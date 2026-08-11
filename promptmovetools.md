@@ -29,10 +29,10 @@
    - `models[]` — คงตาราง ctx ไว้: ทุกรุ่นปัจจุบัน 1M ยกเว้น Haiku 4.5 = 200k (ค่าเดาผิดเคยทำหลอด context อ่านเต็มเร็วกว่าจริง 5 เท่า)
    - `finalTestStages[]` — เขียนด่านทดสอบของโปรเจคนี้ หรือปล่อยว่าง + ปิด `RTB_AUTO_FINAL` ไว้ก่อน
    - `uiTaskPrefixes` — prefix งาน UI ของโปรเจคนี้ (หรือปล่อยว่าง)
-   - `port` ถ้าต้องการเปลี่ยนจาก 4173
+   - `port` — **เปลี่ยนเป็น 4174 ให้แล้ว** (เลี่ยงชนกับ dashboard ของโปรเจคเก่าที่ใช้ 4173) ไม่ต้องแก้อีก เว้นแต่ต้องการค่าอื่น
 2. `lib/prompt.mjs` — **จุดที่ต้องแก้เยอะที่สุด**: ค่าคงที่ `RULES` ฝังกติกาธุรกิจ RTB ทั้งดุ้น (เงินเป็นสตางค์, basis points, docs/16 ฯลฯ) ให้แทนด้วยกติกาจาก `CLAUDE.md` ของโปรเจคนี้ · ชื่อโปรเจค "RTB (pnpm monorepo)" · ชื่อผู้ใช้ใน `buildResumePrompt` · path เอกสารอ้างอิงทั้งหมด
 3. `review-prompt.md`, `final-test-prompt.md`, `final-tests/*.md` — เนื้อหาเป็นธุรกิจ RTB ล้วน ให้เขียนใหม่ตามโปรเจคนี้ โดยใช้โครงเดิมเป็นแม่แบบ (review เฉพาะ diff ตั้งแต่ checkpoint, final test แยกด่าน)
-4. `scripts/start.sh`, `scripts/com.rtb.orchestrator.plist` — path เครื่องเดิม (`/Users/zeegamemsg/RTB-RUAMTABIEN`) hardcode 3 จุด + label `com.rtb.orchestrator` · `scripts/statusline-capture.sh` ถ้าใช้
+4. `scripts/start.sh` + `scripts/statusline-capture.sh` — ตรวจ path เครื่องเดิมที่อาจ hardcode (**ไฟล์ plist ถูก rename เป็น `com.assetrecovery.orchestrator.plist` และแก้ label + path เป็น `/Users/zeegamemsg/AssetRecovery` ให้แล้ว — ไม่ต้องทำซ้ำ**)
 5. env prefix `RTB_*` (~25 ตัว) — **แนะนำคงชื่อเดิมไว้** ลดจุดพัง; ถ้าจะเปลี่ยน ต้อง grep เปลี่ยนให้ครบทุกไฟล์รวม docs
 6. ตรวจว่า **ไม่มี** state จากโปรเจคเดิมติดมา: `queue/*.json`, `logs/` (โดยเฉพาะ `review-checkpoint.json` — ติดมาจะข้าม review/final test ผิด), `.token`, `.run.lock` — ต้องปล่อยให้ระบบสร้างใหม่เอง
 7. `README.md`, `REMOTE.md`, `ADAPT_GUIDE.md` ในโฟลเดอร์ — อัปเดต path/ชื่อโปรเจค
@@ -65,7 +65,7 @@
    - `REPO_ROOT` — ถ้ายังวางที่ `tools/devpanel/` ไม่ต้องแก้
    - ถ้าไม่ใช่ macOS: `/bin/zsh -lc` → bash, `spawn("open")` → `xdg-open`
 2. `tools/devpanel/index.html` — ชื่อ header, ชุดสี, คำอธิบายปุ่ม, URL ปุ่ม "เปิดเว็บ" ให้ตรง port ใหม่
-3. Launcher: เปลี่ยนชื่อไฟล์ `.command`/`.app`, ข้อความ, log path (`/tmp/rtb-devpanel.log`), bundle id ใน `Info.plist` แล้ว `chmod +x Contents/MacOS/run` — จำไว้ว่า `.app` หา repo root จากตำแหน่งที่มันวางอยู่ **ต้องวางที่ root ของ repo เท่านั้น** และมันเช็ค `curl /api/status` ก่อน spawn กันเปิดซ้ำ
+3. Launcher — **ทำให้แล้วทั้งหมด ไม่ต้องทำซ้ำ**: rename เป็น `AssetRecovery Dev Panel.app` / `เปิด AssetRecovery Dev Panel.command`, แก้ข้อความ + bundle id (`com.assetrecovery.devpanel`) + log path (`/tmp/assetrecovery-devpanel.log`) + port default **4600** (ทั้ง launcher และ `server.mjs` — เลี่ยงชนกับแผงโปรเจคเก่าที่ 4599) และ executable bit ยังอยู่ครบ — จำไว้ว่า `.app` หา repo root จากตำแหน่งที่มันวางอยู่ **ต้องวางที่ root ของ repo เท่านั้น** และมันเช็ค `curl /api/status` ก่อน spawn กันเปิดซ้ำ · **สิ่งที่เหลือของข้อนี้**: แก้ชื่อ/ข้อความใน `index.html` (header ยังเป็น "RTB Dev Panel") + desc ปุ่มต่าง ๆ
 
 ### B2 — สิ่งที่ห้าม regress
 

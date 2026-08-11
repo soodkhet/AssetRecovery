@@ -21,7 +21,7 @@ import { spawn } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", ".."); // tools/devpanel → repo root
-const PANEL_PORT = Number(process.env.PANEL_PORT ?? 4599);
+const PANEL_PORT = Number(process.env.PANEL_PORT ?? 4600);
 
 // ---------- โหลด .env → object (ส่งเข้า process ที่ spawn) ----------
 function loadDotEnv() {

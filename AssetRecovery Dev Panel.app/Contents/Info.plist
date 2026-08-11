@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>RTB Dev Panel</string>
+  <string>AssetRecovery Dev Panel</string>
   <key>CFBundleDisplayName</key>
-  <string>RTB Dev Panel</string>
+  <string>AssetRecovery Dev Panel</string>
   <key>CFBundleIdentifier</key>
-  <string>com.rtb.devpanel</string>
+  <string>com.assetrecovery.devpanel</string>
   <key>CFBundleVersion</key>
   <string>1.0</string>
   <key>CFBundleShortVersionString</key>

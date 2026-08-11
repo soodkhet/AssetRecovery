@@ -14,7 +14,7 @@
 node tools/devpanel/server.mjs
 ```
 
-แล้วเปิดเบราว์เซอร์ไปที่ http://localhost:4599
+แล้วเปิดเบราว์เซอร์ไปที่ http://localhost:4600
 
 ## ปุ่มมีอะไรบ้าง
 

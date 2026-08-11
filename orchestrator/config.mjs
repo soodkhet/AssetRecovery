@@ -158,13 +158,13 @@ export const config = {
   ],
 
   // --- Server ---
-  port: Number(process.env.RTB_PORT || 4173),
+  port: Number(process.env.RTB_PORT || 4174),
 
   // --- แจ้งเตือนมือถือผ่าน ntfy (เปิดใช้เมื่อมี RTB_NTFY_TOPIC) ---
   notify: {
     server: process.env.RTB_NTFY_SERVER || 'https://ntfy.sh',
     topic: process.env.RTB_NTFY_TOPIC || '',          // ตั้งชื่อลับ ๆ เช่น rtb-boonphone-7h3k9
-    apiBase: process.env.RTB_API_BASE || '',          // เช่น http://<mac-tailscale>:4173 (ให้ปุ่ม Approve/เปิด dashboard ทำงาน)
+    apiBase: process.env.RTB_API_BASE || '',          // เช่น http://<mac-tailscale>:4174 (ให้ปุ่ม Approve/เปิด dashboard ทำงาน)
     dashboardUrl: process.env.RTB_DASH_URL || '',     // override URL เปิด dashboard (ถ้าเว้น จะสร้างจาก apiBase+token)
     token: '',                                        // ตั้งโดย server ตอน start (= dashboard token)
   },
