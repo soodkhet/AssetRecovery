@@ -1,0 +1,22 @@
+#!/bin/zsh
+# ตัวเปิด RTB Dev Panel (เวอร์ชันแอป — ลากไป Dock แล้วคลิกเปิดได้)
+# เปิดเซิร์ฟเวอร์แผงแบบเบื้องหลัง (ถ้ายังไม่รัน) แล้วเปิดเบราว์เซอร์ไปที่แผง
+# ปิดแผงได้จากปุ่ม "👋 ปิดแผง" ในหน้าเว็บ
+
+# โหลด PATH จาก shell ให้เจอ nvm/node/pnpm/docker (GUI ไม่โหลด .zshrc ให้เอง)
+source "$HOME/.zshrc" 2>/dev/null
+[ -s "$HOME/.nvm/nvm.sh" ] && source "$HOME/.nvm/nvm.sh" 2>/dev/null
+
+# repo root = โฟลเดอร์ที่ .app ตัวนี้วางอยู่ (run → MacOS → Contents → RTB Dev Panel.app → repo)
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$DIR" || exit 1
+
+PORT="${PANEL_PORT:-4599}"
+
+# ถ้ายังไม่มีเซิร์ฟเวอร์รันอยู่ → เปิดใหม่แบบเบื้องหลัง (ไม่ค้าง terminal)
+if ! curl -s -o /dev/null "http://127.0.0.1:$PORT/api/status" 2>/dev/null; then
+  nohup node tools/devpanel/server.mjs >/tmp/rtb-devpanel.log 2>&1 &
+  sleep 1.6
+fi
+
+open "http://localhost:$PORT"

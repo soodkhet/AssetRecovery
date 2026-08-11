@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light only">
+<title>AssetRecovery — พอร์ทัลบริษัทไฟแนนซ์</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  html { background-color: #f8fafc; color-scheme: light; } /* ปรับให้ base font-size เท่ากับหน้าอื่นๆ (finance.html/settings.html ไม่ override font-size) — เดิมขยายเป็น 18px เฉพาะพอร์ทัลนี้ ตอนนี้ยกเลิกเพื่อความสอดคล้อง */
+  body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; min-height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 2px; }
+  .modal-backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(2px); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(120%); } to { opacity:1; transform:translateX(0); } }
+  .toast-in { animation: toastIn .22s ease-out forwards; }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<div id="app" class="flex-1 flex flex-col"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DATE UTILITIES — Asia/Bangkok, พุทธศักราช (พ.ศ.) — ตาม 03 §6.5 / 04 §8
+// ═══════════════════════════════════════════════════════
+const TZ = 'Asia/Bangkok';
+function toBKK(d=new Date()){return new Date(d.toLocaleString('en-US',{timeZone:TZ}));}
+function fmtDate(d=new Date()){const b=toBKK(d instanceof Date?d:new Date(d));return `${String(b.getDate()).padStart(2,'0')}/${String(b.getMonth()+1).padStart(2,'0')}/${b.getFullYear()+543}`;}
+function nowDate(){return fmtDate(new Date());}
+function money(n){ if(n===null||n===undefined) return '—'; return Number(n).toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+
+// ═══════════════════════════════════════════════════════
+// MOCK DATA — บริษัท "สยามไฟแนนซ์" login เข้ามา (company scope เดียว ตาม 97 §11)
+// ═══════════════════════════════════════════════════════
+const store = {
+  currentCompany: { id: 'c1', name: 'บริษัท สยามไฟแนนซ์ จำกัด', taxId: '0105500012345', address: '111 ถ.สาทร แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500', phone: '02-123-4567', contactName: 'สมใจ รักดี', contactPhone: '081-111-2222', signerName: 'วิชัย ศรีสุข', serviceFeeTemplateName: 'Standard Success Fee 10% (SUCCESS_FEE)', vatRegistered: true },
+  currentUser: { name: 'สมใจ รักดี', roleLabel: 'ผู้จัดการ', email: 'somjai@siamfinance.co.th' },
+
+  // เคสของบริษัทตัวเอง — mapping ตามสเปค 97 §10.1 (ไม่ expose raw enum ของ 38/40/41)
+  // internalStatus: จำลอง case.status (38) ; fieldStatus: จำลอง field-side terminal state (41) — ใช้แค่คำนวณ label ฝั่ง mock
+  cases: [
+    { id: 'CASE-26-0012', caseRef: 'SF-2026-00791', debtor: 'ธนกร ศรีวิไล', internalStatus: 'approved', fieldStatus: null, reason: null, createdAt: '10/06/2569', recycleRound: 1 },
+    { id: 'CASE-26-0041', caseRef: 'SF-2026-00802', debtor: 'พิมพ์ชนก แสงทอง', internalStatus: 'approved', fieldStatus: 'closed_success', reason: null, createdAt: '12/06/2569', recycleRound: 1 },
+    { id: 'CASE-26-0055', caseRef: 'SF-2026-00815', debtor: 'อรรถพล เจริญสุข', internalStatus: 'approved', fieldStatus: 'closed_fail', reason: null, createdAt: '15/06/2569', recycleRound: 1 },
+    { id: 'CASE-26-0060', caseRef: 'SF-2026-00822', debtor: 'นภัสกร อินทร์แก้ว', internalStatus: 'need_info', fieldStatus: null, reason: 'ไม่มีเอกสารสัญญาแนบมา กรุณาส่งเอกสารเพิ่มเติมผ่านช่องทางเดิม', createdAt: '20/06/2569', recycleRound: 1 },
+    { id: 'CASE-26-0035', caseRef: 'SF-2026-00811', debtor: 'ปิยะดา ชัยวงศ์', internalStatus: 'rejected', fieldStatus: null, reason: 'มูลหนี้ไม่คุ้มค่าติดตาม', createdAt: '16/06/2569', recycleRound: 1 },
+    { id: 'CASE-26-0070', caseRef: 'SF-2026-00830', debtor: 'ศิริพร บุญมาก', internalStatus: 'pending_review', fieldStatus: null, reason: null, createdAt: '28/06/2569', recycleRound: 1 },
+    { id: 'CASE-26-0071', caseRef: 'SF-2026-00695', debtor: 'ชัยวัฒน์ ทองดี', internalStatus: 'approved', fieldStatus: 'closed_fail', reason: null, createdAt: '02/05/2569', recycleRound: 2 },
+  ],
+
+  // Billing Batch — ตัด draft ออกตามสเปค 97 §6.2 (บังคับกรองที่ backend)
+  billingBatches: [
+    { id: 'bb1', batchNumber: 'BB-2569-06-001', period: 'มิถุนายน 2569', dueDate: '30/07/2569', status: 'sent', caseCount: 3, totalAmount: 16906, receivedAmount: 0 },
+    { id: 'bb0', batchNumber: 'BB-2569-05-004', period: 'พฤษภาคม 2569', dueDate: '30/06/2569', status: 'partially_paid', caseCount: 4, totalAmount: 22150, receivedAmount: 12000 },
+    { id: 'bb_paid', batchNumber: 'BB-2569-04-002', period: 'เมษายน 2569', dueDate: '31/05/2569', status: 'paid', caseCount: 5, totalAmount: 18400, receivedAmount: 18400 },
+  ],
+
+  // ใบกำกับภาษี — ไฟล์ 31
+  taxInvoices: [
+    { id: 'ti1', invoiceNumber: 'INV-2569-0014', issueDate: '02/07/2569', totalAmount: 16906, deliveryFormat: 'e_tax_invoice', status: 'active' },
+    { id: 'ti2', invoiceNumber: 'INV-2569-0009', issueDate: '03/06/2569', totalAmount: 22150, deliveryFormat: 'paper_pdf', status: 'active' },
+    { id: 'ti3', invoiceNumber: 'INV-2569-0003', issueDate: '05/05/2569', totalAmount: 18400, deliveryFormat: 'paper_pdf', status: 'active' },
+    { id: 'ti0', invoiceNumber: 'INV-2569-0002', issueDate: '01/05/2569', totalAmount: 9200, deliveryFormat: 'paper_pdf', status: 'cancelled' },
+  ],
+
+  // HandoverLot — ไฟล์ 44
+  handoverLots: [
+    { id: 'LOT-2569-014', docRef: 'DLV-2569-014', type: 'finance_pickup', status: 'confirmed', assetCount: 3, confirmedAt: '25/06/2569' },
+    { id: 'LOT-2569-018', docRef: 'DLV-2569-018', type: 'we_deliver', status: 'pending_delivery_proof', assetCount: 1, confirmedAt: null },
+    { id: 'LOT-2569-021', docRef: 'DLV-2569-021', type: 'finance_pickup', status: 'pending_attach', assetCount: 2, confirmedAt: null },
+  ],
+
+  // รายการทรัพย์ในแต่ละ Lot — ไฟล์ 44 §7.1 (ไม่แสดง IMEI ในพอร์ทัลนี้ ตามนโยบายเดียวกับ 97 §6.1)
+  assetsByLot: {
+    'LOT-2569-014': [
+      { id: 'AST-014-1', caseRef: 'SF-2026-00802', debtor: 'พิมพ์ชนก แสงทอง', model: 'iPhone 14 สีดำ 128GB', condition: 'normal', conditionNote: null, receivedAt: '24/06/2569', photos: ['ด้านหน้า','ด้านหลัง','หน้าจอ','ด้านข้างซ้าย','ด้านข้างขวา','อุปกรณ์เสริม','ด้านบน-ล่าง'] },
+      { id: 'AST-014-2', caseRef: 'SF-2026-00791', debtor: 'ธนกร ศรีวิไล', model: 'iPad Air 5 สีเงิน', condition: 'normal', conditionNote: null, receivedAt: '23/06/2569', photos: ['ด้านหน้า','ด้านหลัง','หน้าจอ','ด้านข้างซ้าย','ด้านข้างขวา','อุปกรณ์เสริม','ด้านบน-ล่าง'] },
+      { id: 'AST-014-3', caseRef: 'SF-2026-00650', debtor: 'อรุณ ทองสุก', model: 'Samsung Galaxy S23 สีเขียว', condition: 'damaged', conditionNote: 'จอแตกมุมขวาบน', receivedAt: '22/06/2569', photos: ['ด้านหน้า','ด้านหลัง','หน้าจอ (จุดชำรุด)','ด้านข้างซ้าย','ด้านข้างขวา','อุปกรณ์เสริม','ด้านบน-ล่าง'] },
+    ],
+    'LOT-2569-018': [
+      { id: 'AST-018-1', caseRef: 'SF-2026-00815', debtor: 'อรรถพล เจริญสุข', model: 'iPhone 13 สีขาว', condition: 'normal', conditionNote: null, receivedAt: '26/06/2569', photos: ['ด้านหน้า','ด้านหลัง','หน้าจอ','ด้านข้างซ้าย','ด้านข้างขวา','อุปกรณ์เสริม','ด้านบน-ล่าง'] },
+    ],
+    'LOT-2569-021': [
+      { id: 'AST-021-1', caseRef: 'SF-2026-00822', debtor: 'นภัสกร อินทร์แก้ว', model: 'iPad Pro 11" สีเทา', condition: 'partial_loss', conditionNote: 'ไม่มีปากกา Apple Pencil ที่มากับเครื่อง', receivedAt: '27/06/2569', photos: ['ด้านหน้า','ด้านหลัง','หน้าจอ','ด้านข้างซ้าย','ด้านข้างขวา','จุดที่อุปกรณ์เสริมหายไป','ด้านบน-ล่าง'] },
+      { id: 'AST-021-2', caseRef: 'SF-2026-00830', debtor: 'ศิริพร บุญมาก', model: 'iPhone 12 สีน้ำเงิน', condition: 'normal', conditionNote: null, receivedAt: '27/06/2569', photos: ['ด้านหน้า','ด้านหลัง','หน้าจอ','ด้านข้างซ้าย','ด้านข้างขวา','อุปกรณ์เสริม','ด้านบน-ล่าง'] },
+    ],
+  },
+
+  // ยอดเรียกเก็บค่าบริการ — scope เฉพาะบริษัทตัวเอง (96 §F2/§F3) — มุมมองบริษัทไฟแนนซ์: นี่คือยอดที่ถูกเรียกเก็บ ไม่ใช่ "รายได้" ของบริษัทเขา
+  billingTrend: [
+    { m: 'ม.ค.69', amt: 12800, cases: 4, success: 3, fail: 1 },
+    { m: 'ก.พ.69', amt: 15200, cases: 5, success: 4, fail: 1 },
+    { m: 'มี.ค.69', amt: 9800,  cases: 3, success: 2, fail: 1 },
+    { m: 'เม.ย.69', amt: 18400, cases: 5, success: 4, fail: 1 },
+    { m: 'พ.ค.69', amt: 22150, cases: 6, success: 5, fail: 1 },
+    { m: 'มิ.ย.69', amt: 16906, cases: 4, success: 3, fail: 1 },
+  ],
+  arAging: { b0_30: 16906, b31_60: 10150, b61_90: 0, b90p: 0 },
+};
+
+let state = { tab: 'dashboard', caseFilter: 'all', caseSearch: '', billingFilter: 'all', handoverFilter: 'all', modal: null, toast: null };
+function S(patch){ Object.assign(state, patch); render(); }
+function showToast(msg){ state.toast = msg; render(); setTimeout(()=>{ state.toast=null; render(); }, 2600); }
+
+// ═══════════════════════════════════════════════════════
+// STATUS LABEL MAPPING — ตาม 97-client-portal.md §10.1 / §10.2
+// ═══════════════════════════════════════════════════════
+function caseStatusInfo(c){
+  if (c.internalStatus === 'rejected') return { label: 'ไม่รับเคส', cls: 'bg-red-100 text-red-800' };
+  if (c.internalStatus === 'need_info') return { label: 'ขอข้อมูลเพิ่มเติม', cls: 'bg-purple-100 text-purple-800' };
+  if (c.internalStatus === 'draft' || c.internalStatus === 'pending_review') return { label: 'อยู่ระหว่างตรวจสอบ', cls: 'bg-slate-100 text-slate-700' };
+  if (c.internalStatus === 'approved') {
+    if (c.fieldStatus === 'closed_success') return { label: 'ติดตามสำเร็จ', cls: 'bg-emerald-100 text-emerald-800' };
+    if (c.fieldStatus === 'closed_fail') return { label: 'ติดตามไม่สำเร็จ', cls: 'bg-slate-200 text-slate-600' };
+    return { label: 'กำลังดำเนินการติดตาม', cls: 'bg-amber-100 text-amber-800' };
+  }
+  return { label: c.internalStatus, cls: 'bg-slate-100 text-slate-700' };
+}
+function billingStatusInfo(s){
+  const map = {
+    sent: ['ส่งบิลแล้ว', 'bg-blue-100 text-blue-800'],
+    partially_paid: ['ชำระบางส่วน', 'bg-cyan-100 text-cyan-800'],
+    paid: ['ชำระครบแล้ว', 'bg-emerald-100 text-emerald-800'],
+  };
+  const [label, cls] = map[s] || [s, 'bg-slate-100 text-slate-700'];
+  return { label, cls };
+}
+function invoiceStatusInfo(s){
+  return s === 'active' ? { label: 'ใช้งานอยู่', cls: 'bg-emerald-100 text-emerald-800' } : { label: 'ยกเลิกแล้ว', cls: 'bg-red-100 text-red-800' };
+}
+function lotStatusInfo(l){
+  const map = {
+    pending_attach: ['รอดำเนินการส่งมอบ', 'bg-amber-100 text-amber-800'],
+    pending_delivery_proof: ['จัดส่งแล้ว รอยืนยัน', 'bg-amber-100 text-amber-800'],
+    confirmed: ['ส่งมอบสำเร็จ', 'bg-emerald-100 text-emerald-800'],
+  };
+  const [label, cls] = map[l.status] || [l.status, 'bg-slate-100 text-slate-700'];
+  return { label, cls };
+}
+function conditionInfo(c){
+  const map = { normal: ['สภาพปกติ', 'bg-emerald-100 text-emerald-800'], damaged: ['ชำรุด', 'bg-red-100 text-red-800'], partial_loss: ['สูญหายบางส่วน', 'bg-amber-100 text-amber-800'] };
+  const [label, cls] = map[c] || [c, 'bg-slate-100 text-slate-700']; return { label, cls };
+}
+// ค้นหา asset ที่ตรงกับเคส (ผ่าน caseRef) ข้ามทุก Lot — ใช้แสดงรูปสินค้าตอนรับเข้าคลังในการ์ดเคสสำเร็จ
+// (ไม่ใช่หลักฐานปิดงานภาคสนามจากไฟล์ 41 ซึ่งมี GPS/วิดีโอ/เสียงที่อ่อนไหวกว่า)
+function findAssetByCaseRef(caseRef){
+  for (const lotId in store.assetsByLot) {
+    const found = store.assetsByLot[lotId].find(a => a.caseRef === caseRef);
+    if (found) return { asset: found, lotId };
+  }
+  return null;
+}
+function badge(info){ return `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${info.cls}">${info.label}</span>`; }
+
+// ═══════════════════════════════════════════════════════
+// ICONS (inline SVG เล็กๆ)
+// ═══════════════════════════════════════════════════════
+const SVG = {
+  dashboard: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h8v8H3V3zm10 0h8v5h-8V3zm0 8h8v10h-8V11zM3 14h8v7H3v-7z"/></svg>`,
+  case: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>`,
+  money: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m9-8a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+  invoice: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`,
+  box: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>`,
+  report: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>`,
+  building: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4M9 9v.01M9 12v.01M9 15v.01"/></svg>`,
+  download: `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M7 10l5 5 5-5M12 15V3"/></svg>`,
+  eye: `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`,
+  logout: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>`,
+  lock: `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>`,
+  camera: `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h1.5l1-1.5h5l1 1.5H16a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="10" cy="13" r="2.8"/></svg>`,
+  chevron: `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>`,
+};
+
+// ═══════════════════════════════════════════════════════
+// LAYOUT — Top Bar Nav (เปลี่ยนจาก Sidebar เดิมตามคำสั่ง PO — ให้ตรงรูปแบบเดียวกับ finance.html/settings.html/warehouse.html)
+// อัปเดต 97-client-portal.md §5 / §21 แล้วให้สอดคล้องกัน
+// ═══════════════════════════════════════════════════════
+const NAV = [
+  { key: 'dashboard', label: 'ภาพรวม', icon: SVG.dashboard },
+  { key: 'cases', label: 'เคสของเรา', icon: SVG.case },
+  { key: 'billing', label: 'รอบวางบิล / ยอดค้างชำระ', icon: SVG.money },
+  { key: 'invoices', label: 'ใบกำกับภาษี', icon: SVG.invoice },
+  { key: 'handover', label: 'ใบส่งมอบทรัพย์', icon: SVG.box },
+  { key: 'profile', label: 'ข้อมูลบริษัท', icon: SVG.building },
+];
+
+function layout(content){
+  return `
+  <div class="min-h-screen flex flex-col">
+    <!-- Top Nav -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center space-x-3">
+            <div class="bg-slate-900 text-white p-2 rounded">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 9.7a1 1 0 0 1-.68 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .48 0l8 2c.42.1.76.47.76.97Z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+            </div>
+            <div><span class="font-bold text-lg tracking-tight text-slate-900">AssetRecovery</span><span class="text-[10px] block text-slate-500 font-semibold leading-none mt-0.5">พอร์ทัลบริษัทไฟแนนซ์ · ${store.currentCompany.name}</span></div>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="text-right hidden sm:block">
+              <div class="text-sm font-bold text-slate-900">${store.currentUser.name}</div>
+              <div class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono inline-block">${store.currentUser.roleLabel}</div>
+            </div>
+            <div class="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-700">${store.currentUser.name[0]}</div>
+            <button data-action="logout" class="text-slate-400 hover:text-red-600 focus-ring" title="ออกจากระบบ">${SVG.logout}</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main -->
+    <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="flex gap-6 overflow-x-auto no-scrollbar border-b border-slate-200 mb-6">
+        ${NAV.map(n => `
+          <button data-action="nav" data-tab="${n.key}" class="py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap focus-ring flex items-center gap-2 ${state.tab===n.key ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">
+            ${n.icon}${n.label}
+          </button>`).join('')}
+      </div>
+      <div class="animate-fade-in">${content}</div>
+      <div class="text-[11px] text-slate-400 mt-8">แสดงเฉพาะข้อมูลของ ${store.currentCompany.name} · โหมดดูอย่างเดียว (Read-only)</div>
+    </main>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SHARED: KPI Card / Table Container
+// ═══════════════════════════════════════════════════════
+function kpi(label, value, sub, color='slate'){
+  const c = { slate:'text-slate-700 bg-slate-50 border-slate-100', emerald:'text-emerald-700 bg-emerald-50 border-emerald-100', amber:'text-amber-700 bg-amber-50 border-amber-100', blue:'text-blue-700 bg-blue-50 border-blue-100', red:'text-red-700 bg-red-50 border-red-100' }[color] || 'text-slate-700 bg-slate-50 border-slate-100';
+  return `<div class="bg-white border ${c.split(' ')[2]} rounded-xl p-5 shadow-sm">
+    <div class="text-xs text-slate-500 font-bold uppercase tracking-wider">${label}</div>
+    <div class="mt-2 text-2xl font-extrabold ${c.split(' ')[0]}">${value}</div>
+    ${sub ? `<div class="mt-1 text-[11px] font-medium text-slate-500 bg-white inline-block px-2 py-0.5 rounded border border-slate-100">${sub}</div>` : ''}
+  </div>`;
+}
+function pageHeader(title, sub){
+  return `<div class="mb-6"><h1 class="text-2xl font-bold tracking-tight text-slate-900">${title}</h1>${sub ? `<p class="text-sm text-slate-500 mt-1">${sub}</p>` : ''}</div>`;
+}
+
+function sectionHeader(title, tabKey, sub){
+  return `<button data-action="nav" data-tab="${tabKey}" class="w-full flex items-center justify-between mb-3 focus-ring text-left hover:opacity-80">
+    <div>
+      <div class="font-bold text-slate-800">${title}</div>
+      ${sub ? `<div class="text-[13px] text-slate-400">${sub}</div>` : ''}
+    </div>
+    <span class="text-slate-300">${SVG.eye}</span>
+  </button>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: DASHBOARD — สรุปทุกหมวดในหน้าเดียว (ไม่ใช่รายงานละเอียด, ไม่ซ้ำกับ list ในแต่ละเมนู) + รวม Reports เดิม
+// ═══════════════════════════════════════════════════════
+function renderDashboard(){
+  const totalAR = store.billingBatches.reduce((a,b)=>a+(b.totalAmount-b.receivedAmount),0);
+  const unpaidBatches = store.billingBatches.filter(b=>b.status!=='paid').length;
+  const activeInvoice = store.taxInvoices.filter(i=>i.status==='active')[0];
+  const pendingLots = store.handoverLots.filter(l=>l.status!=='confirmed').length;
+  const confirmedLots = store.handoverLots.filter(l=>l.status==='confirmed').length;
+  const totalAmt = store.billingTrend.reduce((a,b)=>a+b.amt,0);
+
+  const statusOrder = ['อยู่ระหว่างตรวจสอบ','ขอข้อมูลเพิ่มเติม','กำลังดำเนินการติดตาม','ติดตามสำเร็จ','ติดตามไม่สำเร็จ','ไม่รับเคส'];
+  const statusColorCls = { 'อยู่ระหว่างตรวจสอบ':'bg-slate-100 text-slate-700', 'ขอข้อมูลเพิ่มเติม':'bg-purple-100 text-purple-800', 'กำลังดำเนินการติดตาม':'bg-amber-100 text-amber-800', 'ติดตามสำเร็จ':'bg-emerald-100 text-emerald-800', 'ติดตามไม่สำเร็จ':'bg-slate-200 text-slate-600', 'ไม่รับเคส':'bg-red-100 text-red-800' };
+  const counts = {};
+  store.cases.forEach(c=>{ const l=caseStatusInfo(c).label; counts[l]=(counts[l]||0)+1; });
+
+  return `
+  ${pageHeader('ภาพรวม', 'สรุปสถานะล่าสุดของ ' + store.currentCompany.name)}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- คอลัมน์ซ้าย: เคสแยกตามสถานะ -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 lg:col-span-1">
+      ${sectionHeader('เคสของเรา', 'cases', store.cases.length + ' เคสทั้งหมด')}
+      <div class="space-y-2">
+        ${statusOrder.map(s => `
+          <div class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2.5">
+            <span class="text-sm font-semibold text-slate-600">${s}</span>
+            <span class="text-sm font-extrabold w-8 h-8 shrink-0 rounded-full flex items-center justify-center ${statusColorCls[s]}">${counts[s]||0}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- คอลัมน์ขวา: การเงิน + ส่งมอบ -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        ${sectionHeader('การเงิน', 'billing', unpaidBatches + ' รอบวางบิลยังไม่ชำระครบ')}
+        <div class="grid grid-cols-2 gap-4">
+          ${kpi('ยอดค้างชำระรวม', '฿ ' + money(totalAR), 'ทุกรอบที่ยังไม่ paid', 'red')}
+          ${kpi('ใบกำกับภาษีล่าสุด', activeInvoice ? activeInvoice.invoiceNumber : '—', activeInvoice ? 'ออกเมื่อ ' + activeInvoice.issueDate : '', 'blue')}
+        </div>
+      </div>
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        ${sectionHeader('ใบส่งมอบทรัพย์', 'handover', store.handoverLots.length + ' Lot ทั้งหมด')}
+        <div class="grid grid-cols-2 gap-4">
+          ${kpi('รอดำเนินการส่งมอบ', pendingLots, 'ยังไม่ยืนยันส่งมอบสำเร็จ', 'amber')}
+          ${kpi('ส่งมอบสำเร็จ', confirmedLots, 'ดาวน์โหลดเอกสารได้แล้ว', 'emerald')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ยอดเรียกเก็บค่าบริการ — แนวโน้ม 6 เดือน (รวมจากแท็บรายงานเดิม) -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mt-6">
+    <div class="flex items-center justify-between mb-4">
+      <div class="font-bold text-slate-800">ยอดเรียกเก็บค่าบริการ — 6 เดือนย้อนหลัง</div>
+      <div class="text-xs text-slate-500">ยอดที่ท่านถูกเรียกเก็บสะสม ฿ ${money(totalAmt)}</div>
+    </div>
+    ${barChart(store.billingTrend,'m','amt','#7c3aed')}
+    <div class="border border-slate-200 rounded-lg overflow-hidden mt-4">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
+        <th class="px-4 py-3">เดือน</th><th class="px-4 py-3 text-right">ยอดเรียกเก็บ</th><th class="px-4 py-3 text-right">เคสทั้งหมด</th><th class="px-4 py-3 text-right">สำเร็จ</th><th class="px-4 py-3 text-right">ไม่สำเร็จ</th>
+      </tr></thead><tbody class="divide-y divide-slate-100">
+      ${store.billingTrend.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-semibold">${r.m}</td>
+        <td class="px-4 py-3 text-right text-emerald-700 font-semibold">฿ ${money(r.amt)}</td>
+        <td class="px-4 py-3 text-right">${r.cases}</td>
+        <td class="px-4 py-3 text-right text-emerald-700">${r.success}</td>
+        <td class="px-4 py-3 text-right text-red-600">${r.fail}</td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>
+  </div>
+
+  <!-- อายุหนี้ (AR Aging) — รวมจากแท็บรายงานเดิม -->
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mt-6">
+    <div class="flex items-center justify-between mb-1">
+      <div class="font-bold text-slate-800">อายุหนี้ (ยอดค้างชำระแยกตามจำนวนวัน)</div>
+      <div class="text-xs text-slate-500">ณ วันที่ ${nowDate()}</div>
+    </div>
+    <div class="text-xs text-slate-400 mb-4">ยอดที่ยังค้างชำระ นับจากวันที่วางบิลจนถึงวันนี้ ยิ่งอยู่คอลัมน์ขวายิ่งค้างนาน (AR = Accounts Receivable)</div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+      ${kpi('0-30 วัน', '฿ '+money(store.arAging.b0_30), '', 'emerald')}
+      ${kpi('31-60 วัน', '฿ '+money(store.arAging.b31_60), '', 'amber')}
+      ${kpi('61-90 วัน', '฿ '+money(store.arAging.b61_90), '', 'red')}
+      ${kpi('90+ วัน', '฿ '+money(store.arAging.b90p), '', 'red')}
+    </div>
+    <div class="text-xs text-slate-400">ยอดค้างชำระรวมทั้งหมด: <span class="font-bold text-red-600">฿ ${money(totalAR)}</span></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: เคสของเรา (38 scope-down)
+// ═══════════════════════════════════════════════════════
+function renderCases(){
+  let list = store.cases.filter(c => {
+    if (state.caseSearch && !(c.caseRef.toLowerCase().includes(state.caseSearch.toLowerCase()) || c.debtor.includes(state.caseSearch))) return false;
+    if (state.caseFilter === 'all') return true;
+    const info = caseStatusInfo(c);
+    return state.caseFilter === info.label;
+  });
+  const filterOptions = ['อยู่ระหว่างตรวจสอบ','ขอข้อมูลเพิ่มเติม','ไม่รับเคส','กำลังดำเนินการติดตาม','ติดตามสำเร็จ','ติดตามไม่สำเร็จ'];
+  return `
+  ${pageHeader('เคสของเรา', 'ติดตามสถานะเคสที่ส่งเข้าระบบผ่านช่องทาง API/Import/เอกสาร')}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex flex-wrap items-center gap-2 mb-5">
+      <input type="text" placeholder="ค้นหาเลขที่สัญญา / ชื่อลูกหนี้..." value="${state.caseSearch}" oninput="S({caseSearch:this.value})" class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-64 focus-ring">
+      <select onchange="S({caseFilter:this.value})" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring bg-white">
+        <option value="all" ${state.caseFilter==='all'?'selected':''}>สถานะทั้งหมด</option>
+        ${filterOptions.map(f=>`<option value="${f}" ${state.caseFilter===f?'selected':''}>${f}</option>`).join('')}
+      </select>
+      <div class="text-xs text-slate-400 ml-auto">ทั้งหมด ${list.length} รายการ</div>
+    </div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
+        <th class="px-4 py-3">เลขที่สัญญา</th><th class="px-4 py-3">ลูกหนี้</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3">วันที่รับเคส</th><th class="px-4 py-3 text-right">จัดการ</th>
+      </tr></thead><tbody class="divide-y divide-slate-100">
+      ${list.map(c => `<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-mono text-xs font-semibold">${c.caseRef}${c.recycleRound>1?` <span class="text-[12px] text-violet-600 font-bold">รอบที่ ${c.recycleRound}</span>`:''}</td>
+        <td class="px-4 py-3">${c.debtor}</td>
+        <td class="px-4 py-3">${badge(caseStatusInfo(c))}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${c.createdAt}</td>
+        <td class="px-4 py-3 text-right"><button data-action="open-modal" data-type="case-detail" data-id="${c.id}" class="text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 focus-ring inline-flex items-center gap-1">${SVG.eye} ดูรายละเอียด</button></td>
+      </tr>`).join('')}
+      ${list.length===0 ? `<tr><td colspan="5" class="px-4 py-10 text-center text-slate-400 text-sm">ไม่พบเคสที่ตรงกับเงื่อนไข</td></tr>` : ''}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: รอบวางบิล / AR (19 scope-down — ตัด draft ออกเสมอ)
+// ═══════════════════════════════════════════════════════
+function renderBilling(){
+  const totalAR = store.billingBatches.reduce((a,b)=>a+(b.totalAmount-b.receivedAmount),0);
+  const billingFilterOptions = ['ส่งบิลแล้ว','ชำระบางส่วน','ชำระครบแล้ว'];
+  const filteredBatches = store.billingBatches.filter(b => state.billingFilter === 'all' || billingStatusInfo(b.status).label === state.billingFilter);
+  return `
+  ${pageHeader('รอบวางบิล / ยอดค้างชำระ', 'แสดงเฉพาะรอบที่ส่งบิลแล้ว (สถานะร่างจะไม่ปรากฏที่นี่)')}
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    ${kpi('ยอดค้างชำระรวม', '฿ ' + money(totalAR), 'ทุกรอบที่ยังไม่ paid', 'red')}
+    ${kpi('จำนวนรอบวางบิล', store.billingBatches.length, 'ที่ส่งบิลแล้ว', 'slate')}
+    ${kpi('รอบล่าสุด', store.billingBatches[0].period, store.billingBatches[0].batchNumber, 'blue')}
+  </div>
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex flex-wrap items-center gap-2 mb-5">
+      <select onchange="S({billingFilter:this.value})" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring bg-white">
+        <option value="all" ${state.billingFilter==='all'?'selected':''}>สถานะทั้งหมด</option>
+        ${billingFilterOptions.map(f=>`<option value="${f}" ${state.billingFilter===f?'selected':''}>${f}</option>`).join('')}
+      </select>
+      <div class="text-xs text-slate-400 ml-auto">ทั้งหมด ${filteredBatches.length} รายการ</div>
+    </div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
+        <th class="px-4 py-3">เลขที่รอบวางบิล</th><th class="px-4 py-3">รอบเดือน</th><th class="px-4 py-3">จำนวนเคส</th>
+        <th class="px-4 py-3 text-right">ยอดรวม</th><th class="px-4 py-3 text-right">ชำระแล้ว</th><th class="px-4 py-3 text-right">ค้างชำระ</th>
+        <th class="px-4 py-3">ครบกำหนด</th><th class="px-4 py-3">สถานะ</th>
+      </tr></thead><tbody class="divide-y divide-slate-100">
+      ${filteredBatches.map(b => { const outstanding = b.totalAmount - b.receivedAmount; return `
+      <tr class="hover:bg-slate-50 ${outstanding>0?'bg-red-50/20':''}">
+        <td class="px-4 py-3 font-mono text-xs font-semibold">${b.batchNumber}</td>
+        <td class="px-4 py-3">${b.period}</td>
+        <td class="px-4 py-3">${b.caseCount}</td>
+        <td class="px-4 py-3 text-right font-semibold">฿ ${money(b.totalAmount)}</td>
+        <td class="px-4 py-3 text-right text-emerald-600">฿ ${money(b.receivedAmount)}</td>
+        <td class="px-4 py-3 text-right font-bold ${outstanding>0?'text-red-600':'text-slate-300'}">${outstanding>0?'฿ '+money(outstanding):'—'}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${b.dueDate}</td>
+        <td class="px-4 py-3">${badge(billingStatusInfo(b.status))}</td>
+      </tr>`}).join('')}
+      ${filteredBatches.length===0 ? `<tr><td colspan="8" class="px-4 py-10 text-center text-slate-400 text-sm">ไม่พบรอบวางบิลที่ตรงกับเงื่อนไข</td></tr>` : ''}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: ใบกำกับภาษี (31 scope-down)
+// ═══════════════════════════════════════════════════════
+function renderInvoices(){
+  return `
+  ${pageHeader('ใบกำกับภาษี', 'เอกสารใบกำกับภาษีที่ออกให้ ' + store.currentCompany.name)}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
+        <th class="px-4 py-3">เลขที่ใบกำกับภาษี</th><th class="px-4 py-3">วันที่ออก</th><th class="px-4 py-3 text-right">ยอดรวม</th>
+        <th class="px-4 py-3">รูปแบบเอกสาร</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th>
+      </tr></thead><tbody class="divide-y divide-slate-100">
+      ${store.taxInvoices.map(i => `<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-mono text-xs font-semibold">${i.invoiceNumber}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${i.issueDate}</td>
+        <td class="px-4 py-3 text-right font-semibold">฿ ${money(i.totalAmount)}</td>
+        <td class="px-4 py-3 text-xs">${i.deliveryFormat === 'e_tax_invoice' ? 'e-Tax Invoice' : 'กระดาษ / PDF'}</td>
+        <td class="px-4 py-3">${badge(invoiceStatusInfo(i.status))}</td>
+        <td class="px-4 py-3 text-right">
+          <button data-action="download" data-label="ใบกำกับภาษี ${i.invoiceNumber}" class="text-xs font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-3 py-1.5 hover:bg-blue-100 focus-ring inline-flex items-center gap-1">${SVG.download} ดาวน์โหลด</button>
+        </td>
+      </tr>`).join('')}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: ใบส่งมอบทรัพย์ (44 scope-down)
+// ═══════════════════════════════════════════════════════
+function renderHandover(){
+  const filterOptions = ['รอดำเนินการส่งมอบ','จัดส่งแล้ว รอยืนยัน','ส่งมอบสำเร็จ'];
+  const filteredLots = store.handoverLots.filter(l => state.handoverFilter === 'all' || lotStatusInfo(l).label === state.handoverFilter);
+  return `
+  ${pageHeader('ใบส่งมอบทรัพย์', 'สถานะการส่งมอบทรัพย์คืนของ ' + store.currentCompany.name)}
+  <div class="flex flex-wrap items-center gap-2 mb-5">
+    <select onchange="S({handoverFilter:this.value})" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring bg-white">
+      <option value="all" ${state.handoverFilter==='all'?'selected':''}>สถานะทั้งหมด</option>
+      ${filterOptions.map(f=>`<option value="${f}" ${state.handoverFilter===f?'selected':''}>${f}</option>`).join('')}
+    </select>
+    <div class="text-xs text-slate-400 ml-auto">ทั้งหมด ${filteredLots.length} Lot</div>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    ${filteredLots.map(l => { const info = lotStatusInfo(l); const canDownload = l.status === 'confirmed'; return `
+    <div data-action="open-modal" data-type="lot-detail" data-id="${l.id}" class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-[13px] px-2 py-0.5 rounded-full font-bold uppercase ${l.type==='finance_pickup'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${l.type==='finance_pickup'?'🏢 รับเอง':'🚚 จัดส่ง'}</span>
+        ${badge(info)}
+      </div>
+      <div class="font-mono font-bold text-slate-800 text-sm">${l.id}</div>
+      <div class="text-xs text-slate-400 mt-0.5">เลขที่ใบส่งมอบ: ${l.docRef}</div>
+      <div class="text-xs text-slate-500 mt-2">จำนวนเครื่อง: ${l.assetCount} เครื่อง · คลิกเพื่อดูรายการ</div>
+      ${l.confirmedAt ? `<div class="text-xs text-emerald-600 mt-1">ยืนยันเมื่อ ${l.confirmedAt}</div>` : ''}
+      <div class="border-t border-slate-100 mt-4 pt-3">
+        ${canDownload
+          ? `<button data-action="download" data-label="ใบส่งมอบ ${l.docRef}" class="w-full text-xs font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-3 py-2 hover:bg-blue-100 focus-ring inline-flex items-center justify-center gap-1">${SVG.download} ดาวน์โหลดใบส่งมอบ</button>`
+          : `<button disabled class="w-full text-xs font-semibold text-slate-400 border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 cursor-not-allowed inline-flex items-center justify-center gap-1">${SVG.lock} รอยืนยันส่งมอบก่อนดาวน์โหลดได้</button>`}
+      </div>
+    </div>`}).join('')}
+    ${filteredLots.length===0 ? `<div class="col-span-full text-center text-slate-400 text-sm py-10">ไม่พบ Lot ที่ตรงกับเงื่อนไข</div>` : ''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SHARED: Bar Chart (ใช้ใน Dashboard)
+// ═══════════════════════════════════════════════════════
+function barChart(data, xKey, yKey, color, maxH=90){
+  const max = Math.max(...data.map(d=>d[yKey]), 1);
+  return `<div class="flex items-end gap-2 h-32">
+    ${data.map(d => `<div class="flex-1 flex flex-col items-center gap-1">
+      <div class="text-[12px] text-slate-500 font-semibold">${money(d[yKey])}</div>
+      <div style="height:${Math.max(4,(d[yKey]/max)*maxH)}px; background:${color}" class="w-full rounded-t-md"></div>
+      <div class="text-[12px] text-slate-400">${d[xKey]}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: ข้อมูลบริษัท (10 §7.1 read-only)
+// ═══════════════════════════════════════════════════════
+function renderProfile(){
+  const co = store.currentCompany;
+  const row = (label, value) => `<div class="flex justify-between py-2.5 border-b border-slate-100 last:border-0"><span class="text-xs text-slate-400">${label}</span><span class="text-sm font-semibold text-slate-800">${value}</span></div>`;
+  return `
+  ${pageHeader('ข้อมูลบริษัท', 'ดูอย่างเดียว — หากต้องการแก้ไข กรุณาติดต่อเจ้าหน้าที่ภายใน')}
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-xl">
+    ${row('ชื่อบริษัท', co.name)}
+    ${row('เลขประจำตัวผู้เสียภาษี', `<span class="font-mono">${co.taxId}</span>`)}
+    ${row('ที่อยู่จดทะเบียน', co.address)}
+    ${row('เบอร์โทรสำนักงาน', co.phone)}
+    ${row('ผู้ติดต่อประจำวัน', `${co.contactName} (${co.contactPhone})`)}
+    ${row('ผู้มีอำนาจลงนาม', co.signerName)}
+    ${row('จดทะเบียน VAT', co.vatRegistered ? 'ใช่' : 'ไม่')}
+    ${row('เทมเพลตค่าบริการที่ผูกอยู่', co.serviceFeeTemplateName)}
+  </div>
+  <div class="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-800 max-w-xl">
+    ต้องการแก้ไขข้อมูลบริษัทหรือจัดการผู้ใช้งานในบริษัทของท่าน กรุณาติดต่อเจ้าหน้าที่ AssetRecovery โดยตรง — พอร์ทัลนี้ไม่รองรับการแก้ไขข้อมูลด้วยตนเอง
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MODAL: รายละเอียดเคส
+// ═══════════════════════════════════════════════════════
+function renderModal(){
+  if (!state.modal) return '';
+  const { type, id } = state.modal;
+  let body = '', title = '', footer = '', maxWidth = 'max-w-md';
+
+  if (type === 'case-detail') {
+    const c = store.cases.find(x=>x.id===id);
+    const info = caseStatusInfo(c);
+    const isSuccess = info.label === 'ติดตามสำเร็จ';
+    const match = isSuccess ? findAssetByCaseRef(c.caseRef) : null;
+    title = `รายละเอียดเคส ${c.caseRef}`;
+    body = `
+      <div class="space-y-3 text-sm">
+        <div class="flex justify-between"><span class="text-slate-400">สถานะ</span>${badge(info)}</div>
+        <div class="flex justify-between"><span class="text-slate-400">ลูกหนี้</span><span class="font-semibold">${c.debtor}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">วันที่รับเคส</span><span>${c.createdAt}</span></div>
+        ${c.recycleRound > 1 ? `<div class="flex justify-between"><span class="text-slate-400">รอบการติดตาม</span><span class="font-semibold text-violet-700">รอบที่ ${c.recycleRound}</span></div>` : ''}
+        ${c.reason ? `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 mt-2"><b>หมายเหตุจากเจ้าหน้าที่:</b><br/>${c.reason}</div>` : ''}
+
+        ${match ? `
+        <div class="pt-3 border-t border-slate-100">
+          <div class="text-xs font-bold text-slate-600 mb-1">รูปสินค้า (แนบตอนรับเข้าคลัง)</div>
+          <div class="text-sm font-semibold text-slate-800 mb-1.5">${match.asset.model}</div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-slate-500 text-xs">สภาพเครื่อง</span>${badge(conditionInfo(match.asset.condition))}
+            <span class="text-[13px] text-slate-400 ml-auto">อยู่ใน Lot <span class="font-mono">${match.lotId}</span></span>
+          </div>
+          <div class="grid grid-cols-4 gap-2">
+            ${match.asset.photos.map(label => `
+            <button data-action="download" data-label="ภาพ: ${label}" class="flex flex-col items-center gap-1 focus-ring">
+              <div class="w-full aspect-square rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">${SVG.camera}</div>
+              <div class="text-[11px] text-slate-500 text-center leading-tight">${label}</div>
+            </button>`).join('')}
+          </div>
+          ${match.asset.conditionNote ? `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 mt-2"><b>หมายเหตุสภาพเครื่อง:</b><br/>${match.asset.conditionNote}</div>` : ''}
+        </div>` : ''}
+
+        <div class="text-[14px] text-slate-400 pt-2 border-t border-slate-100 mt-3">รายละเอียดภาคสนาม (ผู้รับผิดชอบ / วันนัดหมาย / พิกัด GPS / วิดีโอ-เสียงหน้างาน) ไม่แสดงในพอร์ทัลนี้ — ตามนโยบายขอบเขตข้อมูล</div>
+      </div>`;
+  }
+
+  else if (type === 'lot-detail') {
+    const l = store.handoverLots.find(x=>x.id===id);
+    const info = lotStatusInfo(l);
+    const assets = store.assetsByLot[l.id] || [];
+    const canDownload = l.status === 'confirmed';
+    maxWidth = 'max-w-lg';
+    title = `รายการทรัพย์ใน ${l.id}`;
+    body = `
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="text-[13px] px-2 py-0.5 rounded-full font-bold uppercase ${l.type==='finance_pickup'?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${l.type==='finance_pickup'?'🏢 รับเอง':'🚚 จัดส่ง'}</span>
+          ${badge(info)}
+        </div>
+        <div class="text-xs text-slate-400">เลขที่ใบส่งมอบ <span class="font-mono font-semibold text-slate-700">${l.docRef}</span> · ${assets.length} เครื่อง</div>
+        <div class="space-y-2 pt-1 max-h-80 overflow-y-auto pr-1">
+          ${assets.map((a,idx) => `
+          <button data-action="open-modal" data-type="asset-detail" data-id="${a.id}" class="w-full text-left border border-slate-100 rounded-lg p-3 bg-slate-50 hover:border-indigo-300 hover:bg-white transition-colors flex items-center justify-between gap-2 focus-ring">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs font-bold text-slate-700">${a.caseRef}</span>
+                <span class="text-[13px] text-slate-400">#${idx+1}</span>
+              </div>
+              <div class="text-sm font-semibold text-slate-800 mt-1 truncate">${a.debtor}</div>
+              <div class="text-xs text-slate-500 mt-0.5 truncate">${a.model}</div>
+            </div>
+            <span class="text-slate-300 shrink-0">${SVG.eye}</span>
+          </button>`).join('')}
+        </div>
+      </div>`;
+    footer = canDownload
+      ? `<button data-action="download" data-label="ใบส่งมอบ ${l.docRef}" class="text-xs font-semibold text-blue-700 border border-blue-200 bg-blue-50 rounded-lg px-4 py-2 hover:bg-blue-100 focus-ring inline-flex items-center gap-1 mr-auto">${SVG.download} ดาวน์โหลดใบส่งมอบ</button>`
+      : `<button disabled class="text-xs font-semibold text-slate-400 border border-slate-200 bg-slate-50 rounded-lg px-4 py-2 cursor-not-allowed inline-flex items-center gap-1 mr-auto">${SVG.lock} รอยืนยันก่อนดาวน์โหลด</button>`;
+  }
+
+  else if (type === 'asset-detail') {
+    let found = null, lotId = null;
+    for (const lid in store.assetsByLot) { const a = store.assetsByLot[lid].find(x=>x.id===id); if (a) { found = a; lotId = lid; break; } }
+    const a = found;
+    title = 'รายละเอียดทรัพย์';
+    body = `
+      <div class="space-y-3 text-sm">
+        <div class="flex justify-between"><span class="text-slate-400">เลขที่สัญญา</span><span class="font-mono font-bold">${a.caseRef}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">ลูกหนี้</span><span class="font-semibold">${a.debtor}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">รุ่นเครื่อง</span><span class="font-semibold text-right">${a.model}</span></div>
+        <div class="flex justify-between items-center"><span class="text-slate-400">สภาพเครื่อง</span>${badge(conditionInfo(a.condition))}</div>
+        <div class="flex justify-between"><span class="text-slate-400">วันที่รับเข้าคลัง</span><span>${a.receivedAt}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">อยู่ใน Lot</span><span class="font-mono font-semibold">${lotId}</span></div>
+        ${a.conditionNote ? `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800"><b>หมายเหตุสภาพเครื่อง:</b><br/>${a.conditionNote}</div>` : ''}
+        <div class="pt-2 border-t border-slate-100">
+          <div class="text-xs font-bold text-slate-600 mb-2">ภาพถ่ายสภาพเครื่อง (ถ่ายตอนรับเข้าคลัง)</div>
+          <div class="grid grid-cols-4 gap-2">
+            ${a.photos.map(label => `
+            <button data-action="download" data-label="ภาพ: ${label}" class="flex flex-col items-center gap-1 focus-ring">
+              <div class="w-full aspect-square rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">${SVG.camera}</div>
+              <div class="text-[11px] text-slate-500 text-center leading-tight">${label}</div>
+            </button>`).join('')}
+          </div>
+        </div>
+        <div class="pt-2 border-t border-slate-100">
+          <div class="text-xs font-bold text-slate-600 mb-2">เอกสารที่เกี่ยวข้อง</div>
+          <button data-action="open-modal" data-type="lot-detail" data-id="${lotId}" class="w-full flex items-center gap-2 border border-slate-200 rounded-lg p-3 text-left hover:bg-slate-50 focus-ring">
+            ${SVG.download}
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-slate-700">ใบส่งมอบของ Lot ${lotId}</div>
+              <div class="text-[11px] text-slate-400">ดาวน์โหลดได้จากหน้ารายการ Lot — คลิกเพื่อย้อนกลับ</div>
+            </div>
+            <span class="text-slate-300 shrink-0">${SVG.chevron}</span>
+          </button>
+        </div>
+        <div class="text-[14px] text-slate-400 pt-2 border-t border-slate-100">ไม่แสดงหมายเลข IMEI ในพอร์ทัลนี้ตามนโยบายขอบเขตข้อมูล</div>
+      </div>`;
+    footer = `<button data-action="open-modal" data-type="lot-detail" data-id="${lotId}" class="text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg px-4 py-2 hover:bg-slate-50 focus-ring mr-auto inline-flex items-center gap-1">${SVG.eye} ย้อนกลับไปรายการทรัพย์</button>`;
+  }
+
+  return `
+  <div class="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4" data-action="close-modal">
+    <div class="bg-white rounded-xl shadow-xl w-full ${maxWidth} animate-fade-in">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div class="font-bold text-slate-800 text-sm">${title}</div>
+        <button data-action="close-modal" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+      <div class="p-5">${body}</div>
+      <div class="px-5 py-3 border-t border-slate-100 flex justify-end items-center gap-2">
+        ${footer}
+        <button data-action="close-modal" class="text-xs font-semibold text-white bg-slate-900 rounded-lg px-4 py-2 hover:bg-slate-800 focus-ring">ปิด</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderToast(){
+  if (!state.toast) return '';
+  return `<div class="fixed bottom-6 right-6 bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-lg shadow-lg toast-in z-50 flex items-center gap-2">${SVG.download}${state.toast}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER ROOT
+// ═══════════════════════════════════════════════════════
+function render(){
+  const renderers = { dashboard: renderDashboard, cases: renderCases, billing: renderBilling, invoices: renderInvoices, handover: renderHandover, profile: renderProfile };
+  document.getElementById('app').innerHTML = layout(renderers[state.tab]()) + renderModal() + renderToast();
+}
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
+  // ป้องกัน backdrop ปิด modal เวลาคลิกโดน element ภายใน content ที่ไม่มี data-action ของตัวเอง
+  // (closest() จะไล่ขึ้นไปเจอ data-action="close-modal" ที่ backdrop ได้ ถ้าไม่เช็คว่าคลิกโดน backdrop ตรงๆ)
+  if (action === 'close-modal' && el.classList.contains('modal-backdrop') && e.target !== el) return;
+  if (action === 'nav') S({ tab: el.dataset.tab, caseFilter: 'all', caseSearch: '' });
+  else if (action === 'open-modal') { state.modal = { type: el.dataset.type, id: el.dataset.id }; render(); }
+  else if (action === 'close-modal') { state.modal = null; render(); }
+  else if (action === 'download') showToast(`กำลังดาวน์โหลด${el.dataset.label ? ' ' + el.dataset.label : 'เอกสาร'}...`);
+  else if (action === 'logout') showToast('ออกจากระบบแล้ว (จำลอง)');
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd service — รัน dashboard เองตอนล็อกอิน + รีสตาร์ทถ้าดับ
+  ติดตั้ง:
+    cp orchestrator/scripts/com.rtb.orchestrator.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/com.rtb.orchestrator.plist
+  หยุด/ถอน:
+    launchctl unload ~/Library/LaunchAgents/com.rtb.orchestrator.plist
+  ** ถ้า repo ไม่ได้อยู่ที่ /Users/zeegamemsg/RTB-RUAMTABIEN ให้แก้ path ทั้ง 3 จุดด้านล่าง **
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.rtb.orchestrator</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/zeegamemsg/RTB-RUAMTABIEN/orchestrator/scripts/start.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>/Users/zeegamemsg/RTB-RUAMTABIEN</string>
+  <key>StandardOutPath</key>
+  <string>/Users/zeegamemsg/RTB-RUAMTABIEN/orchestrator/logs/service.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/zeegamemsg/RTB-RUAMTABIEN/orchestrator/logs/service.err</string>
+</dict>
+</plist>

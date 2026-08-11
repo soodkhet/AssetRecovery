@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetRecovery — การแจ้งเตือน (Notifications)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; }
+  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 2px; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+<div id="app" class="flex-1 flex flex-col"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// การแจ้งเตือน In-app (เฟส 1 = Push/In-app เท่านั้น — ไฟล์ 90 §6.3)
+// Storage: ตาราง notifications (schema 02 v3.5 — DEC-006/D3)
+//   fields: user_id, event_code, title, body, link_path, read_at
+// Endpoints (ไฟล์ 90 §14): GET /api/notifications ·
+//   PATCH /api/notifications/{id}/read · PATCH /api/notifications/read-all
+// องค์ประกอบ 2 ส่วน: (1) กระดิ่ง + dropdown บน header ทุกหน้า
+//                     (2) หน้ารายการเต็ม (หน้านี้)
+// event_code ตัวอย่างทั้งหมด = event จริงจาก state machine แต่ละไฟล์
+// ═══════════════════════════════════════════════════════════════
+
+const state = { filter: 'all', dropdown: false };
+
+// mock — ตรง schema: { id, event_code, title, body, link_path, read_at, created_at }
+const notis = [
+  { id: 'n1', event_code: 'exception.created',        mod: 'บัญชี',    title: 'Exception ระดับ critical ใหม่',            body: 'BT-003 ยังไม่ได้จับคู่ — มีรายการ unmatched ค้างในงวด มิถุนายน 2569 (บล็อกการส่งงวด)', link_path: '/accounting/documents', created_at: 'วันนี้ 09:42', read_at: null,  level: 'critical' },
+  { id: 'n2', event_code: 'advance.overdue',          mod: 'การเงิน',  title: 'เงินทดรองเลยกำหนดเคลียร์',                 body: 'ADV-002 ของ ประยุทธ์ บุญมี ฿ 3,000 เลยกำหนด 28/06/2569 — ระบบ mark overdue อัตโนมัติ (job: advance_overdue)', link_path: '/finance/advances', created_at: 'วันนี้ 08:15', read_at: null,  level: 'warning' },
+  { id: 'n3', event_code: 'expense.rejected',         mod: 'ค่าตอบแทน', title: 'รายการเบิกถูกตีกลับ',                     body: 'CASE-26-0034 ค่าที่พัก ฿ 1,200 — "รูปใบเสร็จไม่ชัด" · แก้ไขแล้วกดส่งใหม่ได้ (needs_revision)', link_path: '/field/expenses', created_at: 'วันนี้ 07:58', read_at: null,  level: 'warning' },
+  { id: 'n4', event_code: 'case.closed_success',      mod: 'เคส',      title: 'เคสปิดงานสำเร็จ',                          body: 'CASE-26-0034 ยึดทรัพย์สำเร็จ — รอคลังสินค้ายืนยันรับทรัพย์เข้า Lot', link_path: '/cases/CASE-26-0034', created_at: 'เมื่อวาน 16:20', read_at: 'เมื่อวาน 17:05', level: 'success' },
+  { id: 'n5', event_code: 'payout_batch.completed',   mod: 'การเงิน',  title: 'รอบจ่ายโอนเงินสำเร็จ',                     body: 'PB-2569-06-OUT โอนสำเร็จ 12 รายการ รวม ฿ 43,650 — สร้าง WHT Certificate อัตโนมัติแล้ว', link_path: '/finance/payout', created_at: 'เมื่อวาน 14:02', read_at: 'เมื่อวาน 15:11', level: 'success' },
+  { id: 'n6', event_code: 'reassignment.requested',   mod: 'มอบหมาย',  title: 'คำขอย้ายงานรอความยินยอม',                  body: 'CASE-26-0051 ขอย้ายจาก วิชัย → สมพร — ถ้าไม่ตอบใน 24 ชม. ระบบ timeout อัตโนมัติ (job: reassign_timeout)', link_path: '/assignment', created_at: '2 วันก่อน', read_at: null,  level: 'info' },
+  { id: 'n7', event_code: 'question.asked',           mod: 'บัญชี',    title: 'ข้อซักถามใหม่จากสำนักงานบัญชี',            body: 'งวด พ.ค. 69: "ใบเสร็จ EXP-0041 ยอดไม่ตรงกับไฟล์ 03_Expenses ขอคำยืนยัน"', link_path: '/accounting/qa', created_at: '2 วันก่อน', read_at: '2 วันก่อน', level: 'info' },
+  { id: 'n8', event_code: 'period.sent_to_accountant',mod: 'บัญชี',    title: 'ส่งมอบงวดบัญชีแล้ว',                        body: 'งวด พฤษภาคม 2569 export Accounting Pack v1.0 และส่งสำนักงานบัญชีเรียบร้อย', link_path: '/accounting/export', created_at: '03/06/2569', read_at: '03/06/2569', level: 'success' }
+];
+
+const lvl = { critical:'bg-red-100 text-red-700', warning:'bg-orange-100 text-orange-700', success:'bg-emerald-100 text-emerald-700', info:'bg-blue-100 text-blue-700' };
+const unread = () => notis.filter(n=>!n.read_at).length;
+
+function render(){
+  const list = state.filter==='unread' ? notis.filter(n=>!n.read_at) : notis;
+  document.getElementById('app').innerHTML = `
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-20">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm">AR</div>
+        <div><div class="font-bold text-slate-900 text-sm leading-tight">การแจ้งเตือน (Notifications)</div>
+        <div class="text-[10px] text-slate-400">In-app เฟส 1 — ไฟล์ 90 §6.3 · ตาราง notifications (DEC-006/D3)</div></div>
+      </div>
+      <div class="relative">
+        <button id="bell" class="relative p-2 rounded-lg hover:bg-slate-100 focus-ring" title="ตัวอย่างกระดิ่งบน header ทุกหน้า">
+          <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+          ${unread()>0?`<span class="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">${unread()}</span>`:''}
+        </button>
+        ${state.dropdown?`
+        <div class="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-slate-200 shadow-xl z-30 animate-fade-in">
+          <div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700">แจ้งเตือนล่าสุด</span>
+            <span class="text-[10px] text-slate-400">${unread()} ยังไม่อ่าน</span>
+          </div>
+          <div class="max-h-72 overflow-y-auto divide-y divide-slate-50">
+            ${notis.slice(0,5).map(n=>`
+            <div class="px-4 py-2.5 text-xs ${!n.read_at?'bg-blue-50/40':''}">
+              <div class="flex items-center gap-1.5">${!n.read_at?'<span class="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0"></span>':''}<span class="font-semibold text-slate-800 truncate">${n.title}</span></div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${n.mod} · ${n.created_at}</div>
+            </div>`).join('')}
+          </div>
+          <div class="px-4 py-2 border-t border-slate-100 text-center text-[11px] text-blue-600 font-semibold cursor-pointer">ดูทั้งหมด</div>
+        </div>`:''}
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-6 w-full animate-fade-in">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex gap-1">
+        ${[['all','ทั้งหมด ('+notis.length+')'],['unread','ยังไม่อ่าน ('+unread()+')']].map(([id,label])=>`
+        <button data-filter="${id}" class="px-3 py-1.5 rounded-lg text-xs font-semibold focus-ring ${state.filter===id?'bg-slate-900 text-white':'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}">${label}</button>`).join('')}
+      </div>
+      <button id="readAll" class="text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg text-xs font-semibold focus-ring" ${unread()===0?'disabled':''}>อ่านทั้งหมด (PATCH /read-all)</button>
+    </div>
+
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+      ${list.length===0?`<div class="p-10 text-center text-sm text-slate-400">ไม่มีการแจ้งเตือน${state.filter==='unread'?'ที่ยังไม่อ่าน':''} — งานของคุณเรียบร้อยดี</div>`:''}
+      ${list.map(n=>`
+      <div class="p-4 flex gap-3 ${!n.read_at?'bg-blue-50/40':''}">
+        <div class="shrink-0 mt-0.5">${!n.read_at?'<span class="block w-2 h-2 bg-blue-500 rounded-full"></span>':'<span class="block w-2 h-2 bg-slate-200 rounded-full"></span>'}</div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-slate-900 text-sm">${n.title}</span>
+            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${lvl[n.level]}">${n.mod}</span>
+            <span class="font-mono text-[9px] text-slate-400">${n.event_code}</span>
+          </div>
+          <div class="text-xs text-slate-600 mt-1 leading-relaxed">${n.body}</div>
+          <div class="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
+            <span>${n.created_at}</span>
+            <span class="font-mono text-blue-500">${n.link_path}</span>
+            ${n.read_at?`<span>อ่านแล้ว ${n.read_at}</span>`:''}
+          </div>
+        </div>
+        <div class="shrink-0 flex flex-col gap-1.5 items-end">
+          <button class="text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg text-[10px] font-semibold focus-ring">เปิดรายการ</button>
+          ${!n.read_at?`<button data-read="${n.id}" class="text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-lg text-[10px] font-semibold focus-ring">อ่านแล้ว</button>`:''}
+        </div>
+      </div>`).join('')}
+    </div>
+
+    <div class="mt-4 text-[10px] text-slate-400 bg-slate-50 border border-slate-100 rounded-lg p-3 leading-relaxed">
+      <b>อ้างอิง:</b> ช่องทางเฟส 1 = Push/In-app เท่านั้น ไม่มี SMS/Email/LINE OA (ไฟล์ 90 §6.3) · event trigger = ทุก status change สำคัญของเคส/การเงิน ตาม state machine · storage = ตาราง <span class="font-mono">notifications</span> (user_id, event_code, title, body, link_path, read_at) schema 02 v3.5 · endpoints: <span class="font-mono">GET /api/notifications</span>, <span class="font-mono">PATCH /api/notifications/{id}/read</span>, <span class="font-mono">PATCH /api/notifications/read-all</span> (ไฟล์ 90 §14)
+    </div>
+  </main>`;
+
+  document.getElementById('bell').addEventListener('click',()=>{state.dropdown=!state.dropdown;render();});
+  document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{state.filter=b.dataset.filter;render();}));
+  document.querySelectorAll('[data-read]').forEach(b=>b.addEventListener('click',()=>{const n=notis.find(x=>x.id===b.dataset.read);n.read_at='เมื่อสักครู่';render();}));
+  const ra=document.getElementById('readAll'); if(ra) ra.addEventListener('click',()=>{notis.forEach(n=>{if(!n.read_at)n.read_at='เมื่อสักครู่';});render();});
+}
+render();
+</script>
+</body>
+</html>

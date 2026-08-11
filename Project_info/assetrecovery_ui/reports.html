@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetRecovery — รายงาน</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.8.0/Recharts.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Inter','Noto Sans Thai',sans-serif;background:#f8fafc;color:#0f172a;}
+.focus-ring:focus{outline:2px solid #6d28d9;outline-offset:2px;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+.no-scroll::-webkit-scrollbar{display:none;}.no-scroll{-ms-overflow-style:none;scrollbar-width:none;}
+.modal-bg{background:rgba(15,23,42,.6);backdrop-filter:blur(4px);}
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.slide-up{animation:slideUp .2s ease-out forwards;}
+.fade-in{animation:fadeIn .15s ease-out forwards;}
+.pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.tab-on{border-bottom:2.5px solid #7c3aed;color:#7c3aed;font-weight:700;}
+.tab-off{border-bottom:2.5px solid transparent;color:#64748b;}
+.tab-off:hover{color:#334155;}
+.bar{transition:all .3s ease;}
+.trend-up{color:#16a34a;}
+.trend-dn{color:#dc2626;}
+</style>
+</head>
+<body class="min-h-screen">
+<div id="app"></div>
+<script>
+// ═══════════════════════════════════════════════
+// DATE UTILS — Asia/Bangkok, พ.ศ.
+// ═══════════════════════════════════════════════
+const TZ='Asia/Bangkok';
+function toBKK(d=new Date()){return new Date(d.toLocaleString('en-US',{timeZone:TZ}));}
+function fmtDate(d=new Date()){const b=toBKK(d instanceof Date?d:new Date(d));return`${String(b.getDate()).padStart(2,'0')}/${String(b.getMonth()+1).padStart(2,'0')}/${b.getFullYear()+543}`;}
+function nowDate(){return fmtDate(new Date());}
+
+// ═══════════════════════════════════════════════
+// MOCK DATA
+// ═══════════════════════════════════════════════
+const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+const store = {
+  // ── F2: Revenue Summary (12 เดือน) ──────────────
+  revenueTrend: [
+    {m:'ส.ค.2568',rev:182000,cost:95000,cases:38,success:29,fail:9},
+    {m:'ก.ย.2568',rev:195000,cost:98000,cases:41,success:32,fail:9},
+    {m:'ต.ค.2568',rev:211000,cost:103000,cases:44,success:35,fail:9},
+    {m:'พ.ย.2568',rev:198000,cost:97000,cases:40,success:30,fail:10},
+    {m:'ธ.ค.2568',rev:223000,cost:108000,cases:47,success:37,fail:10},
+    {m:'ม.ค.2569',rev:231000,cost:112000,cases:49,success:39,fail:10},
+    {m:'ก.พ.2569',rev:219000,cost:107000,cases:46,success:36,fail:10},
+    {m:'มี.ค.2569',rev:245000,cost:118000,cases:52,success:42,fail:10},
+    {m:'เม.ย.2569',rev:237000,cost:115000,cases:50,success:40,fail:10},
+    {m:'พ.ค.2569',rev:252000,cost:121000,cases:53,success:43,fail:10},
+    {m:'มิ.ย.2569',rev:268000,cost:128000,cases:56,success:45,fail:11},
+    {m:'ก.ค.2569',rev:115000,cost:57000,cases:24,success:19,fail:5},
+  ],
+  // ── F1: Gross Profit by company ──────────────
+  profitByCompany: [
+    {name:'สยามไฟแนนซ์',rev:980000,cost:512000,cases:210,success:168,fail:42},
+    {name:'กรุงไทยลีสซิ่ง',rev:740000,cost:402000,cases:158,success:121,fail:37},
+    {name:'อยุธยา แคปปิตอล',rev:560000,cost:318000,cases:120,success:88,fail:32},
+    {name:'กสิกร ลีส',rev:320000,cost:195000,cases:68,success:48,fail:20},
+  ],
+  // ── F1: Gross Profit by team ──────────────────
+  profitByTeam: [
+    {name:'ทีม A (Inhouse)',rev:820000,cost:390000,cases:175,success:148,fail:27,members:8},
+    {name:'ทีมรับเหมาเหนือ (Outsource)',rev:960000,cost:568000,cases:205,success:162,fail:43,members:12},
+    {name:'ทีม B (Inhouse)',rev:620000,cost:290000,cases:133,success:115,fail:18,members:6},
+    {name:'ทีม C (Outsource)',rev:200000,cost:179000,cases:43,success:19,fail:24,members:5},
+  ],
+  // ── F3: AR Aging ─────────────────────────────
+  arAging: [
+    {company:'สยามไฟแนนซ์',   total:125000, b0_30:80000, b31_60:30000, b61_90:15000, b90p:0,      due:'25/07/2569'},
+    {company:'กรุงไทยลีสซิ่ง', total:89000,  b0_30:0,     b31_60:45000, b61_90:32000, b90p:12000, due:'10/06/2569'},
+    {company:'อยุธยา แคปปิตอล', total:54000,  b0_30:54000, b31_60:0,     b61_90:0,     b90p:0,      due:'01/08/2569'},
+    {company:'กสิกร ลีส',      total:38000,  b0_30:0,     b31_60:0,     b61_90:18000, b90p:20000, due:'15/05/2569'},
+  ],
+  // ── F4: Compensation Summary ──────────────────
+  compByTeam: [
+    {team:'ทีม A (Inhouse)',   type:'inhouse',   members:8,  gross:390000,wht:0,    net:390000,cases:175},
+    {team:'ทีมรับเหมาเหนือ',   type:'outsource', members:12, gross:568000,wht:17040,net:550960,cases:205},
+    {team:'ทีม B (Inhouse)',   type:'inhouse',   members:6,  gross:290000,wht:0,    net:290000,cases:133},
+    {team:'ทีม C (Outsource)', type:'outsource', members:5,  gross:179000,wht:5370, net:173630,cases:43},
+  ],
+  // ── F5: Advance Overdue ───────────────────────
+  advanceOverdue: [
+    {name:'ประสิทธิ์ มากมี', team:'ทีมรับเหมาเหนือ', approved:'01/05/2569', due:'01/06/2569', amount:3500, overdueDays:31},
+    {name:'อนุชา วงษ์ดี',   team:'ทีม C (Outsource)',approved:'15/05/2569',due:'15/06/2569', amount:2000, overdueDays:17},
+    {name:'มนัส ขันธ์ชัย',  team:'ทีม B (Inhouse)', approved:'20/05/2569', due:'20/06/2569', amount:4500, overdueDays:12},
+  ],
+  // ── O1: Success Rate ─────────────────────────
+  successRate: [
+    {m:'ก.พ.2569',rate:78.3},{m:'มี.ค.2569',rate:80.8},{m:'เม.ย.2569',rate:80.0},
+    {m:'พ.ค.2569',rate:81.1},{m:'มิ.ย.2569',rate:80.4},{m:'ก.ค.2569',rate:79.2},
+  ],
+  // ── O2: Team Performance ─────────────────────
+  teamPerf: [
+    {team:'ทีม A',cases:175,avgTAT:4.2,minTAT:1,maxTAT:18,withinSLA:162,breachSLA:13,successRate:84.6},
+    {team:'ทีมรับเหมาเหนือ',cases:205,avgTAT:5.8,minTAT:1,maxTAT:28,withinSLA:178,breachSLA:27,successRate:79.0},
+    {team:'ทีม B',cases:133,avgTAT:3.9,minTAT:1,maxTAT:14,withinSLA:126,breachSLA:7,successRate:86.5},
+    {team:'ทีม C',cases:43, avgTAT:8.1,minTAT:2,maxTAT:31,withinSLA:29, breachSLA:14,successRate:44.2},
+  ],
+  // ── O4: SLA Breach ────────────────────────────
+  slaBreach: [
+    {caseRef:'SF-2026-00980',company:'สยามไฟแนนซ์',   agent:'ธีรวุฒิ สมใจ',  team:'ทีม C',received:'01/06/2569',overdue:32,revenue:8500},
+    {caseRef:'KTL-9995-X',  company:'กรุงไทยลีสซิ่ง',agent:'อนุชา วงษ์ดี',  team:'ทีม C',received:'05/06/2569',overdue:28,revenue:6000},
+    {caseRef:'SF-2026-00941',company:'สยามไฟแนนซ์',   agent:'มานะ ใจดี',    team:'ทีม A',received:'08/06/2569',overdue:25,revenue:7500},
+    {caseRef:'KTL-9992-X',  company:'กรุงไทยลีสซิ่ง',agent:'ประสิทธิ์ มากมี',team:'ทีมรับเหมา',received:'10/06/2569',overdue:23,revenue:5400},
+    {caseRef:'ATF-5520-Z',  company:'อยุธยา แคปปิตอล',agent:'อนุชา วงษ์ดี', team:'ทีม C',received:'12/06/2569',overdue:21,revenue:6200},
+  ],
+  // ── O5: Warehouse Summary ─────────────────────
+  warehouseSummary: [
+    {company:'สยามไฟแนนซ์',   pending:2,inCustody:3,pendingHandover:1,handedOver:12},
+    {company:'กรุงไทยลีสซิ่ง',pending:1,inCustody:4,pendingHandover:1,handedOver:8},
+    {company:'อยุธยา แคปปิตอล',pending:1,inCustody:1,pendingHandover:0,handedOver:3},
+  ],
+  // ── E2: Company Scorecard ─────────────────────
+  companyScorecard: [
+    {company:'สยามไฟแนนซ์',   cases:210,successRate:80.0,revenue:980000,profit:468000,margin:47.8,ar:125000,trend:'up'},
+    {company:'กรุงไทยลีสซิ่ง',cases:158,successRate:76.6,revenue:740000,profit:338000,margin:45.7,ar:89000, trend:'dn'},
+    {company:'อยุธยา แคปปิตอล',cases:120,successRate:73.3,revenue:560000,profit:242000,margin:43.2,ar:54000, trend:'up'},
+    {company:'กสิกร ลีส',      cases:68, successRate:70.6,revenue:320000,profit:125000,margin:39.1,ar:38000, trend:'dn'},
+  ],
+};
+
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+const st = {
+  mainTab: 'finance',   // finance | operations | accounting | executive
+  subTab:  'f1',
+  modal:   null,
+  toast:   null,
+  period:  'ytd',       // this_month | last_month | q1 | ytd | custom
+  profitDim: 'company', // company | team
+};
+function S(p){Object.assign(st,p);render();}
+function openModal(type,id=''){S({modal:{type,id}});}
+function closeModal(){S({modal:null});}
+function toast(msg){S({toast:msg});setTimeout(()=>S({toast:null}),3000);}
+
+// ═══════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════
+function money(n){return(+n||0).toLocaleString('th-TH');}
+function pct(a,b){return b?((a/b)*100).toFixed(1)+'%':'—';}
+function trend(v,good='up'){
+  const up = v>=0;
+  return`<span class="${up?'text-emerald-600':'text-red-600'} font-bold text-xs">
+    ${up?'↑':'↓'}${Math.abs(v).toFixed(1)}%
+  </span>`;
+}
+function pill(lbl,cls){return`<span class="pill ${cls}">${lbl}</span>`;}
+
+const SVG={
+  dl:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>`,
+  refresh:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>`,
+  xl:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`,
+  pdf:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>`,
+  eye:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`,
+  x:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`,
+  warn:`<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`,
+};
+
+function kpiCard(label,val,sub,color='violet',footer=''){
+  const colors={violet:'bg-violet-50 border-violet-200 text-violet-900',emerald:'bg-emerald-50 border-emerald-200 text-emerald-900',amber:'bg-amber-50 border-amber-200 text-amber-900',red:'bg-red-50 border-red-200 text-red-900',blue:'bg-blue-50 border-blue-200 text-blue-900',slate:'bg-slate-50 border-slate-200 text-slate-900'};
+  return`<div class="border rounded-xl p-4 ${colors[color]||colors.violet}">
+    <div class="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-1">${label}</div>
+    <div class="text-2xl font-extrabold">${val}</div>
+    <div class="text-xs opacity-70 mt-0.5">${sub}</div>
+    ${footer?`<div class="mt-2 pt-2 border-t border-current border-opacity-20 text-xs">${footer}</div>`:''}
+  </div>`;
+}
+
+// Simple SVG bar chart
+function barChart(data, xKey, yKey, color='#7c3aed', h=120){
+  const vals = data.map(d=>d[yKey]);
+  const max = Math.max(...vals)||1;
+  const w = 40; const gap = 8;
+  const totalW = data.length*(w+gap);
+  return`<svg viewBox="0 0 ${totalW} ${h+30}" class="w-full" style="height:${h+30}px">
+    ${data.map((d,i)=>{
+      const bh = Math.round((d[yKey]/max)*(h-20));
+      const x = i*(w+gap);
+      return`<g>
+        <rect x="${x}" y="${h-bh-10}" width="${w}" height="${bh}" rx="3" fill="${color}" opacity=".8" class="bar"/>
+        <text x="${x+w/2}" y="${h+12}" text-anchor="middle" font-size="9" fill="#64748b">${d[xKey]}</text>
+      </g>`;
+    }).join('')}
+  </svg>`;
+}
+
+// Simple SVG line chart
+function lineChart(data, xKey, yKey, color='#7c3aed', h=100){
+  const vals = data.map(d=>d[yKey]);
+  const max = Math.max(...vals)||1;
+  const min = Math.min(...vals)||0;
+  const range = max-min||1;
+  const totalW = 500; const gap = totalW/(data.length-1);
+  const pts = data.map((d,i)=>{
+    const x = i*gap;
+    const y = h-((d[yKey]-min)/range)*(h-20)-10;
+    return`${x},${y}`;
+  }).join(' ');
+  return`<svg viewBox="0 0 ${totalW} ${h+20}" class="w-full" style="height:${h+20}px">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${data.map((d,i)=>{
+      const x=i*gap;const y=h-((d[yKey]-min)/range)*(h-20)-10;
+      return`<circle cx="${x}" cy="${y}" r="4" fill="${color}"/>
+      <text x="${x}" y="${h+18}" text-anchor="middle" font-size="9" fill="#64748b">${d[xKey]}</text>`;
+    }).join('')}
+  </svg>`;
+}
+
+function exportBtns(){
+  return`<div class="flex items-center gap-2">
+    <button data-action="toast-msg" data-msg="กำลัง Export Excel..." class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-50 focus-ring">${SVG.xl} Excel</button>
+    <button data-action="toast-msg" data-msg="กำลัง Export PDF..." class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-red-200 text-red-600 rounded-lg hover:bg-red-50 focus-ring">${SVG.pdf} PDF</button>
+    <button data-action="toast-msg" data-msg="รีเฟรชข้อมูลแล้ว" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 focus-ring">${SVG.refresh} รีเฟรช</button>
+  </div>`;
+}
+
+function periodPicker(){
+  const opts=[['this_month','เดือนนี้'],['last_month','เดือนที่แล้ว'],['ytd','ปีนี้ (YTD)'],['q2','Q2/2569']];
+  return`<div class="flex gap-1 bg-slate-100 rounded-lg p-1">
+    ${opts.map(([id,lbl])=>`<button data-action="set-period" data-id="${id}" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${st.period===id?'bg-white shadow text-slate-900':'text-slate-500 hover:text-slate-700'}">${lbl}</button>`).join('')}
+  </div>`;
+}
+
+function tbl(headers, rows, extra=''){
+  return`<div class="overflow-x-auto border border-slate-200 rounded-xl bg-white ${extra}">
+    <table class="w-full text-sm text-left">
+      <thead class="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase font-bold tracking-wide">
+        <tr>${headers.map(h=>`<th class="px-4 py-3">${h}</th>`).join('')}</tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        ${rows}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════════
+function renderNav(){
+  return`<nav class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+      <div class="flex items-center gap-2 mr-4">
+        <div class="w-7 h-7 rounded-lg bg-violet-700 flex items-center justify-center text-white text-xs font-bold">AR</div>
+        <span class="font-bold text-sm text-slate-900">AssetRecovery</span>
+        <span class="text-slate-300">·</span>
+        <span class="text-sm font-semibold text-violet-700">รายงาน</span>
+      </div>
+      <div class="ml-auto flex items-center gap-3">
+        <div class="text-xs text-slate-400">อัปเดตล่าสุด: ${nowDate()} 00:00</div>
+        <div class="w-8 h-8 rounded-full bg-violet-700 text-white flex items-center justify-center text-xs font-bold">E</div>
+      </div>
+    </div>
+  </nav>`;
+}
+
+// ═══════════════════════════════════════════════
+// MAIN TABS
+// ═══════════════════════════════════════════════
+function renderMainTabs(){
+  const tabs=[
+    {id:'finance',    l:'💰 การเงิน',    sub:[['f1','กำไรขั้นต้น'],['f2','สรุปรายได้'],['f3','AR Aging'],['f4','ค่าตอบแทน'],['f5','Advance ค้าง']]},
+    {id:'operations', l:'📦 งานติดตาม', sub:[['o1','อัตราสำเร็จ'],['o2','SLA / TAT'],['o3','ปริมาณงาน'],['o4','เคสเกิน SLA'],['o5','คลังสินค้า']]},
+    {id:'accounting', l:'📋 บัญชี',      sub:[['a1','WHT รายเดือน'],['a2','ใบกำกับภาษี'],['a3','Export History'],['a4','Exception']]},
+    {id:'executive',  l:'🎯 Executive',   sub:[['e1','KPI รวม'],['e2','Scorecard บริษัท'],['e3','Scorecard ทีม']]},
+  ];
+  const cur = tabs.find(t=>t.id===st.mainTab);
+  return`
+  <div class="bg-white border-b border-slate-200 sticky top-14 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <!-- Main tabs -->
+      <div class="flex gap-1 pt-3 no-scroll overflow-x-auto">
+        ${tabs.map(t=>`<button data-action="set-main" data-id="${t.id}" data-first="${t.sub[0][0]}"
+          class="px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors whitespace-nowrap focus-ring
+          ${st.mainTab===t.id?'bg-violet-600 text-white':'text-slate-600 hover:bg-slate-100'}">${t.l}</button>`).join('')}
+      </div>
+      <!-- Sub tabs -->
+      <div class="flex gap-6 no-scroll overflow-x-auto">
+        ${cur.sub.map(([id,lbl])=>`<button data-action="set-sub" data-id="${id}"
+          class="py-2.5 text-sm whitespace-nowrap focus-ring ${st.subTab===id?'tab-on':'tab-off'}">${lbl}</button>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// CONTENT — Finance
+// ═══════════════════════════════════════════════
+function renderF1(){
+  const data = st.profitDim==='company'?store.profitByCompany:store.profitByTeam;
+  const totRev=data.reduce((a,b)=>a+b.rev,0);
+  const totCost=data.reduce((a,b)=>a+b.cost,0);
+  const totProfit=totRev-totCost;
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-bold text-slate-900 text-lg">รายงานกำไรขั้นต้น (Gross Profit)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">ผลจริง (Actual) — ไม่ใช่ประมาณการ · ไฟล์ 21 §6</p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        ${periodPicker()}
+        ${exportBtns()}
+      </div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      ${kpiCard('Revenue รวม','฿ '+money(totRev),'รายได้จริงที่เกิดขึ้น','emerald',trend(8.2)+'  vs เดือนก่อน')}
+      ${kpiCard('Direct Cost รวม','฿ '+money(totCost),'ต้นทุนตรงจากเคส','amber',trend(6.1)+'  vs เดือนก่อน')}
+      ${kpiCard('Gross Profit รวม','฿ '+money(totProfit),'Revenue - Direct Cost','blue',trend(10.9)+'  vs เดือนก่อน')}
+      ${kpiCard('Gross Margin',''+pct(totProfit,totRev),'เฉลี่ยทั้งหมด',totProfit/totRev>0.4?'emerald':'amber',trend(1.2)+'  vs เดือนก่อน')}
+    </div>
+
+    <!-- Dimension toggle -->
+    <div class="flex items-center gap-3">
+      <div class="flex gap-1 bg-slate-100 rounded-lg p-1">
+        <button onclick="S({profitDim:'company'})" class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${st.profitDim==='company'?'bg-white shadow text-slate-900':'text-slate-500'}">แยกตามบริษัทไฟแนนซ์</button>
+        <button onclick="S({profitDim:'team'})"    class="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${st.profitDim==='team'?'bg-white shadow text-slate-900':'text-slate-500'}">แยกตามทีม</button>
+      </div>
+    </div>
+
+    <!-- Bar chart -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4">
+      <div class="text-xs font-bold text-slate-500 uppercase mb-3">Revenue vs Cost (${st.profitDim==='company'?'ตามบริษัท':'ตามทีม'})</div>
+      <div class="flex gap-4">
+        <div class="flex-1 min-w-0">${barChart(data,'name','rev','#6d28d9')}</div>
+        <div class="flex-1 min-w-0">${barChart(data,'name','cost','#f59e0b')}</div>
+      </div>
+      <div class="flex gap-4 text-[10px] mt-1 text-center text-slate-400">
+        <div class="flex-1">Revenue</div><div class="flex-1">Cost</div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    ${tbl(['มิติ','Revenue','Direct Cost','Gross Profit','Margin %','เคสทั้งหมด','Success Rate','เจาะลึก'],
+      data.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.name}</td>
+        <td class="px-4 py-3">฿ ${money(r.rev)}</td>
+        <td class="px-4 py-3 text-amber-700">฿ ${money(r.cost)}</td>
+        <td class="px-4 py-3 font-bold text-emerald-700">฿ ${money(r.rev-r.cost)}</td>
+        <td class="px-4 py-3 font-bold ${(r.rev-r.cost)/r.rev>0.4?'text-emerald-700':(r.rev-r.cost)/r.rev>0.25?'text-amber-700':'text-red-600'}">${pct(r.rev-r.cost,r.rev)}</td>
+        <td class="px-4 py-3">${r.cases}</td>
+        <td class="px-4 py-3">${pct(r.success,r.cases)}</td>
+        <td class="px-4 py-3"><button data-action="open-modal" data-type="drilldown" data-id="${r.name}" class="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 hover:underline">${SVG.eye} เจาะลึก</button></td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderF2(){
+  const totRev=store.revenueTrend.reduce((a,b)=>a+b.rev,0);
+  const totCases=store.revenueTrend.reduce((a,b)=>a+b.cases,0);
+  const avgRev=Math.round(totRev/totCases);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">สรุปรายได้ (Revenue Summary)</h2>
+      <div class="flex items-center gap-3 flex-wrap">${periodPicker()}${exportBtns()}</div>
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+      ${kpiCard('Revenue YTD','฿ '+money(totRev),'รายได้สะสมปีนี้','emerald',trend(12.3)+'  vs ปีก่อน')}
+      ${kpiCard('เคสทั้งหมด',totCases+' เคส','ตลอดช่วงเวลา','blue','')}
+      ${kpiCard('Revenue/เคส เฉลี่ย','฿ '+money(avgRev),'ค่าเฉลี่ยต่อเคส','violet',trend(4.1)+'  vs เดือนก่อน')}
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl p-4">
+      <div class="text-xs font-bold text-slate-500 uppercase mb-3">Revenue รายเดือน (12 เดือนย้อนหลัง)</div>
+      ${barChart(store.revenueTrend,'m','rev','#7c3aed',100)}
+    </div>
+    ${tbl(['เดือน','Revenue','Cost','Gross Profit','เคสทั้งหมด','สำเร็จ','ไม่สำเร็จ','Success Rate'],
+      store.revenueTrend.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-semibold">${r.m}</td>
+        <td class="px-4 py-3 text-emerald-700 font-semibold">฿ ${money(r.rev)}</td>
+        <td class="px-4 py-3 text-amber-700">฿ ${money(r.cost)}</td>
+        <td class="px-4 py-3 font-bold text-blue-700">฿ ${money(r.rev-r.cost)}</td>
+        <td class="px-4 py-3">${r.cases}</td>
+        <td class="px-4 py-3 text-emerald-700 font-semibold">${r.success}</td>
+        <td class="px-4 py-3 text-red-600">${r.fail}</td>
+        <td class="px-4 py-3 font-bold">${pct(r.success,r.cases)}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderF3(){
+  const totAR=store.arAging.reduce((a,b)=>a+b.total,0);
+  const overdue90=store.arAging.reduce((a,b)=>a+b.b90p,0);
+  const overdue60=store.arAging.reduce((a,b)=>a+b.b61_90,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-bold text-slate-900 text-lg">อายุหนี้ลูกค้า (AR Aging)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">ณ วันที่ ${nowDate()} · Buckets: 0-30 / 31-60 / 61-90 / 90+ วัน</p>
+      </div>
+      ${exportBtns()}
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      ${kpiCard('AR ค้างรับรวม','฿ '+money(totAR),'ทุกบริษัท','red','')}
+      ${kpiCard('เกิน 60 วัน','฿ '+money(overdue60+overdue90),'ควรติดตามด่วน','amber','')}
+      ${kpiCard('เกิน 90 วัน','฿ '+money(overdue90),'เสี่ยงเก็บไม่ได้','red','')}
+      ${kpiCard('จำนวนบริษัท',store.arAging.length+' ราย','ที่มียอดค้าง','slate','')}
+    </div>
+    ${overdue90>0?`<div class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-xs text-red-800">${SVG.warn}<div>พบยอดค้างชำระเกิน 90 วัน รวม ฿ ${money(overdue90)} — ควรติดต่อบริษัทไฟแนนซ์โดยด่วน</div></div>`:''}
+    ${tbl(['บริษัทไฟแนนซ์','ยอดรวมค้าง','0-30 วัน','31-60 วัน','61-90 วัน','90+ วัน','วันครบกำหนด'],
+      store.arAging.map(r=>`<tr class="hover:bg-slate-50 ${r.b90p>0?'bg-red-50/30':r.b61_90>0?'bg-amber-50/30':''}">
+        <td class="px-4 py-3 font-bold">${r.company}</td>
+        <td class="px-4 py-3 font-bold text-red-700">฿ ${money(r.total)}</td>
+        <td class="px-4 py-3 text-emerald-700">${r.b0_30>0?'฿ '+money(r.b0_30):'—'}</td>
+        <td class="px-4 py-3 ${r.b31_60>0?'text-amber-700 font-semibold':'text-slate-300'}">${r.b31_60>0?'฿ '+money(r.b31_60):'—'}</td>
+        <td class="px-4 py-3 ${r.b61_90>0?'text-orange-700 font-semibold':'text-slate-300'}">${r.b61_90>0?'฿ '+money(r.b61_90):'—'}</td>
+        <td class="px-4 py-3 ${r.b90p>0?'text-red-700 font-bold':'text-slate-300'}">${r.b90p>0?'฿ '+money(r.b90p):'—'}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${r.due}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderF4(){
+  const totGross=store.compByTeam.reduce((a,b)=>a+b.gross,0);
+  const totWHT=store.compByTeam.reduce((a,b)=>a+b.wht,0);
+  const totNet=store.compByTeam.reduce((a,b)=>a+b.net,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">สรุปค่าตอบแทน (Compensation Summary)</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+      ${kpiCard('Gross รวม','฿ '+money(totGross),'ก่อนหัก WHT','amber','')}
+      ${kpiCard('WHT หัก ณ ที่จ่าย','฿ '+money(totWHT),'ภาษีหักไว้รวม','red','')}
+      ${kpiCard('Net จ่ายจริง','฿ '+money(totNet),'ยอดโอนเข้าบัญชี','emerald','')}
+    </div>
+    ${tbl(['ทีม','ประเภท','สมาชิก','Gross รวม','WHT','Net รวม','เคส','เจาะลึก'],
+      store.compByTeam.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.team}</td>
+        <td class="px-4 py-3">${pill(r.type==='inhouse'?'Inhouse':'Outsource',r.type==='inhouse'?'bg-blue-100 text-blue-700':'bg-purple-100 text-purple-700')}</td>
+        <td class="px-4 py-3">${r.members} คน</td>
+        <td class="px-4 py-3 font-semibold">฿ ${money(r.gross)}</td>
+        <td class="px-4 py-3 text-red-600">${r.wht>0?'฿ '+money(r.wht):'—'}</td>
+        <td class="px-4 py-3 font-bold text-emerald-700">฿ ${money(r.net)}</td>
+        <td class="px-4 py-3">${r.cases}</td>
+        <td class="px-4 py-3"><button data-action="open-modal" data-type="comp-detail" data-id="${r.team}" class="text-xs font-semibold text-violet-700 hover:underline">${SVG.eye} รายพนักงาน</button></td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderF5(){
+  const total=store.advanceOverdue.reduce((a,b)=>a+b.amount,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-bold text-slate-900 text-lg">เงินทดรองค้างเคลียร์ (Advance Overdue)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">ณ วันที่ ${nowDate()} · แสดงเฉพาะที่เกินกำหนดเคลียร์</p>
+      </div>
+      ${exportBtns()}
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      ${kpiCard('รายการค้าง',store.advanceOverdue.length+' รายการ','เกินกำหนดเคลียร์','amber','')}
+      ${kpiCard('ยอดรวมค้าง','฿ '+money(total),'ต้องติดตามและเคลียร์','red','')}
+    </div>
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">${SVG.warn}
+      ระบบบล็อก Advance ใหม่สำหรับพนักงานที่มีรายการค้างอยู่แล้วจนกว่าจะเคลียร์ครบ (ไฟล์ 15)
+    </div>
+    ${tbl(['พนักงาน','ทีม','วันอนุมัติ','กำหนดเคลียร์','ยอด','เกินกำหนด (วัน)','สถานะ'],
+      store.advanceOverdue.map(r=>`<tr class="hover:bg-red-50/20 bg-red-50/10">
+        <td class="px-4 py-3 font-bold">${r.name}</td>
+        <td class="px-4 py-3 text-xs text-slate-600">${r.team}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${r.approved}</td>
+        <td class="px-4 py-3 text-red-700 font-semibold text-xs">${r.due}</td>
+        <td class="px-4 py-3 font-bold">฿ ${money(r.amount)}</td>
+        <td class="px-4 py-3"><span class="font-bold text-red-700">${r.overdueDays} วัน</span></td>
+        <td class="px-4 py-3">${pill('ค้างเคลียร์','bg-red-100 text-red-800')}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// CONTENT — Operations
+// ═══════════════════════════════════════════════
+function renderO1(){
+  const totCases=store.revenueTrend.reduce((a,b)=>a+b.cases,0);
+  const totSuccess=store.revenueTrend.reduce((a,b)=>a+b.success,0);
+  const avgRate=(totSuccess/totCases*100).toFixed(1);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">อัตราความสำเร็จ (Success Rate)</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+      ${kpiCard('เคสทั้งหมด',totCases+' เคส','ในช่วงเวลาที่เลือก','slate','')}
+      ${kpiCard('สำเร็จ (closed_success)',totSuccess+' เคส','closed_success','emerald','')}
+      ${kpiCard('Success Rate เฉลี่ย',avgRate+'%','ตลอดช่วงเวลา',+avgRate>=80?'emerald':+avgRate>=70?'amber':'red',trend(0.8)+'  vs เดือนก่อน')}
+    </div>
+    <div class="bg-white border border-slate-200 rounded-xl p-4">
+      <div class="text-xs font-bold text-slate-500 uppercase mb-3">Success Rate Trend รายเดือน (%)</div>
+      ${lineChart(store.successRate,'m','rate','#16a34a',80)}
+    </div>
+    ${tbl(['ทีม','เคสทั้งหมด','สำเร็จ','ไม่สำเร็จ','Success Rate','TAT เฉลี่ย (วัน)','ภายใน SLA'],
+      store.teamPerf.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.team}</td>
+        <td class="px-4 py-3">${r.cases}</td>
+        <td class="px-4 py-3 text-emerald-700 font-semibold">${Math.round(r.cases*r.successRate/100)}</td>
+        <td class="px-4 py-3 text-red-600">${r.cases-Math.round(r.cases*r.successRate/100)}</td>
+        <td class="px-4 py-3 font-bold ${r.successRate>=80?'text-emerald-700':r.successRate>=70?'text-amber-700':'text-red-600'}">${r.successRate}%</td>
+        <td class="px-4 py-3">${r.avgTAT} วัน</td>
+        <td class="px-4 py-3">${r.withinSLA}/${r.cases} (${pct(r.withinSLA,r.cases)})</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderO2(){
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-bold text-slate-900 text-lg">ประสิทธิภาพทีม / SLA (Team Performance)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">TAT = วันปิดงาน − วันรับมอบหมาย · SLA: ${48} ชั่วโมง (2 วัน)</p>
+      </div>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      ${store.teamPerf.map(r=>kpiCard(r.team,r.avgTAT+' วัน','TAT เฉลี่ย',r.avgTAT<=5?'emerald':r.avgTAT<=8?'amber':'red',`${r.withinSLA}/${r.cases} ภายใน SLA`)).join('')}
+    </div>
+    ${tbl(['ทีม','เคสทั้งหมด','TAT เฉลี่ย','เร็วสุด','ช้าสุด','ภายใน SLA','เกิน SLA','Success Rate'],
+      store.teamPerf.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.team}</td>
+        <td class="px-4 py-3">${r.cases}</td>
+        <td class="px-4 py-3 font-bold ${r.avgTAT<=5?'text-emerald-700':r.avgTAT<=8?'text-amber-700':'text-red-600'}">${r.avgTAT} วัน</td>
+        <td class="px-4 py-3 text-emerald-600">${r.minTAT} วัน</td>
+        <td class="px-4 py-3 text-red-600">${r.maxTAT} วัน</td>
+        <td class="px-4 py-3 text-emerald-700 font-semibold">${r.withinSLA} (${pct(r.withinSLA,r.cases)})</td>
+        <td class="px-4 py-3 text-red-600 font-semibold">${r.breachSLA} (${pct(r.breachSLA,r.cases)})</td>
+        <td class="px-4 py-3 font-bold ${r.successRate>=80?'text-emerald-700':r.successRate>=70?'text-amber-700':'text-red-600'}">${r.successRate}%</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderO3(){
+  const agents=[
+    {name:'ประยุทธ์ บุญมี', team:'ทีมรับเหมาเหนือ',total:68,success:55,fail:13,active:5,rate:80.9},
+    {name:'วิชัย ขยันดี',   team:'ทีม A',          total:62,success:52,fail:10,active:3,rate:83.9},
+    {name:'สมหญิง ดูแลดี',  team:'ทีม A',          total:55,success:47,fail:8, active:4,rate:85.5},
+    {name:'ประสิทธิ์ มากมี',team:'ทีมรับเหมาเหนือ',total:48,success:36,fail:12,active:6,rate:75.0},
+    {name:'อนุชา วงษ์ดี',   team:'ทีม C (Outsource)',total:28,success:12,fail:16,active:8,rate:42.9},
+  ];
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">ปริมาณงานรายพนักงาน (Workload)</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    ${tbl(['พนักงาน','ทีม','เคสรับทั้งหมด','ปิดสำเร็จ','ปิดไม่สำเร็จ','ค้างอยู่','Success Rate'],
+      agents.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.name}</td>
+        <td class="px-4 py-3 text-xs text-slate-600">${r.team}</td>
+        <td class="px-4 py-3">${r.total}</td>
+        <td class="px-4 py-3 text-emerald-700 font-semibold">${r.success}</td>
+        <td class="px-4 py-3 text-red-600">${r.fail}</td>
+        <td class="px-4 py-3">${r.active} เคส</td>
+        <td class="px-4 py-3 font-bold ${r.rate>=80?'text-emerald-700':r.rate>=70?'text-amber-700':'text-red-600'}">${r.rate}%</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderO4(){
+  const total=store.slaBreach.reduce((a,b)=>a+b.revenue,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="font-bold text-slate-900 text-lg">เคสค้างเกิน SLA (SLA Breach)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">เคส open ที่เกิน 48 ชั่วโมง (2 วัน) นับจากวันรับ</p>
+      </div>
+      ${exportBtns()}
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      ${kpiCard('เคสเกิน SLA',store.slaBreach.length+' เคส','ต้องเร่งดำเนินการ','red','')}
+      ${kpiCard('มูลค่ารายได้ที่รอ','฿ '+money(total),'ประมาณการจากเคสค้าง','amber','')}
+    </div>
+    <div class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 text-xs text-red-800">${SVG.warn}
+      เคสเหล่านี้กำลังเกิน SLA — ผู้จัดการทีมควรตรวจสอบและเร่งดำเนินการทันที
+    </div>
+    ${tbl(['Case Ref','บริษัทไฟแนนซ์','พนักงาน','ทีม','วันที่รับ','เกิน SLA (วัน)','ประมาณการรายได้'],
+      store.slaBreach.map(r=>`<tr class="hover:bg-red-50/30 bg-red-50/10">
+        <td class="px-4 py-3 font-mono text-xs text-violet-700 font-bold">${r.caseRef}</td>
+        <td class="px-4 py-3 font-semibold">${r.company}</td>
+        <td class="px-4 py-3">${r.agent}</td>
+        <td class="px-4 py-3 text-xs text-slate-600">${r.team}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${r.received}</td>
+        <td class="px-4 py-3"><span class="font-bold text-red-700">${r.overdueDays} วัน</span></td>
+        <td class="px-4 py-3 text-slate-600">฿ ${money(r.revenue)}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderO5(){
+  const totIn=store.warehouseSummary.reduce((a,b)=>a+b.inCustody,0);
+  const totPend=store.warehouseSummary.reduce((a,b)=>a+b.pending,0);
+  const totDone=store.warehouseSummary.reduce((a,b)=>a+b.handedOver,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">สรุปคลังสินค้า (Warehouse Summary)</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      ${kpiCard('รอรับเข้าคลัง',totPend+' เครื่อง','pending_intake','sky','')}
+      ${kpiCard('ในคลัง',totIn+' เครื่อง','in_custody','violet','')}
+      ${kpiCard('รอส่งมอบ',store.warehouseSummary.reduce((a,b)=>a+b.pendingHandover,0)+' เครื่อง','handover_pending','amber','')}
+      ${kpiCard('ส่งมอบแล้ว (เดือนนี้)',totDone+' เครื่อง','handed_over','emerald','')}
+    </div>
+    ${tbl(['บริษัทไฟแนนซ์','รอรับเข้าคลัง','ในคลัง','รอส่งมอบ','ส่งมอบแล้ว (เดือนนี้)'],
+      store.warehouseSummary.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.company}</td>
+        <td class="px-4 py-3 ${r.pending>0?'text-sky-700 font-semibold':'text-slate-300'}">${r.pending>0?r.pending:0}</td>
+        <td class="px-4 py-3 ${r.inCustody>0?'text-violet-700 font-semibold':'text-slate-300'}">${r.inCustody>0?r.inCustody:0}</td>
+        <td class="px-4 py-3 ${r.pendingHandover>0?'text-amber-700 font-semibold':'text-slate-300'}">${r.pendingHandover>0?r.pendingHandover:0}</td>
+        <td class="px-4 py-3 text-emerald-700 font-semibold">${r.handedOver}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// CONTENT — Accounting
+// ═══════════════════════════════════════════════
+function renderA1(){
+  const whtData=[
+    {period:'มกราคม 2569',pnd3:8400,pnd53:2160,total:10560,due:'15/02/2569',status:'filed'},
+    {period:'กุมภาพันธ์ 2569',pnd3:9150,pnd53:1440,total:10590,due:'15/03/2569',status:'filed'},
+    {period:'มีนาคม 2569',pnd3:11200,pnd53:3600,total:14800,due:'15/04/2569',status:'filed'},
+    {period:'เมษายน 2569',pnd3:8900,pnd53:2880,total:11780,due:'15/05/2569',status:'filed'},
+    {period:'พฤษภาคม 2569',pnd3:12400,pnd53:1800,total:14200,due:'15/06/2569',status:'filed'},
+    {period:'มิถุนายน 2569',pnd3:14800,pnd53:3600,total:18400,due:'15/07/2569',status:'pending'},
+  ];
+  const totPnd3=whtData.reduce((a,b)=>a+b.pnd3,0);
+  const totPnd53=whtData.reduce((a,b)=>a+b.pnd53,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">สรุป WHT รายเดือน</h2>
+      ${exportBtns()}
+    </div>
+    <div class="grid grid-cols-3 gap-4">
+      ${kpiCard('ภ.ง.ด.3 YTD','฿ '+money(totPnd3),'บุคคลธรรมดา','red','')}
+      ${kpiCard('ภ.ง.ด.53 YTD','฿ '+money(totPnd53),'นิติบุคคล','orange','')}
+      ${kpiCard('รวม WHT YTD','฿ '+money(totPnd3+totPnd53),'ยื่นทั้งหมด','amber','')}
+    </div>
+    ${tbl(['รอบเดือน','ภ.ง.ด.3','ภ.ง.ด.53','รวม WHT','กำหนดยื่น','สถานะ'],
+      whtData.map(r=>`<tr class="hover:bg-slate-50 ${r.status==='pending'?'bg-amber-50/30':''}">
+        <td class="px-4 py-3 font-semibold">${r.period}</td>
+        <td class="px-4 py-3 text-red-700">฿ ${money(r.pnd3)}</td>
+        <td class="px-4 py-3 text-orange-700">฿ ${money(r.pnd53)}</td>
+        <td class="px-4 py-3 font-bold">฿ ${money(r.total)}</td>
+        <td class="px-4 py-3 text-xs ${r.status==='pending'?'text-amber-700 font-bold':'text-slate-500'}">${r.due}</td>
+        <td class="px-4 py-3">${r.status==='filed'?pill('ยื่นแล้ว','bg-emerald-100 text-emerald-800'):pill('รอยื่น','bg-amber-100 text-amber-800')}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderA2(){
+  const invData=[
+    {period:'มกราคม 2569',count:18,beforeVat:280000,vat:19600,total:299600,cancelled:0},
+    {period:'กุมภาพันธ์ 2569',count:21,beforeVat:315000,vat:22050,total:337050,cancelled:1},
+    {period:'มีนาคม 2569',count:24,beforeVat:356000,vat:24920,total:380920,cancelled:0},
+    {period:'เมษายน 2569',count:22,beforeVat:328000,vat:22960,total:350960,cancelled:2},
+    {period:'พฤษภาคม 2569',count:26,beforeVat:389000,vat:27230,total:416230,cancelled:0},
+    {period:'มิถุนายน 2569',count:28,beforeVat:412000,vat:28840,total:440840,cancelled:1},
+  ];
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">สรุปใบกำกับภาษี (Tax Invoice Summary)</h2>
+      ${exportBtns()}
+    </div>
+    ${tbl(['รอบเดือน','จำนวนใบ','ก่อน VAT','VAT 7%','รวมสุทธิ','ยกเลิก'],
+      invData.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-semibold">${r.period}</td>
+        <td class="px-4 py-3">${r.count} ใบ</td>
+        <td class="px-4 py-3">฿ ${money(r.beforeVat)}</td>
+        <td class="px-4 py-3 text-slate-500">฿ ${money(r.vat)}</td>
+        <td class="px-4 py-3 font-bold">฿ ${money(r.total)}</td>
+        <td class="px-4 py-3 ${r.cancelled>0?'text-red-600 font-semibold':'text-slate-300'}">${r.cancelled>0?r.cancelled+' ใบ':'—'}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderA3(){
+  const exports=[
+    {period:'เมษายน 2569',version:'v1.2',files:8,attachments:64,by:'พี่เบียร์',at:'05/05/2569 10:00',status:'accepted'},
+    {period:'พฤษภาคม 2569',version:'v1.0',files:8,attachments:49,by:'พี่เบียร์',at:'03/06/2569 09:15',status:'exported'},
+    {period:'มิถุนายน 2569',version:'draft',files:8,attachments:0, by:'—',    at:'—',                 status:'not_exported'},
+  ];
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">ประวัติ Export Accounting Pack</h2>
+      ${exportBtns()}
+    </div>
+    ${tbl(['รอบบัญชี','Version','ไฟล์หลัก','เอกสารแนบ','ส่งโดย','วันที่','สถานะ'],
+      exports.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.period}</td>
+        <td class="px-4 py-3"><span class="font-mono text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">${r.version}</span></td>
+        <td class="px-4 py-3">${r.files} ไฟล์</td>
+        <td class="px-4 py-3">${r.attachments} ไฟล์</td>
+        <td class="px-4 py-3">${r.by}</td>
+        <td class="px-4 py-3 text-xs text-slate-500">${r.at}</td>
+        <td class="px-4 py-3">${r.status==='accepted'?pill('ตอบรับแล้ว','bg-emerald-100 text-emerald-800'):r.status==='exported'?pill('Export แล้ว','bg-blue-100 text-blue-800'):pill('ยังไม่ Export','bg-slate-100 text-slate-600')}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderA4(){
+  const excData=[
+    {period:'เมษายน 2569',critical:0,warning:1,info:2,resolved:3,open:0},
+    {period:'พฤษภาคม 2569',critical:0,warning:2,info:1,resolved:3,open:0},
+    {period:'มิถุนายน 2569',critical:2,warning:3,info:1,resolved:1,open:5},
+  ];
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">Exception Summary รายงวด</h2>
+      ${exportBtns()}
+    </div>
+    ${tbl(['รอบบัญชี','Critical','Warning','Info','แก้ไขแล้ว','ยังเปิดอยู่','สถานะรอบ'],
+      excData.map(r=>`<tr class="hover:bg-slate-50 ${r.critical>0&&r.open>0?'bg-red-50/20':''}">
+        <td class="px-4 py-3 font-bold">${r.period}</td>
+        <td class="px-4 py-3 ${r.critical>0?'text-red-700 font-bold':'text-slate-300'}">${r.critical>0?r.critical:0}</td>
+        <td class="px-4 py-3 ${r.warning>0?'text-amber-700 font-semibold':'text-slate-300'}">${r.warning>0?r.warning:0}</td>
+        <td class="px-4 py-3 text-slate-500">${r.info}</td>
+        <td class="px-4 py-3 text-emerald-700">${r.resolved}</td>
+        <td class="px-4 py-3 ${r.open>0?'text-red-700 font-bold':'text-slate-300'}">${r.open>0?r.open:0}</td>
+        <td class="px-4 py-3">${r.open===0?pill('ครบ','bg-emerald-100 text-emerald-800'):pill('มี Exception','bg-red-100 text-red-800')}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// CONTENT — Executive
+// ═══════════════════════════════════════════════
+function renderE1(){
+  const totRev=store.revenueTrend.reduce((a,b)=>a+b.rev,0);
+  const totCost=store.revenueTrend.reduce((a,b)=>a+b.cost,0);
+  const totCases=store.revenueTrend.reduce((a,b)=>a+b.cases,0);
+  const totSuccess=store.revenueTrend.reduce((a,b)=>a+b.success,0);
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">KPI ภาพรวม (Executive Summary)</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      ${kpiCard('Revenue YTD','฿ '+money(totRev),'รายได้จริง','emerald',trend(12.3)+' YoY')}
+      ${kpiCard('Gross Profit YTD','฿ '+money(totRev-totCost),'Revenue - Cost','blue',trend(15.1)+' YoY')}
+      ${kpiCard('Gross Margin',pct(totRev-totCost,totRev),'ค่าเฉลี่ย','violet',trend(1.2)+' YoY')}
+      ${kpiCard('เคสทั้งหมด',totCases+' เคส','ตลอดปี','slate','')}
+      ${kpiCard('Success Rate',pct(totSuccess,totCases),'ค่าเฉลี่ย',+pct(totSuccess,totCases).replace('%','')>=80?'emerald':'amber',trend(0.8)+' YoY')}
+      ${kpiCard('AR ค้างรับ','฿ '+money(store.arAging.reduce((a,b)=>a+b.total,0)),'ยอดรวมทุกบริษัท','red','')}
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-slate-200 rounded-xl p-4">
+        <div class="text-xs font-bold text-slate-500 uppercase mb-3">Revenue Trend (12 เดือน)</div>
+        ${barChart(store.revenueTrend,'m','rev','#7c3aed',80)}
+      </div>
+      <div class="bg-white border border-slate-200 rounded-xl p-4">
+        <div class="text-xs font-bold text-slate-500 uppercase mb-3">Success Rate Trend (%)</div>
+        ${lineChart(store.successRate,'m','rate','#16a34a',80)}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderE2(){
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">Scorecard รายบริษัทไฟแนนซ์</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    ${tbl(['บริษัทไฟแนนซ์','เคส','Success Rate','Revenue','Gross Profit','Margin %','AR ค้าง','เทรนด์'],
+      store.companyScorecard.map(r=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${r.company}</td>
+        <td class="px-4 py-3">${r.cases}</td>
+        <td class="px-4 py-3 font-bold ${r.successRate>=80?'text-emerald-700':r.successRate>=70?'text-amber-700':'text-red-600'}">${r.successRate}%</td>
+        <td class="px-4 py-3">฿ ${money(r.revenue)}</td>
+        <td class="px-4 py-3 text-emerald-700 font-bold">฿ ${money(r.profit)}</td>
+        <td class="px-4 py-3 font-bold ${r.margin>=45?'text-emerald-700':r.margin>=40?'text-amber-700':'text-red-600'}">${r.margin}%</td>
+        <td class="px-4 py-3 ${r.ar>0?'text-red-600 font-semibold':'text-slate-300'}">฿ ${money(r.ar)}</td>
+        <td class="px-4 py-3 text-lg">${r.trend==='up'?'📈':'📉'}</td>
+      </tr>`).join('')
+    )}
+  </div>`;
+}
+
+function renderE3(){
+  return`<div class="space-y-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="font-bold text-slate-900 text-lg">Scorecard รายทีม</h2>
+      <div class="flex items-center gap-3">${periodPicker()}${exportBtns()}</div>
+    </div>
+    ${tbl(['ทีม','ประเภท','สมาชิก','เคส','Success Rate','TAT เฉลี่ย','ต้นทุน','Gross Profit','Margin'],
+      store.profitByTeam.map((r,i)=>{
+        const tp=store.teamPerf[i]||{avgTAT:0,successRate:0};
+        return`<tr class="hover:bg-slate-50">
+          <td class="px-4 py-3 font-bold">${r.name.split(' ')[0]+' '+r.name.split(' ')[1]}</td>
+          <td class="px-4 py-3">${pill(r.name.includes('Inhouse')?'Inhouse':'Outsource',r.name.includes('Inhouse')?'bg-blue-100 text-blue-700':'bg-purple-100 text-purple-700')}</td>
+          <td class="px-4 py-3">${r.members||'—'} คน</td>
+          <td class="px-4 py-3">${r.cases}</td>
+          <td class="px-4 py-3 font-bold ${tp.successRate>=80?'text-emerald-700':tp.successRate>=70?'text-amber-700':'text-red-600'}">${tp.successRate}%</td>
+          <td class="px-4 py-3 ${tp.avgTAT<=5?'text-emerald-700':tp.avgTAT<=8?'text-amber-700':'text-red-600'}">${tp.avgTAT} วัน</td>
+          <td class="px-4 py-3 text-amber-700">฿ ${money(r.cost)}</td>
+          <td class="px-4 py-3 text-emerald-700 font-bold">฿ ${money(r.rev-r.cost)}</td>
+          <td class="px-4 py-3 font-bold ${(r.rev-r.cost)/r.rev>0.4?'text-emerald-700':(r.rev-r.cost)/r.rev>0.25?'text-amber-700':'text-red-600'}">${pct(r.rev-r.cost,r.rev)}</td>
+        </tr>`;
+      }).join('')
+    )}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════
+function renderModal(){
+  if(!st.modal)return'';
+  const {type,id}=st.modal;
+  let title='',body='';
+
+  if(type==='drilldown'){
+    title=`เจาะลึก — ${id}`;
+    const cases=[
+      {ref:'SF-2026-00832',outcome:'closed_success',rev:7500,cost:3200,agent:'ประยุทธ์ บุญมี'},
+      {ref:'SF-2026-00799',outcome:'closed_fail',   rev:0,   cost:2800,agent:'ประสิทธิ์ มากมี'},
+      {ref:'SF-2026-00780',outcome:'closed_success',rev:8000,cost:3500,agent:'ประยุทธ์ บุญมี'},
+    ];
+    body=`<div class="space-y-4">
+      <div class="grid grid-cols-3 gap-3">
+        ${kpiCard('Revenue','฿ '+money(cases.reduce((a,b)=>a+b.rev,0)),'รวมจากเคสทั้งหมด','emerald','')}
+        ${kpiCard('Cost','฿ '+money(cases.reduce((a,b)=>a+b.cost,0)),'ต้นทุนตรง','amber','')}
+        ${kpiCard('Profit','฿ '+money(cases.reduce((a,b)=>a+b.rev,0)-cases.reduce((a,b)=>a+b.cost,0)),'Gross Profit','blue','')}
+      </div>
+      ${tbl(['Case Ref','ผลลัพธ์','Revenue','Cost','Profit','Agent'],
+        cases.map(c=>`<tr class="hover:bg-slate-50">
+          <td class="px-4 py-3 font-mono text-xs text-violet-700 font-bold">${c.ref}</td>
+          <td class="px-4 py-3">${c.outcome==='closed_success'?pill('สำเร็จ','bg-emerald-100 text-emerald-800'):pill('ไม่สำเร็จ','bg-red-100 text-red-800')}</td>
+          <td class="px-4 py-3 text-emerald-700">${c.rev>0?'฿ '+money(c.rev):'—'}</td>
+          <td class="px-4 py-3 text-amber-700">฿ ${money(c.cost)}</td>
+          <td class="px-4 py-3 font-bold ${c.rev-c.cost>0?'text-blue-700':'text-red-600'}">฿ ${money(c.rev-c.cost)}</td>
+          <td class="px-4 py-3 text-xs">${c.agent}</td>
+        </tr>`).join('')
+      )}
+    </div>`;
+  }
+  else if(type==='comp-detail'){
+    title=`ค่าตอบแทนรายพนักงาน — ${id}`;
+    const agents=[
+      {name:'ประยุทธ์ บุญมี', cases:68,comm:34000,fuel:8500,allow:3400,gross:45900,wht:1377,net:44523},
+      {name:'ประสิทธิ์ มากมี',cases:48,comm:24000,fuel:6200,allow:2400,gross:32600,wht:978, net:31622},
+      {name:'สมใจ วงษ์ทอง',  cases:38,comm:19000,fuel:4800,allow:1900,gross:25700,wht:771, net:24929},
+    ];
+    body=`${tbl(['พนักงาน','เคส','Commission','ค่าน้ำมัน','เบี้ยเลี้ยง','Gross','WHT','Net'],
+      agents.map(a=>`<tr class="hover:bg-slate-50">
+        <td class="px-4 py-3 font-bold">${a.name}</td>
+        <td class="px-4 py-3">${a.cases}</td>
+        <td class="px-4 py-3">฿ ${money(a.comm)}</td>
+        <td class="px-4 py-3">฿ ${money(a.fuel)}</td>
+        <td class="px-4 py-3">฿ ${money(a.allow)}</td>
+        <td class="px-4 py-3 font-semibold">฿ ${money(a.gross)}</td>
+        <td class="px-4 py-3 text-red-600">฿ ${money(a.wht)}</td>
+        <td class="px-4 py-3 font-bold text-emerald-700">฿ ${money(a.net)}</td>
+      </tr>`).join('')
+    )}`;
+  }
+
+  return`<div class="fixed inset-0 modal-bg z-50 flex items-center justify-center p-4 fade-in" id="modal-backdrop">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col slide-up">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+        <h2 class="font-bold text-slate-900">${title}</h2>
+        <button data-action="close-modal" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 focus-ring">${SVG.x}</button>
+      </div>
+      <div class="overflow-y-auto px-6 py-5 flex-1">${body}</div>
+      <div class="flex justify-end px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl shrink-0">
+        <button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 focus-ring">ปิด</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════
+function renderToast(){
+  if(!st.toast)return'';
+  return`<div class="fixed bottom-6 right-6 z-50 slide-up">
+    <div class="bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-3">
+      <div class="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">✓</div>
+      ${st.toast}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════
+const CONTENT = {
+  f1:renderF1,f2:renderF2,f3:renderF3,f4:renderF4,f5:renderF5,
+  o1:renderO1,o2:renderO2,o3:renderO3,o4:renderO4,o5:renderO5,
+  a1:renderA1,a2:renderA2,a3:renderA3,a4:renderA4,
+  e1:renderE1,e2:renderE2,e3:renderE3,
+};
+
+function render(){
+  const fn=CONTENT[st.subTab]||renderE1;
+  document.getElementById('app').innerHTML=`
+    ${renderNav()}
+    ${renderMainTabs()}
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 fade-in">
+        ${fn()}
+      </div>
+    </main>
+    ${renderModal()}
+    ${renderToast()}`;
+}
+
+// ═══════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-action]');
+  if(!el){if(e.target.id==='modal-backdrop')closeModal();return;}
+  const {action,id,msg,first}=el.dataset;
+  if(action==='set-main')  S({mainTab:id,subTab:first});
+  else if(action==='set-sub')    S({subTab:id});
+  else if(action==='set-period') S({period:id});
+  else if(action==='open-modal') openModal(el.dataset.type,id);
+  else if(action==='close-modal')closeModal();
+  else if(action==='toast-msg')  toast(msg);
+});
+
+render();
+</script>
+</body>
+</html>

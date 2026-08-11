@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetRecovery — เข้าสู่ระบบ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; min-height: 100vh; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 2px; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+  .fade-in { animation: fadeIn .18s ease-out forwards; }
+  @keyframes shake { 10%,90%{transform:translateX(-1px);} 20%,80%{transform:translateX(2px);} 30%,50%,70%{transform:translateX(-4px);} 40%,60%{transform:translateX(4px);} }
+  .shake { animation: shake .4s cubic-bezier(.36,.07,.19,.97) both; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(120%); } to { opacity:1; transform:translateX(0); } }
+  .toast-in { animation: toastIn .22s ease-out forwards; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/*
+  05 — Login Mockup
+  อ้างอิง: 05-auth-and-access-control.md §6.1 (Login Flow), §10 (Security Rules), §16 (Test Cases)
+  Business logic ที่ mock ไว้ในไฟล์นี้:
+    - signInWithPassword() → คืน user + role + scope (จำลอง Supabase Auth ไม่ได้เรียกจริง)
+    - user.status != 'active' → ปฏิเสธ login พร้อมข้อความ (ไฟล์ 05 §10, §16 "Inactive login")
+    - login สำเร็จ → redirect ไปหน้า Dashboard ตาม role (จำลองด้วยการแสดงผลลัพธ์ redirect target)
+    - ทุกครั้งที่ login (สำเร็จ/ไม่สำเร็จ) → บันทึก audit event (ไฟล์ 05 §13, §14 auth.login.failed)
+  ไม่ mock: MFA (ยังไม่ตัดสินใจในเฟส 1 — ไฟล์ 05 §18 Open Item), Session timeout (ตัวเลขยังไม่กำหนด — ไฟล์ 05 §18 Open Item)
+*/
+
+// Mock users ตาม role group ต่างๆ (ตรงกับ 07-roles-permissions.md — ใช้แค่บางส่วนเพื่อสาธิต redirect ตาม role)
+const MOCK_USERS = [
+  { email: 'boonphone@assetrecovery.co.th', password: 'demo1234', status: 'active', full_name: 'บุญโพน (Superadmin)', role: 'superadmin', redirect: '/dashboard' },
+  { email: 'finance@assetrecovery.co.th', password: 'demo1234', status: 'active', full_name: 'พิมพ์ใจ (การเงิน)', role: 'finance', redirect: '/finance' },
+  { email: 'accounting@assetrecovery.co.th', password: 'demo1234', status: 'active', full_name: 'สมหญิง (บัญชี)', role: 'accounting', redirect: '/accounting' },
+  { email: 'agent@assetrecovery.co.th', password: 'demo1234', status: 'active', full_name: 'สมชาย (Field Agent)', role: 'field_agent', redirect: '/field' },
+  { email: 'suspended@assetrecovery.co.th', password: 'demo1234', status: 'suspended', full_name: 'ผู้ใช้ถูกระงับ', role: 'admin', redirect: '/dashboard' },
+];
+
+const state = {
+  email: '',
+  password: '',
+  showPassword: false,
+  loading: false,
+  error: null,       // { code, message }
+  shake: false,
+  successUser: null, // แสดงผล redirect target หลัง login สำเร็จ
+  toast: null,
+};
+
+function render() {
+  const root = document.getElementById('root');
+  root.innerHTML = state.successUser ? renderSuccess() : renderLoginForm();
+  attachEvents();
+}
+
+function renderLoginForm() {
+  return `
+  <div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md fade-in">
+
+      <!-- Logo / Brand -->
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-900 text-white text-xl font-extrabold mb-4">AR</div>
+        <h1 class="text-xl font-bold text-slate-900">AssetRecovery</h1>
+        <p class="text-sm text-slate-500 mt-1">ระบบบริหารงานติดตามและจัดเก็บทรัพย์</p>
+      </div>
+
+      <!-- Card -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 ${state.shake ? 'shake' : ''}">
+        <h2 class="text-base font-bold text-slate-900 mb-1">เข้าสู่ระบบ</h2>
+        <p class="text-xs text-slate-500 mb-5">กรอกอีเมลและรหัสผ่านของบัญชีที่ได้รับสิทธิ์</p>
+
+        ${state.error ? `
+        <div class="mb-4 flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2.5 text-xs">
+          <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+          <div>
+            <div class="font-semibold">${state.error.title}</div>
+            <div class="mt-0.5 text-red-600">${state.error.message}</div>
+          </div>
+        </div>` : ''}
+
+        <form id="login-form" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">อีเมล</label>
+            <input
+              type="email" id="email" autocomplete="username"
+              class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"
+              placeholder="name@company.co.th" value="${state.email}" ${state.loading ? 'disabled' : ''} required />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">รหัสผ่าน</label>
+            <div class="relative">
+              <input
+                type="${state.showPassword ? 'text' : 'password'}" id="password" autocomplete="current-password"
+                class="w-full border border-slate-300 rounded-lg px-3 py-2 pr-16 text-sm focus-ring"
+                placeholder="••••••••" value="${state.password}" ${state.loading ? 'disabled' : ''} required />
+              <button type="button" id="toggle-password"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-500 hover:text-slate-800 px-1.5 py-1 rounded">
+                ${state.showPassword ? 'ซ่อน' : 'แสดง'}
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" id="submit-btn"
+            class="w-full bg-slate-900 text-white px-3 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-800 focus-ring disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            ${state.loading ? 'disabled' : ''}>
+            ${state.loading ? `
+              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+              กำลังตรวจสอบ...
+            ` : 'เข้าสู่ระบบ'}
+          </button>
+        </form>
+
+        <div class="mt-4 text-center">
+          <button type="button" class="text-xs text-slate-500 hover:text-slate-700 hover:underline">ลืมรหัสผ่าน?</button>
+        </div>
+      </div>
+
+      <p class="text-center text-[11px] text-slate-400 mt-6">
+        Session timeout และ MFA — รอยืนยันจาก Product Owner (ไฟล์ 05 §18 Open Item)
+      </p>
+
+      <!-- Demo helper (mockup เท่านั้น ไม่ใช่ business logic) -->
+      <details class="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-500">
+        <summary class="cursor-pointer font-semibold text-slate-600">บัญชีทดสอบ (mockup เท่านั้น)</summary>
+        <div class="mt-2 space-y-1 font-mono text-[11px]">
+          ${MOCK_USERS.map(u => `<div>${u.email} — ${u.status === 'active' ? u.role : 'suspended'}</div>`).join('')}
+          <div class="text-slate-400 mt-1">รหัสผ่านทุกบัญชี: demo1234</div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  ${state.toast ? renderToast() : ''}
+  `;
+}
+
+function renderSuccess() {
+  const u = state.successUser;
+  return `
+  <div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md fade-in text-center">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 mb-4">
+        <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+      </div>
+      <h2 class="text-lg font-bold text-slate-900 mb-1">เข้าสู่ระบบสำเร็จ</h2>
+      <p class="text-sm text-slate-500 mb-6">ยินดีต้อนรับ ${u.full_name}</p>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 text-left mb-6">
+        <div class="flex justify-between text-sm mb-2">
+          <span class="text-slate-500">อีเมล</span>
+          <span class="font-medium text-slate-800">${u.email}</span>
+        </div>
+        <div class="flex justify-between text-sm mb-2">
+          <span class="text-slate-500">Role</span>
+          <span class="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded">${u.role}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-slate-500">Redirect ไปที่</span>
+          <span class="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded">${u.redirect}</span>
+        </div>
+      </div>
+
+      <button id="logout-btn" class="text-sm text-slate-500 hover:text-slate-800 hover:underline">ออกจากระบบ / กลับไปหน้า Login</button>
+    </div>
+  </div>
+  `;
+}
+
+function renderToast() {
+  return `
+  <div class="fixed bottom-5 right-5 toast-in bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-lg shadow-lg">
+    ${state.toast}
+  </div>`;
+}
+
+function attachEvents() {
+  const form = document.getElementById('login-form');
+  if (form) {
+    form.addEventListener('submit', handleSubmit);
+    document.getElementById('email').addEventListener('input', e => state.email = e.target.value);
+    document.getElementById('password').addEventListener('input', e => state.password = e.target.value);
+    document.getElementById('toggle-password').addEventListener('click', () => {
+      state.showPassword = !state.showPassword;
+      render();
+    });
+  }
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+}
+
+function handleSubmit(e) {
+  e.preventDefault();
+  state.error = null;
+  state.shake = false;
+  state.loading = true;
+  render();
+
+  // จำลอง network round-trip ของ POST /api/auth/login (ไฟล์ 05 §14)
+  setTimeout(() => {
+    const user = MOCK_USERS.find(u => u.email.toLowerCase() === state.email.trim().toLowerCase());
+
+    if (!user || user.password !== state.password) {
+      // event auth.login.failed → audit log (ไฟล์ 05 §13-14)
+      state.loading = false;
+      state.error = { title: 'เข้าสู่ระบบไม่สำเร็จ', message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' };
+      state.shake = true;
+      render();
+      return;
+    }
+
+    if (user.status !== 'active') {
+      // ไฟล์ 05 §6.1: user.status != 'active' → ปฏิเสธ login, §16 Test Case "Inactive login"
+      state.loading = false;
+      state.error = { title: 'บัญชีถูกระงับการใช้งาน', message: 'กรุณาติดต่อผู้ดูแลระบบ (Superadmin) เพื่อปลดล็อกบัญชี' };
+      state.shake = true;
+      render();
+      return;
+    }
+
+    // login สำเร็จ → cache role+scope ใน server session (จำลอง) → redirect ตาม role
+    state.loading = false;
+    state.successUser = user;
+    render();
+  }, 700);
+}
+
+function handleLogout() {
+  state.successUser = null;
+  state.email = '';
+  state.password = '';
+  state.toast = 'ออกจากระบบแล้ว';
+  render();
+  setTimeout(() => { state.toast = null; render(); }, 2000);
+}
+
+render();
+</script>
+</body>
+</html>

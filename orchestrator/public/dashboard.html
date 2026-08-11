@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RTB — สถานะงาน & Orchestrator</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1f232c; --line:#2a2f3a;
+    --ink:#e7e9ee; --muted:#9aa3b2; --purple:#8b5cf6; --purple-d:#6d28d9;
+    --gold:#d9b160; --green:#34d399; --amber:#fbbf24; --red:#f87171; --blue:#60a5fa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans Thai","Sarabun",-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55}
+  a{color:var(--blue)}
+  .wrap{max-width:1120px;margin:0 auto;padding:22px 18px 60px}
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  h1{font-size:19px;margin:0;font-weight:700}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:9px;
+    padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:var(--purple)}
+  .btn.primary{background:var(--purple-d);border-color:var(--purple-d)}
+  .btn.primary:hover{background:var(--purple)}
+  .btn.ok{background:#065f46;border-color:#065f46}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+  @media(max-width:720px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .metric .big{font-size:34px;font-weight:800;color:var(--gold);letter-spacing:.5px}
+  .metric .lbl{color:var(--muted);font-size:12.5px;margin-bottom:2px}
+  .metric .sm{color:var(--muted);font-size:12px;margin-top:4px}
+  .bar{height:8px;background:var(--panel2);border-radius:6px;overflow:hidden;margin-top:8px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--purple),var(--gold));border-radius:6px}
+  section{margin-top:22px}
+  h2{font-size:14px;font-weight:700;margin:0 0 10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .phase{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .phase .nm{flex:1;min-width:0}
+  .phase .nm b{font-weight:600}
+  .phase .lock{color:var(--amber);font-size:11px}
+  .phase .pct{width:44px;text-align:right;color:var(--gold);font-variant-numeric:tabular-nums}
+  .phase .pbar{width:160px}
+  @media(max-width:720px){.phase .pbar{width:90px}}
+  .tasks{margin-top:8px;display:none}
+  .tasks.open{display:block}
+  .trow{display:flex;gap:10px;padding:5px 0 5px 14px;font-size:13px;border-bottom:1px dashed var(--line)}
+  /* id ยาวอย่าง HASORDER-FIX / SYNC-INTERVAL ล้นกล่อง 46px เดิมไปทับช่องสถานะ (เห็นเป็น
+     "HASORD⬜R-FIX") — กว้างขึ้นพอสำหรับ id ที่ใช้จริง + ให้ตัวที่ยาวกว่านั้นตัดบรรทัดในกล่องตัวเอง */
+  .trow .id{color:var(--muted);width:104px;flex:none;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+  .trow .st{flex:none}
+  .st{width:16px;flex:none;text-align:center}
+  .next-card{border:1px solid var(--purple);background:linear-gradient(180deg,rgba(139,92,246,.10),transparent)}
+  .next-card .t{font-weight:700;font-size:15px;margin-bottom:4px}
+  .pill{display:inline-block;font-size:11px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);color:var(--muted)}
+  .q{background:var(--panel);border:1px solid var(--amber);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .q .type{font-size:11px;color:var(--amber);text-transform:uppercase;letter-spacing:.5px}
+  .q .qt{margin:6px 0 10px;white-space:pre-wrap}
+  .q input[type=text]{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13px;margin-bottom:10px}
+  .commit{display:flex;gap:10px;padding:5px 0;font-size:12.5px;border-bottom:1px dashed var(--line)}
+  .commit code{color:var(--gold);flex:none}
+  .commit .s{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .runlog{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted);
+    background:#0b0d11;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:220px;overflow:auto}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+  .live{white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#c8cede;
+    background:#0b0d11;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:180px;overflow:auto}
+  .muted{color:var(--muted)}
+  .flex{display:flex;align-items:center;gap:8px}
+  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+  .toggle{width:40px;height:22px;border-radius:20px;background:var(--panel2);border:1px solid var(--line);position:relative;transition:.15s}
+  .toggle i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:.15s}
+  .toggle.on{background:var(--purple-d);border-color:var(--purple-d)}
+  .toggle.on i{left:20px;background:#fff}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+  .ctl-grp{display:flex;gap:8px;align-items:center}
+  @media(max-width:640px){
+    .controls{width:100%}
+    .ctl-grp{width:100%}
+    .ctl-actions .btn{flex:1}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>📊 RTB — สถานะการพัฒนา &amp; Orchestrator</h1>
+      <div class="sub" id="updated">กำลังโหลด…</div>
+    </div>
+    <div class="controls">
+      <div class="ctl-grp">
+        <label class="switch" id="autoWrap" title="ทำงานถัดไปต่อเนื่องอัตโนมัติ">
+          <span class="muted">Auto</span><span class="toggle" id="autoTog"><i></i></span>
+        </label>
+        <select id="modelSel" class="btn" style="padding:8px 10px" title="โมเดลสำหรับงานถัดไป"><option value="">โมเดล…</option></select>
+        <button class="btn" id="notifyBtn" title="ส่งแจ้งเตือนทดสอบไปมือถือ">🔔</button>
+        <button class="btn" id="restartBtn" title="restart server (โหลด config/.env ใหม่) — กดได้เฉพาะตอน idle">🔄</button>
+      </div>
+      <div class="ctl-grp ctl-actions">
+        <button class="btn" id="reviewBtn" title="รีวิวโค้ดตั้งแต่ checkpoint ล่าสุด + แก้ให้">🔍 เทสงาน</button>
+        <select id="finalSel" class="btn" style="padding:8px 10px" title="Final test แบ่งด่าน"><option value="">🧪 Final test…</option></select>
+        <button class="btn primary" id="runBtn">▶ รันงานถัดไป</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="cards">
+    <div class="card metric">
+      <div class="lbl">ความพร้อมรวม (Overall Readiness)</div>
+      <div class="big" id="overallPct">–</div>
+      <div class="bar"><i id="overallBar" style="width:0"></i></div>
+      <div class="sm" id="overallSub"></div>
+    </div>
+    <div class="card metric">
+      <div class="lbl">สถานะ Orchestrator</div>
+      <div class="big" id="engPhase" style="font-size:22px">idle</div>
+      <div class="sm" id="engSub">พร้อมทำงาน</div>
+    </div>
+    <div class="card metric">
+      <div class="lbl">รอคุณตัดสินใจ / อนุมัติ</div>
+      <div class="big" id="qCount" style="color:var(--amber)">0</div>
+      <div class="sm">กด Approve หรือพิมพ์คำตอบด้านล่าง</div>
+    </div>
+  </div>
+
+  <div id="nextWrap"></div>
+
+  <section id="queueSec" style="display:none">
+    <h2>⏳ รอการตัดสินใจ</h2>
+    <div id="queue"></div>
+  </section>
+
+  <section>
+    <h2>🔴 ดูสด (session ปัจจุบัน)</h2>
+    <div id="liveHead" style="margin-bottom:9px"></div>
+    <div class="live" id="live">—</div>
+  </section>
+
+  <section>
+    <h2>การใช้งาน AI</h2>
+    <div id="usage" class="card"></div>
+  </section>
+
+  <div class="row" style="align-items:flex-start">
+    <section style="flex:1;min-width:300px">
+      <h2>ความคืบหน้าตาม Phase</h2>
+      <div id="phases"></div>
+    </section>
+    <section style="flex:1;min-width:300px">
+      <h2>Commit ล่าสุด</h2>
+      <div id="commits" class="card"></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>ประวัติการรัน</h2>
+    <div class="runlog" id="runs"></div>
+  </section>
+</div>
+
+<div id="sessionModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:60;padding:16px" onclick="if(event.target===this)closeSession()">
+  <div style="max-width:840px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid var(--line)">
+      <b id="sessionTitle">Transcript</b>
+      <button class="btn" onclick="closeSession()">ปิด</button>
+    </div>
+    <div id="sessionBody" style="overflow:auto;padding:16px 18px;font-size:13px"></div>
+  </div>
+</div>
+
+<script>
+// เอา ?token ออกจาก URL หลังตั้ง cookie แล้ว (กัน token ค้างใน address bar/history)
+if (location.search.includes('token=')) history.replaceState(null,'','/');
+const $ = (s)=>document.querySelector(s);
+const ST = {done:'✅',doing:'🔄',todo:'⬜',blocked:'⏸️',unknown:'❔'};
+const openPhases = new Set();
+
+async function api(path, body){
+  const opt = body ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)} : {};
+  const r = await fetch(path, opt); return r.json();
+}
+
+function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function isTyping(){ const a=document.activeElement; return a && (a.tagName==='INPUT'||a.tagName==='TEXTAREA'); }
+
+function render(d){
+  const p = d.progress, s = p.stats;
+  $('#updated').textContent = `อัปเดตล่าสุด ${p.updatedAt||'-'} · ${s.done}/${s.total} งานเสร็จ · doing ${s.doing} · todo ${s.todo} · blocked ${s.blocked}`;
+  $('#overallPct').textContent = s.percent + '%';
+  $('#overallBar').style.width = s.percent + '%';
+  $('#overallSub').textContent = `${s.done} / ${s.total} tasks`;
+
+  const eng = d.engine;
+  $('#engPhase').textContent = eng.phase;
+  const stuck = !eng.running && (eng.lastError || eng.phase==='parked');
+  $('#engSub').innerHTML = (eng.running ? '<span class="dot" style="background:var(--green)"></span>กำลังทำงาน'
+     : eng.phase==='waiting-limit' ? '<span style="color:var(--amber)">⏸️ รอโควตารีเซ็ต — จะทำต่อเอง</span>'
+     : (eng.lastError ? '<span style="color:var(--red)">'+esc(eng.lastError)+'</span>' : 'พร้อมทำงาน'))
+     + ` · autoMerge=${eng.autoMerge}`
+     + (stuck ? ' · <a href="#" onclick="resetState();return false" style="color:var(--blue)">ปลดล็อกสถานะ</a>' : '');
+  $('#runBtn').disabled = eng.running;
+  $('#reviewBtn').disabled = eng.running;
+  $('#finalSel').disabled = eng.running;
+  if(d.finalStages && !window.__stagesBuilt){ $('#finalSel').innerHTML='<option value="">🧪 Final test…</option>'+d.finalStages.map(s=>`<option value="${esc(s.key)}">ด่าน ${esc(s.key)} — ${esc(s.label)}</option>`).join('')+'<option value="all">▶ ทั้งหมด 1→4 (อัตโนมัติ)</option>'; window.__stagesBuilt=true; }
+
+  window.__ctxWindow = d.contextWindow || 1000000;
+  const autoTog = $('#autoTog'); autoTog.classList.toggle('on', eng.auto);
+  if(d.models && !window.__modelsBuilt){ $('#modelSel').innerHTML = d.models.map(m=>`<option value="${esc(m.value)}">${esc(m.label)}</option>`).join('') + '<option value="__custom__">ระบุเวอร์ชันเอง…</option>'; window.__modelsBuilt=true; }
+  const msel = $('#modelSel'); if(document.activeElement!==msel){ const mv=eng.selectedModel||''; ensureModelOption(msel,mv); msel.value=mv; }
+  window.__curModel = eng.selectedModel||'';
+
+  // next task
+  const n = d.next;
+  $('#nextWrap').innerHTML = n ? `
+    <section><h2>🎯 งานถัดไป</h2>
+    <div class="card next-card">
+      <div class="t">Phase ${esc(n.id)} — ${esc(n.title)}</div>
+      <div class="muted" style="font-size:12.5px">${esc(n.phaseName||'')} ${n.locked?'<span class="lock">🔒 phase ล็อก</span>':''}</div>
+      ${n.note?`<div class="muted" style="font-size:12.5px;margin-top:6px">${esc(n.note).slice(0,260)}</div>`:''}
+    </div></section>` : '<section><div class="card">🎉 งานทั้งหมดเสร็จแล้ว</div></section>';
+
+  // queue
+  const q = d.queue||[];
+  $('#qCount').textContent = q.length;
+  $('#queueSec').style.display = q.length ? 'block':'none';
+  if(!isTyping()) $('#queue').innerHTML = q.map(it=>`
+    <div class="q" id="q-${it.id}">
+      <div class="type">${esc(it.type)} · Phase ${esc(it.taskId)}</div>
+      <div class="qt">${esc(it.question)}</div>
+      ${it.detail?`<details><summary class="muted">ดูรายละเอียด verify</summary><pre class="live" style="max-height:160px">${esc(it.detail)}</pre></details>`:''}
+      ${it.options&&it.options.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">${it.options.map(o=>{const rec=o.includes('แนะนำ');return `<button class="btn${rec?' primary':''}" style="border-color:var(--purple)" data-o="${esc(o)}" onclick="approveWith('${it.id}',this.dataset.o)">${esc(o)}</button>`;}).join('')}</div><div class="muted" style="font-size:11.5px;margin-bottom:6px">หรือพิมพ์คำตอบเอง:</div>`:''}
+      ${it.type==='decision'||it.type==='verify_failed'?`<input type="text" id="ans-${it.id}" placeholder="พิมพ์คำตอบ/คำตัดสิน แล้วกด Approve (เว้นว่างได้ถ้าให้ทำตามค่าเริ่มต้น)">`:''}
+      <div class="flex">
+        <button class="btn ok" onclick="approve('${it.id}')">✓ Approve</button>
+        <button class="btn ghost" onclick="dismiss('${it.id}')">ข้าม</button>
+        ${it.branch?`<span class="pill">${esc(it.branch)}</span>`:''}
+        ${it.cost?`<span class="muted" style="font-size:12px">$${Number(it.cost).toFixed(3)}</span>`:''}
+      </div>
+    </div>`).join('');
+
+  // phases
+  $('#phases').innerHTML = p.phases.map(ph=>{
+    const open = openPhases.has(ph.key);
+    return `<div>
+      <div class="phase" onclick="togglePhase('${ph.key}')" style="cursor:pointer">
+        <div class="pct">${ph.percent}%</div>
+        <div class="pbar bar"><i style="width:${ph.percent}%"></i></div>
+        <div class="nm"><b>Phase ${esc(ph.key)}</b> ${esc(ph.name)} ${ph.locked?'<span class="lock">🔒</span>':''}
+          <span class="muted">· ${ph.done}/${ph.total}</span></div>
+      </div>
+      <div class="tasks ${open?'open':''}">
+        ${ph.tasks.map(t=>`<div class="trow"><span class="id">${esc(t.id)}</span><span class="st">${ST[t.status]||'❔'}</span><span>${esc(t.title)}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  // commits
+  $('#commits').innerHTML = (d.progress && d.runs, '') + (window.__commits||'');
+  $('#live').textContent = d.liveLog ? d.liveLog : '—';
+
+  // หัว "ดูสด": context ของ session ปัจจุบัน + limit ย่อ ไปพร้อมกัน
+  if(eng.running){
+    const ctx = eng.liveContext||0;
+    const CW = d.contextWindow || 1000000;
+    const pct = Math.min(100, Math.round(ctx/CW*100));
+    const cbar = pct>=90?'var(--red)':pct>=75?'var(--gold)':'var(--blue)';
+    $('#liveHead').innerHTML = `<div style="font-size:12.5px;margin-bottom:6px">context session นี้: <b style="color:${cbar}">~${fmtK(ctx)}</b> <span class="muted">/ ${fmtK(CW)} (${pct}%)</span> · turn ${eng.liveTurns||0}${eng.liveModel?' · <span style="color:var(--purple)">🤖 '+esc(shortModel(eng.liveModel))+'</span>':''}${eng.handoffRound>0?' · <span style="color:var(--amber)">🔄 ถ่ายงานรอบ '+eng.handoffRound+'</span>':''}</div>
+      <div class="bar" style="max-width:360px;height:10px"><i style="width:${pct}%;background:${cbar}"></i></div>`;
+  } else if(eng.phase==='waiting-limit' && eng.waitingLimit){
+    const w=eng.waitingLimit;
+    $('#liveHead').innerHTML = `<div style="color:var(--amber);font-weight:700">⏸️ รอโควตา AI reset</div>
+      <div class="muted" style="font-size:12.5px;margin-top:4px">${esc(w.label)}${w.pct!=null?' เต็ม '+w.pct+'%':''} · ${w.resetAt?esc(fmtResetSmart(w.resetAt)):esc(w.reset||'')} — จะเดินงานต่อเองอัตโนมัติหลัง reset</div>`;
+  } else {
+    $('#liveHead').innerHTML = '<span class="muted" style="font-size:12px">ไม่มี session กำลังรัน — กด "รันงานถัดไป" เพื่อเริ่ม แล้วดูสดตรงนี้</span>';
+  }
+
+  renderUsage(d.usage);
+
+  // runs
+  $('#runs').innerHTML = (d.runs||[]).map(r=>{
+    const c = r.event==='merged'||r.event==='merged-approved'?'var(--green)':r.event==='exception'||r.event==='blocked-dirty'?'var(--red)':r.event==='handoff'?'var(--amber)':r.event==='claude-done'?'var(--blue)':'var(--muted)';
+    return `<div><span class="dot" style="background:${c}"></span>${r.ts?.slice(5,16).replace('T',' ')} · Phase ${r.taskId||'-'} · <b>${r.event}</b>${r.round?' รอบ '+r.round:''}${r.note?' · '+esc(r.note):''}${r.cost?` · $${Number(r.cost).toFixed(3)}`:''}${r.peakContext?` · ctx ~${fmtK(r.peakContext)}`:''}${r.tokensOut?` · out ${fmtK(r.tokensOut)}`:''}${r.head?` · ${r.head}`:''}${r.message?` · ${esc(r.message)}`:''}${r.sessionId?` · <a href="#" onclick="viewSession('${esc(r.sessionId)}');return false" style="color:var(--blue)">📄 transcript</a>`:''}</div>`;
+  }).join('') || '<span class="muted">ยังไม่มีการรัน</span>';
+}
+
+// commits ต้องดึงจาก status ด้วย — เก็บไว้ใน progress? ใช้ runs ไม่พอ; embed จาก status
+function renderCommits(d){
+  // commits มาจาก git ผ่าน field แยก (ดู below)
+}
+
+function fmtNum(n){ return n==null?'—':Number(n).toLocaleString('th-TH'); }
+function fmtK(n){ if(n==null) return '—'; return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'k' : String(n); }
+function shortLimit(label){ if(label.includes('เซสชัน'))return '5ชม.'; if(label.includes('Fable'))return 'Fable'; if(label.includes('all models'))return 'สัปดาห์'; return label; }
+function shortModel(m){ if(!m) return ''; m=String(m).toLowerCase(); for(const k of ['opus','sonnet','haiku','fable']) if(m.includes(k)) return k; return m; }
+function compactLimits(pl){ if(!pl||!pl.ok||!pl.limits) return ''; return pl.limits.map(l=>{ const c=l.pct>=90?'var(--red)':l.pct>=70?'var(--gold)':'var(--blue)'; return `${shortLimit(l.label)} <b style="color:${c}">${l.pct}%</b>`; }).join(' · '); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+const THAI_DAY=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+function fmtWeeklyReset(iso){ const d=new Date(iso); if(isNaN(d)) return ''; return `รีเซ็ต ${THAI_DAY[d.getDay()]} ${pad2(d.getHours())}:${pad2(d.getMinutes())} น.`; }
+function fmtCountdown(iso){ const diff=new Date(iso)-Date.now(); if(isNaN(diff)) return ''; if(diff<=0) return 'กำลังรีเซ็ต…'; const s=Math.floor(diff/1000)%60,m=Math.floor(diff/60000)%60,h=Math.floor(diff/3600000); return `รีเซ็ตในอีก ${pad2(h)} : ${pad2(m)} : ${pad2(s)}`; }
+function fmtResetSmart(iso){ const diff=new Date(iso)-Date.now(); if(isNaN(diff)) return ''; return diff>24*3600000 ? fmtWeeklyReset(iso) : fmtCountdown(iso); }
+function tickCountdowns(){ document.querySelectorAll('[data-countdown]').forEach(el=>{ el.textContent=fmtCountdown(el.dataset.countdown); }); }
+setInterval(tickCountdowns,1000);
+function fmtReset(iso){ if(!iso) return ''; const d=new Date(iso); return isNaN(d)?String(iso):d.toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
+const WIN_LABEL = {five_hour:'5 ชั่วโมง', seven_day:'7 วัน', weekly:'รายสัปดาห์', five_hourly:'5 ชั่วโมง'};
+
+function renderUsage(u){
+  if(!u){ $('#usage').innerHTML='<span class="muted">—</span>'; return; }
+  let html='';
+
+  // (A) โควตา subscription จาก claude -p /usage
+  const pl=u.planLimits;
+  if(pl && pl.ok && pl.limits && pl.limits.length){
+    html+='<div style="margin-bottom:12px"><div class="muted" style="font-size:12px;margin-bottom:8px">โควตา subscription'+(pl.at?` · อัปเดต ${fmtReset(pl.at)}`:'')+'</div>';
+    for(const l of pl.limits){
+      const color=l.pct>=90?'var(--red)':l.pct>=70?'var(--gold)':'var(--blue)';
+      const resetHtml = l.key==='session'
+        ? (l.resetAt?`<span data-countdown="${l.resetAt}">${esc(fmtCountdown(l.resetAt))}</span>`:'รีเซ็ต '+esc(l.reset))
+        : (l.resetAt?esc(fmtWeeklyReset(l.resetAt)):'รีเซ็ต '+esc(l.reset));
+      html+=`<div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+          <span>${esc(l.label)}</span>
+          <span style="color:${color};font-weight:700">${l.pct}%</span>
+        </div>
+        <div class="bar" style="height:9px"><i style="width:${l.pct}%;background:${color}"></i></div>
+        <div class="muted" style="font-size:11.5px;margin-top:4px">${resetHtml}</div>
+      </div>`;
+    }
+    if(pl.last24h) html+=`<div class="muted" style="font-size:11px;margin-top:6px">${esc(pl.last24h)}</div>`;
+    html+='</div>';
+  } else {
+    html+=`<div class="muted" style="font-size:12px;margin-bottom:10px">โควตา subscription: ${pl?esc(pl.error||'ไม่พร้อม'):'กำลังโหลด… (รัน claude -p /usage เบื้องหลัง)'}</div>`;
+  }
+
+  // orchestrator runs + context ต่อ session (ตัด cost/token ออกตามที่ขอ)
+  const rt=u.runTotals||{};
+  html+=`<div style="display:flex;gap:22px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--line)">
+    <div><div class="muted" style="font-size:12px">orchestrator รันไป</div><div style="font-size:18px">${rt.runs||0} ก้อน · merge ${rt.merged||0}</div></div>
+    <div><div class="muted" style="font-size:12px">turns รวม</div><div style="font-size:18px">${rt.turnsTotal||0}</div></div>
+    <div><div class="muted" style="font-size:12px">context ก้อนล่าสุด${rt.lastTaskId?' ('+esc(rt.lastTaskId)+')':''}</div><div style="font-size:18px;color:var(--blue)">${rt.lastContext?'~'+fmtK(rt.lastContext):'—'}${rt.lastContext?' <span style="font-size:11px" class="muted">/ '+fmtK(window.__ctxWindow||1000000)+'</span>':''}</div></div>
+  </div>`;
+
+  $('#usage').innerHTML=html;
+}
+
+window.viewSession = async (id)=>{
+  document.getElementById('sessionModal').style.display='block';
+  document.getElementById('sessionTitle').textContent='Transcript · กำลังโหลด…';
+  document.getElementById('sessionBody').innerHTML='<span class="muted">กำลังอ่านไฟล์ transcript…</span>';
+  const d = await api('/api/session?id='+encodeURIComponent(id));
+  renderSession(d);
+};
+window.closeSession = ()=>{ document.getElementById('sessionModal').style.display='none'; };
+function renderSession(d){
+  const body=document.getElementById('sessionBody');
+  if(!d || !d.ok){ document.getElementById('sessionTitle').textContent='Transcript'; body.innerHTML='<span class="muted">'+esc(d&&d.error||'อ่านไม่ได้')+'</span>'; return; }
+  document.getElementById('sessionTitle').textContent='Transcript · '+d.total+' ข้อความ';
+  body.innerHTML = d.messages.map(m=>{
+    const isA = m.role==='assistant';
+    const who = isA?'🤖 Claude':'🧑 ผู้สั่ง / ผลลัพธ์ tool';
+    const blocks = m.blocks.map(b=>{
+      if(b.kind==='text') return `<div style="white-space:pre-wrap;margin:2px 0">${esc(b.text)}</div>`;
+      if(b.kind==='tool_use') return `<div style="color:var(--blue);font-family:ui-monospace,Menlo,monospace;font-size:12px;margin:2px 0">🔧 ${esc(b.name)} <span class="muted">${esc(b.input)}</span></div>`;
+      if(b.kind==='tool_result') return `<div class="muted" style="font-family:ui-monospace,Menlo,monospace;font-size:11px;border-left:2px solid var(--line);padding-left:8px;margin:2px 0;white-space:pre-wrap${b.error?';color:var(--red)':''}">${esc(b.text)}</div>`;
+      return '';
+    }).join('');
+    return `<div style="margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)"><div style="font-size:12px;color:${isA?'var(--purple)':'var(--muted)'};margin-bottom:5px;font-weight:600">${who}</div>${blocks}</div>`;
+  }).join('') || '<span class="muted">ไม่มีข้อความ</span>';
+}
+
+window.togglePhase = (k)=>{ openPhases.has(k)?openPhases.delete(k):openPhases.add(k); refresh(); };
+function afterAction(){ refresh(); setTimeout(refresh,600); setTimeout(refresh,1600); }
+window.approve = async (id)=>{
+  const el = document.getElementById('ans-'+id);
+  const a = el?el.value:undefined;
+  document.getElementById('q-'+id)?.remove();   // หายทันที
+  await api('/api/approve',{queueId:id, answer: a, action:'approve'});
+  afterAction();
+};
+window.approveWith = async (id, answer)=>{ document.getElementById('q-'+id)?.remove(); await api('/api/approve',{queueId:id, answer, action:'approve'}); afterAction(); };
+window.dismiss = async (id)=>{ document.getElementById('q-'+id)?.remove(); await api('/api/approve',{queueId:id, action:'dismiss'}); afterAction(); };
+
+window.resetState = async ()=>{ await api('/api/reset',{}); refresh(); };
+$('#runBtn').onclick = async ()=>{
+  $('#runBtn').disabled=true;
+  const r = await api('/api/run',{});
+  if(r && r.error) alert(r.error);
+  setTimeout(refresh,600); setTimeout(refresh,2500);
+};
+$('#restartBtn').onclick = async ()=>{
+  if(!confirm('Restart dashboard server? (โหลด config + .env ใหม่ — กดได้เฉพาะตอนไม่มีงานรัน)')) return;
+  try{
+    const r = await api('/api/restart',{});
+    if(r.error){ alert(r.error); return; }
+  }catch(e){ /* server ปิดตัวระหว่างตอบ — ปกติ */ }
+  const btn=$('#restartBtn'); btn.disabled=true; btn.textContent='⏳';
+  // รอ server ใหม่ขึ้นแล้ว reload (ลองทุก 1 วิ สูงสุด 30 วิ)
+  let tries=0;
+  const t=setInterval(async ()=>{
+    tries++;
+    try{ const r=await fetch('/api/status',{headers:{}}); if(r.ok){ clearInterval(t); location.reload(); } }catch(e){}
+    if(tries>30){ clearInterval(t); alert('server ยังไม่กลับมา — เช็ค terminal'); btn.disabled=false; btn.textContent='🔄'; }
+  },1000);
+};
+$('#notifyBtn').onclick = async ()=>{ const r=await api('/api/notify-test',{}); alert(r.sent?('ส่งแจ้งเตือนทดสอบแล้ว → topic: '+r.topic+'\nเช็คบนมือถือ'):'ยังไม่ได้ตั้ง ntfy — ใส่ RTB_NTFY_TOPIC ใน .env แล้ว restart'); };
+$('#reviewBtn').onclick = async ()=>{ $('#reviewBtn').disabled=true; await api('/api/review',{}); setTimeout(refresh,600); };
+$('#finalSel').onchange = async (e)=>{
+  const v = e.target.value; e.target.value='';
+  if(!v) return;
+  const label = e.target.options[e.target.selectedIndex]?.textContent || v;
+  if(!confirm(v==='all' ? 'เริ่ม Final test ทั้ง 4 ด่านต่อเนื่อง? (ใช้เวลานาน + โทเคนเยอะ)' : 'เริ่ม Final test ด่าน '+v+'?')) return;
+  await api('/api/review',{kind:'final', stage:v}); setTimeout(refresh,600);
+};
+function ensureModelOption(sel, v){ if(v && ![...sel.options].some(o=>o.value===v)){ const o=document.createElement('option'); o.value=v; o.textContent=v; sel.insertBefore(o, sel.querySelector('option[value="__custom__"]')); } }
+$('#modelSel').onchange = async (e)=>{
+  let v = e.target.value;
+  if(v==='__custom__'){
+    v = (prompt('พิมพ์ชื่อโมเดล/เวอร์ชันเต็ม เช่น claude-opus-4-1-20250805\n(หาได้จาก claude --help หรือ docs · เว้นว่าง = ยกเลิก)')||'').trim();
+    if(!v){ e.target.value = window.__curModel||''; return; }
+    ensureModelOption(e.target, v); e.target.value = v;
+  }
+  window.__curModel = v;
+  await api('/api/model',{model:v}); refresh();
+};
+$('#autoWrap').onclick = async ()=>{ const d=await lastData; const on=!(d&&d.engine.auto); await api('/api/auto',{on}); refresh(); };
+
+let lastData=null;
+async function refresh(){
+  try{ const d = await api('/api/status'); lastData=d; window.__commits = (d.commits||[]).map(c=>`<div class="commit"><code>${esc(c.hash)}</code><span class="s">${esc(c.subject)}</span></div>`).join(''); render(d); }
+  catch(e){ /* ignore */ }
+}
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>

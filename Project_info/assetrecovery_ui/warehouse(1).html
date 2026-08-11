@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetRecovery — คลังสินค้า</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body { font-family:'Inter','Noto Sans Thai',sans-serif; background-color:#f8fafc; color:#0f172a; }
+.focus-ring:focus{outline:2px solid #6d28d9;outline-offset:2px;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+.no-scroll::-webkit-scrollbar{display:none;} .no-scroll{-ms-overflow-style:none;scrollbar-width:none;}
+.modal-bg{background:rgba(15,23,42,.6);backdrop-filter:blur(4px);}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.slide-up{animation:slideUp .2s ease-out forwards;}
+.fade-in{animation:fadeIn .15s ease-out forwards;}
+.pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.tab-on{border-bottom:2.5px solid #7c3aed;color:#7c3aed;font-weight:700;}
+.tab-off{border-bottom:2.5px solid transparent;color:#64748b;}
+.tab-off:hover{color:#334155;}
+.check-row:checked ~ td{background:#f5f3ff;}
+input[type=checkbox]{accent-color:#7c3aed;}
+</style>
+</head>
+<body class="min-h-screen">
+<div id="app"></div>
+<script>
+// ═══════════════════════════════════════════════════════
+// DATE UTILITIES — Asia/Bangkok (UTC+7), พุทธศักราช (พ.ศ.)
+// Standard: DD/MM/YYYY หรือ DD/MM/YYYY HH:mm
+// ═══════════════════════════════════════════════════════
+const TZ = 'Asia/Bangkok';
+
+function toBKK(date = new Date()) {
+  // คืน Date object ที่ตรงกับเวลา Asia/Bangkok
+  return new Date(date.toLocaleString('en-US', { timeZone: TZ }));
+}
+
+function fmtDate(date = new Date()) {
+  // DD/MM/YYYY (พ.ศ.) — วันที่อย่างเดียว
+  const d = toBKK(date instanceof Date ? date : new Date(date));
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear() + 543; // ค.ศ. → พ.ศ.
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function fmtDateTime(date = new Date()) {
+  // DD/MM/YYYY HH:mm (พ.ศ.) — วันที่และเวลา
+  const d = toBKK(date instanceof Date ? date : new Date(date));
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yyyy = d.getFullYear() + 543;
+  const hh = String(d.getHours()).padStart(2,'0');
+  const min = String(d.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+function nowDate() { return fmtDate(new Date()); }
+function nowDateTime() { return fmtDateTime(new Date()); }
+
+// ═══════════════════════════════════════════════════════
+// STORE
+// ═══════════════════════════════════════════════════════
+const COMPANIES = {
+  SF: { id:'SF', name:'บริษัท สยามไฟแนนซ์ จำกัด',       short:'สยามไฟแนนซ์',    addr:'123 ถ.สีลม แขวงสีลม เขตบางรัก กทม 10500', tel:'02-111-2222' },
+  KTL:{ id:'KTL',name:'บริษัท กรุงไทยลีสซิ่ง จำกัด',    short:'กรุงไทยลีสซิ่ง', addr:'456 ถ.พหลโยธิน แขวงลาดยาว เขตจตุจักร กทม 10900', tel:'02-333-4444' },
+  ATF:{ id:'ATF',name:'บริษัท อยุธยา แคปปิตอล จำกัด', short:'อยุธยา แคปปิตอล', addr:'789 ถ.รัชดาภิเษก แขวงดินแดง เขตดินแดง กทม 10400', tel:'02-555-6666' },
+};
+
+const store = {
+  user: { name:'สมศักดิ์ ธุรการ', role:'Admin' },
+  lotSeq: 4, // next lot number
+  handoverLots: [
+    { id:'LOT-2569-001', companyId:'SF',  type:'finance_pickup', createdAt:'10/06/2569', deliveredAt:'12/06/2569', assetIds:['WH-007','WH-009'], docRef:'DLV-2569-001', trackingNo:null,  attachedDoc:true,  status:'confirmed', confirmedAt:'12/06/2569 14:30', note:'' },
+    { id:'LOT-2569-002', companyId:'KTL', type:'we_deliver',      createdAt:'14/06/2569', deliveredAt:'14/06/2569', assetIds:['WH-008','WH-018','WH-019'],          docRef:'DLV-2569-002', trackingNo:'Kerry TH123456789', attachedDoc:true,  status:'confirmed', confirmedAt:'14/06/2569 10:00', note:'' },
+    { id:'LOT-2569-003', companyId:'SF',  type:'finance_pickup',  createdAt:'20/06/2569', deliveredAt:null, assetIds:['WH-010'],          docRef:'DLV-2569-003', scheduledAt:'30/06/2569 10:00', trackingNo:null, attachedDoc:false, status:'pending_attach',     confirmedAt:null, note:'' },
+    { id:'LOT-2569-005', companyId:'KTL', type:'we_deliver', createdAt:'22/06/2569', deliveredAt:null, assetIds:['WH-016'], docRef:'DLV-2569-005', scheduledAt:'28/06/2569 09:00', trackingNo:null, attachedDoc:false, status:'pending_attach', confirmedAt:null, note:'จัดส่งทาง Kerry Express — รอยืนยัน Tracking' },
+    { id:'LOT-2569-004', companyId:'ATF', type:'we_deliver', createdAt:'22/06/2569', deliveredAt:'23/06/2569', assetIds:['WH-012'], docRef:'DLV-2569-004', scheduledAt:'23/06/2569 09:00', trackingNo:'Flash Express TH999888777', attachedDoc:false, status:'pending_delivery_proof', confirmedAt:null, note:'' },
+
+  ],
+  assets: [
+    // pending_intake
+    { id:'WH-001', companyId:'SF',  caseRef:'SF-2026-00832', debtor:'วิทยา มีเงิน',      agent:'ประยุทธ์ บุญมี',   team:'ทีมรับเหมาเหนือ', device:'iPad Air 5',        imeiContract:'353456789012345', imeiActual:null, closedAt:'24/06/2569 17:30', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
+    { id:'WH-002', companyId:'KTL', caseRef:'KTL-9981-X',   debtor:'สมหมาย ดีใจ',       agent:'วิชัย ขยันดี',     team:'ทีม A',             device:'Samsung S24 Ultra', imeiContract:'352345678901234', imeiActual:null, closedAt:'25/06/2569 10:15', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
+    { id:'WH-011', companyId:'ATF', caseRef:'ATF-5501-Z',   debtor:'มานะ ใจดี',          agent:'สมหญิง ดูแลดี',   team:'ทีม B',             device:'iPhone 15 Pro',     imeiContract:'359888777666555', imeiActual:null, closedAt:'26/06/2569 09:00', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
+    // intake_rejected
+    { id:'WH-003', companyId:'SF',  caseRef:'SF-2026-00799', debtor:'ธนกร ศักดิ์สิทธิ์', agent:'ประสิทธิ์ มากมี', team:'ทีมรับเหมาเหนือ', device:'iPhone 14 Pro',     imeiContract:'354567890123456', imeiActual:'354567890199999', closedAt:'23/06/2569 14:00', receivedAt:null, condition:null, conditionNote:'IMEI ไม่ตรง — อาจสลับเครื่องกับเคสอื่น', photos:['front.jpg','back.jpg'], lotId:null, rejectReason:'IMEI บนเครื่อง (354567890199999) ไม่ตรงกับสัญญา (354567890123456)', rejectAt:'23/06/2569 15:30', asset_status:'intake_rejected' },
+    // in_custody
+    { id:'WH-004', companyId:'KTL', caseRef:'KTL-9954-X',   debtor:'รัตนา ทองสุข',      agent:'ประยุทธ์ บุญมี',  team:'ทีมรับเหมาเหนือ', device:'iPhone 13',         imeiContract:'353456789012222', imeiActual:'353456789012222', closedAt:'20/06/2569 16:00', receivedAt:'21/06/2569 09:30', condition:'normal',       conditionNote:'สภาพดี', photos:['f.jpg','b.jpg','imei.jpg'], lotId:null, asset_status:'in_custody' },
+    { id:'WH-005', companyId:'SF',  caseRef:'SF-2026-00750', debtor:'กิตติพงษ์ มั่งมี',  agent:'สมหญิง ดูแลดี',  team:'ทีม A',             device:'Samsung S23',       imeiContract:'352111222333444', imeiActual:'352111222333444', closedAt:'19/06/2569 11:00', receivedAt:'20/06/2569 13:45', condition:'damaged',      conditionNote:'หน้าจอแตกมุมล่างขวา', photos:['front_cracked.jpg','back.jpg'], lotId:null, asset_status:'in_custody' },
+    { id:'WH-006', companyId:'KTL', caseRef:'KTL-9900-X',   debtor:'อรุณี แสงทอง',      agent:'วิชัย ขยันดี',   team:'ทีม A',             device:'iPad Pro 11"',      imeiContract:'353999888777666', imeiActual:'353999888777666', closedAt:'15/06/2569 14:20', receivedAt:'16/06/2569 10:00', condition:'normal',       conditionNote:'สภาพดีมาก', photos:['f.jpg','b.jpg','box.jpg'], lotId:null, asset_status:'in_custody' },
+    { id:'WH-012', companyId:'ATF', caseRef:'ATF-5490-Z',   debtor:'สุดา มีสุข',         agent:'ประยุทธ์ บุญมี',  team:'ทีมรับเหมาเหนือ', device:'Oppo Find X7',      imeiContract:'351777888999000', imeiActual:'351777888999000', closedAt:'22/06/2569 11:00', receivedAt:'23/06/2569 08:30', condition:'partial_loss', conditionNote:'หูฟังหายไป ตัวเครื่องปกติ', photos:['f.jpg','b.jpg'], lotId:'LOT-2569-004', asset_status:'handed_over' },
+    // WH-013: intake_rejected — KTL (ขาด)
+    { id:'WH-013', companyId:'KTL', caseRef:'KTL-9975-X', debtor:'ชาญชัย วงศ์ดี', agent:'สมหญิง ดูแลดี', team:'ทีม A', device:'Vivo V29e', imeiContract:'352888999000111', imeiActual:'352888999099999', closedAt:'26/06/2569 11:30', receivedAt:null, condition:null, conditionNote:'IMEI บนเครื่อง ไม่ตรง — อาจนำเครื่องอื่นมาส่งแทน', photos:['front.jpg'], lotId:null, rejectReason:'IMEI บนเครื่อง (352888999099999) ไม่ตรงกับสัญญา (352888999000111) — เครื่องน่าจะสลับกันกับเคส KTL-9980-X', rejectAt:'26/06/2569 13:00', asset_status:'intake_rejected' },
+    // WH-014: in_custody normal — ATF (ขาด)
+    { id:'WH-014', companyId:'ATF', caseRef:'ATF-5510-Z', debtor:'ปิยะพร มีสุข', agent:'วิชัย ขยันดี', team:'ทีม A', device:'iPhone 14', imeiContract:'359444555666111', imeiActual:'359444555666111', closedAt:'24/06/2569 15:00', receivedAt:'25/06/2569 09:00', condition:'normal', conditionNote:'สภาพดี ครบอุปกรณ์ทุกชิ้น', photos:['front.jpg','back.jpg','box.jpg','imei.jpg'], lotId:null, asset_status:'in_custody' },
+    // WH-015: in_custody partial_loss — KTL (ขาด)
+    { id:'WH-015', companyId:'KTL', caseRef:'KTL-9960-X', debtor:'ธิดา มงคล', agent:'ประยุทธ์ บุญมี', team:'ทีมรับเหมาเหนือ', device:'OPPO Reno 10', imeiContract:'351222333444555', imeiActual:'351222333444555', closedAt:'23/06/2569 16:30', receivedAt:'24/06/2569 10:15', condition:'partial_loss', conditionNote:'กล่องและหูฟังหายไป ตัวเครื่องและที่ชาร์จยังอยู่', photos:['front.jpg','back.jpg'], lotId:null, asset_status:'in_custody' },
+    // WH-016: handover_pending — KTL we_deliver (LOT-005 รอแนบเซ็น in pending_attach tab)
+    { id:'WH-016', companyId:'KTL', caseRef:'KTL-9945-X', debtor:'สมบัติ ร่ำรวย', agent:'สมหญิง ดูแลดี', team:'ทีม A', device:'Samsung A55', imeiContract:'352000111222333', imeiActual:'352000111222333', closedAt:'21/06/2569 14:00', receivedAt:'22/06/2569 09:30', condition:'normal', conditionNote:'ปกติทุกอย่าง', photos:['front.jpg','back.jpg','imei.jpg'], lotId:'LOT-2569-005', asset_status:'handover_pending' },
+    // WH-017: in_custody normal — SF เพิ่ม (ให้การ์ด SF มีมากกว่า 1 เครื่อง normal)
+    { id:'WH-017', companyId:'SF', caseRef:'SF-2026-00860', debtor:'นภา ใจดี', agent:'ประสิทธิ์ มากมี', team:'ทีมรับเหมาเหนือ', device:'Xiaomi 14', imeiContract:'864111222333444', imeiActual:'864111222333444', closedAt:'25/06/2569 13:00', receivedAt:'26/06/2569 08:45', condition:'normal', conditionNote:'สภาพดีมาก', photos:['front.jpg','back.jpg','imei.jpg'], lotId:null, asset_status:'in_custody' },
+    // handover_pending (draft lot)
+    { id:'WH-010', companyId:'SF',  caseRef:'SF-2026-00720', debtor:'ปริญญา สุขสันต์',  agent:'วิชัย ขยันดี',   team:'ทีม A',             device:'iPhone 12 Mini',    imeiContract:'359222333444555', imeiActual:'359222333444555', closedAt:'18/06/2569 13:00', receivedAt:'19/06/2569 10:00', condition:'normal', conditionNote:'ปกติ', photos:['f.jpg','b.jpg'], lotId:'LOT-2569-003', asset_status:'handover_pending' },
+    // handed_over
+    // WH-018, WH-019: handed_over — KTL confirmed we_deliver (LOT-002)
+    { id:'WH-018', companyId:'KTL', caseRef:'KTL-9855-X', debtor:'ประทีป สว่างใจ', agent:'ประยุทธ์ บุญมี', team:'ทีมรับเหมาเหนือ', device:'iPhone 13 Mini', imeiContract:'352777888999000', imeiActual:'352777888999000', closedAt:'07/06/2569 10:00', receivedAt:'08/06/2569 09:00', condition:'normal', conditionNote:'ปกติ', photos:['f.jpg','b.jpg'], lotId:'LOT-2569-002', asset_status:'handed_over' },
+    { id:'WH-019', companyId:'KTL', caseRef:'KTL-9860-X', debtor:'อัญชลี วงค์ดี', agent:'วิชัย ขยันดี', team:'ทีม A', device:'Samsung A54', imeiContract:'351666777888999', imeiActual:'351666777888999', closedAt:'08/06/2569 14:00', receivedAt:'09/06/2569 10:30', condition:'damaged', conditionNote:'รอยขีดข่วนที่ด้านหลัง — แจ้งบริษัทไฟแนนซ์ทราบแล้ว', photos:['f.jpg','b_scratch.jpg'], lotId:'LOT-2569-002', asset_status:'handed_over' },
+    { id:'WH-007', companyId:'SF',  caseRef:'SF-2026-00700', debtor:'ปิยะ สุขสันต์',    agent:'ประยุทธ์ บุญมี', team:'ทีมรับเหมาเหนือ', device:'iPhone 12',         imeiContract:'359111222333444', imeiActual:'359111222333444', closedAt:'10/06/2569 09:00', receivedAt:'11/06/2569 11:00', condition:'normal',       conditionNote:'ปกติ', photos:['f.jpg','b.jpg'], lotId:'LOT-2569-001', asset_status:'handed_over' },
+    { id:'WH-009', companyId:'SF',  caseRef:'SF-2026-00710', debtor:'กนกวรรณ ใจดี',    agent:'สมหญิง ดูแลดี',  team:'ทีม A',             device:'Samsung S22',       imeiContract:'351999000111222', imeiActual:'351999000111222', closedAt:'10/06/2569 10:00', receivedAt:'11/06/2569 11:30', condition:'normal',       conditionNote:'ปกติ', photos:['f.jpg','b.jpg'], lotId:'LOT-2569-001', asset_status:'handed_over' },
+    { id:'WH-008', companyId:'KTL', caseRef:'KTL-9870-X',   debtor:'สายัณห์ บุญรอด',  agent:'สมหญิง ดูแลดี',  team:'ทีม A',             device:'Samsung S22',       imeiContract:'351444555666777', imeiActual:'351444555666777', closedAt:'08/06/2569 16:00', receivedAt:'09/06/2569 09:15', condition:'partial_loss', conditionNote:'หูฟังหายไป', photos:['f.jpg','b.jpg'], lotId:'LOT-2569-002', asset_status:'handed_over' },
+  ]
+};
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const st = {
+  tab: 'intake',       // intake | custody | delivered
+  modal: null,
+  toast: null,
+  // intake filter
+  fIntakeSearch:'', fIntakeDate:'', fIntakeCompany:'', fIntakeTeam:'', fIntakeAgent:'', fIntakeStatus:'', fIntakeCond:'',
+  // custody
+  custodyCompanyOpen: null,  // companyId drill-down
+  fCustodySearch:'', fCustodyDate:'', fCustodyCompany:'',
+  fCustodyDetailSearch:'', fCustodyDetailDate:'',
+  selectedAssets: {},        // { assetId: true }
+  // pending_handover
+  pendingLotOpen: null,
+  fPendingSearch:'', fPendingDate:'', fPendingCompany:'',
+  fPendingDetailSearch:'',
+  // delivered
+  deliveredLotOpen: null,    // lotId drill-down
+  fDelivSearch:'', fDelivDate:'', fDelivCompany:'', fDelivStatus:'',
+  fDelivDetailSearch:'',
+  // modal state
+  mHandoverType:'',
+  mHandoverAddr:'',
+  mHandoverTracking:'',
+  mHandoverNote:'',
+  mIntakeImei:'',
+  mIntakeCond:'',
+  mIntakeNote:'',
+};
+
+function S(p){Object.assign(st,p);render();}
+function openModal(type,id='',extra={}){S({modal:{type,id,...extra}});}
+function closeModal(){S({modal:null,mHandoverType:'',mHandoverAddr:'',mHandoverTracking:'',mHandoverNote:'',mIntakeImei:'',mIntakeCond:'',mIntakeNote:'',selectedAssets:{}});}
+function toast(msg,color='violet'){S({toast:{msg,color}});setTimeout(()=>{if(st.toast?.msg===msg)S({toast:null});},3500);}
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+const CL = {n:'bg-emerald-100 text-emerald-800',d:'bg-red-100 text-red-800',p:'bg-amber-100 text-amber-800'};
+const CLN = {normal:'ปกติ',damaged:'ชำรุด',partial_loss:'สูญหายบางส่วน'};
+const ASL = {pending_intake:'รอรับเข้าคลัง',intake_rejected:'ตีกลับ',in_custody:'ในคลัง',handover_pending:'นัดส่งมอบ',handed_over:'ส่งมอบแล้ว'};
+const ASC = {pending_intake:'bg-sky-100 text-sky-800',intake_rejected:'bg-red-100 text-red-800',in_custody:'bg-violet-100 text-violet-800',handover_pending:'bg-amber-100 text-amber-800',handed_over:'bg-emerald-100 text-emerald-800'};
+function pill(lbl,cls){return`<span class="pill ${cls}">${lbl}</span>`;}
+function btn(lbl,cls='',attr=''){return`<button ${attr} class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors focus-ring ${cls}">${lbl}</button>`;}
+function getCompany(id){return COMPANIES[id]||{name:id,short:id,addr:'',tel:''};}
+function getAsset(id){return store.assets.find(a=>a.id===id);}
+function getLot(id){return store.handoverLots.find(l=>l.id===id);}
+function custodyAssets(companyId){return store.assets.filter(a=>a.companyId===companyId&&a.asset_status==='in_custody');}
+function nextLotId(){return`LOT-2569-00${++store.lotSeq}`;}
+function nextDocRef(){return`DLV-2569-00${store.lotSeq}`;}
+function matchSearch(a,q){if(!q)return true;q=q.toLowerCase();return a.imeiContract.includes(q)||a.imeiActual?.includes(q)||(a.debtor||'').toLowerCase().includes(q)||(a.caseRef||'').toLowerCase().includes(q);}
+
+const SVG = {
+  box:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>`,
+  check:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>`,
+  x:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>`,
+  eye:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>`,
+  truck:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>`,
+  dl:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>`,
+  cam:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0"/></svg>`,
+  warn:`<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`,
+  search:`<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>`,
+  back:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>`,
+  xl:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`,
+  pdf:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>`,
+  clip:`<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>`,
+};
+
+function filterInput(placeholder, bindKey, small=false){
+  return`<div class="relative">
+    <div class="absolute left-3 top-1/2 -translate-y-1/2">${SVG.search}</div>
+    <input type="text" placeholder="${placeholder}" value="${st[bindKey]||''}"
+      oninput="S({${bindKey}:this.value})"
+      class="pl-9 pr-3 ${small?'py-1.5 text-xs':'py-2 text-sm'} border border-slate-200 rounded-lg focus-ring bg-white w-full">
+  </div>`;
+}
+function filterSelect(label, opts, bindKey, small=false){
+  return`<select onchange="S({${bindKey}:this.value})" class="border border-slate-200 rounded-lg px-3 ${small?'py-1.5 text-xs':'py-2 text-sm'} focus-ring bg-white">
+    <option value="">${label}</option>
+    ${opts.map(o=>`<option value="${o.v}" ${st[bindKey]===o.v?'selected':''}>${o.l}</option>`).join('')}
+  </select>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════════════════
+function renderNav(){
+  const pend = store.assets.filter(a=>a.asset_status==='pending_intake').length;
+  return`<nav class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 flex items-center h-14 gap-4">
+      <div class="flex items-center gap-2 mr-4">
+        <div class="w-7 h-7 rounded-lg bg-violet-700 flex items-center justify-center text-white">${SVG.box}</div>
+        <span class="font-bold text-sm text-slate-900">AssetRecovery</span>
+        <span class="text-slate-300">·</span>
+        <span class="text-sm font-semibold text-violet-700">คลังสินค้า</span>
+      </div>
+      ${pend>0?`<div class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-lg">${SVG.warn} ${pend} รายการรอรับเข้าคลัง</div>`:''}
+      <div class="ml-auto flex items-center gap-3">
+        <div class="text-right hidden sm:block">
+          <div class="text-xs font-bold">${st.user?.name||store.user.name}</div>
+          <div class="text-[10px] text-slate-400">${store.user.role}</div>
+        </div>
+        <div class="w-8 h-8 rounded-full bg-violet-700 text-white flex items-center justify-center text-xs font-bold">ส</div>
+      </div>
+    </div>
+  </nav>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SUMMARY CARDS
+// ═══════════════════════════════════════════════════════
+function renderSummary(){
+  const cnt=(s)=>store.assets.filter(a=>a.asset_status===s).length;
+  const lotCnt=(s)=>store.handoverLots.filter(l=>l.status===s).length;
+  const cards=[
+    {l:'รอรับเข้าคลัง', n:cnt('pending_intake')+cnt('intake_rejected'), bg:'bg-sky-50 border-sky-200',     txt:'text-sky-700',    dot:'bg-sky-400',    tab:'intake'},
+    {l:'ในคลัง',         n:cnt('in_custody'),                           bg:'bg-violet-50 border-violet-200',txt:'text-violet-700', dot:'bg-violet-400', tab:'custody'},
+    {l:'รอส่งมอบ (Lot)', n:store.handoverLots.filter(l=>l.status==='pending_attach').length, bg:'bg-amber-50 border-amber-200',   txt:'text-amber-700',  dot:'bg-amber-400',  tab:'pending_handover'},
+    {l:'ส่งมอบแล้ว',     n:lotCnt('confirmed'),                         bg:'bg-emerald-50 border-emerald-200',txt:'text-emerald-700',dot:'bg-emerald-400',tab:'delivered'},
+  ];
+  return`<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+    ${cards.map(c=>`<button data-action="set-tab" data-id="${c.tab}" class="text-left ${c.bg} ${c.txt} border rounded-xl p-4 hover:opacity-90 transition focus-ring">
+      <div class="flex items-center gap-1.5 mb-1"><div class="w-2 h-2 rounded-full ${c.dot}"></div><div class="text-[10px] font-bold uppercase opacity-70">${c.l}</div></div>
+      <div class="text-2xl font-extrabold">${c.n}</div>
+    </button>`).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB BAR
+// ═══════════════════════════════════════════════════════
+function renderTabs(){
+  const tabs=[
+    {id:'intake',           l:'รับเข้าคลัง',      cnt:store.assets.filter(a=>['pending_intake','intake_rejected'].includes(a.asset_status)).length},
+    {id:'custody',          l:'ในคลัง',            cnt:store.assets.filter(a=>a.asset_status==='in_custody').length},
+    {id:'pending_handover', l:'รอส่งมอบ',          cnt:store.handoverLots.filter(l=>l.status==='pending_attach').length},
+    {id:'delivered',        l:'ส่งมอบแล้ว',        cnt:store.handoverLots.filter(l=>l.status==='confirmed').length},
+  ];
+  return`<div class="flex gap-6 border-b border-slate-200 mb-5 no-scroll overflow-x-auto">
+    ${tabs.map(t=>`<button data-action="set-tab" data-id="${t.id}" class="pb-2.5 text-sm whitespace-nowrap focus-ring flex items-center gap-1.5 ${st.tab===t.id?'tab-on':'tab-off'}">
+      ${t.l} <span class="px-1.5 py-0.5 rounded-full text-[10px] font-bold ${st.tab===t.id?'bg-violet-600 text-white':'bg-slate-200 text-slate-600'}">${t.cnt}</span>
+    </button>`).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: รับเข้าคลัง
+// ═══════════════════════════════════════════════════════
+function renderIntakeTab(){
+  let assets = store.assets.filter(a=>['pending_intake','intake_rejected'].includes(a.asset_status));
+  if(st.fIntakeSearch) assets=assets.filter(a=>matchSearch(a,st.fIntakeSearch));
+  if(st.fIntakeCompany) assets=assets.filter(a=>a.companyId===st.fIntakeCompany);
+  if(st.fIntakeTeam) assets=assets.filter(a=>a.team===st.fIntakeTeam);
+  if(st.fIntakeAgent) assets=assets.filter(a=>a.agent===st.fIntakeAgent);
+  if(st.fIntakeStatus) assets=assets.filter(a=>a.asset_status===st.fIntakeStatus);
+  if(st.fIntakeCond) assets=assets.filter(a=>a.condition===st.fIntakeCond);
+
+  const allTeams=[...new Set(store.assets.map(a=>a.team))];
+  const allAgents=[...new Set(store.assets.map(a=>a.agent))];
+
+  return`<div>
+    <!-- Filters -->
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4 space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        ${filterInput('ค้นหา IMEI / ชื่อลูกหนี้ / เลขสัญญา','fIntakeSearch')}
+        <input type="date" value="${st.fIntakeDate||''}" onchange="S({fIntakeDate:this.value})" class="border border-slate-200 rounded-lg px-3 py-2 text-sm focus-ring bg-white">
+        ${filterSelect('ทุกบริษัทไฟแนนซ์',Object.values(COMPANIES).map(c=>({v:c.id,l:c.short})),'fIntakeCompany')}
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        ${filterSelect('ทุกทีม',allTeams.map(t=>({v:t,l:t})),'fIntakeTeam')}
+        ${filterSelect('ทุกพนักงาน',allAgents.map(a=>({v:a,l:a})),'fIntakeAgent')}
+        ${filterSelect('ทุกสถานะ',[{v:'pending_intake',l:'รอรับเข้าคลัง'},{v:'intake_rejected',l:'ตีกลับ'}],'fIntakeStatus')}
+        ${filterSelect('ทุกสภาพ',[{v:'normal',l:'ปกติ'},{v:'damaged',l:'ชำรุด'},{v:'partial_loss',l:'สูญหายบางส่วน'}],'fIntakeCond')}
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm text-left">
+        <thead class="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase font-bold tracking-wide">
+          <tr>
+            <th class="px-4 py-3">เคส / บริษัท</th>
+            <th class="px-4 py-3">ลูกหนี้</th>
+            <th class="px-4 py-3">อุปกรณ์ / IMEI</th>
+            <th class="px-4 py-3">ทีม / พนักงาน</th>
+            <th class="px-4 py-3">ปิดงานเมื่อ</th>
+            <th class="px-4 py-3">สถานะ</th>
+            <th class="px-4 py-3 text-right">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${assets.length===0?`<tr><td colspan="7" class="text-center py-12 text-slate-400">ไม่พบรายการ</td></tr>`:
+          assets.map(a=>`<tr class="border-b border-slate-100 hover:bg-slate-50">
+            <td class="px-4 py-3">
+              <div class="font-mono text-xs text-violet-700 font-bold">${a.caseRef}</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${getCompany(a.companyId).short}</div>
+            </td>
+            <td class="px-4 py-3 font-semibold text-slate-900">${a.debtor}</td>
+            <td class="px-4 py-3">
+              <div class="font-medium">${a.device}</div>
+              <div class="font-mono text-[10px] text-slate-400">${a.imeiContract}</div>
+            </td>
+            <td class="px-4 py-3 text-xs text-slate-600">
+              <div>${a.team}</div>
+              <div class="text-slate-400">${a.agent}</div>
+            </td>
+            <td class="px-4 py-3 text-xs text-slate-500">${a.closedAt}</td>
+            <td class="px-4 py-3">${pill(ASL[a.asset_status],ASC[a.asset_status])}</td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              <div class="inline-flex items-center gap-1.5">
+                ${a.asset_status==='pending_intake'?
+                  btn(`${SVG.check} รับเข้าคลัง`,'bg-violet-600 text-white border-violet-600 hover:bg-violet-700',`data-action="open-modal" data-type="intake" data-id="${a.id}"`)+
+                  ' '+btn(`${SVG.x} ตีกลับ`,'text-red-600 border-red-200 hover:bg-red-50',`data-action="open-modal" data-type="reject-intake" data-id="${a.id}"`)
+                :
+                  btn(`${SVG.eye} ดูเหตุผล`,'text-slate-700 border-slate-200 hover:bg-slate-50',`data-action="open-modal" data-type="view-reject" data-id="${a.id}"`)+
+                  ' '+btn(`${SVG.check} รับใหม่`,'bg-violet-600 text-white border-violet-600 hover:bg-violet-700',`data-action="open-modal" data-type="intake" data-id="${a.id}"`)
+                }
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: ในคลัง / รอส่งมอบ
+// ═══════════════════════════════════════════════════════
+function renderCustodyTab(){
+  // ── DRILL-DOWN VIEW ──────────────────────────────────
+  if(st.custodyCompanyOpen){
+    const c = getCompany(st.custodyCompanyOpen);
+    let assets = store.assets.filter(a=>a.companyId===st.custodyCompanyOpen&&a.asset_status==='in_custody');
+    if(st.fCustodyDetailSearch) assets=assets.filter(a=>matchSearch(a,st.fCustodyDetailSearch));
+    if(st.fCustodyDetailDate) assets=assets.filter(a=>a.receivedAt?.includes(st.fCustodyDetailDate.replace(/-/g,'/')));
+    const readyToSend = assets; // ทุกรายการใน drill-down คือ in_custody แล้ว
+    const selIds = Object.keys(st.selectedAssets).filter(id=>st.selectedAssets[id]);
+    const selCount = selIds.length;
+    const allReadySelected = readyToSend.length>0 && readyToSend.every(a=>st.selectedAssets[a.id]);
+
+    return`<div>
+      <button data-action="custody-back" class="flex items-center gap-2 text-sm text-violet-700 font-semibold mb-4 hover:underline">${SVG.back} กลับ</button>
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-3">
+        <div>
+          <h3 class="font-bold text-slate-900">${c.name}</h3>
+          <div class="text-xs text-slate-500 mt-0.5">${assets.length} เครื่องในคลัง — ทั้งหมดพร้อมส่งมอบ</div>
+        </div>
+        <div class="flex items-center gap-2">
+          ${btn(`${SVG.xl} Export Excel`,'text-emerald-700 border-emerald-200 hover:bg-emerald-50',`data-action="export-xl"`)}
+          ${selCount>0?btn(`${SVG.truck} นัดวันส่งมอบ (${selCount})`,'bg-violet-700 text-white border-violet-700 hover:bg-violet-800',`data-action="open-modal" data-type="handover-lot" data-id="${st.custodyCompanyOpen}"`):
+          btn(`${SVG.truck} นัดวันส่งมอบ`,'text-slate-400 border-slate-200 cursor-not-allowed opacity-50',`disabled`)}
+        </div>
+      </div>
+      <!-- Filters -->
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 flex flex-wrap gap-3">
+        ${filterInput('IMEI / ชื่อลูกหนี้ / เลขสัญญา','fCustodyDetailSearch',true)}
+        <input type="date" value="${st.fCustodyDetailDate||''}" onchange="S({fCustodyDetailDate:this.value})" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus-ring bg-white">
+      </div>
+      <!-- Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase font-bold tracking-wide">
+            <tr>
+              <th class="px-4 py-3">
+                <input type="checkbox" class="focus-ring rounded" ${allReadySelected?'checked':''}
+                  onchange="toggleAllReady('${st.custodyCompanyOpen}',this.checked)">
+              </th>
+              <th class="px-4 py-3">เคส / ลูกหนี้</th>
+              <th class="px-4 py-3">อุปกรณ์ / IMEI</th>
+              <th class="px-4 py-3">วันที่รับเข้า</th>
+              <th class="px-4 py-3">สภาพ</th>
+              <th class="px-4 py-3">สถานะ</th>
+              <th class="px-4 py-3 text-right">รายละเอียด</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${assets.length===0?`<tr><td colspan="7" class="text-center py-8 text-slate-400">ไม่พบรายการ</td></tr>`:
+            assets.map(a=>{
+              const ready = a.asset_status==='in_custody';
+              const sel = !!st.selectedAssets[a.id];
+              return`<tr class="border-b border-slate-100 ${sel?'bg-violet-50':''} hover:bg-violet-50/50">
+                <td class="px-4 py-3">
+                  <input type="checkbox" class="focus-ring rounded" ${sel?'checked':''} ${!ready?'disabled title="นัดส่งมอบแล้ว — ยกเลิก lot ก่อน"':''}
+                    onchange="toggleAsset('${a.id}',this.checked)">
+                </td>
+                <td class="px-4 py-3">
+                  <div class="font-mono text-xs text-violet-700 font-bold">${a.caseRef}</div>
+                  <div class="font-semibold text-slate-900">${a.debtor}</div>
+                </td>
+                <td class="px-4 py-3">
+                  <div class="font-medium">${a.device}</div>
+                  <div class="font-mono text-[10px] text-slate-400">${a.imeiContract}</div>
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-500">${a.receivedAt||'—'}</td>
+                <td class="px-4 py-3">${a.condition?pill(CLN[a.condition],CL[a.condition[0]]):'—'}</td>
+                <td class="px-4 py-3">${pill(ASL[a.asset_status],ASC[a.asset_status])}</td>
+                <td class="px-4 py-3 text-right">
+                  ${btn(`${SVG.eye} ดู`,'text-slate-700 border-slate-200 hover:bg-slate-50',`data-action="open-modal" data-type="view-custody" data-id="${a.id}"`)}
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── CARD VIEW (grouped by company) ───────────────────
+  let allCustody = store.assets.filter(a=>a.asset_status==='in_custody');
+  if(st.fCustodySearch)  allCustody=allCustody.filter(a=>matchSearch(a,st.fCustodySearch));
+  if(st.fCustodyCompany) allCustody=allCustody.filter(a=>a.companyId===st.fCustodyCompany);
+
+  const byCompany = {};
+  allCustody.forEach(a=>{ if(!byCompany[a.companyId])byCompany[a.companyId]=[]; byCompany[a.companyId].push(a); });
+
+  return`<div>
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-5 flex flex-wrap gap-3">
+      ${filterInput('IMEI / ชื่อลูกหนี้ / เลขสัญญา','fCustodySearch',true)}
+      ${filterSelect('ทุกบริษัทไฟแนนซ์',Object.values(COMPANIES).map(c=>({v:c.id,l:c.short})),'fCustodyCompany',true)}
+    </div>
+
+    ${Object.keys(byCompany).length===0?`<div class="text-center py-16 text-slate-400"><div class="text-4xl mb-3">📦</div><div>ไม่มีเครื่องในคลัง</div></div>`:''}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      ${Object.entries(byCompany).map(([compId, assets])=>{
+        const co = getCompany(compId);
+        const ready = assets.length; // assets คือ in_custody ทั้งหมด
+        const condMap = {};
+        assets.forEach(a=>{ if(a.condition)condMap[a.condition]=(condMap[a.condition]||0)+1; });
+        return`<div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+          data-action="open-company" data-id="${compId}">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <div class="font-bold text-slate-900 group-hover:text-violet-700 transition-colors">${co.short}</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${co.name}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-2xl font-extrabold text-violet-700">${assets.length}</div>
+              <div class="text-[10px] text-slate-400">เครื่องทั้งหมด</div>
+            </div>
+          </div>
+          <div class="flex gap-2 mb-3">
+            ${ready>0?`<span class="pill bg-violet-100 text-violet-700">${ready} เครื่อง พร้อมส่ง</span>`:'<span class="pill bg-slate-100 text-slate-400">ไม่มีรายการพร้อมส่ง</span>'}
+          </div>
+          ${Object.keys(condMap).length>0?`<div class="flex gap-1.5 flex-wrap">
+            ${Object.entries(condMap).map(([c,n])=>`<span class="pill ${c==='normal'?'bg-emerald-50 text-emerald-700':c==='damaged'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}">${n} ${CLN[c]}</span>`).join('')}
+          </div>`:''}
+          <div class="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+            <div class="text-xs text-slate-400">คลิกเพื่อดูรายการ</div>
+            <svg class="w-4 h-4 text-slate-400 group-hover:text-violet-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════
+// TAB: รอส่งมอบ (Lot ที่ยังไม่ confirmed)
+// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// TAB: รอส่งมอบ — การ์ด Lot (finance_pickup รอแนบเซ็น)
+// ═══════════════════════════════════════════════════════
+function renderPendingHandoverTab(){
+  if(st.pendingLotOpen){
+    const lot = getLot(st.pendingLotOpen);
+    const co  = getCompany(lot.companyId);
+    let assets = lot.assetIds.map(getAsset).filter(Boolean);
+    if(st.fPendingDetailSearch) assets=assets.filter(a=>matchSearch(a,st.fPendingDetailSearch));
+    const isPickup = lot.type==='finance_pickup';
+    return`<div>
+      <button data-action="pending-back" class="flex items-center gap-2 text-sm text-violet-700 font-semibold mb-4 hover:underline">${SVG.back} กลับ</button>
+      <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-mono font-bold text-violet-700 text-lg">${lot.id}</span>
+            <span class="pill bg-amber-100 text-amber-800">รอแนบ${isPickup?'ใบเซ็นรับ':'หลักฐานจัดส่ง'}</span>
+          </div>
+          <div class="text-sm font-semibold text-slate-700">${co.name}</div>
+          <div class="text-xs text-slate-400 mt-0.5">${isPickup?'🏢 บริษัทไฟแนนซ์มารับ':'🚚 เราจัดส่งไปให้'} · สร้าง ${lot.createdAt} · ${assets.length} เครื่อง</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          ${btn(`${SVG.xl} Export Excel`,'text-emerald-700 border-emerald-200 hover:bg-emerald-50',`data-action="export-xl"`)}
+          ${btn(`${SVG.pdf} ใบส่งมอบ PDF`,'text-red-600 border-red-200 hover:bg-red-50',`data-action="open-modal" data-type="view-delivery-doc" data-id="${lot.id}"`)}
+          ${btn(`${SVG.clip} แนบ${isPickup?'ใบเซ็นรับ':'หลักฐานจัดส่ง'} & ยืนยัน`,'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700',`data-action="open-modal" data-type="attach-doc" data-id="${lot.id}"`)}
+        </div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 flex items-start gap-2 text-xs text-amber-800">${SVG.warn}
+        <div>${isPickup
+          ? 'รอแนบ <b>ใบส่งมอบที่มีลายเซ็นผู้รับ</b> — บริษัทไฟแนนซ์มารับแล้ว กรุณาขอลายเซ็นและแนบเอกสารเพื่อปิด Lot'
+          : 'รอแนบ <b>หลักฐานใบเสร็จส่งพัสดุ / หลักฐาน Delivered</b> — จัดส่งแล้ว กรุณาแนบหลักฐานเพื่อปิด Lot'
+        } · รายการเบิกและรายได้จะปลดล็อกเมื่อยืนยัน</div>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4">
+        ${filterInput('IMEI / ชื่อลูกหนี้ / เลขสัญญา','fPendingDetailSearch',true)}
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase font-bold">
+            <tr><th class="px-4 py-3">เคส / ลูกหนี้</th><th class="px-4 py-3">อุปกรณ์ / IMEI</th><th class="px-4 py-3">วันรับเข้าคลัง</th><th class="px-4 py-3">สภาพ</th><th class="px-4 py-3 text-right">รายละเอียด</th></tr>
+          </thead>
+          <tbody>
+            ${assets.map(a=>`<tr class="border-b border-slate-100 hover:bg-slate-50">
+              <td class="px-4 py-3"><div class="font-mono text-xs text-violet-700 font-bold">${a.caseRef}</div><div class="font-semibold">${a.debtor}</div></td>
+              <td class="px-4 py-3"><div class="font-medium">${a.device}</div><div class="font-mono text-[10px] text-slate-400">${a.imeiContract}</div></td>
+              <td class="px-4 py-3 text-xs text-slate-500">${a.receivedAt||'—'}</td>
+              <td class="px-4 py-3">${a.condition?pill(CLN[a.condition],CL[a.condition[0]]):'—'}</td>
+              <td class="px-4 py-3 text-right">${btn(`${SVG.eye} ดู`,'text-slate-700 border-slate-200 hover:bg-slate-50',`data-action="open-modal" data-type="view-custody" data-id="${a.id}"`)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── การ์ด Lot ──────────────────────────────────────────
+  let lots = store.handoverLots.filter(l=>l.status==='pending_attach');
+  if(st.fPendingSearch)  lots=lots.filter(l=>{ const aids=l.assetIds.map(getAsset).filter(Boolean); return aids.some(a=>matchSearch(a,st.fPendingSearch))||l.id.toLowerCase().includes(st.fPendingSearch.toLowerCase()); });
+  if(st.fPendingDate)    lots=lots.filter(l=>l.createdAt?.includes(st.fPendingDate.replace(/-/g,'/')));
+  if(st.fPendingCompany) lots=lots.filter(l=>l.companyId===st.fPendingCompany);
+
+  return`<div>
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-5 flex flex-wrap gap-3">
+      ${filterInput('เลขล็อต / IMEI / ชื่อลูกหนี้','fPendingSearch',true)}
+      <input type="date" value="${st.fPendingDate||''}" onchange="S({fPendingDate:this.value})" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus-ring bg-white">
+      ${filterSelect('ทุกบริษัทไฟแนนซ์',Object.values(COMPANIES).map(c=>({v:c.id,l:c.short})),'fPendingCompany',true)}
+    </div>
+    ${lots.length===0?`<div class="text-center py-16 text-slate-400"><div class="text-4xl mb-3">🚚</div><div class="font-semibold">ไม่มี Lot ที่รอส่งมอบ</div></div>`:''}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      ${lots.map(lot=>{
+        const co = getCompany(lot.companyId);
+        const assets = lot.assetIds.map(getAsset).filter(Boolean);
+        const isPickup = lot.type==='finance_pickup';
+        return`<div class="bg-white border-2 border-amber-300 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group">
+          <!-- Header -->
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="font-mono text-xs text-violet-700 font-bold mb-0.5">${lot.id}</div>
+              <div class="font-bold text-slate-900 group-hover:text-violet-700 transition-colors">${co.short}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-2xl font-extrabold text-slate-800">${assets.length}</div>
+              <div class="text-[10px] text-slate-400">เครื่อง</div>
+            </div>
+          </div>
+          <!-- ประเภทส่งมอบ -->
+          <div class="flex items-center gap-2 mb-3">
+            <span class="pill ${isPickup?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${isPickup?'🏢 ไฟแนนซ์มารับ':'🚚 เราส่งให้'}</span>
+            <span class="pill bg-amber-100 text-amber-800">รอแนบ${isPickup?'ใบเซ็นรับ':'หลักฐาน'}</span>
+          </div>
+          <!-- เอกสารที่ต้องการ -->
+          <div class="bg-amber-50 rounded-lg p-2.5 mb-3 text-[10px] text-amber-800 border border-amber-100">
+            ${isPickup
+              ? `📄 ต้องการ: <b>ใบส่งมอบที่มีลายเซ็นผู้รับ</b>`
+              : `📄 ต้องการ: <b>หลักฐานใบเสร็จส่งพัสดุ / Delivered</b>`
+            }
+          </div>
+          <!-- วันนัด -->
+          <div class="text-xs text-slate-500 mb-4">${isPickup?'นัดรับ':'กำหนดส่ง'}: <span class="font-semibold text-slate-700">${lot.scheduledAt||'—'}</span></div>
+          <!-- Actions -->
+          <div class="border-t border-slate-100 pt-3 flex gap-2">
+            <button data-action="open-pending-lot" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring flex items-center justify-center gap-1">${SVG.eye} ดูรายการ</button>
+            <button data-action="open-modal" data-type="attach-doc" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 focus-ring flex items-center justify-center gap-1">${SVG.clip} แนบเอกสาร</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB: ส่งมอบแล้ว — การ์ด Lot (confirmed + pending_delivery_proof)
+// ═══════════════════════════════════════════════════════
+function renderDeliveredTab(){
+  if(st.deliveredLotOpen){
+    const lot = getLot(st.deliveredLotOpen);
+    const co  = getCompany(lot.companyId);
+    let assets = lot.assetIds.map(getAsset).filter(Boolean);
+    if(st.fDelivDetailSearch) assets=assets.filter(a=>matchSearch(a,st.fDelivDetailSearch));
+    const isPickup = lot.type==='finance_pickup';
+    const isConfirmed = lot.status==='confirmed';
+    return`<div>
+      <button data-action="delivered-back" class="flex items-center gap-2 text-sm text-violet-700 font-semibold mb-4 hover:underline">${SVG.back} กลับ</button>
+      <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-mono font-bold text-violet-700 text-lg">${lot.id}</span>
+            ${isConfirmed
+              ? '<span class="pill bg-emerald-100 text-emerald-800">✅ ยืนยันแล้ว</span>'
+              : '<span class="pill bg-amber-100 text-amber-800">รอแนบหลักฐาน Delivered</span>'}
+          </div>
+          <div class="text-sm font-semibold text-slate-700">${co.name}</div>
+          <div class="text-xs text-slate-400 mt-0.5">${isPickup?'🏢 บริษัทไฟแนนซ์มารับ':'🚚 เราจัดส่งไปให้'} · ส่งมอบ ${lot.deliveredAt||'—'} · ${assets.length} เครื่อง</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          ${btn(`${SVG.xl} Export Excel`,'text-emerald-700 border-emerald-200 hover:bg-emerald-50',`data-action="export-xl"`)}
+          ${btn(`${SVG.pdf} ใบส่งมอบ PDF`,'text-red-600 border-red-200 hover:bg-red-50',`data-action="open-modal" data-type="view-delivery-doc" data-id="${lot.id}"`)}
+          ${!isConfirmed
+            ? btn(`${SVG.clip} แนบหลักฐาน & ยืนยัน`,'bg-amber-500 text-white border-amber-500 hover:bg-amber-600',`data-action="open-modal" data-type="attach-doc" data-id="${lot.id}"`)
+            : btn(`${SVG.clip} ดูเอกสารแนบ`,'text-slate-600 border-slate-200 hover:bg-slate-50',`data-action="open-modal" data-type="view-attached-doc" data-id="${lot.id}"`)}
+        </div>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4">
+        ${filterInput('IMEI / ชื่อลูกหนี้ / เลขสัญญา','fDelivDetailSearch',true)}
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 uppercase font-bold">
+            <tr><th class="px-4 py-3">เคส / ลูกหนี้</th><th class="px-4 py-3">อุปกรณ์</th><th class="px-4 py-3">IMEI</th><th class="px-4 py-3">วันรับเข้าคลัง</th><th class="px-4 py-3">สภาพ</th></tr>
+          </thead>
+          <tbody>
+            ${assets.map(a=>`<tr class="border-b border-slate-100 hover:bg-slate-50">
+              <td class="px-4 py-3"><div class="font-mono text-xs text-violet-700 font-bold">${a.caseRef}</div><div class="font-semibold">${a.debtor}</div></td>
+              <td class="px-4 py-3">${a.device}</td>
+              <td class="px-4 py-3 font-mono text-xs">${a.imeiContract}</td>
+              <td class="px-4 py-3 text-xs text-slate-500">${a.receivedAt||'—'}</td>
+              <td class="px-4 py-3">${a.condition?pill(CLN[a.condition],CL[a.condition[0]]):'—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── การ์ด Lot ──────────────────────────────────────────
+  let lots = [...store.handoverLots].filter(l=>['confirmed','pending_delivery_proof'].includes(l.status)).reverse();
+  if(st.fDelivStatus) lots=lots.filter(l=>st.fDelivStatus==='confirmed'?l.status==='confirmed':l.status==='pending_delivery_proof');
+  if(st.fDelivSearch)  lots=lots.filter(l=>{ const aids=l.assetIds.map(getAsset).filter(Boolean); return aids.some(a=>matchSearch(a,st.fDelivSearch))||l.id.toLowerCase().includes(st.fDelivSearch.toLowerCase()); });
+  if(st.fDelivDate)    lots=lots.filter(l=>l.deliveredAt?.includes(st.fDelivDate.replace(/-/g,'/')));
+  if(st.fDelivCompany) lots=lots.filter(l=>l.companyId===st.fDelivCompany);
+
+  return`<div>
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-5 flex flex-wrap gap-3">
+      ${filterInput('เลขล็อต / IMEI / ชื่อลูกหนี้','fDelivSearch',true)}
+      <input type="date" value="${st.fDelivDate||''}" onchange="S({fDelivDate:this.value})" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus-ring bg-white">
+      ${filterSelect('ทุกบริษัทไฟแนนซ์',Object.values(COMPANIES).map(c=>({v:c.id,l:c.short})),'fDelivCompany',true)}
+      ${filterSelect('ทุกสถานะ',[{v:'pending_delivery_proof',l:'รอยืนยัน'},{v:'confirmed',l:'ยืนยันแล้ว'}],'fDelivStatus',true)}
+    </div>
+    ${lots.length===0?`<div class="text-center py-16 text-slate-400"><div class="text-4xl mb-3">✅</div><div class="font-semibold">ไม่พบรายการ</div></div>`:''}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      ${lots.map(lot=>{
+        const co = getCompany(lot.companyId);
+        const assets = lot.assetIds.map(getAsset).filter(Boolean);
+        const isPickup = lot.type==='finance_pickup';
+        const isConfirmed = lot.status==='confirmed';
+        return`<div class="bg-white border-2 ${isConfirmed?'border-emerald-200':'border-amber-300'} rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group">
+          <!-- Header -->
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="font-mono text-xs text-violet-700 font-bold mb-0.5">${lot.id}</div>
+              <div class="font-bold text-slate-900 group-hover:text-violet-700 transition-colors">${co.short}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-2xl font-extrabold ${isConfirmed?'text-emerald-700':'text-amber-600'}">${assets.length}</div>
+              <div class="text-[10px] text-slate-400">เครื่อง</div>
+            </div>
+          </div>
+          <!-- ประเภทและสถานะ -->
+          <div class="flex flex-wrap items-center gap-1.5 mb-3">
+            <span class="pill ${isPickup?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${isPickup?'🏢 ไฟแนนซ์มารับ':'🚚 เราส่งให้'}</span>
+            ${isConfirmed
+              ? '<span class="pill bg-emerald-100 text-emerald-800">✅ ยืนยันแล้ว</span>'
+              : '<span class="pill bg-amber-100 text-amber-800">รอแนบหลักฐาน</span>'}
+          </div>
+          <!-- เอกสาร -->
+          <div class="bg-slate-50 rounded-lg p-2.5 mb-3 space-y-1 border border-slate-100 text-[10px]">
+            ${isPickup
+              ? `<div class="${isConfirmed?'text-emerald-700':'text-slate-500'}">📄 ใบส่งมอบลายเซ็นผู้รับ ${isConfirmed?'✅ แนบแล้ว':'⏳ รอแนบ'}</div>`
+              : `<div class="${isConfirmed?'text-emerald-700':'text-slate-500'}">📄 ใบส่งมอบลายเซ็นผู้รับ ${isConfirmed?'✅ แนบแล้ว':'⏳ รอแนบ'}</div>
+                 <div class="${isConfirmed?'text-emerald-700':'text-slate-500'}">📦 หลักฐานใบเสร็จ / Delivered ${isConfirmed?'✅ แนบแล้ว':'⏳ รอแนบ'}</div>`
+            }
+          </div>
+          <!-- วันที่ -->
+          <div class="text-xs text-slate-500 mb-4">ส่งมอบ: <span class="font-semibold text-slate-700">${lot.deliveredAt||'—'}</span>
+            ${isConfirmed?` · ยืนยัน: <span class="font-semibold text-emerald-700">${lot.confirmedAt||'—'}</span>`:''}
+          </div>
+          <!-- Actions -->
+          <div class="border-t border-slate-100 pt-3 flex gap-2">
+            <button data-action="open-lot" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring flex items-center justify-center gap-1">${SVG.eye} ดูรายการ</button>
+            ${!isConfirmed
+              ? `<button data-action="open-modal" data-type="attach-doc" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-white bg-amber-500 rounded-lg hover:bg-amber-600 focus-ring flex items-center justify-center gap-1">${SVG.clip} แนบหลักฐาน</button>`
+              : `<button data-action="open-modal" data-type="view-attached-doc" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring flex items-center justify-center gap-1">${SVG.clip} เอกสาร</button>`
+            }
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════════════════════
+function renderModal(){
+  if(!st.modal) return'';
+  const {type,id}=st.modal;
+  const a = store.assets.find(x=>x.id===id);
+  const lot = store.handoverLots.find(l=>l.id===id);
+  let title='', body='', footer='', wide=false, xlWide=false;
+
+  // asset header helper
+  function ah(a,tint='violet'){
+    return`<div class="bg-${tint}-50 border border-${tint}-200 rounded-xl p-4 mb-5">
+      <div class="flex justify-between items-start">
+        <div>
+          <div class="font-mono text-xs text-violet-700 font-bold">${a.caseRef}</div>
+          <div class="font-bold text-slate-900 mt-0.5">${a.debtor}</div>
+          <div class="text-xs text-slate-500">${getCompany(a.companyId).short}</div>
+        </div>
+        <div class="text-right">
+          <div class="font-bold text-slate-800">${a.device}</div>
+          <div class="font-mono text-[10px] text-slate-500 mt-0.5">IMEI: ${a.imeiContract}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── intake ────────────────────────────────────────────
+  if(type==='intake'){
+    title='รับเครื่องเข้าคลัง'; wide=true;
+    const imei=st.mIntakeImei||a.imeiActual||'';
+    const cond=st.mIntakeCond||'';
+    const match=imei&&imei===a.imeiContract;
+    const mismatch=imei&&imei!==a.imeiContract;
+    const canSubmit=match&&cond;
+
+    body=`${ah(a)}
+    <div class="space-y-5">
+      <!-- IMEI -->
+      <div>
+        <div class="font-bold text-xs text-slate-500 uppercase tracking-wider mb-3">1 — ตรวจสอบ IMEI</div>
+        <div class="flex gap-2 mb-2">
+          <input id="imei-in" type="text" maxlength="15" value="${imei}" placeholder="พิมพ์หรือสแกน IMEI"
+            oninput="S({mIntakeImei:this.value})"
+            class="flex-1 border ${match?'border-emerald-400 bg-emerald-50':mismatch?'border-red-400 bg-red-50':'border-slate-300'} rounded-lg px-3 py-2 text-sm font-mono focus-ring">
+          <button onclick="S({mIntakeImei:'${a.imeiContract}'})" class="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 focus-ring whitespace-nowrap">ใช้ IMEI ในสัญญา</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50 rounded-lg p-3 border border-slate-100">
+          <div><div class="text-slate-400 mb-0.5">IMEI ในสัญญา</div><div class="font-mono font-bold">${a.imeiContract}</div></div>
+          <div><div class="text-slate-400 mb-0.5">IMEI ที่กรอก</div><div class="font-mono font-bold ${match?'text-emerald-600':mismatch?'text-red-600':'text-slate-400'}">${imei||'—'}</div></div>
+        </div>
+        ${match?`<div class="flex items-center gap-1.5 mt-2 text-emerald-700 text-xs font-bold">${SVG.check} IMEI ตรงกัน ✅</div>`:''}
+        ${mismatch?`<div class="flex items-center gap-1.5 mt-2 text-red-700 text-xs font-bold">${SVG.x} IMEI ไม่ตรง — ควรกด "ตีกลับ" แทน</div>`:''}
+      </div>
+      <!-- สภาพ -->
+      <div>
+        <div class="font-bold text-xs text-slate-500 uppercase tracking-wider mb-3">2 — บันทึกสภาพเครื่อง</div>
+        <div class="flex gap-2 mb-3">
+          ${['normal','damaged','partial_loss'].map(c=>`<button onclick="S({mIntakeCond:'${c}'})"
+            class="flex-1 py-3 rounded-xl border-2 text-xs font-bold transition-all focus-ring
+            ${cond===c?(c==='normal'?'border-emerald-500 bg-emerald-50 text-emerald-800':c==='damaged'?'border-red-500 bg-red-50 text-red-800':'border-amber-500 bg-amber-50 text-amber-800'):'border-slate-200 text-slate-500 hover:border-slate-300'}">
+            ${c==='normal'?'✅ ปกติ':c==='damaged'?'⚠️ ชำรุด':'🔸 สูญหายบางส่วน'}
+          </button>`).join('')}
+        </div>
+        <textarea oninput="S({mIntakeNote:this.value})" rows="2" placeholder="หมายเหตุสภาพเครื่อง${cond&&cond!=='normal'?' (บังคับ)':' (ถ้ามี)'}..." 
+          class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">${st.mIntakeNote}</textarea>
+      </div>
+      <!-- รูปถ่าย -->
+      <div>
+        <div class="font-bold text-xs text-slate-500 uppercase tracking-wider mb-3">3 — ถ่ายรูปสภาพเครื่อง</div>
+        <div class="grid grid-cols-4 gap-2">
+          ${['ด้านหน้า','ด้านหลัง','ขอบบน','ขอบล่าง','ขอบซ้าย','ขอบขวา','หน้าจอ IMEI'].map(l=>`
+          <div class="border-2 border-dashed border-slate-200 rounded-lg p-2 text-center hover:bg-slate-50 cursor-pointer">
+            <div class="flex justify-center text-slate-300 mb-1">${SVG.cam}</div>
+            <div class="text-[9px] text-slate-400 font-medium">${l}</div>
+            <input type="file" accept="image/*" class="mt-1 w-full text-[9px]">
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">ยกเลิก</button>
+    <button data-action="do-intake" data-id="${a.id}" class="px-5 py-2 text-sm font-semibold text-white bg-violet-700 rounded-lg hover:bg-violet-800 focus-ring flex items-center gap-1.5 ${!canSubmit?'opacity-40 cursor-not-allowed':''}" ${!canSubmit?'disabled':''}>
+      ${SVG.check} ยืนยันรับเข้าคลัง
+    </button>`;
+  }
+
+  // ── reject-intake ──────────────────────────────────────
+  else if(type==='reject-intake'){
+    title='ตีกลับ — ไม่รับเครื่องเข้าคลัง';
+    body=`${ah(a,'red')}
+    <div class="space-y-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2 text-xs text-amber-900">${SVG.warn}
+        <div>ตีกลับ = <b>ไม่รับเข้าคลัง</b> — เคสยังไม่จบ Field Agent <b>ยังเบิกเงินไม่ได้</b></div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">IMEI ที่พบบนเครื่องจริง (ถ้าทราบ)</label>
+        <input type="text" maxlength="15" placeholder="กรอก IMEI ที่พบจริง" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus-ring" value="${a.imeiActual||''}">
+        <div class="text-[10px] text-slate-400 mt-1">IMEI ในสัญญา: <span class="font-mono font-bold">${a.imeiContract}</span></div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">เหตุผล <span class="text-red-500">*</span></label>
+        <textarea rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring" placeholder="อธิบายสาเหตุที่ตีกลับ...">${a.rejectReason||''}</textarea>
+      </div>
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">ยกเลิก</button>
+    <button data-action="do-reject" data-id="${a.id}" class="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 focus-ring flex items-center gap-1.5">${SVG.x} ยืนยันตีกลับ</button>`;
+  }
+
+  // ── view-reject ───────────────────────────────────────
+  else if(type==='view-reject'){
+    title='เหตุผลที่ตีกลับ';
+    body=`${ah(a,'red')}
+    <div class="border border-red-200 rounded-xl p-4 bg-red-50 space-y-3 text-sm">
+      <div class="font-bold text-red-700">${a.rejectReason}</div>
+      <div class="text-xs text-slate-400">ตีกลับเมื่อ: ${a.rejectAt}</div>
+      <div class="grid grid-cols-2 gap-3 pt-2 border-t border-red-200">
+        <div class="text-xs"><div class="text-slate-400 mb-0.5">IMEI ในสัญญา</div><div class="font-mono font-bold">${a.imeiContract}</div></div>
+        <div class="text-xs"><div class="text-slate-400 mb-0.5">IMEI ที่พบ</div><div class="font-mono font-bold text-red-700">${a.imeiActual||'(ไม่ได้บันทึก)'}</div></div>
+      </div>
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg focus-ring">ปิด</button>`;
+  }
+
+  // ── view-custody ───────────────────────────────────────
+  else if(type==='view-custody'){
+    title='ข้อมูลเครื่องในคลัง';
+    body=`${ah(a,'violet')}
+    <div class="space-y-4">
+      <div class="border border-slate-200 rounded-xl overflow-hidden text-sm">
+        <div class="bg-slate-50 px-4 py-2 text-[10px] font-bold text-slate-500 uppercase">ข้อมูลรับเข้าคลัง</div>
+        <div class="p-4 space-y-2">
+          <div class="flex justify-between"><span class="text-slate-400">วันที่รับ:</span><span class="font-semibold">${a.receivedAt}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">IMEI ตรวจแล้ว:</span><span class="font-mono font-bold text-emerald-700">${a.imeiActual||a.imeiContract} ✅</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-400">สภาพ:</span>${a.condition?pill(CLN[a.condition],CL[a.condition[0]]):'—'}</div>
+          ${a.conditionNote?`<div class="text-slate-600 text-xs pt-1 border-t border-slate-100 mt-1">${a.conditionNote}</div>`:''}
+        </div>
+      </div>
+      <div class="grid grid-cols-4 gap-2">
+        ${(a.photos||[]).map(p=>`<div class="bg-slate-100 rounded-lg h-16 flex flex-col items-center justify-center text-slate-400"><div class="text-[9px]">${SVG.cam}</div><div class="text-[9px] mt-0.5">${p}</div></div>`).join('')}
+        ${(a.photos||[]).length===0?`<div class="col-span-4 text-center text-slate-400 text-xs py-3">ไม่มีรูปถ่าย</div>`:''}
+      </div>
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg focus-ring">ปิด</button>`;
+  }
+
+  // ── handover-lot (นัดวันส่งมอบ) ────────────────────────
+  else if(type==='handover-lot'){
+    const companyId = id;
+    const co = getCompany(companyId);
+    const selIds = Object.keys(st.selectedAssets).filter(i=>st.selectedAssets[i]);
+    const selAssets = selIds.map(getAsset).filter(a=>a&&a.companyId===companyId);
+    const hvType = st.mHandoverType;
+    const nextSeq = store.lotSeq+1;
+    wide=true; xlWide=true;
+    title=`นัดวันส่งมอบ — ${co.short}`;
+
+    body=`<div class="space-y-5">
+      <!-- รูปแบบส่งมอบ -->
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-2">รูปแบบการส่งมอบ <span class="text-red-500">*</span></label>
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="S({mHandoverType:'finance_pickup',mHandoverAddr:'${co.addr}'})"
+            class="p-4 rounded-xl border-2 text-left transition-all focus-ring ${hvType==='finance_pickup'?'border-violet-700 bg-violet-50':'border-slate-200 hover:border-slate-300'}">
+            <div class="font-bold text-sm mb-1">🏢 บริษัทไฟแนนซ์มารับ</div>
+            <div class="text-[11px] text-slate-500">ลูกค้านัดมารับที่คลังของเรา</div>
+            ${hvType==='finance_pickup'?'<div class="text-[10px] text-amber-700 font-bold mt-2">📋 แนบใบเซ็นรับใน &quot;รอส่งมอบ&quot;</div>':''}
+          </button>
+          <button onclick="S({mHandoverType:'we_deliver',mHandoverAddr:'${co.addr}'})"
+            class="p-4 rounded-xl border-2 text-left transition-all focus-ring ${hvType==='we_deliver'?'border-violet-700 bg-violet-50':'border-slate-200 hover:border-slate-300'}">
+            <div class="font-bold text-sm mb-1">🚚 เราจัดส่งไปให้</div>
+            <div class="text-[11px] text-slate-500">ส่งพัสดุหรือเดินทางไปส่ง</div>
+            ${hvType==='we_deliver'?'<div class="text-[10px] text-amber-700 font-bold mt-2">📋 แนบหลักฐานจัดส่งใน &quot;ส่งมอบแล้ว&quot;</div>':''}
+          </button>
+        </div>
+      </div>
+
+      ${hvType?`<div class="space-y-4 border-t border-slate-100 pt-4">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">วันที่${hvType==='finance_pickup'?'นัดรับ':'กำหนดจัดส่ง'} <span class="text-red-500">*</span></label>
+            <input type="datetime-local" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">${hvType==='finance_pickup'?'ชื่อผู้ประสานงาน (ถ้าแจ้งมาแล้ว)':'ที่อยู่จัดส่ง <span class=\'text-red-500\'>*</span>'}</label>
+            ${hvType==='finance_pickup'
+              ? '<input type="text" placeholder="เช่น คุณวิภา ฝ่ายติดตามทรัพย์" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">'
+              : `<textarea oninput="S({mHandoverAddr:this.value})" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">${st.mHandoverAddr}</textarea>`
+            }
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">หมายเหตุ (ถ้ามี)</label>
+          <textarea oninput="S({mHandoverNote:this.value})" rows="1" placeholder="บันทึกเพิ่มเติม..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">${st.mHandoverNote}</textarea>
+        </div>
+      </div>`:`<div class="text-center py-4 text-slate-400 text-xs">← เลือกรูปแบบการส่งมอบก่อน</div>`}
+
+      <!-- เลขล็อตและใบส่งมอบ (Auto) -->
+      <div class="bg-violet-50 border border-violet-200 rounded-xl p-4">
+        <div class="flex justify-between items-center">
+          <div class="flex gap-8">
+            <div>
+              <div class="text-[10px] font-bold text-violet-600 uppercase mb-1">เลขล็อต (Auto)</div>
+              <div class="font-mono font-extrabold text-violet-900 text-base">LOT-2569-00${nextSeq}</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-bold text-violet-600 uppercase mb-1">เลขที่ใบส่งมอบ (Auto)</div>
+              <div class="font-mono font-extrabold text-violet-900 text-base">DLV-2569-00${nextSeq}</div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            ${btn(`${SVG.pdf} ดูตัวอย่าง`,'text-red-600 border-red-200 hover:bg-red-50',`data-action="preview-delivery-doc"`)}
+            ${btn(`${SVG.dl} พิมพ์ / PDF`,'text-slate-700 border-slate-200 hover:bg-slate-50',`onclick="window.print()"`)}
+          </div>
+        </div>
+        <div class="text-[10px] text-violet-500 mt-1">เลขที่ออกอัตโนมัติ — ไม่สามารถแก้ไขได้</div>
+      </div>
+
+      <!-- รายการเครื่อง (ด้านล่างสุด) -->
+      <div class="border border-slate-200 rounded-xl overflow-hidden">
+        <div class="bg-slate-50 px-4 py-2 flex items-center justify-between">
+          <div class="text-[10px] font-bold text-slate-500 uppercase">รายการเครื่องที่จะส่งมอบ (${selAssets.length} เครื่อง)</div>
+          ${btn(`${SVG.xl} Export Excel`,'text-emerald-700 border-emerald-200 hover:bg-emerald-50 text-[10px]',`data-action="export-xl"`)}
+        </div>
+        <div class="divide-y divide-slate-100 max-h-36 overflow-y-auto">
+          ${selAssets.map(a=>`<div class="px-4 py-2 flex items-center justify-between text-xs">
+            <div>
+              <span class="font-mono text-violet-700 font-bold">${a.caseRef}</span>
+              <span class="text-slate-500 ml-2">${a.debtor}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-600">${a.device}</span>
+              <span class="font-mono text-slate-400 hidden sm:inline">${a.imeiContract}</span>
+              ${a.condition?pill(CLN[a.condition],CL[a.condition[0]]):''}
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">ยกเลิก</button>
+    <button data-action="do-handover" data-id="${companyId}" class="px-5 py-2 text-sm font-semibold text-white bg-violet-700 rounded-lg hover:bg-violet-800 focus-ring flex items-center gap-1.5 ${!hvType?'opacity-40 cursor-not-allowed':''}" ${!hvType?'disabled':''}>
+      ${SVG.truck} บันทึกการนัด
+    </button>`;
+  }
+
+
+  // ── view-delivery-doc (ใบส่งมอบ PDF preview) ──────────
+  else if(type==='view-delivery-doc'){
+    const l = lot || getLot(id);
+    const co = getCompany(l.companyId);
+    const assets = l.assetIds.map(getAsset).filter(Boolean);
+    wide=true;
+    title=`ใบส่งมอบ — ${l.id}`;
+    body=`<div class="border-2 border-slate-200 rounded-xl bg-white p-8 text-sm print:p-4" id="delivery-doc">
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <div class="font-extrabold text-xl text-slate-900">ใบส่งมอบสินทรัพย์คืน</div>
+          <div class="text-xs text-slate-400 mt-1">บริษัท ใจดี โมบาย จำกัด</div>
+        </div>
+        <div class="text-right">
+          <div class="font-mono font-bold text-violet-700">เลขที่: ${l.docRef}</div>
+          <div class="text-xs text-slate-400 mt-1">Lot: ${l.id}</div>
+          <div class="text-xs text-slate-400">วันที่: ${l.deliveredAt||nowDate()}</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-6 mb-6 text-xs">
+        <div class="border border-slate-200 rounded-lg p-3">
+          <div class="font-bold text-slate-500 uppercase mb-2">ผู้ส่งมอบ (AssetRecovery)</div>
+          <div class="font-bold">บริษัท ใจดี โมบาย จำกัด</div>
+          <div class="text-slate-500">123 ถ.พระราม 1 กรุงเทพมหานคร</div>
+        </div>
+        <div class="border border-slate-200 rounded-lg p-3">
+          <div class="font-bold text-slate-500 uppercase mb-2">ผู้รับมอบ</div>
+          <div class="font-bold">${co.name}</div>
+          <div class="text-slate-500">${co.addr}</div>
+          <div class="text-slate-500 mt-2">ผู้รับ: ............................................</div>
+          <div class="text-slate-500">ตำแหน่ง: ............................................</div>
+        </div>
+      </div>
+      <table class="w-full text-xs border border-slate-200 rounded-lg overflow-hidden mb-6">
+        <thead class="bg-slate-50 border-b border-slate-200">
+          <tr class="font-bold text-slate-600">
+            <th class="px-3 py-2 text-left">#</th>
+            <th class="px-3 py-2 text-left">เลขสัญญา</th>
+            <th class="px-3 py-2 text-left">ชื่อลูกหนี้</th>
+            <th class="px-3 py-2 text-left">อุปกรณ์</th>
+            <th class="px-3 py-2 text-left">IMEI</th>
+            <th class="px-3 py-2 text-left">สภาพ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${assets.map((a,i)=>`<tr class="border-b border-slate-100">
+            <td class="px-3 py-2">${i+1}</td>
+            <td class="px-3 py-2 font-mono">${a.caseRef}</td>
+            <td class="px-3 py-2">${a.debtor}</td>
+            <td class="px-3 py-2">${a.device}</td>
+            <td class="px-3 py-2 font-mono">${a.imeiContract}</td>
+            <td class="px-3 py-2">${a.condition?CLN[a.condition]:'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="grid grid-cols-2 gap-8 text-xs mt-8">
+        <div class="border-t border-slate-300 pt-4 text-center">
+          <div class="text-slate-400">ลายมือชื่อผู้ส่งมอบ</div>
+          <div class="mt-6">............................................</div>
+          <div class="text-slate-400 mt-1">วันที่ ..............................................</div>
+        </div>
+        <div class="border-t border-slate-300 pt-4 text-center">
+          <div class="text-slate-400">ลายมือชื่อผู้รับมอบ</div>
+          <div class="mt-6">............................................</div>
+          <div class="text-slate-400 mt-1">วันที่ ..............................................</div>
+        </div>
+      </div>
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">ปิด</button>
+    <button onclick="window.print()" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring flex items-center gap-1.5">🖨️ พิมพ์</button>
+    <button data-action="close-modal" class="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 focus-ring flex items-center gap-1.5">${SVG.dl} ดาวน์โหลด PDF</button>`;
+  }
+
+  // ── attach-doc (แนบเอกสารตาม lot type) ───────────────
+  else if(type==='attach-doc'){
+    const l = getLot(id);
+    const lco = getCompany(l.companyId);
+    const isPickup = l.type==='finance_pickup';
+    title=isPickup?`แนบใบเซ็นรับ — ${l.id}`:`แนบหลักฐานจัดส่ง — ${l.id}`;
+    body=`<div class="space-y-4">
+      <div class="border border-slate-200 rounded-xl p-4 text-xs space-y-2">
+        <div class="flex justify-between"><span class="text-slate-400">Lot:</span><span class="font-mono font-bold text-violet-700">${l.id}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">บริษัทไฟแนนซ์:</span><span class="font-semibold">${lco.name}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">รูปแบบ:</span><span class="font-semibold">${isPickup?'🏢 บริษัทไฟแนนซ์มารับที่คลัง':'🚚 เราจัดส่งไปให้'}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">จำนวนเครื่อง:</span><span>${l.assetIds.length} เครื่อง</span></div>
+      </div>
+      ${isPickup?`
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
+        📋 <b>บริษัทไฟแนนซ์มารับ</b> — ต้องการเพียง: <b>ใบส่งมอบที่มีลายเซ็นผู้รับ</b> (พิมพ์จากระบบ ให้เซ็นรับก่อน แล้วแสกนแนบ)
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">① ใบส่งมอบที่มีลายเซ็นผู้รับ <span class="text-red-500">*</span></label>
+        <div class="border-2 border-dashed border-blue-300 rounded-xl p-5 text-center hover:bg-blue-50 cursor-pointer">
+          <div class="text-blue-300 flex justify-center mb-2 scale-125">${SVG.clip}</div>
+          <div class="text-sm text-slate-500 mb-1">PDF ที่สแกนลายเซ็นแล้ว / รูปถ่าย</div>
+          <input type="file" accept=".pdf,image/*" class="text-xs mt-1">
+        </div>
+      </div>`
+      :`
+      <div class="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-800">
+        🚚 <b>เราจัดส่งไปให้</b> — ต้องการ 2 เอกสาร: <b>(1) ใบส่งมอบที่มีลายเซ็นผู้รับ</b> + <b>(2) หลักฐานใบเสร็จส่งพัสดุ / Delivered</b>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">① ใบส่งมอบที่มีลายเซ็นผู้รับ <span class="text-red-500">*</span></label>
+        <div class="border-2 border-dashed border-orange-300 rounded-xl p-4 text-center hover:bg-orange-50 cursor-pointer">
+          <div class="text-orange-300 flex justify-center mb-1 scale-125">${SVG.clip}</div>
+          <div class="text-xs text-slate-500">ใบส่งมอบที่ได้รับคืนพร้อมลายเซ็น</div>
+          <input type="file" accept=".pdf,image/*" class="text-xs mt-1">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">② หลักฐานส่งพัสดุ / Delivered <span class="text-red-500">*</span></label>
+        <div class="border-2 border-dashed border-orange-300 rounded-xl p-4 text-center hover:bg-orange-50 cursor-pointer">
+          <div class="text-orange-300 flex justify-center mb-1 scale-125">${SVG.clip}</div>
+          <div class="text-xs text-slate-500">ใบเสร็จพัสดุ / Screenshot Delivered / รูปถ่าย</div>
+          <input type="file" accept=".pdf,image/*" class="text-xs mt-1">
+        </div>
+      </div>
+      ${l.trackingNo?`<div class="text-xs text-slate-500 bg-slate-50 rounded-lg p-2 border border-slate-100 font-mono">Tracking: <b>${l.trackingNo}</b></div>`:''}`}
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">วันที่${isPickup?'รับ':'ส่ง'}จริง <span class="text-red-500">*</span></label>
+        <input type="datetime-local" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+      </div>
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-800">
+        <div class="font-bold mb-1.5">เมื่อยืนยันแล้ว ระบบจะ:</div>
+        <ul class="space-y-1">
+          <li class="flex items-center gap-1.5">${SVG.check} ปลดล็อกรายการเบิก Field Agent ทุกเครื่องในล็อตนี้</li>
+          <li class="flex items-center gap-1.5">${SVG.check} ปลดล็อก Revenue พร้อมวางบิลบริษัทไฟแนนซ์</li>
+          <li class="flex items-center gap-1.5">${SVG.check} เคสทุกเคสในล็อตนี้ → ปิดสมบูรณ์</li>
+        </ul>
+      </div>
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">ยกเลิก</button>
+    <button data-action="do-confirm-lot" data-id="${l.id}" class="px-5 py-2 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 focus-ring flex items-center gap-1.5">${SVG.check} ยืนยันสำเร็จ</button>`;
+  }
+
+
+  // ── view-attached-doc ──────────────────────────────────
+  else if(type==='view-attached-doc'){
+    const l = getLot(id);
+    const lco = getCompany(l.companyId);
+    const isPickup = l.type==='finance_pickup';
+    title=`เอกสารที่แนบ — ${l.id}`;
+    body=`<div class="space-y-4">
+      <div class="border border-slate-200 rounded-xl p-3 text-xs space-y-1.5">
+        <div class="flex justify-between"><span class="text-slate-400">Lot:</span><span class="font-mono font-bold text-violet-700">${l.id}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">บริษัท:</span><span>${lco.name}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">ประเภท:</span><span>${isPickup?'🏢 บริษัทไฟแนนซ์มารับ':'🚚 เราจัดส่งไปให้'}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">ยืนยันเมื่อ:</span><span class="font-semibold text-emerald-700">${l.confirmedAt}</span></div>
+      </div>
+      <!-- เอกสาร 1: ใบเซ็นรับ (ทุกประเภท) -->
+      <div class="border border-emerald-200 rounded-xl p-4 bg-emerald-50 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">${SVG.clip}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-emerald-900 text-sm">① ใบส่งมอบที่มีลายเซ็นผู้รับ</div>
+          <div class="text-xs text-emerald-700 mt-0.5">DLV-${l.id}-signed.pdf</div>
+        </div>
+        ${btn(`${SVG.dl} ดาวน์โหลด`,'text-emerald-700 border-emerald-200 hover:bg-emerald-100 shrink-0',`data-action="toast-dl"`)}
+      </div>
+      <!-- เอกสาร 2: หลักฐานจัดส่ง (we_deliver เท่านั้น) -->
+      ${!isPickup?`
+      <div class="border border-orange-200 rounded-xl p-4 bg-orange-50 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">${SVG.clip}</div>
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-orange-900 text-sm">② หลักฐานส่งพัสดุ / Delivered</div>
+          <div class="text-xs text-orange-700 mt-0.5">${l.trackingNo?l.trackingNo:'delivery-proof.jpg'}</div>
+        </div>
+        ${btn(`${SVG.dl} ดาวน์โหลด`,'text-orange-700 border-orange-200 hover:bg-orange-100 shrink-0',`data-action="toast-dl"`)}
+      </div>`:''}
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg focus-ring">ปิด</button>`;
+  }
+
+  // ── preview-delivery-doc (from handover-lot modal) ─────
+  else if(type==='preview-delivery-doc'){
+    const companyId = st.custodyCompanyOpen;
+    const co = getCompany(companyId||'SF');
+    const selIds = Object.keys(st.selectedAssets).filter(i=>st.selectedAssets[i]);
+    const selAssets = selIds.map(getAsset).filter(Boolean);
+    wide=true;
+    title='ตัวอย่างใบส่งมอบ (Preview)';
+    body=`<div class="border-2 border-dashed border-slate-200 rounded-xl bg-white p-6 text-sm">
+      <div class="text-center text-slate-400 text-xs mb-4">— ตัวอย่าง Preview — เลขที่ใบส่งมอบจะออกอัตโนมัติเมื่อบันทึก Lot —</div>
+      <div class="flex justify-between items-start mb-4">
+        <div><div class="font-extrabold text-xl">ใบส่งมอบสินทรัพย์คืน</div></div>
+        <div class="text-right text-xs text-slate-400">เลขที่: DLV-2569-00${store.lotSeq+1} (Auto)</div>
+      </div>
+      <table class="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+        <thead class="bg-slate-50 border-b border-slate-200"><tr class="font-bold text-slate-600">
+          <th class="px-3 py-2 text-left">#</th><th class="px-3 py-2 text-left">เลขสัญญา</th><th class="px-3 py-2 text-left">ลูกหนี้</th><th class="px-3 py-2 text-left">อุปกรณ์</th><th class="px-3 py-2 text-left">IMEI</th>
+        </tr></thead>
+        <tbody>
+          ${selAssets.map((a,i)=>`<tr class="border-b border-slate-100">
+            <td class="px-3 py-2">${i+1}</td><td class="px-3 py-2 font-mono">${a.caseRef}</td><td class="px-3 py-2">${a.debtor}</td><td class="px-3 py-2">${a.device}</td><td class="px-3 py-2 font-mono">${a.imeiContract}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="text-center text-slate-400 text-xs mt-4">ผู้รับมอบไม่ต้องระบุในระบบ — เซ็นต์ลงในเอกสารที่พิมพ์</div>
+    </div>`;
+    footer=`<button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">กลับ</button>
+    <button onclick="window.print()" class="px-5 py-2 text-sm font-semibold text-white bg-violet-700 rounded-lg hover:bg-violet-800 focus-ring flex items-center gap-1.5">${SVG.dl} พิมพ์ / ดาวน์โหลด PDF</button>`;
+  }
+
+  const maxW = xlWide?'max-w-4xl':wide?'max-w-2xl':'max-w-lg';
+  return`<div class="fixed inset-0 modal-bg z-50 flex items-center justify-center p-4 fade-in" id="modal-backdrop">
+    <div class="bg-white rounded-2xl shadow-2xl ${maxW} w-full max-h-[90vh] flex flex-col slide-up">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+        <h2 class="font-bold text-slate-900">${title}</h2>
+        <button data-action="close-modal" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 focus-ring">${SVG.x}</button>
+      </div>
+      <div class="overflow-y-auto px-6 py-5 flex-1">${body}</div>
+      ${footer?`<div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl shrink-0">${footer}</div>`:''}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════
+function renderToast(){
+  if(!st.toast) return'';
+  return`<div class="fixed bottom-6 right-6 z-50 slide-up">
+    <div class="bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-3">
+      <div class="w-5 h-5 rounded-full bg-${st.toast.color}-500 flex items-center justify-center">${SVG.check}</div>
+      ${st.toast.msg}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function render(){
+  let tabContent='';
+  if(st.tab==='intake')           tabContent=renderIntakeTab();
+  if(st.tab==='custody')          tabContent=renderCustodyTab();
+  if(st.tab==='pending_handover') tabContent=renderPendingHandoverTab();
+  if(st.tab==='delivered')        tabContent=renderDeliveredTab();
+  document.getElementById('app').innerHTML=`
+    ${renderNav()}
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <div class="mb-6"><h1 class="text-2xl font-extrabold text-slate-900">คลังสินค้า</h1><p class="text-sm text-slate-500 mt-1">รับเครื่อง · ตรวจสภาพ · ส่งมอบเป็นล็อตคืนบริษัทไฟแนนซ์</p></div>
+      ${renderSummary()}
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        ${renderTabs()}${tabContent}
+      </div>
+    </main>
+    ${renderModal()}${renderToast()}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// GLOBAL HELPERS (called from inline html)
+// ═══════════════════════════════════════════════════════
+window.toggleAsset=function(id,v){const s={...st.selectedAssets};s[id]=v;S({selectedAssets:s});}
+window.toggleAllReady=function(companyId,v){
+  const s={...st.selectedAssets};
+  store.assets.filter(a=>a.companyId===companyId&&a.asset_status==='in_custody').forEach(a=>s[a.id]=v);
+  S({selectedAssets:s});
+}
+
+// ═══════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-action]');
+  if(!el){if(e.target.id==='modal-backdrop')closeModal();return;}
+  const action=el.dataset.action, id=el.dataset.id;
+
+  if(action==='set-tab') S({tab:id,custodyCompanyOpen:null,deliveredLotOpen:null,pendingLotOpen:null});
+  else if(action==='open-modal') openModal(el.dataset.type,id);
+  else if(action==='close-modal') closeModal();
+  else if(action==='open-company') S({custodyCompanyOpen:id,selectedAssets:{},fCustodyDetailSearch:'',fCustodyDetailDate:''});
+  else if(action==='custody-back') S({custodyCompanyOpen:null,selectedAssets:{}});
+  else if(action==='open-pending-lot') S({pendingLotOpen:id,fPendingDetailSearch:''});
+  else if(action==='pending-back') S({pendingLotOpen:null});
+  else if(action==='open-lot') S({deliveredLotOpen:id,fDelivDetailSearch:''});
+  else if(action==='delivered-back') S({deliveredLotOpen:null});
+  else if(action==='export-xl') toast('Export Excel เสร็จสิ้น — กำลังดาวน์โหลด','emerald');
+  else if(action==='toast-dl') toast('ดาวน์โหลดเอกสารเสร็จสิ้น','emerald');
+  else if(action==='preview-delivery-doc') openModal('preview-delivery-doc');
+
+  else if(action==='do-intake'){
+    const a=store.assets.find(x=>x.id===id);
+    a.asset_status='in_custody';
+    a.receivedAt=nowDateTime();
+    a.imeiActual=st.mIntakeImei||a.imeiContract;
+    a.condition=st.mIntakeCond;
+    a.conditionNote=st.mIntakeNote;
+    a.photos=['front.jpg','back.jpg','imei.jpg'];
+    closeModal();
+    toast('รับเครื่องเข้าคลังแล้ว — Field Agent เริ่มเบิกได้เมื่อส่งมอบสำเร็จ');
+  }
+  else if(action==='do-reject'){
+    const a=store.assets.find(x=>x.id===id);
+    a.asset_status='intake_rejected';
+    a.rejectAt=nowDate();
+    a.rejectReason='IMEI ไม่ตรงกับที่ระบุในสัญญา — ให้ทีมตรวจสอบและนำเครื่องที่ถูกต้องมาส่งใหม่';
+    closeModal();
+    toast('ตีกลับแล้ว — แจ้งทีมติดตามตรวจสอบ','amber');
+  }
+  else if(action==='do-handover'){
+    const companyId=id;
+    const selIds=Object.keys(st.selectedAssets).filter(i=>st.selectedAssets[i]);
+    const lotId=nextLotId();
+    const docRef=nextDocRef();
+    const isPickup = st.mHandoverType==='finance_pickup';
+    store.handoverLots.push({
+      id:lotId, companyId, type:st.mHandoverType,
+      createdAt:nowDate(),
+      deliveredAt: isPickup ? null : nowDate(),
+      assetIds:selIds,
+      docRef,
+      scheduledAt: null,
+      trackingNo: st.mHandoverTracking||null,
+      attachedDoc: false,
+      // finance_pickup → pending_attach (รอแนบเซ็น) → อยู่ใน "รอส่งมอบ"
+      // we_deliver → pending_delivery_proof (รอหลักฐาน) → ย้ายไป "ส่งมอบแล้ว" ทันที
+      status: isPickup ? 'pending_attach' : 'pending_delivery_proof',
+      confirmedAt: null,
+      note: st.mHandoverNote
+    });
+    selIds.forEach(aid=>{
+      const a=store.assets.find(x=>x.id===aid);
+      if(a){
+        // finance_pickup: ยังอยู่ใน "รอส่งมอบ" รอแนบเซ็น
+        // we_deliver: ส่งออกไปแล้ว → handed_over เลย
+        a.asset_status = isPickup ? 'handover_pending' : 'handed_over';
+        a.lotId=lotId;
+      }
+    });
+    closeModal();
+    S({tab:'pending_handover',pendingLotOpen:lotId});
+    toast(`สร้าง ${lotId} สำเร็จ — กรุณาแนบใบส่งมอบเพื่อยืนยัน`,'violet');
+  }
+  else if(action==='do-confirm-lot'){
+    const l=getLot(id);
+    l.attachedDoc=true;
+    l.status='confirmed';
+    l.confirmedAt=nowDate()+' '+new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+    if(!l.deliveredAt) l.deliveredAt=nowDate();
+    // finance_pickup: asset ยังเป็น handover_pending → เปลี่ยนเป็น handed_over เมื่อยืนยัน
+    // we_deliver: asset เป็น handed_over อยู่แล้ว
+    l.assetIds.forEach(aid=>{
+      const a=store.assets.find(x=>x.id===aid);
+      if(a) a.asset_status='handed_over';
+    });
+    closeModal();
+    S({tab:'delivered',deliveredLotOpen:id,pendingLotOpen:null,fDelivStatus:''});
+    toast('ยืนยันส่งมอบสำเร็จ — ปลดล็อกรายได้และรายการเบิกทั้งหมดในล็อตนี้แล้ว');
+  }
+});
+
+render();
+</script>
+</body>
+</html>

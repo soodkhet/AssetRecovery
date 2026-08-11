@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetRecovery - Settings Only</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; }
+  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 2px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .modal-backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(2px); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+ 
+<div id="app" class="flex-1 flex flex-col"></div>
+ 
+<script>
+// ===================== MOCK DATA STORE =====================
+// ═══════════════════════════════════════════════════════
+// DATE UTILITIES — Asia/Bangkok (UTC+7), พุทธศักราช (พ.ศ.)
+// Standard: DD/MM/YYYY หรือ DD/MM/YYYY HH:mm
+// ═══════════════════════════════════════════════════════
+const TZ = 'Asia/Bangkok';
+function toBKK(d=new Date()){return new Date(d.toLocaleString('en-US',{timeZone:TZ}));}
+function fmtDate(d=new Date()){const b=toBKK(d instanceof Date?d:new Date(d));return `${String(b.getDate()).padStart(2,'0')}/${String(b.getMonth()+1).padStart(2,'0')}/${b.getFullYear()+543}`;}
+function fmtDateTime(d=new Date()){const b=toBKK(d instanceof Date?d:new Date(d));return `${String(b.getDate()).padStart(2,'0')}/${String(b.getMonth()+1).padStart(2,'0')}/${b.getFullYear()+543} ${String(b.getHours()).padStart(2,'0')}:${String(b.getMinutes()).padStart(2,'0')}`;}
+function nowDate(){return fmtDate(new Date());}
+function nowDateTime(){return fmtDateTime(new Date());}
+
+const store = {
+  currentUser: { name: 'พี่เบียร์', role: 'Superadmin' },
+ 
+  // --- Master Data ---
+  // 14 Seed Role ตามไฟล์ 07 §5 — ห้ามลบ/เปลี่ยนชื่อ editable=false ทั้งหมด
+  // Role Group: system (6), inhouse (3), outsource (3), finance_company (3)
+  roles: [
+    // system (6)
+    { id: 'r1',  name: 'Superadmin',              group: 'system',          seed: true, userCount: 1,  editable: false },
+    { id: 'r2',  name: 'เจ้าหน้าที่อนุมัติเคส',   group: 'system',          seed: true, userCount: 2,  editable: false },
+    { id: 'r3',  name: 'บริหาร',                   group: 'system',          seed: true, userCount: 1,  editable: false },
+    { id: 'r4',  name: 'การเงิน',                  group: 'system',          seed: true, userCount: 3,  editable: false },
+    { id: 'r5',  name: 'บัญชี',                    group: 'system',          seed: true, userCount: 2,  editable: false },
+    { id: 'r6',  name: 'ธุรการ',                   group: 'system',          seed: true, userCount: 1,  editable: false },
+    // inhouse (3) — role name เหมือน outsource แต่เป็น record แยกกัน (ไฟล์ 07 §5.2)
+    { id: 'r7',  name: 'ผู้จัดการทีมติดตามทรัพย์', group: 'inhouse',         seed: true, userCount: 2,  editable: false },
+    { id: 'r8',  name: 'หัวหน้าทีมติดตามทรัพย์',   group: 'inhouse',         seed: true, userCount: 3,  editable: false },
+    { id: 'r9',  name: 'พนักงานติดตามทรัพย์',      group: 'inhouse',         seed: true, userCount: 12, editable: false },
+    // outsource (3)
+    { id: 'r10', name: 'ผู้จัดการทีมติดตามทรัพย์', group: 'outsource',        seed: true, userCount: 3,  editable: false },
+    { id: 'r11', name: 'หัวหน้าทีมติดตามทรัพย์',   group: 'outsource',        seed: true, userCount: 4,  editable: false },
+    { id: 'r12', name: 'พนักงานติดตามทรัพย์',      group: 'outsource',        seed: true, userCount: 18, editable: false },
+    // finance_company (3) — ผู้จัดการ/หัวหน้า/แอดมิน ตามไฟล์ 10 §7.2
+    { id: 'r13', name: 'ผู้จัดการ',                group: 'finance_company',  seed: true, userCount: 2,  editable: false },
+    { id: 'r14', name: 'หัวหน้า',                  group: 'finance_company',  seed: true, userCount: 1,  editable: false },
+    { id: 'r15', name: 'แอดมิน',                   group: 'finance_company',  seed: true, userCount: 3,  editable: false },
+  ],
+
+  // Compensation Template ตามไฟล์ 11 §7 — fuel แยก PER_KM / DAILY_FLAT
+  // commission = จ่ายเมื่อสำเร็จ, no_success_fee = เบี้ยเสี่ยงจ่ายเมื่อไม่สำเร็จ (ไฟล์ 11 §7.2)
+  compTemplates: [
+    {
+      id: 'ct1', name: 'Standard Outsource v2', type: 'outsource', wht: true, whtPct: 3,
+      fuel: { mode: 'PER_KM', ratePerKm: 3.5, maxPerCase: 500 },
+      allowance: 300, commission: 500, noSuccessFee: 100,
+      hotel: { maxPerNight: 800, receiptRequired: true }
+    },
+    {
+      id: 'ct2', name: 'แผนมาตรฐาน Inhouse', type: 'inhouse', wht: false, whtPct: 0,
+      fuel: { mode: 'DAILY_FLAT', dailyFlatRate: 250 },
+      allowance: 150, commission: 200, noSuccessFee: 50,
+      hotel: { maxPerNight: 600, receiptRequired: true }
+    }
+  ],
+
+  // Service Fee Template ตามไฟล์ 12 §7.1 — เพิ่ม chargeOnFail, basis enum จริง
+  serviceFeeTemplates: [
+    { id: 'sf1', name: 'Standard Success Fee 10%', model: 'SUCCESS_FEE', base: 0,    chargeOnFail: false, rate: 10, basis: 'debt_amount',  active: true },
+    { id: 'sf2', name: 'Flat Rate Premium',         model: 'FLAT',        base: 3000, chargeOnFail: true,  rate: 0,  basis: null,          active: true },
+    { id: 'sf3', name: 'Hybrid (เปิดเคส + %)',      model: 'HYBRID',      base: 500,  chargeOnFail: false, rate: 5,  basis: 'asset_value', active: true }
+  ],
+
+  teams: [
+    { id: 't1', name: 'ทีม A',            side: 'inhouse',   compensationPlanId: 'ct2', managers: ['u3'], supervisorId: null, status: 'active', memberCount: 5,  provinces: ['กรุงเทพมหานคร', 'นนทบุรี'] },
+    { id: 't2', name: 'ทีม B',            side: 'inhouse',   compensationPlanId: 'ct2', managers: ['u3'], supervisorId: null, status: 'active', memberCount: 4,  provinces: ['ปทุมธานี', 'นนทบุรี'] },
+    { id: 't3', name: 'ทีมรับเหมาเหนือ',  side: 'outsource', compensationPlanId: 'ct1', managers: ['u9'], supervisorId: null, status: 'active', memberCount: 6,  provinces: ['เชียงใหม่', 'เชียงราย'] }
+  ],
+  companies: [
+    { id: 'c1', name: 'บริษัท สยามไฟแนนซ์ จำกัด',     taxId: '0105500012345', phone: '02-123-4567', contactName: 'สมใจ รักดี',    contactPhone: '081-111-2222', signer: 'วิชัย ศรีสุข',  signerPhone: '081-999-0000', serviceTplId: 'sf1', vatRegistered: true,  defaultInvoiceFormat: 'e_tax_invoice', cases: 142, users: 4, status: 'active', suspendedReason: null },
+    { id: 'c2', name: 'บริษัท กรุงไทยลีสซิ่ง จำกัด',  taxId: '0105500067890', phone: '02-999-8888', contactName: 'อรุณี พงษ์ไพร', contactPhone: '089-555-4444', signer: 'ดนัย ชัยยง',   signerPhone: '',             serviceTplId: 'sf2', vatRegistered: true,  defaultInvoiceFormat: 'paper_pdf',     cases: 87,  users: 2, status: 'active', suspendedReason: null }
+  ],
+  users: [
+    { id: 'u1',  name: 'พี่เบียร์',        email: 'beer@company.com',      phone: '0812345678', roleId: 'r1',  group: 'system',   status: 'active' },
+    { id: 'u2',  name: 'สมศักดิ์ ตรวจการณ์', email: 'somsak@company.com',   phone: '0823456789', roleId: 'r2',  group: 'system',   status: 'active' },
+    { id: 'u3',  name: 'มานี รักงาน',       email: 'manee@company.com',     phone: '0834567890', roleId: 'r7',  group: 'inhouse',  status: 'active' },
+    { id: 'u4',  name: 'สมหญิง ดูแลดี',    email: 'somying@company.com',   phone: '0845678901', roleId: 'r8',  group: 'inhouse',  status: 'active' },
+    { id: 'u9',  name: 'ประยุทธ์ บุญมี',   email: 'prayuth@outsource.com', phone: '0890123456', roleId: 'r10', group: 'outsource', status: 'active' },
+    { id: 'u10', name: 'สมพร ขยันยิ่ง',    email: 'somporn@outsource.com', phone: '0856789012', roleId: 'r11', group: 'outsource', status: 'active' }
+  ],
+
+  // System Settings ตามไฟล์ 13 + Operations Settings ตามไฟล์ 40 §6.3-6.4
+  // ข้อมูลองค์กร (ผู้ให้บริการ AssetRecovery เอง) — ใช้ออกเอกสาร/ใบกำกับภาษีฝั่งผู้ขาย
+  orgProfile: {
+    name: 'บริษัท ใจดี โมบาย จำกัด',
+    taxId: '0105560123456',
+    address: '123/45 อาคารสยามสแควร์ ชั้น 10 ถ.พระราม 1 แขวงปทุมวัน เขตปทุมวัน กรุงเทพมหานคร 10330',
+    phone: '02-000-1234',
+    email: 'accounting@jaidee.co.th',
+    logoUrl: null,
+    vatRegistered: true,
+    taxInvoicePrefix: 'INV',     // ตามไฟล์ 13 §6.12 + DB Schema ไฟล์ 02 §5
+    taxInvoiceSeq: 0,            // running sequence (auto-increment)
+  },
+  systemSettings: {
+    slaAlertHours: 48,
+    defaultWht: 3,
+    autoSuspendDays: 90,
+    evidenceRetentionYears: 1,
+    // จากไฟล์ 40 §6.3 — reassign timeout
+    reassignTimeoutHours: 3,
+    // จากไฟล์ 40 §6.4 — สิทธิ์ assign/reassign ของหัวหน้าทีมในแต่ละ group
+    supervisorCanAssignInhouse: true,
+    supervisorCanAssignOutsource: true,
+  },
+  auditLogs: [
+    { id: 'al1', action: 'แก้ไขบริษัท',       user: 'พี่เบียร์',          target: 'บริษัท สยามไฟแนนซ์ จำกัด', date: '21/06/2569 14:30', detail: 'แก้ไขเบอร์โทรติดต่อ' },
+    { id: 'al2', action: 'ตีกลับหลักฐาน',     user: 'สมศักดิ์ ตรวจการณ์', target: 'CASE-26-0040',              date: '27/06/2569 16:09', detail: 'รูปหลักฐานไม่ชัด ดูไม่เหมือนสถานที่จริง' },
+    { id: 'al3', action: 'เปลี่ยนค่า VAT Rate', user: 'พี่เบียร์',         target: 'VAT Rate Setting',          date: '15/06/2569 09:00', detail: 'เพิ่มอัตราใหม่ 10% มีผล 1 ต.ค. 2569' },
+    { id: 'al4', action: 'สร้างทีม',           user: 'พี่เบียร์',          target: 'ทีม B',                    date: '10/06/2569 11:00', detail: 'สร้างทีม Inhouse ใหม่' },
+    { id: 'al5', action: 'แก้ไข Tax Profile',  user: 'พี่เบียร์',          target: 'Outsource บุคคลธรรมดา',    date: '05/06/2569 09:30', detail: 'เปลี่ยน wht_min_threshold จาก 500 เป็น 1000' },
+  ],
+ 
+  // --- Finance Operation Data ---
+  claims: [
+    { id: 'cl1', caseRef: 'CASE-26-0012', type: 'ค่าน้ำมัน', user: 'วิชัย ขยันดี', team: 'ทีม A', amount: 450, status: 'manager_review', date: '22/06/2569' },
+    { id: 'cl2', caseRef: 'CASE-26-0034', type: 'ค่าที่พัก', user: 'ประยุทธ์ บุญมี', team: 'ทีมรับเหมาเหนือ', amount: 1200, status: 'finance_review', date: '21/06/2569' }
+  ],
+  advances: [
+    { id: 'ADV-001', user: 'วิชัย ขยันดี', team: 'ทีม A', request: 5000, used: 4200, returnAmount: 800, status: 'waiting_settlement' }
+  ],
+  payoutBatches: [
+    { id: 'pb1', name: 'รอบจ่าย Outsource ประจำวันที่ 15 มิ.ย. 69', status: 'checking', items: 12, amount: 45000, type: 'outsource', wht: 1350, net: 43650 },
+    { id: 'pb2', name: 'รอบจ่าย Inhouse ประจำเดือน พ.ค. 69', status: 'completed', items: 45, amount: 120500, type: 'inhouse', wht: 0, net: 120500 }
+  ],
+  revenues: [
+    { id: 'RV-001', company: 'บริษัท สยามไฟแนนซ์ จำกัด', case: 'CASE-26-0012', model: 'SUCCESS_FEE', basis: 75000, amount: 7500, status: 'ready_for_billing' }
+  ],
+  billingBatches: [
+    { id: 'bb1', company: 'บริษัท สยามไฟแนนซ์ จำกัด', period: 'มิถุนายน 2569', status: 'draft', cases: 25, amount: 75000, received: 0 },
+    { id: 'bb2', company: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', period: 'พฤษภาคม 2569', status: 'sent', cases: 18, amount: 54000, received: 54000 }
+  ],
+  payees: [
+    { id: 'PY-001', name: 'ประยุทธ์ บุญมี', type: 'บุคคลธรรมดา', tax: '310xxxxxx1234', bank: 'กสิกรไทย ***3210', wht: '3%', status: 'verified', team: 'ทีมรับเหมาเหนือ' }
+  ],
+  bankTransactions: [
+    { id: 'bt1', date: '22/06/2569', ref: 'KBANK-TRX-001', details: 'รับโอนจาก บ.สยามไฟแนนซ์', in: 75000, out: 0, status: 'matched', match: 'BB-001' },
+    { id: 'bt2', date: '22/06/2569', ref: 'KBANK-TRX-002', details: 'รับโอน ไม่ทราบที่มา', in: 12500, out: 0, status: 'unmatched', match: '-' }
+  ],
+  accountingPeriods: [
+    { id: 'ap1', month: 'พฤษภาคม 2569', status: 'locked', exportedAt: '05/06/2569 10:00', exportedBy: 'พี่เบียร์', critical: 0, warning: 1 },
+    { id: 'ap2', month: 'มิถุนายน 2569', status: 'collecting', exportedAt: '-', exportedBy: '-', critical: 2, warning: 3 }
+  ],
+  questions: [
+    { id: 'Q-001', period: 'มิถุนายน 2569', from: 'สำนักงานบัญชี', question: 'เงินเข้า 12,500 บาท มาจากบริษัทใด', ref: 'BT-002', status: 'open', due: '25/06/2569' }
+  ],
+  exceptions: [
+    { id: 'EX-001', level: 'critical', module: 'ค่าใช้จ่าย', detail: 'Claim CL-003 ขาดใบเสร็จ', owner: 'Finance Admin', status: 'open' }
+  ],
+ 
+  // --- Finance Master Settings ตามไฟล์ 13 ---
+  finSettings: {
+    // §6.1 Billing/Payout Cycles
+    cycles: [
+      { id: 'fc1', name: 'AR รอบวางบิลหลัก',       type: 'AR', cutoffRuleType: 'fixed_dates',  cutoffDates: [15, 30], cutoffText: '',                           due: 'Net 30 Days',                    scope: 'ทุกไฟแนนซ์' },
+      { id: 'fc2', name: 'AP รอบจ่าย Outsource',   type: 'AP', cutoffRuleType: 'fixed_dates',  cutoffDates: [25],     cutoffText: '',                           due: 'วันที่ 5 ของเดือนถัดไป',        scope: 'ทีม Outsource' },
+      { id: 'fc3', name: 'AP รอบจ่าย Inhouse',     type: 'AP', cutoffRuleType: 'month_end',    cutoffDates: [],       cutoffText: '',                           due: 'วันที่ 5 ของเดือนถัดไป',        scope: 'ทีม Inhouse' },
+    ],
+    // §6.2 Approval Matrix
+    approvals: [
+      { id: 'fa1', condition: 'Claim ปกติไม่เกินเพดาน', conditionThreshold: 5000,  flow: 'Manager → Finance', enforceSegregation: false },
+      { id: 'fa2', condition: 'Claim เกินเพดาน',         conditionThreshold: null,  flow: 'Manager → Finance → Executive', enforceSegregation: true  },
+    ],
+    // §6.3 Bank Accounts
+    banks: [
+      { id: 'fb1', bank: 'ธนาคารกสิกรไทย', name: 'บริษัท แอสเซ็ทรีคัฟเวอรี่ จำกัด', account: '123-4-56789-0', use: 'รับ/จ่าย', statement: 'KBank CSV',   payment: 'K-Cash Connect',   autoMatchToleranceDays: 7 },
+      { id: 'fb2', bank: 'ธนาคารไทยพาณิชย์', name: 'บริษัท แอสเซ็ทรีคัฟเวอรี่ จำกัด', account: '987-6-54321-0', use: 'จ่ายเท่านั้น', statement: 'SCB CSV', payment: 'SCB Business Net', autoMatchToleranceDays: 5 },
+    ],
+    // §6.4 Tax Profiles — wht_min_threshold 1,000 บาท ตามไฟล์ 13
+    tax: [
+      { id: 'ft1', name: 'Outsource บุคคลธรรมดา', vatMode: 'no_vat',      whtPct: 3, whtBasis: 'before_vat', whtMinThreshold: 1000, appliesTo: 'outsource_individual' },
+      { id: 'ft2', name: 'Outsource นิติบุคคล',   vatMode: 'exclude_vat', whtPct: 3, whtBasis: 'before_vat', whtMinThreshold: 1000, appliesTo: 'outsource_corporate'  },
+    ],
+    // §6.5 VAT Rates (effective-dated)
+    vatRates: [
+      { id: 'vr1', rate: 7.0, effectiveFrom: '2025-10-01', effectiveTo: '2026-09-30' },
+    ],
+    // §6.6 Cost Centers
+    centers: [
+      { id: 'cc1', code: 'CC-001', name: 'ทีม A / Inhouse',              mappingRule: 'auto' },
+      { id: 'cc2', code: 'CC-002', name: 'ทีมรับเหมาเหนือ / Outsource',  mappingRule: 'auto' },
+      { id: 'cc3', code: 'CC-003', name: 'ส่วนกลางสำนักงาน',             mappingRule: 'manual' },
+    ],
+    // §6.8 Tax Invoice Numbering
+    taxInvoiceNumbering: { mode: 'yearly_reset', prefix: 'INV-', digitLength: 4, lastNumber: 142, lastResetYear: 2569 },
+    // §6.9 Bank File Formats — test_status ตามไฟล์ 13 (BANK_FILE_NOT_TESTED validation)
+    bankFiles: [
+      { id: 'bf1', bank: 'KBank K-Cash',    fileType: 'CSV', encoding: 'UTF-8',   columnMapping: 'payee_name, account, amount, ref', testStatus: 'passed'  },
+      { id: 'bf2', bank: 'SCB Business Net', fileType: 'TXT', encoding: 'TIS-620', columnMapping: 'fixed width 80 col',               testStatus: 'pending' },
+    ],
+  },
+
+  // Functional Permission Matrix ตามไฟล์ 25 (source of truth) + ไฟล์ 13 §6.10 — role ID ตรง 15 Seed Role ไฟล์ 07 v2.2
+  // โมเดล 3 ระดับ (PO ตัดสิน 05/07/2569): levels = { roleId: 'manage' (✅ ทำได้) | 'view' (👁️ ดูอย่างเดียว) } · ไม่อยู่ใน levels = ไม่มีสิทธิ์
+  // Superadmin (r1) มีสิทธิ์ทุกรายการโดยนิยาม — ไม่เก็บใน levels · superadminOnly = รายการที่ไฟล์ 25 ระบุ "✅ only"
+  financePermissions: {
+    ops: [
+      { id: 'op1',  action: 'รับ/ไม่รับเคส (Case Approval)',            levels: { r2:'manage' }, note: 'ไฟล์ 38' },
+      { id: 'op2',  action: 'มอบหมาย/Reassign เคส',                     levels: { r7:'manage', r8:'manage', r10:'manage', r11:'manage' }, note: 'ไฟล์ 40 — เฉพาะทีมที่ดูแล' },
+      { id: 'op3',  action: 'รับงาน/ปิดงานภาคสนาม',                     levels: { r9:'manage', r12:'manage' }, note: 'ไฟล์ 41' },
+      { id: 'op4',  action: 'ตีกลับหลักฐานปิดงาน (reject_evidence)',    levels: { r2:'manage' }, note: 'ไฟล์ 41 §8 — กระทบ Revenue (ไฟล์ 19 §6.1)' },
+      { id: 'op5',  action: 'อนุมัติ/ปฏิเสธ Recycle',                   levels: { r2:'manage' }, note: 'ไฟล์ 38 §6.6' },
+      { id: 'op6',  action: 'ดูสถานะเคส/วางบิลของบริษัทตัวเอง',         levels: { r13:'view', r14:'view', r15:'view' }, note: 'ไฟล์ 97 — own scope เท่านั้น' },
+    ],
+    finance: [
+      { id: 'fn1',  action: 'อนุมัติ Claim ขั้น Manager',                levels: { r7:'manage', r10:'manage' }, note: 'ไฟล์ 25 — เฉพาะทีมตัวเอง (ขั้น 1)' },
+      { id: 'fn2',  action: 'อนุมัติ/ตีกลับ Claim ขั้น Finance',         levels: { r4:'manage' }, note: 'ขั้น 2 — pending_finance_approval (ไฟล์ 16/23)' },
+      { id: 'fn3',  action: 'อนุมัติ Claim ที่เกินเพดาน',                levels: { r3:'manage' }, note: 'Executive เท่านั้น — Approval Matrix (ไฟล์ 13 §6.2)' },
+      { id: 'fn4',  action: 'ขอเงินทดรองจ่าย / เคลียร์ยอด',              levels: { r9:'manage', r12:'manage', r4:'view' }, note: 'Field Agent เจ้าของคำขอ · การเงินตรวจสอบ (ไฟล์ 15)' },
+      { id: 'fn5',  action: 'จัดการ Payout Batch',                       levels: { r4:'manage' }, note: 'ไฟล์ 17' },
+      { id: 'fn6',  action: 'สร้างไฟล์โอนเงิน (Bank Payment File)',      levels: { r4:'manage' }, note: 'แยกจากจัดการ Payout — จุดเสี่ยงเงินออก (ไฟล์ 17/25)' },
+      { id: 'fn7',  action: 'จัดการ Payee Profile',                      levels: { r4:'manage', r9:'view', r12:'view' }, note: 'Field Agent ดูได้เฉพาะของตัวเอง (ไฟล์ 18)' },
+      { id: 'fn8',  action: 'จัดการ Billing Batch',                      levels: { r4:'manage', r5:'view', r3:'view' }, note: 'ไฟล์ 19' },
+      { id: 'fn9',  action: 'สร้าง Adjustment',                          levels: { r4:'manage' }, note: 'ไฟล์ 20' },
+      { id: 'fn10', action: 'อนุมัติ Adjustment (รอบ collecting/sent)',  levels: { r4:'manage', r3:'manage' }, note: 'บริหารอนุมัติได้เมื่อรอบเป็น sent (ไฟล์ 20/23 §6.9)' },
+      { id: 'fn11', action: 'อนุมัติ Adjustment (รอบ locked)',           levels: { r3:'manage' }, note: 'Executive เท่านั้น — Period Lock Policy (ไฟล์ 13 §6.11)' },
+      { id: 'fn12', action: 'ดู Dashboard / Profitability Report',       levels: { r4:'view', r5:'view', r3:'view' }, note: 'ไฟล์ 14/21 — ดูอย่างเดียวทุกฝ่าย' },
+    ],
+    accounting: [
+      { id: 'ac1',  action: 'จัดการรอบบัญชี (collecting → sent)',        levels: { r5:'manage' }, note: 'ไฟล์ 30' },
+      { id: 'ac2',  action: 'ปลดล็อกรอบบัญชีที่ locked',                 levels: { r3:'manage' }, note: 'Executive เท่านั้น + บันทึก audit (ไฟล์ 13 §6.11/30) — แยกออกจากข้ออนุมัติเกินเพดาน' },
+      { id: 'ac3',  action: 'ออก/ยกเลิกใบกำกับภาษี',                     levels: { r5:'manage' }, note: 'ไฟล์ 31' },
+      { id: 'ac4',  action: 'ออกหนังสือรับรอง WHT / mark filed',         levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 33' },
+      { id: 'ac5',  action: 'จัดการ Sales/Receipts/Expenses',            levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 31/32' },
+      { id: 'ac6',  action: 'map Cost Center (manual)',                  levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 32' },
+      { id: 'ac7',  action: 'จัดการ Exception (สร้าง/แก้/resolve)',      levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 34' },
+      { id: 'ac8',  action: 'สร้าง Authorized Exception',                levels: { r3:'manage' }, note: 'Executive เท่านั้น — รับความเสี่ยงข้าม exception (ไฟล์ 34)' },
+      { id: 'ac9',  action: 'Import statement / จับคู่ Bank Reconcile',  levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 35 — รวมปิดรายการโดยไม่จับคู่' },
+      { id: 'ac10', action: 'บันทึก/ตอบ Accountant Question',            levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 36' },
+      { id: 'ac11', action: 'Export Accounting Pack',                    levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 37' },
+    ],
+    admin: [
+      { id: 'ad1',  action: 'จัดการ Finance Company',                    levels: {}, superadminOnly: true, note: 'ไฟล์ 10/25' },
+      { id: 'ad2',  action: 'จัดการ Service Fee Template',               levels: {}, superadminOnly: true, note: 'ไฟล์ 12/25' },
+      { id: 'ad3',  action: 'ดูข้อมูล Master Data',                      levels: { r6:'view', r4:'view', r5:'view', r3:'view' }, note: 'ไฟล์ 25 — ดูอย่างเดียวทุกฝ่ายหลัก' },
+      { id: 'ad4',  action: 'แก้ไข Tax Profile / VAT Rate',              levels: {}, superadminOnly: true, note: 'ไฟล์ 13 §6.4-6.5' },
+      { id: 'ad5',  action: 'แก้ไข Period Lock Policy',                  levels: {}, superadminOnly: true, note: 'ไฟล์ 13 §6.11' },
+      { id: 'ad6',  action: 'แก้ไข Tax Invoice Numbering',               levels: {}, superadminOnly: true, note: 'ไฟล์ 13 §6.12' },
+      { id: 'ad7',  action: 'จัดการ Role / Permission',                  levels: {}, superadminOnly: true, note: 'ไฟล์ 05 §10 — critical action' },
+      { id: 'ad8',  action: 'บันทึกข้อมูล/แนบเอกสาร (ธุรการ)',           levels: { r6:'manage' }, note: 'ตามสิทธิ์ที่ได้รับมอบหมาย (ไฟล์ 25)' },
+    ]
+  }
+};
+ 
+const PROVINCE_DATA = [
+  { region: 'ภาคกลาง', provinces: ['กรุงเทพมหานคร', 'นนทบุรี', 'ปทุมธานี', 'นครปฐม', 'สมุทรปราการ', 'สมุทรสาคร', 'สมุทรสงคราม', 'ราชบุรี', 'เพชรบุรี', 'ประจวบคีรีขันธ์', 'สุพรรณบุรี', 'ชลบุรี', 'ระยอง', 'จันทบุรี', 'ตราด'] },
+  { region: 'ภาคเหนือ', provinces: ['เชียงใหม่', 'เชียงราย', 'น่าน', 'พะเยา', 'แพร่', 'แม่ฮ่องสอน', 'ลำปาง', 'ลำพูน', 'อุตรดิตถ์'] },
+  { region: 'ภาคตะวันออกเฉียงเหนือ', provinces: ['มุกดาหาร', 'นครราชสีมา', 'ขอนแก่น', 'อุบลราชธานี', 'เลย', 'ยโสธร', 'ร้อยเอ็ด', 'กาฬสินธุ์', 'มหาสารคาม', 'ชัยภูมิ', 'นครพนม', 'สกลนคร', 'บึงกาฬ'] },
+  { region: 'ภาคใต้', provinces: ['ภูเก็ต', 'กระบี่', 'พังงา', 'สุราษฎร์ธานี', 'นครศรีธรรมราช', 'พัทลุง', 'สตูล', 'สงขลา', 'ตรัง', 'ยะลา', 'ปัตตานี'] },
+  { region: 'ภาคตะวันตก', provinces: ['ราชบุรี', 'เพชรบุรี', 'ประจวบคีรีขันธ์', 'กาญจนบุรี', 'สุพรรณบุรี', 'เพชรบูรณ์', 'ลพบุรี', 'สิงห์บุรี', 'ปราจีนบุรี', 'สระแก้ว'] }
+];
+ 
+// Data Helpers
+function getRole(id) { return store.roles.find(r => r.id === id); }
+function getUser(id) { return store.users.find(u => u.id === id); }
+function getCompany(id) { return store.companies.find(c => c.id === id); }
+function getTeam(id) { return store.teams.find(t => t.id === id); }
+function getCompTemplate(id) { return store.compTemplates.find(c => c.id === id); }
+function getServiceTemplate(id) { return store.serviceFeeTemplates.find(s => s.id === id); }
+function groupLabel(g) { return { system: 'ระบบ (System)', inhouse: 'Inhouse', outsource: 'Outsource', finance_company: 'บริษัทไฟแนนซ์' }[g] || g; }
+function groupColor(g) { return { system: 'bg-slate-100 text-slate-700', inhouse: 'bg-blue-100 text-blue-800', outsource: 'bg-purple-100 text-purple-800', finance_company: 'bg-emerald-100 text-emerald-800' }[g]; }
+ 
+// ===================== HELPER FUNCTIONS =====================
+window.handleUserGroupChange = function(group) {
+  const roleSelect = document.getElementById('m_userRole');
+  if (!roleSelect) return;
+  
+  const filteredRoles = store.roles.filter(r => r.group === group);
+  roleSelect.innerHTML = filteredRoles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+};
+ 
+// ===================== APP STATE =====================
+let state = {
+  mainTab: 'settings', 
+  financeSubTab: 'payout', 
+  accountingSubTab: 'closing', 
+  
+  // Settings Tab Navigation
+  settingsTopTab: 'general', // general | finance
+  settingsTab: 'roles', // roles | teams | companies | users | compensation | servicefee | system | auditlog (for general tab)
+  settingsFinanceTab: 'cycles',
+  permissionSubTab: 'ops', // ops | finance | accounting | admin
+  
+  // Specific Filters
+  rolesSubTab: 'admin', rolesTrackerFilter: 'all', 
+  teamsSide: 'inhouse', usersSubTab: 'admin', trackerFilter: 'all', 
+  filters: { search: '', status: 'all', role: 'all', province: 'all' },
+  modal: null, toast: null,
+};
+ 
+function setState(patch) { state = { ...state, ...patch }; render(); }
+function updateFilter(key, val) { state.filters[key] = val; render(); }
+function resetFilters() { state.filters = { search: '', status: 'all', role: 'all', province: 'all' }; }
+function showToast(msg, type='success') { state.toast = { msg, type }; render(); setTimeout(() => { state.toast = null; render(); }, 3000); }
+function openModal(type, data={}) { setState({ modal: { type, data } }); }
+function closeModal() { setState({ modal: null }); }
+ 
+function handleSfChange(model) {
+  const baseWrap = document.getElementById('sf-base-wrap');
+  const successWrap = document.getElementById('sf-success-wrap');
+  if (baseWrap) baseWrap.classList.toggle('hidden', model === 'SUCCESS_FEE');
+  if (successWrap) successWrap.classList.toggle('hidden', model === 'FLAT');
+}
+ 
+// UI Helpers
+function money(n) { return Number(n||0).toLocaleString('th-TH', { minimumFractionDigits: 0 }); }
+function statusBadge(s) {
+  const map = {
+    completed:'bg-emerald-100 text-emerald-800', locked:'bg-emerald-100 text-emerald-800', matched:'bg-emerald-100 text-emerald-800', verified:'bg-emerald-100 text-emerald-800', paid:'bg-emerald-100 text-emerald-800', closed:'bg-emerald-100 text-emerald-800', approved:'bg-emerald-100 text-emerald-800', active:'bg-emerald-100 text-emerald-800', sent:'bg-blue-100 text-blue-800', ready_for_billing:'bg-blue-100 text-blue-800',
+    checking:'bg-amber-100 text-amber-800', collecting:'bg-amber-100 text-amber-800', pending:'bg-amber-100 text-amber-800', manager_review:'bg-amber-100 text-amber-800', finance_review:'bg-amber-100 text-amber-800', waiting_settlement:'bg-purple-100 text-purple-800', draft:'bg-slate-100 text-slate-700',
+    critical:'bg-red-100 text-red-800', open:'bg-red-100 text-red-800', unmatched:'bg-red-100 text-red-800', suspended:'bg-red-100 text-red-800', deactivated:'bg-red-100 text-red-800'
+  };
+  return `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${map[s]||'bg-slate-100 text-slate-700'}">${s.replace('_', ' ')}</span>`;
+}
+function btnAction(label, action, type='', id='', cls='text-slate-600 hover:bg-slate-50 border-slate-300 bg-white') {
+  return `<button data-action="${action}" data-type="${type}" data-id="${id}" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors focus-ring shadow-sm ${cls}">${label}</button>`;
+}
+function formInput(id, label, val, type='text', placeholder='', required=false, extraAttr='') {
+  const disabledClass = extraAttr.includes('disabled') ? 'bg-slate-50 text-slate-400' : '';
+  return `<div><label class="block text-sm font-medium text-slate-700 mb-1">${label} ${required?'<span class="text-red-500">*</span>':''}</label><input type="${type}" id="${id}" value="${val}" placeholder="${placeholder}" ${extraAttr} class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring ${disabledClass}"></div>`;
+}
+function formSelect(id, label, options, selectedVal) {
+  return `<div><label class="block text-xs font-bold text-slate-700 mb-1">${label} <span class="text-red-500">*</span></label><select id="${id}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">${options.map(o => `<option value="${o.val}" ${o.val===selectedVal?'selected':''}>${o.text}</option>`).join('')}</select></div>`;
+}
+ 
+// ===================== ICONS =====================
+const Icon = {
+  plus: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>`,
+  eye: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  edit: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>`,
+  check: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>`,
+  x: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
+  file: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6"/></svg>`,
+  download: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`,
+  gear: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09c0 .66.39 1.26 1 1.51h.09c.64.27 1.38.12 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.45.44-.6 1.18-.33 1.82V9c.25.61.85 1 1.51 1H21a2 2 0 0 1 0 4h-.09c-.66 0-1.26.39-1.51 1z"/></svg>`,
+  trash: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>`,
+};
+ 
+// ===================== TOP NAV =====================
+function renderTopNav() {
+  return `
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-6">
+          <div class="flex items-center space-x-3">
+            <div class="bg-slate-900 text-white p-2 rounded">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 9.7a1 1 0 0 1-.68 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .48 0l8 2c.42.1.76.47.76.97Z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+            </div>
+            <div><span class="font-bold text-lg tracking-tight text-slate-900">AssetRecovery</span><span class="text-[10px] block text-slate-500 font-semibold leading-none mt-0.5">Back Office</span></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <button data-action="set-main" data-id="settings" class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors focus-ring bg-slate-100 text-slate-900 border border-slate-300 shadow-sm">${Icon.gear} <span class="hidden sm:inline">การตั้งค่า</span></button>
+          <div class="h-6 w-px bg-slate-200 hidden sm:block"></div>
+          <div class="text-right hidden sm:block">
+            <div class="text-sm font-bold text-slate-900">${store.currentUser.name}</div>
+            <div class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono inline-block">${store.currentUser.role}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>`;
+}
+ 
+function kpi(label, value, sub, color) {
+  const c = { emerald:'text-emerald-700 bg-emerald-50 border-emerald-100', amber:'text-amber-700 bg-amber-50 border-amber-100', blue:'text-blue-700 bg-blue-50 border-blue-100', red:'text-red-700 bg-red-50 border-red-100' }[color] || 'text-slate-700 bg-slate-50 border-slate-100';
+  return `<div class="bg-white border ${c.split(' ')[2]} rounded-xl p-5 shadow-sm"><div class="text-xs text-slate-500 font-bold uppercase tracking-wider">${label}</div><div class="mt-2 text-2xl font-extrabold ${c.split(' ')[0]}">${value}</div><div class="mt-1 text-[11px] font-medium text-slate-500 bg-white inline-block px-2 py-0.5 rounded border border-slate-100">${sub}</div></div>`;
+}
+ 
+// ===================== FINANCE MENU =====================
+function renderFinanceOperations() {
+  const tabs = [
+    { id: 'dashboard', label: 'ภาพรวม' }, { id: 'approval', label: 'รออนุมัติ' },
+    { id: 'comp', label: 'ค่าตอบแทน' }, { id: 'advances', label: 'เงินทดรองจ่าย' },
+    { id: 'payout', label: 'รอบจ่ายเงิน' }, { id: 'revenue', label: 'รายได้และวางบิล' },
+    { id: 'payee', label: 'Payee' }, { id: 'adjustment', label: 'ปรับปรุง' }, { id: 'profit', label: 'กำไรและต้นทุน' }
+  ];
+ 
+  let content = '';
+  if (state.financeSubTab === 'dashboard') {
+    content = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      ${kpi('เงินรออนุมัติ', '฿ ' + money(store.claims.reduce((a,b)=>a+b.amount,0)), store.claims.length + ' รายการ', 'amber')}
+      ${kpi('เงินรอจ่าย', '฿ ' + money(store.payoutBatches.reduce((a,b)=>a+b.net,0)), store.payoutBatches.length + ' รอบจ่าย', 'blue')}
+      ${kpi('เงินค้างรับ', '฿ ' + money(store.billingBatches.reduce((a,b)=>a+(b.amount-b.received),0)), 'AR Aging', 'red')}
+      ${kpi('กำไรขั้นต้น', '฿ 82,450', 'รอบเดือนนี้', 'emerald')}
+    </div>
+    <h3 class="font-bold text-slate-800 mb-3 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500"></span> Alerts ที่ต้องจัดการ (Exceptions)</h3>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">ระดับ</th><th class="px-4 py-3">รายการ</th><th class="px-4 py-3">ผู้รับผิดชอบ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.exceptions.map(e => `<tr><td class="px-4 py-3">${statusBadge(e.level)}</td><td class="px-4 py-3 font-medium">${e.detail}</td><td class="px-4 py-3 text-slate-500">${e.owner}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.eye+' ดูรายละเอียด', 'open-modal', 'generic-detail', e.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'approval') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">รายการเบิกและเงินทดรองรออนุมัติ</h3><button data-action="open-modal" data-type="advance-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.plus} ขอเงินทดรอง</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-6">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">วันที่/อ้างอิง</th><th class="px-4 py-3">ประเภท</th><th class="px-4 py-3">ผู้เบิก (ทีม)</th><th class="px-4 py-3">ยอดเงิน</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.claims.map(c => `<tr class="hover:bg-slate-50"><td class="px-4 py-3"><div class="text-xs text-slate-500">${c.date}</div><div class="font-mono text-xs mt-0.5">${c.caseRef}</div></td><td class="px-4 py-3">${c.type}</td><td class="px-4 py-3"><span class="font-bold">${c.user}</span><br><span class="text-[10px] text-slate-500">${c.team}</span></td><td class="px-4 py-3 font-bold text-slate-800">฿ ${money(c.amount)}</td><td class="px-4 py-3">${statusBadge(c.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.check+' อนุมัติ','open-modal','action-approve-claim',c.id,'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100')} ${btnAction(Icon.x+' ปฏิเสธ','open-modal','action-reject-claim',c.id,'bg-red-50 text-red-700 border-red-200 hover:bg-red-100')}</div></td></tr>`).join('')}</tbody></table>
+    </div>
+    <h3 class="font-bold text-slate-800 mb-3">รายการเงินทดรองจ่าย (Advances)</h3>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">เลขที่</th><th class="px-4 py-3">ผู้เบิก</th><th class="px-4 py-3">ยอดขอเบิก</th><th class="px-4 py-3">ใช้จริง</th><th class="px-4 py-3">ยอดคืน</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.advances.map(a => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-mono text-xs">${a.id}</td><td class="px-4 py-3 font-bold">${a.user}</td><td class="px-4 py-3">฿ ${money(a.request)}</td><td class="px-4 py-3">฿ ${money(a.used)}</td><td class="px-4 py-3 text-emerald-600 font-bold">฿ ${money(a.returnAmount)}</td><td class="px-4 py-3">${statusBadge(a.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.eye+' เคลียร์ยอด','open-modal', 'action-clear-advance', a.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'payout') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">รอบจ่ายเงิน (Payout Batches)</h3><button data-action="open-modal" data-type="create-payout" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.plus} สร้างรอบจ่าย</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">ชื่อรอบจ่าย</th><th class="px-4 py-3">กลุ่ม</th><th class="px-4 py-3">Gross</th><th class="px-4 py-3">WHT</th><th class="px-4 py-3">Net (ยอดโอน)</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.payoutBatches.map(p => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">${p.name} <span class="text-[10px] text-slate-500 font-normal ml-2">(${p.items} รายการ)</span></td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${p.type==='inhouse'?'bg-blue-100 text-blue-800':'bg-purple-100 text-purple-800'}">${p.type}</span></td><td class="px-4 py-3">฿ ${money(p.amount)}</td><td class="px-4 py-3 text-rose-600">฿ ${money(p.wht)}</td><td class="px-4 py-3 font-bold text-emerald-700 text-base">฿ ${money(p.net)}</td><td class="px-4 py-3">${statusBadge(p.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.download+' ไฟล์โอน','open-modal','payment-file')} ${btnAction(Icon.eye+' ดู','open-modal','payout-detail', p.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'revenue') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">รอบวางบิลค้างรับ (Billing & AR Aging)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-6">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">บริษัท</th><th class="px-4 py-3">รอบเดือน</th><th class="px-4 py-3">ยอดเรียกเก็บ</th><th class="px-4 py-3">รับชำระแล้ว</th><th class="px-4 py-3">ยอดคงค้าง (AR)</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.billingBatches.map(b => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">${b.company}</td><td class="px-4 py-3">${b.period}</td><td class="px-4 py-3">฿ ${money(b.amount)}</td><td class="px-4 py-3 text-emerald-600">฿ ${money(b.received)}</td><td class="px-4 py-3 font-bold text-rose-600">฿ ${money(b.amount - b.received)}</td><td class="px-4 py-3">${statusBadge(b.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.file+' เอกสาร','open-modal','billing-file', b.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>
+    <h3 class="font-bold text-slate-800 mb-3">รายการรายได้ล่าสุด (Revenues)</h3>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">อ้างอิงเคส</th><th class="px-4 py-3">บริษัท</th><th class="px-4 py-3">Model</th><th class="px-4 py-3">ยอดรายได้</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.revenues.map(r => `<tr><td class="px-4 py-3 font-mono text-xs">${r.case}</td><td class="px-4 py-3">${r.company}</td><td class="px-4 py-3"><span class="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-bold">${r.model}</span></td><td class="px-4 py-3 font-bold">฿ ${money(r.amount)}</td><td class="px-4 py-3">${statusBadge(r.status)}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' ดูคำนวณ','open-modal','revenue-calc-detail',r.id)}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'payee') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">ฐานข้อมูลผู้รับเงิน (Payee Profiles)</h3><button data-action="open-modal" data-type="payee-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.plus} เพิ่ม Payee</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">ชื่อ Payee</th><th class="px-4 py-3">ประเภท</th><th class="px-4 py-3">Tax ID</th><th class="px-4 py-3">บัญชีธนาคาร</th><th class="px-4 py-3">WHT</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.payees.map(p => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">${p.name}<div class="text-[10px] font-normal text-slate-500">${p.team}</div></td><td class="px-4 py-3">${p.type}</td><td class="px-4 py-3 font-mono text-xs">${p.tax}</td><td class="px-4 py-3">${p.bank}</td><td class="px-4 py-3">${p.wht}</td><td class="px-4 py-3">${statusBadge(p.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.edit+' แก้ไข','open-modal','payee-form', p.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'comp') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">ค่าตอบแทนจากเคส (Compensation from Cases)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">เคส</th><th class="px-4 py-3">ทีม</th><th class="px-4 py-3">ประเภท</th><th class="px-4 py-3">สูตร/ฐานคิด</th><th class="px-4 py-3">Gross</th><th class="px-4 py-3">WHT</th><th class="px-4 py-3">Net</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${[['CASE-26-0012','ทีม A','ค่าน้ำมัน','128.5 กม. × 3.50','450','0','450','approved'],['CASE-26-0034','ทีมรับเหมาเหนือ','Commission','Outcome: asset_recovered','500','15','485','pending_review'],['CASE-26-0034','ทีมรับเหมาเหนือ','เบี้ยเลี้ยง','1 วัน × 300','300','9','291','approved']].map(r => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-mono text-xs">${r[0]}</td><td class="px-4 py-3">${r[1]}</td><td class="px-4 py-3">${r[2]}</td><td class="px-4 py-3 text-xs text-slate-600">${r[3]}</td><td class="px-4 py-3">฿ ${money(r[4])}</td><td class="px-4 py-3 text-rose-600">฿ ${money(r[5])}</td><td class="px-4 py-3 font-bold">฿ ${money(r[6])}</td><td class="px-4 py-3">${statusBadge(r[7])}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' ดูสูตร','open-modal','comp-calc-detail')}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'advances') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">เงินทดรองจ่าย (Advances)</h3><button data-action="open-modal" data-type="advance-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.plus} ขอเงินทดรอง</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">เลขที่</th><th class="px-4 py-3">ผู้ขอ</th><th class="px-4 py-3">ทีม</th><th class="px-4 py-3">ยอดขอเบิก</th><th class="px-4 py-3">ใช้จริง</th><th class="px-4 py-3">ยอดคืน</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.advances.map(a => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-mono text-xs">${a.id}</td><td class="px-4 py-3 font-bold">${a.user}</td><td class="px-4 py-3">${a.team}</td><td class="px-4 py-3">฿ ${money(a.request)}</td><td class="px-4 py-3">฿ ${money(a.used)}</td><td class="px-4 py-3 text-emerald-600 font-bold">฿ ${money(a.returnAmount)}</td><td class="px-4 py-3">${statusBadge(a.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.eye+' เคลียร์ยอด','open-modal','action-clear-advance',a.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'adjustment') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">Adjustment / รายการปรับปรุง</h3><button data-action="open-modal" data-type="adjustment-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.plus} สร้าง Adjustment</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">เลขที่</th><th class="px-4 py-3">อ้างอิง</th><th class="px-4 py-3">ประเภท</th><th class="px-4 py-3">เหตุผล</th><th class="px-4 py-3">ยอดปรับ</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100"><tr class="hover:bg-slate-50"><td class="px-4 py-3 font-mono text-xs">ADJ-001</td><td class="px-4 py-3 font-mono text-xs">CL-002</td><td class="px-4 py-3">เพิ่มยอด</td><td class="px-4 py-3">ค่าโรงแรมเกินตามอนุมัติ</td><td class="px-4 py-3 font-bold">฿ 400</td><td class="px-4 py-3">${statusBadge('pending_review')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' ดู','open-modal','adjustment-detail')}</td></tr></tbody></table>
+    </div>`;
+  }
+  else if (state.financeSubTab === 'profit') {
+    content = `<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">${kpi('Revenue','฿ 168,500','รายได้รวมเดือนนี้','emerald')}${kpi('Direct Cost','฿ 86,050','ค่าตอบแทน+Claim','amber')}${kpi('Gross Profit','฿ 82,450','Margin 48.9%','blue')}</div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">มิติการวิเคราะห์</th><th class="px-4 py-3">Revenue</th><th class="px-4 py-3">Cost</th><th class="px-4 py-3">Gross Profit</th><th class="px-4 py-3">Margin %</th><th class="px-4 py-3 text-right">รายละเอียด</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${[['บริษัท สยามไฟแนนซ์','105000','52000','53000','50.4%'],['ทีมรับเหมาเหนือ','54000','34000','20000','37.0%']].map(r => `<tr><td class="px-4 py-3 font-bold">${r[0]}</td><td class="px-4 py-3">฿ ${money(r[1])}</td><td class="px-4 py-3">฿ ${money(r[2])}</td><td class="px-4 py-3 font-bold text-emerald-700">฿ ${money(r[3])}</td><td class="px-4 py-3 font-bold">${r[4]}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.eye+' เจาะลึก','open-modal', 'profit-drilldown', r[0])}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+ 
+  return `<div class="mb-6"><h1 class="text-2xl font-bold tracking-tight text-slate-900">การเงิน (Finance Operation)</h1><p class="text-sm text-slate-500 mt-1">จัดการรอบจ่ายเงินทีมงาน (AP) ยอดเรียกเก็บ (AR) และตรวจสอบ Claim</p></div>
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 overflow-hidden animate-fade-in">
+    <div class="flex gap-6 overflow-x-auto no-scrollbar border-b border-slate-200 mb-6">
+      ${tabs.map(t => `<button data-action="set-sub" data-parent="financeSubTab" data-id="${t.id}" class="py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap focus-ring ${state.financeSubTab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
+    </div>
+    ${content}
+  </div>`;
+}
+ 
+// ===================== ACCOUNTING MENU =====================
+function renderAccountingOperations() {
+  const tabs = [
+    { id: 'closing', label: 'รอบส่งบัญชี' }, { id: 'sales', label: 'รายได้และขาย' },
+    { id: 'receipts', label: 'เงินรับ' }, { id: 'expenses', label: 'ค่าใช้จ่าย' },
+    { id: 'bank', label: 'กระทบยอด' }, { id: 'wht_docs', label: 'เอกสาร & WHT' },
+    { id: 'documents', label: 'เอกสารไม่ครบ' }, { id: 'qa', label: 'ข้อซักถาม' }, { id: 'export', label: 'ส่งมอบ' }
+  ];
+ 
+  let content = '';
+  if (state.accountingSubTab === 'closing') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">ส่งมอบบัญชีรายเดือน (Accounting Pack)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-6">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">รอบบัญชี</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3">Exceptions</th><th class="px-4 py-3">Export ล่าสุด</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.accountingPeriods.map(ap => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">${ap.month}</td><td class="px-4 py-3">${statusBadge(ap.status)}</td><td class="px-4 py-3"><span class="text-red-600 font-bold mr-2">${ap.critical} Critical</span><span class="text-orange-500 font-semibold">${ap.warning} Warning</span></td><td class="px-4 py-3 text-slate-500">${ap.exportedAt}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.eye+' ตรวจความพร้อม','open-modal','accounting-checklist',ap.id)} <button data-action="open-modal" data-type="export-pack" class="bg-slate-900 text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.download} Export Pack</button></div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.accountingSubTab === 'bank') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">กระทบยอดธนาคาร (Bank Reconcile)</h3><button data-action="open-modal" data-type="import-statement" class="bg-slate-100 text-slate-700 border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-200 flex items-center gap-1 shadow-sm">Import Statement</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">วันที่</th><th class="px-4 py-3">รายละเอียด Statement</th><th class="px-4 py-3">เงินเข้า (AR)</th><th class="px-4 py-3">เงินออก (AP)</th><th class="px-4 py-3">จับคู่กับ</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.bankTransactions.map(bt => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 text-slate-500">${bt.date}</td><td class="px-4 py-3"><b>${bt.details}</b><div class="text-[10px] font-mono mt-0.5 text-slate-400">Ref: ${bt.ref}</div></td><td class="px-4 py-3 text-emerald-600 font-bold">${bt.in?'+'+money(bt.in):'-'}</td><td class="px-4 py-3 text-rose-600 font-bold">${bt.out?'-'+money(bt.out):'-'}</td><td class="px-4 py-3 font-mono text-xs">${bt.match}</td><td class="px-4 py-3">${statusBadge(bt.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${bt.status==='unmatched'?btnAction('จับคู่ Manual','open-modal','manual-match','','text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100'):'<span class="text-xs text-slate-400 font-medium">อัตโนมัติ</span>'}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.accountingSubTab === 'wht_docs') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">สรุปข้อมูลหัก ณ ที่จ่าย (WHT) รอนำส่ง</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">ผู้ถูกหัก</th><th class="px-4 py-3">Tax ID</th><th class="px-4 py-3">ประเภทเงินได้</th><th class="px-4 py-3">ฐานหัก (บาท)</th><th class="px-4 py-3">ยอด WHT (บาท)</th><th class="px-4 py-3">อ้างอิง</th><th class="px-4 py-3 text-right">เอกสาร</th></tr></thead>
+      <tbody class="divide-y divide-slate-100"><tr><td class="px-4 py-3 font-bold">ประยุทธ์ บุญมี</td><td class="px-4 py-3 font-mono text-xs">310xxxxxx1234</td><td class="px-4 py-3">ค่าบริการรับเหมา</td><td class="px-4 py-3">45,000</td><td class="px-4 py-3 font-bold text-rose-600">1,350</td><td class="px-4 py-3 font-mono text-xs">PB-001</td><td class="px-4 py-3 text-right">${btnAction(Icon.file+' หนังสือรับรอง','open-modal','download-wht-cert')}</td></tr></tbody></table>
+    </div>`;
+  }
+  else if (state.accountingSubTab === 'sales') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">รายได้และรายการขาย (Revenue & Sales)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">บริษัท</th><th class="px-4 py-3">Case Ref</th><th class="px-4 py-3">วันที่รายได้</th><th class="px-4 py-3">Model</th><th class="px-4 py-3">Gross</th><th class="px-4 py-3">VAT Flag</th><th class="px-4 py-3">Billing Batch</th><th class="px-4 py-3">สถานะ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.revenues.map(r => `<tr class="hover:bg-slate-50"><td class="px-4 py-3">${r.company}</td><td class="px-4 py-3 font-mono text-xs">${r.case}</td><td class="px-4 py-3">22/06/2569</td><td class="px-4 py-3">${r.model}</td><td class="px-4 py-3">฿ ${money(r.amount)}</td><td class="px-4 py-3">Include VAT</td><td class="px-4 py-3 font-mono text-xs">BB-001</td><td class="px-4 py-3">${statusBadge(r.status)}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.accountingSubTab === 'receipts') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">เงินรับ (Cash Receipts)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">วันที่</th><th class="px-4 py-3">ผู้จ่าย</th><th class="px-4 py-3">ยอด</th><th class="px-4 py-3">Bank Ref</th><th class="px-4 py-3">Billing Ref</th><th class="px-4 py-3">WHT ลูกค้าหัก</th><th class="px-4 py-3">สถานะจับคู่</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.bankTransactions.filter(b => b.in > 0).map(b => `<tr class="hover:bg-slate-50"><td class="px-4 py-3">${b.date}</td><td class="px-4 py-3">${b.details}</td><td class="px-4 py-3 font-bold">฿ ${money(b.in)}</td><td class="px-4 py-3 font-mono text-xs">${b.ref}</td><td class="px-4 py-3">${b.match}</td><td class="px-4 py-3">฿ 0</td><td class="px-4 py-3">${statusBadge(b.status)}</td><td class="px-4 py-3 text-right">${b.status === 'unmatched' ? btnAction('จับคู่ Manual', 'open-modal', 'manual-match', '', 'text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100') : btnAction(Icon.eye + ' ดู', 'open-modal', 'receipt-detail', b.id)}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.accountingSubTab === 'expenses') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">ค่าใช้จ่ายและรายการจ่าย (Expenses & Payments)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">ผู้รับ</th><th class="px-4 py-3">ประเภท</th><th class="px-4 py-3">วันที่จ่าย</th><th class="px-4 py-3">Gross</th><th class="px-4 py-3">WHT</th><th class="px-4 py-3">Net</th><th class="px-4 py-3">Cost Center</th><th class="px-4 py-3">เอกสาร</th><th class="px-4 py-3">สถานะ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.payoutBatches.map(p => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">${p.name.split(' ').slice(0, 2).join(' ')}</td><td class="px-4 py-3">${p.type}</td><td class="px-4 py-3">22/06/2569</td><td class="px-4 py-3">฿ ${money(p.amount)}</td><td class="px-4 py-3">฿ ${money(p.wht)}</td><td class="px-4 py-3 font-bold">฿ ${money(p.net)}</td><td class="px-4 py-3">${p.type}</td><td class="px-4 py-3">ครบ</td><td class="px-4 py-3">${statusBadge(p.status)}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+  else if (state.accountingSubTab === 'documents') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">Document Checklist / รายการข้อมูลไม่ครบ</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">ระดับ</th><th class="px-4 py-3">Module</th><th class="px-4 py-3">รายละเอียด</th><th class="px-4 py-3">Owner</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.exceptions.map(e => `<tr class="hover:bg-slate-50"><td class="px-4 py-3">${statusBadge(e.level)}</td><td class="px-4 py-3">${e.module}</td><td class="px-4 py-3 font-medium">${e.detail}</td><td class="px-4 py-3">${e.owner}</td><td class="px-4 py-3">${statusBadge(e.status)}</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit + ' แก้ไข', 'open-modal', 'exception-form', e.id)}</td></tr>`).join('')}</tbody></table>
+    </div>
+    <div class="mt-4 bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-800">ถ้ามี Critical เปิดอยู่ ระบบจะไม่อนุญาตให้ Export Accounting Pack ยกเว้นมี Authorized Exception</div>`;
+  }
+  else if (state.accountingSubTab === 'export') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">Export / ประวัติส่งมอบ (Export History)</h3></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white mb-6">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">รอบบัญชี</th><th class="px-4 py-3">Version</th><th class="px-4 py-3">ไฟล์</th><th class="px-4 py-3">เอกสารแนบ</th><th class="px-4 py-3">ส่งโดย</th><th class="px-4 py-3">วันที่</th><th class="px-4 py-3">สถานะ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100"><tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">พฤษภาคม 2569</td><td class="px-4 py-3">v1.2</td><td class="px-4 py-3">8 ไฟล์</td><td class="px-4 py-3">64 ไฟล์</td><td class="px-4 py-3">พี่เบียร์</td><td class="px-4 py-3">05/06/2569</td><td class="px-4 py-3">${statusBadge('accepted')}</td></tr><tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">มิถุนายน 2569</td><td class="px-4 py-3">draft</td><td class="px-4 py-3">8 ไฟล์</td><td class="px-4 py-3">49 ไฟล์</td><td class="px-4 py-3">-</td><td class="px-4 py-3">-</td><td class="px-4 py-3">${statusBadge('not_exported')}</td></tr></tbody></table>
+    </div>
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900"><b>Export Format:</b> ระบบสร้างไฟล์ CSV/XLSX ตามรูปแบบที่กำหนด (01_Revenue.csv, 02_Cash_Receipts.csv, 03_Expenses.csv, เป็นต้น)</div>`;
+  }
+  else if (state.accountingSubTab === 'qa') {
+    content = `<div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-800">ข้อซักถามจากสำนักงานบัญชี</h3><button data-action="open-modal" data-type="qa-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm">${Icon.plus} เพิ่มคำถาม</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr><th class="px-4 py-3">รอบเดือน</th><th class="px-4 py-3">คำถาม</th><th class="px-4 py-3">อ้างอิง (Ref)</th><th class="px-4 py-3">Due Date</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">${store.questions.map(q => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-medium">${q.period}</td><td class="px-4 py-3 font-medium text-slate-900">${q.question}</td><td class="px-4 py-3 font-mono text-xs">${q.ref}</td><td class="px-4 py-3 text-red-600">${q.due}</td><td class="px-4 py-3">${statusBadge(q.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.edit+' ตอบคำถาม','open-modal','qa-answer', q.id)}</div></td></tr>`).join('')}</tbody></table>
+    </div>`;
+  }
+ 
+  return `<div class="mb-6"><h1 class="text-2xl font-bold tracking-tight text-slate-900">บัญชี (Accounting Handover)</h1><p class="text-sm text-slate-500 mt-1">รวบรวมหลักฐาน ปิดงบ กระทบยอด และประสานงานสำนักงานบัญชี</p></div>
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 animate-fade-in">
+    <div class="flex gap-6 border-b border-slate-200 mb-6 overflow-x-auto no-scrollbar">
+      ${tabs.map(t => `<button data-action="set-sub" data-parent="accountingSubTab" data-id="${t.id}" class="py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap focus-ring ${state.accountingSubTab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
+    </div>
+    ${content}
+  </div>`;
+}
+ 
+// ===================== SETTINGS LAYOUT =====================
+function renderSettingsLayout() {
+  const topTabs = [
+    { id: 'general', label: 'ตั้งค่าทั่วไป (Master Data)' },
+    { id: 'finance', label: 'ตั้งค่าบัญชี/การเงิน (Finance Settings)' }
+  ];
+ 
+  let sidebarNav = '';
+  let content = '';
+ 
+  if (state.settingsTopTab === 'general') {
+    const generalTabs = [
+      { id: 'roles', label: 'สิทธิ์การใช้งาน' }, 
+      { id: 'teams', label: 'ทีมติดตามทรัพย์' },
+      { id: 'companies', label: 'บริษัทไฟแนนซ์' }, 
+      { id: 'users', label: 'ผู้ใช้งาน' },
+      { id: 'organization', label: 'ข้อมูลองค์กร' },
+      { id: 'compensation', label: 'แผนค่าตอบแทน' }, 
+      { id: 'servicefee', label: 'เทมเพลตค่าบริการ' },
+      { id: 'system', label: 'ตั้งค่าระบบกลาง' }, 
+      { id: 'auditlog', label: 'บันทึกการใช้งาน (Audit Log)' }
+    ];
+    sidebarNav = generalTabs.map(t => `<button data-action="set-settings-tab" data-tab="${t.id}" class="text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring ${state.settingsTab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}">${t.label}</button>`).join('');
+    
+    // Switch for General Content
+    if(state.settingsTab==='roles') content = renderRolesContent();
+    else if(state.settingsTab==='teams') content = renderTeamsContent();
+    else if(state.settingsTab==='companies') content = renderCompaniesContent();
+    else if(state.settingsTab==='users') content = renderUsersContent();
+    else if(state.settingsTab==='organization') content = renderOrganizationContent();
+    else if(state.settingsTab==='compensation') content = renderCompensationContent();
+    else if(state.settingsTab==='servicefee') content = renderServiceFeeContent();
+    else if(state.settingsTab==='system') content = renderSystemSettingsContent();
+    else if(state.settingsTab==='auditlog') content = renderAuditLogContent();
+  } 
+  else {
+    const financeTabs = [
+      { id: 'cycles',     label: 'รอบบิลและรอบจ่าย' }, 
+      { id: 'approval',   label: 'Approval Matrix' },
+      { id: 'bank',       label: 'บัญชีธนาคารบริษัท' }, 
+      { id: 'payee',      label: 'Payee Profile' },
+      { id: 'tax',        label: 'Tax Profile' },
+      { id: 'vat',        label: 'อัตรา VAT' },
+      { id: 'cost',       label: 'Cost Center' }, 
+      { id: 'numbering',  label: 'เลขที่ใบกำกับภาษี' },
+      { id: 'docs',       label: 'รูปแบบเอกสาร' },
+      { id: 'taxdoc',     label: 'เทมเพลตเอกสารภาษี' },
+      { id: 'bankfile',   label: 'ไฟล์โอนธนาคาร' },
+      { id: 'export',     label: 'Export Format' },
+      { id: 'lock',       label: 'การล็อกรอบและ Adjustment' },
+      { id: 'permission', label: 'สิทธิ์บัญชี/การเงิน' }
+    ];
+    sidebarNav = financeTabs.map(t => `<button data-action="set-sub" data-parent="settingsFinanceTab" data-id="${t.id}" class="text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring ${state.settingsFinanceTab === t.id ? 'bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}">${t.label}</button>`).join('');
+ 
+    // Switch for Finance Content
+    if(state.settingsFinanceTab==='cycles') content = renderSettingsCycles();
+    else if(state.settingsFinanceTab==='approval') content = renderSettingsApprovals();
+    else if(state.settingsFinanceTab==='bank') content = renderSettingsBanks();
+    else if(state.settingsFinanceTab==='payee') content = renderSettingsPayee();
+    else if(state.settingsFinanceTab==='tax') content = renderSettingsTax();
+    else if(state.settingsFinanceTab==='vat') content = renderSettingsVat();
+    else if(state.settingsFinanceTab==='cost') content = renderSettingsCost();
+    else if(state.settingsFinanceTab==='numbering') content = renderSettingsNumbering();
+    else if(state.settingsFinanceTab==='taxdoc') content = renderSettingsTaxDoc();
+    else if(state.settingsFinanceTab==='docs') content = renderSettingsDocs();
+    else if(state.settingsFinanceTab==='bankfile') content = renderSettingsBankFile();
+    else if(state.settingsFinanceTab==='export') content = renderSettingsExport();
+    else if(state.settingsFinanceTab==='lock') content = renderSettingsLock();
+    else if(state.settingsFinanceTab==='permission') content = renderSettingsPermission();
+  }
+ 
+  return `
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold tracking-tight text-slate-900">การตั้งค่า (Settings & Master Data)</h1>
+    <p class="text-sm text-slate-500 mt-1">บริหารจัดการโครงสร้างผู้ใช้งาน และกฎเกณฑ์ทางบัญชีการเงิน</p>
+  </div>
+  
+  <div class="bg-white rounded-t-xl border border-slate-200 border-b-0 shadow-sm px-6 pt-4 flex gap-6">
+    ${topTabs.map(t => `<button data-action="set-settings-toptab" data-id="${t.id}" class="pb-3 text-sm font-bold border-b-2 transition-colors focus-ring ${state.settingsTopTab === t.id ? (t.id==='finance'?'border-emerald-600 text-emerald-700':'border-slate-900 text-slate-900') : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
+  </div>
+ 
+  <div class="bg-white rounded-b-xl rounded-tr-xl border border-slate-200 shadow-sm p-6 animate-fade-in">
+    <div class="flex flex-col md:flex-row gap-8">
+      <aside class="w-full md:w-56 shrink-0 overflow-y-auto max-h-[80vh] no-scrollbar">
+        <nav class="flex flex-col space-y-1 border-l-4 border-slate-200 pl-0">
+          ${sidebarNav}
+        </nav>
+      </aside>
+      <main class="flex-1 min-w-0">${content}</main>
+    </div>
+  </div>`;
+}
+ 
+// --- GENERAL SETTINGS RENDERERS ---
+function renderRolesContent() {
+  // ไฟล์ 07 §8: แบ่งตาม Role Group จริง 4 กลุ่ม ไม่ใช่แบบ generic เดิม
+  const subTabs = [
+    { id: 'system',          label: 'ระบบ (System)' },
+    { id: 'inhouse',         label: 'Inhouse' },
+    { id: 'outsource',       label: 'Outsource' },
+    { id: 'finance_company', label: 'บริษัทไฟแนนซ์' },
+  ];
+  const groupsToShow = [state.rolesSubTab];
+
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-bold text-slate-900">สิทธิ์การใช้งาน (Roles & Permissions)</h2>
+      <button data-action="open-create-role" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้าง Role</button>
+    </div>
+
+    <div class="border-b border-slate-200 mb-4 flex gap-6">
+      ${subTabs.map(t => `<button data-action="set-roles-subtab" data-subtab="${t.id}" class="py-2.5 text-sm font-medium border-b-2 transition-colors focus-ring ${state.rolesSubTab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
+    </div>
+
+    <div class="space-y-4">
+    ${groupsToShow.map(g => {
+      const roles = store.roles.filter(r => r.group === g);
+      return `
+      <div class="border border-slate-200 rounded-lg overflow-hidden">
+        <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+          <span class="px-2 py-0.5 rounded text-xs font-medium ${groupColor(g)}">${groupLabel(g)}</span>
+          <span class="text-xs text-slate-400">${roles.length} บทบาท — Seed Role ทั้งหมด (ลบ/เปลี่ยนชื่อไม่ได้)</span>
+        </div>
+        <table class="w-full text-left text-sm border-collapse">
+          <thead><tr class="text-xs text-slate-500 border-b border-slate-100 bg-white">
+            <th class="px-4 py-2.5 font-medium">ชื่อ Role</th>
+            <th class="px-4 py-2.5 font-medium">จำนวนผู้ใช้</th>
+            <th class="px-4 py-2.5 font-medium">สถานะ</th>
+            <th class="px-4 py-2.5 font-medium text-right">จัดการสิทธิ์</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-50">
+            ${roles.map(r => `
+              <tr class="hover:bg-slate-50 bg-white">
+                <td class="px-4 py-2.5 font-bold text-slate-900">${r.name}</td>
+                <td class="px-4 py-2.5 text-slate-600">${r.userCount} คน</td>
+                <td class="px-4 py-2.5">
+                  ${r.seed ? `<span class="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-bold uppercase">🔒 Seed</span>` : `<span class="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Custom</span>`}
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <div class="inline-flex items-center gap-1">
+                    <button data-action="edit-permission" data-role="${r.id}" title="กำหนดสิทธิ์" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 shadow-sm">${Icon.edit} กำหนดสิทธิ์</button>
+                    <button data-action="try-delete-role" data-role="${r.id}" class="p-1.5 rounded hover:bg-red-50 ${(r.seed || r.userCount > 0) ? 'text-slate-300 cursor-not-allowed' : 'text-red-500'}">${Icon.trash}</button>
+                  </div>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }).join('')}
+    </div>
+  </div>`;
+}
+ 
+function renderTeamsContent() {
+  const side = state.teamsSide;
+  let filtered = store.teams.filter(t => t.side === side);
+  
+  if (state.filters.search) {
+    const q = state.filters.search.toLowerCase();
+    filtered = filtered.filter(t => t.name.toLowerCase().includes(q) || t.managers.some(m => getUser(m).name.toLowerCase().includes(q)));
+  }
+  if (state.filters.status !== 'all') filtered = filtered.filter(t => t.status === state.filters.status);
+  if (state.filters.province !== 'all') filtered = filtered.filter(t => (t.provinces || []).includes(state.filters.province));
+ 
+  return `
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-slate-900">ทีมติดตามทรัพย์ (Teams)</h2>
+      <button data-action="open-create-team" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างทีม</button>
+    </div>
+ 
+    <div class="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-4">
+      <button data-action="set-teams-side" data-side="inhouse" class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${side==='inhouse' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}">Inhouse</button>
+      <button data-action="set-teams-side" data-side="outsource" class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${side==='outsource' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}">Outsource</button>
+    </div>
+ 
+    <div class="flex flex-col sm:flex-row gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+      <div class="flex-1">
+         <input type="text" placeholder="ค้นหาชื่อทีม, ผู้จัดการ..." value="${state.filters.search}" oninput="updateFilter('search', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+      </div>
+      <div class="w-full sm:w-40">
+         <select onchange="updateFilter('status', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+           <option value="all" ${state.filters.status==='all'?'selected':''}>สถานะ: ทั้งหมด</option>
+           <option value="active" ${state.filters.status==='active'?'selected':''}>ใช้งานปกติ (Active)</option>
+           <option value="suspended" ${state.filters.status==='suspended'?'selected':''}>ระงับ (Suspended)</option>
+         </select>
+      </div>
+    </div>
+ 
+    <div class="border border-slate-200 rounded-lg overflow-hidden">
+      <table class="w-full text-left text-sm border-collapse">
+        <thead><tr class="text-xs text-slate-600 border-b border-slate-200 bg-slate-50">
+          <th class="px-4 py-3 font-medium">ชื่อทีม / พื้นที่</th>
+          <th class="px-4 py-3 font-medium">ผู้จัดการ</th>
+          <th class="px-4 py-3 font-medium">แผนค่าตอบแทน</th>
+          <th class="px-4 py-3 font-medium">สมาชิก</th>
+          <th class="px-4 py-3 font-medium text-right">สถานะ / จัดการ</th>
+        </tr></thead>
+        <tbody class="divide-y divide-slate-100 bg-white">
+          ${filtered.length === 0 ? `<tr><td colspan="5" class="text-center p-6 text-slate-400">ไม่พบข้อมูลทีม</td></tr>` : ''}
+          ${filtered.map(t => `<tr class="hover:bg-slate-50">
+              <td class="px-4 py-3">
+                <div class="font-bold text-slate-900">${t.name}</div>
+                <div class="text-[10px] text-slate-500 font-normal mt-0.5 truncate max-w-[200px]" title="${(t.provinces||[]).join(', ')}">📍 ${(t.provinces||[]).join(', ') || '-'}</div>
+              </td>
+              <td class="px-4 py-3 text-slate-700 font-medium">${t.managers.length ? t.managers.map(m => getUser(m).name).join(', ') : '-'}</td>
+              <td class="px-4 py-3">
+                ${(() => { const ct = getCompTemplate(t.compensationPlanId); return ct ? `<div class="text-sm font-semibold text-slate-800">${ct.name}</div><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${ct.type === 'inhouse' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'} mt-0.5">${ct.type}</span>` : '<span class="text-slate-400 text-xs">ไม่ได้ผูก</span>'; })()}
+              </td>
+              <td class="px-4 py-3 text-slate-600">${t.memberCount} คน</td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-3">
+                  ${t.status === 'active' ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase">Active</span>' : '<span class="text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded-full font-bold uppercase">Suspended</span>'}
+                  <div class="inline-flex items-center gap-1 border-l border-slate-200 pl-3">
+                    <button data-action="open-edit-team" data-team="${t.id}" class="p-1.5 rounded hover:bg-slate-200 text-slate-500">${Icon.edit}</button>
+                  </div>
+                </div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+ 
+function renderCompaniesContent() {
+  let filtered = store.companies;
+  if (state.filters.search) filtered = filtered.filter(c => c.name.toLowerCase().includes(state.filters.search.toLowerCase()) || c.taxId.includes(state.filters.search));
+  if (state.filters.status !== 'all') filtered = filtered.filter(c => c.status === state.filters.status);
+  
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-slate-900">บริษัทไฟแนนซ์ (Finance Companies)</h2>
+      <button data-action="open-create-company" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างบริษัท</button>
+    </div>
+ 
+    <div class="flex flex-col sm:flex-row gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+      <div class="flex-1">
+         <input type="text" placeholder="ค้นหาชื่อบริษัท..." value="${state.filters.search}" oninput="updateFilter('search', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+      </div>
+      <div class="w-full sm:w-48">
+         <select onchange="updateFilter('status', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+           <option value="all" ${state.filters.status==='all'?'selected':''}>สถานะบริษัท: ทั้งหมด</option>
+           <option value="active" ${state.filters.status==='active'?'selected':''}>ใช้งานปกติ (Active)</option>
+           <option value="suspended" ${state.filters.status==='suspended'?'selected':''}>ระงับ (Suspended)</option>
+         </select>
+      </div>
+    </div>
+ 
+    <div class="grid grid-cols-1 gap-4">
+      ${filtered.length === 0 ? `<div class="text-center p-6 text-slate-400 border border-slate-200 rounded-lg border-dashed">ไม่พบข้อมูลบริษัท</div>` : ''}
+      ${filtered.map(c => {
+        const sTpl = getServiceTemplate(c.serviceTplId);
+        return `
+        <div class="border border-slate-200 rounded-lg p-5 relative shadow-sm">
+          ${c.status === 'active' ? '<span class="absolute top-5 right-5 bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Active</span>' : '<span class="absolute top-5 right-5 bg-red-100 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Suspended</span>'}
+          <div class="font-bold text-slate-900 text-lg mb-1">${c.name}</div>
+          <div class="text-xs text-slate-500 font-mono mb-4">Tax ID: ${c.taxId} ${c.vatRegistered ? '· <span class="text-emerald-600 font-semibold not-italic">จด VAT แล้ว</span>' : '· <span class="text-slate-400">ไม่จด VAT</span>'}</div>
+          ${c.status === 'suspended' && c.suspendedReason ? `<div class="mb-3 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700">⚠️ เหตุผลระงับ: ${c.suspendedReason}</div>` : ''}
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-y-3 gap-x-4 text-sm mb-4">
+            <div class="col-span-2 lg:col-span-1"><span class="text-slate-400 block text-[11px] uppercase mb-0.5 font-semibold">ผู้ติดต่อบริษัท</span> <span class="font-medium text-slate-800">${c.contactName}</span> <br><span class="text-xs text-slate-500">📞 ${c.contactPhone}</span></div>
+            <div class="col-span-2 lg:col-span-1"><span class="text-slate-400 block text-[11px] uppercase mb-0.5 font-semibold">ผู้ลงนามสัญญา</span> <span class="font-medium text-slate-800">${c.signer}</span> <br><span class="text-xs text-slate-500">📞 ${c.signerPhone || '-'}</span></div>
+            <div class="col-span-2 lg:col-span-1"><span class="text-slate-400 block text-[11px] uppercase mb-0.5 font-semibold">เทมเพลตค่าบริการ</span> <div class="bg-slate-50 px-2.5 py-1.5 rounded border border-slate-100 mt-1 inline-block"><span class="text-slate-900 font-bold">${sTpl ? sTpl.name : '-'}</span> <span class="text-slate-500 ml-1 text-xs">(${sTpl ? sTpl.model : '-'})</span></div></div>
+            <div class="col-span-2 lg:col-span-1"><span class="text-slate-400 block text-[11px] uppercase mb-0.5 font-semibold">รูปแบบส่งใบแจ้งหนี้</span><span class="text-xs font-medium text-slate-700">${c.defaultInvoiceFormat === 'e_tax_invoice' ? '📧 e-Tax Invoice' : '📄 กระดาษ/PDF'}</span></div>
+          </div>
+          <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+            <div class="text-xs text-slate-500"><span class="font-bold text-slate-800">${c.cases}</span> เคส | <span class="font-bold text-slate-800">${c.users}</span> บัญชีผู้ใช้</div>
+            <div class="flex items-center gap-2">
+              <button data-action="open-edit-company" data-company="${c.id}" class="border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">⚙️ แก้ไขบริษัท</button>
+              ${c.status === 'active' ? `<button data-action="open-modal" data-type="suspend-company" data-id="${c.id}" class="border border-red-200 hover:bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">🚫 ระงับ</button>` : `<button data-action="toast" data-msg='เปิดใช้งานบริษัท "${c.name}" แล้ว' class="border border-emerald-200 hover:bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">✓ เปิดใช้งาน</button>`}
+            </div>
+          </div>
+        </div>`}).join('')}
+    </div>
+  </div>`;
+}
+ 
+function renderUsersContent() {
+  const subTabs = [{ id: 'admin', label: 'แอดมิน' }, { id: 'tracker', label: 'เจ้าหน้าที่ติดตามทรัพย์' }, { id: 'finance', label: 'บริษัทไฟแนนซ์' }];
+  
+  let currentGroup = state.usersSubTab === 'admin' ? 'system' : state.usersSubTab === 'finance' ? 'finance' : 'tracker';
+  let filtered = [];
+ 
+  if (currentGroup === 'system') filtered = store.users.filter(u => u.group === 'system');
+  else if (currentGroup === 'finance') filtered = store.users.filter(u => u.group === 'finance');
+  else {
+    filtered = store.users.filter(u => u.group === 'inhouse' || u.group === 'outsource');
+    if (state.trackerFilter !== 'all') filtered = filtered.filter(u => u.group === state.trackerFilter);
+  }
+ 
+  if (state.filters.search) {
+    const q = state.filters.search.toLowerCase();
+    filtered = filtered.filter(u => u.name.toLowerCase().includes(q) || (u.phone||'').includes(q) || (u.email||'').includes(q));
+  }
+  if (state.filters.status !== 'all') filtered = filtered.filter(u => u.status === state.filters.status);
+  if (state.filters.role !== 'all') filtered = filtered.filter(u => u.roleId === state.filters.role);
+ 
+  const groupRoles = store.roles.filter(r => currentGroup === 'tracker' ? (r.group === 'inhouse' || r.group === 'outsource') : r.group === currentGroup);
+ 
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-slate-900">ผู้ใช้งาน (Users)</h2>
+      <button data-action="open-create-user" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างบัญชี</button>
+    </div>
+    <div class="border-b border-slate-200 mb-4 flex gap-6">
+      ${subTabs.map(t => `<button data-action="set-users-subtab" data-subtab="${t.id}" class="py-2.5 text-sm font-medium border-b-2 transition-colors focus-ring ${state.usersSubTab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
+    </div>
+    ${state.usersSubTab === 'tracker' ? `<div class="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-4">${[['all','ทั้งหมด'],['inhouse','Inhouse'],['outsource','Outsource']].map(([id,label]) => `<button data-action="set-tracker-filter" data-filter="${id}" class="px-4 py-1.5 rounded-md text-sm font-medium transition-colors focus-ring ${state.trackerFilter===id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}">${label}</button>`).join('')}</div>` : ''}
+    <div class="flex flex-col md:flex-row gap-3 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+      <div class="flex-1">
+         <input type="text" placeholder="ค้นหาชื่อ, เบอร์โทร, อีเมล..." value="${state.filters.search}" oninput="updateFilter('search', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+      </div>
+      <div class="w-full md:w-48">
+         <select onchange="updateFilter('role', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+           <option value="all" ${state.filters.role==='all'?'selected':''}>Role: ทั้งหมด</option>
+           ${groupRoles.map(r => `<option value="${r.id}" ${state.filters.role===r.id?'selected':''}>${r.name}</option>`).join('')}
+         </select>
+      </div>
+      <div class="w-full md:w-40">
+         <select onchange="updateFilter('status', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus-ring">
+           <option value="all" ${state.filters.status==='all'?'selected':''}>สถานะ: ทั้งหมด</option>
+           <option value="active" ${state.filters.status==='active'?'selected':''}>ใช้งาน (Active)</option>
+           <option value="deactivated" ${state.filters.status==='deactivated'?'selected':''}>ระงับ (Deactivated)</option>
+         </select>
+      </div>
+    </div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden"><table class="w-full text-left text-sm border-collapse"><thead><tr class="text-xs text-slate-600 border-b border-slate-200 bg-slate-50"><th class="px-4 py-3 font-medium">ชื่อ / ข้อมูลติดต่อ</th><th class="px-4 py-3 font-medium">Role / ฝั่ง</th><th class="px-4 py-3 font-medium text-right">สถานะ / จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">
+      ${filtered.length === 0 ? `<tr><td colspan="3" class="text-center p-6 text-slate-400">ไม่พบข้อมูลผู้ใช้</td></tr>` : ''}
+      ${filtered.map(u => { const role = getRole(u.roleId); return `<tr class="hover:bg-slate-50"><td class="px-4 py-3"><div class="font-bold text-slate-900">${u.name}</div><div class="text-[10px] text-slate-500 font-mono mt-0.5">📞 ${u.phone || '-'} | ✉️ ${u.email}</div></td><td class="px-4 py-3 text-xs text-slate-700"><span class="font-medium">${role?role.name:'-'}</span> <div class="mt-1"><span class="px-2 py-0.5 rounded text-[10px] ${groupColor(u.group)}">${groupLabel(u.group)}</span></div></td><td class="px-4 py-3 text-right"><div class="flex items-center justify-end gap-3">${u.status === 'active' ? '<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase">Active</span>' : '<span class="text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded-full font-bold uppercase">Deactivated</span>'}<div class="inline-flex items-center gap-1 border-l border-slate-200 pl-3"><button data-action="open-edit-user" data-user="${u.id}" class="p-1.5 rounded hover:bg-slate-200 text-slate-600 focus-ring">${Icon.edit}</button></div></div></td></tr>`;}).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+ 
+function renderOrganizationContent() {
+  const org = store.orgProfile;
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900">ข้อมูลองค์กร (Organization Profile)</h2>
+        <p class="text-xs text-slate-500 mt-0.5">ข้อมูลนี้ใช้ออกใบกำกับภาษี / ใบเสร็จรับเงินฝั่งผู้ขาย (AssetRecovery) ตามไฟล์ 31 §7.2</p>
+      </div>
+      <button data-action="open-modal" data-type="edit-org-profile" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.edit} แก้ไขข้อมูล</button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- โลโก้ -->
+      <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-6 text-center bg-slate-50/50">
+        ${org.logoUrl
+          ? `<img src="${org.logoUrl}" alt="โลโก้บริษัท" class="w-24 h-24 object-contain mb-3 rounded-lg">`
+          : `<div class="w-20 h-20 rounded-xl bg-slate-200 flex items-center justify-center mb-3">
+               <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+             </div>`}
+        <div class="text-xs text-slate-400 mb-2">โลโก้บริษัท (ปรากฏบนเอกสาร)</div>
+        <button data-action="open-modal" data-type="upload-logo" class="text-xs text-blue-600 font-semibold hover:underline">
+          ${org.logoUrl ? 'เปลี่ยนโลโก้' : 'อัปโหลดโลโก้'}
+        </button>
+      </div>
+
+      <!-- ข้อมูลหลัก -->
+      <div class="lg:col-span-2 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="col-span-2 border-b border-slate-100 pb-4">
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">ชื่อนิติบุคคล</div>
+            <div class="font-bold text-slate-900 text-base">${org.name}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">เลขประจำตัวผู้เสียภาษี</div>
+            <div class="font-mono font-bold text-slate-800">${org.taxId}</div>
+            ${org.vatRegistered ? '<span class="text-[10px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-bold mt-1 inline-block">จด VAT</span>' : '<span class="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-bold mt-1 inline-block">ไม่จด VAT</span>'}
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">เบอร์โทรสำนักงาน</div>
+            <div class="font-medium text-slate-700">${org.phone}</div>
+            <div class="text-xs text-slate-400 mt-0.5">${org.email}</div>
+          </div>
+          <div class="col-span-2">
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">ที่อยู่ตามที่จดทะเบียน</div>
+            <div class="text-slate-700 text-sm leading-relaxed">${org.address}</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+      <b>หมายเหตุ:</b> ข้อมูลองค์กรนี้ถูก snapshot ลงในใบกำกับภาษีทุกฉบับที่ออก — แก้ไขแล้วมีผลเฉพาะเอกสารที่ออกหลังจากนี้ เอกสารเก่าไม่เปลี่ยน · สิทธิ์แก้ไข: Superadmin เท่านั้น<br>
+      <b>การตั้งค่า Prefix / รูปแบบเลขที่ใบกำกับภาษี</b> อยู่ที่ <b>ตั้งค่าบัญชี/การเงิน → เลขที่ใบกำกับภาษี</b> (ไฟล์ 13 §6.12) ไม่ใช่ที่นี่
+    </div>
+  </div>`;
+}
+
+function renderCompensationContent() {
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">แผนค่าตอบแทน (จ่ายออก)</h2><button data-action="open-create-comp" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างเทมเพลต</button></div>
+  <p class="text-xs text-slate-500 mb-4">commission = จ่ายเมื่อปิดสำเร็จ | เบี้ยเสี่ยง (no_success_fee) = จ่ายเมื่อไม่สำเร็จ — mutual exclusive ต่อเคส (ไฟล์ 11 §7.2)</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">${store.compTemplates.map(ct => {
+    const fuelLabel = ct.fuel.mode === 'PER_KM'
+      ? `${ct.fuel.ratePerKm} บาท/กม. (เพดาน ${ct.fuel.maxPerCase ? ct.fuel.maxPerCase.toLocaleString('th-TH') : '∞'} บาท/เคส)`
+      : `${ct.fuel.dailyFlatRate} บาท/วัน (เหมาจ่าย)`;
+    return `<div class="border border-slate-200 rounded-lg p-5 shadow-sm"><div class="flex justify-between items-start mb-4"><div class="font-bold text-slate-900 text-base">${ct.name}</div><span class="px-2 py-0.5 rounded text-[10px] font-bold ${ct.type === 'inhouse' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'} uppercase">${ct.type}</span></div>
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100 col-span-2"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">⛽ ค่าน้ำมัน (${ct.fuel.mode})</span><span class="font-bold text-slate-800 text-sm">${fuelLabel}</span></div>
+      <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">🍽️ เบี้ยเลี้ยง</span><span class="font-bold text-slate-800 text-sm">${ct.allowance} <span class="font-medium text-xs text-slate-500">บาท/วัน</span></span></div>
+      <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">🏨 ที่พักสูงสุด</span><span class="font-bold text-slate-800 text-sm">${ct.hotel.maxPerNight} <span class="font-medium text-xs text-slate-500">บาท/คืน ${ct.hotel.receiptRequired?'(ใบเสร็จบังคับ)':''}</span></span></div>
+      <div class="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100"><span class="text-emerald-600 block text-[10px] uppercase font-bold tracking-wider mb-1">✅ Commission (สำเร็จ)</span><span class="font-bold text-emerald-700 text-sm">${ct.commission} <span class="font-medium text-xs">บาท/เคส</span></span></div>
+      <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">🔄 เบี้ยเสี่ยง (ไม่สำเร็จ)</span><span class="font-bold text-slate-700 text-sm">${ct.noSuccessFee} <span class="font-medium text-xs text-slate-500">บาท/เคส</span></span></div>
+    </div>
+    ${ct.wht && ct.whtPct > 0 ? `<div class="text-[11px] text-amber-800 font-bold bg-amber-100 px-2.5 py-1 rounded inline-block mb-3 border border-amber-200">⚠️ หัก ณ ที่จ่าย ${ct.whtPct}% อัตโนมัติ</div>` : '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">ไม่หัก WHT</div>'}
+    <div class="pt-3 border-t border-slate-100 text-right"><button data-action="open-edit-comp" data-id="${ct.id}" class="text-xs text-slate-600 hover:text-slate-900 font-semibold px-3 py-1.5 border border-slate-200 rounded hover:bg-slate-50">⚙️ แก้ไขข้อมูล</button></div></div>`;
+  }).join('')}</div></div>`;
+}
+ 
+function renderServiceFeeContent() {
+  // เปลี่ยนจากตารางเป็นการ์ด (04/07/2569 — คำขอ Product Owner: คอลัมน์เยอะ ตารางแสดงข้อมูลไม่พอ)
+  // pattern เดียวกับการ์ดแผนค่าตอบแทน (renderCompensationContent) · สูตร/เงื่อนไขตามไฟล์ 12 §6.1-6.3
+  const MODEL_BADGE = { SUCCESS_FEE: 'bg-emerald-100 text-emerald-800', FLAT: 'bg-blue-100 text-blue-800', HYBRID: 'bg-purple-100 text-purple-800' };
+  const basisTh = b => b === 'debt_amount' ? 'มูลค่าหนี้คงเหลือ' : 'มูลค่าเครื่อง';
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">เทมเพลตค่าบริการ (รับเข้า)</h2><button data-action="open-create-sf" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างเทมเพลต</button></div>
+  <p class="text-xs text-slate-500 mb-4">ฐานคำนวณ "รายได้" (Revenue) ที่เรียกเก็บจากบริษัทไฟแนนซ์ — ตรงข้ามกับแผนค่าตอบแทน (จ่ายออก) · 3 model ตามไฟล์ 12 §6: SUCCESS_FEE / FLAT / HYBRID · ผูกกับบริษัทไฟแนนซ์ทุกรายเสมอ (ไฟล์ 10 §9)</p>
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">${store.serviceFeeTemplates.map(sf => {
+    const basisLabel = sf.basis ? basisTh(sf.basis) : null;
+    // สูตรตามไฟล์ 12 §6.1-6.3
+    const okFormula = sf.model === 'SUCCESS_FEE' ? `${sf.rate}% × ${basisLabel}`
+      : sf.model === 'FLAT' ? `${sf.base.toLocaleString('th-TH')} บาท (เหมาคงที่)`
+      : `${sf.base.toLocaleString('th-TH')} บาท + ${sf.rate}% × ${basisLabel}`;
+    const failFormula = sf.model === 'SUCCESS_FEE' ? 'ไม่เรียกเก็บ (0 บาท)'
+      : (sf.chargeOnFail ? `${sf.base.toLocaleString('th-TH')} บาท (base — charge_on_fail)` : 'ไม่เรียกเก็บ (0 บาท)');
+    return `<div class="border border-slate-200 rounded-lg p-5 shadow-sm">
+    <div class="flex justify-between items-start mb-4">
+      <div>
+        <div class="font-bold text-slate-900 text-base">${sf.name}</div>
+        <span class="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase ${MODEL_BADGE[sf.model] || 'bg-slate-100 text-slate-700'}">${sf.model}</span>
+      </div>
+      ${sf.active ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold shrink-0">ใช้งาน</span>` : `<span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold shrink-0">ปิดใช้งาน</span>`}
+    </div>
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">💰 ค่าเปิดเคส (Base)</span><span class="font-bold text-slate-800 text-sm">${sf.base > 0 ? sf.base.toLocaleString('th-TH') + ' บาท' : '—'}</span></div>
+      <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">📊 อัตราความสำเร็จ</span><span class="font-bold text-slate-800 text-sm">${sf.rate > 0 ? `${sf.rate}% <span class="font-medium text-xs text-slate-500">× ${basisLabel}</span>` : '—'}</span></div>
+      <div class="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 col-span-2"><span class="text-emerald-600 block text-[10px] uppercase font-bold tracking-wider mb-1">✅ เคสสำเร็จ (closed_success) เรียกเก็บ</span><span class="font-bold text-emerald-700 text-sm">${okFormula}</span></div>
+      <div class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'} p-2.5 rounded-lg border col-span-2"><span class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-600' : 'text-slate-400'} block text-[10px] uppercase font-bold tracking-wider mb-1">🔄 เคสไม่สำเร็จ (closed_fail) เรียกเก็บ</span><span class="font-bold ${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-700' : 'text-slate-600'} text-sm">${failFormula}</span></div>
+    </div>
+    ${sf.model === 'SUCCESS_FEE'
+      ? '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล (§6.1) — ไม่มีตัวเลือก charge_on_fail</div>'
+      : (sf.chargeOnFail
+        ? '<div class="text-[11px] text-amber-800 font-bold bg-amber-100 px-2.5 py-1 rounded inline-block mb-3 border border-amber-200">⚠️ charge_on_fail = true — เก็บค่า base เสมอไม่ว่าผลจะเป็นอย่างไร</div>'
+        : '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">charge_on_fail = false — เรียกเก็บเฉพาะเคสสำเร็จ</div>')}
+    <div class="pt-3 border-t border-slate-100 text-right"><button data-action="open-edit-sf" data-id="${sf.id}" class="text-xs text-slate-600 hover:text-slate-900 font-semibold px-3 py-1.5 border border-slate-200 rounded hover:bg-slate-50">⚙️ แก้ไขข้อมูล</button></div>
+    </div>`;
+  }).join('')}</div></div>`;
+}
+ 
+function renderSystemSettingsContent() {
+  const ss = store.systemSettings;
+  return `<h2 class="text-lg font-bold text-slate-900 mb-6">ตั้งค่าระบบส่วนกลาง</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-b border-slate-100 pb-6 mb-6">
+    <div><h3 class="font-semibold text-slate-800 text-sm mb-3">การแจ้งเตือน & SLA</h3><div class="space-y-4">
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">ระยะเวลาแจ้งเตือนเคสค้าง (SLA Alert) — ชั่วโมง</label><input type="number" value="${ss.slaAlertHours}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">ระงับผู้ใช้อัตโนมัติ (ไม่ใช้งานนาน) — วัน</label><input type="number" value="${ss.autoSuspendDays}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div>
+    </div></div>
+    <div><h3 class="font-semibold text-slate-800 text-sm mb-3">การจัดเก็บข้อมูล & WHT</h3><div class="space-y-4">
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">ระยะเวลาเก็บหลักฐาน/เอกสาร — ปี</label><input type="number" value="${ss.evidenceRetentionYears}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">อัตรา WHT ค่าเริ่มต้น (%)</label><input type="number" value="${ss.defaultWht}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div>
+    </div></div>
+  </div>
+  <div class="border-b border-slate-100 pb-6 mb-6">
+    <h3 class="font-semibold text-slate-800 text-sm mb-3">Operations Settings (ไฟล์ 40 §6.3-6.4)</h3>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">Reassign Timeout — ชั่วโมง <span class="text-slate-400 font-normal">(ผู้รับเคสต้องตอบภายในเวลานี้)</span></label><input type="number" value="${ss.reassignTimeoutHours}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div>
+      <div><label class="block text-xs font-bold text-slate-700 mb-2">สิทธิ์มอบหมายงานของหัวหน้าทีม (Supervisor)</label>
+        <div class="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" ${ss.supervisorCanAssignInhouse ? 'checked' : ''} class="rounded accent-slate-900"> มอบหมายงานให้ทีม Inhouse ได้</label>
+          <label class="flex items-center gap-2 text-sm"><input type="checkbox" ${ss.supervisorCanAssignOutsource ? 'checked' : ''} class="rounded accent-slate-900"> มอบหมายงานให้ทีม Outsource ได้</label>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="text-right"><button data-action="toast" data-msg="บันทึกการตั้งค่าระบบเรียบร้อย" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 shadow-sm">บันทึกการตั้งค่าระบบ</button></div>`;
+}
+ 
+function renderAuditLogContent() {
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex justify-between items-center mb-4"><h2 class="text-lg font-bold text-slate-900">บันทึกการใช้งาน (Audit Log)</h2><button data-action="audit-filter-export" class="border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50 text-slate-700 focus-ring">Filter / Export</button></div><div class="border border-slate-200 rounded-lg overflow-hidden"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">วันเวลา</th><th class="px-4 py-3 font-medium">การกระทำ (Action)</th><th class="px-4 py-3 font-medium">ผู้ดำเนินการ</th><th class="px-4 py-3 font-medium">เป้าหมาย (Target)</th><th class="px-4 py-3 font-medium">รายละเอียด</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${store.auditLogs.map(log => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${log.date}</td><td class="px-4 py-3 font-bold text-slate-800">${log.action}</td><td class="px-4 py-3 text-slate-600">${log.user}</td><td class="px-4 py-3 text-slate-600">${log.target}</td><td class="px-4 py-3 text-xs text-slate-500">${log.detail}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+ 
+ 
+
+// --- FINANCE SETTINGS RENDERERS ---
+function renderSettingsCycles() {
+  const cycles = store.finSettings.cycles;
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">รอบบิลและรอบจ่าย (Cycles)</h2><button data-action="open-modal" data-type="fin-cycle-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่มรอบ</button></div>
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 mb-4">ตั้งค่าวันตัดรอบ (cut-off) และกำหนดชำระ/จ่าย — ระบบนำไปใช้กับการสร้าง Billing Batch (AR) และ Payout Batch (AP) อัตโนมัติ</div>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">ชื่อรอบ</th><th class="px-4 py-3 font-medium">ฝั่ง (AR/AP)</th><th class="px-4 py-3 font-medium">วันตัดรอบ</th><th class="px-4 py-3 font-medium">เงื่อนไขจ่าย/รับ</th><th class="px-4 py-3 font-medium">Scope</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${cycles.map(c => {
+    const cutoffLabel = c.cutoffRuleType === 'fixed_dates' ? `วันที่ ${c.cutoffDates.join(', ')} ของเดือน`
+      : c.cutoffRuleType === 'month_end' ? 'สิ้นเดือน'
+      : c.cutoffText || '-';
+    return `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-800">${c.name}</td><td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${c.type==='AR'?'bg-blue-100 text-blue-800':'bg-purple-100 text-purple-800'} uppercase">${c.type}</span></td><td class="px-4 py-3 text-slate-600 text-xs">${cutoffLabel}</td><td class="px-4 py-3 text-slate-600 text-xs">${c.due}</td><td class="px-4 py-3 text-xs text-slate-500">${c.scope}</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-cycle-form', c.id)}</td></tr>`;
+  }).join('')}
+  </tbody></table></div>`;
+}
+
+function renderSettingsApprovals() {
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">สายการอนุมัติ (Approval Matrix)</h2><button data-action="open-modal" data-type="fin-approval-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่มกติกา</button></div>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">เงื่อนไข</th><th class="px-4 py-3 font-medium">วงเงินเพดาน</th><th class="px-4 py-3 font-medium">ลำดับขั้นอนุมัติ</th><th class="px-4 py-3 font-medium">Segregation</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${store.finSettings.approvals.map(a => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-800">${a.condition}</td><td class="px-4 py-3 text-xs">${a.conditionThreshold ? `≤ ${a.conditionThreshold.toLocaleString('th-TH')} บาท` : `<span class="text-slate-400">ไม่จำกัด</span>`}</td><td class="px-4 py-3"><div class="text-xs bg-slate-50 border border-slate-200 px-2 py-1 rounded inline-block text-slate-700">${a.flow}</div></td><td class="px-4 py-3">${a.enforceSegregation ? '<span class="text-emerald-600 font-bold text-xs">✓ บังคับ</span>' : '<span class="text-slate-400 text-xs">ไม่บังคับ</span>'}</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-approval-form', a.id)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function renderSettingsBanks() {
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">บัญชีธนาคารบริษัท (Corporate Banks)</h2><button data-action="open-modal" data-type="fin-bank-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่มบัญชี</button></div>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">ธนาคาร / ชื่อบัญชี</th><th class="px-4 py-3 font-medium">เลขบัญชี</th><th class="px-4 py-3 font-medium">วัตถุประสงค์</th><th class="px-4 py-3 font-medium">Format Statement / Payment</th><th class="px-4 py-3 font-medium">Auto-match (วัน)</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${store.finSettings.banks.map(b => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-800">${b.bank}<br><span class="text-xs text-slate-500 font-normal">${b.name}</span></td><td class="px-4 py-3 font-mono text-xs">${b.account}</td><td class="px-4 py-3"><span class="text-xs px-2 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-700">${b.use}</span></td><td class="px-4 py-3 text-xs text-slate-600">${b.statement} → ${b.payment}</td><td class="px-4 py-3 text-xs text-center">${b.autoMatchToleranceDays} วัน</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-bank-form', b.id)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function renderSettingsTax() {
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">Tax Profile (กติกาภาษี)</h2><button data-action="open-modal" data-type="fin-tax-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่ม Tax Profile</button></div>
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ การแก้ไข Tax Profile กระทบยอดภาษีทุกรายการที่ใช้ profile นั้น — ต้องบันทึก audit และระบุเหตุผลเสมอ</div>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">ชื่อ Profile</th><th class="px-4 py-3 font-medium">ใช้กับ</th><th class="px-4 py-3 font-medium">VAT Mode</th><th class="px-4 py-3 font-medium">WHT Rate</th><th class="px-4 py-3 font-medium">ฐานหัก WHT</th><th class="px-4 py-3 font-medium">วงเงินขั้นต่ำ WHT</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${store.finSettings.tax.map(t => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-800">${t.name}</td><td class="px-4 py-3 text-xs text-slate-600">${t.appliesTo}</td><td class="px-4 py-3 text-xs"><span class="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono text-slate-700">${t.vatMode}</span></td><td class="px-4 py-3 font-bold text-rose-700">${t.whtPct}%</td><td class="px-4 py-3 text-xs">${t.whtBasis}</td><td class="px-4 py-3 text-xs">${(t.whtMinThreshold||0).toLocaleString('th-TH')} บาท</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-tax-form', t.id)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function renderSettingsVat() {
+  const vr = store.finSettings.vatRates || [];
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">อัตรา VAT (Effective-dated)</h2><button data-action="open-modal" data-type="fin-vat-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่มอัตรา VAT</button></div>
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ ช่วงวันที่ต้องไม่ทับซ้อนกัน (VAT_RATE_OVERLAP) — ระบบตรวจสอบก่อนบันทึกทุกครั้ง</div>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">อัตรา VAT (%)</th><th class="px-4 py-3 font-medium">มีผลตั้งแต่</th><th class="px-4 py-3 font-medium">สิ้นสุด</th><th class="px-4 py-3 font-medium">สถานะ</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${vr.map(v => {
+    const now = (()=>{const b=toBKK(new Date());return `${b.getFullYear()}-${String(b.getMonth()+1).padStart(2,'0')}-${String(b.getDate()).padStart(2,'0')}`;})();
+    const active = v.effectiveFrom <= now && (!v.effectiveTo || v.effectiveTo >= now);
+    return `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-900 text-lg">${v.rate}%</td><td class="px-4 py-3 font-mono text-xs">${v.effectiveFrom}</td><td class="px-4 py-3 font-mono text-xs">${v.effectiveTo || '—'}</td><td class="px-4 py-3">${active ? '<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">ใช้งานอยู่</span>' : '<span class="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold">หมดอายุ</span>'}</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-vat-form', v.id)}</td></tr>`;
+  }).join('')}
+  </tbody></table></div>`;
+}
+
+function renderSettingsCost() {
+  const centers = store.finSettings.centers || [];
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">Cost Center</h2><button data-action="open-modal" data-type="fin-cost-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่ม Cost Center</button></div>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">รหัส</th><th class="px-4 py-3 font-medium">ชื่อ Cost Center</th><th class="px-4 py-3 font-medium">Mapping Rule</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${centers.map(c => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-mono font-bold text-slate-800">${c.code}</td><td class="px-4 py-3 text-slate-700">${c.name}</td><td class="px-4 py-3 text-xs"><span class="px-2 py-0.5 rounded ${c.mappingRule==='auto'?'bg-blue-50 text-blue-700 border border-blue-200':'bg-slate-100 text-slate-600 border border-slate-200'}">${c.mappingRule==='auto'?'Auto Mapping':'Manual'}</span></td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-cost-form', c.id)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+// ============ ตั้งค่าบัญชี/การเงิน: เทมเพลตเอกสารภาษี (ไฟล์ 13 §6.13 — เพิ่ม 04/07/2569) ============
+function renderSettingsTaxDoc() {
+  const docs = [
+    { type: 'tax_invoice',     name: 'ใบกำกับภาษี / ใบเสร็จรับเงิน', paper: 'A4', lang: 'th', footer: 'ขอบคุณที่ใช้บริการ', hasLogo: true,  hasSign: true  },
+    { type: 'wht_certificate', name: 'หนังสือรับรองการหัก ณ ที่จ่าย (50 ทวิ)', paper: 'A4', lang: 'th', footer: '', hasLogo: true,  hasSign: false }
+  ];
+  return `<h2 class="text-lg font-bold text-slate-900 mb-1">เทมเพลตเอกสารภาษี (Tax Document Template)</h2>
+  <p class="text-xs text-slate-500 mb-4">รูปแบบเอกสารภาษีทางการ — ไฟล์ 13 §6.13 · ตาราง <span class="font-mono">tax_document_template_settings</span> (schema 02 v3.5)</p>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    ${docs.map(d => `
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <h3 class="font-semibold text-slate-800 text-sm mb-4">${d.name}</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">โลโก้บริษัท</label>
+          <div class="border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs ${d.hasLogo ? 'text-emerald-600 bg-emerald-50/50' : 'text-slate-400'}">${d.hasLogo ? '✓ logo-company.png (อัปโหลดแล้ว)' : 'ยังไม่ได้อัปโหลด — คลิกเพื่ออัปโหลด'}</div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">ลายเซ็นผู้มีอำนาจ</label>
+          <div class="border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs ${d.hasSign ? 'text-emerald-600 bg-emerald-50/50' : 'text-slate-400'}">${d.hasSign ? '✓ signature-ceo.png (อัปโหลดแล้ว)' : 'ยังไม่ได้อัปโหลด — คลิกเพื่ออัปโหลด'}</div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">ขนาดกระดาษ</label>
+            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option ${d.paper==='A4'?'selected':''}>A4</option><option ${d.paper==='A5'?'selected':''}>A5</option></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">ภาษา</label>
+            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option ${d.lang==='th'?'selected':''}>ไทย</option><option ${d.lang==='th_en_bilingual'?'selected':''}>ไทย-อังกฤษ (Bilingual)</option></select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความท้ายเอกสาร (Footer)</label>
+          <input class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring" value="${d.footer}" placeholder="เช่น เงื่อนไขการชำระเงิน / ข้อความขอบคุณ">
+        </div>
+        <button class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-800 focus-ring">บันทึกเทมเพลต</button>
+      </div>
+    </div>`).join('')}
+  </div>
+  <div class="mt-4 text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg p-3">
+    <b>ข้อจำกัด (ไฟล์ 28 §6.2-6.3):</b> ฟิลด์บังคับตามกฎหมาย (เลขประจำตัวผู้เสียภาษี, ชื่อ-ที่อยู่, ยอด VAT/WHT, เลขที่เอกสาร) <b>ปิดหรือซ่อนไม่ได้</b> — เทมเพลตปรับได้เฉพาะโลโก้ ลายเซ็น footer ขนาดกระดาษ และภาษาเท่านั้น
+  </div>`;
+}
+
+function renderSettingsNumbering() {
+  const n = store.finSettings.taxInvoiceNumbering || {};
+  return `<h2 class="text-lg font-bold text-slate-900 mb-4">เลขที่ใบกำกับภาษี (Tax Invoice Numbering)</h2>
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ แก้ไขได้เฉพาะ Superadmin — กระทบความต่อเนื่องของเลขเอกสารตามกฎหมาย ควรตั้งครั้งแรกแล้วไม่เปลี่ยน</div>
+  <div class="bg-white border border-slate-200 rounded-xl p-6 grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">รูปแบบ</div><div class="font-bold text-slate-900">${n.mode === 'yearly_reset' ? 'Reset รายปี' : n.mode}</div></div>
+    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">Prefix</div><div class="font-mono text-slate-900 font-bold">${n.prefix}</div></div>
+    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">ความยาวตัวเลข</div><div class="font-bold text-slate-900">${n.digitLength} หลัก</div></div>
+    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">เลขล่าสุด</div><div class="font-bold text-slate-900">${n.prefix}${String(n.lastNumber).padStart(n.digitLength, '0')}</div></div>
+  </div>
+  <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-600">
+    ตัวอย่างเลขที่ใบกำกับภาษีถัดไป: <span class="font-mono font-bold text-slate-900">${n.prefix}${String(n.lastNumber + 1).padStart(n.digitLength, '0')}</span>
+  </div>
+  <div class="mt-4 text-right">${btnAction(Icon.edit + ' แก้ไขการตั้งค่า', 'open-modal', 'fin-numbering-form')}</div>`;
+}
+
+function renderSettingsPayee() {
+  return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">ผู้รับเงิน / Payee Profile</h2><button data-action="open-modal" data-type="fin-payee-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่ม Payee</button></div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">Payee</th><th class="px-4 py-3 font-medium">ประเภท</th><th class="px-4 py-3 font-medium">Tax ID</th><th class="px-4 py-3 font-medium">บัญชี</th><th class="px-4 py-3 font-medium">WHT</th><th class="px-4 py-3 font-medium">สถานะ</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">${store.payees.map(p => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-800">${p.name}</td><td class="px-4 py-3 text-slate-600">${p.type}</td><td class="px-4 py-3 font-mono text-xs">${p.tax}</td><td class="px-4 py-3">${p.bank}</td><td class="px-4 py-3">${p.wht}</td><td class="px-4 py-3">${statusBadge(p.status)}</td><td class="px-4 py-3 text-right whitespace-nowrap"><div class="inline-flex items-center justify-end gap-2">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-payee-form', p.id)}</div></td></tr>`).join('')}</tbody></table></div>`;
+}
+function renderSettingsDocs() {
+  return `<h2 class="text-lg font-bold text-slate-900 mb-4">รูปแบบเอกสารภายใน (Internal Document Templates)</h2>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">เอกสาร</th><th class="px-4 py-3 font-medium">ใช้เมื่อ</th><th class="px-4 py-3 font-medium">สถานะ</th><th class="px-4 py-3 font-medium text-right">ตัวอย่าง</th></tr></thead><tbody class="divide-y divide-slate-100"><tr><td class="px-4 py-3 font-bold">Internal Billing Summary</td><td class="px-4 py-3">รอบวางบิลภายใน</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' Preview','open-modal','pdf-preview')}</td></tr><tr><td class="px-4 py-3 font-bold">Payout Batch Summary</td><td class="px-4 py-3">รอบจ่ายเงิน</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' Preview','open-modal','pdf-preview')}</td></tr><tr><td class="px-4 py-3 font-bold">Payment Voucher ภายใน</td><td class="px-4 py-3">จ่ายเงินสำเร็จ</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' Preview','open-modal','pdf-preview')}</td></tr><tr><td class="px-4 py-3 font-bold">Compensation Statement / Payslip</td><td class="px-4 py-3">สรุปค่าตอบแทน</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' Preview','open-modal','pdf-preview')}</td></tr><tr><td class="px-4 py-3 font-bold">Accounting Pack Cover Sheet</td><td class="px-4 py-3">Export รายเดือน</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' Preview','open-modal','pdf-preview')}</td></tr></tbody></table></div>`;
+}
+function renderSettingsBankFile() {
+  const bankFiles = store.finSettings.bankFiles || [];
+  return `<h2 class="text-lg font-bold text-slate-900 mb-4">รูปแบบไฟล์โอนธนาคาร (Bank File Format)</h2>
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ ไฟล์ที่ยังไม่ผ่านการทดสอบ (pending) จะไม่สามารถนำไปสร้างไฟล์โอนเงินจริงได้ (BANK_FILE_NOT_TESTED)</div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">ธนาคาร</th><th class="px-4 py-3 font-medium">ประเภทไฟล์</th><th class="px-4 py-3 font-medium">Encoding</th><th class="px-4 py-3 font-medium">Column Mapping</th><th class="px-4 py-3 font-medium">สถานะทดสอบ</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  ${bankFiles.map(b => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold">${b.bank}</td><td class="px-4 py-3">${b.fileType}</td><td class="px-4 py-3 font-mono text-xs">${b.encoding}</td><td class="px-4 py-3 text-xs text-slate-600">${b.columnMapping}</td><td class="px-4 py-3">${b.testStatus === 'passed' ? '<span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">✓ ผ่าน</span>' : '<span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">รอตรวจ</span>'}</td><td class="px-4 py-3 text-right">${btnAction(Icon.eye+' ทดสอบ','open-modal','bankfile-test')}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+function renderSettingsExport() {
+  return `<h2 class="text-lg font-bold text-slate-900 mb-4">Accounting Pack / Export Format</h2>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">ไฟล์</th><th class="px-4 py-3 font-medium">Format</th><th class="px-4 py-3 font-medium">Required Columns</th><th class="px-4 py-3 font-medium">สถานะ</th><th class="px-4 py-3 font-medium text-right">ตัวอย่าง</th></tr></thead><tbody class="divide-y divide-slate-100"><tr><td class="px-4 py-3 font-bold">01_Revenue.csv</td><td class="px-4 py-3">CSV UTF-8</td><td class="px-4 py-3 text-xs">company, case_ref, revenue_date, gross, vat_flag</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.download+' ตัวอย่าง','open-modal','export-sample')}</td></tr><tr><td class="px-4 py-3 font-bold">02_Cash_Receipts.csv</td><td class="px-4 py-3">CSV UTF-8</td><td class="px-4 py-3 text-xs">receipt_date, payer, amount, bank_ref</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.download+' ตัวอย่าง','open-modal','export-sample')}</td></tr><tr><td class="px-4 py-3 font-bold">03_Expenses.csv</td><td class="px-4 py-3">CSV UTF-8</td><td class="px-4 py-3 text-xs">payee, category, gross, wht, net</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.download+' ตัวอย่าง','open-modal','export-sample')}</td></tr><tr><td class="px-4 py-3 font-bold">08_Document_Checklist.xlsx</td><td class="px-4 py-3">XLSX</td><td class="px-4 py-3 text-xs">source_ref, doc_status, issue</td><td class="px-4 py-3">${statusBadge('verified')}</td><td class="px-4 py-3 text-right">${btnAction(Icon.download+' ตัวอย่าง','open-modal','export-sample')}</td></tr></tbody></table></div>`;
+}
+function renderSettingsPermission() {
+  const subTabs = [
+    { id: 'ops', label: 'ปฏิบัติงาน (Operations)' },
+    { id: 'finance', label: 'การเงิน (Finance)' },
+    { id: 'accounting', label: 'บัญชี (Accounting)' },
+    { id: 'admin', label: 'บริหาร (Management)' }
+  ];
+
+  const currentPerms = store.financePermissions[state.permissionSubTab];
+  const GRP_SHORT = { system: '', inhouse: 'IN', outsource: 'OUT', finance: 'FC' };
+  const levelChip = (rid, lv) => {
+    const r = getRole(rid); if (!r) return '';
+    const g = GRP_SHORT[r.group] ? ` · ${GRP_SHORT[r.group]}` : '';
+    return lv === 'manage'
+      ? `<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold" title="ทำได้">✅ ${r.name}${g}</span>`
+      : `<span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] font-bold" title="ดูอย่างเดียว">👁️ ${r.name}${g}</span>`;
+  };
+
+  return `<div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-bold text-slate-900">สิทธิ์บัญชีและการเงิน (Functional Permission Matrix)</h2>
+    <button data-action="open-modal" data-type="fin-permission-edit" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100 transition-colors">${Icon.edit} วิธีแก้ไข Matrix</button>
+  </div>
+
+  <div class="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-4">
+    ${subTabs.map(t => `<button data-action="set-sub" data-parent="permissionSubTab" data-id="${t.id}" class="px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${state.permissionSubTab === t.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}">${t.label} (${store.financePermissions[t.id].length})</button>`).join('')}
+  </div>
+
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 mb-4 space-y-1">
+    <div><b>ระดับสิทธิ์ 3 ระดับ (ตามไฟล์ 25):</b> <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">✅ ทำได้</span> <span class="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">👁️ ดูอย่างเดียว</span> <span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold">— ไม่มีสิทธิ์ (ไม่แสดง)</span></div>
+    <div><b>Superadmin</b> มีสิทธิ์ทุกรายการโดยนิยาม — ไม่แสดงในตาราง · รายการ <span class="px-1.5 py-0.5 bg-slate-900 text-white rounded font-bold">🔒</span> = เฉพาะ Superadmin เท่านั้น (ไฟล์ 25 "✅ only") · storage: <span class="font-mono">capabilities + role_capabilities</span> (ไฟล์ 13 §6.10)</div>
+  </div>
+
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+    <table class="w-full text-left text-sm border-collapse">
+      <thead>
+        <tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs">
+          <th class="px-4 py-3 font-medium w-[42%]">ฟังก์ชันงาน (Functional Capability)</th>
+          <th class="px-4 py-3 font-medium">สิทธิ์การเข้าถึง (Role → ระดับ)</th>
+          <th class="px-4 py-3 font-medium text-right">จัดการ</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        ${currentPerms.map(p => `<tr class="hover:bg-slate-50">
+          <td class="px-4 py-3">
+            <div class="font-bold text-slate-800">${p.action}</div>
+            ${p.note ? `<div class="text-[10px] text-slate-400 mt-0.5">${p.note}</div>` : ''}
+          </td>
+          <td class="px-4 py-3">
+            <div class="flex flex-wrap gap-1">
+              ${p.superadminOnly
+                ? `<span class="px-2 py-0.5 bg-slate-900 text-white rounded text-[10px] font-bold">🔒 Superadmin เท่านั้น</span>`
+                : Object.entries(p.levels).map(([rid, lv]) => levelChip(rid, lv)).join('') || '<span class="text-[10px] text-slate-300">—</span>'}
+            </div>
+          </td>
+          <td class="px-4 py-3 text-right">
+            <button data-action="open-modal" data-type="edit-func-perm" data-id="${p.id}" class="text-slate-400 hover:text-slate-600 focus-ring">${Icon.edit}</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+function renderSettingsLock() {
+  return `<h2 class="text-lg font-bold text-slate-900 mb-4">การล็อกรอบและ Adjustment</h2>
+    <div class="space-y-4">
+    <div class="p-4 border rounded-lg bg-amber-50 border-amber-200 text-amber-900 text-sm"><b>Policy:</b> เมื่อรอบบัญชีถูก "รับรองส่งมอบ" แล้ว ห้ามแก้ source record โดยตรง ต้องสร้าง Adjustment ผ่าน Workflow แทนเท่านั้น</div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">สถานะรอบบัญชี</th><th class="px-4 py-3 font-medium">การแก้ไขเคสเดิม</th><th class="px-4 py-3 font-medium">ต้องใช้ Adjustment</th><th class="px-4 py-3 font-medium">ผู้อนุมัติปลดล็อก (ถ้ามี)</th></tr></thead><tbody class="divide-y divide-slate-100">
+      <tr><td class="px-4 py-3 font-bold">Collecting</td><td class="px-4 py-3">แก้ไขได้อิสระ</td><td class="px-4 py-3 text-slate-500">ไม่จำเป็น</td><td class="px-4 py-3">Finance Admin</td></tr>
+      <tr><td class="px-4 py-3 font-bold">Sent to Accountant</td><td class="px-4 py-3 text-amber-600">จำกัด</td><td class="px-4 py-3 font-medium">บางกรณี</td><td class="px-4 py-3">Finance Admin + Executive</td></tr>
+      <tr><td class="px-4 py-3 font-bold text-red-600">Locked</td><td class="px-4 py-3 text-red-600">แก้ไขไม่ได้</td><td class="px-4 py-3 font-bold text-rose-600">บังคับใช้ 100%</td><td class="px-4 py-3">Executive + ลง Audit Log</td></tr>
+    </tbody></table></div>
+  </div>`;
+}
+ 
+ 
+// ===================== MODALS =====================
+function renderModal() {
+  if (!state.modal) return '';
+  const { type, data } = state.modal;
+  let title = '', body = '', saveText = 'บันทึกข้อมูล';
+  const isEdit = data?.isEdit || false;
+  console.log('renderModal:', { type, data, isEdit });
+ 
+  // --- GENERAL SETTINGS FORMS ---
+  if (type === 'create-role') {
+    title = 'สร้าง Role ใหม่';
+    body = `<div class="space-y-4">${formInput('m_roleName', 'ชื่อ Role', '')}${formSelect('m_roleGroup', 'กลุ่มที่สังกัด', [{val:'system',text:'ระดับระบบ'},{val:'inhouse',text:'Inhouse'},{val:'outsource',text:'Outsource'},{val:'finance',text:'ไฟแนนซ์'}], 'system')}</div>`;
+  }
+  else if (type === 'edit-permission') {
+    const role = getRole(data.id) || {name: 'New Role'};
+    title = `กำหนดสิทธิ์ (Permissions) — ${role.name}`;
+    const perms = [
+      { cat: 'จัดการเคส (Cases)', items: ['สร้าง/นำเข้าเคส', 'แก้ไขข้อมูลเคส', 'ดูรายการเคสทั้งหมด', 'เปลี่ยนสถานะ/ปิดเคส'] },
+      { cat: 'ทีมติดตาม (Teams)', items: ['สร้างทีมใหม่', 'ระงับ/แก้ไขทีม', 'ดูรายการทีมทั้งหมด'] },
+      { cat: 'การเงิน (Finance)', items: ['จัดการเทมเพลตรับ/จ่าย', 'อนุมัติรายการจ่ายเงิน', 'ดูรายงานการเงิน'] },
+      { cat: 'ตั้งค่าระบบ', items: ['จัดการผู้ใช้งาน', 'จัดการ Role', 'จัดการบริษัทไฟแนนซ์'] }
+    ];
+    body = `<div class="space-y-4"><div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">ติ๊กเปิด-ปิดสิทธิ์สำหรับ Role <strong>${role.name}</strong></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${perms.map(p => `<div class="border border-slate-200 rounded-lg p-3 bg-slate-50"><div class="font-bold text-slate-800 text-sm mb-2 border-b border-slate-200 pb-1">${p.cat}</div><div class="flex flex-col gap-2 mt-2">${p.items.map(i => `<label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked class="rounded text-blue-600"> ${i}</label>`).join('')}</div></div>`).join('')}</div></div>`;
+  }
+  else if (type === 'create-team' || type === 'edit-team') {
+    const t = isEdit ? getTeam(data.id) : {};
+    title = isEdit ? 'แก้ไขทีม' : 'สร้างทีม';
+    body = `<div class="space-y-4">${formInput('m_teamName', 'ชื่อทีม', t?.name||'', 'text', '', true)}<div class="grid grid-cols-2 gap-4">${formSelect('m_teamSide', 'ฝั่ง (Group)', [{val:'inhouse',text:'Inhouse'},{val:'outsource',text:'Outsource'}], t?.side||'inhouse')}${formSelect('m_teamTemplate', 'แผนค่าตอบแทน', store.compTemplates.map(ct=>({val:ct.id,text:ct.name})), t?.compensationPlanId||store.compTemplates[0].id)}</div>
+      <div class="col-span-2 border-t border-slate-100 pt-3"><label class="block text-sm font-medium text-slate-700 mb-2">ระบุจังหวัดที่ดูแล (เลือกได้มากกว่า 1) <span class="text-red-500">*</span></label><div class="max-h-56 overflow-y-auto border border-slate-300 rounded-lg p-4 bg-slate-50 space-y-4">${PROVINCE_DATA.map(region => `<div><div class="font-bold text-slate-800 text-xs mb-2 border-b border-slate-200 pb-1">${region.region}</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-2">${region.provinces.map(p => `<label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"><input type="checkbox" name="m_teamProvinces" value="${p}" ${(t?.provinces||[]).includes(p)?'checked':''} class="rounded text-blue-600 focus-ring">${p}</label>`).join('')}</div></div>`).join('')}</div></div></div>`
+  }
+  else if (type === 'create-company' || type === 'edit-company') {
+    const c = isEdit ? getCompany(data.id) : {};
+    title = isEdit ? 'แก้ไขบริษัทไฟแนนซ์' : 'สร้างบริษัทไฟแนนซ์';
+    body = `<div class="space-y-4"><div class="grid grid-cols-2 gap-4"><div class="col-span-2">${formInput('m_compName', 'ชื่อบริษัท', c?.name||'', 'text', '', true)}</div>${formInput('m_compTax', 'เลขผู้เสียภาษี', c?.taxId||'')}${formInput('m_compPhone', 'เบอร์โทรบริษัท', c?.phone||'')}<div class="col-span-2 border-t border-slate-100 pt-3 mt-1"><h3 class="text-sm font-bold text-slate-800 mb-3">ผู้ติดต่อ และผู้ลงนาม</h3></div>${formInput('m_compContact', 'ชื่อผู้ติดต่อหลัก', c?.contactName||'')}${formInput('m_compContactPhone', 'เบอร์โทรผู้ติดต่อ', c?.contactPhone||'')}${formInput('m_compSigner', 'ชื่อผู้ลงนามสัญญา', c?.signer||'')}${formInput('m_compSignerPhone', 'เบอร์โทรผู้ลงนาม', c?.signerPhone||'')}<div class="col-span-2 border-t border-slate-100 pt-3 mt-1"><h3 class="text-sm font-bold text-slate-800 mb-3">การตั้งค่าบริการและเอกสารแนบ</h3></div><div class="col-span-2">${formSelect('m_compServiceTemplate', 'เทมเพลตค่าบริการที่เรียกเก็บ', store.serviceFeeTemplates.map(s=>({val:s.id,text:s.name + ' (' + s.model + ')'})), c?.serviceTplId||store.serviceFeeTemplates[0].id)}</div><div class="col-span-2 space-y-2 mt-2"><div><label class="block text-xs font-medium text-slate-500 mb-1">แนบ: เอกสารสัญญา (PDF)</label><input type="file" class="w-full text-sm text-slate-500 border border-slate-200 rounded p-1.5 bg-slate-50"></div><div><label class="block text-xs font-medium text-slate-500 mb-1">แนบ: เอกสารจดทะเบียนบริษัท</label><input type="file" class="w-full text-sm text-slate-500 border border-slate-200 rounded p-1.5 bg-slate-50"></div><div><label class="block text-xs font-medium text-slate-500 mb-1">แนบ: เอกสาร ภ.พ.20</label><input type="file" class="w-full text-sm text-slate-500 border border-slate-200 rounded p-1.5 bg-slate-50"></div></div></div></div>`
+  }
+  else if (type === 'create-user' || type === 'edit-user') {
+    const u = isEdit ? getUser(data.id) : {};
+    title = isEdit ? `แก้ไขผู้ใช้งาน — ${u?.name||''}` : 'สร้างผู้ใช้งาน';
+    const defaultGroup = isEdit ? u?.group : (state.usersSubTab === 'finance' ? 'finance' : (state.usersSubTab === 'admin' ? 'system' : 'inhouse'));
+    const rolesForGroup = store.roles.filter(r => r.group === (defaultGroup||'inhouse'));
+    body = `<div class="space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        ${formInput('m_userName', 'ชื่อ-นามสกุล', u?.name||'', 'text', '', true)}
+        ${formInput('m_userPhone', 'เบอร์โทรศัพท์', u?.phone||'', 'tel', '0XXXXXXXXX', true)}
+        <div class="col-span-2">${formInput('m_userEmail', 'อีเมล', u?.email||'', 'email', '', true, isEdit ? 'disabled' : '')}</div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">กลุ่มที่สังกัด <span class="text-red-500">*</span></label>
+          <select id="m_userGroup" onchange="window.handleUserGroupChange(this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <option value="system" ${defaultGroup==='system'?'selected':''}>ระดับระบบ</option>
+            <option value="inhouse" ${defaultGroup==='inhouse'?'selected':''}>Inhouse</option>
+            <option value="outsource" ${defaultGroup==='outsource'?'selected':''}>Outsource</option>
+            <option value="finance" ${defaultGroup==='finance'?'selected':''}>ไฟแนนซ์</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Role <span class="text-red-500">*</span></label>
+          <select id="m_userRole" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            ${rolesForGroup.map(r => `<option value="${r.id}" ${u?.roleId===r.id?'selected':''}>${r.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`;
+  }
+  else if (type === 'create-comp' || type === 'edit-comp') {
+    const ct = store.compTemplates.find(c=>c.id===data.id) || {rules:{}};
+    title = isEdit ? 'แก้ไขแผนค่าตอบแทน' : 'สร้างแผนค่าตอบแทน';
+    const fuelMode = ct.fuel?.mode || 'PER_KM';
+    body = `<div class="space-y-4">
+      ${formInput('m_ctName', 'ชื่อแผนค่าตอบแทน', ct.name||'', 'text', 'เช่น Standard Outsource v2', true)}
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">กลุ่มเป้าหมาย <span class="text-red-500">*</span></label>
+          <select id="m_ctType" onchange="document.getElementById('wht-wrap').classList.toggle('hidden', this.value==='inhouse')" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <option value="inhouse" ${ct.type==='inhouse'?'selected':''}>Inhouse (พนักงานในบริษัท)</option>
+            <option value="outsource" ${ct.type==='outsource'?'selected':''}>Outsource (รับเหมาภายนอก)</option>
+          </select>
+        </div>
+        <div id="wht-wrap" class="${ct.type==='inhouse'?'hidden':''}">
+          <label class="block text-xs font-bold text-slate-700 mb-1">อัตราหัก ณ ที่จ่าย (WHT)</label>
+          <select id="m_ctWhtRate" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <option value="0" ${!ct.wht||ct.whtPct===0?'selected':''}>ไม่หัก WHT</option>
+            <option value="1" ${ct.whtPct===1?'selected':''}>หัก 1%</option>
+            <option value="3" ${ct.wht&&(!ct.whtPct||ct.whtPct===3)?'selected':''}>หัก 3% (ค่าจ้างทำของ ม.40(8))</option>
+            <option value="5" ${ct.whtPct===5?'selected':''}>หัก 5%</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="border border-slate-200 rounded-lg p-4 space-y-3">
+        <div class="font-bold text-xs text-slate-600 uppercase tracking-wider mb-2">⛽ ค่าน้ำมัน</div>
+        <div class="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-3">
+          <button type="button" id="fuel-btn-pkm" onclick="window.switchFuelMode('PER_KM')"
+            class="px-3 py-1 rounded-md text-xs font-semibold transition-colors ${fuelMode==='PER_KM'?'bg-white shadow text-slate-900':'text-slate-500 hover:text-slate-700'}">
+            PER_KM (ตามระยะทาง)
+          </button>
+          <button type="button" id="fuel-btn-flat" onclick="window.switchFuelMode('DAILY_FLAT')"
+            class="px-3 py-1 rounded-md text-xs font-semibold transition-colors ${fuelMode==='DAILY_FLAT'?'bg-white shadow text-slate-900':'text-slate-500 hover:text-slate-700'}">
+            DAILY_FLAT (เหมาจ่ายต่อวัน)
+          </button>
+        </div>
+        <input type="hidden" id="m_ctFuelMode" value="${fuelMode}">
+
+        <div id="fuel-pkm-wrap" class="${fuelMode==='DAILY_FLAT'?'hidden':''} grid grid-cols-2 gap-3">
+          ${formInput('m_ctRatePerKm', 'อัตราค่าน้ำมัน (บาท/กม.)', ct.fuel?.ratePerKm??3.5, 'number', '0.00', true)}
+          <div>
+            ${formInput('m_ctMaxPerCase', 'เพดานสูงสุด/เคส (บาท)', ct.fuel?.maxPerCase??'', 'number', 'เว้นว่าง = ไม่จำกัด')}
+            <div class="text-[10px] text-slate-400 mt-1">สูตร: MIN(ระยะทาง × อัตรา, เพดาน) — ไฟล์ 11 §7.1 / 22 §6.1</div>
+          </div>
+        </div>
+        <div id="fuel-flat-wrap" class="${fuelMode==='PER_KM'?'hidden':''}">
+          ${formInput('m_ctDailyFlat', 'เหมาจ่ายค่าน้ำมัน (บาท/วัน)', ct.fuel?.dailyFlatRate??250, 'number', '0', true)}
+          <div class="text-[10px] text-slate-400 mt-1">ไม่คำนวณระยะทาง — จ่ายคงที่ทุกวันที่ลงพื้นที่</div>
+        </div>
+      </div>
+
+      <div class="border border-slate-200 rounded-lg p-4 space-y-3">
+        <div class="font-bold text-xs text-slate-600 uppercase tracking-wider mb-1">💰 ค่าตอบแทนประเภทอื่น</div>
+        <div class="grid grid-cols-2 gap-3">
+          ${formInput('m_ctAllow', 'เบี้ยเลี้ยง (บาท/วัน)', ct.allowance??150, 'number', '0')}
+          <div>
+            ${formInput('m_ctHotel', 'ที่พักสูงสุด (บาท/คืน)', ct.hotel?.maxPerNight??800, 'number', '0')}
+            <label class="flex items-center gap-1.5 mt-1.5 text-xs text-slate-600 cursor-pointer">
+              <input type="checkbox" id="m_ctReceipt" ${ct.hotel?.receiptRequired?'checked':''} class="rounded text-blue-600"> บังคับแนบใบเสร็จค่าที่พัก
+            </label>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+          <div>
+            ${formInput('m_ctCommission', 'Commission — ปิดสำเร็จ (บาท/เคส)', ct.commission??500, 'number', '0', true)}
+            <div class="text-[10px] text-emerald-600 font-semibold mt-1">✅ จ่ายเมื่อ outcome = closed_success เท่านั้น</div>
+          </div>
+          <div>
+            ${formInput('m_ctNoSuccess', 'เบี้ยเสี่ยง — ไม่สำเร็จ (บาท/เคส)', ct.noSuccessFee??100, 'number', '0', true)}
+            <div class="text-[10px] text-amber-600 font-semibold mt-1">🔄 จ่ายเมื่อ outcome = closed_fail เท่านั้น (ไม่ได้รับทั้งคู่พร้อมกัน)</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+  // ============ ข้อมูลองค์กร Modals ============
+  else if (type === 'edit-org-profile') {
+    const org = store.orgProfile;
+    title = 'แก้ไขข้อมูลองค์กร';
+    saveText = 'บันทึก';
+    body = `<div class="space-y-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+        ⚠️ ข้อมูลนี้ปรากฏบนใบกำกับภาษีทุกฉบับ — มีผลกับเอกสารที่ออกหลังจากบันทึกเท่านั้น · สิทธิ์: Superadmin เท่านั้น
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2">${formInput('org_name', 'ชื่อนิติบุคคลเต็ม', org.name, 'text', 'บริษัท xxx จำกัด', true)}</div>
+        ${formInput('org_taxId', 'เลขประจำตัวผู้เสียภาษี (13 หลัก)', org.taxId, 'text', '0000000000000', true)}
+        ${formInput('org_phone', 'เบอร์โทรสำนักงาน', org.phone, 'tel', '02-xxx-xxxx', true)}
+        <div class="col-span-2">${formInput('org_email', 'อีเมลองค์กร', org.email, 'email', '')}</div>
+        <div class="col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">ที่อยู่ตามที่จดทะเบียน <span class="text-red-500">*</span></label><textarea id="org_address" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">${org.address}</textarea></div>
+        <div class="flex items-center gap-3 col-span-2 pt-1">
+          <label class="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+            <input type="checkbox" id="org_vat" ${org.vatRegistered ? 'checked' : ''} class="rounded text-blue-600 focus-ring"> จดทะเบียนภาษีมูลค่าเพิ่ม (VAT)
+          </label>
+        </div>
+      </div>
+    </div>`;
+  }
+  else if (type === 'upload-logo') {
+    title = 'อัปโหลดโลโก้บริษัท';
+    saveText = 'บันทึกโลโก้';
+    body = `<div class="space-y-4">
+      <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+        <svg class="w-10 h-10 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <div class="font-semibold text-slate-600 mb-1">คลิกหรือลากไฟล์รูปมาวางที่นี่</div>
+        <div class="text-xs text-slate-400">PNG / JPG / SVG · ขนาดแนะนำ 400×400 px · ไฟล์ไม่เกิน 2 MB</div>
+        <input type="file" accept="image/*" class="mt-3 text-sm text-slate-500">
+      </div>
+      <div class="text-xs text-slate-500">โลโก้จะปรากฏบนใบกำกับภาษี ใบเสร็จรับเงิน และเอกสาร PDF ทั้งหมดที่ระบบสร้าง</div>
+    </div>`;
+  }
+  else if (type === 'create-sf' || type === 'edit-sf') {
+    const sf = store.serviceFeeTemplates.find(s=>s.id===data.id) || {};
+    const sfType = sf.model || 'SUCCESS_FEE';
+    title = isEdit ? 'แก้ไขเทมเพลตค่าบริการ' : 'สร้างเทมเพลตค่าบริการ';
+    body = `<div class="space-y-4">${formInput('m_sfName', 'ชื่อเทมเพลตค่าบริการ', sf.name||'', 'text', '', true)}<div><label class="block text-sm font-medium text-slate-700 mb-1">โมเดลเก็บเงิน (Pricing Model) <span class="text-red-500">*</span></label><select id="m_sfType" onchange="window.handleSfChange(this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option value="FLAT" ${sfType==='FLAT'?'selected':''}>Flat Rate (เหมาจ่ายรายเคส)</option><option value="SUCCESS_FEE" ${sfType==='SUCCESS_FEE'?'selected':''}>Success Fee (% ความสำเร็จ)</option><option value="HYBRID" ${sfType==='HYBRID'?'selected':''}>Hybrid (ผสม)</option></select></div><div id="sf-base-wrap" class="${sfType==='SUCCESS_FEE'?'hidden':''} bg-slate-50 p-3 rounded-lg border border-slate-200"><label class="block text-sm font-medium text-slate-700 mb-1">ค่าดำเนินการคงที่ (Base Fee) - บาท</label><input type="number" id="m_sfBase" value="${sf.base||0}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div><div id="sf-success-wrap" class="${sfType==='FLAT'?'hidden':''} grid grid-cols-2 gap-4 bg-emerald-50 p-3 rounded-lg border border-emerald-200"><div><label class="block text-sm font-medium text-emerald-900 mb-1">อัตราความสำเร็จ (%)</label><input type="number" id="m_sfSuccessRate" value="${sf.rate||0}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div><div><label class="block text-sm font-medium text-emerald-900 mb-1">ฐานคำนวณ</label><select id="m_sfSuccessBasis" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option value="มูลค่าหนี้คงเหลือ" ${sf.basis==='มูลค่าหนี้คงเหลือ'?'selected':''}>มูลค่าหนี้คงเหลือ</option><option value="มูลค่าเครื่อง" ${sf.basis==='มูลค่าเครื่อง'?'selected':''}>มูลค่าเครื่อง</option></select></div></div></div>`;
+  }
+  else if (type === 'audit-filter-export') {
+    title = 'ตัวกรองและส่งออกข้อมูล (Audit Log)'; saveText = 'ดาวน์โหลดไฟล์ CSV';
+    body = `<div class="space-y-4"><div><label class="block text-sm font-bold text-slate-700 mb-1">ช่วงเวลาที่ต้องการ Export</label><div class="grid grid-cols-2 gap-3"><input type="date" class="border border-slate-300 rounded-lg px-3 py-2 text-sm"><input type="date" class="border border-slate-300 rounded-lg px-3 py-2 text-sm"></div></div></div>`;
+  }
+ 
+  // --- FINANCE OPERATIONS REAL WORKFLOW FORMS ---
+  else if (type === 'action-approve-claim') {
+    title = 'อนุมัติรายการเบิก (Approve Claim)';
+    const claim = store.claims.find(c=>c.id===data.id) || store.claims[0];
+    body = `<div class="space-y-4">
+      <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-lg flex justify-between items-center">
+        <div><div class="text-[10px] font-bold text-emerald-800 uppercase mb-1">ยอดเงินขอเบิก</div><div class="font-bold text-slate-900 text-sm">${claim.type} - ${claim.user}</div></div>
+        <div class="text-right"><div class="text-xl font-extrabold text-emerald-700">฿ ${money(claim.amount)}</div></div>
+      </div>
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">หมายเหตุการอนุมัติ (ถ้ามี)</label><textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="2" placeholder="อธิบายเพิ่มเติม..."></textarea></div>
+      <div class="text-xs text-slate-500 bg-slate-50 p-3 rounded border">ระบบจะทำการล็อกยอดนี้และส่งต่อไปยังรอบจ่ายเงิน (Payout) ถัดไปโดยอัตโนมัติ</div>
+    </div>`;
+  }
+  else if (type === 'action-reject-claim') {
+    title = 'ปฏิเสธรายการเบิก (Reject Claim)';
+    saveText = 'ยืนยันการปฏิเสธ';
+    body = `<div class="space-y-4">
+      <div><label class="block text-xs font-bold text-slate-700 mb-1 text-red-600">เหตุผลที่ปฏิเสธ <span class="text-red-500">*</span></label><textarea class="w-full border border-red-300 focus:border-red-500 focus:ring-red-500 rounded-lg px-3 py-2 text-sm" rows="3" placeholder="ระบุเหตุผลเพื่อให้ผู้เบิกแก้ไข..."></textarea></div>
+    </div>`;
+  }
+  else if (type === 'action-clear-advance') {
+    title = 'เคลียร์เงินทดรองจ่าย (Clear Advance)';
+    saveText = 'บันทึกการเคลียร์ยอด';
+    const adv = store.advances.find(a=>a.id===data.id) || store.advances[0];
+    body = `<div class="space-y-4">
+      <div class="grid grid-cols-3 gap-3 mb-4">
+        <div class="bg-slate-50 p-3 rounded border"><div class="text-[10px] text-slate-500 font-bold uppercase">ยอดยืม</div><div class="font-bold">฿ ${money(adv.request)}</div></div>
+        <div class="bg-blue-50 p-3 rounded border border-blue-100"><div class="text-[10px] text-blue-500 font-bold uppercase">แจ้งใช้จริง</div><div class="font-bold text-blue-700">฿ ${money(adv.used)}</div></div>
+        <div class="bg-emerald-50 p-3 rounded border border-emerald-100"><div class="text-[10px] text-emerald-500 font-bold uppercase">ยอดต้องคืน</div><div class="font-bold text-emerald-700">฿ ${money(adv.returnAmount)}</div></div>
+      </div>
+      ${formSelect('ca_status', 'สถานะการเคลียร์', [{val:'1',text:'รับเงินสดคืนเรียบร้อย'},{val:'2',text:'รับโอนคืนเรียบร้อย'},{val:'3',text:'หักจากรอบจ่ายรอบหน้า'}], '2')}
+      ${formInput('ca_ref', 'อ้างอิงการรับเงิน (ถ้ามีโอนคืน)', '', 'text', 'เช่น Ref ธนาคาร')}
+    </div>`;
+  }
+  else if (type === 'advance-form') {
+    title = 'ขอเบิกเงินทดรองจ่าย (Advance Request)'; saveText = 'ส่งคำขออนุมัติ';
+    body = `<div class="space-y-4"><div class="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-800">กรุณาเคลียร์ยอดเดิมก่อนการเบิกยอดใหม่เสมอ</div><div class="grid grid-cols-2 gap-4"><div class="col-span-2">${formInput('adv_amt', 'ยอดเงินที่ขอเบิก (บาท)', '', 'number', '0.00', true)}</div><div class="col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">วัตถุประสงค์ <span class="text-red-500">*</span></label><textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="2"></textarea></div>${formInput('adv_ref', 'อ้างอิงเคส (ถ้ามี)', '', 'text', 'CASE-XX-XXXX')}${formInput('adv_date', 'กำหนดเคลียร์ยอด', '', 'date', '')}</div></div>`;
+  }
+  else if (type === 'create-payout') {
+    title = 'สร้างรอบจ่ายเงิน (Create Payout Batch)';
+    body = `<div class="space-y-4">${formSelect('po_group', 'ฝั่งของรอบการจ่าย', [{val:'out',text:'Outsource'},{val:'in',text:'Inhouse'}], 'out')}${formInput('po_date', 'วันสิ้นสุดการตัดรอบ (Cut-off Date)', '', 'date', '', true)}<div class="bg-blue-50 border border-blue-200 p-3 rounded-lg mt-2 text-xs text-blue-800">ระบบจะดึงรายการที่คำนวณและอนุมัติเสร็จสิ้นแล้ว จนถึงวันที่ตัดรอบ มารวมใน Batch นี้โดยอัตโนมัติ</div></div>`;
+  }
+  else if (type === 'payee-form') {
+    title = isEdit ? 'แก้ไข Payee Profile' : 'เพิ่ม Payee Profile';
+    body = `<div class="space-y-4"><div class="grid grid-cols-2 gap-4"><div class="col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">ประเภท</label><div class="flex gap-4 mt-1"><label class="text-sm"><input type="radio" name="py_type" checked> บุคคลธรรมดา</label><label class="text-sm"><input type="radio" name="py_type"> นิติบุคคล</label></div></div><div class="col-span-2">${formInput('py_name', 'ชื่อ-นามสกุล / ชื่อบริษัท', '', 'text', 'ตามหน้าสมุดบัญชี', true)}</div>${formInput('py_tax', 'Tax ID', '', 'text', '')}${formSelect('py_wht', 'อัตราหัก WHT', [{val:'3',text:'3%'},{val:'1',text:'1%'},{val:'0',text:'ไม่หัก'}], '3')}<div class="col-span-2 border-t border-slate-100 pt-3"><h3 class="font-bold text-sm mb-2">ข้อมูลธนาคาร</h3></div>${formSelect('py_bank', 'ธนาคาร', [{val:'kbank',text:'กสิกรไทย'},{val:'scb',text:'ไทยพาณิชย์'}], 'kbank')}${formInput('py_acc', 'เลขที่บัญชี', '', 'text', '', true)}</div></div>`;
+  }
+  else if (type === 'payment-file') {
+    title = 'สร้างไฟล์โอนเงินธนาคาร (Bank Payment File)'; saveText = 'ดาวน์โหลดไฟล์ (CSV/TXT)';
+    body = `<div class="space-y-4"><div class="grid grid-cols-2 gap-4">${formSelect('pf_bank', 'เลือกรูปแบบธนาคารต้นทาง', [{val:'1',text:'KBank (K-Cash Connect)'},{val:'2',text:'SCB (Business Net)'}], '1')}${formSelect('pf_acc', 'เลือกบัญชีบริษัทที่จ่าย', [{val:'1',text:'บจก. ใจดี โมบาย (***9876)'}], '1')}<div class="col-span-2 bg-slate-50 border rounded-lg p-4 flex justify-between items-center"><div><div class="text-xs text-slate-500 mb-1">จำนวนรายการทั้งหมด</div><div class="font-bold text-lg">12 รายการ</div></div><div class="text-right"><div class="text-xs text-slate-500 mb-1">ยอดเงินสุทธิเตรียมโอน</div><div class="font-bold text-emerald-700 text-xl">฿ 43,650</div></div></div></div><div class="text-xs text-slate-500 border p-3 rounded-lg flex gap-2"><span class="text-blue-500">${Icon.check}</span> ระบบจะสร้างไฟล์เข้ารหัสและแนบ Idempotency Key ป้องกันการนำไฟล์ไปอัปโหลดซ้ำสองครั้งอัตโนมัติ</div></div>`;
+  }
+  else if (type === 'billing-file') {
+    title = 'สร้างเอกสารวางบิล (Billing Documents)'; saveText = 'สร้างและดาวน์โหลด';
+    body = `<div class="space-y-4 text-sm"><p class="text-slate-600 mb-2">เลือกประเภทเอกสารที่ต้องการจัดเตรียมสำหรับรอบบิลนี้:</p><div class="grid grid-cols-1 gap-3"><label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50"><input type="checkbox" checked class="mt-1 rounded text-blue-600 focus-ring"><div><div class="font-bold text-sm">ใบแจ้งหนี้ (Invoice) / ใบส่งมอบงาน - PDF</div><div class="text-xs text-slate-500">แยกตามรูปแบบภาษีมูลค่าเพิ่มที่ตั้งไว้ล่วงหน้า</div></div></label><label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50"><input type="checkbox" checked class="mt-1 rounded text-blue-600 focus-ring"><div><div class="font-bold text-sm">รายงานสรุปผลงานแนบบิล - Excel</div><div class="text-xs text-slate-500">รายละเอียดเคสที่ตามสำเร็จและค่าบริการรายตัว</div></div></label></div></div>`;
+  }
+  else if (type === 'revenue-calc-detail') {
+    title = 'รายละเอียดการคำนวณรายได้ (Revenue Calculation)'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm">
+      <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg flex justify-between items-center">
+        <div><div class="text-[10px] font-bold text-blue-800 uppercase mb-1">CASE-26-0012</div><div class="font-bold text-slate-900 text-sm">บริษัท สยามไฟแนนซ์ จำกัด</div></div>
+        <div class="text-right"><div class="text-[10px] text-slate-500 uppercase font-bold">ยอดรายได้</div><div class="text-xl font-extrabold text-blue-700">฿ 7,500</div></div>
+      </div>
+      <div class="border rounded-lg overflow-hidden bg-white"><table class="w-full text-left"><thead class="bg-slate-50 text-xs border-b"><tr><th class="px-3 py-2">ปัจจัยการคิด</th><th class="px-3 py-2 text-right">ค่าที่ใช้คำนวณ</th></tr></thead><tbody class="divide-y divide-slate-100"><tr><td class="px-3 py-2">Model ที่ใช้</td><td class="px-3 py-2 text-right font-medium">SUCCESS_FEE (10%)</td></tr><tr><td class="px-3 py-2">ฐานคำนวณ (ยอดหนี้คงเหลือ)</td><td class="px-3 py-2 text-right">75,000 บาท</td></tr><tr><td class="px-3 py-2">สูตรคำนวณ</td><td class="px-3 py-2 text-right font-mono text-xs">75,000 * 0.10</td></tr></tbody></table></div>
+    </div>`;
+  }
+  else if (type === 'profit-drilldown') {
+    title = `วิเคราะห์กำไร - ${data.id}`; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm">
+      <div class="grid grid-cols-2 gap-4"><div class="bg-slate-50 p-4 border rounded"><div class="text-xs text-slate-500 mb-1">Revenue</div><div class="font-bold text-lg text-emerald-700">฿ 105,000</div></div><div class="bg-slate-50 p-4 border rounded"><div class="text-xs text-slate-500 mb-1">Cost Breakdown</div><div class="text-xs text-slate-700">ค่าน้ำมัน: ฿ 12,000<br>คอมมิชชั่น: ฿ 40,000</div></div></div>
+    </div>`;
+  }
+  else if (type === 'manual-match') {
+    title = 'จับคู่รายการธนาคารแบบ Manual (Reconciliation)'; saveText = 'ยืนยันการจับคู่';
+    body = `<div class="space-y-4"><div class="bg-blue-50 border border-blue-200 p-4 rounded-lg flex justify-between items-center"><div><div class="text-[10px] font-bold text-blue-800 uppercase mb-1">Bank Statement Transaction</div><div class="font-bold text-slate-900 text-sm">รับโอน ไม่ทราบที่มา</div><div class="font-mono text-xs text-slate-500 mt-0.5">KBANK-TRX-002 • 22/06/2569</div></div><div class="text-right"><div class="text-[10px] text-slate-500 uppercase font-bold">ยอดเงินเข้า</div><div class="text-xl font-extrabold text-emerald-600">+12,500 ฿</div></div></div>${formSelect('mm_target', 'เลือกรายการที่ต้องการจับคู่ (Match With)', [{val:'',text:'-- พิมพ์ค้นหารหัสบิล (BB) หรือเคส (RV) --'},{val:'1',text:'BB-001 : บริษัท สยามไฟแนนซ์ จำกัด (ยอด 75,000)'},{val:'2',text:'ไม่พบในระบบ (ปรับปรุงรายได้อื่นๆ)'}], '')}<div><label class="block text-xs font-bold text-slate-700 mb-1">หมายเหตุชี้แจง (ถ้ายอดไม่ตรงกัน)</label><textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="2" placeholder="อธิบายสาเหตุ..."></textarea></div></div>`;
+  }
+  else if (type === 'import-statement') {
+    title = 'นำเข้า Bank Statement'; saveText = 'อัปโหลดและประมวลผล';
+    body = `<div class="space-y-4">${formSelect('is_bank', 'เลือกบัญชีธนาคาร', [{val:'1',text:'กสิกรไทย - บจก. ใจดี โมบาย (***9876)'}], '1')}<div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"><div class="text-slate-400 flex justify-center mb-2">${Icon.download}</div><div class="font-bold text-slate-700 text-sm mb-1">คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่</div><div class="text-xs text-slate-500">รองรับไฟล์ CSV จากธนาคารที่ตั้งค่าไว้เท่านั้น</div></div></div>`;
+  }
+  else if (type === 'export-pack') {
+    title = 'ส่งออก Accounting Pack'; saveText = 'ดาวน์โหลดไฟล์ (.zip)';
+    body = `<div class="space-y-4"><div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-900 leading-relaxed font-medium">ระบบจะรวบรวมไฟล์ข้อมูลเป็นชุด (Pack) สำหรับรอบบัญชีนี้ <br>หากระบบตรวจพบ <b class="text-red-600">Critical Exceptions</b> จะต้องแก้ไขก่อนส่งมอบ เพื่อป้องกันงบการเงินคลาดเคลื่อน</div><div class="border border-slate-200 rounded-lg p-4 bg-white"><div class="font-bold text-sm text-slate-800 mb-3 border-b border-slate-100 pb-2">สิ่งที่อยู่ในไฟล์ที่ดาวน์โหลด:</div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 font-mono"><div>📄 01_Revenue.csv</div><div>📄 02_Cash_Receipts.csv</div><div>📄 03_Expenses.csv</div><div>📄 04_Payments.csv</div><div>📄 05_WHT_Data.csv</div><div>📄 06_Bank_Reconciliation.csv</div><div class="col-span-2 pt-2 text-green-700">📊 08_Document_Checklist.xlsx</div></div></div></div>`;
+  }
+  else if (type === 'accounting-checklist') {
+    title = 'ตรวจสอบความพร้อมก่อนส่งบัญชี'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm">
+      <div class="bg-slate-50 p-4 border rounded-lg"><div class="font-bold mb-2">Checklist สถานะข้อมูล</div>
+        <ul class="space-y-2">
+          <li class="flex items-center gap-2 text-emerald-600">${Icon.check} ตรวจสอบยอดบิลกับรายได้ (ตรงกัน)</li>
+          <li class="flex items-center gap-2 text-emerald-600">${Icon.check} Bank Reconcile (จับคู่ครบ 100%)</li>
+          <li class="flex items-center gap-2 text-amber-600">⚠️ มีเอกสาร Claim ขาด 1 รายการ (Warning)</li>
+        </ul>
+      </div>
+    </div>`;
+  }
+  else if (type === 'download-wht-cert') {
+    title = 'หนังสือรับรองการหัก ณ ที่จ่าย (50 ทวิ)'; saveText = 'ดาวน์โหลด PDF';
+    body = `<div class="space-y-4 text-sm text-center py-6">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-blue-600 mb-4">${Icon.file}</div>
+      <div class="font-bold text-lg text-slate-800">สร้างเอกสาร 50 ทวิ สำเร็จแล้ว</div>
+      <p class="text-slate-500 text-xs">ระบบเตรียมไฟล์ PDF เรียบร้อยและพร้อมสำหรับการดาวน์โหลดนำส่ง</p>
+    </div>`;
+  }
+  else if (type === 'qa-form') {
+    title = 'สร้างข้อซักถามถึงสำนักงานบัญชี (New QA)'; saveText = 'ส่งข้อซักถาม';
+    body = `<div class="space-y-4">${formSelect('qa_topic', 'เลือกหัวข้อหลัก', [{val:'1',text:'เอกสารไม่สมบูรณ์'},{val:'2',text:'รายการเงินโอนไม่ทราบที่มา'},{val:'3',text:'อื่นๆ'}], '1')}<div><label class="block text-xs font-bold text-slate-700 mb-1">คำถาม / ข้อสงสัย <span class="text-red-500">*</span></label><textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="3" placeholder="ระบุสิ่งที่ต้องการให้สำนักงานบัญชีตรวจสอบ..."></textarea></div><div class="grid grid-cols-2 gap-4">${formInput('qa_ref', 'อ้างอิงเอกสาร (Ref)', '', 'text', 'เช่น BT-002')}${formInput('qa_due', 'กำหนดตอบกลับ', '', 'date')}</div></div>`;
+  }
+  else if (type === 'qa-answer') {
+    title = 'ตอบข้อซักถาม (Reply QA)'; saveText = 'ส่งคำตอบ';
+    body = `<div class="space-y-4"><div class="bg-slate-50 p-4 rounded-lg border border-slate-200"><div class="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">คำถามเดิม (จากสำนักงานบัญชี)</div><div class="font-medium text-slate-800 text-sm">เงินเข้า 12,500 บาท เมื่อวันที่ 22/06/2569 (Ref: BT-002) มาจากบริษัทใด? รบกวนระบุเพื่อตั้งรับ AR ให้ถูกต้องค่ะ</div></div><div><label class="block text-xs font-bold text-slate-700 mb-1">พิมพ์คำตอบชี้แจง <span class="text-red-500">*</span></label><textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="4" placeholder="พิมพ์คำตอบ..."></textarea></div></div>`;
+  }
+ 
+  // --- FINANCE MASTER SETTINGS FORMS ---
+  else if (type === 'fin-cycle-form') {
+    title = isEdit ? 'แก้ไขรอบบิล/รอบจ่าย' : 'สร้างรอบบิล/รอบจ่าย (Cycle)';
+    body = `<div class="space-y-4">${formInput('fc_name', 'ชื่อรอบ', isEdit ? 'AR รอบวางบิลหลัก' : '', 'text', '', true)}<div class="grid grid-cols-2 gap-4">${formSelect('fc_type', 'ฝั่ง (AP/AR)', [{val:'AR',text:'AR (รับเงิน/วางบิล)'},{val:'AP',text:'AP (จ่ายเงิน)'}], 'AR')}${formInput('fc_scope', 'Scope (กลุ่มที่ใช้กฎนี้)', isEdit ? 'ทุกไฟแนนซ์' : '', 'text', 'เช่น ทีม Outsource')}${formInput('fc_cutoff', 'วันตัดรอบ (Cut-off Date)', isEdit ? 'ทุกวันที่ 15 และ 30' : '', 'text', '', true)}${formInput('fc_due', 'เงื่อนไขการรับ/จ่าย (Due Date)', isEdit ? 'Net 30 Days' : '', 'text', '', true)}</div></div>`;
+  }
+  else if (type === 'fin-approval-form') {
+    title = isEdit ? 'แก้ไข Approval Matrix' : 'สร้างกติกาการอนุมัติ (Approval Matrix)';
+    body = `<div class="space-y-4">${formSelect('fa_module', 'โมดูลที่บังคับใช้', [{val:'1',text:'Claims & Advances'},{val:'2',text:'Payout Batch'},{val:'3',text:'Adjustment'}], '1')}${formInput('fa_condition', 'เงื่อนไข (Condition)', isEdit ? 'ยอดเบิก < 5,000 บาท' : '', 'text', 'เช่น ยอดเบิกเกิน 5000', true)}<div class="border-t border-slate-100 pt-3"><label class="block text-xs font-bold text-slate-700 mb-2">สายการอนุมัติ (ลำดับ Workflow) <span class="text-red-500">*</span></label><div class="space-y-2"><div class="flex items-center gap-2"><span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">Step 1</span>${formSelect('fa_s1','',[{val:'m',text:'Manager'},{val:'f',text:'Finance Admin'},{val:'e',text:'Executive'}],'m')}</div><div class="flex items-center gap-2"><span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold">Step 2</span>${formSelect('fa_s2','',[{val:'m',text:'Manager'},{val:'f',text:'Finance Admin'},{val:'e',text:'Executive'}],'f')}</div></div></div></div>`;
+  }
+  else if (type === 'fin-bank-form') {
+    title = isEdit ? 'แก้ไขบัญชีธนาคารบริษัท' : 'เพิ่มบัญชีธนาคารบริษัท (Corporate Bank)';
+    body = `<div class="space-y-4"><div class="grid grid-cols-2 gap-4">${formSelect('fb_bank', 'ธนาคาร', [{val:'kbank',text:'กสิกรไทย (KBank)'},{val:'scb',text:'ไทยพาณิชย์ (SCB)'}], 'kbank')}${formSelect('fb_use', 'วัตถุประสงค์การใช้', [{val:'1',text:'รับ/จ่าย'},{val:'2',text:'รับเงินเท่านั้น'},{val:'3',text:'จ่ายเงินเท่านั้น'}], '1')}<div class="col-span-2">${formInput('fb_accname', 'ชื่อบัญชี', isEdit ? 'บริษัท ใจดี โมบาย จำกัด' : '', 'text', '', true)}</div>${formInput('fb_accno', 'เลขที่บัญชี', isEdit ? '123-4-56789-0' : '', 'text', '', true)}${formInput('fb_branch', 'สาขา', isEdit ? 'สาขาสุขุมวิท' : '', 'text', '')}<div class="col-span-2 border-t border-slate-100 pt-3"><label class="block text-xs font-bold text-slate-700 mb-1">รูปแบบไฟล์รับ/จ่าย (Integration Format)</label></div>${formSelect('fb_fmt_out', 'Payment File Format', [{val:'1',text:'K-Cash Connect'},{val:'2',text:'SCB Business Net'}], '1')}${formSelect('fb_fmt_in', 'Statement Import Format', [{val:'1',text:'CSV K-Cash Standard'}], '1')}</div></div>`;
+  }
+  else if (type === 'fin-tax-form') {
+    title = isEdit ? 'แก้ไข Tax Profile' : 'เพิ่ม Tax Profile ใหม่';
+    body = `<div class="space-y-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">⚠️ การแก้ไขกระทบยอดภาษีทุกรายการที่ใช้ profile นี้ — ต้องระบุเหตุผลในการบันทึก audit</div>
+      ${formInput('ft_name', 'ชื่อ Profile', isEdit ? 'ค่าบริการ Outsource (บุคคล)' : '', 'text', '', true)}
+      ${formSelect('ft_applies', 'ใช้กับ (Applies To)', [{val:'outsource_individual',text:'Outsource บุคคลธรรมดา'},{val:'outsource_corporate',text:'Outsource นิติบุคคล'},{val:'all',text:'ทั้งหมด'}], 'outsource_individual')}
+      <div class="grid grid-cols-2 gap-4">
+        ${formSelect('ft_vat', 'VAT Mode', [{val:'no_vat',text:'No VAT (ไม่มี VAT)'},{val:'exclude_vat',text:'Exclude VAT (แยก VAT)'},{val:'include_vat',text:'Include VAT (รวม VAT)'}], 'no_vat')}
+        ${formSelect('ft_wht', 'อัตราหัก ณ ที่จ่าย (WHT %)', [{val:'3',text:'3%'},{val:'1',text:'1%'},{val:'5',text:'5%'},{val:'0',text:'0% (ไม่หัก)'}], '3')}
+        ${formSelect('ft_basis', 'ฐานหักภาษี', [{val:'before_vat',text:'ก่อน VAT (before_vat)'},{val:'after_vat',text:'หลัง VAT (after_vat)'}], 'before_vat')}
+        ${formInput('ft_threshold', 'วงเงินขั้นต่ำที่หัก WHT (บาท)', '1000', 'number', '1000')}
+      </div>
+    </div>`;
+  }
+  else if (type === 'fin-cost-form') {
+    title = data.id ? 'แก้ไข Cost Center' : 'สร้าง Cost Center ใหม่';
+    body = `<div class="space-y-4">${formInput('fc_code', 'Cost Center Code', data.id ? (store.finSettings.centers.find(c=>c.id===data.id)||{}).code||'CC-001' : '', 'text', 'เช่น CC-004', true)}${formInput('fc_name', 'ชื่อแผนก / สาขา', data.id ? (store.finSettings.centers.find(c=>c.id===data.id)||{}).name||'' : '', 'text', '', true)}${formSelect('fc_map', 'การ Mapping แบบอัตโนมัติ', [{val:'auto',text:'Auto Mapping (ระบบจัดสรรตาม User/Team)'},{val:'manual',text:'Manual Only'}], 'auto')}</div>`;
+  }
+  else if (type === 'fin-vat-form') {
+    title = data.id ? 'แก้ไขอัตรา VAT' : 'เพิ่มอัตรา VAT ใหม่';
+    body = `<div class="space-y-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">⚠️ ช่วงวันที่ต้องไม่ทับซ้อนกับอัตราที่มีอยู่ (VAT_RATE_OVERLAP)</div>
+      <div class="grid grid-cols-2 gap-4">
+        ${formInput('vr_rate', 'อัตรา VAT (%)', '7', 'number', 'เช่น 7', true)}
+        ${formInput('vr_from', 'มีผลตั้งแต่วันที่', '', 'date', '', true)}
+        ${formInput('vr_to', 'สิ้นสุดวันที่ (ว่างหมายถึงยังไม่กำหนด)', '', 'date', '')}
+      </div>
+    </div>`;
+  }
+  else if (type === 'fin-numbering-form') {
+    const n = store.finSettings.taxInvoiceNumbering || {};
+    title = 'แก้ไขการตั้งเลขที่ใบกำกับภาษี';
+    body = `<div class="space-y-4">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800 font-semibold">⚠️ เปลี่ยนแปลงได้เฉพาะ Superadmin — กระทบเลขเอกสารตามกฎหมาย</div>
+      ${formSelect('nb_mode', 'รูปแบบการนับ', [{val:'yearly_reset',text:'Reset ทุกปีบัญชี (แนะนำ)'},{val:'continuous',text:'ต่อเนื่องตลอดไป'}], n.mode||'yearly_reset')}
+      <div class="grid grid-cols-2 gap-4">
+        ${formInput('nb_prefix', 'Prefix', n.prefix||'INV-', 'text', 'เช่น INV-')}
+        ${formInput('nb_digits', 'ความยาวตัวเลข (หลัก)', n.digitLength||4, 'number', 'เช่น 4')}
+      </div>
+    </div>`;
+  }
+  else if (type === 'suspend-company') {
+    const c = store.companies.find(co => co.id === data.id) || {};
+    title = `ระงับการใช้งาน: ${c.name}`;
+    saveText = 'ยืนยันระงับ';
+    body = `<div class="space-y-4">
+      <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">⚠️ บริษัทนี้จะไม่สามารถส่งเคสใหม่เข้าระบบได้จนกว่าจะเปิดใช้งาน</div>
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">เหตุผลที่ระงับ <span class="text-red-500">*</span></label>
+      <textarea id="suspend_reason" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="3" placeholder="ระบุเหตุผล..."></textarea></div>
+    </div>`;
+  }
+  // --- FINANCE FORMS ---
+  else if (type === 'comp-calc-detail') {
+    title = 'สูตรคำนวณค่าตอบแทน'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm"><div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs"><b>เคส:</b> CASE-26-0012 | <b>ทีม:</b> ทีม A | <b>ประเภท:</b> ค่าน้ำมัน</div><div class="border border-slate-200 rounded-lg p-4 space-y-3"><div class="grid grid-cols-2 gap-3"><div><label class="text-xs text-slate-500 font-medium">Gross Amount</label><div class="text-lg font-bold text-slate-900">฿ 450</div></div><div><label class="text-xs text-slate-500 font-medium">WHT Rate</label><div class="text-lg font-bold text-slate-900">0%</div></div></div><div class="border-t border-slate-100 pt-3"><label class="text-xs text-slate-500 font-medium block mb-2">Calculation Formula:</label><div class="bg-slate-50 p-2 rounded text-xs font-mono text-slate-700">Distance: 128.5 km × 3.50 ฿/km = 450 ฿</div></div><div class="border-t border-slate-100 pt-3"><label class="text-xs text-slate-500 font-medium block mb-2">Approval Status</label><div class="flex items-center gap-2"><span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Approved</span><span class="text-xs text-slate-500">22/06/2569 14:30 by Manager</span></div></div></div></div>`;
+  }
+  else if (type === 'adjustment-detail') {
+    title = 'รายการปรับปรุง'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm"><div class="bg-amber-50 border border-amber-200 p-3 rounded-lg text-amber-900 text-xs"><b>เลขที่:</b> ADJ-001 | <b>อ้างอิง:</b> CL-002</div><div class="border border-slate-200 rounded-lg p-4 space-y-3"><div><label class="text-xs text-slate-500 font-medium">Adjustment Type</label><div class="text-base font-bold text-slate-900">เพิ่มยอด</div></div><div><label class="text-xs text-slate-500 font-medium">Reason</label><div class="text-sm text-slate-700">ค่าโรงแรมเกินตามอนุมัติ</div></div><div><label class="text-xs text-slate-500 font-medium">Amount</label><div class="text-lg font-bold text-emerald-600">฿ 400</div></div><div class="border-t border-slate-100 pt-3"><label class="text-xs text-slate-500 font-medium block mb-2">Status</label><span class="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs font-semibold">Pending Review</span></div></div></div>`;
+  }
+  else if (type === 'adjustment-form') {
+    title = 'สร้างรายการปรับปรุง (New Adjustment)';
+    saveText = 'สร้างรายการ';
+    body = `<div class="space-y-4">
+      ${formSelect('adj_type', 'ประเภทการปรับปรุง', [
+        {val:'credit',text:'เพิ่มยอดจ่าย (Credit Adjustment)'},
+        {val:'debit',text:'ลดค่าใช้จ่าย/เรียกคืน (Debit Adjustment)'},
+        {val:'revenue',text:'ปรับปรุงรายได้ (Revenue Adjustment)'}
+      ], 'credit')}
+      <div class="grid grid-cols-2 gap-4">
+        ${formInput('adj_ref', 'อ้างอิงเคส/เลขที่บิล', '', 'text', 'เช่น CASE-26-xxx')}
+        ${formInput('adj_amount', 'จำนวนเงินปรับปรุง', '', 'number', '0.00')}
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">เหตุผลและรายละเอียดการปรับปรุง <span class="text-red-500">*</span></label>
+        <textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="3" placeholder="ระบุสาเหตุที่ต้องปรับปรุงยอด..."></textarea>
+      </div>
+      <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-[11px] text-blue-800">
+        <b>หมายเหตุ:</b> รายการปรับปรุงจะถูกนำไปรวมในรอบจ่ายเงิน (Payout) หรือรอบวางบิล (Billing) ที่ยังไม่ถูกล็อกโดยอัตโนมัติ
+      </div>
+    </div>`;
+  }
+  else if (type === 'receipt-detail') {
+    title = 'รายละเอียดเงินรับ'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm"><div class="bg-emerald-50 border border-emerald-200 p-3 rounded-lg text-emerald-900 text-xs"><b>วันที่:</b> 22/06/2569 | <b>ผู้จ่าย:</b> Siam Finance</div><div class="border border-slate-200 rounded-lg p-4 space-y-3"><div class="grid grid-cols-2 gap-3"><div><label class="text-xs text-slate-500 font-medium">Amount</label><div class="text-lg font-bold text-emerald-600">฿ 168,500</div></div><div><label class="text-xs text-slate-500 font-medium">Bank Ref</label><div class="font-mono text-sm text-slate-700">KBK-22-0615-001</div></div></div><div><label class="text-xs text-slate-500 font-medium">Billing Reference</label><div class="font-mono text-sm text-slate-700">INV-26-0512</div></div><div><label class="text-xs text-slate-500 font-medium">WHT Deducted</label><div class="text-sm text-slate-700">฿ 0 (No WHT)</div></div><div class="border-t border-slate-100 pt-3"><label class="text-xs text-slate-500 font-medium block mb-2">Match Status</label><span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-semibold">Matched Automatically</span></div></div></div>`;
+  }
+  else if (type === 'exception-form') {
+    const e = isEdit ? store.exceptions[0] : {};
+    title = isEdit ? 'แก้ไขรายการข้อมูลไม่ครบ' : 'เพิ่มรายการข้อมูลไม่ครบ';
+    body = `<div class="space-y-4">${formSelect('m_excLevel', 'ระดับความสำคัญ', [{val:'info',text:'โปรแกรม'},{val:'warning',text:'คำเตือน'},{val:'critical',text:'หายวิกฎ'}], e?.level||'warning')}${formInput('m_excDetail', 'รายละเอียด', e?.detail||'', 'text', '', true)}${formSelect('m_excModule', 'Module', [{val:'finance',text:'การเงิน'},{val:'accounting',text:'บัญชี'},{val:'documents',text:'เอกสาร'}], e?.module||'finance')}${formInput('m_excOwner', 'ผู้รับผิดชอบ', e?.owner||'')}${formSelect('m_excStatus', 'สถานะ', [{val:'open',text:'เปิดอยู่'},{val:'in_progress',text:'กำลังดำเนินการ'},{val:'resolved',text:'แก้ไขแล้ว'}], e?.status||'open')}</div>`;
+  }
+  
+  // --- SETTINGS FORMS ---
+  else if (type === 'fin-payee-form') {
+    const p = isEdit ? store.payees[0] : {};
+    title = isEdit ? 'แก้ไข Payee' : 'เพิ่ม Payee';
+    body = `<div class="space-y-4">${formInput('m_payeeName', 'ชื่อ Payee', p?.name||'', 'text', '', true)}${formSelect('m_payeeType', 'ประเภท', [{val:'individual',text:'บุคคล'},{val:'company',text:'บริษัท'}], p?.type||'individual')}${formInput('m_payeeTax', 'Tax ID / เลขผู้เสียภาษี', p?.tax||'')}${formInput('m_payeeBank', 'บัญชีธนาคาร', p?.bank||'')}${formInput('m_payeeAccount', 'เลขบัญชี', p?.account||'')}${formInput('m_payeeWHT', 'อัตรา WHT (%)', p?.wht||'3')}${formSelect('m_payeeStatus', 'สถานะ', [{val:'active',text:'ใช้งาน'},{val:'inactive',text:'ไม่ใช้งาน'}], p?.status||'active')}</div>`;
+  }
+  else if (type === 'pdf-preview') {
+    title = 'ตัวอย่างเอกสาร'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-3 text-sm"><div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs"><b>เอกสาร:</b> Internal Billing Summary</div><div class="bg-slate-100 rounded-lg p-4 h-64 flex items-center justify-center text-slate-500 text-xs"><div class="text-center"><div class="text-3xl mb-2">${Icon.file}</div>ตัวอย่าง PDF (Preview Mode)<br/><span class="text-[10px]">คลิกเพื่อดาวน์โหลดเอกสาร</span></div></div></div>`;
+  }
+  else if (type === 'bankfile-test') {
+    title = 'ทดสอบไฟล์โอนธนาคาร'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm"><div class="bg-green-50 border border-green-200 p-3 rounded-lg text-green-900 text-xs"><b>ธนาคาร:</b> KBank K-Cash | <b>สถานะ:</b> ผ่าน</div><div class="border border-slate-200 rounded-lg p-4 space-y-3"><div><label class="text-xs text-slate-500 font-medium block mb-1">Test File Upload</label><input type="file" accept=".csv,.txt" class="w-full text-xs text-slate-500 border border-slate-200 rounded p-2 bg-slate-50"/></div><div class="bg-slate-50 p-3 rounded text-xs font-mono text-slate-700 max-h-32 overflow-y-auto"><div>ตัวอย่างผลการทดสอบ:</div><div class="mt-2 text-green-600">✓ Encoding: UTF-8 OK</div><div class="text-green-600">✓ Column Mapping: OK</div><div class="text-green-600">✓ Row Count: 5 records</div><div class="text-green-600">✓ Ready to upload</div></div></div></div>`;
+  }
+  else if (type === 'export-sample') {
+    title = 'ตัวอย่าง Export Format'; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-3 text-sm"><div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs"><b>ไฟล์:</b> 01_Revenue.csv</div><div class="bg-slate-50 p-3 rounded text-xs font-mono text-slate-700 max-h-40 overflow-y-auto"><div class="text-slate-600 font-bold mb-1">company,case_ref,revenue_date,gross,vat_flag</div><div>บริษัท สยามไฟแนนซ์,CASE-26-0012,22/06/2569,105000,Include VAT</div><div>ทีมรับเหมาเหนือ,CASE-26-0034,22/06/2569,54000,Include VAT</div></div></div>`;
+  }
+  else if (type === 'fin-permission-edit') {
+    title = 'แก้ไข Matrix สิทธิ์บัญชีและการเงิน';
+    saveText = 'ปิดหน้าต่าง';
+    const total = Object.values(store.financePermissions).reduce((a, g) => a + g.length, 0);
+    body = `<div class="space-y-4 text-sm">
+      <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs">
+        Matrix ทั้งหมด <b>${total} ฟังก์ชัน</b> ใน 4 กลุ่ม (ปฏิบัติงาน ${store.financePermissions.ops.length} · การเงิน ${store.financePermissions.finance.length} · บัญชี ${store.financePermissions.accounting.length} · บริหาร ${store.financePermissions.admin.length}) — ครบตาม Permission Matrix ไฟล์ 25 ทุกรายการ
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-2">
+        <div class="font-bold text-slate-700">วิธีแก้ไข</div>
+        <div class="text-slate-600">กดปุ่มดินสอ (✎) ท้ายแถวของฟังก์ชันที่ต้องการ → เลือกระดับสิทธิ์ต่อ role เป็น dropdown 3 ระดับ: <b>ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว / ✅ ทำได้</b></div>
+        <div class="text-slate-600">รายการ 🔒 (เฉพาะ Superadmin) แก้ไขไม่ได้ตามไฟล์ 25 · ทุกการแก้ไขสิทธิ์เป็น critical action ต้องบันทึก audit log (ไฟล์ 05 §10 / 90)</div>
+      </div>
+    </div>`;
+  }
+  else if (type === 'edit-func-perm') {
+    const pId = data.id;
+    let found = null;
+    for(const k in store.financePermissions) {
+      const f = store.financePermissions[k].find(x => x.id === pId);
+      if(f) { found = f; break; }
+    }
+    title = `ตั้งค่าฟังก์ชัน: ${found?.action || 'N/A'}`;
+    if (found?.superadminOnly) {
+      saveText = 'ปิดหน้าต่าง';
+      body = `<div class="space-y-4 text-sm">
+        <div class="bg-slate-900 text-white p-4 rounded-lg text-xs flex items-start gap-3">
+          <span class="text-lg">🔒</span>
+          <div><b>รายการนี้เป็นสิทธิ์เฉพาะ Superadmin เท่านั้น</b> (ไฟล์ 25 ระบุ "✅ only")<br>ไม่สามารถมอบให้ role อื่นได้ — แก้ไขระดับสิทธิ์ไม่ได้</div>
+        </div>
+        ${found?.note ? `<div class="text-xs text-slate-500">อ้างอิง: ${found.note}</div>` : ''}
+      </div>`;
+    } else {
+      body = `<div class="space-y-4 text-sm">
+        <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs">
+          กำหนดระดับสิทธิ์ของแต่ละ role สำหรับ <b>${found?.action}</b> — 3 ระดับตามไฟล์ 25: <b>ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว / ✅ ทำได้</b>${found?.note ? `<div class="mt-1 text-blue-700">อ้างอิง: ${found.note}</div>` : ''}
+        </div>
+        <div class="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-[11px] text-slate-500">Superadmin มีสิทธิ์ "ทำได้" ทุกรายการโดยนิยาม — ไม่แสดงในรายการนี้</div>
+        <div class="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-2">
+          ${store.roles.filter(r => r.id !== 'r1').map(r => {
+            const lv = (found?.levels || {})[r.id] || 'none';
+            return `<div class="flex items-center justify-between gap-3 p-2.5 rounded-lg border ${lv === 'none' ? 'border-slate-200' : lv === 'manage' ? 'border-emerald-200 bg-emerald-50/40' : 'border-blue-200 bg-blue-50/40'}">
+              <div class="flex flex-col min-w-0">
+                <span class="font-bold text-slate-800 text-xs truncate">${r.name}</span>
+                <span class="text-[9px] text-slate-400 uppercase">${groupLabel(r.group)}</span>
+              </div>
+              <select class="border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus-ring bg-white shrink-0 w-36">
+                <option value="none" ${lv === 'none' ? 'selected' : ''}>ไม่มีสิทธิ์</option>
+                <option value="view" ${lv === 'view' ? 'selected' : ''}>👁️ ดูอย่างเดียว</option>
+                <option value="manage" ${lv === 'manage' ? 'selected' : ''}>✅ ทำได้</option>
+              </select>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }
+  }
+  
+  else if (type === 'generic-detail' || type === 'payout-detail') {
+    title = `รายละเอียด (Read-Only)`; saveText = 'ปิดหน้าต่าง';
+    body = `<div class="space-y-4 text-sm text-slate-600"><div class="bg-slate-50 border border-slate-200 p-4 rounded-lg flex items-start gap-4"><div class="bg-slate-900 text-white p-2 rounded-lg shadow-sm">${Icon.eye}</div><div><div class="font-bold text-slate-900 text-base mb-1">ข้อมูลอ้างอิง: <span class="font-mono text-sm">${data.id || 'N/A'}</span></div><p class="text-xs">หน้าต่างนี้เป็นการแสดงข้อมูลเชิงลึกแบบอ่านอิง เพื่อประกอบการพิจารณาของฝ่ายการเงิน/บัญชี</p></div></div><div class="border border-slate-200 rounded-lg overflow-hidden"><table class="w-full text-left text-sm"><thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-4 py-2 font-bold">Timestamp</th><th class="px-4 py-2 font-bold">Action Log</th><th class="px-4 py-2 font-bold">User</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white"><tr><td class="px-4 py-2 text-xs">22/06/2569 14:30</td><td class="px-4 py-2 font-medium">Created Record / Submitted</td><td class="px-4 py-2 text-xs">Finance Admin</td></tr><tr><td class="px-4 py-2 text-xs">22/06/2569 15:10</td><td class="px-4 py-2 font-medium">Reviewed & Checked</td><td class="px-4 py-2 text-xs">Manager</td></tr></tbody></table></div></div>`;
+  }
+ 
+  return `
+  <div class="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4" id="modalBackdrop">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col relative transform transition-all scale-100 opacity-100">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-xl">
+        <h2 class="text-lg font-bold text-slate-900">${title}</h2>
+        <button data-action="close-modal" class="text-slate-400 hover:text-slate-700 hover:bg-slate-200 focus-ring rounded p-1.5 transition-colors">${Icon.x}</button>
+      </div>
+      <div class="px-6 py-5 overflow-y-auto">${body}</div>
+      <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+        <button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 rounded-lg hover:bg-slate-200 border border-slate-300 bg-white focus-ring transition-colors shadow-sm">ยกเลิก</button>
+        <button data-action="save-modal" class="px-5 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 focus-ring shadow-sm transition-colors flex items-center gap-1.5">${(type === 'generic-detail' || type === 'payout-detail' || type === 'revenue-calc-detail' || type === 'profit-drilldown' || type === 'accounting-checklist') ? Icon.check : ''} ${saveText}</button>
+      </div>
+    </div>
+  </div>`;
+}
+ 
+function renderToast() {
+  if (!state.toast) return '';
+  return `
+  <div class="fixed bottom-6 right-6 z-50 animate-[fadeIn_0.3s_ease-out]">
+    <div class="bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-3 border border-slate-700">
+      <div class="bg-emerald-500 rounded-full p-0.5 text-white shadow-inner">${Icon.check}</div> ${state.toast.msg}
+    </div>
+  </div>`;
+}
+ 
+// ===================== MAIN RENDER =====================
+function render() {
+  const app = document.getElementById('app');
+  // Settings-only version: force the app to render only the Settings module.
+  state.mainTab = 'settings';
+  const mainContent = renderSettingsLayout();
+ 
+  app.innerHTML = renderTopNav() + `<main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${mainContent}</main>` + renderModal() + renderToast();
+}
+ 
+// ===================== GLOBAL EVENT LISTENERS =====================
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'modalBackdrop') { closeModal(); return; }
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
+ 
+  // Main Tabs
+  if (action === 'set-main') setState({ mainTab: 'settings' });
+  
+  // Settings Top Tabs
+  else if (action === 'set-settings-toptab') setState({ settingsTopTab: el.dataset.id });
+ 
+  // Sub Tabs
+  else if (action === 'set-sub') {
+    const parent = el.dataset.parent;
+    resetFilters();
+    setState({ [parent]: el.dataset.id });
+  }
+  
+  // General Settings Specific Actions
+  else if (action === 'set-settings-tab') {
+    resetFilters();
+    setState({ settingsTab: el.dataset.tab, mainTab: 'settings' });
+  }
+  else if (action === 'set-roles-subtab') {
+    resetFilters();
+    setState({ rolesSubTab: el.dataset.subtab });
+  }
+  else if (action === 'set-roles-tracker-filter') {
+    setState({ rolesTrackerFilter: el.dataset.filter });
+  }
+  else if (action === 'set-teams-side') {
+    resetFilters();
+    setState({ teamsSide: el.dataset.side });
+  }
+  else if (action === 'set-users-subtab') {
+    resetFilters();
+    setState({ usersSubTab: el.dataset.subtab });
+  }
+  else if (action === 'set-tracker-filter') {
+    setState({ trackerFilter: el.dataset.filter });
+  }
+  else if (action === 'open-create-role' || action === 'open-create-team' || action === 'open-create-company' || action === 'open-create-user' || action === 'open-create-comp' || action === 'open-create-sf') {
+    openModal(action.replace('open-', ''), { isEdit: false });
+  }
+  else if (action === 'open-edit-team' || action === 'open-edit-company' || action === 'open-edit-user' || action === 'open-edit-comp' || action === 'open-edit-sf') {
+    const type = action.replace('open-', '');
+    const dataKey = type === 'edit-team' ? 'team' : type === 'edit-company' ? 'company' : type === 'edit-user' ? 'user' : 'id';
+    openModal(type, { id: el.dataset[dataKey], isEdit: true });
+  }
+  else if (action === 'edit-permission') {
+    openModal('edit-permission', { id: el.dataset.role });
+  }
+  else if (action === 'try-delete-role') {
+    showToast('ไม่สามารถลบ Role นี้ได้ (มีผู้ใช้งาน หรือเป็น Role พื้นฐาน)', 'error');
+  }
+  else if (action === 'audit-filter-export') {
+    openModal('audit-filter-export', {});
+  }
+ 
+  // Modal Triggers
+  else if (action === 'open-modal' || action === 'generic-detail') {
+    openModal(el.dataset.type || 'generic-detail', { id: el.dataset.id });
+  }
+  else if (action === 'close-modal') closeModal();
+  
+  // Actions
+  else if (action === 'toast') {
+    closeModal();
+    showToast(el.dataset.msg || 'ดำเนินการสำเร็จ', 'success');
+  }
+  else if (action === 'save-modal') {
+    const { type } = state.modal;
+    const exportTypes = ['billing-file', 'export-pack', 'audit-filter-export', 'payment-file', 'download-wht-cert'];
+    const readOnlyTypes = ['generic-detail', 'payout-detail', 'revenue-calc-detail', 'profit-drilldown', 'accounting-checklist'];
+    
+    let saveMsg = 'บันทึกข้อมูลเรียบร้อยแล้ว';
+    if (exportTypes.includes(type)) saveMsg = 'เตรียมไฟล์สำเร็จ เริ่มดาวน์โหลดเอกสาร';
+    else if (type === 'action-approve-claim') saveMsg = 'อนุมัติรายการสำเร็จ';
+    else if (type === 'action-reject-claim') saveMsg = 'ปฏิเสธรายการสำเร็จ';
+    else if (type === 'action-clear-advance') saveMsg = 'เคลียร์ยอดเงินทดรองสำเร็จ';
+ 
+    closeModal();
+    if (!readOnlyTypes.includes(type)) {
+      showToast(saveMsg, 'success');
+    }
+  }
+});
+ 
+// Fuel mode toggle helper (ใช้ใน compensation modal)
+window.switchFuelMode = function(mode) {
+  document.getElementById('m_ctFuelMode').value = mode;
+  const pkmWrap  = document.getElementById('fuel-pkm-wrap');
+  const flatWrap = document.getElementById('fuel-flat-wrap');
+  const btnPkm   = document.getElementById('fuel-btn-pkm');
+  const btnFlat  = document.getElementById('fuel-btn-flat');
+  if (!pkmWrap || !flatWrap) return;
+  if (mode === 'PER_KM') {
+    pkmWrap.classList.remove('hidden');
+    flatWrap.classList.add('hidden');
+    btnPkm.classList.add('bg-white','shadow','text-slate-900');
+    btnPkm.classList.remove('text-slate-500');
+    btnFlat.classList.remove('bg-white','shadow','text-slate-900');
+    btnFlat.classList.add('text-slate-500');
+  } else {
+    flatWrap.classList.remove('hidden');
+    pkmWrap.classList.add('hidden');
+    btnFlat.classList.add('bg-white','shadow','text-slate-900');
+    btnFlat.classList.remove('text-slate-500');
+    btnPkm.classList.remove('bg-white','shadow','text-slate-900');
+    btnPkm.classList.add('text-slate-500');
+  }
+};
+
+// Init
+render();
+</script>
+</body>
+</html>

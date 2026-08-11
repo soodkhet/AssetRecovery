@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RTB Dev Panel</title>
+<style>
+  :root{
+    --purple:#6d4bd8; --purple-d:#553bad; --gold:#8A7038;
+    --bg:#f6f4fb; --card:#fff; --line:#e5e0f0; --ink:#2b2740; --muted:#6f6a85;
+    --green:#1a9d5a; --red:#c0392b; --amber:#c8860a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",sans-serif;
+       background:var(--bg);color:var(--ink);font-size:14px}
+  header{background:linear-gradient(120deg,#2a2440,#4a3a8f);color:#fff;padding:16px 22px;
+         display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.3px}
+  header .sub{font-size:12px;opacity:.8}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;
+        box-shadow:0 1px 2px rgba(40,20,90,.04)}
+  .card h2{font-size:14px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+  .row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid #f0edf7}
+  .row:first-of-type{border-top:none}
+  .row .info{flex:1;min-width:0}
+  .row .name{font-weight:600;display:flex;align-items:center;gap:7px}
+  .row .desc{color:var(--muted);font-size:12px;margin-top:2px;line-height:1.45}
+  .btns{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:170px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--purple);
+         background:var(--purple);color:#fff;padding:6px 12px;font-size:12.5px;font-weight:600;white-space:nowrap}
+  button:hover{background:var(--purple-d);border-color:var(--purple-d)}
+  button.ghost{background:#fff;color:var(--purple)}
+  button.ghost:hover{background:#f2eefc}
+  button.warn{background:#fff;color:var(--red);border-color:#e3b7b2}
+  button.warn:hover{background:#fbeeec}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  /* จุดสถานะ: เขียว = ทำงานอยู่ · แดง = ปิดอยู่ · เหลือง = กำลังเปิด (สั่งไปแล้วแต่ยังไม่รับพอร์ต) */
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0}
+  .dot.on{background:var(--green)} .dot.off{background:var(--red)}
+  .dot.busy{background:var(--amber);animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  @media(prefers-reduced-motion:reduce){.dot.busy{animation:none}}
+  .hero{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  .hero button{padding:10px 18px;font-size:14px}
+  .big{background:var(--green);border-color:var(--green)} .big:hover{background:#15834b;border-color:#15834b}
+  .pill{font-size:11px;color:var(--muted);padding:3px 8px;border:1px solid var(--line);border-radius:20px;background:#fff}
+  .console{margin-top:16px;background:#1d1a2b;border-radius:12px;overflow:hidden}
+  .console .bar{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;
+                color:#cfc9e6;font-size:12px;border-bottom:1px solid #2f2b44}
+  .console pre{margin:0;padding:12px 14px;height:260px;overflow:auto;color:#d7d2ea;
+               font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;line-height:1.5}
+  .console .src{color:#8a82b8}
+  .console .panel{color:#7fd6a8} .console .err{color:#e78b82}
+  .note{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1>▲ RTB Dev Panel</h1>
+  <span class="sub">กดปุ่มสั่งงาน dev ได้เลย — ไม่ต้องพิมพ์ terminal · โหลด .env + cd + ulimit ให้อัตโนมัติ</span>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <button class="big" onclick="post('/api/startall')">🚀 เปิดครบพร้อมใช้</button>
+    <button class="warn" onclick="post('/api/stopall')">⏹ ปิดทั้งหมด</button>
+    <span class="pill" id="pg-pill">Postgres: —</span>
+    <span class="pill" id="task-pill">งานที่รัน: —</span>
+    <span style="flex:1"></span>
+    <button class="ghost" onclick="refresh()">↻ รีเฟรชสถานะ</button>
+    <button class="warn" onclick="quitPanel()">👋 ปิดแผง</button>
+  </div>
+
+  <div class="grid">
+    <!-- บริการ -->
+    <div class="card">
+      <h2>🖥 บริการ (เปิดค้างไว้ระหว่างทำงาน)</h2>
+      <div id="services"></div>
+    </div>
+
+    <!-- Postgres -->
+    <div class="card">
+      <h2>🐘 ฐานข้อมูล Postgres</h2>
+      <div class="row">
+        <div class="info">
+          <div class="name"><span class="dot" id="pg-dot"></span> Docker Postgres</div>
+          <div class="desc">ฐานข้อมูลหลัก <b>ต้องเปิดก่อน API เสมอ</b> — แก้อาการ "DATABASE_URL required" / "connection refused" ตอนเปิด API</div>
+        </div>
+        <div class="btns" id="pg-btns"></div>
+      </div>
+      <div class="row">
+        <div class="info">
+          <div class="name"><span class="dot" id="studio-dot"></span> Drizzle Studio</div>
+          <div class="desc">เปิดหน้าเว็บดู/แก้ข้อมูลในตารางโดยตรง — ใช้ตรวจว่าข้อมูลเข้าถูกไหม (เปิด Postgres ก่อน)</div>
+        </div>
+        <div class="btns" id="studio-btns"></div>
+      </div>
+    </div>
+
+    <!-- ฐานข้อมูล ops -->
+    <div class="card">
+      <h2>🗄 จัดการข้อมูล</h2>
+      <div class="row">
+        <div class="info">
+          <div class="name">db:migrate</div>
+          <div class="desc">อัปเดตโครงสร้างตารางให้ล่าสุด — รัน <b>หลังเปิด Postgres ครั้งแรก</b> หรือหลัง pull โค้ดที่มี migration ใหม่</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=migrate')">รัน</button></div>
+      </div>
+      <div class="row">
+        <div class="info">
+          <div class="name">seed demo</div>
+          <div class="desc">ใส่ข้อมูลตัวอย่าง <b>[DEMO]</b> (พาร์ทเนอร์/ทะเบียน/ตั้งค่า) ไว้ทดลองใช้งานระบบ</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=seed-demo')">รัน</button></div>
+      </div>
+      <div class="row">
+        <div class="info">
+          <div class="name">clear demo</div>
+          <div class="desc">ลบข้อมูล [DEMO] ทั้งหมด — ใช้ <b>ก่อนกรอกข้อมูลจริง</b> ของธุรกิจ</div>
+        </div>
+        <div class="btns"><button class="warn" onclick="post('/api/task?key=clear-demo')">รัน</button></div>
+      </div>
+    </div>
+
+    <!-- ตรวจสุขภาพโค้ด -->
+    <div class="card">
+      <h2>🔍 ตรวจสุขภาพโค้ด (ก่อน commit)</h2>
+      <div class="row">
+        <div class="info">
+          <div class="name">typecheck</div>
+          <div class="desc">ตรวจชนิดข้อมูล TypeScript ทั้งโปรเจค — เร็ว ใช้เช็คว่าโค้ดไม่พังก่อนรันจริง</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=typecheck')">รัน</button></div>
+      </div>
+      <div class="row">
+        <div class="info">
+          <div class="name">test</div>
+          <div class="desc">รันเทสต์ทั้งหมด (~90 วินาที) — ยืนยันว่าไม่มีอะไรถอยหลังหลังแก้โค้ด</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=test')">รัน</button></div>
+      </div>
+      <div class="row">
+        <div class="info">
+          <div class="name">build หน้าบ้าน</div>
+          <div class="desc">ลอง build เว็บสาธารณะจริง (ตั้ง ulimit + โหลด env ให้เอง) — <b>ต้องเปิด API ไว้ด้วย</b> เพราะ build ดึง config จาก API</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=build')">รัน</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- console -->
+  <div class="console">
+    <div class="bar"><span>📋 Log สด</span><button class="ghost" style="padding:3px 10px" onclick="LOG.textContent='';lastId=0">ล้าง</button></div>
+    <pre id="log"></pre>
+  </div>
+
+  <div class="note">
+    💡 <b>ลำดับเปิดใช้งานปกติ:</b> กด "🚀 เปิดครบพร้อมใช้" ปุ่มเดียว (เปิด Postgres → API → หน้าบ้าน + หลังบ้าน ให้อัตโนมัติ) → รอ ~10 วินาที → กดปุ่ม "เปิดเว็บ" ที่บริการ ·
+    ครั้งแรกสุด (ยังไม่เคยมีตาราง) ให้กด "db:migrate" หลังเปิด Postgres · ปิดหน้านี้ = ปิดบริการทั้งหมดที่ panel เปิดไว้
+  </div>
+</div>
+
+<script>
+const LOG = document.getElementById("log");
+let lastId = 0;
+
+async function post(pathq){ try{ await fetch(pathq,{method:"POST"}); }catch(e){} setTimeout(refresh,300); }
+
+/**
+ * ปุ่มเปิด/ปิดต้องมีปุ่มเดียวเสมอ — สลับตามสถานะจริง (กำลังปิดอยู่ = โชว์ "เปิด", กำลังเปิดอยู่ = โชว์ "ปิด")
+ * โชว์สองปุ่มพร้อมกันทำให้อ่านสถานะจากปุ่มไม่ได้ และกดปุ่มที่ไม่มีผลได้ (เช่นกด "เปิด" ทั้งที่เปิดอยู่แล้ว)
+ */
+function toggleBtn(on, startPath, stopPath, startLabel="เปิด", stopLabel="ปิด"){
+  return on
+    ? `<button class="warn" onclick="post('${stopPath}')">${stopLabel}</button>`
+    : `<button onclick="post('${startPath}')">${startLabel}</button>`;
+}
+async function quitPanel(){
+  if(!confirm("ปิดแผงควบคุม + บริการทั้งหมดที่เปิดไว้?")) return;
+  try{ await fetch("/api/quit",{method:"POST"}); }catch(e){}
+  document.body.innerHTML = "<div style='padding:40px;font-size:16px'>👋 ปิดแผงแล้ว — ปิดแท็บนี้ได้เลย ครั้งหน้าเปิดใหม่ด้วยไอคอน RTB Dev Panel</div>";
+}
+
+async function refresh(){
+  try{
+    const s = await (await fetch("/api/status")).json();
+    // บริการ
+    const svc = document.getElementById("services");
+    svc.innerHTML = "";
+    const desc = {
+      api:"แกนกลางหลังบ้าน — หน้าบ้าน/หลังบ้านต้องมีตัวนี้รันถึงจะโหลดข้อมูลได้ (พอร์ต 3001) · ต้องเปิด Postgres ก่อน",
+      web:"เว็บลูกค้าสาธารณะ (พอร์ต 3000) — ที่ลูกค้าเข้าดูทะเบียน",
+      admin:"ระบบจัดการหลังบ้าน (พอร์ต 5173) — ต้องมี API รันอยู่",
+      worker:"ตัวรันงานเบื้องหลัง (ส่ง LINE, สร้าง PDF, reconcile) — เปิดเมื่อจะทดสอบงานพวกนี้"
+    };
+    for(const [key,v] of Object.entries(s.services)){
+      // Worker ไม่มีพอร์ต ⇒ รู้สถานะได้จาก `managed` อย่างเดียว
+      // starting = แผงสั่งเปิดไปแล้วแต่ยังไม่รับพอร์ต (vite/next ใช้เวลาบูตหลายวินาที)
+      const starting = v.managed && v.port && !v.listening;
+      const on = v.listening || v.managed;
+      const canOpen = key==="web"||key==="admin";
+      const url = key==="web"?"http://localhost:3000":"http://localhost:5173";
+      const div = document.createElement("div");
+      div.className="row";
+      div.innerHTML = `<div class="info">
+          <div class="name"><span class="dot ${starting?'busy':(on?'on':'off')}"></span> ${v.label}
+            <span style="color:var(--muted);font-weight:400;font-size:11px">${v.port?':'+v.port:''} ${starting?'· กำลังเปิด…':(on?'· ทำงานอยู่':'· ปิดอยู่')}</span></div>
+          <div class="desc">${desc[key]||''}</div>
+        </div>
+        <div class="btns">
+          ${toggleBtn(on, `/api/service/start?key=${key}`, `/api/service/stop?key=${key}`)}
+          ${canOpen?`<button class="ghost" ${v.listening?'':'disabled'} onclick="post('/api/open?url=${encodeURIComponent(url)}')">เปิดเว็บ</button>`:''}
+        </div>`;
+      svc.appendChild(div);
+    }
+    // postgres — ปุ่มเดียวสลับตามสถานะ (เดิมโชว์ เปิด+ปิด พร้อมกันตลอด)
+    document.getElementById("pg-dot").className = "dot "+(s.postgres?"on":"off");
+    document.getElementById("pg-btns").innerHTML =
+      toggleBtn(s.postgres, "/api/postgres?action=up", "/api/postgres?action=down");
+    // drizzle studio — long-running เหมือนบริการอื่น จึงต้องปิดได้ด้วย
+    document.getElementById("studio-dot").className = "dot "+(s.studio?"on":"off");
+    document.getElementById("studio-btns").innerHTML =
+      toggleBtn(s.studio, "/api/studio", "/api/service/stop?key=studio", "เปิด Studio", "ปิด Studio");
+    document.getElementById("pg-pill").textContent = "Postgres: "+(s.postgres?"ทำงานอยู่ ✓":"ปิดอยู่");
+    document.getElementById("task-pill").textContent = "งานที่รัน: "+(s.runningTask||"—");
+  }catch(e){}
+}
+
+async function pollLog(){
+  try{
+    const r = await (await fetch("/api/log?since="+lastId)).json();
+    for(const l of r.lines){
+      const cls = l.src==="panel"?"panel":(/error|Error|❌|EMFILE|failed/.test(l.line)?"err":"");
+      const line = document.createElement("div");
+      const tag = document.createElement("span"); tag.className="src"; tag.textContent="["+l.src+"] ";
+      const body = document.createElement("span"); if(cls) body.className=cls; body.textContent=l.line;
+      line.appendChild(tag); line.appendChild(body);
+      LOG.appendChild(line);
+    }
+    if(r.lines.length){ lastId = r.lastId; LOG.scrollTop = LOG.scrollHeight; }
+  }catch(e){}
+}
+
+refresh(); pollLog();
+setInterval(refresh, 2500);
+setInterval(pollLog, 1200);
+</script>
+</body>
+</html>
