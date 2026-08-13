@@ -5,6 +5,49 @@
 
 ---
 
+## Phase 1.2 — Prisma Schema ชุดที่ 2: Group C–G + Seed Data
+
+**วันที่**: 2026-08-14 · **commit**: `49d4737` · **branch**: `staging`
+
+### สิ่งที่ทำ
+- `prisma/schema.prisma` — **+34 ตาราง** (Group C Case 7 · D Warehouse 2 · E Finance 8 · F Accounting 11 · G Platform 4 · +2 ตารางตามมติ PO) รวมทั้งระบบเป็น **53 ตาราง / 55 enums** · เติม back-relation ของ `created_by`/`updated_by` ครบทุกตารางใน Group A/B
+- Migration `20260813231247_group_c_g_tables` — DDL + **raw SQL ที่ Prisma ไม่รองรับ**: generated column `advances.return_satang` · partial unique `uniq_active_advance_per_payee` + `uniq_assets_active_imei` · CHECK `assets_identifier_required` / `pbi_one_source` / `adjustments_one_target` / `bank_tx_one_match` / `bank_tx_status_fk_shape` / `bank_tx_alloc_shape` / `bank_tx_alloc_amount_positive` · DO block เติม `updated_at DEFAULT NOW()` ให้ตารางใหม่
+- `prisma/seed.ts` — **idempotent (upsert ทุกจุด)**: organization 1 · **roles 15** (`is_seed=true`, ธุรการ = editable) · seed user Superadmin (`supabase_uid` ยัง NULL รอ 1.3) · VAT 7% (effective 2025-10-01) · tax profiles 2 · finance_policy_settings 1 · **capabilities 47** = 37 ใน Functional Matrix (`13` §6.10 + `25`: ops 6 / finance 12 / accounting 11 / admin 8) + 10 รายการนอก matrix ที่ `02` §12 ระบุ (warehouse/user/team/settings — `functional_group = NULL`)
+- `prisma/schema.test.ts` — ขยายยาม: Decimal ใช้ได้เฉพาะ pct `(5,2)` และพิกัด GPS `(10,7)` · ทุก model ต้องมี `organizationId` (ยกเว้น 5 ตารางที่ `02` §2.4 ยกเว้น) · **CHECK/partial index/generated column ต้องยังอยู่ในโฟลเดอร์ migrations** (กัน `migrate dev` เขียนทับจนหาย)
+- อัปเดต spec ตามมติ PO 2026-08-12: `02` v3.8 (+changelog +migration order) · `02_OPEN_DECISIONS` A2/A4/A6/B3 → ✅ · `00_MAP` (บรรทัดของ `02` เลื่อน) · `README` 51→53 tables · `REUSE_INDEX`
+
+### สิ่งที่เพิ่มจากมติ PO (นอกเหนือ spec เดิม)
+| ข้อ | ที่ไหน | สิ่งที่เพิ่ม |
+|---|---|---|
+| A1 | `billing_batches`, `cash_receipts` + ตารางใหม่ `customer_wht_certificates` | `wht_withheld_by_customer_satang` + ที่เก็บใบ 50 ทวิ **ฝั่งรับ** (ไฟแนนซ์ออกให้เรา = เครดิตภาษี) |
+| A2 | ตารางใหม่ `bank_transaction_allocations` + `bank_transactions.is_split_allocation` | เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` (ไม่ให้ AR ติดลบ) · CHECK `bank_tx_status_fk_shape` ขยายรองรับโหมดแบ่งยอด |
+| A4 | `payout_batch_items`, `advances`, `bank_transactions` | `expense_id` เป็น nullable + `advance_id` + CHECK `pbi_one_source` · `advances.payout_batch_item_id` · `matched_advance_id` |
+| A6 | `cases`, `assets` | `serial_no` / `serial_contract` / `serial_actual` · `imei_contract` nullable · partial unique แทน UNIQUE เต็มตาราง + CHECK ต้องมี identifier |
+| B3 | `revenues`, `payout_batch_items` | `tracking_round` (default 1) |
+
+### การตัดสินใจระหว่างทาง
+- **ชื่อคอลัมน์ A4 ใช้ `expense_id`/`advance_id` ไม่ใช่ `source_*`** ตามข้อเสนอเดิม — `02` เป็น SSOT ของชื่อคอลัมน์และคอลัมน์เดิมชื่อ `expense_id` อยู่แล้ว (บันทึกไว้ใน changelog `02` v3.8)
+- **A2 ต้องมี `is_split_allocation`** เพราะ CHECK `bank_tx_status_fk_shape` เดิมบังคับว่า matched ⇒ ต้องมี FK — ถ้าจับคู่ผ่านตารางกลางอย่างเดียว CHECK จะปฏิเสธทันที (CHECK มองข้ามตารางไม่ได้)
+- **capabilities = 47 ไม่ใช่ 37**: 37 คือจำนวนแถวใน Functional Matrix (`13` §6.10) ส่วน `02` §12 ระบุ capability ฝั่ง warehouse/user/team/settings เพิ่ม — เก็บทั้งคู่โดยใช้ `functional_group = NULL` แยกกลุ่ม (คอลัมน์นี้ nullable มาตั้งแต่ v3.5)
+- **ไม่ seed `role_capabilities`** — `02` §12 ไม่ได้กำหนด และการผูก role ↔ capability เต็ม matrix เป็นงาน Phase 1.6 (Superadmin ไม่มี record โดยนิยาม — DEC-009)
+- `expenses.payout_batch_item_id` / `advances.payout_batch_item_id` ประกาศเป็น**คอลัมน์ UUID เปล่า ไม่ใช่ relation** ตาม DDL ของ `02` (เลี่ยง 1:1 วนกลับกับ `payout_batch_items.expense_id`)
+- model `StoredFile` ↔ ตาราง `files` — เลี่ยงชื่อชนกับ `File` ของ Web API ในโค้ดอัปโหลด
+
+### verify ที่รันจริง (DoD ของ PLAN §1.2)
+- `prisma validate` เขียว · `migrate dev` ผ่าน · `migrate status` = up to date (3 migrations) · `pnpm db:seed` **รัน 2 รอบได้ผลเท่ากัน** (idempotent จริง)
+- **ตรวจไขว้อัตโนมัติกับ spec**: สคริปต์เทียบ `CREATE TABLE` ใน `02` §6–§10 กับ `information_schema` → 34/34 ตาราง **ทุกคอลัมน์ตรง ไม่ขาดไม่เกิน**
+- query DB จริง: 53 ตาราง · roles 15 (system 6 / inhouse 3 / outsource 3 / finance_company 3) · capabilities 47 (matrix 37 = ops 6 / finance 12 / accounting 11 / admin 8) · VAT 7% · tax profiles 2 · policy 1
+- ทดสอบ constraint ด้วยข้อมูลจริง: INSERT `adjustments` ที่ไม่มี target → ถูกปฏิเสธด้วย `adjustments_one_target` · generated column `return_satang` มีจริงใน `information_schema` (`GREATEST(0, COALESCE(approved_satang,0) - used_satang)`)
+- `pnpm typecheck` / `pnpm test` (35 เคส) / `pnpm lint` เขียวครบ
+
+### จุดที่คนถัดไปควรรู้
+- **`advances.return_satang` เขียนค่าไม่ได้** — Prisma ไม่รู้ว่าเป็น generated column จึงยอมให้ใส่ใน `create`/`update` แล้วไปตายที่ DB · เซ็ตแค่ `requestedSatang`/`approvedSatang`/`usedSatang`
+- Immutable Rules (`02` §13) เขียนเป็นคอมเมนต์ `⚠️ Immutable` ไว้ที่ model ที่เกี่ยวแล้ว (`case_evidences`, `handover_lots`, `payout_batches`, `tax_invoices`, `wht_certificates`, `export_records`, `bank_transactions`, `audit_logs`, `accounting_periods`) — **การบังคับจริงเป็นงานของ task โมดูลนั้น ๆ**
+- ⚠️ **spec ไม่ตรงกันเรื่องจำนวน "✅ only"**: `25` §16.1 เขียน 7 รายการ แต่ mockup `settings.html` ติดธง `superadminOnly` แค่ 6 (ad1/ad2/ad4/ad5/ad6/ad7) — ไม่บล็อก 1.2 (seed ไม่ได้เก็บ flag นี้) แต่ **ต้องเคาะตอน 1.6** ตอน implement การล็อกสิทธิ์จริง
+- seed user `superadmin@assetrecovery.local` (`00000000-...-0002`) ยังไม่มี `supabase_uid` — งาน 1.3 ต้องผูกกับ Supabase Auth ก่อน login ได้จริง
+
+---
+
 ## Phase 1.1 — Prisma Schema ชุดที่ 1: Enums + Group A + Group B
 
 **วันที่**: 2026-08-14 · **commit**: `35dfb6e` · **branch**: `staging`

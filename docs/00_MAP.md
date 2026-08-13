@@ -10,7 +10,7 @@
 ## ส่วนที่ 1 — Spec files (docs/)
 
 
-### `docs/02-database-schema-design.md` (105 KB, 1738 บรรทัด)
+### `docs/02-database-schema-design.md` (114 KB, 1821 บรรทัด — v3.8)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -18,26 +18,26 @@
 | 3 | # 02 — Database Schema Design (Full Production Schema) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 32 | ## 1. Summary |
-| 35 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
-| 37 | ### 2.1 Naming |
-| 47 | ### 2.2 Money |
-| 54 | ### 2.3 Timestamps |
-| 59 | ### 2.4 Common Columns (ทุก table มีครบ) |
-| 70 | ### 2.5 Permission Architecture |
-| 77 | ## 3. Enum Types (ทั้งหมด) |
-| 357 | ## 4. Schema Group A — Identity & Access |
-| 451 | ## 5. Schema Group B — Master Data |
-| 749 | ## 6. Schema Group C — Case Workflow |
-| 938 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1018 | ## 8. Schema Group E — Finance Operation |
-| 1253 | ## 9. Schema Group F — Accounting Handover |
-| 1489 | ## 10. Schema Group G — Platform |
-| 1568 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 1632 | ## 12. Seed Data |
-| 1700 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 1717 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 1727 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 33 | ## 1. Summary |
+| 36 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
+| 38 | ### 2.1 Naming |
+| 48 | ### 2.2 Money |
+| 55 | ### 2.3 Timestamps |
+| 60 | ### 2.4 Common Columns (ทุก table มีครบ) |
+| 71 | ### 2.5 Permission Architecture |
+| 78 | ## 3. Enum Types (ทั้งหมด) |
+| 358 | ## 4. Schema Group A — Identity & Access |
+| 452 | ## 5. Schema Group B — Master Data |
+| 750 | ## 6. Schema Group C — Case Workflow |
+| 940 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
+| 1028 | ## 8. Schema Group E — Finance Operation |
+| 1276 | ## 9. Schema Group F — Accounting Handover (รวม `bank_transaction_allocations` A2 + `customer_wht_certificates` A1) |
+| 1571 | ## 10. Schema Group G — Platform |
+| 1650 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 1716 | ## 12. Seed Data |
+| 1784 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 1801 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 1811 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/03-non-functional-requirements.md` (14 KB, 213 บรรทัด)
 

@@ -83,7 +83,7 @@
 |---|---|---|
 | `00-project-overview.md` | ภาพรวมโครงการ เป้าหมาย ขอบเขต Hybrid Accounting Boundary | ✅ Ready |
 | `01-architecture.md` | Tech Stack, Permission Architecture, Layer Architecture | ✅ Ready |
-| `02-database-schema-design.md` | **Full Production Schema** — **51 tables** (v3.5 — เพิ่ม 6 ตารางกลุ่ม Settings/Notifications ตาม DEC-006), enums, indexes, migration order, seed data | ✅ Ready |
+| `02-database-schema-design.md` | **Full Production Schema** — **53 tables** (v3.8 — +2 ตารางตามมติ PO 2026-08-12: `bank_transaction_allocations`, `customer_wht_certificates`), enums, indexes, migration order, seed data | ✅ Ready |
 | `03-non-functional-requirements.md` | Performance, Security, Datetime Standard (§6.5), Reliability | ✅ Ready |
 | `04-ui-ux-design-system.md` | สี ฟอนต์ ปุ่ม ตาราง ฟอร์ม Modal สถานะ Tailwind pattern | ✅ Ready |
 | `05-auth-and-access-control.md` | Login, Session, MFA, Supabase Auth integration | ✅ Ready |

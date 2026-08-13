@@ -51,23 +51,23 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 - **ผู้ตอบ**: นักบัญชี (ยืนยันว่าไฟแนนซ์หักจริงไหม อัตราเท่าไร) + PO · **บล็อก**: 1.2, 3.6, 4.2
 - **คำตอบ**: ✅ ตามมติ PO 2026-08-12 (setting ต่อบริษัท default 3%) — **ทำแล้วบางส่วนใน Phase 1.1**: `finance_companies.wht_withheld_by_customer_pct` (`02` v3.7) · ส่วนที่เหลือ (`billing_batches`/`cash_receipts` + entity เก็บใบ 50 ทวิฝั่งรับ + auto-match เทียบ `total − expected_wht`) อยู่ใน **1.2 / 3.6 / 4.2** · 🔶 อัตราจริงรายบริษัทรอนักบัญชียืนยันก่อนวางบิลจริงใบแรก
 
-### ⬜ A2 — เงินเข้า 1 ก้อน จ่ายหลาย billing batch / จ่ายบางส่วน — schema รองรับไม่ได้
+### ✅ A2 — เงินเข้า 1 ก้อน จ่ายหลาย billing batch / จ่ายบางส่วน — schema รองรับไม่ได้
 - **ปัญหา**: `bank_transactions` เป็น FK เดี่ยว `matched_billing_id` (1:1) แต่ไฟแนนซ์ปกติโอนรวมหลายรอบบิลใน 1 transaction — โครงสร้างปัจจุบัน match ไม่ได้เลย และไม่มีกฎเมื่อจ่ายเกิน (`ar` ติดลบ)
 - **เสนอ**: ตารางกลาง `bank_transaction_allocations` (transaction↔batch many-to-many + allocated_satang) · เงินเกิน → เก็บเป็น credit balance ของบริษัท ไม่ให้ AR ติดลบ
 - **ผู้ตอบ**: PO (+นักบัญชีเรื่อง credit) · **บล็อก**: 1.2, 4.2
-- **คำตอบ**:
+- **คำตอบ**: ✅ ตามมติ PO 2026-08-12 (ใช้ default) — **schema ทำแล้วใน Phase 1.2** (`02` v3.8): ตาราง `bank_transaction_allocations` (transaction ↔ billing batch + `allocated_satang`) · ส่วนเกิน = แถว `is_credit = true` (`billing_batch_id` NULL) เก็บเป็น credit ของบริษัท ไม่ให้ AR ติดลบ · `bank_transactions.is_split_allocation` แยกโหมดจับคู่แบ่งยอดออกจากจับคู่ 1:1 (CHECK `bank_tx_status_fk_shape` ขยายรองรับแล้ว) · **logic auto-match/ตัด credit อยู่ใน 4.2** · 🔶 กติกาการใช้ credit รอบถัดไปรอนักบัญชียืนยัน
 
-### ⬜ B3 — Recycle รอบ 2 สำเร็จ → เก็บเงินไฟแนนซ์ซ้ำไหม / commission ทับ no_success_fee ไหม
+### ✅ B3 — Recycle รอบ 2 สำเร็จ → เก็บเงินไฟแนนซ์ซ้ำไหม / commission ทับ no_success_fee ไหม
 - **ปัญหา**: รอบ 1 `closed_fail` + model `charge_on_fail=true` → เกิด Revenue ใบ 1 + จ่าย no_success_fee แล้ว → recycle → รอบ 2 `closed_success` → spec ไม่ห้ามเกิด Revenue ใบ 2 (บิลซ้ำสำหรับทรัพย์ชิ้นเดียว) + จ่าย commission ทับ · `revenues` ไม่มี field `tracking_round` เลย
 - **เสนอ**: เพิ่ม `tracking_round` ลง revenues + payout_batch_items ตั้งแต่ตอนนี้ไม่ว่าคำตอบเป็นอะไร · ตัวเลือก: (a) แต่ละรอบอิสระเก็บได้ทุกรอบ (b) รอบใหม่หักกลบรอบเก่า (c) รอบเก่าต้องออก Credit Note
 - **ผู้ตอบ**: PO (ขึ้นกับสัญญากับไฟแนนซ์) · **บล็อก**: 1.2 (เพิ่ม column), 3.6 (logic)
-- **คำตอบ**:
+- **คำตอบ**: ✅ ตามมติ PO 2026-08-12 — **column ทำแล้วใน Phase 1.2** (`02` v3.8): `revenues.tracking_round` + `payout_batch_items.tracking_round` (default 1) · ตัวเลือกกติกาเก็บเงิน = (a) แต่ละรอบอิสระ ตาม `service_fee_templates.charge_per_tracking_round` ที่ลงไว้แล้วใน 1.1 (A3) · **logic กันบิลซ้ำ/commission ทับ อยู่ใน 3.6**
 
-### ⬜ A4 — Advance ไม่มีเส้นทางจ่ายเงินออก/รับเงินคืน
+### ✅ A4 — Advance ไม่มีเส้นทางจ่ายเงินออก/รับเงินคืน
 - **ปัญหา**: `payout_batch_items.source_expense_id` บังคับ → Advance (ไม่ใช่ expense) เข้ารอบจ่ายไม่ได้ = เงินออกนอกระบบ → bank reconciliation มีรายการ match ไม่ได้ทุกครั้งที่เบิก และเงินคืน (`return_satang`) ก็ไม่มี flow รับ
 - **เสนอ**: `source_expense_id` เป็น nullable + เพิ่ม `source_advance_id` (separate FK ตาม DEC-004) + เพิ่ม `matched_advance_id` ฝั่ง bank_transactions สำหรับขาเงินคืน
 - **ผู้ตอบ**: PO ยืนยันแนวทาง (เรื่อง technical ผมเสนอให้แล้ว) · **บล็อก**: 1.2, 3.3, 3.4, 4.2
-- **คำตอบ**:
+- **คำตอบ**: ✅ ตามมติ PO 2026-08-12 (ใช้ default) — **schema ทำแล้วใน Phase 1.2** (`02` v3.8): `payout_batch_items.expense_id` เป็น nullable + `advance_id` + CHECK `pbi_one_source` (exactly-one non-null ตาม DEC-004) · `advances.payout_batch_item_id` (ขาจ่ายออก) · `bank_transactions.matched_advance_id` (ขารับคืน) · **ชื่อคอลัมน์ใช้ `expense_id`/`advance_id` ไม่ใช่ `source_*`** เพราะ `02` เป็น SSOT ของชื่อคอลัมน์และคอลัมน์เดิมชื่อ `expense_id` อยู่แล้ว · **logic เข้ารอบจ่าย/รับคืน อยู่ใน 3.3–3.4 / 4.2**
 
 ### ✅ A5 — `due_rule` เป็น free text คำนวณไม่ได้
 - **ปัญหา**: `13` §6.1 เก็บ "Net 30 Days" / "วันที่ 5 ของเดือนถัดไป" เป็น string แต่ `19` §7.2 ให้คำนวณ `due_date` จากมัน → AR Aging ทั้งรายงานตั้งอยู่บน parser ที่ต้องเดา
@@ -75,11 +75,11 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 - **ผู้ตอบ**: ไม่ค้าน = ใช้ default · **บล็อก**: 1.2, 1.10
 - **คำตอบ**: ✅ ทำแล้วใน **Phase 1.1** ตาม default — enum `due_rule_type` + `due_rule_value` + คง `due_rule` เดิมเป็น label + CHECK `cycles_due_rule_shape` บังคับให้ `net_days`/`day_of_next_month` มีค่าตัวเลขเสมอ (`02` v3.7) · การ clamp วันสุดท้ายของเดือนทำที่ business logic ตอน 1.10
 
-### ⬜ A6 — IMEI: `38` เก็บ free text "IMEI หรือ Serial" แต่ `44` บังคับ 15 หลัก + UNIQUE
+### ✅ A6 — IMEI: `38` เก็บ free text "IMEI หรือ Serial" แต่ `44` บังคับ 15 หลัก + UNIQUE
 - **ปัญหา**: tablet Wi-Fi ไม่มี IMEI (มี serial) → asset auto-create ชน validation ทันทีที่มีเคส tablet · และเคส recycle/เครื่องเดิมกลับมาอีกรอบจะชน `UNIQUE(org, imei_contract)`
 - **เสนอ [default]**: แยก `imei` (15 หลัก, nullable) + `serial_no` · unique เป็น partial `WHERE imei IS NOT NULL AND asset_status <> 'handed_over'` + business check ตอน intake พร้อมข้อความอ่านออก
 - **ผู้ตอบ**: ไม่ค้าน = ใช้ default · **บล็อก**: 1.2, 2.2, 2.13
-- **คำตอบ**:
+- **คำตอบ**: ✅ ตาม default — **schema ทำแล้วใน Phase 1.2** (`02` v3.8): `cases.serial_no` + `assets.serial_contract`/`serial_actual` · `assets.imei_contract` เป็น nullable + CHECK `assets_identifier_required` (ต้องมี IMEI หรือ serial อย่างน้อย 1) · partial unique `uniq_assets_active_imei` (เฉพาะ `imei_contract IS NOT NULL AND asset_status <> 'handed_over' AND deleted_at IS NULL`) แทน UNIQUE เต็มตารางเดิม · **business check ตอน intake + ข้อความ error อ่านออก อยู่ใน 2.13** (IMEI ยังเป็น exact match 15 หลัก ห้าม fuzzy — `44` §6.5)
 
 ---
 

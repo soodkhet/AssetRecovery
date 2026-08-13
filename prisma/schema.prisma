@@ -1,6 +1,8 @@
 // Prisma schema — SSOT ของ schema คือ `docs/02-database-schema-design.md` เท่านั้น (Rule 02)
 // Phase 1.1 = enum ครบ 54 ตัว (`02` §3) + Group A Identity 5 ตาราง (§4) + Group B Master Data 14 ตาราง (§5)
-// Group C–G (32 ตาราง) + seed → Phase 1.2
+// Phase 1.2 = Group C Case 7 (§6) + D Warehouse 2 (§7) + E Finance 8 (§8) + F Accounting 11 (§9) + G Platform 4 (§10)
+//             + 2 ตารางตามมติ PO 2026-08-12 (`bank_transaction_allocations` A2 · `customer_wht_certificates` A1)
+//             = 53 ตารางทั้งหมด · seed อยู่ที่ `prisma/seed.ts`
 //
 // ⚠️ Prisma เป็นเจ้าของ schema แต่เพียงผู้เดียว — ห้ามสร้าง/แก้ตารางผ่าน Supabase Dashboard/Branching
 // ⚠️ เงินทุกช่อง = Int satang เท่านั้น (ห้าม Float/Decimal) ยกเว้น rate_pct/wht_pct = Decimal(5,2)
@@ -492,23 +494,23 @@ enum JobStatus {
 
 /// องค์กรเจ้าของระบบ (multi-tenant ready) — root table: ไม่มี organization_id และลบไม่ได้ (ไม่มี soft delete)
 model Organization {
-  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name           String
-  taxId          String  @unique @map("tax_id") @db.VarChar(13)
-  address        String
-  phone          String? @db.VarChar(20)
-  email          String? @db.VarChar(255)
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String
+  taxId         String  @unique @map("tax_id") @db.VarChar(13)
+  address       String
+  phone         String? @db.VarChar(20)
+  email         String? @db.VarChar(255)
   /// Supabase Storage URL
-  logoUrl        String? @map("logo_url")
-  vatRegistered  Boolean @default(true) @map("vat_registered")
+  logoUrl       String? @map("logo_url")
+  vatRegistered Boolean @default(true) @map("vat_registered")
 
   // Tax invoice numbering (ไฟล์ 13 §6.12) — เลขที่ห้าม gap
-  taxInvoicePrefix         String               @default("INV") @map("tax_invoice_prefix") @db.VarChar(20)
-  taxInvoiceSeq            Int                  @default(0) @map("tax_invoice_seq")
-  taxInvoiceNumberingMode  InvoiceNumberingMode @default(continuous) @map("tax_invoice_numbering_mode")
-  taxInvoiceDigitLength    Int                  @default(4) @map("tax_invoice_digit_length")
+  taxInvoicePrefix        String               @default("INV") @map("tax_invoice_prefix") @db.VarChar(20)
+  taxInvoiceSeq           Int                  @default(0) @map("tax_invoice_seq")
+  taxInvoiceNumberingMode InvoiceNumberingMode @default(continuous) @map("tax_invoice_numbering_mode")
+  taxInvoiceDigitLength   Int                  @default(4) @map("tax_invoice_digit_length")
   /// ปี พ.ศ. — ใช้เฉพาะโหมด yearly_reset
-  taxInvoiceLastResetYear  Int?                 @map("tax_invoice_last_reset_year")
+  taxInvoiceLastResetYear Int?                 @map("tax_invoice_last_reset_year")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -528,6 +530,42 @@ model Organization {
   financePolicySettings       FinancePolicySettings?
   bankFileFormats             BankFileFormat[]
   taxDocumentTemplateSettings TaxDocumentTemplateSettings[]
+
+  // Group C–G
+  cases                      Case[]
+  caseDocuments              CaseDocument[]
+  caseContacts               CaseContact[]
+  recycleRequests            RecycleRequest[]
+  caseAssignments            CaseAssignment[]
+  checkIns                   CheckIn[]
+  caseEvidences              CaseEvidence[]
+  assets                     Asset[]
+  handoverLots               HandoverLot[]
+  payeeProfiles              PayeeProfile[]
+  expenses                   Expense[]
+  advances                   Advance[]
+  payoutBatches              PayoutBatch[]
+  payoutBatchItems           PayoutBatchItem[]
+  revenues                   Revenue[]
+  billingBatches             BillingBatch[]
+  adjustments                Adjustment[]
+  accountingPeriods          AccountingPeriod[]
+  salesRecords               SalesRecord[]
+  taxInvoices                TaxInvoice[]
+  cashReceipts               CashReceipt[]
+  expenseRecords             ExpenseRecord[]
+  whtCertificates            WhtCertificate[]
+  whtFilingSummaries         WhtFilingSummary[]
+  exceptions                 Exception[]
+  bankTransactions           BankTransaction[]
+  bankTransactionAllocations BankTransactionAllocation[]
+  customerWhtCertificates    CustomerWhtCertificate[]
+  accountantQuestions        AccountantQuestion[]
+  exportRecords              ExportRecord[]
+  auditLogs                  AuditLog[]
+  notifications              Notification[]
+  jobs                       Job[]
+  files                      StoredFile[]
 
   @@map("organizations")
 }
@@ -582,18 +620,18 @@ model User {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization Organization    @relation(fields: [organizationId], references: [id])
-  role         Role            @relation(fields: [roleId], references: [id])
-  team         Team?           @relation("team_members", fields: [teamId], references: [id])
-  company      FinanceCompany? @relation("company_users", fields: [companyId], references: [id])
-  createdByUser User?          @relation("users_created_by", fields: [createdBy], references: [id])
-  updatedByUser User?          @relation("users_updated_by", fields: [updatedBy], references: [id])
+  organization  Organization    @relation(fields: [organizationId], references: [id])
+  role          Role            @relation(fields: [roleId], references: [id])
+  team          Team?           @relation("team_members", fields: [teamId], references: [id])
+  company       FinanceCompany? @relation("company_users", fields: [companyId], references: [id])
+  createdByUser User?           @relation("users_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?           @relation("users_updated_by", fields: [updatedBy], references: [id])
 
   usersCreated User[] @relation("users_created_by")
   usersUpdated User[] @relation("users_updated_by")
 
   // scope ที่ผู้ใช้ถืออยู่
-  supervisedTeams Team[]          @relation("team_supervisor")
+  supervisedTeams Team[]        @relation("team_supervisor")
   managedTeams    TeamManager[]
 
   // back-relation ของ created_by / updated_by ทุกตารางใน Group B
@@ -617,6 +655,82 @@ model User {
   bankFileFormatsCreated             BankFileFormat[]              @relation("bank_file_formats_created_by")
   bankFileFormatsUpdated             BankFileFormat[]              @relation("bank_file_formats_updated_by")
   taxDocumentTemplateSettingsUpdated TaxDocumentTemplateSettings[] @relation("tax_doc_templates_updated_by")
+
+  // ── Group C–G: งานที่ผู้ใช้คนนี้เกี่ยวข้องโดยตรง ──
+  payeeProfile       PayeeProfile[]   @relation("payee_user")
+  assignmentsAsAgent CaseAssignment[] @relation("assignments_agent")
+  notifications      Notification[]   @relation("notifications_user")
+  auditLogs          AuditLog[]       @relation("audit_actor")
+
+  // ── Group C–G: back-relation ของ created_by / updated_by / actor อื่นๆ ──
+  casesCreated              Case[]                      @relation("cases_created_by")
+  casesUpdated              Case[]                      @relation("cases_updated_by")
+  casesReviewed             Case[]                      @relation("cases_reviewed_by")
+  caseDocumentsUploaded     CaseDocument[]              @relation("case_documents_uploaded_by")
+  caseContactsCreated       CaseContact[]               @relation("case_contacts_created_by")
+  recycleRequestsCreated    RecycleRequest[]            @relation("recycle_requests_created_by")
+  recycleRequestsDecided    RecycleRequest[]            @relation("recycle_requests_decided_by")
+  assignmentsCreated        CaseAssignment[]            @relation("assignments_created_by")
+  assignmentsUpdated        CaseAssignment[]            @relation("assignments_updated_by")
+  checkInsCreated           CheckIn[]                   @relation("checkins_created_by")
+  evidencesCreated          CaseEvidence[]              @relation("evidences_created_by")
+  evidencesUpdated          CaseEvidence[]              @relation("evidences_updated_by")
+  evidencesReviewed         CaseEvidence[]              @relation("evidences_reviewed_by")
+  assetsCreated             Asset[]                     @relation("assets_created_by")
+  assetsUpdated             Asset[]                     @relation("assets_updated_by")
+  assetsRejected            Asset[]                     @relation("assets_rejected_by")
+  lotsCreated               HandoverLot[]               @relation("lots_created_by")
+  lotsUpdated               HandoverLot[]               @relation("lots_updated_by")
+  lotsConfirmed             HandoverLot[]               @relation("lots_confirmed_by")
+  payeesCreated             PayeeProfile[]              @relation("payees_created_by")
+  payeesUpdated             PayeeProfile[]              @relation("payees_updated_by")
+  payeesVerified            PayeeProfile[]              @relation("payees_verified_by")
+  expensesCreated           Expense[]                   @relation("expenses_created_by")
+  expensesUpdated           Expense[]                   @relation("expenses_updated_by")
+  expensesApprovedManager   Expense[]                   @relation("expenses_manager_approved_by")
+  expensesApprovedFinance   Expense[]                   @relation("expenses_finance_approved_by")
+  expensesApprovedExecutive Expense[]                   @relation("expenses_executive_approved_by")
+  advancesCreated           Advance[]                   @relation("advances_created_by")
+  advancesUpdated           Advance[]                   @relation("advances_updated_by")
+  advancesApproved          Advance[]                   @relation("advances_approved_by")
+  payoutBatchesCreated      PayoutBatch[]               @relation("payout_batches_created_by")
+  payoutBatchesUpdated      PayoutBatch[]               @relation("payout_batches_updated_by")
+  payoutItemsCreated        PayoutBatchItem[]           @relation("payout_items_created_by")
+  revenuesCreated           Revenue[]                   @relation("revenues_created_by")
+  revenuesUpdated           Revenue[]                   @relation("revenues_updated_by")
+  billingCreated            BillingBatch[]              @relation("billing_created_by")
+  billingUpdated            BillingBatch[]              @relation("billing_updated_by")
+  billingSent               BillingBatch[]              @relation("billing_sent_by")
+  adjustmentsCreated        Adjustment[]                @relation("adjustments_created_by")
+  adjustmentsUpdated        Adjustment[]                @relation("adjustments_updated_by")
+  adjustmentsApproved       Adjustment[]                @relation("adjustments_approved_by")
+  periodsCreated            AccountingPeriod[]          @relation("periods_created_by")
+  periodsSent               AccountingPeriod[]          @relation("periods_sent_by")
+  periodsLocked             AccountingPeriod[]          @relation("periods_locked_by")
+  salesRecordsCreated       SalesRecord[]               @relation("sales_created_by")
+  taxInvoicesCreated        TaxInvoice[]                @relation("tax_invoices_created_by")
+  taxInvoicesCancelled      TaxInvoice[]                @relation("tax_invoices_cancelled_by")
+  cashReceiptsCreated       CashReceipt[]               @relation("cash_receipts_created_by")
+  expenseRecordsCreated     ExpenseRecord[]             @relation("expense_records_created_by")
+  whtCertsCreated           WhtCertificate[]            @relation("wht_certs_created_by")
+  whtCertsCancelled         WhtCertificate[]            @relation("wht_certs_cancelled_by")
+  whtFilingsFiled           WhtFilingSummary[]          @relation("wht_filings_filed_by")
+  exceptionsCreated         Exception[]                 @relation("exceptions_created_by")
+  exceptionsUpdated         Exception[]                 @relation("exceptions_updated_by")
+  exceptionsResolved        Exception[]                 @relation("exceptions_resolved_by")
+  exceptionsAuthorized      Exception[]                 @relation("exceptions_authorized_by")
+  bankTxCreated             BankTransaction[]           @relation("bank_tx_created_by")
+  bankTxUpdated             BankTransaction[]           @relation("bank_tx_updated_by")
+  bankTxMatched             BankTransaction[]           @relation("bank_tx_matched_by")
+  allocationsCreated        BankTransactionAllocation[] @relation("allocations_created_by")
+  customerWhtCreated        CustomerWhtCertificate[]    @relation("customer_wht_created_by")
+  customerWhtUpdated        CustomerWhtCertificate[]    @relation("customer_wht_updated_by")
+  questionsCreated          AccountantQuestion[]        @relation("questions_created_by")
+  questionsAnswered         AccountantQuestion[]        @relation("questions_answered_by")
+  exportsGenerated          ExportRecord[]              @relation("exports_generated_by")
+  exportsSent               ExportRecord[]              @relation("exports_sent_by")
+  jobsCreated               Job[]                       @relation("jobs_created_by")
+  filesUploaded             StoredFile[]                @relation("files_uploaded_by")
 
   @@unique([organizationId, email])
   @@index([organizationId, roleId], map: "idx_users_org_role")
@@ -661,15 +775,15 @@ model RoleCapability {
 // ═══════════════════════════════════════════════════════════════
 
 model Team {
-  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId     String   @map("organization_id") @db.Uuid
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String     @map("organization_id") @db.Uuid
   name               String
   side               TeamSide
-  compensationPlanId String?  @map("compensation_plan_id") @db.Uuid
+  compensationPlanId String?    @map("compensation_plan_id") @db.Uuid
   /// หัวหน้าทีม (1 คน)
-  supervisorId       String?  @map("supervisor_id") @db.Uuid
+  supervisorId       String?    @map("supervisor_id") @db.Uuid
   /// จังหวัดที่รับผิดชอบ
-  provinces          String[] @default([])
+  provinces          String[]   @default([])
   status             TeamStatus @default(active)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -686,6 +800,10 @@ model Team {
 
   members  User[]        @relation("team_members")
   managers TeamManager[]
+
+  casesSuggested Case[]           @relation("cases_suggested_team")
+  casesAssigned  Case[]           @relation("cases_assigned_team")
+  assignments    CaseAssignment[] @relation("assignments_team")
 
   @@unique([organizationId, name])
   @@map("teams")
@@ -711,17 +829,17 @@ model CompensationPlan {
   side           TeamSide
 
   // Fuel
-  fuelMode              FuelMode @map("fuel_mode")
+  fuelMode             FuelMode @map("fuel_mode")
   /// ใช้เมื่อ PER_KM
-  fuelRatePerKmSatang   Int?     @map("fuel_rate_per_km_satang")
+  fuelRatePerKmSatang  Int?     @map("fuel_rate_per_km_satang")
   /// เพดานต่อเคส (nullable = ไม่จำกัด)
-  fuelMaxPerCaseSatang  Int?     @map("fuel_max_per_case_satang")
+  fuelMaxPerCaseSatang Int?     @map("fuel_max_per_case_satang")
   /// ใช้เมื่อ DAILY_FLAT
-  fuelDailyFlatSatang   Int?     @map("fuel_daily_flat_satang")
+  fuelDailyFlatSatang  Int?     @map("fuel_daily_flat_satang")
 
-  allowanceSatang Int @default(0) @map("allowance_satang")
+  allowanceSatang    Int @default(0) @map("allowance_satang")
   /// จ่ายเมื่อ closed_success
-  commissionSatang Int @default(0) @map("commission_satang")
+  commissionSatang   Int @default(0) @map("commission_satang")
   /// เบี้ยเสี่ยง จ่ายเมื่อ closed_fail (`22` §6.4)
   noSuccessFeeSatang Int @default(0) @map("no_success_fee_satang")
 
@@ -732,10 +850,10 @@ model CompensationPlan {
   whtPct Decimal @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
 
   // Versioning
-  version       Int      @default(1)
-  effectiveFrom DateTime @map("effective_from") @db.Date
+  version       Int       @default(1)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
   effectiveTo   DateTime? @map("effective_to") @db.Date
-  isCurrent     Boolean  @default(true) @map("is_current")
+  isCurrent     Boolean   @default(true) @map("is_current")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -747,7 +865,8 @@ model CompensationPlan {
   createdByUser User         @relation("comp_plans_created_by", fields: [createdBy], references: [id])
   updatedByUser User?        @relation("comp_plans_updated_by", fields: [updatedBy], references: [id])
 
-  teams Team[]
+  teams    Team[]
+  expenses Expense[] @relation("expenses_comp_plan")
 
   @@unique([organizationId, name, version])
   @@index([organizationId, isCurrent], map: "idx_comp_plans_org")
@@ -777,11 +896,11 @@ model FinanceCompany {
   vatRegistered Boolean @default(true) @map("vat_registered")
 
   /// วันตัดรอบบิล
-  billingDay      Int    @default(1) @map("billing_day")
+  billingDay     Int    @default(1) @map("billing_day")
   /// วันครบกำหนดชำระ
-  paymentDueDays  Int    @default(30) @map("payment_due_days")
+  paymentDueDays Int    @default(30) @map("payment_due_days")
   /// active | inactive
-  status          String @default("active")
+  status         String @default("active")
 
   /// A1 (มติ PO 2026-08-12) — อัตรา WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา · null = ไม่หัก
   whtWithheldByCustomerPct Decimal? @default(3.00) @map("wht_withheld_by_customer_pct") @db.Decimal(5, 2)
@@ -799,6 +918,15 @@ model FinanceCompany {
 
   users User[] @relation("company_users")
 
+  cases                   Case[]                      @relation("cases_company")
+  assets                  Asset[]                     @relation("assets_company")
+  handoverLots            HandoverLot[]               @relation("lots_company")
+  revenues                Revenue[]                   @relation("revenues_company")
+  billingBatches          BillingBatch[]              @relation("billing_company")
+  salesRecords            SalesRecord[]               @relation("sales_company")
+  allocations             BankTransactionAllocation[] @relation("allocations_company")
+  customerWhtCertificates CustomerWhtCertificate[]    @relation("customer_wht_company")
+
   @@unique([organizationId, taxId])
   @@map("finance_companies")
 }
@@ -811,12 +939,12 @@ model ServiceFeeTemplate {
   model          ServiceFeeModel
 
   /// FLAT / HYBRID
-  baseSatang Int @default(0) @map("base_satang")
+  baseSatang   Int              @default(0) @map("base_satang")
   /// SUCCESS_FEE / HYBRID
-  ratePct    Decimal          @default(0) @map("rate_pct") @db.Decimal(5, 2)
-  basis      ServiceFeeBasis?
+  ratePct      Decimal          @default(0) @map("rate_pct") @db.Decimal(5, 2)
+  basis        ServiceFeeBasis?
   /// FLAT / HYBRID — เก็บค่าบริการแม้เคสไม่สำเร็จ
-  chargeOnFail Boolean @default(false) @map("charge_on_fail")
+  chargeOnFail Boolean          @default(false) @map("charge_on_fail")
 
   /// A3 (มติ PO 2026-08-12) — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ)
   chargePerTrackingRound Boolean @default(true) @map("charge_per_tracking_round")
@@ -835,6 +963,7 @@ model ServiceFeeTemplate {
   updatedByUser User?        @relation("service_fee_templates_updated_by", fields: [updatedBy], references: [id])
 
   financeCompanies FinanceCompany[]
+  cases            Case[]           @relation("cases_service_fee_template")
 
   @@unique([organizationId, name, version])
   @@map("service_fee_templates")
@@ -842,17 +971,17 @@ model ServiceFeeTemplate {
 
 /// กติกาภาษีต่อ Payee (ไฟล์ 18 §6.3) — Payee-level ชนะ Plan-level เสมอ
 model TaxProfile {
-  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String  @map("organization_id") @db.Uuid
-  name           String
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String        @map("organization_id") @db.Uuid
+  name                  String
   /// % หัก ณ ที่จ่าย
-  whtPct         Decimal @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
+  whtPct                Decimal       @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
   /// before_vat | gross_amount — ฐานคำนวณ WHT
-  whtBasis       String  @default("before_vat") @map("wht_basis")
+  whtBasis              String        @default("before_vat") @map("wht_basis")
   /// ต่ำกว่านี้ไม่หัก (default 1,000 บาท)
-  whtMinThresholdSatang Int @default(100000) @map("wht_min_threshold_satang")
-  incomeType     String  @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
-  filingForm     WhtFilingForm @default(PND3) @map("filing_form")
+  whtMinThresholdSatang Int           @default(100000) @map("wht_min_threshold_satang")
+  incomeType            String        @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
+  filingForm            WhtFilingForm @default(PND3) @map("filing_form")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -861,6 +990,9 @@ model TaxProfile {
 
   organization  Organization @relation(fields: [organizationId], references: [id])
   createdByUser User         @relation("tax_profiles_created_by", fields: [createdBy], references: [id])
+
+  payeeProfiles    PayeeProfile[]    @relation("payee_tax_profile")
+  payoutBatchItems PayoutBatchItem[] @relation("payout_items_tax_profile")
 
   @@unique([organizationId, name])
   @@map("tax_profiles")
@@ -898,15 +1030,15 @@ model BankAccount {
   accountType    String  @default("savings") @map("account_type")
   isPrimary      Boolean @default(false) @map("is_primary")
 
-  usage BankAccountUsage @default(both)
+  usage                  BankAccountUsage @default(both)
   /// รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้างชื่อจาก bank_file_formats
-  statementFormat   String? @map("statement_format")
+  statementFormat        String?          @map("statement_format")
   /// รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้างชื่อจาก bank_file_formats
-  paymentFileFormat String? @map("payment_file_format")
+  paymentFileFormat      String?          @map("payment_file_format")
   /// จำนวนวันที่ยอมรับสำหรับ auto-match (ไฟล์ 35)
-  autoMatchToleranceDays Int @default(7) @map("auto_match_tolerance_days")
+  autoMatchToleranceDays Int              @default(7) @map("auto_match_tolerance_days")
   /// ⚠️ DEPRECATED (DEC-006/D2) — ความหมายซ้ำกับ `usage` ห้ามใช้ในโค้ดใหม่
-  isPayoutAccount Boolean @default(false) @map("is_payout_account")
+  isPayoutAccount        Boolean          @default(false) @map("is_payout_account")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -915,6 +1047,9 @@ model BankAccount {
 
   organization  Organization @relation(fields: [organizationId], references: [id])
   createdByUser User         @relation("bank_accounts_created_by", fields: [createdBy], references: [id])
+
+  payoutBatches    PayoutBatch[]     @relation("payout_bank_account")
+  bankTransactions BankTransaction[] @relation("bank_tx_account")
 
   @@unique([organizationId, accountNumber])
   @@map("bank_accounts")
@@ -936,6 +1071,8 @@ model CostCenter {
 
   organization  Organization @relation(fields: [organizationId], references: [id])
   createdByUser User         @relation("cost_centers_created_by", fields: [createdBy], references: [id])
+
+  expenseRecords ExpenseRecord[] @relation("expense_records_cost_center")
 
   @@unique([organizationId, code])
   @@map("cost_centers")
@@ -979,15 +1116,15 @@ model BillingPayoutCycle {
 
 /// สายการอนุมัติ (ไฟล์ 13 §6.2) — ค่านโยบายการเงินแยกไป finance_policy_settings
 model ApprovalMatrix {
-  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String @map("organization_id") @db.Uuid
-  condition      String
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId             String   @map("organization_id") @db.Uuid
+  condition                  String
   /// เงินเป็น satang เสมอ (spec ไฟล์ 13 เขียนเป็นบาทระดับเอกสาร)
-  conditionThresholdSatang Int? @map("condition_threshold_satang")
+  conditionThresholdSatang   Int?     @map("condition_threshold_satang")
   /// ลำดับ role เช่น ['Manager','Finance','Executive']
-  approvalFlow String[] @map("approval_flow")
+  approvalFlow               String[] @map("approval_flow")
   /// ไฟล์ 16 — SEGREGATION_OF_DUTIES_VIOLATION
-  enforceSegregationOfDuties Boolean @default(false) @map("enforce_segregation_of_duties")
+  enforceSegregationOfDuties Boolean  @default(false) @map("enforce_segregation_of_duties")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -999,13 +1136,15 @@ model ApprovalMatrix {
   createdByUser User         @relation("approval_matrices_created_by", fields: [createdBy], references: [id])
   updatedByUser User?        @relation("approval_matrices_updated_by", fields: [updatedBy], references: [id])
 
+  expenses Expense[] @relation("expenses_approval_matrix")
+
   @@index([organizationId], map: "idx_approval_matrices_org")
   @@map("approval_matrices")
 }
 
 /// ค่านโยบายการเงินระดับองค์กร — 1 record ต่อ organization (DEC-006/D1 Option B)
 model FinancePolicySettings {
-  organizationId String @id @map("organization_id") @db.Uuid
+  organizationId                   String  @id @map("organization_id") @db.Uuid
   /// NULL = ไม่จำกัด (ไฟล์ 15 — ADVANCE_EXCEEDS_MAX)
   advanceMaxAmountPerRequestSatang Int?    @map("advance_max_amount_per_request_satang")
   requirePayeeIdDocument           Boolean @default(false) @map("require_payee_id_document")
@@ -1013,7 +1152,7 @@ model FinancePolicySettings {
   arAgingBuckets                   Int[]   @default([30, 60, 90]) @map("ar_aging_buckets")
 
   /// B4 (มติ PO 2026-08-12) — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
-  writeOffToleranceSatang Int @default(5000) @map("write_off_tolerance_satang")
+  writeOffToleranceSatang              Int     @default(5000) @map("write_off_tolerance_satang")
   /// D12 (มติ PO 2026-08-12) — ตัด advance ที่ไม่มีใบเสร็จเป็นลูกหนี้พนักงาน แล้วหักจาก payout รอบถัดไป
   advanceUnclearedToEmployeeReceivable Boolean @default(true) @map("advance_uncleared_to_employee_receivable")
 
@@ -1069,4 +1208,1290 @@ model TaxDocumentTemplateSettings {
 
   @@unique([organizationId, documentType])
   @@map("tax_document_template_settings")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group C — Case Workflow (`02` §6)
+// ═══════════════════════════════════════════════════════════════
+
+/// เคสงานติดตามทรัพย์ (ไฟล์ 38)
+/// ⚠️ Service fee = **snapshot ตอน `approved`** ห้ามคำนวณย้อนหลังจาก template ปัจจุบัน (`10` §9.2, `92` §7.1)
+model Case {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  /// เลขสัญญาจากไฟแนนซ์ เช่น SF-2026-00832
+  caseRef        String     @map("case_ref")
+  /// รอบติดตาม (เพิ่มเมื่อ recycle)
+  trackingRound  Int        @default(1) @map("tracking_round")
+  source         CaseSource @default(manual)
+  status         CaseStatus @default(draft)
+  companyId      String     @map("company_id") @db.Uuid
+
+  // Service Fee snapshot (ตอน approved)
+  serviceFeeTemplateId    String?          @map("service_fee_template_id") @db.Uuid
+  serviceFeeModelSnapshot ServiceFeeModel? @map("service_fee_model_snapshot")
+  serviceFeeBaseSatang    Int?             @map("service_fee_base_satang")
+  serviceFeeRatePct       Decimal?         @map("service_fee_rate_pct") @db.Decimal(5, 2)
+  serviceFeeBasisSnapshot ServiceFeeBasis? @map("service_fee_basis_snapshot")
+  serviceFeeChargeOnFail  Boolean?         @map("service_fee_charge_on_fail")
+
+  // Debtor
+  debtorName        String  @map("debtor_name")
+  debtorNationalId  String? @map("debtor_national_id") @db.VarChar(13)
+  debtorPhoneMobile String? @map("debtor_phone_mobile") @db.VarChar(20)
+  debtorPhoneWork   String? @map("debtor_phone_work") @db.VarChar(20)
+  debtorLineId      String? @map("debtor_line_id")
+  debtorFacebook    String? @map("debtor_facebook")
+
+  // Address (current)
+  addrProvince    String? @map("addr_province")
+  addrDistrict    String? @map("addr_district")
+  addrSubdistrict String? @map("addr_subdistrict")
+  addrPostalCode  String? @map("addr_postal_code") @db.VarChar(5)
+  addrDetail      String? @map("addr_detail")
+
+  // Asset
+  assetDescription String  @map("asset_description")
+  /// A6 (มติ PO 2026-08-12) — IMEI 15 หลักเท่านั้น (exact match ห้าม fuzzy · `44` §6.5)
+  imei             String? @db.VarChar(15)
+  /// A6 — เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ) เก็บ serial แทน · ต้องมีอย่างน้อย 1 อย่างก่อนปิดงานสำเร็จ
+  serialNo         String? @map("serial_no")
+  debtAmountSatang Int?    @map("debt_amount_satang")
+  assetValueSatang Int?    @map("asset_value_satang")
+
+  // Team assignment (`38` §6.4)
+  suggestedTeamId  String? @map("suggested_team_id") @db.Uuid
+  assignedTeamId   String? @map("assigned_team_id") @db.Uuid
+  teamChangeReason String? @map("team_change_reason")
+
+  // Review
+  reviewedBy String?   @map("reviewed_by") @db.Uuid
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  reviewNote String?   @map("review_note")
+
+  // Close
+  outcome  CaseOutcome?
+  closedAt DateTime?    @map("closed_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  company            FinanceCompany      @relation("cases_company", fields: [companyId], references: [id])
+  serviceFeeTemplate ServiceFeeTemplate? @relation("cases_service_fee_template", fields: [serviceFeeTemplateId], references: [id])
+  suggestedTeam      Team?               @relation("cases_suggested_team", fields: [suggestedTeamId], references: [id])
+  assignedTeam       Team?               @relation("cases_assigned_team", fields: [assignedTeamId], references: [id])
+  reviewedByUser     User?               @relation("cases_reviewed_by", fields: [reviewedBy], references: [id])
+  createdByUser      User                @relation("cases_created_by", fields: [createdBy], references: [id])
+  updatedByUser      User?               @relation("cases_updated_by", fields: [updatedBy], references: [id])
+
+  documents   CaseDocument[]
+  contacts    CaseContact[]
+  recycles    RecycleRequest[]
+  assignments CaseAssignment[]
+  checkIns    CheckIn[]
+  evidences   CaseEvidence[]
+  assets      Asset[]
+  expenses    Expense[]
+  revenues    Revenue[]
+
+  @@unique([organizationId, companyId, caseRef, trackingRound])
+  @@index([organizationId, status], map: "idx_cases_org_status")
+  @@index([organizationId, companyId], map: "idx_cases_org_company")
+  @@index([organizationId, assignedTeamId], map: "idx_cases_org_team")
+  @@index([organizationId, outcome, closedAt], map: "idx_cases_closed")
+  @@map("cases")
+}
+
+/// เอกสารแนบต่อเคส (`38` §6.3) — insert + soft delete เท่านั้น ไม่มี updated_at (`02` §2.4)
+model CaseDocument {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  caseId         String @map("case_id") @db.Uuid
+  /// contract_doc | national_id_doc | product_photo | other_doc
+  documentType   String @map("document_type")
+  /// Supabase Storage URL
+  fileUrl        String @map("file_url")
+  /// SHA-256 (ไฟล์ 01)
+  fileHash       String @map("file_hash")
+  originalName   String @map("original_name")
+  mimeType       String @map("mime_type")
+  sizeBytes      Int    @map("size_bytes")
+
+  uploadedAt DateTime  @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  uploadedBy String    @map("uploaded_by") @db.Uuid
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  case           Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  uploadedByUser User         @relation("case_documents_uploaded_by", fields: [uploadedBy], references: [id])
+
+  @@index([caseId, documentType], map: "idx_case_docs_case")
+  @@map("case_documents")
+}
+
+/// ผู้ที่เกี่ยวข้องกับลูกหนี้ — insert-only (`02` §2.4)
+model CaseContact {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  caseId         String  @map("case_id") @db.Uuid
+  contactName    String  @map("contact_name")
+  relation       String
+  phone          String? @db.VarChar(20)
+  note           String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  case          Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdByUser User         @relation("case_contacts_created_by", fields: [createdBy], references: [id])
+
+  @@index([caseId], map: "idx_case_contacts_case")
+  @@map("case_contacts")
+}
+
+/// คำขอ recycle เคส closed_fail (`38` §6.5) — insert-only
+model RecycleRequest {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  caseId         String        @map("case_id") @db.Uuid
+  status         RecycleStatus @default(pending)
+  requestNote    String        @map("request_note")
+  decisionNote   String?       @map("decision_note")
+  decidedBy      String?       @map("decided_by") @db.Uuid
+  decidedAt      DateTime?     @map("decided_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  case          Case         @relation(fields: [caseId], references: [id])
+  decidedByUser User?        @relation("recycle_requests_decided_by", fields: [decidedBy], references: [id])
+  createdByUser User         @relation("recycle_requests_created_by", fields: [createdBy], references: [id])
+
+  @@index([caseId, status], map: "idx_recycle_requests_case")
+  @@map("recycle_requests")
+}
+
+/// การมอบหมายงาน Field Agent (ไฟล์ 40) — reassign เก็บสายเดิมไว้ที่ `reassignedFrom`
+model CaseAssignment {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  caseId         String           @map("case_id") @db.Uuid
+  /// Field Agent
+  agentId        String           @map("agent_id") @db.Uuid
+  teamId         String           @map("team_id") @db.Uuid
+  trackingRound  Int              @default(1) @map("tracking_round")
+  status         AssignmentStatus @default(pending)
+
+  scheduledDate DateTime? @map("scheduled_date") @db.Date
+  acceptedAt    DateTime? @map("accepted_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  reassignedFrom String? @map("reassigned_from") @db.Uuid
+  reassignReason String? @map("reassign_reason")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization       Organization    @relation(fields: [organizationId], references: [id])
+  case               Case            @relation(fields: [caseId], references: [id])
+  agent              User            @relation("assignments_agent", fields: [agentId], references: [id])
+  team               Team            @relation("assignments_team", fields: [teamId], references: [id])
+  reassignedFromItem CaseAssignment? @relation("assignments_reassigned_from", fields: [reassignedFrom], references: [id])
+  createdByUser      User            @relation("assignments_created_by", fields: [createdBy], references: [id])
+  updatedByUser      User?           @relation("assignments_updated_by", fields: [updatedBy], references: [id])
+
+  reassignedTo CaseAssignment[] @relation("assignments_reassigned_from")
+  checkIns     CheckIn[]
+  evidences    CaseEvidence[]
+  expenses     Expense[]
+
+  @@index([caseId, status], map: "idx_assignments_case")
+  @@index([agentId, status], map: "idx_assignments_agent")
+  @@map("case_assignments")
+}
+
+/// เช็คอินระหว่างลงพื้นที่ (`41` §6.2) — GPS จริงเท่านั้น · insert-only
+model CheckIn {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  caseId         String      @map("case_id") @db.Uuid
+  assignmentId   String      @map("assignment_id") @db.Uuid
+  checkinType    CheckinType @map("checkin_type")
+  latitude       Decimal     @db.Decimal(10, 7)
+  longitude      Decimal     @db.Decimal(10, 7)
+  addressNote    String?     @map("address_note")
+  note           String?
+  checkedInAt    DateTime    @map("checked_in_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  case          Case           @relation(fields: [caseId], references: [id])
+  assignment    CaseAssignment @relation(fields: [assignmentId], references: [id])
+  createdByUser User           @relation("checkins_created_by", fields: [createdBy], references: [id])
+
+  @@index([caseId, checkedInAt], map: "idx_checkins_case")
+  @@map("check_ins")
+}
+
+/// หลักฐานปิดงาน (`41` §6.3)
+/// ⚠️ Immutable (`02` §13): `status = approved` ห้าม UPDATE ทุกคอลัมน์ — บังคับที่ service layer (task 2.9)
+model CaseEvidence {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  caseId         String         @map("case_id") @db.Uuid
+  assignmentId   String         @map("assignment_id") @db.Uuid
+  outcome        CaseOutcome
+  status         EvidenceStatus @default(pending)
+
+  /// URLs รูปสินค้า (Supabase Storage)
+  productPhotos String[] @default([]) @map("product_photos")
+  videoUrl      String?  @map("video_url")
+
+  reviewedBy   String?   @map("reviewed_by") @db.Uuid
+  reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  rejectReason String?   @map("reject_reason")
+
+  travelOriginLat    Decimal? @map("travel_origin_lat") @db.Decimal(10, 7)
+  travelOriginLng    Decimal? @map("travel_origin_lng") @db.Decimal(10, 7)
+  /// gps_auto | manual
+  travelOriginSource String?  @map("travel_origin_source")
+
+  submittedAt DateTime @map("submitted_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy   String   @map("created_by") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy   String?  @map("updated_by") @db.Uuid
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  case           Case           @relation(fields: [caseId], references: [id])
+  assignment     CaseAssignment @relation(fields: [assignmentId], references: [id])
+  reviewedByUser User?          @relation("evidences_reviewed_by", fields: [reviewedBy], references: [id])
+  createdByUser  User           @relation("evidences_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?          @relation("evidences_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([caseId, status], map: "idx_evidences_case")
+  @@map("case_evidences")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group D — Warehouse (`02` §7 · ไฟล์ 44)
+// ═══════════════════════════════════════════════════════════════
+
+/// ทรัพย์ที่ยึดคืนได้ — snapshot ข้อมูลเคสไว้ในตัว (ไฟล์ 44)
+/// ⚠️ IMEI = exact match 15 หลัก ห้าม fuzzy/trim/ignore dash (`44` §6.5)
+/// A6 (มติ PO 2026-08-12): `imeiContract` เป็น nullable + เพิ่ม `serialContract` (เครื่องไม่มี IMEI)
+/// unique เดิม `(org, imei_contract)` → **partial unique** `uniq_assets_active_imei` ใน raw SQL migration
+model Asset {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  caseId         String  @map("case_id") @db.Uuid
+  companyId      String  @map("company_id") @db.Uuid
+  lotId          String? @map("lot_id") @db.Uuid
+
+  // Snapshot จาก Case
+  caseRef    String @map("case_ref")
+  debtorName String @map("debtor_name")
+  deviceDesc String @map("device_desc")
+
+  /// IMEI ตามสัญญา (15 หลัก) — NULL ได้เฉพาะเครื่องที่ไม่มี IMEI (ต้องมี `serialContract` แทน)
+  imeiContract   String? @map("imei_contract") @db.VarChar(15)
+  /// IMEI ที่ตรวจจริงตอนรับเข้าคลัง — ต่างจากสัญญา = IMEI_MISMATCH (เตือน ไม่ block)
+  imeiActual     String? @map("imei_actual") @db.VarChar(15)
+  /// A6 — serial ตามสัญญา (เครื่องไม่มี IMEI)
+  serialContract String? @map("serial_contract")
+  /// A6 — serial ที่ตรวจจริงตอนรับเข้าคลัง
+  serialActual   String? @map("serial_actual")
+
+  assetStatus   AssetStatus     @default(pending_intake) @map("asset_status")
+  condition     AssetCondition?
+  conditionNote String?         @map("condition_note")
+  /// Supabase Storage URLs
+  photos        String[]        @default([])
+
+  /// snapshot จาก `cases.closed_at`
+  closedAt   DateTime  @map("closed_at") @db.Timestamptz(6)
+  receivedAt DateTime? @map("received_at") @db.Timestamptz(6)
+
+  rejectReason String?   @map("reject_reason")
+  rejectedAt   DateTime? @map("rejected_at") @db.Timestamptz(6)
+  rejectedBy   String?   @map("rejected_by") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  case           Case           @relation(fields: [caseId], references: [id])
+  company        FinanceCompany @relation("assets_company", fields: [companyId], references: [id])
+  lot            HandoverLot?   @relation(fields: [lotId], references: [id])
+  rejectedByUser User?          @relation("assets_rejected_by", fields: [rejectedBy], references: [id])
+  createdByUser  User           @relation("assets_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?          @relation("assets_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([organizationId, assetStatus], map: "idx_assets_org_status")
+  @@index([organizationId, companyId, assetStatus], map: "idx_assets_org_company")
+  @@index([lotId], map: "idx_assets_lot")
+  @@map("assets")
+}
+
+/// ล็อตส่งมอบ (ไฟล์ 44) — **1 lot = 1 บริษัทไฟแนนซ์** (`44` §6.2)
+/// ⚠️ Immutable (`02` §13): `status = confirmed` ห้าม UPDATE/DELETE
+/// ⚠️ confirm = `$transaction` 4 ขั้น (assets→handed_over · ปลดล็อก expenses · audit · tryCreateRevenue) — `44` §11
+model HandoverLot {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  companyId      String @map("company_id") @db.Uuid
+  /// LOT-2569-001 (ปี พ.ศ.)
+  lotNumber      String @unique @map("lot_number")
+  /// DLV-2569-001 (ปี พ.ศ.)
+  docRef         String @unique @map("doc_ref")
+
+  type   HandoverType
+  status HandoverLotStatus @default(pending_attach)
+
+  scheduledAt   DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  contactPerson String?   @map("contact_person")
+  deliveryAddr  String?   @map("delivery_addr")
+
+  deliveredAt DateTime? @map("delivered_at") @db.Timestamptz(6)
+  trackingNo  String?   @map("tracking_no")
+
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  confirmedBy String?   @map("confirmed_by") @db.Uuid
+
+  /// ① ใบเซ็นรับ — บังคับก่อน confirmed
+  signedDocUrl     String? @map("signed_doc_url")
+  /// ② หลักฐานจัดส่ง — บังคับเฉพาะ `we_deliver`
+  deliveryProofUrl String? @map("delivery_proof_url")
+  note             String?
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  company         FinanceCompany @relation("lots_company", fields: [companyId], references: [id])
+  confirmedByUser User?          @relation("lots_confirmed_by", fields: [confirmedBy], references: [id])
+  createdByUser   User           @relation("lots_created_by", fields: [createdBy], references: [id])
+  updatedByUser   User?          @relation("lots_updated_by", fields: [updatedBy], references: [id])
+
+  assets Asset[]
+
+  @@index([organizationId, status], map: "idx_lots_org_status")
+  @@index([organizationId, companyId, status], map: "idx_lots_org_company")
+  @@map("handover_lots")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group E — Finance Operation (`02` §8)
+// ═══════════════════════════════════════════════════════════════
+
+/// ข้อมูลผู้รับเงิน (ไฟล์ 18) — `taxProfileId` ระดับ Payee **ชนะ** Plan level เสมอ (`18` §6.3)
+model PayeeProfile {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  payeeType      PayeeType @default(individual) @map("payee_type")
+  /// Payee level ชนะ Plan level (`18` §6.3) — NULL = fallback Plan พร้อม warning
+  taxProfileId   String?   @map("tax_profile_id") @db.Uuid
+
+  bankName      String? @map("bank_name")
+  accountName   String? @map("account_name")
+  accountNumber String? @map("account_number")
+  nationalId    String? @map("national_id") @db.VarChar(13)
+  /// บังคับเมื่อ `finance_policy_settings.require_payee_id_document = true` (`13` §6.2)
+  idDocumentUrl String? @map("id_document_url")
+
+  isVerified Boolean   @default(false) @map("is_verified")
+  verifiedBy String?   @map("verified_by") @db.Uuid
+  verifiedAt DateTime? @map("verified_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User         @relation("payee_user", fields: [userId], references: [id])
+  taxProfile     TaxProfile?  @relation("payee_tax_profile", fields: [taxProfileId], references: [id])
+  verifiedByUser User?        @relation("payees_verified_by", fields: [verifiedBy], references: [id])
+  createdByUser  User         @relation("payees_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?        @relation("payees_updated_by", fields: [updatedBy], references: [id])
+
+  expenses        Expense[]
+  advances        Advance[]
+  payoutItems     PayoutBatchItem[]
+  whtCertificates WhtCertificate[]
+
+  @@unique([organizationId, userId])
+  @@map("payee_profiles")
+}
+
+/// รายการเบิกค่าตอบแทน (ไฟล์ 15, `41` §6.6)
+/// ⚠️ Snapshot `compPlanId` + `compPlanVersion` ตอนเกิดรายการ ห้ามคำนวณย้อนหลัง (`92` §7.1)
+/// ⚠️ ปลดล็อกจาก `pending_warehouse_confirm` ได้เฉพาะตอน Lot confirmed (`44` §11)
+model Expense {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  /// NULL = Manual Claim ไม่ผูกเคส
+  caseId         String? @map("case_id") @db.Uuid
+  assignmentId   String? @map("assignment_id") @db.Uuid
+  payeeId        String  @map("payee_id") @db.Uuid
+
+  expenseType ExpenseType @map("expense_type")
+  grossSatang Int         @map("gross_satang")
+
+  /// compensation_plan | manual | receipt
+  calculationSource String? @map("calculation_source")
+  compPlanId        String? @map("comp_plan_id") @db.Uuid
+  compPlanVersion   Int?    @map("comp_plan_version")
+
+  status ExpenseStatus @default(pending_warehouse_confirm)
+
+  managerApprovedBy   String?   @map("manager_approved_by") @db.Uuid
+  managerApprovedAt   DateTime? @map("manager_approved_at") @db.Timestamptz(6)
+  financeApprovedBy   String?   @map("finance_approved_by") @db.Uuid
+  financeApprovedAt   DateTime? @map("finance_approved_at") @db.Timestamptz(6)
+  /// ขั้นเกินเพดานตาม Approval Matrix (`16` §6.1 — DEC-006/D5)
+  executiveApprovedBy String?   @map("executive_approved_by") @db.Uuid
+  executiveApprovedAt DateTime? @map("executive_approved_at") @db.Timestamptz(6)
+
+  approvalStepCurrent Int     @default(1) @map("approval_step_current")
+  /// 2 หรือ 3 ตาม approval_flow (`16` §7)
+  approvalStepTotal   Int     @default(2) @map("approval_step_total")
+  /// [{step, approver_id, action, timestamp, reason}] (`16` §7)
+  approvalHistory     Json    @default("[]") @map("approval_history")
+  /// snapshot ว่ารายการนี้ใช้ matrix แถวไหน
+  approvalMatrixId    String? @map("approval_matrix_id") @db.Uuid
+
+  rejectionReason String? @map("rejection_reason")
+  revisionNote    String? @map("revision_note")
+
+  /// ตั้งค่าหลังสร้าง `payout_batch_items` — เก็บเป็นคอลัมน์อ้างอิงตาม `02` §8 (ไม่ประกาศเป็น relation เพื่อเลี่ยง 1:1 วนกลับ)
+  payoutBatchItemId String? @map("payout_batch_item_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization            Organization      @relation(fields: [organizationId], references: [id])
+  case                    Case?             @relation(fields: [caseId], references: [id])
+  assignment              CaseAssignment?   @relation(fields: [assignmentId], references: [id])
+  payee                   PayeeProfile      @relation(fields: [payeeId], references: [id])
+  compPlan                CompensationPlan? @relation("expenses_comp_plan", fields: [compPlanId], references: [id])
+  approvalMatrix          ApprovalMatrix?   @relation("expenses_approval_matrix", fields: [approvalMatrixId], references: [id])
+  managerApprovedByUser   User?             @relation("expenses_manager_approved_by", fields: [managerApprovedBy], references: [id])
+  financeApprovedByUser   User?             @relation("expenses_finance_approved_by", fields: [financeApprovedBy], references: [id])
+  executiveApprovedByUser User?             @relation("expenses_executive_approved_by", fields: [executiveApprovedBy], references: [id])
+  createdByUser           User              @relation("expenses_created_by", fields: [createdBy], references: [id])
+  updatedByUser           User?             @relation("expenses_updated_by", fields: [updatedBy], references: [id])
+
+  payoutItems PayoutBatchItem[]
+  adjustments Adjustment[]
+
+  @@index([organizationId, status], map: "idx_expenses_org_status")
+  @@index([caseId, status], map: "idx_expenses_case")
+  @@index([payeeId, status], map: "idx_expenses_payee")
+  @@map("expenses")
+}
+
+/// เงินทดรองจ่าย (ไฟล์ 15)
+/// ⚠️ ห้ามเบิกซ้อน — partial unique `uniq_active_advance_per_payee` (approved|overdue) อยู่ใน raw SQL migration
+/// ⚠️ `returnSatang` = **generated column** (`GREATEST(0, approved - used)`) — DB คำนวณเอง **ห้ามเขียนค่าลงไป**
+model Advance {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String        @map("organization_id") @db.Uuid
+  payeeId         String        @map("payee_id") @db.Uuid
+  requestedSatang Int           @map("requested_satang")
+  approvedSatang  Int?          @map("approved_satang")
+  usedSatang      Int           @default(0) @map("used_satang")
+  /// read-only (generated) — `used > approved` → 0 เสมอ ห้ามติดลบ (Rule 01)
+  returnSatang    Int           @map("return_satang")
+  status          AdvanceStatus @default(pending_approval)
+  purpose         String
+  dueClearDate    DateTime      @map("due_clear_date") @db.Date
+  approvedBy      String?       @map("approved_by") @db.Uuid
+  approvedAt      DateTime?     @map("approved_at") @db.Timestamptz(6)
+  clearedAt       DateTime?     @map("cleared_at") @db.Timestamptz(6)
+  rejectionReason String?       @map("rejection_reason")
+
+  /// A4 (มติ PO 2026-08-12) — ขาจ่ายเงินทดรองผ่านรอบจ่าย (คู่กับ `payout_batch_items.advance_id`)
+  payoutBatchItemId String? @map("payout_batch_item_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  payee          PayeeProfile @relation(fields: [payeeId], references: [id])
+  approvedByUser User?        @relation("advances_approved_by", fields: [approvedBy], references: [id])
+  createdByUser  User         @relation("advances_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?        @relation("advances_updated_by", fields: [updatedBy], references: [id])
+
+  payoutItems      PayoutBatchItem[]
+  bankTransactions BankTransaction[] @relation("bank_tx_matched_advance")
+
+  @@index([payeeId, status], map: "idx_advances_payee")
+  @@index([organizationId, dueClearDate, status], map: "idx_advances_due")
+  @@map("advances")
+}
+
+/// รอบจ่ายเงิน (ไฟล์ 17) — `idempotencyKey` UNIQUE กันโอนซ้ำ (`17` §6.3)
+/// ⚠️ Immutable (`02` §13): `status = completed` ห้าม UPDATE gross/wht/net
+model PayoutBatch {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  name           String
+  side           PayoutBatchSide
+  status         PayoutBatchStatus @default(draft)
+
+  grossSatang Int @default(0) @map("gross_satang")
+  whtSatang   Int @default(0) @map("wht_satang")
+  netSatang   Int @default(0) @map("net_satang")
+
+  bankAccountId          String?   @map("bank_account_id") @db.Uuid
+  paymentFileUrl         String?   @map("payment_file_url")
+  paymentFileGeneratedAt DateTime? @map("payment_file_generated_at") @db.Timestamptz(6)
+  /// ป้องกันโอนซ้ำ (`17` §6.3)
+  idempotencyKey         String?   @unique @map("idempotency_key")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  bankAccount   BankAccount? @relation("payout_bank_account", fields: [bankAccountId], references: [id])
+  createdByUser User         @relation("payout_batches_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
+
+  items            PayoutBatchItem[]
+  adjustments      Adjustment[]
+  bankTransactions BankTransaction[] @relation("bank_tx_matched_payout")
+
+  @@index([organizationId, status], map: "idx_payout_batches_org")
+  @@map("payout_batches")
+}
+
+/// รายการในรอบจ่าย — snapshot `taxProfileId` + `whtPctSnapshot` ณ เวลาสร้าง (`92` §7.1)
+/// A4 (มติ PO 2026-08-12): `expenseId` เป็น nullable + เพิ่ม `advanceId` (แหล่งที่มา 2 แบบ — DEC-004 separate FK)
+/// CHECK `pbi_one_source` (exactly-one non-null) อยู่ใน raw SQL migration
+model PayoutBatchItem {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  payoutBatchId  String  @map("payout_batch_id") @db.Uuid
+  /// แหล่งที่มา ①: ค่าตอบแทนที่อนุมัติแล้ว
+  expenseId      String? @map("expense_id") @db.Uuid
+  /// แหล่งที่มา ②: เงินทดรองจ่าย (A4)
+  advanceId      String? @map("advance_id") @db.Uuid
+  payeeId        String  @map("payee_id") @db.Uuid
+  /// B3 (มติ PO 2026-08-12) — รอบติดตามของเคสต้นทาง (recycle จ่ายซ้ำได้แต่ต้องแยกรอบ)
+  trackingRound  Int     @default(1) @map("tracking_round")
+
+  grossSatang Int @map("gross_satang")
+  whtSatang   Int @default(0) @map("wht_satang")
+  netSatang   Int @map("net_satang")
+
+  /// snapshot ณ เวลาสร้าง — Payee level ชนะ Plan level (`18` §6.3)
+  taxProfileId   String?  @map("tax_profile_id") @db.Uuid
+  whtPctSnapshot Decimal? @map("wht_pct_snapshot") @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  payoutBatch   PayoutBatch  @relation(fields: [payoutBatchId], references: [id], onDelete: Cascade)
+  expense       Expense?     @relation(fields: [expenseId], references: [id])
+  advance       Advance?     @relation(fields: [advanceId], references: [id])
+  payee         PayeeProfile @relation(fields: [payeeId], references: [id])
+  taxProfile    TaxProfile?  @relation("payout_items_tax_profile", fields: [taxProfileId], references: [id])
+  createdByUser User         @relation("payout_items_created_by", fields: [createdBy], references: [id])
+
+  expenseRecord ExpenseRecord?
+
+  @@unique([payoutBatchId, expenseId])
+  @@unique([payoutBatchId, advanceId])
+  @@index([payoutBatchId], map: "idx_pbi_batch")
+  @@index([expenseId], map: "idx_pbi_expense")
+  @@map("payout_batch_items")
+}
+
+/// รายได้ (ไฟล์ 19) — เกิดเมื่อ `expense.approved` **AND** `HandoverLot.confirmed` (DEC-006/D6)
+/// ⚠️ VAT ห้าม hardcode — resolve จาก `vat_rate_history` ตาม `revenueDate` แล้ว snapshot ลง `vatRatePctUsed`
+model Revenue {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  caseId         String  @map("case_id") @db.Uuid
+  companyId      String  @map("company_id") @db.Uuid
+  billingBatchId String? @map("billing_batch_id") @db.Uuid
+  /// B3 (มติ PO 2026-08-12) — รอบติดตามที่ทำให้เกิดรายได้ใบนี้ (กันบิลซ้ำข้ามรอบ recycle)
+  trackingRound  Int     @default(1) @map("tracking_round")
+
+  grossSatang    Int     @map("gross_satang")
+  vatSatang      Int     @default(0) @map("vat_satang")
+  /// snapshot อัตรา VAT ที่ใช้จริง ณ `revenueDate`
+  vatRatePctUsed Decimal @default(7.00) @map("vat_rate_pct_used") @db.Decimal(5, 2)
+  /// gross + vat
+  totalSatang    Int     @map("total_satang")
+
+  feeModelSnapshot ServiceFeeModel @map("fee_model_snapshot")
+  status           RevenueStatus   @default(ready_for_billing)
+  revenueDate      DateTime        @map("revenue_date") @db.Date
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  case          Case           @relation(fields: [caseId], references: [id])
+  company       FinanceCompany @relation("revenues_company", fields: [companyId], references: [id])
+  billingBatch  BillingBatch?  @relation(fields: [billingBatchId], references: [id])
+  createdByUser User           @relation("revenues_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?          @relation("revenues_updated_by", fields: [updatedBy], references: [id])
+
+  adjustments Adjustment[]
+
+  @@index([organizationId, status], map: "idx_revenues_org_status")
+  @@index([companyId, status], map: "idx_revenues_company")
+  @@index([caseId], map: "idx_revenues_case")
+  @@map("revenues")
+}
+
+/// รอบวางบิล (ไฟล์ 19)
+model BillingBatch {
+  id                          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId              String             @map("organization_id") @db.Uuid
+  companyId                   String             @map("company_id") @db.Uuid
+  /// เช่น "มิถุนายน 2569" (พ.ศ.)
+  period                      String
+  status                      BillingBatchStatus @default(draft)
+  totalSatang                 Int                @default(0) @map("total_satang")
+  receivedSatang              Int                @default(0) @map("received_satang")
+  /// A1 (มติ PO 2026-08-12) — WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา · auto-match เทียบ `total − wht` ด้วย (`35` §6.2)
+  whtWithheldByCustomerSatang Int                @default(0) @map("wht_withheld_by_customer_satang")
+  dueDate                     DateTime           @map("due_date") @db.Date
+  sentAt                      DateTime?          @map("sent_at") @db.Timestamptz(6)
+  sentBy                      String?            @map("sent_by") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  company       FinanceCompany @relation("billing_company", fields: [companyId], references: [id])
+  sentByUser    User?          @relation("billing_sent_by", fields: [sentBy], references: [id])
+  createdByUser User           @relation("billing_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?          @relation("billing_updated_by", fields: [updatedBy], references: [id])
+
+  revenues                Revenue[]
+  adjustments             Adjustment[]
+  salesRecord             SalesRecord?
+  cashReceipts            CashReceipt[]
+  bankTransactions        BankTransaction[]           @relation("bank_tx_matched_billing")
+  allocations             BankTransactionAllocation[]
+  customerWhtCertificates CustomerWhtCertificate[]
+
+  @@unique([organizationId, companyId, period])
+  @@index([organizationId, status], map: "idx_billing_org_status")
+  @@index([companyId, status], map: "idx_billing_company")
+  @@map("billing_batches")
+}
+
+/// รายการปรับปรุง (ไฟล์ 20) — Polymorphic target = separate FK + CHECK exactly-one (DEC-004)
+/// CHECK `adjustments_one_target` อยู่ใน raw SQL migration
+model Adjustment {
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String           @map("organization_id") @db.Uuid
+  adjustmentType       AdjustmentType   @map("adjustment_type")
+  amountSatang         Int              @map("amount_satang")
+  reason               String
+  status               AdjustmentStatus @default(pending_approval)
+  /// snapshot: collecting | sent_to_accountant | locked
+  periodStatusAtTarget String?          @map("period_status_at_target")
+
+  revenueId      String? @map("revenue_id") @db.Uuid
+  expenseId      String? @map("expense_id") @db.Uuid
+  billingBatchId String? @map("billing_batch_id") @db.Uuid
+  payoutBatchId  String? @map("payout_batch_id") @db.Uuid
+
+  approvedBy      String?   @map("approved_by") @db.Uuid
+  approvedAt      DateTime? @map("approved_at") @db.Timestamptz(6)
+  rejectionReason String?   @map("rejection_reason")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  revenue        Revenue?      @relation(fields: [revenueId], references: [id])
+  expense        Expense?      @relation(fields: [expenseId], references: [id])
+  billingBatch   BillingBatch? @relation(fields: [billingBatchId], references: [id])
+  payoutBatch    PayoutBatch?  @relation(fields: [payoutBatchId], references: [id])
+  approvedByUser User?         @relation("adjustments_approved_by", fields: [approvedBy], references: [id])
+  createdByUser  User          @relation("adjustments_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?         @relation("adjustments_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([organizationId, status], map: "idx_adjustments_org_status")
+  @@map("adjustments")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group F — Accounting Handover (`02` §9)
+// ═══════════════════════════════════════════════════════════════
+
+/// รอบบัญชีรายเดือน (ไฟล์ 30)
+/// ⚠️ Immutable (`02` §13): `status = locked` แก้ตรงไม่ได้ทุกกรณี → ต้องผ่าน Adjustment + Executive
+model AccountingPeriod {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  /// เช่น "มิถุนายน 2569" (พ.ศ.)
+  periodLabel    String                 @map("period_label")
+  /// ปี พ.ศ. เช่น 2569
+  yearBe         Int                    @map("year_be")
+  /// 1-12
+  month          Int
+  status         AccountingPeriodStatus @default(collecting)
+
+  exportReady            Boolean   @default(false) @map("export_ready")
+  lastReadinessCheckedAt DateTime? @map("last_readiness_checked_at") @db.Timestamptz(6)
+
+  sentAt   DateTime? @map("sent_at") @db.Timestamptz(6)
+  sentBy   String?   @map("sent_by") @db.Uuid
+  lockedAt DateTime? @map("locked_at") @db.Timestamptz(6)
+  lockedBy String?   @map("locked_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  sentByUser    User?        @relation("periods_sent_by", fields: [sentBy], references: [id])
+  lockedByUser  User?        @relation("periods_locked_by", fields: [lockedBy], references: [id])
+  createdByUser User         @relation("periods_created_by", fields: [createdBy], references: [id])
+
+  salesRecords        SalesRecord[]
+  cashReceipts        CashReceipt[]
+  expenseRecords      ExpenseRecord[]
+  whtFilingSummary    WhtFilingSummary?
+  exceptions          Exception[]
+  bankTransactions    BankTransaction[]
+  accountantQuestions AccountantQuestion[]
+  exportRecords       ExportRecord[]
+
+  @@unique([organizationId, yearBe, month])
+  @@map("accounting_periods")
+}
+
+/// บันทึกขาย (ไฟล์ 31) — 1 billing batch = 1 sales record
+model SalesRecord {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  periodId       String @map("period_id") @db.Uuid
+  billingBatchId String @unique @map("billing_batch_id") @db.Uuid
+  companyId      String @map("company_id") @db.Uuid
+
+  totalBeforeVatSatang Int @map("total_before_vat_satang")
+  vatSatang            Int @default(0) @map("vat_satang")
+  totalSatang          Int @map("total_satang")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization     @relation(fields: [organizationId], references: [id])
+  period        AccountingPeriod @relation(fields: [periodId], references: [id])
+  billingBatch  BillingBatch     @relation(fields: [billingBatchId], references: [id])
+  company       FinanceCompany   @relation("sales_company", fields: [companyId], references: [id])
+  createdByUser User             @relation("sales_created_by", fields: [createdBy], references: [id])
+
+  taxInvoices TaxInvoice[]
+
+  @@index([periodId], map: "idx_sales_records_period")
+  @@index([companyId, periodId], map: "idx_sales_records_company")
+  @@map("sales_records")
+}
+
+/// ใบกำกับภาษี (`31` §8) — เลขที่ auto-gen **ห้าม gap ห้ามแก้**
+/// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE ห้าม reverse cancel
+model TaxInvoice {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  salesRecordId  String           @map("sales_record_id") @db.Uuid
+  invoiceNumber  String           @unique @map("invoice_number")
+  invoiceDate    DateTime         @map("invoice_date") @db.Date
+  status         TaxInvoiceStatus @default(active)
+  cancelReason   String?          @map("cancel_reason")
+  cancelledBy    String?          @map("cancelled_by") @db.Uuid
+  cancelledAt    DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  salesRecord     SalesRecord  @relation(fields: [salesRecordId], references: [id])
+  cancelledByUser User?        @relation("tax_invoices_cancelled_by", fields: [cancelledBy], references: [id])
+  createdByUser   User         @relation("tax_invoices_created_by", fields: [createdBy], references: [id])
+
+  @@index([organizationId, status], map: "idx_tax_invoices_org")
+  @@map("tax_invoices")
+}
+
+/// บันทึกรับเงิน (ไฟล์ 31) — insert-only
+model CashReceipt {
+  id                          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId              String   @map("organization_id") @db.Uuid
+  periodId                    String   @map("period_id") @db.Uuid
+  billingBatchId              String   @map("billing_batch_id") @db.Uuid
+  bankTransactionId           String?  @map("bank_transaction_id") @db.Uuid
+  amountSatang                Int      @map("amount_satang")
+  /// A1 (มติ PO 2026-08-12) — WHT ที่ลูกค้าหักจากยอดนี้ (เครดิตภาษีของบริษัท)
+  whtWithheldByCustomerSatang Int      @default(0) @map("wht_withheld_by_customer_satang")
+  receivedDate                DateTime @map("received_date") @db.Date
+  note                        String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  period          AccountingPeriod @relation(fields: [periodId], references: [id])
+  billingBatch    BillingBatch     @relation(fields: [billingBatchId], references: [id])
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  createdByUser   User             @relation("cash_receipts_created_by", fields: [createdBy], references: [id])
+
+  @@index([periodId], map: "idx_cash_receipts_period")
+  @@index([billingBatchId], map: "idx_cash_receipts_billing")
+  @@map("cash_receipts")
+}
+
+/// บัญชีค่าใช้จ่าย (ไฟล์ 32) — 1 payout item = 1 expense record
+model ExpenseRecord {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String  @map("organization_id") @db.Uuid
+  periodId          String  @map("period_id") @db.Uuid
+  payoutBatchItemId String  @unique @map("payout_batch_item_id") @db.Uuid
+  costCenterId      String? @map("cost_center_id") @db.Uuid
+
+  grossSatang Int @map("gross_satang")
+  whtSatang   Int @default(0) @map("wht_satang")
+  netSatang   Int @map("net_satang")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  period          AccountingPeriod @relation(fields: [periodId], references: [id])
+  payoutBatchItem PayoutBatchItem  @relation(fields: [payoutBatchItemId], references: [id])
+  costCenter      CostCenter?      @relation("expense_records_cost_center", fields: [costCenterId], references: [id])
+  createdByUser   User             @relation("expense_records_created_by", fields: [createdBy], references: [id])
+
+  whtCertificates WhtCertificate[]
+
+  @@index([periodId], map: "idx_expense_records_period")
+  @@map("expense_records")
+}
+
+/// ใบ 50 ทวิ ที่**เราออกให้ผู้รับเงิน** (ไฟล์ 33)
+/// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE/reverse — ออกใบใหม่อ้าง `replacesCertificateId` (DEC-006/D4)
+model WhtCertificate {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String            @map("organization_id") @db.Uuid
+  certificateNumber String            @unique @map("certificate_number")
+  payeeId           String            @map("payee_id") @db.Uuid
+  expenseRecordId   String            @map("expense_record_id") @db.Uuid
+  incomeType        String            @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
+  paymentDate       DateTime          @map("payment_date") @db.Date
+  grossSatang       Int               @map("gross_satang")
+  whtSatang         Int               @map("wht_satang")
+  filingForm        WhtFilingForm     @map("filing_form")
+  deliveryFormat    WhtDeliveryFormat @default(paper) @map("delivery_format")
+
+  status                WhtCertificateStatus @default(active)
+  /// บังคับกรอกเมื่อ cancelled (WHT_CANCEL_REQUIRES_REASON)
+  cancelReason          String?              @map("cancel_reason")
+  cancelledBy           String?              @map("cancelled_by") @db.Uuid
+  cancelledAt           DateTime?            @map("cancelled_at") @db.Timestamptz(6)
+  replacesCertificateId String?              @map("replaces_certificate_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  payee           PayeeProfile    @relation(fields: [payeeId], references: [id])
+  expenseRecord   ExpenseRecord   @relation(fields: [expenseRecordId], references: [id])
+  replaces        WhtCertificate? @relation("wht_replaces", fields: [replacesCertificateId], references: [id])
+  cancelledByUser User?           @relation("wht_certs_cancelled_by", fields: [cancelledBy], references: [id])
+  createdByUser   User            @relation("wht_certs_created_by", fields: [createdBy], references: [id])
+
+  replacedBy WhtCertificate[] @relation("wht_replaces")
+
+  @@index([payeeId, paymentDate], map: "idx_wht_certs_payee")
+  @@map("wht_certificates")
+}
+
+/// สรุปยื่น WHT รายเดือน (ไฟล์ 33) — ใบที่ cancelled **ไม่นับยอด**
+model WhtFilingSummary {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  periodId       String          @unique @map("period_id") @db.Uuid
+  periodLabel    String          @map("period_label")
+  /// คำนวณอัตโนมัติจากงวด (FILING_OVERDUE_WARNING = เตือน ไม่ block)
+  filingDueDate  DateTime        @map("filing_due_date") @db.Date
+  pnd3Satang     Int             @default(0) @map("pnd3_satang")
+  pnd53Satang    Int             @default(0) @map("pnd53_satang")
+  status         WhtFilingStatus @default(pending)
+  filedAt        DateTime?       @map("filed_at") @db.Timestamptz(6)
+  filedBy        String?         @map("filed_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  period       AccountingPeriod @relation(fields: [periodId], references: [id])
+  filedByUser  User?            @relation("wht_filings_filed_by", fields: [filedBy], references: [id])
+
+  @@unique([organizationId, periodId])
+  @@map("wht_filing_summaries")
+}
+
+/// ข้อยกเว้น/ปัญหาที่ต้องเคลียร์ก่อน export (ไฟล์ 34) — critical ที่ยัง open = block export (`37`)
+model Exception {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  periodId       String          @map("period_id") @db.Uuid
+  level          ExceptionLevel
+  status         ExceptionStatus @default(open)
+  title          String
+  description    String
+  /// 'billing' | 'payout' | 'bank' | ...
+  sourceModule   String          @map("source_module")
+  /// เลขอ้างอิง (free text ไม่ใช่ FK)
+  sourceRef      String?         @map("source_ref")
+
+  resolvedBy     String?   @map("resolved_by") @db.Uuid
+  resolvedAt     DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolutionNote String?   @map("resolution_note")
+
+  /// critical เท่านั้น — Executive รับความเสี่ยง
+  authorizedBy  String?   @map("authorized_by") @db.Uuid
+  authorizedAt  DateTime? @map("authorized_at") @db.Timestamptz(6)
+  authorizeNote String?   @map("authorize_note")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  period           AccountingPeriod @relation(fields: [periodId], references: [id])
+  resolvedByUser   User?            @relation("exceptions_resolved_by", fields: [resolvedBy], references: [id])
+  authorizedByUser User?            @relation("exceptions_authorized_by", fields: [authorizedBy], references: [id])
+  createdByUser    User             @relation("exceptions_created_by", fields: [createdBy], references: [id])
+  updatedByUser    User?            @relation("exceptions_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([periodId, level, status], map: "idx_exceptions_period")
+  @@map("exceptions")
+}
+
+/// รายการเดินบัญชีธนาคาร (ไฟล์ 35) — polymorphic match = separate FK + CHECK (DEC-004)
+/// A2 (มติ PO 2026-08-12): เงินเข้าก้อนเดียวจ่ายหลายบิล → ใช้ `BankTransactionAllocation` + `isSplitAllocation = true`
+/// A4 (มติ PO 2026-08-12): เพิ่ม `matchedAdvanceId` (ขาจ่าย/รับคืนเงินทดรอง)
+/// CHECK `bank_tx_one_match` + `bank_tx_status_fk_shape` อยู่ใน raw SQL migration
+/// ⚠️ Immutable (`02` §13): unmatch ต้องมี reason + audit
+model BankTransaction {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String          @map("organization_id") @db.Uuid
+  periodId        String          @map("period_id") @db.Uuid
+  bankAccountId   String          @map("bank_account_id") @db.Uuid
+  transactionDate DateTime        @map("transaction_date") @db.Date
+  description     String
+  /// บวก = รับเงิน · ลบ = จ่ายเงิน
+  amountSatang    Int             @map("amount_satang")
+  matchStatus     BankMatchStatus @default(unmatched) @map("match_status")
+  matchNote       String?         @map("match_note")
+
+  matchedBillingId  String? @map("matched_billing_id") @db.Uuid
+  matchedPayoutId   String? @map("matched_payout_id") @db.Uuid
+  /// A4 — จับคู่กับเงินทดรอง (ขาจ่ายออก / ขารับคืน)
+  matchedAdvanceId  String? @map("matched_advance_id") @db.Uuid
+  /// A2 — true = จับคู่แบบแบ่งยอดผ่าน `bank_transaction_allocations` (FK ด้านบนต้อง NULL ทั้งหมด)
+  isSplitAllocation Boolean @default(false) @map("is_split_allocation")
+
+  matchedBy String?   @map("matched_by") @db.Uuid
+  matchedAt DateTime? @map("matched_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  period         AccountingPeriod @relation(fields: [periodId], references: [id])
+  bankAccount    BankAccount      @relation("bank_tx_account", fields: [bankAccountId], references: [id])
+  matchedBilling BillingBatch?    @relation("bank_tx_matched_billing", fields: [matchedBillingId], references: [id])
+  matchedPayout  PayoutBatch?     @relation("bank_tx_matched_payout", fields: [matchedPayoutId], references: [id])
+  matchedAdvance Advance?         @relation("bank_tx_matched_advance", fields: [matchedAdvanceId], references: [id])
+  matchedByUser  User?            @relation("bank_tx_matched_by", fields: [matchedBy], references: [id])
+  createdByUser  User             @relation("bank_tx_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?            @relation("bank_tx_updated_by", fields: [updatedBy], references: [id])
+
+  allocations  BankTransactionAllocation[]
+  cashReceipts CashReceipt[]
+
+  @@index([periodId, matchStatus], map: "idx_bank_tx_period")
+  @@index([bankAccountId, transactionDate], map: "idx_bank_tx_account")
+  @@map("bank_transactions")
+}
+
+/// คำถามจากสำนักงานบัญชี (ไฟล์ 36)
+model AccountantQuestion {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  periodId       String    @map("period_id") @db.Uuid
+  questionText   String    @map("question_text")
+  answerText     String?   @map("answer_text")
+  answeredBy     String?   @map("answered_by") @db.Uuid
+  answeredAt     DateTime? @map("answered_at") @db.Timestamptz(6)
+  isResolved     Boolean   @default(false) @map("is_resolved")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  period         AccountingPeriod @relation(fields: [periodId], references: [id])
+  answeredByUser User?            @relation("questions_answered_by", fields: [answeredBy], references: [id])
+  createdByUser  User             @relation("questions_created_by", fields: [createdBy], references: [id])
+
+  @@index([periodId, isResolved], map: "idx_accountant_questions_period")
+  @@map("accountant_questions")
+}
+
+/// ประวัติ Export Accounting Pack (ไฟล์ 37)
+/// ⚠️ Immutable (`02` §13): ห้าม DELETE — แก้ = สร้าง version ใหม่ · ทุก pack มี SHA-256 ห้าม overwrite (ไฟล์ 01)
+model ExportRecord {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  periodId       String             @map("period_id") @db.Uuid
+  version        Int                @default(1)
+  status         ExportRecordStatus @default(generated)
+  /// {01: url, 02: url, ...}
+  fileUrls       Json               @default("{}") @map("file_urls")
+  /// SHA-256 ของ pack (ไฟล์ 01)
+  fileHash       String             @map("file_hash")
+
+  generatedAt DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
+  generatedBy String    @map("generated_by") @db.Uuid
+  sentAt      DateTime? @map("sent_at") @db.Timestamptz(6)
+  sentBy      String?   @map("sent_by") @db.Uuid
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(6)
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  period          AccountingPeriod @relation(fields: [periodId], references: [id])
+  generatedByUser User             @relation("exports_generated_by", fields: [generatedBy], references: [id])
+  sentByUser      User?            @relation("exports_sent_by", fields: [sentBy], references: [id])
+
+  @@index([periodId, version], map: "idx_exports_period")
+  @@map("export_records")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group H — ตารางที่เพิ่มตามมติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`)
+// ═══════════════════════════════════════════════════════════════
+
+/// A2 — เงินเข้าก้อนเดียวจ่ายหลายรอบบิล / จ่ายบางส่วน (ไฟล์ 35)
+/// ส่วนเกินจากยอดบิล → แถวที่ `isCredit = true` (billingBatchId = NULL) เก็บเป็น credit ของบริษัท **ไม่ให้ AR ติดลบ**
+/// CHECK `bank_tx_alloc_shape` (credit ↔ batch) + `allocated_satang > 0` อยู่ใน raw SQL migration
+model BankTransactionAllocation {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String  @map("organization_id") @db.Uuid
+  bankTransactionId String  @map("bank_transaction_id") @db.Uuid
+  companyId         String  @map("company_id") @db.Uuid
+  /// NULL = ส่วนเกิน เก็บเป็น credit ของบริษัท (ต้องมี `isCredit = true`)
+  billingBatchId    String? @map("billing_batch_id") @db.Uuid
+  allocatedSatang   Int     @map("allocated_satang")
+  isCredit          Boolean @default(false) @map("is_credit")
+  note              String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  bankTransaction BankTransaction @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+  company         FinanceCompany  @relation("allocations_company", fields: [companyId], references: [id])
+  billingBatch    BillingBatch?   @relation(fields: [billingBatchId], references: [id])
+  createdByUser   User            @relation("allocations_created_by", fields: [createdBy], references: [id])
+
+  @@unique([bankTransactionId, billingBatchId])
+  @@index([billingBatchId], map: "idx_bank_tx_alloc_billing")
+  @@map("bank_transaction_allocations")
+}
+
+/// A1 — ใบ 50 ทวิ ที่**ลูกค้า (บริษัทไฟแนนซ์) ออกให้เรา** เมื่อหัก WHT จากค่าบริการ
+/// = เครดิตภาษีของบริษัท (เงินจริง) — คนละเรื่องกับ `WhtCertificate` ที่เราออกให้ผู้รับเงิน
+model CustomerWhtCertificate {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  companyId         String   @map("company_id") @db.Uuid
+  /// รอบบิลที่ใบนี้อ้างถึง (NULL = ยังจับคู่ไม่ได้)
+  billingBatchId    String?  @map("billing_batch_id") @db.Uuid
+  certificateNumber String   @map("certificate_number")
+  certificateDate   DateTime @map("certificate_date") @db.Date
+  /// ยอดก่อน VAT ที่ถูกหัก (ฐาน before_vat — `22` §6.9)
+  grossSatang       Int      @map("gross_satang")
+  whtSatang         Int      @map("wht_satang")
+  /// ไฟล์สแกนใบจริง (Supabase Storage)
+  fileUrl           String?  @map("file_url")
+  note              String?
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  company       FinanceCompany @relation("customer_wht_company", fields: [companyId], references: [id])
+  billingBatch  BillingBatch?  @relation(fields: [billingBatchId], references: [id])
+  createdByUser User           @relation("customer_wht_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?          @relation("customer_wht_updated_by", fields: [updatedBy], references: [id])
+
+  @@unique([organizationId, companyId, certificateNumber])
+  @@index([organizationId, certificateDate], map: "idx_customer_wht_date")
+  @@map("customer_wht_certificates")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group G — Platform (`02` §10)
+// ═══════════════════════════════════════════════════════════════
+
+/// Audit log — 9 fields บังคับ (`90` §13)
+/// ⚠️ Immutable (`02` §13): ห้าม UPDATE/DELETE เด็ดขาดแม้ Superadmin · ไม่มี updated_at/deleted_at
+model AuditLog {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  /// NULL = system job (ต้องระบุ job id ใน `reason`)
+  actorId        String?     @map("actor_id") @db.Uuid
+  actorRole      String?     @map("actor_role")
+  action         AuditAction
+  /// 'cases' | 'expenses' | 'handover_lots' | ...
+  targetType     String      @map("target_type")
+  targetId       String?     @map("target_id") @db.Uuid
+  beforeData     Json?       @map("before_data")
+  afterData      Json?       @map("after_data")
+  /// บังคับเมื่อกระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period
+  reason         String?
+  ipAddress      String?     @map("ip_address") @db.Inet
+  userAgent      String?     @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  actor        User?        @relation("audit_actor", fields: [actorId], references: [id])
+
+  @@index([organizationId, targetType, targetId, createdAt], map: "idx_audit_target")
+  @@index([organizationId, actorId, createdAt], map: "idx_audit_actor")
+  @@map("audit_logs")
+}
+
+/// In-app notification เฟส 1 (`90` §6.3 — DEC-006/D3)
+model Notification {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  /// ผู้รับ
+  userId         String    @map("user_id") @db.Uuid
+  /// ตามรายการ event (`90` §6.3 + registry `45` §7)
+  eventCode      String    @map("event_code")
+  title          String
+  body           String?
+  /// deep link ในแอป
+  linkPath       String?   @map("link_path")
+  /// NULL = ยังไม่อ่าน
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation("notifications_user", fields: [userId], references: [id])
+
+  @@index([userId, readAt, createdAt(sort: Desc)], map: "idx_notifications_user")
+  @@map("notifications")
+}
+
+/// Background jobs (Vercel Cron / QStash) — ทุก job ต้อง **idempotent** (`91`)
+model Job {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// NULL = job ระดับระบบ (ไม่ผูก org)
+  organizationId String?   @map("organization_id") @db.Uuid
+  /// 'export_pack' | 'bank_file' | 'wht_summary' | 'reassign_timeout' | 'advance_overdue' (`91` §6.1)
+  jobType        String    @map("job_type")
+  status         JobStatus @default(pending)
+  payload        Json      @default("{}")
+  result         Json?
+  errorMessage   String?   @map("error_message")
+  retryCount     Int       @default(0) @map("retry_count")
+  maxRetries     Int       @default(3) @map("max_retries")
+  scheduledAt    DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization  Organization? @relation(fields: [organizationId], references: [id])
+  createdByUser User?         @relation("jobs_created_by", fields: [createdBy], references: [id])
+
+  @@index([status, scheduledAt], map: "idx_jobs_status")
+  @@map("jobs")
+}
+
+/// Metadata ของไฟล์ทั้งหมดใน Supabase Storage (ตาราง `files`)
+/// ชื่อ model ตั้งเป็น `StoredFile` เพื่อไม่ชนกับ `File` ของ Web API ในโค้ดอัปโหลด
+model StoredFile {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  /// Supabase Storage bucket
+  bucket         String
+  path           String
+  /// public/signed URL
+  url            String
+  /// SHA-256 (ไฟล์ 01)
+  fileHash       String @map("file_hash")
+  originalName   String @map("original_name")
+  mimeType       String @map("mime_type")
+  sizeBytes      Int    @map("size_bytes")
+
+  uploadedBy String?   @map("uploaded_by") @db.Uuid
+  uploadedAt DateTime  @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  uploadedByUser User?        @relation("files_uploaded_by", fields: [uploadedBy], references: [id])
+
+  @@unique([bucket, path])
+  @@map("files")
 }
