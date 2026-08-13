@@ -1,19 +1,18 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-13 — ปิด Phase 0.1 (โครง Next.js + Prisma + CI ขึ้นแล้ว บนสาย `staging`)
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 0.2 (Vercel staging deploy เขียว) · ค้าง 2 อย่างฝั่ง Vercel UI ที่บล็อก 1.1 (domain ประจำ + env 5 ตัว)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 0.2: Deploy pipeline ฝั่ง Staging
+## 🎯 งานถัดไป — Phase 0.3: Adapt Orchestrator + Dev Panel เข้าโปรเจกต์นี้
 
-- ทำตาม `docs/01_PLAN.md` §0.2 — **ทำเฉพาะฝั่ง staging** (มติ PO 2026-08-12: เลื่อน Supabase Production ไปเป็น checklist ก่อนเปิด PR แรกเข้า `main`)
-- ขอบเขต: ผูก Vercel กับ repo · env vars ของ branch `staging` ครบ 5 ตัว (`DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) · domain staging ชั่วคราว · Branch Protection บน `main` (require PR + merge ได้เฉพาะ PR จาก `staging`) · verify ว่า push `staging` แล้วเห็นผลที่ domain จริง
-- ⚠️ **Schema ownership**: ห้ามเปิด Supabase Branching / migration sync / แก้ตารางผ่าน Dashboard — Prisma เป็นเจ้าของ schema ทางเดียว (`.claude/rules/02-database.md`)
-- **งานคนก่อนเริ่ม**: `git push origin staging` ครั้งแรก (session อัตโนมัติ push ไม่ได้ตาม Rule 06) + ส่งค่า Supabase staging (URL/anon/service_role) ตาม `docs/tool-register.md` — ขาดค่าไหน → `[[NEEDS_DECISION]]`
-- อ้างอิง: `docs/implementation-todo.md` §0.3–0.6, `docs/tool-register.md`
-- DoD: push `staging` เห็นผลที่ domain staging · CI เขียวบน GitHub · Branch Protection บน `main` ตั้งแล้ว
+- ทำตาม `docs/01_PLAN.md` §0.3 และ **`promptmovetools.md` ทั้งไฟล์อย่างเคร่งครัด** — ห้ามเขียนใหม่จากศูนย์ ห้ามแตะ logic ที่มี comment บทเรียน
+- ขอบเขต: `orchestrator/config.mjs` (verify commands จริงของโปรเจกต์นี้ = `pnpm lint` / `pnpm typecheck` / `pnpm test` — **`baseBranch = staging`** ตาม Release Flow, finalTestStages, uiTaskPrefixes) · แทน RULES ใน `lib/prompt.mjs` ด้วยกติกาจาก CLAUDE.md + path เอกสารชุดนี้ (`docs/00_MAP.md`, `docs/01_PLAN.md`, `docs/REUSE_INDEX.md`) · เขียน `review-prompt.md` / `final-test-prompt.md` / `final-tests/*.md` ใหม่ตามโปรเจกต์นี้ · `tools/devpanel/server.mjs` SERVICES/TASKS/docker ตาม stack จริง (Next 16 + `docker-compose.dev.yml` port 5433) + `index.html` header/desc · ตรวจไม่มี state เก่าค้าง (`queue/`, `logs/`, `.token`, `.run.lock`, `review-checkpoint.json`) · README/REMOTE/ADAPT_GUIDE อัปเดต path
+- อ้างอิง: `promptmovetools.md` (requirement หลัก), `orchestrator/ADAPT_GUIDE.md`, `orchestrator/config.mjs` · งบ ~280k
+- DoD: ตาม Definition of Done 7 ข้อใน `promptmovetools.md` — `node --check` ทุกไฟล์ที่แก้ · `orchestrate.mjs status` แสดง % + งานถัดไปถูกต้อง · `run --dry-run` ได้ prompt ที่อ้างเอกสารโปรเจกต์นี้ · dashboard (4174) + dev panel (4600) เปิดใช้จริง · grep RTB/Boonphone เหลือเฉพาะจุดตั้งใจ · รายงานจุดที่ตัดสินใจเอง
+- ⚠️ **ไม่บล็อกด้วย env** — 0.3 ไม่แตะ DB/Supabase · แต่ **Phase 1.1 บล็อก** จนกว่า env 5 ตัวบน Vercel + `.env.local` บนเครื่องจะครบ (ดูรายการค้างใน `docs/PROGRESS_ARCHIVE.md` §0.2)
 
 ---
 
@@ -22,7 +21,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ✅ | `7eda8e3` · Next 16 + Prisma 7 + vitest + CI · รายละเอียด: PROGRESS_ARCHIVE |
-| 0.2 | Deploy pipeline ฝั่ง Staging (Production เลื่อนไปก่อน PR แรกเข้า main) | ⬜ | PLAN §0.2 · มติ PO 2026-08-12 |
+| 0.2 | Deploy pipeline ฝั่ง Staging (Production เลื่อนไปก่อน PR แรกเข้า main) | ✅ | `6e3fedf`+`6cccf92`+`04f5341` · ⚠️ ค้างฝั่ง Vercel UI: domain ประจำ + env 5 ตัว (บล็อก 1.1) — ดู PROGRESS_ARCHIVE |
 | 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ⬜ | PLAN §0.3 · ห้ามเขียนใหม่จากศูนย์ |
 
 ## Phase 1 — Foundation (DB → Auth → Master Data → Settings)
