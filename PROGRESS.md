@@ -30,7 +30,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 1.1 | Prisma schema ชุด 1: enums 54 + Group A+B (19 ตาราง) | ✅ | `35dfb6e` · 55 enums (+due_rule_type A5) · CHECK+DEFERRABLE ผ่าน raw SQL · รายละเอียด: PROGRESS_ARCHIVE |
-| 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ✅ | 2026-08-14 · `49d4737` · 53 ตารางครบ + seed idempotent (15 roles / 47 capabilities) · A1/A2/A4/A6/B3 ปิดครบ → archive |
+| 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ✅ | 2026-08-14 · `1eba90e` · 53 ตารางครบ + seed idempotent (15 roles / 47 capabilities) · A1/A2/A4/A6/B3 ปิดครบ → archive |
 | 1.3 | Auth + Permission middleware + Login | ⬜ | PLAN §1.3 · ไฟล์ 05 · session 24 ชม. |
 | 1.4 | Audit core service (immutable) | ⬜ | PLAN §1.4 · ไฟล์ 90 §13 |
 | 1.5 | UI Kit + App Shell + Navigation | ⬜ | PLAN §1.5 · ไฟล์ 04+06 |

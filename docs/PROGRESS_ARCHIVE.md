@@ -7,7 +7,7 @@
 
 ## Phase 1.2 — Prisma Schema ชุดที่ 2: Group C–G + Seed Data
 
-**วันที่**: 2026-08-14 · **commit**: `49d4737` · **branch**: `staging`
+**วันที่**: 2026-08-14 · **commit**: `1eba90e` · **branch**: `staging`
 
 ### สิ่งที่ทำ
 - `prisma/schema.prisma` — **+34 ตาราง** (Group C Case 7 · D Warehouse 2 · E Finance 8 · F Accounting 11 · G Platform 4 · +2 ตารางตามมติ PO) รวมทั้งระบบเป็น **53 ตาราง / 55 enums** · เติม back-relation ของ `created_by`/`updated_by` ครบทุกตารางใน Group A/B
