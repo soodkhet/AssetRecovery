@@ -7,7 +7,7 @@
 
 ## Phase 1.1 — Prisma Schema ชุดที่ 1: Enums + Group A + Group B
 
-**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `staging`
+**วันที่**: 2026-08-14 · **commit**: `35dfb6e` · **branch**: `staging`
 
 ### สิ่งที่ทำ
 - `prisma/schema.prisma` — **enum 55 ตัว** (54 ตามสเปค `02` §3 + `due_rule_type` ตามมติ A5) + **19 ตาราง**: Group A Identity 5 (`organizations`, `roles`, `users`, `capabilities`, `role_capabilities`) + Group B Master Data 14
