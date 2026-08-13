@@ -7,7 +7,7 @@
 
 ## Phase 0.1 — Bootstrap โปรเจกต์ Next.js + โครงสร้าง + CI
 
-**วันที่**: 2026-08-13 · **commit**: `fce696d` · **branch**: `staging`
+**วันที่**: 2026-08-13 · **commit**: `7eda8e3` · **branch**: `staging`
 
 ### สิ่งที่ทำ
 - โครง Next.js 16.3 (App Router + TS strict + Tailwind v4) วางที่ root ของ repo เดิม (ไม่ใช้ `create-next-app` เพราะ repo มีไฟล์อยู่แล้ว — scaffold เองทุกไฟล์)

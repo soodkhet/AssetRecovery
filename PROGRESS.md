@@ -21,7 +21,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ✅ | `fce696d` · Next 16 + Prisma 7 + vitest + CI · รายละเอียด: PROGRESS_ARCHIVE |
+| 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ✅ | `7eda8e3` · Next 16 + Prisma 7 + vitest + CI · รายละเอียด: PROGRESS_ARCHIVE |
 | 0.2 | Deploy pipeline ฝั่ง Staging (Production เลื่อนไปก่อน PR แรกเข้า main) | ⬜ | PLAN §0.2 · มติ PO 2026-08-12 |
 | 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ⬜ | PLAN §0.3 · ห้ามเขียนใหม่จากศูนย์ |
 
