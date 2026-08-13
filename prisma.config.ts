@@ -1,5 +1,12 @@
-import 'dotenv/config'
+import { config as loadEnv } from 'dotenv'
 import { defineConfig } from 'prisma/config'
+
+// Next.js ใช้ `.env.local` เป็นไฟล์ env หลักของเครื่อง dev แต่ `dotenv/config` โหลดแค่ `.env`
+// ⇒ ถ้าไม่โหลดเอง Prisma CLI จะไม่เห็น DATABASE_URL/DIRECT_URL แล้วฟ้อง
+//    "The datasource.url property is required in your Prisma config file"
+// `.env.local` ถูกโหลดทีหลังและ override ค่าเดิม (ตรงกับลำดับของ Next.js)
+loadEnv({ path: '.env' })
+loadEnv({ path: '.env.local', override: true })
 
 /**
  * ค่าคอนฟิกของ Prisma CLI (migrate / db pull / seed) — Prisma 7 ย้าย datasource url ออกจาก schema.prisma มาที่นี่

@@ -5,6 +5,50 @@
 
 ---
 
+## Phase 1.1 — Prisma Schema ชุดที่ 1: Enums + Group A + Group B
+
+**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `staging`
+
+### สิ่งที่ทำ
+- `prisma/schema.prisma` — **enum 55 ตัว** (54 ตามสเปค `02` §3 + `due_rule_type` ตามมติ A5) + **19 ตาราง**: Group A Identity 5 (`organizations`, `roles`, `users`, `capabilities`, `role_capabilities`) + Group B Master Data 14
+- Migration 2 ใบ:
+  - `20260813215646_init_enums_group_a_b` — DDL หลัก + **raw SQL ที่ Prisma ไม่รองรับ**: CHECK `cycles_cutoff_shape` (`02` §5) · CHECK `cycles_due_rule_shape` (A5) · แปลง FK ที่ปิดวง circular (users↔teams) 7 เส้นเป็น **DEFERRABLE INITIALLY DEFERRED** (`02` §11)
+  - `20260813220500_updated_at_db_default` — เติม `DEFAULT NOW()` ให้ `updated_at` ครบ 15 ตาราง
+- `prisma/schema.test.ts` — ยาม 8 เคส: satang ต้องเป็น Int · ห้าม Float · Decimal ได้เฉพาะ pct และต้อง `(5,2)` · DateTime ต้องระบุ `Timestamptz(6)`/`Date` · model/enum ต้องมี `@@map` snake_case · field camelCase ต้องมี `@map`
+- `prisma.config.ts` — โหลด `.env` + `.env.local` (Next.js ใช้ตัวหลัง) ไม่งั้น Prisma CLI ไม่เห็น `DATABASE_URL`
+- อัปเดต spec ตามมติ PO 2026-08-12 (`02` v3.7 + changelog + `02_OPEN_DECISIONS` A1/A5 → ✅, A3/B4/D12 ติ๊กในตารางมติ) + regenerate ช่วงบรรทัดของ `02` ใน `docs/00_MAP.md`
+
+### คอลัมน์ที่เพิ่มจากมติ PO (นอกเหนือ spec เดิม — เฉพาะที่ตกอยู่ใน Group B)
+| ข้อ | ที่ไหน | สิ่งที่เพิ่ม |
+|---|---|---|
+| A1 | `finance_companies` | `wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 (NULL = ไม่หัก) — ส่วนที่เหลือของ A1 (billing/receipt + ใบ 50 ทวิฝั่งรับ) อยู่ที่ 1.2/3.6/4.2 |
+| A3 | `service_fee_templates` | `charge_per_tracking_round` BOOLEAN default true |
+| A5 | `billing_payout_cycles` | enum `due_rule_type` + `due_rule_value` INTEGER + คง `due_rule` เดิมเป็น label + CHECK |
+| B4 | `finance_policy_settings` | `write_off_tolerance_satang` INTEGER default 5000 |
+| D12 | `finance_policy_settings` | `advance_uncleared_to_employee_receivable` BOOLEAN default true |
+
+### บั๊ก/กับดักที่เจอระหว่างทาง
+1. **Prisma `@updatedAt` ไม่ออก DB default** — `updated_at` เป็น `NOT NULL` เปล่า ๆ ⇒ INSERT ด้วย SQL ตรง (seed/ops/psql) ล้มทันที ทั้งที่ `02` §2.4 กำหนด `DEFAULT NOW()` · เจอตอนทดสอบ CHECK ด้วย raw SQL แล้วโดน not-null violation ก่อนถึง CHECK
+2. **แก้ migration ที่ apply แล้ว = checksum drift** → Prisma บังคับ `migrate reset` ซึ่งเป็นคำสั่งทำลายข้อมูลและต้องขอ consent · เลี่ยงด้วยการแยกเป็น migration ใบใหม่ (ไม่ต้อง reset ไม่ต้องขอ consent)
+3. **`docker exec` ไม่มี `-i`** → heredoc ไม่ถูกส่งเข้า psql เลย คำสั่งจบเงียบ exit 0 ไม่มี output — เสียเวลาเข้าใจผิดว่า SQL ไม่ทำงาน
+(ทั้งสามข้อบันทึกใน `docs/REUSE_INDEX.md` แล้ว)
+
+### verify ที่รันจริง (DoD ของ PLAN §1.1)
+- `prisma validate` เขียว · `prisma migrate dev` + `migrate deploy` ผ่าน · `migrate status` = up to date (2 migrations)
+- **ตรวจไขว้อัตโนมัติกับ spec** (แทน subagent — ใช้สคริปต์เทียบตรง ๆ กับ DB จริง): ตาราง 19/19 ตรง · **ทุกคอลัมน์ทุกตารางตรง spec ไม่ขาดไม่เกิน** (ยกเว้น 5 คอลัมน์ตามมติ PO ที่ระบุไว้ข้างบน) · enum 54/54 **ค่าและลำดับตรงเป๊ะ** + `due_rule_type` ที่เพิ่มตามมติ
+- **ทดสอบ constraint ด้วยข้อมูลจริง**: circular insert (org → user ที่ชี้ team ยังไม่เกิด + created_by ชี้ตัวเอง → team) ผ่านใน transaction เดียว = DEFERRABLE ทำงานจริง · CHECK ทั้ง 2 ตัวปฏิเสธข้อมูลผิดรูปจริง (`cycles_cutoff_shape`, `cycles_due_rule_shape`)
+- ตรวจ `information_schema`: คอลัมน์ `%satang%` เป็น `integer` ทุกช่อง · `updated_at` มี default 15/15
+- `pnpm typecheck` / `lint` / `test` (21 เคส) / `build` เขียวครบ
+
+### จุดที่คนถัดไปควรรู้
+- **ตารางที่เพิ่มใน 1.2 ต้องรัน `ALTER ... SET DEFAULT NOW()` สำหรับ `updated_at` ด้วย** (Prisma ไม่ทำให้เอง) — คัดลอก DO block จาก migration ใบที่สองได้เลย
+- FK ที่เป็น DEFERRABLE มี 7 เส้น — ถ้า generate migration ใหม่ทับ `users`/`teams` ต้องเติมบล็อก DEFERRABLE ซ้ำ (Prisma ไม่รู้จัก attribute นี้)
+- `cutoff_dates` เป็น `Int[]` ซึ่ง Postgres ทำให้ NOT NULL default `{}` เสมอ ⇒ CHECK ต้องเช็ค `array_length > 0` ไม่ใช่ `IS NOT NULL` (เขียนไว้แล้ว)
+- ข้อ A2/A4/A6/B3-recycle ยัง ⬜ อยู่ — ตกอยู่ใน Group C–G ต้องเคาะ/ทำตอน **1.2**
+- ยังไม่มี seed — `prisma/seed.ts` เป็น stub · master data จริง (15 roles + capabilities 37) อยู่ใน 1.2
+
+---
+
 ## Phase 0.3 — Adapt Orchestrator + Dev Panel เข้าโปรเจกต์นี้
 
 **วันที่**: 2026-08-14 · **commit**: `3a54bb2` · **branch**: `staging`

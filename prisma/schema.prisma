@@ -1,8 +1,11 @@
 // Prisma schema — SSOT ของ schema คือ `docs/02-database-schema-design.md` เท่านั้น (Rule 02)
-// ตารางจริง 51 ตาราง + enum 54 ตัว เริ่มลงใน Phase 1.1 (Group A+B) และ 1.2 (Group C–G)
-// ⚠️ Prisma เป็นเจ้าของ schema แต่เพียงผู้เดียว — ห้ามสร้าง/แก้ตารางผ่าน Supabase Dashboard หรือ Branching
+// Phase 1.1 = enum ครบ 54 ตัว (`02` §3) + Group A Identity 5 ตาราง (§4) + Group B Master Data 14 ตาราง (§5)
+// Group C–G (32 ตาราง) + seed → Phase 1.2
+//
+// ⚠️ Prisma เป็นเจ้าของ schema แต่เพียงผู้เดียว — ห้ามสร้าง/แก้ตารางผ่าน Supabase Dashboard/Branching
 // ⚠️ เงินทุกช่อง = Int satang เท่านั้น (ห้าม Float/Decimal) ยกเว้น rate_pct/wht_pct = Decimal(5,2)
-// ⚠️ วันเวลาเก็บ UTC ผ่าน DateTime @db.Timestamptz(6)
+// ⚠️ วันเวลาเก็บ UTC ผ่าน DateTime @db.Timestamptz(6) — แปลง Asia/Bangkok + พ.ศ. ที่ display layer
+// ⚠️ CHECK / DEFERRABLE FK ที่ Prisma ไม่รองรับ อยู่ใน raw SQL migration (ดู migration ของ task 1.1)
 
 generator client {
   provider = "prisma-client"
@@ -11,4 +14,1059 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Enums (`02` §3) — 54 ตัว
+// ═══════════════════════════════════════════════════════════════
+
+// ── Identity & Access ──
+enum RoleGroup {
+  system // Superadmin, Executive, Finance, Accounting, Admin, Case Approver
+  inhouse // ทีม Inhouse
+  outsource // ทีม Outsource
+  finance_company // บริษัทไฟแนนซ์ภายนอก
+
+  @@map("role_group")
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+
+  @@map("user_status")
+}
+
+// ── Master Data ──
+enum TeamSide {
+  inhouse
+  outsource
+
+  @@map("team_side")
+}
+
+enum TeamStatus {
+  active
+  inactive
+
+  @@map("team_status")
+}
+
+enum PayeeType {
+  individual
+  corporate
+
+  @@map("payee_type")
+}
+
+enum CycleType {
+  AR
+  AP
+
+  @@map("cycle_type")
+}
+
+enum CutoffRuleType {
+  fixed_dates
+  month_end
+  custom_text
+
+  @@map("cutoff_rule_type")
+}
+
+enum BankAccountUsage {
+  receive
+  pay
+  both
+
+  @@map("bank_account_usage")
+}
+
+enum BankFileType {
+  CSV
+  TXT
+
+  @@map("bank_file_type")
+}
+
+enum BankFileEncoding {
+  UTF_8   @map("UTF-8")
+  TIS_620 @map("TIS-620")
+
+  @@map("bank_file_encoding")
+}
+
+enum BankFileTestStatus {
+  pending
+  passed
+  failed
+
+  @@map("bank_file_test_status")
+}
+
+enum InvoiceNumberingMode {
+  continuous
+  yearly_reset
+
+  @@map("invoice_numbering_mode")
+}
+
+enum TaxDocumentType {
+  tax_invoice
+  wht_certificate
+
+  @@map("tax_document_type")
+}
+
+enum TaxDocPaperSize {
+  A4
+  A5
+
+  @@map("tax_doc_paper_size")
+}
+
+enum TaxDocLanguage {
+  th
+  th_en_bilingual
+
+  @@map("tax_doc_language")
+}
+
+enum FunctionalGroup {
+  ops
+  finance
+  accounting
+  admin
+
+  @@map("functional_group")
+}
+
+/// DEC-009 — สิทธิ์ 3 ระดับ: ไม่มี record = มองไม่เห็น / view / manage
+enum CapabilityAccessLevel {
+  view
+  manage
+
+  @@map("capability_access_level")
+}
+
+enum FuelMode {
+  PER_KM // คำนวณตามระยะทางจริง × rate_per_km
+  DAILY_FLAT // อัตราคงที่รายวัน
+
+  @@map("fuel_mode")
+}
+
+enum ServiceFeeModel {
+  SUCCESS_FEE // % ของมูลหนี้/มูลค่าทรัพย์ เฉพาะ closed_success
+  FLAT // ค่าคงที่ต่อเคส
+  HYBRID // base + % (ไฟล์ 12)
+
+  @@map("service_fee_model")
+}
+
+enum ServiceFeeBasis {
+  debt_amount
+  asset_value
+
+  @@map("service_fee_basis")
+}
+
+enum VatMode {
+  include_vat
+  exclude_vat
+  no_vat
+
+  @@map("vat_mode")
+}
+
+enum CompanyUserLevel {
+  manager // เห็นข้อมูลทั้งหมดของบริษัท
+  supervisor // เห็นเฉพาะที่ผู้จัดการมอบหมาย
+  admin // เห็นเฉพาะงานที่ได้รับมอบหมาย
+
+  @@map("company_user_level")
+}
+
+/// A5 (มติ PO 2026-08-12) — `due_rule` ต้องคำนวณได้ ไม่ใช่ free text
+/// net_days = Net N วัน · day_of_next_month = วันที่ N ของเดือนถัดไป · month_end = สิ้นเดือน
+enum DueRuleType {
+  net_days
+  day_of_next_month
+  month_end
+
+  @@map("due_rule_type")
+}
+
+// ── Case Workflow ──
+enum CaseStatus {
+  draft
+  pending_review
+  need_info
+  approved
+  rejected
+  active
+  closed_success
+  closed_fail
+  pending_recycle_review
+
+  @@map("case_status")
+}
+
+enum CaseSource {
+  manual
+  import
+  api
+
+  @@map("case_source")
+}
+
+enum RecycleStatus {
+  pending
+  approved
+  rejected
+
+  @@map("recycle_status")
+}
+
+enum AssignmentStatus {
+  pending
+  accepted
+  active
+  completed
+  reassigned
+  cancelled
+
+  @@map("assignment_status")
+}
+
+enum CheckinType {
+  address
+  contact
+  workplace
+  asset_location
+
+  @@map("checkin_type")
+}
+
+enum CaseOutcome {
+  closed_success
+  closed_fail
+
+  @@map("case_outcome")
+}
+
+enum EvidenceStatus {
+  pending
+  approved
+  rejected
+
+  @@map("evidence_status")
+}
+
+// ── Warehouse (ไฟล์ 44) ──
+enum AssetStatus {
+  pending_intake
+  intake_rejected
+  in_custody
+  handover_pending
+  handed_over
+
+  @@map("asset_status")
+}
+
+enum AssetCondition {
+  normal
+  damaged
+  partial_loss
+
+  @@map("asset_condition")
+}
+
+enum HandoverType {
+  finance_pickup // ไฟแนนซ์มารับ → เอกสาร 1 ชุด
+  we_deliver // เราส่งไป → เอกสาร 2 ชุด
+
+  @@map("handover_type")
+}
+
+enum HandoverLotStatus {
+  pending_attach
+  pending_delivery_proof
+  confirmed
+
+  @@map("handover_lot_status")
+}
+
+// ── Finance Operation ──
+enum ExpenseStatus {
+  pending_warehouse_confirm
+  pending_approval
+  pending_finance_approval
+  approved
+  rejected
+  needs_revision
+  superseded
+
+  @@map("expense_status")
+}
+
+enum ExpenseType {
+  fuel
+  allowance
+  commission
+  no_success_fee
+  hotel
+  receipt
+  manual
+
+  @@map("expense_type")
+}
+
+enum AdvanceStatus {
+  pending_approval
+  approved
+  cleared
+  overdue
+  rejected
+
+  @@map("advance_status")
+}
+
+enum PayoutBatchSide {
+  inhouse
+  outsource
+
+  @@map("payout_batch_side")
+}
+
+enum PayoutBatchStatus {
+  draft
+  checking
+  file_generated
+  completed
+
+  @@map("payout_batch_status")
+}
+
+enum RevenueStatus {
+  ready_for_billing
+  billed
+
+  @@map("revenue_status")
+}
+
+enum BillingBatchStatus {
+  draft
+  sent
+  partially_paid
+  paid
+
+  @@map("billing_batch_status")
+}
+
+enum AdjustmentType {
+  increase
+  decrease
+
+  @@map("adjustment_type")
+}
+
+enum AdjustmentStatus {
+  pending_approval
+  approved
+  rejected
+
+  @@map("adjustment_status")
+}
+
+// ── Accounting Handover ──
+enum AccountingPeriodStatus {
+  collecting
+  sent_to_accountant
+  locked
+
+  @@map("accounting_period_status")
+}
+
+enum ExceptionLevel {
+  info
+  warning
+  critical
+
+  @@map("exception_level")
+}
+
+enum ExceptionStatus {
+  open
+  resolved
+  authorized
+
+  @@map("exception_status")
+}
+
+enum BankMatchStatus {
+  unmatched
+  auto_matched
+  manual_matched
+  unmatched_resolved
+
+  @@map("bank_match_status")
+}
+
+enum TaxInvoiceStatus {
+  active
+  cancelled
+
+  @@map("tax_invoice_status")
+}
+
+enum WhtFilingForm {
+  PND3 // บุคคลธรรมดา (ภ.ง.ด.3)
+  PND53 // นิติบุคคล (ภ.ง.ด.53)
+
+  @@map("wht_filing_form")
+}
+
+enum WhtFilingStatus {
+  pending
+  filed
+
+  @@map("wht_filing_status")
+}
+
+enum WhtCertificateStatus {
+  active
+  cancelled
+
+  @@map("wht_certificate_status")
+}
+
+enum WhtDeliveryFormat {
+  paper
+  e_withholding
+
+  @@map("wht_delivery_format")
+}
+
+enum ExportRecordStatus {
+  generated
+  sent
+  accepted
+
+  @@map("export_record_status")
+}
+
+// ── Platform ──
+enum AuditAction {
+  create
+  update
+  delete
+  status_change
+  approve
+  reject
+  confirm
+  lock
+  unlock
+  export
+  import
+  login
+  logout
+
+  @@map("audit_action")
+}
+
+enum JobStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+
+  @@map("job_status")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group A — Identity & Access (`02` §4)
+// ═══════════════════════════════════════════════════════════════
+
+/// องค์กรเจ้าของระบบ (multi-tenant ready) — root table: ไม่มี organization_id และลบไม่ได้ (ไม่มี soft delete)
+model Organization {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  taxId          String  @unique @map("tax_id") @db.VarChar(13)
+  address        String
+  phone          String? @db.VarChar(20)
+  email          String? @db.VarChar(255)
+  /// Supabase Storage URL
+  logoUrl        String? @map("logo_url")
+  vatRegistered  Boolean @default(true) @map("vat_registered")
+
+  // Tax invoice numbering (ไฟล์ 13 §6.12) — เลขที่ห้าม gap
+  taxInvoicePrefix         String               @default("INV") @map("tax_invoice_prefix") @db.VarChar(20)
+  taxInvoiceSeq            Int                  @default(0) @map("tax_invoice_seq")
+  taxInvoiceNumberingMode  InvoiceNumberingMode @default(continuous) @map("tax_invoice_numbering_mode")
+  taxInvoiceDigitLength    Int                  @default(4) @map("tax_invoice_digit_length")
+  /// ปี พ.ศ. — ใช้เฉพาะโหมด yearly_reset
+  taxInvoiceLastResetYear  Int?                 @map("tax_invoice_last_reset_year")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  roles                       Role[]
+  users                       User[]
+  teams                       Team[]
+  compensationPlans           CompensationPlan[]
+  financeCompanies            FinanceCompany[]
+  serviceFeeTemplates         ServiceFeeTemplate[]
+  taxProfiles                 TaxProfile[]
+  vatRateHistory              VatRateHistory[]
+  bankAccounts                BankAccount[]
+  costCenters                 CostCenter[]
+  billingPayoutCycles         BillingPayoutCycle[]
+  approvalMatrices            ApprovalMatrix[]
+  financePolicySettings       FinancePolicySettings?
+  bankFileFormats             BankFileFormat[]
+  taxDocumentTemplateSettings TaxDocumentTemplateSettings[]
+
+  @@map("organizations")
+}
+
+/// 15 seed roles ตามไฟล์ 07 §5 — `is_seed = true` ห้ามลบ/เปลี่ยนชื่อ (`02` §13)
+model Role {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  roleGroup      RoleGroup @map("role_group")
+  /// true = ห้ามลบ/เปลี่ยนชื่อ
+  isSeed         Boolean   @default(false) @map("is_seed")
+  /// true = แก้ permission ได้
+  isEditable     Boolean   @default(false) @map("is_editable")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  users        User[]
+  capabilities RoleCapability[]
+
+  @@unique([organizationId, name, roleGroup])
+  @@map("roles")
+}
+
+/// ผู้ใช้ระบบ — password จัดการโดย Supabase Auth ไม่เก็บที่นี่ (DEC-001/003)
+model User {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  roleId         String @map("role_id") @db.Uuid
+
+  /// FK → Supabase Auth users
+  supabaseUid  String? @unique @map("supabase_uid") @db.Uuid
+  email        String  @db.VarChar(255)
+  fullName     String  @map("full_name")
+  phone        String? @db.VarChar(20)
+  employeeCode String? @map("employee_code") @db.VarChar(50)
+
+  /// scope: inhouse/outsource เท่านั้น
+  teamId    String? @map("team_id") @db.Uuid
+  /// scope: finance_company เท่านั้น
+  companyId String? @map("company_id") @db.Uuid
+
+  status      UserStatus @default(active)
+  lastLoginAt DateTime?  @map("last_login_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  role         Role            @relation(fields: [roleId], references: [id])
+  team         Team?           @relation("team_members", fields: [teamId], references: [id])
+  company      FinanceCompany? @relation("company_users", fields: [companyId], references: [id])
+  createdByUser User?          @relation("users_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?          @relation("users_updated_by", fields: [updatedBy], references: [id])
+
+  usersCreated User[] @relation("users_created_by")
+  usersUpdated User[] @relation("users_updated_by")
+
+  // scope ที่ผู้ใช้ถืออยู่
+  supervisedTeams Team[]          @relation("team_supervisor")
+  managedTeams    TeamManager[]
+
+  // back-relation ของ created_by / updated_by ทุกตารางใน Group B
+  teamsCreated                       Team[]                        @relation("teams_created_by")
+  teamsUpdated                       Team[]                        @relation("teams_updated_by")
+  compensationPlansCreated           CompensationPlan[]            @relation("comp_plans_created_by")
+  compensationPlansUpdated           CompensationPlan[]            @relation("comp_plans_updated_by")
+  financeCompaniesCreated            FinanceCompany[]              @relation("finance_companies_created_by")
+  financeCompaniesUpdated            FinanceCompany[]              @relation("finance_companies_updated_by")
+  serviceFeeTemplatesCreated         ServiceFeeTemplate[]          @relation("service_fee_templates_created_by")
+  serviceFeeTemplatesUpdated         ServiceFeeTemplate[]          @relation("service_fee_templates_updated_by")
+  taxProfilesCreated                 TaxProfile[]                  @relation("tax_profiles_created_by")
+  vatRateHistoryCreated              VatRateHistory[]              @relation("vat_rate_history_created_by")
+  bankAccountsCreated                BankAccount[]                 @relation("bank_accounts_created_by")
+  costCentersCreated                 CostCenter[]                  @relation("cost_centers_created_by")
+  billingPayoutCyclesCreated         BillingPayoutCycle[]          @relation("cycles_created_by")
+  billingPayoutCyclesUpdated         BillingPayoutCycle[]          @relation("cycles_updated_by")
+  approvalMatricesCreated            ApprovalMatrix[]              @relation("approval_matrices_created_by")
+  approvalMatricesUpdated            ApprovalMatrix[]              @relation("approval_matrices_updated_by")
+  financePolicySettingsUpdated       FinancePolicySettings[]       @relation("finance_policy_settings_updated_by")
+  bankFileFormatsCreated             BankFileFormat[]              @relation("bank_file_formats_created_by")
+  bankFileFormatsUpdated             BankFileFormat[]              @relation("bank_file_formats_updated_by")
+  taxDocumentTemplateSettingsUpdated TaxDocumentTemplateSettings[] @relation("tax_doc_templates_updated_by")
+
+  @@unique([organizationId, email])
+  @@index([organizationId, roleId], map: "idx_users_org_role")
+  @@index([organizationId, teamId], map: "idx_users_org_team")
+  @@index([organizationId, companyId], map: "idx_users_org_company")
+  @@index([supabaseUid], map: "idx_users_supabase")
+  @@map("users")
+}
+
+/// รายการ action ที่ระบบรู้จัก (เช่น 'approve_claim') — ตาราง global ไม่มี organization_id/timestamps (`02` §2.4)
+model Capability {
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code            String           @unique
+  /// ภาษาไทยแสดงใน UI
+  label           String
+  module          String
+  /// ไฟล์ 13 §6.10 — ใช้ capabilities + role_capabilities เป็นที่เก็บ Functional Permission Matrix
+  functionalGroup FunctionalGroup? @map("functional_group")
+  description     String?
+
+  roles RoleCapability[]
+
+  @@map("capabilities")
+}
+
+/// role ไหนเข้าถึง capability อะไร ระดับไหน (DEC-009)
+/// Superadmin = manage ทุกอย่างโดยนิยาม — enforce ที่ middleware **ไม่ seed record** (ไฟล์ 25)
+model RoleCapability {
+  roleId       String                @map("role_id") @db.Uuid
+  capabilityId String                @map("capability_id") @db.Uuid
+  accessLevel  CapabilityAccessLevel @default(manage) @map("access_level")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  capability Capability @relation(fields: [capabilityId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, capabilityId])
+  @@map("role_capabilities")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Group B — Master Data (`02` §5)
+// ═══════════════════════════════════════════════════════════════
+
+model Team {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  name               String
+  side               TeamSide
+  compensationPlanId String?  @map("compensation_plan_id") @db.Uuid
+  /// หัวหน้าทีม (1 คน)
+  supervisorId       String?  @map("supervisor_id") @db.Uuid
+  /// จังหวัดที่รับผิดชอบ
+  provinces          String[] @default([])
+  status             TeamStatus @default(active)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  compensationPlan CompensationPlan? @relation(fields: [compensationPlanId], references: [id])
+  supervisor       User?             @relation("team_supervisor", fields: [supervisorId], references: [id])
+  createdByUser    User              @relation("teams_created_by", fields: [createdBy], references: [id])
+  updatedByUser    User?             @relation("teams_updated_by", fields: [updatedBy], references: [id])
+
+  members  User[]        @relation("team_members")
+  managers TeamManager[]
+
+  @@unique([organizationId, name])
+  @@map("teams")
+}
+
+/// ผู้จัดการทีม (N:N — 1 manager ดูแลได้หลายทีม) · junction: ไม่มี common columns (`02` §2.4)
+model TeamManager {
+  teamId String @map("team_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@map("team_managers")
+}
+
+/// Template ค่าตอบแทน (ไฟล์ 11) — snapshot ลง expenses ตอนเกิดค่าใช้จ่าย ห้ามคำนวณย้อนหลัง (`92` §7.1)
+model CompensationPlan {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String
+  side           TeamSide
+
+  // Fuel
+  fuelMode              FuelMode @map("fuel_mode")
+  /// ใช้เมื่อ PER_KM
+  fuelRatePerKmSatang   Int?     @map("fuel_rate_per_km_satang")
+  /// เพดานต่อเคส (nullable = ไม่จำกัด)
+  fuelMaxPerCaseSatang  Int?     @map("fuel_max_per_case_satang")
+  /// ใช้เมื่อ DAILY_FLAT
+  fuelDailyFlatSatang   Int?     @map("fuel_daily_flat_satang")
+
+  allowanceSatang Int @default(0) @map("allowance_satang")
+  /// จ่ายเมื่อ closed_success
+  commissionSatang Int @default(0) @map("commission_satang")
+  /// เบี้ยเสี่ยง จ่ายเมื่อ closed_fail (`22` §6.4)
+  noSuccessFeeSatang Int @default(0) @map("no_success_fee_satang")
+
+  hotelMaxPerNightSatang Int?    @map("hotel_max_per_night_satang")
+  hotelReceiptRequired   Boolean @default(true) @map("hotel_receipt_required")
+
+  /// fallback เมื่อ payee ไม่มี tax profile — Payee-level ชนะเสมอ (`18` §6.3)
+  whtPct Decimal @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
+
+  // Versioning
+  version       Int      @default(1)
+  effectiveFrom DateTime @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+  isCurrent     Boolean  @default(true) @map("is_current")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("comp_plans_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("comp_plans_updated_by", fields: [updatedBy], references: [id])
+
+  teams Team[]
+
+  @@unique([organizationId, name, version])
+  @@index([organizationId, isCurrent], map: "idx_comp_plans_org")
+  @@map("compensation_plans")
+}
+
+/// บริษัทไฟแนนซ์คู่ค้า (ไฟล์ 10)
+model FinanceCompany {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  name           String
+  /// ชื่อย่อ เช่น "SF", "KTL"
+  shortName      String @map("short_name")
+  taxId          String @map("tax_id") @db.VarChar(13)
+
+  address      String?
+  phone        String? @db.VarChar(20)
+  email        String? @db.VarChar(255)
+  contactName  String? @map("contact_name")
+  contactPhone String? @map("contact_phone") @db.VarChar(20)
+  /// ชื่อผู้ลงนามบนใบส่งมอบ
+  signerName   String? @map("signer_name")
+
+  serviceFeeTemplateId String? @map("service_fee_template_id") @db.Uuid
+
+  vatMode       VatMode @default(exclude_vat) @map("vat_mode")
+  vatRegistered Boolean @default(true) @map("vat_registered")
+
+  /// วันตัดรอบบิล
+  billingDay      Int    @default(1) @map("billing_day")
+  /// วันครบกำหนดชำระ
+  paymentDueDays  Int    @default(30) @map("payment_due_days")
+  /// active | inactive
+  status          String @default("active")
+
+  /// A1 (มติ PO 2026-08-12) — อัตรา WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา · null = ไม่หัก
+  whtWithheldByCustomerPct Decimal? @default(3.00) @map("wht_withheld_by_customer_pct") @db.Decimal(5, 2)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  serviceFeeTemplate ServiceFeeTemplate? @relation(fields: [serviceFeeTemplateId], references: [id])
+  createdByUser      User                @relation("finance_companies_created_by", fields: [createdBy], references: [id])
+  updatedByUser      User?               @relation("finance_companies_updated_by", fields: [updatedBy], references: [id])
+
+  users User[] @relation("company_users")
+
+  @@unique([organizationId, taxId])
+  @@map("finance_companies")
+}
+
+/// กติกาค่าบริการ (ไฟล์ 12) — snapshot ลง case ตอน **approved** ไม่ใช่ตอนสร้าง (`10` §9.2)
+model ServiceFeeTemplate {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  name           String
+  model          ServiceFeeModel
+
+  /// FLAT / HYBRID
+  baseSatang Int @default(0) @map("base_satang")
+  /// SUCCESS_FEE / HYBRID
+  ratePct    Decimal          @default(0) @map("rate_pct") @db.Decimal(5, 2)
+  basis      ServiceFeeBasis?
+  /// FLAT / HYBRID — เก็บค่าบริการแม้เคสไม่สำเร็จ
+  chargeOnFail Boolean @default(false) @map("charge_on_fail")
+
+  /// A3 (มติ PO 2026-08-12) — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ)
+  chargePerTrackingRound Boolean @default(true) @map("charge_per_tracking_round")
+
+  version   Int     @default(1)
+  isCurrent Boolean @default(true) @map("is_current")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("service_fee_templates_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("service_fee_templates_updated_by", fields: [updatedBy], references: [id])
+
+  financeCompanies FinanceCompany[]
+
+  @@unique([organizationId, name, version])
+  @@map("service_fee_templates")
+}
+
+/// กติกาภาษีต่อ Payee (ไฟล์ 18 §6.3) — Payee-level ชนะ Plan-level เสมอ
+model TaxProfile {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  name           String
+  /// % หัก ณ ที่จ่าย
+  whtPct         Decimal @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
+  /// before_vat | gross_amount — ฐานคำนวณ WHT
+  whtBasis       String  @default("before_vat") @map("wht_basis")
+  /// ต่ำกว่านี้ไม่หัก (default 1,000 บาท)
+  whtMinThresholdSatang Int @default(100000) @map("wht_min_threshold_satang")
+  incomeType     String  @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
+  filingForm     WhtFilingForm @default(PND3) @map("filing_form")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("tax_profiles_created_by", fields: [createdBy], references: [id])
+
+  @@unique([organizationId, name])
+  @@map("tax_profiles")
+}
+
+/// ประวัติอัตรา VAT — **ห้าม hardcode 7%** ต้อง resolve ตาม revenue_date + snapshot ลง record (`19` §6.3)
+/// insert-only: ไม่มี updated_at/updated_by/deleted_at (`02` §2.4)
+model VatRateHistory {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  ratePct        Decimal   @map("rate_pct") @db.Decimal(5, 2)
+  effectiveFrom  DateTime  @map("effective_from") @db.Date
+  /// NULL = ยังใช้งานอยู่
+  effectiveTo    DateTime? @map("effective_to") @db.Date
+  note           String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("vat_rate_history_created_by", fields: [createdBy], references: [id])
+
+  @@index([organizationId, effectiveFrom], map: "idx_vat_rates_org_date")
+  @@map("vat_rate_history")
+}
+
+/// บัญชีธนาคารบริษัท (ไฟล์ 13 §6.3)
+model BankAccount {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  bankName       String  @map("bank_name")
+  accountName    String  @map("account_name")
+  accountNumber  String  @map("account_number")
+  /// savings | current
+  accountType    String  @default("savings") @map("account_type")
+  isPrimary      Boolean @default(false) @map("is_primary")
+
+  usage BankAccountUsage @default(both)
+  /// รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้างชื่อจาก bank_file_formats
+  statementFormat   String? @map("statement_format")
+  /// รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้างชื่อจาก bank_file_formats
+  paymentFileFormat String? @map("payment_file_format")
+  /// จำนวนวันที่ยอมรับสำหรับ auto-match (ไฟล์ 35)
+  autoMatchToleranceDays Int @default(7) @map("auto_match_tolerance_days")
+  /// ⚠️ DEPRECATED (DEC-006/D2) — ความหมายซ้ำกับ `usage` ห้ามใช้ในโค้ดใหม่
+  isPayoutAccount Boolean @default(false) @map("is_payout_account")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("bank_accounts_created_by", fields: [createdBy], references: [id])
+
+  @@unique([organizationId, accountNumber])
+  @@map("bank_accounts")
+}
+
+/// ศูนย์ต้นทุน (ไฟล์ 13 §6.9)
+model CostCenter {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  code           String
+  name           String
+  description    String?
+  isActive       Boolean @default(true) @map("is_active")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("cost_centers_created_by", fields: [createdBy], references: [id])
+
+  @@unique([organizationId, code])
+  @@map("cost_centers")
+}
+
+/// รอบบิล/รอบจ่าย (ไฟล์ 13 §6.1)
+/// CHECK `cycles_cutoff_shape` อยู่ใน raw SQL migration (Prisma ไม่รองรับ CHECK)
+model BillingPayoutCycle {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String
+  type           CycleType
+  cutoffRuleType CutoffRuleType @map("cutoff_rule_type")
+  /// ใช้เมื่อ fixed_dates เช่น [15, 30]
+  cutoffDates    Int[]          @map("cutoff_dates")
+  /// ใช้เมื่อ custom_text
+  cutoffText     String?        @map("cutoff_text")
+
+  /// A5 (มติ PO 2026-08-12) — เดิมเป็น free text คำนวณ due_date ไม่ได้ · ตอนนี้เก็บเป็นโครงสร้าง
+  dueRuleType  DueRuleType @default(net_days) @map("due_rule_type")
+  /// net_days = จำนวนวัน · day_of_next_month = วันที่ (เกินจำนวนวันในเดือน → clamp วันสุดท้าย) · month_end = ไม่ใช้
+  dueRuleValue Int?        @map("due_rule_value")
+  /// label ที่ผู้ใช้เห็น เช่น "Net 30 Days" (ไม่ใช้คำนวณ)
+  dueRule      String      @map("due_rule")
+
+  scope String
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("cycles_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("cycles_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([organizationId, type], map: "idx_cycles_org")
+  @@map("billing_payout_cycles")
+}
+
+/// สายการอนุมัติ (ไฟล์ 13 §6.2) — ค่านโยบายการเงินแยกไป finance_policy_settings
+model ApprovalMatrix {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  condition      String
+  /// เงินเป็น satang เสมอ (spec ไฟล์ 13 เขียนเป็นบาทระดับเอกสาร)
+  conditionThresholdSatang Int? @map("condition_threshold_satang")
+  /// ลำดับ role เช่น ['Manager','Finance','Executive']
+  approvalFlow String[] @map("approval_flow")
+  /// ไฟล์ 16 — SEGREGATION_OF_DUTIES_VIOLATION
+  enforceSegregationOfDuties Boolean @default(false) @map("enforce_segregation_of_duties")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("approval_matrices_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("approval_matrices_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([organizationId], map: "idx_approval_matrices_org")
+  @@map("approval_matrices")
+}
+
+/// ค่านโยบายการเงินระดับองค์กร — 1 record ต่อ organization (DEC-006/D1 Option B)
+model FinancePolicySettings {
+  organizationId String @id @map("organization_id") @db.Uuid
+  /// NULL = ไม่จำกัด (ไฟล์ 15 — ADVANCE_EXCEEDS_MAX)
+  advanceMaxAmountPerRequestSatang Int?    @map("advance_max_amount_per_request_satang")
+  requirePayeeIdDocument           Boolean @default(false) @map("require_payee_id_document")
+  /// ไฟล์ 19 §6.4 — สร้างช่วง 0-30/31-60/61-90/90+ อัตโนมัติ
+  arAgingBuckets                   Int[]   @default([30, 60, 90]) @map("ar_aging_buckets")
+
+  /// B4 (มติ PO 2026-08-12) — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
+  writeOffToleranceSatang Int @default(5000) @map("write_off_tolerance_satang")
+  /// D12 (มติ PO 2026-08-12) — ตัด advance ที่ไม่มีใบเสร็จเป็นลูกหนี้พนักงาน แล้วหักจาก payout รอบถัดไป
+  advanceUnclearedToEmployeeReceivable Boolean @default(true) @map("advance_uncleared_to_employee_receivable")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  updatedByUser User?        @relation("finance_policy_settings_updated_by", fields: [updatedBy], references: [id])
+
+  @@map("finance_policy_settings")
+}
+
+/// รูปแบบไฟล์ธนาคาร (ไฟล์ 13 §6.8) — `test_status` ต้องเป็น passed ก่อนใช้ตัดโอนจริง (BANK_FILE_NOT_TESTED)
+model BankFileFormat {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  bankName       String             @map("bank_name")
+  fileType       BankFileType       @map("file_type")
+  /// 🔶 TIS-620/UTF-8 ต้องทดสอบกับธนาคารจริงก่อน production
+  encoding       BankFileEncoding
+  columnMapping  String             @map("column_mapping")
+  testStatus     BankFileTestStatus @default(pending) @map("test_status")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("bank_file_formats_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("bank_file_formats_updated_by", fields: [updatedBy], references: [id])
+
+  @@map("bank_file_formats")
+}
+
+/// รูปแบบเอกสารภาษีทางการ (ไฟล์ 13 §6.13) — ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (`28` §6.2–6.3)
+model TaxDocumentTemplateSettings {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String          @map("organization_id") @db.Uuid
+  documentType      TaxDocumentType @map("document_type")
+  logoUrl           String?         @map("logo_url")
+  footerNote        String?         @map("footer_note")
+  signatureImageUrl String?         @map("signature_image_url")
+  paperSize         TaxDocPaperSize @default(A4) @map("paper_size")
+  language          TaxDocLanguage  @default(th)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  updatedByUser User?        @relation("tax_doc_templates_updated_by", fields: [updatedBy], references: [id])
+
+  @@unique([organizationId, documentType])
+  @@map("tax_document_template_settings")
 }

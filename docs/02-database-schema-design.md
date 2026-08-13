@@ -21,6 +21,7 @@
 | v3.4 | 04/07/2569 | **แก้ comment เท่านั้น — ไม่มีการเปลี่ยน DDL/โครงสร้างใดๆ**: (1) จำนวน Seed Roles "14" → **"15"** — นับจาก seed data จริงใน §12 ได้ 15 records (system 6 + inhouse 3 + outsource 3 + finance_company 3 = 15) ตัวเลข 14 เดิมเป็นการนับผิดที่คัดลอกต่อกันหลายไฟล์ (แก้ไฟล์ 05/07/25/README/implementation-todo พร้อมกัน — 🔶 รอ Product Owner ยืนยันตัวเลขสุดท้าย ดู `93-roadmap-open-items.md` §7.1) (2) comment ตาราง `jobs` เติม job_type `'advance_overdue'` ตามไฟล์ 15/91 |
 | v3.5 | 04/07/2569 | **Batch 6 เฟส 2 — Product Owner อนุมัติครบทุกข้อ (DEC-006 ใน `94-decision-log.md`)**: (D1=B) เพิ่มตารางกลุ่ม Settings ตามไฟล์ 13 — `billing_payout_cycles` (§6.1), `approval_matrices` (§6.2 เฉพาะสายอนุมัติ), `finance_policy_settings` (1 record/org — แยกค่านโยบายออกจาก matrix), `bank_file_formats` (§6.8), `tax_document_template_settings` (§6.13) + เติม `functional_group` บน `capabilities` (§6.10) + เติม numbering mode เต็มรูปบน `organizations` (§6.12) — (D2=A) เติม `usage`/`statement_format`/`payment_file_format`/`auto_match_tolerance_days` บน `bank_accounts` + deprecate `is_payout_account` — (D3=A) เพิ่มตาราง `notifications` (ไฟล์ 90 §6.3) — (D4=A) `wht_certificates` เพิ่ม status model (`active`/`cancelled` + `replaces_certificate_id`) และแก้ `delivery_format` TEXT → enum — (D5=A) `expenses` เพิ่ม `executive_approved_by/at` + `approval_step_current/total` + `approval_history` + `approval_matrix_id` (ชื่อ field ตามไฟล์ 16 §7 ซึ่งเป็นเจ้าของ flow) — (D7) เพิ่ม partial unique index `advances` (ห้ามเบิกซ้อน) + CHECK `bank_tx_status_fk_shape` (ส่วน UNIQUE `idempotency_key` มีอยู่เดิมแล้ว ไม่ต้องเพิ่ม) — รวมเป็น **51 tables** (45 เดิม + 6 ใหม่) อัปเดต Migration Order/Seed/Immutable Rules ตาม — ทุกตารางใหม่เป็น greenfield จึงเขียนเป็น CREATE/column ในตารางเดิมโดยตรง ไม่มี ALTER migration แยก |
 | v3.6 | 05/07/2569 | **DEC-009 — ระดับสิทธิ์ 3 ระดับ**: เพิ่ม enum `capability_access_level` (`view`/`manage`) + column `role_capabilities.access_level` (default `manage`) — "ไม่มีสิทธิ์" = ไม่มี record ในตาราง · Superadmin มีสิทธิ์ manage ทุก capability โดยนิยาม enforce ที่ middleware ไม่ seed record · sync ไฟล์ 13 v3.1 / 25 v2.2 / mockup `settings.html` แล้ว |
+| v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -130,6 +131,13 @@ CREATE TYPE vat_mode AS ENUM (
   'include_vat',    -- ราคารวม VAT แล้ว
   'exclude_vat',    -- ราคาก่อน VAT (บวก VAT แยกบรรทัด)
   'no_vat'          -- ไม่มี VAT (บริษัทไม่จด VAT)
+);
+
+-- due_rule แบบคำนวณได้ — มติ PO 2026-08-12 ข้อ A5 (เดิม billing_payout_cycles.due_rule เป็น free text)
+CREATE TYPE due_rule_type AS ENUM (
+  'net_days',           -- Net N วัน นับจากวันตัดรอบ
+  'day_of_next_month',  -- วันที่ N ของเดือนถัดไป (เกินจำนวนวันในเดือน → clamp วันสุดท้าย)
+  'month_end'           -- สิ้นเดือน
 );
 
 CREATE TYPE company_user_level AS ENUM (
@@ -529,6 +537,8 @@ CREATE TABLE finance_companies (
   -- Billing
   billing_day           INTEGER      NOT NULL DEFAULT 1,    -- วันตัดรอบบิล
   payment_due_days      INTEGER      NOT NULL DEFAULT 30,   -- วันครบกำหนดชำระ
+  -- WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — มติ PO 2026-08-12 ข้อ A1 · NULL = บริษัทนี้ไม่หัก
+  wht_withheld_by_customer_pct NUMERIC(5,2) DEFAULT 3.00,
   status                TEXT         NOT NULL DEFAULT 'active', -- active | inactive
   created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   created_by            UUID         NOT NULL REFERENCES users(id),
@@ -552,6 +562,8 @@ CREATE TABLE service_fee_templates (
   basis               service_fee_basis,
   -- FLAT / HYBRID
   charge_on_fail      BOOLEAN              NOT NULL DEFAULT false,
+  -- คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) — มติ PO 2026-08-12 ข้อ A3
+  charge_per_tracking_round BOOLEAN        NOT NULL DEFAULT true,
   -- Versioning (snapshot ลงใน Case ตอน approved)
   version             INTEGER              NOT NULL DEFAULT 1,
   is_current          BOOLEAN              NOT NULL DEFAULT true,
@@ -644,13 +656,20 @@ CREATE TABLE billing_payout_cycles (
   cutoff_rule_type cutoff_rule_type NOT NULL,
   cutoff_dates     INTEGER[],          -- ใช้เมื่อ fixed_dates เช่น '{15,30}'
   cutoff_text      TEXT,               -- ใช้เมื่อ custom_text
-  due_rule         TEXT NOT NULL,      -- เช่น "Net 30 Days" (ไฟล์ 19 ใช้คำนวณ due_date)
+  -- มติ PO 2026-08-12 ข้อ A5 — ไฟล์ 19 ต้องคำนวณ due_date จากค่าเหล่านี้ (ห้าม parse จาก free text)
+  due_rule_type    due_rule_type NOT NULL DEFAULT 'net_days',
+  due_rule_value   INTEGER,            -- net_days = จำนวนวัน · day_of_next_month = วันที่ · month_end = ไม่ใช้
+  due_rule         TEXT NOT NULL,      -- label ที่ผู้ใช้เห็น เช่น "Net 30 Days" (ไม่ใช้คำนวณ)
   scope            TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL REFERENCES users(id),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by UUID REFERENCES users(id),
   deleted_at TIMESTAMPTZ,
+  CONSTRAINT cycles_due_rule_shape CHECK (
+    (due_rule_type IN ('net_days','day_of_next_month') AND due_rule_value IS NOT NULL AND due_rule_value > 0) OR
+    (due_rule_type = 'month_end')
+  ),
   CONSTRAINT cycles_cutoff_shape CHECK (
     (cutoff_rule_type = 'fixed_dates' AND cutoff_dates IS NOT NULL) OR
     (cutoff_rule_type = 'custom_text' AND cutoff_text IS NOT NULL) OR
@@ -683,6 +702,10 @@ CREATE TABLE finance_policy_settings (
   advance_max_amount_per_request_satang INTEGER,            -- NULL = ไม่จำกัด (ไฟล์ 15 — validation ADVANCE_EXCEEDS_MAX)
   require_payee_id_document BOOLEAN NOT NULL DEFAULT false, -- ไฟล์ 18
   ar_aging_buckets    INTEGER[] NOT NULL DEFAULT '{30,60,90}', -- ไฟล์ 19 §6.4 (สร้างช่วง 0-30/31-60/61-90/90+ อัตโนมัติ)
+  -- มติ PO 2026-08-12 ข้อ B4 — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
+  write_off_tolerance_satang INTEGER NOT NULL DEFAULT 5000,
+  -- มติ PO 2026-08-12 ข้อ D12 — advance ไม่มีใบเสร็จ → ตัดเป็นลูกหนี้พนักงาน หักจาก payout รอบถัดไป
+  advance_uncleared_to_employee_receivable BOOLEAN NOT NULL DEFAULT true,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by UUID REFERENCES users(id)
 );

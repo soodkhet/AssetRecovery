@@ -1,20 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 0 ครบทั้ง 3 task (bootstrap + deploy staging + orchestrator) · เริ่ม Phase 1 ได้เมื่อมี `.env.local` + docker postgres
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.1 (schema ชุดแรก 19 ตาราง + 55 enums ลง DB จริงแล้ว) · งานถัดไป 1.2
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.1: Prisma Schema ชุดที่ 1 (Enums 54 + Group A + Group B)
+## 🎯 งานถัดไป — Phase 1.2: Prisma Schema ชุดที่ 2 (Group C–G 32 ตาราง) + Seed
 
-- ทำตาม `docs/01_PLAN.md` §1.1 — แปลง DDL จาก `02` เป็น `prisma/schema.prisma`: **enum ครบ 54 ตัว** (`02` §3, L76–345) + **Group A Identity 5 ตาราง** (§4, L349) + **Group B Master Data 14 ตาราง** (§5, L443) ตาม convention §2 เป๊ะ (satang, common columns, soft delete, ข้อยกเว้นตารางที่ไม่ครบ §2.4)
-- **อ่าน `02` ผ่าน `docs/00_MAP.md` เท่านั้น** (ไฟล์ 1,714 บรรทัด — ห้ามอ่านทั้งไฟล์): §2 (L34), §3 (L76), §4 (L349), §5 (L443), §11 (L1545) · ประกอบ: `26`, `94` (DEC-004)
-- **ก่อนลงมือต้องอ่าน `docs/02_OPEN_DECISIONS.md` หมวด A** (จุดที่กระทบ schema: WHT ลูกค้าหัก, payment allocation, tracking_round, advance payout, due_rule, IMEI) — มติ PO 2026-08-12 ให้ยึด default ในไฟล์นั้น
-- จุดระวัง: CHECK `cycles_cutoff_shape` (L654) และ constraint ที่ Prisma ไม่รองรับ **ต้องใส่ผ่าน raw SQL migration เสมอ** · circular FK `users↔teams↔organizations` ใช้ DEFERRABLE (§11 L1603) · Polymorphic ใช้ separate FK + CHECK (DEC-004)
-- **⚠️ บล็อก**: ต้องมี `.env.local` (คัดจาก `.env.example`) + `docker compose -f docker-compose.dev.yml up -d` ก่อน ไม่งั้น `prisma migrate dev` รันไม่ได้ — env staging บน Vercel ยังค้างอยู่เช่นกัน (ดู `docs/PROGRESS_ARCHIVE.md` §0.2)
-- LOC ~1,800 · งบ ~280k
-- DoD: `prisma migrate dev` ผ่าน · `prisma validate` เขียว · spot-check ครบ 19 ตาราง + 54 enums เทียบ `02` (ใช้ subagent ตรวจไขว้)
+- ทำตาม `docs/01_PLAN.md` §1.2 — Group C Case (`02` §6, 7 ตาราง) + D Warehouse (§7, 2) + E Finance (§8, 8) + F Accounting (§9, 11) + G Platform (§10, 4) · อ่าน `02` **ผ่าน `docs/00_MAP.md` เท่านั้น** (บรรทัดเลื่อนแล้วหลัง v3.7 — §6 L749, §7 L938, §8 L1018, §9 L1253, §10 L1489, §12 L1632)
+- **ต้องเคาะ `docs/02_OPEN_DECISIONS.md` หมวด A ที่ยังค้าง 4 ข้อก่อนลงมือ** (ทั้งหมดตกอยู่ใน Group C–G): **A2** ตารางกลาง `bank_transaction_allocations` (เงินเข้าก้อนเดียวจ่ายหลายบิล) · **A4** `payout_batch_items.source_expense_id` เป็น nullable + `source_advance_id` + `matched_advance_id` · **A6** แยก `imei`/`serial_no` + partial unique · **B3(recycle)** เพิ่ม `tracking_round` ลง `revenues`/`payout_batch_items` — มติ PO 2026-08-12 ให้ยึด default ที่เสนอไว้ทุกข้อ
+- constraint พิเศษที่ต้องผ่าน **raw SQL**: partial unique `uniq_active_advance_per_payee` · generated column `advances.return_satang` · CHECK `adjustments_one_target` / `bank_tx_one_match` / `bank_tx_status_fk_shape` (DEC-004 separate FK + exactly-one non-null)
+- ⚠️ **ตารางใหม่ทุกตัวต้องเติม `updated_at DEFAULT NOW()`** ด้วย (Prisma ไม่ทำให้ — คัดลอก DO block จาก migration `20260813220500_updated_at_db_default`)
+- Seed (`02` §12): organization 1 · **roles 15** (`is_seed=true`) · VAT 7% · tax profiles 2 · finance_policy_settings 1 · **capabilities 37** ตาม `25` + `13` §6.10 · script `pnpm db:seed` — ต้อง **idempotent** (upsert) รันซ้ำได้
+- อ้างอิง: `02` ผ่าน MAP · `25` (capability list) · `07` §5 (ชื่อ 15 roles) · `13` §6.10
+- LOC ~1,800 · งบ ~290k
+- DoD: migrate + seed รันจริงผ่าน · query เห็น 15 roles + capabilities ครบ · Immutable Rules (`02` §13) ใส่เป็น TODO comment ณ ตารางที่เกี่ยว
 
 ---
 
@@ -30,7 +31,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 1.1 | Prisma schema ชุด 1: enums 54 + Group A+B (19 ตาราง) | ⬜ | PLAN §1.1 · `02` ผ่าน MAP |
+| 1.1 | Prisma schema ชุด 1: enums 54 + Group A+B (19 ตาราง) | ✅ | `__COMMIT__` · 55 enums (+due_rule_type A5) · CHECK+DEFERRABLE ผ่าน raw SQL · รายละเอียด: PROGRESS_ARCHIVE |
 | 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ⬜ | PLAN §1.2 · 15 roles + capabilities 37 |
 | 1.3 | Auth + Permission middleware + Login | ⬜ | PLAN §1.3 · ไฟล์ 05 · session 24 ชม. |
 | 1.4 | Audit core service (immutable) | ⬜ | PLAN §1.4 · ไฟล์ 90 §13 |
