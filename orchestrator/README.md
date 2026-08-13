@@ -1,4 +1,4 @@
-# RTB Orchestrator — auto-driver + dashboard
+# AssetRecovery Orchestrator — auto-driver + dashboard
 
 ระบบสั่ง Claude Code ให้ทำงานทีละก้อน (1 session = 1 task) อัตโนมัติตาม `PROGRESS.md` + verify เอง + หยุดถามเมื่อเจอจุดต้องตัดสินใจ พร้อมหน้า dashboard ดูสถานะสด
 
@@ -10,14 +10,14 @@
 
 ```
 อ่าน PROGRESS.md → หา "🎯 งานถัดไป"
-   → สร้าง branch auto/phase-<id> จาก main
+   → สร้าง branch auto/phase-<id> จาก staging
    → สั่ง Claude Code headless ทำงาน (ตามวงจร WORKFLOW §3 + กติกา CLAUDE.md)
    → รัน verify: pnpm typecheck / test / lint
         แดง → ให้ agent แก้เอง 1 รอบ → ยังแดง → พักไว้รอคน
-   → เขียว + มี commit → merge เข้า main (local เท่านั้น ไม่ push) → ทำงานถัดไปต่อ
+   → เขียว + มี commit → merge เข้า staging (local เท่านั้น ไม่ push) → ทำงานถัดไปต่อ
 ```
 
-**หยุดมาถามคุณเฉพาะเมื่อ** (ตรงกับกติกา CLAUDE.md ข้อ 26 "ไม่ชัด = หยุดถาม ห้ามเดา"):
+**หยุดมาถามคุณเฉพาะเมื่อ** (ตรงกับโปรโตคอลถาม/จบงานใน CLAUDE.md — "ไม่ชัด = หยุดถาม ห้ามเดา"):
 - เอกสารขัดกัน / สเปคไม่ชัด / ต้องตัดสินใจเชิงธุรกิจ
 - ต้องใช้ credential หรือไฟล์ที่ไม่มี
 - verify ไม่ผ่านหลังให้ agent แก้เองแล้ว
@@ -30,13 +30,13 @@
 
 ### 0. ต้องมีก่อน
 - ติดตั้ง Claude Code CLI แล้ว login (`claude` เรียกได้จาก terminal)
-- Docker Postgres (`rtb-postgres`) รันอยู่ + migrate/seed แล้ว (ตาม PROGRESS ข้อ 2a) — เพราะ `pnpm test` ต้องใช้
-- โหลด `.env`: `set -a; . ./.env; set +a`
+- Docker Postgres (`assetrecovery-postgres-dev` จาก `docker-compose.dev.yml` พอร์ต 5433) รันอยู่ + migrate/seed แล้ว — เทสต์ที่แตะ DB ต้องใช้ (เปิดง่ายสุดผ่าน Dev Panel)
+- โหลด env: `set -a; . ./.env.local; set +a`
 
 ### 1. หน้า dashboard (แนะนำ)
 ```bash
 node orchestrator/server.mjs
-# เปิด http://localhost:4173/?token=<TOKEN ที่พิมพ์ออกมาตอนบูต>
+# เปิด http://localhost:4174/?token=<TOKEN ที่พิมพ์ออกมาตอนบูต>
 ```
 > dashboard มี **token auth** — ครั้งแรก server จะสร้าง token ให้ (เก็บที่ `orchestrator/.token`) หรือตั้งเองผ่าน env `RTB_DASH_TOKEN` · **สั่งงานจากมือถือ → ดู [`REMOTE.md`](./REMOTE.md)** (Mac รัน + Tailscale)
 บนหน้านี้:
@@ -57,7 +57,7 @@ node orchestrator/orchestrate.mjs resume <id> --answer "ตอบแบบนี
 ### 3. ตั้งให้รันเองตามเวลา (ทางเลือก)
 cron (mac ใช้ launchd หรือ `crontab -e`) — รันงานถัดไปทุกเช้า 9 โมง:
 ```
-0 9 * * *  cd /path/to/RTB-RUAMTABIEN && set -a && . ./.env && set +a && node orchestrator/orchestrate.mjs run >> orchestrator/logs/cron.log 2>&1
+0 9 * * *  set -a && . ./.env.local && set +a && node orchestrator/orchestrate.mjs run >> orchestrator/logs/cron.log 2>&1
 ```
 
 ---
@@ -74,7 +74,7 @@ dashboard มี panel สรุปการใช้งาน 3 ชั้น:
 แจ้งเตือนตอน task เสร็จ/ต้องตัดสินใจ/รอ approve/ชน limit — ผ่าน [ntfy](https://ntfy.sh) (ฟรี ไม่ต้องสมัคร)
 
 ตั้งครั้งเดียว:
-1. ลงแอป **ntfy** บนมือถือ → **Subscribe** ตั้งชื่อ topic ลับ ๆ เช่น `rtb-boonphone-7h3k9`
+1. ลงแอป **ntfy** บนมือถือ → **Subscribe** ตั้งชื่อ topic ลับ ๆ เช่น `assetrecovery-a7k3x9`
 2. ใส่ใน `.env` ของโปรเจกต์:
    ```
    RTB_NTFY_TOPIC=rtb-boonphone-7h3k9
@@ -111,7 +111,7 @@ dashboard มี panel สรุปการใช้งาน 3 ชั้น:
 
 1. **ทำงานบน branch เสมอ** (`auto/phase-*`) ไม่แตะ `main` จนกว่าจะ verify ผ่าน — `main` ปลอดภัยเสมอ และ revert ได้
 2. **verify เป็นด่านกันของจริง** — ต้องเขียวก่อน merge งานการเงินต้องมี test ในก้อนเดียว (กติกา 16) ถ้าอยากเข้มกว่านี้ เพิ่ม gate ใน `config.mjs` เช่น `pnpm build`
-   **ตั้งแต่ 2026-08-09 เทสต์/lint คิดเฉพาะสิ่งที่ก้อนงานนั้นแตะ** (มติ Boonphone): `vitest --changed <base>` + eslint เฉพาะไฟล์ที่เปลี่ยน — วัดจริงเหลือ **30 วินาที** (เดิมรันเต็ม 327 ไฟล์ทุกก้อน). ไม่ใช่การกรองตามโฟลเดอร์ — vitest ไล่ตาม import graph ⇒ ยังจับ regression ข้ามไฟล์ได้ · **`typecheck` ยังเต็ม ห้ามย่อ** (ด่านเดียวที่จับ type พังข้ามแพ็กเกจที่ไม่มีเทสต์คลุม)
+   **เทสต์/lint คิดเฉพาะสิ่งที่ก้อนงานนั้นแตะ**: `vitest --changed <base>` + eslint เฉพาะไฟล์ที่เปลี่ยน (บทเรียนจากโปรเจกต์เดิม — เดิมรันชุดเต็มทุกก้อนทั้งที่ session แตะไม่กี่ไฟล์). ไม่ใช่การกรองตามโฟลเดอร์ — vitest ไล่ตาม import graph ⇒ ยังจับ regression ข้ามไฟล์ได้ · **`typecheck` ยังเต็ม ห้ามย่อ** (ด่านเดียวที่จับ type พังข้ามโมดูลที่ไม่มีเทสต์คลุม)
    ⚠️ **แก้คำเตือนเดิม (2026-08-09):** ตอนย่อ gate เคยเขียนไว้ว่า "ความปลอดภัยขึ้นกับ `RTB_AUTO_MERGE=false` — จะเปิด auto-merge ต้องเอา gate กลับเป็นชุดเต็มก่อน" **ซึ่งวางเส้นแบ่งผิดจุด** · ตรวจ `lib/git.mjs` แล้วยืนยันว่า **orchestrator ไม่มีคำสั่ง `git push` เลย** ⇒ auto-merge แตะได้แค่ `main` ในเครื่อง ซึ่ง `git reset` กลับได้
    **ด่านที่กั้น production จริงคือตอนคุณ `git push origin main`** — Render ตั้ง `autoDeployTrigger: commit` ⇒ push แล้ว deploy ทันที และ GitHub CI รัน **หลัง** จากนั้น บล็อกอะไรไม่ได้
    ⇒ กติกาที่ถูกคือ **ก่อน push `main` ให้รัน `pnpm typecheck && pnpm test` เต็มหนึ่งรอบ** (หรือดีกว่านั้น: อย่า push `main` ตรง ๆ — push เป็น branch แล้วเปิด PR ให้ CI รันเต็มก่อน merge)

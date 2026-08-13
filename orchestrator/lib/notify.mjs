@@ -19,7 +19,7 @@ export function notify(opts = {}) {
   const url = dashUrl();
   const body = {
     topic: n.topic,
-    title: opts.title || 'RTB',
+    title: opts.title || 'AssetRecovery',
     message: opts.message || '',
     priority: typeof opts.priority === 'number' ? opts.priority : (PRIO[opts.priority] || 3),
     tags: opts.tags || [],

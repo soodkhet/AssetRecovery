@@ -11,7 +11,9 @@
  * เทสต์ตัวที่สำคัญที่สุดคือ "ไม่มีแถวไหนหายไปเงียบ ๆ" — มันคุม id รูปแบบใหม่ที่ยังไม่เกิดด้วย
  * โดยไม่ต้องมาไล่เพิ่มรายการเอง
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PROGRESS_FILE } from "../config.mjs";
 import { parseProgress, pickNextTask } from "./progress.mjs";
@@ -45,10 +47,28 @@ describe("progress.mjs — ไม่ทิ้งแถวเงียบ ๆ", (
   });
 
   it("รับ id ทุกแบบที่ใช้จริงในโปรเจกต์ — รวมตัวพิมพ์ใหญ่ยาวเกิน 2 ตัว", () => {
-    const ids = new Set(progress.phases.flatMap((p) => p.tasks.map((t) => t.id)));
-    // ตัวแทนของรูปแบบที่ **เคยถูกทิ้ง** ทั้งหมด + รูปแบบเดิมที่ต้องไม่พัง
-    for (const id of ["RET-2b", "OPS-1", "UAT-15", "SYNC-GUARD", "LHCI-FIX", "PLATE-FONT", "1.2a", "P.2a", "V2.1a", "FT-1L2"]) {
-      expect(ids, `id "${id}" หายไปจาก parser`).toContain(id);
+    // เทียบกับ **ไฟล์ตัวอย่าง** ไม่ใช่ PROGRESS.md จริง: รูปแบบ id ที่เคยถูกทิ้งเป็นของโปรเจกต์เดิม
+    // (RET-2b/OPS-*/UAT-*) ซึ่งโปรเจกต์นี้ไม่มี — แต่ **ยามต้องอยู่** เพราะ id รูปแบบใหม่เกิดได้เสมอ
+    // (เช่นแตก task เป็น 2.4a/2.4b ตามกติกาใน CLAUDE.md) และอาการพังคือ "หายเงียบ" ไม่มี error
+    const SHAPES = ["RET-2b", "OPS-1", "UAT-15", "SYNC-GUARD", "LHCI-FIX", "PLATE-FONT", "1.2a", "P.2a", "V2.1a", "FT-1L2"];
+    const fixture = [
+      "## Phase X — ตัวอย่างสำหรับเทสต์",
+      "",
+      "| # | งาน | สถานะ | หมายเหตุ |",
+      "|---|---|---|---|",
+      ...SHAPES.map((id) => `| ${id} | งานตัวอย่าง | ⬜ | - |`),
+      "",
+      "## บันทึกการตัดสินใจระหว่างพัฒนา",
+    ].join("\n");
+    const tmp = join(tmpdir(), `progress-idshapes-${process.pid}.md`);
+    writeFileSync(tmp, fixture, "utf8");
+    try {
+      const parsed = parseProgress(tmp);
+      const ids = new Set(parsed.phases.flatMap((p) => p.tasks.map((t) => t.id)));
+      for (const id of SHAPES) expect(ids, `id "${id}" หายไปจาก parser`).toContain(id);
+      expect(parsed.stats.total).toBe(SHAPES.length);
+    } finally {
+      rmSync(tmp, { force: true });
     }
   });
 });

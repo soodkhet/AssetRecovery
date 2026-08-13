@@ -1,4 +1,4 @@
-# สั่งงาน RTB Orchestrator จากมือถือ (Mac รัน + Tailscale)
+# สั่งงาน AssetRecovery Orchestrator จากมือถือ (Mac รัน + Tailscale)
 
 เป้าหมาย: Mac เครื่อง dev ของคุณเป็นตัวรันจริง (ใช้ Claude subscription เดิม + Postgres ที่ตั้งไว้แล้ว) แล้วคุณเปิด dashboard สั่ง/กด Approve จากมือถือที่ไหนก็ได้ ผ่านเน็ตส่วนตัว Tailscale — ไม่เปิด public
 
@@ -15,28 +15,28 @@
 บน Mac รัน:
 ```bash
 tailscale ip -4        # ได้เลขแบบ 100.x.x.x
-tailscale status       # เห็นชื่อเครื่อง (MagicDNS) เช่น  boonphone-mac
+tailscale status       # เห็นชื่อเครื่อง (MagicDNS) เช่น  zeegames-macbook-air
 ```
 จำเลข `100.x.x.x` หรือชื่อเครื่องไว้
 
 ### 3. ตั้ง token ของ dashboard (แนะนำตั้งเอง)
 ```bash
-cd /Users/zeegamemsg/RTB-RUAMTABIEN
+cd /Users/zeegamemsg/AssetRecovery
 echo "ตั้งรหัสอะไรก็ได้ที่เดายาก" > orchestrator/.token   # หรือปล่อยให้ server generate เองครั้งแรก
 ```
 > ถ้าไม่ตั้ง server จะสุ่มให้เองครั้งแรกแล้วพิมพ์ token ออกมาตอนบูต (ดูใน log)
 
 ### 4. ให้ server รันเองตอนเปิดเครื่อง (launchd)
 ```bash
-cp orchestrator/scripts/com.rtb.orchestrator.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.rtb.orchestrator.plist
+cp orchestrator/scripts/com.assetrecovery.orchestrator.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.assetrecovery.orchestrator.plist
 tail -f orchestrator/logs/service.log     # ดูว่าขึ้น dashboard แล้ว + เห็น token
 ```
 > `start.sh` ใช้ `caffeinate -is` กัน Mac หลับระหว่าง server รัน — ถ้าไม่อยากกันหลับถาวร ให้รัน server เองเฉพาะตอนต้องการแทน (ข้อล่าง)
 
 **หรือรันมือ (ไม่ใช้ launchd):**
 ```bash
-cd /Users/zeegamemsg/RTB-RUAMTABIEN
+cd /Users/zeegamemsg/AssetRecovery
 set -a; . ./.env; set +a
 caffeinate -is node orchestrator/server.mjs
 ```
@@ -48,9 +48,9 @@ caffeinate -is node orchestrator/server.mjs
 1. เช็คว่า Mac เปิดอยู่ + Tailscale connected + server รัน
 2. บนมือถือเปิดเบราว์เซอร์ไปที่ (ใส่ token ครั้งแรกครั้งเดียว จากนั้นจำ cookie):
    ```
-   http://<ชื่อเครื่อง-หรือ-100.x.x.x>:4173/?token=<TOKEN>
+   http://<ชื่อเครื่อง-หรือ-100.x.x.x>:4174/?token=<TOKEN>
    ```
-   เช่น `http://boonphone-mac:4173/?token=abc123...`
+   เช่น `http://zeegames-macbook-air:4174/?token=abc123...`
 3. กด **▶ รันงานถัดไป** หรือเปิดสวิตช์ **Auto**
 4. เมื่อมีการ์ด **"รอการตัดสินใจ"** โผล่ → พิมพ์คำตอบ กด **Approve** มันทำต่อให้เอง
 
@@ -69,5 +69,5 @@ caffeinate -is node orchestrator/server.mjs
 ## แก้ปัญหาที่พบบ่อย
 - **เปิด URL ไม่ขึ้น** → เช็ค `tailscale status` ทั้งสองเครื่อง connected ไหม, Mac หลับหรือเปล่า, server รันอยู่ไหม (`tail orchestrator/logs/service.log`)
 - **launchd ไม่เจอ node** → แก้ `NODE_BIN` ใน `start.sh` เป็น path เต็มของ node (`command -v node` เพื่อหา)
-- **`pnpm test` แดงเพราะต่อ DB ไม่ได้** → docker `rtb-postgres` ต้องรัน + `.env` โหลดถูก
-- **อยากหยุด service** → `launchctl unload ~/Library/LaunchAgents/com.rtb.orchestrator.plist`
+- **`pnpm test` แดงเพราะต่อ DB ไม่ได้** → docker `assetrecovery-postgres-dev` ต้องรัน + `.env.local` โหลดถูก
+- **อยากหยุด service** → `launchctl unload ~/Library/LaunchAgents/com.assetrecovery.orchestrator.plist`

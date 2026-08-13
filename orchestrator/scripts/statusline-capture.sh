@@ -8,12 +8,12 @@ input=$(cat)
 printf '%s' "$input" > "$DIR/logs/statusline.json"
 
 # status line ที่จะโชว์ใน Claude Code (ดึงชื่อ model + % 5 ชม.ถ้ามี)
-python3 - "$DIR/logs/statusline.json" <<'PY' 2>/dev/null || printf 'RTB'
+python3 - "$DIR/logs/statusline.json" <<'PY' 2>/dev/null || printf 'AssetRecovery'
 import json,sys
 d=json.load(open(sys.argv[1]))
 model=(d.get('model') or {}).get('display_name','claude')
 rl=d.get('rate_limits') or {}
 fh=(rl.get('five_hour') or {}).get('used_percentage')
 tail=f" · 5h {fh}%" if fh is not None else ""
-print(f"RTB · {model}{tail}")
+print(f"AssetRecovery · {model}{tail}")
 PY

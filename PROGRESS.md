@@ -1,18 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 0.2 (Vercel staging deploy เขียว) · ค้าง 2 อย่างฝั่ง Vercel UI ที่บล็อก 1.1 (domain ประจำ + env 5 ตัว)
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 0 ครบทั้ง 3 task (bootstrap + deploy staging + orchestrator) · เริ่ม Phase 1 ได้เมื่อมี `.env.local` + docker postgres
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 0.3: Adapt Orchestrator + Dev Panel เข้าโปรเจกต์นี้
+## 🎯 งานถัดไป — Phase 1.1: Prisma Schema ชุดที่ 1 (Enums 54 + Group A + Group B)
 
-- ทำตาม `docs/01_PLAN.md` §0.3 และ **`promptmovetools.md` ทั้งไฟล์อย่างเคร่งครัด** — ห้ามเขียนใหม่จากศูนย์ ห้ามแตะ logic ที่มี comment บทเรียน
-- ขอบเขต: `orchestrator/config.mjs` (verify commands จริงของโปรเจกต์นี้ = `pnpm lint` / `pnpm typecheck` / `pnpm test` — **`baseBranch = staging`** ตาม Release Flow, finalTestStages, uiTaskPrefixes) · แทน RULES ใน `lib/prompt.mjs` ด้วยกติกาจาก CLAUDE.md + path เอกสารชุดนี้ (`docs/00_MAP.md`, `docs/01_PLAN.md`, `docs/REUSE_INDEX.md`) · เขียน `review-prompt.md` / `final-test-prompt.md` / `final-tests/*.md` ใหม่ตามโปรเจกต์นี้ · `tools/devpanel/server.mjs` SERVICES/TASKS/docker ตาม stack จริง (Next 16 + `docker-compose.dev.yml` port 5433) + `index.html` header/desc · ตรวจไม่มี state เก่าค้าง (`queue/`, `logs/`, `.token`, `.run.lock`, `review-checkpoint.json`) · README/REMOTE/ADAPT_GUIDE อัปเดต path
-- อ้างอิง: `promptmovetools.md` (requirement หลัก), `orchestrator/ADAPT_GUIDE.md`, `orchestrator/config.mjs` · งบ ~280k
-- DoD: ตาม Definition of Done 7 ข้อใน `promptmovetools.md` — `node --check` ทุกไฟล์ที่แก้ · `orchestrate.mjs status` แสดง % + งานถัดไปถูกต้อง · `run --dry-run` ได้ prompt ที่อ้างเอกสารโปรเจกต์นี้ · dashboard (4174) + dev panel (4600) เปิดใช้จริง · grep RTB/Boonphone เหลือเฉพาะจุดตั้งใจ · รายงานจุดที่ตัดสินใจเอง
-- ⚠️ **ไม่บล็อกด้วย env** — 0.3 ไม่แตะ DB/Supabase · แต่ **Phase 1.1 บล็อก** จนกว่า env 5 ตัวบน Vercel + `.env.local` บนเครื่องจะครบ (ดูรายการค้างใน `docs/PROGRESS_ARCHIVE.md` §0.2)
+- ทำตาม `docs/01_PLAN.md` §1.1 — แปลง DDL จาก `02` เป็น `prisma/schema.prisma`: **enum ครบ 54 ตัว** (`02` §3, L76–345) + **Group A Identity 5 ตาราง** (§4, L349) + **Group B Master Data 14 ตาราง** (§5, L443) ตาม convention §2 เป๊ะ (satang, common columns, soft delete, ข้อยกเว้นตารางที่ไม่ครบ §2.4)
+- **อ่าน `02` ผ่าน `docs/00_MAP.md` เท่านั้น** (ไฟล์ 1,714 บรรทัด — ห้ามอ่านทั้งไฟล์): §2 (L34), §3 (L76), §4 (L349), §5 (L443), §11 (L1545) · ประกอบ: `26`, `94` (DEC-004)
+- **ก่อนลงมือต้องอ่าน `docs/02_OPEN_DECISIONS.md` หมวด A** (จุดที่กระทบ schema: WHT ลูกค้าหัก, payment allocation, tracking_round, advance payout, due_rule, IMEI) — มติ PO 2026-08-12 ให้ยึด default ในไฟล์นั้น
+- จุดระวัง: CHECK `cycles_cutoff_shape` (L654) และ constraint ที่ Prisma ไม่รองรับ **ต้องใส่ผ่าน raw SQL migration เสมอ** · circular FK `users↔teams↔organizations` ใช้ DEFERRABLE (§11 L1603) · Polymorphic ใช้ separate FK + CHECK (DEC-004)
+- **⚠️ บล็อก**: ต้องมี `.env.local` (คัดจาก `.env.example`) + `docker compose -f docker-compose.dev.yml up -d` ก่อน ไม่งั้น `prisma migrate dev` รันไม่ได้ — env staging บน Vercel ยังค้างอยู่เช่นกัน (ดู `docs/PROGRESS_ARCHIVE.md` §0.2)
+- LOC ~1,800 · งบ ~280k
+- DoD: `prisma migrate dev` ผ่าน · `prisma validate` เขียว · spot-check ครบ 19 ตาราง + 54 enums เทียบ `02` (ใช้ subagent ตรวจไขว้)
 
 ---
 
@@ -22,7 +24,7 @@
 |---|---|---|---|
 | 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ✅ | `7eda8e3` · Next 16 + Prisma 7 + vitest + CI · รายละเอียด: PROGRESS_ARCHIVE |
 | 0.2 | Deploy pipeline ฝั่ง Staging (Production เลื่อนไปก่อน PR แรกเข้า main) | ✅ | `6e3fedf`+`6cccf92`+`04f5341` · ⚠️ ค้างฝั่ง Vercel UI: domain ประจำ + env 5 ตัว (บล็อก 1.1) — ดู PROGRESS_ARCHIVE |
-| 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ⬜ | PLAN §0.3 · ห้ามเขียนใหม่จากศูนย์ |
+| 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ✅ | `__COMMIT__` · baseBranch=staging · DoD 7 ข้อผ่านครบ · รายละเอียด: PROGRESS_ARCHIVE |
 
 ## Phase 1 — Foundation (DB → Auth → Master Data → Settings)
 

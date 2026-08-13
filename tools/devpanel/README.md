@@ -1,11 +1,11 @@
-# RTB Dev Panel
+# AssetRecovery Dev Panel
 
 แผงควบคุม dev แบบกดปุ่ม — เปิด/ปิดบริการ, docker Postgres, migrate/seed, typecheck/test/build
 โดยไม่ต้องพิมพ์คำสั่งใน terminal เอง (โหลด `.env` + cd + `ulimit` ให้อัตโนมัติ)
 
 ## วิธีเปิด
 
-ดับเบิลคลิกไฟล์ **`เปิด RTB Dev Panel.command`** ที่โฟลเดอร์หลักของโปรเจค
+ดับเบิลคลิกไฟล์ **`เปิด AssetRecovery Dev Panel.command`** ที่โฟลเดอร์หลักของโปรเจค
 (macOS ครั้งแรกอาจถามยืนยัน → คลิกขวา > Open ครั้งเดียว)
 
 หรือสั่งเอง:
@@ -20,7 +20,7 @@ node tools/devpanel/server.mjs
 
 - **🚀 เปิดครบพร้อมใช้** — เปิด Postgres → API → หน้าบ้าน + หลังบ้าน ให้ตามลำดับ (รอ ~10 วิ)
 - **บริการ** — เปิด/หยุด API (3001) · หน้าบ้าน (3000) · หลังบ้าน admin (5173) · worker + ปุ่ม "เปิดเว็บ"
-- **Postgres** — เปิด/ปิด docker + เปิด Drizzle Studio
+- **Postgres** — เปิด/ปิด docker + เปิด Prisma Studio
 - **จัดการข้อมูล** — db:migrate · seed demo · clear demo
 - **ตรวจสุขภาพโค้ด** — typecheck · test · build (ตั้ง ulimit + env ให้เอง)
 

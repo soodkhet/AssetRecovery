@@ -14,7 +14,7 @@ import { acquireLock, releaseLock } from './lock.mjs';
 
 function notifyEvent(kind, info = {}) {
   const t = info.task;
-  const label = t && t.id ? `Phase ${t.id}` : 'RTB';
+  const label = t && t.id ? `Phase ${t.id}` : 'AssetRecovery';
   switch (kind) {
     case 'merged': notify({ title: `✅ ${label} เสร็จ + merged`, message: info.head || (t && t.title) || '', tags: ['white_check_mark'], priority: 'high' }); break;
     case 'decision': notify({ title: `🤔 ต้องตัดสินใจ · ${label}`, message: info.question || '', tags: ['question'], priority: 'urgent', view: true, queueId: info.queueId, options: info.options }); break;

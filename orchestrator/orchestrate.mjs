@@ -13,7 +13,7 @@ const flag = (n) => { const i = args.indexOf(n); return i >= 0 ? (args[i + 1] ??
 function printStatus() {
   const p = parseProgress();
   const next = pickNextTask(p);
-  console.log(`\nRTB — ความคืบหน้ารวม: ${p.stats.done}/${p.stats.total} (${p.stats.percent}%)  ·  อัปเดตล่าสุด ${p.updatedAt || '-'}`);
+  console.log(`\nAssetRecovery — ความคืบหน้ารวม: ${p.stats.done}/${p.stats.total} (${p.stats.percent}%)  ·  อัปเดตล่าสุด ${p.updatedAt || '-'}`);
   for (const ph of p.phases) console.log(`  Phase ${ph.key.padEnd(2)} ${String(ph.percent).padStart(3)}%  ${ph.done}/${ph.total}  ${ph.name}`);
   // id ที่ไม่ใช่เลขเฟส (HASORDER-FIX · RET-2b · SYNC-INTERVAL) เติมคำว่า "Phase" แล้วอ่านไม่รู้เรื่อง
   const label = (t) => (/^[0-9P]/.test(t.id) ? `Phase ${t.id}` : t.id);
@@ -55,7 +55,7 @@ if (cmd === 'status') {
   console.log(JSON.stringify(r, null, 2));
 } else if (cmd === 'notify-test') {
   const { notify } = await import('./lib/notify.mjs');
-  notify({ title: '🔔 ทดสอบแจ้งเตือน RTB', message: 'ถ้าได้ยินเสียง+เห็นบนมือถือ = ตั้งค่า ntfy สำเร็จ', tags: ['bell'], priority: 'urgent', view: true });
+  notify({ title: '🔔 ทดสอบแจ้งเตือน AssetRecovery', message: 'ถ้าได้ยินเสียง+เห็นบนมือถือ = ตั้งค่า ntfy สำเร็จ', tags: ['bell'], priority: 'urgent', view: true });
   console.log(config.notify.topic ? `ส่งแล้ว → topic: ${config.notify.topic}` : 'ยังไม่ได้ตั้ง RTB_NTFY_TOPIC (แจ้งเตือนปิดอยู่)');
   await new Promise((r) => setTimeout(r, 1500));
 } else {

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * RTB Dev Panel — เซิร์ฟเวอร์ควบคุม dev แบบกดปุ่ม (ไม่ต้องพิมพ์ terminal)
+ * AssetRecovery Dev Panel — เซิร์ฟเวอร์ควบคุม dev แบบกดปุ่ม (ไม่ต้องพิมพ์ terminal)
  *
- * ทำไมต้องมี: งาน dev ประจำ (เปิด API/web/admin/worker, docker postgres, migrate/seed,
- * typecheck/test/build) ต้องพิมพ์คำสั่งใน terminal + จำเรื่อง cd/โหลด .env/ulimit ให้ครบ
+ * ทำไมต้องมี: งาน dev ประจำ (เปิด Next.js dev server, docker postgres, prisma generate/migrate/seed,
+ * typecheck/test/lint/build) ต้องพิมพ์คำสั่งใน terminal + จำเรื่อง cd/โหลด .env/ulimit ให้ครบ
  * ไม่งั้นพัง (EMFILE, DATABASE_URL required, connection refused). Panel นี้จัดการให้อัตโนมัติ:
  *   - cwd = repo root เสมอ
- *   - โหลดค่าจาก .env เข้า process ที่ spawn ทุกตัว (แก้ปัญหา env ไม่ถูกโหลด)
+ *   - โหลดค่าจาก .env / .env.local เข้า process ที่ spawn ทุกตัว (แก้ปัญหา env ไม่ถูกโหลด)
  *   - build ตั้ง `ulimit -n` ให้เอง (แก้ EMFILE)
  *
  * ปลอดภัย: bind 127.0.0.1 เท่านั้น (เครื่องตัวเองเข้าได้คนเดียว) — เครื่องมือ dev ล้วน ไม่ ship prod
@@ -24,8 +24,14 @@ const REPO_ROOT = path.resolve(__dirname, "..", ".."); // tools/devpanel → rep
 const PANEL_PORT = Number(process.env.PANEL_PORT ?? 4600);
 
 // ---------- โหลด .env → object (ส่งเข้า process ที่ spawn) ----------
+// โปรเจกต์นี้ใช้ `.env.local` เป็นหลักตามแบบ Next.js (`.env` เผื่อไว้) — ตัวหลังทับตัวแรก
 function loadDotEnv() {
-  const p = path.join(REPO_ROOT, ".env");
+  const out = {};
+  for (const name of [".env", ".env.local"]) Object.assign(out, parseEnvFile(path.join(REPO_ROOT, name)));
+  return out;
+}
+
+function parseEnvFile(p) {
   const out = {};
   if (!fs.existsSync(p)) return out;
   for (let line of fs.readFileSync(p, "utf8").split("\n")) {
@@ -57,27 +63,25 @@ function log(src, line) {
 }
 
 // ---------- นิยามบริการ (long-running) + one-shot commands ----------
-// ports: web=3000, api=3001(API_PORT), admin(vite)=5173
+// โปรเจกต์นี้เป็น Next.js App Router แอปเดียว (frontend + backend อยู่ด้วยกัน) → service เดียว port 3000
 const SERVICES = {
-  api:    { label: "API",        script: "dev:api",    port: 3001 },
-  web:    { label: "หน้าบ้าน",   script: "dev:web",    port: 3000 },
-  admin:  { label: "หลังบ้าน",   script: "dev:admin",  port: 5173 },
-  worker: { label: "Worker",     script: "dev:worker", port: null }
+  app: { label: "แอป (Next.js)", script: "dev", port: 3000 }
 };
 const children = new Map(); // key → child process (บริการที่กำลังรัน)
 
 // one-shot: รันแล้วจบ (มีได้ทีละงาน)
 const TASKS = {
-  migrate:    { label: "db:migrate",    cmd: "pnpm --filter @rtb/db db:migrate" },
-  "seed-demo":{ label: "seed demo",     cmd: "pnpm --filter @rtb/db db:seed-demo" },
-  "clear-demo":{ label: "clear demo",   cmd: "pnpm --filter @rtb/db db:clear-demo" },
-  typecheck:  { label: "typecheck",     cmd: "pnpm typecheck" },
-  test:       { label: "test",          cmd: "pnpm test" },
-  build:      { label: "build หน้าบ้าน", cmd: "ulimit -n 10240; pnpm --filter @rtb/web build" }
+  generate:   { label: "prisma generate", cmd: "pnpm db:generate" },
+  migrate:    { label: "db:migrate",      cmd: "pnpm db:migrate" },
+  seed:       { label: "db:seed",         cmd: "pnpm db:seed" },
+  typecheck:  { label: "typecheck",       cmd: "pnpm typecheck" },
+  test:       { label: "test",            cmd: "pnpm test" },
+  lint:       { label: "lint",            cmd: "pnpm lint" },
+  build:      { label: "build",           cmd: "ulimit -n 10240; pnpm build" }
 };
 let runningTask = null; // key ของ one-shot ที่กำลังรัน (ครั้งละงาน)
 
-// studio = long-running แต่จัดเป็น service พิเศษ (เปิดหน้าเว็บ drizzle)
+// studio = long-running แต่จัดเป็น service พิเศษ (Prisma Studio :5555)
 // จัดการผ่าน children map เหมือนบริการอื่น key = "studio"
 
 function baseEnv() {
@@ -121,8 +125,8 @@ function stopService(key) {
 
 function startStudio() {
   if (children.has("studio")) return { ok: true, already: true };
-  log("panel", "▶ เปิด Drizzle Studio…");
-  const child = spawnShell("exec pnpm --filter @rtb/db db:studio", "studio");
+  log("panel", "▶ เปิด Prisma Studio…");
+  const child = spawnShell("exec pnpm db:studio", "studio");
   children.set("studio", child);
   child.on("exit", (code) => { log("panel", `⏹ Studio หยุด (exit ${code})`); children.delete("studio"); });
   return { ok: true };
@@ -143,8 +147,10 @@ function runTask(key) {
 }
 
 // ---------- docker postgres ----------
+// ⚠️ compose ของโปรเจกต์นี้ชื่อ `docker-compose.dev.yml` (ไม่ใช่ชื่อ default) ⇒ ต้องส่ง -f ทุกครั้ง
 function dockerCompose(action) {
-  const cmd = action === "up" ? "docker compose up -d postgres" : "docker compose down";
+  const f = "-f docker-compose.dev.yml";
+  const cmd = action === "up" ? `docker compose ${f} up -d postgres` : `docker compose ${f} down`;
   log("panel", `▶ Postgres: ${cmd}…`);
   const child = spawnShell(cmd, "postgres");
   child.on("exit", (code) => log("panel", code === 0 ? "✅ Postgres " + action + " สำเร็จ" : `❌ docker ${action} exit ${code}`));
@@ -155,8 +161,10 @@ function dockerCompose(action) {
 /**
  * พอร์ตมีคนฟังอยู่ไหม — **ต้องลองทั้ง IPv4 และ IPv6 ห้ามเช็คแค่ 127.0.0.1**
  *
- * Vite (หลังบ้าน :5173) ผูกกับ `localhost` ซึ่งบน macOS resolve เป็น `::1` ก่อน ⇒ **ฟัง IPv6
- * อย่างเดียว** (`lsof` เห็น `[::1]:5173`) ต่างจาก Next/Fastify ที่เป็น `*:3000`/`*:3001` = ทุก interface
+ * บทเรียนจากโปรเจกต์เดิม: Vite ผูกกับ `localhost` ซึ่งบน macOS resolve เป็น `::1` ก่อน ⇒ **ฟัง IPv6
+ * อย่างเดียว** (`lsof` เห็น `[::1]:5173`) ต่างจาก Next ที่เป็น `*:3000` = ทุก interface
+ * โปรเจกต์นี้มีแต่ Next (:3000) กับ Prisma Studio (:5555) แต่ **ห้ามถอดการเช็ค IPv6 ออก** —
+ * เครื่องมือที่จะเพิ่มทีหลังอาจผูก IPv6 อีก แล้วอาการเดิมจะกลับมาโดยไม่มีใครเดาถูก
  *
  * ของเดิมเช็คแค่ IPv4 ⇒ หลังบ้านขึ้นจุดเทา "ปิดอยู่" ตลอดทั้งที่รันอยู่จริง, ปุ่ม "เปิดเว็บ" ถูก disable,
  * และพอกด "เปิด" ก็ไป spawn vite ตัวที่สองมาชนพอร์ตเดิมแล้วตาย = อาการ "หลังบ้านกดเปิดไม่ได้"
@@ -173,7 +181,7 @@ function portOpen(port) {
 }
 function dockerRunning() {
   return new Promise((resolve) => {
-    const c = spawn("docker", ["inspect", "-f", "{{.State.Running}}", "rtb-postgres"], { env: baseEnv() });
+    const c = spawn("docker", ["inspect", "-f", "{{.State.Running}}", "assetrecovery-postgres-dev"], { env: baseEnv() });
     let out = "";
     c.stdout.on("data", (d) => (out += d));
     c.on("exit", () => resolve(out.trim() === "true"));
@@ -202,10 +210,9 @@ async function status() {
 // ---------- one-click: เปิดครบ ----------
 async function startAll() {
   dockerCompose("up");
-  // รอ postgres พร้อมสักครู่ก่อนเปิด API (API ต้องต่อ DB ได้)
-  setTimeout(() => startService("api"), 4000);
-  setTimeout(() => { startService("web"); startService("admin"); }, 6000);
-  log("panel", "▶ เปิดครบ: Postgres → (4วิ) API → (6วิ) หน้าบ้าน+หลังบ้าน. รอสักครู่แล้วกดปุ่มเปิดเว็บ");
+  // รอ postgres พร้อมก่อนเปิดแอป (route ที่แตะ Prisma ต้องต่อ DB ได้)
+  setTimeout(() => startService("app"), 4000);
+  log("panel", "▶ เปิดครบ: Postgres → (4วิ) แอป Next.js. รอสักครู่แล้วกดปุ่มเปิดเว็บ");
   return { ok: true };
 }
 function stopAll() {
@@ -256,8 +263,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PANEL_PORT, "127.0.0.1", () => {
-  log("panel", `RTB Dev Panel พร้อมใช้งานที่ http://localhost:${PANEL_PORT}`);
-  console.log(`\n  ▲ RTB Dev Panel → http://localhost:${PANEL_PORT}\n  repo: ${REPO_ROOT}\n`);
+  log("panel", `AssetRecovery Dev Panel พร้อมใช้งานที่ http://localhost:${PANEL_PORT}`);
+  console.log(`\n  ▲ AssetRecovery Dev Panel → http://localhost:${PANEL_PORT}\n  repo: ${REPO_ROOT}\n`);
 });
 
 // ปิด panel = ปิดบริการลูกทั้งหมด (กันค้าง)

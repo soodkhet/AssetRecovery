@@ -2,15 +2,21 @@
 import { readFileSync } from 'node:fs';
 import { config } from '../config.mjs';
 
-const RULES = `กติกาบังคับของ session นี้ (อ้างอิง CLAUDE.md + WORKFLOW.md):
-- Context discipline: ห้ามอ่านทั้งไฟล์ docs/16, docs/03, reference/*.tsx, reference/*.html — เปิด docs/00_MAP.md หา offset/limit แล้ว Read เฉพาะช่วง; ค้นด้วย Grep ก่อนอ่าน; งานสำรวจหลายไฟล์ให้ delegate subagent
-- ยึด docs/16 เป็น authority; เอกสารขัดกัน ลำดับ: กฎธุรกิจ/สูตรใน 16 → security/data integrity → mockup ล่าสุด → ไฟล์ CI
-- เงิน = BIGINT สตางค์, % = basis points, ห้าม float; snapshot ณ สร้าง Order; ห้าม negative mutation
-- TypeScript strict, ห้าม any; DB snake_case / โค้ด camelCase; validation ด้วย Zod schema เดียว
-- งานการเงินต้องมี test ในก้อนงานเดียวกัน`;
+const RULES = `กติกาบังคับของ session นี้ (อ้างอิง CLAUDE.md + .claude/rules/* + WORKFLOW.md):
+- Context discipline: ห้ามอ่านไฟล์ใหญ่ทั้งไฟล์ (docs/02, 13, 38, 40, 41, 44, 97, reference/*.html) — เปิด docs/00_MAP.md หา offset/limit แล้ว Read เฉพาะช่วง; Grep ก่อน Read เสมอ; งานสำรวจหลายไฟล์ให้ delegate subagent; อ่าน spec เฉพาะ reading list ของ task ใน docs/01_PLAN.md ไม่อ่านเผื่อ
+- เอกสารขัดกัน ลำดับ: docs/02 (schema) → ไฟล์ spec ของ module → reference กลาง (22/23/24/25/27/45) → mockup · mockup ใช้ได้เฉพาะ UI ห้ามอ้าง business logic
+- **เงิน = INTEGER satang เท่านั้น** ห้าม float/Decimal (฿100.50 → 10050) ยกเว้น rate_pct/wht_pct = NUMERIC(5,2) · สูตรเงินทุกสูตรอยู่ docs/22 เป็น pure module + unit test ห้าม hardcode ซ้ำ · VAT ห้าม hardcode 7% (ใช้ vat_rate_history + snapshot vat_rate_used) · WHT: Payee-level ชนะ Plan-level ฐาน before_vat threshold 1,000
+- **Datetime**: เก็บ UTC (TIMESTAMPTZ) / แสดง Asia/Bangkok + **พ.ศ. เท่านั้น** DD/MM/YYYY ผ่าน utils กลาง (ยกเว้น <input type="date">)
+- **Permission ตรวจที่ API layer ทุก endpoint** ผ่าน requirePermission(action, resource, scope) — ไม่ใช้ Supabase RLS · UI hide/disable เป็นแค่ UX
+- **Audit ทุก mutation** ครบ 9 fields + immutable · reason บังคับเมื่อกระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period
+- Snapshot pattern ทุก entity การเงิน (ห้ามคำนวณย้อนหลังจาก live template) · Idempotency: payout key, job, export versioned + SHA-256 ห้าม overwrite
+- State machine + enum ตรง docs/23 + docs/02 §3 เป๊ะ · Error code ใช้จาก docs/24 เท่านั้น
+- TypeScript strict ห้าม any; DB snake_case / โค้ด camelCase; validation ด้วย Zod schema เดียวใช้ร่วม FE/BE
+- **งานการเงินทุกก้อนต้องมี test ในก้อนงานเดียวกัน** — pure module + unit test ก่อนเขียน route/UI
+- **ห้าม git push เด็ดขาด** (สายพัฒนา = staging · push/PR เป็นงานของคน) · ห้ามแก้ spec ใน docs/ นอกจากที่ rules/06 อนุญาต`;
 
 export function buildTaskPrompt(task) {
-  return `คุณคือ Claude Code ทำงานในโปรเจกต์ RTB (pnpm monorepo) แบบอัตโนมัติ — 1 session = 1 ก้อนงานเดียว
+  return `คุณคือ Claude Code ทำงานในโปรเจกต์ AssetRecovery (Next.js App Router + Prisma/PostgreSQL, pnpm) แบบอัตโนมัติ — 1 session = 1 ก้อนงานเดียว
 
 # งานของ session นี้
 Phase ${task.id} — ${task.title}
@@ -21,11 +27,11 @@ Phase ${task.id} — ${task.title}
 2. **⚠️ เช็คก่อนลงมือ — กันทำซ้ำ (สำคัญ):** ดู \`git log --oneline -15\` + โค้ด/ไฟล์จริง ยืนยันว่างาน Phase ${task.id} นี้**ยังไม่ถูกทำ+commit ไปแล้ว**
    - ถ้าพบว่า**ทำไปแล้ว** (มี commit/ไฟล์ครบตามสเปค) → **ห้ามทำซ้ำ!** อัปเดต PROGRESS.md ให้ตรงความจริง (มาร์ค task นี้ ✅ + เลื่อน "🎯 งานถัดไป" ไป task ถัดไปที่ยัง ⬜) → commit → พิมพ์ ${config.taskDone} <commit> "Phase ${task.id} ทำไปแล้ว—sync PROGRESS"
    - ถ้า**ยังไม่ได้ทำ** → ทำต่อขั้นถัดไป
-3. **เช็ค docs/17_REUSE_INDEX.md ก่อนเขียนโค้ดทุกครั้ง** (ของที่มีแล้ว/แม่แบบ/กับดัก) แล้วหาเอกสารอ้างอิงจาก "ตารางเส้นทาง" ใน CLAUDE.md; ใช้ docs/00_MAP.md หา offset ก่อน Read ไฟล์ใหญ่
+3. **เช็ค docs/REUSE_INDEX.md ก่อนเขียนโค้ดทุกครั้ง** (ของที่มีแล้ว/แม่แบบ/กับดัก) แล้วหาเอกสารอ้างอิงจาก "ตารางเส้นทาง" ใน CLAUDE.md + reading list ของ task ใน docs/01_PLAN.md; ใช้ docs/00_MAP.md หา offset ก่อน Read ไฟล์ใหญ่
 4. วางแผนทีละขั้น (ระบุ section เอกสาร + วิธีพิสูจน์) แล้วลงมือทำทีละขั้น
 5. verify ระหว่างทาง: หลังแต่ละขั้นรัน typecheck/test ที่เกี่ยวข้อง
-6. เมื่อโค้ดเสร็จ รัน \`pnpm typecheck\` และ \`pnpm test\` ให้ผ่านทั้งหมด
-7. อัปเดต PROGRESS.md: เปลี่ยนสถานะแถว task นี้เป็น ✅ พร้อม (วันที่ + commit hash ใน backtick + headline บรรทัดเดียว + "→ archive"); ย้ายรายละเอียดเต็มลง docs/PROGRESS_ARCHIVE.md; cap ส่วน "🎯 งานถัดไป" ให้เหลือ "งานถัดไป" งานเดียว (งานถัดไปตามลำดับ Phase ใน docs/16 §32)
+6. เมื่อโค้ดเสร็จ รัน \`pnpm typecheck\` + \`pnpm test\` + lint ให้ผ่านทั้งหมด
+7. อัปเดต PROGRESS.md: เปลี่ยนสถานะแถว task นี้เป็น ✅ พร้อม (วันที่ + commit hash ใน backtick + headline บรรทัดเดียว + "→ archive"); ย้ายรายละเอียดเต็มลง docs/PROGRESS_ARCHIVE.md; cap ส่วน "🎯 งานถัดไป" ให้เหลือ "งานถัดไป" งานเดียว (งานถัดไปตามลำดับใน PROGRESS.md — คัดรายละเอียดจาก docs/01_PLAN.md)
 8. commit ด้วย message conventional commits ภาษาไทย: \`feat(<scope>): Phase ${task.id} <headline>\`
 
 # โปรโตคอลหยุดถาม (สำคัญที่สุด — ห้ามเดา)
@@ -76,7 +82,7 @@ export function buildReviewPrompt({ since = null, phase = null } = {}) {
     ? `**รีวิวเฉพาะการเปลี่ยนแปลงตั้งแต่ commit \`${since}\` เป็นต้นมา** (รีวิวก่อนหน้านั้นผ่านไปแล้ว ไม่ต้องทำซ้ำ)
 เริ่มด้วย: \`git log --oneline ${since}..HEAD\` และ \`git diff --stat ${since}..HEAD\` แล้วดู diff เฉพาะไฟล์ที่เกี่ยว`
     : 'ดู `git log --oneline -15` + `git diff` ล่าสุดเพื่อรู้ว่ารีวิวอะไร (ยังไม่มี checkpoint = รีวิวงานล่าสุดที่ยังไม่เคยตรวจ)';
-  return `คุณคือ Claude Code ทำหน้าที่ "รีวิว + แก้" โค้ดในโปรเจกต์ RTB (1 session)${phase ? ` — รอบนี้ตรวจงาน **Phase ${phase}**` : ''}
+  return `คุณคือ Claude Code ทำหน้าที่ "รีวิว + แก้" โค้ดในโปรเจกต์ AssetRecovery (1 session)${phase ? ` — รอบนี้ตรวจงาน **Phase ${phase}**` : ''}
 
 # ขอบเขตที่ต้องรีวิว
 ${scope}
@@ -87,9 +93,9 @@ ${body}
 
 # วิธีทำ
 1. อ่าน CLAUDE.md + เอกสารที่เกี่ยว (ผ่าน MAP) เพื่อรู้กติกา/สูตรที่ต้องเทียบ
-2. รีวิวโค้ดล่าสุดทีละหัวข้อ; ถ้ามี leak/security test ให้รันจริง
+2. รีวิวโค้ดล่าสุดทีละหัวข้อ; ถ้ามี test สิทธิ์/ข้ามบริษัท (multi-tenant) ให้รันจริง
 3. **รายงานเป็นตาราง Markdown:** \`| หัวข้อ | สถานะ (✅ ผ่าน / ❌ ต้องแก้) | รายละเอียด/บรรทัด |\`
-4. จุดที่ ❌ → **แก้ให้เลย** + verify (typecheck/test/leak) ให้ผ่าน + commit
+4. จุดที่ ❌ → **แก้ให้เลย** + verify (typecheck/test/lint) ให้ผ่าน + commit
 5. งานใหญ่/context ยาว → commit + ${config.handoff} <ที่เหลือ>
 6. เจอจุดต้องตัดสินใจ → ${config.needsDecision} <คำถาม> (+ ${config.options} ... ถ้ามีตัวเลือก)
 
@@ -106,7 +112,7 @@ export function buildFinalTestPrompt(stageKey = null) {
   const stage = stageKey ? config.finalTestStages.find((s) => s.key === String(stageKey)) : null;
   let body = DEFAULT_FINAL;
   try { body = readFileSync(stage ? stage.file : config.finalTestPromptFile, 'utf8').trim() || DEFAULT_FINAL; } catch { /* default */ }
-  return `คุณคือ Claude Code ทำหน้าที่ **Final Test** ของโปรเจกต์ RTB — ทดสอบ "ทั้งระบบ" เหมือนผู้ใช้จริง (ไม่ใช่รีวิว diff รายก้อน)${stage ? `\n**รอบนี้ทดสอบเฉพาะด่าน ${stage.key}/4 — ${stage.label}** (ด่านอื่นมี session แยก ไม่ต้องทำที่นี่)` : ''}
+  return `คุณคือ Claude Code ทำหน้าที่ **Final Test** ของโปรเจกต์ AssetRecovery — ทดสอบ "ทั้งระบบ" เหมือนผู้ใช้จริง (ไม่ใช่รีวิว diff รายก้อน)${stage ? `\n**รอบนี้ทดสอบเฉพาะด่าน ${stage.key}/${config.finalTestStages.length} — ${stage.label}** (ด่านอื่นมี session แยก ไม่ต้องทำที่นี่)` : ''}
 
 # สิ่งที่ต้องทำ
 ${body}
@@ -114,8 +120,8 @@ ${body}
 # วิธีทำ
 1. อ่าน PROGRESS.md (เฟสที่เสร็จแล้วทั้งหมด) + CLAUDE.md เพื่อรู้ขอบเขตระบบ; ใช้ docs/00_MAP.md หา section ที่ต้องเทียบ (ห้ามอ่านไฟล์ใหญ่ทั้งไฟล์)
 2. รัน verify เต็ม: \`pnpm typecheck\` + \`pnpm test\` + lint
-3. ทดสอบ flow จริงข้ามเฟส (เช่น รับป้ายเข้าระบบ → ประกาศ → สร้าง Order → รับเงิน → เอกสาร → เคลียร์ยอด → รายงาน/บัญชี) ด้วย integration test ที่มีอยู่ หรือเขียนเพิ่มถ้าช่องโหว่ชัด
-4. ตรวจ cross-cutting: RBAC ทุก role · Source Confidentiality (leak test) · เงินเป็นสตางค์/bps ทุกจุด · audit log ครบ · idempotency
+3. ทดสอบ flow จริงข้ามเฟส (เคสเข้าระบบ → มอบหมาย → ปิดงานภาคสนาม → รับเข้าคลัง → ส่งมอบ (lot confirmed) → revenue/billing → claim/payout → ปิดงวด/export บัญชี) ด้วย integration test ที่มีอยู่ หรือเขียนเพิ่มถ้าช่องโหว่ชัด
+4. ตรวจ cross-cutting: permission 15 roles + scope (ทีม/บริษัท/own) · ข้อมูลข้ามบริษัทไม่รั่ว · เงินเป็น INTEGER satang ทุกจุด · วันที่แสดง พ.ศ. · audit log ครบ 9 fields · idempotency · period lock
 5. **รายงานเป็นตาราง Markdown:** \`| ด้าน | สถานะ (✅/❌) | หลักฐาน/ไฟล์ |\` แล้ว **แก้จุดที่ ❌ ให้เลย** + verify + commit
 
 # โปรโตคอล
@@ -127,7 +133,7 @@ ${RULES}`;
 }
 
 export function buildResumePrompt(task, answer) {
-  return `ผู้ใช้ (Boonphone) ตอบคำถามที่คุณค้างไว้สำหรับงาน Phase ${task.id} — ${task.title} แล้ว:
+  return `ผู้ใช้ (PO) ตอบคำถามที่คุณค้างไว้สำหรับงาน Phase ${task.id} — ${task.title} แล้ว:
 
 "${answer}"
 
@@ -142,7 +148,7 @@ export function buildRepairPrompt(task, failureSummary) {
 ผลลัพธ์ที่ล้มเหลว:
 ${failureSummary}
 
-แก้ให้ผ่านทั้ง typecheck/test/lint โดยไม่ลด scope/ตัด field/เปลี่ยน workflow (กติกา 24) แล้ว amend หรือ commit เพิ่ม
+แก้ให้ผ่านทั้ง typecheck/test/lint โดยไม่ลด scope/ตัด field/เปลี่ยน workflow (ห้ามแก้เทสต์ให้ผ่านแทนการแก้โค้ด) แล้ว amend หรือ commit เพิ่ม
 - แก้ไม่ได้เพราะสเปคไม่ชัด/ต้องตัดสินใจ → พิมพ์ ${config.needsDecision} <คำถาม>
 - เสร็จแล้ว → พิมพ์ ${config.taskDone} <commit hash> <headline>`;
 }

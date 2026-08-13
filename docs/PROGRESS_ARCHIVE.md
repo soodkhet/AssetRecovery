@@ -5,6 +5,48 @@
 
 ---
 
+## Phase 0.3 — Adapt Orchestrator + Dev Panel เข้าโปรเจกต์นี้
+
+**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `staging`
+
+### สิ่งที่ทำ (adapt ตาม `promptmovetools.md` — ไม่เขียนใหม่ ไม่แตะ logic ที่มี comment บทเรียน)
+**A. Orchestrator**
+- `config.mjs`: **`baseBranch` = `staging`** (สายพัฒนาจริงตาม rules/06 — เดิม `main`) · verify 3 ด่านตรงกับโปรเจกต์นี้อยู่แล้ว (`pnpm typecheck` เต็ม + `vitest run --changed` + eslint ผ่าน xargs) · เขียน comment ด้าน release flow ใหม่ให้ตรงกับ staging→PR→main · `finalTestStages` 6 ด่านใหม่ · `uiTaskPrefixes` = ว่าง
+- `lib/prompt.mjs`: แทน `RULES` ทั้งก้อนด้วยกติกาจาก CLAUDE.md ของโปรเจกต์นี้ (satang/พ.ศ./permission API layer/audit 9 fields/snapshot/idempotency/state+error code/ห้าม push) · แก้ชื่อโปรเจกต์ · path เอกสาร (`docs/REUSE_INDEX.md`, `docs/01_PLAN.md`, `docs/00_MAP.md`) · flow ตัวอย่างใน final test เป็นสายงานจริงของเรา · `${stage.key}/4` hardcode → `/${config.finalTestStages.length}`
+- `review-prompt.md` + `final-test-prompt.md` + `final-tests/*.md` — เขียนใหม่ทั้งชุดตามธุรกิจนี้ (ลบไฟล์ RTB 5 ไฟล์ สร้างใหม่ 6 ไฟล์: operations / finance / accounting / security / ui-completeness / reliability)
+- ข้อความแสดงผล "RTB" → "AssetRecovery" ใน `engine.mjs`, `notify.mjs`, `orchestrate.mjs`, `server.mjs`, `dashboard.html`, `scripts/*.sh`
+- `README.md` / `REMOTE.md` / `ADAPT_GUIDE.md` — path เครื่อง, port 4174, ชื่อ container, `.env.local`, หมายเหตุว่าขั้นตอนแปลงเอกสาร 7 ข้อทำครบแล้ว
+
+**B. Dev Panel**
+- `server.mjs`: `SERVICES` เหลือตัวเดียว (`app` = Next.js dev :3000 — โปรเจกต์นี้ frontend+backend อยู่ด้วยกัน ไม่มี api/admin/worker แยก) · `TASKS` = generate/migrate/seed/typecheck/test/lint/build ของจริง · Studio = `pnpm db:studio` (Prisma :5555) · **docker ต้องส่ง `-f docker-compose.dev.yml`** เพราะไฟล์ไม่ใช่ชื่อ default · container = `assetrecovery-postgres-dev` · โหลด env จาก `.env` **และ `.env.local`** (Next.js ใช้ตัวหลัง)
+- `index.html`: header/ปุ่ม/คำอธิบาย/URL เปิดเว็บตาม service ใหม่ + เพิ่มปุ่ม lint และ prisma generate
+
+### การตัดสินใจเอง (ต้องรายงานตาม DoD ข้อ 7)
+1. **`uiTaskPrefixes` = ว่าง** (ไม่เปิด rule "task UI → Fable 5") — task ในแผนนี้เกือบทุกตัวเป็นงานผสม BE+FE และถูกวางขนาดไว้กับงบ context 800k ของ Opus 5 · วิธีเปิดเขียนไว้ใน comment แล้ว
+2. **คง env prefix `RTB_*` ทั้ง 33 ตัว** ตามคำแนะนำใน promptmovetools §A5 (เปลี่ยน = ต้อง grep ครบทุกไฟล์รวม docs, ได้ไม่คุ้มเสีย)
+3. **คง `globalThis.__rtbHandoffTarget`** — เป็นสัญญาระหว่าง `engine.mjs` ↔ `prompt.mjs` เปลี่ยนชื่อแล้วพลาดจุดเดียว = prompt บอกเป้า context ผิดเงียบ ๆ
+4. **เอา `orchestrator/lib/progress.test.mjs` เข้า `pnpm test`** (แก้ `vitest.config.mts` ให้ include `orchestrator/**/*.test.mjs` และเลิก exclude โฟลเดอร์นี้) — เดิมเทสต์นี้ไม่เคยถูกรันในโปรเจกต์นี้เลย ทั้งที่มันคือยามกันบั๊ก "dashboard โชว์ 100% ปลอม / orchestrator หยุดหยิบงาน" · มันรันกับ `PROGRESS.md` **จริง** จึงจับได้ทันทีถ้าแก้ฟอร์แมตพัง
+5. **แก้เทสต์ 1 เคสใน `progress.test.mjs`** — เคส "รับ id ทุกแบบ" เดิม assert ว่า id ของโปรเจกต์เดิม (`RET-2b`, `OPS-1`, …) มีอยู่ใน PROGRESS.md จริง ซึ่งเป็นข้อมูลเฉพาะโปรเจกต์นั้น · เปลี่ยนไปทดสอบ parser กับ **ไฟล์ fixture** ที่มี id รูปแบบเดียวกันแทน — บทเรียนยังอยู่ครบและแข็งขึ้น (ไม่ผูกกับข้อมูลโปรเจกต์) ส่วนเคส "ไม่ทิ้งแถวเงียบ ๆ" ยังเทียบกับไฟล์จริงเหมือนเดิม
+
+### verify ที่รันจริง (DoD 7 ข้อของ promptmovetools)
+1. `node --check` ทุกไฟล์ `.mjs` ที่แก้ ✅
+2. `orchestrate.mjs status` → **AssetRecovery — 2/60 (3%)** + งานถัดไป `Phase 0.3` ถูกต้อง ✅
+3. `run --dry-run` → branch `auto/phase-0.3`, model `claude-opus-5`, prompt อ้าง `docs/00_MAP.md`/`docs/01_PLAN.md`/`docs/REUSE_INDEX.md` + กติกาโปรเจกต์นี้ ✅
+4. dashboard :4174 → ไม่มี token = **401**, มี token = เห็นหัวข้อ AssetRecovery + `next.id=0.3` + `finalStages` 6 ด่านใหม่ ✅
+5. dev panel :4600 → เปิด/ปิด `app` ได้จริง (เห็นสถานะ managed→listening ครบ 3 สถานะ), one-shot `lint` รันจบ, docker postgres up→**ตรวจเจอ container**→down, `/api/quit` ปิดสะอาด ✅ (ยืนยันว่า init script สร้าง `assetrecovery_dev` + `assetrecovery_test` จริง)
+6. `grep -ri "RTB|Boonphone|zeegamemsg"` → เหลือเฉพาะ: env prefix `RTB_*`, path เครื่องนี้ใน plist/REMOTE (ตั้งใจ), `__rtbHandoffTarget`, และ false positive (`insertBefore`/`restartBtn`) ✅
+7. รายงานการตัดสินใจ = หัวข้อด้านบน ✅
+
+เพิ่มเติม: `pnpm typecheck` / `lint` / `test` (14 เคส) / `build` เขียวครบ · ไม่มี state เก่าจากโปรเจกต์เดิมติดมา (`queue/`, `logs/`, `.token`, `.run.lock`, `review-checkpoint.json` — ไม่มีเลย และ gitignore ครอบครบ)
+
+### จุดที่คนถัดไปควรรู้
+- **orchestrator ไม่มี `git push` โดยตั้งใจ** — auto-merge แตะแค่ `staging` ในเครื่อง (reset กลับได้) · เส้นแบ่ง production คือคนกด push เอง
+- เริ่มใช้จริงครั้งแรกแนะนำตั้ง `RTB_AUTO_MERGE=false` ก่อน แล้วค่อยเปิดเมื่อมั่นใจ · `state.auto` default ปิดทุกครั้งที่ restart โดยตั้งใจ
+- dashboard สั่งรันโค้ดได้ → **ห้ามเปิดออกอินเทอร์เน็ต** ใช้ Tailscale + token เท่านั้น (`REMOTE.md`)
+- แก้ `PROGRESS.md` เมื่อไหร่ให้รัน `pnpm test` ด้วยเสมอ — ยาม parser จะจับฟอร์แมตพังให้ (บันทึกใน REUSE_INDEX แล้ว)
+
+---
+
 ## Phase 0.2 — Deploy pipeline ฝั่ง Staging
 
 **วันที่**: 2026-08-14 · **commit**: `6e3fedf` (setup) + `6cccf92` (fix build) + `04f5341` (ตรึง Node) · **branch**: `staging`

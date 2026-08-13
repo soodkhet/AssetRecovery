@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RTB Dev Panel</title>
+<title>AssetRecovery Dev Panel</title>
 <style>
   :root{
     --purple:#6d4bd8; --purple-d:#553bad; --gold:#8A7038;
@@ -59,7 +59,7 @@
 </head>
 <body>
 <header>
-  <h1>▲ RTB Dev Panel</h1>
+  <h1>▲ AssetRecovery Dev Panel</h1>
   <span class="sub">กดปุ่มสั่งงาน dev ได้เลย — ไม่ต้องพิมพ์ terminal · โหลด .env + cd + ulimit ให้อัตโนมัติ</span>
 </header>
 
@@ -87,14 +87,14 @@
       <div class="row">
         <div class="info">
           <div class="name"><span class="dot" id="pg-dot"></span> Docker Postgres</div>
-          <div class="desc">ฐานข้อมูลหลัก <b>ต้องเปิดก่อน API เสมอ</b> — แก้อาการ "DATABASE_URL required" / "connection refused" ตอนเปิด API</div>
+          <div class="desc">ฐานข้อมูล dev (docker-compose.dev.yml · พอร์ต 5433) <b>ต้องเปิดก่อนแอปเสมอ</b> — แก้อาการ "DATABASE_URL required" / "connection refused"</div>
         </div>
         <div class="btns" id="pg-btns"></div>
       </div>
       <div class="row">
         <div class="info">
-          <div class="name"><span class="dot" id="studio-dot"></span> Drizzle Studio</div>
-          <div class="desc">เปิดหน้าเว็บดู/แก้ข้อมูลในตารางโดยตรง — ใช้ตรวจว่าข้อมูลเข้าถูกไหม (เปิด Postgres ก่อน)</div>
+          <div class="name"><span class="dot" id="studio-dot"></span> Prisma Studio</div>
+          <div class="desc">เปิดหน้าเว็บดู/แก้ข้อมูลในตารางโดยตรง (พอร์ต 5555) — ใช้ตรวจว่าข้อมูลเข้าถูกไหม (เปิด Postgres ก่อน)</div>
         </div>
         <div class="btns" id="studio-btns"></div>
       </div>
@@ -105,6 +105,13 @@
       <h2>🗄 จัดการข้อมูล</h2>
       <div class="row">
         <div class="info">
+          <div class="name">prisma generate</div>
+          <div class="desc">สร้าง Prisma Client ใหม่จาก schema — รัน <b>หลัง clone ใหม่หรือหลังแก้ schema.prisma</b> ไม่งั้น typecheck แดง TS2307</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=generate')">รัน</button></div>
+      </div>
+      <div class="row">
+        <div class="info">
           <div class="name">db:migrate</div>
           <div class="desc">อัปเดตโครงสร้างตารางให้ล่าสุด — รัน <b>หลังเปิด Postgres ครั้งแรก</b> หรือหลัง pull โค้ดที่มี migration ใหม่</div>
         </div>
@@ -112,17 +119,10 @@
       </div>
       <div class="row">
         <div class="info">
-          <div class="name">seed demo</div>
-          <div class="desc">ใส่ข้อมูลตัวอย่าง <b>[DEMO]</b> (พาร์ทเนอร์/ทะเบียน/ตั้งค่า) ไว้ทดลองใช้งานระบบ</div>
+          <div class="name">db:seed</div>
+          <div class="desc">ใส่ master data ตั้งต้น (องค์กร/roles/capabilities/settings) — seed เป็น idempotent รันซ้ำได้</div>
         </div>
-        <div class="btns"><button onclick="post('/api/task?key=seed-demo')">รัน</button></div>
-      </div>
-      <div class="row">
-        <div class="info">
-          <div class="name">clear demo</div>
-          <div class="desc">ลบข้อมูล [DEMO] ทั้งหมด — ใช้ <b>ก่อนกรอกข้อมูลจริง</b> ของธุรกิจ</div>
-        </div>
-        <div class="btns"><button class="warn" onclick="post('/api/task?key=clear-demo')">รัน</button></div>
+        <div class="btns"><button onclick="post('/api/task?key=seed')">รัน</button></div>
       </div>
     </div>
 
@@ -139,14 +139,21 @@
       <div class="row">
         <div class="info">
           <div class="name">test</div>
-          <div class="desc">รันเทสต์ทั้งหมด (~90 วินาที) — ยืนยันว่าไม่มีอะไรถอยหลังหลังแก้โค้ด</div>
+          <div class="desc">รันเทสต์ทั้งหมดด้วย vitest — ยืนยันว่าไม่มีอะไรถอยหลังหลังแก้โค้ด</div>
         </div>
         <div class="btns"><button onclick="post('/api/task?key=test')">รัน</button></div>
       </div>
       <div class="row">
         <div class="info">
-          <div class="name">build หน้าบ้าน</div>
-          <div class="desc">ลอง build เว็บสาธารณะจริง (ตั้ง ulimit + โหลด env ให้เอง) — <b>ต้องเปิด API ไว้ด้วย</b> เพราะ build ดึง config จาก API</div>
+          <div class="name">lint</div>
+          <div class="desc">ESLint ทั้ง repo — ด่านเดียวกับที่ CI ใช้ (ห้าม any / ตัวแปรไม่ได้ใช้)</div>
+        </div>
+        <div class="btns"><button onclick="post('/api/task?key=lint')">รัน</button></div>
+      </div>
+      <div class="row">
+        <div class="info">
+          <div class="name">build</div>
+          <div class="desc">build production จริง (ตั้ง ulimit + โหลด env ให้เอง) — รัน <code>prisma generate</code> ให้เองก่อน build</div>
         </div>
         <div class="btns"><button onclick="post('/api/task?key=build')">รัน</button></div>
       </div>
@@ -160,8 +167,8 @@
   </div>
 
   <div class="note">
-    💡 <b>ลำดับเปิดใช้งานปกติ:</b> กด "🚀 เปิดครบพร้อมใช้" ปุ่มเดียว (เปิด Postgres → API → หน้าบ้าน + หลังบ้าน ให้อัตโนมัติ) → รอ ~10 วินาที → กดปุ่ม "เปิดเว็บ" ที่บริการ ·
-    ครั้งแรกสุด (ยังไม่เคยมีตาราง) ให้กด "db:migrate" หลังเปิด Postgres · ปิดหน้านี้ = ปิดบริการทั้งหมดที่ panel เปิดไว้
+    💡 <b>ลำดับเปิดใช้งานปกติ:</b> กด "🚀 เปิดครบพร้อมใช้" ปุ่มเดียว (เปิด Postgres → แอป Next.js ให้อัตโนมัติ) → รอ ~10 วินาที → กดปุ่ม "เปิดเว็บ" ·
+    ครั้งแรกสุด (ยังไม่เคยมีตาราง) ให้กด "prisma generate" แล้ว "db:migrate" หลังเปิด Postgres · ปิดหน้านี้ = ปิดบริการทั้งหมดที่ panel เปิดไว้
   </div>
 </div>
 
@@ -183,7 +190,7 @@ function toggleBtn(on, startPath, stopPath, startLabel="เปิด", stopLabel
 async function quitPanel(){
   if(!confirm("ปิดแผงควบคุม + บริการทั้งหมดที่เปิดไว้?")) return;
   try{ await fetch("/api/quit",{method:"POST"}); }catch(e){}
-  document.body.innerHTML = "<div style='padding:40px;font-size:16px'>👋 ปิดแผงแล้ว — ปิดแท็บนี้ได้เลย ครั้งหน้าเปิดใหม่ด้วยไอคอน RTB Dev Panel</div>";
+  document.body.innerHTML = "<div style='padding:40px;font-size:16px'>👋 ปิดแผงแล้ว — ปิดแท็บนี้ได้เลย ครั้งหน้าเปิดใหม่ด้วยไอคอน AssetRecovery Dev Panel</div>";
 }
 
 async function refresh(){
@@ -193,18 +200,15 @@ async function refresh(){
     const svc = document.getElementById("services");
     svc.innerHTML = "";
     const desc = {
-      api:"แกนกลางหลังบ้าน — หน้าบ้าน/หลังบ้านต้องมีตัวนี้รันถึงจะโหลดข้อมูลได้ (พอร์ต 3001) · ต้องเปิด Postgres ก่อน",
-      web:"เว็บลูกค้าสาธารณะ (พอร์ต 3000) — ที่ลูกค้าเข้าดูทะเบียน",
-      admin:"ระบบจัดการหลังบ้าน (พอร์ต 5173) — ต้องมี API รันอยู่",
-      worker:"ตัวรันงานเบื้องหลัง (ส่ง LINE, สร้าง PDF, reconcile) — เปิดเมื่อจะทดสอบงานพวกนี้"
+      app:"แอปทั้งระบบ (Next.js App Router — หน้าเว็บ + API อยู่ด้วยกัน · พอร์ต 3000) · ต้องเปิด Postgres ก่อนถ้าจะใช้หน้าที่แตะฐานข้อมูล"
     };
     for(const [key,v] of Object.entries(s.services)){
       // Worker ไม่มีพอร์ต ⇒ รู้สถานะได้จาก `managed` อย่างเดียว
       // starting = แผงสั่งเปิดไปแล้วแต่ยังไม่รับพอร์ต (vite/next ใช้เวลาบูตหลายวินาที)
       const starting = v.managed && v.port && !v.listening;
       const on = v.listening || v.managed;
-      const canOpen = key==="web"||key==="admin";
-      const url = key==="web"?"http://localhost:3000":"http://localhost:5173";
+      const canOpen = key==="app";
+      const url = "http://localhost:3000";
       const div = document.createElement("div");
       div.className="row";
       div.innerHTML = `<div class="info">
@@ -222,7 +226,7 @@ async function refresh(){
     document.getElementById("pg-dot").className = "dot "+(s.postgres?"on":"off");
     document.getElementById("pg-btns").innerHTML =
       toggleBtn(s.postgres, "/api/postgres?action=up", "/api/postgres?action=down");
-    // drizzle studio — long-running เหมือนบริการอื่น จึงต้องปิดได้ด้วย
+    // prisma studio — long-running เหมือนบริการอื่น จึงต้องปิดได้ด้วย
     document.getElementById("studio-dot").className = "dot "+(s.studio?"on":"off");
     document.getElementById("studio-btns").innerHTML =
       toggleBtn(s.studio, "/api/studio", "/api/service/stop?key=studio", "เปิด Studio", "ปิด Studio");

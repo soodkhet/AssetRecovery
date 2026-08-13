@@ -50,14 +50,14 @@ function readBody(req) {
   return new Promise((r) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { try { r(b ? JSON.parse(b) : {}); } catch { r({}); } }); });
 }
 
-const LOGIN_PAGE = `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RTB Orchestrator — เข้าสู่ระบบ</title>
+const LOGIN_PAGE = `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AssetRecovery Orchestrator — เข้าสู่ระบบ</title>
 <style>body{background:#0f1115;color:#e7e9ee;font-family:"IBM Plex Sans Thai",system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0}
 .box{background:#171a21;border:1px solid #2a2f3a;border-radius:14px;padding:28px 26px;width:320px}
 h1{font-size:16px;margin:0 0 14px}input{width:100%;box-sizing:border-box;background:#1f232c;border:1px solid #2a2f3a;color:#e7e9ee;border-radius:9px;padding:11px;font-size:14px;margin-bottom:12px}
 button{width:100%;background:#6d28d9;color:#fff;border:0;border-radius:9px;padding:11px;font-size:14px;cursor:pointer}
 p{color:#9aa3b2;font-size:12px;margin:12px 0 0}</style></head>
 <body><form class="box" onsubmit="location='/?token='+encodeURIComponent(document.getElementById('t').value);return false">
-<h1>🔒 RTB Orchestrator</h1><input id="t" type="password" placeholder="ใส่ token" autofocus><button>เข้าสู่ระบบ</button>
+<h1>🔒 AssetRecovery Orchestrator</h1><input id="t" type="password" placeholder="ใส่ token" autofocus><button>เข้าสู่ระบบ</button>
 <p>token อยู่ในไฟล์ <code>orchestrator/.token</code> หรือ env <code>RTB_DASH_TOKEN</code></p></form></body></html>`;
 
 const server = createServer(async (req, res) => {
@@ -75,7 +75,7 @@ const server = createServer(async (req, res) => {
         return send(res, 200, { ...s, runs: readRuns(25), liveLog: state.liveLog, commits: recentCommits(8), usage: getUsage(), models: config.models, contextWindow: activeContextWindow(), finalStages: config.finalTestStages.map((s) => ({ key: s.key, label: s.label })) });
       }
       if (path === '/api/notify-test' && req.method === 'POST') {
-        notify({ title: '🔔 ทดสอบแจ้งเตือน RTB', message: 'ถ้าได้ยินเสียง+เห็นข้อความ = ตั้งค่า ntfy สำเร็จ', tags: ['bell'], priority: 'urgent', view: true });
+        notify({ title: '🔔 ทดสอบแจ้งเตือน AssetRecovery', message: 'ถ้าได้ยินเสียง+เห็นข้อความ = ตั้งค่า ntfy สำเร็จ', tags: ['bell'], priority: 'urgent', view: true });
         return send(res, 200, { sent: !!config.notify.topic, topic: config.notify.topic || null });
       }
       if (path === '/api/session') {
@@ -179,7 +179,7 @@ function restartSelf() {
 }
 
 server.listen(config.port, HOST, () => {
-  console.log(`\n  RTB Orchestrator dashboard → http://localhost:${config.port}/?token=${TOKEN}`);
+  console.log(`\n  AssetRecovery Orchestrator dashboard → http://localhost:${config.port}/?token=${TOKEN}`);
   console.log(`  bind=${HOST} · autoMerge=${config.autoMerge} · permission=${config.permission} · claude="${config.claudeBin}"`);
   console.log(`  token เก็บที่ orchestrator/.token (ตั้งเองผ่าน env RTB_DASH_TOKEN ได้)\n`);
   if (clearDeadLock()) console.log('  (ล้าง .run.lock ที่ค้างจาก process เก่าแล้ว)');

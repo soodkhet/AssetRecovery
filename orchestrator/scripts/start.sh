@@ -1,6 +1,6 @@
 #!/bin/bash
 # รัน orchestrator dashboard + กัน Mac หลับระหว่างทำงาน (caffeinate)
-# ใช้โดย launchd (com.rtb.orchestrator.plist) หรือรันมือ: bash orchestrator/scripts/start.sh
+# ใช้โดย launchd (com.assetrecovery.orchestrator.plist) หรือรันมือ: bash orchestrator/scripts/start.sh
 set -euo pipefail
 
 # ไป repo root (สคริปต์อยู่ที่ orchestrator/scripts/)
