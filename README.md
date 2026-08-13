@@ -25,6 +25,6 @@ Next.js App Router + TypeScript · Prisma · PostgreSQL (Supabase) · Supabase A
 - `tools/devpanel/` — แผงควบคุม dev servers (port 4600) — adapt ใน task 0.3 เช่นกัน
 - `.claude/` — rules / commands (`/start-task`, `/finish-task`, `/review`, `/spec`) / subagents (code-reviewer, spec-checker, security-auditor) / hooks
 
-## โฟลเดอร์ที่ห้ามแตะ
+## หมายเหตุแหล่ง spec
 
-`Project_info/` = archive spec ต้นฉบับ (read-only ถาวร) — งานทั้งหมดใช้สำเนาใน `docs/` + `reference/`
+`docs/` + `reference/` = แหล่ง canonical ของ spec/mockup — archive ต้นฉบับ (`Project_info/`) ถูกนำออกจาก repo แล้ว 2026-08-13 (ดูได้จากประวัติ git)

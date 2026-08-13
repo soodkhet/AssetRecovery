@@ -14,7 +14,7 @@
 | Decision Log | `docs/94-decision-log.md` | DEC-001…DEC-009 — เปลี่ยน tech/architecture ต้องมี DEC ใหม่ |
 | ลำดับเมื่อเอกสารขัดกัน | `02` (schema) → ไฟล์ spec ของ module → reference กลาง (22/23/24/25/27/45) → mockup | ขัดกันจริง → `[[NEEDS_DECISION]]` |
 
-⚠️ `Project_info/` คือ archive ต้นฉบับ — **ห้ามอ่าน/ห้ามแก้** ใช้สำเนาใน `docs/` + `reference/` เท่านั้น
+⚠️ archive ต้นฉบับ (`Project_info/`) ถูกนำออกจาก repo แล้ว (มติ PO 2026-08-13) — **`docs/` + `reference/` คือแหล่ง canonical ของ spec/mockup** (ต้นฉบับเดิมยังอยู่ในประวัติ git ก่อน commit การลบ)
 
 ## Tech Stack (ตัดสินใจแล้ว — ห้ามเปลี่ยนโดยไม่มี Decision Log)
 
@@ -102,7 +102,6 @@ CLAUDE.md / WORKFLOW.md / PROGRESS.md   → กติกา / วงจรงา
 docs/                                   → spec ทั้งหมด (00–97) + 00_INDEX + 00_MAP + 01_PLAN + PROGRESS_ARCHIVE + REUSE_INDEX
 reference/                              → HTML mockups + samples/ (template CSV/PDF/XLSX ตัวอย่าง)
 orchestrator/ , tools/devpanel/         → เครื่องมือ automation (adapt ตาม promptmovetools.md — task 0.3)
-Project_info/                           → archive ต้นฉบับ ห้ามแตะ
 app/ components/ lib/ prisma/           → โค้ดแอป (เกิดจาก task 0.1 เป็นต้นไป — โครงตาม docs/implementation-todo.md §0.2)
 ```
 

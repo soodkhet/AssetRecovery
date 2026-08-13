@@ -13,13 +13,6 @@ if printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]])git[[:space:]]+([-[:alnum:]=
   block "BLOCKED: ห้าม git push จาก session อัตโนมัติ — ให้คนตรวจแล้ว push เอง (rules/06)"
 fi
 
-# 2) ห้ามแตะ Project_info/ (archive ต้นฉบับ read-only)
-if printf '%s' "$CMD" | grep -qE '(rm|mv|cp|tee|>|>>)[^|]*Project_info/'; then
-  if printf '%s' "$CMD" | grep -qE '(rm|mv)[[:space:]][^|]*Project_info/|>[[:space:]]*[^|]*Project_info/'; then
-    block "BLOCKED: Project_info/ เป็น archive ต้นฉบับ ห้ามแก้/ลบ — ใช้สำเนาใน docs/ และ reference/"
-  fi
-fi
-
 # 3) ห้ามลบแบบกว้าง
 if printf '%s' "$CMD" | grep -qE 'rm[[:space:]]+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)[[:space:]]+(/|~|\.\.|\$HOME)([[:space:]]|$)'; then
   block "BLOCKED: rm -rf บน path กว้างเกินไป"

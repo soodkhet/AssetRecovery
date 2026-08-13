@@ -1,4 +1,0 @@
-﻿bank_txn_date,bank_ref,amount_baht,direction,matched_type,matched_ref,status
-28/06/2569,BTR-2569-06-0231,18089.42,credit,billing_batch,BB-2569-06-001,auto_matched
-05/07/2569,BTR-2569-07-0012,8245.00,debit,payout_batch,PB-2569-06-002,manual_matched
-06/07/2569,BTR-2569-07-0033,500.00,credit,-,-,unmatched_resolved

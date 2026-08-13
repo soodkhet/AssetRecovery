@@ -29,5 +29,5 @@ local (เครื่อง dev) ──push──▶ origin/staging ──ท�
 
 - Commit: conventional commits ภาษาไทย — `feat(<scope>): Phase <id> <headline>` / `fix(...)` / `docs(...)` · commit หลัง verify ผ่านเท่านั้น
 - ห้าม commit: `.env*` (นอกจาก `.env.example`), secrets, `node_modules/`, `.next/`, `orchestrator/queue|logs|.token|.run.lock`
-- ห้ามแตะ `Project_info/` (archive ต้นฉบับ) — read-only ถาวร
+- archive ต้นฉบับ (`Project_info/`) ถูกนำออกจาก repo แล้ว (2026-08-13) — `docs/` + `reference/` คือแหล่ง canonical ห้ามลบ/ย้าย
 - แก้ spec ใน `docs/` ได้เฉพาะ: อัปเดต INDEX/MAP/PLAN/PROGRESS_ARCHIVE/REUSE_INDEX/02_OPEN_DECISIONS หรือแก้ spec ตามมติ/คำตอบ `[[NEEDS_DECISION]]` ที่อนุมัติแล้ว (พร้อม changelog ในไฟล์นั้น + DEC ใหม่ถ้าเป็นเชิง architecture)

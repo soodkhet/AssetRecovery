@@ -3,10 +3,7 @@
     "deny": [
       "Bash(git push:*)",
       "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./Project_info/**)",
-      "Edit(./Project_info/**)",
-      "Write(./Project_info/**)"
+      "Read(./.env.*)"
     ]
   },
   "hooks": {
