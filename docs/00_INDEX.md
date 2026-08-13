@@ -10,6 +10,7 @@
 | `00_INDEX.md` | ไฟล์นี้ — ดัชนี + ลำดับความสำคัญ |
 | `00_MAP.md` | ช่วงบรรทัดของไฟล์ใหญ่ทุกไฟล์ — เปิดก่อน Read เสมอ |
 | `01_PLAN.md` | แผนงานละเอียดทุก task: scope + reading list + งบ context + DoD |
+| `03_PRODUCTION_CHECKLIST.md` | สิ่งที่ต้องทำครบก่อนเปิด PR แรกจาก `staging` เข้า `main` (Supabase production / env / seed / verify การแยก env) |
 | `PROGRESS_ARCHIVE.md` | รายละเอียดเต็มของงานที่เสร็จแล้ว (ย้ายมาจาก PROGRESS.md) |
 | `REUSE_INDEX.md` | ของที่มีแล้ว/แม่แบบ/กับดัก — เช็คก่อนเขียนโค้ดใหม่ทุกครั้ง |
 | `README.md` | Build Specification Index ฉบับเดิม (tech stack, file index, key business rules) |

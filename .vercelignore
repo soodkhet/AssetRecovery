@@ -1,0 +1,10 @@
+# ไฟล์ที่ไม่เกี่ยวกับ build ของแอป — ตัดออกเพื่อลดขนาด/เวลา deploy
+# (ไม่มีโค้ดใน app/ lib/ components/ import ของพวกนี้ — ถ้าเริ่ม import เมื่อไหร่ต้องเอาออกจากลิสต์)
+docs/
+reference/
+orchestrator/
+tools/
+_to_delete/
+promptmovetools.md
+WORKFLOW.md
+PROGRESS.md
