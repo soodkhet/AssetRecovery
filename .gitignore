@@ -1,2 +1,29 @@
 .DS_Store
 node_modules/
+
+# Next.js / build
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code — ค่าเฉพาะเครื่อง
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Orchestrator runtime state (ห้าม commit — ระบบสร้างใหม่เอง)
+orchestrator/queue/
+orchestrator/logs/
+orchestrator/.token
+orchestrator/.run.lock
+
+# misc
+*.log
+/tmp/
+coverage/
+_to_delete/
