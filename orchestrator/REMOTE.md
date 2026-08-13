@@ -37,9 +37,26 @@ tail -f orchestrator/logs/service.log     # ดูว่าขึ้น dashboar
 **หรือรันมือ (ไม่ใช้ launchd):**
 ```bash
 cd /Users/zeegamemsg/AssetRecovery
-set -a; . ./.env; set +a
+set -a; . ./.env.local; set +a
 caffeinate -is node orchestrator/server.mjs
 ```
+> โปรเจกต์นี้เก็บค่าที่ `.env.local` (ตามแบบ Next.js) — `start.sh` โหลดให้ทั้ง `.env` และ `.env.local` แล้ว
+
+---
+
+## 5. แจ้งเตือนมือถือผ่าน ntfy (ตัวเลือก แต่แนะนำ)
+
+ตั้งใน `.env.local` (ไฟล์นี้ไม่ถูก commit):
+```bash
+RTB_NTFY_TOPIC=assetrecovery-<สุ่มยาว ๆ เดาไม่ได้>   # ชื่อ topic = รหัสผ่านโดยพฤตินัย
+RTB_API_BASE=http://<ชื่อเครื่อง-หรือ-100.x.x.x>:4174  # ทำให้ปุ่มบนการแจ้งเตือนกดสั่งงานได้
+```
+แล้ว **restart server** · ทดสอบว่าเข้ามือถือจริง: `node orchestrator/orchestrate.mjs notify-test`
+
+- ลงแอป **ntfy** บนมือถือ → Subscribe topic ชื่อเดียวกันเป๊ะ
+- ได้อะไรบ้าง: งานเสร็จ/verify แดง/มีคำถามรอตัดสินใจ → เด้งเข้ามือถือ พร้อมปุ่ม **ตัวเลือกคำตอบ / ✓ Approve / เปิด Dashboard** (สูงสุด 3 ปุ่ม)
+- ⚠️ **ntfy.sh เป็น public broker** — ใครรู้ชื่อ topic ก็อ่านข้อความได้ และ payload ของปุ่มมี dashboard token อยู่ด้วย ⇒ ตั้งชื่อ topic ให้เดาไม่ได้ · ถ้าต้องการแน่นหนากว่านี้ให้ใช้ ntfy ที่มี auth หรือ self-host แล้วตั้ง `RTB_NTFY_SERVER`
+- ปิดแจ้งเตือน: ลบ `RTB_NTFY_TOPIC` ออกแล้ว restart
 
 ---
 

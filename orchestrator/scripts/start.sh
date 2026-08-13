@@ -10,8 +10,10 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/$(cat .nvmrc 2>/dev/null || echo '')/bin:$PATH"
 NODE_BIN="${NODE_BIN:-$(command -v node || echo node)}"
 
-# โหลด .env (มี DB creds ฯลฯ ที่ pnpm test ต้องใช้)
-if [ -f ./.env ]; then set -a; . ./.env; set +a; fi
+# โหลด env (มี DB creds ที่ verify ต้องใช้ + ค่า RTB_* ของ orchestrator/ntfy)
+# โปรเจกต์นี้ใช้ `.env.local` เป็นไฟล์หลักตามแบบ Next.js — `.env` เผื่อไว้ · ตัวหลังทับตัวแรก
+if [ -f ./.env ];       then set -a; . ./.env;       set +a; fi
+if [ -f ./.env.local ]; then set -a; . ./.env.local; set +a; fi
 
 echo "[$(date '+%F %T')] starting orchestrator server ($NODE_BIN)"
 
