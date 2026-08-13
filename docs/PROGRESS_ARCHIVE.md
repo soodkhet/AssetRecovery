@@ -7,7 +7,7 @@
 
 ## Phase 0.3 — Adapt Orchestrator + Dev Panel เข้าโปรเจกต์นี้
 
-**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `staging`
+**วันที่**: 2026-08-14 · **commit**: `3a54bb2` · **branch**: `staging`
 
 ### สิ่งที่ทำ (adapt ตาม `promptmovetools.md` — ไม่เขียนใหม่ ไม่แตะ logic ที่มี comment บทเรียน)
 **A. Orchestrator**

@@ -24,7 +24,7 @@
 |---|---|---|---|
 | 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ✅ | `7eda8e3` · Next 16 + Prisma 7 + vitest + CI · รายละเอียด: PROGRESS_ARCHIVE |
 | 0.2 | Deploy pipeline ฝั่ง Staging (Production เลื่อนไปก่อน PR แรกเข้า main) | ✅ | `6e3fedf`+`6cccf92`+`04f5341` · ⚠️ ค้างฝั่ง Vercel UI: domain ประจำ + env 5 ตัว (บล็อก 1.1) — ดู PROGRESS_ARCHIVE |
-| 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ✅ | `__COMMIT__` · baseBranch=staging · DoD 7 ข้อผ่านครบ · รายละเอียด: PROGRESS_ARCHIVE |
+| 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ✅ | `3a54bb2` · baseBranch=staging · DoD 7 ข้อผ่านครบ · รายละเอียด: PROGRESS_ARCHIVE |
 
 ## Phase 1 — Foundation (DB → Auth → Master Data → Settings)
 
