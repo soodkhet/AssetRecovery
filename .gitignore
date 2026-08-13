@@ -6,6 +6,10 @@ node_modules/
 out/
 build/
 *.tsbuildinfo
+.vercel/
+
+# Prisma Client ที่ generate เอง (CI รัน `pnpm db:generate` ก่อน verify)
+lib/generated/
 
 # env & secrets
 .env

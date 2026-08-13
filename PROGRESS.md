@@ -1,17 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-11 — สร้างแผนงานฉบับแรกจาก spec ครบชุด (ยังไม่เริ่มเขียนโค้ด)
+**อัปเดตล่าสุด:** 2026-08-13 — ปิด Phase 0.1 (โครง Next.js + Prisma + CI ขึ้นแล้ว บนสาย `staging`)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 0.1: Bootstrap โปรเจกต์ Next.js + โครงสร้าง + CI
+## 🎯 งานถัดไป — Phase 0.2: Deploy pipeline ฝั่ง Staging
 
-- ทำตาม `docs/01_PLAN.md` §0.1 — `create-next-app` (App Router + TS + Tailwind + ESLint) + Prisma + Supabase client + vitest + Zod + โครงโฟลเดอร์ตาม `docs/implementation-todo.md` §0.2 + `.env.example` + `docker-compose.dev.yml` (Postgres local) + CI workflow + push เข้า branch `staging`
-- **Prerequisite (งานคน)**: สมัคร GitHub Org / Vercel Pro / Supabase 2 projects ตาม `docs/tool-register.md` — ถ้า credential ยังไม่พร้อมให้ทำส่วนที่ทำได้ใน local ก่อน แล้ว `[[NEEDS_DECISION]]` แจ้งรายการที่ขาด
-- อ้างอิง: `docs/implementation-todo.md` (Phase 0), `docs/tool-register.md`, `docs/01-architecture.md`
-- DoD: `pnpm typecheck && pnpm build` เขียว · CI ผ่าน · dev server ขึ้น local
+- ทำตาม `docs/01_PLAN.md` §0.2 — **ทำเฉพาะฝั่ง staging** (มติ PO 2026-08-12: เลื่อน Supabase Production ไปเป็น checklist ก่อนเปิด PR แรกเข้า `main`)
+- ขอบเขต: ผูก Vercel กับ repo · env vars ของ branch `staging` ครบ 5 ตัว (`DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) · domain staging ชั่วคราว · Branch Protection บน `main` (require PR + merge ได้เฉพาะ PR จาก `staging`) · verify ว่า push `staging` แล้วเห็นผลที่ domain จริง
+- ⚠️ **Schema ownership**: ห้ามเปิด Supabase Branching / migration sync / แก้ตารางผ่าน Dashboard — Prisma เป็นเจ้าของ schema ทางเดียว (`.claude/rules/02-database.md`)
+- **งานคนก่อนเริ่ม**: `git push origin staging` ครั้งแรก (session อัตโนมัติ push ไม่ได้ตาม Rule 06) + ส่งค่า Supabase staging (URL/anon/service_role) ตาม `docs/tool-register.md` — ขาดค่าไหน → `[[NEEDS_DECISION]]`
+- อ้างอิง: `docs/implementation-todo.md` §0.3–0.6, `docs/tool-register.md`
+- DoD: push `staging` เห็นผลที่ domain staging · CI เขียวบน GitHub · Branch Protection บน `main` ตั้งแล้ว
 
 ---
 
@@ -19,8 +21,8 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ⬜ | PLAN §0.1 · ต้องมีบัญชีตาม tool-register |
-| 0.2 | Deploy pipeline แยก Staging/Production | ⬜ | PLAN §0.2 · Vercel env แยก branch |
+| 0.1 | Bootstrap Next.js + โครงสร้าง + CI | ✅ | `fce696d` · Next 16 + Prisma 7 + vitest + CI · รายละเอียด: PROGRESS_ARCHIVE |
+| 0.2 | Deploy pipeline ฝั่ง Staging (Production เลื่อนไปก่อน PR แรกเข้า main) | ⬜ | PLAN §0.2 · มติ PO 2026-08-12 |
 | 0.3 | Adapt Orchestrator + Dev Panel (promptmovetools.md) | ⬜ | PLAN §0.3 · ห้ามเขียนใหม่จากศูนย์ |
 
 ## Phase 1 — Foundation (DB → Auth → Master Data → Settings)
@@ -131,4 +133,5 @@
 - คำถามค้างถึง PO/นักบัญชี (ไม่บล็อกการเริ่ม Phase 0–1): ดูท้าย `docs/01_PLAN.md` แต่ละ Phase + `docs/93-roadmap-open-items.md` §7.1 — จุดที่บล็อกจริง: (Q1) Auth method ของ Client Portal → บล็อก Phase 7 · (Q2) spec แดชบอร์ดหลัก → บล็อก 6.6 · (Q3) Google Maps API key + budget → ต้องมีก่อน 2.9 · (Q4) spec↔schema drift 5 จุดของ Accounting (`export_records.version` int vs string ฯลฯ — ดู PLAN หมายเหตุ Phase 4) → default ยึด `02` · (Q5) เลขที่ใบกำกับภาษี format → ต้องตอบก่อนออก invoice จริงใบแรก (ไม่บล็อก build)
 - 2026-08-12 — **มติ PO เรื่อง Release Flow**: พัฒนาบน local (สาย `staging`) → คน push `origin staging` ทดสอบบนระบบนิเวศจริง (Vercel+Supabase staging) → ผ่านแล้วจึงเปิด PR `staging`→`main` เป็นทางเดียวเข้า production — **ห้าม push/merge เข้า main ที่ไม่ได้มาจาก staging** · orchestrator ใช้ `baseBranch = staging` (ตั้งใน task 0.3) · รายละเอียด `.claude/rules/06-git-workflow.md`
 - 2026-08-12 — **มติ PO ปิด `docs/02_OPEN_DECISIONS.md` ทั้งฉบับ**: เรื่องระบบ/flow ใช้ตามตัวเลือกแนะนำ (ก/default) ทุกข้อ · เรื่องเทมเพลต/รูปแบบ/ค่าที่รองานจริง (บัญชี) ทำเป็น setting พร้อม default (ตารางอยู่หัวไฟล์นั้น) · ข้อยกเว้นห้ามเป็น setting: กฎปัดเศษ, ฐานรวม WHT, Revenue trigger (fix ในโค้ด) · รายการติดธง 🔶 นักบัญชีเซ็นรับก่อนออกเอกสาร/จ่ายเงินจริงครั้งแรก — session ที่ implement ให้ยึดมติหัวไฟล์เป็นหลัก ไม่ต้องรอคำตอบรายข้อ
+- 2026-08-13 — **เวอร์ชันเครื่องมือที่ตรึงไว้ตอน bootstrap (0.1)**: Next 16.3 / React 19.2 / Tailwind 4.3 / Prisma 7.9 / vitest 4.1 / Zod 4.4 · **ตรึง TypeScript 5.9** (ไม่ขึ้น 7.x จนกว่า typescript-eslint + next plugin จะนิ่ง) และ **ตรึง ESLint 9** (ESLint 10 พังกับ eslint-plugin-react ที่ eslint-config-next 16 ดึงมา) · Next 16 เปลี่ยน `middleware.ts` → `proxy.ts` และถอด `next lint` · Prisma 7 ย้าย datasource url ไป `prisma.config.ts` + ต้องใช้ driver adapter — ไม่กระทบ DEC-001/002 (stack เดิมทั้งหมด) รายละเอียดที่ `docs/PROGRESS_ARCHIVE.md` §0.1 + กับดักที่ `docs/REUSE_INDEX.md`
 - 2026-08-12 — รีวิวรอบ Developer เพิ่ม `docs/02_OPEN_DECISIONS.md` (จุดที่ spec ยัง underspecified/ขัดกันเอง 40+ ข้อ พร้อม default) — **ก่อนเริ่ม 1.1/1.2 ต้องอ่านหมวด A (กระทบ schema: WHT ลูกค้าหัก, payment allocation, tracking_round, advance payout, due_rule, IMEI)** · task ที่ถูกอ้างในไฟล์นั้นต้องเปิดอ่านหมวดที่เกี่ยวก่อนลงมือ · ข้อที่มี [default] ถ้า PO ไม่ค้าน ให้ implement ตาม default แล้วแก้ spec ต้นทาง + changelog

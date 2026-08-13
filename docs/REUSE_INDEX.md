@@ -22,7 +22,11 @@
 
 | ชื่อ | ที่อยู่ | สร้างใน task | หมายเหตุ |
 |---|---|---|---|
-| (รอเริ่ม) | | | |
+| `prisma` (client singleton) | `lib/prisma.ts` | 0.1 | ทุก data access ผ่านตัวนี้ · Prisma 7 ต่อผ่าน driver adapter `PrismaPg` + `DATABASE_URL` (pooler) |
+| `getServerEnv()` / `getPublicEnv()` | `lib/env.ts` | 0.1 | validate env ด้วย Zod — ขาดตัวไหน throw พร้อมชื่อตัวแปร · ห้ามอ่าน `process.env` ตรงในโมดูลอื่น |
+| `createSupabaseServerClient()` / `createSupabaseAdminClient()` | `lib/supabase/server.ts` | 0.1 | Auth/Storage เท่านั้น · admin = service_role ห้าม import ฝั่ง client |
+| `createSupabaseBrowserClient()` | `lib/supabase/client.ts` | 0.1 | Auth ฝั่ง browser · ห้าม query ข้อมูลธุรกิจตรง (DEC-002) |
+| `APP_NAME` / `DISPLAY_TIMEZONE` / `BUDDHIST_YEAR_OFFSET` | `lib/constants.ts` | 0.1 | ค่าคงที่ระดับแอป — business rule ต้องมาจาก settings (ไฟล์ 13) ไม่ใช่ที่นี่ |
 
 รายการที่**ต้องเกิด**เป็น shared ตามแผน:
 - `requirePermission(action, resource, scope)` + scope resolver — Phase 1.3 (ทุก endpoint ต้องใช้)
@@ -37,4 +41,7 @@
 
 | วันที่ | เรื่อง | รายละเอียด |
 |---|---|---|
-| (ยังไม่มี — บันทึกเมื่อเจอจริง) | | |
+| 2026-08-13 | Next 16 เลิกใช้ `middleware.ts` | convention เปลี่ยนเป็น `proxy.ts` (default export `proxy`) — เอกสาร `implementation-todo` §0.2 ที่เขียนว่า `/middleware.ts` หมายถึงไฟล์นี้ · `next lint` ถูกถอดออกแล้ว ใช้ `eslint .` แทน |
+| 2026-08-13 | Prisma 7 ย้าย datasource url ออกจาก schema | `prisma.config.ts` ถือ url ของ CLI (ใช้ `DIRECT_URL`) · runtime ต้องส่ง driver adapter (`PrismaPg` + `DATABASE_URL`) ให้ `new PrismaClient()` เสมอ · client ถูก generate ไปที่ `lib/generated/prisma` (gitignored — CI ต้องรัน `pnpm db:generate` ก่อน verify) |
+| 2026-08-13 | ESLint 10 ยังใช้กับ `eslint-config-next` 16 ไม่ได้ | `eslint-plugin-react` 7.37.x พังกับ context API ของ ESLint 10 (`contextOrFilename.getFilename is not a function`) — ตรึงไว้ที่ `eslint@^9` จนกว่า plugin จะรองรับ |
+| 2026-08-13 | `next dev` เขียนบล็อกต่อท้าย CLAUDE.md เอง | บล็อก `<!-- BEGIN:nextjs-agent-rules -->` ถูกเติมกลับทุกครั้งที่รัน dev — commit ไปเลย (ปิดได้ด้วย `agentRules: false` ใน next.config ถ้าไม่ต้องการ) |

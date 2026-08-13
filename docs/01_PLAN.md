@@ -30,6 +30,8 @@ migration/schema เป็นก้อนแรกเสมอ → สูตร/
 - **DoD**: `pnpm typecheck && pnpm build` เขียว · CI รันผ่านบน PR แรก · dev server ขึ้น local ได้
 
 ### 0.2 — Deploy pipeline แยก Staging/Production
+> ⚠️ **Schema ownership**: Prisma เป็นเจ้าของ schema แต่เพียงผู้เดียว — Supabase project มี GitHub integration เชื่อมอยู่ (inert) **ห้ามเปิด Branching / migration sync / แก้ตารางผ่าน Dashboard** ทุกกรณี (ดู `.claude/rules/02-database.md`)
+> **มติ PO 2026-08-12**: เลื่อนการสร้าง Supabase Production ออกไปจนกว่า staging จะสมบูรณ์พร้อมใช้งาน — task นี้ทำ**เฉพาะฝั่ง staging** ให้จบ (Vercel + env staging + verify) ส่วนฝั่ง production (สร้าง project Pro + env `main` + migrate/seed + Organization/Tax ID จริง) แยกเป็น **checklist ก่อนเปิด PR เข้า `main` ครั้งแรก** — ห้าม merge PR แรกก่อนทำครบ
 - **ขอบเขต**: ผูก Vercel กับ repo · env vars แยกชุดตาม branch (`staging` → Supabase staging, `main` → Supabase production) ขั้นต่ำ: `DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` · domain ชั่วคราว 2 ตัว · Branch Protection บน `main` (require PR + **จำกัดให้ merge ได้เฉพาะ PR จาก `staging`** — Release Flow ตาม `.claude/rules/06-git-workflow.md`: local → push staging → ทดสอบบนระบบจริง → PR staging→main เท่านั้น) · verify แยกจริง (สร้าง table ทดสอบใน staging DB → production ต้องไม่มี)
 - **อ้างอิง**: `docs/implementation-todo.md` §0.3–0.6, `docs/tool-register.md`
 - **LOC ~200 · งบรวม ~120k** · ⚠️ ต้องมีบัญชี/สิทธิ์จาก Prerequisite ครบก่อน — ขาด → `[[NEEDS_DECISION]]`

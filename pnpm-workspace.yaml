@@ -1,0 +1,7 @@
+# pnpm 11 ย้าย setting ออกจาก package.json มาที่ไฟล์นี้ (https://pnpm.io/settings)
+# อนุญาต build script เฉพาะแพ็กเกจที่จำเป็นต้อง compile / ดาวน์โหลด binary จริงเท่านั้น
+allowBuilds:
+  '@prisma/engines': true
+  esbuild: true
+  prisma: true
+  unrs-resolver: true

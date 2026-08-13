@@ -1,0 +1,14 @@
+// Prisma schema — SSOT ของ schema คือ `docs/02-database-schema-design.md` เท่านั้น (Rule 02)
+// ตารางจริง 51 ตาราง + enum 54 ตัว เริ่มลงใน Phase 1.1 (Group A+B) และ 1.2 (Group C–G)
+// ⚠️ Prisma เป็นเจ้าของ schema แต่เพียงผู้เดียว — ห้ามสร้าง/แก้ตารางผ่าน Supabase Dashboard หรือ Branching
+// ⚠️ เงินทุกช่อง = Int satang เท่านั้น (ห้าม Float/Decimal) ยกเว้น rate_pct/wht_pct = Decimal(5,2)
+// ⚠️ วันเวลาเก็บ UTC ผ่าน DateTime @db.Timestamptz(6)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

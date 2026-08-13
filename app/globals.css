@@ -1,0 +1,14 @@
+@import 'tailwindcss';
+
+/* Design System — `04` §8.1 (theme slate/emerald · font Inter + Noto Sans Thai)
+   UI Kit ตัวจริง (Button/Table/Modal/Badge/statusBadge mapper) เกิดใน Phase 1.5 */
+@theme {
+  --font-sans: 'Inter', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
