@@ -5,6 +5,46 @@
 
 ---
 
+## Phase 1.9 — Users (08) + flow เชิญ/ตั้งรหัสผ่านครั้งแรก (ปิด D1)
+
+**วันที่**: 2026-08-14 · **commit**: `9e505ef` (โมดูลผู้ใช้) + `680159e` (provisioning ตามมติ PO) · **branch**: `auto/phase-1.9`
+
+### สิ่งที่ทำ
+
+**BE ผู้ใช้งาน (08)** — `lib/users/*`: `user.ts` (pure: normalize + conditional required ตาม role group + lifecycle + `assertUserDeletable`) · `schemas.ts` (Zod ใช้ร่วม FE/BE) · `errors.ts` · `queries.ts` (ชั้น DB + scope ระดับแถว) · endpoint: `GET/POST /api/users`, `GET/PATCH/DELETE /api/users/:id`, `PATCH /:id/suspend`, `PATCH /:id/reactivate`, `POST /:id/invite` และ `POST /api/finance-companies/:id/users` (เลื่อนมาจาก 1.8)
+
+**Provisioning (มติ PO 14/08/2569 ปิด open item D1)** — `lib/users/invite.ts` (pure) + `lib/users/provisioning.ts` (Supabase admin) + หน้า `/auth/set-password` (`components/auth/set-password-form.tsx`) + `setPasswordSchema` ใน `lib/auth/schemas.ts` + `SET_PASSWORD_PATH` เข้า public paths ของ `proxy.ts`
+- สร้างผู้ใช้ = เชิญด้วย `inviteUserByEmail` แล้วเก็บ `supabase_uid` ในธุรกรรมเดียวกับการสร้าง
+- เชิญไม่สำเร็จ = **ไม่ล้มงาน** — บันทึกผู้ใช้โดย uid เป็น null + คืน `warning` (`USER_NOT_PROVISIONED`) ให้ FE เตือน แล้วส่งซ้ำผ่านปุ่ม "ส่งคำเชิญอีกครั้ง"
+- อีเมลที่มีบัญชี Auth อยู่ก่อน = ผูก uid เดิม + เตือน `USER_LINKED_EXISTING_AUTH` (ไม่ส่งอีเมลใหม่)
+- แก้อีเมลผู้ใช้ = ย้ายอีเมลฝั่ง Supabase Auth ให้ด้วย (ล้มเหลว = warning ไม่ rollback ข้อมูลธุรกิจ)
+
+**สิทธิ์** — ผูก capability `manage_users` ครั้งแรก (`lib/roles/default-matrix.ts`): ธุรการ = manage · บริหาร + ผู้จัดการทีม inhouse/outsource = view · Superadmin ไม่มี record ตามนิยาม
+
+**FE** — `/settings/users`: ตาราง 5 คอลัมน์ + `<RoleGroupTabs>` (reuse 1.6) + ค้นหา/กรอง role/สถานะ + ป้าย "รอตั้งรหัสผ่าน" + ปุ่มแก้ไข/ส่งคำเชิญ/ระงับ/เปิดใช้งาน/ลบ (ทุกปุ่มบังคับ `reason` ผ่าน `<ConfirmModal>`) · ฟอร์ม cascading (กลุ่ม → role → ทีม/บริษัท) · เพิ่มเมนูย่อย `settings.users`
+
+**เอกสาร** — `24` v3.7 (+6 code หมวด 08) และ v3.8 (`INVITE_SEND_FAILED`) · `05` v3.2 (§17 Decision การตั้งรหัสผ่านครั้งแรก) · `02_OPEN_DECISIONS` D1 → ✅ · REUSE_INDEX
+
+**เทสต์** — `lib/users/user.test.ts` · `lib/users/schemas.test.ts` · `lib/users/invite.test.ts` · `lib/auth/schemas.test.ts` · เพิ่มยาม binding `manage_users` ใน `lib/roles/default-matrix.test.ts` — รวมทั้ง repo 500 → 518+ เทสต์เขียว
+
+### การตัดสินใจระหว่างทาง
+
+- **Error code**: `08` §11 เขียนกว้าง (`DUPLICATE_RECORD`/`INVALID_STATUS`) ซึ่งไม่มีใน dictionary กลาง → ตั้ง code เฉพาะตามแบบเดียวกับ Phase 1.7/1.8 แล้วลง `24` §6.1 · ทีม/บริษัทที่อ้างไม่เจอใช้ `TEAM_NOT_FOUND`/`COMPANY_NOT_FOUND` ของโมดูลเจ้าของ ไม่ตั้ง code ซ้ำ
+- **DELETE = soft delete เท่านั้น** และถูกปฏิเสธด้วย `USER_HAS_HISTORY` เมื่อมีร่องรอยการทำงาน — `countUserReferences()` **ไม่นับ audit log** (ทุกคนที่เคย login ก็มี ⇒ จะลบใครไม่ได้เลย) แต่นับทีมที่ยังถือตำแหน่งอยู่ด้วย
+- **สถานะไม่อยู่ในฟอร์ม** — เปลี่ยนผ่าน `/suspend`,`/reactivate` ตาม `08` §14 + Rule 04 เพื่อบังคับ `reason` และยาม lifecycle ครบทุกทาง
+- **D7 (suspend ตอนมีเคสค้าง)**: ทำตาม default — แสดงจำนวนงานค้างในกล่องยืนยัน ไม่ block (bulk reassign ยังเป็นงาน Phase 2.6) เหมือนที่ 1.8 ทำกับ `TEAM_HAS_ACTIVE_CASES`
+- **เมนู**: `05` §12 ให้ธุรการจัดการผู้ใช้ได้ แต่ `06` §7.2 ไม่ให้ธุรการเห็นเมนู "การตั้งค่า" และแท็บย่อยกว้างกว่าเมนูแม่ไม่ได้ ⇒ คงตาม `06` (สิทธิ์ที่ API ยังมีจริง) พร้อมหมายเหตุในโค้ด
+- **redirect ของลิงก์คำเชิญ** ประกอบจาก `origin` ของ request แทนการเพิ่ม env ใหม่ — ใช้ได้ทั้ง local/staging/production โดยไม่ต้องตั้งค่าเพิ่มฝั่งเรา
+
+### จุดที่คนถัดไปควรรู้
+
+- ต้องรัน **`pnpm db:seed`** ซ้ำ 1 ครั้งต่อ environment — `manage_users` เพิ่งถูก binding 4 แถวใหม่ ไม่งั้นธุรการ/บริหาร/ผู้จัดการจะเรียก `/api/users` ไม่ผ่าน (Superadmin ใช้ได้อยู่แล้ว)
+- ต้องตั้งค่าฝั่ง **Supabase Dashboard** ก่อนทดสอบ flow เชิญจริง: (1) Authentication → URL Configuration → Redirect URLs เพิ่ม `<origin>/auth/set-password` ของทุก environment (2) ตั้ง SMTP จริงถ้าจะส่งอีเมลนอกทีม (ตัวส่งในตัวของ Supabase จำกัดโควตา) — ไม่ตั้ง = สร้างผู้ใช้ได้แต่ได้ warning และต้องกด "ส่งคำเชิญอีกครั้ง" ทีหลัง
+- `warning` ใน response envelope (`lib/api/types.ts`) เป็นของใหม่ — โมดูลถัดไปที่มีงาน "สำเร็จแต่มีเรื่องต้องบอก" ใช้ช่องนี้ ห้ามยัดเป็น error
+- D2 (ลืมรหัสผ่าน) ยังเปิดอยู่ — หน้า `/auth/set-password` รองรับ `type=recovery` ไว้แล้ว เหลือแค่ปุ่ม "ลืมรหัสผ่าน" + `resetPasswordForEmail`
+
+---
+
 ## Phase 1.8 — Teams (09) + Finance Companies (10)
 
 **วันที่**: 2026-08-14 · **commit**: `0565ff7` · **branch**: `auto/phase-1.8`

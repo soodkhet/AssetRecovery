@@ -15,6 +15,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Login, Session, Route Guard, Action-level permission |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header block, Login sequence diagram, endpoint จริงแทน placeholder, Decisions/Open Items แยกชัดเจน) — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v3 | 03/07/2569 | Product Owner ยืนยัน 2 Open Item: (1) Session timeout = 24 ชั่วโมง (2) MFA ไม่เปิดใช้ในเฟส 1 — ย้ายจาก Open Item เป็น Decision (§17), อัปเดตค่าใน §10 |
+| v3.2 | 14/08/2569 | **ปิด open item D1** ตามมติ PO: การตั้งรหัสผ่านครั้งแรกใช้ลิงก์คำเชิญทางอีเมล (`inviteUserByEmail`) → เพิ่มเป็น Decision ใน §17 พร้อมรายละเอียดหน้าปลายทาง/ผู้ส่งซ้ำ/นโยบายรหัสผ่าน · implement ที่ Phase 1.9 (`lib/users/invite.ts` · `lib/users/provisioning.ts` · `/auth/set-password`) — ไม่กระทบ auth logic เดิม (login/session/route guard เหมือนเดิมทุกข้อ) |
 | v3.1 | 04/07/2569 | แก้จำนวน role อ้างอิง "14" → "15" ตามการนับใหม่ในไฟล์ 07 v2.2 / seed data ไฟล์ 02 §12 (แก้ตัวเลขอ้างอิงเท่านั้น ไม่กระทบ auth logic) |
 
 ขอบเขตเอกสารนี้: กลไก Authentication/Session/Route Guard เชิงเทคนิค — วิธี login, การตรวจสอบ session, การ guard route ตาม permission
@@ -190,6 +191,7 @@ sequenceDiagram
 - **Superadmin ห้าม lockout ตัวเอง** — ต้องมี safeguard กันไม่ให้ deactivate Superadmin คนสุดท้ายของระบบ (ข้อ 10, เพิ่ม test case ข้อ 16)
 - **รายชื่อ Role/Permission Matrix แบบเต็มอยู่ที่ `07-roles-permissions.md` เท่านั้น** — ไฟล์นี้ไม่ duplicate รายละเอียด role
 - **Session timeout = 24 ชั่วโมง** — ยืนยันกับ Product Owner 03/07/2569 (เดิมเป็น Open Item)
+- **การตั้งรหัสผ่านครั้งแรก = ลิงก์คำเชิญทางอีเมล (`inviteUserByEmail`)** — ยืนยันกับ Product Owner 14/08/2569 (ปิด open item D1): ผู้ใช้ตั้งรหัสผ่านเองที่หน้า `/auth/set-password` · ระบบไม่เก็บ/ไม่ตั้งรหัสผ่านแทนใคร · ส่งซ้ำได้โดยผู้มีสิทธิ์ `manage_users` ผ่าน `POST /api/users/:id/invite` (บังคับ `reason`) · อายุลิงก์ใช้ค่าของ Supabase project · รหัสผ่านขั้นต่ำ 8 ตัว มีทั้งตัวอักษรและตัวเลข
 - **MFA (Multi-Factor Authentication) ไม่เปิดใช้ในเฟส 1** — ยืนยันกับ Product Owner 03/07/2569 — คงเป็น Open Item สำหรับเฟส 2 ว่าจะเปิดหรือไม่ และถ้าเปิดจะเปิดทุก role หรือเฉพาะ role สูง
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)

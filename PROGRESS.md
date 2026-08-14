@@ -1,20 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.8 (Teams + Finance Companies) · งานถัดไป 1.9
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.9 (Users + invite flow ตามมติ PO ที่ปิด D1) · งานถัดไป 1.10
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.9: Users Module (08)
+## 🎯 งานถัดไป — Phase 1.10: Settings ไฟล์ 13 — Backend ครบ 13 หมวด
 
-- ทำตาม `docs/01_PLAN.md` §1.9 — **BE**: users CRUD + Supabase Auth provisioning (`supabase_uid`) + conditional required (`team_id` ถ้า inhouse/outsource · `company_id` ถ้า finance_company) + lifecycle `active → suspended → deleted` (soft) + `USER_HAS_HISTORY` (hard-delete user ที่มีประวัติต้อง reject) + suspend/reactivate พร้อม reason
-- **FE**: 3-tab nested — **reuse `<RoleGroupTabs>` จาก 1.6** + search/filter + ฟอร์ม cascading role select (เลือกกลุ่ม → role → ทีม/บริษัท)
-- ใช้ของที่มีแล้ว: `assertNotLastSuperadmin()`/`assertRoleDeletable()` (1.3/1.6) · `GET /api/teams/eligible-members` + `GET /api/finance-companies` (1.8) สำหรับ dropdown ทีม/บริษัท · `invalidateSessionCache()` ทุกครั้งที่เปลี่ยน role/สถานะ/ทีม/บริษัท
-- ⚠️ **ติด D1 (invite/first-login flow) ใน `docs/02_OPEN_DECISIONS.md`** — ถ้ายังไม่มีคำตอบตอนถึงขั้น provisioning ให้ `[[NEEDS_DECISION]]` ก่อนเขียน flow ตั้งรหัสผ่าน · `POST /api/finance-companies/:id/users` (สร้าง company user) ที่ 1.8 เลื่อนมา ให้ทำในก้อนนี้
-- อ้างอิง: `08` ทั้งไฟล์ · `05` §10 · mockup `settings.html` ผ่าน MAP (users)
-- LOC ~1,700 · งบ ~260k
-- DoD: สร้าง user แล้ว login ได้จริงผ่าน Supabase Auth · hard-delete user ที่มี history ถูก reject
+- ทำตาม `docs/01_PLAN.md` §1.10 — API + validation + audit ครบทั้ง 13 sub-section: §6.1 Cycles (CHECK cutoff_shape) · §6.2 Approval Matrix (threshold เป็น **satang**) + §6.2.1 Finance Policy (1 record/org) · §6.3 Bank Accounts (usage enum · ห้ามลบที่มีรายการผูก · `is_payout_account` deprecated) · §6.4 Tax Profiles (WHT 3% default · `applies_to` ไม่มี inhouse) · §6.5 VAT Rate effective-dated + `VAT_RATE_OVERLAP` resolver · §6.6 Cost Centers (auto running code) · §6.7/§6.9 read-only · §6.8 Bank File Formats + `POST /:id/test` + gate `BANK_FILE_NOT_TESTED` · §6.10 Functional Permission Matrix (บังคับจริงแล้วที่ `lib/roles/capability-locks.ts` ตั้งแต่ 1.6) · §6.11 Period Lock Policy + interceptor `PERIOD_LOCKED_DIRECT_EDIT` (โครง — บังคับจริง Phase 4) · §6.12 Tax Invoice Numbering (sequence · yearly reset · `last_number` ห้ามแก้มือ) · §6.13 Tax Doc Template Settings
+- **เพิ่ม endpoint ที่ spec §13 ตกหล่น**: `/api/settings/finance-policy` และ `/api/settings/tax-document-templates`
+- ใช้ของที่มีแล้ว: `withApiPermission()`/`toModuleErrorResponse()` (`lib/api/http.ts`) · `satangSchema()`/`pctSchema()`/`reasonSchema` (`lib/api/validation.ts`) · แม่แบบชั้น DB + scope ดูที่ `lib/users/queries.ts` / `lib/teams/queries.ts`
+- อ้างอิง: `13` ผ่าน MAP ทีละ § (ห้ามอ่านทั้งไฟล์) · `27` §6.1 · `25` · `02` Group B
+- LOC ~3,100 · งบ ~430k
+- DoD: test VAT overlap/resolve ข้ามช่วงเวลา · bank file ใช้จริงไม่ได้จนกว่า `test_status = passed` · numbering ไม่มี gap ภายใต้ concurrency
 
 ---
 
@@ -38,7 +37,7 @@
 | 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
 | 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
-| 1.9 | Users module | ⬜ | PLAN §1.9 · ไฟล์ 08 |
+| 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`680159e` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
 | 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |

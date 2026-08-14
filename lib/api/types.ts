@@ -5,6 +5,11 @@
 
 export interface ApiData<T> {
   data: T
+  /**
+   * งานที่ "สำเร็จแต่มีเรื่องต้องบอก" — ไม่ใช่ error (HTTP ยัง 2xx) เช่น สร้างผู้ใช้สำเร็จ
+   * แต่ส่งอีเมลคำเชิญไม่ผ่าน (`08` §14 · D1) · FE แสดงเป็น toast โทนเตือน
+   */
+  warning?: { code: string; title: string; message: string }
 }
 
 export interface ApiErrorBody {
@@ -21,6 +26,7 @@ export interface ApiErrorBody {
 
 export interface ApiCallResult<T> {
   data?: T
+  warning?: { code: string; title: string; message: string }
   error?: { title: string; message: string }
 }
 
@@ -41,7 +47,8 @@ export async function callApi<T>(input: string, init?: RequestInit): Promise<Api
     const response = await fetch(input, init)
     const body: unknown = await response.json()
     if (!response.ok) return { error: toErrorMessage(body) }
-    return { data: (body as ApiData<T>).data }
+    const payload = body as ApiData<T>
+    return payload.warning === undefined ? { data: payload.data } : { data: payload.data, warning: payload.warning }
   } catch {
     return { error: { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: 'กรุณาลองใหม่' } }
   }
