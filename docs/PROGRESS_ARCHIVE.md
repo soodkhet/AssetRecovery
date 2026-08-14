@@ -41,44 +41,6 @@
 
 ---
 
-## Phase 3.1 — Pure Finance Calculation Modules + Unit Tests (ไฟล์ 22 ครบ 13 สูตร)
-
-**วันที่**: 2026-08-15 · **commit**: `PENDING` · **branch**: `auto/phase-3.1`
-
-### สิ่งที่ทำ
-สูตรเงินทั้งระบบมีบ้านเดียวแล้วที่ `lib/finance/*` — pure ล้วนทุกไฟล์ (ไม่มี I/O ไม่แตะ Prisma/next) พร้อมเทสต์ **152 เคส**
-
-| ไฟล์ | สูตร (`22`) | จุดสำคัญ |
-|---|---|---|
-| `satang.ts` | (ฐาน) | เครื่องคิดเลขสตางค์ตัวเดียวของระบบ — `pctOfSatang()` ปัดครึ่งขึ้นครั้งเดียวที่ปลายสูตร + **ล้างเศษ binary ของอัตรา `NUMERIC(5,2)` ก่อนปัด** · `vatIncludedInSatang()` · ยามจับ float |
-| `compensation-calc.ts` | §6.1–6.4 | §6.1–6.3 **re-export ของเดิม** จาก `lib/field/expense-calc.ts` (2.9) ไม่เขียนซ้ำ · §6.4 commission/no-success fee exclusive ตาม outcome (ยอด 0 ไม่สร้าง record · ไม่มี "กฎหาร 4") |
-| `service-fee-calc.ts` | §6.5–6.7 | 3 model × 2 outcome × `charge_on_fail` · ส่วน `rate × basis` ได้เฉพาะ `closed_success` **เสมอ** · ฐานคำนวณว่าง ⇒ `grossSatang = null` + `missingBasis` |
-| `vat-calc.ts` | §6.8 | ต่อยอด `resolveVatRateAt()` (1.10) + snapshot `vatRatePctUsed` · เทสต์ใช้ทั้ง 7% และ 10% เพื่อให้โค้ดที่ hardcode ล้ม |
-| `wht-calc.ts` | §6.9 | **Payee ชนะ Plan** + fallback มี `warning` · ฐาน `before_vat`/`gross_amount` · เกณฑ์ 1,000 บาท (ค่าตั้งได้) |
-| `payout-calc.ts` | §6.10 | `net = gross − wht` ของรอบ + ยามรายการที่ `net ≠ gross − wht` ให้ล้มก่อนเงินออกจริง |
-| `ar-calc.ts` | §6.11 | ยอดค้าง + AR Aging ตาม `ar_aging_buckets` (`13` §6.2.1) · นับวันตามปฏิทินไทยเทียบคอลัมน์ `DATE` |
-| `gross-profit.ts` | §6.12 | `revenue = 0` ⇒ `marginPct = null` (ห้ามหารศูนย์) · margin ยอดรวมคิดจากยอดรวมไม่ใช่เฉลี่ยรายแถว |
-| `advance-calc.ts` | §6.13 | ยอดคืนไม่ติดลบ · มิเรอร์ generated column ของ DB |
-| `approval-flow-resolver.ts` | (`16` §6.1/§9) | matrix → รายการขั้น + เดินขั้น + ตีกลับกลับขั้น 1 + ยาม `APPROVAL_STEP_OUT_OF_ORDER`/`SEGREGATION_OF_DUTIES_VIOLATION` |
-| `adjustment-approval-policy.ts` | (`20` §6.2) | ระดับผู้อนุมัติจาก **snapshot `period_status_at_target`** + `INSUFFICIENT_APPROVAL_LEVEL` + ธง audit แยกของรอบ `locked` |
-| `errors.ts` | — | `FinanceError` 4 code ของ `24` §6.4/§6.7 (ผูกเข้าเทสต์ status ของทะเบียนกลางแล้ว) |
-| `formula-coverage.test.ts` | — | **ยาม DoD**: อ่านหัวข้อ `### 6.x` จาก `docs/22` จริง เทียบกับทะเบียน "สูตร → ไฟล์" ทั้งสองทาง + เช็คว่าไฟล์สูตรไม่ import Prisma/next |
-
-### การตัดสินใจระหว่างทาง
-- **`include_vat` — เอกสารสองฉบับพูดคนละมุม**: `22` §6.8 เขียนว่า `total = revenue_gross` (ราคาที่ตกลงรวม VAT แล้ว) แต่ `19` §7.1 + `02` §5 กำหนดว่า `revenues.gross_satang` = ยอด**ก่อน** VAT และ `total = gross + vat` ⇒ implement เป็น "**ถอด** VAT ออกจากราคาที่ตกลง" ซึ่งตรงกับทั้งสองฉบับพร้อมกัน (ยอดเรียกเก็บไม่บวกเพิ่ม + คอลัมน์ตรงความหมาย)
-- **ยอดคืนเงินทดรอง — `02` ชนะ `22`**: `22` §6.13 เขียนว่าฐานคือ `requested` แต่ `02` §5 ทำ `return_satang` เป็น **generated column** `GREATEST(0, COALESCE(approved,0) − used)` ⇒ `advanceReturnSatang()` มิเรอร์ของ DB (ฐาน = ยอด**อนุมัติ** = เงินที่ออกไปจริง) ส่วน `USED_EXCEEDS_REQUEST_NO_TOPUP` ยังเทียบ **`requested`** ตามนิยามใน `24` §6.4 — คนละฐานโดยตั้งใจ
-- **`sent_to_accountant` = "การเงิน + Executive" ตีความเป็นชุด role ที่ต้องครบ** (ไม่ใช่ "ผู้อนุมัติคนเดียวที่เป็นได้ 2 role") ⇒ API ของ 3.7 ต้องส่ง role ของผู้อนุมัติ**ทุกคน**ที่ผ่านมาแล้วเข้า `assertApprovalLevelSufficient()`
-- **ไม่เพิ่ม error code ใหม่เลย** — code ที่ใช้มีครบใน `24` อยู่แล้ว · code ที่โมดูลอื่นเป็นเจ้าของ (`VAT_RATE_NOT_FOUND`/`INVALID_WHT_RATE`/`APPROVAL_MATRIX_NOT_FOUND`) โยนด้วย `SettingsError` ห้าม declare ซ้ำ
-- **ปัดเศษ**: ปัดครึ่งขึ้นครั้งเดียวที่ปลายสูตร แต่ต้องล้างเศษ binary ก่อน — `1000 × 2.05%` ควรได้ 21 สตางค์ ถ้าคูณ/หารตรง ๆ จะได้ 20 (มีเทสต์คุมไว้)
-
-### จุดที่คนถัดไปควรรู้
-- **ห้ามคำนวณเงินนอก `lib/finance/*`** — 3.2–3.8 และ Phase 4 เรียกฟังก์ชันเหล่านี้เท่านั้น (`docs/REUSE_INDEX.md` มีตารางครบทุกตัว)
-- `calculateProjectedRevenue()` (`lib/cases/projected-revenue.ts`) เป็น **ประมาณการก่อนรับเคส** คนละตัวกับ `calculateServiceFeeRevenue()` — ห้ามสลับกัน
-- ยังไม่มี `@vitest/coverage-v8` ในโปรเจกต์ ⇒ ความครบของ pure module คุมด้วย `formula-coverage.test.ts` + เทสต์รายฟังก์ชัน (ทุก export มีเทสต์) แทนตัวเลข coverage
-- Phase 3.4 ให้เรียก `calculateWhtForPayee()` ตัวเดียว (มันประกอบกฎ priority + สูตรให้แล้ว) · Phase 3.6 เรียก `calculateVatForRevenue()` คู่กับ `evaluateRevenueTrigger()`
-
----
-
 ## Phase 2.15 — Warehouse Frontend ชุดที่ 2 (ส่งมอบ + แนบเอกสาร · ไฟล์ 44 §8.4–8.5)
 
 **วันที่**: 2026-08-15 · **commit**: `557fc34` · **branch**: `auto/phase-2.15`
