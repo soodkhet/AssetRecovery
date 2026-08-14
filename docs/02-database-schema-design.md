@@ -21,6 +21,7 @@
 | v3.4 | 04/07/2569 | **แก้ comment เท่านั้น — ไม่มีการเปลี่ยน DDL/โครงสร้างใดๆ**: (1) จำนวน Seed Roles "14" → **"15"** — นับจาก seed data จริงใน §12 ได้ 15 records (system 6 + inhouse 3 + outsource 3 + finance_company 3 = 15) ตัวเลข 14 เดิมเป็นการนับผิดที่คัดลอกต่อกันหลายไฟล์ (แก้ไฟล์ 05/07/25/README/implementation-todo พร้อมกัน — 🔶 รอ Product Owner ยืนยันตัวเลขสุดท้าย ดู `93-roadmap-open-items.md` §7.1) (2) comment ตาราง `jobs` เติม job_type `'advance_overdue'` ตามไฟล์ 15/91 |
 | v3.5 | 04/07/2569 | **Batch 6 เฟส 2 — Product Owner อนุมัติครบทุกข้อ (DEC-006 ใน `94-decision-log.md`)**: (D1=B) เพิ่มตารางกลุ่ม Settings ตามไฟล์ 13 — `billing_payout_cycles` (§6.1), `approval_matrices` (§6.2 เฉพาะสายอนุมัติ), `finance_policy_settings` (1 record/org — แยกค่านโยบายออกจาก matrix), `bank_file_formats` (§6.8), `tax_document_template_settings` (§6.13) + เติม `functional_group` บน `capabilities` (§6.10) + เติม numbering mode เต็มรูปบน `organizations` (§6.12) — (D2=A) เติม `usage`/`statement_format`/`payment_file_format`/`auto_match_tolerance_days` บน `bank_accounts` + deprecate `is_payout_account` — (D3=A) เพิ่มตาราง `notifications` (ไฟล์ 90 §6.3) — (D4=A) `wht_certificates` เพิ่ม status model (`active`/`cancelled` + `replaces_certificate_id`) และแก้ `delivery_format` TEXT → enum — (D5=A) `expenses` เพิ่ม `executive_approved_by/at` + `approval_step_current/total` + `approval_history` + `approval_matrix_id` (ชื่อ field ตามไฟล์ 16 §7 ซึ่งเป็นเจ้าของ flow) — (D7) เพิ่ม partial unique index `advances` (ห้ามเบิกซ้อน) + CHECK `bank_tx_status_fk_shape` (ส่วน UNIQUE `idempotency_key` มีอยู่เดิมแล้ว ไม่ต้องเพิ่ม) — รวมเป็น **51 tables** (45 เดิม + 6 ใหม่) อัปเดต Migration Order/Seed/Immutable Rules ตาม — ทุกตารางใหม่เป็น greenfield จึงเขียนเป็น CREATE/column ในตารางเดิมโดยตรง ไม่มี ALTER migration แยก |
 | v3.6 | 05/07/2569 | **DEC-009 — ระดับสิทธิ์ 3 ระดับ**: เพิ่ม enum `capability_access_level` (`view`/`manage`) + column `role_capabilities.access_level` (default `manage`) — "ไม่มีสิทธิ์" = ไม่มี record ในตาราง · Superadmin มีสิทธิ์ manage ทุก capability โดยนิยาม enforce ที่ middleware ไม่ seed record · sync ไฟล์ 13 v3.1 / 25 v2.2 / mockup `settings.html` แล้ว |
+| v4.0 | 14/08/2569 | **Sync กับไฟล์ 38 §6/§11 — implement ใน Phase 2.2** (Group C เดิมเขียนไว้ก่อนไฟล์ 38 รอบ reformat จึงขาดฟิลด์ที่ฟอร์มรับเคสใช้จริง ไม่ใช่การเปลี่ยน business logic): (1) `cases.case_ref_normalized` + unique index `uniq_cases_company_case_ref` (§11 กันซ้ำ 2 ชั้น — normalize = uppercase+trim เท่านั้น) · (2) enum ใหม่ `debtor_nationality` (§6.1) และ `asset_kind` (§6.2 `asset_type`) + คอลัมน์ `debtor_nationality`/`debtor_nationality_other`/`debtor_passport_no`/`asset_kind` · (3) ที่อยู่ครบ 3 ชุดตาม §6.1 — เติมกลุ่ม `work_addr_*` และ `id_card_addr_*` · (4) `projected_revenue_satang`/`projected_revenue_source` (§6.4/§6.5 — ค่าประมาณการ ไม่ใช่ Revenue จริงของไฟล์ 19) · (5) **ปลด NOT NULL** ของ `debtor_name`/`asset_description` ตาม §11 (เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ) · (6) ตารางใหม่ `case_edit_history` (§6.4 `edit_history` append-only) · (7) `recycle_requests.previous_round`/`new_round` — §6.4 `recycle_history` คือแถว `status = 'approved'` ของตารางนี้ ไม่แยกตารางใหม่ · `asset_description` = `asset_brand_model` ของไฟล์ 38 · enum รวมเป็น **58 ตัว** · รวมเป็น **54 tables** · migration: `20260814090450_case_submission_fields` + `20260814092000_case_ref_unique_not_partial` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
 | v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
@@ -173,6 +174,21 @@ CREATE TYPE case_source AS ENUM (
   'manual',     -- กรอกมือในระบบ
   'import',     -- Import ไฟล์ Excel/CSV
   'api'         -- API Ingestion จากบริษัทไฟแนนซ์
+);
+
+-- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.1/§6.1.1 ใช้จริงในฟอร์ม แต่ enum เดิมไม่มี
+CREATE TYPE debtor_nationality AS ENUM (
+  'TH',         -- ไทย — ใช้เลขบัตรประชาชน 13 หลัก
+  'MM',         -- พม่า
+  'LA',         -- ลาว
+  'KH',         -- กัมพูชา
+  'OTHER'       -- อื่นๆ (ระบุชื่อสัญชาติใน debtor_nationality_other)
+);
+
+-- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.2 `asset_type` (ชื่อ type ใช้ `asset_kind` เลี่ยงชนกับคำว่า asset type ของไฟล์ 44)
+CREATE TYPE asset_kind AS ENUM (
+  'smartphone',
+  'tablet'
 );
 
 CREATE TYPE recycle_status AS ENUM (
@@ -766,7 +782,9 @@ CREATE TABLE cases (
   id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID         NOT NULL REFERENCES organizations(id),
   -- Reference
-  case_ref        TEXT         NOT NULL,  -- เลขสัญญาจากไฟแนนซ์ เช่น SF-2026-00832
+  case_ref        TEXT         NOT NULL,  -- เลขสัญญาจากไฟแนนซ์ เช่น SF-2026-00832 (เก็บค่าดิบ ไม่แก้ไข)
+  -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.1/§11: ค่าที่ normalize แล้ว (uppercase + trim เท่านั้น) ใช้เทียบซ้ำ
+  case_ref_normalized TEXT     NOT NULL,
   tracking_round  INTEGER      NOT NULL DEFAULT 1,  -- รอบติดตาม (เพิ่มเมื่อ recycle)
   source          case_source  NOT NULL DEFAULT 'manual',
   status          case_status  NOT NULL DEFAULT 'draft',
@@ -780,20 +798,37 @@ CREATE TABLE cases (
   service_fee_basis_snapshot   service_fee_basis,
   service_fee_charge_on_fail   BOOLEAN,
   -- Debtor info
-  debtor_name         TEXT     NOT NULL,
+  -- แก้ 14/08/2569 (Phase 2.2): `debtor_name`/`asset_description` ปลด NOT NULL — ไฟล์ 38 §11 บังคับว่า
+  -- เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ (ความครบถ้วนบังคับตอนขอขึ้น pending_review แทน)
+  debtor_name         TEXT,
+  debtor_nationality  debtor_nationality,       -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.1
+  debtor_nationality_other TEXT,                -- เพิ่ม 14/08/2569 — ระบุเมื่อ nationality = OTHER (§6.1.1)
   debtor_national_id  VARCHAR(13),
+  debtor_passport_no  TEXT,                     -- เพิ่ม 14/08/2569 — สัญชาติ ≠ TH ใช้ช่องนี้ free text (§6.1.1)
   debtor_phone_mobile VARCHAR(20),
   debtor_phone_work   VARCHAR(20),
   debtor_line_id      TEXT,
   debtor_facebook     TEXT,
-  -- Address (current)
+  -- Address (current) — ฐานเดียวของ routing ทีม (ไฟล์ 38 §6.1.2)
   addr_province       TEXT,
   addr_district       TEXT,
   addr_subdistrict    TEXT,
   addr_postal_code    VARCHAR(5),
   addr_detail         TEXT,
+  -- Address (work + ตามบัตรประชาชน) — เพิ่ม 14/08/2569 (Phase 2.2) ไฟล์ 38 §6.1 ระบุ 3 ที่อยู่ต่อเคส
+  work_addr_province     TEXT,
+  work_addr_district     TEXT,
+  work_addr_subdistrict  TEXT,
+  work_addr_postal_code  VARCHAR(5),
+  work_addr_detail       TEXT,
+  id_card_addr_province     TEXT,
+  id_card_addr_district     TEXT,
+  id_card_addr_subdistrict  TEXT,
+  id_card_addr_postal_code  VARCHAR(5),
+  id_card_addr_detail       TEXT,
   -- Asset
-  asset_description   TEXT     NOT NULL,
+  asset_kind          asset_kind,               -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.2 `asset_type`
+  asset_description   TEXT,                     -- = `asset_brand_model` ของไฟล์ 38 §6.2
   imei                VARCHAR(15),                     -- A6: IMEI 15 หลักเท่านั้น (exact match)
   serial_no           TEXT,                            -- A6: เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ)
   debt_amount_satang  INTEGER,
@@ -802,6 +837,9 @@ CREATE TABLE cases (
   suggested_team_id   UUID     REFERENCES teams(id),   -- ระบบเสนอ
   assigned_team_id    UUID     REFERENCES teams(id),   -- ผู้จัดการยืนยัน
   team_change_reason  TEXT,                            -- ถ้าเปลี่ยนจากที่เสนอ
+  -- Projected revenue (เพิ่ม 14/08/2569 — ไฟล์ 38 §6.4/§6.5) ประมาณการ best-case ไม่ใช่รายได้จริงตามไฟล์ 19
+  projected_revenue_satang  INTEGER,
+  projected_revenue_source  TEXT,                       -- calculation_source: template/version ที่ใช้คำนวณ
   -- Review
   reviewed_by         UUID     REFERENCES users(id),
   reviewed_at         TIMESTAMPTZ,
@@ -817,6 +855,9 @@ CREATE TABLE cases (
   deleted_at          TIMESTAMPTZ,
   UNIQUE(organization_id, company_id, case_ref, tracking_round)
 );
+-- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §11 กันเลขที่สัญญาซ้ำภายในบริษัทไฟแนนซ์เดียวกัน (ชั้น DB ของการกันซ้ำ 2 ชั้น)
+-- ไม่ partial: UNIQUE ด้านบนก็ไม่ partial ⇒ เคสที่ soft delete แล้วยังจองเลขไว้เหมือนกันทั้งคู่
+CREATE UNIQUE INDEX uniq_cases_company_case_ref ON cases(organization_id, company_id, case_ref_normalized);
 CREATE INDEX idx_cases_org_status     ON cases(organization_id, status);
 CREATE INDEX idx_cases_org_company    ON cases(organization_id, company_id);
 CREATE INDEX idx_cases_org_team       ON cases(organization_id, assigned_team_id);
@@ -855,6 +896,20 @@ CREATE TABLE case_contacts (
 );
 CREATE INDEX idx_case_contacts_case ON case_contacts(case_id);
 
+-- ── case_edit_history ────────────────────────────────────────
+-- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.4 `edit_history`: ประวัติการแก้ไขเคสทุกครั้ง **append-only**
+-- (ไม่ใช่ที่เก็บ audit หลัก — audit_logs ยังต้องมีครบทุก mutation ตาม §10)
+CREATE TABLE case_edit_history (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  case_id         UUID    NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  note            TEXT,                        -- หมายเหตุที่ผู้แก้ระบุ (ไม่บังคับ)
+  changed_fields  TEXT[]  NOT NULL,            -- ชื่อ field ระดับ API ที่เปลี่ยนจริงในการแก้ครั้งนั้น
+  edited_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  edited_by       UUID    NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_case_edit_history_case ON case_edit_history(case_id, edited_at);
+
 -- ── recycle_requests ─────────────────────────────────────────
 -- คำขอ recycle เคส closed_fail (ไฟล์ 38 §6.5)
 CREATE TABLE recycle_requests (
@@ -864,6 +919,9 @@ CREATE TABLE recycle_requests (
   status          recycle_status  NOT NULL DEFAULT 'pending',
   request_note    TEXT            NOT NULL,
   decision_note   TEXT,
+  -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.4 `recycle_history` = แถวที่ status = 'approved' ของตารางนี้
+  previous_round  INTEGER,
+  new_round       INTEGER,
   decided_by      UUID            REFERENCES users(id),
   decided_at      TIMESTAMPTZ,
   created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -1679,6 +1737,7 @@ CREATE TABLE files (
 17_cases.sql
 18_case_documents.sql
 19_case_contacts.sql
+19b_case_edit_history.sql      ← เพิ่ม 14/08/2569 (Phase 2.2) ต้องหลัง cases, users
 20_recycle_requests.sql
 21_case_assignments.sql
 22_check_ins.sql
@@ -1803,6 +1862,7 @@ VALUES ('...org_id...', NULL, false, '{30,60,90}');  -- NULL = ไม่จำ�
 | `bank_transactions` | match_status != 'unmatched' | unmatch ต้องมี reason + audit |
 | `handover_lots` | status = 'confirmed' | ห้าม UPDATE, ห้าม DELETE |
 | `audit_logs` | any | ห้าม UPDATE/DELETE เด็ดขาด |
+| `case_edit_history` | any | append-only ที่ชั้น service — มีแต่ INSERT ไม่มี endpoint/โค้ดที่ UPDATE/DELETE (เพิ่ม 14/08/2569 · ไฟล์ 38 §6.4 "ไม่เขียนทับประวัติเดิม") · **ไม่ใส่ trigger ระดับ DB** เพราะตารางนี้ผูก `ON DELETE CASCADE` กับ `cases` — trigger จะไปบล็อก cascade ด้วย (audit ตัวจริงที่ห้ามแตะเด็ดขาดคือ `audit_logs`) |
 | `roles` | is_seed = true | ห้าม DELETE, ห้าม UPDATE name/role_group |
 | `accounting_periods` | status = 'locked' | แก้ตรงไม่ได้ — ต้องผ่าน Adjustment + Executive |
 

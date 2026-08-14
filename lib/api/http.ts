@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import type { z } from 'zod'
 import { authErrorMessage, toAuthErrorResponse } from '@/lib/auth/errors'
-import { requirePermission } from '@/lib/auth/require-permission'
+import { requireAnyPermission, requirePermission } from '@/lib/auth/require-permission'
 import type { PermissionAction, SessionUser } from '@/lib/auth/types'
 import { API_CONTRACT, type EndpointId } from '@/lib/api/contract'
 import { apiFailure, apiSuccess, type ApiWarning } from '@/lib/api/envelope'
@@ -91,7 +91,11 @@ export interface EndpointRouteOptions<Ctx, T> {
   /** id ใน `API_CONTRACT` (ไฟล์ `45`) — ห้ามเขียน path เองในไฟล์ route */
   endpoint: EndpointId
   action: PermissionAction
-  resource: string
+  /**
+   * capability code — ส่งเป็น array ได้เมื่อ endpoint เดียวมีผู้ใช้หลายบทบาทที่ถือ capability คนละตัว
+   * (ผ่านเมื่อมีอย่างน้อย 1 ตัว — `requireAnyPermission()`)
+   */
+  resource: string | readonly string[]
   /** ตัวแปลง error ประจำโมดูล — ไม่ระบุ = `toModuleErrorResponse` */
   toErrorResponse?: ModuleErrorResponder
   handler: EndpointHandler<Ctx, T>
@@ -116,7 +120,9 @@ export function withEndpoint<Ctx = unknown, T = unknown>(
       )
     }
     try {
-      const user = await requirePermission(options.action, options.resource)
+      const user = Array.isArray(options.resource)
+        ? await requireAnyPermission(options.action, options.resource)
+        : await requirePermission(options.action, options.resource as string)
       const result = await options.handler(request, context, user)
       if (result instanceof Response) return result
       return apiSuccess(result.data, { status: result.status, warning: result.warning })

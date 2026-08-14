@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.1 (API Contract Infra ไฟล์ 45 — contract/event registry/envelope/error catalog) · งานถัดไป 2.2
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.2 (Case Submission BE ชุด 1 — schema/CRUD/เอกสาร) · งานถัดไป 2.3
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.2: Case Submission BE ชุด 1 (schema + CRUD + เอกสาร)
+## 🎯 งานถัดไป — Phase 2.3: Case Submission BE ชุด 2 (state machine + routing + recycle + import)
 
-- ทำตาม `docs/01_PLAN.md` §2.2 — migration `cases`/`case_contacts`/`case_documents`/`edit_history`/`recycle_history` + unique `(finance_company_id, case_ref_normalized)` (normalize = uppercase+trim เท่านั้น)
-- `POST/GET /api/cases` + `GET /:id` — duplicate **2 ชั้น** (DB constraint + API pre-check ที่ตอบพร้อมลิงก์เคสเดิม) + `edit_history` append-only · API ingestion สร้าง draft เสมอแม้ข้อมูลไม่ครบ (ยกเว้น ref ซ้ำ)
-- documents API (slot-based + `file_hash`) + required-doc gate ก่อน `pending_review` (contract_doc + national_id_doc + product_photo ≥1 ≤8) · identity conditional ตามสัญชาติ + phone format filters
-- ของที่มีแล้วต้อง reuse (ดู `docs/REUSE_INDEX.md`): **`withEndpoint()` + `API_CONTRACT` + `apiPath()` + envelope + `ERROR_CATALOG` จาก 2.1** (ห้ามพิมพ์ path เอง/สร้าง envelope เอง) · `emitAudit()` · `SettingsTxClient` · Zod helper กลาง `lib/api/validation.ts`
-- อ้างอิง: `38` ผ่าน MAP §6 (L68–197), §11–12 (L306), §17 (L371) · `02` Group C
-- LOC ~1,950 · งบ ~300k
-- DoD: test duplicate ภายใต้ concurrency 3 ช่องทาง · draft จาก API ที่ข้อมูลไม่ครบสร้างได้
+- ทำตาม `docs/01_PLAN.md` §2.3 — `PATCH /api/cases/:id/status` state machine (`draft→pending_review→approved|rejected|need_info→draft`) + permission (Case Approver = system role global) + events
+- team suggestion service (routing จาก `addr_province` ของที่อยู่ปัจจุบันตัวเดียว · `CASE_NO_TEAM_MATCH` · default ไม่ auto-assign) · projected revenue calculator (best-case 100% — FLAT/SUCCESS_FEE/HYBRID) · **service fee snapshot ตอน `approved`** (4 คอลัมน์ตาม `10` §9.2)
+- Recycle flow (เฉพาะ `closed_fail` · ไม่จำกัดรอบ · approve → `tracking_round`+1 ข้าม pending_review ตรงเข้า ready_to_assign) · Import Excel/CSV (mapping + validate ต่อแถว + batch draft)
+- ของที่มีแล้วต้อง reuse (ดู `docs/REUSE_INDEX.md`): **`caseReadiness()` = gate ก่อน `pending_review`** · `caseScopeWhere()`/`CaseError`/schemas จาก 2.2 · คอลัมน์ `projected_revenue_*` + `recycle_requests.previous_round/new_round` มีแล้ว · `withEndpoint()` + `API_CONTRACT` + `emitAudit()` + `resolvePlanVersionAt()`
+- อ้างอิง: `38` ผ่าน MAP §6.5–6.6, §8–10 (L258–305), §16 · `10` §9.2 · `12`
+- LOC ~2,500 · งบ ~350k
+- DoD: test ตาม `38` §20 — โดยเฉพาะ recycle round + snapshot ตอน approved ไม่เปลี่ยนเมื่อแก้ template
 
 ---
 
@@ -48,7 +48,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 2.1 | API Contract Infra (ไฟล์ 45) — 39 endpoints + events + envelope | ✅ | 2026-08-14 · `4dba3a3` · contract 39 endpoint + ทะเบียน event 34 + กฎ ESLint + envelope กลาง + error catalog 129 code (เทสต์เทียบ spec จริง) → archive |
-| 2.2 | Case Submission BE ชุด 1 (schema/CRUD/เอกสาร) | ⬜ | PLAN §2.2 · duplicate 2-layer |
+| 2.2 | Case Submission BE ชุด 1 (schema/CRUD/เอกสาร) | ✅ | 2026-08-14 · `d5accc2` · schema เคสครบตามไฟล์ 38 §6 + API 5 endpoint + กันเลขสัญญาซ้ำ 2 ชั้น (เทสต์ concurrency 3 ช่องทาง) → archive |
 | 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ⬜ | PLAN §2.3 · snapshot ตอน approved |
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ⬜ | PLAN §2.4 · address reuse ไฟล์ 41 |
 | 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ⬜ | PLAN §2.5 · detail modal reuse 40/41 |

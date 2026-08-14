@@ -10,6 +10,7 @@ import {
   type ApiErrorCode,
 } from '@/lib/api/error-catalog'
 import { auditErrorStatus, AUDIT_ERROR_CODES } from '@/lib/audit/errors'
+import { caseErrorStatus, CASE_ERROR_CODES } from '@/lib/cases/errors'
 import { authErrorStatus, AUTH_ERROR_CODES } from '@/lib/auth/errors'
 import { compensationErrorStatus, COMPENSATION_ERROR_CODES } from '@/lib/compensation/errors'
 import { financeCompanyErrorStatus, FINANCE_COMPANY_ERROR_CODES } from '@/lib/finance-companies/errors'
@@ -122,6 +123,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['service-fee', SERVICE_FEE_ERROR_CODES, serviceFeeErrorStatus as (code: never) => number],
   ['finance-companies', FINANCE_COMPANY_ERROR_CODES, financeCompanyErrorStatus as (code: never) => number],
   ['settings', SETTINGS_ERROR_CODES, settingsErrorStatus as (code: never) => number],
+  ['cases', CASE_ERROR_CODES, caseErrorStatus as (code: never) => number],
 ]
 
 describe('status ของโมดูลที่มีอยู่แล้ว', () => {

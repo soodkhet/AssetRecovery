@@ -25,6 +25,27 @@ export async function requirePermission(
   return user
 }
 
+/**
+ * endpoint ที่ผู้ใช้หลายบทบาทเข้าถึงได้ด้วย capability **คนละตัว** — ผ่านเมื่อมีอย่างน้อย 1 ตัวในรายการ
+ * (เช่น `GET /api/cases` ที่ธุรการ/เจ้าหน้าที่อนุมัติเคส/ผู้จัดการทีม/บริหาร เห็นได้คนละเหตุผล — `38` §13)
+ *
+ * ยังเป็นการตรวจที่ API layer ตัวเดียวกัน (DEC-002) — scope ระดับแถวยังต้องกรองในชั้นข้อมูลของโมดูลเสมอ
+ */
+export async function requireAnyPermission(
+  action: PermissionAction,
+  resources: readonly string[],
+  scope?: ScopeTarget,
+): Promise<SessionUser> {
+  if (resources.length === 0) throw new Error('requireAnyPermission ต้องระบุ capability อย่างน้อย 1 ตัว')
+  const user = await requireSession()
+  let violation: ReturnType<typeof checkPermission> = null
+  for (const resource of resources) {
+    violation = checkPermission(user, action, resource, scope)
+    if (violation === null) return user
+  }
+  throw new AuthError(violation ?? 'PERMISSION_DENIED', `${action}:${resources.join('|')} user=${user.id}`)
+}
+
 type RouteHandler<Ctx> = (request: NextRequest, context: Ctx, user: SessionUser) => Response | Promise<Response>
 
 /**

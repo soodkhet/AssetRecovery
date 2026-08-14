@@ -320,6 +320,8 @@
 |---|---|---|
 | case_ref ซ้ำกับเคสเดิมของไฟแนนซ์เดียวกัน (เทียบที่ case_ref_normalized) | `CASE_REF_DUPLICATE` | **Reject ทันที** ไม่สร้างเคสใหม่ — แสดง error พร้อมลิงก์ไปเคสเดิม ทุกช่องทาง (API/Import/Manual) ถูก reject เหมือนกัน |
 | ขาดเอกสาร required (contract_doc/national_id_doc/product_photo) | `CASE_DOCUMENT_INCOMPLETE` | ไม่อนุญาตเปลี่ยนสถานะเป็น pending_review จนกว่าจะอัปโหลดครบ |
+| เปิด/แก้/แนบเอกสารเคสที่ไม่มีอยู่จริง หรืออยู่นอกขอบเขตที่ผู้ใช้เห็นได้ (ทีม/บริษัทอื่น) | `CASE_NOT_FOUND` | ตอบ 404 เหมือนไม่มีเคสนี้ ไม่บอกว่าเป็นของทีม/บริษัทอื่น (ไม่ leak ตาม `25` §16.1) |
+| อัปโหลดรูปสินค้าเกิน 8 รูปต่อเคส (§6.3.1) | `CASE_PRODUCT_PHOTO_LIMIT` | reject ไฟล์ที่เกิน — ไม่กระทบรูปที่อัปโหลดสำเร็จไปแล้ว |
 | province ของที่อยู่ปัจจุบันไม่ตรงกับทีมใดเลย | `CASE_NO_TEAM_MATCH` | ไม่เสนอทีมอัตโนมัติ — ต้องให้ผู้จัดการเลือกทีมเองแบบ manual พร้อม reason |
 | debtor_national_id ไม่ครบ 13 หลัก หรือมีตัวอักษรที่ไม่ใช่เลข (เมื่อสัญชาติไทย) | `CASE_INVALID_NATIONAL_ID` | reject การบันทึก แสดง error ใต้ช่องกรอกทันที (inline) — input ต้อง filter ตัวอักษรที่ไม่ใช่เลขออกตั้งแต่ตอนพิมพ์เพื่อลดโอกาสเจอ error นี้ |
 | debtor_phone_mobile/contact_phone ไม่ครบ 10 หลัก หรือ debtor_phone_work ไม่อยู่ในช่วง 9-10 หลัก | `CASE_INVALID_PHONE_FORMAT` | reject การบันทึก แสดง error ใต้ช่องกรอกทันที |
