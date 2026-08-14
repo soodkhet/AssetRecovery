@@ -6,17 +6,17 @@
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.7: Case Assignment Frontend (ไฟล์ 40)
+## 🎯 งานถัดไป — Phase 2.8: Field Tracker Backend ชุดที่ 1 (core flow — ไฟล์ 41)
 
-- ทำตาม `docs/01_PLAN.md` §2.7 — หน้า List (filter, badge inhouse/outsource **คนละบรรทัด**, badge `pending_reassignment` แยกจากสถานะ, วันเวลากำกับทุก action)
-- **Assignment Modal** = `<CaseDetailModal>` ของ 2.5 (reuse ห้ามสร้างใหม่) + Agent Picker + expand ดูเคสที่พนักงานถืออยู่ (`GET /api/teams/:id/agents/:agent_id/cases`)
-- **Reassign flow UI**: ฟอร์มเหตุผลบังคับ + คำเตือนว่าเคสที่ `accepted` ต้องรอความยินยอม (ไม่เปลี่ยนทันที)
-- **Kanban full-screen** read-only: 1 คอลัมน์ = 1 พนักงาน · filter ที่ระดับการ์ด · **คอลัมน์ว่างต้องยังแสดง**
-- ปุ่ม assign/reassign ของ **หัวหน้าทีม** เมื่อ settings ปิด = **hide ไม่ใช่ disabled** (`40` §20 · Rule 05)
-- ของที่มีแล้วต้อง reuse: `<CaseDetailModal>`/`<FileViewerModal>` (2.5) · UI Kit + `<StatusBadge>` · `assignmentStateOf()`/`reassignBranchOf()`/`canPerformAssignmentAction()` (2.6 — ห้าม hardcode เงื่อนไขสถานะในหน้าจอ) · `apiPath()` ของ contract
-- อ้างอิง: `40` §7 ผ่าน MAP (L114–166) · mockup `40-case-assignment-mockup.html` ผ่าน MAP
-- LOC ~2,700 · งบ ~380k · หมายเหตุ: Agent Accept UI ฝั่งพนักงานทำใน 2.10 (ไฟล์ 41) ครั้งเดียว
-- DoD: มอบหมาย/รับงาน/reassign ครบ flow บน staging
+- ทำตาม `docs/01_PLAN.md` §2.8 — migration ส่วน field: `assignment_status` 7 ค่า, `schedule_date`/`order`, evidence, checkins, travel_origins, close_case_drafts
+- `GET /api/field/cases` 4 กลุ่มสถานะ + detail payload เต็ม · accept/schedule/reorder (**recompute ทั้งวัน**) + team view (read-only เห็นรายละเอียดเต็ม)
+- **checkin = device GPS เท่านั้น** (ห้ามมีช่องกรอกพิกัดมือ) หลายจุดได้ ล็อกตลอดแก้ไม่ได้ · **travel_origin แยกจาก checkins เด็ดขาด** (auto GPS ตอนกด "เริ่มงาน", ปรับได้, 1 เคส 1 จุด, ไม่ auto-fill จากเคสก่อน)
+- close-draft 1:1 ต่อเคส (autoload · ลบตอน submit · ไม่มี expiry) · `submit_close_case` validate หลักฐานตาม outcome: checkin ≥1, รูป ≥1, วิดีโอ ≥1, รูปสินค้าเฉพาะ success, travel_origin เฉพาะ PER_KM
+- hard gate: เคสที่ยังไม่ `accepted` ห้ามเข้ารอบจัดเส้นทาง — ใช้ `assignmentStateOf()` ของ 2.6 ห้ามอ่าน `case_assignments.status` ดิบ
+- ของที่มีแล้วต้อง reuse: `assignmentStateOf()`/`assignment-ui.ts` (2.6/2.7) · `caseScopeWhere()` (2.2) · envelope + `API_CONTRACT` (2.1) · audit helper (1.4)
+- อ้างอิง: `41` ผ่าน MAP §6 (L80–198), §9–10 (L322–372), §17 (L435) · `23` §6.3
+- LOC ~2,500 · งบ ~350k
+- DoD: flow รับงาน→จัดวัน→เช็คอิน→ปิดงานครบบน staging + test validation ทุก error code
 
 ---
 
@@ -55,7 +55,7 @@
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ✅ | 2026-08-14 · `9c05e9e` · หน้า `/cases/submit` (filter/pagination/card list) + ฟอร์มรับเคส-แก้ไข + `<AddressFields>` shared (77 จังหวัด + postal auto-complete) → archive |
 | 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ✅ | 2026-08-14 · `07100c8`+`267b3f3` · ผู้ติดต่อ/เอกสาร/รูปสินค้า + ทีมที่เสนอ (ข้อมูลดิบ) + `<CaseDetailModal>` shared 4 โหมด + import wizard · ⚠️ ต้องสร้าง bucket `case-documents` ต่อ environment → archive |
 | 2.6 | Case Assignment BE | ✅ | 2026-08-14 · `a79c64c` · schema คำขอเปลี่ยนผู้รับผิดชอบ + API 8 endpoint ของ `45` §6.2 + reassign 2 สาขา + job timeout idempotent + `successRate()` service กลาง → archive |
-| 2.7 | Case Assignment FE | ⬜ | PLAN §2.7 · Kanban read-only |
+| 2.7 | Case Assignment FE | ✅ | 2026-08-14 · `612e3b2` · หน้า `/cases/assign` + Assignment Modal (reuse `<CaseDetailModal>`) + Kanban full-screen read-only + `assignment-ui.ts` (ปุ่มหัวหน้า = ซ่อนตาม settings) → archive |
 | 2.8 | Field Tracker BE ชุด 1 (core flow) | ⬜ | PLAN §2.8 · GPS จริงเท่านั้น |
 | 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ⬜ | PLAN §2.9 · ต้องมี Google Maps API key |
 | 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ⬜ | PLAN §2.10 |
