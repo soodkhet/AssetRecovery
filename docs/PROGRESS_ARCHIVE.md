@@ -5,6 +5,45 @@
 
 ---
 
+## Phase 2.9 — Field Tracker Backend ชุดที่ 2 (เงิน + ตีกลับ + push — ไฟล์ 41)
+
+**วันที่**: 2026-08-14 · **commit**: `dcb0fc3`+`f19cad0`+`71d8b8d`+`6af1d76` · **branch**: `auto/phase-2.9`
+
+### มติ PO ที่ปลดล็อกงานนี้ (ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task)
+- **เพิ่มคอลัมน์/ตารางที่ `41` ใช้จริงแต่ `02` ยังไม่มี** พร้อมแก้ `02` (v4.3 + changelog) — `expenses` +5 คอลัมน์ (`expense_date`, `distance_km`, `shared_with_user_id`, `receipt_file_url`, `superseded_by_expense_id`) และตารางใหม่ `push_subscriptions`
+- **D10 = ใช้ default** (ปิดงานสำเร็จเสมอ · fuel รอ job) — implement โดย**ไม่เพิ่มค่า enum ใหม่** (Rule 04): fuel `PER_KM` ที่ยังไม่รู้ระยะทาง = **ยังไม่สร้างแถว** + ตั้ง job `fuel_distance_retry` แทนสถานะ `pending_calculation` ที่ถ้อยคำเดิมของ default เขียนไว้
+- **Google Maps API key ใส่ที่ Vercel/staging ทีหลังได้** — โค้ดไม่บล็อก (ไม่มี key = เดินเส้นทาง D10 เหมือน Maps ล่ม)
+
+### สิ่งที่ทำ
+1. **schema เงินภาคสนาม** (`dcb0fc3`) — 5 คอลัมน์บน `expenses` + `push_subscriptions` + index `idx_expenses_payee_date` + **partial unique `uniq_active_case_expense_per_assignment`** (1 รอบติดตามมีรายการเบิกที่ยังมีผลได้ชนิดละ 1 — กันกด submit/resubmit ซ้อนที่ระดับ DB) · ยาม `schema.test.ts` เปิดทาง Decimal(10,2) เฉพาะ `distanceKm`
+2. **pure logic** (`f19cad0`) — `distance.ts` (ลำดับ origin→checkins ตามเวลาจริง, รวมทุกช่วง, เมตร→ร้อยของ กม.) · `expense-calc.ts` (สูตร `22` §6.1–6.3 + สถานะเริ่มต้นตาม outcome + ยอด 0 ไม่สร้าง record) · `expense-status.ts` (state machine `23` §6.3) · `hotel-claim.ts` · Zod ของ endpoint ที่เหลือ · error code ใหม่ 3 ตัวเข้า `41` §12
+3. **service + route** (`71d8b8d`) — Google Distance Matrix ทีละช่วง + cache + retry · สร้าง fuel/allowance ในทรานแซกชันเดียวกับปิดงาน (snapshot แผนด้วย `resolvePlanVersionAt`) · `reject_evidence` + `resubmit_close_case` (supersede + สร้างใหม่ + ผูก `superseded_by_expense_id`) · `reject_expense` + `resubmit_expense` · เบิกที่พัก + รายการเบิก 2 แท็บ + สรุปรายได้ · respond reassignment ฝั่ง field · job `fuel_distance_retry` · Web Push (VAPID) + กล่องแจ้งเตือนในแอป · endpoint ใหม่ 6 ตัวเข้า `45` §6.2/§6.3 (รวมเป็น 47) + event `case.evidence_rejected` เข้า `41` §17.2
+4. **เทสต์ระดับ DB** (`6af1d76`) — 16 เคสครอบ DoD ทั้งหมด (ดูหัวข้อถัดไป)
+
+### DoD ที่พิสูจน์แล้ว (`lib/field/field-expense.db.test.ts`)
+- `resubmit_close` → รายการเบิกรอบเดิม `superseded` ครบ + ชุดใหม่ชนิดละ 1 รายการ (**ไม่ซ้ำไม่หาย**) + `tracking_round` ไม่เพิ่ม + outcome ล็อกตามรอบแรก
+- ทีม `DAILY_FLAT` **ไม่เรียก Distance Matrix เลยแม้แต่ครั้งเดียว** (spy ของ `fetch` = 0 ครั้ง) และ `distance_km` เป็น NULL
+- เพดาน `max_per_case` ตัดยอดจริง (120 กม. × ฿5 = ฿600 → จ่าย ฿400) · ไม่มีเพดาน = จ่ายเต็ม
+- D10: Maps ตอบ 500 → ปิดงานยังสำเร็จ, ไม่มีแถว fuel, job ถูกตั้ง · ปลายทางกลับมา job สร้างรายการให้ · **รันซ้ำไม่เกิดรายการซ้ำ** · ยอด 0 ไม่สร้าง record
+- `reject_expense` ไม่กระทบ `assignment_status` · `resubmit_expense` โดยคนอื่น = `EXPENSE_NOT_FOUND` (ไม่ leak)
+- เบิกที่พัก: ผู้พักร่วมนอกทีมถูกปฏิเสธฝั่ง BE · auto-mapping เคสวันเดียวกันแสดงผลแต่ไม่กระทบยอด
+
+### ตัดสินใจเชิงเทคนิคที่ควรรู้
+- **หน่วยระยะทางภายในเป็นจำนวนเต็ม** ("ร้อยของกิโลเมตร") ปัดครั้งเดียวตอนแปลงจากเมตร ⇒ ยอดที่ auditor คิดซ้ำจาก `distance_km × rate` ตรงกับที่บันทึกเสมอ
+- **ยิง Distance Matrix ทีละช่วง** (1 element/ครั้ง) แทนเมทริกซ์ n×n — ค่าใช้จ่ายคาดเดาได้และ cache ต่อช่วงได้จริง · `ZERO_RESULTS` นับเป็น 0 เมตรของช่วงนั้น (retry อีกกี่รอบก็ได้ผลเดิม ไม่งั้น job ค้างถาวรจนไม่มีรายการเบิก)
+- **I/O ภายนอกอยู่นอก `$transaction` เสมอ** (คำนวณระยะทางก่อนเปิดทรานแซกชัน · แจ้งเตือน/push หลัง commit)
+- `ensureAgentPayeeId()` สร้าง `payee_profiles` โครงเปล่าให้พนักงานที่ยังไม่มี เพราะ `expenses.payee_id` เป็น NOT NULL ตาม `02` — ข้อมูลธนาคาร/ภาษีเป็นงานของ Phase 3.2 (`18`)
+- ผู้รับการแจ้งเตือนมาจาก **capability** (`approve_expense_manager`) ไม่ใช่ชื่อ role
+- **`reject_expense` ทำได้ตั้งแต่ `pending_approval` ขึ้นไป** ตาม `23` §6.3 ⇒ รายการของเคสสำเร็จที่ยัง `pending_warehouse_confirm` ตีกลับไม่ได้จนกว่าคลังจะยืนยัน (Phase 2.13)
+
+### ค้าง/ต้องทำต่อ
+- ⚠️ **ตั้ง env ที่ Vercel/staging ก่อนใช้จริง**: `GOOGLE_MAPS_API_KEY` (ไม่มี = fuel `PER_KM` รอ job) · `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` + `NEXT_PUBLIC_VAPID_PUBLIC_KEY` สำหรับ Web Push (ไม่มี = เหลือแต่แจ้งเตือนในแอป) — `.env.example` แก้ไม่ได้จาก session อัตโนมัติ (permission บล็อกไฟล์ `.env*`) ต้องเติมด้วยมือ
+- scheduler ของ job (`fuel_distance_retry`) ยังไม่มี — Phase 5.3 ตาม `91` · ระหว่างนี้เรียก `runFuelDistanceRetryJob()` เองได้
+- `EMPTY_PAYOUT_BATCH` ของ D10 เป็นของ Phase 3.4
+- ฝั่งหน้าจอทั้งหมด (ฟอร์มเบิก/สรุปรายได้/PWA + service worker ของ push) = 2.10–2.12
+
+---
+
 ## Phase 2.8 — Field Tracker Backend ชุดที่ 1 (core flow — ไฟล์ 41)
 
 **วันที่**: 2026-08-14 · **commit**: `0465255`+`3f8328f`+`2122229` · **branch**: `auto/phase-2.8`
