@@ -7,7 +7,7 @@
 
 ## Phase 2.1 — API Contract Infra (ไฟล์ 45): 39 endpoints + event registry + envelope + error catalog
 
-**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `auto/phase-2.1`
+**วันที่**: 2026-08-14 · **commit**: `4dba3a3` · **branch**: `auto/phase-2.1`
 
 ### สิ่งที่ทำ
 

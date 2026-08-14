@@ -47,7 +47,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 2.1 | API Contract Infra (ไฟล์ 45) — 39 endpoints + events + envelope | ✅ | 2026-08-14 · `__COMMIT__` · contract 39 endpoint + ทะเบียน event 34 + กฎ ESLint + envelope กลาง + error catalog 129 code (เทสต์เทียบ spec จริง) → archive |
+| 2.1 | API Contract Infra (ไฟล์ 45) — 39 endpoints + events + envelope | ✅ | 2026-08-14 · `4dba3a3` · contract 39 endpoint + ทะเบียน event 34 + กฎ ESLint + envelope กลาง + error catalog 129 code (เทสต์เทียบ spec จริง) → archive |
 | 2.2 | Case Submission BE ชุด 1 (schema/CRUD/เอกสาร) | ⬜ | PLAN §2.2 · duplicate 2-layer |
 | 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ⬜ | PLAN §2.3 · snapshot ตอน approved |
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ⬜ | PLAN §2.4 · address reuse ไฟล์ 41 |
