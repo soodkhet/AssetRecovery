@@ -395,6 +395,10 @@ Desktop: จัดเป็น 2 คอลัมน์ (เนื้อหาห
 |เบิกที่พักไม่กรอกวันที่/จำนวนเงิน/ไม่แนบใบเสร็จ|`HOTEL_CLAIM_FIELD_REQUIRED`|reject การบันทึก ทั้ง 3 ฟิลด์บังคับ|
 |เลือกผู้พักร่วมที่ไม่ใช่คนในทีมเดียวกัน|`HOTEL_CLAIM_INVALID_SHARED_AGENT`|reject — dropdown ต้องกรองเฉพาะคนในทีมเดียวกันไว้ก่อนอยู่แล้ว แต่ validate ซ้ำฝั่ง backend|
 |เช็คอินขณะปิด GPS permission ของอุปกรณ์|`CHECKIN_GPS_PERMISSION_DENIED`|แสดง prompt ให้เปิดสิทธิ์ตำแหน่งของอุปกรณ์ ไม่สามารถเช็คอินต่อได้จนกว่าจะอนุญาต|
+|กด `resubmit_close_case` โดยไม่ได้แก้สื่อเลย|`CLOSE_NO_EVIDENCE_REVISION`|reject — §8 บังคับว่าต้องมีการแก้ไขรูป/วิดีโอ/เสียง/รูปสินค้าอย่างน้อย 1 รายการก่อนส่งกลับ (เพิ่ม 14/08/2569 พร้อม Phase 2.9)|
+|เรียกรายการเบิกที่ไม่มี/ไม่ใช่ของตัวเอง|`EXPENSE_NOT_FOUND`|reject 404 — ไม่บอกว่ารายการนั้นเป็นของใคร (เพิ่ม 14/08/2569 พร้อม Phase 2.9)|
+|ทำ action กับรายการเบิกที่สถานะไม่รองรับ (เช่น resubmit รายการที่อนุมัติแล้ว)|`EXPENSE_INVALID_STATUS`|reject — ปลายทางของแต่ละ action ตาม `23-finance-state-machines.md` §6.3 (เพิ่ม 14/08/2569 พร้อม Phase 2.9)|
+|ผู้อื่นพยายามแก้รายการเบิกที่ถูกตีกลับ (ผู้จัดการ/หัวหน้าทีม)|`PERMISSION_DENIED`|reject — เฉพาะ Field Agent เจ้าของรายการเท่านั้นที่ resubmit ได้ (§6.6/§8)|
 
 ## 13. Permissions
 |Capability|Allowed Roles|Notes|

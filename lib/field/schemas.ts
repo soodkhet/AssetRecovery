@@ -100,3 +100,87 @@ export const closeCaseSchema = z.object({
 })
 
 export type CloseCaseInput = z.infer<typeof closeCaseSchema>
+
+/**
+ * `POST /api/field/cases/:id/resubmit-close` (`41` §8 `resubmit_close_case`)
+ * ส่งได้เฉพาะ **สื่อ** — outcome/เช็คอินล็อกตามเดิม (`41` §10.1) จึงไม่มีช่อง `outcome` ที่นี่โดยตั้งใจ
+ */
+export const resubmitCloseSchema = z.object({
+  ...evidenceMediaShape,
+  note: trimmedText.max(2000).nullish(),
+})
+
+export type ResubmitCloseInput = z.infer<typeof resubmitCloseSchema>
+
+/** `POST /api/cases/:id/reject-evidence` (`41` §8 `reject_evidence`) — เจ้าหน้าที่อนุมัติเคสเท่านั้น */
+export const rejectEvidenceSchema = z.object({
+  reason: trimmedText.min(5, 'ต้องระบุเหตุผลอย่างน้อย 5 ตัวอักษร').max(1000),
+})
+
+export type RejectEvidenceInput = z.infer<typeof rejectEvidenceSchema>
+
+/** `GET /api/field/expenses?type=` — 2 แท็บของ `41` §7.9 */
+export const EXPENSE_VIEW_TYPES = ['caseBound', 'separate'] as const
+export type ExpenseViewType = (typeof EXPENSE_VIEW_TYPES)[number]
+
+export const fieldExpenseListQuerySchema = z.object({
+  type: z.enum(EXPENSE_VIEW_TYPES).default('caseBound'),
+})
+
+export type FieldExpenseListQuery = z.infer<typeof fieldExpenseListQuerySchema>
+
+/** `POST /api/field/expenses/hotel` (`41` §6.6 กลุ่มเบิกแยก) — ยอดเป็น satang จำนวนเต็มเสมอ (Rule 01) */
+export const hotelClaimSchema = z.object({
+  expenseDate: dateOnlySchema('วันที่เข้าพัก'),
+  amountSatang: z.int().positive('จำนวนเงินต้องมากกว่า 0'),
+  sharedWithUserId: z.uuid('ผู้พักร่วมไม่ถูกต้อง').nullish(),
+  receiptFileUrl: fileUrl,
+  note: trimmedText.max(1000).nullish(),
+})
+
+export type HotelClaimInput = z.infer<typeof hotelClaimSchema>
+
+/** `POST /api/field/expenses/:id/resubmit` (`41` §8 `resubmit_expense`) — แก้เอกสาร/ยอดแล้วส่งใหม่ */
+export const resubmitExpenseSchema = z.object({
+  amountSatang: z.int().positive().optional(),
+  receiptFileUrl: fileUrl.optional(),
+  note: trimmedText.max(1000).nullish(),
+})
+
+export type ResubmitExpenseInput = z.infer<typeof resubmitExpenseSchema>
+
+/** `POST /api/field/expenses/:id/reject` (`41` §8 `reject_expense`) — ผู้อนุมัติจ่ายเท่านั้น */
+export const rejectExpenseSchema = z.object({
+  reason: trimmedText.min(5, 'ต้องระบุเหตุผลอย่างน้อย 5 ตัวอักษร').max(1000),
+})
+
+export type RejectExpenseInput = z.infer<typeof rejectExpenseSchema>
+
+/** `POST /api/field/reassignment/:id/respond` (`41` §8 · `40` §8) */
+export const respondFieldReassignmentSchema = z.object({
+  consent: z.boolean(),
+  declineReason: trimmedText.max(1000).nullish(),
+})
+
+export type RespondFieldReassignmentInput = z.infer<typeof respondFieldReassignmentSchema>
+
+/** `GET /api/field/income-summary?month=YYYY-MM` — ไม่ระบุเดือน = สะสมตลอด (`41` §7.10) */
+export const incomeSummaryQuerySchema = z.object({
+  month: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'เดือนต้องอยู่ในรูปแบบ YYYY-MM (ค.ศ.)')
+    .optional(),
+})
+
+export type IncomeSummaryQuery = z.infer<typeof incomeSummaryQuerySchema>
+
+/** `POST /api/field/push/subscribe` (`41` §15) — payload ตรงกับ `PushSubscription.toJSON()` ของเบราว์เซอร์ */
+export const pushSubscribeSchema = z.object({
+  endpoint: trimmedText.min(1).max(1000),
+  keys: z.object({
+    p256dh: trimmedText.min(1).max(500),
+    auth: trimmedText.min(1).max(500),
+  }),
+})
+
+export type PushSubscribeInput = z.infer<typeof pushSubscribeSchema>

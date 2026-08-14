@@ -174,6 +174,10 @@ export const ERROR_CATALOG = {
   HOTEL_CLAIM_FIELD_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_INVALID_SHARED_AGENT: { status: 400, severity: 'reject', source: '41 §12' },
   CHECKIN_GPS_PERMISSION_DENIED: { status: 400, severity: 'reject', source: '41 §12' },
+  // เติมเข้า `41` §12 พร้อม Phase 2.9 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  CLOSE_NO_EVIDENCE_REVISION: { status: 400, severity: 'reject', source: '41 §12' },
+  EXPENSE_NOT_FOUND: { status: 404, severity: 'reject', source: '41 §12' },
+  EXPENSE_INVALID_STATUS: { status: 400, severity: 'reject', source: '41 §12' },
 
   // ── 44 §12 Warehouse (Assets + Handover Lots) ──────────────────────────
   IMEI_MISMATCH: { status: 200, severity: 'warn', source: '44 §12' },
