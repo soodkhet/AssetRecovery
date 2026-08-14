@@ -1,5 +1,11 @@
 import { CASE_DOCUMENT_BUCKET } from '@/lib/cases/document-upload'
-import { checkFieldMediaCandidate, fieldEvidencePath, type FieldMediaKind } from '@/lib/field/media-upload'
+import {
+  checkExpenseReceiptCandidate,
+  checkFieldMediaCandidate,
+  expenseReceiptPath,
+  fieldEvidencePath,
+  type FieldMediaKind,
+} from '@/lib/field/media-upload'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 /**
@@ -34,5 +40,25 @@ export async function uploadFieldMedia(caseId: string, kind: FieldMediaKind, fil
   }
 
   // bucket เป็น private ⇒ เก็บ path ไว้ แล้วขอ signed URL ตอนเปิดดู (`signedFileUrl()` ของ 2.5)
+  return uploaded.data.path
+}
+
+/**
+ * อัปโหลดใบเสร็จของรายการเบิกแยก (`41` §6.6) แล้วคืน path ที่ส่งเข้า
+ * `POST /api/field/expenses/hotel` หรือ `POST /api/field/expenses/:id/resubmit`
+ */
+export async function uploadExpenseReceipt(userId: string, file: File): Promise<string> {
+  const problem = checkExpenseReceiptCandidate({ name: file.name, type: file.type, size: file.size })
+  if (problem !== null) throw new FieldUploadError(problem)
+
+  const path = expenseReceiptPath(userId, file.name, crypto.randomUUID())
+  const supabase = createSupabaseBrowserClient()
+  const uploaded = await supabase.storage.from(CASE_DOCUMENT_BUCKET).upload(path, file, {
+    contentType: file.type === '' ? undefined : file.type,
+    upsert: false,
+  })
+  if (uploaded.error !== null) {
+    throw new FieldUploadError(`อัปโหลดใบเสร็จไม่สำเร็จ — ${uploaded.error.message}`)
+  }
   return uploaded.data.path
 }
