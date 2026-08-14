@@ -10,6 +10,7 @@ import { ExportFormatsTab } from '@/components/settings/export-formats-tab'
 import { FunctionalPermissionsTab } from '@/components/settings/functional-permissions-tab'
 import { InternalDocumentsTab } from '@/components/settings/internal-documents-tab'
 import { InvoiceNumberingTab } from '@/components/settings/invoice-numbering-tab'
+import { PayeeTab } from '@/components/settings/payee-tab'
 import { PeriodLockTab } from '@/components/settings/period-lock-tab'
 import { TaxDocTemplatesTab } from '@/components/settings/tax-doc-templates-tab'
 import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
@@ -20,10 +21,11 @@ import { FINANCE_SETTINGS_TABS } from '@/lib/settings/finance-tabs'
 
 /**
  * หน้า "ตั้งค่าบัญชี/การเงิน" — โครงตาม mockup `settings.html` (`renderSettingsLayout`):
- * **แถบแท็บแนวตั้งด้านซ้าย 13 แท็บ + เนื้อหาด้านขวา** (โทน emerald แยกจากตั้งค่าทั่วไปที่เป็น slate)
+ * **แถบแท็บแนวตั้งด้านซ้าย + เนื้อหาด้านขวา** (โทน emerald แยกจากตั้งค่าทั่วไปที่เป็น slate)
  *
  * แท็บที่หน้าจริงยังไม่เกิดแสดงเป็น disabled พร้อมบอก phase — ไม่พาไปหน้าว่าง (แนวเดียวกับ `<SubNav>`)
- * ครบทั้ง 13 แท็บแล้วตั้งแต่ Phase 1.12 (ชุดแรก 5 ตัวจาก 1.11 + อีก 8 ตัวจาก 1.12)
+ * ครบ 13 แท็บของไฟล์ 13 ตั้งแต่ Phase 1.12 (5 ตัวจาก 1.11 + 8 ตัวจาก 1.12)
+ * + แท็บ "ผู้รับเงิน" ของ **ไฟล์ 18** ที่ Phase 3.2 เพิ่มเข้ามาในหน้าเดียวกันตาม mockup
  */
 
 export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
@@ -82,6 +84,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'cycles' && <CyclesTab />}
           {current?.id === 'approval' && <ApprovalMatrixTab />}
           {current?.id === 'bank' && <BankAccountsTab />}
+          {current?.id === 'payee' && <PayeeTab />}
           {current?.id === 'tax' && <TaxProfilesTab />}
           {current?.id === 'vat' && <VatRatesTab />}
           {current?.id === 'cost' && <CostCentersTab />}

@@ -6,8 +6,8 @@ import { listPayeeCandidates, MANAGE_PAYEE_PROFILE } from '@/lib/payees/queries'
 /**
  * `GET /api/payees/candidates` — ผู้ใช้ที่ยังไม่มี Payee Profile (เติม dropdown ฟอร์ม "เพิ่ม Payee")
  *
- * ไม่ได้อยู่ใน `27` §6.3 เพราะเป็น endpoint ช่วยกรอกฟอร์ม ไม่ใช่ทรัพยากรของโมดูล — แนวเดียวกับ
- * `/api/cases/team-options` (Phase 2.5) · ต้องมีสิทธิ์ `manage` เพราะเป็นข้อมูลตั้งต้นของการสร้าง
+ * ไม่ได้อยู่ใน `18` §14 เพราะเอกสารเขียนระดับ resource — ตัวนี้เป็น lookup ประกอบฟอร์มเดียวกัน
+ * จึงใช้ capability ชุดเดียวกับการสร้าง (`manage`) ไม่ใช่ `view` เพื่อไม่ให้รายชื่อพนักงานรั่วเกินจำเป็น
  */
 export const GET = withApiPermission(
   'manage',

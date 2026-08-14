@@ -4,8 +4,9 @@
  * pure ล้วน (ค่าคงที่) — ใช้ร่วมทั้ง server component (ตรวจ `?tab=` ที่ส่งเข้ามา) และ client
  * component (แถบแท็บแนวตั้ง) · เพิ่ม/แก้แท็บต้องแก้ที่นี่ที่เดียว
  *
- * ⚠️ mockup `settings.html` มีแท็บที่ 14 ("Payee Profile") — ตัวนั้นเป็นของ **ไฟล์ 18** ไม่ใช่ไฟล์ 13
- * (`13` §16 ยืนยัน 13 แท็บ) จึงไม่อยู่ในรายการนี้
+ * ⚠️ แท็บ "ผู้รับเงิน (Payee Profile)" เป็นของ **ไฟล์ 18** ไม่ใช่ไฟล์ 13 (`13` §16 ยืนยัน 13 แท็บ)
+ * — เพิ่มเข้ามาใน Phase 3.2 ตามลำดับของ mockup `settings.html` (`renderSettingsPayee`) เพราะอยู่หน้า
+ * เดียวกันกับผู้ใช้ · `section` ของแท็บนี้จึงอ้างไฟล์ 18 ไม่ใช่ §ของไฟล์ 13
  */
 
 export interface FinanceSettingsTab {
@@ -25,6 +26,7 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'cycles', label: 'รอบบิลและรอบจ่าย', section: '§6.1', available: true },
   { id: 'approval', label: 'สายการอนุมัติ', section: '§6.2 + §6.2.1', available: true },
   { id: 'bank', label: 'บัญชีธนาคารบริษัท', section: '§6.3', available: true },
+  { id: 'payee', label: 'ผู้รับเงิน (Payee)', section: 'ไฟล์ 18', available: true },
   { id: 'tax', label: 'กติกาภาษี (Tax Profile)', section: '§6.4', available: true },
   { id: 'vat', label: 'อัตรา VAT', section: '§6.5', available: true },
   { id: 'cost', label: 'ศูนย์ต้นทุน', section: '§6.6', available: true },

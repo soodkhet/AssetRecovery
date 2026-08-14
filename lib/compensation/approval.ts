@@ -5,6 +5,7 @@ import {
   TEAM_MANAGER_ROLE_NAME,
 } from '@/lib/auth/constants'
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
+import { resetApprovalToFirstStep } from '@/lib/finance/approval-flow-resolver'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { SettingsError } from '@/lib/settings/errors'
 
@@ -114,6 +115,16 @@ export const APPROVAL_ROLE_CONTRACTS: Readonly<Record<string, ApprovalRoleContra
   executive: { capability: 'approve_expense_executive', column: 'executive' },
 }
 
+/**
+ * capability ทั้งหมดที่ "เป็นผู้อนุมัติสักขั้น" ถืออยู่ — ใช้เป็นด่านแรกที่ API layer
+ * (`requireAnyPermission()`) ก่อนที่ชั้นข้อมูลจะตรวจ capability **ของขั้นนั้นจริง ๆ** ซ้ำอีกที
+ */
+export const APPROVAL_STEP_CAPABILITIES: readonly string[] = [
+  'approve_expense_manager',
+  'approve_expense_finance',
+  'approve_expense_executive',
+]
+
 export function approvalRoleContract(roleName: string): ApprovalRoleContract {
   const exact = APPROVAL_ROLE_CONTRACTS[roleName.trim()]
   if (exact !== undefined) return exact
@@ -172,3 +183,47 @@ export const CLEARED_APPROVER_STAMPS = {
   executiveApprovedBy: null,
   executiveApprovedAt: null,
 } as const
+
+/**
+ * ชุดค่าที่ต้องเขียนลง `expenses` เมื่อ **ตีกลับ** (`16` §9 · `41` §8 `reject_expense`)
+ * — **บ้านเดียวของกฎ "ตีกลับแล้วกลับขั้น 1 เสมอ"** ใช้ร่วมทั้ง `/api/compensation/:id/reject`
+ * และ `/api/field/expenses/:id/reject` (Phase 2.9) ห้ามประกอบเองซ้ำที่ service
+ *
+ * ผู้เรียกต้องผ่าน `assertRejectReason()` + `nextExpenseStatus(status, 'reject_expense')` มาก่อน
+ */
+export function buildRejectExpenseUpdate(input: {
+  status: ExpenseStatus
+  history: readonly ApprovalHistoryEntry[]
+  rejectedStep: number
+  actorId: string
+  actorRole: string
+  reason: string
+  at: Date
+}): {
+  status: ExpenseStatus
+  rejectionReason: string
+  approvalStepCurrent: number
+  /** ผู้เรียกฝั่ง DB เป็นคนแปลงเป็น JSON ของ Prisma (ไฟล์นี้ pure — ไม่รู้จัก Prisma) */
+  approvalHistory: ApprovalHistoryEntry[]
+  managerApprovedBy: null
+  managerApprovedAt: null
+  financeApprovedBy: null
+  financeApprovedAt: null
+  executiveApprovedBy: null
+  executiveApprovedAt: null
+} {
+  return {
+    status: input.status,
+    rejectionReason: input.reason,
+    approvalStepCurrent: resetApprovalToFirstStep(),
+    approvalHistory: appendApprovalHistory(input.history, {
+      step: input.rejectedStep,
+      approverId: input.actorId,
+      approverRole: input.actorRole,
+      action: 'reject',
+      timestamp: input.at.toISOString(),
+      reason: input.reason,
+    }),
+    ...CLEARED_APPROVER_STAMPS,
+  }
+}

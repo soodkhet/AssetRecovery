@@ -1,6 +1,7 @@
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
+import { buildRejectExpenseUpdate, parseApprovalHistory } from '@/lib/compensation/approval'
 import { resolvePlanVersionAt } from '@/lib/compensation/plan'
 import { kmHundredthsToDecimalString } from '@/lib/field/distance'
 import {
@@ -623,6 +624,10 @@ export async function resubmitFieldExpense(
 /**
  * ตีกลับรายการเบิก — **ผู้อนุมัติจ่าย (บัญชี/การเงิน ไฟล์ 16/17) เท่านั้น**
  * ห้ามสลับกับ `reject_evidence` ซึ่งแตะ `assignment_status` ทั้งเคส (`41` §10.1)
+ *
+ * ⚠️ ค่าที่เขียนลงแถวมาจาก `buildRejectExpenseUpdate()` (Phase 3.2) ที่เดียวกับ
+ * `PATCH /api/compensation/:id/reject` — กฎ "ตีกลับแล้วกลับขั้น 1 เสมอ" (`16` §9) จึงใช้กับ
+ * ทั้งสองทางเข้าเหมือนกัน ไม่มีทางลัดที่ทำให้รายการค้างอยู่กลางสายอนุมัติ
  */
 export async function rejectFieldExpense(
   user: SessionUser,
@@ -634,16 +639,29 @@ export async function rejectFieldExpense(
 
   const current = await prisma.expense.findFirst({
     where: { id: expenseId, organizationId: user.organizationId, deletedAt: null },
-    select: expenseSelect,
+    select: { ...expenseSelect, approvalStepCurrent: true, approvalHistory: true },
   })
   if (current === null) throw new ExpenseStateError('EXPENSE_NOT_FOUND')
 
   const nextStatus = nextExpenseStatus(current.status, 'reject_expense')
+  const update = buildRejectExpenseUpdate({
+    status: nextStatus,
+    history: parseApprovalHistory(current.approvalHistory),
+    rejectedStep: current.approvalStepCurrent,
+    actorId: context.actor.id,
+    actorRole: context.actor.roleName,
+    reason,
+    at: new Date(),
+  })
 
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.expense.update({
       where: { id: expenseId },
-      data: { status: nextStatus, rejectionReason: reason, updatedBy: context.actor.id },
+      data: {
+        ...update,
+        approvalHistory: update.approvalHistory as unknown as Prisma.InputJsonValue,
+        updatedBy: context.actor.id,
+      },
       select: expenseSelect,
     })
 
@@ -655,9 +673,15 @@ export async function rejectFieldExpense(
         action: 'reject',
         targetType: 'expenses',
         targetId: expenseId,
-        before: { status: current.status },
+        before: { status: current.status, approval_step_current: current.approvalStepCurrent },
         // ไม่แตะ assignment_status ของเคสเลย (`41` §10.1 · §20)
-        after: { status: nextStatus, rejectReason: reason, events: [] },
+        after: {
+          status: nextStatus,
+          rejectReason: reason,
+          approval_step_current: update.approvalStepCurrent,
+          rejected_at_step: current.approvalStepCurrent,
+          events: [],
+        },
         reason,
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,

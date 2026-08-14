@@ -53,7 +53,7 @@ describe('approval_history (`16` §7/§13)', () => {
       { step: 2, approverId: 'user-2', action: 'ยกเลิก' },
     ])
     expect(parsed).toHaveLength(1)
-    expect(parsed[0].approverId).toBe('user-1')
+    expect(parsed[0]?.approverId).toBe('user-1')
   })
 
   it('ค่าที่ไม่ใช่ array (null จาก DB เก่า) คืนประวัติว่าง', () => {
