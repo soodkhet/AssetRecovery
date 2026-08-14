@@ -7,7 +7,7 @@
 
 ## Phase 3.1 — Pure Finance Calculation Modules + Unit Tests (ไฟล์ 22 ครบ 13 สูตร)
 
-**วันที่**: 2026-08-15 · **commit**: `<pending>` · **branch**: `auto/phase-3.1`
+**วันที่**: 2026-08-15 · **commit**: `0a05c48` · **branch**: `auto/phase-3.1`
 
 ### สิ่งที่ทำ
 - **`lib/finance/*` pure ล้วน ไม่มี I/O ครบ 13 สูตรของ `22`** (+ เทสต์ 169 เคสใน 13 ไฟล์ รวมยาม `formula-coverage.test.ts` ที่อ่านหัวข้อ §6.x จากเอกสารจริงมาเทียบว่าทุกสูตรมีบ้าน)

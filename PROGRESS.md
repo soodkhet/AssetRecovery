@@ -67,7 +67,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `PENDING` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
+| 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `0a05c48` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
 | 3.2 | Payee & Tax Profile + Compensation Approval BE | ⬜ | PLAN §3.2 · WHT Payee ชนะ Plan |
 | 3.3 | Approval FE + Claims & Advances | ⬜ | PLAN §3.3 · ห้ามเบิกซ้อน + overdue job |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ⬜ | PLAN §3.4 · gate BANK_FILE_NOT_TESTED |
