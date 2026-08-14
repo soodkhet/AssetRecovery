@@ -1,19 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 2.15 (Warehouse FE ชุด 2 — นัดวันส่งมอบ + แนบเอกสาร + ยืนยันส่งมอบ) · **จบ Phase 2 ทั้งเฟส** · งานถัดไป 3.1
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.1 (pure calculation modules ครบ 13 สูตรของไฟล์ 22 + unit test) · งานถัดไป 3.2
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.1: Pure Finance Calculation Modules + Unit Tests (ไฟล์ 22 ทั้งหมด)
+## 🎯 งานถัดไป — Phase 3.2: Payee & Tax Profile (18) + Compensation Approval Backend (16)
 
-- ทำตาม `docs/01_PLAN.md` §3.1 — **ก่อนทุกงานใน Phase 3** · pure module ไม่มี I/O + unit test ครบ 13 สูตร
-- สูตรที่ต้องมี: fuel PER_KM/DAILY_FLAT · allowance (นับ DISTINCT วันปฏิทินจาก check_ins) · commission / no_success_fee · service fee SUCCESS_FEE/FLAT/HYBRID · VAT resolver (effective-dated + include/exclude/no_vat + snapshot `vat_rate_used`) · **WHT resolver (Payee ชนะ Plan + fallback warning + threshold 1,000 + ฐาน before_vat)** · payout batch รวม · AR outstanding · Gross Profit (revenue = 0 → "N/A" ห้ามหารศูนย์) · advance return (used > requested → 0 ห้ามติดลบ) · approval-flow-resolver (matrix → step list) · adjustment-approval-policy (period_status → ระดับผู้อนุมัติ)
-- ของที่มีแล้วห้ามเขียนซ้ำ: `lib/finance/revenue-trigger-rules.ts` (2.13 — `shouldCreateRevenue()` ครอบ DEC-006/D6) · `lib/field/expense-calc.ts` (2.9 — fuel/allowance ของงานสนาม) · `lib/settings/*` VAT resolver ที่ 1.10 ทำไว้ — เช็ค `docs/REUSE_INDEX.md` ก่อนเสมอ แล้วรวมของเดิมเข้ามาแทนการสร้างใหม่
-- เงิน = **INTEGER satang เท่านั้น** · ห้าม hardcode VAT 7% · ทุกสูตรมีเทสต์ในก้อนงานเดียวกัน (Rule 07)
-- อ้างอิง: `22` ทั้งไฟล์ · `18` §6.3 · `19` §6.1 + §16 · `13` §6.4–6.5
-- DoD: coverage 100% ของ pure modules · service หลังจากนี้เรียกสูตรจากที่นี่เท่านั้น · LOC ~2,500 (รวมเทสต์) · งบ ~360k
+- ทำตาม `docs/01_PLAN.md` §3.2 — **สูตรเงินทุกตัวเรียกจาก `lib/finance/*` (3.1) เท่านั้น ห้ามคำนวณเอง**
+- BE+FE 18: Payee CRUD + verify + **auto-reset เป็น unverified เมื่อแก้ธนาคาร/ภาษี** + policy `require_payee_id_document` + `BANK_ACCOUNT_NAME_MISMATCH` (เตือน ไม่ block) + ตาราง/ฟอร์มในหน้า settings
+- BE 16: approve/reject หลายขั้นใน `$transaction` + step guard (`APPROVAL_STEP_OUT_OF_ORDER`, SoD เมื่อเปิด) + **reject → reset ขั้น 1 เสมอ** + `approval_history` append + emit `expense.approved` + แยกสิทธิ์ `reject_expense` vs `reject_evidence` เด็ดขาด
+- ของที่มีแล้วห้ามเขียนซ้ำ: `resolveApprovalFlow()`/`assertApprovalStepInOrder()`/`assertNoDuplicateApprover()`/`resetApprovalToFirstStep()` (3.1) · `calculateWhtForPayee()` (3.1 — Payee ชนะ Plan) · `nextExpenseStatus()` (2.9) · `ensureAgentPayeeId()` (2.9 สร้าง payee โครงเปล่าไว้แล้ว รอเติมธนาคาร/ภาษี)
+- `expense.approved` ต้องเรียก `evaluateRevenueTrigger()` (2.13) ต่อ — ห้ามเขียนเงื่อนไข Revenue ซ้ำ
+- อ้างอิง: `18`, `16` ทั้งไฟล์ · `13` §6.2 · `23` §6.5
+- DoD: เทสต์ §16 ของ `16` (ข้ามขั้น / ตีกลับแล้วเริ่มใหม่) + §9 ของ `18` (verified → แก้ธนาคาร → unverified) · LOC ~1,750 · งบ ~280k
 
 ---
 
@@ -66,7 +67,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ⬜ | PLAN §3.1 · ก่อนทุกงานใน Phase |
+| 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `PENDING` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
 | 3.2 | Payee & Tax Profile + Compensation Approval BE | ⬜ | PLAN §3.2 · WHT Payee ชนะ Plan |
 | 3.3 | Approval FE + Claims & Advances | ⬜ | PLAN §3.3 · ห้ามเบิกซ้อน + overdue job |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ⬜ | PLAN §3.4 · gate BANK_FILE_NOT_TESTED |
