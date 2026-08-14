@@ -1,9 +1,21 @@
+import { redirect } from 'next/navigation'
 import { ModulePlaceholder } from '@/components/shell/module-placeholder'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+import { canViewMenu, findMenu } from '@/lib/nav/menu-registry'
 
-/** จัดการเคส — แท็บย่อยตาม `06` §7.1.1 อยู่บนแถบ Sub-Nav · หน้าจริงเริ่ม Phase 2.4 (ไฟล์ 38) */
+/**
+ * จัดการเคส — เมนูนี้ไม่มีหน้าของตัวเอง มีแต่แท็บย่อยตาม `06` §7.1.1
+ * ผู้ใช้ที่เห็นแท็บย่อยที่หน้าจริงพร้อมแล้ว ให้เด้งไปแท็บแรกที่ตัวเองเข้าถึงได้
+ * (ตอนนี้ = "รับเคส" Phase 2.4 · มอบหมายงาน 2.7 · ติดตามภาคสนาม 2.10 ตามมาทีหลัง)
+ */
 export default async function CasesPage() {
-  await requireMenuPage('cases')
+  const user = await requireMenuPage('cases')
+
+  const firstAvailable = (findMenu('cases')?.children ?? []).find(
+    (child) => child.available && canViewMenu(user, child.id),
+  )
+  if (firstAvailable !== undefined) redirect(firstAvailable.path)
+
   return (
     <ModulePlaceholder
       menuId="cases"
