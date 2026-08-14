@@ -89,6 +89,40 @@ export interface CaseReadinessDto {
   missingDocuments: DocumentSlot[]
 }
 
+/** ผลของ `GET /api/cases/:id/team-suggestion` (`38` §7.4 · §17.1) */
+export interface CaseTeamSuggestionDto {
+  province: string | null
+  suggestedTeamId: string | null
+  suggestedTeamName: string | null
+  matchedTeams: Array<{ id: string; name: string }>
+  /** ไม่มีทีมตรงจังหวัด — FE บังคับเลือกทีมเองพร้อมเหตุผล (`CASE_NO_TEAM_MATCH`) */
+  noMatch: boolean
+  /** ทีมที่บันทึกไว้กับเคสตอนนี้ (`cases.suggested_team_id`) */
+  savedSuggestedTeamId: string | null
+}
+
+/** ผลของ `POST /api/cases/import` (`38` §8 `import_cases` — success/error ต่อแถว) */
+export interface CaseImportRowResultDto {
+  rowNumber: number
+  caseRef: string | null
+  status: 'created' | 'failed'
+  caseId: string | null
+  errorCode: string | null
+  errorMessage: string | null
+  fields: Record<string, string> | null
+}
+
+export interface CaseImportResultDto {
+  /** ตรวจอย่างเดียว ไม่สร้างเคสจริง (preview ก่อนยืนยัน) */
+  dryRun: boolean
+  totalRows: number
+  createdCount: number
+  failedCount: number
+  /** คอลัมน์ในไฟล์ที่ระบบไม่รู้จัก — เตือนเฉย ๆ ไม่ทำให้แถวผิด */
+  unmappedHeaders: string[]
+  rows: CaseImportRowResultDto[]
+}
+
 export interface CaseDetailDto extends CaseListItemDto {
   caseRefNormalized: string
   debtorNationality: string | null
@@ -106,6 +140,19 @@ export interface CaseDetailDto extends CaseListItemDto {
   assetImeiSerial: string | null
   projectedRevenueSatang: number | null
   projectedRevenueSource: string | null
+  suggestedTeamId: string | null
+  assignedTeamId: string | null
+  teamChangeReason: string | null
+  /** snapshot ค่าบริการ ณ ตอน `approved` (`10` §9.2) — ก่อน approved เป็น null ทั้งชุด */
+  serviceFeeTemplateId: string | null
+  serviceFeeModelSnapshot: string | null
+  serviceFeeBaseSatang: number | null
+  /** NUMERIC(5,2) — ส่งเป็น number เพื่อให้ FE แสดงได้ตรง (ไม่ใช่ยอดเงิน) */
+  serviceFeeRatePct: number | null
+  serviceFeeBasisSnapshot: string | null
+  serviceFeeChargeOnFail: boolean | null
+  /** action ที่ทำได้จากสถานะปัจจุบัน (`38` §10) — UX เท่านั้น API ตรวจซ้ำเสมอ */
+  allowedActions: string[]
   reviewNote: string | null
   reviewedAt: string | null
   outcome: string | null

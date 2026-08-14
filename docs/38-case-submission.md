@@ -13,6 +13,7 @@
 | Version | วันที่ | การเปลี่ยนแปลง |
 |---|---|---|
 | v1 | (เดิม) | Build Spec Round 1 — ตกลงร่วมกับผู้ใช้งานจริง (สัมภาษณ์รอบที่ 1) แทนที่ Baseline เดิม |
+| v3 | 14/08/2569 | **เติม §12 สอง code ที่ตกหล่น** (Phase 2.3 — Rule 04 doc + code คอมมิตเดียวกัน): `CASE_INVALID_STATUS_TRANSITION` (action ไม่ตรงตาราง §10) และ `CASE_STATUS_REASON_REQUIRED` (ไม่รับเคส/ขอข้อมูลเพิ่ม/เปลี่ยนทีม โดยไม่กรอกเหตุผล — §13 + body ของ `PATCH /:id/status` บังคับไว้แล้วแต่ไม่มี code รองรับ) · ไม่กระทบ business logic เดิม |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + **แก้ reference "ไฟล์ 42/43" ที่ล้าสมัย** (ทั้งคู่ merge เข้าไฟล์ 41 แล้วตาม `README.md`) เป็น "ไฟล์ 41" ทุกจุด + **เพิ่ม `pending_recycle_review` เข้า enum `case_status`** ใน `02-database-schema-design.md` ที่ขาดหายไป (comment เดิมของ `closed_fail` ใบ้ไว้แล้วว่า "รอ recycle" แต่ไม่มี enum value รองรับจริง) — แยก Decisions/Open Items ชัดเจน — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง**
 
 ขอบเขตเอกสารนี้: รับเคสติดตามทรัพย์จากบริษัทไฟแนนซ์เข้าสู่ระบบ ผ่าน 3 ช่องทาง (API / Import ไฟล์ / กรอกฟอร์มมือ) ตรวจสอบความครบถ้วนและความซ้ำซ้อนของข้อมูล จากนั้นระบบเสนอทีมที่ดูแลพื้นที่ให้เจ้าหน้าที่อนุมัติเคสพิจารณารับเคสและยืนยัน/เปลี่ยนทีมเอง — รวมถึง Recycle Flow สำหรับเคสไม่สำเร็จที่ไฟแนนซ์ขอให้ลองใหม่
@@ -328,6 +329,8 @@
 | รหัสไปรษณีย์ที่กรอกไม่พบใน Thailand Post API | `CASE_POSTAL_CODE_NOT_FOUND` | ไม่ auto-fill จังหวัด/อำเภอ/ตำบล — ให้ผู้ใช้เลือกเองทีละขั้นแบบ manual โดยไม่ block การกรอกฟอร์มต่อ |
 | Import ไฟล์ field ไม่ตรง mapping | `API_VALIDATION_FAILED` (ตามไฟล์ 01 §11) | reject แถวนั้น แสดง field error เฉพาะแถว ไม่ reject ทั้งไฟล์ |
 | แก้ไขเคสหลัง approved | `CASE_LOCKED_AFTER_APPROVAL` | ต้องผ่าน controlled edit/reopen ไม่แก้ตรงได้ (กฎ immutability ตามไฟล์ 02 §7) |
+| สั่ง action เปลี่ยนสถานะที่สถานะปัจจุบันไม่รองรับ (เช่น accept_case กับเคส `draft`) | `CASE_INVALID_STATUS_TRANSITION` | reject — ทุก transition ต้องตรงตาราง §10 เท่านั้น ไม่ข้ามขั้น |
+| ไม่รับเคส / ขอข้อมูลเพิ่ม / เปลี่ยนทีมที่ระบบเสนอ โดยไม่กรอกเหตุผล | `CASE_STATUS_REASON_REQUIRED` | reject การบันทึก — `reason` บังคับตาม §13 และ body ของ `PATCH /:id/status` (ไฟล์ 45 §6.1) |
 | สร้างคำขอรีไซเกิลกับเคสที่ไม่ใช่ `closed_fail` | `CASE_RECYCLE_INVALID_STATUS` | reject — รีไซเกิลได้เฉพาะเคสที่ปิดงานด้วยผลไม่สำเร็จเท่านั้น (เคส `closed_success` ไม่มีสิทธิ์) |
 | สร้างคำขอรีไซเกิลโดยไม่กรอกหมายเหตุ | `CASE_RECYCLE_NOTE_REQUIRED` | reject การบันทึก ต้องระบุหมายเหตุอ้างอิงการติดต่อจากไฟแนนซ์เสมอ เพื่อ traceability |
 | ไม่อนุมัติรีไซเกิลโดยไม่กรอกเหตุผล | `CASE_RECYCLE_REJECT_REASON_REQUIRED` | reject การบันทึก ต้องระบุเหตุผลที่ไม่อนุมัติเสมอ |
