@@ -28,13 +28,19 @@ export type ModuleErrorResponder = (error: unknown) => Response
 
 export function withApiPermission<Ctx = unknown>(
   action: PermissionAction,
-  resource: string,
+  /**
+   * capability code — ส่งเป็น array ได้เมื่อ endpoint เดียวมีผู้ใช้หลายบทบาทที่ถือ capability คนละตัว
+   * (ผ่านเมื่อมีอย่างน้อย 1 ตัว เช่นสายอนุมัติ 3 ขั้นของไฟล์ 16) — กติกาเดียวกับ `withEndpoint()`
+   */
+  resource: string | readonly string[],
   toErrorResponse: ModuleErrorResponder,
   handler: ApiRouteHandler<Ctx>,
 ): (request: NextRequest, context: Ctx) => Promise<Response> {
   return async (request, context) => {
     try {
-      const user = await requirePermission(action, resource)
+      const user = Array.isArray(resource)
+        ? await requireAnyPermission(action, resource)
+        : await requirePermission(action, resource as string)
       return await handler(request, context, user)
     } catch (error) {
       return toErrorResponse(error)

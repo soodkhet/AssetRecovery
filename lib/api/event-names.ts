@@ -49,6 +49,8 @@ export const EVENT_NAMES = [
   'lot.created',
   'lot.doc_attached',
   'lot.confirmed',
+  // Compensation Approval (16 §9) — จุดที่ Revenue เกิด (`19` §6.1)
+  'expense.approved',
 ] as const
 
 export type DomainEventName = (typeof EVENT_NAMES)[number]

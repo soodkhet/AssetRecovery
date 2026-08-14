@@ -8,7 +8,7 @@ import { EVENT_NAMES, type DomainEventName } from '@/lib/api/event-names'
  * ส่วนที่ `45` §7 เขียนไม่ตรงกับไฟล์ต้นทาง บันทึกไว้ที่ `EVENT_NAME_DIFFS` ด้านล่าง (ห้ามเงียบ)
  */
 
-export type EventModule = 'case' | 'assignment' | 'field' | 'warehouse'
+export type EventModule = 'case' | 'assignment' | 'field' | 'warehouse' | 'finance'
 
 export interface DomainEventContract {
   readonly module: EventModule
@@ -63,6 +63,13 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
   'lot.created': { module: 'warehouse', source: '44 §14', description: 'สร้าง Lot ส่งมอบ (1 Lot = 1 บริษัทไฟแนนซ์)' },
   'lot.doc_attached': { module: 'warehouse', source: '44 §14', description: 'แนบใบเซ็นรับ/หลักฐานการส่ง' },
   'lot.confirmed': { module: 'warehouse', source: '44 §14', description: 'ยืนยันส่งมอบ — จุด trigger เดียวที่ unlock expense + สร้าง Revenue ใน transaction เดียว' },
+
+  // ── Compensation Approval (16) ─────────────────────────────────────────
+  'expense.approved': {
+    module: 'finance',
+    source: '16 §9 · 19 §6.1',
+    description: 'รายการเบิกผ่านครบทุกขั้นของสายอนุมัติ — เกตหนึ่งในสามของ Revenue (`19` §6.1)',
+  },
 }
 
 /**
