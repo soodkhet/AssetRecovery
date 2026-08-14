@@ -57,12 +57,21 @@ const GROUP_BADGE: Record<RoleGroup, string> = {
   finance_company: 'bg-amber-100 text-amber-800',
 }
 
-type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' }
+type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' | 'invite' }
 
 const ACTION_TITLE: Record<PendingAction['action'], string> = {
   suspend: 'ระงับการใช้งานบัญชี',
   reactivate: 'เปิดใช้งานบัญชีกลับ',
   delete: 'ลบบัญชีผู้ใช้',
+  invite: 'ส่งคำเชิญตั้งรหัสผ่าน',
+}
+
+const ACTION_DESCRIPTION: Record<PendingAction['action'], string> = {
+  suspend: 'ผู้ใช้ที่ถูกระงับจะเข้าสู่ระบบไม่ได้ทันที แต่ประวัติทั้งหมดยังอยู่ครบ (ไฟล์ 08 §7.2)',
+  reactivate: 'เปิดสิทธิ์เข้าใช้งานกลับให้บัญชีนี้',
+  delete:
+    'ลบได้เฉพาะบัญชีที่ยังไม่มีประวัติการทำงาน — ถ้ามีเคส/งานภาคสนาม/รายการเงินผูกอยู่ ระบบจะปฏิเสธด้วย USER_HAS_HISTORY ให้ใช้การระงับแทน (ไฟล์ 08 §10)',
+  invite: 'ส่งอีเมลลิงก์ตั้งรหัสผ่านให้ผู้ใช้ตั้งเอง — ลิงก์เดิมที่เคยส่งไปจะใช้ไม่ได้อีก',
 }
 
 export function UsersManager() {
@@ -158,19 +167,20 @@ export function UsersManager() {
     setSubmitting(true)
     try {
       const { user, action } = pending
-      const request =
-        action === 'delete'
-          ? jsonRequest('DELETE', { reason: pendingReason })
-          : jsonRequest('PATCH', { reason: pendingReason })
+      const method = action === 'delete' ? 'DELETE' : action === 'invite' ? 'POST' : 'PATCH'
       const path = action === 'delete' ? `/api/users/${user.id}` : `/api/users/${user.id}/${action}`
 
-      const result = await callApi(path, request)
+      const result = await callApi(path, jsonRequest(method, { reason: pendingReason }))
       if (result.error !== undefined) {
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
 
-      showToast({ tone: 'success', title: `${ACTION_TITLE[action]}แล้ว`, description: user.fullName })
+      if (result.warning !== undefined) {
+        showToast({ tone: 'warning', title: result.warning.title, description: result.warning.message })
+      } else {
+        showToast({ tone: 'success', title: `${ACTION_TITLE[action]}แล้ว`, description: user.fullName })
+      }
       setPending(null)
       setPendingReason('')
       await reload()
@@ -327,6 +337,17 @@ export function UsersManager() {
                         <Button variant="secondary" onClick={() => openForm(user)}>
                           แก้ไข
                         </Button>
+                        {user.status !== 'deleted' && (
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setPending({ user, action: 'invite' })
+                              setPendingReason('')
+                            }}
+                          >
+                            {user.isProvisioned ? 'ส่งคำเชิญอีกครั้ง' : 'ส่งคำเชิญ'}
+                          </Button>
+                        )}
                         {user.status === 'active' ? (
                           <Button
                             variant="secondary"
@@ -385,15 +406,9 @@ export function UsersManager() {
         onClose={() => setPending(null)}
         onConfirm={() => void confirmPending()}
         title={`${ACTION_TITLE[pending?.action ?? 'suspend']} — ${pending?.user.fullName ?? ''}`}
-        description={
-          pending?.action === 'delete'
-            ? 'ลบได้เฉพาะบัญชีที่ยังไม่มีประวัติการทำงาน — ถ้ามีเคส/งานภาคสนาม/รายการเงินผูกอยู่ ระบบจะปฏิเสธด้วย USER_HAS_HISTORY ให้ใช้การระงับแทน (ไฟล์ 08 §10)'
-            : pending?.action === 'suspend'
-              ? 'ผู้ใช้ที่ถูกระงับจะเข้าสู่ระบบไม่ได้ทันที แต่ประวัติทั้งหมดยังอยู่ครบ (ไฟล์ 08 §7.2)'
-              : 'เปิดสิทธิ์เข้าใช้งานกลับให้บัญชีนี้'
-        }
+        description={ACTION_DESCRIPTION[pending?.action ?? 'suspend']}
         confirmLabel={`ยืนยัน${ACTION_TITLE[pending?.action ?? 'suspend']}`}
-        confirmVariant={pending?.action === 'reactivate' ? 'primary' : 'danger'}
+        confirmVariant={pending?.action === 'reactivate' || pending?.action === 'invite' ? 'primary' : 'danger'}
         loading={submitting}
         confirmDisabled={pendingReason.trim().length < REASON_MIN_LENGTH}
       >

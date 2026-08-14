@@ -14,6 +14,8 @@ import { prisma } from '@/lib/prisma'
 import { TeamError } from '@/lib/teams/errors'
 import { ACTIVE_CASE_STATUSES } from '@/lib/teams/team'
 import { UserError } from '@/lib/users/errors'
+import { buildInviteRedirectUrl, inviteWarning } from '@/lib/users/invite'
+import { inviteUser, resendInvite, syncAuthEmail } from '@/lib/users/provisioning'
 import type { UserListQuery } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import {
@@ -34,9 +36,9 @@ import {
  * ⚠️ ทุกครั้งที่ role/สถานะ/ทีม/บริษัทเปลี่ยน ต้อง `invalidateSessionCache()` ของ user นั้น
  * ไม่งั้น session เดิมยังถือสิทธิ์เก่าได้อีกไม่เกิน 5 นาที (`lib/auth/session-cache.ts`)
  *
- * ⚠️ **ยังไม่ provision Supabase Auth ที่นี่** — flow เชิญ/ตั้งรหัสผ่านครั้งแรกเป็น open item D1
- * (`docs/02_OPEN_DECISIONS.md`) · user ที่สร้างใหม่จึงมี `supabase_uid = null` และ login ไม่ได้
- * จนกว่าจะผูกบัญชี Auth (`05` §6.1 ตอบ `USER_NOT_PROVISIONED`)
+ * **Provisioning (มติ PO ปิด D1)**: สร้างผู้ใช้ = เชิญทางอีเมลด้วย `inviteUserByEmail` แล้วเก็บ
+ * `supabase_uid` ที่ได้ลงในธุรกรรมเดียวกับการสร้าง · ถ้าเชิญไม่สำเร็จ **ไม่ล้มทั้งงาน** —
+ * บันทึกผู้ใช้ไว้โดย `supabase_uid = null` แล้วส่งคำเชิญซ้ำผ่าน `POST /api/users/:id/invite` ได้
  */
 
 const activeAssignmentWhere = {
@@ -164,6 +166,14 @@ interface MutationContext {
   actor: SessionUser
   meta: RequestMeta
   reason: string
+  /** origin ของ request — ใช้ประกอบลิงก์ตั้งรหัสผ่านในอีเมลคำเชิญ (`lib/users/invite.ts`) */
+  origin?: string
+}
+
+/** ผลของ mutation ที่อาจมีเรื่องต้องเตือนแม้สำเร็จ (เช่น ส่งอีเมลคำเชิญไม่ผ่าน) */
+export interface UserMutationResult {
+  user: UserDto
+  warning: { code: string; title: string; message: string } | null
 }
 
 /** role ที่เลือกต้องอยู่ในองค์กรเดียวกันและยังไม่ถูกลบ — คืน role group ไปตรวจ conditional required ต่อ */
@@ -246,7 +256,7 @@ async function assertSuperadminSafety(
   })
 }
 
-export async function createUser(context: MutationContext, input: UserValues): Promise<UserDto> {
+export async function createUser(context: MutationContext, input: UserValues): Promise<UserMutationResult> {
   const organizationId = context.actor.organizationId
   const values = normalizeUserValues(input)
   const role = await loadRole(organizationId, values.roleId)
@@ -256,11 +266,19 @@ export async function createUser(context: MutationContext, input: UserValues): P
   await assertPhoneAvailable(organizationId, values.phone)
   await assertReferencesExist(organizationId, values)
 
+  // เชิญก่อนเขียน DB เพื่อให้ `supabase_uid` ลงไปในธุรกรรมเดียวกัน (audit เห็นค่าจริงตั้งแต่แถวแรก)
+  // เชิญไม่สำเร็จ = ยังสร้างผู้ใช้ต่อโดย uid เป็น null แล้วเตือนให้ส่งคำเชิญซ้ำ
+  const outcome =
+    context.origin === undefined
+      ? null
+      : await inviteUser(values.email, buildInviteRedirectUrl(context.origin))
+
   const created = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
         organizationId,
         roleId: values.roleId,
+        supabaseUid: outcome?.uid ?? null,
         email: values.email,
         fullName: values.fullName,
         phone: values.phone,
@@ -281,7 +299,11 @@ export async function createUser(context: MutationContext, input: UserValues): P
         action: 'create',
         targetType: 'users',
         targetId: user.id,
-        after: toUserAuditPayload(values, { status: 'active', roleName: role.name }),
+        after: {
+          ...toUserAuditPayload(values, { status: 'active', roleName: role.name }),
+          supabase_uid: outcome?.uid ?? null,
+          invite_email_sent: outcome?.emailSent ?? false,
+        },
         reason: context.reason,
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
@@ -292,10 +314,61 @@ export async function createUser(context: MutationContext, input: UserValues): P
     return user
   })
 
-  return toDto(created)
+  return { user: toDto(created), warning: outcome === null ? null : inviteWarning(outcome) }
 }
 
-export async function updateUser(context: MutationContext, current: UserDto, input: UserValues): Promise<UserDto> {
+/**
+ * ส่งคำเชิญตั้งรหัสผ่าน (ครั้งแรกหรือส่งซ้ำ — `POST /api/users/:id/invite`)
+ * ผูก `supabase_uid` ที่ได้กลับเข้า record เสมอ · ล้มเหลว = `INVITE_SEND_FAILED` (ผู้ใช้กดปุ่มนี้มาเพื่อสิ่งนี้)
+ */
+export async function sendUserInvite(
+  context: MutationContext & { origin: string },
+  current: UserDto,
+): Promise<UserMutationResult> {
+  const organizationId = context.actor.organizationId
+  if (current.status === 'deleted') {
+    throw new UserError('INVALID_USER_STATUS_TRANSITION', { detail: `user=${current.id} status=deleted` })
+  }
+
+  const outcome = await resendInvite(current.email, buildInviteRedirectUrl(context.origin))
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: current.id },
+      data: { supabaseUid: outcome.uid, updatedBy: context.actor.id },
+      select: userSelect,
+    })
+
+    await emitAudit(
+      {
+        organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'update',
+        targetType: 'users',
+        targetId: current.id,
+        before: { supabase_uid: current.isProvisioned ? 'linked' : null },
+        after: { supabase_uid: outcome.uid, invite_email_sent: outcome.emailSent },
+        reason: context.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+
+    return user
+  })
+
+  invalidateSession(updated.supabaseUid)
+  return { user: toDto(updated), warning: inviteWarning(outcome) }
+}
+
+export async function updateUser(
+  context: MutationContext,
+  current: UserDto,
+  input: UserValues,
+): Promise<UserMutationResult> {
   const organizationId = context.actor.organizationId
   const values = normalizeUserValues(input)
   const before = toValues(current)
@@ -348,7 +421,21 @@ export async function updateUser(context: MutationContext, current: UserDto, inp
   })
 
   invalidateSession(updated.supabaseUid)
-  return toDto(updated)
+
+  // อีเมล = username ตอน login → ต้องย้ายฝั่ง Supabase Auth ตามด้วย (ล้มเหลว = เตือน ไม่ rollback ข้อมูลธุรกิจ)
+  let warning: UserMutationResult['warning'] = null
+  if (values.email !== before.email && updated.supabaseUid !== null) {
+    const failure = await syncAuthEmail(updated.supabaseUid, values.email)
+    if (failure !== null) {
+      warning = {
+        code: 'AUTH_EMAIL_NOT_SYNCED',
+        title: 'บันทึกแล้ว แต่ย้ายอีเมลฝั่ง Supabase Auth ไม่สำเร็จ',
+        message: `ผู้ใช้ยังต้องเข้าสู่ระบบด้วยอีเมลเดิมไปก่อน — แก้ที่ Supabase หรือลองบันทึกใหม่อีกครั้ง (${failure})`,
+      }
+    }
+  }
+
+  return { user: toDto(updated), warning }
 }
 
 /**

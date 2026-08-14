@@ -17,6 +17,7 @@ export const USER_ERROR_CODES = [
   'INVALID_USER_STATUS_TRANSITION',
   'INVALID_USER_SCOPE',
   'ROLE_NOT_FOUND',
+  'INVITE_SEND_FAILED',
 ] as const
 
 export type UserErrorCode = (typeof USER_ERROR_CODES)[number]
@@ -30,6 +31,8 @@ const HTTP_STATUS: Record<UserErrorCode, number> = {
   INVALID_USER_STATUS_TRANSITION: 400,
   INVALID_USER_SCOPE: 400,
   ROLE_NOT_FOUND: 404,
+  // 502 = ปลายทางภายนอก (Supabase Auth) ไม่ตอบ/ปฏิเสธ ไม่ใช่ข้อมูลของผู้เรียกผิด
+  INVITE_SEND_FAILED: 502,
 }
 
 const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
@@ -62,6 +65,11 @@ const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
   ROLE_NOT_FOUND: {
     title: 'ไม่พบบทบาท',
     message: 'ไม่พบบทบาท (role) ที่เลือก หรือบทบาทนั้นถูกลบไปแล้ว',
+  },
+  INVITE_SEND_FAILED: {
+    title: 'ส่งคำเชิญไม่สำเร็จ',
+    message:
+      'ส่งอีเมลคำเชิญตั้งรหัสผ่านไม่สำเร็จ — ตรวจการตั้งค่าอีเมล (SMTP) และ Redirect URL ของ Supabase project แล้วลองใหม่ · บัญชีผู้ใช้ยังอยู่ ไม่ต้องสร้างซ้ำ',
   },
 }
 

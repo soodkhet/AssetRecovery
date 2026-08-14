@@ -22,6 +22,7 @@ export const GET = withApiPermission<RouteContext>(
  *
  * เปลี่ยน role ของ Superadmin คนสุดท้าย → `LAST_SUPERADMIN_REMOVAL` (`07` §11)
  * การเปลี่ยนสถานะ **ไม่ผ่าน endpoint นี้** — ใช้ `/suspend` และ `/reactivate` (Rule 04)
+ * เปลี่ยนอีเมล = ย้ายอีเมลฝั่ง Supabase Auth ให้ด้วย (อีเมลคือ username ตอน login — `05` §6.1)
  */
 export const PATCH = withApiPermission<RouteContext>(
   'manage',
@@ -34,9 +35,12 @@ export const PATCH = withApiPermission<RouteContext>(
 
     const current = await getUser(user, id)
     const { reason, ...values } = parsed.data
+    const origin = new URL(request.url).origin
 
-    const updated = await updateUser({ actor: user, meta: getRequestMeta(request), reason }, current, values)
-    return Response.json({ data: updated })
+    const result = await updateUser({ actor: user, meta: getRequestMeta(request), reason, origin }, current, values)
+    return Response.json(
+      result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
+    )
   },
 )
 

@@ -153,8 +153,12 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 
 ## หมวด D — Flow ที่ไม่มีทางเดิน (จะจอดตอน implement — ต้องเคาะก่อนถึง task ที่ระบุ)
 
-### ⬜ D1 — First-login / invite flow ไม่มีเลย (สร้าง user แล้วตั้งรหัสผ่านครั้งแรกยังไง?)
-- **[default]**: Supabase `inviteUserByEmail` → user ตั้งรหัสเอง · PO เคาะ: อายุลิงก์, ใครส่งซ้ำได้ · **บล็อก**: 1.3, 1.9 (บล็อก sprint แรกจริง) · **คำตอบ**:
+### ✅ D1 — First-login / invite flow ไม่มีเลย (สร้าง user แล้วตั้งรหัสผ่านครั้งแรกยังไง?)
+- **[default]**: Supabase `inviteUserByEmail` → user ตั้งรหัสเอง · PO เคาะ: อายุลิงก์, ใครส่งซ้ำได้ · **บล็อก**: 1.3, 1.9 (บล็อก sprint แรกจริง) · **คำตอบ (PO 14/08/2569)**: ใช้ `inviteUserByEmail` ส่งลิงก์ให้ผู้ใช้ตั้งรหัสผ่านเอง — implement แล้วใน Phase 1.9
+  - สร้างผู้ใช้ = เชิญอัตโนมัติ · ส่งซ้ำได้ที่ `POST /api/users/:id/invite` (สิทธิ์ `manage:manage_users` — ชุดเดียวกับคนที่สร้างผู้ใช้ได้ · บังคับ `reason` เพราะแตะ `supabase_uid`)
+  - **อายุลิงก์** = ค่าของ Supabase project (Dashboard → Auth → Email link expiry) ไม่ override รายครั้ง
+  - ปลายทางลิงก์ = `/auth/set-password` (ต้องเพิ่มใน Redirect URLs ของทุก environment) · รหัสผ่านขั้นต่ำ 8 ตัว มีทั้งตัวอักษรและตัวเลข (`lib/auth/schemas.ts`)
+  - เชิญไม่สำเร็จตอนสร้าง = ไม่ reject งาน — บันทึกผู้ใช้โดย `supabase_uid = null` (UI ขึ้นป้าย "รอตั้งรหัสผ่าน") แล้วส่งซ้ำได้
 
 ### ⬜ D2 — ลืมรหัสผ่านไม่มีในสเปค (0 hit ทั้งโปรเจกต์)
 - **[default]**: Supabase reset email + custom template ภาษาไทย + rate limit · user suspended กด reset ไม่ได้แบบไม่ leak · **บล็อก**: 1.3 · **คำตอบ**:
@@ -226,7 +230,7 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 | 2 | A2 เงินเข้า 1 ก้อนหลายบิล | Phase 1.2 | PO |
 | 3 | A3 Recycle เก็บเงินซ้ำไหม | Phase 1.2 | PO |
 | 4 | A4 Advance เข้ารอบจ่าย | Phase 1.2 | PO (ยืนยัน default) |
-| 5 | D1+D2 Invite/Reset password | Phase 1.3 | PO (ยืนยัน default) |
+| 5 | D1+D2 Invite/Reset password | Phase 1.3 | ✅ D1 ตอบแล้ว 14/08/2569 (invite ทางอีเมล — ทำใน 1.9) · D2 (ลืมรหัสผ่าน) ยังเปิดอยู่ |
 | 6 | C5 เมนูของธุรการ | Phase 1.5 | PO |
 | 7 | B1–B4 กฎปัดเศษ/WHT/tolerance | Phase 3.1 | นักบัญชี |
 | 8 | D3 เพดานไฟล์สื่อ | Phase 2.2 | PO (ยืนยัน default) |

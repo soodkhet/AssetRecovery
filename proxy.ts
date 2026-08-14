@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import { getPublicEnv } from '@/lib/env'
+import { SET_PASSWORD_PATH } from '@/lib/users/invite'
 
 /**
  * Next.js proxy (เดิมชื่อ middleware — Next 16 เปลี่ยนชื่อ convention เป็น `proxy.ts`)
@@ -14,8 +15,11 @@ import { getPublicEnv } from '@/lib/env'
  * ⚠️ `/api/*` ไม่ถูก redirect — endpoint ต้องตอบ 401/403 เป็น JSON เอง (เรียกตรงก็ต้องโดนปฏิเสธ)
  */
 
-/** หน้าที่เข้าได้โดยไม่ต้อง login */
-const PUBLIC_PAGE_PATHS = new Set<string>([LOGIN_PATH, '/'])
+/**
+ * หน้าที่เข้าได้โดยไม่ต้อง login
+ * `SET_PASSWORD_PATH` = ปลายทางลิงก์เชิญ — ผู้ใช้ยังไม่มี session ตอนกดลิงก์ ต้องเปิดได้เสมอ (D1)
+ */
+const PUBLIC_PAGE_PATHS = new Set<string>([LOGIN_PATH, SET_PASSWORD_PATH, '/'])
 
 function isPublicPage(pathname: string): boolean {
   return PUBLIC_PAGE_PATHS.has(pathname)

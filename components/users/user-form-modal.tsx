@@ -146,11 +146,17 @@ export function UserFormModal({
         return
       }
 
-      showToast({
-        tone: 'success',
-        title: isEdit ? 'บันทึกข้อมูลผู้ใช้แล้ว' : 'สร้างบัญชีผู้ใช้แล้ว',
-        description: isEdit ? form.fullName.trim() : `${form.fullName.trim()} — ยังต้องตั้งรหัสผ่านก่อนเข้าใช้งาน`,
-      })
+      if (result.warning !== undefined) {
+        showToast({ tone: 'warning', title: result.warning.title, description: result.warning.message })
+      } else {
+        showToast({
+          tone: 'success',
+          title: isEdit ? 'บันทึกข้อมูลผู้ใช้แล้ว' : 'สร้างบัญชีและส่งคำเชิญแล้ว',
+          description: isEdit
+            ? form.fullName.trim()
+            : `${form.fullName.trim()} — ส่งลิงก์ตั้งรหัสผ่านไปที่ ${form.email.trim()} แล้ว`,
+        })
+      }
       onSaved()
       onClose()
     } finally {
@@ -178,9 +184,9 @@ export function UserFormModal({
     >
       <div className="space-y-4">
         {!isEdit && (
-          <InlineAlert tone="warning" title="บัญชีที่สร้างใหม่ยังเข้าสู่ระบบไม่ได้ทันที">
-            ระบบยังไม่มี flow เชิญ/ตั้งรหัสผ่านครั้งแรก (open item D1) — บัญชีจะถูกสร้างไว้ในสถานะ “รอตั้งรหัสผ่าน”
-            จนกว่าจะผูกกับ Supabase Auth
+          <InlineAlert tone="info" title="ระบบจะส่งอีเมลคำเชิญให้อัตโนมัติ">
+            ผู้ใช้จะได้รับลิงก์ไปตั้งรหัสผ่านเอง — ระบบไม่เก็บรหัสผ่านและผู้ดูแลตั้งรหัสให้ไม่ได้ · ถ้าอีเมลไม่ถึง
+            กดปุ่ม “ส่งคำเชิญอีกครั้ง” ในตารางผู้ใช้งานได้ตลอด
           </InlineAlert>
         )}
 

@@ -30,7 +30,7 @@ export const GET = withApiPermission<RouteContext>(
  * (`getFinanceCompany()` โยน 403/404 ให้เอง) · role ที่เลือกต้องอยู่ในกลุ่ม `finance_company`
  * ไม่งั้น `INVALID_USER_SCOPE` (`08` §7.1)
  *
- * ⚠️ เหมือน `POST /api/users` — ยังไม่ผูก Supabase Auth (open item **D1**) จึงยัง login ไม่ได้
+ * เหมือน `POST /api/users` — สร้างเสร็จส่งอีเมลคำเชิญให้ตั้งรหัสผ่านเองทันที (มติ PO ปิด D1)
  */
 export const POST = withApiPermission<RouteContext>(
   'manage',
@@ -44,11 +44,14 @@ export const POST = withApiPermission<RouteContext>(
     const company = await getFinanceCompany(user, id)
     const { reason, ...values } = parsed.data
 
-    const created = await createUser(
-      { actor: user, meta: getRequestMeta(request), reason },
+    const result = await createUser(
+      { actor: user, meta: getRequestMeta(request), reason, origin: new URL(request.url).origin },
       { ...values, teamId: null, companyId: company.id },
     )
 
-    return Response.json({ data: created }, { status: 201 })
+    return Response.json(
+      result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
+      { status: 201 },
+    )
   },
 )

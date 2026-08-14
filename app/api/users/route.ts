@@ -34,8 +34,8 @@ export const GET = withApiPermission(
  * `POST /api/users` (`08` §14) — สร้างบัญชีผู้ใช้ใหม่
  *
  * `team_id`/`company_id` บังคับตาม role group ที่เลือก (`08` §7.1) · อีเมล/เบอร์โทรห้ามซ้ำในองค์กร (§10)
- * ⚠️ ยังไม่ผูก Supabase Auth (`supabase_uid = null`) — ผู้ใช้ที่สร้างใหม่ยัง login ไม่ได้จนกว่า
- * flow เชิญ/ตั้งรหัสผ่านครั้งแรก (open item **D1**) จะถูกเคาะ
+ * สร้างเสร็จ = ส่งอีเมลคำเชิญให้ตั้งรหัสผ่านเองทันที (มติ PO ปิด D1) · ส่งไม่สำเร็จยัง 201 แต่แนบ
+ * `warning` กลับไป และผู้ใช้จะยัง login ไม่ได้จนกว่าจะกด "ส่งคำเชิญอีกครั้ง"
  */
 export const POST = withApiPermission(
   'manage',
@@ -46,8 +46,12 @@ export const POST = withApiPermission(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const { reason, ...values } = parsed.data
-    const created = await createUser({ actor: user, meta: getRequestMeta(request), reason }, values)
+    const origin = new URL(request.url).origin
+    const result = await createUser({ actor: user, meta: getRequestMeta(request), reason, origin }, values)
 
-    return Response.json({ data: created }, { status: 201 })
+    return Response.json(
+      result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
+      { status: 201 },
+    )
   },
 )
