@@ -202,10 +202,15 @@ export function CaseDetailModal({
               teams={teamOptions}
               selectedTeamId={selectedTeamId}
               disabled={busyAction !== null}
-              onSelect={mode === 'review' ? (team) => {
-                setTeamPick(team)
-                setTeamReason('')
-              } : undefined}
+              // ปุ่มเปลี่ยนทีม active เฉพาะตอน pending_review และเฉพาะคนที่กด "รับเคส" ได้จริง (§7.5)
+              onSelect={
+                actions.some((button) => button.action === 'accept')
+                  ? (team) => {
+                      setTeamPick(team)
+                      setTeamReason('')
+                    }
+                  : undefined
+              }
             />
 
             <ContactSection detail={detail} />

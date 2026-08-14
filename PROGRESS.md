@@ -1,21 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.4 (Case FE ชุด 1 — list/form/address component) · งานถัดไป 2.5
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.5 (Case FE ชุด 2 — เอกสาร/ทีมที่เสนอ/review modal/import) · งานถัดไป 2.6
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.5: Case Submission FE ชุด 2 (เอกสาร + ทีมที่เสนอ + review modal + import)
+## 🎯 งานถัดไป — Phase 2.6: Case Assignment Backend (ไฟล์ 40)
 
-- ทำตาม `docs/01_PLAN.md` §2.5 — ต่อท้ายฟอร์มของ 2.4: **ผู้ติดต่ออื่น** (dynamic list เพิ่ม/ลบแถว, เบอร์ 10 หลัก) · **Document slots** (contract/national_id/other — สถานะ "อัปโหลดแล้ว ✓" ต่อ slot) · **Product Photo dropzone** (drag-drop + thumbnail grid, สูงสุด 8 รูป)
-- **Team Suggestion UI** (`38` §7.4) — inline list + toggle "ดูทีมอื่นทั้งหมด" + กล่องค่าใช้จ่ายทีม (**ข้อมูลดิบเท่านั้น ห้ามคำนวณกำไร/ขาดทุน**) + reason modal เมื่อเปลี่ยนทีม
-- **Case Detail / Review Modal** (`38` §7.5) — 4 โหมดตามสถานะ (pending_review 3 ปุ่ม / closed_fail ขอรีไซเกิล / pending_recycle_review 2 ปุ่ม / อื่น ๆ read-only) + doc viewer/lightbox + ประวัติรีไซเกิล → **shared component** (40/41 ใช้ซ้ำ) ลง `docs/REUSE_INDEX.md`
-- **Import wizard UI** — เลือกไฟล์ → mapping คอลัมน์ (`IMPORT_COLUMNS`) → preview (`dryRun`) → ยืนยัน + ผลรายแถว
-- ของที่มีแล้วต้อง reuse: `<CasesManager>`/`<CaseFormModal>` + `lib/cases/case-form.ts` (2.4 — มี comment ระบุจุดเสียบไว้แล้ว) · `<AddressFields>` · `caseStatusLabel()`/`caseStatusBadgeGroup()` · `allowedActionsFrom()` + `CASE_ACTION_CAPABILITIES` (ห้าม hardcode เงื่อนไขสถานะ) · `IMPORT_COLUMNS` · `<ReasonConfirmModal>` · `callApi()` + `apiPath()`
-- อ้างอิง: `38` §7.3–7.5 ผ่าน MAP (L215–257) · mockup `reference/38-case-submission-mockup.html` (`renderReviewModal` L669+, `renderTeamSelectionSection` L796+) — UI เท่านั้น
-- LOC ~2,400 · งบ ~350k
-- DoD: review/approve/reject/need_info ครบจาก UI · Case Approver เท่านั้นที่เห็นเมนูรับเคส · อัปโหลดเอกสาร + ส่งตรวจสอบได้จริงบน staging (ปิดส่วนที่ค้างจาก DoD ของ 2.4)
+- ทำตาม `docs/01_PLAN.md` §2.6 — migration `assignments` / `pending_reassignments` / `reassignment_history` + settings keys (`reassign_timeout_hours` default 3, `supervisor_can_assign_*` default true)
+- **assign** (กรองพนักงานตาม `assigned_team_id` ของเคส → `ASSIGNMENT_TEAM_MISMATCH`, 1 เคส 1 คน) + **accept**
+- **reassign 2 branch (ห้ามสลับ)**: ยังไม่ accepted = เปลี่ยนทันที · accepted แล้ว = สร้าง `pending_reassignment` รอ consent **ไม่ freeze งาน** + respond + **scheduled job timeout** (auto-assign, `resolution=timeout_auto`) + race guard `REASSIGNMENT_ALREADY_TIMED_OUT` · reassign สำเร็จ → reset `assigned` + ล้าง `accepted_at` เสมอ
+- agent decision-support: `active_case_count` · `success_rate` (**service กลาง** — Report ใช้ซ้ำ) · `covered_provinces` · Kanban aggregation + supervisor permission gate
+- ของที่มีแล้วต้อง reuse: `caseScopeWhere()` · `ACTIVE_CASE_STATUSES` (`lib/teams/team.ts`) · `withEndpoint()` + contract 8 endpoint ของ `45` §6.2 · `emitAudit()` · `CASE_READ_CAPABILITIES`
+- อ้างอิง: `40` ผ่าน MAP §6 (L63–113), §8–§12 (L167–234), §17 (L273) · `09` §7.1
+- LOC ~2,650 · งบ ~370k
+- DoD: test ตาม `40` §20 — โดยเฉพาะ timeout job race กับ respond ที่มาช้า
 
 ---
 
@@ -52,7 +52,7 @@
 | 2.2 | Case Submission BE ชุด 1 (schema/CRUD/เอกสาร) | ✅ | 2026-08-14 · `d5accc2` · schema เคสครบตามไฟล์ 38 §6 + API 5 endpoint + กันเลขสัญญาซ้ำ 2 ชั้น (เทสต์ concurrency 3 ช่องทาง) → archive |
 | 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ✅ | 2026-08-14 · `03b50e6` · state machine 8 action + routing จังหวัด + snapshot ค่าบริการตอน approved + recycle ไม่จำกัดรอบ + import ต่อแถว → archive |
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ✅ | 2026-08-14 · `9c05e9e` · หน้า `/cases/submit` (filter/pagination/card list) + ฟอร์มรับเคส-แก้ไข + `<AddressFields>` shared (77 จังหวัด + postal auto-complete) → archive |
-| 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ⬜ | PLAN §2.5 · detail modal reuse 40/41 |
+| 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ✅ | 2026-08-14 · `07100c8`+`267b3f3` · ผู้ติดต่อ/เอกสาร/รูปสินค้า + ทีมที่เสนอ (ข้อมูลดิบ) + `<CaseDetailModal>` shared 4 โหมด + import wizard · ⚠️ ต้องสร้าง bucket `case-documents` ต่อ environment → archive |
 | 2.6 | Case Assignment BE | ⬜ | PLAN §2.6 · reassign 2 branch + timeout job |
 | 2.7 | Case Assignment FE | ⬜ | PLAN §2.7 · Kanban read-only |
 | 2.8 | Field Tracker BE ชุด 1 (core flow) | ⬜ | PLAN §2.8 · GPS จริงเท่านั้น |
