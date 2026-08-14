@@ -21,10 +21,23 @@ export interface ApiErrorBody {
   error: ApiErrorPayload
 }
 
+/**
+ * error ที่หน้าจอใช้ได้จริง — นอกจากข้อความยังต้องมี `code`/`fields` เพื่อทำ inline error
+ * และ `payload` ดิบสำหรับ error ที่แนบข้อมูลประกอบมา (เช่น `CASE_REF_DUPLICATE` ส่ง `existingCase`
+ * ให้ลิงก์ไปเคสเดิมได้ตาม `38` §7.3) — โครง `{title, message}` เดิมยังอยู่ครบ หน้าจอเก่าไม่ต้องแก้
+ */
+export interface ApiCallError {
+  code?: string
+  title: string
+  message: string
+  fields?: Record<string, string>
+  payload?: ApiErrorPayload
+}
+
 export interface ApiCallResult<T> {
   data?: T
   warning?: ApiWarning
-  error?: { title: string; message: string }
+  error?: ApiCallError
 }
 
 /** ต่อท้ายข้อมูลประกอบที่ error บางตัวส่งมา เช่นรายชื่อบริษัทของ `TEMPLATE_IN_USE` (`12` §11) */
@@ -43,10 +56,14 @@ export async function callApi<T>(input: string, init?: RequestInit): Promise<Api
     const body: unknown = await response.json()
     const envelope = readEnvelope<T>(body, response.ok)
     if (!envelope.success) {
+      const { code, title, message, fields } = envelope.error
       return {
         error: {
-          title: envelope.error.title,
-          message: withContextSuffix(envelope.error.message, envelope.error.companies),
+          code,
+          title,
+          message: withContextSuffix(message, envelope.error.companies),
+          ...(fields === undefined ? {} : { fields }),
+          payload: envelope.error,
         },
       }
     }

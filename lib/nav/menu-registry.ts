@@ -103,7 +103,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         label: 'รับเคส',
         path: '/cases/submit',
         audiences: ['superadmin', 'executive', 'case_approver', 'admin_office'],
-        available: false,
+        available: true,
         plannedPhase: '2.4',
       },
       // §7.1.1 — "มอบหมายงาน" = ผู้จัดการ/หัวหน้า ของ inhouse+outsource (Case Approver ❌ ตามตาราง §7.1.1)
