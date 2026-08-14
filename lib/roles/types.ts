@@ -31,16 +31,5 @@ export interface RolePermissionsPayload {
   sections: MatrixSection[]
 }
 
-/** response envelope ชั่วคราวของ Phase 1 — ย้ายไป envelope กลางของไฟล์ `45` ใน Phase 2.1 */
-export interface ApiData<T> {
-  data: T
-}
-
-export interface ApiErrorBody {
-  error: {
-    code: string
-    title: string
-    message: string
-    fields?: Record<string, string>
-  }
-}
+/** response envelope ชั่วคราวของ Phase 1 — ตัวจริงย้ายไป `lib/api/types.ts` ตอน Phase 1.7 */
+export type { ApiData, ApiErrorBody } from '@/lib/api/types'

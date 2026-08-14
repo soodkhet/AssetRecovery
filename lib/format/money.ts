@@ -92,3 +92,27 @@ export function fmtRatioPct(value: number | null | undefined, fallback = 'N/A'):
   if (value === null || value === undefined || !Number.isFinite(value)) return fallback
   return `${groupFormatter.format(value)}%`
 }
+
+/**
+ * ช่องกรอกเงินในฟอร์มรับเป็น **บาท** แต่ระบบเก็บเป็น **สตางค์** — ตัวแปลงสองทางอยู่ที่นี่ที่เดียว
+ * (Rule 01: ห้ามให้แต่ละหน้าจอคูณ/หาร 100 เอง — พลาดที่เดียวคือเงินผิดทั้งโมดูล)
+ */
+
+/** `10050` → `"100.50"` สำหรับใส่ใน `<input type="number">` · `null` → `''` */
+export function toBahtInput(satang: number | null | undefined): string {
+  if (satang === null || satang === undefined) return ''
+  assertSatang(satang)
+  return (satang / 100).toFixed(2)
+}
+
+/**
+ * `"100.50"` → `10050` — คืน `null` เมื่อช่องว่าง (แปลว่า "ไม่กำหนด" เช่นเพดานไม่จำกัด)
+ * และคืน `NaN` เมื่อกรอกค่าที่ไม่ใช่ตัวเลข เพื่อให้ชั้นฟอร์มเลือกวิธีแจ้งเตือนเอง
+ */
+export function parseBahtInput(value: string): number | null | typeof NaN {
+  const trimmed = value.trim().replace(/,/g, '')
+  if (trimmed === '') return null
+  const baht = Number(trimmed)
+  if (!Number.isFinite(baht)) return Number.NaN
+  return Math.round(baht * 100)
+}

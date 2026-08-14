@@ -5,6 +5,48 @@
 
 ---
 
+## Phase 1.7 — Compensation Plans (11) + Service Fee Templates (12)
+
+**วันที่**: 2026-08-14 · **commit**: `ad5982a` (BE) + `8417ef1` (FE + docs) · **branch**: `auto/phase-1.7`
+
+### สิ่งที่ทำ
+
+- **ชิ้นส่วนกลางที่ดึงออกมาก่อน** (โมดูลถัดไปใช้ต่อได้ทันที)
+  - `lib/api/errors.ts` — คลาส `ModuleError` (pure ล้วน) ที่ error ของทุกโมดูลสืบทอด
+  - `lib/api/http.ts` — `withApiPermission()` / `readJsonBody()` / `validationErrorResponse()` / `toModuleErrorResponse()` (ย้ายมาจาก `lib/roles/http.ts` ซึ่งตอนนี้เหลือเป็นตัวห่อบาง ๆ ที่ผูก `toRoleErrorResponse` ให้)
+  - `lib/api/validation.ts` — `reasonSchema` / `satangSchema()` / `pctSchema()` / `toFieldErrors()`
+  - `lib/api/types.ts` — `callApi()` / `jsonRequest()` + envelope `ApiData`/`ApiErrorBody` (เดิมอยู่ `lib/roles/types.ts`)
+  - `lib/format/money.ts` — `toBahtInput()` / `parseBahtInput()` สำหรับช่องกรอกเงินในฟอร์ม (บาท ↔ สตางค์)
+- **Pure modules ของสองโมดูลใหม่** (ไม่แตะ DB — เทสต์ได้โดยไม่ต้องมี Postgres)
+  - `lib/compensation/plan.ts` — `normalizePlanValues()` (บังคับ exclusive ของโหมดน้ำมันระดับข้อมูล), `diffPlanValues()`, `planNextVersion()`, **`resolvePlanVersionAt()` = snapshot resolver แบบ effective-dated**, `toCompensationSnapshot()`, `describeFuelRule()`
+  - `lib/service-fee/template.ts` — `normalizeTemplateValues()`, `planNextTemplateVersion()`, `toServiceFeeSnapshot()`, `assertRateRange()` (`INVALID_RATE_RANGE`), **`describeServiceFeeFormula()` คืนองค์ประกอบสูตร 2 กรณี** (สำเร็จ/ไม่สำเร็จ) ตาม `22` §6.5–6.7
+  - `lib/{compensation,service-fee}/schemas.ts` — Zod ชุดเดียวใช้ร่วม FE/BE พร้อม conditional validation เต็มตาราง `11` §7.1 และ `12` §7.1
+- **ชั้น DB + API** — `lib/{compensation,service-fee}/queries.ts` + 8 endpoint (`GET/POST` list · `GET/PATCH/DELETE /:id` · `GET /:id/versions` ของทั้งสองโมดูล)
+- **หน้าจอ** — `/settings/compensation` (การ์ดแผน + toggle โหมดน้ำมัน) และ `/settings/service-fee` (การ์ดตาม DEC-008 แสดงสูตร 2 กรณี) + `<VersionHistoryModal>` ที่ใช้ร่วมกัน + เมนู 2 แท็บใน `menu-registry`
+- **เอกสาร** — `24` §6.1 เพิ่ม 5 code (`DUPLICATE_TEMPLATE_NAME`, `PLAN_NOT_FOUND`, `TEMPLATE_NOT_FOUND`, `VERSION_NOT_CURRENT`, `PLAN_IN_USE`) + changelog v3.5 · REUSE_INDEX เพิ่ม 12 แถว + กับดักใหม่ 1 ข้อ
+- **เทสต์** — 4 ไฟล์ใหม่ (61 เทสต์) ครอบ conditional validation ครบทุกโหมด/ทุก model + versioning + resolver + สูตร 2 กรณี · รวมทั้ง repo 436 เทสต์เขียว · `pnpm build` ผ่าน
+
+### การตัดสินใจระหว่างทาง
+
+- **"1 เทมเพลต = แถวชื่อเดียวกันหลายเวอร์ชัน"** — `02` §5 มี `UNIQUE(organization_id, name, version)` และไม่มีคอลัมน์ group id ⇒ ประวัติเวอร์ชันจับกลุ่มด้วย `name` · ผลตามมา: **เปลี่ยนชื่อ = เปลี่ยนทุกแถวของชุดพร้อมกัน** ไม่งั้นเวอร์ชันเก่าจะหลุดกลุ่ม
+- **PATCH ย้าย FK ของผู้ใช้งานมาชี้เวอร์ชันใหม่เสมอ** (`teams.compensation_plan_id`, `finance_companies.service_fee_template_id`) — จำเป็นเพื่อให้ `12` §9 เป็นจริง ("เคสที่ยังไม่ approved เห็นค่าใหม่ทันที") ส่วนแถวเก่ายังอยู่ครบให้ `expenses` ที่ snapshot ไว้แล้วอ้างถึงได้ (`92` §7.1) · ทั้งชุดอยู่ใน `$transaction` เดียวกับ `emitAudit()`
+- **PATCH ที่ไม่มีฟิลด์ไหนเปลี่ยน = ไม่สร้างเวอร์ชัน ไม่ลง audit** — กันเวอร์ชันขยะจากการกดบันทึกซ้ำ (เทียบค่าหลัง normalize เพื่อไม่ให้ฟิลด์ของโหมด/model ที่ไม่ได้ใช้นับเป็นการเปลี่ยนแปลง)
+- **`active` ของ `12` §7.1 map ไปที่ `deleted_at`** — `02` (schema, ชนะตามลำดับความสำคัญ) ไม่มีคอลัมน์ `active` แยก และ §2.4 กำหนดว่า soft delete = `deleted_at` (NULL = active) · ปิด/เปิดใช้งานผ่าน `DELETE /:id` body `{ isActive, reason }` และทำทีเดียวทุกเวอร์ชันของชุด
+- **`INVALID_RATE_RANGE` ไม่ได้เช็คใน Zod** — ถ้าใส่ min/max ใน schema จะได้ `REQUIRED_MISSING` แทน code ที่ `24` §6.1 กำหนดไว้ ⇒ ปล่อยผ่าน schema แล้วดักด้วย `assertRateRange()` ในชั้น service
+- **ผูก `manage_compensation_plans` ตาม `11` §12** (บริหาร/การเงิน = manage · บัญชี/ผู้จัดการทีม inhouse+outsource = view) — เป็น capability นอก Functional Matrix 37 รายการ ซึ่ง `default-matrix.ts` ระบุไว้ว่า "ให้ task ของโมดูลเจ้าของสิทธิ์ผูกเอง" · เพิ่มค่าคงที่ `BOUND_NON_MATRIX_CAPABILITIES` + ปรับเทสต์ยามให้ยังจับการผูกเงียบ ๆ ได้เหมือนเดิม
+- **แท็บเมนูใหม่ใช้ audience เดียวกับเมนูแม่** (`superadmin`/`executive`) — `06` §7.2 ระบุชัดว่าเมนู "การตั้งค่า" เห็นได้แค่ 2 role นี้ · สิทธิ์ที่กว้างกว่าของการเงิน/บัญชี (`11` §12) ยังบังคับจริงที่ API ทุก endpoint (เมนูไม่ใช่ security — DEC-002)
+- **เพิ่ม `GET /api/service-fee-templates/:id/versions`** ที่ `12` §14 ไม่ได้ระบุ — ตาราง `service_fee_templates` มี versioning เต็มรูปแบบใน `02` §5 และหน้าจอต้องแสดงประวัติเหมือนแผนค่าตอบแทน · เป็น read-only ใช้สิทธิ์ `view:view_master_data` เท่ากับ endpoint อ่านตัวอื่น
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 1.8 (teams/companies)**: FK ต้องชี้แถวที่ `is_current = true` เสมอ — ดึงรายการจาก `GET /api/compensation-plans` / `GET /api/service-fee-templates` (คืนเฉพาะเวอร์ชันปัจจุบัน) · ยาม `PLAN_IN_USE`/`TEMPLATE_IN_USE` นับเฉพาะ team/company ที่ `deleted_at IS NULL`
+- **Phase 2.3 / 2.9 / 3.2 (snapshot ของจริง)**: ใช้ `resolvePlanVersionAt(versions, onDate)` + `toCompensationSnapshot()` / `toServiceFeeSnapshot()` — **ห้ามอ่านเวอร์ชันปัจจุบันมาคำนวณย้อนหลัง**
+- **Phase 3.1 (สูตรเงิน `22`)**: `describeServiceFeeFormula()` และ `describeFuelRule()` คืนแค่ *องค์ประกอบ* ของสูตร ไม่คูณอะไรเลย — สูตรจริง (ต้องรู้ระยะทาง/มูลหนี้/มูลค่าเครื่องของเคส) ยังเป็นงานของ 3.1 ตามแผน
+- **กับดักที่เจอจริง**: `lib/<module>/errors.ts` ที่ import `lib/api/http.ts` จะลาก Prisma เข้า client bundle — typecheck/test ผ่านหมด พังเฉพาะตอน `next build` ⇒ **โมดูลใหม่ต้องรัน `pnpm build` อย่างน้อย 1 ครั้งก่อนปิด task** (บันทึกไว้ใน REUSE_INDEX แล้ว)
+- ยังไม่มีข้อมูล seed ของแผน/เทมเพลต — หน้าจอจะเป็น empty state จนกว่าจะสร้างเองผ่าน UI (ตั้งใจ: ค่าเงินเป็นข้อมูลธุรกิจจริง ไม่ควร seed ค่าสมมติ)
+
+---
+
 ## Phase 1.6 — Roles & Permissions module
 
 **วันที่**: 2026-08-14 · **commit**: `a5ef75c` · **branch**: `auto/phase-1.6`

@@ -177,6 +177,23 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         audiences: ['superadmin', 'executive'],
         available: true,
       },
+      // แท็บย่อยของการตั้งค่าใช้ audience เดียวกับเมนูแม่เสมอ — `06` §7.2 ให้เมนู "การตั้งค่า"
+      // เห็นได้เฉพาะ Superadmin/บริหาร · สิทธิ์ระดับ capability (`11` §12 การเงินแก้ได้ / บัญชีดูได้)
+      // ยังบังคับจริงที่ API ทุก endpoint — เมนูไม่ใช่ security (DEC-002)
+      {
+        id: 'settings.compensation',
+        label: 'แผนค่าตอบแทน',
+        path: '/settings/compensation',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
+      {
+        id: 'settings.service-fee',
+        label: 'เทมเพลตค่าบริการ',
+        path: '/settings/service-fee',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
     ],
   },
 ]

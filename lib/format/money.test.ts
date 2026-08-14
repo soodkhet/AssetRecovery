@@ -8,6 +8,8 @@ import {
   fmtSatangRounded,
   fmtSatangSymbol,
   MoneyFormatError,
+  parseBahtInput,
+  toBahtInput,
 } from '@/lib/format/money'
 
 /** ยามของ Rule 01 — เงิน = INTEGER satang เท่านั้น · display หาร 100 + comma ห้ามคำนวณเงินที่ชั้นนี้ */
@@ -92,5 +94,28 @@ describe('fmtRatioPct — ค่าที่คำนวณมาแล้วจ
   it('ค่าปกติแสดงทศนิยม 2 ตำแหน่ง', () => {
     expect(fmtRatioPct(42.5)).toBe('42.50%')
     expect(fmtRatioPct(-3)).toBe('-3.00%')
+  })
+})
+
+describe('toBahtInput / parseBahtInput (ช่องกรอกเงินในฟอร์ม)', () => {
+  it('แปลงสตางค์ → ข้อความบาทสองตำแหน่ง', () => {
+    expect(toBahtInput(10_050)).toBe('100.50')
+    expect(toBahtInput(0)).toBe('0.00')
+    expect(toBahtInput(null)).toBe('')
+  })
+
+  it('ค่าที่ไม่ใช่จำนวนเต็มสตางค์โยน MoneyFormatError', () => {
+    expect(() => toBahtInput(100.5)).toThrow(MoneyFormatError)
+  })
+
+  it('แปลงข้อความบาท → สตางค์จำนวนเต็ม (ปัดที่ทศนิยมที่ 2)', () => {
+    expect(parseBahtInput('100.50')).toBe(10_050)
+    expect(parseBahtInput('1,234.56')).toBe(123_456)
+    expect(parseBahtInput('0.005')).toBe(1)
+  })
+
+  it('ช่องว่าง = ไม่กำหนดค่า (null) · ข้อความที่ไม่ใช่ตัวเลข = NaN', () => {
+    expect(parseBahtInput('   ')).toBeNull()
+    expect(parseBahtInput('abc')).toBeNaN()
   })
 })

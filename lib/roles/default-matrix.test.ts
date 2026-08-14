@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { EXECUTIVE_ROLE_NAME, SUPERADMIN_ROLE_NAME } from '@/lib/auth/constants'
 import { CAPABILITIES, CAPABILITY_CODES, MATRIX_CAPABILITIES } from '@/lib/roles/capability-catalog'
 import { CAPABILITY_LOCKS, capabilityLockOwner } from '@/lib/roles/capability-locks'
-import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
+import { BOUND_NON_MATRIX_CAPABILITIES, DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
 
 /**
  * ยามความสอดคล้อง: catalog (`02` §12) ↔ ค่าเริ่มต้นของ matrix (`25` §7) ↔ รายการที่ล็อก (`25` §16.1)
@@ -80,12 +80,33 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
     expect(missing).toEqual([])
   })
 
-  it('capability นอก matrix ยังไม่ถูกผูก (เป็นงานของโมดูลเจ้าของสิทธิ์)', () => {
+  it('capability นอก matrix ถูกผูกเฉพาะรายการที่โมดูลเจ้าของสิทธิ์ประกาศไว้', () => {
     const outsideMatrix = new Set(
       CAPABILITIES.filter((capability) => capability.functionalGroup === null).map((each) => each.code),
     )
-    const bound = DEFAULT_ROLE_CAPABILITIES.filter((each) => outsideMatrix.has(each.capabilityCode))
-    expect(bound).toEqual([])
+    const bound = new Set(
+      DEFAULT_ROLE_CAPABILITIES.filter((each) => outsideMatrix.has(each.capabilityCode)).map(
+        (each) => each.capabilityCode,
+      ),
+    )
+    expect([...bound].sort()).toEqual([...BOUND_NON_MATRIX_CAPABILITIES].sort())
+  })
+
+  it('แผนค่าตอบแทน (`11` §12): บริหาร/การเงิน = manage · บัญชี/ผู้จัดการทีม = view', () => {
+    const rows = DEFAULT_ROLE_CAPABILITIES.filter(
+      (each) => each.capabilityCode === 'manage_compensation_plans',
+    )
+    const byRole = rows.map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`).sort()
+
+    expect(byRole).toEqual(
+      [
+        'inhouse:ผู้จัดการทีมติดตามทรัพย์=view',
+        'outsource:ผู้จัดการทีมติดตามทรัพย์=view',
+        'system:การเงิน=manage',
+        'system:บริหาร=manage',
+        'system:บัญชี=view',
+      ].sort(),
+    )
   })
 
   it('role ชื่อซ้ำข้าม group ได้สิทธิ์แยกกันคนละแถว (`07` §6 — คนละ record จริง)', () => {
