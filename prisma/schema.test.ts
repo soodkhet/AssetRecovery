@@ -144,4 +144,23 @@ describe('migrations — constraint ที่ Prisma ไม่รองรับ
   it('updated_at ต้องมี DB default (Prisma @updatedAt ไม่ออก default ให้)', () => {
     expect(sql).toContain('ALTER COLUMN updated_at SET DEFAULT NOW()')
   })
+
+  /**
+   * `audit_logs` ห้าม UPDATE/DELETE เด็ดขาด (`02` §13 · `90` §17) — ต้องกันที่ DB ไม่ใช่แค่ service
+   * trigger ต้องเป็น **STATEMENT-level** เพื่อให้ยิงแม้คำสั่งไม่ match แถวไหน และต้องคลุม TRUNCATE ด้วย
+   */
+  it.each(['trg_audit_logs_no_update', 'trg_audit_logs_no_delete', 'trg_audit_logs_no_truncate'])(
+    'trigger `%s` ต้องอยู่ใน migration',
+    (name) => {
+      expect(sql).toContain(name)
+    },
+  )
+
+  it('trigger ของ audit_logs ต้องเป็น FOR EACH STATEMENT ทั้งหมด', () => {
+    const statements = sql.match(/CREATE TRIGGER trg_audit_logs_no_\w+[\s\S]*?;/g) ?? []
+    expect(statements).toHaveLength(3)
+    for (const statement of statements) {
+      expect(statement, `trigger ต้องเป็น statement-level: ${statement}`).toContain('FOR EACH STATEMENT')
+    }
+  })
 })

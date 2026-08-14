@@ -18,6 +18,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:deploy:test": "PRISMA_USE_TEST_DB=1 prisma migrate deploy",
     "db:seed": "prisma db seed",
     "auth:link-superadmin": "tsx scripts/link-superadmin.ts",
     "db:studio": "prisma studio"
