@@ -7,7 +7,7 @@
 
 ## Phase 2.3 — Case Submission BE ชุด 2 (state machine + routing + recycle + import + snapshot)
 
-**วันที่**: 2026-08-14 · **commit**: `<commit>` · **branch**: `auto/phase-2.3`
+**วันที่**: 2026-08-14 · **commit**: `03b50e6` · **branch**: `auto/phase-2.3`
 
 ### สิ่งที่ทำ
 - **State machine (`38` §9/§10)** — `lib/cases/state-machine.ts` (pure): 8 action (`review`/`accept`/`reject`/`request_more_info`/`return_to_draft` + recycle 3 ตัว) พร้อมตารางกฎ (from/to/reason/readiness), `allowedActionsFrom()` สำหรับ UI, `CASE_ACTION_CAPABILITIES` ต่อ action (`38` §13) และ `caseEventsFor()` ตาม `38` §16/§17.2
