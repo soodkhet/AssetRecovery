@@ -112,6 +112,16 @@ describe('lotCreateSchema', () => {
   it('ชนิดการส่งมอบต้องเป็น 1 ใน 2 แบบของ §6.3', () => {
     expect(lotCreateSchema.safeParse({ ...base, type: 'courier' }).success).toBe(false)
   })
+
+  it('we_deliver ต้องมีที่อยู่จัดส่ง (`44` §7.2) — finance_pickup ไม่ต้อง', () => {
+    const missing = lotCreateSchema.safeParse({ ...base, type: 'we_deliver' })
+    expect(missing.success).toBe(false)
+    expect(missing.error?.issues[0]?.path).toEqual(['deliveryAddr'])
+
+    expect(lotCreateSchema.safeParse({ ...base, type: 'we_deliver', deliveryAddr: '99 ถนนทดสอบ' }).success).toBe(true)
+    expect(lotCreateSchema.safeParse({ ...base, type: 'we_deliver', deliveryAddr: '   ' }).success).toBe(false)
+    expect(lotCreateSchema.safeParse(base).success).toBe(true)
+  })
 })
 
 describe('lotConfirmSchema', () => {

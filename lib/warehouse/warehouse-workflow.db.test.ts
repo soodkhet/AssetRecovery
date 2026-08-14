@@ -484,6 +484,25 @@ suite('Phase 2.13 — สร้างล็อตส่งมอบ (`44` §17 T
     )
   })
 
+  it('ค้นล็อตด้วยเลขล็อต / IMEI / ชื่อลูกหนี้ได้ (`44` §8.4) — IMEI ต้อง exact ห้าม fuzzy (§6.5)', async () => {
+    const { assetId } = await seedInCustody()
+    const lot = await warehouse.createLot(admin, lotInput([assetId], 'finance_pickup'), ctx(admin))
+    const asset = await db().asset.findUniqueOrThrow({
+      where: { id: assetId },
+      select: { imeiContract: true, debtorName: true },
+    })
+    const imei = asset.imeiContract ?? ''
+    const found = async (search: string) =>
+      (await warehouse.listLots(admin, lotListQuerySchema.parse({ search }))).items.map((item) => item.id)
+
+    expect(await found(lot.lotNumber)).toEqual([lot.id])
+    expect(await found(lot.docRef)).toEqual([lot.id])
+    expect(await found(imei)).toEqual([lot.id])
+    expect(await found(asset.debtorName)).toEqual([lot.id])
+    // IMEI ที่พิมพ์ไม่ครบ 15 หลัก = ไม่ตรง (ห้าม prefix match)
+    expect(await found(imei.slice(0, 14))).toEqual([])
+  })
+
   it('เลขล็อต/ใบส่งมอบไม่ซ้ำกันข้ามล็อต (`44` §6.2)', async () => {
     const first = await seedInCustody()
     const second = await seedInCustody()

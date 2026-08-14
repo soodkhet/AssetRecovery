@@ -69,6 +69,31 @@ body {
   display: none;
 }
 
+/* พิมพ์เฉพาะเอกสารในกรอบ `.print-area` (ตัวอย่างใบส่งมอบ `44` §8.4 — mockup เรียก `window.print()`)
+   ฉบับสมบูรณ์ที่ใช้จริงคือ PDF จาก `GET /api/handover-lots/:id/pdf` (`28` §7) — ส่วนนี้ไว้พิมพ์ร่างจากหน้าจอ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
 /* scrollbar บางทั้งระบบตาม mockup */
 ::-webkit-scrollbar {
   width: 6px;

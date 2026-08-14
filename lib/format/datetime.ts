@@ -131,3 +131,25 @@ export function fromInputDate(value: string | null | undefined): Date | null {
   const date = new Date(`${value}T00:00:00${BANGKOK_UTC_OFFSET}`)
   return Number.isNaN(date.getTime()) ? null : date
 }
+
+/**
+ * ค่า `value` ของ `<input type="datetime-local">` — `YYYY-MM-DDTHH:mm` **ค.ศ. เวลาไทย**
+ * (ข้อยกเว้นเดียวกับ `<input type="date">`: browser บังคับรูปแบบนี้ · `03` §6.5)
+ * ใช้กับ "วันนัดรับ/กำหนดส่ง" และ "วันส่งมอบจริง" ของล็อตส่งมอบ (`44` §8.4)
+ */
+export function toInputDateTime(input: DateInput | null | undefined, fallback = ''): string {
+  const parts = input === null || input === undefined ? null : toBangkokParts(input)
+  if (parts === null) return fallback
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}T${pad2(parts.hour)}:${pad2(parts.minute)}`
+}
+
+/**
+ * แปลงค่าจาก `<input type="datetime-local">` กลับเป็น instant UTC — ค่าที่กรอกคือ**เวลาไทย**
+ * (input ชนิดนี้ไม่มีโซนเวลาในตัว ถ้าปล่อยให้ `new Date()` เดาเองจะกลายเป็นเวลาของเครื่องผู้ใช้)
+ */
+export function fromInputDateTime(value: string | null | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(value)) return null
+  const withSeconds = value.length === 16 ? `${value}:00` : value
+  const date = new Date(`${withSeconds}${BANGKOK_UTC_OFFSET}`)
+  return Number.isNaN(date.getTime()) ? null : date
+}

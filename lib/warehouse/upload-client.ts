@@ -3,6 +3,8 @@ import { checkFieldMediaCandidate } from '@/lib/field/media-upload'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { intakePhotoPath } from '@/lib/warehouse/intake-photos'
 import type { IntakePhotoAngle } from '@/lib/warehouse/intake'
+import { checkLotDocumentCandidate, lotDocumentPath } from '@/lib/warehouse/lot-documents'
+import type { LotDocument } from '@/lib/warehouse/lot-status'
 
 /**
  * อัปโหลดรูปหลักฐานตอนรับเข้าคลัง (`44` §8.2 ขั้น 3/3) แล้วคืน **path** ที่จะส่งเข้า
@@ -39,5 +41,29 @@ export async function uploadIntakePhoto(assetId: string, angle: IntakePhotoAngle
   }
 
   // bucket เป็น private ⇒ เก็บ path ไว้ แล้วขอ signed URL ตอนเปิดดู (`signedFileUrl()` ของ 2.5)
+  return uploaded.data.path
+}
+
+/**
+ * อัปโหลดเอกสารแนบของล็อตส่งมอบ (`44` §6.4 · §8.4) แล้วคืน **path** ที่จะส่งเข้า
+ * `PATCH /api/handover-lots/:id/confirm` (`signedDocUrl` / `deliveryProofUrl`)
+ *
+ * ⚠️ `upsert: true` โดยตั้งใจ — path ต่อชนิดเอกสารตายตัวตาม §6.4 (1 ล็อต = 1 ไฟล์ต่อชนิด)
+ *    ธุรการที่แนบไฟล์ผิดต้องแนบทับได้ก่อนกดยืนยัน · หลัง `confirmed` ล็อตแก้ไม่ได้อยู่แล้ว (§10)
+ *    และการยืนยันสิทธิ์จริงอยู่ที่ endpoint confirm เสมอ (`manage:confirm_handover_lot` — DEC-002)
+ */
+export async function uploadLotDocument(lotId: string, document: LotDocument, file: File): Promise<string> {
+  const problem = checkLotDocumentCandidate(document, { name: file.name, type: file.type, size: file.size })
+  if (problem !== null) throw new WarehouseUploadError(problem)
+
+  const path = lotDocumentPath(lotId, document, file.name)
+  const supabase = createSupabaseBrowserClient()
+  const uploaded = await supabase.storage.from(CASE_DOCUMENT_BUCKET).upload(path, file, {
+    contentType: file.type === '' ? undefined : file.type,
+    upsert: true,
+  })
+  if (uploaded.error !== null) {
+    throw new WarehouseUploadError(`อัปโหลด ${file.name} ไม่สำเร็จ — ${uploaded.error.message}`)
+  }
   return uploaded.data.path
 }

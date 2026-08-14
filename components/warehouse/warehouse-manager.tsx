@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Card, EmptyState, PageHeader } from '@/components/ui'
+import { PageHeader } from '@/components/ui'
 import { CustodyTab } from '@/components/warehouse/custody-tab'
+import { HandoverLotModal } from '@/components/warehouse/handover-lot-modal'
 import { IntakeTab } from '@/components/warehouse/intake-tab'
+import { LotTab } from '@/components/warehouse/lot-tab'
 import { EMPTY_TAB_COUNTS, WarehouseTabs, type WarehouseTabCounts } from '@/components/warehouse/warehouse-tabs'
 import { apiPath } from '@/lib/api/contract'
 import { callApi } from '@/lib/api/types'
@@ -13,13 +15,14 @@ import type { UserDto } from '@/lib/users/types'
 import type { AssetTab } from '@/lib/warehouse/asset-status'
 import { statusesOnWarehouseTab, type FilterOption } from '@/lib/warehouse/asset-filters'
 import { statusesInLotTab } from '@/lib/warehouse/lot-status'
-import type { AssetListDto, LotListDto } from '@/lib/warehouse/types'
-import { ASSET_TAB_LABEL } from '@/lib/warehouse/warehouse-ui'
+import type { AssetListDto, AssetListItemDto, LotListDto } from '@/lib/warehouse/types'
 
 /**
  * หน้า "คลังสินค้า" (`/warehouse` — `44` §8 · `06` §7.1.1) — shell 4 แท็บ + badge counts
  *
- * - แท็บ 1–2 (รับเข้าคลัง / ในคลัง) = Phase 2.14 · แท็บ 3–4 (รอส่งมอบ / ส่งมอบแล้ว) = Phase 2.15
+ * - แท็บ 1–2 (รับเข้าคลัง / ในคลัง) = Phase 2.14 · แท็บ 3–4 (รอส่งมอบ / ส่งมอบแล้ว) = Phase 2.15 (`<LotTab>`)
+ * - วงจรครบที่นี่: ติ๊กเครื่องในแท็บ "ในคลัง" → `<HandoverLotModal>` สร้างล็อต → เด้งไปแท็บของล็อตที่เกิด
+ *   (`tab` ของ DTO ตาม §9.3 — `we_deliver` ไป "ส่งมอบแล้ว" ทันที) → แนบเอกสาร → ยืนยัน
  * - badge นับตามตาราง §8.1: 2 แท็บแรกนับ **เครื่อง** (`asset.list`) · 2 แท็บหลังนับ **ล็อต** (`lot.list`)
  *   ทั้งคู่ยิงด้วย `limit=1` แล้วอ่าน `total` — ไม่ต้องมี endpoint นับใหม่ (แนวเดียวกับ KPI ของหน้ารับเคส)
  * - ตัวเลือก dropdown ทีม/พนักงาน/บริษัทมาจาก endpoint master data ซึ่ง **ธุรการคลังอาจไม่มีสิทธิ์เรียก**
@@ -36,6 +39,12 @@ export function WarehouseManager() {
   const [companies, setCompanies] = useState<readonly FilterOption[]>([])
   const [teams, setTeams] = useState<readonly FilterOption[]>([])
   const [agents, setAgents] = useState<readonly FilterOption[]>([])
+  /** ที่อยู่บริษัท (master data) — เติมช่อง "ที่อยู่จัดส่ง" ให้อัตโนมัติเมื่อเลือก `we_deliver` */
+  const [companyAddresses, setCompanyAddresses] = useState<Readonly<Record<string, string | null>>>({})
+
+  /** เครื่องที่ติ๊กมาจากแท็บ "ในคลัง" เพื่อเปิด modal นัดวันส่งมอบ (`null` = ยังไม่เปิด) */
+  const [scheduling, setScheduling] = useState<{ companyId: string; assets: readonly AssetListItemDto[] } | null>(null)
+  const [custodyVersion, setCustodyVersion] = useState(0)
 
   /** ตัวดึงข้อมูล **ไม่มี setState ในตัวเอง** (กฎ `react-hooks/set-state-in-effect`) */
   const fetchCounts = useCallback(async (): Promise<WarehouseTabCounts> => {
@@ -71,6 +80,9 @@ export function WarehouseManager() {
       ])
       if (cancelled) return
       setCompanies((companyResult.data ?? []).map((company) => ({ id: company.id, name: company.name })))
+      setCompanyAddresses(
+        Object.fromEntries((companyResult.data ?? []).map((company) => [company.id, company.address])),
+      )
       setTeams((teamResult.data ?? []).map((team) => ({ id: team.id, name: team.name })))
       setAgents((agentResult.data ?? []).map((agent) => ({ id: agent.id, name: agent.fullName })))
     })()
@@ -93,14 +105,33 @@ export function WarehouseManager() {
       {tab === 'intake' && (
         <IntakeTab companies={companies} teams={teams} agents={agents} onChanged={refreshCounts} />
       )}
-      {tab === 'in_custody' && <CustodyTab companies={companies} onChanged={refreshCounts} />}
+      {tab === 'in_custody' && (
+        <CustodyTab
+          companies={companies}
+          reloadToken={custodyVersion}
+          onScheduleHandover={(companyId, assets) => setScheduling({ companyId, assets })}
+        />
+      )}
       {(tab === 'pending_handover' || tab === 'handed_over') && (
-        <Card>
-          <EmptyState
-            title={`แท็บ “${ASSET_TAB_LABEL[tab]}” กำลังจะมา`}
-            description="หน้าจอล็อตส่งมอบ (นัดวันส่งมอบ / แนบเอกสาร / ยืนยันส่งมอบ) เปิดใช้งานใน Phase 2.15"
-          />
-        </Card>
+        <LotTab tab={tab} companies={companies} onChanged={refreshCounts} />
+      )}
+
+      {scheduling !== null && (
+        <HandoverLotModal
+          key={scheduling.assets.map((asset) => asset.id).join('|')}
+          open
+          companyId={scheduling.companyId}
+          assets={scheduling.assets}
+          defaultDeliveryAddr={companyAddresses[scheduling.companyId] ?? null}
+          onClose={() => setScheduling(null)}
+          onCreated={(lot) => {
+            // เครื่องที่เลือกกลายเป็น `handover_pending` แล้ว ⇒ รีเฟรชแท็บในคลัง + badge
+            setScheduling(null)
+            setCustodyVersion((current) => current + 1)
+            refreshCounts()
+            setTab(lot.tab) // `44` §9.3 — `we_deliver` เด้งไป "ส่งมอบแล้ว" ทันที
+          }}
+        />
       )}
     </div>
   )

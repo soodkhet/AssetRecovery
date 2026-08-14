@@ -56,8 +56,9 @@ import {
  *   breakdown "พร้อมส่ง vs ใน Lot แล้ว" ได้จริง
  * - ติ๊กเลือกได้เฉพาะเครื่องที่ยัง `in_custody` และไม่มีล็อต (`isSelectableForLot()` — เงื่อนไขเดียว
  *   กับด่าน `ASSET_NOT_IN_CUSTODY`/`ASSET_ALREADY_IN_LOT` ของ API)
- * - ปุ่ม "นัดวันส่งมอบ (N)" ⇒ **Modal สร้างล็อตอยู่ใน Phase 2.15** — ที่นี่ส่งเครื่องที่เลือกออกไป
- *   ทาง `onScheduleHandover` ให้ผู้เรียกเป็นคนเปิด modal (ยังไม่ผูก = ปุ่มบอกว่ายังไม่เปิดใช้งาน)
+ * - ปุ่ม "นัดวันส่งมอบ (N)" ส่ง **แถวเครื่องที่เลือก** ออกไปทาง `onScheduleHandover` ให้ผู้เรียกเปิด
+ *   `<HandoverLotModal>` เอง (ส่งทั้งแถวไม่ใช่แค่ id เพื่อให้ modal แสดงรายการได้โดยไม่ต้องยิงซ้ำ)
+ *   — ยังไม่ผูก = ปุ่มบอกว่ายังไม่เปิดใช้งาน
  */
 
 /** โหลดทีเดียวให้ครบ (เพดานของ schema = 200) — การ์ดต้องนับรวมทุกบริษัทจากชุดเดียวกัน */
@@ -65,12 +66,13 @@ const CUSTODY_PAGE_SIZE = 200
 
 export function CustodyTab({
   companies,
-  onChanged,
   onScheduleHandover,
+  reloadToken = 0,
 }: {
   companies: readonly FilterOption[]
-  onChanged: () => void
-  onScheduleHandover?: (companyId: string, assetIds: readonly string[]) => void
+  /** เพิ่มค่าเมื่อมีเหตุจากภายนอกที่ทำให้รายการเปลี่ยน (สร้างล็อตแล้วเครื่องกลายเป็น `handover_pending`) */
+  reloadToken?: number
+  onScheduleHandover?: (companyId: string, assets: readonly AssetListItemDto[]) => void
 }) {
   const { can } = usePermission()
   const { showToast } = useToast()
@@ -115,7 +117,7 @@ export function CustodyTab({
     return () => {
       cancelled = true
     }
-  }, [fetchList, version])
+  }, [fetchList, version, reloadToken])
 
   /** ต้อง memo เพราะ `?? []` สร้าง array ใหม่ทุก render ⇒ `drillRows` จะคำนวณใหม่ไม่จบ */
   const items = useMemo(() => result?.items ?? [], [result])
@@ -179,8 +181,8 @@ export function CustodyTab({
       })
       return
     }
-    onScheduleHandover(openCompanyId, selectedHere)
-    onChanged()
+    const picked = drillRows.filter((row) => selectedHere.includes(row.id))
+    onScheduleHandover(openCompanyId, picked)
   }
 
   // ── หน้าการ์ด (grouped by บริษัท) ─────────────────────────────
