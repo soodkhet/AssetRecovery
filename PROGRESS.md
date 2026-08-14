@@ -1,21 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.1 (schema ชุดแรก 19 ตาราง + 55 enums ลง DB จริงแล้ว) · งานถัดไป 1.2
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.2 (schema ครบ 53 ตาราง + seed master data ลง DB จริงแล้ว) · งานถัดไป 1.3
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.2: Prisma Schema ชุดที่ 2 (Group C–G 32 ตาราง) + Seed
+## 🎯 งานถัดไป — Phase 1.3: Auth & Access Control + Permission Middleware
 
-- ทำตาม `docs/01_PLAN.md` §1.2 — Group C Case (`02` §6, 7 ตาราง) + D Warehouse (§7, 2) + E Finance (§8, 8) + F Accounting (§9, 11) + G Platform (§10, 4) · อ่าน `02` **ผ่าน `docs/00_MAP.md` เท่านั้น** (บรรทัดเลื่อนแล้วหลัง v3.7 — §6 L749, §7 L938, §8 L1018, §9 L1253, §10 L1489, §12 L1632)
-- **ต้องเคาะ `docs/02_OPEN_DECISIONS.md` หมวด A ที่ยังค้าง 4 ข้อก่อนลงมือ** (ทั้งหมดตกอยู่ใน Group C–G): **A2** ตารางกลาง `bank_transaction_allocations` (เงินเข้าก้อนเดียวจ่ายหลายบิล) · **A4** `payout_batch_items.source_expense_id` เป็น nullable + `source_advance_id` + `matched_advance_id` · **A6** แยก `imei`/`serial_no` + partial unique · **B3(recycle)** เพิ่ม `tracking_round` ลง `revenues`/`payout_batch_items` — มติ PO 2026-08-12 ให้ยึด default ที่เสนอไว้ทุกข้อ
-- constraint พิเศษที่ต้องผ่าน **raw SQL**: partial unique `uniq_active_advance_per_payee` · generated column `advances.return_satang` · CHECK `adjustments_one_target` / `bank_tx_one_match` / `bank_tx_status_fk_shape` (DEC-004 separate FK + exactly-one non-null)
-- ⚠️ **ตารางใหม่ทุกตัวต้องเติม `updated_at DEFAULT NOW()`** ด้วย (Prisma ไม่ทำให้ — คัดลอก DO block จาก migration `20260813220500_updated_at_db_default`)
-- Seed (`02` §12): organization 1 · **roles 15** (`is_seed=true`) · VAT 7% · tax profiles 2 · finance_policy_settings 1 · **capabilities 37** ตาม `25` + `13` §6.10 · script `pnpm db:seed` — ต้อง **idempotent** (upsert) รันซ้ำได้
-- อ้างอิง: `02` ผ่าน MAP · `25` (capability list) · `07` §5 (ชื่อ 15 roles) · `13` §6.10
-- LOC ~1,800 · งบ ~290k
-- DoD: migrate + seed รันจริงผ่าน · query เห็น 15 roles + capabilities ครบ · Immutable Rules (`02` §13) ใส่เป็น TODO comment ณ ตารางที่เกี่ยว
+- ทำตาม `docs/01_PLAN.md` §1.3 — Supabase Auth integration (server/client แยก) · `proxy.ts` (Next 16 เปลี่ยนชื่อจาก `middleware.ts`) verify JWT · `requirePermission(action, resource, scope)` + scope resolver (global/team/company/self ตาม `role_group`) + cache role+scope ใน session (ห้าม query DB ทุก request) · session timeout 24 ชม. · guard ห้าม deactivate Superadmin คนสุดท้าย · audit hook login/logout/failed (ใช้ audit core จาก 1.4 — ทำก่อนให้ stub interface) · หน้า Login จาก `reference/login.html` · route guard + `<Can>` / `usePermission()`
+- **ฐานข้อมูลพร้อมแล้ว (1.2)**: 15 roles + 47 capabilities (37 อยู่ใน Functional Matrix) + user seed `superadmin@assetrecovery.local` (`supabase_uid` ยัง NULL — ต้องผูกกับ Supabase Auth user ในงานนี้)
+- สิทธิ์ 3 ระดับ (DEC-009): ไม่มี record = มองไม่เห็น / `view` / `manage` ที่ `role_capabilities.access_level` · Superadmin = manage ทุกอย่าง **ไม่เก็บ record** enforce ที่ middleware · ผูก role ↔ capability ตาม matrix เต็มเป็นงาน 1.6
+- อ้างอิง: `05` ทั้งไฟล์ · `07` §6–§7 · `01` §6.1 · `02` Group A · mockup `login.html`
+- LOC ~1,800 · งบ ~280k
+- DoD: login/logout จริงบน staging · user ไม่ active ถูกปฏิเสธ · endpoint ที่ไม่มีสิทธิ์ตอบ 403 แม้เรียกตรง · test permission middleware ครอบ scope ทั้ง 4 แบบ
 
 ---
 
@@ -32,7 +30,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 1.1 | Prisma schema ชุด 1: enums 54 + Group A+B (19 ตาราง) | ✅ | `35dfb6e` · 55 enums (+due_rule_type A5) · CHECK+DEFERRABLE ผ่าน raw SQL · รายละเอียด: PROGRESS_ARCHIVE |
-| 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ⬜ | PLAN §1.2 · 15 roles + capabilities 37 |
+| 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ✅ | 2026-08-14 · `1eba90e` · 53 ตารางครบ + seed idempotent (15 roles / 47 capabilities) · A1/A2/A4/A6/B3 ปิดครบ → archive |
 | 1.3 | Auth + Permission middleware + Login | ⬜ | PLAN §1.3 · ไฟล์ 05 · session 24 ชม. |
 | 1.4 | Audit core service (immutable) | ⬜ | PLAN §1.4 · ไฟล์ 90 §13 |
 | 1.5 | UI Kit + App Shell + Navigation | ⬜ | PLAN §1.5 · ไฟล์ 04+06 |
