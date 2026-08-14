@@ -1,19 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.12 (Settings FE ชุด 2 — ครบ 13 แท็บของไฟล์ 13) · จบ Phase 1 · งานถัดไป 2.1
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.1 (API Contract Infra ไฟล์ 45 — contract/event registry/envelope/error catalog) · งานถัดไป 2.2
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.1: API Contract Infra (ไฟล์ 45) — 37 endpoints + events + envelope
+## 🎯 งานถัดไป — Phase 2.2: Case Submission BE ชุด 1 (schema + CRUD + เอกสาร)
 
-- ทำตาม `docs/01_PLAN.md` §2.1 — TypeScript route contract จาก `45` §6.1–6.5 (**37 endpoints**) เป็น single source ให้ทั้ง router และ client typing · event registry 28 events (`45` §7) + lint จับชื่อ event นอก registry · response envelope กลาง `{success, data, error{code,message,field}}` + error-code catalog รวมจาก `24` + `38`/`40`/`41`/`44`
-- ⚠️ ชื่อ event ไม่ตรงกันระหว่าง `41` §17.2 / `44` §14 / `45` §7 — **ยึดไฟล์ต้นทางของ module** แล้วบันทึกส่วนต่างลง `docs/PROGRESS_ARCHIVE.md` (ห้ามเงียบ)
-- ของที่มีแล้วต้อง reuse/ต่อยอด (ดู `docs/REUSE_INDEX.md`): envelope ชั่วคราวของ Phase 1 อยู่ที่ `lib/api/types.ts` (`ApiData`/`callApi`/`jsonRequest`) มี TODO ชี้มาที่ task นี้ · `withApiPermission()` + `toModuleErrorResponse()` (`lib/api/http.ts`) · Zod helper กลาง `lib/api/validation.ts`
-- อ้างอิง: `45` ทั้งไฟล์ · `24` · `27` §7 (convention)
-- LOC ~1,000 · งบ ~190k
-- DoD: ทุก endpoint หลังจากนี้ประกาศผ่าน contract นี้ · lint จับ event ชื่อนอก registry ได้จริง
+- ทำตาม `docs/01_PLAN.md` §2.2 — migration `cases`/`case_contacts`/`case_documents`/`edit_history`/`recycle_history` + unique `(finance_company_id, case_ref_normalized)` (normalize = uppercase+trim เท่านั้น)
+- `POST/GET /api/cases` + `GET /:id` — duplicate **2 ชั้น** (DB constraint + API pre-check ที่ตอบพร้อมลิงก์เคสเดิม) + `edit_history` append-only · API ingestion สร้าง draft เสมอแม้ข้อมูลไม่ครบ (ยกเว้น ref ซ้ำ)
+- documents API (slot-based + `file_hash`) + required-doc gate ก่อน `pending_review` (contract_doc + national_id_doc + product_photo ≥1 ≤8) · identity conditional ตามสัญชาติ + phone format filters
+- ของที่มีแล้วต้อง reuse (ดู `docs/REUSE_INDEX.md`): **`withEndpoint()` + `API_CONTRACT` + `apiPath()` + envelope + `ERROR_CATALOG` จาก 2.1** (ห้ามพิมพ์ path เอง/สร้าง envelope เอง) · `emitAudit()` · `SettingsTxClient` · Zod helper กลาง `lib/api/validation.ts`
+- อ้างอิง: `38` ผ่าน MAP §6 (L68–197), §11–12 (L306), §17 (L371) · `02` Group C
+- LOC ~1,950 · งบ ~300k
+- DoD: test duplicate ภายใต้ concurrency 3 ช่องทาง · draft จาก API ที่ข้อมูลไม่ครบสร้างได้
 
 ---
 
@@ -46,7 +47,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 2.1 | API Contract Infra (ไฟล์ 45) — 37 endpoints + events + envelope | ⬜ | PLAN §2.1 |
+| 2.1 | API Contract Infra (ไฟล์ 45) — 39 endpoints + events + envelope | ✅ | 2026-08-14 · `4dba3a3` · contract 39 endpoint + ทะเบียน event 34 + กฎ ESLint + envelope กลาง + error catalog 129 code (เทสต์เทียบ spec จริง) → archive |
 | 2.2 | Case Submission BE ชุด 1 (schema/CRUD/เอกสาร) | ⬜ | PLAN §2.2 · duplicate 2-layer |
 | 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ⬜ | PLAN §2.3 · snapshot ตอน approved |
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ⬜ | PLAN §2.4 · address reuse ไฟล์ 41 |
