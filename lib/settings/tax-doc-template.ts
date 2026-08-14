@@ -51,6 +51,33 @@ export const LEGALLY_REQUIRED_DOCUMENT_FIELDS: readonly string[] = [
   'ภาษีมูลค่าเพิ่ม / ภาษีหัก ณ ที่จ่าย แยกบรรทัดชัดเจน',
 ]
 
+/**
+ * ชื่อไฟล์ที่อ่านออกจากลิงก์รูป — mockup `settings.html` แสดงสถานะเป็น "✓ logo-company.png"
+ * ไม่ใช่ลิงก์ยาว ๆ (`renderSettingsTaxDoc`) · ใช้แสดงผลเท่านั้น ห้ามเอาไปตัดสินใจเชิงธุรกิจ
+ *
+ * คืน `null` เมื่อว่างหรือไม่ใช่ URL ที่ parse ได้ · ลิงก์ที่ไม่มีชื่อไฟล์ (ลงท้ายด้วย `/`) คืน host
+ */
+export function documentAssetName(url: string | null): string | null {
+  const trimmed = url?.trim() ?? ''
+  if (trimmed === '') return null
+
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    return null
+  }
+
+  const segment = parsed.pathname.split('/').filter((part) => part !== '').at(-1)
+  if (segment === undefined) return parsed.host
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    // ลิงก์ที่มี `%` แบบไม่ถูก encode — โชว์ดิบดีกว่าพัง
+    return segment
+  }
+}
+
 const trimOrNull = (value: string | null): string | null => {
   const trimmed = value?.trim() ?? ''
   return trimmed === '' ? null : trimmed

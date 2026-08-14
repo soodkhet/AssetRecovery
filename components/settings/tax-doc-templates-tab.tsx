@@ -19,11 +19,13 @@ import {
   Textarea,
   useToast,
 } from '@/components/ui'
+import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import type { TaxDocLanguage, TaxDocPaperSize, TaxDocumentType } from '@/lib/generated/prisma/enums'
 import { taxDocTemplateUpdateSchema } from '@/lib/settings/schemas'
+import { documentAssetName } from '@/lib/settings/tax-doc-template'
 import type { TaxDocTemplateDto } from '@/lib/settings/types'
 
 /**
@@ -47,6 +49,25 @@ interface FormState {
   paperSize: TaxDocPaperSize
   language: TaxDocLanguage
   reason: string
+}
+
+/**
+ * กล่องสถานะรูปแบบ dashed ตาม mockup `settings.html` (`renderSettingsTaxDoc`) — mockup วาดเป็นช่อง
+ * "อัปโหลด" แต่ `02` เก็บเป็น **URL** (`logo_url` / `signature_image_url`) และ Phase 1 ยังไม่มี
+ * Storage integration ⇒ ช่องกรอกคือ "ลิงก์" ส่วนกล่องนี้ทำหน้าที่บอกสถานะแบบเดียวกับ mockup
+ */
+function AssetStatus({ url, emptyLabel }: { url: string; emptyLabel: string }) {
+  const name = documentAssetName(url)
+  return (
+    <div
+      className={cn(
+        'rounded-lg border border-dashed p-3 text-center text-xs',
+        name === null ? 'border-slate-300 text-slate-400' : 'border-emerald-300 bg-emerald-50/50 text-emerald-700',
+      )}
+    >
+      {name === null ? emptyLabel : `✓ ${name} (ตั้งค่าแล้ว)`}
+    </div>
+  )
 }
 
 function formOf(template: TaxDocTemplateDto): FormState {
@@ -197,30 +218,36 @@ export function TaxDocTemplatesTab() {
               <div className="space-y-4">
                 <Field
                   id={`logo-${template.documentType}`}
-                  label="ลิงก์โลโก้บริษัท"
+                  label="โลโก้บริษัท"
                   error={fieldErrors.logoUrl}
-                  hint="เว้นว่าง = ไม่แสดงโลโก้บนเอกสาร"
+                  hint="วางลิงก์รูป — เว้นว่าง = ไม่แสดงโลโก้บนเอกสาร"
                 >
-                  <Input
-                    id={`logo-${template.documentType}`}
-                    value={form.logoUrl}
-                    onChange={(event) => set(template.documentType, 'logoUrl', event.target.value)}
-                    placeholder="https://…/logo-company.png"
-                  />
+                  <div className="space-y-2">
+                    <AssetStatus url={form.logoUrl} emptyLabel="ยังไม่ได้ตั้งค่าโลโก้ — วางลิงก์รูปด้านล่าง" />
+                    <Input
+                      id={`logo-${template.documentType}`}
+                      value={form.logoUrl}
+                      onChange={(event) => set(template.documentType, 'logoUrl', event.target.value)}
+                      placeholder="https://…/logo-company.png"
+                    />
+                  </div>
                 </Field>
 
                 <Field
                   id={`signature-${template.documentType}`}
-                  label="ลิงก์รูปลายเซ็นผู้มีอำนาจ"
+                  label="ลายเซ็นผู้มีอำนาจ"
                   error={fieldErrors.signatureImageUrl}
-                  hint="เว้นว่าง = เว้นที่ให้เซ็นสด"
+                  hint="วางลิงก์รูป — เว้นว่าง = เว้นที่ให้เซ็นสดบนกระดาษ"
                 >
-                  <Input
-                    id={`signature-${template.documentType}`}
-                    value={form.signatureImageUrl}
-                    onChange={(event) => set(template.documentType, 'signatureImageUrl', event.target.value)}
-                    placeholder="https://…/signature.png"
-                  />
+                  <div className="space-y-2">
+                    <AssetStatus url={form.signatureImageUrl} emptyLabel="ยังไม่ได้ตั้งค่าลายเซ็น — เว้นที่ให้เซ็นสด" />
+                    <Input
+                      id={`signature-${template.documentType}`}
+                      value={form.signatureImageUrl}
+                      onChange={(event) => set(template.documentType, 'signatureImageUrl', event.target.value)}
+                      placeholder="https://…/signature.png"
+                    />
+                  </div>
                 </Field>
 
                 <div className="grid grid-cols-2 gap-3">

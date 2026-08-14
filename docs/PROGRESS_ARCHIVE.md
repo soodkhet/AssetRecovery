@@ -24,9 +24,19 @@
 ### การตัดสินใจระหว่างทาง
 
 - **§6.4 ยึดฟิลด์จาก `02` ไม่ใช่ตารางใน `13`** — `13` §6.4 มี `vat_mode`/`applies_to` แต่ `tax_profiles` ใน `02` ไม่มี (VAT mode เป็นของบริษัทไฟแนนซ์ฝั่งขาย · ชนิดผู้รับเงินสะท้อนผ่าน `filing_form`) เป็นข้อสรุปเดียวกับที่ Phase 1.10 ตัดสินไว้แล้ว จึงไม่เปิด `[[NEEDS_DECISION]]` ใหม่
-- **§6.10 ไม่ทำเป็น grid 37×15 จริง** — mockup `settings.html` (`renderSettingsPermission`) เป็น **ตารางรายแถว + ชิปบทบาท + ปุ่มแก้รายแถว** ไม่ใช่ตารางกว้าง 15 คอลัมน์ · ยึด mockup ตามลำดับความสำคัญของเอกสารด้าน UI แล้วให้ modal เป็นที่ที่มี dropdown 3 ระดับต่อ role ครบตาม DEC-009
+- **§6.10 ไม่ทำเป็น grid 37×15 จริง** (ยืนยันแล้วหลังทวนเอกสาร — มติ PO 2026-08-14 "เลือกแนวที่ตรงเอกสารที่สุด") — `13` §6.10 เขียนไว้ว่า "UI เป็น dropdown 3 ระดับต่อ role ต่อ capability (**ดู mockup `settings.html`** — 37 รายการครบตามไฟล์ 25)" คือชี้ไป mockup ตรง ๆ และ mockup (`renderSettingsPermission`) เป็น **ตารางรายแถว + ชิปบทบาท + ปุ่มแก้รายแถว** ไม่ใช่ตารางกว้าง 15 คอลัมน์ · คำว่า "grid 37×role" ใน `01_PLAN` §1.12 เป็นคำย่อของแผนงาน ไม่ใช่ SSOT ด้าน UI (ลำดับ: `02` → spec module → reference กลาง → mockup) ⇒ ยึด spec+mockup แล้วให้ modal เป็นที่ที่มี dropdown 3 ระดับต่อ role ครบตาม DEC-009
 - **แท็บ §6.11 ไม่มีปุ่มแก้ policy** — `02` ไม่มีตารางเก็บนโยบายนี้ (Phase 1.10 สรุปไว้แล้วว่า endpoint เป็น GET อย่างเดียว) การปลดล็อกรอบเป็น action ของไฟล์ 30 บนหน้างวดบัญชี (Phase 4.1)
-- **mockup แสดง "อัปโหลดโลโก้/ลายเซ็น" เป็นกล่อง upload** แต่ schema เก็บเป็น URL (`logo_url`/`signature_image_url`) และ Storage integration ยังไม่มีใน Phase 1 ⇒ ทำเป็นช่องกรอกลิงก์ไปก่อน (ตัวอัปโหลดจริงต่อยอดได้ตอน Phase 3.5/4.3 ที่ render PDF)
+- **mockup แสดง "อัปโหลดโลโก้/ลายเซ็น" เป็นกล่อง upload** แต่ `02` เก็บเป็น URL (`logo_url`/`signature_image_url`) และ Phase 1 ยังไม่มี Storage integration ⇒ **ยึด `02` เรื่องรูปแบบข้อมูล (ช่องกรอกลิงก์) แต่ยึด mockup เรื่องหน้าตา**: มีกล่อง dashed บอกสถานะ "✓ <ชื่อไฟล์> (ตั้งค่าแล้ว)" / "ยังไม่ได้ตั้งค่า" เหนือช่องกรอกเหมือน mockup · ชื่อไฟล์อ่านด้วย `documentAssetName()` (pure + เทสต์ 5 เคส) · ตัวอัปโหลดจริงต่อยอดตอน Phase 3.5/4.3 ที่ render PDF
+
+### ความครบตาม Test Cases `13` §15 (ตรวจก่อนปิด task)
+
+| Test Case ของ `13` §15 | อยู่ที่ไหน |
+|---|---|
+| เพิ่ม VAT Rate ทับช่วงเดิม → `VAT_RATE_OVERLAP` | `lib/settings/vat.test.ts` (+ FE เตือนสดด้วย pure module ตัวเดียวกัน) |
+| ใช้ Bank File ที่ยังไม่ทดสอบ → `BANK_FILE_NOT_TESTED` | `lib/settings/bank-file.test.ts` |
+| แก้ไขขณะ locked → `PERIOD_LOCKED_DIRECT_EDIT` | `lib/settings/period-lock.test.ts` |
+| WHT ต่ำ/ถึงเกณฑ์ 1,000 บาท (800 → ไม่หัก · 1,200 → หัก) | **Phase 3.1** — สูตร WHT เต็ม (ฐานหัก + threshold gate) เป็นของ `22` §6.9 ห้าม implement ซ้ำนอกโมดูลนั้น (Rule 01) · ที่ 1.12 มีแค่ค่าตั้งต้น `DEFAULT_WHT_MIN_THRESHOLD_SATANG` + เทสต์ว่า = 100,000 สตางค์ |
+| "37 รายการครบตามไฟล์ 25" (`13` §6.10) | `lib/roles/default-matrix.test.ts` (37 รายการ 4 กลุ่ม) + `lib/roles/capability-locks.test.ts` (ล็อก 9 รายการ) |
 
 ### จุดที่คนถัดไปควรรู้
 
