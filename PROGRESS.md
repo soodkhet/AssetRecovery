@@ -37,7 +37,7 @@
 | 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
 | 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
-| 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`__PROVISION_COMMIT__` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
+| 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`680159e` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
 | 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |

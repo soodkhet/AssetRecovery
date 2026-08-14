@@ -7,7 +7,7 @@
 
 ## Phase 1.9 — Users (08) + flow เชิญ/ตั้งรหัสผ่านครั้งแรก (ปิด D1)
 
-**วันที่**: 2026-08-14 · **commit**: `9e505ef` (โมดูลผู้ใช้) + `__PROVISION_COMMIT__` (provisioning ตามมติ PO) · **branch**: `auto/phase-1.9`
+**วันที่**: 2026-08-14 · **commit**: `9e505ef` (โมดูลผู้ใช้) + `680159e` (provisioning ตามมติ PO) · **branch**: `auto/phase-1.9`
 
 ### สิ่งที่ทำ
 
