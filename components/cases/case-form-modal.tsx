@@ -1,7 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
+import { CaseAttachmentsFields, type StagedFile } from '@/components/cases/case-attachments-fields'
+import { CaseContactsFields } from '@/components/cases/case-contacts-fields'
+import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
@@ -14,9 +17,10 @@ import {
 } from '@/lib/cases/case'
 import {
   buildCasePayload,
-  CASE_ERROR_FIELD_MAP,
   caseFormFromDetail,
+  contactsPayload,
   identityFieldOf,
+  mapCaseErrorField,
   readDuplicateCase,
   zodFieldErrors,
   type CaseFormState,
@@ -24,15 +28,16 @@ import {
 import { CaseError } from '@/lib/cases/errors'
 import { caseCreateSchema, caseUpdateSchema } from '@/lib/cases/schemas'
 import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
-import type { CaseDetailDto } from '@/lib/cases/types'
+import type { CaseDetailDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
+import { uploadCaseFile } from '@/lib/cases/upload-client'
 import { parseBahtInput } from '@/lib/format/money'
 
 /**
  * ฟอร์มรับเคสแบบกรอกมือ + แก้ไขเคส (`38` §7.3 · §8 `create_case_manual`/`edit_case`)
  * โครงหน้า/ลำดับ section ตาม mockup `38-case-submission-mockup.html` (`renderCreateCaseModal`)
  *
- * ขอบเขต Phase 2.4 = ข้อมูลสัญญา → ข้อมูลลูกหนี้ → ที่อยู่ 3 ชุด → ข้อมูลทรัพย์
- * (ผู้ติดต่ออื่น / เอกสารแนบ / รูปสินค้า / ทีมที่เสนอ อยู่ Phase 2.5 ตาม `01_PLAN` §2.5)
+ * ลำดับ section ตาม §7.3: ข้อมูลสัญญา → ข้อมูลลูกหนี้ → ที่อยู่ 3 ชุด → ผู้ติดต่ออื่น →
+ * ข้อมูลทรัพย์ → เอกสารแนบ → รูปสินค้า → **ทีมที่เสนอ (ท้ายสุด)**
  *
  * กติกาที่บังคับในฟอร์มนี้
  * - validate ด้วย **Zod ชุดเดียวกับ backend** (`caseCreateSchema`/`caseUpdateSchema`) ห้าม validate ซ้ำเอง
@@ -40,6 +45,10 @@ import { parseBahtInput } from '@/lib/format/money'
  *   ผ่าน `CaseError` ตัวเดียวกับ API (ข้อความเดียวกันทั้งสองฝั่ง)
  * - ช่องเงินกรอกเป็น **บาท** แล้วแปลงเป็น **สตางค์** ด้วย `parseBahtInput()` ก่อนส่ง (Rule 01)
  * - `case_ref` ซ้ำ = hard block พร้อมข้อมูลเคสเดิม (`38` §7.3/§11) — ไม่ใช่ warning
+ * - ไฟล์แนบถูก **อัปโหลดหลังบันทึกเคสสำเร็จ** (เคสใหม่ยังไม่มี `case_id` ให้ผูกไฟล์) — เคสถูกบันทึกแล้ว
+ *   แม้ไฟล์บางไฟล์อัปโหลดไม่ผ่าน จึงรายงานเป็น warning ไม่ใช่ล้มทั้งการบันทึก
+ * - กล่องทีมที่เสนอบนฟอร์มเป็น **ข้อมูลประกอบ** — การยืนยัน/เปลี่ยนทีมจริงเกิดตอน `accept`
+ *   ผ่าน Review Modal เท่านั้น (`38` §7.5 "ปุ่มเปลี่ยนทีม active เฉพาะตอน pending_review")
  */
 
 const NATIONALITY_HINT = 'สัญชาติกำหนดว่าใช้เลขบัตรประชาชน (ไทย) หรือเลข Passport/เอกสารอื่น (`38` §6.1.1)'
@@ -70,6 +79,8 @@ export function CaseFormModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<ApiCallError | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [staged, setStaged] = useState<StagedFile[]>([])
+  const [teamOptions, setTeamOptions] = useState<readonly CaseTeamOptionDto[]>([])
 
   // เปลี่ยนเป้าหมายของ modal (สร้าง ↔ แก้ไขเคสอื่น) = โหลดค่าเริ่มต้นใหม่ระหว่าง render
   // (ไม่ใช้ `useEffect` — กฎ `react-hooks/set-state-in-effect` ใน REUSE_INDEX)
@@ -84,6 +95,21 @@ export function CaseFormModal({
   const isEdit = editing !== null
   const identityKind = identityFieldOf(form.debtorNationality)
   const duplicate = readDuplicateCase(formError)
+
+  // ตัวเลือกทีม + ค่าใช้จ่ายของแต่ละทีม (`38` §7.4) — โหลดครั้งเดียวตอนเปิดฟอร์ม
+  // การจับคู่จังหวัดทำฝั่ง client ด้วย pure ตัวเดียวกับ API จึงอัปเดตทันทีที่เปลี่ยนจังหวัด
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void (async () => {
+      const response = await callApi<CaseTeamOptionsDto>(apiPath('case.teamOptions'))
+      if (cancelled) return
+      setTeamOptions(response.data?.teams ?? [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   function patch(next: Partial<CaseFormState>): void {
     setForm((current) => ({ ...current, ...next }))
@@ -113,11 +139,12 @@ export function CaseFormModal({
         nationalId: form.debtorNationalId,
         phoneMobile: form.debtorPhoneMobile,
         phoneWork: form.debtorPhoneWork,
+        contactPhones: contactsPayload(form.contacts).map((contact) => contact.contactPhone),
       })
     } catch (error) {
       if (!(error instanceof CaseError)) throw error
       const field = typeof error.context?.field === 'string' ? error.context.field : '_'
-      setFieldErrors({ [CASE_ERROR_FIELD_MAP[field] ?? '_']: error.userMessage })
+      setFieldErrors({ [mapCaseErrorField(field)]: error.userMessage })
       return
     }
 
@@ -137,15 +164,54 @@ export function CaseFormModal({
         return
       }
 
+      const saved = await uploadStagedFiles(result.data)
+
       showToast({
         tone: 'success',
         title: isEdit ? 'บันทึกการแก้ไขเคสแล้ว' : 'สร้างเคสร่างแล้ว',
-        description: `${result.data.caseRef} · ${result.data.financeCompanyName}`,
+        description: `${saved.caseRef} · ${saved.financeCompanyName}`,
       })
-      onSaved(result.data)
+      setStaged([])
+      onSaved(saved)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  /**
+   * อัปโหลดไฟล์ที่ค้างอยู่บนฟอร์มหลังเคสถูกบันทึกแล้ว — ไฟล์ที่ล้มเหลวรายงานเป็น toast เตือน
+   * (เคสถูกบันทึกไปแล้ว การล้มของไฟล์ต้องไม่ทำให้ข้อมูลเคสหาย) · คืน detail ล่าสุดที่ API ส่งกลับมา
+   */
+  async function uploadStagedFiles(saved: CaseDetailDto): Promise<CaseDetailDto> {
+    if (staged.length === 0) return saved
+
+    let latest = saved
+    const failed: string[] = []
+    for (const item of staged) {
+      try {
+        const payload = await uploadCaseFile(saved.id, item.slot, item.file)
+        const response = await callApi<CaseDetailDto>(
+          apiPath('case.uploadDocument', { id: saved.id }),
+          jsonRequest('POST', payload),
+        )
+        if (response.error !== undefined || response.data === undefined) {
+          failed.push(`${item.file.name} (${response.error?.message ?? 'บันทึกไฟล์ไม่สำเร็จ'})`)
+          continue
+        }
+        latest = response.data
+      } catch (error) {
+        failed.push(`${item.file.name} (${error instanceof Error ? error.message : 'อัปโหลดไม่สำเร็จ'})`)
+      }
+    }
+
+    if (failed.length > 0) {
+      showToast({
+        tone: 'warning',
+        title: `อัปโหลดไฟล์ไม่สำเร็จ ${failed.length} ไฟล์`,
+        description: `${failed.join(' · ')} — เปิดเคสแล้วแนบใหม่ได้`,
+      })
+    }
+    return latest
   }
 
   return (
@@ -406,6 +472,12 @@ export function CaseFormModal({
           </div>
         </section>
 
+        <CaseContactsFields
+          contacts={form.contacts}
+          errors={fieldErrors}
+          onChange={(next) => patch({ contacts: next })}
+        />
+
         <section>
           <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">ข้อมูลทรัพย์/สินค้า</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -468,6 +540,14 @@ export function CaseFormModal({
           </div>
         </section>
 
+        <CaseAttachmentsFields documents={editing?.documents ?? []} staged={staged} onChange={setStaged} />
+
+        <TeamSuggestionPanel
+          province={form.addressCurrent.province}
+          teams={teamOptions}
+          selectedTeamId={editing?.assignedTeamId ?? editing?.suggestedTeamId ?? null}
+        />
+
         {isEdit && (
           <section>
             <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">
@@ -489,8 +569,8 @@ export function CaseFormModal({
         )}
 
         <p className="text-[11px] text-slate-400">
-          ผู้ติดต่ออื่น · เอกสารแนบ · รูปสินค้า · ทีมที่ระบบเสนอ อยู่ในชุดงานถัดไป (Phase 2.5) —
-          เคสที่บันทึกจากหน้านี้เป็นสถานะ “ร่าง” จนกว่าจะแนบเอกสารครบและส่งตรวจสอบ
+          เคสที่บันทึกจากหน้านี้เป็นสถานะ “ร่าง” จนกว่าจะแนบเอกสารครบแล้วกด “ส่งตรวจสอบ” ที่รายการเคส ·
+          การยืนยัน/เปลี่ยนทีมทำตอนผู้พิจารณากด “รับเคส & ยืนยันทีม”
         </p>
       </div>
     </Modal>
