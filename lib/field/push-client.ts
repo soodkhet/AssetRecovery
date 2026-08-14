@@ -67,14 +67,15 @@ export function shouldOfferPushPrompt(
  * VAPID public key (base64url) → `Uint8Array` สำหรับ `pushManager.subscribe()`
  * คืน `null` เมื่อคีย์ว่าง/ไม่ถูกต้อง — หน้าจอต้องข้ามการสมัครไปเงียบ ๆ (in-app ยังทำงาน)
  */
-export function urlBase64ToUint8Array(base64Url: string): Uint8Array | null {
+export function urlBase64ToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> | null {
   const trimmed = base64Url.trim()
   if (trimmed === '') return null
   const padding = '='.repeat((4 - (trimmed.length % 4)) % 4)
   const base64 = (trimmed + padding).replace(/-/g, '+').replace(/_/g, '/')
   try {
     const raw = atob(base64)
-    const output = new Uint8Array(raw.length)
+    // ระบุ `ArrayBuffer` ชัด ๆ เพราะ `pushManager.subscribe()` ไม่รับ `SharedArrayBuffer`
+    const output = new Uint8Array(new ArrayBuffer(raw.length))
     for (let index = 0; index < raw.length; index += 1) output[index] = raw.charCodeAt(index)
     return output
   } catch {

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Noto_Sans_Thai } from 'next/font/google'
 import { APP_NAME } from '@/lib/constants'
 import './globals.css'
@@ -13,6 +13,14 @@ const notoSansThai = Noto_Sans_Thai({ subsets: ['thai'], variable: '--font-noto-
 export const metadata: Metadata = {
   title: APP_NAME,
   description: 'Operations Platform สำหรับธุรกิจรับจ้างติดตามทรัพย์คืนจากลูกหนี้ให้บริษัทไฟแนนซ์',
+  // PWA ของงานภาคสนาม (`41` §15) — iOS ต้อง "เพิ่มลงหน้าจอโฮม" ก่อนถึงจะได้ Web Push
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: 'default' },
+  icons: { icon: '/icons/app-icon.svg', apple: '/icons/app-icon.svg' },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#0f172a',
 }
 
 export default function RootLayout({

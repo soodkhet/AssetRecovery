@@ -20,6 +20,8 @@ import {
   IconUser,
   IconWallet,
 } from '@/components/field/field-icons'
+import { NotificationBell } from '@/components/field/notification-bell'
+import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { ToastProvider } from '@/components/ui'
 import { LOGIN_PATH } from '@/lib/auth/constants'
@@ -286,14 +288,17 @@ function TopBar({ title, onOpenMenu }: { title: string; onOpenMenu: () => void }
           </span>
           <span className="text-[15px] font-extrabold text-slate-900">AssetRecovery</span>
         </Link>
-        <button
-          type="button"
-          onClick={onOpenMenu}
-          aria-label="เปิดเมนู"
-          className="focus-ring rounded-lg p-2 text-slate-700 hover:bg-slate-100"
-        >
-          <IconMenu className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            aria-label="เปิดเมนู"
+            className="focus-ring rounded-lg p-2 text-slate-700 hover:bg-slate-100"
+          >
+            <IconMenu className="h-5 w-5" />
+          </button>
+        </div>
       </div>
       <div className="mx-auto max-w-[560px] px-4 pt-1 pb-2">
         <h1 className="text-[20px] font-extrabold text-slate-900">{title}</h1>
@@ -319,7 +324,12 @@ function ShellFrame({ session, children }: { session: ClientSession; children: R
       <div className="lg:ml-[260px]">
         <TopBar title={title} onOpenMenu={() => setMenuOpen(true)} />
         <main className="mx-auto w-full max-w-[560px] px-4 pt-3 pb-28 lg:max-w-[960px] lg:px-8 lg:pt-8 lg:pb-12">
-          <h1 className="mb-4 hidden text-2xl font-extrabold text-slate-900 lg:block">{title}</h1>
+          <div className="mb-4 hidden items-center justify-between lg:flex">
+            <h1 className="text-2xl font-extrabold text-slate-900">{title}</h1>
+            <NotificationBell />
+          </div>
+          {/* แบนเนอร์ A2HS / ปุ่มเปิดการแจ้งเตือน (`41` §15) — โผล่เฉพาะอุปกรณ์ที่เข้าเงื่อนไข */}
+          <FieldPwaProvider />
           {children}
         </main>
       </div>
