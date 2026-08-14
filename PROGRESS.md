@@ -1,19 +1,18 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.2 (schema ครบ 53 ตาราง + seed master data ลง DB จริงแล้ว) · งานถัดไป 1.3
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.3 (Auth + Permission middleware + หน้า Login) · งานถัดไป 1.4
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.3: Auth & Access Control + Permission Middleware
+## 🎯 งานถัดไป — Phase 1.4: Audit Core Service (immutable)
 
-- ทำตาม `docs/01_PLAN.md` §1.3 — Supabase Auth integration (server/client แยก) · `proxy.ts` (Next 16 เปลี่ยนชื่อจาก `middleware.ts`) verify JWT · `requirePermission(action, resource, scope)` + scope resolver (global/team/company/self ตาม `role_group`) + cache role+scope ใน session (ห้าม query DB ทุก request) · session timeout 24 ชม. · guard ห้าม deactivate Superadmin คนสุดท้าย · audit hook login/logout/failed (ใช้ audit core จาก 1.4 — ทำก่อนให้ stub interface) · หน้า Login จาก `reference/login.html` · route guard + `<Can>` / `usePermission()`
-- **ฐานข้อมูลพร้อมแล้ว (1.2)**: 15 roles + 47 capabilities (37 อยู่ใน Functional Matrix) + user seed `superadmin@assetrecovery.local` (`supabase_uid` ยัง NULL — ต้องผูกกับ Supabase Auth user ในงานนี้)
-- สิทธิ์ 3 ระดับ (DEC-009): ไม่มี record = มองไม่เห็น / `view` / `manage` ที่ `role_capabilities.access_level` · Superadmin = manage ทุกอย่าง **ไม่เก็บ record** enforce ที่ middleware · ผูก role ↔ capability ตาม matrix เต็มเป็นงาน 1.6
-- อ้างอิง: `05` ทั้งไฟล์ · `07` §6–§7 · `01` §6.1 · `02` Group A · mockup `login.html`
-- LOC ~1,800 · งบ ~280k
-- DoD: login/logout จริงบน staging · user ไม่ active ถูกปฏิเสธ · endpoint ที่ไม่มีสิทธิ์ตอบ 403 แม้เรียกตรง · test permission middleware ครอบ scope ทั้ง 4 แบบ
+- ทำตาม `docs/01_PLAN.md` §1.4 — ต่อยอด `lib/audit/audit.ts` ที่เกิดใน 1.3 (ห้ามสร้าง helper ใหม่ซ้ำ): validator บังคับ `reason` เมื่อกระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period · before/after diff util · immutable guard **ระดับ DB** (trigger/rule ห้าม UPDATE/DELETE `audit_logs` แม้ Superadmin) + ระดับ service · ทุก module หลังจากนี้เรียกผ่าน helper นี้เท่านั้น
+- **มีอยู่แล้วจาก 1.3**: `emitAudit()` เขียนครบ 9 fields + ip/user-agent · ใช้จริงแล้วที่ login/logout/failed login (`action = login/logout` + ผลลัพธ์ใน `after` เพราะ `02` §3 ไม่มี enum `login_failed`)
+- อ้างอิง: `90` §6.1, §13, §16–17 · `02` Group G (L1470)
+- LOC ~1,000 · งบ ~180k
+- DoD: test พิสูจน์ UPDATE/DELETE audit ถูก reject ที่ DB · mutation ตัวอย่างผ่าน helper แล้วมี record ครบ 9 fields
 
 ---
 
@@ -31,7 +30,7 @@
 |---|---|---|---|
 | 1.1 | Prisma schema ชุด 1: enums 54 + Group A+B (19 ตาราง) | ✅ | `35dfb6e` · 55 enums (+due_rule_type A5) · CHECK+DEFERRABLE ผ่าน raw SQL · รายละเอียด: PROGRESS_ARCHIVE |
 | 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ✅ | 2026-08-14 · `1eba90e` · 53 ตารางครบ + seed idempotent (15 roles / 47 capabilities) · A1/A2/A4/A6/B3 ปิดครบ → archive |
-| 1.3 | Auth + Permission middleware + Login | ⬜ | PLAN §1.3 · ไฟล์ 05 · session 24 ชม. |
+| 1.3 | Auth + Permission middleware + Login | ✅ | 2026-08-14 · `edfdd9b` · requirePermission + scope 4 แบบ + session 24 ชม. + หน้า Login · ⚠️ ต้องรัน `pnpm auth:link-superadmin` 1 ครั้งต่อ environment → archive |
 | 1.4 | Audit core service (immutable) | ⬜ | PLAN §1.4 · ไฟล์ 90 §13 |
 | 1.5 | UI Kit + App Shell + Navigation | ⬜ | PLAN §1.5 · ไฟล์ 04+06 |
 | 1.6 | Roles & Permissions module | ⬜ | PLAN §1.6 · ไฟล์ 07+25 |
