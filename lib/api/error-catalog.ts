@@ -87,6 +87,9 @@ export const ERROR_CATALOG = {
 
   // ── 24 §6.5 Payout/Payee ───────────────────────────────────────────────
   UNVERIFIED_PAYEE_IN_PAYOUT: { status: 400, severity: 'reject', source: '24 §6.5' },
+  PAYEE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.5' },
+  PAYEE_ALREADY_EXISTS: { status: 400, severity: 'reject', source: '24 §6.5' },
+  PAYEE_ID_DOCUMENT_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.5' },
 
   // ── 24 §6.6 Revenue/Billing ────────────────────────────────────────────
   NO_REVENUE_TO_BILL: { status: 400, severity: 'reject', source: '24 §6.6' },
