@@ -18,7 +18,8 @@ import {
   withWeekdayPrefix,
   type CalendarMonth,
 } from '@/lib/field/calendar'
-import { teammatesInProvince } from '@/lib/field/field-ui'
+import { casesScheduledOn, teammatesInProvince } from '@/lib/field/field-ui'
+import { nextScheduleOrder } from '@/lib/field/schedule'
 import type { FieldActionResultDto, FieldCaseDetailDto, FieldCaseListItemDto, FieldCaseListResultDto } from '@/lib/field/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 
@@ -89,14 +90,12 @@ export function CalendarPickerModal({
   )
 
   const casesOnPickedDate = useMemo(
-    () =>
-      pickedDate === null
-        ? []
-        : items
-            .filter((item) => item.status === 'scheduled' && item.scheduleDate === pickedDate)
-            .sort((a, b) => (a.scheduleOrder ?? 0) - (b.scheduleOrder ?? 0)),
+    () => (pickedDate === null ? [] : casesScheduledOn(items, pickedDate)),
     [items, pickedDate],
   )
+
+  /** ลำดับที่เคสนี้จะได้ = ต่อท้ายเสมอ — ใช้ฟังก์ชันเดียวกับที่ BE คิด (`41` §8) */
+  const nextOrder = nextScheduleOrder(casesOnPickedDate.map((item) => item.scheduleOrder))
 
   const teammates = useMemo(
     () => teammatesInProvince(teamItems, target?.province ?? null, target?.agentId ?? ''),
@@ -249,7 +248,7 @@ export function CalendarPickerModal({
 
             <p className="mb-3 text-xs text-slate-500">
               ยืนยันจัดเคส <strong>{target?.debtorName ?? '—'}</strong> ลงวันนี้
-              {casesOnPickedDate.length > 0 && <> (จะเป็นลำดับที่ {casesOnPickedDate.length + 1})</>}?
+              {casesOnPickedDate.length > 0 && <> (จะเป็นลำดับที่ {nextOrder})</>}?
             </p>
 
             <div className="flex gap-2">

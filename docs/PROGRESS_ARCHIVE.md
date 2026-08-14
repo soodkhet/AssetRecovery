@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 2.10 — Field Tracker Frontend ชุดที่ 1 (shell + case detail + งานรายวัน + ปฏิทิน)
+
+**วันที่**: 2026-08-14 · **commit**: `97afe2e` + `4d53196` + (docs) · **branch**: `auto/phase-2.10`
+
+### สิ่งที่ทำ
+- **ชุด 1 — pure logic + test (31 เคส)**
+  - `lib/field/field-nav.ts` = SSOT ของเมนูไฟล์ 41 §5 (7 เมนู · bottom nav 4 ปุ่มเรียงตาม flow · 2 หมวด งานของฉัน/การเงิน · badge key + โทนสี · `activeFieldNavId()` จับด้วย href ยาวสุด)
+  - `lib/field/field-ui.ts` = ป้ายสถานะ 7 ตัว + กลุ่มสี `04` §8.1 · `fieldCardAction()` (จุดเดียวที่ตัดสินปุ่มบนการ์ด) · `groupCasesByDate()`/`splitTrackingCases()`/`groupCasesByAgent()`/`casesScheduledOn()` · `reorderCaseIds()` · `teammatesInProvince()` · deep link `tel:`/LINE/Facebook/Maps + `formatFieldAddress()`/`assetSummary()`
+  - `lib/field/calendar.ts` = grid ปฏิทินเอง (`41` §7.4) — `buildMonthGrid()`/`shiftMonth()`/`monthLabelTH()` (พ.ศ.)/`countCasesByDate()`/`withWeekdayPrefix()` · รับ `todayIso` เข้ามาแทนการอ่านนาฬิกาเอง
+- **ชุด 2 — หน้าจอ**
+  - `<FieldShell>`: mobile top bar (โลโก้กลับหน้าแรก + แฮมเบอร์เกอร์) + bottom nav 4 ปุ่มพร้อม badge (แดง/ม่วง) · desktop sidebar **260px `position: fixed`** + `margin-left:260px` + ข้อมูลผู้ใช้/ออกจากระบบล่างสุด
+  - `<FieldCasesProvider>`/`useFieldCases()` = badge store + คลังเคส (โหลด `field.caseList?view=own` ครั้งเดียว ทุกแท็บกรองจากชุดเดียวกัน · `reload()` หลัง mutation)
+  - `<FieldCaseDetailBody>`/`<FieldCaseDetailModal>` (`41` §7.7 ครบทุกบล็อก: สรุปเคส+รอบติดตาม · กล่องคำขอเปลี่ยนผู้รับผิดชอบ · กล่องคอมมิชชั่นเฉพาะ `pending_accept` · เลขบัตร/มูลหนี้/ทรัพย์+IMEI · 3 ที่อยู่ปุ่ม Maps แยกอิสระ · ช่องทางติดต่อกดโทร/LINE/FB · ผู้ติดต่ออื่น · เอกสาร/รูปสินค้าเปิดดูจริง · เช็คอิน · แบนเนอร์เหตุผลตีกลับ · ปุ่มรับงาน)
+  - แท็บรอรับงาน (§7.2 + Agent Accept ของไฟล์ 40) · แท็บรับงานแล้ว toggle ของฉัน/ทีม (§7.3 — ทีมเป็นคอลัมน์ต่อคน **read-only**) · แท็บกำลังติดตาม (§7.5 — บล็อกส้ม `needs_revision` บนสุด + group ตามวัน + เลขลำดับ + ปุ่ม 3 สถานะ)
+  - `<CalendarPickerModal>` (§7.4): grid เอง + badge ต่อวัน + วันย้อนหลัง disabled + popup ยืนยัน (ลิสต์เคสเดิม + "จะเป็นลำดับที่ N" จาก `nextScheduleOrder()` ตัวเดียวกับ BE) + banner ม่วงเพื่อนร่วมทีมจังหวัดเดียวกัน + รายละเอียดเคสเต็มใต้ปฏิทิน
+  - หน้า `/field` + `/field/{pending,accepted,tracking,closed,expenses,income}` · layout guard `perform_field_work` (ไม่มีสิทธิ์ = เด้งแดชบอร์ด กันวนซ้ำ)
+
+### การตัดสินใจระหว่างทาง
+- **ไม่ reuse `<CaseDetailModal>` ของไฟล์ 38 ตามที่แผนเขียนไว้ — เพราะติดเรื่องสิทธิ์**: modal ตัวนั้นโหลดเอง 2 endpoint (`case.detail` + `case.teamOptions`) ที่บังคับ `CASE_READ_CAPABILITIES` ส่วนพนักงานภาคสนามถือ `perform_field_work` ตัวเดียว (`41` §13) ⇒ ได้ 403 ทุกครั้ง · ฝั่ง BE (2.8) ทำ `GET /api/field/cases/:id` + `FieldCaseDetailDto` ไว้ให้อยู่แล้ว (มีคอมมิชชั่น/เช็คอิน/คำขอเปลี่ยนผู้รับผิดชอบ ซึ่ง DTO ของไฟล์ 38 ไม่มี) จึงทำ `<FieldCaseDetailBody>` เป็น component เดียวของไฟล์ 41 แล้ว**ใช้ซ้ำ 3 ที่ตาม §7.7** · ส่วนที่ reuse ได้จริงคือ `<FileViewerModal>` — ขยายให้รับ `ViewableFile` (โครงร่วมขั้นต่ำ) แทนการผูกกับ `CaseDocumentDto`
+- **ทุกแท็บอ่านจากคลังเดียวของ shell** แทนที่จะให้แต่ละแท็บยิง `field.caseList` ของตัวเอง — badge กับรายการจึงไม่มีทางไม่ตรงกัน และสลับแท็บไม่ต้องรอเน็ต (มุมมองทีมยังยิงแยกเพราะเป็นคนละ scope)
+- **สลับลำดับมีทั้งลากและปุ่มลูกศร**: HTML5 drag ใช้ไม่ได้บน iOS Safari — ทั้งสองทางเรียก `reorderCaseIds()` แล้วยิง `field.reorderCases` ชุดเดียวกัน (logic เดียวกัน 100% ตาม §11 ต่างแค่วิธีสั่ง)
+- **วันที่บนจอผ่าน `fmtDate` เสมอ** — `withWeekdayPrefix()` เติมแค่ชื่อวัน ("วันศ 14/08/2569") ไม่ format วันที่เอง (mockup เขียน "14 ส.ค. 2569" แต่ Rule 01 บังคับ `DD/MM/YYYY`)
+- **ปุ่มของเฟสถัดไปบอกตรง ๆ ว่ายังไม่เปิด** (toast "อยู่ระหว่างพัฒนา Phase 2.11") แทนการซ่อนปุ่ม — โครงการ์ด/แท็บจึงตรง mockup ตั้งแต่รอบนี้ และไม่มีปุ่มหลอกที่กดแล้วเงียบ
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ (94 ไฟล์ / 1,228 เคส) · `pnpm build` ✅ (route `/field/*` ออกครบ 7 หน้า)
+
+### จุดที่คนถัดไปควรรู้
+- **Phase 2.11 ต่อ**: ฟอร์มปิดงาน 3 ส่วน + Pending Reassignment flow — จุดเสียบคือ `notYet()` ใน `components/field/tracking-tab.tsx` และ prop `onRespondReassignment` ของ `<FieldCaseDetailBody>` (กล่องม่วงพร้อมแล้ว เหลือฟอร์มตอบ)
+- **Phase 2.12 ต่อ**: `<FieldComingSoon>` 4 หน้า (`/field`, `/field/closed`, `/field/expenses`, `/field/income`) — เมนู/badge/shell พร้อมใช้แล้ว แค่เปลี่ยนเนื้อหาในหน้า
+- กฎ lint `react-hooks/set-state-in-effect` ห้าม `setState` ตรง ๆ ใน effect (รวมถึงเรียกผ่าน `useCallback`) — ใช้ async IIFE + `key` remount (บันทึกไว้ในกับดักของ `REUSE_INDEX` แล้ว)
+- ยังไม่ได้ทดสอบบนมือถือจริง/staging (ต้อง push โดยคน) — จุดที่ควรดูก่อน: bottom nav กับ safe area ของ iOS, การลากการ์ดบนมือถือ (ต้องใช้ปุ่มลูกศร), sidebar 260px บนจอ ≥1024px
+
+---
+
 ## Phase 2.9 — Field Tracker Backend ชุดที่ 2 (เงิน + ตีกลับ + push — ไฟล์ 41)
 
 **วันที่**: 2026-08-14 · **commit**: `dcb0fc3`+`f19cad0`+`71d8b8d`+`6af1d76` · **branch**: `auto/phase-2.9`

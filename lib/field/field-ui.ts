@@ -158,6 +158,16 @@ export function splitTrackingCases(items: readonly FieldCaseListItemDto[]): Trac
   }
 }
 
+/**
+ * เคสที่จัดไว้ในวันนั้นแล้ว เรียงตามลำดับ (`41` §7.4 popup ยืนยันวัน)
+ * ใช้ทั้งแสดงรายการเดิมใน popup และคิด "จะเป็นลำดับที่เท่าไหร่" ด้วย `nextScheduleOrder()` ตัวเดียวกับ BE
+ */
+export function casesScheduledOn(items: readonly FieldCaseListItemDto[], date: string): FieldCaseListItemDto[] {
+  return items
+    .filter((item) => item.status === 'scheduled' && item.scheduleDate === date)
+    .sort((a, b) => (a.scheduleOrder ?? 0) - (b.scheduleOrder ?? 0))
+}
+
 export interface FieldAgentColumn {
   agentId: string
   agentName: string

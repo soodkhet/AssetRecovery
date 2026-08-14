@@ -3,6 +3,7 @@ import { FIELD_STATUSES } from '@/lib/field/field-status'
 import {
   FIELD_STATUS_LABEL,
   assetSummary,
+  casesScheduledOn,
   facebookHref,
   fieldCardAction,
   fieldStatusBadgeGroup,
@@ -16,6 +17,7 @@ import {
   teammatesInProvince,
   telHref,
 } from '@/lib/field/field-ui'
+import { nextScheduleOrder } from '@/lib/field/schedule'
 import type { FieldCaseListItemDto } from '@/lib/field/types'
 
 function item(overrides: Partial<FieldCaseListItemDto> = {}): FieldCaseListItemDto {
@@ -137,6 +139,27 @@ describe('จัดกลุ่มรายการ (`41` §7.3/§7.5)', () => 
     )
     expect(columns.map((column) => column.agentId)).toEqual(['b', 'a'])
     expect(columns[0]?.items).toHaveLength(2)
+  })
+})
+
+describe('popup ยืนยันวันของ Calendar Picker (`41` §7.4 · §20)', () => {
+  const items = [
+    item({ caseId: 'c1', scheduleDate: '2026-08-20', scheduleOrder: 2 }),
+    item({ caseId: 'c2', scheduleDate: '2026-08-20', scheduleOrder: 1 }),
+    item({ caseId: 'c3', scheduleDate: '2026-08-21', scheduleOrder: 1 }),
+    item({ caseId: 'c4', status: 'accepted_unscheduled', scheduleDate: null, scheduleOrder: null }),
+  ]
+
+  it('วันว่าง = ไม่มีลิสต์เคส และลำดับใหม่ = 1', () => {
+    const existing = casesScheduledOn(items, '2026-08-25')
+    expect(existing).toEqual([])
+    expect(nextScheduleOrder(existing.map((entry) => entry.scheduleOrder))).toBe(1)
+  })
+
+  it('วันที่มีเคสอยู่ 2 รายการ = แสดงลิสต์ตามลำดับ และเคสใหม่ได้ลำดับ 3', () => {
+    const existing = casesScheduledOn(items, '2026-08-20')
+    expect(existing.map((entry) => entry.caseId)).toEqual(['c2', 'c1'])
+    expect(nextScheduleOrder(existing.map((entry) => entry.scheduleOrder))).toBe(3)
   })
 })
 
