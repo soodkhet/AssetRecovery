@@ -60,6 +60,21 @@ function toValues(dto: FinancePolicyDto): FinancePolicyValues {
   }
 }
 
+/** ค่าเริ่มต้นเมื่อยังไม่เคยตั้งค่า — ต้องตรงกับ `@default` ใน `schema.prisma` */
+const DEFAULT_POLICY: FinancePolicyValues = {
+  advanceMaxAmountPerRequestSatang: null,
+  requirePayeeIdDocument: false,
+  arAgingBuckets: [...DEFAULT_AR_AGING_BUCKETS],
+  writeOffToleranceSatang: DEFAULT_WRITE_OFF_TOLERANCE_SATANG,
+  advanceUnclearedToEmployeeReceivable: true,
+}
+
+/**
+ * ⚠️ **GET ต้องไม่เขียน DB**: endpoint นี้เปิดให้สิทธิ์ `view` — ถ้าอ่านแล้วสร้างแถวให้เอง
+ * เท่ากับผู้ที่มีสิทธิ์ดูอย่างเดียวทำให้เกิด mutation ที่ไม่มี audit (ตารางนี้อยู่หมวด `money`)
+ * และ 2 request แรกที่เข้ามาพร้อมกันจะชนกันเป็น 500 · ยังไม่มีแถว = คืนค่าเริ่มต้นเฉย ๆ
+ * แถวเกิดตอน PATCH ครั้งแรก (upsert) เหมือน `queries/tax-doc-templates.ts`
+ */
 export async function getFinancePolicy(organizationId: string): Promise<FinancePolicyDto> {
   const existing = await prisma.financePolicySettings.findUnique({
     where: { organizationId },
@@ -67,15 +82,7 @@ export async function getFinancePolicy(organizationId: string): Promise<FinanceP
   })
   if (existing) return toDto(existing)
 
-  const created = await prisma.financePolicySettings.create({
-    data: {
-      organizationId,
-      arAgingBuckets: [...DEFAULT_AR_AGING_BUCKETS],
-      writeOffToleranceSatang: DEFAULT_WRITE_OFF_TOLERANCE_SATANG,
-    },
-    select: policySelect,
-  })
-  return toDto(created)
+  return { ...toDto({ ...DEFAULT_POLICY, updatedAt: new Date() }), updatedAt: null }
 }
 
 export async function updateFinancePolicy(
@@ -86,10 +93,22 @@ export async function updateFinancePolicy(
   const organizationId = context.actor.organizationId
   const normalized = normalizeFinancePolicyValues(values)
 
+  const isFirstTime = current.updatedAt === null
+
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.financePolicySettings.update({
+    // upsert — แถวเกิดครั้งแรกที่นี่ (GET ไม่สร้างให้) จึงต้องรองรับทั้งกรณีมีและไม่มีแถว
+    const row = await tx.financePolicySettings.upsert({
       where: { organizationId },
-      data: {
+      create: {
+        organizationId,
+        advanceMaxAmountPerRequestSatang: normalized.advanceMaxAmountPerRequestSatang,
+        requirePayeeIdDocument: normalized.requirePayeeIdDocument,
+        arAgingBuckets: normalized.arAgingBuckets,
+        writeOffToleranceSatang: normalized.writeOffToleranceSatang,
+        advanceUnclearedToEmployeeReceivable: normalized.advanceUnclearedToEmployeeReceivable,
+        updatedBy: context.actor.id,
+      },
+      update: {
         advanceMaxAmountPerRequestSatang: normalized.advanceMaxAmountPerRequestSatang,
         requirePayeeIdDocument: normalized.requirePayeeIdDocument,
         arAgingBuckets: normalized.arAgingBuckets,
@@ -105,11 +124,11 @@ export async function updateFinancePolicy(
         organizationId,
         actorId: context.actor.id,
         actorRole: context.actor.roleName,
-        action: 'update',
+        action: isFirstTime ? 'create' : 'update',
         targetType: TARGET,
         // PK ของตารางนี้คือ organization_id เอง (`02` §5)
         targetId: organizationId,
-        before: toFinancePolicyAuditPayload(normalizeFinancePolicyValues(toValues(current))),
+        ...(isFirstTime ? {} : { before: toFinancePolicyAuditPayload(normalizeFinancePolicyValues(toValues(current))) }),
         after: toFinancePolicyAuditPayload(normalized),
         reason: context.reason,
         ipAddress: context.meta.ipAddress,

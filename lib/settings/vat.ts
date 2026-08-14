@@ -1,3 +1,5 @@
+import { toBangkokParts } from '@/lib/format/datetime'
+
 /**
  * อัตรา VAT แบบ effective-dated (`13` §6.5 · `19` §6.3) — **pure ล้วน ใช้ร่วม FE/BE**
  *
@@ -19,9 +21,22 @@ export interface VatRatePeriod {
   effectiveTo: Date | null
 }
 
-/** จำนวนวันนับจาก epoch ตามปฏิทิน UTC — ตัดเวลาทิ้งเพื่อเทียบคอลัมน์ `DATE` อย่างเดียว */
+/** จำนวนวันนับจาก epoch ตามปฏิทิน UTC — ใช้กับ **ค่าที่มาจากคอลัมน์ `DATE`** (เที่ยงคืน UTC) */
 export function toDayNumber(date: Date): number {
   return Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 86_400_000)
+}
+
+/**
+ * จำนวนวันของ **วันตามปฏิทินกรุงเทพ** — ใช้กับ "วันที่ของรายการ" ที่อาจเป็น instant (`TIMESTAMPTZ`)
+ *
+ * ⚠️ จุดพลาดที่ทำให้ VAT ผิดวัน: `revenue_date` ที่เป็น instant ตอน 20:00Z คือวันถัดไปตามเวลาไทย
+ * ถ้าเทียบด้วยปฏิทิน UTC จะได้อัตราของวันก่อนหน้า — รอยต่อ 30/09 → 01/10 (7% → 10%) จึงเพี้ยน
+ * ส่วนขอบของช่วง (`effective_from`/`effective_to`) เป็นคอลัมน์ `DATE` ต้องใช้ `toDayNumber()` เสมอ
+ */
+export function toBangkokDayNumber(date: Date): number {
+  const parts = toBangkokParts(date)
+  if (parts === null) throw new Error('toBangkokDayNumber: วันที่ไม่ถูกต้อง')
+  return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / 86_400_000)
 }
 
 /** ช่วง `[from, to]` เป็นวัน — `to = null` → `Infinity` (เปิดปลาย) */
