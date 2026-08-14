@@ -5,6 +5,36 @@
 
 ---
 
+## Phase 2.4 — Case Submission FE ชุด 1 (list + form + address component)
+
+**วันที่**: 2026-08-14 · **commit**: `9c05e9e` · **branch**: `auto/phase-2.4`
+
+### สิ่งที่ทำ
+- **Master data ที่อยู่ (`38` §6.1.2)** — `lib/address/thai-address.ts` (pure): **77 จังหวัดครบ** จัดกลุ่ม 6 ภาค (ทำ `<optgroup>`), `getDistricts()`/`getSubDistricts()` cascading, `isValidPostalCode()`, `lookupPostalCode()` (**async ตั้งแต่วันแรก** เพื่อสลับไปเรียก Thailand Post API จริงได้โดยไม่แก้จุดเรียกใช้) · `lib/address/address-value.ts` (pure): `AddressValue`/`EMPTY_ADDRESS`/`addressFromDto()`/`isAddressEmpty()`
+- **`<AddressFields>` (shared — ไฟล์ 41 ใช้ซ้ำ)** — `components/address/address-fields.tsx`: ลำดับช่องตาม §6.1.2 (บ้านเลขที่ → รหัสไปรษณีย์ auto-complete → จังหวัด → อำเภอ → ตำบล), กรอกครบ 5 หลัก/blur → ค้นแล้วเติม 3 ระดับ, เปลี่ยนจังหวัดล้างอำเภอ/ตำบลเสมอ, ไฮไลต์ + ป้าย "ใช้สำหรับ routing ทีม" บนที่อยู่ปัจจุบัน · **ไม่มี `useEffect`** ในไฟล์เลย (ทุกอย่างเป็น event handler)
+- **หน้า `/cases/submit`** — `components/cases/cases-manager.tsx`: KPI 4 ใบ (ร่าง/รอพิจารณา/ขอข้อมูลเพิ่ม/รับเคสแล้ว — นับด้วย `case.list` limit=1 อ่าน `total` ไม่เพิ่ม endpoint), filter ครบ §7.2 (สถานะ · ช่องทาง · ไฟแนนซ์ · จังหวัด · ค้นหา) + pagination, ตารางบน `md` ขึ้นไป และ **card list บนจอเล็ก** (§7.2 Responsive), ปุ่มแก้ไขเช็ค `isCaseEditable()` + any-of `CASE_EDIT_CAPABILITIES`
+- **ฟอร์มรับเคส/แก้ไขเคส** — `components/cases/case-form-modal.tsx` + ตรรกะ pure ที่ `lib/cases/case-form.ts`: 4 section ตาม mockup (ข้อมูลสัญญา → ลูกหนี้ → ที่อยู่ 3 ชุด → ทรัพย์), **สลับช่องเอกสารยืนยันตัวตนตามสัญชาติ** (ไทย = เลขบัตร 13 หลัก filter ตัวเลข / อื่น = passport free text + ช่อง "ระบุสัญชาติ" เมื่อ OTHER), เบอร์มือถือ/ที่ทำงาน filter ตัวเลข, เงินกรอกเป็นบาท → สตางค์ด้วย `parseBahtInput()`, `case_ref` ซ้ำ = **hard block พร้อมลิงก์เคสเดิม** (§7.3/§11)
+- **ป้ายสถานะ/ช่องทางของเคส** — `lib/cases/status-display.ts` (pure): `CASE_STATUS_LABEL` ครบ 9 สถานะ + แมปเข้า 10 กลุ่มสีของ `04` §8.1 (ส่งเข้า `<StatusBadge group>` ไม่ใส่คลาสสีเอง) + ป้ายช่องทาง + ป้ายประเภททรัพย์
+- **เมนู** — เปิด `cases.submit` (`available: true`) และให้ `/cases` เด้งไปแท็บย่อยแรกที่ผู้ใช้เข้าถึงได้ (role ที่ยังไม่มีหน้าจริงยังเห็น placeholder เดิม)
+- **`callApi()` คืน `code`/`fields`/`payload` ของ error แล้ว** — จำเป็นสำหรับ inline error รายช่อง และลิงก์ "เปิดเคสเดิม" ของ `CASE_REF_DUPLICATE` (โครง `{title, message}` เดิมยังอยู่ หน้าจอ Phase 1 ไม่ต้องแก้)
+- **เทสต์ใหม่ 32 เคส (3 ไฟล์ pure)**: `thai-address.test.ts` (77 จังหวัดไม่ซ้ำ · จังหวัดของทีมใน `09` §8 เป็นสับเซตจริง · ตารางไปรษณีย์ชี้ไปพื้นที่ที่มีอยู่) · `status-display.test.ts` (label ครบทุกสถานะของ state machine · ทุกกลุ่มสีมีจริงใน `04` §8.1) · `case-form.test.ts` (บาท→สตางค์เป็นจำนวนเต็ม · payload ผ่าน schema เดียวกับ backend · สลับสัญชาติล้างช่องของอีกแบบ · ฟอร์มเปล่าขาดแค่ `caseRef`/`financeCompanyId` ตาม §11 · อ่าน `existingCase` ของ error ซ้ำ)
+
+### การตัดสินใจระหว่างทาง
+- **อำเภอ/ตำบลเป็นช่องพิมพ์ได้ + `<datalist>`** ไม่ใช่ `<select>` ตายตัว — master data จริงยังไม่มี (Open Item `38` §22 ข้อ 5 มีแค่ 4 จังหวัดตัวอย่างจาก mockup) และ §6.1.2 เขียนไว้เองว่า "ถ้าไม่พบในระบบ ให้ผู้ใช้กรอกต่อแบบ manual ทีละขั้น" ⇒ จังหวัดที่มีข้อมูลได้ตัวช่วยเลือก จังหวัดที่ยังไม่มีก็กรอกเองได้ ไม่ block งานจริง · เติม master data ภายหลัง = แก้ `DISTRICT_DATA` ที่เดียว หน้าจอไม่ต้องแก้
+- **ไม่เพิ่ม endpoint ค้นรหัสไปรษณีย์** — `45` ไม่มี endpoint นี้ และการเติม endpoint ต้องแก้สเปคคู่กัน ⇒ `lookupPostalCode()` เป็น async function ฝั่ง client ที่สลับไส้ในเป็น fetch ได้ทันทีเมื่อ PO เลือก provider (Open Item `38` §22 ข้อ 4)
+- **จังหวัด 77 ตัวแยกจาก `PROVINCE_DATA` ของทีม (`lib/teams/provinces.ts`)** — คนละความหมาย (พื้นที่ให้บริการ vs ทะเบียนจังหวัดทั้งประเทศ) และ §6.1.2 ระบุชัดว่า dropdown ที่อยู่ **ไม่จำกัดเฉพาะจังหวัดที่มีทีม** · มีเทสต์ยามว่าจังหวัดของทีมทุกตัวต้องอยู่ในทะเบียน 77 จังหวัด
+- **สีสถานะเคสอยู่ในโมดูล ไม่แก้ mapper กลาง** — `lib/ui/status-badge.ts` ยังไม่รู้จัก `pending_review`/`need_info`/`closed_*`/`pending_recycle_review` ⇒ ส่ง `group` เข้า `<StatusBadge>` ตามที่ mapper อนุญาตไว้เอง (คงสีตาม mockup: รอพิจารณา=เหลือง, ขอข้อมูลเพิ่ม=ม่วง) โดยไม่ไปตีความสถานะของโมดูลอื่นแทนเจ้าของ
+- **ตรรกะฟอร์มแยกเป็น pure module** (`lib/cases/case-form.ts`) — repo ยังไม่มี jsdom/testing-library และการเพิ่ม dependency ทดสอบ UI ไม่อยู่ในสเปคของ task นี้ ⇒ ย้ายส่วนที่ต้องพิสูจน์ (payload/เงิน/สัญชาติ/pre-fill/duplicate) ออกมาเทสต์จริงแทนการเทสต์ผ่าน DOM
+- **ปุ่ม Import แสดงแบบ disabled** พร้อม title บอกว่าเป็น Phase 2.5 — §7.1 กำหนดให้มีปุ่มนี้บนหน้า List แต่ wizard อยู่ชุดถัดไป (ไม่ซ่อนเพื่อไม่ให้ดูเหมือนสเปคหาย ไม่เปิดใช้เพื่อไม่ให้กดแล้วตาย)
+
+### จุดที่คนถัดไปควรรู้
+- **Phase 2.5 เสียบต่อที่ไหน**: `CasesManager` — ปุ่ม "ดูรายละเอียด" (ตอนนี้ disabled) → Case Detail/Review Modal · ปุ่ม Import → wizard · `CaseFormModal` — section ผู้ติดต่ออื่น/เอกสารแนบ/รูปสินค้า/ทีมที่เสนอ ต่อท้ายตามลำดับของ §7.3 (ในไฟล์มี comment ระบุจุดไว้แล้ว)
+- **DoD ของ 2.4 ("สร้างเคส manual ครบ flow บน staging: ข้อมูล→เอกสาร→ส่งตรวจสอบ") ปิดได้เท่าที่ขอบเขต FE ชุด 1 ครอบ** — ส่วน "ข้อมูล" ครบแล้ว (สร้าง/แก้ไขเคสร่างได้จริงจากหน้าจอ) ส่วน "เอกสาร→ส่งตรวจสอบ" ต้องรอ UI อัปโหลดเอกสาร + ปุ่ม `review` ของ 2.5 เพราะแผน §2.5 กำหนดให้ document slot/photo อยู่ชุดนั้น
+- `<AddressFields>` เป็น **controlled component ล้วน** (ไม่เก็บ state ของค่าที่อยู่เอง มีแค่สถานะการค้นรหัสไปรษณีย์) — ไฟล์ 41 นำไปใช้ได้ตรง ๆ โดยส่ง `value`/`onChange` ของตัวเอง
+- ฟอร์มใช้ `key` จากตัวนับใน `CasesManager` เพื่อล้างค่าทุกครั้งที่เปิด — เปิด modal ซ้ำโดยไม่เปลี่ยน `key` จะเห็นค่าที่พิมพ์ค้างไว้รอบก่อน (กับดักเดิมของ modal ที่ mount ค้าง)
+
+---
+
 ## Phase 2.3 — Case Submission BE ชุด 2 (state machine + routing + recycle + import + snapshot)
 
 **วันที่**: 2026-08-14 · **commit**: `03b50e6` · **branch**: `auto/phase-2.3`
