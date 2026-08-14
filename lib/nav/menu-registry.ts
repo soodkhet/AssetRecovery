@@ -180,6 +180,16 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       // แท็บย่อยของการตั้งค่าใช้ audience เดียวกับเมนูแม่เสมอ — `06` §7.2 ให้เมนู "การตั้งค่า"
       // เห็นได้เฉพาะ Superadmin/บริหาร · สิทธิ์ระดับ capability (`11` §12 การเงินแก้ได้ / บัญชีดูได้)
       // ยังบังคับจริงที่ API ทุก endpoint — เมนูไม่ใช่ security (DEC-002)
+      // ⚠️ `05` §12 ให้ "ธุรการ" จัดการผู้ใช้ได้ด้วย (capability `manage_users` = manage) แต่ `06` §7.2
+      // ไม่ให้ role นี้เห็นเมนู "การตั้งค่า" — แท็บย่อยกว้างกว่าเมนูแม่ไม่ได้ จึงคงตาม `06` ไว้ก่อน
+      // (สิทธิ์ที่ API ยังมีจริง ใช้ได้เมื่อเปิดทางเข้าหน้าให้ธุรการในภายหลัง)
+      {
+        id: 'settings.users',
+        label: 'ผู้ใช้งาน',
+        path: '/settings/users',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
       {
         id: 'settings.compensation',
         label: 'แผนค่าตอบแทน',

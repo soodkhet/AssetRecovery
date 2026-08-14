@@ -109,6 +109,20 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
     )
   })
 
+  it('ผู้ใช้งาน (`08` §12 · `05` §12): ธุรการ = manage · บริหาร/ผู้จัดการทีม = view', () => {
+    const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'manage_users')
+    const byRole = rows.map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`).sort()
+
+    expect(byRole).toEqual(
+      [
+        'inhouse:ผู้จัดการทีมติดตามทรัพย์=view',
+        'outsource:ผู้จัดการทีมติดตามทรัพย์=view',
+        'system:ธุรการ=manage',
+        'system:บริหาร=view',
+      ].sort(),
+    )
+  })
+
   it('role ชื่อซ้ำข้าม group ได้สิทธิ์แยกกันคนละแถว (`07` §6 — คนละ record จริง)', () => {
     const assignCase = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'assign_case')
     const groups = assignCase

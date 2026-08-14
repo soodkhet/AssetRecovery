@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v3.7 | 14/08/2569 | **เติม §6.1** (Phase 1.9 — ผู้ใช้งาน `08`): `USER_NOT_FOUND`, `DUPLICATE_USER_EMAIL`, `DUPLICATE_USER_PHONE`, `USER_HAS_HISTORY` (ชื่อตรงตามที่ `08` §11 ระบุไว้แล้ว), `INVALID_USER_STATUS_TRANSITION`, `INVALID_USER_SCOPE` — code เดิมของ `08` §11 เขียนกว้าง (`DUPLICATE_RECORD`/`INVALID_STATUS`) ไม่มีใน dictionary กลาง จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5/v3.6 · `ROLE_NOT_FOUND` มีอยู่แล้วใน §6.9 (ใช้ร่วมกัน) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.6 | 14/08/2569 | **เติม §6.1** (Phase 1.8 — ทีม `09` / บริษัทไฟแนนซ์ `10`): `COMPANY_NOT_FOUND`, `TEAM_NOT_FOUND`, `DUPLICATE_TEAM_NAME`, `TEAM_HAS_ACTIVE_CASES` (ตาม default ของ D7 — ส่วน modal bulk reassign อยู่ Phase 2.6), `SUPERVISOR_ALREADY_ASSIGNED` (ปิด Open Item `09` §18 ตามมติที่ระบุไว้แล้วใน `09` §7.1/§17 ว่าหัวหน้าทีม 1 คน = 1 ทีม → **reject ไม่ใช่แค่เตือน**), `INVALID_TEAM_MEMBER`, `INVALID_PROVINCE` — code เดิมของ `09` §11 เขียนกว้าง (`DUPLICATE_RECORD`/`INVALID_STATUS`) ไม่มีใน dictionary กลาง จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริง · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.5 | 14/08/2569 | **เติม §6.1 หมวดข้อมูลพื้นฐาน** (Phase 1.7 — แผนค่าตอบแทน `11` / เทมเพลตค่าบริการ `12`): `DUPLICATE_TEMPLATE_NAME`, `PLAN_NOT_FOUND`, `TEMPLATE_NOT_FOUND`, `VERSION_NOT_CURRENT`, `PLAN_IN_USE` — code เดิมของ `11` §11 ที่เขียนไว้กว้าง ๆ (`DUPLICATE_RECORD`/`INVALID_STATUS`) ไม่มีใน dictionary กลาง จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริง · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.4 | 14/08/2569 | **เติม §6.9 หมวด Roles & Permissions** (Phase 1.6) — รวบ `SEED_ROLE_DELETE`/`SEED_ROLE_RENAME` (ต้นทาง `07` §11) เข้ามาใน dictionary กลาง + เพิ่ม code ที่ implementation ต้องใช้จริง: `ROLE_NOT_EDITABLE`, `CAPABILITY_LOCKED`, `CAPABILITY_NOT_FOUND`, `ROLE_IN_USE`, `DUPLICATE_ROLE_NAME`, `ROLE_NOT_FOUND` — ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -41,7 +42,7 @@
 
 ## 6. Validation Rules แยกตามหมวด
 
-### 6.1 หมวดข้อมูลพื้นฐาน (Master Data — ไฟล์ 10, 12, 18)
+### 6.1 หมวดข้อมูลพื้นฐาน (Master Data — ไฟล์ 08, 09, 10, 11, 12, 18)
 
 | Code | Condition | Source File |
 |---|---|---|
@@ -64,6 +65,12 @@
 | SUPERVISOR_ALREADY_ASSIGNED | ตั้ง user เป็นหัวหน้าทีมทั้งที่เป็นหัวหน้าของอีกทีมอยู่แล้ว — หัวหน้าทีม 1 คนสังกัดได้ทีมเดียว (`09` §7.1/§17 · ต่างจากผู้จัดการที่ดูแลได้หลายทีม) | 09 |
 | INVALID_TEAM_MEMBER | user ที่ตั้งเป็นผู้จัดการ/หัวหน้าทีมไม่มีอยู่จริง ไม่ active หรืออยู่นอก role group `inhouse`/`outsource` (`09` §7.1) | 09 |
 | INVALID_PROVINCE | จังหวัดที่เลือกไม่อยู่ใน PROVINCE_DATA (`09` §8) | 09 |
+| USER_NOT_FOUND | อ้างผู้ใช้ที่ไม่มีในองค์กรของผู้เรียก หรือถูก soft delete ไปแล้ว (404 — ไม่ leak ข้ามองค์กร) | 08 |
+| DUPLICATE_USER_EMAIL | อีเมลซ้ำกับผู้ใช้ที่ยังไม่ถูกลบในองค์กรเดียวกัน — อีเมลใช้เป็น username ของ Supabase Auth (`08` §10) | 08 |
+| DUPLICATE_USER_PHONE | เบอร์โทรซ้ำกับผู้ใช้ที่ยังไม่ถูกลบในองค์กรเดียวกัน (`08` §10 — เทียบหลังตัดตัวคั่นออก) | 08 |
+| USER_HAS_HISTORY | พยายามลบผู้ใช้ที่มีประวัติการทำงาน (เคส/งานภาคสนาม/หลักฐาน/สายจ่ายเงิน/คลัง หรือยังถือตำแหน่งในทีม) — ต้องใช้ระงับการใช้งานแทนเสมอ (`08` §10/§11) | 08 |
+| INVALID_USER_STATUS_TRANSITION | เปลี่ยนสถานะผู้ใช้นอก lifecycle `active ⇄ suspended → deleted` เช่น เปิดใช้งานบัญชีที่ถูกลบไปแล้ว (`08` §7.2) | 08 |
+| INVALID_USER_SCOPE | สังกัดไม่ตรงกับ role group: กลุ่ม inhouse/outsource ต้องมี `team_id` · กลุ่ม finance_company ต้องมี `company_id` · กลุ่ม system ต้องไม่มีทั้งคู่ (`08` §7.1) | 08 |
 | BANK_ACCOUNT_NAME_MISMATCH | ชื่อบัญชีธนาคารไม่ตรงกับชื่อ payee (เตือน ไม่ reject) | 18 |
 
 ### 6.2 หมวดภาษี/VAT (ไฟล์ 13, 19)

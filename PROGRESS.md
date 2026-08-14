@@ -1,6 +1,6 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.8 (Teams + Finance Companies) · งานถัดไป 1.9
+**อัปเดตล่าสุด:** 2026-08-14 — Phase 1.9 (Users) ทำแล้วเกือบครบ 🔄 เหลือ Supabase Auth provisioning ที่ติดคำตอบ D1
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
@@ -8,13 +8,11 @@
 
 ## 🎯 งานถัดไป — Phase 1.9: Users Module (08)
 
-- ทำตาม `docs/01_PLAN.md` §1.9 — **BE**: users CRUD + Supabase Auth provisioning (`supabase_uid`) + conditional required (`team_id` ถ้า inhouse/outsource · `company_id` ถ้า finance_company) + lifecycle `active → suspended → deleted` (soft) + `USER_HAS_HISTORY` (hard-delete user ที่มีประวัติต้อง reject) + suspend/reactivate พร้อม reason
-- **FE**: 3-tab nested — **reuse `<RoleGroupTabs>` จาก 1.6** + search/filter + ฟอร์ม cascading role select (เลือกกลุ่ม → role → ทีม/บริษัท)
-- ใช้ของที่มีแล้ว: `assertNotLastSuperadmin()`/`assertRoleDeletable()` (1.3/1.6) · `GET /api/teams/eligible-members` + `GET /api/finance-companies` (1.8) สำหรับ dropdown ทีม/บริษัท · `invalidateSessionCache()` ทุกครั้งที่เปลี่ยน role/สถานะ/ทีม/บริษัท
-- ⚠️ **ติด D1 (invite/first-login flow) ใน `docs/02_OPEN_DECISIONS.md`** — ถ้ายังไม่มีคำตอบตอนถึงขั้น provisioning ให้ `[[NEEDS_DECISION]]` ก่อนเขียน flow ตั้งรหัสผ่าน · `POST /api/finance-companies/:id/users` (สร้าง company user) ที่ 1.8 เลื่อนมา ให้ทำในก้อนนี้
+- ✅ **ทำไปแล้วใน `2bb2531`** (BE + FE ครบยกเว้น provisioning): API 7 endpoint (`GET/POST /api/users`, `GET/PATCH/DELETE /:id`, `PATCH /:id/suspend`, `PATCH /:id/reactivate`, `POST /api/finance-companies/:id/users`) + conditional required ตาม role group + lifecycle `active ⇄ suspended → deleted` + `USER_HAS_HISTORY` + scope ระดับแถว + หน้า `/settings/users` (reuse `<RoleGroupTabs>` + ฟอร์ม cascading) + ผูก capability `manage_users`
+- 🔴 **ค้างอยู่ก้อนเดียว — Supabase Auth provisioning (ติด D1)**: ตอนนี้ user ที่สร้างใหม่มี `supabase_uid = null` ⇒ ยัง login ไม่ได้ (`USER_NOT_PROVISIONED`) · ต้องได้คำตอบ D1 (invite/first-login) ใน `docs/02_OPEN_DECISIONS.md` ก่อน แล้วทำ: ผูก/สร้างบัญชี Supabase Auth ตอนสร้าง user + ปุ่ม "ส่งคำเชิญอีกครั้ง" + สถานะ "รอตั้งรหัสผ่าน" บน UI (badge มีแล้ว) + เทสต์
+- ⚠️ ก่อนทดสอบบน environment ใด ๆ ต้องรัน `pnpm db:seed` ซ้ำ 1 ครั้ง — capability `manage_users` เพิ่ง binding ใหม่ 4 แถว (ธุรการ = manage · บริหาร/ผู้จัดการทีม inhouse+outsource = view)
 - อ้างอิง: `08` ทั้งไฟล์ · `05` §10 · mockup `settings.html` ผ่าน MAP (users)
-- LOC ~1,700 · งบ ~260k
-- DoD: สร้าง user แล้ว login ได้จริงผ่าน Supabase Auth · hard-delete user ที่มี history ถูก reject
+- DoD ที่เหลือ: สร้าง user แล้ว login ได้จริงผ่าน Supabase Auth (ข้อ "hard-delete user ที่มี history ถูก reject" ผ่านแล้ว — มีเทสต์)
 
 ---
 
@@ -38,7 +36,7 @@
 | 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
 | 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
-| 1.9 | Users module | ⬜ | PLAN §1.9 · ไฟล์ 08 |
+| 1.9 | Users module | 🔄 | 2026-08-14 · `2bb2531` · API 7 endpoint + lifecycle + `USER_HAS_HISTORY` + หน้า `/settings/users` · **ค้าง provisioning Supabase Auth — รอคำตอบ D1** |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
 | 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |
