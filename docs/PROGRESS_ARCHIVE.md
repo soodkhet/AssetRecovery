@@ -7,7 +7,7 @@
 
 ## Phase 1.5 — UI Kit + App Shell + Navigation
 
-**วันที่**: 2026-08-14 · **commit**: `f612e9e` · **branch**: `auto/phase-1.5`
+**วันที่**: 2026-08-14 · **commit**: `e4d56b4` · **branch**: `auto/phase-1.5`
 
 ### สิ่งที่ทำ
 
