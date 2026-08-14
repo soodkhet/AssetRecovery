@@ -27,9 +27,10 @@ export interface EndpointContract {
 }
 
 /**
- * 40 endpoints ตาม `45` §6.1–6.5
+ * 41 endpoints ตาม `45` §6.1–6.5
  * (PLAN §2.1 เขียน "37" เป็นตัวเลขประมาณตอนวางแผน — นับจริงจากไฟล์ 45 ตอน 2.1 ได้ 7+8+14+4+6 = 39
- *  แล้ว Phase 2.2 เติม `case.update` เข้า `45` §6.1 v1.3 ตาม `38` §8 ⇒ 40)
+ *  แล้ว Phase 2.2 เติม `case.update` เข้า `45` §6.1 v1.3 ตาม `38` §8 ⇒ 40
+ *  และ Phase 2.5 เติม `case.teamOptions` เข้า v1.4 ตาม `38` §7.4 ⇒ 41)
  */
 export const API_CONTRACT = {
   // ── 6.1 Case Submission (ไฟล์ 38 §17.1) ────────────────────────────────
@@ -89,6 +90,13 @@ export const API_CONTRACT = {
     module: 'case',
     source: '38 §17.1 · 45 §6.1',
     summary: 'คำนวณทีมที่เสนอจากจังหวัดที่อยู่ปัจจุบัน',
+  },
+  'case.teamOptions': {
+    method: 'GET',
+    path: '/api/cases/team-options',
+    module: 'case',
+    source: '38 §7.4 · 45 §6.1 (v1.4)',
+    summary: 'ทีม active ทั้งหมด + จังหวัดที่ดูแล + ค่าตั้งของแผนค่าตอบแทน (กล่องค่าใช้จ่ายทีม)',
   },
 
   // ── 6.2 Case Assignment & Routing (ไฟล์ 40 §17.1) ──────────────────────

@@ -5,6 +5,36 @@
 
 ---
 
+## Phase 2.5 — Case Submission FE ชุด 2 (เอกสาร + ทีมที่เสนอ + review modal + import)
+
+**วันที่**: 2026-08-14 · **commit**: `07100c8` + `267b3f3` · **branch**: `auto/phase-2.5`
+
+### สิ่งที่ทำ
+- **ฟอร์มรับเคสครบลำดับ section ตาม `38` §7.3** — เพิ่มต่อจาก 2.4: **ผู้ติดต่ออื่น** (`<CaseContactsFields>` — dynamic list, ปุ่มลบต่อแถว, เบอร์กรอง non-digit 10 หลัก, แถวว่างทั้งแถวถูกตัดทิ้ง แถวกรอกไม่ครบ = error รายช่อง) → **ข้อมูลทรัพย์** → **เอกสารแนบ + รูปสินค้า** (`<CaseAttachmentsFields>` — 3 slot พร้อมป้าย "อัปโหลดแล้ว ✓ (n ไฟล์)"/"ยังไม่อัปโหลด" ต่อ slot · dropzone drag-drop + thumbnail grid + ปุ่ม ✕ ต่อรูป · เพดาน 8 รูปผ่าน `assertProductPhotoCapacity()` ตัวเดียวกับ API) → **ทีมที่เสนอ (ท้ายสุด)**
+- **อัปโหลดไฟล์จริง** — `lib/cases/document-upload.ts` (pure: ชนิด/ขนาด/ชื่อไฟล์/`storagePath()`/`sha256Hex()`) + `lib/cases/upload-client.ts` (browser: ขึ้น Supabase Storage bucket `case-documents` → `POST /api/cases/:id/documents` ด้วย `fileUrl` = path + `fileHash` SHA-256) · **อัปโหลดหลังบันทึกเคสสำเร็จ** เพราะ endpoint ต้องมี `case_id` — ไฟล์ที่ล้มเหลวรายงานเป็น toast เตือน ไม่ทำให้เคสหาย
+- **`<TeamSuggestionPanel>` (`38` §7.4)** — ทีมที่เสนอ 1 ทีมพร้อมป้าย "ระบบเสนอ" อัปเดต **real-time** ทันทีที่จังหวัดของที่อยู่ปัจจุบันเปลี่ยน (จับคู่ฝั่ง client ด้วย `matchTeamsByProvince()` pure ตัวเดียวกับ API — ไม่ยิง API ใหม่) · รายการทีมที่จังหวัดตรงแสดง **inline ทันที ไม่ใช่ dropdown** + toggle "ดูทีมอื่นทั้งหมด" (ซ่อน default) · **กล่องค่าใช้จ่ายทีมทุกใบในรายการ** จาก `describeTeamCost()` — น้ำมัน (PER_KM แสดงอัตรา+เพดาน / DAILY_FLAT แสดงเหมาจ่าย) · เบี้ยเลี้ยง · ค่าที่พัก · คอมมิชชั่น (สำเร็จ) · เบี้ยเสี่ยง (ไม่สำเร็จ) — **ไม่มีการคำนวณ/สรุปกำไร-ขาดทุนใดๆ** (มีเทสต์ยาม)
+- **`<CaseDetailModal>` — shared component (`38` §7.5)** modal เดียวใช้ทั้งดูและพิจารณา 4 โหมดตาม `caseDetailMode()`: `pending_review` (3 ปุ่ม: ไม่รับเคส/ขอข้อมูลเพิ่ม/รับเคส & ยืนยันทีม) · `closed_fail` (ขอรีไซเกิล) · `pending_recycle_review` (ไม่อนุมัติ/อนุมัติรีไซเกิล) · อื่น ๆ อ่านอย่างเดียว · เนื้อหาครบ §7.5: สรุปเคส + `tracking_round` ทุกสถานะ, จังหวัด/มูลหนี้, ช่องทางติดต่อ 4 ทาง (มือถือเป็นลิงก์ `tel:`), ผู้ติดต่ออื่น, **เอกสารแนบเปิดดูได้จริง** ผ่าน `<FileViewerModal>` (PDF ใน iframe / รูป lightbox / signed URL ต่อครั้ง), thumbnail grid รูปสินค้า, **กล่องประมาณการรายได้ติดกับกล่องทีม**, ช่องเหตุผล, **ประวัติรีไซเกิล** (แสดงเมื่อมีประวัติ ไม่ว่าสถานะปัจจุบันจะเป็นอะไร)
+- **เปลี่ยนทีมพร้อมเหตุผล** — กด "เลือกทีมนี้" (active เฉพาะคนที่กด `accept` ได้จริง) → `<ReasonConfirmModal>` → ส่ง `teamId` + `teamChangeReason` ไปกับ action `accept` (backend 2.3 บังคับเหตุผลอยู่แล้วที่ `assertStatusChange()`)
+- **`<CaseImportWizard>`** — เลือกไฟล์ → mapping คอลัมน์จาก `IMPORT_COLUMNS` (auto-map + แก้ทับได้ + ยามฟิลด์บังคับ/จับคู่ซ้ำ/คอลัมน์ที่จะถูกข้าม) → preview ด้วย `dryRun: true` → ยืนยัน + **ผลรายแถว** (แถว/เลขที่สัญญา/ผล/รายละเอียด error รายช่อง)
+- **`GET /api/cases/team-options`** (`45` §6.1 v1.4 — endpoint ที่ 41) + `lib/cases/team-options-queries.ts`
+- **ปุ่ม workflow บนแถวรายการ** — "ส่งตรวจสอบ" (draft) / "กลับไปแก้ไขเป็นร่าง" (need_info) จาก `caseRowActions()` · ปุ่ม "พิจารณา"/"ดูรายละเอียด" เปิด detail modal · ปุ่ม Import เปิด wizard
+- **เทสต์ใหม่ 4 ไฟล์** (`team-cost` · `case-actions` · `document-upload` · `import-wizard`) + ขยาย `case-form.test.ts` (ผู้ติดต่ออื่น 5 เคส) — รวม `pnpm test` 999 เคสเขียว
+
+### การตัดสินใจระหว่างทาง
+- **เพิ่ม endpoint `GET /api/cases/team-options` (แก้ `45` v1.4 ในคอมมิตเดียวกัน)** — §7.4 บังคับให้ฟอร์มแสดงทีมที่เสนอแบบ real-time ตั้งแต่ก่อนบันทึกเคส (ยังไม่มี `:id` ⇒ ใช้ `team-suggestion` ไม่ได้) และกล่องค่าใช้จ่ายต้องอ่านค่าแผนค่าตอบแทน ซึ่ง `GET /api/teams` + `GET /api/compensation-plans` ต้องใช้ `view_master_data`/`manage_compensation_plans` ที่ **เจ้าหน้าที่อนุมัติเคสไม่มี** (`25` §7.1) · endpoint ใหม่อ่านด้วย `CASE_READ_CAPABILITIES` · read-only ไม่มี business logic ใหม่
+- **กล่องทีมบนฟอร์ม = อ่านอย่างเดียว** — schema ของ 2.2/2.3 ไม่มีช่องเก็บทีมตอน draft (`suggested_team_id` เขียนตอน `review`, `assigned_team_id` ตอน `accept`) และ §7.5 ระบุว่าปุ่มเปลี่ยนทีม "active เฉพาะตอน pending_review" ⇒ การเลือก/เปลี่ยนทีมจริงอยู่ใน Review Modal เท่านั้น ฟอร์มแสดงเป็นข้อมูลประกอบการกรอก
+- **`review`/`return_to_draft` อยู่บนแถวรายการ ไม่ใช่บน modal** — §7.5 ล็อกให้ modal ของ draft/need_info เป็นอ่านอย่างเดียว แต่ §8 ยังต้องมีปุ่ม `review_case` ⇒ วางไว้ที่ปุ่มแถว (mockup ไม่มีปุ่มนี้เพราะ mockup ครอบเฉพาะฝั่งพิจารณา)
+- **Import รอบนี้รองรับเฉพาะ CSV** — `xlsx` บน npm ค้างที่ 0.18.5 (มี CVE) ส่วนเวอร์ชันที่แก้แล้วอยู่บน `cdn.sheetjs.com` เท่านั้น ⇒ ไม่ติดตั้ง dependency เองใน session อัตโนมัติ · จุดเสียบอยู่ที่ `readRowsFromFile()` จุดเดียว และหน้าจอบอกผู้ใช้ให้ save เป็น CSV ก่อน
+- **ชนิด/ขนาดไฟล์ไม่ออก error code ใหม่** — `24` ไม่มีหมวดไฟล์ และ payload ที่ส่งเข้า API เป็น metadata (ไม่ใช่ไฟล์) ⇒ เป็น UX guard ฝั่งฟอร์ม (ข้อความไทยธรรมดา) ส่วนกติกาธุรกิจจริง (8 รูป) ยังใช้ `CASE_PRODUCT_PHOTO_LIMIT` ตามเดิม
+
+### จุดที่คนถัดไปควรรู้
+- ⚠️ **ต้องสร้าง bucket `case-documents` ใน Supabase 1 ครั้งต่อ environment** (แนะนำ private + policy ให้ผู้ใช้ที่ล็อกอินอัปโหลด/อ่านได้) ไม่งั้นการแนบไฟล์จะล้มด้วยข้อความจาก Storage — สิทธิ์ระดับธุรกิจยังตรวจที่ API layer ตามเดิม (DEC-002)
+- **ยังไม่มี endpoint ลบเอกสารของเคส** ใน `45` ⇒ ปุ่ม ✕ ใช้ได้เฉพาะไฟล์ที่ยังไม่อัปโหลด (staged) — ถ้าธุรกิจต้องการลบไฟล์ที่แนบแล้ว ต้องเพิ่ม endpoint + แก้ `38`/`45` ก่อน
+- `<CaseDetailModal>` ออกแบบให้เรียกด้วย `caseId` อย่างเดียว — **Phase 2.7 (Assignment Modal) และ 2.10 (Field Detail) ใช้ตัวนี้ซ้ำ** อย่าสร้าง modal เคสใหม่
+- ยังไม่มี event bus จริง — การเปลี่ยนสถานะจาก modal บันทึก event ลง audit ตามที่ 2.3 ทำไว้
+
+---
+
 ## Phase 2.4 — Case Submission FE ชุด 1 (list + form + address component)
 
 **วันที่**: 2026-08-14 · **commit**: `9c05e9e` · **branch**: `auto/phase-2.4`

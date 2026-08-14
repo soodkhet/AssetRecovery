@@ -4,7 +4,11 @@ import {
   EMPTY_CASE_FORM,
   buildCasePayload,
   caseFormFromDetail,
+  contactsPayload,
+  emptyContact,
   identityFieldOf,
+  isBlankContact,
+  mapCaseErrorField,
   readDuplicateCase,
   zodFieldErrors,
   type CaseFormState,
@@ -118,6 +122,46 @@ describe('payload ของฟอร์มรับเคส', () => {
   })
 })
 
+describe('ผู้ติดต่ออื่น (`38` §6.1.3)', () => {
+  it('แถวที่ว่างทั้งแถวถูกตัดทิ้ง (0 คนก็บันทึกได้)', () => {
+    const form = formWith({ contacts: [emptyContact('a'), emptyContact('b')] })
+    expect(contactsPayload(form.contacts)).toEqual([])
+    expect(caseCreateSchema.safeParse(buildCasePayload(form, 'create')).success).toBe(true)
+  })
+
+  it('แถวที่กรอกครบ 3 ช่องผ่าน schema', () => {
+    const form = formWith({
+      contacts: [{ key: 'a', contactName: 'สมชาย', relationship: 'บุตร', contactPhone: '0811111111' }],
+    })
+    const parsed = caseCreateSchema.safeParse(buildCasePayload(form, 'create'))
+    expect(parsed.success).toBe(true)
+    expect(parsed.success === true && parsed.data.contacts).toEqual([
+      { contactName: 'สมชาย', relationship: 'บุตร', contactPhone: '0811111111' },
+    ])
+  })
+
+  it('แถวที่กรอกไม่ครบ = error รายช่องของแถวนั้น (ไม่ถูกตัดทิ้งเงียบ ๆ)', () => {
+    const form = formWith({
+      contacts: [{ key: 'a', contactName: 'สมชาย', relationship: '', contactPhone: '081' }],
+    })
+    const parsed = caseCreateSchema.safeParse(buildCasePayload(form, 'create'))
+    expect(parsed.success).toBe(false)
+    const fields = parsed.success === false ? zodFieldErrors(parsed.error) : {}
+    expect(Object.keys(fields).sort()).toEqual(['contacts.0.contactPhone', 'contacts.0.relationship'])
+  })
+
+  it('รู้ว่าแถวไหนว่างทั้งแถว', () => {
+    expect(isBlankContact(emptyContact('a'))).toBe(true)
+    expect(isBlankContact({ ...emptyContact('a'), contactPhone: '08' })).toBe(false)
+  })
+
+  it('error เบอร์ผู้ติดต่อจาก API ชี้กลับไปที่ช่องบนฟอร์มได้', () => {
+    expect(mapCaseErrorField('contacts.1.phone')).toBe('contacts.1.contactPhone')
+    expect(mapCaseErrorField('debtor_phone_mobile')).toBe('debtorPhoneMobile')
+    expect(mapCaseErrorField('ไม่รู้จัก')).toBe('_')
+  })
+})
+
 describe('pre-fill ฟอร์มจากเคสเดิม (`38` §8 edit_case)', () => {
   const detail = {
     id: 'case-1',
@@ -139,6 +183,10 @@ describe('pre-fill ฟอร์มจากเคสเดิม (`38` §8 edit_
     assetBrandModel: 'iPad Air',
     assetImeiSerial: 'SN-001',
     outstandingDebtSatang: 999_900,
+    contacts: [
+      { id: 'contact-1', contactName: 'สมชาย', relationship: 'บุตร', contactPhone: '0811111111' },
+      { id: 'contact-2', contactName: 'สมศรี', relationship: 'คู่สมรส', contactPhone: null },
+    ],
   } as unknown as CaseDetailDto
 
   it('แปลงค่า null เป็นช่องว่าง และเงินสตางค์กลับเป็นบาทให้ผู้ใช้แก้ต่อ', () => {

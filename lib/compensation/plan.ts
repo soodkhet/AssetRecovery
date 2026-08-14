@@ -152,7 +152,12 @@ export type FuelRuleDescription =
   | { mode: 'PER_KM'; ratePerKmSatang: number; maxPerCaseSatang: number | null }
   | { mode: 'DAILY_FLAT'; dailyFlatSatang: number }
 
-export function describeFuelRule(plan: CompensationPlanValues): FuelRuleDescription {
+export function describeFuelRule(
+  plan: Pick<
+    CompensationPlanValues,
+    'fuelMode' | 'fuelRatePerKmSatang' | 'fuelMaxPerCaseSatang' | 'fuelDailyFlatSatang'
+  >,
+): FuelRuleDescription {
   if (plan.fuelMode === 'PER_KM') {
     return {
       mode: 'PER_KM',

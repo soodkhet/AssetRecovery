@@ -1,4 +1,6 @@
 import type { DocumentSlot } from '@/lib/cases/case'
+import type { TeamCostSnapshot } from '@/lib/cases/team-cost'
+import type { TeamSuggestionResult } from '@/lib/cases/team-suggestion'
 
 /**
  * DTO ของโมดูลรับเคส — **type-only** เพื่อให้ฝั่ง client import ได้โดยไม่ลาก Prisma เข้า bundle
@@ -99,6 +101,29 @@ export interface CaseTeamSuggestionDto {
   noMatch: boolean
   /** ทีมที่บันทึกไว้กับเคสตอนนี้ (`cases.suggested_team_id`) */
   savedSuggestedTeamId: string | null
+}
+
+/**
+ * ทีมหนึ่งตัวเลือกในกล่อง "ทีมที่เสนอ" (`38` §7.4) — ผลของ `GET /api/cases/team-options`
+ * `cost` = **ค่าที่ตั้งไว้** ของแผนค่าตอบแทนที่ผูกกับทีม (ไฟล์ 11) ห้ามคำนวณกำไร/ขาดทุนต่อ
+ */
+export interface CaseTeamOptionDto {
+  id: string
+  name: string
+  side: 'inhouse' | 'outsource'
+  provinces: string[]
+  supervisorName: string | null
+  cost: TeamCostSnapshot | null
+}
+
+export interface CaseTeamOptionsDto {
+  teams: CaseTeamOptionDto[]
+}
+
+/** ผลของ `PATCH /api/cases/:id/status` — เคสล่าสุด + ทีมที่ระบบเสนอ ณ เวลานั้น */
+export interface CaseStatusChangeResultDto {
+  case: CaseDetailDto
+  suggestion: TeamSuggestionResult | null
 }
 
 /** ผลของ `POST /api/cases/import` (`38` §8 `import_cases` — success/error ต่อแถว) */

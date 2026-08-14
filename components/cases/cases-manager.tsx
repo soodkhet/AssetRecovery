@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
+import { CaseDetailModal } from '@/components/cases/case-detail-modal'
 import { CaseFormModal } from '@/components/cases/case-form-modal'
+import { CaseImportWizard } from '@/components/cases/case-import-wizard'
 import {
   Badge,
   Button,
@@ -23,9 +25,10 @@ import {
   useToast,
 } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
-import { callApi, type ApiCallError } from '@/lib/api/types'
+import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { THAI_PROVINCES } from '@/lib/address/thai-address'
 import { isCaseEditable } from '@/lib/cases/case'
+import { caseRowActions, type CaseActionButton } from '@/lib/cases/case-actions'
 import { CASE_EDIT_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { CASE_STATUSES } from '@/lib/cases/state-machine'
 import {
@@ -35,7 +38,12 @@ import {
   caseStatusBadgeGroup,
   caseStatusLabel,
 } from '@/lib/cases/status-display'
-import type { CaseDetailDto, CaseListItemDto, CaseListResultDto } from '@/lib/cases/types'
+import type {
+  CaseDetailDto,
+  CaseListItemDto,
+  CaseListResultDto,
+  CaseStatusChangeResultDto,
+} from '@/lib/cases/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
@@ -104,6 +112,10 @@ export function CasesManager() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CaseDetailDto | null>(null)
   const [openingCaseId, setOpeningCaseId] = useState<string | null>(null)
+  const [detailCaseId, setDetailCaseId] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  /** เคสที่กำลังเปลี่ยนสถานะจากปุ่มบนแถว (ส่งตรวจสอบ / กลับไปแก้ไข) */
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null)
   /** เปลี่ยนทุกครั้งที่เปิดฟอร์ม — บังคับให้ modal เริ่มจากค่าเปล่า/ค่าเคสล่าสุดเสมอ (กันค่าค้างจากรอบก่อน) */
   const [formKey, setFormKey] = useState(0)
 
@@ -202,6 +214,37 @@ export function CasesManager() {
     }
   }
 
+  /**
+   * ปุ่ม workflow บนแถว (`38` §8 review_case) — ความครบถ้วนของข้อมูล/เอกสารถูกตรวจที่ API
+   * (`caseReadiness()`) เสมอ หน้าจอจึงแค่ส่ง action แล้วรายงานข้อความที่ API ตอบกลับ
+   */
+  async function runRowAction(item: CaseListItemDto, button: CaseActionButton): Promise<void> {
+    setRowBusyId(item.id)
+    try {
+      const response = await callApi<CaseStatusChangeResultDto>(
+        apiPath('case.changeStatus', { id: item.id }),
+        jsonRequest('PATCH', { action: button.action }),
+      )
+      if (response.error !== undefined || response.data === undefined) {
+        showToast({
+          tone: 'error',
+          title: response.error?.title ?? `${button.label}ไม่สำเร็จ`,
+          description: response.error?.message ?? 'กรุณาลองใหม่',
+        })
+        return
+      }
+      showToast({
+        tone: 'success',
+        title: `${button.label}แล้ว`,
+        description: `${item.caseRef} → ${caseStatusLabel(response.data.case.status)}`,
+      })
+      setLoading(true)
+      await reload()
+    } finally {
+      setRowBusyId(null)
+    }
+  }
+
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -212,14 +255,12 @@ export function CasesManager() {
         title="รับเคส (Case Submission)"
         description="รับเคสจากบริษัทไฟแนนซ์ผ่าน API / Import ไฟล์ / กรอกฟอร์มมือ — ตรวจสอบและพิจารณารับก่อนส่งต่อมอบหมายทีม"
         action={
-          <>
-            <Button variant="secondary" disabled title="Import wizard อยู่ใน Phase 2.5">
+          <Can action="manage" resource={CASE_WRITE_CAPABILITY}>
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
               Import ไฟล์
             </Button>
-            <Can action="manage" resource={CASE_WRITE_CAPABILITY}>
-              <Button onClick={openCreate}>+ รับเคส (กรอกมือ)</Button>
-            </Can>
-          </>
+            <Button onClick={openCreate}>+ รับเคส (กรอกมือ)</Button>
+          </Can>
         }
       />
 
@@ -374,7 +415,10 @@ export function CasesManager() {
                       <CaseRowActions
                         item={item}
                         busy={openingCaseId === item.id}
+                        workflowBusy={rowBusyId === item.id}
                         onEdit={() => void openEdit(item)}
+                        onOpenDetail={() => setDetailCaseId(item.id)}
+                        onRunAction={(button) => void runRowAction(item, button)}
                       />
                     </Td>
                   </Tr>
@@ -430,7 +474,14 @@ export function CasesManager() {
                 <div className="mb-3 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
                   สร้างเมื่อ {fmtDateTime(item.createdAt)} โดย {item.createdByName}
                 </div>
-                <CaseRowActions item={item} busy={openingCaseId === item.id} onEdit={() => void openEdit(item)} />
+                <CaseRowActions
+                  item={item}
+                  busy={openingCaseId === item.id}
+                  workflowBusy={rowBusyId === item.id}
+                  onEdit={() => void openEdit(item)}
+                  onOpenDetail={() => setDetailCaseId(item.id)}
+                  onRunAction={(button) => void runRowAction(item, button)}
+                />
               </div>
             ))}
         </div>
@@ -482,37 +533,83 @@ export function CasesManager() {
           updateFilter({ search: info.caseRef, status: 'all' })
         }}
       />
+
+      <CaseDetailModal
+        open={detailCaseId !== null}
+        caseId={detailCaseId}
+        onClose={() => setDetailCaseId(null)}
+        onChanged={() => {
+          setLoading(true)
+          void reload()
+        }}
+      />
+
+      <CaseImportWizard
+        open={importOpen}
+        companies={companies}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          setLoading(true)
+          void reload()
+        }}
+      />
     </>
   )
 }
 
 /**
- * ปุ่มต่อแถว — แก้ไขได้เฉพาะสถานะที่ `38` §8 อนุญาต และผู้ใช้ที่ถือ capability อย่างน้อย 1 ตัวใน
- * `CASE_EDIT_CAPABILITIES` (any-of เหมือนฝั่ง API) · การซ่อนปุ่มเป็น UX — API ตรวจซ้ำเสมอ (DEC-002)
+ * ปุ่มต่อแถว — "ดู/พิจารณา" เปิด Case Detail Modal เสมอ (`38` §7.5 modal เดียวทุกสถานะ)
+ * · "แก้ไข" เฉพาะสถานะที่ `38` §8 อนุญาต + ผู้ใช้ที่ถือ capability อย่างน้อย 1 ตัวใน
+ * `CASE_EDIT_CAPABILITIES` (any-of เหมือนฝั่ง API) · ปุ่ม workflow (ส่งตรวจสอบ/กลับไปแก้ไข)
+ * มาจาก `caseRowActions()` ห้าม hardcode เงื่อนไขสถานะ
+ * การซ่อนปุ่มเป็น UX — API ตรวจซ้ำเสมอ (DEC-002)
  */
 function CaseRowActions({
   item,
   busy,
+  workflowBusy,
   onEdit,
+  onOpenDetail,
+  onRunAction,
 }: {
   item: CaseListItemDto
   busy: boolean
+  workflowBusy: boolean
   onEdit: () => void
+  onOpenDetail: () => void
+  onRunAction: (button: CaseActionButton) => void
 }) {
   const { can } = usePermission()
-
-  if (!isCaseEditable(item.status)) {
-    return (
-      <Button variant="secondary" size="sm" disabled title="หน้ารายละเอียด/พิจารณาเคสอยู่ใน Phase 2.5">
-        ดูรายละเอียด
-      </Button>
-    )
-  }
-  if (!CASE_EDIT_CAPABILITIES.some((capability) => can('manage', capability))) return null
+  const canEdit =
+    isCaseEditable(item.status) && CASE_EDIT_CAPABILITIES.some((capability) => can('manage', capability))
+  const workflow = caseRowActions(item.status, (capability) => can('manage', capability))
 
   return (
-    <Button variant="secondary" size="sm" loading={busy} onClick={onEdit}>
-      แก้ไข
-    </Button>
+    <div className="flex flex-wrap justify-end gap-1.5">
+      {workflow.map((button) => (
+        <Button
+          key={button.action}
+          variant="secondary"
+          size="sm"
+          loading={workflowBusy}
+          disabled={workflowBusy}
+          onClick={() => onRunAction(button)}
+        >
+          {button.label}
+        </Button>
+      ))}
+      {canEdit && (
+        <Button variant="secondary" size="sm" loading={busy} onClick={onEdit}>
+          แก้ไข
+        </Button>
+      )}
+      <Button
+        variant={item.status === 'pending_review' ? 'success' : 'secondary'}
+        size="sm"
+        onClick={onOpenDetail}
+      >
+        {item.status === 'pending_review' ? 'พิจารณา' : 'ดูรายละเอียด'}
+      </Button>
+    </div>
   )
 }

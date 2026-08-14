@@ -35,8 +35,47 @@ export interface CaseFormState {
   assetImeiSerial: string
   /** ค่าที่ผู้ใช้พิมพ์เป็น **บาท** (ยังไม่แปลง) */
   outstandingDebtBaht: string
+  /** ผู้ติดต่ออื่น (`38` §6.1.3) — เพิ่ม/ลบแถวได้ไม่จำกัด */
+  contacts: CaseContactForm[]
   /** หมายเหตุที่จะลง `case_edit_history` — ใช้เฉพาะโหมดแก้ไข (`38` §6.4) */
   editNote: string
+}
+
+/** แถวผู้ติดต่ออื่นบนฟอร์ม — `key` ใช้เป็น React key เท่านั้น ไม่ส่งขึ้น API */
+export interface CaseContactForm {
+  key: string
+  contactName: string
+  relationship: string
+  contactPhone: string
+}
+
+export function emptyContact(key: string): CaseContactForm {
+  return { key, contactName: '', relationship: '', contactPhone: '' }
+}
+
+/** แถวที่ยังไม่ได้กรอกอะไรเลย — ตัดทิ้งก่อนส่ง (§6.1.3 "อย่างน้อย 0 คนได้") */
+export function isBlankContact(contact: CaseContactForm): boolean {
+  return (
+    contact.contactName.trim() === '' &&
+    contact.relationship.trim() === '' &&
+    contact.contactPhone.trim() === ''
+  )
+}
+
+/**
+ * แถวผู้ติดต่อ → payload — ตัดเฉพาะแถวที่ **ว่างทั้งแถว**
+ * แถวที่กรอกมาบางส่วนส่งต่อให้ Zod ตีเป็น error รายช่อง (§6.1.3 "เพิ่มแถวแล้วต้องกรอกครบทั้ง 3")
+ */
+export function contactsPayload(
+  contacts: readonly CaseContactForm[],
+): Array<{ contactName: string; relationship: string; contactPhone: string }> {
+  return contacts
+    .filter((contact) => !isBlankContact(contact))
+    .map((contact) => ({
+      contactName: contact.contactName,
+      relationship: contact.relationship,
+      contactPhone: contact.contactPhone,
+    }))
 }
 
 export const EMPTY_CASE_FORM: CaseFormState = {
@@ -58,6 +97,7 @@ export const EMPTY_CASE_FORM: CaseFormState = {
   assetBrandModel: '',
   assetImeiSerial: '',
   outstandingDebtBaht: '',
+  contacts: [],
   editNote: '',
 }
 
@@ -84,6 +124,12 @@ export function caseFormFromDetail(detail: CaseDetailDto | null): CaseFormState 
     assetBrandModel: detail.assetBrandModel ?? '',
     assetImeiSerial: detail.assetImeiSerial ?? '',
     outstandingDebtBaht: toBahtInput(detail.outstandingDebtSatang),
+    contacts: detail.contacts.map((contact) => ({
+      key: contact.id,
+      contactName: contact.contactName,
+      relationship: contact.relationship,
+      contactPhone: contact.contactPhone ?? '',
+    })),
     editNote: '',
   }
 }
@@ -120,6 +166,7 @@ export function buildCasePayload(
     addressCurrent: form.addressCurrent,
     addressWork: form.addressWork,
     addressIdCard: form.addressIdCard,
+    contacts: contactsPayload(form.contacts),
     assetType: form.assetType === '' ? null : form.assetType,
     assetBrandModel: form.assetBrandModel,
     assetImeiSerial: form.assetImeiSerial,
@@ -143,6 +190,16 @@ export const CASE_ERROR_FIELD_MAP: Readonly<Record<string, string>> = {
   debtor_national_id: 'debtorNationalId',
   debtor_phone_mobile: 'debtorPhoneMobile',
   debtor_phone_work: 'debtorPhoneWork',
+}
+
+/**
+ * ชื่อ field จาก `CaseError.context` → ชื่อช่องบนฟอร์ม (รวมแถวผู้ติดต่อที่ API ส่งเป็น
+ * `contacts.<index>.phone` แต่ฟอร์มเก็บเป็น `contacts.<index>.contactPhone`)
+ */
+export function mapCaseErrorField(field: string): string {
+  const contact = /^contacts\.(\d+)\.phone$/.exec(field)
+  if (contact !== null) return `contacts.${contact[1]}.contactPhone`
+  return CASE_ERROR_FIELD_MAP[field] ?? '_'
 }
 
 /** เคสเดิมที่ backend แนบมากับ `CASE_REF_DUPLICATE` เพื่อทำลิงก์ "เปิดเคสเดิม" (`38` §7.3/§11) */
