@@ -14,6 +14,12 @@ const nextConfig: NextConfig = {
     // dev ยังใช้ tsconfig.json ตามเดิม (Next watch เฉพาะ tsconfig.json ในโหมด dev)
     tsconfigPath: isProd ? 'tsconfig.build.json' : 'tsconfig.json',
   },
+  // ใบส่งมอบ PDF อ่านฟอนต์ไทยจากดิสก์ตอน render (`44` §6.4 · `28` §7) — ตัว trace ของ Next
+  // มองไม่เห็นการอ่านไฟล์นี้เอง ต้องบอกให้ผูกเข้า bundle ของ route ไม่งั้นบน Vercel ฟอนต์หาย
+  // (ผลคือ PDF ออกมาแต่ **ตัวอักษรไทยหายทั้งใบโดยไม่มี error**)
+  outputFileTracingIncludes: {
+    '/api/handover-lots/**': ['./public/fonts/**'],
+  },
   // ⚠️ ไม่ตั้ง process.env.TZ ที่นี่โดยเจตนา — server เก็บ/คำนวณเป็น UTC เสมอ
   //    การแปลงเป็น Asia/Bangkok + พ.ศ. ทำที่ display layer ผ่าน utils กลาง (Rule 01 · Phase 1.5)
 }

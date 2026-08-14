@@ -7,6 +7,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import { WarehouseError } from '@/lib/warehouse/errors'
+import type { HandoverParty } from '@/lib/warehouse/handover-doc'
 import { compareAssetIdentity } from '@/lib/warehouse/imei'
 import { assertIntakeCondition, assertRejectReason, imeiMismatchWarning } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
@@ -752,7 +753,37 @@ export async function confirmLot(
   }
 }
 
-/** ข้อมูลดิบของล็อตสำหรับออกเอกสาร (PDF/Excel) — ใช้ scope เดียวกับ `getLot()` */
-export async function getLotForExport(user: SessionUser, lotId: string): Promise<LotDetailDto> {
-  return getLot(user, lotId)
+// ── เอกสารของล็อต: ใบส่งมอบ PDF + Export Excel (`44` §6.4 · §15) ────────────
+
+export interface HandoverDocSource {
+  lot: LotDetailDto
+  /** ผู้ส่งมอบ = องค์กรเจ้าของระบบ */
+  issuer: HandoverParty
+  /** ผู้รับมอบ = บริษัทไฟแนนซ์เจ้าของล็อต (1 ล็อต = 1 บริษัทเสมอ · §6.2) */
+  recipient: HandoverParty
+}
+
+/**
+ * ข้อมูลดิบของล็อตสำหรับออกเอกสาร — ใช้ scope เดียวกับ `getLot()` (ล็อตนอก scope = `LOT_NOT_FOUND`)
+ * ที่อยู่/เลขผู้เสียภาษีของสองฝ่ายอ่าน ณ เวลาออกเอกสาร (ไม่ใช่ snapshot — ใบส่งมอบไม่ใช่เอกสารการเงิน
+ * ที่ต้องตรึงค่า ต่างจาก `92` §7.1 ที่บังคับ snapshot เฉพาะเอกสารที่กระทบเงิน/ภาษี)
+ */
+export async function getHandoverDocSource(user: SessionUser, lotId: string): Promise<HandoverDocSource> {
+  const lot = await getLot(user, lotId)
+  const [organization, company] = await Promise.all([
+    prisma.organization.findUniqueOrThrow({
+      where: { id: user.organizationId },
+      select: { name: true, address: true, taxId: true, phone: true },
+    }),
+    prisma.financeCompany.findUniqueOrThrow({
+      where: { id: lot.companyId },
+      select: { name: true, address: true, taxId: true, phone: true },
+    }),
+  ])
+
+  return {
+    lot,
+    issuer: organization,
+    recipient: company,
+  }
 }
