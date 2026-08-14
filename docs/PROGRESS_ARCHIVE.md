@@ -5,6 +5,40 @@
 
 ---
 
+## Phase 2.11 — Field Tracker Frontend ชุดที่ 2 (ฟอร์มปิดงาน + คำขอเปลี่ยนผู้รับผิดชอบ)
+
+**วันที่**: 2026-08-14 · **commit**: `66be882` + `011318f` + (docs) · **branch**: `auto/phase-2.11`
+
+### สิ่งที่ทำ
+- **ชุด 1 — pure logic + test (51 เคสใหม่)**
+  - `lib/field/close-form.ts` — โหมดฟอร์ม (`closeFormMode()`: ล็อก outcome/เช็คอิน + ปุ่มท้ายฟอร์มตามสถานะ) · ค่าเริ่มต้น (`closeFormFromDetail()`: draft autoload · โหมดตีกลับตั้งจาก `submittedEvidence`) · `closeFormMissing()`/`closeMissingSummary()` (บอกหลักฐานที่ขาด**ครบครั้งเดียว** §20) · `hasCloseFormRevision()`/`canSubmitCloseForm()` · payload ของ 3 ปุ่ม
+  - `lib/field/reassignment-ui.ts` — `nextReassignmentPopup()` (auto-popup ทีละเคส + "ดูทีหลัง") · `declineReasonError()` · `reassignmentCountdown()` (รับ `now` เข้ามา) · `trackReassignments()` จับเคสที่ auto-resolve แล้ว toast ครั้งเดียว
+  - `lib/field/map-pan.ts` — static map (OSM ตาม mockup ไม่ต้องมี API key) + `panCenter()` แปลงพิกเซลที่ลาก ↔ พิกัดด้วยสูตร Web Mercator (ผันกลับได้ มีเทสต์เทียบ `metersPerPixel`)
+  - `lib/field/media-upload.ts` + `upload-client.ts` — accept/capture/เพดานขนาดต่อชนิดสื่อ + `fieldEvidencePath()` (bucket `case-documents` prefix `field_evidence/`)
+  - `field.caseDetail` เพิ่ม `submittedEvidence` (ขยาย payload ไม่แตะ contract) — ฟอร์มโหมดตีกลับต้องเห็นชุดเดิมเพื่อแก้เฉพาะสื่อ + เทียบว่ามีการแก้จริง
+- **ชุด 2 — หน้าจอ**
+  - `<CloseCaseModal>` (`41` §7.6): กล่องจุดเริ่มเดินทาง (ดึง GPS อัตโนมัติทันทีที่เปิดฟอร์ม → บันทึกผ่าน `close-draft` · ลากแผนที่ปรับ = `manual_adjusted` · ปุ่ม "ดึง GPS ใหม่" เมื่อ GPS ล้ม · แสดงเฉพาะทีม `PER_KM`) · outcome picker การ์ดใหญ่ 2 ปุ่ม · เช็คอินจาก `navigator.geolocation` จริง + static map preview + ลิงก์ Maps (ล็อกทุกจุด) · รูป/วิดีโอ/รูปสินค้า (กล้อง + เลือกไฟล์ · thumbnail grid ลบได้) · เสียงไม่บังคับ · autosave draft ทุกครั้งที่แก้ · แถบสรุป "ยังขาด…" · โหมด `needs_revision` = banner เหตุผล + ล็อก outcome/เช็คอิน + ปุ่มเดียว "ส่งกลับยืนยันอีกครั้ง"
+  - `<FieldReassignmentProvider>` ระดับ shell (`41` §7.8): auto-popup ทุกหน้าใต้ `/field` · "ดูทีหลัง" ปิดแค่ popup (**badge ม่วงยังค้าง**) · toast auto-dismiss เมื่อเคสถูกโอนเพราะตอบไม่ทัน · `<ReassignmentModal>` = สรุปคำขอ + countdown + ยินยอม/ไม่ยินยอม (บังคับเหตุผล) + `<FieldCaseDetailBody>` เต็มใต้กล่อง (ครบ 3 ที่ตาม §7.7)
+  - แท็บกำลังติดตาม/รับงานแล้ว + หน้ารายละเอียดเคส ต่อปุ่มของจริงครบ (เลิกใช้ `notYet()` ของ 2.10) · เปิดฟอร์มปิดงานจะ `setPopupPaused(true)` กัน popup เด้งทับ
+
+### การตัดสินใจระหว่างทาง
+- **ไม่มีปุ่มลบจุดเช็คอิน** แม้ §7.6 เขียนว่ามี — §6.4/§6.4.1/§11 ระบุว่าเช็คอิน "ล็อกตลอด แก้ไขไม่ได้", §8 ไม่มี action ลบ และ `45` §6.3 ไม่มี endpoint (2.8 ทำ insert-only พร้อมเทสต์ยาม) ⇒ ยึดกฎธุรกิจ + สัญญา API · ถ้า PO ยืนยันภายหลังว่าต้องลบได้ ต้องเพิ่ม action + endpoint + error code ก่อน
+- **ลากปรับตำแหน่งบนแผนที่โดยไม่เพิ่ม dependency** — mockup ทิ้ง `adjustTravelOrigin()` ไว้เป็น stub · เลือกทำเองด้วยรูป static map + สูตร Web Mercator (`panCenter()`) แทนการดึง Leaflet/Google Maps JS เข้ามา (ต้องมี DEC ใหม่ + ค่า API) — ได้ UX ลากจริงทั้ง touch/mouse และเทสต์คณิตศาสตร์ได้
+- **ไฟล์หลักฐานใช้ bucket `case-documents` เดิม** prefix `cases/<id>/field_evidence/<kind>/` แทนการตั้ง bucket ใหม่ (จะกลายเป็นขั้นตอน ops เพิ่มต่อ environment) · เก็บเฉพาะ path แล้วเปิดดูด้วย `signedFileUrl()` ของ 2.5
+- **จุดเริ่มเดินทางเดินทางมากับ `close-draft`** ตามที่ 2.8 ออกแบบไว้ (ไม่มี endpoint แยกใน `45`) ⇒ ทุกครั้งที่ปรับพิกัดต้องส่งสื่อทั้งชุดไปด้วย ไม่งั้น draft โดนเขียนทับด้วยค่าว่าง (บันทึกไว้ในกับดัก REUSE_INDEX)
+- **toast เคสที่ถูกโอนอัตโนมัติจับจาก "คำขอที่เคยเห็นแล้วหายไป"** — รายการที่ shell โหลดมีแต่สถานะที่ยังทำงานอยู่ (`reassigned_away` ไปอยู่แท็บจบงาน) จึงเทียบข้ามรอบโหลดด้วย `trackReassignments()` และกันซ้ำด้วยรายการ `answered` (เคสที่ผู้ใช้ตอบเอง) + `notified`
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ (98 ไฟล์ / 1,280 เคส — รวมเทสต์ระดับ DB ของ `submittedEvidence` ในโหมด `needs_revision`) · `pnpm build` ✅
+
+### จุดที่คนถัดไปควรรู้
+- **ยังไม่ได้ทดสอบบนมือถือจริง/staging** (ต้อง push โดยคน) — DoD ของ task นี้ที่เหลือคือ: กล้อง/ไมค์บนมือถือจริง, สิทธิ์ตำแหน่ง (ทั้งกรณีอนุญาตและปฏิเสธ), ลากแผนที่บนจอสัมผัส, ปิดงานจริงแล้วเช็คว่ารายการเบิกเกิดครบ
+- **ต้องมี bucket `case-documents` ต่อ environment** (ข้อเดิมจาก 2.5) — ฟอร์มปิดงานใช้ bucket เดียวกัน ถ้าไม่มีจะอัปโหลดหลักฐานไม่ได้เลย
+- **Phase 2.12 ต่อ**: แท็บเบิกค่าใช้จ่าย/สรุปรายได้/แท็บจบงาน/Dashboard/PWA+push — `<FieldComingSoon>` 4 หน้ายังคาอยู่ · flow คำขอเปลี่ยนผู้รับผิดชอบและฟอร์มปิดงานพร้อมใช้ซ้ำได้ทันที (`useReassignment()` / `<CloseCaseModal>`)
+- ปุ่ม "แก้ไขหลักฐาน" ของบล็อกส้มในแท็บกำลังติดตามเปิด `<CloseCaseModal>` ตัวเดียวกัน — โหมดตีกลับตัดสินจาก `status` ไม่ใช่ prop (ห้ามส่ง flag เอง)
+
+---
+
 ## Phase 2.10 — Field Tracker Frontend ชุดที่ 1 (shell + case detail + งานรายวัน + ปฏิทิน)
 
 **วันที่**: 2026-08-14 · **commit**: `97afe2e` + `4d53196` + (docs) · **branch**: `auto/phase-2.10`

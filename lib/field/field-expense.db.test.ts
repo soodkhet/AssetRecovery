@@ -1,6 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
+import { closeFormFromDetail, hasCloseFormRevision } from '@/lib/field/close-form'
 import { clearDistanceCache } from '@/lib/field/distance-provider'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
@@ -452,6 +453,27 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     const evidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId }, orderBy: { submittedAt: 'desc' } })
     expect(evidence.status).toBe('rejected')
     expect(evidence.rejectReason).toBe('ภาพหลักฐานไม่ชัด ตรวจสอบไม่ได้')
+  })
+
+  it('โหมด needs_revision: detail ส่งหลักฐานชุดเดิม + เหตุผลตีกลับให้ฟอร์มตั้งค่าเริ่มต้น (`41` §7.6)', async () => {
+    const caseId = await closeSuccessfully()
+    await field.rejectFieldEvidence(manager, caseId, { reason: 'ภาพหลักฐานไม่ชัด' }, { actor: manager, meta })
+
+    const detail = await field.getFieldCase(agentA, caseId)
+    expect(detail.status).toBe('needs_revision')
+    expect(detail.rejectReason).toBe('ภาพหลักฐานไม่ชัด')
+    expect(detail.submittedEvidence).toMatchObject({
+      outcome: 'closed_success',
+      photos: MEDIA.photos,
+      videos: MEDIA.videos,
+      productPhotos: MEDIA.productPhotos,
+    })
+
+    // ฟอร์มโหมดตีกลับตั้งค่าเริ่มต้นจากชุดนี้ แล้วต้องมีการแก้สื่อจริงก่อนจึงส่งกลับได้ (§8)
+    const form = closeFormFromDetail(detail)
+    expect(form.outcome).toBe('closed_success')
+    expect(hasCloseFormRevision(form, detail)).toBe(false)
+    expect(hasCloseFormRevision({ ...form, photos: [...form.photos, 'p2.jpg'] }, detail)).toBe(true)
   })
 
   it('resubmit_close โดยไม่แก้สื่อเลย = ปฏิเสธ (`41` §8)', async () => {

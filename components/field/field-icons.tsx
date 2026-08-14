@@ -207,6 +207,67 @@ export function IconImage(props: IconProps) {
   )
 }
 
+export function IconCamera(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+      <circle cx="12" cy="13" r="3.2" />
+    </Base>
+  )
+}
+
+export function IconVideo(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3" y="6" width="12" height="12" rx="2" />
+      <path d="m15 10 6-3v10l-6-3z" />
+    </Base>
+  )
+}
+
+export function IconMic(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="9" y="3" width="6" height="10" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    </Base>
+  )
+}
+
+export function IconPackage(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" />
+      <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+    </Base>
+  )
+}
+
+export function IconPlus(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Base>
+  )
+}
+
+export function IconTrash(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+    </Base>
+  )
+}
+
+export function IconMap(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2z" />
+      <path d="M9 4v14M15 6v14" />
+    </Base>
+  )
+}
+
 export function IconLogout(props: IconProps) {
   return (
     <Base {...props}>
