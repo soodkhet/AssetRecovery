@@ -1,22 +1,23 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.6 (Case Assignment BE — reassign 2 สาขา/timeout job/decision support) · งานถัดไป 2.7
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.8 (Field Tracker BE ชุด 1 — core flow รับงาน→จัดวัน→เช็คอิน→ปิดงาน) · งานถัดไป 2.9
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.8: Field Tracker Backend ชุดที่ 1 (core flow — ไฟล์ 41)
+## 🎯 งานถัดไป — Phase 2.9: Field Tracker Backend ชุดที่ 2 (เงิน + ตีกลับ + reassign + push)
 
-- ทำตาม `docs/01_PLAN.md` §2.8 — migration ส่วน field: `assignment_status` 7 ค่า, `schedule_date`/`order`, evidence, checkins, travel_origins, close_case_drafts
-- `GET /api/field/cases` 4 กลุ่มสถานะ + detail payload เต็ม · accept/schedule/reorder (**recompute ทั้งวัน**) + team view (read-only เห็นรายละเอียดเต็ม)
-- **checkin = device GPS เท่านั้น** (ห้ามมีช่องกรอกพิกัดมือ) หลายจุดได้ ล็อกตลอดแก้ไม่ได้ · **travel_origin แยกจาก checkins เด็ดขาด** (auto GPS ตอนกด "เริ่มงาน", ปรับได้, 1 เคส 1 จุด, ไม่ auto-fill จากเคสก่อน)
-- close-draft 1:1 ต่อเคส (autoload · ลบตอน submit · ไม่มี expiry) · `submit_close_case` validate หลักฐานตาม outcome: checkin ≥1, รูป ≥1, วิดีโอ ≥1, รูปสินค้าเฉพาะ success, travel_origin เฉพาะ PER_KM
-- hard gate: เคสที่ยังไม่ `accepted` ห้ามเข้ารอบจัดเส้นทาง — ใช้ `assignmentStateOf()` ของ 2.6 ห้ามอ่าน `case_assignments.status` ดิบ
-- ของที่มีแล้วต้อง reuse: `assignmentStateOf()`/`assignment-ui.ts` (2.6/2.7) · `caseScopeWhere()` (2.2) · envelope + `API_CONTRACT` (2.1) · audit helper (1.4)
-- อ้างอิง: `41` ผ่าน MAP §6 (L80–198), §9–10 (L322–372), §17 (L435) · `23` §6.3
-- LOC ~2,500 · งบ ~350k
-- DoD: flow รับงาน→จัดวัน→เช็คอิน→ปิดงานครบบน staging + test validation ทุก error code
+- ทำตาม `docs/01_PLAN.md` §2.9 — **ต้องมี Google Maps API key ก่อนเริ่ม** (Distance Matrix)
+- Distance service: ลำดับ `travel_origin → checkins ตามเวลาจริง` · เรียกเฉพาะตอน submit/resubmit (ไม่ realtime) · retry/cache · `MIN(dist × rate, max_per_case)`
+- expense auto-generation ตอนปิดงาน (ต่อที่ `closeFieldCase()` จุดเดียว): fuel/allowance จาก snapshot แผนค่าตอบแทน · `closed_success` → `pending_warehouse_confirm` **เสมอ** / `closed_fail` → `pending_approval` · DAILY_FLAT ไม่เรียก distance
+- hotel claim เบิกแยก (`shared_with` = คนในทีมเดียวกัน validate ฝั่ง BE · `matched_case_ids` ใช้ตรวจสอบเท่านั้น)
+- **2 เส้นทางตีกลับห้ามสลับ (`41` §10.1)**: `reject_expense`+`resubmit_expense` (เจ้าของรายการเท่านั้น → กลับ `pending_approval` ไม่ผ่านคลังซ้ำ) / `reject_evidence`+`resubmit_close_case` (Case Approver เท่านั้น · แก้ได้เฉพาะสื่อ ล็อก checkin+outcome · expense เดิม → `superseded` + สร้างใหม่)
+- reassignment respond ฝั่ง field + `reassigned_away` (ไม่นับ success_rate) · income-summary · Web Push (VAPID) + in-app notification store
+- ของที่มีแล้วต้อง reuse: `field-status.ts`/`evidence.ts` (2.8 — transition ของ `reject_evidence`/`resubmit_close_case` มีแล้ว) · `resolvePlanVersionAt()` (1.7) · `swapAssignment()`/timeout job (2.6)
+- อ้างอิง: `41` ผ่าน MAP §6.4–6.6 (L113–198), §10.1 (L362), §11–12 (L373–398) · `22` §6.1–6.4 · `11`
+- LOC ~2,800 · งบ ~400k
+- DoD: test resubmit_close → superseded + expense ใหม่ไม่ซ้ำไม่หาย · DAILY_FLAT ไม่เรียก distance · fuel cap ทำงาน
 
 ---
 
@@ -56,7 +57,7 @@
 | 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ✅ | 2026-08-14 · `07100c8`+`267b3f3` · ผู้ติดต่อ/เอกสาร/รูปสินค้า + ทีมที่เสนอ (ข้อมูลดิบ) + `<CaseDetailModal>` shared 4 โหมด + import wizard · ⚠️ ต้องสร้าง bucket `case-documents` ต่อ environment → archive |
 | 2.6 | Case Assignment BE | ✅ | 2026-08-14 · `a79c64c` · schema คำขอเปลี่ยนผู้รับผิดชอบ + API 8 endpoint ของ `45` §6.2 + reassign 2 สาขา + job timeout idempotent + `successRate()` service กลาง → archive |
 | 2.7 | Case Assignment FE | ✅ | 2026-08-14 · `612e3b2` · หน้า `/cases/assign` + Assignment Modal (reuse `<CaseDetailModal>`) + Kanban full-screen read-only + `assignment-ui.ts` (ปุ่มหัวหน้า = ซ่อนตาม settings) → archive |
-| 2.8 | Field Tracker BE ชุด 1 (core flow) | ⬜ | PLAN §2.8 · GPS จริงเท่านั้น |
+| 2.8 | Field Tracker BE ชุด 1 (core flow) | ✅ | 2026-08-14 · `0465255`+`3f8328f`+`2122229` · `assignment_status` 7 ค่า + `travel_origins`/`close_case_drafts` + API 8 endpoint (รับงาน→จัดวัน→เช็คอิน→ปิดงาน) → archive |
 | 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ⬜ | PLAN §2.9 · ต้องมี Google Maps API key |
 | 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ⬜ | PLAN §2.10 |
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ⬜ | PLAN §2.11 |

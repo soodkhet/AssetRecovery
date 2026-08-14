@@ -5,6 +5,40 @@
 
 ---
 
+## Phase 2.8 — Field Tracker Backend ชุดที่ 1 (core flow — ไฟล์ 41)
+
+**วันที่**: 2026-08-14 · **commit**: `0465255`+`3f8328f`+`2122229` · **branch**: `auto/phase-2.8`
+
+### สิ่งที่ทำ
+- **Schema ภาคสนาม (sync `02` v4.2)** — migration 3 ใบ (`20260814150000_field_tracker_core` + 2 ใบปรับ FK action ให้ตรงแบบที่ Prisma สร้าง):
+  - `assignment_status` **6 → 7 ค่าตาม `41` §10** (`pending_accept`/`accepted_unscheduled`/`scheduled`/`closed_success`/`closed_fail`/`needs_revision`/`reassigned_away`) — ของเดิมแยก "จัดวันแล้ว/ยังไม่จัดวัน" และผลการติดตามไม่ได้ · Postgres ลบค่า enum ไม่ได้ ⇒ สร้างชนิดใหม่แล้วย้ายคอลัมน์พร้อม mapping ของเก่า
+  - `case_assignments.schedule_order` + index `idx_assignments_agent_schedule` · `case_evidences` เปลี่ยน `video_url` → `videos TEXT[]` + เพิ่ม `photos`/`audio_url` (§6.4 เก็บแยกประเภทเป็น array)
+  - ตารางใหม่ **`travel_origins`** (§6.4.1 · enum `travel_origin_source`) และ **`close_case_drafts`** (§6.5) — UNIQUE ที่ `assignment_id` (1 รอบติดตาม = 1 จุด/1 draft)
+- **pure module + unit test 36 เคส**: `field-status.ts` (transition table + `assertFieldAction`/`assertFieldStateAction` + `fieldGroupOf`/`statusesInGroup` 4 กลุ่มแท็บ) · `evidence.ts` (`missingCloseEvidence` คืน**ทุก**รายการที่ขาด + `assertDeviceCoordinates` + `hasEvidenceRevision`) · `schedule.ts` (`nextScheduleOrder` ต่อท้าย + `recomputeScheduleOrder` ทั้งวัน + `assertReorderCoversDay`)
+- **API 8 endpoint ของ `45` §6.3**: list 4 กลุ่ม + `view=own|team` · detail เต็ม (3 ที่อยู่/ติดต่อ/เอกสาร/รูปสินค้า/เช็คอิน/draft/จุดเริ่มเดินทาง/คำขอเปลี่ยนผู้รับผิดชอบ/`rejectReason`) · accept · schedule · reorder · checkin · close-draft (พ่วง travel origin) · close
+- **เทสต์ระดับ DB 22 เคส** (`field-workflow.db.test.ts`): flow เต็ม · error code ครบทุกตัวในขอบเขต · ลำดับต่อวัน · draft autoload/ลบตอน submit · travel origin ไม่ auto-fill ข้ามเคส · มุมมองทีม read-only
+
+### การตัดสินใจระหว่างทาง
+- **enum 7 ค่าเดินตาม `41` §10 แล้ว sync `02` (v4.2)** ตามแนวเดียวกับ v4.0/v4.1 (Group C เขียนไว้ก่อนไฟล์ 38/40/41 รอบ reformat) — โค้ด 2.6 ทั้งหมดย้ายมาใช้ค่าใหม่ผ่าน `assignmentStateOf()` โดยเพิ่ม `ACCEPTED_ASSIGNMENT_STATUSES` (ไม่มีที่ไหนอ่าน `status` ดิบ)
+- **`needs_revision` นับว่า "ยังถือเคสอยู่"** และอยู่แท็บ **กำลังติดตาม** ไม่ใช่จบงาน — เป็นงานค้างที่พนักงานต้องแก้ (§7.6/§10.1)
+- **`travel_origin` ไม่มี endpoint แยกใน `45`** ⇒ เดินทางมากับ `close-draft` (ตรงกับ §6.5 ที่ draft มี `travel_origin` อยู่ในโครงสร้าง) — ไม่เพิ่ม endpoint นอกสัญญา
+- **body ของ `close` เป็นเจ้าของชุดหลักฐานสุดท้าย ไม่ merge กับ draft** (ไม่งั้นไฟล์ที่ผู้ใช้ลบทิ้งจะกลับมา) ส่วน**เช็คอินอ่านจาก DB เสมอ** เพราะล็อกแล้ว
+- **`case.status` → `active` ตอนจัดวัน** และ → `closed_success`/`closed_fail` + `outcome` + `closed_at` ตอนปิดงาน (`02` §3 `case_status.active` = "กำลังดำเนินงาน")
+- **detail เปิดกว้างกว่า `caseScopeWhere()` โดยตั้งใจ** — §7.3/§20 บังคับให้มุมมองทีมเห็นรายละเอียดเต็มไม่ปิดบัง จึงใช้เงื่อนไข "เคสตัวเอง **หรือ** ทีมเดียวกัน" ที่ระดับ assignment ส่วน mutation ทุกตัวยังผ่าน `loadOwnAssignment()` ที่บังคับ `agentId = ผู้เรียก`
+- **วันย้อนหลังไม่ถูกบล็อกฝั่ง BE** — `41` §7.4 เป็นกฎของ Calendar Picker และ §12 ไม่มี error code รองรับ (ห้ามตั้ง code เอง — Rule 04)
+- **`resubmit_close_case` / `reject_evidence` มีใน transition table แล้วแต่ยังไม่มี endpoint** — ตาม PLAN อยู่ Phase 2.9 คู่กับ expense
+
+### จุดที่คนถัดไปควรรู้
+- **การสร้างรายการเบิก fuel/allowance อัตโนมัติตอนปิดงาน (§6.6) ยังไม่มี** — Phase 2.9 ต้องต่อที่ `closeFieldCase()` (จุดเดียว) พร้อมคำนวณระยะทางจาก `travel_origins` + `check_ins` ตามลำดับเวลา
+- `case_evidences.travel_origin_*` คือ **snapshot ณ เวลา submit** — ตัวคำนวณระยะทางของ 2.9 ต้องอ่านค่านี้ ไม่ใช่ค่าปัจจุบันในตาราง `travel_origins`
+- FE 2.10–2.12 ต้องเรียก `fieldGroupOf()`/`assertFieldAction()` ชุดเดียวกับ API — ห้าม if สถานะเองใน JSX (แนวเดียวกับ `assignment-ui.ts` ของ 2.7)
+- เทสต์ DB ของ 2.8 ใช้ 2 ทีม 2 แผนค่าตอบแทน (PER_KM / DAILY_FLAT) — เคสที่ต้องตรวจเงื่อนไขจุดเริ่มเดินทางให้ยืมชุด fixture นี้
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm test` (85 ไฟล์ / 1,126 เคส) ✅ · `pnpm lint` ✅ · `pnpm build` ✅
+
+---
+
 ## Phase 2.7 — Case Assignment Frontend (ไฟล์ 40)
 
 **วันที่**: 2026-08-14 · **commit**: `612e3b2` · **branch**: `auto/phase-2.7`
