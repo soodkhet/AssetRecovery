@@ -348,22 +348,29 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
 // ── อ่าน ────────────────────────────────────────────────────────────────────
 
 export async function listCases(user: SessionUser, query: CaseListQuery): Promise<CaseListResultDto> {
+  // ⚠️ scope กับ filter ต้องอยู่คนละก้อนใน `AND` — spread รวมอ็อบเจ็กต์เดียวทำให้คีย์ซ้ำของ filter
+  //    (`companyId`, `OR` ของ search) **ทับ** เงื่อนไข scope ⇒ ผู้จัดการค้นอะไรก็เห็นทุกทีม
+  //    และ Company User ส่ง `finance_company_id` ของบริษัทอื่นแล้วเห็นข้ามบริษัทได้ (`38` §13 · DEC-002)
   const where: Prisma.CaseWhereInput = {
     organizationId: user.organizationId,
     deletedAt: null,
-    ...caseScopeWhere(user),
-    ...(query.status ? { status: query.status } : {}),
-    ...(query.source_channel ? { source: query.source_channel } : {}),
-    ...(query.finance_company_id ? { companyId: query.finance_company_id } : {}),
-    ...(query.province ? { addrProvince: query.province } : {}),
-    ...(query.search
-      ? {
-          OR: [
-            { caseRefNormalized: { contains: normalizeCaseRef(query.search) } },
-            { debtorName: { contains: query.search, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
+    AND: [
+      caseScopeWhere(user),
+      {
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.source_channel ? { source: query.source_channel } : {}),
+        ...(query.finance_company_id ? { companyId: query.finance_company_id } : {}),
+        ...(query.province ? { addrProvince: query.province } : {}),
+        ...(query.search
+          ? {
+              OR: [
+                { caseRefNormalized: { contains: normalizeCaseRef(query.search) } },
+                { debtorName: { contains: query.search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+    ],
   }
 
   const [total, rows] = await Promise.all([

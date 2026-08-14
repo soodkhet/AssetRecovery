@@ -362,6 +362,44 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     ).rejects.toMatchObject({ code: 'CASE_NOT_FOUND' })
   })
 
+  it('filter ของ `listCases` ทับ scope ไม่ได้ — `finance_company_id`/`search` ห้ามเปิดแถวนอกขอบเขต', async () => {
+    const caseRef = 'SF-2026-2320'
+    const caseId = await seedCase(caseRef, { withDocuments: false })
+    try {
+      const { listCases } = await import('@/lib/cases/queries')
+      const { caseListQuerySchema } = await import('@/lib/cases/schemas')
+
+      // ① Company User ของบริษัทอื่น ส่ง `finance_company_id` ของบริษัทที่มีเคสมาเอง ⇒ ต้องได้ 0
+      const otherCompanyUser: SessionUser = {
+        ...actor,
+        isSuperadmin: false,
+        scope: { kind: 'company', teamIds: [], companyId: TEAM_ID, userId: USER_ID },
+      }
+      const crossCompany = await listCases(
+        otherCompanyUser,
+        caseListQuerySchema.parse({ finance_company_id: COMPANY_ID }),
+      )
+      expect(crossCompany.items).toEqual([])
+      expect(crossCompany.total).toBe(0)
+
+      // ② search ตั้งคีย์ `OR` — ห้ามไปทับ `OR` ของ scope ทีม (เคสนี้ยังไม่มีทีมที่รับผิดชอบ)
+      const teamUser: SessionUser = {
+        ...actor,
+        isSuperadmin: false,
+        scope: { kind: 'team', teamIds: [TEAM_ID], companyId: null, userId: USER_ID },
+      }
+      const searched = await listCases(teamUser, caseListQuerySchema.parse({ search: caseRef }))
+      expect(searched.items).toEqual([])
+      expect(searched.total).toBe(0)
+
+      // ยาม: เคสนี้มีอยู่จริงและผู้ที่เห็นทุกแถวค้นเจอ (ไม่ใช่ 0 เพราะ search พัง)
+      const asGlobal = await listCases(actor, caseListQuerySchema.parse({ search: caseRef }))
+      expect(asGlobal.items.map((item) => item.id)).toEqual([caseId])
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${caseId}'`)
+    }
+  })
+
   it('ผู้ที่ไม่มีสิทธิ์อนุมัติเคสกด accept ไม่ได้ (`38` §13)', async () => {
     const caseId = await seedCase('SF-2026-2309', { withDocuments: true })
     await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })

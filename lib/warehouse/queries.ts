@@ -216,41 +216,48 @@ function toLotDetail(row: LotRow, assets: readonly AssetListItemDto[]): LotDetai
 // ── GET /api/assets (`44` §15) ──────────────────────────────────────────────
 
 export async function listAssets(user: SessionUser, query: AssetListQuery): Promise<AssetListDto> {
+  // ⚠️ scope กับ filter ต้องอยู่คนละก้อนใน `AND` เสมอ — ถ้า spread รวมกันในอ็อบเจ็กต์เดียว
+  //    คีย์ซ้ำ (`companyId`/`case`) ของ filter จะ **ทับ** เงื่อนไข scope ⇒ ส่ง `?companyId=` ของบริษัทอื่น
+  //    แล้วเห็นข้อมูลข้ามบริษัทได้ (`44` §13 · T15)
   const where: Prisma.AssetWhereInput = {
     organizationId: user.organizationId,
     deletedAt: null,
-    ...assetScopeWhere(user),
-    ...(query.status === undefined ? {} : { assetStatus: { in: query.status } }),
-    ...(query.companyId === undefined ? {} : { companyId: query.companyId }),
-    ...(query.condition === undefined ? {} : { condition: query.condition }),
-    ...(query.teamId === undefined && query.agentId === undefined
-      ? {}
-      : {
-          case: {
-            ...(query.teamId === undefined ? {} : { assignedTeamId: query.teamId }),
-            ...(query.agentId === undefined ? {} : { assignments: { some: { agentId: query.agentId } } }),
-          },
-        }),
-    ...(query.dateFrom === undefined && query.dateTo === undefined
-      ? {}
-      : {
-          closedAt: {
-            ...(query.dateFrom === undefined ? {} : { gte: new Date(`${query.dateFrom}T00:00:00.000Z`) }),
-            // ปลายช่วงเป็น "ทั้งวัน" — บวก 1 วันแล้วใช้ `lt` กันเคสที่ปิดตอนบ่ายหลุดออกจากผลลัพธ์
-            ...(query.dateTo === undefined ? {} : { lt: nextDayUtc(query.dateTo) }),
-          },
-        }),
-    ...(query.search === undefined
-      ? {}
-      : {
-          OR: [
-            { caseRef: { contains: query.search, mode: 'insensitive' } },
-            { debtorName: { contains: query.search, mode: 'insensitive' } },
-            // IMEI ค้นแบบ exact เท่านั้น (`44` §6.5 — ห้าม fuzzy)
-            { imeiContract: query.search },
-            { imeiActual: query.search },
-          ],
-        }),
+    AND: [
+      assetScopeWhere(user),
+      {
+        ...(query.status === undefined ? {} : { assetStatus: { in: query.status } }),
+        ...(query.companyId === undefined ? {} : { companyId: query.companyId }),
+        ...(query.condition === undefined ? {} : { condition: query.condition }),
+        ...(query.teamId === undefined && query.agentId === undefined
+          ? {}
+          : {
+              case: {
+                ...(query.teamId === undefined ? {} : { assignedTeamId: query.teamId }),
+                ...(query.agentId === undefined ? {} : { assignments: { some: { agentId: query.agentId } } }),
+              },
+            }),
+        ...(query.dateFrom === undefined && query.dateTo === undefined
+          ? {}
+          : {
+              closedAt: {
+                ...(query.dateFrom === undefined ? {} : { gte: new Date(`${query.dateFrom}T00:00:00.000Z`) }),
+                // ปลายช่วงเป็น "ทั้งวัน" — บวก 1 วันแล้วใช้ `lt` กันเคสที่ปิดตอนบ่ายหลุดออกจากผลลัพธ์
+                ...(query.dateTo === undefined ? {} : { lt: nextDayUtc(query.dateTo) }),
+              },
+            }),
+        ...(query.search === undefined
+          ? {}
+          : {
+              OR: [
+                { caseRef: { contains: query.search, mode: 'insensitive' } },
+                { debtorName: { contains: query.search, mode: 'insensitive' } },
+                // IMEI ค้นแบบ exact เท่านั้น (`44` §6.5 — ห้าม fuzzy)
+                { imeiContract: query.search },
+                { imeiActual: query.search },
+              ],
+            }),
+      },
+    ],
   }
 
   const [rows, total] = await Promise.all([
@@ -438,47 +445,52 @@ export async function rejectAssetIntake(
 // ── GET /api/handover-lots (`44` §15) ───────────────────────────────────────
 
 export async function listLots(user: SessionUser, query: LotListQuery): Promise<LotListDto> {
+  // scope อยู่คนละก้อนกับ filter ใน `AND` — เหตุผลเดียวกับ `listAssets()` (`?companyId=` ห้ามทับ scope)
   const where: Prisma.HandoverLotWhereInput = {
     organizationId: user.organizationId,
     deletedAt: null,
-    ...lotScopeWhere(user),
-    ...(query.status === undefined ? {} : { status: { in: query.status } }),
-    ...(query.companyId === undefined ? {} : { companyId: query.companyId }),
-    ...(query.type === undefined ? {} : { type: query.type }),
-    ...(query.dateFrom === undefined && query.dateTo === undefined
-      ? {}
-      : {
-          scheduledAt: {
-            ...(query.dateFrom === undefined ? {} : { gte: new Date(`${query.dateFrom}T00:00:00.000Z`) }),
-            ...(query.dateTo === undefined ? {} : { lt: nextDayUtc(query.dateTo) }),
-          },
-        }),
-    ...(query.search === undefined
-      ? {}
-      : {
-          // `44` §8.4 ให้ค้นได้ทั้ง **เลขล็อต / IMEI / ชื่อลูกหนี้** ⇒ ค้นทะลุไปที่เครื่องในล็อตด้วย
-          // ⚠️ IMEI/serial เทียบ **exact เท่านั้น** (§6.5 ห้าม fuzzy) ส่วนชื่อ/เลขสัญญาเทียบ contains
-          //    — กติกาเดียวกับ `listAssets()` และ `matchesAssetSearch()` ฝั่งหน้าจอ
-          OR: [
-            { lotNumber: { contains: query.search, mode: 'insensitive' } },
-            { docRef: { contains: query.search, mode: 'insensitive' } },
-            {
-              assets: {
-                some: {
-                  deletedAt: null,
-                  OR: [
-                    { caseRef: { contains: query.search, mode: 'insensitive' } },
-                    { debtorName: { contains: query.search, mode: 'insensitive' } },
-                    { imeiContract: query.search },
-                    { imeiActual: query.search },
-                    { serialContract: query.search },
-                    { serialActual: query.search },
-                  ],
-                },
+    AND: [
+      lotScopeWhere(user),
+      {
+        ...(query.status === undefined ? {} : { status: { in: query.status } }),
+        ...(query.companyId === undefined ? {} : { companyId: query.companyId }),
+        ...(query.type === undefined ? {} : { type: query.type }),
+        ...(query.dateFrom === undefined && query.dateTo === undefined
+          ? {}
+          : {
+              scheduledAt: {
+                ...(query.dateFrom === undefined ? {} : { gte: new Date(`${query.dateFrom}T00:00:00.000Z`) }),
+                ...(query.dateTo === undefined ? {} : { lt: nextDayUtc(query.dateTo) }),
               },
-            },
-          ],
-        }),
+            }),
+        ...(query.search === undefined
+          ? {}
+          : {
+              // `44` §8.4 ให้ค้นได้ทั้ง **เลขล็อต / IMEI / ชื่อลูกหนี้** ⇒ ค้นทะลุไปที่เครื่องในล็อตด้วย
+              // ⚠️ IMEI/serial เทียบ **exact เท่านั้น** (§6.5 ห้าม fuzzy) ส่วนชื่อ/เลขสัญญาเทียบ contains
+              //    — กติกาเดียวกับ `listAssets()` และ `matchesAssetSearch()` ฝั่งหน้าจอ
+              OR: [
+                { lotNumber: { contains: query.search, mode: 'insensitive' } },
+                { docRef: { contains: query.search, mode: 'insensitive' } },
+                {
+                  assets: {
+                    some: {
+                      deletedAt: null,
+                      OR: [
+                        { caseRef: { contains: query.search, mode: 'insensitive' } },
+                        { debtorName: { contains: query.search, mode: 'insensitive' } },
+                        { imeiContract: query.search },
+                        { imeiActual: query.search },
+                        { serialContract: query.search },
+                        { serialActual: query.search },
+                      ],
+                    },
+                  },
+                },
+              ],
+            }),
+      },
+    ],
   }
 
   const [rows, total] = await Promise.all([
