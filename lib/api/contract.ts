@@ -300,6 +300,15 @@ export const API_CONTRACT = {
     source: '41 §17.1 · 45 §6.3',
     summary: 'ส่งคำขอเบิกที่พัก',
   },
+  // เติมเข้า `45` §6.3 พร้อม Phase 2.12 — `41` §6.6 บังคับให้ผู้พักร่วมเป็นคนในทีมเดียวกัน
+  // ฟอร์มจึงต้องมีรายชื่อทีมของตัวเอง (ยาม `assertSharedAgentInTeam()` ฝั่ง BE ใช้เงื่อนไขเดียวกัน)
+  'field.teammates': {
+    method: 'GET',
+    path: '/api/field/teammates',
+    module: 'field',
+    source: '41 §6.6 · 45 §6.3',
+    summary: 'รายชื่อเพื่อนร่วมทีมของผู้เรียก (ตัวเลือก "พักร่วมกับ" ของฟอร์มเบิกที่พัก)',
+  },
   'field.incomeSummary': {
     method: 'GET',
     path: '/api/field/income-summary',

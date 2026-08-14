@@ -6,6 +6,7 @@ import type {
   ExpenseStatus,
   ExpenseType,
   FuelMode,
+  ReassignmentResolution,
   TravelOriginSource,
 } from '@/lib/generated/prisma/enums'
 
@@ -114,6 +115,33 @@ export interface FieldCaseListItemDto {
   /** `41` §6.8 — แสดงก่อนกดรับงานเสมอ (ค่าตายตัวต่อเคสจากแผนค่าตอบแทนของทีม) */
   commissionSatang: number | null
   noSuccessFeeSatang: number | null
+  /** `41` §7.11 — non-null เฉพาะสถานะ `reassigned_away` (การ์ดแบบไม่มีสถานะค่าใช้จ่าย) */
+  reassignedAway: FieldReassignedAwayDto | null
+  /**
+   * สถานะรายการเบิกของ assignment รอบนี้ (`41` §7.11 — ป้าย "ค่าใช้จ่าย" บนการ์ดแท็บจบงาน)
+   * ว่าง = ยังไม่มีรายการเบิก (เคสไม่มี expense ตาม DEC-006/D6) หรือเป็นเคสที่ถูกโอนไป
+   */
+  expenseStatuses: ExpenseStatus[]
+}
+
+/**
+ * เคสที่ **ถูกโอนไปให้คนอื่น** (`41` §7.11) — มาจาก `reassignment_history` (insert-only) ของรอบที่
+ * ผู้เรียกเป็นผู้รับผิดชอบคนเดิม · การ์ดนี้ไม่มีสถานะค่าใช้จ่ายเพราะไม่ใช่ผลการปิดงาน
+ */
+export interface FieldReassignedAwayDto {
+  /** พนักงานคนใหม่ที่รับเคสต่อ */
+  toAgentName: string
+  /** เวลาที่เคสถูกโอนจริง (`reassignment_history.resolved_at`) */
+  reassignedAt: string
+  reason: string
+  /** `timeout_auto` = เกินกำหนดเวลาตอบรับ · `consented` = ยินยอมเอง (ใช้เหตุผลที่ผู้จัดการระบุ) */
+  resolution: ReassignmentResolution
+}
+
+/** เพื่อนร่วมทีมสำหรับช่อง "พักร่วมกับ" ของฟอร์มเบิกที่พัก (`41` §6.6 — เลือกได้เฉพาะคนในทีม) */
+export interface FieldTeammateDto {
+  id: string
+  fullName: string
 }
 
 export interface FieldCaseListResultDto {

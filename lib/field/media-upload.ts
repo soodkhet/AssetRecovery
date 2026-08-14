@@ -83,3 +83,29 @@ export function fieldEvidencePath(
 ): string {
   return `cases/${caseId}/field_evidence/${kind}/${uniqueKey}-${sanitizeFileName(fileName)}`
 }
+
+// ── ใบเสร็จของรายการเบิกแยก (`41` §6.6 — `receipt` บังคับแนบ) ───────────────
+
+/** ใบเสร็จรับได้ทั้งรูปถ่ายและ PDF (ต่างจากสื่อหลักฐานปิดงานที่รับเฉพาะรูป/วิดีโอ/เสียง) */
+export const EXPENSE_RECEIPT_ACCEPT = 'image/*,application/pdf'
+export const EXPENSE_RECEIPT_MAX_BYTES = 10 * MB
+
+export function checkExpenseReceiptCandidate(file: UploadCandidate): string | null {
+  const type = file.type.toLowerCase()
+  if (type !== '' && !type.startsWith('image/') && type !== 'application/pdf') {
+    return `ใบเสร็จรับเฉพาะไฟล์รูปภาพหรือ PDF — ไฟล์ ${file.name} ไม่รองรับ`
+  }
+  if (file.size > EXPENSE_RECEIPT_MAX_BYTES) {
+    return `ไฟล์ ${file.name} ใหญ่เกิน ${Math.floor(EXPENSE_RECEIPT_MAX_BYTES / MB)} MB`
+  }
+  if (file.size <= 0) return `ไฟล์ ${file.name} ว่างเปล่า`
+  return null
+}
+
+/**
+ * path ของใบเสร็จ — แยกตาม **ผู้เบิก** ไม่ใช่เคส เพราะรายการกลุ่ม "เบิกแยก" ไม่ผูกกับเคสใดเคสหนึ่ง
+ * (auto-mapping กับเคสตาม §6.6 ใช้ตรวจสอบเท่านั้น ไม่ใช่ความเป็นเจ้าของไฟล์)
+ */
+export function expenseReceiptPath(userId: string, fileName: string, uniqueKey: string): string {
+  return `expenses/${userId}/receipts/${uniqueKey}-${sanitizeFileName(fileName)}`
+}

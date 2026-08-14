@@ -36,6 +36,8 @@ function item(overrides: Partial<FieldCaseListItemDto> = {}): FieldCaseListItemD
     checkinCount: 0,
     commissionSatang: null,
     noSuccessFeeSatang: null,
+    reassignedAway: null,
+    expenseStatuses: [],
     ...overrides,
   }
 }

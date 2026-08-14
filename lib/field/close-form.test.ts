@@ -42,6 +42,8 @@ function detailOf(overrides: Partial<FieldCaseDetailDto> = {}): FieldCaseDetailD
     checkinCount: 0,
     commissionSatang: null,
     noSuccessFeeSatang: null,
+    reassignedAway: null,
+    expenseStatuses: [],
     companyName: 'ไฟแนนซ์ ก',
     teamId: 'team-1',
     teamName: 'ทีมชลบุรี',

@@ -39,6 +39,8 @@ function scheduled(caseId: string, scheduleDate: string | null): FieldCaseListIt
     checkinCount: 0,
     commissionSatang: null,
     noSuccessFeeSatang: null,
+    reassignedAway: null,
+    expenseStatuses: [],
   }
 }
 

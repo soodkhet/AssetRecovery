@@ -86,6 +86,7 @@ POST   /api/field/notifications/read                  ทำเครื่อ�
 POST   /api/field/reassignment/:id/respond            ตอบรับ/ปฏิเสธคำขอเปลี่ยนผู้รับผิดชอบ (body: consent, decline_reason?)
 GET    /api/field/expenses?type={caseBound|separate}  ดึงรายการเบิกค่าใช้จ่าย
 POST   /api/field/expenses/hotel                      ส่งคำขอเบิกที่พัก
+GET    /api/field/teammates                           รายชื่อเพื่อนร่วมทีมของผู้เรียก — ตัวเลือก "พักร่วมกับ" ของฟอร์มเบิกที่พัก ไฟล์ 41 §6.6 (เพิ่ม 14/08/2569 Phase 2.12)
 GET    /api/field/income-summary?month={YYYY-MM}      ดึงสรุปรายได้
 ```
 

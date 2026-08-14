@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192" role="img" aria-label="AssetRecovery">
+  <rect width="192" height="192" rx="40" fill="#0f172a" />
+  <g fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 118V74h56v44" />
+    <path d="M96 88h26l18 20v10h-44" />
+    <circle cx="66" cy="126" r="10" fill="#0f172a" />
+    <circle cx="122" cy="126" r="10" fill="#0f172a" />
+  </g>
+</svg>

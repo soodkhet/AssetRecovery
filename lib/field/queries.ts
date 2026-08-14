@@ -46,12 +46,14 @@ import type {
   FieldCheckinResultDto,
   FieldCloseDraftDto,
   FieldCloseDraftResultDto,
+  FieldReassignedAwayDto,
   FieldReorderResultDto,
+  FieldTeammateDto,
   FieldTravelOriginDto,
 } from '@/lib/field/types'
 import { FieldError } from '@/lib/field/errors'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { AssignmentStatus, CaseOutcome, FuelMode } from '@/lib/generated/prisma/enums'
+import type { AssignmentStatus, CaseOutcome, ExpenseStatus, FuelMode } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -123,7 +125,19 @@ function toDateOnly(value: Date | null): string | null {
   return value === null ? null : value.toISOString().slice(0, 10)
 }
 
-function toListItem(row: AssignmentRow, hasPendingReassignment: boolean): FieldCaseListItemDto {
+/** ข้อมูลเสริมของแท็บ "จบงาน" (`41` §7.11) — โหลดแยกเฉพาะแถวกลุ่ม `closed` เท่านั้น */
+interface ClosedCardExtras {
+  reassignedAway: FieldReassignedAwayDto | null
+  expenseStatuses: ExpenseStatus[]
+}
+
+const NO_CLOSED_EXTRAS: ClosedCardExtras = { reassignedAway: null, expenseStatuses: [] }
+
+function toListItem(
+  row: AssignmentRow,
+  hasPendingReassignment: boolean,
+  extras: ClosedCardExtras = NO_CLOSED_EXTRAS,
+): FieldCaseListItemDto {
   const plan = row.team.compensationPlan
   return {
     caseId: row.caseId,
@@ -150,6 +164,8 @@ function toListItem(row: AssignmentRow, hasPendingReassignment: boolean): FieldC
     checkinCount: row._count.checkIns,
     commissionSatang: plan?.commissionSatang ?? null,
     noSuccessFeeSatang: plan?.noSuccessFeeSatang ?? null,
+    reassignedAway: extras.reassignedAway,
+    expenseStatuses: extras.expenseStatuses,
   }
 }
 
@@ -252,6 +268,75 @@ async function pendingReassignmentCaseIds(caseIds: readonly string[]): Promise<S
   return new Set(rows.map((row) => row.caseId))
 }
 
+/**
+ * ข้อมูลเสริมของการ์ดแท็บ "จบงาน" (`41` §7.11) — 2 query ต่อ 1 ครั้งที่โหลดกลุ่ม `closed`
+ * (แถวกลุ่มอื่นไม่จ่ายค่า query นี้เลย เพราะแท็บอื่นไม่แสดงข้อมูลชุดนี้)
+ *
+ * - `reassigned_away` → แถวประวัติของ **รอบที่ผู้เรียกเป็นคนเดิม** เท่านั้น (`from_agent_id`)
+ * - สถานะค่าใช้จ่าย → ของ `assignment` รอบนั้นตรง ๆ ⇒ รอบติดตามเก่าไม่ปนกัน
+ */
+async function loadClosedCardExtras(rows: readonly AssignmentRow[]): Promise<Map<string, ClosedCardExtras>> {
+  const closedRows = rows.filter((row) => fieldGroupOf(row.status) === 'closed')
+  if (closedRows.length === 0) return new Map()
+
+  const reassignedRows = closedRows.filter((row) => row.status === 'reassigned_away')
+  const [histories, expenses] = await Promise.all([
+    reassignedRows.length === 0
+      ? Promise.resolve([])
+      : prisma.reassignmentHistory.findMany({
+          where: {
+            caseId: { in: reassignedRows.map((row) => row.caseId) },
+            fromAgentId: { in: [...new Set(reassignedRows.map((row) => row.agentId))] },
+          },
+          orderBy: { resolvedAt: 'desc' },
+          select: {
+            caseId: true,
+            fromAgentId: true,
+            resolvedAt: true,
+            reason: true,
+            resolution: true,
+            toAgent: { select: { fullName: true } },
+          },
+        }),
+    prisma.expense.findMany({
+      where: { assignmentId: { in: closedRows.map((row) => row.id) }, deletedAt: null },
+      select: { assignmentId: true, status: true },
+    }),
+  ])
+
+  // เรียง `resolvedAt` ใหม่→เก่าแล้วเก็บแถวแรกของแต่ละคู่ = ครั้งล่าสุดที่เคสถูกโอนออกจากคนนั้น
+  const historyByKey = new Map<string, FieldReassignedAwayDto>()
+  for (const history of histories) {
+    const key = `${history.caseId}:${history.fromAgentId}`
+    if (historyByKey.has(key)) continue
+    historyByKey.set(key, {
+      toAgentName: history.toAgent.fullName,
+      reassignedAt: history.resolvedAt.toISOString(),
+      reason: history.reason,
+      resolution: history.resolution,
+    })
+  }
+
+  const statusesByAssignment = new Map<string, ExpenseStatus[]>()
+  for (const expense of expenses) {
+    if (expense.assignmentId === null) continue
+    statusesByAssignment.set(expense.assignmentId, [
+      ...(statusesByAssignment.get(expense.assignmentId) ?? []),
+      expense.status,
+    ])
+  }
+
+  return new Map(
+    closedRows.map((row) => [
+      row.id,
+      {
+        reassignedAway: historyByKey.get(`${row.caseId}:${row.agentId}`) ?? null,
+        expenseStatuses: statusesByAssignment.get(row.id) ?? [],
+      },
+    ]),
+  )
+}
+
 // ── GET /api/field/cases (`41` §7.2/§7.3/§7.5/§7.11) ────────────────────────
 
 export async function listFieldCases(user: SessionUser, query: FieldCaseListQuery): Promise<FieldCaseListResultDto> {
@@ -274,14 +359,39 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
     select: assignmentSelect,
   })
 
-  const pending = await pendingReassignmentCaseIds(rows.map((row) => row.caseId))
+  const [pending, closedExtras] = await Promise.all([
+    pendingReassignmentCaseIds(rows.map((row) => row.caseId)),
+    loadClosedCardExtras(rows),
+  ])
 
   return {
     view: query.view,
     group: query.status ?? null,
     readOnly: query.view === 'team',
-    items: rows.map((row) => toListItem(row, pending.has(row.caseId))),
+    items: rows.map((row) => toListItem(row, pending.has(row.caseId), closedExtras.get(row.id))),
   }
+}
+
+// ── GET /api/field/teammates (`41` §6.6 — ช่อง "พักร่วมกับ") ────────────────
+
+/**
+ * เพื่อนร่วมทีมของผู้เรียก (ไม่รวมตัวเอง) — ใช้เติมตัวเลือก `shared_with` ของฟอร์มเบิกที่พัก
+ * เงื่อนไขต้องตรงกับยาม `assertSharedAgentInTeam()` ฝั่ง `POST /api/field/expenses/hotel` เป๊ะ
+ * มิฉะนั้นหน้าจอจะเสนอคนที่ BE ปฏิเสธ
+ */
+export async function listFieldTeammates(user: SessionUser): Promise<FieldTeammateDto[]> {
+  const rows = await prisma.user.findMany({
+    where: {
+      organizationId: user.organizationId,
+      teamId: { not: null },
+      team: { members: { some: { id: user.id } } },
+      id: { not: user.id },
+      deletedAt: null,
+    },
+    orderBy: { fullName: 'asc' },
+    select: { id: true, fullName: true },
+  })
+  return rows.map((row) => ({ id: row.id, fullName: row.fullName }))
 }
 
 // ── GET /api/field/cases/:id (`41` §7.7) ────────────────────────────────────

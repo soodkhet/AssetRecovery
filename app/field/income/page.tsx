@@ -1,11 +1,6 @@
-import { FieldComingSoon } from '@/components/field/field-coming-soon'
+import { IncomeSummary } from '@/components/field/income-summary'
 
-/** สรุปรายได้ (`41` §7.10) — สะสม + รายเดือน · เนื้อหาจริงอยู่ Phase 2.12 */
+/** สรุปรายได้ (`41` §7.10) — สะสมตลอด + กรองรายเดือน */
 export default function FieldIncomePage() {
-  return (
-    <FieldComingSoon
-      title="สรุปรายได้"
-      description="คอมมิชชั่นสะสมและรายเดือนของคุณ — อยู่ระหว่างพัฒนา (Phase 2.12)"
-    />
-  )
+  return <IncomeSummary />
 }
