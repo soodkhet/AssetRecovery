@@ -5,6 +5,42 @@
 
 ---
 
+## Phase 2.15 — Warehouse Frontend ชุดที่ 2 (ส่งมอบ + แนบเอกสาร · ไฟล์ 44 §8.4–8.5)
+
+**วันที่**: 2026-08-15 · **commit**: `557fc34` · **branch**: `auto/phase-2.15`
+
+### สิ่งที่ทำ
+- **pure modules + unit test ใหม่ 22 เคส**
+  - `lib/warehouse/lot-filters.ts` — `buildLotListQuery()` (สถานะของแท็บติดไปเสมอ), `filterByDeliveredDate()`, ตัวเลือกบริษัทพร้อม fallback, `DELIVERED_STATUS_OPTIONS`
+  - `lib/warehouse/lot-documents.ts` — path เอกสารตาม §6.4, `lotDocumentSlots()` (จุดเดียวที่ตัดสินว่าล็อตต้องมีเอกสารกี่ชิ้น/ครบหรือยัง), `lotDocumentMime()`, `checkLotDocumentCandidate()`
+  - `lib/format/datetime.ts` — `toInputDateTime()`/`fromInputDateTime()` สำหรับ `<input type="datetime-local">` (อ่านค่าเป็นเวลาไทยเสมอ)
+- **`uploadLotDocument()`** (browser) — อัปโหลดใบเซ็นรับ/หลักฐานจัดส่งขึ้น bucket `case-documents` prefix `handover-lots/{lotId}/`
+- **หน้าจอครบวงจรบน `/warehouse`**
+  - **Modal "นัดวันส่งมอบ"** (`<HandoverLotModal>`): เลือกรูปแบบ 2 แบบ → ช่องกรอกเปลี่ยนตามรูปแบบ (นัดรับ+ผู้ประสาน / กำหนดส่ง+ที่อยู่จัดส่งบังคับ+เลขพัสดุ) + กล่องเลขล็อต/ใบส่งมอบอ่านอย่างเดียว + ปุ่มดูตัวอย่างใบส่งมอบ (พิมพ์ได้) + รายการเครื่องแบบพับได้
+  - **`<LotTab>` ครอบทั้งแท็บ "รอส่งมอบ" และ "ส่งมอบแล้ว"**: filter bar (ค้นหา/วันที่/บริษัท + สถานะเฉพาะแท็บส่งมอบแล้ว) + การ์ดล็อต (กรอบ amber/emerald + checklist เอกสาร ✅/⏳) + drill-down รายการเครื่อง + ปุ่มใบส่งมอบ PDF / Export Excel
+  - **Modal แนบเอกสาร + ยืนยันส่งมอบ** (`<AttachDocModal>`) และ **Modal ดูเอกสารที่แนบ** (`<ViewAttachedDocModal>`)
+- **backend เล็กน้อยที่จำเป็นตาม spec**: `listLots()` ค้นทะลุถึงเครื่องในล็อต (เลขสัญญา/ชื่อลูกหนี้ contains · IMEI/serial exact) ตาม §8.4 + เทสต์ระดับ DB · `lotCreateSchema` บังคับ `deliveryAddr` เมื่อ `we_deliver` ตาม §7.2
+
+### การตัดสินใจระหว่างทาง
+- **ไม่โชว์เลข `LOT-`/`DLV-` ล่วงหน้าในฟอร์ม** — mockup โชว์ "เลขถัดไป" ได้เพราะเป็นข้อมูลจำลอง แต่ของจริงเดินจาก sequence ระดับ DB ตอนสร้าง (`44` §6.2/§10 ห้าม recycle) การเดาเลขจะชนกันทันทีที่มีคนสร้างพร้อมกัน ⇒ แสดงเป็น `LOT-…… / DLV-……` พร้อมข้อความว่าออกอัตโนมัติตอนบันทึก
+- **"ดูตัวอย่างใบส่งมอบ" เป็นร่างฝั่ง client** (`<HandoverNotePreview>` + คลาส `.print-area`) — ฉบับสมบูรณ์คือ PDF จาก `GET /api/handover-lots/:id/pdf` ซึ่งออกได้หลังล็อตเกิดเท่านั้น · คอลัมน์/ลำดับใช้ `documentIdentifier()`+`assetConditionLabel()` ชุดเดียวกับ PDF/Excel เพื่อไม่ให้ร่างกับฉบับจริงต่างกัน · **Export Excel ในโมดัลสร้างล็อตจึงไม่มี** (endpoint ต้องมี lot id) — ย้ายไปไว้ที่ drill-down ของล็อตหลังบันทึกแทน
+- **แท็บ "รอส่งมอบ"/"ส่งมอบแล้ว" เป็น component เดียว** (`<LotTab tab=…>`) — §8.4/§8.5 มีโครงเดียวกัน ต่างแค่สถานะ/ตัวกรอง/ปุ่ม การแยกไฟล์จะทำให้กติกาสองแท็บเพี้ยนจากกันภายหลัง
+- **"วันที่" ของสองแท็บคนละความหมาย** — §8.4 = วันนัด (ให้ API กรองผ่าน `dateFrom`/`dateTo` ที่ผูกกับ `scheduledAt`) · §8.5 = วันส่งมอบจริง (กรองฝั่ง client เพราะ `44` §15 ไม่มี filter `deliveredAt`) · mockup กรอง `createdAt` ในแท็บรอส่งมอบ ซึ่งไม่มีประโยชน์กับการนัดหมายจริง
+- **เพิ่มการค้นทะลุถึงเครื่องใน `listLots()`** — §8.4 ระบุว่า filter bar ค้นด้วย "เลขล็อต / IMEI / ชื่อลูกหนี้" แต่ §15 เขียน `search` ไว้แค่ `lotNumber|docRef` · การ์ดล็อตไม่มีข้อมูลเครื่องให้ค้นฝั่ง client ⇒ ขยายที่ where ของ API (IMEI ยัง exact ตาม §6.5) แทนที่จะปล่อยให้ฟีเจอร์บนสเปคใช้ไม่ได้
+- **`deliveryAddr` บังคับที่ Zod ไม่ใช่ error code ใหม่** — `44` §7.2 บอกว่าบังคับ แต่ §12 ไม่มี code สำหรับช่องนี้ ⇒ ตกที่ validation กลาง (`REQUIRED_MISSING` + field error) ตาม Rule 04 ห้ามตั้ง code เอง
+- **วันนัด/วันส่งมอบจริงบังคับกรอกที่หน้าจอ** ทั้งที่ schema ยอม `null` — mockup ติด `*` ทั้งสองช่อง และทั้งสอง modal มีขึ้นเพื่อบันทึกเวลาเหล่านี้โดยตรง (API ยังยอม null ไว้สำหรับงาน ops/ย้อนหลัง)
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ (0 warning) · `pnpm test` ✅ (120 ไฟล์ / 1,579 เคส รวมเทสต์ระดับ DB ของ `44` §17) · `next build` ✅
+
+### จุดที่คนถัดไปควรรู้
+- **วงจร `closed_success → intake → lot → confirm` ครบบนหน้าจอแล้ว** — ยืนยันล็อตคือจุดที่ปลดล็อก expense จริง (`44` §11) ส่วน Revenue ยังเป็น stub ของ 2.13 (`revenue-service.ts`) รอ Phase 3.6 เสียบตัวจริง
+- ปุ่ม PDF/Excel เป็น `<a href>` ตรงไป endpoint (พา session cookie ไปเอง) — ถ้าเปลี่ยน endpoint ให้ต้องใช้ token ต้องเปลี่ยนวิธีดาวน์โหลดที่ `<LotTab>` ด้วย
+- เอกสารแนบใช้ path ตายตัวต่อชนิด (`upsert: true`) ⇒ แนบทับได้เฉพาะก่อนยืนยัน หลัง `confirmed` ล็อตเป็น terminal ทั้งชั้น service และ trigger DB
+- คลาส `.print-area` / `.no-print` ใน `app/globals.css` เป็นของกลาง — เอกสารพิมพ์ได้ตัวถัดไปใช้ซ้ำได้เลย
+
+---
+
 ## Phase 2.14 — Warehouse Frontend ชุดที่ 1 (รับเข้าคลัง + ในคลัง · ไฟล์ 44 §8.1–8.3)
 
 **วันที่**: 2026-08-15 · **commit**: `8d25403` · **branch**: `auto/phase-2.14`
