@@ -3,9 +3,21 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { ACTIVE_ASSIGNMENT_STATUSES } from '@/lib/assignments/assignment'
 import { AssignmentError } from '@/lib/assignments/errors'
-import { acceptAssignment } from '@/lib/assignments/queries'
+import { acceptAssignment, respondReassignment } from '@/lib/assignments/queries'
 import { caseScopeWhere } from '@/lib/cases/queries'
-import { assertCloseEvidence, assertDeviceCoordinates } from '@/lib/field/evidence'
+import { assertCloseEvidence, assertDeviceCoordinates, hasEvidenceRevision } from '@/lib/field/evidence'
+import { metersToKmHundredths, routePoints } from '@/lib/field/distance'
+import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
+import {
+  generateCaseExpenses,
+  linkSupersededExpenses,
+  resolvePlanSnapshot,
+  supersedeCaseExpenses,
+  type ExpenseTxClient,
+  type PlanSnapshot,
+} from '@/lib/field/expense-queries'
+import { notifyUsersDetached } from '@/lib/notifications/notify'
+import { usersWithCapability } from '@/lib/notifications/recipients'
 import {
   assertFieldAction,
   assertFieldStateAction,
@@ -19,7 +31,10 @@ import type {
   CloseCaseInput,
   CloseDraftInput,
   FieldCaseListQuery,
+  RejectEvidenceInput,
   ReorderSchedulesInput,
+  RespondFieldReassignmentInput,
+  ResubmitCloseInput,
   ScheduleCaseInput,
 } from '@/lib/field/schemas'
 import type {
@@ -34,8 +49,9 @@ import type {
   FieldReorderResultDto,
   FieldTravelOriginDto,
 } from '@/lib/field/types'
+import { FieldError } from '@/lib/field/errors'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { AssignmentStatus } from '@/lib/generated/prisma/enums'
+import type { AssignmentStatus, CaseOutcome, FuelMode } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -78,7 +94,7 @@ const assignmentSelect = {
       id: true,
       name: true,
       compensationPlan: {
-        select: { fuelMode: true, commissionSatang: true, noSuccessFeeSatang: true },
+        select: { id: true, fuelMode: true, commissionSatang: true, noSuccessFeeSatang: true },
       },
     },
   },
@@ -789,11 +805,86 @@ export async function saveCloseDraft(
 // ── POST /api/field/cases/:id/close (`41` §8 submit_close_case) ─────────────
 
 /**
+ * ระยะทางของค่าน้ำมันโหมด `PER_KM` (`41` §6.4.2) — เรียก Google Distance Matrix **นอก** transaction
+ *
+ * มติ PO 14/08/2569 (D10): คำนวณไม่ได้ (Maps ล่ม/quota หมด/ยังไม่ใส่ `GOOGLE_MAPS_API_KEY`)
+ * **ห้ามทำให้ปิดงานล้ม** — คืน `null` แล้วให้ `generateCaseExpenses()` ตั้ง job มาสร้างรายการ fuel ทีหลัง
+ */
+async function resolveDistanceForClose(
+  assignmentId: string,
+  fuelMode: FuelMode | null,
+): Promise<{ distanceKmHundredths: number | null; checkedInAts: Date[] }> {
+  const checkins = await prisma.checkIn.findMany({
+    where: { assignmentId },
+    orderBy: { checkedInAt: 'asc' },
+    select: { latitude: true, longitude: true, checkedInAt: true },
+  })
+  const checkedInAts = checkins.map((row) => row.checkedInAt)
+
+  // `DAILY_FLAT` ไม่แตะ Distance Matrix เลยแม้แต่ครั้งเดียว (`41` §6.4.2 · §20)
+  if (fuelMode !== 'PER_KM') return { distanceKmHundredths: null, checkedInAts }
+
+  const origin = await prisma.travelOrigin.findUnique({
+    where: { assignmentId },
+    select: { latitude: true, longitude: true },
+  })
+  if (origin === null) return { distanceKmHundredths: null, checkedInAts }
+
+  try {
+    const meters = await resolveRouteMeters(
+      routePoints(
+        { latitude: origin.latitude.toNumber(), longitude: origin.longitude.toNumber() },
+        checkins.map((row) => ({
+          latitude: row.latitude.toNumber(),
+          longitude: row.longitude.toNumber(),
+          checkedInAt: row.checkedInAt,
+        })),
+      ),
+    )
+    return { distanceKmHundredths: metersToKmHundredths(meters), checkedInAts }
+  } catch (error) {
+    if (error instanceof DistanceUnavailableError) {
+      console.warn('[field] คำนวณระยะทางไม่สำเร็จ — ตั้ง job คำนวณย้อนหลังตาม D10', {
+        assignmentId,
+        message: error.message,
+      })
+      return { distanceKmHundredths: null, checkedInAts }
+    }
+    throw error
+  }
+}
+
+/** แผนค่าตอบแทนที่ใช้คิดเงินของรอบติดตามนี้ (`92` §7.1) — ทีมไม่มีแผนผูกไว้ = ไม่มีรายการเบิก */
+async function loadPlanSnapshot(user: SessionUser, planId: string | null, onDate: Date): Promise<PlanSnapshot | null> {
+  if (planId === null) return null
+  return await resolvePlanSnapshot(prisma as ExpenseTxClient, {
+    organizationId: user.organizationId,
+    planId,
+    onDate,
+  })
+}
+
+/** `41` §15 — รายการเบิกที่เข้า `pending_approval` แล้วต้องแจ้งฝ่ายบัญชี/การเงิน */
+function notifyExpenseQueue(organizationId: string, outcome: CaseOutcome, count: number, caseRef: string): void {
+  if (count === 0 || outcome !== 'closed_fail') return
+  void usersWithCapability(organizationId, 'approve_expense_manager').then((userIds) => {
+    notifyUsersDetached({
+      organizationId,
+      userIds,
+      eventCode: 'expense.case_bound_created',
+      title: 'มีรายการเบิกใหม่รออนุมัติ',
+      body: `เคส ${caseRef} ปิดงานไม่สำเร็จ — มีรายการเบิก ${count} รายการเข้าคิวอนุมัติ`,
+      linkPath: '/finance/approvals',
+    })
+  })
+}
+
+/**
  * ยืนยันปิดงาน — หลักฐานที่ส่งมาใน body คือชุดสุดท้าย (ฟอร์มเป็นเจ้าของสถานะ ไม่ merge กับ draft
  * ไม่งั้นไฟล์ที่ผู้ใช้ลบทิ้งจะกลับมา) ส่วน **เช็คอินอ่านจาก DB เสมอ** เพราะเป็นหลักฐานที่ล็อกแล้ว
  *
- * ⚠️ การสร้างรายการเบิก fuel/allowance อัตโนมัติ (`41` §6.6) + คำนวณระยะทาง PER_KM = **Phase 2.9**
- * ตัวปิดงานที่นี่จบที่ evidence + สถานะ + ลบ draft เท่านั้น
+ * ปิดงานสำเร็จ = สร้างรายการเบิก fuel/allowance อัตโนมัติในทรานแซกชันเดียวกัน (`41` §6.6 · §8)
+ * — `closed_success` เข้า `pending_warehouse_confirm` เสมอ · `closed_fail` เข้า `pending_approval`
  */
 export async function closeFieldCase(
   user: SessionUser,
@@ -829,7 +920,14 @@ export async function closeFieldCase(
   const closedCaseStatus = outcome === 'closed_success' ? ('closed_success' as const) : ('closed_fail' as const)
   const closedAt = new Date()
 
-  const updated = await prisma.$transaction(async (tx) => {
+  // I/O ภายนอก (Google Distance Matrix) ต้องอยู่นอก `$transaction` — ห้ามถือ transaction ค้างรอ network
+  const fuelMode = current.team.compensationPlan?.fuelMode ?? null
+  const [{ distanceKmHundredths, checkedInAts }, plan] = await Promise.all([
+    resolveDistanceForClose(current.id, fuelMode),
+    loadPlanSnapshot(user, current.team.compensationPlan?.id ?? null, closedAt),
+  ])
+
+  const result = await prisma.$transaction(async (tx) => {
     const claimed = await tx.caseAssignment.updateMany({
       where: { id: current.id, status: 'scheduled' },
       data: { status: closedStatus, completedAt: closedAt, updatedBy: context.actor.id },
@@ -864,6 +962,22 @@ export async function closeFieldCase(
     // draft ถูกลบทันทีที่ปิดงานสำเร็จ (`41` §6.5) — ไม่ใช่ draft ที่ค้างอยู่อีกต่อไป
     await tx.closeCaseDraft.deleteMany({ where: { assignmentId: current.id } })
 
+    // รายการเบิก fuel/allowance เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
+    // พนักงานไม่ต้องทำเรื่องเบิกเอง) ⇒ ปิดงานสำเร็จแต่ไม่มีรายการเบิกเป็นไปไม่ได้
+    const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      caseId,
+      assignmentId: current.id,
+      agentId: user.id,
+      outcome,
+      plan,
+      distanceKmHundredths,
+      checkedInAts,
+      closedAt,
+      actor: context.actor,
+      meta: context.meta,
+    })
+
     await emitAudit(
       {
         organizationId: user.organizationId,
@@ -881,7 +995,12 @@ export async function closeFieldCase(
           photos: input.photos.length,
           videos: input.videos.length,
           productPhotos: input.productPhotos.length,
-          events: [outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail'],
+          expenseIds: expenses.expenseIds,
+          fuelDistancePending: expenses.fuelDistancePending,
+          events: [
+            outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
+            ...(expenses.expenseIds.length > 0 ? ['expense.case_bound_created'] : []),
+          ],
         },
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
@@ -890,8 +1009,330 @@ export async function closeFieldCase(
       tx as FieldTxClient,
     )
 
-    return await tx.caseAssignment.findUniqueOrThrow({ where: { id: current.id }, select: assignmentSelect })
+    const assignment = await tx.caseAssignment.findUniqueOrThrow({
+      where: { id: current.id },
+      select: assignmentSelect,
+    })
+    return { assignment, expenses }
   })
 
-  return toActionResult(updated, [outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail'])
+  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef)
+
+  return toActionResult(result.assignment, [
+    outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
+    ...(result.expenses.expenseIds.length > 0 ? ['expense.case_bound_created'] : []),
+  ])
+}
+
+// ── POST /api/field/reassignment/:id/respond (`41` §7.8 · §8) ──────────────
+
+/**
+ * พนักงานตอบคำขอเปลี่ยนผู้รับผิดชอบจากฝั่ง Field (`41` §8 `respond_reassignment_consent`)
+ *
+ * **ใช้ service ตัวเดียวกับ `POST /api/cases/:id/reassignment/respond` ของไฟล์ 40** —
+ * ยินยอมแล้วเคสโอนทันที (`reassigned_away` ของคนเดิม ซึ่ง **ไม่นับเข้า `success_rate`** ตาม `41` §10)
+ * ต่างกันแค่ URL รับ `pendingReassignmentId` แทน `caseId` และชื่อ event ตามทะเบียนของไฟล์ 41
+ */
+export async function respondFieldReassignment(
+  user: SessionUser,
+  pendingReassignmentId: string,
+  input: RespondFieldReassignmentInput,
+  context: FieldMutationContext,
+): Promise<FieldActionResultDto> {
+  const pending = await prisma.pendingReassignment.findFirst({
+    where: { id: pendingReassignmentId, organizationId: user.organizationId, fromAgentId: user.id },
+    select: { caseId: true },
+  })
+  // ไม่ใช่คำขอของตัวเอง = ไม่บอกว่ามีคำขอนี้อยู่จริงไหม (`40` §13)
+  if (pending === null) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
+
+  await respondReassignment(
+    user,
+    pending.caseId,
+    {
+      decision: input.consent ? 'consent' : 'decline',
+      ...(input.declineReason === null || input.declineReason === undefined
+        ? {}
+        : { declineReason: input.declineReason }),
+    },
+    context,
+  )
+
+  const events = input.consent ? ['reassignment.consented'] : ['reassignment.declined']
+  const assignment = await prisma.caseAssignment.findFirst({
+    where: { caseId: pending.caseId, agentId: user.id, organizationId: user.organizationId },
+    orderBy: { createdAt: 'desc' },
+    select: assignmentSelect,
+  })
+  if (assignment === null) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
+  return toActionResult(assignment, events)
+}
+
+// ── POST /api/cases/:id/reject-evidence (`41` §8 reject_evidence · §10.1) ───
+
+/**
+ * ตีกลับ **หลักฐานปิดงาน** — สายที่ 2 ของ `41` §10.1 ซึ่ง**ห้ามสลับ**กับ `reject_expense`
+ *
+ * - ผู้สั่งได้คือ **เจ้าหน้าที่อนุมัติเคส (system role)** เท่านั้น — บังคับที่ route ด้วย
+ *   capability `reject_evidence` (`25` §7 · ผู้จัดการ/หัวหน้าทีมของไฟล์ 40 ไม่มีสิทธิ์นี้)
+ * - `assignment_status` → `needs_revision` · **ไม่เพิ่ม `tracking_round`** (แก้หลักฐานของรอบเดิม)
+ * - ยังไม่แตะรายการเบิก — รายการเดิมจะถูก `superseded` ตอน `resubmit_close_case` (`41` §8)
+ */
+export async function rejectFieldEvidence(
+  user: SessionUser,
+  caseId: string,
+  input: RejectEvidenceInput,
+  context: FieldMutationContext,
+): Promise<FieldActionResultDto> {
+  const assignment = await prisma.caseAssignment.findFirst({
+    where: {
+      caseId,
+      organizationId: user.organizationId,
+      case: { deletedAt: null, organizationId: user.organizationId },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: assignmentSelect,
+  })
+  if (assignment === null) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
+  assertFieldAction(assignment.status, 'reject_evidence')
+
+  const reviewedAt = new Date()
+  const updated = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.caseAssignment.updateMany({
+      where: { id: assignment.id, status: assignment.status },
+      data: { status: 'needs_revision', updatedBy: context.actor.id },
+    })
+    if (claimed.count === 0) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS')
+
+    // หลักฐานชุดล่าสุดของรอบนี้ถูกตีกลับ — เก็บเหตุผลไว้โชว์เป็นแบนเนอร์บนฟอร์ม (`41` §7.6)
+    const latest = await tx.caseEvidence.findFirst({
+      where: { assignmentId: assignment.id },
+      orderBy: { submittedAt: 'desc' },
+      select: { id: true, status: true },
+    })
+    if (latest !== null) {
+      await tx.caseEvidence.update({
+        where: { id: latest.id },
+        data: {
+          status: 'rejected',
+          rejectReason: input.reason,
+          reviewedBy: context.actor.id,
+          reviewedAt,
+          updatedBy: context.actor.id,
+        },
+      })
+    }
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'reject',
+        targetType: 'case_assignments',
+        targetId: assignment.id,
+        before: { status: assignment.status },
+        after: {
+          status: 'needs_revision',
+          evidenceId: latest?.id ?? null,
+          // `tracking_round` ต้องเท่าเดิมเสมอ (`41` §10 · §20) — บันทึกไว้ให้ตรวจย้อนหลังได้
+          trackingRound: assignment.trackingRound,
+          events: ['case.evidence_rejected'],
+        },
+        reason: input.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx as FieldTxClient,
+    )
+
+    return await tx.caseAssignment.findUniqueOrThrow({ where: { id: assignment.id }, select: assignmentSelect })
+  })
+
+  notifyUsersDetached({
+    organizationId: user.organizationId,
+    userIds: [assignment.agentId],
+    eventCode: 'case.evidence_rejected',
+    title: 'หลักฐานปิดงานถูกตีกลับ',
+    body: `เคส ${assignment.case.caseRef} — ${input.reason}`,
+    linkPath: `/field/cases/${caseId}`,
+  })
+
+  return toActionResult(updated, ['case.evidence_rejected'])
+}
+
+// ── POST /api/field/cases/:id/resubmit-close (`41` §8 resubmit_close_case) ──
+
+/**
+ * ส่งกลับยืนยันอีกครั้งหลังถูกตีกลับหลักฐาน (`41` §8 · §10.1) — ลำดับที่บังคับ:
+ * 1. ต้องมีการแก้ไข**สื่อ**อย่างน้อย 1 รายการ (เช็คอิน + outcome ล็อกตามเดิม)
+ * 2. สถานะกลับเป็น `closed_success`/`closed_fail` **เดิม** — ไม่เพิ่ม `tracking_round`
+ * 3. รายการเบิกรอบเดิม → `superseded` แล้วสร้างชุดใหม่ตามกฎปกติ (ไม่ซ้ำ ไม่หาย)
+ */
+export async function resubmitCloseCase(
+  user: SessionUser,
+  caseId: string,
+  input: ResubmitCloseInput,
+  context: FieldMutationContext,
+): Promise<FieldActionResultDto> {
+  const current = await loadOwnAssignment(user, caseId)
+  assertFieldAction(current.status, 'resubmit_close_case')
+
+  const previous = await prisma.caseEvidence.findFirst({
+    where: { assignmentId: current.id },
+    orderBy: { submittedAt: 'desc' },
+    select: { id: true, outcome: true, photos: true, videos: true, productPhotos: true, audioUrl: true },
+  })
+  if (previous === null) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS', { detail: 'ไม่พบหลักฐานรอบก่อนหน้า' })
+
+  if (
+    !hasEvidenceRevision(
+      {
+        photos: previous.photos,
+        videos: previous.videos,
+        productPhotos: previous.productPhotos,
+        audioUrl: previous.audioUrl,
+      },
+      {
+        photos: input.photos,
+        videos: input.videos,
+        productPhotos: input.productPhotos,
+        audioUrl: input.audioUrl ?? null,
+      },
+    )
+  ) {
+    throw new FieldError('CLOSE_NO_EVIDENCE_REVISION')
+  }
+
+  // outcome ล็อกตามรอบแรกเสมอ (`41` §10.1) — ห้ามให้ body เปลี่ยนผลการติดตาม
+  const outcome = previous.outcome
+  const closedStatus = closedStatusOf(outcome)
+  const [checkinCount, travelOrigin] = await Promise.all([
+    prisma.checkIn.count({ where: { assignmentId: current.id } }),
+    prisma.travelOrigin.findUnique({
+      where: { assignmentId: current.id },
+      select: { latitude: true, longitude: true, source: true },
+    }),
+  ])
+
+  assertCloseEvidence({
+    outcome,
+    checkinCount,
+    photoCount: input.photos.length,
+    videoCount: input.videos.length,
+    productPhotoCount: input.productPhotos.length,
+    hasTravelOrigin: travelOrigin !== null,
+    fuelMode: current.team.compensationPlan?.fuelMode ?? null,
+  })
+
+  const closedAt = new Date()
+  const fuelMode = current.team.compensationPlan?.fuelMode ?? null
+  const [{ distanceKmHundredths, checkedInAts }, plan] = await Promise.all([
+    resolveDistanceForClose(current.id, fuelMode),
+    loadPlanSnapshot(user, current.team.compensationPlan?.id ?? null, closedAt),
+  ])
+
+  const result = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.caseAssignment.updateMany({
+      where: { id: current.id, status: 'needs_revision' },
+      data: { status: closedStatus, completedAt: closedAt, updatedBy: context.actor.id },
+    })
+    if (claimed.count === 0) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS')
+
+    const evidence = await tx.caseEvidence.create({
+      data: {
+        organizationId: user.organizationId,
+        caseId,
+        assignmentId: current.id,
+        outcome,
+        photos: input.photos,
+        videos: input.videos,
+        productPhotos: input.productPhotos,
+        audioUrl: input.audioUrl ?? null,
+        travelOriginLat: travelOrigin?.latitude ?? null,
+        travelOriginLng: travelOrigin?.longitude ?? null,
+        travelOriginSource: travelOrigin?.source ?? null,
+        submittedAt: closedAt,
+        createdBy: context.actor.id,
+      },
+      select: { id: true },
+    })
+
+    await tx.case.update({
+      where: { id: caseId },
+      data: {
+        status: outcome === 'closed_success' ? 'closed_success' : 'closed_fail',
+        outcome,
+        closedAt,
+        updatedBy: context.actor.id,
+      },
+    })
+    await tx.closeCaseDraft.deleteMany({ where: { assignmentId: current.id } })
+
+    // ลำดับสำคัญ: supersede ของเดิม **ก่อน** สร้างชุดใหม่ (partial unique ระดับ DB บังคับอยู่แล้ว)
+    const supersededIds = await supersedeCaseExpenses(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      assignmentId: current.id,
+      actor: context.actor,
+      meta: context.meta,
+      reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แทนที่รายการเบิกรอบเดิม (`41` §10.1)',
+    })
+
+    const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      caseId,
+      assignmentId: current.id,
+      agentId: user.id,
+      outcome,
+      plan,
+      distanceKmHundredths,
+      checkedInAts,
+      closedAt,
+      actor: context.actor,
+      meta: context.meta,
+    })
+
+    await linkSupersededExpenses(tx as ExpenseTxClient, {
+      supersededIds,
+      replacementIds: expenses.expenseIds,
+      actorId: context.actor.id,
+    })
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'status_change',
+        targetType: 'case_assignments',
+        targetId: current.id,
+        before: { status: current.status },
+        after: {
+          status: closedStatus,
+          outcome,
+          evidenceId: evidence.id,
+          trackingRound: current.trackingRound,
+          supersededExpenseIds: supersededIds,
+          expenseIds: expenses.expenseIds,
+          events: ['case.close_resubmitted'],
+        },
+        reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ (`41` §8)',
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx as FieldTxClient,
+    )
+
+    const assignment = await tx.caseAssignment.findUniqueOrThrow({
+      where: { id: current.id },
+      select: assignmentSelect,
+    })
+    return { assignment, expenses }
+  })
+
+  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef)
+
+  return toActionResult(result.assignment, ['case.close_resubmitted'])
 }

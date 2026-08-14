@@ -284,7 +284,8 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     )
     expect(closed.status).toBe('closed_success')
     expect(closed.group).toBe('closed')
-    expect(closed.events).toEqual(['case.closed_success'])
+    // Phase 2.9 — ปิดงานสร้างรายการเบิกในทรานแซกชันเดียวกัน (`41` §6.6) ⇒ มี event ของรายการเบิกด้วย
+    expect(closed.events).toEqual(['case.closed_success', 'expense.case_bound_created'])
 
     const caseRow = await db().case.findUniqueOrThrow({ where: { id: caseId } })
     expect(caseRow.status).toBe('closed_success')
@@ -319,7 +320,7 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
       { actor: agentA, meta },
     )
     expect(closed.status).toBe('closed_fail')
-    expect(closed.events).toEqual(['case.closed_fail'])
+    expect(closed.events).toEqual(['case.closed_fail', 'expense.case_bound_created'])
     expect((await db().case.findUniqueOrThrow({ where: { id: caseId } })).status).toBe('closed_fail')
   })
 

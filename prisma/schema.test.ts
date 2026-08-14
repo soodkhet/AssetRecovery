@@ -32,19 +32,21 @@ describe('schema.prisma — กติกาเงิน (`02` §2.2 · Rule 01)'
   })
 
   /**
-   * Decimal อนุญาต 2 กรณีเท่านั้น (`02` §2.2): อัตราร้อยละ = `Decimal(5,2)` · พิกัด GPS = `Decimal(10,7)`
+   * Decimal อนุญาต 3 กรณีเท่านั้น (`02` §2.2): อัตราร้อยละ = `Decimal(5,2)` · พิกัด GPS = `Decimal(10,7)`
+   * · ระยะทางกิโลเมตร = `Decimal(10,2)` (`41` §6.4.2 — มติ PO 14/08/2569 พร้อม Phase 2.9)
    * เงินห้ามเป็น Decimal เด็ดขาด — ดักที่ชื่อ field ไม่ให้มี Decimal ตัวใหม่หลุดมาโดยไม่ตั้งใจ
    */
-  it('Decimal ใช้ได้เฉพาะ pct (5,2) และพิกัด GPS (10,7)', () => {
+  it('Decimal ใช้ได้เฉพาะ pct (5,2) · พิกัด GPS (10,7) · ระยะทาง km (10,2)', () => {
     const decimals = fieldLines.filter((l) => /\sDecimal\??\s/.test(l))
     expect(decimals.length).toBeGreaterThan(0)
     for (const line of decimals) {
       const isPct = /^\w*[Pp]ct\w*\s/.test(line)
       const isGeo = /^(latitude|longitude|\w+(Lat|Lng))\s/.test(line)
-      expect(isPct || isGeo, `Decimal ใช้ได้เฉพาะ pct/พิกัด: ${line}`).toBe(true)
-      expect(line, `${isPct ? 'pct ต้องเป็น @db.Decimal(5, 2)' : 'พิกัดต้องเป็น @db.Decimal(10, 7)'}: ${line}`).toMatch(
-        isPct ? /@db\.Decimal\(5, 2\)/ : /@db\.Decimal\(10, 7\)/,
-      )
+      // ระยะทางไม่ใช่เงิน (เงินยังเป็น satang INTEGER) — เก็บ 2 ตำแหน่งเพื่อให้ audit คำนวณยอดซ้ำได้ตรง
+      const isDistanceKm = /^\w*[Dd]istanceKm\s/.test(line)
+      expect(isPct || isGeo || isDistanceKm, `Decimal ใช้ได้เฉพาะ pct/พิกัด/ระยะทาง: ${line}`).toBe(true)
+      const expected = isPct ? /@db\.Decimal\(5, 2\)/ : isGeo ? /@db\.Decimal\(10, 7\)/ : /@db\.Decimal\(10, 2\)/
+      expect(line, `ชนิด Decimal ไม่ตรงกติกา: ${line}`).toMatch(expected)
     }
   })
 })
@@ -141,6 +143,8 @@ describe('migrations — constraint ที่ Prisma ไม่รองรับ
     'uniq_cases_company_case_ref',
     // 2.6 — `40` §12 ห้ามมีคำขอเปลี่ยนผู้รับผิดชอบค้างซ้อนกันในเคสเดียว (REASSIGNMENT_ALREADY_PENDING)
     'uniq_pending_reassignment_active',
+    // 2.9 — `41` §6.6/§10.1 รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม (กัน submit/resubmit ซ้อน)
+    'uniq_active_case_expense_per_assignment',
   ])('constraint `%s` ต้องอยู่ใน migration', (name) => {
     expect(sql).toContain(name)
   })

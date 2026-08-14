@@ -21,6 +21,9 @@ export const FIELD_ERROR_CODES = [
   'CLOSE_VIDEO_REQUIRED',
   'CLOSE_PRODUCT_PHOTO_REQUIRED',
   'CHECKIN_GPS_PERMISSION_DENIED',
+  'CLOSE_NO_EVIDENCE_REVISION',
+  'HOTEL_CLAIM_FIELD_REQUIRED',
+  'HOTEL_CLAIM_INVALID_SHARED_AGENT',
   'REQUIRED_MISSING',
 ] as const
 
@@ -34,6 +37,9 @@ const HTTP_STATUS: Record<FieldErrorCode, number> = {
   CLOSE_VIDEO_REQUIRED: 400,
   CLOSE_PRODUCT_PHOTO_REQUIRED: 400,
   CHECKIN_GPS_PERMISSION_DENIED: 400,
+  CLOSE_NO_EVIDENCE_REVISION: 400,
+  HOTEL_CLAIM_FIELD_REQUIRED: 400,
+  HOTEL_CLAIM_INVALID_SHARED_AGENT: 400,
   REQUIRED_MISSING: 400,
 }
 
@@ -65,6 +71,18 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
   CHECKIN_GPS_PERMISSION_DENIED: {
     title: 'ไม่ได้รับพิกัดจากอุปกรณ์',
     message: 'เช็คอินต้องใช้พิกัด GPS จริงของอุปกรณ์ — เปิดสิทธิ์ตำแหน่งแล้วลองใหม่ (`41` §11/§12)',
+  },
+  CLOSE_NO_EVIDENCE_REVISION: {
+    title: 'ยังไม่ได้แก้ไขหลักฐาน',
+    message: 'ต้องแก้ไขรูป/วิดีโอ/เสียง/รูปสินค้าอย่างน้อย 1 รายการก่อนส่งกลับให้ตรวจอีกครั้ง (`41` §8)',
+  },
+  HOTEL_CLAIM_FIELD_REQUIRED: {
+    title: 'ข้อมูลเบิกที่พักไม่ครบ',
+    message: 'ต้องกรอกวันที่เข้าพัก จำนวนเงิน และแนบใบเสร็จให้ครบทั้ง 3 อย่าง (`41` §12)',
+  },
+  HOTEL_CLAIM_INVALID_SHARED_AGENT: {
+    title: 'ผู้พักร่วมไม่ถูกต้อง',
+    message: 'เลือกผู้พักร่วมได้เฉพาะพนักงานในทีมเดียวกันเท่านั้น (`41` §11/§12)',
   },
   REQUIRED_MISSING: {
     title: 'ข้อมูลไม่ครบ',

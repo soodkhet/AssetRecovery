@@ -627,6 +627,7 @@ model Organization {
   exportRecords              ExportRecord[]
   auditLogs                  AuditLog[]
   notifications              Notification[]
+  pushSubscriptions          PushSubscription[]
   jobs                       Job[]
   files                      StoredFile[]
 
@@ -727,6 +728,10 @@ model User {
   /// คำขอที่ตัวเองเป็นผู้รับงานคนใหม่
   reassignmentsToMe   PendingReassignment[] @relation("pending_reassignments_new_agent")
   notifications       Notification[]        @relation("notifications_user")
+  /// อุปกรณ์ที่ลงทะเบียนรับ Web Push ไว้ (`41` §15 — Phase 2.9)
+  pushSubscriptions   PushSubscription[]    @relation("push_subscriptions_user")
+  /// รายการเบิกที่พักที่ตัวเองถูกระบุว่า "พักร่วมห้อง" (`41` §6.6 — ไม่ใช่ผู้เบิก)
+  expensesSharedWithMe Expense[]            @relation("expenses_shared_with")
   auditLogs           AuditLog[]            @relation("audit_actor")
 
   // ── Group C–G: back-relation ของ created_by / updated_by / actor อื่นๆ ──
@@ -770,6 +775,8 @@ model User {
   expensesApprovedManager   Expense[]                   @relation("expenses_manager_approved_by")
   expensesApprovedFinance   Expense[]                   @relation("expenses_finance_approved_by")
   expensesApprovedExecutive Expense[]                   @relation("expenses_executive_approved_by")
+  pushSubscriptionsCreated  PushSubscription[]          @relation("push_subscriptions_created_by")
+  pushSubscriptionsUpdated  PushSubscription[]          @relation("push_subscriptions_updated_by")
   advancesCreated           Advance[]                   @relation("advances_created_by")
   advancesUpdated           Advance[]                   @relation("advances_updated_by")
   advancesApproved          Advance[]                   @relation("advances_approved_by")
@@ -1980,6 +1987,20 @@ model Expense {
   expenseType ExpenseType @map("expense_type")
   grossSatang Int         @map("gross_satang")
 
+  /// วันที่เกิดรายการ (`41` §6.6) — กลุ่มผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก (เบิกย้อนหลังได้)
+  /// ใช้เป็นฐานของ auto-mapping `matched_case_ids` และสรุปรายได้รายเดือน — เวลาไทย (Rule 01 E7)
+  expenseDate DateTime @map("expense_date") @db.Date
+  /// ระยะทางจริงของ `fuel` โหมด `PER_KM` (`41` §6.4.2/§6.6) เก็บไว้ตรวจย้อนหลัง
+  /// NULL เสมอสำหรับ `DAILY_FLAT` / `allowance` / รายการเบิกแยก — **ไม่ใช่เงิน** จึงเป็น NUMERIC(10,2) ได้
+  distanceKm  Decimal? @map("distance_km") @db.Decimal(10, 2)
+
+  /// ผู้พักร่วมห้องของรายการเบิกที่พัก (`41` §6.6) — ต้องเป็นคนในทีมเดียวกันเท่านั้น (validate ฝั่ง BE)
+  sharedWithUserId String? @map("shared_with_user_id") @db.Uuid
+  /// ใบเสร็จของรายการเบิกแยก (`41` §6.6 — บังคับสำหรับที่พัก)
+  receiptFileUrl   String? @map("receipt_file_url")
+  /// รายการที่มาแทนหลัง `resubmit_close_case` (`41` §10.1) — ตัวเก่าถูก mark เป็น `superseded`
+  supersededByExpenseId String? @map("superseded_by_expense_id") @db.Uuid
+
   /// compensation_plan | manual | receipt
   calculationSource String? @map("calculation_source")
   compPlanId        String? @map("comp_plan_id") @db.Uuid
@@ -2026,13 +2047,18 @@ model Expense {
   executiveApprovedByUser User?             @relation("expenses_executive_approved_by", fields: [executiveApprovedBy], references: [id])
   createdByUser           User              @relation("expenses_created_by", fields: [createdBy], references: [id])
   updatedByUser           User?             @relation("expenses_updated_by", fields: [updatedBy], references: [id])
+  sharedWithUser          User?             @relation("expenses_shared_with", fields: [sharedWithUserId], references: [id])
+  supersededBy            Expense?          @relation("expenses_superseded_by", fields: [supersededByExpenseId], references: [id])
 
+  supersedes  Expense[]         @relation("expenses_superseded_by")
   payoutItems PayoutBatchItem[]
   adjustments Adjustment[]
 
   @@index([organizationId, status], map: "idx_expenses_org_status")
   @@index([caseId, status], map: "idx_expenses_case")
   @@index([payeeId, status], map: "idx_expenses_payee")
+  /// สรุปรายได้/รายการเบิกของพนักงานตามเดือน (`41` §7.9/§7.10)
+  @@index([payeeId, expenseDate], map: "idx_expenses_payee_date")
   @@map("expenses")
 }
 
@@ -2764,6 +2790,40 @@ model Notification {
 
   @@index([userId, readAt, createdAt(sort: Desc)], map: "idx_notifications_user")
   @@map("notifications")
+}
+
+/// อุปกรณ์ที่ลงทะเบียนรับ **Web Push** (`41` §15 — ไม่ใช่ FCM) — 1 อุปกรณ์/เบราว์เซอร์ = 1 แถว
+/// `endpoint` UNIQUE ⇒ subscribe ซ้ำจากเครื่องเดิม = upsert ไม่เกิดแถวซ้ำ (idempotent)
+/// subscription หลุดเองได้ (iOS) — `41` §15 ระบุว่าไม่ต้องแจ้งเตือนแยก เพราะ fallback คือ in-app `notifications`
+model PushSubscription {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  userId         String @map("user_id") @db.Uuid
+
+  /// endpoint ของ push service (FCM/Mozilla/APNs ผ่านเบราว์เซอร์)
+  endpoint String @unique
+  /// กุญแจของ subscription ฝั่งเบราว์เซอร์ (`p256dh`/`auth`) — ใช้เข้ารหัส payload
+  p256dh   String
+  auth     String
+
+  userAgent String?  @map("user_agent")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  /// ส่งไม่สำเร็จติดกันกี่ครั้ง — ปลายทางตอบ 404/410 ให้ปิด subscription (soft delete)
+  failureCount Int    @default(0) @map("failure_count")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  user          User         @relation("push_subscriptions_user", fields: [userId], references: [id])
+  createdByUser User         @relation("push_subscriptions_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("push_subscriptions_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([organizationId, userId, deletedAt], map: "idx_push_subscriptions_user")
+  @@map("push_subscriptions")
 }
 
 /// Background jobs (Vercel Cron / QStash) — ทุก job ต้อง **idempotent** (`91`)

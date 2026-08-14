@@ -1,23 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.8 (Field Tracker BE ชุด 1 — core flow รับงาน→จัดวัน→เช็คอิน→ปิดงาน) · งานถัดไป 2.9
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.9 (Field Tracker BE ชุด 2 — เงิน/ตีกลับ/push) · งานถัดไป 2.10
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.9: Field Tracker Backend ชุดที่ 2 (เงิน + ตีกลับ + reassign + push)
+## 🎯 งานถัดไป — Phase 2.10: Field Tracker Frontend ชุดที่ 1 (shell + detail + งานรายวัน)
 
-- ทำตาม `docs/01_PLAN.md` §2.9 — **ต้องมี Google Maps API key ก่อนเริ่ม** (Distance Matrix)
-- Distance service: ลำดับ `travel_origin → checkins ตามเวลาจริง` · เรียกเฉพาะตอน submit/resubmit (ไม่ realtime) · retry/cache · `MIN(dist × rate, max_per_case)`
-- expense auto-generation ตอนปิดงาน (ต่อที่ `closeFieldCase()` จุดเดียว): fuel/allowance จาก snapshot แผนค่าตอบแทน · `closed_success` → `pending_warehouse_confirm` **เสมอ** / `closed_fail` → `pending_approval` · DAILY_FLAT ไม่เรียก distance
-- hotel claim เบิกแยก (`shared_with` = คนในทีมเดียวกัน validate ฝั่ง BE · `matched_case_ids` ใช้ตรวจสอบเท่านั้น)
-- **2 เส้นทางตีกลับห้ามสลับ (`41` §10.1)**: `reject_expense`+`resubmit_expense` (เจ้าของรายการเท่านั้น → กลับ `pending_approval` ไม่ผ่านคลังซ้ำ) / `reject_evidence`+`resubmit_close_case` (Case Approver เท่านั้น · แก้ได้เฉพาะสื่อ ล็อก checkin+outcome · expense เดิม → `superseded` + สร้างใหม่)
-- reassignment respond ฝั่ง field + `reassigned_away` (ไม่นับ success_rate) · income-summary · Web Push (VAPID) + in-app notification store
-- ของที่มีแล้วต้อง reuse: `field-status.ts`/`evidence.ts` (2.8 — transition ของ `reject_evidence`/`resubmit_close_case` มีแล้ว) · `resolvePlanVersionAt()` (1.7) · `swapAssignment()`/timeout job (2.6)
-- อ้างอิง: `41` ผ่าน MAP §6.4–6.6 (L113–198), §10.1 (L362), §11–12 (L373–398) · `22` §6.1–6.4 · `11`
-- LOC ~2,800 · งบ ~400k
-- DoD: test resubmit_close → superseded + expense ใหม่ไม่ซ้ำไม่หาย · DAILY_FLAT ไม่เรียก distance · fuel cap ทำงาน
+- ทำตาม `docs/01_PLAN.md` §2.10 — BE ของ flow นี้ครบแล้วตั้งแต่ 2.8/2.9 (เรียก endpoint ผ่าน `apiPath()` เท่านั้น)
+- App shell ของ Field Tracker **แยกจาก `<AppShell>` ของหลังบ้าน**: Mobile bottom nav 4 รายการ + hamburger / Desktop sidebar 260px `position: fixed` + badge store
+- **`<CaseDetailModal>` (2.5) ใช้ซ้ำ ห้ามสร้างใหม่** — ต่อยอด deep link `tel:`/LINE/Maps + doc viewer/lightbox (`<FileViewerModal>`)
+- แท็บรอรับงาน (รวม Agent Accept UI ของไฟล์ 40) · แท็บรับงานแล้ว (toggle ของฉัน/ทีม — มุมมองทีม **read-only** ตาม `41` §11) · Calendar Picker (grid เอง + badge ต่อวัน + popup ยืนยัน + banner เพื่อนร่วมทีมจังหวัดเดียวกัน) · แท็บกำลังติดตาม (group ตามวัน + drag reorder เรียก `field.reorderCases` + ปุ่ม 3 สถานะ)
+- Mobile กับ Desktop ใช้ logic เดียวกัน 100% (`41` §11) — ต่างแค่ layout · วันที่บนจอเป็น พ.ศ. ผ่าน `fmtDate` เสมอ
+- อ้างอิง: `41` §5, §7.1–7.5 ผ่าน MAP (L199–243) · mockup `41-field-tracker-mobile-mockup.html` + `-desktop-` ผ่าน MAP
+- LOC ~3,250 · งบ ~450k
+- DoD: mobile + desktop logic เดียวกัน 100% · flow ถึงก่อนเปิดฟอร์มปิดงานครบ
 
 ---
 
@@ -58,7 +56,7 @@
 | 2.6 | Case Assignment BE | ✅ | 2026-08-14 · `a79c64c` · schema คำขอเปลี่ยนผู้รับผิดชอบ + API 8 endpoint ของ `45` §6.2 + reassign 2 สาขา + job timeout idempotent + `successRate()` service กลาง → archive |
 | 2.7 | Case Assignment FE | ✅ | 2026-08-14 · `612e3b2` · หน้า `/cases/assign` + Assignment Modal (reuse `<CaseDetailModal>`) + Kanban full-screen read-only + `assignment-ui.ts` (ปุ่มหัวหน้า = ซ่อนตาม settings) → archive |
 | 2.8 | Field Tracker BE ชุด 1 (core flow) | ✅ | 2026-08-14 · `0465255`+`3f8328f`+`2122229` · `assignment_status` 7 ค่า + `travel_origins`/`close_case_drafts` + API 8 endpoint (รับงาน→จัดวัน→เช็คอิน→ปิดงาน) → archive |
-| 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ⬜ | PLAN §2.9 · ต้องมี Google Maps API key |
+| 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ✅ | 2026-08-14 · `dcb0fc3`+`f19cad0`+`71d8b8d`+`6af1d76` · มติ PO: +5 คอลัมน์ `expenses` + `push_subscriptions` (`02` v4.3) · D10 ✅ · expense อัตโนมัติ + 2 เส้นทางตีกลับ + Web Push · ⚠️ ต้องตั้ง `GOOGLE_MAPS_API_KEY` + VAPID ที่ Vercel → archive |
 | 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ⬜ | PLAN §2.10 |
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ⬜ | PLAN §2.11 |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ⬜ | PLAN §2.12 |

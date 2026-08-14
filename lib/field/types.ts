@@ -1,5 +1,13 @@
 import type { FieldGroup } from '@/lib/field/field-status'
-import type { AssignmentStatus, CaseOutcome, FuelMode, TravelOriginSource } from '@/lib/generated/prisma/enums'
+import type { ExpenseViewType } from '@/lib/field/schemas'
+import type {
+  AssignmentStatus,
+  CaseOutcome,
+  ExpenseStatus,
+  ExpenseType,
+  FuelMode,
+  TravelOriginSource,
+} from '@/lib/generated/prisma/enums'
 
 /**
  * DTO ของ Field Tracker (`41` §17.1 · `45` §6.3) — **type-only** เพื่อให้ฝั่ง client import ได้
@@ -161,5 +169,60 @@ export interface FieldCloseDraftResultDto {
   caseId: string
   draft: FieldCloseDraftDto
   travelOrigin: FieldTravelOriginDto | null
+  events: readonly string[]
+}
+
+/** รายการเบิก 1 แถว (`41` §6.6 · §7.9) — เงินเป็น satang เสมอ · `distanceKm` เป็น string (NUMERIC) */
+export interface FieldExpenseDto {
+  id: string
+  caseId: string | null
+  caseRef: string | null
+  debtorName: string | null
+  expenseType: ExpenseType
+  grossSatang: number
+  /** ระยะทางจริงของ fuel PER_KM — string เพื่อไม่ให้ float ปัดเศษ (`41` §6.6) */
+  distanceKm: string | null
+  /** `YYYY-MM-DD` (คอลัมน์ `DATE`) — หน้าจอแปลงเป็น พ.ศ. ด้วย `fmtDate` */
+  expenseDate: string
+  status: ExpenseStatus
+  rejectReason: string | null
+  note: string | null
+  receiptFileUrl: string | null
+  sharedWithUserId: string | null
+  sharedWithName: string | null
+  /** auto-mapping เคสที่ลงพื้นที่วันเดียวกัน — **ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด** (`41` §6.6) */
+  matchedCaseIds: string[]
+  createdAt: string
+}
+
+export interface FieldExpenseListDto {
+  type: ExpenseViewType
+  items: FieldExpenseDto[]
+  /** สรุปยอดหัวหน้าจอ (`41` §7.9) — superseded/rejected ไม่นับ */
+  pendingSatang: number
+  approvedSatang: number
+}
+
+export interface FieldIncomeItemDto {
+  caseId: string
+  caseRef: string
+  debtorName: string | null
+  outcome: CaseOutcome
+  closedAt: string | null
+  amountSatang: number
+}
+
+/** สรุปรายได้ (`41` §7.10) — ไม่ระบุเดือน = สะสมตลอด */
+export interface FieldIncomeSummaryDto {
+  month: string | null
+  successCount: number
+  failCount: number
+  commissionSatang: number
+  noSuccessFeeSatang: number
+  items: FieldIncomeItemDto[]
+}
+
+export interface FieldExpenseActionResultDto {
+  expense: FieldExpenseDto
   events: readonly string[]
 }

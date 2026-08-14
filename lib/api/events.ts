@@ -44,6 +44,11 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
   'case.close_draft_saved': { module: 'field', source: '41 §17.2', description: 'บันทึก Draft ปิดงาน' },
   'case.closed_success': { module: 'field', source: '41 §17.2', description: 'ปิดงานสำเร็จ — ต้องผ่านคลังก่อนเกิด Revenue (`19` §6.1)' },
   'case.closed_fail': { module: 'field', source: '41 §17.2', description: 'ปิดงานไม่สำเร็จ — ไม่ผ่านคลัง' },
+  'case.evidence_rejected': {
+    module: 'field',
+    source: '41 §17.2',
+    description: 'ตีกลับหลักฐานปิดงาน — เจ้าหน้าที่อนุมัติเคสเท่านั้น (`41` §10.1 · ไม่เพิ่ม tracking_round)',
+  },
   'case.close_resubmitted': { module: 'field', source: '41 §17.2', description: 'ส่งปิดงานใหม่หลังถูกตีกลับ — expense เดิม superseded' },
   'expense.case_bound_created': { module: 'field', source: '41 §17.2', description: 'สร้างรายการเบิกที่ผูกกับเคส' },
   'expense.hotel_claim_submitted': { module: 'field', source: '41 §17.2', description: 'ส่งคำขอเบิกที่พัก' },

@@ -24,6 +24,7 @@
 | v4.0 | 14/08/2569 | **Sync กับไฟล์ 38 §6/§11 — implement ใน Phase 2.2** (Group C เดิมเขียนไว้ก่อนไฟล์ 38 รอบ reformat จึงขาดฟิลด์ที่ฟอร์มรับเคสใช้จริง ไม่ใช่การเปลี่ยน business logic): (1) `cases.case_ref_normalized` + unique index `uniq_cases_company_case_ref` (§11 กันซ้ำ 2 ชั้น — normalize = uppercase+trim เท่านั้น) · (2) enum ใหม่ `debtor_nationality` (§6.1) และ `asset_kind` (§6.2 `asset_type`) + คอลัมน์ `debtor_nationality`/`debtor_nationality_other`/`debtor_passport_no`/`asset_kind` · (3) ที่อยู่ครบ 3 ชุดตาม §6.1 — เติมกลุ่ม `work_addr_*` และ `id_card_addr_*` · (4) `projected_revenue_satang`/`projected_revenue_source` (§6.4/§6.5 — ค่าประมาณการ ไม่ใช่ Revenue จริงของไฟล์ 19) · (5) **ปลด NOT NULL** ของ `debtor_name`/`asset_description` ตาม §11 (เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ) · (6) ตารางใหม่ `case_edit_history` (§6.4 `edit_history` append-only) · (7) `recycle_requests.previous_round`/`new_round` — §6.4 `recycle_history` คือแถว `status = 'approved'` ของตารางนี้ ไม่แยกตารางใหม่ · `asset_description` = `asset_brand_model` ของไฟล์ 38 · enum รวมเป็น **58 ตัว** · รวมเป็น **54 tables** · migration: `20260814090450_case_submission_fields` + `20260814092000_case_ref_unique_not_partial` |
 | v4.1 | 14/08/2569 | **Sync กับไฟล์ 40 §6.1/§6.1.1/§6.4 — implement ใน Phase 2.6** (Group C เดิมมีแต่ `case_assignments` ซึ่งเก็บ flow "เปลี่ยนผู้รับผิดชอบแบบต้องขอความยินยอม" ของไฟล์ 40 ไม่ได้ — เป็นการเติมให้ครบ ไม่ใช่การเปลี่ยน business logic): (1) enum ใหม่ `pending_reassignment_status` (§6.1.1) และ `reassignment_resolution` (§6.1) · (2) ตารางใหม่ `pending_reassignments` = `pending_reassignment` object ของ §6.1.1 + **partial unique `uniq_pending_reassignment_active`** (ตัวบังคับจริงของ `REASSIGNMENT_ALREADY_PENDING`) — resolve แล้วเปลี่ยน `status` ไม่ลบแถว เพื่อคง log การปฏิเสธตาม §8 · (3) ตารางใหม่ `reassignment_history` = `reassignment_history` array ของ §6.1 (insert-only · เก็บเฉพาะการเปลี่ยนที่ **สำเร็จ**) · (4) ตารางใหม่ `assignment_policy_settings` (1 record/org) = `reassign_timeout_hours` (default 3) + `supervisor_can_assign_system/inhouse/outsource` (default true) ของ §6.4 + `accept_deadline_hours` (NULL = ไม่จำกัด ตาม §11) · **ไม่มีการลบ/แก้คอลัมน์เดิม** · enum รวมเป็น **60 ตัว** · รวมเป็น **57 tables** · migration: `20260814114904_assignment_reassignment_tables` |
 | v4.2 | 14/08/2569 | **Sync กับไฟล์ 41 §6.1/§6.4/§6.4.1/§6.5/§10 — implement ใน Phase 2.8** (Group C เดิมเขียนก่อนไฟล์ 41 รอบ reformat — enum/คอลัมน์ที่มีอยู่แทน flow ภาคสนามไม่ได้ เป็นการเติม/ปรับให้ครบตามไฟล์ต้นทางของโมดูล ไม่ใช่การเปลี่ยน business logic): (1) **`assignment_status` 6 ค่า → 7 ค่าตาม `41` §10** (`pending_accept`/`accepted_unscheduled`/`scheduled`/`closed_success`/`closed_fail`/`needs_revision`/`reassigned_away`) — ของเดิม (`pending`/`accepted`/`active`/`completed`/`reassigned`/`cancelled`) แยก "จัดวันแล้ว/ยังไม่จัดวัน" ไม่ได้ แยกผลการติดตามไม่ได้ และไม่มี `needs_revision` ของ §10.1 · (2) `case_assignments.schedule_order` INTEGER (§6.1 — recompute ทั้งวันทุกครั้งที่ลากสลับ) + index `idx_assignments_agent_schedule` · (3) `case_evidences`: `video_url` → `videos TEXT[]` + เพิ่ม `photos TEXT[]`/`audio_url` (§6.4 หลักฐานเป็น array แยกประเภท ไม่ใช่ไฟล์เดียว) · (4) enum ใหม่ `travel_origin_source` (`gps_auto`/`manual_adjusted`) + ตารางใหม่ `travel_origins` (§6.4.1 — **คนละชุดกับ `check_ins` เด็ดขาด**: เช็คอิน = หลักฐาน ล็อกตลอด · จุดเริ่มเดินทาง = ตัวอ้างอิงคำนวณค่าน้ำมัน ปรับได้เสมอ) · (5) ตารางใหม่ `close_case_drafts` (§6.5 — 1:1 ต่อเคส · autoload · ลบตอน submit · ไม่มี expiry) · "1 เคส 1 จุด/1 draft" บังคับด้วย UNIQUE ที่ `assignment_id` (1 รอบติดตาม = 1 assignment ⇒ รอบ recycle ใหม่เริ่มจุดใหม่ตาม §6.4.1) · enum รวมเป็น **61 ตัว** · รวมเป็น **59 tables** · migration: `20260814150000_field_tracker_core` (+ `…150500_field_tracker_fk_actions`, `…150800_field_tracker_nullable_fk` ปรับ FK action ให้ตรงแบบที่ Prisma สร้าง) |
+| v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
 | v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
@@ -1285,6 +1286,12 @@ CREATE TABLE expenses (
   approval_matrix_id    UUID    REFERENCES approval_matrices(id),  -- snapshot ว่ารายการนี้ใช้ matrix แถวไหน
   rejection_reason      TEXT,
   revision_note         TEXT,
+  -- Field Tracker (ไฟล์ 41 §6.6 — เพิ่ม 14/08/2569 มติ PO พร้อม Phase 2.9)
+  expense_date          DATE    NOT NULL,   -- วันที่เกิดรายการ: ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก (เบิกย้อนหลังได้)
+  distance_km           NUMERIC(10,2),      -- fuel โหมด PER_KM เท่านั้น (ไฟล์ 41 §6.4.2) — NULL สำหรับ DAILY_FLAT/allowance/เบิกแยก · ไม่ใช่เงิน
+  shared_with_user_id   UUID    REFERENCES users(id),  -- ผู้พักร่วมห้อง (เบิกที่พัก) — ต้องเป็นคนในทีมเดียวกัน validate ฝั่ง service
+  receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
+  superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)
   -- Payout (FK → payout_batch_items เมื่อเข้ารอบจ่าย)
   payout_batch_item_id  UUID,   -- FK กลับไป (set หลัง payout_batch_items สร้าง)
   -- Audit
@@ -1297,6 +1304,12 @@ CREATE TABLE expenses (
 CREATE INDEX idx_expenses_org_status ON expenses(organization_id, status);
 CREATE INDEX idx_expenses_case       ON expenses(case_id, status);
 CREATE INDEX idx_expenses_payee      ON expenses(payee_id, status);
+CREATE INDEX idx_expenses_payee_date ON expenses(payee_id, expense_date);   -- เพิ่ม 14/08/2569 (Phase 2.9) — รายการเบิก/สรุปรายได้รายเดือน (ไฟล์ 41 §7.9/§7.10)
+-- เพิ่ม 14/08/2569 (Phase 2.9) — รายการเบิกผูกเคสมีได้ชนิดละ 1 รายการที่ยังมีผลต่อ 1 รอบติดตาม
+-- (ไฟล์ 41 §10.1 — สร้างรายการใหม่ได้ต่อเมื่อรายการเดิม mark `superseded` แล้ว · กันกด submit/resubmit ซ้อน)
+CREATE UNIQUE INDEX uniq_active_case_expense_per_assignment
+  ON expenses(assignment_id, expense_type)
+  WHERE assignment_id IS NOT NULL AND status <> 'superseded' AND deleted_at IS NULL;
 
 -- ── advances ─────────────────────────────────────────────────
 -- เงินทดรองจ่าย ตามไฟล์ 15
@@ -1808,6 +1821,28 @@ CREATE TABLE notifications (
 );
 CREATE INDEX idx_notifications_user ON notifications(user_id, read_at, created_at DESC);
 
+-- ── push_subscriptions ───────────────────────────────────────
+-- Web Push (ไม่ใช่ FCM) ของ PWA ภาคสนาม ตามไฟล์ 41 §15 (เพิ่ม 14/08/2569 มติ PO พร้อม Phase 2.9)
+-- 1 อุปกรณ์/เบราว์เซอร์ = 1 แถว · endpoint UNIQUE ⇒ subscribe ซ้ำจากเครื่องเดิม = upsert (idempotent)
+-- subscription หลุดเองได้ (โดยเฉพาะ iOS) — ไฟล์ 41 §15 ไม่ให้แจ้งเตือนแยก เพราะ fallback คือ in-app notifications
+CREATE TABLE push_subscriptions (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id),
+  user_id         UUID        NOT NULL REFERENCES users(id),
+  endpoint        TEXT        NOT NULL UNIQUE,   -- endpoint ของ push service
+  p256dh          TEXT        NOT NULL,          -- กุญแจ subscription ฝั่งเบราว์เซอร์
+  auth            TEXT        NOT NULL,
+  user_agent      TEXT,
+  last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  failure_count   INTEGER     NOT NULL DEFAULT 0,  -- 404/410 จากปลายทาง = ปิด subscription (soft delete)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID        NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID        REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ
+);
+CREATE INDEX idx_push_subscriptions_user ON push_subscriptions(organization_id, user_id, deleted_at);
+
 -- ── jobs ─────────────────────────────────────────────────────
 -- Background jobs (Vercel Cron / QStash)
 CREATE TABLE jobs (
@@ -1910,6 +1945,7 @@ CREATE TABLE files (
 50_bank_file_formats.sql
 51_tax_document_template_settings.sql
 52_notifications.sql            ← DEC-006/D3
+52b_push_subscriptions.sql       ← เพิ่ม 14/08/2569 (Phase 2.9) ต้องหลัง organizations, users
 53_bank_transaction_allocations.sql  ← A2 (มติ PO 2026-08-12)
 54_customer_wht_certificates.sql     ← A1 (มติ PO 2026-08-12)
 99_seed_data.sql
