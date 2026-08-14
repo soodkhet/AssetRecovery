@@ -17,6 +17,12 @@ export const SUPERADMIN_ROLE_NAME = 'Superadmin'
 export const FIELD_AGENT_ROLE_NAME = 'พนักงานติดตามทรัพย์'
 export const TEAM_MANAGER_ROLE_NAME = 'ผู้จัดการทีมติดตามทรัพย์'
 export const TEAM_SUPERVISOR_ROLE_NAME = 'หัวหน้าทีมติดตามทรัพย์'
+/** role กลุ่ม `system` ที่เหลือ (`07` §5.1) — ใช้กรองเมนูตาม `06` §7.2 */
+export const CASE_APPROVER_ROLE_NAME = 'เจ้าหน้าที่อนุมัติเคส'
+export const EXECUTIVE_ROLE_NAME = 'บริหาร'
+export const FINANCE_ROLE_NAME = 'การเงิน'
+export const ACCOUNTING_ROLE_NAME = 'บัญชี'
+export const ADMIN_OFFICE_ROLE_NAME = 'ธุรการ'
 
 /** เส้นทางหน้า Login และปลายทางหลัง login (mockup `login.html` · `06` §7.2 · ไฟล์ 97) */
 export const LOGIN_PATH = '/login'

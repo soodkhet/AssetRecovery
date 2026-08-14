@@ -1,19 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.4 (Audit core service immutable) · งานถัดไป 1.5
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.5 (UI Kit + App Shell + Navigation) · งานถัดไป 1.6
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.5: UI Kit + App Shell + Navigation
+## 🎯 งานถัดไป — Phase 1.6: Roles & Permissions module
 
-- ทำตาม `docs/01_PLAN.md` §1.5 — Design tokens ตาม `04` §8.1 (font Inter + Noto Sans Thai, **statusBadge mapper 10 กลุ่มสีตายตัว**, component classes) → shared components: Button/Table/Modal/Badge/Input/Card/Toast + **loading / empty / error state ครบทุกหน้า**
-- utils กลางที่ทุกโมดูลหลังจากนี้ต้องใช้: `fmtDate`/`fmtDateTime` **พ.ศ. เท่านั้น** TZ Asia/Bangkok (`03` §6.5 · DEC-005) · satang → display (÷100 + comma) ห้ามคำนวณเงินฝั่ง display
-- Top Nav 7 เมนู + sub-tab shell + menu registry กรองตาม role (`06` §7.2 Top Nav Visibility Matrix) + `GET /api/meta/menu` (ผ่าน `requirePermission` ตามปกติ) · หน้าแดชบอร์ดหลักเป็น placeholder (spec จริงรอ PO — Phase 6.6)
-- อ้างอิง: `04` ทั้งไฟล์ · `06` ผ่าน MAP §7–§8 · `03` §6.5 · mockup `app-shell.html`, `login.html`
-- LOC ~1,700 · งบ ~280k
-- DoD: ทุกหน้าใหม่หลังจากนี้ใช้ shared components เท่านั้น · nav แสดง/ซ่อนตาม role ถูกต้องตาม matrix `06` §7.2 · เพิ่มรายการทั้งหมดลง `docs/REUSE_INDEX.md`
+- ทำตาม `docs/01_PLAN.md` §1.6 — **BE**: roles/capabilities API 4 endpoints + guards `SEED_ROLE_DELETE`/`SEED_ROLE_RENAME`/`LAST_SUPERADMIN_REMOVAL` + permission resolve (role→capability set + `access_level` view/manage ตาม DEC-009, Superadmin implicit-manage **ไม่เก็บ record**)
+- **FE**: หน้า "บทบาทและสิทธิ์" 3 tab หลัก (แอดมิน / เจ้าหน้าที่ติดตามทรัพย์ [sub-toggle Inhouse/Outsource] / บริษัทไฟแนนซ์) + Permission Matrix editor (disabled ตาม `is_editable`, Seed badge) — ประกอบจาก UI Kit `@/components/ui` เท่านั้น
+- ผูก `role_capabilities` ให้ครบ (งานที่ seed 1.2 เว้นไว้) — 7 รายการ "✅ only" ล็อก Superadmin มอบให้ role อื่นไม่ได้ (`25` §16.1) · เปลี่ยน role/สิทธิ์ต้องเรียก `invalidateSessionCache()` + `emitAudit()` พร้อม `reason`
+- อ้างอิง: `07` ทั้งไฟล์ · `25` · `13` §6.10 · mockup `settings.html` ผ่าน MAP (render roles)
+- LOC ~1,900 · งบ ~290k
+- DoD: ลบ/เปลี่ยนชื่อ seed role ถูก reject · role ชื่อซ้ำข้าม group เป็นคนละ record จริง · matrix แก้ได้เฉพาะ editable + audit ครบ
 
 ---
 
@@ -33,7 +33,7 @@
 | 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ✅ | 2026-08-14 · `1eba90e` · 53 ตารางครบ + seed idempotent (15 roles / 47 capabilities) · A1/A2/A4/A6/B3 ปิดครบ → archive |
 | 1.3 | Auth + Permission middleware + Login | ✅ | 2026-08-14 · `edfdd9b` · requirePermission + scope 4 แบบ + session 24 ชม. + หน้า Login · ⚠️ ต้องรัน `pnpm auth:link-superadmin` 1 ครั้งต่อ environment → archive |
 | 1.4 | Audit core service (immutable) | ✅ | 2026-08-14 · `09b283a` · immutable 2 ชั้น (DB trigger + Prisma extension) + นโยบาย `reason` + diff util + เทสต์ระดับ DB → archive |
-| 1.5 | UI Kit + App Shell + Navigation | ⬜ | PLAN §1.5 · ไฟล์ 04+06 |
+| 1.5 | UI Kit + App Shell + Navigation | ✅ | 2026-08-14 · `f612e9e` · UI Kit `components/ui/*` + App Shell 7 เมนูตาม `06` §7.2 + utils พ.ศ./satang + statusBadge 10 กลุ่ม + `GET /api/meta/menu` → archive |
 | 1.6 | Roles & Permissions module | ⬜ | PLAN §1.6 · ไฟล์ 07+25 |
 | 1.7 | Compensation Plans + Service Fee Templates | ⬜ | PLAN §1.7 · ไฟล์ 11+12 · ก่อน 1.8 |
 | 1.8 | Teams + Finance Companies | ⬜ | PLAN §1.8 · ไฟล์ 09+10 |

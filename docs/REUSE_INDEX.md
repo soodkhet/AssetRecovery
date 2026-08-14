@@ -7,14 +7,13 @@
 | ชื่อ | ที่อยู่ | สร้างใน task | หมายเหตุ |
 |---|---|---|---|
 | `<PermissionProvider>` / `usePermission()` / `<Can action resource scope>` | `components/auth/permission-provider.tsx` | 1.3 | ซ่อน/แสดงปุ่ม-เมนูตามสิทธิ์ — **UX เท่านั้น ไม่ใช่ security** (API ตรวจซ้ำเสมอ) · ใช้ตรรกะเดียวกับ backend (`canAccess`) |
-| `<LoginForm>` / `<LogoutButton>` | `components/auth/login-form.tsx` · `components/auth/logout-button.tsx` | 1.3 | โครงหน้า/คลาสตาม mockup `login.html` (card + shake + focus-ring) · คลาส `.focus-ring`/`.fade-in`/`.shake` อยู่ใน `app/globals.css` |
-| (Phase 1.5 จะสร้าง UI Kit ชุดแรก: Button/Table/Modal/Badge/Input/Card/Toast + statusBadge mapper + loading/empty/error states) | | | |
+| `<LoginForm>` / `<LogoutButton>` | `components/auth/login-form.tsx` · `components/auth/logout-button.tsx` | 1.3 | โครงหน้า/คลาสตาม mockup `login.html` (card + shake + focus-ring) · คลาส `.focus-ring`/`.fade-in`/`.shake`/`.no-scrollbar` อยู่ใน `app/globals.css` |
+| **UI Kit** — `<Button>`/`<Spinner>` · `<Card>`/`<CardHeader>`/`<PageHeader>`/`<StatCard>` · `<StatusBadge>`/`<Badge>`/`<RefText>` · `<Field>`/`<Input>`/`<Select>`/`<Textarea>`/`<Label>` · `<Table>`/`<THead>`/`<TBody>`/`<Tr>`/`<Th>`/`<Td>`/`<TableState>` · `<Modal>`/`<ConfirmModal>` · `<ToastProvider>`/`useToast()` · `<LoadingState>`/`<EmptyState>`/`<ErrorState>`/`<InlineAlert>`/`<Skeleton>` · `cn()` | `components/ui/*` (import จาก `@/components/ui`) | 1.5 | **ทุกหน้าใหม่ต้องประกอบจากชุดนี้เท่านั้น** ห้ามเขียนคลาสเองนอก pattern `04` §8.1 · `<Td numeric>`/`<Input numeric>` = ชิดขวา+font-mono สำหรับเงิน/ตัวเลข · `<TableState>` ให้ loading/empty/error ครบในบรรทัดเดียว (`04` §9) · `<ConfirmModal>` บังคับใช้กับทุก action ที่ทำลายข้อมูล/กระทบเงิน (ช่อง `reason` ส่งเข้าทาง children) |
+| `<AppShell>` / `<TopNav>` / `<SubNav>` / `<ModulePlaceholder>` | `components/shell/*` | 1.5 | เปลือกของทุกหน้าใน route group `app/(app)/` — ใส่ `PermissionProvider` + `ToastProvider` ให้แล้ว · `SubNav` หาเมนูที่เปิดอยู่จาก pathname เอง · **Field Tracker (41) และ Portal (97) ใช้ shell ของตัวเอง ไม่ผ่านที่นี่** |
 
 รายการที่**ต้องเกิด**เป็น shared ตามแผน (อย่าสร้างซ้ำในโมดูลตัวเอง):
-- `statusBadge()` mapper 10 กลุ่มสี (`04` §8.1) — Phase 1.5
-- datetime utils `fmtDate`/`fmtDateTime` พ.ศ. (`03` §6.5) — Phase 1.5
-- satang ↔ display utils (÷100 + comma) — Phase 1.5
 - 3-tab nested shell (แอดมิน/เจ้าหน้าที่/บริษัทไฟแนนซ์) ใช้ทั้งไฟล์ 07+08 — Phase 1.6
+- กระดิ่งแจ้งเตือนบน header ทุกหน้า (`06` §8 · `90` §6.3) — Phase 5.1
 - Address component ×3 ที่อยู่ + cascading จังหวัด/อำเภอ/ตำบล (`38` §6.1.2) — Phase 2.4, ไฟล์ 41 ใช้ซ้ำ
 - Case Detail component (`38` §7.5) — Phase 2.5, ใช้ซ้ำใน 40 (Assignment Modal) และ 41 (3 จุด)
 - Doc viewer + image lightbox — Phase 2.5
@@ -51,6 +50,12 @@
 | `resolveLandingPath()` | `lib/auth/landing.ts` | 1.3 | ปลายทางหลัง login ตาม role (portal / field / dashboard) |
 | `getRequestMeta()` / `normalizeIpAddress()` | `lib/auth/request-meta.ts` | 1.3 | ip+user agent สำหรับ audit · `ip_address` เป็น INET — ค่าที่ไม่ใช่ IP ต้องเป็น NULL |
 | `pnpm auth:link-superadmin` | `scripts/link-superadmin.ts` | 1.3 | ผูก seed user เข้ากับ Supabase Auth (idempotent) — ต้องรัน 1 ครั้งต่อ environment ไม่งั้น login ตอบ `USER_NOT_PROVISIONED` |
+| `fmtDate` / `fmtDateTime` / `fmtTime` / `nowDate` / `nowDateTime` / `buddhistYear` / `toInputDate` / `fromInputDate` / `toBangkokParts` / `toDate` | `lib/format/datetime.ts` | 1.5 | **พ.ศ. เท่านั้น** TZ Asia/Bangkok (`03` §6.5 · DEC-005) — ห้าม format วันที่เองที่อื่น · `toInputDate`/`fromInputDate` = ข้อยกเว้นเดียวที่ใช้ ค.ศ. (`<input type="date">`) · ค่าว่าง/ไม่ใช่วันที่คืน `—` ไม่ใช่ `Invalid Date` |
+| `fmtSatang` / `fmtSatangSymbol` / `fmtSatangRounded` / `fmtCount` / `fmtPercent` / `fmtRatioPct` | `lib/format/money.ts` | 1.5 | display เท่านั้น (÷100 + comma) — **ห้ามคำนวณเงินที่ชั้นนี้** · ส่ง float เข้าไป = โยน `MoneyFormatError` ทันที (ยามดักบั๊กเงินที่ไม่ใช่ satang) · `fmtRatioPct(null)` = `N/A` สำหรับเคสหารศูนย์ที่ pure module ของ `22` ส่งมา |
+| `statusBadgeClass()` / `statusBadgeGroup()` / `STATUS_BADGE_CLASS` | `lib/ui/status-badge.ts` | 1.5 | 10 กลุ่มสีตายตัว (`04` §8.1) — **ห้ามใส่คลาสสีสถานะเอง** · สถานะใหม่ให้เพิ่มในตาราง `STATUS_GROUP` หรือส่ง `group` เข้า `<StatusBadge>` · สถานะที่ไม่รู้จักตกกลุ่ม `neutral` |
+| `MENU_ITEMS` / `visibleMenus()` / `canViewMenu()` / `resolveMenuAudience()` / `findMenu()` | `lib/nav/menu-registry.ts` | 1.5 | SSOT ของเมนู (`06` §7.1.1 + §7.2) — เพิ่มเมนู/แท็บใหม่ต้องแก้ที่นี่ที่เดียว แล้วเทสต์ matrix ต้องเขียว · กรองด้วย **role** ตาม §7.2 (capability คุมว่า "ทำอะไรได้" ต่างหาก) · **ซ่อนเมนู ≠ security** |
+| `requireMenuPage(menuId)` | `lib/nav/menu-guard.ts` | 1.5 | route guard ของหน้าใน `app/(app)/` — ไม่มีสิทธิ์เห็นเมนู = เด้งกลับแดชบอร์ด (ไม่ leak ว่ามีหน้านี้) · ยังต้องตรวจ `requirePermission()` ที่ API ของหน้านั้นเสมอ |
+| `GET /api/meta/menu` | `app/api/meta/menu/route.ts` | 1.5 | เมนูของผู้เรียกเอง (`06` §14) — ใช้ `requireSession()` ไม่ผูก capability (ไม่มี code สำหรับเมนูใน `02` §12) เหมือน `GET /api/auth/session` |
 
 รายการที่**ต้องเกิด**เป็น shared ตามแผน:
 - Pure calculation modules ครบ 13 สูตร (`22`) — Phase 3.1 (ห้ามคำนวณเงินนอก module นี้)
@@ -77,4 +82,6 @@
 | 2026-08-14 | `audit_logs` ลบไม่ได้แม้ในเทสต์ | trigger ระดับ DB ปฏิเสธ UPDATE/DELETE/TRUNCATE **ทุกกรณี** ⇒ เทสต์ที่ insert audit จะทิ้งขยะถาวรใน DB ล้างไม่ได้ · วิธีที่ใช้: ทำงานใน `$transaction` แล้ว **throw เพื่อ rollback** (ดู `lib/audit/audit-immutable.db.test.ts`) · อีกกับดัก: trigger ต้องเป็น `FOR EACH STATEMENT` ไม่ใช่ `FOR EACH ROW` — ไม่งั้น `DELETE ... WHERE` ที่ไม่ match แถวไหนจะผ่านเงียบ ๆ |
 | 2026-08-14 | `toAuditJson` ต้องแยก object ธรรมดาออกจาก instance ของคลาส | เช็คแค่ `typeof === 'object'` จะกาง Prisma `Decimal` ออกเป็น `{s,e,d}` แทนที่จะเป็นตัวเลข ⇒ ต้องเทียบ `Object.getPrototypeOf(value) === Object.prototype` ก่อน แล้วค่อย fallback ไป `toString()` ของคลาส |
 | 2026-08-14 | vitest ต้องได้รับ **เฉพาะ** `TEST_DATABASE_URL` | `vitest.config.mts` โหลด `.env.local` ด้วย `processEnv: {}` แล้วส่งต่อคีย์เดียว — ถ้าโหลดทั้งไฟล์ `DATABASE_URL` จะหลุดเข้าเทสต์ ทำให้ไฟล์ที่ import `lib/prisma` เผลอต่อ DB dev/staging จริงแทนที่จะล้มให้เห็น |
+| 2026-08-14 | เมนู `06` §7.2 ไม่มีแถวของ "ธุรการ" | ตาราง Top Nav Visibility Matrix มี 8 คอลัมน์ ไม่ครอบคลุม role `ธุรการ` (system) — ยึด mockup `app-shell.html` (`ROLE_CONFIG.admin_office` = แดชบอร์ด + จัดการเคส/รับเคส) เป็น source of truth ด้าน UI · role ที่สร้างเพิ่มเองภายหลัง (custom) `resolveMenuAudience()` คืน `null` = เห็นเฉพาะแดชบอร์ด (least privilege) จนกว่า Phase 1.6 จะผูก capability |
+| 2026-08-14 | ปุ่ม/สีสถานะห้าม hardcode ในโมดูล | คลาสสถานะทั้งหมดอยู่ `lib/ui/status-badge.ts` (10 กลุ่มตาม `04` §8.1) และปุ่ม/ตาราง/ฟอร์มอยู่ `components/ui/*` — เขียนคลาสเองในหน้าจอโมดูล = หลุด design system และแก้ทีหลังไม่ครบทุกจุด |
 | 2026-08-13 | `next dev` เขียนบล็อกต่อท้าย CLAUDE.md เอง | บล็อก `<!-- BEGIN:nextjs-agent-rules -->` ถูกเติมกลับทุกครั้งที่รัน dev — commit ไปเลย (ปิดได้ด้วย `agentRules: false` ใน next.config ถ้าไม่ต้องการ) |
