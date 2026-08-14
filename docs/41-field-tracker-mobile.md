@@ -468,6 +468,7 @@ Desktop: จัดเป็น 2 คอลัมน์ (เนื้อหาห
 - `reassignment.declined`
 - `expense.case_bound_created`
 - `expense.hotel_claim_submitted`
+- `case.evidence_rejected` (จาก action `reject_evidence` §8 — เพิ่ม 14/08/2569 พร้อม Phase 2.9: §8 มี action นี้อยู่แล้วแต่ §17.2 เดิมไม่ได้ลงชื่อ event ไว้)
 - `case.close_resubmitted` (จาก action `resubmit_close_case` §8)
 - `expense.resubmitted` (จาก action `resubmit_expense` §8)
 

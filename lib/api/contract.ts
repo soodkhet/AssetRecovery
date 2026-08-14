@@ -158,6 +158,14 @@ export const API_CONTRACT = {
     source: '40 §17.1 · 45 §6.2',
     summary: 'พนักงานกดรับงาน (เฉพาะ agent ที่ถูก assign)',
   },
+  // เติมเข้า `45` §6.2 พร้อม Phase 2.9 — สายตีกลับหลักฐานของ `41` §10.1 (คนละสายกับ reject_expense)
+  'case.rejectEvidence': {
+    method: 'POST',
+    path: '/api/cases/:id/reject-evidence',
+    module: 'assignment',
+    source: '41 §8/§10.1 · 45 §6.2',
+    summary: 'ตีกลับหลักฐานปิดงาน (body: reason) — เจ้าหน้าที่อนุมัติเคส system role เท่านั้น',
+  },
 
   // ── 6.3 Field Tracker (ไฟล์ 41 §17.1) ──────────────────────────────────
   // ⚠️ `field.reorderCases` เป็น segment คงที่ (`/reorder`) ที่อยู่ระดับเดียวกับ `/:id` —
@@ -233,6 +241,42 @@ export const API_CONTRACT = {
     module: 'field',
     source: '41 §17.1 · 45 §6.3',
     summary: 'แก้ไขรายการเบิกที่ถูกตีกลับแล้วส่งใหม่ (action resubmit_expense)',
+  },
+  // เติมเข้า `45` §6.3 พร้อม Phase 2.9 — `41` §8 มี action พวกนี้อยู่แล้วแต่ §17.1 ไม่ได้ลง endpoint ไว้
+  'field.rejectExpense': {
+    method: 'POST',
+    path: '/api/field/expenses/:id/reject',
+    module: 'field',
+    source: '41 §8 · 45 §6.3',
+    summary: 'ตีกลับรายการเบิก (action reject_expense) — ผู้อนุมัติจ่ายตามไฟล์ 16/17',
+  },
+  'field.pushSubscribe': {
+    method: 'POST',
+    path: '/api/field/push/subscribe',
+    module: 'field',
+    source: '41 §15 · 45 §6.3',
+    summary: 'ลงทะเบียนอุปกรณ์รับ Web Push (body: endpoint, keys)',
+  },
+  'field.pushUnsubscribe': {
+    method: 'DELETE',
+    path: '/api/field/push/subscribe',
+    module: 'field',
+    source: '41 §15 · 45 §6.3',
+    summary: 'ยกเลิกการรับ Web Push ของอุปกรณ์นั้น (body: endpoint)',
+  },
+  'field.notificationList': {
+    method: 'GET',
+    path: '/api/field/notifications',
+    module: 'field',
+    source: '41 §15 · 45 §6.3',
+    summary: 'รายการแจ้งเตือนในแอป + จำนวนที่ยังไม่อ่าน (fallback หลักของ §15)',
+  },
+  'field.notificationRead': {
+    method: 'POST',
+    path: '/api/field/notifications/read',
+    module: 'field',
+    source: '41 §15 · 45 §6.3',
+    summary: 'ทำเครื่องหมายว่าอ่านแล้ว (body: ids[] · ไม่ส่ง = อ่านทั้งหมด)',
   },
   'field.respondReassignment': {
     method: 'POST',

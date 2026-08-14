@@ -159,6 +159,8 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'accountant_questions',
   'export_records',
   'notifications',
+  // `41` §15 — อุปกรณ์ที่ผู้ใช้ลงทะเบียนรับ Web Push เอง (ไม่ใช่เงิน/สิทธิ์/ธนาคาร)
+  'push_subscriptions',
   'jobs',
   'files',
   'audit_logs',

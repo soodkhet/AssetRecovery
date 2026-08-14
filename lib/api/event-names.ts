@@ -35,6 +35,7 @@ export const EVENT_NAMES = [
   'case.close_draft_saved',
   'case.closed_success',
   'case.closed_fail',
+  'case.evidence_rejected',
   'case.close_resubmitted',
   'expense.case_bound_created',
   'expense.hotel_claim_submitted',

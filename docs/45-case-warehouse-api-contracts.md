@@ -62,6 +62,7 @@ POST   /api/cases/:id/assign                              มอบหมาย�
 POST   /api/cases/:id/reassign                            เปลี่ยนพนักงานรับผิดชอบ (body: agent_id, reason) — assigned เปลี่ยนทันที / accepted สร้าง pending_reassignment
 POST   /api/cases/:id/reassignment/respond                พนักงานคนเดิมตอบคำขอ (body: decision: consent|decline, decline_reason)
 POST   /api/cases/:id/accept                              พนักงานกดรับงาน (เฉพาะ agent ที่ถูก assign)
+POST   /api/cases/:id/reject-evidence                     ตีกลับหลักฐานปิดงาน (body: reason) — **เจ้าหน้าที่อนุมัติเคส (system role) เท่านั้น** ตามไฟล์ 41 §8/§10.1 (เพิ่ม 14/08/2569 Phase 2.9)
 ```
 
 ### 6.3 Field Tracker — Mobile/Desktop (ไฟล์ 41)
@@ -77,6 +78,11 @@ POST   /api/field/cases/:id/close-draft               บันทึก Draft �
 POST   /api/field/cases/:id/close                     ยืนยันปิดงาน (body: outcome, evidence)
 POST   /api/field/cases/:id/resubmit-close            ส่งกลับยืนยันอีกครั้งหลังถูกตีกลับ needs_revision (ไฟล์ 41 §8 resubmit_close_case)
 POST   /api/field/expenses/:id/resubmit               แก้ไขรายการเบิกที่ถูกตีกลับแล้วส่งใหม่ (ไฟล์ 41 §8 resubmit_expense)
+POST   /api/field/expenses/:id/reject                 ตีกลับรายการเบิก (body: reason) — ผู้อนุมัติจ่าย ไฟล์ 16/17 (ไฟล์ 41 §8 reject_expense · เพิ่ม 14/08/2569 Phase 2.9)
+POST   /api/field/push/subscribe                      ลงทะเบียนอุปกรณ์รับ Web Push (body: endpoint, keys) — ไฟล์ 41 §15 (เพิ่ม 14/08/2569 Phase 2.9)
+DELETE /api/field/push/subscribe                      ยกเลิกการรับ Web Push ของอุปกรณ์นั้น (body: endpoint) — ไฟล์ 41 §15 (เพิ่ม 14/08/2569 Phase 2.9)
+GET    /api/field/notifications                       รายการแจ้งเตือนในแอป + จำนวนที่ยังไม่อ่าน (fallback หลักของ §15 — เพิ่ม 14/08/2569 Phase 2.9)
+POST   /api/field/notifications/read                  ทำเครื่องหมายว่าอ่านแล้ว (body: ids[] · ไม่ส่ง = อ่านทั้งหมด — เพิ่ม 14/08/2569 Phase 2.9)
 POST   /api/field/reassignment/:id/respond            ตอบรับ/ปฏิเสธคำขอเปลี่ยนผู้รับผิดชอบ (body: consent, decline_reason?)
 GET    /api/field/expenses?type={caseBound|separate}  ดึงรายการเบิกค่าใช้จ่าย
 POST   /api/field/expenses/hotel                      ส่งคำขอเบิกที่พัก
