@@ -159,6 +159,9 @@ export const ERROR_CATALOG = {
   REASSIGNMENT_ALREADY_PENDING: { status: 400, severity: 'reject', source: '40 §12' },
   DECLINE_REASON_REQUIRED: { status: 400, severity: 'reject', source: '40 §12' },
   REASSIGNMENT_ALREADY_TIMED_OUT: { status: 400, severity: 'reject', source: '40 §12 · 41 §12' },
+  // เติมเข้า `40` §12 พร้อม Phase 2.6 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  ASSIGNMENT_NOT_FOUND: { status: 404, severity: 'reject', source: '40 §12' },
+  ASSIGNMENT_INVALID_STATUS: { status: 400, severity: 'reject', source: '40 §12' },
 
   // ── 41 §12 Field Tracker ───────────────────────────────────────────────
   CLOSE_OUTCOME_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },

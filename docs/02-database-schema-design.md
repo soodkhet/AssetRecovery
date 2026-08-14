@@ -22,6 +22,7 @@
 | v3.5 | 04/07/2569 | **Batch 6 เฟส 2 — Product Owner อนุมัติครบทุกข้อ (DEC-006 ใน `94-decision-log.md`)**: (D1=B) เพิ่มตารางกลุ่ม Settings ตามไฟล์ 13 — `billing_payout_cycles` (§6.1), `approval_matrices` (§6.2 เฉพาะสายอนุมัติ), `finance_policy_settings` (1 record/org — แยกค่านโยบายออกจาก matrix), `bank_file_formats` (§6.8), `tax_document_template_settings` (§6.13) + เติม `functional_group` บน `capabilities` (§6.10) + เติม numbering mode เต็มรูปบน `organizations` (§6.12) — (D2=A) เติม `usage`/`statement_format`/`payment_file_format`/`auto_match_tolerance_days` บน `bank_accounts` + deprecate `is_payout_account` — (D3=A) เพิ่มตาราง `notifications` (ไฟล์ 90 §6.3) — (D4=A) `wht_certificates` เพิ่ม status model (`active`/`cancelled` + `replaces_certificate_id`) และแก้ `delivery_format` TEXT → enum — (D5=A) `expenses` เพิ่ม `executive_approved_by/at` + `approval_step_current/total` + `approval_history` + `approval_matrix_id` (ชื่อ field ตามไฟล์ 16 §7 ซึ่งเป็นเจ้าของ flow) — (D7) เพิ่ม partial unique index `advances` (ห้ามเบิกซ้อน) + CHECK `bank_tx_status_fk_shape` (ส่วน UNIQUE `idempotency_key` มีอยู่เดิมแล้ว ไม่ต้องเพิ่ม) — รวมเป็น **51 tables** (45 เดิม + 6 ใหม่) อัปเดต Migration Order/Seed/Immutable Rules ตาม — ทุกตารางใหม่เป็น greenfield จึงเขียนเป็น CREATE/column ในตารางเดิมโดยตรง ไม่มี ALTER migration แยก |
 | v3.6 | 05/07/2569 | **DEC-009 — ระดับสิทธิ์ 3 ระดับ**: เพิ่ม enum `capability_access_level` (`view`/`manage`) + column `role_capabilities.access_level` (default `manage`) — "ไม่มีสิทธิ์" = ไม่มี record ในตาราง · Superadmin มีสิทธิ์ manage ทุก capability โดยนิยาม enforce ที่ middleware ไม่ seed record · sync ไฟล์ 13 v3.1 / 25 v2.2 / mockup `settings.html` แล้ว |
 | v4.0 | 14/08/2569 | **Sync กับไฟล์ 38 §6/§11 — implement ใน Phase 2.2** (Group C เดิมเขียนไว้ก่อนไฟล์ 38 รอบ reformat จึงขาดฟิลด์ที่ฟอร์มรับเคสใช้จริง ไม่ใช่การเปลี่ยน business logic): (1) `cases.case_ref_normalized` + unique index `uniq_cases_company_case_ref` (§11 กันซ้ำ 2 ชั้น — normalize = uppercase+trim เท่านั้น) · (2) enum ใหม่ `debtor_nationality` (§6.1) และ `asset_kind` (§6.2 `asset_type`) + คอลัมน์ `debtor_nationality`/`debtor_nationality_other`/`debtor_passport_no`/`asset_kind` · (3) ที่อยู่ครบ 3 ชุดตาม §6.1 — เติมกลุ่ม `work_addr_*` และ `id_card_addr_*` · (4) `projected_revenue_satang`/`projected_revenue_source` (§6.4/§6.5 — ค่าประมาณการ ไม่ใช่ Revenue จริงของไฟล์ 19) · (5) **ปลด NOT NULL** ของ `debtor_name`/`asset_description` ตาม §11 (เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ) · (6) ตารางใหม่ `case_edit_history` (§6.4 `edit_history` append-only) · (7) `recycle_requests.previous_round`/`new_round` — §6.4 `recycle_history` คือแถว `status = 'approved'` ของตารางนี้ ไม่แยกตารางใหม่ · `asset_description` = `asset_brand_model` ของไฟล์ 38 · enum รวมเป็น **58 ตัว** · รวมเป็น **54 tables** · migration: `20260814090450_case_submission_fields` + `20260814092000_case_ref_unique_not_partial` |
+| v4.1 | 14/08/2569 | **Sync กับไฟล์ 40 §6.1/§6.1.1/§6.4 — implement ใน Phase 2.6** (Group C เดิมมีแต่ `case_assignments` ซึ่งเก็บ flow "เปลี่ยนผู้รับผิดชอบแบบต้องขอความยินยอม" ของไฟล์ 40 ไม่ได้ — เป็นการเติมให้ครบ ไม่ใช่การเปลี่ยน business logic): (1) enum ใหม่ `pending_reassignment_status` (§6.1.1) และ `reassignment_resolution` (§6.1) · (2) ตารางใหม่ `pending_reassignments` = `pending_reassignment` object ของ §6.1.1 + **partial unique `uniq_pending_reassignment_active`** (ตัวบังคับจริงของ `REASSIGNMENT_ALREADY_PENDING`) — resolve แล้วเปลี่ยน `status` ไม่ลบแถว เพื่อคง log การปฏิเสธตาม §8 · (3) ตารางใหม่ `reassignment_history` = `reassignment_history` array ของ §6.1 (insert-only · เก็บเฉพาะการเปลี่ยนที่ **สำเร็จ**) · (4) ตารางใหม่ `assignment_policy_settings` (1 record/org) = `reassign_timeout_hours` (default 3) + `supervisor_can_assign_system/inhouse/outsource` (default true) ของ §6.4 + `accept_deadline_hours` (NULL = ไม่จำกัด ตาม §11) · **ไม่มีการลบ/แก้คอลัมน์เดิม** · enum รวมเป็น **60 ตัว** · รวมเป็น **57 tables** · migration: `20260814114904_assignment_reassignment_tables` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
 | v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
@@ -204,6 +205,19 @@ CREATE TYPE assignment_status AS ENUM (
   'completed',  -- ปิดงานแล้ว (terminal)
   'reassigned', -- ถูก reassign ออก (superseded)
   'cancelled'   -- ยกเลิก
+);
+
+-- เพิ่ม 14/08/2569 (Phase 2.6 — sync กับไฟล์ 40 §6.1/§6.1.1)
+CREATE TYPE pending_reassignment_status AS ENUM (
+  'waiting_consent', -- คำขอที่ยังรอผล (มีได้ครั้งละ 1 คำขอต่อเคส)
+  'consented',       -- พนักงานคนเดิมยินยอม
+  'declined',        -- พนักงานคนเดิมไม่ยินยอม (ต้องมี decline_reason)
+  'timeout_auto'     -- ไม่ตอบจนเลย expires_at → ระบบเปลี่ยนให้อัตโนมัติ
+);
+
+CREATE TYPE reassignment_resolution AS ENUM (
+  'consented',    -- เปลี่ยนสำเร็จด้วยความยินยอม (รวมกรณีเปลี่ยนทันทีตอนยังไม่ accepted)
+  'timeout_auto'  -- เปลี่ยนสำเร็จโดยระบบเมื่อหมดเวลารอความยินยอม
 );
 
 CREATE TYPE checkin_type AS ENUM (
@@ -954,6 +968,68 @@ CREATE TABLE case_assignments (
 );
 CREATE INDEX idx_assignments_case   ON case_assignments(case_id, status);
 CREATE INDEX idx_assignments_agent  ON case_assignments(agent_id, status);
+
+-- ── pending_reassignments ────────────────────────────────────────
+-- คำขอเปลี่ยนผู้รับผิดชอบที่รอความยินยอม ตามไฟล์ 40 §6.1.1 (เพิ่ม 14/08/2569 — Phase 2.6)
+-- resolve แล้วไม่ลบแถว (เปลี่ยน status) เพื่อคง traceability ของการปฏิเสธตาม §8
+CREATE TABLE pending_reassignments (
+  id              UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                        NOT NULL REFERENCES organizations(id),
+  case_id         UUID                        NOT NULL REFERENCES cases(id),
+  assignment_id   UUID                        NOT NULL REFERENCES case_assignments(id), -- assignment ของคนเดิม
+  from_agent_id   UUID                        NOT NULL REFERENCES users(id),
+  new_agent_id    UUID                        NOT NULL REFERENCES users(id),
+  requested_by    UUID                        NOT NULL REFERENCES users(id),
+  requested_at    TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  expires_at      TIMESTAMPTZ                 NOT NULL,  -- requested_at + reassign_timeout_hours
+  reason          TEXT                        NOT NULL,  -- ASSIGNMENT_REASON_REQUIRED
+  status          pending_reassignment_status NOT NULL DEFAULT 'waiting_consent',
+  decline_reason  TEXT,
+  resolved_at     TIMESTAMPTZ,
+  resolved_by     UUID                        REFERENCES users(id),  -- NULL = ระบบ (timeout_auto)
+  created_at      TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  created_by      UUID                        NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  updated_by      UUID                        REFERENCES users(id)
+);
+CREATE INDEX idx_pending_reassignments_case ON pending_reassignments(case_id, status);
+CREATE INDEX idx_pending_reassignments_due  ON pending_reassignments(status, expires_at);
+-- 1 เคสมีคำขอที่รอผลได้ครั้งละ 1 คำขอ (`40` §12 REASSIGNMENT_ALREADY_PENDING)
+CREATE UNIQUE INDEX uniq_pending_reassignment_active
+  ON pending_reassignments(case_id) WHERE status = 'waiting_consent';
+
+-- ── reassignment_history ─────────────────────────────────────────
+-- ประวัติการเปลี่ยนผู้รับผิดชอบที่ **สำเร็จแล้ว** ตามไฟล์ 40 §6.1 — insert-only
+CREATE TABLE reassignment_history (
+  id                      UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id         UUID                    NOT NULL REFERENCES organizations(id),
+  case_id                 UUID                    NOT NULL REFERENCES cases(id),
+  pending_reassignment_id UUID                    REFERENCES pending_reassignments(id), -- NULL = เปลี่ยนทันที
+  from_agent_id           UUID                    NOT NULL REFERENCES users(id),
+  to_agent_id             UUID                    NOT NULL REFERENCES users(id),
+  reassigned_by           UUID                    NOT NULL REFERENCES users(id),
+  requested_at            TIMESTAMPTZ             NOT NULL,
+  resolved_at             TIMESTAMPTZ             NOT NULL,
+  resolution              reassignment_resolution NOT NULL,
+  reason                  TEXT                    NOT NULL,
+  was_accepted_before_reassign BOOLEAN            NOT NULL,
+  created_at              TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+  created_by              UUID                    NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_reassignment_history_case ON reassignment_history(organization_id, case_id);
+
+-- ── assignment_policy_settings ───────────────────────────────────
+-- ค่าตั้งระดับองค์กรของการมอบหมายงาน ตามไฟล์ 40 §6.4/§11 (1 record ต่อ org)
+CREATE TABLE assignment_policy_settings (
+  organization_id                 UUID        PRIMARY KEY REFERENCES organizations(id),
+  reassign_timeout_hours          INTEGER     NOT NULL DEFAULT 3,
+  supervisor_can_assign_system    BOOLEAN     NOT NULL DEFAULT TRUE,
+  supervisor_can_assign_inhouse   BOOLEAN     NOT NULL DEFAULT TRUE,
+  supervisor_can_assign_outsource BOOLEAN     NOT NULL DEFAULT TRUE,
+  accept_deadline_hours           INTEGER,    -- NULL = ไม่จำกัดเวลากดรับงานครั้งแรก (§11)
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by                      UUID        REFERENCES users(id)
+);
 
 -- ── check_ins ────────────────────────────────────────────────
 -- เช็คอินระหว่างลงพื้นที่ ตามไฟล์ 41 §6.2
@@ -1740,6 +1816,9 @@ CREATE TABLE files (
 19b_case_edit_history.sql      ← เพิ่ม 14/08/2569 (Phase 2.2) ต้องหลัง cases, users
 20_recycle_requests.sql
 21_case_assignments.sql
+21b_pending_reassignments.sql  ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง case_assignments
+21c_reassignment_history.sql   ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง pending_reassignments
+21d_assignment_policy_settings.sql ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง organizations, users
 22_check_ins.sql
 23_case_evidences.sql
 24_assets.sql
