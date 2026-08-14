@@ -40,7 +40,7 @@
 | 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`680159e` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ✅ | 2026-08-14 · `53f4c38`+`b00a5f9` · API 22 endpoint ครบ 13 หมวด + 2 endpoint ที่ spec ตกหล่น + VAT resolver/เดินเลขใบกำกับ atomic → archive |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ✅ | 2026-08-14 · `0eb2e81` · shell 13 แท็บ (`/settings/finance`) + 5 แท็บแรก CRUD ครบ + บังคับ `reason` ทุก mutation → archive |
-| 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ✅ | 2026-08-14 · `fa00f40` · ครบ 13 แท็บของไฟล์ 13 — 8 แท็บที่เหลือ + capability เฉพาะแท็บ + read-only 3 แท็บ → archive |
+| 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ✅ | 2026-08-14 · `fa00f40`+`7e5d61e` · ครบ 13 แท็บของไฟล์ 13 — 8 แท็บที่เหลือ + capability เฉพาะแท็บ + read-only 3 แท็บ → archive |
 
 ## Phase 2 — Case & Field Operations (ไฟล์ 38, 40, 41, 44, 45)
 
