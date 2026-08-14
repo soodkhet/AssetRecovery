@@ -193,6 +193,10 @@ export const ERROR_CATALOG = {
   LOT_ALREADY_CONFIRMED: { status: 400, severity: 'reject', source: '44 §12' },
   // side effect ใน $transaction fail = ปัญหาฝั่งระบบ ไม่ใช่ข้อมูลผู้เรียกผิด (`44` §11)
   CONFIRM_TRANSACTION_FAILED: { status: 500, severity: 'reject', source: '44 §12' },
+  // เติมเข้า `44` §12 (v2.1) พร้อม Phase 2.13 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  ASSET_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
+  ASSET_INVALID_STATUS: { status: 400, severity: 'reject', source: '44 §12' },
+  LOT_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
 } as const satisfies Record<string, ErrorCodeContract>
 
 export type ApiErrorCode = keyof typeof ERROR_CATALOG

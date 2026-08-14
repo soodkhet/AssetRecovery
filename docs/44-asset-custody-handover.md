@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | (เดิม) | ออกแบบเสร็จสมบูรณ์ พร้อม Mockup (`warehouse.html`) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header/Changelog + แยก Decisions/Open Items ชัดเจน) — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง** |
+| v2.1 | 14/08/2569 | §12 เพิ่ม 3 code ที่ตารางเดิมตกหล่น (`ASSET_NOT_FOUND`, `ASSET_INVALID_STATUS`, `LOT_NOT_FOUND`) — code ระดับ "ไม่พบ/สถานะไม่ตรง" ที่ทุก endpoint ของ §15 ต้องใช้ ลงพร้อม implementation Phase 2.13 ตาม Rule 04 (doc + code คอมมิตเดียวกัน) · **business logic เดิมไม่เปลี่ยน** |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -438,6 +439,9 @@ WHEN HandoverLot.status → confirmed:
 | `LOT_MISSING_DELIVERY_PROOF` | ยืนยัน we_deliver ไม่แนบหลักฐาน | reject |
 | `LOT_ALREADY_CONFIRMED` | แก้ไข/เพิ่ม/ลด Asset ใน Lot ที่ confirmed | reject — Terminal State |
 | `CONFIRM_TRANSACTION_FAILED` | side effects ใน $transaction fail | rollback ทั้งหมด + alert |
+| `ASSET_NOT_FOUND` | ไม่พบ asset ที่ระบุ **หรือ** อยู่นอก scope ของผู้เรียก | reject 404 — ข้อความเดียวกันทั้งสองกรณี (ห้าม leak ว่ามีของบริษัทอื่นอยู่จริง §13) |
+| `ASSET_INVALID_STATUS` | asset_status ปัจจุบันไม่รองรับ action ที่สั่ง (§9.1) | reject — ให้รีเฟรชแล้วลองใหม่ (กันสองคนกดพร้อมกัน) |
+| `LOT_NOT_FOUND` | ไม่พบ lot ที่ระบุ **หรือ** อยู่นอก scope ของผู้เรียก | reject 404 — เช่นเดียวกับ `ASSET_NOT_FOUND` |
 
 ---
 

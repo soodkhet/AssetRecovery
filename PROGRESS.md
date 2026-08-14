@@ -60,7 +60,7 @@
 | 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ✅ | 2026-08-14 · `97afe2e`+`4d53196` · shell mobile/desktop (sidebar 260px fixed) + `<FieldCaseDetailBody>` ใช้ซ้ำ 3 ที่ + 3 แท็บงาน + Calendar Picker → archive |
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ✅ | 2026-08-14 · `66be882`+`011318f` · ฟอร์มปิดงาน 3 ส่วน (auto GPS + ลากแผนที่ + เช็คอินจากอุปกรณ์จริง + สื่อ 4 ชนิด + draft) + โหมด `needs_revision` + flow คำขอเปลี่ยนผู้รับผิดชอบครบ 3 ทางเข้า → archive |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ✅ | 2026-08-14 · `1af69ae`+`07b2744` · 4 หน้าจอสุดท้ายของไฟล์ 41 (เบิกเงิน 2 ขอบแท็บ/รายได้/จบงาน/dashboard) + PWA manifest + service worker + กระดิ่งแจ้งเตือนในแอป · ⚠️ ต้องตั้ง `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (คู่กับ `VAPID_*`) ที่ Vercel ก่อน push จริงจะทำงาน → archive |
-| 2.13 | Warehouse BE (confirm = transaction 4 steps) | ⬜ | PLAN §2.13 · Revenue stub → ของจริง 3.6 |
+| 2.13 | Warehouse BE (confirm = transaction 4 steps) | 🔄 | PLAN §2.13 · Revenue stub → ของจริง 3.6 · ทำแล้ว: migration + `lib/warehouse/*` ครบ (service/pure/schemas/hook) + เทสต์ T01–T15 · เหลือ: API routes `45` §6.4–6.5 + PDF ใบส่งมอบ + Excel export |
 | 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ⬜ | PLAN §2.14 |
 | 2.15 | Warehouse FE ชุด 2 (ส่งมอบ/แนบเอกสาร) | ⬜ | PLAN §2.15 |
 

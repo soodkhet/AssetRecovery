@@ -26,6 +26,7 @@ import {
   statusesInGroup,
 } from '@/lib/field/field-status'
 import { assertReorderCoversDay, nextScheduleOrder, recomputeScheduleOrder } from '@/lib/field/schedule'
+import { ensureAssetForClosedCase, type WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import type {
   CheckinInput,
   CloseCaseInput,
@@ -1092,6 +1093,18 @@ export async function closeFieldCase(
     // draft ถูกลบทันทีที่ปิดงานสำเร็จ (`41` §6.5) — ไม่ใช่ draft ที่ค้างอยู่อีกต่อไป
     await tx.closeCaseDraft.deleteMany({ where: { assignmentId: current.id } })
 
+    // เครื่องที่ยึดได้เข้าคิวรอรับเข้าคลังในทรานแซกชันเดียวกัน (`44` §6.1) — ปิดงานสำเร็จแล้ว
+    // ไม่มีเครื่องรอรับเข้าคลังเป็นไปไม่ได้ (คู่กับเกต Revenue ของ `19` §6.1 ที่รอ lot confirmed)
+    const asset =
+      outcome === 'closed_success'
+        ? await ensureAssetForClosedCase(tx as WarehouseTxClient, {
+            organizationId: user.organizationId,
+            caseId,
+            closedAt,
+            actorId: context.actor.id,
+          })
+        : null
+
     // รายการเบิก fuel/allowance เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
     // พนักงานไม่ต้องทำเรื่องเบิกเอง) ⇒ ปิดงานสำเร็จแต่ไม่มีรายการเบิกเป็นไปไม่ได้
     const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
@@ -1127,6 +1140,7 @@ export async function closeFieldCase(
           productPhotos: input.productPhotos.length,
           expenseIds: expenses.expenseIds,
           fuelDistancePending: expenses.fuelDistancePending,
+          assetId: asset?.assetId ?? null,
           events: [
             outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
             ...(expenses.expenseIds.length > 0 ? ['expense.case_bound_created'] : []),
@@ -1400,6 +1414,18 @@ export async function resubmitCloseCase(
     })
     await tx.closeCaseDraft.deleteMany({ where: { assignmentId: current.id } })
 
+    // ตัวเดียวกับตอนปิดงานรอบแรก — **idempotent** (`44` §6.1): รอบส่งใหม่ไม่สร้างเครื่องใบที่สอง
+    // แต่เคสที่เพิ่งตีกลับก่อนมีเครื่อง (เช่นถูกตีกลับหลักฐานทันที) ยังได้เครื่องครบตอนนี้
+    const asset =
+      outcome === 'closed_success'
+        ? await ensureAssetForClosedCase(tx as WarehouseTxClient, {
+            organizationId: user.organizationId,
+            caseId,
+            closedAt,
+            actorId: context.actor.id,
+          })
+        : null
+
     // ลำดับสำคัญ: supersede ของเดิม **ก่อน** สร้างชุดใหม่ (partial unique ระดับ DB บังคับอยู่แล้ว)
     const supersededIds = await supersedeCaseExpenses(tx as ExpenseTxClient, {
       organizationId: user.organizationId,
@@ -1445,6 +1471,7 @@ export async function resubmitCloseCase(
           trackingRound: current.trackingRound,
           supersededExpenseIds: supersededIds,
           expenseIds: expenses.expenseIds,
+          assetId: asset?.assetId ?? null,
           events: ['case.close_resubmitted'],
         },
         reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ (`41` §8)',
