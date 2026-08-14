@@ -60,7 +60,7 @@
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ✅ | 2026-08-14 · `66be882`+`011318f` · ฟอร์มปิดงาน 3 ส่วน (auto GPS + ลากแผนที่ + เช็คอินจากอุปกรณ์จริง + สื่อ 4 ชนิด + draft) + โหมด `needs_revision` + flow คำขอเปลี่ยนผู้รับผิดชอบครบ 3 ทางเข้า → archive |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ✅ | 2026-08-14 · `1af69ae`+`07b2744` · 4 หน้าจอสุดท้ายของไฟล์ 41 (เบิกเงิน 2 ขอบแท็บ/รายได้/จบงาน/dashboard) + PWA manifest + service worker + กระดิ่งแจ้งเตือนในแอป · ⚠️ ต้องตั้ง `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (คู่กับ `VAPID_*`) ที่ Vercel ก่อน push จริงจะทำงาน → archive |
 | 2.13 | Warehouse BE (confirm = transaction 4 steps) | ✅ | 2026-08-15 · `32f6b4c`+`b9b1f0a` · API 10 endpoint + confirm 4 ขั้น + PDF/Excel ใบส่งมอบ + Revenue stub (ของจริง 3.6) · เทสต์ T01–T15 ของ `44` §17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
-| 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ✅ | 2026-08-15 · `PENDING` · หน้า `/warehouse` จริง 4 แท็บ + badge + modal รับเข้าคลัง 3 ขั้น (force proceed) + แท็บในคลัง (การ์ด/drill-down/checkbox) → archive |
+| 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ✅ | 2026-08-15 · `8d25403` · หน้า `/warehouse` จริง 4 แท็บ + badge + modal รับเข้าคลัง 3 ขั้น (force proceed) + แท็บในคลัง (การ์ด/drill-down/checkbox) → archive |
 | 2.15 | Warehouse FE ชุด 2 (ส่งมอบ/แนบเอกสาร) | ⬜ | PLAN §2.15 |
 
 ## Phase 3 — Finance Module (ไฟล์ 14–21, 22)
