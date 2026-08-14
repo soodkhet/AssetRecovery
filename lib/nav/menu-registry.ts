@@ -194,6 +194,20 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         audiences: ['superadmin', 'executive'],
         available: true,
       },
+      {
+        id: 'settings.teams',
+        label: 'ทีมติดตามทรัพย์',
+        path: '/settings/teams',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
+      {
+        id: 'settings.companies',
+        label: 'บริษัทไฟแนนซ์',
+        path: '/settings/companies',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
     ],
   },
 ]

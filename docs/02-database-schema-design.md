@@ -21,6 +21,7 @@
 | v3.4 | 04/07/2569 | **แก้ comment เท่านั้น — ไม่มีการเปลี่ยน DDL/โครงสร้างใดๆ**: (1) จำนวน Seed Roles "14" → **"15"** — นับจาก seed data จริงใน §12 ได้ 15 records (system 6 + inhouse 3 + outsource 3 + finance_company 3 = 15) ตัวเลข 14 เดิมเป็นการนับผิดที่คัดลอกต่อกันหลายไฟล์ (แก้ไฟล์ 05/07/25/README/implementation-todo พร้อมกัน — 🔶 รอ Product Owner ยืนยันตัวเลขสุดท้าย ดู `93-roadmap-open-items.md` §7.1) (2) comment ตาราง `jobs` เติม job_type `'advance_overdue'` ตามไฟล์ 15/91 |
 | v3.5 | 04/07/2569 | **Batch 6 เฟส 2 — Product Owner อนุมัติครบทุกข้อ (DEC-006 ใน `94-decision-log.md`)**: (D1=B) เพิ่มตารางกลุ่ม Settings ตามไฟล์ 13 — `billing_payout_cycles` (§6.1), `approval_matrices` (§6.2 เฉพาะสายอนุมัติ), `finance_policy_settings` (1 record/org — แยกค่านโยบายออกจาก matrix), `bank_file_formats` (§6.8), `tax_document_template_settings` (§6.13) + เติม `functional_group` บน `capabilities` (§6.10) + เติม numbering mode เต็มรูปบน `organizations` (§6.12) — (D2=A) เติม `usage`/`statement_format`/`payment_file_format`/`auto_match_tolerance_days` บน `bank_accounts` + deprecate `is_payout_account` — (D3=A) เพิ่มตาราง `notifications` (ไฟล์ 90 §6.3) — (D4=A) `wht_certificates` เพิ่ม status model (`active`/`cancelled` + `replaces_certificate_id`) และแก้ `delivery_format` TEXT → enum — (D5=A) `expenses` เพิ่ม `executive_approved_by/at` + `approval_step_current/total` + `approval_history` + `approval_matrix_id` (ชื่อ field ตามไฟล์ 16 §7 ซึ่งเป็นเจ้าของ flow) — (D7) เพิ่ม partial unique index `advances` (ห้ามเบิกซ้อน) + CHECK `bank_tx_status_fk_shape` (ส่วน UNIQUE `idempotency_key` มีอยู่เดิมแล้ว ไม่ต้องเพิ่ม) — รวมเป็น **51 tables** (45 เดิม + 6 ใหม่) อัปเดต Migration Order/Seed/Immutable Rules ตาม — ทุกตารางใหม่เป็น greenfield จึงเขียนเป็น CREATE/column ในตารางเดิมโดยตรง ไม่มี ALTER migration แยก |
 | v3.6 | 05/07/2569 | **DEC-009 — ระดับสิทธิ์ 3 ระดับ**: เพิ่ม enum `capability_access_level` (`view`/`manage`) + column `role_capabilities.access_level` (default `manage`) — "ไม่มีสิทธิ์" = ไม่มี record ในตาราง · Superadmin มีสิทธิ์ manage ทุก capability โดยนิยาม enforce ที่ middleware ไม่ seed record · sync ไฟล์ 13 v3.1 / 25 v2.2 / mockup `settings.html` แล้ว |
+| v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
 | v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
 
@@ -145,6 +146,12 @@ CREATE TYPE company_user_level AS ENUM (
   'manager',      -- เห็นข้อมูลทั้งหมดของบริษัท
   'supervisor',   -- เห็นเฉพาะที่ผู้จัดการมอบหมาย
   'admin'         -- เห็นเฉพาะงานที่ได้รับมอบหมาย
+);
+
+-- รูปแบบส่งใบกำกับภาษี/ใบแจ้งหนี้เริ่มต้นต่อบริษัทไฟแนนซ์ — มติ PO 14/08/2569 (ไฟล์ 10 §7.1)
+CREATE TYPE invoice_delivery_format AS ENUM (
+  'e_tax_invoice',  -- ส่งแบบ e-Tax Invoice
+  'paper_pdf'       -- ส่งกระดาษ/PDF
 );
 
 -- ══════════════════════════════════════════════
@@ -535,12 +542,15 @@ CREATE TABLE finance_companies (
   -- VAT
   vat_mode              vat_mode     NOT NULL DEFAULT 'exclude_vat',
   vat_registered        BOOLEAN      NOT NULL DEFAULT true,
+  -- รูปแบบส่งใบกำกับภาษีเริ่มต้น — มติ PO 14/08/2569 (ไฟล์ 10 §7.1 · เปลี่ยนต่อใบได้ที่ไฟล์ 31 §6.2)
+  default_invoice_delivery_format invoice_delivery_format NOT NULL DEFAULT 'paper_pdf',
   -- Billing
   billing_day           INTEGER      NOT NULL DEFAULT 1,    -- วันตัดรอบบิล
   payment_due_days      INTEGER      NOT NULL DEFAULT 30,   -- วันครบกำหนดชำระ
   -- WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — มติ PO 2026-08-12 ข้อ A1 · NULL = บริษัทนี้ไม่หัก
   wht_withheld_by_customer_pct NUMERIC(5,2) DEFAULT 3.00,
-  status                TEXT         NOT NULL DEFAULT 'active', -- active | inactive
+  status                TEXT         NOT NULL DEFAULT 'active', -- active | suspended (ไฟล์ 10 §9.3 — แก้ 14/08/2569)
+  suspended_reason      TEXT,                                   -- บังคับเมื่อ status = suspended (ไฟล์ 10 §11 SUSPEND_REASON_REQUIRED)
   created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   created_by            UUID         NOT NULL REFERENCES users(id),
   updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

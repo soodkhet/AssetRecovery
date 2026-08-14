@@ -73,7 +73,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
 
   it('ทุก enum map ไปชื่อ snake_case', () => {
     const enums = [...schema.matchAll(/^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm)]
-    expect(enums.length).toBe(55) // 54 ตามสเปค + due_rule_type (มติ PO A5)
+    // 54 ตามสเปค + due_rule_type (มติ PO A5) + invoice_delivery_format (มติ PO 14/08/2569 — Phase 1.8)
+    expect(enums.length).toBe(56)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

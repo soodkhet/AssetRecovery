@@ -102,6 +102,8 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
       'billing_day',
       'status',
       'tax_id',
+      // `10` §13 — ผู้มีอำนาจลงนามกระทบเอกสารทางการ (สัญญา/ใบส่งมอบ) จึงต้องมีเหตุผลเสมอ
+      'signer_name',
     ],
   },
   organizations: {

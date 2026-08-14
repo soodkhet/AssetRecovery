@@ -5,6 +5,47 @@
 
 ---
 
+## Phase 1.8 — Teams (09) + Finance Companies (10)
+
+**วันที่**: 2026-08-14 · **branch**: `auto/phase-1.8`
+
+### สิ่งที่ทำ
+
+**Schema / migration** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task)
+- migration `20260814043410_finance_company_suspend_delivery_format`: enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + `finance_companies.suspended_reason` (TEXT null ได้) + `finance_companies.default_invoice_delivery_format` (NOT NULL DEFAULT `paper_pdf`)
+- `02` v3.9 (§3 enum + §5 DDL + comment `status` = `active | suspended` คงชนิด TEXT) · `00_MAP` เลขบรรทัดของ `02` · `prisma/schema.test.ts` ยาม enum 55 → **56**
+- `24` v3.6 — เพิ่ม code §6.1: `COMPANY_NOT_FOUND`, `TEAM_NOT_FOUND`, `DUPLICATE_TEAM_NAME`, `TEAM_HAS_ACTIVE_CASES`, `SUPERVISOR_ALREADY_ASSIGNED`, `INVALID_TEAM_MEMBER`, `INVALID_PROVINCE`
+- `lib/audit/reason-policy.ts` — เพิ่ม `signer_name` ในฟิลด์อ่อนไหวของ `finance_companies` (`10` §13)
+
+**BE ทีม (09)** — `lib/teams/*`: `provinces.ts` (PROVINCE_DATA master) · `team.ts` (pure guards) · `schemas.ts` (Zod) · `errors.ts` · `queries.ts` (ชั้น DB) · endpoint: `GET/POST /api/teams`, `GET/PATCH/DELETE /api/teams/:id`, `POST /api/teams/:id/managers`, `DELETE /api/teams/:id/managers/:userId`, `GET /api/teams/eligible-members`
+
+**BE บริษัทไฟแนนซ์ (10)** — `lib/finance-companies/*`: `company.ts` (pure: tax id + suspend) · `schemas.ts` · `errors.ts` · `queries.ts` · endpoint: `GET/POST /api/finance-companies`, `GET/PATCH /:id`, `POST /:id/status`, `GET /:id/users`
+
+**FE** — `/settings/teams` (ตาราง 5 คอลัมน์ + toggle Inhouse/Outsource + filter สถานะ/จังหวัด/ค้นหา + ฟอร์ม province picker แยกภาค) · `/settings/companies` (การ์ดตาม `10` §8 + ปุ่มระงับ/เปิดใช้งานพร้อม reason) · เพิ่ม 2 เมนูย่อยใน `lib/nav/menu-registry.ts`
+
+**เทสต์** — `lib/teams/team.test.ts` + `schemas.test.ts` · `lib/finance-companies/company.test.ts` + `schemas.test.ts` · `lib/teams/teams-companies.db.test.ts` (ระดับ DB: UNIQUE ชื่อทีม, N:N ผู้จัดการ 2 ทีม, UNIQUE tax_id, ดีฟอลต์คอลัมน์ใหม่, ค่า enum) — รวมทั้ง repo 474 → 500 เทสต์เขียว
+
+### การตัดสินใจระหว่างทาง
+
+1. **`suspended_reason` + `default_invoice_delivery_format`** — `02` §5 ไม่มี 2 คอลัมน์นี้แต่ `10` §7.1 + mockup ใช้จริง → หยุดถาม PO ก่อนลงมือ (ตาม Rule 02) → PO เลือก "เพิ่ม migration + แก้ `02` พร้อม changelog" · บันทึกเป็น A7 ใน `02_OPEN_DECISIONS`
+2. **`signer_phone` ยังไม่เพิ่ม** — เป็นช่องที่ `10` §7.1 มีแต่ `02` ไม่มี และอยู่นอกมติรอบนี้ → เปิดเป็น **A8 (⬜)** ใน `02_OPEN_DECISIONS` · ฟอร์ม/การ์ดของ 1.8 ไม่มีช่องนี้ไปก่อน
+3. **หัวหน้าทีมซ้ำ 2 ทีม = reject ไม่ใช่แค่เตือน** — ปิด Open Item `09` §18 ตามที่ §7.1/§17 ระบุไว้แล้วว่า "1 คน = 1 ทีม" · code = `SUPERVISOR_ALREADY_ASSIGNED` (ผู้จัดการยังหลายทีมได้ตามเดิม)
+4. **`POST /:id/users` (สร้าง company user) เลื่อนไป 1.9** — ต้อง provision Supabase Auth ซึ่งติด D1 (invite/first-login) ที่ระบุว่าบล็อก 1.9 อยู่แล้ว · 1.8 ทำ `GET /:id/users` + ตัวนับบนการ์ด
+5. **ปิดทีมที่มีเคสค้าง = `TEAM_HAS_ACTIVE_CASES`** ตาม default ของ D7 · สถานะที่นับว่า "ยังไม่จบ" = `pending_review`/`need_info`/`approved`/`active`/`pending_recycle_review` (ไม่นับ `draft` ที่ยังไม่ผูกทีม) · **modal bulk reassign เป็นของ Phase 2.6**
+6. **ระงับบริษัทเป็น endpoint แยก** (`POST /:id/status`) ไม่รวมใน PATCH — Rule 04 กำหนดว่า transition ใช้ `POST /:id/action-name` และการระงับมีกติกา reason ของตัวเอง · เหตุผลถูกเก็บ 2 ที่โดยตั้งใจ: คอลัมน์ `suspended_reason` (แสดงบนการ์ด) + audit log (ประวัติ)
+7. **event `finance-company.suspended` ยังไม่ยิงจริง** — event bus เกิด Phase 2.1 (`45` §7) · ตัวบล็อกเคสใหม่อยู่ที่ไฟล์ 38 ซึ่งอ่าน `status` จากตารางตรง ๆ อยู่แล้ว
+8. **ทีมใช้ enum `team_status` = `active | inactive`** ตาม `02` §3 (mockup เขียน "Suspended" แต่ schema เป็น SSOT) — ต่างจากบริษัทที่ใช้ `active | suspended`
+
+### จุดที่คนถัดไปควรรู้
+
+- **`migrate dev` แถม SQL พยศทุกใบ** — ต้อง `--create-only` แล้วลบ `ALTER COLUMN updated_at DROP DEFAULT` (ทุกตาราง) + `ALTER COLUMN return_satang SET NOT NULL` ออกก่อน apply เสมอ · รอบนี้พลาดไปครั้งหนึ่ง migration ล้มกลางคันและทำ default ของ 3 ตารางหาย ต้องซ่อมด้วยมือ + `migrate resolve --rolled-back` (บันทึกไว้ในหมวดกับดักของ REUSE_INDEX แล้ว)
+- **scope ระดับแถวอยู่ในชั้น queries** — `getTeam()`/`getFinanceCompany()` รับ `SessionUser` (ไม่ใช่ `organizationId`) เพื่อเช็ค `isWithinScope()` ให้ครบทุกทางเข้า · โมดูลถัดไปที่มี scope ย่อยควรลอกรูปแบบนี้
+- `PROVINCE_DATA` เป็นพื้นที่ให้บริการจาก mockup (ไม่ครบ 77 จังหวัด) — Address component ของ Phase 2.4 ที่ต้องการจังหวัด/อำเภอ/ตำบลครบทั้งประเทศต้องมี master ของตัวเอง อย่า reuse ตัวนี้
+- `GET /api/teams/eligible-members` ต้องอยู่ก่อน `[id]` ใน routing (static ชนะ dynamic) — Users module (1.9) เรียกซ้ำได้เลย
+- ทีมที่ผูกแผนค่าตอบแทนแล้ว ถูกย้ายไปเวอร์ชันใหม่อัตโนมัติเมื่อ PATCH แผน (โค้ดของ 1.7) — 1.8 จึงยอมผูกได้เฉพาะแผน `is_current = true` และยังไม่ถูกปิดใช้งาน
+
+---
+
 ## Phase 1.7 — Compensation Plans (11) + Service Fee Templates (12)
 
 **วันที่**: 2026-08-14 · **commit**: `ad5982a` (BE) + `8417ef1` (FE + docs) · **branch**: `auto/phase-1.7`

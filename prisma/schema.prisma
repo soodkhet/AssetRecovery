@@ -182,6 +182,15 @@ enum VatMode {
   @@map("vat_mode")
 }
 
+/// มติ PO 14/08/2569 (Phase 1.8) — รูปแบบส่งใบกำกับภาษี/ใบแจ้งหนี้เริ่มต้นของบริษัทไฟแนนซ์ (`10` §7.1)
+/// เลือกเปลี่ยนต่อใบได้ทีหลังตอนออกเอกสารจริง (`31` §6.2) — ค่านี้เป็นแค่ default ของบริษัท
+enum InvoiceDeliveryFormat {
+  e_tax_invoice
+  paper_pdf
+
+  @@map("invoice_delivery_format")
+}
+
 enum CompanyUserLevel {
   manager // เห็นข้อมูลทั้งหมดของบริษัท
   supervisor // เห็นเฉพาะที่ผู้จัดการมอบหมาย
@@ -895,12 +904,17 @@ model FinanceCompany {
   vatMode       VatMode @default(exclude_vat) @map("vat_mode")
   vatRegistered Boolean @default(true) @map("vat_registered")
 
+  /// รูปแบบส่งใบกำกับภาษีเริ่มต้นของบริษัทนี้ (`10` §7.1) — เปลี่ยนต่อใบได้ตอนออกเอกสาร (`31` §6.2)
+  defaultInvoiceDeliveryFormat InvoiceDeliveryFormat @default(paper_pdf) @map("default_invoice_delivery_format")
+
   /// วันตัดรอบบิล
   billingDay     Int    @default(1) @map("billing_day")
   /// วันครบกำหนดชำระ
   paymentDueDays Int    @default(30) @map("payment_due_days")
-  /// active | inactive
+  /// active | suspended (`10` §9.3 — มติ PO 14/08/2569 · คงชนิด TEXT ตาม `02` §5 ไม่แปลงเป็น enum)
   status         String @default("active")
+  /// เหตุผลที่ระงับ — บังคับกรอกเมื่อเปลี่ยนเป็น suspended (`10` §7.1/§11 `SUSPEND_REASON_REQUIRED`)
+  suspendedReason String? @map("suspended_reason")
 
   /// A1 (มติ PO 2026-08-12) — อัตรา WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา · null = ไม่หัก
   whtWithheldByCustomerPct Decimal? @default(3.00) @map("wht_withheld_by_customer_pct") @db.Decimal(5, 2)
