@@ -275,8 +275,13 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
     where: {
       caseId,
       organizationId: user.organizationId,
-      case: { deletedAt: null, organizationId: user.organizationId, ...caseScopeWhere(user) },
-      // เห็นได้ทั้งของตัวเองและของเพื่อนร่วมทีม (มุมมองทีม §7.3 เปิด detail เต็มได้)
+      case: { deletedAt: null, organizationId: user.organizationId },
+      /**
+       * ขอบเขตของหน้านี้ = **เคสตัวเอง หรือเคสของเพื่อนร่วมทีมเดียวกัน** (`41` §7.3/§13)
+       * กว้างกว่า `caseScopeWhere()` ของพนักงาน (ซึ่งจำกัดเฉพาะเคสที่ตัวเองถือ) โดยตั้งใจ —
+       * §7.3/§20 บังคับว่ามุมมองทีมต้องเห็นรายละเอียดเต็มไม่ปิดบัง แต่ยัง **read-only**
+       * (mutation ทุกตัวไปทาง `loadOwnAssignment()` ซึ่งบังคับ `agentId = ผู้เรียก` เสมอ)
+       */
       OR: [{ agentId: user.id }, { team: { members: { some: { id: user.id } } } }],
     },
     orderBy: { createdAt: 'desc' },
