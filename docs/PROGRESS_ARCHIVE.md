@@ -5,6 +5,49 @@
 
 ---
 
+## Phase 1.6 — Roles & Permissions module
+
+**วันที่**: 2026-08-14 · **commit**: `a5ef75c` · **branch**: `auto/phase-1.6`
+
+### สิ่งที่ทำ
+
+- **มติ PO ก่อนลงมือ (จุดที่ 1.2 เลื่อนมาให้เคาะ)**: รายการ "✅ only" ที่ล็อกแก้ไม่ได้ = **9 รายการ** — Superadmin 6 (`manage_companies`, `manage_service_fees`, `manage_tax_profiles`, `manage_period_lock_policy`, `manage_invoice_numbering`, `manage_roles`) + **บริหาร (Executive) 3** (`approve_adjustment_locked`, `unlock_period`, `authorize_exception`) · แก้เชิงอรรถ `25` §16.1 (v2.3) และ `13` §6.10 (v3.2) ให้ตรงกับตารางจริงแล้ว
+- **Pure modules** (`lib/roles/*` — ไม่มีอะไรแตะ DB, เทสต์ได้โดยไม่ต้องมี Postgres)
+  - `capability-catalog.ts` — ย้ายรายการ capability 47 ตัวออกมาจาก `prisma/seed.ts` (เนื้อหาเดิมไม่เปลี่ยน) เพื่อให้ยามความสอดคล้องเทสต์ได้
+  - `capability-locks.ts` — ตารางล็อก 9 รายการ + `capabilityLockOwner()`/`isCapabilityLocked()`/`ownsLockedCapability()`
+  - `default-matrix.ts` — ค่าเริ่มต้นของ `role_capabilities` ถอดจาก `25` §7 ทุกช่อง (**57 แถว**) · Superadmin ไม่มี record (DEC-009) · capability นอก matrix (10 ตัว) ยังไม่ผูก ปล่อยให้ task ของโมดูลเจ้าของสิทธิ์ผูกเอง
+  - `matrix.ts` — `buildRoleMatrix()` จัดกลุ่ม 4 กลุ่ม (`13` §6.10) + กลุ่ม "อื่นๆ" · `resolveLevel()` (Superadmin = manage ทุกแถว) · `isRowEditable()` · `countGrantedLevels()`
+  - `role-groups.ts` — โครงแท็บ **3 tab** ตาม `07` §8 (แท็บเจ้าหน้าที่ติดตามทรัพย์มี sub-toggle Inhouse/Outsource)
+  - `guards.ts` — `assertRoleRenamable` (`SEED_ROLE_RENAME`) · `assertRoleDeletable` (`LAST_SUPERADMIN_REMOVAL` → `SEED_ROLE_DELETE` → `ROLE_IN_USE`) · `assertRolePermissionsEditable` (`ROLE_NOT_EDITABLE`) · `assertCapabilityAssignable` (`CAPABILITY_LOCKED`) · `planPermissionChanges()` (คัดเฉพาะรายการที่เปลี่ยนจริง = idempotent)
+  - `errors.ts` (8 code ตาม `24` §6.9 ที่เติมใหม่) · `schemas.ts` (Zod ใช้ร่วม FE/BE + `reason` บังคับ ≥5 ตัวอักษร) · `http.ts` (`withRolePermission()` + `validationErrorResponse()`)
+- **ชั้น DB** `lib/roles/queries.ts` — `listRoles()` (พร้อม `userCount` + จำนวนสิทธิ์) · `getRole()`/`getRoleAssignments()`/`countRoleUsers()` · `applyRolePermissionChanges()` = `$transaction` (upsert/delete `role_capabilities` + `emitAudit` ใน tx เดียว) แล้ว `clearSessionCache()` · `createRole`/`updateRole`/`deleteRole` (soft delete) ครบ audit
+- **API 7 endpoint**: `GET|POST /api/roles` · `PATCH|DELETE /api/roles/:id` · `GET|PATCH /api/roles/:id/permissions` · `GET /api/permissions` — อ่าน = `view:view_master_data`, แก้ = `manage:manage_roles`
+- **Seed**: `prisma/seed.ts` ผูก `role_capabilities` ครบ (งานที่ 1.2 เว้นไว้) — รันจริงบน dev DB ได้ 57 แถว และรันซ้ำแล้วยังได้ 57 (idempotent)
+- **FE** `/settings/roles`: `<RolesManager>` (ตารางบทบาทต่อกลุ่ม + Seed/Custom badge + สร้าง/ลบบทบาทพร้อม `reason`) · `<RoleGroupTabs>` (shared — Users module 1.9 ใช้ซ้ำ) · `<PermissionMatrixModal>` (dropdown 3 ระดับต่อ capability, แถว 🔒 disable, ปุ่มบันทึกล็อกจนกว่าจะกรอกเหตุผล) — ประกอบจาก UI Kit ทั้งหมด + loading/empty/error ครบ · เพิ่มแท็บย่อย `settings.roles` ใน menu registry
+- **เอกสาร**: `24` §6.9 เพิ่ม 8 code (v3.4) · `25` §16.1 v2.3 · `13` §6.10 v3.2 · REUSE_INDEX เพิ่ม 11 แถว + กับดัก 2 ข้อ
+
+### การตัดสินใจระหว่างทาง
+
+- **อ่าน roles ใช้ `view_master_data` ไม่ใช่ `manage_roles`** — `07` §12 ให้ บริหาร/การเงิน/บัญชี ดู role ได้ แต่ `manage_roles` ถูกล็อกไว้กับ Superadmin (มอบให้ role อื่นไม่ได้) จึงใช้เป็นสิทธิ์ "ดู" ไม่ได้ · แถว "ดูข้อมูล Master Data" ของ `25` §7.1 (👁️ ให้ ธุรการ/การเงิน/บัญชี/บริหาร) ตรงกับเจตนานี้พอดี
+- **ล็อก = ห้ามเปลี่ยนค่าของแถวนั้น ไม่ว่ากับ role ไหน** (รวมเจ้าของ) แต่ถ้า client ส่งค่าเดิมกลับมา (UI ส่งทั้งตาราง) ถือว่าไม่เปลี่ยน = ผ่าน — กัน false reject โดยไม่เปิดช่องแก้จริง
+- **`clearSessionCache()` ไม่ใช่ `invalidateSessionCache(uid)`** — สิทธิ์เปลี่ยนที่ระดับ role กระทบผู้ใช้ทุกคนในบทบาทนั้น ซึ่ง cache เก็บเป็นราย `supabase_uid` จึงต้องล้างทั้งชุด (คอมเมนต์ในไฟล์ 1.3 ก็เขียนแนวนี้ไว้แล้ว)
+- **`ROLE_IN_USE` / `DUPLICATE_ROLE_NAME` / `ROLE_NOT_EDITABLE` / `CAPABILITY_LOCKED` / `CAPABILITY_NOT_FOUND` / `ROLE_NOT_FOUND` เป็น code ใหม่** — `07` §11 ให้มาแค่ 2 ตัว (seed delete/rename) ที่เหลือจำเป็นจริงตอน implement จึงเพิ่มลง `24` §6.9 ใน commit เดียวกันตาม Rule 04
+- **capability นอก Functional Matrix ยังไม่ผูก role** — `13` §6.10 คุมเฉพาะ 37 รายการสายการเงิน/บัญชี · เจ้าของสิทธิ์ของอีก 10 ตัว (users/teams/warehouse/settings ฯลฯ) อยู่ในสเปคโมดูลนั้น ๆ ที่ยังไม่ถึงคิว — เดาไว้ก่อนจะกลายเป็นสิทธิ์ผิดที่แก้ยากทีหลัง
+- **role CRUD (POST/PATCH/DELETE) เพิ่มจาก 4 endpoint ใน `07` §14** — ไม่งั้นยาม `SEED_ROLE_DELETE`/`SEED_ROLE_RENAME` ไม่มีทางถูกเรียกจริง และ `07` §9 lifecycle เขียน "สร้าง role → assign permissions" ไว้ชัด
+
+### verify ที่รันจริง (DoD ของ PLAN §1.6)
+
+`pnpm typecheck` ✅ · `pnpm lint` ✅ (0 error) · `pnpm test` ✅ 370/370 (28 ไฟล์ — ใหม่ 6 ไฟล์ 52 เคส) · `pnpm build` ✅ · `pnpm db:seed` ✅ รัน 2 รอบได้ `role_capabilities` 57 แถวเท่ากัน · ตรวจยอดจริงใน DB: การเงิน manage 7/view 10 · บัญชี 9/3 · บริหาร 5/3 · Superadmin 0/0 (ไม่มี record ตามนิยาม) — ตรงกับ `25` §7 ทุกช่อง
+
+### จุดที่คนถัดไปควรรู้
+
+- **แก้รายการ capability ใหม่ให้แก้ที่ `lib/roles/capability-catalog.ts`** (seed import ไปใช้) และถ้าเป็นรายการที่ต้องล็อก ต้องเพิ่มที่ `capability-locks.ts` + มีมติ PO + แก้ `25`/`13` — เทสต์ยามจะแดงถ้าจำนวน/เจ้าของไม่ตรง
+- **Users module (1.9)**: ใช้ `<RoleGroupTabs>` และ `assertRoleDeletable()`/`assertNotLastSuperadmin()` ซ้ำ ห้ามสร้างใหม่ · ตอนย้าย role ของ user ต้องเรียก `invalidateSessionCache(supabaseUid)` เอง
+- **Settings shell ตัวจริง (1.11/1.12)** ยังไม่เกิด — ตอนนี้ `/settings` ยังเป็น placeholder และ `/settings/roles` เป็นแท็บย่อยตัวแรกใน registry · เมื่อทำ settings shell ให้ย้ายรายการแท็บทั้ง 9 (mockup `renderSettingsLayout`) เข้า registry ทีเดียว
+- **หน้าใหม่ที่ fetch ข้อมูลเอง** ต้องเลี่ยง `setState` แบบ synchronous ใน `useEffect` (กฎ lint ใหม่) — ดู pattern ที่ `components/roles/roles-manager.tsx` (ฟังก์ชัน fetch ไม่มี setState + async IIFE + `cancelled`)
+
+---
+
 ## Phase 1.5 — UI Kit + App Shell + Navigation
 
 **วันที่**: 2026-08-14 · **commit**: `e4d56b4` · **branch**: `auto/phase-1.5`

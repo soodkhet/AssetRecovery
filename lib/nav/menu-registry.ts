@@ -167,6 +167,17 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     audiences: ['superadmin', 'executive'],
     available: false,
     plannedPhase: '1.11',
+    children: [
+      // `06` §9 — "ตั้งค่าทั่วไป" แท็บแรกตาม mockup `settings.html` (`renderSettingsLayout`)
+      // สิทธิ์แก้จริงบังคับที่ API ด้วย `manage_roles` (Superadmin เท่านั้น — `25` §16.1)
+      {
+        id: 'settings.roles',
+        label: 'สิทธิ์การใช้งาน',
+        path: '/settings/roles',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
+    ],
   },
 ]
 
