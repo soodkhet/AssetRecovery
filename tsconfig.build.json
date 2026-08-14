@@ -1,0 +1,32 @@
+{
+  // tsconfig สำหรับขั้น build ของ Next เท่านั้น (next.config.ts → typescript.tsconfigPath เมื่อ NODE_ENV=production)
+  //
+  // ทำไมต้องมีไฟล์นี้: `.vercelignore` ตัด `tools/` ออกจาก build context ของ Vercel (กันขนาด deploy บวม)
+  // แต่ `next build` typecheck ทุกไฟล์ที่ tsconfig include รวมถึง `*.test.ts` — และเทสต์บางตัว
+  // (`lib/api/event-lint.test.ts`) import กฎ ESLint จาก `tools/` ตรง ๆ → บน Vercel เจอ TS2307 ทั้งที่ CI เขียว
+  // เพราะ CI เห็น repo เต็ม
+  //
+  // ทางแก้: ขั้น build ไม่ typecheck ไฟล์เทสต์ (เทสต์เป็นหน้าที่ของ vitest + CI)
+  // ⚠️ ห้ามใช้ไฟล์นี้กับ `pnpm typecheck` — typecheck ของ CI/local ต้องกวาดไฟล์เทสต์เต็มเสมอผ่าน `tsconfig.json`
+  "extends": "./tsconfig.json",
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "orchestrator",
+    "tools",
+    "reference",
+    "Project_info",
+    "_to_delete",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
+}

@@ -147,6 +147,8 @@ async function cleanupCases(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM case_evidences WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM pending_reassignments WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
+  // เครื่องที่ hook คลังสร้างตอนปิดงานสำเร็จ (`44` §6.1) — ต้องลบก่อนเคส (FK RESTRICT)
+  await tx.$executeRawUnsafe(`DELETE FROM assets WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
   clearDistanceCache()
 }
@@ -239,13 +241,15 @@ let caseSeq = 0
 async function seedApprovedCase(teamId: string): Promise<string> {
   caseSeq += 1
   const caseRef = `FL29-${caseSeq}`
+  // ⚠️ ต้องมี IMEI หรือ serial เสมอ — `38` §6.2 บังคับก่อนเข้า `pending_review` และ CHECK
+  //    `assets_identifier_required` ของเครื่องที่ hook คลังสร้างตอนปิดงานสำเร็จ (`44` §6.1)
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO cases (
       organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
-      debtor_name, addr_province, addr_district, asset_description, debt_amount_satang, assigned_team_id
+      debtor_name, addr_province, addr_district, asset_description, serial_no, debt_amount_satang, assigned_team_id
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_ID}', 'manual', 'approved', '${MANAGER_ID}',
-      'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'iPhone 15', 1000000, '${teamId}'
+      'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'iPhone 15', $$SN-${caseRef}$$, 1000000, '${teamId}'
     ) RETURNING id
   `)
   return rows[0]?.id ?? ''

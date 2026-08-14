@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 2.13 — Warehouse Backend (คลังสินค้า + ส่งมอบ · ไฟล์ 44)
+
+**วันที่**: 2026-08-15 · **commit**: `6b119ba` (migration ที่ค้างจาก session ก่อน) + `32f6b4c` + `b9b1f0a` + (docs) · **branch**: `auto/phase-2.13`
+
+### สิ่งที่ทำ
+- **migration `20260814183000`** — SQL function `next_handover_number(prefix, be_year)` เดินเลข `LOT-`/`DLV-` ด้วย **PostgreSQL sequence 1 ตัวต่อ (prefix, ปี พ.ศ.)** สร้างแบบ lazy (`nextval()` ไม่ถูก rollback ⇒ ไม่ซ้ำ ไม่ recycle แม้ทรานแซกชันล้ม) + trigger `handover_lots` ที่ `confirmed` **ห้าม UPDATE/DELETE** (`02` §13)
+- **pure modules** (ฟอร์ม 2.14/2.15 เรียกตัวเดียวกับ API — ห้าม if เงื่อนไขเองในหน้าจอ)
+  - `asset-status.ts` state machine `44` §9.1 · `lot-status.ts` §6.3/§9.2/§9.3 (`we_deliver` เริ่มที่ `pending_delivery_proof` และอยู่แท็บ "ส่งมอบแล้ว" ทันที) · `imei.ts` exact 15 หลัก · `intake.ts` สภาพ/เหตุผล/คำเตือน · `lot-assets.ts` 5 ด่าน · `numbering.ts` เลข พ.ศ. · `warehouse-ui.ts` label/badge · `permissions.ts` capability ต่อ endpoint
+  - `errors.ts` 14 code + `schemas.ts` (Zod ใช้ร่วม FE/BE) + `types.ts` DTO
+- **`lib/finance/revenue-trigger-rules.ts`** — บ้านเดียวของเงื่อนไข "Revenue เกิดเมื่อไหร่" (`19` §6.1 · DEC-006/D6) เขียนก่อนกำหนดจาก Phase 3.1 เพราะ lot confirm ต้องใช้จริง
+- **`asset-hook.ts`** — เครื่องเข้าคิว `pending_intake` อัตโนมัติในทรานแซกชันเดียวกับการปิดเคส `closed_success` **idempotent** (เสียบทั้ง `closeFieldCase()` และ `resubmitCloseCase()`)
+- **`revenue-service.ts`** — step 4 ของ lot confirm: ตัดสินเคสที่ถึงเวลาเกิดรายได้ผ่าน `evaluateRevenueTrigger()` **idempotent ต่อ (เคส, รอบติดตาม)** · **stub ตามแผน** ยังไม่สร้างแถว `revenues`
+- **`queries.ts`** — list/detail/intake/reject/create lot/**confirm 4 ขั้นใน `$transaction` เดียว** + scope ระดับแถว 4 แบบ
+- **API 10 endpoint** ตาม `45` §6.4–6.5 ผูก contract ผ่าน `withEndpoint()` ทุกตัว
+- **เอกสาร**: `handover-doc.ts` (แบบข้อมูลร่วมของ PDF+Excel) · `components/pdf/handover-note.tsx` (PDF ตัวแรกของระบบ · `28` §7) · `handover-excel.ts` (Excel ตัวแรก · `96` §15)
+
+### การตัดสินใจระหว่างทาง
+- **`intake_rejected → in_custody` ในขั้นตอนเดียว** (ไม่วิ่งผ่าน `pending_intake` ตาม diagram §9.1) — UI "รับใหม่" เปิด modal รับเข้าคลังตัวเดิม (§8.2) การเขียนสถานะกลางจึงเป็นขั้นที่ผู้ใช้ไม่เคยเห็น และถ้าทรานแซกชันล้มจะค้างสถานะกลาง · ตัวบอกว่าเป็นการรับใหม่คือ `isIntakeRetry()` ที่ทำให้ลง event `asset.intake_retry` เพิ่ม
+- **RevenueService เป็น stub ที่ "ตัดสินครบแต่ไม่สร้างแถว"** — ยอดเงิน (gross/VAT/fee model) เป็นสูตรของ `22` §6.5–6.8 ที่ Phase 3.1/3.6 เป็นเจ้าของ · `eligibleCaseIds` = สัญญาที่ 3.6 ต้องทำตาม และ `revenue-service.test.ts` คือชุดเทสต์ที่ **ห้ามแก้** ตอนเสียบตัวจริง
+- **เติม 3 error code ลง `44` §12 (v2.1)** — `ASSET_NOT_FOUND`/`ASSET_INVALID_STATUS`/`LOT_NOT_FOUND` เป็น code ระดับ "ไม่พบ/สถานะไม่ตรง" ที่ทุก endpoint ของ §15 ต้องใช้แต่ตารางเดิมไม่ได้ลิสต์ (Rule 04 — doc + code + catalog คอมมิตเดียวกัน)
+- **สิทธิ์ดูคลังประกอบจาก capability ของหน้าที่** — `02` §12 ไม่มี "ดูคลัง" แยก จึงทำ `WAREHOUSE_READ_CAPABILITIES` แนวเดียวกับ `CASE_READ_CAPABILITIES` ให้ตรงกับผู้ที่เห็นเมนู `warehouse` ใน `06` §7.1.1 · **export PDF/Excel ไม่ให้บริษัทไฟแนนซ์** (§13 ระบุ ธุรการ/การเงิน/บัญชี — ช่องทางของบริษัทคือ Client Portal ไฟล์ 97)
+- **`xlsx` ติดตั้งจาก CDN ของ SheetJS** ไม่ใช่ npm (npm ค้างที่ 0.18.5 + มีช่องโหว่ที่แก้แล้วในรุ่นหลัง — สำคัญเพราะ import เคสของ 2.5 จะ parse ไฟล์จากผู้ใช้)
+- **ใบส่งมอบอ่านที่อยู่/เลขผู้เสียภาษี ณ เวลาออกเอกสาร ไม่ snapshot** — เป็นเอกสารปฏิบัติการ ไม่ใช่เอกสารการเงิน/ภาษีที่ `92` §7.1 บังคับให้ตรึงค่า
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ (115 ไฟล์ / 1,520 เคส) · `next build` ✅ (จำลอง Vercel ด้วยการซ่อน `tools/`) · เทสต์ระดับ DB `warehouse-workflow.db.test.ts` ครบ T01–T15 ของ `44` §17 รวม **T11 rollback / T12–T13 เกต Revenue**
+
+### จุดที่คนถัดไปควรรู้
+- ต้องรัน **`pnpm db:deploy:test`** (และ `pnpm db:deploy` ต่อ environment) ก่อน — migration เดินเลข/immutable เป็นของใหม่
+- **เคสที่ปิดสำเร็จต้องมี IMEI หรือ serial เสมอ** (CHECK `assets_identifier_required`) — ของจริงกันไว้แล้วที่ `missingRequiredFields()` แต่เทสต์ที่ seed เคสด้วย raw SQL ต้องใส่เอง และ cleanup ต้องลบ `assets` ก่อน `cases`
+- Phase 3.6 เสียบ RevenueService ตัวจริงที่ `lib/warehouse/revenue-service.ts` (จุด `// ⬇️ Phase 3.6`) แล้วรันเทสต์ชุดเดิมให้ผ่านโดยไม่แก้สัญญา
+- ที่เหลือของโมดูลคลังคือ **หน้าจอ** (2.14/2.15) — backend ครบทั้ง 10 endpoint แล้ว
+
+---
+
 ## Phase 2.12 — Field Tracker Frontend ชุดที่ 3 (เบิกเงิน + รายได้ + จบงาน + PWA)
 
 **วันที่**: 2026-08-14 · **commit**: `1af69ae` + `07b2744` + (docs) · **branch**: `auto/phase-2.12`
