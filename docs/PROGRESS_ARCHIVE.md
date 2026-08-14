@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 2.6 — Case Assignment Backend (ไฟล์ 40)
+
+**วันที่**: 2026-08-14 · **commit**: `a79c64c` · **branch**: `auto/phase-2.6`
+
+### สิ่งที่ทำ
+- **Schema (sync `02` v4.1 — 57 ตาราง / 60 enum)**: `pending_reassignments` (คำขอเปลี่ยนผู้รับผิดชอบตาม `40` §6.1.1 + **partial unique `uniq_pending_reassignment_active`** = ตัวบังคับจริงของ `REASSIGNMENT_ALREADY_PENDING`) · `reassignment_history` (insert-only, เก็บเฉพาะการเปลี่ยนที่ **สำเร็จ** พร้อม `was_accepted_before_reassign`) · `assignment_policy_settings` (1 record/org — `reassign_timeout_hours` 3 ชม., `supervisor_can_assign_system/inhouse/outsource` default true, `accept_deadline_hours` NULL = ไม่จำกัดตาม §11) · enum ใหม่ `pending_reassignment_status` / `reassignment_resolution` · migration `20260814114904_assignment_reassignment_tables` (ตัดบล็อกพยศของ `migrate dev` ออก + เติม `updated_at DEFAULT NOW()` เอง)
+- **Pure logic** (`lib/assignments/assignment.ts`): state machine ของการมอบหมาย (`ready_to_assign`/`assigned`/`accepted` เป็น sub-state ของ `case.status = approved`) · `reassignBranchOf()` = **จุดเดียว**ที่ตัดสินสาขาของ reassign · `reassignOutcome()` บังคับกติกา "สำเร็จแล้วรีเซ็ตเป็น assigned + ล้าง `accepted_at` เสมอ" · `reassignmentExpiresAt()`/`isReassignmentExpired()`/`assertRespondable()`/`assertDeclineReason()`/`assertAcceptable()`
+- **`successRate()` = service กลาง** (`40` §6.2) พร้อม `SUCCESS_RATE_SOURCE` — สะสมตลอดการทำงาน, ไม่เคยได้รับมอบหมาย = `null` (ห้ามหารศูนย์ → `N/A`), Report ของ `96` ต้องเรียกตัวนี้ซ้ำ
+- **API 8 endpoint ครบ `45` §6.2**: `GET /api/assignments` (filter สถานะทำที่ DB เพื่อให้ `total`/pagination ตรง) · `GET /api/teams/:id/agents` (decision support 3 ค่า) · `GET /api/teams/:id/agents/:agent_id/cases` · `GET /api/teams/:id/kanban` · `POST /api/cases/:id/{assign,reassign,accept}` · `POST /api/cases/:id/reassignment/respond`
+- **reassign 2 สาขา (ห้ามสลับ)**: ยังไม่ accepted = เปลี่ยนทันที + ลง history ทันที (`consented` โดยปริยาย) · accepted แล้ว = สร้างคำขอ `waiting_consent` แล้ว **ไม่แตะ assignment เดิม** (เคสยังทำงานต่อได้ตามปกติ)
+- **job `reassign_timeout`** (`lib/assignments/timeout-job.ts`): idempotent — claim ด้วย conditional update ก่อนทำงาน, แพ้การแข่งกับคำตอบของพนักงาน = นับเป็น `skipped` ไม่ใช่ error · actor = ระบบ (`actor_id = NULL`) ⇒ `reason` ใส่ job id ตาม `90` §13
+- **ยาม settings §6.4**: `canPerformAssignmentAction()` คุมเฉพาะ **หัวหน้าทีม** ตาม Role Group — ผู้จัดการ/Superadmin ไม่ถูกคุม และ **ไม่คุมการมองเห็น** (agents/kanban/list เปิดให้หัวหน้าเสมอ)
+- **เติม error code 2 ตัวเข้า `40` §12 + catalog** (Rule 04 — doc + code คอมมิตเดียวกัน): `ASSIGNMENT_NOT_FOUND` (404), `ASSIGNMENT_INVALID_STATUS` (400) · "คนอื่นตอบคำขอแทน" ใช้ `PERMISSION_DENIED` ตาม §12 ตรง ๆ
+- **Test**: pure 26 เคส (`assignment.test.ts` / `success-rate.test.ts` / `policy.test.ts`) + DB workflow 20 เคสตาม `40` §20 — รวม **timeout job × respond ที่มาช้า** (DoD), job รันซ้ำผลไม่เปลี่ยน, ตอบหลัง `expires_at` แต่ job ยังไม่ทันรัน, หัวหน้าข้ามทีม = `PERMISSION_DENIED`, Kanban กรองแล้วคอลัมน์ยังอยู่
+
+### การตัดสินใจระหว่างทาง
+- **ไม่ลบแถว `pending_reassignments` ตอน resolve** — สเปค §6.1.1 เขียนว่า "ถูกย้ายไปบันทึกใน history ทันทีที่ resolve (ไม่ค้างอยู่ใน pending object)" ตีความเป็น "ไม่เหลือเป็น *คำขอที่รอผล*" ⇒ เปลี่ยน `status` แทนการลบ เพราะ §8 สั่งให้เก็บ log การปฏิเสธไว้ traceability (ถ้าลบแถวจะไม่เหลือ `decline_reason`) · "pending object" ของ API = แถวที่ `status = waiting_consent` เท่านั้น
+- **`reassignment_history` เก็บเฉพาะการเปลี่ยนที่สำเร็จ** (`consented`/`timeout_auto`) ตาม §6.1 — การปฏิเสธดูจาก `pending_reassignments.status = declined` + audit log
+- **สาขา immediate ก็ลง history** ด้วย `resolution = consented`, `was_accepted_before_reassign = false`, `pending_reassignment_id = NULL` (§8 ระบุว่า "resolution = consented โดยปริยาย เพราะไม่มีใครต้องยินยอม")
+- **ตอบคำขอหลัง `expires_at` แต่ job ยังไม่รัน** → ปฏิเสธด้วย `REASSIGNMENT_ALREADY_TIMED_OUT` เหมือนกับกรณีที่ job รันไปแล้ว (ผลลัพธ์สุดท้ายเหมือนกัน ไม่ให้เวลาที่ job มาถึงกลายเป็นตัวแปรของ business rule)
+- **`accept` ซ้ำ = `ASSIGNMENT_INVALID_STATUS`** ไม่ใช่ 200 เงียบ ๆ (สถานะเปลี่ยนไปแล้วต้องไม่เขียนทับ `accepted_at` เดิม)
+- **endpoint ตั้งค่า `assignment_policy_settings` ยังไม่ทำ** — `45` ไม่มี endpoint นี้ และไฟล์ 13 ไม่มีแท็บนี้ ⇒ ตารางพร้อมใช้ + อ่านค่า default ได้เลย ส่วนหน้าจอ Superadmin เป็นงานของ Settings รอบถัดไป (บันทึกไว้ใน REUSE_INDEX)
+
+### จุดที่คนถัดไปควรรู้
+- **โฟลเดอร์ route ของทีมใช้ `[id]` ไม่ใช่ `[team_id]`** — Next.js ห้ามตั้งชื่อ dynamic segment ต่างกันในระดับเดียวกัน (มี `/api/teams/[id]` อยู่แล้ว) · URL ที่ได้ตรงกับ contract ทุกประการ
+- **FE 2.7 ห้าม if สถานะเอง** — ปุ่มทั้งหมดต้องมาจาก `assignmentStateOf()` + `reassignBranchOf()` + `canPerformAssignmentAction()` (หัวหน้าที่ settings ปิด = **ซ่อนปุ่ม** ไม่ใช่ disable)
+- **ตัว scheduler ของ job ยังไม่มี** — `resolveExpiredReassignments()` เป็น handler ล้วน ๆ ต่อเข้า Vercel Cron/ตาราง `jobs` ใน Phase 5.3 (`91` §6.1 · `job_type = reassign_timeout`)
+- **ไฟล์ 41 (Field Tracker)** ต้องยึด hard gate ของ §11: เคสที่ยังไม่ `accepted` ห้ามถูกดึงเข้ารอบจัดเส้นทาง — ใช้ `assignmentStateOf()` ตัวเดียวกัน อย่าอ่าน `case_assignments.status` ดิบ
+- Kanban: ตัวเลข workload บนหัวคอลัมน์นับเคสที่ถืออยู่ **จริง** ไม่ใช่จำนวนการ์ดหลังกรอง (มีเทสต์ยาม)
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm test` (80 ไฟล์ / 1,048 เคส ก่อนเพิ่มเทสต์ล็อตนี้ → รวมของ 2.6 อีก 46 เคส) ✅ · `pnpm lint` ✅ · `pnpm build` ✅ (เห็น route ใหม่ครบ 8 ตัว)
+
+---
+
 ## Phase 2.5 — Case Submission FE ชุด 2 (เอกสาร + ทีมที่เสนอ + review modal + import)
 
 **วันที่**: 2026-08-14 · **commit**: `07100c8` + `267b3f3` · **branch**: `auto/phase-2.5`

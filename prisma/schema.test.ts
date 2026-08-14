@@ -75,7 +75,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     const enums = [...schema.matchAll(/^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm)]
     // 54 ตามสเปค + due_rule_type (มติ PO A5) + invoice_delivery_format (มติ PO 14/08/2569 — Phase 1.8)
     // + debtor_nationality / asset_kind (`38` §6.1.1/§6.2 — Phase 2.2)
-    expect(enums.length).toBe(58)
+    // + pending_reassignment_status / reassignment_resolution (`40` §6.1/§6.1.1 — Phase 2.6)
+    expect(enums.length).toBe(60)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)
@@ -137,6 +138,8 @@ describe('migrations — constraint ที่ Prisma ไม่รองรับ
     'cycles_due_rule_shape',
     // 2.2 — `38` §11 กันเลขที่สัญญาซ้ำภายในบริษัทไฟแนนซ์เดียวกัน (ชั้นที่ 1 ของการกันซ้ำ 2 ชั้น)
     'uniq_cases_company_case_ref',
+    // 2.6 — `40` §12 ห้ามมีคำขอเปลี่ยนผู้รับผิดชอบค้างซ้อนกันในเคสเดียว (REASSIGNMENT_ALREADY_PENDING)
+    'uniq_pending_reassignment_active',
   ])('constraint `%s` ต้องอยู่ใน migration', (name) => {
     expect(sql).toContain(name)
   })

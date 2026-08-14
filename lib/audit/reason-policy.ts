@@ -46,6 +46,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   finance_policy_settings: 'money',
   cost_centers: 'money',
   // สิทธิ์
+  /// `40` §6.4 — `supervisor_can_assign_*` คุมว่าหัวหน้าทีม assign/reassign ได้หรือไม่ (Superadmin เท่านั้นที่ตั้งได้)
+  assignment_policy_settings: 'permission',
   roles: 'permission',
   capabilities: 'permission',
   role_capabilities: 'permission',
@@ -143,6 +145,9 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'case_edit_history',
   'recycle_requests',
   'case_assignments',
+  // `40` §6.1/§6.1.1 — เหตุผลของการเปลี่ยนผู้รับผิดชอบบังคับที่ตัวโมดูลเอง (`ASSIGNMENT_REASON_REQUIRED`)
+  'pending_reassignments',
+  'reassignment_history',
   'check_ins',
   'case_evidences',
   'assets',

@@ -270,6 +270,24 @@ enum AssignmentStatus {
   @@map("assignment_status")
 }
 
+/// สถานะคำขอเปลี่ยนผู้รับผิดชอบ (`40` §6.1.1) — `waiting_consent` คือคำขอที่ยังค้างอยู่จริง
+enum PendingReassignmentStatus {
+  waiting_consent
+  consented
+  declined
+  timeout_auto
+
+  @@map("pending_reassignment_status")
+}
+
+/// ผลของการเปลี่ยนผู้รับผิดชอบที่ **สำเร็จ** เท่านั้น (`40` §6.1 `reassignment_history.resolution`)
+enum ReassignmentResolution {
+  consented
+  timeout_auto
+
+  @@map("reassignment_resolution")
+}
+
 enum CheckinType {
   address
   contact
@@ -566,6 +584,9 @@ model Organization {
   caseEditHistories          CaseEditHistory[]
   recycleRequests            RecycleRequest[]
   caseAssignments            CaseAssignment[]
+  pendingReassignments       PendingReassignment[]
+  reassignmentHistory        ReassignmentHistory[]
+  assignmentPolicySettings   AssignmentPolicySettings?
   checkIns                   CheckIn[]
   caseEvidences              CaseEvidence[]
   assets                     Asset[]
@@ -688,6 +709,10 @@ model User {
   // ── Group C–G: งานที่ผู้ใช้คนนี้เกี่ยวข้องโดยตรง ──
   payeeProfile       PayeeProfile[]   @relation("payee_user")
   assignmentsAsAgent CaseAssignment[] @relation("assignments_agent")
+  /// คำขอเปลี่ยนผู้รับผิดชอบที่ตัวเองเป็นคนถือเคสอยู่ (คนที่ต้องตอบ) — `40` §6.1.1
+  reassignmentsFromMe PendingReassignment[] @relation("pending_reassignments_from_agent")
+  /// คำขอที่ตัวเองเป็นผู้รับงานคนใหม่
+  reassignmentsToMe   PendingReassignment[] @relation("pending_reassignments_new_agent")
   notifications      Notification[]   @relation("notifications_user")
   auditLogs          AuditLog[]       @relation("audit_actor")
 
@@ -702,6 +727,13 @@ model User {
   recycleRequestsDecided    RecycleRequest[]            @relation("recycle_requests_decided_by")
   assignmentsCreated        CaseAssignment[]            @relation("assignments_created_by")
   assignmentsUpdated        CaseAssignment[]            @relation("assignments_updated_by")
+  reassignmentsRequested    PendingReassignment[]       @relation("pending_reassignments_requested_by")
+  reassignmentsResolved     PendingReassignment[]       @relation("pending_reassignments_resolved_by")
+  reassignmentsUpdated      PendingReassignment[]       @relation("pending_reassignments_updated_by")
+  reassignmentHistoryFrom   ReassignmentHistory[]       @relation("reassignment_history_from_agent")
+  reassignmentHistoryTo     ReassignmentHistory[]       @relation("reassignment_history_to_agent")
+  reassignmentHistoryActor  ReassignmentHistory[]       @relation("reassignment_history_reassigned_by")
+  assignmentPolicyUpdated   AssignmentPolicySettings[]  @relation("assignment_policy_settings_updated_by")
   checkInsCreated           CheckIn[]                   @relation("checkins_created_by")
   evidencesCreated          CaseEvidence[]              @relation("evidences_created_by")
   evidencesUpdated          CaseEvidence[]              @relation("evidences_updated_by")
@@ -1360,6 +1392,10 @@ model Case {
   recycles    RecycleRequest[]
   editHistory CaseEditHistory[]
   assignments CaseAssignment[]
+
+  pendingReassignments PendingReassignment[]
+  reassignmentHistory  ReassignmentHistory[]
+
   checkIns    CheckIn[]
   evidences   CaseEvidence[]
   assets      Asset[]
@@ -1502,14 +1538,113 @@ model CaseAssignment {
   createdByUser      User            @relation("assignments_created_by", fields: [createdBy], references: [id])
   updatedByUser      User?           @relation("assignments_updated_by", fields: [updatedBy], references: [id])
 
-  reassignedTo CaseAssignment[] @relation("assignments_reassigned_from")
-  checkIns     CheckIn[]
-  evidences    CaseEvidence[]
-  expenses     Expense[]
+  reassignedTo         CaseAssignment[]      @relation("assignments_reassigned_from")
+  pendingReassignments PendingReassignment[]
+  checkIns             CheckIn[]
+  evidences            CaseEvidence[]
+  expenses             Expense[]
 
   @@index([caseId, status], map: "idx_assignments_case")
   @@index([agentId, status], map: "idx_assignments_agent")
   @@map("case_assignments")
+}
+
+/// คำขอเปลี่ยนผู้รับผิดชอบที่ยังรอผล (`40` §6.1.1) — มีได้ **1 คำขอ `waiting_consent` ต่อเคส**
+/// (partial unique `uniq_pending_reassignment_active` = ตัวบังคับจริงของ `REASSIGNMENT_ALREADY_PENDING`)
+/// resolve แล้วไม่ลบแถว — เปลี่ยน `status` เพื่อคง traceability ของการปฏิเสธ (`40` §8)
+model PendingReassignment {
+  id             String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                    @map("organization_id") @db.Uuid
+  caseId         String                    @map("case_id") @db.Uuid
+  /// assignment ของพนักงานคนเดิม ณ เวลาที่ขอเปลี่ยน
+  assignmentId   String                    @map("assignment_id") @db.Uuid
+  fromAgentId    String                    @map("from_agent_id") @db.Uuid
+  newAgentId     String                    @map("new_agent_id") @db.Uuid
+  requestedBy    String                    @map("requested_by") @db.Uuid
+  requestedAt    DateTime                  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  /// `requested_at` + `reassign_timeout_hours` (`40` §6.1.1) — snapshot ไว้ ห้ามคำนวณย้อนหลังจากค่าปัจจุบัน
+  expiresAt      DateTime                  @map("expires_at") @db.Timestamptz(6)
+  reason         String
+  status         PendingReassignmentStatus @default(waiting_consent)
+  declineReason  String?                   @map("decline_reason")
+  resolvedAt     DateTime?                 @map("resolved_at") @db.Timestamptz(6)
+  /// NULL = ระบบ resolve เอง (`timeout_auto`)
+  resolvedBy     String?                   @map("resolved_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  case            Case           @relation(fields: [caseId], references: [id])
+  assignment      CaseAssignment @relation(fields: [assignmentId], references: [id])
+  fromAgent       User           @relation("pending_reassignments_from_agent", fields: [fromAgentId], references: [id])
+  newAgent        User           @relation("pending_reassignments_new_agent", fields: [newAgentId], references: [id])
+  requestedByUser User           @relation("pending_reassignments_requested_by", fields: [requestedBy], references: [id])
+  resolvedByUser  User?          @relation("pending_reassignments_resolved_by", fields: [resolvedBy], references: [id])
+  updatedByUser   User?          @relation("pending_reassignments_updated_by", fields: [updatedBy], references: [id])
+
+  history ReassignmentHistory[]
+
+  @@index([caseId, status], map: "idx_pending_reassignments_case")
+  @@index([status, expiresAt], map: "idx_pending_reassignments_due")
+  @@map("pending_reassignments")
+}
+
+/// ประวัติการเปลี่ยนผู้รับผิดชอบที่ **สำเร็จแล้ว** ทุกครั้ง (`40` §6.1) — insert-only
+/// การปฏิเสธคำขอไม่ลงที่นี่ (ไม่ใช่การเปลี่ยนที่สำเร็จ) — ดูได้จาก `pending_reassignments.status = declined`
+model ReassignmentHistory {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  caseId         String  @map("case_id") @db.Uuid
+  /// NULL = reassign ทันทีตอนยังไม่ accepted (ไม่ต้องผ่านคำขอ — `40` §8)
+  pendingReassignmentId String? @map("pending_reassignment_id") @db.Uuid
+
+  fromAgentId  String @map("from_agent_id") @db.Uuid
+  toAgentId    String @map("to_agent_id") @db.Uuid
+  reassignedBy String @map("reassigned_by") @db.Uuid
+
+  requestedAt DateTime               @map("requested_at") @db.Timestamptz(6)
+  resolvedAt  DateTime               @map("resolved_at") @db.Timestamptz(6)
+  resolution  ReassignmentResolution
+  reason      String
+  /// เคสนี้ถูกพนักงานคนเดิมกดรับแล้วหรือยัง ณ เวลาที่ขอเปลี่ยน (`40` §6.1)
+  wasAcceptedBeforeReassign Boolean @map("was_accepted_before_reassign")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization       Organization         @relation(fields: [organizationId], references: [id])
+  case               Case                 @relation(fields: [caseId], references: [id])
+  pendingReassignment PendingReassignment? @relation(fields: [pendingReassignmentId], references: [id])
+  fromAgent          User                 @relation("reassignment_history_from_agent", fields: [fromAgentId], references: [id])
+  toAgent            User                 @relation("reassignment_history_to_agent", fields: [toAgentId], references: [id])
+  reassignedByUser   User                 @relation("reassignment_history_reassigned_by", fields: [reassignedBy], references: [id])
+
+  @@index([organizationId, caseId], map: "idx_reassignment_history_case")
+  @@map("reassignment_history")
+}
+
+/// ค่าตั้งระดับองค์กรของการมอบหมายงาน (`40` §6.4 · §11) — 1 record ต่อ org เหมือน `finance_policy_settings`
+model AssignmentPolicySettings {
+  organizationId String @id @map("organization_id") @db.Uuid
+  /// เวลารอความยินยอมก่อน auto-resolve (`40` §11 — default 3 ชั่วโมง)
+  reassignTimeoutHours Int @default(3) @map("reassign_timeout_hours")
+  /// §6.4 — คุมเฉพาะ **การกระทำ** assign/reassign ของหัวหน้าทีม ไม่คุมการมองเห็นข้อมูล
+  supervisorCanAssignSystem    Boolean @default(true) @map("supervisor_can_assign_system")
+  supervisorCanAssignInhouse   Boolean @default(true) @map("supervisor_can_assign_inhouse")
+  supervisorCanAssignOutsource Boolean @default(true) @map("supervisor_can_assign_outsource")
+  /// NULL = ไม่จำกัดเวลากดรับงานครั้งแรก (`40` §11 — ช่อง config เผื่ออนาคต ยังไม่บังคับใช้)
+  acceptDeadlineHours          Int?    @map("accept_deadline_hours")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  updatedByUser User?        @relation("assignment_policy_settings_updated_by", fields: [updatedBy], references: [id])
+
+  @@map("assignment_policy_settings")
 }
 
 /// เช็คอินระหว่างลงพื้นที่ (`41` §6.2) — GPS จริงเท่านั้น · insert-only
