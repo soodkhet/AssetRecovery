@@ -150,6 +150,9 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'reassignment_history',
   'check_ins',
   'case_evidences',
+  // `41` §6.4.1/§6.5 — จุดเริ่มเดินทาง + draft ปิดงาน (ข้อมูลปฏิบัติการของพนักงานเอง ไม่ใช่เงิน/สิทธิ์)
+  'travel_origins',
+  'close_case_drafts',
   'assets',
   'handover_lots',
   'exceptions',

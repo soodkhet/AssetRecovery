@@ -34,14 +34,15 @@ describe('assignmentStateOf (`40` §10)', () => {
     expect(assignmentStateOf(null)).toBe('ready_to_assign')
   })
 
-  it('pending = assigned (รอกดรับ) · accepted/active = accepted', () => {
-    expect(assignmentStateOf({ status: 'pending', acceptedAt: null })).toBe('assigned')
-    expect(assignmentStateOf({ status: 'accepted', acceptedAt: new Date() })).toBe('accepted')
-    expect(assignmentStateOf({ status: 'active', acceptedAt: new Date() })).toBe('accepted')
+  it('pending_accept = assigned (รอกดรับ) · accepted_unscheduled/scheduled/needs_revision = accepted', () => {
+    expect(assignmentStateOf({ status: 'pending_accept', acceptedAt: null })).toBe('assigned')
+    expect(assignmentStateOf({ status: 'accepted_unscheduled', acceptedAt: new Date() })).toBe('accepted')
+    expect(assignmentStateOf({ status: 'scheduled', acceptedAt: new Date() })).toBe('accepted')
+    expect(assignmentStateOf({ status: 'needs_revision', acceptedAt: new Date() })).toBe('accepted')
   })
 
   it('สายที่ปิด/ถูกแทนที่แล้วไม่นับว่าถือเคสอยู่', () => {
-    for (const status of ['reassigned', 'cancelled', 'completed'] as const) {
+    for (const status of ['reassigned_away', 'closed_success', 'closed_fail'] as const) {
       expect(assignmentStateOf({ status, acceptedAt: null })).toBe('ready_to_assign')
     }
   })
@@ -79,7 +80,11 @@ describe('reassign 2 สาขา (`40` §8/§9)', () => {
   })
 
   it('reassign สำเร็จรีเซ็ตกลับ assigned + ล้าง accepted_at เสมอ (`40` §11)', () => {
-    expect(reassignOutcome()).toEqual({ previousStatus: 'reassigned', nextStatus: 'pending', acceptedAt: null })
+    expect(reassignOutcome()).toEqual({
+      previousStatus: 'reassigned_away',
+      nextStatus: 'pending_accept',
+      acceptedAt: null,
+    })
   })
 })
 
@@ -140,11 +145,11 @@ describe('respond_reassignment_consent (`40` §12)', () => {
 
 describe('accept_assignment (`40` §8)', () => {
   it('กดรับได้เฉพาะเคสของตัวเองที่ยังไม่กดรับ', () => {
-    const assignment = { agentId: AGENT, status: 'pending' as const, acceptedAt: null }
+    const assignment = { agentId: AGENT, status: 'pending_accept' as const, acceptedAt: null }
     expect(codeOf(() => assertAcceptable(assignment, AGENT))).toBe('NO_ERROR')
     expect(codeOf(() => assertAcceptable(assignment, OTHER))).toBe('ASSIGNMENT_NOT_FOUND')
     expect(
-      codeOf(() => assertAcceptable({ agentId: AGENT, status: 'accepted', acceptedAt: new Date() }, AGENT)),
+      codeOf(() => assertAcceptable({ agentId: AGENT, status: 'accepted_unscheduled', acceptedAt: new Date() }, AGENT)),
     ).toBe('ASSIGNMENT_INVALID_STATUS')
   })
 })

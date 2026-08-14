@@ -412,9 +412,9 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
 
     const assignments = await db().caseAssignment.findMany({ where: { caseId }, orderBy: { createdAt: 'asc' } })
     expect(assignments).toHaveLength(2)
-    expect(assignments[0]?.status).toBe('reassigned')
+    expect(assignments[0]?.status).toBe('reassigned_away')
     expect(assignments[1]?.agentId).toBe(AGENT_B)
-    expect(assignments[1]?.status).toBe('pending')
+    expect(assignments[1]?.status).toBe('pending_accept')
     expect(assignments[1]?.acceptedAt).toBeNull()
 
     const history = await db().reassignmentHistory.findFirst({ where: { caseId } })
@@ -483,7 +483,7 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
     const result = await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID })
     expect(result.due).toBe(0)
 
-    const assignment = await db().caseAssignment.findFirst({ where: { caseId, status: 'accepted' } })
+    const assignment = await db().caseAssignment.findFirst({ where: { caseId, status: 'accepted_unscheduled' } })
     expect(assignment?.agentId).toBe(AGENT_A)
   })
 })

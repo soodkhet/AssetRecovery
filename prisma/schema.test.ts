@@ -76,7 +76,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // 54 ตามสเปค + due_rule_type (มติ PO A5) + invoice_delivery_format (มติ PO 14/08/2569 — Phase 1.8)
     // + debtor_nationality / asset_kind (`38` §6.1.1/§6.2 — Phase 2.2)
     // + pending_reassignment_status / reassignment_resolution (`40` §6.1/§6.1.1 — Phase 2.6)
-    expect(enums.length).toBe(60)
+    // + travel_origin_source (`41` §6.4.1 — Phase 2.8)
+    expect(enums.length).toBe(61)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

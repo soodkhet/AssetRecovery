@@ -23,6 +23,7 @@
 | v3.6 | 05/07/2569 | **DEC-009 — ระดับสิทธิ์ 3 ระดับ**: เพิ่ม enum `capability_access_level` (`view`/`manage`) + column `role_capabilities.access_level` (default `manage`) — "ไม่มีสิทธิ์" = ไม่มี record ในตาราง · Superadmin มีสิทธิ์ manage ทุก capability โดยนิยาม enforce ที่ middleware ไม่ seed record · sync ไฟล์ 13 v3.1 / 25 v2.2 / mockup `settings.html` แล้ว |
 | v4.0 | 14/08/2569 | **Sync กับไฟล์ 38 §6/§11 — implement ใน Phase 2.2** (Group C เดิมเขียนไว้ก่อนไฟล์ 38 รอบ reformat จึงขาดฟิลด์ที่ฟอร์มรับเคสใช้จริง ไม่ใช่การเปลี่ยน business logic): (1) `cases.case_ref_normalized` + unique index `uniq_cases_company_case_ref` (§11 กันซ้ำ 2 ชั้น — normalize = uppercase+trim เท่านั้น) · (2) enum ใหม่ `debtor_nationality` (§6.1) และ `asset_kind` (§6.2 `asset_type`) + คอลัมน์ `debtor_nationality`/`debtor_nationality_other`/`debtor_passport_no`/`asset_kind` · (3) ที่อยู่ครบ 3 ชุดตาม §6.1 — เติมกลุ่ม `work_addr_*` และ `id_card_addr_*` · (4) `projected_revenue_satang`/`projected_revenue_source` (§6.4/§6.5 — ค่าประมาณการ ไม่ใช่ Revenue จริงของไฟล์ 19) · (5) **ปลด NOT NULL** ของ `debtor_name`/`asset_description` ตาม §11 (เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ) · (6) ตารางใหม่ `case_edit_history` (§6.4 `edit_history` append-only) · (7) `recycle_requests.previous_round`/`new_round` — §6.4 `recycle_history` คือแถว `status = 'approved'` ของตารางนี้ ไม่แยกตารางใหม่ · `asset_description` = `asset_brand_model` ของไฟล์ 38 · enum รวมเป็น **58 ตัว** · รวมเป็น **54 tables** · migration: `20260814090450_case_submission_fields` + `20260814092000_case_ref_unique_not_partial` |
 | v4.1 | 14/08/2569 | **Sync กับไฟล์ 40 §6.1/§6.1.1/§6.4 — implement ใน Phase 2.6** (Group C เดิมมีแต่ `case_assignments` ซึ่งเก็บ flow "เปลี่ยนผู้รับผิดชอบแบบต้องขอความยินยอม" ของไฟล์ 40 ไม่ได้ — เป็นการเติมให้ครบ ไม่ใช่การเปลี่ยน business logic): (1) enum ใหม่ `pending_reassignment_status` (§6.1.1) และ `reassignment_resolution` (§6.1) · (2) ตารางใหม่ `pending_reassignments` = `pending_reassignment` object ของ §6.1.1 + **partial unique `uniq_pending_reassignment_active`** (ตัวบังคับจริงของ `REASSIGNMENT_ALREADY_PENDING`) — resolve แล้วเปลี่ยน `status` ไม่ลบแถว เพื่อคง log การปฏิเสธตาม §8 · (3) ตารางใหม่ `reassignment_history` = `reassignment_history` array ของ §6.1 (insert-only · เก็บเฉพาะการเปลี่ยนที่ **สำเร็จ**) · (4) ตารางใหม่ `assignment_policy_settings` (1 record/org) = `reassign_timeout_hours` (default 3) + `supervisor_can_assign_system/inhouse/outsource` (default true) ของ §6.4 + `accept_deadline_hours` (NULL = ไม่จำกัด ตาม §11) · **ไม่มีการลบ/แก้คอลัมน์เดิม** · enum รวมเป็น **60 ตัว** · รวมเป็น **57 tables** · migration: `20260814114904_assignment_reassignment_tables` |
+| v4.2 | 14/08/2569 | **Sync กับไฟล์ 41 §6.1/§6.4/§6.4.1/§6.5/§10 — implement ใน Phase 2.8** (Group C เดิมเขียนก่อนไฟล์ 41 รอบ reformat — enum/คอลัมน์ที่มีอยู่แทน flow ภาคสนามไม่ได้ เป็นการเติม/ปรับให้ครบตามไฟล์ต้นทางของโมดูล ไม่ใช่การเปลี่ยน business logic): (1) **`assignment_status` 6 ค่า → 7 ค่าตาม `41` §10** (`pending_accept`/`accepted_unscheduled`/`scheduled`/`closed_success`/`closed_fail`/`needs_revision`/`reassigned_away`) — ของเดิม (`pending`/`accepted`/`active`/`completed`/`reassigned`/`cancelled`) แยก "จัดวันแล้ว/ยังไม่จัดวัน" ไม่ได้ แยกผลการติดตามไม่ได้ และไม่มี `needs_revision` ของ §10.1 · (2) `case_assignments.schedule_order` INTEGER (§6.1 — recompute ทั้งวันทุกครั้งที่ลากสลับ) + index `idx_assignments_agent_schedule` · (3) `case_evidences`: `video_url` → `videos TEXT[]` + เพิ่ม `photos TEXT[]`/`audio_url` (§6.4 หลักฐานเป็น array แยกประเภท ไม่ใช่ไฟล์เดียว) · (4) enum ใหม่ `travel_origin_source` (`gps_auto`/`manual_adjusted`) + ตารางใหม่ `travel_origins` (§6.4.1 — **คนละชุดกับ `check_ins` เด็ดขาด**: เช็คอิน = หลักฐาน ล็อกตลอด · จุดเริ่มเดินทาง = ตัวอ้างอิงคำนวณค่าน้ำมัน ปรับได้เสมอ) · (5) ตารางใหม่ `close_case_drafts` (§6.5 — 1:1 ต่อเคส · autoload · ลบตอน submit · ไม่มี expiry) · "1 เคส 1 จุด/1 draft" บังคับด้วย UNIQUE ที่ `assignment_id` (1 รอบติดตาม = 1 assignment ⇒ รอบ recycle ใหม่เริ่มจุดใหม่ตาม §6.4.1) · enum รวมเป็น **61 ตัว** · รวมเป็น **59 tables** · migration: `20260814150000_field_tracker_core` (+ `…150500_field_tracker_fk_actions`, `…150800_field_tracker_nullable_fk` ปรับ FK action ให้ตรงแบบที่ Prisma สร้าง) |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
 | v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
@@ -198,13 +199,15 @@ CREATE TYPE recycle_status AS ENUM (
   'rejected'    -- ไม่อนุมัติ
 );
 
+-- แก้ 14/08/2569 v4.2 (Phase 2.8 — sync กับไฟล์ 41 §10 ซึ่งเป็นเจ้าของ state machine ของ assignment)
 CREATE TYPE assignment_status AS ENUM (
-  'pending',    -- รอรับงาน
-  'accepted',   -- รับงานแล้ว
-  'active',     -- กำลังดำเนินงาน
-  'completed',  -- ปิดงานแล้ว (terminal)
-  'reassigned', -- ถูก reassign ออก (superseded)
-  'cancelled'   -- ยกเลิก
+  'pending_accept',       -- มอบหมายแล้ว รอพนักงานกดรับ
+  'accepted_unscheduled', -- รับงานแล้ว ยังไม่จัดวันที่
+  'scheduled',            -- จัดวันที่แล้ว กำลังดำเนินงาน
+  'closed_success',       -- ปิดงานสำเร็จ (terminal ยกเว้นถูกตีกลับ)
+  'closed_fail',          -- ปิดงานไม่สำเร็จ (terminal ยกเว้นถูกตีกลับ/recycle)
+  'needs_revision',       -- ถูกเจ้าหน้าที่อนุมัติเคสตีกลับหลักฐาน (`41` §10.1) รอแก้แล้ว resubmit
+  'reassigned_away'       -- ถูกโอนไปพนักงานคนใหม่ — terminal สำหรับคนเดิม ไม่นับ success_rate
 );
 
 -- เพิ่ม 14/08/2569 (Phase 2.6 — sync กับไฟล์ 40 §6.1/§6.1.1)
@@ -225,6 +228,12 @@ CREATE TYPE checkin_type AS ENUM (
   'contact',        -- พบญาติ/ผู้ที่รู้จัก
   'workplace',      -- สถานที่ทำงาน
   'asset_location'  -- พบทรัพย์
+);
+
+-- เพิ่ม 14/08/2569 v4.2 (Phase 2.8 — ไฟล์ 41 §6.4.1)
+CREATE TYPE travel_origin_source AS ENUM (
+  'gps_auto',        -- ค่าเริ่มต้นจาก device GPS ตอนกดปุ่ม "เริ่มงาน"
+  'manual_adjusted'  -- พนักงานลากปรับตำแหน่งบนแผนที่เอง
 );
 
 CREATE TYPE case_outcome AS ENUM (
@@ -952,11 +961,12 @@ CREATE TABLE case_assignments (
   agent_id        UUID              NOT NULL REFERENCES users(id),  -- Field Agent
   team_id         UUID              NOT NULL REFERENCES teams(id),
   tracking_round  INTEGER           NOT NULL DEFAULT 1,
-  status          assignment_status NOT NULL DEFAULT 'pending',
+  status          assignment_status NOT NULL DEFAULT 'pending_accept',
   -- จัดวันที่
   scheduled_date  DATE,
+  schedule_order  INTEGER,          -- ลำดับในวันเดียวกัน (ไฟล์ 41 §6.1 — recompute ทั้งวันตอนลากสลับ)
   accepted_at     TIMESTAMPTZ,
-  completed_at    TIMESTAMPTZ,
+  completed_at    TIMESTAMPTZ,      -- = closed_at ของไฟล์ 41 §6.1
   -- Reassign
   reassigned_from UUID              REFERENCES case_assignments(id),
   reassign_reason TEXT,
@@ -968,6 +978,7 @@ CREATE TABLE case_assignments (
 );
 CREATE INDEX idx_assignments_case   ON case_assignments(case_id, status);
 CREATE INDEX idx_assignments_agent  ON case_assignments(agent_id, status);
+CREATE INDEX idx_assignments_agent_schedule ON case_assignments(agent_id, scheduled_date, schedule_order);
 
 -- ── pending_reassignments ────────────────────────────────────────
 -- คำขอเปลี่ยนผู้รับผิดชอบที่รอความยินยอม ตามไฟล์ 40 §6.1.1 (เพิ่ม 14/08/2569 — Phase 2.6)
@@ -1058,17 +1069,19 @@ CREATE TABLE case_evidences (
   assignment_id   UUID            NOT NULL REFERENCES case_assignments(id),
   outcome         case_outcome    NOT NULL,
   status          evidence_status NOT NULL DEFAULT 'pending',
-  -- Files
-  product_photos  TEXT[]          NOT NULL DEFAULT '{}',  -- URLs รูปสินค้า
-  video_url       TEXT,
+  -- Files (v4.2 — ไฟล์ 41 §6.4 เก็บแยกตามประเภทเป็น array ไม่ใช่ไฟล์เดียว)
+  product_photos  TEXT[]          NOT NULL DEFAULT '{}',  -- รูปสินค้า (บังคับเฉพาะ closed_success)
+  photos          TEXT[]          NOT NULL DEFAULT '{}',  -- รูปหน้างาน (บังคับ ≥1 ทุก outcome)
+  videos          TEXT[]          NOT NULL DEFAULT '{}',  -- วิดีโอ (บังคับ ≥1 ทุก outcome)
+  audio_url       TEXT,                                   -- เสียงบันทึกการสนทนา (ไม่บังคับ)
   -- Review
   reviewed_by     UUID            REFERENCES users(id),
   reviewed_at     TIMESTAMPTZ,
   reject_reason   TEXT,
-  -- Travel
+  -- Travel — **snapshot** ของ travel_origins ณ เวลา submit (`92` §7.1) ตัวที่แก้ได้อยู่ตาราง travel_origins
   travel_origin_lat   NUMERIC(10,7),
   travel_origin_lng   NUMERIC(10,7),
-  travel_origin_source TEXT,  -- gps_auto | manual
+  travel_origin_source TEXT,  -- gps_auto | manual_adjusted
   -- Audit
   submitted_at    TIMESTAMPTZ     NOT NULL,
   created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -1077,6 +1090,51 @@ CREATE TABLE case_evidences (
   updated_by      UUID            REFERENCES users(id)
 );
 CREATE INDEX idx_evidences_case ON case_evidences(case_id, status);
+
+-- ── travel_origins ───────────────────────────────────────────
+-- จุดเริ่มเดินทางของเคส ตามไฟล์ 41 §6.4.1 (เพิ่ม 14/08/2569 v4.2 — Phase 2.8)
+-- ⚠️ คนละชุดกับ check_ins เด็ดขาด: เช็คอิน = หลักฐานว่าไปถึงจริง (ล็อกตลอด แก้ไม่ได้)
+--    จุดเริ่มเดินทาง = ตัวอ้างอิงคำนวณค่าน้ำมัน PER_KM เท่านั้น (ปรับตำแหน่งได้เสมอ)
+CREATE TABLE travel_origins (
+  id              UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                 NOT NULL REFERENCES organizations(id),
+  case_id         UUID                 NOT NULL REFERENCES cases(id),
+  assignment_id   UUID                 NOT NULL REFERENCES case_assignments(id),
+  latitude        NUMERIC(10,7)        NOT NULL,
+  longitude       NUMERIC(10,7)        NOT NULL,
+  source          travel_origin_source NOT NULL DEFAULT 'gps_auto',
+  set_at          TIMESTAMPTZ          NOT NULL,  -- เวลาที่กดปุ่ม "เริ่มงาน"
+  created_at      TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by      UUID                 NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  updated_by      UUID                 REFERENCES users(id)
+);
+-- "1 เคส 1 จุด" (§6.4.1) บังคับที่รอบติดตาม — รอบ recycle ใหม่ = assignment ใหม่ = จุดใหม่
+CREATE UNIQUE INDEX travel_origins_assignment_id_key ON travel_origins(assignment_id);
+CREATE INDEX idx_travel_origins_case ON travel_origins(case_id);
+
+-- ── close_case_drafts ────────────────────────────────────────
+-- ฟอร์มปิดงานที่ยังกรอกไม่ครบ ตามไฟล์ 41 §6.5 (เพิ่ม 14/08/2569 v4.2 — Phase 2.8)
+-- autoload ตอนเปิดฟอร์มซ้ำ · ลบทันทีที่ submit_close_case สำเร็จ · ไม่มี expiry (§11)
+CREATE TABLE close_case_drafts (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID         NOT NULL REFERENCES organizations(id),
+  case_id         UUID         NOT NULL REFERENCES cases(id),
+  assignment_id   UUID         NOT NULL REFERENCES case_assignments(id),
+  agent_id        UUID         NOT NULL REFERENCES users(id),
+  outcome         case_outcome,   -- NULL = ยังไม่เลือกผลการติดตาม
+  photos          TEXT[]       NOT NULL DEFAULT '{}',
+  videos          TEXT[]       NOT NULL DEFAULT '{}',
+  product_photos  TEXT[]       NOT NULL DEFAULT '{}',
+  audio_url       TEXT,
+  note            TEXT,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  created_by      UUID         NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_by      UUID         REFERENCES users(id)
+);
+CREATE UNIQUE INDEX close_case_drafts_assignment_id_key ON close_case_drafts(assignment_id);
+CREATE INDEX idx_close_case_drafts_case ON close_case_drafts(case_id);
 ```
 
 ---
@@ -1821,6 +1879,8 @@ CREATE TABLE files (
 21d_assignment_policy_settings.sql ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง organizations, users
 22_check_ins.sql
 23_case_evidences.sql
+23a_travel_origins.sql        ← เพิ่ม 14/08/2569 (Phase 2.8) ต้องหลัง case_assignments
+23b_close_case_drafts.sql     ← เพิ่ม 14/08/2569 (Phase 2.8) ต้องหลัง case_assignments
 24_assets.sql
 25_handover_lots.sql
 26_expenses.sql

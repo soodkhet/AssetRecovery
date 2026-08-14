@@ -167,8 +167,9 @@ export const API_CONTRACT = {
     path: '/api/field/cases',
     module: 'field',
     source: '41 §17.1 · 45 §6.3',
-    summary: 'ดึงรายการเคสของพนักงานตามสถานะ (4 กลุ่มหลัก)',
-    query: ['status'],
+    summary: 'ดึงรายการเคสของพนักงานตามสถานะ (4 กลุ่มหลัก) + มุมมองของฉัน/ทีม',
+    // `view` เติมเข้า `45` §6.3 พร้อม Phase 2.8 — มุมมองทีมของ `41` §7.3 (read-only ทั้งทีม)
+    query: ['status', 'view'],
   },
   'field.caseDetail': {
     method: 'GET',
