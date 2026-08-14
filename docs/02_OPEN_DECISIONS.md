@@ -81,6 +81,15 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 - **ผู้ตอบ**: ไม่ค้าน = ใช้ default · **บล็อก**: 1.2, 2.2, 2.13
 - **คำตอบ**: ✅ ตาม default — **schema ทำแล้วใน Phase 1.2** (`02` v3.8): `cases.serial_no` + `assets.serial_contract`/`serial_actual` · `assets.imei_contract` เป็น nullable + CHECK `assets_identifier_required` (ต้องมี IMEI หรือ serial อย่างน้อย 1) · partial unique `uniq_assets_active_imei` (เฉพาะ `imei_contract IS NOT NULL AND asset_status <> 'handed_over' AND deleted_at IS NULL`) แทน UNIQUE เต็มตารางเดิม · **business check ตอน intake + ข้อความ error อ่านออก อยู่ใน 2.13** (IMEI ยังเป็น exact match 15 หลัก ห้าม fuzzy — `44` §6.5)
 
+### ✅ A7 — `finance_companies` ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup ใช้จริง (พบตอนเริ่ม Phase 1.8)
+- **ปัญหา**: `02` §5 ไม่มี `suspended_reason` (การ์ดบริษัทแสดงกล่องเหตุผลระงับ · §11 `SUSPEND_REASON_REQUIRED`) และไม่มี `default_invoice_delivery_format` (§7.1 บังคับ) · comment ของ `status` เขียน `active | inactive` ขณะที่ `10` §9.3 + mockup ใช้ `active | suspended`
+- **ผู้ตอบ**: **PO 14/08/2569 — เลือกตัวเลือกที่ 1** (เพิ่ม migration 2 คอลัมน์ + enum `invoice_delivery_format` + แก้ comment `status` พร้อม changelog `02`)
+- **คำตอบ**: ✅ ทำแล้วใน **Phase 1.8** (`02` v3.9) — migration `20260814043410_finance_company_suspend_delivery_format` · คง `status` เป็น TEXT ไม่แปลงเป็น enum
+
+### ⬜ A8 — `finance_companies.signer_phone` ยังไม่มีที่เก็บ (ต่อเนื่องจาก A7)
+- **ปัญหา**: `10` §7.1 มีฟิลด์ `signer_phone` (เบอร์ผู้มีอำนาจลงนาม) และ mockup การ์ดบริษัทก็แสดง แต่ `02` §5 ไม่มีคอลัมน์นี้ — มติ 14/08/2569 อนุมัติเฉพาะ 2 คอลัมน์ของ A7 จึง**ยังไม่เพิ่ม**
+- **[default]**: เพิ่ม `signer_phone VARCHAR(20)` คู่กับ `signer_name` ตอน task ถัดไปที่แตะตารางนี้ (เอกสารทางการอ้าง `signer_name` เป็นหลัก เบอร์เป็นข้อมูลติดต่อประกอบ) · **บล็อก**: ไม่บล็อก — ฟอร์ม/การ์ดของ 1.8 ไม่มีช่องนี้ไปก่อน · **คำตอบ**:
+
 ---
 
 ## หมวด B — กติกาเงินที่ต้องให้นักบัญชีเคาะ (รวมถามพร้อม A2/C3/C4/D2 ของ `QUESTIONS-FOR-ACCOUNTANT.md` รอบเดียว)

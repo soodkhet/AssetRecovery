@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.7 (Compensation Plans + Service Fee Templates) · งานถัดไป 1.8
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.8 (Teams + Finance Companies) · งานถัดไป 1.9
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.8: Teams (09) + Finance Companies (10)
+## 🎯 งานถัดไป — Phase 1.9: Users Module (08)
 
-- ทำตาม `docs/01_PLAN.md` §1.8 — **BE 09**: teams + `team_managers` N:N (Manager หลายทีม / Supervisor เดี่ยว 1 ทีม) + **บังคับผูก `compensation_plan_id` ตอนสร้างทีมเสมอ** (`09` §7 — ใช้ API แผนค่าตอบแทนจาก 1.7) + guard deactivate ทีมที่มีงาน active + provinces (PROVINCE_DATA master)
-- **BE 10**: companies CRUD + `tax_id` 13 หลัก format-only + `DUPLICATE_TAX_ID` + suspend (reason บังคับ, event `finance-company.suspended`) + company users sub-resource + `vat_registered`/delivery_format + **บังคับผูก `service_fee_template_id`** (`10` §9)
-- **FE**: ตารางทีม + form (plan dropdown, manager multi-select, supervisor select, province picker) · **การ์ดบริษัท (ไม่ใช่ตาราง)** + form + suspend dialog — ประกอบจาก UI Kit `@/components/ui` เท่านั้น
-- ปิด/ลบทีมหรือบริษัทที่ผูกอยู่ต้องเช็คยาม `PLAN_IN_USE`/`TEMPLATE_IN_USE` ฝั่ง 1.7 ให้สอดคล้อง · ทุก mutation ผ่าน `emitAudit()` (`teams`/`finance_companies` = หมวดเงิน/สิทธิ์)
-- อ้างอิง: `09`, `10` ทั้งไฟล์ · mockup `settings.html` ผ่าน MAP (teams/companies)
-- LOC ~2,200 · งบ ~330k · หมายเหตุ: snapshot service fee ตอนเคส approved อยู่ Phase 2.3 (spec เจ้าของ `10` §9.2)
-- DoD: ทีมไม่มีแผน → สร้างไม่ได้ · tax_id ซ้ำ → reject · company user เห็นเฉพาะ company ตัวเอง
+- ทำตาม `docs/01_PLAN.md` §1.9 — **BE**: users CRUD + Supabase Auth provisioning (`supabase_uid`) + conditional required (`team_id` ถ้า inhouse/outsource · `company_id` ถ้า finance_company) + lifecycle `active → suspended → deleted` (soft) + `USER_HAS_HISTORY` (hard-delete user ที่มีประวัติต้อง reject) + suspend/reactivate พร้อม reason
+- **FE**: 3-tab nested — **reuse `<RoleGroupTabs>` จาก 1.6** + search/filter + ฟอร์ม cascading role select (เลือกกลุ่ม → role → ทีม/บริษัท)
+- ใช้ของที่มีแล้ว: `assertNotLastSuperadmin()`/`assertRoleDeletable()` (1.3/1.6) · `GET /api/teams/eligible-members` + `GET /api/finance-companies` (1.8) สำหรับ dropdown ทีม/บริษัท · `invalidateSessionCache()` ทุกครั้งที่เปลี่ยน role/สถานะ/ทีม/บริษัท
+- ⚠️ **ติด D1 (invite/first-login flow) ใน `docs/02_OPEN_DECISIONS.md`** — ถ้ายังไม่มีคำตอบตอนถึงขั้น provisioning ให้ `[[NEEDS_DECISION]]` ก่อนเขียน flow ตั้งรหัสผ่าน · `POST /api/finance-companies/:id/users` (สร้าง company user) ที่ 1.8 เลื่อนมา ให้ทำในก้อนนี้
+- อ้างอิง: `08` ทั้งไฟล์ · `05` §10 · mockup `settings.html` ผ่าน MAP (users)
+- LOC ~1,700 · งบ ~260k
+- DoD: สร้าง user แล้ว login ได้จริงผ่าน Supabase Auth · hard-delete user ที่มี history ถูก reject
 
 ---
 
@@ -37,7 +37,7 @@
 | 1.5 | UI Kit + App Shell + Navigation | ✅ | 2026-08-14 · `e4d56b4` · UI Kit `components/ui/*` + App Shell 7 เมนูตาม `06` §7.2 + utils พ.ศ./satang + statusBadge 10 กลุ่ม + `GET /api/meta/menu` → archive |
 | 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
-| 1.8 | Teams + Finance Companies | ⬜ | PLAN §1.8 · ไฟล์ 09+10 |
+| 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
 | 1.9 | Users module | ⬜ | PLAN §1.9 · ไฟล์ 08 |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
