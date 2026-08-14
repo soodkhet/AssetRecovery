@@ -5,6 +5,48 @@
 
 ---
 
+## Phase 1.12 — Settings FE ชุดที่ 2: 8 แท็บที่เหลือ (ไฟล์ 13 §6.4/6.5/6.7/6.9/6.10/6.11/6.12/6.13)
+
+**วันที่**: 2026-08-14 · **commit**: `fa00f40` · **branch**: `auto/phase-1.12`
+
+### สิ่งที่ทำ
+
+- **ครบ 13 แท็บของหน้า `/settings/finance`** — เปิด `available: true` ทั้ง 8 แท็บที่เหลือใน `lib/settings/finance-tabs.ts` แล้วเสียบ component ใน `finance-settings-shell.tsx` (ไม่มี placeholder เหลือแล้ว)
+- **§6.4 กติกาภาษี (Tax Profile)** — `<TaxProfilesTab>` ตาราง + ฟอร์มสร้าง/แก้ + ปิดใช้งาน (soft delete) · ช่องเกณฑ์ขั้นต่ำกรอกเป็นบาท แปลงด้วย `parseBahtInput()` · capability `manage_tax_profiles`
+- **§6.5 อัตรา VAT** — `<VatRatesTab>` timeline effective-dated + ไฮไลต์ช่วงที่ใช้อยู่ (`isCurrent`) + **เตือนช่วงทับซ้อนสดขณะกรอก** โดยเรียก `findOverlappingPeriods()` ตัวเดียวกับที่ API ใช้ (เตือนเท่านั้น — `VAT_RATE_OVERLAP` ตัดสินที่ API) · ไม่มีปุ่มลบ (ปิดช่วงด้วย `effectiveTo` แทน)
+- **§6.7 / §6.9 แท็บ read-only 2 ตัว** — `<InternalDocumentsTab>` (เอกสารภายใน 5 รายการ) และ `<ExportFormatsTab>` (Accounting Pack 01–08) ดึงจาก catalog ที่ API ส่งมา **ไม่มีปุ่มเพิ่ม/แก้/ลบ** เพราะ endpoint มีแต่ GET
+- **§6.10 Functional Permission Matrix** — `<FunctionalPermissionsTab>` sub-tab 4 กลุ่มฟังก์ชัน + แถว capability พร้อมชิป "บทบาท → ระดับ" + แก้ทีละแถวผ่าน modal (dropdown 3 ระดับต่อ role, ส่งเป็น batch พร้อม reason) · Superadmin ไม่อยู่ในตาราง · แถว 🔒 disable ทั้งปุ่มแก้และ dropdown · capability `manage_roles`
+- **§6.11 การล็อกรอบและ Adjustment** — `<PeriodLockTab>` **banner เหลืองแสดงเสมอ** ตาม `13` §7 (ข้อความมาจาก API ไม่พิมพ์ซ้ำ) + ตารางนโยบาย 3 สถานะ read-only
+- **§6.12 เลขที่ใบกำกับภาษี** — `<InvoiceNumberingTab>` การ์ดสรุป 4 ช่อง + ตัวอย่างเลขถัดไปที่คำนวณด้วย `previewNextNumber()` (pure ตัวเดียวกับตัวเดินเลขจริง) · `lastNumber`/`lastResetYear` **แสดงอย่างเดียว ไม่มีช่องกรอก** · warning จาก API (เปลี่ยนรูปแบบหลังออกเอกสารแล้ว) แสดงเป็น toast โทนเตือน · capability `manage_invoice_numbering`
+- **§6.13 เทมเพลตเอกสารภาษี** — `<TaxDocTemplatesTab>` การ์ดคู่ (ใบกำกับภาษี / 50 ทวิ) บันทึกแยกกันพร้อม reason ต่อการ์ด + รายการฟิลด์บังคับตามกฎหมายที่ปิดไม่ได้ (`28` §6.2–6.3)
+- **`MATRIX_LEVEL_LABEL`** ย้ายขึ้นเป็นค่าคงที่กลางใน `lib/roles/matrix.ts` — `<PermissionMatrixModal>` (1.6) กับแท็บใหม่ใช้ข้อความชุดเดียวกัน
+
+### การตัดสินใจระหว่างทาง
+
+- **§6.4 ยึดฟิลด์จาก `02` ไม่ใช่ตารางใน `13`** — `13` §6.4 มี `vat_mode`/`applies_to` แต่ `tax_profiles` ใน `02` ไม่มี (VAT mode เป็นของบริษัทไฟแนนซ์ฝั่งขาย · ชนิดผู้รับเงินสะท้อนผ่าน `filing_form`) เป็นข้อสรุปเดียวกับที่ Phase 1.10 ตัดสินไว้แล้ว จึงไม่เปิด `[[NEEDS_DECISION]]` ใหม่
+- **§6.10 ไม่ทำเป็น grid 37×15 จริง** (ยืนยันแล้วหลังทวนเอกสาร — มติ PO 2026-08-14 "เลือกแนวที่ตรงเอกสารที่สุด") — `13` §6.10 เขียนไว้ว่า "UI เป็น dropdown 3 ระดับต่อ role ต่อ capability (**ดู mockup `settings.html`** — 37 รายการครบตามไฟล์ 25)" คือชี้ไป mockup ตรง ๆ และ mockup (`renderSettingsPermission`) เป็น **ตารางรายแถว + ชิปบทบาท + ปุ่มแก้รายแถว** ไม่ใช่ตารางกว้าง 15 คอลัมน์ · คำว่า "grid 37×role" ใน `01_PLAN` §1.12 เป็นคำย่อของแผนงาน ไม่ใช่ SSOT ด้าน UI (ลำดับ: `02` → spec module → reference กลาง → mockup) ⇒ ยึด spec+mockup แล้วให้ modal เป็นที่ที่มี dropdown 3 ระดับต่อ role ครบตาม DEC-009
+- **แท็บ §6.11 ไม่มีปุ่มแก้ policy** — `02` ไม่มีตารางเก็บนโยบายนี้ (Phase 1.10 สรุปไว้แล้วว่า endpoint เป็น GET อย่างเดียว) การปลดล็อกรอบเป็น action ของไฟล์ 30 บนหน้างวดบัญชี (Phase 4.1)
+- **mockup แสดง "อัปโหลดโลโก้/ลายเซ็น" เป็นกล่อง upload** แต่ `02` เก็บเป็น URL (`logo_url`/`signature_image_url`) และ Phase 1 ยังไม่มี Storage integration ⇒ **ยึด `02` เรื่องรูปแบบข้อมูล (ช่องกรอกลิงก์) แต่ยึด mockup เรื่องหน้าตา**: มีกล่อง dashed บอกสถานะ "✓ <ชื่อไฟล์> (ตั้งค่าแล้ว)" / "ยังไม่ได้ตั้งค่า" เหนือช่องกรอกเหมือน mockup · ชื่อไฟล์อ่านด้วย `documentAssetName()` (pure + เทสต์ 5 เคส) · ตัวอัปโหลดจริงต่อยอดตอน Phase 3.5/4.3 ที่ render PDF
+
+### ความครบตาม Test Cases `13` §15 (ตรวจก่อนปิด task)
+
+| Test Case ของ `13` §15 | อยู่ที่ไหน |
+|---|---|
+| เพิ่ม VAT Rate ทับช่วงเดิม → `VAT_RATE_OVERLAP` | `lib/settings/vat.test.ts` (+ FE เตือนสดด้วย pure module ตัวเดียวกัน) |
+| ใช้ Bank File ที่ยังไม่ทดสอบ → `BANK_FILE_NOT_TESTED` | `lib/settings/bank-file.test.ts` |
+| แก้ไขขณะ locked → `PERIOD_LOCKED_DIRECT_EDIT` | `lib/settings/period-lock.test.ts` |
+| WHT ต่ำ/ถึงเกณฑ์ 1,000 บาท (800 → ไม่หัก · 1,200 → หัก) | **Phase 3.1** — สูตร WHT เต็ม (ฐานหัก + threshold gate) เป็นของ `22` §6.9 ห้าม implement ซ้ำนอกโมดูลนั้น (Rule 01) · ที่ 1.12 มีแค่ค่าตั้งต้น `DEFAULT_WHT_MIN_THRESHOLD_SATANG` + เทสต์ว่า = 100,000 สตางค์ |
+| "37 รายการครบตามไฟล์ 25" (`13` §6.10) | `lib/roles/default-matrix.test.ts` (37 รายการ 4 กลุ่ม) + `lib/roles/capability-locks.test.ts` (ล็อก 9 รายการ) |
+
+### จุดที่คนถัดไปควรรู้
+
+- **กับดักใหม่**: `dateOnlySchema` transform string → `Date` ⇒ ส่ง `parsed.data` กลับเข้า API ตรง ๆ จะกลายเป็น ISO เต็มแล้วโดน 400 · ฟอร์มที่มีช่องวันที่ต้องส่ง **payload ดิบ** (บันทึกใน `REUSE_INDEX` แล้ว)
+- แท็บที่ใช้ capability เฉพาะ (`manage_tax_profiles` / `manage_invoice_numbering` / `manage_roles`) ส่งให้ `<Can>` ตรงกับที่ route ตรวจแล้ว — ถ้าเพิ่มปุ่มใหม่ในแท็บเหล่านี้ต้องใช้ constant จาก `components/settings/shared.ts` อย่าพิมพ์สตริงเอง
+- `StatCard` ไม่มี prop `mono` — ต้องการ font-mono ให้ห่อ `value` ด้วย `<span className="font-mono">` เอง
+- เลขเอกสารล่าสุดบนแท็บ §6.12 แสดงเป็น **ลำดับ** ไม่ใช่เลขเต็ม เพราะเลขเต็มของฉบับล่าสุดผูกกับปีที่ออกจริง (โหมด `yearly_reset`) การเดาปีให้จะได้เลขที่ไม่มีอยู่จริง
+
+---
+
 ## Phase 1.11 — Settings FE ชุดที่ 1: shell 13 แท็บ + 5 แท็บแรก (ไฟล์ 13)
 
 **วันที่**: 2026-08-14 · **commit**: `0eb2e81` · **branch**: `auto/phase-1.11`

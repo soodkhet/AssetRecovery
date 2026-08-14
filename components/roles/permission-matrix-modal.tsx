@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
-import { MATRIX_LEVELS, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
+import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
 import type { ApiData, ApiErrorBody, RoleDetail, RolePermissionsPayload } from '@/lib/roles/types'
 
 /**
@@ -13,12 +13,6 @@ import type { ApiData, ApiErrorBody, RoleDetail, RolePermissionsPayload } from '
  *   ⚠️ disable เป็นแค่ UX — API ปฏิเสธซ้ำเสมอด้วย `CAPABILITY_LOCKED`/`ROLE_NOT_EDITABLE` (DEC-002)
  * - บังคับกรอกเหตุผลก่อนบันทึก (`90` §13 — การเปลี่ยนสิทธิ์ต้องมี reason ทุกครั้ง)
  */
-
-const LEVEL_LABEL: Readonly<Record<MatrixLevel, string>> = {
-  none: '— ไม่มีสิทธิ์',
-  view: '👁️ ดูอย่างเดียว',
-  manage: '✅ ทำได้',
-}
 
 const REASON_MIN_LENGTH = 5
 
@@ -197,7 +191,7 @@ export function PermissionMatrixModal({
                     >
                       {MATRIX_LEVELS.map((level) => (
                         <option key={level} value={level}>
-                          {LEVEL_LABEL[level]}
+                          {MATRIX_LEVEL_LABEL[level]}
                         </option>
                       ))}
                     </Select>

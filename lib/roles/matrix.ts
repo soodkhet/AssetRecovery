@@ -14,6 +14,16 @@ import { capabilityLockOwner, type CapabilityLockOwner } from '@/lib/roles/capab
 export const MATRIX_LEVELS = ['none', 'view', 'manage'] as const
 export type MatrixLevel = (typeof MATRIX_LEVELS)[number]
 
+/**
+ * ข้อความ + ไอคอนของแต่ละระดับ — **ชุดเดียวใช้ทุกหน้าจอที่แสดง matrix**
+ * (แท็บสิทธิ์ของไฟล์ 07 และแท็บ "สิทธิ์บัญชี/การเงิน" ของ `13` §6.10 ต้องพูดภาษาเดียวกัน)
+ */
+export const MATRIX_LEVEL_LABEL: Readonly<Record<MatrixLevel, string>> = {
+  none: '— ไม่มีสิทธิ์',
+  view: '👁️ ดูอย่างเดียว',
+  manage: '✅ ทำได้',
+}
+
 /** กลุ่มฟังก์ชันของ Functional Permission Matrix (`13` §6.10 — 4 กลุ่ม 37 รายการ) */
 export const FUNCTIONAL_GROUP_LABEL: Readonly<Record<FunctionalGroup, string>> = {
   ops: 'ปฏิบัติงาน (Operations)',

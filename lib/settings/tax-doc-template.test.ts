@@ -4,6 +4,7 @@ import {
   LEGALLY_REQUIRED_DOCUMENT_FIELDS,
   TAX_DOCUMENT_TYPES,
   TAX_DOCUMENT_TYPE_LABEL,
+  documentAssetName,
   normalizeTaxDocTemplateValues,
   toTaxDocTemplateAuditPayload,
 } from '@/lib/settings/tax-doc-template'
@@ -64,5 +65,30 @@ describe('toTaxDocTemplateAuditPayload', () => {
       paper_size: 'A4',
       language: 'th',
     })
+  })
+})
+
+describe('documentAssetName', () => {
+  it('อ่านชื่อไฟล์ท้ายลิงก์ออกมาแสดงแทนลิงก์ยาว (ตาม mockup `settings.html`)', () => {
+    expect(documentAssetName('https://cdn.example.com/assets/logo-company.png')).toBe('logo-company.png')
+  })
+
+  it('decode ชื่อไฟล์ภาษาไทยที่ถูก encode มา', () => {
+    expect(documentAssetName('https://cdn.example.com/%E0%B9%82%E0%B8%A5%E0%B9%82%E0%B8%81%E0%B9%89.png')).toBe(
+      'โลโก้.png',
+    )
+  })
+
+  it('ค่าว่าง/ช่องว่างล้วน = ยังไม่ได้ตั้งค่า', () => {
+    expect(documentAssetName(null)).toBeNull()
+    expect(documentAssetName('   ')).toBeNull()
+  })
+
+  it('ลิงก์ที่ไม่มีชื่อไฟล์คืน host — ไม่คืนค่าว่างจนหน้าจอโล่ง', () => {
+    expect(documentAssetName('https://cdn.example.com/')).toBe('cdn.example.com')
+  })
+
+  it('ข้อความที่ไม่ใช่ URL = null (Zod ปฏิเสธอยู่แล้ว หน้าจอไม่ต้องเดา)', () => {
+    expect(documentAssetName('logo.png')).toBeNull()
   })
 })

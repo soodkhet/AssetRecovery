@@ -22,9 +22,23 @@ describe('FINANCE_SETTINGS_TABS', () => {
     }
   })
 
-  it('Phase 1.11 ทำ 5 แท็บ: รอบบิล · สายอนุมัติ · ธนาคาร · ศูนย์ต้นทุน · ไฟล์โอนธนาคาร', () => {
+  it('ครบ 13 แท็บพร้อมใช้จริงตั้งแต่ Phase 1.12 — ไม่เหลือ placeholder', () => {
     const available = FINANCE_SETTINGS_TABS.filter((tab) => tab.available).map((tab) => tab.id)
-    expect(available).toEqual(['cycles', 'approval', 'bank', 'cost', 'bankfile'])
+    expect(available).toEqual([
+      'cycles',
+      'approval',
+      'bank',
+      'tax',
+      'vat',
+      'cost',
+      'docs',
+      'bankfile',
+      'export',
+      'permission',
+      'lock',
+      'numbering',
+      'taxdoc',
+    ])
   })
 })
 
@@ -33,8 +47,9 @@ describe('resolveFinanceSettingsTab', () => {
     expect(resolveFinanceSettingsTab('bankfile')).toBe('bankfile')
   })
 
-  it('แท็บที่ยังไม่เกิด (รอ 1.12) ตกกลับแท็บเริ่มต้น — ไม่พาไปหน้าว่าง', () => {
-    expect(resolveFinanceSettingsTab('numbering')).toBe(DEFAULT_FINANCE_SETTINGS_TAB)
+  it('แท็บชุดที่ 2 (Phase 1.12) เปิดใช้ได้แล้ว — ไม่ตกกลับแท็บเริ่มต้นอีก', () => {
+    expect(resolveFinanceSettingsTab('numbering')).toBe('numbering')
+    expect(resolveFinanceSettingsTab('permission')).toBe('permission')
   })
 
   it('ค่าที่ไม่รู้จักหรือไม่ได้ส่งมา ตกกลับแท็บเริ่มต้น', () => {
