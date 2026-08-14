@@ -68,6 +68,16 @@ export interface FieldCloseDraftDto {
   updatedAt: string
 }
 
+/** หลักฐานชุดที่ส่งไปแล้วของรอบนี้ (`41` §6.4) — ฟอร์มโหมด `needs_revision` เอาไปตั้งค่าเริ่มต้น */
+export interface FieldSubmittedEvidenceDto {
+  outcome: CaseOutcome
+  photos: string[]
+  videos: string[]
+  productPhotos: string[]
+  audioUrl: string | null
+  submittedAt: string
+}
+
 export interface FieldPendingReassignmentDto {
   id: string
   requestedByName: string
@@ -137,6 +147,11 @@ export interface FieldCaseDetailDto extends FieldCaseListItemDto {
   checkins: FieldCheckinDto[]
   travelOrigin: FieldTravelOriginDto | null
   draft: FieldCloseDraftDto | null
+  /**
+   * หลักฐานชุดล่าสุดที่ปิดงานไปแล้ว (null = ยังไม่เคยปิดงานรอบนี้) — ฟอร์มโหมด `needs_revision`
+   * ใช้ตั้งค่าเริ่มต้นและใช้เทียบว่ามีการแก้ไขสื่อจริงก่อน `resubmit_close_case` (`41` §8)
+   */
+  submittedEvidence: FieldSubmittedEvidenceDto | null
   pendingReassignment: FieldPendingReassignmentDto | null
   /** เหตุผลที่ถูกตีกลับหลักฐาน (`41` §10.1) — แสดงเป็นแบนเนอร์ค้างบนฟอร์มโหมด `needs_revision` */
   rejectReason: string | null

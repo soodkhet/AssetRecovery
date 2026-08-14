@@ -389,7 +389,15 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
     prisma.caseEvidence.findFirst({
       where: { assignmentId: assignment.id },
       orderBy: { submittedAt: 'desc' },
-      select: { rejectReason: true },
+      select: {
+        rejectReason: true,
+        outcome: true,
+        photos: true,
+        videos: true,
+        productPhotos: true,
+        audioUrl: true,
+        submittedAt: true,
+      },
     }),
   ])
 
@@ -437,6 +445,18 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
     checkins: checkins.map(toCheckinDto),
     travelOrigin: travelOrigin === null ? null : toTravelOriginDto(travelOrigin),
     draft: draft === null ? null : toDraftDto(draft),
+    // ชุดหลักฐานที่ส่งไปแล้ว — ฟอร์มโหมด `needs_revision` ต้องเห็นของเดิมเพื่อแก้เฉพาะสื่อ (`41` §7.6)
+    submittedEvidence:
+      evidence === null
+        ? null
+        : {
+            outcome: evidence.outcome,
+            photos: evidence.photos,
+            videos: evidence.videos,
+            productPhotos: evidence.productPhotos,
+            audioUrl: evidence.audioUrl,
+            submittedAt: evidence.submittedAt.toISOString(),
+          },
     pendingReassignment:
       pending === null
         ? null
