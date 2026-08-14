@@ -7,7 +7,7 @@
 
 ## Phase 1.8 — Teams (09) + Finance Companies (10)
 
-**วันที่**: 2026-08-14 · **branch**: `auto/phase-1.8`
+**วันที่**: 2026-08-14 · **commit**: `0565ff7` · **branch**: `auto/phase-1.8`
 
 ### สิ่งที่ทำ
 
