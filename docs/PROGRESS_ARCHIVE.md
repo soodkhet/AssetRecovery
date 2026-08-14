@@ -5,6 +5,48 @@
 
 ---
 
+## Phase 2.12 — Field Tracker Frontend ชุดที่ 3 (เบิกเงิน + รายได้ + จบงาน + PWA)
+
+**วันที่**: 2026-08-14 · **commit**: `1af69ae` + `07b2744` + (docs) · **branch**: `auto/phase-2.12`
+
+### สิ่งที่ทำ
+- **ชุด 1 — pure logic + test (64 เคสใหม่) + ส่วนขยาย BE ที่ §7.11 ต้องใช้**
+  - `lib/field/month-filter.ts` — ตัวกรองเดือนกลางของ 3 หน้าจอ · คีย์ **ค.ศ. `YYYY-MM`** (ค่าที่ส่ง API) แต่ป้าย **พ.ศ.** · `monthKeyOfInstant()` แปลงเป็นเวลาไทยก่อนหาเดือน (ปิดงาน 01/09 ตี 1 ไทย = เดือน 9 ไม่ใช่ 8)
+  - `lib/field/expense-ui.ts` — ป้าย/สีครบทุกค่า `expense_status`/`expense_type` · `groupExpensesByCase()` (1 เคส = 1 แถวสรุป + แยกบล็อกรายการที่ถูกแทนที่) · `aggregateExpenseStatus()` (สถานะรวม ใช้ทั้ง §7.9 และ §7.11) · ตัวกรองคนละชุดต่อแท็บตาม mockup
+  - `lib/field/closed-ui.ts` — pill 4 ตัว + เดือน · การ์ด `reassigned_away` ใช้ **เวลาที่ถูกโอน** แทนวันปิดงาน และคืน `null` เสมอสำหรับสถานะค่าใช้จ่าย
+  - `lib/field/dashboard.ts` — 5 บล็อกของ §7.1 + กราฟ 7 วัน (คืน `heightPct`/`successPct` ให้ JSX) + `successRatePct()` ที่คืน `null` แทนหารศูนย์
+  - `lib/field/push-client.ts` — `pushAvailability()` (iOS ยังไม่ A2HS = `needs_a2hs` ไม่ใช่ `unsupported`) · `urlBase64ToUint8Array()` · `notificationHref()` กัน open redirect · `unreadBadgeText()` (99+)
+  - **BE**: `FieldCaseListItemDto` เพิ่ม `reassignedAway` (จาก `reassignment_history` ของรอบที่ผู้เรียกเป็นคนเดิม) + `expenseStatuses` — โหลด **เฉพาะแถวกลุ่ม `closed`** (2 query ต่อการเรียก 1 ครั้ง แท็บอื่นไม่จ่ายค่านี้)
+  - **BE**: `GET /api/field/teammates` (contract + `45` §6.3) — ตัวเลือก "พักร่วมกับ" ต้องใช้เงื่อนไขเดียวกับยาม `assertSharedAgentInTeam()` ฝั่งฟอร์มที่พัก
+  - upload ใบเสร็จ: รับรูป **หรือ PDF** เพดาน 10MB path `expenses/<userId>/receipts/` (แยกตามผู้เบิก ไม่ใช่ตามเคส)
+- **ชุด 2 — 4 หน้าจอ + PWA**
+  - `<ExpensesTab>` (§7.9): กล่องสรุปรอดำเนินการ/อนุมัติแล้ว (ยอดจาก BE ไม่ใช่ยอดหลังกรอง) · ขอบแท็บ "ผูกกับเคส" = การ์ด group ต่อเคส กดขยาย + บล็อก "รายการรอบก่อนหน้า (ถูกแทนที่แล้ว)" · ขอบแท็บ "เบิกแยก" = filter สถานะ+เดือน + ปุ่ม "เบิกที่พัก" · บล็อกส้ม "ถูกตีกลับ" บนสุดทั้ง 2 แท็บ
+  - `<HotelClaimModal>` / `<ResubmitExpenseModal>`: 3 ฟิลด์บังคับ + ผู้พักร่วมจาก `field.teammates` · เงินกรอกบาท → ส่ง satang เสมอ · resubmit ของกลุ่มผูกเคสแก้ได้แค่หมายเหตุ (BE ก็ยามซ้ำ)
+  - `<IncomeSummary>` (§7.10): default สะสมตลอด แล้วยิงใหม่เมื่อเลือกเดือน (ยอดต้องเป็นของ BE) + กล่องดำรวม + 2 กล่องสถิติ + รายการเคส
+  - `<ClosedTab>` (§7.11): pill 4 + เดือน · การ์ด `reassigned_away` ขอบม่วง **กดไม่ได้** แสดงคนใหม่/เวลาที่โอน/เหตุผลแทนสถานะค่าใช้จ่าย
+  - `<FieldDashboard>` (§7.1): แบนเนอร์ draft ค้าง · การ์ดดำเคสวันนี้ · สรุป 3 สถานะ · %สำเร็จสะสม + คอมมิชชั่นเดือนนี้ (จาก `field.incomeSummary` 2 ครั้ง) · กราฟแท่ง 7 วัน · desktop 2 คอลัมน์ (2/3 + 1/3)
+  - **PWA/Push (§15)**: `app/manifest.ts` (`start_url=/field`, standalone) + `public/sw.js` + metadata `appleWebApp`/theme-color · `<FieldPwaProvider>` = ลงทะเบียน SW + แบนเนอร์ A2HS ของ iOS (ปิดแล้วจำ) + ปุ่มขอสิทธิ์แจ้งเตือน · `<NotificationBell>` = fallback หลัก (badge + dropdown + "อ่านทั้งหมด")
+
+### การตัดสินใจระหว่างทาง
+- **เพิ่ม `GET /api/field/teammates` แทนการปล่อยให้ฟอร์มเดารายชื่อ** — §6.6 บังคับว่าผู้พักร่วมต้องเป็นคนในทีมเดียวกัน แต่ `45` §6.3 ไม่มี endpoint ให้ ⇒ เติมตามแบบเดียวกับที่ 2.9 เติม `reject_expense`/push/notifications (แก้ทั้ง contract + `45` + เทสต์นับ endpoint 47 → 48)
+- **ขยาย `field.caseList` แทนสร้าง endpoint ใหม่ให้แท็บจบงาน** — §7.11 ต้องการ "คนใหม่/เวลาที่โอน/เหตุผล" + "สถานะค่าใช้จ่าย" ซึ่งไม่มีใน DTO เดิม · เลือกเติมฟิลด์แล้วโหลดเสริมเฉพาะกลุ่ม `closed` (แท็บอื่นไม่มีต้นทุนเพิ่ม) ไม่แตะ path/contract
+- **`needs_revision` ไม่อยู่ในตัวกรองสถานะใดเลย** — mockup ให้ตัวเลือกกรอง 3–4 ตัวที่ไม่มี "ถูกตีกลับ" ถ้าปล่อยไว้ในกองปกติงานค้างของพนักงานจะจมใต้ตัวกรอง ⇒ ยกขึ้นบล็อกส้มบนสุดเสมอแบบเดียวกับแท็บ "กำลังติดตาม" (§7.5)
+- **service worker ไม่ทำ offline cache** — §15 ต้องการแค่ push · ข้อมูลภาคสนาม (สถานะเคส/รายการเบิก) ถ้าแคชแล้วพนักงานเห็นของเก่าจะทำงานผิด (§11 mobile/desktop ตรรกะเดียวกัน)
+- **ไม่ขอสิทธิ์แจ้งเตือนอัตโนมัติตอนเปิดแอป** — เบราว์เซอร์บล็อกคำขอที่ไม่ได้มาจาก user gesture และ §15 ระบุว่าเป็นการ "แนะนำ" ⇒ ทำเป็นแถบพร้อมปุ่ม
+- **ไอคอน PWA เป็น SVG** (`public/icons/app-icon.svg`) — ยังไม่มี asset PNG จริงในโปรเจกต์ · Chrome/Android รับ SVG ได้ · ถ้าต้องการ splash/ไอคอนคมบน iOS ควรเพิ่ม PNG 192/512 ภายหลัง (ไม่กระทบตรรกะ)
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ (103 ไฟล์ / 1,344 เคส) · `pnpm build` ✅ (route `/field/*` ครบ 7 หน้า + `/manifest.webmanifest`)
+
+### จุดที่คนถัดไปควรรู้
+- **ต้องตั้ง env ก่อน push จริงถึงจะทำงาน**: `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` (server) **และ `NEXT_PUBLIC_VAPID_PUBLIC_KEY`** (browser ใช้ตอน subscribe — ต้องเป็นค่าเดียวกับ public key) · ยังไม่ได้เพิ่มลง `.env.example` เพราะ session อัตโนมัติเข้าถึงไฟล์ `.env*` ไม่ได้ (สิทธิ์เครื่อง) — **ฝากคนเพิ่มให้ 4 บรรทัดนี้**
+- ไม่ตั้งคีย์ = ระบบยังทำงานครบ แค่ไม่มี push (กระดิ่งในแอปเป็น fallback หลักตาม §15) — ปุ่ม "เปิดการแจ้งเตือน" จะขึ้น toast บอกว่าเซิร์ฟเวอร์ยังไม่เปิด
+- Field Tracker ครบทุกหน้าแล้ว (`<FieldComingSoon>` ไม่ถูกใช้ในหน้าใดอีก แต่คงไว้เป็น component กลางสำหรับโมดูลถัดไป)
+- ยังไม่ได้ทดสอบบนมือถือจริง/staging (ต้อง push โดยคน) — จุดที่ควรดู: การติดตั้ง A2HS บน iOS แล้วรับ push จริง, badge กระดิ่งกับ safe area, กราฟ 7 วันบนจอเล็ก
+- **Phase 2.13 ต่อ**: expense กลุ่ม `pending_warehouse_confirm` จะปลดล็อกได้จริงเมื่อคลังยืนยัน lot (`44` §11) — แถวสรุปต่อเคสในแท็บเบิกเงินคือจุดที่จะเห็นผลของ transaction 4 steps
+
+---
+
 ## Phase 2.11 — Field Tracker Frontend ชุดที่ 2 (ฟอร์มปิดงาน + คำขอเปลี่ยนผู้รับผิดชอบ)
 
 **วันที่**: 2026-08-14 · **commit**: `66be882` + `011318f` + (docs) · **branch**: `auto/phase-2.11`
