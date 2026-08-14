@@ -1,5 +1,6 @@
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { auditLogImmutableExtension } from '@/lib/audit/immutable'
 
 /**
  * Prisma client singleton — ทุก data access ของข้อมูลธุรกิจต้องผ่านที่นี่ (DEC-001/002)
@@ -13,10 +14,17 @@ function createPrismaClient() {
   if (!connectionString) {
     throw new Error('[prisma] ไม่พบ DATABASE_URL — ดู .env.example')
   }
-  return new PrismaClient({
+  const client = new PrismaClient({
     adapter: new PrismaPg({ connectionString }),
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   })
+
+  /**
+   * `audit_logs` ห้าม UPDATE/DELETE เด็ดขาดแม้แต่ Superadmin (`02` §13 · `90` §17)
+   * ชั้นนี้กันทางที่ผ่าน Prisma Client — ส่วน raw SQL กันด้วย trigger ระดับ DB
+   * (migration `20260814091702_audit_logs_immutable`)
+   */
+  return client.$extends(auditLogImmutableExtension)
 }
 
 const globalForPrisma = globalThis as unknown as {

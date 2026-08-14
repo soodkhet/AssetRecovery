@@ -1,18 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.3 (Auth + Permission middleware + หน้า Login) · งานถัดไป 1.4
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.4 (Audit core service immutable) · งานถัดไป 1.5
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.4: Audit Core Service (immutable)
+## 🎯 งานถัดไป — Phase 1.5: UI Kit + App Shell + Navigation
 
-- ทำตาม `docs/01_PLAN.md` §1.4 — ต่อยอด `lib/audit/audit.ts` ที่เกิดใน 1.3 (ห้ามสร้าง helper ใหม่ซ้ำ): validator บังคับ `reason` เมื่อกระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period · before/after diff util · immutable guard **ระดับ DB** (trigger/rule ห้าม UPDATE/DELETE `audit_logs` แม้ Superadmin) + ระดับ service · ทุก module หลังจากนี้เรียกผ่าน helper นี้เท่านั้น
-- **มีอยู่แล้วจาก 1.3**: `emitAudit()` เขียนครบ 9 fields + ip/user-agent · ใช้จริงแล้วที่ login/logout/failed login (`action = login/logout` + ผลลัพธ์ใน `after` เพราะ `02` §3 ไม่มี enum `login_failed`)
-- อ้างอิง: `90` §6.1, §13, §16–17 · `02` Group G (L1470)
-- LOC ~1,000 · งบ ~180k
-- DoD: test พิสูจน์ UPDATE/DELETE audit ถูก reject ที่ DB · mutation ตัวอย่างผ่าน helper แล้วมี record ครบ 9 fields
+- ทำตาม `docs/01_PLAN.md` §1.5 — Design tokens ตาม `04` §8.1 (font Inter + Noto Sans Thai, **statusBadge mapper 10 กลุ่มสีตายตัว**, component classes) → shared components: Button/Table/Modal/Badge/Input/Card/Toast + **loading / empty / error state ครบทุกหน้า**
+- utils กลางที่ทุกโมดูลหลังจากนี้ต้องใช้: `fmtDate`/`fmtDateTime` **พ.ศ. เท่านั้น** TZ Asia/Bangkok (`03` §6.5 · DEC-005) · satang → display (÷100 + comma) ห้ามคำนวณเงินฝั่ง display
+- Top Nav 7 เมนู + sub-tab shell + menu registry กรองตาม role (`06` §7.2 Top Nav Visibility Matrix) + `GET /api/meta/menu` (ผ่าน `requirePermission` ตามปกติ) · หน้าแดชบอร์ดหลักเป็น placeholder (spec จริงรอ PO — Phase 6.6)
+- อ้างอิง: `04` ทั้งไฟล์ · `06` ผ่าน MAP §7–§8 · `03` §6.5 · mockup `app-shell.html`, `login.html`
+- LOC ~1,700 · งบ ~280k
+- DoD: ทุกหน้าใหม่หลังจากนี้ใช้ shared components เท่านั้น · nav แสดง/ซ่อนตาม role ถูกต้องตาม matrix `06` §7.2 · เพิ่มรายการทั้งหมดลง `docs/REUSE_INDEX.md`
 
 ---
 
@@ -31,7 +32,7 @@
 | 1.1 | Prisma schema ชุด 1: enums 54 + Group A+B (19 ตาราง) | ✅ | `35dfb6e` · 55 enums (+due_rule_type A5) · CHECK+DEFERRABLE ผ่าน raw SQL · รายละเอียด: PROGRESS_ARCHIVE |
 | 1.2 | Prisma schema ชุด 2: Group C–G (32 ตาราง) + seed | ✅ | 2026-08-14 · `1eba90e` · 53 ตารางครบ + seed idempotent (15 roles / 47 capabilities) · A1/A2/A4/A6/B3 ปิดครบ → archive |
 | 1.3 | Auth + Permission middleware + Login | ✅ | 2026-08-14 · `edfdd9b` · requirePermission + scope 4 แบบ + session 24 ชม. + หน้า Login · ⚠️ ต้องรัน `pnpm auth:link-superadmin` 1 ครั้งต่อ environment → archive |
-| 1.4 | Audit core service (immutable) | ⬜ | PLAN §1.4 · ไฟล์ 90 §13 |
+| 1.4 | Audit core service (immutable) | ✅ | 2026-08-14 · `09b283a` · immutable 2 ชั้น (DB trigger + Prisma extension) + นโยบาย `reason` + diff util + เทสต์ระดับ DB → archive |
 | 1.5 | UI Kit + App Shell + Navigation | ⬜ | PLAN §1.5 · ไฟล์ 04+06 |
 | 1.6 | Roles & Permissions module | ⬜ | PLAN §1.6 · ไฟล์ 07+25 |
 | 1.7 | Compensation Plans + Service Fee Templates | ⬜ | PLAN §1.7 · ไฟล์ 11+12 · ก่อน 1.8 |

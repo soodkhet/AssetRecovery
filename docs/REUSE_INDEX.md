@@ -39,7 +39,12 @@
 | `getSessionUser()` / `requireSession()` / `loadSessionUser()` | `lib/auth/session.ts` | 1.3 | Supabase JWT = ตัวตน · role+scope จาก Prisma = สิทธิ์ (แยกกันเสมอ) · timeout 24 ชม. นับจาก `users.last_login_at` |
 | `requireSessionPage()` | `lib/auth/page-guard.ts` | 1.3 | route guard ของ server component — เด้ง `/login?reason=<code>` |
 | session cache role+scope | `lib/auth/session-cache.ts` | 1.3 | TTL 5 นาที ต่อ instance (ห้าม query DB ทุก request) · **เปลี่ยน role/สถานะ/ทีม/บริษัท ต้องเรียก `invalidateSessionCache()`** |
-| `emitAudit()` (9 fields) | `lib/audit/audit.ts` | 1.3 (ขยาย 1.4) | ทุก mutation ต้องผ่านที่นี่ · Phase 1.4 จะเติม validator `reason` + diff util + immutable guard ระดับ DB — ห้ามสร้าง helper audit ตัวใหม่ |
+| `emitAudit(entry, client?)` (9 fields) | `lib/audit/audit.ts` | 1.3 (เต็มใน 1.4) | **ทุก mutation ต้องผ่านที่นี่** ห้ามสร้าง helper audit ตัวใหม่ · validate `reason` + แปลง Date/Decimal + ปิดบังค่าอ่อนไหวให้เอง · action `update` เก็บเฉพาะฟิลด์ที่เปลี่ยน (`diffOnly: false` = snapshot เต็ม) · **ส่ง tx client เป็น argument ที่ 2** เมื่ออยู่ใน `$transaction` (เช่น lot confirm `44` §11) |
+| `reasonRequirement()` / `targetSensitivity()` + ตารางจัดหมวด 4 กลุ่ม | `lib/audit/reason-policy.ts` | 1.4 | นโยบาย "เมื่อไหร่ต้องมี `reason`" (`90` §13) — pure · **เพิ่มตารางใหม่ใน `02` ต้องมาจัดหมวดที่นี่** ไม่งั้นเทสต์แดง · โมดูลที่ต้องการเข้มกว่าให้ validate เพิ่มในโมดูลตัวเอง |
+| `diffRecords()` / `toAuditJson()` / `normalizeFieldName()` | `lib/audit/diff.ts` | 1.4 | before/after diff + แปลงค่าให้ JSONB เก็บได้ (Date→ISO UTC, Decimal/BigInt→string) + ปิดบัง password/token (`90` §6.2) · ไม่นับ `updated_at` เป็นการเปลี่ยนแปลง |
+| `AuditError` / `AUDIT_REASON_REQUIRED` / `AUDIT_IMMUTABLE` | `lib/audit/errors.ts` | 1.4 | code ตาม `24` §6.10 เท่านั้น · `validateAuditEntry()` (pure) อยู่ที่ `lib/audit/validate.ts` |
+| `auditLogImmutableExtension` / `assertAuditLogOperationAllowed()` | `lib/audit/immutable.ts` | 1.4 | ต่อเข้า `lib/prisma.ts` แล้ว — `prisma.auditLog.update/delete/upsert/...` โยน `AUDIT_IMMUTABLE` · ชั้น DB คือ trigger ใน migration `20260814091702_audit_logs_immutable` |
+| `pnpm db:deploy:test` (`PRISMA_USE_TEST_DB=1`) | `package.json` + `prisma.config.ts` | 1.4 | apply migration ลง `TEST_DATABASE_URL` (`assetrecovery_test`) — ต้องรันก่อนเทสต์ที่แตะ DB จริง · CI รันให้อัตโนมัติ |
 | `AuthError` / error code หมวด auth + ข้อความไทย | `lib/auth/errors.ts` | 1.3 | code ตาม `24` §6.9 เท่านั้น · `toAuthErrorResponse()` โยน error ที่ไม่ใช่ `AuthError` ต่อ (ห้ามกลืนเป็น 401/403) |
 | `loginSchema` (Zod ใช้ร่วม FE/BE) | `lib/auth/schemas.ts` | 1.3 | ฟอร์ม login และ `POST /api/auth/login` ใช้ schema เดียวกัน |
 | `assertNotLastSuperadmin()` / `countActiveSuperadmins()` | `lib/auth/superadmin-guard.ts` (pure) + `lib/auth/superadmin-queries.ts` (DB) | 1.3 | กัน lockout — Users/Roles module (1.6/1.9) ต้องเรียกก่อนเปลี่ยนสถานะหรือย้าย role |
@@ -48,7 +53,6 @@
 | `pnpm auth:link-superadmin` | `scripts/link-superadmin.ts` | 1.3 | ผูก seed user เข้ากับ Supabase Auth (idempotent) — ต้องรัน 1 ครั้งต่อ environment ไม่งั้น login ตอบ `USER_NOT_PROVISIONED` |
 
 รายการที่**ต้องเกิด**เป็น shared ตามแผน:
-- Audit emit helper ตัวเต็ม (validator `reason` + immutable guard ระดับ DB) — Phase 1.4 (ต่อยอด `lib/audit/audit.ts`)
 - Pure calculation modules ครบ 13 สูตร (`22`) — Phase 3.1 (ห้ามคำนวณเงินนอก module นี้)
 - `success_rate` service กลาง (`40` §6.2) — Phase 2.6 (Report ใช้ซ้ำ)
 - Response envelope + error catalog — Phase 2.1
@@ -70,4 +74,7 @@
 | 2026-08-14 | Prisma ไม่รู้จัก generated column | `advances.return_satang` เป็น `GENERATED ALWAYS AS ... STORED` (เติมมือตอน `--create-only`) แต่ Prisma มองเป็นคอลัมน์ธรรมดา ⇒ **client ยอมให้ใส่ค่าใน create/update แล้วไปตายที่ DB** (`cannot insert a non-DEFAULT value into column`) · เวลาสร้าง Advance ให้เซ็ตแค่ `requestedSatang`/`approvedSatang`/`usedSatang` · ยามอยู่ใน `prisma/schema.test.ts` (เช็คว่า SQL generated ยังอยู่ในโฟลเดอร์ migrations) |
 | 2026-08-14 | ไฟล์ที่ `import '@/lib/prisma'` เทสต์ไม่ได้ถ้าไม่มี DB | `lib/prisma.ts` สร้าง client ทันทีตอน import ⇒ ไฟล์ไหนที่ import มันจะ throw `ไม่พบ DATABASE_URL` ตั้งแต่ตอนโหลดโมดูลใน vitest (ไม่มีการโหลด `.env.local`) · **แยก pure logic ออกจากไฟล์ที่แตะ Prisma เสมอ** (ตัวอย่าง: `superadmin-guard.ts` = pure / `superadmin-queries.ts` = DB) หรือใช้ `vi.mock()` โมดูลที่แตะ DB |
 | 2026-08-14 | แพ็กเกจ `server-only` ไม่ได้ติดตั้งในโปรเจกต์นี้ | `import 'server-only'` จะพัง (resolve ไม่เจอ) — กันโค้ด server หลุดฝั่ง client ด้วยการไม่ import โมดูลที่แตะ Prisma/`next/headers` เข้าไฟล์ `'use client'` แทน |
+| 2026-08-14 | `audit_logs` ลบไม่ได้แม้ในเทสต์ | trigger ระดับ DB ปฏิเสธ UPDATE/DELETE/TRUNCATE **ทุกกรณี** ⇒ เทสต์ที่ insert audit จะทิ้งขยะถาวรใน DB ล้างไม่ได้ · วิธีที่ใช้: ทำงานใน `$transaction` แล้ว **throw เพื่อ rollback** (ดู `lib/audit/audit-immutable.db.test.ts`) · อีกกับดัก: trigger ต้องเป็น `FOR EACH STATEMENT` ไม่ใช่ `FOR EACH ROW` — ไม่งั้น `DELETE ... WHERE` ที่ไม่ match แถวไหนจะผ่านเงียบ ๆ |
+| 2026-08-14 | `toAuditJson` ต้องแยก object ธรรมดาออกจาก instance ของคลาส | เช็คแค่ `typeof === 'object'` จะกาง Prisma `Decimal` ออกเป็น `{s,e,d}` แทนที่จะเป็นตัวเลข ⇒ ต้องเทียบ `Object.getPrototypeOf(value) === Object.prototype` ก่อน แล้วค่อย fallback ไป `toString()` ของคลาส |
+| 2026-08-14 | vitest ต้องได้รับ **เฉพาะ** `TEST_DATABASE_URL` | `vitest.config.mts` โหลด `.env.local` ด้วย `processEnv: {}` แล้วส่งต่อคีย์เดียว — ถ้าโหลดทั้งไฟล์ `DATABASE_URL` จะหลุดเข้าเทสต์ ทำให้ไฟล์ที่ import `lib/prisma` เผลอต่อ DB dev/staging จริงแทนที่จะล้มให้เห็น |
 | 2026-08-13 | `next dev` เขียนบล็อกต่อท้าย CLAUDE.md เอง | บล็อก `<!-- BEGIN:nextjs-agent-rules -->` ถูกเติมกลับทุกครั้งที่รัน dev — commit ไปเลย (ปิดได้ด้วย `agentRules: false` ใน next.config ถ้าไม่ต้องการ) |

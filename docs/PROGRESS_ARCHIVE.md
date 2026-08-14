@@ -5,6 +5,43 @@
 
 ---
 
+## Phase 1.4 — Audit Core Service (immutable)
+
+**วันที่**: 2026-08-14 · **commit**: `09b283a` · **branch**: `auto/phase-1.4`
+
+### สิ่งที่ทำ
+- **Immutable guard 2 ชั้น** (`02` §13 · `90` §10/§17):
+  - **ระดับ DB** — migration `20260814091702_audit_logs_immutable`: function `audit_logs_immutable()` + trigger 3 ตัว (`trg_audit_logs_no_update` / `_no_delete` / `_no_truncate`) แบบ **statement-level** ยกเว้น `AUDIT_IMMUTABLE` (ERRCODE 42501)
+  - **ระดับ service** — `lib/audit/immutable.ts` (`auditLogImmutableExtension` = Prisma extension `$allOperations` ของ model `auditLog`) ต่อเข้า `lib/prisma.ts` แล้ว ⇒ `prisma.auditLog.update/updateMany/updateManyAndReturn/delete/deleteMany/upsert` โยน `AuditError('AUDIT_IMMUTABLE')` · `create`/read ผ่านปกติ
+- **นโยบาย `reason`** — `lib/audit/reason-policy.ts` (pure) แปล `90` §13 เป็นกติกา 4 ข้อ: (1) action แทรกแซง `delete`/`reject`/`lock`/`unlock` ต้องมีเสมอทุกตาราง (2) ตาราง master/ตั้งค่า 17 ตัว ต้องมีทุก mutation (3) ตารางธุรกรรม 16 ตัว ต้องมีเมื่อ `update`/`delete` (แก้ย้อนหลังด้วยมือ) (4) `users`/`teams`/`finance_companies`/`organizations`/`cases` ต้องมีเมื่อฟิลด์ที่เปลี่ยนอยู่ในรายการอ่อนไหว + (5) actor = system (NULL) ต้องระบุ job id ใน reason ยกเว้น login/logout
+- **before/after diff util** — `lib/audit/diff.ts` (pure): `diffRecords()` เก็บเฉพาะฟิลด์ที่เปลี่ยน (ข้าม `updated_at`) · `toAuditJson()` แปลง Date→ISO UTC, Decimal/BigInt→string, binary→marker, กัน circular · ปิดบัง password/token/apiKey ทุกชั้น (`90` §6.2 PDPA)
+- **`emitAudit()` ตัวเต็ม** — `lib/audit/audit.ts`: validate ก่อนเขียน (`lib/audit/validate.ts`) → normalize JSON → create · รับ **tx client เป็น argument ที่ 2** เพื่อให้ audit อยู่ใน `$transaction` เดียวกับ mutation ได้ (`44` §11) · action `update` เก็บเฉพาะฟิลด์ที่เปลี่ยนอัตโนมัติ (`diffOnly: false` = snapshot เต็ม)
+- **error code** — `lib/audit/errors.ts` (`AUDIT_REASON_REQUIRED` 400 / `AUDIT_IMMUTABLE` 403 / `REQUIRED_MISSING` 400) + เพิ่ม **`24` §6.10 หมวด Audit** (v3.3) ตาม Rule 04
+- **โครงเทสต์ที่แตะ DB จริง** — `pnpm db:deploy:test` (`PRISMA_USE_TEST_DB=1` ใน `prisma.config.ts` → ชี้ `TEST_DATABASE_URL`) · `vitest.config.mts` ส่งต่อ **เฉพาะ** `TEST_DATABASE_URL` จาก `.env.local` · CI เพิ่มขั้น `Migrate test DB` และเปลี่ยนชื่อ DB ของ CI เป็น `assetrecovery_test`
+
+### การตัดสินใจระหว่างทาง
+- **trigger เป็น `FOR EACH STATEMENT` ไม่ใช่ `FOR EACH ROW`** — row trigger ไม่ยิงเมื่อ `WHERE` ไม่โดนแถวไหน ทำให้ `DELETE FROM audit_logs WHERE ...` ผ่านเงียบ ๆ · เพิ่ม trigger `TRUNCATE` ด้วยเพราะ TRUNCATE ข้าม row trigger โดยธรรมชาติ
+- **ต้องมี guard ทั้ง 2 ชั้น** — Prisma extension กันได้เฉพาะทางที่ผ่าน Prisma Client (raw SQL / psql / งาน ops ยังลบได้) จึงยึด DB เป็นชั้นสุดท้ายตาม `90` §16 ("reject ที่ระดับ backend ไม่ใช่แค่ UI")
+- **นโยบาย reason แยก "master data" กับ "ธุรกรรม"** — ถ้าบังคับ reason ทุก mutation ของตารางเงินทั้งหมด flow ปกติ (ระบบสร้าง expense/revenue เอง, agent ปิดเคส) จะต้องกรอกเหตุผลทั้งที่ spec ต้นทาง (`15`/`16`/`41`) ไม่มีช่องให้กรอก — จึงบังคับเฉพาะจุดที่เป็น "การแทรกแซงของคน"
+- **ตารางกลุ่มข้อ 4 ไม่บังคับ reason ตอน `create`** — ฟอร์มสร้าง user/ทีม/บริษัทตามไฟล์ 08/09/10 ไม่มีช่องเหตุผล · แต่ถ้าไม่ส่ง before/after มาเลยตอน `update` จะถือว่า "อาจแตะฟิลด์อ่อนไหว" แล้วบังคับ reason ไว้ก่อน (fail-safe)
+- **`REQUIRED_MISSING` ใช้ code เดิมจาก `24` §6.1** ไม่ตั้ง code ใหม่สำหรับ field ที่ขาดใน audit entry
+- **ยามความครบถ้วนใน `reason-policy.test.ts`** — ไล่ `@@map` ทุก model ใน `schema.prisma` แล้วบังคับว่าต้องถูกจัดหมวด ⇒ ตารางใหม่ที่ยังไม่จัดหมวดจะทำให้เทสต์แดงแทนที่จะหลุดกติกาเงียบ ๆ
+
+### verify ที่รันจริง (DoD ของ PLAN §1.4)
+- `pnpm typecheck` เขียว · `pnpm test` **201 tests / 16 files** ผ่านหมด · `pnpm lint` เขียว
+- **DoD ข้อ 1 (UPDATE/DELETE ถูก reject ที่ DB)**: `lib/audit/audit-immutable.db.test.ts` รันกับ Postgres จริง — UPDATE/DELETE ที่ไม่ match แถวไหนก็ถูกปฏิเสธ, TRUNCATE ถูกปฏิเสธ, trigger ครบ 3 ตัว, และ `prisma.auditLog.delete()/updateMany()` โดน guard ระดับ service
+- **DoD ข้อ 2 (mutation ผ่าน helper แล้วมี record ครบ 9 fields)**: เทสต์ INSERT ผ่าน `$transaction` แล้ว rollback — ตรวจครบทั้ง 9 fields รวม `created_at` จาก DB default · ฝั่ง service ตรวจ payload ที่ `emitAudit()` เขียนใน `audit.test.ts`
+- เทสต์ pure: `diff.test.ts` (16) · `reason-policy.test.ts` (52 รวมยามความครบถ้วนของตาราง) · `validate.test.ts` · `immutable.test.ts` · `audit.test.ts`
+
+### จุดที่คนถัดไปควรรู้
+- **ทุก mutation หลังจากนี้เรียก `emitAudit()` เท่านั้น** — ห้ามเขียน `prisma.auditLog.create()` ตรง · อยู่ใน `$transaction` ให้ส่ง tx client เป็น argument ที่ 2
+- **เพิ่มตารางใหม่ใน `02` = ต้องจัดหมวดใน `lib/audit/reason-policy.ts` ด้วย** ไม่งั้น `pnpm test` แดง
+- **`audit_logs` ลบไม่ได้จริง ๆ แม้ในเทสต์** — เทสต์ที่ต้อง insert audit ให้ทำใน `$transaction` แล้ว throw เพื่อ rollback (ดูตัวอย่างในไฟล์เทสต์)
+- **เทสต์ที่แตะ DB ต้องรัน `pnpm db:deploy:test` ก่อน** และต้องมี `TEST_DATABASE_URL` (ไม่มี = ข้ามเทสต์นั้นเงียบ ๆ พร้อม warning) · guard ในไฟล์เทสต์ปฏิเสธ host ที่ไม่ใช่ localhost และ DB ที่ชื่อไม่มีคำว่า `test`
+- ยังไม่ได้ทำในก้อนนี้ (ตาม PLAN): endpoint `GET /api/audit-logs` (+ detail) ของ `90` §14 และ Notification service — จะเกิดใน Phase 5 (`90`/`91`)
+
+---
+
 ## Phase 1.3 — Auth & Access Control + Permission Middleware
 
 **วันที่**: 2026-08-14 · **commit**: `edfdd9b` · **branch**: `staging`
