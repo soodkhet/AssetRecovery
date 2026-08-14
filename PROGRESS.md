@@ -36,7 +36,7 @@
 | 1.3 | Auth + Permission middleware + Login | ✅ | 2026-08-14 · `edfdd9b` · requirePermission + scope 4 แบบ + session 24 ชม. + หน้า Login · ⚠️ ต้องรัน `pnpm auth:link-superadmin` 1 ครั้งต่อ environment → archive |
 | 1.4 | Audit core service (immutable) | ✅ | 2026-08-14 · `09b283a` · immutable 2 ชั้น (DB trigger + Prisma extension) + นโยบาย `reason` + diff util + เทสต์ระดับ DB → archive |
 | 1.5 | UI Kit + App Shell + Navigation | ✅ | 2026-08-14 · `e4d56b4` · UI Kit `components/ui/*` + App Shell 7 เมนูตาม `06` §7.2 + utils พ.ศ./satang + statusBadge 10 กลุ่ม + `GET /api/meta/menu` → archive |
-| 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `PENDING` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
+| 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ⬜ | PLAN §1.7 · ไฟล์ 11+12 · ก่อน 1.8 |
 | 1.8 | Teams + Finance Companies | ⬜ | PLAN §1.8 · ไฟล์ 09+10 |
 | 1.9 | Users module | ⬜ | PLAN §1.9 · ไฟล์ 08 |

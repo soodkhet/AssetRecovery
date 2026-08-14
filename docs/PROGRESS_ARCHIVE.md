@@ -7,7 +7,7 @@
 
 ## Phase 1.6 — Roles & Permissions module
 
-**วันที่**: 2026-08-14 · **commit**: `PENDING` · **branch**: `auto/phase-1.6`
+**วันที่**: 2026-08-14 · **commit**: `a5ef75c` · **branch**: `auto/phase-1.6`
 
 ### สิ่งที่ทำ
 
