@@ -6,14 +6,16 @@
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.10: Settings ไฟล์ 13 — Backend ครบ 13 หมวด
+## 🎯 งานถัดไป — Phase 1.11: Settings FE ชุดที่ 1 (แท็บ §6.1, §6.2+6.2.1, §6.3, §6.6, §6.8)
 
-- ทำตาม `docs/01_PLAN.md` §1.10 — API + validation + audit ครบทั้ง 13 sub-section: §6.1 Cycles (CHECK cutoff_shape) · §6.2 Approval Matrix (threshold เป็น **satang**) + §6.2.1 Finance Policy (1 record/org) · §6.3 Bank Accounts (usage enum · ห้ามลบที่มีรายการผูก · `is_payout_account` deprecated) · §6.4 Tax Profiles (WHT 3% default · `applies_to` ไม่มี inhouse) · §6.5 VAT Rate effective-dated + `VAT_RATE_OVERLAP` resolver · §6.6 Cost Centers (auto running code) · §6.7/§6.9 read-only · §6.8 Bank File Formats + `POST /:id/test` + gate `BANK_FILE_NOT_TESTED` · §6.10 Functional Permission Matrix (บังคับจริงแล้วที่ `lib/roles/capability-locks.ts` ตั้งแต่ 1.6) · §6.11 Period Lock Policy + interceptor `PERIOD_LOCKED_DIRECT_EDIT` (โครง — บังคับจริง Phase 4) · §6.12 Tax Invoice Numbering (sequence · yearly reset · `last_number` ห้ามแก้มือ) · §6.13 Tax Doc Template Settings
-- **เพิ่ม endpoint ที่ spec §13 ตกหล่น**: `/api/settings/finance-policy` และ `/api/settings/tax-document-templates`
-- ใช้ของที่มีแล้ว: `withApiPermission()`/`toModuleErrorResponse()` (`lib/api/http.ts`) · `satangSchema()`/`pctSchema()`/`reasonSchema` (`lib/api/validation.ts`) · แม่แบบชั้น DB + scope ดูที่ `lib/users/queries.ts` / `lib/teams/queries.ts`
-- อ้างอิง: `13` ผ่าน MAP ทีละ § (ห้ามอ่านทั้งไฟล์) · `27` §6.1 · `25` · `02` Group B
-- LOC ~3,100 · งบ ~430k
-- DoD: test VAT overlap/resolve ข้ามช่วงเวลา · bank file ใช้จริงไม่ได้จนกว่า `test_status = passed` · numbering ไม่มี gap ภายใต้ concurrency
+- ทำตาม `docs/01_PLAN.md` §1.11 — Settings shell **13 แท็บ** + shared table/CRUD-modal pattern แล้วทำ 5 แท็บแรก: รอบบิล/รอบจ่าย · สายอนุมัติ + นโยบายการเงิน · บัญชีธนาคารบริษัท · ศูนย์ต้นทุน · รูปแบบไฟล์ธนาคาร (แสดงสถานะทดสอบ + ปุ่มทดสอบ)
+- **Backend พร้อมแล้วจาก 1.10** — ต่อ API ตรง ๆ ไม่ต้องเขียน BE เพิ่ม: DTO ทุกตัวอยู่ `lib/settings/types.ts` (type-only) · Zod ชุดเดียวกันใช้ตรวจฟอร์มได้เลย (`…FieldsSchema` = ไม่มี `reason`) ที่ `lib/settings/schemas.ts`
+- **ทุก mutation บังคับ `reason`** ⇒ ทุกปุ่มบันทึก/ลบต้องผ่าน `<ConfirmModal>` ที่มีช่องเหตุผล (pattern เดียวกับ `/settings/companies` และ `/settings/users`)
+- ช่องเงิน (เพดานสายอนุมัติ, เพดาน advance, write-off tolerance) กรอกเป็น**บาท** แปลงด้วย `parseBahtInput()`/`toBahtInput()` ห้ามคูณ/หาร 100 เอง · รหัสศูนย์ต้นทุนเป็น read-only (ระบบเดินให้)
+- ใช้ของที่มีแล้ว: UI Kit `components/ui/*` · `<TableState>` (วางเป็นพี่น้องของ `<TBody>`) · `callApi()` (`lib/api/types.ts`) · แม่แบบหน้า: `components/teams/*` (ตาราง) และ `components/finance-companies/*` (การ์ด)
+- อ้างอิง: `13` §7 + mockup `settings.html` ผ่าน MAP เฉพาะ render function ที่เกี่ยว (ห้ามอ่านทั้งไฟล์)
+- LOC ~2,000 · งบ ~310k
+- DoD: ทุกแท็บ CRUD ได้จริงบน staging ตรง pattern mockup · ทุกหน้ามี loading/empty/error state
 
 ---
 
@@ -38,7 +40,7 @@
 | 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
 | 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
 | 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`680159e` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
-| 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
+| 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ✅ | 2026-08-14 · `53f4c38`+`b00a5f9` · API 22 endpoint ครบ 13 หมวด + 2 endpoint ที่ spec ตกหล่น + VAT resolver/เดินเลขใบกำกับ atomic → archive |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
 | 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |
 
