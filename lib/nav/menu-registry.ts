@@ -165,8 +165,8 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     label: 'การตั้งค่า',
     path: '/settings',
     audiences: ['superadmin', 'executive'],
-    available: false,
-    plannedPhase: '1.11',
+    // ครบทุกแท็บที่วางไว้แล้วตั้งแต่ 1.11 (`/settings` เปลี่ยนเส้นทางไปแท็บแรกให้เอง)
+    available: true,
     children: [
       // `06` §9 — "ตั้งค่าทั่วไป" แท็บแรกตาม mockup `settings.html` (`renderSettingsLayout`)
       // สิทธิ์แก้จริงบังคับที่ API ด้วย `manage_roles` (Superadmin เท่านั้น — `25` §16.1)
@@ -215,6 +215,15 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         id: 'settings.companies',
         label: 'บริษัทไฟแนนซ์',
         path: '/settings/companies',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
+      // `06` §9 — แท็บที่สองของหน้าตั้งค่าตาม mockup `settings.html` ("ตั้งค่าบัญชี/การเงิน")
+      // ข้างในเป็นแท็บแนวตั้ง 13 ตัวตามไฟล์ 13 §6.1–6.13 (5 ตัวแรกเกิดใน 1.11 · ที่เหลือ 1.12)
+      {
+        id: 'settings.finance',
+        label: 'ตั้งค่าบัญชี/การเงิน',
+        path: '/settings/finance',
         audiences: ['superadmin', 'executive'],
         available: true,
       },
