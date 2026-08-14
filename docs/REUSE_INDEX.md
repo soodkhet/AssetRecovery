@@ -6,7 +6,9 @@
 
 | ชื่อ | ที่อยู่ | สร้างใน task | หมายเหตุ |
 |---|---|---|---|
-| (รอเริ่ม — Phase 1.5 จะสร้าง UI Kit ชุดแรก: Button/Table/Modal/Badge/Input/Card/Toast + statusBadge mapper + loading/empty/error states) | | | |
+| `<PermissionProvider>` / `usePermission()` / `<Can action resource scope>` | `components/auth/permission-provider.tsx` | 1.3 | ซ่อน/แสดงปุ่ม-เมนูตามสิทธิ์ — **UX เท่านั้น ไม่ใช่ security** (API ตรวจซ้ำเสมอ) · ใช้ตรรกะเดียวกับ backend (`canAccess`) |
+| `<LoginForm>` / `<LogoutButton>` | `components/auth/login-form.tsx` · `components/auth/logout-button.tsx` | 1.3 | โครงหน้า/คลาสตาม mockup `login.html` (card + shake + focus-ring) · คลาส `.focus-ring`/`.fade-in`/`.shake` อยู่ใน `app/globals.css` |
+| (Phase 1.5 จะสร้าง UI Kit ชุดแรก: Button/Table/Modal/Badge/Input/Card/Toast + statusBadge mapper + loading/empty/error states) | | | |
 
 รายการที่**ต้องเกิด**เป็น shared ตามแผน (อย่าสร้างซ้ำในโมดูลตัวเอง):
 - `statusBadge()` mapper 10 กลุ่มสี (`04` §8.1) — Phase 1.5
@@ -31,10 +33,22 @@
 | `createSupabaseServerClient()` / `createSupabaseAdminClient()` | `lib/supabase/server.ts` | 0.1 | Auth/Storage เท่านั้น · admin = service_role ห้าม import ฝั่ง client |
 | `createSupabaseBrowserClient()` | `lib/supabase/client.ts` | 0.1 | Auth ฝั่ง browser · ห้าม query ข้อมูลธุรกิจตรง (DEC-002) |
 | `APP_NAME` / `DISPLAY_TIMEZONE` / `BUDDHIST_YEAR_OFFSET` | `lib/constants.ts` | 0.1 | ค่าคงที่ระดับแอป — business rule ต้องมาจาก settings (ไฟล์ 13) ไม่ใช่ที่นี่ |
+| `requirePermission(action, resource, scope)` / `withPermission()` / `withAuthErrors()` | `lib/auth/require-permission.ts` | 1.3 | **จุดบังคับสิทธิ์เดียวของระบบ — ทุก endpoint ต้องเรียก** (DEC-002) · `action` = `view`/`manage` (DEC-009) · `resource` = capability code · `scope` = แถวปลายทาง (ทีม/บริษัท/ตัวเอง) |
+| `hasCapability` / `canAccess` / `checkPermission` / `isSessionExpired` | `lib/auth/permission.ts` | 1.3 | pure ทั้งหมด ใช้ร่วม FE/BE · Superadmin = manage ทุกอย่างโดยไม่มี record · `view ⊂ manage` |
+| `resolveScope()` / `isWithinScope()` | `lib/auth/scope.ts` | 1.3 | scope 4 แบบ global/team/company/self ตาม role_group (`05` §5 · `07` §6) — ห้าม query ข้ามทีม/ข้ามบริษัทโดยไม่ผ่านตัวนี้ |
+| `getSessionUser()` / `requireSession()` / `loadSessionUser()` | `lib/auth/session.ts` | 1.3 | Supabase JWT = ตัวตน · role+scope จาก Prisma = สิทธิ์ (แยกกันเสมอ) · timeout 24 ชม. นับจาก `users.last_login_at` |
+| `requireSessionPage()` | `lib/auth/page-guard.ts` | 1.3 | route guard ของ server component — เด้ง `/login?reason=<code>` |
+| session cache role+scope | `lib/auth/session-cache.ts` | 1.3 | TTL 5 นาที ต่อ instance (ห้าม query DB ทุก request) · **เปลี่ยน role/สถานะ/ทีม/บริษัท ต้องเรียก `invalidateSessionCache()`** |
+| `emitAudit()` (9 fields) | `lib/audit/audit.ts` | 1.3 (ขยาย 1.4) | ทุก mutation ต้องผ่านที่นี่ · Phase 1.4 จะเติม validator `reason` + diff util + immutable guard ระดับ DB — ห้ามสร้าง helper audit ตัวใหม่ |
+| `AuthError` / error code หมวด auth + ข้อความไทย | `lib/auth/errors.ts` | 1.3 | code ตาม `24` §6.9 เท่านั้น · `toAuthErrorResponse()` โยน error ที่ไม่ใช่ `AuthError` ต่อ (ห้ามกลืนเป็น 401/403) |
+| `loginSchema` (Zod ใช้ร่วม FE/BE) | `lib/auth/schemas.ts` | 1.3 | ฟอร์ม login และ `POST /api/auth/login` ใช้ schema เดียวกัน |
+| `assertNotLastSuperadmin()` / `countActiveSuperadmins()` | `lib/auth/superadmin-guard.ts` (pure) + `lib/auth/superadmin-queries.ts` (DB) | 1.3 | กัน lockout — Users/Roles module (1.6/1.9) ต้องเรียกก่อนเปลี่ยนสถานะหรือย้าย role |
+| `resolveLandingPath()` | `lib/auth/landing.ts` | 1.3 | ปลายทางหลัง login ตาม role (portal / field / dashboard) |
+| `getRequestMeta()` / `normalizeIpAddress()` | `lib/auth/request-meta.ts` | 1.3 | ip+user agent สำหรับ audit · `ip_address` เป็น INET — ค่าที่ไม่ใช่ IP ต้องเป็น NULL |
+| `pnpm auth:link-superadmin` | `scripts/link-superadmin.ts` | 1.3 | ผูก seed user เข้ากับ Supabase Auth (idempotent) — ต้องรัน 1 ครั้งต่อ environment ไม่งั้น login ตอบ `USER_NOT_PROVISIONED` |
 
 รายการที่**ต้องเกิด**เป็น shared ตามแผน:
-- `requirePermission(action, resource, scope)` + scope resolver — Phase 1.3 (ทุก endpoint ต้องใช้)
-- Audit emit helper (9 fields + immutable) — Phase 1.4 (ทุก mutation ต้องผ่าน)
+- Audit emit helper ตัวเต็ม (validator `reason` + immutable guard ระดับ DB) — Phase 1.4 (ต่อยอด `lib/audit/audit.ts`)
 - Pure calculation modules ครบ 13 สูตร (`22`) — Phase 3.1 (ห้ามคำนวณเงินนอก module นี้)
 - `success_rate` service กลาง (`40` §6.2) — Phase 2.6 (Report ใช้ซ้ำ)
 - Response envelope + error catalog — Phase 2.1
@@ -54,4 +68,6 @@
 | 2026-08-14 | แก้ `PROGRESS.md` ต้องคง marker ภาษาไทยเป๊ะ | parser ของ orchestrator (`orchestrator/lib/progress.mjs`) จับคำไทยตรงตัว: `## 🎯 งานถัดไป — Phase <id>: <ชื่อ>` (มีได้อันเดียว), หัวตาราง `\| # \| งาน \| สถานะ \| หมายเหตุ \|`, สถานะ ⬜/🔄/✅/⏸️ เท่านั้น, `## บันทึกการตัดสินใจ` = จุดหยุด parser, ไฟล์ ≤50,000 ตัวอักษร (วัดด้วย python `len()` ไม่ใช่ `wc -c`) · ผิดฟอร์แมต = แถวหาย**เงียบ ๆ** ไม่มี error → `pnpm test` มียามอยู่แล้ว (`orchestrator/lib/progress.test.mjs`) ให้รันก่อน commit ทุกครั้งที่แก้ PROGRESS |
 | 2026-08-14 | Vercel build ล้ม `TS2307: Cannot find module '@/lib/generated/prisma/client'` | `lib/generated/` ถูก gitignore ไว้ ถ้า pipeline ไหนไม่รัน `prisma generate` ก่อน `next build` จะพังตอน typecheck (local/CI ผ่านเพราะมีขั้น generate แยก) — แก้โดยให้ script `build` = `prisma generate && next build` · **ห้ามเอา `prisma generate` ออกจาก build** และถ้าเพิ่ม pipeline ใหม่ที่ typecheck โดยไม่ build ต้องมีขั้น generate ของตัวเอง |
 | 2026-08-14 | Prisma ไม่รู้จัก generated column | `advances.return_satang` เป็น `GENERATED ALWAYS AS ... STORED` (เติมมือตอน `--create-only`) แต่ Prisma มองเป็นคอลัมน์ธรรมดา ⇒ **client ยอมให้ใส่ค่าใน create/update แล้วไปตายที่ DB** (`cannot insert a non-DEFAULT value into column`) · เวลาสร้าง Advance ให้เซ็ตแค่ `requestedSatang`/`approvedSatang`/`usedSatang` · ยามอยู่ใน `prisma/schema.test.ts` (เช็คว่า SQL generated ยังอยู่ในโฟลเดอร์ migrations) |
+| 2026-08-14 | ไฟล์ที่ `import '@/lib/prisma'` เทสต์ไม่ได้ถ้าไม่มี DB | `lib/prisma.ts` สร้าง client ทันทีตอน import ⇒ ไฟล์ไหนที่ import มันจะ throw `ไม่พบ DATABASE_URL` ตั้งแต่ตอนโหลดโมดูลใน vitest (ไม่มีการโหลด `.env.local`) · **แยก pure logic ออกจากไฟล์ที่แตะ Prisma เสมอ** (ตัวอย่าง: `superadmin-guard.ts` = pure / `superadmin-queries.ts` = DB) หรือใช้ `vi.mock()` โมดูลที่แตะ DB |
+| 2026-08-14 | แพ็กเกจ `server-only` ไม่ได้ติดตั้งในโปรเจกต์นี้ | `import 'server-only'` จะพัง (resolve ไม่เจอ) — กันโค้ด server หลุดฝั่ง client ด้วยการไม่ import โมดูลที่แตะ Prisma/`next/headers` เข้าไฟล์ `'use client'` แทน |
 | 2026-08-13 | `next dev` เขียนบล็อกต่อท้าย CLAUDE.md เอง | บล็อก `<!-- BEGIN:nextjs-agent-rules -->` ถูกเติมกลับทุกครั้งที่รัน dev — commit ไปเลย (ปิดได้ด้วย `agentRules: false` ใน next.config ถ้าไม่ต้องการ) |

@@ -5,6 +5,47 @@
 
 ---
 
+## Phase 1.3 — Auth & Access Control + Permission Middleware
+
+**วันที่**: 2026-08-14 · **commit**: `edfdd9b` · **branch**: `staging`
+
+### สิ่งที่ทำ
+- **ชั้นสิทธิ์ (pure — ไม่แตะ DB/HTTP ทดสอบได้ล้วน)**: `lib/auth/permission.ts` (`hasCapability` / `canAccess` / `checkPermission` / `isSessionExpired`) · `lib/auth/scope.ts` (`resolveScope` / `isWithinScope`) · `lib/auth/superadmin-guard.ts` · `lib/auth/landing.ts` · `lib/auth/errors.ts`
+- **จุดบังคับสิทธิ์เดียวของระบบ**: `lib/auth/require-permission.ts` — `requirePermission(action, resource, scope)` + `withPermission()` (ห่อ route handler) + `withAuthErrors()` · ลำดับปฏิเสธ: บัญชีไม่ active → session หมดอายุ → capability → scope ย่อย
+- **Session**: `lib/auth/session.ts` — Supabase JWT = ตัวตน / role+scope จาก Prisma = สิทธิ์ (แยกกันตาม DEC-002 ไม่ใช้ RLS) · `lib/auth/session-cache.ts` cache role+scope TTL 5 นาทีต่อ instance + `invalidateSessionCache()`
+- **Audit**: `lib/audit/audit.ts` — `emitAudit()` ครบ 9 fields + ip/user-agent · ใช้จริงที่ login สำเร็จ/ล้มเหลว/logout (ทั้ง 3 ทางตาม `05` §13–14)
+- **API**: `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/session` (ตาม `05` §14)
+- **Proxy**: `proxy.ts` refresh session cookie ของ Supabase + route guard หน้าเว็บ (redirect `/login?next=`) — `/api/*` ไม่ redirect เพราะต้องตอบ 401/403 เป็น JSON
+- **FE**: `app/login/page.tsx` + `components/auth/login-form.tsx` (โครง/คลาสตาม mockup `login.html` รวม shake/fade-in/focus-ring ที่ย้ายมาไว้ใน `app/globals.css`) · `components/auth/permission-provider.tsx` (`<PermissionProvider>` / `usePermission()` / `<Can>`) · `components/auth/logout-button.tsx` · `app/dashboard/page.tsx` = placeholder ที่ guard จริงด้วย `requireSessionPage()`
+- **เครื่องมือ**: `scripts/link-superadmin.ts` + `pnpm auth:link-superadmin` — ผูก seed user เข้ากับ Supabase Auth (idempotent)
+- **spec**: `24` v3.2 เพิ่ม **§6.9 หมวด Auth & Access Control** (รวบ `PERMISSION_DENIED`/`LAST_SUPERADMIN_REMOVAL` เดิม + เพิ่ม `UNAUTHENTICATED`/`SESSION_EXPIRED`/`INVALID_CREDENTIALS`/`ACCOUNT_INACTIVE`/`USER_NOT_PROVISIONED`) · `REUSE_INDEX` เพิ่ม 15 รายการ + 2 กับดัก
+
+### การตัดสินใจระหว่างทาง
+- **Scope 4 แบบ map จาก role_group** (`05` §5 + `07` §6): `system` → `global` (ข้อจำกัดเชิงหน้าที่มาจาก capability ไม่ใช่ scope) · ผู้จัดการ/หัวหน้าทีม → `team` (union ของ `team_managers` + `teams.supervisor_id` + `users.team_id`) · พนักงานติดตามทรัพย์ → `self` · `finance_company` → `company`
+- **Session timeout 24 ชม. วัดจาก `users.last_login_at`** ไม่ใช่ cookie แยก — ไม่ต้องเพิ่ม state ใหม่ ตรวจซ้ำได้ทุก request และ audit ย้อนกลับได้ (`05` §10/§17)
+- **failed login ใช้ `action = login` + `after.result = 'failed'`** เพราะ enum `audit_action` ใน `02` §3 ไม่มี `login_failed` — ห้ามสร้าง enum ใหม่เอง (event ชื่อ `auth.login.failed` ตาม `05` §14 เก็บใน `after.code`)
+- **failed login ของอีเมลที่ไม่มีในระบบ**: หา `organization_id` จาก user ที่อีเมลตรงก่อน ถ้าไม่มีใช้ organization เดียวของระบบ (`02` §12) — เพื่อให้ audit ลงได้ทุกครั้งตาม `05` §13 โดยไม่ leak ว่ามีอีเมลนี้จริงหรือไม่ (ข้อความตอบกลับเป็น `INVALID_CREDENTIALS` เสมอ)
+- **`toAuthErrorResponse()` โยน error ที่ไม่ใช่ `AuthError` ต่อ** — ไม่กลืน DB error เป็น 401/403 ปลอม (มี test คุม)
+- **แยก `superadmin-guard.ts` (pure) ออกจาก `superadmin-queries.ts` (Prisma)** เพราะ `lib/prisma.ts` สร้าง client ตอน import ⇒ ไฟล์ที่ import มันจะเทสต์ใน vitest ไม่ได้ถ้าไม่มี `DATABASE_URL`
+- **`lib/supabase/server.ts` เรียก `await cookies()` ก่อน `getPublicEnv()`** — runtime API ต้องมาก่อน ไม่งั้น `next build` พยายาม prerender `/dashboard` แล้วตายที่ env (พังจริงตอน build ครั้งแรก)
+
+### verify ที่รันจริง (DoD ของ PLAN §1.3)
+- `pnpm typecheck` เขียว · `pnpm vitest run` **85 tests / 10 files** ผ่านหมด · `pnpm lint` เขียว · `pnpm build` (Next 16 + Turbopack) ผ่าน — route ทั้ง 5 เส้นเป็น dynamic ตามที่ควร
+- **test ครอบ scope ทั้ง 4 แบบ** (`scope.test.ts`): global เห็นทุกแถว · team เฉพาะทีมที่ดูแล/แถวตัวเอง · company ข้ามบริษัทถูกปฏิเสธ · self เฉพาะของตัวเอง
+- **test สิทธิ์ 3 ระดับ DEC-009** (`permission.test.ts`): ไม่มี record = มองไม่เห็น · `view` ดูได้แต่สั่งการไม่ได้ · `manage` ผ่านทั้งคู่ · Superadmin ผ่านทุก capability โดยไม่มี record
+- **test endpoint ไม่มีสิทธิ์ตอบ 403 แม้เรียกตรง** (`require-permission.test.ts`): การเงิน/Field Agent เรียก endpoint ของ `manage_roles` → 403 + ไม่มี `data` ใน body · ไม่ได้ login → 401 · บัญชีถูกระงับ → 403 `ACCOUNT_INACTIVE`
+- test session timeout ที่ขอบ 24 ชม. พอดี/เกิน · test cache หมด TTL แล้วโหลดใหม่ · test `LAST_SUPERADMIN_REMOVAL` ทั้งทางปิดใช้งานและย้าย role
+
+### จุดที่คนถัดไปควรรู้
+- **ทุก endpoint ที่เขียนต่อจากนี้ต้องขึ้นต้นด้วย `requirePermission()`** — ไม่มีข้อยกเว้น (DEC-002) · scope ย่อยส่งผ่านพารามิเตอร์ที่ 3 (`{ teamId }` / `{ companyId }` / `{ userId }`)
+- **ต้องรัน `pnpm auth:link-superadmin <email> <password>` 1 ครั้งต่อ environment** (local/staging/production) ไม่งั้น seed user จะ login ไม่ได้ (`supabase_uid` เป็น NULL → ตอบ `USER_NOT_PROVISIONED`) — ยังไม่ได้รันบน staging ในเซสชันนี้ (ต้องใช้ service role key + ตั้งรหัสผ่านโดยคน)
+- **ยังไม่ผูก role ↔ capability** (`role_capabilities` ว่างตามงาน 1.2) ⇒ ตอนนี้มีแต่ Superadmin ที่ทำอะไรได้จริง — role อื่นจะได้สิทธิ์เมื่อ **Phase 1.6** seed matrix เต็ม
+- **เปลี่ยน role / สถานะ / ทีม / บริษัทของผู้ใช้ ต้องเรียก `invalidateSessionCache(supabaseUid)`** ไม่งั้นสิทธิ์เก่าค้างได้สูงสุด 5 นาที (Users module 1.9 / Roles module 1.6 ต้องไม่ลืม)
+- ปลายทาง redirect `/portal` (บริษัทไฟแนนซ์) และ `/field` (พนักงานติดตามทรัพย์) **ยังไม่มีหน้าจริง** — เกิดใน Phase 6.x / 2.10 · ตอนนี้มีแต่ `/dashboard` (placeholder ที่ Phase 1.5 จะแทนที่ด้วย App Shell)
+- Phase 1.4 ให้ **ต่อยอด `lib/audit/audit.ts`** ไม่ใช่สร้างไฟล์ใหม่ (validator `reason` + diff util + trigger กัน UPDATE/DELETE ระดับ DB)
+
+---
+
 ## Phase 1.2 — Prisma Schema ชุดที่ 2: Group C–G + Seed Data
 
 **วันที่**: 2026-08-14 · **commit**: `1eba90e` · **branch**: `staging`

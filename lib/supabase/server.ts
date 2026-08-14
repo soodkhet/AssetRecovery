@@ -7,8 +7,9 @@ import { getPublicEnv, getServerEnv } from '@/lib/env'
  * ข้อมูลธุรกิจทั้งหมดอ่าน/เขียนผ่าน Prisma เท่านั้น (DEC-001/002)
  */
 export async function createSupabaseServerClient() {
-  const env = getPublicEnv()
+  // อ่าน cookie ก่อนเสมอ — เป็น runtime API ที่บอก Next ว่าหน้านี้ dynamic (กัน prerender หน้าที่ต้องมี session)
   const cookieStore = await cookies()
+  const env = getPublicEnv()
 
   return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     cookies: {
