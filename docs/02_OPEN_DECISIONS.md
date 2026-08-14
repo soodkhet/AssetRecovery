@@ -30,7 +30,7 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 
 ### สิ่งที่มตินี้ยังไม่ครอบ (blocker ภายนอก — ติดตามใน `93` §7.1 + PROGRESS.md)
 
-สมัคร GitHub/Vercel/Supabase (ก่อน 0.1) · Google Maps API key (ก่อน 2.9) · spec แดชบอร์ดหลัก (6.6 ⏸️) · Auth method Client Portal (Phase 7 🔒) · ทดสอบ Bank File กับธนาคารจริง + ค่าเริ่มต้นเลขใบกำกับ (ก่อนใช้เงินจริง) · PDPA sign-off (ก่อน go-live) · 🔶 รายการที่ติดธง "นักบัญชีเซ็นรับ": B1, B2, B3(ฐานรวม), A1(อัตราจริงรายบริษัท), D12(เกณฑ์ลูกหนี้พนักงาน) — ไม่บล็อกโค้ด แต่บล็อกการออกเอกสาร/จ่ายเงินจริงครั้งแรก
+สมัคร GitHub/Vercel/Supabase (ก่อน 0.1) · Google Maps API key (ใส่ที่ Vercel/staging ก่อน**ใช้จริง** — มติ PO 14/08/2569: โค้ด 2.9 ไม่บล็อก ไม่มี key = fuel PER_KM รอ job `fuel_distance_retry` ตาม D10) · spec แดชบอร์ดหลัก (6.6 ⏸️) · Auth method Client Portal (Phase 7 🔒) · ทดสอบ Bank File กับธนาคารจริง + ค่าเริ่มต้นเลขใบกำกับ (ก่อนใช้เงินจริง) · PDPA sign-off (ก่อน go-live) · 🔶 รายการที่ติดธง "นักบัญชีเซ็นรับ": B1, B2, B3(ฐานรวม), A1(อัตราจริงรายบริษัท), D12(เกณฑ์ลูกหนี้พนักงาน) — ไม่บล็อกโค้ด แต่บล็อกการออกเอกสาร/จ่ายเงินจริงครั้งแรก
 
 ---
 
@@ -184,8 +184,9 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 ### ⬜ D9 — Recycle รอบใหม่: ทีมเดิมหรือ route ใหม่ + ประวัติรอบเก่าแสดงที่ไหน
 - **[default]**: สร้าง assignment record ใหม่เสมอ · re-run team suggestion จาก province ปัจจุบัน + pre-select ทีมเดิม · Case Detail มีแท็บ "รอบก่อนหน้า" ดูหลักฐาน/ผลรอบเก่า · **บล็อก**: 2.3, 2.6 · **คำตอบ**:
 
-### ⬜ D10 — Google Maps ล่ม/quota หมดตอนปิดงาน + expense ยอด 0 + payout batch ว่าง
-- **[default]**: ปิดงานสำเร็จเสมอ — fuel เป็น `pending_calculation` แล้ว retry ด้วย background job · expense ยอด 0 ไม่สร้าง record (เข้าเงื่อนไข "เคสไม่มี expense" DEC-006/D6 — เขียนกำกับใน `19` §6.1) · เพิ่ม `EMPTY_PAYOUT_BATCH` reject batch 0 รายการ · **บล็อก**: 2.9, 3.4 · **คำตอบ**:
+### ✅ D10 — Google Maps ล่ม/quota หมดตอนปิดงาน + expense ยอด 0 + payout batch ว่าง
+- **[default]**: ปิดงานสำเร็จเสมอ — fuel เป็น `pending_calculation` แล้ว retry ด้วย background job · expense ยอด 0 ไม่สร้าง record (เข้าเงื่อนไข "เคสไม่มี expense" DEC-006/D6 — เขียนกำกับใน `19` §6.1) · เพิ่ม `EMPTY_PAYOUT_BATCH` reject batch 0 รายการ · **บล็อก**: 2.9, 3.4 · **คำตอบ**: ✅ **มติ PO 14/08/2569 — ใช้ default** (implement ส่วนของ 2.9 แล้ว · ส่วน `EMPTY_PAYOUT_BATCH` ยังค้างไปที่ 3.4)
+- **วิธี implement จริงใน Phase 2.9** (ต่างจากถ้อยคำของ default 1 จุด เพราะกติกาห้ามสร้าง state ใหม่ — Rule 04): **ไม่เพิ่มค่า `pending_calculation` เข้า enum `expense_status`** แต่ใช้ "ยังไม่สร้างแถว" แทน — ปิดงาน/ส่งกลับสำเร็จเสมอ, allowance สร้างทันที, ส่วน fuel โหมด `PER_KM` ที่คำนวณระยะทางไม่ได้ (Maps ล่ม/quota หมด/ยังไม่ได้ใส่ `GOOGLE_MAPS_API_KEY`) จะ**ยังไม่สร้างแถว** และตั้งงาน `fuel_distance_retry` ไว้ในตาราง `jobs` ให้มาสร้างทีหลัง (idempotent — กันซ้ำด้วย partial unique `uniq_active_case_expense_per_assignment`) · ยอด 0 ไม่สร้าง record ตามเดิม
 
 ### ⬜ D11 — เลขรันนิ่งเอกสาร: กัน race + ขอบปี + receipt/50ทวิ ไม่มี format config
 - **[default]**: `SELECT ... FOR UPDATE` ใน transaction เดียวกับ insert (ห้ามใช้ PG sequence — gap ตอน rollback ผิดกฎ "ห้ามขาดช่วง") · ตัดปี yearly_reset ด้วย issue_date เวลาไทย · ขยาย `13` §6.12 ครอบ receipt + wht_certificate (sequence แยกต่อชนิด) · **บล็อก**: 4.3, 4.5 · **คำตอบ**:
