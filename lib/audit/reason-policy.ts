@@ -139,6 +139,8 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
 export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'case_documents',
   'case_contacts',
+  // `38` §6.4 — append-only ประวัติการแก้เคส (ตัว audit จริงของการแก้ยังอยู่ที่ `audit_logs` targetType `cases`)
+  'case_edit_history',
   'recycle_requests',
   'case_assignments',
   'check_ins',

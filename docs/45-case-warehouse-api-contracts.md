@@ -14,6 +14,7 @@
 | v1 | 03/07/2569 | สร้างไฟล์ครั้งแรก — ไฟล์นี้ถูก reference ไว้ตั้งแต่ Batch ก่อนหน้าในไฟล์ `02` §เชิงอรรถ, `27` §Scope note, `91` §Scope note, `92` §14 แต่ไม่เคยถูกสร้างขึ้นจริง (ต่างจากไฟล์ 39/42/43 ที่เป็นการ merge โดยตั้งใจและมีบันทึกไว้ใน README) — ไฟล์นี้**ไม่ใช่เนื้อหาใหม่** เป็นการรวบรวม endpoint ที่มีอยู่แล้วครบถ้วนในไฟล์ต้นทาง 38/40/41/44 มาไว้ที่เดียว ไม่มีการเปลี่ยนแปลง business logic ใดๆ |
 | v1.1 | 04/07/2569 | **Sync กับไฟล์ 41 v2.1**: §6.3 เติม `POST /api/field/cases/:id/resubmit-close` และ `POST /api/field/expenses/:id/resubmit` + §7 เติม event `case.close_resubmitted` / `expense.resubmitted` — ตาม endpoint ที่เติมเข้าไฟล์ 41 §17.1 (ปิดช่องว่าง action `resubmit_close_case`/`resubmit_expense` ที่นิยามไว้ใน 41 §8 แต่ไม่มี endpoint) |
 | v1.2 | 04/07/2569 | ✅ Product Owner ยืนยันชื่อ endpoint ทั้ง 2 แล้ว (DEC-006/D9) |
+| v1.3 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.2**: §6.1 เติม `PATCH /api/cases/:id` (action `edit_case` ที่ `38` §8/§12 นิยามไว้พร้อม error `CASE_LOCKED_AFTER_APPROVAL` และ `edit_history` ใน §6.4 แต่ §17.1 ของไฟล์ 38 ไม่เคยประกาศ endpoint) — ไม่มี business logic ใหม่ รวมเป็น 40 endpoints |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -42,6 +43,7 @@ POST   /api/cases                       รับเคส (manual form submit +
 POST   /api/cases/import                Import ไฟล์ Excel/CSV แบบ batch
 GET    /api/cases                       List พร้อม filter (status, source_channel, finance_company_id, province)
 GET    /api/cases/:id                   รายละเอียดเคส
+PATCH  /api/cases/:id                   แก้ไขเคส (edit_case — เฉพาะ draft/pending_review/need_info) เพิ่มแถวใน edit_history ทุกครั้ง
 POST   /api/cases/:id/documents         อัปโหลดเอกสารต่อ slot (document_type ระบุใน payload)
 PATCH  /api/cases/:id/status            เปลี่ยนสถานะ (review/accept/reject/request_more_info) — body ต้องมี reason เมื่อ action เป็น reject/need_info/เปลี่ยนทีม
 GET    /api/cases/:id/team-suggestion   คำนวณทีมที่เสนอจากจังหวัดที่อยู่ปัจจุบัน

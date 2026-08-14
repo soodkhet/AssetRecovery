@@ -136,6 +136,9 @@ export const ERROR_CATALOG = {
   // ── 38 §12 Case Submission ─────────────────────────────────────────────
   CASE_REF_DUPLICATE: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_DOCUMENT_INCOMPLETE: { status: 400, severity: 'reject', source: '38 §12' },
+  // เติมเข้า `38` §12 พร้อม Phase 2.2 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  CASE_NOT_FOUND: { status: 404, severity: 'reject', source: '38 §12' },
+  CASE_PRODUCT_PHOTO_LIMIT: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_NO_TEAM_MATCH: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_INVALID_NATIONAL_ID: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_INVALID_PHONE_FORMAT: { status: 400, severity: 'reject', source: '38 §12' },

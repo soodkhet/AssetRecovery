@@ -5,6 +5,38 @@
 
 ---
 
+## Phase 2.2 — Case Submission BE ชุด 1 (schema + CRUD + เอกสาร)
+
+**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `auto/phase-2.2`
+
+### สิ่งที่ทำ
+
+- **Schema/migration** (`20260814090450_case_submission_fields` + `20260814092000_case_ref_unique_not_partial`) — เติมสิ่งที่ `02` §6 Group C ขาดเทียบกับไฟล์ 38 §6:
+  `cases.case_ref_normalized` + unique index `uniq_cases_company_case_ref(org, company, case_ref_normalized)` · enum ใหม่ `debtor_nationality`/`asset_kind` + คอลัมน์สัญชาติ/passport/ประเภททรัพย์ · ที่อยู่ครบ 3 ชุด (`work_addr_*`, `id_card_addr_*`) · `projected_revenue_satang`/`projected_revenue_source` · **ปลด NOT NULL** ของ `debtor_name`/`asset_description` ตาม §11 · ตารางใหม่ `case_edit_history` (append-only) · `recycle_requests.previous_round`/`new_round`
+- **Pure module** — `lib/cases/case-ref.ts` (`normalizeCaseRef` = uppercase+trim เท่านั้น) · `lib/cases/case.ts` (สัญชาติ→เอกสารยืนยันตัวตน, เบอร์โทร 10/9-10 หลัก, เลขบัตร 13 หลัก, slot เอกสาร + เพดานรูป 8 รูป, `missingRequiredFields`/`caseReadiness`, `splitAssetIdentifier` IMEI 15 หลัก vs serial, `assertCaseEditable`) · `lib/cases/errors.ts` (9 code) · `lib/cases/schemas.ts` (Zod ใช้ร่วม FE/BE) · `lib/cases/permissions.ts`
+- **ชั้นข้อมูล** `lib/cases/queries.ts` — `listCases`/`getCase`/`createCase`/`updateCase`/`addCaseDocument` + `caseScopeWhere()` (scope ระดับแถว 4 แบบ) · mutation ทุกตัวอยู่ใน `$transaction` เดียวกับ `emitAudit()`
+- **API 5 endpoint** ผ่าน `withEndpoint()` ทั้งหมด: `GET/POST /api/cases` · `GET/PATCH /api/cases/:id` · `POST /api/cases/:id/documents`
+- **เทสต์ 51 เคส (4 ไฟล์)** — pure 3 ไฟล์ + **เทสต์ระดับ DB จริง** `case-duplicate.db.test.ts`: 3 ช่องทางยิงพร้อมกัน (manual/import/api) ด้วยเลขที่ต่างกันแค่ตัวพิมพ์/ช่องว่าง → สำเร็จ 1 ราย, เลขที่มี dash/underscore ต่างกันไม่ถือว่าซ้ำ, เลขเดียวกันคนละบริษัทได้, เคสจาก API ข้อมูลไม่ครบสร้าง draft ได้
+
+### การตัดสินใจระหว่างทาง (ไม่มีข้อไหนขัดสเปค — บันทึกไว้ให้ตรวจย้อนได้)
+
+1. **`02` §6 Group C ไม่ครบเทียบกับไฟล์ 38 §6** (เขียนไว้ก่อนไฟล์ 38 รอบ reformat) — เติมตาม PLAN §2.2 ที่ระบุ migration ชุดนี้ไว้แล้ว แล้ว sync `02` เป็น **v4.0** พร้อม changelog เต็ม ไม่มีการเปลี่ยน business logic
+2. **`recycle_history` ไม่แยกตารางใหม่** — `recycle_requests` ของ `02` เก็บ `request_note`/`decision_note`/`decided_by/at` ครบแล้ว ขาดแค่เลขรอบ ⇒ เติม `previous_round`/`new_round` แทนการสร้างตารางซ้ำซ้อน (`38` §6.4 `recycle_history` = แถวที่ `status = approved`)
+3. **`PATCH /api/cases/:id` เป็น endpoint ใหม่ใน `45` v1.3** — `38` §8/§12 นิยาม `edit_case` + `CASE_LOCKED_AFTER_APPROVAL` + `edit_history` ไว้ แต่ §17.1 ไม่เคยประกาศ endpoint ⇒ เติมเข้า `45` §6.1 พร้อมโค้ด (contract รวมเป็น **40 endpoints**)
+4. **error code ใหม่ 2 ตัว** `CASE_NOT_FOUND` (404) / `CASE_PRODUCT_PHOTO_LIMIT` (400) เติมเข้า `38` §12 + catalog ในคอมมิตเดียวกันตาม Rule 04
+5. **สิทธิ์อ่านเคสเป็น any-of** — `02` §12 ไม่มี capability "ดูเคส" แยก ⇒ เพิ่ม `requireAnyPermission()` + `withEndpoint({resource: [...]})` แล้วให้อ่านเคสได้เมื่อมี capability ตัวใดตัวหนึ่งใน `record_admin_data`/`approve_case`/`assign_case`/`view_master_data`/`view_own_company_data` (ตรงกับผู้ที่เห็นเมนู `cases.submit` ใน `06` §7.1.1) · **ไม่แตะ matrix ที่ seed ไว้**
+6. **unique index ไม่ partial** — `cases` มี `UNIQUE(org, company, case_ref, tracking_round)` เดิมที่ไม่ partial อยู่แล้ว ⇒ ทำ index ใหม่ให้ความหมายตรงกัน (เคสที่ soft delete ยังจองเลขไว้) แทนที่จะสร้างพฤติกรรม "ลบแล้วใช้เลขซ้ำได้" ที่สเปคไม่ได้ระบุ
+7. **`case_edit_history` เป็น append-only ที่ชั้น service ไม่ใส่ trigger DB** — ตารางนี้เป็นปลาย `ON DELETE CASCADE` ของ `cases` การใส่ trigger ห้าม DELETE จะไปบล็อก cascade ด้วย (บันทึกเหตุผลไว้ใน `02` §13)
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 2.3** ต่อยอดตรง: `caseReadiness()` คือ gate ก่อน `pending_review` (ยังไม่มีใครเรียก) · คอลัมน์ `projected_revenue_*` + `previous_round`/`new_round` มีแล้วรอ logic · `case_edit_history` ถูกเขียนเฉพาะตอน `PATCH /:id`
+- **ยังไม่มีในรอบนี้** (อยู่ใน 2.3/2.5 ตามแผน): `POST /api/cases/import`, `PATCH /:id/status`, `GET /:id/team-suggestion`, recycle flow, การลบเอกสาร (contract ไม่มี endpoint ลบ) และการอัปโหลดไฟล์จริงขึ้น Storage (endpoint รับ metadata + `file_hash` ที่ FE อัปโหลดเสร็จแล้ว)
+- `source_channel` มาจาก payload — API ingestion ยังใช้ session ของผู้เรียกเป็น `created_by` (service account ตาม `38` §6.4 เป็นงานตอนต่อ API ingestion จริง)
+- ห้ามลบแถว `users`/`organizations` ใน test DB (FK จาก `audit_logs` → trigger immutable) — ดูกับดักใน REUSE_INDEX
+
+---
+
 ## Phase 2.1 — API Contract Infra (ไฟล์ 45): 39 endpoints + event registry + envelope + error catalog
 
 **วันที่**: 2026-08-14 · **commit**: `4dba3a3` · **branch**: `auto/phase-2.1`
