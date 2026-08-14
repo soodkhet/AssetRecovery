@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { FileViewerModal } from '@/components/cases/file-viewer-modal'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
@@ -17,6 +17,7 @@ import {
   StatusBadge,
   Textarea,
   useToast,
+  type ModalSize,
 } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -59,12 +60,34 @@ export function CaseDetailModal({
   caseId,
   onClose,
   onChanged,
+  size = 'lg',
+  title,
+  description,
+  headerSlot,
+  extraSection,
+  footerActions,
+  hideWorkflowActions = false,
 }: {
   open: boolean
   caseId: string | null
   onClose: () => void
   /** เรียกเมื่อสถานะเคสเปลี่ยนสำเร็จ — ผู้เรียกใช้รีโหลดรายการของตัวเอง */
   onChanged?: (detail: CaseDetailDto) => void
+  size?: ModalSize
+  /** แทนหัวเรื่อง/คำอธิบายเริ่มต้น (ไฟล์ 40 เปิด modal นี้ในบริบท "มอบหมายงาน") */
+  title?: ReactNode
+  description?: ReactNode
+  /** กล่องแจ้งเตือนเหนือรายละเอียดเคส (เช่น คำเตือนเรื่องขอความยินยอมของ `40` §7.3) */
+  headerSlot?: ReactNode
+  /**
+   * section ต่อท้ายรายละเอียดเคสภายใน modal เดียวกัน — `40` §7.3 บังคับว่า Agent Picker ต้องอยู่
+   * หน้าเดียวกับรายละเอียดเคส (ห้ามสลับ modal/หน้าใหม่)
+   */
+  extraSection?: ReactNode
+  /** ปุ่มของโมดูลผู้เรียก (มอบหมาย/เปลี่ยนผู้รับผิดชอบ) — วางต่อจากปุ่ม "ปิดหน้าต่าง" */
+  footerActions?: ReactNode
+  /** ซ่อนปุ่ม workflow ของไฟล์ 38 (รับเคส/ไม่รับ/ขอข้อมูลเพิ่ม) เมื่อเปิดจากโมดูลอื่น */
+  hideWorkflowActions?: boolean
 }) {
   const { can } = usePermission()
   const { showToast } = useToast()
@@ -105,7 +128,10 @@ export function CaseDetailModal({
 
   const status = detail?.status ?? ''
   const mode = caseDetailMode(status)
-  const actions = detail === null ? [] : caseModalActions(status, (capability) => can('manage', capability))
+  const actions =
+    detail === null || hideWorkflowActions
+      ? []
+      : caseModalActions(status, (capability) => can('manage', capability))
 
   async function runAction(button: CaseActionButton): Promise<void> {
     if (detail === null) return
@@ -149,16 +175,20 @@ export function CaseDetailModal({
       <Modal
         open={open}
         onClose={onClose}
-        size="lg"
-        title={detail === null ? 'รายละเอียดเคส' : `เคส ${detail.caseRef} · รอบที่ ${detail.trackingRound}`}
+        size={size}
+        title={
+          title ??
+          (detail === null ? 'รายละเอียดเคส' : `เคส ${detail.caseRef} · รอบที่ ${detail.trackingRound}`)
+        }
         description={
-          mode === 'review'
+          description ??
+          (mode === 'review'
             ? 'ตรวจข้อมูล เอกสาร และทีมที่ระบบเสนอ แล้วตัดสินใจได้ในหน้าเดียว (`38` §7.5)'
             : mode === 'recycle_review'
               ? 'พิจารณาคำขอรีไซเกิล — อนุมัติแล้วเคสจะขึ้นรอบใหม่และกลับเข้าคิวมอบหมายทันที'
               : mode === 'recycle_request'
                 ? 'เคสปิดแบบไม่สำเร็จ — ขอรีไซเกิลได้เมื่อไฟแนนซ์ต้องการให้ลองติดตามใหม่'
-                : 'ดูรายละเอียดเคส (สถานะนี้แก้ไขจากหน้านี้ไม่ได้)'
+                : 'ดูรายละเอียดเคส (สถานะนี้แก้ไขจากหน้านี้ไม่ได้)')
         }
         footer={
           <>
@@ -177,6 +207,7 @@ export function CaseDetailModal({
                 {button.label}
               </Button>
             ))}
+            {footerActions}
           </>
         }
       >
@@ -191,6 +222,8 @@ export function CaseDetailModal({
                 {actionError.message}
               </InlineAlert>
             )}
+
+            {headerSlot}
 
             <CaseSummary detail={detail} />
 
@@ -237,6 +270,9 @@ export function CaseDetailModal({
                 </Field>
               </section>
             )}
+
+            {/* ส่วนของโมดูลผู้เรียก — `40` §7.3 วาง Agent Picker ต่อท้ายในหน้าเดียวกัน */}
+            {extraSection}
           </div>
         )}
       </Modal>

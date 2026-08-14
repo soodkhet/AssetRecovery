@@ -553,6 +553,47 @@ suite('Phase 2.6 — ยามสิทธิ์ + ข้อมูลประ�
     expect(unfiltered.columns.find((column) => column.agentId === AGENT_A)?.cases).toHaveLength(1)
   })
 
+  it('Kanban/agent picker ส่งข้อมูลที่หน้าจอ §7.3/§7.5 ต้องใช้ (side ของทีม · % สำเร็จ · badge คำขอค้าง)', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    await queries.acceptAssignment(agentA, caseId, { actor: agentA, meta })
+    await queries.reassignCase(
+      manager,
+      caseId,
+      { agentId: AGENT_B, reason: 'สลับผู้รับผิดชอบ' },
+      { actor: manager, meta },
+    )
+
+    // badge Inhouse/Outsource ของ agent picker (`40` §7.3)
+    const agents = await agentQueries.listTeamAgents(manager, TEAM_A)
+    expect(agents.teamSide).toBe('inhouse')
+
+    const board = await agentQueries.getTeamKanban(manager, TEAM_A, {})
+    expect(board.teamSide).toBe('inhouse')
+
+    const columnA = board.columns.find((column) => column.agentId === AGENT_A)
+    // เคสยังเป็นของคนเดิมระหว่างรอความยินยอม + การ์ดต้องบอกได้ว่ามีคำขอค้าง (`40` §7.5)
+    const card = columnA?.cases.find((item) => item.caseId === caseId)
+    expect(card?.state).toBe('accepted')
+    expect(card?.hasPendingReassignment).toBe(true)
+    // % ความสำเร็จบนหัวคอลัมน์มาจาก service กลางตัวเดียวกับ agent picker
+    expect(columnA?.successRate).toBe(agents.agents.find((each) => each.agentId === AGENT_A)?.successRate)
+
+    const cases = await agentQueries.listAgentCases(manager, TEAM_A, AGENT_A)
+    expect(cases.cases.find((item) => item.caseId === caseId)?.hasPendingReassignment).toBe(true)
+  })
+
+  it('รายการมอบหมายส่งทีมที่ผู้ใช้เห็นมาด้วย — ผู้จัดการเห็นทุกทีมที่ดูแล หัวหน้าเห็นทีมเดียว (`40` §7.1)', async () => {
+    const managerTeams = await queries.listAssignments(manager, { page: 1, limit: 1 })
+    expect(managerTeams.teams.map((team) => team.teamId).sort()).toEqual([TEAM_A, TEAM_B].sort())
+    // side ของแต่ละทีมต้องมาด้วย — ผู้จัดการที่ดูแลทั้ง inhouse และ outsource ต้องแยกออกจาก badge (`40` §7.2)
+    expect(managerTeams.teams.find((team) => team.teamId === TEAM_A)?.teamSide).toBe('inhouse')
+    expect(managerTeams.teams.find((team) => team.teamId === TEAM_B)?.teamSide).toBe('outsource')
+
+    const supervisorTeams = await queries.listAssignments(supervisor, { page: 1, limit: 1 })
+    expect(supervisorTeams.teams.map((team) => team.teamId)).toEqual([TEAM_A])
+  })
+
   it('รายการมอบหมายกรองตามสถานะได้ และแสดง badge คำขอที่รอผล', async () => {
     const assigned = await seedApprovedCase()
     await queries.assignCase(manager, assigned, { agentId: AGENT_A }, { actor: manager, meta })
