@@ -13,7 +13,10 @@ export interface FinanceSettingsTab {
   label: string
   /** หัวข้อใน `docs/13-accounting-finance-settings.md` ที่เป็นต้นทางของแท็บนี้ */
   section: string
-  /** หน้าจริงพร้อมใช้แล้วหรือยัง — `false` = ยังเป็น placeholder รอ phase ที่ระบุ */
+  /**
+   * หน้าจริงพร้อมใช้แล้วหรือยัง — `false` = ยังเป็น placeholder รอ phase ที่ระบุ
+   * (ตั้งแต่ Phase 1.12 ครบทั้ง 13 แท็บแล้ว — ช่องนี้เหลือไว้สำหรับแท็บใหม่ในอนาคต)
+   */
   available: boolean
   plannedPhase?: string
 }
@@ -22,16 +25,16 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'cycles', label: 'รอบบิลและรอบจ่าย', section: '§6.1', available: true },
   { id: 'approval', label: 'สายการอนุมัติ', section: '§6.2 + §6.2.1', available: true },
   { id: 'bank', label: 'บัญชีธนาคารบริษัท', section: '§6.3', available: true },
-  { id: 'tax', label: 'กติกาภาษี (Tax Profile)', section: '§6.4', available: false, plannedPhase: '1.12' },
-  { id: 'vat', label: 'อัตรา VAT', section: '§6.5', available: false, plannedPhase: '1.12' },
+  { id: 'tax', label: 'กติกาภาษี (Tax Profile)', section: '§6.4', available: true },
+  { id: 'vat', label: 'อัตรา VAT', section: '§6.5', available: true },
   { id: 'cost', label: 'ศูนย์ต้นทุน', section: '§6.6', available: true },
-  { id: 'docs', label: 'รูปแบบเอกสารภายใน', section: '§6.7', available: false, plannedPhase: '1.12' },
+  { id: 'docs', label: 'รูปแบบเอกสารภายใน', section: '§6.7', available: true },
   { id: 'bankfile', label: 'ไฟล์โอนธนาคาร', section: '§6.8', available: true },
-  { id: 'export', label: 'รูปแบบไฟล์ส่งบัญชี', section: '§6.9', available: false, plannedPhase: '1.12' },
-  { id: 'permission', label: 'สิทธิ์บัญชี/การเงิน', section: '§6.10', available: false, plannedPhase: '1.12' },
-  { id: 'lock', label: 'การล็อกรอบและ Adjustment', section: '§6.11', available: false, plannedPhase: '1.12' },
-  { id: 'numbering', label: 'เลขที่ใบกำกับภาษี', section: '§6.12', available: false, plannedPhase: '1.12' },
-  { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: false, plannedPhase: '1.12' },
+  { id: 'export', label: 'รูปแบบไฟล์ส่งบัญชี', section: '§6.9', available: true },
+  { id: 'permission', label: 'สิทธิ์บัญชี/การเงิน', section: '§6.10', available: true },
+  { id: 'lock', label: 'การล็อกรอบและ Adjustment', section: '§6.11', available: true },
+  { id: 'numbering', label: 'เลขที่ใบกำกับภาษี', section: '§6.12', available: true },
+  { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: true },
 ]
 
 export const DEFAULT_FINANCE_SETTINGS_TAB = 'cycles'

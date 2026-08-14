@@ -6,6 +6,14 @@ import { BankAccountsTab } from '@/components/settings/bank-accounts-tab'
 import { BankFileFormatsTab } from '@/components/settings/bank-file-formats-tab'
 import { CostCentersTab } from '@/components/settings/cost-centers-tab'
 import { CyclesTab } from '@/components/settings/cycles-tab'
+import { ExportFormatsTab } from '@/components/settings/export-formats-tab'
+import { FunctionalPermissionsTab } from '@/components/settings/functional-permissions-tab'
+import { InternalDocumentsTab } from '@/components/settings/internal-documents-tab'
+import { InvoiceNumberingTab } from '@/components/settings/invoice-numbering-tab'
+import { PeriodLockTab } from '@/components/settings/period-lock-tab'
+import { TaxDocTemplatesTab } from '@/components/settings/tax-doc-templates-tab'
+import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
+import { VatRatesTab } from '@/components/settings/vat-rates-tab'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { FINANCE_SETTINGS_TABS } from '@/lib/settings/finance-tabs'
@@ -15,7 +23,7 @@ import { FINANCE_SETTINGS_TABS } from '@/lib/settings/finance-tabs'
  * **แถบแท็บแนวตั้งด้านซ้าย 13 แท็บ + เนื้อหาด้านขวา** (โทน emerald แยกจากตั้งค่าทั่วไปที่เป็น slate)
  *
  * แท็บที่หน้าจริงยังไม่เกิดแสดงเป็น disabled พร้อมบอก phase — ไม่พาไปหน้าว่าง (แนวเดียวกับ `<SubNav>`)
- * แท็บชุดแรก 5 ตัวเกิดใน Phase 1.11 · อีก 8 ตัวเกิดใน Phase 1.12
+ * ครบทั้ง 13 แท็บแล้วตั้งแต่ Phase 1.12 (ชุดแรก 5 ตัวจาก 1.11 + อีก 8 ตัวจาก 1.12)
  */
 
 export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
@@ -74,8 +82,16 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'cycles' && <CyclesTab />}
           {current?.id === 'approval' && <ApprovalMatrixTab />}
           {current?.id === 'bank' && <BankAccountsTab />}
+          {current?.id === 'tax' && <TaxProfilesTab />}
+          {current?.id === 'vat' && <VatRatesTab />}
           {current?.id === 'cost' && <CostCentersTab />}
+          {current?.id === 'docs' && <InternalDocumentsTab />}
           {current?.id === 'bankfile' && <BankFileFormatsTab />}
+          {current?.id === 'export' && <ExportFormatsTab />}
+          {current?.id === 'permission' && <FunctionalPermissionsTab />}
+          {current?.id === 'lock' && <PeriodLockTab />}
+          {current?.id === 'numbering' && <InvoiceNumberingTab />}
+          {current?.id === 'taxdoc' && <TaxDocTemplatesTab />}
           {current !== undefined && !current.available && (
             <EmptyState
               title={`${current.label} ${current.section}`}
