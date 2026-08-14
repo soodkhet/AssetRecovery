@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.10 (Field Tracker FE ชุด 1 — shell/detail/งานรายวัน/ปฏิทิน) · งานถัดไป 2.11
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.11 (Field Tracker FE ชุด 2 — ฟอร์มปิดงาน/คำขอเปลี่ยนผู้รับผิดชอบ) · งานถัดไป 2.12
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.11: Field Tracker Frontend ชุดที่ 2 (ฟอร์มปิดงาน + reassignment)
+## 🎯 งานถัดไป — Phase 2.12: Field Tracker Frontend ชุดที่ 3 (เบิกเงิน + รายได้ + จบงาน + PWA)
 
-- ทำตาม `docs/01_PLAN.md` §2.11 — shell/แท็บ/case detail พร้อมแล้วจาก 2.10 · BE ครบตั้งแต่ 2.8/2.9 (เรียกผ่าน `apiPath()` เท่านั้น)
-- **ฟอร์มปิดงาน 3 ส่วน** — A: outcome picker + จุดเริ่มเดินทาง (auto GPS ทันทีที่กด "เริ่มงาน" + ลากปรับบนแผนที่, **แสดงเฉพาะทีม `PER_KM`**) · B: เช็คอิน (Geolocation ของอุปกรณ์จริง — **ห้ามมีช่องกรอกพิกัดมือ** `41` §11) + รูป/วิดีโอ/รูปสินค้า/เสียง (camera & file picker + thumbnail grid) · C: draft save/restore (`close-draft`) + validation ตาม outcome (`missingCloseEvidence()` บอกครบครั้งเดียว) + โหมด `needs_revision` (banner `rejectReason`, ล็อก checkin/outcome แก้ได้เฉพาะสื่อ)
-- **Pending Reassignment flow** (`41` §7.8): auto-popup เมื่อโหลดหน้า + "ดูทีหลัง" (ไม่เด้งซ้ำในเซสชัน แต่ badge ม่วงยังอยู่) + countdown หมดเขต + ยินยอม/ไม่ยินยอม (ไม่ยินยอมต้องมีเหตุผล → `REASSIGNMENT_DECLINE_REASON_REQUIRED`)
-- จุดเสียบที่ 2.10 เตรียมไว้: `notYet()` ใน `components/field/tracking-tab.tsx` (ปุ่มเริ่มงาน/จบงาน/ตอบคำขอ) และ prop `onRespondReassignment` ของ `<FieldCaseDetailBody>`
-- อ้างอิง: `41` §7.6–7.8 ผ่าน MAP (L244–285) · `23` §6.3 · mockup `41-field-tracker-mobile-mockup.html` (`renderCloseCaseModal` L981+) ผ่าน MAP
-- LOC ~2,250 · งบ ~350k
-- DoD: ปิดงานจริงบน staging มือถือ (GPS/กล้องจริง) · `needs_revision` แก้ได้เฉพาะสื่อ · เทสต์ §20: ปิดงานไม่ครบหลักฐาน / สำเร็จไม่มีรูปสินค้า / draft แล้วทำต่อ
+- ทำตาม `docs/01_PLAN.md` §2.12 — shell/แท็บ/case detail/ฟอร์มปิดงาน พร้อมแล้วจาก 2.10–2.11 · BE ครบตั้งแต่ 2.9 (เรียกผ่าน `apiPath()` เท่านั้น) · 4 หน้าที่ยังเป็น `<FieldComingSoon>`: `/field`, `/field/closed`, `/field/expenses`, `/field/income`
+- **แท็บเบิกค่าใช้จ่าย 2 ขอบแท็บ** (`41` §7.9): "ผูกกับเคส" group ต่อเคส (ระบบสร้างให้อัตโนมัติ ไม่มีปุ่มยืนยันของพนักงาน) · "เบิกแยก" + ฟอร์มที่พัก (3 ฟิลด์บังคับ + ผู้พักร่วมเฉพาะคนในทีม) + upload ใบเสร็จ + flow แก้ `needs_revision` (`resubmit_expense` เจ้าของรายการเท่านั้น)
+- **หน้าสรุปรายได้** (§7.10): สะสม + รายเดือน จาก `field.incomeSummary` · **แท็บจบงาน** (§7.11): pill filter 4 ตัวรวม "ถูกโอนไป" — การ์ด `reassigned_away` ไม่มีสถานะค่าใช้จ่าย · **Dashboard 5 บล็อก** (§7.1)
+- **PWA + Web Push client** (§15): service worker, permission prompt, iOS A2HS banner, in-app notification list — BE (VAPID/`field.pushSubscribe`/`field.notificationList`) พร้อมแล้วจาก 2.9
+- อ้างอิง: `41` §7.9–7.11, §15 ผ่าน MAP · mockup `41-field-tracker-mobile-mockup.html` + `-desktop-` ผ่าน MAP
+- LOC ~2,550 · งบ ~380k
+- DoD: Field Tracker ครบทุกหน้าตรง mockup · push แจ้งเตือนจริงบน staging
 
 ---
 
@@ -57,7 +57,7 @@
 | 2.8 | Field Tracker BE ชุด 1 (core flow) | ✅ | 2026-08-14 · `0465255`+`3f8328f`+`2122229` · `assignment_status` 7 ค่า + `travel_origins`/`close_case_drafts` + API 8 endpoint (รับงาน→จัดวัน→เช็คอิน→ปิดงาน) → archive |
 | 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ✅ | 2026-08-14 · `dcb0fc3`+`f19cad0`+`71d8b8d`+`6af1d76` · มติ PO: +5 คอลัมน์ `expenses` + `push_subscriptions` (`02` v4.3) · D10 ✅ · expense อัตโนมัติ + 2 เส้นทางตีกลับ + Web Push · ⚠️ ต้องตั้ง `GOOGLE_MAPS_API_KEY` + VAPID ที่ Vercel → archive |
 | 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ✅ | 2026-08-14 · `97afe2e`+`4d53196` · shell mobile/desktop (sidebar 260px fixed) + `<FieldCaseDetailBody>` ใช้ซ้ำ 3 ที่ + 3 แท็บงาน + Calendar Picker → archive |
-| 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ⬜ | PLAN §2.11 |
+| 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ✅ | 2026-08-14 · `66be882`+`011318f` · ฟอร์มปิดงาน 3 ส่วน (auto GPS + ลากแผนที่ + เช็คอินจากอุปกรณ์จริง + สื่อ 4 ชนิด + draft) + โหมด `needs_revision` + flow คำขอเปลี่ยนผู้รับผิดชอบครบ 3 ทางเข้า → archive |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ⬜ | PLAN §2.12 |
 | 2.13 | Warehouse BE (confirm = transaction 4 steps) | ⬜ | PLAN §2.13 · Revenue stub → ของจริง 3.6 |
 | 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ⬜ | PLAN §2.14 |
