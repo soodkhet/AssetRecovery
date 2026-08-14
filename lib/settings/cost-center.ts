@@ -17,7 +17,7 @@ const CODE_PATTERN = /^CC-(\d+)$/
 /** เลขลำดับจากรหัส — `null` = รหัสไม่ตรงรูปแบบ (ข้อมูลนำเข้าเก่า) จึงไม่นับรวมตอนหาเลขถัดไป */
 export function costCenterCodeSequence(code: string): number | null {
   const match = CODE_PATTERN.exec(code.trim().toUpperCase())
-  if (!match) return null
+  if (!match?.[1]) return null
   const value = Number.parseInt(match[1], 10)
   return Number.isSafeInteger(value) ? value : null
 }
