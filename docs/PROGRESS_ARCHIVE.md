@@ -7,7 +7,7 @@
 
 ## Phase 3.2 — Payee & Tax Profile (18) + Compensation Approval Backend (16)
 
-**วันที่**: 2026-08-15 · **commit**: `PENDING` · **branch**: `auto/phase-3.2`
+**วันที่**: 2026-08-15 · **commit**: `fe2834b` (ชุด 1 — Payee BE + pure สายอนุมัติ) + `68cd696` (ชุด 2 — Approval BE + แท็บผู้รับเงิน) · **branch**: `auto/phase-3.2`
 
 ### สิ่งที่ทำ
 
