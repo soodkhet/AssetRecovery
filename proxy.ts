@@ -1,15 +1,62 @@
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { LOGIN_PATH } from '@/lib/auth/constants'
+import { getPublicEnv } from '@/lib/env'
 
 /**
  * Next.js proxy (เดิมชื่อ middleware — Next 16 เปลี่ยนชื่อ convention เป็น `proxy.ts`)
  * ตำแหน่งนี้คือไฟล์เดียวกับที่เอกสาร `docs/implementation-todo.md` §0.2 เรียกว่า `/middleware.ts`
  *
- * ⚠️ ที่นี่ **ไม่ใช่** จุดบังคับสิทธิ์ (DEC-002): permission ตรวจที่ API layer ทุก endpoint ผ่าน
- * `requirePermission(action, resource, scope)` ซึ่งจะเกิดใน Phase 1.3 — ไฟล์นี้มีหน้าที่
- * refresh session cookie ของ Supabase Auth + redirect หน้า login เท่านั้น (ใส่จริงใน Phase 1.3)
+ * หน้าที่: (1) refresh session cookie ของ Supabase Auth (2) route guard หน้าเว็บแบบ optimistic
+ *
+ * ⚠️ ที่นี่ **ไม่ใช่** จุดบังคับสิทธิ์ (DEC-002) — permission ตรวจที่ API layer ทุก endpoint ผ่าน
+ *    `requirePermission(action, resource, scope)` และหน้า server component ตรวจซ้ำด้วย `requireSession()`
+ * ⚠️ `/api/*` ไม่ถูก redirect — endpoint ต้องตอบ 401/403 เป็น JSON เอง (เรียกตรงก็ต้องโดนปฏิเสธ)
  */
-export default function proxy(_request: NextRequest) {
-  return NextResponse.next()
+
+/** หน้าที่เข้าได้โดยไม่ต้อง login */
+const PUBLIC_PAGE_PATHS = new Set<string>([LOGIN_PATH, '/'])
+
+function isPublicPage(pathname: string): boolean {
+  return PUBLIC_PAGE_PATHS.has(pathname)
+}
+
+export default async function proxy(request: NextRequest): Promise<NextResponse> {
+  const env = getPublicEnv()
+  let response = NextResponse.next({ request })
+
+  const supabase = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value } of cookiesToSet) {
+          request.cookies.set(name, value)
+        }
+        response = NextResponse.next({ request })
+        for (const { name, value, options } of cookiesToSet) {
+          response.cookies.set(name, value, options)
+        }
+      },
+    },
+  })
+
+  // เรียกเพื่อ refresh token ที่ใกล้หมดอายุ — ห้ามใช้ผลลัพธ์นี้เป็นสิทธิ์ (สิทธิ์ตรวจที่ API layer)
+  const { data } = await supabase.auth.getUser()
+
+  const { pathname } = request.nextUrl
+  if (pathname.startsWith('/api/')) return response
+
+  if (!data.user && !isPublicPage(pathname)) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = LOGIN_PATH
+    redirectUrl.search = ''
+    redirectUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  return response
 }
 
 export const config = {
