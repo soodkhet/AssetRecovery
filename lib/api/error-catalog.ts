@@ -145,6 +145,9 @@ export const ERROR_CATALOG = {
   CASE_POSTAL_CODE_NOT_FOUND: { status: 400, severity: 'reject', source: '38 §12' },
   API_VALIDATION_FAILED: { status: 400, severity: 'reject', source: '38 §12 (`01` §11)' },
   CASE_LOCKED_AFTER_APPROVAL: { status: 400, severity: 'reject', source: '38 §12' },
+  // เติมเข้า `38` §12 พร้อม Phase 2.3 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  CASE_INVALID_STATUS_TRANSITION: { status: 400, severity: 'reject', source: '38 §12' },
+  CASE_STATUS_REASON_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_RECYCLE_INVALID_STATUS: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_RECYCLE_NOTE_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_RECYCLE_REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },

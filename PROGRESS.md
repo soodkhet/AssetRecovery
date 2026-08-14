@@ -1,20 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.2 (Case Submission BE ชุด 1 — schema/CRUD/เอกสาร) · งานถัดไป 2.3
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.3 (Case Submission BE ชุด 2 — state/routing/recycle/import/snapshot) · งานถัดไป 2.4
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.3: Case Submission BE ชุด 2 (state machine + routing + recycle + import)
+## 🎯 งานถัดไป — Phase 2.4: Case Submission FE ชุด 1 (list + form + address)
 
-- ทำตาม `docs/01_PLAN.md` §2.3 — `PATCH /api/cases/:id/status` state machine (`draft→pending_review→approved|rejected|need_info→draft`) + permission (Case Approver = system role global) + events
-- team suggestion service (routing จาก `addr_province` ของที่อยู่ปัจจุบันตัวเดียว · `CASE_NO_TEAM_MATCH` · default ไม่ auto-assign) · projected revenue calculator (best-case 100% — FLAT/SUCCESS_FEE/HYBRID) · **service fee snapshot ตอน `approved`** (4 คอลัมน์ตาม `10` §9.2)
-- Recycle flow (เฉพาะ `closed_fail` · ไม่จำกัดรอบ · approve → `tracking_round`+1 ข้าม pending_review ตรงเข้า ready_to_assign) · Import Excel/CSV (mapping + validate ต่อแถว + batch draft)
-- ของที่มีแล้วต้อง reuse (ดู `docs/REUSE_INDEX.md`): **`caseReadiness()` = gate ก่อน `pending_review`** · `caseScopeWhere()`/`CaseError`/schemas จาก 2.2 · คอลัมน์ `projected_revenue_*` + `recycle_requests.previous_round/new_round` มีแล้ว · `withEndpoint()` + `API_CONTRACT` + `emitAudit()` + `resolvePlanVersionAt()`
-- อ้างอิง: `38` ผ่าน MAP §6.5–6.6, §8–10 (L258–305), §16 · `10` §9.2 · `12`
-- LOC ~2,500 · งบ ~350k
-- DoD: test ตาม `38` §20 — โดยเฉพาะ recycle round + snapshot ตอน approved ไม่เปลี่ยนเมื่อแก้ template
+- ทำตาม `docs/01_PLAN.md` §2.4 — หน้า List (`/cases`) + filter/search/pagination + badge สถานะ + responsive card · ฟอร์ม Manual (ข้อมูลสัญญา/ลูกหนี้ + conditional identity ตามสัญชาติ + input filter ตัวเลข)
+- **Address component ×3 ที่อยู่** (postal auto-complete + cascading จังหวัด/อำเภอ/ตำบล) — ทำเป็น shared component เพราะไฟล์ 41 ใช้ซ้ำ → ลง `docs/REUSE_INDEX.md`
+- ของที่มีแล้วต้อง reuse (ดู `docs/REUSE_INDEX.md`): UI Kit `components/ui/*` + `<AppShell>` · `statusBadgeClass()` · `fmtDate`/`fmtSatang`/`parseBahtInput()` · `callApi()` + `apiPath()` (ห้ามพิมพ์ path เอง) · schema/pure ของเคสจาก 2.2/2.3 (`caseCreateSchema`, `assertIdentityFormats`, `caseReadiness`, `allowedActionsFrom`) · กับดัก `setState` ใน `useEffect` (ESLint) + ช่องวันที่ส่ง payload ดิบ
+- อ้างอิง: `38` §7 ผ่าน MAP (L198–257) · mockup `reference/38-case-submission-mockup.html` ผ่าน MAP (UI เท่านั้น)
+- LOC ~1,950 · งบ ~310k
+- DoD: สร้างเคส manual ครบ flow บน staging (ข้อมูล→เอกสาร→ส่งตรวจสอบ)
 
 ---
 
@@ -49,7 +48,7 @@
 |---|---|---|---|
 | 2.1 | API Contract Infra (ไฟล์ 45) — 39 endpoints + events + envelope | ✅ | 2026-08-14 · `4dba3a3` · contract 39 endpoint + ทะเบียน event 34 + กฎ ESLint + envelope กลาง + error catalog 129 code (เทสต์เทียบ spec จริง) → archive |
 | 2.2 | Case Submission BE ชุด 1 (schema/CRUD/เอกสาร) | ✅ | 2026-08-14 · `d5accc2` · schema เคสครบตามไฟล์ 38 §6 + API 5 endpoint + กันเลขสัญญาซ้ำ 2 ชั้น (เทสต์ concurrency 3 ช่องทาง) → archive |
-| 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ⬜ | PLAN §2.3 · snapshot ตอน approved |
+| 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ✅ | 2026-08-14 · `<commit>` · state machine 8 action + routing จังหวัด + snapshot ค่าบริการตอน approved + recycle ไม่จำกัดรอบ + import ต่อแถว → archive |
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ⬜ | PLAN §2.4 · address reuse ไฟล์ 41 |
 | 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ⬜ | PLAN §2.5 · detail modal reuse 40/41 |
 | 2.6 | Case Assignment BE | ⬜ | PLAN §2.6 · reassign 2 branch + timeout job |

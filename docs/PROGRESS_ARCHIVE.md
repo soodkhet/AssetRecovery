@@ -5,6 +5,37 @@
 
 ---
 
+## Phase 2.3 — Case Submission BE ชุด 2 (state machine + routing + recycle + import + snapshot)
+
+**วันที่**: 2026-08-14 · **commit**: `<commit>` · **branch**: `auto/phase-2.3`
+
+### สิ่งที่ทำ
+- **State machine (`38` §9/§10)** — `lib/cases/state-machine.ts` (pure): 8 action (`review`/`accept`/`reject`/`request_more_info`/`return_to_draft` + recycle 3 ตัว) พร้อมตารางกฎ (from/to/reason/readiness), `allowedActionsFrom()` สำหรับ UI, `CASE_ACTION_CAPABILITIES` ต่อ action (`38` §13) และ `caseEventsFor()` ตาม `38` §16/§17.2
+- **Routing (`38` §6.4/§7.4/§12)** — `lib/cases/team-suggestion.ts` (pure): จับคู่จาก `addr_province` ตัวเดียว, กรองทีมที่ไม่ `active`, คืนทีมที่ตรงทั้งหมด (UI มี toggle ดูทีมอื่น), ไม่ auto-assign · `GET /api/cases/:id/team-suggestion`
+- **Projected revenue (`38` §6.5)** — `lib/cases/projected-revenue.ts` (pure): FLAT/SUCCESS_FEE/HYBRID แบบ best-case 100% (ไม่สนใจ `charge_on_fail`) + `calculation_source` อ้าง template/version · คำนวณใหม่ทุกครั้งที่ `review`/`accept`/`approve_recycle`
+- **Service fee snapshot ตอน `approved` (`10` §9.2)** — เขียน 6 คอลัมน์ (`service_fee_template_id` + `model`/`base_satang`/`rate_pct`/`basis`/`charge_on_fail` snapshot) ที่ตัวเคส และ snapshot ใหม่ทุกครั้งที่อนุมัติรีไซเกิล (A3 `charge_per_tracking_round` — แต่ละรอบอิสระ)
+- **Recycle (`38` §6.6)** — `create_recycle_request` (เฉพาะ `closed_fail`) → `pending_recycle_review` → `approve_recycle` (`tracking_round` +1, ล้าง `outcome`/`closed_at`, ข้าม `pending_review` ตรงเข้า `approved`) / `reject_recycle` (กลับ `closed_fail` รอบไม่ขยับ) + เขียน `recycle_requests` (`previous_round`/`new_round`) ใน transaction เดียวกับ audit
+- **Import (`38` §8/§12)** — `lib/cases/import.ts` (pure): CSV parser ในตัว (BOM/CRLF/quote), `IMPORT_COLUMNS` 29 คอลัมน์รองรับหัวไทย/อังกฤษ/snake_case, แปลงบาท→สตางค์, สัญชาติ/ประเภทสินค้าเป็นคำไทยได้, validate ต่อแถวด้วย `caseCreateSchema` เดิม · `POST /api/cases/import` (รองรับ `rows` หรือ `csv`, มี `dryRun` สำหรับ preview) — **แถวผิดตกเฉพาะแถวนั้น**
+- Endpoint ใหม่ 3 ตัวครบ `45` §6.1 (8/8): `PATCH /api/cases/:id/status`, `GET /api/cases/:id/team-suggestion`, `POST /api/cases/import`
+- เทสต์: pure 4 ไฟล์ (state machine / team suggestion / projected revenue / import) + **เทสต์ระดับ DB จริง 11 เคส** (`case-workflow.db.test.ts`) ครอบ DoD: snapshot ไม่เปลี่ยนเมื่อบริษัทย้ายไปเทมเพลตใหม่, รีไซเกิล 3 รอบ → `tracking_round` = 4 + `recycle_history` 3 รายการ, gate เอกสาร, scope ข้ามบริษัท 404, สิทธิ์ accept 403, import สร้าง draft/ซ้ำในไฟล์/dryRun
+
+### การตัดสินใจระหว่างทาง
+- **recycle 3 action เดินผ่าน `PATCH /:id/status`** — `38` §17.1 และ `45` §6.1 ไม่มี endpoint แยกสำหรับ recycle แต่ทั้ง 3 action คือการเปลี่ยนสถานะตาม §10 จึงใช้ endpoint เดิมตาม contract (ไม่ต้องแก้ `45`)
+- **เพิ่ม 2 error code เข้า `38` §12 (v3)**: `CASE_INVALID_STATUS_TRANSITION` (action ไม่ตรงตาราง §10) และ `CASE_STATUS_REASON_REQUIRED` (reject/need_info/เปลี่ยนทีมโดยไม่กรอกเหตุผล — §13 + body ของ `PATCH /:id/status` บังคับไว้แต่ไม่มี code) · เติมลง `lib/api/error-catalog.ts` ในคอมมิตเดียวกันตาม Rule 04
+- **`return_to_draft`**: §10 ระบุ `need_info → draft` แต่ §8 ไม่ได้ตั้งชื่อปุ่มไว้ — ตั้งชื่อ action ตามความหมายของ transition ไม่สร้าง state ใหม่
+- **audit `reason` ของ `accept`**: `90` §13 บังคับ reason เมื่อแตะฟิลด์ snapshot ค่าบริการ แต่ `38` ไม่บังคับให้ผู้พิจารณากรอกตอนรับเคส ⇒ เติมเหตุผลเชิงระบบที่ระบุ template/version ที่ใช้ (ยัง trace ได้ว่าใช้เงื่อนไขไหน) เมื่อผู้ใช้ไม่ได้กรอกเอง
+- **`approve_recycle` ล้าง `outcome`/`closed_at`** เพราะเคสกลับเข้า pipeline รอบใหม่ (ถ้าค้างไว้ รายงานที่กรองด้วย outcome จะนับเคสที่กำลังทำงานอยู่เป็นเคสปิด) — ประวัติผลรอบก่อนอยู่ที่ `recycle_requests` + audit · **ทีมที่ดูแลคงไว้ตามเดิม** (มอบหมายพนักงานรอบใหม่เป็นงานของไฟล์ 40)
+- **Import ไม่เพิ่ม dependency**: CSV แยกเองที่ backend · Excel ให้ wizard (2.5) แปลงด้วย SheetJS ฝั่ง client แล้วส่ง `rows` มา (ตรงกับ `38` §7.1 ที่ให้ผู้ใช้ทำ mapping + preview บนหน้าจอก่อนยืนยัน)
+- **ประมาณการรายได้ ≠ Revenue จริง** — `lib/cases/projected-revenue.ts` แยกจากสูตร `22` §6.5–6.7 ของ Phase 3.1 อย่างชัดเจน (มีคำเตือนในหัวไฟล์ + REUSE_INDEX)
+
+### จุดที่คนถัดไปควรรู้
+- ยังไม่มี **event bus** จริงในระบบ — `caseEventsFor()` คืนรายชื่อ event ที่ต้องยิง และชั้น service บันทึกลง `after.events` ของ audit ไว้ก่อน · Phase 2.6 (consumer ฝั่ง 40) ต่อของจริงแล้วให้ย้ายมาใช้จุดนี้ ไม่ต้องเดาย้อนหลัง
+- `PATCH /:id/status` ตรวจ capability **2 ชั้น**: route ตรวจขั้นต่ำ (ใครแตะ workflow เคสได้) → service ตรวจต่อ action ตาม `38` §13 — เพิ่ม action ใหม่ต้องเติมใน `CASE_ACTION_CAPABILITIES` ด้วย
+- FE 2.4/2.5 ต้องอ่าน `allowedActions` จาก `CaseDetailDto` แทนการเขียนเงื่อนไขสถานะเอง และเรียก `IMPORT_COLUMNS` ทำหน้าจอ mapping
+- เทสต์ DB ของ task นี้เรียก service จริง ⇒ ต้องมี `TEST_DATABASE_URL` + `pnpm db:deploy:test` (ข้ามอัตโนมัติถ้าไม่มี) · audit ที่มันเขียนลบไม่ได้ตาม `02` §13 (ค้างใน test DB โดยตั้งใจ)
+
+---
+
 ## Phase 2.2 — Case Submission BE ชุด 1 (schema + CRUD + เอกสาร)
 
 **วันที่**: 2026-08-14 · **commit**: `d5accc2` · **branch**: `auto/phase-2.2`

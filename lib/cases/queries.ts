@@ -15,6 +15,7 @@ import {
 } from '@/lib/cases/case'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
+import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -48,7 +49,8 @@ export interface CaseMutationContext {
   reason?: string
 }
 
-type CaseTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
+/** ชนิด tx ของ client ที่ต่อ extension แล้ว (กับดัก `Prisma.TransactionClient` — REUSE_INDEX 14/08) */
+export type CaseTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
 
 // ── scope ระดับแถว (`38` §13 · `05` §5) ──────────────────────────────────────
 
@@ -96,7 +98,7 @@ const listSelect = {
   _count: { select: { documents: { where: { deletedAt: null } } } },
 } as const
 
-const detailSelect = {
+export const detailSelect = {
   ...listSelect,
   caseRefNormalized: true,
   debtorNationality: true,
@@ -124,8 +126,18 @@ const detailSelect = {
   assetKind: true,
   imei: true,
   serialNo: true,
+  assetValueSatang: true,
   projectedRevenueSatang: true,
   projectedRevenueSource: true,
+  suggestedTeamId: true,
+  assignedTeamId: true,
+  teamChangeReason: true,
+  serviceFeeTemplateId: true,
+  serviceFeeModelSnapshot: true,
+  serviceFeeBaseSatang: true,
+  serviceFeeRatePct: true,
+  serviceFeeBasisSnapshot: true,
+  serviceFeeChargeOnFail: true,
   reviewNote: true,
   reviewedAt: true,
   outcome: true,
@@ -179,7 +191,7 @@ const detailSelect = {
 } as const
 
 type CaseListRow = Prisma.CaseGetPayload<{ select: typeof listSelect }>
-type CaseDetailRow = Prisma.CaseGetPayload<{ select: typeof detailSelect }>
+export type CaseDetailRow = Prisma.CaseGetPayload<{ select: typeof detailSelect }>
 
 function toListDto(row: CaseListRow): CaseListItemDto {
   return {
@@ -221,7 +233,7 @@ function documentCounts(documents: CaseDetailRow['documents']): DocumentCounts {
   return counts
 }
 
-function toDetailDto(row: CaseDetailRow): CaseDetailDto {
+export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
   const assetImeiSerial = joinAssetIdentifier(row.imei, row.serialNo)
   return {
     ...toListDto(row),
@@ -253,6 +265,16 @@ function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetImeiSerial,
     projectedRevenueSatang: row.projectedRevenueSatang,
     projectedRevenueSource: row.projectedRevenueSource,
+    suggestedTeamId: row.suggestedTeamId,
+    assignedTeamId: row.assignedTeamId,
+    teamChangeReason: row.teamChangeReason,
+    serviceFeeTemplateId: row.serviceFeeTemplateId,
+    serviceFeeModelSnapshot: row.serviceFeeModelSnapshot,
+    serviceFeeBaseSatang: row.serviceFeeBaseSatang,
+    serviceFeeRatePct: row.serviceFeeRatePct === null ? null : Number(row.serviceFeeRatePct),
+    serviceFeeBasisSnapshot: row.serviceFeeBasisSnapshot,
+    serviceFeeChargeOnFail: row.serviceFeeChargeOnFail,
+    allowedActions: allowedActionsFrom(row.status),
     reviewNote: row.reviewNote,
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
     outcome: row.outcome,
