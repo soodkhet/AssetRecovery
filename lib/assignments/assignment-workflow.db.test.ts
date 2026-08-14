@@ -623,4 +623,21 @@ suite('Phase 2.6 — ยามสิทธิ์ + ข้อมูลประ�
     expect(readyToAssign.items).toHaveLength(0)
     expect(readyToAssign.total).toBe(0)
   })
+
+  it('filter ที่ผู้เรียกส่งมาต้องทับ scope ไม่ได้ — ค้นหา/กรองสถานะแล้วยังเห็นแค่ในขอบเขตตัวเอง', async () => {
+    const mine = await seedApprovedCase({ teamId: TEAM_A })
+    const outside = await seedApprovedCase({ teamId: TEAM_B })
+    await queries.assignCase(manager, mine, { agentId: AGENT_A }, { actor: manager, meta })
+    await queries.assignCase(manager, outside, { agentId: AGENT_C }, { actor: manager, meta })
+
+    // ① search ตั้งคีย์ `OR` — ห้ามไปทับ `OR` ของ scope ทีม (หัวหน้าดูแลแค่ TEAM_A)
+    const searched = await queries.listAssignments(supervisor, { page: 1, limit: 50, search: 'ลูกหนี้' })
+    expect(searched.items.map((item) => item.caseId)).toEqual([mine])
+    expect(searched.total).toBe(1)
+
+    // ② ตัวกรองสถานะตั้งคีย์ `assignments` — ห้ามไปทับ scope ของพนักงาน (เห็นเฉพาะเคสที่ตัวเองถือ)
+    const agentView = await queries.listAssignments(agentA, { page: 1, limit: 50, status: 'assigned' })
+    expect(agentView.items.map((item) => item.caseId)).toEqual([mine])
+    expect(agentView.total).toBe(1)
+  })
 })

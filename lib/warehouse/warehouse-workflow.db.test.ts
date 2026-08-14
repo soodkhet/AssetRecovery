@@ -44,6 +44,8 @@ const PLAN_ID = '00000000-0000-4000-8000-0000000213a9'
 const TEMPLATE_ID = '00000000-0000-4000-8000-0000000213aa'
 const COMPANY_A = '00000000-0000-4000-8000-0000000213ab'
 const COMPANY_B = '00000000-0000-4000-8000-0000000213ac'
+/** ทีมที่ไม่มีอยู่ใน scope ของ `manager` — ใช้ยิง filter นอกขอบเขต (ไม่ต้อง seed) */
+const OTHER_TEAM_ID = '00000000-0000-4000-8000-0000000213ad'
 const PROVINCE = 'ลำพูน'
 const DAY_1 = '2026-09-01'
 
@@ -188,8 +190,9 @@ beforeAll(async () => {
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
-    INSERT INTO teams (id, organization_id, name, side, provinces, status, compensation_plan_id, created_by)
-    VALUES ('${TEAM_ID}', '${ORG_ID}', 'ทีมทดสอบคลัง 2.13', 'inhouse', ARRAY['${PROVINCE}'], 'active', '${PLAN_ID}', '${MANAGER_ID}')
+    INSERT INTO teams (id, organization_id, name, side, provinces, status, compensation_plan_id, created_by) VALUES
+      ('${TEAM_ID}', '${ORG_ID}', 'ทีมทดสอบคลัง 2.13', 'inhouse', ARRAY['${PROVINCE}'], 'active', '${PLAN_ID}', '${MANAGER_ID}'),
+      ('${OTHER_TEAM_ID}', '${ORG_ID}', 'ทีมนอก scope 2.13', 'inhouse', ARRAY['${PROVINCE}'], 'active', '${PLAN_ID}', '${MANAGER_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_ID}' WHERE id = '${AGENT_ID}'`)
@@ -692,6 +695,58 @@ suite('Phase 2.13 — scope ระดับแถว (`44` §13 · §17 T15)', (
 
     // ไม่พบ vs ไม่มีสิทธิ์ ต้องได้ code เดียวกัน (ห้าม leak ว่ามีเครื่องของบริษัทอื่นอยู่จริง)
     await expectCode(() => warehouse.getAsset(companyUser, others.assetId), 'ASSET_NOT_FOUND')
+  })
+
+  it('T15 — filter ที่ผู้เรียกส่งมาต้องทับ scope ไม่ได้ (`?companyId=` ของบริษัทอื่น = ไม่เห็นอะไรเลย)', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+    const theirs = await seedInCustody(COMPANY_B)
+    await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_B,
+        assetIds: [theirs.assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+
+    // เครื่อง: Company User ของ A ส่ง companyId=B มาเอง — ต้องได้ 0 ไม่ใช่ของบริษัท B
+    const crossCompany = await warehouse.listAssets(
+      companyUser,
+      assetListQuerySchema.parse({ companyId: COMPANY_B }),
+    )
+    expect(crossCompany.items).toEqual([])
+    expect(crossCompany.total).toBe(0)
+
+    // ล็อต: ทางเดียวกัน — ล็อตของบริษัท B ต้องไม่โผล่
+    const crossLots = await warehouse.listLots(companyUser, lotListQuerySchema.parse({ companyId: COMPANY_B }))
+    expect(crossLots.total).toBe(0)
+
+    // filter ที่อยู่ในขอบเขตตัวเองยังทำงานปกติ
+    const own = await warehouse.listAssets(companyUser, assetListQuerySchema.parse({ companyId: COMPANY_A }))
+    expect(own.items.map((item) => item.id)).toEqual([mine.assetId])
+  })
+
+  it('T15 — ผู้จัดการทีมส่ง `teamId` ของทีมอื่นมาเอง ก็ยังไม่เห็นเครื่องของทีมนั้น', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+    const outside = await seedInCustody(COMPANY_A)
+    // ย้ายเคสของเครื่องตัวที่สองไปทีมที่ manager ไม่ได้ดูแล (seed ผูก TEAM_ID ให้ทุกเคส)
+    await db().$executeRawUnsafe(
+      `UPDATE cases SET assigned_team_id = '${OTHER_TEAM_ID}' WHERE id = '${outside.caseId}'`,
+    )
+
+    // ทีมตัวเองยังกรองได้ปกติ
+    const own = await warehouse.listAssets(manager, assetListQuerySchema.parse({ teamId: TEAM_ID }))
+    expect(own.items.map((item) => item.id)).toEqual([mine.assetId])
+
+    // ทีมอื่น = 0 (filter ต้องไม่ทับ `case` ของ scope) · ธุรการที่เห็นทุกแถวยังกรองเจอตามปกติ
+    expect((await warehouse.listAssets(manager, assetListQuerySchema.parse({ teamId: OTHER_TEAM_ID }))).total).toBe(0)
+    expect((await warehouse.listAssets(admin, assetListQuerySchema.parse({ teamId: OTHER_TEAM_ID }))).total).toBe(1)
   })
 
   it('ธุรการเห็นทุกบริษัท และล็อตถูกกรองตาม scope เดียวกัน', async () => {

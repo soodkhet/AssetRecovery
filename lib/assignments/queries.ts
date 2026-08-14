@@ -244,22 +244,28 @@ export async function listAssignments(
   query: AssignmentListQuery,
 ): Promise<AssignmentListResultDto> {
   const organizationId = user.organizationId
+  // ⚠️ scope กับ filter อยู่คนละก้อนใน `AND` เสมอ — ถ้า spread รวมกัน คีย์ `OR` ของ search จะทับ scope
+  //    ของผู้จัดการ และ `assignments` ของตัวกรองสถานะจะทับ scope ของพนักงาน (`40` §7.1 · DEC-002)
   const where: Prisma.CaseWhereInput = {
     organizationId,
     deletedAt: null,
     // หน้ามอบหมายทำงานกับเคสที่ผ่านการอนุมัติแล้วเท่านั้น (`40` §16)
     status: { in: ['approved', 'active'] },
-    ...caseScopeWhere(user),
-    ...(query.team ? { assignedTeamId: query.team } : {}),
-    ...assignmentStateFilter(query.status),
-    ...(query.search
-      ? {
-          OR: [
-            { caseRef: { contains: query.search, mode: 'insensitive' } },
-            { debtorName: { contains: query.search, mode: 'insensitive' } },
-          ],
-        }
-      : {}),
+    AND: [
+      caseScopeWhere(user),
+      assignmentStateFilter(query.status),
+      {
+        ...(query.team ? { assignedTeamId: query.team } : {}),
+        ...(query.search
+          ? {
+              OR: [
+                { caseRef: { contains: query.search, mode: 'insensitive' } },
+                { debtorName: { contains: query.search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+    ],
   }
 
   const [total, rows, teams] = await Promise.all([
