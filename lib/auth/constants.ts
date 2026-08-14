@@ -23,6 +23,10 @@ export const EXECUTIVE_ROLE_NAME = 'บริหาร'
 export const FINANCE_ROLE_NAME = 'การเงิน'
 export const ACCOUNTING_ROLE_NAME = 'บัญชี'
 export const ADMIN_OFFICE_ROLE_NAME = 'ธุรการ'
+/** role กลุ่ม `finance_company` (`07` §5.3) — ชื่อซ้ำกับกลุ่มอื่นได้ แต่เป็น record คนละตัว (`07` §6) */
+export const COMPANY_MANAGER_ROLE_NAME = 'ผู้จัดการ'
+export const COMPANY_SUPERVISOR_ROLE_NAME = 'หัวหน้า'
+export const COMPANY_ADMIN_ROLE_NAME = 'แอดมิน'
 
 /** เส้นทางหน้า Login และปลายทางหลัง login (mockup `login.html` · `06` §7.2 · ไฟล์ 97) */
 export const LOGIN_PATH = '/login'

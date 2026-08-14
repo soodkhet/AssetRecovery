@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v3.4 | 14/08/2569 | **เติม §6.9 หมวด Roles & Permissions** (Phase 1.6) — รวบ `SEED_ROLE_DELETE`/`SEED_ROLE_RENAME` (ต้นทาง `07` §11) เข้ามาใน dictionary กลาง + เพิ่ม code ที่ implementation ต้องใช้จริง: `ROLE_NOT_EDITABLE`, `CAPABILITY_LOCKED`, `CAPABILITY_NOT_FOUND`, `ROLE_IN_USE`, `DUPLICATE_ROLE_NAME`, `ROLE_NOT_FOUND` — ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.3 | 14/08/2569 | **เพิ่ม §6.10 หมวด Audit (Platform)** (Phase 1.4) — `AUDIT_REASON_REQUIRED` (บังคับ `reason` ตาม `90` §13) และ `AUDIT_IMMUTABLE` (`02` §13 — ห้าม UPDATE/DELETE audit_logs) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.2 | 14/08/2569 | **เพิ่ม §6.9 หมวด Auth & Access Control** (Phase 1.3) — รวบ `PERMISSION_DENIED` (05 §11) / `LAST_SUPERADMIN_REMOVAL` (07 §11) ที่กระจายอยู่ไฟล์ต้นทาง เข้ามาไว้ใน dictionary กลาง + เพิ่ม code ใหม่ที่ implementation ต้องใช้จริง: `UNAUTHENTICATED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `ACCOUNT_INACTIVE`, `USER_NOT_PROVISIONED` — ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 
@@ -130,6 +131,14 @@
 | USER_NOT_PROVISIONED | auth user ของ Supabase ยังไม่ถูกผูกกับ `users.supabase_uid` ในระบบ | 05 |
 | PERMISSION_DENIED | ไม่มีสิทธิ์ทำ action (403) — UI hide/disable + API reject เสมอ | 05, 07, 25 |
 | LAST_SUPERADMIN_REMOVAL | ถอด role หรือปิดใช้งาน Superadmin คนสุดท้ายที่ยัง active | 07 |
+| SEED_ROLE_DELETE | พยายามลบ seed role (15 ตัวตาม `07` §5) — ปฏิเสธทุกกรณี | 07 |
+| SEED_ROLE_RENAME | พยายามเปลี่ยนชื่อ seed role — ชื่อถูกอ้างอิงข้ามไฟล์ทั้งระบบ | 07 |
+| ROLE_NOT_EDITABLE | แก้ Permission Matrix ของ role ที่ `is_editable = false` หรือของ Superadmin (implicit manage ไม่เก็บ record) | 07, 13 §6.10 |
+| CAPABILITY_LOCKED | มอบ/แก้ระดับ capability ที่ติด "✅ only" ให้ role อื่น (9 รายการ — `25` §16.1) | 25, 13 §6.10 |
+| CAPABILITY_NOT_FOUND | อ้าง capability code ที่ไม่มีในระบบ (`02` §12) | 07 |
+| ROLE_IN_USE | ลบ role ที่ยังมีผู้ใช้ผูกอยู่ (1 user ต้องมี role เสมอ — `07` §10) | 07, 08 |
+| DUPLICATE_ROLE_NAME | สร้าง/เปลี่ยนชื่อ role ชนกับชื่อเดิมใน Role Group เดียวกัน (ชื่อซ้ำข้ามกลุ่มได้ — `07` §6) | 07 |
+| ROLE_NOT_FOUND | อ้าง role ที่ไม่มีในองค์กรของผู้เรียก หรือถูกลบไปแล้ว (404 — ไม่ leak ข้ามองค์กร) | 07 |
 
 > `PERMISSION_DENIED` และ `LAST_SUPERADMIN_REMOVAL` มีอยู่แล้วในไฟล์ต้นทาง (05 §11 / 07 §11) — รวบมาไว้ที่นี่เพื่อให้ dictionary ครบตาม §2 · `REQUIRED_MISSING` ใช้ร่วมกับ §6.1 (ฟอร์ม login ที่กรอกไม่ครบ)
 

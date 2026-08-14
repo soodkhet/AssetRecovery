@@ -1,19 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.5 (UI Kit + App Shell + Navigation) · งานถัดไป 1.6
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.6 (Roles & Permissions module) · งานถัดไป 1.7
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.6: Roles & Permissions module
+## 🎯 งานถัดไป — Phase 1.7: Compensation Plans (11) + Service Fee Templates (12)
 
-- ทำตาม `docs/01_PLAN.md` §1.6 — **BE**: roles/capabilities API 4 endpoints + guards `SEED_ROLE_DELETE`/`SEED_ROLE_RENAME`/`LAST_SUPERADMIN_REMOVAL` + permission resolve (role→capability set + `access_level` view/manage ตาม DEC-009, Superadmin implicit-manage **ไม่เก็บ record**)
-- **FE**: หน้า "บทบาทและสิทธิ์" 3 tab หลัก (แอดมิน / เจ้าหน้าที่ติดตามทรัพย์ [sub-toggle Inhouse/Outsource] / บริษัทไฟแนนซ์) + Permission Matrix editor (disabled ตาม `is_editable`, Seed badge) — ประกอบจาก UI Kit `@/components/ui` เท่านั้น
-- ผูก `role_capabilities` ให้ครบ (งานที่ seed 1.2 เว้นไว้) — 7 รายการ "✅ only" ล็อก Superadmin มอบให้ role อื่นไม่ได้ (`25` §16.1) · เปลี่ยน role/สิทธิ์ต้องเรียก `invalidateSessionCache()` + `emitAudit()` พร้อม `reason`
-- อ้างอิง: `07` ทั้งไฟล์ · `25` · `13` §6.10 · mockup `settings.html` ผ่าน MAP (render roles)
-- LOC ~1,900 · งบ ~290k
-- DoD: ลบ/เปลี่ยนชื่อ seed role ถูก reject · role ชื่อซ้ำข้าม group เป็นคนละ record จริง · matrix แก้ได้เฉพาะ editable + audit ครบ
+- ทำตาม `docs/01_PLAN.md` §1.7 — **BE 11**: fuel 2 โหมด (PER_KM: rate+max_per_case / DAILY_FLAT) validate เลือกได้โหมดเดียว + commission/no_success_fee (mutually exclusive ตาม outcome) + allowance/hotel/WHT/receipt_required + **versioning: PATCH สร้าง version ใหม่ไม่ overwrite** + snapshot resolver
+- **BE 12**: 3 model SUCCESS_FEE/FLAT/HYBRID + conditional validation (base/rate/basis/charge_on_fail ตาม model) + `TEMPLATE_IN_USE`/`INVALID_RATE_RANGE`
+- **FE**: การ์ดเทมเพลตทั้งสองแบบ (DEC-008 — service fee เป็นการ์ด แสดงสูตร 2 กรณี), form conditional fields, version history — ประกอบจาก UI Kit `@/components/ui` เท่านั้น
+- เงินทุกช่อง = **INTEGER satang** · สูตรอ้าง `22` §6.1–6.7 ห้าม hardcode ซ้ำ · ทุก mutation ผ่าน `emitAudit()` พร้อม `reason` (ตาราง `compensation_plans`/`service_fee_templates` = หมวดเงิน)
+- อ้างอิง: `11`, `12` ทั้งไฟล์ · `22` §6.1–6.7 · mockup `settings.html` ผ่าน MAP (compensation/servicefee)
+- LOC ~2,400 · งบ ~340k
+- DoD: test conditional validation ครบทุก model/โหมด · แก้ template ที่ถูกใช้แล้ว → version ใหม่ · audit+reason ครบ
+
 
 ---
 
@@ -34,7 +36,7 @@
 | 1.3 | Auth + Permission middleware + Login | ✅ | 2026-08-14 · `edfdd9b` · requirePermission + scope 4 แบบ + session 24 ชม. + หน้า Login · ⚠️ ต้องรัน `pnpm auth:link-superadmin` 1 ครั้งต่อ environment → archive |
 | 1.4 | Audit core service (immutable) | ✅ | 2026-08-14 · `09b283a` · immutable 2 ชั้น (DB trigger + Prisma extension) + นโยบาย `reason` + diff util + เทสต์ระดับ DB → archive |
 | 1.5 | UI Kit + App Shell + Navigation | ✅ | 2026-08-14 · `e4d56b4` · UI Kit `components/ui/*` + App Shell 7 เมนูตาม `06` §7.2 + utils พ.ศ./satang + statusBadge 10 กลุ่ม + `GET /api/meta/menu` → archive |
-| 1.6 | Roles & Permissions module | ⬜ | PLAN §1.6 · ไฟล์ 07+25 |
+| 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `PENDING` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ⬜ | PLAN §1.7 · ไฟล์ 11+12 · ก่อน 1.8 |
 | 1.8 | Teams + Finance Companies | ⬜ | PLAN §1.8 · ไฟล์ 09+10 |
 | 1.9 | Users module | ⬜ | PLAN §1.9 · ไฟล์ 08 |

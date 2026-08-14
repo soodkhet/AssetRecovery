@@ -15,6 +15,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — 13 sub-section ครบ (§6.1-6.13) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + **แก้ไข §3**: เดิมเขียนว่า "ทั้ง 10 sub-section" แต่เนื้อหาจริงมี **13 sub-section** (§6.1 ถึง §6.13) ตรงกับที่ระบุใน `README.md` ("ตั้งค่าบัญชี/การเงิน 13 sub-tabs") — แก้ไขให้ตรงกันแล้ว + แยก Decisions/Open Items ชัดเจน — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v3 | 04/07/2569 | **Batch 6 — Product Owner อนุมัติ DEC-006 (D1=B, D2=A)**: (1) ย้ายค่านโยบายการเงินระดับองค์กร 3 ตัว (`advance_max_amount_per_request`, `require_payee_id_document`, `ar_aging_buckets`) ออกจากตาราง §6.2 Approval Matrix ไปเป็น **§6.2.1 Finance Policy Settings** (1 record/org) — เดิมฝังใน matrix ทำให้ค่า duplicate ต่อแถว (2) ทุก entity ในไฟล์นี้มีตารางรองรับใน `02-database-schema-design.md` v3.5 ครบแล้ว (`billing_payout_cycles`, `approval_matrices`, `finance_policy_settings`, `bank_file_formats`, `tax_document_template_settings`, numbering columns บน `organizations`, `functional_group` บน `capabilities`) (3) §6.3 sync กับ schema แล้ว — `is_payout_account` เดิมถูก deprecate แทนด้วย `usage` (4) หมายเหตุ: field เงินทุกตัว (เช่น `condition_threshold`) เก็บใน DB เป็น **INTEGER satang** ตาม convention — ที่เขียน decimal ในไฟล์นี้เป็นระดับ spec เท่านั้น |
+| v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
 
 ขอบเขตเอกสารนี้: รวมการตั้งค่าพื้นฐานทั้งหมดที่โมดูล Finance/Accounting อื่นต้องอ้างอิง — รอบบิล/รอบจ่าย, สายการอนุมัติ, บัญชีธนาคารบริษัท, Tax Profile, VAT Rate, Cost Center, รูปแบบเอกสาร, รูปแบบไฟล์โอนธนาคาร, Export format, Functional Permission Matrix, นโยบายล็อกรอบบัญชี, รูปแบบเลขที่ใบกำกับภาษี, และรูปแบบเอกสารภาษีทางการ — **13 sub-section ทั้งหมด**
@@ -202,7 +203,9 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 กติกาเพิ่มเติม (DEC-009, 05/07/2569):
 - UI เป็น **dropdown 3 ระดับต่อ role** ต่อ capability (ดู mockup `settings.html` tab "สิทธิ์บัญชี/การเงิน" — 37 รายการครบตามไฟล์ 25)
 - **Superadmin มีสิทธิ์ `manage` ทุก capability โดยนิยาม** — ไม่แสดงในตาราง/ไม่เก็บ record, enforce ที่ permission middleware
-- Capability ที่ไฟล์ 25 ระบุ "✅ only" (7 รายการ เช่น จัดการ Finance Company, แก้ Tax Profile) **ล็อกเป็นของ Superadmin เท่านั้น** มอบให้ role อื่นไม่ได้
+- Capability ที่ไฟล์ 25 ระบุ "✅ only" **9 รายการ** (มติ PO 14/08/2569 — ดู `25` §16.1) **ล็อกกับ role เจ้าของเท่านั้น มอบให้ role อื่นไม่ได้ และแก้ระดับของเจ้าของก็ไม่ได้**
+  - Superadmin 6: จัดการ Finance Company · จัดการ Service Fee Template · แก้ไข Tax Profile/VAT Rate · แก้ไข Period Lock Policy · แก้ไข Tax Invoice Numbering · จัดการ Role/Permission
+  - บริหาร (Executive) 3: อนุมัติ Adjustment (รอบ locked) · ปลดล็อกรอบ locked · สร้าง Authorized Exception
 - การแก้ไข matrix เป็น critical action ต้องบันทึก audit log เสมอ (ไฟล์ 05 §10 / 90)
 
 ### 6.11 Period Lock Policy (นโยบายล็อกรอบบัญชี)

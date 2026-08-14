@@ -104,7 +104,7 @@ migration/schema เป็นก้อนแรกเสมอ → สูตร/
 - **DoD**: สร้าง user แล้ว login ได้จริงผ่าน Supabase Auth · hard-delete user มี history ถูก reject
 
 ### 1.10 — Settings ไฟล์ 13: Backend ครบ 13 หมวด
-- **ขอบเขต**: API + validation + audit ทั้ง 13 sub-sections — §6.1 Cycles (CHECK cutoff_shape) · §6.2 Approval Matrix (threshold เป็น satang) + §6.2.1 Finance Policy (1 record/org) · §6.3 Bank Accounts (usage enum, ห้ามลบที่มีรายการผูก, `is_payout_account` deprecated ห้ามใช้) · §6.4 Tax Profiles (WHT 3% default, applies_to ไม่มี inhouse) · §6.5 VAT Rate effective-dated + `VAT_RATE_OVERLAP` resolver · §6.6 Cost Centers (auto running code) · §6.7/§6.9 read-only endpoints · §6.8 Bank File Formats + `POST /:id/test` + `BANK_FILE_NOT_TESTED` gate · §6.10 Functional Permission Matrix (37 รายการ, 3 ระดับ, 7 รายการ "✅ only" ล็อก Superadmin) · §6.11 Period Lock Policy + interceptor `PERIOD_LOCKED_DIRECT_EDIT` (โครง — บังคับจริงตอน Phase 4) · §6.12 Tax Invoice Numbering (sequence, yearly reset, `last_number` ห้ามแก้มือ) · §6.13 Tax Doc Template Settings · **เพิ่ม endpoint ที่ spec §13 ตกหล่น**: `/api/settings/finance-policy`, `/api/settings/tax-document-templates`
+- **ขอบเขต**: API + validation + audit ทั้ง 13 sub-sections — §6.1 Cycles (CHECK cutoff_shape) · §6.2 Approval Matrix (threshold เป็น satang) + §6.2.1 Finance Policy (1 record/org) · §6.3 Bank Accounts (usage enum, ห้ามลบที่มีรายการผูก, `is_payout_account` deprecated ห้ามใช้) · §6.4 Tax Profiles (WHT 3% default, applies_to ไม่มี inhouse) · §6.5 VAT Rate effective-dated + `VAT_RATE_OVERLAP` resolver · §6.6 Cost Centers (auto running code) · §6.7/§6.9 read-only endpoints · §6.8 Bank File Formats + `POST /:id/test` + `BANK_FILE_NOT_TESTED` gate · §6.10 Functional Permission Matrix (37 รายการ, 3 ระดับ, **9 รายการ "✅ only" ล็อกกับ role เจ้าของ** — Superadmin 6 + บริหาร 3, มติ PO 14/08/2569 · บังคับจริงแล้วที่ `lib/roles/capability-locks.ts` ตั้งแต่ Phase 1.6) · §6.11 Period Lock Policy + interceptor `PERIOD_LOCKED_DIRECT_EDIT` (โครง — บังคับจริงตอน Phase 4) · §6.12 Tax Invoice Numbering (sequence, yearly reset, `last_number` ห้ามแก้มือ) · §6.13 Tax Doc Template Settings · **เพิ่ม endpoint ที่ spec §13 ตกหล่น**: `/api/settings/finance-policy`, `/api/settings/tax-document-templates`
 - **อ้างอิง**: `13` ผ่าน MAP ทีละ § · `27` §6.1 · `25` · `02` Group B
 - **LOC ~3,100 · งบรวม ~430k**
 - **DoD**: test VAT overlap/resolve ข้ามช่วงเวลา · bank file ใช้จริงไม่ได้จนกว่า test_status=passed · numbering ไม่มี gap ภายใต้ concurrency
@@ -116,7 +116,7 @@ migration/schema เป็นก้อนแรกเสมอ → สูตร/
 - **DoD**: ทุกแท็บ CRUD ได้จริงบน staging ตรง pattern mockup
 
 ### 1.12 — Settings FE ชุดที่ 2 (แท็บ §6.4, §6.5, §6.7, §6.9, §6.10, §6.11, §6.12, §6.13)
-- **ขอบเขต**: แท็บ Tax Profile · VAT Rate (timeline effective-date + overlap warning) · Internal Doc Templates (read-only) · Export Format (read-only) · Functional Permission Matrix (grid 37×role, dropdown 3 ระดับ, 🔒 7 รายการ) · Period Lock Policy (policy banner เหลือง) · Tax Invoice Numbering · Tax Doc Template
+- **ขอบเขต**: แท็บ Tax Profile · VAT Rate (timeline effective-date + overlap warning) · Internal Doc Templates (read-only) · Export Format (read-only) · Functional Permission Matrix (grid 37×role, dropdown 3 ระดับ, 🔒 9 รายการ — reuse `<PermissionMatrixModal>`/`lib/roles/*` จาก Phase 1.6) · Period Lock Policy (policy banner เหลือง) · Tax Invoice Numbering · Tax Doc Template
 - **อ้างอิง**: `13` §7 + mockup `settings.html` ผ่าน MAP
 - **LOC ~2,150 · งบรวม ~330k**
 - **DoD**: ครบ 13 แท็บตรง spec + mockup · audit+reason ทุกจุดที่กำหนด
