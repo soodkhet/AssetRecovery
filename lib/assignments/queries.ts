@@ -30,6 +30,7 @@ import type {
   AssignmentActionResultDto,
   AssignmentListItemDto,
   AssignmentListResultDto,
+  AssignmentTeamOptionDto,
   PendingReassignmentDto,
 } from '@/lib/assignments/types'
 import { caseScopeWhere } from '@/lib/cases/queries'
@@ -217,6 +218,26 @@ function assignmentStateFilter(state: AssignmentState | undefined): Prisma.CaseW
   }
 }
 
+/**
+ * ทีมที่ผู้ใช้เห็นได้ในหน้ามอบหมาย (`40` §7.1) — ผู้จัดการเห็นทุกทีมที่ดูแล · หัวหน้าเห็นทีมเดียว
+ * ส่งไปกับ list เพราะ `GET /api/teams` ต้องมี `view_master_data` ที่ผู้จัดการ/หัวหน้าไม่จำเป็นต้องมี (`25` §7.1)
+ */
+async function listScopedTeams(user: SessionUser): Promise<AssignmentTeamOptionDto[]> {
+  const scope = user.scope
+  if (scope.kind === 'company' || scope.kind === 'self') return []
+  const rows = await prisma.team.findMany({
+    where: {
+      organizationId: user.organizationId,
+      deletedAt: null,
+      status: 'active',
+      ...(scope.kind === 'team' ? { id: { in: [...scope.teamIds] } } : {}),
+    },
+    orderBy: [{ side: 'asc' }, { name: 'asc' }],
+    select: { id: true, name: true, side: true },
+  })
+  return rows.map((row) => ({ teamId: row.id, teamName: row.name, teamSide: row.side }))
+}
+
 export async function listAssignments(
   user: SessionUser,
   query: AssignmentListQuery,
@@ -240,7 +261,7 @@ export async function listAssignments(
       : {}),
   }
 
-  const [total, rows] = await Promise.all([
+  const [total, rows, teams] = await Promise.all([
     prisma.case.count({ where }),
     prisma.case.findMany({
       where,
@@ -265,6 +286,7 @@ export async function listAssignments(
         },
       },
     }),
+    listScopedTeams(user),
   ])
 
   const items: AssignmentListItemDto[] = rows.map((row) => {
@@ -294,7 +316,7 @@ export async function listAssignments(
     }
   })
 
-  return { items, total, page: query.page, limit: query.limit }
+  return { items, total, page: query.page, limit: query.limit, teams }
 }
 
 // ── POST /api/cases/:id/assign (`40` §8) ────────────────────────────────────

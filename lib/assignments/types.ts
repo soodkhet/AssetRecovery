@@ -8,6 +8,9 @@ import type { AgentDecisionSupport } from '@/lib/assignments/success-rate'
  * วันเวลาเป็น ISO 8601 UTC เสมอ (Rule 01) — หน้าจอแปลงเป็น พ.ศ./Asia-Bangkok ด้วย `fmtDateTime`
  */
 
+/** ฝั่งของทีม (`09` §7 `Team.side`) — badge Inhouse/Outsource ของ `40` §7.2/§7.3/§7.5 */
+export type AssignmentTeamSide = 'inhouse' | 'outsource'
+
 export interface PendingReassignmentDto {
   id: string
   requestedBy: string
@@ -33,7 +36,7 @@ export interface AssignmentListItemDto {
   teamId: string | null
   teamName: string | null
   /** `40` §7.2 — inhouse/outsource แสดงคนละบรรทัดกับชื่อทีม */
-  teamSide: 'inhouse' | 'outsource' | null
+  teamSide: AssignmentTeamSide | null
   state: AssignmentState
   assignmentId: string | null
   agentId: string | null
@@ -46,11 +49,25 @@ export interface AssignmentListItemDto {
   pendingReassignment: PendingReassignmentDto | null
 }
 
+/**
+ * ทีมที่ผู้ใช้คนนี้เห็นได้ในหน้ามอบหมาย (`40` §7.1) — ส่งมากับ list เพื่อให้หน้าจอทำ filter ทีม
+ * และเลือกกระดาน Kanban ได้โดยไม่ต้องเรียก `GET /api/teams` (endpoint นั้นต้องมี `view_master_data`
+ * ซึ่งผู้จัดการ/หัวหน้าทีมไม่จำเป็นต้องมี — `25` §7.1)
+ *
+ * มี **1 ทีม** = หัวหน้าทีม ⇒ หน้าจอไม่ต้องแสดงตัวเลือกทีมเลย (`40` §7.1)
+ */
+export interface AssignmentTeamOptionDto {
+  teamId: string
+  teamName: string
+  teamSide: AssignmentTeamSide
+}
+
 export interface AssignmentListResultDto {
   items: AssignmentListItemDto[]
   total: number
   page: number
   limit: number
+  teams: AssignmentTeamOptionDto[]
 }
 
 export interface AgentCaseDto {
@@ -63,6 +80,8 @@ export interface AgentCaseDto {
   state: AssignmentState
   assignedAt: string | null
   acceptedAt: string | null
+  /** มีคำขอเปลี่ยนผู้รับผิดชอบค้างอยู่ — การ์ด Kanban ต้องมี badge แยกจากสถานะ (`40` §7.5) */
+  hasPendingReassignment: boolean
 }
 
 export interface TeamAgentDto extends AgentDecisionSupport {
@@ -75,6 +94,8 @@ export interface TeamAgentDto extends AgentDecisionSupport {
 export interface TeamAgentsResultDto {
   teamId: string
   teamName: string
+  /** `40` §7.3 — การ์ดพนักงานต้องมี badge Inhouse/Outsource ของทีมที่สังกัด */
+  teamSide: AssignmentTeamSide
   agents: TeamAgentDto[]
 }
 
@@ -89,12 +110,15 @@ export interface KanbanColumnDto {
   agentId: string
   fullName: string
   activeCaseCount: number
+  /** `40` §7.5 — หัวคอลัมน์แสดง % ความสำเร็จสะสม (`null` = ยังไม่เคยได้รับมอบหมาย ⇒ แสดง N/A) */
+  successRate: number | null
   cases: AgentCaseDto[]
 }
 
 export interface KanbanBoardDto {
   teamId: string
   teamName: string
+  teamSide: AssignmentTeamSide
   columns: KanbanColumnDto[]
 }
 

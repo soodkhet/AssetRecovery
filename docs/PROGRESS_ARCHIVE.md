@@ -5,6 +5,39 @@
 
 ---
 
+## Phase 2.7 — Case Assignment Frontend (ไฟล์ 40)
+
+**วันที่**: 2026-08-14 · **commit**: `612e3b2` · **branch**: `auto/phase-2.7`
+
+### สิ่งที่ทำ
+- **หน้า `/cases/assign`** (`components/assignments/assignments-manager.tsx` · `40` §7.1/§7.2): KPI 3 ใบ + filter สถานะ/ทีม/ค้นหา + pagination · จอ < `md` สลับเป็น **card list** ที่ยังมีวันเวลากำกับและ badge ทีมครบ · ตารางมีคอลัมน์ทีม (**badge Inhouse/Outsource คนละบรรทัดกับชื่อทีม**) และคอลัมน์ผู้รับผิดชอบที่มี "มอบหมายเมื่อ … • รับงานเมื่อ …" เสมอ · badge `pending_reassignment` **แยกจาก badge สถานะหลัก** พร้อมบรรทัด "ขอเปลี่ยนเป็น X · เหลืออีก N ชม."
+- **ปุ่มของหัวหน้าทีม = ซ่อน ไม่ใช่ disabled** (`40` §7.2 · Rule 05): page เป็น server component คำนวณ `canPerformAssignmentAction()` จาก settings §6.4 แล้วส่งเป็น prop · FE ต้องผ่านทั้ง prop นี้ **และ** capability `assign_case` จึงจะเห็นปุ่ม (ผู้บริหาร/การเงินที่เข้าด้วย `view_master_data` เห็นเป็นอ่านอย่างเดียว) — API ตรวจซ้ำเสมอ (DEC-002)
+- **Assignment Modal (`40` §7.3) = reuse `<CaseDetailModal>` ของ 2.5** — เพิ่ม prop `size`/`title`/`description`/`headerSlot`/`extraSection`/`footerActions`/`hideWorkflowActions` แล้วต่อ Agent Picker + กล่องเหตุผล + ปุ่มยืนยันเข้าไปใน **modal เดียวกัน** (ไม่สลับ modal/หน้าใหม่) ลำดับ: รายละเอียดเคส → เอกสาร/รูปสินค้า → เลือกพนักงาน → ปุ่มยืนยัน
+- **Agent Picker**: รายชื่อ **เฉพาะทีมของเคส** + ข้อมูล §6.2 (เคสในมือ · % สำเร็จ · จังหวัดที่รับผิดชอบ) · toggle "ดูเคสที่ถืออยู่" **ขยายพร้อมกันได้หลายคน** และแต่ละเคสมีปุ่ม "ดูรายละเอียด" เปิด `<CaseDetailModal>` แบบอ่านอย่างเดียวซ้อนขึ้นมา (ไม่มีปุ่ม assign/reassign ซ้อน)
+- **Reassign flow UI**: reason บังคับทุกกรณี · คำบนปุ่ม + คำเตือนมาจาก `reassignConfirmLabel()`/`reassignWarning()` ซึ่งเรียก `reassignBranchOf()` ตัวเดียวกับ API (accepted = "ส่งคำขอเปลี่ยนผู้รับผิดชอบ" + เตือนว่าไม่เปลี่ยนทันที) · เคสที่มีคำขอค้างอยู่ = ปิดการเลือกพนักงาน + ซ่อนปุ่มยืนยัน
+- **Kanban full-screen read-only** (`40` §7.5): แทนที่หน้ารายการทั้งหน้า (ไม่ใช่ modal) + ปุ่มกลับที่ตำแหน่งเดิม · 1 คอลัมน์ = 1 พนักงาน (ชื่อทีม + badge side + % สำเร็จ + เคสในมือ) · filter ทีม/ชื่อพนักงาน/จังหวัด/สถานะ — **สถานะกรองที่ระดับการ์ด คอลัมน์ว่างยังแสดง** · คลิกการ์ดเปิด Assignment Modal ตัวเดียวกับหน้ารายการ · จอเล็ก stack แนวตั้ง
+- **pure module `lib/assignments/assignment-ui.ts` + unit test 18 เคส**: label/สีสถานะ · badge ทีม · `assignedTimeline()` · `assignmentRowActions()` (canAct=false → `[]`) · `kanbanCardMatches()` · `targetFromListItem()`/`targetFromKanbanCard()` · `expiresInText()`
+- **ขยาย payload ของ endpoint เดิม (ไม่แตะ contract `45`)**: `assignment.list` ส่ง `teams[]` ที่ผู้ใช้เห็น · `teamAgents`/`teamKanban` ส่ง `teamSide` · การ์ดเคสมี `hasPendingReassignment` · คอลัมน์ Kanban มี `successRate` (จาก `successRate()` ตัวกลาง) + เทสต์ระดับ DB 2 เคสยาม
+- **UI Kit**: `<Modal size="xl">` + body เลื่อนได้ (`max-h-[90vh]`, header/footer คงที่) — ได้ประโยชน์กับทุก modal ยาวในระบบ
+
+### การตัดสินใจระหว่างทาง
+- **ตัวเลือกทีมมากับ `GET /api/assignments` ไม่ใช่ `GET /api/teams`** — endpoint ทีมต้องมี `view_master_data` ซึ่งผู้จัดการ/หัวหน้าทีมไม่จำเป็นต้องมี (`25` §7.1) ⇒ เพิ่มฟิลด์ `teams[]` (scope-filtered) ในผลลัพธ์เดิมแทนการเพิ่ม endpoint นอก `45` · มีทีมเดียว (หัวหน้า) = ไม่แสดงตัวเลือกทีมเลยตาม §7.1
+- **Kanban ไม่มีคอลัมน์ "รอมอบหมาย"** — mockup มี แต่ §7.5 ระบุชัดว่า "แบ่งคอลัมน์ตามพนักงาน (1 คอลัมน์ = 1 คน)" และ endpoint คืนเฉพาะคอลัมน์พนักงาน ⇒ ยึดสเปค (mockup ใช้ได้เฉพาะ UI ไม่ใช่ business logic) · เคสที่ยังไม่มอบหมายดูจากหน้ารายการด้วย filter "พร้อมมอบหมาย"
+- **เลือกพนักงานคนเดิมซ้ำไม่ได้** — การ์ดของผู้รับผิดชอบปัจจุบันถูกล็อกพร้อม badge "ผู้รับผิดชอบปัจจุบัน" (สเปคไม่ได้ห้ามไว้ตรง ๆ แต่ไม่มีความหมายเชิงธุรกิจและทำให้เกิด history ขยะ)
+- **`hideWorkflowActions` บังคับใช้ทุกจุดที่ 40 เปิด `<CaseDetailModal>`** — กันปุ่ม "รับเคส/ไม่รับ/ขอข้อมูลเพิ่ม" ของไฟล์ 38 โผล่ซ้อนกลาง flow มอบหมาย (สถานะ `approved` ปกติไม่มีปุ่มอยู่แล้ว แต่ล็อกไว้ให้ชัด)
+- **Agent Accept UI (§7.4) ไม่ทำในรอบนี้** — ตาม PLAN §2.7 ทำครั้งเดียวที่ 2.10 ฝั่งไฟล์ 41
+
+### จุดที่คนถัดไปควรรู้
+- **`lib/assignments/assignment-ui.ts` = ที่เดียวที่ตัดสินปุ่ม/ข้อความของโมดูลนี้** — 2.10/2.11 (ฝั่งพนักงาน) ต้องเรียกซ้ำ ห้ามเขียนเงื่อนไขสถานะใน JSX
+- `<CaseDetailModal>` มีทางเสียบครบแล้ว (`extraSection`/`footerActions`/`headerSlot`) — ไฟล์ 41 ที่ต้องใช้ Case Detail 3 จุดควรต่อทางนี้ ไม่ต้อง fork component
+- Kanban รีโหลดผ่าน prop `reloadToken` (ไม่ remount) เพื่อไม่ล้าง filter ที่ผู้ใช้ตั้งไว้หลังมอบหมายสำเร็จ
+- ยังไม่มีหน้า Settings ของ `assignment_policy_settings` (`40` §6.4) — ถ้าอยากทดสอบเคส "หัวหน้าถูกปิดสิทธิ์" ต้อง UPDATE ตารางตรงบน staging ไปก่อน (งาน Settings รอบถัดไป)
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm test` (81 ไฟล์ / 1,068 เคส) ✅ · `pnpm lint` ✅ · `pnpm build` ✅ (เห็น route `/cases/assign`)
+
+---
+
 ## Phase 2.6 — Case Assignment Backend (ไฟล์ 40)
 
 **วันที่**: 2026-08-14 · **commit**: `a79c64c` · **branch**: `auto/phase-2.6`

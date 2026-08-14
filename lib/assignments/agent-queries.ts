@@ -4,7 +4,7 @@ import { ACTIVE_ASSIGNMENT_STATUSES, assignmentStateOf } from '@/lib/assignments
 import { AssignmentError } from '@/lib/assignments/errors'
 import { assertTeamInScope } from '@/lib/assignments/queries'
 import type { KanbanQuery } from '@/lib/assignments/schemas'
-import { toDecisionSupport } from '@/lib/assignments/success-rate'
+import { successRate, toDecisionSupport } from '@/lib/assignments/success-rate'
 import type {
   AgentCaseDto,
   AgentCasesResultDto,
@@ -32,7 +32,7 @@ async function loadTeamInScope(user: SessionUser, teamId: string) {
   assertTeamInScope(user, teamId)
   const team = await prisma.team.findFirst({
     where: { id: teamId, organizationId: user.organizationId, deletedAt: null },
-    select: { id: true, name: true, provinces: true },
+    select: { id: true, name: true, side: true, provinces: true },
   })
   if (team === null) throw new AssignmentError('TEAM_NOT_FOUND', { context: { teamId } })
   return team
@@ -94,7 +94,7 @@ export async function listTeamAgents(user: SessionUser, teamId: string): Promise
     }),
   )
 
-  return { teamId: team.id, teamName: team.name, agents: rows }
+  return { teamId: team.id, teamName: team.name, teamSide: team.side, agents: rows }
 }
 
 /**
@@ -115,6 +115,12 @@ const agentCaseSelect = {
     take: 1,
     select: { id: true, agentId: true, status: true, acceptedAt: true, createdAt: true },
   },
+  // การ์ด Kanban/รายการที่ขยายต้องรู้ว่ามีคำขอเปลี่ยนผู้รับผิดชอบค้างอยู่ไหม (`40` §7.5)
+  pendingReassignments: {
+    where: { status: 'waiting_consent' as const },
+    take: 1,
+    select: { id: true },
+  },
 } as const
 
 type AgentCaseRow = Prisma.CaseGetPayload<{ select: typeof agentCaseSelect }>
@@ -131,6 +137,7 @@ function toAgentCase(row: AgentCaseRow): AgentCaseDto {
     state: assignmentStateOf(assignment),
     assignedAt: assignment?.createdAt.toISOString() ?? null,
     acceptedAt: assignment?.acceptedAt?.toISOString() ?? null,
+    hasPendingReassignment: row.pendingReassignments.length > 0,
   }
 }
 
@@ -230,13 +237,24 @@ export async function getTeamKanban(
     heldCount.set(holder.agentId, (heldCount.get(holder.agentId) ?? 0) + 1)
   }
 
+  // % ความสำเร็จบนหัวคอลัมน์ (`40` §7.5) — มาจาก service กลางตัวเดียวกับ agent picker
+  const performance = await Promise.all(
+    agentIds.map(async (agentId) => {
+      const counts = await agentCounts(user.organizationId, agentId)
+      return [agentId, successRate(counts)] as const
+    }),
+  )
+  const successByAgent = new Map<string, number | null>(performance)
+
   return {
     teamId: team.id,
     teamName: team.name,
+    teamSide: team.side,
     columns: agents.map((agent) => ({
       agentId: agent.id,
       fullName: agent.fullName,
       activeCaseCount: heldCount.get(agent.id) ?? 0,
+      successRate: successByAgent.get(agent.id) ?? null,
       cases: byAgent.get(agent.id) ?? [],
     })),
   }
