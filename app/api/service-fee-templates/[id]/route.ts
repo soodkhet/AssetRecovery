@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server'
-import { readJsonBody, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
-import { toServiceFeeErrorResponse } from '@/lib/service-fee/errors'
 import {
   getServiceFeeTemplate,
   setServiceFeeTemplateActive,
@@ -18,7 +17,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 export const GET = withApiPermission<RouteContext>(
   'view',
   'view_master_data',
-  toServiceFeeErrorResponse,
+  toModuleErrorResponse,
   async (_request: NextRequest, context, user) => {
     const { id } = await context.params
     return Response.json({ data: await getServiceFeeTemplate(user.organizationId, id) })
@@ -33,7 +32,7 @@ export const GET = withApiPermission<RouteContext>(
 export const PATCH = withApiPermission<RouteContext>(
   'manage',
   'manage_service_fees',
-  toServiceFeeErrorResponse,
+  toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const parsed = serviceFeeTemplateUpdateSchema.safeParse(await readJsonBody(request))
@@ -59,7 +58,7 @@ export const PATCH = withApiPermission<RouteContext>(
 export const DELETE = withApiPermission<RouteContext>(
   'manage',
   'manage_service_fees',
-  toServiceFeeErrorResponse,
+  toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const parsed = serviceFeeTemplateActivationSchema.safeParse(await readJsonBody(request))

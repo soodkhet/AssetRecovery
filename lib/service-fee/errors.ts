@@ -1,4 +1,4 @@
-import { ModuleError, type ErrorMessage, toModuleErrorResponse } from '@/lib/api/http'
+import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
 
 /**
  * Error code หมวดเทมเพลตค่าบริการ (ไฟล์ 12) — SSOT อยู่ที่ `docs/24-finance-validation-rules.md` §6.1
@@ -67,5 +67,3 @@ export class ServiceFeeError extends ModuleError<ServiceFeeErrorCode> {
 export function isServiceFeeError(error: unknown): error is ServiceFeeError {
   return error instanceof ServiceFeeError
 }
-
-export const toServiceFeeErrorResponse = toModuleErrorResponse

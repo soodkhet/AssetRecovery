@@ -1,6 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { withApiPermission } from '@/lib/api/http'
-import { toCompensationErrorResponse } from '@/lib/compensation/errors'
+import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
 import { listCompensationPlanVersions } from '@/lib/compensation/queries'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -12,7 +11,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 export const GET = withApiPermission<RouteContext>(
   'view',
   'view_master_data',
-  toCompensationErrorResponse,
+  toModuleErrorResponse,
   async (_request: NextRequest, context, user) => {
     const { id } = await context.params
     return Response.json({ data: await listCompensationPlanVersions(user.organizationId, id) })

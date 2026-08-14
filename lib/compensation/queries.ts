@@ -7,9 +7,9 @@ import {
   normalizePlanValues,
   planNextVersion,
   type CompensationPlanValues,
-  type CompensationPlanVersion,
 } from '@/lib/compensation/plan'
 import type { CompensationPlanListQuery } from '@/lib/compensation/schemas'
+import type { CompensationPlanDto, CompensationPlanListDto } from '@/lib/compensation/types'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -47,15 +47,9 @@ const planSelect = {
 
 type PlanRow = Prisma.CompensationPlanGetPayload<{ select: typeof planSelect }>
 
-export interface CompensationPlanRecord extends CompensationPlanVersion {
-  isActive: boolean
-  updatedAt: string
-}
-
-export interface CompensationPlanListItem extends CompensationPlanRecord {
-  /** จำนวนทีมที่ผูกอยู่กับเวอร์ชันนี้ — ใช้เตือนก่อนแก้/ปิดใช้งาน (`11` §10) */
-  teamCount: number
-}
+/** รูปร่างที่ส่งออกทาง API — นิยามอยู่ `lib/compensation/types.ts` (pure ใช้ร่วมฝั่ง client ได้) */
+export type CompensationPlanRecord = CompensationPlanDto
+export type CompensationPlanListItem = CompensationPlanListDto
 
 /** DATE ของ Postgres มาเป็น `Date` เที่ยงคืน UTC — ตัดเป็น `YYYY-MM-DD` ตรง ๆ ห้ามแปลง timezone */
 function toIsoDate(value: Date | null): string | null {

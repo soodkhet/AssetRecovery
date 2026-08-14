@@ -1,7 +1,6 @@
 import type { NextRequest } from 'next/server'
-import { readJsonBody, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
-import { toCompensationErrorResponse } from '@/lib/compensation/errors'
 import { createCompensationPlan, listCompensationPlans } from '@/lib/compensation/queries'
 import {
   compensationPlanCreateSchema,
@@ -15,7 +14,7 @@ import {
 export const GET = withApiPermission(
   'view',
   'view_master_data',
-  toCompensationErrorResponse,
+  toModuleErrorResponse,
   async (request: NextRequest, _context, user) => {
     const url = new URL(request.url)
     const parsed = compensationPlanListQuerySchema.safeParse({
@@ -35,7 +34,7 @@ export const GET = withApiPermission(
 export const POST = withApiPermission(
   'manage',
   'manage_compensation_plans',
-  toCompensationErrorResponse,
+  toModuleErrorResponse,
   async (request: NextRequest, _context, user) => {
     const parsed = compensationPlanCreateSchema.safeParse(await readJsonBody(request))
     if (!parsed.success) return validationErrorResponse(parsed.error)

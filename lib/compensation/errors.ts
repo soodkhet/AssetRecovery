@@ -1,4 +1,4 @@
-import { ModuleError, type ErrorMessage, toModuleErrorResponse } from '@/lib/api/http'
+import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
 
 /**
  * Error code หมวดแผนค่าตอบแทน (ไฟล์ 11) — SSOT อยู่ที่ `docs/24-finance-validation-rules.md` §6.1
@@ -63,5 +63,3 @@ export function isCompensationError(error: unknown): error is CompensationError 
   return error instanceof CompensationError
 }
 
-/** แปลง error → Response (error ที่ไม่ใช่ของโมดูลถูกส่งต่อ/โยนต่อโดย `toModuleErrorResponse`) */
-export const toCompensationErrorResponse = toModuleErrorResponse

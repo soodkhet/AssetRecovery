@@ -3,6 +3,7 @@ import type { z } from 'zod'
 import { authErrorMessage, toAuthErrorResponse } from '@/lib/auth/errors'
 import { requirePermission } from '@/lib/auth/require-permission'
 import type { PermissionAction, SessionUser } from '@/lib/auth/types'
+import { ModuleError } from '@/lib/api/errors'
 import { toFieldErrors } from '@/lib/api/validation'
 
 /**
@@ -58,44 +59,6 @@ export async function readJsonBody(request: NextRequest): Promise<unknown> {
     return await request.json()
   } catch {
     return null
-  }
-}
-
-/** ข้อความคู่ (title/message) ภาษาไทยของ error code หนึ่งตัว */
-export interface ErrorMessage {
-  title: string
-  message: string
-}
-
-/**
- * error ของโมดูลธุรกิจ — โมดูลสร้าง subclass พร้อมตาราง status/message ของตัวเอง
- * code ทุกตัวต้องมีอยู่ใน `docs/24-finance-validation-rules.md` เท่านั้น (Rule 04)
- */
-export class ModuleError<Code extends string = string> extends Error {
-  readonly code: Code
-  readonly status: number
-  readonly title: string
-  /** ข้อความไทยที่ส่งให้ผู้ใช้ (ไม่มี prefix code เหมือน `Error.message`) */
-  readonly userMessage: string
-  /** รายละเอียดสำหรับ log ฝั่ง server เท่านั้น — ห้ามส่งออก response */
-  readonly detail?: string
-  /** ข้อมูลประกอบที่ปลอดภัยพอจะส่งให้ FE (เช่น รายชื่อบริษัทที่ผูกเทมเพลตอยู่ — `12` §11) */
-  readonly context?: Record<string, unknown>
-
-  constructor(
-    code: Code,
-    messages: ErrorMessage,
-    status: number,
-    options?: { detail?: string; context?: Record<string, unknown> },
-  ) {
-    super(`${code}: ${messages.message}`)
-    this.name = 'ModuleError'
-    this.code = code
-    this.status = status
-    this.title = messages.title
-    this.userMessage = messages.message
-    this.detail = options?.detail
-    this.context = options?.context
   }
 }
 

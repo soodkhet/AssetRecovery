@@ -8,9 +8,9 @@ import {
   normalizeTemplateValues,
   planNextTemplateVersion,
   type ServiceFeeTemplateValues,
-  type ServiceFeeTemplateVersion,
 } from '@/lib/service-fee/template'
 import type { ServiceFeeTemplateListQuery } from '@/lib/service-fee/schemas'
+import type { ServiceFeeTemplateDto, ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -38,15 +38,9 @@ const templateSelect = {
 
 type TemplateRow = Prisma.ServiceFeeTemplateGetPayload<{ select: typeof templateSelect }>
 
-export interface ServiceFeeTemplateRecord extends ServiceFeeTemplateVersion {
-  isActive: boolean
-  updatedAt: string
-}
-
-export interface ServiceFeeTemplateListItem extends ServiceFeeTemplateRecord {
-  /** จำนวนบริษัทไฟแนนซ์ที่ผูกเวอร์ชันนี้อยู่ — ยาม `TEMPLATE_IN_USE` (`12` §10) */
-  companyCount: number
-}
+/** รูปร่างที่ส่งออกทาง API — นิยามอยู่ `lib/service-fee/types.ts` (pure ใช้ร่วมฝั่ง client ได้) */
+export type ServiceFeeTemplateRecord = ServiceFeeTemplateDto
+export type ServiceFeeTemplateListItem = ServiceFeeTemplateListDto
 
 function toRecord(row: TemplateRow): ServiceFeeTemplateRecord {
   return {

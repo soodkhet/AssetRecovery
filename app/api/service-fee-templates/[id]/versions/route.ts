@@ -1,6 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { withApiPermission } from '@/lib/api/http'
-import { toServiceFeeErrorResponse } from '@/lib/service-fee/errors'
+import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
 import { listServiceFeeTemplateVersions } from '@/lib/service-fee/queries'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -13,7 +12,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 export const GET = withApiPermission<RouteContext>(
   'view',
   'view_master_data',
-  toServiceFeeErrorResponse,
+  toModuleErrorResponse,
   async (_request: NextRequest, context, user) => {
     const { id } = await context.params
     return Response.json({ data: await listServiceFeeTemplateVersions(user.organizationId, id) })
