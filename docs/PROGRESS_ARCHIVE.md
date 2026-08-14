@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 2.14 — Warehouse Frontend ชุดที่ 1 (รับเข้าคลัง + ในคลัง · ไฟล์ 44 §8.1–8.3)
+
+**วันที่**: 2026-08-15 · **commit**: `PENDING` · **branch**: `auto/phase-2.14`
+
+### สิ่งที่ทำ
+- **pure modules + unit test 40 เคสใหม่** (หน้าจอห้ามตัดสินใจเอง — เรียกตัวเดียวกับที่ API บังคับ)
+  - `lib/warehouse/asset-filters.ts` — `buildAssetListQuery()` (state ฟอร์ม → query ที่ตรง contract), `statusesOnWarehouseTab()`, `groupCustodyByCompany()`, `isSelectableForLot()`/`selectableAssetIds()`/`keepSelectable()`, `matchesAssetSearch()`, `filterByReceivedDate()`, `optionsFromAssets()`/`filterOptionsOrFallback()`
+  - `lib/warehouse/asset-actions.ts` — ปุ่มต่อแถวตามสถานะ + capability (`44` §8.2 Action Buttons)
+  - `lib/warehouse/intake-photos.ts` — path/มุมของรูป 7 มุม + คำเตือนเมื่อไม่ครบ
+- **`lib/warehouse/upload-client.ts`** (browser) — อัปโหลดรูปเข้ารับเข้าคลังขึ้น bucket `case-documents` ตัวเดิม แล้วส่งเฉพาะ path เข้า `photos[]`
+- **หน้า `/warehouse` ของจริง** แทน `<ModulePlaceholder>` — shell 4 แท็บ + badge counts (`44` §8.1)
+  - แท็บ **รับเข้าคลัง**: filter 7 ตัว + ตาราง 9 คอลัมน์ + card list บนจอเล็ก + ปุ่มตามสถานะ
+  - **Modal รับเข้าคลัง 3 ขั้นในหน้าต่างเดียว**: เทียบ IMEI/serial (เขียว/แดง + force proceed) → สภาพ + note บังคับเมื่อไม่ปกติ → รูป 7 มุม
+  - **Modal ตีกลับ / ดูเหตุผลตีกลับ** (`rejectReason` = `reason` ของ audit ด้วย)
+  - แท็บ **ในคลัง**: การ์ดต่อบริษัท (พร้อมส่ง vs ใน Lot + breakdown สภาพ) → drill-down ตาราง + checkbox + ปุ่ม "นัดวันส่งมอบ (N)" + modal ดูรายละเอียดเครื่อง (รูปเปิดผ่าน `<FileViewerModal>` ขอ signed URL)
+
+### การตัดสินใจระหว่างทาง
+- **แท็บ "ในคลัง" ดึง `in_custody` + `handover_pending`** ตามตาราง `44` §8.1 — **ต่างจาก mockup** ที่กรองเฉพาะ `in_custody` · ถ้าทำตาม mockup การ์ดของ §8.3 จะโชว์ "ใน Lot แล้ว" เป็น 0 เสมอ (spec ชนะ mockup เมื่อขัดกัน) ⇒ แยกเป็น `statusesOnWarehouseTab()` ไม่ไปแก้ `statusesInAssetTab()` ของ §9.3 ที่ตอบคนละคำถาม
+- **มุมของรูปเข้ารหัสไว้ใน path** (`assets/<assetId>/intake/<angle>/…`) — `assets.photos` เป็น `text[]` ล้วนและ contract ของ 2.13 ปิดแล้ว การเก็บมุมแบบนี้ทำให้แสดง "มุมไหนถ่ายแล้ว" ได้โดยไม่ต้องแก้ schema/`45`
+- **IMEI ไม่ตรงต้องกดยืนยัน 2 ครั้ง** — mockup **disable** ปุ่มยืนยันเมื่อ IMEI ไม่ตรง แต่ `44` §8.2/§12 บอกชัดว่า "เตือน แต่ยังไปต่อได้ (force proceed)" ⇒ ทำตาม spec แล้วเปลี่ยนปุ่มเป็น "ยืนยันรับทั้งที่ IMEI ไม่ตรง" เพื่อให้เป็นการตั้งใจ ไม่ใช่เผลอกด
+- **ไม่ทำปุ่ม "ใช้ IMEI ในสัญญา"** ที่มีใน mockup — เป็นทางลัดให้กดผ่านการตรวจโดยไม่ได้ดูเครื่องจริง ขัดเจตนาของ §6.5 และ spec ไม่ได้ระบุไว้
+- **ตัวเลือก dropdown ทีม/พนักงาน/บริษัทมี fallback** — `/api/teams`+`/api/finance-companies` ขอ `view_master_data` และ `/api/users` ขอ `manage_users` ซึ่ง `44` §13 ไม่ได้ให้ธุรการคลัง ⇒ เรียกไม่ได้ก็ถอยไปรวมค่าจากแถวที่โหลดมา (`filterOptionsOrFallback()`) แทนที่จะปล่อย dropdown ว่าง
+- **"วันที่รับเข้า" ของ drill-down กรองฝั่ง client** — `GET /api/assets` มี `dateFrom`/`dateTo` ที่ผูกกับ **วันปิดเคส** เท่านั้น (`44` §15) · ไม่เพิ่ม query param ใหม่เพราะจะกระทบ contract `45`; drill-down โหลด 200 แถว (เพดาน schema) และเตือนบนหน้าจอเมื่อ `total` เกินที่แสดง
+- **แท็บ 3–4 เป็น placeholder** ตามขอบเขต 2.15 — `onScheduleHandover` ของ `<CustodyTab>` คือจุดเดียวที่ 2.15 ต้องเสียบ modal สร้างล็อต
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ (0 warning) · `pnpm test` ✅ (118 ไฟล์ / 1,556 เคส) · `next build` ✅
+
+### จุดที่คนถัดไปควรรู้
+- Phase 2.15 เสียบต่อ 3 จุด: prop `onScheduleHandover` ของ `<CustodyTab>` · บล็อก placeholder ของแท็บ `pending_handover`/`handed_over` ใน `<WarehouseManager>` · badge 2 แท็บหลังนับล็อตอยู่แล้ว (`countLots()`)
+- ปุ่ม/แท็บทั้งหมดอ่านจาก pure module — เพิ่มสถานะหรือปุ่มใหม่ต้องแก้ที่ `asset-actions.ts`/`asset-filters.ts` ไม่ใช่ใน JSX
+- bucket `case-documents` ต้องมีอยู่แล้วต่อ environment (ตั้งไว้ตั้งแต่ 2.5) — รูปรับเข้าคลังใช้ bucket เดียวกัน คนละ prefix
+
+---
+
 ## Phase 2.13 — Warehouse Backend (คลังสินค้า + ส่งมอบ · ไฟล์ 44)
 
 **วันที่**: 2026-08-15 · **commit**: `6b119ba` (migration ที่ค้างจาก session ก่อน) + `32f6b4c` + `b9b1f0a` + (docs) · **branch**: `auto/phase-2.13`
