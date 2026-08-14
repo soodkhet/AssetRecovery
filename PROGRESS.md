@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.6 (Roles & Permissions module) · งานถัดไป 1.7
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.7 (Compensation Plans + Service Fee Templates) · งานถัดไป 1.8
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.7: Compensation Plans (11) + Service Fee Templates (12)
+## 🎯 งานถัดไป — Phase 1.8: Teams (09) + Finance Companies (10)
 
-- ทำตาม `docs/01_PLAN.md` §1.7 — **BE 11**: fuel 2 โหมด (PER_KM: rate+max_per_case / DAILY_FLAT) validate เลือกได้โหมดเดียว + commission/no_success_fee (mutually exclusive ตาม outcome) + allowance/hotel/WHT/receipt_required + **versioning: PATCH สร้าง version ใหม่ไม่ overwrite** + snapshot resolver
-- **BE 12**: 3 model SUCCESS_FEE/FLAT/HYBRID + conditional validation (base/rate/basis/charge_on_fail ตาม model) + `TEMPLATE_IN_USE`/`INVALID_RATE_RANGE`
-- **FE**: การ์ดเทมเพลตทั้งสองแบบ (DEC-008 — service fee เป็นการ์ด แสดงสูตร 2 กรณี), form conditional fields, version history — ประกอบจาก UI Kit `@/components/ui` เท่านั้น
-- เงินทุกช่อง = **INTEGER satang** · สูตรอ้าง `22` §6.1–6.7 ห้าม hardcode ซ้ำ · ทุก mutation ผ่าน `emitAudit()` พร้อม `reason` (ตาราง `compensation_plans`/`service_fee_templates` = หมวดเงิน)
-- อ้างอิง: `11`, `12` ทั้งไฟล์ · `22` §6.1–6.7 · mockup `settings.html` ผ่าน MAP (compensation/servicefee)
-- LOC ~2,400 · งบ ~340k
-- DoD: test conditional validation ครบทุก model/โหมด · แก้ template ที่ถูกใช้แล้ว → version ใหม่ · audit+reason ครบ
-
+- ทำตาม `docs/01_PLAN.md` §1.8 — **BE 09**: teams + `team_managers` N:N (Manager หลายทีม / Supervisor เดี่ยว 1 ทีม) + **บังคับผูก `compensation_plan_id` ตอนสร้างทีมเสมอ** (`09` §7 — ใช้ API แผนค่าตอบแทนจาก 1.7) + guard deactivate ทีมที่มีงาน active + provinces (PROVINCE_DATA master)
+- **BE 10**: companies CRUD + `tax_id` 13 หลัก format-only + `DUPLICATE_TAX_ID` + suspend (reason บังคับ, event `finance-company.suspended`) + company users sub-resource + `vat_registered`/delivery_format + **บังคับผูก `service_fee_template_id`** (`10` §9)
+- **FE**: ตารางทีม + form (plan dropdown, manager multi-select, supervisor select, province picker) · **การ์ดบริษัท (ไม่ใช่ตาราง)** + form + suspend dialog — ประกอบจาก UI Kit `@/components/ui` เท่านั้น
+- ปิด/ลบทีมหรือบริษัทที่ผูกอยู่ต้องเช็คยาม `PLAN_IN_USE`/`TEMPLATE_IN_USE` ฝั่ง 1.7 ให้สอดคล้อง · ทุก mutation ผ่าน `emitAudit()` (`teams`/`finance_companies` = หมวดเงิน/สิทธิ์)
+- อ้างอิง: `09`, `10` ทั้งไฟล์ · mockup `settings.html` ผ่าน MAP (teams/companies)
+- LOC ~2,200 · งบ ~330k · หมายเหตุ: snapshot service fee ตอนเคส approved อยู่ Phase 2.3 (spec เจ้าของ `10` §9.2)
+- DoD: ทีมไม่มีแผน → สร้างไม่ได้ · tax_id ซ้ำ → reject · company user เห็นเฉพาะ company ตัวเอง
 
 ---
 
@@ -37,7 +36,7 @@
 | 1.4 | Audit core service (immutable) | ✅ | 2026-08-14 · `09b283a` · immutable 2 ชั้น (DB trigger + Prisma extension) + นโยบาย `reason` + diff util + เทสต์ระดับ DB → archive |
 | 1.5 | UI Kit + App Shell + Navigation | ✅ | 2026-08-14 · `e4d56b4` · UI Kit `components/ui/*` + App Shell 7 เมนูตาม `06` §7.2 + utils พ.ศ./satang + statusBadge 10 กลุ่ม + `GET /api/meta/menu` → archive |
 | 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
-| 1.7 | Compensation Plans + Service Fee Templates | ⬜ | PLAN §1.7 · ไฟล์ 11+12 · ก่อน 1.8 |
+| 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
 | 1.8 | Teams + Finance Companies | ⬜ | PLAN §1.8 · ไฟล์ 09+10 |
 | 1.9 | Users module | ⬜ | PLAN §1.9 · ไฟล์ 08 |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
