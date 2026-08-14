@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 2.13 (Warehouse Backend — คลัง/ส่งมอบ/PDF/Excel ครบ 10 endpoint) · งานถัดไป 2.14
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 2.14 (Warehouse FE ชุด 1 — หน้า `/warehouse` จริง: รับเข้าคลัง + ในคลัง) · งานถัดไป 2.15
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.14: Warehouse Frontend ชุดที่ 1 (รับเข้าคลัง + ในคลัง)
+## 🎯 งานถัดไป — Phase 2.15: Warehouse Frontend ชุดที่ 2 (ส่งมอบ + แนบเอกสาร)
 
-- ทำตาม `docs/01_PLAN.md` §2.14 — Warehouse shell 4 แท็บ + badge counts + Company User read-only scope
-- **แท็บรับเข้าคลัง**: filter 7 ตัว + ตาราง 9 คอลัมน์ · ปุ่มตามสถานะ (`pending_intake` → รับเข้าคลัง/ตีกลับ · `intake_rejected` → ดูเหตุผล/รับใหม่)
-- **Modal intake 3 ขั้น**: เทียบ IMEI (ไม่ตรง = ไฮไลต์แดง + force proceed ได้) → สภาพ + note บังคับเมื่อไม่ปกติ → อัปโหลดรูป 7 มุม
-- **Modal ตีกลับ / ดูเหตุผล / รับใหม่** · **แท็บในคลัง**: การ์ด group ตามบริษัท + drill-down + checkbox + ปุ่มนัดวันส่งมอบ
-- ใช้ของที่มีแล้ว: `lib/warehouse/*` (pure + schemas ครบจาก 2.13 — ห้ามเขียนเงื่อนไขซ้ำในหน้าจอ) · UI Kit · `<FileViewerModal>` · `<ReasonConfirmModal>`
-- อ้างอิง: `44` §8.1–8.3 ผ่าน MAP (L170–264) · mockup `reference/warehouse.html` ผ่าน MAP
-- LOC ~2,400 · งบ ~360k
+- ทำตาม `docs/01_PLAN.md` §2.15 — ปิดวงจร `closed_success → intake → lot → confirm` ให้ครบบนหน้าจอ
+- **Modal "นัดวันส่งมอบ"**: radio 2 รูปแบบ (🏢 ไฟแนนซ์มารับ / 🚚 เราจัดส่ง) + ช่องตามรูปแบบ (วันนัด/ผู้ประสาน · ที่อยู่จัดส่งบังคับ default จากบริษัท) + เลขล็อต/ใบส่งมอบ auto-gen (อ่านอย่างเดียว) + ปุ่มดูตัวอย่าง/พิมพ์ PDF + รายการเครื่อง collapsible + Export Excel
+- **แท็บรอส่งมอบ + ส่งมอบแล้ว**: การ์ด Lot + drill-down (`we_deliver` อยู่แท็บ "ส่งมอบแล้ว" ทันทีตาม §9.3)
+- **Modal แนบเอกสาร + ยืนยันส่งมอบ**: 1 ช่อง (`finance_pickup`) หรือ 2 ช่อง (`we_deliver`) · ปุ่มยืนยัน disabled ตาม `canConfirmLot()` ตัวเดียวกับ API
+- ใช้ของที่มีแล้ว: prop `onScheduleHandover` ของ `<CustodyTab>` + บล็อก placeholder ใน `<WarehouseManager>` (2 จุดเสียบที่ 2.14 เตรียมไว้) · `lib/warehouse/*` pure ครบจาก 2.13 · `<FileViewerModal>` · UI Kit
+- อ้างอิง: `44` §8.4–8.5 ผ่าน MAP (L265–308) · mockup `reference/warehouse.html` ผ่าน MAP (L485–715)
+- DoD: วงจร closed_success → intake → lot → confirm ครบบน staging (expense ปลดล็อกจริง) · LOC ~1,550 · งบ ~260k
 
 ---
 
@@ -60,7 +60,7 @@
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ✅ | 2026-08-14 · `66be882`+`011318f` · ฟอร์มปิดงาน 3 ส่วน (auto GPS + ลากแผนที่ + เช็คอินจากอุปกรณ์จริง + สื่อ 4 ชนิด + draft) + โหมด `needs_revision` + flow คำขอเปลี่ยนผู้รับผิดชอบครบ 3 ทางเข้า → archive |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ✅ | 2026-08-14 · `1af69ae`+`07b2744` · 4 หน้าจอสุดท้ายของไฟล์ 41 (เบิกเงิน 2 ขอบแท็บ/รายได้/จบงาน/dashboard) + PWA manifest + service worker + กระดิ่งแจ้งเตือนในแอป · ⚠️ ต้องตั้ง `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (คู่กับ `VAPID_*`) ที่ Vercel ก่อน push จริงจะทำงาน → archive |
 | 2.13 | Warehouse BE (confirm = transaction 4 steps) | ✅ | 2026-08-15 · `32f6b4c`+`b9b1f0a` · API 10 endpoint + confirm 4 ขั้น + PDF/Excel ใบส่งมอบ + Revenue stub (ของจริง 3.6) · เทสต์ T01–T15 ของ `44` §17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
-| 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ⬜ | PLAN §2.14 |
+| 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ✅ | 2026-08-15 · `8d25403` · หน้า `/warehouse` จริง 4 แท็บ + badge + modal รับเข้าคลัง 3 ขั้น (force proceed) + แท็บในคลัง (การ์ด/drill-down/checkbox) → archive |
 | 2.15 | Warehouse FE ชุด 2 (ส่งมอบ/แนบเอกสาร) | ⬜ | PLAN §2.15 |
 
 ## Phase 3 — Finance Module (ไฟล์ 14–21, 22)
