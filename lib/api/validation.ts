@@ -4,7 +4,7 @@ import { z } from 'zod'
  * ชิ้นส่วน Zod ที่ใช้ร่วมทุกโมดูล (Rule 04 · Rule 13 — schema เดียวใช้ร่วม FE/BE)
  * ย้ายออกมาจาก `lib/roles/schemas.ts` (Phase 1.6) ตอน Phase 1.7 เพื่อไม่ให้แต่ละโมดูลนิยามซ้ำ
  *
- * TODO(Phase 2.1): รวมเข้ากับ envelope/validation กลางของไฟล์ `45` เมื่อ API Contract Infra พร้อม
+ * `toFieldErrors()` ป้อนช่อง `error.fields` ของ envelope กลาง (`lib/api/envelope.ts` — Phase 2.1)
  */
 
 const REASON_MIN = 5

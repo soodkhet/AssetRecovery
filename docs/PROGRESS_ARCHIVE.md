@@ -5,6 +5,56 @@
 
 ---
 
+## Phase 2.1 — API Contract Infra (ไฟล์ 45): 39 endpoints + event registry + envelope + error catalog
+
+**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `auto/phase-2.1`
+
+### สิ่งที่ทำ
+
+- **Route contract** `lib/api/contract.ts` — `API_CONTRACT` ครบทุก endpoint ของ `45` §6.1–6.5 พร้อม `method/path/module/source/summary/query` · `apiPath(id, params, query)` สร้าง URL แบบ typed (ชื่อ path param มาจาก template literal type — พิมพ์ผิดไม่ผ่าน `tsc`) และ **ปฏิเสธ query key ที่สเปคไม่ได้ประกาศ**
+- **Event registry** `lib/api/event-names.ts` (34 ชื่อ, literal บรรทัดละตัว) + `lib/api/events.ts` (metadata + `isDomainEvent()`/`assertDomainEvent()` + `EVENT_NAME_DIFFS`)
+- **กฎ ESLint `assetrecovery/no-unregistered-event`** (`tools/eslint-rules/no-unregistered-event.mjs` + `.d.mts`) — จับชื่อ event นอกทะเบียนใน `emitEvent`/`publishEvent`/`recordEvent`/`assertDomainEvent` และ property `event`/`eventName`/`event_name` · เสียบใน `eslint.config.mjs` เป็น plugin `assetrecovery` ระดับ error
+- **Response envelope กลาง** `lib/api/envelope.ts` ตาม `44` §15 — `{success, data, error{code,message,field}}` + ส่วนขยาย `error.title`/`error.fields`/`warning` (superset ของรูปแบบ Phase 1 จึงไม่ต้องแก้หน้าจอเดิม) · `toModuleErrorResponse()`/`validationErrorResponse()` ออก envelope นี้แล้วทั้งคู่ ⇒ **error ของ 50 route เดิมอัปเกรดอัตโนมัติ**
+- **`withEndpoint()`** ใน `lib/api/http.ts` — ตัวห่อ route ของ endpoint ที่ผูก contract: เช็ค HTTP method ตรง contract → `requirePermission()` (DEC-002) → ห่อ envelope ให้เอง (handler คืน `{data, status?, warning?}` หรือ `Response` ตรง ๆ เมื่อส่งไฟล์ PDF/Excel)
+- **Error catalog** `lib/api/error-catalog.ts` — 129 code (จาก `24` §6.1–6.10 + `38`/`40`/`41`/`44` §12) เก็บ `status` + `severity` + ที่มา · ข้อความไทยยังอยู่ที่ `lib/<module>/errors.ts` (ไม่ทำซ้ำสองที่)
+- **เทสต์ 57 เคส (5 ไฟล์)** — จุดที่ต่างจากเทสต์ทั่วไปคือ **อ่านไฟล์ spec จริงมาเทียบ**: contract ↔ `45` §6 ทั้งสองทาง · event registry ↔ `38`/`40`/`41` §17.2 + `44` §14 · error catalog ↔ `24` + module docs ทั้งสองทาง + เทียบ status กับ 9 โมดูลที่ implement แล้ว · กฎ ESLint รันจริงผ่าน `RuleTester`
+
+### ส่วนต่างชื่อ event ระหว่าง `45` §7 กับไฟล์ต้นทาง (ตาม PLAN §2.1 — บันทึกไว้ ห้ามเงียบ)
+
+ทะเบียนยึด **ไฟล์ต้นทางของโมดูล** เสมอ (ลำดับเอกสารใน CLAUDE.md: module spec ชนะ reference กลาง) — บันทึกเป็นโค้ดไว้ที่ `EVENT_NAME_DIFFS` ด้วย
+
+| ชื่อในทะเบียน | `45` §7 เขียนว่า | สรุป |
+|---|---|---|
+| `asset.intake` | `asset.intake_confirmed` | ยึด `44` §14 · `asset.intake_confirmed` จะโดนกฎ ESLint จับถ้ามีใครเขียน |
+| `asset.intake_retry` | (ไม่ลิสต์) | มีใน `44` §14 — รับเข้าทะเบียน |
+| `lot.doc_attached` | (ไม่ลิสต์) | มีใน `44` §14 — รับเข้าทะเบียน |
+| `expense.case_bound_created` | (ไม่ลิสต์) | มีใน `41` §17.2 — รับเข้าทะเบียน |
+| `expense.hotel_claim_submitted` | (ไม่ลิสต์) | มีใน `41` §17.2 — รับเข้าทะเบียน |
+| `case.recycle_approved` | มี | `38` §17.2 ไม่ได้ลิสต์ แต่ flow recycle มีจริงที่ `38` §10 — รับเข้าทะเบียน |
+
+### การตัดสินใจระหว่างทาง
+
+- **จำนวน endpoint = 39 ไม่ใช่ 37** — PLAN §2.1 เขียน 37 เป็นตัวเลขประมาณ · นับจาก `45` §6.1–6.5 จริงได้ 7+8+14+4+6 = 39 (เทสต์ตรึงเลข 39 ไว้กับไฟล์เอกสาร)
+- **ไม่ normalize verb** — คง POST สำหรับ action ที่มี side effect ตาม `45` §8/§17 (ไม่ทำให้เป็น PATCH แบบไฟล์ `27`)
+- **ไม่ย้าย success response ของ 50 route เดิม** มาใช้ `apiSuccess()` ในคอมมิตนี้ — DoD ระบุว่า "endpoint หลังจากนี้" ใช้ contract · `callApi()` อ่านได้ทั้งสองรูปแบบอยู่แล้ว (`readEnvelope()`) จึงไม่มีหน้าจอไหนต้องแก้ · route เดิมย้ายทีละตัวได้เมื่อแตะไฟล์นั้นอยู่แล้ว
+- **catalog เก็บเฉพาะ metadata ไม่เก็บข้อความ** — กันข้อความไทยเพี้ยนสองที่กับ `lib/<module>/errors.ts` ที่มีอยู่แล้ว 9 โมดูล
+- **ทะเบียน event แยกไฟล์ `event-names.ts`** ออกจาก metadata — เพราะกฎ ESLint (JS ล้วน) อ่านด้วย regex ไม่ได้ import TS
+- `ApiData`/`ApiErrorBody` มาร์ค `@deprecated` แต่ยังคงไว้ (หน้าจอ roles 2 ตัวยังอ่าน body ดิบเอง)
+
+### verify ที่รันจริง
+
+`pnpm typecheck` ✅ · `pnpm test` ✅ (796/796 · ใหม่ 57) · `pnpm lint` ✅ · `pnpm build` ✅ (กันกับดัก Prisma หลุดเข้า client bundle)
+พิสูจน์ DoD ข้อ "lint จับ event นอก registry ได้จริง": สร้างไฟล์ probe ที่มี `{ event: 'lot.shipped' }` แล้วรัน `pnpm lint` → error จริง แล้วลบ probe ทิ้ง
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 2.2 เป็นต้นไปเขียน route ด้วย `withEndpoint({endpoint: 'case.create', action, resource, handler})`** — ห้ามพิมพ์ path เอง ห้ามสร้าง envelope เอง
+- เพิ่ม/แก้ endpoint หรือ event = แก้ `docs/45` (และไฟล์ต้นทาง) ในคอมมิตเดียวกัน ไม่งั้นเทสต์ spec-drift แดง
+- `PATCH /api/field/cases/reorder` เป็น segment คงที่ระดับเดียวกับ `[id]` — ฝั่ง Next ต้องวางโฟลเดอร์ `reorder/` คู่กับ `[id]/` (static ชนะ dynamic)
+- ต้องการใช้ชื่อ event นอกทะเบียนจริง ๆ (เช่นเทสต์ยาม) ให้ใส่ `// eslint-disable-next-line assetrecovery/no-unregistered-event -- <เหตุผล>`
+
+---
+
 ## Phase 1.12 — Settings FE ชุดที่ 2: 8 แท็บที่เหลือ (ไฟล์ 13 §6.4/6.5/6.7/6.9/6.10/6.11/6.12/6.13)
 
 **วันที่**: 2026-08-14 · **commit**: `fa00f40` · **branch**: `auto/phase-1.12`

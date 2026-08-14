@@ -1,41 +1,36 @@
+import { readEnvelope, type ApiErrorPayload, type ApiWarning } from '@/lib/api/envelope'
+
 /**
- * Response envelope ชั่วคราวของ Phase 1 — **pure type ล้วน** (import เข้าไฟล์ `'use client'` ได้)
- * TODO(Phase 2.1): ย้ายไป envelope กลางของไฟล์ `45` เมื่อ API Contract Infra พร้อม
+ * ตัวเรียก API ฝั่ง client — **pure type + fetch ล้วน** (import เข้าไฟล์ `'use client'` ได้)
+ *
+ * รูปแบบ envelope กลางอยู่ที่ `lib/api/envelope.ts` (Phase 2.1 · ตาม `44` §15) —
+ * ตัวนี้อ่านได้ทั้ง envelope ใหม่ (`{success, data, error}`) และ response ของ Phase 1 ที่ยังเป็น
+ * `{ data }` / `{ error }` ล้วน จึงไม่ต้องแก้หน้าจอเดิมพร้อมกันทั้งหมด
  */
 
+export type { ApiWarning }
+
+/** @deprecated ใช้ `ApiEnvelope` จาก `lib/api/envelope.ts` — เหลือไว้ให้หน้าจอ Phase 1 ที่ยังอ่าน body ดิบเอง */
 export interface ApiData<T> {
   data: T
-  /**
-   * งานที่ "สำเร็จแต่มีเรื่องต้องบอก" — ไม่ใช่ error (HTTP ยัง 2xx) เช่น สร้างผู้ใช้สำเร็จ
-   * แต่ส่งอีเมลคำเชิญไม่ผ่าน (`08` §14 · D1) · FE แสดงเป็น toast โทนเตือน
-   */
-  warning?: { code: string; title: string; message: string }
+  warning?: ApiWarning
 }
 
+/** @deprecated ใช้ `ApiEnvelope` จาก `lib/api/envelope.ts` */
 export interface ApiErrorBody {
-  error: {
-    code: string
-    title: string
-    message: string
-    fields?: Record<string, string>
-    /** ข้อมูลประกอบเฉพาะ error บางตัว เช่น `TEMPLATE_IN_USE` ส่งรายชื่อบริษัทกลับมา (`12` §11) */
-    companies?: string[]
-    teamCount?: number
-  }
+  error: ApiErrorPayload
 }
 
 export interface ApiCallResult<T> {
   data?: T
-  warning?: { code: string; title: string; message: string }
+  warning?: ApiWarning
   error?: { title: string; message: string }
 }
 
-function toErrorMessage(body: unknown): { title: string; message: string } {
-  const error = (body as ApiErrorBody | undefined)?.error
-  if (error === undefined) return { title: 'ทำรายการไม่สำเร็จ', message: 'กรุณาลองใหม่' }
-  const companies = error.companies
-  const suffix = companies !== undefined && companies.length > 0 ? ` (${companies.join(', ')})` : ''
-  return { title: error.title, message: `${error.message}${suffix}` }
+/** ต่อท้ายข้อมูลประกอบที่ error บางตัวส่งมา เช่นรายชื่อบริษัทของ `TEMPLATE_IN_USE` (`12` §11) */
+function withContextSuffix(message: string, companies: unknown): string {
+  if (!Array.isArray(companies) || companies.length === 0) return message
+  return `${message} (${companies.join(', ')})`
 }
 
 /**
@@ -46,9 +41,18 @@ export async function callApi<T>(input: string, init?: RequestInit): Promise<Api
   try {
     const response = await fetch(input, init)
     const body: unknown = await response.json()
-    if (!response.ok) return { error: toErrorMessage(body) }
-    const payload = body as ApiData<T>
-    return payload.warning === undefined ? { data: payload.data } : { data: payload.data, warning: payload.warning }
+    const envelope = readEnvelope<T>(body, response.ok)
+    if (!envelope.success) {
+      return {
+        error: {
+          title: envelope.error.title,
+          message: withContextSuffix(envelope.error.message, envelope.error.companies),
+        },
+      }
+    }
+    return envelope.warning === undefined
+      ? { data: envelope.data }
+      : { data: envelope.data, warning: envelope.warning }
   } catch {
     return { error: { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: 'กรุณาลองใหม่' } }
   }
