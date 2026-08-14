@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 
 /** ปุ่มออกจากระบบ — เรียก `POST /api/auth/logout` (invalidate session + audit) แล้วกลับหน้า login */
@@ -19,14 +20,10 @@ export function LogoutButton() {
     }
   }
 
+  // ปุ่มรองตาม mockup `app-shell.html` (มุมขวาบนของ header) — ไม่แย่งสายตากับเมนูหลักสีดำ
   return (
-    <button
-      type="button"
-      onClick={handleLogout}
-      disabled={loading}
-      className="focus-ring rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-    >
+    <Button variant="secondary" onClick={handleLogout} loading={loading}>
       {loading ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ'}
-    </button>
+    </Button>
   )
 }

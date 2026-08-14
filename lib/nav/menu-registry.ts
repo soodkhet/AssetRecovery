@@ -1,0 +1,255 @@
+import type { RoleGroup } from '@/lib/generated/prisma/enums'
+import {
+  ACCOUNTING_ROLE_NAME,
+  ADMIN_OFFICE_ROLE_NAME,
+  CASE_APPROVER_ROLE_NAME,
+  DASHBOARD_PATH,
+  EXECUTIVE_ROLE_NAME,
+  FIELD_AGENT_ROLE_NAME,
+  FIELD_TRACKER_PATH,
+  FINANCE_ROLE_NAME,
+  SUPERADMIN_ROLE_NAME,
+  TEAM_MANAGER_ROLE_NAME,
+  TEAM_SUPERVISOR_ROLE_NAME,
+} from '@/lib/auth/constants'
+
+/**
+ * Menu registry — SSOT ของเมนูฝั่ง UI (`06` §7.1.1 Role Group Matrix + §7.2 Top Nav Visibility Matrix)
+ *
+ * ⚠️ **เป็นชั้น UX เท่านั้น** — ซ่อนเมนูไม่ใช่ security · ข้อมูลจริงทุก endpoint ยังตรวจด้วย
+ * `requirePermission(action, resource, scope)` ที่ API layer เสมอ (DEC-002 · Rule 03)
+ *
+ * ทำไมกรองด้วย "role" ไม่ใช่ capability: `06` §7.2 กำหนดการมองเห็นเมนูเป็นราย role ตรง ๆ และเป็น
+ * source of truth ของหัวข้อนี้ (§17) — ส่วน capability (DEC-009) คุมว่า "ทำอะไรได้" ในหน้านั้น
+ * ซึ่งบังคับที่ API + `<Can>` ต่างหาก การผูก role ↔ capability จริงเกิดใน Phase 1.6
+ */
+
+/** คอลัมน์ของ matrix `06` §7.2 (8 คอลัมน์) + `admin_office` ที่ตารางตกหล่น — ดูหมายเหตุที่ `MENU_ITEMS` */
+export type MenuAudience =
+  | 'superadmin'
+  | 'executive'
+  | 'finance'
+  | 'accounting'
+  | 'case_approver'
+  | 'admin_office'
+  | 'team_lead'
+  | 'field_agent'
+  | 'company_user'
+
+export type MenuId = 'dashboard' | 'cases' | 'finance' | 'accounting' | 'warehouse' | 'reports' | 'settings'
+
+export interface MenuItem {
+  id: string
+  /** ชื่อเมนูภาษาไทย — ต้องตรงกับเอกสาร (`06` §9 "ชื่อเมนูในเอกสารกับ UI ต้องตรงกัน") */
+  label: string
+  path: string
+  /** role ที่เห็นเมนูนี้ */
+  audiences: readonly MenuAudience[]
+  /** หน้าจริงพร้อมใช้แล้วหรือยัง — `false` = ยังเป็น placeholder รอ phase ที่ระบุ */
+  available: boolean
+  /** phase ที่หน้าจริงจะเกิด (ใช้แสดงบน placeholder) */
+  plannedPhase?: string
+  /** แท็บย่อยของเมนู (`06` §8) — `cases` มี sub-menu จริงตาม §7.1.1 ที่เหลือเป็นรายการรอพัฒนา */
+  children?: readonly MenuItem[]
+}
+
+const ALL_AUDIENCES: readonly MenuAudience[] = [
+  'superadmin',
+  'executive',
+  'finance',
+  'accounting',
+  'case_approver',
+  'admin_office',
+  'team_lead',
+  'field_agent',
+  'company_user',
+]
+
+/**
+ * เมนูทั้งหมด — ค่าการมองเห็นถอดมาจาก `06` §7.2 ตรง ๆ (✅ = อยู่ใน `audiences`)
+ *
+ * หมายเหตุ **ธุรการ (admin_office)**: ตาราง §7.2 ไม่มีคอลัมน์ของ role นี้ — ยึดตาม mockup
+ * `reference/app-shell.html` (`ROLE_CONFIG.admin_office`) ซึ่งเป็น source of truth ด้าน UI:
+ * เห็น "แดชบอร์ด" + "จัดการเคส" (แท็บรับเคส) ตามหน้าที่คีย์ข้อมูลเคสในไฟล์ 38 §5
+ */
+export const MENU_ITEMS: readonly MenuItem[] = [
+  {
+    id: 'dashboard',
+    label: 'แดชบอร์ด',
+    path: DASHBOARD_PATH,
+    audiences: ALL_AUDIENCES,
+    available: true,
+    plannedPhase: '6.6 (เนื้อหาจริง — รอ PO อนุมัติ mockup)',
+  },
+  {
+    id: 'cases',
+    label: 'จัดการเคส',
+    path: '/cases',
+    audiences: [
+      'superadmin',
+      'executive',
+      'case_approver',
+      'admin_office',
+      'team_lead',
+      'field_agent',
+      'company_user',
+    ],
+    available: false,
+    plannedPhase: '2.4',
+    children: [
+      // §7.1.1 — "รับเคส" เป็นของ Role Group `system` เท่านั้น
+      {
+        id: 'cases.submit',
+        label: 'รับเคส',
+        path: '/cases/submit',
+        audiences: ['superadmin', 'executive', 'case_approver', 'admin_office'],
+        available: false,
+        plannedPhase: '2.4',
+      },
+      // §7.1.1 — "มอบหมายงาน" = ผู้จัดการ/หัวหน้า ของ inhouse+outsource (Case Approver ❌ ตามตาราง §7.1.1)
+      {
+        id: 'cases.assign',
+        label: 'มอบหมายงาน',
+        path: '/cases/assign',
+        audiences: ['superadmin', 'executive', 'team_lead'],
+        available: false,
+        plannedPhase: '2.7',
+      },
+      // §7.1.1 — "ติดตามภาคสนาม" = พนักงานติดตามทรัพย์ (mobile-first, shell ของตัวเองตามไฟล์ 41)
+      {
+        id: 'cases.field',
+        label: 'ติดตามภาคสนาม',
+        path: FIELD_TRACKER_PATH,
+        audiences: ['superadmin', 'executive', 'field_agent'],
+        available: false,
+        plannedPhase: '2.10',
+      },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'การเงิน',
+    path: '/finance',
+    audiences: ['superadmin', 'executive', 'finance'],
+    available: false,
+    plannedPhase: '3.3',
+  },
+  {
+    id: 'accounting',
+    label: 'บัญชี',
+    path: '/accounting',
+    audiences: ['superadmin', 'executive', 'accounting'],
+    available: false,
+    plannedPhase: '4.7',
+  },
+  {
+    id: 'warehouse',
+    label: 'คลังสินค้า',
+    path: '/warehouse',
+    // การเงิน/บัญชี/หัวหน้าทีม/บริษัทไฟแนนซ์ = read เท่านั้น (ระดับสิทธิ์บังคับที่ API ไม่ใช่ที่เมนู)
+    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'team_lead', 'company_user'],
+    available: false,
+    plannedPhase: '2.14',
+  },
+  {
+    id: 'reports',
+    label: 'รายงาน',
+    path: '/reports',
+    // การเงิน F1-F5 · บัญชี A1-A4 · ผู้จัดการ/หัวหน้า O1-O5 (ทีมตัวเอง) — กรองรายรายงานที่ Phase 6
+    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'team_lead'],
+    available: false,
+    plannedPhase: '6.1',
+  },
+  {
+    id: 'settings',
+    label: 'การตั้งค่า',
+    path: '/settings',
+    audiences: ['superadmin', 'executive'],
+    available: false,
+    plannedPhase: '1.11',
+  },
+]
+
+/** ข้อมูล session เท่าที่จำเป็นต่อการกรองเมนู — ทั้ง `SessionUser` (BE) และ `ClientSession` (FE) เข้าได้ */
+export interface MenuViewer {
+  isSuperadmin: boolean
+  roleGroup: RoleGroup
+  roleName: string
+}
+
+/**
+ * role ปัจจุบัน → คอลัมน์ใน matrix `06` §7.2
+ * คืน `null` เมื่อเป็น role ที่สร้างเพิ่มเอง (custom role) — ได้เห็นเฉพาะเมนูที่ทุกคนเห็น (least privilege)
+ * จนกว่า Phase 1.6 จะผูก capability ให้ครบ
+ */
+export function resolveMenuAudience(viewer: MenuViewer): MenuAudience | null {
+  if (viewer.isSuperadmin) return 'superadmin'
+
+  switch (viewer.roleGroup) {
+    case 'finance_company':
+      return 'company_user'
+    case 'inhouse':
+    case 'outsource':
+      if (viewer.roleName === TEAM_MANAGER_ROLE_NAME || viewer.roleName === TEAM_SUPERVISOR_ROLE_NAME) {
+        return 'team_lead'
+      }
+      return viewer.roleName === FIELD_AGENT_ROLE_NAME ? 'field_agent' : null
+    case 'system':
+      switch (viewer.roleName) {
+        case SUPERADMIN_ROLE_NAME:
+          return 'superadmin'
+        case EXECUTIVE_ROLE_NAME:
+          return 'executive'
+        case FINANCE_ROLE_NAME:
+          return 'finance'
+        case ACCOUNTING_ROLE_NAME:
+          return 'accounting'
+        case CASE_APPROVER_ROLE_NAME:
+          return 'case_approver'
+        case ADMIN_OFFICE_ROLE_NAME:
+          return 'admin_office'
+        default:
+          return null
+      }
+    default:
+      return null
+  }
+}
+
+function filterByAudience(items: readonly MenuItem[], audience: MenuAudience | null): MenuItem[] {
+  if (audience === null) {
+    // custom role — เห็นเฉพาะเมนูที่ทุกคอลัมน์ของ matrix เห็น (ปัจจุบัน = แดชบอร์ด)
+    return items
+      .filter((item) => ALL_AUDIENCES.every((each) => item.audiences.includes(each)))
+      .map((item) => ({ ...item, children: item.children ? [] : undefined }))
+  }
+
+  return items
+    .filter((item) => item.audiences.includes(audience))
+    .map((item) =>
+      item.children === undefined ? item : { ...item, children: filterByAudience(item.children, audience) },
+    )
+}
+
+/** เมนูที่ผู้ใช้คนนี้เห็น (กรอง sub-menu ให้ด้วย) — ใช้ทั้ง top nav, `GET /api/meta/menu` และ route guard ของหน้า */
+export function visibleMenus(viewer: MenuViewer): MenuItem[] {
+  return filterByAudience(MENU_ITEMS, resolveMenuAudience(viewer))
+}
+
+/** ผู้ใช้คนนี้เห็นเมนู/แท็บย่อยนี้หรือไม่ (`id` = `dashboard`, `cases`, `cases.submit`, …) */
+export function canViewMenu(viewer: MenuViewer, menuId: string): boolean {
+  const [rootId, childId] = menuId.split('.')
+  const root = visibleMenus(viewer).find((item) => item.id === rootId)
+  if (!root) return false
+  if (childId === undefined) return true
+  return (root.children ?? []).some((child) => child.id === menuId)
+}
+
+/** เมนูตาม id จาก registry (ไม่กรองสิทธิ์) — ใช้ประกอบหน้า/breadcrumb */
+export function findMenu(menuId: string): MenuItem | null {
+  const [rootId, childId] = menuId.split('.')
+  const root = MENU_ITEMS.find((item) => item.id === rootId)
+  if (!root) return null
+  if (childId === undefined) return root
+  return (root.children ?? []).find((child) => child.id === menuId) ?? null
+}

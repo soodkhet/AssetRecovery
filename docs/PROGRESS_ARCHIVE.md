@@ -5,6 +5,48 @@
 
 ---
 
+## Phase 1.5 — UI Kit + App Shell + Navigation
+
+**วันที่**: 2026-08-14 · **commit**: `e4d56b4` · **branch**: `auto/phase-1.5`
+
+### สิ่งที่ทำ
+
+- **Utils กลาง (pure + unit test)**
+  - `lib/format/datetime.ts` — `fmtDate`/`fmtDateTime`/`fmtTime`/`nowDate`/`nowDateTime`/`buddhistYear`/`toBangkokParts`/`toDate` + `toInputDate`/`fromInputDate` (ข้อยกเว้น `<input type="date">`) · แปลง UTC → Asia/Bangkok ด้วย `Intl` (ไม่ hardcode offset) แล้วแสดง **พ.ศ. เท่านั้น** (`03` §6.5 · DEC-005)
+  - `lib/format/money.ts` — `fmtSatang`/`fmtSatangSymbol`/`fmtSatangRounded`/`fmtCount`/`fmtPercent`/`fmtRatioPct` · แปลง satang → ข้อความด้วยการหาร/มอดจำนวนเต็ม (ไม่มี float) · ส่งค่าไม่ใช่จำนวนเต็มเข้าไป = โยน `MoneyFormatError`
+  - `lib/ui/status-badge.ts` — statusBadge mapper **10 กลุ่มสีตายตัว** ถอดจากตาราง `04` §8.1 ครบทั้ง 36 สถานะ · สถานะที่ยังไม่จัดหมวด → `neutral`
+- **UI Kit** `components/ui/*` (barrel `@/components/ui`): `Button`/`Spinner` · `Card`/`CardHeader`/`PageHeader`/`StatCard` · `StatusBadge`/`Badge`/`RefText` · `Field`/`Input`/`Select`/`Textarea`/`Label` · `Table`/`THead`/`TBody`/`Tr`/`Th`/`Td`/`TableState` · `Modal`/`ConfirmModal` · `ToastProvider`/`useToast` · `LoadingState`/`EmptyState`/`ErrorState`/`InlineAlert`/`Skeleton` · `cn()` — คลาสทุกตัวถอดจาก `04` §8.1 + mockup
+- **Menu registry** `lib/nav/menu-registry.ts` — SSOT ของเมนู 7 ตัว + แท็บย่อย "จัดการเคส" 3 ตัว พร้อม `resolveMenuAudience()`/`visibleMenus()`/`canViewMenu()`/`findMenu()` ถอดจาก `06` §7.2 + §7.1.1 ตรง ๆ · เทสต์ = ตารางในเอกสาร (9 คอลัมน์ × 7 เมนู + submenu matrix)
+- **App Shell** `components/shell/*` + route group `app/(app)/` — Top Nav (desktop + จอเล็ก) → Sub-Nav (หาเมนูที่เปิดอยู่จาก pathname) → เนื้อหา · ห่อ `PermissionProvider` + `ToastProvider` ให้ทุกหน้าอัตโนมัติ
+- **หน้าใหม่**: `/dashboard` (placeholder + session/menu panel), `/cases`, `/finance`, `/accounting`, `/warehouse`, `/reports`, `/settings` (ModulePlaceholder + `requireMenuPage()`), `/field` + `/portal` (placeholder นอก shell — กัน 404 หลัง login ของ Field Agent/Company User), `/` redirect ตาม `resolveLandingPath()`
+- **`GET /api/meta/menu`** (`06` §14) + เทสต์ 5 เคส (matrix + 401)
+- Font Inter + Noto Sans Thai ผ่าน `next/font` (self-host ตอน build) ผูกเข้า `@theme --font-sans` ของ Tailwind v4 · เพิ่ม `.no-scrollbar` + scrollbar บางใน `globals.css` · `LogoutButton` เปลี่ยนมาใช้ `<Button variant="secondary">`
+
+### การตัดสินใจระหว่างทาง
+
+- **กรองเมนูด้วย role ไม่ใช่ capability** — `06` §7.2 เป็น source of truth ของการมองเห็นเมนูและเขียนเป็นราย role · capability (DEC-009) ตอบคำถามคนละข้อ ("ทำอะไรได้ในหน้านั้น") ซึ่งบังคับที่ `requirePermission()` + `<Can>` อยู่แล้ว · อีกเหตุผลเชิงปฏิบัติ: `role_capabilities` ยังว่างจนถึง Phase 1.6 ถ้ากรองด้วย capability ตอนนี้ทุก role ที่ไม่ใช่ Superadmin จะไม่เห็นเมนูเลย
+- **role "ธุรการ" ไม่มีในตาราง `06` §7.2** → ยึด mockup `app-shell.html` (`ROLE_CONFIG.admin_office`): แดชบอร์ด + จัดการเคส (แท็บรับเคส) ตามหน้าที่คีย์ข้อมูลเคส (`07` §5.1 อ้างไฟล์ 38) — บันทึกไว้เป็น assumption ในโค้ด + REUSE_INDEX
+- **"มอบหมายงาน" ไม่ให้ Case Approver เห็น** — `06` §7.1 (บรรทัดบรรยาย) กับ §7.1.1 (ตาราง) ขัดกัน · §17 ของไฟล์ 06 ระบุชัดว่า §7.1.1 เป็น source of truth และ mockup ก็ให้ `caseSubmenus: ['submit']` เท่านั้น
+- **custom role (ที่จะสร้างเพิ่มภายหลัง) → `resolveMenuAudience()` คืน `null`** = เห็นเฉพาะเมนูที่ทุกคอลัมน์เห็น (ปัจจุบัน = แดชบอร์ด) — least privilege จนกว่า Phase 1.6 จะผูก capability
+- **`GET /api/meta/menu` ใช้ `requireSession()` ไม่ผูก capability** — ไม่มี capability code สำหรับ "เมนู" ใน `02` §12 และการสร้าง code ใหม่เป็นงานของ Phase 1.6 · endpoint คืนข้อมูลของผู้เรียกเองล้วน (เหมือน `GET /api/auth/session` ที่ทำแบบเดียวกันมาตั้งแต่ 1.3)
+- **ไม่ใส่สูตรคำนวณเงินใน display layer** — ตัด `fmtMarginPct` ที่เคยร่างไว้ออก เหลือ `fmtRatioPct(value|null)` ที่รับผลลัพธ์จาก pure module ของ `22` มาแสดงอย่างเดียว (กันสูตรซ้ำก่อน Phase 3.1)
+- **Field Tracker (41) / Client Portal (97) ไม่อยู่ใน route group `(app)`** — ทั้งสองมี shell ของตัวเองตามสเปก (mobile-first sidebar / portal nav) จึงวางเป็น route ระดับบนแยก
+
+### verify ที่รันจริง (DoD ของ PLAN §1.5)
+
+`pnpm typecheck` ✅ · `pnpm lint` ✅ (0 error 0 warning) · `pnpm test` ✅ 318/318 (21 ไฟล์ — ใหม่ 5 ไฟล์ 118 เคส) · `pnpm build` ✅ (17 route, font โหลดผ่าน `next/font` สำเร็จ)
+
+### จุดที่คนถัดไปควรรู้
+
+- **ทุกหน้าใหม่ต้อง import จาก `@/components/ui` เท่านั้น** — เขียนคลาส Tailwind เองในหน้าจอโมดูล = หลุด design system (`04` §8.1) · ตารางต้องใช้ `<TableState>` เพื่อให้ครบ loading/empty/error (`04` §9)
+- **วันที่ทุกจุดต้องผ่าน `fmtDate`/`fmtDateTime`** และ **เงินทุกจุดผ่าน `fmtSatang`** — ห้าม format เอง (มีเทสต์ยามอยู่แล้วแต่กันได้เฉพาะใน util)
+- เพิ่มเมนู/แท็บใหม่ = แก้ `lib/nav/menu-registry.ts` ที่เดียว แล้วอัปเดตตารางในเทสต์ให้ตรง `06` — เทสต์แดง = หลุด spec ไม่ใช่เทสต์พัง
+- หน้า `/cases`, `/finance`, `/accounting`, `/warehouse`, `/reports`, `/settings` เป็น **placeholder** — โมดูลที่มาทำต่อให้แทนที่ `<ModulePlaceholder>` ด้วยของจริง และเปลี่ยน `available: true` ใน registry (แท็บย่อยที่ `available: false` ยัง disabled อยู่)
+- ยังไม่ได้ทดสอบด้วยตาบน browser จริง (ต้องมี Supabase + DB ครบ) — build/typecheck/test เขียวทั้งหมด แต่การไล่ดู nav ต่อ role จริงควรทำตอน push ขึ้น staging
+- กระดิ่งแจ้งเตือนบน header (`06` §8 · `90` §6.3) ยังไม่มี — เป็นงาน Phase 5.1
+
+---
+
 ## Phase 1.4 — Audit Core Service (immutable)
 
 **วันที่**: 2026-08-14 · **commit**: `09b283a` · **branch**: `auto/phase-1.4`

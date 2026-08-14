@@ -1,14 +1,23 @@
-import { APP_NAME } from '@/lib/constants'
+import { redirect } from 'next/navigation'
+import { LOGIN_PATH } from '@/lib/auth/constants'
+import { isAuthError } from '@/lib/auth/errors'
+import { resolveLandingPath } from '@/lib/auth/landing'
+import { getSessionUser } from '@/lib/auth/session'
 
-export default function HomePage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-slate-900">{APP_NAME} — Staging OK</h1>
-        <p className="mt-2 text-xs text-slate-600">
-          โครงโปรเจกต์พร้อมใช้งาน (Phase 0.1) — หน้าจอจริงเริ่มที่ Phase 1.5 (UI Kit + App Shell)
-        </p>
-      </div>
-    </main>
-  )
+/**
+ * หน้าแรก `/` — ส่งต่อไปยังปลายทางตาม role (`05` §6.1 · `resolveLandingPath()`)
+ * ยังไม่ได้ login / session ใช้ไม่ได้ → หน้า Login พร้อมเหตุผล
+ */
+export default async function HomePage() {
+  let target = LOGIN_PATH
+
+  try {
+    const user = await getSessionUser()
+    if (user !== null) target = resolveLandingPath(user.roleGroup, user.roleName)
+  } catch (error) {
+    if (!isAuthError(error)) throw error
+    target = `${LOGIN_PATH}?reason=${error.code}`
+  }
+
+  redirect(target)
 }

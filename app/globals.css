@@ -1,9 +1,10 @@
 @import 'tailwindcss';
 
 /* Design System — `04` §8.1 (theme slate/emerald · font Inter + Noto Sans Thai)
-   UI Kit ตัวจริง (Button/Table/Modal/Badge/statusBadge mapper) เกิดใน Phase 1.5 */
+   UI Kit อยู่ที่ `components/ui/*` (Phase 1.5) — คลาสเฉพาะทางที่ Tailwind ไม่มีให้เท่านั้นที่มาอยู่ไฟล์นี้ */
 @theme {
-  --font-sans: 'Inter', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+  /* ตัวแปร --font-inter / --font-noto-sans-thai มาจาก `next/font` ใน `app/layout.tsx` */
+  --font-sans: var(--font-inter), var(--font-noto-sans-thai), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
 }
 
@@ -56,4 +57,25 @@ body {
 
 .shake {
   animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* แถบเมนูที่เลื่อนแนวนอนได้โดยไม่โชว์ scrollbar (mockup `app-shell.html`) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* scrollbar บางทั้งระบบตาม mockup */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
