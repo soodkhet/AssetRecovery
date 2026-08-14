@@ -1,21 +1,22 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.5 (Case FE ชุด 2 — เอกสาร/ทีมที่เสนอ/review modal/import) · งานถัดไป 2.6
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.6 (Case Assignment BE — reassign 2 สาขา/timeout job/decision support) · งานถัดไป 2.7
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.6: Case Assignment Backend (ไฟล์ 40)
+## 🎯 งานถัดไป — Phase 2.7: Case Assignment Frontend (ไฟล์ 40)
 
-- ทำตาม `docs/01_PLAN.md` §2.6 — migration `assignments` / `pending_reassignments` / `reassignment_history` + settings keys (`reassign_timeout_hours` default 3, `supervisor_can_assign_*` default true)
-- **assign** (กรองพนักงานตาม `assigned_team_id` ของเคส → `ASSIGNMENT_TEAM_MISMATCH`, 1 เคส 1 คน) + **accept**
-- **reassign 2 branch (ห้ามสลับ)**: ยังไม่ accepted = เปลี่ยนทันที · accepted แล้ว = สร้าง `pending_reassignment` รอ consent **ไม่ freeze งาน** + respond + **scheduled job timeout** (auto-assign, `resolution=timeout_auto`) + race guard `REASSIGNMENT_ALREADY_TIMED_OUT` · reassign สำเร็จ → reset `assigned` + ล้าง `accepted_at` เสมอ
-- agent decision-support: `active_case_count` · `success_rate` (**service กลาง** — Report ใช้ซ้ำ) · `covered_provinces` · Kanban aggregation + supervisor permission gate
-- ของที่มีแล้วต้อง reuse: `caseScopeWhere()` · `ACTIVE_CASE_STATUSES` (`lib/teams/team.ts`) · `withEndpoint()` + contract 8 endpoint ของ `45` §6.2 · `emitAudit()` · `CASE_READ_CAPABILITIES`
-- อ้างอิง: `40` ผ่าน MAP §6 (L63–113), §8–§12 (L167–234), §17 (L273) · `09` §7.1
-- LOC ~2,650 · งบ ~370k
-- DoD: test ตาม `40` §20 — โดยเฉพาะ timeout job race กับ respond ที่มาช้า
+- ทำตาม `docs/01_PLAN.md` §2.7 — หน้า List (filter, badge inhouse/outsource **คนละบรรทัด**, badge `pending_reassignment` แยกจากสถานะ, วันเวลากำกับทุก action)
+- **Assignment Modal** = `<CaseDetailModal>` ของ 2.5 (reuse ห้ามสร้างใหม่) + Agent Picker + expand ดูเคสที่พนักงานถืออยู่ (`GET /api/teams/:id/agents/:agent_id/cases`)
+- **Reassign flow UI**: ฟอร์มเหตุผลบังคับ + คำเตือนว่าเคสที่ `accepted` ต้องรอความยินยอม (ไม่เปลี่ยนทันที)
+- **Kanban full-screen** read-only: 1 คอลัมน์ = 1 พนักงาน · filter ที่ระดับการ์ด · **คอลัมน์ว่างต้องยังแสดง**
+- ปุ่ม assign/reassign ของ **หัวหน้าทีม** เมื่อ settings ปิด = **hide ไม่ใช่ disabled** (`40` §20 · Rule 05)
+- ของที่มีแล้วต้อง reuse: `<CaseDetailModal>`/`<FileViewerModal>` (2.5) · UI Kit + `<StatusBadge>` · `assignmentStateOf()`/`reassignBranchOf()`/`canPerformAssignmentAction()` (2.6 — ห้าม hardcode เงื่อนไขสถานะในหน้าจอ) · `apiPath()` ของ contract
+- อ้างอิง: `40` §7 ผ่าน MAP (L114–166) · mockup `40-case-assignment-mockup.html` ผ่าน MAP
+- LOC ~2,700 · งบ ~380k · หมายเหตุ: Agent Accept UI ฝั่งพนักงานทำใน 2.10 (ไฟล์ 41) ครั้งเดียว
+- DoD: มอบหมาย/รับงาน/reassign ครบ flow บน staging
 
 ---
 
@@ -53,7 +54,7 @@
 | 2.3 | Case Submission BE ชุด 2 (state/routing/recycle/import/snapshot) | ✅ | 2026-08-14 · `03b50e6` · state machine 8 action + routing จังหวัด + snapshot ค่าบริการตอน approved + recycle ไม่จำกัดรอบ + import ต่อแถว → archive |
 | 2.4 | Case FE ชุด 1 (list/form/address component) | ✅ | 2026-08-14 · `9c05e9e` · หน้า `/cases/submit` (filter/pagination/card list) + ฟอร์มรับเคส-แก้ไข + `<AddressFields>` shared (77 จังหวัด + postal auto-complete) → archive |
 | 2.5 | Case FE ชุด 2 (docs/suggestion/review modal/import) | ✅ | 2026-08-14 · `07100c8`+`267b3f3` · ผู้ติดต่อ/เอกสาร/รูปสินค้า + ทีมที่เสนอ (ข้อมูลดิบ) + `<CaseDetailModal>` shared 4 โหมด + import wizard · ⚠️ ต้องสร้าง bucket `case-documents` ต่อ environment → archive |
-| 2.6 | Case Assignment BE | ⬜ | PLAN §2.6 · reassign 2 branch + timeout job |
+| 2.6 | Case Assignment BE | ✅ | 2026-08-14 · `a79c64c` · schema คำขอเปลี่ยนผู้รับผิดชอบ + API 8 endpoint ของ `45` §6.2 + reassign 2 สาขา + job timeout idempotent + `successRate()` service กลาง → archive |
 | 2.7 | Case Assignment FE | ⬜ | PLAN §2.7 · Kanban read-only |
 | 2.8 | Field Tracker BE ชุด 1 (core flow) | ⬜ | PLAN §2.8 · GPS จริงเท่านั้น |
 | 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ⬜ | PLAN §2.9 · ต้องมี Google Maps API key |
