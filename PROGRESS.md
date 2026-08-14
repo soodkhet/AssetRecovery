@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.1 (pure calculation modules ครบ 13 สูตรของไฟล์ 22 + unit test) · งานถัดไป 3.2
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.2 (Payee & Tax Profile + Compensation Approval BE) · งานถัดไป 3.3
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.2: Payee & Tax Profile (18) + Compensation Approval Backend (16)
+## 🎯 งานถัดไป — Phase 3.3: Compensation Approval FE (16) + Claims & Advances (15)
 
-- ทำตาม `docs/01_PLAN.md` §3.2 — **สูตรเงินทุกตัวเรียกจาก `lib/finance/*` (3.1) เท่านั้น ห้ามคำนวณเอง**
-- BE+FE 18: Payee CRUD + verify + **auto-reset เป็น unverified เมื่อแก้ธนาคาร/ภาษี** + policy `require_payee_id_document` + `BANK_ACCOUNT_NAME_MISMATCH` (เตือน ไม่ block) + ตาราง/ฟอร์มในหน้า settings
-- BE 16: approve/reject หลายขั้นใน `$transaction` + step guard (`APPROVAL_STEP_OUT_OF_ORDER`, SoD เมื่อเปิด) + **reject → reset ขั้น 1 เสมอ** + `approval_history` append + emit `expense.approved` + แยกสิทธิ์ `reject_expense` vs `reject_evidence` เด็ดขาด
-- ของที่มีแล้วห้ามเขียนซ้ำ: `resolveApprovalFlow()`/`assertApprovalStepInOrder()`/`assertNoDuplicateApprover()`/`resetApprovalToFirstStep()` (3.1) · `calculateWhtForPayee()` (3.1 — Payee ชนะ Plan) · `nextExpenseStatus()` (2.9) · `ensureAgentPayeeId()` (2.9 สร้าง payee โครงเปล่าไว้แล้ว รอเติมธนาคาร/ภาษี)
-- `expense.approved` ต้องเรียก `evaluateRevenueTrigger()` (2.13) ต่อ — ห้ามเขียนเงื่อนไข Revenue ซ้ำ
-- อ้างอิง: `18`, `16` ทั้งไฟล์ · `13` §6.2 · `23` §6.5
-- DoD: เทสต์ §16 ของ `16` (ข้ามขั้น / ตีกลับแล้วเริ่มใหม่) + §9 ของ `18` (verified → แก้ธนาคาร → unverified) · LOC ~1,750 · งบ ~280k
+- ทำตาม `docs/01_PLAN.md` §3.3 — **สูตรเงินทุกตัวเรียกจาก `lib/finance/*` (3.1) เท่านั้น ห้ามคำนวณเอง**
+- FE 16: แท็บ comp (ตาราง + stepper ขั้นอนุมัติ + modal "ดูสูตร") — เสียบกับ API ของ 3.2 ที่มีแล้ว (`GET /api/compensation`, `PATCH :id/approve|reject`)
+- BE 15: Advance 5 สถานะ + **ห้ามเบิกซ้อน** (`ADVANCE_PENDING_SETTLEMENT` — approved|overdue, DB partial unique มีแล้วจาก 1.2) + `ADVANCE_EXCEEDS_MAX` (null = ไม่จำกัด) + settle (`USED_EXCEEDS_REQUEST_NO_TOPUP`) + background job auto-overdue (actor = system) · Manual Claim (enum ของ `41` §6.6 ห้ามสร้างใหม่)
+- FE 15: แท็บรออนุมัติ (2 ตาราง + ฟอร์ม Advance + modal เคลียร์ยอด + overdue badge แดง)
+- ของที่มีแล้วห้ามเขียนซ้ำ: `advanceReturnSatang()`/`advanceSettlement()`/`assertSettlementAllowed()` (3.1) · `CompensationApprovalDto` + `compensationApproveSchema`/`compensationRejectSchema` (3.2) · `<ReasonConfirmModal>` (1.11)
+- อ้างอิง: `15` ทั้งไฟล์ · `16` §8 · `23` §6.3–6.4 · mockup `finance.html` ผ่าน MAP
+- DoD: เทสต์ห้ามเบิกซ้อน + job auto-overdue idempotent · LOC ~2,300 · งบ ~340k
 
 ---
 
@@ -68,7 +68,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `0a05c48` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
-| 3.2 | Payee & Tax Profile + Compensation Approval BE | ⬜ | PLAN §3.2 · WHT Payee ชนะ Plan |
+| 3.2 | Payee & Tax Profile + Compensation Approval BE | ✅ | 2026-08-15 · `PENDING` · API 7 endpoint (payee 4 + compensation 3) + auto-reset unverified + สายอนุมัติหลายขั้น snapshot + `expense.approved` → Revenue gate · เทสต์ระดับ DB 19 เคส → archive |
 | 3.3 | Approval FE + Claims & Advances | ⬜ | PLAN §3.3 · ห้ามเบิกซ้อน + overdue job |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ⬜ | PLAN §3.4 · gate BANK_FILE_NOT_TESTED |
 | 3.5 | Payout FE + Internal PDFs | ⬜ | PLAN §3.5 · เทียบ samples 04–06 |

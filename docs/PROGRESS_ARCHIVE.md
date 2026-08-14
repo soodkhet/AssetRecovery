@@ -5,6 +5,42 @@
 
 ---
 
+## Phase 3.2 — Payee & Tax Profile (18) + Compensation Approval Backend (16)
+
+**วันที่**: 2026-08-15 · **commit**: `PENDING` · **branch**: `auto/phase-3.2`
+
+### สิ่งที่ทำ
+
+| ส่วน | ไฟล์ | จุดสำคัญ |
+|---|---|---|
+| Payee pure | `lib/payees/payee.ts` | **บ้านเดียวของ auto-reset unverified** (`18` §9) — แก้ `payee_type`/`national_id`/`tax_profile_id`/ธนาคาร ⇒ กลับเป็นรอยืนยัน · แนบเอกสารยืนยันตัวตน **ไม่** reset (ไม่ใช่ปลายทางของเงิน) · เปลี่ยนแค่รูปแบบเลขบัญชี (ขีด/ช่องว่าง) ไม่นับว่าแก้ |
+| Payee errors/schemas | `lib/payees/errors.ts` · `schemas.ts` · `types.ts` | code ใหม่ 3 ตัวเข้า `24` §6.5 · `reason` บังคับทุก mutation (ตารางหมวด `bank`) |
+| Payee DB | `lib/payees/queries.ts` | scope: `manage` เห็นทุกราย · `view` (พนักงาน) เห็นเฉพาะของตัวเอง + เลขบัญชี**ปิดบัง 4 ตัวท้าย** · scope แยกจาก filter ผู้เรียกด้วย `AND` (กับดัก `f188619`) |
+| Payee API | `app/api/payees/{route,[id]/route,[id]/verify/route,candidates/route}.ts` | ครบตาม `18` §14 + `27` §6.3 · `BANK_ACCOUNT_NAME_MISMATCH` เดินทางมากับ `warning` ของ envelope ไม่ใช่ error |
+| Payee FE | `components/settings/payee-tab.tsx` | แท็บที่ 14 ของหน้า `/settings/finance` (ตาม mockup `renderSettingsPayee`) — ตาราง 6 คอลัมน์ + ฟอร์ม + ปุ่มยืนยันผ่าน `<ReasonConfirmModal>` · ปุ่ม "ยืนยัน" disable เมื่อข้อมูลยังไม่ครบ (กติกาเดียวกับ API) |
+| Approval pure | `lib/compensation/approval.ts` | ตัวเชื่อม **ขั้น ↔ สถานะ ↔ capability ↔ `approval_history`** · `buildRejectExpenseUpdate()` = บ้านเดียวของ "ตีกลับ ⇒ ขั้น 1 + ล้างรอยประทับ" |
+| Approval DB | `lib/compensation/approval-queries.ts` | approve/reject ใน `$transaction` เดียวกับ audit · ผ่านครบขั้น ⇒ `expense.approved` + `tryCreateRevenue()` (2.13) |
+| Approval API | `app/api/compensation/{route,[id]/approve,[id]/reject}.ts` | ตาม `16` §14 · `27` §6.5 |
+
+### การตัดสินใจระหว่างทาง
+
+- **สถานะเป็นฟังก์ชันของ "ขั้นที่กำลังรอ" ไม่ใช่ของจำนวนขั้น** — enum `expense_status` มีสถานะรออนุมัติแค่ 2 ตัว (`23` §6.3) แต่ Approval Matrix ตั้งสายได้ถึง 5 ขั้น (`13` §6.2) ⇒ กำหนดว่า รอขั้น 1 = `pending_approval` · รอขั้น ≥ 2 = `pending_finance_approval` · ไม่เหลือขั้น = `approved` — ครอบสาย 1/2/3+ ขั้นได้โดย **ไม่เพิ่ม enum ใหม่**
+- **snapshot สายอนุมัติตอนอนุมัติขั้นแรก ไม่ใช่ตอนสร้างรายการ** — `13` §6.2 เขียนว่า "เมื่อสร้างรายการเบิก ระบบเช็ค threshold แล้วกำหนด flow" แต่การ resolve ตอนสร้างจะทำให้ **การปิดงานภาคสนามพัง** เมื่อองค์กรยังตั้ง Approval Matrix ไม่ครบ (`APPROVAL_MATRIX_NOT_FOUND` เป็น config error ของฝั่งการเงิน ไม่ใช่ของพนักงานที่ปิดงาน) ⇒ snapshot `approval_matrix_id` + `approval_step_total` ลงรายการ **ครั้งเดียวตอนอนุมัติขั้นแรก** แล้วใช้ชุดเดิมจนจบ (รวมหลังตีกลับ) — รายการที่ยังไม่มี snapshot แสดงสายแบบ **คาดการณ์** จาก matrix ปัจจุบัน
+- **ตีกลับยังทำได้แม้ตั้งสายอนุมัติไม่ครบ** (วาล์วนิรภัย) — การอนุมัติต้องมีสายจริงเสมอ (matrix คือสิ่งที่บอกว่าใครต้องอนุมัติ) แต่ถ้าบล็อกการตีกลับด้วย ผู้รับเงินที่เอกสารผิดจะค้างคิวโดยไม่มีทางออก · สิทธิ์ยังถูกตรวจที่ API layer เสมอ
+- **role ในสายอนุมัติ → capability ผ่านตารางตายตัว** — `approval_flow` เป็นข้อความอิสระ ⇒ ชื่อนอกรายการ (`ผู้จัดการทีมติดตามทรัพย์`/`การเงิน`/`บริหาร` + ชื่ออังกฤษที่ `13` §6.2 ยกตัวอย่าง) ถือเป็น **ตั้งค่าสายผิด** ⇒ `APPROVAL_MATRIX_NOT_FOUND` ไม่ใช่ "ใครก็อนุมัติได้"
+- **`/api/field/expenses/:id/reject` (2.9) ถูกดึงมาใช้กติกาเดียวกัน** — เดิมตีกลับแล้วไม่ reset ขั้น/ไม่ลงประวัติ ⇒ ตอนนี้เรียก `buildRejectExpenseUpdate()` ตัวเดียวกับ `/api/compensation/:id/reject` และรับ capability ครบทั้ง 3 ขั้น (สายเกินเพดานมี Executive)
+- **`expense.approved` เข้าทะเบียน event** (`lib/api/event-names.ts` + `EVENT_REGISTRY` module ใหม่ `finance`) — ที่มาคือ `16` §9 + `19` §6.1 ซึ่งเป็นไฟล์ต้นทางที่นิยาม trigger นี้ไว้แล้ว
+- **`withApiPermission()` รับ capability หลายตัวได้แล้ว** (เหมือน `withEndpoint()`) — endpoint ของสายอนุมัติมีผู้ใช้ 3 บทบาทที่ถือ capability คนละตัว
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 3.3 (FE ของ 16)**: API พร้อมแล้วทั้ง `GET /api/compensation` (มี `approvalStepCurrent`/`Total`/`pendingStepRole`/`approvalHistory` สำหรับ stepper) และ approve/reject — ใช้ `compensationApproveSchema`/`compensationRejectSchema` ที่แชร์ FE/BE แล้ว
+- **Phase 3.4 (Payout)**: กัน `UNVERIFIED_PAYEE_IN_PAYOUT` ด้วย `PayeeDto.isVerified` ห้ามอ่านคอลัมน์ดิบเอง · ยอด WHT/Net ใน `CompensationApprovalDto` เป็น **ตัวเลขแสดงผล** ที่คิดสด ห้ามเอาไปเขียนลง `payout_batch_items` (ต้อง snapshot ตอนสร้างรอบตาม `92` §7.1)
+- **Phase 3.6 (Revenue)**: จุดเสียบมี 2 ที่แล้ว — `confirmLot()` (2.13) และ `approveCompensationExpense()` (3.2) ทั้งคู่เรียก `tryCreateRevenue()` ตัวเดียวกัน ⇒ เสียบของจริงที่ `lib/warehouse/revenue-service.ts` ที่เดียวพอ
+- **เทสต์ระดับ DB** `lib/compensation/approval-payee.db.test.ts` (19 เคส) ครอบ DoD ทั้ง `18` §9/§16 และ `16` §16 — ต้องมี `TEST_DATABASE_URL` (docker-compose.dev) ไม่งั้นถูก skip
+
+---
+
 ## Phase 3.1 — Pure Finance Calculation Modules + Unit Tests (ไฟล์ 22 ครบ 13 สูตร)
 
 **วันที่**: 2026-08-15 · **commit**: `0a05c48` · **branch**: `auto/phase-3.1`
