@@ -5,6 +5,70 @@
 
 ---
 
+## Phase 1.11 — Settings FE ชุดที่ 1: shell 13 แท็บ + 5 แท็บแรก (ไฟล์ 13)
+
+**วันที่**: 2026-08-14 · **commit**: `0eb2e81` · **branch**: `auto/phase-1.11`
+
+### สิ่งที่ทำ
+
+- **Shell "ตั้งค่าบัญชี/การเงิน"** — หน้า `/settings/finance` (`app/(app)/settings/finance/page.tsx`) + `<FinanceSettingsShell>` แถบแท็บ **แนวตั้ง 13 แท็บ** โทน emerald ตาม mockup `settings.html` (`renderSettingsLayout`) · แท็บที่หน้าจริงยังไม่เกิดแสดงเป็น disabled พร้อมบอก phase (แนวเดียวกับ `<SubNav>`) ไม่พาไปหน้าว่าง
+- **SSOT ของแท็บ** อยู่ที่ `lib/settings/finance-tabs.ts` (pure) + เทสต์ยาม 7 เคส — จำนวนต้องเป็น 13 เป๊ะ (`13` §16), id ห้ามซ้ำ, แท็บที่ยังไม่พร้อมต้องระบุ `plannedPhase` · `resolveFinanceSettingsTab()` ทำให้ `?tab=` ที่ชี้แท็บยังไม่เกิดตกกลับแท็บแรกเสมอ
+- **5 แท็บแรกใช้งานได้จริง**: §6.1 รอบบิล/รอบจ่าย · §6.2 สายอนุมัติ + §6.2.1 นโยบายการเงิน (การ์ดในแท็บเดียวกัน) · §6.3 บัญชีธนาคาร · §6.6 ศูนย์ต้นทุน · §6.8 ไฟล์โอนธนาคาร — ทุกแท็บมี loading/empty/error state ผ่าน `<TableState>`
+- **`<ReasonConfirmModal>`** (shared) — กล่องยืนยันที่บังคับกรอกเหตุผล ≥5 ตัวอักษร ใช้ซ้ำทุกแท็บ (ทุกตารางของไฟล์ 13 อยู่หมวด money/bank/tax ⇒ `reason` บังคับทุก mutation ตาม `90` §13)
+- `/settings` เปลี่ยนจาก `<ModulePlaceholder>` เป็น **redirect ไปแท็บแรก** (`/settings/roles`) ตาม mockup ที่ไม่มีหน้า "ราก" + เพิ่มเมนู `settings.finance` และปลด `available: false` ของเมนู `settings`
+
+### การตัดสินใจระหว่างทาง
+
+- **Top-tab 2 ชั้นของ mockup ไม่ถูกลอกมาตรง ๆ** — mockup มีแถบแท็บบน 2 อัน ("ตั้งค่าทั่วไป" / "ตั้งค่าบัญชี/การเงิน") แต่แอปมี `<SubNav>` (จาก 1.5) ทำหน้าที่นี้อยู่แล้ว ⇒ เพิ่ม "ตั้งค่าบัญชี/การเงิน" เป็นแท็บย่อยตัวที่ 7 ของ `<SubNav>` แล้วเก็บ **แถบแนวตั้ง 13 แท็บ** ไว้ในหน้านั้น — ได้โครงเดียวกับ mockup โดยไม่มี nav ซ้อน 3 ชั้น
+- **แท็บสลับด้วย state ไม่ใช่ URL routing** — server component อ่าน `?tab=` ส่งเป็น `initialTab` เข้ามา (deep link ได้) แล้วสลับต่อด้วย `useState` · เลี่ยง `useSearchParams()` ที่ต้องมี Suspense boundary
+- **badge สถานะทั้งหมดผ่าน `<StatusBadge>`** พร้อม `group` จาก mapper กลาง (`04` §8.1) ไม่ใส่คลาสสีเอง — `passed`/`failed` ของไฟล์ธนาคารยังไม่อยู่ใน `STATUS_GROUP` จึงส่ง `group` ตรง ๆ (`success`/`critical`) ตามที่ `<StatusBadge>` เปิดทางไว้ · badge ที่เป็น **ประเภท** ไม่ใช่สถานะ (AR/AP, receive/pay/both, "บัญชีหลัก") ยังใช้ `<Badge>` ตาม precedent ของ `components/teams/*`
+- **ฟอร์มซ่อนช่องของโหมดที่ไม่เลือกจริง** (ไม่ใช่ disable) และส่งค่าของอีกโหมดเป็น `[]`/`null` เสมอ — ให้ตรงกับ CHECK `cycles_cutoff_shape` / `cycles_due_rule_shape` ระดับ DB (ค่าค้างทำให้ API ปฏิเสธ)
+
+### จุดที่คนถัดไปควรรู้
+
+- **เพิ่มแท็บใน 1.12 = แก้ 2 ที่**: เปลี่ยน `available: true` ใน `lib/settings/finance-tabs.ts` แล้วเสียบ component ใน `finance-settings-shell.tsx` — เทสต์ `finance-tabs.test.ts` ล็อกรายชื่อ 5 แท็บของ 1.11 ไว้ ต้องอัปเดตรายการนั้นด้วยเมื่อเปิดแท็บใหม่
+- **capability ต่างกันต่อแท็บ**: 1.11 ใช้ `manage_settings` ทั้งหมด แต่ 1.12 มีแท็บที่ใช้ `manage_tax_profiles` (ภาษี/VAT/เทมเพลตเอกสารภาษี) · `manage_invoice_numbering` · `manage_roles` (matrix) — ส่งให้ `<Can>` ให้ตรง ไม่งั้นปุ่มโผล่แล้ว API ตอบ 403
+- **ความไม่ตรงกันที่พบระหว่างทำ (ยังไม่แก้ spec — บันทึกไว้ก่อน)**: `13` §6.6 และ mockup มีฟิลด์ `mapping_rule` (auto/manual) ของศูนย์ต้นทุน แต่ `02`/schema จริงไม่มี (Phase 1.10 ตัดสินไปแล้วโดยใช้ `description` + `is_active` แทน) ⇒ FE ไม่แสดงฟิลด์นี้ · ถ้าธุรกิจต้องการจริงต้องมี `[[NEEDS_DECISION]]` + migration ใหม่
+- mockup `settings.html` มีแท็บที่ 14 "Payee Profile" — เป็นของ **ไฟล์ 18** ไม่ใช่ไฟล์ 13 จึงไม่อยู่ใน `FINANCE_SETTINGS_TABS` (จะเกิดใน Phase 3.2)
+- mockup ไม่มีช่อง `reason` ในทุก modal และไม่มีปุ่มเพิ่ม/แก้ของแท็บไฟล์ธนาคาร — ยึด spec/API (บังคับ reason + CRUD ครบ) ตามลำดับความสำคัญของเอกสาร
+
+---
+
+## Phase 1.10 — Settings ไฟล์ 13: Backend ครบ 13 หมวด
+
+**วันที่**: 2026-08-14 · **commit**: `c6848db` (กู้ไฟล์ pure ค้างจาก session ที่ถูกตัด) + `53f4c38` (pure + Zod + test + `24` v3.9) + `b00a5f9` (ชั้น DB + API 22 route) · **branch**: `auto/phase-1.10`
+
+### สิ่งที่ทำ
+
+**ชั้น pure (`lib/settings/*.ts`, ใช้ร่วม FE/BE)** — ครบ 13 หมวด: `cycles` (รูปร่าง cutoff/due rule ตรง CHECK ระดับ DB) · `approval-matrix` (เพดานเป็น satang + ยามสายอนุมัติซ้ำเมื่อบังคับแยกหน้าที่) · `finance-policy` (AR aging buckets + label 0-30/31-60/61-90/90+) · `bank-account` (`usage` เป็นตัวตัดสินเดียว, mask เลขบัญชี) · `tax-profile` (WHT 3% / ฐาน before_vat / เกณฑ์ 1,000 บาท = ค่าตั้งได้ ห้าม hardcode) · `vat` (overlap + resolver แบบ date-only) · `cost-center` (running code `CC-001`) · `bank-file` (ทดสอบ mapping แบบ deterministic + `assertBankFileUsable`) · `numbering` (เลข พ.ศ. + preview + warning) · `period-lock` (ตาราง policy + `assertPeriodEditable`) · `tax-doc-template` · `catalogs` (§6.7/§6.9 read-only)
+
+**ชั้น DB (`lib/settings/queries/*`)** — 10 โมดูล · ทุก mutation อยู่ใน `$transaction` เดียวกับ `emitAudit()` + `reason` (ทุกตารางของไฟล์ 13 อยู่หมวด money/permission/bank/tax ตาม `lib/audit/reason-policy.ts`) · ทุก query กรอง `organization_id`
+
+**API 22 route** ตาม `13` §13 + **2 endpoint ที่ spec ตกหล่น**: `/api/settings/finance-policy` (ค่านโยบายถูกย้ายออกจาก approval matrix ตั้งแต่ DEC-006/D1 แต่ §13 ไม่ได้เพิ่มแถว) และ `/api/settings/tax-document-templates` (§6.13 เป็น 1 ใน 13 หมวดแต่ไม่มีในตาราง API draft)
+
+**เทสต์** — 13 ไฟล์ / 209 เคส unit (pure + Zod) + 1 ไฟล์ DB (`numbering-concurrency.db.test.ts`, 5 เคส)
+
+### การตัดสินใจระหว่างทาง (ยึด `02` เหนือ spec module ตามลำดับความสำคัญเอกสาร)
+
+1. **`/period-lock-policy` เป็น GET อย่างเดียว** — `13` §13 ร่างว่ามี PATCH แต่ `02` ไม่มีตารางเก็บ policy นี้ ⇒ เป็นกติกาตายตัวขององค์กร (แก้ = แก้สเปค + โค้ดคู่กัน ไม่ใช่ค่าตั้งค่า) · การ "ปลดล็อกรอบ" เป็น action ของไฟล์ 30 (Phase 4.1)
+2. **`tax_profiles` ไม่มี `vat_mode`/`applies_to`** ตามที่ `13` §6.4 เขียน — `vat_mode` อยู่ที่ `finance_companies` (ฝั่งขาย) และชนิดผู้รับเงินอยู่ที่ `payee_profiles.payee_type` + สะท้อนที่ `filing_form` · ตรงกับ §6.4 ที่ยืนยันว่าไม่มี `inhouse_employee`
+3. **`cost_centers` ไม่มี `mapping_rule`** ตามที่ §6.6 เขียน — การ map อัตโนมัติอยู่ฝั่งรายการค่าใช้จ่าย (`32`)
+4. **`/vat-rates` มี PATCH แต่ไม่มี DELETE** — `vat_rate_history` เป็น insert-only *ด้านคอลัมน์* (ไม่มี `updated_at`/`updated_by`/`deleted_at`) แต่ไม่อยู่ในรายการ immutable ของ `02` §13 ⇒ แก้ได้เท่าที่ §13 ให้มี PATCH โดยมี audit+reason เสมอ · หยุดใช้อัตรา = **ปิดช่วงด้วย `effectiveTo`** ไม่ใช่ลบ
+5. **บัญชีหลัก (`is_primary`) มีได้บัญชีเดียวต่อองค์กร** — ตั้งใหม่ปลดของเดิมในทรานแซกชันเดียวกัน (spec ไม่ได้ระบุ แต่ค่านี้กำกวมถ้ามีหลายบัญชี)
+6. **`docs/24` v3.9** — เติม error code 13 ตัวที่ implementation ใช้จริงแต่ `13` §10 ระบุไว้แค่ 5 (ตามแนวเดียวกับ v3.5–v3.7)
+7. `manage_settings` ยังไม่มี role ไหนถือ ⇒ แก้ตั้งค่าทั่วไป = **Superadmin เท่านั้น** ตรงกับ `13` §11 · ภาษี/VAT/เทมเพลตเอกสารภาษี = `manage_tax_profiles` · เลขใบกำกับ = `manage_invoice_numbering` · matrix = `manage_roles` (ทั้งสามเป็นรายการที่ล็อกกับ Superadmin)
+
+### จุดที่คนถัดไปควรรู้
+
+- **`reserveNextInvoiceNumber()`** (`lib/settings/queries/numbering.ts`) เดินเลขด้วย `UPDATE ... RETURNING` **ครั้งเดียว** (ล็อกแถว `organizations`) — Phase 4.3 ต้องเรียก**ภายใน `$transaction` เดียวกับการสร้าง `tax_invoices`** ไม่งั้น rollback ทิ้งเลขเป็น gap · ห้ามอ่านค่ามาบวกในโค้ดแล้วเขียนกลับเด็ดขาด · เทสต์ยิงพร้อมกัน 20 คำขอพิสูจน์แล้วว่าได้ 1..20 ครบ
+- **VAT resolver พร้อมใช้แล้ว**: `resolveVatRate()` (DB) / `resolveVatRateAt()` (pure) — Phase 3.6/4.3 ต้องเรียกตัวนี้แล้ว snapshot `vat_rate_used` ลง record · ไม่เจอช่วงครอบคลุม = `VAT_RATE_NOT_FOUND` **ห้าม fallback 7%**
+- **`assertBankFileUsable()`** = gate เดียวของ `BANK_FILE_NOT_TESTED` — Phase 3.4 (payout) ต้องเรียกก่อนสร้างไฟล์โอนจริง ห้าม inline เงื่อนไขเอง
+- **`assertPeriodEditable()`** = โครง interceptor `PERIOD_LOCKED_DIRECT_EDIT` — Phase 4.1 ต่อเข้า write endpoint ของสายการเงิน/บัญชีทุกตัว
+- FE ของ 13 หมวดนี้ยังไม่ทำ (Phase 1.11 = 5 แท็บแรก · 1.12 = 8 แท็บที่เหลือ) — DTO ที่ API ส่งออกนิยามไว้ครบแล้วที่ `lib/settings/types.ts` (type-only ฝั่ง client import ได้)
+- กับดักใหม่ 4 ข้อบันทึกไว้ใน `REUSE_INDEX` แล้ว: คอลัมน์ `DATE` กับ `fromInputDate()` · `Prisma.TransactionClient` กับ client ที่ `$extends` · `audit_logs.target_id` เป็น UUID · ตารางตั้งค่าบางตัวไม่มี `updated_by`
+
+---
+
 ## Phase 1.9 — Users (08) + flow เชิญ/ตั้งรหัสผ่านครั้งแรก (ปิด D1)
 
 **วันที่**: 2026-08-14 · **commit**: `9e505ef` (โมดูลผู้ใช้) + `680159e` (provisioning ตามมติ PO) · **branch**: `auto/phase-1.9`

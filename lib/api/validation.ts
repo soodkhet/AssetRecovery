@@ -43,6 +43,37 @@ export function pctSchema(label: string, max = 100) {
     })
 }
 
+const INPUT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * ช่องวันที่แบบ **date-only** (คอลัมน์ `DATE` ไม่ใช่ `TIMESTAMPTZ`) — รับ `YYYY-MM-DD` ค.ศ. จาก
+ * `<input type="date">` (ข้อยกเว้นเดียวของ Rule 01) แล้วแปลงเป็น **เที่ยงคืน UTC** ของวันนั้น
+ *
+ * ⚠️ ห้ามใช้ `fromInputDate()` กับคอลัมน์ `DATE`: ตัวนั้นแปลงเป็นเที่ยงคืน**ตามเวลาไทย** (= 17:00Z
+ * ของวันก่อนหน้า) ซึ่ง Prisma จะตัดเก็บเป็นวันที่ผิดไป 1 วัน · `fromInputDate()` ใช้กับ instant
+ * (`TIMESTAMPTZ`) เท่านั้น
+ */
+export function dateOnlySchema(label: string) {
+  return z
+    .string()
+    .regex(INPUT_DATE_PATTERN, `${label} ต้องเป็นรูปแบบ YYYY-MM-DD`)
+    .transform((value, ctx) => {
+      const parts = value.split('-').map((part) => Number.parseInt(part, 10))
+      const [year = 0, month = 0, day = 0] = parts
+      const date = new Date(Date.UTC(year, month - 1, day))
+      if (
+        Number.isNaN(date.getTime()) ||
+        date.getUTCFullYear() !== year ||
+        date.getUTCMonth() !== month - 1 ||
+        date.getUTCDate() !== day
+      ) {
+        ctx.addIssue({ code: 'custom', message: `${label} ไม่ใช่วันที่ที่มีอยู่จริง` })
+        return z.NEVER
+      }
+      return date
+    })
+}
+
 /** แปลง Zod error → field errors สำหรับ response 400 (`24` §6.1 `REQUIRED_MISSING`) */
 export function toFieldErrors(error: z.ZodError): Record<string, string> {
   const fields: Record<string, string> = {}

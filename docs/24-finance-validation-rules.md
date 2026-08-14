@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v3.9 | 14/08/2569 | **เติม §6.1–6.3** (Phase 1.10 — ตั้งค่าการเงิน/บัญชี `13` ครบ 13 หมวด): `CYCLE_NOT_FOUND`, `DUPLICATE_CYCLE_NAME`, `APPROVAL_MATRIX_NOT_FOUND`, `COST_CENTER_NOT_FOUND`, `COST_CENTER_IN_USE`, `TAX_PROFILE_NOT_FOUND`, `DUPLICATE_TAX_PROFILE_NAME`, `TAX_PROFILE_IN_USE`, `NUMBERING_SEQ_NOT_EDITABLE`, `BANK_FILE_FORMAT_NOT_FOUND`, `BANK_ACCOUNT_NOT_FOUND`, `DUPLICATE_BANK_ACCOUNT`, `BANK_ACCOUNT_IN_USE` — `13` §10 ระบุไว้แค่ 5 code (`REQUIRED_MISSING`/`INVALID_WHT_RATE`/`VAT_RATE_OVERLAP`/`BANK_FILE_NOT_TESTED`/`PERIOD_LOCKED_DIRECT_EDIT`) ซึ่งไม่ครอบคลุมกรณี 404/ซ้ำ/ลบของ ที่ถูกใช้อยู่ จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v3.7 · `VAT_RATE_NOT_FOUND` ขยาย source ครอบคลุมไฟล์ 13 (อ้างอัตราที่ไม่มีในองค์กร) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.8 | 14/08/2569 | **เติม §6.1** (Phase 1.9 — flow เชิญผู้ใช้ ตามมติ PO ที่ปิด open item D1): `INVITE_SEND_FAILED` — ส่งอีเมลคำเชิญตั้งรหัสผ่านผ่าน `inviteUserByEmail` ไม่สำเร็จตอนกด "ส่งคำเชิญอีกครั้ง" (502 เพราะเป็นความล้มเหลวของปลายทางภายนอก ไม่ใช่ข้อมูลผู้เรียกผิด) · ตอน **สร้าง** ผู้ใช้ถ้าเชิญไม่สำเร็จจะ**ไม่ reject** แต่คืน warning `USER_NOT_PROVISIONED` (code เดิม §6.9) แล้วบันทึกผู้ใช้ไว้ให้ส่งซ้ำได้ |
 | v3.7 | 14/08/2569 | **เติม §6.1** (Phase 1.9 — ผู้ใช้งาน `08`): `USER_NOT_FOUND`, `DUPLICATE_USER_EMAIL`, `DUPLICATE_USER_PHONE`, `USER_HAS_HISTORY` (ชื่อตรงตามที่ `08` §11 ระบุไว้แล้ว), `INVALID_USER_STATUS_TRANSITION`, `INVALID_USER_SCOPE` — code เดิมของ `08` §11 เขียนกว้าง (`DUPLICATE_RECORD`/`INVALID_STATUS`) ไม่มีใน dictionary กลาง จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5/v3.6 · `ROLE_NOT_FOUND` มีอยู่แล้วใน §6.9 (ใช้ร่วมกัน) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.6 | 14/08/2569 | **เติม §6.1** (Phase 1.8 — ทีม `09` / บริษัทไฟแนนซ์ `10`): `COMPANY_NOT_FOUND`, `TEAM_NOT_FOUND`, `DUPLICATE_TEAM_NAME`, `TEAM_HAS_ACTIVE_CASES` (ตาม default ของ D7 — ส่วน modal bulk reassign อยู่ Phase 2.6), `SUPERVISOR_ALREADY_ASSIGNED` (ปิด Open Item `09` §18 ตามมติที่ระบุไว้แล้วใน `09` §7.1/§17 ว่าหัวหน้าทีม 1 คน = 1 ทีม → **reject ไม่ใช่แค่เตือน**), `INVALID_TEAM_MEMBER`, `INVALID_PROVINCE` — code เดิมของ `09` §11 เขียนกว้าง (`DUPLICATE_RECORD`/`INVALID_STATUS`) ไม่มีใน dictionary กลาง จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริง · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -74,6 +75,11 @@
 | INVITE_SEND_FAILED | ส่งอีเมลคำเชิญตั้งรหัสผ่าน (`inviteUserByEmail`) ไม่สำเร็จตอนสั่งส่งซ้ำ — บัญชีผู้ใช้ยังอยู่ ไม่ต้องสร้างใหม่ (มติ PO ปิด D1) | 08 |
 | INVALID_USER_SCOPE | สังกัดไม่ตรงกับ role group: กลุ่ม inhouse/outsource ต้องมี `team_id` · กลุ่ม finance_company ต้องมี `company_id` · กลุ่ม system ต้องไม่มีทั้งคู่ (`08` §7.1) | 08 |
 | BANK_ACCOUNT_NAME_MISMATCH | ชื่อบัญชีธนาคารไม่ตรงกับชื่อ payee (เตือน ไม่ reject) | 18 |
+| CYCLE_NOT_FOUND | อ้างรอบบิล/รอบจ่ายที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 13 |
+| DUPLICATE_CYCLE_NAME | ชื่อรอบบิล/รอบจ่ายซ้ำกับรอบที่ยังใช้งานอยู่ในองค์กร (`13` §6.1) | 13 |
+| APPROVAL_MATRIX_NOT_FOUND | อ้างสายอนุมัติที่ไม่มีในองค์กรของผู้เรียก (404) | 13 |
+| COST_CENTER_NOT_FOUND | อ้างศูนย์ต้นทุนที่ไม่มีในองค์กรของผู้เรียก (404) | 13 |
+| COST_CENTER_IN_USE | ลบศูนย์ต้นทุนที่มีรายการค่าใช้จ่ายผูกอยู่ — ปิดใช้งานแทน (`13` §6.6 · ไฟล์ 32) | 13 |
 
 ### 6.2 หมวดภาษี/VAT (ไฟล์ 13, 19)
 
@@ -81,13 +87,21 @@
 |---|---|---|
 | INVALID_WHT_RATE | `wht_rate` ติดลบหรือมากกว่า 100 | 13 |
 | VAT_RATE_OVERLAP | ช่วงเวลา VAT Rate ใหม่ทับกับรายการเดิม | 13 |
-| VAT_RATE_NOT_FOUND | ไม่มี vat_rate_history ครอบคลุมวันที่ revenue_date | 19 |
+| VAT_RATE_NOT_FOUND | ไม่มี vat_rate_history ครอบคลุมวันที่ revenue_date (หรืออ้างอัตราที่ไม่มีในองค์กร — 404) | 19, 13 |
+| TAX_PROFILE_NOT_FOUND | อ้าง Tax Profile ที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 13 |
+| DUPLICATE_TAX_PROFILE_NAME | ชื่อ Tax Profile ซ้ำในองค์กร (UNIQUE `organization_id, name` — `02` §5) | 13 |
+| TAX_PROFILE_IN_USE | ลบ Tax Profile ที่ผูกกับ payee/รายการจ่ายไปแล้ว — แก้อัตราได้แต่ลบไม่ได้ (ยอดภาษีเดิมต้องอ้างอิงได้) | 13, 18 |
+| NUMBERING_SEQ_NOT_EDITABLE | พยายามแก้ `tax_invoice_seq`/`last_reset_year` ด้วยมือ — ระบบเดินเลขให้เอง เลขต้องต่อเนื่องตามกฎหมาย (`13` §6.12) | 13, 31 |
 
 ### 6.3 หมวดธนาคาร/ไฟล์ (ไฟล์ 13, 17, 35)
 
 | Code | Condition | Source File |
 |---|---|---|
 | BANK_FILE_NOT_TESTED | ใช้ bank file format ที่ยังไม่ผ่านทดสอบไปสร้างไฟล์โอนจริง | 13 |
+| BANK_FILE_FORMAT_NOT_FOUND | อ้างรูปแบบไฟล์ธนาคารที่ไม่มีในองค์กรของผู้เรียก (404) | 13 |
+| BANK_ACCOUNT_NOT_FOUND | อ้างบัญชีธนาคารบริษัทที่ไม่มีในองค์กรของผู้เรียก (404) | 13 |
+| DUPLICATE_BANK_ACCOUNT | เลขบัญชีซ้ำในองค์กร (UNIQUE `organization_id, account_number` — เทียบหลังตัด `-`/ช่องว่าง) | 13 |
+| BANK_ACCOUNT_IN_USE | ลบบัญชีที่มีรอบจ่ายเงิน/รายการเดินบัญชีผูกอยู่ — แก้ไขได้แต่ลบไม่ได้ (`13` §9) | 13, 17, 35 |
 | DUPLICATE_PAYMENT_FILE | สร้างไฟล์โอนซ้ำสำหรับ batch ที่มี idempotency_key อยู่แล้ว (เตือน ไม่ reject ทันที) | 17 |
 | MIXED_SIDE_BATCH | พยายามรวมรายการ inhouse และ outsource ในรอบเดียวกัน | 17 |
 | MATCH_NOTE_REQUIRED | จับคู่ manual ที่ยอดไม่ตรงเป๊ะ โดยไม่กรอกหมายเหตุ | 35 |
