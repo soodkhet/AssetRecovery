@@ -20,6 +20,7 @@ import {
   IconUser,
   IconWallet,
 } from '@/components/field/field-icons'
+import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { ToastProvider } from '@/components/ui'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import type { ClientSession } from '@/lib/auth/types'
@@ -336,7 +337,10 @@ export function FieldShell({ session, children }: { session: ClientSession; chil
     <PermissionProvider session={session}>
       <ToastProvider>
         <FieldCasesProvider>
-          <ShellFrame session={session}>{children}</ShellFrame>
+          {/* auto-popup คำขอเปลี่ยนผู้รับผิดชอบอยู่ระดับ shell — เด้งได้ทุกหน้าใต้ `/field` (`41` §7.8) */}
+          <FieldReassignmentProvider>
+            <ShellFrame session={session}>{children}</ShellFrame>
+          </FieldReassignmentProvider>
         </FieldCasesProvider>
       </ToastProvider>
     </PermissionProvider>

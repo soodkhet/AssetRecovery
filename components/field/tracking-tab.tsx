@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { CloseCaseModal } from '@/components/field/close-case-modal'
 import { FieldCaseDetailModal } from '@/components/field/field-case-detail'
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { IconAlert, IconGrip, IconMapPin } from '@/components/field/field-icons'
+import { useReassignment } from '@/components/field/reassignment-provider'
 import { Button, EmptyState, ErrorState, LoadingState, StatusBadge, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
@@ -52,7 +54,9 @@ function CardButton({ action, onClick }: { action: FieldCardAction; onClick: () 
 export function TrackingTab() {
   const { items, loading, error, reload } = useFieldCases()
   const { showToast } = useToast()
+  const { openReassignment, setPopupPaused } = useReassignment()
   const [detailCaseId, setDetailCaseId] = useState<string | null>(null)
+  const [closeCaseId, setCloseCaseId] = useState<string | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [savingDate, setSavingDate] = useState<string | null>(null)
 
@@ -86,16 +90,24 @@ export function TrackingTab() {
     void applyOrder(date, next)
   }
 
-  /** ปุ่มปิดงาน/ตอบคำขอของ Phase 2.11 — ตอนนี้บอกผู้ใช้ตรง ๆ ว่ายังไม่เปิด (ไม่ทำปุ่มหลอก) */
-  function notYet(action: FieldCardAction): void {
-    showToast({
-      tone: 'info',
-      title: `${action.label} — ยังไม่เปิดใช้งาน`,
-      description:
-        action.kind === 'respond_reassignment'
-          ? 'หน้าจอตอบคำขอเปลี่ยนผู้รับผิดชอบอยู่ระหว่างพัฒนา (Phase 2.11)'
-          : 'ฟอร์มปิดงาน (เช็คอิน/รูป/วิดีโอ) อยู่ระหว่างพัฒนา (Phase 2.11)',
-    })
+  /** ปุ่มบนการ์ด — คำขอเปลี่ยนผู้รับผิดชอบเปิด modal ของ shell · ที่เหลือเปิดฟอร์มปิดงาน (`41` §7.5/§7.6) */
+  function runAction(action: FieldCardAction, caseId: string): void {
+    if (action.kind === 'respond_reassignment') {
+      openReassignment(caseId)
+      return
+    }
+    openCloseForm(caseId)
+  }
+
+  /** ระหว่างเปิดฟอร์มปิดงาน พัก auto-popup ไว้ก่อน (mockup ก็ไม่เด้ง popup ทับ modal อื่น) */
+  function openCloseForm(caseId: string): void {
+    setPopupPaused(true)
+    setCloseCaseId(caseId)
+  }
+
+  function closeCloseForm(): void {
+    setCloseCaseId(null)
+    setPopupPaused(false)
   }
 
   if (loading) return <LoadingState message="กำลังโหลดงานที่กำลังติดตาม..." />
@@ -129,7 +141,7 @@ export function TrackingTab() {
                         {item.trackingRound}
                       </div>
                     </button>
-                    {action !== null && <CardButton action={action} onClick={() => notYet(action)} />}
+                    {action !== null && <CardButton action={action} onClick={() => runAction(action, item.caseId)} />}
                   </div>
                 </div>
               )
@@ -225,7 +237,7 @@ export function TrackingTab() {
                             </div>
                           </button>
 
-                          {action !== null && <CardButton action={action} onClick={() => notYet(action)} />}
+                          {action !== null && <CardButton action={action} onClick={() => runAction(action, item.caseId)} />}
                         </div>
                       )
                     })}
@@ -244,14 +256,22 @@ export function TrackingTab() {
         onChanged={() => {
           void reload()
         }}
-        onRespondReassignment={() =>
-          showToast({
-            tone: 'info',
-            title: 'ตอบคำขอ — ยังไม่เปิดใช้งาน',
-            description: 'หน้าจอตอบคำขอเปลี่ยนผู้รับผิดชอบอยู่ระหว่างพัฒนา (Phase 2.11)',
-          })
-        }
+        onRespondReassignment={(detail) => {
+          setDetailCaseId(null)
+          openReassignment(detail.caseId)
+        }}
       />
+
+      {closeCaseId !== null && (
+        <CloseCaseModal
+          key={closeCaseId}
+          caseId={closeCaseId}
+          onClose={closeCloseForm}
+          onDone={() => {
+            void reload()
+          }}
+        />
+      )}
     </>
   )
 }

@@ -5,6 +5,7 @@ import { CalendarPickerModal } from '@/components/field/calendar-picker-modal'
 import { FieldCaseDetailModal } from '@/components/field/field-case-detail'
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { IconMapPin, IconUser, IconUsers } from '@/components/field/field-icons'
+import { useReassignment } from '@/components/field/reassignment-provider'
 import { Button, EmptyState, ErrorState, LoadingState, RefText } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
@@ -29,6 +30,7 @@ type ViewKey = (typeof VIEWS)[number]['key']
 
 export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
   const { items, loading, error, reload } = useFieldCases()
+  const { openReassignment } = useReassignment()
   const [view, setView] = useState<ViewKey>('own')
   const [scheduling, setScheduling] = useState<FieldCaseListItemDto | null>(null)
   const [detailCaseId, setDetailCaseId] = useState<string | null>(null)
@@ -178,6 +180,10 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
         onClose={() => setDetailCaseId(null)}
         onChanged={() => {
           void reload()
+        }}
+        onRespondReassignment={(detail) => {
+          setDetailCaseId(null)
+          openReassignment(detail.caseId)
         }}
       />
     </>
