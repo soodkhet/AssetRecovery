@@ -67,7 +67,7 @@ POST   /api/cases/:id/accept                              พนักงาน�
 ### 6.3 Field Tracker — Mobile/Desktop (ไฟล์ 41)
 
 ```
-GET    /api/field/cases?status={status}              ดึงรายการเคสของพนักงานตามสถานะ (4 กลุ่มหลัก)
+GET    /api/field/cases?status={status}&view={own|team}  ดึงรายการเคสของพนักงานตามสถานะ (4 กลุ่มหลัก) — view=team คือมุมมองทีม read-only ของไฟล์ 41 §7.3 (เพิ่ม 14/08/2569 Phase 2.8)
 GET    /api/field/cases/:id                           ดึงรายละเอียดเคสเต็ม
 POST   /api/field/cases/:id/accept                    รับงาน
 POST   /api/field/cases/:id/schedule                  จัดวันที่ (body: schedule_date)
