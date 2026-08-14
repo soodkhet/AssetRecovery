@@ -1,20 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 2.14 (Warehouse FE ชุด 1 — หน้า `/warehouse` จริง: รับเข้าคลัง + ในคลัง) · งานถัดไป 2.15
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 2.15 (Warehouse FE ชุด 2 — นัดวันส่งมอบ + แนบเอกสาร + ยืนยันส่งมอบ) · **จบ Phase 2 ทั้งเฟส** · งานถัดไป 3.1
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.15: Warehouse Frontend ชุดที่ 2 (ส่งมอบ + แนบเอกสาร)
+## 🎯 งานถัดไป — Phase 3.1: Pure Finance Calculation Modules + Unit Tests (ไฟล์ 22 ทั้งหมด)
 
-- ทำตาม `docs/01_PLAN.md` §2.15 — ปิดวงจร `closed_success → intake → lot → confirm` ให้ครบบนหน้าจอ
-- **Modal "นัดวันส่งมอบ"**: radio 2 รูปแบบ (🏢 ไฟแนนซ์มารับ / 🚚 เราจัดส่ง) + ช่องตามรูปแบบ (วันนัด/ผู้ประสาน · ที่อยู่จัดส่งบังคับ default จากบริษัท) + เลขล็อต/ใบส่งมอบ auto-gen (อ่านอย่างเดียว) + ปุ่มดูตัวอย่าง/พิมพ์ PDF + รายการเครื่อง collapsible + Export Excel
-- **แท็บรอส่งมอบ + ส่งมอบแล้ว**: การ์ด Lot + drill-down (`we_deliver` อยู่แท็บ "ส่งมอบแล้ว" ทันทีตาม §9.3)
-- **Modal แนบเอกสาร + ยืนยันส่งมอบ**: 1 ช่อง (`finance_pickup`) หรือ 2 ช่อง (`we_deliver`) · ปุ่มยืนยัน disabled ตาม `canConfirmLot()` ตัวเดียวกับ API
-- ใช้ของที่มีแล้ว: prop `onScheduleHandover` ของ `<CustodyTab>` + บล็อก placeholder ใน `<WarehouseManager>` (2 จุดเสียบที่ 2.14 เตรียมไว้) · `lib/warehouse/*` pure ครบจาก 2.13 · `<FileViewerModal>` · UI Kit
-- อ้างอิง: `44` §8.4–8.5 ผ่าน MAP (L265–308) · mockup `reference/warehouse.html` ผ่าน MAP (L485–715)
-- DoD: วงจร closed_success → intake → lot → confirm ครบบน staging (expense ปลดล็อกจริง) · LOC ~1,550 · งบ ~260k
+- ทำตาม `docs/01_PLAN.md` §3.1 — **ก่อนทุกงานใน Phase 3** · pure module ไม่มี I/O + unit test ครบ 13 สูตร
+- สูตรที่ต้องมี: fuel PER_KM/DAILY_FLAT · allowance (นับ DISTINCT วันปฏิทินจาก check_ins) · commission / no_success_fee · service fee SUCCESS_FEE/FLAT/HYBRID · VAT resolver (effective-dated + include/exclude/no_vat + snapshot `vat_rate_used`) · **WHT resolver (Payee ชนะ Plan + fallback warning + threshold 1,000 + ฐาน before_vat)** · payout batch รวม · AR outstanding · Gross Profit (revenue = 0 → "N/A" ห้ามหารศูนย์) · advance return (used > requested → 0 ห้ามติดลบ) · approval-flow-resolver (matrix → step list) · adjustment-approval-policy (period_status → ระดับผู้อนุมัติ)
+- ของที่มีแล้วห้ามเขียนซ้ำ: `lib/finance/revenue-trigger-rules.ts` (2.13 — `shouldCreateRevenue()` ครอบ DEC-006/D6) · `lib/field/expense-calc.ts` (2.9 — fuel/allowance ของงานสนาม) · `lib/settings/*` VAT resolver ที่ 1.10 ทำไว้ — เช็ค `docs/REUSE_INDEX.md` ก่อนเสมอ แล้วรวมของเดิมเข้ามาแทนการสร้างใหม่
+- เงิน = **INTEGER satang เท่านั้น** · ห้าม hardcode VAT 7% · ทุกสูตรมีเทสต์ในก้อนงานเดียวกัน (Rule 07)
+- อ้างอิง: `22` ทั้งไฟล์ · `18` §6.3 · `19` §6.1 + §16 · `13` §6.4–6.5
+- DoD: coverage 100% ของ pure modules · service หลังจากนี้เรียกสูตรจากที่นี่เท่านั้น · LOC ~2,500 (รวมเทสต์) · งบ ~360k
 
 ---
 
@@ -61,7 +60,7 @@
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ✅ | 2026-08-14 · `1af69ae`+`07b2744` · 4 หน้าจอสุดท้ายของไฟล์ 41 (เบิกเงิน 2 ขอบแท็บ/รายได้/จบงาน/dashboard) + PWA manifest + service worker + กระดิ่งแจ้งเตือนในแอป · ⚠️ ต้องตั้ง `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (คู่กับ `VAPID_*`) ที่ Vercel ก่อน push จริงจะทำงาน → archive |
 | 2.13 | Warehouse BE (confirm = transaction 4 steps) | ✅ | 2026-08-15 · `32f6b4c`+`b9b1f0a` · API 10 endpoint + confirm 4 ขั้น + PDF/Excel ใบส่งมอบ + Revenue stub (ของจริง 3.6) · เทสต์ T01–T15 ของ `44` §17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ✅ | 2026-08-15 · `8d25403` · หน้า `/warehouse` จริง 4 แท็บ + badge + modal รับเข้าคลัง 3 ขั้น (force proceed) + แท็บในคลัง (การ์ด/drill-down/checkbox) → archive |
-| 2.15 | Warehouse FE ชุด 2 (ส่งมอบ/แนบเอกสาร) | ⬜ | PLAN §2.15 |
+| 2.15 | Warehouse FE ชุด 2 (ส่งมอบ/แนบเอกสาร) | ✅ | 2026-08-15 · `557fc34` · modal นัดวันส่งมอบ + 2 แท็บล็อต (`<LotTab>`) + แนบเอกสาร/ยืนยันส่งมอบ + ค้นล็อตด้วย IMEI/ชื่อลูกหนี้ → archive |
 
 ## Phase 3 — Finance Module (ไฟล์ 14–21, 22)
 

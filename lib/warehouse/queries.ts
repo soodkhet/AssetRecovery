@@ -456,9 +456,27 @@ export async function listLots(user: SessionUser, query: LotListQuery): Promise<
     ...(query.search === undefined
       ? {}
       : {
+          // `44` §8.4 ให้ค้นได้ทั้ง **เลขล็อต / IMEI / ชื่อลูกหนี้** ⇒ ค้นทะลุไปที่เครื่องในล็อตด้วย
+          // ⚠️ IMEI/serial เทียบ **exact เท่านั้น** (§6.5 ห้าม fuzzy) ส่วนชื่อ/เลขสัญญาเทียบ contains
+          //    — กติกาเดียวกับ `listAssets()` และ `matchesAssetSearch()` ฝั่งหน้าจอ
           OR: [
             { lotNumber: { contains: query.search, mode: 'insensitive' } },
             { docRef: { contains: query.search, mode: 'insensitive' } },
+            {
+              assets: {
+                some: {
+                  deletedAt: null,
+                  OR: [
+                    { caseRef: { contains: query.search, mode: 'insensitive' } },
+                    { debtorName: { contains: query.search, mode: 'insensitive' } },
+                    { imeiContract: query.search },
+                    { imeiActual: query.search },
+                    { serialContract: query.search },
+                    { serialActual: query.search },
+                  ],
+                },
+              },
+            },
           ],
         }),
   }

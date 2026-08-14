@@ -6,11 +6,13 @@ import {
   fmtDateTime,
   fmtTime,
   fromInputDate,
+  fromInputDateTime,
   nowDate,
   nowDateTime,
   toBangkokParts,
   toDate,
   toInputDate,
+  toInputDateTime,
 } from '@/lib/format/datetime'
 
 /**
@@ -112,6 +114,28 @@ describe('input[type=date] — ข้อยกเว้นเดียวที�
     // 2026 ไม่ใช่ปีอธิกสุรทิน — 29/02 ถูก normalize เป็น 01/03 ตามพฤติกรรม Date มาตรฐาน
     expect(round).toBe('2026-03-01')
     expect(toInputDate(fromInputDate('2026-02-28'))).toBe('2026-02-28')
+  })
+})
+
+describe('input[type=datetime-local] — วันนัด/วันส่งมอบจริงของล็อต (`44` §8.4)', () => {
+  it('toInputDateTime = `YYYY-MM-DDTHH:mm` ค.ศ. ตามเวลาไทย', () => {
+    expect(toInputDateTime('2026-07-02T03:00:00Z')).toBe('2026-07-02T10:00')
+    // 17:30Z = 00:30 ของวันถัดไปตามเวลาไทย — วันต้องเลื่อนตามด้วย
+    expect(toInputDateTime('2026-08-13T17:30:00Z')).toBe('2026-08-14T00:30')
+    expect(toInputDateTime(null)).toBe('')
+  })
+
+  it('fromInputDateTime อ่านค่าที่กรอกเป็น **เวลาไทย** เสมอ (ไม่ใช่เวลาเครื่องผู้ใช้)', () => {
+    expect(fromInputDateTime('2026-07-02T10:00')?.toISOString()).toBe('2026-07-02T03:00:00.000Z')
+    expect(fromInputDateTime('2026-07-02T10:00:30')?.toISOString()).toBe('2026-07-02T03:00:30.000Z')
+    expect(fromInputDateTime('02/07/2569 10:00')).toBeNull()
+    expect(fromInputDateTime('2026-07-02')).toBeNull()
+    expect(fromInputDateTime('')).toBeNull()
+    expect(fromInputDateTime(null)).toBeNull()
+  })
+
+  it('ไป-กลับแล้วเวลาไม่เพี้ยน', () => {
+    expect(toInputDateTime(fromInputDateTime('2026-12-31T23:59'))).toBe('2026-12-31T23:59')
   })
 })
 

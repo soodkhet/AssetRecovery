@@ -126,6 +126,9 @@ export type LotListQuery = z.infer<typeof lotListQuerySchema>
  * `POST /api/handover-lots` — 1 ล็อต = 1 บริษัท (`44` §6.2)
  * `assetIds` ต้องไม่ซ้ำกันเอง: ชั้น query นับจำนวนแถวที่ผูกสำเร็จเทียบกับความยาวลิสต์
  * เพื่อกันสองคนหยิบเครื่องชุดเดียวกัน — id ซ้ำจะทำให้การนับนั้นเพี้ยน
+ *
+ * `deliveryAddr` **บังคับเมื่อ `we_deliver`** (`44` §7.2) — `44` §12 ไม่มี error code สำหรับช่องนี้
+ * จึงตกที่ validation กลาง (`REQUIRED_MISSING` + field error) ไม่ใช่ code ใหม่ (Rule 04)
  */
 export const lotCreateSchema = z.object({
   companyId: z.uuid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
@@ -140,6 +143,14 @@ export const lotCreateSchema = z.object({
   deliveryAddr: nullableText(500),
   trackingNo: nullableText(100),
   note: nullableText(1000),
+}).superRefine((value, ctx) => {
+  if (value.type === 'we_deliver' && value.deliveryAddr === null) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['deliveryAddr'],
+      message: 'ล็อตแบบ "เราจัดส่งไปให้" ต้องระบุที่อยู่จัดส่ง (`44` §7.2)',
+    })
+  }
 })
 
 export type LotCreateInput = z.infer<typeof lotCreateSchema>
