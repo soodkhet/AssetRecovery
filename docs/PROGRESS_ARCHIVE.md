@@ -7,7 +7,7 @@
 
 ## Phase 2.2 — Case Submission BE ชุด 1 (schema + CRUD + เอกสาร)
 
-**วันที่**: 2026-08-14 · **commit**: `__COMMIT__` · **branch**: `auto/phase-2.2`
+**วันที่**: 2026-08-14 · **commit**: `d5accc2` · **branch**: `auto/phase-2.2`
 
 ### สิ่งที่ทำ
 
