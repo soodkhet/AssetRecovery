@@ -259,15 +259,26 @@ enum RecycleStatus {
   @@map("recycle_status")
 }
 
+/// สถานะของ assignment ฝั่งภาคสนาม (`41` §6.1/§10 — sync เข้า `02` §3 v4.2 ตอน Phase 2.8)
+/// sub-state ของ `case.status = approved` — ไม่ใช่ state ของเคส
 enum AssignmentStatus {
-  pending
-  accepted
-  active
-  completed
-  reassigned
-  cancelled
+  pending_accept
+  accepted_unscheduled
+  scheduled
+  closed_success
+  closed_fail
+  needs_revision
+  reassigned_away
 
   @@map("assignment_status")
+}
+
+/// ที่มาของพิกัดจุดเริ่มเดินทาง (`41` §6.4.1) — ไม่ใช่หลักฐานปิดงาน (คนละชุดกับ `check_ins`)
+enum TravelOriginSource {
+  gps_auto
+  manual_adjusted
+
+  @@map("travel_origin_source")
 }
 
 /// สถานะคำขอเปลี่ยนผู้รับผิดชอบ (`40` §6.1.1) — `waiting_consent` คือคำขอที่ยังค้างอยู่จริง
@@ -589,6 +600,8 @@ model Organization {
   assignmentPolicySettings   AssignmentPolicySettings?
   checkIns                   CheckIn[]
   caseEvidences              CaseEvidence[]
+  travelOrigins              TravelOrigin[]
+  closeCaseDrafts            CloseCaseDraft[]
   assets                     Asset[]
   handoverLots               HandoverLot[]
   payeeProfiles              PayeeProfile[]
@@ -707,14 +720,14 @@ model User {
   taxDocumentTemplateSettingsUpdated TaxDocumentTemplateSettings[] @relation("tax_doc_templates_updated_by")
 
   // ── Group C–G: งานที่ผู้ใช้คนนี้เกี่ยวข้องโดยตรง ──
-  payeeProfile       PayeeProfile[]   @relation("payee_user")
-  assignmentsAsAgent CaseAssignment[] @relation("assignments_agent")
+  payeeProfile        PayeeProfile[]        @relation("payee_user")
+  assignmentsAsAgent  CaseAssignment[]      @relation("assignments_agent")
   /// คำขอเปลี่ยนผู้รับผิดชอบที่ตัวเองเป็นคนถือเคสอยู่ (คนที่ต้องตอบ) — `40` §6.1.1
   reassignmentsFromMe PendingReassignment[] @relation("pending_reassignments_from_agent")
   /// คำขอที่ตัวเองเป็นผู้รับงานคนใหม่
   reassignmentsToMe   PendingReassignment[] @relation("pending_reassignments_new_agent")
-  notifications      Notification[]   @relation("notifications_user")
-  auditLogs          AuditLog[]       @relation("audit_actor")
+  notifications       Notification[]        @relation("notifications_user")
+  auditLogs           AuditLog[]            @relation("audit_actor")
 
   // ── Group C–G: back-relation ของ created_by / updated_by / actor อื่นๆ ──
   casesCreated              Case[]                      @relation("cases_created_by")
@@ -738,6 +751,11 @@ model User {
   evidencesCreated          CaseEvidence[]              @relation("evidences_created_by")
   evidencesUpdated          CaseEvidence[]              @relation("evidences_updated_by")
   evidencesReviewed         CaseEvidence[]              @relation("evidences_reviewed_by")
+  travelOriginsCreated      TravelOrigin[]              @relation("travel_origins_created_by")
+  travelOriginsUpdated      TravelOrigin[]              @relation("travel_origins_updated_by")
+  closeCaseDraftsOwned      CloseCaseDraft[]            @relation("close_case_drafts_agent")
+  closeCaseDraftsCreated    CloseCaseDraft[]            @relation("close_case_drafts_created_by")
+  closeCaseDraftsUpdated    CloseCaseDraft[]            @relation("close_case_drafts_updated_by")
   assetsCreated             Asset[]                     @relation("assets_created_by")
   assetsUpdated             Asset[]                     @relation("assets_updated_by")
   assetsRejected            Asset[]                     @relation("assets_rejected_by")
@@ -961,11 +979,11 @@ model FinanceCompany {
   defaultInvoiceDeliveryFormat InvoiceDeliveryFormat @default(paper_pdf) @map("default_invoice_delivery_format")
 
   /// วันตัดรอบบิล
-  billingDay     Int    @default(1) @map("billing_day")
+  billingDay      Int     @default(1) @map("billing_day")
   /// วันครบกำหนดชำระ
-  paymentDueDays Int    @default(30) @map("payment_due_days")
+  paymentDueDays  Int     @default(30) @map("payment_due_days")
   /// active | suspended (`10` §9.3 — มติ PO 14/08/2569 · คงชนิด TEXT ตาม `02` §5 ไม่แปลงเป็น enum)
-  status         String @default("active")
+  status          String  @default("active")
   /// เหตุผลที่ระงับ — บังคับกรอกเมื่อเปลี่ยนเป็น suspended (`10` §7.1/§11 `SUSPEND_REASON_REQUIRED`)
   suspendedReason String? @map("suspended_reason")
 
@@ -1284,18 +1302,18 @@ model TaxDocumentTemplateSettings {
 /// เคสงานติดตามทรัพย์ (ไฟล์ 38)
 /// ⚠️ Service fee = **snapshot ตอน `approved`** ห้ามคำนวณย้อนหลังจาก template ปัจจุบัน (`10` §9.2, `92` §7.1)
 model Case {
-  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String     @map("organization_id") @db.Uuid
+  id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String     @map("organization_id") @db.Uuid
   /// เลขสัญญาจากไฟแนนซ์ เช่น SF-2026-00832 (เก็บค่าดิบ ไม่ถูกแก้ไข — `38` §6.1)
-  caseRef        String     @map("case_ref")
+  caseRef           String     @map("case_ref")
   /// `38` §11 — `case_ref` ที่ normalize แล้ว (uppercase + trim เท่านั้น) ใช้เทียบซ้ำอย่างเดียว ไม่แสดงต่อผู้ใช้
   /// เขียนผ่าน `normalizeCaseRef()` (`lib/cases/case-ref.ts`) เสมอ ห้ามประกอบเอง
-  caseRefNormalized String  @map("case_ref_normalized")
+  caseRefNormalized String     @map("case_ref_normalized")
   /// รอบติดตาม (เพิ่มเมื่อ recycle)
-  trackingRound  Int        @default(1) @map("tracking_round")
-  source         CaseSource @default(manual)
-  status         CaseStatus @default(draft)
-  companyId      String     @map("company_id") @db.Uuid
+  trackingRound     Int        @default(1) @map("tracking_round")
+  source            CaseSource @default(manual)
+  status            CaseStatus @default(draft)
+  companyId         String     @map("company_id") @db.Uuid
 
   // Service Fee snapshot (ตอน approved)
   serviceFeeTemplateId    String?          @map("service_fee_template_id") @db.Uuid
@@ -1308,17 +1326,17 @@ model Case {
   // Debtor
   /// `38` §11 — เคสจาก API สร้าง draft ได้แม้ข้อมูลยังไม่ครบ ⇒ ฟิลด์ "required" ของ §6 เป็น NULL ได้ที่ชั้น DB
   /// ความครบถ้วนถูกบังคับตอนขอเข้า `pending_review` ผ่าน `assertReadyForReview()` (`lib/cases/case.ts`)
-  debtorName        String? @map("debtor_name")
-  debtorNationality DebtorNationality? @map("debtor_nationality")
+  debtorName             String?            @map("debtor_name")
+  debtorNationality      DebtorNationality? @map("debtor_nationality")
   /// ระบุชื่อสัญชาติเมื่อ `debtor_nationality = OTHER` (`38` §6.1.1)
-  debtorNationalityOther String? @map("debtor_nationality_other")
-  debtorNationalId  String? @map("debtor_national_id") @db.VarChar(13)
+  debtorNationalityOther String?            @map("debtor_nationality_other")
+  debtorNationalId       String?            @map("debtor_national_id") @db.VarChar(13)
   /// เลข passport/เอกสารอื่น — free text (แต่ละประเทศ format ต่างกัน · `38` §6.1.1)
-  debtorPassportNo  String? @map("debtor_passport_no")
-  debtorPhoneMobile String? @map("debtor_phone_mobile") @db.VarChar(20)
-  debtorPhoneWork   String? @map("debtor_phone_work") @db.VarChar(20)
-  debtorLineId      String? @map("debtor_line_id")
-  debtorFacebook    String? @map("debtor_facebook")
+  debtorPassportNo       String?            @map("debtor_passport_no")
+  debtorPhoneMobile      String?            @map("debtor_phone_mobile") @db.VarChar(20)
+  debtorPhoneWork        String?            @map("debtor_phone_work") @db.VarChar(20)
+  debtorLineId           String?            @map("debtor_line_id")
+  debtorFacebook         String?            @map("debtor_facebook")
 
   // Address (current) — `addr_province` เป็นฐานเดียวของ routing ทีม (`38` §6.1.2)
   addrProvince    String? @map("addr_province")
@@ -1345,13 +1363,13 @@ model Case {
   /// `38` §6.2 `asset_type` — smartphone | tablet
   assetKind        AssetKind? @map("asset_kind")
   /// `38` §6.2 `asset_brand_model` — ยี่ห้อ/รุ่นเครื่อง (คอลัมน์เดิมของ `02` §6)
-  assetDescription String? @map("asset_description")
+  assetDescription String?    @map("asset_description")
   /// A6 (มติ PO 2026-08-12) — IMEI 15 หลักเท่านั้น (exact match ห้าม fuzzy · `44` §6.5)
-  imei             String? @db.VarChar(15)
+  imei             String?    @db.VarChar(15)
   /// A6 — เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ) เก็บ serial แทน · ต้องมีอย่างน้อย 1 อย่างก่อนปิดงานสำเร็จ
-  serialNo         String? @map("serial_no")
-  debtAmountSatang Int?    @map("debt_amount_satang")
-  assetValueSatang Int?    @map("asset_value_satang")
+  serialNo         String?    @map("serial_no")
+  debtAmountSatang Int?       @map("debt_amount_satang")
+  assetValueSatang Int?       @map("asset_value_satang")
 
   // Team assignment (`38` §6.4)
   suggestedTeamId  String? @map("suggested_team_id") @db.Uuid
@@ -1396,11 +1414,13 @@ model Case {
   pendingReassignments PendingReassignment[]
   reassignmentHistory  ReassignmentHistory[]
 
-  checkIns    CheckIn[]
-  evidences   CaseEvidence[]
-  assets      Asset[]
-  expenses    Expense[]
-  revenues    Revenue[]
+  checkIns       CheckIn[]
+  evidences      CaseEvidence[]
+  travelOrigins  TravelOrigin[]
+  closeCaseDraft CloseCaseDraft[]
+  assets         Asset[]
+  expenses       Expense[]
+  revenues       Revenue[]
 
   @@unique([organizationId, companyId, caseRef, trackingRound])
   @@index([organizationId, status], map: "idx_cases_org_status")
@@ -1461,9 +1481,9 @@ model CaseContact {
 /// `38` §6.4 `edit_history` — ประวัติการแก้ไขเคสทุกครั้ง **append-only** ไม่เขียนทับของเดิม
 /// (ไม่ใช่ที่เก็บ audit หลัก — `audit_logs` ยังต้องมีครบทุก mutation ตาม Rule 03)
 model CaseEditHistory {
-  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String @map("organization_id") @db.Uuid
-  caseId         String @map("case_id") @db.Uuid
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  caseId         String   @map("case_id") @db.Uuid
   /// หมายเหตุที่ผู้แก้ระบุ (ไม่บังคับ — `38` §6.4 เก็บ `note`)
   note           String?
   /// รายชื่อฟิลด์ที่เปลี่ยนในการแก้ครั้งนั้น (คีย์ระดับ API เช่น `debtor_name`)
@@ -1516,9 +1536,11 @@ model CaseAssignment {
   agentId        String           @map("agent_id") @db.Uuid
   teamId         String           @map("team_id") @db.Uuid
   trackingRound  Int              @default(1) @map("tracking_round")
-  status         AssignmentStatus @default(pending)
+  status         AssignmentStatus @default(pending_accept)
 
   scheduledDate DateTime? @map("scheduled_date") @db.Date
+  /// ลำดับก่อน-หลังในวันเดียวกัน (`41` §6.1) — recompute ทั้งวันทุกครั้งที่ลากสลับ ไม่มีกฎ lock ลำดับ
+  scheduleOrder Int?      @map("schedule_order")
   acceptedAt    DateTime? @map("accepted_at") @db.Timestamptz(6)
   completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
 
@@ -1543,9 +1565,12 @@ model CaseAssignment {
   checkIns             CheckIn[]
   evidences            CaseEvidence[]
   expenses             Expense[]
+  travelOrigin         TravelOrigin?
+  closeCaseDraft       CloseCaseDraft?
 
   @@index([caseId, status], map: "idx_assignments_case")
   @@index([agentId, status], map: "idx_assignments_agent")
+  @@index([agentId, scheduledDate, scheduleOrder], map: "idx_assignments_agent_schedule")
   @@map("case_assignments")
 }
 
@@ -1595,9 +1620,9 @@ model PendingReassignment {
 /// ประวัติการเปลี่ยนผู้รับผิดชอบที่ **สำเร็จแล้ว** ทุกครั้ง (`40` §6.1) — insert-only
 /// การปฏิเสธคำขอไม่ลงที่นี่ (ไม่ใช่การเปลี่ยนที่สำเร็จ) — ดูได้จาก `pending_reassignments.status = declined`
 model ReassignmentHistory {
-  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String  @map("organization_id") @db.Uuid
-  caseId         String  @map("case_id") @db.Uuid
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String  @map("organization_id") @db.Uuid
+  caseId                String  @map("case_id") @db.Uuid
   /// NULL = reassign ทันทีตอนยังไม่ accepted (ไม่ต้องผ่านคำขอ — `40` §8)
   pendingReassignmentId String? @map("pending_reassignment_id") @db.Uuid
 
@@ -1605,22 +1630,22 @@ model ReassignmentHistory {
   toAgentId    String @map("to_agent_id") @db.Uuid
   reassignedBy String @map("reassigned_by") @db.Uuid
 
-  requestedAt DateTime               @map("requested_at") @db.Timestamptz(6)
-  resolvedAt  DateTime               @map("resolved_at") @db.Timestamptz(6)
-  resolution  ReassignmentResolution
-  reason      String
+  requestedAt               DateTime               @map("requested_at") @db.Timestamptz(6)
+  resolvedAt                DateTime               @map("resolved_at") @db.Timestamptz(6)
+  resolution                ReassignmentResolution
+  reason                    String
   /// เคสนี้ถูกพนักงานคนเดิมกดรับแล้วหรือยัง ณ เวลาที่ขอเปลี่ยน (`40` §6.1)
-  wasAcceptedBeforeReassign Boolean @map("was_accepted_before_reassign")
+  wasAcceptedBeforeReassign Boolean                @map("was_accepted_before_reassign")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
 
-  organization       Organization         @relation(fields: [organizationId], references: [id])
-  case               Case                 @relation(fields: [caseId], references: [id])
+  organization        Organization         @relation(fields: [organizationId], references: [id])
+  case                Case                 @relation(fields: [caseId], references: [id])
   pendingReassignment PendingReassignment? @relation(fields: [pendingReassignmentId], references: [id])
-  fromAgent          User                 @relation("reassignment_history_from_agent", fields: [fromAgentId], references: [id])
-  toAgent            User                 @relation("reassignment_history_to_agent", fields: [toAgentId], references: [id])
-  reassignedByUser   User                 @relation("reassignment_history_reassigned_by", fields: [reassignedBy], references: [id])
+  fromAgent           User                 @relation("reassignment_history_from_agent", fields: [fromAgentId], references: [id])
+  toAgent             User                 @relation("reassignment_history_to_agent", fields: [toAgentId], references: [id])
+  reassignedByUser    User                 @relation("reassignment_history_reassigned_by", fields: [reassignedBy], references: [id])
 
   @@index([organizationId, caseId], map: "idx_reassignment_history_case")
   @@map("reassignment_history")
@@ -1628,9 +1653,9 @@ model ReassignmentHistory {
 
 /// ค่าตั้งระดับองค์กรของการมอบหมายงาน (`40` §6.4 · §11) — 1 record ต่อ org เหมือน `finance_policy_settings`
 model AssignmentPolicySettings {
-  organizationId String @id @map("organization_id") @db.Uuid
+  organizationId               String  @id @map("organization_id") @db.Uuid
   /// เวลารอความยินยอมก่อน auto-resolve (`40` §11 — default 3 ชั่วโมง)
-  reassignTimeoutHours Int @default(3) @map("reassign_timeout_hours")
+  reassignTimeoutHours         Int     @default(3) @map("reassign_timeout_hours")
   /// §6.4 — คุมเฉพาะ **การกระทำ** assign/reassign ของหัวหน้าทีม ไม่คุมการมองเห็นข้อมูล
   supervisorCanAssignSystem    Boolean @default(true) @map("supervisor_can_assign_system")
   supervisorCanAssignInhouse   Boolean @default(true) @map("supervisor_can_assign_inhouse")
@@ -1682,17 +1707,24 @@ model CaseEvidence {
   outcome        CaseOutcome
   status         EvidenceStatus @default(pending)
 
-  /// URLs รูปสินค้า (Supabase Storage)
+  /// URLs หลักฐานตาม `41` §6.4 — เก็บแยกตามประเภท ไม่ใช่ boolean flag เดียว
+  /// รูปสินค้ายืนยัน (บังคับเฉพาะ outcome = `closed_success`)
   productPhotos String[] @default([]) @map("product_photos")
-  videoUrl      String?  @map("video_url")
+  /// รูปถ่ายหน้างาน (บังคับ ≥1 ทุก outcome)
+  photos        String[] @default([]) @map("photos")
+  /// วิดีโอ (บังคับ ≥1 ทุก outcome) — v4.2 แทน `video_url` เดี่ยว เพราะ §6.4 เป็น array
+  videos        String[] @default([]) @map("videos")
+  /// เสียงบันทึกการสนทนา — ไม่บังคับทุก outcome (`41` §6.4)
+  audioUrl      String?  @map("audio_url")
 
   reviewedBy   String?   @map("reviewed_by") @db.Uuid
   reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)
   rejectReason String?   @map("reject_reason")
 
+  /// **snapshot** ของ `travel_origins` ณ เวลาที่ submit (`92` §7.1) — ตัวที่แก้ได้อยู่ตาราง `travel_origins`
   travelOriginLat    Decimal? @map("travel_origin_lat") @db.Decimal(10, 7)
   travelOriginLng    Decimal? @map("travel_origin_lng") @db.Decimal(10, 7)
-  /// gps_auto | manual
+  /// gps_auto | manual_adjusted
   travelOriginSource String?  @map("travel_origin_source")
 
   submittedAt DateTime @map("submitted_at") @db.Timestamptz(6)
@@ -1710,6 +1742,69 @@ model CaseEvidence {
 
   @@index([caseId, status], map: "idx_evidences_case")
   @@map("case_evidences")
+}
+
+/// จุดเริ่มเดินทางของเคส (`41` §6.4.1) — ใช้คำนวณค่าน้ำมันโหมด `PER_KM` เท่านั้น
+/// ⚠️ **คนละชุดกับ `check_ins` เด็ดขาด** — เช็คอินคือหลักฐานว่าไปถึงจริง (ล็อกตลอด) ส่วนจุดนี้ปรับได้เสมอ
+/// "1 เคส 1 จุด" บังคับที่ระดับ assignment (1 รอบติดตาม = 1 assignment) — รอบใหม่เริ่มจุดใหม่เสมอ
+/// ห้าม auto-fill จากเคสก่อนหน้า (`41` §6.4.1)
+model TravelOrigin {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  caseId         String             @map("case_id") @db.Uuid
+  assignmentId   String             @unique @map("assignment_id") @db.Uuid
+  latitude       Decimal            @db.Decimal(10, 7)
+  longitude      Decimal            @db.Decimal(10, 7)
+  source         TravelOriginSource @default(gps_auto)
+  /// เวลาที่กดปุ่ม "เริ่มงาน" ครั้งแรกของเคสนั้น
+  setAt          DateTime           @map("set_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  case          Case           @relation(fields: [caseId], references: [id])
+  assignment    CaseAssignment @relation(fields: [assignmentId], references: [id])
+  createdByUser User           @relation("travel_origins_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?          @relation("travel_origins_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([caseId], map: "idx_travel_origins_case")
+  @@map("travel_origins")
+}
+
+/// ฟอร์มปิดงานที่ยังกรอกไม่ครบ (`41` §6.5) — 1:1 ต่อเคส (บังคับที่ assignment = รอบติดตามปัจจุบัน)
+/// autoload ตอนเปิดฟอร์มซ้ำ · ลบทันทีที่ `submit_close_case` สำเร็จ · **ไม่มี expiry** (`41` §11)
+model CloseCaseDraft {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  caseId         String       @map("case_id") @db.Uuid
+  assignmentId   String       @unique @map("assignment_id") @db.Uuid
+  agentId        String       @map("agent_id") @db.Uuid
+  /// null = ยังไม่เลือกผลการติดตาม (draft ไม่บังคับครบ)
+  outcome        CaseOutcome?
+
+  photos        String[] @default([]) @map("photos")
+  videos        String[] @default([]) @map("videos")
+  productPhotos String[] @default([]) @map("product_photos")
+  audioUrl      String?  @map("audio_url")
+  note          String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  case          Case           @relation(fields: [caseId], references: [id])
+  assignment    CaseAssignment @relation(fields: [assignmentId], references: [id])
+  agent         User           @relation("close_case_drafts_agent", fields: [agentId], references: [id])
+  createdByUser User           @relation("close_case_drafts_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?          @relation("close_case_drafts_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([caseId], map: "idx_close_case_drafts_case")
+  @@map("close_case_drafts")
 }
 
 // ═══════════════════════════════════════════════════════════════

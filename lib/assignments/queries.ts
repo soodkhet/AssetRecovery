@@ -4,6 +4,7 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isWithinScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import {
+  ACCEPTED_ASSIGNMENT_STATUSES,
   ACTIVE_ASSIGNMENT_STATUSES,
   assertAcceptable,
   assertAgentInCaseTeam,
@@ -212,9 +213,9 @@ function assignmentStateFilter(state: AssignmentState | undefined): Prisma.CaseW
     case 'ready_to_assign':
       return { assignments: { none: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] } } } }
     case 'assigned':
-      return { assignments: { some: { status: 'pending' } } }
+      return { assignments: { some: { status: 'pending_accept' } } }
     case 'accepted':
-      return { assignments: { some: { status: { in: ['accepted', 'active'] } } } }
+      return { assignments: { some: { status: { in: [...ACCEPTED_ASSIGNMENT_STATUSES] } } } }
   }
 }
 
@@ -345,7 +346,7 @@ export async function assignCase(
         agentId: agent.id,
         teamId,
         trackingRound: row.trackingRound,
-        status: 'pending',
+        status: 'pending_accept',
         createdBy: context.actor.id,
       },
       select: assignmentSelect,
@@ -364,7 +365,7 @@ export async function assignCase(
           caseRef: row.caseRef,
           agentId: agent.id,
           teamId,
-          status: 'pending',
+          status: 'pending_accept',
           trackingRound: row.trackingRound,
           events: ['assignment.created'],
         },
@@ -635,8 +636,8 @@ export async function acceptAssignment(
   const acceptedAt = new Date()
   const updated = await prisma.$transaction(async (tx) => {
     const claimed = await tx.caseAssignment.updateMany({
-      where: { id: current.id, status: 'pending' },
-      data: { status: 'accepted', acceptedAt, updatedBy: context.actor.id },
+      where: { id: current.id, status: 'pending_accept' },
+      data: { status: 'accepted_unscheduled', acceptedAt, updatedBy: context.actor.id },
     })
     // กดรับซ้ำ/ถูก reassign ไปแล้วระหว่างทาง — สถานะเปลี่ยนไปแล้วต้องไม่เขียนทับเงียบ ๆ
     if (claimed.count === 0) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS')
@@ -650,7 +651,7 @@ export async function acceptAssignment(
         targetType: 'case_assignments',
         targetId: current.id,
         before: { status: current.status, acceptedAt: null },
-        after: { status: 'accepted', acceptedAt, events: ['assignment.accepted'] },
+        after: { status: 'accepted_unscheduled', acceptedAt, events: ['assignment.accepted'] },
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
         diffOnly: false,

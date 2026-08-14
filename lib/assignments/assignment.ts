@@ -13,8 +13,23 @@ import { AuthError } from '@/lib/auth/errors'
  * สถานะของ assignment เป็น sub-state ของ `case.status = approved` (ไฟล์ 38) — ไม่ใช่ตัวแทน state ของเคส
  */
 
-/** สถานะของ `case_assignments` ที่ถือว่า "ยังถือเคสอยู่" — นอกนั้นคือสายที่ปิด/ถูกแทนที่ไปแล้ว */
-export const ACTIVE_ASSIGNMENT_STATUSES: readonly AssignmentStatus[] = ['pending', 'accepted', 'active']
+/**
+ * สถานะของ `case_assignments` ที่ถือว่า "ยังถือเคสอยู่" — นอกนั้นคือสายที่ปิด/ถูกแทนที่ไปแล้ว
+ * `needs_revision` ยังนับว่าถืออยู่ (`41` §10.1 — พนักงานคนเดิมต้องแก้หลักฐานแล้วส่งใหม่)
+ */
+export const ACTIVE_ASSIGNMENT_STATUSES: readonly AssignmentStatus[] = [
+  'pending_accept',
+  'accepted_unscheduled',
+  'scheduled',
+  'needs_revision',
+]
+
+/** สถานะที่แปลว่า "พนักงานกดรับแล้ว" — สับเซตของ {@link ACTIVE_ASSIGNMENT_STATUSES} ที่ไม่ใช่ `pending_accept` */
+export const ACCEPTED_ASSIGNMENT_STATUSES: readonly AssignmentStatus[] = [
+  'accepted_unscheduled',
+  'scheduled',
+  'needs_revision',
+]
 
 /** สถานะระดับเคสตาม `40` §10 (ready_to_assign → assigned → accepted) */
 export type AssignmentState = 'ready_to_assign' | 'assigned' | 'accepted'
@@ -24,11 +39,14 @@ export interface AssignmentSnapshot {
   acceptedAt: Date | null
 }
 
-/** `assigned` = มอบหมายแล้วรอกดรับ · `accepted` = กดรับแล้ว (รวมสถานะ `active` ที่ไฟล์ 41 ใช้ระหว่างลงพื้นที่) */
+/**
+ * `assigned` = มอบหมายแล้วรอกดรับ · `accepted` = กดรับแล้ว
+ * (รวม `scheduled`/`needs_revision` ที่ไฟล์ 41 ใช้ระหว่างลงพื้นที่/แก้หลักฐาน)
+ */
 export function assignmentStateOf(assignment: AssignmentSnapshot | null): AssignmentState {
   if (assignment === null) return 'ready_to_assign'
   if (!ACTIVE_ASSIGNMENT_STATUSES.includes(assignment.status)) return 'ready_to_assign'
-  return assignment.status === 'pending' ? 'assigned' : 'accepted'
+  return assignment.status === 'pending_accept' ? 'assigned' : 'accepted'
 }
 
 /** `40` §12 — มอบหมายซ้ำโดยไม่ผ่าน reassign ไม่ได้ ไม่ว่าสถานะปัจจุบันจะเป็น assigned หรือ accepted */
@@ -132,7 +150,7 @@ export function assertAcceptable(assignment: AssignmentSnapshot & { agentId: str
 export interface ReassignOutcome {
   /** สถานะของ assignment เดิมหลังเปลี่ยนสำเร็จ */
   previousStatus: AssignmentStatus
-  /** assignment ใหม่เริ่มที่ `pending` เสมอ + `accepted_at` = null (`40` §11 — ต้องกดรับใหม่) */
+  /** assignment ใหม่เริ่มที่ `pending_accept` เสมอ + `accepted_at` = null (`40` §11 — ต้องกดรับใหม่) */
   nextStatus: AssignmentStatus
   acceptedAt: null
 }
@@ -142,5 +160,5 @@ export interface ReassignOutcome {
  * ผลลัพธ์ของฟังก์ชันนี้คือค่าที่ต้องเขียนลง DB — ห้ามคำนวณเองซ้ำในชั้น query
  */
 export function reassignOutcome(): ReassignOutcome {
-  return { previousStatus: 'reassigned', nextStatus: 'pending', acceptedAt: null }
+  return { previousStatus: 'reassigned_away', nextStatus: 'pending_accept', acceptedAt: null }
 }
