@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.12 (Field Tracker FE ชุด 3 — เบิกเงิน/รายได้/จบงาน/PWA) · งานถัดไป 2.13
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 2.13 (Warehouse Backend — คลัง/ส่งมอบ/PDF/Excel ครบ 10 endpoint) · งานถัดไป 2.14
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.13: Warehouse Backend (ไฟล์ 44)
+## 🎯 งานถัดไป — Phase 2.14: Warehouse Frontend ชุดที่ 1 (รับเข้าคลัง + ในคลัง)
 
-- ทำตาม `docs/01_PLAN.md` §2.13 — migration `assets` + `handover_lots` + PostgreSQL sequence `LOT-`/`DLV-` (ปี **พ.ศ.**, immutable)
-- **asset auto-create hook** เมื่อเคส → `closed_success` (idempotent + snapshot fields) · assets list/detail (filter 8 ตัว + company scope)
-- **intake**: IMEI **exact match 15 หลัก** (เตือน mismatch แต่ force proceed ได้) · condition + note · รูป 7 มุม · reject-intake + retry
-- **lot create**: 1 บริษัท/lot (`MIXED_COMPANY_LOT`/`EMPTY_LOT`/`ASSET_NOT_IN_CUSTODY`/`ASSET_ALREADY_IN_LOT`) · status ตาม type (finance_pickup→`pending_attach` / we_deliver→`pending_delivery_proof`)
-- **confirm = `$transaction` 4 steps + rollback** (`CONFIRM_TRANSACTION_FAILED`) + `RevenueService.tryCreateRevenue()` (ตัวจริง Phase 3.6 — รอบนี้ทำ **stub ที่ idempotent + test contract**) · เอกสารบังคับตาม type · PDF ใบส่งมอบ + Excel export
-- อ้างอิง: `44` ผ่าน MAP §6–§7 (L62–169), §9–§12 (L309–443), §15 (L475) · `92` §6.1 · `19` §6.1
-- LOC ~2,850 · งบ ~400k
-- DoD: test T11/T12/T13 ของ `44` §17 (confirm ครบ / ล้ม rollback / expense ยังไม่ approved → Revenue ยังไม่เกิด)
+- ทำตาม `docs/01_PLAN.md` §2.14 — Warehouse shell 4 แท็บ + badge counts + Company User read-only scope
+- **แท็บรับเข้าคลัง**: filter 7 ตัว + ตาราง 9 คอลัมน์ · ปุ่มตามสถานะ (`pending_intake` → รับเข้าคลัง/ตีกลับ · `intake_rejected` → ดูเหตุผล/รับใหม่)
+- **Modal intake 3 ขั้น**: เทียบ IMEI (ไม่ตรง = ไฮไลต์แดง + force proceed ได้) → สภาพ + note บังคับเมื่อไม่ปกติ → อัปโหลดรูป 7 มุม
+- **Modal ตีกลับ / ดูเหตุผล / รับใหม่** · **แท็บในคลัง**: การ์ด group ตามบริษัท + drill-down + checkbox + ปุ่มนัดวันส่งมอบ
+- ใช้ของที่มีแล้ว: `lib/warehouse/*` (pure + schemas ครบจาก 2.13 — ห้ามเขียนเงื่อนไขซ้ำในหน้าจอ) · UI Kit · `<FileViewerModal>` · `<ReasonConfirmModal>`
+- อ้างอิง: `44` §8.1–8.3 ผ่าน MAP (L170–264) · mockup `reference/warehouse.html` ผ่าน MAP
+- LOC ~2,400 · งบ ~360k
 
 ---
 
@@ -60,7 +59,7 @@
 | 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ✅ | 2026-08-14 · `97afe2e`+`4d53196` · shell mobile/desktop (sidebar 260px fixed) + `<FieldCaseDetailBody>` ใช้ซ้ำ 3 ที่ + 3 แท็บงาน + Calendar Picker → archive |
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ✅ | 2026-08-14 · `66be882`+`011318f` · ฟอร์มปิดงาน 3 ส่วน (auto GPS + ลากแผนที่ + เช็คอินจากอุปกรณ์จริง + สื่อ 4 ชนิด + draft) + โหมด `needs_revision` + flow คำขอเปลี่ยนผู้รับผิดชอบครบ 3 ทางเข้า → archive |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ✅ | 2026-08-14 · `1af69ae`+`07b2744` · 4 หน้าจอสุดท้ายของไฟล์ 41 (เบิกเงิน 2 ขอบแท็บ/รายได้/จบงาน/dashboard) + PWA manifest + service worker + กระดิ่งแจ้งเตือนในแอป · ⚠️ ต้องตั้ง `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (คู่กับ `VAPID_*`) ที่ Vercel ก่อน push จริงจะทำงาน → archive |
-| 2.13 | Warehouse BE (confirm = transaction 4 steps) | 🔄 | PLAN §2.13 · Revenue stub → ของจริง 3.6 · ทำแล้ว: migration + `lib/warehouse/*` ครบ (service/pure/schemas/hook) + เทสต์ T01–T15 · เหลือ: API routes `45` §6.4–6.5 + PDF ใบส่งมอบ + Excel export |
+| 2.13 | Warehouse BE (confirm = transaction 4 steps) | ✅ | 2026-08-15 · `32f6b4c`+`b9b1f0a` · API 10 endpoint + confirm 4 ขั้น + PDF/Excel ใบส่งมอบ + Revenue stub (ของจริง 3.6) · เทสต์ T01–T15 ของ `44` §17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 2.14 | Warehouse FE ชุด 1 (รับเข้าคลัง/ในคลัง) | ⬜ | PLAN §2.14 |
 | 2.15 | Warehouse FE ชุด 2 (ส่งมอบ/แนบเอกสาร) | ⬜ | PLAN §2.15 |
 
