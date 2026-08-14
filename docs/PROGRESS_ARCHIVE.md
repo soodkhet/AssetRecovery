@@ -5,6 +5,35 @@
 
 ---
 
+## Phase 1.11 — Settings FE ชุดที่ 1: shell 13 แท็บ + 5 แท็บแรก (ไฟล์ 13)
+
+**วันที่**: 2026-08-14 · **commit**: `0eb2e81` · **branch**: `auto/phase-1.11`
+
+### สิ่งที่ทำ
+
+- **Shell "ตั้งค่าบัญชี/การเงิน"** — หน้า `/settings/finance` (`app/(app)/settings/finance/page.tsx`) + `<FinanceSettingsShell>` แถบแท็บ **แนวตั้ง 13 แท็บ** โทน emerald ตาม mockup `settings.html` (`renderSettingsLayout`) · แท็บที่หน้าจริงยังไม่เกิดแสดงเป็น disabled พร้อมบอก phase (แนวเดียวกับ `<SubNav>`) ไม่พาไปหน้าว่าง
+- **SSOT ของแท็บ** อยู่ที่ `lib/settings/finance-tabs.ts` (pure) + เทสต์ยาม 7 เคส — จำนวนต้องเป็น 13 เป๊ะ (`13` §16), id ห้ามซ้ำ, แท็บที่ยังไม่พร้อมต้องระบุ `plannedPhase` · `resolveFinanceSettingsTab()` ทำให้ `?tab=` ที่ชี้แท็บยังไม่เกิดตกกลับแท็บแรกเสมอ
+- **5 แท็บแรกใช้งานได้จริง**: §6.1 รอบบิล/รอบจ่าย · §6.2 สายอนุมัติ + §6.2.1 นโยบายการเงิน (การ์ดในแท็บเดียวกัน) · §6.3 บัญชีธนาคาร · §6.6 ศูนย์ต้นทุน · §6.8 ไฟล์โอนธนาคาร — ทุกแท็บมี loading/empty/error state ผ่าน `<TableState>`
+- **`<ReasonConfirmModal>`** (shared) — กล่องยืนยันที่บังคับกรอกเหตุผล ≥5 ตัวอักษร ใช้ซ้ำทุกแท็บ (ทุกตารางของไฟล์ 13 อยู่หมวด money/bank/tax ⇒ `reason` บังคับทุก mutation ตาม `90` §13)
+- `/settings` เปลี่ยนจาก `<ModulePlaceholder>` เป็น **redirect ไปแท็บแรก** (`/settings/roles`) ตาม mockup ที่ไม่มีหน้า "ราก" + เพิ่มเมนู `settings.finance` และปลด `available: false` ของเมนู `settings`
+
+### การตัดสินใจระหว่างทาง
+
+- **Top-tab 2 ชั้นของ mockup ไม่ถูกลอกมาตรง ๆ** — mockup มีแถบแท็บบน 2 อัน ("ตั้งค่าทั่วไป" / "ตั้งค่าบัญชี/การเงิน") แต่แอปมี `<SubNav>` (จาก 1.5) ทำหน้าที่นี้อยู่แล้ว ⇒ เพิ่ม "ตั้งค่าบัญชี/การเงิน" เป็นแท็บย่อยตัวที่ 7 ของ `<SubNav>` แล้วเก็บ **แถบแนวตั้ง 13 แท็บ** ไว้ในหน้านั้น — ได้โครงเดียวกับ mockup โดยไม่มี nav ซ้อน 3 ชั้น
+- **แท็บสลับด้วย state ไม่ใช่ URL routing** — server component อ่าน `?tab=` ส่งเป็น `initialTab` เข้ามา (deep link ได้) แล้วสลับต่อด้วย `useState` · เลี่ยง `useSearchParams()` ที่ต้องมี Suspense boundary
+- **badge สถานะทั้งหมดผ่าน `<StatusBadge>`** พร้อม `group` จาก mapper กลาง (`04` §8.1) ไม่ใส่คลาสสีเอง — `passed`/`failed` ของไฟล์ธนาคารยังไม่อยู่ใน `STATUS_GROUP` จึงส่ง `group` ตรง ๆ (`success`/`critical`) ตามที่ `<StatusBadge>` เปิดทางไว้ · badge ที่เป็น **ประเภท** ไม่ใช่สถานะ (AR/AP, receive/pay/both, "บัญชีหลัก") ยังใช้ `<Badge>` ตาม precedent ของ `components/teams/*`
+- **ฟอร์มซ่อนช่องของโหมดที่ไม่เลือกจริง** (ไม่ใช่ disable) และส่งค่าของอีกโหมดเป็น `[]`/`null` เสมอ — ให้ตรงกับ CHECK `cycles_cutoff_shape` / `cycles_due_rule_shape` ระดับ DB (ค่าค้างทำให้ API ปฏิเสธ)
+
+### จุดที่คนถัดไปควรรู้
+
+- **เพิ่มแท็บใน 1.12 = แก้ 2 ที่**: เปลี่ยน `available: true` ใน `lib/settings/finance-tabs.ts` แล้วเสียบ component ใน `finance-settings-shell.tsx` — เทสต์ `finance-tabs.test.ts` ล็อกรายชื่อ 5 แท็บของ 1.11 ไว้ ต้องอัปเดตรายการนั้นด้วยเมื่อเปิดแท็บใหม่
+- **capability ต่างกันต่อแท็บ**: 1.11 ใช้ `manage_settings` ทั้งหมด แต่ 1.12 มีแท็บที่ใช้ `manage_tax_profiles` (ภาษี/VAT/เทมเพลตเอกสารภาษี) · `manage_invoice_numbering` · `manage_roles` (matrix) — ส่งให้ `<Can>` ให้ตรง ไม่งั้นปุ่มโผล่แล้ว API ตอบ 403
+- **ความไม่ตรงกันที่พบระหว่างทำ (ยังไม่แก้ spec — บันทึกไว้ก่อน)**: `13` §6.6 และ mockup มีฟิลด์ `mapping_rule` (auto/manual) ของศูนย์ต้นทุน แต่ `02`/schema จริงไม่มี (Phase 1.10 ตัดสินไปแล้วโดยใช้ `description` + `is_active` แทน) ⇒ FE ไม่แสดงฟิลด์นี้ · ถ้าธุรกิจต้องการจริงต้องมี `[[NEEDS_DECISION]]` + migration ใหม่
+- mockup `settings.html` มีแท็บที่ 14 "Payee Profile" — เป็นของ **ไฟล์ 18** ไม่ใช่ไฟล์ 13 จึงไม่อยู่ใน `FINANCE_SETTINGS_TABS` (จะเกิดใน Phase 3.2)
+- mockup ไม่มีช่อง `reason` ในทุก modal และไม่มีปุ่มเพิ่ม/แก้ของแท็บไฟล์ธนาคาร — ยึด spec/API (บังคับ reason + CRUD ครบ) ตามลำดับความสำคัญของเอกสาร
+
+---
+
 ## Phase 1.10 — Settings ไฟล์ 13: Backend ครบ 13 หมวด
 
 **วันที่**: 2026-08-14 · **commit**: `c6848db` (กู้ไฟล์ pure ค้างจาก session ที่ถูกตัด) + `53f4c38` (pure + Zod + test + `24` v3.9) + `b00a5f9` (ชั้น DB + API 22 route) · **branch**: `auto/phase-1.10`

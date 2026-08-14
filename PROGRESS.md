@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.9 (Users + invite flow ตามมติ PO ที่ปิด D1) · งานถัดไป 1.10
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.11 (Settings FE ชุด 1 — shell 13 แท็บ + 5 แท็บแรก) · งานถัดไป 1.12
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.11: Settings FE ชุดที่ 1 (แท็บ §6.1, §6.2+6.2.1, §6.3, §6.6, §6.8)
+## 🎯 งานถัดไป — Phase 1.12: Settings FE ชุดที่ 2 (แท็บ §6.4, §6.5, §6.7, §6.9, §6.10, §6.11, §6.12, §6.13)
 
-- ทำตาม `docs/01_PLAN.md` §1.11 — Settings shell **13 แท็บ** + shared table/CRUD-modal pattern แล้วทำ 5 แท็บแรก: รอบบิล/รอบจ่าย · สายอนุมัติ + นโยบายการเงิน · บัญชีธนาคารบริษัท · ศูนย์ต้นทุน · รูปแบบไฟล์ธนาคาร (แสดงสถานะทดสอบ + ปุ่มทดสอบ)
-- **Backend พร้อมแล้วจาก 1.10** — ต่อ API ตรง ๆ ไม่ต้องเขียน BE เพิ่ม: DTO ทุกตัวอยู่ `lib/settings/types.ts` (type-only) · Zod ชุดเดียวกันใช้ตรวจฟอร์มได้เลย (`…FieldsSchema` = ไม่มี `reason`) ที่ `lib/settings/schemas.ts`
-- **ทุก mutation บังคับ `reason`** ⇒ ทุกปุ่มบันทึก/ลบต้องผ่าน `<ConfirmModal>` ที่มีช่องเหตุผล (pattern เดียวกับ `/settings/companies` และ `/settings/users`)
-- ช่องเงิน (เพดานสายอนุมัติ, เพดาน advance, write-off tolerance) กรอกเป็น**บาท** แปลงด้วย `parseBahtInput()`/`toBahtInput()` ห้ามคูณ/หาร 100 เอง · รหัสศูนย์ต้นทุนเป็น read-only (ระบบเดินให้)
-- ใช้ของที่มีแล้ว: UI Kit `components/ui/*` · `<TableState>` (วางเป็นพี่น้องของ `<TBody>`) · `callApi()` (`lib/api/types.ts`) · แม่แบบหน้า: `components/teams/*` (ตาราง) และ `components/finance-companies/*` (การ์ด)
-- อ้างอิง: `13` §7 + mockup `settings.html` ผ่าน MAP เฉพาะ render function ที่เกี่ยว (ห้ามอ่านทั้งไฟล์)
-- LOC ~2,000 · งบ ~310k
-- DoD: ทุกแท็บ CRUD ได้จริงบน staging ตรง pattern mockup · ทุกหน้ามี loading/empty/error state
+- ทำตาม `docs/01_PLAN.md` §1.12 — เติม **8 แท็บที่เหลือ** ลงใน shell ที่มีแล้ว: Tax Profile · อัตรา VAT (timeline effective-date + เตือน `VAT_RATE_OVERLAP`) · รูปแบบเอกสารภายใน (read-only) · รูปแบบไฟล์ส่งบัญชี (read-only) · Functional Permission Matrix (grid 37×role, dropdown 3 ระดับ, 🔒 9 รายการ — reuse `<PermissionMatrixModal>`/`lib/roles/*` จาก 1.6) · การล็อกรอบ + Adjustment (banner เหลืองเสมอ) · เลขที่ใบกำกับภาษี · เทมเพลตเอกสารภาษี
+- **shell + BE พร้อมแล้ว** — เพิ่มแท็บ = แก้ `available: true` ที่ `lib/settings/finance-tabs.ts` (มีเทสต์ยามจำนวน 13 แท็บ) แล้วเสียบ component ที่ `components/settings/finance-settings-shell.tsx` · API 22 route + DTO + Zod ครบจาก 1.10
+- **แม่แบบที่ลอกได้ทันที** (จาก 1.11): `components/settings/cycles-tab.tsx` = ตาราง+ฟอร์มแบบมีเงื่อนไข · `finance-policy-card.tsx` = ฟอร์มการ์ดเดี่ยว (1 record/org) · `<ReasonConfirmModal>` = ยืนยันบังคับเหตุผล
+- ระวัง: `manage_tax_profiles` / `manage_invoice_numbering` / `manage_roles` เป็นคนละ capability กับ `manage_settings` — ส่งให้ `<Can>` ให้ตรงต่อแท็บ · `lastNumber` ห้ามให้แก้มือ (`NUMBERING_SEQ_NOT_EDITABLE`) · แท็บ read-only ไม่ต้องมีปุ่มแก้
+- อ้างอิง: `13` §7 + mockup `settings.html` ผ่าน MAP (ห้ามอ่านทั้งไฟล์)
+- LOC ~2,150 · งบ ~330k
+- DoD: ครบ 13 แท็บตรง spec + mockup · audit+reason ทุกจุดที่กำหนด · ทุกหน้ามี loading/empty/error state
 
 ---
 
@@ -41,7 +40,7 @@
 | 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
 | 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`680159e` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ✅ | 2026-08-14 · `53f4c38`+`b00a5f9` · API 22 endpoint ครบ 13 หมวด + 2 endpoint ที่ spec ตกหล่น + VAT resolver/เดินเลขใบกำกับ atomic → archive |
-| 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
+| 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ✅ | 2026-08-14 · `0eb2e81` · shell 13 แท็บ (`/settings/finance`) + 5 แท็บแรก CRUD ครบ + บังคับ `reason` ทุก mutation → archive |
 | 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |
 
 ## Phase 2 — Case & Field Operations (ไฟล์ 38, 40, 41, 44, 45)
