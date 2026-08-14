@@ -1,20 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.11 (Settings FE ชุด 1 — shell 13 แท็บ + 5 แท็บแรก) · งานถัดไป 1.12
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 1.12 (Settings FE ชุด 2 — ครบ 13 แท็บของไฟล์ 13) · จบ Phase 1 · งานถัดไป 2.1
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 1.12: Settings FE ชุดที่ 2 (แท็บ §6.4, §6.5, §6.7, §6.9, §6.10, §6.11, §6.12, §6.13)
+## 🎯 งานถัดไป — Phase 2.1: API Contract Infra (ไฟล์ 45) — 37 endpoints + events + envelope
 
-- ทำตาม `docs/01_PLAN.md` §1.12 — เติม **8 แท็บที่เหลือ** ลงใน shell ที่มีแล้ว: Tax Profile · อัตรา VAT (timeline effective-date + เตือน `VAT_RATE_OVERLAP`) · รูปแบบเอกสารภายใน (read-only) · รูปแบบไฟล์ส่งบัญชี (read-only) · Functional Permission Matrix (grid 37×role, dropdown 3 ระดับ, 🔒 9 รายการ — reuse `<PermissionMatrixModal>`/`lib/roles/*` จาก 1.6) · การล็อกรอบ + Adjustment (banner เหลืองเสมอ) · เลขที่ใบกำกับภาษี · เทมเพลตเอกสารภาษี
-- **shell + BE พร้อมแล้ว** — เพิ่มแท็บ = แก้ `available: true` ที่ `lib/settings/finance-tabs.ts` (มีเทสต์ยามจำนวน 13 แท็บ) แล้วเสียบ component ที่ `components/settings/finance-settings-shell.tsx` · API 22 route + DTO + Zod ครบจาก 1.10
-- **แม่แบบที่ลอกได้ทันที** (จาก 1.11): `components/settings/cycles-tab.tsx` = ตาราง+ฟอร์มแบบมีเงื่อนไข · `finance-policy-card.tsx` = ฟอร์มการ์ดเดี่ยว (1 record/org) · `<ReasonConfirmModal>` = ยืนยันบังคับเหตุผล
-- ระวัง: `manage_tax_profiles` / `manage_invoice_numbering` / `manage_roles` เป็นคนละ capability กับ `manage_settings` — ส่งให้ `<Can>` ให้ตรงต่อแท็บ · `lastNumber` ห้ามให้แก้มือ (`NUMBERING_SEQ_NOT_EDITABLE`) · แท็บ read-only ไม่ต้องมีปุ่มแก้
-- อ้างอิง: `13` §7 + mockup `settings.html` ผ่าน MAP (ห้ามอ่านทั้งไฟล์)
-- LOC ~2,150 · งบ ~330k
-- DoD: ครบ 13 แท็บตรง spec + mockup · audit+reason ทุกจุดที่กำหนด · ทุกหน้ามี loading/empty/error state
+- ทำตาม `docs/01_PLAN.md` §2.1 — TypeScript route contract จาก `45` §6.1–6.5 (**37 endpoints**) เป็น single source ให้ทั้ง router และ client typing · event registry 28 events (`45` §7) + lint จับชื่อ event นอก registry · response envelope กลาง `{success, data, error{code,message,field}}` + error-code catalog รวมจาก `24` + `38`/`40`/`41`/`44`
+- ⚠️ ชื่อ event ไม่ตรงกันระหว่าง `41` §17.2 / `44` §14 / `45` §7 — **ยึดไฟล์ต้นทางของ module** แล้วบันทึกส่วนต่างลง `docs/PROGRESS_ARCHIVE.md` (ห้ามเงียบ)
+- ของที่มีแล้วต้อง reuse/ต่อยอด (ดู `docs/REUSE_INDEX.md`): envelope ชั่วคราวของ Phase 1 อยู่ที่ `lib/api/types.ts` (`ApiData`/`callApi`/`jsonRequest`) มี TODO ชี้มาที่ task นี้ · `withApiPermission()` + `toModuleErrorResponse()` (`lib/api/http.ts`) · Zod helper กลาง `lib/api/validation.ts`
+- อ้างอิง: `45` ทั้งไฟล์ · `24` · `27` §7 (convention)
+- LOC ~1,000 · งบ ~190k
+- DoD: ทุก endpoint หลังจากนี้ประกาศผ่าน contract นี้ · lint จับ event ชื่อนอก registry ได้จริง
 
 ---
 
@@ -41,7 +40,7 @@
 | 1.9 | Users module | ✅ | 2026-08-14 · `9e505ef`+`680159e` · API 8 endpoint + lifecycle + `USER_HAS_HISTORY` + invite ทางอีเมล (**ปิด D1**) + หน้า `/settings/users` · ⚠️ ต้องรัน `pnpm db:seed` ซ้ำ + ตั้ง Redirect URL ที่ Supabase → archive |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ✅ | 2026-08-14 · `53f4c38`+`b00a5f9` · API 22 endpoint ครบ 13 หมวด + 2 endpoint ที่ spec ตกหล่น + VAT resolver/เดินเลขใบกำกับ atomic → archive |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ✅ | 2026-08-14 · `0eb2e81` · shell 13 แท็บ (`/settings/finance`) + 5 แท็บแรก CRUD ครบ + บังคับ `reason` ทุก mutation → archive |
-| 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |
+| 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ✅ | 2026-08-14 · `fa00f40` · ครบ 13 แท็บของไฟล์ 13 — 8 แท็บที่เหลือ + capability เฉพาะแท็บ + read-only 3 แท็บ → archive |
 
 ## Phase 2 — Case & Field Operations (ไฟล์ 38, 40, 41, 44, 45)
 
