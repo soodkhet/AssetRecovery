@@ -8,7 +8,7 @@
 
 ## 🎯 งานถัดไป — Phase 1.9: Users Module (08)
 
-- ✅ **ทำไปแล้วใน `2bb2531`** (BE + FE ครบยกเว้น provisioning): API 7 endpoint (`GET/POST /api/users`, `GET/PATCH/DELETE /:id`, `PATCH /:id/suspend`, `PATCH /:id/reactivate`, `POST /api/finance-companies/:id/users`) + conditional required ตาม role group + lifecycle `active ⇄ suspended → deleted` + `USER_HAS_HISTORY` + scope ระดับแถว + หน้า `/settings/users` (reuse `<RoleGroupTabs>` + ฟอร์ม cascading) + ผูก capability `manage_users`
+- ✅ **ทำไปแล้วใน `9e505ef`** (BE + FE ครบยกเว้น provisioning): API 7 endpoint (`GET/POST /api/users`, `GET/PATCH/DELETE /:id`, `PATCH /:id/suspend`, `PATCH /:id/reactivate`, `POST /api/finance-companies/:id/users`) + conditional required ตาม role group + lifecycle `active ⇄ suspended → deleted` + `USER_HAS_HISTORY` + scope ระดับแถว + หน้า `/settings/users` (reuse `<RoleGroupTabs>` + ฟอร์ม cascading) + ผูก capability `manage_users`
 - 🔴 **ค้างอยู่ก้อนเดียว — Supabase Auth provisioning (ติด D1)**: ตอนนี้ user ที่สร้างใหม่มี `supabase_uid = null` ⇒ ยัง login ไม่ได้ (`USER_NOT_PROVISIONED`) · ต้องได้คำตอบ D1 (invite/first-login) ใน `docs/02_OPEN_DECISIONS.md` ก่อน แล้วทำ: ผูก/สร้างบัญชี Supabase Auth ตอนสร้าง user + ปุ่ม "ส่งคำเชิญอีกครั้ง" + สถานะ "รอตั้งรหัสผ่าน" บน UI (badge มีแล้ว) + เทสต์
 - ⚠️ ก่อนทดสอบบน environment ใด ๆ ต้องรัน `pnpm db:seed` ซ้ำ 1 ครั้ง — capability `manage_users` เพิ่ง binding ใหม่ 4 แถว (ธุรการ = manage · บริหาร/ผู้จัดการทีม inhouse+outsource = view)
 - อ้างอิง: `08` ทั้งไฟล์ · `05` §10 · mockup `settings.html` ผ่าน MAP (users)
@@ -36,7 +36,7 @@
 | 1.6 | Roles & Permissions module | ✅ | 2026-08-14 · `a5ef75c` · API 7 endpoint + ยาม seed role/lock 9 capability + หน้า `/settings/roles` + seed `role_capabilities` 57 แถว → archive |
 | 1.7 | Compensation Plans + Service Fee Templates | ✅ | 2026-08-14 · `8417ef1` · API 8 endpoint + versioning (PATCH ไม่ overwrite) + conditional validation fuel 2 โหมด/3 model + หน้าการ์ด 2 แบบ → archive |
 | 1.8 | Teams + Finance Companies | ✅ | 2026-08-14 · `0565ff7` · API 11 endpoint + scope ระดับแถว (ทีมตัวเอง/บริษัทตัวเอง) + `02` v3.9 เพิ่ม 2 คอลัมน์ตามมติ PO + หน้าตารางทีม/การ์ดบริษัท → archive |
-| 1.9 | Users module | 🔄 | 2026-08-14 · `2bb2531` · API 7 endpoint + lifecycle + `USER_HAS_HISTORY` + หน้า `/settings/users` · **ค้าง provisioning Supabase Auth — รอคำตอบ D1** |
+| 1.9 | Users module | 🔄 | 2026-08-14 · `9e505ef` · API 7 endpoint + lifecycle + `USER_HAS_HISTORY` + หน้า `/settings/users` · **ค้าง provisioning Supabase Auth — รอคำตอบ D1** |
 | 1.10 | Settings ไฟล์ 13 — Backend ครบ 13 หมวด | ⬜ | PLAN §1.10 · +2 endpoint ที่ spec ตกหล่น |
 | 1.11 | Settings FE ชุด 1 (Cycles/Approval/Bank/CostCenter/BankFile) | ⬜ | PLAN §1.11 |
 | 1.12 | Settings FE ชุด 2 (Tax/VAT/Matrix/Lock/Numbering/Template) | ⬜ | PLAN §1.12 |
