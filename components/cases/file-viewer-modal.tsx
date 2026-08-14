@@ -3,9 +3,20 @@
 import { useEffect, useState } from 'react'
 import { Button, ErrorState, LoadingState, Modal } from '@/components/ui'
 import { isPdfMime } from '@/lib/cases/document-upload'
-import type { CaseDocumentDto } from '@/lib/cases/types'
 import { signedFileUrl } from '@/lib/cases/upload-client'
 import { fmtDateTime } from '@/lib/format/datetime'
+
+/**
+ * ไฟล์ที่เปิดดูได้ — โครงร่วมที่น้อยที่สุด เพื่อให้ DTO ของแต่ละโมดูลเสียบได้ตรง ๆ
+ * (`CaseDocumentDto` ของไฟล์ 38 · `FieldDocumentDto` ของไฟล์ 41 ที่ไม่มีข้อมูลผู้อัปโหลด)
+ */
+export interface ViewableFile {
+  fileUrl: string
+  originalName: string
+  mimeType: string
+  uploadedByName?: string
+  uploadedAt?: string
+}
 
 /**
  * ตัวเปิดดูไฟล์แนบ (`38` §7.5 — "เอกสารแนบต้องเปิดดูได้จริง")
@@ -20,7 +31,7 @@ export function FileViewerModal({
   onClose,
 }: {
   open: boolean
-  document: CaseDocumentDto | null
+  document: ViewableFile | null
   onClose: () => void
 }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -50,7 +61,11 @@ export function FileViewerModal({
       onClose={onClose}
       size="lg"
       title={document.originalName}
-      description={`แนบโดย ${document.uploadedByName} · ${fmtDateTime(document.uploadedAt)}`}
+      description={
+        document.uploadedByName === undefined
+          ? undefined
+          : `แนบโดย ${document.uploadedByName} · ${fmtDateTime(document.uploadedAt)}`
+      }
       footer={
         <>
           {url !== null && (

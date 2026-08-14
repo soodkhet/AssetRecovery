@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.9 (Field Tracker BE ชุด 2 — เงิน/ตีกลับ/push) · งานถัดไป 2.10
+**อัปเดตล่าสุด:** 2026-08-14 — ปิด Phase 2.10 (Field Tracker FE ชุด 1 — shell/detail/งานรายวัน/ปฏิทิน) · งานถัดไป 2.11
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 2.10: Field Tracker Frontend ชุดที่ 1 (shell + detail + งานรายวัน)
+## 🎯 งานถัดไป — Phase 2.11: Field Tracker Frontend ชุดที่ 2 (ฟอร์มปิดงาน + reassignment)
 
-- ทำตาม `docs/01_PLAN.md` §2.10 — BE ของ flow นี้ครบแล้วตั้งแต่ 2.8/2.9 (เรียก endpoint ผ่าน `apiPath()` เท่านั้น)
-- App shell ของ Field Tracker **แยกจาก `<AppShell>` ของหลังบ้าน**: Mobile bottom nav 4 รายการ + hamburger / Desktop sidebar 260px `position: fixed` + badge store
-- **`<CaseDetailModal>` (2.5) ใช้ซ้ำ ห้ามสร้างใหม่** — ต่อยอด deep link `tel:`/LINE/Maps + doc viewer/lightbox (`<FileViewerModal>`)
-- แท็บรอรับงาน (รวม Agent Accept UI ของไฟล์ 40) · แท็บรับงานแล้ว (toggle ของฉัน/ทีม — มุมมองทีม **read-only** ตาม `41` §11) · Calendar Picker (grid เอง + badge ต่อวัน + popup ยืนยัน + banner เพื่อนร่วมทีมจังหวัดเดียวกัน) · แท็บกำลังติดตาม (group ตามวัน + drag reorder เรียก `field.reorderCases` + ปุ่ม 3 สถานะ)
-- Mobile กับ Desktop ใช้ logic เดียวกัน 100% (`41` §11) — ต่างแค่ layout · วันที่บนจอเป็น พ.ศ. ผ่าน `fmtDate` เสมอ
-- อ้างอิง: `41` §5, §7.1–7.5 ผ่าน MAP (L199–243) · mockup `41-field-tracker-mobile-mockup.html` + `-desktop-` ผ่าน MAP
-- LOC ~3,250 · งบ ~450k
-- DoD: mobile + desktop logic เดียวกัน 100% · flow ถึงก่อนเปิดฟอร์มปิดงานครบ
+- ทำตาม `docs/01_PLAN.md` §2.11 — shell/แท็บ/case detail พร้อมแล้วจาก 2.10 · BE ครบตั้งแต่ 2.8/2.9 (เรียกผ่าน `apiPath()` เท่านั้น)
+- **ฟอร์มปิดงาน 3 ส่วน** — A: outcome picker + จุดเริ่มเดินทาง (auto GPS ทันทีที่กด "เริ่มงาน" + ลากปรับบนแผนที่, **แสดงเฉพาะทีม `PER_KM`**) · B: เช็คอิน (Geolocation ของอุปกรณ์จริง — **ห้ามมีช่องกรอกพิกัดมือ** `41` §11) + รูป/วิดีโอ/รูปสินค้า/เสียง (camera & file picker + thumbnail grid) · C: draft save/restore (`close-draft`) + validation ตาม outcome (`missingCloseEvidence()` บอกครบครั้งเดียว) + โหมด `needs_revision` (banner `rejectReason`, ล็อก checkin/outcome แก้ได้เฉพาะสื่อ)
+- **Pending Reassignment flow** (`41` §7.8): auto-popup เมื่อโหลดหน้า + "ดูทีหลัง" (ไม่เด้งซ้ำในเซสชัน แต่ badge ม่วงยังอยู่) + countdown หมดเขต + ยินยอม/ไม่ยินยอม (ไม่ยินยอมต้องมีเหตุผล → `REASSIGNMENT_DECLINE_REASON_REQUIRED`)
+- จุดเสียบที่ 2.10 เตรียมไว้: `notYet()` ใน `components/field/tracking-tab.tsx` (ปุ่มเริ่มงาน/จบงาน/ตอบคำขอ) และ prop `onRespondReassignment` ของ `<FieldCaseDetailBody>`
+- อ้างอิง: `41` §7.6–7.8 ผ่าน MAP (L244–285) · `23` §6.3 · mockup `41-field-tracker-mobile-mockup.html` (`renderCloseCaseModal` L981+) ผ่าน MAP
+- LOC ~2,250 · งบ ~350k
+- DoD: ปิดงานจริงบน staging มือถือ (GPS/กล้องจริง) · `needs_revision` แก้ได้เฉพาะสื่อ · เทสต์ §20: ปิดงานไม่ครบหลักฐาน / สำเร็จไม่มีรูปสินค้า / draft แล้วทำต่อ
 
 ---
 
@@ -57,7 +56,7 @@
 | 2.7 | Case Assignment FE | ✅ | 2026-08-14 · `612e3b2` · หน้า `/cases/assign` + Assignment Modal (reuse `<CaseDetailModal>`) + Kanban full-screen read-only + `assignment-ui.ts` (ปุ่มหัวหน้า = ซ่อนตาม settings) → archive |
 | 2.8 | Field Tracker BE ชุด 1 (core flow) | ✅ | 2026-08-14 · `0465255`+`3f8328f`+`2122229` · `assignment_status` 7 ค่า + `travel_origins`/`close_case_drafts` + API 8 endpoint (รับงาน→จัดวัน→เช็คอิน→ปิดงาน) → archive |
 | 2.9 | Field Tracker BE ชุด 2 (เงิน/ตีกลับ/push) | ✅ | 2026-08-14 · `dcb0fc3`+`f19cad0`+`71d8b8d`+`6af1d76` · มติ PO: +5 คอลัมน์ `expenses` + `push_subscriptions` (`02` v4.3) · D10 ✅ · expense อัตโนมัติ + 2 เส้นทางตีกลับ + Web Push · ⚠️ ต้องตั้ง `GOOGLE_MAPS_API_KEY` + VAPID ที่ Vercel → archive |
-| 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ⬜ | PLAN §2.10 |
+| 2.10 | Field FE ชุด 1 (shell/detail/งานรายวัน/calendar) | ✅ | 2026-08-14 · `97afe2e`+`4d53196` · shell mobile/desktop (sidebar 260px fixed) + `<FieldCaseDetailBody>` ใช้ซ้ำ 3 ที่ + 3 แท็บงาน + Calendar Picker → archive |
 | 2.11 | Field FE ชุด 2 (ฟอร์มปิดงาน/reassignment) | ⬜ | PLAN §2.11 |
 | 2.12 | Field FE ชุด 3 (เบิกเงิน/รายได้/จบงาน/PWA) | ⬜ | PLAN §2.12 |
 | 2.13 | Warehouse BE (confirm = transaction 4 steps) | ⬜ | PLAN §2.13 · Revenue stub → ของจริง 3.6 |
