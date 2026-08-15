@@ -17,9 +17,9 @@ describe('แท็บหน้าการเงิน', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('Phase 3.7 เปิดจริง 5 แท็บ: รออนุมัติ (15) + ค่าตอบแทน (16) + เงินทดรองจ่าย (15) + รอบจ่ายเงิน (17) + รายได้และวางบิล (19)', () => {
+  it('Phase 3.7 เปิดจริง 6 แท็บ: รออนุมัติ (15) + ค่าตอบแทน (16) + เงินทดรองจ่าย (15) + รอบจ่ายเงิน (17) + รายได้และวางบิล (19) + ปรับปรุง (20)', () => {
     const open = FINANCE_OPERATION_TABS.filter((tab) => tab.available).map((tab) => tab.id)
-    expect(open).toEqual(['approval', 'comp', 'advances', 'payout', 'revenue'])
+    expect(open).toEqual(['approval', 'comp', 'advances', 'payout', 'revenue', 'adjustment'])
   })
 
   it('แท็บที่ยังไม่เปิดต้องบอก Phase ปลายทางเสมอ (ไม่ปล่อยปุ่มหลอก)', () => {
@@ -39,5 +39,6 @@ describe('แท็บหน้าการเงิน', () => {
     expect(resolveFinanceOperationTab('payout')).toBe('payout')
     expect(resolveFinanceOperationTab('approval')).toBe('approval')
     expect(resolveFinanceOperationTab('revenue')).toBe('revenue')
+    expect(resolveFinanceOperationTab('adjustment')).toBe('adjustment')
   })
 })

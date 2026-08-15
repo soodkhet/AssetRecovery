@@ -25,7 +25,7 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
   { id: 'revenue', label: 'รายได้และวางบิล', source: 'ไฟล์ 19', available: true },
   // ไฟล์ 18 ทำเสร็จตั้งแต่ 3.2 แต่หน้าอยู่ในหน้าตั้งค่าการเงิน (`13`) ตาม mockup `settings.html`
   { id: 'payee', label: 'ผู้รับเงิน (Payee)', source: 'ไฟล์ 18', available: false, plannedPhase: '3.2 — อยู่ที่หน้าตั้งค่าการเงิน' },
-  { id: 'adjustment', label: 'ปรับปรุง', source: 'ไฟล์ 20', available: false, plannedPhase: '3.7' },
+  { id: 'adjustment', label: 'ปรับปรุง', source: 'ไฟล์ 20', available: true },
   { id: 'profit', label: 'กำไรและต้นทุน', source: 'ไฟล์ 21', available: false, plannedPhase: '3.8' },
 ]
 
