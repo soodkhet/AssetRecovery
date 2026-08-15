@@ -4,6 +4,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { ModuleError } from '@/lib/api/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
+import { isCompanySideViewer } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/dispatch'
 import { assetIntakeRejectedMessage, lotConfirmedMessage } from '@/lib/notifications/messages'
@@ -120,6 +121,30 @@ const assetSelect = {
 
 type AssetRow = Prisma.AssetGetPayload<{ select: typeof assetSelect }>
 
+/**
+ * ตัดฟิลด์ภายในออกก่อนส่งให้ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`97` §6.1 — "**ไม่แสดง**: ชื่อ/เบอร์
+ * field agent, ทีมที่มอบหมาย, … IMEI")
+ *
+ * `assetScopeWhere()` คุมว่าเห็น **แถวไหน** เท่านั้น — ก่อน Phase 8.3 แถวที่เห็นยังพก
+ * `agentName`/`teamName`/`imeiActual`/`serialActual` ติดออกไปด้วย ทั้งที่ role กลุ่ม
+ * `finance_company` ถือ `view_own_company_data` มาตั้งแต่ default matrix (Final Test ด่าน 4)
+ *
+ * IMEI/serial ตามสัญญายังต้องแสดง (บริษัทเป็นผู้ส่งข้อมูลนั้นมาเอง — `38` §6.1) ตัดเฉพาะ
+ * ค่าที่ **เราตรวจได้ในคลัง** ซึ่งเป็นข้อมูลปฏิบัติการภายใน
+ */
+function redactAssetForCompany(item: AssetListItemDto): AssetListItemDto {
+  return {
+    ...item,
+    imeiActual: null,
+    serialActual: null,
+    teamId: null,
+    teamName: null,
+    agentId: null,
+    agentName: null,
+    rejectReason: null,
+  }
+}
+
 function toAssetListItem(row: AssetRow): AssetListItemDto {
   const assignment = row.case.assignments[0] ?? null
   return {
@@ -149,6 +174,12 @@ function toAssetListItem(row: AssetRow): AssetListItemDto {
     lotNumber: row.lot?.lotNumber ?? null,
     photoCount: row.photos.length,
   }
+}
+
+/** แถวเดียวในมุมมองของผู้เรียก — ฝั่งบริษัทไฟแนนซ์ได้ payload ที่ตัดฟิลด์ภายในออกแล้ว */
+function assetItemFor(user: SessionUser, row: AssetRow): AssetListItemDto {
+  const item = toAssetListItem(row)
+  return isCompanySideViewer(user) ? redactAssetForCompany(item) : item
 }
 
 function toAssetDetail(row: AssetRow, lot: LotSummaryDto | null): AssetDetailDto {
@@ -274,7 +305,7 @@ export async function listAssets(user: SessionUser, query: AssetListQuery): Prom
     prisma.asset.count({ where }),
   ])
 
-  return { items: rows.map(toAssetListItem), total, page: query.page, limit: query.limit }
+  return { items: rows.map((row) => assetItemFor(user, row)), total, page: query.page, limit: query.limit }
 }
 
 function nextDayUtc(date: string): Date {
@@ -295,9 +326,11 @@ async function loadAsset(user: SessionUser, assetId: string): Promise<AssetRow> 
 
 export async function getAsset(user: SessionUser, assetId: string): Promise<AssetDetailDto> {
   const row = await loadAsset(user, assetId)
-  if (row.lotId === null) return toAssetDetail(row, null)
-  const lot = await prisma.handoverLot.findUnique({ where: { id: row.lotId }, select: lotSelect })
-  return toAssetDetail(row, lot === null ? null : toLotSummary(lot))
+  const lotRow = row.lotId === null ? null : await prisma.handoverLot.findUnique({ where: { id: row.lotId }, select: lotSelect })
+  const detail = toAssetDetail(row, lotRow === null ? null : toLotSummary(lotRow))
+  if (!isCompanySideViewer(user)) return detail
+  // `97` §6.1 — ฝั่งบริษัทไม่เห็นชื่อคนตีกลับ/เหตุผลภายในเช่นกัน
+  return { ...redactAssetForCompany(detail), photos: detail.photos, lot: detail.lot, rejectedByName: null }
 }
 
 // ── POST /api/assets/:id/intake (`44` §8.2 · §9.1) ──────────────────────────
@@ -531,11 +564,11 @@ async function loadLot(user: SessionUser, lotId: string): Promise<LotRow> {
 export async function getLot(user: SessionUser, lotId: string): Promise<LotDetailDto> {
   const row = await loadLot(user, lotId)
   const assets = await prisma.asset.findMany({
-    where: { lotId, deletedAt: null },
+    where: { lotId, organizationId: user.organizationId, deletedAt: null },
     select: assetSelect,
     orderBy: [{ caseRef: 'asc' }],
   })
-  return toLotDetail(row, assets.map(toAssetListItem))
+  return toLotDetail(row, assets.map((asset) => assetItemFor(user, asset)))
 }
 
 // ── POST /api/handover-lots (`44` §6.2 · §9.2) ──────────────────────────────

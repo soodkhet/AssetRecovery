@@ -1,4 +1,5 @@
 import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import { arOutstandingSatang } from '@/lib/finance/ar-calc'
 import { sumSatang } from '@/lib/finance/satang'
@@ -361,6 +362,11 @@ export async function getDashboardKpi(
   query: DashboardKpiQuery,
   now: Date = new Date(),
 ): Promise<DashboardKpiReportDto> {
+  // KPI 4 ตัวเป็นยอดรวม **ทั้งองค์กร** ที่กรองรายแถวไม่ได้ (ต่างจาก `getProfitability` ข้างล่าง
+  // ที่มี `profitEntryScope()`) — `view_finance_dashboard` เป็น capability ที่มอบให้ role ไหน
+  // ก็ได้จากหน้า Settings ⇒ ต้องกันที่ชั้นข้อมูลด้วย ไม่ใช่เชื่อว่าผู้เรียกเป็น scope `global` เสมอ
+  // (Final Test ด่าน 4 — วันนี้ถือโดยการเงิน/บัญชี/บริหารซึ่งเป็น `global` ทั้งหมด)
+  assertOrgWideReadable(user, 'finance-dashboard-kpi')
   const organizationId = user.organizationId
   const asOf = query.asOf ?? now
 

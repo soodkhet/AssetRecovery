@@ -781,4 +781,58 @@ suite('Phase 2.13 — scope ระดับแถว (`44` §13 · §17 T15)', (
     expect((await warehouse.listLots(admin, lotListQuerySchema.parse({}))).total).toBe(1)
     expect((await warehouse.listLots(companyUser, lotListQuerySchema.parse({}))).total).toBe(1)
   })
+
+  /**
+   * Final Test ด่าน 4 (Phase 8.3) — T15 เดิมพิสูจน์แค่ **แถว** ที่เห็น
+   * แต่แถวที่เห็นยังพก `agentName`/`teamName`/`imeiActual` ออกไปด้วย ซึ่ง `97` §6.1 ห้ามไว้ตรงตัว
+   */
+  it('Company User ต้องไม่เห็นชื่อพนักงาน/ทีม/IMEI ที่ตรวจจริง (`97` §6.1)', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+
+    // ธุรการเห็นครบ = ยืนยันว่าข้อมูลมีอยู่จริงในแถวนั้น (ไม่ใช่ null เพราะ fixture ว่าง)
+    const asAdmin = await warehouse.getAsset(admin, mine.assetId)
+    expect(asAdmin.agentName).not.toBeNull()
+    expect(asAdmin.teamName).not.toBeNull()
+    expect(asAdmin.imeiActual).not.toBeNull()
+
+    const detail = await warehouse.getAsset(companyUser, mine.assetId)
+    expect(detail.agentId).toBeNull()
+    expect(detail.agentName).toBeNull()
+    expect(detail.teamId).toBeNull()
+    expect(detail.teamName).toBeNull()
+    expect(detail.imeiActual).toBeNull()
+    expect(detail.serialActual).toBeNull()
+    expect(detail.rejectedByName).toBeNull()
+    // IMEI ตามสัญญาเป็นข้อมูลที่บริษัทส่งมาเอง (`38` §6.1) — ยังต้องเห็น
+    expect(detail.imeiContract).toBe(asAdmin.imeiContract)
+
+    const [listItem] = (await warehouse.listAssets(companyUser, assetListQuerySchema.parse({}))).items
+    expect(listItem?.agentName).toBeNull()
+    expect(listItem?.imeiActual).toBeNull()
+  })
+
+  it('เครื่องในล็อตที่เปิดจากฝั่งบริษัทก็ต้องถูกตัดฟิลด์ภายในเหมือนกัน', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+    const lot = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [mine.assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+
+    const asCompany = await warehouse.getLot(companyUser, lot.id)
+    expect(asCompany.assets.map((asset) => asset.agentName)).toEqual([null])
+    expect(asCompany.assets.map((asset) => asset.imeiActual)).toEqual([null])
+
+    const asAdmin = await warehouse.getLot(admin, lot.id)
+    expect(asAdmin.assets[0]?.agentName).not.toBeNull()
+  })
 })

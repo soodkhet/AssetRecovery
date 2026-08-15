@@ -97,3 +97,18 @@ export function assertOrgWideReadable(user: SessionUser, resource: string): void
     throw new AuthError('PERMISSION_DENIED', `${resource}: scope=${user.scope.kind} user=${user.id}`)
   }
 }
+
+/**
+ * ผู้เรียกเป็นผู้ใช้ฝั่ง **บริษัทไฟแนนซ์** (external tenant) หรือไม่ — Superadmin ไม่นับ
+ *
+ * ใช้เป็นสวิตช์ของการ **ตัดฟิลด์ภายในออกจาก response** (field-level redaction) ในโมดูลที่
+ * บริษัทไฟแนนซ์เข้าถึงได้ผ่าน `view_own_company_data`: `97` §6.1 ห้ามให้ฝั่งบริษัทเห็น
+ * ชื่อ/เบอร์พนักงานภาคสนาม · ทีมที่มอบหมาย · IMEI · หลักฐานปิดงาน และ §7 ห้าม expose
+ * ราคาละเอียด/note ภายใน — `assetScopeWhere()`/`caseScopeWhere()` คุมแค่ว่าเห็น **แถวไหน**
+ * ไม่ได้คุมว่าแถวนั้นมี **คอลัมน์อะไรติดมา**
+ *
+ * (แนวเดียวกับ `isCompanySideViewer()` ของโมดูล revenue ที่กรอง billing batch `draft` ออก)
+ */
+export function isCompanySideViewer(user: SessionUser): boolean {
+  return !user.isSuperadmin && user.scope.kind === 'company'
+}

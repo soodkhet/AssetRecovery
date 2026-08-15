@@ -362,6 +362,51 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     ).rejects.toMatchObject({ code: 'CASE_NOT_FOUND' })
   })
 
+  /**
+   * Final Test ด่าน 4 (Phase 8.3) — scope ระดับแถวคุมแค่ว่า "เห็นเคสไหน"
+   * เคสที่เห็นยังพกอัตราค่าบริการที่เราคิดกับบริษัทนั้น + note ภายใน + ชื่อพนักงานหลังบ้านออกไปด้วย
+   * (`97` §6.6 "ชื่อ+model เท่านั้น **ไม่แสดงอัตราละเอียด**" · §6.1 ไม่แสดงทีมที่มอบหมาย)
+   */
+  it('Company User ต้องไม่เห็นอัตราค่าบริการ/ประมาณการ/note ภายใน/ประวัติแก้ไข (`97` §6.6)', async () => {
+    const caseId = await seedCase('SF-2026-2321', { withDocuments: true })
+    try {
+      const { getCase, listCases } = await import('@/lib/cases/queries')
+      const { caseListQuerySchema } = await import('@/lib/cases/schemas')
+
+      // ยืนยันก่อนว่าค่าพวกนี้มีอยู่จริงในแถว (ไม่ใช่ null เพราะ fixture ว่าง)
+      await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+      await service.changeCaseStatus(actor, caseId, change({ action: 'accept' }), { actor, meta })
+      const asGlobal = await getCase(actor, caseId)
+      expect(asGlobal.serviceFeeRatePct).not.toBeNull()
+      expect(asGlobal.serviceFeeModelSnapshot).not.toBeNull()
+      expect(asGlobal.createdByName).not.toBe('')
+
+      const companyUser: SessionUser = {
+        ...actor,
+        isSuperadmin: false,
+        scope: { kind: 'company', teamIds: [], companyId: COMPANY_ID, userId: USER_ID },
+      }
+      const detail = await getCase(companyUser, caseId)
+      expect(detail.serviceFeeRatePct).toBeNull()
+      expect(detail.serviceFeeBaseSatang).toBeNull()
+      expect(detail.projectedRevenueSatang).toBeNull()
+      expect(detail.projectedRevenueSource).toBeNull()
+      expect(detail.reviewNote).toBeNull()
+      expect(detail.editHistory).toEqual([])
+      expect(detail.assignedTeamId).toBeNull()
+      expect(detail.assignedTeamName).toBeNull()
+      expect(detail.createdByName).toBe('')
+      // model ยังเห็นได้ตาม §6.6 ("ชื่อ+model เท่านั้น")
+      expect(detail.serviceFeeModelSnapshot).toBe(asGlobal.serviceFeeModelSnapshot)
+
+      const [listItem] = (await listCases(companyUser, caseListQuerySchema.parse({}))).items
+      expect(listItem?.createdByName).toBe('')
+      expect(listItem?.assignedTeamName).toBeNull()
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${caseId}'`)
+    }
+  })
+
   it('filter ของ `listCases` ทับ scope ไม่ได้ — `finance_company_id`/`search` ห้ามเปิดแถวนอกขอบเขต', async () => {
     const caseRef = 'SF-2026-2320'
     const caseId = await seedCase(caseRef, { withDocuments: false })

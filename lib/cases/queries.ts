@@ -1,5 +1,6 @@
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
+import { isCompanySideViewer } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   assertCaseEditable,
@@ -193,6 +194,37 @@ export const detailSelect = {
 type CaseListRow = Prisma.CaseGetPayload<{ select: typeof listSelect }>
 export type CaseDetailRow = Prisma.CaseGetPayload<{ select: typeof detailSelect }>
 
+/**
+ * ตัดฟิลด์ภายในออกก่อนส่งให้ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`97` §6.1 "**ไม่แสดง**: … ทีมที่มอบหมาย"
+ * · §6.6 "Service Fee Template … ชื่อ+model เท่านั้น **ไม่แสดงอัตราละเอียด**")
+ *
+ * `caseScopeWhere()` คุมว่าเห็น **แถวไหน** เท่านั้น — ก่อน Phase 8.3 แถวที่เห็นยังพก
+ * อัตราค่าบริการที่เราคิดกับบริษัทนั้น, ประมาณการรายได้, note ภายใน, ประวัติแก้ไข
+ * (พร้อมชื่อพนักงานหลังบ้าน) และชื่อทีมติดออกไปด้วย (Final Test ด่าน 4)
+ */
+function redactCaseListForCompany(item: CaseListItemDto): CaseListItemDto {
+  return { ...item, suggestedTeamName: null, assignedTeamName: null, createdByName: '' }
+}
+
+function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
+  return {
+    ...detail,
+    ...redactCaseListForCompany(detail),
+    suggestedTeamId: null,
+    assignedTeamId: null,
+    teamChangeReason: null,
+    // ราคาที่เราคิดกับบริษัท: เห็น model ได้ แต่ฐาน/อัตรา/ประมาณการเป็นข้อมูลภายใน (§6.6)
+    serviceFeeBaseSatang: null,
+    serviceFeeRatePct: null,
+    projectedRevenueSatang: null,
+    projectedRevenueSource: null,
+    reviewNote: null,
+    editHistory: [],
+    recycleHistory: detail.recycleHistory.map((entry) => ({ ...entry, decisionNote: null, decidedByName: null })),
+    documents: detail.documents.map((document) => ({ ...document, uploadedByName: '' })),
+  }
+}
+
 function toListDto(row: CaseListRow): CaseListItemDto {
   return {
     id: row.id,
@@ -384,7 +416,13 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
     }),
   ])
 
-  return { items: rows.map(toListDto), total, page: query.page, limit: query.limit }
+  const items = rows.map(toListDto)
+  return {
+    items: isCompanySideViewer(user) ? items.map(redactCaseListForCompany) : items,
+    total,
+    page: query.page,
+    limit: query.limit,
+  }
 }
 
 /** อ่านเคสเดียว — นอก scope ตอบ `CASE_NOT_FOUND` เหมือนไม่มีเคสนี้ (ไม่ leak ข้ามทีม/ข้ามบริษัท) */
@@ -394,7 +432,8 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
     select: detailSelect,
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
-  return toDetailDto(row)
+  const detail = toDetailDto(row)
+  return isCompanySideViewer(user) ? redactCaseDetailForCompany(detail) : detail
 }
 
 // ── เขียน ───────────────────────────────────────────────────────────────────
