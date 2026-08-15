@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v4.11 | 15/08/2569 | **ลบแถวซ้ำ 4 แถวใน §6.7/§6.8** (รีวิว Phase 4): `PERIOD_NOT_FOUND`, `PERIOD_INVALID_STATUS`, `EXCEPTION_NOT_FOUND`, `EXCEPTION_INVALID_STATUS` ถูกเติมซ้ำสองครั้งตอน v4.6 (คำอธิบายต่างกันเล็กน้อย) ขัดกับ §7 ที่ประกาศว่า "ไม่มี code ซ้ำ" — เก็บฉบับที่คำอธิบายครบกว่าไว้ **ไม่มี code ใดถูกเพิ่ม/ลบ ไม่กระทบ business logic และไม่กระทบ parity test** (`lib/api/error-catalog.test.ts` ใช้ `Set`) |
 | v4.10 | 15/08/2569 | **เติม §6.8** (Phase 4.5 — WHT Data `33`): `WHT_CERTIFICATE_NOT_FOUND`, `WHT_CERTIFICATE_INVALID_STATUS`, `WHT_FILING_SUMMARY_NOT_FOUND`, `WHT_FILING_ALREADY_FILED` — `33` §11 ระบุไว้ 2 เคส (`FILING_OVERDUE_WARNING`/`WHT_CANCEL_REQUIRES_REASON`) ซึ่งไม่ครอบคลุมกรณี 404 ของตัวหนังสือรับรอง/สรุปรอบนำส่งเอง · การยกเลิกใบที่เป็น terminal แล้ว (`33` §10 · `02` §13) · และการ mark-filed ซ้ำ (`33` §9 — `pending → filed` ทางเดียว) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.9 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.9 | 15/08/2569 | **เติม §6.8** (Phase 4.4 — บัญชีค่าใช้จ่าย `32` / ข้อซักถาม `36`): `EXPENSE_RECORD_NOT_FOUND`, `ACCOUNTANT_QUESTION_NOT_FOUND`, `ACCOUNTANT_QUESTION_ALREADY_ANSWERED` — `32` §11 ระบุไว้ 2 code (`EDIT_AMOUNT_DIRECTLY`/`COST_CENTER_AUTO_EDIT`) และ `36` §10 ระบุแค่ `REQUIRED_MISSING` ซึ่งไม่ครอบคลุมกรณี 404 ของรายการค่าใช้จ่าย/ข้อซักถามเอง (ศูนย์ต้นทุนใช้ `COST_CENTER_NOT_FOUND` ของ `13` ที่มีอยู่แล้ว ไม่ประกาศซ้ำ) และการตอบข้อซักถามซ้ำ (`36` §8 — `answered` เป็นปลายทาง) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.8 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.8 | 15/08/2569 | **เติม §6.8** (Phase 4.3 — บัญชีขาย/ใบกำกับภาษี `31`): `SALES_RECORD_NOT_FOUND`, `TAX_INVOICE_NOT_FOUND`, `TAX_INVOICE_INVALID_STATUS`, `TAX_INVOICE_ALREADY_ISSUED` — `31` §11 ระบุไว้ 3 code (`TAX_INVOICE_FIELD_MISSING`/`INVOICE_NUMBER_GAP`/`CANCEL_REQUIRES_REASON`) ซึ่งไม่ครอบคลุมกรณี 404 ของรายการขาย/ใบกำกับภาษีเอง · การยกเลิกใบที่เป็น terminal แล้ว (`31` §9.1 — `cancelled` ห้าม reverse) · และการออกใบซ้ำให้รายการขายที่มีใบ `active` อยู่ (`31` §10 "ห้ามแก้ไขใบที่ active ต้องยกเลิกแล้วออกใหม่") จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.7 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -174,8 +175,6 @@
 | UNLOCK_REQUIRES_EXECUTIVE | ปลดล็อกรอบ locked โดยไม่ใช่ Executive | 30 |
 | PERIOD_NOT_FOUND | อ้างรอบบัญชีที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) — 404 ไม่ leak ว่ามีอยู่จริง | 30 |
 | PERIOD_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันของรอบบัญชีทำไม่ได้ตาม `23` §6.13 (ส่งซ้ำ / ล็อกรอบที่ยัง `collecting` / ปลดล็อกรอบที่ยังไม่ `locked`) | 30 |
-| PERIOD_NOT_FOUND | อ้างรอบบัญชีที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 30 |
-| PERIOD_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันของรอบบัญชีทำไม่ได้ตาม `23` §6.13 (ข้ามขั้น / ปลดล็อกรอบที่ยังไม่ locked) | 30 |
 
 ### 6.8 หมวดเอกสารทางการ/บัญชี (ไฟล์ 31, 32, 34)
 
@@ -200,8 +199,6 @@
 | AUTHORIZED_EXCEPTION_REASON_REQUIRED | สร้าง Authorized Exception โดยไม่กรอกเหตุผล | 34 |
 | EXCEPTION_NOT_FOUND | อ้าง Exception ที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) — 404 ไม่ leak ว่ามีอยู่จริง | 34 |
 | EXCEPTION_INVALID_STATUS | แก้ไข/resolve/authorize Exception ที่ไม่ได้อยู่สถานะ `open` (ไฟล์ 23 §6.12 — `resolved`/`authorized` เป็น terminal) | 34 |
-| EXCEPTION_NOT_FOUND | อ้าง Exception ที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 34 |
-| EXCEPTION_INVALID_STATUS | แก้ไข/resolve/authorize Exception ที่ไม่ได้อยู่สถานะ `open` (`23` §6.12 — terminal แล้ว) | 34 |
 | FILING_OVERDUE_WARNING | เลยกำหนดนำส่งภาษีแต่ยัง pending (เตือน ไม่ block) | 33 |
 | WHT_CANCEL_REQUIRES_REASON | ยกเลิก WHT Certificate โดยไม่กรอก cancel_reason | 33 |
 | WHT_CERTIFICATE_NOT_FOUND | อ้างหนังสือรับรองหัก ณ ที่จ่ายที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 33 |

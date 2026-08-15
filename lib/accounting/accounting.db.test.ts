@@ -538,4 +538,44 @@ suite('Phase 4.1 — Period Lock guard (`13` §6.11 · interceptor)', () => {
     })
     expect(nextMonth.id).toBeTruthy()
   })
+
+  /**
+   * มติ PO 2026-08-15 — `sent_to_accountant` = `directEdit: 'limited'` (`13` §6.11)
+   * บล็อกเฉพาะการเขียนที่กระทบยอดที่ส่งไปแล้ว ส่วนงานจัดหมวดที่ไม่ขยับตัวเลขยังทำได้
+   */
+  it('งวด sent_to_accountant ⇒ การเขียนที่กระทบยอดโดนบล็อก (PERIOD_LOCKED_DIRECT_EDIT)', async () => {
+    await seedPeriod('sent_to_accountant')
+
+    await expectCode(
+      () =>
+        claims.createManualClaim(ctx(), {
+          claimType: 'manual',
+          grossSatang: 250_00,
+          expenseDate: new Date('2026-08-20T00:00:00Z'),
+          payeeId: null,
+          receiptFileUrl: null,
+          note: 'ค่าเดินทางเพิ่มเติม',
+        }),
+      'PERIOD_LOCKED_DIRECT_EDIT',
+    )
+  })
+
+  it('งวด sent_to_accountant ⇒ สร้างรอบวางบิลของงวดนั้นไม่ได้ (กระทบยอด)', async () => {
+    await seedPeriod('sent_to_accountant')
+    await seedUnbilledRevenue()
+
+    await expectCode(
+      () =>
+        revenue.createBillingBatch(
+          { actor: accountant, meta, reason: 'วางบิลรอบสิงหาคม' },
+          {
+            companyId: COMPANY_A,
+            cutoffDate: new Date('2026-08-31T00:00:00Z'),
+            cycleId: null,
+            reason: 'วางบิลรอบสิงหาคม',
+          },
+        ),
+      'PERIOD_LOCKED_DIRECT_EDIT',
+    )
+  })
 })
