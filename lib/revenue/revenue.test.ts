@@ -6,6 +6,7 @@ import {
   assertRevenueEditable,
   billingPeriodLabel,
   canTransitionBillingBatch,
+  parseBillingPeriodLabel,
   periodStartOf,
   resolveBillingStatusAfterReceipt,
   summarizeBillingBatch,
@@ -137,5 +138,24 @@ describe('resolveBillingStatusAfterReceipt (`19` §9.2 — จุดเสีย
 
   it('รอบที่ยัง draft ไม่ถูกดันไป partially_paid (ต้องส่งบิลก่อน)', () => {
     expect(resolveBillingStatusAfterReceipt({ ...base, current: 'draft', receivedSatang: 50_000 })).toBe('draft')
+  })
+})
+
+describe('parseBillingPeriodLabel — อ่านงวดกลับจากป้าย (ไฟล์ 20 ใช้หา `period_status_at_target`)', () => {
+  it('อ่าน "มิถุนายน 2569" เป็นงวด 6/2569 (พ.ศ.)', () => {
+    expect(parseBillingPeriodLabel('มิถุนายน 2569')).toEqual({ yearBe: 2569, month: 6 })
+  })
+
+  it('ไป-กลับกับ `billingPeriodLabel()` ได้ครบทุกเดือน', () => {
+    for (let month = 0; month < 12; month += 1) {
+      const label = billingPeriodLabel(new Date(Date.UTC(2026, month, 15)))
+      expect(parseBillingPeriodLabel(label)).toEqual({ yearBe: 2569, month: month + 1 })
+    }
+  })
+
+  it('รูปแบบที่อ่านไม่ออกคืน null (ผู้เรียกตัดสินใจต่อ ไม่ใช่เดา)', () => {
+    expect(parseBillingPeriodLabel('June 2026')).toBeNull()
+    expect(parseBillingPeriodLabel('มิถุนายน')).toBeNull()
+    expect(parseBillingPeriodLabel('')).toBeNull()
   })
 })
