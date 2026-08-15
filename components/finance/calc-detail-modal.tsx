@@ -4,7 +4,7 @@ import { Badge, InlineAlert, Modal, StatusBadge } from '@/components/ui'
 import { approvalHistoryLabel, approvalStepText } from '@/lib/compensation/approval-ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { EXPENSE_TYPE_LABEL, EXPENSE_STATUS_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
-import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 
 /**
@@ -55,7 +55,7 @@ export function CalcDetailModal({
             <pre className="mt-1 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-slate-700">
               {item.basisText}
               {item.distanceKm === null ? '' : `\nระยะทางที่บันทึกไว้: ${item.distanceKm} กม.`}
-              {`\nวันที่เกิดรายการ: ${item.expenseDate}`}
+              {`\nวันที่เกิดรายการ: ${fmtDate(item.expenseDate)}`}
             </pre>
           </div>
 

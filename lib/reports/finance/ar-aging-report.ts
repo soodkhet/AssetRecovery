@@ -1,5 +1,6 @@
 import { arOutstandingSatang, summarizeArAging, type ArAgingRow } from '@/lib/finance/ar-calc'
 import { sumSatang } from '@/lib/finance/satang'
+import { fmtDate } from '@/lib/format/datetime'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { toIsoDateOnly } from '@/lib/reports/period'
 import { describeAgingBuckets } from '@/lib/settings/finance-policy'
@@ -163,7 +164,7 @@ export function buildArAgingReport(input: {
       latestDueDate: null,
     },
     note:
-      `อายุหนี้คำนวณ ณ วันที่ ${toIsoDateOnly(asOf)} จากวันครบกำหนดชำระของรอบวางบิล — นับเฉพาะบิลที่ส่งให้ลูกค้าแล้วและยังมียอดค้าง ` +
+      `อายุหนี้คำนวณ ณ วันที่ ${fmtDate(asOf)} จากวันครบกำหนดชำระของรอบวางบิล — นับเฉพาะบิลที่ส่งให้ลูกค้าแล้วและยังมียอดค้าง ` +
       '(ยอดที่ลูกค้าหักภาษี ณ ที่จ่ายไว้ถือว่าชำระแล้ว) · ช่วงอายุหนี้มาจากตั้งค่าการเงิน ไม่ใช่ค่าตายตัวในรายงาน',
   }
 }

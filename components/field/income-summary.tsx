@@ -5,7 +5,7 @@ import { EmptyState, ErrorState, LoadingState, Select, StatusBadge } from '@/com
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { fieldStatusBadgeGroup, fieldStatusLabel } from '@/lib/field/field-ui'
-import { ALL_MONTHS, monthOptions, monthQueryValue } from '@/lib/field/month-filter'
+import { ALL_MONTHS, monthKeyOfInstant, monthOptions, monthQueryValue } from '@/lib/field/month-filter'
 import type { FieldIncomeSummaryDto } from '@/lib/field/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -44,7 +44,9 @@ export function IncomeSummary() {
   }, [month])
 
   const months = monthOptions(
-    allTimeItems.map((item) => (item.closedAt === null ? null : item.closedAt.slice(0, 7))),
+    // `closedAt` เป็น instant UTC — ต้องแปลงเป็นเดือนตามเวลาไทยก่อน ไม่งั้นเคสที่ปิดช่วง 00:00–07:00 น.
+    // ของวันที่ 1 จะตกไปอยู่เดือนก่อนหน้า (Rule 01 · เหตุผลเดียวกับ `closedMonthKeys()` ของแท็บจบงาน)
+    allTimeItems.map((item) => monthKeyOfInstant(item.closedAt)),
     'สะสมตลอด (ทุกเดือน)',
   )
 
