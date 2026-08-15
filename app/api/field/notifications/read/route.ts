@@ -9,7 +9,12 @@ const markReadSchema = z.object({
   ids: z.array(z.uuid()).max(200).optional(),
 })
 
-/** `POST /api/field/notifications/read` (`41` §15 · E11) */
+/**
+ * `POST /api/field/notifications/read` (`41` §15 · E11)
+ *
+ * ⚠️ ตั้งแต่ Phase 5.1 หน้าจอใช้ `PATCH /api/notifications/:id/read` + `/read-all` (`90` §14) แทน —
+ * endpoint นี้คงไว้ตามสัญญา `45` §6.3 (service เดียวกัน ผลลัพธ์เดียวกัน)
+ */
 export const POST = withEndpoint<unknown, { updated: number }>({
   endpoint: 'field.notificationRead',
   action: 'view',

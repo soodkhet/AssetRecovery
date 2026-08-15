@@ -20,7 +20,7 @@ import {
   IconUser,
   IconWallet,
 } from '@/components/field/field-icons'
-import { NotificationBell } from '@/components/field/notification-bell'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { ToastProvider } from '@/components/ui'

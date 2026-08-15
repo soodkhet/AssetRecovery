@@ -2,6 +2,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import type { PushSubscribeInput } from '@/lib/field/schemas'
+import { NOTIFICATION_LIST_MAX } from '@/lib/notifications/schemas'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -139,18 +140,33 @@ export interface NotificationDto {
 export interface NotificationListDto {
   items: NotificationDto[]
   unreadCount: number
+  /** จำนวนทั้งหมดของผู้เรียก (ไม่ขึ้นกับตัวกรอง) — หน้ารายการเต็มใช้โชว์ "ทั้งหมด (N)" */
+  totalCount: number
 }
 
-/** กล่องแจ้งเตือนของผู้เรียกเอง (`41` §15 fallback) — badge cap ที่หน้าจอ (E11) */
-export async function listNotifications(user: SessionUser, limit = 50): Promise<NotificationListDto> {
-  const [rows, unreadCount] = await Promise.all([
+export interface NotificationListOptions {
+  /** `unread` = เฉพาะที่ยังไม่อ่าน (แท็บของ mockup `notifications.html`) */
+  filter?: 'all' | 'unread'
+  limit?: number
+}
+
+/** กล่องแจ้งเตือนของผู้เรียกเอง (`90` §14 · `41` §15 fallback) — badge cap ที่หน้าจอ (E11) */
+export async function listNotifications(
+  user: SessionUser,
+  options: NotificationListOptions = {},
+): Promise<NotificationListDto> {
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), NOTIFICATION_LIST_MAX)
+  const owner = { userId: user.id, organizationId: user.organizationId }
+
+  const [rows, unreadCount, totalCount] = await Promise.all([
     prisma.notification.findMany({
-      where: { userId: user.id, organizationId: user.organizationId },
+      where: { ...owner, ...(options.filter === 'unread' ? { readAt: null } : {}) },
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: { id: true, eventCode: true, title: true, body: true, linkPath: true, readAt: true, createdAt: true },
     }),
-    prisma.notification.count({ where: { userId: user.id, organizationId: user.organizationId, readAt: null } }),
+    prisma.notification.count({ where: { ...owner, readAt: null } }),
+    prisma.notification.count({ where: owner }),
   ])
 
   return {
@@ -164,12 +180,17 @@ export async function listNotifications(user: SessionUser, limit = 50): Promise<
       createdAt: row.createdAt.toISOString(),
     })),
     unreadCount,
+    totalCount,
   }
 }
 
 /**
  * มาร์คว่าอ่านแล้ว — ไม่ส่ง `ids` = อ่านทั้งหมดของตัวเอง (E11: เปิด dropdown ไม่ auto-mark
  * ⇒ หน้าจอเป็นคนตัดสินใจเรียกตัวนี้ตอนคลิกจริง)
+ *
+ * `id` ที่ไม่ใช่ของผู้เรียก (หรือไม่มีอยู่จริง) จะไม่ถูกแตะและคืน `updated: 0` เฉย ๆ —
+ * **จงใจไม่แยก 404 ออกจาก 403** เพื่อไม่บอกใบ้ว่ามีแถวนั้นอยู่จริงหรือไม่ (`25` — ไม่ leak)
+ * และทำให้ endpoint นี้ idempotent โดยธรรมชาติ (กดซ้ำ/ยิงซ้ำได้ไม่พัง)
  *
  * ไม่ลง audit: เป็นสถานะการอ่านของผู้ใช้เอง ไม่ใช่ข้อมูลธุรกิจ (`90` §6.3)
  */
@@ -179,7 +200,8 @@ export async function markNotificationsRead(user: SessionUser, ids?: readonly st
       userId: user.id,
       organizationId: user.organizationId,
       readAt: null,
-      ...(ids !== undefined && ids.length > 0 ? { id: { in: [...ids] } } : {}),
+      // ส่ง `ids` มา = แตะเฉพาะรายการนั้น (ลิสต์ว่าง = ไม่แตะอะไรเลย ไม่ใช่ "อ่านทั้งหมด")
+      ...(ids === undefined ? {} : { id: { in: [...ids] } }),
     },
     data: { readAt: new Date() },
   })

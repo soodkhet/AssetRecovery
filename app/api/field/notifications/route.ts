@@ -7,6 +7,10 @@ import { listNotifications, type NotificationListDto } from '@/lib/notifications
  * `GET /api/field/notifications` (`41` §15)
  * fallback หลักของการแจ้งเตือน — ผู้ใช้เห็นรายการที่ต้องรู้เสมอตอนเปิดแอป แม้ push จะหลุด
  * เห็นเฉพาะของตัวเองเท่านั้น (กรอง `user_id` ในชั้น service)
+ *
+ * ⚠️ ตั้งแต่ Phase 5.1 หน้าจอ (กระดิ่งกลาง `components/notifications/notification-bell.tsx`) ใช้
+ * `GET /api/notifications` (`90` §14) แทน — endpoint นี้คงไว้ตามสัญญา `45` §6.3 สำหรับผู้เรียกฝั่ง
+ * Field โดยตรง (ข้อมูลชุดเดียวกัน service เดียวกัน)
  */
 export const GET = withEndpoint<unknown, NotificationListDto>({
   endpoint: 'field.notificationList',

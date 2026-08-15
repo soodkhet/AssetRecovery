@@ -5,6 +5,38 @@
 
 ---
 
+## Phase 5.1 — Notification Service + Notification Center
+
+**วันที่**: 2026-08-15 · **commit**: `fbc275c` · **branch**: `auto/phase-5.1`
+
+### สิ่งที่ทำ
+
+- **`lib/notifications/events.ts` (pure)** — แค็ตตาล็อก event ที่แจ้งเตือนได้ครบตาม `90` §6.3 ทั้ง 9 แถว (22 code) พร้อมป้ายโมดูลไทย + ระดับสีจาก **10 กลุ่มของ `04` §8.1** (`notificationDisplay()` — code แปลกปลอมตกเป็นกลาง ไม่ทำจอพัง) · `NOTIFICATION_ONLY_EVENTS` = code ที่โมดูลยังไม่ emit (งาน 5.2) · เทสต์บังคับว่าชื่อที่มีในทะเบียน domain event แล้วต้องสะกดตรงกัน (จุดพลาดจริง: `90` เขียน `evidence.reject_evidence`/`reassignment_timeout` แต่ไฟล์ต้นทางใช้ `case.evidence_rejected`/`assignment.reassignment_timeout_resolved`)
+- **`lib/notifications/dedupe.ts` (pure)** — `uuidV5()` (เขียนเอง ตรวจกับเวกเตอร์มาตรฐาน RFC 4122) + `notificationDedupeId()` ⇒ **idempotency โดยไม่แตะ schema**: คำนวณ `id` ของแถวจาก (org, ผู้รับ, event, `dedupeKey`) ให้ PRIMARY KEY เป็นตัวกันซ้ำ
+- **`notifyUsers()` รับ `dedupeKey`** — มี key = เช็คแถวที่มีอยู่ → `createMany({skipDuplicates})` ด้วย id ที่คำนวณไว้ → push เฉพาะคนที่ได้แถวใหม่ · ไม่มี key = พฤติกรรมเดิมของ 2.9 ทุกประการ · `eventCode` เป็น union type จากแค็ตตาล็อก (คอมไพล์ไม่ผ่านถ้าสะกดผิด — แข็งกว่ากฎ ESLint ที่จับได้แค่ prop ชื่อ `event`)
+- **`listNotifications(user, {filter, limit})`** — เพิ่มตัวกรอง `all|unread` + `totalCount` (แท็บของหน้ารายการเต็ม) เพดาน 100 · `markNotificationsRead()`: **ลิสต์ว่าง = ไม่แตะอะไรเลย** (เดิมตีความเป็น "ทั้งหมด")
+- **API 3 endpoint ของ `90` §14**: `GET /api/notifications` · `PATCH /api/notifications/:id/read` · `PATCH /api/notifications/read-all` — ใช้ `requireSession()` **ไม่ผูก capability** (เหมือน `/api/meta/menu`) เพราะทุก role ต้องอ่านกล่องตัวเองได้ · Zod ชุดเดียวใช้ร่วม FE/BE (`lib/notifications/schemas.ts`)
+- **`<NotificationBell>` กลางตัวเดียวทั้งระบบ** — ย้าย `components/field/notification-bell.tsx` → `components/notifications/notification-bell.tsx` แล้วให้ทั้ง `<TopNav>` (App Shell) และ `<FieldShell>` ใช้ตัวเดียวกัน ยิงเส้นกลาง `/api/notifications*` · App Shell ส่ง `allHref="/notifications"` (ลิงก์ "ดูทั้งหมด") ฝั่ง Field ไม่ส่ง
+- **หน้า `/notifications` (`<NotificationCenter>`)** — ตาม mockup `notifications.html`: แท็บ ทั้งหมด/ยังไม่อ่าน พร้อมตัวเลข + ปุ่มอ่านทั้งหมด + แถวรายการ (จุดสถานะ, ป้ายโมดูลสีตามระดับ, `event_code` mono, `link_path`, เวลา พ.ศ., ปุ่มเปิดรายการ/อ่านแล้ว) + loading/empty/error ครบ (`04` §9) · **ไม่อยู่ใน Top Nav 7 เมนู** ของ `06` §7.1.1 (เข้าทางกระดิ่ง)
+- **เทสต์**: pure 18 เคส (`events.test.ts` 8 · `dedupe.test.ts` 8 + เวกเตอร์มาตรฐาน) · route 10 เคส (401 ทั้งสาม endpoint / ไม่มี capability ก็ผ่าน / filter นอกสเปค = 400 / id ไม่ใช่ UUID = 400 / read-all ไม่ส่ง ids) · DB 13 เคส (`notify.db.test.ts` — ยิงพร้อมกัน 5 ครั้งด้วย key เดียวได้แถวเดียว · dedupe แยกตามผู้รับ · กล่องของใครของมัน · มาร์ค id คนอื่น = `updated: 0`) · รวมทั้ง repo **2,538 เคสเขียว** · typecheck + lint + `pnpm build` ผ่าน
+
+### การตัดสินใจระหว่างทาง
+
+- **idempotency ด้วย id ที่คำนวณได้ แทนการเพิ่มคอลัมน์ `dedupe_key`** — ตาราง `notifications` ใน `02` §10 ไม่มีคอลัมน์นั้น และการเพิ่ม (+ unique index) ต้องผ่านมติ PO ตาม Rule 02 · UUIDv5 บน PK ให้ผลเท่ากันทุกประการ (กันซ้ำระดับ DB, ทนเรซ) โดยไม่แตะ schema และไม่ต้อง migration
+- **endpoint แจ้งเตือนไม่ผูก capability** — `90` §12 ระบุ capability ไว้เฉพาะ "ดู audit"/"จัดการกฎแจ้งเตือน" ไม่ใช่การอ่านกล่องของตัวเอง · ถ้าไปผูก capability ใดก็ตาม role ที่ไม่มีสิทธิ์นั้นจะไม่เห็นกระดิ่งของตัวเอง (พนักงานภาคสนามพัง) · ความปลอดภัยมาจากการกรอง `user_id` ของ session ในชั้น service ซึ่งไม่มีทางถูก override จาก query
+- **มาร์คอ่าน id ที่ไม่ใช่ของตัวเอง = `updated: 0` ไม่ใช่ 404/403** — ไม่บอกใบ้ว่าแถวนั้นมีจริงไหม (`25` — ไม่ leak) และทำให้ endpoint idempotent · ทางเลือกอื่นคือเพิ่ม error code ใหม่ลง `24` ซึ่งไม่คุ้มกับการมาร์คอ่าน
+- **กระดิ่งเหลือตัวเดียวใช้ร่วมทุก shell** — เดิมของ 2.12 อยู่ใต้ `components/field/` และยิง `/api/field/notifications` · ถ้าทำตัวที่สองสำหรับหลังบ้าน ตรรกะ E11 (ไม่ auto-mark) และการกัน open redirect จะแตกสองทางทันที ⇒ ย้ายมาเป็นของกลาง · **endpoint `/api/field/notifications*` ยังคงอยู่ตามสัญญา `45` §6.3** (service เดียวกัน) แค่ไม่มีหน้าจอเรียกแล้ว
+- **หน้ารายการเต็มไม่เข้า Top Nav** — `06` §7.1.1 ล็อกเมนูหลักไว้ 7 ตัว การเพิ่มเมนูที่ 8 ต้องแก้ spec · mockup เองก็ออกแบบให้เข้าจากกระดิ่ง ("ดูทั้งหมด")
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 5.2 ต้องทำ 2 อย่างคู่กัน**: (1) เรียก `notifyUsers()` จากจุด mutation จริงของแต่ละโมดูล **พร้อม `dedupeKey`** (2) ย้าย code ใน `NOTIFICATION_ONLY_EVENTS` เข้าทะเบียน `lib/api/event-names.ts` + `45` §7/ไฟล์ต้นทาง ในคอมมิตเดียวกัน แล้วลบออกจากรายการ (เทสต์จะฟ้องถ้าลืมลบ)
+- **`dedupeKey` ห้ามมีเวลาปัจจุบัน** — ใส่แล้วจะไม่ซ้ำเลยและ idempotency ตายเงียบ ๆ · ใช้ id ของ entity ที่เหตุการณ์อ้างถึง (`lot-<id>` / `payout-<id>` / `case-<id>-r<round>`)
+- **กระดิ่งรีเฟรชเองทุก 2 นาที** (ไม่มี websocket) — จุดที่ต้องแจ้ง "ทันที" จริง ๆ ต้องพึ่ง Web Push ซึ่งต้องตั้ง `VAPID_*` + `NEXT_PUBLIC_VAPID_PUBLIC_KEY` ที่ Vercel ก่อน (ค้างมาตั้งแต่ 2.9/2.12)
+- **หน้า `/notifications` ไม่มี pagination** — ดึงล่าสุด 100 รายการ ถ้าปริมาณจริงโตเกินนี้ค่อยเติม cursor (schema มี index `(user_id, read_at, created_at DESC)` รองรับอยู่แล้ว)
+
+---
+
 ## Phase 4.7 — Accounting Frontend ที่เหลือ (shell + periods + exceptions + sales/receipts)
 
 **วันที่**: 2026-08-15 · **commit**: `ad12e13` · **branch**: `auto/phase-4.7`
