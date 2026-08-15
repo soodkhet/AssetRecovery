@@ -4,6 +4,7 @@ import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
+import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
 import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
@@ -786,6 +787,9 @@ export async function completePayoutBatch(
 
     return row
   })
+
+  // จ่ายเงินจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่าย (`32` §6.1) — idempotent เรียกซ้ำไม่สร้างซ้ำ
+  await syncExpenseRecordsFromPayout(context, batchId)
 
   return toBatchDto(updated)
 }

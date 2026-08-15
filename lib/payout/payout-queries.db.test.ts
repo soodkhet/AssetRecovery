@@ -149,6 +149,9 @@ const generateInput = {
 async function reset(): Promise<void> {
   const tx = db()
   storage.clear()
+  // Phase 4.4 — รอบที่ `completed` ผลิตบัญชีค่าใช้จ่าย (+ exception ถ้าเอกสารไม่ครบ) ต้องล้างก่อน FK
+  await tx.$executeRawUnsafe(`DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)

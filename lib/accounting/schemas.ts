@@ -60,6 +60,28 @@ export const periodReasonSchema = z.object({
   reason: z.string().trim().min(1, 'ต้องระบุเหตุผล').max(1000),
 })
 
+// ── ข้อซักถามจากสำนักงานบัญชี (ไฟล์ 36 §13) ────────────────────────────────
+
+export const questionListQuerySchema = z.object({
+  periodId: uuidSchema.optional(),
+  /** `open` = ยังไม่ตอบ · `answered` = ตอบแล้ว (map เป็น `is_resolved` — `36` §6.1) */
+  status: z.enum(['open', 'answered']).optional(),
+})
+
+export const questionCreateSchema = z.object({
+  /** ไม่ส่งมา = รอบบัญชีของเดือนปัจจุบัน (สร้างให้อัตโนมัติถ้ายังไม่มี) */
+  periodId: uuidSchema.optional(),
+  questionText: z.string().trim().min(1, 'ต้องระบุคำถาม').max(2000),
+})
+
+export const questionAnswerSchema = z.object({
+  answerText: z.string().trim().min(1, 'ต้องระบุคำตอบ').max(2000),
+})
+
+export type QuestionListQuery = z.infer<typeof questionListQuerySchema>
+export type QuestionCreateInput = z.infer<typeof questionCreateSchema>
+export type QuestionAnswerInput = z.infer<typeof questionAnswerSchema>
+
 export type ExceptionListQuery = z.infer<typeof exceptionListQuerySchema>
 export type ExceptionCreateInput = z.infer<typeof exceptionCreateSchema>
 export type ExceptionUpdateInput = z.infer<typeof exceptionUpdateSchema>

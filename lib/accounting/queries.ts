@@ -265,7 +265,8 @@ export async function listPeriods(
   return rows.map((row) => toPeriodDto(row, counts.get(row.id) ?? summarizeExceptionCounts([]), exports.get(row.id)))
 }
 
-async function findPeriod(user: SessionUser, periodId: string): Promise<PeriodRow> {
+/** อ่านรอบบัญชีตาม id ในองค์กรของผู้เรียก — 404 แบบไม่ leak ข้ามองค์กร (ใช้ร่วมกับไฟล์ 36) */
+export async function findPeriodById(user: SessionUser, periodId: string): Promise<PeriodRow> {
   const row = await prisma.accountingPeriod.findFirst({
     where: { id: periodId, organizationId: user.organizationId },
     select: PERIOD_SELECT,
@@ -372,7 +373,7 @@ async function readinessOf(organizationId: string, row: PeriodRow): Promise<Read
 }
 
 export async function getPeriodReadiness(user: SessionUser, periodId: string): Promise<PeriodReadinessDto> {
-  const row = await findPeriod(user, periodId)
+  const row = await findPeriodById(user, periodId)
   const result = await readinessOf(user.organizationId, row)
   return { ...result, periodId: row.id, periodLabel: row.periodLabel, status: row.status }
 }
@@ -386,7 +387,7 @@ async function transitionPeriod(
   input: PeriodReasonInput,
   extra: { readiness?: ReadinessResult; unlock?: boolean } = {},
 ): Promise<AccountingPeriodDto> {
-  const row = await findPeriod(ctx.actor, periodId)
+  const row = await findPeriodById(ctx.actor, periodId)
   assertPeriodTransition(row.status, to)
 
   const now = new Date()
@@ -437,7 +438,7 @@ export async function sendPeriod(
   periodId: string,
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
-  const row = await findPeriod(ctx.actor, periodId)
+  const row = await findPeriodById(ctx.actor, periodId)
   assertPeriodTransition(row.status, 'sent_to_accountant')
   const readiness = await readinessOf(ctx.actor.organizationId, row)
   assertReadyToSend(readiness)
@@ -548,7 +549,7 @@ export async function createException(
   const period =
     input.periodId === undefined
       ? await ensurePeriod(ctx, periodKeyOf(now))
-      : await findPeriod(ctx.actor, input.periodId)
+      : await findPeriodById(ctx.actor, input.periodId)
 
   const created = await prisma.$transaction(async (tx) => {
     const row = await tx.exception.create({

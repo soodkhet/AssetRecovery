@@ -37,6 +37,7 @@ import type {
 } from '@/lib/bank-recon/types'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
+import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
@@ -669,6 +670,8 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
       actorId: ctx.actor.id,
       actorRole: ctx.actor.roleName,
     })
+    // จ่ายจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่ายของรอบนั้น (`32` §6.1) — idempotent เช่นกัน
+    if (payoutStatus === 'completed') await syncExpenseRecordsFromPayout(ctx, input.candidate.id)
     effect = { kind: 'payout', payoutStatus }
   }
 

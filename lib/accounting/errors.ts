@@ -29,6 +29,9 @@ export const ACCOUNTING_ERROR_CODES = [
   'EXCEPTION_INVALID_STATUS',
   'AUTHORIZED_EXCEPTION_REASON_REQUIRED',
   'EXPORT_BLOCKED_CRITICAL',
+  // §6.8 ข้อซักถามจากสำนักงานบัญชี (ไฟล์ 36)
+  'ACCOUNTANT_QUESTION_NOT_FOUND',
+  'ACCOUNTANT_QUESTION_ALREADY_ANSWERED',
 ] as const
 
 export type AccountingErrorCode = (typeof ACCOUNTING_ERROR_CODES)[number]
@@ -45,6 +48,8 @@ const HTTP_STATUS: Record<AccountingErrorCode, number> = {
   EXCEPTION_INVALID_STATUS: 400,
   AUTHORIZED_EXCEPTION_REASON_REQUIRED: 400,
   EXPORT_BLOCKED_CRITICAL: 400,
+  ACCOUNTANT_QUESTION_NOT_FOUND: 404,
+  ACCOUNTANT_QUESTION_ALREADY_ANSWERED: 400,
 }
 
 const MESSAGES: Record<AccountingErrorCode, ErrorMessage> = {
@@ -87,6 +92,14 @@ const MESSAGES: Record<AccountingErrorCode, ErrorMessage> = {
   EXPORT_BLOCKED_CRITICAL: {
     title: 'ส่งข้อมูลบัญชีไม่ได้',
     message: 'ยังมีข้อยกเว้นระดับวิกฤต (critical) ที่เปิดอยู่ในรอบนี้ — แก้ไขให้เรียบร้อยหรือให้ผู้บริหารอนุมัติยกเว้นก่อน',
+  },
+  ACCOUNTANT_QUESTION_NOT_FOUND: {
+    title: 'ไม่พบข้อซักถาม',
+    message: 'ไม่พบข้อซักถามนี้ หรือคุณไม่มีสิทธิ์เข้าถึงรายการนี้',
+  },
+  ACCOUNTANT_QUESTION_ALREADY_ANSWERED: {
+    title: 'ข้อซักถามนี้ตอบไปแล้ว',
+    message: 'คำตอบที่บันทึกแล้วแก้ไม่ได้ เพื่อคงหลักฐานการสื่อสารกับสำนักงานบัญชี — ถ้ามีข้อมูลเพิ่มให้บันทึกเป็นข้อซักถามใหม่ (`36` §8)',
   },
 }
 
