@@ -1,6 +1,7 @@
 import { BUDDHIST_YEAR_OFFSET } from '@/lib/constants'
 import { MONTH_NAMES_TH } from '@/lib/field/calendar'
 import { toBangkokParts } from '@/lib/format/datetime'
+import { settledSatang } from '@/lib/finance/ar-calc'
 import { sumSatang } from '@/lib/finance/satang'
 import type { BillingBatchStatus } from '@/lib/generated/prisma/enums'
 import { RevenueError } from '@/lib/revenue/errors'
@@ -151,7 +152,7 @@ export function resolveBillingStatusAfterReceipt(input: {
   receivedSatang: number
   whtWithheldByCustomerSatang: number
 }): BillingBatchStatus {
-  const settled = input.receivedSatang + input.whtWithheldByCustomerSatang
+  const settled = settledSatang(input)
   if (settled <= 0) return input.current
   if (settled >= input.totalSatang) return 'paid'
   return input.current === 'draft' ? input.current : 'partially_paid'

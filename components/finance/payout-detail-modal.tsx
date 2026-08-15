@@ -99,7 +99,7 @@ export function PayoutDetailModal({
             />
             <span>
               Gross {fmtSatangSymbol(batch.grossSatang)} · WHT{' '}
-              <span className="text-rose-600">{fmtSatangSymbol(batch.whtSatang)}</span> · สุทธิ{' '}
+              <span className="text-red-600">{fmtSatangSymbol(batch.whtSatang)}</span> · สุทธิ{' '}
               <span className="font-bold text-emerald-700">{fmtSatangSymbol(batch.netSatang)}</span>
             </span>
           </div>
@@ -157,7 +157,7 @@ export function PayoutDetailModal({
                         </p>
                       )}
                       {item.source === 'advance' && (
-                        <p className="text-[10px] text-purple-700">เงินทดรองจ่าย — ไม่หัก WHT</p>
+                        <p className="text-[10px] text-purple-800">เงินทดรองจ่าย — ไม่หัก WHT</p>
                       )}
                     </Td>
                     <Td className="text-xs text-slate-600">
@@ -165,7 +165,7 @@ export function PayoutDetailModal({
                       <p className="font-mono text-[10px] text-slate-400">{item.accountNumberMasked ?? '—'}</p>
                     </Td>
                     <Td numeric>{fmtSatangSymbol(item.grossSatang)}</Td>
-                    <Td numeric className={item.whtSatang > 0 ? 'text-rose-600' : undefined}>
+                    <Td numeric className={item.whtSatang > 0 ? 'text-red-600' : undefined}>
                       {fmtSatangSymbol(item.whtSatang)}
                       {item.whtPctSnapshot !== null && item.whtSatang > 0 && (
                         <p className="text-[10px] text-slate-400">

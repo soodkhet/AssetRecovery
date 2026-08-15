@@ -10,6 +10,7 @@ import { ReasonConfirmModal, REASON_MIN_LENGTH } from '@/components/settings/rea
 import {
   Button,
   Card,
+  FilterGroup,
   InlineAlert,
   RefText,
   StatCard,
@@ -26,7 +27,7 @@ import {
 import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { MANAGE_BILLING } from '@/lib/revenue/revenue'
 import {
   BILLING_STATUS_FILTERS,
@@ -250,6 +251,10 @@ export function RevenueTab() {
                           group={billingStatusBadgeGroup(batch.status)}
                           label={BILLING_STATUS_LABEL[batch.status]}
                         />
+                        {/* Rule 05 — "ส่งบิล" เป็น action สำคัญ ต้องเห็นวันที่บน list ไม่ใช่เฉพาะใน modal */}
+                        {batch.sentAt !== null && (
+                          <p className="mt-1 text-[10px] text-slate-400">ส่งบิล {fmtDate(batch.sentAt)}</p>
+                        )}
                       </Td>
                       <Td className="text-right whitespace-nowrap">
                         <div className="inline-flex flex-col items-end gap-1">
@@ -340,7 +345,7 @@ export function RevenueTab() {
                       </p>
                     </Td>
                     <Td className="text-xs">
-                      {revenue.vatRatePctUsed > 0 ? `VAT ${revenue.vatRatePctUsed}%` : VAT_MODE_LABEL.no_vat}
+                      {revenue.vatRatePctUsed > 0 ? `VAT ${fmtPercent(revenue.vatRatePctUsed)}` : VAT_MODE_LABEL.no_vat}
                     </Td>
                     <Td className="text-xs">
                       {revenue.billingBatchPeriod === null ? (
@@ -410,31 +415,3 @@ export function RevenueTab() {
   )
 }
 
-function FilterGroup({
-  options,
-  value,
-  onChange,
-}: {
-  options: readonly { value: string; label: string }[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={cn(
-            'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-            value === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
-}

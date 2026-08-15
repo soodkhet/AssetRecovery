@@ -8,6 +8,7 @@ import { useAdjustments } from '@/components/finance/use-adjustments'
 import {
   Button,
   Card,
+  FilterGroup,
   InlineAlert,
   RefText,
   StatCard,
@@ -41,7 +42,7 @@ import {
   type AdjustmentTargetFilter,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto } from '@/lib/adjustments/types'
-import { fmtDate } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 
 /**
@@ -178,8 +179,12 @@ export function AdjustmentTab() {
                         group={adjustmentStatusBadgeGroup(row.status)}
                         label={ADJUSTMENT_STATUS_LABEL[row.status]}
                       />
+                      {/* Rule 05 — วันเวลาที่อนุมัติต้องอยู่บน list คู่กับชื่อผู้อนุมัติ */}
                       {row.approvedByName !== null && (
-                        <p className="mt-1 text-[10px] text-slate-400">โดย: {row.approvedByName}</p>
+                        <p className="mt-1 text-[10px] text-slate-400">
+                          โดย: {row.approvedByName}
+                          {row.approvedAt !== null && ` · ${fmtDateTime(row.approvedAt)}`}
+                        </p>
                       )}
                       {row.status === 'pending_approval' && row.missingApproverRoles.length > 0 && (
                         <p className="mt-1 text-[10px] text-slate-400">รอ: {row.missingApproverRoles.join(', ')}</p>
@@ -224,31 +229,3 @@ export function AdjustmentTab() {
   )
 }
 
-function FilterGroup({
-  options,
-  value,
-  onChange,
-}: {
-  options: readonly { value: string; label: string }[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={cn(
-            'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-            value === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
-}

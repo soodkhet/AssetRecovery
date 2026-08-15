@@ -9,6 +9,7 @@ import { useAdvances } from '@/components/finance/use-advances'
 import {
   Button,
   Card,
+  FilterGroup,
   InlineAlert,
   RefText,
   StatCard,
@@ -35,7 +36,7 @@ import {
   type AdvanceStatusFilter,
 } from '@/lib/advances/advance-ui'
 import type { AdvanceDto } from '@/lib/advances/types'
-import { fmtDate } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 
 /**
@@ -90,24 +91,7 @@ export function AdvanceTab() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-              {ADVANCE_STATUS_FILTERS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setFilter(item.value)}
-                  aria-pressed={filter === item.value}
-                  className={cn(
-                    'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-                    filter === item.value
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700',
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            <FilterGroup options={ADVANCE_STATUS_FILTERS} value={filter} onChange={setFilter} />
             {canRequestAdvance && (
               <Button size="sm" onClick={() => setFormOpen(true)}>
                 + ขอเงินทดรอง
@@ -192,6 +176,14 @@ export function AdvanceTab() {
                         group={advanceStatusBadgeGroup(advance.status)}
                         label={advanceStatusLabel(advance.status)}
                       />
+                      {/* Rule 05 — action สำคัญต้องเห็นวันเวลาบน list ไม่ใช่ต้องไปขุดใน audit */}
+                      {advance.clearedAt !== null ? (
+                        <p className="mt-1 text-[10px] text-slate-400">เคลียร์ยอด {fmtDateTime(advance.clearedAt)}</p>
+                      ) : (
+                        advance.approvedAt !== null && (
+                          <p className="mt-1 text-[10px] text-slate-400">อนุมัติ {fmtDateTime(advance.approvedAt)}</p>
+                        )
+                      )}
                       {advance.rejectionReason !== null && (
                         <p className="mt-1 max-w-[180px] text-[10px] text-orange-700">
                           เหตุผล: {advance.rejectionReason}

@@ -25,6 +25,7 @@ import {
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
+import { fmtPercent } from '@/lib/format/money'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
 import type { TaxProfileDto } from '@/lib/settings/types'
@@ -353,7 +354,7 @@ export function PayeeTab() {
                     <span className="text-[10px] font-semibold text-amber-600">ยังไม่ผูก Tax Profile</span>
                   ) : (
                     <>
-                      <span className="text-xs font-semibold text-slate-800">{item.whtPct.toFixed(2)}%</span>
+                      <span className="text-xs font-semibold text-slate-800">{fmtPercent(item.whtPct)}</span>
                       <div className="text-[10px] text-slate-500">{item.taxProfileName}</div>
                     </>
                   )}
@@ -476,7 +477,7 @@ export function PayeeTab() {
               <option value="">— ยังไม่ผูก (ใช้อัตราจากแผนค่าตอบแทนชั่วคราว) —</option>
               {taxProfiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>
-                  {profile.name} · {profile.whtPct.toFixed(2)}%
+                  {profile.name} · {fmtPercent(profile.whtPct)}
                 </option>
               ))}
             </Select>

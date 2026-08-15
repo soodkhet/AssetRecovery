@@ -15,16 +15,33 @@ import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
 export interface BillingBatchAmounts {
   totalSatang: number
   receivedSatang: number
+  /**
+   * WHT ที่ **ลูกค้าหักจากเรา** (A1) — ต้องระบุเสมอ (ไม่ optional โดยเจตนา) เพราะเคยมีจุดที่ลืมบวก
+   * แล้วยอดค้างไม่ตรงกับสถานะ `paid` ของบิลเดียวกัน · ไม่มีการหัก ⇒ ส่ง `0`
+   */
+  whtWithheldByCustomerSatang: number
 }
 
 /**
- * `22` §6.11 — `ar_outstanding = total_amount - received_amount`
+ * ยอดที่ถือว่า "ชำระแล้ว" ของรอบวางบิล = เงินที่รับเข้าจริง + WHT ที่ลูกค้าหักไว้ (A1)
+ *
+ * ⚠️ เงินส่วน WHT ไม่ได้เข้าบัญชีเราแต่ไปเป็นเครดิตภาษี ⇒ **ไม่ใช่หนี้ค้าง** ถ้าไม่บวกกลับ ทุกบิล
+ * จะค้างค้างอยู่เท่าอัตรา WHT ตลอดกาล · นิยามนี้ต้องมีที่เดียวเท่านั้น — ทั้งตัวตัดสินสถานะ
+ * (`resolveBillingStatusAfterReceipt`) AR Aging และ KPI แดชบอร์ดต้องใช้ตัวนี้ร่วมกัน
+ */
+export function settledSatang(batch: BillingBatchAmounts): number {
+  assertSatang(batch.receivedSatang, 'ยอดรับชำระแล้ว')
+  assertSatang(batch.whtWithheldByCustomerSatang, 'WHT ที่ลูกค้าหัก')
+  return batch.receivedSatang + batch.whtWithheldByCustomerSatang
+}
+
+/**
+ * `22` §6.11 — `ar_outstanding = total_amount - received_amount` (`received` = `settledSatang()`)
  * ค่าติดลบ = รับเงินเกินยอดบิล (เกิดได้จริงตอนลูกค้าโอนเกิน) — คืนตามจริง ไม่ clamp เพื่อไม่ให้ยอดหาย
  */
 export function arOutstandingSatang(batch: BillingBatchAmounts): number {
   assertSatang(batch.totalSatang, 'ยอดบิลรวม')
-  assertSatang(batch.receivedSatang, 'ยอดรับชำระแล้ว')
-  return batch.totalSatang - batch.receivedSatang
+  return batch.totalSatang - settledSatang(batch)
 }
 
 /**
@@ -48,10 +65,8 @@ export function agingBucketIndex(days: number, buckets: readonly number[]): numb
   return buckets.length
 }
 
-export interface ArAgingRow {
+export interface ArAgingRow extends BillingBatchAmounts {
   dueDate: Date
-  totalSatang: number
-  receivedSatang: number
 }
 
 export interface ArAgingBucket {

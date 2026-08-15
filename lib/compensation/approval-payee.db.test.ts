@@ -56,8 +56,10 @@ const FINANCE_ROLE = 'การเงิน'
 let client: PrismaClient | null = null
 type PayeeQueries = typeof import('@/lib/payees/queries')
 type ApprovalQueries = typeof import('@/lib/compensation/approval-queries')
+type FieldExpenseQueries = typeof import('@/lib/field/expense-queries')
 let payees: PayeeQueries
 let approvals: ApprovalQueries
+let fieldExpenses: FieldExpenseQueries
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -158,6 +160,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = url
   payees = await import('@/lib/payees/queries')
   approvals = await import('@/lib/compensation/approval-queries')
+  fieldExpenses = await import('@/lib/field/expense-queries')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -526,6 +529,31 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     expect(await approvals.listCompensationApprovals(manager, { status: 'all' })).toEqual([])
     await expectCode(
       () => approvals.approveCompensationExpense({ actor: manager, meta }, expenseId, {}),
+      'EXPENSE_NOT_FOUND',
+    )
+  })
+
+  /**
+   * ทางเข้า `POST /api/field/expenses/:id/reject` เขียนค่าชุดเดียวกับ `PATCH /api/compensation/:id/reject`
+   * ⇒ ต้องผ่านยามชุดเดียวกัน ไม่งั้นกลายเป็นประตูหลังของสายอนุมัติทั้งเส้น (พบตอนรีวิว Phase 3)
+   */
+  it('§10/§12 ตีกลับผ่านทางเข้าฝั่ง field ก็ต้องติด scope ทีม + capability ของขั้นเหมือนกัน', async () => {
+    const payeeId = await seedPayee(AGENT_ID)
+    const expenseId = await seedPendingExpense(payeeId)
+    const rejectInput = { reason: 'ใบเสร็จไม่ชัด ขอให้ถ่ายใหม่' }
+    const fieldCtx = { actor: manager, meta }
+
+    // ขั้นที่ 1 เป็นของ Manager และรายการอยู่ในทีมที่ตนดูแล ⇒ ตีกลับได้ตามปกติ
+    const rejected = await fieldExpenses.rejectFieldExpense(manager, expenseId, rejectInput, fieldCtx)
+    expect(rejected.status).toBe('needs_revision')
+
+    // ย้ายงานไปทีมอื่น ⇒ ต้องได้ `EXPENSE_NOT_FOUND` (ไม่ leak) ไม่ใช่ตีกลับสำเร็จ
+    const again = await seedPendingExpense(await seedPayee(AGENT_2_ID))
+    await db().$executeRawUnsafe(
+      `UPDATE case_assignments SET team_id = '${OTHER_TEAM_ID}' WHERE organization_id = '${ORG_ID}'`,
+    )
+    await expectCode(
+      () => fieldExpenses.rejectFieldExpense(manager, again, rejectInput, fieldCtx),
       'EXPENSE_NOT_FOUND',
     )
   })

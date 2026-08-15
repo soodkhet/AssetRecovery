@@ -144,6 +144,22 @@ export function toInputDateTime(input: DateInput | null | undefined, fallback = 
 }
 
 /**
+ * ขอบบน (inclusive) ของ "ทั้งวัน" ตามปฏิทิน**ไทย** สำหรับเทียบกับคอลัมน์ `TIMESTAMPTZ`
+ *
+ * รับวันที่แบบ date-only (เที่ยงคืน **UTC** ของวันนั้น — ผลลัพธ์ของ `dateOnlySchema()`) แล้วคืน
+ * instant สุดท้ายของวันนั้นตามเวลาไทย = `16:59:59.999Z` ของวันเดียวกัน
+ *
+ * ⚠️ **ห้ามใช้ `+24h-1ms` เฉย ๆ** — นั่นคือ `23:59:59.999Z` ซึ่งเท่ากับ **06:59 น. ของวันไทยถัดไป**
+ *    ⇒ รายการที่เกิดเช้าวันถัดไปจะหลุดเข้ามาในรอบตัดยอด (กับดักเดียวกับที่ `lib/reports/cache.ts`
+ *    และ `lib/api/validation.ts` เตือนไว้)
+ */
+export function endOfBangkokDay(dateOnlyUtc: Date): Date {
+  const DAY_MS = 86_400_000
+  const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000
+  return new Date(dateOnlyUtc.getTime() + DAY_MS - BANGKOK_OFFSET_MS - 1)
+}
+
+/**
  * แปลงค่าจาก `<input type="datetime-local">` กลับเป็น instant UTC — ค่าที่กรอกคือ**เวลาไทย**
  * (input ชนิดนี้ไม่มีโซนเวลาในตัว ถ้าปล่อยให้ `new Date()` เดาเองจะกลายเป็นเวลาของเครื่องผู้ใช้)
  */

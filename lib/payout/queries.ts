@@ -4,6 +4,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { endOfBangkokDay } from '@/lib/format/datetime'
 import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
@@ -349,7 +350,9 @@ async function collectAdvanceCandidates(
       deletedAt: null,
       status: { in: ['approved', 'overdue'] },
       payoutBatchItemId: null,
-      approvedAt: { lte: endOfDay(cutoffDate) },
+      // `approved_at` เป็น TIMESTAMPTZ ⇒ ขอบบนต้องเป็นสิ้นวัน**ตามเวลาไทย** ไม่ใช่สิ้นวัน UTC
+      // (ไม่งั้นเงินทดรองที่อนุมัติเช้าวันถัดไปหลุดเข้ารอบตัดยอดไป 7 ชั่วโมง)
+      approvedAt: { lte: endOfBangkokDay(cutoffDate) },
     },
     select: {
       id: true,
@@ -370,7 +373,13 @@ async function collectAdvanceCandidates(
   })
 
   return rows.map((row) => {
-    const grossSatang = row.approvedSatang ?? row.requestedSatang
+    // สถานะ `approved`/`overdue` ต้องมี `approved_satang` เสมอ (`resolveApprovedSatang()` เขียนให้
+    // ตั้งแต่ตอนอนุมัติ) — ถ้า null คือข้อมูลเพี้ยน **ต้องดัง ไม่ใช่เดา**: fallback ไปยอด "ที่ขอ"
+    // จะโอนเกินยอดที่อนุมัติจริงได้ (`approved <= requested` เสมอ)
+    if (row.approvedSatang === null) {
+      throw new Error(`เงินทดรอง ${row.id} สถานะอนุมัติแล้วแต่ไม่มี approved_satang — ข้อมูลไม่สอดคล้อง`)
+    }
+    const grossSatang = row.approvedSatang
     return {
       source: 'advance',
       sourceId: row.id,
@@ -389,11 +398,6 @@ async function collectAdvanceCandidates(
       whtPctSnapshot: 0,
     }
   })
-}
-
-/** `approved_at` เป็น TIMESTAMPTZ ⇒ วันตัดรอบต้องครอบทั้งวัน (เทียบกับเที่ยงคืน UTC ของวันถัดไป) */
-function endOfDay(date: Date): Date {
-  return new Date(date.getTime() + 86_400_000 - 1)
 }
 
 export async function createPayoutBatch(

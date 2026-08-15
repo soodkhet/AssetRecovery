@@ -18,12 +18,17 @@ import { financeCompanyErrorStatus, FINANCE_COMPANY_ERROR_CODES } from '@/lib/fi
 import { financeErrorStatus, FINANCE_ERROR_CODES } from '@/lib/finance/errors'
 import { payeeErrorStatus, PAYEE_ERROR_CODES } from '@/lib/payees/errors'
 import { adjustmentErrorStatus, ADJUSTMENT_ERROR_CODES } from '@/lib/adjustments/errors'
+import { advanceErrorStatus, ADVANCE_ERROR_CODES } from '@/lib/advances/errors'
+import { revenueErrorStatus, REVENUE_ERROR_CODES } from '@/lib/revenue/errors'
+import { reportErrorStatus, REPORT_ERROR_CODES } from '@/lib/reports/errors'
 import { payoutErrorStatus, PAYOUT_ERROR_CODES } from '@/lib/payout/errors'
 import { roleErrorStatus, ROLE_ERROR_CODES } from '@/lib/roles/errors'
 import { serviceFeeErrorStatus, SERVICE_FEE_ERROR_CODES } from '@/lib/service-fee/errors'
 import { settingsErrorStatus, SETTINGS_ERROR_CODES } from '@/lib/settings/errors'
 import { teamErrorStatus, TEAM_ERROR_CODES } from '@/lib/teams/errors'
 import { userErrorStatus, USER_ERROR_CODES } from '@/lib/users/errors'
+import { warehouseErrorStatus, WAREHOUSE_ERROR_CODES } from '@/lib/warehouse/errors'
+import { fieldErrorStatus, FIELD_ERROR_CODES } from '@/lib/field/errors'
 
 /**
  * Catalog ต้องตรงกับเอกสารทั้งสองทาง (Rule 04):
@@ -129,12 +134,33 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['finance-companies', FINANCE_COMPANY_ERROR_CODES, financeCompanyErrorStatus as (code: never) => number],
   ['finance', FINANCE_ERROR_CODES, financeErrorStatus as (code: never) => number],
   ['adjustments', ADJUSTMENT_ERROR_CODES, adjustmentErrorStatus as (code: never) => number],
+  ['advances', ADVANCE_ERROR_CODES, advanceErrorStatus as (code: never) => number],
+  ['revenue', REVENUE_ERROR_CODES, revenueErrorStatus as (code: never) => number],
+  ['reports', REPORT_ERROR_CODES, reportErrorStatus as (code: never) => number],
   ['payees', PAYEE_ERROR_CODES, payeeErrorStatus as (code: never) => number],
   ['payout', PAYOUT_ERROR_CODES, payoutErrorStatus as (code: never) => number],
   ['settings', SETTINGS_ERROR_CODES, settingsErrorStatus as (code: never) => number],
   ['cases', CASE_ERROR_CODES, caseErrorStatus as (code: never) => number],
   ['assignments', ASSIGNMENT_ERROR_CODES, assignmentErrorStatus as (code: never) => number],
+  ['warehouse', WAREHOUSE_ERROR_CODES, warehouseErrorStatus as (code: never) => number],
+  ['field', FIELD_ERROR_CODES, fieldErrorStatus as (code: never) => number],
 ]
+
+/**
+ * ยามของยามอีกที — โมดูลใหม่ที่ประกาศ `*_ERROR_CODES` แล้วลืมต่อเข้า `MODULE_STATUS` จะไม่มีอะไร
+ * ตรวจ status ของมันเลย (ช่องโหว่ที่พบตอนรีวิว Phase 3: `advances`/`revenue`/`reports` หลุดไป 3 เฟส)
+ */
+describe('ทุกโมดูลที่มี errors.ts ถูกต่อเข้าการตรวจ status', () => {
+  it('ไม่มีโมดูลไหนตกสำรวจ', async () => {
+    const { globSync } = await import('node:fs')
+    const root = fileURLToPath(new URL('../../', import.meta.url))
+    const modules = globSync('lib/*/errors.ts', { cwd: root })
+      .map((path) => path.split('/')[1])
+      .filter((name) => name !== 'api')
+      .sort()
+    expect(modules).toEqual([...MODULE_STATUS.map(([name]) => name)].sort())
+  })
+})
 
 describe('status ของโมดูลที่มีอยู่แล้ว', () => {
   it.each(MODULE_STATUS)('โมดูล %s ใช้ status ตรงกับทะเบียน', (_name, codes, statusOf) => {
