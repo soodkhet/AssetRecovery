@@ -177,10 +177,18 @@ async function setNumbering(
 async function lockPeriodOf(period: string): Promise<void> {
   const [month = '', yearText = ''] = period.split(' ')
   const monthIndex = MONTHS.indexOf(month as (typeof MONTHS)[number]) + 1
-  await db().$executeRawUnsafe(`
-    UPDATE accounting_periods SET status = 'locked'
-    WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
-  `)
+  const tx = db()
+  // งวดที่ `locked` อยู่แล้ว (ของค้างจากรอบรันก่อน) ถูก trigger แช่แข็ง (`02` §13)
+  // — fixture ต้องล็อกซ้ำได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
+  try {
+    await tx.$executeRawUnsafe(`
+      UPDATE accounting_periods SET status = 'locked'
+      WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
+    `)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
+  }
 }
 
 beforeAll(async () => {

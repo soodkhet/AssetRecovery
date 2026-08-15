@@ -222,19 +222,27 @@ async function seedRevenue(): Promise<void> {
 async function resetOrgData(): Promise<void> {
   storage.clear()
   const tx = db()
-  for (const statement of [
-    `DELETE FROM export_records WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
-  ]) {
-    await tx.$executeRawUnsafe(statement)
+  // ชุดส่งสำนักงานบัญชี + ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE export_records DISABLE TRIGGER trg_export_records_no_delete`)
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
+  try {
+    for (const statement of [
+      `DELETE FROM export_records WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
+    ]) {
+      await tx.$executeRawUnsafe(statement)
+    }
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
+    await tx.$executeRawUnsafe(`ALTER TABLE export_records ENABLE TRIGGER trg_export_records_no_delete`)
   }
 }
 
