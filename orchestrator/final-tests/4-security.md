@@ -9,6 +9,7 @@
 5. **Audit:** ทุก mutation ลงครบ 9 fields · `reason` บังคับเมื่อกระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period · **UPDATE/DELETE ถูกปฏิเสธที่ระดับ DB** (ลองยิงจริง) · login/logout/failed login ลงครบ
 6. **Multi-tenant:** ทุก query กรอง `organization_id` · ไล่หา query ที่ลืมกรอง (list, detail, export, report, count/aggregate) — aggregate ที่ลืมกรองคือจุดรั่วที่หาเจอยากที่สุด
 7. **Client Portal:** `/api/portal/*` = **GET เท่านั้น** · ผูก `company_id` จาก session ห้ามรับจาก query param
+   — ⏸️ **ยังไม่มีของให้ตรวจ**: Phase 7 ถูกบล็อกด้วยคำตอบ PO (Auth method — `97` §22 #2) ยังไม่มีโค้ดใต้ `/api/portal` เลย ⇒ ข้อนี้เปิดตรวจเมื่อ Phase 7 เกิดจริง (ข้อ 6 ของด่าน 5 เช่นกัน)
 8. **Session/Auth:** session 24 ชม. ตาม `05` · route guard ครบ · service_role key ไม่ถูก import เข้าโค้ดฝั่ง client (grep `SUPABASE_SERVICE_ROLE_KEY` ใน bundle)
 
 รายงานตาราง `| หัวข้อ | สถานะ | หลักฐาน (ไฟล์/เทสต์) |` แล้วแก้จุดที่ ❌ พร้อม test ที่พิสูจน์
