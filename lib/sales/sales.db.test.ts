@@ -174,21 +174,25 @@ async function setNumbering(
   `)
 }
 
-async function lockPeriodOf(period: string): Promise<void> {
+async function setPeriodStatusOf(period: string, status: 'locked' | 'collecting'): Promise<void> {
   const [month = '', yearText = ''] = period.split(' ')
   const monthIndex = MONTHS.indexOf(month as (typeof MONTHS)[number]) + 1
   const tx = db()
   // งวดที่ `locked` อยู่แล้ว (ของค้างจากรอบรันก่อน) ถูก trigger แช่แข็ง (`02` §13)
-  // — fixture ต้องล็อกซ้ำได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  // — fixture ต้องล็อก/ปลดซ้ำได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
   await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
   try {
     await tx.$executeRawUnsafe(`
-      UPDATE accounting_periods SET status = 'locked'
+      UPDATE accounting_periods SET status = '${status}'
       WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
     `)
   } finally {
     await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
   }
+}
+
+async function lockPeriodOf(period: string): Promise<void> {
+  await setPeriodStatusOf(period, 'locked')
 }
 
 beforeAll(async () => {
@@ -406,6 +410,9 @@ suite('Phase 4.3 — ออก/ยกเลิกใบกำกับภาษ�
   })
 
   it('โหมด yearly_reset ข้ามปี ⇒ กลับไปเริ่ม 0001 พร้อม prefix ปี พ.ศ. ใหม่ (`31` §16)', async () => {
+    // งวดของรันก่อน ๆ ค้าง `locked` ได้ (เทสต์ period lock ล็อกงวดตามลำดับ `monthCursor` ที่ขยับ
+    // ทุกครั้งที่มีเทสต์ใหม่) และงวดที่ล็อกแล้วปลดเองไม่ได้ ⇒ เปิดงวดของเทสต์นี้ให้ชัดเจนก่อน
+    await setPeriodStatusOf('มกราคม 2570', 'collecting')
     await setNumbering({ seq: 37, mode: 'yearly_reset', lastResetYear: 2569 })
     const batch = await seedBilling({ status: 'sent' })
     const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
