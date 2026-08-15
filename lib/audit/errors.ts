@@ -3,7 +3,12 @@
  * ⚠️ ห้ามตั้ง code ใหม่ที่นี่โดยไม่เพิ่มลงไฟล์ 24 ใน commit เดียวกัน (Rule 04)
  */
 
-export const AUDIT_ERROR_CODES = ['AUDIT_REASON_REQUIRED', 'AUDIT_IMMUTABLE', 'REQUIRED_MISSING'] as const
+export const AUDIT_ERROR_CODES = [
+  'AUDIT_REASON_REQUIRED',
+  'AUDIT_IMMUTABLE',
+  'AUDIT_LOG_NOT_FOUND',
+  'REQUIRED_MISSING',
+] as const
 
 export type AuditErrorCode = (typeof AUDIT_ERROR_CODES)[number]
 
@@ -11,6 +16,7 @@ export type AuditErrorCode = (typeof AUDIT_ERROR_CODES)[number]
 const HTTP_STATUS: Record<AuditErrorCode, number> = {
   AUDIT_REASON_REQUIRED: 400,
   AUDIT_IMMUTABLE: 403,
+  AUDIT_LOG_NOT_FOUND: 404,
   REQUIRED_MISSING: 400,
 }
 
@@ -24,6 +30,11 @@ const MESSAGES: Record<AuditErrorCode, { title: string; message: string }> = {
   AUDIT_IMMUTABLE: {
     title: 'แก้ไข Audit Log ไม่ได้',
     message: 'ประวัติการใช้งาน (Audit Log) ห้ามแก้ไขหรือลบย้อนหลังทุกกรณี',
+  },
+  /** ไม่มีจริง กับ อยู่คนละองค์กร ตอบเหมือนกันเสมอ — ไม่บอกใบ้ว่ามีรายการนั้นอยู่ */
+  AUDIT_LOG_NOT_FOUND: {
+    title: 'ไม่พบรายการ',
+    message: 'ไม่พบรายการบันทึกการใช้งานที่ต้องการ',
   },
 }
 

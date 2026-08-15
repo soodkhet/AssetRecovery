@@ -76,6 +76,7 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'reject_asset_intake', label: 'ปฏิเสธการรับเข้าคลัง', module: 'warehouse', functionalGroup: null, description: 'ไฟล์ 44' },
   { code: 'create_handover_lot', label: 'สร้างล็อตส่งมอบ', module: 'warehouse', functionalGroup: null, description: 'ไฟล์ 44 — 1 lot = 1 บริษัทไฟแนนซ์' },
   { code: 'confirm_handover_lot', label: 'ยืนยันส่งมอบล็อต', module: 'warehouse', functionalGroup: null, description: 'ไฟล์ 44 §11 — transaction 4 ขั้น + trigger Revenue' },
+  { code: 'view_audit_log', label: 'ดูบันทึกการใช้งาน (Audit Log)', module: 'platform', functionalGroup: null, description: '`90` §12 "View audit" — Superadmin/บริหาร/บัญชี/การเงิน · อ่านอย่างเดียวเสมอ (`90` §8/§10)' },
 ]
 
 /** capability ที่อยู่ใน Functional Permission Matrix (`13` §6.10 — ต้องเท่ากับ 37 เสมอ) */

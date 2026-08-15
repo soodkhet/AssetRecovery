@@ -1,18 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 5.1 (Notification Service idempotent + ศูนย์แจ้งเตือน: กระดิ่งกลาง + หน้า `/notifications` + API 3 endpoint) · งานถัดไป 5.2 (Event wiring ทุกโมดูล + Audit Log UI)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 5.2 (ต่อ event ทุกโมดูลเข้าการแจ้งเตือน + หน้าบันทึกการใช้งาน `/settings/audit-logs`) · งานถัดไป 5.3 (Job Engine + Handlers + Job Log)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 5.2: Event wiring ทุกโมดูล + Audit Log UI
+## 🎯 งานถัดไป — Phase 5.3: Background Job Engine + Handlers + Job Log
 
-- ทำตาม `docs/01_PLAN.md` §5.2 — ผูก event ทั้ง 9 กลุ่มของ `90` §6.3 เข้า notification (Case/Assignment/Field/Warehouse/Finance/Payout/WHT/Exception): grep ว่าโค้ด Phase 2–4 emit จริงหรือยัง แล้วเติมที่ขาด
-- ⚠️ ท่อพร้อมแล้วจาก 5.1 — เรียก `notifyUsers()` ด้วย `eventCode` จากแค็ตตาล็อก `lib/notifications/events.ts` + **ส่ง `dedupeKey` ทุกจุดที่ผู้เรียกเป็น job/consumer** · code ใน `NOTIFICATION_ONLY_EVENTS` ต้องถูกย้ายเข้าทะเบียน `lib/api/event-names.ts` (+ `45` §7/ไฟล์ต้นทาง) พร้อมกับที่โมดูล emit จริง
-- **Audit Log UI**: query API (filter target/actor/date ตาม permission scope) + FE ตาราง read-only + detail drawer (before/after JSON diff)
-- อ้างอิง: `90` §6.3, §8, §14 · โค้ด event ที่มีอยู่ (grep)
-- LOC ~1,550 · งบ ~280k
+- ทำตาม `docs/01_PLAN.md` §5.3 — job engine: queue abstraction + idempotency store + state machine `pending→running→completed|failed` + retry/backoff + `dead_letter` derive จาก `retry_count ≥ max` (**manual retry = Superadmin เท่านั้น**) · `JOB_DUPLICATE` คืน job เดิม
+- API + dev trigger (`/api/dev/trigger-job` — **404 ใน production**, จำกัด job_type 5 ตัวรวม `advance_overdue`) · wiring Vercel Cron/QStash
+- ⚠️ handler ที่ **มีอยู่แล้ว** ต้องยกเข้า engine เดียว ห้ามเขียนใหม่: `lib/assignments/timeout-job.ts` (reassign_timeout) · `lib/advances/overdue-job.ts` (advance_overdue) · `lib/wht/filing-reminder-job.ts` (wht_filing_reminder — เกิดที่ 5.2) · export pack (`lib/exports/*`) · bank file (`lib/payout/*`)
+- output ของ job ต้อง versioned + hash (ห้ามเขียนทับ) · FE: Job Log (list/filter/detail/retry/download)
+- อ้างอิง: `91` ทั้งไฟล์ · `01` §11
+- LOC ~2,400 · งบ ~350k
+
 
 ---
 
@@ -91,7 +93,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 5.1 | Notification Service + Notification Center | ✅ | 2026-08-15 · `fbc275c` · service idempotent (UUIDv5 = id ไม่แตะ schema) + แค็ตตาล็อก event `90` §6.3 + API 3 endpoint + กระดิ่งกลางใช้ร่วม App/Field + หน้า `/notifications` → archive |
-| 5.2 | Event wiring ทุกโมดูล + Audit Log UI | ⬜ | PLAN §5.2 |
+| 5.2 | Event wiring ทุกโมดูล + Audit Log UI | ✅ | 2026-08-15 · `c184aa7`+`<pending>` · ต่อ event 9 กลุ่มเข้าการแจ้งเตือน (เหลือ 2 code ที่สคีมายังไม่รองรับ) + job เตือนยื่น WHT + หน้า `/settings/audit-logs` (capability `view_audit_log`) → archive |
 | 5.3 | Job Engine + Handlers + Job Log | ⬜ | PLAN §5.3 · dev trigger 404 ใน prod |
 
 ## Phase 6 — Reports (ไฟล์ 96) + แดชบอร์ดหลัก

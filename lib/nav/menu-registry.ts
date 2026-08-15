@@ -227,6 +227,17 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         audiences: ['superadmin', 'executive'],
         available: true,
       },
+      // `06` §9 — "ตั้งค่าทั่วไป" รวม `auditlog` (mockup `settings.html` แท็บสุดท้าย) · Phase 5.2
+      // ⚠️ `90` §12 ให้บัญชี/การเงินดู audit ได้ด้วย (capability `view_audit_log`) แต่ `06` §7.2
+      // ไม่ให้สอง role นี้เห็นเมนู "การตั้งค่า" — คงตาม `06` เหมือนกรณีธุรการที่ `settings.users`
+      // (สิทธิ์ที่ API ยังมีจริง เข้าถึงได้ตรงลิงก์ · เมนูไม่ใช่ security boundary — DEC-002)
+      {
+        id: 'settings.audit-logs',
+        label: 'บันทึกการใช้งาน (Audit Log)',
+        path: '/settings/audit-logs',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
     ],
   },
 ]
