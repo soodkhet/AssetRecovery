@@ -1430,8 +1430,8 @@ model Case {
   revenues       Revenue[]
 
   @@unique([organizationId, companyId, caseRef, trackingRound])
-  @@index([organizationId, status], map: "idx_cases_org_status")
-  @@index([organizationId, companyId], map: "idx_cases_org_company")
+  @@index([organizationId, status, closedAt], map: "idx_cases_org_status_closed_at")
+  @@index([organizationId, createdAt], map: "idx_cases_org_created_at")
   @@index([organizationId, assignedTeamId], map: "idx_cases_org_team")
   @@index([organizationId, outcome, closedAt], map: "idx_cases_closed")
   @@map("cases")
@@ -1576,6 +1576,7 @@ model CaseAssignment {
   closeCaseDraft       CloseCaseDraft?
 
   @@index([caseId, status], map: "idx_assignments_case")
+  @@index([organizationId, createdAt], map: "idx_assignments_org_created")
   @@index([agentId, status], map: "idx_assignments_agent")
   @@index([agentId, scheduledDate, scheduleOrder], map: "idx_assignments_agent_schedule")
   @@map("case_assignments")
@@ -2057,7 +2058,7 @@ model Expense {
   payoutItems PayoutBatchItem[]
   adjustments Adjustment[]
 
-  @@index([organizationId, status], map: "idx_expenses_org_status")
+  @@index([organizationId, status, expenseDate], map: "idx_expenses_org_status_date")
   @@index([caseId, status], map: "idx_expenses_case")
   @@index([payeeId, status], map: "idx_expenses_payee")
   /// สรุปรายได้/รายการเบิกของพนักงานตามเดือน (`41` §7.9/§7.10)
@@ -2187,7 +2188,7 @@ model PayoutBatchItem {
 
   @@unique([payoutBatchId, expenseId])
   @@unique([payoutBatchId, advanceId])
-  @@index([payoutBatchId], map: "idx_pbi_batch")
+  @@index([organizationId, expenseId], map: "idx_pbi_org_expense")
   @@index([expenseId], map: "idx_pbi_expense")
   @@map("payout_batch_items")
 }
@@ -2230,6 +2231,7 @@ model Revenue {
   adjustments Adjustment[]
 
   @@index([organizationId, status], map: "idx_revenues_org_status")
+  @@index([organizationId, revenueDate], map: "idx_revenues_org_revenue_date")
   @@index([companyId, status], map: "idx_revenues_company")
   @@index([caseId], map: "idx_revenues_case")
   @@map("revenues")
@@ -2414,6 +2416,7 @@ model TaxInvoice {
   createdByUser   User         @relation("tax_invoices_created_by", fields: [createdBy], references: [id])
 
   @@index([organizationId, status], map: "idx_tax_invoices_org")
+  @@index([organizationId, invoiceDate], map: "idx_tax_invoices_org_invoice_date")
   @@map("tax_invoices")
 }
 
@@ -2570,6 +2573,7 @@ model Exception {
   updatedByUser    User?            @relation("exceptions_updated_by", fields: [updatedBy], references: [id])
 
   @@index([periodId, level, status], map: "idx_exceptions_period")
+  @@index([organizationId, status, createdAt], map: "idx_exceptions_org_status_created")
   @@map("exceptions")
 }
 
