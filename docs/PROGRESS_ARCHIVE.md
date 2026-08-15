@@ -7,7 +7,7 @@
 
 ## Phase 5.2 — Event Wiring ทุกโมดูล + Audit Log UI
 
-**วันที่**: 2026-08-15 · **commit**: `c184aa7` (event wiring) + `<audit-ui>` · **branch**: `auto/phase-5.2`
+**วันที่**: 2026-08-15 · **commit**: `c184aa7` (event wiring) + `984248d` (Audit Log UI) · **branch**: `auto/phase-5.2`
 
 ### สิ่งที่ทำ — ก้อนที่ 1: ต่อ event เข้าการแจ้งเตือน (`90` §6.3)
 

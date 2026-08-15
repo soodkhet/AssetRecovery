@@ -93,7 +93,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 5.1 | Notification Service + Notification Center | ✅ | 2026-08-15 · `fbc275c` · service idempotent (UUIDv5 = id ไม่แตะ schema) + แค็ตตาล็อก event `90` §6.3 + API 3 endpoint + กระดิ่งกลางใช้ร่วม App/Field + หน้า `/notifications` → archive |
-| 5.2 | Event wiring ทุกโมดูล + Audit Log UI | ✅ | 2026-08-15 · `c184aa7`+`<pending>` · ต่อ event 9 กลุ่มเข้าการแจ้งเตือน (เหลือ 2 code ที่สคีมายังไม่รองรับ) + job เตือนยื่น WHT + หน้า `/settings/audit-logs` (capability `view_audit_log`) → archive |
+| 5.2 | Event wiring ทุกโมดูล + Audit Log UI | ✅ | 2026-08-15 · `c184aa7`+`984248d` · ต่อ event 9 กลุ่มเข้าการแจ้งเตือน (เหลือ 2 code ที่สคีมายังไม่รองรับ) + job เตือนยื่น WHT + หน้า `/settings/audit-logs` (capability `view_audit_log`) → archive |
 | 5.3 | Job Engine + Handlers + Job Log | ⬜ | PLAN §5.3 · dev trigger 404 ใน prod |
 
 ## Phase 6 — Reports (ไฟล์ 96) + แดชบอร์ดหลัก
