@@ -1,21 +1,25 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 8.1 (E2E Acceptance Tests: 5 scenario ของไฟล์ `29` + Integration Checklist 9 จุด + เงินทดรอง 5 สถานะ ที่ `tests/acceptance/*.db.test.ts` เดินผ่าน service จริงทุกก้าว) — ไม่มี migration ใหม่ · งานถัดไป 8.2 (Consistency Sweep + Hardening — 6.6/Phase 7 ยังบล็อกด้วยคำตอบ PO)
+**อัปเดตล่าสุด:** 2026-08-16 — ปิด Phase 8.2 (Consistency Sweep + Hardening: กวาด 5 แกนครบ — ปิดช่องเสี่ยง**โอนซ้ำ**ของไฟล์โอน, Export pack ที่ล็อกรอบตัวเองถาวร, **เงินเข้าถูกนับซ้ำ**ตอนนำเข้า statement พร้อมกัน, ร่องรอย export ที่หายทั้งเส้น, job เขียนสถานะทับเจ้าของงาน + ยาม scope ระดับองค์กร 5 โมดูล + trigger immutable ครบ `02` §13 + index รายงาน 8 ตัว) — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · งานถัดไป 8.3 (Final Test ทั้งระบบ)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 8.2: Consistency Sweep + Hardening
+## 🎯 งานถัดไป — Phase 8.3: Final Test ทั้งระบบ (ด่านของ orchestrator)
 
-> 6.6 (แดชบอร์ดหลัก) และ Phase 7 (Client Portal) ยัง **บล็อกด้วยคำตอบ PO** (spec `dashboard.html` เป็น DRAFT · Auth method ของ Portal — `97` §22 #2) ⇒ งานที่เดินต่อได้จริงคือ 8.2
+> 6.6 (แดชบอร์ดหลัก) และ Phase 7 (Client Portal) ยัง **บล็อกด้วยคำตอบ PO** (spec `dashboard.html` เป็น DRAFT · Auth method ของ Portal — `97` §22 #2) ⇒ งานที่เดินต่อได้จริงคือ 8.3
 
-- ทำตาม `docs/01_PLAN.md` §8.2 — กวาดเทียบ implementation ↔ mockup ↔ spec ทุกโมดูล (ใช้ subagent อ่านในหน้าต่างของมันแล้วส่งข้อสรุปกลับ ห้ามลากไฟล์ใหญ่เข้า context หลัก)
-- ตรวจ cross-cutting 5 แกน: เงิน satang ทุกจุด (ห้าม float/คำนวณฝั่ง display) / วันที่ พ.ศ. ทุกจุด (`fmtDate`/`fmtDateTime` — ค.ศ. บนจอ = bug) / RBAC ครบทุก role + scope ย่อย / audit ครบ 9 fields + `reason` ตามนโยบาย / idempotency (payout key · job · export version + SHA-256)
-- แก้จุดที่พบในก้อนงานเดียวกัน — จุดที่กระทบเงิน/สิทธิ์ต้องมีเทสต์คุมด้วยเสมอ (Rule 07)
-- index profiling เบื้องต้นของ query ที่ join หนัก (แดชบอร์ด/รายงาน F·O·A·E) — เพิ่ม index ผ่าน migration เท่านั้น
-- อ้างอิง: `docs/REUSE_INDEX.md` (ของที่มีแล้ว + กับดัก) · `04` §8.1 · `25` · `90` · reference กลาง 22/23/24/27/45
-- งบ ~350k
+- ทำตาม `docs/01_PLAN.md` §8.3 — เขียน/ปรับ `orchestrator/final-tests/*.md` ให้ครอบระบบจริง แล้วรัน Final Test ผ่านทุกด่าน + แก้จุดที่พัง
+- แนวด่าน 5 กลุ่ม: การเงิน E2E / Security + สิทธิ์ / Portal / ความทนทาน + jobs / UI ครบทุกเมนู
+- ⚠️ ต้องรัน `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` ก่อน — 8.2 เพิ่ม migration ใหม่ 2 ตัว (`20260816001500_report_query_indexes`, `20260816010000_bank_transaction_dedupe`)
+- อ้างอิง: `29` (acceptance) · `docs/REUSE_INDEX.md` · reference กลาง 23/24/25
+- งบ ~400k
+
+### หนี้ที่ 8.2 ตรวจเจอแต่ **ไม่ได้แก้** (ต้องมีมติก่อน — ห้ามแก้เงียบ ๆ)
+
+1. **เอกสารล็อตส่งมอบเขียนทับได้ ไม่มี hash** — `lib/warehouse/upload-client.ts` ใช้ `upsert: true` + path ตายตัวต่อชนิดเอกสาร ซึ่ง **`44` §6.4 สั่งไว้อย่างนั้นจริง** ("1 ล็อต = 1 ไฟล์ต่อชนิด แนบใหม่ = ทับไฟล์เดิม") · ปัญหาคืออัปโหลดวิ่งจาก browser เข้า Supabase Storage **ตรง ๆ ไม่ผ่าน API ของเรา** ⇒ ไม่มีชั้นตรวจว่าล็อต `confirmed` ไปแล้ว (trigger `02` §13 คุมแค่แถวใน DB ไม่ใช่ไฟล์) และไม่เก็บ SHA-256 เลย ต่างจากเอกสารเคสที่มี `fileHash` + `upsert: false` · แก้ให้ถูกต้องต้องเลือกระหว่าง **(ก)** แก้ `44` §6.4 ให้ path ต่อเวอร์ชัน + เก็บ hash หรือ **(ข)** ย้ายอัปโหลดไปหลังบ้านให้ตรวจสถานะล็อตก่อน — ทั้งคู่กระทบ spec/design ⇒ ต้องมีมติ PO
+2. **แจ้งเตือนของ job หายถาวรเมื่อ dispatch ล้ม** — `lib/assignments/timeout-job.ts` / `lib/advances/overdue-job.ts` `await dispatchNotificationAwaited()` **นอก** tx และไม่มี try/catch ⇒ dispatch ล้มหลัง commit = job ล้มทั้งที่สถานะเปลี่ยนไปแล้ว และรอบหน้าไม่หยิบซ้ำ (เป็น at-most-once) · แก้ให้ถูกต้องต้องมี **outbox table** ซึ่งเป็น architecture ⇒ ต้องมี DEC ใหม่ (โปรเจกต์ยังไม่มี event bus/outbox เลย — `lib/notifications/events.ts` เป็นแค่แค็ตตาล็อกรหัส)
 
 ---
 
@@ -121,7 +125,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ✅ | 2026-08-15 · `7c8fbd4` · `tests/acceptance/*.db.test.ts` 3 ไฟล์ (รายรับ/รายจ่าย+เงินทดรอง/ปิดงวด+Adjustment) เดินผ่าน service จริงทุกก้าว + Checklist `29` §7 ครบ 9 จุด → archive |
-| 8.2 | Consistency Sweep + Hardening | ⬜ | PLAN §8.2 |
+| 8.2 | Consistency Sweep + Hardening | ✅ | 2026-08-16 · `0ae328c`+`91de430`+`32b71ff`+`0d743f9`+`b69a6b2`+`9bd34bc`+`c98f9a7`+`05cd29f` · กวาด 5 แกน (เงิน/วันที่ · RBAC · audit · idempotency · index) — ปิดช่องโอนซ้ำของไฟล์โอน, Export pack ล็อกรอบตัวเองถาวร, เงินเข้าถูกนับซ้ำตอนนำเข้า statement พร้อมกัน + ยาม scope 5 โมดูล + trigger immutable ครบ `02` §13 → archive |
 | 8.3 | Final Test ทั้งระบบ (ด่าน orchestrator) | ⬜ | PLAN §8.3 |
 
 ---
