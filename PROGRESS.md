@@ -90,7 +90,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 5.1 | Notification Service + Notification Center | ✅ | 2026-08-15 · `PENDING` · service idempotent (UUIDv5 = id ไม่แตะ schema) + แค็ตตาล็อก event `90` §6.3 + API 3 endpoint + กระดิ่งกลางใช้ร่วม App/Field + หน้า `/notifications` → archive |
+| 5.1 | Notification Service + Notification Center | ✅ | 2026-08-15 · `fbc275c` · service idempotent (UUIDv5 = id ไม่แตะ schema) + แค็ตตาล็อก event `90` §6.3 + API 3 endpoint + กระดิ่งกลางใช้ร่วม App/Field + หน้า `/notifications` → archive |
 | 5.2 | Event wiring ทุกโมดูล + Audit Log UI | ⬜ | PLAN §5.2 |
 | 5.3 | Job Engine + Handlers + Job Log | ⬜ | PLAN §5.3 · dev trigger 404 ใน prod |
 

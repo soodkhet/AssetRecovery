@@ -7,7 +7,7 @@
 
 ## Phase 5.1 — Notification Service + Notification Center
 
-**วันที่**: 2026-08-15 · **commit**: `PENDING` · **branch**: `auto/phase-5.1`
+**วันที่**: 2026-08-15 · **commit**: `fbc275c` · **branch**: `auto/phase-5.1`
 
 ### สิ่งที่ทำ
 
