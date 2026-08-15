@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **เติม endpoint §6.4**: `PATCH /api/advances/:id/approve` และ `PATCH /api/advances/:id/reject` ที่ตกหล่นจากไฟล์ 15 v2 (แยก approve/reject ออกจาก settle ชัดเจนตาม state machine 5 สถานะใหม่) — Reformat header ตามมาตรฐานเอกสารชุดใหม่ |
 | v3 | 04/07/2569 | **Sync endpoint กับไฟล์ต้นทางหลังการแก้ Batch 5**: (1) §6.8 เติม `PATCH /api/adjustments/:id/reject` — state machine (ไฟล์ 23 §6.9) มี `pending_approval → rejected` และ schema มี `rejection_reason` อยู่แล้ว แต่ไม่เคยมี endpoint รองรับ (2) §6.13 เติม `PATCH /api/exceptions/:id/resolve` ตามไฟล์ 34 §14 (3) §6.14 เติม `PATCH /api/bank-reconciliation/transactions/:id/resolve-unmatched` ตามไฟล์ 35 v2 (รองรับ state `unmatched_resolved` ที่เพิ่มใน Batch 5) — ทั้งหมดเป็นการรวบรวมจากไฟล์ต้นทาง/state machine ที่มีอยู่แล้ว ไม่ใช่ business logic ใหม่ |
 | v3.1 | 04/07/2569 | **เติม §6.12**: `PATCH /api/accounting/wht-certificates/:id/cancel` ตามไฟล์ 33 v3 (DEC-006/D4) |
+| v3.2 | 15/08/2569 | **เติม §6.6** (Phase 3.4 — Payout Batch `17`): `GET /api/payout-batches/:id` (ปุ่ม "ดู" ของตารางรอบจ่าย `17` §8 ต้องมีรายละเอียด+รายการในรอบ) และ `GET /api/payout-batches/:id/payment-file` (ไฟล์โอนเก็บใน bucket private ⇒ ดาวน์โหลดต้องผ่าน endpoint ที่ตรวจ `generate_payment_file` ทุกครั้ง ห้ามแจก signed URL) — เป็น endpoint ที่ flow ใน `17` §8/§9 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -103,8 +104,10 @@ PATCH  /api/compensation/:id/reject
 
 ```
 GET    /api/payout-batches
+GET    /api/payout-batches/:id                          (v3.2 — รายละเอียด + รายการในรอบ)
 POST   /api/payout-batches
 POST   /api/payout-batches/:id/generate-payment-file
+GET    /api/payout-batches/:id/payment-file             (v3.2 — ดาวน์โหลดไฟล์โอนล่าสุด)
 PATCH  /api/payout-batches/:id/complete
 ```
 
