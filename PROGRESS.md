@@ -84,7 +84,7 @@
 | 4.2 | Bank Reconciliation | ✅ | 2026-08-15 · `1b2adeb` · import statement + auto-match (candidate เดียว) + trigger 2 ทาง (Cash Receipt/payout completed) + แท็บกระทบยอด · เทสต์ pure 79 + DB 16 → archive |
 | 4.3 | Sales & Receipts + Tax Invoice + PDF | ✅ | 2026-08-15 · `ecde0e8` · sales sync 1:1 จากการส่งบิล + ใบกำกับภาษี auto-number ไม่ gap (FOR UPDATE ในทรานแซกชันเดียวกับ insert) + trigger immutable + `TaxInvoicePDF` · เทสต์ pure 18 + route 9 + DB 10 → archive |
 | 4.4 | Accounting Expenses + Accountant Questions | ✅ | 2026-08-15 · `1f3d525` · sync เฉพาะ payout ที่จ่ายจริง + เอกสารไม่ครบขึ้น exception เอง + map cost center (manual) + ข้อซักถามครบวงจร · เทสต์ pure 24 + route 9 + DB 12 → archive |
-| 4.5 | WHT Data + ใบ 50 ทวิ PDF | ✅ | 2026-08-15 · `__COMMIT__` · ออกใบอัตโนมัติจากรอบจ่ายที่จ่ายจริง + ยกเลิก/ออกใบแทน trace 2 ทาง + ใบ cancelled ไม่นับยอด + ใบ 50 ทวิ PDF · เทสต์ pure 18 + route 9 + DB 13 → archive |
+| 4.5 | WHT Data + ใบ 50 ทวิ PDF | ✅ | 2026-08-15 · `3fb2f75` · ออกใบอัตโนมัติจากรอบจ่ายที่จ่ายจริง + ยกเลิก/ออกใบแทน trace 2 ทาง + ใบ cancelled ไม่นับยอด + ใบ 50 ทวิ PDF · เทสต์ pure 18 + route 9 + DB 13 → archive |
 | 4.6 | Accounting Pack Export (8 ไฟล์ + SHA-256) | ⬜ | PLAN §4.6 · เทียบ samples 01–08 |
 | 4.7 | Accounting FE ที่เหลือ (shell/periods/exceptions/sales) | ⬜ | PLAN §4.7 |
 

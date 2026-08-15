@@ -7,7 +7,7 @@
 
 ## Phase 4.5 — WHT Data (33) + ใบ 50 ทวิ PDF
 
-**วันที่**: 2026-08-15 · **commit**: `__COMMIT__` · **branch**: `auto/phase-4.5`
+**วันที่**: 2026-08-15 · **commit**: `3fb2f75` · **branch**: `auto/phase-4.5`
 
 ### สิ่งที่ทำ
 
