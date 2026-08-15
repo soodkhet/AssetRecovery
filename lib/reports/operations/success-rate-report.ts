@@ -96,8 +96,11 @@ function columnsOf(dimension: SuccessRateDimension): readonly ReportColumn[] {
  *
  * ใช้ `successRate()` ตัวกลางของระบบ (`40` §6.2) โดยจงใจส่งเคสที่ปิดแล้วเป็นตัวหาร
  * ⇒ ได้ทั้ง % สำเร็จ (`part = สำเร็จ`) และ % ไม่สำเร็จ (`part = ไม่สำเร็จ`) จากสูตรเดียวกัน
+ *
+ * **export ไว้ให้หมวด E ใช้ซ้ำ** (6.5 — Scorecard บริษัท/ทีม และ KPI ภาพรวมใช้นิยามเดียวกับ O1
+ * เป๊ะ ๆ) — ห้ามเขียนสูตร "สำเร็จ ÷ ปิดแล้ว" ขึ้นมาใหม่ที่ไหนอีก
  */
-function successPctOf(part: number, counterpart: number): number | null {
+export function successPctOf(part: number, counterpart: number): number | null {
   return successRate({ successCount: part, assignedCount: part + counterpart })
 }
 

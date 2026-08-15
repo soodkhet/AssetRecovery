@@ -276,19 +276,18 @@ const revenueSummaryProvider: ReportProvider = async (ctx: ReportContext): Promi
 
 // ── F3 — อายุหนี้ลูกค้า (`96` §6-F3) ────────────────────────────────────────
 
-const arAgingProvider: ReportProvider = async (ctx: ReportContext): Promise<ReportData> => {
-  const asOf = reportAsOfDate(ctx.range, ctx.now)
-  const policy = await getFinancePolicy(ctx.user.organizationId)
-
-  // ลูกหนี้การค้าเป็นยอดระดับ**บริษัทไฟแนนซ์** ไม่มีมิติทีมให้กรอง ⇒ ผู้ที่เห็นได้เฉพาะทีมตัวเอง
-  // ต้องไม่เห็นยอดรวมทั้งองค์กร (`96` §10 — ห้ามตีความว่า "ทุกทีม")
-  if (ctx.teamIds !== null) {
-    return buildArAgingReport({ companies: [], buckets: policy.arAgingBuckets, asOf })
-  }
-
+/**
+ * รอบวางบิลที่ยังไม่ปิดยอด แยกตามบริษัทไฟแนนซ์ — ฐานของ **F3 (อายุหนี้)** และของ **หมวด E**
+ * (`96` §6-E1 การ์ด "AR ค้างรับ" · §6-E2 คอลัมน์ "AR ค้าง") ⇒ ยอดลูกหนี้ของทุกเมนูมาจาก query
+ * ชุดเดียวกัน ตัวเลขขัดกันไม่ได้
+ *
+ * ยอดที่คืนเป็นยอดบิล**หลังรายการปรับปรุงที่อนุมัติแล้ว** (`20` §9) ส่วนการหักเงินรับ/WHT ที่ลูกค้า
+ * หักไว้อยู่ในสูตร `arOutstandingSatang()` (`22` §6.11) ซึ่งผู้เรียกเป็นคนเรียกเอง
+ */
+export async function loadArAgingCompanies(organizationId: string): Promise<ArAgingCompanyEntry[]> {
   const rows = await prisma.billingBatch.findMany({
     where: {
-      organizationId: ctx.user.organizationId,
+      organizationId,
       deletedAt: null,
       // บิลที่ยัง `draft` ยังไม่ได้ส่งให้ลูกค้า ⇒ ยังไม่ใช่ลูกหนี้การค้า (`19` §9.1)
       status: { in: ['sent', 'partially_paid', 'paid'] },
@@ -309,7 +308,7 @@ const arAgingProvider: ReportProvider = async (ctx: ReportContext): Promise<Repo
       ? []
       : await prisma.adjustment.findMany({
           where: {
-            organizationId: ctx.user.organizationId,
+            organizationId,
             status: 'approved',
             billingBatchId: { in: rows.map((row) => row.id) },
           },
@@ -332,7 +331,20 @@ const arAgingProvider: ReportProvider = async (ctx: ReportContext): Promise<Repo
     })
   }
 
-  const companies: ArAgingCompanyEntry[] = [...byCompany.values()]
+  return [...byCompany.values()]
+}
+
+const arAgingProvider: ReportProvider = async (ctx: ReportContext): Promise<ReportData> => {
+  const asOf = reportAsOfDate(ctx.range, ctx.now)
+  const policy = await getFinancePolicy(ctx.user.organizationId)
+
+  // ลูกหนี้การค้าเป็นยอดระดับ**บริษัทไฟแนนซ์** ไม่มีมิติทีมให้กรอง ⇒ ผู้ที่เห็นได้เฉพาะทีมตัวเอง
+  // ต้องไม่เห็นยอดรวมทั้งองค์กร (`96` §10 — ห้ามตีความว่า "ทุกทีม")
+  if (ctx.teamIds !== null) {
+    return buildArAgingReport({ companies: [], buckets: policy.arAgingBuckets, asOf })
+  }
+
+  const companies = await loadArAgingCompanies(ctx.user.organizationId)
   return buildArAgingReport({ companies, buckets: policy.arAgingBuckets, asOf })
 }
 
