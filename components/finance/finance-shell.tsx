@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { AdjustmentTab } from '@/components/finance/adjustment-tab'
 import { AdvanceTab } from '@/components/finance/advance-tab'
@@ -38,6 +39,19 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
           className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
         >
           {FINANCE_OPERATION_TABS.map((item) => {
+            // หน้าจริงอยู่คนละ route (เช่น "ผู้รับเงิน" อยู่ในหน้าตั้งค่าการเงิน) — ลิงก์ข้ามไป
+            if (item.href !== undefined) {
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="focus-ring border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800"
+                >
+                  {item.label}
+                </Link>
+              )
+            }
+
             if (!item.available) {
               return (
                 <span

@@ -24,6 +24,7 @@ import {
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 import type { SalesRecordDto, TaxInvoiceDto } from '@/lib/sales/types'
 
@@ -132,7 +133,7 @@ export function SalesTab() {
                   <Td>
                     <RefText>{row.billingPeriod}</RefText>
                     <div className="mt-0.5">
-                      <StatusBadge status={row.billingStatus} />
+                      <StatusBadge status={row.billingStatus} label={BILLING_STATUS_LABEL[row.billingStatus]} />
                     </div>
                   </Td>
                   <Td className="text-xs font-semibold text-slate-900">{row.companyName}</Td>

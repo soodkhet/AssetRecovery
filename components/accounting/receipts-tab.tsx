@@ -14,8 +14,10 @@ import {
   Th,
   Tr,
 } from '@/components/ui'
+import { BANK_MATCH_STATUS_LABEL } from '@/lib/bank-recon/matching'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 
 /**
  * แท็บ "เงินรับ" (`31` §8 · mockup `accounting.html` แท็บ `receipts`) — **อ่านอย่างเดียวทั้งแท็บ**
@@ -95,14 +97,14 @@ export function ReceiptsTab() {
                   <Td>
                     <RefText>{row.billingPeriod}</RefText>
                     <div className="mt-0.5">
-                      <StatusBadge status={row.billingStatus} />
+                      <StatusBadge status={row.billingStatus} label={BILLING_STATUS_LABEL[row.billingStatus]} />
                     </div>
                   </Td>
                   <Td>
                     {row.bankMatchStatus === null ? (
                       <span className="text-xs text-slate-300">—</span>
                     ) : (
-                      <StatusBadge status={row.bankMatchStatus} />
+                      <StatusBadge status={row.bankMatchStatus} label={BANK_MATCH_STATUS_LABEL[row.bankMatchStatus]} />
                     )}
                   </Td>
                   <Td className="text-xs text-slate-500">{fmtDateTime(row.createdAt)}</Td>

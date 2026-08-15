@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Card, InlineAlert, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
 import type { PeriodLockPolicyRow } from '@/lib/settings/period-lock'
+import { STATUS_BADGE_CLASS } from '@/lib/ui/status-badge'
 
 /**
  * แท็บ "การล็อกรอบและ Adjustment" (`13` §6.11) — **read-only**
@@ -26,10 +27,14 @@ const DIRECT_EDIT_CLASS: Readonly<Record<PeriodLockPolicyRow['directEdit'], stri
   blocked: 'font-semibold text-red-600',
 }
 
+/**
+ * ใช้คลาสจาก 10 กลุ่มสีกลางของ `04` §8.1 เท่านั้น (`STATUS_BADGE_CLASS`) — เดิมช่อง "ต้องใช้
+ * Adjustment เสมอ" ใช้ `rose` ซึ่งไม่มีในพาเลตต์ (Final Test ด่าน 5)
+ */
 const ADJUSTMENT_CLASS: Readonly<Record<PeriodLockPolicyRow['adjustmentRequired'], string>> = {
-  no: 'bg-slate-100 text-slate-500',
-  sometimes: 'bg-amber-100 text-amber-800',
-  always: 'bg-rose-100 text-rose-700',
+  no: STATUS_BADGE_CLASS.neutral,
+  sometimes: STATUS_BADGE_CLASS.warning,
+  always: STATUS_BADGE_CLASS.critical,
 }
 
 export function PeriodLockTab() {

@@ -45,9 +45,16 @@ export interface MenuItem {
   path: string
   /** role ที่เห็นเมนูนี้ */
   audiences: readonly MenuAudience[]
-  /** หน้าจริงพร้อมใช้แล้วหรือยัง — `false` = ยังเป็น placeholder รอ phase ที่ระบุ */
+  /**
+   * หน้าจริงพร้อมใช้แล้วหรือยัง — `false` = ยังเป็น placeholder รอ phase ที่ระบุ
+   *
+   * ⚠️ ธงนี้เป็น **หนี้ที่ลืมปลดได้ง่ายที่สุดของโปรเจกต์**: `SubNav` เรนเดอร์แท็บที่ `false`
+   * เป็น span กดไม่ได้ และ `/cases` เด้งไป `ModulePlaceholder` เมื่อไม่มีลูกที่ `available`
+   * ⇒ หน้าที่ทำเสร็จแล้วแต่ลืมปลดธง = ผู้ใช้เข้าไม่ถึงเลย (Final Test ด่าน 5 เจอจริงใน Phase 8.3)
+   * `menu-registry.test.ts` จึงล็อกไว้ว่า **ทุก path ที่มี `page.tsx` จริงต้องเป็น `true`**
+   */
   available: boolean
-  /** phase ที่หน้าจริงจะเกิด (ใช้แสดงบน placeholder) */
+  /** phase ที่หน้าจริงเกิด (ใช้แสดงบน placeholder เมื่อ `available = false`) */
   plannedPhase?: string
   /** แท็บย่อยของเมนู (`06` §8) — `cases` มี sub-menu จริงตาม §7.1.1 ที่เหลือเป็นรายการรอพัฒนา */
   children?: readonly MenuItem[]
@@ -94,7 +101,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       'field_agent',
       'company_user',
     ],
-    available: false,
+    available: true,
     plannedPhase: '2.4',
     children: [
       // §7.1.1 — "รับเคส" เป็นของ Role Group `system` เท่านั้น
@@ -112,7 +119,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         label: 'มอบหมายงาน',
         path: '/cases/assign',
         audiences: ['superadmin', 'executive', 'team_lead'],
-        available: false,
+        available: true,
         plannedPhase: '2.7',
       },
       // §7.1.1 — "ติดตามภาคสนาม" = พนักงานติดตามทรัพย์ (mobile-first, shell ของตัวเองตามไฟล์ 41)
@@ -121,7 +128,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         label: 'ติดตามภาคสนาม',
         path: FIELD_TRACKER_PATH,
         audiences: ['superadmin', 'executive', 'field_agent'],
-        available: false,
+        available: true,
         plannedPhase: '2.10',
       },
     ],
@@ -131,7 +138,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     label: 'การเงิน',
     path: '/finance',
     audiences: ['superadmin', 'executive', 'finance'],
-    available: false,
+    available: true,
     plannedPhase: '3.3',
   },
   {
@@ -139,7 +146,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     label: 'บัญชี',
     path: '/accounting',
     audiences: ['superadmin', 'executive', 'accounting'],
-    available: false,
+    available: true,
     plannedPhase: '4.7',
   },
   {
@@ -148,7 +155,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     path: '/warehouse',
     // การเงิน/บัญชี/หัวหน้าทีม/บริษัทไฟแนนซ์ = read เท่านั้น (ระดับสิทธิ์บังคับที่ API ไม่ใช่ที่เมนู)
     audiences: ['superadmin', 'executive', 'finance', 'accounting', 'team_lead', 'company_user'],
-    available: false,
+    available: true,
     plannedPhase: '2.14',
   },
   {
@@ -157,7 +164,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     path: '/reports',
     // การเงิน F1-F5 · บัญชี A1-A4 · ผู้จัดการ/หัวหน้า O1-O5 (ทีมตัวเอง) — กรองรายรายงานที่ Phase 6
     audiences: ['superadmin', 'executive', 'finance', 'accounting', 'team_lead'],
-    available: false,
+    available: true,
     plannedPhase: '6.1',
   },
   {

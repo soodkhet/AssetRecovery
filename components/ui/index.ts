@@ -4,7 +4,7 @@
  */
 
 export { cn } from '@/components/ui/cn'
-export { Button, Spinner, type ButtonProps, type ButtonSize, type ButtonVariant } from '@/components/ui/button'
+export { Button, Spinner, buttonClass, type ButtonProps, type ButtonSize, type ButtonVariant } from '@/components/ui/button'
 export { Badge, RefText, StatusBadge } from '@/components/ui/badge'
 export { Card, CardHeader, PageHeader, StatCard } from '@/components/ui/card'
 export { FilterGroup } from '@/components/ui/filter-group'

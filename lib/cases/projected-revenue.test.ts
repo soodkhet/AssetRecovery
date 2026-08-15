@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { calculateProjectedRevenue, type ProjectedRevenueTemplate } from '@/lib/cases/projected-revenue'
+import { pctOfSatang } from '@/lib/finance/satang'
 
 /**
  * `38` §20 — Projected revenue 3 โมเดล (ตัวเลขในสเปคเป็น **บาท** ที่นี่เทียบเป็น **สตางค์**)
@@ -72,7 +73,24 @@ describe('ประมาณการรายได้ (`38` §6.5)', () => {
     const template = { ...SUCCESS_FEE, ratePct: 12.35 }
     const result = calculateProjectedRevenue(template, { debtAmountSatang: 999_999, assetValueSatang: null })
     expect(Number.isInteger(result.amountSatang)).toBe(true)
-    expect(result.amountSatang).toBe(Math.round((999_999 * 12.35) / 100))
+    expect(result.amountSatang).toBe(pctOfSatang(999_999, 12.35))
+  })
+
+  // Final Test ด่าน 2 — ประมาณการเคยคูณ % เองด้วย `Math.round(base * pct / 100)` ซึ่งกินเศษ binary
+  // ของ `NUMERIC(5,2)` แล้วปัดลงผิดไป 1 สตางค์ ต่างจากยอดวางบิลจริงที่คิดผ่าน `pctOfSatang()`
+  it('คูณ % ผ่าน `pctOfSatang()` ตัวเดียวของระบบ — ไม่ต่างจากยอดจริง 1 สตางค์', () => {
+    const cases: readonly [number, number][] = [
+      [1_001_000, 2.05],
+      [1_000_500, 4.1],
+      [1_000_250, 8.2],
+      [1_001_250, 8.04],
+    ]
+    for (const [debtAmountSatang, ratePct] of cases) {
+      const result = calculateProjectedRevenue({ ...SUCCESS_FEE, ratePct }, { debtAmountSatang, assetValueSatang: null })
+      expect(result.amountSatang).toBe(pctOfSatang(debtAmountSatang, ratePct))
+      // สูตรเดิมที่ถูกถอดออก — ยืนยันว่าเลิกใช้แล้วจริง (ต่างกัน 1 สตางค์ทุกคู่)
+      expect(result.amountSatang).not.toBe(Math.round((debtAmountSatang * ratePct) / 100))
+    }
   })
 
   it('calculation_source อ้าง template/version ที่ใช้คำนวณ (`38` §6.4)', () => {
