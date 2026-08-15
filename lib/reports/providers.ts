@@ -1,4 +1,5 @@
 import type { SessionUser } from '@/lib/auth/types'
+import { ACCOUNTING_REPORT_PROVIDERS } from '@/lib/reports/accounting/providers'
 import { FINANCE_REPORT_PROVIDERS } from '@/lib/reports/finance/providers'
 import { OPERATIONS_REPORT_PROVIDERS } from '@/lib/reports/operations/providers'
 import type { ReportDefinition } from '@/lib/reports/catalog'
@@ -9,7 +10,7 @@ import type { ReportRange } from '@/lib/reports/range'
  * ทะเบียนตัวคำนวณของรายงานแต่ละตัว — **ไม่มี business logic ในไฟล์นี้**
  * (แนวเดียวกับ `JOB_HANDLERS` ของ 5.3: ทะเบียนกลางเปล่า ๆ ที่โมดูลเจ้าของงานมาต่อสาย)
  *
- * Phase 6.1 วางแค่โครง — 6.2 (หมวด F), 6.3 (O), 6.4 (A), 6.5 (E) มาเติม provider ของตัวเอง
+ * Phase 6.1 วางแค่โครง — 6.2 (หมวด F), 6.3 (O), 6.4 (A) เติม provider ของตัวเองแล้ว · เหลือ 6.5 (E)
  * รายงานที่ยังไม่มี provider = "ยังไม่เปิดใช้งาน" (API ตอบ `REPORT_NOT_FOUND`, หน้าจอไม่ลิงก์ให้กด)
  *
  * ### กติกาของ provider
@@ -43,6 +44,7 @@ export type ReportProvider = (context: ReportContext) => Promise<ReportData>
 export const REPORT_PROVIDERS: Partial<Record<string, ReportProvider>> = {
   ...FINANCE_REPORT_PROVIDERS,
   ...OPERATIONS_REPORT_PROVIDERS,
+  ...ACCOUNTING_REPORT_PROVIDERS,
 }
 
 export function reportProviderOf(id: string): ReportProvider | null {

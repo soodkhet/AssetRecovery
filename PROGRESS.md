@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.3 (รายงานหมวด O ครบ 5 ตัว: อัตราความสำเร็จ + กราฟแท่งซ้อน · ประสิทธิภาพทีม/SLA · ปริมาณงานรายพนักงาน · เคสค้างเกิน SLA · สรุปคลังสินค้า) + **มติ PO D18: เกณฑ์ SLA ระดับองค์กร** (คอลัมน์ใหม่ + แท็บที่ 14 ของหน้าตั้งค่าบัญชี/การเงิน) · งานถัดไป 6.4 (รายงานหมวด A — A1–A4)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.4 (รายงานหมวด A ครบ 4 ตัว: สรุป WHT รายเดือน · สรุปใบกำกับภาษี 2 มิติ · ประวัติส่งออกชุดข้อมูลบัญชีทุกเวอร์ชัน · สรุปข้อยกเว้นรายงวดที่แยก `authorized` ออกจาก `resolved`) — ไม่มี migration ใหม่ · งานถัดไป 6.5 (Executive Dashboard — E1–E3)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 6.4: รายงานหมวด A (A1–A4)
+## 🎯 งานถัดไป — Phase 6.5: Executive Dashboard (E1–E3)
 
-- ทำตาม `docs/01_PLAN.md` §6.4 — A1 WHT Summary (ใช้ `wht_filing_summaries` — ชื่อตามไฟล์ 96 v2.1) · A2 Tax Invoice Summary · A3 Export History · A4 Exception Summary — **real-time ทั้งชุด** (ไม่แคช · `96` §8)
-- **ใช้โครงของ 6.1–6.3 เท่านั้น**: เขียน provider ของหมวด A (`lib/reports/accounting/providers.ts`) ต่อเข้า `REPORT_PROVIDERS` + หน้าจอลงทะเบียนที่ `<ReportScreen>` (กราฟใช้ `<ReportBarChart>` มีโหมด `stack` แล้ว) — ห้ามเขียน route/แคช/ยามสิทธิ์/ตาราง/ปุ่มส่งออกชุดใหม่
-- ยอดทุกก้อนมาจากเอกสารที่บันทึกแล้ว (`33`/`31`/`37`/`34`) — **ใบ WHT ที่ `cancelled` ไม่นับยอด** (`33`) · exception `authorized` ห้ามนับปนกับ `resolved` (`34` §6.3 — ใช้ `summarizeExceptions()` ของ 4.1)
-- **หมวด A ต้องเป็นระดับ `manage` ของฝ่ายบัญชี** — การเงินเรียกต้อง 403 (ยามมีอยู่แล้วที่ `lib/reports/access.ts`)
-- ⚠️ `lib/reports/run.test.ts` ใช้ A1 เป็นตัวอย่าง "รายงานที่ยังไม่มี provider" — 6.4 ต้องเปลี่ยนไปใช้ E1
-- อ้างอิง: `96` §6-A, §7–8, §10 ผ่าน MAP · mockup `reports.html` ผ่าน MAP (`renderA1`–`renderA4`)
-- LOC ~1,050 · งบ ~210k
+- ทำตาม `docs/01_PLAN.md` §6.5 — E1 KPI ภาพรวม (6 KPI: รายได้ YTD / กำไรขั้นต้น YTD / Margin % / เคสทั้งหมด / Success Rate / AR ค้างรับ + Revenue trend 12 เดือน + Success trend + Top 5 บริษัท) · E2 Scorecard รายบริษัทไฟแนนซ์ · E3 Scorecard รายทีม
+- **Executive/Superadmin เท่านั้น** — การเงิน/บัญชี/ผู้จัดการเรียกต้อง 403 (`96` §14 มี test case ตรงตัว · ยามอยู่ที่ `lib/reports/access.ts` แล้ว)
+- **ใช้โครงของ 6.1–6.4 เท่านั้น**: provider ใหม่ที่ `lib/reports/executive/providers.ts` ต่อเข้า `REPORT_PROVIDERS` + หน้าจอลงทะเบียนที่ `<ReportScreen>` — ยอดต้อง**เรียกโมดูล pure ของ F/O ที่มีอยู่** (`buildGrossProfitSummary()`/`successRate()`/`buildArAgingReport()`) ห้ามคิดสูตรใหม่
+- แคช **รายวัน** (`96` §8) + E1 ต้องแสดงเวลา refresh ล่าสุด ≤24 ชม. (`96` §13) — โครงแคช/ปุ่มรีเฟรชมีแล้วที่ 6.1 · กราฟเส้นยังไม่มี ⇒ เพิ่ม `<ReportLineChart>` (Recharts) เป็น shared ข้าง `<ReportBarChart>`
+- ⚠️ `lib/reports/run.test.ts` ใช้ E1 เป็นตัวอย่าง "รายงานที่ยังไม่มี provider" — 6.5 ต้องเปลี่ยนไปลงทะเบียน provider ปลอมแทน (จะไม่เหลือรายงานที่ยังไม่เปิดใช้งานแล้ว)
+- อ้างอิง: `96` §6-E, §8, §10, §13–14 ผ่าน MAP · mockup `reports.html` ผ่าน MAP (`renderE1`–`renderE3`)
+- LOC ~1,600 · งบ ~270k
 
 ---
 
@@ -103,7 +103,7 @@
 | 6.1 | Report Framework + Export Engine | ✅ | 2026-08-15 · `4d76986`+`83600a2` · ทะเบียน 17 รายงาน + ยามสิทธิ์รายหมวด (การเงินเรียก E1 = 403) + แคช 3 โหมด + โครงหน้าจอกลาง `<ReportView>` + export Excel/PDF (>5,000 แถว = job) · ⚠️ ต้องสร้าง bucket `report-exports` ต่อ environment → archive |
 | 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
 | 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `f4b824f` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
-| 6.4 | รายงานหมวด A (A1–A4) | ⬜ | PLAN §6.4 |
+| 6.4 | รายงานหมวด A (A1–A4) | ✅ | 2026-08-15 · `ec43687` · A1–A4 ครบ (WHT รายเดือน/ใบกำกับภาษี 2 มิติ/ประวัติส่งออกทุกเวอร์ชัน/ข้อยกเว้นรายงวดที่แยก `authorized` จาก `resolved`) + ตัวแปลงช่วงวันที่ → ช่วงงวดบัญชี · เทสต์ pure 29 + DB 12 → archive |
 | 6.5 | Executive Dashboard (E1–E3) | ⬜ | PLAN §6.5 · Exec/Superadmin เท่านั้น |
 | 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⏸️ | PLAN §6.6 · รอ PO อนุมัติ spec (dashboard.html เป็น DRAFT) |
 
