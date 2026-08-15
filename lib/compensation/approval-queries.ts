@@ -257,6 +257,7 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow): CompensationApprovalDto {
     expenseDate: row.expenseDate.toISOString().slice(0, 10),
     distanceKm: row.distanceKm?.toFixed(2) ?? null,
     calculationSource: row.calculationSource,
+    basisText: describeExpenseBasis(row),
     grossSatang: row.grossSatang,
     whtSatang: wht.whtSatang,
     netSatang: wht.netSatang,

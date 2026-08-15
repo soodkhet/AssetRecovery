@@ -1,0 +1,55 @@
+import { canAdvanceAction } from '@/lib/advances/advance'
+import type { AdvanceDto } from '@/lib/advances/types'
+import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
+import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
+
+/**
+ * ป้าย/สี/สิทธิ์ปุ่มของหน้าจอเงินทดรองจ่าย (`15` §8) — **pure ล้วน**
+ *
+ * ⚠️ หน้าจอ **ห้าม if สถานะเอง** — การเปลี่ยนสถานะยังผ่าน `advance.ts` (state machine `23` §6.4)
+ * ⚠️ `overdue` ต้องเป็น **แดงเด่นชัดแยกจาก approved** (`15` §8) — สีมาจาก 10 กลุ่มของ `04` §8.1
+ */
+
+export const ADVANCE_STATUS_LABEL: Readonly<Record<AdvanceStatus, string>> = {
+  pending_approval: 'รออนุมัติ',
+  approved: 'อนุมัติแล้ว — รอเคลียร์ยอด',
+  overdue: 'เลยกำหนดเคลียร์',
+  cleared: 'เคลียร์ยอดแล้ว',
+  rejected: 'ไม่อนุมัติ',
+}
+
+const ADVANCE_STATUS_GROUP: Readonly<Record<AdvanceStatus, StatusBadgeGroup>> = {
+  pending_approval: 'pending',
+  approved: 'sent',
+  // `15` §8 — เลยกำหนดแล้วต้องเห็นทันทีว่าเป็นปัญหา
+  overdue: 'critical',
+  cleared: 'cleared',
+  rejected: 'critical',
+}
+
+export function advanceStatusLabel(status: AdvanceStatus): string {
+  return ADVANCE_STATUS_LABEL[status]
+}
+
+export function advanceStatusBadgeGroup(status: AdvanceStatus): StatusBadgeGroup {
+  return ADVANCE_STATUS_GROUP[status]
+}
+
+/** ปุ่มอนุมัติ/ปฏิเสธ (การเงิน) — โผล่เฉพาะรายการที่ยังรออนุมัติ */
+export function canReviewAdvance(status: AdvanceStatus): boolean {
+  return canAdvanceAction(status, 'approve')
+}
+
+/** ปุ่ม "เคลียร์ยอด" — ทำได้ทั้ง `approved` และ `overdue` (`15` §9.1) */
+export function canSettleAdvance(status: AdvanceStatus): boolean {
+  return canAdvanceAction(status, 'settle')
+}
+
+/** แถวที่ยังถือเงินทดรองอยู่ — ใช้ขึ้นแถบเตือนหัวตาราง (`15` §8 · mockup `finance.html`) */
+export function countAwaitingSettlement(items: readonly AdvanceDto[]): number {
+  return items.filter((item) => canSettleAdvance(item.status)).length
+}
+
+export function countOverdue(items: readonly AdvanceDto[]): number {
+  return items.filter((item) => item.status === 'overdue').length
+}

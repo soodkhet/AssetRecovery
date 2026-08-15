@@ -26,6 +26,11 @@ export interface CompensationApprovalDto {
   expenseDate: string
   distanceKm: string | null
   calculationSource: string | null
+  /**
+   * ข้อความ "สูตร / ฐานคิด" ที่ตารางแสดง (`16` §8 — เช่น "128.50 กม. × 3.50 บาท/กม.")
+   * ประกอบฝั่ง server จาก **snapshot ของรายการ** เท่านั้น (`92` §7.1) หน้าจอห้ามคิดสูตรเอง
+   */
+  basisText: string
   grossSatang: number
   whtSatang: number
   netSatang: number

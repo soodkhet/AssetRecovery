@@ -10,7 +10,7 @@ import * as git from './git.mjs';
 import { park, listQueue, getQueue, updateQueue, appendRun, writeSessionLog } from './queue.mjs';
 import { saveRateLimits, getPlanLimits, refreshPlanLimits } from './usage.mjs';
 import { notify } from './notify.mjs';
-import { acquireLock, releaseLock } from './lock.mjs';
+import { acquireLock, releaseLock, lockHeld, launchWhenFree } from './lock.mjs';
 
 function notifyEvent(kind, info = {}) {
   const t = info.task;
@@ -147,16 +147,31 @@ function recoverDirtyTree(label) {
   }
 }
 
+// รัน task ถัดไป 1 ก้อน + ยิงแจ้งเตือน — **ผู้เรียกต้องถือล็อกอยู่แล้ว** (ใช้โดย `runOne`/`runLoop`)
+async function runOneUnderLock(opts) {
+  const r = await runOneCore(opts);
+  try { notifyFromResult(r); } catch { /* ignore */ }
+  return r;
+}
+
 // รัน task ถัดไป 1 ก้อน คืนสรุปผล (+ ยิงแจ้งเตือนตามผลลัพธ์)
 export async function runOne(opts) {
   if (opts && opts.dryRun) return runOneCore(opts);
   const lk = acquireLock();
-  if (!lk.ok) return { skipped: `มี orchestrator อื่นรันอยู่ (pid ${lk.pid})` };
+  if (!lk.ok) return { skipped: lockSkipMessage(lk) };
   try {
-    const r = await runOneCore(opts);
-    try { notifyFromResult(r); } catch { /* ignore */ }
-    return r;
+    return await runOneUnderLock(opts);
   } finally { releaseLock(); }
+}
+
+/**
+ * ข้อความตอนยึดล็อกไม่ได้ — แยก "process อื่น" กับ "งานอื่นใน server ตัวเดียวกัน" ให้ชัด
+ * (เคสหลังคือบั๊กที่ทำให้ Phase 3.3 ถูกหยิบซ้ำ 2 session — ต้องอ่านออกจาก log ทันทีถ้าเกิดอีก)
+ */
+function lockSkipMessage(lk) {
+  return lk.samePid
+    ? 'มีงาน orchestrator อื่นรันอยู่ใน server นี้แล้ว'
+    : `มี orchestrator อื่นรันอยู่ (pid ${lk.pid})`;
 }
 
 async function runOneCore({ dryRun = false, force = false } = {}) {
@@ -381,7 +396,7 @@ async function runOneCore({ dryRun = false, force = false } = {}) {
 // kind: 'review' (รีวิว diff ตั้งแต่ checkpoint) | 'final' (ทดสอบทั้งระบบ)
 export async function runReview(opts = {}) {
   const lk = acquireLock();
-  if (!lk.ok) return { skipped: `มี orchestrator อื่นรันอยู่ (pid ${lk.pid})` };
+  if (!lk.ok) return { skipped: lockSkipMessage(lk) };
   try { return await runReviewCore(opts); }
   finally { releaseLock(); }
 }
@@ -471,7 +486,7 @@ async function runReviewCore({ kind = 'review', phase = null, stage = null } = {
 // แก้ item ที่ park ไว้ (+ ยิงแจ้งเตือนตามผลลัพธ์)
 export async function resolveQueueItem(queueId, opts) {
   const lk = acquireLock();
-  if (!lk.ok) return { error: `มี orchestrator อื่นรันอยู่ (pid ${lk.pid})` };
+  if (!lk.ok) return { error: lockSkipMessage(lk) };
   try {
     const r = await resolveCore(queueId, opts);
     try { notifyFromResult(r); } catch { /* ignore */ }
@@ -505,7 +520,7 @@ async function resolveCore(queueId, { answer, action = 'approve' } = {}) {
     if (/ทำต่อ|force|ต่อเลย|ไม่ต้องรอ/i.test(a)) {     // ฝืนทำต่อทันที ไม่รอรีเซ็ต
       state.resumeAfterReset = false; state.waitingLimit = null;
       setPhase('idle', null);
-      runOne({ force: true }).catch(() => {});
+      launchWhenFree(() => { runOne({ force: true }).catch(() => {}); });   // ยังถือล็อกอยู่ — ต้องรอปล่อยก่อน
       return { forcedRun: true };
     }
     // กด Approve เฉย ๆ / ไม่ระบุ = คงพฤติกรรม default (รอรีเซ็ตแล้วทำต่อเอง)
@@ -517,7 +532,7 @@ async function resolveCore(queueId, { answer, action = 'approve' } = {}) {
 
   if (rec.type === 'error') {
     updateQueue(queueId, { status: 'resolved', resolvedAt: new Date().toISOString(), resolution: 'retry' });
-    if (!state.running) runOne().catch(() => {});
+    if (!state.running) launchWhenFree(() => { runOne().catch(() => {}); });   // ยังถือล็อกอยู่ — ต้องรอปล่อยก่อน
     return { retried: true };
   }
 
@@ -590,12 +605,26 @@ async function resolveCore(queueId, { answer, action = 'approve' } = {}) {
   }
 }
 
-// วนทำต่อเนื่องจนกว่าจะ park หรือหมดงาน (ใช้โดย server เมื่อเปิด auto)
+/**
+ * วนทำต่อเนื่องจนกว่าจะ park หรือหมดงาน (ใช้โดย server เมื่อเปิด auto)
+ *
+ * **ถือล็อกคลุมทั้งลูป** — เดิมล็อกอยู่ที่ `runOne()` ข้างใน ทำให้ `runLoop()` สองตัวใน server
+ * เดียวกัน (เช่น watchdog ยิงตอน `state.running` ยังเป็น false ระหว่างรอ pre-flight โควตา)
+ * สลับกันหยิบ task เดียวกันได้ ⇒ เกิด 2 session บน branch เดียวกัน (บั๊ก Phase 3.3 2026-08-15)
+ */
 export async function runLoop() {
+  const lk = acquireLock();
+  if (!lk.ok) return [{ skipped: lockSkipMessage(lk) }];
+  try {
+    return await runLoopUnderLock();
+  } finally { releaseLock(); }
+}
+
+async function runLoopUnderLock() {
   const results = [];
   let lastDoneId = null;   // กันวนซ้ำ: task เดิมขึ้น "เสร็จอยู่แล้ว" สองรอบติด = PROGRESS ไม่ได้อัปเดต
   while (state.auto) {
-    const r = await runOne();
+    const r = await runOneUnderLock();
     results.push(r);
     if (r.alreadyDone && r.task) {
       if (lastDoneId === r.task.id) {
@@ -632,7 +661,7 @@ export async function runLoop() {
 // รัน Final test ทุกด่านเรียงกัน (ข้ามด่านที่ผ่านแล้ว) — หยุดถ้าเจอปัญหา/ชนโควตา
 export async function runFinalAll() {
   const lk = acquireLock();
-  if (!lk.ok) return { skipped: `มี orchestrator อื่นรันอยู่ (pid ${lk.pid})` };
+  if (!lk.ok) return { skipped: lockSkipMessage(lk) };
   const out = [];
   try {
     for (const st of config.finalTestStages) {
@@ -652,6 +681,9 @@ export async function runFinalAll() {
 // (กันเคส Auto เปิดค้างแต่ไม่มี loop วิ่ง เช่นหลัง restart หรือหลังกดรันเองทีละก้อน)
 export async function autoWatchdog() {
   if (!state.auto || state.running) return;
+  // `state.running` ถูกตั้งหลัง await (pre-flight โควตา) จึงมีช่วงที่ยังเป็น false ทั้งที่งานเริ่มแล้ว
+  // — ล็อกคือตัวชี้ขาดว่ามีงานวิ่งอยู่จริงไหม (บั๊ก task ถูกหยิบซ้ำ 2026-08-15)
+  if (lockHeld()) return;
   if (state.phase === 'waiting-limit' || state.resumeAfterReset) return; // รอ limit → ให้ tryResumeFromLimit จัดการ
   if (listQueue('pending').length) return;                               // มีคำถามค้าง → ต้องให้คนตอบก่อน
   // งาน task หมดแล้ว → เดิน Final test ต่อเอง (ถ้ายังมีด่านค้าง)

@@ -16,15 +16,51 @@ function testDatabaseUrl(): Record<string, string> {
   return url ? { TEST_DATABASE_URL: url } : {}
 }
 
+const DB_TESTS = '**/*.db.test.ts'
+
+/**
+ * ⚠️ `*.db.test.ts` ทุกไฟล์ยิง **Postgres ตัวเดียวกัน** และ reset ด้วย `DELETE ... WHERE
+ * organization_id = ...` ของตัวเอง — ถึงจะแยก `ORG_ID` กันคนละไฟล์ แต่การรัน **ขนานกัน**
+ * ทำให้ reset ของไฟล์หนึ่งไปชนกับ transaction ที่อีกไฟล์กำลังเขียนค้างอยู่ (เห็นเป็น FK error
+ * `travel_origins_assignment_id_fkey` / `CASE_NOT_FOUND` แบบสุ่มในไฟล์ที่ไม่ได้แก้อะไรเลย)
+ *
+ * ⇒ แยกเป็น project ต่างหากแล้วบังคับรัน **ทีละไฟล์** (`singleFork`) · เทสต์ที่ไม่แตะ DB
+ * ยังขนานเต็มที่เหมือนเดิม เวลารวมจึงไม่ต่างกันในทางปฏิบัติ
+ */
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    // `orchestrator/lib/*.test.mjs` = ยามของ parser PROGRESS.md — ต้องรันคู่กับเทสต์แอปเสมอ
-    // (บั๊กที่มันกัน: parser ทิ้งแถวเงียบ ๆ จน dashboard โชว์ 100% ปลอม แล้ว orchestrator หยุดหยิบงาน)
-    include: ['**/*.{test,spec}.{ts,tsx}', 'orchestrator/**/*.test.mjs'],
-    exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**'],
     env: testDatabaseUrl(),
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          globals: true,
+          environment: 'node',
+          env: testDatabaseUrl(),
+          // `orchestrator/lib/*.test.mjs` = ยามของ parser PROGRESS.md + run lock — ต้องรันคู่กับเทสต์แอปเสมอ
+          // (บั๊กที่มันกัน: parser ทิ้งแถวเงียบ ๆ จน dashboard โชว์ 100% ปลอม · orchestrator หยิบงานซ้ำ 2 session)
+          include: ['**/*.{test,spec}.{ts,tsx}', 'orchestrator/**/*.test.mjs'],
+          exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**', DB_TESTS],
+          alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
+        },
+      },
+      {
+        test: {
+          name: 'db',
+          globals: true,
+          environment: 'node',
+          env: testDatabaseUrl(),
+          include: [DB_TESTS],
+          exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**'],
+          alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
+          // ทีละไฟล์เท่านั้น — DB ตัวเดียวกัน (ดูหมายเหตุด้านบน)
+          // `poolOptions` ถูกถอดออกใน vitest 4 แล้ว — `fileParallelism: false` พอสำหรับกันชนกันเอง
+          fileParallelism: false,
+        },
+      },
+    ],
   },
   resolve: {
     alias: {

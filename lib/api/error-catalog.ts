@@ -79,6 +79,9 @@ export const ERROR_CATALOG = {
 
   // ── 24 §6.4 Claim/Advance/Approval ─────────────────────────────────────
   ADVANCE_PENDING_SETTLEMENT: { status: 400, severity: 'reject', source: '24 §6.4' },
+  ADVANCE_EXCEEDS_MAX: { status: 400, severity: 'reject', source: '24 §6.4' },
+  ADVANCE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.4' },
+  ADVANCE_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.4' },
   USED_EXCEEDS_REQUEST_NO_TOPUP: { status: 400, severity: 'reject', source: '24 §6.4' },
   REJECTION_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
