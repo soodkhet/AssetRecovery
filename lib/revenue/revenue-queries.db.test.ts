@@ -170,9 +170,12 @@ async function seedAssetInLot(caseId: string, lotStatus: string | null, companyI
   seq += 1
   let lotId = 'NULL'
   if (lotStatus !== null) {
+    // ล็อตที่ `confirmed` **ลบไม่ได้** (trigger `02` §13) ⇒ เลขล็อตจากรันก่อน ๆ ค้างในฐานทดสอบตลอด
+    // ⇒ suffix ต้องมีเอนโทรปีพอ ไม่งั้นชน `handover_lots_lot_number_key` แบบสุ่ม (เดิมใช้ ms 3 หลัก)
+    const suffix = `${seq}-${Date.now()}-${process.pid}`
     const lot = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO handover_lots (organization_id, company_id, lot_number, doc_ref, type, status, created_by)
-      VALUES ('${ORG_ID}', '${companyId}', 'LOT-2569-${seq}${Date.now() % 1000}', 'DLV-2569-${seq}${Date.now() % 1000}',
+      VALUES ('${ORG_ID}', '${companyId}', 'LOT-2569-${suffix}', 'DLV-2569-${suffix}',
               'finance_pickup', '${lotStatus}', '${FINANCE_ID}')
       RETURNING id
     `)
