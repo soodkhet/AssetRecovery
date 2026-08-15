@@ -48,6 +48,14 @@ export const payoutCompleteSchema = z.object({
   reason: reasonSchema,
 })
 
+/**
+ * ตัวกรองของเอกสารภายใน (`28` §6.1) — ระบุ `payeeId` = ออกเฉพาะของคนนั้น
+ * ไม่ระบุ = ออกทั้งรอบ (1 คน = 1 หน้า) สำหรับพิมพ์ทีเดียวจบ
+ */
+export const payoutDocQuerySchema = z.object({
+  payeeId: uuidSchema.optional(),
+})
+
 export const payoutBatchListQuerySchema = z.object({
   status: z.enum(['all', 'draft', 'checking', 'file_generated', 'completed']).default('all'),
   side: z.enum(['all', 'inhouse', 'outsource']).default('all'),
@@ -57,3 +65,4 @@ export type PayoutBatchCreateInput = z.infer<typeof payoutBatchCreateSchema>
 export type PaymentFileGenerateInput = z.infer<typeof paymentFileGenerateSchema>
 export type PayoutCompleteInput = z.infer<typeof payoutCompleteSchema>
 export type PayoutBatchListQuery = z.infer<typeof payoutBatchListQuerySchema>
+export type PayoutDocQuery = z.infer<typeof payoutDocQuerySchema>

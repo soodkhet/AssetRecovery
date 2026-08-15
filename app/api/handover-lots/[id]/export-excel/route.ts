@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { withEndpoint } from '@/lib/api/http'
-import { attachmentHeader, buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
+import { attachmentHeader } from '@/lib/format/attachment'
+import { buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
 import { buildHandoverWorkbook } from '@/lib/warehouse/handover-excel'
 import { WAREHOUSE_EXPORT_CAPABILITIES } from '@/lib/warehouse/permissions'
 import { getHandoverDocSource } from '@/lib/warehouse/queries'

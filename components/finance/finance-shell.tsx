@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { AdvanceTab } from '@/components/finance/advance-tab'
 import { ApprovalTab } from '@/components/finance/approval-tab'
 import { CompensationTab } from '@/components/finance/compensation-tab'
+import { PayoutTab } from '@/components/finance/payout-tab'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
@@ -68,6 +69,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         {current?.id === 'approval' && <ApprovalTab />}
         {current?.id === 'comp' && <CompensationTab />}
         {current?.id === 'advances' && <AdvanceTab />}
+        {current?.id === 'payout' && <PayoutTab />}
         {current === undefined && (
           <EmptyState title="ยังไม่มีหน้าจอของแท็บนี้" description="เลือกแท็บที่พร้อมใช้งานจากแถบด้านบน" />
         )}

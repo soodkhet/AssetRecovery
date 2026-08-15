@@ -119,8 +119,3 @@ export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recip
 export function handoverFileName(lot: { lotNumber: string }, extension: 'pdf' | 'xlsx'): string {
   return `${lot.lotNumber}.${extension}`
 }
-
-/** header ของ Content-Disposition ที่รองรับชื่อไฟล์ภาษาไทย (RFC 5987) */
-export function attachmentHeader(fileName: string): string {
-  return `attachment; filename="${fileName.replace(/[^\w.\-]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(fileName)}`
-}

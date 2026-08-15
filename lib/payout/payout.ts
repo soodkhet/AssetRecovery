@@ -46,6 +46,14 @@ export function nextPayoutBatchStatus(current: PayoutBatchStatus, action: Payout
   return next
 }
 
+/**
+ * ทำ action นี้จากสถานะปัจจุบันได้หรือไม่ — **ตารางเดียวกับ `nextPayoutBatchStatus()`**
+ * ⇒ หน้าจอถามที่นี่แทนการ `if (status === …)` เอง (Rule 05 · แนวเดียวกับ `canAdvanceAction()`)
+ */
+export function canPayoutAction(current: PayoutBatchStatus, action: PayoutBatchAction): boolean {
+  return TRANSITIONS[action][current] !== undefined
+}
+
 /** แก้รายการใน batch ที่สร้างไฟล์โอนแล้วไม่ได้ (`17` §10) — ยามของ endpoint ที่จะแตะรายการ */
 export function assertBatchItemsEditable(current: PayoutBatchStatus): void {
   if (current === 'draft' || current === 'checking') return

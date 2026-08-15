@@ -17,9 +17,9 @@ describe('แท็บหน้าการเงิน', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('Phase 3.4 เปิดจริง 3 แท็บ: รออนุมัติ (15) + ค่าตอบแทน (16) + เงินทดรองจ่าย (15)', () => {
+  it('Phase 3.5 เปิดจริง 4 แท็บ: รออนุมัติ (15) + ค่าตอบแทน (16) + เงินทดรองจ่าย (15) + รอบจ่ายเงิน (17)', () => {
     const open = FINANCE_OPERATION_TABS.filter((tab) => tab.available).map((tab) => tab.id)
-    expect(open).toEqual(['approval', 'comp', 'advances'])
+    expect(open).toEqual(['approval', 'comp', 'advances', 'payout'])
   })
 
   it('แท็บที่ยังไม่เปิดต้องบอก Phase ปลายทางเสมอ (ไม่ปล่อยปุ่มหลอก)', () => {
@@ -29,13 +29,14 @@ describe('แท็บหน้าการเงิน', () => {
   })
 
   it('`?tab=` ที่ชี้แท็บยังไม่เกิด/ไม่มีจริง ตกกลับแท็บเริ่มต้น', () => {
-    expect(resolveFinanceOperationTab('payout')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+    expect(resolveFinanceOperationTab('revenue')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
     expect(resolveFinanceOperationTab('ไม่มีแท็บนี้')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
     expect(resolveFinanceOperationTab(undefined)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
   })
 
   it('แท็บที่เปิดแล้วถูกเลือกได้ตรงตัว', () => {
     expect(resolveFinanceOperationTab('comp')).toBe('comp')
+    expect(resolveFinanceOperationTab('payout')).toBe('payout')
     expect(resolveFinanceOperationTab('approval')).toBe('approval')
   })
 })
