@@ -194,6 +194,9 @@
 | ACCOUNTANT_QUESTION_NOT_FOUND | อ้างข้อซักถามที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 36 |
 | ACCOUNTANT_QUESTION_ALREADY_ANSWERED | ตอบข้อซักถามที่ `is_resolved = true` ไปแล้ว (`36` §8 — ตอบได้ครั้งเดียว) | 36 |
 | EXPORT_BLOCKED_CRITICAL | Export Pack ขณะมี critical exception เปิดอยู่ | 34, 37 |
+| EXPORT_RECORD_NOT_FOUND | อ้างประวัติการส่งมอบที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 37 |
+| EXPORT_INVALID_STATUS | mark-sent/accept ผิดลำดับ (`37` §9 — `generated → sent → accepted` ทางเดียว ข้ามขั้นไม่ได้) | 37 |
+| EXPORT_PAYEE_TAX_ID_MISSING | สร้าง Accounting Pack ขณะที่ payee ในไฟล์ `05_WHT_Data.csv` ยังไม่มีเลขประจำตัวผู้เสียภาษี 13 หลัก (`37` §6.1 · DEC-006/D10) | 37 |
 | AUTHORIZED_EXCEPTION_REASON_REQUIRED | สร้าง Authorized Exception โดยไม่กรอกเหตุผล | 34 |
 | EXCEPTION_NOT_FOUND | อ้าง Exception ที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) — 404 ไม่ leak ว่ามีอยู่จริง | 34 |
 | EXCEPTION_INVALID_STATUS | แก้ไข/resolve/authorize Exception ที่ไม่ได้อยู่สถานะ `open` (ไฟล์ 23 §6.12 — `resolved`/`authorized` เป็น terminal) | 34 |
