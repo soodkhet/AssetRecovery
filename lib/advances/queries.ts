@@ -1,3 +1,4 @@
+import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import {
   APPROVE_ADVANCE,
   assertAdvanceRejectionReason,
@@ -167,6 +168,10 @@ export async function createAdvance(
   const policy = await getFinancePolicy(user.organizationId)
   assertWithinAdvanceMax(input.requestedSatang, policy.advanceMaxAmountPerRequestSatang)
 
+  // Period Lock (`13` §6.11 · Phase 4.1) — เงินทดรองเป็นเงินที่ออกในงวดปัจจุบัน
+  // งวดที่ปิดแล้วห้ามมีรายการเงินเพิ่มโดยตรง (`30` · `20`)
+  await assertPeriodOpenAt({ organizationId: user.organizationId, at: now, targetType: 'advances' })
+
   const created = await prisma.$transaction(async (tx) => {
     const payeeId =
       input.payeeId !== null && (user.isSuperadmin || canApproveAdvance(user))
@@ -265,6 +270,12 @@ export async function approveAdvance(
   const status = nextAdvanceStatus(current.status, 'approve')
   const approvedSatang = resolveApprovedSatang(current.requestedSatang, input.approvedSatang)
   const at = new Date()
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: now,
+    targetType: 'advances',
+    targetId: advanceId,
+  })
 
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.advance.update({
@@ -307,6 +318,12 @@ export async function rejectAdvance(
   const reason = assertAdvanceRejectionReason(input.rejectionReason)
   const current = await findAdvance(user, advanceId)
   const status = nextAdvanceStatus(current.status, 'reject')
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: now,
+    targetType: 'advances',
+    targetId: advanceId,
+  })
 
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.advance.update({
@@ -355,6 +372,12 @@ export async function settleAdvance(
   const current = await findAdvance(user, advanceId)
   const status = nextAdvanceStatus(current.status, 'settle')
   assertSettlementAllowed({ requestedSatang: current.requestedSatang, usedSatang: input.usedSatang })
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: now,
+    targetType: 'advances',
+    targetId: advanceId,
+  })
   const preview = advanceSettlement({
     requestedSatang: current.requestedSatang,
     approvedSatang: current.approvedSatang,
