@@ -1,20 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.4 (รายงานหมวด A ครบ 4 ตัว: สรุป WHT รายเดือน · สรุปใบกำกับภาษี 2 มิติ · ประวัติส่งออกชุดข้อมูลบัญชีทุกเวอร์ชัน · สรุปข้อยกเว้นรายงวดที่แยก `authorized` ออกจาก `resolved`) — ไม่มี migration ใหม่ · งานถัดไป 6.5 (Executive Dashboard — E1–E3)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.5 (Executive Dashboard E1–E3: KPI ภาพรวม 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard รายบริษัท · Scorecard รายทีม) ⇒ **เมนูรายงานเปิดครบ 17/17 ตัวของไฟล์ 96** — ไม่มี migration ใหม่ · งานถัดไป 8.1 (E2E Acceptance Tests — 6.6/Phase 7 ยังบล็อกด้วยคำตอบ PO)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 6.5: Executive Dashboard (E1–E3)
+## 🎯 งานถัดไป — Phase 8.1: E2E Acceptance Tests (ไฟล์ 29)
 
-- ทำตาม `docs/01_PLAN.md` §6.5 — E1 KPI ภาพรวม (6 KPI: รายได้ YTD / กำไรขั้นต้น YTD / Margin % / เคสทั้งหมด / Success Rate / AR ค้างรับ + Revenue trend 12 เดือน + Success trend + Top 5 บริษัท) · E2 Scorecard รายบริษัทไฟแนนซ์ · E3 Scorecard รายทีม
-- **Executive/Superadmin เท่านั้น** — การเงิน/บัญชี/ผู้จัดการเรียกต้อง 403 (`96` §14 มี test case ตรงตัว · ยามอยู่ที่ `lib/reports/access.ts` แล้ว)
-- **ใช้โครงของ 6.1–6.4 เท่านั้น**: provider ใหม่ที่ `lib/reports/executive/providers.ts` ต่อเข้า `REPORT_PROVIDERS` + หน้าจอลงทะเบียนที่ `<ReportScreen>` — ยอดต้อง**เรียกโมดูล pure ของ F/O ที่มีอยู่** (`buildGrossProfitSummary()`/`successRate()`/`buildArAgingReport()`) ห้ามคิดสูตรใหม่
-- แคช **รายวัน** (`96` §8) + E1 ต้องแสดงเวลา refresh ล่าสุด ≤24 ชม. (`96` §13) — โครงแคช/ปุ่มรีเฟรชมีแล้วที่ 6.1 · กราฟเส้นยังไม่มี ⇒ เพิ่ม `<ReportLineChart>` (Recharts) เป็น shared ข้าง `<ReportBarChart>`
-- ⚠️ `lib/reports/run.test.ts` ใช้ E1 เป็นตัวอย่าง "รายงานที่ยังไม่มี provider" — 6.5 ต้องเปลี่ยนไปลงทะเบียน provider ปลอมแทน (จะไม่เหลือรายงานที่ยังไม่เปิดใช้งานแล้ว)
-- อ้างอิง: `96` §6-E, §8, §10, §13–14 ผ่าน MAP · mockup `reports.html` ผ่าน MAP (`renderE1`–`renderE3`)
-- LOC ~1,600 · งบ ~270k
+> 6.6 (แดชบอร์ดหลัก) และ Phase 7 (Client Portal) ยัง **บล็อกด้วยคำตอบ PO** (spec `dashboard.html` เป็น DRAFT · Auth method ของ Portal — `97` §22 #2) ⇒ งานที่เดินต่อได้จริงคือ 8.1
+
+- ทำตาม `docs/01_PLAN.md` §8.1 — automated integration tests ผูกเข้า CI ครอบ 5 scenario เต็มของ `29` §6.1–6.5: รายรับ happy path / รายจ่าย happy path / QC ตีกลับไม่กระทบ Revenue / งวด locked → Adjustment / Full Monthly Close
+- \+ Integration Checklist 9 จุดของ `29` §7 (จุดเชื่อมข้ามโมดูล) \+ scenario **Advance 5 สถานะ** (Open Item ของ `29`)
+- ใช้โครงเทสต์ระดับ DB ที่มีอยู่แล้วเป็นแม่แบบ (`*.db.test.ts` — org/ผู้ใช้/ทีม/บริษัทของตัวเอง + `cleanup()` ต่อรัน) และ **เดินผ่าน service จริงทุกก้าว** ห้าม insert ข้ามขั้นเพื่อให้ผ่าน
+- จุดที่ต้องพิสูจน์ให้ครบตาม Rule 07: Revenue trigger 8 เคส (`19` §16) · Lot confirm 4 ขั้น + rollback (`44` §17) · resubmit_close superseded (`41`) · period locked → `PERIOD_LOCKED_DIRECT_EDIT` (`30`/`20`) · export block เมื่อ critical open (`34`/`37`)
+- อ้างอิง: `29` ทั้งไฟล์ · `22`/`23`/`24` ประกอบ
+- LOC ~2,000 (tests) · งบ ~360k
 
 ---
 
@@ -104,7 +105,7 @@
 | 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
 | 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `f4b824f` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 6.4 | รายงานหมวด A (A1–A4) | ✅ | 2026-08-15 · `ec43687` · A1–A4 ครบ (WHT รายเดือน/ใบกำกับภาษี 2 มิติ/ประวัติส่งออกทุกเวอร์ชัน/ข้อยกเว้นรายงวดที่แยก `authorized` จาก `resolved`) + ตัวแปลงช่วงวันที่ → ช่วงงวดบัญชี · เทสต์ pure 29 + DB 12 → archive |
-| 6.5 | Executive Dashboard (E1–E3) | ⬜ | PLAN §6.5 · Exec/Superadmin เท่านั้น |
+| 6.5 | Executive Dashboard (E1–E3) | ✅ | 2026-08-15 · `PENDING65` · E1–E3 ครบ (KPI 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard บริษัท/ทีม) + `<ReportLineChart>` shared ⇒ **รายงานครบ 17/17 ตัวของไฟล์ 96** · เทสต์ pure 25 + DB 11 → archive |
 | 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⏸️ | PLAN §6.6 · รอ PO อนุมัติ spec (dashboard.html เป็น DRAFT) |
 
 ## Phase 7 — Client Portal (ไฟล์ 97) 🔒 (ปลดล็อกเมื่อ PO ตอบ Auth method — `97` §22 #2)

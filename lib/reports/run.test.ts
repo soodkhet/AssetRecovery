@@ -87,8 +87,10 @@ afterEach(() => {
 
 describe('runReport', () => {
   it('รายงานที่ยังไม่มี provider ⇒ REPORT_NOT_FOUND (ไม่คืนตัวเลขปลอม)', async () => {
-    // E1 ยังไม่มีตัวคำนวณ (Phase 6.5) — ผู้บริหารมีสิทธิ์ดูหมวด E จึงไปตกที่ยาม provider ไม่ใช่ 403
-    // (หมวด F เปิดใช้แล้วตั้งแต่ 6.2 · O ตั้งแต่ 6.3 · A ตั้งแต่ 6.4 ⇒ ต้องใช้รายงานของหมวดที่ยังไม่ถึงคิว)
+    // 6.5 เปิดใช้ครบทั้ง 17 รายงานแล้ว ⇒ จำลอง "รายงานที่ยังไม่เปิดใช้งาน" ด้วยการถอน provider
+    // ออกชั่วคราว (afterEach คืนทะเบียนจริงให้) — ยามตัวนี้ยังต้องอยู่สำหรับรายงานที่จะเพิ่มในอนาคต
+    // ผู้บริหารมีสิทธิ์ดูหมวด E จึงไปตกที่ยาม provider ไม่ใช่ 403
+    delete REPORT_PROVIDERS[E1.id]
     const executive = userOf({ id: 'exec-1', capabilities: { unlock_period: 'manage' } })
 
     await expect(runReport(executive, E1, { range: RANGE, refresh: false, now: NOW })).rejects.toThrow(ReportError)
