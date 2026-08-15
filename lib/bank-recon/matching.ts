@@ -117,6 +117,24 @@ export function isExactMatchAmount(
   return absolute === candidate.amountSatang || (candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang)
 }
 
+/**
+ * A1 — WHT ที่ลูกค้าหักไว้ก่อนโอน สำหรับบันทึกลงใบเงินรับ (`31` §8 · มติ PO 2026-08-12)
+ *
+ * ยอดที่เข้าบัญชีจริงเท่ากับ `total − wht` เมื่อใดก็ตามที่ลูกค้าหักภาษีก่อนโอน ⇒ ส่วนต่างคือ
+ * **เครดิตภาษีของบริษัท** ต้องเก็บไว้กับใบเงินรับ ไม่ใช่ปล่อยเป็น 0 (ไม่งั้นตามเครดิตรายใบไม่ได้)
+ * · คืน 0 เมื่อรับเต็มจำนวนหรือยอดไม่ตรงทั้งสองค่า — **ไม่เดาส่วนต่าง** เพราะยอดที่ไม่ตรงเป๊ะ
+ *   เกิดได้จากจ่ายบางส่วน/ค่าธรรมเนียม ซึ่งไม่ใช่ภาษีหัก ณ ที่จ่าย
+ * · เลขจำนวนเต็มล้วน ไม่คิดอัตราภาษีใหม่ (อัตราถูก snapshot ไว้ที่ `billing_batches` แล้ว)
+ */
+export function whtWithheldForReceipt(
+  transactionAmountSatang: number,
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang'>,
+): number {
+  const absolute = Math.abs(transactionAmountSatang)
+  if (candidate.altAmountSatang === null || absolute !== candidate.altAmountSatang) return 0
+  return candidate.amountSatang - absolute
+}
+
 /** `MATCH_NOTE_REQUIRED` — จับคู่ manual ที่ยอดไม่ตรงเป๊ะต้องมีหมายเหตุ (`35` §11) */
 export function manualMatchRequiresNote(input: {
   exactAmount: boolean

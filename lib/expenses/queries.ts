@@ -312,6 +312,9 @@ export async function mapExpenseCostCenter(
     periodStatus: record.period.status,
     targetType: TARGET,
     targetId: expenseRecordId,
+    // จัดหมวดค่าใช้จ่าย ไม่ขยับยอดสักช่อง (`assertNoAmountEdit` การันตีอีกชั้น)
+    // ⇒ รอบที่ "ส่งสำนักงานบัญชีแล้ว" ยัง map ได้ · รอบ `locked` ยังห้ามเหมือนเดิม (`13` §6.11)
+    affectsAmount: false,
   })
 
   const costCenter = await prisma.costCenter.findFirst({

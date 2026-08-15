@@ -2668,6 +2668,8 @@ model ExportRecord {
   generatedByUser User             @relation("exports_generated_by", fields: [generatedBy], references: [id])
   sentByUser      User?            @relation("exports_sent_by", fields: [sentBy], references: [id])
 
+  /// เวอร์ชันห้ามชนกันเอง — กันสองคนกด Export พร้อมกันแล้วได้ `version` เดียวกัน (`37` §6.2 · Rule 02)
+  @@unique([organizationId, periodId, version], map: "uniq_export_period_version")
   @@index([periodId, version], map: "idx_exports_period")
   @@map("export_records")
 }

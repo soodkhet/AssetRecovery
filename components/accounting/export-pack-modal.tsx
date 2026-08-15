@@ -92,7 +92,12 @@ export function ExportPackModal({
           </Select>
         </Field>
 
-        {criticalCount > 0 ? (
+        {/* ไม่มีรอบให้เลือก = โหลดรายชื่อไม่สำเร็จ/ยังไม่มีรอบ ⇒ ห้ามขึ้นไฟเขียว "พร้อม Export" */}
+        {selected === undefined ? (
+          <InlineAlert tone="error" title="ยังไม่ทราบสถานะข้อยกเว้นของรอบนี้">
+            โหลดรายชื่อรอบบัญชีไม่สำเร็จ หรือยังไม่มีรอบให้ส่งออก — ปิดหน้าต่างแล้วลองใหม่อีกครั้ง
+          </InlineAlert>
+        ) : criticalCount > 0 ? (
           <InlineAlert tone="error" title={`ไม่สามารถ Export ได้ — มี ${fmtCount(criticalCount)} Critical Exception เปิดอยู่`}>
             แก้ไขให้เรียบร้อยหรือขอ Authorized Exception จากผู้บริหารก่อน (ไฟล์ 34)
           </InlineAlert>

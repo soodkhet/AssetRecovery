@@ -81,6 +81,30 @@ export function assertUnlockAllowed(canUnlock: boolean): void {
   if (!canUnlock) throw new AccountingError('UNLOCK_REQUIRES_EXECUTIVE')
 }
 
+/** action ของรอบบัญชี → สถานะต้นทางที่ยอมให้สั่งได้เพียงสถานะเดียว (`30` §9–§10 · `23` §6.13) */
+const PERIOD_ACTION_FROM: Readonly<Record<PeriodAction, AccountingPeriodStatus>> = {
+  send: 'collecting',
+  lock: 'sent_to_accountant',
+  unlock: 'locked',
+}
+
+export type PeriodAction = 'send' | 'lock' | 'unlock'
+
+/**
+ * ยามระดับ **action** — ตาราง from→to อย่างเดียวไม่พอ เพราะ `sent_to_accountant` มีทางเข้า 2 ทาง
+ * (`collecting` = ส่งตามปกติ · `locked` = ปลดล็อกโดยผู้บริหาร) ⇒ ถ้าเช็คแค่ transition จะเปิดช่อง 2 ทาง:
+ * - บัญชียิง `send` ใส่รอบที่ `locked` = ปลดล็อกได้เองโดยไม่ผ่าน `UNLOCK_REQUIRES_EXECUTIVE` (`30` §10)
+ * - ผู้บริหารยิง `unlock` ใส่รอบที่ `collecting` = ส่งบัญชีโดย**ข้าม Readiness Check** ทั้ง 3 เงื่อนไข
+ *
+ * `24` §6.7 ระบุ `PERIOD_INVALID_STATUS` ไว้ตรงตัวสำหรับ "ปลดล็อกรอบที่ยังไม่ `locked`"
+ */
+export function assertPeriodActionStatus(action: PeriodAction, from: AccountingPeriodStatus): void {
+  const expected = PERIOD_ACTION_FROM[action]
+  if (from !== expected) {
+    throw new AccountingError('PERIOD_INVALID_STATUS', { detail: `action=${action} ต้องอยู่ที่ ${expected} (ปัจจุบัน ${from})` })
+  }
+}
+
 /** ป้ายสถานะรอบ — ข้อความเดียวกับตารางนโยบาย `13` §6.11 (ห้ามตั้งชุดใหม่) */
 export function periodStatusLabel(status: AccountingPeriodStatus): string {
   return periodLockPolicyFor(status).statusLabel

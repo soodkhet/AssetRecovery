@@ -448,6 +448,31 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     const periodId = await seedPeriod()
     await expectCode(() => accounting.lockPeriod(ctx(), periodId, reason), 'PERIOD_INVALID_STATUS')
   })
+
+  it('บัญชีส่งบัญชีรอบที่ `locked` ไม่ได้ — กันปลดล็อกอ้อมโดยไม่ผ่านผู้บริหาร (`30` §10)', async () => {
+    const periodId = await seedPeriod('sent_to_accountant')
+    await accounting.lockPeriod(ctx(), periodId, reason)
+
+    await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason), 'PERIOD_INVALID_STATUS')
+
+    // รอบต้องยังปิดอยู่จริง และ `locked_at` ต้องไม่ถูกทิ้งค้างไว้แบบสถานะไม่ตรง
+    const after = await db().accountingPeriod.findUniqueOrThrow({ where: { id: periodId } })
+    expect(after.status).toBe('locked')
+    expect(after.lockedAt).not.toBeNull()
+  })
+
+  it('ผู้บริหารปลดล็อกรอบที่ยัง `collecting` ไม่ได้ — กันข้าม Readiness Check (`24` §6.7)', async () => {
+    const periodId = await seedPeriod()
+
+    await expectCode(
+      () => accounting.unlockPeriod(ctx(executive), periodId, { reason: 'ขอส่งเลยไม่ต้องเช็ค' }),
+      'PERIOD_INVALID_STATUS',
+    )
+
+    const after = await db().accountingPeriod.findUniqueOrThrow({ where: { id: periodId } })
+    expect(after.status).toBe('collecting')
+    expect(after.sentAt).toBeNull()
+  })
 })
 
 suite('Phase 4.1 — Period Lock guard (`13` §6.11 · interceptor)', () => {
@@ -512,5 +537,45 @@ suite('Phase 4.1 — Period Lock guard (`13` §6.11 · interceptor)', () => {
       note: 'ค่าเดินทางเดือนถัดไป',
     })
     expect(nextMonth.id).toBeTruthy()
+  })
+
+  /**
+   * มติ PO 2026-08-15 — `sent_to_accountant` = `directEdit: 'limited'` (`13` §6.11)
+   * บล็อกเฉพาะการเขียนที่กระทบยอดที่ส่งไปแล้ว ส่วนงานจัดหมวดที่ไม่ขยับตัวเลขยังทำได้
+   */
+  it('งวด sent_to_accountant ⇒ การเขียนที่กระทบยอดโดนบล็อก (PERIOD_LOCKED_DIRECT_EDIT)', async () => {
+    await seedPeriod('sent_to_accountant')
+
+    await expectCode(
+      () =>
+        claims.createManualClaim(ctx(), {
+          claimType: 'manual',
+          grossSatang: 250_00,
+          expenseDate: new Date('2026-08-20T00:00:00Z'),
+          payeeId: null,
+          receiptFileUrl: null,
+          note: 'ค่าเดินทางเพิ่มเติม',
+        }),
+      'PERIOD_LOCKED_DIRECT_EDIT',
+    )
+  })
+
+  it('งวด sent_to_accountant ⇒ สร้างรอบวางบิลของงวดนั้นไม่ได้ (กระทบยอด)', async () => {
+    await seedPeriod('sent_to_accountant')
+    await seedUnbilledRevenue()
+
+    await expectCode(
+      () =>
+        revenue.createBillingBatch(
+          { actor: accountant, meta, reason: 'วางบิลรอบสิงหาคม' },
+          {
+            companyId: COMPANY_A,
+            cutoffDate: new Date('2026-08-31T00:00:00Z'),
+            cycleId: null,
+            reason: 'วางบิลรอบสิงหาคม',
+          },
+        ),
+      'PERIOD_LOCKED_DIRECT_EDIT',
+    )
   })
 })

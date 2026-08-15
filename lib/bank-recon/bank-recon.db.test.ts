@@ -267,6 +267,25 @@ suite('Phase 4.2 — นำเข้า statement + auto-match (`35` §6.2)', ()
     // ยอดรับ 780,000 + WHT ที่ลูกค้าหักไว้ 22,500 = เต็มยอด ⇒ ปิดรอบเป็น paid
     expect(billing.receivedSatang).toBe(780000)
     expect(billing.status).toBe('paid')
+
+    // ใบเงินรับต้องเก็บเครดิตภาษีที่ลูกค้าหักไว้ด้วย ไม่ใช่ 0 (`31` §8 — แท็บเงินรับแสดงคอลัมน์นี้)
+    const receipt = await db().cashReceipt.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(receipt.amountSatang).toBe(780000)
+    expect(receipt.whtWithheldByCustomerSatang).toBe(22500)
+  })
+
+  it('รับเต็มจำนวน ⇒ ใบเงินรับไม่บันทึก WHT ที่ลูกค้าหัก (ห้ามเดาส่วนต่าง)', async () => {
+    await seedBilling(BILLING_A, 802500)
+
+    await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'full.csv',
+      csv: csvOf('05/08/2569,โอนเข้าเต็มจำนวน,KBANK-TRX-012,"8,025.00",'),
+    })
+
+    const receipt = await db().cashReceipt.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(receipt.amountSatang).toBe(802500)
+    expect(receipt.whtWithheldByCustomerSatang).toBe(0)
   })
 
   it('เงินออกจับกับรอบจ่าย ⇒ payout เปลี่ยนเป็น completed (`17` §9)', async () => {

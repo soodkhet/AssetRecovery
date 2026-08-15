@@ -312,6 +312,30 @@ suite('Phase 4.4 — map Cost Center (`32` §10/§11)', () => {
       await setPeriodStatus('collecting')
     }
   })
+
+  /**
+   * มติ PO 2026-08-15 — `sent_to_accountant` = `limited` (`13` §6.11)
+   * map Cost Center ไม่ขยับยอดสักช่อง ⇒ ยังทำได้ (ต่างจาก `locked` ที่ห้ามทุกกรณี)
+   */
+  it('งวดที่ sent_to_accountant ⇒ map Cost Center ได้ เพราะไม่กระทบยอด (`13` §6.11)', async () => {
+    const seeded = await seedBatch()
+    const [record] = await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+
+    await setPeriodStatus('sent_to_accountant')
+    try {
+      const updated = await expenses.mapExpenseCostCenter(ctx, record?.id ?? '', {
+        costCenterId: COST_CENTER_ID,
+        reason: 'จัดหมวดหลังส่งสำนักงานบัญชี',
+      })
+      expect(updated.costCenterId).toBe(COST_CENTER_ID)
+      // ยอดต้องไม่ขยับเลยแม้แต่ช่องเดียว
+      expect(updated.grossSatang).toBe(record?.grossSatang)
+      expect(updated.whtSatang).toBe(record?.whtSatang)
+      expect(updated.netSatang).toBe(record?.netSatang)
+    } finally {
+      await setPeriodStatus('collecting')
+    }
+  })
 })
 
 suite('Phase 4.4 — รายการและตัวกรอง (`32` §8)', () => {

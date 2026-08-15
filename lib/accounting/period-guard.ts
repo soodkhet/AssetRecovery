@@ -55,24 +55,46 @@ export interface PeriodGuardInput {
   /** ชื่อตารางของรายการที่กำลังจะแก้ — ไปโผล่ใน `detail` ของ error และ audit */
   targetType: string
   targetId?: string | null
+  /**
+   * การเขียนนี้ขยับยอดที่ส่งสำนักงานบัญชีไปแล้วหรือไม่ (default `true`)
+   * `false` = งานจัดหมวดที่ไม่ขยับตัวเลข ⇒ รอบ `sent_to_accountant` ยังทำได้ (`13` §6.11)
+   */
+  affectsAmount?: boolean
 }
 
 /**
  * ยามหลักที่ต้องเรียก **ก่อน** ทุก write ของสายการเงิน/บัญชีที่ผูกกับงวด
  * รอบ `locked` ⇒ โยน `PERIOD_LOCKED_DIRECT_EDIT` (400) ให้ไปใช้ Adjustment แทน (`20`)
+ * รอบ `sent_to_accountant` ⇒ โยนเฉพาะการเขียนที่กระทบยอด (`13` §6.11)
  */
 export async function assertPeriodOpenAt(input: PeriodGuardInput, client: QueryClient = prisma): Promise<void> {
   const status = await periodStatusAt(input.organizationId, periodKeyOf(input.at), client)
-  assertPeriodEditable({ periodStatus: status, targetType: input.targetType, targetId: input.targetId ?? null })
+  assertPeriodEditable({
+    periodStatus: status,
+    targetType: input.targetType,
+    targetId: input.targetId ?? null,
+    affectsAmount: input.affectsAmount,
+  })
 }
 
 /** เวอร์ชันที่รู้งวดอยู่แล้ว (เช่นรอบวางบิลที่เก็บป้ายงวดไว้เป็นข้อความ) */
 export async function assertPeriodOpenForKey(
-  input: { organizationId: string; key: PeriodKey; targetType: string; targetId?: string | null },
+  input: {
+    organizationId: string
+    key: PeriodKey
+    targetType: string
+    targetId?: string | null
+    affectsAmount?: boolean
+  },
   client: QueryClient = prisma,
 ): Promise<void> {
   const status = await periodStatusAt(input.organizationId, input.key, client)
-  assertPeriodEditable({ periodStatus: status, targetType: input.targetType, targetId: input.targetId ?? null })
+  assertPeriodEditable({
+    periodStatus: status,
+    targetType: input.targetType,
+    targetId: input.targetId ?? null,
+    affectsAmount: input.affectsAmount,
+  })
 }
 
 /**
@@ -80,13 +102,25 @@ export async function assertPeriodOpenForKey(
  * จึงต้องอ่านจากป้าย (`19` §6.2) · ป้ายที่อ่านไม่ออก = ไม่รู้งวด ⇒ ปล่อยผ่าน (ไม่บล็อกมั่ว)
  */
 export async function assertPeriodOpenForLabel(
-  input: { organizationId: string; periodLabel: string; targetType: string; targetId?: string | null },
+  input: {
+    organizationId: string
+    periodLabel: string
+    targetType: string
+    targetId?: string | null
+    affectsAmount?: boolean
+  },
   client: QueryClient = prisma,
 ): Promise<void> {
   const key = parseBillingPeriodLabel(input.periodLabel)
   if (key === null) return
   await assertPeriodOpenForKey(
-    { organizationId: input.organizationId, key, targetType: input.targetType, targetId: input.targetId },
+    {
+      organizationId: input.organizationId,
+      key,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      affectsAmount: input.affectsAmount,
+    },
     client,
   )
 }

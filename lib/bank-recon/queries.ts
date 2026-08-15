@@ -11,6 +11,7 @@ import {
   manualMatchRequiresNote,
   nextBankMatchStatus,
   transactionSide,
+  whtWithheldForReceipt,
   type MatchCandidate,
   type MatchTargetKind,
 } from '@/lib/bank-recon/matching'
@@ -576,6 +577,8 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
 
     let receiptId: string | null = null
     if (input.candidate.kind === 'billing') {
+      // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ เก็บส่วนต่างไว้กับใบเงินรับเป็นเครดิตภาษี (`31` §8)
+      const whtWithheldSatang = whtWithheldForReceipt(before.amountSatang, input.candidate)
       const receipt = await tx.cashReceipt.create({
         data: {
           organizationId: ctx.actor.organizationId,
@@ -583,6 +586,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
           billingBatchId: input.candidate.id,
           bankTransactionId: before.id,
           amountSatang: absSatang(before.amountSatang),
+          whtWithheldByCustomerSatang: whtWithheldSatang,
           receivedDate: before.transactionDate,
           note,
           createdBy: ctx.actor.id,
@@ -602,6 +606,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
             billing_batch_id: input.candidate.id,
             bank_transaction_id: before.id,
             amount_satang: absSatang(before.amountSatang),
+            wht_withheld_by_customer_satang: whtWithheldSatang,
             received_date: before.transactionDate,
             source: 'bank_reconciliation',
           },

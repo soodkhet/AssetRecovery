@@ -11,6 +11,7 @@ import {
   type ExceptionSummary,
 } from '@/lib/accounting/exception'
 import {
+  assertPeriodActionStatus,
   assertPeriodTransition,
   assertReadyToSend,
   assertUnlockAllowed,
@@ -439,7 +440,8 @@ export async function sendPeriod(
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
   const row = await findPeriodById(ctx.actor, periodId)
-  assertPeriodTransition(row.status, 'sent_to_accountant')
+  // เฉพาะ `collecting` — รอบที่ `locked` ต้องไปทาง `unlockPeriod()` ที่บังคับสิทธิ์ผู้บริหาร (`30` §10)
+  assertPeriodActionStatus('send', row.status)
   const readiness = await readinessOf(ctx.actor.organizationId, row)
   assertReadyToSend(readiness)
   return transitionPeriod(ctx, periodId, 'sent_to_accountant', input, { readiness })
@@ -451,6 +453,7 @@ export async function lockPeriod(
   periodId: string,
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
+  assertPeriodActionStatus('lock', (await findPeriodById(ctx.actor, periodId)).status)
   return transitionPeriod(ctx, periodId, 'locked', input)
 }
 
@@ -465,6 +468,8 @@ export async function unlockPeriod(
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
   assertUnlockAllowed(ctx.actor.isSuperadmin || hasCapability(ctx.actor, 'manage', UNLOCK_PERIOD))
+  // เฉพาะ `locked` — ไม่งั้นรอบที่ยัง `collecting` จะถูกส่งบัญชีโดยข้าม Readiness Check (`30` §10)
+  assertPeriodActionStatus('unlock', (await findPeriodById(ctx.actor, periodId)).status)
   return transitionPeriod(ctx, periodId, 'sent_to_accountant', input, { unlock: true })
 }
 

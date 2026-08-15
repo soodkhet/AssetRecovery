@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAccountingError } from '@/lib/accounting/errors'
 import {
+  assertPeriodActionStatus,
   assertPeriodTransition,
   assertReadyToSend,
   assertUnlockAllowed,
@@ -79,6 +80,28 @@ describe('state machine ของรอบบัญชี (`23` §6.13)', () => 
   it('ป้ายสถานะมาจากตารางนโยบาย `13` §6.11 ตัวเดียว', () => {
     expect(periodStatusLabel('locked')).toBe('ปิดรอบแล้ว')
     expect(periodStatusLabel('collecting')).toBe('กำลังรวบรวม')
+  })
+})
+
+describe('ยาม action ของรอบบัญชี (`30` §9–§10 · `24` §6.7)', () => {
+  it('แต่ละ action สั่งได้จากสถานะเดียวเท่านั้น', () => {
+    expect(() => assertPeriodActionStatus('send', 'collecting')).not.toThrow()
+    expect(() => assertPeriodActionStatus('lock', 'sent_to_accountant')).not.toThrow()
+    expect(() => assertPeriodActionStatus('unlock', 'locked')).not.toThrow()
+  })
+
+  it('ส่งบัญชีรอบที่ `locked` ไม่ได้ — ต้องไปทางปลดล็อกที่บังคับสิทธิ์ผู้บริหาร (`30` §10)', () => {
+    expect(codeOf(() => assertPeriodActionStatus('send', 'locked'))).toBe('PERIOD_INVALID_STATUS')
+    expect(codeOf(() => assertPeriodActionStatus('send', 'sent_to_accountant'))).toBe('PERIOD_INVALID_STATUS')
+  })
+
+  it('ปลดล็อกรอบที่ยังไม่ `locked` ไม่ได้ — กันการข้าม Readiness Check (`24` §6.7)', () => {
+    expect(codeOf(() => assertPeriodActionStatus('unlock', 'collecting'))).toBe('PERIOD_INVALID_STATUS')
+    expect(codeOf(() => assertPeriodActionStatus('unlock', 'sent_to_accountant'))).toBe('PERIOD_INVALID_STATUS')
+  })
+
+  it('ล็อกรอบที่ยัง `collecting` ไม่ได้', () => {
+    expect(codeOf(() => assertPeriodActionStatus('lock', 'collecting'))).toBe('PERIOD_INVALID_STATUS')
   })
 })
 

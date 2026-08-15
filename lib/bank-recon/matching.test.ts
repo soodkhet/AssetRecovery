@@ -11,6 +11,7 @@ import {
   manualMatchRequiresNote,
   nextBankMatchStatus,
   transactionSide,
+  whtWithheldForReceipt,
   type MatchCandidate,
 } from '@/lib/bank-recon/matching'
 
@@ -132,6 +133,17 @@ describe('MATCH_NOTE_REQUIRED (`35` §11)', () => {
     expect(isExactMatchAmount(802500, { amountSatang: 802500, altAmountSatang: null })).toBe(true)
     expect(isExactMatchAmount(-780000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(true)
     expect(isExactMatchAmount(800000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(false)
+  })
+
+  it('whtWithheldForReceipt คืนส่วนต่างเฉพาะตอนรับยอด total − wht (A1)', () => {
+    // ลูกค้าหัก WHT ก่อนโอน ⇒ เข้าจริง 7,800.00 จากบิล 8,025.00 ⇒ เครดิตภาษี 225.00
+    expect(whtWithheldForReceipt(780000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(22500)
+    expect(whtWithheldForReceipt(-780000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(22500)
+    // รับเต็มจำนวน = ไม่มีการหักภาษี
+    expect(whtWithheldForReceipt(802500, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(0)
+    expect(whtWithheldForReceipt(802500, { amountSatang: 802500, altAmountSatang: null })).toBe(0)
+    // ยอดไม่ตรงทั้งสองค่า (จ่ายบางส่วน/ค่าธรรมเนียม) — ห้ามเดาว่าเป็นภาษีหัก ณ ที่จ่าย
+    expect(whtWithheldForReceipt(800000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(0)
   })
 
   it('hasNote ตัดช่องว่างล้วนทิ้ง', () => {

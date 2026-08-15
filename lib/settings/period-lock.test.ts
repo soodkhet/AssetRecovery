@@ -4,6 +4,7 @@ import {
   PERIOD_LOCK_POLICY,
   assertPeriodEditable,
   isDirectEditBlocked,
+  isDirectEditRejected,
   periodLockPolicyFor,
 } from '@/lib/settings/period-lock'
 
@@ -41,10 +42,27 @@ describe('PERIOD_LOCK_POLICY', () => {
 })
 
 describe('isDirectEditBlocked', () => {
-  it('เฉพาะ locked ที่บล็อกการแก้ตรง', () => {
+  it('เฉพาะ locked ที่บล็อกการแก้ตรงทุกกรณี', () => {
     expect(isDirectEditBlocked('collecting')).toBe(false)
     expect(isDirectEditBlocked('sent_to_accountant')).toBe(false)
     expect(isDirectEditBlocked('locked')).toBe(true)
+  })
+})
+
+describe('isDirectEditRejected (`13` §6.11 — มติ PO 2026-08-15)', () => {
+  it('collecting = ผ่านหมด', () => {
+    expect(isDirectEditRejected('collecting', true)).toBe(false)
+    expect(isDirectEditRejected('collecting', false)).toBe(false)
+  })
+
+  it('sent_to_accountant = ปฏิเสธเฉพาะที่กระทบยอด', () => {
+    expect(isDirectEditRejected('sent_to_accountant', true)).toBe(true)
+    expect(isDirectEditRejected('sent_to_accountant', false)).toBe(false)
+  })
+
+  it('locked = ปฏิเสธทุกกรณี', () => {
+    expect(isDirectEditRejected('locked', true)).toBe(true)
+    expect(isDirectEditRejected('locked', false)).toBe(true)
   })
 })
 
@@ -53,9 +71,39 @@ describe('assertPeriodEditable', () => {
     expect(() => assertPeriodEditable({ periodStatus: null, targetType: 'expenses' })).not.toThrow()
   })
 
-  it('collecting / sent_to_accountant = ผ่าน (ข้อจำกัดรายฟิลด์เป็นงานของ Phase 4.1)', () => {
+  it('collecting = ผ่านทุกกรณี ไม่ว่ากระทบยอดหรือไม่', () => {
     expect(() => assertPeriodEditable({ periodStatus: 'collecting', targetType: 'expenses' })).not.toThrow()
-    expect(() => assertPeriodEditable({ periodStatus: 'sent_to_accountant', targetType: 'expenses' })).not.toThrow()
+    expect(() =>
+      assertPeriodEditable({ periodStatus: 'collecting', targetType: 'expenses', affectsAmount: true }),
+    ).not.toThrow()
+  })
+
+  /** มติ PO 2026-08-15 — `limited` = บล็อกเฉพาะการเขียนที่กระทบยอดที่ส่งไปแล้ว (`13` §6.11) */
+  it('sent_to_accountant = บล็อกเฉพาะที่กระทบยอด · งานจัดหมวดยังทำได้', () => {
+    expect(() =>
+      assertPeriodEditable({ periodStatus: 'sent_to_accountant', targetType: 'expense_records', affectsAmount: false }),
+    ).not.toThrow()
+
+    try {
+      assertPeriodEditable({ periodStatus: 'sent_to_accountant', targetType: 'revenues', targetId: 'r1' })
+      expect.unreachable('การเขียนที่กระทบยอดต้องโดนบล็อก')
+    } catch (error) {
+      expect(isSettingsError(error)).toBe(true)
+      if (isSettingsError(error)) {
+        expect(error.code).toBe('PERIOD_LOCKED_DIRECT_EDIT')
+        expect(error.context).toMatchObject({ periodStatus: 'sent_to_accountant', affectsAmount: true })
+      }
+    }
+  })
+
+  it('ไม่ระบุ affectsAmount = ถือว่ากระทบยอด (ลืม = ปลอดภัยไว้ก่อน)', () => {
+    expect(() => assertPeriodEditable({ periodStatus: 'sent_to_accountant', targetType: 'revenues' })).toThrow()
+  })
+
+  it('locked = บล็อกแม้การเขียนที่ไม่กระทบยอด', () => {
+    expect(() =>
+      assertPeriodEditable({ periodStatus: 'locked', targetType: 'expense_records', affectsAmount: false }),
+    ).toThrow()
   })
 
   it('locked = PERIOD_LOCKED_DIRECT_EDIT พร้อมบอกเป้าหมาย', () => {

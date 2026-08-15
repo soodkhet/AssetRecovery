@@ -70,20 +70,40 @@ export function isDirectEditBlocked(status: AccountingPeriodStatus): boolean {
 }
 
 /**
- * **Interceptor (โครง)** — เรียกก่อนแก้ source record ทุกตัวที่ผูกกับงวดบัญชี
+ * การเขียนนี้ถูกนโยบายของงวดปฏิเสธไหม (`13` §6.11 — มติ PO 2026-08-15)
+ *
+ * - `blocked` (`locked`) = ปฏิเสธ**ทุกกรณี** ต้องไป Adjustment (`20`)
+ * - `limited` (`sent_to_accountant`) = ปฏิเสธ**เฉพาะการเขียนที่กระทบยอดที่ส่งไปแล้ว**
+ *   ("จำกัด — เฉพาะฟิลด์ที่ไม่กระทบยอดที่ส่งไปแล้ว" / "บางกรณี (เมื่อกระทบยอด)")
+ *   ⇒ งานจัดหมวดที่ไม่ขยับตัวเลข เช่น map cost center ยังทำได้ตามปกติ
+ * - `free` (`collecting`) = ผ่านหมด
+ */
+export function isDirectEditRejected(status: AccountingPeriodStatus, affectsAmount: boolean): boolean {
+  const { directEdit } = periodLockPolicyFor(status)
+  if (directEdit === 'blocked') return true
+  if (directEdit === 'limited') return affectsAmount
+  return false
+}
+
+/**
+ * **Interceptor** — เรียกก่อนแก้ source record ทุกตัวที่ผูกกับงวดบัญชี
  * `periodStatus = null` = ยังไม่มีงวดของเดือนนั้น (ยังเก็บข้อมูลอยู่) → แก้ได้
  *
- * Phase 4.1 จะต่อตัวนี้เข้าทุก write endpoint ของสายการเงิน/บัญชี — เฟสนี้ export ไว้ให้เรียกได้แล้ว
+ * `affectsAmount` **ค่าเริ่มต้น = `true`** โดยเจตนา — การเขียนสายการเงินเกือบทั้งหมดขยับตัวเลข
+ * ⇒ ผู้เรียกที่ "ไม่กระทบยอด" ต้องประกาศเองอย่างชัดแจ้ง (ลืม = ปลอดภัยไว้ก่อน ไม่ใช่หลุด)
  */
 export function assertPeriodEditable(input: {
   periodStatus: AccountingPeriodStatus | null
   targetType: string
   targetId?: string | null
+  /** การเขียนนี้ขยับ "ยอด" ที่ส่งสำนักงานบัญชีไปแล้วหรือไม่ (default `true`) */
+  affectsAmount?: boolean
 }): void {
   if (input.periodStatus === null) return
-  if (!isDirectEditBlocked(input.periodStatus)) return
+  const affectsAmount = input.affectsAmount ?? true
+  if (!isDirectEditRejected(input.periodStatus, affectsAmount)) return
   throw new SettingsError('PERIOD_LOCKED_DIRECT_EDIT', {
     detail: `target=${input.targetType}:${input.targetId ?? '-'} period_status=${input.periodStatus}`,
-    context: { targetType: input.targetType, periodStatus: input.periodStatus },
+    context: { targetType: input.targetType, periodStatus: input.periodStatus, affectsAmount },
   })
 }
