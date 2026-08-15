@@ -41,7 +41,9 @@ export const taxInvoiceCreateSchema = z.object({
 export type TaxInvoiceCreateInput = z.infer<typeof taxInvoiceCreateSchema>
 
 export const taxInvoiceCancelSchema = z.object({
-  reason: z.string().max(1000),
+  // ยกเลิกใบกำกับภาษี = กระทบภาษี ⇒ `reason` บังคับที่ schema ร่วม FE/BE ด้วย ไม่ใช่พึ่ง
+  // `requireCancelReason()` ในชั้น service อย่างเดียว (`31` §10 · Rule 03/04 · `CANCEL_REQUIRES_REASON`)
+  reason: z.string().min(1).max(1000),
 })
 
 export type TaxInvoiceCancelInput = z.infer<typeof taxInvoiceCancelSchema>

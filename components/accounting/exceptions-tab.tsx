@@ -121,6 +121,10 @@ export function ExceptionsTab() {
         </div>
       </div>
 
+      {/*
+        แบนเนอร์เขียวเป็นคำยืนยันว่า "ส่งงวดได้" ⇒ ขึ้นได้เฉพาะตอนรู้ข้อมูลจริงแล้วเท่านั้น
+        ตอน loading/error ต้องเงียบ ไม่งั้นผู้ใช้เห็นไฟเขียวทั้งที่ยังไม่ได้ข้อมูล (แบนเนอร์แดงปล่อยได้ — เตือนเกินไม่เป็นอันตราย)
+      */}
       {summary.blockingCritical > 0 ? (
         <InlineAlert
           tone="error"
@@ -128,11 +132,11 @@ export function ExceptionsTab() {
         >
           ระบบจะไม่ให้ส่งชุดเอกสารบัญชีของรอบนั้นจนกว่าจะแก้ที่ต้นทาง หรือผู้บริหารอนุมัติยกเว้นให้เป็นรายรอบ
         </InlineAlert>
-      ) : (
+      ) : !loading && error === null ? (
         <InlineAlert tone="success" title="ไม่มีข้อยกเว้นระดับวิกฤตค้าง">
           ส่งชุดเอกสารบัญชีได้ตามปกติ (ยังต้องผ่านความพร้อมอีก 2 เงื่อนไขในแท็บ “รอบส่งบัญชี”)
         </InlineAlert>
-      )}
+      ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <Table>
