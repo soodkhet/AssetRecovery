@@ -2832,6 +2832,8 @@ model PushSubscription {
 }
 
 /// Background jobs (Vercel Cron / QStash) — ทุก job ต้อง **idempotent** (`91`)
+/// ⚠️ คีย์กันซ้ำอยู่ใน `payload->>'idempotencyKey'` (`02` §10 ไม่มีคอลัมน์นี้) — บังคับด้วย partial
+/// unique index บน expression `uniq_jobs_idempotency_key` ใน raw SQL migration (Prisma ประกาศไม่ได้)
 model Job {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// NULL = job ระดับระบบ (ไม่ผูก org)

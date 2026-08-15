@@ -1,20 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 5.2 (ต่อ event ทุกโมดูลเข้าการแจ้งเตือน + หน้าบันทึกการใช้งาน `/settings/audit-logs`) · งานถัดไป 5.3 (Job Engine + Handlers + Job Log)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 5.3 (ตัวรันงานเบื้องหลังกลาง + Job Log `/settings/jobs` + cron `/api/cron/jobs`) · **จบ Phase 5** · งานถัดไป 6.1 (Report Framework + Export Engine)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 5.3: Background Job Engine + Handlers + Job Log
+## 🎯 งานถัดไป — Phase 6.1: Report Framework + Export Engine
 
-- ทำตาม `docs/01_PLAN.md` §5.3 — job engine: queue abstraction + idempotency store + state machine `pending→running→completed|failed` + retry/backoff + `dead_letter` derive จาก `retry_count ≥ max` (**manual retry = Superadmin เท่านั้น**) · `JOB_DUPLICATE` คืน job เดิม
-- API + dev trigger (`/api/dev/trigger-job` — **404 ใน production**, จำกัด job_type 5 ตัวรวม `advance_overdue`) · wiring Vercel Cron/QStash
-- ⚠️ handler ที่ **มีอยู่แล้ว** ต้องยกเข้า engine เดียว ห้ามเขียนใหม่: `lib/assignments/timeout-job.ts` (reassign_timeout) · `lib/advances/overdue-job.ts` (advance_overdue) · `lib/wht/filing-reminder-job.ts` (wht_filing_reminder — เกิดที่ 5.2) · export pack (`lib/exports/*`) · bank file (`lib/payout/*`)
-- output ของ job ต้อง versioned + hash (ห้ามเขียนทับ) · FE: Job Log (list/filter/detail/retry/download)
-- อ้างอิง: `91` ทั้งไฟล์ · `01` §11
-- LOC ~2,400 · งบ ~350k
-
+- ทำตาม `docs/01_PLAN.md` §6.1 — query builder + date-range util + preset · permission guard ต่อหมวด (F=Finance/Exec · O=Manager team-scope/Exec · A=Accounting/Exec · **E=Exec เท่านั้น — Finance เรียก E1 ต้อง 403**)
+- cache layer 3 โหมด (daily/hourly/real-time) + refresh endpoint + `REPORT_CACHE_STALE`
+- shared UI: DateRangePicker + preset · KPI card + MoM badge · table + virtual scroll >100 แถว · skeleton · empty state
+- export engine: Excel (SheetJS) + PDF + hook "export ตรง UI ทุกแถว" · ≥5,000 แถว = background job `report_export` (E13 — ต่อกับตัวรันงานของ 5.3)
+- อ้างอิง: `96` §8–§12 ผ่าน MAP · mockup `reports.html` ผ่าน MAP
+- LOC ~1,800 · งบ ~290k
 
 ---
 
@@ -94,7 +93,7 @@
 |---|---|---|---|
 | 5.1 | Notification Service + Notification Center | ✅ | 2026-08-15 · `fbc275c` · service idempotent (UUIDv5 = id ไม่แตะ schema) + แค็ตตาล็อก event `90` §6.3 + API 3 endpoint + กระดิ่งกลางใช้ร่วม App/Field + หน้า `/notifications` → archive |
 | 5.2 | Event wiring ทุกโมดูล + Audit Log UI | ✅ | 2026-08-15 · `c184aa7`+`984248d` · ต่อ event 9 กลุ่มเข้าการแจ้งเตือน (เหลือ 2 code ที่สคีมายังไม่รองรับ) + job เตือนยื่น WHT + หน้า `/settings/audit-logs` (capability `view_audit_log`) → archive |
-| 5.3 | Job Engine + Handlers + Job Log | ⬜ | PLAN §5.3 · dev trigger 404 ใน prod |
+| 5.3 | Job Engine + Handlers + Job Log | ✅ | 2026-08-15 · `COMMIT53` · ตัวรันงานกลาง (idempotency ระดับ DB + backoff + dead letter) + ต่อ handler เดิม 6 ตัว + API 5 endpoint (dev trigger 404 ใน prod) + cron ทุก 10 นาที + หน้า `/settings/jobs` · ⚠️ ต้องรัน `pnpm db:deploy` + `pnpm db:seed` ซ้ำ และตั้ง `CRON_SECRET` ต่อ environment → archive |
 
 ## Phase 6 — Reports (ไฟล์ 96) + แดชบอร์ดหลัก
 

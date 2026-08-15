@@ -33,6 +33,7 @@ import { teamErrorStatus, TEAM_ERROR_CODES } from '@/lib/teams/errors'
 import { userErrorStatus, USER_ERROR_CODES } from '@/lib/users/errors'
 import { warehouseErrorStatus, WAREHOUSE_ERROR_CODES } from '@/lib/warehouse/errors'
 import { fieldErrorStatus, FIELD_ERROR_CODES } from '@/lib/field/errors'
+import { jobErrorStatus, JOB_ERROR_CODES } from '@/lib/jobs/errors'
 import { exportErrorStatus, EXPORT_ERROR_CODES } from '@/lib/exports/errors'
 import { whtErrorStatus, WHT_ERROR_CODES } from '@/lib/wht/errors'
 
@@ -155,6 +156,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['assignments', ASSIGNMENT_ERROR_CODES, assignmentErrorStatus as (code: never) => number],
   ['warehouse', WAREHOUSE_ERROR_CODES, warehouseErrorStatus as (code: never) => number],
   ['field', FIELD_ERROR_CODES, fieldErrorStatus as (code: never) => number],
+  ['jobs', JOB_ERROR_CODES, jobErrorStatus as (code: never) => number],
   ['exports', EXPORT_ERROR_CODES, exportErrorStatus as (code: never) => number],
   ['wht', WHT_ERROR_CODES, whtErrorStatus as (code: never) => number],
 ]

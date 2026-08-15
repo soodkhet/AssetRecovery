@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v4.13 | 15/08/2569 | **เพิ่ม §6.11** (Phase 5.3 — Background Job `91`): `JOB_NOT_FOUND`, `JOB_INVALID_STATUS` — `91` §11 ระบุ code ทั่วไปไว้ 4 ตัว (`REQUIRED_MISSING`/`DUPLICATE_RECORD`/`PERMISSION_DENIED`/`INVALID_STATUS`) + `JOB_DUPLICATE` ซึ่งไม่ครอบคลุมกรณี 404 ของตัว job เอง และไม่ได้ตั้งชื่อตาม pattern §7 · `JOB_DUPLICATE` **ไม่ถูกประกาศเป็น error code** เพราะ §11 กำหนดพฤติกรรมว่า "คืน job เดิมที่มีอยู่แล้ว ไม่สร้างใหม่" = ผลลัพธ์สำเร็จ (API ตอบ 200 + `duplicate: true`) และรายชื่อ code แบบ "เตือนไม่ block" ถูกล็อกไว้ 6 ตัวตาม Rule 04 (เพิ่มต้องมีมติ PO) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.12 | 15/08/2569 | **เติม §6.10** (Phase 5.2 — หน้าบันทึกการใช้งาน `90` §8/§14): `AUDIT_LOG_NOT_FOUND` — `90` §11 ระบุไว้ 4 code ทั่วไป (`REQUIRED_MISSING`/`DUPLICATE_RECORD`/`PERMISSION_DENIED`/`INVALID_STATUS`) ซึ่งไม่ครอบคลุมกรณี 404 ของรายการ audit ที่เปิดดูรายละเอียด (id ไม่มีจริง/อยู่คนละองค์กร — ต้องตอบเหมือนกันเพื่อไม่ leak ว่ามีรายการนั้นอยู่) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.11 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.11 | 15/08/2569 | **ลบแถวซ้ำ 4 แถวใน §6.7/§6.8** (รีวิว Phase 4): `PERIOD_NOT_FOUND`, `PERIOD_INVALID_STATUS`, `EXCEPTION_NOT_FOUND`, `EXCEPTION_INVALID_STATUS` ถูกเติมซ้ำสองครั้งตอน v4.6 (คำอธิบายต่างกันเล็กน้อย) ขัดกับ §7 ที่ประกาศว่า "ไม่มี code ซ้ำ" — เก็บฉบับที่คำอธิบายครบกว่าไว้ **ไม่มี code ใดถูกเพิ่ม/ลบ ไม่กระทบ business logic และไม่กระทบ parity test** (`lib/api/error-catalog.test.ts` ใช้ `Set`) |
 | v4.10 | 15/08/2569 | **เติม §6.8** (Phase 4.5 — WHT Data `33`): `WHT_CERTIFICATE_NOT_FOUND`, `WHT_CERTIFICATE_INVALID_STATUS`, `WHT_FILING_SUMMARY_NOT_FOUND`, `WHT_FILING_ALREADY_FILED` — `33` §11 ระบุไว้ 2 เคส (`FILING_OVERDUE_WARNING`/`WHT_CANCEL_REQUIRES_REASON`) ซึ่งไม่ครอบคลุมกรณี 404 ของตัวหนังสือรับรอง/สรุปรอบนำส่งเอง · การยกเลิกใบที่เป็น terminal แล้ว (`33` §10 · `02` §13) · และการ mark-filed ซ้ำ (`33` §9 — `pending → filed` ทางเดียว) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.9 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -236,6 +237,15 @@
 | AUDIT_REASON_REQUIRED | บันทึก audit ของรายการที่กระทบ เงิน/สิทธิ์/ธนาคาร/ภาษี/lock period โดยไม่มี `reason` (รวมกรณี background job ที่ไม่ระบุ job id) | 90 |
 | AUDIT_IMMUTABLE | พยายาม UPDATE/DELETE/TRUNCATE `audit_logs` — ปฏิเสธทั้งระดับ service และ DB trigger แม้ผู้เรียกเป็น Superadmin | 90, 02 §13 |
 | AUDIT_LOG_NOT_FOUND | เปิดรายละเอียด audit (`GET /api/audit-logs/{id}`) ที่ไม่มีอยู่จริง หรืออยู่นอกองค์กรของผู้เรียก | 90 §14 |
+
+### 6.11 หมวด Background Job (Platform — ไฟล์ 91)
+
+| Code | Condition | Source File |
+|---|---|---|
+| JOB_NOT_FOUND | เปิดรายละเอียด/สั่งทำงานใหม่ (`GET /api/jobs/{id}`, `POST /api/jobs/{id}/retry`) กับงานที่ไม่มีอยู่จริง หรืออยู่นอกองค์กรของผู้เรียก — ตอบเหมือนกันเพื่อไม่ leak ว่ามีงานนั้นอยู่ | 91 §14 |
+| JOB_INVALID_STATUS | สั่งทำงานใหม่กับงานที่ไม่ได้ล้มเหลว/ถูกยกเลิก (ยังรอคิว/กำลังทำ/สำเร็จแล้ว — `91` §6.2) · dev trigger ส่ง `job_type` นอกรายการ `91` §6.1 | 91 §11, §14.1 |
+
+> `JOB_INVALID_STATUS` คือรูปที่มี prefix ของ code สถานะทั่วไปที่ `91` §11 ระบุไว้ — ตั้งชื่อตาม §7 (`[ENTITY]_[CONDITION]`) เหมือน `ADJUSTMENT_INVALID_STATUS` / `ASSET_INVALID_STATUS` · การสั่งงานด้วยคีย์กันซ้ำเดิม (`91` §11) **ไม่ใช่ error** — ระบบคืน job เดิมพร้อม `duplicate: true` ตามพฤติกรรมที่ §11 กำหนด ("คืน job เดิมที่มีอยู่แล้ว ไม่สร้างใหม่")
 
 > เงื่อนไขว่า mutation ไหนต้องมี `reason` implement ไว้ที่ `lib/audit/reason-policy.ts` (จัดหมวดทุกตารางใน `02`) — โมดูลที่ต้องการเข้มกว่านี้ใช้ code เฉพาะของตัวเอง เช่น `SUSPEND_REASON_REQUIRED` (§6.1), `REJECT_REASON_REQUIRED` (§6.4), `CANCEL_REQUIRES_REASON` (§6.8) · `REQUIRED_MISSING` (§6.1) ใช้กับ audit entry ที่ field บังคับไม่ครบ
 

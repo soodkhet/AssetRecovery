@@ -15,6 +15,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Background Job, Import/Export, Retry, Queue |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header block, job lifecycle state diagram, job_type จริงจาก schema, endpoint จริง, Decisions/Open Items แยกชัดเจน) — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v2.1 | 04/07/2569 | **เพิ่ม §14.1 Dev Trigger Endpoint** (`POST /api/dev/trigger-job`) — เพื่อให้ dev ทดสอบ Background Job บน local ได้โดยไม่ต้องรอ Vercel Cron — บังคับปิดตัวเองใน production เสมอ (ดู §14, §14.1) |
+| v2.3 | 15/08/2569 | **sync §14.1/§17 ให้ครบ 5 job_type** (ปิด C8 ใน `docs/02_OPEN_DECISIONS.md` ตามมติ PO 12/08/2569 ข้อ 1 — ใช้ตัวเลือก default): §6.1 เติม `advance_overdue` ไปตั้งแต่ v2.2 แต่ §14.1 และ §17 ยังเขียน 4 ตัว · Phase 5.3 implement dev trigger ให้รับครบ 5 ตัวตาม §6.1 จึงแก้ถ้อยคำให้ตรงกัน **ไม่มีการเปลี่ยน business logic** |
 | v2.2 | 04/07/2569 | **เติม job_type `advance_overdue` ใน §6.1** — background job auto-mark Advance ที่เลย `due_clear_date` เป็น `overdue` ถูกกำหนดไว้แล้วในไฟล์ 15 (§9.1/§10/§13/EVENT `advance.overdue`) แต่ตกหล่นจากรายการ job_type — sync comment ใน `02-database-schema-design.md` (ตาราง jobs) แล้วเช่นกัน |
 
 ขอบเขตเอกสารนี้: มาตรฐาน Background Job, Import/Export, Retry, Queue และ Scheduled Tasks ที่ใช้ร่วมกันข้ามทุกโมดูล — รันผ่าน Vercel Cron / QStash (Upstash) ตาม DEC-001
@@ -159,7 +160,7 @@ stateDiagram-v2
 
 **กฎบังคับ**:
 - **ต้องปิดการใช้งานทันทีเมื่อ `NODE_ENV === 'production'`** (return `404 Not Found` เหมือนไม่มี route นี้อยู่) — ป้องกันไม่ให้มีใครยิง job ทดสอบใน production โดยไม่ได้ตั้งใจ
-- รับ `job_type` ตามรายการใน §6.1 เท่านั้น (`export_pack` | `bank_file` | `wht_summary` | `reassign_timeout`) — ถ้าไม่ตรง reject ด้วย `INVALID_STATUS`
+- รับ `job_type` ตามรายการใน §6.1 เท่านั้น (`export_pack` | `bank_file` | `wht_summary` | `reassign_timeout` | `advance_overdue`) — ถ้าไม่ตรง reject ด้วย `INVALID_STATUS` (implement เป็น `JOB_INVALID_STATUS` ตาม pattern ชื่อของ `24` §7 — ดู `24` §6.11)
 - ยังต้องสร้าง job record ผ่าน flow เดียวกับ `POST /api/jobs` ปกติ (มี `idempotency_key`, บันทึก audit log) — ไม่ใช่ shortcut ที่ข้าม business logic แค่ข้าม "การรอเวลา cron" เท่านั้น
 - จำกัดสิทธิ์เรียกเฉพาะ role ที่มีสิทธิ์ Trigger job ตาม §12 เช่นเดียวกับ production endpoint
 
@@ -186,7 +187,8 @@ stateDiagram-v2
 
 - **Background Jobs รันผ่าน Vercel Cron / QStash (Upstash)** — DEC-001 ใน `01-architecture.md` §6.0
 - **ทุก job ต้อง idempotent และมี `idempotency_key`** — ป้องกันสร้างผลซ้ำเมื่อ retry (ข้อ 10, 11, 14)
-- **job_type ที่ระบบรู้จักตอนนี้มี 4 ประเภท**: `export_pack`, `bank_file`, `wht_summary`, `reassign_timeout` (§6.1) — ตรงกับ table `jobs` ใน `02-database-schema-design.md`
+- **job_type ที่ระบบรู้จักตอนนี้มี 5 ประเภท**: `export_pack`, `bank_file`, `wht_summary`, `reassign_timeout`, `advance_overdue` (§6.1) — ตรงกับ table `jobs` ใน `02-database-schema-design.md`
+  - โมดูลที่เกิดทีหลังเพิ่ม job_type ของตัวเองได้ตามหมายเหตุท้าย §6.1 (ปัจจุบัน: `fuel_distance_retry` — มติ PO 14/08/2569 D10 · `wht_filing_reminder` — `33` §6.2/§8) แต่ **dev trigger (§14.1) รับเฉพาะ 5 ตัวในตาราง §6.1**
 - **Retry มีเพดาน `max_retries`** เกินแล้วเข้า `dead_letter` ต้อง manual retry โดย Superadmin เท่านั้น (§6.2, ข้อ 12)
 - **ไฟล์ output (export/bank file) ต้อง versioned + hash เสมอ** ห้าม overwrite (ข้อ 10) — สอดคล้อง Immutable Rules ใน `02-database-schema-design.md` §13
 

@@ -5,6 +5,50 @@
 
 ---
 
+## Phase 5.3 — Background Job Engine + Handlers + Job Log
+
+**วันที่**: 2026-08-15 · **commit**: `COMMIT53` · **branch**: `auto/phase-5.3`
+
+### สิ่งที่ทำ
+
+- **`lib/jobs/engine.ts`** — ตัวรันงานกลาง ทางเข้าเดียวของงานเบื้องหลังทั้งระบบ
+  - `enqueueJob()` — คีย์กันซ้ำบังคับ (`01` §11 · `91` §14) · คีย์ซ้ำ = **คืน job เดิม** `duplicate: true` (พฤติกรรมของ `91` §11 "คืน job เดิมที่มีอยู่แล้ว")
+  - `runDueJobs()` / `runJob()` / `runJobById()` — claim ด้วย conditional update (`updateMany` + `where status: pending`) ⇒ ตัวรันงานสองตัวยิงพร้อมกัน มีตัวเดียวได้ทำ อีกตัว `skipped` ไม่ใช่ error
+  - ล้มเหลว → backoff **1/5/15/60 นาที** แล้วกลับเข้าคิว · ครบ `max_retries` → คงสถานะ `failed` = **dead letter** (derive ไม่ใช่ enum ใหม่) รอ Superadmin สั่งเอง · `job_type` ที่ไม่มี handler = dead letter ทันที (ไม่เผารอบ retry)
+  - `enqueueScheduledJobs()` — ตั้งคิวตามตารางเวลาโดยใช้คีย์ `cron:<type>:<ช่องเวลา>` ⇒ cron ยิงซ้ำ/retry ไม่เกิดงานซ้อน
+- **`lib/jobs/registry.ts`** — ต่อสาย handler ที่โมดูลเขียนไว้แล้ว **ไม่มี business logic ใหม่**: `reassign_timeout` (2.6) · `advance_overdue` (3.3) · `wht_filing_reminder` (5.2) · `wht_summary` (ห่อ `refreshFilingSummary()` ของ 4.5 เป็น `lib/wht/summary-job.ts`) · `export_pack` (4.6) · `bank_file` (3.4)
+- **API 5 endpoint** — `GET/POST /api/jobs` · `GET /api/jobs/:id` · `POST /api/jobs/:id/retry` · `POST /api/dev/trigger-job` (**404 เมื่อ `NODE_ENV=production`**) · `GET /api/cron/jobs` (ตัวรันงานจริง — `CRON_SECRET`)
+- **`vercel.json`** — cron `/api/cron/jobs` ทุก 10 นาที (DEC-001)
+- **capability `manage_jobs`** (`91` §12): view = ดู Job Log · manage = สั่งงาน · **retry ล็อก Superadmin เท่านั้น** (ตรวจซ้ำที่ชั้นข้อมูล ไม่พึ่ง access_level) · default matrix: บริหาร/บัญชี/การเงิน = view
+- **FE `/settings/jobs`** — ตาราง + ตัวกรอง (ประเภท/สถานะ/ช่วงวันไทย) + modal รายละเอียด (payload/result/สาเหตุที่ล้ม/ดาวน์โหลดผลลัพธ์/ปุ่มสั่งทำใหม่เฉพาะ Superadmin)
+- **migration `20260815180000_jobs_idempotency_key`** — partial unique index บน expression `(payload->>'idempotencyKey')`
+
+### การตัดสินใจระหว่างทาง (คนถัดไปควรรู้)
+
+1. **คีย์กันซ้ำอยู่ใน `payload` ไม่ใช่คอลัมน์ใหม่** — `01` §11/`91` §14 บังคับให้มี `idempotency_key` แต่รูปตาราง `jobs` ของ `02` §10 ไม่มีคอลัมน์นี้ และ Rule 02 ห้ามแก้ schema ให้ต่างจาก `02` เงียบ ๆ ⇒ เก็บใน `payload.idempotencyKey` + partial unique index (Rule 02 กำหนดให้ index แบบนี้ผ่าน raw SQL อยู่แล้ว) · ตัวตัดสินอยู่ที่ **ฐานข้อมูล** ไม่ใช่โค้ด (แข่งกันสร้าง = ตัวที่แพ้ได้ P2002 แล้วอ่านของเดิมคืน — มีเทสต์ยิงพร้อมกัน 4 ตัว)
+2. **`JOB_DUPLICATE` ไม่ถูกประกาศเป็น error code** — `91` §11 กำหนดพฤติกรรมว่า "คืน job เดิม ไม่สร้างใหม่" = ผลลัพธ์**สำเร็จ** (API ตอบ 200 + `duplicate: true`, สร้างใหม่ = 201) · จะทำเป็น warning ก็ไม่ได้เพราะ Rule 04 ล็อกรายชื่อ code แบบ "เตือนไม่ block" ไว้ 6 ตัว (เพิ่มต้องมีมติ PO) · code ที่เพิ่มเข้า `docs/24` §6.11 (v4.13) มี 2 ตัวคือ `JOB_NOT_FOUND` / `JOB_INVALID_STATUS`
+3. **`fuel_distance_retry` ไม่เข้าทะเบียน handler** — handler เดิม (2.9/D10) เป็น "ตัวกวาดคิว" ที่ไปหยิบ job ของตัวเองจากตาราง `jobs` แล้วจัดการสถานะ/retry เอง ⇒ ถ้าเสียบเป็น handler รายตัวจะกลายเป็น claim สองชั้นทับกัน · ตัวรันงานกลางจึงข้าม `SWEEPER_JOB_TYPES` แล้ว cron เรียกตัวกวาดคิวตรง ๆ หนึ่งครั้งต่อรอบ
+4. **job_type มี 7 ตัว** = 5 ของ `91` §6.1 + `wht_filing_reminder` (5.2) + `fuel_distance_retry` (D10) · **dev trigger รับเฉพาะ 5 ตัวของ §6.1** ตาม §14.1 + C8 ใน `02_OPEN_DECISIONS.md` (มติ PO 12/08 ใช้ default: รองรับครบ 5 รวม `advance_overdue`) — ตัวนอกรายการถูกปฏิเสธด้วย `JOB_INVALID_STATUS`
+5. **`export_pack`/`bank_file` รันแทนคน** — โหลด `SessionUser` ของ `jobs.created_by` แล้วเรียก service เดิม ⇒ สิทธิ์/scope ของคนสั่งยังถูกตรวจครบ (DEC-002 — job ไม่ใช่ทางลัดข้ามสิทธิ์) · งานที่ไม่มีผู้สั่ง (ตัวตั้งเวลา) เรียกสองตัวนี้ไม่ได้
+6. **ไม่เพิ่ม event `job.status.changed`** — `91` §14 ระบุ event นี้ไว้ให้ trigger notification แต่ `90` §6.3 ไม่มีแถวของงานเบื้องหลัง (ไม่มีผู้รับ/ข้อความที่สเปคกำหนด) ⇒ การเพิ่มเข้า `EVENT_NAMES` ตอนนี้จะเป็น event ที่ไม่มีปลายทาง · ร่องรอยยังครบผ่านตาราง `jobs` + audit (สร้าง/จบรอบ/retry)
+7. **audit ของงานระดับระบบ** — งานที่ `organization_id = NULL` เขียน audit ระดับ job ไม่ได้ (`audit_logs.organization_id` NOT NULL) ⇒ ผลกระทบทางธุรกิจถูก audit โดย handler เองในองค์กรนั้น ๆ (actor = ระบบ + job id ใน `reason` ตาม `90` §13) ส่วนตัวงานถูก trace จากตาราง `jobs`
+8. **retry ด้วยมือ = คืนคิว ไม่รันทันที** — รีเซ็ต `retry_count` เป็น 0 (ไม่งั้น dead letter ตกกลับเป็น dead letter รอบแรก) ค่าเดิมอยู่ในฝั่ง `before` ของ audit · งานถูกหยิบในรอบถัดไปของ cron (ไม่ให้ request ค้างยาว)
+
+### เทสต์
+
+- `lib/jobs/job-state.test.ts` (pure) — dead letter derive · ladder backoff · `canManualRetry`
+- `lib/jobs/job-types.test.ts` (pure) — dev trigger = 5 ตัวของ §6.1 · ช่องเวลา **วันไทย** ของงานรายวัน · คีย์ cron คงที่ในช่องเดิม
+- `lib/jobs/engine.db.test.ts` (DB) — idempotency (ซ้ำ + ยิงพร้อมกัน 4 ตัว) · claim แข่งกัน · backoff → dead letter · scope องค์กร + งานระดับระบบ · Company User 403 · retry เฉพาะ Superadmin + audit มีเหตุผล
+- `app/api/job-routes.test.ts` (route) — 401 ทุก endpoint เมื่อไม่ล็อกอิน · 201/200 + `duplicate` · **dev trigger 404 ใน production** · cron ต้องมี `CRON_SECRET` ตรง
+
+### ค้างไว้ให้คนถัดไป / ต้องทำนอกโค้ด
+
+- ตั้ง **`CRON_SECRET`** ที่ Vercel ทุก environment (ไม่ตั้ง = production ปฏิเสธทุกคำขอเข้า `/api/cron/jobs` ⇒ งานเบื้องหลังไม่เดิน)
+- รัน `pnpm db:deploy` (migration index) + `pnpm db:seed` ซ้ำ (capability `manage_jobs` + default matrix) ต่อ environment
+- `report_export` (E13) ของ Phase 6.1 ให้เพิ่ม job_type ใหม่ที่ `lib/jobs/job-types.ts` + handler ที่ `lib/jobs/registry.ts` + ตาราง §6.1 ของ `91` ในคอมมิตเดียวกัน
+
+---
+
 ## Phase 5.2 — Event Wiring ทุกโมดูล + Audit Log UI
 
 **วันที่**: 2026-08-15 · **commit**: `c184aa7` (event wiring) + `984248d` (Audit Log UI) · **branch**: `auto/phase-5.2`
