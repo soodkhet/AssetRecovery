@@ -173,14 +173,39 @@ async function expectCode(run: () => Promise<unknown>, code: string): Promise<vo
 }
 
 /**
- * วันตัดรอบ = "วันนี้" **ตามเวลาไทย** — ต้องใช้ฐานเดียวกับที่ระบบเขียน `expense_date`
- * (`bangkokBusinessDate()` ใน `lib/field/expense-queries` — Rule 01)
- * ถ้าคิดจากวันที่แบบ UTC เทสต์จะตกเฉพาะช่วง 00:00–07:00 น. เวลาไทย ที่วันไทยเดินไปก่อนวัน UTC
- * ⇒ รายการที่เพิ่งเกิด (วันไทยพรุ่งนี้) หลุดออกนอกวันตัดรอบจนได้ `NO_ITEMS_TO_PAY`
+ * **นาฬิกาของเทสต์ถูกตรึงไว้** ที่ `01:30 น. วันที่ 16/08/2569 เวลาไทย` (= `2026-08-15T18:30:00Z`)
+ *
+ * เหตุผลที่ต้องตรึง และตรึงไว้ตรงจุดนี้ (บั๊ก CI 2026-08-16 — ห้ามย้ายออกนอกช่วงนี้):
+ * ช่วง **00:00–07:00 น. เวลาไทย** คือช่วงเดียวที่ "วันไทย" เดินไปก่อน "วัน UTC" แล้ว (16/08 ไทย
+ * ยังเป็น 15/08 UTC) — ระบบเขียน `expense_date` ด้วยวัน**ไทย** (`bangkokBusinessDate()` ตาม Rule 01)
+ * ⇒ fixture ที่คิดวันตัดรอบจากวัน **UTC** จะได้ 15/08 แล้วกรองรายการของวันที่ 16/08 หลุดทั้งหมด
+ * จนได้ `NO_ITEMS_TO_PAY` — เทสต์เดิมใช้ `new Date()` จึงเขียว 17 ชั่วโมงและแดง 7 ชั่วโมงต่อวัน
+ * (CI รอบ `ea3cc5a` รัน 02:19 น. เวลาไทย → แดง 2 เคส)
+ *
+ * ตรึงเวลาไว้ในช่วงนี้ = ทุกเครื่องทุกเวลารันแล้วได้ผลเดียวกัน **และ**ทดสอบขอบวันของจริงทุกครั้ง
+ * (ตรึงนอกช่วงนี้เมื่อไร เทสต์จะเขียวโดยไม่ได้พิสูจน์อะไรอีกเลย — มียาม `assertClockPinned()` กันไว้)
  */
-function bangkokTodayCutoff(): Date {
-  const bangkokNow = new Date(Date.now() + 7 * 60 * 60 * 1000)
-  return new Date(`${bangkokNow.toISOString().slice(0, 10)}T00:00:00.000Z`)
+const FROZEN_NOW = new Date('2026-08-15T18:30:00.000Z')
+
+/**
+ * วันตัดรอบ = วัน**ไทย**ของ `FROZEN_NOW` แบบ date-only เที่ยงคืน **UTC** — ฐานเดียวกับที่
+ * `dateOnlySchema()` ส่งเข้ามาจาก API จริง และเดียวกับที่ระบบเขียนคอลัมน์ `DATE` (`lib/api/validation.ts`)
+ */
+const CUTOFF_DATE = new Date('2026-08-16T00:00:00.000Z')
+
+/** ยามของ fixture เอง — เวลาที่ตรึงต้องอยู่ในช่วงที่วันไทยกับวัน UTC ไม่ตรงกันจริง ๆ */
+function assertClockPinned(): void {
+  const utcDay = FROZEN_NOW.toISOString().slice(0, 10)
+  const bangkokDay = new Date(FROZEN_NOW.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  if (utcDay === bangkokDay) {
+    throw new Error(
+      `FROZEN_NOW ต้องอยู่ในช่วง 00:00–07:00 น. เวลาไทย (วันไทย ${bangkokDay} ต้องต่างจากวัน UTC ${utcDay}) — ` +
+        'ไม่งั้นเทสต์นี้เลิกพิสูจน์ขอบวันตัดรอบ ดูหมายเหตุที่ FROZEN_NOW',
+    )
+  }
+  if (CUTOFF_DATE.toISOString() !== `${bangkokDay}T00:00:00.000Z`) {
+    throw new Error(`CUTOFF_DATE ต้องเป็นเที่ยงคืน UTC ของวันไทยที่ตรึงไว้ (${bangkokDay})`)
+  }
 }
 
 /** `DD/MM/YYYY` พ.ศ. สำหรับไฟล์ statement (Rule 01 — วันบนเอกสารเป็น พ.ศ. เสมอ) */
@@ -295,6 +320,11 @@ async function cleanup(): Promise<void> {
 
 beforeAll(async () => {
   if (!url) return
+  assertClockPinned()
+  // ตรึงเฉพาะ `Date` — ห้ามตรึง timer จริง (`setTimeout`/`setInterval`) ไม่งั้น pool ของ pg ค้าง
+  // `shouldAdvanceTime` ให้เวลายังเดินหน้าตามจริง ⇒ ลำดับเหตุการณ์ในรอบเดียวกันยังเรียงถูก
+  vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+  vi.setSystemTime(FROZEN_NOW)
   process.env.DATABASE_URL = url
   assignments = await import('@/lib/assignments/queries')
   field = await import('@/lib/field/queries')
@@ -410,6 +440,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (url) await cleanup()
   await client?.$disconnect()
+  vi.useRealTimers()
 })
 
 beforeEach(async () => {
@@ -461,7 +492,8 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     expect(await db().revenue.count({ where: { caseId } })).toBe(0)
 
     // ── ขั้น 3: รวมเข้ารอบจ่ายเงิน (`17`) ─────────────────────────────────
-    const cutoffDate = bangkokTodayCutoff()
+    // วันตัดรอบ = วันไทยของนาฬิกาที่ตรึงไว้ (ดู `FROZEN_NOW`) ⇒ ต้องเก็บรายการของวันนี้ครบ
+    const cutoffDate = CUTOFF_DATE
     const { batch } = await payout.createPayoutBatch(ctx(finance), {
       side: 'inhouse',
       cutoffDate,
@@ -730,7 +762,7 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
 
     // ผู้รับเงินยังไม่ยืนยัน ⇒ **ทั้งรอบ**สร้างไม่ได้ (`17` §10)
     await db().$executeRawUnsafe(`UPDATE payee_profiles SET is_verified = false WHERE id = '${PAYEE_ID}'`)
-    const cutoffDate = bangkokTodayCutoff()
+    const cutoffDate = CUTOFF_DATE
     await expectCode(
       () => payout.createPayoutBatch(ctx(finance), { side: 'inhouse', cutoffDate, name: null }),
       'UNVERIFIED_PAYEE_IN_PAYOUT',
@@ -747,7 +779,8 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
     })
 
     // เงินออกจาก statement (ยอดลบ = ฝั่งจ่าย) ⇒ จับคู่รอบจ่าย ⇒ ปิดรอบ + sync บัญชีให้เอง (`35` §6.2)
-    const statementDate = beDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    // ธนาคารตัดเงินวันถัดจากวันตัดรอบ — ผูกกับ `CUTOFF_DATE` ไม่ใช่นาฬิกาเครื่อง (fixture ต้อง deterministic)
+    const statementDate = beDate(new Date(CUTOFF_DATE.getTime() + 24 * 60 * 60 * 1000))
     const imported = await recon.importStatement(ctx(finance), {
       bankAccountId: BANK_ACCOUNT_ID,
       fileName: `payout-${RUN}.csv`,
