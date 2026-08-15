@@ -51,6 +51,15 @@ export const EVENT_NAMES = [
   'lot.confirmed',
   // Compensation Approval (16 §9) — จุดที่ Revenue เกิด (`19` §6.1)
   'expense.approved',
+  'expense.rejected',
+  // Payout (17 §9) + Advance job (15 §9.1) — ชื่อตาม `90` §6.3 (ไฟล์ต้นทางไม่มีตาราง event ของตัวเอง)
+  'payout_batch.completed',
+  'advance.overdue',
+  // Accounting (30/33/34/36) — `90` §6.3 + mockup `notifications.html`
+  'wht.filing_due_reminder',
+  'exception.created',
+  'question.asked',
+  'period.sent_to_accountant',
 ] as const
 
 export type DomainEventName = (typeof EVENT_NAMES)[number]

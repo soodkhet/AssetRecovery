@@ -5,6 +5,65 @@
 
 ---
 
+## Phase 5.2 — Event Wiring ทุกโมดูล + Audit Log UI
+
+**วันที่**: 2026-08-15 · **commit**: `c184aa7` (event wiring) + `984248d` (Audit Log UI) · **branch**: `auto/phase-5.2`
+
+### สิ่งที่ทำ — ก้อนที่ 1: ต่อ event เข้าการแจ้งเตือน (`90` §6.3)
+
+- **`lib/notifications/messages.ts` (pure)** — ข้อความ + deep link ของทุก event ที่เดียว (15 ตัว) · วันที่ผ่าน `fmtDate()` (**พ.ศ.**) · เงินผ่าน `fmtSatangSymbol()` (satang → บาท) · เทสต์ล็อกว่า **ห้ามมีปี ค.ศ. หลุดลงข้อความ** ลิงก์ต้องขึ้นต้น `/` และ event ฝั่ง job ต้องมี `dedupeKey` ครบ
+- **`lib/notifications/dispatch.ts`** — ทางเข้าเดียวของทุกโมดูล: `dispatchNotification()` (ยิงแล้วลืม สำหรับ endpoint ที่ผู้ใช้รอผล) · `dispatchNotificationAwaited()` (**job/consumer ต้องใช้ตัวนี้** — ต้องรู้ว่าเขียนแถวสำเร็จก่อนจบรอบ) + ตัวช่วยหาผู้รับ (`caseSubmitterIds`/`activeAgentIds`/`payeeUserIds` + `usersWithCapability`)
+- **จุด emit จริงที่ต่อสาย** (ทั้งหมดอยู่ **หลัง** `$transaction` commit):
+
+| กลุ่ม | event | ผู้รับ | ที่มา |
+|---|---|---|---|
+| เคส (38) | `case.approved` / `rejected` / `need_info_requested` / `recycle_approved` | ผู้ส่งเคส (`cases.created_by`) | `changeCaseStatus()` |
+| มอบหมาย (40) | `assignment.reassignment_requested` | พนักงานคนเดิม (คนที่ต้องให้ความยินยอม) | `reassignCase()` |
+| มอบหมาย (40) | `assignment.reassignment_timeout_resolved` | คนเดิม + คนใหม่ + ผู้จัดการที่ขอ | job `timeout-job.ts` |
+| ภาคสนาม (41) | `case.closed_success` | ผู้มี `intake_asset` (คลัง — เกตของรายได้ `19` §6.1) | `closeFieldCase()`/`resubmitCloseCase()` |
+| ภาคสนาม (41) | `case.closed_fail` | ผู้มี `assign_case` (มอบหมายใหม่/รีไซเกิล) | เดียวกัน |
+| คลัง (44) | `asset.intake_rejected` | พนักงานที่ถือเคสนั้น | `rejectAssetIntake()` |
+| คลัง (44) | `lot.confirmed` | ผู้มี `manage_billing` (ไปวางบิลต่อ) | `confirmLot()` |
+| ค่าตอบแทน (16) | `expense.approved` (เฉพาะผ่านครบขั้น) / `expense.rejected` | ผู้รับเงิน (`payee.user_id`) | `approve/rejectCompensationExpense()` |
+| รอบจ่าย (17) | `payout_batch.completed` | ผู้มี `manage_payout_batch` | `completePayoutBatch()` **และ** `syncPayoutBatchCompleted()` (ไฟล์ 35) |
+| เงินทดรอง (15) | `advance.overdue` | ผู้ยืม + ผู้มี `approve_advance` (ลิงก์คนละปลายทาง) | job `overdue-job.ts` |
+| บัญชี (34/36/30) | `exception.created` (critical เท่านั้น) · `question.asked` · `period.sent_to_accountant` | ผู้มี `manage_exceptions` / `manage_accountant_questions` / `manage_accounting_period` | `createException()` · `createAccountantQuestion()` · `transitionPeriod()` |
+| WHT (33) | `wht.filing_due_reminder` | ผู้มี `manage_wht` | job ใหม่ `lib/wht/filing-reminder-job.ts` |
+
+- **job ใหม่ `runWhtFilingReminderJob()`** (`33` §6.2/§8) — เตือนก่อนกำหนดยื่น ภ.ง.ด.3/53 (ค่าเริ่มต้น 5 วันตามตัวอย่าง §8) · **อ่านอย่างเดียว ไม่เขียนสถานะ** ⇒ idempotent ด้วย `dedupeKey` ต่อ 1 งวด · เตือนต่อแม้เลยกำหนด (มีโทษปรับจริง) · scheduler จริงเป็นงาน 5.3 เหมือน `overdue-job`/`timeout-job`
+- **ทะเบียน event**: ย้าย 7 code จาก `NOTIFICATION_ONLY_EVENTS` เข้า `lib/api/event-names.ts` + `EVENT_REGISTRY` (พร้อมที่มาเอกสาร) — `expense.rejected`, `payout_batch.completed`, `advance.overdue`, `wht.filing_due_reminder`, `exception.created`, `question.asked`, `period.sent_to_accountant`
+
+### สิ่งที่ทำ — ก้อนที่ 2: หน้าบันทึกการใช้งาน (Audit Log UI — `90` §8/§12/§14)
+
+- **capability ใหม่ `view_audit_log`** (`90` §12 "View audit") — นอก Functional Matrix 37 รายการ (catalog เป็น 48) · default: บริหาร/การเงิน/บัญชี ระดับ `view` · Superadmin ได้โดยนิยาม (ไม่เก็บ record — DEC-009) · เพิ่มใน `BOUND_NON_MATRIX_CAPABILITIES` ให้เทสต์ยืนยันว่าตั้งใจผูก
+- **`lib/audit/log-queries.ts`** — `listAuditLogs()` (ตัวกรอง target_type/target_id/actor/action/ช่วงวัน + offset paging + `targetTypes` สำหรับเติม dropdown) · `getAuditLog()` (before/after เต็ม + IP/User-Agent) · **ไม่มีฟังก์ชันเขียน/ลบในโมดูลนี้โดยเจตนา** (`02` §13)
+- **`GET /api/audit-logs` + `GET /api/audit-logs/:id`** (`90` §14) — `requirePermission('view', 'view_audit_log')` · id ที่ไม่มีจริงกับ id ขององค์กรอื่นตอบ `AUDIT_LOG_NOT_FOUND` เหมือนกัน (ไม่ leak)
+- **หน้า `/settings/audit-logs`** (`<AuditLogsManager>` + `<AuditDetailModal>`) ตาม mockup `settings.html` แท็บ `auditlog`: ตาราง 5 คอลัมน์ (วันเวลา/การกระทำ/ผู้ดำเนินการ/เป้าหมาย/เหตุผล) + ตัวกรอง 4 ช่อง + แบ่งหน้า + loading/empty/error + drawer เทียบ before/after ต่อฟิลด์ · **ไม่มีปุ่มแก้/ลบทั้งหน้า** · เพิ่มแท็บใน `menu-registry` (`settings.audit-logs`) ⇒ `<SubNav>` แสดงให้เอง
+- **`docs/24` v4.12** — เพิ่ม `AUDIT_LOG_NOT_FOUND` ใน §6.10 พร้อมลง `error-catalog` + `lib/audit/errors.ts` ในคอมมิตเดียวกัน (Rule 04)
+
+### การตัดสินใจระหว่างทาง
+
+- **2 event ที่ไม่ต่อสาย เพราะสคีมาไม่รองรับ** (ลำดับเอกสาร `02` ชนะ `90`): `payout_batch.failed` — `02` §3 ไม่มีสถานะล้มเหลวใน `payout_batch_status` และ `23` ไม่มี transition ไปสถานะนั้น · `exception.due_soon` — ตาราง `exceptions` ไม่มีคอลัมน์วันครบกำหนด และไฟล์ `34` ไม่มีแนวคิด deadline เลย ⇒ **ไม่แต่งสถานะ/คอลัมน์เอง** คงไว้ใน `NOTIFICATION_ONLY_EVENTS` พร้อมเหตุผลในโค้ด (ต้องมีมติ PO + แก้ `02` ก่อนถึงต่อสายได้)
+- **ผู้รับเลือกจาก capability ไม่ใช่ชื่อ role ทุกจุด** — role ถูกแก้สิทธิ์ผ่าน matrix ได้ตลอด (`07`/`25`) · ผลข้างเคียงที่รู้ตัว: `usersWithCapability()` ไม่กรองทีม ⇒ `case.closed_fail` เด้งหาผู้จัดการทุกทีมในองค์กร (ถ้าต้องการจำกัดเฉพาะทีมเจ้าของเคส ต้องเพิ่ม scope ให้ตัวช่วยนี้ก่อน)
+- **`approve_recycle` ยิง 2 event แต่แจ้งใบเดียว** — `caseEventsFor()` คืนทั้ง `case.recycle_approved` และ `case.approved` ⇒ `caseDecisionEventOf()` เลือกตัวที่เฉพาะเจาะจงกว่า (มีเทสต์ล็อกไว้) ไม่งั้นผู้ส่งเคสได้แจ้งเตือนซ้อนจากการกดครั้งเดียว
+- **หน้า audit อยู่ใต้ "การตั้งค่า" ตาม `06` §9** (mockup มีแท็บ `auditlog` อยู่แล้ว) — แต่ `06` §7.2 ให้เห็นเมนูตั้งค่าเฉพาะ Superadmin/บริหาร ⇒ บัญชี/การเงินที่มี capability เข้าได้ทางลิงก์ตรง (เมนูไม่ใช่ security boundary — DEC-002) เหมือนกรณีธุรการที่ `settings.users`
+- **Company User โดน 403 ที่ชั้นข้อมูล ไม่ใช่แค่ไม่ให้ capability** — แถว `audit_logs` ไม่มีคอลัมน์บริษัทให้กรองรายแถว และเนื้อในมีข้อมูลข้ามบริษัท ⇒ กันไว้ที่ `listAuditLogs()`/`getAuditLog()` ตรง ๆ เผื่อมีคนสร้าง custom role แล้วติ๊ก capability นี้ให้
+- **แบ่งหน้าแบบ offset ไม่ใช่ cursor** — audit เป็น append-only + หน้าอ่านอย่างเดียว ลำดับจึงนิ่งพอ · เพดาน `limit` 100 กันดึงทั้งตาราง
+- **ยังไม่ทำ Export CSV ของ mockup** — mockup มีปุ่ม "Filter / Export" แต่ Export Engine กลาง (Excel/PDF) เป็นงาน Phase 6.1 (`96` §12) ⇒ ทำ Filter ก่อน ไม่สร้างตัวส่งออกซ้ำสองระบบ
+
+### verify ที่รันจริง
+
+- `pnpm typecheck` · `pnpm lint` · `pnpm test` — **194 ไฟล์ / 2,581 เคสเขียว** (เพิ่มจาก 5.1: ข้อความแจ้งเตือน 12 · นับวันถึงกำหนดยื่น 4 · เลือก event ของเคส 3 · audit display/schema 12 · audit DB 10 · notification ของ job overdue 1)
+
+### จุดที่คนถัดไปควรรู้
+
+- **ต้องรัน `pnpm db:seed` ซ้ำทุก environment** — capability `view_audit_log` + `role_capabilities` ของบริหาร/การเงิน/บัญชี เกิดจาก seed (seed idempotent รันซ้ำได้)
+- **Phase 5.3 อย่าเขียน handler ใหม่** — `timeout-job.ts` / `overdue-job.ts` / `filing-reminder-job.ts` เป็น handler ล้วนที่รอ engine มาเรียก (idempotent ครบแล้ว) · handler ที่ยิงแจ้งเตือนต้องใช้ `dispatchNotificationAwaited()` เท่านั้น ไม่งั้น process อาจจบก่อนแถวถูกเขียน
+- **`dedupeKey` ห้ามมีเวลาปัจจุบัน** (กติกาเดิมจาก 5.1) — เทสต์ `messages.test.ts` ดักรูปแบบ timestamp ไว้แล้ว
+- **เพิ่มตารางใหม่ใน `02` เมื่อไร ให้เติมชื่อไทยใน `TARGET_TYPE_LABEL`** (`lib/audit/log-display.ts`) — ไม่เติมก็ไม่พัง (แสดง code ดิบ) แต่หน้าจอจะอ่านยาก
+
+---
+
 ## Phase 5.1 — Notification Service + Notification Center
 
 **วันที่**: 2026-08-15 · **commit**: `fbc275c` · **branch**: `auto/phase-5.1`

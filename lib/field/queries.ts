@@ -16,6 +16,8 @@ import {
   type ExpenseTxClient,
   type PlanSnapshot,
 } from '@/lib/field/expense-queries'
+import { dispatchNotification } from '@/lib/notifications/dispatch'
+import { caseClosedFailMessage, caseClosedSuccessMessage } from '@/lib/notifications/messages'
 import { notifyUsersDetached } from '@/lib/notifications/notify'
 import { usersWithCapability } from '@/lib/notifications/recipients'
 import {
@@ -995,6 +997,23 @@ async function loadPlanSnapshot(user: SessionUser, planId: string | null, onDate
   })
 }
 
+/**
+ * `90` §6.3 แถว 4 — ผลปิดงานต้องเด้งหา "คนที่ทำงานต่อ" คนละกลุ่มตามผลลัพธ์:
+ * - `closed_success` → คลัง (`intake_asset`) เพราะต้องรับทรัพย์เข้าคลังก่อนรายได้จะเกิด (`19` §6.1)
+ * - `closed_fail` → ผู้จัดการ/หัวหน้าทีม (`assign_case`) เพราะต้องตัดสินใจมอบหมายใหม่/รีไซเกิล (`38` §6.6)
+ */
+function notifyCaseClosed(organizationId: string, outcome: CaseOutcome, caseRef: string, agentName: string): void {
+  const capability = outcome === 'closed_success' ? 'intake_asset' : 'assign_case'
+  const message =
+    outcome === 'closed_success'
+      ? caseClosedSuccessMessage({ caseRef, agentName })
+      : caseClosedFailMessage({ caseRef, agentName })
+
+  void usersWithCapability(organizationId, capability).then((userIds) => {
+    dispatchNotification({ organizationId, userIds }, message)
+  })
+}
+
 /** `41` §15 — รายการเบิกที่เข้า `pending_approval` แล้วต้องแจ้งฝ่ายบัญชี/การเงิน */
 function notifyExpenseQueue(organizationId: string, outcome: CaseOutcome, count: number, caseRef: string): void {
   if (count === 0 || outcome !== 'closed_fail') return
@@ -1161,6 +1180,7 @@ export async function closeFieldCase(
   })
 
   notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef)
+  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName)
 
   return toActionResult(result.assignment, [
     outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
@@ -1490,6 +1510,7 @@ export async function resubmitCloseCase(
   })
 
   notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef)
+  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName)
 
   return toActionResult(result.assignment, ['case.close_resubmitted'])
 }

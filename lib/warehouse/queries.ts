@@ -5,6 +5,8 @@ import type { ApiWarning } from '@/lib/api/envelope'
 import { ModuleError } from '@/lib/api/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
+import { dispatchNotification, usersWithCapability } from '@/lib/notifications/dispatch'
+import { assetIntakeRejectedMessage, lotConfirmedMessage } from '@/lib/notifications/messages'
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import { WarehouseError } from '@/lib/warehouse/errors'
@@ -400,7 +402,7 @@ export async function rejectAssetIntake(
   const reason = assertRejectReason(input.rejectReason)
   const rejectedAt = new Date()
 
-  return prisma.$transaction(async (tx) => {
+  const detail = await prisma.$transaction(async (tx) => {
     const claimed = await tx.asset.updateMany({
       where: { id: assetId, assetStatus: current.assetStatus },
       data: {
@@ -441,6 +443,15 @@ export async function rejectAssetIntake(
     const updated = await tx.asset.findUniqueOrThrow({ where: { id: assetId }, select: assetSelect })
     return toAssetDetail(updated, null)
   })
+
+  // `90` §6.3 แถว 5 — คนที่ต้องแก้คือพนักงานที่ถือเคสนั้นอยู่ (IMEI/สภาพไม่ตรง ⇒ แก้แล้วรับใหม่)
+  const agentId = current.case.assignments[0]?.agentId
+  dispatchNotification(
+    { organizationId: user.organizationId, userIds: agentId === undefined ? [] : [agentId] },
+    assetIntakeRejectedMessage({ caseRef: current.caseRef, reason }),
+  )
+
+  return detail
 }
 
 // ── GET /api/handover-lots (`44` §15) ───────────────────────────────────────
@@ -775,6 +786,21 @@ export async function confirmLot(
   }
 
   const lot = await getLot(user, lotId)
+
+  // `90` §6.3 แถว 5 — จุดที่รายได้เกิด ⇒ การเงินต้องรู้เพื่อไปวางบิลต่อ (`19` §6.1)
+  void usersWithCapability(user.organizationId, 'manage_billing').then((userIds) => {
+    dispatchNotification(
+      { organizationId: user.organizationId, userIds },
+      lotConfirmedMessage({
+        lotId,
+        lotNumber: lot.lotNumber,
+        companyName: lot.companyName,
+        assetCount: result.assetIds.length,
+        revenueCount: result.revenueIdsCreated.length,
+      }),
+    )
+  })
+
   return {
     lot,
     assetIdsHandedOver: result.assetIds,

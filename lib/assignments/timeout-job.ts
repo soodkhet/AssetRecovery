@@ -1,4 +1,6 @@
 import { swapAssignment, type AssignmentTxClient } from '@/lib/assignments/queries'
+import { dispatchNotificationAwaited } from '@/lib/notifications/dispatch'
+import { reassignmentTimeoutMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -60,7 +62,8 @@ export async function resolveExpiredReassignments(
       newAgentId: true,
       requestedAt: true,
       reason: true,
-      case: { select: { assignedTeamId: true, trackingRound: true } },
+      requestedBy: true,
+      case: { select: { caseRef: true, assignedTeamId: true, trackingRound: true } },
     },
   })
 
@@ -99,6 +102,15 @@ export async function resolveExpiredReassignments(
     if (changed) {
       result.resolved += 1
       result.caseIds.push(pending.caseId)
+      // ทั้งสามคนต้องรู้ผลที่ job ตัดสินให้: คนเดิม คนใหม่ และผู้จัดการที่ขอ (`90` §6.3 แถว 3)
+      // await เสมอ — job ต้องมั่นใจว่าเขียนแถวแล้วก่อนจบรอบ · `dedupeKey` ทำให้รันซ้ำไม่แจ้งซ้ำ
+      await dispatchNotificationAwaited(
+        {
+          organizationId: pending.organizationId,
+          userIds: [pending.fromAgentId, pending.newAgentId, pending.requestedBy],
+        },
+        reassignmentTimeoutMessage({ caseRef: pending.case.caseRef, pendingReassignmentId: pending.id }),
+      )
     } else {
       result.skipped += 1
     }

@@ -176,13 +176,25 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [managerIn, 'view'],
     [managerOut, 'view'],
   ],
+
+  // ── นอก matrix: บันทึกการใช้งาน (`90` §12) — อ่านอย่างเดียวทุก role ที่ได้สิทธิ์ ──
+  // `90` §12 ระบุ "Superadmin/บริหาร/บัญชี/การเงิน" · Superadmin ไม่มี record โดยนิยาม (DEC-009)
+  view_audit_log: [
+    [executive, 'view'],
+    [finance, 'view'],
+    [accounting, 'view'],
+  ],
 }
 
 /**
  * capability นอก Functional Matrix 37 รายการ ที่ถูกผูกไปแล้วโดย task ของโมดูลเจ้าของสิทธิ์
  * เพิ่มรายการที่นี่ = ยืนยันว่าตั้งใจผูก (เทสต์กันการผูกเงียบ ๆ ที่ `default-matrix.test.ts`)
  */
-export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = ['manage_compensation_plans', 'manage_users']
+export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
+  'manage_compensation_plans',
+  'manage_users',
+  'view_audit_log',
+]
 
 export const DEFAULT_ROLE_CAPABILITIES: readonly DefaultAssignment[] = Object.entries(MATRIX).flatMap(
   ([capabilityCode, grants]) => grants.map(([role, level]) => ({ capabilityCode, role, level })),

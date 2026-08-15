@@ -26,6 +26,8 @@ import {
 import { suggestTeam, type TeamCoverage, type TeamSuggestionResult } from '@/lib/cases/team-suggestion'
 import type { CaseDetailDto, CaseTeamSuggestionDto } from '@/lib/cases/types'
 import type { Prisma } from '@/lib/generated/prisma/client'
+import { caseSubmitterIds, dispatchNotification } from '@/lib/notifications/dispatch'
+import { caseDecisionMessage, type CaseDecisionEvent } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -356,7 +358,31 @@ export async function changeCaseStatus(
     return next
   })
 
+  // แจ้งผู้ส่งเคสหลัง commit (`90` §6.3 แถว 1–2) — ล้มแล้วห้ามพา transaction ล้มตาม
+  const decision = caseDecisionEventOf(events)
+  if (decision !== null) {
+    dispatchNotification(
+      { organizationId, userIds: await caseSubmitterIds(organizationId, caseId) },
+      caseDecisionMessage(decision, { caseId, caseRef: row.caseRef, reason: auditReason }),
+    )
+  }
+
   return { case: toDetailDto(updated), suggestion }
+}
+
+/**
+ * event เดียวที่ควรเด้งหาผู้ส่งเคสจากชุด event ของ action นั้น (`caseEventsFor()`)
+ * — `approve_recycle` ยิงทั้ง `case.recycle_approved` และ `case.approved` ⇒ เลือกตัวที่เฉพาะเจาะจงกว่า
+ *   ไม่งั้นผู้ส่งเคสได้แจ้งเตือนสองใบจากการกดปุ่มครั้งเดียว
+ */
+export function caseDecisionEventOf(events: readonly string[]): CaseDecisionEvent | null {
+  const priority: readonly CaseDecisionEvent[] = [
+    'case.recycle_approved',
+    'case.approved',
+    'case.rejected',
+    'case.need_info_requested',
+  ]
+  return priority.find((code) => events.includes(code)) ?? null
 }
 
 /** ค่าที่เขียนลงคอลัมน์ snapshot ของเคส (`02` §6 · `10` §9.2) */

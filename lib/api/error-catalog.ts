@@ -171,6 +171,7 @@ export const ERROR_CATALOG = {
   // ── 24 §6.10 Audit (Platform) ──────────────────────────────────────────
   AUDIT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.10' },
   AUDIT_IMMUTABLE: { status: 403, severity: 'reject', source: '24 §6.10' },
+  AUDIT_LOG_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.10' },
 
   // ── 38 §12 Case Submission ─────────────────────────────────────────────
   CASE_REF_DUPLICATE: { status: 400, severity: 'reject', source: '38 §12' },
