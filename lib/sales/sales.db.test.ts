@@ -442,7 +442,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     const bankTx = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO bank_transactions (organization_id, period_id, bank_account_id, transaction_date, description,
                                      amount_satang, match_status, matched_billing_id, created_by)
-      VALUES ('${ORG_ID}', '${periodId}', '${BANK_ACCOUNT_ID}', '2026-06-28', 'โอนเข้า · อ้างอิง BTR-43',
+      VALUES ('${ORG_ID}', '${periodId}', '${BANK_ACCOUNT_ID}', '2026-06-28', 'โอนเข้า · อ้างอิง BTR-43-${RUN}',
               1284000, 'auto_matched', '${batch.id}', '${ACCOUNTING_ID}')
       RETURNING id
     `)
@@ -458,7 +458,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     expect(row?.payerName).toBe(`ไฟแนนซ์ 4.3 (${RUN})`)
     expect(row?.amountSatang).toBe(1_284_000)
     expect(row?.whtWithheldByCustomerSatang).toBe(36_000)
-    expect(row?.bankRef).toBe('โอนเข้า · อ้างอิง BTR-43')
+    expect(row?.bankRef).toBe(`โอนเข้า · อ้างอิง BTR-43-${RUN}`)
     expect(row?.bankMatchStatus).toBe('auto_matched')
     expect(receipts.totalSatang).toBeGreaterThanOrEqual(1_284_000)
   })

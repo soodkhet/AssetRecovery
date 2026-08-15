@@ -2624,6 +2624,9 @@ model BankTransaction {
 
   @@index([periodId, matchStatus], map: "idx_bank_tx_period")
   @@index([bankAccountId, transactionDate], map: "idx_bank_tx_account")
+  /// กันนำเข้า statement ซ้ำที่ระดับ DB — `uniq_bank_tx_statement_row` เป็น **functional unique index**
+  /// `(organization_id, bank_account_id, transaction_date, amount_satang, md5(lower(btrim(description))))`
+  /// ซึ่ง Prisma เขียนไม่ได้ ⇒ อยู่ใน raw SQL (`20260816010000_bank_transaction_dedupe`) ตาม Rule 02
   @@map("bank_transactions")
 }
 

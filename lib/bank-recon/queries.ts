@@ -402,43 +402,53 @@ export async function importStatement(
     }
     seen.add(key)
 
-    const inserted = await prisma.$transaction(async (tx) => {
-      const record = await tx.bankTransaction.create({
-        data: {
-          organizationId: ctx.actor.organizationId,
-          periodId: row.periodId,
-          bankAccountId: account.id,
-          transactionDate: row.transactionDate,
-          description: row.description,
-          amountSatang: row.amountSatang,
-          createdBy: ctx.actor.id,
-        },
-        select: { id: true },
-      })
-      await emitAudit(
-        {
-          organizationId: ctx.actor.organizationId,
-          actorId: ctx.actor.id,
-          actorRole: ctx.actor.roleName,
-          action: 'import',
-          targetType: TARGET,
-          targetId: record.id,
-          after: {
-            period_label: row.periodLabel,
-            transaction_date: row.transactionDate,
+    // ด่านที่ 2 ของการกันซ้ำ: `uniq_bank_tx_statement_row` (สะท้อน `statementRowKey()` เป๊ะ)
+    // ด่านแรกข้างบนเป็น read-then-insert ⇒ สองคำขอที่อัปไฟล์เดียวกัน **พร้อมกัน** ผ่านทั้งคู่ได้
+    // ⇒ เงินเข้าถูกนับซ้ำ · ชนแล้วถือเป็น "ซ้ำ" ตามปกติ ไม่ใช่ล้มทั้งไฟล์
+    let inserted: { id: string } | null = null
+    try {
+      inserted = await prisma.$transaction(async (tx) => {
+        const record = await tx.bankTransaction.create({
+          data: {
+            organizationId: ctx.actor.organizationId,
+            periodId: row.periodId,
+            bankAccountId: account.id,
+            transactionDate: row.transactionDate,
             description: row.description,
-            amount_satang: row.amountSatang,
-            match_status: 'unmatched',
-            source_file: input.fileName,
+            amountSatang: row.amountSatang,
+            createdBy: ctx.actor.id,
           },
-          reason: `นำเข้า statement ${input.fileName} ของบัญชี ${bankAccountLabel(account)} (ไฟล์ 35 §9)`,
-          ipAddress: ctx.meta.ipAddress,
-          userAgent: ctx.meta.userAgent,
-        },
-        tx,
-      )
-      return record
-    })
+          select: { id: true },
+        })
+        await emitAudit(
+          {
+            organizationId: ctx.actor.organizationId,
+            actorId: ctx.actor.id,
+            actorRole: ctx.actor.roleName,
+            action: 'import',
+            targetType: TARGET,
+            targetId: record.id,
+            after: {
+              period_label: row.periodLabel,
+              transaction_date: row.transactionDate,
+              description: row.description,
+              amount_satang: row.amountSatang,
+              match_status: 'unmatched',
+              source_file: input.fileName,
+            },
+            reason: `นำเข้า statement ${input.fileName} ของบัญชี ${bankAccountLabel(account)} (ไฟล์ 35 §9)`,
+            ipAddress: ctx.meta.ipAddress,
+            userAgent: ctx.meta.userAgent,
+          },
+          tx,
+        )
+        return record
+      })
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      duplicates += 1
+      continue
+    }
 
     created.push({ id: inserted.id, row })
   }
