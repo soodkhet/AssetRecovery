@@ -7,7 +7,7 @@
 
 ## Phase 6.5 — Executive Dashboard (E1–E3)
 
-**วันที่**: 2026-08-15 · **commit**: `PENDING65` · **branch**: `auto/phase-6.5`
+**วันที่**: 2026-08-15 · **commit**: `9e0d570` · **branch**: `auto/phase-6.5`
 
 ### สิ่งที่ทำ
 

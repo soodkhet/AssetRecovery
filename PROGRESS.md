@@ -105,7 +105,7 @@
 | 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
 | 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `f4b824f` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 6.4 | รายงานหมวด A (A1–A4) | ✅ | 2026-08-15 · `ec43687` · A1–A4 ครบ (WHT รายเดือน/ใบกำกับภาษี 2 มิติ/ประวัติส่งออกทุกเวอร์ชัน/ข้อยกเว้นรายงวดที่แยก `authorized` จาก `resolved`) + ตัวแปลงช่วงวันที่ → ช่วงงวดบัญชี · เทสต์ pure 29 + DB 12 → archive |
-| 6.5 | Executive Dashboard (E1–E3) | ✅ | 2026-08-15 · `PENDING65` · E1–E3 ครบ (KPI 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard บริษัท/ทีม) + `<ReportLineChart>` shared ⇒ **รายงานครบ 17/17 ตัวของไฟล์ 96** · เทสต์ pure 25 + DB 11 → archive |
+| 6.5 | Executive Dashboard (E1–E3) | ✅ | 2026-08-15 · `9e0d570` · E1–E3 ครบ (KPI 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard บริษัท/ทีม) + `<ReportLineChart>` shared ⇒ **รายงานครบ 17/17 ตัวของไฟล์ 96** · เทสต์ pure 25 + DB 11 → archive |
 | 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⏸️ | PLAN §6.6 · รอ PO อนุมัติ spec (dashboard.html เป็น DRAFT) |
 
 ## Phase 7 — Client Portal (ไฟล์ 97) 🔒 (ปลดล็อกเมื่อ PO ตอบ Auth method — `97` §22 #2)
