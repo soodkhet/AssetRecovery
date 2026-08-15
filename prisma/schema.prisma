@@ -2073,7 +2073,10 @@ model Advance {
   approvedSatang  Int?          @map("approved_satang")
   usedSatang      Int           @default(0) @map("used_satang")
   /// read-only (generated) — `used > approved` → 0 เสมอ ห้ามติดลบ (Rule 01)
-  returnSatang    Int           @map("return_satang")
+  /// `@default(dbgenerated())` = บอก Prisma ว่า "ค่าเกิดที่ DB" ⇒ ตัดออกจาก create input ได้
+  /// (คอลัมน์จริงเป็น `GENERATED ALWAYS ... STORED` ตั้งแต่ migration `20260813231247` — **ไม่มี SQL เปลี่ยน**
+  /// จากบรรทัดนี้ ยืนยันด้วย `prisma migrate diff` แล้วว่าไม่เกิด `SET DEFAULT` · Phase 3.3)
+  returnSatang    Int           @default(dbgenerated()) @map("return_satang")
   status          AdvanceStatus @default(pending_approval)
   purpose         String
   dueClearDate    DateTime      @map("due_clear_date") @db.Date

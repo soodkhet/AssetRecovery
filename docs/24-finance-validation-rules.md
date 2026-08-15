@@ -15,6 +15,8 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v4.1 | 15/08/2569 | **เติม §6.4** (Phase 3.3 — Claims & Advances `15`): `ADVANCE_EXCEEDS_MAX` (ระบุไว้แล้วใน `15` §11 แต่ตกหล่นจาก dictionary กลาง), `ADVANCE_NOT_FOUND`, `ADVANCE_INVALID_STATUS` — `15` §11 ไม่ครอบคลุมกรณี 404 / สถานะทำ action ไม่ได้ (`23` §6.4) ที่ implementation ต้องใช้จริง จึงระบุให้ตรงเหมือน v3.5–v4.0 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
+| v4.1 | 15/08/2569 | **เติม §6.4** (Phase 3.3 — Claims & Advances `15`): `ADVANCE_EXCEEDS_MAX` (มีอยู่ใน `15` §11 + `13` §6.2.1 อยู่แล้วแต่ตกหล่นจาก dictionary กลาง), `ADVANCE_NOT_FOUND`, `ADVANCE_INVALID_STATUS` — `15` §11 ระบุไว้ 5 code ซึ่งไม่ครอบคลุมกรณี 404 / สถานะไม่รองรับตาม `23` §6.4 จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.0 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.0 | 15/08/2569 | **เติม §6.5** (Phase 3.2 — Payee & Tax Profile `18`): `PAYEE_NOT_FOUND`, `PAYEE_ALREADY_EXISTS`, `PAYEE_ID_DOCUMENT_REQUIRED` — `18` §11 ระบุไว้แค่ 3 code (`REQUIRED_MISSING`/`BANK_ACCOUNT_NAME_MISMATCH`/`UNVERIFIED_PAYEE_IN_PAYOUT`) ซึ่งไม่ครอบคลุมกรณี 404 / ซ้ำ (unique `(organization_id, user_id)` ของ `payee_profiles`) / เอกสารยืนยันตัวตนที่ `18` §10 บังคับผ่าน `13` §6.2.1 จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v3.9 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.9 | 14/08/2569 | **เติม §6.1–6.3** (Phase 1.10 — ตั้งค่าการเงิน/บัญชี `13` ครบ 13 หมวด): `CYCLE_NOT_FOUND`, `DUPLICATE_CYCLE_NAME`, `APPROVAL_MATRIX_NOT_FOUND`, `COST_CENTER_NOT_FOUND`, `COST_CENTER_IN_USE`, `TAX_PROFILE_NOT_FOUND`, `DUPLICATE_TAX_PROFILE_NAME`, `TAX_PROFILE_IN_USE`, `NUMBERING_SEQ_NOT_EDITABLE`, `BANK_FILE_FORMAT_NOT_FOUND`, `BANK_ACCOUNT_NOT_FOUND`, `DUPLICATE_BANK_ACCOUNT`, `BANK_ACCOUNT_IN_USE` — `13` §10 ระบุไว้แค่ 5 code (`REQUIRED_MISSING`/`INVALID_WHT_RATE`/`VAT_RATE_OVERLAP`/`BANK_FILE_NOT_TESTED`/`PERIOD_LOCKED_DIRECT_EDIT`) ซึ่งไม่ครอบคลุมกรณี 404/ซ้ำ/ลบของ ที่ถูกใช้อยู่ จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v3.7 · `VAT_RATE_NOT_FOUND` ขยาย source ครอบคลุมไฟล์ 13 (อ้างอัตราที่ไม่มีในองค์กร) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.8 | 14/08/2569 | **เติม §6.1** (Phase 1.9 — flow เชิญผู้ใช้ ตามมติ PO ที่ปิด open item D1): `INVITE_SEND_FAILED` — ส่งอีเมลคำเชิญตั้งรหัสผ่านผ่าน `inviteUserByEmail` ไม่สำเร็จตอนกด "ส่งคำเชิญอีกครั้ง" (502 เพราะเป็นความล้มเหลวของปลายทางภายนอก ไม่ใช่ข้อมูลผู้เรียกผิด) · ตอน **สร้าง** ผู้ใช้ถ้าเชิญไม่สำเร็จจะ**ไม่ reject** แต่คืน warning `USER_NOT_PROVISIONED` (code เดิม §6.9) แล้วบันทึกผู้ใช้ไว้ให้ส่งซ้ำได้ |
@@ -113,11 +115,17 @@
 | Code | Condition | Source File |
 |---|---|---|
 | ADVANCE_PENDING_SETTLEMENT | ขอ Advance ใหม่ทั้งที่มียอดเดิม **`approved` หรือ `overdue`** ค้างอยู่ (แก้จาก `waiting_settlement` เดิมที่ถูกตัดออก) | 15 |
+| ADVANCE_EXCEEDS_MAX | `requested_amount` เกิน `advance_max_amount_per_request` (`13` §6.2.1) — ค่าเป็น `null` = ไม่จำกัด ไม่ตรวจข้อนี้ | 15, 13 |
+| ADVANCE_NOT_FOUND | อ้าง Advance ที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) | 15 |
+| ADVANCE_INVALID_STATUS | ทำ action ที่สถานะปัจจุบันของ Advance ไม่รองรับตาม `23` §6.4 (เช่น อนุมัติรายการที่ `cleared` แล้ว) | 15, 23 |
 | USED_EXCEEDS_REQUEST_NO_TOPUP | เคลียร์ยอด Advance ที่ used_amount > requested_amount | 15 |
 | REJECTION_REASON_REQUIRED | ปฏิเสธ Advance หรือ Adjustment (`rejected`) โดยไม่กรอก rejection_reason | 15, 20 |
 | REJECT_REASON_REQUIRED | กด reject_expense โดยไม่กรอกเหตุผล | 15, 16, 41 |
 | APPROVAL_STEP_OUT_OF_ORDER | อนุมัติขั้นที่ยังไม่ถึงตา | 16 |
 | SEGREGATION_OF_DUTIES_VIOLATION | ผู้อนุมัติคนเดียวกันอนุมัติซ้ำ 2 ขั้น ขณะ enforce_segregation_of_duties=true | 16 |
+| ADVANCE_EXCEEDS_MAX | `requested_amount` เกิน `advance_max_amount_per_request` (`13` §6.2.1) — ค่าเป็น `null` = ไม่จำกัด ไม่ตรวจข้อนี้เลย | 15 |
+| ADVANCE_NOT_FOUND | ไม่พบคำขอเงินทดรองที่ระบุ หรืออยู่นอก scope ของผู้เรียก (404 — ไม่ leak ว่ามีอยู่จริง) | 15 |
+| ADVANCE_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันทำไม่ได้ตาม `23` §6.4 (เช่น อนุมัติรายการที่ `cleared` แล้ว) | 15 |
 
 ### 6.5 หมวด Payout/Payee (ไฟล์ 17, 18)
 
