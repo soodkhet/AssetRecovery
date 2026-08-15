@@ -7,7 +7,7 @@
 
 ## Phase 4.2 — Bank Reconciliation (35)
 
-**วันที่**: 2026-08-15 · **commit**: `<pending>` · **branch**: `auto/phase-4.2`
+**วันที่**: 2026-08-15 · **commit**: `1b2adeb` · **branch**: `auto/phase-4.2`
 
 ### สิ่งที่ทำ
 

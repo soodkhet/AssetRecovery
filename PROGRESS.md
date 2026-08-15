@@ -81,7 +81,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 4.1 | Exceptions + Period/Readiness/Lock guard | ✅ | 2026-08-15 · `5a2b26f` · BE 30/34 ครบ + interceptor `PERIOD_LOCKED_DIRECT_EDIT` ต่อเข้า write การเงิน 15 จุด + เทสต์ DB 14 เคส → archive |
-| 4.2 | Bank Reconciliation | ✅ | 2026-08-15 · `<pending>` · import statement + auto-match (candidate เดียว) + trigger 2 ทาง (Cash Receipt/payout completed) + แท็บกระทบยอด · เทสต์ pure 79 + DB 16 → archive |
+| 4.2 | Bank Reconciliation | ✅ | 2026-08-15 · `1b2adeb` · import statement + auto-match (candidate เดียว) + trigger 2 ทาง (Cash Receipt/payout completed) + แท็บกระทบยอด · เทสต์ pure 79 + DB 16 → archive |
 | 4.3 | Sales & Receipts + Tax Invoice + PDF | ⬜ | PLAN §4.3 · เลขห้าม gap |
 | 4.4 | Accounting Expenses + Accountant Questions | ⬜ | PLAN §4.4 |
 | 4.5 | WHT Data + ใบ 50 ทวิ PDF | ⬜ | PLAN §4.5 · cancelled ไม่นับยอด |
