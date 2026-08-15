@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.5 (Payout FE + เอกสารภายใน 3 ใบ) · งานถัดไป 3.6
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.6 (Revenue/Billing/AR BE — เสียบ RevenueService ตัวจริง) · งานถัดไป 3.7
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.6: Revenue / Billing / AR Backend (ไฟล์ 19)
+## 🎯 งานถัดไป — Phase 3.7: Billing FE (19 §8) + Adjustment (20)
 
-- ทำตาม `docs/01_PLAN.md` §3.6 — **Revenue trigger เป็นหัวใจของ Phase นี้ ห้าม implement จากความจำ** อ่าน `19` §6.1 + `44` §11 + DEC-006/D6 ก่อนเขียนบรรทัดแรก
-- **Revenue creation service**: subscribe `expense.approved` + `handover_lot.confirmed` + case terminal → เรียก revenue-trigger-rules ของ 3.1 · **idempotent ต่อเคส** · snapshot `vat_rate_used` (จาก `vat_rate_history` ตาม `revenue_date` — **ห้าม hardcode 7%**) + fee model · Warehouse gate ใช้กับ `closed_success` **เสมอ** รวมเคสที่ไม่มี expense (DEC-006/D6) · `closed_fail` ไม่ผ่านคลัง
-- **เสียบของจริงแทน stub `RevenueService.tryCreateRevenue()` ของ 2.13** แล้วรัน test contract เดิมของ 2.13 ให้ผ่านทั้งชุด (อย่าแก้เทสต์เดิมให้เข้ากับโค้ดใหม่)
-- **Billing Batch**: builder รวมหลายเคส/บริษัท/รอบ (`NO_REVENUE_TO_BILL`) + send + guard `EDIT_BILLED_REVENUE` + ห้ามลบ non-draft · **AR Aging** buckets จาก `13` · `received_amount` เว้น hook ไว้ให้ไฟล์ 35 (Phase 4.2)
-- ของที่มีแล้วห้ามเขียนซ้ำ: `lib/finance/*` ครบ 13 สูตร (3.1 — รวม revenue-trigger-rules/VAT resolver) · `assertBankFileUsable()`+VAT resolver/เดินเลข (1.10) · audit helper (1.4) · envelope/error catalog (2.1)
-- อ้างอิง: `19` ทั้งไฟล์ · `44` §11 · `22` §6.5–6.8/§6.11 · `12`
-- DoD: unit + integration test ครอบ `19` §16 **ทั้ง 8 เคส** + DEC-006/D6 (เคสไม่มี expense) · LOC ~1,900 · งบ ~310k
+- ทำตาม `docs/01_PLAN.md` §3.7 — 2 ก้อนในงานเดียว: **FE ของไฟล์ 19** ที่ BE เสร็จแล้ว (3.6) + **BE+FE ของไฟล์ 20** ทั้งโมดูล
+- **FE 19**: เปิดแท็บ `revenue` ใน `operation-tabs.ts` → แท็บ "รายได้และวางบิล" = **2 ตาราง** (รอบวางบิล: บริษัท/รอบเดือน/ยอดเรียกเก็บ/รับชำระ/**AR แดงเมื่อ > 0**/สถานะ/ปุ่มเอกสาร · รายการรายได้ดิบ: บริษัท/Case Ref/วันที่/Model/Gross/VAT flag/รอบที่ถูกรวม "-" ถ้ายังไม่รวม) + **AR Aging view** · DTO พร้อมแล้ว (`outstandingSatang`/`daysOverdue` มาจาก API ห้ามคำนวณบนหน้าจอ)
+- **BE 20 (Adjustment)**: CRUD + **4 FK แยก + CHECK exactly-one (DEC-004)** · `amount` บวกเสมอ + type `increase`/`decrease` · `REASON_REQUIRED` · **snapshot `period_status_at_target` ณ ตอนสร้าง** แล้วใช้ตัดสินระดับอนุมัติจาก `adjustmentApprovalPolicyFor()` (3.1) · `INSUFFICIENT_APPROVAL_LEVEL` · state machine `23` §6.9
+- **FE 20**: แท็บ adjustment (ค้นหาเป้าหมาย + แสดงระดับอนุมัติที่ต้องใช้ก่อนกดส่ง)
+- ของที่มีแล้วห้ามเขียนซ้ำ: `adjustmentApprovalPolicyFor()`/`assertApprovalLevelSufficient()` (3.1) · `assertRevenueAmountEditable()` — **เรียกก่อนสร้าง Adjustment ที่เป้าหมายเป็น Revenue ห้ามเช็คสถานะรอบเอง** (3.6) · `assertPeriodEditable()` (1.10) · `<ReasonConfirmModal>`/`<FinanceShell>` (1.11/3.3)
+- อ้างอิง: `19` §8 · `20` ทั้งไฟล์ · `13` §6.11 · `23` §6.9 · mockup `finance.html` ผ่าน MAP
+- DoD: เทสต์ครอบ CHECK exactly-one + ระดับอนุมัติตาม `period_status_at_target` (รวมเคส `locked` ที่ต้องเป็นผู้บริหาร) · LOC ~2,000 · งบ ~310k
 
 ---
 
@@ -72,7 +72,7 @@
 | 3.3 | Approval FE + Claims & Advances | ✅ | 2026-08-15 · `d1f39f6`+`45bd3a1` · API 9 endpoint (`27` §6.4) + ห้ามเบิกซ้อน 2 ชั้น + job auto-overdue idempotent + หน้า `/finance` 2 แท็บแรก · เทสต์ระดับ DB 22 เคสของ `15` §16 → archive |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+`1848a48` · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
 | 3.5 | Payout FE + Internal PDFs | ✅ | 2026-08-15 · `9538009`+`c15a75b` · แท็บรอบจ่ายเงิน (ตาราง+3 modal+ยืนยันซ้ำ 2 จังหวะ) + เอกสารภายใน 3 ใบเทียบ samples 04–06 · fix `lpad` เลขเอกสารเกิน 999 → archive |
-| 3.6 | Revenue / Billing / AR BE | ⬜ | PLAN §3.6 · เสียบ stub จาก 2.13 |
+| 3.6 | Revenue / Billing / AR BE | ✅ | 2026-08-15 · `fb84fd9`+`294f47f` · RevenueService ตัวจริง (เกต `19` §6.1 + ยอด `22` §6.5–6.8 + snapshot VAT) + Billing Batch/AR Aging + API 7 endpoint · เทสต์ pure 34 + DB 30 (`19` §16 ครบ 8 เคส) → archive |
 | 3.7 | Billing FE + Adjustment | ⬜ | PLAN §3.7 · 4 FK + CHECK (DEC-004) |
 | 3.8 | Profitability + Finance Dashboard | ⬜ | PLAN §3.8 |
 

@@ -210,6 +210,12 @@ beforeAll(async () => {
   `)
   // ผู้ใช้บริษัทต้องผูก company หลังบริษัทถูกสร้างแล้ว
   await tx.$executeRawUnsafe(`UPDATE users SET company_id = '${COMPANY_A}' WHERE id = '${COMPANY_USER_ID}'`)
+  // Phase 3.6 — step 4 คิด VAT จริงแล้ว ⇒ องค์กรทดสอบต้องมีอัตราครอบวันปิดงาน (ห้าม fallback 7%)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO vat_rate_history (organization_id, rate_pct, effective_from, effective_to, created_by)
+    VALUES ('${ORG_ID}', 7.00, '2020-01-01', NULL, '${MANAGER_ID}')
+    ON CONFLICT DO NOTHING
+  `)
 })
 
 afterAll(async () => {
@@ -610,8 +616,11 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     const result = await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
 
     expect(result.revenueEligibleCaseIds).toEqual([caseId])
-    // stub ของ 2.13 ยังไม่สร้างแถวจริง — Phase 3.6 เสียบตัวจริงแล้วต้องได้ id ที่นี่
-    expect(result.revenueIdsCreated).toEqual([])
+    // Phase 3.6 เสียบ RevenueService ตัวจริงแล้ว ⇒ ต้องได้แถว `revenues` จริงพร้อม snapshot VAT
+    expect(result.revenueIdsCreated).toHaveLength(1)
+    const created = await db().revenue.findFirstOrThrow({ where: { caseId } })
+    expect(created.status).toBe('ready_for_billing')
+    expect(created.vatRatePctUsed.toNumber()).toBe(7)
   })
 
   it('🔑 DEC-006/D6 — เคสที่ไม่มี expense เลย ก็ต้องรอคลังยืนยันก่อนจึงเข้าเงื่อนไข', async () => {
@@ -636,6 +645,7 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     const result = await warehouse.confirmLot(admin, lot.id, confirmInput(), ctx(admin))
     expect(result.expenseIdsUnlocked).toEqual([])
     expect(result.revenueEligibleCaseIds).toEqual([caseId])
+    expect(result.revenueIdsCreated).toHaveLength(1)
   })
 
   it('T11 — step 2 ล้ม = rollback ทั้งชุด (CONFIRM_TRANSACTION_FAILED)', async () => {

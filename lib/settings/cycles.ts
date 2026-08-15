@@ -78,6 +78,44 @@ export function describeDueRule(values: Pick<CycleValues, 'dueRuleType' | 'dueRu
   }
 }
 
+/** วันสุดท้ายของเดือนนั้นตามปฏิทิน UTC (คอลัมน์ `DATE` = เที่ยงคืน UTC) */
+function lastDayOfMonthUtc(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+}
+
+/**
+ * **วันครบกำหนดชำระจริง** (A5 · `19` §7.2) — คำนวณจาก `due_rule_type` + `due_rule_value` เท่านั้น
+ * ห้าม parse `due_rule` (label ที่ผู้ใช้พิมพ์เอง) มาคิด
+ *
+ * | ชนิด | ผลลัพธ์ |
+ * |---|---|
+ * | `net_days` | วันตัดรอบ + N วัน |
+ * | `day_of_next_month` | วันที่ N ของ**เดือนถัดจากวันตัดรอบ** (เกินจำนวนวันในเดือน → clamp วันสุดท้าย) |
+ * | `month_end` | วันสุดท้ายของ**เดือนที่ตัดรอบ** |
+ *
+ * ⚠️ `cutoffDate` ต้องมาจากคอลัมน์/ค่า **date-only (เที่ยงคืน UTC)** เหมือน `billing_batches.due_date`
+ *    — ส่ง instant เข้ามาตรง ๆ จะได้วันเพี้ยนตอนหัวค่ำเวลาไทย (บทเรียนเดียวกับ VAT resolver)
+ */
+export function resolveDueDate(
+  cutoffDate: Date,
+  values: Pick<CycleValues, 'dueRuleType' | 'dueRuleValue'>,
+): Date {
+  const year = cutoffDate.getUTCFullYear()
+  const month = cutoffDate.getUTCMonth()
+  const day = cutoffDate.getUTCDate()
+
+  switch (values.dueRuleType) {
+    case 'net_days':
+      return new Date(Date.UTC(year, month, day + (values.dueRuleValue ?? 0)))
+    case 'day_of_next_month': {
+      const target = values.dueRuleValue ?? 1
+      return new Date(Date.UTC(year, month + 1, Math.min(target, lastDayOfMonthUtc(year, month + 1))))
+    }
+    case 'month_end':
+      return new Date(Date.UTC(year, month, lastDayOfMonthUtc(year, month)))
+  }
+}
+
 /** label ภาษาไทยของกติกาวันตัดรอบ (ตารางแท็บรอบบิลแสดงคอลัมน์นี้ — `13` §7) */
 export function describeCutoffRule(
   values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates' | 'cutoffText'>,

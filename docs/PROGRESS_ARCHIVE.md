@@ -5,6 +5,39 @@
 
 ---
 
+## Phase 3.6 — Revenue / Billing / AR Backend (19)
+
+**วันที่**: 2026-08-15 · **commit**: `fb84fd9` (Revenue service ตัวจริง + Billing/AR BE) + `294f47f` (เทสต์ระดับ DB + ปิด task) · **branch**: `auto/phase-3.6`
+
+### สิ่งที่ทำ
+
+- **เสียบ RevenueService ตัวจริงแทน stub ของ 2.13** (`lib/warehouse/revenue-service.ts`) — เกตยังมาจาก `evaluateRevenueTrigger()` ที่เดียวเหมือนเดิม แล้วต่อด้วยการคิดยอด + `INSERT revenues` จริง พร้อม snapshot `vat_rate_pct_used` / `fee_model_snapshot` / `revenue_date` (วันปิดงานตามปฏิทินไทย) · **เทสต์สัญญาเดิม `revenue-service.test.ts` ผ่านครบโดยไม่แก้แม้บรรทัดเดียว**
+- **`buildRevenueRow()`** (`lib/revenue/revenue-builder.ts`, pure) — จุดเดียวที่ต่อ `22` §6.5–6.7 (ยอดค่าบริการ) เข้ากับ §6.8 (VAT) · เคสไม่มีฐานคำนวณ ⇒ `missing_basis` **ไม่สร้าง Revenue ไม่เดายอด 0** · ไม่มีอัตรา VAT ครอบวันนั้น ⇒ `VAT_RATE_NOT_FOUND` หลุดออกไปทั้งทรานแซกชัน (ปล่อยเงียบ = รายได้หาย)
+- **`lib/revenue/revenue.ts`** (pure) — `period` เดือนไทย+พ.ศ. · state machine `23` §6.8 + ยาม 4 ตัว (`assertBillingBatchSendable/Deletable`, `assertRevenueEditable`, `assertHasRevenueToBill`) · `summarizeBillingBatch()` · `resolveBillingStatusAfterReceipt()` · `toBangkokDateOnly()`
+- **`resolveDueDate()`** (`lib/settings/cycles.ts`, A5) — วันครบกำหนดจาก `due_rule_type`+`due_rule_value` ครบ 3 ชนิด (clamp 31 → 28/29 ก.พ.) ตามที่ 1.10 จองที่ไว้ให้ไฟล์ 19
+- **ชั้น DB (`lib/revenue/queries.ts`)**: list รายได้ (+`unbilledOnly` ของตาราง `19` §8) · สร้างรอบวางบิล (ดึงรายได้ `ready_for_billing` ของบริษัทตั้งแต่ต้นเดือนถึงวันตัดรอบ + ยึดใบด้วย `updateMany(billingBatchId: null)` กันสองรอบแย่งกัน) · ส่งบิล (ยึดสถานะเดิม กดพร้อมกันได้คนเดียว) · ลบเฉพาะ `draft` + ปล่อยรายได้กลับ · AR Aging ตาม `ar_aging_buckets` ของ `13` (รวม + แยกบริษัท) · `assertRevenueAmountEditable()` ให้ไฟล์ 20 เรียก · `applyBillingReceipt()` = จุดเสียบของไฟล์ 35
+- **API 7 endpoint**: `GET /api/revenues` · `GET|POST /api/billing-batches` · `GET|DELETE /api/billing-batches/:id` · `PATCH /api/billing-batches/:id/send` · `GET /api/ar-aging` — อ่านเปิดให้ `manage_billing` + `view_own_company_data` (scope บริษัทตัวเอง) · เขียน = `manage:manage_billing` + `reason` บังคับทุกตัว
+- **เทสต์**: pure 29 เคส (`revenue.test.ts` + `revenue-builder.test.ts`) + `resolveDueDate` 5 เคส + **ระดับ DB 30 เคส** ครอบ `19` §16 **ครบทั้ง 8 เคส** + DEC-006/D6 + idempotency + `missing_basis` + `VAT_RATE_NOT_FOUND` + scope ข้ามบริษัท + AR Aging + hook ไฟล์ 35 · รวมทั้งระบบ **2,054 เทสต์ผ่าน**
+- **เอกสาร**: `24` v4.3 (+`BILLING_BATCH_NOT_FOUND`/`BILLING_BATCH_INVALID_STATUS`) · `27` v3.3 (+2 endpoint ที่ flow ต้องใช้)
+
+### การตัดสินใจระหว่างทาง
+
+- **วันครบกำหนดชำระมี 2 แหล่งที่เอกสารไม่ผูกกัน** — `19` §7.2 ให้มาจาก `due_rule` ของ Billing Cycle แต่ `billing_payout_cycles.scope` เป็น free text จับคู่บริษัทเองไม่ได้ ขณะที่ `02` §5 มี `finance_companies.payment_due_days` อยู่แล้ว ⇒ ให้ผู้ใช้ **เลือกรอบ AR ได้ (`cycleId`) แล้วรอบชนะเสมอ** · ไม่เลือก = Net N วันจาก `payment_due_days` · ที่มาถูกบันทึกลง audit (`after.due_date_source`) ทุกครั้ง — ถ้า PO ต้องการผูกรอบกับบริษัทแบบตายตัว ต้องเพิ่มคอลัมน์ใน `02` ก่อน
+- **`eligibleCaseIds` = ชุดที่ถูกสร้างจริง** (ตามคอมเมนต์สัญญาของ 2.13 "ไม่ขาดไม่เกิน") ⇒ เคสที่ผ่านเกตแต่คิดยอดไม่ได้ถูกย้ายไป `skipped` ด้วยเหตุผลใหม่ `missing_basis` แทนที่จะค้างอยู่ใน eligible โดยไม่มี Revenue คู่กัน
+- **idempotency ไม่มี unique index รองรับ** — `02` §8 ไม่มี unique `(case_id, tracking_round)` บน `revenues` และการเพิ่มเองต้อง `[[NEEDS_DECISION]]` ⇒ กันซ้ำด้วยอ่านก่อนเขียน**ในทรานแซกชันเดียวกัน** ซึ่งปลอดภัยเพราะทุกเส้นทางที่เรียกล็อกแถวต้นทางไว้ก่อนแล้ว (UPDATE ล็อต/expense) — เหตุผลเดียวกับ `ensureAssetForClosedCase()` ของ 2.13
+- **`confirmLot()` ปล่อย `ModuleError` ทุกตัวออกไปตรง ๆ** (เดิมปล่อยเฉพาะ `WarehouseError`) — ตอนนี้ step 4 คิด VAT จริง ถ้าองค์กรยังไม่ตั้งอัตรา จะได้ `VAT_RATE_NOT_FOUND` ที่บอกวิธีแก้ แทน `CONFIRM_TRANSACTION_FAILED` ที่อ่านไม่ออก
+- **บิลที่ยัง `draft` ไม่นับเป็นลูกหนี้** ใน AR Aging — ยังไม่ได้ส่งให้ลูกค้าตาม `19` §9.1 · และ **WHT ที่ลูกค้าหักไว้ (A1) นับเป็นรับชำระแล้ว** ไม่งั้นทุกบิลจะค้าง 3% ตลอดกาล
+- **`applyBillingReceipt()` รับ "ยอดสะสม" ไม่ใช่ยอดที่เพิ่ม** ⇒ ไฟล์ 35 ยิงซ้ำได้โดยไม่บวกเกินและไม่ลง audit ซ้ำ (`91`)
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 3.7 (FE 19 + Adjustment)**: แท็บ "รายได้และวางบิล" ยังปิดอยู่ใน `operation-tabs.ts` (`revenue`/`adjustment`) · DTO พร้อมใช้แล้วทั้ง `RevenueDto`/`BillingBatchDto`/`ArAgingReportDto` (มี `outstandingSatang`/`daysOverdue` มาให้ ไม่ต้องคำนวณบนหน้าจอ) · ก่อนสร้าง Adjustment ให้เรียก `assertRevenueAmountEditable()` — **ห้ามเช็คสถานะรอบเอง**
+- **Phase 4.2 (ไฟล์ 35)** เรียก `applyBillingReceipt()` ตรง ๆ — ห้าม `UPDATE received_satang` หรือเขียน transition `partially_paid`/`paid` ซ้ำ
+- **Phase 4.1** (`NOT_READY_BILLING_REVENUE_MISMATCH`) เทียบ `SUM(revenues.total_satang)` ของงวดกับ `billing_batches.total_satang` ได้ตรง ๆ เพราะยอดรอบมาจาก `summarizeBillingBatch()` ตัวเดียว
+- ⚠️ **องค์กรต้องมี `vat_rate_history` ครอบวันปิดงาน** ก่อนยืนยันล็อตแรกในแต่ละ environment ไม่งั้น confirm ล้มด้วย `VAT_RATE_NOT_FOUND` (seed ของ `prisma/seed.ts` ใส่ให้แล้ว — ตรวจซ้ำหลัง `pnpm db:deploy`)
+
+---
+
 ## Phase 3.5 — Payout FE (17 §8) + เอกสารภายใน 3 ใบ (28 §6.1)
 
 **วันที่**: 2026-08-15 · **commit**: `9538009` (โค้ดทั้งหมด — กู้จาก session ที่ถูกตัดกลางคัน) + `c15a75b` (verify + ปิด task) · **branch**: `auto/phase-3.5`

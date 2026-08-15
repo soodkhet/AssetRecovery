@@ -5,6 +5,7 @@ import {
   isCutoffShapeValid,
   isDueRuleShapeValid,
   normalizeCycleValues,
+  resolveDueDate,
   toCycleAuditPayload,
   type CycleValues,
 } from '@/lib/settings/cycles'
@@ -106,5 +107,50 @@ describe('toCycleAuditPayload', () => {
       due_rule_value: 30,
       due_rule: 'Net 30 วัน',
     })
+  })
+})
+
+describe('resolveDueDate (A5 · `19` §7.2)', () => {
+  const iso = (date: Date): string => date.toISOString().slice(0, 10)
+  const cutoff = (value: string): Date => new Date(`${value}T00:00:00.000Z`)
+
+  it('net_days — บวกจำนวนวันจากวันตัดรอบ (ข้ามเดือน/ข้ามปีได้)', () => {
+    expect(iso(resolveDueDate(cutoff('2026-08-31'), { dueRuleType: 'net_days', dueRuleValue: 30 }))).toBe('2026-09-30')
+    expect(iso(resolveDueDate(cutoff('2026-12-20'), { dueRuleType: 'net_days', dueRuleValue: 30 }))).toBe('2027-01-19')
+  })
+
+  it('day_of_next_month — วันที่ N ของเดือนถัดไป', () => {
+    expect(iso(resolveDueDate(cutoff('2026-08-31'), { dueRuleType: 'day_of_next_month', dueRuleValue: 5 }))).toBe(
+      '2026-09-05',
+    )
+    expect(iso(resolveDueDate(cutoff('2026-12-15'), { dueRuleType: 'day_of_next_month', dueRuleValue: 10 }))).toBe(
+      '2027-01-10',
+    )
+  })
+
+  it('day_of_next_month — วันที่เกินจำนวนวันในเดือนถูก clamp เป็นวันสุดท้าย', () => {
+    // ตัดรอบ ม.ค. → ครบกำหนด ก.พ. ซึ่งมี 28 วัน (2569 ไม่ใช่ปีอธิกสุรทิน)
+    expect(iso(resolveDueDate(cutoff('2026-01-31'), { dueRuleType: 'day_of_next_month', dueRuleValue: 31 }))).toBe(
+      '2026-02-28',
+    )
+    // ปีอธิกสุรทิน 2028 → 29 ก.พ.
+    expect(iso(resolveDueDate(cutoff('2028-01-31'), { dueRuleType: 'day_of_next_month', dueRuleValue: 31 }))).toBe(
+      '2028-02-29',
+    )
+  })
+
+  it('month_end — วันสุดท้ายของเดือนที่ตัดรอบ (ไม่ใช้ due_rule_value)', () => {
+    expect(iso(resolveDueDate(cutoff('2026-02-10'), { dueRuleType: 'month_end', dueRuleValue: null }))).toBe(
+      '2026-02-28',
+    )
+    expect(iso(resolveDueDate(cutoff('2026-08-01'), { dueRuleType: 'month_end', dueRuleValue: null }))).toBe(
+      '2026-08-31',
+    )
+  })
+
+  it('ผลลัพธ์เป็น date-only (เที่ยงคืน UTC) เสมอ — ลงคอลัมน์ `DATE` ได้ตรง', () => {
+    const due = resolveDueDate(cutoff('2026-08-31'), { dueRuleType: 'net_days', dueRuleValue: 30 })
+    expect(due.getUTCHours()).toBe(0)
+    expect(due.getUTCMinutes()).toBe(0)
   })
 })
