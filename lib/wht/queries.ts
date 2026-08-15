@@ -369,9 +369,22 @@ export async function syncWhtCertificatesFromPayout(
       continue
     }
 
-    issued.push(
-      await prisma.$transaction((tx) => issueCertificate(tx, ctx, record, existing?.id ?? null)),
-    )
+    try {
+      issued.push(
+        await prisma.$transaction((tx) => issueCertificate(tx, ctx, record, existing?.id ?? null)),
+      )
+    } catch (error) {
+      // แข่งกันออกใบพร้อมกัน (รอบจ่ายเป็น `completed` ได้ 2 ทาง — ยืนยันด้วยมือกับกระทบยอดธนาคาร)
+      // ⇒ คนที่แพ้ `uniq_wht_cert_active_per_expense` อ่านใบที่มีอยู่แล้วกลับไป ไม่ใช่ error
+      // (แนวเดียวกับ `syncExpenseRecordsFromPayout()` ที่แพ้ unique ของ `payout_batch_item_id`)
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      const raced = await prisma.whtCertificate.findFirst({
+        where: { organizationId, expenseRecordId: record.id, status: 'active' },
+        select: CERT_SELECT,
+      })
+      if (raced === null) throw error
+      issued.push(raced)
+    }
   }
 
   return issued.map(toCertDto)

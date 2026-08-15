@@ -517,6 +517,29 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     expect(source.filingForm).toBe('PND53')
   })
 
+  it('Final Test ด่าน 3 — sync พร้อมกันสองทาง ⇒ ใบ 50 ทวิ ยังใบเดียวต่อรายการ (ยอด ภ.ง.ด. ไม่เกินจริง)', async () => {
+    await setPeriodStatus('collecting')
+    const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 25_000_00, wht: 750_00 }])
+
+    // รอบจ่ายเป็น `completed` ได้ 2 ทาง (ยืนยันด้วยมือ `17` §9 กับการจับคู่กระทบยอดธนาคารไฟล์ 35)
+    // ⇒ ทั้งสองทางเรียก sync ได้พร้อมกันสำหรับรอบเดียวกัน
+    const results = await Promise.allSettled([
+      expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId),
+      expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId),
+    ])
+    expect(results.filter((result) => result.status === 'rejected')).toEqual([])
+
+    const certificates = await db().whtCertificate.findMany({
+      where: {
+        organizationId: ORG_ID,
+        expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } },
+      },
+      select: { status: true },
+    })
+    expect(certificates.filter((row) => row.status === 'active')).toHaveLength(1)
+    expect(certificates).toHaveLength(1)
+  })
+
   it('Final Test ด่าน 6 — งานเบื้องหลังสรุปรอบนำส่งต้องไม่เขียนทับงวดที่ปิดไปแล้ว', async () => {
     await setPeriodStatus('collecting')
     const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 30_000_00, wht: 900_00 }])

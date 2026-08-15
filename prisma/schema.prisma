@@ -2510,6 +2510,9 @@ model WhtCertificate {
   replacedBy WhtCertificate[] @relation("wht_replaces")
 
   @@index([payeeId, paymentDate], map: "idx_wht_certs_payee")
+  /// กันออกใบซ้ำที่ระดับ DB — `uniq_wht_cert_active_per_expense` เป็น **partial unique index**
+  /// `(organization_id, expense_record_id) WHERE status = 'active'` ซึ่ง Prisma เขียนไม่ได้
+  /// ⇒ อยู่ใน raw SQL (`20260816030000_wht_certificate_active_unique`) ตาม Rule 02
   @@map("wht_certificates")
 }
 
