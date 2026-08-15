@@ -33,6 +33,7 @@ import {
   paymentFileName,
   paymentFileStoragePath,
   resolvePayoutSide,
+  whtFallbackWarning,
 } from '@/lib/payout/payout'
 import { downloadPaymentFile, sha256Hex, uploadPaymentFile } from '@/lib/payout/payment-file-storage'
 import type {
@@ -251,6 +252,8 @@ interface Candidate {
   netSatang: number
   taxProfileId: string | null
   whtPctSnapshot: number
+  /** `true` = คิด WHT ด้วยอัตราของ Plan เพราะ Payee ยังไม่มี Tax Profile ⇒ ต้องเตือน (`18` §6.3) */
+  whtRateFromPlan: boolean
 }
 
 /** payee ที่ verified แล้วต้องมี Tax Profile เสมอ (`18` §9) ⇒ ค่านี้ไม่ควรเป็น null ตอนคิด WHT */
@@ -328,6 +331,7 @@ async function collectExpenseCandidates(
       netSatang: wht.netSatang,
       taxProfileId: row.payee.taxProfileId,
       whtPctSnapshot: wht.rate.whtPct,
+      whtRateFromPlan: wht.rate.source === 'plan',
     }
   })
 }
@@ -396,14 +400,22 @@ async function collectAdvanceCandidates(
       netSatang: grossSatang,
       taxProfileId: row.payee.taxProfileId,
       whtPctSnapshot: 0,
+      // เงินทดรองไม่หัก WHT อยู่แล้ว ⇒ ไม่มีการ fallback อัตราให้ต้องเตือน
+      whtRateFromPlan: false,
     }
   })
+}
+
+export interface PayoutBatchCreateOutcome {
+  batch: PayoutBatchDetailDto
+  /** `WHT_RATE_FALLBACK_TO_PLAN` — เตือนไม่บล็อก (`18` §6.3 · `24` §6.5) */
+  warning?: ApiWarning
 }
 
 export async function createPayoutBatch(
   context: PayoutMutationContext,
   input: PayoutBatchCreateInput,
-): Promise<PayoutBatchDetailDto> {
+): Promise<PayoutBatchCreateOutcome> {
   const user = context.actor
   const [expenses, advances] = await Promise.all([
     collectExpenseCandidates(user.organizationId, input.cutoffDate),
@@ -510,7 +522,12 @@ export async function createPayoutBatch(
     return batch.id
   })
 
-  return getPayoutBatch(user, batchId)
+  // `18` §6.3 — ใครถูกคิดด้วยอัตราสำรองต้องถูกรายงานกลับเสมอ ห้ามคิดเงียบ (Rule 01)
+  const warning = whtFallbackWarning(
+    candidates.filter((candidate) => candidate.whtRateFromPlan).map((candidate) => candidate.payeeName),
+  )
+
+  return { batch: await getPayoutBatch(user, batchId), ...(warning === null ? {} : { warning }) }
 }
 
 // ── POST /api/payout-batches/:id/generate-payment-file (`17` §6.3/§6.4) ─────

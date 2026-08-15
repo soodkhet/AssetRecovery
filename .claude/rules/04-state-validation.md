@@ -2,7 +2,7 @@
 
 - State machine ทุก entity ตาม `23` (16 ตัว) + enum ตรง `02` §3 **เป๊ะ** — ห้ามสร้าง state ใหม่ ห้ามข้ามขั้น · transition endpoint = `PATCH|POST /:id/action-name`
 - Error code ใช้จาก `24` (33 codes / 8 หมวด) เท่านั้น — ต้องการ code ใหม่ให้เพิ่มใน `24` (doc) พร้อมโค้ด commit เดียวกัน · FE/BE share constant ชุดเดียว
-- Code ที่เป็น "เตือน ไม่ block" มี 4 ตัวเท่านั้น: `BANK_ACCOUNT_NAME_MISMATCH`, `DUPLICATE_PAYMENT_FILE`, `ALREADY_MATCHED`, `FILING_OVERDUE_WARNING` (+`IMEI_MISMATCH` ฝั่ง warehouse) — นอกนั้น reject
+- Code ที่เป็น "เตือน ไม่ block" มี 5 ตัวเท่านั้น: `BANK_ACCOUNT_NAME_MISMATCH`, `DUPLICATE_PAYMENT_FILE`, `ALREADY_MATCHED`, `FILING_OVERDUE_WARNING`, `WHT_RATE_FALLBACK_TO_PLAN` (+`IMEI_MISMATCH` ฝั่ง warehouse) — นอกนั้น reject · รายชื่อจริงถูกล็อกด้วย `WARNING_ONLY_CODES` ใน `lib/api/error-catalog.test.ts` — เพิ่มตัวใหม่ต้องมีมติ PO + แก้ `docs/24` ใน commit เดียวกัน
 - Validation ด้วย **Zod schema เดียว** ใช้ร่วม FE/BE ต่อ resource · API validation fail → 400 + field errors
 - Reject/cancel ทุกชนิดต้องมี reason (`REJECT_REASON_REQUIRED`/`REJECTION_REASON_REQUIRED`/`CANCEL_REQUIRES_REASON`/`WHT_CANCEL_REQUIRES_REASON`)
 - จุด transition วิกฤตที่ต้องมี test เสมอ:

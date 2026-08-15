@@ -104,13 +104,14 @@ describe('error catalog ↔ เอกสาร', () => {
 })
 
 describe('ความรุนแรงของ code', () => {
-  it('code ที่ "เตือน ไม่ block" มี 5 ตัวเท่านั้น (Rule 04)', () => {
+  it('code ที่ "เตือน ไม่ block" มี 6 ตัวเท่านั้น (Rule 04)', () => {
     expect([...WARNING_ONLY_CODES].sort()).toEqual([
       'ALREADY_MATCHED',
       'BANK_ACCOUNT_NAME_MISMATCH',
       'DUPLICATE_PAYMENT_FILE',
       'FILING_OVERDUE_WARNING',
       'IMEI_MISMATCH',
+      'WHT_RATE_FALLBACK_TO_PLAN',
     ])
   })
 
