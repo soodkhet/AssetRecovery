@@ -39,6 +39,7 @@ import type {
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
+import { calculateCustomerWithheldWht } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
@@ -180,6 +181,35 @@ export async function listBankTransactions(
 // ── ผู้สมัครจับคู่ ───────────────────────────────────────────────────────────
 
 /**
+ * **A1 — ยอดเข้าจริงเมื่อลูกค้าหัก WHT ก่อนโอน** (มติ PO 2026-08-12 · `35` §6.2)
+ *
+ * `billing_batches.wht_withheld_by_customer_satang` เป็นยอดที่ **บันทึกตอนรับชำระแล้ว**
+ * (`applyBillingReceipt()` เขียนลงตอนจับคู่สำเร็จ) ⇒ ตอนที่ยังไม่เคยรับเงินเลยค่านี้เป็น 0 เสมอ
+ * ⇒ ถ้ายึดค่านี้อย่างเดียว **ยอดทางเลือกไม่มีวันเกิด** และเงินโอนที่ถูกหักภาษีมาแล้วจะจับคู่
+ * อัตโนมัติไม่ได้สักใบ (ไก่กับไข่) ⇒ AR ค้าง 3% ตลอดกาลตามที่ A1 ระบุไว้เป็นปัญหาตั้งต้น
+ *
+ * ⇒ ยังไม่มียอดที่บันทึกไว้ ให้**คาดการณ์**จากอัตราของบริษัท (`finance_companies`
+ * `.wht_withheld_by_customer_pct` · `NULL` = ไม่หัก) บนฐานรายได้ **ก่อน VAT** ของรอบ
+ * · ค่านี้เป็นเพียงยอด*ทางเลือก* — ยอดเต็มยังจับคู่ได้เหมือนเดิมเสมอ (`matching.ts` รับได้ทั้งคู่)
+ * ⇒ คาดผิดไม่ทำให้จับคู่พลาด และไม่แตะยอด AR (ยอดหักจริงถูกบันทึกตอนจับคู่สำเร็จเท่านั้น)
+ */
+function altAmountForBilling(row: {
+  totalSatang: number
+  whtWithheldByCustomerSatang: number
+  company: { whtWithheldByCustomerPct: Prisma.Decimal | null }
+  revenues: readonly { grossSatang: number }[]
+}): number | null {
+  const withheldSatang =
+    row.whtWithheldByCustomerSatang > 0
+      ? row.whtWithheldByCustomerSatang
+      : calculateCustomerWithheldWht({
+          amountBeforeVatSatang: row.revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0),
+          whtPct: row.company.whtWithheldByCustomerPct === null ? null : Number(row.company.whtWithheldByCustomerPct),
+        })
+  return withheldSatang > 0 ? row.totalSatang - withheldSatang : null
+}
+
+/**
  * ผู้สมัครที่ระบบยอมให้จับคู่ — เงินเข้า = รอบวางบิลที่ยังเก็บเงินไม่ครบ (`sent`/`partially_paid`)
  * · เงินออก = รอบจ่ายที่สร้างไฟล์โอนแล้ว (`file_generated`) หรือที่ยืนยันจ่ายแล้ว (`completed`
  * — สำหรับเคสจับคู่ใหม่/แยกงวด) ตาม `35` §6.2 + state machine `23` §6.6/§6.8
@@ -211,7 +241,8 @@ async function loadCandidates(
         receivedSatang: true,
         whtWithheldByCustomerSatang: true,
         sentAt: true,
-        company: { select: { name: true } },
+        company: { select: { name: true, whtWithheldByCustomerPct: true } },
+        revenues: { select: { grossSatang: true } },
       },
       orderBy: { sentAt: 'desc' },
       take: 100,
@@ -223,7 +254,7 @@ async function loadCandidates(
       ref: billingRef(row),
       amountSatang: row.totalSatang,
       // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ ยอดเข้าจริง = total − wht (`35` §6.2 · มติ PO A1)
-      altAmountSatang: row.whtWithheldByCustomerSatang > 0 ? row.totalSatang - row.whtWithheldByCustomerSatang : null,
+      altAmountSatang: altAmountForBilling(row),
       referenceDate: row.sentAt,
     }))
   }
@@ -281,12 +312,26 @@ export async function listMatchCandidates(
 // ── ผลข้างเคียงของการจับคู่ (trigger 2 ทาง — `35` §9) ────────────────────────
 
 /** ยอดสะสมที่รับชำระแล้วของรอบวางบิลนั้น = ผลรวม Cash Receipt ทั้งหมด (ห้ามบวกเพิ่มทีละก้อน) */
-async function receivedTotalSatang(organizationId: string, billingBatchId: string): Promise<number> {
+/**
+ * ยอดสะสมของรอบวางบิลจากใบเงินรับทั้งหมด — **รวมยอด WHT ที่ลูกค้าหักไว้ด้วย** (A1)
+ *
+ * ส่วนที่ลูกค้าหักไปเป็นเครดิตภาษีของบริษัท ไม่ใช่หนี้ที่ยังเก็บไม่ได้ (`19` §9.2 · `31` §8) ⇒
+ * ต้องส่งกลับไปเขียนที่ `billing_batches` ด้วย ไม่งั้น `settledSatang()` ขาดไป 3% ⇒ รอบค้างอยู่
+ * ที่ `partially_paid` และยอดนั้นค้างใน AR aging ตลอดกาลทั้งที่เก็บเงินครบแล้ว
+ * · ทั้งคู่เป็น **ยอดสะสม** (ไม่ใช่ส่วนเพิ่ม) ⇒ `applyBillingReceipt()` ยัง idempotent เหมือนเดิม
+ */
+async function receivedTotalSatang(
+  organizationId: string,
+  billingBatchId: string,
+): Promise<{ receivedSatang: number; whtWithheldByCustomerSatang: number }> {
   const aggregate = await prisma.cashReceipt.aggregate({
     where: { organizationId, billingBatchId },
-    _sum: { amountSatang: true },
+    _sum: { amountSatang: true, whtWithheldByCustomerSatang: true },
   })
-  return aggregate._sum.amountSatang ?? 0
+  return {
+    receivedSatang: aggregate._sum.amountSatang ?? 0,
+    whtWithheldByCustomerSatang: aggregate._sum.whtWithheldByCustomerSatang ?? 0,
+  }
 }
 
 async function syncBillingAfterReceipt(
@@ -298,7 +343,8 @@ async function syncBillingAfterReceipt(
   const result = await applyBillingReceipt({
     organizationId: ctx.actor.organizationId,
     batchId: billingBatchId,
-    receivedSatang: received,
+    receivedSatang: received.receivedSatang,
+    whtWithheldByCustomerSatang: received.whtWithheldByCustomerSatang,
     sourceRef,
     actorId: ctx.actor.id,
     actorRole: ctx.actor.roleName,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { calculateWht, calculateWhtForPayee, resolveWhtRate } from '@/lib/finance/wht-calc'
+import {
+  calculateCustomerWithheldWht,
+  calculateWht,
+  calculateWhtForPayee,
+  resolveWhtRate,
+} from '@/lib/finance/wht-calc'
 import { DEFAULT_WHT_MIN_THRESHOLD_SATANG } from '@/lib/settings/tax-profile'
 import { isSettingsError } from '@/lib/settings/errors'
 
@@ -157,5 +162,31 @@ describe('calculateWhtForPayee — resolve + คิดยอดในก้า�
     })
     expect(result.whtSatang).toBe(30_000)
     expect(result.rate.warning).toBeDefined()
+  })
+})
+
+describe('calculateCustomerWithheldWht — A1 ลูกค้าหักภาษีจากเราก่อนโอน (มติ PO 2026-08-12)', () => {
+  it('ฐานเป็นยอด **ก่อน VAT** เสมอ (Rule 01) — บิล 8,025 บาท (7,500 + VAT 525) หัก 3% = 225 บาท', () => {
+    expect(calculateCustomerWithheldWht({ amountBeforeVatSatang: 750_000, whtPct: 3 })).toBe(22_500)
+  })
+
+  it('บริษัทที่ไม่หักภาษีก่อนโอน (`null`) หรืออัตรา 0 ⇒ 0 — ไม่มียอดทางเลือกให้จับคู่', () => {
+    expect(calculateCustomerWithheldWht({ amountBeforeVatSatang: 750_000, whtPct: null })).toBe(0)
+    expect(calculateCustomerWithheldWht({ amountBeforeVatSatang: 750_000, whtPct: 0 })).toBe(0)
+  })
+
+  it('ไม่มีเกณฑ์ขั้นต่ำแบบ §6.9 — ยอดเล็กก็ยังคิดตามอัตรา (เกณฑ์ 1,000 ผูกกับ tax_profile ฝั่งเรา)', () => {
+    expect(calculateCustomerWithheldWht({ amountBeforeVatSatang: 50_000, whtPct: 3 })).toBe(1_500)
+  })
+
+  it('ปัดเศษเป็นสตางค์เต็มจำนวนด้วยตัวช่วยกลาง — ห้ามมีทศนิยมสตางค์หลุดออกไป', () => {
+    const result = calculateCustomerWithheldWht({ amountBeforeVatSatang: 33_333, whtPct: 3 })
+    expect(Number.isInteger(result)).toBe(true)
+    expect(result).toBe(1_000)
+  })
+
+  it('ยอดติดลบ / อัตรานอกช่วง ⇒ โยนทิ้ง ไม่ปล่อยค่าเพี้ยนลงฐาน', () => {
+    expect(() => calculateCustomerWithheldWht({ amountBeforeVatSatang: -1, whtPct: 3 })).toThrow()
+    expect(() => calculateCustomerWithheldWht({ amountBeforeVatSatang: 750_000, whtPct: 120 })).toThrow()
   })
 })
