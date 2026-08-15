@@ -7,7 +7,7 @@
 
 ## Phase 4.3 — Sales & Receipts + Tax Invoice + PDF (31)
 
-**วันที่**: 2026-08-15 · **commit**: `__COMMIT__` · **branch**: `auto/phase-4.3`
+**วันที่**: 2026-08-15 · **commit**: `ecde0e8` · **branch**: `auto/phase-4.3`
 
 ### สิ่งที่ทำ
 
