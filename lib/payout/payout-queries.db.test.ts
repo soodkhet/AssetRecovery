@@ -150,7 +150,13 @@ async function reset(): Promise<void> {
   const tx = db()
   storage.clear()
   // Phase 4.4/4.5 — รอบที่ `completed` ผลิตบัญชีค่าใช้จ่าย (+ exception) และใบ 50 ทวิ ต้องล้างก่อน FK
-  await tx.$executeRawUnsafe(`DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`)
+  // ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13 — เลขที่ห้ามขาดช่วง) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
+  }
   await tx.$executeRawUnsafe(`DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`)
@@ -411,6 +417,35 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
     expect(text).toContain('004,1234567890,')
     expect(text).toContain('4850.00')
     expect(file.fileName).toBe(`${outcome.result.batch.idempotencyKey}-v1.csv`)
+  })
+
+  it('สร้างไฟล์พร้อมกันสองคำขอ → คีย์กันโอนซ้ำต้องมีค่าเดียว (Rule 09 — ธนาคารต้องจับซ้ำได้)', async () => {
+    const batchId = await batchWithOneItem()
+
+    // ทั้งสองอ่าน `idempotency_key = NULL` พร้อมกัน — ถ้าต่างคนต่าง mint คีย์ จะได้ `referenceNo`
+    // คนละชุด ⇒ ไฟล์สองใบที่อัปเข้าธนาคารถูกมองเป็นคนละรายการ = **โอนซ้ำ** (`17` §6.3)
+    const settled = await Promise.allSettled([
+      payout.generatePaymentFile(ctx, batchId, generateInput),
+      payout.generatePaymentFile(ctx, batchId, generateInput),
+    ])
+
+    const row = await db().payoutBatch.findUniqueOrThrow({
+      where: { id: batchId },
+      select: { idempotencyKey: true },
+    })
+    expect(row.idempotencyKey).toMatch(/^PB-OUT-\d{8}-[0-9A-Z]+$/)
+
+    // อย่างน้อยหนึ่งคำขอต้องสำเร็จ (ไม่ใช่ล้มทั้งคู่)
+    const generated = settled.flatMap((outcome) =>
+      outcome.status === 'fulfilled' && outcome.value.result.generated ? [outcome.value.result] : [],
+    )
+    expect(generated.length).toBeGreaterThanOrEqual(1)
+
+    // ทุกคำขอที่ผ่านต้องอ้างคีย์เดียวกันกับที่อยู่ในแถวจริง
+    expect([...new Set(generated.map((result) => result.batch.idempotencyKey))]).toEqual([row.idempotencyKey])
+
+    // ไม่มีไฟล์กำพร้าที่ผูกกับคีย์อื่นค้างใน storage
+    expect([...storage.keys()].every((path) => path.includes(`${row.idempotencyKey}-v`))).toBe(true)
   })
 
   it('ยิงซ้ำโดยไม่ยืนยัน → เตือน DUPLICATE_PAYMENT_FILE และยังไม่สร้างไฟล์ใหม่', async () => {

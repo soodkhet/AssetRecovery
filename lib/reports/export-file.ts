@@ -76,22 +76,29 @@ export function reportExportStoragePath(input: {
   return `${input.organizationId}/${input.jobId}/${input.fileName}`
 }
 
+/**
+ * อัปโหลดไฟล์รายงาน — `upsert: false` เสมอ (ห้ามทับของเดิม — Rule 09)
+ *
+ * คืน `false` เมื่อ **ไฟล์ที่ path นั้นมีอยู่แล้ว** (HTTP 409) ซึ่งเกิดได้ตามปกติเมื่องาน `report_export`
+ * ถูก retry: path ผูกกับ job id ⇒ รอบก่อนอาจอัปโหลดสำเร็จแล้วล้มตอนบันทึกผล ⇒ ผู้เรียกต้องถือว่า
+ * **สำเร็จ** ไม่ใช่ล้ม (ไม่งั้นงานจะนับ retry จนตกเป็น dead letter ทั้งที่ไฟล์อยู่ครบแล้ว)
+ */
 export async function uploadReportExport(input: {
   path: string
   bytes: Uint8Array
   contentType: string
-}): Promise<void> {
+}): Promise<boolean> {
   const supabase = createSupabaseAdminClient()
   const { error } = await supabase.storage.from(REPORT_EXPORT_BUCKET).upload(input.path, input.bytes, {
     contentType: input.contentType,
     upsert: false,
   })
-  if (error !== null) {
-    throw new ReportExportStorageError(
-      `อัปโหลดไฟล์รายงานไม่สำเร็จ — ${error.message} ` +
-        `(ตรวจว่าสร้าง bucket "${REPORT_EXPORT_BUCKET}" แบบ private ไว้แล้วหรือยัง)`,
-    )
-  }
+  if (error === null) return true
+  if (error.statusCode === '409') return false
+  throw new ReportExportStorageError(
+    `อัปโหลดไฟล์รายงานไม่สำเร็จ — ${error.message} ` +
+      `(ตรวจว่าสร้าง bucket "${REPORT_EXPORT_BUCKET}" แบบ private ไว้แล้วหรือยัง)`,
+  )
 }
 
 export async function downloadReportExport(path: string): Promise<Uint8Array> {

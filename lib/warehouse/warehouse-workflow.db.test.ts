@@ -294,6 +294,76 @@ async function seedInCustody(companyId = COMPANY_A): Promise<{ caseId: string; a
   return { caseId: seeded.caseId, assetId: seeded.assetId }
 }
 
+/**
+ * Final Test ด่าน 1 (Phase 8.3) — `19` §6.1 หมายเหตุ DEC-006/D6:
+ * เคสที่ **ไม่มี expense เลย** + `closed_fail` + model คิดเงินกรณี fail ⇒ Revenue ต้องเกิด
+ * **ทันทีที่เคสเข้าสถานะ terminal** · เดิมผู้เรียก `tryCreateRevenue()` มีแค่ lot confirm กับ
+ * expense approve ⇒ สายนี้ไม่มี trigger ไหนยิงเลย (กฎ pure ถูกต้องแต่ไม่มีเส้นทาง runtime)
+ */
+suite('Phase 8.3 — Revenue ของ `closed_fail` ที่ไม่มี expense (DEC-006/D6)', () => {
+  beforeEach(cleanupCases)
+
+  async function closeFailWithoutExpense(chargeOnFail: boolean): Promise<string> {
+    caseSeq += 1
+    const caseRef = `WH83-${caseSeq}-${Date.now()}`
+    const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO cases (
+        organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
+        debtor_name, addr_province, addr_district, asset_kind, asset_description, imei,
+        debt_amount_satang, assigned_team_id,
+        service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_charge_on_fail
+      ) VALUES (
+        '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_A}', 'manual', 'approved', '${MANAGER_ID}',
+        'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15 สีดำ', '3559000000${String(2000 + caseSeq)}',
+        1000000, '${TEAM_ID}',
+        '${TEMPLATE_ID}', 'FLAT', 50000, ${chargeOnFail}
+      ) RETURNING id
+    `)
+    const caseId = rows[0]?.id ?? ''
+
+    // ทีมไม่ผูกแผนค่าตอบแทน ⇒ `generateCaseExpenses()` คืนรายการว่าง = เคสไม่มี expense เลย
+    await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = NULL WHERE id = '${TEAM_ID}'`)
+    try {
+      await assignments.assignCase(manager, caseId, { agentId: agent.id }, ctx(manager))
+      await field.acceptFieldCase(agent, caseId, ctx(agent))
+      await field.scheduleFieldCase(agent, caseId, { scheduleDate: new Date(`${DAY_1}T00:00:00.000Z`) }, ctx(agent))
+      await field.saveCloseDraft(
+        agent,
+        caseId,
+        {
+          outcome: null,
+          photos: [],
+          videos: [],
+          productPhotos: [],
+          travelOrigin: { latitude: 18.58, longitude: 99.0, source: 'gps_auto' },
+        },
+        ctx(agent),
+      )
+      await field.recordCheckin(agent, caseId, { latitude: 18.5801, longitude: 99.0031, checkinType: 'address' }, ctx(agent))
+      await field.closeFieldCase(agent, caseId, { outcome: 'closed_fail', ...MEDIA }, ctx(agent))
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_ID}' WHERE id = '${TEAM_ID}'`)
+    }
+    return caseId
+  }
+
+  it('`charge_on_fail = true` → Revenue เกิดทันทีที่ปิดเคส (ไม่ต้องรอ expense/คลัง)', async () => {
+    const caseId = await closeFailWithoutExpense(true)
+
+    expect(await db().expense.count({ where: { caseId } })).toBe(0)
+    const revenues = await db().revenue.findMany({ where: { caseId } })
+    expect(revenues).toHaveLength(1)
+    expect(revenues[0]?.grossSatang).toBe(50_000)
+    // `closed_fail` ไม่ผ่านคลัง ⇒ ต้องไม่มีเครื่องรอรับเข้าเลย (`19` §6.1)
+    expect(await db().asset.count({ where: { caseId } })).toBe(0)
+  })
+
+  it('`charge_on_fail = false` → ไม่เกิด Revenue (`model_excludes_fail`)', async () => {
+    const caseId = await closeFailWithoutExpense(false)
+    expect(await db().revenue.count({ where: { caseId } })).toBe(0)
+  })
+})
+
 suite('Phase 2.13 — Asset auto-create hook (`44` §6.1)', () => {
   beforeEach(cleanupCases)
 
@@ -485,12 +555,16 @@ suite('Phase 2.13 — สร้างล็อตส่งมอบ (`44` §17 T
       'ASSET_NOT_IN_CUSTODY',
     )
 
+    // Final Test ด่าน 1 — เดิม assert เป็น `ASSET_NOT_IN_CUSTODY` (ไม่ตรงกับหัวข้อเทสต์เอง)
+    // เพราะยามสถานะถูกเช็คก่อน ⇒ ผู้ใช้ไม่ได้เลขล็อตเดิมติดมาตามที่ `44` §12 สั่ง
     const inLot = await seedInCustody()
-    await warehouse.createLot(admin, lotInput([inLot.assetId], 'finance_pickup'), ctx(admin))
-    await expectCode(
-      () => warehouse.createLot(admin, lotInput([inLot.assetId], 'finance_pickup'), ctx(admin)),
-      'ASSET_NOT_IN_CUSTODY',
-    )
+    const firstLot = await warehouse.createLot(admin, lotInput([inLot.assetId], 'finance_pickup'), ctx(admin))
+    await expect(
+      warehouse.createLot(admin, lotInput([inLot.assetId], 'finance_pickup'), ctx(admin)),
+    ).rejects.toMatchObject({
+      code: 'ASSET_ALREADY_IN_LOT',
+      context: { lotNumbers: [firstLot.lotNumber] },
+    })
   })
 
   it('ค้นล็อตด้วยเลขล็อต / IMEI / ชื่อลูกหนี้ได้ (`44` §8.4) — IMEI ต้อง exact ห้าม fuzzy (§6.5)', async () => {
@@ -780,5 +854,59 @@ suite('Phase 2.13 — scope ระดับแถว (`44` §13 · §17 T15)', (
     expect((await warehouse.listAssets(admin, assetListQuerySchema.parse({}))).total).toBe(2)
     expect((await warehouse.listLots(admin, lotListQuerySchema.parse({}))).total).toBe(1)
     expect((await warehouse.listLots(companyUser, lotListQuerySchema.parse({}))).total).toBe(1)
+  })
+
+  /**
+   * Final Test ด่าน 4 (Phase 8.3) — T15 เดิมพิสูจน์แค่ **แถว** ที่เห็น
+   * แต่แถวที่เห็นยังพก `agentName`/`teamName`/`imeiActual` ออกไปด้วย ซึ่ง `97` §6.1 ห้ามไว้ตรงตัว
+   */
+  it('Company User ต้องไม่เห็นชื่อพนักงาน/ทีม/IMEI ที่ตรวจจริง (`97` §6.1)', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+
+    // ธุรการเห็นครบ = ยืนยันว่าข้อมูลมีอยู่จริงในแถวนั้น (ไม่ใช่ null เพราะ fixture ว่าง)
+    const asAdmin = await warehouse.getAsset(admin, mine.assetId)
+    expect(asAdmin.agentName).not.toBeNull()
+    expect(asAdmin.teamName).not.toBeNull()
+    expect(asAdmin.imeiActual).not.toBeNull()
+
+    const detail = await warehouse.getAsset(companyUser, mine.assetId)
+    expect(detail.agentId).toBeNull()
+    expect(detail.agentName).toBeNull()
+    expect(detail.teamId).toBeNull()
+    expect(detail.teamName).toBeNull()
+    expect(detail.imeiActual).toBeNull()
+    expect(detail.serialActual).toBeNull()
+    expect(detail.rejectedByName).toBeNull()
+    // IMEI ตามสัญญาเป็นข้อมูลที่บริษัทส่งมาเอง (`38` §6.1) — ยังต้องเห็น
+    expect(detail.imeiContract).toBe(asAdmin.imeiContract)
+
+    const [listItem] = (await warehouse.listAssets(companyUser, assetListQuerySchema.parse({}))).items
+    expect(listItem?.agentName).toBeNull()
+    expect(listItem?.imeiActual).toBeNull()
+  })
+
+  it('เครื่องในล็อตที่เปิดจากฝั่งบริษัทก็ต้องถูกตัดฟิลด์ภายในเหมือนกัน', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+    const lot = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [mine.assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+
+    const asCompany = await warehouse.getLot(companyUser, lot.id)
+    expect(asCompany.assets.map((asset) => asset.agentName)).toEqual([null])
+    expect(asCompany.assets.map((asset) => asset.imeiActual)).toEqual([null])
+
+    const asAdmin = await warehouse.getLot(admin, lot.id)
+    expect(asAdmin.assets[0]?.agentName).not.toBeNull()
   })
 })

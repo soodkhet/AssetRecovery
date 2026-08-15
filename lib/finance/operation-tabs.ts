@@ -14,6 +14,11 @@ export interface FinanceOperationTab {
   /** หน้าจริงพร้อมใช้แล้วหรือยัง — `false` = ปุ่มเทา กดไม่ได้ พร้อมบอกว่าอยู่ Phase ไหน */
   available: boolean
   plannedPhase?: string
+  /**
+   * แท็บที่หน้าจริงอยู่ **คนละ route** — เรนเดอร์เป็นลิงก์ข้ามไปแทนที่จะเป็นปุ่มเทา
+   * (Final Test ด่าน 5 — "ผู้รับเงิน" เคยเป็นปุ่มเทาถาวรทั้งที่หน้าเสร็จตั้งแต่ Phase 3.2)
+   */
+  href?: string
 }
 
 export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
@@ -24,7 +29,8 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
   { id: 'payout', label: 'รอบจ่ายเงิน', source: 'ไฟล์ 17', available: true },
   { id: 'revenue', label: 'รายได้และวางบิล', source: 'ไฟล์ 19', available: true },
   // ไฟล์ 18 ทำเสร็จตั้งแต่ 3.2 แต่หน้าอยู่ในหน้าตั้งค่าการเงิน (`13`) ตาม mockup `settings.html`
-  { id: 'payee', label: 'ผู้รับเงิน (Payee)', source: 'ไฟล์ 18', available: false, plannedPhase: '3.2 — อยู่ที่หน้าตั้งค่าการเงิน' },
+  // ⇒ แท็บนี้เป็น **ลิงก์ข้ามไปหน้านั้น** ไม่ใช่ปุ่มเทา (หน้าจริงมีอยู่ กดได้)
+  { id: 'payee', label: 'ผู้รับเงิน (Payee)', source: 'ไฟล์ 18', available: true, href: '/settings/finance?tab=payee' },
   { id: 'adjustment', label: 'ปรับปรุง', source: 'ไฟล์ 20', available: true },
   { id: 'profit', label: 'กำไรและต้นทุน', source: 'ไฟล์ 21', available: true },
 ]
@@ -35,8 +41,13 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
  */
 export const DEFAULT_FINANCE_OPERATION_TAB = 'dashboard'
 
-/** แท็บแรกที่ใช้งานได้จริง — `?tab=` ที่ชี้แท็บยังไม่เกิดตกกลับแท็บเริ่มต้นเสมอ */
+/**
+ * แท็บแรกที่ใช้งานได้จริง — `?tab=` ที่ชี้แท็บยังไม่เกิดตกกลับแท็บเริ่มต้นเสมอ
+ * แท็บที่เป็นลิงก์ข้าม route (`href`) ก็เลือกค้างไว้ที่หน้านี้ไม่ได้ ไม่งั้นจะได้การ์ดเปล่า
+ */
 export function resolveFinanceOperationTab(tab: string | undefined): string {
   const found = FINANCE_OPERATION_TABS.find((item) => item.id === tab)
-  return found !== undefined && found.available ? found.id : DEFAULT_FINANCE_OPERATION_TAB
+  return found !== undefined && found.available && found.href === undefined
+    ? found.id
+    : DEFAULT_FINANCE_OPERATION_TAB
 }

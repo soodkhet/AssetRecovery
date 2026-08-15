@@ -265,33 +265,42 @@ export async function retryJob(
     throw new JobError('JOB_INVALID_STATUS', { detail: `job=${id} status=${before.status}` })
   }
 
-  const updated = await prisma.job.update({
-    where: { id },
-    data: {
-      status: 'pending',
-      retryCount: 0,
-      errorMessage: null,
-      startedAt: null,
-      completedAt: null,
-      scheduledAt: now,
-      // ล้างผลของรอบก่อน — ไม่งั้นหน้า Job Log ยังชี้ไฟล์/hash เก่าระหว่างที่งานยังไม่ทำใหม่
-      result: Prisma.DbNull,
-    },
-    select: listSelect,
-  })
+  // audit ต้องอยู่ใน `$transaction` เดียวกับ mutation (`lib/audit/audit.ts`) — ไม่งั้น insert audit ล้ม
+  // แล้วการรีเซ็ต `retry_count` จะค้างอยู่โดยไม่มีประวัติว่าใครสั่ง (Rule 03 — audit ทุก mutation)
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.job.update({
+      where: { id },
+      data: {
+        status: 'pending',
+        retryCount: 0,
+        errorMessage: null,
+        startedAt: null,
+        completedAt: null,
+        scheduledAt: now,
+        // ล้างผลของรอบก่อน — ไม่งั้นหน้า Job Log ยังชี้ไฟล์/hash เก่าระหว่างที่งานยังไม่ทำใหม่
+        result: Prisma.DbNull,
+      },
+      select: listSelect,
+    })
 
-  await emitAudit({
-    organizationId: before.organizationId ?? ctx.actor.organizationId,
-    actorId: ctx.actor.id,
-    actorRole: ctx.actor.roleName,
-    action: 'update',
-    targetType: 'jobs',
-    targetId: id,
-    before: { status: before.status, retryCount: before.retryCount, errorMessage: before.errorMessage },
-    after: { status: updated.status, retryCount: updated.retryCount },
-    reason: input.reason,
-    ipAddress: ctx.meta.ipAddress,
-    userAgent: ctx.meta.userAgent,
+    await emitAudit(
+      {
+        organizationId: before.organizationId ?? ctx.actor.organizationId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        action: 'update',
+        targetType: 'jobs',
+        targetId: id,
+        before: { status: before.status, retryCount: before.retryCount, errorMessage: before.errorMessage },
+        after: { status: row.status, retryCount: row.retryCount },
+        reason: input.reason,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+      },
+      tx,
+    )
+
+    return row
   })
 
   return toDetail(updated, ctx.actor)

@@ -174,13 +174,25 @@ async function setNumbering(
   `)
 }
 
-async function lockPeriodOf(period: string): Promise<void> {
+async function setPeriodStatusOf(period: string, status: 'locked' | 'collecting'): Promise<void> {
   const [month = '', yearText = ''] = period.split(' ')
   const monthIndex = MONTHS.indexOf(month as (typeof MONTHS)[number]) + 1
-  await db().$executeRawUnsafe(`
-    UPDATE accounting_periods SET status = 'locked'
-    WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
-  `)
+  const tx = db()
+  // งวดที่ `locked` อยู่แล้ว (ของค้างจากรอบรันก่อน) ถูก trigger แช่แข็ง (`02` §13)
+  // — fixture ต้องล็อก/ปลดซ้ำได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
+  try {
+    await tx.$executeRawUnsafe(`
+      UPDATE accounting_periods SET status = '${status}'
+      WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
+    `)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
+  }
+}
+
+async function lockPeriodOf(period: string): Promise<void> {
+  await setPeriodStatusOf(period, 'locked')
 }
 
 beforeAll(async () => {
@@ -368,7 +380,39 @@ suite('Phase 4.3 — ออก/ยกเลิกใบกำกับภาษ�
     expect(new Set(issued.map((invoice) => invoice.invoiceNumber)).size).toBe(4)
   })
 
+  it('Final Test ด่าน 2 — ออกใบของ**รายการขายเดียวกัน**พร้อมกัน ⇒ ได้ใบเดียว อีกคน `TAX_INVOICE_ALREADY_ISSUED`', async () => {
+    await setNumbering({ seq: 200 })
+    const batch = await seedBilling({ status: 'sent' })
+    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const salesRecordId = record?.id ?? ''
+
+    // ดับเบิลคลิก / retry / เปิดสองแท็บ — `assertIssuable()` อ่านสถานะนอก transaction จึงผ่านทั้งคู่
+    // ถ้าไม่มี unique ระดับ DB จะได้ใบ active 2 ใบ 2 เลขที่ ⇒ ทะเบียนภาษีขายนับซ้ำ ยื่น ภ.พ.30 เกิน
+    const results = await Promise.allSettled([
+      sales.issueTaxInvoice(ctx, { salesRecordId }),
+      sales.issueTaxInvoice(ctx, { salesRecordId }),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const loser = results.find((result) => result.status === 'rejected')
+    expect(codeOf((loser as PromiseRejectedResult).reason)).toBe('TAX_INVOICE_ALREADY_ISSUED')
+
+    const invoices = await db().taxInvoice.findMany({
+      where: { salesRecordId },
+      select: { status: true, invoiceNumber: true },
+    })
+    expect(invoices).toHaveLength(1)
+    expect(invoices[0]?.status).toBe('active')
+    // เลขของคนที่แพ้ต้อง rollback ไปด้วย ⇒ ใบถัดไปได้เลขต่อเนื่อง ไม่ขาดช่วง (`31` §16)
+    const next = await sales.syncSalesRecordFromBilling(ctx, (await seedBilling({ status: 'sent' })).id)
+    const following = await sales.issueTaxInvoice(ctx, { salesRecordId: next?.id ?? '' })
+    expect(sequenceOf(following.invoiceNumber)).toBe(sequenceOf(invoices[0]?.invoiceNumber ?? '') + 1)
+  })
+
   it('โหมด yearly_reset ข้ามปี ⇒ กลับไปเริ่ม 0001 พร้อม prefix ปี พ.ศ. ใหม่ (`31` §16)', async () => {
+    // งวดของรันก่อน ๆ ค้าง `locked` ได้ (เทสต์ period lock ล็อกงวดตามลำดับ `monthCursor` ที่ขยับ
+    // ทุกครั้งที่มีเทสต์ใหม่) และงวดที่ล็อกแล้วปลดเองไม่ได้ ⇒ เปิดงวดของเทสต์นี้ให้ชัดเจนก่อน
+    await setPeriodStatusOf('มกราคม 2570', 'collecting')
     await setNumbering({ seq: 37, mode: 'yearly_reset', lastResetYear: 2569 })
     const batch = await seedBilling({ status: 'sent' })
     const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
@@ -434,7 +478,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     const bankTx = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO bank_transactions (organization_id, period_id, bank_account_id, transaction_date, description,
                                      amount_satang, match_status, matched_billing_id, created_by)
-      VALUES ('${ORG_ID}', '${periodId}', '${BANK_ACCOUNT_ID}', '2026-06-28', 'โอนเข้า · อ้างอิง BTR-43',
+      VALUES ('${ORG_ID}', '${periodId}', '${BANK_ACCOUNT_ID}', '2026-06-28', 'โอนเข้า · อ้างอิง BTR-43-${RUN}',
               1284000, 'auto_matched', '${batch.id}', '${ACCOUNTING_ID}')
       RETURNING id
     `)
@@ -450,7 +494,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     expect(row?.payerName).toBe(`ไฟแนนซ์ 4.3 (${RUN})`)
     expect(row?.amountSatang).toBe(1_284_000)
     expect(row?.whtWithheldByCustomerSatang).toBe(36_000)
-    expect(row?.bankRef).toBe('โอนเข้า · อ้างอิง BTR-43')
+    expect(row?.bankRef).toBe(`โอนเข้า · อ้างอิง BTR-43-${RUN}`)
     expect(row?.bankMatchStatus).toBe('auto_matched')
     expect(receipts.totalSatang).toBeGreaterThanOrEqual(1_284_000)
   })

@@ -18,8 +18,10 @@ import { runReport } from '@/lib/reports/run'
  * - **รันแทนคน ไม่ใช่ข้ามสิทธิ์** (DEC-002): ตัวรันงานโหลด `SessionUser` ของ `jobs.created_by`
  *   มาให้ แล้ว `runReport()` ตรวจ `assertReportAccess()` + scope ทีมของคนคนนั้นตามปกติ
  * - **idempotent** (`91` §17): งานเดียวกันรันซ้ำได้ผลเท่าเดิม — รายงานอ่านอย่างเดียว และ path
- *   ของไฟล์ผูกกับ job id (รันซ้ำ job เดิม = เขียนไฟล์ชื่อเดิม ซึ่ง `upsert: false` จะปฏิเสธ
- *   ⇒ ถือว่ามีไฟล์อยู่แล้ว งานสำเร็จโดยไม่สร้างซ้ำ)
+ *   ของไฟล์ผูกกับ job id + **เวลาที่สั่งงาน** (`jobs.created_at`) ไม่ใช่เวลาของ attempt
+ *   ⇒ รันซ้ำได้ path เดิมเป๊ะ แล้ว `uploadReportExport()` คืน `false` (409) = ถือว่าสำเร็จ
+ *   ⚠️ ห้ามใช้ `now` ของ attempt ตั้งชื่อไฟล์ — ชื่อไฟล์มี `HH-mm` อยู่ด้วย และ backoff เป็นนาที
+ *   ⇒ retry จะได้ path ใหม่ทุกครั้ง ⇒ ไฟล์กำพร้าสะสม (ไม่มีตัวลบ) และไม่มีอะไรกันไฟล์ซ้ำเลย
  * - ไม่มี notification เมื่อเสร็จ: `90` §6.3 ไม่มีแถวของงานเบื้องหลัง (เหตุผลเดียวกับที่ 5.3
  *   ไม่เพิ่ม event `job.status.changed`) — ผู้ใช้ติดตามสถานะที่หน้า Job Log แล้วกดดาวน์โหลด
  */
@@ -96,6 +98,8 @@ export async function runReportExportJob(input: {
   jobId: string
   payload: unknown
   now: Date
+  /** เวลาที่ **สั่งงาน** (`jobs.created_at`) — ใช้ตั้งชื่อไฟล์ให้ retry ได้ path เดิมเสมอ */
+  requestedAt: Date
 }): Promise<ReportExportJobResult> {
   const parsed = parseReportExportPayload(input.payload)
   const report = findReport(parsed.reportId)
@@ -122,7 +126,7 @@ export async function runReportExportJob(input: {
   const file = await buildReportExportFile({
     payload,
     format: parsed.format,
-    generatedAt: input.now,
+    generatedAt: input.requestedAt,
     generatedByName: input.actor.fullName,
   })
   const storagePath = reportExportStoragePath({
@@ -130,6 +134,7 @@ export async function runReportExportJob(input: {
     jobId: input.jobId,
     fileName: file.fileName,
   })
+  // `false` = ไฟล์ของ attempt ก่อนอยู่ครบแล้ว (409) ⇒ สำเร็จ ไม่ต้องอัปซ้ำ ไม่นับ retry
   await uploadReportExport({ path: storagePath, bytes: file.bytes, contentType: file.contentType })
 
   return {

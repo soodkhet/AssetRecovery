@@ -16,6 +16,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import { dispatchToCapability } from '@/lib/notifications/dispatch'
 import { accountantQuestionMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
  * ข้อซักถามจากสำนักงานบัญชี (ไฟล์ 36) — ชั้น DB (`36` §13)
@@ -67,6 +68,7 @@ export async function listAccountantQuestions(
   user: SessionUser,
   query: QuestionListQuery,
 ): Promise<AccountantQuestionListDto> {
+  assertOrgWideReadable(user, 'accountant-questions')
   const rows = await prisma.accountantQuestion.findMany({
     where: {
       organizationId: user.organizationId,
@@ -87,6 +89,7 @@ export async function createAccountantQuestion(
   input: QuestionCreateInput,
   now: Date = new Date(),
 ): Promise<AccountantQuestionDto> {
+  assertOrgWideReadable(ctx.actor, 'accountant-questions')
   const period =
     input.periodId === undefined
       ? await ensurePeriod(ctx, periodKeyOf(now))
@@ -138,6 +141,7 @@ export async function answerAccountantQuestion(
   input: QuestionAnswerInput,
   now: Date = new Date(),
 ): Promise<AccountantQuestionDto> {
+  assertOrgWideReadable(ctx.actor, 'accountant-questions')
   const existing = await prisma.accountantQuestion.findFirst({
     where: { id: questionId, organizationId: ctx.actor.organizationId },
     select: QUESTION_SELECT,

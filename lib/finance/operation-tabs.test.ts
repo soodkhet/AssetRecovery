@@ -17,10 +17,17 @@ describe('แท็บหน้าการเงิน', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('Phase 3.8 เปิดครบ 8 แท็บ — เหลือเฉพาะ `payee` ที่อยู่หน้าตั้งค่าการเงินตามมติเดิม', () => {
-    const open = FINANCE_OPERATION_TABS.filter((tab) => tab.available).map((tab) => tab.id)
-    expect(open).toEqual(['dashboard', 'approval', 'comp', 'advances', 'payout', 'revenue', 'adjustment', 'profit'])
-    expect(FINANCE_OPERATION_TABS.filter((tab) => !tab.available).map((tab) => tab.id)).toEqual(['payee'])
+  // Final Test ด่าน 5 (Phase 8.3) — `payee` เคยเป็น `available:false` = ปุ่มเทากดไม่ได้ถาวร
+  // ทั้งที่หน้าจริงเสร็จตั้งแต่ Phase 3.2 แค่ไปอยู่คนละ route ⇒ เปลี่ยนเป็นลิงก์ข้าม
+  it('ทุกแท็บใช้งานได้จริง — `payee` เป็นลิงก์ข้ามไปหน้าตั้งค่าการเงิน ไม่ใช่ปุ่มเทา', () => {
+    expect(FINANCE_OPERATION_TABS.filter((tab) => !tab.available)).toEqual([])
+    const crossLinks = FINANCE_OPERATION_TABS.filter((tab) => tab.href !== undefined)
+    expect(crossLinks.map((tab) => tab.id)).toEqual(['payee'])
+    expect(crossLinks[0]?.href).toBe('/settings/finance?tab=payee')
+  })
+
+  it('แท็บที่เป็นลิงก์ข้าม route เลือกค้างที่หน้านี้ไม่ได้ (กันการ์ดเปล่า)', () => {
+    expect(resolveFinanceOperationTab('payee')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
   })
 
   it('แท็บเริ่มต้น = "ภาพรวม" (`14` §1 — หน้าแรกของโมดูลการเงิน)', () => {

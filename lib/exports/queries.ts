@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { renderPackCover } from '@/components/pdf/pack-cover'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
 import { findPeriodById, getPeriodReadiness, type AccountingMutationContext } from '@/lib/accounting/queries'
@@ -13,6 +14,7 @@ import {
   cashReceiptCsv,
   expenseCsv,
   exportVersionLabel,
+  packAttemptId,
   packFileName,
   packStoragePath,
   packZipFileName,
@@ -46,6 +48,7 @@ import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { voucherNumber } from '@/lib/payout/payout-doc'
 import { prisma } from '@/lib/prisma'
 import { buddhistYear } from '@/lib/format/datetime'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
  * Accounting Pack Export (ไฟล์ 37) — ชั้น DB + ตัวประกอบชุดเอกสาร (`37` §14)
@@ -135,6 +138,7 @@ export async function listExportHistory(
   user: SessionUser,
   query: ExportHistoryListQuery,
 ): Promise<ExportHistoryListDto> {
+  assertOrgWideReadable(user, 'export-records')
   const rows = await prisma.exportRecord.findMany({
     where: {
       organizationId: user.organizationId,
@@ -147,6 +151,7 @@ export async function listExportHistory(
 }
 
 export async function findExportRecord(user: SessionUser, id: string): Promise<ExportRow> {
+  assertOrgWideReadable(user, 'export-records')
   const row = await prisma.exportRecord.findFirst({
     where: { id, organizationId: user.organizationId },
     select: EXPORT_SELECT,
@@ -545,6 +550,7 @@ export async function createExportPack(
   input: ExportPackInput,
 ): Promise<ExportRecordDto> {
   const { actor } = ctx
+  assertOrgWideReadable(actor, 'export-records')
   const period = await findPeriodById(actor, input.periodId)
   const scope = scopeOf(period)
 
@@ -622,12 +628,16 @@ export async function createExportPack(
   const zipFileName = packZipFileName(scope.periodLabel, version)
 
   // ⑤ อัปโหลดทั้งชุด — `upsert: false` ⇒ ไฟล์เวอร์ชันเดิมไม่มีวันถูกทับ (Rule 09)
+  // path มีชั้น "ครั้งที่พยายาม" คั่นไว้ ⇒ ความพยายามที่ล้มหลังอัปโหลด (tx ล้ม / สองคนกดพร้อมกัน)
+  // ทิ้งไฟล์กำพร้าได้ แต่**ไม่บล็อกครั้งถัดไป** — ดู `packAttemptId()`
+  const attempt = packAttemptId(generatedAt, randomUUID())
   const pathFor = (fileName: string): string =>
     packStoragePath({
       organizationId: actor.organizationId,
       yearBe: scope.yearBe,
       month: scope.month,
       version,
+      attempt,
       fileName,
     })
 
@@ -652,6 +662,10 @@ export async function createExportPack(
   for (const file of uploads) fileUrls[file.key] = file.path
 
   // ⑥ บันทึกประวัติ + audit (`37` §13 — ต้องมี version, ผู้ส่ง, รายชื่อไฟล์)
+  //
+  // version ถูกคำนวณนอก transaction (ขั้น ③) เพราะต้องใช้ประกอบหน้าปก/ชื่อไฟล์ก่อนอัปโหลด ⇒
+  // สองคำขอพร้อมกันได้เลขเดียวกันแล้วชนกับ `uniq_export_period_version` · ข้อมูลไม่เสีย
+  // (ไฟล์เดิมไม่ถูกทับ ไม่มี version ซ้ำ) แต่ต้องตอบด้วย code จาก `24` ไม่ใช่ Prisma error ดิบ 500
   const created = await prisma.$transaction(async (tx) => {
     const row = await tx.exportRecord.create({
       data: {
@@ -690,9 +704,22 @@ export async function createExportPack(
       tx,
     )
     return row
+  }).catch((error: unknown) => {
+    if (isUniqueViolation(error)) {
+      throw new ExportError('EXPORT_VERSION_CONFLICT', {
+        detail: `period=${scope.id} version=${version}`,
+      })
+    }
+    throw error
   })
 
   return toExportDto(created)
+}
+
+
+/** Prisma `P2002` = ชน unique constraint — ที่นี่คือ `uniq_export_period_version` */
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002'
 }
 
 // ── PATCH mark-sent / accept (`37` §9 · §14) ────────────────────────────────

@@ -89,6 +89,11 @@ describe('F5 — ตารางและ KPI', () => {
     expect(data.totalRow).toMatchObject({ amountSatang: 350_000 })
   })
 
+  it('หมายเหตุท้ายรายงานแสดงวันที่เป็น พ.ศ. (Rule 01 — ค.ศ. บนจอ = bug)', () => {
+    expect(data.note).toContain('15/08/2569')
+    expect(data.note).not.toMatch(/2026/)
+  })
+
   it('ไม่มีรายการค้าง ⇒ ไม่มีแถวรวม (ตารางว่างต้องไม่มีแถว "รวมทั้งหมด" ลอย ๆ)', () => {
     const empty = buildAdvanceOverdueReport({ advances: [], asOf: NOW })
 

@@ -601,4 +601,23 @@ suite('Dashboard — Exceptions (`14` §6.2/§8)', () => {
     const dashboard = await reports.getDashboardKpi(finance, { refresh: true }, NOW)
     expect(dashboard.exceptions).toEqual({ critical: 1, warning: 1, info: 0, total: 2 })
   })
+
+  /**
+   * Final Test ด่าน 4 (Phase 8.3) — KPI 4 ตัวเป็นยอดรวมทั้งองค์กรที่กรองรายแถวไม่ได้
+   * `view_finance_dashboard` มอบให้ role ไหนก็ได้จากหน้า Settings ⇒ ต้องกันที่ชั้นข้อมูลด้วย
+   * (เดิม `getProfitability` ในคำตอบเดียวกันกรอง scope แล้ว แต่ KPI ไม่กรอง = ยอดทั้งองค์กรรั่ว)
+   */
+  it('scope ที่ไม่ใช่ `global` เรียก KPI ไม่ได้แม้ถือ capability', async () => {
+    for (const scope of [
+      { kind: 'team' as const, teamIds: [], companyId: null, userId: FINANCE_ID },
+      { kind: 'company' as const, teamIds: [], companyId: null, userId: FINANCE_ID },
+      { kind: 'self' as const, teamIds: [], companyId: null, userId: FINANCE_ID },
+    ]) {
+      await expect(
+        reports.getDashboardKpi({ ...finance, scope }, { refresh: true }, NOW),
+      ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' })
+    }
+    // Superadmin/การเงินที่เป็น scope `global` ยังเรียกได้ตามปกติ
+    await expect(reports.getDashboardKpi(finance, { refresh: true }, NOW)).resolves.toBeDefined()
+  })
 })

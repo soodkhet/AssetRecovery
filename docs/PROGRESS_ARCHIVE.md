@@ -5,6 +5,101 @@
 
 ---
 
+## Phase 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator)
+
+**วันที่**: 2026-08-16 · **commit**: `cfb531f` + `d71c28a` + `6f3d264` + `1eee46e` + `db0c416` + `9a4e3a7` + `e852f36` + `0e8f872` + `94d66ef` + `adea507` + `bcf2086` · **branch**: `auto/phase-8.3`
+
+รัน Final Test ครบ **6 ด่าน** ตาม `orchestrator/final-tests/*.md` (ปฏิบัติการ / การเงิน / บัญชี / Security / UI / ความทนทาน) — ด่าน 2 กับ 3 ใช้ subagent อ่านในหน้าต่างของตัวเอง แล้ว **ยืนยันทุก finding ด้วยตัวเองก่อนแก้** · ทุกจุดที่แก้มีเทสต์คุม และ **พิสูจน์แล้วว่าเทสต์แดงบนโค้ดเดิมจริง** (ถอด index/การแก้ออกแล้วรันซ้ำ)
+
+### ด่าน 1 / 4 / 5 (session ก่อนหน้าในก้อนงานเดียวกัน)
+- `6f3d264` — Revenue ที่ไม่มีวันเกิด + ตีกลับหลังเคสจบจริง (ด่าน 1 ปฏิบัติการ)
+- `d71c28a` — ปิดข้อมูลภายในที่รั่วไปฝั่งบริษัทไฟแนนซ์ (ด่าน 4 security)
+- `cfb531f` — ปลดเมนูที่ค้าง `available:false` + error/404 boundary (ด่าน 5 UI)
+
+### ด่าน 6 — ความทนทาน: เทสต์ที่ยังขาดของยามที่กู้มาจาก session ที่ถูกตัด (`1eee46e` → `db0c416`)
+โค้ดถูกกู้กลับมาโดยไม่มีเทสต์พิสูจน์ — เติมให้ครบตาม Rule 07:
+- **ตัวรันงานเบื้องหลังเขียนทับ claim ของตัวรันอื่น** — `completeJob()`/`failJob()` ใช้ `update({where:{id}})` เปล่า ⇒ ถ้า `reclaimStaleJobs()` คืนงานเข้าคิวแล้วตัวใหม่หยิบไปทำ ตัวเดิมยังเขียนผลทับได้ · แก้เป็น conditional update + ย้ายการเขียนผล **ออกนอก try ของ handler** (เดิม `emitAudit` ล้ม = `failJob()` ทับงานที่ `completed` ⇒ handler ทำงานซ้ำ)
+- **job สรุป ภ.ง.ด. เขียนทับงวดที่ปิดแล้ว** — ตัวกรอง `status` หายไปเมื่อ payload ระบุ `periodId` + เช็คซ้ำก่อนเขียนแต่ละงวด (TOCTOU ของ job ที่รันคร่อมช่วงปิดงวด)
+- **สร้าง Accounting Pack พร้อมกัน** ⇒ ชน `uniq_export_period_version` แล้วหลุดเป็น Prisma error ดิบ 500 ⇒ `EXPORT_VERSION_CONFLICT` (409) เติมใน `24` §6.8 พร้อมโค้ดใน commit เดียวกันตาม Rule 04
+- **อนุมัติ/ตีกลับรายการเบิกพร้อมกัน** ⇒ ยาม optimistic ใน tx (สถานะถูกอ่านนอก tx) — คนที่แพ้ได้ `EXPENSE_INVALID_STATUS`
+
+### ด่าน 3 — บัญชี: ใบ 50 ทวิ ออกซ้ำได้ (`9a4e3a7`)
+`syncWhtCertificatesFromPayout()` กันซ้ำด้วย read-then-insert อย่างเดียว และรอบจ่ายเป็น `completed` ได้ **2 ทาง** (ยืนยันด้วยมือ `17` §9 / จับคู่กระทบยอดธนาคารไฟล์ 35) ⇒ ยิงพร้อมกัน = ใบ `active` สองใบต่อ 1 รายการ ⇒ ยอด ภ.ง.ด.3/53 เกินจริง · แก้ด้วย partial unique index `(organization_id, expense_record_id) WHERE status='active'` (migration `20260816030000`) + จับ P2002 คืนใบเดิม · เลขที่ไม่ขาดช่วงเพราะการจองเลขอยู่ใน tx เดียวกับ insert
+
+### ด่าน 2 + 3 — **A1 ลูกค้าหักภาษีก่อนโอน ตายทั้งเส้น** (`e852f36`) ⚠️ จุดที่ร้ายแรงที่สุดของด่านนี้
+มติ PO 2026-08-12 (A1) วางไว้ว่าเงินเข้าที่ถูกหัก WHT ต้องจับคู่ด้วย `total − wht` และส่วนต่างเป็น**เครดิตภาษี** — ของจริงพังสองต่อ:
+1. ยอดทางเลือกของ auto-match อ่านจาก `billing_batches.wht_withheld_by_customer_satang` ซึ่งเขียน**ตอนรับชำระแล้ว**เท่านั้น ⇒ ก่อนรับเงินค่านี้เป็น 0 เสมอ ⇒ `altAmountSatang` ไม่มีวันเกิด (ไก่กับไข่)
+2. ยอด WHT ที่บันทึกกับ**ใบเงินรับ**ไม่เคยถูกรวมกลับไปที่รอบวางบิล ⇒ `settledSatang()` ขาด 3% ⇒ ค้างที่ `partially_paid` และค้างใน AR aging ตลอดกาลทั้งที่เก็บเงินครบแล้ว
+
+แก้: `calculateCustomerWithheldWht()` (pure + unit test · ฐาน **ก่อน VAT** ตาม Rule 01 · อัตราจาก `finance_companies.wht_withheld_by_customer_pct` · `NULL` = ไม่หัก · ไม่มีเกณฑ์ขั้นต่ำแบบ §6.9 เพราะเกณฑ์นั้นผูกกับ `tax_profiles` ฝั่งเรา) → ใช้คาดการณ์เฉพาะตอนสร้าง **ผู้สมัครจับคู่** + รวม WHT ของใบเงินรับกลับไปปิดรอบ
+
+> **ทางที่เลือกไม่เดิน (สำคัญ)**: เคย snapshot ยอดคาดการณ์ลง `billing_batches` ตอนวางบิล — **ผิด** เพราะ `settledSatang() = received + wht` ⇒ AR จะหายไป 3% ตั้งแต่ยังไม่เก็บเงิน (เทสต์เดิมของ 3.6 จับได้ทันที) · คอลัมน์นั้นคือยอด**ที่ถูกหักจริง** ไม่ใช่ยอดคาดการณ์
+
+### ด่าน 2 — ใบกำกับภาษีออกซ้ำ 2 ใบต่อรายการขายเดียว (`0e8f872`)
+`assertIssuable()` อ่านสถานะ**นอก** tx และ `FOR UPDATE` ที่นั่นล็อกแค่แถว `organizations` เพื่อเดินเลข ⇒ ดับเบิลคลิก/retry ได้ใบ active สองใบสองเลขที่ ⇒ ทะเบียนภาษีขายนับซ้ำ ยื่น ภ.พ.30 เกิน · แก้ด้วย partial unique index (migration `20260816040000`) + map P2002 → `TAX_INVOICE_ALREADY_ISSUED` · เทสต์เดิม "ออกพร้อมกัน 4 คำขอ" ใช้ 4 รายการขาย**คนละใบ** จึงจับไม่ได้
+
+### ด่าน 2 — อีก 3 จุด (`adea507` + `bcf2086` + `94d66ef`)
+- **อนุมัติเงินทดรองใบที่สอง = 500** — ยามห้ามเบิกซ้อนตอนสร้างดูเฉพาะ `approved|overdue` ⇒ มี `pending_approval` หลายใบได้โดยตั้งใจ ⇒ จุดที่ชน partial unique จริงคือตอน**อนุมัติ** ซึ่งไม่มี `.catch(rethrowDuplicateAdvance)` (เกิดได้แม้ไม่ได้กดพร้อมกัน)
+- **สรุปรายได้พนักงานขยับย้อนหลัง** — fallback ไปแผน**ปัจจุบัน**ของทีม ซึ่งย้ายไปเวอร์ชันใหม่ทุกครั้งที่แก้แผน ⇒ ยอดเคสที่ปิดเดือนก่อนเปลี่ยนเอง (ผิด Snapshot `92` §7.1 และขัด doc comment ของฟังก์ชันเอง) ⇒ ตัด fallback ทิ้ง ไม่มี snapshot = 0
+- **badge MoM ของ KPI โกหกเมื่อค่าเป็น N/A** — `marginPct ?? 0` ⇒ การ์ดโชว์ N/A แต่ badge ขึ้น `↓ 100.0%` สีแดง ⇒ `momOfNullable()` เทียบต่อเมื่อมีค่าจริงทั้งสองงวด
+- **fixture งวดบัญชีเปราะ** (`94d66ef`) — เทสต์ period lock ล็อกงวดตามลำดับ `monthCursor` และงวดที่ล็อกแล้วปลดเองไม่ได้ ⇒ ของค้างจากรันก่อนทำให้เทสต์ `yearly_reset` ล้มตามลำดับการรัน
+
+### สิ่งที่คนถัดไปควรรู้
+- **migration ใหม่ 2 ตัว** ต้อง `pnpm db:deploy` (+ `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test`) ก่อนรันต่อ: `20260816030000_wht_certificate_active_unique`, `20260816040000_tax_invoice_active_unique` — ทั้งคู่จะ**ล้ม**ถ้าฐานปลายทางมีใบ `active` ซ้ำค้างอยู่ (ตั้งใจ — ต้องยกเลิกใบส่วนเกินด้วยมือก่อน ห้ามให้ migration ลบเอกสารภาษี)
+- แพตเทิร์นที่ใช้ซ้ำได้: **read-then-insert + partial unique index + จับ P2002 คืนของเดิม/คืน error code ของ `24`** — ตอนนี้มี 4 ที่ (`bank_transactions`, `wht_certificates`, `tax_invoices`, `export_records`)
+- **หนี้ที่ต้องมีมติก่อนแก้ 2 ข้อใหม่** (รวมของ 8.2 เป็น 4) อยู่หัว `PROGRESS.md`: รายการเบิกที่ไม่มีอัตราภาษีทั้งสองระดับทำ API พัง 500 · ตั้งค่าเทมเพลตเอกสารภาษี (`13` §6.13) เป็น config ที่ไม่มีผล
+- ด่าน Portal (ข้อ 7 ของด่าน 4 · ข้อ 6 ของด่าน 5) **ยังไม่มีของให้ตรวจ** — Phase 7 ถูกบล็อกด้วย Auth method (`97` §22 #2) · หมายเหตุนี้เขียนไว้ในไฟล์เช็คลิสต์แล้ว
+
+---
+
+## Phase 8.2 — Consistency Sweep + Hardening
+
+**วันที่**: 2026-08-15…16 · **commit**: `0ae328c` + `91de430` + `32b71ff` + `0d743f9` + `b69a6b2` + `9bd34bc` + `c98f9a7` + `05cd29f` · **branch**: `auto/phase-8.2`
+
+กวาดเทียบ implementation ↔ spec ทั้งระบบตาม 5 แกน cross-cutting ของ `01_PLAN` §8.2 — ใช้ subagent อ่านในหน้าต่างของตัวเองแล้วส่งข้อสรุปกลับ (ไม่ลากไฟล์ใหญ่เข้า context หลัก) แล้ว **ยืนยันทุก finding ด้วยตัวเองก่อนแก้** · ทุกจุดที่แก้มีเทสต์คุม และ **พิสูจน์แล้วว่าเทสต์แดงบนโค้ดเดิมจริง** (ไม่ใช่เทสต์ที่ผ่านทั้งสองทาง)
+
+### แกน 1–2: เงิน satang + วันที่ พ.ศ. (`0ae328c`)
+- `lib/compensation/approval-queries.ts` — `satangToBaht` หาร 100 เป็น float **นอก** `lib/format` ⇒ ใช้ `fmtSatang()` (integer-only + `assertSatang`)
+- `components/finance/calc-detail-modal.tsx` — "วันที่เกิดรายการ" แสดง ISO ค.ศ. ⇒ `fmtDate()`
+- `lib/reports/finance/{ar-aging,advance-overdue}-report.ts` — หมายเหตุท้ายรายงาน (ขึ้นจอ + เข้าไฟล์ export) ใช้ `toIsoDateOnly` ที่ JSDoc ห้ามใช้แสดงผล ⇒ `fmtDate()`
+- `components/field/income-summary.tsx` — ตัวเลือกเดือนตัด `closedAt` แบบ UTC ⇒ เคสที่ปิด 00:00–07:00 น. ของวันที่ 1 ตกเดือนก่อนหน้า ⇒ `monthKeyOfInstant()`
+- กวาดซ้ำรอบสองตอนปิด task: `/ 100` ที่เหลือทั้งหมดเป็นเลขจำนวนเต็มล้วนหรืออยู่ใน formatter กลาง · `toISOString()` ที่เหลืออยู่ชั้น API/DTO ซึ่ง Rule 01 กำหนดให้เป็น ISO อยู่แล้ว ⇒ **ไม่มีของใหม่**
+
+### แกน 3: RBAC + scope ย่อย (`91de430`)
+- `assertOrgWideReadable(user, resource)` ที่ `lib/auth/scope.ts` — ยามกลางของทรัพยากรระดับองค์กร (whitelist `global`) แนวเดียวกับ `assertAuditReadable()` — ตารางกลุ่มนี้ไม่มีคอลัมน์บริษัท/ทีมให้กรองรายแถว
+- ต่อสายครบทุกจุดเข้าของ 5 โมดูลที่ค้างมาตั้งแต่รีวิว Phase 5: รอบบัญชี · คำถามสำนักงานบัญชี · exception · `expense_records` · export history/pack · WHT + สรุปยื่น · bank transactions — **ไม่แตะ** `findPeriodById`/`ensurePeriod*` (เส้นทางอัตโนมัติ payout → syncExpenseRecords → createException จะ 403 กลางคันหลัง commit)
+- **รายงานกำไรรั่วข้ามทีม/บริษัท** (`21` §14): `getProfitability`/`drilldown` ไม่ส่ง scope ลง query เลย ⇒ ผู้ถือ `view_finance_dashboard` ที่เป็น scope `team`/`company` เห็นกำไรทั้งองค์กรแยกรายทีม/รายบริษัท ⇒ `profitEntryScope()` + `companyId` ใน `ProfitEntryScope` + **ใส่ scope ลงคีย์แคช** (ไม่งั้นแคชข้ามผู้ใช้)
+- `reportTeamScope()` คืน `null` (= ทุกทีม) ให้ scope `company`/`self` ⇒ แก้เป็นรายการว่าง (= ผลลัพธ์ว่าง)
+- ปิดท้ายด้วยการกวาดเองอีกรอบ: ทุก route ที่ export `POST|PATCH|PUT|DELETE` มียามครบ (`/api/auth/login|logout` เปิดโดยเจตนา · `/api/dev/trigger-job` มี `withApiPermission` + 404 ใน production)
+
+### แกน 4: audit ครบ 9 fields + `reason` (`9bd34bc`)
+ตรวจ route mutation 117 ไฟล์ **รายหน้าที่** + call site ของ `emitAudit` 129 จุด — นโยบาย `reason` บังคับที่ runtime จริง (`lib/audit/validate.ts` → `AUDIT_REASON_REQUIRED` → 400) และมียามในเทสต์บังคับให้ทุก `@@map` ถูกจัดหมวด ⇒ **แกนนี้ผ่านเกือบทั้งหมด** เหลือของจริง 2 จุด:
+- **Export รายงานทางลัด "ทำสด" ไม่ลง audit เลย** — `exportReport()` แตกสองทาง เกิน 5,000 แถวเข้างานเบื้องหลัง (มี audit ผ่าน `enqueueJob`) ส่วน ≤ 5,000 แถวส่งไฟล์กลับตรง ๆ แล้ว return ทันที ⇒ ดึงรายงานการเงิน/กำไรออกได้โดยไม่เหลือร่องรอย (ผิด `90` §13 "รายการ export ต้อง trace กลับผู้สั่งงานได้") ⇒ `auditExportRequest()` ลง **ทั้งสองทาง** ที่เดียว `targetType: 'export_records'` (อยู่ใน `NON_SENSITIVE_TARGETS` ⇒ ไม่บังคับ reason) · `target_id` = NULL เพราะทางทำสดไม่มีแถวจริง
+- **`retryJob()` เขียน DB แล้วค่อยลง audit นอก `$transaction`** — เป็นจุดเดียวที่เหลือทั้ง repo ⇒ ห่อเข้า tx เดียวกัน
+- จุดที่ตรวจแล้ว **ไม่ใช่** finding (กันตรวจซ้ำรอบหน้า): `PATCH /api/notifications/:id/read` ไม่ลง audit โดยเจตนา (`90` §14) · `POST /api/reports/:id/refresh` ไม่แตะ DB · job ระดับระบบ (`organization_id = NULL`) ลง audit ไม่ได้เพราะ `audit_logs.organization_id` เป็น NOT NULL — ผลกระทบทางธุรกิจยังลงครบรายองค์กรพร้อม `[job:<id>]` ใน reason (จะทำจริงต้องมี DEC ให้คอลัมน์ nullable)
+
+### แกน 5: Idempotency (`b69a6b2` · `c98f9a7` · `05cd29f`)
+- **ไฟล์โอนพร้อมกันสองคำขอ = 1 รอบจ่ายได้ 2 idempotency key ⇒ เสี่ยงโอนซ้ำ** — คีย์ถูก mint จากค่าที่ **อ่านมาก่อนหน้า** (`batch.idempotencyKey ?? สร้างใหม่`) ⇒ สองคำขอเห็น `null` ทั้งคู่ → ได้คนละคีย์ → `referenceNo` คนละชุด → ธนาคารจับซ้ำไม่ได้ · `payout_batches.idempotency_key` UNIQUE ไม่ช่วยเพราะคีย์ไม่ซ้ำกันอยู่แล้ว · `payoutBatch.update` where `{id}` เฉย ๆ ⇒ คนหลังทับ แล้ว `GET /payment-file` เสิร์ฟไฟล์ของอีกคน ทั้งที่จอโชว์คีย์+SHA-256 ของไฟล์ตัวเอง ⇒ `claimIdempotencyKey()` จองด้วย `UPDATE … WHERE idempotency_key IS NULL` แล้วอ่านค่าจริงกลับมาใช้ร่วมกัน
+- **Export pack ล้มกลางทาง = รอบนั้น Export ไม่ได้อีกตลอดกาล** — `version` มาจาก `MAX(version) + 1` แต่อัปโหลดเกิด**ก่อน**สร้างแถว และ path เดิมเป็น `org/ปี-เดือน/v<n>/<ไฟล์>` ล้วน ⇒ ไฟล์ v1 กำพร้าค้าง → ครั้งถัดไปคิด version ได้ 1 เท่าเดิม → ชน `upsert: false` ทุกครั้ง · **ทั้ง repo ไม่มีโค้ดลบ object ใน storage** ⇒ ต้องเข้า Supabase ลบมือ ⇒ `packAttemptId()` เพิ่มชั้น "ครั้งที่พยายาม" ใต้ `v<version>`
+- **เงินเข้าถูกนับซ้ำตอนนำเข้า statement พร้อมกัน** — กันซ้ำด้วย read-then-insert อย่างเดียว และ `bank_transactions` ไม่มี unique constraint ใด ๆ ⇒ migration `20260816010000_bank_transaction_dedupe` เพิ่ม **functional unique index** `(organization_id, bank_account_id, transaction_date, amount_satang, md5(lower(btrim(description))))` สะท้อน `statementRowKey()` เป๊ะ + จับ P2002 นับเป็น `duplicates`
+- **`fuel_distance_retry` เขียนสถานะทับเจ้าของงาน** — ตอน claim ใช้ conditional update แต่ตอนปิดงานใช้ `where: { id }` ล้วน ⇒ หลัง `reclaimStaleJobs()` ดันงานกลับคิว instance เดิมที่ตื่นมาทีหลังเขียนทับ ⇒ `releaseJob()` ใส่เงื่อนไข `status: 'running'` ครบ 3 จุด + จับ P2002 = "อีก instance สร้างให้แล้ว" ⇒ `completed` ไม่ใช่ `failed`
+- **`report_export` รีทรายแล้วไฟล์งอก / ตาย dead letter ทั้งที่ไฟล์ครบ** — คอมเมนต์อ้างว่า path ผูกกับ job id แต่ชื่อไฟล์มี `HH-mm` จาก `now` ของ attempt และ backoff เป็นนาที ⇒ retry ได้ path ใหม่ทุกครั้ง (ไฟล์กำพร้าสะสม ไม่มีตัวลบ) และถ้าตกในนาทีเดียวกันก็โยนออกไม่มีใครแปลงเป็นสำเร็จ ⇒ ชื่อไฟล์ยึด `jobs.created_at` + `uploadReportExport()` คืน `boolean` (409 = สำเร็จ)
+- จุดที่ตรวจแล้ว **ผ่านจริง** พร้อมหลักฐาน: การสร้าง job กันซ้ำ (partial unique per-org + จับ P2002 คืน job เดิม + เทสต์ concurrency) · การหยิบงานกันซ้อน (conditional `updateMany`) · cron ยิงซ้ำ (คีย์ bucket วันไทย/ช่วง N นาที) · `reassign_timeout`/`advance_overdue` · `wht_summary` (คำนวณใหม่ทั้งก้อน + `period_id` UNIQUE) · แจ้งเตือนกันซ้ำ (id = UUIDv5 เป็น PK + `createMany({skipDuplicates:true})` — กันที่ DB จริง)
+
+### Immutable Rules ครบทุกตารางของ `02` §13 (`32b71ff`)
+ปิดหนี้จากรีวิว Phase 4 — repo มี trigger แค่ 3 ตารางทั้งที่ `02`:2057 สั่งว่า "บังคับที่ระดับ table ไม่ใช่แค่ระดับ application" ⇒ migration `20260815230000_immutable_rules_seven_tables` เติมอีก 7 ตาราง **อ่านสเปคตรงตัว บล็อกเท่าที่ §13 สั่ง** (แถวที่เขียน "ห้ามลบ" มีแค่ `export_records`/`wht_certificates`/`roles` — ตารางอื่นใส่แค่ยามฝั่งแก้ไข ไม่งั้นไปบล็อก cascade ของ `cases` และงาน housekeeping ที่สเปคไม่ได้ห้าม) · เทสต์ `prisma/immutable-rules.db.test.ts` เช็ค `pg_trigger` จริงครบ 10 ตาราง + พิสูจน์การยิงจริง · fixture 8 ไฟล์ปรับตาม pattern `ALTER TABLE … DISABLE TRIGGER` + try/finally — **ไม่มีเคสไหนถูกลบ/skip/แก้ assertion**
+
+### Index profiling ของ query ที่ join หนัก (`0d743f9`)
+migration `20260816001500_report_query_indexes` — สำรวจ `lib/reports/**` ทุก provider แล้วเทียบกับ `@@index` ที่มีจริง · ช่องว่างทุกตัวคือ pattern `organization_id + <คอลัมน์วันที่/สถานะ>` ที่ไม่มี index รองรับ (provider กรองด้วย "ช่วงวันที่" เป็นหลัก แต่ index เดิมเป็น `(org, status)` ล้วน ⇒ query ที่ไม่กรอง status — F1/F2/E1/E2/E3/A2 — ต้องอ่านทั้ง org ทุกครั้ง) และ `exceptions`/`case_assignments`/`payout_batch_items` ไม่มี index ที่ขึ้นต้นด้วย `organization_id` เลยแม้แต่ตัวเดียว (ผิด Rule 02 ด้วย) ⇒ เพิ่ม 8 ตัว + ถอด 4 ตัวที่กลายเป็น prefix ของตัวใหม่ (ตรวจแล้วว่าตัวใหม่คลุม prefix เดิมครบ — Postgres ตอบ query จากคอลัมน์นำหน้าได้)
+
+### สิ่งที่คนถัดไปต้องรู้
+- **มี migration ใหม่ 2 ตัว** — ต้อง `pnpm db:deploy` (และ `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test`) ก่อนรันงานต่อ
+- `uniq_bank_tx_statement_row` จะทำให้ migration **ล้ม** ถ้าฐานปลายทางมีรายการเดินบัญชีซ้ำค้างอยู่ — จงใจ ต้องตรวจ/รวมรายการด้วยมือก่อน (ห้ามให้ migration ลบรายการเดินบัญชีเอง) · ตอนลงฐานทดสอบเจอของซ้ำ 68 แถวจาก `sales.db.test.ts` ที่แทรกแถวด้วยวัน/ยอด/รายละเอียดคงที่ทุกรอบรัน ทั้งที่ไฟล์นั้นใช้ `${RUN}` กันชนอยู่แล้วทุกจุดอื่น — เติม `${RUN}` ให้ตรงกันแล้ว
+- **assertion ที่แตะ `audit_logs` ต้องเป็นแบบ "อย่างน้อย"/"ล่าสุด" เสมอ** ไม่ใช่จำนวนเป๊ะ — ตารางนี้ลบไม่ได้ (`02` §13) จึงสะสมข้ามการรัน (เทสต์ audit ของ export คัดด้วย `created_at >= เวลาที่เริ่มเทสต์`)
+- **หนี้ที่เหลือ 2 ข้อที่ตั้งใจไม่แก้เพราะต้องมีมติก่อน** — ดูหัวข้อ "หนี้ที่ 8.2 ตรวจเจอแต่ไม่ได้แก้" ใน `PROGRESS.md`: (1) เอกสารล็อตส่งมอบเขียนทับได้/ไม่มี hash ซึ่ง `44` §6.4 สั่งไว้อย่างนั้นจริง แต่อัปโหลดวิ่งจาก browser เข้า Storage ตรง ๆ ไม่ผ่าน API ⇒ ไม่มีชั้นตรวจว่าล็อต `confirmed` แล้ว (2) แจ้งเตือนของ job หายถาวรเมื่อ dispatch ล้ม ⇒ ต้องมี outbox = DEC ใหม่
+
+---
+
 ## Phase 8.1 — E2E Acceptance Tests (ไฟล์ 29)
 
 **วันที่**: 2026-08-15 · **commit**: `7c8fbd4` · **branch**: `auto/phase-8.1`

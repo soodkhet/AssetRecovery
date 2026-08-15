@@ -3,8 +3,8 @@ import { resolveFinanceOperationTab } from '@/lib/finance/operation-tabs'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
 /**
- * การเงิน — 9 แท็บตามไฟล์ 14–21 (`06` §8) · เปิดจริงแล้ว 2 แท็บใน Phase 3.3
- * (รออนุมัติ = ไฟล์ 15 · ค่าตอบแทน = ไฟล์ 16) ที่เหลือทยอยเปิดตาม Phase 3.4–3.8
+ * การเงิน — 9 แท็บตามไฟล์ 14–21 (`06` §8) เปิดใช้งานครบแล้ว (Phase 3.3–3.8)
+ * "ผู้รับเงิน" เป็นลิงก์ข้ามไปหน้าตั้งค่าการเงินตาม mockup `settings.html` — ดู `lib/finance/operation-tabs.ts`
  *
  * `requireMenuPage()` = ยามระดับเมนู (UX) — สิทธิ์จริงถูกตรวจซ้ำที่ทุก endpoint (DEC-002)
  */

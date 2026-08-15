@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { globSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import {
@@ -203,6 +204,33 @@ describe('ความสอดคล้องของ registry', () => {
       expect(item.path.startsWith('/')).toBe(true)
       for (const child of item.children ?? []) expect(child.path.startsWith('/')).toBe(true)
     }
+  })
+
+  /**
+   * Final Test ด่าน 5 (Phase 8.3) — เมนู `จัดการเคส`/`มอบหมายงาน`/`ติดตามภาคสนาม`/การเงิน/บัญชี/
+   * คลังสินค้า/รายงาน ค้างที่ `available:false` หลังเฟสของตัวเองปิดไปนาน ⇒ ผู้ใช้เข้าไม่ถึงหน้าที่
+   * ทำเสร็จแล้ว (`/cases` เด้ง `ModulePlaceholder`, แท็บย่อยเป็น span กดไม่ได้)
+   * เทียบกับไฟล์ `page.tsx` จริงใต้ `app/` เพื่อไม่ให้ต้องอาศัยความจำของคนอีก
+   */
+  it('ทุกเมนูที่มีหน้าจริงใน `app/` ต้อง `available: true` (กันธงค้างหลังปิดเฟส)', () => {
+    const appDir = fileURLToPath(new URL('../../app', import.meta.url))
+    const routes = new Set(
+      globSync('**/page.tsx', { cwd: appDir }).map((file) => {
+        const segments = file
+          .slice(0, -'/page.tsx'.length)
+          .split('/')
+          // route group `(app)` ไม่ปรากฏบน URL
+          .filter((segment) => segment !== '' && !segment.startsWith('('))
+        return `/${segments.join('/')}`
+      }),
+    )
+    // ยามของยาม — ถ้า glob พังจนไม่เจอหน้าเลย เทสต์นี้จะผ่านฟรี
+    expect(routes.size).toBeGreaterThan(20)
+
+    const withRealPage = MENU_ITEMS.flatMap((item) => [item, ...(item.children ?? [])]).filter((item) =>
+      routes.has(item.path),
+    )
+    expect(withRealPage.filter((item) => !item.available).map((item) => item.id)).toEqual([])
   })
 
   it('แท็บย่อยต้องไม่กว้างกว่าเมนูแม่ (เห็นแท็บแต่ไม่เห็นเมนู = บั๊ก)', () => {

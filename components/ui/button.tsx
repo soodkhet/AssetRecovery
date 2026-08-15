@@ -23,6 +23,19 @@ const SIZE_CLASS: Readonly<Record<ButtonSize, string>> = {
   md: 'px-4 py-2 text-sm',
 }
 
+/**
+ * คลาสของปุ่มสำหรับ element ที่ **ไม่ใช่ `<button>`** — ใช้กับ `<Link>` ที่ต้องหน้าตาเป็นปุ่ม
+ * (`<button>` ซ้อนใน `<a>` เป็น HTML ที่ไม่ถูกต้อง) — ห้าม copy คลาสไปเขียนเองที่อื่น
+ */
+export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'sm', className?: string): string {
+  return cn(
+    'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors',
+    VARIANT_CLASS[variant],
+    SIZE_CLASS[size],
+    className,
+  )
+}
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   size?: ButtonSize

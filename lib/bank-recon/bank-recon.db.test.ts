@@ -109,6 +109,28 @@ async function seedBilling(
   `)
 }
 
+let seq = 0
+
+/**
+ * รายได้ที่ผูกกับรอบวางบิล — ต้องมีของจริงเพราะยอดที่คาดว่าลูกค้าจะหักคิดจาก **ฐานก่อน VAT**
+ * (`revenues.gross_satang`) ไม่ใช่ยอดรวมบิล
+ */
+async function seedRevenueIn(billingId: string, grossSatang: number, vatSatang: number): Promise<void> {
+  seq += 1
+  const caseRef = `RECON-A1-${seq}-${Date.now()}`
+  const caseRows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO cases (organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by)
+    VALUES ('${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_A}', 'manual', 'closed_success', '${ACCOUNTING_ID}')
+    RETURNING id
+  `)
+  await db().$executeRawUnsafe(`
+    INSERT INTO revenues (organization_id, case_id, company_id, gross_satang, vat_satang, total_satang,
+                          fee_model_snapshot, status, revenue_date, billing_batch_id, created_by)
+    VALUES ('${ORG_ID}', '${caseRows[0]?.id ?? ''}', '${COMPANY_A}', ${grossSatang}, ${vatSatang},
+            ${grossSatang + vatSatang}, 'SUCCESS_FEE', 'billed', '2026-07-31', '${billingId}', '${ACCOUNTING_ID}')
+  `)
+}
+
 /** รอบจ่ายที่สร้างไฟล์โอนแล้ว — ยอดสุทธิ 120,000.00 บาท */
 async function seedPayout(id: string, netSatang: number): Promise<void> {
   await db().$executeRawUnsafe(`
@@ -147,6 +169,8 @@ async function cleanup(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM cash_receipts WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM bank_transactions WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM billing_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
@@ -274,6 +298,54 @@ suite('Phase 4.2 — นำเข้า statement + auto-match (`35` §6.2)', ()
     expect(receipt.whtWithheldByCustomerSatang).toBe(22500)
   })
 
+  it('Final Test ด่าน 2/3 — A1 จากสถานะจริงของระบบ: บิลที่ยังไม่เคยรับเงิน (wht = 0) ต้องจับคู่ `total − wht` ได้', async () => {
+    // สถานะที่ production สร้างได้จริง: `wht_withheld_by_customer_satang` ยังเป็น 0 เพราะค่านั้น
+    // ถูกเขียนตอน**รับชำระ**เท่านั้น ⇒ ยอดทางเลือกต้องคาดจากอัตราของบริษัท (ค่าเริ่มต้น 3%)
+    // ไม่งั้นเงินที่ถูกหักภาษีมาแล้วจับคู่ไม่ได้สักใบ และ AR ค้าง 3% ตลอดกาล
+    await seedBilling(BILLING_A, 802500)
+    await seedRevenueIn(BILLING_A, 750000, 52500)
+
+    const result = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'wht-expected.csv',
+      csv: csvOf('05/08/2569,โอนเข้าหลังหัก ณ ที่จ่าย,KBANK-TRX-021,"7,800.00",'),
+    })
+    expect(result.autoMatched).toBe(1)
+
+    // เครดิตภาษีลงใบเงินรับ **และ** ย้อนกลับไปปิดยอดของรอบ ⇒ ไม่ค้างที่ `partially_paid`
+    const receipt = await db().cashReceipt.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(receipt.amountSatang).toBe(780000)
+    expect(receipt.whtWithheldByCustomerSatang).toBe(22500)
+
+    const billing = await db().billingBatch.findUniqueOrThrow({ where: { id: BILLING_A } })
+    expect(billing.receivedSatang).toBe(780000)
+    expect(billing.whtWithheldByCustomerSatang).toBe(22500)
+    expect(billing.status).toBe('paid')
+    expect(billing.totalSatang - billing.receivedSatang - billing.whtWithheldByCustomerSatang).toBe(0)
+  })
+
+  it('Final Test ด่าน 2/3 — A1: บริษัทที่ไม่หักภาษีก่อนโอน (`NULL`) ⇒ ไม่มียอดทางเลือก ไม่จับคู่มั่ว', async () => {
+    await db().$executeRawUnsafe(
+      `UPDATE finance_companies SET wht_withheld_by_customer_pct = NULL WHERE id = '${COMPANY_A}'`,
+    )
+    try {
+      await seedBilling(BILLING_A, 802500)
+      await seedRevenueIn(BILLING_A, 750000, 52500)
+
+      const result = await recon.importStatement(ctx, {
+        bankAccountId: BANK_ACCOUNT_ID,
+        fileName: 'no-wht.csv',
+        csv: csvOf('05/08/2569,โอนเข้าไม่ครบยอด,KBANK-TRX-022,"7,800.00",'),
+      })
+      expect(result.autoMatched).toBe(0)
+      expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(0)
+    } finally {
+      await db().$executeRawUnsafe(
+        `UPDATE finance_companies SET wht_withheld_by_customer_pct = 3.00 WHERE id = '${COMPANY_A}'`,
+      )
+    }
+  })
+
   it('รับเต็มจำนวน ⇒ ใบเงินรับไม่บันทึก WHT ที่ลูกค้าหัก (ห้ามเดาส่วนต่าง)', async () => {
     await seedBilling(BILLING_A, 802500)
 
@@ -315,6 +387,22 @@ suite('Phase 4.2 — นำเข้า statement + auto-match (`35` §6.2)', ()
 
     expect(second.imported).toBe(0)
     expect(second.duplicates).toBe(1)
+    expect(await db().bankTransaction.count({ where: { organizationId: ORG_ID } })).toBe(1)
+    expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+
+  it('นำเข้าไฟล์เดิม **พร้อมกัน** สองคำขอ ⇒ ยังไม่นับเงินซ้ำ (`uniq_bank_tx_statement_row`)', async () => {
+    await seedBilling(BILLING_A, 802500)
+    const csv = csvOf('05/08/2569,โอนเข้าจากไฟแนนซ์ A,KBANK-TRX-001,"8,025.00",')
+
+    // ด่านกันซ้ำชั้น app เป็น read-then-insert ⇒ ทั้งสองฝั่งอ่านชุดเดิมก่อนที่อีกฝั่งจะ insert
+    // ⇒ ผ่านด่านทั้งคู่ → เงินเข้าถูกนับซ้ำ ถ้าไม่มี unique index ระดับ DB คุมไว้
+    const settled = await Promise.allSettled([
+      recon.importStatement(ctx, { bankAccountId: BANK_ACCOUNT_ID, fileName: 'a.csv', csv }),
+      recon.importStatement(ctx, { bankAccountId: BANK_ACCOUNT_ID, fileName: 'a.csv', csv }),
+    ])
+    expect(settled.filter((outcome) => outcome.status === 'fulfilled').length).toBeGreaterThanOrEqual(1)
+
     expect(await db().bankTransaction.count({ where: { organizationId: ORG_ID } })).toBe(1)
     expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })

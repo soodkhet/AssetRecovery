@@ -1,6 +1,7 @@
 import { advanceStatusLabel } from '@/lib/advances/advance-ui'
 import { daysOverdue } from '@/lib/finance/ar-calc'
 import { sumSatang } from '@/lib/finance/satang'
+import { fmtDate } from '@/lib/format/datetime'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { toIsoDateOnly } from '@/lib/reports/period'
@@ -122,7 +123,7 @@ export function buildAdvanceOverdueReport(input: {
             statusLabel: null,
           },
     note:
-      `นับ ณ วันที่ ${toIsoDateOnly(asOf)} ตามปฏิทินไทย — รายการที่ครบกำหนดวันนี้ยังไม่ถือว่าเกินกำหนด (เริ่มนับวันถัดไป) · ` +
+      `นับ ณ วันที่ ${fmtDate(asOf)} ตามปฏิทินไทย — รายการที่ครบกำหนดวันนี้ยังไม่ถือว่าเกินกำหนด (เริ่มนับวันถัดไป) · ` +
       'ยอดคือยอดที่อนุมัติจริง · พนักงานที่ยังมีรายการค้างจะขอเบิกเงินทดรองรายการใหม่ไม่ได้จนกว่าจะเคลียร์ (ไฟล์ 15)',
   }
 }

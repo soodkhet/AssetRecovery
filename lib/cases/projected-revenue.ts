@@ -1,3 +1,4 @@
+import { pctOfSatang } from '@/lib/finance/satang'
 import type { ServiceFeeBasis, ServiceFeeModel } from '@/lib/service-fee/template'
 
 /**
@@ -9,8 +10,9 @@ import type { ServiceFeeBasis, ServiceFeeModel } from '@/lib/service-fee/templat
  * - สูตร Revenue **จริง** (`22` §6.5–6.7 รวมกรณี `closed_fail` + VAT/WHT) เป็น pure module ของ Phase 3.1
  *   ไฟล์นี้ห้ามถูกนำไปใช้แทน (Rule 01 — สูตรเงินจริงอยู่ `22` ที่เดียว)
  *
- * เงินเป็น **สตางค์จำนวนเต็ม** ทุกจุด (Rule 01) — ส่วนของ `rate` ปัดเป็นสตางค์เต็มด้วย `Math.round`
- * (ประมาณการอยู่แล้ว ไม่ใช่ยอดที่เรียกเก็บจริง)
+ * เงินเป็น **สตางค์จำนวนเต็ม** ทุกจุด (Rule 01) — ส่วนของ `rate` คูณผ่าน `pctOfSatang()` ตัวเดียวของระบบ
+ * (`lib/finance/satang.ts`) ห้ามเขียนสูตร `%` ซ้ำที่นี่: ค่านี้ถูกเขียนลง `cases.projected_revenue_satang`
+ * แล้วผู้ใช้เอาไปเทียบกับยอดวางบิลจริง — ปัดคนละแบบ = ต่างกัน 1 สตางค์ (เช่น ฐาน 1,001,000 × 2.05%)
  */
 
 export interface ProjectedRevenueTemplate {
@@ -76,7 +78,7 @@ export function calculateProjectedRevenue(
     return { amountSatang: null, source, basisSatang: null, missingBasis: true }
   }
 
-  const rateComponent = Math.round((base * template.ratePct) / 100)
+  const rateComponent = pctOfSatang(base, template.ratePct)
   const amountSatang = template.model === 'HYBRID' ? template.baseSatang + rateComponent : rateComponent
   return { amountSatang, source, basisSatang: base, missingBasis: false }
 }

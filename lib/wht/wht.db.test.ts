@@ -50,8 +50,10 @@ const PAYMENT_AT = '2026-06-25T03:00:00Z'
 let client: PrismaClient | null = null
 type ExpenseQueries = typeof import('@/lib/expenses/queries')
 type WhtQueries = typeof import('@/lib/wht/queries')
+type WhtSummaryJob = typeof import('@/lib/wht/summary-job')
 let expenses: ExpenseQueries
 let wht: WhtQueries
+let summaryJob: WhtSummaryJob
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -146,10 +148,17 @@ async function seedBatch(items: readonly SeedItem[]): Promise<{ batchId: string;
 }
 
 async function setPeriodStatus(status: string): Promise<void> {
-  await db().$executeRawUnsafe(`
-    UPDATE accounting_periods SET status = '${status}'
-    WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 6
-  `)
+  const tx = db()
+  // งวดที่ `locked` ถูก trigger แช่แข็งไว้ (`02` §13) — fixture ต้องปลดกลับได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
+  try {
+    await tx.$executeRawUnsafe(`
+      UPDATE accounting_periods SET status = '${status}'
+      WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 6
+    `)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
+  }
 }
 
 async function junePeriodId(): Promise<string> {
@@ -168,17 +177,23 @@ async function junePeriodId(): Promise<string> {
  */
 async function resetOrgData(): Promise<void> {
   const tx = db()
-  for (const statement of [
-    `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
-  ]) {
-    await tx.$executeRawUnsafe(statement)
+  // ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13 — เลขที่ห้ามขาดช่วง) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
+  try {
+    for (const statement of [
+      `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
+    ]) {
+      await tx.$executeRawUnsafe(statement)
+    }
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
   }
 }
 
@@ -187,6 +202,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = url
   expenses = await import('@/lib/expenses/queries')
   wht = await import('@/lib/wht/queries')
+  summaryJob = await import('@/lib/wht/summary-job')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -499,6 +515,55 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     expect(source.payee.name).toBe('บริษัท เร็วดี จำกัด')
     expect(source.payee.taxId).toBe('0105560099999')
     expect(source.filingForm).toBe('PND53')
+  })
+
+  it('Final Test ด่าน 3 — sync พร้อมกันสองทาง ⇒ ใบ 50 ทวิ ยังใบเดียวต่อรายการ (ยอด ภ.ง.ด. ไม่เกินจริง)', async () => {
+    await setPeriodStatus('collecting')
+    const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 25_000_00, wht: 750_00 }])
+
+    // รอบจ่ายเป็น `completed` ได้ 2 ทาง (ยืนยันด้วยมือ `17` §9 กับการจับคู่กระทบยอดธนาคารไฟล์ 35)
+    // ⇒ ทั้งสองทางเรียก sync ได้พร้อมกันสำหรับรอบเดียวกัน
+    const results = await Promise.allSettled([
+      expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId),
+      expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId),
+    ])
+    expect(results.filter((result) => result.status === 'rejected')).toEqual([])
+
+    const certificates = await db().whtCertificate.findMany({
+      where: {
+        organizationId: ORG_ID,
+        expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } },
+      },
+      select: { status: true },
+    })
+    expect(certificates.filter((row) => row.status === 'active')).toHaveLength(1)
+    expect(certificates).toHaveLength(1)
+  })
+
+  it('Final Test ด่าน 6 — งานเบื้องหลังสรุปรอบนำส่งต้องไม่เขียนทับงวดที่ปิดไปแล้ว', async () => {
+    await setPeriodStatus('collecting')
+    const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 30_000_00, wht: 900_00 }])
+    await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+    const periodId = await junePeriodId()
+    const real = (await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang
+
+    // ปักยอดปลอมไว้ — ถ้า job ยังทำงานกับงวดที่ปิดแล้ว ยอดนี้จะถูกคำนวณทับกลับเป็นของจริง
+    // (เท่ากับแก้ข้อมูลงวดที่ล็อกโดยไม่ผ่าน Adjustment — `30`/`20`)
+    for (const closed of ['locked', 'sent_to_accountant'] as const) {
+      await db().whtFilingSummary.update({ where: { periodId }, data: { pnd3Satang: 1 } })
+      await setPeriodStatus(closed)
+
+      const skipped = await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
+      expect(skipped.refreshed).toBe(0)
+      expect(skipped.periodIds).toEqual([])
+      expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang).toBe(1)
+    }
+
+    // งวดที่ยังเปิดอยู่ต้องยังคำนวณให้ตามปกติ (ยามนี้ไม่ได้ปิดงานทิ้งทั้งตัว)
+    await setPeriodStatus('collecting')
+    const refreshed = await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
+    expect(refreshed.refreshed).toBe(1)
+    expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang).toBe(real)
   })
 
   it('อ้าง id ที่ไม่มีในองค์กร ⇒ 404 ไม่ leak (WHT_CERTIFICATE_NOT_FOUND / WHT_FILING_SUMMARY_NOT_FOUND)', async () => {

@@ -25,6 +25,10 @@ vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock, loadS
 const enqueueJobMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/jobs/engine', () => ({ enqueueJob: enqueueJobMock }))
 
+/** ร่องรอย export (`90` §13) เขียนลง DB จริง — เทสต์ระดับ route ไม่มีฐาน จึงดักไว้แล้วตรวจ argument */
+const emitAuditMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/audit/audit', () => ({ emitAudit: emitAuditMock }))
+
 const { GET: catalogRoute } = await import('@/app/api/reports/route')
 const { GET: reportRoute } = await import('@/app/api/reports/[reportId]/route')
 const { POST: refreshRoute } = await import('@/app/api/reports/[reportId]/refresh/route')
@@ -96,6 +100,7 @@ function data(rows: number): ReportData {
 beforeEach(() => {
   requireSessionMock.mockReset()
   enqueueJobMock.mockReset()
+  emitAuditMock.mockReset()
   clearReportCache()
 })
 
@@ -224,6 +229,15 @@ describe('POST /api/reports/:id/export (E13)', () => {
     expect(response.headers.get('content-type')).toContain('spreadsheetml')
     expect(response.headers.get('content-disposition')).toContain('F1')
     expect(enqueueJobMock).not.toHaveBeenCalled()
+
+    // `90` §13 — ทางทำสดก็ต้องเหลือร่องรอยว่าใครดึงรายงานอะไรออกไป (เดิมหลุดทั้งเส้น)
+    expect(emitAuditMock).toHaveBeenCalledTimes(1)
+    expect(emitAuditMock.mock.calls[0]?.[0]).toMatchObject({
+      actorId: FINANCE.id,
+      action: 'export',
+      targetType: 'export_records',
+      after: { report_id: 'gross-profit', format: 'xlsx', mode: 'sync', row_count: 3 },
+    })
   })
 
   it('เกิน 5,000 แถว = 202 + jobId (ไม่ส่งไฟล์) และงานถูกตั้งคิวพร้อมขอบเขตที่คำนวณแล้ว', async () => {

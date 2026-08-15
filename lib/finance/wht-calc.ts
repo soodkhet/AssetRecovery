@@ -142,3 +142,28 @@ export function calculateWhtForPayee(input: {
   })
   return { ...calculation, rate }
 }
+
+/**
+ * **A1 — WHT ที่ "ลูกค้าหักจากเรา" ก่อนโอน** (มติ PO 2026-08-12 · `02_OPEN_DECISIONS` A1)
+ *
+ * คนละทิศกับ §6.9 ข้างบน (นั่นคือ *เราหักคนอื่น*) — ตัวนี้คือบริษัทไฟแนนซ์หักภาษีจากค่าบริการของเรา
+ * ก่อนโอน ⇒ เงินเข้าบัญชีจริง = `total − wht` และส่วนต่างคือ **เครดิตภาษีของบริษัท** ไม่ใช่หนี้ค้าง
+ *
+ * - อัตรามาจาก `finance_companies.wht_withheld_by_customer_pct` (ตั้งต่อบริษัท · `NULL` = ไม่หัก)
+ * - **ฐาน = ยอดก่อน VAT** ตามกติกาเหล็กของโปรเจกต์ (Rule 01 — WHT ฐาน `before_vat` เสมอ)
+ * - **ไม่มีเกณฑ์ขั้นต่ำ** — เกณฑ์ 1,000 บาทของ §6.9 ผูกกับ `tax_profiles` ของผู้รับเงินฝั่งเรา
+ *   ซึ่งไม่มีในทิศนี้ · ค่านี้เป็นเพียง "ยอดที่คาดว่าจะถูกหัก" ที่ใช้เป็น**ทางเลือก**ของการจับคู่
+ *   (`altAmountSatang`) — ยอดเต็มยังจับคู่ได้เหมือนเดิมเสมอ ⇒ คาดผิดไม่ทำให้จับคู่พลาด
+ *   🔶 อัตราจริงรายบริษัทยังรอนักบัญชียืนยันก่อนวางบิลจริงใบแรก (open item A1 เดิม)
+ */
+export function calculateCustomerWithheldWht(input: {
+  /** ยอดรายได้ของรอบวางบิล **ก่อน VAT** (`billing_batches` = ผลรวม `revenues.gross_satang`) */
+  amountBeforeVatSatang: number
+  /** `finance_companies.wht_withheld_by_customer_pct` — `null` = บริษัทนี้ไม่หักภาษีก่อนโอน */
+  whtPct: number | null
+}): number {
+  assertNonNegativeSatang(input.amountBeforeVatSatang, 'ยอดรายได้ก่อน VAT ของรอบวางบิล')
+  if (input.whtPct === null || input.whtPct === 0) return 0
+  assertWhtPctValid(input.whtPct)
+  return pctOfSatang(input.amountBeforeVatSatang, input.whtPct)
+}

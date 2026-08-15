@@ -1,3 +1,4 @@
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
@@ -368,9 +369,22 @@ export async function syncWhtCertificatesFromPayout(
       continue
     }
 
-    issued.push(
-      await prisma.$transaction((tx) => issueCertificate(tx, ctx, record, existing?.id ?? null)),
-    )
+    try {
+      issued.push(
+        await prisma.$transaction((tx) => issueCertificate(tx, ctx, record, existing?.id ?? null)),
+      )
+    } catch (error) {
+      // แข่งกันออกใบพร้อมกัน (รอบจ่ายเป็น `completed` ได้ 2 ทาง — ยืนยันด้วยมือกับกระทบยอดธนาคาร)
+      // ⇒ คนที่แพ้ `uniq_wht_cert_active_per_expense` อ่านใบที่มีอยู่แล้วกลับไป ไม่ใช่ error
+      // (แนวเดียวกับ `syncExpenseRecordsFromPayout()` ที่แพ้ unique ของ `payout_batch_item_id`)
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      const raced = await prisma.whtCertificate.findFirst({
+        where: { organizationId, expenseRecordId: record.id, status: 'active' },
+        select: CERT_SELECT,
+      })
+      if (raced === null) throw error
+      issued.push(raced)
+    }
   }
 
   return issued.map(toCertDto)
@@ -382,6 +396,7 @@ export async function listWhtCertificates(
   user: SessionUser,
   query: WhtCertificateListQuery,
 ): Promise<WhtCertificateListDto> {
+  assertOrgWideReadable(user, 'wht-certificates')
   const rows = await prisma.whtCertificate.findMany({
     where: {
       organizationId: user.organizationId,
@@ -397,6 +412,7 @@ export async function listWhtCertificates(
 }
 
 async function findCertificate(user: SessionUser, certificateId: string): Promise<CertRow> {
+  assertOrgWideReadable(user, 'wht-certificates')
   const row = await prisma.whtCertificate.findFirst({
     where: { id: certificateId, organizationId: user.organizationId },
     select: CERT_SELECT,
@@ -504,6 +520,7 @@ export async function listWhtFilingSummaries(
   query: WhtFilingSummaryListQuery,
   now: Date = new Date(),
 ): Promise<WhtFilingSummaryListDto> {
+  assertOrgWideReadable(user, 'wht-filing-summaries')
   const rows = await prisma.whtFilingSummary.findMany({
     where: {
       organizationId: user.organizationId,
@@ -542,6 +559,7 @@ export async function markWhtFilingFiled(
   input: WhtMarkFiledInput,
   now: Date = new Date(),
 ): Promise<WhtFilingSummaryDto> {
+  assertOrgWideReadable(ctx.actor, 'wht-filing-summaries')
   const organizationId = ctx.actor.organizationId
   const summary = await prisma.whtFilingSummary.findFirst({
     where: { id: summaryId, organizationId },

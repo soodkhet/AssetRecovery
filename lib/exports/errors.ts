@@ -18,6 +18,7 @@ export const EXPORT_ERROR_CODES = [
   'EXPORT_RECORD_NOT_FOUND',
   'EXPORT_INVALID_STATUS',
   'EXPORT_PAYEE_TAX_ID_MISSING',
+  'EXPORT_VERSION_CONFLICT',
 ] as const
 
 export type ExportErrorCode = (typeof EXPORT_ERROR_CODES)[number]
@@ -26,6 +27,7 @@ const HTTP_STATUS: Record<ExportErrorCode, number> = {
   EXPORT_RECORD_NOT_FOUND: 404,
   EXPORT_INVALID_STATUS: 400,
   EXPORT_PAYEE_TAX_ID_MISSING: 400,
+  EXPORT_VERSION_CONFLICT: 409,
 }
 
 const MESSAGES: Record<ExportErrorCode, ErrorMessage> = {
@@ -41,6 +43,10 @@ const MESSAGES: Record<ExportErrorCode, ErrorMessage> = {
     title: 'เลขประจำตัวผู้เสียภาษีของผู้รับเงินไม่ครบ',
     message:
       'ไฟล์ 05_WHT_Data.csv ต้องมีเลขประจำตัวผู้เสียภาษี 13 หลักทุกแถว — แก้โปรไฟล์ผู้รับเงินให้ครบก่อนส่งข้อมูลบัญชี',
+  },
+  EXPORT_VERSION_CONFLICT: {
+    title: 'มีคนสร้างชุดส่งข้อมูลของรอบนี้พร้อมกัน',
+    message: 'มีผู้ใช้อื่นเพิ่งสร้างชุดส่งข้อมูลของงวดนี้ไปแล้ว — กดสร้างใหม่อีกครั้งเพื่อให้ได้เวอร์ชันถัดไป (`37` §6.2)',
   },
 }
 

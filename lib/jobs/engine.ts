@@ -281,6 +281,7 @@ export async function runJob(job: JobRow, now: Date = new Date()): Promise<JobOu
   })
   if (claimed.count === 0) return 'skipped'
 
+  let outcome: { kind: 'completed'; result: JobHandlerResult } | { kind: 'failed'; message: string }
   try {
     const handler = isKnownJobType(job.jobType) ? JOB_HANDLERS[job.jobType] : undefined
     if (handler === undefined) {
@@ -288,24 +289,40 @@ export async function runJob(job: JobRow, now: Date = new Date()): Promise<JobOu
       return await failJob(job, now, `ไม่รู้จัก job_type "${job.jobType}" — ไม่มี handler ในทะเบียน`, true)
     }
     const result = await handler({ job, now })
-    return await completeJob(job, now, result)
+    outcome = { kind: 'completed', result }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'ทำงานไม่สำเร็จ (ไม่ทราบสาเหตุ)'
-    return await failJob(job, now, message, false)
+    outcome = { kind: 'failed', message }
   }
+
+  // ⚠️ การเขียนผล **ต้องอยู่นอก try ของ handler** (Final Test ด่าน 6) — เดิมถ้า `emitAudit`
+  // ใน `completeJob()` โยน (DB สะดุด) จะตกเข้า catch แล้ว `failJob()` ทับงานที่ `completed`
+  // ไปแล้วให้กลับเข้าคิว ⇒ handler ทำงานซ้ำทั้งที่ผลลัพธ์ออกไปแล้ว
+  return outcome.kind === 'completed'
+    ? await completeJob(job, now, outcome.result)
+    : await failJob(job, now, outcome.message, false)
 }
 
+/**
+ * ปิดงานสำเร็จ — เขียนสถานะแบบมียาม `status = 'running'` (Final Test ด่าน 6)
+ *
+ * `update({ where: { id } })` เปล่า ๆ ทับสถานะของ **เจ้าของงานตัวจริง** ได้เมื่อมีตัวรันซ้อน
+ * (เช่น `reclaimStaleJobs()` คืนงานเป็น `pending` แล้วอีกตัวหยิบไปรันก่อนที่ตัวเดิมจะเขียนผล)
+ * ⇒ ใครไม่ได้ถือ claim อยู่ ให้เงียบไป ไม่เขียนทับ (แพตเทิร์นเดียวกับ `confirmLot()`)
+ */
 async function completeJob(job: JobRow, now: Date, result: JobHandlerResult): Promise<JobOutcome> {
-  const updated = await prisma.job.update({
-    where: { id: job.id },
+  const claimed = await prisma.job.updateMany({
+    where: { id: job.id, status: 'running' },
     data: {
       status: 'completed',
       completedAt: now,
       errorMessage: null,
       result: (result ?? {}) as Prisma.InputJsonValue,
     },
-    select: JOB_SELECT,
   })
+  if (claimed.count === 0) return 'skipped'
+
+  const updated = await prisma.job.findUniqueOrThrow({ where: { id: job.id }, select: JOB_SELECT })
   await auditJobOutcome(updated, job, 'ทำงานสำเร็จ')
   return 'completed'
 }
@@ -315,8 +332,10 @@ async function failJob(job: JobRow, now: Date, message: string, terminal: boolea
     ? { status: 'failed' as const, retryCount: job.maxRetries, scheduledAt: null, deadLetter: true }
     : nextAttemptAfterFailure(job, now)
 
-  const updated = await prisma.job.update({
-    where: { id: job.id },
+  // ยามเดียวกับ `completeJob()` — เขียนได้เฉพาะตอนที่ยังถือ claim อยู่จริง
+  // (`reclaimStaleJobs()` เปลี่ยนงานเป็น `pending` ก่อนเรียกที่นี่ จึงอนุญาต `pending` ด้วย)
+  const claimed = await prisma.job.updateMany({
+    where: { id: job.id, status: { in: ['running', 'pending'] } },
     data: {
       status: next.status,
       retryCount: next.retryCount,
@@ -324,8 +343,10 @@ async function failJob(job: JobRow, now: Date, message: string, terminal: boolea
       errorMessage: message,
       completedAt: next.deadLetter ? now : null,
     },
-    select: JOB_SELECT,
   })
+  if (claimed.count === 0) return 'skipped'
+
+  const updated = await prisma.job.findUniqueOrThrow({ where: { id: job.id }, select: JOB_SELECT })
 
   await auditJobOutcome(
     updated,

@@ -138,6 +138,10 @@ async function cleanupCases(): Promise<void> {
   const tx = db()
   // `audit_logs` ลบไม่ได้เด็ดขาด (`02` §13 — trigger ระดับ DB) จึงปล่อยค้างไว้ตามกติกา
   await tx.$executeRawUnsafe(`UPDATE expenses SET superseded_by_expense_id = NULL WHERE organization_id = '${ORG_ID}'`)
+  // รายการเบิกที่เทสต์ผูกเข้ารอบจ่าย (`seedPayoutBatchItem`) — ต้องปลด FK ก่อนลบ expenses
+  await tx.$executeRawUnsafe(`UPDATE expenses SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM jobs WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
@@ -226,6 +230,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (url) {
     await cleanupCases()
+    await db().$executeRawUnsafe(`UPDATE expenses SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
     await db().$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
   }
   await client?.$disconnect()
@@ -291,6 +298,40 @@ async function seedReadyToClose(
     )
   }
   return caseId
+}
+
+/**
+ * ผูกรายการเบิกเข้ารอบจ่ายจริง (มี FK) — ใช้พิสูจน์ยาม `EVIDENCE_REJECT_AFTER_FINAL`
+ * ที่กันไม่ให้รายการซึ่งเข้ารอบจ่ายแล้วถูก supersede (= จ่ายซ้ำ)
+ */
+async function seedPayoutBatchItem(expenseId: string): Promise<string> {
+  const expense = await db().expense.findUniqueOrThrow({
+    where: { id: expenseId },
+    select: { payeeId: true, grossSatang: true },
+  })
+  const batch = await db().payoutBatch.create({
+    data: {
+      organizationId: ORG_ID,
+      name: 'รอบจ่ายทดสอบ 8.3',
+      side: 'inhouse',
+      createdBy: MANAGER_ID,
+    },
+    select: { id: true },
+  })
+  const item = await db().payoutBatchItem.create({
+    data: {
+      organizationId: ORG_ID,
+      payoutBatchId: batch.id,
+      expenseId,
+      payeeId: expense.payeeId ?? '',
+      grossSatang: expense.grossSatang,
+      netSatang: expense.grossSatang,
+      createdBy: MANAGER_ID,
+    },
+    select: { id: true },
+  })
+  await db().expense.update({ where: { id: expenseId }, data: { payoutBatchItemId: item.id } })
+  return item.id
 }
 
 async function expensesOf(caseId: string) {
@@ -411,6 +452,51 @@ suite('Phase 2.9 — D10: Google Maps ใช้ไม่ได้ตอนปิ
     const second = await fuelJob.runFuelDistanceRetryJob({ organizationId: ORG_ID })
     expect(second.created).toBe(0)
     expect((await expensesOf(caseId)).filter((row) => row.expenseType === 'fuel')).toHaveLength(1)
+  })
+
+  it('งานที่ถูกดึงกลับคิวระหว่างทาง — instance เดิมห้ามเขียนสถานะทับเจ้าของงานตัวใหม่ (`91` §17)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('down', { status: 500 })),
+    )
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
+
+    const pending = await db().job.findFirstOrThrow({
+      where: { organizationId: ORG_ID, jobType: 'fuel_distance_retry', status: 'pending' },
+      select: { id: true },
+    })
+
+    // Maps ค้างนานเกิน ⇒ `reclaimStaleJobs()` ดันงานกลับ `pending` แล้ว instance อื่นหยิบไปทำ
+    // (จำลองด้วยการปล่อยให้ instance นี้ claim ไม่ได้ตั้งแต่แรก แล้วเช็คว่าไม่มีการเขียนทับ)
+    let release: () => void = () => undefined
+    const blocked = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await blocked
+        return new Response(
+          JSON.stringify({ status: 'OK', rows: [{ elements: [{ status: 'OK', distance: { value: 10_000 } }] }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const running = fuelJob.runFuelDistanceRetryJob({ organizationId: ORG_ID })
+    // รอให้ job claim เสร็จ (`pending` → `running`) แล้วค่อยแกล้งดึงกลับคิว
+    await vi.waitFor(async () => {
+      const row = await db().job.findUniqueOrThrow({ where: { id: pending.id }, select: { status: true } })
+      expect(row.status).toBe('running')
+    })
+    await db().job.update({ where: { id: pending.id }, data: { status: 'pending', startedAt: null } })
+    release()
+    await running
+
+    // instance เดิมทำงานเสร็จทีหลัง แต่ไม่ถือ claim แล้ว ⇒ ห้ามเขียน `completed` ทับ
+    const after = await db().job.findUniqueOrThrow({ where: { id: pending.id }, select: { status: true } })
+    expect(after.status).toBe('pending')
   })
 
   it('ยอดที่คำนวณได้เป็น 0 = ไม่สร้าง record (DEC-006/D6)', async () => {
@@ -565,6 +651,42 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     expect(resubmitted.status).toBe('pending_approval')
     expect(resubmitted.rejectReason).toBeNull()
   })
+
+  /**
+   * Final Test ด่าน 1 (Phase 8.3) — `41` §10.1 ให้ `reject_evidence` ทำได้จาก `closed_success`
+   * แต่ `19` §6.1 บอกว่าเคสที่ผ่านขั้นสุดท้ายแล้ว "ไม่มีโอกาสถูกตีกลับอีก"
+   *
+   * ถ้าปล่อยผ่าน: `resubmit_close` จะสร้างรายการเบิกชุดใหม่ที่ `pending_warehouse_confirm`
+   * ซึ่งปลดล็อกไม่ได้ตลอดกาล (ล็อตเดิม confirmed = terminal · asset `handed_over`) ⇒ เงินค้าง
+   */
+  it('ตีกลับหลักฐานหลังเครื่องส่งมอบไปแล้ว = EVIDENCE_REJECT_AFTER_FINAL', async () => {
+    const caseId = await closeSuccessfully()
+    await db().asset.updateMany({ where: { caseId }, data: { assetStatus: 'handed_over' } })
+
+    await expectCode(
+      () => field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่ม' }, { actor: manager, meta }),
+      'EVIDENCE_REJECT_AFTER_FINAL',
+    )
+
+    // สถานะต้องไม่ขยับเลย (ยามอยู่ก่อน transaction)
+    const assignment = await db().caseAssignment.findFirstOrThrow({ where: { caseId } })
+    expect(assignment.status).toBe('closed_success')
+  })
+
+  it('ตีกลับหลักฐานหลังรายการเบิกเข้ารอบจ่ายแล้ว = EVIDENCE_REJECT_AFTER_FINAL (กันจ่ายซ้ำ)', async () => {
+    const caseId = await closeSuccessfully()
+    const target = (await expensesOf(caseId))[0]
+    const batchItemId = await seedPayoutBatchItem(target?.id ?? '')
+
+    await expectCode(
+      () => field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่ม' }, { actor: manager, meta }),
+      'EVIDENCE_REJECT_AFTER_FINAL',
+    )
+
+    const still = await db().expense.findFirstOrThrow({ where: { id: target?.id ?? '' } })
+    expect(still.payoutBatchItemId).toBe(batchItemId)
+    expect(still.status).not.toBe('superseded')
+  })
 })
 
 suite('Phase 2.9 — เบิกที่พัก + สรุปรายได้ (`41` §6.6 · §7.9 · §7.10)', () => {
@@ -656,5 +778,57 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     expect(summary.commissionSatang).toBe(COMMISSION_SATANG)
     expect(summary.noSuccessFeeSatang).toBe(NO_SUCCESS_FEE_SATANG)
     expect(summary.items).toHaveLength(2)
+  })
+
+  it('Final Test ด่าน 2 — เคสที่ไม่มี snapshot ต้องไม่หยิบแผน**ปัจจุบัน**ของทีมมาคิดย้อนหลัง (`92` §7.1)', async () => {
+    stubDistanceMatrix(1_000)
+    const closedCase = await seedReadyToClose()
+    await field.closeFieldCase(agentA, closedCase, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
+
+    // งานที่ไม่มีรายการเบิก active = ไม่มี snapshot ของแผน — เกิดจริงเมื่อเบิกถูกตีกลับทั้งหมด
+    // (`rejected` ไม่อยู่ใน `ACTIVE_EXPENSE_STATUSES`) หรือ fuel PER_KM ที่ยังไม่ได้ระยะทาง + เบี้ยเลี้ยง 0
+    await db().$executeRawUnsafe(`
+      UPDATE expenses SET status = 'rejected'
+       WHERE organization_id = '${ORG_ID}' AND case_id = '${closedCase}'
+    `)
+
+    // ชื่อแผนของเทสต์นี้ต้องไม่ชนกับแผนหลักของทีม — การค้นแผน "เวอร์ชันปัจจุบัน" ใช้ชื่อเป็นสายพันธุ์
+    const NEW_PLAN_NAME = 'แผนหลังแก้ (Final Test 8.3)'
+
+    // จำลองการแก้แผน: เกิดแถวเวอร์ชันใหม่แล้ว **ทีมถูกย้ายไปชี้เวอร์ชันใหม่** (`lib/compensation/queries.ts`)
+    // ⇒ ถ้าสรุปรายได้ fallback ไปแผนปัจจุบันของทีม ยอดของเคสที่ปิดไปแล้วจะเปลี่ยนตาม
+    // (แผนลบไม่ได้ในฐานทดสอบ ⇒ เวอร์ชันต้องเดินต่อจากของที่ค้างจากรันก่อน ไม่ใช่ค่าตายตัว)
+    const maxVersion = await db().compensationPlan.aggregate({
+      where: { organizationId: ORG_ID, name: NEW_PLAN_NAME },
+      _max: { version: true },
+    })
+    const planVersion = (maxVersion._max.version ?? 0) + 1
+    const newPlanRows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO compensation_plans
+        (organization_id, name, side, fuel_mode, fuel_daily_flat_satang, allowance_satang,
+         commission_satang, no_success_fee_satang, version, effective_from, is_current, created_by)
+      VALUES ('${ORG_ID}', $$${NEW_PLAN_NAME}$$, 'inhouse', 'DAILY_FLAT', ${DAILY_FLAT_SATANG}, ${ALLOWANCE_SATANG},
+              ${COMMISSION_SATANG * 3}, ${NO_SUCCESS_FEE_SATANG * 3}, ${planVersion}, DATE '2026-08-01', true,
+              '${MANAGER_ID}')
+      RETURNING id
+    `)
+    await db().$executeRawUnsafe(
+      `UPDATE teams SET compensation_plan_id = '${newPlanRows[0]?.id ?? ''}' WHERE id = '${TEAM_PER_KM}'`,
+    )
+
+    try {
+      const summary = await expenses.getIncomeSummary(agentA, {})
+      // ไม่มี snapshot = ยังไม่มีค่าตอบแทนบันทึกไว้จริง ⇒ 0 · ห้ามกลายเป็นยอดของแผนใหม่เด็ดขาด
+      expect(summary.commissionSatang).toBe(0)
+      expect(summary.items.map((item) => item.amountSatang)).toEqual([0])
+    } finally {
+      // คืนตัวชี้แผนของทีม — เทสต์อื่นในไฟล์นี้ใช้แผน PER_KM ตัวเดิม (แผนลบไม่ได้ ⇒ ต้องคืนเอง)
+      await db().$executeRawUnsafe(
+        `UPDATE compensation_plans SET is_current = false WHERE id = '${newPlanRows[0]?.id ?? ''}'`,
+      )
+      await db().$executeRawUnsafe(
+        `UPDATE teams SET compensation_plan_id = '${PLAN_PER_KM}' WHERE id = '${TEAM_PER_KM}'`,
+      )
+    }
   })
 })

@@ -1,7 +1,21 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+
+/** สวิตช์จำลอง "DB สะดุดตอนเขียน audit" — ใช้เฉพาะเทสต์ด่าน 6 ที่เหลือเวลานอกนั้นเขียน audit จริง */
+const auditControl = vi.hoisted(() => ({ shouldThrow: false }))
+
+vi.mock('@/lib/audit/audit', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/audit/audit')>()
+  return {
+    ...actual,
+    emitAudit: async (input: Parameters<typeof actual.emitAudit>[0]) => {
+      if (auditControl.shouldThrow) throw new Error('DB สะดุดตอนเขียน audit')
+      return actual.emitAudit(input)
+    },
+  }
+})
 
 /**
  * เทสต์ระดับ DB ของตัวรันงานเบื้องหลัง (Phase 5.3 — `91` §6.2/§11/§14/§16):
@@ -274,6 +288,74 @@ suite('การหยิบงานและรอบ retry (`91` §6.2/§10)'
       expect(afterSecond.retryCount).toBe(2)
       expect(afterSecond.completedAt).not.toBeNull()
     } finally {
+      handlers['wht_summary'] = original
+    }
+  })
+
+  it('Final Test ด่าน 6 — ถูกตัวกวาดดันกลับคิวระหว่าง handler ทำงาน ⇒ ตัวเดิมไม่เขียนทับเป็น "สำเร็จ"', async () => {
+    const registry = await import('@/lib/jobs/registry')
+    const handlers = registry.JOB_HANDLERS as Record<string, unknown>
+    const original = handlers['wht_summary']
+    // จำลอง `reclaimStaleJobs()` คืนงานเข้าคิวแล้วตัวรันอื่นหยิบไปทำ ระหว่างที่ตัวเดิมยังทำ handler ค้างอยู่
+    handlers['wht_summary'] = async ({ job: running }: { job: { id: string } }) => {
+      await db().job.update({ where: { id: running.id }, data: { status: 'pending', retryCount: 1 } })
+      return { refreshed: 0 }
+    }
+
+    try {
+      const { job } = await seedJob({ jobType: 'wht_summary', idempotencyKey: 'test53:lost-claim' })
+      expect(await engine.runJob(job)).toBe('skipped')
+
+      const row = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+      // เจ้าของ claim ตัวจริงคือคิวใหม่ ⇒ ห้ามถูกทับเป็น completed (ไม่งั้นงานของตัวใหม่หายไปเงียบ ๆ)
+      expect(row.status).toBe('pending')
+      expect(row.completedAt).toBeNull()
+    } finally {
+      handlers['wht_summary'] = original
+    }
+  })
+
+  it('Final Test ด่าน 6 — handler ล้มหลังงานถูกปิดโดยตัวรันอื่น ⇒ ไม่ดันงานที่ `completed` กลับเข้าคิว', async () => {
+    const registry = await import('@/lib/jobs/registry')
+    const handlers = registry.JOB_HANDLERS as Record<string, unknown>
+    const original = handlers['wht_summary']
+    handlers['wht_summary'] = async ({ job: running }: { job: { id: string } }) => {
+      await db().job.update({
+        where: { id: running.id },
+        data: { status: 'completed', completedAt: new Date('2026-08-15T10:00:00Z') },
+      })
+      throw new Error('ล้มหลังจากงานถูกปิดโดยตัวรันอื่น')
+    }
+
+    try {
+      const { job } = await seedJob({ jobType: 'wht_summary', idempotencyKey: 'test53:already-done' })
+      expect(await engine.runJob(job)).toBe('skipped')
+
+      const row = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+      expect(row.status).toBe('completed')
+      expect(row.errorMessage).toBeNull()
+    } finally {
+      handlers['wht_summary'] = original
+    }
+  })
+
+  it('Final Test ด่าน 6 — audit ล้มหลังปิดงานสำเร็จ ⇒ งานยังคง `completed` ไม่ถูกดันกลับไปทำซ้ำ', async () => {
+    const registry = await import('@/lib/jobs/registry')
+    const handlers = registry.JOB_HANDLERS as Record<string, unknown>
+    const original = handlers['wht_summary']
+    handlers['wht_summary'] = async () => ({ refreshed: 0 })
+
+    try {
+      const { job } = await seedJob({ jobType: 'wht_summary', idempotencyKey: 'test53:audit-down' })
+      auditControl.shouldThrow = true
+      // การเขียน audit ล้มต้องไม่ทำให้ผลของ handler ที่ออกไปแล้วถูกตีเป็น "ล้มเหลว" แล้วรันซ้ำ (`91` §10)
+      await expect(engine.runJob(job)).rejects.toThrow('DB สะดุดตอนเขียน audit')
+
+      const row = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+      expect(row.status).toBe('completed')
+      expect(row.completedAt).not.toBeNull()
+    } finally {
+      auditControl.shouldThrow = false
       handlers['wht_summary'] = original
     }
   })

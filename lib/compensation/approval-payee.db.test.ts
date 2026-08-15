@@ -467,6 +467,31 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     )
   })
 
+  it('Final Test ด่าน 6 — อนุมัติกับตีกลับพร้อมกัน ⇒ สำเร็จคนเดียว อีกคน `EXPENSE_INVALID_STATUS`', async () => {
+    const expenseId = await seedPendingExpense(await seedPayee(AGENT_ID))
+
+    // สถานะถูกอ่าน**นอก** transaction ⇒ ถ้าไม่มียาม optimistic ตอนเขียน คนที่กดทีหลังจะทับผลของคนแรก
+    // (ตีกลับถูกพลิกกลับเป็นอนุมัติ · รอยประทับผู้อนุมัติหาย) — `16` §9 + Rule 04
+    const results = await Promise.allSettled([
+      approvals.approveCompensationExpense({ actor: manager, meta }, expenseId, {}),
+      approvals.rejectCompensationExpense({ actor: manager, meta }, expenseId, { reason: 'เอกสารไม่ครบ' }),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const loser = results.find((result) => result.status === 'rejected')
+    expect(loser).toBeDefined()
+    expect(codeOf((loser as PromiseRejectedResult).reason)).toBe('EXPENSE_INVALID_STATUS')
+
+    // ผลลัพธ์ใน DB ต้องเป็นของผู้ชนะคนเดียว ไม่มีประวัติซ้อน 2 แถวจากคำสั่งที่แข่งกัน
+    const row = await db().expense.findUniqueOrThrow({
+      where: { id: expenseId },
+      select: { status: true, approvalStepCurrent: true, approvalHistory: true },
+    })
+    expect(row.approvalHistory as unknown[]).toHaveLength(1)
+    if (row.status === 'needs_revision') expect(row.approvalStepCurrent).toBe(1)
+    else expect([row.status, row.approvalStepCurrent]).toEqual(['pending_finance_approval', 2])
+  })
+
   it('§10 SoD เปิด ⇒ คนเดิมอนุมัติ 2 ขั้นในรายการเดียวกันไม่ได้', async () => {
     await db().$executeRawUnsafe(`
       INSERT INTO approval_matrices

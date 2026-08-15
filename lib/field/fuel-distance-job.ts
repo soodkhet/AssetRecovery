@@ -20,8 +20,12 @@ import { prisma } from '@/lib/prisma'
  *
  * กติกา (`91` §17 — ทุก job ต้อง idempotent):
  * - claim งานด้วย conditional update (`pending` → `running`) ก่อนทำจริง — แพ้การแข่ง = ข้ามไปเงียบ ๆ
+ * - **เขียนสถานะปิดงานต้องมีเงื่อนไข `running` เหมือนตอน claim** — Maps ค้างเกิน `reclaimStaleJobs()`
+ *   จะดันงานกลับเป็น `pending` แล้ว instance อื่นหยิบไปทำ ⇒ ถ้าเขียนด้วย `where: { id }` เฉย ๆ
+ *   instance เก่าที่ตื่นมาทีหลังจะทับสถานะของเจ้าของงานตัวจริง
  * - ก่อนสร้าง ตรวจซ้ำว่ารอบติดตามนั้นยังไม่มีรายการ fuel ที่มีผลอยู่ (partial unique ระดับ DB
- *   `uniq_active_case_expense_per_assignment` เป็นด่านสุดท้าย)
+ *   `uniq_active_case_expense_per_assignment` เป็นด่านสุดท้าย) — การตรวจอยู่นอกทรานแซกชันโดย
+ *   ธรรมชาติ ⇒ ชนกันได้ P2002 ซึ่งแปลว่า "อีก instance สร้างให้แล้ว" = **สำเร็จ ไม่ใช่ล้ม**
  * - ยังคำนวณไม่ได้ = ปล่อยงานกลับเป็น `pending` + นับ retry (ไม่ทิ้งงาน ไม่สร้างยอด 0)
  * - ยอดที่คำนวณได้ = 0 ⇒ **ไม่สร้าง record** แล้วปิดงานนั้นเป็น `completed` (D10)
  */
@@ -46,6 +50,14 @@ export interface FuelDistanceJobResult {
 interface JobPayload {
   caseId?: unknown
   assignmentId?: unknown
+}
+
+/**
+ * ปิด/คืนงานที่ **ตัวเองถือ claim อยู่เท่านั้น** — เงื่อนไข `running` คู่กับตอน claim
+ * (ถ้างานถูก `reclaimStaleJobs()` ดันกลับ `pending` แล้ว instance อื่นหยิบไป จะเขียนไม่ติดโดยตั้งใจ)
+ */
+async function releaseJob(jobId: string, data: Prisma.JobUpdateManyMutationInput): Promise<void> {
+  await prisma.job.updateMany({ where: { id: jobId, status: 'running' }, data })
 }
 
 export async function runFuelDistanceRetryJob(
@@ -77,9 +89,10 @@ export async function runFuelDistanceRetryJob(
     const payload = job.payload as JobPayload
     const assignmentId = typeof payload.assignmentId === 'string' ? payload.assignmentId : null
     if (assignmentId === null || job.organizationId === null) {
-      await prisma.job.update({
-        where: { id: job.id },
-        data: { status: 'failed', errorMessage: 'payload ไม่มี assignmentId/organizationId', completedAt: now },
+      await releaseJob(job.id, {
+        status: 'failed',
+        errorMessage: 'payload ไม่มี assignmentId/organizationId',
+        completedAt: now,
       })
       continue
     }
@@ -88,23 +101,25 @@ export async function runFuelDistanceRetryJob(
       const outcome = await createFuelExpense({ jobId, assignmentId, organizationId: job.organizationId, now })
       if (outcome === 'created') result.created += 1
       if (outcome === 'zero' || outcome === 'skipped') result.skippedZero += 1
-      await prisma.job.update({
-        where: { id: job.id },
-        data: { status: 'completed', completedAt: now, result: { outcome } },
-      })
+      await releaseJob(job.id, { status: 'completed', completedAt: now, result: { outcome } })
     } catch (error) {
+      // P2002 = `uniq_active_case_expense_per_assignment` ⇒ อีก instance สร้างรายการให้แล้ว
+      // ⇒ ปิดเป็นสำเร็จ ไม่ใช่ `failed` (ไม่งั้นหน้า Job Log โชว์ล้มทั้งที่ค่าน้ำมันออกถูกต้อง)
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        result.skippedZero += 1
+        await releaseJob(job.id, { status: 'completed', completedAt: now, result: { outcome: 'skipped' } })
+        continue
+      }
+
       const retryable = error instanceof DistanceUnavailableError
       const exhausted = job.retryCount + 1 >= job.maxRetries
       result.deferred += retryable && !exhausted ? 1 : 0
-      await prisma.job.update({
-        where: { id: job.id },
-        data: {
-          // ยังคำนวณไม่ได้ = กลับเข้าคิว (ปลายทางอาจกลับมาใน 10 นาที) — หมดโควตา retry จึงยอมแพ้
-          status: retryable && !exhausted ? 'pending' : 'failed',
-          retryCount: { increment: 1 },
-          errorMessage: error instanceof Error ? error.message : 'คำนวณระยะทางไม่สำเร็จ',
-          ...(retryable && !exhausted ? {} : { completedAt: now }),
-        },
+      await releaseJob(job.id, {
+        // ยังคำนวณไม่ได้ = กลับเข้าคิว (ปลายทางอาจกลับมาใน 10 นาที) — หมดโควตา retry จึงยอมแพ้
+        status: retryable && !exhausted ? 'pending' : 'failed',
+        retryCount: { increment: 1 },
+        errorMessage: error instanceof Error ? error.message : 'คำนวณระยะทางไม่สำเร็จ',
+        ...(retryable && !exhausted ? {} : { completedAt: now }),
       })
     }
   }

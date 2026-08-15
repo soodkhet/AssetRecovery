@@ -32,6 +32,7 @@ import {
 } from '@/lib/field/field-status'
 import { assertReorderCoversDay, nextScheduleOrder, recomputeScheduleOrder } from '@/lib/field/schedule'
 import { ensureAssetForClosedCase, type WarehouseTxClient } from '@/lib/warehouse/asset-hook'
+import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
 import type {
   CheckinInput,
   CloseCaseInput,
@@ -1164,6 +1165,18 @@ export async function closeFieldCase(
       tx as FieldTxClient,
     )
 
+    // `19` §6.1 หมายเหตุ DEC-006/D6 — เคสที่ **ไม่มี expense เลย** (ทีมไม่ผูกแผนค่าตอบแทน หรือ
+    // ยอดคำนวณได้ 0) เงื่อนไข `expense.approved` ตกไป ⇒ `closed_fail` ที่ model คิดเงินกรณี fail
+    // ต้องเกิด Revenue **ทันทีที่เคสเข้าสถานะ terminal** · ก่อน Phase 8.3 ผู้เรียก
+    // `tryCreateRevenue()` มีแค่ lot confirm กับ expense approve ⇒ เคสสายนี้ไม่มี trigger ไหนยิงเลย
+    // (`closed_success` ยังติด Warehouse gate เสมอ ไม่มีข้อยกเว้น — เกตตัดสินให้เองใน service
+    //  และเคสที่มี expense จะติด `expense_not_approved` ตามปกติ · idempotent ต่อ (case, round))
+    await tryCreateRevenue(tx as WarehouseTxClient, {
+      organizationId: user.organizationId,
+      caseIds: [caseId],
+      actorId: context.actor.id,
+    })
+
     const assignment = await tx.caseAssignment.findUniqueOrThrow({
       where: { id: current.id },
       select: assignmentSelect,
@@ -1227,6 +1240,33 @@ export async function respondFieldReassignment(
 // ── POST /api/cases/:id/reject-evidence (`41` §8 reject_evidence · §10.1) ───
 
 /**
+ * `19` §6.1 — "ผ่านขั้นนี้แล้วถือว่าเคสจบจริง **ไม่มีโอกาสถูกตีกลับอีก**"
+ *
+ * `41` §10.1 ให้ `reject_evidence` ทำได้จาก `closed_success`/`closed_fail` แต่ state machine
+ * อย่างเดียวไม่รู้ว่าเคสเดินเลยจุดที่ย้อนไม่ได้ไปแล้วหรือยัง — ถ้าปล่อยผ่าน:
+ * `resubmit_close` จะสร้างรายการเบิกชุดใหม่ที่สถานะ `pending_warehouse_confirm` ซึ่ง
+ * **ปลดล็อกไม่ได้ตลอดกาล** (ล็อตเดิม `confirmed` = terminal · asset เป็น `handed_over`
+ * เข้าล็อตใหม่ไม่ได้) ⇒ พนักงานไม่ได้เงินและไม่มีปุ่มไหนแก้ได้
+ *
+ * เคสที่เลยจุดนี้ต้องแก้ผ่าน **Adjustment** (ไฟล์ 20) เท่านั้น
+ */
+async function assertEvidenceStillRejectable(
+  organizationId: string,
+  caseId: string,
+  assignmentId: string,
+): Promise<void> {
+  const [handedOver, revenue, inPayout] = await Promise.all([
+    prisma.asset.count({ where: { organizationId, caseId, assetStatus: 'handed_over', deletedAt: null } }),
+    prisma.revenue.count({ where: { organizationId, caseId, deletedAt: null } }),
+    prisma.expense.count({ where: { organizationId, assignmentId, payoutBatchItemId: { not: null }, deletedAt: null } }),
+  ])
+  if (handedOver === 0 && revenue === 0 && inPayout === 0) return
+  throw new FieldError('EVIDENCE_REJECT_AFTER_FINAL', {
+    detail: `case=${caseId} handedOver=${handedOver} revenue=${revenue} inPayout=${inPayout}`,
+  })
+}
+
+/**
  * ตีกลับ **หลักฐานปิดงาน** — สายที่ 2 ของ `41` §10.1 ซึ่ง**ห้ามสลับ**กับ `reject_expense`
  *
  * - ผู้สั่งได้คือ **เจ้าหน้าที่อนุมัติเคส (system role)** เท่านั้น — บังคับที่ route ด้วย
@@ -1251,6 +1291,7 @@ export async function rejectFieldEvidence(
   })
   if (assignment === null) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
   assertFieldAction(assignment.status, 'reject_evidence')
+  await assertEvidenceStillRejectable(user.organizationId, caseId, assignment.id)
 
   const reviewedAt = new Date()
   const updated = await prisma.$transaction(async (tx) => {
@@ -1489,6 +1530,18 @@ export async function resubmitCloseCase(
       },
       tx as FieldTxClient,
     )
+
+    // `19` §6.1 หมายเหตุ DEC-006/D6 — เคสที่ **ไม่มี expense เลย** (ทีมไม่ผูกแผนค่าตอบแทน หรือ
+    // ยอดคำนวณได้ 0) เงื่อนไข `expense.approved` ตกไป ⇒ `closed_fail` ที่ model คิดเงินกรณี fail
+    // ต้องเกิด Revenue **ทันทีที่เคสเข้าสถานะ terminal** · ก่อน Phase 8.3 ผู้เรียก
+    // `tryCreateRevenue()` มีแค่ lot confirm กับ expense approve ⇒ เคสสายนี้ไม่มี trigger ไหนยิงเลย
+    // (`closed_success` ยังติด Warehouse gate เสมอ ไม่มีข้อยกเว้น — เกตตัดสินให้เองใน service
+    //  และเคสที่มี expense จะติด `expense_not_approved` ตามปกติ · idempotent ต่อ (case, round))
+    await tryCreateRevenue(tx as WarehouseTxClient, {
+      organizationId: user.organizationId,
+      caseIds: [caseId],
+      actorId: context.actor.id,
+    })
 
     const assignment = await tx.caseAssignment.findUniqueOrThrow({
       where: { id: current.id },

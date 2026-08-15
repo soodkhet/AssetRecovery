@@ -172,6 +172,17 @@ async function expectCode(run: () => Promise<unknown>, code: string): Promise<vo
   await expect(run()).rejects.toSatisfy((error: unknown) => codeOf(error) === code, `ต้องได้ error code ${code}`)
 }
 
+/**
+ * วันตัดรอบ = "วันนี้" **ตามเวลาไทย** — ต้องใช้ฐานเดียวกับที่ระบบเขียน `expense_date`
+ * (`bangkokBusinessDate()` ใน `lib/field/expense-queries` — Rule 01)
+ * ถ้าคิดจากวันที่แบบ UTC เทสต์จะตกเฉพาะช่วง 00:00–07:00 น. เวลาไทย ที่วันไทยเดินไปก่อนวัน UTC
+ * ⇒ รายการที่เพิ่งเกิด (วันไทยพรุ่งนี้) หลุดออกนอกวันตัดรอบจนได้ `NO_ITEMS_TO_PAY`
+ */
+function bangkokTodayCutoff(): Date {
+  const bangkokNow = new Date(Date.now() + 7 * 60 * 60 * 1000)
+  return new Date(`${bangkokNow.toISOString().slice(0, 10)}T00:00:00.000Z`)
+}
+
 /** `DD/MM/YYYY` พ.ศ. สำหรับไฟล์ statement (Rule 01 — วันบนเอกสารเป็น พ.ศ. เสมอ) */
 function beDate(date: Date): string {
   const bangkok = new Date(date.getTime() + 7 * 60 * 60 * 1000)
@@ -243,6 +254,8 @@ async function approveAllSteps(expenseIds: readonly string[]): Promise<number> {
 async function cleanup(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`ALTER TABLE handover_lots DISABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
+  // ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13 — เลขที่ห้ามขาดช่วง) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
   try {
     // ⚠️ ต้องล้างรายการเดินบัญชี **ก่อน** รอบจ่ายเงิน — FK `matched_payout_id` เป็น ON DELETE SET NULL
     //    การลบรอบจ่ายทิ้งก่อนจึงทำให้แถวที่ `auto_matched` ชน CHECK `bank_tx_status_fk_shape`
@@ -274,6 +287,7 @@ async function cleanup(): Promise<void> {
     await tx.$executeRawUnsafe(`UPDATE payee_profiles SET is_verified = true WHERE id = '${PAYEE_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
   } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
     await tx.$executeRawUnsafe(`ALTER TABLE handover_lots ENABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
   }
   storage.clear()
@@ -447,7 +461,7 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     expect(await db().revenue.count({ where: { caseId } })).toBe(0)
 
     // ── ขั้น 3: รวมเข้ารอบจ่ายเงิน (`17`) ─────────────────────────────────
-    const cutoffDate = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`)
+    const cutoffDate = bangkokTodayCutoff()
     const { batch } = await payout.createPayoutBatch(ctx(finance), {
       side: 'inhouse',
       cutoffDate,
@@ -716,7 +730,7 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
 
     // ผู้รับเงินยังไม่ยืนยัน ⇒ **ทั้งรอบ**สร้างไม่ได้ (`17` §10)
     await db().$executeRawUnsafe(`UPDATE payee_profiles SET is_verified = false WHERE id = '${PAYEE_ID}'`)
-    const cutoffDate = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`)
+    const cutoffDate = bangkokTodayCutoff()
     await expectCode(
       () => payout.createPayoutBatch(ctx(finance), { side: 'inhouse', cutoffDate, name: null }),
       'UNVERIFIED_PAYEE_IN_PAYOUT',

@@ -1,3 +1,4 @@
+import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { enqueueJob } from '@/lib/jobs/engine'
@@ -26,6 +27,12 @@ import { runReport } from '@/lib/reports/run'
  * ### กันสั่งซ้ำ
  * คีย์กันซ้ำผูกกับ (องค์กร, ผู้สั่ง, รายงาน, ช่วง, พารามิเตอร์, รูปแบบไฟล์, **เวลาที่ข้อมูลถูกคำนวณ**)
  * ⇒ กดปุ่มรัว ๆ ได้งานเดิม แต่พอข้อมูลถูกคำนวณใหม่ (แคชหมดอายุ/กดรีเฟรช) จะได้งานใหม่จริง ๆ
+ *
+ * ### audit
+ * `90` §13 — "รายการ export ต้อง trace กลับผู้สั่งงานได้" ⇒ ลง audit **ทั้งสองทาง** ที่นี่ที่เดียว
+ * ทางงานเบื้องหลังมี audit ของ `jobs` อยู่แล้วก็จริง แต่นั่นเป็น audit ของ *วงจรงาน* ไม่ใช่ของ
+ * *การดึงข้อมูลออก* ⇒ ถ้าไม่ลงตรงนี้ คำถาม "ใครดึงรายงานการเงินตัวไหน ช่วงไหน ออกไปบ้าง"
+ * จะตอบได้เฉพาะรายงานที่เกินเพดานทำสด (ไฟล์ ≤ 5,000 แถวหลุดหมด)
  */
 
 export type ReportExportOutcome =
@@ -68,6 +75,36 @@ function idempotencyKeyOf(input: {
   ].join(':')
 }
 
+/** ร่องรอยการดึงข้อมูลออก (`90` §13) — `export_records` อยู่ใน `NON_SENSITIVE_TARGETS` ⇒ ไม่บังคับ reason */
+async function auditExportRequest(
+  ctx: { actor: SessionUser; meta: RequestMeta },
+  report: ReportDefinition,
+  input: { format: ReportExportFormat; payload: ReportPayload; mode: 'sync' | 'job'; rowCount: number },
+): Promise<void> {
+  await emitAudit({
+    organizationId: ctx.actor.organizationId,
+    actorId: ctx.actor.id,
+    actorRole: ctx.actor.roleName,
+    action: 'export',
+    targetType: 'export_records',
+    // ทางทำสดไม่มีแถวใน `export_records` (ไฟล์ถูกส่งกลับตรง ๆ ไม่ผ่าน bucket)
+    targetId: null,
+    after: {
+      report_id: report.id,
+      report_code: report.code,
+      format: input.format,
+      range_label: input.payload.range.label,
+      range_from: input.payload.range.from,
+      range_to: input.payload.range.to,
+      row_count: input.rowCount,
+      mode: input.mode,
+    },
+    reason: null,
+    ipAddress: ctx.meta.ipAddress,
+    userAgent: ctx.meta.userAgent,
+  })
+}
+
 export async function exportReport(
   ctx: { actor: SessionUser; meta: RequestMeta },
   report: ReportDefinition,
@@ -83,6 +120,12 @@ export async function exportReport(
       format: request.format,
       generatedAt: now,
       generatedByName: ctx.actor.fullName,
+    })
+    await auditExportRequest(ctx, report, {
+      format: request.format,
+      payload,
+      mode: 'sync',
+      rowCount: payload.rows.length,
     })
     return { mode: 'sync', payload, file }
   }
@@ -114,6 +157,13 @@ export async function exportReport(
     reason:
       `สั่งงานเบื้องหลัง "${jobTypeLabel('report_export')}" — ${report.code} ${report.title} ` +
       `ช่วง ${payload.range.label} (${payload.rows.length} แถว เกินเพดานทำสด)`,
+  })
+
+  await auditExportRequest(ctx, report, {
+    format: request.format,
+    payload,
+    mode: 'job',
+    rowCount: payload.rows.length,
   })
 
   return { mode: 'job', payload, jobId: job.id, duplicate, rowCount: payload.rows.length }

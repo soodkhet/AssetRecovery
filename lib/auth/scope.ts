@@ -1,6 +1,7 @@
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
-import type { ScopeTarget, SessionScope } from '@/lib/auth/types'
+import { AuthError } from '@/lib/auth/errors'
+import type { ScopeTarget, SessionScope, SessionUser } from '@/lib/auth/types'
 
 /**
  * Scope resolver — แปลง role_group + role ของผู้ใช้เป็นขอบเขตข้อมูลที่มองเห็น (`05` §5 · `07` §6)
@@ -72,4 +73,42 @@ export function isWithinScope(scope: SessionScope, target?: ScopeTarget): boolea
     case 'self':
       return userId !== null && userId === scope.userId
   }
+}
+
+/**
+ * ยามของ **ทรัพยากรระดับองค์กร** — ผ่านเฉพาะ scope `global` (DEC-002 · Rule 03)
+ *
+ * ใช้กับตารางที่ยอด/เอกสาร "รวมทั้งองค์กร" อยู่ในแถวเดียว (รอบบัญชี, ชุดส่งบัญชี, ใบหัก ณ ที่จ่าย,
+ * รายการเดินบัญชีธนาคาร) — แถวพวกนี้ **ไม่มีคอลัมน์บริษัท/ทีมให้กรองรายแถว** ⇒ ปล่อยให้ scope
+ * `company`/`team`/`self` อ่านได้เท่ากับเปิดข้อมูลข้ามบริษัททั้งก้อน (`97` §11 ห้าม leak)
+ *
+ * ### ทำไมต้องมีทั้งที่ capability ยังไม่ถูกมอบให้ role กลุ่มนั้น
+ * `role_capabilities` แก้ได้จากหน้า Settings — วันที่ Superadmin ผูก `manage_wht` ให้ role ฝั่ง
+ * บริษัทไฟแนนซ์ ยามที่ route (`requirePermission`) จะปล่อยผ่านทันที ⇒ ต้องมีชั้นที่ **ข้อมูล** ด้วย
+ * (แนวเดียวกับ `assertAuditReadable()` ของ `90` — whitelist `global` ไม่ใช่ blacklist `company`)
+ *
+ * ⚠️ ใช้กับ resource ที่กรองรายแถวได้ (cases/assets/revenues/sales) **ไม่ได้** — พวกนั้นต้อง
+ * "แคบ filter" ด้วย `scopeWhere()` ของโมดูลตัวเอง ไม่ใช่ 403 ทั้งก้อน
+ *
+ * @throws {AuthError} `PERMISSION_DENIED` (403) — ไม่บอกว่ามีข้อมูลอยู่จริงไหม (`25` ห้าม leak)
+ */
+export function assertOrgWideReadable(user: SessionUser, resource: string): void {
+  if (user.scope.kind !== 'global') {
+    throw new AuthError('PERMISSION_DENIED', `${resource}: scope=${user.scope.kind} user=${user.id}`)
+  }
+}
+
+/**
+ * ผู้เรียกเป็นผู้ใช้ฝั่ง **บริษัทไฟแนนซ์** (external tenant) หรือไม่ — Superadmin ไม่นับ
+ *
+ * ใช้เป็นสวิตช์ของการ **ตัดฟิลด์ภายในออกจาก response** (field-level redaction) ในโมดูลที่
+ * บริษัทไฟแนนซ์เข้าถึงได้ผ่าน `view_own_company_data`: `97` §6.1 ห้ามให้ฝั่งบริษัทเห็น
+ * ชื่อ/เบอร์พนักงานภาคสนาม · ทีมที่มอบหมาย · IMEI · หลักฐานปิดงาน และ §7 ห้าม expose
+ * ราคาละเอียด/note ภายใน — `assetScopeWhere()`/`caseScopeWhere()` คุมแค่ว่าเห็น **แถวไหน**
+ * ไม่ได้คุมว่าแถวนั้นมี **คอลัมน์อะไรติดมา**
+ *
+ * (แนวเดียวกับ `isCompanySideViewer()` ของโมดูล revenue ที่กรอง billing batch `draft` ออก)
+ */
+export function isCompanySideViewer(user: SessionUser): boolean {
+  return !user.isSuperadmin && user.scope.kind === 'company'
 }

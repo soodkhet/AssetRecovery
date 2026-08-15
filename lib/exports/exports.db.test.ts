@@ -222,19 +222,27 @@ async function seedRevenue(): Promise<void> {
 async function resetOrgData(): Promise<void> {
   storage.clear()
   const tx = db()
-  for (const statement of [
-    `DELETE FROM export_records WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
-  ]) {
-    await tx.$executeRawUnsafe(statement)
+  // ชุดส่งสำนักงานบัญชี + ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE export_records DISABLE TRIGGER trg_export_records_no_delete`)
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
+  try {
+    for (const statement of [
+      `DELETE FROM export_records WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
+    ]) {
+      await tx.$executeRawUnsafe(statement)
+    }
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
+    await tx.$executeRawUnsafe(`ALTER TABLE export_records ENABLE TRIGGER trg_export_records_no_delete`)
   }
 }
 
@@ -424,6 +432,27 @@ suite('Phase 4.6 — ยามก่อน Export (`37` §10/§11 · `34` §11)'
     // ไม่มีไฟล์ไหนถูกอัปโหลดเลยเมื่อยามไม่ผ่าน (ไม่มีชุดครึ่ง ๆ กลาง ๆ ค้างใน bucket)
     expect(storage.size).toBe(0)
   })
+
+  it('ไฟล์กำพร้าจากครั้งที่ล้มกลางทาง ต้องไม่ล็อกรอบนั้นถาวร (`37` §6.2 · Rule 09)', async () => {
+    await resetOrgData()
+    await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 500000, wht: 15000 }])
+    const periodId = await junePeriodId()
+
+    // จำลองครั้งที่ "อัปโหลดสำเร็จแล้ว tx/audit ล้ม" (หรือสองคนกด Export พร้อมกันแล้วชน
+    // `uniq_export_period_version`) — เหลือไฟล์ของ v1 ค้างในถังโดยไม่มีแถวใน `export_records`
+    // ⇒ ครั้งถัดไปคิด `version` ได้ 1 เท่าเดิม · ถ้า path ไม่มีชั้น "ครั้งที่พยายาม" คั่นไว้
+    // `upsert: false` จะปฏิเสธทุกครั้งไม่มีวันหาย (ทั้งระบบไม่มีโค้ดลบ object ใน storage)
+    for (const fileName of ['01_Revenue.csv', '00_Cover_Sheet.pdf']) {
+      storage.set(`${ORG_ID}/2569-06/v1/${fileName}`, new Uint8Array([1, 2, 3]))
+    }
+
+    const record = await exportsApi.createExportPack(ctx, { periodId })
+    expect(record.status).toBe('generated')
+    expect(record.version).toBe(1)
+
+    // ไฟล์กำพร้ายังอยู่ครบ (ห้ามเขียนทับของเดิม) และชุดใหม่ไปอยู่คนละ path
+    expect(storage.get(`${ORG_ID}/2569-06/v1/01_Revenue.csv`)).toEqual(new Uint8Array([1, 2, 3]))
+  })
 })
 
 suite('Phase 4.6 — สถานะการส่งมอบ (`37` §9 · §16)', () => {
@@ -469,5 +498,34 @@ suite('Phase 4.6 — สถานะการส่งมอบ (`37` §9 · §1
     expect(after?.version).toBe('v1.0')
     expect(after?.file_names).toHaveLength(9)
     expect(after?.file_hash).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+suite('Final Test ด่าน 6 — สองคนกดสร้างชุดส่งบัญชีของงวดเดียวกันพร้อมกัน (`37` §6.2)', () => {
+  it('ชนกันที่ `uniq_export_period_version` ⇒ คนที่แพ้ได้ `EXPORT_VERSION_CONFLICT` ไม่ใช่ error ดิบ 500', async () => {
+    await resetOrgData()
+    await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 500000, wht: 15000 }])
+    const periodId = await junePeriodId()
+
+    // เลข version ถูกคิด**นอก** transaction (ต้องใช้ประกอบหน้าปก/ชื่อไฟล์ก่อนอัปโหลด)
+    // ⇒ สองคำขอพร้อมกันได้เลขเดียวกันแล้วชน unique — ข้อมูลต้องไม่เสียและต้องตอบด้วย code จาก `24`
+    const results = await Promise.allSettled([
+      exportsApi.createExportPack(ctx, { periodId }),
+      exportsApi.createExportPack(ctx, { periodId }),
+    ])
+
+    const winners = results.filter((result) => result.status === 'fulfilled')
+    const losers = results.filter((result) => result.status === 'rejected')
+    expect(winners).toHaveLength(1)
+    expect(losers).toHaveLength(1)
+    expect(codeOf((losers[0] as PromiseRejectedResult).reason)).toBe('EXPORT_VERSION_CONFLICT')
+
+    // เหลือแถวเดียวจริง ๆ (ไม่มีเวอร์ชันซ้ำ) และกดใหม่ได้เวอร์ชันถัดไปตามปกติ
+    const rows = await db().exportRecord.findMany({ where: { periodId }, select: { version: true } })
+    expect(rows.map((row) => row.version)).toEqual([1])
+
+    const retried = await exportsApi.createExportPack(ctx, { periodId })
+    expect(retried.version).toBe(2)
+    expect(retried.versionLabel).toBe('v1.1')
   })
 })

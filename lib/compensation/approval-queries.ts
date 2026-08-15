@@ -2,6 +2,7 @@ import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
+import { fmtSatang } from '@/lib/format/money'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   appendApprovalHistory,
@@ -195,8 +196,11 @@ function stepRoleOf(flow: ResolvedFlow, step: number): string {
 
 // ── สรุปฐานคิดเป็นข้อความ (`16` §8) ─────────────────────────────────────────
 
-const satangToBaht = (value: number): string =>
-  (value / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+/**
+ * แสดงเงินในข้อความ "ฐานคิด" — ใช้ util กลางตัวเดียวกับทั้งระบบ (Rule 01)
+ * ห้ามหาร 100 เองที่นี่: `fmtSatang()` หารแบบ integer-only + `assertSatang()` ดักค่าที่ไม่ใช่ satang ให้ด้วย
+ */
+const satangToBaht = (value: number): string => fmtSatang(value)
 
 /**
  * ข้อความสรุป "สูตร/ฐานคิด" ที่ตารางแสดง (`16` §8 — เช่น "128.50 กม. × 3.50 บาท/กม.")
@@ -432,6 +436,19 @@ export async function approveCompensationExpense(
   }
 
   const outcome = await prisma.$transaction(async (tx) => {
+    // ยาม optimistic (Final Test ด่าน 6) — สถานะถูกอ่าน **นอก** transaction จึงต้องยืนยันอีกครั้ง
+    // ตอนเขียน ไม่งั้นคนที่กดทีหลังทับผลของคนแรก (เช่น "ปฏิเสธ" ถูกพลิกกลับเป็น "อนุมัติ"
+    // แล้ว `tryCreateRevenue()` ยิงต่อ · หรือประทับตราผู้อนุมัติของคนแรกหายไป)
+    const claimed = await tx.expense.updateMany({
+      where: { id: expenseId, status: current.status, approvalStepCurrent: current.approvalStepCurrent },
+      data: { updatedBy: user.id },
+    })
+    if (claimed.count === 0) {
+      throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
+        detail: `expense=${expenseId} ถูกเปลี่ยนสถานะโดยผู้ใช้อื่นระหว่างทาง`,
+      })
+    }
+
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {
@@ -558,6 +575,19 @@ export async function rejectCompensationExpense(
   })
 
   const updated = await prisma.$transaction(async (tx) => {
+    // ยาม optimistic (Final Test ด่าน 6) — สถานะถูกอ่าน **นอก** transaction จึงต้องยืนยันอีกครั้ง
+    // ตอนเขียน ไม่งั้นคนที่กดทีหลังทับผลของคนแรก (เช่น "ปฏิเสธ" ถูกพลิกกลับเป็น "อนุมัติ"
+    // แล้ว `tryCreateRevenue()` ยิงต่อ · หรือประทับตราผู้อนุมัติของคนแรกหายไป)
+    const claimed = await tx.expense.updateMany({
+      where: { id: expenseId, status: current.status, approvalStepCurrent: current.approvalStepCurrent },
+      data: { updatedBy: user.id },
+    })
+    if (claimed.count === 0) {
+      throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
+        detail: `expense=${expenseId} ถูกเปลี่ยนสถานะโดยผู้ใช้อื่นระหว่างทาง`,
+      })
+    }
+
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {
