@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · เหลือแต่งานที่บล็อกด้วยคำตอบ PO (6.6 / Phase 7) + หนี้ที่ต้องมีมติ 4 ข้อ
+**อัปเดตล่าสุด:** 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — ⏸️ ไม่มีงานที่เดินต่อได้เอง (รอคำตอบ PO)
+## 🎯 งานถัดไป — Phase 6.6: แดชบอร์ดหลัก (Top Nav เมนูแรก)
 
-งานตามแผนทั้งหมดปิดครบแล้ว **ยกเว้น** 3 รายการที่ถูกบล็อกด้วยการตัดสินใจของ PO:
+> **มติ PO 2026-08-16** (ปลดล็อกทั้งสองงานที่ค้าง):
+> 1. **6.6 อนุมัติ spec แล้ว** — สร้างตาม `reference/dashboard.html` (DRAFT) โดย**ปรับให้เข้ากับข้อมูล/ฟีเจอร์ที่มีจริงในระบบ** ส่วนที่ mockup อ้างข้อมูลที่ไม่มีจริง ให้ใช้ของจริงแทนหรือตัดออก แล้วบันทึกจุดเบี่ยงลง PROGRESS_ARCHIVE (ไม่ต้องกลับมาถาม)
+> 2. **Phase 7 ปลดล็อก** — Auth method = **Supabase Auth ชุดเดียวกับ internal** (email+password, ใช้ invite/reset password flow เดิม) · แยกขอบเขตข้อมูลด้วย scope middleware `company_id` ตาม PLAN §7.1 · ไม่ทำ magic link ใน release แรก
 
-| งาน | บล็อกด้วย |
-|---|---|
-| 6.6 แดชบอร์ดหลัก (เมนูแรก Top Nav) | spec `reference/dashboard.html` ยังเป็น **DRAFT** — ต้องให้ PO อนุมัติหน้าตา/ตัวเลขบนแดชบอร์ดก่อน (PLAN §6.6) |
-| 7.1–7.3 Client Portal (ไฟล์ 97) | **Auth method ของ Portal** (`97` §22 #2) — ยังไม่ตัดสินว่าใช้ Supabase Auth ชุดเดียวกับพนักงาน หรือแยก tenant/รหัสผ่านของบริษัทไฟแนนซ์ |
-
-ระหว่างรอ: ขั้นถัดไปที่ทำได้คือ **push ขึ้น staging แล้วทดสอบบนระบบนิเวศจริง** (Rule 06 ขั้น 2–3 — เป็นงานของคน ไม่ใช่ session อัตโนมัติ) · ก่อน deploy ต้องรัน `pnpm db:deploy` (migration ใหม่จาก 8.3 สองตัว) และดู `docs/03_PRODUCTION_CHECKLIST.md`
+- ทำตาม `docs/01_PLAN.md` §6.6 — ใช้ shared components/design tokens เดิม (1.5) · widget ตาม role (menu registry `06` §7.2) · ข้อมูลจาก endpoint KPI/รายงานที่มีแล้ว (Phase 6) ห้ามสร้างสูตรใหม่
+- ลำดับที่เหลือ: 6.6 → 7.1 → 7.2 → 7.3 → **Final Test รอบสุดท้าย** (ด่าน orchestrator รันเองเมื่องานหมด — ใช้โมเดล Fable 5 ตาม config)
+- ⚠️ ก่อนเริ่ม: `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` (migration ใหม่จาก 8.2/8.3 รวม 5 ตัว)
 
 ### หนี้ที่ Final Test ตรวจเจอแต่ **ไม่ได้แก้** (ต้องมีมติก่อน — ห้ามแก้เงียบ ๆ)
 
@@ -113,13 +112,13 @@
 | 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `f4b824f` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 6.4 | รายงานหมวด A (A1–A4) | ✅ | 2026-08-15 · `ec43687` · A1–A4 ครบ (WHT รายเดือน/ใบกำกับภาษี 2 มิติ/ประวัติส่งออกทุกเวอร์ชัน/ข้อยกเว้นรายงวดที่แยก `authorized` จาก `resolved`) + ตัวแปลงช่วงวันที่ → ช่วงงวดบัญชี · เทสต์ pure 29 + DB 12 → archive |
 | 6.5 | Executive Dashboard (E1–E3) | ✅ | 2026-08-15 · `9e0d570` · E1–E3 ครบ (KPI 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard บริษัท/ทีม) + `<ReportLineChart>` shared ⇒ **รายงานครบ 17/17 ตัวของไฟล์ 96** · เทสต์ pure 25 + DB 11 → archive |
-| 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⏸️ | PLAN §6.6 · รอ PO อนุมัติ spec (dashboard.html เป็น DRAFT) |
+| 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⬜ | PLAN §6.6 · มติ PO 2026-08-16: ตาม mockup + ปรับเข้าข้อมูลจริง |
 
-## Phase 7 — Client Portal (ไฟล์ 97) 🔒 (ปลดล็อกเมื่อ PO ตอบ Auth method — `97` §22 #2)
+## Phase 7 — Client Portal (ไฟล์ 97) (ปลดล็อกแล้ว — มติ PO 2026-08-16: Supabase Auth เดียวกับ internal)
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 7.1 | Portal Auth + Scope Middleware (company_id) | ⬜ | PLAN §7.1 · บล็อกด้วย Auth method |
+| 7.1 | Portal Auth + Scope Middleware (company_id) | ⬜ | PLAN §7.1 · Auth = Supabase Auth เดียวกับ internal |
 | 7.2 | Portal API 11 endpoints + Status Mapping | ⬜ | PLAN §7.2 · GET เท่านั้น |
 | 7.3 | Portal FE (Desktop + Mobile) | ⬜ | PLAN §7.3 |
 

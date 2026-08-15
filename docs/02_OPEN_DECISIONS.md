@@ -284,3 +284,14 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 | 8 | D3 เพดานไฟล์สื่อ | Phase 2.2 | PO (ยืนยัน default) |
 
 ที่เหลือ (หมวด C default, D default, E ทั้งหมด) — ถ้าไม่ค้านภายในก่อนถึง task ที่ระบุ จะ implement ตาม default ที่เสนอ และแก้ spec ต้นทาง + changelog ให้สอดคล้องทุกครั้ง
+
+
+---
+
+## มติ PO เพิ่มเติม 2026-08-16 (ปลดล็อกงานท้ายโปรเจกต์)
+
+1. **Auth method ของ Client Portal** (Open Item #2 ของ `97` §22 — เคยบล็อก Phase 7): ใช้ **Supabase Auth ชุดเดียวกับ internal** (email+password, invite/reset password flow เดิมจาก Phase 1) · แยกขอบเขตข้อมูลด้วย scope middleware `company_id` ตาม PLAN §7.1 · ไม่ทำ magic link ใน release แรก
+2. **Spec แดชบอร์ดหลัก 6.6**: อนุมัติให้สร้างตาม `reference/dashboard.html` (DRAFT) โดยปรับให้เข้ากับข้อมูล/ฟีเจอร์ที่มีจริง — จุดเบี่ยงจาก mockup บันทึกลง PROGRESS_ARCHIVE ไม่ต้องถามซ้ำ
+3. **Final Test รอบสุดท้าย**: หลัง 6.6 + Phase 7 เสร็จ ให้ orchestrator รัน Final Test ครบ 6 ด่านอีกรอบอัตโนมัติ (autoFinalTest) — **ใช้โมเดล Fable 5** (`config.finalModel = claude-fable-5`)
+
+⚠️ หนี้ 4 ข้อจาก 8.2/8.3 ที่ต้องมีมติ (เอกสารล็อตทับได้ไม่มี hash · notification หายเมื่อ dispatch ล้ม · เบิกไม่มีอัตราภาษี 500 · ข้อ 4 ดู PROGRESS) — ยังค้าง ดูรายละเอียดใน PROGRESS.md ท้าย section งานถัดไป + PROGRESS_ARCHIVE

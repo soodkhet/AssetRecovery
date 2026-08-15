@@ -125,6 +125,9 @@ export const config = {
     review: process.env.RTB_MODEL_REVIEW || '',  // session รีวิว/เทสต์ — แนะนำใช้คนละตัวกับ code
   },
 
+  // --- โมเดลสำหรับ Final Test โดยเฉพาะ (มติ PO 2026-08-16: ใช้ Fable 5) — override: RTB_MODEL_FINAL ---
+  finalModel: process.env.RTB_MODEL_FINAL ?? 'claude-fable-5',
+
   // --- โมเดลตามชนิดงาน: task UI → โมเดลอื่นได้ ---
   // จับจาก id ของ task ใน PROGRESS (prefix match) — แก้รายการได้ที่ RTB_UI_TASKS (คั่นด้วย ,)
   // **โปรเจกต์นี้ตั้งค่าเริ่มต้นเป็นว่าง = ทุก task ใช้โมเดลเดียวกัน (Opus 5)** โดยตั้งใจ:

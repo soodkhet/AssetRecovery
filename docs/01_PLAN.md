@@ -353,14 +353,17 @@ migration/schema เป็นก้อนแรกเสมอ → สูตร/
 - **ขอบเขต**: E1 KPI ภาพรวม (6 KPI + Revenue trend 12 เดือน + Success trend + Top 5 บริษัท — Recharts, refresh ≤24 ชม. + แสดงเวลา refresh) · E2 Company Scorecard · E3 Team Scorecard — Executive/Superadmin เท่านั้น
 - **อ้างอิง**: `96` §6-E ผ่าน MAP · **LOC ~1,600 · งบรวม ~270k**
 
-### 6.6 — แดชบอร์ดหลัก (Top Nav เมนูแรก) — ⏸️ รอ PO
-- **สถานะ**: `reference/dashboard.html` เป็น DRAFT — **ยังไม่มี spec .md** ต้องรอ PO ตรวจ mockup + อนุมัติ spec ก่อน (ดู `93` §7.1 Mockup Audit) → เมื่อได้ spec แล้วค่อยประเมิน LOC/งบ แล้วเปลี่ยน ⏸️ เป็น ⬜
+### 6.6 — แดชบอร์ดหลัก (Top Nav เมนูแรก) — ✅ อนุมัติ spec แล้ว (มติ PO 2026-08-16)
+- **มติ**: สร้างตาม `reference/dashboard.html` (DRAFT) โดย**ปรับให้เข้ากับข้อมูล/ฟีเจอร์ที่มีจริงในระบบ** — ส่วนที่ mockup อ้างข้อมูล/ฟีเจอร์ที่ไม่มีจริง ให้ใช้ของจริงแทนหรือตัดออก แล้วบันทึกจุดเบี่ยงจาก mockup ลง PROGRESS_ARCHIVE (ไม่ต้องกลับมาถาม PO ซ้ำ)
+- **ขอบเขต**: หน้าแรกหลัง login (เมนูแรก Top Nav) ตาม mockup · widget แสดงตาม role ที่เห็นได้จริง (menu registry `06` §7.2) · ใช้ shared components + design tokens จาก 1.5 · ดึงข้อมูลจาก endpoint KPI/รายงานที่มีแล้ว (Phase 6) — **ห้ามสร้างสูตรคำนวณใหม่**
+- **อ้างอิง**: `reference/dashboard.html` ผ่าน MAP · `96` §6-E · **LOC ~1,400 · งบรวม ~280k**
+- **DoD**: ทุก role เปิดแดชบอร์ดได้ไม่มี error/ข้อมูลหลอก · จุดเบี่ยงจาก mockup ถูกบันทึกครบ
 
 ---
 
-# Phase 7 — Client Portal (ไฟล์ 97) 🔒
+# Phase 7 — Client Portal (ไฟล์ 97)
 
-> 🔒 **ปลดล็อกเมื่อ**: PO ตอบ Open Item #2 ของ `97` §22 — **Auth method** (Supabase Auth เดียวกับ internal หรือแยก/magic link) — บล็อก 7.1 ทั้งก้อน · Portal เป็นส่วนหนึ่งของ release แรก (ยืนยัน 04/07/2569) แต่ build ท้ายสุดตาม dependency
+> ✅ **ปลดล็อกแล้ว — มติ PO 2026-08-16** (Open Item #2 ของ `97` §22): **Auth = Supabase Auth ชุดเดียวกับ internal** (email+password · ใช้ invite/reset password flow เดิมจาก Phase 1 · ไม่ทำ magic link ใน release แรก) · แยกขอบเขตข้อมูลด้วย scope middleware `company_id` (7.1) · Portal เป็นส่วนหนึ่งของ release แรก (ยืนยัน 04/07/2569)
 
 ### 7.1 — Portal Auth + Scope Middleware
 - **ขอบเขต**: login/logout Company User + guard `COMPANY_SUSPENDED`/`USER_DEACTIVATED` · middleware inject `WHERE company_id = :current_user.company_id` ทุก query · 403 แบบไม่ leak · audit login/logout + `PERMISSION_DENIED` ทุกครั้ง (ไม่ audit การดูรายแถว)

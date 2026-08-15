@@ -421,7 +421,7 @@ async function runReviewCore({ kind = 'review', phase = null, stage = null } = {
   setPhase('running', task);
   state.liveLog = ''; state.liveContext = 0; state.liveTurns = 0;
   appendRun({ runId, taskId: 'review', event: 'start', branch });
-  const opt = { onData: (d) => { state.liveLog = (state.liveLog + d).slice(-8000); }, onProgress: onProg, model: modelFor('review') };
+  const opt = { onData: (d) => { state.liveLog = (state.liveLog + d).slice(-8000); }, onProgress: onProg, model: isFinal ? (config.finalModel || modelFor('review')) : modelFor('review') };
   try {
     git.checkoutBranch(branch, { create: true, from: config.baseBranch });
     const since = isFinal ? null : getCheckpoint().lastReviewed;   // รีวิวต่อจาก commit ที่เคยตรวจแล้ว
