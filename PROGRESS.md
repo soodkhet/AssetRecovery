@@ -1,19 +1,18 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 5.3 (ตัวรันงานเบื้องหลังกลาง + Job Log `/settings/jobs` + cron `/api/cron/jobs`) · **จบ Phase 5** · งานถัดไป 6.1 (Report Framework + Export Engine)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.1 (โครงรายงานกลาง 17 ตัว + ยามสิทธิ์รายหมวด + แคช 3 โหมด + `<ReportView>` + Export engine Excel/PDF) · งานถัดไป 6.2 (รายงานหมวด F — F1–F5)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 6.1: Report Framework + Export Engine
+## 🎯 งานถัดไป — Phase 6.2: รายงานหมวด F (F1–F5)
 
-- ทำตาม `docs/01_PLAN.md` §6.1 — query builder + date-range util + preset · permission guard ต่อหมวด (F=Finance/Exec · O=Manager team-scope/Exec · A=Accounting/Exec · **E=Exec เท่านั้น — Finance เรียก E1 ต้อง 403**)
-- cache layer 3 โหมด (daily/hourly/real-time) + refresh endpoint + `REPORT_CACHE_STALE`
-- shared UI: DateRangePicker + preset · KPI card + MoM badge · table + virtual scroll >100 แถว · skeleton · empty state
-- export engine: Excel (SheetJS) + PDF + hook "export ตรง UI ทุกแถว" · ≥5,000 แถว = background job `report_export` (E13 — ต่อกับตัวรันงานของ 5.3)
-- อ้างอิง: `96` §8–§12 ผ่าน MAP · mockup `reports.html` ผ่าน MAP
-- LOC ~1,800 · งบ ~290k
+- ทำตาม `docs/01_PLAN.md` §6.2 — F1 Gross Profit (drill-down รายเคส) · F2 Revenue Summary (bar รายเดือน + MoM) · F3 AR Aging (>60 เหลือง >90 แดง) · F4 Compensation Summary (drill-down รายพนักงาน) · F5 Advance Overdue (due วันนี้ยังไม่ overdue — นับวันถัดไป)
+- **ใช้โครงของ 6.1 เท่านั้น**: เขียน provider ลงทะเบียนที่ `REPORT_PROVIDERS` (`lib/reports/providers.ts`) + หน้าจอห่อ `<ReportView>` — ห้ามเขียน route/แคช/ยามสิทธิ์/ตาราง/ปุ่มส่งออกชุดใหม่
+- ยอดเงินทุกตัวผ่านสูตรของ 3.1 (`lib/finance/*`) + `netAfterAdjustments()` — ห้ามอ่านยอดดิบจาก record
+- อ้างอิง: `96` §6-F, §7, §13–14 ผ่าน MAP · mockup `reports.html` ผ่าน MAP
+- LOC ~1,900 · งบ ~300k
 
 ---
 
@@ -99,7 +98,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 6.1 | Report Framework + Export Engine | ⬜ | PLAN §6.1 · cache 3 โหมด |
+| 6.1 | Report Framework + Export Engine | ✅ | 2026-08-15 · `4d76986`+`83600a2` · ทะเบียน 17 รายงาน + ยามสิทธิ์รายหมวด (การเงินเรียก E1 = 403) + แคช 3 โหมด + โครงหน้าจอกลาง `<ReportView>` + export Excel/PDF (>5,000 แถว = job) · ⚠️ ต้องสร้าง bucket `report-exports` ต่อ environment → archive |
 | 6.2 | รายงานหมวด F (F1–F5) | ⬜ | PLAN §6.2 |
 | 6.3 | รายงานหมวด O (O1–O5) | ⬜ | PLAN §6.3 · Manager team scope |
 | 6.4 | รายงานหมวด A (A1–A4) | ⬜ | PLAN §6.4 |

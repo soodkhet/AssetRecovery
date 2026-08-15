@@ -6,6 +6,7 @@
  * มีอีก 2 ตัวเกิดขึ้นจริงจากมติ/สเปคของโมดูล:
  *  · `fuel_distance_retry` — มติ PO 14/08/2569 (D10) ใช้อยู่แล้วตั้งแต่ Phase 2.9
  *  · `wht_filing_reminder` — `33` §6.2/§8 · `90` §6.3 แถว 8 (Phase 5.2)
+ *  · `report_export` — E13 (`02_OPEN_DECISIONS`) · `96` §11 (Phase 6.1) — รายงานเกิน 5,000 แถว
  *
  * ทั้งสองตัวรันผ่านตัวรันงานเดียวกัน แต่ **ไม่อยู่ในรายการที่ dev trigger เรียกได้**
  * เพราะ `91` §14.1 ล็อกไว้ว่า "รับ job_type ตามรายการใน §6.1 เท่านั้น" (ดู `DEV_TRIGGER_JOB_TYPES`)
@@ -20,6 +21,7 @@ export const JOB_TYPES = [
   'advance_overdue',
   'wht_filing_reminder',
   'fuel_distance_retry',
+  'report_export',
 ] as const
 
 export type JobTypeCode = (typeof JOB_TYPES)[number]
@@ -91,6 +93,16 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
     inSpecCatalog: false,
     schedule: { kind: 'daily' },
   },
+  report_export: {
+    code: 'report_export',
+    label: 'ส่งออกรายงานขนาดใหญ่',
+    description: 'สร้างไฟล์ Excel/PDF ของรายงานที่เกิน 5,000 แถว แล้วเก็บไว้ให้ผู้สั่งดาวน์โหลด',
+    source: 'E13 (`02_OPEN_DECISIONS`) · `96` §11',
+    inSpecCatalog: false,
+    // สั่งจากปุ่ม Export ของหน้ารายงานเท่านั้น — ไม่มีรอบเวลา
+    schedule: null,
+  },
+
   fuel_distance_retry: {
     code: 'fuel_distance_retry',
     label: 'คำนวณระยะทางค่าน้ำมันย้อนหลัง',

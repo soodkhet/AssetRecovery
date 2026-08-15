@@ -8,6 +8,7 @@ import type { JobRow } from '@/lib/jobs/engine'
 import type { JobTypeCode } from '@/lib/jobs/job-types'
 import { generatePaymentFile } from '@/lib/payout/queries'
 import { prisma } from '@/lib/prisma'
+import { runReportExportJob } from '@/lib/reports/export-job'
 import { runWhtFilingReminderJob } from '@/lib/wht/filing-reminder-job'
 import { runWhtSummaryJob } from '@/lib/wht/summary-job'
 
@@ -25,6 +26,7 @@ import { runWhtSummaryJob } from '@/lib/wht/summary-job'
  * | `wht_summary` | `runWhtSummaryJob()` | Phase 4.5 (`33` §9) — ห่อ `refreshFilingSummary()` เดิม |
  * | `export_pack` | `createExportPack()` | Phase 4.6 (`37` §6.2) |
  * | `bank_file` | `generatePaymentFile()` | Phase 3.4 (`17` §6.3) |
+ * | `report_export` | `runReportExportJob()` | Phase 6.1 (E13 · `96` §11) |
  *
  * `fuel_distance_retry` **ไม่อยู่ในทะเบียนนี้** — handler เดิม (`runFuelDistanceRetryJob()`) เป็น
  * ตัวกวาดคิว: มันไปหยิบ job ของตัวเองจากตาราง `jobs` แล้วจัดการสถานะ/retry เองครบตั้งแต่ Phase 2.9
@@ -133,6 +135,11 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
       fileName: record.zipFileName,
       periodLabel: record.periodLabel,
     }
+  },
+
+  report_export: async ({ job, now }) => {
+    const actor = await actorOf(job)
+    return runReportExportJob({ actor, jobId: job.id, payload: job.payload, now })
   },
 
   bank_file: async ({ job, now }) => {

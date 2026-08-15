@@ -141,6 +141,18 @@ export function jobOutput(row: JobRow): JobOutputDto | null {
     }
   }
 
+  if (row.jobType === 'report_export') {
+    const storagePath = stringField(row.result, 'storagePath')
+    if (storagePath === null) return null
+    return {
+      label: 'ไฟล์รายงาน',
+      href: `/api/reports/exports/${row.id}/download`,
+      fileName: stringField(row.result, 'fileName'),
+      fileHash: null,
+      version: null,
+    }
+  }
+
   if (row.jobType === 'bank_file') {
     const batchId = stringField(row.result, 'batchId')
     if (batchId === null) return null

@@ -5,6 +5,49 @@
 
 ---
 
+## Phase 6.1 — Report Framework + Export Engine
+
+**วันที่**: 2026-08-15 · **commit**: `4d76986` (โครงหลัง) + `83600a2` (หน้าจอ) · **branch**: `auto/phase-6.1`
+
+### สิ่งที่ทำ
+
+- **`lib/reports/catalog.ts`** — ทะเบียนรายงาน **17 ตัว** ของ `96` (code/id/หมวด/โหมดแคช/endpoint) · `catalog.test.ts` อ่าน `docs/96` มาเทียบตัวต่อตัว ⇒ ทะเบียนหลุดสเปคเมื่อไหร่เทสต์แดงทันที
+- **`lib/reports/access.ts`** — ยามสิทธิ์ **รายหมวด** (`96` §10) ประกอบจาก **capability ไม่ใช่ชื่อ role** · `assertReportAccess()` / `visibleReports()` / `reportTeamScope()` (ผู้จัดการเห็นเฉพาะทีมตัวเอง)
+- **`lib/reports/run.ts` + `providers.ts`** — ตัวรันกลาง ทางเดินเดียวของทุกรายงาน: สิทธิ์ → scope ทีม → คีย์แคช → แคชตามโหมด → provider · **6.2–6.5 เขียนแค่ provider** แล้วลงทะเบียนที่ `REPORT_PROVIDERS` (แนวเดียวกับ `JOB_HANDLERS` ของ 5.3) · รายงานที่ยังไม่มี provider = "ยังไม่เปิดใช้งาน" ทั้งบน API และหน้าจอ (**ห้ามคืนตัวเลขปลอม**)
+- **`lib/reports/cache.ts`** — ต่อของเดิม (3.8) เป็น **3 โหมดตาม `96` §8**: `daily` (หมดอายุเที่ยงคืนไทย) / `hourly` / `realtime` (ไม่แคช) + ธง `stale` เมื่อผลเก่ากว่า 24 ชม. + **cooldown รีเฟรช 5 นาทีต่อรายงาน** (E14) · ทางเดิมของ 3.8 คงพฤติกรรมทุกประการ
+- **`lib/reports/range.ts` + `kpi.ts`** — preset `เดือนนี้/เดือนที่แล้ว/ไตรมาสนี้/ปีนี้/กำหนดเอง` (`96` §11) ต่อยอด `resolveReportPeriod()` ของ 3.8 + `previousReportRange()` เป็นฐานของ MoM · MoM ห้ามหารศูนย์ (งวดก่อน 0 ⇒ `N/A`) และเทียบด้วยค่าสัมบูรณ์
+- **`lib/reports/payload.ts`** — สัญญากลาง `columns/rows/kpis/totalRow` ที่หน้าจอ Excel PDF ใช้ร่วมกัน (`96` §13) ⇒ ตัวเลขบนจอกับในไฟล์ตรงกันโดยโครงสร้าง
+- **Export engine (E13)** — Excel (SheetJS `xlsx` จาก cdn.sheetjs.com 0.20.3) + PDF `<ReportDoc>` ฝัง Noto Sans Thai · ชื่อไฟล์เป็น **พ.ศ.** · **> 5,000 แถว → job `report_export`** (ตัวรันงานของ 5.3) ตอบ 202 + jobId แทนไฟล์ · ไฟล์เก็บที่ bucket `report-exports` เก็บ 7 วัน
+- **API** — `GET /api/reports` · `GET /api/reports/:id` · `POST /api/reports/:id/refresh` · `POST /api/reports/:id/export` · `GET /api/reports/exports/:jobId/download`
+- **FE** — `/reports` (รวม 17 ตัว 4 หมวด กรองด้วยสิทธิ์ตั้งแต่ฝั่ง server) + `/reports/:id` ผ่านโครงกลาง `<ReportView>`: `<DateRangePicker>` + preset · `<KpiCardRow>` + badge MoM · `<ReportTable>` (virtual scroll > 100 แถว) · skeleton / empty / error ครบ · ปุ่มรีเฟรช + ส่งออก Excel/PDF
+- **`docs/24` v4.14 §6.12** — เพิ่ม `REPORT_DATE_INVALID` + `REPORT_NOT_FOUND`
+
+### การตัดสินใจระหว่างทาง (คนถัดไปควรรู้)
+
+1. **`96` §5 ขัดกับ §10/§14 ในไฟล์เดียวกัน** — §5 (ตาราง Actors) เขียนว่าการเงิน/บัญชีดู E1 ได้ แต่ §10 (Permission Matrix) + §14 (test case "Finance ดู E1 → 403") บอกตรงข้าม ⇒ **ยึด §10** เพราะมี test case ระบุตรงตัว (บันทึกไว้ในหัวไฟล์ `access.ts`)
+2. **สิทธิ์ประกอบจาก capability ไม่ใช่ชื่อ role** — `02` §12 ไม่มี capability "ดูรายงาน" แยกรายหมวด และ DEC-002/009 บังคับว่าสิทธิ์อยู่ที่ `role_capabilities` ⇒ ประกอบจาก capability ประจำหน้าที่ (แนวเดียวกับ `WAREHOUSE_READ_CAPABILITIES` ของ 2.13) · **หมวด A ต้องเป็นระดับ `manage`** เพราะการเงินถือ `view` ของงานบัญชีหลายตัว (`25` §7.5) เช็คแค่ "มี capability" จะรั่ว
+3. **คีย์แคชต้องมีลายนิ้วมือ scope** — ผู้จัดการคนละชุดทีมต้องไม่ใช้แคชร่วมกัน ไม่งั้นข้อมูลข้ามทีมรั่วผ่านแคช (คีย์ = org + report + ช่วง/พารามิเตอร์ + scope)
+4. **`REPORT_NO_DATA`/`REPORT_CACHE_STALE` ไม่ประกาศเป็น error code** — ทั้งคู่คือ**ผลลัพธ์ที่สำเร็จ** (แถวว่าง = empty state · แคชเก่า = แสดงเวลาคำนวณล่าสุด + ปุ่มรีเฟรช) ส่งผ่านฟิลด์ `rows`/`cache` ใน payload · ประกาศเป็น code จะไปเพิ่มรายชื่อ "เตือนไม่บล็อก" ที่ Rule 04 ล็อกไว้โดยไม่มีมติ PO (เหตุผลเดียวกับ `JOB_DUPLICATE` ของ 5.3) · `REPORT_PERMISSION_DENIED` ก็ไม่ประกาศ เพราะซ้ำความหมายกับ `PERMISSION_DENIED` ที่ยามโยนอยู่แล้ว
+5. **ต้องรันรายงานก่อนจึงรู้ว่า export ทำสดได้ไหม** — เกณฑ์ของ E13 คือจำนวนแถว · ไม่แพงเพราะใช้แคชชุดเดียวกับที่หน้าจอเพิ่งแสดง (คีย์เดียวกันเป๊ะ) ⇒ **ไฟล์ตรงกับ UI ทุกแถวโดยโครงสร้าง** ไม่ใช่ด้วยวินัยของคนเขียน
+6. **คีย์กันซ้ำของ export ผูกกับเวลาที่ข้อมูลถูกคำนวณ** — กดปุ่มรัว ๆ ได้งานเดิม แต่เมื่อข้อมูลถูกคำนวณใหม่ (แคชหมดอายุ/กดรีเฟรช) จะได้ไฟล์ใหม่จริง
+7. **งานเบื้องหลังรันในนามผู้สั่ง** — `runReportExportJob()` โหลด `SessionUser` ของผู้สั่งแล้วเรียก `runReport()` ⇒ ยาม `assertReportAccess()` ถูกตรวจอีกชั้น (export/งานเบื้องหลังไม่ใช่ทางลัดข้ามสิทธิ์ · แนวเดียวกับ `export_pack` ของ 5.3)
+8. **แคชเป็น in-memory ต่อ instance เหมือน 3.8** — `96` §8 กำหนดแค่ "โหมด/อายุ" ไม่ได้บังคับกลไก จึงไม่มีตารางใหม่ · ผลข้างเคียงที่คนถัดไปต้องรู้: บน Vercel หลาย instance คนละเครื่องอาจเห็นเวลาคำนวณต่างกัน — ปุ่ม "รีเฟรชตอนนี้" แก้ได้เสมอ
+
+### เทสต์
+
+- `lib/reports/catalog.test.ts` — ทะเบียน 17 ตัวเทียบ `docs/96` จริง (code/หมวด/โหมดแคช/endpoint)
+- `lib/reports/access.test.ts` — เมทริกซ์ `96` §10 ครบทุกหมวด × ทุกฝ่าย · **การเงินเรียก E1 = 403** · scope ทีมของหมวด O
+- `lib/reports/range.test.ts` / `kpi.test.ts` — preset 4 ตัว + custom + `REPORT_DATE_INVALID` · MoM ห้ามหารศูนย์/ค่าติดลบได้ทิศทางถูก
+- `lib/reports/cache.test.ts` — 3 โหมด + `stale` + cooldown 5 นาที · ทางเดิมของ 3.8 ไม่เปลี่ยนพฤติกรรม
+- `lib/reports/export.test.ts` / `run.test.ts` / `table-window.test.ts` — เกณฑ์ 5,000 แถว · ชื่อไฟล์ พ.ศ. · คีย์แคชแยกตาม scope · หน้าต่าง virtual scroll ครอบแถวที่มองเห็นเสมอ
+- `app/api/report-routes.test.ts` — ยามระดับ route ทั้ง 5 endpoint: 403 ของหมวด E (provider ไม่ถูกเรียกเลย) · cooldown ของ refresh · export > 5,000 แถว = 202 + jobId
+
+### ⚠️ ค้างฝั่ง environment
+
+- ต้องสร้าง Storage bucket **`report-exports`** ต่อ environment (เหมือน `case-documents` ของ 2.5) ก่อนที่ export แบบงานเบื้องหลังจะทำงานจริง
+
+---
+
 ## Phase 5.3 — Background Job Engine + Handlers + Job Log
 
 **วันที่**: 2026-08-15 · **commit**: `ee55116` · **branch**: `auto/phase-5.3`

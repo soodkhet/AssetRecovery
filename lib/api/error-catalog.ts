@@ -177,6 +177,10 @@ export const ERROR_CATALOG = {
   JOB_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.11' },
   JOB_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.11' },
 
+  // ── 24 §6.12 รายงาน (Platform — ไฟล์ 96) ────────────────────────────────
+  REPORT_DATE_INVALID: { status: 400, severity: 'reject', source: '24 §6.12' },
+  REPORT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.12' },
+
   // ── 38 §12 Case Submission ─────────────────────────────────────────────
   CASE_REF_DUPLICATE: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_DOCUMENT_INCOMPLETE: { status: 400, severity: 'reject', source: '38 §12' },
