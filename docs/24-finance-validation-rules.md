@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v4.3 | 15/08/2569 | **เติม §6.6** (Phase 3.6 — Revenue/Billing `19`): `BILLING_BATCH_NOT_FOUND`, `BILLING_BATCH_INVALID_STATUS` — `19` §11 ระบุไว้ 3 code (`NO_REVENUE_TO_BILL`/`EDIT_BILLED_REVENUE`/`VAT_RATE_NOT_FOUND`) ซึ่งไม่ครอบคลุมกรณี 404 และกรณีที่ `19` §10 ห้ามไว้ตรง ๆ ("ห้ามลบ Billing Batch ที่ `status != draft`" / ส่งบิลซ้ำที่สถานะไม่ใช่ `draft` ตาม `23` §6.8) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.2 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.2 | 15/08/2569 | **เติม §6.5** (Phase 3.4 — Payout Batch `17`): `PAYOUT_BATCH_NOT_FOUND`, `PAYOUT_BATCH_INVALID_STATUS`, `NO_ITEMS_TO_PAY`, `PAYMENT_FILE_NOT_GENERATED` — `17` §11 ระบุไว้แค่ 3 code (`UNVERIFIED_PAYEE_IN_PAYOUT`/`DUPLICATE_PAYMENT_FILE`/`MIXED_SIDE_BATCH`) ซึ่งไม่ครอบคลุมกรณี 404 / สถานะทำ action ไม่ได้ตาม `23` §6.6 / ไม่มีรายการให้จ่าย / ขอไฟล์โอนที่ยังไม่เคยสร้าง ที่ implementation ต้องใช้จริง จึงระบุให้ตรงเหมือน v3.5–v4.1 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.1 | 15/08/2569 | **เติม §6.4** (Phase 3.3 — Claims & Advances `15`): `ADVANCE_EXCEEDS_MAX` (ระบุไว้แล้วใน `15` §11 แต่ตกหล่นจาก dictionary กลาง), `ADVANCE_NOT_FOUND`, `ADVANCE_INVALID_STATUS` — `15` §11 ไม่ครอบคลุมกรณี 404 / สถานะทำ action ไม่ได้ (`23` §6.4) ที่ implementation ต้องใช้จริง จึงระบุให้ตรงเหมือน v3.5–v4.0 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.1 | 15/08/2569 | **เติม §6.4** (Phase 3.3 — Claims & Advances `15`): `ADVANCE_EXCEEDS_MAX` (มีอยู่ใน `15` §11 + `13` §6.2.1 อยู่แล้วแต่ตกหล่นจาก dictionary กลาง), `ADVANCE_NOT_FOUND`, `ADVANCE_INVALID_STATUS` — `15` §11 ระบุไว้ 5 code ซึ่งไม่ครอบคลุมกรณี 404 / สถานะไม่รองรับตาม `23` §6.4 จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.0 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -147,6 +148,8 @@
 |---|---|---|
 | NO_REVENUE_TO_BILL | สร้างรอบวางบิลแต่ไม่มี Revenue ที่ ready_for_billing | 19 |
 | EDIT_BILLED_REVENUE | แก้ Revenue ที่ผูก Billing Batch ที่ไม่ใช่ draft แล้ว | 19 |
+| BILLING_BATCH_NOT_FOUND | อ้างรอบวางบิลที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) — 404 ไม่ leak ว่ามีอยู่จริง | 19 |
+| BILLING_BATCH_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันของรอบวางบิลทำไม่ได้ตาม `23` §6.8 (ส่งบิลซ้ำ / ลบรอบที่ `status != draft` ตาม §10) | 19 |
 
 ### 6.7 หมวด Adjustment / Period Lock (ไฟล์ 13, 20, 30)
 

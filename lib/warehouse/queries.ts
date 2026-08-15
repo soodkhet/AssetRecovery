@@ -2,6 +2,7 @@ import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { emitAudit } from '@/lib/audit/audit'
 import type { ApiWarning } from '@/lib/api/envelope'
+import { ModuleError } from '@/lib/api/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
@@ -765,8 +766,9 @@ export async function confirmLot(
       }
     })
   } catch (error) {
-    // กติกาที่ผู้ใช้แก้เองได้ต้องบอกตรง ๆ ไม่ให้กลายเป็น 500 (`44` §12)
-    if (error instanceof WarehouseError) throw error
+    // กติกาที่ผู้ใช้แก้เองได้ต้องบอกตรง ๆ ไม่ให้กลายเป็น 500 (`44` §12) — รวม error ของโมดูลอื่นที่
+    // step 4 พาเข้ามาด้วย (`VAT_RATE_NOT_FOUND` ของ `13` §6.5: ตั้งอัตราแล้วกดยืนยันใหม่ได้เลย)
+    if (error instanceof ModuleError) throw error
     throw new WarehouseError('CONFIRM_TRANSACTION_FAILED', {
       detail: error instanceof Error ? error.message : String(error),
     })

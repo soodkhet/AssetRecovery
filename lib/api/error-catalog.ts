@@ -101,6 +101,8 @@ export const ERROR_CATALOG = {
   // ── 24 §6.6 Revenue/Billing ────────────────────────────────────────────
   NO_REVENUE_TO_BILL: { status: 400, severity: 'reject', source: '24 §6.6' },
   EDIT_BILLED_REVENUE: { status: 400, severity: 'reject', source: '24 §6.6' },
+  BILLING_BATCH_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.6' },
+  BILLING_BATCH_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.6' },
 
   // ── 24 §6.7 Adjustment / Period Lock ───────────────────────────────────
   PERIOD_LOCKED_DIRECT_EDIT: { status: 400, severity: 'reject', source: '24 §6.7' },
