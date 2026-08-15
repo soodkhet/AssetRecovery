@@ -1,21 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.5 (Executive Dashboard E1–E3: KPI ภาพรวม 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard รายบริษัท · Scorecard รายทีม) ⇒ **เมนูรายงานเปิดครบ 17/17 ตัวของไฟล์ 96** — ไม่มี migration ใหม่ · งานถัดไป 8.1 (E2E Acceptance Tests — 6.6/Phase 7 ยังบล็อกด้วยคำตอบ PO)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 8.1 (E2E Acceptance Tests: 5 scenario ของไฟล์ `29` + Integration Checklist 9 จุด + เงินทดรอง 5 สถานะ ที่ `tests/acceptance/*.db.test.ts` เดินผ่าน service จริงทุกก้าว) — ไม่มี migration ใหม่ · งานถัดไป 8.2 (Consistency Sweep + Hardening — 6.6/Phase 7 ยังบล็อกด้วยคำตอบ PO)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 8.1: E2E Acceptance Tests (ไฟล์ 29)
+## 🎯 งานถัดไป — Phase 8.2: Consistency Sweep + Hardening
 
-> 6.6 (แดชบอร์ดหลัก) และ Phase 7 (Client Portal) ยัง **บล็อกด้วยคำตอบ PO** (spec `dashboard.html` เป็น DRAFT · Auth method ของ Portal — `97` §22 #2) ⇒ งานที่เดินต่อได้จริงคือ 8.1
+> 6.6 (แดชบอร์ดหลัก) และ Phase 7 (Client Portal) ยัง **บล็อกด้วยคำตอบ PO** (spec `dashboard.html` เป็น DRAFT · Auth method ของ Portal — `97` §22 #2) ⇒ งานที่เดินต่อได้จริงคือ 8.2
 
-- ทำตาม `docs/01_PLAN.md` §8.1 — automated integration tests ผูกเข้า CI ครอบ 5 scenario เต็มของ `29` §6.1–6.5: รายรับ happy path / รายจ่าย happy path / QC ตีกลับไม่กระทบ Revenue / งวด locked → Adjustment / Full Monthly Close
-- \+ Integration Checklist 9 จุดของ `29` §7 (จุดเชื่อมข้ามโมดูล) \+ scenario **Advance 5 สถานะ** (Open Item ของ `29`)
-- ใช้โครงเทสต์ระดับ DB ที่มีอยู่แล้วเป็นแม่แบบ (`*.db.test.ts` — org/ผู้ใช้/ทีม/บริษัทของตัวเอง + `cleanup()` ต่อรัน) และ **เดินผ่าน service จริงทุกก้าว** ห้าม insert ข้ามขั้นเพื่อให้ผ่าน
-- จุดที่ต้องพิสูจน์ให้ครบตาม Rule 07: Revenue trigger 8 เคส (`19` §16) · Lot confirm 4 ขั้น + rollback (`44` §17) · resubmit_close superseded (`41`) · period locked → `PERIOD_LOCKED_DIRECT_EDIT` (`30`/`20`) · export block เมื่อ critical open (`34`/`37`)
-- อ้างอิง: `29` ทั้งไฟล์ · `22`/`23`/`24` ประกอบ
-- LOC ~2,000 (tests) · งบ ~360k
+- ทำตาม `docs/01_PLAN.md` §8.2 — กวาดเทียบ implementation ↔ mockup ↔ spec ทุกโมดูล (ใช้ subagent อ่านในหน้าต่างของมันแล้วส่งข้อสรุปกลับ ห้ามลากไฟล์ใหญ่เข้า context หลัก)
+- ตรวจ cross-cutting 5 แกน: เงิน satang ทุกจุด (ห้าม float/คำนวณฝั่ง display) / วันที่ พ.ศ. ทุกจุด (`fmtDate`/`fmtDateTime` — ค.ศ. บนจอ = bug) / RBAC ครบทุก role + scope ย่อย / audit ครบ 9 fields + `reason` ตามนโยบาย / idempotency (payout key · job · export version + SHA-256)
+- แก้จุดที่พบในก้อนงานเดียวกัน — จุดที่กระทบเงิน/สิทธิ์ต้องมีเทสต์คุมด้วยเสมอ (Rule 07)
+- index profiling เบื้องต้นของ query ที่ join หนัก (แดชบอร์ด/รายงาน F·O·A·E) — เพิ่ม index ผ่าน migration เท่านั้น
+- อ้างอิง: `docs/REUSE_INDEX.md` (ของที่มีแล้ว + กับดัก) · `04` §8.1 · `25` · `90` · reference กลาง 22/23/24/27/45
+- งบ ~350k
 
 ---
 
@@ -120,7 +120,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ⬜ | PLAN §8.1 |
+| 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ✅ | 2026-08-15 · `<commit>` · `tests/acceptance/*.db.test.ts` 3 ไฟล์ (รายรับ/รายจ่าย+เงินทดรอง/ปิดงวด+Adjustment) เดินผ่าน service จริงทุกก้าว + Checklist `29` §7 ครบ 9 จุด → archive |
 | 8.2 | Consistency Sweep + Hardening | ⬜ | PLAN §8.2 |
 | 8.3 | Final Test ทั้งระบบ (ด่าน orchestrator) | ⬜ | PLAN §8.3 |
 
