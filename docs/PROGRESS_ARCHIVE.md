@@ -26,6 +26,8 @@
 - **ยอดคืนคิดจากยอดที่อนุมัติ** (generated column ของ DB) ส่วนการปฏิเสธตอนเคลียร์ยอดเทียบ **ยอดที่ขอ** ตาม `24` §6.4 — ปิดช่องว่างที่ 3.1 ฝากไว้: อนุมัติน้อยกว่าที่ขอแล้วใช้เกินยอดอนุมัติแต่ไม่เกินยอดที่ขอ ⇒ ไม่ reject แต่ยอดคืน = 0 และหน้าจอเตือนว่าต้องเบิกส่วนเกินเป็นรายการใหม่
 - **สิทธิ์ตาม `25` §7.2 เป๊ะ**: ขอเบิก = `manage:request_advance` (การเงินถือแค่ `view` จึงขอเองไม่ได้) · อนุมัติ/ปฏิเสธ = `manage:approve_advance` · เคลียร์ยอด = เจ้าของหรือการเงิน · scope ระดับแถวบังคับในชั้นข้อมูล
 - **`schema.prisma`**: `advances.returnSatang` ใส่ `@default(dbgenerated())` เพื่อให้ Prisma ไม่บังคับส่งค่า generated column ตอน create — ยืนยันด้วย `prisma migrate diff` แล้วว่า **ไม่เกิด SQL ใหม่** (drift เดิมของ generated column เท่ากันทั้งก่อน/หลัง) จึงไม่ต้องมี migration ใบใหม่
+- **capability constant ย้ายเข้าโมดูล pure**: `REQUEST_ADVANCE`/`APPROVE_ADVANCE` → `lib/advances/advance.ts` · `CREATE_CLAIM_CAPABILITIES` → `lib/claims/claim.ts` (ตัวเดิมใน `queries.ts` re-export ต่อ ไม่กระทบผู้เรียกฝั่ง server) — เพราะหน้าจอ client ที่ import จาก `queries.ts` จะลาก Prisma เข้า bundle (กับดักเดียวกับ `types.ts` ใน REUSE_INDEX)
+- **แท็บ "รออนุมัติ" กับ "ค่าตอบแทน" ใช้ hook เดียวกัน** (`useApprovalActions(endpoint)`) เพราะรายการเบิกทุกแหล่งเป็น entity เดียวกัน (`15` §9 header) ต่างแค่ endpoint — ไม่ทำ fetch/approve/reject ซ้ำสองชุด · `<AdvanceReviewModal>` รวมอนุมัติ/ปฏิเสธไว้ใน component เดียว 2 โหมด (อนุมัติปรับลดยอดได้ ห้ามเกินยอดที่ขอ · ปฏิเสธบังคับเหตุผล)
 
 ### จุดที่คนถัดไปควรรู้
 
