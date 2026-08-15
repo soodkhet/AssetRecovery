@@ -5,6 +5,37 @@
 
 ---
 
+## Phase 4.1 — Exceptions (34) + Accounting Period / Readiness / Lock Guard (30)
+
+**วันที่**: 2026-08-15 · **commit**: `5a2b26f` · **branch**: `auto/phase-4.1`
+
+### สิ่งที่ทำ
+
+- **`lib/accounting/exception.ts`** (pure) — state machine `23` §6.12 (`open → resolved` / `open → authorized` เท่านั้น ไม่มี `in_progress`) · `assertAuthorizeNote()` (เหตุผลบังคับ) · `summarizeExceptions()`/`summarizeExceptionCounts()` ที่ **แยกช่อง `authorized` ออกจาก `resolved` เสมอ** · `blockingCriticalOf()`/`assertExportNotBlocked()` (ของจริงใช้ที่ 4.6)
+- **`lib/accounting/period.ts`** (pure) — `PERIOD_TRANSITIONS` ตาม `23` §6.13 (ปลดล็อกกลับ `sent_to_accountant` ไม่ใช่ `collecting`) · `evaluateReadiness()`/`assertReadyToSend()` 3 เงื่อนไข **ไม่มีพารามิเตอร์ `force`** · `periodLabelOf()`/`nextPeriodKey()`/`periodOrdinal()`/`periodYearCe()` (พ.ศ. ล้วน)
+- **`lib/accounting/queries.ts`** — ชั้น DB ครบทั้ง 2 ไฟล์: `ensurePeriod()`/`ensurePeriodForDate()` (idempotent กัน P2002) + backfill รอบที่ขาดตอน list · `getPeriodReadiness()` (อ่านอย่างเดียว) · `sendPeriod()`/`lockPeriod()`/`unlockPeriod()` · CRUD + `resolve`/`authorize` ของ exception
+- **`lib/accounting/period-guard.ts`** — interceptor `PERIOD_LOCKED_DIRECT_EDIT` cross-cutting ต่อเข้า write service จริงแล้ว: `createBillingBatch`/`sendBillingBatch`/`deleteBillingBatch` (19) · `createManualClaim` (15) · `approveCompensationExpense`/`rejectCompensationExpense` (16) · `createAdvance`/`approveAdvance`/`rejectAdvance`/`settleAdvance` (15) · `createPayoutBatch`/`generatePaymentFile`/`completePayoutBatch` (17) · `submitHotelClaim`/`resubmitFieldExpense`/`rejectFieldExpense` (41)
+- **API 9 endpoint** (`30` §14 · `34` §14): `GET|POST /api/exceptions` · `PATCH /api/exceptions/:id` · `PATCH /api/exceptions/:id/resolve` · `POST /api/exceptions/:id/authorize` · `GET /api/accounting/periods` · `GET /api/accounting/periods/:id/readiness` · `PATCH /api/accounting/periods/:id/send|lock|unlock`
+- **เทสต์**: pure 27 เคส (`exception.test.ts` + `period.test.ts`) + ระดับ DB 14 เคส (`accounting.db.test.ts` — Readiness ครบ 3 เงื่อนไข, ไม่สืบทอด authorized ข้ามรอบ, unlock เฉพาะผู้บริหาร + audit `lock`/`unlock`, guard บล็อกจริงในงวด `locked`)
+- **`docs/24` v4.6** — เติม 4 error code ที่ implementation ต้องใช้จริงแต่ `30`/`34` ไม่ได้ระบุ: `PERIOD_NOT_FOUND`, `PERIOD_INVALID_STATUS` (§6.7) · `EXCEPTION_NOT_FOUND`, `EXCEPTION_INVALID_STATUS` (§6.8)
+
+### การตัดสินใจระหว่างทาง (ยึด schema `02` เป็นหลักตาม Q4)
+
+- **รอบบัญชีเกิดอัตโนมัติ ไม่มี endpoint สร้าง** — `30` §14 ไม่มี `POST /periods` และ §9 บอกว่า "เดือนใหม่เริ่มต้น → collecting" ⇒ `ensurePeriod()` เปิดรอบให้ตอน list/สร้าง exception พร้อม audit `create` + reason (ตาราง `accounting_periods` อยู่หมวด `period_lock` ของ reason policy) · backfill ย้อนหลังไม่เกิน 24 เดือนนับจากเดือนแรกที่มีรายได้
+- **`GET /readiness` ไม่เขียน DB** — `export_ready`/`last_readiness_checked_at` อัปเดตตอน `send` ซึ่งเป็น mutation ที่มี audit จริง (ไม่เขียนเงียบ ๆ ตอน GET)
+- **เงื่อนไขที่ 1 ของ Readiness ตรวจ 2 ทิศทาง** — ยอดรอบวางบิลเทียบ `summarizeBillingBatch()` **และ** ต้องไม่มีรายได้ของงวดที่ยังไม่ถูกวางบิล (ไม่งั้น "ยอดตรง" ปลอมได้ด้วยการไม่วางบิลเลย)
+- **จุดที่จงใจไม่ใส่ guard**: `applyBillingReceipt()` (เงินเข้าเดือนปัจจุบันของบิลเก่า — บล็อกแล้วกระทบยอดธนาคารจะจับคู่ไม่ได้) · expense ที่ระบบสร้างตอนปิดเคสภาคสนาม (เป็นผลของงานสนาม ไม่ใช่การแก้ย้อนหลัง — ไปโดนยามที่ขั้น `approve` แทน)
+- **`unlockPeriod()` ตรวจสิทธิ์ 2 ชั้น** — route ปล่อยสายบัญชีเข้ามาได้ แล้ว service โยน `UNLOCK_REQUIRES_EXECUTIVE` (403) ตามที่ `30` §11/§16 ล็อก code ไว้ (ไม่ใช่ `PERMISSION_DENIED`)
+
+### จุดที่คนถัดไปควรรู้
+
+- Phase 4.2–4.6 ที่ต้องผูก record เข้ารอบ ให้เรียก `ensurePeriodForDate()` — **ห้าม query `accounting_periods` เอง**
+- Phase 4.6 (Export) ต้องเรียก `assertExportNotBlocked()` ของ `lib/accounting/exception.ts` — กฎ "critical open = บล็อก" อยู่ที่เดียว
+- write endpoint ใหม่ของสายการเงินทุกตัวต้องเรียก `assertPeriodOpenAt()` ก่อนเขียนเสมอ (ดูรายการจุดที่ต่อแล้วด้านบนเป็นแม่แบบ)
+- FE ของ 30/34 (ตารางรอบ + Modal checklist + แท็บ Exceptions) อยู่ที่ **Phase 4.7** — เฟสนี้เป็น BE ล้วน
+
+---
+
 ## Phase 3.8 — Profitability Report (21) + Finance Dashboard (14) — ปิด Phase 3
 
 **วันที่**: 2026-08-15 · **commit**: `43c654f` (BE + เทสต์) + `f04f732` (FE + เปิดแท็บ) · **branch**: `auto/phase-3.8`

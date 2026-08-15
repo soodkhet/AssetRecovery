@@ -1,3 +1,4 @@
+import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -389,6 +390,14 @@ export async function approveCompensationExpense(
     })
   }
 
+  // Period Lock (`13` §6.11 · Phase 4.1) — อนุมัติ = จุดที่เงินเข้างวด ⇒ งวดที่ปิดแล้วต้องใช้ Adjustment
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: current.expenseDate,
+    targetType: TARGET,
+    targetId: expenseId,
+  })
+
   const flow = flowOf(current, await loadMatrixCandidates(user.organizationId))
   assertApprovalStepInOrder({
     requestedStep: input.step ?? current.approvalStepCurrent,
@@ -508,6 +517,13 @@ export async function rejectCompensationExpense(
   const reason = assertRejectReason(input.reason)
   const current = await findExpense(user, expenseId)
   const nextStatus = nextExpenseStatus(current.status, 'reject_expense')
+
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: current.expenseDate,
+    targetType: TARGET,
+    targetId: expenseId,
+  })
 
   const flow = flowOrNull(current, await loadMatrixCandidates(user.organizationId))
   const stepRole = flow === null ? null : stepRoleOf(flow, current.approvalStepCurrent)

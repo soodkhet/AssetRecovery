@@ -1,3 +1,4 @@
+import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -483,6 +484,13 @@ export async function submitHotelClaim(
     receiptFileUrl: input.receiptFileUrl,
   })
 
+  // Period Lock (`13` §6.11 · Phase 4.1) — ค่าที่พักกรอกวันที่เองได้ ⇒ ย้อนเข้างวดที่ปิดแล้วไม่ได้
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: input.expenseDate,
+    targetType: 'expenses',
+  })
+
   // ผู้พักร่วมต้องเป็นคนในทีมเดียวกัน — เช็คจากทีมของผู้เบิกเอง (`41` §12)
   const teammates = await prisma.user.findMany({
     where: {
@@ -573,6 +581,12 @@ export async function resubmitFieldExpense(
 ): Promise<FieldExpenseDto> {
   const current = await loadOwnExpense(user, expenseId)
   const nextStatus = nextExpenseStatus(current.status, 'resubmit_expense')
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: current.expenseDate,
+    targetType: 'expenses',
+    targetId: expenseId,
+  })
 
   // รายการที่ระบบคำนวณให้ (fuel/allowance) แก้ยอดเองไม่ได้ — แก้ได้เฉพาะรายการที่มาจากใบเสร็จ
   const editable = current.assignmentId === null
@@ -647,6 +661,13 @@ export async function rejectFieldExpense(
     select: { ...expenseSelect, approvalStepCurrent: true, approvalHistory: true },
   })
   if (current === null) throw new ExpenseStateError('EXPENSE_NOT_FOUND')
+
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: current.expenseDate,
+    targetType: 'expenses',
+    targetId: expenseId,
+  })
 
   const nextStatus = nextExpenseStatus(current.status, 'reject_expense')
   const update = buildRejectExpenseUpdate({

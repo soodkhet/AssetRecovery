@@ -113,6 +113,8 @@ export const ERROR_CATALOG = {
   ADJUSTMENT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.7' },
   ADJUSTMENT_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.7' },
   ADJUSTMENT_TARGET_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.7' },
+  PERIOD_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.7' },
+  PERIOD_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.7' },
   NOT_READY_CRITICAL_OPEN: { status: 400, severity: 'reject', source: '24 §6.7' },
   NOT_READY_RECONCILE_INCOMPLETE: { status: 400, severity: 'reject', source: '24 §6.7' },
   NOT_READY_BILLING_REVENUE_MISMATCH: { status: 400, severity: 'reject', source: '24 §6.7' },
@@ -126,6 +128,8 @@ export const ERROR_CATALOG = {
   COST_CENTER_AUTO_EDIT: { status: 400, severity: 'reject', source: '24 §6.8' },
   EXPORT_BLOCKED_CRITICAL: { status: 400, severity: 'reject', source: '24 §6.8' },
   AUTHORIZED_EXCEPTION_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.8' },
+  EXCEPTION_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
+  EXCEPTION_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.8' },
   FILING_OVERDUE_WARNING: { status: 200, severity: 'warn', source: '24 §6.8' },
   WHT_CANCEL_REQUIRES_REASON: { status: 400, severity: 'reject', source: '24 §6.8' },
 

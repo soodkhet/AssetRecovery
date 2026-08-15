@@ -1,3 +1,4 @@
+import { assertPeriodOpenForLabel } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -345,6 +346,13 @@ export async function createBillingBatch(
   const period = billingPeriodLabel(input.cutoffDate)
   const periodStart = periodStartOf(input.cutoffDate)
 
+  // Period Lock (`13` §6.11 · Phase 4.1) — งวดที่ปิดแล้วห้ามสร้างรอบวางบิลย้อนหลัง ต้องใช้ Adjustment
+  await assertPeriodOpenForLabel({
+    organizationId: user.organizationId,
+    periodLabel: period,
+    targetType: 'billing_batches',
+  })
+
   // 1 บริษัท 1 รอบเดือน = 1 batch (`19` §6.2 + unique `02` §8) — เช็คก่อนเพื่อไม่ให้ P2002 กลายเป็น 500
   const existing = await prisma.billingBatch.findFirst({
     where: { organizationId: user.organizationId, companyId: company.id, period },
@@ -450,6 +458,12 @@ export async function sendBillingBatch(
   const user = context.actor
   const batch = await findBatch(user, batchId)
   assertBillingBatchSendable(batch.status)
+  await assertPeriodOpenForLabel({
+    organizationId: user.organizationId,
+    periodLabel: batch.period,
+    targetType: 'billing_batches',
+    targetId: batchId,
+  })
 
   await prisma.$transaction(async (tx) => {
     // ยึดด้วยสถานะเดิม — สองคนกดส่งพร้อมกัน คนที่สองได้ 0 แถวแล้วโดนปฏิเสธ (ไม่ทับ `sent_at`)
@@ -496,6 +510,12 @@ export async function deleteBillingBatch(
   const user = context.actor
   const batch = await findBatch(user, batchId)
   assertBillingBatchDeletable(batch.status)
+  await assertPeriodOpenForLabel({
+    organizationId: user.organizationId,
+    periodLabel: batch.period,
+    targetType: 'billing_batches',
+    targetId: batchId,
+  })
 
   return prisma.$transaction(async (tx) => {
     const released = await tx.revenue.findMany({
@@ -638,6 +658,11 @@ export async function getArAging(
  * รับ "ยอดสะสมที่รับแล้ว" ไม่ใช่ยอดที่เพิ่มขึ้น ⇒ **idempotent**: ยิงซ้ำด้วยค่าเดิมไม่เปลี่ยนอะไร
  * และไม่ลงบันทึกซ้ำ (job/webhook รันซ้ำได้ — `91`) · สถานะใหม่มาจาก
  * `resolveBillingStatusAfterReceipt()` ที่เดียว (`23` §6.8) ห้ามตัดสินเองที่นี่
+ */
+/**
+ * ⚠️ **ไม่มี Period Lock guard ที่นี่โดยตั้งใจ** (Phase 4.1) — การรับชำระเป็น "เหตุการณ์ใหม่ของงวด
+ * ปัจจุบัน" ที่ไปอัปเดตยอดคงค้างของรอบเก่า ไม่ใช่การแก้ยอดที่ปิดงวดไปแล้ว (`19` §9.2 · `35`)
+ * ถ้าบล็อกที่นี่ = กระทบยอดธนาคารของเดือนปัจจุบันจะจับคู่บิลเก่าไม่ได้เลย
  */
 export async function applyBillingReceipt(input: {
   organizationId: string

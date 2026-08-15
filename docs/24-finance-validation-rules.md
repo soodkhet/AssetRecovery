@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v4.6 | 15/08/2569 | **เติม §6.7/§6.8** (Phase 4.1 — ปิดงวด `30` / Exception `34`): `PERIOD_NOT_FOUND`, `PERIOD_INVALID_STATUS`, `EXCEPTION_NOT_FOUND`, `EXCEPTION_INVALID_STATUS` — `30` §11 ระบุไว้ 4 code และ `34` §11 ระบุไว้ 2 code ซึ่งไม่ครอบคลุมกรณี 404 ของตัวรอบบัญชี/ข้อยกเว้นเอง และ transition ที่ `23` §6.12/§6.13 ไม่รองรับ (เช่น ปลดล็อกรอบที่ยัง `collecting` / resolve รายการที่ `authorized` ไปแล้ว) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.5 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.5 | 15/08/2569 | **เติม §6.5 — `WHT_RATE_FALLBACK_TO_PLAN`** (มติ PO ตอนรีวิว Phase 3): `18` §6.3 และ Rule 01 บังคับว่า "fallback ไป Plan-level ได้ **แต่ต้องมี warning**" · `resolveWhtRate()` สร้างข้อความเตือนไว้แล้วแต่ไม่มี code กลางให้ส่งขึ้น envelope ⇒ รอบจ่ายถูกสร้างด้วยอัตราสำรอง**เงียบ ๆ** · เพิ่มเป็น code แบบ **เตือนไม่บล็อก** (status 200) ⇒ รายชื่อ code ที่ "เตือน ไม่ block" เพิ่มจาก 5 เป็น **6 ตัว** (sync `.claude/rules/04-state-validation.md` แล้ว) · เลือกเตือนแทนการบล็อก เพราะ `18` §9 ไม่ได้บังคับว่า Payee ที่ verified ต้องมี Tax Profile — บล็อกจะทำให้จ่ายเงินไม่ได้ทั้งรอบจากข้อมูลที่แก้ทีหลังได้ |
 | v4.4 | 15/08/2569 | **เติม §6.7** (Phase 3.7 — Adjustment `20`): `ADJUSTMENT_NOT_FOUND`, `ADJUSTMENT_INVALID_STATUS`, `ADJUSTMENT_TARGET_NOT_FOUND` — `20` §11 ระบุไว้ 3 code (`REASON_REQUIRED`/`REJECTION_REASON_REQUIRED`/`INSUFFICIENT_APPROVAL_LEVEL`) ซึ่งไม่ครอบคลุมกรณี 404 ของตัว Adjustment เอง / สถานะที่ทำ action ไม่ได้ตาม `23` §6.9 (terminal แล้ว) / รายการต้นทางที่อ้างไม่มีอยู่จริงหรืออยู่นอก scope จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.3 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.3 | 15/08/2569 | **เติม §6.6** (Phase 3.6 — Revenue/Billing `19`): `BILLING_BATCH_NOT_FOUND`, `BILLING_BATCH_INVALID_STATUS` — `19` §11 ระบุไว้ 3 code (`NO_REVENUE_TO_BILL`/`EDIT_BILLED_REVENUE`/`VAT_RATE_NOT_FOUND`) ซึ่งไม่ครอบคลุมกรณี 404 และกรณีที่ `19` §10 ห้ามไว้ตรง ๆ ("ห้ามลบ Billing Batch ที่ `status != draft`" / ส่งบิลซ้ำที่สถานะไม่ใช่ `draft` ตาม `23` §6.8) จึงระบุให้ตรงกับสิ่งที่ implementation ใช้จริงเหมือน v3.5–v4.2 · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -164,6 +165,10 @@
 | NOT_READY_RECONCILE_INCOMPLETE | ปิดงวดขณะ Bank Reconcile ยังไม่ครบ 100% | 30 |
 | NOT_READY_BILLING_REVENUE_MISMATCH | ปิดงวดขณะยอด Billing Batch ยังไม่ sync ตรงกับ Revenue ของรอบนั้น (เงื่อนไขที่ 3 ของ Readiness Check ไฟล์ 30 §6.2) | 30 |
 | UNLOCK_REQUIRES_EXECUTIVE | ปลดล็อกรอบ locked โดยไม่ใช่ Executive | 30 |
+| PERIOD_NOT_FOUND | อ้างรอบบัญชีที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) — 404 ไม่ leak ว่ามีอยู่จริง | 30 |
+| PERIOD_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันของรอบบัญชีทำไม่ได้ตาม `23` §6.13 (ส่งซ้ำ / ล็อกรอบที่ยัง `collecting` / ปลดล็อกรอบที่ยังไม่ `locked`) | 30 |
+| PERIOD_NOT_FOUND | อ้างรอบบัญชีที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 30 |
+| PERIOD_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันของรอบบัญชีทำไม่ได้ตาม `23` §6.13 (ข้ามขั้น / ปลดล็อกรอบที่ยังไม่ locked) | 30 |
 
 ### 6.8 หมวดเอกสารทางการ/บัญชี (ไฟล์ 31, 32, 34)
 
@@ -176,6 +181,10 @@
 | COST_CENTER_AUTO_EDIT | แก้ cost_center ของรายการที่ mapping_rule = auto | 32 |
 | EXPORT_BLOCKED_CRITICAL | Export Pack ขณะมี critical exception เปิดอยู่ | 34, 37 |
 | AUTHORIZED_EXCEPTION_REASON_REQUIRED | สร้าง Authorized Exception โดยไม่กรอกเหตุผล | 34 |
+| EXCEPTION_NOT_FOUND | อ้าง Exception ที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) — 404 ไม่ leak ว่ามีอยู่จริง | 34 |
+| EXCEPTION_INVALID_STATUS | แก้ไข/resolve/authorize Exception ที่ไม่ได้อยู่สถานะ `open` (ไฟล์ 23 §6.12 — `resolved`/`authorized` เป็น terminal) | 34 |
+| EXCEPTION_NOT_FOUND | อ้าง Exception ที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 34 |
+| EXCEPTION_INVALID_STATUS | แก้ไข/resolve/authorize Exception ที่ไม่ได้อยู่สถานะ `open` (`23` §6.12 — terminal แล้ว) | 34 |
 | FILING_OVERDUE_WARNING | เลยกำหนดนำส่งภาษีแต่ยัง pending (เตือน ไม่ block) | 33 |
 | WHT_CANCEL_REQUIRES_REASON | ยกเลิก WHT Certificate โดยไม่กรอก cancel_reason | 33 |
 

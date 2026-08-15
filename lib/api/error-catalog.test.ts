@@ -17,6 +17,7 @@ import { compensationErrorStatus, COMPENSATION_ERROR_CODES } from '@/lib/compens
 import { financeCompanyErrorStatus, FINANCE_COMPANY_ERROR_CODES } from '@/lib/finance-companies/errors'
 import { financeErrorStatus, FINANCE_ERROR_CODES } from '@/lib/finance/errors'
 import { payeeErrorStatus, PAYEE_ERROR_CODES } from '@/lib/payees/errors'
+import { accountingErrorStatus, ACCOUNTING_ERROR_CODES } from '@/lib/accounting/errors'
 import { adjustmentErrorStatus, ADJUSTMENT_ERROR_CODES } from '@/lib/adjustments/errors'
 import { advanceErrorStatus, ADVANCE_ERROR_CODES } from '@/lib/advances/errors'
 import { revenueErrorStatus, REVENUE_ERROR_CODES } from '@/lib/revenue/errors'
@@ -134,6 +135,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['service-fee', SERVICE_FEE_ERROR_CODES, serviceFeeErrorStatus as (code: never) => number],
   ['finance-companies', FINANCE_COMPANY_ERROR_CODES, financeCompanyErrorStatus as (code: never) => number],
   ['finance', FINANCE_ERROR_CODES, financeErrorStatus as (code: never) => number],
+  ['accounting', ACCOUNTING_ERROR_CODES, accountingErrorStatus as (code: never) => number],
   ['adjustments', ADJUSTMENT_ERROR_CODES, adjustmentErrorStatus as (code: never) => number],
   ['advances', ADVANCE_ERROR_CODES, advanceErrorStatus as (code: never) => number],
   ['revenue', REVENUE_ERROR_CODES, revenueErrorStatus as (code: never) => number],

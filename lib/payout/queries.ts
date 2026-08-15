@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -417,6 +418,15 @@ export async function createPayoutBatch(
   input: PayoutBatchCreateInput,
 ): Promise<PayoutBatchCreateOutcome> {
   const user = context.actor
+
+  // Period Lock (`13` §6.11 · Phase 4.1) — รอบจ่ายผูกกับงวดของวันตัดรอบ (`02` ไม่มีคอลัมน์วันตัดรอบ
+  // ⇒ ใช้ `cutoffDate` ที่ผู้ใช้ระบุ ซึ่งเป็นวันเดียวกับที่คัดรายการเข้ารอบ)
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: input.cutoffDate,
+    targetType: 'payout_batches',
+  })
+
   const [expenses, advances] = await Promise.all([
     collectExpenseCandidates(user.organizationId, input.cutoffDate),
     collectAdvanceCandidates(user.organizationId, input.cutoffDate),
@@ -546,6 +556,13 @@ export async function generatePaymentFile(
   const user = context.actor
   const batch = await findBatch(user, batchId)
   const previousGeneratedAt = batch.paymentFileGeneratedAt
+
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: batch.createdAt,
+    targetType: 'payout_batches',
+    targetId: batchId,
+  })
 
   // `17` §11 `DUPLICATE_PAYMENT_FILE` — เตือนก่อนเสมอ ไม่ reject · ยืนยันแล้วค่อยสร้างจริง
   if (previousGeneratedAt !== null && !input.confirmDuplicate) {
@@ -733,6 +750,13 @@ export async function completePayoutBatch(
   const user = context.actor
   const batch = await findBatch(user, batchId)
   const status = nextPayoutBatchStatus(batch.status, 'complete')
+
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: batch.createdAt,
+    targetType: 'payout_batches',
+    targetId: batchId,
+  })
 
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.payoutBatch.update({

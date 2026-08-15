@@ -1,3 +1,4 @@
+import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -49,6 +50,13 @@ export async function createManualClaim(
   if (input.payeeId !== null && !canCreateForOthers(user)) {
     throw new AuthError('PERMISSION_DENIED', 'บันทึกรายการเบิกแทนผู้อื่นต้องมีสิทธิ์อนุมัติขั้นการเงิน')
   }
+
+  // Period Lock (`13` §6.11 · Phase 4.1) — เบิกย้อนหลังเข้างวดที่ปิดแล้วไม่ได้ ต้องผ่าน Adjustment
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: input.expenseDate,
+    targetType: 'expenses',
+  })
 
   return prisma.$transaction(async (tx) => {
     const payeeId =
