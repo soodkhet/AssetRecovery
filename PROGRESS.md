@@ -6,14 +6,15 @@
 
 ---
 
-## 🎯 งานถัดไป — Phase 6.3: รายงานหมวด O (O1–O5)
+## 🎯 งานถัดไป — Phase 6.4: รายงานหมวด A (A1–A4)
 
-- ทำตาม `docs/01_PLAN.md` §6.3 — O1 Success Rate (`success/(success+fail)` **ไม่รวมเคส open**) · O2 Team Performance/SLA (TAT = calendar days รวมวันหยุด, `slaAlertHours`) · O3 Workload · O4 SLA Breach · O5 Warehouse Summary
-- **ใช้โครงของ 6.1/6.2 เท่านั้น**: เขียน provider ลงทะเบียนที่ `FINANCE_REPORT_PROVIDERS` เวอร์ชันของหมวด O แล้วต่อเข้า `REPORT_PROVIDERS` + หน้าจอลงทะเบียนที่ `<ReportScreen>` (กราฟใช้ `<ReportBarChart>`) — ห้ามเขียน route/แคช/ยามสิทธิ์/ตาราง/ปุ่มส่งออกชุดใหม่
-- % ความสำเร็จต้องเรียก `successRate()` (`lib/assignments/success-rate.ts` — 2.6) ห้ามคำนวณซ้ำ · ทั้งชุดแคชรายชั่วโมง
-- **Manager เห็นเฉพาะทีมตัวเอง** (`96` §14) — `ctx.teamIds !== null` ต้องกรองทุก query · รายการว่าง = ผลลัพธ์ว่าง
-- อ้างอิง: `96` §6-O, §13–14 ผ่าน MAP · mockup `reports.html` ผ่าน MAP (`renderO1`–`renderO5`)
-- LOC ~1,700 · งบ ~280k
+- ทำตาม `docs/01_PLAN.md` §6.4 — A1 WHT Summary (ใช้ `wht_filing_summaries` — ชื่อตามไฟล์ 96 v2.1) · A2 Tax Invoice Summary · A3 Export History · A4 Exception Summary — **real-time ทั้งชุด** (ไม่แคช · `96` §8)
+- **ใช้โครงของ 6.1–6.3 เท่านั้น**: เขียน provider ของหมวด A (`lib/reports/accounting/providers.ts`) ต่อเข้า `REPORT_PROVIDERS` + หน้าจอลงทะเบียนที่ `<ReportScreen>` (กราฟใช้ `<ReportBarChart>` มีโหมด `stack` แล้ว) — ห้ามเขียน route/แคช/ยามสิทธิ์/ตาราง/ปุ่มส่งออกชุดใหม่
+- ยอดทุกก้อนมาจากเอกสารที่บันทึกแล้ว (`33`/`31`/`37`/`34`) — **ใบ WHT ที่ `cancelled` ไม่นับยอด** (`33`) · exception `authorized` ห้ามนับปนกับ `resolved` (`34` §6.3 — ใช้ `summarizeExceptions()` ของ 4.1)
+- **หมวด A ต้องเป็นระดับ `manage` ของฝ่ายบัญชี** — การเงินเรียกต้อง 403 (ยามมีอยู่แล้วที่ `lib/reports/access.ts`)
+- ⚠️ `lib/reports/run.test.ts` ใช้ A1 เป็นตัวอย่าง "รายงานที่ยังไม่มี provider" — 6.4 ต้องเปลี่ยนไปใช้ E1
+- อ้างอิง: `96` §6-A, §7–8, §10 ผ่าน MAP · mockup `reports.html` ผ่าน MAP (`renderA1`–`renderA4`)
+- LOC ~1,050 · งบ ~210k
 
 ---
 
@@ -101,7 +102,7 @@
 |---|---|---|---|
 | 6.1 | Report Framework + Export Engine | ✅ | 2026-08-15 · `4d76986`+`83600a2` · ทะเบียน 17 รายงาน + ยามสิทธิ์รายหมวด (การเงินเรียก E1 = 403) + แคช 3 โหมด + โครงหน้าจอกลาง `<ReportView>` + export Excel/PDF (>5,000 แถว = job) · ⚠️ ต้องสร้าง bucket `report-exports` ต่อ environment → archive |
 | 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
-| 6.3 | รายงานหมวด O (O1–O5) | ⬜ | PLAN §6.3 · Manager team scope |
+| 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `<pending>` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 6.4 | รายงานหมวด A (A1–A4) | ⬜ | PLAN §6.4 |
 | 6.5 | Executive Dashboard (E1–E3) | ⬜ | PLAN §6.5 · Exec/Superadmin เท่านั้น |
 | 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⏸️ | PLAN §6.6 · รอ PO อนุมัติ spec (dashboard.html เป็น DRAFT) |

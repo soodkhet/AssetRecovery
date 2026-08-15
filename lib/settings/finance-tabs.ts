@@ -7,6 +7,8 @@
  * ⚠️ แท็บ "ผู้รับเงิน (Payee Profile)" เป็นของ **ไฟล์ 18** ไม่ใช่ไฟล์ 13 (`13` §16 ยืนยัน 13 แท็บ)
  * — เพิ่มเข้ามาใน Phase 3.2 ตามลำดับของ mockup `settings.html` (`renderSettingsPayee`) เพราะอยู่หน้า
  * เดียวกันกับผู้ใช้ · `section` ของแท็บนี้จึงอ้างไฟล์ 18 ไม่ใช่ §ของไฟล์ 13
+ * ⚠️ แท็บ "เกณฑ์ SLA งานติดตาม" (§6.14) เพิ่มใน Phase 6.3 ตาม**มติ PO 15/08/2569 (D18)** — ค่าเก็บที่
+ * `assignment_policy_settings.sla_alert_hours` (ตารางของไฟล์ 40) แต่หน้าจอตั้งค่าอยู่รวมที่นี่
  */
 
 export interface FinanceSettingsTab {
@@ -37,6 +39,7 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'lock', label: 'การล็อกรอบและ Adjustment', section: '§6.11', available: true },
   { id: 'numbering', label: 'เลขที่ใบกำกับภาษี', section: '§6.12', available: true },
   { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: true },
+  { id: 'sla', label: 'เกณฑ์ SLA งานติดตาม', section: '§6.14', available: true },
 ]
 
 export const DEFAULT_FINANCE_SETTINGS_TAB = 'cycles'
