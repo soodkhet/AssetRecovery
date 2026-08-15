@@ -7,7 +7,7 @@
 
 ## Phase 4.1 — Exceptions (34) + Accounting Period / Readiness / Lock Guard (30)
 
-**วันที่**: 2026-08-15 · **branch**: `auto/phase-4.1`
+**วันที่**: 2026-08-15 · **commit**: `5a2b26f` · **branch**: `auto/phase-4.1`
 
 ### สิ่งที่ทำ
 

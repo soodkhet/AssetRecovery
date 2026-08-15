@@ -1,21 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.8 ⇒ **Phase 3 เสร็จครบทั้งเฟส** · ผ่านรีวิวทั้งเฟสแล้ว (`0bd0672` + `f723f56` — ปิด BLOCKER สิทธิ์การตีกลับ, ยอด AR/ขอบวันตัดรอบ, WHT fallback warning) · งานถัดไป 4.1
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.1 (BE ไฟล์ 30/34 + interceptor Period Lock ต่อเข้าสายการเงินจริง) · งานถัดไป 4.2 (Bank Reconciliation `35`)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 4.1: Exceptions (34) + Accounting Period / Readiness / Lock Guard (30)
+## 🎯 งานถัดไป — Phase 4.2: Bank Reconciliation (35)
 
-- ทำตาม `docs/01_PLAN.md` §4.1 — **งานแรกของ Phase 4** และเป็น guard ที่ cross-cutting ทั้งระบบ
-- ⚠️ ก่อนเริ่ม: spec↔schema drift 5 จุดของหมวดบัญชี (Q4) ยังไม่มีคำตอบ → **ยึด schema `02` เป็นหลัก** แล้วบันทึกสิ่งที่ยึดไว้ลง `docs/PROGRESS_ARCHIVE.md`
-- **BE 34 (Exceptions)**: CRUD (3 ระดับ `info/warning/critical` × 3 สถานะ `open/resolved/authorized` — **ไม่มี** `in_progress`) + authorize (ผู้บริหารเท่านั้น + note บังคับ → `authorized` ทันที) + **กฎกันหายเงียบ 3 ข้อ**: แสดงแยกหมวดเสมอ / ไม่สืบทอดข้ามรอบ (สร้าง record ใหม่ต่อ period) / ปลดบล็อกเฉพาะ period เดียวกัน
-- **BE 30 (Period)**: state machine `collecting → sent_to_accountant → locked` (unlock กลับได้เฉพาะผู้บริหาร) + **Readiness Check 3 เงื่อนไข** (billing-revenue sync / reconcile 100% รวม `unmatched_resolved` / ไม่มี critical open) **ห้าม force ข้าม** · `critical_count`/`warning_count` เป็น derived **ห้ามสร้างคอลัมน์**
-- **Period Lock guard (cross-cutting)**: interceptor `PERIOD_LOCKED_DIRECT_EDIT` บังคับกับ write endpoint การเงิน/บัญชีทุกตัว (`30`/`20` · `13` §6.11)
-- ของที่มีแล้วห้ามเขียนซ้ำ: `exceptionLinkOf()`/`exceptionModuleLabel()`/`countExceptionLevels()` (3.8 — ทะเบียนโมดูล/ลิงก์ของ exception อยู่ที่ `lib/reports/dashboard.ts` แล้ว) · `periodKeyOf()`/`parsePeriodStatusSnapshot()` (3.7) · `adjustmentApprovalPolicyFor()`/`periodLockPolicyFor()` (3.1/1.10) · `summarizeBillingBatch()` (3.6 — ใช้เทียบ `NOT_READY_BILLING_REVENUE_MISMATCH` ได้ตรง)
-- อ้างอิง: `34`, `30` ทั้งไฟล์ · `13` §6.11 · `23` §6.12–6.13 · `24` (error codes)
-- DoD: เทสต์ Readiness ครบ 3 เงื่อนไข + unlock เฉพาะผู้บริหาร + write endpoint ของงวดที่ `locked` โดน `PERIOD_LOCKED_DIRECT_EDIT` จริง · LOC ~1,950 · งบ ~300k
+- ทำตาม `docs/01_PLAN.md` §4.2 — ต่อจาก 4.1 ที่วางรอบบัญชี + guard ไว้แล้ว
+- **Import statement CSV** ตาม format ที่ตั้งค่าไว้ (`13` §6.8) · ผูก `period_id` ด้วย `ensurePeriodForDate()` ของ 4.1 **ห้าม query `accounting_periods` เอง**
+- **Auto-match engine**: ยอดตรงเป๊ะ + tolerance days + **candidate เดียวเท่านั้น** (เงินเข้า ↔ billing `sent` · เงินออก ↔ payout `file_generated`) · A1: เทียบ `total − wht` ด้วย
+- **Manual match**: `MATCH_NOTE_REQUIRED` เมื่อยอดไม่ตรง · `unmatched_resolved` (note บังคับ ห้ามผูก FK) · `ALREADY_MATCHED` = เตือนไม่บล็อก · re-match ต้องลง audit
+- **Trigger 2 ทาง**: สร้าง Cash Receipt (31) + payout → `completed` (17) + `applyBillingReceipt()` ของ 3.6 (จุดเสียบเดียว — รับยอดสะสม idempotent)
+- FE: ตาราง + Modal จับคู่ Manual + Modal Import
+- อ้างอิง: `35` ทั้งไฟล์ · `13` §6.3/§6.8 · `23` §6.14 · mockup `accounting.html` ผ่าน MAP
+- DoD: auto-match ไม่จับคู่เมื่อมี candidate >1 · `unmatched` ค้าง = ปิดงวดไม่ได้ (เชื่อ Readiness ของ 4.1) · LOC ~1,900 · งบ ~300k
 
 ---
 
@@ -81,7 +81,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 4.1 | Exceptions + Period/Readiness/Lock guard | ⬜ | PLAN §4.1 · guard cross-cutting |
+| 4.1 | Exceptions + Period/Readiness/Lock guard | ✅ | 2026-08-15 · `5a2b26f` · BE 30/34 ครบ + interceptor `PERIOD_LOCKED_DIRECT_EDIT` ต่อเข้า write การเงิน 15 จุด + เทสต์ DB 14 เคส → archive |
 | 4.2 | Bank Reconciliation | ⬜ | PLAN §4.2 · trigger 2 ทาง (31/17/19) |
 | 4.3 | Sales & Receipts + Tax Invoice + PDF | ⬜ | PLAN §4.3 · เลขห้าม gap |
 | 4.4 | Accounting Expenses + Accountant Questions | ⬜ | PLAN §4.4 |
