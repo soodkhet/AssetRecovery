@@ -7,7 +7,7 @@
 
 ## Phase 5.3 — Background Job Engine + Handlers + Job Log
 
-**วันที่**: 2026-08-15 · **commit**: `COMMIT53` · **branch**: `auto/phase-5.3`
+**วันที่**: 2026-08-15 · **commit**: `ee55116` · **branch**: `auto/phase-5.3`
 
 ### สิ่งที่ทำ
 
