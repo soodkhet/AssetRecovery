@@ -25,7 +25,7 @@ export const ACCOUNTING_TABS: readonly AccountingTab[] = [
   { id: 'wht', label: 'เอกสาร & WHT', source: 'ไฟล์ 33', available: true },
   { id: 'documents', label: 'เอกสารไม่ครบ', source: 'ไฟล์ 34', available: false, plannedPhase: '4.7' },
   { id: 'qa', label: 'ข้อซักถาม', source: 'ไฟล์ 36', available: true },
-  { id: 'export', label: 'ส่งมอบ', source: 'ไฟล์ 37', available: false, plannedPhase: '4.6' },
+  { id: 'export', label: 'ส่งมอบ', source: 'ไฟล์ 37', available: true },
 ]
 
 /** แท็บเริ่มต้น — "รอบส่งบัญชี" คือหน้าแรกของโมดูล (`30`) แต่ยังไม่เกิดจนถึง Phase 4.7 */

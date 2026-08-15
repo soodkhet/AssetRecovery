@@ -5,6 +5,44 @@
 
 ---
 
+## Phase 4.6 — Accounting Pack Export (37)
+
+**วันที่**: 2026-08-15 · **commit**: `8c913c5` · **branch**: `auto/phase-4.6`
+
+### สิ่งที่ทำ
+
+- **`lib/exports/pack.ts`** (pure) — ตัวประกอบไฟล์ทั้ง 8 ของ `37` §6.1: `PACK_FILES`/`packFileName()` · `revenueCsv()` / `cashReceiptCsv()` / `expenseCsv()` / `paymentCsv()` / `whtCsv()` / `bankReconCsv()` / `adjustmentCsv()` / `checklistSheet()` · `normalizeTaxId()`+`payeesMissingTaxId()` (13 หลักล้วน — DEC-006/D10) · `adjustmentRef()` (เลข `ADJ-<พ.ศ.>-<เดือน>-NNN` deterministic ไม่เดินเลขลง DB) · `exportVersionLabel()` (`v1.0`→`v1.1`→`v1.2` จากคอลัมน์ `version` ที่เป็น INT) · `packStoragePath()`/`packZipFileName()` · `buildPackCoverDoc()` · `EXPORT_STATUS_LABEL/GROUP` + `canTransitionExport()`
+- **`lib/exports/csv.ts`** (pure) — CSV **UTF-8 + BOM + CRLF** ตามไบต์จริงของ `reference/samples/01–07` · `csvBaht()` = ทศนิยม 2 ตำแหน่งไม่มีตัวคั่นหลักพัน คำนวณด้วยเลขจำนวนเต็มล้วน (Rule 01) · `csvDate()` = พ.ศ. ผ่าน `fmtDate()` ตัวกลาง
+- **`lib/exports/zip.ts`** (pure) — ตัวเขียน `.zip` แบบ **STORE เขียนเอง ไม่เพิ่ม dependency**: `crc32()` (ตรวจกับ vector มาตรฐาน) · `dosDateTime()` (เวลาไทย) · `buildZip()` · ตรวจแล้วว่า `unzip -t`/`unzip -l` ของจริงอ่านผ่านและเวลาบนไฟล์เป็น 10:30 ตามเวลาไทย
+- **`lib/exports/pack-storage.ts`** — bucket private `accounting-packs` · `upload` ด้วย `upsert: false` + path มี `v<version>` ⇒ ชุดที่ส่งไปแล้วไม่มีวันถูกทับ · `sha256Hex()` (hash ของ `.zip` ลง `export_records.file_hash`) และ `packContentDigest()` (ลายนิ้วมือของเนื้อไฟล์ 01–08 สำหรับพิมพ์บนหน้าปก)
+- **`lib/exports/queries.ts`** — `createExportPack()` (ยาม → ประกอบ 8 ไฟล์ → เดินเวอร์ชัน → หน้าปก → zip → อัปโหลด 10 ไฟล์ → บันทึกระเบียน+audit `action=export`) · `listExportHistory()` · `markExportSent()` / `acceptExport()` · `getExportPackDownload()` (ส่ง**ไฟล์เดิม** ไม่ประกอบใหม่)
+- **API 5 endpoint** (`37` §14 + ดาวน์โหลด): `GET /api/accounting/export-history` · `POST /api/accounting/export-pack` · `PATCH /api/accounting/export-history/:id/mark-sent` · `PATCH …/accept` · `GET …/download` — อ่าน/ดาวน์โหลด = `view:export_accounting_pack` (การเงิน/ผู้บริหาร) · สร้าง/เดินสถานะ = `manage` (บัญชี)
+- **`components/pdf/pack-cover.tsx`** — หน้าปก `00_Cover_Sheet.pdf` ต่อยอด `internal-doc.tsx` เลย์เอาต์ตาม `reference/samples/07_accounting_pack_cover.pdf` (รอบ/เวอร์ชัน/ผู้จัดทำ/วันที่/SHA-256 → ตาราง Readiness → ตารางรายชื่อไฟล์ → ช่องเซ็น 2 ช่อง)
+- **FE แท็บ `export` ("ส่งมอบ") ใน `<AccountingShell>`** — ตารางประวัติ 9 คอลัมน์ (เพิ่มคอลัมน์ SHA-256 ย่อจาก mockup) + `<ExportPackModal>` (เลือกงวด · แถบเตือน critical · รายชื่อไฟล์ grid 2 คอลัมน์ · ปุ่ม "ดาวน์โหลดไฟล์ (.zip)") + ปุ่ม `Mark ว่าส่งแล้ว`/`Mark ว่าตอบรับ` ตามสถานะ · **ไม่มีปุ่มลบ** (`37` §10)
+- **`docs/24` §6.8 เติม 3 code**: `EXPORT_RECORD_NOT_FOUND` · `EXPORT_INVALID_STATUS` · `EXPORT_PAYEE_TAX_ID_MISSING`
+- **เทสต์**: pure 40 เคส (`csv.test.ts` 7 · `zip.test.ts` 6 · `pack.test.ts` 27 — รวม **เทสต์ที่อ่านหัวคอลัมน์จากไฟล์ตัวอย่างจริงมาเทียบทั้ง 7 ไฟล์**) + ระดับ DB 10 เคส (`exports.db.test.ts` — ชุดครบ 8+หน้าปก+zip · hash ตรง · เนื้อไฟล์ตรงข้อมูลจริง · export ซ้ำได้ v1.1 โดยไฟล์ v1 อยู่ครบ · ดาวน์โหลดซ้ำได้ไฟล์เดิม · critical open บล็อก/authorized ผ่าน · warning ไม่บล็อก · tax id ขาดแล้วไม่มีไฟล์ค้างใน bucket · state machine 3 ขั้น · audit) · รวมทั้ง repo **2,470 เคสเขียว**
+
+### การตัดสินใจระหว่างทาง
+
+- **เขียนตัว zip เองแทนการเพิ่ม dependency** — Tech Stack ใน CLAUDE.md ไม่มีไลบรารี zip (เพิ่มต้องมี Decision Log) และที่สำคัญกว่า: `export_records.file_hash` จะพิสูจน์อะไรไม่ได้เลยถ้าไฟล์ไม่ deterministic ไลบรารีทั่วไปฝังเวลาปัจจุบัน/ระดับการบีบอัดลงไฟล์ ⇒ STORE + เวลาที่เราคุมเอง ⇒ input เดิมได้ไบต์เดิมเสมอ (มีเทสต์) · ข้อจำกัดที่รับไว้: ไม่มี ZIP64 (≤ 4 GB / 65,535 ไฟล์ — ชุดจริง 10 ไฟล์)
+- **สอง hash คนละหน้าที่** — หน้าปกอยู่*ใน* zip จึงพิมพ์ hash ของ zip บนหน้าปกไม่ได้ (วนกลับตัวเอง) ⇒ หน้าปกพิมพ์ `packContentDigest()` = ลายนิ้วมือของเนื้อไฟล์ 01–08 (ผู้รับคำนวณซ้ำเองได้จากไฟล์ที่แตกออกมา) ส่วน `file_hash` ในระเบียน = SHA-256 ของ `.zip` ซึ่งเป็นตัวที่ส่งจริง (ส่งกลับทาง header `x-pack-sha256` ตอนดาวน์โหลดด้วย)
+- **หน้าปกใช้ชื่อ `00_Cover_Sheet.pdf`** — §6.1 ล็อกรายชื่อไว้ 8 ไฟล์ 01–08 ต่อเนื่องไม่มีช่องว่าง ⇒ ตั้งเลข `00` ให้หน้าปกเรียงมาก่อนโดยไม่ไปแทรกเลขของสเปค · `file_count` ในระเบียนนับเฉพาะ 01–08 (= 8) ตาม §7.1
+- **ไม่ติดยาม Period Lock ให้ Export** — การส่งมอบเป็นการ*อ่าน*ข้อมูลงวดไปทำไฟล์ ไม่ได้แก้ยอด และ `37` §9 บอกชัดว่าถ้าสำนักงานบัญชีทักกลับให้ export เวอร์ชันใหม่ (ซึ่งงวดมักถูกล็อกไปแล้ว) · mockup ก็ให้งวด `locked` กด Export ได้
+- **ยามเลขผู้เสียภาษี = หยุดทั้งชุด ไม่ใช่ปล่อยช่องว่าง** — `05_WHT_Data.csv` ต้องเป็นเลข 13 หลักล้วนทุกแถว (DEC-006/D10) ⇒ ขาดแม้แถวเดียวก็โยน `EXPORT_PAYEE_TAX_ID_MISSING` พร้อมรายชื่อ payee ก่อนอัปโหลดอะไรทั้งสิ้น (เทสต์ยืนยันว่าไม่มีไฟล์ค้างใน bucket) — เลือกทางนี้แทนการสร้าง exception อัตโนมัติ เพราะคนกดปุ่มคือบัญชีที่แก้โปรไฟล์ได้ทันที
+- **ขอบเขตงวดต่อไฟล์**: ตารางที่มี `period_id` (เงินรับ/ค่าใช้จ่าย/กระทบยอด/exception) ใช้ตรง ๆ · `revenues` ไม่มี `period_id` ⇒ ใช้ช่วงวันของงวดตาม `revenue_date` (เหมือน Readiness ของ 4.1) · **`adjustments` ยึด "งวดของเป้าหมาย"** (วันรายได้/วันค่าใช้จ่าย/งวดของรอบวางบิล/วันสร้างรอบจ่าย) แบบเดียวกับที่ 3.7 ใช้ตัดสิน `period_status_at_target` — ไม่ใช่วันอนุมัติ เพราะการแก้ยอดมิถุนายนมักอนุมัติในกรกฎาคม
+- **ฟิลด์ที่สคีมาไม่มีให้** (ตระกูล D13/D14/D15): `bank_ref` ของไฟล์ 02/06 ใช้ `bank_transactions.description` (ตัวนำเข้า statement รวมเลขอ้างอิงไว้ในนั้นตั้งแต่ 4.2 — `02` §9 ไม่มีคอลัมน์ reference แยก) · `04_Payments.csv` `voucher_ref` ใช้ `voucherNumber()` ตัวเดียวกับใบสำคัญจ่ายที่พิมพ์จริงของ 3.5 และ `payment_date` = วันสร้างไฟล์โอน (เหมือนที่ 4.4 ใช้ผูกงวด) · `08` คอลัมน์ `responsible` ใช้ผู้ปิดรายการ/ผู้บันทึกของ exception (ไม่มีคอลัมน์ผู้รับผิดชอบ)
+- **`attachment_count` = 0 ในเฟสนี้** — แผน §4.6 กำหนดขอบเขตเป็น 8 ไฟล์ + หน้าปก + zip เท่านั้น การรวม*เอกสารแนบ* (ใบเสร็จ/หลักฐานจาก Storage) ยังไม่อยู่ในขอบเขต · `37` §7.1 มีช่องนี้ แต่ `02` §9 ไม่มีคอลัมน์ ⇒ DTO ส่ง 0 และหน้าจอแสดง "0 ไฟล์"
+
+### จุดที่คนถัดไปควรรู้
+
+- **⚠️ ต้องสร้าง bucket `accounting-packs` (private) 1 ครั้งต่อ environment** (เหมือน `payment-files` ของ 3.4 และ `case-documents` ของ 2.5) — ไม่มี bucket = กด Export แล้วขึ้นข้อความบอกให้สร้างก่อน · **ไม่มี migration ใหม่** (ใช้ `export_records` ที่มีตั้งแต่ 1.2)
+- **ถ้าสองคนกด Export รอบเดียวกันพร้อมกัน** จะมีคนหนึ่งได้ error จากชั้น Storage (path เวอร์ชันเดียวกันซ้ำ) ไม่ใช่การเขียนทับ — เลือกความปลอดภัยของไฟล์ก่อน UX · ถ้าเจอบ่อยจริงค่อยเพิ่ม advisory lock รอบการเดินเวอร์ชัน (แนวเดียวกับเลขใบ 50 ทวิ ของ 4.5)
+- **Phase 4.7** ต้องเปิดแท็บ `closing`/`sales`/`receipts`/`documents` ที่เหลือใน `accounting-tabs.ts` (แท็บ `export` เปิดแล้วในเฟสนี้ — เหลือ 4 แท็บ) · หน้า Monthly Close มีปุ่ม Export ในแถวรอบบัญชีตาม mockup ⇒ เรียก `<ExportPackModal>` ตัวเดิมได้เลย ห้ามทำโมดัลใหม่
+- **งาน export ไฟล์อื่นในอนาคต (Reports Phase 6)** ให้ใช้ `lib/exports/csv.ts` + `zip.ts` ต่อ — ห้ามเขียนตัวประกอบ CSV/zip ใหม่
+- เทสต์ระดับ DB ของเฟสนี้ **mock เฉพาะ `uploadPackFile`/`downloadPackFile`** (เก็บไฟล์ในหน่วยความจำ) ส่วนการประกอบไฟล์/หน้าปก PDF/zip เป็นของจริงทั้งหมด ⇒ เทสต์ตรวจไบต์จริงได้ · **`new TextDecoder()` กิน BOM ทิ้ง** ต้องใช้ `{ ignoreBOM: true }` เมื่อตรวจรูปแบบไฟล์
+
+---
+
 ## Phase 4.5 — WHT Data (33) + ใบ 50 ทวิ PDF
 
 **วันที่**: 2026-08-15 · **commit**: `3fb2f75` · **branch**: `auto/phase-4.5`
