@@ -48,6 +48,8 @@ const STATUS_GROUP: Readonly<Record<string, StatusBadgeGroup>> = {
   completed: 'success',
   locked: 'success',
   matched: 'success',
+  /** `35` §8 — จับคู่อัตโนมัติ = เขียว · จับคู่โดยคน = ฟ้า · ปิดรายการแล้ว = เทา */
+  auto_matched: 'success',
   verified: 'success',
   paid: 'success',
   closed: 'success',
@@ -59,6 +61,7 @@ const STATUS_GROUP: Readonly<Record<string, StatusBadgeGroup>> = {
   ready_for_billing: 'sent',
   billed: 'sent',
   file_generated: 'sent',
+  manual_matched: 'sent',
   exported: 'sent',
   // ฟ้าอมเขียว
   partially_paid: 'partial',
@@ -75,6 +78,7 @@ const STATUS_GROUP: Readonly<Record<string, StatusBadgeGroup>> = {
   draft: 'neutral',
   in_progress: 'neutral',
   not_exported: 'neutral',
+  unmatched_resolved: 'neutral',
   // แดง
   critical: 'critical',
   open: 'critical',
