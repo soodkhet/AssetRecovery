@@ -5,6 +5,39 @@
 
 ---
 
+## Phase 4.5 — WHT Data (33) + ใบ 50 ทวิ PDF
+
+**วันที่**: 2026-08-15 · **commit**: `__COMMIT__` · **branch**: `auto/phase-4.5`
+
+### สิ่งที่ทำ
+
+- **`lib/wht/wht.ts`** (pure) — กติกาไฟล์ 33 ทั้งชุด: `shouldIssueCertificate()` (ออกใบเฉพาะ `wht > 0`) · `filingFormOf()` (Tax Profile ที่ snapshot ไว้ชนะชนิด payee เสมอ — `18` §6.3) · `incomeTypeOf()` · `whtCertificateNumber()`/`whtCertificateNumberPrefix()`/`nextCertificateSequence()` (ประกอบเลขด้วย `formatInvoiceNumber()` ของ `13` §6.12 รูปแบบ `WHT-<พ.ศ.>-NNN` yearly reset) · `filingDueDateOf()` (วันที่ 15 ของเดือนถัดไป) / `daysUntilFilingDue()` / `isFilingOverdue()` / `filingOverdueWarning()` · **`summarizeFilingTotals()` = บ้านเดียวของกฎ "ใบ cancelled ไม่นับยอด"** · `assertCertificateCancellable()` / `requireWhtCancelReason()` / `assertFilingMarkable()` · `buildWhtCertificateDoc()`
+- **`lib/wht/queries.ts`** — `syncWhtCertificatesFromPayout()` (idempotent: 1 รายการจ่าย = 1 ใบที่ `active` · ใบที่ยกเลิกแล้วจะได้ใบแทนพร้อม `replaces_certificate_id` เมื่อ sync ซ้ำ) · `listWhtCertificates()` · `cancelWhtCertificate()` (+ธง `reissue`) · `listWhtFilingSummaries()` · `markWhtFilingFiled()` · `getWhtCertificateDocSource()` · ภายในมี `refreshFilingSummary()` ที่**คำนวณ `pnd3/pnd53` ใหม่ทั้งก้อน**ทุกครั้งที่ใบเกิด/ถูกยกเลิก (ยอดใบที่ยกเลิกหายทันที)
+- **จุดเสียบ**: ต่อท้าย `syncExpenseRecordsFromPayout()` (ไฟล์ 32) — ใบผูก `expense_record_id` จึงต้องเกิดหลังบัญชีค่าใช้จ่าย ⇒ ได้ทั้ง 2 เส้นทางที่รอบจ่ายเป็น `completed` (ยืนยันด้วยมือ + จับคู่กระทบยอด) ฟรีโดยไม่ต้องแก้ call site
+- **เลขที่ (D11)** — `pg_advisory_xact_lock` ค่าคงที่ + อ่านเลขสูงสุดของปีนั้น + insert **ในทรานแซกชันเดียวกัน** · เลือก advisory lock แทนการล็อกแถว `organizations` (แบบใบกำกับภาษี 4.3) เพราะ `wht_certificates.certificate_number` เป็น **UNIQUE ทั้งตาราง** ตาม `02` §9 — ล็อกต่อองค์กรจะทำให้สององค์กรชนเลขกัน (เจอจริงตอนเทสต์ 4.4 กับ 4.5 รันขนานกัน)
+- **API 5 endpoint** (`33` §14 · `27` §6.12 ครบทุกตัว + PDF): `GET /api/accounting/wht-certificates` · `PATCH /api/accounting/wht-certificates/:id/cancel` · `GET /api/accounting/wht-certificates/:id/pdf` · `GET /api/accounting/wht-filing-summary` (ส่ง `FILING_OVERDUE_WARNING` ใน `warning` ของ envelope — 200 เสมอ) · `PATCH /api/accounting/wht-filing-summary/:id/mark-filed`
+- **`components/pdf/wht-certificate.tsx`** — ใบ 50 ทวิ ตาม `28` §6.3 ต่อยอด `official-doc.tsx` ของ 4.3 (ไม่ใช้ `internal-doc.tsx`) · ฟิลด์บังคับตามกฎหมาย 6 ข้อครบ · ใบที่ยกเลิกพิมพ์ได้แต่ขึ้นแถบ "ยกเลิก" + บรรทัด "ออกแทนเลขที่ …"
+- **FE แท็บ `wht` ใน `<AccountingShell>`** — banner countdown (เหลือ N วัน / เลยกำหนดเป็นสีแดง) + ตารางสรุปรอบนำส่งรายเดือน + ทะเบียนใบ 50 ทวิ 10 คอลัมน์ตาม mockup + `<CancelWhtModal>` (เหตุผลบังคับ + เช็กบ็อกซ์ออกใบแทน) + `<MarkWhtFiledModal>` · เพิ่ม `filed`/`cancelled` เข้า mapper สีกลาง (`04` §8.1) พร้อมเทสต์
+- **`docs/24` v4.10** — เติม 4 error code (§6.8): `WHT_CERTIFICATE_NOT_FOUND`, `WHT_CERTIFICATE_INVALID_STATUS`, `WHT_FILING_SUMMARY_NOT_FOUND`, `WHT_FILING_ALREADY_FILED`
+- **เทสต์**: pure 18 เคส (`lib/wht/wht.test.ts`) + route 9 เคส (`app/api/accounting-wht-routes.test.ts`) + ระดับ DB 13 เคส (`lib/wht/wht.db.test.ts` — ครบ §16 ทั้ง 4 เคส + ออกใบแทน + concurrency เลขที่ + Period Lock + 404) · รวมทั้ง repo 2,419 เคสเขียว
+
+### การตัดสินใจระหว่างทาง
+
+- **ไม่ออกใบให้รายการที่ `wht = 0`** (เงินทดรองจ่าย A4 / ยอดต่ำกว่าเกณฑ์ 1,000 บาท) แม้ `33` §9 เขียนว่า "ต่อรายการ" — ใบ 50 ทวิ คือหลักฐาน *ภาษีที่หักไว้* ไม่มีภาษีก็ไม่มีอะไรให้รับรอง และการออกใบยอด 0 จะทำให้ยอด ภ.ง.ด. มีบรรทัดขยะ · กติกาอยู่ที่ `shouldIssueCertificate()` จุดเดียว ถ้าสำนักงานบัญชีเห็นต่างแก้ที่นี่ที่เดียว
+- **ยกเลิกอย่างเดียวเป็นค่าเริ่มต้น (`reissue = false`)** — เทสต์ `33` §16 บังคับว่ายกเลิกแล้วยอดของรอบต้องลดลงจริง · การ "ออกใบใหม่ตาม flow ปกติ" (§9) ทำได้ 2 ทาง: ติ๊กในโมดัลยกเลิก (ทรานแซกชันเดียวกัน) หรือปล่อยให้ sync รอบจ่ายเดิมซ้ำแล้วระบบออกใบแทนให้เอง — **ไม่เพิ่ม endpoint นอก `27` §6.12**
+- **`mark-filed` ไม่ติดยาม Period Lock** — กำหนดยื่นคือวันที่ 15 ของเดือนถัดไป ซึ่งงวดนั้นมักถูกล็อกไปแล้ว ถ้าบล็อกจะ mark ไม่ได้ตลอดกาล · `13` §6.11 คุมการแก้ "ข้อมูลของงวด" ไม่ใช่การบันทึกว่ายื่นแบบเสร็จ · การ**ยกเลิกใบ**ยังติดยามตามปกติเพราะกระทบยอดภาษีของงวด (แนวเดียวกับใบกำกับภาษี 4.3) — มีเทสต์ทั้งสองด้าน
+- **สรุปรอบเก็บเป็นคอลัมน์จริง (ไม่ derive ตอนอ่าน)** ตาม `02` §9 ที่มี `pnd3_satang`/`pnd53_satang` — แต่เขียนใหม่ทั้งก้อนทุกครั้งที่ใบเกิด/ยกเลิก ⇒ ไม่มีทางที่ยอดจะค้างไม่ตรงกับใบจริง (แหล่งความจริงเดียวยังเป็นตัวใบ)
+- **ฟิลด์ที่ `02` ไม่มีคอลัมน์ ⇒ บันทึกเป็น D15** (ตระกูลเดียวกับ D13/D14): ที่อยู่ผู้ถูกหักบนใบ 50 ทวิ พิมพ์ `—` (ไม่มีคอลัมน์ที่อยู่ใน `payee_profiles`/`users`) · เลขผู้เสียภาษีใช้ `national_id` ช่องเดียวทั้งบุคคล/นิติบุคคล · `delivery_format` ใช้ค่า default `paper` เพราะไม่มี endpoint ให้เลือกรายใบใน §14
+
+### จุดที่คนถัดไปควรรู้
+
+- **ใบ 50 ทวิ ที่พิมพ์ตอนนี้ยังไม่ครบตามกฎหมาย 100%** — ขาดที่อยู่ผู้ถูกหัก (D15) ⇒ ต้องเคาะกับนักบัญชี/PO ก่อนใช้จริงบน production (บันทึกไว้ใน `02_OPEN_DECISIONS` D15 พร้อม default ที่เสนอ)
+- **Phase 4.6 (`05_WHT_Data.csv`)** ดึงยอดจาก `listWhtCertificates()` ได้ตรง ๆ — **ห้ามรวมยอดเอง** ให้เรียก `summarizeFilingTotals()` เพราะกฎ "ใบ cancelled ไม่นับ" อยู่ที่นั่นที่เดียว · `tax_id` 13 หลักล้วนของ export มาจาก `payee.nationalId` ซึ่ง**อาจว่าง** ⇒ ต้องมี exception/ยามฝั่ง 4.6
+- **เทสต์ DB ของโมดูลที่ผลิต `expense_records` ต้องล้าง `wht_certificates` ก่อน** (FK) — เพิ่มให้ `payout-queries.db.test.ts` แล้ว ถ้ามีไฟล์เทสต์ใหม่ที่ลบ `expense_records` ต้องทำเหมือนกัน
+- เลขที่ใบ 50 ทวิ **เดินร่วมกันทั้งระบบ (ไม่แยกต่อองค์กร)** ตามคอลัมน์ UNIQUE ของ `02` — ถ้าจะรองรับหลายองค์กรจริงต้องเปลี่ยนเป็น `@@unique([organizationId, certificateNumber])` พร้อมย้ายล็อกกลับไปที่แถวองค์กร
+
+---
+
 ## Phase 4.4 — Accounting Expenses (32) + Accountant Questions (36)
 
 **วันที่**: 2026-08-15 · **commit**: `1f3d525` · **branch**: `auto/phase-4.4`

@@ -56,6 +56,8 @@ const STATUS_GROUP: Readonly<Record<string, StatusBadgeGroup>> = {
   approved: 'success',
   active: 'success',
   accepted: 'success',
+  /** `33` §8 — รอบนำส่ง WHT ที่ยื่นแบบแล้ว */
+  filed: 'success',
   // น้ำเงิน
   sent: 'sent',
   ready_for_billing: 'sent',
@@ -87,6 +89,8 @@ const STATUS_GROUP: Readonly<Record<string, StatusBadgeGroup>> = {
   deactivated: 'critical',
   rejected: 'critical',
   unverified: 'critical',
+  /** `31` §9.1 · `33` §10 — ใบกำกับภาษี/ใบ 50 ทวิ ที่ถูกยกเลิก (terminal ห้ามลบ) */
+  cancelled: 'critical',
   // ส้ม
   needs_revision: 'warning',
   warning: 'warning',

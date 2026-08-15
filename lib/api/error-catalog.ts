@@ -143,6 +143,10 @@ export const ERROR_CATALOG = {
   EXCEPTION_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.8' },
   FILING_OVERDUE_WARNING: { status: 200, severity: 'warn', source: '24 §6.8' },
   WHT_CANCEL_REQUIRES_REASON: { status: 400, severity: 'reject', source: '24 §6.8' },
+  WHT_CERTIFICATE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
+  WHT_CERTIFICATE_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.8' },
+  WHT_FILING_SUMMARY_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
+  WHT_FILING_ALREADY_FILED: { status: 400, severity: 'reject', source: '24 §6.8' },
 
   // ── 24 §6.9 Auth & Access Control ──────────────────────────────────────
   UNAUTHENTICATED: { status: 401, severity: 'reject', source: '24 §6.9' },
