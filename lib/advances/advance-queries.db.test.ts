@@ -119,6 +119,7 @@ function createInput(overrides: Partial<{ requestedSatang: number; purpose: stri
 
 async function reset(): Promise<void> {
   const tx = db()
+  await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(
@@ -417,6 +418,26 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
     await job.runAdvanceOverdueJob({ organizationId: ORG_ID })
 
     await expectCode(() => advances.createAdvance(ctx(agent), createInput()), 'ADVANCE_PENDING_SETTLEMENT')
+  })
+
+  it('แจ้งเตือนผู้ยืม 1 ใบ และรันซ้ำไม่แจ้งซ้ำ (Phase 5.2 · `90` §6.3 — dedupeKey)', async () => {
+    await seedOverdueCandidate()
+    await job.runAdvanceOverdueJob({ organizationId: ORG_ID })
+
+    const first = await db().notification.findMany({
+      where: { organizationId: ORG_ID, eventCode: 'advance.overdue' },
+      select: { id: true, userId: true, linkPath: true },
+    })
+    // การเงินในเทสต์ชุดนี้ไม่มีแถว `role_capabilities` จริง ⇒ ผู้รับที่แน่นอนคือผู้ยืมเท่านั้น
+    expect(first.filter((row) => row.userId === AGENT_ID)).toHaveLength(1)
+    expect(first.find((row) => row.userId === AGENT_ID)?.linkPath).toBe('/field/income')
+
+    await job.runAdvanceOverdueJob({ organizationId: ORG_ID })
+    const second = await db().notification.findMany({
+      where: { organizationId: ORG_ID, eventCode: 'advance.overdue' },
+      select: { id: true },
+    })
+    expect(second.map((row) => row.id).sort()).toEqual(first.map((row) => row.id).sort())
   })
 
   it('audit ของ job ระบุ actor = ระบบ พร้อม job id ใน reason (`90` §13)', async () => {

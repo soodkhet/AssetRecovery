@@ -1,6 +1,8 @@
 import { nextAdvanceStatus } from '@/lib/advances/advance'
 import { emitAudit } from '@/lib/audit/audit'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
+import { dispatchNotificationAwaited, payeeUserIds, usersWithCapability } from '@/lib/notifications/dispatch'
+import { advanceOverdueMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -90,8 +92,25 @@ export async function runAdvanceOverdueJob(
       return true
     })
 
-    if (changed) result.marked += 1
-    else result.skipped += 1
+    if (changed) {
+      result.marked += 1
+      // `90` §6.3 (mockup `notifications.html`) — ผู้ยืมต้องรีบเคลียร์ · การเงินต้องตาม
+      // `dedupeKey` ผูกกับรายการ ⇒ job รันทุกวันก็แจ้งครั้งเดียวต่อคน
+      const message = (audience: 'payee' | 'finance') =>
+        advanceOverdueMessage({ advanceId: advance.id, dueClearDate: advance.dueClearDate }, audience)
+
+      const [payeeIds, financeIds] = await Promise.all([
+        payeeUserIds(advance.organizationId, [advance.payeeId]),
+        usersWithCapability(advance.organizationId, 'approve_advance'),
+      ])
+      await dispatchNotificationAwaited({ organizationId: advance.organizationId, userIds: payeeIds }, message('payee'))
+      await dispatchNotificationAwaited(
+        { organizationId: advance.organizationId, userIds: financeIds },
+        message('finance'),
+      )
+    } else {
+      result.skipped += 1
+    }
   }
 
   return result

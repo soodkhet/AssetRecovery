@@ -38,6 +38,8 @@ import {
   whtFallbackWarning,
 } from '@/lib/payout/payout'
 import { downloadPaymentFile, sha256Hex, uploadPaymentFile } from '@/lib/payout/payment-file-storage'
+import { dispatchNotificationAwaited, usersWithCapability } from '@/lib/notifications/dispatch'
+import { payoutBatchCompletedMessage } from '@/lib/notifications/messages'
 import type {
   PaymentFileResultDto,
   PayoutBatchDetailDto,
@@ -791,6 +793,8 @@ export async function completePayoutBatch(
   // จ่ายเงินจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่าย (`32` §6.1) — idempotent เรียกซ้ำไม่สร้างซ้ำ
   await syncExpenseRecordsFromPayout(context, batchId)
 
+  await notifyPayoutCompleted(user.organizationId, updated, 'manual')
+
   return toBatchDto(updated)
 }
 
@@ -811,7 +815,7 @@ export async function syncPayoutBatchCompleted(input: {
 }): Promise<PayoutBatchStatus> {
   const batch = await prisma.payoutBatch.findFirst({
     where: { id: input.batchId, organizationId: input.organizationId, deletedAt: null },
-    select: { id: true, status: true, netSatang: true },
+    select: { id: true, name: true, status: true, netSatang: true },
   })
   if (batch === null) throw new PayoutError('PAYOUT_BATCH_NOT_FOUND', { detail: `batch=${input.batchId}` })
   if (batch.status === 'completed') return batch.status
@@ -847,5 +851,30 @@ export async function syncPayoutBatchCompleted(input: {
     )
   })
 
+  await notifyPayoutCompleted(input.organizationId, batch, 'bank_reconciliation')
+
   return status
+}
+
+/**
+ * `90` §6.3 แถว 7 — รอบจ่ายสำเร็จต้องแจ้งผู้ดูแลรอบจ่าย (ทั้งเส้นทางกดเองและเส้นทาง sync จากธนาคาร)
+ *
+ * เส้นทาง sync เป็น **consumer** (ยิงซ้ำได้ตามกติกา `91`) ⇒ ข้อความพก `dedupeKey` ผูกกับรอบจ่าย
+ * ⇒ เรียกซ้ำกี่ครั้งก็ได้แถวเดียว · ต้อง `await` เพื่อให้ job รู้ผลก่อนจบรอบ
+ */
+async function notifyPayoutCompleted(
+  organizationId: string,
+  batch: { id: string; name: string; netSatang: number },
+  source: 'manual' | 'bank_reconciliation',
+): Promise<void> {
+  const userIds = await usersWithCapability(organizationId, 'manage_payout_batch')
+  await dispatchNotificationAwaited(
+    { organizationId, userIds },
+    payoutBatchCompletedMessage({
+      batchId: batch.id,
+      batchName: batch.name,
+      netSatang: batch.netSatang,
+      source,
+    }),
+  )
 }

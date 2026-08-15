@@ -36,6 +36,8 @@ import type {
 } from '@/lib/assignments/types'
 import { caseScopeWhere } from '@/lib/cases/queries'
 import { Prisma } from '@/lib/generated/prisma/client'
+import { dispatchNotification } from '@/lib/notifications/dispatch'
+import { reassignmentRequestedMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -526,6 +528,12 @@ export async function reassignCase(
       )
       return created
     })
+
+    // `90` §6.3 แถว 3 — คนเดิมคือคนเดียวที่ต้องลงมือ (ให้ความยินยอมภายในเวลาที่กำหนด)
+    dispatchNotification(
+      { organizationId: user.organizationId, userIds: [assignment.agentId] },
+      reassignmentRequestedMessage({ caseRef: row.caseRef, reason, expiresAt }),
+    )
 
     return toActionResult(row.id, assignment, pending, ['assignment.reassignment_requested'])
   } catch (error) {

@@ -31,6 +31,8 @@ import { FinanceError } from '@/lib/finance/errors'
 import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
+import { dispatchNotification } from '@/lib/notifications/dispatch'
+import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
@@ -97,6 +99,8 @@ const expenseSelect = {
   payee: {
     select: {
       id: true,
+      /** ผู้ใช้เจ้าของ Payee — ปลายทางของการแจ้งเตือนผลอนุมัติ/ตีกลับ (`90` §6.3 แถว 6) */
+      userId: true,
       isVerified: true,
       user: { select: { fullName: true } },
       taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
@@ -490,6 +494,17 @@ export async function approveCompensationExpense(
     return { row, events: [...events], revenueEligibleCaseIds: revenue.eligibleCaseIds }
   })
 
+  // `90` §6.3 แถว 6 — แจ้งผู้รับเงินเมื่อผ่าน**ครบทุกขั้น**เท่านั้น (ขั้นกลางไม่ใช่ผลลัพธ์ของเขา)
+  if (progress.isComplete) {
+    dispatchNotification(
+      { organizationId: user.organizationId, userIds: [outcome.row.payee.userId] },
+      expenseApprovedMessage({
+        grossSatang: outcome.row.grossSatang,
+        caseRef: outcome.row.case?.caseRef ?? null,
+      }),
+    )
+  }
+
   return {
     expense: toDto(outcome.row, { ...flow, projected: false }),
     events: outcome.events,
@@ -571,7 +586,7 @@ export async function rejectCompensationExpense(
           step_role: stepRole,
           rejection_reason: reason,
           // ไม่แตะ `assignment_status` ของเคส (`41` §10.1)
-          events: [],
+          events: ['expense.rejected'],
         },
         reason,
         ipAddress: context.meta.ipAddress,
@@ -584,9 +599,15 @@ export async function rejectCompensationExpense(
     return row
   })
 
+  // `90` §6.3 แถว 6 — ตีกลับแล้วผู้เบิกต้องแก้เอง ⇒ ต้องรู้ทันทีพร้อมเหตุผล
+  dispatchNotification(
+    { organizationId: user.organizationId, userIds: [updated.payee.userId] },
+    expenseRejectedMessage({ grossSatang: updated.grossSatang, reason }),
+  )
+
   return {
     expense: toDto(updated, flow ?? fallbackFlow(updated)),
-    events: [],
+    events: ['expense.rejected'],
   }
 }
 

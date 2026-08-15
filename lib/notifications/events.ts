@@ -11,8 +11,10 @@ import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
  * (เทสต์ `events.test.ts` บังคับ — กันสะกดเพี้ยนแบบ `evidence.reject_evidence` ที่ `90` §6.3 เขียนไว้
  * แต่ไฟล์ต้นทาง `41` §17.2 ใช้ `case.evidence_rejected`)
  *
- * ⚠️ เฟส 5.1 สร้าง "ท่อ" (service + ศูนย์แจ้งเตือน) เท่านั้น — การผูก event เข้าโมดูลจริงครบทุกกลุ่ม
- * เป็นงาน Phase 5.2 · code ที่โมดูลยังไม่ emit อยู่ใน `NOTIFICATION_ONLY_EVENTS` ด้านล่าง
+ * ⚠️ เฟส 5.1 สร้าง "ท่อ" (service + ศูนย์แจ้งเตือน) · **เฟส 5.2 ต่อสายเข้าโมดูลจริงครบทุกกลุ่ม**
+ * — ข้อความ/ปลายทางลิงก์ของแต่ละ event อยู่ที่ `lib/notifications/messages.ts` (pure)
+ * และผู้รับ + จุดเรียกอยู่ที่ `lib/notifications/dispatch.ts` · code ที่ยังไม่มีที่ให้ emit
+ * (สคีมาไม่รองรับ) อยู่ใน `NOTIFICATION_ONLY_EVENTS` ด้านล่างพร้อมเหตุผล
  */
 
 /** ระดับความสำคัญบน UI — ใช้กลุ่มสีของ `04` §8.1 ตรง ๆ ห้ามตั้งสีเอง (mockup `notifications.html` L45) */
@@ -186,19 +188,20 @@ export const NOTIFICATION_EVENT_CODES = Object.keys(NOTIFICATION_EVENTS) as Noti
 
 /**
  * code ในแค็ตตาล็อกที่ **ยังไม่มี** ในทะเบียน domain event (`lib/api/event-names.ts`)
- * เพราะโมดูลต้นทางยังไม่ emit — Phase 5.2 เป็นคนต่อสายและย้ายชื่อเข้าทะเบียนพร้อมไฟล์ spec ต้นทาง
- * (Rule 04) · รายการนี้ต้องหดลงเรื่อย ๆ ห้ามโตขึ้นเงียบ ๆ — เทสต์บังคับให้ตรงกับความจริงเสมอ
+ * เพราะโมดูลต้นทางยังไม่ emit · รายการนี้ต้องหดลงเรื่อย ๆ ห้ามโตขึ้นเงียบ ๆ — เทสต์บังคับให้ตรงกับความจริง
+ *
+ * Phase 5.2 ย้ายเข้าทะเบียนไปแล้ว 7 ตัว เหลือ 2 ตัวที่ **ยังไม่มีที่ให้ emit จริงในสคีมาปัจจุบัน**
+ * (ลำดับเอกสาร: `02` ชนะ `90` — CLAUDE.md) ⇒ ต้องแก้ `02` ก่อนถึงจะต่อสายได้:
+ * - `payout_batch.failed` — `02` §3 `payout_batch_status` มีแค่ `draft|checking|file_generated|completed`
+ *   ไม่มีสถานะล้มเหลว และ `23` ก็ไม่มี transition ไปสถานะนั้น
+ * - `exception.due_soon` — `02` §9 `exceptions` **ไม่มีคอลัมน์วันครบกำหนด** และไฟล์ `34` ไม่มีแนวคิด deadline เลย
+ *   (`90` §6.3 เขียนว่า "ใหม่/ใกล้ deadline" ⇒ ทำได้เฉพาะครึ่งแรก คือ `exception.created`)
+ * ทั้งสองยังอยู่ในแค็ตตาล็อกเพื่อให้หน้าจอแสดงข้อมูลเก่า/ข้อมูลนำเข้าได้ถูกกลุ่มสี ถ้า PO ตัดสินใจเพิ่ม
+ * คอลัมน์/สถานะใน `02` เมื่อไร ให้ต่อสายแล้วย้ายออกจากรายการนี้ในคอมมิตเดียวกัน (Rule 04)
  */
 export const NOTIFICATION_ONLY_EVENTS: readonly NotificationEventCode[] = [
-  'expense.rejected',
-  'payout_batch.completed',
   'payout_batch.failed',
-  'advance.overdue',
-  'wht.filing_due_reminder',
-  'exception.created',
   'exception.due_soon',
-  'question.asked',
-  'period.sent_to_accountant',
 ]
 
 export function isNotificationEvent(code: string): code is NotificationEventCode {

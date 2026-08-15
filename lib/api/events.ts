@@ -8,7 +8,7 @@ import { EVENT_NAMES, type DomainEventName } from '@/lib/api/event-names'
  * ส่วนที่ `45` §7 เขียนไม่ตรงกับไฟล์ต้นทาง บันทึกไว้ที่ `EVENT_NAME_DIFFS` ด้านล่าง (ห้ามเงียบ)
  */
 
-export type EventModule = 'case' | 'assignment' | 'field' | 'warehouse' | 'finance'
+export type EventModule = 'case' | 'assignment' | 'field' | 'warehouse' | 'finance' | 'accounting'
 
 export interface DomainEventContract {
   readonly module: EventModule
@@ -69,6 +69,45 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
     module: 'finance',
     source: '16 §9 · 19 §6.1',
     description: 'รายการเบิกผ่านครบทุกขั้นของสายอนุมัติ — เกตหนึ่งในสามของ Revenue (`19` §6.1)',
+  },
+  'expense.rejected': {
+    module: 'finance',
+    source: '90 §6.3 · 16 §9',
+    description: 'ตีกลับรายการเบิกให้ผู้เบิกแก้ (`needs_revision`) — ไม่แตะสถานะงานภาคสนาม (`41` §10.1)',
+  },
+
+  // ── Payout (17) + Advance job (15) — เข้าทะเบียนที่ Phase 5.2 ──────────
+  'payout_batch.completed': {
+    module: 'finance',
+    source: '90 §6.3 · 17 §9/§18',
+    description: 'รอบจ่ายโอนเงินสำเร็จ (ยืนยันด้วยมือ หรือจับคู่จาก Bank Reconciliation — ไฟล์ 35)',
+  },
+  'advance.overdue': {
+    module: 'finance',
+    source: '90 §6.3 (mockup `notifications.html`) · 15 §9.1',
+    description: 'job มาร์คเงินทดรองที่เลย `due_clear_date` เป็น `overdue` — ไม่มีปุ่มให้กดเอง (`15` §10)',
+  },
+
+  // ── Accounting (30/33/34/36) — เข้าทะเบียนที่ Phase 5.2 ────────────────
+  'wht.filing_due_reminder': {
+    module: 'accounting',
+    source: '90 §6.3 · 33 §6.2/§8',
+    description: 'เตือนก่อนถึงกำหนดนำส่ง ภ.ง.ด.3/53 ของงวด — job รายวัน (idempotent ต่อ 1 งวด)',
+  },
+  'exception.created': {
+    module: 'accounting',
+    source: '90 §6.3 · 34 §9',
+    description: 'ข้อยกเว้นใหม่ระดับ critical — ที่ยัง open จะบล็อก Export Pack (`37`)',
+  },
+  'question.asked': {
+    module: 'accounting',
+    source: '90 §6.3 (mockup `notifications.html`) · 36 §13',
+    description: 'บันทึกข้อซักถามใหม่จากสำนักงานบัญชี รอคำตอบ',
+  },
+  'period.sent_to_accountant': {
+    module: 'accounting',
+    source: '90 §6.3 (mockup `notifications.html`) · 30 §9',
+    description: 'งวดบัญชีผ่าน Readiness Check แล้วส่งให้สำนักงานบัญชี (`collecting → sent_to_accountant`)',
   },
 }
 
