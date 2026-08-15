@@ -227,11 +227,32 @@ suite('ห้ามเบิกซ้อน (`15` §9.2/§16)', () => {
     const approved = results.filter((result) => result.status === 'fulfilled')
     expect(approved).toHaveLength(1)
 
+    // Final Test ด่าน 2 — ฝั่งที่แพ้ต้องได้ code ของ `24` เหมือนตอนสร้าง ไม่ใช่ Prisma error ดิบ 500
+    // (ยามตอนสร้างดูเฉพาะ `approved|overdue` ⇒ มี `pending_approval` หลายใบต่อคนได้โดยตั้งใจ
+    //  ⇒ จังหวะ "อนุมัติใบที่สอง" คือจุดที่ชน partial unique จริง — เกิดได้แม้ไม่ได้กดพร้อมกัน)
+    const loser = results.find((result) => result.status === 'rejected')
+    expect(codeOf((loser as PromiseRejectedResult).reason)).toBe('ADVANCE_PENDING_SETTLEMENT')
+
     const rows = await db().advance.findMany({
       where: { organizationId: ORG_ID, status: { in: ['approved', 'overdue'] } },
       select: { id: true },
     })
     expect(rows).toHaveLength(1)
+  })
+
+  it('Final Test ด่าน 2 — อนุมัติใบที่สอง **ตามลำดับ** (ไม่ได้พร้อมกัน) ⇒ `ADVANCE_PENDING_SETTLEMENT` ไม่ใช่ 500', async () => {
+    const first = await advances.createAdvance(ctx(agent), createInput())
+    const second = await advances.createAdvance(ctx(agent), createInput())
+
+    await advances.approveAdvance(ctx(finance), first.id, { approvedSatang: null, note: null })
+    await expectCode(
+      () => advances.approveAdvance(ctx(finance), second.id, { approvedSatang: null, note: null }),
+      'ADVANCE_PENDING_SETTLEMENT',
+    )
+
+    const stillPending = await db().advance.findUniqueOrThrow({ where: { id: second.id } })
+    expect(stillPending.status).toBe('pending_approval')
+    expect(stillPending.approvedAt).toBeNull()
   })
 })
 

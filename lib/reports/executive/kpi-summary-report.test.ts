@@ -133,6 +133,33 @@ describe('buildKpiSummaryReport', () => {
     expect(kpi(report, 'arOutstanding').higherIsBetter).toBe(false)
   })
 
+  it('Final Test ด่าน 2 — ค่าที่เป็น N/A ต้องไม่มี badge MoM (ห้ามแปลง null เป็น 0 แล้วเทียบ)', () => {
+    const report = build({
+      // งวดนี้รายได้ 0 ⇒ margin = N/A · งวดก่อน 60% ⇒ ถ้าแปลงเป็น 0 จะได้ badge "↓ 100.0%" สีแดง
+      // ทั้งที่ค่าบนการ์ดคือ N/A ⇒ ผู้บริหารอ่านว่ากำไรตก 100%
+      current: totals({ revenueSatang: 0, directCostSatang: 0, successCount: 0, failCount: 0 }),
+      previous: totals({ revenueSatang: 10_000_00, directCostSatang: 4_000_00 }),
+    })
+
+    expect(kpi(report, 'marginPct').value).toBeNull()
+    expect(kpi(report, 'marginPct').mom).toBeUndefined()
+    expect(kpi(report, 'successPct').value).toBeNull()
+    expect(kpi(report, 'successPct').mom).toBeUndefined()
+    // ค่าที่ยังเทียบได้ตามปกติต้องไม่ถูกกระทบ
+    expect(kpi(report, 'revenue').mom).toMatchObject({ direction: 'down' })
+  })
+
+  it('Final Test ด่าน 2 — งวดก่อนหน้าเป็น N/A ก็เทียบไม่ได้เช่นกัน (ไม่ใช่ "โตจาก 0%")', () => {
+    const report = build({
+      current: totals({ revenueSatang: 10_000_00, directCostSatang: 4_000_00 }),
+      previous: totals({ revenueSatang: 0, directCostSatang: 0, successCount: 0, failCount: 0 }),
+    })
+
+    expect(kpi(report, 'marginPct').value).toBe(60)
+    expect(kpi(report, 'marginPct').mom).toBeUndefined()
+    expect(kpi(report, 'successPct').mom).toBeUndefined()
+  })
+
   it('ช่วงก่อนหน้าเป็น 0 ⇒ changePct = null (N/A) ไม่ใช่ 100%', () => {
     const report = build({ previous: totals({ revenueSatang: 0 }) })
 

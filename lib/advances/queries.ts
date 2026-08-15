@@ -303,7 +303,11 @@ export async function approveAdvance(
     )
 
     return row
-  })
+    // ห้ามเบิกซ้อนถูกกันไว้ตอน**สร้าง**ก็จริง แต่ยังมี `pending_approval` หลายใบต่อคนได้โดยตั้งใจ
+    // (ยามตอนสร้างดูเฉพาะ `approved`/`overdue`) ⇒ อนุมัติใบที่สองของคนเดิมคือจังหวะที่ชน
+    // `uniq_active_advance_per_payee` จริง ต้องตอบ `ADVANCE_PENDING_SETTLEMENT` (400) เหมือน
+    // ตอนสร้าง ไม่ใช่ Prisma error ดิบ 500 (`15` §6.2 · `24` §6.4)
+  }).catch(rethrowDuplicateAdvance)
 
   return toDto(updated, now)
 }

@@ -1,7 +1,7 @@
 import { grossProfit } from '@/lib/finance/gross-profit'
 import { sumSatang } from '@/lib/finance/satang'
 import { fmtSatang } from '@/lib/format/money'
-import { momComparison } from '@/lib/reports/kpi'
+import { momComparison, type MoMComparison } from '@/lib/reports/kpi'
 import { successPctOf } from '@/lib/reports/operations/success-rate-report'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { resolveReportPeriod, toIsoDateOnly } from '@/lib/reports/period'
@@ -110,6 +110,17 @@ function rowOf(month: ExecutiveMonthEntry): ReportRow {
   }
 }
 
+/**
+ * เทียบเดือนต่อเดือนเฉพาะค่าที่ **มีจริงทั้งสองงวด** (`96` §11 · Rule 01)
+ *
+ * ค่าที่เป็น `null` คือ "เทียบไม่ได้" ไม่ใช่ศูนย์ — Margin ของงวดที่รายได้ = 0 และ % สำเร็จของงวด
+ * ที่ยังไม่มีเคสปิด · แปลงเป็น 0 แล้วเทียบจะได้ตัวเลขที่ไม่มีอยู่จริงบน badge
+ */
+function momOfNullable(current: number | null, previous: number | null): MoMComparison | undefined {
+  if (current === null || previous === null) return undefined
+  return momComparison(current, previous)
+}
+
 export function buildKpiSummaryReport(input: {
   /** 12 เดือนย้อนหลัง เรียงเก่า → ใหม่ (ผู้เรียกใช้ `lastMonthlyPeriods()`) */
   months: readonly ExecutiveMonthEntry[]
@@ -176,7 +187,10 @@ export function buildKpiSummaryReport(input: {
         value: currentProfit.marginPct,
         type: 'percent',
         hint: 'กำไรขั้นต้น ÷ รายได้',
-        mom: momComparison(currentProfit.marginPct ?? 0, previousProfit.marginPct ?? 0),
+        // งวดที่รายได้ = 0 ⇒ margin เป็น "N/A" (Rule 01 ห้ามหารศูนย์) — แปลง `null` เป็น 0 แล้วเทียบ
+        // จะได้ badge "↓ 100.0%" สีแดงทั้งที่ค่าบนการ์ดเป็น N/A ⇒ ผู้บริหารอ่านว่ากำไรตก 100%
+        // ⇒ เทียบได้ต่อเมื่อมีค่าจริงทั้งสองงวดเท่านั้น (ไม่มี = ไม่ต้องแสดง badge)
+        mom: momOfNullable(currentProfit.marginPct, previousProfit.marginPct),
       },
       {
         key: 'caseCount',
@@ -192,7 +206,8 @@ export function buildKpiSummaryReport(input: {
         value: currentSuccessPct,
         type: 'percent',
         hint: `สำเร็จ ${current.successCount.toLocaleString('th-TH')} จากเคสที่ปิดแล้ว ${currentClosed.toLocaleString('th-TH')}`,
-        mom: momComparison(currentSuccessPct ?? 0, previousSuccessPct ?? 0),
+        // เหมือน Margin — งวดที่ยังไม่มีเคสปิดเลย % สำเร็จเป็น N/A ไม่ใช่ 0%
+        mom: momOfNullable(currentSuccessPct, previousSuccessPct),
       },
       {
         key: 'arOutstanding',
