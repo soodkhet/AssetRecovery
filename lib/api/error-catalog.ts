@@ -125,6 +125,10 @@ export const ERROR_CATALOG = {
   UNLOCK_REQUIRES_EXECUTIVE: { status: 403, severity: 'reject', source: '24 §6.7' },
 
   // ── 24 §6.8 เอกสารทางการ/บัญชี ─────────────────────────────────────────
+  SALES_RECORD_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
+  TAX_INVOICE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
+  TAX_INVOICE_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.8' },
+  TAX_INVOICE_ALREADY_ISSUED: { status: 400, severity: 'reject', source: '24 §6.8' },
   TAX_INVOICE_FIELD_MISSING: { status: 400, severity: 'reject', source: '24 §6.8' },
   INVOICE_NUMBER_GAP: { status: 500, severity: 'reject', source: '24 §6.8' },
   CANCEL_REQUIRES_REASON: { status: 400, severity: 'reject', source: '24 §6.8' },

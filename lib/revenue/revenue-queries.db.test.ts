@@ -200,6 +200,9 @@ async function cleanup(): Promise<void> {
   // ของรอบที่เพิ่งสร้าง ซึ่งไม่ซ้ำข้ามเทสต์อยู่แล้ว
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)
+  // Phase 4.3: ส่งบิลแล้วเกิด `sales_records` ผูกกับรอบวางบิล (`31` §6.1) ⇒ ต้องล้างก่อนรอบวางบิล
+  // (ไฟล์นี้ไม่ได้ออกใบกำกับภาษี จึงไม่มีแถว `tax_invoices` มาขวาง — ใบกำกับภาษีลบไม่ได้ตาม `02` §13)
+  await tx.$executeRawUnsafe(`DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM billing_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM assets WHERE organization_id = '${ORG_ID}'`)
