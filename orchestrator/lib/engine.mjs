@@ -7,7 +7,7 @@ import { getCheckpoint, setCheckpoint, phaseReviewed, markFinalStage, finalStage
 import { runClaude, buildArgs } from './claude.mjs';
 import { runVerify, verifyFailureSummary } from './verify.mjs';
 import * as git from './git.mjs';
-import { park, listQueue, getQueue, updateQueue, appendRun, writeSessionLog } from './queue.mjs';
+import { park, listQueue, getQueue, updateQueue, appendRun, writeSessionLog, resolveStaleForTask } from './queue.mjs';
 import { saveRateLimits, getPlanLimits, refreshPlanLimits } from './usage.mjs';
 import { notify } from './notify.mjs';
 import { acquireLock, releaseLock, lockHeld, launchWhenFree } from './lock.mjs';
@@ -374,6 +374,7 @@ async function runOneCore({ dryRun = false, force = false } = {}) {
       const merged = git.mergeBranch(branch, config.baseBranch);
       git.deleteBranch(branch);
       appendRun({ runId, taskId: task.id, event: 'merged', head: merged, cost: res.cost });
+      resolveStaleForTask(task.id);
       state.running = false;
       setPhase('idle', null);
       return { merged, task, cost: res.cost };
@@ -543,6 +544,7 @@ async function resolveCore(queueId, { answer, action = 'approve' } = {}) {
     updateQueue(queueId, { status: 'resolved', resolvedAt: new Date().toISOString(), resolution: 'merged', head: merged });
     if (rec.reviewKind === 'final' && rec.reviewStage) markFinalStage(rec.reviewStage);   // ด่านนี้ผ่านแล้ว
     appendRun({ runId: rec.runId, taskId: rec.taskId, event: 'merged-approved', head: merged });
+    resolveStaleForTask(rec.taskId);
     setPhase('idle', null);
     return { merged, task };
   }
@@ -589,6 +591,7 @@ async function resolveCore(queueId, { answer, action = 'approve' } = {}) {
     if (config.autoMerge) {
       const merged = git.mergeBranch(rec.branch, config.baseBranch);
       git.deleteBranch(rec.branch);
+      resolveStaleForTask(rec.taskId);
       state.running = false;
       setPhase('idle', null);
       return { merged, task };

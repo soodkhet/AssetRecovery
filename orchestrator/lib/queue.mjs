@@ -42,6 +42,27 @@ export function updateQueue(id, patch) {
   return next;
 }
 
+
+// ปิดการ์ดค้างของ task ที่ทำจนจบ (merged) แล้ว — error/verify_failed/decision ที่ยัง pending/processing
+// ของ task เดียวกันถือว่าหมดความหมาย (เช่น session ล้มแล้ว retry รอบใหม่สำเร็จ) → resolve อัตโนมัติ
+export function resolveStaleForTask(taskId, note) {
+  const stale = listQueue().filter(
+    (q) =>
+      q.taskId === taskId &&
+      (q.status === 'pending' || q.status === 'processing') &&
+      ['error', 'verify_failed', 'decision'].includes(q.type),
+  );
+  for (const q of stale) {
+    updateQueue(q.id, {
+      status: 'resolved',
+      resolvedAt: new Date().toISOString(),
+      resolution: 'auto-closed',
+      note: note || 'task ทำจนจบ (merged) แล้ว — ปิดการ์ดค้างอัตโนมัติ',
+    });
+  }
+  return stale.length;
+}
+
 // --- run log (append-only) ---
 export function appendRun(entry) {
   ensure(LOG_DIR);
