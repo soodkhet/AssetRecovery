@@ -1,6 +1,6 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.7 (Accounting FE ครบ 9/9 แท็บ) **⇒ จบ Phase 4 ทั้งเฟส** + รีวิว Phase 4 แก้ครบ (`7e9ff1b`, `caed4b9`) · งานถัดไป 5.1 (Notification Service + Notification Center)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.7 (Accounting FE ครบ 9/9 แท็บ) **⇒ จบ Phase 4 ทั้งเฟส** + รีวิว Phase 4 แก้ครบ (`7e9ff1b`, `c143d25`) · งานถัดไป 5.1 (Notification Service + Notification Center)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
