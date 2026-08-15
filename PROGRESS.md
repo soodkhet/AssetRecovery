@@ -100,7 +100,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 6.1 | Report Framework + Export Engine | ✅ | 2026-08-15 · `4d76986`+`83600a2` · ทะเบียน 17 รายงาน + ยามสิทธิ์รายหมวด (การเงินเรียก E1 = 403) + แคช 3 โหมด + โครงหน้าจอกลาง `<ReportView>` + export Excel/PDF (>5,000 แถว = job) · ⚠️ ต้องสร้าง bucket `report-exports` ต่อ environment → archive |
-| 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `__COMMIT__` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
+| 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
 | 6.3 | รายงานหมวด O (O1–O5) | ⬜ | PLAN §6.3 · Manager team scope |
 | 6.4 | รายงานหมวด A (A1–A4) | ⬜ | PLAN §6.4 |
 | 6.5 | Executive Dashboard (E1–E3) | ⬜ | PLAN §6.5 · Exec/Superadmin เท่านั้น |

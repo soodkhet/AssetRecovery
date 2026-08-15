@@ -7,7 +7,7 @@
 
 ## Phase 6.2 — รายงานหมวด F (F1–F5)
 
-**วันที่**: 2026-08-15 · **commit**: `__COMMIT__` · **branch**: `auto/phase-6.2`
+**วันที่**: 2026-08-15 · **commit**: `22a3fab` · **branch**: `auto/phase-6.2`
 
 ### สิ่งที่ทำ
 
