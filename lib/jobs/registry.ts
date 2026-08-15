@@ -139,7 +139,7 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
 
   report_export: async ({ job, now }) => {
     const actor = await actorOf(job)
-    return runReportExportJob({ actor, jobId: job.id, payload: job.payload, now })
+    return runReportExportJob({ actor, jobId: job.id, payload: job.payload, now, requestedAt: job.createdAt })
   },
 
   bank_file: async ({ job, now }) => {
