@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { renderPackCover } from '@/components/pdf/pack-cover'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
 import { findPeriodById, getPeriodReadiness, type AccountingMutationContext } from '@/lib/accounting/queries'
@@ -13,6 +14,7 @@ import {
   cashReceiptCsv,
   expenseCsv,
   exportVersionLabel,
+  packAttemptId,
   packFileName,
   packStoragePath,
   packZipFileName,
@@ -626,12 +628,16 @@ export async function createExportPack(
   const zipFileName = packZipFileName(scope.periodLabel, version)
 
   // ⑤ อัปโหลดทั้งชุด — `upsert: false` ⇒ ไฟล์เวอร์ชันเดิมไม่มีวันถูกทับ (Rule 09)
+  // path มีชั้น "ครั้งที่พยายาม" คั่นไว้ ⇒ ความพยายามที่ล้มหลังอัปโหลด (tx ล้ม / สองคนกดพร้อมกัน)
+  // ทิ้งไฟล์กำพร้าได้ แต่**ไม่บล็อกครั้งถัดไป** — ดู `packAttemptId()`
+  const attempt = packAttemptId(generatedAt, randomUUID())
   const pathFor = (fileName: string): string =>
     packStoragePath({
       organizationId: actor.organizationId,
       yearBe: scope.yearBe,
       month: scope.month,
       version,
+      attempt,
       fileName,
     })
 

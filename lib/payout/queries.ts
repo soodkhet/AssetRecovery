@@ -550,6 +550,42 @@ export interface PaymentFileOutcome {
   warning?: ApiWarning
 }
 
+/**
+ * จองคีย์กันโอนซ้ำของรอบ — **ค่าเดียวตลอดชีพของรอบ** (`17` §6.3 · Rule 09)
+ *
+ * mint จากค่าที่อ่านมาก่อนหน้า (`batch.idempotencyKey ?? สร้างใหม่`) ไม่ได้ เพราะสองคำขอที่เข้ามา
+ * พร้อมกันบนรอบที่ยังไม่เคยสร้างไฟล์จะเห็น `null` **ทั้งคู่** แล้วได้คนละคีย์ ⇒ `referenceNo` ของ
+ * สองไฟล์เป็นคนละชุด ⇒ ถ้าไฟล์ทั้งสองถูกอัปเข้าธนาคาร **ธนาคารจับซ้ำไม่ได้ = โอนซ้ำ**
+ *
+ * ⇒ จองด้วย `UPDATE … WHERE idempotency_key IS NULL` (Postgres ล็อกแถวตอนอัปเดต ⇒ ผู้ชนะมีคนเดียว
+ * เสมอ) แล้ว**อ่านค่าจริงกลับมา** ใช้ร่วมกันทั้งสองฝั่ง · จองก่อนอัปโหลดโดยตั้งใจ — คีย์เป็นแค่
+ * ตัวระบุรอบ ไม่ใช่สถานะ "สร้างไฟล์แล้ว" (ตัวนั้นคือ `payment_file_generated_at`) ⇒ อัปโหลดล้ม
+ * แล้วลองใหม่ยังได้คีย์เดิม ซึ่งเป็นพฤติกรรมที่ `17` §6.3 ต้องการ
+ */
+async function claimIdempotencyKey(
+  batch: { id: string; side: PayoutBatchSide; idempotencyKey: string | null },
+  now: Date,
+): Promise<string> {
+  if (batch.idempotencyKey !== null) return batch.idempotencyKey
+
+  await prisma.payoutBatch.updateMany({
+    where: { id: batch.id, idempotencyKey: null },
+    data: {
+      idempotencyKey: buildIdempotencyKey({ side: batch.side, generatedAt: now, uniqueSuffix: randomUUID() }),
+    },
+  })
+
+  const claimed = await prisma.payoutBatch.findUnique({
+    where: { id: batch.id },
+    select: { idempotencyKey: true },
+  })
+  // ไปไม่ถึงบรรทัดนี้ — แถวเพิ่งถูกอ่านมาแล้ว และคีย์ไม่มีทางถูกล้างกลับเป็น NULL
+  if (claimed?.idempotencyKey == null) {
+    throw new Error(`claimIdempotencyKey: จองคีย์กันโอนซ้ำของรอบ ${batch.id} ไม่สำเร็จ`)
+  }
+  return claimed.idempotencyKey
+}
+
 export async function generatePaymentFile(
   context: PayoutMutationContext,
   batchId: string,
@@ -610,9 +646,10 @@ export async function generatePaymentFile(
   assertBankFileUsable(format)
   assertHasItemsToPay(items.length)
 
-  const idempotencyKey =
-    batch.idempotencyKey ??
-    buildIdempotencyKey({ side: batch.side, generatedAt: now, uniqueSuffix: randomUUID() })
+  const idempotencyKey = await claimIdempotencyKey(
+    { id: batchId, side: batch.side, idempotencyKey: batch.idempotencyKey },
+    now,
+  )
 
   const rows = items.map((item, index): PaymentFileRowInput => {
     const bankCode = resolveBankCode(item.payee.bankName)

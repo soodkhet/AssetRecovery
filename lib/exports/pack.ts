@@ -118,16 +118,35 @@ export function packZipFileName(periodLabel: string, version: number): string {
   return `AccountingPack_${slug}_${exportVersionLabel(version)}.zip`
 }
 
-/** path ใน bucket — เดินตาม version ⇒ ไฟล์เวอร์ชันเก่าไม่มีวันถูกทับ (Rule 09) */
+/**
+ * รหัสของ "ครั้งที่พยายามสร้าง" — ใช้คั่น path ไม่ให้ความพยายามที่ล้มกลางทางไปบล็อกครั้งถัดไป
+ *
+ * `version` มาจาก `MAX(export_records.version) + 1` ⇒ ถ้าอัปโหลดสำเร็จแล้ว tx/audit ล้ม (หรือสองคน
+ * กด Export รอบเดียวกันพร้อมกัน) จะมีไฟล์ `v<n>` ค้างในถังโดยไม่มีแถวใน `export_records`
+ * ⇒ ครั้งถัดไปคิด `version` ได้เท่าเดิม แล้วชน `upsert: false` **ทุกครั้งไม่มีวันหาย**
+ * (ทั้งระบบไม่มีโค้ดลบ object ใน storage ⇒ ต้องเข้าไปลบมือถึงจะ Export รอบนั้นได้อีก)
+ */
+export function packAttemptId(generatedAt: Date, uniqueSuffix: string): string {
+  const stamp = generatedAt.toISOString().replace(/[-:.]/g, '').replace('T', '-').slice(0, 16)
+  return `${stamp}-${uniqueSuffix.replace(/[^0-9a-zA-Z]/g, '').slice(0, 8).toLowerCase()}`
+}
+
+/**
+ * path ใน bucket — เดินตาม version ⇒ ไฟล์เวอร์ชันเก่าไม่มีวันถูกทับ (Rule 09)
+ *
+ * ชั้น `attempt` อยู่ **ใต้** `v<version>` ⇒ ยังอ่านออกว่าไฟล์ชุดไหนเป็นเวอร์ชันอะไร และ path จริง
+ * ของชุดที่ใช้งานถูกเก็บไว้ใน `export_records.file_urls` อยู่แล้ว (ไม่มีใครประกอบ path ใหม่ตอนดาวน์โหลด)
+ */
 export function packStoragePath(input: {
   organizationId: string
   yearBe: number
   month: number
   version: number
+  attempt: string
   fileName: string
 }): string {
   const month = String(input.month).padStart(2, '0')
-  return `${input.organizationId}/${input.yearBe}-${month}/v${input.version}/${input.fileName}`
+  return `${input.organizationId}/${input.yearBe}-${month}/v${input.version}/${input.attempt}/${input.fileName}`
 }
 
 // ── 01_Revenue.csv (ไฟล์ 19) ────────────────────────────────────────────────

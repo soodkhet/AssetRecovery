@@ -419,6 +419,35 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
     expect(file.fileName).toBe(`${outcome.result.batch.idempotencyKey}-v1.csv`)
   })
 
+  it('สร้างไฟล์พร้อมกันสองคำขอ → คีย์กันโอนซ้ำต้องมีค่าเดียว (Rule 09 — ธนาคารต้องจับซ้ำได้)', async () => {
+    const batchId = await batchWithOneItem()
+
+    // ทั้งสองอ่าน `idempotency_key = NULL` พร้อมกัน — ถ้าต่างคนต่าง mint คีย์ จะได้ `referenceNo`
+    // คนละชุด ⇒ ไฟล์สองใบที่อัปเข้าธนาคารถูกมองเป็นคนละรายการ = **โอนซ้ำ** (`17` §6.3)
+    const settled = await Promise.allSettled([
+      payout.generatePaymentFile(ctx, batchId, generateInput),
+      payout.generatePaymentFile(ctx, batchId, generateInput),
+    ])
+
+    const row = await db().payoutBatch.findUniqueOrThrow({
+      where: { id: batchId },
+      select: { idempotencyKey: true },
+    })
+    expect(row.idempotencyKey).toMatch(/^PB-OUT-\d{8}-[0-9A-Z]+$/)
+
+    // อย่างน้อยหนึ่งคำขอต้องสำเร็จ (ไม่ใช่ล้มทั้งคู่)
+    const generated = settled.flatMap((outcome) =>
+      outcome.status === 'fulfilled' && outcome.value.result.generated ? [outcome.value.result] : [],
+    )
+    expect(generated.length).toBeGreaterThanOrEqual(1)
+
+    // ทุกคำขอที่ผ่านต้องอ้างคีย์เดียวกันกับที่อยู่ในแถวจริง
+    expect([...new Set(generated.map((result) => result.batch.idempotencyKey))]).toEqual([row.idempotencyKey])
+
+    // ไม่มีไฟล์กำพร้าที่ผูกกับคีย์อื่นค้างใน storage
+    expect([...storage.keys()].every((path) => path.includes(`${row.idempotencyKey}-v`))).toBe(true)
+  })
+
   it('ยิงซ้ำโดยไม่ยืนยัน → เตือน DUPLICATE_PAYMENT_FILE และยังไม่สร้างไฟล์ใหม่', async () => {
     const batchId = await batchWithOneItem()
     const first = await payout.generatePaymentFile(ctx, batchId, generateInput)

@@ -201,8 +201,12 @@ export function paymentFileName(input: {
 
 /**
  * เวอร์ชันถัดไปของไฟล์โอน — อ่านจาก path ของไฟล์ล่าสุด (`payment_file_url`) เพราะ `02` §8 ไม่มี
- * คอลัมน์นับจำนวนครั้ง · ไม่เคยสร้าง/อ่านไม่ออก = เริ่มที่ 1 (ค่าที่อ่านไม่ออกต้องไม่ทับของเดิม
- * ⇒ path จริงยังมีเวลาต่อท้ายอีกชั้นที่ `paymentFileStoragePath()`)
+ * คอลัมน์นับจำนวนครั้ง · ไม่เคยสร้าง/อ่านไม่ออก = เริ่มที่ 1
+ *
+ * ⚠️ `paymentFileStoragePath()` **ไม่มี**เวลาต่อท้าย — path ผูกกับ `(batchId, idempotencyKey, version)`
+ * ล้วน ⇒ สองคำขอที่สร้างไฟล์พร้อมกันบนรอบเดียวกันจะได้ path เดียวกัน แล้วคนที่สองถูก `upsert: false`
+ * ปฏิเสธ (ไม่ทับของเดิม = ผลลัพธ์ที่ต้องการ) · คีย์ที่ใช้ประกอบ path ถูกจองแบบ atomic ที่
+ * `claimIdempotencyKey()` แล้ว ⇒ ทั้งสองฝั่งอ้างคีย์เดียวกันเสมอ ธนาคารจับซ้ำได้
  */
 export function nextPaymentFileVersion(previousFileUrl: string | null): number {
   if (previousFileUrl === null) return 1
