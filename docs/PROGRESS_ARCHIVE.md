@@ -7,7 +7,7 @@
 
 ## Phase 3.6 — Revenue / Billing / AR Backend (19)
 
-**วันที่**: 2026-08-15 · **commit**: `fb84fd9` (Revenue service ตัวจริง + Billing/AR BE) + `<hash-2>` (เทสต์ระดับ DB + ปิด task) · **branch**: `auto/phase-3.6`
+**วันที่**: 2026-08-15 · **commit**: `fb84fd9` (Revenue service ตัวจริง + Billing/AR BE) + `294f47f` (เทสต์ระดับ DB + ปิด task) · **branch**: `auto/phase-3.6`
 
 ### สิ่งที่ทำ
 

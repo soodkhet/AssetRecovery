@@ -72,7 +72,7 @@
 | 3.3 | Approval FE + Claims & Advances | ✅ | 2026-08-15 · `d1f39f6`+`45bd3a1` · API 9 endpoint (`27` §6.4) + ห้ามเบิกซ้อน 2 ชั้น + job auto-overdue idempotent + หน้า `/finance` 2 แท็บแรก · เทสต์ระดับ DB 22 เคสของ `15` §16 → archive |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+`1848a48` · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
 | 3.5 | Payout FE + Internal PDFs | ✅ | 2026-08-15 · `9538009`+`c15a75b` · แท็บรอบจ่ายเงิน (ตาราง+3 modal+ยืนยันซ้ำ 2 จังหวะ) + เอกสารภายใน 3 ใบเทียบ samples 04–06 · fix `lpad` เลขเอกสารเกิน 999 → archive |
-| 3.6 | Revenue / Billing / AR BE | ✅ | 2026-08-15 · `fb84fd9`+`<hash-2>` · RevenueService ตัวจริง (เกต `19` §6.1 + ยอด `22` §6.5–6.8 + snapshot VAT) + Billing Batch/AR Aging + API 7 endpoint · เทสต์ pure 34 + DB 30 (`19` §16 ครบ 8 เคส) → archive |
+| 3.6 | Revenue / Billing / AR BE | ✅ | 2026-08-15 · `fb84fd9`+`294f47f` · RevenueService ตัวจริง (เกต `19` §6.1 + ยอด `22` §6.5–6.8 + snapshot VAT) + Billing Batch/AR Aging + API 7 endpoint · เทสต์ pure 34 + DB 30 (`19` §16 ครบ 8 เคส) → archive |
 | 3.7 | Billing FE + Adjustment | ⬜ | PLAN §3.7 · 4 FK + CHECK (DEC-004) |
 | 3.8 | Profitability + Finance Dashboard | ⬜ | PLAN §3.8 |
 
