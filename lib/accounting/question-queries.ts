@@ -13,7 +13,7 @@ import type { AccountantQuestionDto, AccountantQuestionListDto } from '@/lib/acc
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import { dispatchNotification, usersWithCapability } from '@/lib/notifications/dispatch'
+import { dispatchToCapability } from '@/lib/notifications/dispatch'
 import { accountantQuestionMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 
@@ -120,12 +120,11 @@ export async function createAccountantQuestion(
   })
 
   // `90` §6.3 (mockup `notifications.html` · `36` §13) — ข้อซักถามใหม่ต้องมีคนตอบ
-  void usersWithCapability(ctx.actor.organizationId, MANAGE_ACCOUNTANT_QUESTIONS).then((userIds) => {
-    dispatchNotification(
-      { organizationId: ctx.actor.organizationId, userIds },
-      accountantQuestionMessage({ periodLabel: period.periodLabel, questionText: created.questionText }),
-    )
-  })
+  dispatchToCapability(
+    ctx.actor.organizationId,
+    MANAGE_ACCOUNTANT_QUESTIONS,
+    accountantQuestionMessage({ periodLabel: period.periodLabel, questionText: created.questionText }),
+  )
 
   return toDto(created)
 }

@@ -60,13 +60,24 @@ export function AuditLogsManager() {
       />
 
       <Card>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="เป้าหมาย (Target)">
             <Select value={filters.targetType} onChange={(event) => update({ targetType: event.target.value })}>
               <option value="">ทั้งหมด</option>
               {data.targetTypes.map((targetType) => (
                 <option key={targetType} value={targetType}>
                   {auditTargetLabel(targetType)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {/* `90` §14 กำหนดตัวกรองไว้ 3 ช่อง: เป้าหมาย · ผู้ดำเนินการ · ช่วงวัน */}
+          <Field label="ผู้ดำเนินการ">
+            <Select value={filters.actorId} onChange={(event) => update({ actorId: event.target.value })}>
+              <option value="">ทั้งหมด</option>
+              {data.actors.map((actor) => (
+                <option key={actor.id} value={actor.id}>
+                  {actor.name}
                 </option>
               ))}
             </Select>
@@ -98,7 +109,15 @@ export function AuditLogsManager() {
             แสดง {fmtCount(from)}–{fmtCount(data.offset + shown)} จาก {fmtCount(data.total)} รายการ
           </p>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setFilters(EMPTY_AUDIT_FILTERS)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                // ต้องรีเซ็ตหน้าด้วย — ไม่งั้นล้างตัวกรองตอนอยู่หน้า 3 แล้วยังค้าง offset เดิม
+                setFilters(EMPTY_AUDIT_FILTERS)
+                setOffset(0)
+              }}
+            >
               ล้างตัวกรอง
             </Button>
             <Button variant="secondary" size="sm" onClick={() => void reload()}>

@@ -2770,6 +2770,8 @@ model AuditLog {
 
   @@index([organizationId, targetType, targetId, createdAt], map: "idx_audit_target")
   @@index([organizationId, actorId, createdAt], map: "idx_audit_actor")
+  /// หน้า `90` §14 เรียงล่าสุดก่อนทั้งองค์กร — สอง index บนไม่รองรับเพราะขึ้นต้นด้วยคอลัมน์อื่น
+  @@index([organizationId, createdAt(sort: Desc)], map: "idx_audit_logs_org_created_at")
   @@map("audit_logs")
 }
 
@@ -2833,7 +2835,8 @@ model PushSubscription {
 
 /// Background jobs (Vercel Cron / QStash) — ทุก job ต้อง **idempotent** (`91`)
 /// ⚠️ คีย์กันซ้ำอยู่ใน `payload->>'idempotencyKey'` (`02` §10 ไม่มีคอลัมน์นี้) — บังคับด้วย partial
-/// unique index บน expression `uniq_jobs_idempotency_key` ใน raw SQL migration (Prisma ประกาศไม่ได้)
+/// unique index `uniq_jobs_org_idempotency_key` ใน raw SQL migration (Prisma ประกาศไม่ได้)
+/// ขอบเขตคีย์ = **ต่อองค์กร** (`COALESCE(organization_id::text,'system')` + คีย์) ไม่ใช่ทั้งระบบ
 model Job {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// NULL = job ระดับระบบ (ไม่ผูก org)

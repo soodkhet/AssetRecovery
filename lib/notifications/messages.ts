@@ -118,6 +118,26 @@ export function caseClosedFailMessage(input: {
   }
 }
 
+/** `90` §6.3 แถว 4 — หลักฐานปิดงานถูกตีกลับ ต้องบอกพนักงานคนที่ถือเคส */
+export function evidenceRejectedMessage(input: { caseId: string; caseRef: string; reason: string }): NotificationMessage {
+  return {
+    eventCode: 'case.evidence_rejected',
+    title: 'หลักฐานปิดงานถูกตีกลับ',
+    body: withReason(`เคส ${input.caseRef}`, input.reason),
+    linkPath: `/field/cases/${input.caseId}`,
+  }
+}
+
+/** `41` §15 — รายการเบิกที่เข้า `pending_approval` หลังปิดงานไม่สำเร็จ */
+export function expenseQueueMessage(input: { caseRef: string; count: number }): NotificationMessage {
+  return {
+    eventCode: 'expense.case_bound_created',
+    title: 'มีรายการเบิกใหม่รออนุมัติ',
+    body: `เคส ${input.caseRef} ปิดงานไม่สำเร็จ — มีรายการเบิก ${input.count} รายการเข้าคิวอนุมัติ`,
+    linkPath: '/finance/approvals',
+  }
+}
+
 // ── Warehouse (44 §14) ──────────────────────────────────────────────────────
 
 export function assetIntakeRejectedMessage(input: {
@@ -163,7 +183,9 @@ export function expenseApprovedMessage(input: {
   return {
     eventCode: 'expense.approved',
     title: 'รายการเบิกผ่านอนุมัติครบทุกขั้น',
-    body: `ยอด ${fmtSatangSymbol(input.grossSatang)}${scope} — รอเข้ารอบจ่าย`,
+    // ยอดนี้เป็น **ก่อนหัก ณ ที่จ่าย** — ยอดโอนจริงหัก WHT ก่อน (`22` §6.9) ⇒ ต้องบอกให้ชัด
+    // ไม่งั้นผู้รับเงินอ่านแล้วเข้าใจว่าจะได้เต็มจำนวน
+    body: `ยอดก่อนหัก ณ ที่จ่าย ${fmtSatangSymbol(input.grossSatang)}${scope} — รอเข้ารอบจ่าย`,
     linkPath: '/field/income',
   }
 }
@@ -232,6 +254,20 @@ export function exceptionCreatedMessage(input: {
   }
 }
 
+/**
+ * "ขั้นของการเตือน" ที่คำนวณซ้ำได้จาก `daysLeft` — เป็นส่วนหนึ่งของ dedupe key
+ *
+ * ⚠️ ถ้าคีย์เป็น `wht-filing-<summaryId>` เฉย ๆ job รายวันจะเตือน **ครั้งเดียวตลอดชีพของงวด**
+ * ⇒ สาขา "ครบกำหนดวันนี้" / "เลยกำหนด" ไม่มีวันถึงผู้ใช้ ทั้งที่พลาดกำหนดมีโทษปรับจริง (`33` §6.2)
+ * ⇒ แบ่งขั้นแทน: ก่อนกำหนดวันละครั้ง (อยู่ในหน้าต่าง 5 วัน) · วันครบกำหนดหนึ่งครั้ง · เลยกำหนดสัปดาห์ละครั้ง
+ * — ยังคำนวณซ้ำได้จากข้อมูลล้วน ไม่ใช้เวลาปัจจุบันดิบ (กติกาของ `lib/notifications/dedupe.ts`)
+ */
+export function whtFilingReminderStage(daysLeft: number): string {
+  if (daysLeft > 0) return `d${daysLeft}`
+  if (daysLeft === 0) return 'd0'
+  return `overdue-w${Math.floor((Math.abs(daysLeft) - 1) / 7) + 1}`
+}
+
 export function whtFilingDueMessage(input: {
   summaryId: string
   periodLabel: string
@@ -249,8 +285,9 @@ export function whtFilingDueMessage(input: {
     title: 'ใกล้ครบกำหนดยื่น ภ.ง.ด.3/53',
     body: `งวด ${input.periodLabel} · กำหนดนำส่ง ${fmtDate(input.filingDueDate)} (${countdown})`,
     linkPath: '/accounting?tab=wht',
-    // job รันทุกวัน ⇒ คีย์ต่อ "งวด" หนึ่งงวด เตือนครั้งเดียวจนกว่าจะยื่น (`33` §8)
-    dedupeKey: `wht-filing-${input.summaryId}`,
+    // job รันทุกวัน ⇒ คีย์ = งวด + ขั้นของการเตือน (ดู `whtFilingReminderStage()`)
+    // รันซ้ำวันเดียวกันได้แถวเดียว · วันถัดไปได้ใบใหม่จนกว่าจะยื่น (`33` §6.2/§8)
+    dedupeKey: `wht-filing-${input.summaryId}-${whtFilingReminderStage(input.daysLeft)}`,
   }
 }
 

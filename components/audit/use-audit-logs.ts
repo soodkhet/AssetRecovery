@@ -13,6 +13,7 @@ import type { AuditLogDetailDto, AuditLogListDto } from '@/lib/audit/log-types'
 
 export interface AuditLogFilters {
   targetType: string
+  actorId: string
   action: AuditLogAction | 'all'
   dateFrom: string
   dateTo: string
@@ -20,6 +21,7 @@ export interface AuditLogFilters {
 
 export const EMPTY_AUDIT_FILTERS: AuditLogFilters = {
   targetType: '',
+  actorId: '',
   action: 'all',
   dateFrom: '',
   dateTo: '',
@@ -32,6 +34,7 @@ const EMPTY: AuditLogListDto = {
   limit: AUDIT_LOG_PAGE_SIZE_DEFAULT,
   hasMore: false,
   targetTypes: [],
+  actors: [],
 }
 
 export interface AuditLogsState {
@@ -44,6 +47,7 @@ export interface AuditLogsState {
 export function auditLogQueryString(filters: AuditLogFilters, offset: number): string {
   const params = new URLSearchParams()
   if (filters.targetType !== '') params.set('targetType', filters.targetType)
+  if (filters.actorId !== '') params.set('actorId', filters.actorId)
   if (filters.action !== 'all') params.set('action', filters.action)
   if (filters.dateFrom !== '') params.set('dateFrom', filters.dateFrom)
   if (filters.dateTo !== '') params.set('dateTo', filters.dateTo)

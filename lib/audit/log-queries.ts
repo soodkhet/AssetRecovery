@@ -1,7 +1,12 @@
 import { AuthError } from '@/lib/auth/errors'
 import type { SessionUser } from '@/lib/auth/types'
 import type { AuditLogListQuery } from '@/lib/audit/log-schemas'
-import type { AuditLogDetailDto, AuditLogListDto, AuditLogListItemDto } from '@/lib/audit/log-types'
+import type {
+  AuditLogActorOptionDto,
+  AuditLogDetailDto,
+  AuditLogListDto,
+  AuditLogListItemDto,
+} from '@/lib/audit/log-types'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 
@@ -55,26 +60,36 @@ function toListItem(row: ListRow): AuditLogListItemDto {
   }
 }
 
-/** ผู้ที่เข้าถึงบันทึกการใช้งานไม่ได้เลย — ตรวจซ้ำที่ชั้นข้อมูล ไม่พึ่ง capability อย่างเดียว (DEC-002) */
+/**
+ * ผู้ที่เข้าถึงบันทึกการใช้งานไม่ได้เลย — ตรวจซ้ำที่ชั้นข้อมูล ไม่พึ่ง capability อย่างเดียว (DEC-002)
+ *
+ * ใช้ **whitelist `global`** ไม่ใช่ blacklist `company`: `view_audit_log` เป็น capability นอก matrix
+ * ที่ admin มอบให้ role ไหนก็ได้ ⇒ ถ้าไปตกที่ Manager (`team`) หรือ Field Agent (`self`) แถว audit
+ * ก็ไม่มีคอลัมน์ทีม/ผู้ใช้ให้กรองรายแถวเหมือนกันกับเคส company ⇒ เห็นทั้งองค์กร (เงิน/ภาษี/สิทธิ์)
+ */
 function assertAuditReadable(user: SessionUser): void {
-  if (user.scope.kind === 'company') {
-    throw new AuthError('PERMISSION_DENIED', `audit-logs: company scope user=${user.id}`)
+  if (user.scope.kind !== 'global') {
+    throw new AuthError('PERMISSION_DENIED', `audit-logs: scope=${user.scope.kind} user=${user.id}`)
   }
 }
 
-/** ขอบล่าง/บนของ "ทั้งวัน" ตามปฏิทินไทยจากค่า `YYYY-MM-DD` ของ `<input type="date">` */
+/** ขอบล่างของ "ทั้งวัน" ตามปฏิทินไทยจากค่า `YYYY-MM-DD` ของ `<input type="date">` */
 function bangkokDayStart(dateOnly: string): Date {
   return new Date(`${dateOnly}T00:00:00.000+07:00`)
 }
 
-function bangkokDayEnd(dateOnly: string): Date {
-  return new Date(`${dateOnly}T23:59:59.999+07:00`)
+/**
+ * ขอบบน = **เที่ยงคืนของวันถัดไป** แล้วใช้ `lt` — `created_at` เป็น `Timestamptz(6)` ระดับไมโครวินาที
+ * ถ้าใช้ `lte 23:59:59.999` แถวช่วง `.999001–.999999` จะตกหล่นเงียบ ๆ
+ */
+function bangkokDayAfter(dateOnly: string): Date {
+  return new Date(new Date(`${dateOnly}T00:00:00.000+07:00`).getTime() + 24 * 60 * 60 * 1000)
 }
 
 export function auditLogWhere(user: SessionUser, query: AuditLogListQuery): Prisma.AuditLogWhereInput {
   const createdAt: Prisma.DateTimeFilter = {}
   if (query.dateFrom !== undefined) createdAt.gte = bangkokDayStart(query.dateFrom)
-  if (query.dateTo !== undefined) createdAt.lte = bangkokDayEnd(query.dateTo)
+  if (query.dateTo !== undefined) createdAt.lt = bangkokDayAfter(query.dateTo)
 
   return {
     organizationId: user.organizationId,
@@ -82,7 +97,7 @@ export function auditLogWhere(user: SessionUser, query: AuditLogListQuery): Pris
     ...(query.targetId === undefined ? {} : { targetId: query.targetId }),
     ...(query.actorId === undefined ? {} : { actorId: query.actorId }),
     ...(query.action === undefined ? {} : { action: query.action }),
-    ...(createdAt.gte === undefined && createdAt.lte === undefined ? {} : { createdAt }),
+    ...(createdAt.gte === undefined && createdAt.lt === undefined ? {} : { createdAt }),
   }
 }
 
@@ -90,7 +105,7 @@ export async function listAuditLogs(user: SessionUser, query: AuditLogListQuery)
   assertAuditReadable(user)
   const where = auditLogWhere(user, query)
 
-  const [rows, total, targetTypes] = await Promise.all([
+  const [rows, total, targetTypes, actorIds] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -100,12 +115,17 @@ export async function listAuditLogs(user: SessionUser, query: AuditLogListQuery)
     }),
     prisma.auditLog.count({ where }),
     // ตัวเลือกของช่อง "เป้าหมาย" มาจากข้อมูลจริงในองค์กร (ไม่ hardcode รายชื่อตาราง)
-    prisma.auditLog.findMany({
+    // ⚠️ ต้องเป็น `groupBy` ไม่ใช่ `findMany({ distinct })` — Prisma ทำ distinct ในหน่วยความจำและ
+    // ไม่ push `LIMIT` ลง SQL ⇒ เปิดหน้าทีนึงอ่านแถว audit ทั้งองค์กร (เก็บ 5 ปี) เข้ามาใน Node
+    prisma.auditLog.groupBy({
+      by: ['targetType'],
       where: { organizationId: user.organizationId },
-      distinct: ['targetType'],
       orderBy: { targetType: 'asc' },
-      select: { targetType: true },
-      take: 100,
+    }),
+    // ตัวเลือกช่อง "ผู้ดำเนินการ" (`90` §14) — เฉพาะคนที่มีรายการจริง (`actor_id` NULL = งานของระบบ)
+    prisma.auditLog.groupBy({
+      by: ['actorId'],
+      where: { organizationId: user.organizationId, actorId: { not: null } },
     }),
   ])
 
@@ -116,7 +136,24 @@ export async function listAuditLogs(user: SessionUser, query: AuditLogListQuery)
     limit: query.limit,
     hasMore: query.offset + rows.length < total,
     targetTypes: targetTypes.map((row) => row.targetType),
+    actors: await actorOptions(user, actorIds),
   }
+}
+
+/** ชื่อผู้ดำเนินการของตัวเลือกในช่องกรอง — กรอง `organization_id` ซ้ำอีกชั้น (Rule 02) */
+async function actorOptions(
+  user: SessionUser,
+  rows: readonly { actorId: string | null }[],
+): Promise<AuditLogActorOptionDto[]> {
+  const ids = rows.map((row) => row.actorId).filter((id): id is string => id !== null)
+  if (ids.length === 0) return []
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids }, organizationId: user.organizationId },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: 'asc' },
+  })
+  return users.map((row) => ({ id: row.id, name: row.fullName }))
 }
 
 /** รายละเอียดรายการเดียว — before/after JSON เต็ม (`90` §14) */

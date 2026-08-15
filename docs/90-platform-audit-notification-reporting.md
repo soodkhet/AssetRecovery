@@ -16,6 +16,7 @@
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header block, event flow diagram, endpoint จริง, Decisions/Open Items แยกชัดเจน) — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเดาตัวเลข retention/notification channel ที่ยังไม่ตัดสินใจ** |
 | v3 | 03/07/2569 | (1) เพิ่ม **§6.2 PDPA / Privacy Scope (Draft)** ตามคำขอ Product Owner — ยังไม่ปิด Open Item รอทนายความอนุมัติ (2) ปิด Open Item **Notification channel**: เฟส 1 = Push/In-app เท่านั้น, event trigger = ทุก status change สำคัญของเคส/การเงิน — เพิ่ม **§6.3** ตารางรายการ event เริ่มต้น (3) SMS/Email Gateway provider เปลี่ยนสถานะเป็นไม่บล็อกเฟส 1 (รอ PO แจ้งตอน implement เฟส 2) (4) ปิด Open Item **Audit Log Retention = 5 ปี** อ้างอิง พ.ร.บ.การบัญชี พ.ศ. 2543 |
 | v4 | 04/07/2569 | **Batch 6 (DEC-006/D3)**: ตาราง `notifications` เพิ่มเข้า `02-database-schema-design.md` v3.5 แล้ว (เดิม endpoint ใน §14 มีอยู่แต่ไม่มี entity รองรับใน schema) + เติม endpoint `PATCH /api/notifications/read-all` ที่ขาด + อัปเดตหมายเหตุ §7 ให้ครอบคลุมตาราง notifications |
+| v2.3 | 15/08/2569 | **มติ PO ตอนรีวิว Phase 5 (D16) — ถอน 2 event ที่สคีมาไม่มีที่ให้เกิดออกจาก §6.3**: `payout_batch.failed` (`02` §3 `payout_batch_status` ไม่มีสถานะล้มเหลว) และ "Exception ใกล้ deadline" (`02` §9 `exceptions` ไม่มีคอลัมน์กำหนดเส้นตาย) — ตอน implement Phase 5.2 ต่อสายครบทุกแถวยกเว้นสองตัวนี้ เพราะไม่มีจุดใดในระบบยิงได้ · ยึดลำดับเอกสาร `02` ชนะไฟล์ spec ของโมดูล ⇒ **ไม่ประดิษฐ์ status/คอลัมน์ใหม่** · ต่อสายได้เมื่อมีมติเพิ่ม `payout_batch_status = 'failed'` + `exceptions.due_date` ลง `02` · ส่วน "Exception ใหม่" ยังอยู่ (จำกัดที่ระดับ critical ตาม `37` ซึ่งเป็นตัวบล็อก Export Pack) |
 | v4.1 | 04/07/2569 | แก้จำนวนรายงานอ้างอิง "13" → **"17"** — นับจริงจากไฟล์ 96: F1–F5 (5) + O1–O5 (5) + A1–A4 (4) + E1–E3 (3) = 17 (เลข 13 เดิมนับผิด คัดลอกต่อกันใน README/implementation-todo — แก้พร้อมกันแล้ว) |
 
 ขอบเขตเอกสารนี้: ระบบกลางสำหรับ Audit Log, Notification, Exception และ Reporting ที่ใช้ร่วมกันข้ามทุกโมดูล
@@ -129,11 +130,13 @@ sequenceDiagram
 | Field Tracker (41) | `case.closed_success`, `case.closed_fail`, `evidence.reject_evidence` | `41-field-tracker-mobile.md` |
 | Warehouse (44) | `asset.intake_rejected` (IMEI ไม่ตรง), `lot.confirmed` | `44-asset-custody-handover.md` |
 | Finance (15/16) | `expense.rejected`, `expense.approved` | `16-compensation-approval.md` |
-| Finance (17) | `payout_batch.completed`, `payout_batch.failed` | `17-payroll-and-payout.md` |
+| Finance (17) | `payout_batch.completed` | `17-payroll-and-payout.md` |
 | Accounting (33) | WHT ใกล้ครบกำหนดยื่น (reminder) | `33-accounting-wht-data.md` |
-| Accounting (34) | Exception ใหม่/ใกล้ deadline | `34-accounting-document-checklist-exceptions.md` |
+| Accounting (34) | Exception ใหม่ (ระดับ critical) | `34-accounting-document-checklist-exceptions.md` |
 
 > รายการนี้เป็นจุดเริ่มต้นตาม state machine ที่มีอยู่ — เมื่อ implement แต่ละโมดูลจริงให้ตรวจสอบ event เพิ่มเติมที่อาจตกหล่นและอัปเดตตารางนี้กลับมา (ตามหลักการ §17 ของไฟล์นี้)
+>
+> **ถอนออก 15/08/2569 (v2.3 — มติ PO ตอนรีวิว Phase 5, ข้อ D16)**: `payout_batch.failed` และ "Exception ใกล้ deadline" ถูกตัดออกจากตารางนี้เพราะ **สคีมาไม่มีที่ให้เกิด** — `02` §3 `payout_batch_status` มีแค่ `draft/pending_approval/approved/paid` (ไม่มีสถานะล้มเหลว) และ `02` §9 `exceptions` ไม่มีคอลัมน์กำหนดเส้นตาย จึงคำนวณ "ใกล้ครบกำหนด" ไม่ได้ · ยึดลำดับเอกสาร (`02` ชนะไฟล์ spec ของโมดูล) ⇒ ไม่ประดิษฐ์ status/คอลัมน์ใหม่เพื่อรองรับ event · จะกลับมาต่อสายได้เมื่อมีมติเพิ่ม `payout_batch_status = 'failed'` และ `exceptions.due_date` ลง `02` (เปิดเป็น item ใหม่ได้ตอนนั้น)
 
 ## 7. Data Entities / Required Objects
 

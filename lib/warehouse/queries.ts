@@ -5,7 +5,7 @@ import type { ApiWarning } from '@/lib/api/envelope'
 import { ModuleError } from '@/lib/api/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
-import { dispatchNotification, usersWithCapability } from '@/lib/notifications/dispatch'
+import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/dispatch'
 import { assetIntakeRejectedMessage, lotConfirmedMessage } from '@/lib/notifications/messages'
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
@@ -788,18 +788,17 @@ export async function confirmLot(
   const lot = await getLot(user, lotId)
 
   // `90` §6.3 แถว 5 — จุดที่รายได้เกิด ⇒ การเงินต้องรู้เพื่อไปวางบิลต่อ (`19` §6.1)
-  void usersWithCapability(user.organizationId, 'manage_billing').then((userIds) => {
-    dispatchNotification(
-      { organizationId: user.organizationId, userIds },
-      lotConfirmedMessage({
-        lotId,
-        lotNumber: lot.lotNumber,
-        companyName: lot.companyName,
-        assetCount: result.assetIds.length,
-        revenueCount: result.revenueIdsCreated.length,
-      }),
-    )
-  })
+  dispatchToCapability(
+    user.organizationId,
+    'manage_billing',
+    lotConfirmedMessage({
+      lotId,
+      lotNumber: lot.lotNumber,
+      companyName: lot.companyName,
+      assetCount: result.assetIds.length,
+      revenueCount: result.revenueIdsCreated.length,
+    }),
+  )
 
   return {
     lot,

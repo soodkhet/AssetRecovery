@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { notificationDedupeId } from '@/lib/notifications/dedupe'
 import type { NotificationEventCode } from '@/lib/notifications/events'
 import { sendPushToUsers, type PushPayload } from '@/lib/notifications/push'
@@ -94,17 +95,33 @@ export async function notifyUsers(input: NotifyInput): Promise<NotifyResult> {
     linkPath: input.linkPath ?? null,
     eventCode: input.eventCode,
   }
-  const pushed = recipients.length === 0 ? 0 : await sendPushToUsers(recipients, payload)
+  const pushed = recipients.length === 0 ? 0 : await sendPushToUsers(recipients, payload, input.organizationId)
 
   return { created, skipped: userIds.length - recipients.length, pushed }
+}
+
+function runNotify(input: NotifyInput): Promise<void> {
+  return notifyUsers(input).then(
+    () => undefined,
+    (error: unknown) => {
+      console.error('[notify] ส่งการแจ้งเตือนไม่สำเร็จ', { eventCode: input.eventCode, error })
+    },
+  )
 }
 
 /**
  * เวอร์ชัน "ยิงแล้วลืม" สำหรับจุดที่ไม่อยากให้การแจ้งเตือนถ่วง response
  * (ยังคง log ไว้ที่ server ถ้าล้ม — ไม่โยนต่อ)
+ *
+ * ⚠️ ต้องผูกกับ lifecycle ของ request ผ่าน `after()` ของ Next — hosting คือ Vercel (DEC-001)
+ * ซึ่ง **freeze instance ทันทีที่ส่ง response** ⇒ promise ลอย ๆ ที่ยังทำงานไม่เสร็จถูกตัดกลางคัน
+ * แถวแจ้งเตือนหายเงียบโดยไม่มี log · `after()` เรียกได้เฉพาะใน request scope ⇒ นอก scope
+ * (job/สคริปต์/เทสต์) ถอยไปใช้ promise ลอยแบบเดิมซึ่งปลอดภัยในบริบทที่ process ไม่ถูก freeze
  */
 export function notifyUsersDetached(input: NotifyInput): void {
-  void notifyUsers(input).catch((error: unknown) => {
-    console.error('[notify] ส่งการแจ้งเตือนไม่สำเร็จ', { eventCode: input.eventCode, error })
-  })
+  try {
+    after(() => runNotify(input))
+  } catch {
+    void runNotify(input)
+  }
 }

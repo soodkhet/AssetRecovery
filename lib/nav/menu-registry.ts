@@ -164,8 +164,11 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     id: 'settings',
     label: 'การตั้งค่า',
     path: '/settings',
-    audiences: ['superadmin', 'executive'],
-    // ครบทุกแท็บที่วางไว้แล้วตั้งแต่ 1.11 (`/settings` เปลี่ยนเส้นทางไปแท็บแรกให้เอง)
+    // `06` §7.2 v1.2 (มติ PO 15/08/2569 — D17): การเงิน/บัญชีเห็นเมนูนี้แบบ **บางส่วน** เพื่อเข้าถึง
+    // "บันทึกการใช้งาน" + "งานเบื้องหลัง" ที่ `90` §12 / `91` §12 ให้สิทธิ์ไว้ · แท็บอื่นยังถูกกรองออก
+    // ด้วย audience ของลูกแต่ละตัว (`filterByAudience` กรองลูกซ้ำอีกชั้น)
+    audiences: ['superadmin', 'executive', 'finance', 'accounting'],
+    // ครบทุกแท็บที่วางไว้แล้วตั้งแต่ 1.11 (`/settings` เปลี่ยนเส้นทางไปแท็บแรก**ที่ผู้ใช้เห็น**)
     available: true,
     children: [
       // `06` §9 — "ตั้งค่าทั่วไป" แท็บแรกตาม mockup `settings.html` (`renderSettingsLayout`)
@@ -228,24 +231,25 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         available: true,
       },
       // `06` §9 — "ตั้งค่าทั่วไป" รวม `auditlog` (mockup `settings.html` แท็บสุดท้าย) · Phase 5.2
-      // ⚠️ `90` §12 ให้บัญชี/การเงินดู audit ได้ด้วย (capability `view_audit_log`) แต่ `06` §7.2
-      // ไม่ให้สอง role นี้เห็นเมนู "การตั้งค่า" — คงตาม `06` เหมือนกรณีธุรการที่ `settings.users`
-      // (สิทธิ์ที่ API ยังมีจริง เข้าถึงได้ตรงลิงก์ · เมนูไม่ใช่ security boundary — DEC-002)
+      // `90` §12 ให้บัญชี/การเงินดู audit ได้ (capability `view_audit_log`) — มติ PO 15/08/2569 (D17)
+      // เปิด audience ให้ตรงกับสิทธิ์ที่ให้ไว้จริง (`06` §7.2 v1.2 แก้คู่กัน) · หน้านี้อ่านอย่างเดียว
+      // และ API บังคับ `requirePermission()` อยู่แล้ว ⇒ เมนูไม่ใช่ security boundary (DEC-002)
       {
         id: 'settings.audit-logs',
         label: 'บันทึกการใช้งาน (Audit Log)',
         path: '/settings/audit-logs',
-        audiences: ['superadmin', 'executive'],
+        audiences: ['superadmin', 'executive', 'finance', 'accounting'],
         available: true,
       },
       // `91` §8 — หน้าสถานะงานเบื้องหลัง (Job Log) · Phase 5.3
       // เหตุผลเดียวกับ audit log: `91` §12 ให้บัญชี/การเงินดูสถานะงานของตัวเองได้ (capability
-      // `manage_jobs` ระดับ view) แต่ `06` §7.2 ไม่ให้สอง role นี้เห็นเมนู "การตั้งค่า"
+      // `manage_jobs` ระดับ view) ⇒ เปิด audience ให้ตรงกัน (มติ PO 15/08/2569 — D17)
+      // **สั่งงาน/retry ยังไม่ได้** เพราะบังคับที่ API (`manage` + capability ของงานปลายทาง / Superadmin)
       {
         id: 'settings.jobs',
         label: 'งานเบื้องหลัง (Job Log)',
         path: '/settings/jobs',
-        audiences: ['superadmin', 'executive'],
+        audiences: ['superadmin', 'executive', 'finance', 'accounting'],
         available: true,
       },
     ],
@@ -325,6 +329,19 @@ export function canViewMenu(viewer: MenuViewer, menuId: string): boolean {
   if (!root) return false
   if (childId === undefined) return true
   return (root.children ?? []).some((child) => child.id === menuId)
+}
+
+/**
+ * แท็บแรกของเมนูนี้ที่ผู้ใช้ **เห็นจริง** — หน้า "ราก" ที่ไม่มีเนื้อหาของตัวเอง (เช่น `/settings`)
+ * ใช้ตัวนี้เลือกปลายทาง redirect · คืน `null` = ไม่เห็นเมนูนั้นเลย/ไม่มีแท็บที่เห็นได้
+ *
+ * ⚠️ redirect ไปแท็บตายตัวไม่ได้แล้ว: `06` §7.2 v1.2 ให้การเงิน/บัญชีเห็น "การตั้งค่า" แบบบางส่วน
+ * (เฉพาะบันทึกการใช้งาน/งานเบื้องหลัง) ⇒ ส่งไป `/settings/roles` = เด้งกลับแดชบอร์ดทันที
+ */
+export function firstVisibleChildPath(viewer: MenuViewer, menuId: MenuId): string | null {
+  const root = visibleMenus(viewer).find((item) => item.id === menuId)
+  if (root === undefined) return null
+  return root.children?.[0]?.path ?? root.path
 }
 
 /** เมนูตาม id จาก registry (ไม่กรองสิทธิ์) — ใช้ประกอบหน้า/breadcrumb */

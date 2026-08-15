@@ -218,4 +218,23 @@ suite('Company User เข้าไม่ได้แม้ถือ capability'
       (error: unknown) => (error as { code?: string }).code === 'PERMISSION_DENIED',
     )
   })
+
+  /**
+   * `view_audit_log` เป็น capability นอก matrix ที่ admin มอบให้ role ไหนก็ได้ — scope ที่ไม่ใช่
+   * `global` ทุกชนิดต้องถูกปฏิเสธเหมือนกัน (แถว audit ไม่มีคอลัมน์ทีม/ผู้ใช้ให้กรองรายแถว)
+   */
+  it('scope ทีม/ตัวเอง ก็เข้าไม่ได้เหมือนกัน — ไม่ใช่แค่ company', async () => {
+    for (const kind of ['team', 'self'] as const) {
+      const scoped = sessionUser({
+        id: FINANCE_ID,
+        scope: { kind, teamIds: ['00000000-0000-4000-8000-0000000052e1'], companyId: null, userId: FINANCE_ID },
+      })
+      await expect(logs.listAuditLogs(scoped, baseQuery)).rejects.toSatisfy(
+        (error: unknown) => (error as { code?: string }).code === 'PERMISSION_DENIED',
+      )
+      await expect(logs.getAuditLog(scoped, LOG_CASE_APPROVE)).rejects.toSatisfy(
+        (error: unknown) => (error as { code?: string }).code === 'PERMISSION_DENIED',
+      )
+    }
+  })
 })

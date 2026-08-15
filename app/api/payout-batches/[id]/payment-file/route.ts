@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { attachmentHeader } from '@/lib/format/attachment'
 import { GENERATE_PAYMENT_FILE, readPaymentFile } from '@/lib/payout/queries'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -20,7 +21,7 @@ export const GET = withApiPermission<RouteContext>(
     return new Response(file.bytes as unknown as BodyInit, {
       headers: {
         'Content-Type': file.contentType,
-        'Content-Disposition': `attachment; filename="${file.fileName}"`,
+        'Content-Disposition': attachmentHeader(file.fileName),
         'Cache-Control': 'no-store',
       },
     })

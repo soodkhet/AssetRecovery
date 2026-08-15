@@ -12,8 +12,10 @@ import { MANAGE_WHT } from '@/lib/wht/wht'
  *
  * ### ทำไม idempotent
  * - เลือกอ่านอย่างเดียว ไม่เขียนสถานะอะไรเลย — งานทั้งหมดคือการแจ้งเตือน
- * - ทุกข้อความพก `dedupeKey = wht-filing-<summaryId>` ⇒ รันวันละกี่รอบก็ได้แถวเดียวต่อผู้รับหนึ่งคน
- *   (กันที่ PRIMARY KEY ของ `notifications` ไม่ใช่ที่แอป — `lib/notifications/dedupe.ts`)
+ * - ทุกข้อความพก `dedupeKey = wht-filing-<summaryId>-<ขั้นของการเตือน>` ⇒ รันวันละกี่รอบก็ได้
+ *   แถวเดียวต่อผู้รับหนึ่งคน (กันที่ PRIMARY KEY ของ `notifications` — `lib/notifications/dedupe.ts`)
+ *   แต่ **วันถัดไปได้ใบใหม่** เพราะขั้นเปลี่ยน (`whtFilingReminderStage()`) — ไม่งั้นเตือนครั้งเดียว
+ *   ตลอดชีพของงวด แล้วข้อความ "ครบกำหนดวันนี้"/"เลยกำหนด" จะไม่มีวันถึงใครเลย
  * - ยื่นแล้ว (`filed`) จะไม่ถูกเลือกอีก
  *
  * ตัว scheduler (Vercel Cron/QStash) + ตาราง `jobs` เป็นงานของ Phase 5.3 — ที่นี่คือ handler ล้วน ๆ

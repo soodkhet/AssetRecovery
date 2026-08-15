@@ -1,12 +1,14 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
+import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
-import type { Prisma } from '@/lib/generated/prisma/client'
+import { Prisma } from '@/lib/generated/prisma/client'
+import { jobRequiredCapability } from '@/lib/jobs/access'
 import { JOB_SELECT, enqueueJob, type JobRow } from '@/lib/jobs/engine'
 import { JobError } from '@/lib/jobs/errors'
 import { canManualRetry, jobViewStatus, type JobViewStatus } from '@/lib/jobs/job-state'
-import { jobTypeLabel } from '@/lib/jobs/job-types'
+import { jobTypeLabel, type JobTypeCode } from '@/lib/jobs/job-types'
 import type { JobCreateInput, JobListQuery, JobRetryInput } from '@/lib/jobs/schemas'
 import type { JobCreateResultDto, JobDetailDto, JobListDto, JobListItemDto, JobOutputDto } from '@/lib/jobs/types'
 import { prisma } from '@/lib/prisma'
@@ -28,6 +30,17 @@ import { prisma } from '@/lib/prisma'
 function assertJobsReadable(user: SessionUser): void {
   if (user.scope.kind === 'company') {
     throw new AuthError('PERMISSION_DENIED', `jobs: company scope user=${user.id}`)
+  }
+}
+
+/**
+ * งานที่ทำแทนคน (`export_pack`/`bank_file`) ต้องมี capability **ของงานปลายทาง** ด้วย (DEC-002)
+ * — `manage_jobs` อย่างเดียวเปิดทางลัดสร้างไฟล์โอนเงิน/ชุดบัญชีโดยไม่มีสิทธิ์นั้น
+ */
+function assertJobTypeAllowed(user: SessionUser, jobType: JobTypeCode): void {
+  const required = jobRequiredCapability(jobType)
+  if (required !== null && !hasCapability(user, 'manage', required)) {
+    throw new AuthError('PERMISSION_DENIED', `jobs.create: ${jobType} ต้องมี ${required} (user=${user.id})`)
   }
 }
 
@@ -143,12 +156,19 @@ export function jobOutput(row: JobRow): JobOutputDto | null {
   return null
 }
 
-function toDetail(row: JobWithActor): JobDetailDto {
+/**
+ * งานระดับระบบ (`organization_id IS NULL`) ทำข้ามทุกองค์กรในรอบเดียว ⇒ `result` ของมันมี id
+ * ของ**องค์กรอื่น** ปนอยู่ (เช่น `caseIds` ของ `reassign_timeout`, `periodIds` ของ `wht_summary`)
+ * แต่ทุกองค์กรมองเห็นแถวนี้ได้ (`jobListWhere()`) ⇒ ซ่อน payload/result ไว้ให้ Superadmin เท่านั้น
+ * — สถานะ/เวลา/ข้อความผิดพลาดยังเห็นได้ปกติเพื่อให้ตามงานได้ (`91` §8)
+ */
+function toDetail(row: JobWithActor, user: SessionUser): JobDetailDto {
+  const hideInternals = row.organizationId === null && !user.isSuperadmin
   return {
     ...toListItem(row),
-    payload: row.payload,
-    result: row.result,
-    output: jobOutput(row),
+    payload: hideInternals ? null : row.payload,
+    result: hideInternals ? null : row.result,
+    output: hideInternals ? null : jobOutput(row),
   }
 }
 
@@ -188,7 +208,7 @@ async function findJobRow(user: SessionUser, id: string): Promise<JobWithActor> 
 
 export async function getJob(user: SessionUser, id: string): Promise<JobDetailDto> {
   assertJobsReadable(user)
-  return toDetail(await findJobRow(user, id))
+  return toDetail(await findJobRow(user, id), user)
 }
 
 /** `POST /api/jobs` (`91` §14) — คีย์กันซ้ำเดิม = คืนงานเดิม ไม่สร้างใหม่ (`91` §11) */
@@ -197,6 +217,7 @@ export async function createJob(
   input: JobCreateInput,
 ): Promise<JobCreateResultDto> {
   assertJobsReadable(ctx.actor)
+  assertJobTypeAllowed(ctx.actor, input.jobType)
   const { job, duplicate } = await enqueueJob({
     organizationId: ctx.actor.organizationId,
     jobType: input.jobType,
@@ -208,7 +229,7 @@ export async function createJob(
     reason: `สั่งงานเบื้องหลัง "${jobTypeLabel(input.jobType)}" (คีย์กันซ้ำ ${input.idempotencyKey})`,
   })
 
-  return { job: toDetail({ ...job, createdByUser: { fullName: ctx.actor.fullName } }), duplicate }
+  return { job: toDetail({ ...job, createdByUser: { fullName: ctx.actor.fullName } }, ctx.actor), duplicate }
 }
 
 /**
@@ -241,6 +262,8 @@ export async function retryJob(
       startedAt: null,
       completedAt: null,
       scheduledAt: now,
+      // ล้างผลของรอบก่อน — ไม่งั้นหน้า Job Log ยังชี้ไฟล์/hash เก่าระหว่างที่งานยังไม่ทำใหม่
+      result: Prisma.DbNull,
     },
     select: listSelect,
   })
@@ -259,5 +282,5 @@ export async function retryJob(
     userAgent: ctx.meta.userAgent,
   })
 
-  return toDetail(updated)
+  return toDetail(updated, ctx.actor)
 }

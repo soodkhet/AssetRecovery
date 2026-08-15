@@ -41,7 +41,7 @@ export const auditLogListQuerySchema = z.object({
   action: auditActionSchema.optional(),
   /** ตั้งแต่ (วันไทย 00:00) */
   dateFrom: dateOnly.optional(),
-  /** ถึง (วันไทย 23:59:59.999) — รวมวันสุดท้ายเสมอ */
+  /** ถึง (วันไทยสิ้นวัน) — รวมวันสุดท้ายเสมอ (backend แปลงเป็น `lt` เที่ยงคืนวันถัดไป) */
   dateTo: dateOnly.optional(),
   limit: z.coerce.number().int().min(1).max(AUDIT_LOG_PAGE_SIZE_MAX).default(AUDIT_LOG_PAGE_SIZE_DEFAULT),
   /** เลื่อนหน้าแบบ offset — audit เป็น append-only ลำดับจึงนิ่งพอสำหรับหน้าอ่านอย่างเดียว */

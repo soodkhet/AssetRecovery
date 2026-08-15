@@ -79,12 +79,21 @@ async function deliver(subscription: SubscriptionRow, payload: PushPayload, conf
  * ส่ง push ให้ทุกอุปกรณ์ของผู้ใช้กลุ่มหนึ่ง — คืนจำนวนที่ส่งสำเร็จ
  * **ห้ามเรียกใน `$transaction`** (เป็น I/O ภายนอก) — เรียกหลัง commit เสมอ
  */
-export async function sendPushToUsers(userIds: readonly string[], payload: PushPayload): Promise<number> {
+export async function sendPushToUsers(
+  userIds: readonly string[],
+  payload: PushPayload,
+  /** ยามชั้นสุดท้ายของ multi-tenant (Rule 02) — ผู้เรียกกรอง org มาแล้ว แต่ที่นี่ต้องไม่พึ่งอย่างเดียว */
+  organizationId?: string,
+): Promise<number> {
   const config = getVapidConfig()
   if (config === null || userIds.length === 0) return 0
 
   const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId: { in: [...userIds] }, deletedAt: null },
+    where: {
+      userId: { in: [...userIds] },
+      deletedAt: null,
+      ...(organizationId === undefined ? {} : { organizationId }),
+    },
     select: { id: true, endpoint: true, p256dh: true, auth: true },
   })
 

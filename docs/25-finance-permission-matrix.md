@@ -13,6 +13,7 @@
 |---|---|---|
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Permission Matrix รวม 6 กลุ่มไฟล์ |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน permission ใดๆ** (การแก้ไข Batch 3 ไม่กระทบสิทธิ์ ตรวจสอบแล้ว) |
+| v2.2 | 15/08/2569 | **เพิ่ม §8.1 "endpoint ที่ผูกกับตัวผู้ใช้เอง (self-scoped)"** (พบตอนรีวิว Phase 5) — `/api/notifications*`, `/api/field/notifications*`, `/api/meta/menu` ใช้ `requireSession()` ไม่ผูก capability เพราะคืนเฉพาะข้อมูลของผู้เรียกและกรอง `user_id + organization_id` ที่ชั้น service · **ทุก role ต้องอ่านกล่องของตัวเองได้** (พนักงานภาคสนามไม่มี capability หลังบ้านเลย) ⇒ ผูก capability = ตัดคนที่ต้องใช้จริงออก · ไฟล์นี้ไม่เคยมีแถวของ notification จึงถูกหยิบเป็น finding ซ้ำทุกรอบรีวิว — บันทึกเงื่อนไขการเข้ากลุ่มนี้ไว้ให้ชัด · **ไม่กระทบ permission เดิมข้อใด** |
 | v2.1 | 04/07/2569 | แก้จำนวน role อ้างอิง "14" → "15" ตามไฟล์ 07 v2.2 (แก้ตัวเลขอ้างอิงเท่านั้น ไม่กระทบ permission) |
 | v2.3 | 14/08/2569 | **แก้เชิงอรรถ §16.1 ตามมติ PO (Phase 1.6)**: "✅ only" = ล็อกกับ role ที่ติดสัญลักษณ์นั้น (ไม่ใช่ Superadmin เสมอไป) และมี **9 รายการ** (Superadmin 6 + บริหาร 3) ไม่ใช่ 7 — เดิมนับตกหล่นและเหมารวมเจ้าของสิทธิ์ผิด · **ช่องในตาราง §7 ไม่เปลี่ยนแม้แต่ช่องเดียว** |
 | v2.2 | 05/07/2569 | **DEC-009 — เพิ่ม §16.1 mapping สัญลักษณ์ → ระดับสิทธิ์ในระบบ**: ✅ → `manage`, 👁️ → `view`, — → ไม่มี record · Superadmin = manage ทุกรายการโดยนิยาม · "✅ only" = ล็อกเฉพาะ Superadmin — **เนื้อหา matrix เดิมไม่เปลี่ยนแม้แต่ช่องเดียว** ไฟล์นี้ยังเป็น source of truth ของสิทธิ์รายฟังก์ชัน (UI ครบ 37 รายการใน `settings.html`) |
@@ -121,6 +122,18 @@
 - **Accounting** ดูแลฝั่งบันทึกบัญชี/เอกสารทางการ/ปิดงวด — เป็น operational role หลักอีกฝั่ง
 - **Executive** ถูกเรียกใช้เฉพาะจุดที่มีความเสี่ยงสูง (ปลดล็อก, อนุมัติเกินเพดาน, ยกเว้น Critical Exception) — ไม่ใช่ operational role ประจำวัน
 - **Superadmin** จำกัดเฉพาะ Master Data ที่กระทบทั้งระบบ (ภาษี, Permission Matrix เอง, Period Lock Policy)
+
+### 8.1 ข้อยกเว้น: endpoint ที่ผูกกับตัวผู้ใช้เอง (self-scoped) — เพิ่ม 15/08/2569
+
+endpoint กลุ่มนี้ **ไม่ผูกกับ capability ใดเลย** ใช้แค่ "ต้องล็อกอิน" (`requireSession()`) เพราะข้อมูลที่คืนเป็น *ของผู้เรียกคนนั้นคนเดียว* และถูกกรองด้วย `user_id + organization_id` ที่ชั้น service เสมอ — ไม่มีทางเห็น/แก้ของคนอื่นแม้เป็น Superadmin:
+
+| Endpoint | เหตุผล |
+|---|---|
+| `GET /api/meta/menu` | เมนูของตัวเอง (คำนวณจาก role ของผู้เรียก) |
+| `GET /api/notifications` · `PATCH /api/notifications/:id/read` · `PATCH /api/notifications/read-all` | กล่องแจ้งเตือนของตัวเอง — **ทุก role ต้องอ่านได้** รวมพนักงานภาคสนามที่ไม่มี capability หลังบ้านเลย ⇒ ผูก capability = ตัดคนที่ต้องใช้จริงออก |
+| `GET /api/field/notifications` · `PATCH /api/field/notifications/read` | เหมือนข้างบน ฝั่ง Field Tracker |
+
+> ⚠️ **ไม่ใช่ข้อยกเว้นของ DEC-002** — DEC-002 บังคับว่า "ตรวจสิทธิ์ที่ API layer ทุก endpoint" ซึ่งกลุ่มนี้ยังทำครบ (session + scope ที่ชั้นข้อมูล) เพียงแต่ *หน่วยของสิทธิ์* คือ "เจ้าของข้อมูล" ไม่ใช่ capability · การเพิ่ม endpoint เข้ากลุ่มนี้ต้องผ่านเงื่อนไขครบทั้งสองข้อ: (1) คืนเฉพาะข้อมูลของผู้เรียก (2) กรอง `user_id + organization_id` ที่ชั้น service ไม่ใช่รับ id จาก body/query · ระบุไว้ที่นี่เพื่อไม่ให้ถูกหยิบขึ้นมาเป็น finding ซ้ำทุกรอบรีวิว
 
 ## 9. Workflow / Lifecycle
 

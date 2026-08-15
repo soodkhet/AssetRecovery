@@ -20,13 +20,14 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
   const { detail, loading, error } = useAuditLogDetail(id)
   const changes = detail === null ? [] : auditFieldChanges(detail.before, detail.after)
 
+  // audit immutable — `90` §10 / `02` §13 (อ้างสเปคไว้ในคอมเมนต์ ไม่ปล่อยเลขไฟล์ขึ้นหน้าจอผู้ใช้)
   return (
     <Modal
       open={id !== null}
       onClose={onClose}
       size="lg"
       title="รายละเอียดบันทึกการใช้งาน"
-      description="ข้อมูลชุดนี้แก้ไขหรือลบไม่ได้ทุกกรณี (`90` §10) — ใช้เป็นหลักฐานการตรวจสอบย้อนหลัง"
+      description="ข้อมูลชุดนี้แก้ไขหรือลบไม่ได้ทุกกรณี — ใช้เป็นหลักฐานการตรวจสอบย้อนหลัง"
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>
           ปิด
@@ -84,9 +85,9 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                     {changes.map((change) => (
                       <tr key={change.field} className="align-top">
                         <td className="px-3 py-2 font-mono text-xs text-slate-700">{change.field}</td>
-                        <td className="px-3 py-2 text-xs break-all text-slate-500">{auditValueText(change.before)}</td>
+                        <td className="px-3 py-2 text-xs break-all text-slate-500">{auditValueText(change.before, change.field)}</td>
                         <td className="px-3 py-2 text-xs font-medium break-all text-slate-800">
-                          {auditValueText(change.after)}
+                          {auditValueText(change.after, change.field)}
                         </td>
                       </tr>
                     ))}

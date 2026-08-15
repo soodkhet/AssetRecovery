@@ -16,10 +16,13 @@ import {
   type ExpenseTxClient,
   type PlanSnapshot,
 } from '@/lib/field/expense-queries'
-import { dispatchNotification } from '@/lib/notifications/dispatch'
-import { caseClosedFailMessage, caseClosedSuccessMessage } from '@/lib/notifications/messages'
-import { notifyUsersDetached } from '@/lib/notifications/notify'
-import { usersWithCapability } from '@/lib/notifications/recipients'
+import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/dispatch'
+import {
+  caseClosedFailMessage,
+  caseClosedSuccessMessage,
+  evidenceRejectedMessage,
+  expenseQueueMessage,
+} from '@/lib/notifications/messages'
 import {
   assertFieldAction,
   assertFieldStateAction,
@@ -1009,24 +1012,13 @@ function notifyCaseClosed(organizationId: string, outcome: CaseOutcome, caseRef:
       ? caseClosedSuccessMessage({ caseRef, agentName })
       : caseClosedFailMessage({ caseRef, agentName })
 
-  void usersWithCapability(organizationId, capability).then((userIds) => {
-    dispatchNotification({ organizationId, userIds }, message)
-  })
+  dispatchToCapability(organizationId, capability, message)
 }
 
 /** `41` §15 — รายการเบิกที่เข้า `pending_approval` แล้วต้องแจ้งฝ่ายบัญชี/การเงิน */
 function notifyExpenseQueue(organizationId: string, outcome: CaseOutcome, count: number, caseRef: string): void {
   if (count === 0 || outcome !== 'closed_fail') return
-  void usersWithCapability(organizationId, 'approve_expense_manager').then((userIds) => {
-    notifyUsersDetached({
-      organizationId,
-      userIds,
-      eventCode: 'expense.case_bound_created',
-      title: 'มีรายการเบิกใหม่รออนุมัติ',
-      body: `เคส ${caseRef} ปิดงานไม่สำเร็จ — มีรายการเบิก ${count} รายการเข้าคิวอนุมัติ`,
-      linkPath: '/finance/approvals',
-    })
-  })
+  dispatchToCapability(organizationId, 'approve_expense_manager', expenseQueueMessage({ caseRef, count }))
 }
 
 /**
@@ -1314,14 +1306,10 @@ export async function rejectFieldEvidence(
     return await tx.caseAssignment.findUniqueOrThrow({ where: { id: assignment.id }, select: assignmentSelect })
   })
 
-  notifyUsersDetached({
-    organizationId: user.organizationId,
-    userIds: [assignment.agentId],
-    eventCode: 'case.evidence_rejected',
-    title: 'หลักฐานปิดงานถูกตีกลับ',
-    body: `เคส ${assignment.case.caseRef} — ${input.reason}`,
-    linkPath: `/field/cases/${caseId}`,
-  })
+  dispatchNotification(
+    { organizationId: user.organizationId, userIds: [assignment.agentId] },
+    evidenceRejectedMessage({ caseId, caseRef: assignment.case.caseRef, reason: input.reason }),
+  )
 
   return toActionResult(updated, ['case.evidence_rejected'])
 }

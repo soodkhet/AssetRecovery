@@ -29,6 +29,7 @@ const engineMock = vi.hoisted(() => ({
   runJobById: vi.fn(),
   enqueueScheduledJobs: vi.fn(),
   runDueJobs: vi.fn(),
+  reclaimStaleJobs: vi.fn(),
 }))
 vi.mock('@/lib/jobs/engine', () => engineMock)
 
@@ -196,6 +197,19 @@ describe('POST /api/dev/trigger-job (`91` §14.1)', () => {
     expect(engineMock.runJobById).not.toHaveBeenCalled()
   })
 
+  it('production: ตอบ 404 ก่อนชั้นสิทธิ์ — คนไม่ล็อกอินต้องไม่ได้ 401 (ไม่ใบ้ว่ามี route นี้)', async () => {
+    requireSessionMock.mockRejectedValue(new AuthError('UNAUTHENTICATED'))
+    setNodeEnv('production')
+
+    const response = await devTriggerRoute(
+      request('http://localhost/api/dev/trigger-job', 'POST', { jobType: 'advance_overdue' }),
+      undefined,
+    )
+
+    expect(response.status).toBe(404)
+    expect(requireSessionMock).not.toHaveBeenCalled()
+  })
+
   it('นอก production: สร้าง job ผ่านทางเดียวกับ POST /api/jobs แล้วรันทันที', async () => {
     requireSessionMock.mockResolvedValue(SUPERADMIN)
     queriesMock.createJob.mockResolvedValue({ job: JOB_DETAIL, duplicate: false })
@@ -246,6 +260,7 @@ describe('GET /api/cron/jobs (`91` §17 · DEC-001)', () => {
     vi.stubEnv('CRON_SECRET', 'cron-secret-53')
     engineMock.enqueueScheduledJobs.mockResolvedValue({ enqueued: 2, duplicated: 0 })
     engineMock.runDueJobs.mockResolvedValue({ picked: 1, completed: 1, retryScheduled: 0, deadLettered: 0, skipped: 0 })
+    engineMock.reclaimStaleJobs.mockResolvedValue(0)
     registryMock.runSweeperJobs.mockResolvedValue({ fuelDistance: { claimed: 0, created: 0, skippedZero: 0, deferred: 0 } })
 
     const denied = await cronRoute(request('http://localhost/api/cron/jobs', 'GET', undefined, { authorization: 'Bearer wrong-secret' }))
