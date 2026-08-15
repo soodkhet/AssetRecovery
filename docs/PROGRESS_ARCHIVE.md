@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 3.7 — Billing FE (19 §8) + Adjustment ทั้งโมดูล (20)
+
+**วันที่**: 2026-08-15 · **commit**: `c9b7f20` (FE รายได้และวางบิล) + `43764cb` (Adjustment BE + เทสต์ DB) + `9677446` (FE แท็บปรับปรุง) · **branch**: `auto/phase-3.7`
+
+### สิ่งที่ทำ
+
+- **FE ไฟล์ 19 — แท็บ "รายได้และวางบิล"** (`<RevenueTab>`): 2 ตารางในหน้าเดียวตาม §8 (รอบวางบิล: บริษัท/รอบเดือน/ยอดเรียกเก็บ/รับชำระ/**AR แดงเมื่อ > 0**/สถานะ/ปุ่ม "เอกสาร" · รายการรายได้ดิบ: บริษัท/Case Ref/วันที่/Model/Gross/VAT flag/รอบที่ถูกรวม "-" ถ้ายังไม่รวม/สถานะ) + KPI 3 ช่อง + สลับมุมมอง **AR Aging** (`<ArAgingPanel>`) · modal สร้างรอบวางบิล (บริษัท + วันตัดรอบ + รอบ AR ตาม A5) · ปุ่มส่งบิล/ลบรอบผ่าน `<ReasonConfirmModal>` · `<BillingDetailModal>` = ปุ่มเอกสาร
+- **`lib/revenue/revenue-ui.ts`** (pure + เทสต์ 10 เคส): ป้าย/กลุ่มสี/ตัวกรอง + `canSendBillingBatch()`/`canDeleteBillingBatch()` (อ่านตาราง transition เดียวกับ API) + `isArOutstanding()`/`isArOverdue()`/`totalArOutstandingSatang()`
+- **`use-billing.ts`** — hook โหลด `/api/billing-batches` `/api/revenues` `/api/ar-aging` ตัวเดียวของระบบ (ตัวกรองส่งไป API เสมอ ให้ scope บริษัททำงานตรงกัน)
+- **BE ไฟล์ 20 (Adjustment) ทั้งโมดูล**:
+  - `lib/adjustments/adjustment.ts` (pure, เทสต์ 20 เคส) — `adjustmentTargetColumns()`/`adjustmentTargetOf()` = จุดเดียวที่ประกอบ FK 4 ช่อง (DEC-004) · `signedAdjustmentSatang()` (amount บวกเสมอ) · `netAfterAdjustments()` (§9 — นับเฉพาะ `approved`) · state machine `23` §6.9 · `assertAdjustmentReason()`/`assertRejectionReason()` · `approvalCapabilityFor()`/`assertActorCanApproveAdjustment()` · `periodKeyOf()` (ปฏิทินไทย → `year_be`/`month`)
+  - `lib/adjustments/queries.ts` — snapshot `period_status_at_target` ตอนสร้างจาก `accounting_periods` ของงวดรายการต้นทาง · อนุมัติทีละบทบาทจนครบตาม `adjustmentApprovalPolicyFor()` (3.1) · รอบ `locked` ลง audit แยกอีกใบ · ปฏิเสธเป็น terminal + `rejection_reason` บังคับ
+  - **API 5 เส้น**: `GET|POST /api/adjustments` · `GET /api/adjustments/targets` · `PATCH /api/adjustments/:id/approve|reject`
+- **FE ไฟล์ 20 — แท็บ "ปรับปรุง"** (`<AdjustmentTab>`): ตาราง 7 คอลัมน์ตาม §8 + แถวของรอบ `locked` ไฮไลต์แดง + "ต้องผู้บริหาร" · `<AdjustmentFormModal>` บังคับลำดับ เลือกชนิด → ค้นเลขอ้างอิง → เลือกเป้าหมาย → **แสดงสถานะรอบ + ระดับอนุมัติที่ต้องใช้** ก่อนกดสร้าง · `<AdjustmentReviewModal>` modal เดียว 2 โหมด
+- **เทสต์**: pure 30 เคส (adjustment 20 + adjustment-ui 6 + revenue-ui/parse period) + **ระดับ DB 16 เคส** (`20` §16 ครบ 3 เคส + CHECK exactly-one ระดับ DB + snapshot ไม่เปลี่ยนแม้รอบถูกปิดภายหลัง + สาย 2 บทบาทของ `sent_to_accountant` + audit แยกของรอบ `locked`) · รวมทั้งระบบ **2,109 เทสต์ผ่าน** + `pnpm build` ผ่าน
+- **เอกสาร**: `24` v4.4 (+`ADJUSTMENT_NOT_FOUND`/`ADJUSTMENT_INVALID_STATUS`/`ADJUSTMENT_TARGET_NOT_FOUND`) · `20` v2.2 + `27` v3.4 (+`GET /api/adjustments/targets` ที่ §8 บังคับแต่ §14 ตกหล่น) · REUSE_INDEX +6 แถว +2 กับดัก
+
+### การตัดสินใจระหว่างทาง
+
+- **`20` §7.1 มี `adjustment_number` แต่ `02` §8 ไม่มีคอลัมน์** ⇒ ตามลำดับเอกสาร (`02` ชนะ) จึงไม่สร้างเลขรันนิ่ง — ตารางใช้ **เลขที่อ้างอิงของรายการต้นทาง** เป็นคอลัมน์แรกแทน (แนวเดียวกับ `cutoff_date` ของ 3.4) · ต้องการเลขจริงต้องเพิ่มคอลัมน์ + migration + ตัวเดินเลขก่อน
+- **รอบ `sent_to_accountant` ต้องอนุมัติ 2 บทบาท แต่ schema มี `approved_by` ช่องเดียว** ⇒ ใช้ **`audit_logs` (action `approve`) เป็นทะเบียนผู้อนุมัติ** (immutable + append-only อยู่แล้ว) — กดครั้งแรกยังคง `pending_approval` แล้วเปลี่ยนเป็น `approved` เมื่อ `missingApproverRoles()` ว่าง · ไม่เพิ่มคอลัมน์นอก `02`
+- **การเงินอนุมัติรายการของรอบ `locked` ได้ `INSUFFICIENT_APPROVAL_LEVEL` ไม่ใช่ `PERMISSION_DENIED`** — ตาม `20` §11/§16 + `24` §6.7 (การตรวจ capability `approve_adjustment_locked` โยน code นี้โดยตรง)
+- **`assertRevenueAmountEditable()` (3.6) ถูกเรียกจริงตามที่ PROGRESS สั่ง แต่ `EDIT_BILLED_REVENUE` ไม่ใช่ error ของ flow นี้** — รายได้ที่วางบิลไปแล้วคือเคสที่ *ต้อง* ใช้ Adjustment พอดี ⇒ แปลงเป็นธง `directEditBlocked` บนตัวเลือกเป้าหมาย (หน้าจอเตือนว่า "แก้ยอดตรงไม่ได้แล้ว") แทนการบล็อก
+- **เพิ่ม `GET /api/adjustments/targets`** เพราะ §8 บังคับให้ฟอร์มแสดงสถานะรอบ + ระดับอนุมัติก่อนกดสร้าง ซึ่งอ่านจาก `accounting_periods` ที่หน้าจอเข้าไม่ถึง (endpoint ที่ spec ตกหล่น — sync `20`/`27` ในคอมมิตเดียวกัน)
+- **งวดของรายการต้นทาง**: Revenue = `revenue_date` · Expense = `expense_date` · Billing Batch = อ่านจากป้าย `period` ด้วย `parseBillingPeriodLabel()` ใหม่ (ไม่ใช่ `due_date` ที่ข้ามเดือนได้) · Payout Batch = `created_at` (`02` §8 ไม่มีวันตัดรอบ)
+- **`directEditBlocked` ของเป้าหมายที่ไม่ใช่ Revenue คิดจาก Period Lock (`13` §6.11) อย่างเดียว** — กติกาห้ามแก้ตรงเฉพาะโมดูลของ Expense/Billing/Payout เป็นงานของ Period Guard ใน Phase 4.1 ไม่ประดิษฐ์เพิ่มที่นี่
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 4.1** ที่สร้าง `accounting_periods` จริง: การจับคู่รายการ ↔ งวดใช้ `periodKeyOf(date)` (ปฏิทินไทย → `year_be`/`month`) ที่ `lib/adjustments/adjustment.ts` — ใช้ตัวเดียวกันเพื่อไม่ให้รายการหลุดงวด · ก่อนมีงวดจริง ทุก snapshot จะเป็น `null` = `collecting` (การเงินอนุมัติเองได้)
+- **รายงานที่ต้องแสดง "ยอดสุทธิหลังปรับปรุง"** (21/30/37) ใช้ `netAfterAdjustments()` — **ห้าม UPDATE ยอดบน source record** (`20` §6.1)
+- แท็บที่เปิดแล้วในหน้า `/finance` = 6 จาก 9 (เหลือ `dashboard`/`profit` ของ 3.8 และ `payee` ที่อยู่หน้าตั้งค่า)
+
+---
+
 ## Phase 3.6 — Revenue / Billing / AR Backend (19)
 
 **วันที่**: 2026-08-15 · **commit**: `fb84fd9` (Revenue service ตัวจริง + Billing/AR BE) + `294f47f` (เทสต์ระดับ DB + ปิด task) · **branch**: `auto/phase-3.6`

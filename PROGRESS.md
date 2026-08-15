@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.6 (Revenue/Billing/AR BE — เสียบ RevenueService ตัวจริง) · งานถัดไป 3.7
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.7 (Billing FE + Adjustment ทั้งโมดูล) · งานถัดไป 3.8
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.7: Billing FE (19 §8) + Adjustment (20)
+## 🎯 งานถัดไป — Phase 3.8: Profitability Report (21) + Finance Dashboard (14)
 
-- ทำตาม `docs/01_PLAN.md` §3.7 — 2 ก้อนในงานเดียว: **FE ของไฟล์ 19** ที่ BE เสร็จแล้ว (3.6) + **BE+FE ของไฟล์ 20** ทั้งโมดูล
-- **FE 19**: เปิดแท็บ `revenue` ใน `operation-tabs.ts` → แท็บ "รายได้และวางบิล" = **2 ตาราง** (รอบวางบิล: บริษัท/รอบเดือน/ยอดเรียกเก็บ/รับชำระ/**AR แดงเมื่อ > 0**/สถานะ/ปุ่มเอกสาร · รายการรายได้ดิบ: บริษัท/Case Ref/วันที่/Model/Gross/VAT flag/รอบที่ถูกรวม "-" ถ้ายังไม่รวม) + **AR Aging view** · DTO พร้อมแล้ว (`outstandingSatang`/`daysOverdue` มาจาก API ห้ามคำนวณบนหน้าจอ)
-- **BE 20 (Adjustment)**: CRUD + **4 FK แยก + CHECK exactly-one (DEC-004)** · `amount` บวกเสมอ + type `increase`/`decrease` · `REASON_REQUIRED` · **snapshot `period_status_at_target` ณ ตอนสร้าง** แล้วใช้ตัดสินระดับอนุมัติจาก `adjustmentApprovalPolicyFor()` (3.1) · `INSUFFICIENT_APPROVAL_LEVEL` · state machine `23` §6.9
-- **FE 20**: แท็บ adjustment (ค้นหาเป้าหมาย + แสดงระดับอนุมัติที่ต้องใช้ก่อนกดส่ง)
-- ของที่มีแล้วห้ามเขียนซ้ำ: `adjustmentApprovalPolicyFor()`/`assertApprovalLevelSufficient()` (3.1) · `assertRevenueAmountEditable()` — **เรียกก่อนสร้าง Adjustment ที่เป้าหมายเป็น Revenue ห้ามเช็คสถานะรอบเอง** (3.6) · `assertPeriodEditable()` (1.10) · `<ReasonConfirmModal>`/`<FinanceShell>` (1.11/3.3)
-- อ้างอิง: `19` §8 · `20` ทั้งไฟล์ · `13` §6.11 · `23` §6.9 · mockup `finance.html` ผ่าน MAP
-- DoD: เทสต์ครอบ CHECK exactly-one + ระดับอนุมัติตาม `period_status_at_target` (รวมเคส `locked` ที่ต้องเป็นผู้บริหาร) · LOC ~2,000 · งบ ~310k
+- ทำตาม `docs/01_PLAN.md` §3.8 — ปิด Phase 3 ทั้งเฟส: **รายงานกำไร (21)** + **แดชบอร์ดการเงิน (14)**
+- **Profitability BE**: aggregation มิติ **บริษัท/ทีม** + drill-down + **daily cache + force refresh** · `closed_fail` ที่มีต้นทางต้องลด margin จริง (ไม่ตัดทิ้ง) · สูตรจาก `22` §6.12 (`grossProfit()`/`summarizeGrossProfit()` ของ 3.1) — **`revenue = 0` ⇒ margin `null` แสดง "N/A" ห้ามหารศูนย์**
+- **Dashboard BE**: KPI 4 ตัวตาม `14` §6.1 + exception aggregator (ลิงก์กลับต้นทาง read-only)
+- **FE**: เปิดแท็บ `profit` + `dashboard` ใน `operation-tabs.ts` แล้วเสียบใน `<FinanceShell>` (ครบ 8/9 แท็บ — `payee` อยู่หน้าตั้งค่าตามมติเดิม)
+- ของที่มีแล้วห้ามเขียนซ้ำ: `grossProfit()`/`summarizeGrossProfit()`/`directCostSatang()` (3.1) · `netAfterAdjustments()` — **ยอดสุทธิหลังปรับปรุงต้องคิดผ่านตัวนี้ ห้ามอ่านยอดจาก source record ตรง** (3.7) · `useBillingBatches()`/`useRevenues()` (3.7) · `<StatCard>`/`fmtRatioPct(null)` = `N/A`
+- อ้างอิง: `21`, `14` ทั้งไฟล์ · `22` §6.12 · mockup `finance.html` ผ่าน MAP
+- DoD: เทสต์ครอบ margin เคสหารศูนย์ + `closed_fail` ที่มีต้นทุน + cache/force refresh idempotent · LOC ~1,750 · งบ ~280k
 
 ---
 
@@ -73,7 +73,7 @@
 | 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+`1848a48` · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
 | 3.5 | Payout FE + Internal PDFs | ✅ | 2026-08-15 · `9538009`+`c15a75b` · แท็บรอบจ่ายเงิน (ตาราง+3 modal+ยืนยันซ้ำ 2 จังหวะ) + เอกสารภายใน 3 ใบเทียบ samples 04–06 · fix `lpad` เลขเอกสารเกิน 999 → archive |
 | 3.6 | Revenue / Billing / AR BE | ✅ | 2026-08-15 · `fb84fd9`+`294f47f` · RevenueService ตัวจริง (เกต `19` §6.1 + ยอด `22` §6.5–6.8 + snapshot VAT) + Billing Batch/AR Aging + API 7 endpoint · เทสต์ pure 34 + DB 30 (`19` §16 ครบ 8 เคส) → archive |
-| 3.7 | Billing FE + Adjustment | ⬜ | PLAN §3.7 · 4 FK + CHECK (DEC-004) |
+| 3.7 | Billing FE + Adjustment | ✅ | 2026-08-15 · `c9b7f20`+`43764cb`+`9677446` · แท็บรายได้และวางบิล (2 ตาราง + AR Aging) + Adjustment ทั้งโมดูล (4 FK + CHECK · snapshot งวด · ผู้อนุมัติจาก audit) · เทสต์ pure 30 + DB 16 → archive |
 | 3.8 | Profitability + Finance Dashboard | ⬜ | PLAN §3.8 |
 
 ## Phase 4 — Accounting Module (ไฟล์ 30–37)

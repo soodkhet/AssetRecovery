@@ -13,6 +13,7 @@
 |---|---|---|
 | v1 | (เดิม) | Drafted from UI Reference — Adjustment ไม่แก้ของเดิม, ระดับอนุมัติตาม Period Lock |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — ตรวจสอบ `target_type` เทียบกับ DEC-004 (Separate FK columns) ใน `02-database-schema-design.md` แล้ว **สอดคล้องกัน** — **เนื้อหา business logic เดิมคงไว้ครบ** |
+| v2.2 | 15/08/2569 | **เติม endpoint ที่ §8 บังคับแต่ §14 ตกหล่น** (Phase 3.7): `GET /api/adjustments/targets` — §8 กำหนดว่าฟอร์มต้อง "เลือก target ก่อน (ค้นหาจากเลขที่อ้างอิง) แล้วระบบ snapshot `period_status_at_target` อัตโนมัติ พร้อมแสดงว่าต้องผ่านการอนุมัติระดับไหน" ซึ่งข้อมูลสองอย่างหลังอยู่ที่ `accounting_periods` — หน้าจอคำนวณเองไม่ได้และไม่มี endpoint เดิมรองรับ · สิทธิ์ = `create_adjustment` (อ่านอย่างเดียว ไม่สร้างข้อมูล) · sync `27` §6.8 แล้ว · ไม่กระทบ business logic เดิม |
 | v2.1 | 04/07/2569 | **เติม endpoint/validation ปฏิเสธ Adjustment ที่ตกหล่น**: state machine (ไฟล์ 23 §6.9) และ enum `adjustment_status` ใน schema มี `rejected` (terminal) พร้อม column `rejection_reason` อยู่แล้ว แต่ไฟล์นี้ไม่เคยมี endpoint/validation รองรับ — เติม `PATCH /api/adjustments/:id/reject` (§14), validation `REJECTION_REASON_REQUIRED` (§11 — ใช้ code เดียวกับไฟล์ 15 ความหมายเดียวกัน สอดคล้องกฎ audit กลางที่บังคับ reason กับทุก mutation ที่กระทบเงิน) และ test case (§16) — sync ไฟล์ 24/27 แล้ว |
 
 ขอบเขตเอกสารนี้: สร้างรายการปรับปรุงยอดเงิน (เพิ่ม/ลด) สำหรับกรณีที่ต้องแก้ไขข้อมูลย้อนหลังแต่**ห้ามแก้ source record ตรง** ตามนโยบาย Period Lock — เป็นกลไกเดียวที่อนุญาตให้แก้ไขยอดเงินของรายการที่ผ่านการประมวลผลไปแล้ว
@@ -117,6 +118,7 @@
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | /api/adjustments | list |
+| GET | /api/adjustments/targets | ตัวเลือกรายการต้นทางของฟอร์ม (§8) — ค้นจากเลขที่อ้างอิง + คืน `period_status_at_target` และระดับอนุมัติที่ต้องใช้ |
 | POST | /api/adjustments | สร้างใหม่ (ต้องมี reason) |
 | PATCH | /api/adjustments/:id/approve | อนุมัติ (เช็คระดับสิทธิ์ตาม period_status) |
 | PATCH | /api/adjustments/:id/reject | ปฏิเสธ (terminal — ต้องมี rejection_reason, ระดับสิทธิ์เดียวกับ approve) |

@@ -41,6 +41,21 @@ export function billingPeriodLabel(cutoffDate: Date): string {
   return `${month} ${cutoffDate.getUTCFullYear() + BUDDHIST_YEAR_OFFSET}`
 }
 
+/**
+ * อ่าน `period` ("มิถุนายน 2569") กลับเป็นงวด — ใช้ตอนต้องรู้ว่ารอบวางบิลอยู่งวดบัญชีไหน
+ * (ไฟล์ 20 snapshot `period_status_at_target`) · รูปแบบอื่น ⇒ `null` ให้ผู้เรียกตัดสินใจต่อ
+ *
+ * ⚠️ ปีในป้ายเป็น **พ.ศ.** เสมอ (Rule 01) — คืนค่าเป็น `yearBe` ตรงกับ `accounting_periods.year_be`
+ */
+export function parseBillingPeriodLabel(period: string): { yearBe: number; month: number } | null {
+  const [monthName, yearText] = period.trim().split(/\s+/)
+  if (monthName === undefined || yearText === undefined) return null
+  const index = MONTH_NAMES_TH.findIndex((name) => name === monthName)
+  const yearBe = Number.parseInt(yearText, 10)
+  if (index < 0 || !Number.isInteger(yearBe)) return null
+  return { yearBe, month: index + 1 }
+}
+
 /** ต้นเดือนของวันตัดรอบ (date-only) — ขอบล่างของช่วง `revenue_date` ที่ถูกรวมเข้ารอบนั้น */
 export function periodStartOf(cutoffDate: Date): Date {
   return new Date(Date.UTC(cutoffDate.getUTCFullYear(), cutoffDate.getUTCMonth(), 1))
