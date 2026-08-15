@@ -9,9 +9,10 @@ import { BOUND_NON_MATRIX_CAPABILITIES, DEFAULT_ROLE_CAPABILITIES } from '@/lib/
  * เทสต์ชุดนี้แดง = seed กับสเปคเริ่มไม่ตรงกัน ไม่ใช่เทสต์พัง
  */
 describe('capability catalog (`02` §12 · `13` §6.10)', () => {
-  // 48 = 47 ของ Phase 1.2/1.6 + `view_audit_log` ที่ Phase 5.2 เพิ่มตาม `90` §12 (นอก matrix 37 รายการ)
-  it('มี 48 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
-    expect(CAPABILITIES).toHaveLength(48)
+  // 49 = 47 ของ Phase 1.2/1.6 + `view_audit_log` (Phase 5.2 · `90` §12) + `manage_jobs`
+  // (Phase 5.3 · `91` §12) — ทั้งสองตัวอยู่นอก Functional Matrix 37 รายการ
+  it('มี 49 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
+    expect(CAPABILITIES).toHaveLength(49)
     expect(MATRIX_CAPABILITIES).toHaveLength(37)
     expect(new Set(MATRIX_CAPABILITIES.map((capability) => capability.functionalGroup)).size).toBe(4)
   })

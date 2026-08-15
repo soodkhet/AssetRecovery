@@ -165,7 +165,7 @@ type TxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$trans
  * คำนวณ `pnd3/pnd53` ของงวดใหม่ทั้งก้อนจากใบที่ `active` แล้วเขียนทับ — **idempotent**
  * เรียกทุกครั้งที่ใบเกิดหรือถูกยกเลิก (`33` §9 — ใบที่ยกเลิกต้องหายจากยอดทันที)
  */
-async function refreshFilingSummary(
+export async function refreshFilingSummary(
   tx: TxClient,
   input: {
     organizationId: string

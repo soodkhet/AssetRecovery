@@ -238,6 +238,16 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         audiences: ['superadmin', 'executive'],
         available: true,
       },
+      // `91` §8 — หน้าสถานะงานเบื้องหลัง (Job Log) · Phase 5.3
+      // เหตุผลเดียวกับ audit log: `91` §12 ให้บัญชี/การเงินดูสถานะงานของตัวเองได้ (capability
+      // `manage_jobs` ระดับ view) แต่ `06` §7.2 ไม่ให้สอง role นี้เห็นเมนู "การตั้งค่า"
+      {
+        id: 'settings.jobs',
+        label: 'งานเบื้องหลัง (Job Log)',
+        path: '/settings/jobs',
+        audiences: ['superadmin', 'executive'],
+        available: true,
+      },
     ],
   },
 ]

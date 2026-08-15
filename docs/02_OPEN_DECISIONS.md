@@ -146,8 +146,8 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 ### ⬜ C7 — `97` เมนู "รายงานสรุป" ถูกยุบเข้า Dashboard แล้ว (v3) แต่ §8/§13 ยังอ้างเมนูเดิม และ §5 อธิบาย Dashboard ไม่ครบ
 - **[default]**: Dashboard = KPI 4 ใบ + Revenue trend 6 เดือน + AR Aging · แก้ §5/§8 ให้ตรง v3 · **บล็อก**: 7.3 · **คำตอบ**:
 
-### ⬜ C8 — `job_type` 5 ตัว (`91` §6.1) แต่ §14.1/§17 ยังเขียน 4 ตัว (ตกหล่น `advance_overdue`)
-- **[default]**: dev trigger รองรับครบ 5 · แก้ §14.1/§17 · **บล็อก**: 5.3 · **คำตอบ**:
+### ✅ C8 — `job_type` 5 ตัว (`91` §6.1) แต่ §14.1/§17 ยังเขียน 4 ตัว (ตกหล่น `advance_overdue`)
+- **[default]**: dev trigger รองรับครบ 5 · แก้ §14.1/§17 · **บล็อก**: 5.3 · **คำตอบ**: ✅ **ใช้ default ตามมติ PO 12/08/2569 ข้อ 1** — implement ที่ Phase 5.3: `POST /api/dev/trigger-job` รับครบ 5 ตัวของ §6.1 (นอกรายการ = `JOB_INVALID_STATUS`) และแก้ `91` §14.1/§17 ให้ตรง (v2.3) · job_type ที่เกิดนอกตาราง §6.1 (`fuel_distance_retry`, `wht_filing_reminder`) รันผ่านตัวตั้งเวลาได้แต่ dev trigger ไม่รับ
 
 ---
 

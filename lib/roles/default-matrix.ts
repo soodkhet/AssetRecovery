@@ -184,6 +184,17 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [finance, 'view'],
     [accounting, 'view'],
   ],
+
+  // ── นอก matrix: งานเบื้องหลัง (`91` §12) ──
+  // "Trigger job = allowed module role ตาม action" ⇒ คนที่สั่งงานจริงคือเจ้าของโมดูลนั้น ๆ ผ่าน
+  // ปุ่มของโมดูลเอง (ส่งออกชุดบัญชี/สร้างไฟล์โอน) · หน้า Job Log เป็นหน้ากลางไว้ "ดูสถานะ"
+  // ⇒ default ให้ระดับ `view` กับบริหาร/บัญชี/การเงิน · `manage` (สั่งงานตรงจาก Job Log) และ
+  //   retry เป็นของ Superadmin ซึ่งไม่เก็บ record ตามนิยาม (DEC-009)
+  manage_jobs: [
+    [executive, 'view'],
+    [finance, 'view'],
+    [accounting, 'view'],
+  ],
 }
 
 /**
@@ -194,6 +205,7 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_compensation_plans',
   'manage_users',
   'view_audit_log',
+  'manage_jobs',
 ]
 
 export const DEFAULT_ROLE_CAPABILITIES: readonly DefaultAssignment[] = Object.entries(MATRIX).flatMap(
