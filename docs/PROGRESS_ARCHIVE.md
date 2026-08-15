@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 4.4 — Accounting Expenses (32) + Accountant Questions (36)
+
+**วันที่**: 2026-08-15 · **commit**: `1f3d525` · **branch**: `auto/phase-4.4`
+
+### สิ่งที่ทำ
+
+- **`lib/expenses/expense-record.ts`** (pure) — กติกาไฟล์ 32 ทั้งชุด: `isSyncableBatchStatus()` (เฉพาะ `completed`) · `expenseCategoryOf()` (ป้ายจากทะเบียนกลาง `EXPENSE_TYPE_LABEL` ของ `41` §6.6 · เงินทดรอง = "เงินทดรองจ่าย") · `resolveDocumentStatus()` (บังคับใบเสร็จเฉพาะ `hotel`/`receipt`) · `resolveMappingRule()` + `assertCostCenterEditable()` (`COST_CENTER_AUTO_EDIT`) · `assertNoAmountEdit()` (`EDIT_AMOUNT_DIRECTLY` — ตรวจ body ดิบก่อน Zod) · `buildDocumentException()` · `summarizeExpenseRecords()`
+- **`lib/expenses/queries.ts`** — `syncExpenseRecordsFromPayout()` (idempotent ด้วย unique `payout_batch_item_id` · ผูกงวดด้วย `ensurePeriodForDate()` ของ 4.1 จาก **วันจ่ายจริง** = `payment_file_generated_at` หรือเวลาที่รอบเป็น `completed`) · `listExpenseRecords()` (คืนตัวเลือกศูนย์ต้นทุนมาด้วย ไม่ต้องยิง `/api/settings/*` ซ้ำ) · `mapExpenseCostCenter()`
+- **จุดเสียบ 2 ทางเดียวกับที่รอบจ่ายเป็น `completed` ได้** (`17` §9/§18): ท้าย `completePayoutBatch()` (ยืนยันด้วยมือ) และหลัง `syncPayoutBatchCompleted()` ในการจับคู่กระทบยอด (ไฟล์ 35) — ทั้งคู่เรียกนอกทรานแซกชันของตัวเอง ความล้มเหลวฝั่งบัญชีจึงไม่ย้อนไปล้มการยืนยันจ่ายเงินที่สำเร็จแล้ว
+- **เอกสารไม่ครบ ⇒ exception อัตโนมัติ** (`32` §6.3/§9 · ใช้ `createException()` ของ 4.1) ระดับ **`warning`** ไม่ใช่ critical (ใบเสร็จตามเก็บทีหลังได้ ไม่ควรบล็อก Export ทั้งรอบ — ตรงกับ EX-004 ของ mockup) · สร้างเฉพาะจังหวะที่ record เกิดใหม่ ⇒ sync ซ้ำไม่ได้ exception ซ้ำ
+- **`lib/accounting/question.ts` + `question-queries.ts`** (ไฟล์ 36) — สถานะเป็น `is_resolved BOOLEAN` (`false`=`open`/`true`=`answered` · ไม่สร้าง enum ใหม่) · `assertAnswerable()` ⇒ ตอบได้ครั้งเดียว · list เรียงค้างตอบขึ้นก่อน · audit ทุก mutation แต่**ไม่บังคับ `reason`** (`36` §12 — ไม่ใช่รายการเงิน ตารางอยู่หมวด non-sensitive ของ `reason-policy`)
+- **API 4 endpoint**: `GET /api/accounting/expenses` · `PATCH /api/accounting/expenses/:id/cost-center` (`manage:map_cost_center` + `reason` บังคับ + ยาม `PERIOD_LOCKED_DIRECT_EDIT` ตามสถานะงวดของรายการ) · `GET|POST /api/accounting/questions` · `PATCH /api/accounting/questions/:id/answer`
+- **FE 2 แท็บใน `<AccountingShell>`**: `expenses` (ตาราง 9 คอลัมน์ตาม mockup + KPI 4 ใบ + ตัวกรองเอกสารครบ/ไม่ครบ + `<CostCenterMapModal>` + `<ExpenseDetailModal>` อ่านอย่างเดียว) และ `qa` (ตาราง + `<QuestionFormModal>` + `<AnswerQuestionModal>` ที่สลับเป็นโหมดดูคำตอบเมื่อ `is_resolved`) — เปิดแท็บผ่าน `accounting-tabs.ts` ที่เดียวตามที่ 4.2 วางไว้ · แท็บเริ่มต้นย้ายเป็น `expenses`
+- **`docs/24` v4.9** — เติม 3 error code (§6.8): `EXPENSE_RECORD_NOT_FOUND`, `ACCOUNTANT_QUESTION_NOT_FOUND`, `ACCOUNTANT_QUESTION_ALREADY_ANSWERED` (ศูนย์ต้นทุนไม่เจอใช้ `COST_CENTER_NOT_FOUND` ของ `13` ที่มีอยู่แล้ว)
+- **เทสต์**: pure 24 เคส (`expense-record.test.ts` 15 + `question.test.ts` 9) + ยามทะเบียนแท็บ 5 เคส (`accounting-tabs.test.ts`) + route 9 เคส (`accounting-expenses-routes.test.ts` — 403 ของการเงิน/พนักงานสนาม, `EDIT_AMOUNT_DIRECTLY` ตั้งแต่ชั้น route, route ค่าใช้จ่าย export แค่ `GET`) + ระดับ DB 12 เคส (`expenses.db.test.ts` — `file_generated` ไม่ sync, `completed` sync 1:1 + เรียกซ้ำไม่ซ้ำ, เอกสารไม่ครบ ⇒ exception ครั้งเดียว, ยืนยันจ่ายด้วยมือแล้วเกิดเอง, map cost center + audit reason, 404 สองแบบ, งวด locked, ตัวกรอง, ข้อซักถามครบวงจร)
+
+### การตัดสินใจระหว่างทาง (ยึด schema `02` เป็นหลัก — ตระกูลเดียวกับ D13)
+
+- **5 ฟิลด์ของ `32` §7.1 ที่ `02` §9 ไม่มีคอลัมน์** (`payee_name`, `category`, `payment_date`, `document_status`, `mapping_rule`) ⇒ **derive ตอนอ่าน** จากต้นทาง (`payout_batch_items` → `expenses`/`advances` → `payee_profiles`) · ยอดเงินยัง snapshot จริงในตารางเหมือนเดิม · **ผลข้างเคียงที่รับไว้: `payee_name` ไม่ใช่ snapshot จริง** (แก้ชื่อผู้รับเงินแล้วรายการเก่าจะแสดงชื่อใหม่ ซึ่งขัดเจตนา §7.1) — บันทึกเป็น **`02_OPEN_DECISIONS` D14** พร้อม default ที่เสนอ (เพิ่มคอลัมน์)
+- **auto-mapping cost center ยังเกิดจริงไม่ได้** — `02` ไม่มีเส้นเชื่อม "ทีม → ศูนย์ต้นทุน" เลย (ทั้ง `teams` และ `cost_centers`) และโครงสร้าง Cost Center จริงยังเป็นคำถามค้าง E1 ถึงนักบัญชี ⇒ ชั้น DB ส่ง `autoCostCenterId = null` เสมอ ทุกแถวจึงเป็น `manual` · **ยาม `COST_CENTER_AUTO_EDIT` implement + มีเทสต์ครบแล้ว** พอเพิ่มเส้นเชื่อมเมื่อไรก็ทำงานทันทีโดยไม่ต้องแก้ตรรกะ
+- **`reference` / `due_date` ของไฟล์ 36 ไม่ implement** — `accountant_questions` ใน `02` §9 ไม่มีคอลัมน์ ⇒ ตารางแสดง "บันทึกเมื่อ" แทน Due Date และไม่มีการเตือนเลยกำหนด (รวมอยู่ใน D14 — กระทบคุณค่าการติดตามงานของไฟล์ 36 โดยตรง ควรเคาะก่อน 4.6)
+- **exception ของเอกสารไม่ครบเป็น `warning`** (ไม่ใช่ critical) — `34` §6.1 กำหนดว่า critical = บล็อก Export ทั้งรอบ ซึ่งแรงเกินไปสำหรับใบเสร็จที่ตามเก็บได้ · mockup ตั้ง EX-004 เป็น warning เช่นกัน
+- **`EDIT_AMOUNT_DIRECTLY` ตรวจที่ชั้น route ก่อน Zod** — ถ้าปล่อยให้ `.strict()` ของ Zod จัดการ ผู้ใช้จะได้ field error ทั่วไปแทน code ที่ `32` §11 ระบุไว้
+- **map cost center บังคับ `reason`** — `expense_records` อยู่หมวด `money` ของ `reason-policy` ⇒ ทุก `update` ต้องมีเหตุผล (ตรงกับช่อง "หมายเหตุการ Mapping" ของ mockup พอดี)
+
+### จุดที่คนถัดไปควรรู้
+
+- **ไม่มี migration ใหม่ในเฟสนี้** — ใช้ตาราง `expense_records`/`accountant_questions` ที่มีอยู่แล้วตั้งแต่ 1.2 (ไม่ต้องรัน `pnpm db:deploy`)
+- **db test ไฟล์อื่นที่ลบ `payout_batch_items` ต้องลบ `expense_records` + `exceptions` ก่อน** (FK ใหม่) — แก้ `payout-queries.db.test.ts` ไปแล้ว 1 จุด ถ้ามีไฟล์ใหม่ต้องทำแบบเดียวกัน
+- **4.5 (WHT)**: `wht_certificates.expense_record_id` ชี้มาที่โมดูลนี้ ⇒ ใบ 50 ทวิ ต้องออกจาก expense record ที่ sync แล้วเท่านั้น (รอบที่ยังไม่ `completed` จะไม่มีแถวให้ออก — เป็นพฤติกรรมที่ถูกต้องตาม `32` §6.1)
+- **4.6 (Export Pack)**: `04_Expenses.csv` ต้องดูว่า sample ขอ payee/ประเภท/วันจ่ายแบบไหน — ตอนนี้ derive ได้ครบแต่ไม่ใช่ snapshot (ถ้า sample ต้องการ snapshot จริงต้องเคาะ D14 ก่อน)
+- **4.7 (FE ที่เหลือ)**: แท็บ `closing`/`sales`/`receipts`/`documents` ยังปิดอยู่ — เปิดโดยแก้ `available` ใน `lib/accounting/accounting-tabs.ts` แล้วเสียบ component (มีเทสต์ยามรายชื่อแท็บที่เปิดแล้ว ต้องอัปเดตคู่กัน)
+
+---
+
 ## Phase 4.3 — Sales & Receipts + Tax Invoice + PDF (31)
 
 **วันที่**: 2026-08-15 · **commit**: `ecde0e8` · **branch**: `auto/phase-4.3`

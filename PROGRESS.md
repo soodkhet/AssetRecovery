@@ -1,20 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.3 (Sales & Receipts + ใบกำกับภาษี `31` + PDF เอกสารทางการ) · งานถัดไป 4.4 (Accounting Expenses `32` + Accountant Questions `36`)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.4 (Accounting Expenses `32` + Accountant Questions `36`) · งานถัดไป 4.5 (WHT Data `33` + ใบ 50 ทวิ)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 4.4: Accounting Expenses (32) + Accountant Questions (36)
+## 🎯 งานถัดไป — Phase 4.5: WHT Data (33) + ใบ 50 ทวิ PDF
 
-- ทำตาม `docs/01_PLAN.md` §4.4 — ต่อจาก 4.3 ที่ฝั่งรายได้/ขายครบแล้ว รอบนี้เป็นฝั่งจ่าย
-- **Expense Records sync เฉพาะ payout `completed` เท่านั้น** (จ่ายจริง ไม่ใช่แค่อนุมัติ) + snapshot `payee_name` — `expense_records.payout_batch_item_id` UNIQUE 1:1 (`02`) · จุดเสียบคือ `syncPayoutBatchCompleted()` ของ 3.4
-- **Cost center**: แก้ได้เฉพาะรายการที่ map แบบ manual (`COST_CENTER_AUTO_EDIT` เมื่อ `mapping_rule = auto`) · แก้ยอดตรงไม่ได้ (`EDIT_AMOUNT_DIRECTLY` → ต้องผ่าน Adjustment ไฟล์ 20)
-- **`document_status = incomplete` ⇒ สร้าง exception อัตโนมัติ** (ไฟล์ 34 — ใช้ service ของ 4.1)
-- **ไฟล์ 36 (คำถามถึงนักบัญชี)**: CRUD + ตอบ (`is_resolved` boolean) + due date — BE+FE ครบในก้อนนี้ · FE ของ 32 = แท็บ expenses ใน `<AccountingShell>`
-- อ้างอิง: `32`, `36` ทั้งไฟล์ · `13` §6.6 · mockup `accounting.html` ผ่าน MAP
-- LOC ~1,400 · งบ ~240k
+- ทำตาม `docs/01_PLAN.md` §4.5 — ต่อจาก 4.4 ที่บัญชีค่าใช้จ่ายพร้อมแล้ว (`wht_certificates.expense_record_id` ชี้มาที่นั้น)
+- **WHT Certificate auto-create จาก payout `completed`** (1 รายการจ่าย = 1 ใบ) + status `active → cancelled` **ห้ามลบ/reverse** (`cancel_reason` + `replaces_certificate_id` trace 2 ทาง) · **ใบ cancelled ไม่นับใน pnd3/pnd53 totals**
+- **Filing Summary ต่อรอบ** (PND3 บุคคล / PND53 นิติ) + `filing_due_date` อัตโนมัติ (default วันที่ 15 เดือนถัดไป) + `FILING_OVERDUE_WARNING` (เตือนไม่บล็อก) + mark-filed
+- **`WhtCertificatePDF.tsx` ใบ 50 ทวิ** ตาม `28` §6.3 (เทียบ `reference/samples/02_wht_certificate.pdf`) — ต่อยอด `components/pdf/official-doc.tsx` ของ 4.3 **ห้ามใช้ `internal-doc.tsx`**
+- ⚠️ ตัวเดินเลขใบ 50 ทวิ ยังค้างที่ D11 (`docs/02_OPEN_DECISIONS.md`) — ถ้าจำเป็นให้ยึด default ของ D11 (`SELECT … FOR UPDATE` ในทรานแซกชันเดียวกับ insert)
+- FE: แท็บ `wht` ใน `<AccountingShell>` (เปิดที่ `lib/accounting/accounting-tabs.ts` + อัปเดต `accounting-tabs.test.ts`) + banner countdown
+- อ้างอิง: `33` ทั้งไฟล์ · `13` §6.4 · `22` §6.9 · `28` §6.3 · mockup `accounting.html` ผ่าน MAP
+- LOC ~1,950 · งบ ~300k
 
 ---
 
@@ -83,7 +84,7 @@
 | 4.1 | Exceptions + Period/Readiness/Lock guard | ✅ | 2026-08-15 · `5a2b26f` · BE 30/34 ครบ + interceptor `PERIOD_LOCKED_DIRECT_EDIT` ต่อเข้า write การเงิน 15 จุด + เทสต์ DB 14 เคส → archive |
 | 4.2 | Bank Reconciliation | ✅ | 2026-08-15 · `1b2adeb` · import statement + auto-match (candidate เดียว) + trigger 2 ทาง (Cash Receipt/payout completed) + แท็บกระทบยอด · เทสต์ pure 79 + DB 16 → archive |
 | 4.3 | Sales & Receipts + Tax Invoice + PDF | ✅ | 2026-08-15 · `ecde0e8` · sales sync 1:1 จากการส่งบิล + ใบกำกับภาษี auto-number ไม่ gap (FOR UPDATE ในทรานแซกชันเดียวกับ insert) + trigger immutable + `TaxInvoicePDF` · เทสต์ pure 18 + route 9 + DB 10 → archive |
-| 4.4 | Accounting Expenses + Accountant Questions | ⬜ | PLAN §4.4 |
+| 4.4 | Accounting Expenses + Accountant Questions | ✅ | 2026-08-15 · `1f3d525` · sync เฉพาะ payout ที่จ่ายจริง + เอกสารไม่ครบขึ้น exception เอง + map cost center (manual) + ข้อซักถามครบวงจร · เทสต์ pure 24 + route 9 + DB 12 → archive |
 | 4.5 | WHT Data + ใบ 50 ทวิ PDF | ⬜ | PLAN §4.5 · cancelled ไม่นับยอด |
 | 4.6 | Accounting Pack Export (8 ไฟล์ + SHA-256) | ⬜ | PLAN §4.6 · เทียบ samples 01–08 |
 | 4.7 | Accounting FE ที่เหลือ (shell/periods/exceptions/sales) | ⬜ | PLAN §4.7 |

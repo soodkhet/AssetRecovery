@@ -203,6 +203,17 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
   - ใบเสร็จรับเงิน/`receipt_number` = **ไม่ implement** (ไม่มีตาราง/คอลัมน์ · export ของ `37` ไม่ได้ขอฟิลด์นี้ — `02_Cash_Receipts.csv` มีแค่ receipt_date/payer/amount/bank_ref)
 - **[default]**: เพิ่ม 1 คอลัมน์ `tax_invoices.delivery_format invoice_delivery_format NOT NULL DEFAULT 'paper_pdf'` (**snapshot ตอนออกใบ** จากค่าเริ่มต้นของบริษัท เลือกทับได้รายใบ) + `sales_records.accounting_date DATE` · ส่วนใบเสร็จรับเงินรอ**นักบัญชีเคาะ**ว่าต้องออกจริงหรือใช้ใบกำกับภาษี/ใบแจ้งหนี้แทน (ถ้าต้องออก = ตารางใหม่ + sequence แยกตาม D11) · **บล็อก**: ไม่บล็อก 4.3 (ส่งงานได้ตามที่ทำไปแล้ว) แต่กระทบ 4.6 ถ้าสำนักงานบัญชีขอฟิลด์เพิ่ม · **คำตอบ**:
 
+### ⬜ D14 — ไฟล์ 32/36 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.4 — ตระกูลเดียวกับ D13)
+- **ปัญหา**:
+  - `32` §7.1 ระบุ `payee_name` (สั่งให้ **snapshot**), `category`, `payment_date`, `document_status` เป็นฟิลด์บังคับของ Expense Record แต่ `expense_records` ใน `02` §9 มีแค่ `period_id / payout_batch_item_id / cost_center_id / gross|wht|net_satang`
+  - `32` §6.2/§11 บังคับให้แยก `mapping_rule = auto|manual` แต่ **ไม่มีคอลัมน์นี้ทั้งที่ `cost_centers` และ `expense_records`** (`13` §6.6 เขียนว่าอยู่ที่ศูนย์ต้นทุน แต่ `02` §5 ไม่มี — เคยบันทึกไว้แล้วตอน Phase 1.11) และ **ไม่มีเส้นเชื่อมทีม → ศูนย์ต้นทุน** ให้ map อัตโนมัติได้เลย (โครงสร้าง Cost Center จริงยังเป็นคำถามค้าง E1 ใน `QUESTIONS-FOR-ACCOUNTANT.md`)
+  - `36` §6.1 ระบุ `reference` และ `due_date` (บังคับ + จอแสดงเป็นสีแดง) แต่ `accountant_questions` ใน `02` §9 ไม่มีทั้งสองคอลัมน์
+- **ที่ทำไปแล้วใน 4.4** (ยึดลำดับ "เอกสารขัดกัน → `02` ชนะไฟล์ spec ของโมดูล" ตาม CLAUDE.md ⇒ **ไม่แก้ schema เอง** เหมือน D13):
+  - `payee_name`/`category`/`payment_date`/`document_status` = **derive ตอนอ่าน** จากต้นทาง (`payout_batch_items` → `expenses`/`advances` → `payee_profiles`) ด้วย `lib/expenses/expense-record.ts` — ยอดเงินยัง snapshot จริงในตารางเหมือนเดิม · ผลข้างเคียงที่รับไว้: **`payee_name` ไม่ใช่ snapshot จริง** (แก้ชื่อผู้รับเงินแล้วรายการบัญชีเก่าจะแสดงชื่อใหม่ ซึ่งขัดเจตนา §7.1) · `document_status` กรองหลังอ่าน ไม่ใช่ที่ SQL
+  - `mapping_rule` = derive จาก "มีต้นทางอัตโนมัติไหม" (`resolveMappingRule()`); ปัจจุบันชั้น DB ส่ง `autoCostCenterId = null` เสมอ ⇒ **ทุกแถวเป็น `manual`** · ยาม `COST_CENTER_AUTO_EDIT` implement + มีเทสต์ครบแล้ว พอมีเส้นเชื่อมเมื่อไรก็ทำงานทันที
+  - `36` `reference`/`due_date` = **ไม่ implement** (ไม่มีคอลัมน์) ⇒ ตารางข้อซักถามแสดง "บันทึกเมื่อ" แทน Due Date และไม่มีการเตือนเลยกำหนด
+- **[default]**: เพิ่มคอลัมน์ 3 ชุด — (1) `expense_records.payee_name TEXT NOT NULL` (snapshot ตอน sync) (2) `expense_records.mapping_rule cost_center_mapping_rule NOT NULL DEFAULT 'manual'` + `teams.cost_center_id UUID REFERENCES cost_centers(id)` เพื่อให้ auto-mapping เกิดได้จริง (3) `accountant_questions.reference TEXT` + `due_date DATE` · **บล็อก**: ไม่บล็อก 4.4 (ส่งงานได้ตามที่ทำไปแล้ว) แต่กระทบ 4.6 ถ้า `04_Expenses.csv` ต้องมี payee/ประเภท/วันจ่ายแบบ snapshot และกระทบคุณค่าของไฟล์ 36 (ไม่มี due date = ตามงานไม่ได้) · **คำตอบ**:
+
 ---
 
 ## หมวด E — มาตรฐานกลาง UI/Platform ที่หายไป (ผมตั้ง default ให้แล้ว — รับทราบ/ค้านพอ จะเขียนเป็นกฎเพิ่มใน `03`/`04` ตอน task 1.5)

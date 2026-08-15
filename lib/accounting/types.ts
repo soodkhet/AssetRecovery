@@ -1,4 +1,5 @@
 import type { ReadinessResult } from '@/lib/accounting/period'
+import type { QuestionStatus, QuestionSummary } from '@/lib/accounting/question'
 import type { AccountingPeriodStatus, ExceptionLevel, ExceptionStatus } from '@/lib/generated/prisma/enums'
 
 /**
@@ -63,6 +64,28 @@ export interface AccountingPeriodDto {
   lockedByName: string | null
   /** นโยบายแก้ไขของสถานะนี้ (`13` §6.11) — FE ใช้แสดงคำอธิบายใต้ badge */
   directEditLabel: string
+}
+
+/** ข้อซักถามจากสำนักงานบัญชี (`36` §6.1/§7) */
+export interface AccountantQuestionDto {
+  id: string
+  periodId: string
+  periodLabel: string
+  questionText: string
+  answerText: string | null
+  /** `36` §6.1 — `is_resolved=false` → `open` · `true` → `answered` */
+  isResolved: boolean
+  status: QuestionStatus
+  statusLabel: string
+  answeredByName: string | null
+  answeredAt: string | null
+  createdByName: string
+  createdAt: string
+}
+
+export interface AccountantQuestionListDto {
+  items: AccountantQuestionDto[]
+  summary: QuestionSummary
 }
 
 export interface PeriodReadinessDto extends ReadinessResult {
