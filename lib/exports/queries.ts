@@ -662,6 +662,10 @@ export async function createExportPack(
   for (const file of uploads) fileUrls[file.key] = file.path
 
   // ⑥ บันทึกประวัติ + audit (`37` §13 — ต้องมี version, ผู้ส่ง, รายชื่อไฟล์)
+  //
+  // version ถูกคำนวณนอก transaction (ขั้น ③) เพราะต้องใช้ประกอบหน้าปก/ชื่อไฟล์ก่อนอัปโหลด ⇒
+  // สองคำขอพร้อมกันได้เลขเดียวกันแล้วชนกับ `uniq_export_period_version` · ข้อมูลไม่เสีย
+  // (ไฟล์เดิมไม่ถูกทับ ไม่มี version ซ้ำ) แต่ต้องตอบด้วย code จาก `24` ไม่ใช่ Prisma error ดิบ 500
   const created = await prisma.$transaction(async (tx) => {
     const row = await tx.exportRecord.create({
       data: {
@@ -700,9 +704,22 @@ export async function createExportPack(
       tx,
     )
     return row
+  }).catch((error: unknown) => {
+    if (isUniqueViolation(error)) {
+      throw new ExportError('EXPORT_VERSION_CONFLICT', {
+        detail: `period=${scope.id} version=${version}`,
+      })
+    }
+    throw error
   })
 
   return toExportDto(created)
+}
+
+
+/** Prisma `P2002` = ชน unique constraint — ที่นี่คือ `uniq_export_period_version` */
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002'
 }
 
 // ── PATCH mark-sent / accept (`37` §9 · §14) ────────────────────────────────

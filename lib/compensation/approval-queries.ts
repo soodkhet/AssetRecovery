@@ -436,6 +436,19 @@ export async function approveCompensationExpense(
   }
 
   const outcome = await prisma.$transaction(async (tx) => {
+    // ยาม optimistic (Final Test ด่าน 6) — สถานะถูกอ่าน **นอก** transaction จึงต้องยืนยันอีกครั้ง
+    // ตอนเขียน ไม่งั้นคนที่กดทีหลังทับผลของคนแรก (เช่น "ปฏิเสธ" ถูกพลิกกลับเป็น "อนุมัติ"
+    // แล้ว `tryCreateRevenue()` ยิงต่อ · หรือประทับตราผู้อนุมัติของคนแรกหายไป)
+    const claimed = await tx.expense.updateMany({
+      where: { id: expenseId, status: current.status, approvalStepCurrent: current.approvalStepCurrent },
+      data: { updatedBy: user.id },
+    })
+    if (claimed.count === 0) {
+      throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
+        detail: `expense=${expenseId} ถูกเปลี่ยนสถานะโดยผู้ใช้อื่นระหว่างทาง`,
+      })
+    }
+
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {
@@ -562,6 +575,19 @@ export async function rejectCompensationExpense(
   })
 
   const updated = await prisma.$transaction(async (tx) => {
+    // ยาม optimistic (Final Test ด่าน 6) — สถานะถูกอ่าน **นอก** transaction จึงต้องยืนยันอีกครั้ง
+    // ตอนเขียน ไม่งั้นคนที่กดทีหลังทับผลของคนแรก (เช่น "ปฏิเสธ" ถูกพลิกกลับเป็น "อนุมัติ"
+    // แล้ว `tryCreateRevenue()` ยิงต่อ · หรือประทับตราผู้อนุมัติของคนแรกหายไป)
+    const claimed = await tx.expense.updateMany({
+      where: { id: expenseId, status: current.status, approvalStepCurrent: current.approvalStepCurrent },
+      data: { updatedBy: user.id },
+    })
+    if (claimed.count === 0) {
+      throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
+        detail: `expense=${expenseId} ถูกเปลี่ยนสถานะโดยผู้ใช้อื่นระหว่างทาง`,
+      })
+    }
+
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {

@@ -141,6 +141,8 @@ export const ERROR_CATALOG = {
   EXPORT_RECORD_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
   EXPORT_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.8' },
   EXPORT_PAYEE_TAX_ID_MISSING: { status: 400, severity: 'reject', source: '24 §6.8' },
+  // เติมเข้า `24` §6.8 พร้อม Phase 8.3 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  EXPORT_VERSION_CONFLICT: { status: 409, severity: 'reject', source: '24 §6.8' },
   AUTHORIZED_EXCEPTION_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.8' },
   EXCEPTION_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.8' },
   EXCEPTION_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.8' },
