@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 3.8 — Profitability Report (21) + Finance Dashboard (14) — ปิด Phase 3
+
+**วันที่**: 2026-08-15 · **commit**: `43c654f` (BE + เทสต์) + `f04f732` (FE + เปิดแท็บ) · **branch**: `auto/phase-3.8`
+
+### สิ่งที่ทำ
+
+- **`lib/reports/period.ts`** (pure, เทสต์ 9 เคส) — `resolveReportPeriod()` เดือน/ไตรมาส/ปี คิดขอบเขตด้วยปฏิทิน**ไทย** คืน date-only (เที่ยงคืน UTC) ให้เทียบคอลัมน์ `DATE` ได้ตรง · `endDate` รวมวันสุดท้าย · ป้าย พ.ศ. ("สิงหาคม 2569" / "ไตรมาส 3/2569" / "ปี 2569")
+- **`lib/reports/profitability.ts`** (pure, เทสต์ 11 เคส) — `summarizeProfitability()` จัดกลุ่มตามมิติแล้วต่อ `summarizeGrossProfit()` ของ 3.1 (ไม่เขียนสูตรซ้ำ) · `summarizeCostBreakdown()` + `countCasesWithCostOnly()` สำหรับ drill-down · `DIRECT_COST_EXPENSE_TYPES` = fuel/allowance/commission/no_success_fee เท่านั้น
+- **`lib/reports/cache.ts`** (เทสต์ 9 เคส) — แคช in-memory หมดอายุ**เที่ยงคืนไทย** + `refresh` ข้ามแคช (`21` §9/§17)
+- **`lib/reports/dashboard.ts`** (pure, เทสต์ 9 เคส) — KPI meta 4 ตัว + โทนสีตาม `14` §8 · `countExceptionLevels()`/`compareExceptionLevel()` · ทะเบียน `exceptionLinkOf()` ลิงก์กลับต้นทาง
+- **`lib/reports/queries.ts`** — ชั้น DB อ่านอย่างเดียว: `getProfitability()` / `getProfitabilityDrilldown()` / `getDashboardKpi()` / `getExceptions()`
+- **API 4 endpoint ครบ `27` §6.9**: `GET /api/reports/profitability` · `GET /api/reports/profitability/:dimensionId/drilldown` · `GET /api/finance/dashboard-kpi` · `GET /api/finance/exceptions` — capability `view_finance_dashboard` (`25` §7.6)
+- **FE**: `<DashboardTab>` (KPI 4 การ์ด + แถบเตือน critical + ตาราง Alerts ลิงก์กลับต้นทาง) · `<ProfitTab>` + `<ProfitDrilldownModal>` (สลับมิติ/ช่วงเวลา + ปุ่มรีเฟรช + แถวรวม + เจาะลึกต้นทุนตามชนิด) · `lib/reports/profit-ui.ts` (pure + เทสต์ 6 เคส)
+- **เปิดแท็บครบ 8/9** ใน `operation-tabs.ts` (`payee` อยู่หน้าตั้งค่าการเงินตามมติเดิม) + เลื่อนแท็บเริ่มต้นเป็น `dashboard` ตาม `14` §1
+- **เทสต์**: pure 44 เคส + **ระดับ DB 17 เคส** (สูตร/มิติ/ช่วงเวลา · `closed_fail` ลด margin · หารศูนย์ · adjustment · แคช+รีเฟรช idempotent · drill-down · KPI 4 ตัว · exceptions) · รวมทั้งระบบ **2,170 เทสต์ผ่าน**
+
+### การตัดสินใจระหว่างทาง
+
+- **แคชเป็น in-memory ไม่ใช่ตารางใหม่** — `21` §7 ระบุว่ารายงานนี้ไม่มี entity ของตัวเอง และ §18 เปิดให้เลือกกลไกแคชได้อิสระ "โดยไม่กระทบ business logic" ⇒ ไม่มี migration ใหม่ · แคชหายเมื่อ process รีสตาร์ต = คำนวณใหม่ ผลเท่าเดิมเพราะอ่านอย่างเดียว
+- **แคชเก็บ entry ดิบ ไม่ใช่ DTO** ⇒ ตารางสรุปกับ drill-down มาจากชุดข้อมูลเดียวกันเสมอ ตัวเลขขัดกันไม่ได้ (`21` §15)
+- **ต้นทุนที่ผูกเคสไม่ได้ (manual claim / ค่าที่พัก) อยู่นอกรายงาน** ตาม `21` §4 + `22` §6.12 — mockup วาดแถว "ค่าที่พัก" ใน modal เจาะลึก แต่ **สเปคชนะ mockup** (mockup ใช้ได้เฉพาะ UI)
+- **การ์ด KPI ที่ 4 = "กำไรขั้นต้นเดือนนี้"** ตาม `14` §6.1 (mockup วาดเป็น "รายได้รวม") — เหตุผลเดียวกัน
+- **expense ที่นับเป็นต้นทุนจริง = `approved` เท่านั้น** · `superseded` ถูกแทนที่ไปแล้วตาม `41` §10.1 นับซ้ำไม่ได้ — ใช้กติกาเดียวกันกับ KPI "เงินรออนุมัติ" (ไม่นับ `approved`/`rejected`/`superseded`)
+- **ทุกยอดในรายงานผ่าน `netAfterAdjustments()`** (`20` §9) รวมถึง KPI ทั้ง 3 ตัวแรกของแดชบอร์ด — เป็นการใช้งานจริงครั้งแรกของ helper ตัวนี้ ⚠️ หมายความว่าหน้า **AR Aging (3.7) ยังแสดงยอดก่อนปรับปรุง** ส่วนการ์ด "ยอดค้างรับ" แสดงยอดหลังปรับปรุง — ถ้ามี adjustment ระดับรอบวางบิลจริง สองจอจะต่างกัน ให้ Phase 4.x ที่แตะ AR ต่อยอดด้วย `netAfterAdjustments()` ให้ตรงกัน
+- **drill-down ของมิติที่ไม่มีข้อมูล ⇒ `COMPANY_NOT_FOUND`/`TEAM_NOT_FOUND`** (code เดิมของ `24` §6.1) — ไม่ตั้ง code ใหม่เพราะรายงานเป็น read-only ไม่มี validation ของตัวเอง (Rule 04)
+
+### จุดที่คนถัดไปควรรู้
+
+- **Phase 4.1 (ไฟล์ 34)** ต้องต่อยอด `exceptionLinkOf()`/`exceptionModuleLabel()` ของ `lib/reports/dashboard.ts` — ห้ามตั้งทะเบียนโมดูล/ลิงก์ชุดใหม่ · โมดูลบัญชีลิงก์ไป `/accounting` ซึ่งยังเป็น placeholder จนถึง Phase 4.7
+- `GET /api/finance/exceptions` เป็น **GET อย่างเดียวโดยตั้งใจ** — CRUD/authorize ของ exception เกิดที่ไฟล์ 34 ห้ามเพิ่ม mutation ลง `lib/reports/queries.ts`
+- รายงานใหม่ทุกตัว (`96` Phase 6) ให้ใช้ `resolveReportPeriod()` + `withDailyCache()` ซ้ำ — ห้ามคิดช่วงเดือน/ปีเองอีก
+- แท็บการเงินเปิดครบแล้ว 8/9 — เพิ่มแท็บใหม่ไม่มีอีกใน Phase 3 (`payee` อยู่หน้าตั้งค่าโดยเจตนา)
+
+---
+
 ## Phase 3.7 — Billing FE (19 §8) + Adjustment ทั้งโมดูล (20)
 
 **วันที่**: 2026-08-15 · **commit**: `c9b7f20` (FE รายได้และวางบิล) + `43764cb` (Adjustment BE + เทสต์ DB) + `9677446` (FE แท็บปรับปรุง) · **branch**: `auto/phase-3.7`
