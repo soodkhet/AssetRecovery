@@ -32,7 +32,8 @@ export const POST = withApiPermission(
     const parsed = payoutBatchCreateSchema.safeParse(await readJsonBody(request))
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
-    const created = await createPayoutBatch({ actor: user, meta: getRequestMeta(request) }, parsed.data)
-    return apiSuccess(created, { status: 201 })
+    // `WHT_RATE_FALLBACK_TO_PLAN` = เตือนไม่บล็อก ⇒ รอบถูกสร้างจริงแล้ว แต่ต้องบอกว่าใครใช้อัตราสำรอง
+    const { batch, warning } = await createPayoutBatch({ actor: user, meta: getRequestMeta(request) }, parsed.data)
+    return apiSuccess(batch, { status: 201, ...(warning === undefined ? {} : { warning }) })
   },
 )

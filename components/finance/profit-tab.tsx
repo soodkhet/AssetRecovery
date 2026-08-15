@@ -5,6 +5,8 @@ import { ProfitDrilldownModal } from '@/components/finance/profit-drilldown-moda
 import { useProfitability } from '@/components/finance/use-reports'
 import {
   Button,
+  FilterGroup,
+  InlineAlert,
   StatCard,
   TBody,
   THead,
@@ -54,37 +56,16 @@ export function ProfitTab() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-            {PROFIT_DIMENSION_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setDimension(option.id)}
-                className={cn(
-                  'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-                  dimension === option.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-            {PROFIT_PERIOD_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setPeriod(option.id)}
-                className={cn(
-                  'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-                  period === option.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <FilterGroup
+            options={PROFIT_DIMENSION_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+            value={dimension}
+            onChange={setDimension}
+          />
+          <FilterGroup
+            options={PROFIT_PERIOD_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+            value={period}
+            onChange={setPeriod}
+          />
 
           <Button variant="secondary" loading={loading} onClick={() => void reload(true)}>
             รีเฟรชตอนนี้
@@ -92,7 +73,16 @@ export function ProfitTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      {/*
+        ⚠️ โหลดรายงานไม่สำเร็จ = `data` เป็นค่า EMPTY (`use-reports.ts`) ⇒ ถ้าไม่บอกให้ชัด ผู้ใช้จะ
+        อ่าน "฿0.00 / กำไร 0" เป็นตัวเลขจริง — KPI ต้องหายไปพร้อมข้อความ ไม่ใช่โชว์ศูนย์ปลอม
+      */}
+      {error !== null ? (
+        <InlineAlert tone="error" title={error.title}>
+          {error.message}
+        </InlineAlert>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard
           label="รายได้ (Revenue)"
           value={fmtSatangSymbol(data.total.revenueSatang)}
@@ -116,7 +106,8 @@ export function ProfitTab() {
           value={<span className={marginToneClass(data.total.marginPct)}>{fmtRatioPct(data.total.marginPct)}</span>}
           hint="กำไร ÷ รายได้ × 100"
         />
-      </div>
+        </div>
+      )}
 
       <p className="text-[11px] text-slate-400">
         {freshnessLabel(data.fromCache)}

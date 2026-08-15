@@ -14,6 +14,7 @@ import {
   Badge,
   Button,
   Card,
+  FilterGroup,
   InlineAlert,
   RefText,
   StatCard,
@@ -116,24 +117,7 @@ export function ApprovalTab() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-              {CLAIM_STATUS_FILTERS.map((filter) => (
-                <button
-                  key={filter.value}
-                  type="button"
-                  onClick={() => setClaimFilter(filter.value)}
-                  aria-pressed={claimFilter === filter.value}
-                  className={cn(
-                    'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-                    claimFilter === filter.value
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700',
-                  )}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
+            <FilterGroup options={CLAIM_STATUS_FILTERS} value={claimFilter} onChange={setClaimFilter} />
             {canCreateClaim && (
               <Button size="sm" onClick={() => setClaimFormOpen(true)}>
                 + สร้างรายการเบิกเอง

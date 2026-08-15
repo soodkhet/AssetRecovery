@@ -12,6 +12,7 @@ import {
   paymentFileName,
   paymentFileStoragePath,
   resolvePayoutSide,
+  whtFallbackWarning,
 } from '@/lib/payout/payout'
 
 /** `17` §6.1/§6.3/§9/§10/§11 · `23` §6.6 — ยามทั้งหมดก่อนเงินออกจริง */
@@ -132,6 +133,32 @@ describe('ชื่อรอบ / idempotency key (`17` §6.3 · Rule 01 พ.ศ
     const warning = duplicatePaymentFileWarning(new Date('2026-08-14T09:30:00Z'))
     expect(warning.code).toBe('DUPLICATE_PAYMENT_FILE')
     expect(warning.message).toContain('14/08/2569 16:30')
+  })
+})
+
+/** `18` §6.3 · Rule 01 — fallback ไป Plan-level ได้ **แต่ต้องเตือนเสมอ** ห้ามคิดเงียบ */
+describe('คำเตือน WHT fallback ไปอัตราของแผน (`WHT_RATE_FALLBACK_TO_PLAN`)', () => {
+  it('ไม่มีใคร fallback = ไม่มี warning', () => {
+    expect(whtFallbackWarning([])).toBeNull()
+    expect(whtFallbackWarning(['', '   '])).toBeNull()
+  })
+
+  it('มีคน fallback ⇒ code ตรงทะเบียน + บอกชื่อและจำนวน', () => {
+    const warning = whtFallbackWarning(['สมชาย ใจดี', 'สมหญิง รักงาน'])
+    expect(warning?.code).toBe('WHT_RATE_FALLBACK_TO_PLAN')
+    expect(warning?.message).toContain('สมชาย ใจดี')
+    expect(warning?.message).toContain('สมหญิง รักงาน')
+    expect(warning?.message).toContain('(2 คน)')
+  })
+
+  it('ชื่อซ้ำนับครั้งเดียว (payee เดียวมีได้หลายรายการในรอบ)', () => {
+    expect(whtFallbackWarning(['สมชาย ใจดี', 'สมชาย ใจดี'])?.message).toContain('(1 คน)')
+  })
+
+  it('เกิน 3 คนตัดรายชื่อแต่ยอดรวมยังครบ', () => {
+    const warning = whtFallbackWarning(['ก', 'ข', 'ค', 'ง', 'จ'])
+    expect(warning?.message).toContain('และอีก 2 คน')
+    expect(warning?.message).toContain('(5 คน)')
   })
 })
 

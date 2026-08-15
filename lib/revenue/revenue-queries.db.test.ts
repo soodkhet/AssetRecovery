@@ -203,10 +203,20 @@ async function cleanup(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM billing_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM assets WHERE organization_id = '${ORG_ID}'`)
-  // ล็อตที่ `confirmed` แล้วลบไม่ได้เช่นกัน (`44` §10) — ปล่อยค้างไว้ได้ เพราะเครื่องที่ชี้ถูกลบไปแล้ว
-  await tx.$executeRawUnsafe(
-    `DELETE FROM handover_lots WHERE organization_id = '${ORG_ID}' AND status <> 'confirmed'`,
-  )
+  /**
+   * ล็อตที่ `confirmed` ถูก trigger กัน DELETE (`02` §13) — **ต้องปิด trigger เฉพาะตอนล้างข้อมูลเทสต์**
+   * เหมือนที่ `warehouse-workflow.db.test.ts` ทำ
+   *
+   * ⚠️ เดิมไฟล์นี้ปล่อยล็อต confirmed ค้างไว้ ("ลบไม่ได้ก็ปล่อยไป") ผลคือฐานทดสอบสะสมแถวขึ้นเรื่อย ๆ
+   *    (พบตอนรีวิว Phase 3: ค้างอยู่ 1,430 แถว) จนเลขที่เอกสารของรันใหม่ไปชนของเก่า ⇒
+   *    `handover_lots_lot_number_key` ล้มแบบสุ่มในไฟล์เทสต์ที่ไม่ได้แก้อะไรเลย
+   */
+  await tx.$executeRawUnsafe(`ALTER TABLE handover_lots DISABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM handover_lots WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE handover_lots ENABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
+  }
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
 }
 

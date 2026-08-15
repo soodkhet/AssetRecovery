@@ -165,6 +165,31 @@ export function duplicatePaymentFileWarning(previousGeneratedAt: Date): ApiWarni
   }
 }
 
+/**
+ * `18` §6.3 · `22` §6.9 · Rule 01 — **เตือน ไม่ block** (`WHT_RATE_FALLBACK_TO_PLAN`)
+ *
+ * Payee-level ชนะ Plan-level เสมอ · ผู้รับเงินที่ยังไม่ผูก Tax Profile จะถูกคิดด้วยอัตราของ
+ * Compensation Plan เป็นค่าสำรอง — **กติกาบังคับว่าต้องเตือนทุกครั้ง** ไม่ใช่คิดเงียบ ๆ
+ * (เลือกเตือนแทนบล็อกเพราะ `18` §9 ไม่ได้บังคับให้ Payee ที่ verified ต้องมี Tax Profile —
+ * บล็อกจะทำให้ทั้งรอบจ่ายไม่ได้เพราะข้อมูลที่แก้ทีหลังได้ · มติ PO ตอนรีวิว Phase 3)
+ *
+ * คืน `null` เมื่อไม่มีใคร fallback — ผู้เรียกส่งต่อเป็น `warning` ของ envelope ได้ตรง ๆ
+ */
+export function whtFallbackWarning(payeeNames: readonly string[]): ApiWarning | null {
+  const names = [...new Set(payeeNames)].filter((name) => name.trim() !== '')
+  if (names.length === 0) return null
+
+  // รายชื่อยาวเกินไปอ่านไม่ไหว — ตัดที่ 3 คนแล้วบอกจำนวนที่เหลือ (ยอดรวมยังบอกครบ)
+  const shown = names.slice(0, 3).join(', ')
+  const rest = names.length - Math.min(names.length, 3)
+  const who = rest === 0 ? shown : `${shown} และอีก ${rest} คน`
+  return {
+    code: 'WHT_RATE_FALLBACK_TO_PLAN',
+    title: 'มีผู้รับเงินที่ยังไม่ผูกกติกาภาษี',
+    message: `${who} ยังไม่มี Tax Profile — รอบนี้ใช้อัตรา WHT จากแผนค่าตอบแทนเป็นค่าสำรอง (${names.length} คน) โปรดผูก Tax Profile ให้เรียบร้อยก่อนรอบถัดไป`,
+  }
+}
+
 /** ชื่อไฟล์โอนที่ดาวน์โหลด — เดินเวอร์ชันทุกครั้งที่สร้างซ้ำ (ห้าม overwrite ของเดิม — Rule 04 idempotency) */
 export function paymentFileName(input: {
   idempotencyKey: string

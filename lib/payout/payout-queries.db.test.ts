@@ -153,8 +153,9 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
+  // คืนทั้ง `is_verified` และ `tax_profile_id` — เทสต์ WHT fallback ถอด Tax Profile ออกชั่วคราว
   await tx.$executeRawUnsafe(
-    `UPDATE payee_profiles SET is_verified = true WHERE organization_id = '${ORG_ID}'`,
+    `UPDATE payee_profiles SET is_verified = true, tax_profile_id = '${TAX_PROFILE_ID}' WHERE organization_id = '${ORG_ID}'`,
   )
   await tx.$executeRawUnsafe(
     `UPDATE bank_file_formats SET test_status = 'passed' WHERE id = '${FORMAT_OK_ID}'`,
@@ -241,7 +242,7 @@ suite('batch builder (`17` §9)', () => {
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034c1', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034c2', payeeId: PAYEE_IN_ID, grossSatang: 300_000 })
 
-    const batch = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
 
     expect(batch.status).toBe('checking')
     expect(batch.itemCount).toBe(1)
@@ -252,6 +253,35 @@ suite('batch builder (`17` §9)', () => {
     expect(batch.items[0]?.whtPctSnapshot).toBe(3)
     expect(batch.items[0]?.taxProfileId).toBe(TAX_PROFILE_ID)
     expect(batch.name).toBe('รอบจ่าย Outsource ตัดรอบ 31/08/2569')
+  })
+
+  /**
+   * `18` §6.3 · Rule 01 — Payee ที่ยังไม่ผูก Tax Profile ถูกคิดด้วยอัตราของ Plan ได้
+   * **แต่ต้องเตือนกลับเสมอ** (`WHT_RATE_FALLBACK_TO_PLAN` — เตือนไม่บล็อก · มติ PO รีวิว Phase 3)
+   */
+  it('Payee ไม่มี Tax Profile ⇒ ใช้อัตราของแผนได้ แต่ต้องได้ warning กลับมาด้วย', async () => {
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET tax_profile_id = NULL WHERE id = '${PAYEE_OUT_ID}'`)
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034c8', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
+
+    const { batch, warning } = await payout.createPayoutBatch(ctx, {
+      side: 'outsource',
+      cutoffDate: CUTOFF,
+      name: null,
+    })
+
+    // รอบยังถูกสร้างจริง (เตือน ไม่บล็อก) และคิดด้วยอัตราของแผน 3% เท่าเดิม
+    expect(batch.status).toBe('checking')
+    expect(batch.whtSatang).toBe(15_000)
+    expect(batch.items[0]?.taxProfileId).toBeNull()
+
+    expect(warning?.code).toBe('WHT_RATE_FALLBACK_TO_PLAN')
+    expect(warning?.message).toContain('สมชาย นอกบ้าน')
+  })
+
+  it('Payee ที่มี Tax Profile ครบ ⇒ ไม่มี warning', async () => {
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034c9', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
+    const { warning } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    expect(warning).toBeUndefined()
   })
 
   it('รายการที่ถูกดึงเข้ารอบแล้วไม่ถูกดึงซ้ำในรอบถัดไป', async () => {
@@ -293,7 +323,7 @@ suite('batch builder (`17` §9)', () => {
   it('เงินทดรองเข้ารอบจ่ายได้ และไม่ถูกหัก WHT (A4 — ไม่ใช่เงินได้)', async () => {
     await seedAdvance({ id: '00000000-0000-4000-8000-0000000034c6', payeeId: PAYEE_OUT_ID, satang: 200_000 })
 
-    const batch = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
 
     expect(batch.itemCount).toBe(1)
     expect(batch.items[0]?.source).toBe('advance')
@@ -338,7 +368,7 @@ suite('ยามก่อนสร้างรอบ (`17` §10/§11 · `18` §1
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034d2', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034d3', payeeId: PAYEE_IN_ID, grossSatang: 300_000 })
 
-    const batch = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
     expect(batch.itemCount).toBe(1)
     expect(batch.items[0]?.payeeId).toBe(PAYEE_IN_ID)
     expect(batch.side).toBe('inhouse')
@@ -348,7 +378,7 @@ suite('ยามก่อนสร้างรอบ (`17` §10/§11 · `18` §1
 suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` §6.8)', () => {
   async function batchWithOneItem(): Promise<string> {
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034e1', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
-    const batch = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
     return batch.id
   }
 
@@ -426,14 +456,14 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
 suite('ยืนยันจ่ายสำเร็จ (`17` §9 · `23` §6.6)', () => {
   async function generatedBatch(): Promise<string> {
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034f1', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
-    const batch = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
     await payout.generatePaymentFile(ctx, batch.id, generateInput)
     return batch.id
   }
 
   it('ข้ามขั้นไม่ได้ — ยังไม่สร้างไฟล์โอนก็ยืนยันไม่ได้', async () => {
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034f2', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
-    const batch = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
 
     await expectCode(
       () => payout.completePayoutBatch(ctx, batch.id, { reason: 'ยืนยันจ่ายเงินเรียบร้อย' }),

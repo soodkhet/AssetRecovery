@@ -374,8 +374,9 @@ export async function getDashboardKpi(
     .map((row) =>
       arOutstandingSatang({
         totalSatang: netOf(row.totalSatang, billingAdjustments, row.id),
-        // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว — เหมือน AR Aging ของ `19` §6.4
-        receivedSatang: row.receivedSatang + row.whtWithheldByCustomerSatang,
+        // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว — รวมให้ที่ `settledSatang()` ที่เดียว (`19` §6.4)
+        receivedSatang: row.receivedSatang,
+        whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
       }),
     )
     .filter((value) => value > 0)

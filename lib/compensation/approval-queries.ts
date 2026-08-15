@@ -339,6 +339,25 @@ async function findExpense(user: SessionUser, expenseId: string): Promise<Expens
   return row
 }
 
+/**
+ * ยามของการ **ตีกลับรายการเบิก** ที่ใช้ร่วมทั้งสองทางเข้า — `PATCH /api/compensation/:id/reject`
+ * และ `POST /api/field/expenses/:id/reject` (`41` §8) ซึ่งเขียนค่าชุดเดียวกันผ่าน
+ * `buildRejectExpenseUpdate()` จึงต้องผ่านด่านเดียวกันเป๊ะ:
+ *
+ * 1. **scope ทีม** — Manager ตีกลับได้เฉพาะรายการของทีมตัวเอง (`25` §7.2 · `16` §10) นอก scope
+ *    ต้องได้ `EXPENSE_NOT_FOUND` เหมือนไม่มีแถวนั้น (ไม่ leak)
+ * 2. **capability ของขั้นที่รายการค้างอยู่** — ถือ `approve_expense_manager` ไม่ได้แปลว่าเขี่ย
+ *    รายการที่ค้างขั้น Finance/Executive ได้ (`16` §12)
+ *
+ * ⚠️ ห้ามลบการเรียกนี้ออกจากทางเข้าใดทางหนึ่ง — ทางที่ขาดยามจะกลายเป็นประตูหลังของอีกทางทันที
+ */
+export async function assertCanRejectExpense(user: SessionUser, expenseId: string): Promise<void> {
+  const current = await findExpense(user, expenseId)
+  const flow = flowOrNull(current, await loadMatrixCandidates(user.organizationId))
+  const stepRole = flow === null ? null : stepRoleOf(flow, current.approvalStepCurrent)
+  if (stepRole !== null) assertActorCanApproveStep(user, stepRole)
+}
+
 export interface ApproveResult {
   expense: CompensationApprovalDto
   /** ชื่อ event ที่เกิดจริงในก้าวนี้ — ลง audit ให้ตามสอบได้ (`45` §7) */
@@ -493,6 +512,7 @@ export async function rejectCompensationExpense(
   const flow = flowOrNull(current, await loadMatrixCandidates(user.organizationId))
   const stepRole = flow === null ? null : stepRoleOf(flow, current.approvalStepCurrent)
   if (stepRole !== null) assertActorCanApproveStep(user, stepRole)
+  // (ยามชุดเดียวกันถูกห่อไว้ที่ `assertCanRejectExpense()` ให้ทางเข้าฝั่ง field เรียกใช้)
 
   const history = parseApprovalHistory(current.approvalHistory)
   const at = new Date()

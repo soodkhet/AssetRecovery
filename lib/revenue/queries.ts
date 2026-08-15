@@ -8,7 +8,13 @@ import {
   type ArAgingRow,
 } from '@/lib/finance/ar-calc'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import type { BillingBatchStatus, RevenueStatus } from '@/lib/generated/prisma/enums'
+import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
+import type {
+  AdjustmentStatus,
+  AdjustmentType,
+  BillingBatchStatus,
+  RevenueStatus,
+} from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { RevenueError } from '@/lib/revenue/errors'
 import {
@@ -84,6 +90,22 @@ function companyScopeFilter(user: SessionUser): { companyId?: string } | null {
   if (scope.kind === 'global') return {}
   if (scope.kind === 'company') return scope.companyId === null ? null : { companyId: scope.companyId }
   return null
+}
+
+/**
+ * สถานะรอบวางบิลที่ฝั่ง**บริษัทไฟแนนซ์**มองเห็นได้ (`97` §6.2/§11) — `draft` ยังไม่ถูกยืนยันความ
+ * ถูกต้องจากฝั่งเรา ⇒ **ห้ามให้บริษัทเห็นเด็ดขาด** ไม่ว่าจะเข้ามาทางพอร์ทัลหรือ endpoint ภายใน
+ */
+const COMPANY_VISIBLE_BATCH_STATUSES: readonly BillingBatchStatus[] = ['sent', 'partially_paid', 'paid']
+
+/** `true` = ผู้เรียกเป็นฝั่งบริษัท (ไม่ใช่คนในองค์กรเรา) ⇒ ต้องกรอง `draft` ออกทุกเส้นทาง */
+function isCompanySideViewer(user: SessionUser): boolean {
+  return !user.isSuperadmin && user.scope.kind === 'company'
+}
+
+/** ยามกรอง `draft` สำหรับฝั่งบริษัท — ใช้กับทุก query ของ billing batch (list/detail) */
+function companyVisibilityWhere(user: SessionUser): Prisma.BillingBatchWhereInput {
+  return isCompanySideViewer(user) ? { status: { in: [...COMPANY_VISIBLE_BATCH_STATUSES] } } : {}
 }
 
 /** `null` = ผู้ใช้ไม่มีสิทธิ์เห็นแถวใดเลย ⇒ where ที่ไม่มีทางแมตช์ (ไม่ leak ว่ามีข้อมูลอยู่) */
@@ -170,7 +192,11 @@ function toBatchDto(row: BatchRow, asOf: Date): BillingBatchDto {
     totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
     whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
-    outstandingSatang: arOutstandingSatang({ totalSatang: row.totalSatang, receivedSatang: row.receivedSatang }),
+    outstandingSatang: arOutstandingSatang({
+      totalSatang: row.totalSatang,
+      receivedSatang: row.receivedSatang,
+      whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+    }),
     dueDate: toDateOnlyIso(row.dueDate),
     daysOverdue: daysOverdue(row.dueDate, asOf),
     sentAt: row.sentAt === null ? null : toIso(row.sentAt),
@@ -233,6 +259,7 @@ export async function listBillingBatches(
       organizationId: user.organizationId,
       deletedAt: null,
       ...scopeWhere(user, query.companyId),
+      ...companyVisibilityWhere(user),
       ...(query.status === 'all' ? {} : { status: query.status as BillingBatchStatus }),
     },
     select: batchSelect,
@@ -244,7 +271,13 @@ export async function listBillingBatches(
 
 async function findBatch(user: SessionUser, batchId: string): Promise<BatchRow> {
   const row = await prisma.billingBatch.findFirst({
-    where: { id: batchId, organizationId: user.organizationId, deletedAt: null, ...scopeWhere(user) },
+    where: {
+      id: batchId,
+      organizationId: user.organizationId,
+      deletedAt: null,
+      ...scopeWhere(user),
+      ...companyVisibilityWhere(user),
+    },
     select: batchSelect,
   })
   if (row === null) throw new RevenueError('BILLING_BATCH_NOT_FOUND', { detail: `batch=${batchId}` })
@@ -525,6 +558,7 @@ export async function getArAging(
         ...scopeWhere(user, query.companyId),
       },
       select: {
+        id: true,
         companyId: true,
         dueDate: true,
         totalSatang: true,
@@ -535,11 +569,35 @@ export async function getArAging(
     }),
   ])
 
-  // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว — ไม่งั้นทุกบิลจะค้าง 3% ตลอดกาล
+  // Adjustment ที่อนุมัติแล้วของรอบวางบิลเหล่านี้ (`20` §9) — ดึงหลังรู้ id เพื่อไม่ให้ scan ทั้งตาราง
+  const adjustmentRows =
+    rows.length === 0
+      ? []
+      : await prisma.adjustment.findMany({
+          where: {
+            organizationId: user.organizationId,
+            status: 'approved',
+            billingBatchId: { in: rows.map((row) => row.id) },
+          },
+          select: { billingBatchId: true, adjustmentType: true, amountSatang: true, status: true },
+        })
+
+  const adjustmentsOf = new Map<string, { adjustmentType: AdjustmentType; amountSatang: number; status: AdjustmentStatus }[]>()
+  for (const row of adjustmentRows) {
+    if (row.billingBatchId === null) continue
+    const list = adjustmentsOf.get(row.billingBatchId)
+    if (list === undefined) adjustmentsOf.set(row.billingBatchId, [row])
+    else list.push(row)
+  }
+
+  // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว (`settledSatang()`) — ไม่งั้นทุกบิลจะค้าง 3% ตลอดกาล
+  // ยอดบิลต้องเป็น **ยอดสุทธิหลัง Adjustment** เหมือน KPI ของแดชบอร์ด (`20` §7.1) ไม่งั้นสองตัวเลข
+  // บนหน้าเดียวกันไม่ตรงกัน
   const agingRow = (row: (typeof rows)[number]): ArAgingRow => ({
     dueDate: row.dueDate,
-    totalSatang: row.totalSatang,
-    receivedSatang: row.receivedSatang + row.whtWithheldByCustomerSatang,
+    totalSatang: netAfterAdjustments(row.totalSatang, adjustmentsOf.get(row.id) ?? []),
+    receivedSatang: row.receivedSatang,
+    whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
   })
 
   const buckets = summarizeArAging(rows.map(agingRow), policy.arAgingBuckets, asOf)
@@ -624,6 +682,7 @@ export async function applyBillingReceipt(input: {
       outstandingSatang: arOutstandingSatang({
         totalSatang: batch.totalSatang,
         receivedSatang: batch.receivedSatang,
+        whtWithheldByCustomerSatang: batch.whtWithheldByCustomerSatang,
       }),
     }
   }
@@ -672,6 +731,7 @@ export async function applyBillingReceipt(input: {
     outstandingSatang: arOutstandingSatang({
       totalSatang: batch.totalSatang,
       receivedSatang: input.receivedSatang,
+      whtWithheldByCustomerSatang: whtSatang,
     }),
   }
 }

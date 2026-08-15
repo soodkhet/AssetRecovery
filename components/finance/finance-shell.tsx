@@ -9,7 +9,7 @@ import { DashboardTab } from '@/components/finance/dashboard-tab'
 import { PayoutTab } from '@/components/finance/payout-tab'
 import { ProfitTab } from '@/components/finance/profit-tab'
 import { RevenueTab } from '@/components/finance/revenue-tab'
-import { EmptyState, PageHeader } from '@/components/ui'
+import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
 
@@ -32,7 +32,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         description="จัดการรอบจ่ายเงินทีมงาน (AP) ยอดเรียกเก็บ (AR) ตรวจสอบรายการเบิก และรายงานกำไร"
       />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <Card>
         <nav
           aria-label="แท็บงานการเงิน"
           className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
@@ -81,7 +81,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         {current === undefined && (
           <EmptyState title="ยังไม่มีหน้าจอของแท็บนี้" description="เลือกแท็บที่พร้อมใช้งานจากแถบด้านบน" />
         )}
-      </div>
+      </Card>
     </>
   )
 }

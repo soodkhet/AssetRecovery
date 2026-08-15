@@ -30,18 +30,20 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   if (advance === null) return null
 
   const usedSatang = parseBahtInput(used)
-  const preview =
-    usedSatang === null
-      ? null
-      : advanceSettlement({
-          requestedSatang: advance.requestedSatang,
-          approvedSatang: advance.approvedSatang,
-          usedSatang,
-        })
-  const exceedsRequest = usedSatang !== null && usedSatang > advance.requestedSatang
+  // `parseBahtInput()` คืน `NaN` เมื่อกรอกค่าที่ไม่ใช่ตัวเลข — ถ้าปล่อยเข้า `advanceSettlement()`
+  // ตัว `assertNonNegativeSatang()` จะโยน `RangeError` **ระหว่าง render** = จอขาว ไม่ใช่ข้อความเตือน
+  const validUsed = usedSatang !== null && Number.isInteger(usedSatang) && usedSatang >= 0
+  const preview = validUsed
+    ? advanceSettlement({
+        requestedSatang: advance.requestedSatang,
+        approvedSatang: advance.approvedSatang,
+        usedSatang,
+      })
+    : null
+  const exceedsRequest = validUsed && usedSatang > advance.requestedSatang
 
   async function submit(): Promise<void> {
-    if (advance === null || usedSatang === null || exceedsRequest) return
+    if (advance === null || !validUsed || exceedsRequest) return
     setSaving(true)
     const result = await callApi(
       `/api/advances/${advance.id}/settle`,
@@ -71,7 +73,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           <Button variant="ghost" onClick={onClose}>
             ยกเลิก
           </Button>
-          <Button loading={saving} disabled={usedSatang === null || exceedsRequest} onClick={() => void submit()}>
+          <Button loading={saving} disabled={!validUsed || exceedsRequest} onClick={() => void submit()}>
             บันทึกการเคลียร์ยอด
           </Button>
         </>

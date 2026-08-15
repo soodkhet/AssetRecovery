@@ -10,6 +10,7 @@ import { ReasonConfirmModal, REASON_MIN_LENGTH } from '@/components/settings/rea
 import {
   Button,
   Card,
+  FilterGroup,
   InlineAlert,
   RefText,
   StatCard,
@@ -193,7 +194,7 @@ export function PayoutTab() {
                       </span>
                     </Td>
                     <Td numeric>{fmtSatangSymbol(batch.grossSatang)}</Td>
-                    <Td numeric className="text-rose-600">
+                    <Td numeric className="text-red-600">
                       {fmtSatangSymbol(batch.whtSatang)}
                     </Td>
                     <Td numeric className="text-base font-bold text-emerald-700">
@@ -288,31 +289,3 @@ export function PayoutTab() {
   )
 }
 
-function FilterGroup({
-  options,
-  value,
-  onChange,
-}: {
-  options: readonly { value: string; label: string }[]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={cn(
-            'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
-            value === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  )
-}

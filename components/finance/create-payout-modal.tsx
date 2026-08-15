@@ -48,6 +48,11 @@ export function CreatePayoutModal({
       title: 'สร้างรอบจ่ายเงินแล้ว',
       description: `${result.data?.name ?? ''} — ตรวจสอบยอดก่อนสร้างไฟล์โอน`,
     })
+    // `WHT_RATE_FALLBACK_TO_PLAN` = เตือนไม่บล็อก ⇒ รอบสร้างสำเร็จแล้ว แต่ต้องแจ้งว่าใครใช้อัตราสำรอง
+    // (`18` §6.3 — ห้ามคิดอัตราจากแผนเงียบ ๆ) · แยก toast ต่างหากเพื่อไม่ให้กลืนไปกับข้อความสำเร็จ
+    if (result.warning !== undefined) {
+      showToast({ tone: 'warning', title: result.warning.title, description: result.warning.message })
+    }
     setCutoffDate('')
     setName('')
     onCreated()

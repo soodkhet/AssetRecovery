@@ -4,6 +4,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { endOfBangkokDay } from '@/lib/format/datetime'
 import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
@@ -32,6 +33,7 @@ import {
   paymentFileName,
   paymentFileStoragePath,
   resolvePayoutSide,
+  whtFallbackWarning,
 } from '@/lib/payout/payout'
 import { downloadPaymentFile, sha256Hex, uploadPaymentFile } from '@/lib/payout/payment-file-storage'
 import type {
@@ -250,6 +252,8 @@ interface Candidate {
   netSatang: number
   taxProfileId: string | null
   whtPctSnapshot: number
+  /** `true` = คิด WHT ด้วยอัตราของ Plan เพราะ Payee ยังไม่มี Tax Profile ⇒ ต้องเตือน (`18` §6.3) */
+  whtRateFromPlan: boolean
 }
 
 /** payee ที่ verified แล้วต้องมี Tax Profile เสมอ (`18` §9) ⇒ ค่านี้ไม่ควรเป็น null ตอนคิด WHT */
@@ -327,6 +331,7 @@ async function collectExpenseCandidates(
       netSatang: wht.netSatang,
       taxProfileId: row.payee.taxProfileId,
       whtPctSnapshot: wht.rate.whtPct,
+      whtRateFromPlan: wht.rate.source === 'plan',
     }
   })
 }
@@ -349,7 +354,9 @@ async function collectAdvanceCandidates(
       deletedAt: null,
       status: { in: ['approved', 'overdue'] },
       payoutBatchItemId: null,
-      approvedAt: { lte: endOfDay(cutoffDate) },
+      // `approved_at` เป็น TIMESTAMPTZ ⇒ ขอบบนต้องเป็นสิ้นวัน**ตามเวลาไทย** ไม่ใช่สิ้นวัน UTC
+      // (ไม่งั้นเงินทดรองที่อนุมัติเช้าวันถัดไปหลุดเข้ารอบตัดยอดไป 7 ชั่วโมง)
+      approvedAt: { lte: endOfBangkokDay(cutoffDate) },
     },
     select: {
       id: true,
@@ -370,7 +377,13 @@ async function collectAdvanceCandidates(
   })
 
   return rows.map((row) => {
-    const grossSatang = row.approvedSatang ?? row.requestedSatang
+    // สถานะ `approved`/`overdue` ต้องมี `approved_satang` เสมอ (`resolveApprovedSatang()` เขียนให้
+    // ตั้งแต่ตอนอนุมัติ) — ถ้า null คือข้อมูลเพี้ยน **ต้องดัง ไม่ใช่เดา**: fallback ไปยอด "ที่ขอ"
+    // จะโอนเกินยอดที่อนุมัติจริงได้ (`approved <= requested` เสมอ)
+    if (row.approvedSatang === null) {
+      throw new Error(`เงินทดรอง ${row.id} สถานะอนุมัติแล้วแต่ไม่มี approved_satang — ข้อมูลไม่สอดคล้อง`)
+    }
+    const grossSatang = row.approvedSatang
     return {
       source: 'advance',
       sourceId: row.id,
@@ -387,19 +400,22 @@ async function collectAdvanceCandidates(
       netSatang: grossSatang,
       taxProfileId: row.payee.taxProfileId,
       whtPctSnapshot: 0,
+      // เงินทดรองไม่หัก WHT อยู่แล้ว ⇒ ไม่มีการ fallback อัตราให้ต้องเตือน
+      whtRateFromPlan: false,
     }
   })
 }
 
-/** `approved_at` เป็น TIMESTAMPTZ ⇒ วันตัดรอบต้องครอบทั้งวัน (เทียบกับเที่ยงคืน UTC ของวันถัดไป) */
-function endOfDay(date: Date): Date {
-  return new Date(date.getTime() + 86_400_000 - 1)
+export interface PayoutBatchCreateOutcome {
+  batch: PayoutBatchDetailDto
+  /** `WHT_RATE_FALLBACK_TO_PLAN` — เตือนไม่บล็อก (`18` §6.3 · `24` §6.5) */
+  warning?: ApiWarning
 }
 
 export async function createPayoutBatch(
   context: PayoutMutationContext,
   input: PayoutBatchCreateInput,
-): Promise<PayoutBatchDetailDto> {
+): Promise<PayoutBatchCreateOutcome> {
   const user = context.actor
   const [expenses, advances] = await Promise.all([
     collectExpenseCandidates(user.organizationId, input.cutoffDate),
@@ -506,7 +522,12 @@ export async function createPayoutBatch(
     return batch.id
   })
 
-  return getPayoutBatch(user, batchId)
+  // `18` §6.3 — ใครถูกคิดด้วยอัตราสำรองต้องถูกรายงานกลับเสมอ ห้ามคิดเงียบ (Rule 01)
+  const warning = whtFallbackWarning(
+    candidates.filter((candidate) => candidate.whtRateFromPlan).map((candidate) => candidate.payeeName),
+  )
+
+  return { batch: await getPayoutBatch(user, batchId), ...(warning === null ? {} : { warning }) }
 }
 
 // ── POST /api/payout-batches/:id/generate-payment-file (`17` §6.3/§6.4) ─────

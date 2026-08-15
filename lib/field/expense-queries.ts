@@ -2,6 +2,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { buildRejectExpenseUpdate, parseApprovalHistory } from '@/lib/compensation/approval'
+import { assertCanRejectExpense } from '@/lib/compensation/approval-queries'
 import { resolvePlanVersionAt } from '@/lib/compensation/plan'
 import { kmHundredthsToDecimalString } from '@/lib/field/distance'
 import {
@@ -636,6 +637,10 @@ export async function rejectFieldExpense(
   context: ExpenseMutationContext,
 ): Promise<FieldExpenseDto> {
   const reason = assertRejectReason(input.reason)
+
+  // ยามเดียวกับ `PATCH /api/compensation/:id/reject` — scope ทีม + capability ของขั้นที่ค้างอยู่
+  // (`16` §10/§12 · `25` §7.2) ถ้าไม่เรียก ทางเข้านี้จะกลายเป็นประตูหลังของสายอนุมัติทั้งเส้น
+  await assertCanRejectExpense(user, expenseId)
 
   const current = await prisma.expense.findFirst({
     where: { id: expenseId, organizationId: user.organizationId, deletedAt: null },

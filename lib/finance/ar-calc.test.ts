@@ -3,27 +3,68 @@ import {
   agingBucketIndex,
   arOutstandingSatang,
   daysOverdue,
+  settledSatang,
   summarizeArAging,
   totalArOutstandingSatang,
 } from '@/lib/finance/ar-calc'
+import { resolveBillingStatusAfterReceipt } from '@/lib/revenue/revenue'
 import { DEFAULT_AR_AGING_BUCKETS } from '@/lib/settings/finance-policy'
 
 /** `22` §6.11 · `19` §6.4 — ยอดค้างรับ + ช่วงอายุหนี้ */
 
 const buckets = [...DEFAULT_AR_AGING_BUCKETS] // [30, 60, 90]
 
+const noWht = { whtWithheldByCustomerSatang: 0 }
+
 describe('§6.11 ยอดค้างรับ', () => {
   it('outstanding = total - received', () => {
-    expect(arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 400_000 })).toBe(600_000)
+    expect(arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 400_000, ...noWht })).toBe(600_000)
   })
 
   it('จ่ายครบ = 0 · จ่ายเกิน = ติดลบ (ไม่ clamp เพื่อไม่ให้ยอดหาย)', () => {
-    expect(arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 1_000_000 })).toBe(0)
-    expect(arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 1_100_000 })).toBe(-100_000)
+    expect(arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 1_000_000, ...noWht })).toBe(0)
+    expect(arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 1_100_000, ...noWht })).toBe(-100_000)
   })
 
   it('ค่าที่ไม่ใช่สตางค์จำนวนเต็ม = ล้ม', () => {
-    expect(() => arOutstandingSatang({ totalSatang: 1_000.5, receivedSatang: 0 })).toThrow(RangeError)
+    expect(() => arOutstandingSatang({ totalSatang: 1_000.5, receivedSatang: 0, ...noWht })).toThrow(RangeError)
+  })
+})
+
+describe('WHT ที่ลูกค้าหัก (A1) ถือว่าชำระแล้ว', () => {
+  // บิล 1,000,000 สตางค์ · ลูกค้าหัก WHT 3% = 30,000 แล้วโอนที่เหลือ 970,000 ⇒ ต้องไม่เหลือหนี้ค้าง
+  const withheld = { totalSatang: 1_000_000, receivedSatang: 970_000, whtWithheldByCustomerSatang: 30_000 }
+
+  it('settled = received + wht', () => {
+    expect(settledSatang(withheld)).toBe(1_000_000)
+  })
+
+  it('บิลที่ลูกค้าหัก WHT แล้วโอนส่วนที่เหลือ = ไม่ค้าง (เดิมค้างค้างเท่าอัตรา WHT ตลอดกาล)', () => {
+    expect(arOutstandingSatang(withheld)).toBe(0)
+  })
+
+  it('ยอดค้างต้องสอดคล้องกับสถานะ `paid` ที่ resolveBillingStatusAfterReceipt ตัดสิน', () => {
+    expect(
+      resolveBillingStatusAfterReceipt({
+        current: 'sent',
+        totalSatang: withheld.totalSatang,
+        receivedSatang: withheld.receivedSatang,
+        whtWithheldByCustomerSatang: withheld.whtWithheldByCustomerSatang,
+      }),
+    ).toBe('paid')
+    expect(arOutstandingSatang(withheld)).toBe(0)
+  })
+
+  it('รับบางส่วน + WHT ยังค้างส่วนต่าง', () => {
+    expect(
+      arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 400_000, whtWithheldByCustomerSatang: 30_000 }),
+    ).toBe(570_000)
+  })
+
+  it('WHT ที่ไม่ใช่สตางค์จำนวนเต็ม = ล้ม', () => {
+    expect(() =>
+      arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 0, whtWithheldByCustomerSatang: 1.5 }),
+    ).toThrow(RangeError)
   })
 })
 
@@ -58,13 +99,20 @@ describe('summarizeArAging', () => {
   const asOf = new Date('2026-08-15T03:00:00Z')
   const rows = [
     // เลยกำหนด 14 วัน — ช่วง 0-30
-    { dueDate: new Date('2026-08-01T00:00:00Z'), totalSatang: 1_000_000, receivedSatang: 0 },
+    { dueDate: new Date('2026-08-01T00:00:00Z'), totalSatang: 1_000_000, receivedSatang: 0, ...noWht },
     // เลยกำหนด 45 วัน — ช่วง 31-60
-    { dueDate: new Date('2026-07-01T00:00:00Z'), totalSatang: 500_000, receivedSatang: 200_000 },
+    { dueDate: new Date('2026-07-01T00:00:00Z'), totalSatang: 500_000, receivedSatang: 200_000, ...noWht },
     // เลยกำหนด 136 วัน — ช่วง 90+
-    { dueDate: new Date('2026-04-01T00:00:00Z'), totalSatang: 300_000, receivedSatang: 0 },
+    { dueDate: new Date('2026-04-01T00:00:00Z'), totalSatang: 300_000, receivedSatang: 0, ...noWht },
     // จ่ายครบแล้ว — ไม่เข้ารายงานค้างรับ
-    { dueDate: new Date('2026-04-01T00:00:00Z'), totalSatang: 900_000, receivedSatang: 900_000 },
+    { dueDate: new Date('2026-04-01T00:00:00Z'), totalSatang: 900_000, receivedSatang: 900_000, ...noWht },
+    // ลูกค้าหัก WHT แล้วโอนส่วนที่เหลือ ⇒ ชำระครบ ไม่เข้าช่วงใดเลย
+    {
+      dueDate: new Date('2026-04-01T00:00:00Z'),
+      totalSatang: 1_000_000,
+      receivedSatang: 970_000,
+      whtWithheldByCustomerSatang: 30_000,
+    },
   ]
 
   it('แยกยอดเข้าช่วงถูกต้อง + ป้ายชื่อชุดเดียวกับ describeAgingBuckets()', () => {

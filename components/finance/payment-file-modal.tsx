@@ -230,7 +230,7 @@ export function PaymentFileModal({
 
             <div className="grid grid-cols-3 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
               <Summary label="จำนวนรายการ" value={`${fmtCount(batch.itemCount)} รายการ`} />
-              <Summary label="WHT รวม" value={fmtSatangSymbol(batch.whtSatang)} tone="rose" />
+              <Summary label="WHT รวม" value={fmtSatangSymbol(batch.whtSatang)} tone="deduction" />
               <Summary label="ยอดโอนสุทธิ" value={fmtSatangSymbol(batch.netSatang)} tone="emerald" />
             </div>
 
@@ -254,8 +254,10 @@ export function PaymentFileModal({
   )
 }
 
-function Summary({ label, value, tone }: { label: string; value: string; tone?: 'rose' | 'emerald' }) {
-  const toneClass = tone === 'rose' ? 'text-rose-600' : tone === 'emerald' ? 'text-emerald-700' : 'text-slate-900'
+function Summary({ label, value, tone }: { label: string; value: string; tone?: 'deduction' | 'emerald' }) {
+  // สีตาม palette กลาง (`04` §8.1): ยอดหัก = red · ยอดสุทธิ = emerald — ห้ามใช้ตระกูลสีนอกระบบ (เดิมเป็น rose)
+  const toneClass =
+    tone === 'deduction' ? 'text-red-600' : tone === 'emerald' ? 'text-emerald-700' : 'text-slate-900'
   return (
     <div>
       <p className="mb-1 text-xs text-slate-500">{label}</p>
