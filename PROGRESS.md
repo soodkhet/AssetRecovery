@@ -70,7 +70,7 @@
 | 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `0a05c48` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
 | 3.2 | Payee & Tax Profile + Compensation Approval BE | ✅ | 2026-08-15 · `fe2834b`+`68cd696` · API 7 endpoint (payee 4 + compensation 3) + auto-reset unverified + สายอนุมัติหลายขั้น snapshot + `expense.approved` → Revenue gate · เทสต์ระดับ DB 19 เคส → archive |
 | 3.3 | Approval FE + Claims & Advances | ✅ | 2026-08-15 · `d1f39f6`+`45bd3a1` · API 9 endpoint (`27` §6.4) + ห้ามเบิกซ้อน 2 ชั้น + job auto-overdue idempotent + หน้า `/finance` 2 แท็บแรก · เทสต์ระดับ DB 22 เคสของ `15` §16 → archive |
-| 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+ชุด 2 · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
+| 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+`1848a48` · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
 | 3.5 | Payout FE + Internal PDFs | ⬜ | PLAN §3.5 · เทียบ samples 04–06 |
 | 3.6 | Revenue / Billing / AR BE | ⬜ | PLAN §3.6 · เสียบ stub จาก 2.13 |
 | 3.7 | Billing FE + Adjustment | ⬜ | PLAN §3.7 · 4 FK + CHECK (DEC-004) |
