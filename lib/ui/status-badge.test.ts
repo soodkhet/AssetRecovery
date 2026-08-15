@@ -45,7 +45,11 @@ describe('statusBadgeGroup', () => {
     ['accepted', 'success'],
     // `33` §8 — รอบนำส่ง WHT ที่ยื่นแบบแล้ว
     ['filed', 'success'],
+    // `34` §8 — ข้อยกเว้นที่แก้ต้นทางจริงแล้ว
+    ['resolved', 'success'],
     ['sent', 'sent'],
+    // `30` §6.1 — รอบบัญชีที่ส่งสำนักงานบัญชีแล้ว
+    ['sent_to_accountant', 'sent'],
     ['ready_for_billing', 'sent'],
     ['billed', 'sent'],
     ['file_generated', 'sent'],
@@ -59,6 +63,8 @@ describe('statusBadgeGroup', () => {
     ['pending_approval', 'pending'],
     ['cleared', 'cleared'],
     ['pending_warehouse_confirm', 'cleared'],
+    // `34` §8 — ข้อยกเว้นที่ผู้บริหารอนุมัติให้ข้าม (คนละสีกับ `resolved` เสมอ — §6.3)
+    ['authorized', 'cleared'],
     ['draft', 'neutral'],
     ['in_progress', 'neutral'],
     ['not_exported', 'neutral'],

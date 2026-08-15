@@ -163,3 +163,31 @@ export const EXCEPTION_STATUS_LABEL: Readonly<Record<ExceptionStatus, string>> =
 export function exceptionStatusLabel(status: ExceptionStatus): string {
   return EXCEPTION_STATUS_LABEL[status]
 }
+
+// ── ปุ่มบนแถวข้อยกเว้น (`34` §8) ─────────────────────────────────────────────
+
+/** สิทธิ์ที่หน้าจอถืออยู่ — บัญชีจัดการรายการ · ผู้บริหารอนุมัติยกเว้น (`34` §12) */
+export interface ExceptionCapabilityFlags {
+  /** `manage:manage_exceptions` (สายบัญชี) */
+  canManage: boolean
+  /** `manage:authorize_exception` (ผู้บริหาร — 🔒 "✅ only") */
+  canAuthorize: boolean
+}
+
+export interface ExceptionActions {
+  canEdit: boolean
+  canResolve: boolean
+  canAuthorize: boolean
+}
+
+/**
+ * สถานะ + สิทธิ์ → ปุ่มที่ขึ้นบนแถว — **หน้าจอห้าม `if` สถานะเอง**
+ * แก้รายละเอียดได้เฉพาะ `open` (`34` §14) · เปลี่ยนสถานะยึด `EXCEPTION_TRANSITIONS` ตัวเดียวกับ API
+ */
+export function exceptionActionsFor(status: ExceptionStatus, caps: ExceptionCapabilityFlags): ExceptionActions {
+  return {
+    canEdit: caps.canManage && status === 'open',
+    canResolve: caps.canManage && canTransitionException(status, 'resolved'),
+    canAuthorize: caps.canAuthorize && canTransitionException(status, 'authorized'),
+  }
+}

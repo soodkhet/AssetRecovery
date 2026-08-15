@@ -86,6 +86,41 @@ export function periodStatusLabel(status: AccountingPeriodStatus): string {
   return periodLockPolicyFor(status).statusLabel
 }
 
+// ── ปุ่มบนแถวรอบบัญชี (`30` §8) ──────────────────────────────────────────────
+
+/** สิทธิ์ที่หน้าจอถืออยู่ — มาจาก `usePermission()` ฝั่ง FE / จาก session ฝั่ง BE */
+export interface PeriodCapabilityFlags {
+  /** `manage:manage_accounting_period` (สายบัญชี) */
+  canManagePeriod: boolean
+  /** `manage:unlock_period` (ผู้บริหาร — 🔒 "✅ only") */
+  canUnlockPeriod: boolean
+  /** `manage:export_accounting_pack` (ไฟล์ 37) */
+  canExportPack: boolean
+}
+
+export interface PeriodActions {
+  canSend: boolean
+  canLock: boolean
+  canUnlock: boolean
+  canExport: boolean
+}
+
+/**
+ * สถานะ + สิทธิ์ → ปุ่มที่ขึ้นบนแถว — **หน้าจอห้าม `if` สถานะเอง** (แนวเดียวกับแท็บกระทบยอด 4.2)
+ *
+ * - ส่งสำนักงานบัญชี = บัญชีเท่านั้น และต้องอยู่ `collecting` (`30` §9 — readiness ตรวจซ้ำที่ API)
+ * - ล็อกงวด = "บัญชี/Executive ยืนยันปิดงวด" (`30` §9) ⇒ ผ่านได้ทั้งสองสาย เท่ากับ route `/lock`
+ * - ปลดล็อก = **ผู้บริหารเท่านั้น** (`30` §10) — API ตรวจซ้ำแล้วโยน `UNLOCK_REQUIRES_EXECUTIVE`
+ */
+export function periodActionsFor(status: AccountingPeriodStatus, caps: PeriodCapabilityFlags): PeriodActions {
+  return {
+    canSend: caps.canManagePeriod && canTransitionPeriod(status, 'sent_to_accountant') && status === 'collecting',
+    canLock: (caps.canManagePeriod || caps.canUnlockPeriod) && canTransitionPeriod(status, 'locked'),
+    canUnlock: caps.canUnlockPeriod && status === 'locked',
+    canExport: caps.canExportPack,
+  }
+}
+
 // ── Readiness Check 3 เงื่อนไข (`30` §6.2) ───────────────────────────────────
 
 export type ReadinessCheckKey = 'billing_revenue_sync' | 'bank_reconcile' | 'no_critical_exception'
