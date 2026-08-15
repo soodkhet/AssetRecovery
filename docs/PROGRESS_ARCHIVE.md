@@ -7,7 +7,7 @@
 
 ## Phase 8.1 — E2E Acceptance Tests (ไฟล์ 29)
 
-**วันที่**: 2026-08-15 · **commit**: `<pending>` · **branch**: `auto/phase-8.1`
+**วันที่**: 2026-08-15 · **commit**: `7c8fbd4` · **branch**: `auto/phase-8.1`
 
 ### สิ่งที่ทำ
 

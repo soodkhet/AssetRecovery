@@ -120,7 +120,7 @@
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ✅ | 2026-08-15 · `<commit>` · `tests/acceptance/*.db.test.ts` 3 ไฟล์ (รายรับ/รายจ่าย+เงินทดรอง/ปิดงวด+Adjustment) เดินผ่าน service จริงทุกก้าว + Checklist `29` §7 ครบ 9 จุด → archive |
+| 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ✅ | 2026-08-15 · `7c8fbd4` · `tests/acceptance/*.db.test.ts` 3 ไฟล์ (รายรับ/รายจ่าย+เงินทดรอง/ปิดงวด+Adjustment) เดินผ่าน service จริงทุกก้าว + Checklist `29` §7 ครบ 9 จุด → archive |
 | 8.2 | Consistency Sweep + Hardening | ⬜ | PLAN §8.2 |
 | 8.3 | Final Test ทั้งระบบ (ด่าน orchestrator) | ⬜ | PLAN §8.3 |
 
