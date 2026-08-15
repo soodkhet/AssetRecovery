@@ -5,6 +5,41 @@
 
 ---
 
+## Phase 8.1 — E2E Acceptance Tests (ไฟล์ 29)
+
+**วันที่**: 2026-08-15 · **commit**: `7c8fbd4` · **branch**: `auto/phase-8.1`
+
+### สิ่งที่ทำ
+
+เทสต์ยอมรับระดับ end-to-end 3 ไฟล์ที่ `tests/acceptance/` (เข้า CI อัตโนมัติเพราะลงท้าย `*.db.test.ts` — project `db` ของ `vitest.config.mts` รันทีละไฟล์อยู่แล้ว) **เดินผ่าน service จริงทุกก้าว ห้าม insert ข้ามขั้น**
+
+| ไฟล์ | ครอบ | ORG_ID |
+|---|---|---|
+| `e2e-revenue-cycle.db.test.ts` | `29` §6.1 — รับเคส → อนุมัติ (snapshot ค่าบริการ) → ภาคสนามปิดสำเร็จ → คลังรับเข้า/จัดล็อต/ยืนยัน → อนุมัติค่าตอบแทนครบสาย → **Revenue** → รอบวางบิล → ส่งบิล (รายการขาย 1:1) → ใบกำกับภาษี (ยกเลิก+ออกใหม่ = เลขเดินหน้า ไม่ recycle) → statement เข้า → auto-match → ใบเงินรับ → บิล `paid` → AR = 0 | `…81a0` |
+| `e2e-payout-cycle.db.test.ts` | `29` §6.2 (ปิดไม่สำเร็จ → ค่าน้ำมัน/เบี้ยเลี้ยง → อนุมัติ 2 ขั้น → รอบจ่าย → ไฟล์โอน + idempotency → ปิดรอบ → ลงบัญชี + ใบ 50 ทวิ) · `29` §6.3 (QC ตีกลับ → ไม่มีรายได้ให้แก้ย้อนหลัง → resubmit → รายการเดิม `superseded` → รายได้เกิดครั้งเดียว) · `29` §18 เงินทดรอง 5 สถานะ · จุดเชื่อม payee-verified + เงินออกจาก statement ปิดรอบจ่ายให้เอง | `…81b0` |
+| `e2e-monthly-close.db.test.ts` | `29` §6.5 (critical เปิดอยู่ = ตรวจความพร้อมไม่ผ่าน **และ** export ถูกบล็อก → แก้ → ส่งสำนักงานบัญชี → Export Pack v1/v2 + SHA-256 → ถาม/ตอบ → ปิดงวด) · `29` §6.4 (งวด locked แก้ตรงไม่ได้ → Adjustment → การเงินอนุมัติไม่ได้ ต้อง Executive → ยอดสุทธิในรายงานขยับโดยไม่แตะ Revenue ต้นฉบับ) | `…81d0` |
+
+**Integration Checklist `29` §7 ครบ 9 จุด**: Case→Revenue (snapshot ตอน `accept`) · Case→Expense (สูตร `22` §6.1–6.4) · Expense→Approval (สถานะกลางทาง = `pending_finance_approval` ตาม enum `02` §3 ไม่ใช่ค่าที่คิดเอง) · Expense→Payout (`approved` + `UNVERIFIED_PAYEE_IN_PAYOUT`) · Payout→Accounting (sync เฉพาะ `completed` + WHT + เรียกซ้ำไม่สร้างซ้ำ) · Billing→Accounting (เลขใบกำกับภาษีต่อเนื่อง) · Bank Statement→Cash Receipt / Payout Complete (auto-match ทั้งขาเข้าและขาออก) · Period Lock (`PERIOD_LOCKED_DIRECT_EDIT` 2 ช่องทาง) · Export บล็อกด้วย critical (`EXPORT_BLOCKED_CRITICAL`)
+
+### การตัดสินใจระหว่างทาง
+
+- **ไม่สร้าง harness กลาง** — แต่ละไฟล์ถือ fixture ของตัวเอง (ORG_ID คนละชุด) ตามแพทเทิร์นของ db test เดิม เพราะ `fileParallelism: false` และ reset ด้วย `DELETE ... WHERE organization_id` ของตัวเอง · harness กลางจะผูกไฟล์เข้าหากันแล้วแก้ทีเดียวพังหลายไฟล์
+- **ไฟล์รายรับไม่ล้างข้อมูลท้ายรัน** — `tax_invoices` ลบไม่ได้ (trigger `02` §13) จึงสร้าง **บริษัทไฟแนนซ์ + prefix เลขที่ใหม่ทุกรัน** แทน (แพทเทิร์นเดียวกับ `sales.db.test.ts` ของ 4.3) และเคลียร์ "ผู้สมัคร auto-match" ที่ค้างตอน `beforeAll` เพราะบิลยอดเท่ากันจากรันก่อนทำให้ auto-match กลายเป็น ambiguous
+- **เป้าหมาย Adjustment ของ §6.4 สร้างจากสายจริง** ด้วยเทมเพลต `FLAT` + `charge_on_fail` (ปิดไม่สำเร็จก็มีรายได้ ไม่ต้องผ่านคลัง — DEC-006/D6) เพื่อไม่ต้องเดินสายคลังซ้ำในไฟล์ที่โฟกัสเรื่องปิดงวด
+- **ยืนยันซ้ำได้จริง**: รันชุด `tests/acceptance/` ติดกัน 2 รอบผ่านทั้งคู่ (fixture มีเอนโทรปี `pid`+`ms` และ cleanup ครบทุกตารางที่ลบได้)
+
+### จุดที่คนถัดไปควรรู้
+
+- ไฟล์ E2E **ไม่ต้องตั้งค่าอะไรเพิ่มใน CI** — `.github/workflows/ci.yml` ตั้ง `TEST_DATABASE_URL` + `pnpm db:deploy:test` อยู่แล้ว
+- Supabase Storage ถูก mock เป็น in-memory 2 จุด (`payment-file-storage` ของรอบจ่าย · `pack-storage` ของ Accounting Pack) — เทสต์จึงพิสูจน์ "ห้ามเขียนทับ path เดิม" ได้จริงโดยไม่แตะ bucket
+- กับดักที่เจอระหว่างทางถูกบันทึกลง `docs/REUSE_INDEX.md` แล้ว 5 ข้อ (ลำดับ cleanup ของ `bank_transactions` · เกณฑ์วันของ auto-match · `pending_approval` ไม่นับว่าค้างของเงินทดรอง · commission ไม่ใช่แถว expense · เกณฑ์ WHT คิดต่อรายการ)
+- ยังไม่ครอบใน E2E (มีเทสต์เฉพาะโมดูลอยู่แล้ว): rollback ของ `confirmLot` (`44` §17 T11–T13) · Revenue trigger ครบ 8 เคส (`19` §16) · เลขใบกำกับภาษีภายใต้ concurrency (`31`) · manual match ฝั่งบิล (`35`)
+
+### verify ที่รันจริง
+`pnpm typecheck` ✅ · `pnpm lint` ✅ · `pnpm test` ✅ (235 ไฟล์ / 2,915 เทสต์) · `npx vitest run --project db tests/acceptance/` ✅ 2 รอบติด
+
+---
+
 ## Phase 6.5 — Executive Dashboard (E1–E3)
 
 **วันที่**: 2026-08-15 · **commit**: `9e0d570` · **branch**: `auto/phase-6.5`
