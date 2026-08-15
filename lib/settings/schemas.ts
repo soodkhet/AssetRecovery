@@ -9,6 +9,7 @@ import {
   MIN_AGING_BUCKETS,
 } from '@/lib/settings/finance-policy'
 import { MAX_DIGIT_LENGTH, MIN_DIGIT_LENGTH } from '@/lib/settings/numbering'
+import { MAX_SLA_ALERT_HOURS, MIN_SLA_ALERT_HOURS } from '@/lib/settings/sla-policy'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
 
@@ -151,6 +152,18 @@ const financePolicyFields = z.object({
 
 export const financePolicyFieldsSchema = financePolicyFields
 export const financePolicyUpdateSchema = financePolicyFields.extend({ reason: reasonSchema })
+
+// ── §6.14 เกณฑ์ SLA งานติดตาม (1 record/องค์กร · D18) ────────────────────
+const slaPolicyFields = z.object({
+  slaAlertHours: z
+    .number()
+    .int('เกณฑ์ SLA ต้องเป็นจำนวนเต็มชั่วโมง')
+    .min(MIN_SLA_ALERT_HOURS, `เกณฑ์ SLA ต้องอย่างน้อย ${MIN_SLA_ALERT_HOURS} ชั่วโมง`)
+    .max(MAX_SLA_ALERT_HOURS, `เกณฑ์ SLA ต้องไม่เกิน ${MAX_SLA_ALERT_HOURS} ชั่วโมง`),
+})
+
+export const slaPolicyFieldsSchema = slaPolicyFields
+export const slaPolicyUpdateSchema = slaPolicyFields.extend({ reason: reasonSchema })
 
 // ── §6.3 บัญชีธนาคารบริษัท ─────────────────────────────────────────────
 export const bankAccountUsageSchema = z.enum(['receive', 'pay', 'both'])

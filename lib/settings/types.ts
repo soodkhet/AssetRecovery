@@ -61,6 +61,13 @@ export interface FinancePolicyDto {
   updatedAt: string | null
 }
 
+/** §6.14 เกณฑ์ SLA งานติดตาม (D18) — เก็บที่ `assignment_policy_settings` */
+export interface SlaPolicyDto {
+  slaAlertHours: number
+  /** `null` = ยังไม่เคยตั้งค่า (ค่าที่เห็นคือค่าเริ่มต้นของระบบ ยังไม่มีแถวใน DB) */
+  updatedAt: string | null
+}
+
 export interface BankAccountDto {
   id: string
   bankName: string

@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | 02/07/2569 | ออกแบบเสร็จสมบูรณ์ — รายงานครบ 4 หมวด (F/O/A/E) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header/Changelog + แยก Decisions/Open Items ชัดเจน) — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง** |
+| v2.2 | 15/08/2569 | **มติ PO 15/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม Phase 6.3 (D18)** — แก้ที่มาของ `slaAlertHours` ใน §6-O2/§6-O4: เดิมเขียนว่า "ดึงจาก slaAlertHours ใน Finance Settings (ไฟล์ 03)" ซึ่ง**ไฟล์ 03 ไม่เคยนิยามค่านี้** (§18 ระบุเองว่าตัวเลข SLA ยังไม่ตกลง) และ `02` ไม่มีคอลัมน์รองรับ ⇒ ค่าจริงอยู่ที่ `assignment_policy_settings.sla_alert_hours` (ไฟล์ `02` v4.4) ตั้งค่าที่ไฟล์ `13` §6.14 ค่าเริ่มต้น 72 ชั่วโมง (3 วัน) · เพิ่มหมายเหตุจุดเริ่มนับ (`cases.created_at`) และขอบเขตของ O1/O4 ให้ implement ได้โดยไม่ต้องเดา — **ไม่มีการเปลี่ยนสูตร/คอลัมน์ของรายงาน** |
 | v2.1 | 04/07/2569 | **แก้ชื่อตารางใน data source ของ A1**: `wht_filing_period_summaries` → `wht_filing_summaries` ให้ตรงกับชื่อตารางจริงใน `02-database-schema-design.md` §9 (schema เป็น source of truth) — ไม่กระทบเนื้อหารายงาน |
 
 ขอบเขตเอกสารนี้: โมดูลรายงานรวมศูนย์สำหรับดูภาพรวมธุรกิจ แยกเป็น 4 หมวด (การเงิน / งานติดตาม / บัญชี / Executive Dashboard) ทุกรายงานเป็น read-only ไม่มี state machine ของตัวเอง คำนวณจากข้อมูลที่มีในระบบแล้วเท่านั้น
@@ -152,6 +153,7 @@
 | ข้อมูลจาก | Case outcomes (ไฟล์ 38-41) |
 | มิติ | รายทีม / รายบริษัทไฟแนนซ์ / รายเดือน |
 | KPI | Total cases, Success rate %, Fail rate % |
+| ขอบเขต | เคสที่ **รับเข้าระบบ (`created_at`) ในช่วงที่เลือก** — "เคสทั้งหมด" จึงรวมเคสที่ยังไม่ปิด ส่วน Success rate ตัดเคส open ออกจากตัวหารตาม §13 |
 
 **ตาราง:**
 ```
@@ -168,7 +170,8 @@
 |-------|--------|
 | ข้อมูลจาก | Case created_at → closed_at, CheckIn (ไฟล์ 38-41) |
 | KPI | เวลาเฉลี่ยปิดงาน (TAT), % เคสที่ปิดภายใน SLA |
-| SLA threshold | ดึงจาก slaAlertHours ใน Finance Settings (ไฟล์ 03) |
+| SLA threshold | `assignment_policy_settings.sla_alert_hours` (ไฟล์ 02) — ตั้งค่าที่ไฟล์ 13 §6.14 · default 72 ชม. (มติ PO 15/08/2569 · D18) |
+| ขอบเขต | เคสที่ **ปิดในช่วงที่เลือก** เท่านั้น (เคสที่ยังไม่ปิดไม่มี TAT — ดู O4) |
 
 **ตาราง:**
 ```
@@ -195,8 +198,9 @@
 
 | Field | Detail |
 |-------|--------|
-| ข้อมูลจาก | Case ที่ open อยู่และ created_at + slaAlertHours < now (ไฟล์ 38, 03) |
+| ข้อมูลจาก | Case ที่ open อยู่และ created_at + slaAlertHours < now (ไฟล์ 38 · เกณฑ์จากไฟล์ 13 §6.14) |
 | KPI | จำนวนเคสเกิน SLA, ยอดรวมค่าบริการที่ค้าง |
+| นิยาม "open" | `pending_review` / `need_info` / `approved` / `active` / `pending_recycle_review` — `draft` (ยังไม่ส่ง) และ `rejected` ไม่นับ · ครบเกณฑ์พอดี **ยังไม่ถือว่าเกิน** |
 
 **Columns:**
 ```

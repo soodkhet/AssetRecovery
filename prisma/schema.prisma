@@ -1669,6 +1669,9 @@ model AssignmentPolicySettings {
   supervisorCanAssignOutsource Boolean @default(true) @map("supervisor_can_assign_outsource")
   /// NULL = ไม่จำกัดเวลากดรับงานครั้งแรก (`40` §11 — ช่อง config เผื่ออนาคต ยังไม่บังคับใช้)
   acceptDeadlineHours          Int?    @map("accept_deadline_hours")
+  /// เกณฑ์ SLA ของงานติดตาม — นับจาก `cases.created_at` (`96` §6-O2/O4 · มติ PO 15/08/2569 D18)
+  /// ใช้เฉพาะ**รายงาน** O2/O4 (อ่านอย่างเดียว) ไม่บล็อกการทำงานใดในระบบ · default 72 ชม. = 3 วัน
+  slaAlertHours                Int     @default(72) @map("sla_alert_hours")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid

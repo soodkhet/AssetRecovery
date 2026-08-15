@@ -160,6 +160,17 @@ export function endOfBangkokDay(dateOnlyUtc: Date): Date {
 }
 
 /**
+ * ขอบล่าง (inclusive) ของ "ทั้งวัน" ตามปฏิทิน**ไทย** — คู่กับ {@link endOfBangkokDay}
+ *
+ * เที่ยงคืนของวันไทย = `17:00:00.000Z` ของวันก่อนหน้า ⇒ ใช้ `gte` กับคอลัมน์ `TIMESTAMPTZ`
+ * (ใช้ค่า date-only ตรง ๆ จะได้ 07:00 น. ของวันไทยวันนั้น ⇒ รายการช่วงเช้าหลุดออกจากรอบ)
+ */
+export function startOfBangkokDay(dateOnlyUtc: Date): Date {
+  const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000
+  return new Date(dateOnlyUtc.getTime() - BANGKOK_OFFSET_MS)
+}
+
+/**
  * แปลงค่าจาก `<input type="datetime-local">` กลับเป็น instant UTC — ค่าที่กรอกคือ**เวลาไทย**
  * (input ชนิดนี้ไม่มีโซนเวลาในตัว ถ้าปล่อยให้ `new Date()` เดาเองจะกลายเป็นเวลาของเครื่องผู้ใช้)
  */

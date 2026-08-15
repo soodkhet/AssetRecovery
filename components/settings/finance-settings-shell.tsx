@@ -12,6 +12,7 @@ import { InternalDocumentsTab } from '@/components/settings/internal-documents-t
 import { InvoiceNumberingTab } from '@/components/settings/invoice-numbering-tab'
 import { PayeeTab } from '@/components/settings/payee-tab'
 import { PeriodLockTab } from '@/components/settings/period-lock-tab'
+import { SlaPolicyTab } from '@/components/settings/sla-policy-tab'
 import { TaxDocTemplatesTab } from '@/components/settings/tax-doc-templates-tab'
 import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
 import { VatRatesTab } from '@/components/settings/vat-rates-tab'
@@ -95,6 +96,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'lock' && <PeriodLockTab />}
           {current?.id === 'numbering' && <InvoiceNumberingTab />}
           {current?.id === 'taxdoc' && <TaxDocTemplatesTab />}
+          {current?.id === 'sla' && <SlaPolicyTab />}
           {current !== undefined && !current.available && (
             <EmptyState
               title={`${current.label} ${current.section}`}

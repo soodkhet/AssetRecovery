@@ -17,7 +17,17 @@ export interface AssignmentPolicy {
   supervisorCanAssignOutsource: boolean
   /** NULL = ไม่จำกัดเวลากดรับงานครั้งแรก (`40` §11 — ยังไม่บังคับใช้ในรอบนี้) */
   acceptDeadlineHours: number | null
+  /**
+   * เกณฑ์ SLA ของงานติดตาม (ชั่วโมง) นับจาก `cases.created_at` — `96` §6-O2/O4 (มติ PO 15/08/2569 · D18)
+   *
+   * ใช้เฉพาะ**รายงาน** O2/O4 เท่านั้น: ไม่บล็อก flow ใด ไม่มี auto-reassign ไม่มีค่าปรับ
+   * (คำถาม "เกิดอะไรขึ้นเมื่อ breach" ยังค้างอยู่ที่ `DECISIONS-NEEDED.md` §3.2)
+   */
+  slaAlertHours: number
 }
+
+/** เกณฑ์ SLA เริ่มต้น 72 ชม. = 3 วัน (มติ PO 15/08/2569) — ต้องตรงกับ `@default` ใน `schema.prisma` */
+export const DEFAULT_SLA_ALERT_HOURS = 72
 
 /** ค่าตั้งต้นเมื่อองค์กรยังไม่เคยตั้งค่า (`40` §6.4 — default = เปิดให้หัวหน้าทำได้ทุกกลุ่ม) */
 export const DEFAULT_ASSIGNMENT_POLICY: AssignmentPolicy = {
@@ -26,6 +36,7 @@ export const DEFAULT_ASSIGNMENT_POLICY: AssignmentPolicy = {
   supervisorCanAssignInhouse: true,
   supervisorCanAssignOutsource: true,
   acceptDeadlineHours: null,
+  slaAlertHours: DEFAULT_SLA_ALERT_HOURS,
 }
 
 export function supervisorCanAssign(policy: AssignmentPolicy, roleGroup: RoleGroup): boolean {

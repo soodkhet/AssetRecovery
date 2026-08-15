@@ -16,6 +16,7 @@ export async function getAssignmentPolicy(organizationId: string): Promise<Assig
       supervisorCanAssignInhouse: true,
       supervisorCanAssignOutsource: true,
       acceptDeadlineHours: true,
+      slaAlertHours: true,
     },
   })
   return row === null ? DEFAULT_ASSIGNMENT_POLICY : row

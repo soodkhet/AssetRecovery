@@ -10,6 +10,7 @@ import {
   fromInputDateTime,
   nowDate,
   nowDateTime,
+  startOfBangkokDay,
   toBangkokParts,
   toDate,
   toInputDate,
@@ -114,6 +115,17 @@ describe('input[type=date] — ข้อยกเว้นเดียวที�
     // วันตัดรอบ 02/07/2026 (เที่ยงคืน UTC — ผลของ `dateOnlySchema()`)
     const cutoff = new Date('2026-07-02T00:00:00.000Z')
     expect(endOfBangkokDay(cutoff).toISOString()).toBe('2026-07-02T16:59:59.999Z')
+  })
+
+  it('startOfBangkokDay = เที่ยงคืนเวลาไทย (17:00Z ของวันก่อนหน้า) — คู่กับ endOfBangkokDay', () => {
+    const day = new Date('2026-07-02T00:00:00.000Z')
+    expect(startOfBangkokDay(day).toISOString()).toBe('2026-07-01T17:00:00.000Z')
+    // ครอบทั้งวันไทยพอดี 24 ชั่วโมง (ลบ 1 ms ของขอบบน inclusive)
+    expect(endOfBangkokDay(day).getTime() - startOfBangkokDay(day).getTime()).toBe(86_400_000 - 1)
+    // 00:30 น. ของวันไทยที่ 2 = 17:30Z ของวันที่ 1 ⇒ ต้องอยู่ในช่วง
+    expect(new Date('2026-07-01T17:30:00.000Z') >= startOfBangkokDay(day)).toBe(true)
+    // 23:30 น. ของวันไทยที่ 1 = 16:30Z ของวันที่ 1 ⇒ ต้องอยู่นอกช่วง
+    expect(new Date('2026-07-01T16:30:00.000Z') >= startOfBangkokDay(day)).toBe(false)
   })
 
   it('รายการที่เกิดเช้าวันไทยถัดไปต้องอยู่นอกขอบวันตัดรอบ', () => {

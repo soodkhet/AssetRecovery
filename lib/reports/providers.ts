@@ -1,5 +1,6 @@
 import type { SessionUser } from '@/lib/auth/types'
 import { FINANCE_REPORT_PROVIDERS } from '@/lib/reports/finance/providers'
+import { OPERATIONS_REPORT_PROVIDERS } from '@/lib/reports/operations/providers'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import type { ReportData } from '@/lib/reports/payload'
 import type { ReportRange } from '@/lib/reports/range'
@@ -41,6 +42,7 @@ export type ReportProvider = (context: ReportContext) => Promise<ReportData>
  */
 export const REPORT_PROVIDERS: Partial<Record<string, ReportProvider>> = {
   ...FINANCE_REPORT_PROVIDERS,
+  ...OPERATIONS_REPORT_PROVIDERS,
 }
 
 export function reportProviderOf(id: string): ReportProvider | null {
