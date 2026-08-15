@@ -15,6 +15,7 @@ import {
 import {
   canViewMenu,
   findMenu,
+  firstVisibleChildPath,
   MENU_ITEMS,
   type MenuAudience,
   type MenuViewer,
@@ -48,8 +49,9 @@ const VIEWERS: Record<MenuAudience, MenuViewer> = {
 const TOP_NAV_MATRIX: Record<MenuAudience, readonly string[]> = {
   superadmin: ['dashboard', 'cases', 'finance', 'accounting', 'warehouse', 'reports', 'settings'],
   executive: ['dashboard', 'cases', 'finance', 'accounting', 'warehouse', 'reports', 'settings'],
-  finance: ['dashboard', 'finance', 'warehouse', 'reports'],
-  accounting: ['dashboard', 'accounting', 'warehouse', 'reports'],
+  // `06` §7.2 v1.2 (D17) — การเงิน/บัญชีเห็น "การตั้งค่า" แบบบางส่วน (เฉพาะ 2 แท็บอ่านอย่างเดียว)
+  finance: ['dashboard', 'finance', 'warehouse', 'reports', 'settings'],
+  accounting: ['dashboard', 'accounting', 'warehouse', 'reports', 'settings'],
   case_approver: ['dashboard', 'cases'],
   admin_office: ['dashboard', 'cases'],
   team_lead: ['dashboard', 'cases', 'warehouse', 'reports'],
@@ -103,18 +105,41 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
     expect(visibleMenus(VIEWERS[audience]).map((item) => item.id)).toEqual(TOP_NAV_MATRIX[audience])
   })
 
-  it('การเงิน/บัญชี ไม่เห็น "จัดการเคส" และไม่เห็น "การตั้งค่า"', () => {
+  it('การเงิน/บัญชี ไม่เห็น "จัดการเคส"', () => {
     for (const audience of ['finance', 'accounting'] as const) {
       expect(canViewMenu(VIEWERS[audience], 'cases')).toBe(false)
-      expect(canViewMenu(VIEWERS[audience], 'settings')).toBe(false)
     }
   })
 
-  it('มีเฉพาะ Superadmin/บริหาร ที่เห็น "การตั้งค่า"', () => {
+  /**
+   * `06` §7.2 v1.2 (มติ PO 15/08/2569 — D17): `90` §12 / `91` §12 ให้การเงิน/บัญชีดู
+   * บันทึกการใช้งาน + งานเบื้องหลังได้ ⇒ เห็นเมนู "การตั้งค่า" เฉพาะสองแท็บนี้เท่านั้น
+   * แท็บที่ตั้งค่าจริง (สิทธิ์/ผู้ใช้/แผนค่าตอบแทน/…) ยังเป็นของ Superadmin+บริหาร
+   */
+  it('การเงิน/บัญชี เห็น "การตั้งค่า" เฉพาะแท็บอ่านอย่างเดียว 2 ตัว', () => {
+    for (const audience of ['finance', 'accounting'] as const) {
+      const settings = visibleMenus(VIEWERS[audience]).find((item) => item.id === 'settings')
+      expect(settings?.children?.map((child) => child.id)).toEqual(['settings.audit-logs', 'settings.jobs'])
+      expect(canViewMenu(VIEWERS[audience], 'settings.audit-logs')).toBe(true)
+      expect(canViewMenu(VIEWERS[audience], 'settings.jobs')).toBe(true)
+      expect(canViewMenu(VIEWERS[audience], 'settings.roles')).toBe(false)
+      expect(canViewMenu(VIEWERS[audience], 'settings.users')).toBe(false)
+    }
+  })
+
+  it('มีเฉพาะ Superadmin/บริหาร/การเงิน/บัญชี ที่เห็น "การตั้งค่า"', () => {
     const seeSettings = (Object.keys(VIEWERS) as MenuAudience[]).filter((audience) =>
       canViewMenu(VIEWERS[audience], 'settings'),
     )
-    expect(seeSettings).toEqual(['superadmin', 'executive'])
+    expect(seeSettings).toEqual(['superadmin', 'executive', 'finance', 'accounting'])
+  })
+
+  /** `/settings` ไม่มีเนื้อหาของตัวเอง — ต้องพาไปแท็บแรก**ที่ผู้ใช้เห็น** ไม่ใช่ `/settings/roles` ตายตัว */
+  it('แท็บแรกของ "การตั้งค่า" ต่างกันตาม role', () => {
+    expect(firstVisibleChildPath(VIEWERS.superadmin, 'settings')).toBe('/settings/roles')
+    expect(firstVisibleChildPath(VIEWERS.finance, 'settings')).toBe('/settings/audit-logs')
+    expect(firstVisibleChildPath(VIEWERS.accounting, 'settings')).toBe('/settings/audit-logs')
+    expect(firstVisibleChildPath(VIEWERS.field_agent, 'settings')).toBeNull()
   })
 
   it('ทุก role เห็น "แดชบอร์ด"', () => {

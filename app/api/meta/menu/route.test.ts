@@ -62,7 +62,18 @@ describe('GET /api/meta/menu (`06` §14)', () => {
 
     const body = (await response.json()) as MenuResponseBody
     expect(body.data.audience).toBe('accounting')
-    expect(body.data.menus.map((menu) => menu.id)).toEqual(['dashboard', 'accounting', 'warehouse', 'reports'])
+    // `06` §7.2 v2.2 (D17) — บัญชีเห็น "การตั้งค่า" แบบบางส่วน (เฉพาะ 2 แท็บอ่านอย่างเดียว)
+    expect(body.data.menus.map((menu) => menu.id)).toEqual([
+      'dashboard',
+      'accounting',
+      'warehouse',
+      'reports',
+      'settings',
+    ])
+    expect(body.data.menus.find((menu) => menu.id === 'settings')?.children?.map((child) => child.id)).toEqual([
+      'settings.audit-logs',
+      'settings.jobs',
+    ])
   })
 
   it('กรองแท็บย่อยของ "จัดการเคส" ตาม `06` §7.1.1 ด้วย', async () => {
