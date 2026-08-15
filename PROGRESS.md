@@ -1,6 +1,6 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.2 (รายงานหมวด F ครบ 5 ตัว: กำไรขั้นต้น + drill-down รายเคส · สรุปรายได้ + กราฟแท่ง/MoM · AR Aging ตามค่าตั้ง · สรุปค่าตอบแทนรายทีม/รายคน · เงินทดรองค้างเคลียร์) · งานถัดไป 6.3 (รายงานหมวด O — O1–O5)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.3 (รายงานหมวด O ครบ 5 ตัว: อัตราความสำเร็จ + กราฟแท่งซ้อน · ประสิทธิภาพทีม/SLA · ปริมาณงานรายพนักงาน · เคสค้างเกิน SLA · สรุปคลังสินค้า) + **มติ PO D18: เกณฑ์ SLA ระดับองค์กร** (คอลัมน์ใหม่ + แท็บที่ 14 ของหน้าตั้งค่าบัญชี/การเงิน) · งานถัดไป 6.4 (รายงานหมวด A — A1–A4)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
@@ -102,7 +102,7 @@
 |---|---|---|---|
 | 6.1 | Report Framework + Export Engine | ✅ | 2026-08-15 · `4d76986`+`83600a2` · ทะเบียน 17 รายงาน + ยามสิทธิ์รายหมวด (การเงินเรียก E1 = 403) + แคช 3 โหมด + โครงหน้าจอกลาง `<ReportView>` + export Excel/PDF (>5,000 แถว = job) · ⚠️ ต้องสร้าง bucket `report-exports` ต่อ environment → archive |
 | 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
-| 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `<pending>` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
+| 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `f4b824f` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 6.4 | รายงานหมวด A (A1–A4) | ⬜ | PLAN §6.4 |
 | 6.5 | Executive Dashboard (E1–E3) | ⬜ | PLAN §6.5 · Exec/Superadmin เท่านั้น |
 | 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⏸️ | PLAN §6.6 · รอ PO อนุมัติ spec (dashboard.html เป็น DRAFT) |
