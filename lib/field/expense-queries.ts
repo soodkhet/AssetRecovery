@@ -316,6 +316,10 @@ export async function supersedeCaseExpenses(
       organizationId: params.organizationId,
       assignmentId: params.assignmentId,
       status: { in: [...ACTIVE_EXPENSE_STATUSES] },
+      // ยามชั้นสอง (Final Test ด่าน 1) — รายการที่เข้ารอบจ่ายแล้วห้ามกลายเป็น `superseded`
+      // ไม่งั้น `payout_batch_items` จะชี้ไปที่รายการที่ถูกแทนที่ ขณะชุดใหม่ยอดเดียวกันรอเข้ารอบจ่ายอีก
+      // = จ่ายซ้ำ · ชั้นแรกคือยาม `EVIDENCE_REJECT_AFTER_FINAL` ที่ `rejectFieldEvidence()`
+      payoutBatchItemId: null,
       deletedAt: null,
     },
     select: { id: true, status: true, expenseType: true, grossSatang: true },

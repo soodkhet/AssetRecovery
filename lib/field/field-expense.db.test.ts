@@ -138,6 +138,10 @@ async function cleanupCases(): Promise<void> {
   const tx = db()
   // `audit_logs` ลบไม่ได้เด็ดขาด (`02` §13 — trigger ระดับ DB) จึงปล่อยค้างไว้ตามกติกา
   await tx.$executeRawUnsafe(`UPDATE expenses SET superseded_by_expense_id = NULL WHERE organization_id = '${ORG_ID}'`)
+  // รายการเบิกที่เทสต์ผูกเข้ารอบจ่าย (`seedPayoutBatchItem`) — ต้องปลด FK ก่อนลบ expenses
+  await tx.$executeRawUnsafe(`UPDATE expenses SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM jobs WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
@@ -226,6 +230,9 @@ beforeAll(async () => {
 afterAll(async () => {
   if (url) {
     await cleanupCases()
+    await db().$executeRawUnsafe(`UPDATE expenses SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
     await db().$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
   }
   await client?.$disconnect()
@@ -291,6 +298,40 @@ async function seedReadyToClose(
     )
   }
   return caseId
+}
+
+/**
+ * ผูกรายการเบิกเข้ารอบจ่ายจริง (มี FK) — ใช้พิสูจน์ยาม `EVIDENCE_REJECT_AFTER_FINAL`
+ * ที่กันไม่ให้รายการซึ่งเข้ารอบจ่ายแล้วถูก supersede (= จ่ายซ้ำ)
+ */
+async function seedPayoutBatchItem(expenseId: string): Promise<string> {
+  const expense = await db().expense.findUniqueOrThrow({
+    where: { id: expenseId },
+    select: { payeeId: true, grossSatang: true },
+  })
+  const batch = await db().payoutBatch.create({
+    data: {
+      organizationId: ORG_ID,
+      name: 'รอบจ่ายทดสอบ 8.3',
+      side: 'inhouse',
+      createdBy: MANAGER_ID,
+    },
+    select: { id: true },
+  })
+  const item = await db().payoutBatchItem.create({
+    data: {
+      organizationId: ORG_ID,
+      payoutBatchId: batch.id,
+      expenseId,
+      payeeId: expense.payeeId ?? '',
+      grossSatang: expense.grossSatang,
+      netSatang: expense.grossSatang,
+      createdBy: MANAGER_ID,
+    },
+    select: { id: true },
+  })
+  await db().expense.update({ where: { id: expenseId }, data: { payoutBatchItemId: item.id } })
+  return item.id
 }
 
 async function expensesOf(caseId: string) {
@@ -609,6 +650,42 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     )
     expect(resubmitted.status).toBe('pending_approval')
     expect(resubmitted.rejectReason).toBeNull()
+  })
+
+  /**
+   * Final Test ด่าน 1 (Phase 8.3) — `41` §10.1 ให้ `reject_evidence` ทำได้จาก `closed_success`
+   * แต่ `19` §6.1 บอกว่าเคสที่ผ่านขั้นสุดท้ายแล้ว "ไม่มีโอกาสถูกตีกลับอีก"
+   *
+   * ถ้าปล่อยผ่าน: `resubmit_close` จะสร้างรายการเบิกชุดใหม่ที่ `pending_warehouse_confirm`
+   * ซึ่งปลดล็อกไม่ได้ตลอดกาล (ล็อตเดิม confirmed = terminal · asset `handed_over`) ⇒ เงินค้าง
+   */
+  it('ตีกลับหลักฐานหลังเครื่องส่งมอบไปแล้ว = EVIDENCE_REJECT_AFTER_FINAL', async () => {
+    const caseId = await closeSuccessfully()
+    await db().asset.updateMany({ where: { caseId }, data: { assetStatus: 'handed_over' } })
+
+    await expectCode(
+      () => field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่ม' }, { actor: manager, meta }),
+      'EVIDENCE_REJECT_AFTER_FINAL',
+    )
+
+    // สถานะต้องไม่ขยับเลย (ยามอยู่ก่อน transaction)
+    const assignment = await db().caseAssignment.findFirstOrThrow({ where: { caseId } })
+    expect(assignment.status).toBe('closed_success')
+  })
+
+  it('ตีกลับหลักฐานหลังรายการเบิกเข้ารอบจ่ายแล้ว = EVIDENCE_REJECT_AFTER_FINAL (กันจ่ายซ้ำ)', async () => {
+    const caseId = await closeSuccessfully()
+    const target = (await expensesOf(caseId))[0]
+    const batchItemId = await seedPayoutBatchItem(target?.id ?? '')
+
+    await expectCode(
+      () => field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่ม' }, { actor: manager, meta }),
+      'EVIDENCE_REJECT_AFTER_FINAL',
+    )
+
+    const still = await db().expense.findFirstOrThrow({ where: { id: target?.id ?? '' } })
+    expect(still.payoutBatchItemId).toBe(batchItemId)
+    expect(still.status).not.toBe('superseded')
   })
 })
 

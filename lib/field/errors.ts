@@ -22,6 +22,7 @@ export const FIELD_ERROR_CODES = [
   'CLOSE_PRODUCT_PHOTO_REQUIRED',
   'CHECKIN_GPS_PERMISSION_DENIED',
   'CLOSE_NO_EVIDENCE_REVISION',
+  'EVIDENCE_REJECT_AFTER_FINAL',
   'HOTEL_CLAIM_FIELD_REQUIRED',
   'HOTEL_CLAIM_INVALID_SHARED_AGENT',
   'REQUIRED_MISSING',
@@ -38,6 +39,7 @@ const HTTP_STATUS: Record<FieldErrorCode, number> = {
   CLOSE_PRODUCT_PHOTO_REQUIRED: 400,
   CHECKIN_GPS_PERMISSION_DENIED: 400,
   CLOSE_NO_EVIDENCE_REVISION: 400,
+  EVIDENCE_REJECT_AFTER_FINAL: 400,
   HOTEL_CLAIM_FIELD_REQUIRED: 400,
   HOTEL_CLAIM_INVALID_SHARED_AGENT: 400,
   REQUIRED_MISSING: 400,
@@ -75,6 +77,12 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
   CLOSE_NO_EVIDENCE_REVISION: {
     title: 'ยังไม่ได้แก้ไขหลักฐาน',
     message: 'ต้องแก้ไขรูป/วิดีโอ/เสียง/รูปสินค้าอย่างน้อย 1 รายการก่อนส่งกลับให้ตรวจอีกครั้ง (`41` §8)',
+  },
+  EVIDENCE_REJECT_AFTER_FINAL: {
+    title: 'เคสนี้ผ่านขั้นสุดท้ายไปแล้ว ตีกลับไม่ได้',
+    message:
+      'เคสที่ส่งมอบเข้าล็อตที่ยืนยันแล้ว / เกิดรายได้แล้ว / รายการเบิกเข้ารอบจ่ายแล้ว ถือว่าจบจริง — ' +
+      'แก้ไขต้องผ่านรายการปรับปรุง (Adjustment) เท่านั้น (`19` §6.1 · `20`)',
   },
   HOTEL_CLAIM_FIELD_REQUIRED: {
     title: 'ข้อมูลเบิกที่พักไม่ครบ',

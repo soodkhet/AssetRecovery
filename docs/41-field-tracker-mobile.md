@@ -17,6 +17,7 @@
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header/Changelog + แยก Decisions/Open Items ชัดเจน) — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง** |
 | v2.1 | 04/07/2569 | **Sync กับ schema/ไฟล์ 15/23**: (1) §6.6 เติมสถานะ `pending_finance_approval` ที่ตกหล่นจาก enum `expense_status` (ไฟล์ 02 §3 มี 7 ค่า แต่ไฟล์นี้เดิมระบุ 6 ค่า — ทั้งที่ไฟล์ 15 header อ้างว่าไฟล์นี้เป็นเจ้าของ enum 7 ค่า) (2) §8 `reject_expense` แก้ transition ให้ตีกลับได้จากทั้ง `pending_approval` และ `pending_finance_approval` ตรงกับ `23-finance-state-machines.md` §6.3 (3) §17.1/§17.2 เติม endpoint + event ของ action `resubmit_close_case` และ `resubmit_expense` ที่นิยามไว้แล้วใน §8 แต่ไม่เคยมี endpoint รองรับ — ตั้งชื่อตาม convention namespace `/api/field/*` เดิม (🔶 ชื่อ endpoint ใหม่ 2 ตัวนี้รอ Product Owner ยืนยัน — ดู `93-roadmap-open-items.md` §7.1) — ไม่มีการเปลี่ยน business logic |
 | v2.2 | 04/07/2569 | ✅ Product Owner **ยืนยันชื่อ endpoint** `resubmit-close`/`resubmit` แล้ว (DEC-006/D9) — ปิด 🔶 ที่ตั้งไว้ใน v2.1 |
+| v2.3 | 16/08/2569 | **เติม §12** (Final Test ด่าน 1 — Phase 8.3): `EVIDENCE_REJECT_AFTER_FINAL` · §10.1 เดิมให้ `reject_evidence` ทำได้จาก `closed_success`/`closed_fail` โดยไม่มีเงื่อนไขอื่น ⇒ ตีกลับเคสที่ล็อตยืนยันแล้ว/เกิด Revenue แล้ว/รายการเบิกเข้ารอบจ่ายแล้วได้ ซึ่งขัดกับ `19` §6.1 และทำให้รายการเบิกชุดใหม่ค้างที่ `pending_warehouse_confirm` ตลอดกาล (ล็อตเดิม confirmed = terminal · asset เป็น `handed_over` เข้าล็อตใหม่ไม่ได้) — ไม่เปลี่ยน business logic เดิม เป็นการปิดช่องที่สเปคตั้งใจห้ามอยู่แล้ว |
 
 ขอบเขตเอกสารนี้: แอปสำหรับพนักงานติดตามทรัพย์ใช้รับงาน, จัดวันลงพื้นที่, เช็คอิน/บันทึกหลักฐาน, ปิดงาน, ตอบรับ/ปฏิเสธคำขอเปลี่ยนผู้รับผิดชอบ, และเบิกค่าใช้จ่าย — เป็นจุดสุดท้ายของ pipeline งานสนาม ต่อจากไฟล์ 40 และส่งผลลัพธ์กลับไปไฟล์ 38 (ผ่าน recycle flow ถ้าไม่สำเร็จ)
 
@@ -399,6 +400,7 @@ Desktop: จัดเป็น 2 คอลัมน์ (เนื้อหาห
 |เรียกรายการเบิกที่ไม่มี/ไม่ใช่ของตัวเอง|`EXPENSE_NOT_FOUND`|reject 404 — ไม่บอกว่ารายการนั้นเป็นของใคร (เพิ่ม 14/08/2569 พร้อม Phase 2.9)|
 |ทำ action กับรายการเบิกที่สถานะไม่รองรับ (เช่น resubmit รายการที่อนุมัติแล้ว)|`EXPENSE_INVALID_STATUS`|reject — ปลายทางของแต่ละ action ตาม `23-finance-state-machines.md` §6.3 (เพิ่ม 14/08/2569 พร้อม Phase 2.9)|
 |ผู้อื่นพยายามแก้รายการเบิกที่ถูกตีกลับ (ผู้จัดการ/หัวหน้าทีม)|`PERMISSION_DENIED`|reject — เฉพาะ Field Agent เจ้าของรายการเท่านั้นที่ resubmit ได้ (§6.6/§8)|
+|กด `reject_evidence` กับเคสที่ผ่านขั้นสุดท้ายไปแล้ว (ล็อต `confirmed` / มี Revenue ของรอบนั้น / รายการเบิกเข้ารอบจ่ายแล้ว)|`EVIDENCE_REJECT_AFTER_FINAL`|reject — `19` §6.1 ถือว่าเคสจบจริง แก้ไขต้องผ่าน Adjustment (ไฟล์ 20) เท่านั้น (เพิ่ม 16/08/2569 พร้อม Phase 8.3)|
 
 ## 13. Permissions
 |Capability|Allowed Roles|Notes|

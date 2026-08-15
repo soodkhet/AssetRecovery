@@ -48,13 +48,9 @@ export function assertLotAssets(input: LotAssetsInput): void {
     })
   }
 
-  const notInCustody = input.assets.filter((asset) => asset.assetStatus !== LOT_ELIGIBLE_STATUS)
-  if (notInCustody.length > 0) {
-    throw new WarehouseError('ASSET_NOT_IN_CUSTODY', {
-      context: { assetIds: notInCustody.map((asset) => asset.id) },
-    })
-  }
-
+  // เช็ค "อยู่ในล็อตอื่นแล้ว" **ก่อน** สถานะ (Final Test ด่าน 1) — เครื่องที่อยู่ในล็อตอื่นมีสถานะ
+  // `handover_pending` เสมอ ⇒ ถ้าเช็คสถานะก่อน ผู้ใช้จะได้ `ASSET_NOT_IN_CUSTODY` ที่ไม่มีเลขล็อต
+  // ติดมา ตามไปดูล็อตเดิมไม่ได้ · `44` §12 สั่งไว้ว่าเคสนี้ต้อง "reject — **ระบุ lot number**"
   const alreadyInLot = input.assets.filter((asset) => asset.lotId !== null)
   if (alreadyInLot.length > 0) {
     throw new WarehouseError('ASSET_ALREADY_IN_LOT', {
@@ -62,6 +58,13 @@ export function assertLotAssets(input: LotAssetsInput): void {
         assetIds: alreadyInLot.map((asset) => asset.id),
         lotNumbers: [...new Set(alreadyInLot.map((asset) => asset.lotNumber).filter((no): no is string => no !== null))],
       },
+    })
+  }
+
+  const notInCustody = input.assets.filter((asset) => asset.assetStatus !== LOT_ELIGIBLE_STATUS)
+  if (notInCustody.length > 0) {
+    throw new WarehouseError('ASSET_NOT_IN_CUSTODY', {
+      context: { assetIds: notInCustody.map((asset) => asset.id) },
     })
   }
 }
