@@ -51,6 +51,7 @@ import { prisma } from '@/lib/prisma'
 import { exceptionLinkOf, exceptionModuleLabel } from '@/lib/reports/dashboard'
 import { summarizeBillingBatch } from '@/lib/revenue/revenue'
 import { periodLockPolicyFor } from '@/lib/settings/period-lock'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
  * รอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — ชั้น DB (`27` §6.13 · §6.16)
@@ -250,6 +251,7 @@ export async function listPeriods(
   query: PeriodListQuery,
   now: Date = new Date(),
 ): Promise<AccountingPeriodDto[]> {
+  assertOrgWideReadable(ctx.actor, 'accounting-periods')
   await backfillPeriods(ctx, now)
 
   const rows = await prisma.accountingPeriod.findMany({
@@ -378,6 +380,7 @@ async function readinessOf(organizationId: string, row: PeriodRow): Promise<Read
 }
 
 export async function getPeriodReadiness(user: SessionUser, periodId: string): Promise<PeriodReadinessDto> {
+  assertOrgWideReadable(user, 'accounting-periods')
   const row = await findPeriodById(user, periodId)
   const result = await readinessOf(user.organizationId, row)
   return { ...result, periodId: row.id, periodLabel: row.periodLabel, status: row.status }
@@ -452,6 +455,7 @@ export async function sendPeriod(
   periodId: string,
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
+  assertOrgWideReadable(ctx.actor, 'accounting-periods')
   const row = await findPeriodById(ctx.actor, periodId)
   // เฉพาะ `collecting` — รอบที่ `locked` ต้องไปทาง `unlockPeriod()` ที่บังคับสิทธิ์ผู้บริหาร (`30` §10)
   assertPeriodActionStatus('send', row.status)
@@ -466,6 +470,7 @@ export async function lockPeriod(
   periodId: string,
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
+  assertOrgWideReadable(ctx.actor, 'accounting-periods')
   assertPeriodActionStatus('lock', (await findPeriodById(ctx.actor, periodId)).status)
   return transitionPeriod(ctx, periodId, 'locked', input)
 }
@@ -480,6 +485,7 @@ export async function unlockPeriod(
   periodId: string,
   input: PeriodReasonInput,
 ): Promise<AccountingPeriodDto> {
+  assertOrgWideReadable(ctx.actor, 'accounting-periods')
   assertUnlockAllowed(ctx.actor.isSuperadmin || hasCapability(ctx.actor, 'manage', UNLOCK_PERIOD))
   // เฉพาะ `locked` — ไม่งั้นรอบที่ยัง `collecting` จะถูกส่งบัญชีโดยข้าม Readiness Check (`30` §10)
   assertPeriodActionStatus('unlock', (await findPeriodById(ctx.actor, periodId)).status)
@@ -536,6 +542,7 @@ function toExceptionDto(row: ExceptionRecord): ExceptionDto {
 }
 
 export async function listExceptions(user: SessionUser, query: ExceptionListQuery): Promise<ExceptionListDto> {
+  assertOrgWideReadable(user, 'exceptions')
   const rows = await prisma.exception.findMany({
     where: {
       organizationId: user.organizationId,

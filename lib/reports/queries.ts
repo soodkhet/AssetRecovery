@@ -103,6 +103,8 @@ export interface ProfitEntryRange {
 export interface ProfitEntryScope {
   /** ทีมที่ผู้เรียกเห็นได้ — `null` = ทุกทีม · **รายการว่าง = ผลลัพธ์ว่าง** (`96` §10) */
   teamIds?: readonly string[] | null
+  /** บริษัทไฟแนนซ์ที่ผู้เรียกเห็นได้ (scope `company`) — `null` = ทุกบริษัท (`25` §16.1) */
+  companyId?: string | null
 }
 
 /**
@@ -121,7 +123,12 @@ export async function loadProfitEntries(
   scope: ProfitEntryScope = {},
 ): Promise<ProfitEntries> {
   const teamIds = scope.teamIds ?? null
-  const teamWhere = teamIds === null ? {} : { assignedTeamId: { in: [...teamIds] } }
+  const companyId = scope.companyId ?? null
+  const caseWhere = {
+    ...(teamIds === null ? {} : { assignedTeamId: { in: [...teamIds] } }),
+    ...(companyId === null ? {} : { companyId }),
+  }
+  const hasCaseFilter = Object.keys(caseWhere).length > 0
 
   const [revenueRows, expenseRows] = await Promise.all([
     prisma.revenue.findMany({
@@ -129,7 +136,8 @@ export async function loadProfitEntries(
         organizationId,
         deletedAt: null,
         revenueDate: { gte: range.startDate, lte: range.endDate },
-        ...(teamIds === null ? {} : { case: teamWhere }),
+        ...(companyId === null ? {} : { companyId }),
+        ...(teamIds === null ? {} : { case: { assignedTeamId: { in: [...teamIds] } } }),
       },
       select: {
         id: true,
@@ -149,7 +157,7 @@ export async function loadProfitEntries(
         expenseDate: { gte: range.startDate, lte: range.endDate },
         // ต้นทุนที่ผูกเคสไม่ได้ = ผูกมิติไม่ได้ ⇒ อยู่นอกรายงานนี้ (`21` §4)
         caseId: { not: null },
-        ...(teamIds === null ? {} : { case: teamWhere }),
+        ...(hasCaseFilter ? { case: caseWhere } : {}),
       },
       select: {
         id: true,
@@ -216,16 +224,44 @@ interface ResolvedEntries {
   fromCache: boolean
 }
 
-/** entry ดิบผ่านแคชรายวัน — คีย์ผูก `organization_id` เสมอ (multi-tenant) */
+/**
+ * ขอบเขตข้อมูลของผู้เรียกสำหรับรายงานกำไร (`21` §14 · `25` §16.1)
+ *
+ * `view_finance_dashboard` เป็น capability ที่ Superadmin มอบให้ role ไหนก็ได้จากหน้า Settings
+ * ⇒ ห้ามเชื่อว่าผู้เรียกเป็น scope `global` เสมอ · ผู้จัดการ (`team`) เห็นเฉพาะทีมตัวเอง ·
+ * ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`company`) เห็นเฉพาะบริษัทตัวเอง · Field Agent (`self`) ไม่มีมิติให้เห็น
+ * ⇒ คืนรายการทีมว่าง = **ผลลัพธ์ว่าง**
+ */
+function profitEntryScope(user: SessionUser): ProfitEntryScope {
+  switch (user.scope.kind) {
+    case 'global':
+      return {}
+    case 'team':
+      return { teamIds: user.scope.teamIds }
+    case 'company':
+      return { companyId: user.scope.companyId }
+    case 'self':
+      return { teamIds: [] }
+  }
+}
+
+/** ส่วนของคีย์แคชที่แทน scope — ผู้ใช้คนละขอบเขตต้อง **ไม่** ใช้แคชก้อนเดียวกัน */
+function profitScopeKey(scope: ProfitEntryScope): string {
+  const teams = scope.teamIds === undefined || scope.teamIds === null ? 'all' : [...scope.teamIds].sort().join('+')
+  return `${teams}|${scope.companyId ?? 'all'}`
+}
+
+/** entry ดิบผ่านแคชรายวัน — คีย์ผูก `organization_id` + scope ของผู้เรียกเสมอ (multi-tenant) */
 async function resolveProfitEntries(
-  organizationId: string,
+  user: SessionUser,
   query: ProfitabilityQuery,
   now: Date,
 ): Promise<ResolvedEntries> {
   const range = resolveReportPeriod(query.period, query.asOf ?? now)
-  const key = `profit:${organizationId}:${query.dimension}:${reportPeriodKey(range)}`
+  const scope = profitEntryScope(user)
+  const key = `profit:${user.organizationId}:${profitScopeKey(scope)}:${query.dimension}:${reportPeriodKey(range)}`
   const cached = await withDailyCache(key, { refresh: query.refresh, now }, () =>
-    loadProfitEntries(organizationId, query.dimension, range),
+    loadProfitEntries(user.organizationId, query.dimension, range, scope),
   )
   return { entries: cached.value, range, computedAt: cached.computedAt, fromCache: cached.fromCache }
 }
@@ -236,7 +272,7 @@ export async function getProfitability(
   query: ProfitabilityQuery,
   now: Date = new Date(),
 ): Promise<ProfitabilityReportDto> {
-  const { entries, range, computedAt, fromCache } = await resolveProfitEntries(user.organizationId, query, now)
+  const { entries, range, computedAt, fromCache } = await resolveProfitEntries(user, query, now)
   const summary = summarizeProfitability(entries.revenues, entries.costs)
 
   return {
@@ -277,7 +313,7 @@ export async function getProfitabilityDrilldown(
   query: ProfitabilityQuery,
   now: Date = new Date(),
 ): Promise<ProfitabilityDrilldownDto> {
-  const { entries, range } = await resolveProfitEntries(user.organizationId, query, now)
+  const { entries, range } = await resolveProfitEntries(user, query, now)
   const summary = summarizeProfitability(entries.revenues, entries.costs)
   const row = summary.rows.find((item) => item.key === dimensionId)
   if (row === undefined) {

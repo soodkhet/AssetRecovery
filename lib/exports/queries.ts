@@ -46,6 +46,7 @@ import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { voucherNumber } from '@/lib/payout/payout-doc'
 import { prisma } from '@/lib/prisma'
 import { buddhistYear } from '@/lib/format/datetime'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
  * Accounting Pack Export (ไฟล์ 37) — ชั้น DB + ตัวประกอบชุดเอกสาร (`37` §14)
@@ -135,6 +136,7 @@ export async function listExportHistory(
   user: SessionUser,
   query: ExportHistoryListQuery,
 ): Promise<ExportHistoryListDto> {
+  assertOrgWideReadable(user, 'export-records')
   const rows = await prisma.exportRecord.findMany({
     where: {
       organizationId: user.organizationId,
@@ -147,6 +149,7 @@ export async function listExportHistory(
 }
 
 export async function findExportRecord(user: SessionUser, id: string): Promise<ExportRow> {
+  assertOrgWideReadable(user, 'export-records')
   const row = await prisma.exportRecord.findFirst({
     where: { id, organizationId: user.organizationId },
     select: EXPORT_SELECT,
@@ -545,6 +548,7 @@ export async function createExportPack(
   input: ExportPackInput,
 ): Promise<ExportRecordDto> {
   const { actor } = ctx
+  assertOrgWideReadable(actor, 'export-records')
   const period = await findPeriodById(actor, input.periodId)
   const scope = scopeOf(period)
 

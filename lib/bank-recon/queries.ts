@@ -47,6 +47,7 @@ import { syncPayoutBatchCompleted } from '@/lib/payout/queries'
 import { RevenueError } from '@/lib/revenue/errors'
 import { applyBillingReceipt } from '@/lib/revenue/queries'
 import { SettingsError } from '@/lib/settings/errors'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
  * กระทบยอดธนาคาร (ไฟล์ 35) — ชั้น DB (`27` §6.14)
@@ -142,6 +143,7 @@ export async function listBankTransactions(
   user: SessionUser,
   query: BankTransactionListQuery,
 ): Promise<BankTransactionListDto> {
+  assertOrgWideReadable(user, 'bank-transactions')
   const where: Prisma.BankTransactionWhereInput = {
     organizationId: user.organizationId,
     ...(query.periodId === undefined ? {} : { periodId: query.periodId }),
@@ -254,6 +256,7 @@ export async function listMatchCandidates(
   user: SessionUser,
   query: MatchCandidateQuery,
 ): Promise<MatchCandidateDto[]> {
+  assertOrgWideReadable(user, 'bank-transactions')
   const transaction = await prisma.bankTransaction.findFirst({
     where: { id: query.transactionId, organizationId: user.organizationId },
     select: { amountSatang: true },
@@ -320,6 +323,7 @@ export async function importStatement(
   ctx: AccountingMutationContext,
   input: StatementImportInput,
 ): Promise<StatementImportResultDto> {
+  assertOrgWideReadable(ctx.actor, 'bank-transactions')
   const account = await prisma.bankAccount.findFirst({
     where: { id: input.bankAccountId, organizationId: ctx.actor.organizationId, deletedAt: null },
     select: { id: true, bankName: true, accountNumber: true, statementFormat: true, autoMatchToleranceDays: true },
@@ -695,6 +699,7 @@ export async function matchBankTransaction(
   transactionId: string,
   input: BankMatchInput,
 ): Promise<{ result: MatchResultDto | null; warning?: ApiWarning }> {
+  assertOrgWideReadable(ctx.actor, 'bank-transactions')
   const transaction = await loadTransaction(ctx.actor.organizationId, transactionId)
 
   if (transaction.matchStatus === 'unmatched_resolved') {
@@ -753,6 +758,7 @@ export async function resolveUnmatchedTransaction(
   transactionId: string,
   input: ResolveUnmatchedInput,
 ): Promise<BankTransactionDto> {
+  assertOrgWideReadable(ctx.actor, 'bank-transactions')
   const before = await loadTransaction(ctx.actor.organizationId, transactionId)
   const status = nextBankMatchStatus(before.matchStatus, 'resolve_unmatched')
   if (status === null) {

@@ -21,6 +21,7 @@ import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertPeriodEditable } from '@/lib/settings/period-lock'
 import { syncWhtCertificatesFromPayout } from '@/lib/wht/queries'
+import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
  * บัญชีค่าใช้จ่าย (ไฟล์ 32) — ชั้น DB (`32` §14)
@@ -260,6 +261,7 @@ export async function listExpenseRecords(
   user: SessionUser,
   query: ExpenseRecordListQuery,
 ): Promise<ExpenseRecordListDto> {
+  assertOrgWideReadable(user, 'expense-records')
   const rows = await prisma.expenseRecord.findMany({
     where: {
       organizationId: user.organizationId,
@@ -304,6 +306,7 @@ export async function mapExpenseCostCenter(
   expenseRecordId: string,
   input: CostCenterMapInput,
 ): Promise<ExpenseRecordDto> {
+  assertOrgWideReadable(ctx.actor, 'expense-records')
   const record = await findRecord(ctx.actor, expenseRecordId)
   const current = toDto(record)
 
