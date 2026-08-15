@@ -413,6 +413,51 @@ suite('Phase 2.9 — D10: Google Maps ใช้ไม่ได้ตอนปิ
     expect((await expensesOf(caseId)).filter((row) => row.expenseType === 'fuel')).toHaveLength(1)
   })
 
+  it('งานที่ถูกดึงกลับคิวระหว่างทาง — instance เดิมห้ามเขียนสถานะทับเจ้าของงานตัวใหม่ (`91` §17)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('down', { status: 500 })),
+    )
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
+
+    const pending = await db().job.findFirstOrThrow({
+      where: { organizationId: ORG_ID, jobType: 'fuel_distance_retry', status: 'pending' },
+      select: { id: true },
+    })
+
+    // Maps ค้างนานเกิน ⇒ `reclaimStaleJobs()` ดันงานกลับ `pending` แล้ว instance อื่นหยิบไปทำ
+    // (จำลองด้วยการปล่อยให้ instance นี้ claim ไม่ได้ตั้งแต่แรก แล้วเช็คว่าไม่มีการเขียนทับ)
+    let release: () => void = () => undefined
+    const blocked = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await blocked
+        return new Response(
+          JSON.stringify({ status: 'OK', rows: [{ elements: [{ status: 'OK', distance: { value: 10_000 } }] }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }),
+    )
+
+    const running = fuelJob.runFuelDistanceRetryJob({ organizationId: ORG_ID })
+    // รอให้ job claim เสร็จ (`pending` → `running`) แล้วค่อยแกล้งดึงกลับคิว
+    await vi.waitFor(async () => {
+      const row = await db().job.findUniqueOrThrow({ where: { id: pending.id }, select: { status: true } })
+      expect(row.status).toBe('running')
+    })
+    await db().job.update({ where: { id: pending.id }, data: { status: 'pending', startedAt: null } })
+    release()
+    await running
+
+    // instance เดิมทำงานเสร็จทีหลัง แต่ไม่ถือ claim แล้ว ⇒ ห้ามเขียน `completed` ทับ
+    const after = await db().job.findUniqueOrThrow({ where: { id: pending.id }, select: { status: true } })
+    expect(after.status).toBe('pending')
+  })
+
   it('ยอดที่คำนวณได้เป็น 0 = ไม่สร้าง record (DEC-006/D6)', async () => {
     vi.stubGlobal(
       'fetch',
