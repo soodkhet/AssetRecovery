@@ -50,8 +50,10 @@ const PAYMENT_AT = '2026-06-25T03:00:00Z'
 let client: PrismaClient | null = null
 type ExpenseQueries = typeof import('@/lib/expenses/queries')
 type WhtQueries = typeof import('@/lib/wht/queries')
+type WhtSummaryJob = typeof import('@/lib/wht/summary-job')
 let expenses: ExpenseQueries
 let wht: WhtQueries
+let summaryJob: WhtSummaryJob
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -200,6 +202,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = url
   expenses = await import('@/lib/expenses/queries')
   wht = await import('@/lib/wht/queries')
+  summaryJob = await import('@/lib/wht/summary-job')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -512,6 +515,32 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     expect(source.payee.name).toBe('บริษัท เร็วดี จำกัด')
     expect(source.payee.taxId).toBe('0105560099999')
     expect(source.filingForm).toBe('PND53')
+  })
+
+  it('Final Test ด่าน 6 — งานเบื้องหลังสรุปรอบนำส่งต้องไม่เขียนทับงวดที่ปิดไปแล้ว', async () => {
+    await setPeriodStatus('collecting')
+    const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 30_000_00, wht: 900_00 }])
+    await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+    const periodId = await junePeriodId()
+    const real = (await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang
+
+    // ปักยอดปลอมไว้ — ถ้า job ยังทำงานกับงวดที่ปิดแล้ว ยอดนี้จะถูกคำนวณทับกลับเป็นของจริง
+    // (เท่ากับแก้ข้อมูลงวดที่ล็อกโดยไม่ผ่าน Adjustment — `30`/`20`)
+    for (const closed of ['locked', 'sent_to_accountant'] as const) {
+      await db().whtFilingSummary.update({ where: { periodId }, data: { pnd3Satang: 1 } })
+      await setPeriodStatus(closed)
+
+      const skipped = await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
+      expect(skipped.refreshed).toBe(0)
+      expect(skipped.periodIds).toEqual([])
+      expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang).toBe(1)
+    }
+
+    // งวดที่ยังเปิดอยู่ต้องยังคำนวณให้ตามปกติ (ยามนี้ไม่ได้ปิดงานทิ้งทั้งตัว)
+    await setPeriodStatus('collecting')
+    const refreshed = await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
+    expect(refreshed.refreshed).toBe(1)
+    expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang).toBe(real)
   })
 
   it('อ้าง id ที่ไม่มีในองค์กร ⇒ 404 ไม่ leak (WHT_CERTIFICATE_NOT_FOUND / WHT_FILING_SUMMARY_NOT_FOUND)', async () => {

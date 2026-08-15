@@ -500,3 +500,32 @@ suite('Phase 4.6 — สถานะการส่งมอบ (`37` §9 · §1
     expect(after?.file_hash).toMatch(/^[0-9a-f]{64}$/)
   })
 })
+
+suite('Final Test ด่าน 6 — สองคนกดสร้างชุดส่งบัญชีของงวดเดียวกันพร้อมกัน (`37` §6.2)', () => {
+  it('ชนกันที่ `uniq_export_period_version` ⇒ คนที่แพ้ได้ `EXPORT_VERSION_CONFLICT` ไม่ใช่ error ดิบ 500', async () => {
+    await resetOrgData()
+    await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 500000, wht: 15000 }])
+    const periodId = await junePeriodId()
+
+    // เลข version ถูกคิด**นอก** transaction (ต้องใช้ประกอบหน้าปก/ชื่อไฟล์ก่อนอัปโหลด)
+    // ⇒ สองคำขอพร้อมกันได้เลขเดียวกันแล้วชน unique — ข้อมูลต้องไม่เสียและต้องตอบด้วย code จาก `24`
+    const results = await Promise.allSettled([
+      exportsApi.createExportPack(ctx, { periodId }),
+      exportsApi.createExportPack(ctx, { periodId }),
+    ])
+
+    const winners = results.filter((result) => result.status === 'fulfilled')
+    const losers = results.filter((result) => result.status === 'rejected')
+    expect(winners).toHaveLength(1)
+    expect(losers).toHaveLength(1)
+    expect(codeOf((losers[0] as PromiseRejectedResult).reason)).toBe('EXPORT_VERSION_CONFLICT')
+
+    // เหลือแถวเดียวจริง ๆ (ไม่มีเวอร์ชันซ้ำ) และกดใหม่ได้เวอร์ชันถัดไปตามปกติ
+    const rows = await db().exportRecord.findMany({ where: { periodId }, select: { version: true } })
+    expect(rows.map((row) => row.version)).toEqual([1])
+
+    const retried = await exportsApi.createExportPack(ctx, { periodId })
+    expect(retried.version).toBe(2)
+    expect(retried.versionLabel).toBe('v1.1')
+  })
+})
