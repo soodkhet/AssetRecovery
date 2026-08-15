@@ -5,6 +5,36 @@
 
 ---
 
+## Phase 3.3 — Compensation Approval FE (16) + Claims & Advances (15)
+
+**วันที่**: 2026-08-15 · **commit**: `d1f39f6` (ชุด 1 — Claims & Advances BE + job) + `45bd3a1` (ชุด 2 — หน้าการเงิน 2 แท็บ) · **branch**: `auto/phase-3.3`
+
+### สิ่งที่ทำ
+
+- **BE ไฟล์ 15 ครบ 9 endpoint ของ `27` §6.4**: `GET/POST /api/claims` · `PATCH /api/claims/:id/approve|reject` · `GET/POST /api/advances` · `PATCH /api/advances/:id/approve|reject|settle`
+- **เงินทดรองจ่าย 5 สถานะตาม `23` §6.4** (`lib/advances/advance.ts` pure): `pending_approval → approved|rejected` · `approved → overdue` (job เท่านั้น) · `approved|overdue → cleared`
+- **ห้ามเบิกซ้อน 2 ชั้น** (`15` §9.2): pre-check ในทรานแซกชัน (ตอบผู้ใช้ว่าติดรายการไหน) + partial unique `uniq_active_advance_per_payee` ระดับ DB (P2002 → `ADVANCE_PENDING_SETTLEMENT`) — ทดสอบการแข่งกันจริงด้วยการอนุมัติ 2 ใบพร้อมกัน
+- **job `advance_overdue`** idempotent ด้วย conditional update (`updateMany` + `where status`) · actor = ระบบ (`actor_id = NULL`) + job id ใน `reason` ตาม `90` §13 · scheduler จริงรอ Phase 5.3
+- **Manual Claim** (`lib/claims/*`): ใช้ `expense_type` เดิมของ `41` §6.6 (`hotel`/`receipt`/`manual`) ไม่ผูกเคส เข้าคิวอนุมัติขั้น 1 ทันที · list/approve/reject ของ `/api/claims` **เรียกชั้นข้อมูลของไฟล์ 16 ตัวเดิม** ไม่เขียนสายอนุมัติซ้ำ
+- **หน้า `/finance` ของจริง**: `<FinanceShell>` 9 แท็บ (`06` §8) เปิดจริง 2 แท็บ — "รออนุมัติ" (2 ตาราง + ตัวกรอง 5 pill + ฟอร์มขอเงินทดรอง + modal เคลียร์ยอด + modal สร้าง Claim + badge `overdue` แดง) และ "ค่าตอบแทน" (ตาราง + stepper + modal "ดูสูตร" พร้อมประวัติอนุมัติทีละขั้น)
+- **เทสต์**: pure 25 เคส (`advance.test.ts`) + UI pure 19 เคส (`approval-ui`/`operation-tabs`) + ระดับ DB 22 เคสครอบ `15` §16 ครบทุกแถว (เบิกซ้อน approved/overdue · เคลียร์ยอดมีเงินคืน · ใช้เกิน · auto-overdue · ปฏิเสธไม่กรอกเหตุผล) + job รันซ้ำได้
+
+### การตัดสินใจระหว่างทาง
+
+- **`24` §6.4 v4.1** เติม 3 code ที่ implementation ต้องใช้จริง: `ADVANCE_EXCEEDS_MAX` (ระบุใน `15` §11 แต่ตกจาก dictionary กลาง), `ADVANCE_NOT_FOUND`, `ADVANCE_INVALID_STATUS`
+- **ฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ ⇒ ไม่ทำ** (ลำดับเอกสาร `02` ชนะ): `case_ref` ของ Advance และ `claim_type` แบบ free text — ประเภท Claim จึงเลือกจาก enum เดิม ส่วนข้อความอิสระไปที่ `revision_note` · ใบเสร็จ/หมายเหตุตอนเคลียร์ยอดเก็บใน audit (`15` §13) เพราะ `advances` ไม่มีคอลัมน์ไฟล์
+- **ยอดคืนคิดจากยอดที่อนุมัติ** (generated column ของ DB) ส่วนการปฏิเสธตอนเคลียร์ยอดเทียบ **ยอดที่ขอ** ตาม `24` §6.4 — ปิดช่องว่างที่ 3.1 ฝากไว้: อนุมัติน้อยกว่าที่ขอแล้วใช้เกินยอดอนุมัติแต่ไม่เกินยอดที่ขอ ⇒ ไม่ reject แต่ยอดคืน = 0 และหน้าจอเตือนว่าต้องเบิกส่วนเกินเป็นรายการใหม่
+- **สิทธิ์ตาม `25` §7.2 เป๊ะ**: ขอเบิก = `manage:request_advance` (การเงินถือแค่ `view` จึงขอเองไม่ได้) · อนุมัติ/ปฏิเสธ = `manage:approve_advance` · เคลียร์ยอด = เจ้าของหรือการเงิน · scope ระดับแถวบังคับในชั้นข้อมูล
+- **`schema.prisma`**: `advances.returnSatang` ใส่ `@default(dbgenerated())` เพื่อให้ Prisma ไม่บังคับส่งค่า generated column ตอน create — ยืนยันด้วย `prisma migrate diff` แล้วว่า **ไม่เกิด SQL ใหม่** (drift เดิมของ generated column เท่ากันทั้งก่อน/หลัง) จึงไม่ต้องมี migration ใบใหม่
+
+### จุดที่คนถัดไปควรรู้
+
+- **ผู้จัดการทีมยังไม่มีเมนูเข้าหน้านี้**: `06` §7.2 ให้เมนู "การเงิน" กับ superadmin/บริหาร/การเงินเท่านั้น แต่ขั้น 1 ของสายอนุมัติเป็นของผู้จัดการ ⇒ API เปิดให้แล้ว (ผ่านสิทธิ์) แต่ต้องรอหน้าจอ/เมนูของผู้จัดการใน Phase ถัดไป หรือมติ PO ให้แก้ `06`
+- **`*.db.test.ts` รันทีละไฟล์แล้ว** (`vitest.config.mts` project `db`) — ไฟล์ใหม่ห้ามใช้ `ORG_ID`/`tax_id` ซ้ำกับไฟล์อื่น
+- Phase 3.4 เสียบแท็บ "เงินทดรองจ่าย" เต็มรูปที่ `operation-tabs.ts` (`available: true`) แล้วต่อ component ใน `<FinanceShell>` — ตัวช่วยฝั่ง UI (`advance-ui.ts`, `<AdvanceFormModal>`, `<SettleAdvanceModal>`) มีครบแล้ว
+
+---
+
 ## Phase 3.2 — Payee & Tax Profile (18) + Compensation Approval Backend (16)
 
 **วันที่**: 2026-08-15 · **commit**: `fe2834b` (ชุด 1 — Payee BE + pure สายอนุมัติ) + `68cd696` (ชุด 2 — Approval BE + แท็บผู้รับเงิน) · **branch**: `auto/phase-3.2`

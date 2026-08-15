@@ -1,20 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.2 (Payee & Tax Profile + Compensation Approval BE) · งานถัดไป 3.3
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.3 (Approval FE + Claims & Advances) · งานถัดไป 3.4
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.3: Compensation Approval FE (16) + Claims & Advances (15)
+## 🎯 งานถัดไป — Phase 3.4: Payout Batch Backend (17) + Claims FE ส่วนที่เหลือ
 
-- ทำตาม `docs/01_PLAN.md` §3.3 — **สูตรเงินทุกตัวเรียกจาก `lib/finance/*` (3.1) เท่านั้น ห้ามคำนวณเอง**
-- FE 16: แท็บ comp (ตาราง + stepper ขั้นอนุมัติ + modal "ดูสูตร") — เสียบกับ API ของ 3.2 ที่มีแล้ว (`GET /api/compensation`, `PATCH :id/approve|reject`)
-- BE 15: Advance 5 สถานะ + **ห้ามเบิกซ้อน** (`ADVANCE_PENDING_SETTLEMENT` — approved|overdue, DB partial unique มีแล้วจาก 1.2) + `ADVANCE_EXCEEDS_MAX` (null = ไม่จำกัด) + settle (`USED_EXCEEDS_REQUEST_NO_TOPUP`) + background job auto-overdue (actor = system) · Manual Claim (enum ของ `41` §6.6 ห้ามสร้างใหม่)
-- FE 15: แท็บรออนุมัติ (2 ตาราง + ฟอร์ม Advance + modal เคลียร์ยอด + overdue badge แดง)
-- ของที่มีแล้วห้ามเขียนซ้ำ: `advanceReturnSatang()`/`advanceSettlement()`/`assertSettlementAllowed()` (3.1) · `CompensationApprovalDto` + `compensationApproveSchema`/`compensationRejectSchema` (3.2) · `<ReasonConfirmModal>` (1.11)
-- อ้างอิง: `15` ทั้งไฟล์ · `16` §8 · `23` §6.3–6.4 · mockup `finance.html` ผ่าน MAP
-- DoD: เทสต์ห้ามเบิกซ้อน + job auto-overdue idempotent · LOC ~2,300 · งบ ~340k
+- ทำตาม `docs/01_PLAN.md` §3.4 — **สูตรเงินทุกตัวเรียกจาก `lib/finance/*` (3.1) เท่านั้น ห้ามคำนวณเอง**
+- BE 17: batch builder (ดึง `approved` ตาม cutoff/side · `UNVERIFIED_PAYEE_IN_PAYOUT` reject · `MIXED_SIDE_BATCH` · draft→checking อัตโนมัติ) + roll-up gross/wht/net ผ่าน `summarizePayoutBatch()` (3.1)
+- payment file generator ตาม `13` §6.8 — gate `assertBankFileUsable()` (`BANK_FILE_NOT_TESTED`) + **`idempotency_key` UNIQUE กันโอนซ้ำ** + `DUPLICATE_PAYMENT_FILE` (เตือนพร้อมวันที่ครั้งก่อน ไม่ block) + audit ทุกก้าว
+- complete endpoint + hook รอรับ sync จากไฟล์ 35 (Phase 4.2) · snapshot `tax_profile`/`wht_pct` ลง `payout_batch_items` (`92` §7.1)
+- FE 15 ส่วนที่เหลือ: แท็บ "เงินทดรองจ่าย" เต็มรูป (ตาราง 9 คอลัมน์ + banner ยอดค้าง) — เสียบที่ `operation-tabs.ts` (`available: true`) แล้วต่อ component ใน `<FinanceShell>`
+- ของที่มีแล้วห้ามเขียนซ้ำ: `summarizePayoutBatch()`/`calculateWhtForPayee()` (3.1) · `PayeeDto.isVerified` + `missingForVerification` (3.2) · `assertBankFileUsable()` (1.10) · `<FinanceShell>`/`advance-ui.ts`/`<AdvanceFormModal>` (3.3)
+- อ้างอิง: `17` ทั้งไฟล์ · `18` §6.2 · `22` §6.9–6.10 · `13` §6.1/§6.8 · mockup `finance.html` ผ่าน MAP
+- DoD: เทสต์ idempotency (ยิงซ้ำได้ batch เดิม) + gate payee ยังไม่ยืนยัน · LOC ~1,950 · งบ ~300k
 
 ---
 
@@ -69,7 +70,7 @@
 |---|---|---|---|
 | 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `0a05c48` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
 | 3.2 | Payee & Tax Profile + Compensation Approval BE | ✅ | 2026-08-15 · `fe2834b`+`68cd696` · API 7 endpoint (payee 4 + compensation 3) + auto-reset unverified + สายอนุมัติหลายขั้น snapshot + `expense.approved` → Revenue gate · เทสต์ระดับ DB 19 เคส → archive |
-| 3.3 | Approval FE + Claims & Advances | ⬜ | PLAN §3.3 · ห้ามเบิกซ้อน + overdue job |
+| 3.3 | Approval FE + Claims & Advances | ✅ | 2026-08-15 · `d1f39f6`+`45bd3a1` · API 9 endpoint (`27` §6.4) + ห้ามเบิกซ้อน 2 ชั้น + job auto-overdue idempotent + หน้า `/finance` 2 แท็บแรก · เทสต์ระดับ DB 22 เคสของ `15` §16 → archive |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ⬜ | PLAN §3.4 · gate BANK_FILE_NOT_TESTED |
 | 3.5 | Payout FE + Internal PDFs | ⬜ | PLAN §3.5 · เทียบ samples 04–06 |
 | 3.6 | Revenue / Billing / AR BE | ⬜ | PLAN §3.6 · เสียบ stub จาก 2.13 |
