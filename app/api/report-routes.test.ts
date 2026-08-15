@@ -99,9 +99,12 @@ beforeEach(() => {
   clearReportCache()
 })
 
+/** ทะเบียนจริง (หมวด F เปิดใช้งานแล้วตั้งแต่ 6.2) — คืนสภาพหลังทุกเทสต์ */
+const ORIGINAL_PROVIDERS = { ...REPORT_PROVIDERS }
+
 afterEach(() => {
-  delete REPORT_PROVIDERS['gross-profit']
-  delete REPORT_PROVIDERS['kpi-summary']
+  for (const key of Object.keys(REPORT_PROVIDERS)) delete REPORT_PROVIDERS[key]
+  Object.assign(REPORT_PROVIDERS, ORIGINAL_PROVIDERS)
 })
 
 describe('GET /api/reports (ทะเบียนรายงานของผู้เรียก)', () => {
@@ -117,7 +120,8 @@ describe('GET /api/reports (ทะเบียนรายงานของผ�
     const reports = (envelope.data as { reports: Array<{ code: string; available: boolean }> }).reports
 
     expect(reports.map((report) => report.code)).toEqual(['F1', 'F2', 'F3', 'F4', 'F5'])
-    expect(reports.every((report) => report.available === false)).toBe(true)
+    // 6.2 เปิดใช้งานหมวด F ครบทั้ง 5 ตัวแล้ว (หมวดอื่นยังทยอยเปิดใน 6.3–6.5)
+    expect(reports.every((report) => report.available)).toBe(true)
   })
 
   it('ผู้บริหารเห็นครบ 17 ตัว', async () => {

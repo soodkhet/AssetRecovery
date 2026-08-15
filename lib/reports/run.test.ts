@@ -73,18 +73,25 @@ function register(id: string, provider: ReportProvider): void {
   REPORT_PROVIDERS[id] = provider
 }
 
+/** ทะเบียนจริง (หมวด F เปิดใช้งานแล้วตั้งแต่ 6.2) — คืนสภาพหลังทุกเทสต์ */
+const ORIGINAL_PROVIDERS = { ...REPORT_PROVIDERS }
+
 beforeEach(() => {
   clearReportCache()
 })
 
 afterEach(() => {
-  delete REPORT_PROVIDERS[F1.id]
-  delete REPORT_PROVIDERS[E1.id]
+  for (const key of Object.keys(REPORT_PROVIDERS)) delete REPORT_PROVIDERS[key]
+  Object.assign(REPORT_PROVIDERS, ORIGINAL_PROVIDERS)
 })
 
 describe('runReport', () => {
   it('รายงานที่ยังไม่มี provider ⇒ REPORT_NOT_FOUND (ไม่คืนตัวเลขปลอม)', async () => {
-    await expect(runReport(finance, F1, { range: RANGE, refresh: false, now: NOW })).rejects.toThrow(ReportError)
+    // O1 ยังไม่มีตัวคำนวณ (Phase 6.3) — ผู้บริหารมีสิทธิ์ดูหมวด O จึงไปตกที่ยาม provider ไม่ใช่ 403
+    const O1 = findReport('success-rate')!
+    const executive = userOf({ id: 'exec-1', capabilities: { unlock_period: 'manage' } })
+
+    await expect(runReport(executive, O1, { range: RANGE, refresh: false, now: NOW })).rejects.toThrow(ReportError)
   })
 
   it('ตรวจสิทธิ์ก่อนเสมอ — ไม่มีสิทธิ์ต้อง 403 **ก่อน** provider ถูกเรียก', async () => {

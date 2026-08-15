@@ -1,4 +1,5 @@
 import type { SessionUser } from '@/lib/auth/types'
+import { FINANCE_REPORT_PROVIDERS } from '@/lib/reports/finance/providers'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import type { ReportData } from '@/lib/reports/payload'
 import type { ReportRange } from '@/lib/reports/range'
@@ -31,8 +32,16 @@ export interface ReportContext {
 
 export type ReportProvider = (context: ReportContext) => Promise<ReportData>
 
-/** report id → provider (6.2–6.5 เติมที่นี่) */
-export const REPORT_PROVIDERS: Partial<Record<string, ReportProvider>> = {}
+/**
+ * report id → provider (6.2–6.5 เติมที่นี่)
+ *
+ * โมดูลเจ้าของงานส่งทะเบียนของหมวดตัวเองเข้ามา (แนวเดียวกับ `JOB_HANDLERS`) — ทิศทางการ import
+ * เป็น "ทะเบียนกลาง → โมดูลหมวด" ทางเดียวเสมอ ส่วนโมดูลหมวดอ้าง `ReportContext` ด้วย `import type`
+ * เท่านั้น ⇒ ไม่มี cycle ตอนรันจริง
+ */
+export const REPORT_PROVIDERS: Partial<Record<string, ReportProvider>> = {
+  ...FINANCE_REPORT_PROVIDERS,
+}
 
 export function reportProviderOf(id: string): ReportProvider | null {
   return REPORT_PROVIDERS[id] ?? null

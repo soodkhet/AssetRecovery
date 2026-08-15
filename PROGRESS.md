@@ -1,18 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.1 (โครงรายงานกลาง 17 ตัว + ยามสิทธิ์รายหมวด + แคช 3 โหมด + `<ReportView>` + Export engine Excel/PDF) · งานถัดไป 6.2 (รายงานหมวด F — F1–F5)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 6.2 (รายงานหมวด F ครบ 5 ตัว: กำไรขั้นต้น + drill-down รายเคส · สรุปรายได้ + กราฟแท่ง/MoM · AR Aging ตามค่าตั้ง · สรุปค่าตอบแทนรายทีม/รายคน · เงินทดรองค้างเคลียร์) · งานถัดไป 6.3 (รายงานหมวด O — O1–O5)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 6.2: รายงานหมวด F (F1–F5)
+## 🎯 งานถัดไป — Phase 6.3: รายงานหมวด O (O1–O5)
 
-- ทำตาม `docs/01_PLAN.md` §6.2 — F1 Gross Profit (drill-down รายเคส) · F2 Revenue Summary (bar รายเดือน + MoM) · F3 AR Aging (>60 เหลือง >90 แดง) · F4 Compensation Summary (drill-down รายพนักงาน) · F5 Advance Overdue (due วันนี้ยังไม่ overdue — นับวันถัดไป)
-- **ใช้โครงของ 6.1 เท่านั้น**: เขียน provider ลงทะเบียนที่ `REPORT_PROVIDERS` (`lib/reports/providers.ts`) + หน้าจอห่อ `<ReportView>` — ห้ามเขียน route/แคช/ยามสิทธิ์/ตาราง/ปุ่มส่งออกชุดใหม่
-- ยอดเงินทุกตัวผ่านสูตรของ 3.1 (`lib/finance/*`) + `netAfterAdjustments()` — ห้ามอ่านยอดดิบจาก record
-- อ้างอิง: `96` §6-F, §7, §13–14 ผ่าน MAP · mockup `reports.html` ผ่าน MAP
-- LOC ~1,900 · งบ ~300k
+- ทำตาม `docs/01_PLAN.md` §6.3 — O1 Success Rate (`success/(success+fail)` **ไม่รวมเคส open**) · O2 Team Performance/SLA (TAT = calendar days รวมวันหยุด, `slaAlertHours`) · O3 Workload · O4 SLA Breach · O5 Warehouse Summary
+- **ใช้โครงของ 6.1/6.2 เท่านั้น**: เขียน provider ลงทะเบียนที่ `FINANCE_REPORT_PROVIDERS` เวอร์ชันของหมวด O แล้วต่อเข้า `REPORT_PROVIDERS` + หน้าจอลงทะเบียนที่ `<ReportScreen>` (กราฟใช้ `<ReportBarChart>`) — ห้ามเขียน route/แคช/ยามสิทธิ์/ตาราง/ปุ่มส่งออกชุดใหม่
+- % ความสำเร็จต้องเรียก `successRate()` (`lib/assignments/success-rate.ts` — 2.6) ห้ามคำนวณซ้ำ · ทั้งชุดแคชรายชั่วโมง
+- **Manager เห็นเฉพาะทีมตัวเอง** (`96` §14) — `ctx.teamIds !== null` ต้องกรองทุก query · รายการว่าง = ผลลัพธ์ว่าง
+- อ้างอิง: `96` §6-O, §13–14 ผ่าน MAP · mockup `reports.html` ผ่าน MAP (`renderO1`–`renderO5`)
+- LOC ~1,700 · งบ ~280k
 
 ---
 
@@ -99,7 +100,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 6.1 | Report Framework + Export Engine | ✅ | 2026-08-15 · `4d76986`+`83600a2` · ทะเบียน 17 รายงาน + ยามสิทธิ์รายหมวด (การเงินเรียก E1 = 403) + แคช 3 โหมด + โครงหน้าจอกลาง `<ReportView>` + export Excel/PDF (>5,000 แถว = job) · ⚠️ ต้องสร้าง bucket `report-exports` ต่อ environment → archive |
-| 6.2 | รายงานหมวด F (F1–F5) | ⬜ | PLAN §6.2 |
+| 6.2 | รายงานหมวด F (F1–F5) | ✅ | 2026-08-15 · `22a3fab` · F1–F5 ครบ (drill-down รายเคส + กราฟแท่ง Recharts + AR bucket จากค่าตั้ง + due วันนี้ยังไม่ overdue) + เทสต์ระดับ DB 10 เคส → archive |
 | 6.3 | รายงานหมวด O (O1–O5) | ⬜ | PLAN §6.3 · Manager team scope |
 | 6.4 | รายงานหมวด A (A1–A4) | ⬜ | PLAN §6.4 |
 | 6.5 | Executive Dashboard (E1–E3) | ⬜ | PLAN §6.5 · Exec/Superadmin เท่านั้น |

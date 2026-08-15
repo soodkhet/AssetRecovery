@@ -33,6 +33,15 @@ export type ReportCellValue = string | number | null
 
 export type ReportRow = Readonly<Record<string, ReportCellValue>>
 
+/**
+ * คีย์เทคนิคของแถว (id ของมิติ) — **ไม่ใช่คอลัมน์**
+ *
+ * ทั้งตารางบนจอ ไฟล์ Excel และ PDF วนจาก `columns` เท่านั้น ⇒ ค่าที่ใส่ในช่องนี้จึงไม่โผล่ให้ผู้ใช้เห็น
+ * แต่ตัวกรอง "ดูรายละเอียดของ…" ฝั่งจอหยิบไปใช้เป็นค่าของ `<select>` ได้โดยไม่ต้องเดาจากชื่อที่แสดง
+ * (ชื่อซ้ำกันได้ · id ซ้ำไม่ได้) — ห้ามประกาศคีย์เทคนิคชื่ออื่นเพิ่มในรายงานแต่ละตัว
+ */
+export const ROW_KEY = '__key'
+
 export interface ReportKpi {
   readonly key: string
   readonly label: string
