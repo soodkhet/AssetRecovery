@@ -1,28 +1,40 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { IconAlert, IconClose } from '@/components/field/field-icons'
 import { cn } from '@/components/ui/cn'
-import { apiPath } from '@/lib/api/contract'
+import { IconBell, IconClose } from '@/components/notifications/notification-icons'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { notificationHref, unreadBadgeText } from '@/lib/field/push-client'
+import { notificationDisplay } from '@/lib/notifications/events'
 import type { NotificationDto, NotificationListDto } from '@/lib/notifications/queries'
 import { fmtDateTime } from '@/lib/format/datetime'
 
 /**
- * กระดิ่งแจ้งเตือนในแอป (`41` §15 — **fallback หลัก** ที่ใช้เสมอไม่ว่าจะได้ push หรือไม่)
+ * กระดิ่งแจ้งเตือนบน header (`90` §6.3/§14 · `06` §8 · mockup `notifications.html`)
+ * ใช้ร่วมกันทั้ง App Shell (หลังบ้าน) และ Field Tracker — **ตัวเดียวในระบบ ห้ามทำใหม่**
  *
  * - เปิด dropdown **ไม่** มาร์คว่าอ่านอัตโนมัติ (E11) — มาร์คตอนกดรายการ หรือกด "อ่านทั้งหมด"
  * - รายการที่มี `linkPath` ภายในแอปเท่านั้นที่พาไปหน้าอื่นได้ (กัน open redirect — `notificationHref()`)
+ * - ยิง `GET /api/notifications` ตัวเดียวกันทุก role (ของผู้เรียกเองเสมอ) — ฝั่ง Field ยังมี
+ *   `/api/field/notifications` ตามสเปค `45` §6.3 อยู่ แต่ UI ใช้เส้นกลางเส้นเดียวเพื่อไม่ให้ตรรกะแตกสองทาง
  */
-export function NotificationBell() {
+
+const DROPDOWN_LIMIT = 10
+
+export function NotificationBell({
+  /** ลิงก์ "ดูทั้งหมด" ท้าย dropdown — ไม่ส่ง = ไม่แสดง (Field Tracker ไม่มีหน้ารายการเต็มของตัวเอง) */
+  allHref,
+}: {
+  allHref?: string
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [data, setData] = useState<NotificationListDto>({ items: [], unreadCount: 0 })
+  const [data, setData] = useState<NotificationListDto>({ items: [], unreadCount: 0, totalCount: 0 })
 
   const load = useCallback(async () => {
-    const response = await callApi<NotificationListDto>(apiPath('field.notificationList'))
+    const response = await callApi<NotificationListDto>(`/api/notifications?limit=${DROPDOWN_LIMIT}`)
     if (response.data !== undefined) setData(response.data)
   }, [])
 
@@ -35,13 +47,18 @@ export function NotificationBell() {
     return () => clearInterval(timer)
   }, [load])
 
-  async function markRead(ids?: string[]): Promise<void> {
-    await callApi(apiPath('field.notificationRead'), jsonRequest('POST', ids === undefined ? {} : { ids }))
+  async function markOneRead(id: string): Promise<void> {
+    await callApi(`/api/notifications/${id}/read`, jsonRequest('PATCH', {}))
+    await load()
+  }
+
+  async function markAllRead(): Promise<void> {
+    await callApi('/api/notifications/read-all', jsonRequest('PATCH', {}))
     await load()
   }
 
   function openItem(item: NotificationDto): void {
-    void markRead([item.id])
+    void markOneRead(item.id)
     const href = notificationHref(item.linkPath)
     if (href !== null) {
       setOpen(false)
@@ -60,7 +77,7 @@ export function NotificationBell() {
         aria-expanded={open}
         className="focus-ring relative rounded-lg p-2 text-slate-700 hover:bg-slate-100"
       >
-        <IconAlert className="h-5 w-5" />
+        <IconBell className="h-5 w-5" />
         {badge !== null && (
           <span className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
             {badge}
@@ -73,12 +90,13 @@ export function NotificationBell() {
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
           <div className="absolute right-0 z-50 mt-1 w-[min(88vw,340px)] rounded-xl border border-slate-200 bg-white shadow-lg">
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
-              <span className="text-xs font-bold text-slate-700">การแจ้งเตือน</span>
+              <span className="text-xs font-bold text-slate-700">แจ้งเตือนล่าสุด</span>
               <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400">{data.unreadCount} ยังไม่อ่าน</span>
                 {data.unreadCount > 0 && (
                   <button
                     type="button"
-                    onClick={() => void markRead()}
+                    onClick={() => void markAllRead()}
                     className="focus-ring rounded px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
                   >
                     อ่านทั้งหมด
@@ -116,13 +134,25 @@ export function NotificationBell() {
                         {item.body !== null && (
                           <span className="mt-0.5 block text-[11px] text-slate-500">{item.body}</span>
                         )}
-                        <span className="mt-0.5 block text-[10px] text-slate-400">{fmtDateTime(item.createdAt)}</span>
+                        <span className="mt-0.5 block text-[10px] text-slate-400">
+                          {notificationDisplay(item.eventCode).module} · {fmtDateTime(item.createdAt)}
+                        </span>
                       </span>
                     </div>
                   </button>
                 ))
               )}
             </div>
+
+            {allHref !== undefined && (
+              <Link
+                href={allHref}
+                onClick={() => setOpen(false)}
+                className="focus-ring block border-t border-slate-100 px-4 py-2 text-center text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
+              >
+                ดูทั้งหมด
+              </Link>
+            )}
           </div>
         </>
       )}

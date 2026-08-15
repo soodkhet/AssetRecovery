@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoutButton } from '@/components/auth/logout-button'
+import { NotificationBell } from '@/components/notifications/notification-bell'
 import { cn } from '@/components/ui/cn'
 import type { MenuItem } from '@/lib/nav/menu-registry'
 import type { ClientSession } from '@/lib/auth/types'
@@ -53,6 +54,7 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
           </div>
 
           <div className="flex flex-shrink-0 items-center gap-3">
+            <NotificationBell allHref="/notifications" />
             <div className="hidden text-right sm:block">
               <div className="text-sm font-bold text-slate-900">{session.fullName}</div>
               <div className="inline-block rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">

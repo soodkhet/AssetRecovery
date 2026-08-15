@@ -11,7 +11,8 @@ import type { MenuItem } from '@/lib/nav/menu-registry'
  * โครง: Top Nav (7 เมนูตาม role) → Sub-tab (ถ้าเมนูนั้นมี) → เนื้อหา
  *
  * ⚠️ Field Tracker (ไฟล์ 41) และ Client Portal (ไฟล์ 97) ใช้ shell ของตัวเอง — ไม่ผ่านที่นี่
- * ⚠️ กระดิ่งแจ้งเตือนบน header (`06` §8 · `90` §6.3) จะมาต่อใน Phase 5.1
+ *    (Field ใช้กระดิ่งตัวเดียวกันใน shell ของตัวเอง — `components/notifications/notification-bell.tsx`)
+ * กระดิ่งแจ้งเตือนอยู่บน `<TopNav>` แล้วตั้งแต่ Phase 5.1 (`06` §8 · `90` §6.3) พร้อมหน้ารายการเต็ม `/notifications`
  */
 export function AppShell({
   session,
