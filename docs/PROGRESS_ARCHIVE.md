@@ -5,6 +5,37 @@
 
 ---
 
+## Phase 3.5 — Payout FE (17 §8) + เอกสารภายใน 3 ใบ (28 §6.1)
+
+**วันที่**: 2026-08-15 · **commit**: `9538009` (โค้ดทั้งหมด — กู้จาก session ที่ถูกตัดกลางคัน) + `64ecfa2` (verify + ปิด task) · **branch**: `auto/phase-3.5`
+
+### สิ่งที่ทำ
+
+- **แท็บ "รอบจ่ายเงิน" เปิดใช้จริง** (`operation-tabs.ts` `available: true` → เสียบใน `<FinanceShell>`): KPI 3 ใบ + ตัวกรองสถานะ/ฝั่ง + ตาราง batch 7 คอลัมน์ (ชื่อรอบ+จำนวนรายการ+idempotency key / ฝั่ง / Gross / **WHT แดง** / **โอนสุทธิเขียวเด่น** / สถานะ+เวลาสร้างไฟล์ / ปุ่มจัดการ)
+- **3 modal + 1 ยืนยัน**: `<CreatePayoutModal>` (เลือกฝั่ง + วันตัดรอบ + ชื่อรอบเว้นว่างได้) · `<PaymentFileModal>` (เลือก format + บัญชีที่จ่าย + สรุปยอด + **ยืนยัน idempotency 2 จังหวะ**) · `<PayoutDetailModal>` (รายการในรอบ + ลิงก์ PDF 3 ใบ) · `<ReasonConfirmModal>` (1.11) สำหรับ "ยืนยันจ่ายแล้ว"
+- **flow ยืนยันสร้างไฟล์ซ้ำครบตาม `17` §6.3**: ยิงครั้งแรก `confirmDuplicate: false` เสมอ → ได้ `generated:false` + `warning: DUPLICATE_PAYMENT_FILE` → หน้าจอเปลี่ยนหัวข้อ/ปุ่มเป็นโหมดยืนยัน → ยิงซ้ำเป็น `true` · ดาวน์โหลดไฟล์โอนเป็น `<a href>` ตรงไป `GET /api/payout-batches/:id/payment-file` (แพตเทิร์นเดียวกับ PDF ของ 2.15)
+- **เอกสารภายใน 3 ใบ (`28` §6.1 · `@react-pdf/renderer` ฝั่ง server)** — เทียบเลย์เอาต์กับ `reference/samples/04–06` ครบทุกช่อง: **สรุปรอบจ่ายเงิน** (meta 8 ช่อง + ตาราง 5 คอลัมน์ + แถวรวม + ช่องเซ็น 2) · **ใบสำคัญจ่าย** (7 แถวข้อมูล + ยอด 3 ชั้น + จำนวนเงินเป็นตัวอักษรไทย + ช่องเซ็น 3) · **สลิปค่าตอบแทน** (รายการค่าตอบแทนต่อเคส + WHT ในวงเล็บ + ช่องเซ็น 2) — ใบสำคัญจ่าย/สลิป = **1 ผู้รับเงิน 1 หน้า** ในไฟล์เดียว, `?payeeId=` = เฉพาะคนเดียว
+- **โครงร่วมของเอกสารภายในทุกใบ**: `components/pdf/internal-doc.tsx` (`docStyles`/`<DocHeader>`/`<MetaCell>`/`<SignatureRow>`/`<DocFooter>`) + `components/pdf/thai-font.ts` (`ensureThaiFont()` — แยกออกจาก `<HandoverNote>` ของ 2.13) + `lib/format/attachment.ts` (`attachmentHeader()` RFC 5987 ย้ายออกจาก `handover-doc.ts`)
+- **pure module ของเอกสาร**: `lib/payout/payout-doc.ts` (แบบข้อมูล 3 ใบ + ยาม `assertPayoutDocReady`/`assertVoucherReady` + `groupPayoutItemsByPayee`/`selectPayoutDocItems`) · `lib/payout/baht-text.ts` (`bahtInWords()`) · `lib/payout/payout-ui.ts` (ป้าย/สี/สิทธิ์ปุ่ม)
+- **เทสต์**: `payout-doc.test.ts` (แบบข้อมูล/ยามสถานะ/ยอดรวมต่อคน) + `baht-text.test.ts` + `payout-ui.test.ts` + `app/api/payout-doc-routes.test.ts` (**เรนเดอร์ PDF จริง** ตรวจ `%PDF-` + สิทธิ์ 403 + `payeeId` ผิด → 400 + สถานะยังไม่พร้อม → reject) · รวมทั้งระบบ **1,990 เทสต์ผ่าน**
+
+### การตัดสินใจระหว่างทาง
+
+- **เลขที่ใบสำคัญจ่าย derive ไม่เดินเลขลง DB** — `02` §8 ไม่มีตารางเดินเลขใบสำคัญจ่าย (ต่างจากใบกำกับภาษีที่มี `13` §6.12) และ `28` §6.1 จัดใบนี้เป็นเอกสารภายในไม่มีข้อกำหนดทางกฎหมาย ⇒ `voucherNumber()` ประกอบจากรอบ+ลำดับผู้รับเงินแบบ deterministic (พิมพ์ซ้ำได้เลขเดิม) · ถ้าบัญชีขอเลขรันจริงภายหลัง ต้องเพิ่มตารางใน `02` + migration ก่อน
+- **สิทธิ์ของ PDF ทั้ง 3 ใบ = `view:manage_payout_batch`** ไม่ใช่ `generate_payment_file` — เอกสารเหล่านี้ใช้ *ตรวจสอบ* (บัญชี/ผู้บริหารพิมพ์ได้ตาม `17` §12) ส่วน `generate_payment_file` สงวนไว้กับจุดที่เงินออกจริงเท่านั้น
+- **จังหวะที่ออกเอกสารได้ต่างกันตามความหมายของใบ**: สรุปรอบจ่าย/สลิป = ตั้งแต่ `checking` (เป็นเอกสารสรุปยอด) · ใบสำคัญจ่าย = ต้อง `file_generated` ขึ้นไป (เป็นหลักฐาน**การจ่าย** ต้องมีวันที่จ่ายจริง) — `draft` เป็น transient state ออกไม่ได้ทุกใบ
+- **PDF ไม่คิดเลขเองแม้แต่ช่องเดียว** — ทุกค่าเป็นข้อความที่ประกอบมาแล้วจาก `payout-doc.ts` และยอดรวมต่อคนคิดผ่าน `summarizePayoutBatch()` (`22` §6.10) ซึ่งมียามจับ `net ≠ gross − wht` ให้ในตัว
+- **แก้บั๊กเลขเอกสารคลังที่พบระหว่างทาง (นอกขอบเขต 3.5 แต่เป็นบั๊กเงียบ)**: `lpad(x, 3, '0')` ของ PostgreSQL **ตัดปลายทิ้ง** ⇒ ล็อตลำดับ 1000–1009 กลายเป็น `100` ชนกับล็อตที่ 100 ของปีเดียวกัน — migration `20260815090000_handover_number_over_999` + `handover-numbering.db.test.ts` เป็นยาม
+
+### จุดที่คนถัดไปควรรู้
+
+- ⚠️ **route ที่เรนเดอร์ PDF ต้องอยู่ใน `outputFileTracingIncludes` ของ `next.config.ts`** (เพิ่ม `/api/payout-batches/**` แล้ว) — ตัว trace ของ Next มองไม่เห็นการอ่านไฟล์ฟอนต์ตอน runtime ⇒ ลืมแล้วพังเฉพาะบน Vercel แบบ **ตัวอักษรไทยหายทั้งใบโดยไม่มี error**
+- **เอกสารภายในใบต่อ ๆ ไป** (Internal Billing Summary ของ 3.7 · Accounting Pack Cover Sheet ของ 4.6) ให้ต่อยอดจาก `components/pdf/internal-doc.tsx` — **ห้ามใช้กับเอกสารทางการ** (ใบกำกับภาษี 4.3 / ใบ 50 ทวิ 4.5 ต้องล็อกฟิลด์ตามแบบสรรพากร `28` §6.2/§6.3)
+- **หน้าจอที่ต้องยืนยันคำเตือนแบบ 2 จังหวะ** ให้ลอกแพตเทิร์นจาก `<PaymentFileModal>` (ยิง `confirm*: false` ก่อนเสมอ แล้วค่อยยืนยัน) — ใช้ซ้ำได้กับ `ALREADY_MATCHED` ของ 4.2 และ `BANK_ACCOUNT_NAME_MISMATCH`
+- แท็บที่ยังปิดอยู่ใน `operation-tabs.ts`: `revenue`/`adjustment` (3.7) · `profit` (3.8)
+
+---
+
 ## Phase 3.4 — Payout Batch Backend (17) + แท็บเงินทดรองจ่าย (15)
 
 **วันที่**: 2026-08-15 · **commit**: `c344dcb` (ชุด 1 — Payout BE) + `1848a48` (ชุด 2 — แท็บเงินทดรองจ่าย + ปิด task) · **branch**: `auto/phase-3.4`

@@ -1,20 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.4 (Payout Batch BE + แท็บเงินทดรองจ่าย) · งานถัดไป 3.5
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.5 (Payout FE + เอกสารภายใน 3 ใบ) · งานถัดไป 3.6
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.5: Payout FE + Internal PDFs
+## 🎯 งานถัดไป — Phase 3.6: Revenue / Billing / AR Backend (ไฟล์ 19)
 
-- ทำตาม `docs/01_PLAN.md` §3.5 — **ยอดทุกช่องมาจาก API (snapshot) ห้ามคิดสูตรซ้ำบนหน้าจอ/PDF**
-- FE 17 (แท็บ "รอบจ่ายเงิน"): ตาราง batch (ชื่อรอบ+จำนวนรายการ / ฝั่ง / Gross / WHT แดง / Net เขียวเด่น / สถานะ / ปุ่ม "ไฟล์โอน"+"ดู") + Modal สร้างรอบจ่าย (เลือกฝั่ง + วันตัดรอบ) + Modal สร้างไฟล์โอน (เลือก format + บัญชีที่จ่าย + สรุปยอด + ข้อความยืนยัน idempotency) — เปิดแท็บที่ `operation-tabs.ts` (`available: true`) แล้วเสียบใน `<FinanceShell>`
-- ปุ่ม "สร้างไฟล์โอน" ยิง 2 ครั้ง: ครั้งแรกได้ `generated:false` + `warning: DUPLICATE_PAYMENT_FILE` (ถ้าเคยสร้าง) → ยืนยันแล้วส่ง `confirmDuplicate: true` · ดาวน์โหลดเป็น `<a href>` ตรงไป `GET /api/payout-batches/:id/payment-file` (แบบเดียวกับ PDF ของ 2.15)
-- PDF ภายใน 3 ใบ (`28` §6.1 · `@react-pdf/renderer` ฝั่ง server): Payout Batch Summary + Payment Voucher + Payslip/Compensation Statement — เทียบ `reference/samples/04_payout_batch_summary.pdf`, `05_payment_voucher.pdf`, `06_payslip.pdf`
-- ของที่มีแล้วห้ามเขียนซ้ำ: `lib/payout/*` ทั้งชุด (3.4 — DTO/สถานะ/ป้าย/ยาม) · `<FinanceShell>` + `operation-tabs.ts` (3.3) · `<ReasonConfirmModal>` (1.11) · UI Kit + `fmtSatangSymbol`/`fmtDate` (1.5)
-- อ้างอิง: `17` §8 · `28` §6.1+§7 · mockup `finance.html` ผ่าน MAP (`renderFinanceOperations` แท็บ `payout`)
-- DoD: เทียบ layout PDF กับ samples 04–06 · LOC ~1,450 · งบ ~250k
+- ทำตาม `docs/01_PLAN.md` §3.6 — **Revenue trigger เป็นหัวใจของ Phase นี้ ห้าม implement จากความจำ** อ่าน `19` §6.1 + `44` §11 + DEC-006/D6 ก่อนเขียนบรรทัดแรก
+- **Revenue creation service**: subscribe `expense.approved` + `handover_lot.confirmed` + case terminal → เรียก revenue-trigger-rules ของ 3.1 · **idempotent ต่อเคส** · snapshot `vat_rate_used` (จาก `vat_rate_history` ตาม `revenue_date` — **ห้าม hardcode 7%**) + fee model · Warehouse gate ใช้กับ `closed_success` **เสมอ** รวมเคสที่ไม่มี expense (DEC-006/D6) · `closed_fail` ไม่ผ่านคลัง
+- **เสียบของจริงแทน stub `RevenueService.tryCreateRevenue()` ของ 2.13** แล้วรัน test contract เดิมของ 2.13 ให้ผ่านทั้งชุด (อย่าแก้เทสต์เดิมให้เข้ากับโค้ดใหม่)
+- **Billing Batch**: builder รวมหลายเคส/บริษัท/รอบ (`NO_REVENUE_TO_BILL`) + send + guard `EDIT_BILLED_REVENUE` + ห้ามลบ non-draft · **AR Aging** buckets จาก `13` · `received_amount` เว้น hook ไว้ให้ไฟล์ 35 (Phase 4.2)
+- ของที่มีแล้วห้ามเขียนซ้ำ: `lib/finance/*` ครบ 13 สูตร (3.1 — รวม revenue-trigger-rules/VAT resolver) · `assertBankFileUsable()`+VAT resolver/เดินเลข (1.10) · audit helper (1.4) · envelope/error catalog (2.1)
+- อ้างอิง: `19` ทั้งไฟล์ · `44` §11 · `22` §6.5–6.8/§6.11 · `12`
+- DoD: unit + integration test ครอบ `19` §16 **ทั้ง 8 เคส** + DEC-006/D6 (เคสไม่มี expense) · LOC ~1,900 · งบ ~310k
 
 ---
 
@@ -71,7 +71,7 @@
 | 3.2 | Payee & Tax Profile + Compensation Approval BE | ✅ | 2026-08-15 · `fe2834b`+`68cd696` · API 7 endpoint (payee 4 + compensation 3) + auto-reset unverified + สายอนุมัติหลายขั้น snapshot + `expense.approved` → Revenue gate · เทสต์ระดับ DB 19 เคส → archive |
 | 3.3 | Approval FE + Claims & Advances | ✅ | 2026-08-15 · `d1f39f6`+`45bd3a1` · API 9 endpoint (`27` §6.4) + ห้ามเบิกซ้อน 2 ชั้น + job auto-overdue idempotent + หน้า `/finance` 2 แท็บแรก · เทสต์ระดับ DB 22 เคสของ `15` §16 → archive |
 | 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+`1848a48` · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
-| 3.5 | Payout FE + Internal PDFs | ⬜ | PLAN §3.5 · เทียบ samples 04–06 |
+| 3.5 | Payout FE + Internal PDFs | ✅ | 2026-08-15 · `9538009`+`64ecfa2` · แท็บรอบจ่ายเงิน (ตาราง+3 modal+ยืนยันซ้ำ 2 จังหวะ) + เอกสารภายใน 3 ใบเทียบ samples 04–06 · fix `lpad` เลขเอกสารเกิน 999 → archive |
 | 3.6 | Revenue / Billing / AR BE | ⬜ | PLAN §3.6 · เสียบ stub จาก 2.13 |
 | 3.7 | Billing FE + Adjustment | ⬜ | PLAN §3.7 · 4 FK + CHECK (DEC-004) |
 | 3.8 | Profitability + Finance Dashboard | ⬜ | PLAN §3.8 |
