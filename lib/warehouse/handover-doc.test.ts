@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { attachmentHeader } from '@/lib/format/attachment'
 import {
-  attachmentHeader,
   buildHandoverDoc,
   documentIdentifier,
   documentIdentifierActual,

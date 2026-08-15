@@ -19,6 +19,7 @@ import {
   type PaymentFileRowInput,
 } from '@/lib/payout/bank-file-builder'
 import { PayoutError } from '@/lib/payout/errors'
+import type { PayoutDocIssuer } from '@/lib/payout/payout-doc'
 import {
   assertHasItemsToPay,
   assertPayeesVerified,
@@ -214,6 +215,24 @@ export async function getPayoutBatch(user: SessionUser, batchId: string): Promis
     orderBy: [{ createdAt: 'asc' }],
   })
   return { ...toBatchDto(batch), items: items.map(toItemDto) }
+}
+
+/**
+ * แหล่งข้อมูลของเอกสารภายใน 3 ใบ (`28` §6.1) — รอบจ่าย + ผู้ออกเอกสาร (องค์กรเจ้าของระบบ)
+ * โครงเดียวกับ `getHandoverDocSource()` ของ 2.13 เพื่อให้ route ของเอกสารทุกใบหน้าตาเหมือนกัน
+ */
+export async function getPayoutDocSource(
+  user: SessionUser,
+  batchId: string,
+): Promise<{ batch: PayoutBatchDetailDto; issuer: PayoutDocIssuer }> {
+  const [batch, organization] = await Promise.all([
+    getPayoutBatch(user, batchId),
+    prisma.organization.findUniqueOrThrow({
+      where: { id: user.organizationId },
+      select: { name: true, address: true, taxId: true, phone: true },
+    }),
+  ])
+  return { batch, issuer: organization }
 }
 
 // ── POST /api/payout-batches (batch builder — `17` §9) ──────────────────────

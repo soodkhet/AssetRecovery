@@ -1,5 +1,5 @@
-import { join } from 'node:path'
-import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { ensureThaiFont, THAI_FONT } from '@/components/pdf/thai-font'
 import type { HandoverDocModel } from '@/lib/warehouse/handover-doc'
 import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
 
@@ -9,22 +9,9 @@ import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
  *
  * เรนเดอร์ฝั่ง server ด้วย `@react-pdf/renderer` (`28` §7 — ห้ามสลับไป library อื่นโดยไม่มี DEC)
  *
- * ⚠️ ต้อง register ฟอนต์ไทยเอง — ฟอนต์ในตัวของ `@react-pdf/renderer` ไม่มี glyph ภาษาไทย
- *    (ไม่ register = ตัวอักษรไทยหายทั้งใบ **โดยไม่มี error**) ไฟล์อยู่ `public/fonts/NotoSansThai.ttf`
- *    และถูกผูกเข้า bundle ของ route ผ่าน `outputFileTracingIncludes` ใน `next.config.ts`
+ * ⚠️ ฟอนต์ไทย register ผ่าน `ensureThaiFont()` (`components/pdf/thai-font.ts`) — ใช้ร่วมทุกเอกสาร
  * ⚠️ วันที่ทุกจุดเป็น พ.ศ. มาแล้วจาก `buildHandoverDoc()` — component นี้ **ห้าม format วันที่เอง**
  */
-
-const THAI_FONT = 'NotoSansThai'
-let fontRegistered = false
-
-function ensureFont(): void {
-  if (fontRegistered) return
-  Font.register({ family: THAI_FONT, src: join(process.cwd(), 'public/fonts/NotoSansThai.ttf') })
-  // คำไทยไม่มีช่องว่างคั่น — ตัวตัดคำเริ่มต้นจะดันทั้งประโยคเป็นบรรทัดเดียวจนล้นกรอบ
-  Font.registerHyphenationCallback((word) => [word])
-  fontRegistered = true
-}
 
 /** สัดส่วนคอลัมน์ของตารางรายการ (รวม = 100) */
 const COLUMN_WIDTHS = ['5%', '17%', '20%', '22%', '22%', '14%'] as const
@@ -190,6 +177,6 @@ export function HandoverNote({ doc }: { doc: HandoverDocModel }): React.JSX.Elem
 
 /** เรนเดอร์เป็นไฟล์ PDF (`28` §7 — `renderToBuffer()` ฝั่ง server แล้วคืนพร้อม header) */
 export async function renderHandoverNote(doc: HandoverDocModel): Promise<Buffer> {
-  ensureFont()
+  ensureThaiFont()
   return renderToBuffer(<HandoverNote doc={doc} />)
 }
