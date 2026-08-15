@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
-import { ReportView } from '@/components/reports/report-view'
+import { ReportScreen } from '@/components/reports/report-screen'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 import { requireSession } from '@/lib/auth/session'
 import { assertReportAccess } from '@/lib/reports/access'
@@ -12,8 +12,8 @@ type PageProps = { params: Promise<{ reportId: string }> }
 /**
  * หน้ารายงานหนึ่งตัว (ไฟล์ 96) — ใช้โครงกลาง `<ReportView>` ทั้งหมด
  *
- * 6.2–6.5 ที่ต้องการตัวกรอง/กราฟเฉพาะรายงาน ให้เพิ่มหน้าเฉพาะของตัวเองที่ห่อ `<ReportView>`
- * อีกที (ส่ง `filters`) — ห้ามสร้างตาราง/ปุ่มส่งออกชุดใหม่
+ * 6.2–6.5 ที่ต้องการตัวกรอง/กราฟเฉพาะรายงาน ให้ลงทะเบียนหน้าจอของตัวเองที่ `<ReportScreen>`
+ * (ซึ่งห่อ `<ReportView>` อีกที ส่ง `filters`/`chart`) — ห้ามสร้างตาราง/ปุ่มส่งออกชุดใหม่
  */
 export default async function ReportPage({ params }: PageProps) {
   await requireMenuPage('reports')
@@ -40,5 +40,5 @@ export default async function ReportPage({ params }: PageProps) {
     )
   }
 
-  return <ReportView report={{ id: report.id, code: report.code, title: report.title }} />
+  return <ReportScreen report={{ id: report.id, code: report.code, title: report.title }} />
 }

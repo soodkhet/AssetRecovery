@@ -10,15 +10,20 @@ import { readEnvelope } from '@/lib/api/envelope'
 import { fmtDateTime } from '@/lib/format/datetime'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import type { ReportExportFormat } from '@/lib/reports/export'
+import type { ReportPayload } from '@/lib/reports/payload'
 
 /**
  * โครงหน้าจอกลางของทุกรายงาน (`96` §11) — **หน้ารายงานใน 6.2–6.5 ต้องใช้ตัวนี้ ห้ามทำตารางเอง**
  *
- * ประกอบด้วย: หัวเรื่อง → ตัวเลือกช่วงเวลา + ปุ่มรีเฟรช/ส่งออก → KPI + badge MoM → ตาราง
- * (virtual scroll เมื่อเกิน 100 แถว) → ป้าย "ข้อมูล ณ …" · ครบทั้ง loading / empty / error (`04` §9)
+ * ประกอบด้วย: หัวเรื่อง → ตัวเลือกช่วงเวลา + ตัวกรองเฉพาะรายงาน + ปุ่มรีเฟรช/ส่งออก →
+ * KPI + badge MoM → กราฟ (ถ้ารายงานนั้นมี) → ตาราง (virtual scroll เมื่อเกิน 100 แถว) →
+ * ป้าย "ข้อมูล ณ …" · ครบทั้ง loading / empty / error (`04` §9)
  *
  * ปุ่มส่งออกเรียก `POST /api/reports/:id/export` ตัวเดียว: ไฟล์เล็กดาวน์โหลดทันที
  * ไฟล์ใหญ่ (>5,000 แถว) ระบบตอบ 202 แล้วบอกผู้ใช้ให้ไปดูที่หน้างานเบื้องหลัง (E13)
+ *
+ * `filters`/`chart` รับได้ทั้ง node และฟังก์ชันที่รับ payload ปัจจุบัน — ตัวกรองแบบ drill-down
+ * (F1) และกราฟ (F2) จึงอ่านจาก **payload ชุดเดียวกับตาราง** ไม่ต้องยิง API ซ้ำและไม่มีทางเพี้ยน
  */
 
 const EXPORT_LABEL: Readonly<Record<ReportExportFormat, string>> = {
@@ -26,17 +31,34 @@ const EXPORT_LABEL: Readonly<Record<ReportExportFormat, string>> = {
   pdf: 'ส่งออก PDF',
 }
 
+export interface ReportSlotContext {
+  payload: ReportPayload | null
+  loading: boolean
+}
+
+type ReportSlot = React.ReactNode | ((context: ReportSlotContext) => React.ReactNode)
+
+function renderSlot(slot: ReportSlot | undefined, context: ReportSlotContext): React.ReactNode {
+  return typeof slot === 'function' ? slot(context) : slot
+}
+
 export function ReportView({
   report,
   params = {},
   filters,
+  chart,
   initialRange,
+  onRangeChange,
 }: {
   report: Pick<ReportDefinition, 'id' | 'code' | 'title'>
   params?: Readonly<Record<string, string>>
   /** ตัวกรองเฉพาะรายงาน (6.2–6.5 ส่งเข้ามา) — วางต่อจาก DateRangePicker */
-  filters?: React.ReactNode
+  filters?: ReportSlot
+  /** กราฟของรายงานนั้น — วางระหว่าง KPI กับตาราง (`96` §6 กำหนดเฉพาะบางรายงาน) */
+  chart?: ReportSlot
   initialRange?: ReportRangeValue
+  /** ผู้ใช้เปลี่ยนช่วงเวลา — หน้าที่มี drill-down ใช้รีเซ็ตตัวกรองของตัวเองกลับหน้าสรุป */
+  onRangeChange?: (range: ReportRangeValue) => void
 }) {
   const { showToast } = useToast()
   const [range, setRange] = useState<ReportRangeValue>(initialRange ?? { preset: 'this_month', from: '', to: '' })
@@ -97,6 +119,15 @@ export function ReportView({
   )
 
   const cache = payload?.cache ?? null
+  const slotContext: ReportSlotContext = { payload, loading }
+
+  const changeRange = useCallback(
+    (next: ReportRangeValue) => {
+      setRange(next)
+      onRangeChange?.(next)
+    },
+    [onRangeChange],
+  )
 
   return (
     <div className="flex flex-col gap-4">
@@ -126,8 +157,8 @@ export function ReportView({
 
       <Card>
         <div className="flex flex-col gap-3">
-          <DateRangePicker value={range} onChange={setRange} disabled={loading} />
-          {filters}
+          <DateRangePicker value={range} onChange={changeRange} disabled={loading} />
+          {renderSlot(filters, slotContext)}
         </div>
       </Card>
 
@@ -151,6 +182,8 @@ export function ReportView({
       ) : (
         <KpiCardRow kpis={payload?.kpis ?? []} />
       )}
+
+      {renderSlot(chart, slotContext)}
 
       <ReportTable
         columns={payload?.columns ?? []}

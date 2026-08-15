@@ -94,23 +94,42 @@ interface ProfitEntries {
   costs: readonly ProfitCostEntry[]
 }
 
+/** ช่วงวันที่ของการดึงข้อมูล — รับได้ทั้ง `ReportPeriodRange` (3.8) และ `ReportRange` ของเมนูรายงาน (6.x) */
+export interface ProfitEntryRange {
+  startDate: Date
+  endDate: Date
+}
+
+export interface ProfitEntryScope {
+  /** ทีมที่ผู้เรียกเห็นได้ — `null` = ทุกทีม · **รายการว่าง = ผลลัพธ์ว่าง** (`96` §10) */
+  teamIds?: readonly string[] | null
+}
+
 /**
  * ดึงรายได้ + ต้นทุนตรงของช่วงเวลา แล้วผูกมิติ (บริษัท/ทีม) ให้เรียบร้อย
  *
  * ⚠️ เคส `closed_fail` **ไม่ถูกกรองทิ้ง** — ต้นทุนของมันเข้ารายงานเสมอแม้ไม่มีรายได้คู่กัน
  * (`21` §6.1) ⇒ query ฝั่งต้นทุนจึงเริ่มจาก `expenses` ไม่ใช่จาก `revenues`
+ *
+ * ใช้ร่วมกันระหว่างแท็บกำไรของไฟล์ 21 (3.8) และรายงาน F1 ของเมนูรายงาน (6.2)
+ * — **ห้ามเขียน query ชุดที่สองขึ้นมาใหม่** ไม่งั้นตัวเลขสองหน้าจอมีสิทธิ์ไม่ตรงกัน
  */
-async function loadProfitEntries(
+export async function loadProfitEntries(
   organizationId: string,
   dimension: ProfitDimension,
-  range: ReportPeriodRange,
+  range: ProfitEntryRange,
+  scope: ProfitEntryScope = {},
 ): Promise<ProfitEntries> {
+  const teamIds = scope.teamIds ?? null
+  const teamWhere = teamIds === null ? {} : { assignedTeamId: { in: [...teamIds] } }
+
   const [revenueRows, expenseRows] = await Promise.all([
     prisma.revenue.findMany({
       where: {
         organizationId,
         deletedAt: null,
         revenueDate: { gte: range.startDate, lte: range.endDate },
+        ...(teamIds === null ? {} : { case: teamWhere }),
       },
       select: {
         id: true,
@@ -130,6 +149,7 @@ async function loadProfitEntries(
         expenseDate: { gte: range.startDate, lte: range.endDate },
         // ต้นทุนที่ผูกเคสไม่ได้ = ผูกมิติไม่ได้ ⇒ อยู่นอกรายงานนี้ (`21` §4)
         caseId: { not: null },
+        ...(teamIds === null ? {} : { case: teamWhere }),
       },
       select: {
         id: true,
