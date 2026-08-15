@@ -7,7 +7,7 @@
 
 ## Phase 4.7 — Accounting Frontend ที่เหลือ (shell + periods + exceptions + sales/receipts)
 
-**วันที่**: 2026-08-15 · **commit**: `COMMIT_4_7` · **branch**: `auto/phase-4.7`
+**วันที่**: 2026-08-15 · **commit**: `ad12e13` · **branch**: `auto/phase-4.7`
 
 ### สิ่งที่ทำ
 

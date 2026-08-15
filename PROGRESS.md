@@ -84,7 +84,7 @@
 | 4.4 | Accounting Expenses + Accountant Questions | ✅ | 2026-08-15 · `1f3d525` · sync เฉพาะ payout ที่จ่ายจริง + เอกสารไม่ครบขึ้น exception เอง + map cost center (manual) + ข้อซักถามครบวงจร · เทสต์ pure 24 + route 9 + DB 12 → archive |
 | 4.5 | WHT Data + ใบ 50 ทวิ PDF | ✅ | 2026-08-15 · `3fb2f75` · ออกใบอัตโนมัติจากรอบจ่ายที่จ่ายจริง + ยกเลิก/ออกใบแทน trace 2 ทาง + ใบ cancelled ไม่นับยอด + ใบ 50 ทวิ PDF · เทสต์ pure 18 + route 9 + DB 13 → archive |
 | 4.6 | Accounting Pack Export (8 ไฟล์ + SHA-256) | ✅ | 2026-08-15 · `8c913c5` · ไฟล์ 01–08 ตรง samples ทุกหัวคอลัมน์ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ) + หน้าปก PDF + zip/SHA-256 เขียนเอง deterministic + versioning ไม่ทับของเดิม · ⚠️ ต้องสร้าง bucket `accounting-packs` ต่อ environment → archive |
-| 4.7 | Accounting FE ที่เหลือ (shell/periods/exceptions/sales) | ✅ | 2026-08-15 · `COMMIT_4_7` · เปิดครบ 9/9 แท็บหน้าบัญชี — รอบส่งบัญชี (readiness สด + ส่ง/ล็อก/ปลดล็อกบังคับเหตุผล) + เอกสารไม่ครบ (authorized แยกจาก resolved) + รายได้และขาย + เงินรับ · ปุ่มทุกปุ่มมาจาก pure `periodActionsFor()`/`exceptionActionsFor()` → archive |
+| 4.7 | Accounting FE ที่เหลือ (shell/periods/exceptions/sales) | ✅ | 2026-08-15 · `ad12e13` · เปิดครบ 9/9 แท็บหน้าบัญชี — รอบส่งบัญชี (readiness สด + ส่ง/ล็อก/ปลดล็อกบังคับเหตุผล) + เอกสารไม่ครบ (authorized แยกจาก resolved) + รายได้และขาย + เงินรับ · ปุ่มทุกปุ่มมาจาก pure `periodActionsFor()`/`exceptionActionsFor()` → archive |
 
 ## Phase 5 — Platform Services (ไฟล์ 90, 91)
 
