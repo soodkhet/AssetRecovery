@@ -756,7 +756,6 @@ export async function getIncomeSummary(
       completedAt: true,
       teamId: true,
       case: { select: { caseRef: true, debtorName: true } },
-      team: { select: { compensationPlanId: true } },
       expenses: {
         where: { deletedAt: null, status: { in: [...ACTIVE_EXPENSE_STATUSES] } },
         select: { compPlanId: true },
@@ -765,11 +764,13 @@ export async function getIncomeSummary(
     },
   })
 
-  const planIds = [
-    ...new Set(
-      assignments.flatMap((row) => [row.expenses[0]?.compPlanId ?? null, row.team?.compensationPlanId ?? null]),
-    ),
-  ].filter((id): id is string => id !== null)
+  // ⚠️ **ห้าม fallback ไปแผนปัจจุบันของทีม** (Rule: Snapshot pattern · `92` §7.1) — ตัวชี้ของทีม
+  // ถูกย้ายไปเวอร์ชันใหม่ทุกครั้งที่แก้แผน (`lib/compensation/queries.ts`) ⇒ ยอดของเคสที่ปิดไป
+  // เมื่อเดือนก่อนจะ**ขยับเอง**หลังการเงินแก้แผน · งานที่ไม่มี snapshot (ไม่มีรายการเบิก active)
+  // แปลว่ายังไม่มีค่าตอบแทนบันทึกไว้จริง ⇒ แสดง 0 ไม่ใช่เดาจากแผนสด
+  const planIds = [...new Set(assignments.map((row) => row.expenses[0]?.compPlanId ?? null))].filter(
+    (id): id is string => id !== null,
+  )
 
   const plans = await prisma.compensationPlan.findMany({
     where: { id: { in: planIds }, organizationId: user.organizationId },
@@ -778,7 +779,7 @@ export async function getIncomeSummary(
   const planById = new Map(plans.map((plan) => [plan.id, plan]))
 
   const items = assignments.map((row) => {
-    const planId = row.expenses[0]?.compPlanId ?? row.team?.compensationPlanId ?? null
+    const planId = row.expenses[0]?.compPlanId ?? null
     const plan = planId === null ? undefined : planById.get(planId)
     const success = row.status === 'closed_success'
     const amountSatang = success ? (plan?.commissionSatang ?? 0) : (plan?.noSuccessFeeSatang ?? 0)
