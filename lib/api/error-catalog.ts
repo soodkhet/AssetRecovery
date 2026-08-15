@@ -76,6 +76,10 @@ export const ERROR_CATALOG = {
   MIXED_SIDE_BATCH: { status: 400, severity: 'reject', source: '24 §6.3' },
   MATCH_NOTE_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.3' },
   ALREADY_MATCHED: { status: 200, severity: 'warn', source: '24 §6.3' },
+  // เติมเข้า `24` §6.3 พร้อม Phase 4.2 (Rule 04 — doc + code คอมมิตเดียวกัน)
+  BANK_TRANSACTION_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.3' },
+  BANK_TRANSACTION_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.3' },
+  STATEMENT_FILE_INVALID: { status: 400, severity: 'reject', source: '24 §6.3' },
 
   // ── 24 §6.4 Claim/Advance/Approval ─────────────────────────────────────
   ADVANCE_PENDING_SETTLEMENT: { status: 400, severity: 'reject', source: '24 §6.4' },

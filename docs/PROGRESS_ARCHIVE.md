@@ -5,6 +5,40 @@
 
 ---
 
+## Phase 4.2 — Bank Reconciliation (35)
+
+**วันที่**: 2026-08-15 · **commit**: `1b2adeb` · **branch**: `auto/phase-4.2`
+
+### สิ่งที่ทำ
+
+- **`lib/bank-recon/statement.ts`** (pure) — อ่านไฟล์ statement CSV ตาม `column_mapping` ที่ตั้งไว้ (`13` §6.3 → §6.8) ไม่มี/ใช้ไม่ได้ค่อยเดาจากหัวตาราง (ชื่อพ้องไทย+อังกฤษ) · `parseAmountToSatang()` แปลงบาท→satang **ด้วยเลขจำนวนเต็มล้วน** (ทศนิยม >2 ตำแหน่ง = อ่านไม่ออก ไม่ปัดให้) · `parseStatementDate()` รับ พ.ศ./ค.ศ. · `statementRowKey()` กันนำเข้าซ้ำ
+- **`lib/bank-recon/matching.ts`** (pure) — `findAutoMatch()` จับคู่**เมื่อผู้สมัครเหลือรายเดียวเท่านั้น** (ยอดตรงเป๊ะ + เกิดตั้งแต่วันเอกสารถึง `auto_match_tolerance_days`) · A1 เทียบ `total − wht` ด้วย · state machine `23` §6.14 (`unmatched_resolved` = terminal) · `isReconciled()` ให้ Readiness ของ `30` นับ resolved เป็นครบ
+- **`lib/bank-recon/queries.ts`** — ชั้น DB: `importStatement()` (ผูกงวดด้วย `ensurePeriodForDate()` + `assertPeriodOpenAt()` ก่อนเขียน + ข้ามแถวซ้ำ + auto-match รอบเดียวหลังบันทึก) · `listBankTransactions()` · `listMatchCandidates()` · `matchBankTransaction()` · `resolveUnmatchedTransaction()`
+- **trigger 2 ทาง (`35` §9)** — จับคู่บิล ⇒ สร้าง `cash_receipts` (ไฟล์ 31 — ห้ามกรอกมือ) แล้วเรียก `applyBillingReceipt()` ของ 3.6 ด้วย**ยอดสะสม** (ผลรวม cash receipt) · จับคู่รอบจ่าย ⇒ `syncPayoutBatchCompleted()` ของ 3.4 · re-match ถอน cash receipt เดิม + sync รอบเดิมให้ยอดลดจริง
+- **API 5 endpoint**: `POST /api/bank-reconciliation/import` · `GET /api/bank-reconciliation/transactions` · `GET /api/bank-reconciliation/match-candidates` (เติมลง `27` §6.14 v3.6) · `PATCH /api/bank-reconciliation/transactions/:id/match` · `.../resolve-unmatched` — ทุกตัวผ่าน `manage_bank_reconciliation` (`25` §7.5 บัญชีจัดการ / การเงิน view)
+- **FE**: หน้า `/accounting` จริง (shell 9 แท็บ — เปิดแท็บ "กระทบยอด" แท็บแรก) + ตาราง 8 คอลัมน์ตาม mockup + `<ImportStatementModal>` (drag-drop CSV) / `<ManualMatchModal>` / `<ResolveUnmatchedModal>` / `<MatchDetailModal>`
+- **เทสต์**: pure 79 เคส (`statement.test.ts` + `matching.test.ts`) + ระดับ DB 16 เคส (`bank-recon.db.test.ts` — auto-match สำเร็จ/ผู้สมัคร >1 ไม่จับคู่/เกิน tolerance/A1 หัก WHT/เงินออก→payout completed/นำเข้าซ้ำ/`MATCH_NOTE_REQUIRED`/`ALREADY_MATCHED` 2 จังหวะ/terminal/Period Lock)
+- **`docs/24` v4.7** — เติม 3 error code (§6.3): `BANK_TRANSACTION_NOT_FOUND`, `BANK_TRANSACTION_INVALID_STATUS`, `STATEMENT_FILE_INVALID` · **`docs/27` v3.6** — เติม `GET /api/bank-reconciliation/match-candidates`
+
+### การตัดสินใจระหว่างทาง (ยึด schema `02` เป็นหลัก)
+
+- **ไม่มีคอลัมน์ `reference`/`amount_in`/`amount_out` ใน schema** (`02` §9 มี `description` + `amount_satang` คอลัมน์เดียว บวก=เข้า ลบ=ออก) — ตาราง §7.1 ของไฟล์ 35 เขียนไว้คนละรูป ⇒ ยึด `02` (Rule 02): เลขอ้างอิงถูกผนวกเข้า `description` ("… · อ้างอิง KBANK-TRX-001") และเครื่องหมายของยอดเป็นตัวบอกฝั่ง
+- **statement format ใช้คนละ vocabulary กับไฟล์โอนเงิน** — `bank_file_formats.column_mapping` ของ 1.10 รองรับเฉพาะคอลัมน์ไฟล์โอน (`receiving_bank_code` ฯลฯ) ⇒ เพิ่มชุดคอลัมน์ statement ที่ `lib/bank-recon/statement.ts` แทนการแก้ pure module ของ 1.10 (ไม่ให้ `runBankFileTest()` ของไฟล์โอนเพี้ยน) · mapping ที่ใส่ผิดช่องถือว่า "ไม่มี" แล้วเดาจากหัวตารางแทน ไม่ reject ทั้งไฟล์
+- **`GET /match-candidates` เป็น endpoint ใหม่** — dropdown ของ `35` §8 ต้องอ่านรอบวางบิล/รอบจ่าย แต่ `25` §7.4 ให้ `/api/billing-batches` กับ `/api/payout-batches` เป็นของ**การเงิน** ส่วนคนกระทบยอดคือ**บัญชี** ⇒ ต้องมีทางอ่านของโมดูล 35 เอง (เติมลง `27` แล้ว)
+- **นำเข้าไฟล์ซ้ำ = ข้ามแถวเดิม ไม่ reject ทั้งไฟล์** — statement เดือนเดียวถูกอัปโหลดซ้ำง่ายมาก และการนับเงินเข้าซ้ำ = AR เพี้ยนทั้งรอบ ⇒ กันด้วยคีย์ (บัญชี+วัน+ยอด+รายละเอียด) แล้วรายงานจำนวนที่ข้ามกลับหน้าจอ (Rule 09)
+- **`ALREADY_MATCHED` เดินตามแม่แบบ `DUPLICATE_PAYMENT_FILE` ของ 3.4** — ครั้งแรกคืน 200 + `warning` โดยไม่เปลี่ยนอะไร ยืนยันแล้ว (`confirmRematch`) จึงเปลี่ยนจริง และ **re-match บังคับ `match_note` เสมอ** แม้ยอดตรง (`35` §10 "แก้ไขการจับคู่ต้อง audit พร้อมเหตุผล")
+- **re-match ที่ย้ายออกจากรอบจ่ายเดิม: รอบเดิมยังคง `completed`** — `23` §6.6 ไม่มีเส้นทางย้อน (ย้อนสถานะการจ่ายเงินจริงเงียบ ๆ ไม่ได้) ⇒ แก้ยอดรอบเดิมต้องผ่าน Adjustment (ไฟล์ 20) · ฝั่งบิลถอน cash receipt คืนได้จริงเพราะเป็นเอกสารที่ระบบสร้างเอง
+- **auto-match ไม่แตะรอบจ่ายที่ `completed`** (ผู้สมัครมี `referenceDate = null`) — เลือกได้เฉพาะทาง manual เพื่อไม่ให้เงินออกก้อนใหม่ไปเกาะรอบที่ปิดไปแล้วโดยอัตโนมัติ
+
+### จุดที่คนถัดไปควรรู้
+
+- Phase 4.3 (ไฟล์ 31) **ห้ามสร้างช่องกรอก Cash Receipt ด้วยมือ** — `cash_receipts` เกิดจาก `matchBankTransaction()` ที่เดียวเท่านั้น (ตาราง `bank_transaction_id` ผูกไว้แล้ว)
+- แท็บบัญชีที่เหลือ (4.4/4.5/4.6/4.7) เสียบเข้า `<AccountingShell>` โดยแก้ `available: true` ที่ `lib/accounting/accounting-tabs.ts` — มีเทสต์ยามจำนวน 9 แท็บ
+- **A2 (split allocation) ยังไม่ implement** — `bank_transaction_allocations` มีตาราง + CHECK พร้อมแล้วแต่ไฟล์ 35 ไม่ได้ระบุ flow UI ไว้ ⇒ `isSplitAllocation` ถูกตั้ง `false` เสมอในเฟสนี้ (เงินเข้าก้อนเดียวตัดหลายบิลยังทำไม่ได้ ต้องมีมติ PO ก่อน) · A4 (`matched_advance_id`) เช่นกัน — ยังไม่มีเส้นทางจับคู่เงินทดรอง
+- ไฟล์ statement จริงของธนาคารที่ใช้งานยังไม่เคยทดสอบ (ยังไม่มีตัวอย่างจริงใน repo) — ก่อนใช้จริงต้องตั้ง `statement_format` ต่อบัญชีที่หน้าตั้งค่าการเงินแล้วลองไฟล์จริง 1 รอบ
+
+---
+
 ## Phase 4.1 — Exceptions (34) + Accounting Period / Readiness / Lock Guard (30)
 
 **วันที่**: 2026-08-15 · **commit**: `5a2b26f` · **branch**: `auto/phase-4.1`

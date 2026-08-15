@@ -11,6 +11,7 @@ import {
 } from '@/lib/api/error-catalog'
 import { auditErrorStatus, AUDIT_ERROR_CODES } from '@/lib/audit/errors'
 import { assignmentErrorStatus, ASSIGNMENT_ERROR_CODES } from '@/lib/assignments/errors'
+import { bankReconErrorStatus, BANK_RECON_ERROR_CODES } from '@/lib/bank-recon/errors'
 import { caseErrorStatus, CASE_ERROR_CODES } from '@/lib/cases/errors'
 import { authErrorStatus, AUTH_ERROR_CODES } from '@/lib/auth/errors'
 import { compensationErrorStatus, COMPENSATION_ERROR_CODES } from '@/lib/compensation/errors'
@@ -139,6 +140,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['adjustments', ADJUSTMENT_ERROR_CODES, adjustmentErrorStatus as (code: never) => number],
   ['advances', ADVANCE_ERROR_CODES, advanceErrorStatus as (code: never) => number],
   ['revenue', REVENUE_ERROR_CODES, revenueErrorStatus as (code: never) => number],
+  ['bank-recon', BANK_RECON_ERROR_CODES, bankReconErrorStatus as (code: never) => number],
   ['reports', REPORT_ERROR_CODES, reportErrorStatus as (code: never) => number],
   ['payees', PAYEE_ERROR_CODES, payeeErrorStatus as (code: never) => number],
   ['payout', PAYOUT_ERROR_CODES, payoutErrorStatus as (code: never) => number],

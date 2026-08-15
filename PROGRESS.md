@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.1 (BE ไฟล์ 30/34 + interceptor Period Lock ต่อเข้าสายการเงินจริง) · งานถัดไป 4.2 (Bank Reconciliation `35`)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.2 (Bank Reconciliation `35` ครบ BE+FE + trigger 2 ทาง) · งานถัดไป 4.3 (Sales & Receipts + Tax Invoice `31`)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 4.2: Bank Reconciliation (35)
+## 🎯 งานถัดไป — Phase 4.3: Sales & Receipts + Tax Invoice + PDF (31)
 
-- ทำตาม `docs/01_PLAN.md` §4.2 — ต่อจาก 4.1 ที่วางรอบบัญชี + guard ไว้แล้ว
-- **Import statement CSV** ตาม format ที่ตั้งค่าไว้ (`13` §6.8) · ผูก `period_id` ด้วย `ensurePeriodForDate()` ของ 4.1 **ห้าม query `accounting_periods` เอง**
-- **Auto-match engine**: ยอดตรงเป๊ะ + tolerance days + **candidate เดียวเท่านั้น** (เงินเข้า ↔ billing `sent` · เงินออก ↔ payout `file_generated`) · A1: เทียบ `total − wht` ด้วย
-- **Manual match**: `MATCH_NOTE_REQUIRED` เมื่อยอดไม่ตรง · `unmatched_resolved` (note บังคับ ห้ามผูก FK) · `ALREADY_MATCHED` = เตือนไม่บล็อก · re-match ต้องลง audit
-- **Trigger 2 ทาง**: สร้าง Cash Receipt (31) + payout → `completed` (17) + `applyBillingReceipt()` ของ 3.6 (จุดเสียบเดียว — รับยอดสะสม idempotent)
-- FE: ตาราง + Modal จับคู่ Manual + Modal Import
-- อ้างอิง: `35` ทั้งไฟล์ · `13` §6.3/§6.8 · `23` §6.14 · mockup `accounting.html` ผ่าน MAP
-- DoD: auto-match ไม่จับคู่เมื่อมี candidate >1 · `unmatched` ค้าง = ปิดงวดไม่ได้ (เชื่อ Readiness ของ 4.1) · LOC ~1,900 · งบ ~300k
+- ทำตาม `docs/01_PLAN.md` §4.3 — ต่อจาก 4.2 ที่ทำให้ `cash_receipts` เกิดจากการกระทบยอดแล้ว
+- **Sales records sync จาก billing (1:1)** — `sales_records.billing_batch_id` UNIQUE (`02`)
+- **Tax Invoice**: auto-number เท่านั้น **เรียงต่อเนื่องห้าม gap** (advisory lock / `SELECT FOR UPDATE`) · ไม่มี draft (สร้าง = active) · cancel ต้องมีเหตุผล เลขเดิมไม่ reuse · ฟิลด์บังคับตามกฎหมายครบก่อนออก (`TAX_INVOICE_FIELD_MISSING`) — เดินเลขผ่าน `formatInvoiceNumber()`/`nextSequence()` ของ 1.10 ห้ามเขียนใหม่
+- **Cash Receipt**: สร้างจากไฟล์ 35 เท่านั้น **ห้ามกรอกมือ** (Phase 4.2 ผูก `bank_transaction_id` ไว้แล้ว) — หน้านี้อ่านอย่างเดียว
+- **`TaxInvoicePDF.tsx`** ตาม `28` §6.2 (7 ฟิลด์บังคับ — เทียบ `reference/samples/01_tax_invoice.pdf`)
+- อ้างอิง: `31` ทั้งไฟล์ · `13` §6.12 · `28` §6.2 · `24` §6.8
+- DoD: ยกเลิกใบ 005 → ใบใหม่ได้ 006 · เทสต์ number gap ภายใต้ concurrency · LOC ~1,500 · งบ ~260k
 
 ---
 
@@ -82,7 +81,7 @@
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
 | 4.1 | Exceptions + Period/Readiness/Lock guard | ✅ | 2026-08-15 · `5a2b26f` · BE 30/34 ครบ + interceptor `PERIOD_LOCKED_DIRECT_EDIT` ต่อเข้า write การเงิน 15 จุด + เทสต์ DB 14 เคส → archive |
-| 4.2 | Bank Reconciliation | ⬜ | PLAN §4.2 · trigger 2 ทาง (31/17/19) |
+| 4.2 | Bank Reconciliation | ✅ | 2026-08-15 · `1b2adeb` · import statement + auto-match (candidate เดียว) + trigger 2 ทาง (Cash Receipt/payout completed) + แท็บกระทบยอด · เทสต์ pure 79 + DB 16 → archive |
 | 4.3 | Sales & Receipts + Tax Invoice + PDF | ⬜ | PLAN §4.3 · เลขห้าม gap |
 | 4.4 | Accounting Expenses + Accountant Questions | ⬜ | PLAN §4.4 |
 | 4.5 | WHT Data + ใบ 50 ทวิ PDF | ⬜ | PLAN §4.5 · cancelled ไม่นับยอด |
