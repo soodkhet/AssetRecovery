@@ -2,9 +2,13 @@
 
 import { useState } from 'react'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
+import { ClosingTab } from '@/components/accounting/closing-tab'
+import { ExceptionsTab } from '@/components/accounting/exceptions-tab'
 import { ExpensesTab } from '@/components/accounting/expenses-tab'
 import { ExportTab } from '@/components/accounting/export-tab'
 import { QuestionsTab } from '@/components/accounting/questions-tab'
+import { ReceiptsTab } from '@/components/accounting/receipts-tab'
+import { SalesTab } from '@/components/accounting/sales-tab'
 import { WhtTab } from '@/components/accounting/wht-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
@@ -66,9 +70,13 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
           })}
         </nav>
 
+        {current?.id === 'closing' && <ClosingTab />}
+        {current?.id === 'sales' && <SalesTab />}
+        {current?.id === 'receipts' && <ReceiptsTab />}
         {current?.id === 'expenses' && <ExpensesTab />}
         {current?.id === 'bank' && <BankReconTab />}
         {current?.id === 'wht' && <WhtTab />}
+        {current?.id === 'documents' && <ExceptionsTab />}
         {current?.id === 'qa' && <QuestionsTab />}
         {current?.id === 'export' && <ExportTab />}
         {current === undefined && (

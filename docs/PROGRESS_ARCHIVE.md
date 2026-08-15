@@ -5,6 +5,42 @@
 
 ---
 
+## Phase 4.7 — Accounting Frontend ที่เหลือ (shell + periods + exceptions + sales/receipts)
+
+**วันที่**: 2026-08-15 · **commit**: `COMMIT_4_7` · **branch**: `auto/phase-4.7`
+
+### สิ่งที่ทำ
+
+- **เปิดหน้าบัญชีครบ 9/9 แท็บ** — แก้ `available` ใน `lib/accounting/accounting-tabs.ts` ที่เดียว (4 แท็บสุดท้าย: `closing`/`sales`/`receipts`/`documents`) + ย้าย `DEFAULT_ACCOUNTING_TAB` จาก `expenses` → **`closing`** (ปิดงวดคือแกนของโมดูล — `30` §8) แล้วเสียบ component ใน `<AccountingShell>` · เทสต์ยามรายชื่อแท็บอัปเดตคู่กัน (ไม่มีแท็บเทาเหลือแล้ว)
+- **`periodActionsFor()` (pure, ใน `lib/accounting/period.ts`)** — สถานะ + สิทธิ์ → ปุ่มบนแถว (`canSend`/`canLock`/`canUnlock`/`canExport`) อิง `PERIOD_TRANSITIONS` ตัวเดียวกับ API: ส่ง = บัญชีจาก `collecting` · ล็อก = บัญชี**หรือ**ผู้บริหาร (`30` §9 "บัญชี/Executive ยืนยันปิดงวด" — ตรงกับ route `/lock` ที่รับ 2 capability) · ปลดล็อก = ผู้บริหารเท่านั้น
+- **`exceptionActionsFor()` (pure, ใน `lib/accounting/exception.ts`)** — `canEdit` เฉพาะ `open` (`34` §14) · `canResolve`/`canAuthorize` อิง `EXCEPTION_TRANSITIONS`
+- **แท็บ "รอบส่งบัญชี" (`<ClosingTab>` + `<ReadinessModal>`)** — ตารางรอบ (สถานะ/วิกฤต-คำเตือน/Export ล่าสุด/ผู้ส่ง-ผู้ล็อก) + banner รวมยอด critical · Modal ตรวจความพร้อม **ยิง `GET /…/readiness` สดทุกครั้งที่เปิด** (ไม่ใช้ `exportReady` ที่ค้างในแถว) แสดง checklist 3 ข้อ + คำเตือน warning + รายชื่อ critical/รายการบิลไม่ตรง · ปุ่มส่ง/ล็อก/ปลดล็อกใช้ `<ReasonConfirmModal>` (1.11) บังคับเหตุผลทุกครั้ง · **ปุ่ม Export เรียก `<ExportPackModal>` ของ 4.6 โดยส่ง `periods={[period]}`** (ไม่ทำโมดัลใหม่)
+- **แท็บ "เอกสารไม่ครบ" (`<ExceptionsTab>` + `<ExceptionFormModal>` + `<ExceptionActionModal>`)** — การ์ดสรุป 4 ช่อง **แยก "ผ่านแบบมีข้อยกเว้น" ออกจาก "แก้ไขแล้ว" คนละใบ** (`34` §6.3) + ช่อง "บล็อกการส่งมอบ" (= `blockingCritical`) · ตัวกรองระดับ+สถานะยิงไป API · ฟอร์มสร้าง/แก้ (ระดับ/โมดูล/รอบ/หัวข้อ/รายละเอียด/อ้างอิง) · โมดัล resolve/authorize คนละสำเนาข้อความ พร้อม banner เตือนว่า authorize ≠ แก้ปัญหา
+- **แท็บ "รายได้และขาย" (`<SalesTab>` + `<IssueTaxInvoiceModal>`)** — KPI 4 ตัว + ตารางรายการขาย + ออกใบกำกับภาษี (ไม่มีช่องเลขที่ — ระบบเดินเลขเอง) / ยกเลิกผ่าน `<ReasonConfirmModal>` / พิมพ์ PDF ผ่าน `window.open()` ไป route ของ 4.3 · ใบที่ยกเลิกแสดงขีดฆ่าใต้ใบปัจจุบัน (พิสูจน์ความต่อเนื่องของเลขที่)
+- **แท็บ "เงินรับ" (`<ReceiptsTab>`)** — read-only ล้วน ไม่มีปุ่ม mutation เลย (`31` §10) + กล่องอธิบายว่าทำไมแก้ที่นี่ไม่ได้
+- **hooks ใหม่ 3 ตัว**: `usePeriods()` · `useAccountingExceptions()` · `useSalesRecords()`/`useCashReceipts()` — ตัวกรองส่งไป API เสมอ ไม่กรองฝั่ง client
+- **`lib/ui/status-badge.ts` เติม 3 สถานะ**: `sent_to_accountant` → น้ำเงิน · `resolved` → เขียว · **`authorized` → ม่วง (คนละสีกับ `resolved` เสมอ)** พร้อมเทสต์ (mapper กลางตัวเดียว ไม่แจกสีในจอ)
+- **เทสต์**: pure 11 เคสใหม่ (`periodActionsFor` 4 · `exceptionActionsFor` 3 · status-badge 3 สถานะ + ยามครอบคลุมทะเบียน · tabs 9/9) · รวมทั้ง repo **2,480 เคสเขียว** · typecheck + lint ผ่าน
+
+### การตัดสินใจระหว่างทาง
+
+- **ปุ่มบนแถวมาจาก pure function ไม่ใช่ `if` ใน JSX** — ต่อแนวของแท็บกระทบยอด (4.2): กติกา "ใครกดอะไรได้ตอนไหน" ต้องเทสต์ได้โดยไม่ต้อง render และต้องตรงกับที่ API บังคับเป๊ะ ไม่งั้นผู้ใช้เจอปุ่มที่กดแล้ว 403
+- **ล็อกงวดให้ผู้บริหารกดได้ด้วย** — `30` §9 เขียนว่า "บัญชี/Executive ยืนยันปิดงวด" และ route `/lock` ของ 4.1 รับทั้ง `manage_accounting_period` และ `unlock_period` อยู่แล้ว ⇒ UI ตามหลัง API (ส่วน**ปลดล็อก**ยังเป็นของผู้บริหารคนเดียวตาม §10)
+- **Modal ตรวจความพร้อมยิง API สดทุกครั้ง ไม่แคช** — `exportReady`/`lastReadinessCheckedAt` ในแถวเป็นผลของการตรวจ*ครั้งก่อน* ถ้าเอามาแสดงแทนจะหลอกผู้ใช้ว่ารอบพร้อมทั้งที่เพิ่งมี exception ใหม่เข้ามา · **ไม่มีปุ่ม force ข้าม** ทั้งจอ (`30` §10)
+- **ฟอร์ม Exception ตัดช่อง "สถานะ" และ "ผู้รับผิดชอบ" ของ mockup ทิ้ง** — สถานะเปลี่ยนผ่าน `/resolve`/`/authorize` เท่านั้น (`34` §14) และ mockup ยังมี `in_progress` ที่สเปคตัดไปแล้วตั้งแต่ v2 (`34` §6.2) · `owner` ไม่มีคอลัมน์ใน `02` §9 ⇒ ตารางแสดง**ผู้บันทึก**แทน (ตระกูล D14 เดียวกับแท็บข้อซักถามของ 4.4)
+- **แท็บเงินรับตัดคอลัมน์ "เลขที่ใบเสร็จ" ของ mockup/`31` §7.3** — `cash_receipts` ใน `02` ไม่มีคอลัมน์ `receipt_number` ⇒ ยึด schema ตามลำดับเอกสารของ CLAUDE.md (ถ้าจะออกใบเสร็จจริงต้องเพิ่มคอลัมน์ + เดินเลข = งานใหม่พร้อมมติ ไม่ใช่ FE)
+- **เพิ่ม 3 สถานะเข้า mapper กลางแทนการส่ง `group` ในจอ** — `lib/ui/status-badge.ts` เขียนกำกับไว้เองว่า enum ของ `02` §3 ที่ยังไม่มีในตารางให้เพิ่มที่นั่น · จุดสำคัญคือ `authorized` (ม่วง) ต้องไม่ใช้สีเดียวกับ `resolved` (เขียว) เพื่อไม่ให้ "หายเงียบ" ตาม `34` §6.3
+- **ไม่แตะ backend เลยทั้งเฟส** — endpoint ของ `30`/`34`/`31` ครบตั้งแต่ 4.1/4.3 แล้ว (ตรวจกับ `27`/`45` ก่อนเริ่ม) ⇒ เฟสนี้ไม่มี route ใหม่ ไม่มี migration
+
+### จุดที่คนถัดไปควรรู้
+
+- **`GET /api/accounting/periods` เป็น mutation กลาย ๆ** — มัน backfill รอบที่ยังไม่มี (พร้อม audit) ⇒ `usePeriods()` ถูกเรียกจาก 3 จอ (รอบส่งบัญชี / ฟอร์ม exception / ส่งมอบ) ระวังอย่าเรียกในลูปหรือใน `useEffect` ที่ dependency ไม่นิ่ง
+- **หน้าบัญชีไม่มีแท็บเทาเหลือแล้ว** — เทสต์ `accounting-tabs.test.ts` บังคับว่า `available: false` ต้องมี `plannedPhase` เสมอ ถ้าจะปิดแท็บชั่วคราวต้องใส่ Phase ปลายทางด้วย
+- **DoD ที่เหลือเป็นงานคน**: เดินวงจรปิดงวดเต็มของ `29` §6.5 บน staging (สร้าง exception → authorize → ส่ง → Export → ล็อก → ปลดล็อก) — ต้องมี bucket `accounting-packs` ครบตาม 4.6 ก่อน
+- **Phase 5.2 (event wiring)**: exception/period ยัง**ไม่ยิง event** เข้า notification — จุดเสียบอยู่ที่ `lib/accounting/queries.ts` (`createException`/`authorizeException`/`sendPeriod`/`lockPeriod`) ตาม `90` §6.3
+
+---
+
 ## Phase 4.6 — Accounting Pack Export (37)
 
 **วันที่**: 2026-08-15 · **commit**: `8c913c5` · **branch**: `auto/phase-4.6`

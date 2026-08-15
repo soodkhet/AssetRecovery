@@ -7,6 +7,7 @@ import {
   canTransitionPeriod,
   evaluateReadiness,
   nextPeriodKey,
+  periodActionsFor,
   periodKeyOf,
   periodLabelOf,
   periodOrdinal,
@@ -165,5 +166,40 @@ describe('Readiness Check 3 เงื่อนไข (`30` §6.2 · §16)', () =
       ],
     })
     expect(codeOf(() => assertReadyToSend(result))).toBe('NOT_READY_CRITICAL_OPEN')
+  })
+})
+
+describe('ปุ่มบนแถวรอบบัญชี (`30` §8)', () => {
+  const accountant = { canManagePeriod: true, canUnlockPeriod: false, canExportPack: true }
+  const executive = { canManagePeriod: false, canUnlockPeriod: true, canExportPack: true }
+  const viewer = { canManagePeriod: false, canUnlockPeriod: false, canExportPack: false }
+
+  it('บัญชี: `collecting` ส่งได้ · `sent_to_accountant` ล็อกได้ · ปลดล็อกไม่ได้เลย (`30` §10)', () => {
+    expect(periodActionsFor('collecting', accountant)).toMatchObject({ canSend: true, canLock: false, canUnlock: false })
+    expect(periodActionsFor('sent_to_accountant', accountant)).toMatchObject({ canSend: false, canLock: true })
+    expect(periodActionsFor('locked', accountant).canUnlock).toBe(false)
+  })
+
+  it('ผู้บริหาร: ล็อกงวดได้ (`30` §9 "บัญชี/Executive ยืนยันปิดงวด") และปลดล็อกได้คนเดียว', () => {
+    expect(periodActionsFor('sent_to_accountant', executive).canLock).toBe(true)
+    expect(periodActionsFor('locked', executive).canUnlock).toBe(true)
+    // ส่งสำนักงานบัญชียังเป็นงานของบัญชี
+    expect(periodActionsFor('collecting', executive).canSend).toBe(false)
+  })
+
+  it('คนที่ดูอย่างเดียว (การเงิน) ไม่มีปุ่มเปลี่ยนสถานะและ Export ไม่ได้', () => {
+    for (const status of ['collecting', 'sent_to_accountant', 'locked'] as const) {
+      expect(periodActionsFor(status, viewer)).toEqual({
+        canSend: false,
+        canLock: false,
+        canUnlock: false,
+        canExport: false,
+      })
+    }
+  })
+
+  it('ปุ่มยึด state machine เดียวกับ API — ไม่มีทางลัดข้ามขั้น', () => {
+    expect(periodActionsFor('locked', accountant).canLock).toBe(false)
+    expect(periodActionsFor('collecting', executive).canUnlock).toBe(false)
   })
 })

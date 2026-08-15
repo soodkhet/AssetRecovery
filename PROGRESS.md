@@ -1,21 +1,18 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.6 (Accounting Pack Export `37`) · งานถัดไป 4.7 (Accounting FE ที่เหลือ — shell/periods/exceptions/sales)
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 4.7 (Accounting FE ครบ 9/9 แท็บ) **⇒ จบ Phase 4 ทั้งเฟส** · งานถัดไป 5.1 (Notification Service + Notification Center)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 4.7: Accounting Frontend ที่เหลือ (shell + periods + exceptions + sales/receipts)
+## 🎯 งานถัดไป — Phase 5.1: Notification Service + Notification Center
 
-- ทำตาม `docs/01_PLAN.md` §4.7 — ปิดหน้าบัญชีให้ครบ 9 แท็บ (เหลือ 4 แท็บ: `closing` / `sales` / `receipts` / `documents`) โดย**เปิดผ่าน `lib/accounting/accounting-tabs.ts` ที่เดียว** แล้วเสียบ component ใน `<AccountingShell>` (มีเทสต์ยามรายชื่อแท็บ — ต้องอัปเดตคู่กัน)
-- **แท็บ Monthly Close (`30` §8)**: ตารางรอบบัญชี + Modal Readiness Checklist (3 เงื่อนไข จาก `GET /api/accounting/periods/:id/readiness` — **ห้าม force ข้าม**) + ปุ่มส่ง/ล็อก/ปลดล็อก (ปลดล็อก = ผู้บริหารเท่านั้น) · ปุ่ม Export ในแถวรอบ **เรียก `<ExportPackModal>` ของ 4.6 ห้ามทำโมดัลใหม่**
-- **แท็บ Exceptions (`34` §8)**: ตาราง + ฟอร์มสร้าง/แก้ + resolve + authorize (critical เท่านั้น · เหตุผลบังคับ `AUTHORIZED_EXCEPTION_REASON_REQUIRED`) · badge 3 สีตาม `EXCEPTION_STATUS_*` ของ 4.1
-- **แท็บรายได้และขาย + เงินรับ (`31` §8)**: ตารางรายการขาย/ใบกำกับภาษี (ออก/ยกเลิก/พิมพ์ PDF ของ 4.3) + ตารางเงินรับ (read-only เกิดจากกระทบยอด)
-- BE ครบแล้วทุกตัวตั้งแต่ 4.1–4.3 — เฟสนี้เป็น FE ล้วน **ห้ามเพิ่ม endpoint ใหม่โดยไม่เช็ค `27`/`45` ก่อน**
-- อ้างอิง: `30` §8 · `34` §8 · `31` §8 · mockup `accounting.html` ผ่าน MAP (L278 `renderAccountingOperations`, L817 `renderModal`)
-- **DoD**: วงจรปิดงวดเต็ม (`29` §6.5) เดินได้จริงบน staging
-- LOC ~2,300 · งบ ~350k
+- ทำตาม `docs/01_PLAN.md` §5.1 — notification service (create/dispatch, **idempotent**) + ทะเบียน event ตาม `90` §6.3 · เฟสนี้ **Push/In-app เท่านั้น ไม่มี gateway ภายนอก** (SMS/LINE ไว้เฟสหลัง)
+- **API 3 endpoint**: `GET /api/notifications` · `PATCH /api/notifications/:id/read` · `PATCH /api/notifications/read-all` — ตรวจสิทธิ์ที่ API layer ทุกตัวตามปกติ (ผู้ใช้เห็นเฉพาะของตัวเอง)
+- **FE**: กระดิ่ง + dropdown + หน้ารายการเต็ม + deep link (`link_path`) ตาม `reference/notifications.html` — ⚠️ กระดิ่ง/Web Push ฝั่ง Field มีอยู่แล้วจาก 2.9/2.12 (`push_subscriptions` + service worker) **ต้อง reuse ห้ามสร้างชุดใหม่** (เช็ค `docs/REUSE_INDEX.md` ก่อน)
+- อ้างอิง: `90` §6.3, §14 · `02` L1489 (`notifications`) ผ่าน MAP · mockup `notifications.html`
+- LOC ~1,750 · งบ ~270k
 
 ---
 
@@ -87,7 +84,7 @@
 | 4.4 | Accounting Expenses + Accountant Questions | ✅ | 2026-08-15 · `1f3d525` · sync เฉพาะ payout ที่จ่ายจริง + เอกสารไม่ครบขึ้น exception เอง + map cost center (manual) + ข้อซักถามครบวงจร · เทสต์ pure 24 + route 9 + DB 12 → archive |
 | 4.5 | WHT Data + ใบ 50 ทวิ PDF | ✅ | 2026-08-15 · `3fb2f75` · ออกใบอัตโนมัติจากรอบจ่ายที่จ่ายจริง + ยกเลิก/ออกใบแทน trace 2 ทาง + ใบ cancelled ไม่นับยอด + ใบ 50 ทวิ PDF · เทสต์ pure 18 + route 9 + DB 13 → archive |
 | 4.6 | Accounting Pack Export (8 ไฟล์ + SHA-256) | ✅ | 2026-08-15 · `8c913c5` · ไฟล์ 01–08 ตรง samples ทุกหัวคอลัมน์ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ) + หน้าปก PDF + zip/SHA-256 เขียนเอง deterministic + versioning ไม่ทับของเดิม · ⚠️ ต้องสร้าง bucket `accounting-packs` ต่อ environment → archive |
-| 4.7 | Accounting FE ที่เหลือ (shell/periods/exceptions/sales) | ⬜ | PLAN §4.7 |
+| 4.7 | Accounting FE ที่เหลือ (shell/periods/exceptions/sales) | ✅ | 2026-08-15 · `COMMIT_4_7` · เปิดครบ 9/9 แท็บหน้าบัญชี — รอบส่งบัญชี (readiness สด + ส่ง/ล็อก/ปลดล็อกบังคับเหตุผล) + เอกสารไม่ครบ (authorized แยกจาก resolved) + รายได้และขาย + เงินรับ · ปุ่มทุกปุ่มมาจาก pure `periodActionsFor()`/`exceptionActionsFor()` → archive |
 
 ## Phase 5 — Platform Services (ไฟล์ 90, 91)
 

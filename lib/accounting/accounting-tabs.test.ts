@@ -23,21 +23,25 @@ describe('ทะเบียนแท็บหน้าบัญชี', () => {
     }
   })
 
-  it('แท็บที่เปิดแล้วถึง Phase 4.6 = ค่าใช้จ่าย · กระทบยอด · เอกสาร & WHT · ข้อซักถาม · ส่งมอบ', () => {
+  it('ครบทั้ง 9 แท็บตั้งแต่ Phase 4.7 — ไม่มีแท็บเทาเหลือแล้ว', () => {
     expect(ACCOUNTING_TABS.filter((tab) => tab.available).map((tab) => tab.id)).toEqual([
+      'closing',
+      'sales',
+      'receipts',
       'expenses',
       'bank',
       'wht',
+      'documents',
       'qa',
       'export',
     ])
   })
 
-  it('`?tab=` ที่ชี้แท็บยังไม่เกิด/ไม่มีจริง ตกกลับแท็บเริ่มต้นเสมอ', () => {
+  it('`?tab=` ที่ไม่มีจริง ตกกลับแท็บเริ่มต้นเสมอ', () => {
     expect(resolveAccountingTab('qa')).toBe('qa')
-    expect(resolveAccountingTab('expenses')).toBe('expenses')
+    expect(resolveAccountingTab('closing')).toBe('closing')
+    expect(resolveAccountingTab('documents')).toBe('documents')
     expect(resolveAccountingTab('export')).toBe('export')
-    expect(resolveAccountingTab('closing')).toBe(DEFAULT_ACCOUNTING_TAB)
     expect(resolveAccountingTab('ไม่มีจริง')).toBe(DEFAULT_ACCOUNTING_TAB)
     expect(resolveAccountingTab(undefined)).toBe(DEFAULT_ACCOUNTING_TAB)
   })

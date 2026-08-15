@@ -7,6 +7,7 @@ import {
   assertExportNotBlocked,
   blockingCriticalOf,
   canTransitionException,
+  exceptionActionsFor,
   EXCEPTION_TRANSITIONS,
   summarizeExceptions,
   type BlockingException,
@@ -116,5 +117,33 @@ describe('ตัวบล็อก Export (`34` §16)', () => {
       if (!isAccountingError(error)) throw error
       expect(error.context?.blockingExceptions).toEqual([{ id: 'a', title: 'ปัญหา a', sourceModule: 'billing' }])
     }
+  })
+})
+
+describe('ปุ่มบนแถวข้อยกเว้น (`34` §8)', () => {
+  const accountant = { canManage: true, canAuthorize: false }
+  const executive = { canManage: false, canAuthorize: true }
+
+  it('บัญชี: `open` แก้ได้/ปิดได้ แต่ authorize เองไม่ได้ (`34` §10 — ผู้บริหารเท่านั้น)', () => {
+    expect(exceptionActionsFor('open', accountant)).toEqual({
+      canEdit: true,
+      canResolve: true,
+      canAuthorize: false,
+    })
+  })
+
+  it('ผู้บริหาร: authorize ได้เฉพาะรายการที่ยัง `open`', () => {
+    expect(exceptionActionsFor('open', executive).canAuthorize).toBe(true)
+    expect(exceptionActionsFor('authorized', executive).canAuthorize).toBe(false)
+    expect(exceptionActionsFor('resolved', executive).canAuthorize).toBe(false)
+  })
+
+  it('รายการที่ปิดไปแล้วแก้รายละเอียดไม่ได้ (`34` §14 — แก้ได้เฉพาะขณะ `open`)', () => {
+    expect(exceptionActionsFor('resolved', accountant)).toEqual({
+      canEdit: false,
+      canResolve: false,
+      canAuthorize: false,
+    })
+    expect(exceptionActionsFor('authorized', accountant).canEdit).toBe(false)
   })
 })
