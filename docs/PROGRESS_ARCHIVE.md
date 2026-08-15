@@ -7,7 +7,7 @@
 
 ## Phase 4.4 — Accounting Expenses (32) + Accountant Questions (36)
 
-**วันที่**: 2026-08-15 · **commit**: `__COMMIT__` · **branch**: `auto/phase-4.4`
+**วันที่**: 2026-08-15 · **commit**: `1f3d525` · **branch**: `auto/phase-4.4`
 
 ### สิ่งที่ทำ
 
