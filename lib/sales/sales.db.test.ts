@@ -376,6 +376,35 @@ suite('Phase 4.3 — ออก/ยกเลิกใบกำกับภาษ�
     expect(new Set(issued.map((invoice) => invoice.invoiceNumber)).size).toBe(4)
   })
 
+  it('Final Test ด่าน 2 — ออกใบของ**รายการขายเดียวกัน**พร้อมกัน ⇒ ได้ใบเดียว อีกคน `TAX_INVOICE_ALREADY_ISSUED`', async () => {
+    await setNumbering({ seq: 200 })
+    const batch = await seedBilling({ status: 'sent' })
+    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const salesRecordId = record?.id ?? ''
+
+    // ดับเบิลคลิก / retry / เปิดสองแท็บ — `assertIssuable()` อ่านสถานะนอก transaction จึงผ่านทั้งคู่
+    // ถ้าไม่มี unique ระดับ DB จะได้ใบ active 2 ใบ 2 เลขที่ ⇒ ทะเบียนภาษีขายนับซ้ำ ยื่น ภ.พ.30 เกิน
+    const results = await Promise.allSettled([
+      sales.issueTaxInvoice(ctx, { salesRecordId }),
+      sales.issueTaxInvoice(ctx, { salesRecordId }),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const loser = results.find((result) => result.status === 'rejected')
+    expect(codeOf((loser as PromiseRejectedResult).reason)).toBe('TAX_INVOICE_ALREADY_ISSUED')
+
+    const invoices = await db().taxInvoice.findMany({
+      where: { salesRecordId },
+      select: { status: true, invoiceNumber: true },
+    })
+    expect(invoices).toHaveLength(1)
+    expect(invoices[0]?.status).toBe('active')
+    // เลขของคนที่แพ้ต้อง rollback ไปด้วย ⇒ ใบถัดไปได้เลขต่อเนื่อง ไม่ขาดช่วง (`31` §16)
+    const next = await sales.syncSalesRecordFromBilling(ctx, (await seedBilling({ status: 'sent' })).id)
+    const following = await sales.issueTaxInvoice(ctx, { salesRecordId: next?.id ?? '' })
+    expect(sequenceOf(following.invoiceNumber)).toBe(sequenceOf(invoices[0]?.invoiceNumber ?? '') + 1)
+  })
+
   it('โหมด yearly_reset ข้ามปี ⇒ กลับไปเริ่ม 0001 พร้อม prefix ปี พ.ศ. ใหม่ (`31` §16)', async () => {
     await setNumbering({ seq: 37, mode: 'yearly_reset', lastResetYear: 2569 })
     const batch = await seedBilling({ status: 'sent' })

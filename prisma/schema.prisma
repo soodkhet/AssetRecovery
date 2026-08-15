@@ -2417,6 +2417,9 @@ model TaxInvoice {
 
   @@index([organizationId, status], map: "idx_tax_invoices_org")
   @@index([organizationId, invoiceDate], map: "idx_tax_invoices_org_invoice_date")
+  /// กันออกใบซ้ำที่ระดับ DB — `uniq_tax_invoice_active_per_sales` เป็น **partial unique index**
+  /// `(organization_id, sales_record_id) WHERE status = 'active'` ซึ่ง Prisma เขียนไม่ได้
+  /// ⇒ อยู่ใน raw SQL (`20260816040000_tax_invoice_active_unique`) ตาม Rule 02
   @@map("tax_invoices")
 }
 

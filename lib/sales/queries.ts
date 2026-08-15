@@ -462,6 +462,17 @@ export async function issueTaxInvoice(
     )
 
     return invoice
+  }).catch((error: unknown) => {
+    // แข่งกันออกใบพร้อมกัน — `assertIssuable()` อ่านสถานะ**นอก** transaction จึงผ่านได้ทั้งคู่
+    // ⇒ คนที่แพ้ `uniq_tax_invoice_active_per_sales` ต้องได้ code เดิมของ `24` ไม่ใช่ Prisma error ดิบ
+    // (เลขที่ไม่ขาดช่วงเพราะการจองเลขอยู่ในทรานแซกชันเดียวกับ insert จึง rollback ไปพร้อมกัน)
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
+        detail: `มีใบกำกับภาษีของรายการขาย ${sales.id} ถูกออกโดยคำขออื่นพร้อมกัน`,
+        context: { salesRecordId: sales.id },
+      })
+    }
+    throw error
   })
 
   return toInvoiceDto(created, sales)
