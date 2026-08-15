@@ -1,6 +1,11 @@
 'use client'
 
 import {
+  ExceptionSummaryScreen,
+  TaxInvoiceScreen,
+  WhtSummaryScreen,
+} from '@/components/reports/accounting/accounting-report-screens'
+import {
   CompensationScreen,
   GrossProfitScreen,
   RevenueSummaryScreen,
@@ -16,7 +21,7 @@ import type { ReportDefinition } from '@/lib/reports/catalog'
 /**
  * ทะเบียน "หน้าจอเฉพาะรายงาน" — รายงานที่มีตัวกรอง/กราฟของตัวเองมาลงทะเบียนที่นี่
  * รายงานที่ไม่มีอะไรพิเศษใช้ `<ReportView>` ตรง ๆ (F3/F5 เป็นรายงาน ณ วันที่ ไม่มีพารามิเตอร์ ·
- * O3/O4 ก็เช่นกัน — O4 เป็นรายการเคสที่ค้างอยู่ ณ ตอนนี้)
+ * O3/O4 ก็เช่นกัน — O4 เป็นรายการเคสที่ค้างอยู่ ณ ตอนนี้ · A3 เป็นตารางประวัติล้วน)
  *
  * หน้ารายงานกลาง (`app/(app)/reports/[reportId]/page.tsx`) เป็นทางเข้าเดียวของทุกรายงาน
  * ⇒ ยามสิทธิ์/เมนู/สถานะ "ยังไม่เปิดใช้งาน" อยู่ที่เดียว ไม่แตกเป็นหน้าละมาตรฐาน (6.1)
@@ -31,6 +36,9 @@ const SCREENS: Readonly<Record<string, (props: ScreenProps) => React.ReactElemen
   'success-rate': SuccessRateScreen,
   'team-performance': TeamPerformanceScreen,
   'warehouse-summary': WarehouseSummaryScreen,
+  'wht-summary': WhtSummaryScreen,
+  'tax-invoice': TaxInvoiceScreen,
+  'exception-summary': ExceptionSummaryScreen,
 }
 
 export function ReportScreen({ report }: ScreenProps) {

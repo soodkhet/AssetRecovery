@@ -87,12 +87,11 @@ afterEach(() => {
 
 describe('runReport', () => {
   it('รายงานที่ยังไม่มี provider ⇒ REPORT_NOT_FOUND (ไม่คืนตัวเลขปลอม)', async () => {
-    // A1 ยังไม่มีตัวคำนวณ (Phase 6.4) — ผู้บริหารมีสิทธิ์ดูหมวด A จึงไปตกที่ยาม provider ไม่ใช่ 403
-    // (หมวด F เปิดใช้แล้วตั้งแต่ 6.2 · หมวด O ตั้งแต่ 6.3 ⇒ ต้องใช้รายงานของหมวดที่ยังไม่ถึงคิว)
-    const A1 = findReport('wht-summary')!
+    // E1 ยังไม่มีตัวคำนวณ (Phase 6.5) — ผู้บริหารมีสิทธิ์ดูหมวด E จึงไปตกที่ยาม provider ไม่ใช่ 403
+    // (หมวด F เปิดใช้แล้วตั้งแต่ 6.2 · O ตั้งแต่ 6.3 · A ตั้งแต่ 6.4 ⇒ ต้องใช้รายงานของหมวดที่ยังไม่ถึงคิว)
     const executive = userOf({ id: 'exec-1', capabilities: { unlock_period: 'manage' } })
 
-    await expect(runReport(executive, A1, { range: RANGE, refresh: false, now: NOW })).rejects.toThrow(ReportError)
+    await expect(runReport(executive, E1, { range: RANGE, refresh: false, now: NOW })).rejects.toThrow(ReportError)
   })
 
   it('ตรวจสิทธิ์ก่อนเสมอ — ไม่มีสิทธิ์ต้อง 403 **ก่อน** provider ถูกเรียก', async () => {
