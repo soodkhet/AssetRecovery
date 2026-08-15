@@ -35,6 +35,32 @@ export function dispatchNotification(target: DispatchTarget, message: Notificati
 }
 
 /**
+ * ส่งให้ "ทุกคนที่ถือ capability นี้" แบบยิงแล้วลืม — **ทางเข้าเดียว**ของ pattern นี้
+ *
+ * ⚠️ ห้ามเขียน `void usersWithCapability(...).then(...)` เองในโมดูล: `dispatchNotification()`
+ * กัน error ของ *การส่ง* ไว้ก็จริง แต่ error ของ *การหาผู้รับ* (query Prisma ล้ม/DB หลุด) จะไม่มี
+ * ใครรับ ⇒ unhandled rejection = Node ล้มโปรเซสทั้งตัว ซึ่งขัดกติกาข้อ (2) ด้านบนตรง ๆ
+ */
+export function dispatchToCapability(
+  organizationId: string,
+  capabilityCode: string,
+  message: NotificationMessage,
+): void {
+  void usersWithCapability(organizationId, capabilityCode)
+    .then((userIds) => {
+      dispatchNotification({ organizationId, userIds }, message)
+    })
+    .catch((error: unknown) => {
+      console.error('[notifications] หาผู้รับตาม capability ไม่สำเร็จ', {
+        organizationId,
+        capabilityCode,
+        eventCode: message.eventCode,
+        error,
+      })
+    })
+}
+
+/**
  * ส่งแบบรอผล — ใช้กับ **job** เท่านั้น (ต้องรู้ว่าเขียนแถวสำเร็จก่อนจบรอบ ไม่งั้น process ตาย
  * ระหว่าง fire-and-forget แล้วการเตือนหายไปเงียบ ๆ) · คืนจำนวนแถวที่สร้างจริง
  */

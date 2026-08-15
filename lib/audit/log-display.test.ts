@@ -70,6 +70,24 @@ describe('auditValueText()', () => {
     expect(auditValueText({ a: 1 })).toBe('{"a":1}')
     expect(auditValueText(['x', 'y'])).toBe('["x","y"]')
   })
+
+  it('ฟิลด์เงินแสดงเป็นบาทผ่าน util กลาง — ห้ามโชว์ satang ดิบ (Rule 01)', () => {
+    // `1250000` satang = ฿12,500.00 · โชว์ดิบ = ผู้ตรวจอ่านผิด 100 เท่า
+    expect(auditValueText(1250000, 'net_satang')).toBe('฿12,500.00')
+    expect(auditValueText(1250000, 'netSatang')).toBe('฿12,500.00')
+    expect(auditValueText(0, 'approved_satang')).toBe('฿0.00')
+    // ฟิลด์ที่ไม่ใช่เงินต้องไม่ถูกหาร 100
+    expect(auditValueText(1250000, 'retry_count')).toBe('1250000')
+    expect(auditValueText(1250000)).toBe('1250000')
+  })
+
+  it('ค่าเวลาแสดงเป็น พ.ศ. — ค.ศ. บนหน้าจอ = bug (`DISPLAY_CE_YEAR`)', () => {
+    const text = auditValueText('2026-08-15T07:30:00.000Z', 'sent_at')
+    expect(text).toBe('15/08/2569 14:30')
+    expect(text).not.toContain('2026')
+    // ข้อความธรรมดาที่ไม่ใช่ ISO ต้องไม่ถูกแตะ
+    expect(auditValueText('approved', 'status')).toBe('approved')
+  })
 })
 
 describe('auditLogListQuerySchema', () => {

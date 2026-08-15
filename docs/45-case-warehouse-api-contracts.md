@@ -15,6 +15,7 @@
 | v1.1 | 04/07/2569 | **Sync กับไฟล์ 41 v2.1**: §6.3 เติม `POST /api/field/cases/:id/resubmit-close` และ `POST /api/field/expenses/:id/resubmit` + §7 เติม event `case.close_resubmitted` / `expense.resubmitted` — ตาม endpoint ที่เติมเข้าไฟล์ 41 §17.1 (ปิดช่องว่าง action `resubmit_close_case`/`resubmit_expense` ที่นิยามไว้ใน 41 §8 แต่ไม่มี endpoint) |
 | v1.2 | 04/07/2569 | ✅ Product Owner ยืนยันชื่อ endpoint ทั้ง 2 แล้ว (DEC-006/D9) |
 | v1.4 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.5**: §6.1 เติม `GET /api/cases/team-options` — `38` §7.4 บังคับให้ฟอร์มรับเคสแสดง "ทีมที่เสนอ" แบบ real-time ตามจังหวัด พร้อมกล่องค่าใช้จ่ายของทุกทีมในรายการ แต่เคสที่ยังไม่ถูกบันทึกยังไม่มี `:id` จึงเรียก `GET /api/cases/:id/team-suggestion` ไม่ได้ · และ `GET /api/teams` + `GET /api/compensation-plans` ต้องใช้ `view_master_data`/`manage_compensation_plans` ซึ่งเจ้าหน้าที่อนุมัติเคสไม่มี (`25` §7.1) ⇒ endpoint นี้อ่านด้วย capability ชุดเดียวกับการอ่านเคส · **read-only ไม่มี business logic ใหม่** รวมเป็น 41 endpoints |
+| v1.5 | 15/08/2569 | **ขึ้นทะเบียน event ของการแจ้งเตือน (Phase 5.1/5.2)**: §7 เติมกลุ่ม "Notification (`90` §6.3)" 7 ชื่อ — `expense.rejected`, `payout_batch.completed`, `advance.overdue`, `wht.filing_due_reminder`, `exception.created`, `question.asked`, `period.sent_to_accountant` · ทั้ง 7 ตัวถูกกำหนดไว้แล้วใน `90` §6.3 (คู่ event → การแจ้งเตือน) แต่ไฟล์ต้นทาง 15/16/17/30/33/34/36 ไม่มีตาราง event ของตัวเอง จึงไม่เคยถูกรวมมาที่ registry นี้ · Rule 04 บังคับว่า "เพิ่ม event ใหม่ต้องลง registry" ⇒ ขึ้นทะเบียนย้อนให้ตรงกับ `lib/api/event-names.ts` ที่ implement ไปแล้ว · **ไม่มี business logic ใหม่** |
 | v1.3 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.2**: §6.1 เติม `PATCH /api/cases/:id` (action `edit_case` ที่ `38` §8/§12 นิยามไว้พร้อม error `CASE_LOCKED_AFTER_APPROVAL` และ `edit_history` ใน §6.4 แต่ §17.1 ของไฟล์ 38 ไม่เคยประกาศ endpoint) — ไม่มี business logic ใหม่ รวมเป็น 40 endpoints |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
@@ -128,6 +129,13 @@ Field Tracker (41): case.accepted / case.scheduled / case.reordered / case.check
 Warehouse (44):    asset.intake_confirmed / asset.intake_rejected / lot.created / lot.confirmed
                    (lot.confirmed คือ trigger point เดียวที่ unlock expense + generate revenue พร้อมกันใน
                    1 transaction — ดู 44 §11 และ 92-platform-data-model.md §6.1)
+
+Notification (90 §6.3): expense.rejected / payout_batch.completed / advance.overdue /
+                   wht.filing_due_reminder / exception.created / question.asked /
+                   period.sent_to_accountant
+                   (7 ตัวนี้ไฟล์ต้นทาง 15/16/17/30/33/34/36 ไม่มีตาราง event ของตัวเอง — SSOT ของชื่อ
+                   คือ `90` §6.3 ซึ่งกำหนดคู่ event → การแจ้งเตือนไว้ · ขึ้นทะเบียนที่นี่ตาม Rule 04
+                   "event ใหม่ต้องลง registry" — เพิ่มพร้อม Phase 5.1/5.2)
 ```
 
 ## 8. REST Convention ที่ใช้สม่ำเสมอทั้งระบบ

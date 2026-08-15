@@ -32,10 +32,20 @@ export function NotificationBell({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<NotificationListDto>({ items: [], unreadCount: 0, totalCount: 0 })
+  // Rule 05 — ต้องแยก "กำลังโหลด" / "ว่างจริง" / "โหลดไม่สำเร็จ" ออกจากกัน
+  // (ก่อนหน้านี้ทั้งสามกรณีขึ้นข้อความ "ยังไม่มีการแจ้งเตือน" เหมือนกันหมด = ปิดบังปัญหา)
+  const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
   const load = useCallback(async () => {
     const response = await callApi<NotificationListDto>(`/api/notifications?limit=${DROPDOWN_LIMIT}`)
-    if (response.data !== undefined) setData(response.data)
+    if (response.data !== undefined) {
+      setData(response.data)
+      setFailed(false)
+    } else {
+      setFailed(true)
+    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -114,7 +124,20 @@ export function NotificationBell({
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto">
-              {data.items.length === 0 ? (
+              {loading ? (
+                <p className="px-3 py-6 text-center text-xs text-slate-400">กำลังโหลด...</p>
+              ) : failed ? (
+                <div className="px-3 py-6 text-center">
+                  <p className="text-xs text-rose-600">โหลดการแจ้งเตือนไม่สำเร็จ</p>
+                  <button
+                    type="button"
+                    onClick={() => void load()}
+                    className="focus-ring mt-1 rounded px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
+                  >
+                    ลองใหม่
+                  </button>
+                </div>
+              ) : data.items.length === 0 ? (
                 <p className="px-3 py-6 text-center text-xs text-slate-400">ยังไม่มีการแจ้งเตือน</p>
               ) : (
                 data.items.map((item) => (

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { apiFailure, apiSuccess } from '@/lib/api/envelope'
 import { authErrorMessage } from '@/lib/auth/errors'
-import { enqueueScheduledJobs, runDueJobs } from '@/lib/jobs/engine'
+import { enqueueScheduledJobs, reclaimStaleJobs, runDueJobs } from '@/lib/jobs/engine'
 import { runSweeperJobs } from '@/lib/jobs/registry'
 import type { JobRunSummaryDto } from '@/lib/jobs/types'
 
@@ -17,12 +17,14 @@ export const maxDuration = 300
 /**
  * `GET /api/cron/jobs` — ตัวรันงานเบื้องหลังของระบบ (`91` §17 · DEC-001 Vercel Cron / QStash)
  *
- * หนึ่งรอบทำ 3 อย่างตามลำดับ:
- *  ① ตั้งคิวงานตามตารางเวลาของช่องเวลานี้ (`enqueueScheduledJobs()` — คีย์กันซ้ำต่อช่องเวลา
+ * หนึ่งรอบทำ 4 อย่างตามลำดับ:
+ *  ① กู้งานที่ค้างสถานะ `running` จากรอบที่ถูกตัดกลางคัน (`reclaimStaleJobs()` — ทำก่อนเสมอ
+ *     เพื่อให้งานที่ตันได้กลับเข้าบันได retry ในรอบเดียวกัน)
+ *  ② ตั้งคิวงานตามตารางเวลาของช่องเวลานี้ (`enqueueScheduledJobs()` — คีย์กันซ้ำต่อช่องเวลา
  *     ⇒ cron ยิงซ้ำ/retry ไม่เกิดงานซ้อน)
- *  ② หยิบงานที่ถึงคิวมาทำ (`runDueJobs()` — claim ด้วย conditional update, retry/backoff,
+ *  ③ หยิบงานที่ถึงคิวมาทำ (`runDueJobs()` — claim ด้วย conditional update, retry/backoff,
  *     ครบเพดานเข้า dead letter รอ Superadmin)
- *  ③ เรียกตัวกวาดคิวที่ดูแลสถานะของตัวเอง (`fuel_distance_retry` — D10)
+ *  ④ เรียกตัวกวาดคิวที่ดูแลสถานะของตัวเอง (`fuel_distance_retry` — D10)
  *
  * **ไม่มี session**: ผู้เรียกคือ Vercel Cron/QStash ⇒ ยืนยันตัวด้วย `CRON_SECRET` ผ่าน
  * `Authorization: Bearer ...` (Vercel ใส่ให้เองเมื่อกำหนดตัวแปรนี้) · ไม่ตั้งค่า = อนุญาตเฉพาะ
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   }
 
   const now = new Date()
+  const reclaimed = await reclaimStaleJobs(now)
   const scheduled = await enqueueScheduledJobs(now)
   const tally = await runDueJobs({ now })
   const sweepers = await runSweeperJobs({ now })
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest): Promise<Response> {
     duplicated: scheduled.duplicated,
     ...tally,
   }
-  return apiSuccess({ ...summary, sweepers, ranAt: now.toISOString() })
+  return apiSuccess({ ...summary, reclaimed, sweepers, ranAt: now.toISOString() })
 }
 
 function isCronAuthorized(request: NextRequest): boolean {

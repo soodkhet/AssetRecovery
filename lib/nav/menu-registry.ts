@@ -230,7 +230,9 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       // `06` §9 — "ตั้งค่าทั่วไป" รวม `auditlog` (mockup `settings.html` แท็บสุดท้าย) · Phase 5.2
       // ⚠️ `90` §12 ให้บัญชี/การเงินดู audit ได้ด้วย (capability `view_audit_log`) แต่ `06` §7.2
       // ไม่ให้สอง role นี้เห็นเมนู "การตั้งค่า" — คงตาม `06` เหมือนกรณีธุรการที่ `settings.users`
-      // (สิทธิ์ที่ API ยังมีจริง เข้าถึงได้ตรงลิงก์ · เมนูไม่ใช่ security boundary — DEC-002)
+      // ⚠️ ผลจริง: `requireMenuPage()` **redirect** กลับแดชบอร์ด ⇒ สอง role นี้ใช้ฟีเจอร์ผ่าน UI
+      //    ไม่ได้เลย (เข้าตรงลิงก์ก็ไม่ได้) เหลือแต่การยิง API ตรงซึ่งยังผ่าน `requirePermission()`
+      //    → ข้อขัดกัน `90` §12 vs `06` §7.2 ยังรอมติ PO (ดู `docs/02_OPEN_DECISIONS.md`)
       {
         id: 'settings.audit-logs',
         label: 'บันทึกการใช้งาน (Audit Log)',
@@ -241,6 +243,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       // `91` §8 — หน้าสถานะงานเบื้องหลัง (Job Log) · Phase 5.3
       // เหตุผลเดียวกับ audit log: `91` §12 ให้บัญชี/การเงินดูสถานะงานของตัวเองได้ (capability
       // `manage_jobs` ระดับ view) แต่ `06` §7.2 ไม่ให้สอง role นี้เห็นเมนู "การตั้งค่า"
+      // ⇒ ผลจริงเหมือนกัน: เข้าหน้าไม่ได้เลยผ่าน UI — รอมติ PO ก้อนเดียวกับ audit log
       {
         id: 'settings.jobs',
         label: 'งานเบื้องหลัง (Job Log)',

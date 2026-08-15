@@ -22,13 +22,16 @@ export const runtime = 'nodejs'
  * job_type รับได้ **5 ตัวของ `91` §6.1 เท่านั้น** (C8 — รวม `advance_overdue`) · นอกรายการ
  * ถูกปฏิเสธด้วย `JOB_INVALID_STATUS` ซึ่งคือรูป prefix ตาม `24` §7 ของ `INVALID_STATUS` ใน §14.1
  */
-export const POST = withApiPermission(
+/** ต้องตอบ 404 **ก่อน**ชั้นสิทธิ์ — ถ้าปล่อยให้ 401/403 ออกไปก่อน คนนอกก็รู้ว่ามี route นี้อยู่ */
+function notFound(): Response {
+  return new Response('Not Found', { status: 404 })
+}
+
+const triggerJob = withApiPermission(
   'manage',
   MANAGE_JOBS,
   toModuleErrorResponse,
   async (request: NextRequest, _context: unknown, user) => {
-    if (process.env.NODE_ENV === 'production') return new Response('Not Found', { status: 404 })
-
     const body = await readJsonBody(request)
     const requestedType = (body as { jobType?: unknown } | null)?.jobType
     if (typeof requestedType === 'string' && isKnownJobType(requestedType) && !DEV_TRIGGER_JOB_TYPES.includes(requestedType)) {
@@ -57,3 +60,8 @@ export const POST = withApiPermission(
     return apiSuccess({ job: await getJob(user, created.job.id), duplicate: created.duplicate, outcome })
   },
 )
+
+export async function POST(request: NextRequest, context: unknown): Promise<Response> {
+  if (process.env.NODE_ENV === 'production') return notFound()
+  return triggerJob(request, context)
+}

@@ -182,6 +182,27 @@ suite('idempotency ของการสร้าง job (`91` §11/§16 · `01`
     expect(await db().job.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 
+  it('คีย์เดียวกันคนละองค์กร = คนละงาน (ไม่กลืนกัน ไม่คืนงานขององค์กรอื่น)', async () => {
+    const key = 'test53:shared-key'
+    const mine = await engine.enqueueJob({
+      organizationId: ORG_ID,
+      jobType: UNKNOWN_TYPE,
+      idempotencyKey: key,
+      createdBy: ADMIN_ID,
+    })
+    const other = await engine.enqueueJob({
+      organizationId: OTHER_ORG_ID,
+      jobType: UNKNOWN_TYPE,
+      idempotencyKey: key,
+      createdBy: OTHER_USER_ID,
+    })
+
+    expect(mine.duplicate).toBe(false)
+    expect(other.duplicate).toBe(false)
+    expect(other.job.id).not.toBe(mine.job.id)
+    expect(other.job.organizationId).toBe(OTHER_ORG_ID)
+  })
+
   it('ตัวตั้งเวลายิงซ้ำในช่องเวลาเดิม = ไม่มีงานเพิ่ม', async () => {
     const at = new Date('2026-08-15T10:03:00Z')
     const first = await engine.enqueueScheduledJobs(at)
@@ -255,6 +276,30 @@ suite('การหยิบงานและรอบ retry (`91` §6.2/§10)'
     } finally {
       handlers['wht_summary'] = original
     }
+  })
+
+  it('งานค้าง `running` จากรอบที่ถูกตัดกลางคัน — ตัวกวาดดันกลับเข้าบันได retry', async () => {
+    const { job } = await seedJob({ maxRetries: 2 })
+    const startedAt = new Date('2026-08-15T10:00:00Z')
+    await db().job.update({ where: { id: job.id }, data: { status: 'running', startedAt } })
+
+    // ยังไม่ถึงเกณฑ์ค้าง = ห้ามไปแย่งงานที่อาจยังทำอยู่จริง
+    expect(await engine.reclaimStaleJobs(new Date('2026-08-15T10:05:00Z'))).toBe(0)
+    expect((await db().job.findUniqueOrThrow({ where: { id: job.id } })).status).toBe('running')
+
+    const later = new Date('2026-08-15T10:30:00Z')
+    expect(await engine.reclaimStaleJobs(later)).toBe(1)
+
+    const reclaimed = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+    expect(reclaimed.status).toBe('pending')
+    expect(reclaimed.retryCount).toBe(1)
+    expect(reclaimed.errorMessage).toContain('ค้างสถานะ')
+    // นับเป็นความล้มเหลวหนึ่งครั้ง ⇒ ค้างซ้ำจนครบเพดานต้องตกเป็น dead letter ไม่วนไม่รู้จบ
+    await db().job.update({ where: { id: job.id }, data: { status: 'running', startedAt: later } })
+    await engine.reclaimStaleJobs(new Date('2026-08-15T11:00:00Z'))
+    const dead = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+    expect(dead.status).toBe('failed')
+    expect(dead.retryCount).toBe(2)
   })
 })
 

@@ -20,9 +20,11 @@ import { prisma } from '@/lib/prisma'
  * ### idempotency (`01` §11 · `91` §14)
  * คีย์กันซ้ำเก็บอยู่ใน `payload.idempotencyKey` **ไม่ใช่คอลัมน์ใหม่** — `02` §10 กำหนดรูปตาราง
  * `jobs` ไว้แล้วและ Rule 02 ห้ามแก้ schema ให้ต่างจาก `02` เงียบ ๆ · ตัวบังคับความไม่ซ้ำจริงคือ
- * partial unique index บน expression `(payload->>'idempotencyKey')`
- * (`prisma/migrations/20260815180000_jobs_idempotency_key`) ⇒ สองคำขอพร้อมกันด้วยคีย์เดียวกัน
+ * partial unique index `uniq_jobs_org_idempotency_key` บน
+ * `(COALESCE(organization_id::text,'system'), payload->>'idempotencyKey')`
+ * (`prisma/migrations/20260815203000_jobs_idempotency_key_per_org`) ⇒ สองคำขอพร้อมกันด้วยคีย์เดียวกัน
  * ตัวที่แพ้ได้ P2002 แล้วอ่าน job เดิมกลับมาคืน — ไม่มีทางเกิด job ซ้ำแม้แข่งกันระดับมิลลิวินาที
+ * · ขอบเขตของคีย์คือ **ต่อองค์กร** — คีย์ที่ผู้เรียกส่งมาเองห้ามชนกันข้ามองค์กร (multi-tenant)
  *
  * ### กันงานซ้อน (`91` §10 — retry ห้ามสร้างผลซ้ำ)
  * หยิบงานด้วย **conditional update** (`updateMany` + `where status: 'pending'`) เสมอ — ตัวรันงาน
@@ -99,11 +101,22 @@ function payloadWithKey(payload: Record<string, unknown> | undefined, key: strin
   return { ...(payload ?? {}), [JOB_IDEMPOTENCY_PAYLOAD_KEY]: key } as Prisma.InputJsonValue
 }
 
-async function findByIdempotencyKey(key: string): Promise<JobRow | null> {
-  return prisma.job.findFirst({
-    where: { payload: { path: [JOB_IDEMPOTENCY_PAYLOAD_KEY], equals: key } },
-    select: JOB_SELECT,
-  })
+/**
+ * คีย์กันซ้ำมีผล **ภายในองค์กรเดียวกันเท่านั้น** — `POST /api/jobs` รับคีย์จากผู้เรียกตรง ๆ
+ * ถ้าค้นข้ามองค์กร องค์กร B ที่ใช้คีย์ซ้ำกับ A จะได้ job ของ A กลับไป (งานของ B หาย + ข้อมูลรั่ว)
+ * งานระดับระบบ (`organization_id IS NULL`) กันซ้ำกันเองในกลุ่มเดียว
+ */
+async function findByIdempotencyKey(organizationId: string | null, key: string): Promise<JobRow | null> {
+  // เทียบด้วยรูปเดียวกับ expression ของ `uniq_jobs_org_idempotency_key` เป๊ะ ๆ เพื่อให้เข้า index
+  // (`payload: { path, equals }` ของ Prisma เทียบแบบ jsonb ⇒ ไม่เข้า index ตัวนี้ = seq scan ทุกครั้ง)
+  const [row] = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM jobs
+     WHERE COALESCE(organization_id::text, 'system') = ${organizationId ?? 'system'}
+       AND payload->>'idempotencyKey' = ${key}
+     LIMIT 1
+  `
+  if (row === undefined) return null
+  return prisma.job.findUnique({ where: { id: row.id }, select: JOB_SELECT })
 }
 
 /**
@@ -111,7 +124,7 @@ async function findByIdempotencyKey(key: string): Promise<JobRow | null> {
  * ⇒ ผู้เรียกทุกทาง (API / dev trigger / ตัวตั้งเวลา / โมดูลอื่น) ต้องผ่านฟังก์ชันนี้เท่านั้น
  */
 export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResult> {
-  const existing = await findByIdempotencyKey(input.idempotencyKey)
+  const existing = await findByIdempotencyKey(input.organizationId, input.idempotencyKey)
   if (existing !== null) return { job: existing, duplicate: true }
 
   try {
@@ -148,7 +161,7 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
   } catch (error) {
     // แข่งกันสร้างด้วยคีย์เดียวกัน — ตัวที่แพ้ partial unique index อ่านของเดิมกลับมาคืน
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const raced = await findByIdempotencyKey(input.idempotencyKey)
+      const raced = await findByIdempotencyKey(input.organizationId, input.idempotencyKey)
       if (raced !== null) return { job: raced, duplicate: true }
     }
     throw error
@@ -208,6 +221,43 @@ export async function runDueJobs(options: RunJobsOptions = {}): Promise<JobRunTa
     }
   }
   return tally
+}
+
+/**
+ * เวลาที่ปล่อยให้งานหนึ่งตัวค้างสถานะ `running` ได้ก่อนถือว่าตัวรันงานตายไปแล้ว
+ * ต้องมากกว่า `maxDuration` ของ route ตัวตั้งเวลา (300 วิ) พอสมควร — ไม่งั้นจะไปแย่งงานที่ยังทำอยู่จริง
+ */
+export const JOB_STALE_RUNNING_MS = 15 * 60 * 1000
+
+/**
+ * กู้งานที่ค้าง `running` (`91` §10) — instance ของ Vercel ถูกตัดกลางคัน/ถูก freeze ระหว่างทำงาน
+ * งานนั้นจะไม่ถูกหยิบซ้ำ (`where status: 'pending'`), retry มือก็ไม่ได้ (`canManualRetry()` ปฏิเสธ
+ * `running`) และคีย์กันซ้ำถูกจองไปแล้ว ⇒ **ตันทุกทาง** ถ้าไม่มีตัวกวาด
+ *
+ * นับเป็น "ล้มเหลวหนึ่งครั้ง" ตามบันไดเดิม เพื่อให้ครบเพดานแล้วตกเป็น dead letter จริง
+ * (ถ้าดันกลับเป็น `pending` เฉย ๆ งานที่ค้างทุกรอบจะวนไม่รู้จบ)
+ */
+export async function reclaimStaleJobs(
+  now: Date = new Date(),
+  staleAfterMs: number = JOB_STALE_RUNNING_MS,
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - staleAfterMs)
+  const stale = await prisma.job.findMany({
+    where: { status: 'running', startedAt: { lt: cutoff } },
+    select: JOB_SELECT,
+  })
+
+  for (const job of stale) {
+    // กันแย่งกับตัวกวาดอีกตัว — ใครเปลี่ยนสถานะออกจาก `running` ได้ก่อนเป็นคนจัดการ
+    const claimed = await prisma.job.updateMany({
+      where: { id: job.id, status: 'running', startedAt: { lt: cutoff } },
+      data: { status: 'pending' },
+    })
+    if (claimed.count === 0) continue
+    await failJob(job, now, `งานค้างสถานะ "กำลังทำ" เกิน ${Math.round(staleAfterMs / 60000)} นาที — ตัวรันงานหยุดกลางคัน`, false)
+  }
+
+  return stale.length
 }
 
 /**

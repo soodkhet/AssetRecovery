@@ -34,4 +34,11 @@ export interface AuditLogListDto {
   hasMore: boolean
   /** ค่าที่มีจริงในองค์กรนี้ — ใช้เติมช่องกรอง "เป้าหมาย" */
   targetTypes: string[]
+  /** ผู้ที่เคยมีรายการในองค์กรนี้ — ใช้เติมช่องกรอง "ผู้ดำเนินการ" (`90` §14) */
+  actors: AuditLogActorOptionDto[]
+}
+
+export interface AuditLogActorOptionDto {
+  id: string
+  name: string
 }

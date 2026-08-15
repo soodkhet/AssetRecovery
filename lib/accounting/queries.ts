@@ -45,7 +45,7 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { dispatchNotification, usersWithCapability } from '@/lib/notifications/dispatch'
+import { dispatchToCapability } from '@/lib/notifications/dispatch'
 import { exceptionCreatedMessage, periodSentToAccountantMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 import { exceptionLinkOf, exceptionModuleLabel } from '@/lib/reports/dashboard'
@@ -436,12 +436,11 @@ async function transitionPeriod(
 
   // `90` §6.3 (mockup `notifications.html` · `30` §9) — ส่งงวดให้สำนักงานบัญชีแล้วทีมบัญชีต้องรู้ทั้งทีม
   if (to === 'sent_to_accountant' && extra.unlock !== true) {
-    void usersWithCapability(ctx.actor.organizationId, MANAGE_ACCOUNTING_PERIOD).then((userIds) => {
-      dispatchNotification(
-        { organizationId: ctx.actor.organizationId, userIds },
-        periodSentToAccountantMessage({ periodId, periodLabel: updated.periodLabel }),
-      )
-    })
+    dispatchToCapability(
+      ctx.actor.organizationId,
+      MANAGE_ACCOUNTING_PERIOD,
+      periodSentToAccountantMessage({ periodId, periodLabel: updated.periodLabel }),
+    )
   }
 
   return toPeriodDto(updated, summarizeExceptionCounts([]), undefined)
@@ -603,12 +602,11 @@ export async function createException(
 
   // `90` §6.3 แถว 9 — เฉพาะระดับ critical (ตัวที่ยัง open จะบล็อก Export Pack ของ `37`)
   if (created.level === 'critical') {
-    void usersWithCapability(ctx.actor.organizationId, MANAGE_EXCEPTIONS).then((userIds) => {
-      dispatchNotification(
-        { organizationId: ctx.actor.organizationId, userIds },
-        exceptionCreatedMessage({ title: created.title, periodLabel: created.period.periodLabel }),
-      )
-    })
+    dispatchToCapability(
+      ctx.actor.organizationId,
+      MANAGE_EXCEPTIONS,
+      exceptionCreatedMessage({ title: created.title, periodLabel: created.period.periodLabel }),
+    )
   }
 
   return toExceptionDto(created)

@@ -1,3 +1,5 @@
+import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AuditAction } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -133,10 +135,29 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
-/** ค่าในคอลัมน์ before/after ของ drawer — object/array แสดงเป็น JSON บรรทัดเดียว */
-export function auditValueText(value: unknown): string {
+/** ฟิลด์เงินใน payload ของ audit เขียนได้ทั้ง `net_satang` (snake) และ `netSatang` (camel) */
+const SATANG_FIELD = /(^|_)satang$|Satang$/
+
+/** ค่า `TIMESTAMPTZ` ที่ `emitAudit()` เก็บลง before/after เป็น ISO UTC เสมอ */
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
+
+/**
+ * ค่าในคอลัมน์ before/after ของ drawer — object/array แสดงเป็น JSON บรรทัดเดียว
+ *
+ * ⚠️ ค่าที่เก็บใน audit เป็น **satang** และ **ISO ค.ศ.** ตามที่ DB เก็บจริง ⇒ ต้องแปลงที่ชั้นแสดงผล
+ * ก่อนขึ้นจอเสมอ ไม่งั้นผู้ตรวจอ่านเงินผิด 100 เท่า (`1250000` = ฿12,500.00) และเห็นปี ค.ศ.
+ * (Rule 01 — `DISPLAY_CE_YEAR`) · `field` ไม่ระบุ = แสดงดิบเหมือนเดิม
+ */
+export function auditValueText(value: unknown, field?: string): string {
   if (value === null || value === undefined) return '—'
-  if (typeof value === 'string') return value === '' ? '—' : value
+
+  if (typeof value === 'number' && field !== undefined && SATANG_FIELD.test(field)) {
+    return fmtSatangSymbol(value)
+  }
+  if (typeof value === 'string') {
+    if (value === '') return '—'
+    return ISO_DATETIME.test(value) ? fmtDateTime(value) : value
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value)
 }
