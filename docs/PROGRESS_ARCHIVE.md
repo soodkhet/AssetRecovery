@@ -5,6 +5,40 @@
 
 ---
 
+## Phase 4.3 — Sales & Receipts + Tax Invoice + PDF (31)
+
+**วันที่**: 2026-08-15 · **commit**: `__COMMIT__` · **branch**: `auto/phase-4.3`
+
+### สิ่งที่ทำ
+
+- **`lib/sales/sales.ts`** (pure) — กติกาใบกำกับภาษีทั้งชุด: `missingTaxInvoiceFields()`/`assertTaxInvoiceFieldsComplete()` (ฟิลด์บังคับตามกฎหมาย 7 ข้อของ `28` §6.2 — ผู้ขาย/ผู้ซื้อ ชื่อ+ที่อยู่+เลขภาษี 13 หลัก, ผู้ขายต้องจด VAT, รายการ, ยอดที่ `total = before + vat`) · `assertIssuable()`/`assertCancellable()`/`requireCancelReason()`/`assertNoNumberGap()` · `summarizeSalesAmounts()` (มียามจับ `total ≠ gross + vat` ของรายได้ต้นทาง) · `buildTaxInvoiceDoc()` ประกอบข้อความเอกสาร (พ.ศ. + คั่นหลักพัน + จำนวนเงินเป็นตัวอักษรผ่าน `bahtInWords()` ของ 3.5)
+- **`lib/sales/queries.ts`** — `syncSalesRecordFromBilling()` (จุดเสียบท้าย `sendBillingBatch()` ของ 3.6 · idempotent ด้วย unique `billing_batch_id` · ผูกงวดด้วย `ensurePeriod()` ของ 4.1) · `listSalesRecords()` · `issueTaxInvoice()` · `cancelTaxInvoice()` · `listTaxInvoices()` · `getTaxInvoiceDocSource()` · `listCashReceipts()`
+- **เดินเลขไม่ให้ gap (D11)** — ใน `$transaction` เดียวกับ insert: `SELECT … FOR UPDATE` แถว `organizations` → คิดเลขที่ควรได้ด้วย `nextSequence()` (pure ของ 1.10) → เดินเลขจริงด้วย `reserveNextInvoiceNumber()` (1.10) → เทียบกัน ผิด = `INVOICE_NUMBER_GAP` · ตรวจฟิลด์บังคับ **ก่อน** แตะตัวเดินเลขเสมอ (ฟิลด์ไม่ครบต้องไม่กินเลขที่)
+- **API 5 endpoint** (`31` §14): `GET /api/accounting/sales` · `GET|POST /api/accounting/tax-invoices` · `PATCH /api/accounting/tax-invoices/:id/cancel` · `GET /api/accounting/tax-invoices/:id/pdf` · `GET /api/accounting/cash-receipts` — อ่าน = `view` ของ `manage_sales_expenses`/`manage_tax_invoice` (การเงินอ่านได้) · ออก/ยกเลิก = `manage:manage_tax_invoice` ของบัญชีเท่านั้น
+- **`components/pdf/official-doc.tsx` + `tax-invoice.tsx`** — ชุดชิ้นส่วน **เอกสารทางการ** (แยกจาก `internal-doc.tsx` ของ 3.5 เพราะฟิลด์ถูกกฎหมายบังคับ · ใบ 50 ทวิ ของ 4.5 ใช้ต่อ) + ใบกำกับภาษีเต็มรูปครบ 7 ฟิลด์ · ใบที่ยกเลิกแล้วพิมพ์ได้แต่ขึ้นแถบ "เอกสารนี้ถูกยกเลิก" เสมอ
+- **migration `20260815120000_tax_invoices_immutable`** — trigger ระดับ DB ตาม `02` §13: ห้าม DELETE ทุกกรณี · แถว `cancelled` ห้ามแก้/ห้าม reverse · แถว `active` แก้ได้ทางเดียวคือเปลี่ยนเป็น `cancelled` (เลขที่/วันที่/รายการขายแก้ไม่ได้)
+- **เทสต์**: pure 18 เคส (`sales.test.ts`) + route 9 เคส (`accounting-sales-routes.test.ts` — สิทธิ์ 403 ของการเงิน/พนักงานสนาม, PDF จริง + ฟอนต์ไทยฝังจริง, route เงินรับ/รายการขาย export แค่ `GET`) + ระดับ DB 10 เคส (`sales.db.test.ts` — sync 1:1 จากการส่งบิลจริง, draft ไม่สร้าง, ฟิลด์ไม่ครบไม่กินเลข, **ยกเลิก 005 → ออกใหม่ได้ 006**, **ออกพร้อมกัน 4 คำขอได้ 101–104 ไม่ขาดช่วง**, `yearly_reset` ข้ามปีได้ `…-2570-0001`, trigger immutable, Period Lock, เงินรับอ่านอย่างเดียว)
+- **`docs/24` v4.8** — เติม 4 error code (§6.8): `SALES_RECORD_NOT_FOUND`, `TAX_INVOICE_NOT_FOUND`, `TAX_INVOICE_INVALID_STATUS`, `TAX_INVOICE_ALREADY_ISSUED`
+
+### การตัดสินใจระหว่างทาง (ยึด schema `02` เป็นหลัก)
+
+- **`delivery_format` ต่อใบยังทำไม่ได้** — `31` §7.2 บอกว่าเป็นฟิลด์บังคับต่อใบ แต่ `02` §9 ไม่มีคอลัมน์นี้ใน `tax_invoices` ⇒ ยึด `02` (ลำดับเอกสารขัดกันใน CLAUDE.md) แล้วอ่านค่าเริ่มต้นของบริษัท (`finance_companies.default_invoice_delivery_format`) มาแสดงบน PDF แทน · **บันทึกเป็น `02_OPEN_DECISIONS` D13 พร้อม default ที่เสนอ (เพิ่มคอลัมน์ + snapshot ตอนออกใบ)** — ยังไม่แก้ schema เอง
+- **ใบเสร็จรับเงิน (`31` §6.4) + `cash_receipts.receipt_number` ไม่ implement** — ไม่มีตาราง/คอลัมน์ใน `02` และ export ของ `37` (`02_Cash_Receipts.csv`) ไม่ได้ขอเลขใบเสร็จ ⇒ รวมไว้ใน D13 ให้นักบัญชีเคาะ
+- **`sales_records.accounting_date` ใช้ `period_id` แทน** — ผูกกับรอบบัญชีของรอบวางบิล (`31` §6.1 sync ตอน `sent`) เพียงพอต่อการจัดกลุ่มตามงวด
+- **sync รายการขายอยู่ *นอก* ทรานแซกชันของการส่งบิล** — แนวเดียวกับจุดเสียบ 2 ทางของ 4.2: ความล้มเหลวฝั่งบัญชีต้องไม่ย้อนไปล้มการส่งบิลที่สำเร็จแล้ว และตัว sync เป็น idempotent เรียกซ้ำได้
+- **ยกเลิกใช้ conditional update (`where status = 'active'`)** — สองคนกดยกเลิกพร้อมกัน คนที่สองได้ 0 แถวแล้วโดน `TAX_INVOICE_INVALID_STATUS` (แนวเดียวกับ `sendBillingBatch` ของ 3.6)
+- **`INVOICE_NUMBER_GAP` = HTTP 500** — `24` §6.8 ระบุว่า "ไม่ควรเกิดในทางปฏิบัติ" ⇒ ถ้าเกิดคือตัวเดินเลขเสีย ไม่ใช่ผู้ใช้กรอกผิด
+
+### จุดที่คนถัดไปควรรู้
+
+- **ต้องรัน `pnpm db:deploy` ต่อ environment** (migration ใหม่ = trigger immutable ของ `tax_invoices`)
+- **ใบกำกับภาษีลบไม่ได้เลยแม้ในเทสต์** ⇒ เทสต์ระดับ DB ของ 4.3 สร้างบริษัทไฟแนนซ์ใหม่ทุกครั้งที่รัน + ใช้ prefix เลขที่เฉพาะรัน · เทสต์ของโมดูล 19 ต้อง `DELETE FROM sales_records` ก่อน `billing_batches` (การส่งบิลสร้างรายการขายให้แล้ว) — บันทึกเป็นกับดักใน REUSE_INDEX
+- **FE ของแท็บ "รายได้และขาย" / "เงินรับ" อยู่ที่ 4.7** — เฟสนี้เป็น BE + PDF เท่านั้น (แท็บใน `lib/accounting/accounting-tabs.ts` ยังไม่เปิด)
+- 4.5 (ใบ 50 ทวิ) ให้ต่อยอด `components/pdf/official-doc.tsx` — **ห้ามใช้ `internal-doc.tsx`** กับเอกสารทางการ
+- ตัวเดินเลขของ **ใบเสร็จรับเงิน/ใบ 50 ทวิ** ยังไม่มี (D11 ค้างเฉพาะส่วนนั้น) — ส่วนใบกำกับภาษี implement ตาม default ของ D11 ครบแล้ว
+
+---
+
 ## Phase 4.2 — Bank Reconciliation (35)
 
 **วันที่**: 2026-08-15 · **commit**: `1b2adeb` · **branch**: `auto/phase-4.2`

@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
     '/api/handover-lots/**': ['./public/fonts/**'],
     // เอกสารภายในของรอบจ่ายเงิน 3 ใบ (`28` §6.1 — สรุปรอบจ่าย/ใบสำคัญจ่าย/สลิปค่าตอบแทน)
     '/api/payout-batches/**': ['./public/fonts/**'],
+    // เอกสารทางการฝั่งบัญชี (`28` §6.2 — ใบกำกับภาษี)
+    '/api/accounting/**': ['./public/fonts/**'],
   },
   // ⚠️ ไม่ตั้ง process.env.TZ ที่นี่โดยเจตนา — server เก็บ/คำนวณเป็น UTC เสมอ
   //    การแปลงเป็น Asia/Bangkok + พ.ศ. ทำที่ display layer ผ่าน utils กลาง (Rule 01 · Phase 1.5)

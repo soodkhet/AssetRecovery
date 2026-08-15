@@ -18,6 +18,7 @@ import type {
 } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { RevenueError } from '@/lib/revenue/errors'
+import { syncSalesRecordFromBilling } from '@/lib/sales/queries'
 import {
   assertBillingBatchDeletable,
   assertBillingBatchSendable,
@@ -494,6 +495,10 @@ export async function sendBillingBatch(
       tx,
     )
   })
+
+  // จุดเสียบของบัญชี (`31` §6.1 · §9.1) — อยู่นอก transaction เพราะเป็น **idempotent** เรียกซ้ำได้
+  // ถ้าครั้งนี้พลาด และไม่ควรทำให้การส่งบิลที่สำเร็จแล้วถูก rollback ตาม (แนวเดียวกับจุดเสียบของ 4.2)
+  await syncSalesRecordFromBilling({ actor: user, meta: context.meta }, batchId)
 
   return getBillingBatch(user, batchId, now)
 }

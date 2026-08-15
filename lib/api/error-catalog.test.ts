@@ -22,6 +22,7 @@ import { accountingErrorStatus, ACCOUNTING_ERROR_CODES } from '@/lib/accounting/
 import { adjustmentErrorStatus, ADJUSTMENT_ERROR_CODES } from '@/lib/adjustments/errors'
 import { advanceErrorStatus, ADVANCE_ERROR_CODES } from '@/lib/advances/errors'
 import { revenueErrorStatus, REVENUE_ERROR_CODES } from '@/lib/revenue/errors'
+import { salesErrorStatus, SALES_ERROR_CODES } from '@/lib/sales/errors'
 import { reportErrorStatus, REPORT_ERROR_CODES } from '@/lib/reports/errors'
 import { payoutErrorStatus, PAYOUT_ERROR_CODES } from '@/lib/payout/errors'
 import { roleErrorStatus, ROLE_ERROR_CODES } from '@/lib/roles/errors'
@@ -141,6 +142,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['advances', ADVANCE_ERROR_CODES, advanceErrorStatus as (code: never) => number],
   ['revenue', REVENUE_ERROR_CODES, revenueErrorStatus as (code: never) => number],
   ['bank-recon', BANK_RECON_ERROR_CODES, bankReconErrorStatus as (code: never) => number],
+  ['sales', SALES_ERROR_CODES, salesErrorStatus as (code: never) => number],
   ['reports', REPORT_ERROR_CODES, reportErrorStatus as (code: never) => number],
   ['payees', PAYEE_ERROR_CODES, payeeErrorStatus as (code: never) => number],
   ['payout', PAYOUT_ERROR_CODES, payoutErrorStatus as (code: never) => number],

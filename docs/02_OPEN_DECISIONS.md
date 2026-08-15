@@ -190,9 +190,18 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 
 ### ⬜ D11 — เลขรันนิ่งเอกสาร: กัน race + ขอบปี + receipt/50ทวิ ไม่มี format config
 - **[default]**: `SELECT ... FOR UPDATE` ใน transaction เดียวกับ insert (ห้ามใช้ PG sequence — gap ตอน rollback ผิดกฎ "ห้ามขาดช่วง") · ตัดปี yearly_reset ด้วย issue_date เวลาไทย · ขยาย `13` §6.12 ครอบ receipt + wht_certificate (sequence แยกต่อชนิด) · **บล็อก**: 4.3, 4.5 · **คำตอบ**:
+- **สถานะจริงหลัง Phase 4.3**: ส่วน**ใบกำกับภาษี** implement ตาม default แล้ว (`SELECT … FOR UPDATE` แถว `organizations` → `nextSequence()` → เดินเลข → เทียบ `INVOICE_NUMBER_GAP` ทั้งหมดในทรานแซกชันเดียวกับ insert · ตัดปี พ.ศ. จาก `invoice_date` เวลาไทย · เทสต์ concurrency 4 คำขอพร้อมกันได้เลขเรียงไม่ขาด) ⇒ **ไม่บล็อก 4.3 แล้ว** · ที่ยังค้างคือ sequence ของ **ใบเสร็จรับเงิน** (ดู D13) และ **ใบ 50 ทวิ** ซึ่งบล็อก 4.5 อยู่
 
 ### ⬜ D12 — Advance เคลียร์บางส่วน / overdue ค้างข้ามงวด
 - **[default]**: เคลียร์ครั้งเดียวเหมือนเดิม + เพิ่ม flow "ตัดส่วนไม่มีใบเสร็จเป็นลูกหนี้พนักงาน หักจาก payout รอบถัดไป" · advance overdue ไม่ block ปิดงวดแต่ขึ้น warning exception — **นักบัญชีเคาะ** · **บล็อก**: 3.3 · **คำตอบ**:
+
+### ⬜ D13 — ไฟล์ 31 §7 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.3)
+- **ปัญหา**: `31` §7.2 ระบุ `delivery_format` เป็นฟิลด์บังคับ **ต่อใบ** (และ changelog ของ `02` v3.9 เองก็เขียนว่า "เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2") แต่ตาราง `tax_invoices` ใน `02` §9 **ไม่มีคอลัมน์นี้** · เช่นเดียวกับ `sales_records.accounting_date` (§7.1) และ `cash_receipts.receipt_number` + เอกสาร "ใบเสร็จรับเงิน" (§6.4/§7.3) ที่ไม่มีคอลัมน์/ตารางรองรับเลย
+- **ที่ทำไปแล้วใน 4.3** (ยึดลำดับ "เอกสารขัดกัน → `02` ชนะไฟล์ spec ของโมดูล" ตาม CLAUDE.md ⇒ **ไม่แก้ schema เอง**):
+  - `delivery_format` = อ่านค่าเริ่มต้นของบริษัท (`finance_companies.default_invoice_delivery_format`) มาแสดงบน PDF แบบ read-through — **ยังเลือกรายใบไม่ได้ และไม่ได้ snapshot** (เปลี่ยนค่าเริ่มต้นของบริษัทแล้ว ใบเก่าที่พิมพ์ใหม่จะแสดงค่าใหม่ ซึ่งขัดกับ Rule 08 snapshot)
+  - `accounting_date` = ใช้ `period_id` (รอบบัญชีของรอบวางบิล) แทน — พอสำหรับการจัดกลุ่มตามงวด แต่ระบุ "วันบันทึกบัญชี" ที่ต่างจากงวดไม่ได้
+  - ใบเสร็จรับเงิน/`receipt_number` = **ไม่ implement** (ไม่มีตาราง/คอลัมน์ · export ของ `37` ไม่ได้ขอฟิลด์นี้ — `02_Cash_Receipts.csv` มีแค่ receipt_date/payer/amount/bank_ref)
+- **[default]**: เพิ่ม 1 คอลัมน์ `tax_invoices.delivery_format invoice_delivery_format NOT NULL DEFAULT 'paper_pdf'` (**snapshot ตอนออกใบ** จากค่าเริ่มต้นของบริษัท เลือกทับได้รายใบ) + `sales_records.accounting_date DATE` · ส่วนใบเสร็จรับเงินรอ**นักบัญชีเคาะ**ว่าต้องออกจริงหรือใช้ใบกำกับภาษี/ใบแจ้งหนี้แทน (ถ้าต้องออก = ตารางใหม่ + sequence แยกตาม D11) · **บล็อก**: ไม่บล็อก 4.3 (ส่งงานได้ตามที่ทำไปแล้ว) แต่กระทบ 4.6 ถ้าสำนักงานบัญชีขอฟิลด์เพิ่ม · **คำตอบ**:
 
 ---
 
