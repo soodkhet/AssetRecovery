@@ -20,7 +20,7 @@ import { prisma } from '@/lib/prisma'
  * (`lib/compensation/approval-queries.ts`) ตัวเดิม **ห้ามเขียนสายอนุมัติซ้ำ**
  */
 
-export const CREATE_CLAIM_CAPABILITIES = ['approve_expense_finance', 'perform_field_work'] as const
+export { CREATE_CLAIM_CAPABILITIES } from '@/lib/claims/claim'
 
 export interface ClaimMutationContext {
   actor: SessionUser

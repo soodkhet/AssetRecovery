@@ -1,4 +1,5 @@
 import {
+  APPROVE_ADVANCE,
   assertAdvanceRejectionReason,
   assertNoUnclearedAdvance,
   assertWithinAdvanceMax,
@@ -34,8 +35,7 @@ import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
  *   — แยก scope ออกจาก filter ของผู้เรียกด้วย `AND` เสมอ (กับดัก commit `f188619`)
  */
 
-export const REQUEST_ADVANCE = 'request_advance'
-export const APPROVE_ADVANCE = 'approve_advance'
+export { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
 
 const TARGET = 'advances'
 

@@ -111,3 +111,10 @@ export function isAdvanceOverdue(dueClearDate: Date | string, now: Date): boolea
   const due = typeof dueClearDate === 'string' ? dueClearDate.slice(0, 10) : dueClearDate.toISOString().slice(0, 10)
   return due < toInputDate(now)
 }
+
+/**
+ * ชื่อ capability ของไฟล์ 15 (`25` §7.2) — วางไว้ในโมดูล pure เพื่อให้ **หน้าจอ client import ได้**
+ * โดยไม่ลาก Prisma เข้า bundle (กับดักเดียวกับ `types.ts` — ดู REUSE_INDEX)
+ */
+export const REQUEST_ADVANCE = 'request_advance'
+export const APPROVE_ADVANCE = 'approve_advance'

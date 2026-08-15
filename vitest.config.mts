@@ -56,8 +56,8 @@ export default defineConfig({
           exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**'],
           alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
           // ทีละไฟล์เท่านั้น — DB ตัวเดียวกัน (ดูหมายเหตุด้านบน)
+          // `poolOptions` ถูกถอดออกใน vitest 4 แล้ว — `fileParallelism: false` พอสำหรับกันชนกันเอง
           fileParallelism: false,
-          poolOptions: { forks: { singleFork: true } },
         },
       },
     ],
