@@ -53,3 +53,28 @@ export function countAwaitingSettlement(items: readonly AdvanceDto[]): number {
 export function countOverdue(items: readonly AdvanceDto[]): number {
   return items.filter((item) => item.status === 'overdue').length
 }
+
+/**
+ * ยอดเงินบริษัทที่ยังอยู่ในมือผู้เบิก (`15` §8 แถบเตือนหัวตาราง) — นับจาก **ยอดที่อนุมัติจริง**
+ * ของรายการที่ยังไม่เคลียร์เท่านั้น (ยอดที่ยังรออนุมัติยังไม่ใช่เงินที่ออกไป)
+ *
+ * `approvedSatang` เป็น `null` ได้เฉพาะรายการที่ยังไม่อนุมัติ ซึ่งถูกกรองออกไปแล้วโดย
+ * `canSettleAdvance()` — เหลือ `?? 0` ไว้เป็นยามท้ายทาง ไม่ให้ยอดรวมกลายเป็น `NaN`
+ */
+export function outstandingAdvanceSatang(items: readonly AdvanceDto[]): number {
+  return items
+    .filter((item) => canSettleAdvance(item.status))
+    .reduce((total, item) => total + (item.approvedSatang ?? 0), 0)
+}
+
+/** ตัวกรองสถานะของแท็บ "เงินทดรองจ่าย" — ค่าตรงกับ `status` ของ `GET /api/advances` (`15` §14) */
+export const ADVANCE_STATUS_FILTERS = [
+  { value: 'all', label: 'ทั้งหมด' },
+  { value: 'pending_approval', label: 'รออนุมัติ' },
+  { value: 'uncleared', label: 'ยังไม่เคลียร์' },
+  { value: 'overdue', label: 'เลยกำหนด' },
+  { value: 'cleared', label: 'เคลียร์แล้ว' },
+  { value: 'rejected', label: 'ไม่อนุมัติ' },
+] as const satisfies readonly { value: string; label: string }[]
+
+export type AdvanceStatusFilter = (typeof ADVANCE_STATUS_FILTERS)[number]['value']

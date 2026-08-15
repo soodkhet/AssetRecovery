@@ -7,6 +7,8 @@ import {
   canSettleAdvance,
   countAwaitingSettlement,
   countOverdue,
+  ADVANCE_STATUS_FILTERS,
+  outstandingAdvanceSatang,
 } from '@/lib/advances/advance-ui'
 import type { AdvanceDto } from '@/lib/advances/types'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
@@ -121,5 +123,33 @@ describe('ตัวนับบนหัวตาราง', () => {
     const items = [advance({ status: 'approved', isPastDue: true })]
     expect(countOverdue(items)).toBe(0)
     expect(countAwaitingSettlement(items)).toBe(1)
+  })
+})
+
+describe('ยอดค้าง + ตัวกรองของแท็บเต็ม (`15` §8 — Phase 3.4)', () => {
+  it('ยอดค้าง = ยอดที่อนุมัติของรายการที่ยังไม่เคลียร์เท่านั้น', () => {
+    const items = [
+      advance({ id: 'a', status: 'approved', approvedSatang: 500_000 }),
+      advance({ id: 'b', status: 'overdue', approvedSatang: 200_000 }),
+      // ยังไม่อนุมัติ = เงินยังไม่ออก · เคลียร์แล้ว = คืนของแล้ว ⇒ ไม่นับทั้งคู่
+      advance({ id: 'c', status: 'pending_approval', approvedSatang: null }),
+      advance({ id: 'd', status: 'cleared', approvedSatang: 900_000 }),
+    ]
+    expect(outstandingAdvanceSatang(items)).toBe(700_000)
+  })
+
+  it('ไม่มีรายการค้าง = 0 (หน้าจอไม่ขึ้นแถบเตือน)', () => {
+    expect(outstandingAdvanceSatang([])).toBe(0)
+  })
+
+  it('ตัวกรองทุกตัวต้องเป็นค่าที่ `GET /api/advances` รับได้จริง', () => {
+    expect(ADVANCE_STATUS_FILTERS.map((item) => item.value)).toEqual([
+      'all',
+      'pending_approval',
+      'uncleared',
+      'overdue',
+      'cleared',
+      'rejected',
+    ])
   })
 })

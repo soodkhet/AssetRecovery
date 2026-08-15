@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
 import { CalcDetailModal } from '@/components/finance/calc-detail-modal'
 import { ManualClaimModal } from '@/components/finance/manual-claim-modal'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
+import { useAdvances } from '@/components/finance/use-advances'
 import { useApprovalActions } from '@/components/finance/use-approval-actions'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
@@ -36,7 +37,6 @@ import {
   countOverdue,
 } from '@/lib/advances/advance-ui'
 import type { AdvanceDto } from '@/lib/advances/types'
-import { callApi } from '@/lib/api/types'
 import { CREATE_CLAIM_CAPABILITIES } from '@/lib/claims/claim'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
@@ -74,47 +74,12 @@ export function ApprovalTab() {
   const [rejectReason, setRejectReason] = useState('')
   const [claimFormOpen, setClaimFormOpen] = useState(false)
 
-  const [advances, setAdvances] = useState<readonly AdvanceDto[]>([])
-  const [advLoading, setAdvLoading] = useState(true)
-  const [advError, setAdvError] = useState<{ title: string; message: string } | null>(null)
+  // ตารางที่ 2 ใช้ตัวโหลดเดียวกับแท็บ "เงินทดรองจ่าย" เต็มรูป (3.4) — ห้าม fetch เอง
+  const { items: advances, loading: advLoading, error: advError, reload: reloadAdvances } = useAdvances('all')
   const [advanceFormOpen, setAdvanceFormOpen] = useState(false)
   const [settleTarget, setSettleTarget] = useState<AdvanceDto | null>(null)
   const [reviewTarget, setReviewTarget] = useState<AdvanceDto | null>(null)
   const [reviewMode, setReviewMode] = useState<'approve' | 'reject'>('approve')
-
-  const fetchAdvances = useCallback(async () => callApi<AdvanceDto[]>('/api/advances?status=all'), [])
-
-  const reloadAdvances = useCallback(async () => {
-    const result = await fetchAdvances()
-    if (result.error !== undefined) {
-      setAdvError({ title: result.error.title, message: result.error.message })
-      setAdvLoading(false)
-      return
-    }
-    setAdvances(result.data ?? [])
-    setAdvError(null)
-    setAdvLoading(false)
-  }, [fetchAdvances])
-
-  // setState ต้องอยู่หลัง `await` ใน IIFE เท่านั้น (กฎ `react-hooks/set-state-in-effect` — ดู REUSE_INDEX)
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const result = await fetchAdvances()
-      if (cancelled) return
-      if (result.error !== undefined) {
-        setAdvError({ title: result.error.title, message: result.error.message })
-        setAdvLoading(false)
-        return
-      }
-      setAdvances(result.data ?? [])
-      setAdvError(null)
-      setAdvLoading(false)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [fetchAdvances])
 
   const visibleClaims =
     claimFilter === 'all' ? claims.items : claims.items.filter((item) => item.status === claimFilter)

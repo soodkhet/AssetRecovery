@@ -1,21 +1,20 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.3 (Approval FE + Claims & Advances) · งานถัดไป 3.4
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.4 (Payout Batch BE + แท็บเงินทดรองจ่าย) · งานถัดไป 3.5
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.4: Payout Batch Backend (17) + Claims FE ส่วนที่เหลือ
+## 🎯 งานถัดไป — Phase 3.5: Payout FE + Internal PDFs
 
-- ทำตาม `docs/01_PLAN.md` §3.4 — **สูตรเงินทุกตัวเรียกจาก `lib/finance/*` (3.1) เท่านั้น ห้ามคำนวณเอง**
-- BE 17: batch builder (ดึง `approved` ตาม cutoff/side · `UNVERIFIED_PAYEE_IN_PAYOUT` reject · `MIXED_SIDE_BATCH` · draft→checking อัตโนมัติ) + roll-up gross/wht/net ผ่าน `summarizePayoutBatch()` (3.1)
-- payment file generator ตาม `13` §6.8 — gate `assertBankFileUsable()` (`BANK_FILE_NOT_TESTED`) + **`idempotency_key` UNIQUE กันโอนซ้ำ** + `DUPLICATE_PAYMENT_FILE` (เตือนพร้อมวันที่ครั้งก่อน ไม่ block) + audit ทุกก้าว
-- complete endpoint + hook รอรับ sync จากไฟล์ 35 (Phase 4.2) · snapshot `tax_profile`/`wht_pct` ลง `payout_batch_items` (`92` §7.1)
-- FE 15 ส่วนที่เหลือ: แท็บ "เงินทดรองจ่าย" เต็มรูป (ตาราง 9 คอลัมน์ + banner ยอดค้าง) — เสียบที่ `operation-tabs.ts` (`available: true`) แล้วต่อ component ใน `<FinanceShell>`
-- ของที่มีแล้วห้ามเขียนซ้ำ: `summarizePayoutBatch()`/`calculateWhtForPayee()` (3.1) · `PayeeDto.isVerified` + `missingForVerification` (3.2) · `assertBankFileUsable()` (1.10) · `<FinanceShell>`/`advance-ui.ts`/`<AdvanceFormModal>` (3.3)
-- อ้างอิง: `17` ทั้งไฟล์ · `18` §6.2 · `22` §6.9–6.10 · `13` §6.1/§6.8 · mockup `finance.html` ผ่าน MAP
-- DoD: เทสต์ idempotency (ยิงซ้ำได้ batch เดิม) + gate payee ยังไม่ยืนยัน · LOC ~1,950 · งบ ~300k
+- ทำตาม `docs/01_PLAN.md` §3.5 — **ยอดทุกช่องมาจาก API (snapshot) ห้ามคิดสูตรซ้ำบนหน้าจอ/PDF**
+- FE 17 (แท็บ "รอบจ่ายเงิน"): ตาราง batch (ชื่อรอบ+จำนวนรายการ / ฝั่ง / Gross / WHT แดง / Net เขียวเด่น / สถานะ / ปุ่ม "ไฟล์โอน"+"ดู") + Modal สร้างรอบจ่าย (เลือกฝั่ง + วันตัดรอบ) + Modal สร้างไฟล์โอน (เลือก format + บัญชีที่จ่าย + สรุปยอด + ข้อความยืนยัน idempotency) — เปิดแท็บที่ `operation-tabs.ts` (`available: true`) แล้วเสียบใน `<FinanceShell>`
+- ปุ่ม "สร้างไฟล์โอน" ยิง 2 ครั้ง: ครั้งแรกได้ `generated:false` + `warning: DUPLICATE_PAYMENT_FILE` (ถ้าเคยสร้าง) → ยืนยันแล้วส่ง `confirmDuplicate: true` · ดาวน์โหลดเป็น `<a href>` ตรงไป `GET /api/payout-batches/:id/payment-file` (แบบเดียวกับ PDF ของ 2.15)
+- PDF ภายใน 3 ใบ (`28` §6.1 · `@react-pdf/renderer` ฝั่ง server): Payout Batch Summary + Payment Voucher + Payslip/Compensation Statement — เทียบ `reference/samples/04_payout_batch_summary.pdf`, `05_payment_voucher.pdf`, `06_payslip.pdf`
+- ของที่มีแล้วห้ามเขียนซ้ำ: `lib/payout/*` ทั้งชุด (3.4 — DTO/สถานะ/ป้าย/ยาม) · `<FinanceShell>` + `operation-tabs.ts` (3.3) · `<ReasonConfirmModal>` (1.11) · UI Kit + `fmtSatangSymbol`/`fmtDate` (1.5)
+- อ้างอิง: `17` §8 · `28` §6.1+§7 · mockup `finance.html` ผ่าน MAP (`renderFinanceOperations` แท็บ `payout`)
+- DoD: เทียบ layout PDF กับ samples 04–06 · LOC ~1,450 · งบ ~250k
 
 ---
 
@@ -71,7 +70,7 @@
 | 3.1 | Pure calculation modules + unit tests (ไฟล์ 22 ครบ 13 สูตร) | ✅ | 2026-08-15 · `0a05c48` · `lib/finance/*` ครบ 13 สูตร + เทสต์ 169 เคส + ยาม `formula-coverage` อ่าน `22` เทียบทะเบียน → archive |
 | 3.2 | Payee & Tax Profile + Compensation Approval BE | ✅ | 2026-08-15 · `fe2834b`+`68cd696` · API 7 endpoint (payee 4 + compensation 3) + auto-reset unverified + สายอนุมัติหลายขั้น snapshot + `expense.approved` → Revenue gate · เทสต์ระดับ DB 19 เคส → archive |
 | 3.3 | Approval FE + Claims & Advances | ✅ | 2026-08-15 · `d1f39f6`+`45bd3a1` · API 9 endpoint (`27` §6.4) + ห้ามเบิกซ้อน 2 ชั้น + job auto-overdue idempotent + หน้า `/finance` 2 แท็บแรก · เทสต์ระดับ DB 22 เคสของ `15` §16 → archive |
-| 3.4 | Payout Batch BE (idempotency + bank file) | ⬜ | PLAN §3.4 · gate BANK_FILE_NOT_TESTED |
+| 3.4 | Payout Batch BE (idempotency + bank file) | ✅ | 2026-08-15 · `c344dcb`+ชุด 2 · API 5 endpoint + batch builder (ค่าตอบแทน+เงินทดรอง) + ไฟล์โอนตาม `13` §6.8 + idempotency key/เตือนซ้ำ + แท็บเงินทดรองจ่าย · เทสต์ pure 51 + DB 17 · ⚠️ ต้องสร้าง bucket `payment-files` ต่อ environment → archive |
 | 3.5 | Payout FE + Internal PDFs | ⬜ | PLAN §3.5 · เทียบ samples 04–06 |
 | 3.6 | Revenue / Billing / AR BE | ⬜ | PLAN §3.6 · เสียบ stub จาก 2.13 |
 | 3.7 | Billing FE + Adjustment | ⬜ | PLAN §3.7 · 4 FK + CHECK (DEC-004) |
