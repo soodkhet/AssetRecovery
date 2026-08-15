@@ -140,10 +140,17 @@ async function seedBatch(
 }
 
 async function setPeriodStatus(status: string): Promise<void> {
-  await db().$executeRawUnsafe(`
-    UPDATE accounting_periods SET status = '${status}'
-    WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 6
-  `)
+  const tx = db()
+  // งวดที่ `locked` ถูก trigger แช่แข็งไว้ (`02` §13) — fixture ต้องปลดกลับได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
+  try {
+    await tx.$executeRawUnsafe(`
+      UPDATE accounting_periods SET status = '${status}'
+      WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 6
+    `)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
+  }
 }
 
 beforeAll(async () => {

@@ -14,6 +14,7 @@ import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
 import {
   ACCOUNTING_ROLE_NAME,
   EXECUTIVE_ROLE_NAME,
+  FIELD_AGENT_ROLE_NAME,
   FINANCE_ROLE_NAME,
   TEAM_MANAGER_ROLE_NAME,
 } from '@/lib/auth/constants'
@@ -138,5 +139,15 @@ describe('Scope ระดับแถวของหมวด O (`96` §14 "Mana
   it('ผู้จัดการที่ไม่ได้ดูแลทีมไหนเลยได้รายการว่าง (ไม่ใช่ "ทุกทีม")', () => {
     const orphan = userOf({ roleName: TEAM_MANAGER_ROLE_NAME, roleGroup: 'outsource', managedTeamIds: [] })
     expect(reportTeamScope(orphan)).toEqual([])
+  })
+
+  it('scope company/self ได้รายการว่าง — ห้ามตกไป null ซึ่งแปลว่า "เห็นทุกทีม" (Phase 8.2)', () => {
+    const companyUser = userOf({ roleName: 'ผู้จัดการบริษัทไฟแนนซ์', roleGroup: 'finance_company' })
+    const fieldAgent = userOf({ roleName: FIELD_AGENT_ROLE_NAME, roleGroup: 'inhouse' })
+
+    expect(companyUser.scope.kind).toBe('company')
+    expect(fieldAgent.scope.kind).toBe('self')
+    expect(reportTeamScope(companyUser)).toEqual([])
+    expect(reportTeamScope(fieldAgent)).toEqual([])
   })
 })

@@ -146,10 +146,17 @@ async function seedBatch(items: readonly SeedItem[]): Promise<{ batchId: string;
 }
 
 async function setPeriodStatus(status: string): Promise<void> {
-  await db().$executeRawUnsafe(`
-    UPDATE accounting_periods SET status = '${status}'
-    WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 6
-  `)
+  const tx = db()
+  // งวดที่ `locked` ถูก trigger แช่แข็งไว้ (`02` §13) — fixture ต้องปลดกลับได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
+  try {
+    await tx.$executeRawUnsafe(`
+      UPDATE accounting_periods SET status = '${status}'
+      WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 6
+    `)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
+  }
 }
 
 async function junePeriodId(): Promise<string> {
@@ -168,17 +175,23 @@ async function junePeriodId(): Promise<string> {
  */
 async function resetOrgData(): Promise<void> {
   const tx = db()
-  for (const statement of [
-    `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
-    `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
-  ]) {
-    await tx.$executeRawUnsafe(statement)
+  // ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13 — เลขที่ห้ามขาดช่วง) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
+  try {
+    for (const statement of [
+      `DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
+      `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
+    ]) {
+      await tx.$executeRawUnsafe(statement)
+    }
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
   }
 }
 

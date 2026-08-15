@@ -104,6 +104,11 @@ describe('F3 — ยอดและ KPI', () => {
     })
   })
 
+  it('หมายเหตุท้ายรายงานแสดงวันที่เป็น พ.ศ. (Rule 01 — ค.ศ. บนจอ = bug)', () => {
+    expect(data.note).toContain('15/08/2569')
+    expect(data.note).not.toMatch(/2026/)
+  })
+
   it('WHT ที่ลูกค้าหักไว้ถือว่าชำระแล้ว — ไม่ค้างค้างตลอดกาล', () => {
     const withWht = buildArAgingReport({
       companies: [

@@ -16,6 +16,7 @@ import {
   expenseCsv,
   exportVersionLabel,
   normalizeTaxId,
+  packAttemptId,
   packStoragePath,
   packZipFileName,
   paymentCsv,
@@ -64,8 +65,28 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
   it('ชื่อไฟล์ .zip และ path ใน bucket เดินตาม version (ห้ามทับของเดิม — Rule 09)', () => {
     expect(packZipFileName('มิถุนายน 2569', 3)).toBe('AccountingPack_มิถุนายน_2569_v1.2.zip')
     expect(
-      packStoragePath({ organizationId: 'org-1', yearBe: 2569, month: 6, version: 2, fileName: '01_Revenue.csv' }),
-    ).toBe('org-1/2569-06/v2/01_Revenue.csv')
+      packStoragePath({
+        organizationId: 'org-1',
+        yearBe: 2569,
+        month: 6,
+        version: 2,
+        attempt: '20260816-0032-ab12cd34',
+        fileName: '01_Revenue.csv',
+      }),
+    ).toBe('org-1/2569-06/v2/20260816-0032-ab12cd34/01_Revenue.csv')
+  })
+
+  it('ครั้งที่พยายามต่างกัน = path ต่างกัน แม้ version เท่ากัน (ล้มกลางทางแล้วต้อง Export ซ้ำได้)', () => {
+    const at = new Date('2026-08-16T00:32:45.123Z')
+    const base = { organizationId: 'org-1', yearBe: 2569, month: 6, version: 1, fileName: '01_Revenue.csv' }
+
+    const first = packStoragePath({ ...base, attempt: packAttemptId(at, '9a8b7c6d-1111-4000-8000-000000000000') })
+    const second = packStoragePath({ ...base, attempt: packAttemptId(at, '0f1e2d3c-2222-4000-8000-000000000000') })
+
+    expect(first).not.toBe(second)
+    // ยังอ่านออกว่าเป็นเวอร์ชันอะไร + เวลาที่พยายาม
+    expect(first).toContain('/v1/20260816-0032')
+    expect(first.endsWith('/01_Revenue.csv')).toBe(true)
   })
 })
 

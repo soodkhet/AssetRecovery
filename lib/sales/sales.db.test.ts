@@ -177,10 +177,18 @@ async function setNumbering(
 async function lockPeriodOf(period: string): Promise<void> {
   const [month = '', yearText = ''] = period.split(' ')
   const monthIndex = MONTHS.indexOf(month as (typeof MONTHS)[number]) + 1
-  await db().$executeRawUnsafe(`
-    UPDATE accounting_periods SET status = 'locked'
-    WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
-  `)
+  const tx = db()
+  // งวดที่ `locked` อยู่แล้ว (ของค้างจากรอบรันก่อน) ถูก trigger แช่แข็ง (`02` §13)
+  // — fixture ต้องล็อกซ้ำได้ ⇒ ปิดยามเฉพาะตอนตั้งค่าเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods DISABLE TRIGGER trg_accounting_periods_locked`)
+  try {
+    await tx.$executeRawUnsafe(`
+      UPDATE accounting_periods SET status = 'locked'
+      WHERE organization_id = '${ORG_ID}' AND year_be = ${Number.parseInt(yearText, 10)} AND month = ${monthIndex}
+    `)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE accounting_periods ENABLE TRIGGER trg_accounting_periods_locked`)
+  }
 }
 
 beforeAll(async () => {
@@ -434,7 +442,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     const bankTx = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO bank_transactions (organization_id, period_id, bank_account_id, transaction_date, description,
                                      amount_satang, match_status, matched_billing_id, created_by)
-      VALUES ('${ORG_ID}', '${periodId}', '${BANK_ACCOUNT_ID}', '2026-06-28', 'โอนเข้า · อ้างอิง BTR-43',
+      VALUES ('${ORG_ID}', '${periodId}', '${BANK_ACCOUNT_ID}', '2026-06-28', 'โอนเข้า · อ้างอิง BTR-43-${RUN}',
               1284000, 'auto_matched', '${batch.id}', '${ACCOUNTING_ID}')
       RETURNING id
     `)
@@ -450,7 +458,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     expect(row?.payerName).toBe(`ไฟแนนซ์ 4.3 (${RUN})`)
     expect(row?.amountSatang).toBe(1_284_000)
     expect(row?.whtWithheldByCustomerSatang).toBe(36_000)
-    expect(row?.bankRef).toBe('โอนเข้า · อ้างอิง BTR-43')
+    expect(row?.bankRef).toBe(`โอนเข้า · อ้างอิง BTR-43-${RUN}`)
     expect(row?.bankMatchStatus).toBe('auto_matched')
     expect(receipts.totalSatang).toBeGreaterThanOrEqual(1_284_000)
   })

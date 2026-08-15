@@ -319,6 +319,22 @@ suite('Phase 4.2 — นำเข้า statement + auto-match (`35` §6.2)', ()
     expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 
+  it('นำเข้าไฟล์เดิม **พร้อมกัน** สองคำขอ ⇒ ยังไม่นับเงินซ้ำ (`uniq_bank_tx_statement_row`)', async () => {
+    await seedBilling(BILLING_A, 802500)
+    const csv = csvOf('05/08/2569,โอนเข้าจากไฟแนนซ์ A,KBANK-TRX-001,"8,025.00",')
+
+    // ด่านกันซ้ำชั้น app เป็น read-then-insert ⇒ ทั้งสองฝั่งอ่านชุดเดิมก่อนที่อีกฝั่งจะ insert
+    // ⇒ ผ่านด่านทั้งคู่ → เงินเข้าถูกนับซ้ำ ถ้าไม่มี unique index ระดับ DB คุมไว้
+    const settled = await Promise.allSettled([
+      recon.importStatement(ctx, { bankAccountId: BANK_ACCOUNT_ID, fileName: 'a.csv', csv }),
+      recon.importStatement(ctx, { bankAccountId: BANK_ACCOUNT_ID, fileName: 'a.csv', csv }),
+    ])
+    expect(settled.filter((outcome) => outcome.status === 'fulfilled').length).toBeGreaterThanOrEqual(1)
+
+    expect(await db().bankTransaction.count({ where: { organizationId: ORG_ID } })).toBe(1)
+    expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+
   it('แถวที่อ่านไม่ออกถูกข้าม + ไฟล์ที่ไม่มีแถวใช้ได้เลย ⇒ STATEMENT_FILE_INVALID', async () => {
     const result = await recon.importStatement(ctx, {
       bankAccountId: BANK_ACCOUNT_ID,

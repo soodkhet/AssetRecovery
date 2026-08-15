@@ -228,8 +228,9 @@ async function seedException(options: {
 
 async function cleanup(): Promise<void> {
   const tx = db()
-  // ใบกำกับภาษีลบไม่ได้ด้วย trigger (`02` §13) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  // ใบกำกับภาษี/ชุดส่งสำนักงานบัญชี ลบไม่ได้ด้วย trigger (`02` §13) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
   await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices DISABLE TRIGGER trg_tax_invoices_no_delete`)
+  await tx.$executeRawUnsafe(`ALTER TABLE export_records DISABLE TRIGGER trg_export_records_no_delete`)
   try {
     await tx.$executeRawUnsafe(`DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`)
@@ -239,6 +240,7 @@ async function cleanup(): Promise<void> {
     await tx.$executeRawUnsafe(`DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
   } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE export_records ENABLE TRIGGER trg_export_records_no_delete`)
     await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices ENABLE TRIGGER trg_tax_invoices_no_delete`)
   }
   clearReportCache()
@@ -490,5 +492,37 @@ suite('สิทธิ์ของหมวด A (`96` §10)', () => {
       expect(payload.rows, reportId).toHaveLength(0)
       expect(payload.cache.mode, reportId).toBe('realtime')
     }
+  })
+})
+
+suite('Export รายงาน — ร่องรอยผู้ดึงข้อมูล (`90` §13)', () => {
+  it('Export แบบทำสด (ไม่เข้างานเบื้องหลัง) ต้องลง audit ว่าใครดึงรายงานอะไร ช่วงไหน', async () => {
+    const report = findReport('wht-summary')
+    if (report === null) throw new Error('ไม่รู้จักรายงาน wht-summary')
+
+    // `audit_logs` ลบไม่ได้ (`02` §13) ⇒ แถวของรอบก่อนสะสมอยู่ — คัดเฉพาะที่เกิดหลังจุดนี้
+    const startedAt = new Date()
+
+    const exportService = await import('@/lib/reports/export-service')
+    const outcome = await exportService.exportReport(
+      { actor: accounting, meta: { ipAddress: null, userAgent: null } },
+      report,
+      { range: RANGE_MONTH, format: 'xlsx', now: NOW },
+    )
+    // ข้อมูลว่าง ⇒ ต่ำกว่าเพดานทำสด ⇒ เดินทาง `sync` ซึ่งเดิมไม่ลง audit เลย
+    expect(outcome.mode).toBe('sync')
+
+    const rows = await db().$queryRawUnsafe<{ actor_id: string; after_data: Record<string, unknown> }[]>(`
+      SELECT actor_id, after_data FROM audit_logs
+      WHERE organization_id = '${ORG_ID}' AND target_type = 'export_records' AND action = 'export'
+        AND created_at >= '${startedAt.toISOString()}'
+      ORDER BY created_at DESC LIMIT 1
+    `)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.actor_id).toBe(ACCOUNTING_ID)
+    expect(rows[0]?.after_data.report_id).toBe('wht-summary')
+    expect(rows[0]?.after_data.format).toBe('xlsx')
+    expect(rows[0]?.after_data.mode).toBe('sync')
+    expect(rows[0]?.after_data.range_label).toBe(outcome.payload.range.label)
   })
 })

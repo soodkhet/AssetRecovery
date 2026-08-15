@@ -114,5 +114,16 @@ export function visibleReports(
  */
 export function reportTeamScope(user: SessionUser): readonly string[] | null {
   if (isExecutiveViewer(user)) return null
-  return user.scope.kind === 'team' ? user.scope.teamIds : null
+  switch (user.scope.kind) {
+    case 'team':
+      return user.scope.teamIds
+    // เมนูรายงาน (`96` §10) ไม่มีแถวของ scope `company`/`self` — ข้อมูลของบริษัทไฟแนนซ์ออกทาง
+    // Client Portal (`97`) ไม่ใช่ทางนี้ ⇒ คืนรายการว่าง = **ผลลัพธ์ว่าง** ห้ามตกไป `null`
+    // ซึ่งแปลว่า "เห็นทุกทีม" (ช่องรั่วถ้า Superadmin ผูก capability ของรายงานให้ role กลุ่มนั้น)
+    case 'company':
+    case 'self':
+      return []
+    case 'global':
+      return null
+  }
 }
