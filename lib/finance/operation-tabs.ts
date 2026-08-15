@@ -20,7 +20,7 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
   { id: 'dashboard', label: 'ภาพรวม', source: 'ไฟล์ 14', available: false, plannedPhase: '3.8' },
   { id: 'approval', label: 'รออนุมัติ', source: 'ไฟล์ 15', available: true },
   { id: 'comp', label: 'ค่าตอบแทน', source: 'ไฟล์ 16', available: true },
-  { id: 'advances', label: 'เงินทดรองจ่าย', source: 'ไฟล์ 15', available: false, plannedPhase: '3.4' },
+  { id: 'advances', label: 'เงินทดรองจ่าย', source: 'ไฟล์ 15', available: true },
   { id: 'payout', label: 'รอบจ่ายเงิน', source: 'ไฟล์ 17', available: false, plannedPhase: '3.5' },
   { id: 'revenue', label: 'รายได้และวางบิล', source: 'ไฟล์ 19', available: false, plannedPhase: '3.7' },
   // ไฟล์ 18 ทำเสร็จตั้งแต่ 3.2 แต่หน้าอยู่ในหน้าตั้งค่าการเงิน (`13`) ตาม mockup `settings.html`

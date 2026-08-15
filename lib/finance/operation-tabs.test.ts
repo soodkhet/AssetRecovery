@@ -17,9 +17,9 @@ describe('แท็บหน้าการเงิน', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('Phase 3.3 เปิดจริง 2 แท็บ: รออนุมัติ (15) + ค่าตอบแทน (16)', () => {
+  it('Phase 3.4 เปิดจริง 3 แท็บ: รออนุมัติ (15) + ค่าตอบแทน (16) + เงินทดรองจ่าย (15)', () => {
     const open = FINANCE_OPERATION_TABS.filter((tab) => tab.available).map((tab) => tab.id)
-    expect(open).toEqual(['approval', 'comp'])
+    expect(open).toEqual(['approval', 'comp', 'advances'])
   })
 
   it('แท็บที่ยังไม่เปิดต้องบอก Phase ปลายทางเสมอ (ไม่ปล่อยปุ่มหลอก)', () => {

@@ -17,6 +17,7 @@ import { compensationErrorStatus, COMPENSATION_ERROR_CODES } from '@/lib/compens
 import { financeCompanyErrorStatus, FINANCE_COMPANY_ERROR_CODES } from '@/lib/finance-companies/errors'
 import { financeErrorStatus, FINANCE_ERROR_CODES } from '@/lib/finance/errors'
 import { payeeErrorStatus, PAYEE_ERROR_CODES } from '@/lib/payees/errors'
+import { payoutErrorStatus, PAYOUT_ERROR_CODES } from '@/lib/payout/errors'
 import { roleErrorStatus, ROLE_ERROR_CODES } from '@/lib/roles/errors'
 import { serviceFeeErrorStatus, SERVICE_FEE_ERROR_CODES } from '@/lib/service-fee/errors'
 import { settingsErrorStatus, SETTINGS_ERROR_CODES } from '@/lib/settings/errors'
@@ -127,6 +128,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['finance-companies', FINANCE_COMPANY_ERROR_CODES, financeCompanyErrorStatus as (code: never) => number],
   ['finance', FINANCE_ERROR_CODES, financeErrorStatus as (code: never) => number],
   ['payees', PAYEE_ERROR_CODES, payeeErrorStatus as (code: never) => number],
+  ['payout', PAYOUT_ERROR_CODES, payoutErrorStatus as (code: never) => number],
   ['settings', SETTINGS_ERROR_CODES, settingsErrorStatus as (code: never) => number],
   ['cases', CASE_ERROR_CODES, caseErrorStatus as (code: never) => number],
   ['assignments', ASSIGNMENT_ERROR_CODES, assignmentErrorStatus as (code: never) => number],

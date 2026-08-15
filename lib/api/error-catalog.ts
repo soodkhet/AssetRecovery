@@ -93,6 +93,10 @@ export const ERROR_CATALOG = {
   PAYEE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.5' },
   PAYEE_ALREADY_EXISTS: { status: 400, severity: 'reject', source: '24 §6.5' },
   PAYEE_ID_DOCUMENT_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.5' },
+  PAYOUT_BATCH_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.5' },
+  PAYOUT_BATCH_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.5' },
+  NO_ITEMS_TO_PAY: { status: 400, severity: 'reject', source: '24 §6.5' },
+  PAYMENT_FILE_NOT_GENERATED: { status: 404, severity: 'reject', source: '24 §6.5' },
 
   // ── 24 §6.6 Revenue/Billing ────────────────────────────────────────────
   NO_REVENUE_TO_BILL: { status: 400, severity: 'reject', source: '24 §6.6' },

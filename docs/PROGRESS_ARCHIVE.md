@@ -5,6 +5,39 @@
 
 ---
 
+## Phase 3.4 — Payout Batch Backend (17) + แท็บเงินทดรองจ่าย (15)
+
+**วันที่**: 2026-08-15 · **commit**: `c344dcb` (ชุด 1 — Payout BE) + `1848a48` (ชุด 2 — แท็บเงินทดรองจ่าย + ปิด task) · **branch**: `auto/phase-3.4`
+
+### สิ่งที่ทำ
+
+- **BE ไฟล์ 17 ครบตาม `27` §6.6**: `GET/POST /api/payout-batches` · `GET /api/payout-batches/:id` · `POST /:id/generate-payment-file` · `GET /:id/payment-file` · `PATCH /:id/complete`
+- **batch builder** (`17` §9): ดึงรายการที่อนุมัติแล้วและยังไม่ถูกจ่ายภายในวันตัดรอบ — ทั้ง **ค่าตอบแทน** (`expenses.approved`) และ **เงินทดรอง** (A4 `advances.approved|overdue`) — คัดตามฝั่งก่อน แล้วตรวจ payee → คิด WHT ต่อรายการด้วย `calculateWhtForPayee()` (3.1) → รวมยอดด้วย `summarizePayoutBatch()` (`22` §6.10) → `draft → checking` อัตโนมัติในทรานแซกชันเดียว
+- **ยาม 3 ตัวก่อนเงินออก**: `UNVERIFIED_PAYEE_IN_PAYOUT` (reject ทั้งรอบ + บอกชื่อคนที่ยังไม่ยืนยัน) · `MIXED_SIDE_BATCH` (ยามสุดท้ายก่อนเขียน) · `NO_ITEMS_TO_PAY` · **1 รายการเข้าได้รอบเดียว** ด้วย `updateMany(payoutBatchItemId: null)` ในทรานแซกชัน (สองรอบสร้างพร้อมกัน → รอดรอบเดียว อีกรอบ rollback ทั้งก้อน)
+- **ไฟล์โอนธนาคาร** (`13` §6.8): ประกอบตาม `column_mapping` ของ format ที่ตั้งไว้ (ไม่ hardcode ลำดับคอลัมน์) + CSV quoting + TXT คั่น `|` + encoding UTF-8/TIS-620 (แปลงอักษรไทยเป็นไบต์เดียวเอง) + `resolveBankCode()` ชื่อธนาคาร → รหัส 3 หลัก (20 ธนาคาร) · gate `assertBankFileUsable()` (1.10) → `BANK_FILE_NOT_TESTED`
+- **idempotency (`17` §6.3)**: `idempotency_key` 1 รอบ = 1 ค่า สร้างตอนทำไฟล์ครั้งแรกแล้วใช้ค่าเดิมตลอด · สร้างซ้ำ = คืน `generated: false` + `warning: DUPLICATE_PAYMENT_FILE` (พร้อมวันที่ครั้งก่อน) ต้องส่ง `confirmDuplicate: true` มาอีกรอบจึงสร้างจริง · ไฟล์ทุกเวอร์ชันขึ้น path ใหม่ (`-v2.csv`) **ห้าม overwrite** + SHA-256 ลง audit
+- **complete + จุดเสียบไฟล์ 35**: `completePayoutBatch()` (manual, บังคับ `reason` ตาม `17` §13) และ `syncPayoutBatchCompleted()` สำหรับ Bank Reconciliation ของ Phase 4.2 — **idempotent** (รอบที่ `completed` แล้วเรียกซ้ำไม่เพิ่ม audit)
+- **FE แท็บ "เงินทดรองจ่าย" เต็มรูป** (`15` §8 · mockup แท็บ `advances`): ตาราง 9 คอลัมน์ + ตัวกรอง 6 pill + แถบเตือนยอดค้างเคลียร์ + KPI 3 ใบ · ดึงข้อมูลผ่าน `useAdvances()` ที่แท็บ "รออนุมัติ" (3.3) ถูก refactor มาใช้ร่วมกันแล้ว (ไม่มี fetch ซ้ำสองที่)
+- **เทสต์**: pure 51 เคส (`payout.test.ts` state machine/ยาม/key/เวอร์ชันไฟล์ + `bank-file-builder.test.ts` mapping/encoding/รหัสธนาคาร) + ระดับ DB 17 เคส (ครบ 3 เคสของ `17` §16 + gate bank file + แข่งกันสร้างรอบ + advance ไม่หัก WHT + audit ของไฟล์โอน + sync idempotent) + UI pure 3 เคส
+
+### การตัดสินใจระหว่างทาง
+
+- **`24` §6.5 v4.2** เติม 4 code ที่ implementation ต้องใช้จริง (`17` §11 มีแค่ 3): `PAYOUT_BATCH_NOT_FOUND`, `PAYOUT_BATCH_INVALID_STATUS`, `NO_ITEMS_TO_PAY`, `PAYMENT_FILE_NOT_GENERATED` · **`27` §6.6 v3.2** เติม 2 endpoint ที่ flow ของ `17` §8/§9 ต้องใช้ (รายละเอียดรอบ + ดาวน์โหลดไฟล์โอน)
+- **`cutoff_date`/`item_count` ไม่มีคอลัมน์ใน `02` §8 ⇒ ไม่เพิ่มเอง** (ลำดับเอกสาร `02` ชนะ) — วันตัดรอบอยู่ในชื่อรอบ + audit · จำนวนรายการอ่านจาก `_count.items`
+- **เงินทดรองเข้ารอบจ่ายแต่ไม่หัก WHT** — A4 เปิดเส้นทางไว้ใน schema แต่ `17` §6.2 พูดถึง WHT ของค่าตอบแทนเท่านั้น · เงินทดรองเป็นเงินยืมล่วงหน้าที่ต้องเคลียร์คืน ไม่ใช่เงินได้ ⇒ `wht_satang = 0` แต่ยัง snapshot `tax_profile_id` ไว้ตรวจย้อนหลัง (แก้ที่ `collectAdvanceCandidates()` จุดเดียวถ้าสำนักงานบัญชีเห็นต่าง)
+- **ไฟล์โอนเก็บใน Supabase Storage bucket private `payment-files`** ไม่ใช่สร้างสดตอนดาวน์โหลด — ถ้า regenerate จากค่าตั้งปัจจุบัน ไฟล์ที่ได้จะไม่ตรงกับไฟล์ที่ส่งเข้าธนาคารไปแล้วเมื่อมีคนแก้ `column_mapping` ทีหลัง · ดาวน์โหลดผ่าน endpoint ที่ตรวจสิทธิ์ทุกครั้ง (ไม่แจก signed URL)
+- **สิทธิ์แยก 2 ตัวตาม `25`**: `manage_payout_batch` (สร้าง/ดู/ยืนยันจ่าย) กับ `generate_payment_file` (สร้าง+ดาวน์โหลดไฟล์โอน — จุดที่เงินออกจริง `17` §12)
+- **ชื่อธนาคารเป็นข้อความอิสระใน `payee_profiles`** แต่ไฟล์โอนต้องมีรหัสปลายทาง ⇒ ทำตาราง `THAI_BANK_CODES` (เทียบด้วยคำสำคัญไทย/อังกฤษ) · แปลงไม่ได้ = โยน `REQUIRED_MISSING` พร้อมชื่อผู้รับเงิน **ห้ามเดารหัส** (เงินเข้าผิดธนาคารกู้คืนยาก)
+
+### จุดที่คนถัดไปควรรู้
+
+- ⚠️ **ต้องสร้าง bucket `payment-files` (private) 1 ครั้งต่อ environment** ก่อนใช้งานจริง — ไม่มี bucket = สร้างไฟล์โอนไม่ผ่าน (ข้อความ error บอกวิธีแล้ว) เหมือน `case-documents` ของ 2.5
+- **Phase 3.5 (FE 17)** ต่อจากนี้: ตาราง batch + modal สร้างรอบ (เลือกฝั่ง + วันตัดรอบ) + modal สร้างไฟล์โอน (เลือก format + บัญชี + ข้อความยืนยัน idempotency) — flow ปุ่ม "สร้างไฟล์โอน" ต้องยิง 2 ครั้ง (ครั้งแรกได้ warning ครั้งที่สองส่ง `confirmDuplicate: true`) และปุ่มดาวน์โหลดเป็น `<a href>` ตรงไป `/api/payout-batches/:id/payment-file` (แบบเดียวกับ PDF ของ 2.15)
+- **Phase 4.2 (ไฟล์ 35)** เรียก `syncPayoutBatchCompleted()` ตรง ๆ ห้ามเขียน transition `completed` ซ้ำ
+- **แท็บ "รอบจ่ายเงิน" ยังปิดอยู่** (`operation-tabs.ts` `available: false` → เปิดใน 3.5)
+
+---
+
 ## Phase 3.3 — Compensation Approval FE (16) + Claims & Advances (15)
 
 **วันที่**: 2026-08-15 · **commit**: `d1f39f6` (ชุด 1 — Claims & Advances BE + job) + `45bd3a1` (ชุด 2 — หน้าการเงิน 2 แท็บ) · **branch**: `auto/phase-3.3`
