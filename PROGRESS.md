@@ -1,20 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.7 (Billing FE + Adjustment ทั้งโมดูล) · งานถัดไป 3.8
+**อัปเดตล่าสุด:** 2026-08-15 — ปิด Phase 3.8 (Profitability + Finance Dashboard) ⇒ **Phase 3 เสร็จครบทั้งเฟส** · งานถัดไป 4.1
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 3.8: Profitability Report (21) + Finance Dashboard (14)
+## 🎯 งานถัดไป — Phase 4.1: Exceptions (34) + Accounting Period / Readiness / Lock Guard (30)
 
-- ทำตาม `docs/01_PLAN.md` §3.8 — ปิด Phase 3 ทั้งเฟส: **รายงานกำไร (21)** + **แดชบอร์ดการเงิน (14)**
-- **Profitability BE**: aggregation มิติ **บริษัท/ทีม** + drill-down + **daily cache + force refresh** · `closed_fail` ที่มีต้นทางต้องลด margin จริง (ไม่ตัดทิ้ง) · สูตรจาก `22` §6.12 (`grossProfit()`/`summarizeGrossProfit()` ของ 3.1) — **`revenue = 0` ⇒ margin `null` แสดง "N/A" ห้ามหารศูนย์**
-- **Dashboard BE**: KPI 4 ตัวตาม `14` §6.1 + exception aggregator (ลิงก์กลับต้นทาง read-only)
-- **FE**: เปิดแท็บ `profit` + `dashboard` ใน `operation-tabs.ts` แล้วเสียบใน `<FinanceShell>` (ครบ 8/9 แท็บ — `payee` อยู่หน้าตั้งค่าตามมติเดิม)
-- ของที่มีแล้วห้ามเขียนซ้ำ: `grossProfit()`/`summarizeGrossProfit()`/`directCostSatang()` (3.1) · `netAfterAdjustments()` — **ยอดสุทธิหลังปรับปรุงต้องคิดผ่านตัวนี้ ห้ามอ่านยอดจาก source record ตรง** (3.7) · `useBillingBatches()`/`useRevenues()` (3.7) · `<StatCard>`/`fmtRatioPct(null)` = `N/A`
-- อ้างอิง: `21`, `14` ทั้งไฟล์ · `22` §6.12 · mockup `finance.html` ผ่าน MAP
-- DoD: เทสต์ครอบ margin เคสหารศูนย์ + `closed_fail` ที่มีต้นทุน + cache/force refresh idempotent · LOC ~1,750 · งบ ~280k
+- ทำตาม `docs/01_PLAN.md` §4.1 — **งานแรกของ Phase 4** และเป็น guard ที่ cross-cutting ทั้งระบบ
+- ⚠️ ก่อนเริ่ม: spec↔schema drift 5 จุดของหมวดบัญชี (Q4) ยังไม่มีคำตอบ → **ยึด schema `02` เป็นหลัก** แล้วบันทึกสิ่งที่ยึดไว้ลง `docs/PROGRESS_ARCHIVE.md`
+- **BE 34 (Exceptions)**: CRUD (3 ระดับ `info/warning/critical` × 3 สถานะ `open/resolved/authorized` — **ไม่มี** `in_progress`) + authorize (ผู้บริหารเท่านั้น + note บังคับ → `authorized` ทันที) + **กฎกันหายเงียบ 3 ข้อ**: แสดงแยกหมวดเสมอ / ไม่สืบทอดข้ามรอบ (สร้าง record ใหม่ต่อ period) / ปลดบล็อกเฉพาะ period เดียวกัน
+- **BE 30 (Period)**: state machine `collecting → sent_to_accountant → locked` (unlock กลับได้เฉพาะผู้บริหาร) + **Readiness Check 3 เงื่อนไข** (billing-revenue sync / reconcile 100% รวม `unmatched_resolved` / ไม่มี critical open) **ห้าม force ข้าม** · `critical_count`/`warning_count` เป็น derived **ห้ามสร้างคอลัมน์**
+- **Period Lock guard (cross-cutting)**: interceptor `PERIOD_LOCKED_DIRECT_EDIT` บังคับกับ write endpoint การเงิน/บัญชีทุกตัว (`30`/`20` · `13` §6.11)
+- ของที่มีแล้วห้ามเขียนซ้ำ: `exceptionLinkOf()`/`exceptionModuleLabel()`/`countExceptionLevels()` (3.8 — ทะเบียนโมดูล/ลิงก์ของ exception อยู่ที่ `lib/reports/dashboard.ts` แล้ว) · `periodKeyOf()`/`parsePeriodStatusSnapshot()` (3.7) · `adjustmentApprovalPolicyFor()`/`periodLockPolicyFor()` (3.1/1.10) · `summarizeBillingBatch()` (3.6 — ใช้เทียบ `NOT_READY_BILLING_REVENUE_MISMATCH` ได้ตรง)
+- อ้างอิง: `34`, `30` ทั้งไฟล์ · `13` §6.11 · `23` §6.12–6.13 · `24` (error codes)
+- DoD: เทสต์ Readiness ครบ 3 เงื่อนไข + unlock เฉพาะผู้บริหาร + write endpoint ของงวดที่ `locked` โดน `PERIOD_LOCKED_DIRECT_EDIT` จริง · LOC ~1,950 · งบ ~300k
 
 ---
 
@@ -74,7 +75,7 @@
 | 3.5 | Payout FE + Internal PDFs | ✅ | 2026-08-15 · `9538009`+`c15a75b` · แท็บรอบจ่ายเงิน (ตาราง+3 modal+ยืนยันซ้ำ 2 จังหวะ) + เอกสารภายใน 3 ใบเทียบ samples 04–06 · fix `lpad` เลขเอกสารเกิน 999 → archive |
 | 3.6 | Revenue / Billing / AR BE | ✅ | 2026-08-15 · `fb84fd9`+`294f47f` · RevenueService ตัวจริง (เกต `19` §6.1 + ยอด `22` §6.5–6.8 + snapshot VAT) + Billing Batch/AR Aging + API 7 endpoint · เทสต์ pure 34 + DB 30 (`19` §16 ครบ 8 เคส) → archive |
 | 3.7 | Billing FE + Adjustment | ✅ | 2026-08-15 · `c9b7f20`+`43764cb`+`9677446` · แท็บรายได้และวางบิล (2 ตาราง + AR Aging) + Adjustment ทั้งโมดูล (4 FK + CHECK · snapshot งวด · ผู้อนุมัติจาก audit) · เทสต์ pure 30 + DB 16 → archive |
-| 3.8 | Profitability + Finance Dashboard | ⬜ | PLAN §3.8 |
+| 3.8 | Profitability + Finance Dashboard | ✅ | 2026-08-15 · `43c654f`+`f04f732` · รายงานกำไร (มิติบริษัท/ทีม + drill-down + แคชรายวัน) + แดชบอร์ด KPI 4 ตัว + exception aggregator · เปิดแท็บการเงินครบ 8/9 · เทสต์ pure 44 + DB 17 → archive |
 
 ## Phase 4 — Accounting Module (ไฟล์ 30–37)
 

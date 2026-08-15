@@ -17,7 +17,7 @@ export interface FinanceOperationTab {
 }
 
 export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
-  { id: 'dashboard', label: 'ภาพรวม', source: 'ไฟล์ 14', available: false, plannedPhase: '3.8' },
+  { id: 'dashboard', label: 'ภาพรวม', source: 'ไฟล์ 14', available: true },
   { id: 'approval', label: 'รออนุมัติ', source: 'ไฟล์ 15', available: true },
   { id: 'comp', label: 'ค่าตอบแทน', source: 'ไฟล์ 16', available: true },
   { id: 'advances', label: 'เงินทดรองจ่าย', source: 'ไฟล์ 15', available: true },
@@ -26,10 +26,14 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
   // ไฟล์ 18 ทำเสร็จตั้งแต่ 3.2 แต่หน้าอยู่ในหน้าตั้งค่าการเงิน (`13`) ตาม mockup `settings.html`
   { id: 'payee', label: 'ผู้รับเงิน (Payee)', source: 'ไฟล์ 18', available: false, plannedPhase: '3.2 — อยู่ที่หน้าตั้งค่าการเงิน' },
   { id: 'adjustment', label: 'ปรับปรุง', source: 'ไฟล์ 20', available: true },
-  { id: 'profit', label: 'กำไรและต้นทุน', source: 'ไฟล์ 21', available: false, plannedPhase: '3.8' },
+  { id: 'profit', label: 'กำไรและต้นทุน', source: 'ไฟล์ 21', available: true },
 ]
 
-export const DEFAULT_FINANCE_OPERATION_TAB = 'approval'
+/**
+ * `14` §1 — "ภาพรวม" คือ **หน้าแรกของโมดูลการเงิน** (เปิดใช้จริงตั้งแต่ Phase 3.8)
+ * ก่อนหน้านั้นแท็บเริ่มต้นเป็น `approval` เพราะหน้าภาพรวมยังไม่เกิด
+ */
+export const DEFAULT_FINANCE_OPERATION_TAB = 'dashboard'
 
 /** แท็บแรกที่ใช้งานได้จริง — `?tab=` ที่ชี้แท็บยังไม่เกิดตกกลับแท็บเริ่มต้นเสมอ */
 export function resolveFinanceOperationTab(tab: string | undefined): string {
