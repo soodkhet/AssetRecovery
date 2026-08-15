@@ -20,6 +20,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertPeriodEditable } from '@/lib/settings/period-lock'
+import { syncWhtCertificatesFromPayout } from '@/lib/wht/queries'
 
 /**
  * บัญชีค่าใช้จ่าย (ไฟล์ 32) — ชั้น DB (`32` §14)
@@ -35,6 +36,8 @@ import { assertPeriodEditable } from '@/lib/settings/period-lock'
  *   `PERIOD_LOCKED_DIRECT_EDIT` ของรอบที่รายการนั้นสังกัด (`13` §6.11)
  * - **เอกสารไม่ครบ ⇒ สร้าง exception ของไฟล์ 34 ให้อัตโนมัติ** ตอน sync ครั้งแรกเท่านั้น
  *   (ไม่ซ้ำเมื่อ sync ซ้ำ เพราะผูกกับจังหวะที่ record เกิดใหม่)
+ * - **ต่อท้ายด้วยการออกใบ 50 ทวิ** (`33` §9 · Phase 4.5) — ใบผูกกับ `expense_record_id` จึงต้องเกิด
+ *   หลังรายการค่าใช้จ่ายเสมอ · ตัวมันเอง idempotent ⇒ sync ซ้ำไม่ออกใบซ้ำ
  */
 
 const TARGET = 'expense_records'
@@ -234,6 +237,10 @@ export async function syncExpenseRecordsFromPayout(
 
     created.push(row)
   }
+
+  // มีบัญชีค่าใช้จ่ายแล้ว ⇒ ออกใบ 50 ทวิ ให้รายการที่หักภาษีจริง (`33` §9) — idempotent เช่นกัน
+  // (ต้องอยู่**หลัง** expense record เกิด เพราะ `wht_certificates.expense_record_id` เป็น FK บังคับ)
+  await syncWhtCertificatesFromPayout(ctx, payoutBatchId)
 
   return created.map(toDto)
 }

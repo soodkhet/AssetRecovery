@@ -23,10 +23,11 @@ describe('ทะเบียนแท็บหน้าบัญชี', () => {
     }
   })
 
-  it('แท็บที่เปิดแล้วถึง Phase 4.4 = ค่าใช้จ่าย · กระทบยอด · ข้อซักถาม', () => {
+  it('แท็บที่เปิดแล้วถึง Phase 4.5 = ค่าใช้จ่าย · กระทบยอด · เอกสาร & WHT · ข้อซักถาม', () => {
     expect(ACCOUNTING_TABS.filter((tab) => tab.available).map((tab) => tab.id)).toEqual([
       'expenses',
       'bank',
+      'wht',
       'qa',
     ])
   })

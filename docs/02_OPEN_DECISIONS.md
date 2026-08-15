@@ -190,7 +190,8 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 
 ### ⬜ D11 — เลขรันนิ่งเอกสาร: กัน race + ขอบปี + receipt/50ทวิ ไม่มี format config
 - **[default]**: `SELECT ... FOR UPDATE` ใน transaction เดียวกับ insert (ห้ามใช้ PG sequence — gap ตอน rollback ผิดกฎ "ห้ามขาดช่วง") · ตัดปี yearly_reset ด้วย issue_date เวลาไทย · ขยาย `13` §6.12 ครอบ receipt + wht_certificate (sequence แยกต่อชนิด) · **บล็อก**: 4.3, 4.5 · **คำตอบ**:
-- **สถานะจริงหลัง Phase 4.3**: ส่วน**ใบกำกับภาษี** implement ตาม default แล้ว (`SELECT … FOR UPDATE` แถว `organizations` → `nextSequence()` → เดินเลข → เทียบ `INVOICE_NUMBER_GAP` ทั้งหมดในทรานแซกชันเดียวกับ insert · ตัดปี พ.ศ. จาก `invoice_date` เวลาไทย · เทสต์ concurrency 4 คำขอพร้อมกันได้เลขเรียงไม่ขาด) ⇒ **ไม่บล็อก 4.3 แล้ว** · ที่ยังค้างคือ sequence ของ **ใบเสร็จรับเงิน** (ดู D13) และ **ใบ 50 ทวิ** ซึ่งบล็อก 4.5 อยู่
+- **สถานะจริงหลัง Phase 4.3**: ส่วน**ใบกำกับภาษี** implement ตาม default แล้ว (`SELECT … FOR UPDATE` แถว `organizations` → `nextSequence()` → เดินเลข → เทียบ `INVOICE_NUMBER_GAP` ทั้งหมดในทรานแซกชันเดียวกับ insert · ตัดปี พ.ศ. จาก `invoice_date` เวลาไทย · เทสต์ concurrency 4 คำขอพร้อมกันได้เลขเรียงไม่ขาด) ⇒ **ไม่บล็อก 4.3 แล้ว**
+- **สถานะจริงหลัง Phase 4.5 (ใบ 50 ทวิ)**: implement ตาม default แล้วเช่นกัน แต่**ล็อกด้วย `pg_advisory_xact_lock` ค่าคงที่**แทนการล็อกแถว `organizations` เพราะ `wht_certificates.certificate_number` เป็น **UNIQUE ทั้งตาราง** ตาม `02` §9 (ไม่ใช่ unique ต่อองค์กร) ⇒ ถ้าล็อกแยกต่อองค์กร สองคำขอคนละองค์กรจะชนเลขกัน · ยังไม่มีคอลัมน์ตัวเดินเลข (`wht_certificate_seq`/prefix/digit length) ใน `02` ⇒ **รูปแบบ `WHT-<พ.ศ.>-NNN` ตายตัวตาม mockup** (รีเซ็ตรายปีตามวันจ่าย) และลำดับ derive จากเลขที่ของปีเดียวกันภายในทรานแซกชันเดียวกับ insert (รวมใบที่ยกเลิก — เลขไม่ recycle) · เทสต์: ออกใบพร้อมกัน 2 คำขอได้เลขติดกันไม่ซ้ำ ⇒ **ไม่บล็อก 4.5 แล้ว** · ที่ยังค้างคือ sequence ของ **ใบเสร็จรับเงิน** (ดู D13) และการเปิดให้ตั้งค่า prefix/รูปแบบของใบ 50 ทวิ ผ่าน `13` §6.12 (ต้องเพิ่มคอลัมน์)
 
 ### ⬜ D12 — Advance เคลียร์บางส่วน / overdue ค้างข้ามงวด
 - **[default]**: เคลียร์ครั้งเดียวเหมือนเดิม + เพิ่ม flow "ตัดส่วนไม่มีใบเสร็จเป็นลูกหนี้พนักงาน หักจาก payout รอบถัดไป" · advance overdue ไม่ block ปิดงวดแต่ขึ้น warning exception — **นักบัญชีเคาะ** · **บล็อก**: 3.3 · **คำตอบ**:
@@ -213,6 +214,17 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
   - `mapping_rule` = derive จาก "มีต้นทางอัตโนมัติไหม" (`resolveMappingRule()`); ปัจจุบันชั้น DB ส่ง `autoCostCenterId = null` เสมอ ⇒ **ทุกแถวเป็น `manual`** · ยาม `COST_CENTER_AUTO_EDIT` implement + มีเทสต์ครบแล้ว พอมีเส้นเชื่อมเมื่อไรก็ทำงานทันที
   - `36` `reference`/`due_date` = **ไม่ implement** (ไม่มีคอลัมน์) ⇒ ตารางข้อซักถามแสดง "บันทึกเมื่อ" แทน Due Date และไม่มีการเตือนเลยกำหนด
 - **[default]**: เพิ่มคอลัมน์ 3 ชุด — (1) `expense_records.payee_name TEXT NOT NULL` (snapshot ตอน sync) (2) `expense_records.mapping_rule cost_center_mapping_rule NOT NULL DEFAULT 'manual'` + `teams.cost_center_id UUID REFERENCES cost_centers(id)` เพื่อให้ auto-mapping เกิดได้จริง (3) `accountant_questions.reference TEXT` + `due_date DATE` · **บล็อก**: ไม่บล็อก 4.4 (ส่งงานได้ตามที่ทำไปแล้ว) แต่กระทบ 4.6 ถ้า `04_Expenses.csv` ต้องมี payee/ประเภท/วันจ่ายแบบ snapshot และกระทบคุณค่าของไฟล์ 36 (ไม่มี due date = ตามงานไม่ได้) · **คำตอบ**:
+
+### ⬜ D15 — ไฟล์ 33/28 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.5 — ตระกูลเดียวกับ D13/D14)
+- **ปัญหา**:
+  - `28` §6.3 บังคับให้ใบ 50 ทวิ มี **ชื่อ/ที่อยู่/เลขประจำตัวผู้เสียภาษีของผู้ถูกหัก** ครบตามกฎหมาย แต่ `payee_profiles` (และ `users`) ใน `02` **ไม่มีคอลัมน์ที่อยู่** เลย · เลขผู้เสียภาษีใช้ `payee_profiles.national_id` (VARCHAR(13)) ซึ่งเป็นช่องเดียวที่มี — นิติบุคคลก็ต้องกรอกเลข 13 หลักลงช่องนี้
+  - `33` §7.1 ระบุ `delivery_format` เป็นฟิลด์**บังคับต่อใบ** และมีคอลัมน์จริงใน `02` แต่ **ไม่มี endpoint ให้เลือก** (§14 มี 4 endpoint: list/cancel/summary/mark-filed) ⇒ ทุกใบใช้ค่า default `paper`
+  - `33` §14 ไม่มี endpoint "ออกใบใหม่" ⇒ การออกใบแทนหลังยกเลิกต้องแนบไปกับ flow ที่มีอยู่
+- **ที่ทำไปแล้วใน 4.5** (ยึดลำดับ "เอกสารขัดกัน → `02` ชนะไฟล์ spec ของโมดูล" ⇒ **ไม่แก้ schema เอง** เหมือน D13/D14):
+  - ที่อยู่ผู้ถูกหักบน PDF พิมพ์เป็น `—` (ห้ามเว้นว่างบนเอกสารทางการ) · เลขผู้เสียภาษีอ่านจาก `national_id`, ไม่มีค่า = `—` ⇒ **ใบที่พิมพ์ออกไปยังไม่ครบตามกฎหมาย 100% จนกว่าจะมีคอลัมน์ที่อยู่**
+  - `delivery_format` = ใช้ค่า default ของคอลัมน์ (`paper`) และแสดงบนใบ/ตาราง — ยังเลือกรายใบไม่ได้
+  - ออกใบแทน = ธง `reissue` ใน body ของ `PATCH /:id/cancel` (default `false`) + เส้นทางอัตโนมัติเมื่อ sync รอบจ่ายเดิมซ้ำแล้วพบว่าใบเดิมถูกยกเลิก ⇒ ไม่เพิ่ม endpoint นอก `27` §6.12
+- **[default]**: เพิ่ม (1) `payee_profiles.address TEXT` + `tax_id VARCHAR(13)` แยกจาก `national_id` (นิติบุคคลใช้เลขผู้เสียภาษี ไม่ใช่เลขบัตร) (2) endpoint/ฟิลด์ให้เลือก `delivery_format` รายใบตอนออก/ก่อนส่ง · **บล็อก**: ไม่บล็อก 4.5 (ส่งงานได้ตามที่ทำไปแล้ว) แต่**กระทบความถูกต้องตามกฎหมายของใบ 50 ทวิ จริง** — ต้องถามนักบัญชี/PO ก่อนใช้งาน production · **คำตอบ**:
 
 ---
 

@@ -43,6 +43,8 @@ describe('statusBadgeGroup', () => {
     ['approved', 'success'],
     ['active', 'success'],
     ['accepted', 'success'],
+    // `33` §8 — รอบนำส่ง WHT ที่ยื่นแบบแล้ว
+    ['filed', 'success'],
     ['sent', 'sent'],
     ['ready_for_billing', 'sent'],
     ['billed', 'sent'],
@@ -68,6 +70,8 @@ describe('statusBadgeGroup', () => {
     ['deactivated', 'critical'],
     ['rejected', 'critical'],
     ['unverified', 'critical'],
+    // `31` §9.1 · `33` §10 — เอกสารทางภาษีที่ถูกยกเลิก (terminal ห้ามลบ)
+    ['cancelled', 'critical'],
     ['needs_revision', 'warning'],
     ['warning', 'warning'],
     ['superseded', 'superseded'],

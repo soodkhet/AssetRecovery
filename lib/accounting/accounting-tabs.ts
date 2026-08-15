@@ -22,7 +22,7 @@ export const ACCOUNTING_TABS: readonly AccountingTab[] = [
   { id: 'receipts', label: 'เงินรับ', source: 'ไฟล์ 31', available: false, plannedPhase: '4.7' },
   { id: 'expenses', label: 'ค่าใช้จ่าย', source: 'ไฟล์ 32', available: true },
   { id: 'bank', label: 'กระทบยอด', source: 'ไฟล์ 35', available: true },
-  { id: 'wht', label: 'เอกสาร & WHT', source: 'ไฟล์ 33', available: false, plannedPhase: '4.5' },
+  { id: 'wht', label: 'เอกสาร & WHT', source: 'ไฟล์ 33', available: true },
   { id: 'documents', label: 'เอกสารไม่ครบ', source: 'ไฟล์ 34', available: false, plannedPhase: '4.7' },
   { id: 'qa', label: 'ข้อซักถาม', source: 'ไฟล์ 36', available: true },
   { id: 'export', label: 'ส่งมอบ', source: 'ไฟล์ 37', available: false, plannedPhase: '4.6' },
