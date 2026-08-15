@@ -5,7 +5,9 @@ import { AdjustmentTab } from '@/components/finance/adjustment-tab'
 import { AdvanceTab } from '@/components/finance/advance-tab'
 import { ApprovalTab } from '@/components/finance/approval-tab'
 import { CompensationTab } from '@/components/finance/compensation-tab'
+import { DashboardTab } from '@/components/finance/dashboard-tab'
 import { PayoutTab } from '@/components/finance/payout-tab'
+import { ProfitTab } from '@/components/finance/profit-tab'
 import { RevenueTab } from '@/components/finance/revenue-tab'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
@@ -68,12 +70,14 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
           })}
         </nav>
 
+        {current?.id === 'dashboard' && <DashboardTab />}
         {current?.id === 'approval' && <ApprovalTab />}
         {current?.id === 'comp' && <CompensationTab />}
         {current?.id === 'advances' && <AdvanceTab />}
         {current?.id === 'payout' && <PayoutTab />}
         {current?.id === 'revenue' && <RevenueTab />}
         {current?.id === 'adjustment' && <AdjustmentTab />}
+        {current?.id === 'profit' && <ProfitTab />}
         {current === undefined && (
           <EmptyState title="ยังไม่มีหน้าจอของแท็บนี้" description="เลือกแท็บที่พร้อมใช้งานจากแถบด้านบน" />
         )}
