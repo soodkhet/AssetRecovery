@@ -5,8 +5,10 @@ import { defineConfig } from 'prisma/config'
 // ⇒ ถ้าไม่โหลดเอง Prisma CLI จะไม่เห็น DATABASE_URL/DIRECT_URL แล้วฟ้อง
 //    "The datasource.url property is required in your Prisma config file"
 // `.env.local` ถูกโหลดทีหลังและ override ค่าเดิม (ตรงกับลำดับของ Next.js)
+// `PRISMA_ENV_FILE=<ไฟล์>` → ใช้ไฟล์นั้นแทน `.env.local` (เช่น `.env.staging` ตอน `pnpm db:deploy` ขึ้นฐาน staging
+// จากเครื่องที่ `.env.local` ชี้ฐานบนเครื่อง) · ไฟล์ `.env*` ทุกตัวต้องไม่ถูก commit
 loadEnv({ path: '.env' })
-loadEnv({ path: '.env.local', override: true })
+loadEnv({ path: process.env['PRISMA_ENV_FILE'] ?? '.env.local', override: true })
 
 /**
  * ค่าคอนฟิกของ Prisma CLI (migrate / db pull / seed) — Prisma 7 ย้าย datasource url ออกจาก schema.prisma มาที่นี่
