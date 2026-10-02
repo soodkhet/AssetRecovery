@@ -83,7 +83,7 @@ export function PeriodLockTab() {
       <div className="mb-4">
         <h2 className="text-sm font-bold text-slate-900">การล็อกรอบและ Adjustment</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          นโยบายตายตัวขององค์กรที่ไฟล์ 20 (Adjustment) และ 30 (ปิดงวด) บังคับใช้ — ไม่ใช่ค่าที่ตั้งได้รายรอบ (ไฟล์ 13 §6.11)
+          นโยบายตายตัวขององค์กรที่ระบบรายการปรับปรุง (Adjustment) และการปิดงวดบังคับใช้ — ไม่ใช่ค่าที่ตั้งได้รายรอบ
         </p>
       </div>
 
@@ -148,7 +148,7 @@ export function PeriodLockTab() {
       </div>
 
       <p className="mt-3 text-[11px] text-slate-400">
-        การปลดล็อกรอบที่ปิดแล้วทำที่หน้างวดบัญชี (ไฟล์ 30) พร้อมบันทึก audit log และเหตุผลทุกครั้ง —
+        การปลดล็อกรอบที่ปิดแล้วทำที่หน้างวดบัญชี พร้อมบันทึก audit log และเหตุผลทุกครั้ง —
         รอบที่ <span className="font-mono">locked</span> ทุก write จะถูกปฏิเสธด้วย{' '}
         <span className="font-mono">PERIOD_LOCKED_DIRECT_EDIT</span>
       </p>

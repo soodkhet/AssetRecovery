@@ -214,7 +214,7 @@ export function buildPayoutSummaryDoc(
     totalGrossText: fmtSatang(totals.grossSatang),
     totalWhtText: fmtSatang(totals.whtSatang),
     totalNetText: fmtSatang(totals.netSatang),
-    note: 'ใช้รูปแบบไฟล์ธนาคารที่ test_status = passed เท่านั้นในการตัดโอนจริง (BANK_FILE_NOT_TESTED — ไฟล์ 13 §6.8)',
+    note: 'ใช้รูปแบบไฟล์ธนาคารที่ test_status = passed เท่านั้นในการตัดโอนจริง (BANK_FILE_NOT_TESTED)',
   }
 }
 
@@ -348,7 +348,7 @@ export function buildPayslipDocs(batch: PayoutBatchDetailDto, issuer: PayoutDocI
         : `หักภาษี ณ ที่จ่าย (${fmtPercent(group.whtPctSnapshot)})`,
     whtText: group.totals.whtSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.totals.whtSatang)})`,
     netText: fmtSatang(group.totals.netSatang),
-    note: 'หนังสือรับรองหัก ณ ที่จ่ายฉบับทางการ (50 ทวิ) ออกแยกต่างหากตามไฟล์ 33',
+    note: 'หนังสือรับรองหัก ณ ที่จ่ายฉบับทางการ (50 ทวิ) ออกแยกต่างหาก',
   }))
 }
 

@@ -306,7 +306,7 @@ function renderF1(){
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="font-bold text-slate-900 text-lg">รายงานกำไรขั้นต้น (Gross Profit)</h2>
-        <p class="text-xs text-slate-500 mt-0.5">ผลจริง (Actual) — ไม่ใช่ประมาณการ · ไฟล์ 21 §6</p>
+        <p class="text-xs text-slate-500 mt-0.5">ผลจริง (Actual) — ไม่ใช่ประมาณการ</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap">
         ${periodPicker()}
@@ -466,7 +466,7 @@ function renderF5(){
       ${kpiCard('ยอดรวมค้าง','฿ '+money(total),'ต้องติดตามและเคลียร์','red','')}
     </div>
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 text-xs text-amber-800">${SVG.warn}
-      ระบบบล็อก Advance ใหม่สำหรับพนักงานที่มีรายการค้างอยู่แล้วจนกว่าจะเคลียร์ครบ (ไฟล์ 15)
+      ระบบบล็อก Advance ใหม่สำหรับพนักงานที่มีรายการค้างอยู่แล้วจนกว่าจะเคลียร์ครบ
     </div>
     ${tbl(['พนักงาน','ทีม','วันอนุมัติ','กำหนดเคลียร์','ยอด','เกินกำหนด (วัน)','สถานะ'],
       store.advanceOverdue.map(r=>`<tr class="hover:bg-red-50/20 bg-red-50/10">

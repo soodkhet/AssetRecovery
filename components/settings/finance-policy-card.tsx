@@ -160,7 +160,7 @@ export function FinancePolicyCard() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">นโยบายการเงินระดับองค์กร</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ค่ากลางที่ใช้ทั้งระบบ — เพดานเงินทดรอง เอกสารผู้รับเงิน ช่วงอายุหนี้ และเพดานตัดส่วนต่าง (ไฟล์ 13 §6.2.1)
+            ค่ากลางที่ใช้ทั้งระบบ — เพดานเงินทดรอง เอกสารผู้รับเงิน ช่วงอายุหนี้ และเพดานตัดส่วนต่าง
           </p>
         </div>
         <div className="text-[10px] text-slate-400">
@@ -271,7 +271,7 @@ export function FinancePolicyCard() {
         </Field>
 
         <InlineAlert tone="warning" title="ค่าเหล่านี้กระทบตัวเลขทั้งระบบ">
-          เปลี่ยนแล้วมีผลกับรายการใหม่เท่านั้น — เอกสารและงวดที่ปิดไปแล้วยังอ้างค่าที่ snapshot ไว้เสมอ (ไฟล์ 92 §7.1)
+          เปลี่ยนแล้วมีผลกับรายการใหม่เท่านั้น — เอกสารและงวดที่ปิดไปแล้วยังอ้างค่าที่ snapshot ไว้เสมอ
         </InlineAlert>
 
         <Can action="manage" resource={MANAGE_SETTINGS}>

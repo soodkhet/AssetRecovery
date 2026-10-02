@@ -22,8 +22,8 @@ export interface TaxDocTemplateValues {
 export const TAX_DOCUMENT_TYPES: readonly TaxDocumentType[] = ['tax_invoice', 'wht_certificate']
 
 export const TAX_DOCUMENT_TYPE_LABEL: Readonly<Record<TaxDocumentType, string>> = {
-  tax_invoice: 'ใบกำกับภาษี (ไฟล์ 31)',
-  wht_certificate: 'หนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ (ไฟล์ 33)',
+  tax_invoice: 'ใบกำกับภาษี',
+  wht_certificate: 'หนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ',
 }
 
 /** ค่าเริ่มต้นเมื่อยังไม่เคยตั้งค่า — ตรงกับ `@default` ใน `schema.prisma` */

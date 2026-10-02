@@ -200,7 +200,7 @@ export function AttachDocModal({
               <li>· ปลดล็อกรายการเบิกของทีมภาคสนามให้เข้าคิวอนุมัติ</li>
               <li>· เปิดเกตรายได้เพื่อรอวางบิลบริษัทไฟแนนซ์</li>
             </ul>
-            <div className="mt-1 font-semibold">ล็อตที่ยืนยันแล้วแก้ไขไม่ได้ทุกกรณี (`44` §10)</div>
+            <div className="mt-1 font-semibold">ล็อตที่ยืนยันแล้วแก้ไขไม่ได้ทุกกรณี</div>
           </InlineAlert>
         </div>
       </Modal>

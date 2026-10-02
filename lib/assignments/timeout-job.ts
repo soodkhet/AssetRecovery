@@ -94,7 +94,7 @@ export async function resolveExpiredReassignments(
         actorRole: null,
         pendingReassignmentId: pending.id,
         events: ['assignment.reassignment_timeout_resolved'],
-        auditReason: `[job:${jobId}] หมดเวลารอความยินยอมตาม \`40\` §11 — ${pending.reason}`,
+        auditReason: `[job:${jobId}] หมดเวลารอความยินยอม — ${pending.reason}`,
       })
       return true
     })

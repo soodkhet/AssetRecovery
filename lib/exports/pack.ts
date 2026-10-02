@@ -484,7 +484,7 @@ export function checklistSummary(rows: readonly ChecklistExportRow[]): Checklist
 }
 
 export const CHECKLIST_FOOTER_NOTE =
-  'หมายเหตุ: ห้าม Export Accounting Pack ถ้ายังมีรายการ Critical เปิดอยู่ (ไฟล์ 30 Readiness Check)'
+  'หมายเหตุ: ห้าม Export Accounting Pack ถ้ายังมีรายการ Critical เปิดอยู่ (Readiness Check)'
 
 /** ชีตเดียวทั้งไฟล์ — หัวเรื่อง 2 บรรทัด + ตาราง + สรุปนับ + หมายเหตุ (ตาม `samples/08`) */
 export function checklistSheet(input: {
@@ -497,7 +497,7 @@ export function checklistSheet(input: {
   return [
     [`Document Checklist Export — รอบบัญชี ${input.periodLabel}`],
     [
-      `อ้างอิง: ไฟล์ 34-accounting-document-checklist-exceptions.md — จัดทำโดย ${input.generatedByName} ` +
+      `จัดทำโดย ${input.generatedByName} ` +
         `วันที่ ${fmtDate(input.generatedAt)}`,
     ],
     [],

@@ -34,11 +34,11 @@ const HTTP_STATUS: Record<RoleErrorCode, number> = {
 const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
   SEED_ROLE_DELETE: {
     title: 'ลบ Seed Role ไม่ได้',
-    message: 'บทบาทพื้นฐานของระบบ 15 ตัวลบไม่ได้ทุกกรณี (ไฟล์ 07 §10)',
+    message: 'บทบาทพื้นฐานของระบบ 15 ตัวลบไม่ได้ทุกกรณี',
   },
   SEED_ROLE_RENAME: {
     title: 'เปลี่ยนชื่อ Seed Role ไม่ได้',
-    message: 'ชื่อบทบาทพื้นฐานถูกอ้างอิงทั้งระบบ จึงเปลี่ยนไม่ได้ (ไฟล์ 07 §10)',
+    message: 'ชื่อบทบาทพื้นฐานถูกอ้างอิงทั้งระบบ จึงเปลี่ยนไม่ได้',
   },
   ROLE_NOT_EDITABLE: {
     title: 'บทบาทนี้แก้สิทธิ์ไม่ได้',
@@ -46,7 +46,7 @@ const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
   },
   CAPABILITY_LOCKED: {
     title: 'สิทธิ์นี้ถูกล็อกไว้',
-    message: 'ความสามารถนี้เป็นของบทบาทเดียวตามไฟล์ 25 ("✅ only") มอบให้บทบาทอื่นไม่ได้',
+    message: 'ความสามารถนี้เป็นของบทบาทเดียว ("✅ only") มอบให้บทบาทอื่นไม่ได้',
   },
   CAPABILITY_NOT_FOUND: {
     title: 'ไม่พบความสามารถที่ระบุ',
@@ -58,7 +58,7 @@ const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
   },
   DUPLICATE_ROLE_NAME: {
     title: 'ชื่อบทบาทซ้ำ',
-    message: 'มีบทบาทชื่อนี้ในกลุ่มเดียวกันอยู่แล้ว (ชื่อซ้ำข้ามกลุ่มได้ — ไฟล์ 07 §6)',
+    message: 'มีบทบาทชื่อนี้ในกลุ่มเดียวกันอยู่แล้ว (ชื่อซ้ำข้ามกลุ่มได้)',
   },
   ROLE_NOT_FOUND: {
     title: 'ไม่พบบทบาท',

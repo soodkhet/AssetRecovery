@@ -84,7 +84,7 @@ export async function runAdvanceOverdueJob(
             payee_id: advance.payeeId,
             auto_marked: true,
           },
-          reason: `[job:${jobId}] เลยกำหนดเคลียร์ยอดแล้วยังไม่เคลียร์ — มาร์คเป็น overdue อัตโนมัติ (\`15\` §9.1)`,
+          reason: `[job:${jobId}] เลยกำหนดเคลียร์ยอดแล้วยังไม่เคลียร์ — มาร์คเป็น overdue อัตโนมัติ`,
           diffOnly: false,
         },
         tx,

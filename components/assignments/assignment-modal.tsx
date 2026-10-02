@@ -104,7 +104,7 @@ export function AssignmentModal({
         size="xl"
         hideWorkflowActions
         title={`${isAssign ? 'มอบหมายงาน' : 'เปลี่ยนผู้รับผิดชอบ'} — ${target.caseRef}`}
-        description="ตรวจรายละเอียดเคสและเปรียบเทียบพนักงานในทีมเดียวกันได้ในหน้าเดียว (`40` §7.3)"
+        description="ตรวจรายละเอียดเคสและเปรียบเทียบพนักงานในทีมเดียวกันได้ในหน้าเดียว"
         headerSlot={
           <div className="space-y-2">
             {blocked && (
@@ -139,7 +139,7 @@ export function AssignmentModal({
 
             {target.teamId === null ? (
               <InlineAlert tone="warning" title="เคสนี้ยังไม่มีทีมที่รับผิดชอบ">
-                ต้องยืนยันทีมที่หน้ารับเคสก่อน จึงจะเลือกพนักงานได้ (`40` §11 — เลือกได้เฉพาะคนในทีมของเคส)
+                ต้องยืนยันทีมที่หน้ารับเคสก่อน จึงจะเลือกพนักงานได้ (เลือกได้เฉพาะคนในทีมของเคส)
               </InlineAlert>
             ) : blocked ? (
               <p className="py-6 text-center text-sm text-slate-400">เลือกพนักงานไม่ได้ขณะมีคำขอค้างอยู่</p>

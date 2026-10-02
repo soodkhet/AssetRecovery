@@ -114,8 +114,8 @@ export function CostCenterMapModal({
         </Field>
 
         <InlineAlert tone="info" title="แก้ยอดเงินที่นี่ไม่ได้">
-          ยอด Gross/WHT/Net เป็นข้อมูลจากรอบจ่ายเงินจริง (ไฟล์ 17) — ถ้ายอดผิดต้องสร้าง Adjustment ผ่านเมนู
-          การเงิน (ไฟล์ 20)
+          ยอด Gross/WHT/Net เป็นข้อมูลจากรอบจ่ายเงินจริง — ถ้ายอดผิดต้องสร้าง Adjustment ผ่านเมนู
+          การเงิน
         </InlineAlert>
       </div>
     </Modal>

@@ -62,9 +62,7 @@ export function DashboardTab() {
             label={kpi.label}
             value={fmtSatangSymbol(kpi.amountSatang)}
             hint={
-              kpi.marginPct === undefined
-                ? `${kpi.hint} · ${kpi.source}`
-                : `Margin ${fmtRatioPct(kpi.marginPct)} · ${kpi.source}`
+              kpi.marginPct === undefined ? kpi.hint : `Margin ${fmtRatioPct(kpi.marginPct)}`
             }
             className={cn(KPI_TONE_CLASS[kpi.tone])}
           />
@@ -82,7 +80,7 @@ export function DashboardTab() {
           tone="error"
           title={`มี ${fmtCount(dashboard.data.exceptions.critical)} Critical Exception ที่ยังเปิดอยู่`}
         >
-          ต้องแก้ไขหรือให้ผู้บริหารรับความเสี่ยงก่อน จึงจะ Export Accounting Pack ได้ (ไฟล์ 30/34)
+          ต้องแก้ไขหรือให้ผู้บริหารรับความเสี่ยงก่อน จึงจะ Export Accounting Pack ได้
         </InlineAlert>
       )}
 

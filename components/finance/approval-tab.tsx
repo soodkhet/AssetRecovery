@@ -113,7 +113,7 @@ export function ApprovalTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รายการเบิก (Claims) — อนุมัติหลายขั้น</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              มาจากงานภาคสนาม (ไฟล์ 41) อัตโนมัติ หรือบันทึกเองที่นี่ — เดินสายอนุมัติตาม Approval Matrix (`13` §6.2)
+              มาจากงานภาคสนามอัตโนมัติ หรือบันทึกเองที่นี่ — เดินสายอนุมัติตาม Approval Matrix
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -227,7 +227,7 @@ export function ApprovalTab() {
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">เงินทดรองจ่าย (Advances) — ไฟล์ 15</h2>
+            <h2 className="text-base font-semibold text-slate-900">เงินทดรองจ่าย (Advances)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
               เบิกล่วงหน้าได้ครั้งละ 1 รายการต่อคน — ต้องเคลียร์ยอดเดิมให้เสร็จก่อนขอรอบใหม่เสมอ
             </p>
@@ -366,7 +366,7 @@ export function ApprovalTab() {
       <ReasonConfirmModal
         open={rejectTarget !== null}
         title="ตีกลับรายการเบิกให้แก้ไข"
-        description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส (`16` §6.2)"
+        description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส"
         confirmLabel="ตีกลับรายการ"
         loading={rejectTarget !== null && claims.busyId === rejectTarget.id}
         reason={rejectReason}

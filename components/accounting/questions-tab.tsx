@@ -135,9 +135,9 @@ export function QuestionsTab() {
         </Table>
       </div>
 
-      <InlineAlert tone="info" title="หลักการ (ไฟล์ 36)">
+      <InlineAlert tone="info" title="หลักการ">
         ตอบได้ครั้งเดียวต่อ 1 ข้อซักถาม — ถ้ามีข้อมูลเพิ่มให้บันทึกเป็นข้อซักถามใหม่ ·
-        การแก้ไขข้อมูลที่เป็นต้นเหตุทำที่โมดูลต้นทาง (ถ้ากระทบยอดต้องผ่าน Adjustment ไฟล์ 20)
+        การแก้ไขข้อมูลที่เป็นต้นเหตุทำที่โมดูลต้นทาง (ถ้ากระทบยอดต้องผ่าน Adjustment)
       </InlineAlert>
 
       <QuestionFormModal open={creating} onClose={() => setCreating(false)} onCreated={() => void reload()} />

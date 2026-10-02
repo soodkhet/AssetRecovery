@@ -747,7 +747,7 @@ export async function applyBillingReceipt(input: {
           received_source: 'bank_reconciliation',
           source_ref: input.sourceRef,
         },
-        reason: `รับชำระจากรายการเดินบัญชี ${input.sourceRef} (ไฟล์ 35)`,
+        reason: `รับชำระจากรายการเดินบัญชี ${input.sourceRef}`,
         ipAddress: null,
         userAgent: null,
         diffOnly: false,

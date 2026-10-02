@@ -107,7 +107,7 @@ export function CreateBillingModal({
     >
       <div className="space-y-4">
         <InlineAlert tone="info">
-          1 บริษัท 1 รอบเดือน = 1 รอบวางบิลเท่านั้น (`19` §6.2) — ไม่มีรายได้ที่รอวางบิลในงวดนั้นจะถูกปฏิเสธ
+          1 บริษัท 1 รอบเดือน = 1 รอบวางบิลเท่านั้น — ไม่มีรายได้ที่รอวางบิลในงวดนั้นจะถูกปฏิเสธ
           ด้วย NO_REVENUE_TO_BILL
         </InlineAlert>
 

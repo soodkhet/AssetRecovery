@@ -167,7 +167,7 @@ export function InvoiceNumberingTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">เลขที่ใบกำกับภาษี (Tax Invoice Numbering)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            รูปแบบเลขรันนิ่งของใบกำกับภาษี — ปีในเลขเอกสารเป็น พ.ศ. เสมอ (ไฟล์ 13 §6.12 · 31 §6.2)
+            รูปแบบเลขรันนิ่งของใบกำกับภาษี — ปีในเลขเอกสารเป็น พ.ศ. เสมอ
           </p>
         </div>
         <Can action="manage" resource={MANAGE_INVOICE_NUMBERING}>

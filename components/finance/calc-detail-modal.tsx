@@ -46,12 +46,12 @@ export function CalcDetailModal({
           {item.whtWarning !== null && <InlineAlert tone="warning">{item.whtWarning}</InlineAlert>}
           {!item.payeeVerified && (
             <InlineAlert tone="warning">
-              ผู้รับเงินรายนี้ยังไม่ถูกยืนยัน — รวมเข้ารอบจ่ายไม่ได้จนกว่าการเงินจะยืนยันข้อมูลธนาคาร/ภาษี (`18` §6.2)
+              ผู้รับเงินรายนี้ยังไม่ถูกยืนยัน — รวมเข้ารอบจ่ายไม่ได้จนกว่าการเงินจะยืนยันข้อมูลธนาคาร/ภาษี
             </InlineAlert>
           )}
 
           <div>
-            <p className="text-xs font-bold tracking-wider text-slate-500 uppercase">สูตร / ฐานคิด (ไฟล์ 11/22)</p>
+            <p className="text-xs font-bold tracking-wider text-slate-500 uppercase">สูตร / ฐานคิด</p>
             <pre className="mt-1 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs whitespace-pre-wrap text-slate-700">
               {item.basisText}
               {item.distanceKm === null ? '' : `\nระยะทางที่บันทึกไว้: ${item.distanceKm} กม.`}

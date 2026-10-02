@@ -50,13 +50,13 @@ export function CompensationTab() {
       <div className="mb-4">
         <h2 className="text-base font-semibold text-slate-900">ค่าตอบแทนจากเคส (Compensation) — อนุมัติหลายขั้น</h2>
         <p className="mt-1 text-xs text-slate-500">
-          รายการที่ระบบคิดให้จากงานภาคสนาม (ไฟล์ 41) เดินตามสายอนุมัติของ Approval Matrix (`13` §6.2)
+          รายการที่ระบบคิดให้จากงานภาคสนาม เดินตามสายอนุมัติของ Approval Matrix
         </p>
       </div>
 
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
         <p>ขั้นตอน: รอขั้น 1 (ผู้จัดการ) → รอขั้น 2 (การเงิน) → อนุมัติแล้ว — เกินเพดานเพิ่มขั้นบริหารตาม Approval Matrix</p>
-        <p className="mt-1">ตีกลับ: กลับไป “ต้องแก้ไข” แล้วเริ่มขั้น 1 ใหม่ทั้งหมด ไม่ resume จากขั้นที่ตีกลับ (`16` §9)</p>
+        <p className="mt-1">ตีกลับ: กลับไป “ต้องแก้ไข” แล้วเริ่มขั้น 1 ใหม่ทั้งหมด ไม่ resume จากขั้นที่ตีกลับ</p>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -157,7 +157,7 @@ export function CompensationTab() {
       <ReasonConfirmModal
         open={rejectTarget !== null}
         title="ตีกลับรายการเบิกให้แก้ไข"
-        description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส (`16` §6.2)"
+        description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส"
         confirmLabel="ตีกลับรายการ"
         loading={rejectTarget !== null && busyId === rejectTarget.id}
         reason={rejectReason}

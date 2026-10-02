@@ -624,7 +624,7 @@ export async function resubmitFieldExpense(
           receiptFileUrl: row.receiptFileUrl,
           events: ['expense.resubmitted'],
         },
-        reason: input.note ?? 'แก้ไขเอกสารตามที่ผู้อนุมัติจ่ายตีกลับ (`41` §8)',
+        reason: input.note ?? 'แก้ไขเอกสารตามที่ผู้อนุมัติจ่ายตีกลับ',
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
         diffOnly: false,

@@ -158,7 +158,7 @@ export function ExportTab() {
         </Table>
       </div>
 
-      <InlineAlert tone="info" title="รายชื่อไฟล์มาตรฐานใน Accounting Pack (ไฟล์ 37 §6.1)">
+      <InlineAlert tone="info" title="รายชื่อไฟล์มาตรฐานใน Accounting Pack">
         <div className="mt-1 grid grid-cols-1 gap-1 font-mono text-xs sm:grid-cols-2">
           {PACK_FILES.map((file) => (
             <div key={file.no}>

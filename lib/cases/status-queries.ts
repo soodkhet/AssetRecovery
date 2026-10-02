@@ -414,5 +414,5 @@ function serviceFeeSnapshotAudit(row: CaseDetailRow) {
  * จึงเติมเหตุผลเชิงระบบที่ระบุ template/version ที่ใช้ (ยัง trace กลับได้ว่าใช้เงื่อนไขไหน)
  */
 function snapshotReason(templateName: string, version: number): string {
-  return `snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "${templateName}" v${version} (\`10\` §9.2)`
+  return `snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "${templateName}" v${version}`
 }

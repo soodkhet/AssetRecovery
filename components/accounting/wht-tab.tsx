@@ -155,7 +155,7 @@ export function WhtTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">หนังสือรับรองการหัก ณ ที่จ่าย (ใบ 50 ทวิ)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              ออกอัตโนมัติ 1 ใบต่อรายการจ่ายที่มีการหักภาษี เมื่อรอบจ่ายเงินจ่ายจริงแล้ว (ไฟล์ 17)
+              ออกอัตโนมัติ 1 ใบต่อรายการจ่ายที่มีการหักภาษี เมื่อรอบจ่ายเงินจ่ายจริงแล้ว
             </p>
           </div>
           <FilterGroup options={STATUS_FILTERS} value={status} onChange={(value) => setStatus(value as WhtStatusFilter)} />
@@ -240,7 +240,7 @@ export function WhtTab() {
         </div>
       </section>
 
-      <InlineAlert tone="info" title="หลักการ (ไฟล์ 33)">
+      <InlineAlert tone="info" title="หลักการ">
         ใบที่ออกแล้วแก้ยอดไม่ได้ — ต้องยกเลิกพร้อมเหตุผลแล้วออกใบใหม่ที่อ้างกลับฉบับเดิม · ยอดของใบที่ยกเลิกจะ
         ไม่ถูกนับใน ภ.ง.ด.3/53 · การยื่นแบบจริงทำนอกระบบผ่านสำนักงานบัญชี ระบบเตรียมข้อมูลและเตือนกำหนดเท่านั้น
       </InlineAlert>

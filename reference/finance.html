@@ -479,7 +479,7 @@ function renderFinanceOperations() {
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
         <h3 class="font-bold text-slate-800">รายการเบิก (Claims) — Multi-step Approval</h3>
-        <p class="text-xs text-slate-500 mt-0.5">Claim มาจากไฟล์ 41 (auto) หรือสร้าง manual ก็ได้ — ผ่านสายอนุมัติตาม Approval Matrix</p>
+        <p class="text-xs text-slate-500 mt-0.5">Claim มาจากงานภาคสนาม (auto) หรือสร้าง manual ก็ได้ — ผ่านสายอนุมัติตาม Approval Matrix</p>
       </div>
       <div class="flex gap-2">
         <div class="flex gap-1 bg-slate-100 rounded-lg p-1">
@@ -504,7 +504,7 @@ function renderFinanceOperations() {
           <td class="px-4 py-3">
             <div class="text-xs text-slate-400">${c.date}</div>
             <div class="font-mono text-xs font-semibold text-slate-800 mt-0.5">${c.caseRef}</div>
-            <div class="text-[10px] text-slate-400">${c.source==='auto'?'🤖 Auto (ไฟล์ 41)':'✏️ Manual'}</div>
+            <div class="text-[10px] text-slate-400">${c.source==='auto'?'🤖 Auto':'✏️ Manual'}</div>
           </td>
           <td class="px-4 py-3 text-slate-700">${c.type}</td>
           <td class="px-4 py-3">
@@ -539,7 +539,7 @@ function renderFinanceOperations() {
         ${filterClaims.length === 0 ? `<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">ไม่มีรายการ</td></tr>` : ''}
       </tbody></table>
     </div>
-    <h3 class="font-bold text-slate-800 mb-3">เงินทดรองจ่าย (Advances) — ไฟล์ 15</h3>
+    <h3 class="font-bold text-slate-800 mb-3">เงินทดรองจ่าย (Advances)</h3>
     <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
       <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
         <th class="px-4 py-3">เลขที่</th><th class="px-4 py-3">ผู้ขอ / ทีม</th>
@@ -632,7 +632,7 @@ function renderFinanceOperations() {
     content = `
     <div class="flex justify-between items-center mb-4">
       <div>
-        <h3 class="font-bold text-slate-800">เงินทดรองจ่าย (Advances) — ไฟล์ 15</h3>
+        <h3 class="font-bold text-slate-800">เงินทดรองจ่าย (Advances)</h3>
         <p class="text-xs text-slate-500 mt-0.5">กฎ: ต้องเคลียร์ยอดเดิมที่ cleared ก่อนขอเบิกรอบใหม่ได้</p>
       </div>
       <button data-action="open-modal" data-type="advance-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">${Icon.plus} ขอเงินทดรอง</button>
@@ -670,7 +670,7 @@ function renderFinanceOperations() {
   else if (state.financeSubTab === 'payout') {
     content = `
     <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-slate-800">รอบจ่ายเงิน (Payout Batches) — ไฟล์ 17</h3>
+      <h3 class="font-bold text-slate-800">รอบจ่ายเงิน (Payout Batches)</h3>
       <button data-action="open-modal" data-type="create-payout" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">${Icon.plus} สร้างรอบจ่าย</button>
     </div>
     <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">
@@ -725,7 +725,7 @@ function renderFinanceOperations() {
     content = `
     <div class="flex justify-between items-center mb-4">
       <div>
-        <h3 class="font-bold text-slate-800">รอบวางบิล (Billing Batches) + AR Aging — ไฟล์ 19</h3>
+        <h3 class="font-bold text-slate-800">รอบวางบิล (Billing Batches) + AR Aging</h3>
         <p class="text-xs text-slate-500 mt-0.5">AR ค้างรับทั้งหมด: <span class="font-bold text-red-600">฿ ${money(totalAR)}</span></p>
       </div>
       <button data-action="open-modal" data-type="create-billing" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">${Icon.plus} สร้างรอบวางบิล</button>
@@ -788,7 +788,7 @@ function renderFinanceOperations() {
     const unverifiedCount = store.payees.filter(p => p.status === 'unverified').length;
     content = `
     <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-slate-800">ฐานข้อมูลผู้รับเงิน (Payee Profiles) — ไฟล์ 18</h3>
+      <h3 class="font-bold text-slate-800">ฐานข้อมูลผู้รับเงิน (Payee Profiles)</h3>
       <button data-action="open-modal" data-type="payee-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">${Icon.plus} เพิ่ม Payee</button>
     </div>
     ${unverifiedCount > 0 ? `<div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800 mb-4 font-semibold">🚫 มี ${unverifiedCount} Payee ที่ยังไม่ verified — ถูกบล็อกไม่ให้รวมเข้า Payout Batch (UNVERIFIED_PAYEE_IN_PAYOUT)</div>` : ''}
@@ -839,7 +839,7 @@ function renderFinanceOperations() {
   else if (state.financeSubTab === 'adjustment') {
     content = `
     <div class="flex justify-between items-center mb-2">
-      <h3 class="font-bold text-slate-800">รายการปรับปรุง (Adjustments) — ไฟล์ 20</h3>
+      <h3 class="font-bold text-slate-800">รายการปรับปรุง (Adjustments)</h3>
       <button data-action="open-modal" data-type="adjustment-form" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">${Icon.plus} สร้าง Adjustment</button>
     </div>
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 mb-4">
@@ -904,7 +904,7 @@ function renderFinanceOperations() {
     content = `
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <div>
-        <h3 class="font-bold text-slate-800">รายงานกำไรขั้นต้น (Gross Profit Report) — ไฟล์ 21</h3>
+        <h3 class="font-bold text-slate-800">รายงานกำไรขั้นต้น (Gross Profit Report)</h3>
         <p class="text-xs text-slate-500 mt-0.5">ผลจริงที่เกิดขึ้นแล้ว (actual) — ไม่ใช่ประมาณการ — เคส closed_fail ลด Margin จริง</p>
       </div>
       <div class="flex gap-2">
@@ -1688,7 +1688,7 @@ function renderModal() {
         </div>
       </div>
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-        🚫 <b>Terminal State</b> — เมื่อปฏิเสธแล้วผู้ขอต้องยื่นคำขอใหม่ ไม่สามารถ resubmit คำขอเดิมได้ (ไฟล์ 23 §6.4)
+        🚫 <b>Terminal State</b> — เมื่อปฏิเสธแล้วผู้ขอต้องยื่นคำขอใหม่ ไม่สามารถ resubmit คำขอเดิมได้
       </div>
       <div>
         <label class="block text-xs font-bold text-slate-700 mb-1 text-red-700">เหตุผลที่ปฏิเสธ <span class="text-red-500">*</span></label>
@@ -1746,7 +1746,7 @@ function renderModal() {
         <div class="text-xs text-slate-500">ยอดสุทธิที่โอน: <span class="font-bold text-emerald-700 text-base">฿ ${batch?money(batch.netAmount):'43,650'}</span></div>
       </div>
       <div class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
-        ปกติระบบ sync อัตโนมัติจาก Bank Statement ที่จับคู่สำเร็จ (ไฟล์ 35) — manual confirm ใช้เป็นทางเลือกสำรองเมื่อ statement ล่าช้า
+        ปกติระบบ sync อัตโนมัติจาก Bank Statement ที่จับคู่สำเร็จ — manual confirm ใช้เป็นทางเลือกสำรองเมื่อ statement ล่าช้า
       </div>
       ${formInput('cp_bankref','Bank Ref อ้างอิง (ถ้ามี)','','text','เช่น KBANK-TRX-XXX')}
       ${formInput('cp_date','วันที่โอนสำเร็จ','','date','')}
@@ -1935,7 +1935,7 @@ function renderModal() {
       ${hasRevenue ? `
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
         ${Icon.alert}
-        <div>เมื่อยืนยันส่งวางบิลแล้ว สถานะ <b>${batch?.batchNumber || '—'}</b> จะเปลี่ยนเป็น <b>sent</b> — ไม่สามารถเพิ่ม/ลบรายการ Revenue ในรอบนี้ได้อีก หากต้องการแก้ไขต้องสร้าง Adjustment (ไฟล์ 20)</div>
+        <div>เมื่อยืนยันส่งวางบิลแล้ว สถานะ <b>${batch?.batchNumber || '—'}</b> จะเปลี่ยนเป็น <b>sent</b> — ไม่สามารถเพิ่ม/ลบรายการ Revenue ในรอบนี้ได้อีก หากต้องการแก้ไขต้องสร้าง Adjustment</div>
       </div>` : ''}
 
     </div>`;
@@ -1988,7 +1988,7 @@ function renderModal() {
         <div class="text-xs font-bold text-orange-700 uppercase flex items-center gap-1">↩ เหตุผลที่ตีกลับ (needs_revision)</div>
         <div class="text-slate-800 font-medium">${claim?.rejectReason || 'ไม่มีเหตุผลระบุ'}</div>
         <div class="text-[10px] text-orange-600 mt-2 pt-2 border-t border-orange-200">
-          Field Agent ต้องแก้ไขและ resubmit ตั้งแต่ขั้น 1 ใหม่ทั้งหมด (ไม่ resume จากขั้นที่ตีกลับ — ไฟล์ 23 §6.5)
+          Field Agent ต้องแก้ไขและ resubmit ตั้งแต่ขั้น 1 ใหม่ทั้งหมด (ไม่ resume จากขั้นที่ตีกลับ)
         </div>
       </div>
       <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-1">
@@ -2012,7 +2012,7 @@ function renderModal() {
         <div class="text-xs font-bold text-red-700 uppercase flex items-center gap-1">🚫 เหตุผลที่ปฏิเสธถาวร (rejected)</div>
         <div class="text-slate-800 font-medium">${claim?.rejectReason || 'ไม่มีเหตุผลระบุ'}</div>
         <div class="text-[10px] text-red-600 mt-2 pt-2 border-t border-red-200">
-          สถานะ <b>rejected</b> เป็น Terminal State — ไม่สามารถ resubmit ได้ (ต่างจาก needs_revision) ตามไฟล์ 23 §6.3
+          สถานะ <b>rejected</b> เป็น Terminal State — ไม่สามารถ resubmit ได้ (ต่างจาก needs_revision)
         </div>
       </div>
       <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-1">
@@ -2091,7 +2091,7 @@ function renderModal() {
           <div><div class="text-xs text-slate-400">Net จ่ายจริง</div><div class="font-bold text-emerald-700 text-lg">฿ 450</div></div>
         </div>
         <div class="border-t border-slate-100 pt-3">
-          <div class="text-xs text-slate-400 font-bold mb-2">สูตร (ไฟล์ 11/22)</div>
+          <div class="text-xs text-slate-400 font-bold mb-2">สูตร</div>
           <div class="bg-slate-50 p-3 rounded font-mono text-xs space-y-1">
             <div>Mode: PER_KM</div>
             <div>128.5 km × ฿ 3.50/km = ฿ 449.75 → ปัดเป็น ฿ 450</div>
@@ -2144,7 +2144,7 @@ function renderModal() {
         <div class="bg-amber-50 border border-amber-100 rounded-lg p-4">
           <div class="text-xs text-amber-600 font-bold uppercase mb-1">Direct Cost</div>
           <div class="text-2xl font-extrabold text-amber-700">฿ 86,050</div>
-          <div class="text-xs text-amber-500 mt-1">ค่าตอบแทน (ไฟล์ 11/16)</div>
+          <div class="text-xs text-amber-500 mt-1">ค่าตอบแทน</div>
         </div>
       </div>
       <div class="border border-slate-200 rounded-lg overflow-hidden">
@@ -2159,7 +2159,7 @@ function renderModal() {
         </tbody></table>
       </div>
       <div class="text-xs text-slate-500 bg-slate-50 p-3 rounded border border-slate-200">
-        เคส closed_fail (7 เคส) มี Direct Cost แต่ไม่มี Revenue → ลด Margin จริงลง (ไฟล์ 21 §6.1)
+        เคส closed_fail (7 เคส) มี Direct Cost แต่ไม่มี Revenue → ลด Margin จริงลง
       </div>
     </div>`;
   }
@@ -2167,7 +2167,7 @@ function renderModal() {
     title = 'สร้าง Claim Manual'; saveText = 'ส่งคำขออนุมัติ';
     body = `<div class="space-y-4">
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-        Manual Claim — สำหรับค่าใช้จ่ายที่ไม่ได้ auto จากไฟล์ 41 (เช่น ค่าใช้จ่ายเบ็ดเตล็ด)
+        Manual Claim — สำหรับค่าใช้จ่ายที่ไม่ได้ auto จากงานภาคสนาม (เช่น ค่าใช้จ่ายเบ็ดเตล็ด)
       </div>
       ${formInput('cl_case','อ้างอิงเคส (ถ้ามี)','','text','CASE-XX-XXXX (ไม่บังคับ)')}
       ${formInput('cl_type','ประเภทค่าใช้จ่าย','','text','เช่น ค่าน้ำมัน, ค่าที่พัก, อื่นๆ',true)}

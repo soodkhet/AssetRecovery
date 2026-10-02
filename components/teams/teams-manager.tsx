@@ -352,7 +352,7 @@ export function TeamsManager() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => void confirmDelete()}
         title={`ลบทีม "${deleteTarget?.name ?? ''}"`}
-        description="ทีมที่ยังมีเคสค้างอยู่ลบไม่ได้ — ย้ายเคสไปทีมอื่นก่อน (ไฟล์ 09 §10)"
+        description="ทีมที่ยังมีเคสค้างอยู่ลบไม่ได้ — ย้ายเคสไปทีมอื่นก่อน"
         confirmLabel="ยืนยันลบทีม"
         confirmVariant="danger"
         loading={deleting}

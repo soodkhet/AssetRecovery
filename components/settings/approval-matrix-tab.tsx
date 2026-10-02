@@ -227,7 +227,7 @@ export function ApprovalMatrixTab() {
           <div>
             <h2 className="text-sm font-bold text-slate-900">สายการอนุมัติ (Approval Matrix)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              กำหนดว่ารายการแบบไหนต้องผ่านใครบ้าง — เรียงตามเพดานเงินจากน้อยไปมาก (ไฟล์ 13 §6.2)
+              กำหนดว่ารายการแบบไหนต้องผ่านใครบ้าง — เรียงตามเพดานเงินจากน้อยไปมาก
             </p>
           </div>
           <div className="flex items-center gap-2">

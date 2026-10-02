@@ -70,11 +70,11 @@ const MESSAGES: Record<ExpenseErrorCode, { title: string; message: string }> = {
   },
   EXPENSE_INVALID_STATUS: {
     title: 'สถานะรายการเบิกไม่ถูกต้อง',
-    message: 'สถานะปัจจุบันของรายการเบิกทำรายการนี้ไม่ได้ (`23` §6.3)',
+    message: 'สถานะปัจจุบันของรายการเบิกทำรายการนี้ไม่ได้',
   },
   REJECT_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผล',
-    message: 'การตีกลับรายการเบิกต้องระบุเหตุผลให้ผู้เบิกเสมอ (`41` §6.6)',
+    message: 'การตีกลับรายการเบิกต้องระบุเหตุผลให้ผู้เบิกเสมอ',
   },
 }
 

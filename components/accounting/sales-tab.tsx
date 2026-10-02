@@ -97,7 +97,7 @@ export function SalesTab() {
         <div>
           <h2 className="text-base font-semibold text-slate-900">รายการขาย / รายได้ (Sales Records)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            เกิดอัตโนมัติเมื่อรอบวางบิลถูกส่งให้ลูกค้า (ไฟล์ 19) — หน้านี้ทำได้แค่ออก/ยกเลิกใบกำกับภาษี
+            เกิดอัตโนมัติเมื่อรอบวางบิลถูกส่งให้ลูกค้า — หน้านี้ทำได้แค่ออก/ยกเลิกใบกำกับภาษี
           </p>
         </div>
         <FilterGroup options={INVOICE_FILTERS} value={invoiceState} onChange={setInvoiceState} />
@@ -206,7 +206,7 @@ export function SalesTab() {
         </Table>
       </div>
 
-      <InlineAlert tone="info" title="หลักการ (ไฟล์ 31)">
+      <InlineAlert tone="info" title="หลักการ">
         รายการขาย sync 1:1 จากรอบวางบิลที่ส่งแล้ว · เลขที่ใบกำกับภาษีเดินต่อเนื่องห้ามขาดช่วง ·
         ยกเลิกต้องมีเหตุผลและออกใบใหม่เสมอ — ใบที่ยกเลิกยังอยู่ในทะเบียนตลอดไป
       </InlineAlert>

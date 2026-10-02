@@ -158,7 +158,7 @@ export function CompensationPlansManager() {
     <>
       <PageHeader
         title="แผนค่าตอบแทน (จ่ายออก)"
-        description="commission = จ่ายเมื่อปิดสำเร็จ · เบี้ยเสี่ยง = จ่ายเมื่อไม่สำเร็จ — เคสหนึ่งได้อย่างใดอย่างหนึ่ง (ไฟล์ 11 §7.2)"
+        description="commission = จ่ายเมื่อปิดสำเร็จ · เบี้ยเสี่ยง = จ่ายเมื่อไม่สำเร็จ — เคสหนึ่งได้อย่างใดอย่างหนึ่ง"
         action={
           <Can action="manage" resource={MANAGE_RESOURCE}>
             <Button
@@ -176,7 +176,7 @@ export function CompensationPlansManager() {
       <Card>
         <div className="mb-4 flex items-center justify-between gap-3">
           <span className="text-xs text-slate-500">
-            แก้ไขแผนที่ใช้งานอยู่จะสร้าง <strong>เวอร์ชันใหม่</strong> เสมอ ไม่ทับของเดิม (ไฟล์ 11 §10)
+            แก้ไขแผนที่ใช้งานอยู่จะสร้าง <strong>เวอร์ชันใหม่</strong> เสมอ ไม่ทับของเดิม
           </span>
           <div className="w-40">
             <Select
@@ -325,7 +325,7 @@ export function CompensationPlansManager() {
         title={`${activationTarget?.isActive === true ? 'ปิด' : 'เปิด'}ใช้งานแผน "${activationTarget?.name ?? ''}"`}
         description={
           activationTarget?.isActive === true
-            ? 'แผนที่ยังมีทีมผูกอยู่ปิดใช้งานไม่ได้ — ย้ายทีมไปแผนอื่นก่อน (ไฟล์ 11 §10)'
+            ? 'แผนที่ยังมีทีมผูกอยู่ปิดใช้งานไม่ได้ — ย้ายทีมไปแผนอื่นก่อน'
             : 'เปิดใช้งานกลับให้เลือกผูกกับทีมได้อีกครั้ง'
         }
         confirmLabel={activationTarget?.isActive === true ? 'ยืนยันปิดใช้งาน' : 'ยืนยันเปิดใช้งาน'}

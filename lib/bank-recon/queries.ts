@@ -482,7 +482,7 @@ export async function importStatement(
               match_status: 'unmatched',
               source_file: input.fileName,
             },
-            reason: `นำเข้า statement ${input.fileName} ของบัญชี ${bankAccountLabel(account)} (ไฟล์ 35 §9)`,
+            reason: `นำเข้า statement ${input.fileName} ของบัญชี ${bankAccountLabel(account)}`,
             ipAddress: ctx.meta.ipAddress,
             userAgent: ctx.meta.userAgent,
           },
@@ -587,7 +587,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
   const note = input.matchNote?.trim() ?? null
   const reason =
     note ??
-    `จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} ${input.mode === 'auto' ? 'อัตโนมัติ' : 'โดยเจ้าหน้าที่'} (ไฟล์ 35 §6.2)`
+    `จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} ${input.mode === 'auto' ? 'อัตโนมัติ' : 'โดยเจ้าหน้าที่'}`
 
   const { cashReceiptId } = await prisma.$transaction(async (tx) => {
     // เปลี่ยนการจับคู่เดิม (re-match) — ถอน Cash Receipt ของการจับคู่เดิมออกก่อน ไม่ให้ยอดรับซ้ำ
@@ -611,7 +611,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
               amount_satang: receipt.amountSatang,
               received_date: receipt.receivedDate,
             },
-            reason: `ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่รายการเดินบัญชี ${before.id} (ไฟล์ 35 §10)`,
+            reason: `ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่รายการเดินบัญชี ${before.id}`,
             ipAddress: ctx.meta.ipAddress,
             userAgent: ctx.meta.userAgent,
           },
@@ -670,7 +670,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
             received_date: before.transactionDate,
             source: 'bank_reconciliation',
           },
-          reason: `เงินรับจากการจับคู่รายการเดินบัญชีกับ ${input.candidate.ref} (ไฟล์ 31 §6 — ห้ามสร้างมือ)`,
+          reason: `เงินรับจากการจับคู่รายการเดินบัญชีกับ ${input.candidate.ref} (ห้ามสร้างมือ)`,
           ipAddress: ctx.meta.ipAddress,
           userAgent: ctx.meta.userAgent,
         },
@@ -760,7 +760,7 @@ export async function matchBankTransaction(
 
   if (transaction.matchStatus === 'unmatched_resolved') {
     throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
-      detail: 'unmatched_resolved เป็นสถานะสุดท้าย จับคู่ต่อไม่ได้ (`23` §6.14)',
+      detail: 'unmatched_resolved เป็นสถานะสุดท้าย จับคู่ต่อไม่ได้',
     })
   }
 

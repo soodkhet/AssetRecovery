@@ -77,7 +77,7 @@ export function ExpensesTab() {
 
       {data.summary.unmappedCount > 0 && (
         <InlineAlert tone="warning" title={`ยังไม่ได้ map Cost Center ${fmtCount(data.summary.unmappedCount)} รายการ`}>
-          บัญชีต้องเลือกศูนย์ต้นทุนให้ครบก่อนรวมเข้าชุดเอกสารส่งสำนักงานบัญชี (ไฟล์ 30/37)
+          บัญชีต้องเลือกศูนย์ต้นทุนให้ครบก่อนรวมเข้าชุดเอกสารส่งสำนักงานบัญชี
         </InlineAlert>
       )}
 
@@ -101,7 +101,7 @@ export function ExpensesTab() {
             error={error}
             isEmpty={data.items.length === 0}
             emptyTitle="ยังไม่มีรายการค่าใช้จ่ายตามตัวกรองนี้"
-            emptyDescription="รายการจะเกิดเองเมื่อรอบจ่ายเงินถูกยืนยันว่าจ่ายจริงแล้ว (ไฟล์ 17)"
+            emptyDescription="รายการจะเกิดเองเมื่อรอบจ่ายเงินถูกยืนยันว่าจ่ายจริงแล้ว"
             colSpan={9}
           />
           <TBody>
@@ -159,9 +159,9 @@ export function ExpensesTab() {
         </Table>
       </div>
 
-      <InlineAlert tone="info" title="หลักการ (ไฟล์ 32)">
-        ห้ามแก้ไขยอดเงินโดยตรง — ถ้าต้องแก้ต้องผ่าน Adjustment (ไฟล์ 20) · รายการที่เอกสารไม่ครบจะขึ้นเป็น
-        ข้อยกเว้นในแท็บ &ldquo;เอกสารไม่ครบ&rdquo; อัตโนมัติ (ไฟล์ 34)
+      <InlineAlert tone="info" title="หลักการ">
+        ห้ามแก้ไขยอดเงินโดยตรง — ถ้าต้องแก้ต้องผ่าน Adjustment · รายการที่เอกสารไม่ครบจะขึ้นเป็น
+        ข้อยกเว้นในแท็บ &ldquo;เอกสารไม่ครบ&rdquo; อัตโนมัติ
       </InlineAlert>
 
       <CostCenterMapModal

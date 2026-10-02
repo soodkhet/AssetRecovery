@@ -176,10 +176,10 @@ export function BankReconTab() {
         </Table>
       </div>
 
-      <InlineAlert tone="info" title="หลักการ (ไฟล์ 35)">
+      <InlineAlert tone="info" title="หลักการ">
         ระบบจับคู่อัตโนมัติเฉพาะรายการที่ยอดตรงเป๊ะและมีคู่ที่เป็นไปได้<b>เพียงรายการเดียว</b> ·
-        จับคู่เองที่ยอดไม่ตรงต้องกรอกหมายเหตุเสมอ · จับคู่สำเร็จ ระบบสร้างเงินรับ (ไฟล์ 31) หรือยืนยัน
-        รอบจ่ายเป็น &ldquo;จ่ายแล้ว&rdquo; (ไฟล์ 17) ให้อัตโนมัติ
+        จับคู่เองที่ยอดไม่ตรงต้องกรอกหมายเหตุเสมอ · จับคู่สำเร็จ ระบบสร้างเงินรับ หรือยืนยัน
+        รอบจ่ายเป็น &ldquo;จ่ายแล้ว&rdquo; ให้อัตโนมัติ
       </InlineAlert>
 
       <ImportStatementModal open={importOpen} onClose={() => setImportOpen(false)} onImported={() => void reload()} />

@@ -217,7 +217,7 @@ export function TaxProfilesTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">กติกาภาษี (Tax Profile)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            อัตราหัก ณ ที่จ่าย ฐานที่ใช้หัก และเกณฑ์ขั้นต่ำต่อประเภทผู้รับเงิน — ใช้ตอนสร้างรอบจ่ายเงิน (ไฟล์ 13 §6.4)
+            อัตราหัก ณ ที่จ่าย ฐานที่ใช้หัก และเกณฑ์ขั้นต่ำต่อประเภทผู้รับเงิน — ใช้ตอนสร้างรอบจ่ายเงิน
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -244,7 +244,7 @@ export function TaxProfilesTab() {
       </div>
 
       <InlineAlert tone="warning" title="การแก้ Tax Profile กระทบยอดภาษีทุกรายการที่ใช้ profile นี้">
-        ระบบบันทึก audit log พร้อมเหตุผลทุกครั้ง — รายการที่จ่ายไปแล้วยังอ้างค่าที่ snapshot ไว้ตอนตั้งรอบจ่าย (ไฟล์ 92 §7.1)
+        ระบบบันทึก audit log พร้อมเหตุผลทุกครั้ง — รายการที่จ่ายไปแล้วยังอ้างค่าที่ snapshot ไว้ตอนตั้งรอบจ่าย
       </InlineAlert>
 
       <div className="mt-4">
@@ -437,7 +437,7 @@ export function TaxProfilesTab() {
           </Field>
 
           <InlineAlert tone="info" title="อัตราของ Payee ชนะอัตราของ Plan เสมอ">
-            เมื่อผู้รับเงินผูก Tax Profile ไว้ ระบบใช้อัตรานี้ก่อนค่าจากแผนค่าตอบแทนเสมอ (ไฟล์ 22 §6.9)
+            เมื่อผู้รับเงินผูก Tax Profile ไว้ ระบบใช้อัตรานี้ก่อนค่าจากแผนค่าตอบแทนเสมอ
           </InlineAlert>
         </div>
       </Modal>

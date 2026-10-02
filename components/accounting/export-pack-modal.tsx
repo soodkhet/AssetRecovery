@@ -99,7 +99,7 @@ export function ExportPackModal({
           </InlineAlert>
         ) : criticalCount > 0 ? (
           <InlineAlert tone="error" title={`ไม่สามารถ Export ได้ — มี ${fmtCount(criticalCount)} Critical Exception เปิดอยู่`}>
-            แก้ไขให้เรียบร้อยหรือขอ Authorized Exception จากผู้บริหารก่อน (ไฟล์ 34)
+            แก้ไขให้เรียบร้อยหรือขอ Authorized Exception จากผู้บริหารก่อน
           </InlineAlert>
         ) : (
           <InlineAlert tone="success" title="ไม่มี Critical Exception — พร้อม Export">
@@ -108,7 +108,7 @@ export function ExportPackModal({
         )}
 
         <InlineAlert tone="warning" title="Export ซ้ำจะเพิ่มเวอร์ชัน ไม่เขียนทับของเดิม">
-          ชุดถัดไปของรอบนี้จะเป็นเวอร์ชันหลังจาก {exportVersionLabel(1)} เรียงขึ้นเรื่อย ๆ (`37` §6.2) —
+          ชุดถัดไปของรอบนี้จะเป็นเวอร์ชันหลังจาก {exportVersionLabel(1)} เรียงขึ้นเรื่อย ๆ —
           ทุกเวอร์ชันเก็บไว้เป็นหลักฐานว่าเคยส่งอะไรไปบ้าง
         </InlineAlert>
 

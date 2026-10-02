@@ -179,7 +179,7 @@ export function buildDocumentException(input: DocumentExceptionInput): {
     title: `เอกสารประกอบการจ่ายไม่ครบ — ${input.payeeName}`,
     description:
       `รายการ "${input.category}" ของ ${input.payeeName} ในรอบจ่าย ${input.batchName} ` +
-      'ยังไม่มีใบเสร็จ/หลักฐานการจ่ายแนบ — ตามเก็บจากผู้เบิกก่อนส่งชุดเอกสารให้สำนักงานบัญชี (`32` §6.3)',
+      'ยังไม่มีใบเสร็จ/หลักฐานการจ่ายแนบ — ตามเก็บจากผู้เบิกก่อนส่งชุดเอกสารให้สำนักงานบัญชี',
     sourceModule: EXPENSE_EXCEPTION_MODULE,
     sourceRef: input.expenseRecordId,
   }

@@ -239,7 +239,7 @@ export function CompaniesManager() {
                 {company.status === 'suspended' && company.suspendedReason !== null && (
                   <div className="mb-3">
                     <InlineAlert tone="error" title="บริษัทนี้ถูกระงับ">
-                      เหตุผล: {company.suspendedReason} — รับเคสใหม่จากบริษัทนี้ไม่ได้จนกว่าจะเปิดใช้งานกลับ (ไฟล์ 10 §9.3)
+                      เหตุผล: {company.suspendedReason} — รับเคสใหม่จากบริษัทนี้ไม่ได้จนกว่าจะเปิดใช้งานกลับ
                     </InlineAlert>
                   </div>
                 )}
@@ -320,7 +320,7 @@ export function CompaniesManager() {
         }
         description={
           statusTarget?.status === 'active'
-            ? 'เคสที่เปิดอยู่ก่อนระงับยังดำเนินต่อตามปกติ แต่จะรับเคสใหม่จากบริษัทนี้ไม่ได้ (ไฟล์ 10 §9.3)'
+            ? 'เคสที่เปิดอยู่ก่อนระงับยังดำเนินต่อตามปกติ แต่จะรับเคสใหม่จากบริษัทนี้ไม่ได้'
             : 'เปิดใช้งานกลับได้ตลอด ไม่มีเงื่อนไขพิเศษ — เหตุผลที่ระงับไว้เดิมจะถูกล้างทิ้ง'
         }
         confirmLabel={statusTarget?.status === 'active' ? 'ยืนยันระงับบริษัท' : 'ยืนยันเปิดใช้งาน'}

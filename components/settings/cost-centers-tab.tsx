@@ -169,7 +169,7 @@ export function CostCentersTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">ศูนย์ต้นทุน (Cost Center)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ใช้จัดกลุ่มค่าใช้จ่ายตามหน่วยงาน — <span className="font-mono">รหัสระบบเดินให้อัตโนมัติ</span> แก้เองไม่ได้ (ไฟล์ 13 §6.6)
+            ใช้จัดกลุ่มค่าใช้จ่ายตามหน่วยงาน — <span className="font-mono">รหัสระบบเดินให้อัตโนมัติ</span> แก้เองไม่ได้
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -333,7 +333,7 @@ export function CostCentersTab() {
           </Field>
 
           <InlineAlert tone="info" title="ทุกการแก้ไขถูกบันทึกลง Audit Log">
-            การตั้งค่าการเงินกระทบตัวเลขในรายงาน — ระบบบันทึกผู้แก้ ค่าก่อน/หลัง และเหตุผลไว้ถาวร (ไฟล์ 90 §13)
+            การตั้งค่าการเงินกระทบตัวเลขในรายงาน — ระบบบันทึกผู้แก้ ค่าก่อน/หลัง และเหตุผลไว้ถาวร
           </InlineAlert>
         </div>
       </Modal>

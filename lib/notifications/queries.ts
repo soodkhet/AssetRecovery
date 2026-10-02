@@ -114,7 +114,7 @@ export async function removePushSubscription(
           targetId: user.id,
           before: { userId: user.id },
           after: { removed: removed.count },
-          reason: 'ผู้ใช้ยกเลิกรับการแจ้งเตือนบนอุปกรณ์นี้ (`41` §15)',
+          reason: 'ผู้ใช้ยกเลิกรับการแจ้งเตือนบนอุปกรณ์นี้',
           ipAddress: context.meta.ipAddress,
           userAgent: context.meta.userAgent,
           diffOnly: false,

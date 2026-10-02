@@ -182,7 +182,7 @@ export function CompensationPlanFormModal({
       title={isEdit ? `แก้ไขแผนค่าตอบแทน — ${plan.name}` : 'สร้างแผนค่าตอบแทน'}
       description={
         isEdit
-          ? `บันทึกแล้วระบบจะสร้างเวอร์ชัน ${plan.version + 1} ใหม่ ไม่ทับของเดิม (ไฟล์ 11 §10)`
+          ? `บันทึกแล้วระบบจะสร้างเวอร์ชัน ${plan.version + 1} ใหม่ ไม่ทับของเดิม`
           : 'ค่าตอบแทนที่จ่ายออกให้ทีมงาน — ผูกกับทีมในขั้นตอนจัดการทีม'
       }
       footer={
@@ -353,7 +353,7 @@ export function CompensationPlanFormModal({
             id="plan-wht"
             label="หัก ณ ที่จ่าย (%)"
             required
-            hint="ใช้เมื่อ payee ไม่มี tax profile — Payee-level ชนะเสมอ (ไฟล์ 18 §6.3)"
+            hint="ใช้เมื่อ payee ไม่มี tax profile — Payee-level ชนะเสมอ"
             error={errors.whtPct}
           >
             <Input
@@ -382,10 +382,10 @@ export function CompensationPlanFormModal({
             onChange={(event) => set('hotelReceiptRequired', event.target.checked)}
             className="h-4 w-4 rounded border-slate-300"
           />
-          บังคับแนบใบเสร็จค่าที่พัก (มีผลต่อการตรวจรายการเบิก — ไฟล์ 11 §10)
+          บังคับแนบใบเสร็จค่าที่พัก (มีผลต่อการตรวจรายการเบิก)
         </label>
 
-        <Field id="plan-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (ไฟล์ 90 §13 — หมวดเงิน)" error={errors.reason}>
+        <Field id="plan-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (หมวดเงิน)" error={errors.reason}>
           <Textarea
             id="plan-reason"
             value={form.reason}

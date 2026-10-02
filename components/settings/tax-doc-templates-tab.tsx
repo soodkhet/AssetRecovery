@@ -196,7 +196,7 @@ export function TaxDocTemplatesTab() {
       <Card>
         <h2 className="text-sm font-bold text-slate-900">เทมเพลตเอกสารภาษี (Tax Document Template)</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          ปรับหน้าตาเอกสารภาษีทางการที่ระบบออกให้ — ใบกำกับภาษี (ไฟล์ 31) และหนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ (ไฟล์ 33)
+          ปรับหน้าตาเอกสารภาษีทางการที่ระบบออกให้ — ใบกำกับภาษี และหนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ
         </p>
       </Card>
 
@@ -320,7 +320,7 @@ export function TaxDocTemplatesTab() {
 
       <Card>
         <InlineAlert tone="warning" title="ฟิลด์บังคับตามกฎหมายปิดหรือซ่อนไม่ได้">
-          เอกสารทุกฉบับต้องมีรายการต่อไปนี้เสมอ ไม่มีสวิตช์ปิดในระบบ (ไฟล์ 28 §6.2–6.3):
+          เอกสารทุกฉบับต้องมีรายการต่อไปนี้เสมอ ไม่มีสวิตช์ปิดในระบบ:
         </InlineAlert>
         <ul className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           {payload.legallyRequiredFields.map((field) => (

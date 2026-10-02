@@ -91,7 +91,7 @@ export function ProfitDrilldownModal({
                 {fmtSatangSymbol(detail.directCostSatang)}
               </div>
               <div className="mt-1 text-xs text-amber-600">
-                ค่าตอบแทนจาก {fmtCount(detail.costCaseCount)} เคส (ไฟล์ 11/16)
+                ค่าตอบแทนจาก {fmtCount(detail.costCaseCount)} เคส
               </div>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -141,8 +141,7 @@ export function ProfitDrilldownModal({
               tone="warning"
               title={`เคสที่มีต้นทุนแต่ไม่มีรายได้ ${fmtCount(detail.lossMaking.caseCount)} เคส`}
             >
-              รวม {fmtSatangSymbol(detail.lossMaking.costSatang)} — ต้นทุนก้อนนี้ถูกนับในรายงานและกด Margin ลงจริงตามไฟล์
-              21 §6.1
+              รวม {fmtSatangSymbol(detail.lossMaking.costSatang)} — ต้นทุนก้อนนี้ถูกนับในรายงานและกด Margin ลงจริง
             </InlineAlert>
           )}
         </div>

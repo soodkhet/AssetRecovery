@@ -326,10 +326,10 @@ function renderAccountingOperations() {
                     : ''}
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
-                  <span title="Bank Reconcile (ไฟล์ 35)" class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${ap.reconcileOk ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">
+                  <span title="Bank Reconcile" class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${ap.reconcileOk ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">
                     ${ap.reconcileOk ? '✓' : '✗'} Recon${!ap.reconcileOk ? ` (${ap.unmatchedCount} unmatched)` : ''}
                   </span>
-                  <span title="Billing sync Revenue (ไฟล์ 19)" class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${ap.billingOk ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">
+                  <span title="Billing sync Revenue" class="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${ap.billingOk ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">
                     ${ap.billingOk ? '✓' : '✗'} Billing
                   </span>
                 </div>
@@ -383,7 +383,7 @@ function renderAccountingOperations() {
       </table>
     </div>
     <div class="mt-3 text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3">
-      <b>State machine (ไฟล์ 30):</b> collecting → ส่งสำนักงานบัญชี (ผ่าน Readiness Check) → ล็อกงวด (Executive ยืนยัน) · ปลดล็อก: เฉพาะ Executive + บันทึก audit log
+      <b>State machine:</b> collecting → ส่งสำนักงานบัญชี (ผ่าน Readiness Check) → ล็อกงวด (Executive ยืนยัน) · ปลดล็อก: เฉพาะ Executive + บันทึก audit log
     </div>`;
   }
 
@@ -435,7 +435,7 @@ function renderAccountingOperations() {
       </table>
     </div>
     <div class="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3">
-      <b>หมายเหตุ (ไฟล์ 31):</b> Sales Record sync อัตโนมัติเมื่อ Billing Batch เปลี่ยนเป็น <code>sent</code> · เลขใบกำกับภาษีเรียงต่อเนื่อง ห้ามขาดช่วง · ยกเลิกใบกำกับต้องระบุเหตุผลและออกใบใหม่เสมอ
+      <b>หมายเหตุ:</b> Sales Record sync อัตโนมัติเมื่อ Billing Batch เปลี่ยนเป็น <code>sent</code> · เลขใบกำกับภาษีเรียงต่อเนื่อง ห้ามขาดช่วง · ยกเลิกใบกำกับต้องระบุเหตุผลและออกใบใหม่เสมอ
     </div>`;
   }
 
@@ -482,7 +482,7 @@ function renderAccountingOperations() {
       </table>
     </div>
     <div class="mt-3 text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3">
-      <b>หมายเหตุ (ไฟล์ 31):</b> Cash Receipt สร้างอัตโนมัติเมื่อ Bank Statement ถูกจับคู่กับ Billing Batch สำเร็จแล้วในแท็บ "กระทบยอด" — ห้ามสร้างมือในหน้านี้โดยตรง
+      <b>หมายเหตุ:</b> Cash Receipt สร้างอัตโนมัติเมื่อ Bank Statement ถูกจับคู่กับ Billing Batch สำเร็จแล้วในแท็บ "กระทบยอด" — ห้ามสร้างมือในหน้านี้โดยตรง
     </div>`;
   }
 
@@ -536,7 +536,7 @@ function renderAccountingOperations() {
       </table>
     </div>
     <div class="mt-3 text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3">
-      <b>หมายเหตุ (ไฟล์ 32):</b> ห้ามแก้ไขยอดเงินโดยตรง — ถ้าต้องแก้ไขต้องผ่าน Adjustment (ไฟล์ 20) · รายการที่ documentStatus = incomplete จะขึ้น Exception ในแท็บ "เอกสารไม่ครบ" อัตโนมัติ
+      <b>หมายเหตุ:</b> ห้ามแก้ไขยอดเงินโดยตรง — ถ้าต้องแก้ไขต้องผ่าน Adjustment · รายการที่ documentStatus = incomplete จะขึ้น Exception ในแท็บ "เอกสารไม่ครบ" อัตโนมัติ
     </div>`;
   }
 
@@ -593,7 +593,7 @@ function renderAccountingOperations() {
       </table>
     </div>
     <div class="mt-3 text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3">
-      <b>หมายเหตุ (ไฟล์ 35):</b> จับคู่ manual ที่ยอดไม่ตรงเป๊ะ ต้องกรอก match_note บังคับ (MATCH_NOTE_REQUIRED) · เมื่อจับคู่ธนาคารสำเร็จ ระบบสร้าง Cash Receipt อัตโนมัติ (ไฟล์ 31)
+      <b>หมายเหตุ:</b> จับคู่ manual ที่ยอดไม่ตรงเป๊ะ ต้องกรอก match_note บังคับ (MATCH_NOTE_REQUIRED) · เมื่อจับคู่ธนาคารสำเร็จ ระบบสร้าง Cash Receipt อัตโนมัติ
     </div>`;
   }
 
@@ -681,7 +681,7 @@ function renderAccountingOperations() {
     const criticals = store.exceptions.filter(e => e.level === 'critical' && e.status !== 'resolved');
     content = `
     <div class="flex justify-between items-center mb-4">
-      <h3 class="font-bold text-slate-800">Document Checklist & Exceptions (ไฟล์ 34)</h3>
+      <h3 class="font-bold text-slate-800">Document Checklist & Exceptions</h3>
       <button data-action="open-modal" data-type="new-exception" class="inline-flex items-center gap-1 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm hover:bg-slate-800">${Icon.plus} เพิ่ม Exception</button>
     </div>
     ${criticals.length > 0 ? `
@@ -785,7 +785,7 @@ function renderAccountingOperations() {
       </table>
     </div>
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-      <div class="font-bold text-sm text-blue-900 mb-2">รายชื่อไฟล์มาตรฐานใน Accounting Pack (ไฟล์ 37 §6.1)</div>
+      <div class="font-bold text-sm text-blue-900 mb-2">รายชื่อไฟล์มาตรฐานใน Accounting Pack</div>
       <div class="grid grid-cols-2 gap-2 text-xs font-mono text-blue-700">
         <div>📄 01_Revenue.csv</div>
         <div>📄 02_Cash_Receipts.csv</div>
@@ -827,7 +827,7 @@ function renderModal() {
     saveText = 'ปิดหน้าต่าง'; isReadOnly = true;
     body = `<div class="space-y-4 text-sm">
       <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
-        <div class="font-bold text-slate-800 mb-3 flex items-center gap-2">${Icon.eye} Readiness Check (ไฟล์ 30 §6.2)</div>
+        <div class="font-bold text-slate-800 mb-3 flex items-center gap-2">${Icon.eye} Readiness Check</div>
         <ul class="space-y-3">
           <li class="flex items-start gap-3 ${ap.billingOk ? 'text-emerald-700' : 'text-red-600'}">
             <span class="mt-0.5">${ap.billingOk ? Icon.check : Icon.x}</span>
@@ -893,7 +893,7 @@ function renderModal() {
     body = `<div class="space-y-4 text-sm">
       <div class="bg-slate-800 text-white rounded-lg p-4">
         <div class="flex items-center gap-2 font-bold mb-1">${Icon.lock} ล็อกงวดบัญชี</div>
-        <div class="text-slate-300 text-xs">เมื่อล็อกแล้ว <b>ห้ามแก้ไข source record ใดๆ โดยตรง</b> — ต้องสร้าง Adjustment แทนเสมอ (ไฟล์ 20)</div>
+        <div class="text-slate-300 text-xs">เมื่อล็อกแล้ว <b>ห้ามแก้ไข source record ใดๆ โดยตรง</b> — ต้องสร้าง Adjustment แทนเสมอ</div>
       </div>
       <div class="border border-slate-200 rounded-lg p-4 space-y-2 text-xs">
         <div class="flex justify-between"><span class="text-slate-500">รอบ:</span><span class="font-bold">${ap.month}</span></div>
@@ -1015,7 +1015,7 @@ function renderModal() {
     saveText = 'ยืนยันยกเลิก';
     body = `<div class="space-y-4 text-sm">
       <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
-        🚫 <b>ห้ามลบเลขที่ใบกำกับเดิม</b> — เลขที่ ${inv?.invoiceNumber} จะถูก mark เป็น <b>cancelled</b> และระบบออกใบกำกับใหม่เลขถัดไปแทน (ตามข้อกำหนดกรมสรรพากร ไฟล์ 31 §9.1)
+        🚫 <b>ห้ามลบเลขที่ใบกำกับเดิม</b> — เลขที่ ${inv?.invoiceNumber} จะถูก mark เป็น <b>cancelled</b> และระบบออกใบกำกับใหม่เลขถัดไปแทน (ตามข้อกำหนดกรมสรรพากร)
       </div>
       ${formTextarea('cancel_reason', 'เหตุผลที่ยกเลิก (CANCEL_REQUIRES_REASON — บังคับ)', '', 'ระบุเหตุผลให้ชัดเจน เช่น ออกผิดบริษัท, ยอดผิด...', 3, true)}
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
@@ -1075,7 +1075,7 @@ function renderModal() {
     saveText = 'บันทึก Cost Center';
     body = `<div class="space-y-4 text-sm">
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-        รายการนี้ mapping_rule = <b>manual</b> — บัญชีต้องเลือก Cost Center เองก่อนรวมใน Accounting Pack ได้ (ไฟล์ 32 §6.2)
+        รายการนี้ mapping_rule = <b>manual</b> — บัญชีต้องเลือก Cost Center เองก่อนรวมใน Accounting Pack ได้
       </div>
       <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-1">
         <div class="flex justify-between"><span class="text-slate-400">ผู้รับ:</span><span class="font-bold">${exp.payeeName}</span></div>
@@ -1115,7 +1115,7 @@ function renderModal() {
         </div>
       </div>
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-        ห้ามแก้ไขยอดเงินในหน้านี้โดยตรง — ถ้าต้องแก้ต้องสร้าง Adjustment ผ่านเมนูการเงิน (ไฟล์ 20)
+        ห้ามแก้ไขยอดเงินในหน้านี้โดยตรง — ถ้าต้องแก้ต้องสร้าง Adjustment ผ่านเมนูการเงิน
       </div>
     </div>`;
   }
@@ -1267,7 +1267,7 @@ function renderModal() {
       </div>
       ${formInput('resolve_note', 'เหตุผลที่ปิดรายการ (บังคับ)', '', 'text', 'เช่น ค่าธรรมเนียมธนาคาร / ดอกเบี้ยรับ — ไม่ใช่รายรับ-จ่ายของระบบ', true)}
       <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs text-purple-800">
-        สถานะจะเปลี่ยนเป็น <b>unmatched_resolved</b> (terminal) — นับเป็น "จัดการครบ" ในเงื่อนไข Bank Reconcile 100% ของ Readiness Check (ไฟล์ 35 v2 / 30) · ต้องระบุเหตุผลเสมอ + บันทึก audit log
+        สถานะจะเปลี่ยนเป็น <b>unmatched_resolved</b> (terminal) — นับเป็น "จัดการครบ" ในเงื่อนไข Bank Reconcile 100% ของ Readiness Check · ต้องระบุเหตุผลเสมอ + บันทึก audit log
       </div>
     </div>`;
   }
@@ -1285,7 +1285,7 @@ function renderModal() {
       </div>
       ${formInput('wht_cancel_reason', 'เหตุผลการยกเลิก (บังคับ — WHT_CANCEL_REQUIRES_REASON)', '', 'text', 'เช่น ฐานหักผิด / ข้อมูลผู้ถูกหักผิด', true)}
       <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800">
-        <b>การยกเลิกเป็น terminal</b> — ห้ามลบ/ย้อนกลับ (Immutable Rule ไฟล์ 02 §13) · ยอดของใบนี้จะ<b>ไม่ถูกนับ</b>ใน ภ.ง.ด.3/53 ของรอบ · แก้ไขโดยออกใบใหม่ตาม flow ปกติ พร้อมอ้างอิงกลับฉบับนี้ (replaces_certificate_id)
+        <b>การยกเลิกเป็น terminal</b> — ห้ามลบ/ย้อนกลับ · ยอดของใบนี้จะ<b>ไม่ถูกนับ</b>ใน ภ.ง.ด.3/53 ของรอบ · แก้ไขโดยออกใบใหม่ตาม flow ปกติ พร้อมอ้างอิงกลับฉบับนี้ (replaces_certificate_id)
       </div>
     </div>`;
   }

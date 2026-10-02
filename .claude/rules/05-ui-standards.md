@@ -9,3 +9,4 @@
 - เมนู/สิทธิ์เห็นเมนูตาม `06` §7.1.1 + §7.2 — ปุ่มที่ไม่มีสิทธิ์: กรณี Supervisor assign ที่ปิดด้วย settings = **hide** ไม่ใช่ disabled (`40` §7.2) · ทั่วไป hide/disable ตาม spec ของ module
 - Field Tracker: Mobile กับ Desktop ใช้ logic เดียวกัน 100% (`41` §11) · Desktop sidebar 260px `position: fixed`
 - วันที่บน UI = พ.ศ. เสมอ (ดู Rule 01)
+- **ข้อความที่ผู้ใช้เห็นห้ามมีเลขอ้างอิงสเปค** (`§6.7`, `ไฟล์ 18`, `` `08` §7.1 `` ฯลฯ) — ทั้ง label/description/hint/toast/InlineAlert/placeholder/tooltip/badge, `MESSAGES` ใน `lib/**/errors.ts`, เหตุผล audit/ข้อความแจ้งเตือนที่ระบบสร้าง และข้อความที่มองเห็นใน mockup `reference/` — ใส่อ้างอิงไว้ใน code comment (หรือ field metadata ที่ไม่ render เช่น `source`) แทน (มติ PO 03/10/2569)

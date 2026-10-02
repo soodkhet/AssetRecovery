@@ -128,7 +128,7 @@ export function HandoverLotModal({
         onClose={onClose}
         size="lg"
         title={`นัดวันส่งมอบ — ${companyName}`}
-        description={`${assets.length} เครื่อง · 1 ล็อต = 1 บริษัทไฟแนนซ์เสมอ (44 §6.2)`}
+        description={`${assets.length} เครื่อง · 1 ล็อต = 1 บริษัทไฟแนนซ์เสมอ`}
         footer={
           <>
             <Button variant="secondary" onClick={onClose} disabled={submitting}>

@@ -53,7 +53,7 @@ function render(){
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm">AR</div>
         <div><div class="font-bold text-slate-900 text-sm leading-tight">การแจ้งเตือน (Notifications)</div>
-        <div class="text-[10px] text-slate-400">In-app เฟส 1 — ไฟล์ 90 §6.3 · ตาราง notifications (DEC-006/D3)</div></div>
+        <div class="text-[10px] text-slate-400">In-app เฟส 1</div></div>
       </div>
       <div class="relative">
         <button id="bell" class="relative p-2 rounded-lg hover:bg-slate-100 focus-ring" title="ตัวอย่างกระดิ่งบน header ทุกหน้า">
@@ -114,7 +114,7 @@ function render(){
     </div>
 
     <div class="mt-4 text-[10px] text-slate-400 bg-slate-50 border border-slate-100 rounded-lg p-3 leading-relaxed">
-      <b>อ้างอิง:</b> ช่องทางเฟส 1 = Push/In-app เท่านั้น ไม่มี SMS/Email/LINE OA (ไฟล์ 90 §6.3) · event trigger = ทุก status change สำคัญของเคส/การเงิน ตาม state machine · storage = ตาราง <span class="font-mono">notifications</span> (user_id, event_code, title, body, link_path, read_at) schema 02 v3.5 · endpoints: <span class="font-mono">GET /api/notifications</span>, <span class="font-mono">PATCH /api/notifications/{id}/read</span>, <span class="font-mono">PATCH /api/notifications/read-all</span> (ไฟล์ 90 §14)
+      <b>อ้างอิง:</b> ช่องทางเฟส 1 = Push/In-app เท่านั้น ไม่มี SMS/Email/LINE OA · event trigger = ทุก status change สำคัญของเคส/การเงิน ตาม state machine · storage = ตาราง <span class="font-mono">notifications</span> (user_id, event_code, title, body, link_path, read_at) schema 02 v3.5 · endpoints: <span class="font-mono">GET /api/notifications</span>, <span class="font-mono">PATCH /api/notifications/{id}/read</span>, <span class="font-mono">PATCH /api/notifications/read-all</span>
     </div>
   </main>`;
 

@@ -116,7 +116,7 @@ export function PayoutTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รอบจ่ายเงิน (Payout Batches)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              1 รอบ = 1 ฝั่งเสมอ · ระบบรวบรวมรายการที่อนุมัติแล้วให้เอง (`17` §6.1/§9)
+              1 รอบ = 1 ฝั่งเสมอ · ระบบรวบรวมรายการที่อนุมัติแล้วให้เอง
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -280,7 +280,7 @@ export function PayoutTab() {
             {completeTarget === null ? '' : fmtSatangSymbol(completeTarget.netSatang)}
           </InlineAlert>
           <InlineAlert tone="info">
-            ปกติระบบ sync สถานะนี้อัตโนมัติจากรายการเดินบัญชีที่จับคู่สำเร็จ (ไฟล์ 35) —
+            ปกติระบบ sync สถานะนี้อัตโนมัติจากรายการเดินบัญชีที่จับคู่สำเร็จ —
             การยืนยันด้วยมือเป็นทางเลือกสำรองเมื่อ statement ล่าช้า และจะถูกบันทึกชื่อผู้ยืนยันไว้
           </InlineAlert>
         </div>

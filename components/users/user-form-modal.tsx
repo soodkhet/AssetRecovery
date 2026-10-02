@@ -194,7 +194,7 @@ export function UserFormModal({
       onClose={onClose}
       size="lg"
       title={isEdit ? `แก้ไขผู้ใช้งาน — ${user.fullName}` : 'สร้างบัญชีผู้ใช้งาน'}
-      description="เลือกกลุ่ม → บทบาท → สังกัด (ทีมสำหรับ Inhouse/Outsource · บริษัทสำหรับกลุ่มไฟแนนซ์) — ไฟล์ 08 §7.1"
+      description="เลือกกลุ่ม → บทบาท → สังกัด (ทีมสำหรับ Inhouse/Outsource · บริษัทสำหรับกลุ่มไฟแนนซ์)"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -356,13 +356,13 @@ export function UserFormModal({
 
         {scope === 'team' && groupTeams.length === 0 && (
           <InlineAlert tone="warning" title="ยังไม่มีทีมของฝั่งนี้">
-            สร้างทีมที่หน้า “ทีมติดตามทรัพย์” ก่อน — ผู้ใช้กลุ่ม Inhouse/Outsource ต้องสังกัดทีมเสมอ (ไฟล์ 08 §7.1)
+            สร้างทีมที่หน้า “ทีมติดตามทรัพย์” ก่อน — ผู้ใช้กลุ่ม Inhouse/Outsource ต้องสังกัดทีมเสมอ
           </InlineAlert>
         )}
 
         {isEdit && user.roleGroup !== form.roleGroup && (
           <InlineAlert tone="warning" title="กำลังย้ายผู้ใช้ข้ามกลุ่ม">
-            การเปลี่ยนกลุ่ม/บทบาทเปลี่ยนขอบเขตข้อมูลที่ผู้ใช้คนนี้มองเห็นทันทีหลังบันทึก (`05` §5)
+            การเปลี่ยนกลุ่ม/บทบาทเปลี่ยนขอบเขตข้อมูลที่ผู้ใช้คนนี้มองเห็นทันทีหลังบันทึก
           </InlineAlert>
         )}
 

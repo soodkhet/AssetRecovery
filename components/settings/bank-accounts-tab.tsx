@@ -232,7 +232,7 @@ export function BankAccountsTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">บัญชีธนาคารบริษัท</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            บัญชีที่ใช้รับเงินจากบริษัทไฟแนนซ์และจ่ายค่าตอบแทนทีม — ใช้จับคู่รายการเดินบัญชี (ไฟล์ 13 §6.3 · 35)
+            บัญชีที่ใช้รับเงินจากบริษัทไฟแนนซ์และจ่ายค่าตอบแทนทีม — ใช้จับคู่รายการเดินบัญชี
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ export function BankAccountsTab() {
           </Field>
 
           <InlineAlert tone="warning" title="ข้อมูลบัญชีธนาคารเป็นข้อมูลอ่อนไหว">
-            ทุกการเพิ่ม/แก้ไขต้องมีเหตุผลและถูกบันทึกลง Audit Log — เลขบัญชีถูกปิดบังในบันทึกและในตาราง (ไฟล์ 90 §6.2/§13)
+            ทุกการเพิ่ม/แก้ไขต้องมีเหตุผลและถูกบันทึกลง Audit Log — เลขบัญชีถูกปิดบังในบันทึกและในตาราง
           </InlineAlert>
         </div>
       </Modal>

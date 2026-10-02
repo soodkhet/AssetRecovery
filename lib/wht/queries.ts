@@ -320,8 +320,8 @@ async function issueCertificate(
       },
       reason:
         replacesId === null
-          ? `ออกหนังสือรับรองหัก ณ ที่จ่าย ${certificateNumber} อัตโนมัติจากรอบจ่าย "${item.payoutBatch.name}" ที่จ่ายเงินจริงแล้ว (\`33\` §9)`
-          : `ออกหนังสือรับรอง ${certificateNumber} แทนฉบับที่ถูกยกเลิก (\`33\` §10)`,
+          ? `ออกหนังสือรับรองหัก ณ ที่จ่าย ${certificateNumber} อัตโนมัติจากรอบจ่าย "${item.payoutBatch.name}" ที่จ่ายเงินจริงแล้ว`
+          : `ออกหนังสือรับรอง ${certificateNumber} แทนฉบับที่ถูกยกเลิก`,
       ipAddress: ctx.meta.ipAddress,
       userAgent: ctx.meta.userAgent,
     },

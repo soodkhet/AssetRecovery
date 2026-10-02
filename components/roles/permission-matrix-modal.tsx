@@ -132,7 +132,7 @@ export function PermissionMatrixModal({
       onClose={onClose}
       size="lg"
       title={`กำหนดสิทธิ์ — ${role?.name ?? ''}`}
-      description="ระดับสิทธิ์ 3 ระดับตามไฟล์ 25: ✅ ทำได้ / 👁️ ดูอย่างเดียว / — ไม่มีสิทธิ์"
+      description="ระดับสิทธิ์ 3 ระดับ: ✅ ทำได้ / 👁️ ดูอย่างเดียว / — ไม่มีสิทธิ์"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -206,7 +206,7 @@ export function PermissionMatrixModal({
               id="permission-reason"
               label="เหตุผลในการเปลี่ยนสิทธิ์"
               required
-              hint="บังคับตามไฟล์ 90 §13 — การเปลี่ยนสิทธิ์ถูกบันทึกลง audit log ถาวร"
+              hint="การเปลี่ยนสิทธิ์ถูกบันทึกลง audit log ถาวร"
               error={reasonTooShort && reason.length > 0 ? `ระบุอย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร` : null}
             >
               <Textarea

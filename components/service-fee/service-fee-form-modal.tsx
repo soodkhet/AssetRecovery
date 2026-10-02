@@ -142,7 +142,7 @@ export function ServiceFeeFormModal({
       title={isEdit ? `แก้ไขเทมเพลตค่าบริการ — ${template.name}` : 'สร้างเทมเพลตค่าบริการ'}
       description={
         isEdit
-          ? `บันทึกแล้วระบบจะสร้างเวอร์ชัน ${template.version + 1} ใหม่ ไม่ทับของเดิม (ไฟล์ 12 §9)`
+          ? `บันทึกแล้วระบบจะสร้างเวอร์ชัน ${template.version + 1} ใหม่ ไม่ทับของเดิม`
           : 'ฐานคำนวณรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ — ตรงข้ามกับแผนค่าตอบแทน (จ่ายออก)'
       }
       footer={
@@ -159,7 +159,7 @@ export function ServiceFeeFormModal({
       <div className="space-y-4">
         {isEdit && template.companyCount > 0 && (
           <InlineAlert tone="warning" title={`มี ${template.companyCount} บริษัทผูกอยู่กับเทมเพลตนี้`}>
-            บริษัททั้งหมดถูกย้ายมาใช้เวอร์ชันใหม่ทันที — เคสที่อนุมัติแล้วใช้ snapshot เดิม ไม่กระทบ (ไฟล์ 12 §9)
+            บริษัททั้งหมดถูกย้ายมาใช้เวอร์ชันใหม่ทันที — เคสที่อนุมัติแล้วใช้ snapshot เดิม ไม่กระทบ
           </InlineAlert>
         )}
 
@@ -250,7 +250,7 @@ export function ServiceFeeFormModal({
           คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ — มติ PO 2026-08-12 ข้อ A3)
         </label>
 
-        <Field id="sf-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (ไฟล์ 12 §13 — กระทบรายได้)" error={errors.reason}>
+        <Field id="sf-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (กระทบรายได้)" error={errors.reason}>
           <Textarea
             id="sf-reason"
             value={form.reason}

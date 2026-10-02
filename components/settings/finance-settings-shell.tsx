@@ -39,7 +39,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
     <>
       <PageHeader
         title="ตั้งค่าบัญชี / การเงิน"
-        description="ค่ากลางที่ระบบใช้คำนวณเงิน ภาษี และรอบเอกสาร (ไฟล์ 13) — ทุกการแก้ไขต้องมีเหตุผลและถูกบันทึกลง Audit Log"
+        description="ค่ากลางที่ระบบใช้คำนวณเงิน ภาษี และรอบเอกสาร — ทุกการแก้ไขต้องมีเหตุผลและถูกบันทึกลง Audit Log"
       />
 
       <div className="flex flex-col gap-6 md:flex-row">
@@ -74,7 +74,6 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
                   )}
                 >
                   {item.label}
-                  <span className="ml-1 font-mono text-[10px] text-slate-400">{item.section}</span>
                 </button>
               )
             })}
@@ -99,7 +98,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'sla' && <SlaPolicyTab />}
           {current !== undefined && !current.available && (
             <EmptyState
-              title={`${current.label} ${current.section}`}
+              title={current.label}
               description={`หน้าจริงเกิดใน Phase ${current.plannedPhase ?? '-'}`}
             />
           )}

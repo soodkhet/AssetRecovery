@@ -57,7 +57,7 @@ export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {
 
 /** `15` §8 — ป้ายบอกที่มาของรายการ (auto จากไฟล์ 41 หรือบันทึกเอง) */
 export function claimSourceLabel(calculationSource: string | null): string {
-  return isManualClaim(calculationSource) ? '✏️ บันทึกเอง' : '🤖 อัตโนมัติ (ไฟล์ 41)'
+  return isManualClaim(calculationSource) ? '✏️ บันทึกเอง' : '🤖 อัตโนมัติ'
 }
 
 /** บรรทัดประวัติอนุมัติใน modal "ดูสูตร" (`16` §8) — เวลาแปลงเป็น พ.ศ. ที่ component */

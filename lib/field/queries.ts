@@ -1481,7 +1481,7 @@ export async function resubmitCloseCase(
       assignmentId: current.id,
       actor: context.actor,
       meta: context.meta,
-      reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แทนที่รายการเบิกรอบเดิม (`41` §10.1)',
+      reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แทนที่รายการเบิกรอบเดิม',
     })
 
     const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
@@ -1523,7 +1523,7 @@ export async function resubmitCloseCase(
           assetId: asset?.assetId ?? null,
           events: ['case.close_resubmitted'],
         },
-        reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ (`41` §8)',
+        reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ',
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
         diffOnly: false,

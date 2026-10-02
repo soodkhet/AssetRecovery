@@ -879,7 +879,7 @@ export async function syncPayoutBatchCompleted(input: {
           confirmed_source: 'bank_reconciliation',
           bank_transaction_id: input.bankTransactionId,
         },
-        reason: `จับคู่กับรายการเดินบัญชี ${input.bankTransactionId} สำเร็จ (ไฟล์ 35)`,
+        reason: `จับคู่กับรายการเดินบัญชี ${input.bankTransactionId} สำเร็จ`,
         ipAddress: null,
         userAgent: null,
         diffOnly: false,

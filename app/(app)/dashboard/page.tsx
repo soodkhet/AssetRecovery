@@ -60,7 +60,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader
             title="เมนูที่บัญชีนี้เข้าถึงได้"
-            description="กรองตาม Top Nav Visibility Matrix (`06` §7.2)"
+            description="กรองตาม Top Nav Visibility Matrix"
           />
           <ul className="mt-4 space-y-1.5 text-sm">
             {menus.map((menu) => (

@@ -28,12 +28,12 @@ const HTTP_STATUS: Record<RevenueErrorCode, number> = {
 const MESSAGES: Record<RevenueErrorCode, ErrorMessage> = {
   NO_REVENUE_TO_BILL: {
     title: 'ไม่มีรายได้ให้วางบิล',
-    message: 'ไม่มีรายการรายได้ที่รอวางบิลของบริษัทนี้ภายในรอบที่เลือก (`19` §11)',
+    message: 'ไม่มีรายการรายได้ที่รอวางบิลของบริษัทนี้ภายในรอบที่เลือก',
   },
   EDIT_BILLED_REVENUE: {
     title: 'แก้รายได้ที่วางบิลแล้วไม่ได้',
     message:
-      'รายการรายได้นี้ถูกรวมเข้ารอบวางบิลที่ส่งออกไปแล้ว — ต้องแก้ผ่านรายการปรับปรุง (Adjustment) เท่านั้น (`19` §10)',
+      'รายการรายได้นี้ถูกรวมเข้ารอบวางบิลที่ส่งออกไปแล้ว — ต้องแก้ผ่านรายการปรับปรุง (Adjustment) เท่านั้น',
   },
   BILLING_BATCH_NOT_FOUND: {
     title: 'ไม่พบรอบวางบิล',
@@ -41,7 +41,7 @@ const MESSAGES: Record<RevenueErrorCode, ErrorMessage> = {
   },
   BILLING_BATCH_INVALID_STATUS: {
     title: 'สถานะรอบวางบิลไม่ถูกต้อง',
-    message: 'สถานะปัจจุบันของรอบวางบิลทำรายการนี้ไม่ได้ (`23` §6.8)',
+    message: 'สถานะปัจจุบันของรอบวางบิลทำรายการนี้ไม่ได้',
   },
 }
 

@@ -97,7 +97,7 @@ export function WarehouseManager() {
     <div className="space-y-5">
       <PageHeader
         title="คลังสินค้า"
-        description="รับเครื่องเข้าคลัง จัดล็อตส่งมอบ และยืนยันส่งมอบคืนบริษัทไฟแนนซ์ (ไฟล์ 44)"
+        description="รับเครื่องเข้าคลัง จัดล็อตส่งมอบ และยืนยันส่งมอบคืนบริษัทไฟแนนซ์"
       />
 
       <WarehouseTabs tab={tab} counts={counts} onTabChange={setTab} />

@@ -39,7 +39,7 @@ const MESSAGES: Record<FinanceCompanyErrorCode, ErrorMessage> = {
   },
   SUSPEND_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผลที่ระงับ',
-    message: 'การระงับบริษัทไฟแนนซ์ต้องระบุเหตุผลเสมอ (`10` §9.3)',
+    message: 'การระงับบริษัทไฟแนนซ์ต้องระบุเหตุผลเสมอ',
   },
   TEMPLATE_NOT_FOUND: {
     title: 'ไม่พบเทมเพลตค่าบริการ',

@@ -39,11 +39,11 @@ const MESSAGES: Record<WhtErrorCode, ErrorMessage> = {
   },
   WHT_CERTIFICATE_INVALID_STATUS: {
     title: 'ยกเลิกหนังสือรับรองฉบับนี้ไม่ได้',
-    message: 'ใบที่ยกเลิกแล้วเป็นสถานะสุดท้าย ห้ามลบและห้ามย้อนกลับ (`02` §13) — ถ้าต้องแก้ให้ออกใบใหม่แทน',
+    message: 'ใบที่ยกเลิกแล้วเป็นสถานะสุดท้าย ห้ามลบและห้ามย้อนกลับ — ถ้าต้องแก้ให้ออกใบใหม่แทน',
   },
   WHT_CANCEL_REQUIRES_REASON: {
     title: 'ต้องระบุเหตุผลการยกเลิก',
-    message: 'การยกเลิกหนังสือรับรองหัก ณ ที่จ่ายต้องกรอกเหตุผลเสมอ เพื่อบันทึกไว้ในเอกสารและ audit log (`33` §11)',
+    message: 'การยกเลิกหนังสือรับรองหัก ณ ที่จ่ายต้องกรอกเหตุผลเสมอ เพื่อบันทึกไว้ในเอกสารและ audit log',
   },
   WHT_FILING_SUMMARY_NOT_FOUND: {
     title: 'ไม่พบสรุปรอบนำส่ง',
@@ -51,7 +51,7 @@ const MESSAGES: Record<WhtErrorCode, ErrorMessage> = {
   },
   WHT_FILING_ALREADY_FILED: {
     title: 'รอบนี้ mark ว่ายื่นแล้ว',
-    message: 'สรุปรอบนำส่งนี้ถูก mark ว่ายื่นแบบแล้ว — ทำซ้ำไม่ได้ (`33` §9)',
+    message: 'สรุปรอบนำส่งนี้ถูก mark ว่ายื่นแบบแล้ว — ทำซ้ำไม่ได้',
   },
 }
 

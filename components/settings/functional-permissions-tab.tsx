@@ -166,7 +166,7 @@ export function FunctionalPermissionsTab() {
       <div className="mb-4">
         <h2 className="text-sm font-bold text-slate-900">สิทธิ์บัญชีและการเงิน (Functional Permission Matrix)</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          สิทธิ์เฉพาะทางของโมดูลการเงิน/บัญชี แบ่ง 4 กลุ่มฟังก์ชัน — ละเอียดกว่าเมทริกซ์รวมของระบบ (ไฟล์ 13 §6.10)
+          สิทธิ์เฉพาะทางของโมดูลการเงิน/บัญชี แบ่ง 4 กลุ่มฟังก์ชัน — ละเอียดกว่าเมทริกซ์รวมของระบบ
         </p>
       </div>
 
@@ -191,7 +191,7 @@ export function FunctionalPermissionsTab() {
         </div>
       )}
 
-      <InlineAlert tone="info" title="ระดับสิทธิ์ 3 ระดับ (ไฟล์ 25)">
+      <InlineAlert tone="info" title="ระดับสิทธิ์ 3 ระดับ">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1.5">
             {MATRIX_LEVELS.map((level) => (
@@ -311,7 +311,7 @@ export function FunctionalPermissionsTab() {
           <div className="space-y-4">
             {editing.locked && (
               <InlineAlert tone="warning" title="รายการนี้ถูกล็อก">
-                “{editing.label}” เป็น 1 ใน 9 รายการที่ล็อกไว้กับ {editing.lockOwner} เท่านั้น (ไฟล์ 25 §16.1) —
+                “{editing.label}” เป็น 1 ใน 9 รายการที่ล็อกไว้กับ {editing.lockOwner} เท่านั้น —
                 มอบให้บทบาทอื่นไม่ได้
               </InlineAlert>
             )}
@@ -349,7 +349,7 @@ export function FunctionalPermissionsTab() {
               id="functional-permission-reason"
               label="เหตุผลในการเปลี่ยนสิทธิ์"
               required
-              hint="บังคับตามไฟล์ 90 §13 — การเปลี่ยนสิทธิ์ถูกบันทึกลง audit log ถาวร"
+              hint="การเปลี่ยนสิทธิ์ถูกบันทึกลง audit log ถาวร"
               error={reasonTooShort && reason.length > 0 ? `ระบุอย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร` : null}
             >
               <Textarea

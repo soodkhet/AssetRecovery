@@ -104,7 +104,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
 
         {batch.status !== 'draft' && (
           <InlineAlert tone="info">
-            รับชำระจริงอัปเดตจากการจับคู่รายการเดินบัญชี (ไฟล์ 35) เท่านั้น — แก้ยอดของรอบที่ส่งแล้วต้องผ่าน
+            รับชำระจริงอัปเดตจากการจับคู่รายการเดินบัญชีเท่านั้น — แก้ยอดของรอบที่ส่งแล้วต้องผ่าน
             รายการปรับปรุง (Adjustment)
           </InlineAlert>
         )}

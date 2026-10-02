@@ -224,7 +224,7 @@ export function PayeeTab() {
         showToast({
           tone: 'warning',
           title: 'สถานะกลับเป็น "รอยืนยัน"',
-          description: 'แก้ข้อมูลธนาคาร/ภาษีแล้วต้องให้การเงินยืนยันใหม่ก่อนเข้ารอบจ่ายเงิน (ไฟล์ 18 §9)',
+          description: 'แก้ข้อมูลธนาคาร/ภาษีแล้วต้องให้การเงินยืนยันใหม่ก่อนเข้ารอบจ่ายเงิน',
         })
       }
       setFormOpen(false)
@@ -268,8 +268,7 @@ export function PayeeTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">ผู้รับเงิน (Payee Profile)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ข้อมูลบัญชี/ภาษีของผู้ที่บริษัทจ่ายค่าตอบแทนให้ — <span className="font-semibold">รายที่ยังไม่ยืนยันรวมเข้ารอบจ่ายเงินไม่ได้</span>{' '}
-            (ไฟล์ 18 §6.2)
+            ข้อมูลบัญชี/ภาษีของผู้ที่บริษัทจ่ายค่าตอบแทนให้ — <span className="font-semibold">รายที่ยังไม่ยืนยันรวมเข้ารอบจ่ายเงินไม่ได้</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -418,7 +417,6 @@ export function PayeeTab() {
           {editing !== null && editing.isVerified && (
             <InlineAlert tone="warning" title="แก้แล้วต้องยืนยันใหม่">
               รายนี้ยืนยันแล้ว — แก้ {RESET_LABELS} จะกลับเป็น “รอยืนยัน” อัตโนมัติ และเข้ารอบจ่ายเงินไม่ได้จนกว่าการเงินจะยืนยันใหม่
-              (ไฟล์ 18 §9)
             </InlineAlert>
           )}
 
@@ -516,7 +514,7 @@ export function PayeeTab() {
           <Field
             id="payee-id-document"
             label="ลิงก์เอกสารยืนยันตัวตน"
-            hint="บังคับเมื่อองค์กรเปิด “ต้องแนบเอกสารยืนยันตัวตนก่อนยืนยัน Payee” (ไฟล์ 13 §6.2.1)"
+            hint="บังคับเมื่อองค์กรเปิด “ต้องแนบเอกสารยืนยันตัวตนก่อนยืนยัน Payee”"
             error={errors.idDocumentUrl}
           >
             <Input
@@ -551,7 +549,7 @@ export function PayeeTab() {
         description={
           verifyTarget === null
             ? ''
-            : `ตรวจแล้วว่าเลขบัญชี ${verifyTarget.accountNumber ?? verifyTarget.accountNumberMasked ?? '—'} และข้อมูลภาษีถูกต้อง — ยืนยันแล้วจึงรวมเข้ารอบจ่ายเงินได้ (ไฟล์ 18 §9)`
+            : `ตรวจแล้วว่าเลขบัญชี ${verifyTarget.accountNumber ?? verifyTarget.accountNumberMasked ?? '—'} และข้อมูลภาษีถูกต้อง — ยืนยันแล้วจึงรวมเข้ารอบจ่ายเงินได้`
         }
         confirmLabel="ยืนยันผู้รับเงิน"
         reason={verifyReason}

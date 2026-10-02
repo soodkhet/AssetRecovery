@@ -96,7 +96,7 @@ export function JobDetailModal({
 
           {detail.output !== null && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">ไฟล์ผลลัพธ์ (เก็บเป็นเวอร์ชัน ห้ามเขียนทับ — `91` §10)</p>
+              <p className="text-xs text-slate-500">ไฟล์ผลลัพธ์ (เก็บเป็นเวอร์ชัน ห้ามเขียนทับ)</p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <a
                   href={detail.output.href}
@@ -125,7 +125,7 @@ export function JobDetailModal({
               <p className="text-sm font-semibold text-slate-900">สั่งทำงานใหม่</p>
               <p className="text-xs text-slate-500">
                 งานจะถูกคืนเข้าคิวและถูกหยิบไปทำในรอบถัดไปของตัวตั้งเวลา — ต้องระบุเหตุผลเพื่อบันทึกลง
-                บันทึกการใช้งาน (`91` §12)
+                บันทึกการใช้งาน
               </p>
               {retryError !== null && (
                 <InlineAlert tone="error" title={retryError.title}>

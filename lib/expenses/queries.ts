@@ -203,7 +203,7 @@ export async function syncExpenseRecordsFromPayout(
               wht_satang: item.whtSatang,
               net_satang: item.netSatang,
             },
-            reason: `บันทึกบัญชีค่าใช้จ่ายอัตโนมัติเมื่อรอบจ่าย "${batch.name}" จ่ายเงินจริงแล้ว (\`32\` §6.1)`,
+            reason: `บันทึกบัญชีค่าใช้จ่ายอัตโนมัติเมื่อรอบจ่าย "${batch.name}" จ่ายเงินจริงแล้ว`,
             ipAddress: ctx.meta.ipAddress,
             userAgent: ctx.meta.userAgent,
           },

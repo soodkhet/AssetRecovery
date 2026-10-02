@@ -221,49 +221,49 @@ const store = {
   // Superadmin (r1) มีสิทธิ์ทุกรายการโดยนิยาม — ไม่เก็บใน levels · superadminOnly = รายการที่ไฟล์ 25 ระบุ "✅ only"
   financePermissions: {
     ops: [
-      { id: 'op1',  action: 'รับ/ไม่รับเคส (Case Approval)',            levels: { r2:'manage' }, note: 'ไฟล์ 38' },
-      { id: 'op2',  action: 'มอบหมาย/Reassign เคส',                     levels: { r7:'manage', r8:'manage', r10:'manage', r11:'manage' }, note: 'ไฟล์ 40 — เฉพาะทีมที่ดูแล' },
-      { id: 'op3',  action: 'รับงาน/ปิดงานภาคสนาม',                     levels: { r9:'manage', r12:'manage' }, note: 'ไฟล์ 41' },
-      { id: 'op4',  action: 'ตีกลับหลักฐานปิดงาน (reject_evidence)',    levels: { r2:'manage' }, note: 'ไฟล์ 41 §8 — กระทบ Revenue (ไฟล์ 19 §6.1)' },
-      { id: 'op5',  action: 'อนุมัติ/ปฏิเสธ Recycle',                   levels: { r2:'manage' }, note: 'ไฟล์ 38 §6.6' },
-      { id: 'op6',  action: 'ดูสถานะเคส/วางบิลของบริษัทตัวเอง',         levels: { r13:'view', r14:'view', r15:'view' }, note: 'ไฟล์ 97 — own scope เท่านั้น' },
+      { id: 'op1',  action: 'รับ/ไม่รับเคส (Case Approval)',            levels: { r2:'manage' }, note: '' },
+      { id: 'op2',  action: 'มอบหมาย/Reassign เคส',                     levels: { r7:'manage', r8:'manage', r10:'manage', r11:'manage' }, note: 'เฉพาะทีมที่ดูแล' },
+      { id: 'op3',  action: 'รับงาน/ปิดงานภาคสนาม',                     levels: { r9:'manage', r12:'manage' }, note: '' },
+      { id: 'op4',  action: 'ตีกลับหลักฐานปิดงาน (reject_evidence)',    levels: { r2:'manage' }, note: 'กระทบ Revenue' },
+      { id: 'op5',  action: 'อนุมัติ/ปฏิเสธ Recycle',                   levels: { r2:'manage' }, note: '' },
+      { id: 'op6',  action: 'ดูสถานะเคส/วางบิลของบริษัทตัวเอง',         levels: { r13:'view', r14:'view', r15:'view' }, note: 'own scope เท่านั้น' },
     ],
     finance: [
-      { id: 'fn1',  action: 'อนุมัติ Claim ขั้น Manager',                levels: { r7:'manage', r10:'manage' }, note: 'ไฟล์ 25 — เฉพาะทีมตัวเอง (ขั้น 1)' },
-      { id: 'fn2',  action: 'อนุมัติ/ตีกลับ Claim ขั้น Finance',         levels: { r4:'manage' }, note: 'ขั้น 2 — pending_finance_approval (ไฟล์ 16/23)' },
-      { id: 'fn3',  action: 'อนุมัติ Claim ที่เกินเพดาน',                levels: { r3:'manage' }, note: 'Executive เท่านั้น — Approval Matrix (ไฟล์ 13 §6.2)' },
-      { id: 'fn4',  action: 'ขอเงินทดรองจ่าย / เคลียร์ยอด',              levels: { r9:'manage', r12:'manage', r4:'view' }, note: 'Field Agent เจ้าของคำขอ · การเงินตรวจสอบ (ไฟล์ 15)' },
-      { id: 'fn5',  action: 'จัดการ Payout Batch',                       levels: { r4:'manage' }, note: 'ไฟล์ 17' },
-      { id: 'fn6',  action: 'สร้างไฟล์โอนเงิน (Bank Payment File)',      levels: { r4:'manage' }, note: 'แยกจากจัดการ Payout — จุดเสี่ยงเงินออก (ไฟล์ 17/25)' },
-      { id: 'fn7',  action: 'จัดการ Payee Profile',                      levels: { r4:'manage', r9:'view', r12:'view' }, note: 'Field Agent ดูได้เฉพาะของตัวเอง (ไฟล์ 18)' },
-      { id: 'fn8',  action: 'จัดการ Billing Batch',                      levels: { r4:'manage', r5:'view', r3:'view' }, note: 'ไฟล์ 19' },
-      { id: 'fn9',  action: 'สร้าง Adjustment',                          levels: { r4:'manage' }, note: 'ไฟล์ 20' },
-      { id: 'fn10', action: 'อนุมัติ Adjustment (รอบ collecting/sent)',  levels: { r4:'manage', r3:'manage' }, note: 'บริหารอนุมัติได้เมื่อรอบเป็น sent (ไฟล์ 20/23 §6.9)' },
-      { id: 'fn11', action: 'อนุมัติ Adjustment (รอบ locked)',           levels: { r3:'manage' }, note: 'Executive เท่านั้น — Period Lock Policy (ไฟล์ 13 §6.11)' },
-      { id: 'fn12', action: 'ดู Dashboard / Profitability Report',       levels: { r4:'view', r5:'view', r3:'view' }, note: 'ไฟล์ 14/21 — ดูอย่างเดียวทุกฝ่าย' },
+      { id: 'fn1',  action: 'อนุมัติ Claim ขั้น Manager',                levels: { r7:'manage', r10:'manage' }, note: 'เฉพาะทีมตัวเอง (ขั้น 1)' },
+      { id: 'fn2',  action: 'อนุมัติ/ตีกลับ Claim ขั้น Finance',         levels: { r4:'manage' }, note: 'ขั้น 2 — pending_finance_approval' },
+      { id: 'fn3',  action: 'อนุมัติ Claim ที่เกินเพดาน',                levels: { r3:'manage' }, note: 'Executive เท่านั้น — Approval Matrix' },
+      { id: 'fn4',  action: 'ขอเงินทดรองจ่าย / เคลียร์ยอด',              levels: { r9:'manage', r12:'manage', r4:'view' }, note: 'Field Agent เจ้าของคำขอ · การเงินตรวจสอบ' },
+      { id: 'fn5',  action: 'จัดการ Payout Batch',                       levels: { r4:'manage' }, note: '' },
+      { id: 'fn6',  action: 'สร้างไฟล์โอนเงิน (Bank Payment File)',      levels: { r4:'manage' }, note: 'แยกจากจัดการ Payout — จุดเสี่ยงเงินออก' },
+      { id: 'fn7',  action: 'จัดการ Payee Profile',                      levels: { r4:'manage', r9:'view', r12:'view' }, note: 'Field Agent ดูได้เฉพาะของตัวเอง' },
+      { id: 'fn8',  action: 'จัดการ Billing Batch',                      levels: { r4:'manage', r5:'view', r3:'view' }, note: '' },
+      { id: 'fn9',  action: 'สร้าง Adjustment',                          levels: { r4:'manage' }, note: '' },
+      { id: 'fn10', action: 'อนุมัติ Adjustment (รอบ collecting/sent)',  levels: { r4:'manage', r3:'manage' }, note: 'บริหารอนุมัติได้เมื่อรอบเป็น sent' },
+      { id: 'fn11', action: 'อนุมัติ Adjustment (รอบ locked)',           levels: { r3:'manage' }, note: 'Executive เท่านั้น — Period Lock Policy' },
+      { id: 'fn12', action: 'ดู Dashboard / Profitability Report',       levels: { r4:'view', r5:'view', r3:'view' }, note: 'ดูอย่างเดียวทุกฝ่าย' },
     ],
     accounting: [
-      { id: 'ac1',  action: 'จัดการรอบบัญชี (collecting → sent)',        levels: { r5:'manage' }, note: 'ไฟล์ 30' },
-      { id: 'ac2',  action: 'ปลดล็อกรอบบัญชีที่ locked',                 levels: { r3:'manage' }, note: 'Executive เท่านั้น + บันทึก audit (ไฟล์ 13 §6.11/30) — แยกออกจากข้ออนุมัติเกินเพดาน' },
-      { id: 'ac3',  action: 'ออก/ยกเลิกใบกำกับภาษี',                     levels: { r5:'manage' }, note: 'ไฟล์ 31' },
-      { id: 'ac4',  action: 'ออกหนังสือรับรอง WHT / mark filed',         levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 33' },
-      { id: 'ac5',  action: 'จัดการ Sales/Receipts/Expenses',            levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 31/32' },
-      { id: 'ac6',  action: 'map Cost Center (manual)',                  levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 32' },
-      { id: 'ac7',  action: 'จัดการ Exception (สร้าง/แก้/resolve)',      levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 34' },
-      { id: 'ac8',  action: 'สร้าง Authorized Exception',                levels: { r3:'manage' }, note: 'Executive เท่านั้น — รับความเสี่ยงข้าม exception (ไฟล์ 34)' },
-      { id: 'ac9',  action: 'Import statement / จับคู่ Bank Reconcile',  levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 35 — รวมปิดรายการโดยไม่จับคู่' },
-      { id: 'ac10', action: 'บันทึก/ตอบ Accountant Question',            levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 36' },
-      { id: 'ac11', action: 'Export Accounting Pack',                    levels: { r5:'manage', r4:'view' }, note: 'ไฟล์ 37' },
+      { id: 'ac1',  action: 'จัดการรอบบัญชี (collecting → sent)',        levels: { r5:'manage' }, note: '' },
+      { id: 'ac2',  action: 'ปลดล็อกรอบบัญชีที่ locked',                 levels: { r3:'manage' }, note: 'Executive เท่านั้น + บันทึก audit — แยกออกจากข้ออนุมัติเกินเพดาน' },
+      { id: 'ac3',  action: 'ออก/ยกเลิกใบกำกับภาษี',                     levels: { r5:'manage' }, note: '' },
+      { id: 'ac4',  action: 'ออกหนังสือรับรอง WHT / mark filed',         levels: { r5:'manage', r4:'view' }, note: '' },
+      { id: 'ac5',  action: 'จัดการ Sales/Receipts/Expenses',            levels: { r5:'manage', r4:'view' }, note: '' },
+      { id: 'ac6',  action: 'map Cost Center (manual)',                  levels: { r5:'manage', r4:'view' }, note: '' },
+      { id: 'ac7',  action: 'จัดการ Exception (สร้าง/แก้/resolve)',      levels: { r5:'manage', r4:'view' }, note: '' },
+      { id: 'ac8',  action: 'สร้าง Authorized Exception',                levels: { r3:'manage' }, note: 'Executive เท่านั้น — รับความเสี่ยงข้าม exception' },
+      { id: 'ac9',  action: 'Import statement / จับคู่ Bank Reconcile',  levels: { r5:'manage', r4:'view' }, note: 'รวมปิดรายการโดยไม่จับคู่' },
+      { id: 'ac10', action: 'บันทึก/ตอบ Accountant Question',            levels: { r5:'manage', r4:'view' }, note: '' },
+      { id: 'ac11', action: 'Export Accounting Pack',                    levels: { r5:'manage', r4:'view' }, note: '' },
     ],
     admin: [
-      { id: 'ad1',  action: 'จัดการ Finance Company',                    levels: {}, superadminOnly: true, note: 'ไฟล์ 10/25' },
-      { id: 'ad2',  action: 'จัดการ Service Fee Template',               levels: {}, superadminOnly: true, note: 'ไฟล์ 12/25' },
-      { id: 'ad3',  action: 'ดูข้อมูล Master Data',                      levels: { r6:'view', r4:'view', r5:'view', r3:'view' }, note: 'ไฟล์ 25 — ดูอย่างเดียวทุกฝ่ายหลัก' },
-      { id: 'ad4',  action: 'แก้ไข Tax Profile / VAT Rate',              levels: {}, superadminOnly: true, note: 'ไฟล์ 13 §6.4-6.5' },
-      { id: 'ad5',  action: 'แก้ไข Period Lock Policy',                  levels: {}, superadminOnly: true, note: 'ไฟล์ 13 §6.11' },
-      { id: 'ad6',  action: 'แก้ไข Tax Invoice Numbering',               levels: {}, superadminOnly: true, note: 'ไฟล์ 13 §6.12' },
-      { id: 'ad7',  action: 'จัดการ Role / Permission',                  levels: {}, superadminOnly: true, note: 'ไฟล์ 05 §10 — critical action' },
-      { id: 'ad8',  action: 'บันทึกข้อมูล/แนบเอกสาร (ธุรการ)',           levels: { r6:'manage' }, note: 'ตามสิทธิ์ที่ได้รับมอบหมาย (ไฟล์ 25)' },
+      { id: 'ad1',  action: 'จัดการ Finance Company',                    levels: {}, superadminOnly: true, note: '' },
+      { id: 'ad2',  action: 'จัดการ Service Fee Template',               levels: {}, superadminOnly: true, note: '' },
+      { id: 'ad3',  action: 'ดูข้อมูล Master Data',                      levels: { r6:'view', r4:'view', r5:'view', r3:'view' }, note: 'ดูอย่างเดียวทุกฝ่ายหลัก' },
+      { id: 'ad4',  action: 'แก้ไข Tax Profile / VAT Rate',              levels: {}, superadminOnly: true, note: '' },
+      { id: 'ad5',  action: 'แก้ไข Period Lock Policy',                  levels: {}, superadminOnly: true, note: '' },
+      { id: 'ad6',  action: 'แก้ไข Tax Invoice Numbering',               levels: {}, superadminOnly: true, note: '' },
+      { id: 'ad7',  action: 'จัดการ Role / Permission',                  levels: {}, superadminOnly: true, note: 'critical action' },
+      { id: 'ad8',  action: 'บันทึกข้อมูล/แนบเอกสาร (ธุรการ)',           levels: { r6:'manage' }, note: 'ตามสิทธิ์ที่ได้รับมอบหมาย' },
     ]
   }
 };
@@ -918,7 +918,7 @@ function renderOrganizationContent() {
     <div class="flex items-center justify-between mb-6">
       <div>
         <h2 class="text-lg font-bold text-slate-900">ข้อมูลองค์กร (Organization Profile)</h2>
-        <p class="text-xs text-slate-500 mt-0.5">ข้อมูลนี้ใช้ออกใบกำกับภาษี / ใบเสร็จรับเงินฝั่งผู้ขาย (AssetRecovery) ตามไฟล์ 31 §7.2</p>
+        <p class="text-xs text-slate-500 mt-0.5">ข้อมูลนี้ใช้ออกใบกำกับภาษี / ใบเสร็จรับเงินฝั่งผู้ขาย (AssetRecovery)</p>
       </div>
       <button data-action="open-modal" data-type="edit-org-profile" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.edit} แก้ไขข้อมูล</button>
     </div>
@@ -965,14 +965,14 @@ function renderOrganizationContent() {
 
     <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
       <b>หมายเหตุ:</b> ข้อมูลองค์กรนี้ถูก snapshot ลงในใบกำกับภาษีทุกฉบับที่ออก — แก้ไขแล้วมีผลเฉพาะเอกสารที่ออกหลังจากนี้ เอกสารเก่าไม่เปลี่ยน · สิทธิ์แก้ไข: Superadmin เท่านั้น<br>
-      <b>การตั้งค่า Prefix / รูปแบบเลขที่ใบกำกับภาษี</b> อยู่ที่ <b>ตั้งค่าบัญชี/การเงิน → เลขที่ใบกำกับภาษี</b> (ไฟล์ 13 §6.12) ไม่ใช่ที่นี่
+      <b>การตั้งค่า Prefix / รูปแบบเลขที่ใบกำกับภาษี</b> อยู่ที่ <b>ตั้งค่าบัญชี/การเงิน → เลขที่ใบกำกับภาษี</b> ไม่ใช่ที่นี่
     </div>
   </div>`;
 }
 
 function renderCompensationContent() {
   return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">แผนค่าตอบแทน (จ่ายออก)</h2><button data-action="open-create-comp" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างเทมเพลต</button></div>
-  <p class="text-xs text-slate-500 mb-4">commission = จ่ายเมื่อปิดสำเร็จ | เบี้ยเสี่ยง (no_success_fee) = จ่ายเมื่อไม่สำเร็จ — mutual exclusive ต่อเคส (ไฟล์ 11 §7.2)</p>
+  <p class="text-xs text-slate-500 mb-4">commission = จ่ายเมื่อปิดสำเร็จ | เบี้ยเสี่ยง (no_success_fee) = จ่ายเมื่อไม่สำเร็จ — mutual exclusive ต่อเคส</p>
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">${store.compTemplates.map(ct => {
     const fuelLabel = ct.fuel.mode === 'PER_KM'
       ? `${ct.fuel.ratePerKm} บาท/กม. (เพดาน ${ct.fuel.maxPerCase ? ct.fuel.maxPerCase.toLocaleString('th-TH') : '∞'} บาท/เคส)`
@@ -996,7 +996,7 @@ function renderServiceFeeContent() {
   const MODEL_BADGE = { SUCCESS_FEE: 'bg-emerald-100 text-emerald-800', FLAT: 'bg-blue-100 text-blue-800', HYBRID: 'bg-purple-100 text-purple-800' };
   const basisTh = b => b === 'debt_amount' ? 'มูลค่าหนี้คงเหลือ' : 'มูลค่าเครื่อง';
   return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">เทมเพลตค่าบริการ (รับเข้า)</h2><button data-action="open-create-sf" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างเทมเพลต</button></div>
-  <p class="text-xs text-slate-500 mb-4">ฐานคำนวณ "รายได้" (Revenue) ที่เรียกเก็บจากบริษัทไฟแนนซ์ — ตรงข้ามกับแผนค่าตอบแทน (จ่ายออก) · 3 model ตามไฟล์ 12 §6: SUCCESS_FEE / FLAT / HYBRID · ผูกกับบริษัทไฟแนนซ์ทุกรายเสมอ (ไฟล์ 10 §9)</p>
+  <p class="text-xs text-slate-500 mb-4">ฐานคำนวณ "รายได้" (Revenue) ที่เรียกเก็บจากบริษัทไฟแนนซ์ — ตรงข้ามกับแผนค่าตอบแทน (จ่ายออก) · 3 model: SUCCESS_FEE / FLAT / HYBRID · ผูกกับบริษัทไฟแนนซ์ทุกรายเสมอ</p>
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">${store.serviceFeeTemplates.map(sf => {
     const basisLabel = sf.basis ? basisTh(sf.basis) : null;
     // สูตรตามไฟล์ 12 §6.1-6.3
@@ -1020,7 +1020,7 @@ function renderServiceFeeContent() {
       <div class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'} p-2.5 rounded-lg border col-span-2"><span class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-600' : 'text-slate-400'} block text-[10px] uppercase font-bold tracking-wider mb-1">🔄 เคสไม่สำเร็จ (closed_fail) เรียกเก็บ</span><span class="font-bold ${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-700' : 'text-slate-600'} text-sm">${failFormula}</span></div>
     </div>
     ${sf.model === 'SUCCESS_FEE'
-      ? '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล (§6.1) — ไม่มีตัวเลือก charge_on_fail</div>'
+      ? '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือก charge_on_fail</div>'
       : (sf.chargeOnFail
         ? '<div class="text-[11px] text-amber-800 font-bold bg-amber-100 px-2.5 py-1 rounded inline-block mb-3 border border-amber-200">⚠️ charge_on_fail = true — เก็บค่า base เสมอไม่ว่าผลจะเป็นอย่างไร</div>'
         : '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">charge_on_fail = false — เรียกเก็บเฉพาะเคสสำเร็จ</div>')}
@@ -1043,7 +1043,7 @@ function renderSystemSettingsContent() {
     </div></div>
   </div>
   <div class="border-b border-slate-100 pb-6 mb-6">
-    <h3 class="font-semibold text-slate-800 text-sm mb-3">Operations Settings (ไฟล์ 40 §6.3-6.4)</h3>
+    <h3 class="font-semibold text-slate-800 text-sm mb-3">Operations Settings</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div><label class="block text-xs font-bold text-slate-700 mb-1">Reassign Timeout — ชั่วโมง <span class="text-slate-400 font-normal">(ผู้รับเคสต้องตอบภายในเวลานี้)</span></label><input type="number" value="${ss.reassignTimeoutHours}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"></div>
       <div><label class="block text-xs font-bold text-slate-700 mb-2">สิทธิ์มอบหมายงานของหัวหน้าทีม (Supervisor)</label>
@@ -1128,7 +1128,7 @@ function renderSettingsTaxDoc() {
     { type: 'wht_certificate', name: 'หนังสือรับรองการหัก ณ ที่จ่าย (50 ทวิ)', paper: 'A4', lang: 'th', footer: '', hasLogo: true,  hasSign: false }
   ];
   return `<h2 class="text-lg font-bold text-slate-900 mb-1">เทมเพลตเอกสารภาษี (Tax Document Template)</h2>
-  <p class="text-xs text-slate-500 mb-4">รูปแบบเอกสารภาษีทางการ — ไฟล์ 13 §6.13 · ตาราง <span class="font-mono">tax_document_template_settings</span> (schema 02 v3.5)</p>
+  <p class="text-xs text-slate-500 mb-4">รูปแบบเอกสารภาษีทางการ</p>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
     ${docs.map(d => `
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -1161,7 +1161,7 @@ function renderSettingsTaxDoc() {
     </div>`).join('')}
   </div>
   <div class="mt-4 text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg p-3">
-    <b>ข้อจำกัด (ไฟล์ 28 §6.2-6.3):</b> ฟิลด์บังคับตามกฎหมาย (เลขประจำตัวผู้เสียภาษี, ชื่อ-ที่อยู่, ยอด VAT/WHT, เลขที่เอกสาร) <b>ปิดหรือซ่อนไม่ได้</b> — เทมเพลตปรับได้เฉพาะโลโก้ ลายเซ็น footer ขนาดกระดาษ และภาษาเท่านั้น
+    <b>ข้อจำกัด:</b> ฟิลด์บังคับตามกฎหมาย (เลขประจำตัวผู้เสียภาษี, ชื่อ-ที่อยู่, ยอด VAT/WHT, เลขที่เอกสาร) <b>ปิดหรือซ่อนไม่ได้</b> — เทมเพลตปรับได้เฉพาะโลโก้ ลายเซ็น footer ขนาดกระดาษ และภาษาเท่านั้น
   </div>`;
 }
 
@@ -1229,8 +1229,8 @@ function renderSettingsPermission() {
   </div>
 
   <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 mb-4 space-y-1">
-    <div><b>ระดับสิทธิ์ 3 ระดับ (ตามไฟล์ 25):</b> <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">✅ ทำได้</span> <span class="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">👁️ ดูอย่างเดียว</span> <span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold">— ไม่มีสิทธิ์ (ไม่แสดง)</span></div>
-    <div><b>Superadmin</b> มีสิทธิ์ทุกรายการโดยนิยาม — ไม่แสดงในตาราง · รายการ <span class="px-1.5 py-0.5 bg-slate-900 text-white rounded font-bold">🔒</span> = เฉพาะ Superadmin เท่านั้น (ไฟล์ 25 "✅ only") · storage: <span class="font-mono">capabilities + role_capabilities</span> (ไฟล์ 13 §6.10)</div>
+    <div><b>ระดับสิทธิ์ 3 ระดับ:</b> <span class="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">✅ ทำได้</span> <span class="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">👁️ ดูอย่างเดียว</span> <span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold">— ไม่มีสิทธิ์ (ไม่แสดง)</span></div>
+    <div><b>Superadmin</b> มีสิทธิ์ทุกรายการโดยนิยาม — ไม่แสดงในตาราง · รายการ <span class="px-1.5 py-0.5 bg-slate-900 text-white rounded font-bold">🔒</span> = เฉพาะ Superadmin เท่านั้น · storage: <span class="font-mono">capabilities + role_capabilities</span></div>
   </div>
 
   <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -1383,7 +1383,7 @@ function renderModal() {
           ${formInput('m_ctRatePerKm', 'อัตราค่าน้ำมัน (บาท/กม.)', ct.fuel?.ratePerKm??3.5, 'number', '0.00', true)}
           <div>
             ${formInput('m_ctMaxPerCase', 'เพดานสูงสุด/เคส (บาท)', ct.fuel?.maxPerCase??'', 'number', 'เว้นว่าง = ไม่จำกัด')}
-            <div class="text-[10px] text-slate-400 mt-1">สูตร: MIN(ระยะทาง × อัตรา, เพดาน) — ไฟล์ 11 §7.1 / 22 §6.1</div>
+            <div class="text-[10px] text-slate-400 mt-1">สูตร: MIN(ระยะทาง × อัตรา, เพดาน)</div>
           </div>
         </div>
         <div id="fuel-flat-wrap" class="${fuelMode==='PER_KM'?'hidden':''}">
@@ -1703,12 +1703,12 @@ function renderModal() {
     const total = Object.values(store.financePermissions).reduce((a, g) => a + g.length, 0);
     body = `<div class="space-y-4 text-sm">
       <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs">
-        Matrix ทั้งหมด <b>${total} ฟังก์ชัน</b> ใน 4 กลุ่ม (ปฏิบัติงาน ${store.financePermissions.ops.length} · การเงิน ${store.financePermissions.finance.length} · บัญชี ${store.financePermissions.accounting.length} · บริหาร ${store.financePermissions.admin.length}) — ครบตาม Permission Matrix ไฟล์ 25 ทุกรายการ
+        Matrix ทั้งหมด <b>${total} ฟังก์ชัน</b> ใน 4 กลุ่ม (ปฏิบัติงาน ${store.financePermissions.ops.length} · การเงิน ${store.financePermissions.finance.length} · บัญชี ${store.financePermissions.accounting.length} · บริหาร ${store.financePermissions.admin.length}) — ครบตาม Permission Matrix ทุกรายการ
       </div>
       <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-2">
         <div class="font-bold text-slate-700">วิธีแก้ไข</div>
         <div class="text-slate-600">กดปุ่มดินสอ (✎) ท้ายแถวของฟังก์ชันที่ต้องการ → เลือกระดับสิทธิ์ต่อ role เป็น dropdown 3 ระดับ: <b>ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว / ✅ ทำได้</b></div>
-        <div class="text-slate-600">รายการ 🔒 (เฉพาะ Superadmin) แก้ไขไม่ได้ตามไฟล์ 25 · ทุกการแก้ไขสิทธิ์เป็น critical action ต้องบันทึก audit log (ไฟล์ 05 §10 / 90)</div>
+        <div class="text-slate-600">รายการ 🔒 (เฉพาะ Superadmin) แก้ไขไม่ได้ · ทุกการแก้ไขสิทธิ์เป็น critical action ต้องบันทึก audit log</div>
       </div>
     </div>`;
   }
@@ -1725,14 +1725,14 @@ function renderModal() {
       body = `<div class="space-y-4 text-sm">
         <div class="bg-slate-900 text-white p-4 rounded-lg text-xs flex items-start gap-3">
           <span class="text-lg">🔒</span>
-          <div><b>รายการนี้เป็นสิทธิ์เฉพาะ Superadmin เท่านั้น</b> (ไฟล์ 25 ระบุ "✅ only")<br>ไม่สามารถมอบให้ role อื่นได้ — แก้ไขระดับสิทธิ์ไม่ได้</div>
+          <div><b>รายการนี้เป็นสิทธิ์เฉพาะ Superadmin เท่านั้น</b><br>ไม่สามารถมอบให้ role อื่นได้ — แก้ไขระดับสิทธิ์ไม่ได้</div>
         </div>
-        ${found?.note ? `<div class="text-xs text-slate-500">อ้างอิง: ${found.note}</div>` : ''}
+        ${found?.note ? `<div class="text-xs text-slate-500">หมายเหตุ: ${found.note}</div>` : ''}
       </div>`;
     } else {
       body = `<div class="space-y-4 text-sm">
         <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-blue-900 text-xs">
-          กำหนดระดับสิทธิ์ของแต่ละ role สำหรับ <b>${found?.action}</b> — 3 ระดับตามไฟล์ 25: <b>ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว / ✅ ทำได้</b>${found?.note ? `<div class="mt-1 text-blue-700">อ้างอิง: ${found.note}</div>` : ''}
+          กำหนดระดับสิทธิ์ของแต่ละ role สำหรับ <b>${found?.action}</b> — 3 ระดับ: <b>ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว / ✅ ทำได้</b>${found?.note ? `<div class="mt-1 text-blue-700">หมายเหตุ: ${found.note}</div>` : ''}
         </div>
         <div class="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-[11px] text-slate-500">Superadmin มีสิทธิ์ "ทำได้" ทุกรายการโดยนิยาม — ไม่แสดงในรายการนี้</div>
         <div class="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-2">

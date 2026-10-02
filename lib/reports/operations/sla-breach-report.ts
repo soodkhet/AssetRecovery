@@ -84,7 +84,7 @@ export function buildSlaBreachReport(input: {
         label: 'ประมาณการรายได้ที่ค้าง',
         value: projectedTotal,
         type: 'money',
-        hint: 'ยอดประมาณการ best-case ของเคสที่ยังไม่ปิด (ไฟล์ 38 §6.5)',
+        hint: 'ยอดประมาณการ best-case ของเคสที่ยังไม่ปิด',
       },
       {
         key: 'worstOverdue',

@@ -30,11 +30,11 @@ const HTTP_STATUS: Record<AdvanceErrorCode, number> = {
 const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
   ADVANCE_PENDING_SETTLEMENT: {
     title: 'มีเงินทดรองค้างอยู่',
-    message: 'ต้องเคลียร์ยอดเงินทดรองรอบเดิมให้เสร็จก่อน จึงขอเบิกรอบใหม่ได้ (`15` §9.2)',
+    message: 'ต้องเคลียร์ยอดเงินทดรองรอบเดิมให้เสร็จก่อน จึงขอเบิกรอบใหม่ได้',
   },
   ADVANCE_EXCEEDS_MAX: {
     title: 'ยอดขอเบิกเกินเพดาน',
-    message: 'ยอดที่ขอเบิกเกินเพดานเงินทดรองต่อครั้งที่องค์กรตั้งไว้ (`13` §6.2.1)',
+    message: 'ยอดที่ขอเบิกเกินเพดานเงินทดรองต่อครั้งที่องค์กรตั้งไว้',
   },
   ADVANCE_NOT_FOUND: {
     title: 'ไม่พบคำขอเงินทดรอง',
@@ -42,11 +42,11 @@ const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
   },
   ADVANCE_INVALID_STATUS: {
     title: 'สถานะคำขอไม่ถูกต้อง',
-    message: 'สถานะปัจจุบันของคำขอเงินทดรองทำรายการนี้ไม่ได้ (`23` §6.4)',
+    message: 'สถานะปัจจุบันของคำขอเงินทดรองทำรายการนี้ไม่ได้',
   },
   REJECTION_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผล',
-    message: 'การปฏิเสธคำขอเงินทดรองต้องระบุเหตุผลให้ผู้ขอเสมอ (`15` §11)',
+    message: 'การปฏิเสธคำขอเงินทดรองต้องระบุเหตุผลให้ผู้ขอเสมอ',
   },
 }
 

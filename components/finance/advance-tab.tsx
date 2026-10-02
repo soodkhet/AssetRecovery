@@ -87,7 +87,7 @@ export function AdvanceTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">เงินทดรองจ่าย (Advances)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              กฎ: ต้องเคลียร์ยอดเดิมให้เสร็จก่อน จึงขอเบิกรอบใหม่ได้ (`15` §9.2)
+              กฎ: ต้องเคลียร์ยอดเดิมให้เสร็จก่อน จึงขอเบิกรอบใหม่ได้
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

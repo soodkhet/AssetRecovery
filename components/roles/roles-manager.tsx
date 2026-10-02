@@ -177,7 +177,7 @@ export function RolesManager() {
     <>
       <PageHeader
         title="สิทธิ์การใช้งาน (Roles & Permissions)"
-        description="บทบาทพื้นฐาน 15 ตัวตามไฟล์ 07 §5 — Seed Role ลบ/เปลี่ยนชื่อไม่ได้"
+        description="บทบาทพื้นฐาน 15 ตัว — Seed Role ลบ/เปลี่ยนชื่อไม่ได้"
         action={
           <Can action="manage" resource={MANAGE_RESOURCE}>
             <Button onClick={() => setCreateOpen(true)}>+ สร้างบทบาท</Button>
@@ -250,7 +250,7 @@ export function RolesManager() {
                           disabled={role.isSeed || role.userCount > 0}
                           title={
                             role.isSeed
-                              ? 'Seed Role ลบไม่ได้ (ไฟล์ 07 §10)'
+                              ? 'Seed Role ลบไม่ได้'
                               : role.userCount > 0
                                 ? 'ยังมีผู้ใช้ผูกอยู่กับบทบาทนี้'
                                 : undefined
@@ -310,7 +310,7 @@ export function RolesManager() {
             />
           </Field>
 
-          <Field id="role-group" label="กลุ่มที่สังกัด" required hint="ชื่อซ้ำข้ามกลุ่มได้ — เป็นคนละบทบาทจริง (ไฟล์ 07 §6)">
+          <Field id="role-group" label="กลุ่มที่สังกัด" required hint="ชื่อซ้ำข้ามกลุ่มได้ — เป็นคนละบทบาทจริง">
             <Select
               id="role-group"
               value={createGroup}
@@ -324,7 +324,7 @@ export function RolesManager() {
             </Select>
           </Field>
 
-          <Field id="role-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (ไฟล์ 90 §13)">
+          <Field id="role-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร">
             <Textarea
               id="role-reason"
               value={createReason}

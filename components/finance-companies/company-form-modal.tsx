@@ -167,7 +167,7 @@ export function CompanyFormModal({
       onClose={onClose}
       size="lg"
       title={isEdit ? `แก้ไขบริษัท — ${company.name}` : 'สร้างบริษัทไฟแนนซ์'}
-      description="ข้อมูลนี้ใช้ออกใบกำกับภาษี/ใบวางบิล — ทุกบริษัทต้องผูกเทมเพลตค่าบริการเสมอ (ไฟล์ 10 §9.1)"
+      description="ข้อมูลนี้ใช้ออกใบกำกับภาษี/ใบวางบิล — ทุกบริษัทต้องผูกเทมเพลตค่าบริการเสมอ"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -206,7 +206,7 @@ export function CompanyFormModal({
             label="เลขประจำตัวผู้เสียภาษี (13 หลัก)"
             required
             error={errors.taxId}
-            hint="ตรวจรูปแบบอย่างเดียว ไม่มี checksum (ไฟล์ 10 §7.1)"
+            hint="ตรวจรูปแบบอย่างเดียว ไม่มี checksum"
           >
             <Input
               id="co-taxid"
@@ -262,7 +262,7 @@ export function CompanyFormModal({
 
         {isEdit && company.serviceFeeTemplateId !== form.serviceFeeTemplateId && (
           <InlineAlert tone="info" title="เปลี่ยนเทมเพลตค่าบริการ">
-            เคสที่อนุมัติ (approved) ไปแล้วใช้ตัวเลขที่ snapshot ไว้ที่ตัวเคส — ยอดเดิมไม่เปลี่ยน · เคสที่ยังไม่อนุมัติจะคิดตามเทมเพลตใหม่ (ไฟล์ 10 §9.2)
+            เคสที่อนุมัติ (approved) ไปแล้วใช้ตัวเลขที่ snapshot ไว้ที่ตัวเคส — ยอดเดิมไม่เปลี่ยน · เคสที่ยังไม่อนุมัติจะคิดตามเทมเพลตใหม่
           </InlineAlert>
         )}
 

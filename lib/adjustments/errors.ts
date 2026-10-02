@@ -31,11 +31,11 @@ const HTTP_STATUS: Record<AdjustmentErrorCode, number> = {
 const MESSAGES: Record<AdjustmentErrorCode, ErrorMessage> = {
   REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผล',
-    message: 'รายการปรับปรุงต้องกรอกเหตุผลเสมอไม่มีข้อยกเว้น (`20` §10)',
+    message: 'รายการปรับปรุงต้องกรอกเหตุผลเสมอไม่มีข้อยกเว้น',
   },
   REJECTION_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผลที่ปฏิเสธ',
-    message: 'การปฏิเสธรายการปรับปรุงเป็นสถานะสุดท้าย ต้องอธิบายเหตุผลไว้ในระบบ (`20` §11)',
+    message: 'การปฏิเสธรายการปรับปรุงเป็นสถานะสุดท้าย ต้องอธิบายเหตุผลไว้ในระบบ',
   },
   ADJUSTMENT_NOT_FOUND: {
     title: 'ไม่พบรายการปรับปรุง',
@@ -43,7 +43,7 @@ const MESSAGES: Record<AdjustmentErrorCode, ErrorMessage> = {
   },
   ADJUSTMENT_INVALID_STATUS: {
     title: 'สถานะรายการปรับปรุงไม่ถูกต้อง',
-    message: 'รายการนี้ถูกอนุมัติหรือปฏิเสธไปแล้ว — สถานะปัจจุบันทำรายการนี้ไม่ได้ (`23` §6.9)',
+    message: 'รายการนี้ถูกอนุมัติหรือปฏิเสธไปแล้ว — สถานะปัจจุบันทำรายการนี้ไม่ได้',
   },
   ADJUSTMENT_TARGET_NOT_FOUND: {
     title: 'ไม่พบรายการต้นทาง',

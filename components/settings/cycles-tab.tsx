@@ -246,7 +246,7 @@ export function CyclesTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">รอบบิล / รอบจ่าย (Cycles)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            รอบ AR = วางบิลบริษัทไฟแนนซ์ · รอบ AP = จ่ายค่าตอบแทนทีม — ใช้กำหนดวันตัดรอบและวันครบกำหนดชำระ (ไฟล์ 13 §6.1)
+            รอบ AR = วางบิลบริษัทไฟแนนซ์ · รอบ AP = จ่ายค่าตอบแทนทีม — ใช้กำหนดวันตัดรอบและวันครบกำหนดชำระ
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -506,7 +506,7 @@ export function CyclesTab() {
           </Field>
 
           <InlineAlert tone="warning" title="การแก้รอบมีผลกับงวดที่ยังไม่ปิด">
-            งวดที่ปิดไปแล้วจะไม่ถูกคำนวณย้อนหลัง — เอกสารเก่ายังอ้างค่าเดิมที่ snapshot ไว้เสมอ (ไฟล์ 92 §7.1)
+            งวดที่ปิดไปแล้วจะไม่ถูกคำนวณย้อนหลัง — เอกสารเก่ายังอ้างค่าเดิมที่ snapshot ไว้เสมอ
           </InlineAlert>
         </div>
       </Modal>

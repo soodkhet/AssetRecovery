@@ -133,7 +133,7 @@ export function RevenueTab() {
         <StatCard
           label="รายได้ที่ยังไม่ถูกรวมรอบ"
           value={fmtCount(unbilledCount)}
-          hint="เกิดอัตโนมัติเมื่อผ่านเกตของ `19` §6.1"
+          hint="เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ"
         />
       </div>
 
@@ -142,7 +142,7 @@ export function RevenueTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รอบวางบิล (Billing Batches)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              1 บริษัท 1 งวด = 1 รอบ · รับชำระจริงมาจากการจับคู่รายการเดินบัญชี (ไฟล์ 35) ไม่ใช่กรอกมือ
+              1 บริษัท 1 งวด = 1 รอบ · รับชำระจริงมาจากการจับคู่รายการเดินบัญชี ไม่ใช่กรอกมือ
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +286,7 @@ export function RevenueTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รายการรายได้ (Revenue)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติ **และ** คลังยืนยันส่งมอบแล้ว (`19` §6.1) — ไม่มีการสร้าง/แก้ด้วยมือ
+              เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติ **และ** คลังยืนยันส่งมอบแล้ว — ไม่มีการสร้าง/แก้ด้วยมือ
             </p>
           </div>
           <FilterGroup
@@ -321,7 +321,7 @@ export function RevenueTab() {
               error={revenues.error}
               isEmpty={revenues.data.length === 0}
               emptyTitle="ยังไม่มีรายการรายได้ตามตัวกรองนี้"
-              emptyDescription="รายได้จะปรากฏหลังเคสผ่านเกตของ `19` §6.1 (expense approved + คลังยืนยัน)"
+              emptyDescription="รายได้จะปรากฏหลังรายการเบิกของเคสอนุมัติและคลังยืนยันส่งมอบแล้ว"
               colSpan={8}
             />
             <TBody>

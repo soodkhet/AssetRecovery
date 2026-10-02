@@ -251,7 +251,7 @@ export function BankFileFormatsTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">รูปแบบไฟล์ธนาคาร (Bank File Format)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            โครงไฟล์ที่ใช้ส่งให้ธนาคารตัดโอนเงินเป็นชุด — <b>ต้องทดสอบผ่านก่อนจึงใช้สร้างไฟล์โอนจริงได้</b> (ไฟล์ 13 §6.8)
+            โครงไฟล์ที่ใช้ส่งให้ธนาคารตัดโอนเงินเป็นชุด — <b>ต้องทดสอบผ่านก่อนจึงใช้สร้างไฟล์โอนจริงได้</b>
           </p>
         </div>
         <div className="flex items-center gap-2">

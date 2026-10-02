@@ -154,7 +154,7 @@ export function TeamFormModal({
       onClose={onClose}
       size="lg"
       title={isEdit ? `แก้ไขทีม — ${team.name}` : 'สร้างทีมติดตามทรัพย์'}
-      description="ทุกทีมต้องผูกแผนค่าตอบแทนเสมอ (ไฟล์ 09 §7) — ผู้จัดการดูแลได้หลายทีม ส่วนหัวหน้าทีมสังกัดได้ทีมเดียว"
+      description="ทุกทีมต้องผูกแผนค่าตอบแทนเสมอ — ผู้จัดการดูแลได้หลายทีม ส่วนหัวหน้าทีมสังกัดได้ทีมเดียว"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -169,7 +169,7 @@ export function TeamFormModal({
       <div className="space-y-4">
         {plans.length === 0 && (
           <InlineAlert tone="warning" title="ยังไม่มีแผนค่าตอบแทนที่ใช้งานอยู่">
-            สร้างแผนค่าตอบแทนที่หน้า “แผนค่าตอบแทน” ก่อน — ทีมที่ไม่มีแผนสร้างไม่ได้ (ไฟล์ 09 §7)
+            สร้างแผนค่าตอบแทนที่หน้า “แผนค่าตอบแทน” ก่อน — ทีมที่ไม่มีแผนสร้างไม่ได้
           </InlineAlert>
         )}
 
@@ -251,7 +251,7 @@ export function TeamFormModal({
 
         {isEdit && team.activeCaseCount > 0 && form.status === 'inactive' && (
           <InlineAlert tone="warning" title={`ทีมนี้ยังมี ${team.activeCaseCount} เคสที่ยังไม่ปิด`}>
-            ย้ายเคสไปทีมอื่นให้หมดก่อน ไม่งั้นระบบจะปฏิเสธด้วย `TEAM_HAS_ACTIVE_CASES` (ไฟล์ 09 §10)
+            ย้ายเคสไปทีมอื่นให้หมดก่อน ไม่งั้นระบบจะปฏิเสธด้วย `TEAM_HAS_ACTIVE_CASES`
           </InlineAlert>
         )}
 

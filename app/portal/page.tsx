@@ -28,7 +28,7 @@ export default async function ClientPortalPage() {
       <Card padded={false}>
         <EmptyState
           title="พอร์ทัลอยู่ระหว่างพัฒนา"
-          description="เมนู 6 รายการตามไฟล์ 97 (Desktop + Mobile) เกิดใน Phase 7.3 — ข้อมูลทุกหน้าจำกัดเฉพาะบริษัทของผู้ใช้เท่านั้น"
+          description="เมนู 6 รายการ (Desktop + Mobile) จะเปิดใช้งานเร็ว ๆ นี้ — ข้อมูลทุกหน้าจำกัดเฉพาะบริษัทของผู้ใช้เท่านั้น"
         />
       </Card>
     </main>

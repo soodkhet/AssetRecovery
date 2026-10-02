@@ -176,7 +176,7 @@ export function ServiceFeeTemplatesManager() {
     <>
       <PageHeader
         title="เทมเพลตค่าบริการ (รับเข้า)"
-        description="ฐานคำนวณรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ — 3 model ตามไฟล์ 12 §6 · ผูกกับบริษัทไฟแนนซ์ทุกราย"
+        description="ฐานคำนวณรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ — 3 model · ผูกกับบริษัทไฟแนนซ์ทุกราย"
         action={
           <Can action="manage" resource={MANAGE_RESOURCE}>
             <Button
@@ -194,7 +194,7 @@ export function ServiceFeeTemplatesManager() {
       <Card>
         <div className="mb-4 flex items-center justify-between gap-3">
           <span className="text-xs text-slate-500">
-            แก้ไขเทมเพลตที่ใช้งานอยู่จะสร้าง <strong>เวอร์ชันใหม่</strong> — เคสที่อนุมัติแล้วใช้ snapshot เดิม (ไฟล์ 12 §9)
+            แก้ไขเทมเพลตที่ใช้งานอยู่จะสร้าง <strong>เวอร์ชันใหม่</strong> — เคสที่อนุมัติแล้วใช้ snapshot เดิม
           </span>
           <div className="w-40">
             <Select
@@ -280,7 +280,7 @@ export function ServiceFeeTemplatesManager() {
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     {template.model === 'SUCCESS_FEE' ? (
                       <Badge className="border border-slate-200 bg-slate-50 text-slate-400">
-                        เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล (§6.1) — ไม่มีตัวเลือก charge_on_fail
+                        เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือก charge_on_fail
                       </Badge>
                     ) : template.chargeOnFail ? (
                       <Badge className="border border-amber-200 bg-amber-100 text-amber-800">
@@ -354,7 +354,7 @@ export function ServiceFeeTemplatesManager() {
         title={`${activationTarget?.isActive === true ? 'ปิด' : 'เปิด'}ใช้งานเทมเพลต "${activationTarget?.name ?? ''}"`}
         description={
           activationTarget?.isActive === true
-            ? 'เทมเพลตที่มีบริษัทไฟแนนซ์ผูกอยู่ปิดใช้งานไม่ได้ — ย้ายบริษัทไปเทมเพลตอื่นก่อน (ไฟล์ 12 §10)'
+            ? 'เทมเพลตที่มีบริษัทไฟแนนซ์ผูกอยู่ปิดใช้งานไม่ได้ — ย้ายบริษัทไปเทมเพลตอื่นก่อน'
             : 'เปิดใช้งานกลับให้เลือกผูกกับบริษัทได้อีกครั้ง'
         }
         confirmLabel={activationTarget?.isActive === true ? 'ยืนยันปิดใช้งาน' : 'ยืนยันเปิดใช้งาน'}

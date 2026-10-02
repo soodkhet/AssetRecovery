@@ -34,7 +34,7 @@ const MESSAGES: Record<PayeeErrorCode, ErrorMessage> = {
   },
   PAYEE_ALREADY_EXISTS: {
     title: 'ผู้ใช้รายนี้มีข้อมูลผู้รับเงินแล้ว',
-    message: 'ผู้ใช้ 1 คนมีข้อมูลผู้รับเงินได้ 1 ชุดเท่านั้น (ไฟล์ 18 §6.1) — แก้ไขชุดเดิมแทนการสร้างใหม่',
+    message: 'ผู้ใช้ 1 คนมีข้อมูลผู้รับเงินได้ 1 ชุดเท่านั้น — แก้ไขชุดเดิมแทนการสร้างใหม่',
   },
   PAYEE_ID_DOCUMENT_REQUIRED: {
     title: 'ต้องแนบเอกสารยืนยันตัวตนก่อน',
@@ -42,7 +42,7 @@ const MESSAGES: Record<PayeeErrorCode, ErrorMessage> = {
   },
   REQUIRED_MISSING: {
     title: 'ข้อมูลไม่ครบ',
-    message: 'ยืนยันผู้รับเงินได้ต่อเมื่อข้อมูลภาษีและบัญชีธนาคารครบถ้วนแล้ว (ไฟล์ 18 §9)',
+    message: 'ยืนยันผู้รับเงินได้ต่อเมื่อข้อมูลภาษีและบัญชีธนาคารครบถ้วนแล้ว',
   },
   INVALID_TAX_ID_FORMAT: {
     title: 'เลขประจำตัวผู้เสียภาษีไม่ถูกต้อง',

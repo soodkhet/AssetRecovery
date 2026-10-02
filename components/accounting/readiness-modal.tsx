@@ -54,7 +54,7 @@ export function ReadinessModal({
       onClose={onClose}
       size="lg"
       title={`ตรวจความพร้อมก่อนส่งบัญชี — ${period.periodLabel}`}
-      description="เงื่อนไข 3 ข้อตามไฟล์ 30 §6.2 — ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม"
+      description="เงื่อนไข 3 ข้อ — ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม"
       footer={
         <Button variant="ghost" onClick={onClose}>
           ปิดหน้าต่าง

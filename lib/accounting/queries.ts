@@ -75,7 +75,7 @@ const EXCEPTION_TARGET = 'exceptions'
 /** เพดานย้อนหลังของการเปิดรอบอัตโนมัติ — กันสร้างรอบเปล่ายาวเป็นสิบปีตอนใช้งานครั้งแรก */
 const MAX_BACKFILL_MONTHS = 24
 
-const AUTO_PERIOD_REASON = 'ระบบเปิดรอบบัญชีของเดือนใหม่อัตโนมัติ (`30` §9)'
+const AUTO_PERIOD_REASON = 'ระบบเปิดรอบบัญชีของเดือนใหม่อัตโนมัติ'
 
 export interface AccountingMutationContext {
   actor: SessionUser

@@ -83,7 +83,7 @@ export function reassignmentTimeoutMessage(input: {
   return {
     eventCode: 'assignment.reassignment_timeout_resolved',
     title: 'คำขอเปลี่ยนผู้รับผิดชอบหมดเวลารอคำตอบ',
-    body: `เคส ${input.caseRef} — ระบบมอบหมายให้พนักงานคนใหม่อัตโนมัติตาม \`40\` §11`,
+    body: `เคส ${input.caseRef} — ระบบมอบหมายให้พนักงานคนใหม่อัตโนมัติ`,
     linkPath: '/cases/assign',
     // job รันซ้ำได้ ⇒ คีย์ต่อ "คำขอ" หนึ่งใบ (ผลลัพธ์เกิดครั้งเดียวเสมอ)
     dedupeKey: `pending-reassignment-${input.pendingReassignmentId}`,
@@ -100,7 +100,7 @@ export function caseClosedSuccessMessage(input: {
   return {
     eventCode: 'case.closed_success',
     title: 'ปิดงานสำเร็จ — รอรับทรัพย์เข้าคลัง',
-    body: `เคส ${input.caseRef} ปิดงานสำเร็จ${by} · รายได้เกิดเมื่อคลังยืนยันรับทรัพย์ (\`19\` §6.1)`,
+    body: `เคส ${input.caseRef} ปิดงานสำเร็จ${by} · รายได้เกิดเมื่อคลังยืนยันรับทรัพย์`,
     linkPath: '/warehouse',
   }
 }

@@ -287,7 +287,7 @@ export function parseStatementCsv(input: StatementParseInput): StatementParseRes
   const effective = columns.filter((column): column is StatementColumn => column !== null)
   if (!isUsableStatementMapping(effective)) {
     throw new StatementParseError(
-      'อ่านคอลัมน์ของไฟล์ statement ไม่ได้ — ต้องมีอย่างน้อยคอลัมน์วันที่และจำนวนเงิน (ตั้งรูปแบบไฟล์ที่หน้าตั้งค่า `13` §6.8)',
+      'อ่านคอลัมน์ของไฟล์ statement ไม่ได้ — ต้องมีอย่างน้อยคอลัมน์วันที่และจำนวนเงิน (ตั้งรูปแบบไฟล์ที่หน้าตั้งค่าการเงิน)',
     )
   }
 

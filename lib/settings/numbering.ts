@@ -77,5 +77,5 @@ export function numberingChangeWarning(
   const changed =
     before.mode !== after.mode || before.prefix !== after.prefix || before.digitLength !== after.digitLength
   if (!changed) return null
-  return `องค์กรนี้ออกใบกำกับภาษีไปแล้ว ${issuedInvoiceCount} ใบ — การเปลี่ยนรูปแบบเลขที่กระทบความต่อเนื่องของเลขเอกสารตามกฎหมาย (\`13\` §6.12)`
+  return `องค์กรนี้ออกใบกำกับภาษีไปแล้ว ${issuedInvoiceCount} ใบ — การเปลี่ยนรูปแบบเลขที่กระทบความต่อเนื่องของเลขเอกสารตามกฎหมาย`
 }

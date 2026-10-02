@@ -183,7 +183,7 @@ export function CaseDetailModal({
         description={
           description ??
           (mode === 'review'
-            ? 'ตรวจข้อมูล เอกสาร และทีมที่ระบบเสนอ แล้วตัดสินใจได้ในหน้าเดียว (`38` §7.5)'
+            ? 'ตรวจข้อมูล เอกสาร และทีมที่ระบบเสนอ แล้วตัดสินใจได้ในหน้าเดียว'
             : mode === 'recycle_review'
               ? 'พิจารณาคำขอรีไซเกิล — อนุมัติแล้วเคสจะขึ้นรอบใหม่และกลับเข้าคิวมอบหมายทันที'
               : mode === 'recycle_request'
@@ -280,7 +280,7 @@ export function CaseDetailModal({
       <ReasonConfirmModal
         open={teamPick !== null}
         title={`เปลี่ยนทีมเป็น “${teamPick?.name ?? ''}”`}
-        description="การเปลี่ยนทีมจากที่ระบบเสนอถูกบันทึกไว้ในประวัติเคส — ระบุเหตุผลก่อนยืนยัน (`38` §7.4)"
+        description="การเปลี่ยนทีมจากที่ระบบเสนอถูกบันทึกไว้ในประวัติเคส — ระบุเหตุผลก่อนยืนยัน"
         confirmLabel="ยืนยันเปลี่ยนทีม"
         confirmVariant="primary"
         reason={teamReason}
@@ -339,7 +339,7 @@ function ProjectedRevenueBox({ detail }: { detail: CaseDetailDto }) {
         {detail.projectedRevenueSource === null
           ? 'ต้องมีเทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้ก่อน'
           : `คำนวณจากโมเดล ${detail.projectedRevenueSource}`}{' '}
-        · เป็นประมาณการก่อนรับเคส ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดตามไฟล์ 19)
+        · เป็นประมาณการก่อนรับเคส ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)
       </p>
     </div>
   )

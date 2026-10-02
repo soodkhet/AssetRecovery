@@ -77,8 +77,8 @@ export function ExpenseDetailModal({ record, onClose }: { record: ExpenseRecordD
         </div>
 
         <InlineAlert tone="info" title="ห้ามแก้ไขยอดเงินในหน้านี้">
-          ยอดทั้งหมดเป็นข้อมูลจากรอบจ่ายเงินจริง (ไฟล์ 17) — ถ้าต้องแก้ต้องสร้าง Adjustment ผ่านเมนูการเงิน
-          (ไฟล์ 20)
+          ยอดทั้งหมดเป็นข้อมูลจากรอบจ่ายเงินจริง — ถ้าต้องแก้ต้องสร้าง Adjustment ผ่านเมนูการเงิน
+
         </InlineAlert>
       </div>
     </Modal>

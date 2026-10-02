@@ -148,7 +148,7 @@ export const lotCreateSchema = z.object({
     ctx.addIssue({
       code: 'custom',
       path: ['deliveryAddr'],
-      message: 'ล็อตแบบ "เราจัดส่งไปให้" ต้องระบุที่อยู่จัดส่ง (`44` §7.2)',
+      message: 'ล็อตแบบ "เราจัดส่งไปให้" ต้องระบุที่อยู่จัดส่ง',
     })
   }
 })
