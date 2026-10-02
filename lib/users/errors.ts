@@ -12,12 +12,13 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
 export const USER_ERROR_CODES = [
   'USER_NOT_FOUND',
   'DUPLICATE_USER_EMAIL',
+  'DUPLICATE_USERNAME',
   'DUPLICATE_USER_PHONE',
   'USER_HAS_HISTORY',
   'INVALID_USER_STATUS_TRANSITION',
   'INVALID_USER_SCOPE',
   'ROLE_NOT_FOUND',
-  'INVITE_SEND_FAILED',
+  'AUTH_ACCOUNT_SYNC_FAILED',
 ] as const
 
 export type UserErrorCode = (typeof USER_ERROR_CODES)[number]
@@ -26,13 +27,14 @@ export type UserErrorCode = (typeof USER_ERROR_CODES)[number]
 const HTTP_STATUS: Record<UserErrorCode, number> = {
   USER_NOT_FOUND: 404,
   DUPLICATE_USER_EMAIL: 400,
+  DUPLICATE_USERNAME: 400,
   DUPLICATE_USER_PHONE: 400,
   USER_HAS_HISTORY: 400,
   INVALID_USER_STATUS_TRANSITION: 400,
   INVALID_USER_SCOPE: 400,
   ROLE_NOT_FOUND: 404,
   // 502 = ปลายทางภายนอก (Supabase Auth) ไม่ตอบ/ปฏิเสธ ไม่ใช่ข้อมูลของผู้เรียกผิด
-  INVITE_SEND_FAILED: 502,
+  AUTH_ACCOUNT_SYNC_FAILED: 502,
 }
 
 const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
@@ -42,7 +44,11 @@ const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
   },
   DUPLICATE_USER_EMAIL: {
     title: 'อีเมลซ้ำ',
-    message: 'มีผู้ใช้งานที่ใช้อีเมลนี้อยู่แล้วในองค์กร — อีเมลต้องไม่ซ้ำเพราะใช้เป็นชื่อผู้ใช้ตอนเข้าสู่ระบบ',
+    message: 'มีผู้ใช้งานที่ใช้อีเมลนี้อยู่แล้วในองค์กร — อีเมลต้องไม่ซ้ำเพราะใช้เข้าสู่ระบบได้',
+  },
+  DUPLICATE_USERNAME: {
+    title: 'ชื่อผู้ใช้ซ้ำ',
+    message: 'มีผู้ใช้งานที่ใช้ชื่อผู้ใช้ (username) นี้อยู่แล้วในองค์กร — กรุณาตั้งชื่ออื่น',
   },
   DUPLICATE_USER_PHONE: {
     title: 'เบอร์โทรซ้ำ',
@@ -66,10 +72,10 @@ const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
     title: 'ไม่พบบทบาท',
     message: 'ไม่พบบทบาท (role) ที่เลือก หรือบทบาทนั้นถูกลบไปแล้ว',
   },
-  INVITE_SEND_FAILED: {
-    title: 'ส่งคำเชิญไม่สำเร็จ',
+  AUTH_ACCOUNT_SYNC_FAILED: {
+    title: 'บันทึกบัญชีเข้าสู่ระบบไม่สำเร็จ',
     message:
-      'ส่งอีเมลคำเชิญตั้งรหัสผ่านไม่สำเร็จ — ตรวจการตั้งค่าอีเมล (SMTP) และ Redirect URL ของ Supabase project แล้วลองใหม่ · บัญชีผู้ใช้ยังอยู่ ไม่ต้องสร้างซ้ำ',
+      'ระบบยืนยันตัวตน (Supabase Auth) ปฏิเสธหรือไม่ตอบ — ตรวจรหัสผ่านให้ตรงนโยบายของ Supabase project แล้วลองใหม่',
   },
 }
 

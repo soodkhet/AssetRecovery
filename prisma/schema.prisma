@@ -665,7 +665,10 @@ model User {
 
   /// FK → Supabase Auth users
   supabaseUid  String? @unique @map("supabase_uid") @db.Uuid
-  email        String  @db.VarChar(255)
+  /// ชื่อผู้ใช้สำหรับ login (มติ PO 03/10/2569) — บังคับที่ชั้นแอป · unique (org, username) เฉพาะแถวที่ยังไม่ลบ (partial index ใน raw SQL)
+  username     String? @db.VarChar(50)
+  /// ไม่บังคับ (มติ PO 03/10/2569) — CHECK ต้องมี username หรือ email อย่างน้อย 1
+  email        String? @db.VarChar(255)
   fullName     String  @map("full_name")
   phone        String? @db.VarChar(20)
   employeeCode String? @map("employee_code") @db.VarChar(50)
@@ -677,6 +680,8 @@ model User {
 
   status      UserStatus @default(active)
   lastLoginAt DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  /// ผู้ดูแลตั้ง/รีเซ็ตรหัสผ่านให้ → ต้องเปลี่ยนรหัสเองก่อนใช้งาน (มติ PO 03/10/2569)
+  mustChangePassword Boolean @default(false) @map("must_change_password")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String?   @map("created_by") @db.Uuid

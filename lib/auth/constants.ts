@@ -30,6 +30,10 @@ export const COMPANY_ADMIN_ROLE_NAME = 'แอดมิน'
 
 /** เส้นทางหน้า Login และปลายทางหลัง login (mockup `login.html` · `06` §7.2 · ไฟล์ 97) */
 export const LOGIN_PATH = '/login'
+/** หน้าเปลี่ยนรหัสผ่านของตัวเอง — บังคับเข้าเมื่อ `users.must_change_password` (มติ PO 03/10/2569) */
+export const CHANGE_PASSWORD_PATH = '/auth/change-password'
+/** ปลายทางลิงก์จากอีเมลของ Supabase (คำเชิญเดิมของ D1 ที่ส่งค้างไว้ / ลืมรหัสผ่าน D2) — เปิดได้โดยไม่มี session */
+export const SET_PASSWORD_PATH = '/auth/set-password'
 export const DASHBOARD_PATH = '/dashboard'
 export const FIELD_TRACKER_PATH = '/field'
 export const CLIENT_PORTAL_PATH = '/portal'

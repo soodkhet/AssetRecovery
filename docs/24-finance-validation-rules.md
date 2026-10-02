@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไข §6.4**: `ADVANCE_PENDING_SETTLEMENT` เดิมอ้างถึง state `waiting_settlement` ที่ถูกตัดออกแล้ว — แก้ condition ให้ตรงกับ state ใหม่ (`approved`/`overdue`) + เพิ่ม `REJECTION_REASON_REQUIRED` ที่ตกหล่นจากไฟล์ 15 v2 — sync กับ Batch 3 |
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
+| v4.16 | 03/10/2569 | **แก้ §6.1/§6.9 ตามมติ PO 03/10/2569 (login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ — DEC-010 · แทน flow เชิญของ D1)**: ลบ `INVITE_SEND_FAILED` (ไม่มีการส่งอีเมลเชิญแล้ว) · เพิ่ม §6.1 `DUPLICATE_USERNAME` (username ซ้ำในองค์กร) + `AUTH_ACCOUNT_SYNC_FAILED` (502 — Supabase Auth ปฏิเสธ/ไม่ตอบตอนสร้างบัญชีหรือตั้งรหัสผ่าน) · เพิ่ม §6.9 `PASSWORD_CHANGE_REQUIRED` (403 — ผู้ดูแลตั้งรหัสให้แล้วผู้ใช้ยังไม่เปลี่ยนเอง เรียก endpoint ที่ต้องมีสิทธิ์ไม่ได้) · ปรับคำอธิบาย `DUPLICATE_USER_EMAIL`/`INVALID_CREDENTIALS` — ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) |
 | v4.15 | 16/08/2569 | **เติม §6.8** (Phase 8.3 — Final Test ด่าน 6): `EXPORT_VERSION_CONFLICT` (409) — `37` §6.2 ให้ Accounting Pack เดินเวอร์ชันโดยห้ามทับของเดิม และมี unique `uniq_export_period_version` คุมอยู่จริง แต่เลขเวอร์ชันถูกคำนวณ**นอก** transaction (ต้องใช้ประกอบหน้าปก/ชื่อไฟล์ก่อนอัปโหลด) ⇒ สองคำขอพร้อมกันในงวดเดียวชน constraint แล้วหลุดเป็น Prisma error ดิบ 500 ซึ่งไม่มีใน §7 · ข้อมูลไม่เสีย (ไฟล์เดิมไม่ถูกทับ ไม่มีเวอร์ชันซ้ำ) แต่ผู้ใช้ไม่รู้ว่าให้กดใหม่ · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.14 | 15/08/2569 | **เพิ่ม §6.12** (Phase 6.1 — Report Framework `96`): `REPORT_DATE_INVALID` + `REPORT_NOT_FOUND` — `96` §12 ระบุไว้ 4 กรณี แต่ประกาศเป็น error code จริงตัวเดียว (บวก 404 ของตัวรายงานเองที่ §12 ไม่ได้ครอบคลุม เหมือน v3.5–v4.13) · `REPORT_PERMISSION_DENIED` ซ้ำความหมายกับ `PERMISSION_DENIED` (§6.9) ที่ `requirePermission()` โยนอยู่แล้ว จึงไม่ประกาศซ้ำ (แนวเดียวกับที่ไฟล์ 32 ใช้ `COST_CENTER_NOT_FOUND` ของไฟล์ 13) · `REPORT_NO_DATA` และ `REPORT_CACHE_STALE` เป็นผลลัพธ์ที่สำเร็จ ไม่ใช่การปฏิเสธคำขอ (แถวว่าง = empty state · แคชเก่า = แสดงเวลารีเฟรชล่าสุด + ปุ่มรีเฟรช) ส่งผ่านฟิลด์ `rows`/`cache` ใน payload — ประกาศเป็น code จะทำให้รายชื่อ "เตือนไม่บล็อก" ที่ Rule 04 ล็อกไว้ 6 ตัวเพิ่มขึ้นโดยไม่มีมติ PO (เหตุผลเดียวกับ `JOB_DUPLICATE` ใน v4.13) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.13 | 15/08/2569 | **เพิ่ม §6.11** (Phase 5.3 — Background Job `91`): `JOB_NOT_FOUND`, `JOB_INVALID_STATUS` — `91` §11 ระบุ code ทั่วไปไว้ 4 ตัว (`REQUIRED_MISSING`/`DUPLICATE_RECORD`/`PERMISSION_DENIED`/`INVALID_STATUS`) + `JOB_DUPLICATE` ซึ่งไม่ครอบคลุมกรณี 404 ของตัว job เอง และไม่ได้ตั้งชื่อตาม pattern §7 · `JOB_DUPLICATE` **ไม่ถูกประกาศเป็น error code** เพราะ §11 กำหนดพฤติกรรมว่า "คืน job เดิมที่มีอยู่แล้ว ไม่สร้างใหม่" = ผลลัพธ์สำเร็จ (API ตอบ 200 + `duplicate: true`) และรายชื่อ code แบบ "เตือนไม่ block" ถูกล็อกไว้ 6 ตัวตาม Rule 04 (เพิ่มต้องมีมติ PO) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
@@ -84,11 +85,12 @@
 | INVALID_TEAM_MEMBER | user ที่ตั้งเป็นผู้จัดการ/หัวหน้าทีมไม่มีอยู่จริง ไม่ active หรืออยู่นอก role group `inhouse`/`outsource` (`09` §7.1) | 09 |
 | INVALID_PROVINCE | จังหวัดที่เลือกไม่อยู่ใน PROVINCE_DATA (`09` §8) | 09 |
 | USER_NOT_FOUND | อ้างผู้ใช้ที่ไม่มีในองค์กรของผู้เรียก หรือถูก soft delete ไปแล้ว (404 — ไม่ leak ข้ามองค์กร) | 08 |
-| DUPLICATE_USER_EMAIL | อีเมลซ้ำกับผู้ใช้ที่ยังไม่ถูกลบในองค์กรเดียวกัน — อีเมลใช้เป็น username ของ Supabase Auth (`08` §10) | 08 |
+| DUPLICATE_USER_EMAIL | อีเมลซ้ำกับผู้ใช้ที่ยังไม่ถูกลบในองค์กรเดียวกัน (อีเมลไม่บังคับ แต่ถ้ากรอกใช้ login ได้ — `08` §10) · หรืออีเมลนี้มีบัญชี Supabase Auth ที่ผู้ใช้อื่นถืออยู่แล้ว | 08 |
+| DUPLICATE_USERNAME | username ซ้ำกับผู้ใช้ที่ยังไม่ถูกลบในองค์กรเดียวกัน (เทียบตัวพิมพ์เล็ก — `08` §10 · DEC-010) | 08 |
 | DUPLICATE_USER_PHONE | เบอร์โทรซ้ำกับผู้ใช้ที่ยังไม่ถูกลบในองค์กรเดียวกัน (`08` §10 — เทียบหลังตัดตัวคั่นออก) | 08 |
 | USER_HAS_HISTORY | พยายามลบผู้ใช้ที่มีประวัติการทำงาน (เคส/งานภาคสนาม/หลักฐาน/สายจ่ายเงิน/คลัง หรือยังถือตำแหน่งในทีม) — ต้องใช้ระงับการใช้งานแทนเสมอ (`08` §10/§11) | 08 |
 | INVALID_USER_STATUS_TRANSITION | เปลี่ยนสถานะผู้ใช้นอก lifecycle `active ⇄ suspended → deleted` เช่น เปิดใช้งานบัญชีที่ถูกลบไปแล้ว (`08` §7.2) | 08 |
-| INVITE_SEND_FAILED | ส่งอีเมลคำเชิญตั้งรหัสผ่าน (`inviteUserByEmail`) ไม่สำเร็จตอนสั่งส่งซ้ำ — บัญชีผู้ใช้ยังอยู่ ไม่ต้องสร้างใหม่ (มติ PO ปิด D1) | 08 |
+| AUTH_ACCOUNT_SYNC_FAILED | Supabase Auth ปฏิเสธ/ไม่ตอบตอนสร้างบัญชีหรือตั้งรหัสผ่าน (502 ปลายทางภายนอก) — ตอนสร้างผู้ใช้จะไม่บันทึกผู้ใช้ (DEC-010) | 08 |
 | INVALID_USER_SCOPE | สังกัดไม่ตรงกับ role group: กลุ่ม inhouse/outsource ต้องมี `team_id` · กลุ่ม finance_company ต้องมี `company_id` · กลุ่ม system ต้องไม่มีทั้งคู่ (`08` §7.1) | 08 |
 | BANK_ACCOUNT_NAME_MISMATCH | ชื่อบัญชีธนาคารไม่ตรงกับชื่อ payee (เตือน ไม่ reject) | 18 |
 | CYCLE_NOT_FOUND | อ้างรอบบิล/รอบจ่ายที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 13 |
@@ -217,11 +219,12 @@
 |---|---|---|
 | UNAUTHENTICATED | เรียก endpoint/หน้าที่ต้องล็อกอินโดยไม่มี session (401) | 05 |
 | SESSION_EXPIRED | session เกิน 24 ชั่วโมงนับจาก login ล่าสุด — บังคับ re-login (`05` §10/§17) | 05 |
-| INVALID_CREDENTIALS | อีเมลหรือรหัสผ่านไม่ถูกต้อง (ข้อความห้าม leak ว่ามีอีเมลนี้ในระบบหรือไม่) | 05 |
+| INVALID_CREDENTIALS | อีเมล/username หรือรหัสผ่านไม่ถูกต้อง — รวมกรณีไม่พบผู้ใช้หรือยังไม่มีบัญชี Auth (ข้อความห้าม leak ว่ามีตัวตนนี้ในระบบหรือไม่) | 05 |
 | ACCOUNT_INACTIVE | user ที่ `status ≠ active` พยายาม login หรือใช้งานต่อ (`05` §10, §16) | 05, 08 |
 | USER_NOT_PROVISIONED | auth user ของ Supabase ยังไม่ถูกผูกกับ `users.supabase_uid` ในระบบ | 05 |
 | PERMISSION_DENIED | ไม่มีสิทธิ์ทำ action (403) — UI hide/disable + API reject เสมอ | 05, 07, 25 |
 | LAST_SUPERADMIN_REMOVAL | ถอด role หรือปิดใช้งาน Superadmin คนสุดท้ายที่ยัง active | 07 |
+| PASSWORD_CHANGE_REQUIRED | ผู้ดูแลตั้ง/รีเซ็ตรหัสผ่านให้แล้ว (`users.must_change_password`) ผู้ใช้ต้องเปลี่ยนรหัสเองที่ `/auth/change-password` ก่อนเรียก endpoint ที่ต้องมีสิทธิ์ (403 — DEC-010) | 05, 08 |
 | SEED_ROLE_DELETE | พยายามลบ seed role (15 ตัวตาม `07` §5) — ปฏิเสธทุกกรณี | 07 |
 | SEED_ROLE_RENAME | พยายามเปลี่ยนชื่อ seed role — ชื่อถูกอ้างอิงข้ามไฟล์ทั้งระบบ | 07 |
 | ROLE_NOT_EDITABLE | แก้ Permission Matrix ของ role ที่ `is_editable = false` หรือของ Superadmin (implicit manage ไม่เก็บ record) | 07, 13 §6.10 |

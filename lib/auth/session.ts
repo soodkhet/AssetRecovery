@@ -21,12 +21,14 @@ export async function loadSessionUser(supabaseUid: string): Promise<SessionUser 
       id: true,
       organizationId: true,
       supabaseUid: true,
+      username: true,
       email: true,
       fullName: true,
       status: true,
       teamId: true,
       companyId: true,
       lastLoginAt: true,
+      mustChangePassword: true,
       deletedAt: true,
       role: {
         select: {
@@ -56,6 +58,7 @@ export async function loadSessionUser(supabaseUid: string): Promise<SessionUser 
     id: user.id,
     organizationId: user.organizationId,
     supabaseUid: user.supabaseUid,
+    username: user.username,
     email: user.email,
     fullName: user.fullName,
     status: user.status,
@@ -76,6 +79,7 @@ export async function loadSessionUser(supabaseUid: string): Promise<SessionUser 
       supervisedTeamIds: user.supervisedTeams.map((t) => t.id),
     }),
     loginAt: user.lastLoginAt?.toISOString() ?? null,
+    mustChangePassword: user.mustChangePassword,
   }
 }
 
@@ -106,9 +110,20 @@ export async function getSessionUser(now: Date = new Date()): Promise<SessionUse
   return sessionUser
 }
 
-/** session ปัจจุบันแบบบังคับ — ไม่มี session = โยน `UNAUTHENTICATED` (401) */
-export async function requireSession(now: Date = new Date()): Promise<SessionUser> {
+/**
+ * session ปัจจุบันแบบบังคับ — ไม่มี session = โยน `UNAUTHENTICATED` (401)
+ * ผู้ดูแลตั้ง/รีเซ็ตรหัสให้แล้วยังไม่เปลี่ยนเอง = โยน `PASSWORD_CHANGE_REQUIRED` (403) — บังคับที่นี่
+ * เพื่อครอบ endpoint ที่ไม่ผ่าน `checkPermission()` ด้วย (รายงาน/แจ้งเตือน/เมนู — DEC-010)
+ * `allowPasswordChangePending` ใช้กับ `POST /api/auth/change-password` เท่านั้น
+ */
+export async function requireSession(
+  now: Date = new Date(),
+  options: { allowPasswordChangePending?: boolean } = {},
+): Promise<SessionUser> {
   const user = await getSessionUser(now)
   if (!user) throw new AuthError('UNAUTHENTICATED')
+  if (user.mustChangePassword === true && options.allowPasswordChangePending !== true) {
+    throw new AuthError('PASSWORD_CHANGE_REQUIRED', `user=${user.id}`)
+  }
   return user
 }

@@ -35,9 +35,8 @@ export const PATCH = withApiPermission<RouteContext>(
 
     const current = await getUser(user, id)
     const { reason, ...values } = parsed.data
-    const origin = new URL(request.url).origin
 
-    const result = await updateUser({ actor: user, meta: getRequestMeta(request), reason, origin }, current, values)
+    const result = await updateUser({ actor: user, meta: getRequestMeta(request), reason }, current, values)
     return Response.json(
       result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
     )

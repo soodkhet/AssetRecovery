@@ -1,5 +1,6 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
+import { authEmailFor } from '@/lib/auth/login-identifier'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isWithinScope } from '@/lib/auth/scope'
 import { invalidateSessionCache } from '@/lib/auth/session-cache'
@@ -13,9 +14,19 @@ import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { TeamError } from '@/lib/teams/errors'
 import { ACTIVE_CASE_STATUSES } from '@/lib/teams/team'
+import {
+  canChangeOwnRole,
+  canManageAccountIn,
+  canSetPasswordFor,
+  mustChangeAfterAdminSet,
+} from '@/lib/users/auth-account'
 import { UserError } from '@/lib/users/errors'
-import { buildInviteRedirectUrl, inviteWarning } from '@/lib/users/invite'
-import { inviteUser, resendInvite, syncAuthEmail } from '@/lib/users/provisioning'
+import {
+  createAuthAccount,
+  deleteAuthAccount,
+  setAuthPassword,
+  syncAuthEmail,
+} from '@/lib/users/provisioning'
 import type { UserListQuery } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import {
@@ -36,9 +47,10 @@ import {
  * ⚠️ ทุกครั้งที่ role/สถานะ/ทีม/บริษัทเปลี่ยน ต้อง `invalidateSessionCache()` ของ user นั้น
  * ไม่งั้น session เดิมยังถือสิทธิ์เก่าได้อีกไม่เกิน 5 นาที (`lib/auth/session-cache.ts`)
  *
- * **Provisioning (มติ PO ปิด D1)**: สร้างผู้ใช้ = เชิญทางอีเมลด้วย `inviteUserByEmail` แล้วเก็บ
- * `supabase_uid` ที่ได้ลงในธุรกรรมเดียวกับการสร้าง · ถ้าเชิญไม่สำเร็จ **ไม่ล้มทั้งงาน** —
- * บันทึกผู้ใช้ไว้โดย `supabase_uid = null` แล้วส่งคำเชิญซ้ำผ่าน `POST /api/users/:id/invite` ได้
+ * **Provisioning (มติ PO 03/10/2569 — แทน flow เชิญของ D1)**: สร้างผู้ใช้ = สร้างบัญชี Supabase Auth
+ * พร้อมรหัสผ่านที่ผู้ดูแลตั้งให้ **ก่อน** แล้วเขียน DB ในธุรกรรมเดียวกับ audit · DB ล้ม = ลบบัญชี Auth
+ * ที่เพิ่งสร้างทิ้ง (ชดเชย) · ผู้ใช้ต้องเปลี่ยนรหัสเองตอน login ครั้งแรก (`must_change_password`)
+ * รีเซ็ตรหัสภายหลังผ่าน `setUserPassword()` (`POST /api/users/:id/password`)
  */
 
 const activeAssignmentWhere = {
@@ -47,6 +59,7 @@ const activeAssignmentWhere = {
 
 const userSelect = {
   id: true,
+  username: true,
   email: true,
   fullName: true,
   phone: true,
@@ -56,6 +69,7 @@ const userSelect = {
   companyId: true,
   status: true,
   supabaseUid: true,
+  mustChangePassword: true,
   lastLoginAt: true,
   updatedAt: true,
   role: { select: { name: true, roleGroup: true } },
@@ -69,6 +83,7 @@ type UserRow = Prisma.UserGetPayload<{ select: typeof userSelect }>
 function toDto(row: UserRow): UserDto {
   return {
     id: row.id,
+    username: row.username,
     email: row.email,
     fullName: row.fullName,
     phone: row.phone,
@@ -82,6 +97,7 @@ function toDto(row: UserRow): UserDto {
     companyName: row.company?.name ?? null,
     status: row.status,
     isProvisioned: row.supabaseUid !== null,
+    mustChangePassword: row.mustChangePassword,
     lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
     activeCaseCount: row._count.assignmentsAsAgent,
     updatedAt: row.updatedAt.toISOString(),
@@ -91,6 +107,8 @@ function toDto(row: UserRow): UserDto {
 function toValues(dto: UserDto): UserValues {
   return {
     roleId: dto.roleId,
+    // แถวเก่าที่ไม่มี username ไม่มีแล้วหลัง backfill — `?? ''` กันชนิดเท่านั้น (ฟอร์มบังคับกรอก)
+    username: dto.username ?? '',
     email: dto.email,
     fullName: dto.fullName,
     phone: dto.phone,
@@ -141,6 +159,7 @@ export async function listUsers(user: SessionUser, query: UserListQuery): Promis
         : {
             OR: [
               { fullName: { contains: query.search, mode: 'insensitive' } },
+              { username: { contains: query.search, mode: 'insensitive' } },
               { email: { contains: query.search, mode: 'insensitive' } },
               { phone: { contains: query.search.replace(/[\s-]/g, '') } },
             ],
@@ -166,11 +185,9 @@ interface MutationContext {
   actor: SessionUser
   meta: RequestMeta
   reason: string
-  /** origin ของ request — ใช้ประกอบลิงก์ตั้งรหัสผ่านในอีเมลคำเชิญ (`lib/users/invite.ts`) */
-  origin?: string
 }
 
-/** ผลของ mutation ที่อาจมีเรื่องต้องเตือนแม้สำเร็จ (เช่น ส่งอีเมลคำเชิญไม่ผ่าน) */
+/** ผลของ mutation ที่อาจมีเรื่องต้องเตือนแม้สำเร็จ (เช่น ย้ายอีเมลฝั่ง Supabase Auth ไม่ผ่าน) */
 export interface UserMutationResult {
   user: UserDto
   warning: { code: string; title: string; message: string } | null
@@ -186,7 +203,12 @@ async function loadRole(organizationId: string, roleId: string): Promise<{ name:
   return role
 }
 
-async function assertEmailAvailable(organizationId: string, email: string, exceptUserId?: string): Promise<void> {
+async function assertEmailAvailable(
+  organizationId: string,
+  email: string | null,
+  exceptUserId?: string,
+): Promise<void> {
+  if (email === null) return
   const duplicate = await prisma.user.findFirst({
     where: {
       organizationId,
@@ -197,6 +219,26 @@ async function assertEmailAvailable(organizationId: string, email: string, excep
     select: { id: true },
   })
   if (duplicate) throw new UserError('DUPLICATE_USER_EMAIL', { detail: `email=${email}` })
+}
+
+/** username ห้ามซ้ำในองค์กร (เทียบตัวพิมพ์เล็ก — เก็บตัวพิมพ์เล็กเสมอ) · DB มี partial unique index กันซ้ำอีกชั้น */
+async function assertUsernameAvailable(organizationId: string, username: string, exceptUserId?: string): Promise<void> {
+  const duplicate = await prisma.user.findFirst({
+    where: {
+      organizationId,
+      username,
+      deletedAt: null,
+      id: exceptUserId === undefined ? undefined : { not: exceptUserId },
+    },
+    select: { id: true },
+  })
+  if (duplicate) throw new UserError('DUPLICATE_USERNAME', { detail: `username=${username}` })
+}
+
+/** uid ของ Supabase Auth ถูกผู้ใช้ในระบบถืออยู่แล้วหรือยัง (รวมคนที่ลบแล้ว — `supabase_uid` unique ทั้งตาราง) */
+async function isAuthUidTaken(uid: string): Promise<boolean> {
+  const holder = await prisma.user.findUnique({ where: { supabaseUid: uid }, select: { id: true } })
+  return holder !== null
 }
 
 async function assertPhoneAvailable(
@@ -239,6 +281,13 @@ async function assertReferencesExist(organizationId: string, values: UserValues)
  * ยาม lockout (`05` §10 · `07` §11) — กันทั้ง 2 ทางที่ทำให้ Superadmin ที่ active หมดไป:
  * ย้าย role ออกจาก Superadmin และเปลี่ยนสถานะเป็นไม่ active
  */
+/** บัญชีกลุ่ม `system` จัดการได้เฉพาะ Superadmin (DEC-010 — `lib/users/auth-account.ts`) · 403 ไม่ leak */
+function assertCanManageAccountIn(actor: SessionUser, roleGroup: RoleGroup, detail: string): void {
+  if (!canManageAccountIn(actor, roleGroup)) {
+    throw new AuthError('PERMISSION_DENIED', `${detail} roleGroup=${roleGroup} by user=${actor.id}`)
+  }
+}
+
 async function assertSuperadminSafety(
   organizationId: string,
   current: { roleName: string; status: UserStatus },
@@ -256,112 +305,155 @@ async function assertSuperadminSafety(
   })
 }
 
-export async function createUser(context: MutationContext, input: UserValues): Promise<UserMutationResult> {
+export async function createUser(
+  context: MutationContext,
+  input: UserValues,
+  password: string,
+): Promise<UserMutationResult> {
   const organizationId = context.actor.organizationId
   const values = normalizeUserValues(input)
   const role = await loadRole(organizationId, values.roleId)
 
+  assertCanManageAccountIn(context.actor, role.roleGroup, 'create user')
   assertScopeConsistent(role.roleGroup, values)
+  await assertUsernameAvailable(organizationId, values.username)
   await assertEmailAvailable(organizationId, values.email)
   await assertPhoneAvailable(organizationId, values.phone)
   await assertReferencesExist(organizationId, values)
 
-  // เชิญก่อนเขียน DB เพื่อให้ `supabase_uid` ลงไปในธุรกรรมเดียวกัน (audit เห็นค่าจริงตั้งแต่แถวแรก)
-  // เชิญไม่สำเร็จ = ยังสร้างผู้ใช้ต่อโดย uid เป็น null แล้วเตือนให้ส่งคำเชิญซ้ำ
-  const outcome =
-    context.origin === undefined
-      ? null
-      : await inviteUser(values.email, buildInviteRedirectUrl(context.origin))
+  // id สร้างฝั่งแอป เพื่อใช้ประกอบอีเมลภายในของ Supabase Auth ได้ก่อนเขียน DB (ผู้ใช้ที่ไม่มีอีเมล)
+  const userId = crypto.randomUUID()
+  // ผู้ดูแลตั้งรหัสให้ = บังคับเปลี่ยนเองตอน login ครั้งแรก (มติ PO 03/10/2569)
+  const mustChangePassword = mustChangeAfterAdminSet(context.actor.id, userId)
+  const authUid = await createAuthAccount(authEmailFor({ id: userId, email: values.email }), password, isAuthUidTaken)
 
-  const created = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        organizationId,
-        roleId: values.roleId,
-        supabaseUid: outcome?.uid ?? null,
-        email: values.email,
-        fullName: values.fullName,
-        phone: values.phone,
-        employeeCode: values.employeeCode,
-        teamId: values.teamId,
-        companyId: values.companyId,
-        status: 'active',
-        createdBy: context.actor.id,
-      },
-      select: userSelect,
-    })
-
-    await emitAudit(
-      {
-        organizationId,
-        actorId: context.actor.id,
-        actorRole: context.actor.roleName,
-        action: 'create',
-        targetType: 'users',
-        targetId: user.id,
-        after: {
-          ...toUserAuditPayload(values, { status: 'active', roleName: role.name }),
-          supabase_uid: outcome?.uid ?? null,
-          invite_email_sent: outcome?.emailSent ?? false,
+  let created: UserRow
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          id: userId,
+          organizationId,
+          roleId: values.roleId,
+          supabaseUid: authUid,
+          username: values.username,
+          email: values.email,
+          fullName: values.fullName,
+          phone: values.phone,
+          employeeCode: values.employeeCode,
+          teamId: values.teamId,
+          companyId: values.companyId,
+          status: 'active',
+          mustChangePassword,
+          createdBy: context.actor.id,
         },
-        reason: context.reason,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-      },
-      tx,
-    )
+        select: userSelect,
+      })
 
-    return user
-  })
+      await emitAudit(
+        {
+          organizationId,
+          actorId: context.actor.id,
+          actorRole: context.actor.roleName,
+          action: 'create',
+          targetType: 'users',
+          targetId: user.id,
+          // ห้ามมีรหัสผ่านใน audit — บันทึกแค่ว่าผู้ดูแลตั้งให้
+          after: {
+            ...toUserAuditPayload(values, { status: 'active', roleName: role.name }),
+            supabase_uid: authUid,
+            password_set_by_admin: true,
+            must_change_password: mustChangePassword,
+          },
+          reason: context.reason,
+          ipAddress: context.meta.ipAddress,
+          userAgent: context.meta.userAgent,
+        },
+        tx,
+      )
 
-  return { user: toDto(created), warning: outcome === null ? null : inviteWarning(outcome) }
+      return user
+    })
+  } catch (error) {
+    await compensateAuthAccount(authUid)
+    throw error
+  }
+
+  return { user: toDto(created), warning: null }
+}
+
+/** เขียน DB ไม่สำเร็จ → ลบบัญชี Auth ที่เพิ่งสร้างทิ้ง — best effort */
+async function compensateAuthAccount(uid: string): Promise<void> {
+  try {
+    await deleteAuthAccount(uid)
+  } catch {
+    // ลบไม่สำเร็จ = เหลือบัญชี Auth กำพร้า ซึ่งครั้งหน้าสร้างด้วยอีเมลเดิมจะถูกลบแล้วสร้างใหม่เอง (`createAuthAccount`)
+  }
 }
 
 /**
- * ส่งคำเชิญตั้งรหัสผ่าน (ครั้งแรกหรือส่งซ้ำ — `POST /api/users/:id/invite`)
- * ผูก `supabase_uid` ที่ได้กลับเข้า record เสมอ · ล้มเหลว = `INVITE_SEND_FAILED` (ผู้ใช้กดปุ่มนี้มาเพื่อสิ่งนี้)
+ * ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้ (`POST /api/users/:id/password` — มติ PO 03/10/2569)
+ *
+ * - สิทธิ์ = `manage:manage_users` (ชุดเดียวกับคนที่เพิ่มผู้ใช้ได้) + scope ตรวจแล้วที่ `getUser()`
+ * - ไม่ใช่ Superadmin ตั้งรหัสให้บัญชีกลุ่ม `system` ไม่ได้ (`canSetPasswordFor` — กันยึดบัญชีบริหาร/การเงิน)
+ * - ผู้ใช้ที่ยังไม่มีบัญชี Auth (ค้างจาก flow เชิญเดิม) → สร้างบัญชีให้พร้อมรหัสนี้เลย
+ * - ตั้งให้คนอื่น → `must_change_password = true` · ตั้งให้ตัวเอง → false
  */
-export async function sendUserInvite(
-  context: MutationContext & { origin: string },
-  current: UserDto,
-): Promise<UserMutationResult> {
+export async function setUserPassword(context: MutationContext, current: UserDto, password: string): Promise<UserDto> {
   const organizationId = context.actor.organizationId
-  if (current.status === 'deleted') {
-    throw new UserError('INVALID_USER_STATUS_TRANSITION', { detail: `user=${current.id} status=deleted` })
+  if (!canSetPasswordFor(context.actor, current)) {
+    throw new AuthError('PERMISSION_DENIED', `set password of ${current.roleGroup} user=${current.id} by user=${context.actor.id}`)
   }
 
-  const outcome = await resendInvite(current.email, buildInviteRedirectUrl(context.origin))
+  const existing = await prisma.user.findUniqueOrThrow({ where: { id: current.id }, select: { supabaseUid: true } })
+  let createdAccount: string | null = null
+  if (existing.supabaseUid === null) {
+    createdAccount = await createAuthAccount(authEmailFor(current), password, isAuthUidTaken)
+  } else {
+    await setAuthPassword(existing.supabaseUid, password)
+  }
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({
-      where: { id: current.id },
-      data: { supabaseUid: outcome.uid, updatedBy: context.actor.id },
-      select: userSelect,
+  const mustChangePassword = mustChangeAfterAdminSet(context.actor.id, current.id)
+  const supabaseUid = createdAccount ?? existing.supabaseUid
+
+  let updated: UserRow
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: current.id },
+        data: { supabaseUid, mustChangePassword, updatedBy: context.actor.id },
+        select: userSelect,
+      })
+
+      await emitAudit(
+        {
+          organizationId,
+          actorId: context.actor.id,
+          actorRole: context.actor.roleName,
+          action: 'update',
+          targetType: 'users',
+          targetId: current.id,
+          // ห้ามมีรหัสผ่านใน audit — บันทึกแค่ข้อเท็จจริงว่ามีการตั้งใหม่
+          before: { supabase_uid: existing.supabaseUid, must_change_password: current.mustChangePassword },
+          after: { supabase_uid: supabaseUid, must_change_password: mustChangePassword, password_reset_by_admin: true },
+          reason: context.reason,
+          ipAddress: context.meta.ipAddress,
+          userAgent: context.meta.userAgent,
+          diffOnly: false,
+        },
+        tx,
+      )
+
+      return user
     })
+  } catch (error) {
+    if (createdAccount !== null) await compensateAuthAccount(createdAccount)
+    throw error
+  }
 
-    await emitAudit(
-      {
-        organizationId,
-        actorId: context.actor.id,
-        actorRole: context.actor.roleName,
-        action: 'update',
-        targetType: 'users',
-        targetId: current.id,
-        before: { supabase_uid: current.isProvisioned ? 'linked' : null },
-        after: { supabase_uid: outcome.uid, invite_email_sent: outcome.emailSent },
-        reason: context.reason,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-        diffOnly: false,
-      },
-      tx,
-    )
-
-    return user
-  })
-
+  // session เดิมของผู้ใช้ต้องเห็นธง must_change_password ทันที ไม่รอ cache หมดอายุ
   invalidateSession(updated.supabaseUid)
-  return { user: toDto(updated), warning: inviteWarning(outcome) }
+  return toDto(updated)
 }
 
 export async function updateUser(
@@ -374,7 +466,14 @@ export async function updateUser(
   const before = toValues(current)
   const role = await loadRole(organizationId, values.roleId)
 
+  // ทั้งบัญชีเดิมและกลุ่มปลายทาง — กันย้ายผู้ใช้ที่ตัวเองตั้งรหัสไว้เข้ากลุ่ม system
+  assertCanManageAccountIn(context.actor, current.roleGroup, `update user=${current.id}`)
+  assertCanManageAccountIn(context.actor, role.roleGroup, `update user=${current.id}`)
+  if (current.id === context.actor.id && values.roleId !== before.roleId && !canChangeOwnRole(context.actor)) {
+    throw new AuthError('PERMISSION_DENIED', `change own role user=${current.id}`)
+  }
   assertScopeConsistent(role.roleGroup, values)
+  if (values.username !== before.username) await assertUsernameAvailable(organizationId, values.username, current.id)
   if (values.email !== before.email) await assertEmailAvailable(organizationId, values.email, current.id)
   if (values.phone !== before.phone) await assertPhoneAvailable(organizationId, values.phone, current.id)
   await assertReferencesExist(organizationId, values)
@@ -389,6 +488,7 @@ export async function updateUser(
       where: { id: current.id },
       data: {
         roleId: values.roleId,
+        username: values.username,
         email: values.email,
         fullName: values.fullName,
         phone: values.phone,
@@ -422,15 +522,17 @@ export async function updateUser(
 
   invalidateSession(updated.supabaseUid)
 
-  // อีเมล = username ตอน login → ต้องย้ายฝั่ง Supabase Auth ตามด้วย (ล้มเหลว = เตือน ไม่ rollback ข้อมูลธุรกิจ)
+  // อีเมลของบัญชี Auth = อีเมลจริง หรืออีเมลภายในเมื่อไม่มี → ย้ายตามเมื่อเปลี่ยน/เพิ่ม/ลบอีเมล
+  // ล้มเหลว = เตือน ไม่ rollback ข้อมูลธุรกิจ (login ด้วย username ยังได้เพราะอ่านอีเมลจาก Auth ตรง)
+  // username ไม่ผูกกับ Auth จึงเปลี่ยนได้โดยไม่ต้องแตะ Supabase
   let warning: UserMutationResult['warning'] = null
   if (values.email !== before.email && updated.supabaseUid !== null) {
-    const failure = await syncAuthEmail(updated.supabaseUid, values.email)
+    const failure = await syncAuthEmail(updated.supabaseUid, authEmailFor({ id: current.id, email: values.email }))
     if (failure !== null) {
       warning = {
         code: 'AUTH_EMAIL_NOT_SYNCED',
         title: 'บันทึกแล้ว แต่ย้ายอีเมลฝั่ง Supabase Auth ไม่สำเร็จ',
-        message: `ผู้ใช้ยังต้องเข้าสู่ระบบด้วยอีเมลเดิมไปก่อน — แก้ที่ Supabase หรือลองบันทึกใหม่อีกครั้ง (${failure})`,
+        message: `ผู้ใช้ยังเข้าสู่ระบบได้ตามปกติ (login อ่านอีเมลจาก Auth ตรง) แต่ข้อมูลฝั่ง Supabase ยังเป็นอีเมลเดิม — ลองบันทึกใหม่อีกครั้ง (${failure})`,
       }
     }
   }
@@ -448,6 +550,7 @@ export async function setUserStatus(
   nextStatus: Extract<UserStatus, 'active' | 'suspended'>,
 ): Promise<UserDto> {
   const organizationId = context.actor.organizationId
+  assertCanManageAccountIn(context.actor, current.roleGroup, `set status user=${current.id}`)
   assertUserStatusTransition(current.status, nextStatus)
   await assertSuperadminSafety(
     organizationId,
@@ -536,6 +639,7 @@ export async function countUserReferences(organizationId: string, userId: string
  */
 export async function deleteUser(context: MutationContext, current: UserDto): Promise<void> {
   const organizationId = context.actor.organizationId
+  assertCanManageAccountIn(context.actor, current.roleGroup, `delete user=${current.id}`)
   assertUserStatusTransition(current.status, 'deleted')
   await assertSuperadminSafety(
     organizationId,

@@ -48,7 +48,7 @@ export function isSessionExpired(loginAt: string | Date | null, now: Date, maxAg
 }
 
 /**
- * ตรวจสิทธิ์ครบชุด: สถานะบัญชี → อายุ session → capability → scope ย่อย
+ * ตรวจสิทธิ์ครบชุด: สถานะบัญชี → อายุ session → ต้องเปลี่ยนรหัสผ่าน → capability → scope ย่อย
  * คืน `null` = ผ่าน · คืน error code = ปฏิเสธ (caller เป็นคนโยน `AuthError`)
  */
 export function checkPermission(
@@ -60,6 +60,8 @@ export function checkPermission(
 ): AuthErrorCode | null {
   if (user.status !== 'active') return 'ACCOUNT_INACTIVE'
   if (isSessionExpired(user.loginAt, now)) return 'SESSION_EXPIRED'
+  // ผู้ดูแลตั้ง/รีเซ็ตรหัสให้ → ใช้ endpoint ที่ต้องมีสิทธิ์ไม่ได้จนกว่าจะเปลี่ยนรหัสเอง (มติ PO 03/10/2569)
+  if (user.mustChangePassword === true) return 'PASSWORD_CHANGE_REQUIRED'
   if (!hasCapability(user, action, resource)) return 'PERMISSION_DENIED'
   // scope ย่อย ("ทีมตัวเอง"/"own"/"company") บังคับเพิ่มจาก access_level — `25` §16.1
   if (!isWithinScope(user.scope, target)) return 'PERMISSION_DENIED'

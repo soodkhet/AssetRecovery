@@ -7,7 +7,8 @@ import type { RoleGroup, UserStatus } from '@/lib/generated/prisma/enums'
 
 export interface UserDto {
   id: string
-  email: string
+  username: string | null
+  email: string | null
   fullName: string
   phone: string | null
   employeeCode: string | null
@@ -20,10 +21,12 @@ export interface UserDto {
   companyName: string | null
   status: UserStatus
   /**
-   * ผูกกับ Supabase Auth แล้วหรือยัง (`users.supabase_uid`) — `false` = ยังตั้งรหัสผ่านไม่ได้
-   * จึงยัง login ไม่ได้ (`05` §6.1 ตอบ `USER_NOT_PROVISIONED`) · flow เชิญ/ตั้งรหัสครั้งแรก = D1
+   * ผูกกับ Supabase Auth แล้วหรือยัง (`users.supabase_uid`) — `false` = ยังไม่มีรหัสผ่าน จึงยัง login ไม่ได้
+   * (ผู้ใช้ค้างจาก flow เชิญเดิมของ D1) → ผู้ดูแลกด "ตั้งรหัสผ่าน" ให้ได้ (มติ PO 03/10/2569)
    */
   isProvisioned: boolean
+  /** ผู้ดูแลตั้งรหัสให้แล้ว ผู้ใช้ยังไม่ได้เปลี่ยนเอง */
+  mustChangePassword: boolean
   lastLoginAt: string | null
   /** จำนวนงานภาคสนามที่ยังไม่จบของผู้ใช้คนนี้ — ใช้เตือนก่อนระงับบัญชี (D7 default) */
   activeCaseCount: number

@@ -18,6 +18,7 @@
 | v3 | 04/07/2569 | **เพิ่ม DEC-006 (Batch 6 Consistency Sync — คำตอบ D1–D10 ครบชุด)** — Product Owner ตอบผ่าน `DECISIONS-NEEDED-BATCH6.md` เมื่อ 04/07/2569 |
 | v3.1 | 05/07/2569 | **เพิ่ม DEC-007 (Mockup Audit 04/07/2569), DEC-008 (Service Fee Template แสดงเป็นการ์ด), DEC-009 (Functional Permission 3 ระดับ)** — เก็บตกการตัดสินใจ 2 รอบหลังที่ยังไม่ได้ลงบันทึก · DEC-009 มี doc sync ค้าง (schema `role_capabilities.access_level` + ไฟล์ 13 §6.10 + ไฟล์ 25) ⏳ รอ Product Owner สั่งเดิน |
 | v3.2 | 05/07/2569 | **ปิด doc sync ของ DEC-009** — Product Owner สั่งเดิน: `02` v3.6 / `13` v3.1 / `25` v2.2 เสร็จครบ อัปเดตช่อง Impact ของ DEC-009 เป็น ✅ |
+| v3.3 | 03/10/2569 | **เพิ่ม DEC-010** (login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ — แทนมติ D1 เดิม) |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
 
@@ -230,6 +231,16 @@
 | Reason | Audit พบ mockup มีสิทธิ์ให้ติ๊กแค่ 20/29 รายการของไฟล์ 25 และ checkbox เปิด/ปิดค่าเดียวแสดงมิติ "ดูอย่างเดียว" ไม่ได้ |
 | Impact | `settings.html` (ทำแล้ว) — **✅ doc sync ครบแล้ว 05/07/2569**: `02` v3.6 (`capability_access_level` enum + `role_capabilities.access_level`), ไฟล์ `13` v3.1 (§6.10 โมเดลระดับ), ไฟล์ `25` v2.2 (§16.1 mapping ✅→manage / 👁️→view) |
 | Reversible | UI ง่าย · โมเดล storage ปานกลาง (ก่อน Phase 0 ยังแก้ฟรี) |
+
+### DEC-010 — Login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ผู้ใช้ (03/10/2569)
+
+| Field | Value |
+|---|---|
+| Decision | (1) หน้า Login ช่องเดียวรับ **อีเมลหรือ username** (มี `@` = อีเมล) (2) `users.username` **บังคับ** (a-z 0-9 . _ - ยาว 3–50 · unique ต่อองค์กรเฉพาะแถวที่ยังไม่ลบ) · `users.email` **ไม่บังคับ** — ผู้ใช้ไม่มีอีเมลใช้อีเมลภายใน `<users.id>@users.assetrecovery.invalid` กับบัญชี Supabase Auth (ผู้ใช้ไม่เห็น) (3) **ยกเลิก flow เชิญทางอีเมล (มติ D1 14/08/2569)** — ตอนสร้างผู้ใช้ผู้ดูแลตั้งรหัสผ่านเริ่มต้นในฟอร์มเลย ผ่าน `supabase.auth.admin.createUser` (4) ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้ได้ (`POST /api/users/:id/password`) — สิทธิ์ **`manage:manage_users` เท่านั้น** (ชุดเดียวกับคนที่เพิ่มผู้ใช้ได้) ภายใน scope ทีม/บริษัทของตัวเอง · `reason` บังคับ · audit ไม่มีรหัสผ่าน (6) **บัญชีกลุ่มแอดมิน (`system`) จัดการได้เฉพาะ Superadmin** — สร้าง/แก้ไข/ย้ายเข้ากลุ่ม/ตั้งรหัส/ระงับ/ลบ (ปิดช่องที่ผู้ดูแลทั่วไปมอบ role Superadmin หรือ role บริหาร/การเงินให้ตัวเอง/คนอื่นแล้ว login เป็นคนนั้น) · ไม่ใช่ Superadmin เปลี่ยน role ของตัวเองไม่ได้ (7) เปลี่ยนรหัสเองต้องกรอกรหัสปัจจุบันเสมอ (ตอนถูกบังคับ = รหัสชั่วคราว) · ยืนยันตัวตนกับ Supabase ด้วยบัญชี Auth ที่มีอยู่ก่อนแล้วโดยไม่มีผู้ใช้ในระบบถืออยู่ (บัญชีกำพร้า) จะถูก**ลบแล้วสร้างใหม่** ไม่ผูกของเดิม (กันยึดบัญชีล่วงหน้าด้วย signUp) (5) ผู้ดูแลตั้ง/รีเซ็ตรหัสให้คนอื่น → `users.must_change_password = true` ผู้ใช้ต้องเปลี่ยนเองที่ `/auth/change-password` ก่อนใช้งาน (API ที่ต้องมีสิทธิ์ตอบ `PASSWORD_CHANGE_REQUIRED` 403) |
+| Approved by | Product Owner — ตอบผ่านชุดตัวเลือก 03/10/2569 (username บังคับ/email ไม่บังคับ · ตั้งรหัสในฟอร์มอย่างเดียว · บังคับเปลี่ยนตอน login ครั้งแรก) + หลัง security review รอบเดียวกัน (ห้ามผู้ดูแลทั่วไปตั้งรหัสให้กลุ่ม system ทั้งหมด · แก้ช่องมอบ role Superadmin ในงานเดียวกัน) |
+| Reason | เจ้าหน้าที่ภาคสนามจำนวนมากไม่มีอีเมล/ไม่สะดวกเปิดอีเมล และ flow เชิญพึ่ง SMTP ของ Supabase — ผู้ดูแลต้องเปิดบัญชีและช่วยรีเซ็ตรหัสได้ทันที |
+| Impact | `02` (`users.username`, `users.must_change_password`, `email` nullable + CHECK ต้องมีอย่างใดอย่างหนึ่ง) · `05` §6.1/§14/§17 · `08` §7.1/§10/§11/§14/§17 · `24` v4.16 (`DUPLICATE_USERNAME`, `AUTH_ACCOUNT_SYNC_FAILED`, `PASSWORD_CHANGE_REQUIRED` · ลบ `INVITE_SEND_FAILED`) · migration `20261003000000_user_username_admin_password` (backfill username จากส่วนหน้า @ ของอีเมล) |
+| Reversible | ปานกลาง — คอลัมน์ใหม่ไม่กระทบตารางอื่น · กลับไปใช้ invite ได้โดยไม่ต้องย้ายข้อมูล |
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 

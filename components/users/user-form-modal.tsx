@@ -8,7 +8,10 @@ import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { ROLE_GROUP_LABEL } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
 import type { TeamDto } from '@/lib/teams/types'
-import { userCreateSchema } from '@/lib/users/schemas'
+import { useSession } from '@/components/auth/permission-provider'
+import { PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
+import { canManageAccountIn } from '@/lib/users/auth-account'
+import { userCreateSchema, userUpdateSchema } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import { requiredScopeFor } from '@/lib/users/user'
 
@@ -18,17 +21,24 @@ import { requiredScopeFor } from '@/lib/users/user'
  * **cascading role select** (`08` §8): เลือกกลุ่ม → role ในกลุ่มนั้น → ทีม (inhouse/outsource)
  * หรือบริษัท (finance_company) · ช่องสังกัดที่ไม่เกี่ยวกับกลุ่มถูก**ซ่อนจริง**ไม่ใช่แค่ disable
  * เพราะค่าที่ค้างอยู่จะทำให้ API ปฏิเสธด้วย `INVALID_USER_SCOPE`
+ *
+ * มติ PO 03/10/2569: username บังคับ · อีเมลไม่บังคับ · ตอนสร้างผู้ดูแลตั้งรหัสผ่านเริ่มต้นให้เลย
+ * (ไม่ส่งอีเมลเชิญ — ผู้ใช้ถูกบังคับเปลี่ยนเองตอน login ครั้งแรก) · ตอนแก้ไขไม่มีช่องรหัสผ่าน
+ * (ตั้งใหม่ผ่านปุ่ม "ตั้งรหัสผ่าน" ในตาราง — `<UserPasswordModal>`)
  */
 
 interface FormState {
   roleGroup: RoleGroup
   roleId: string
+  username: string
   email: string
   fullName: string
   phone: string
   employeeCode: string
   teamId: string
   companyId: string
+  password: string
+  confirmPassword: string
   reason: string
 }
 
@@ -36,12 +46,15 @@ function emptyForm(roleGroup: RoleGroup): FormState {
   return {
     roleGroup,
     roleId: '',
+    username: '',
     email: '',
     fullName: '',
     phone: '',
     employeeCode: '',
     teamId: '',
     companyId: '',
+    password: '',
+    confirmPassword: '',
     reason: '',
   }
 }
@@ -50,26 +63,31 @@ function formOf(user: UserDto): FormState {
   return {
     roleGroup: user.roleGroup,
     roleId: user.roleId,
-    email: user.email,
+    username: user.username ?? '',
+    email: user.email ?? '',
     fullName: user.fullName,
     phone: user.phone ?? '',
     employeeCode: user.employeeCode ?? '',
     teamId: user.teamId ?? '',
     companyId: user.companyId ?? '',
+    password: '',
+    confirmPassword: '',
     reason: '',
   }
 }
 
-function payloadOf(form: FormState): Record<string, unknown> {
+function payloadOf(form: FormState, isEdit: boolean): Record<string, unknown> {
   const scope = requiredScopeFor(form.roleGroup)
   return {
     roleId: form.roleId === '' ? undefined : form.roleId,
-    email: form.email.trim(),
+    username: form.username.trim(),
+    email: form.email.trim() === '' ? null : form.email.trim(),
     fullName: form.fullName.trim(),
     phone: form.phone.trim() === '' ? null : form.phone.trim(),
     employeeCode: form.employeeCode.trim() === '' ? null : form.employeeCode.trim(),
     teamId: scope === 'team' && form.teamId !== '' ? form.teamId : null,
     companyId: scope === 'company' && form.companyId !== '' ? form.companyId : null,
+    ...(isEdit ? {} : { password: form.password, confirmPassword: form.confirmPassword }),
     reason: form.reason.trim(),
   }
 }
@@ -95,7 +113,16 @@ export function UserFormModal({
   onSaved: () => void
 }) {
   const { showToast } = useToast()
-  const [form, setForm] = useState<FormState>(user === null ? emptyForm(defaultRoleGroup) : formOf(user))
+  const session = useSession()
+  /** กลุ่มที่ผู้ใช้คนนี้มอบให้ได้ — กลุ่ม system เฉพาะ Superadmin (DEC-010 · API ตรวจซ้ำ) */
+  const assignableGroups = (Object.keys(ROLE_GROUP_LABEL) as RoleGroup[]).filter(
+    (group) => session !== null && canManageAccountIn(session, group),
+  )
+  const [form, setForm] = useState<FormState>(
+    user === null
+      ? emptyForm(assignableGroups.includes(defaultRoleGroup) ? defaultRoleGroup : (assignableGroups[0] ?? defaultRoleGroup))
+      : formOf(user),
+  )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
@@ -114,7 +141,7 @@ export function UserFormModal({
   }
 
   async function save(): Promise<void> {
-    const parsed = userCreateSchema.safeParse(payloadOf(form))
+    const parsed = (isEdit ? userUpdateSchema : userCreateSchema).safeParse(payloadOf(form, isEdit))
     if (!parsed.success) {
       const fields: Record<string, string> = {}
       for (const issue of parsed.error.issues) {
@@ -151,10 +178,10 @@ export function UserFormModal({
       } else {
         showToast({
           tone: 'success',
-          title: isEdit ? 'บันทึกข้อมูลผู้ใช้แล้ว' : 'สร้างบัญชีและส่งคำเชิญแล้ว',
+          title: isEdit ? 'บันทึกข้อมูลผู้ใช้แล้ว' : 'สร้างบัญชีแล้ว',
           description: isEdit
             ? form.fullName.trim()
-            : `${form.fullName.trim()} — ส่งลิงก์ตั้งรหัสผ่านไปที่ ${form.email.trim()} แล้ว`,
+            : `${form.fullName.trim()} — เข้าสู่ระบบด้วย ${form.username.trim().toLowerCase()} ได้ทันที และต้องเปลี่ยนรหัสผ่านตอนเข้าครั้งแรก`,
         })
       }
       onSaved()
@@ -183,12 +210,6 @@ export function UserFormModal({
       }
     >
       <div className="space-y-4">
-        {!isEdit && (
-          <InlineAlert tone="info" title="ระบบจะส่งอีเมลคำเชิญให้อัตโนมัติ">
-            ผู้ใช้จะได้รับลิงก์ไปตั้งรหัสผ่านเอง — ระบบไม่เก็บรหัสผ่านและผู้ดูแลตั้งรหัสให้ไม่ได้ · ถ้าอีเมลไม่ถึง
-            กดปุ่ม “ส่งคำเชิญอีกครั้ง” ในตารางผู้ใช้งานได้ตลอด
-          </InlineAlert>
-        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="user-group" label="กลุ่มผู้ใช้ (Role Group)" required>
@@ -197,7 +218,7 @@ export function UserFormModal({
               value={form.roleGroup}
               onChange={(event) => changeRoleGroup(event.target.value as RoleGroup)}
             >
-              {(Object.keys(ROLE_GROUP_LABEL) as RoleGroup[]).map((group) => (
+              {assignableGroups.map((group) => (
                 <option key={group} value={group}>
                   {ROLE_GROUP_LABEL[group]}
                 </option>
@@ -227,7 +248,20 @@ export function UserFormModal({
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field id="user-email" label="อีเมล (ใช้เข้าสู่ระบบ)" required error={errors.email}>
+          <Field id="user-username" label="ชื่อผู้ใช้ (ใช้เข้าสู่ระบบ)" required error={errors.username}>
+            <Input
+              id="user-username"
+              className="font-mono"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={form.username}
+              onChange={(event) => set('username', event.target.value)}
+              placeholder="เช่น somchai.j"
+            />
+          </Field>
+
+          <Field id="user-email" label="อีเมล (ไม่บังคับ — ใช้เข้าสู่ระบบได้)" error={errors.email}>
             <Input
               id="user-email"
               type="email"
@@ -236,7 +270,41 @@ export function UserFormModal({
               placeholder="name@example.com"
             />
           </Field>
+        </div>
 
+        {!isEdit && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field id="user-password" label="รหัสผ่านเริ่มต้น" required error={errors.password}>
+              <Input
+                id="user-password"
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(event) => set('password', event.target.value)}
+                placeholder={`อย่างน้อย ${PASSWORD_MIN_LENGTH} ตัว มีตัวอักษรและตัวเลข`}
+              />
+            </Field>
+
+            <Field id="user-confirm-password" label="ยืนยันรหัสผ่าน" required error={errors.confirmPassword}>
+              <Input
+                id="user-confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={form.confirmPassword}
+                onChange={(event) => set('confirmPassword', event.target.value)}
+                placeholder="••••••••"
+              />
+            </Field>
+          </div>
+        )}
+
+        {!isEdit && (
+          <InlineAlert tone="info" title="ผู้ใช้ต้องเปลี่ยนรหัสผ่านเองตอนเข้าสู่ระบบครั้งแรก">
+            แจ้งชื่อผู้ใช้และรหัสผ่านเริ่มต้นให้ผู้ใช้ทางช่องทางที่ปลอดภัย — ระบบไม่ส่งอีเมลใดๆ
+          </InlineAlert>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="user-phone" label="เบอร์โทร" error={errors.phone}>
             <Input
               id="user-phone"
@@ -245,9 +313,7 @@ export function UserFormModal({
               placeholder="0812345678"
             />
           </Field>
-        </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="user-employee-code" label="รหัสพนักงาน" error={errors.employeeCode}>
             <Input
               id="user-employee-code"
@@ -256,6 +322,9 @@ export function UserFormModal({
               placeholder="เช่น EMP-0012"
             />
           </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 
           {scope === 'team' && (
             <Field id="user-team" label="ทีมที่สังกัด" required error={errors.teamId}>

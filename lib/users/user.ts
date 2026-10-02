@@ -14,7 +14,8 @@ import { UserError } from '@/lib/users/errors'
 /** ค่าที่ผู้ใช้ตั้งได้ต่อ user — ตรงกับคอลัมน์ `users` (`02` §4) ยกเว้น `status` ที่เปลี่ยนผ่าน endpoint แยก */
 export interface UserValues {
   roleId: string
-  email: string
+  username: string
+  email: string | null
   fullName: string
   phone: string | null
   employeeCode: string | null
@@ -32,7 +33,7 @@ export function requiredScopeFor(roleGroup: RoleGroup): RequiredUserScope {
 }
 
 /**
- * เก็บอีเมลเป็นตัวพิมพ์เล็กเสมอ (ใช้เทียบซ้ำและใช้เป็น username ของ Supabase Auth)
+ * เก็บ username/อีเมลเป็นตัวพิมพ์เล็กเสมอ (ใช้เทียบซ้ำและใช้ login — มติ PO 03/10/2569)
  * เบอร์โทรตัดตัวคั่นทิ้งให้เหลือแต่ตัวเลข — เทียบซ้ำแบบ exact ตาม `08` §10
  */
 export function normalizePhone(raw: string | null | undefined): string | null {
@@ -50,7 +51,8 @@ function blankToNull(raw: string | null | undefined): string | null {
 export function normalizeUserValues(input: UserValues): UserValues {
   return {
     roleId: input.roleId,
-    email: input.email.trim().toLowerCase(),
+    username: input.username.trim().toLowerCase(),
+    email: blankToNull(input.email)?.toLowerCase() ?? null,
     fullName: input.fullName.trim(),
     phone: normalizePhone(input.phone),
     employeeCode: blankToNull(input.employeeCode),
@@ -126,6 +128,7 @@ export function toUserAuditPayload(
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     role_id: values.roleId,
+    username: values.username,
     email: values.email,
     full_name: values.fullName,
     phone: values.phone,

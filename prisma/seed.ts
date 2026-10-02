@@ -77,6 +77,7 @@ async function main() {
       id: SEED_USER_ID,
       organizationId: org.id,
       roleId: superadminRole.id,
+      username: 'superadmin',
       email: SEED_USER_EMAIL,
       fullName: 'ผู้ดูแลระบบ (seed)',
       // `supabaseUid` ผูกตอน Phase 1.3 — login จริงต้องมี Supabase Auth user ก่อน

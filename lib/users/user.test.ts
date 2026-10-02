@@ -18,6 +18,7 @@ import {
 
 const base: UserValues = {
   roleId: '11111111-1111-4111-8111-111111111111',
+  username: ' Somchai.J ',
   email: 'Somchai@Example.COM ',
   fullName: '  สมชาย ใจดี ',
   phone: '08-1234-5678',
@@ -27,8 +28,14 @@ const base: UserValues = {
 }
 
 describe('normalizeUserValues', () => {
-  it('อีเมลเป็นตัวพิมพ์เล็กเสมอ (ใช้เป็น username ของ Supabase Auth)', () => {
+  it('username/อีเมลเป็นตัวพิมพ์เล็กเสมอ (ใช้ login — มติ PO 03/10/2569)', () => {
+    expect(normalizeUserValues(base).username).toBe('somchai.j')
     expect(normalizeUserValues(base).email).toBe('somchai@example.com')
+  })
+
+  it('อีเมลไม่บังคับ — ช่องว่างล้วนกลายเป็น null', () => {
+    expect(normalizeUserValues({ ...base, email: '  ' }).email).toBeNull()
+    expect(normalizeUserValues({ ...base, email: null }).email).toBeNull()
   })
 
   it('ตัดช่องว่างหัวท้ายของชื่อ และแปลงช่องว่างล้วนเป็น null', () => {
@@ -123,6 +130,7 @@ describe('toUserAuditPayload', () => {
   it('ใช้ชื่อคอลัมน์จริง (snake_case) และแนบสถานะ/ชื่อ role เมื่อส่งมา', () => {
     const payload = toUserAuditPayload(normalizeUserValues(base), { status: 'active', roleName: 'Superadmin' })
     expect(payload).toMatchObject({
+      username: 'somchai.j',
       email: 'somchai@example.com',
       full_name: 'สมชาย ใจดี',
       phone: '0812345678',

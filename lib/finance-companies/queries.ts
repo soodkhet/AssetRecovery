@@ -174,6 +174,7 @@ export async function listCompanyUsers(user: SessionUser, companyId: string): Pr
     select: {
       id: true,
       fullName: true,
+      username: true,
       email: true,
       phone: true,
       status: true,
@@ -186,6 +187,7 @@ export async function listCompanyUsers(user: SessionUser, companyId: string): Pr
   return rows.map((row) => ({
     id: row.id,
     fullName: row.fullName,
+    username: row.username,
     email: row.email,
     phone: row.phone,
     roleName: row.role.name,

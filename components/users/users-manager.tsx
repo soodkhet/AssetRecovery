@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, useSession } from '@/components/auth/permission-provider'
 import { RoleGroupTabs } from '@/components/roles/role-group-tabs'
 import { UserFormModal } from '@/components/users/user-form-modal'
+import { UserPasswordModal } from '@/components/users/user-password-modal'
 import {
   Badge,
   Button,
@@ -29,6 +30,7 @@ import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { ROLE_GROUP_LABEL, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
+import { canManageAccountIn } from '@/lib/users/auth-account'
 import type { TeamDto } from '@/lib/teams/types'
 import type { UserDto } from '@/lib/users/types'
 
@@ -57,13 +59,12 @@ const GROUP_BADGE: Record<RoleGroup, string> = {
   finance_company: 'bg-amber-100 text-amber-800',
 }
 
-type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' | 'invite' }
+type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' }
 
 const ACTION_TITLE: Record<PendingAction['action'], string> = {
   suspend: 'ระงับการใช้งานบัญชี',
   reactivate: 'เปิดใช้งานบัญชีกลับ',
   delete: 'ลบบัญชีผู้ใช้',
-  invite: 'ส่งคำเชิญตั้งรหัสผ่าน',
 }
 
 const ACTION_DESCRIPTION: Record<PendingAction['action'], string> = {
@@ -71,11 +72,12 @@ const ACTION_DESCRIPTION: Record<PendingAction['action'], string> = {
   reactivate: 'เปิดสิทธิ์เข้าใช้งานกลับให้บัญชีนี้',
   delete:
     'ลบได้เฉพาะบัญชีที่ยังไม่มีประวัติการทำงาน — ถ้ามีเคส/งานภาคสนาม/รายการเงินผูกอยู่ ระบบจะปฏิเสธด้วย USER_HAS_HISTORY ให้ใช้การระงับแทน (ไฟล์ 08 §10)',
-  invite: 'ส่งอีเมลลิงก์ตั้งรหัสผ่านให้ผู้ใช้ตั้งเอง — ลิงก์เดิมที่เคยส่งไปจะใช้ไม่ได้อีก',
 }
 
 export function UsersManager() {
   const { showToast } = useToast()
+  const session = useSession()
+  const [passwordUser, setPasswordUser] = useState<UserDto | null>(null)
   const [users, setUsers] = useState<readonly UserDto[]>([])
   const [roles, setRoles] = useState<readonly RoleListItem[]>([])
   const [teams, setTeams] = useState<readonly TeamDto[]>([])
@@ -167,7 +169,7 @@ export function UsersManager() {
     setSubmitting(true)
     try {
       const { user, action } = pending
-      const method = action === 'delete' ? 'DELETE' : action === 'invite' ? 'POST' : 'PATCH'
+      const method = action === 'delete' ? 'DELETE' : 'PATCH'
       const path = action === 'delete' ? `/api/users/${user.id}` : `/api/users/${user.id}/${action}`
 
       const result = await callApi(path, jsonRequest(method, { reason: pendingReason }))
@@ -305,7 +307,7 @@ export function UsersManager() {
                   <Td>
                     <div className="font-bold text-slate-900">{user.fullName}</div>
                     <div className="mt-0.5 font-mono text-[10px] text-slate-500">
-                      {user.phone ?? '-'} · {user.email}
+                      {user.username ?? '-'} · {user.phone ?? '-'} · {user.email ?? 'ไม่มีอีเมล'}
                     </div>
                   </Td>
                   <Td>
@@ -326,6 +328,9 @@ export function UsersManager() {
                       {!user.isProvisioned && (
                         <Badge className="bg-amber-100 text-amber-800">รอตั้งรหัสผ่าน</Badge>
                       )}
+                      {user.isProvisioned && user.mustChangePassword && (
+                        <Badge className="bg-amber-100 text-amber-800">รอผู้ใช้เปลี่ยนรหัส</Badge>
+                      )}
                       <Badge
                         className={
                           user.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
@@ -333,51 +338,50 @@ export function UsersManager() {
                       >
                         {user.status === 'active' ? 'Active' : 'Suspended'}
                       </Badge>
+                      {/* บัญชีกลุ่ม system จัดการได้เฉพาะ Superadmin (DEC-010) — ซ่อนปุ่มทั้งชุด · API ตอบ 403 ซ้ำ */}
                       <Can action="manage" resource={MANAGE_RESOURCE}>
-                        <Button variant="secondary" onClick={() => openForm(user)}>
-                          แก้ไข
-                        </Button>
-                        {user.status !== 'deleted' && (
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setPending({ user, action: 'invite' })
-                              setPendingReason('')
-                            }}
-                          >
-                            {user.isProvisioned ? 'ส่งคำเชิญอีกครั้ง' : 'ส่งคำเชิญ'}
-                          </Button>
+                        {session !== null && canManageAccountIn(session, user.roleGroup) && (
+                          <>
+                            <Button variant="secondary" onClick={() => openForm(user)}>
+                              แก้ไข
+                            </Button>
+                            {user.status !== 'deleted' && (
+                              <Button variant="secondary" onClick={() => setPasswordUser(user)}>
+                                ตั้งรหัสผ่าน
+                              </Button>
+                            )}
+                            {user.status === 'active' ? (
+                              <Button
+                                variant="secondary"
+                                onClick={() => {
+                                  setPending({ user, action: 'suspend' })
+                                  setPendingReason('')
+                                }}
+                              >
+                                ระงับ
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="secondary"
+                                onClick={() => {
+                                  setPending({ user, action: 'reactivate' })
+                                  setPendingReason('')
+                                }}
+                              >
+                                เปิดใช้งาน
+                              </Button>
+                            )}
+                            <Button
+                              variant="danger"
+                              onClick={() => {
+                                setPending({ user, action: 'delete' })
+                                setPendingReason('')
+                              }}
+                            >
+                              ลบ
+                            </Button>
+                          </>
                         )}
-                        {user.status === 'active' ? (
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setPending({ user, action: 'suspend' })
-                              setPendingReason('')
-                            }}
-                          >
-                            ระงับ
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setPending({ user, action: 'reactivate' })
-                              setPendingReason('')
-                            }}
-                          >
-                            เปิดใช้งาน
-                          </Button>
-                        )}
-                        <Button
-                          variant="danger"
-                          onClick={() => {
-                            setPending({ user, action: 'delete' })
-                            setPendingReason('')
-                          }}
-                        >
-                          ลบ
-                        </Button>
                       </Can>
                     </div>
                   </Td>
@@ -401,6 +405,16 @@ export function UsersManager() {
         />
       )}
 
+      {passwordUser !== null && (
+        <UserPasswordModal
+          key={passwordUser.id}
+          user={passwordUser}
+          isSelf={session?.id === passwordUser.id}
+          onClose={() => setPasswordUser(null)}
+          onSaved={() => void reload()}
+        />
+      )}
+
       <ConfirmModal
         open={pending !== null}
         onClose={() => setPending(null)}
@@ -408,7 +422,7 @@ export function UsersManager() {
         title={`${ACTION_TITLE[pending?.action ?? 'suspend']} — ${pending?.user.fullName ?? ''}`}
         description={ACTION_DESCRIPTION[pending?.action ?? 'suspend']}
         confirmLabel={`ยืนยัน${ACTION_TITLE[pending?.action ?? 'suspend']}`}
-        confirmVariant={pending?.action === 'reactivate' || pending?.action === 'invite' ? 'primary' : 'danger'}
+        confirmVariant={pending?.action === 'reactivate' ? 'primary' : 'danger'}
         loading={submitting}
         confirmDisabled={pendingReason.trim().length < REASON_MIN_LENGTH}
       >

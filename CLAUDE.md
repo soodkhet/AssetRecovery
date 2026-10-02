@@ -11,7 +11,7 @@
 | UI / Layout / Style | `reference/*.html` (mockup) | UI เท่านั้น — **ห้ามอ้าง business logic จาก mockup** |
 | ช่วงบรรทัดไฟล์ใหญ่ | `docs/00_MAP.md` | เปิดก่อน Read ไฟล์ใหญ่เสมอ |
 | แผนงานละเอียดต่อ task | `docs/01_PLAN.md` | scope + reading list + งบ context ของทุก task |
-| Decision Log | `docs/94-decision-log.md` | DEC-001…DEC-009 — เปลี่ยน tech/architecture ต้องมี DEC ใหม่ |
+| Decision Log | `docs/94-decision-log.md` | DEC-001…DEC-010 — เปลี่ยน tech/architecture ต้องมี DEC ใหม่ |
 | ลำดับเมื่อเอกสารขัดกัน | `02` (schema) → ไฟล์ spec ของ module → reference กลาง (22/23/24/25/27/45) → mockup | ขัดกันจริง → `[[NEEDS_DECISION]]` |
 
 ⚠️ archive ต้นฉบับ (`Project_info/`) ถูกนำออกจาก repo แล้ว (มติ PO 2026-08-13) — **`docs/` + `reference/` คือแหล่ง canonical ของ spec/mockup** (ต้นฉบับเดิมยังอยู่ในประวัติ git ก่อน commit การลบ)

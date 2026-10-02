@@ -18,7 +18,7 @@ interface LoginError {
 
 export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPath?: string }) {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -37,7 +37,7 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
     setError(null)
     setLoading(true)
 
-    const parsed = loginSchema.safeParse({ email, password })
+    const parsed = loginSchema.safeParse({ identifier, password })
     if (!parsed.success) {
       const first = parsed.error.issues[0]
       fail({ title: 'ข้อมูลไม่ครบ', message: first?.message ?? 'กรุณากรอกข้อมูลให้ครบถ้วน' })
@@ -81,7 +81,7 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
           className={`rounded-xl border border-slate-200 bg-white p-6 shadow-sm ${shake ? 'shake' : ''}`}
         >
           <h2 className="mb-1 text-base font-bold text-slate-900">เข้าสู่ระบบ</h2>
-          <p className="mb-5 text-xs text-slate-500">กรอกอีเมลและรหัสผ่านของบัญชีที่ได้รับสิทธิ์</p>
+          <p className="mb-5 text-xs text-slate-500">กรอกอีเมลหรือชื่อผู้ใช้ และรหัสผ่านของบัญชีที่ได้รับสิทธิ์</p>
 
           {error && (
             <div
@@ -111,18 +111,20 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="mb-1 block text-xs font-bold text-slate-700">
-                อีเมล
+              <label htmlFor="identifier" className="mb-1 block text-xs font-bold text-slate-700">
+                อีเมลหรือชื่อผู้ใช้
               </label>
               <input
-                id="email"
-                type="email"
+                id="identifier"
+                type="text"
                 autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
                 disabled={loading}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.co.th"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="name@company.co.th หรือ username"
                 className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
             </div>

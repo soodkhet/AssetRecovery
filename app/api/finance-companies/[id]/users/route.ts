@@ -30,7 +30,7 @@ export const GET = withApiPermission<RouteContext>(
  * (`getFinanceCompany()` โยน 403/404 ให้เอง) · role ที่เลือกต้องอยู่ในกลุ่ม `finance_company`
  * ไม่งั้น `INVALID_USER_SCOPE` (`08` §7.1)
  *
- * เหมือน `POST /api/users` — สร้างเสร็จส่งอีเมลคำเชิญให้ตั้งรหัสผ่านเองทันที (มติ PO ปิด D1)
+ * เหมือน `POST /api/users` — ผู้ดูแลตั้งรหัสผ่านเริ่มต้นให้ในฟอร์ม ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งแรก (มติ PO 03/10/2569)
  */
 export const POST = withApiPermission<RouteContext>(
   'manage',
@@ -42,11 +42,12 @@ export const POST = withApiPermission<RouteContext>(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const company = await getFinanceCompany(user, id)
-    const { reason, ...values } = parsed.data
+    const { reason, password, confirmPassword: _confirm, ...values } = parsed.data
 
     const result = await createUser(
-      { actor: user, meta: getRequestMeta(request), reason, origin: new URL(request.url).origin },
+      { actor: user, meta: getRequestMeta(request), reason },
       { ...values, teamId: null, companyId: company.id },
+      password,
     )
 
     return Response.json(

@@ -33,9 +33,9 @@ export const GET = withApiPermission(
 /**
  * `POST /api/users` (`08` §14) — สร้างบัญชีผู้ใช้ใหม่
  *
- * `team_id`/`company_id` บังคับตาม role group ที่เลือก (`08` §7.1) · อีเมล/เบอร์โทรห้ามซ้ำในองค์กร (§10)
- * สร้างเสร็จ = ส่งอีเมลคำเชิญให้ตั้งรหัสผ่านเองทันที (มติ PO ปิด D1) · ส่งไม่สำเร็จยัง 201 แต่แนบ
- * `warning` กลับไป และผู้ใช้จะยัง login ไม่ได้จนกว่าจะกด "ส่งคำเชิญอีกครั้ง"
+ * `team_id`/`company_id` บังคับตาม role group ที่เลือก (`08` §7.1) · username/อีเมล/เบอร์โทรห้ามซ้ำในองค์กร (§10)
+ * มติ PO 03/10/2569: ผู้ดูแลตั้งรหัสผ่านเริ่มต้นให้ในฟอร์มเลย (ไม่ส่งอีเมลเชิญ) → ผู้ใช้ login ได้ทันที
+ * และถูกบังคับเปลี่ยนรหัสเองตอน login ครั้งแรก · บัญชี Supabase Auth สร้างไม่สำเร็จ = 502 ไม่สร้างผู้ใช้
  */
 export const POST = withApiPermission(
   'manage',
@@ -45,9 +45,8 @@ export const POST = withApiPermission(
     const parsed = userCreateSchema.safeParse(await readJsonBody(request))
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
-    const { reason, ...values } = parsed.data
-    const origin = new URL(request.url).origin
-    const result = await createUser({ actor: user, meta: getRequestMeta(request), reason, origin }, values)
+    const { reason, password, confirmPassword: _confirm, ...values } = parsed.data
+    const result = await createUser({ actor: user, meta: getRequestMeta(request), reason }, values, password)
 
     return Response.json(
       result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },

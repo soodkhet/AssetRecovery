@@ -3,7 +3,9 @@ import {
   companyUserCreateSchema,
   userCreateSchema,
   userListQuerySchema,
+  userPasswordResetSchema,
   userStatusChangeSchema,
+  userUpdateSchema,
 } from '@/lib/users/schemas'
 
 /** schema เดียวใช้ร่วม FE/BE (Rule 13) — เทสต์กติกาที่ฟอร์มพึ่งพาโดยตรง */
@@ -13,12 +15,15 @@ const TEAM_ID = '22222222-2222-4222-8222-222222222222'
 
 const valid = {
   roleId: ROLE_ID,
+  username: 'Somchai.J',
   email: 'Somchai@Example.com',
   fullName: 'สมชาย ใจดี',
   phone: '081-234-5678',
   employeeCode: '',
   teamId: TEAM_ID,
   companyId: null,
+  password: 'assetrecovery1',
+  confirmPassword: 'assetrecovery1',
   reason: 'เพิ่มพนักงานใหม่เข้าทีมกรุงเทพ 1',
 }
 
@@ -44,6 +49,26 @@ describe('userCreateSchema', () => {
     expect(userCreateSchema.safeParse({ ...valid, email: 'not-an-email' }).success).toBe(false)
   })
 
+  it('username บังคับ + normalize ตัวพิมพ์เล็ก (มติ PO 03/10/2569)', () => {
+    expect(userCreateSchema.parse(valid).username).toBe('somchai.j')
+    expect(userCreateSchema.safeParse({ ...valid, username: '' }).success).toBe(false)
+    expect(userCreateSchema.safeParse({ ...valid, username: 'มี@อีเมล' }).success).toBe(false)
+  })
+
+  it('อีเมลไม่บังคับ — ว่าง/ไม่ส่งมา = null', () => {
+    expect(userCreateSchema.parse({ ...valid, email: '' }).email).toBeNull()
+    const { email: _omit, ...withoutEmail } = valid
+    expect(userCreateSchema.parse(withoutEmail).email).toBeNull()
+  })
+
+  it('ตอนสร้างต้องตั้งรหัสผ่านตามนโยบาย + ยืนยันให้ตรง', () => {
+    expect(userCreateSchema.safeParse({ ...valid, password: undefined, confirmPassword: undefined }).success).toBe(false)
+    expect(userCreateSchema.safeParse({ ...valid, password: 'short1', confirmPassword: 'short1' }).success).toBe(false)
+    const mismatch = userCreateSchema.safeParse({ ...valid, confirmPassword: 'assetrecovery2' })
+    expect(mismatch.success).toBe(false)
+    expect(mismatch.error?.issues[0]?.path).toEqual(['confirmPassword'])
+  })
+
   it('`reason` บังคับทุก mutation (ผู้ใช้กระทบสิทธิ์ — `90` §13)', () => {
     expect(userCreateSchema.safeParse({ ...valid, reason: '' }).success).toBe(false)
     expect(userCreateSchema.safeParse({ ...valid, reason: 'สั้น' }).success).toBe(false)
@@ -64,6 +89,23 @@ describe('companyUserCreateSchema', () => {
     })
     expect('companyId' in parsed).toBe(false)
     expect('teamId' in parsed).toBe(false)
+  })
+})
+
+describe('userUpdateSchema', () => {
+  it('แก้ไขผู้ใช้ไม่รับรหัสผ่าน — ตั้งใหม่ผ่าน endpoint แยกเท่านั้น', () => {
+    const parsed = userUpdateSchema.parse(valid)
+    expect('password' in parsed).toBe(false)
+    expect('confirmPassword' in parsed).toBe(false)
+  })
+})
+
+describe('userPasswordResetSchema', () => {
+  it('รหัสผ่านใหม่ตามนโยบาย + เหตุผลบังคับ', () => {
+    const good = { password: 'newpass123', confirmPassword: 'newpass123', reason: 'ผู้ใช้ลืมรหัสผ่าน' }
+    expect(userPasswordResetSchema.safeParse(good).success).toBe(true)
+    expect(userPasswordResetSchema.safeParse({ ...good, reason: '' }).success).toBe(false)
+    expect(userPasswordResetSchema.safeParse({ ...good, confirmPassword: 'other1234' }).success).toBe(false)
   })
 })
 

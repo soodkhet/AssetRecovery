@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { reasonSchema } from '@/lib/api/validation'
+import { USERNAME_PATTERN } from '@/lib/auth/login-identifier'
+import { passwordPairFields, refinePasswordPair } from '@/lib/auth/schemas'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลผู้ใช้งาน (ไฟล์ 08 · Rule 04 · Rule 13)
@@ -9,6 +11,8 @@ import { reasonSchema } from '@/lib/api/validation'
  * - `team_id`/`company_id` เป็น nullable ที่ชั้น schema แล้วบังคับ conditional required ตาม role group
  *   ที่ `assertScopeConsistent()` (ต้องรู้ role group ของ `role_id` ก่อน จึงตรวจที่ชั้น business logic)
  * - `reason` บังคับทุก mutation: ผู้ใช้ = **สิทธิ์** (`90` §13 — เปลี่ยน role/สถานะกระทบการเข้าถึงข้อมูล)
+ * - มติ PO 03/10/2569: `username` บังคับ · `email` ไม่บังคับ · ตอนสร้างผู้ดูแลตั้งรหัสผ่านให้เลย
+ *   (ไม่ส่งอีเมลเชิญ) · แก้ไขผู้ใช้ไม่แตะรหัสผ่าน — ตั้งใหม่ผ่าน `POST /api/users/:id/password` เท่านั้น
  */
 
 const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
@@ -30,13 +34,17 @@ const phoneSchema = optionalText(
 
 const userFields = z.object({
   roleId: uuidSchema,
-  email: z
+  username: z
     .string()
     .trim()
     .toLowerCase()
-    .min(1, 'ต้องระบุอีเมล')
-    .max(255, 'อีเมลยาวเกินไป')
-    .email('รูปแบบอีเมลไม่ถูกต้อง'),
+    .min(1, 'ต้องระบุชื่อผู้ใช้')
+    .regex(USERNAME_PATTERN, 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - ยาว 3–50 ตัว และขึ้นต้นด้วยตัวอักษรหรือตัวเลข'),
+  email: optionalText(
+    z.string().trim().toLowerCase().max(255, 'อีเมลยาวเกินไป').email('รูปแบบอีเมลไม่ถูกต้อง').nullable(),
+  )
+    .pipe(z.string().nullable())
+    .default(null),
   fullName: z.string().trim().min(2, 'ชื่อ-นามสกุลสั้นเกินไป').max(200, 'ชื่อ-นามสกุลยาวเกินไป'),
   phone: phoneSchema.default(null),
   employeeCode: optionalText(z.string().trim().max(50, 'รหัสพนักงานยาวเกินไป').nullable())
@@ -49,18 +57,25 @@ const userFields = z.object({
 /** ตัวผู้ใช้ล้วน (ไม่มี `reason`) — FE ใช้ตรวจฟอร์มก่อนเปิดกล่องยืนยันเหตุผล */
 export const userFieldsSchema = userFields
 
-export const userCreateSchema = userFields.extend({ reason: reasonSchema })
+/** สร้างผู้ใช้ = ข้อมูลผู้ใช้ + รหัสผ่านเริ่มต้นที่ผู้ดูแลตั้งให้ (ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งแรก) */
+export const userCreateSchema = refinePasswordPair(userFields.extend(passwordPairFields.shape).extend({ reason: reasonSchema }))
 
-/** PATCH ส่งค่าทั้งชุดเหมือนตอนสร้าง (ฟอร์มเดียวกัน) — ไม่ใช่ partial patch */
-export const userUpdateSchema = userCreateSchema
+/** PATCH ส่งค่าทั้งชุดเหมือนตอนสร้าง (ฟอร์มเดียวกัน) — ไม่ใช่ partial patch · ไม่มีรหัสผ่าน */
+export const userUpdateSchema = userFields.extend({ reason: reasonSchema })
 
 /**
  * `POST /api/finance-companies/:id/users` (`10` §14) — สร้างบัญชีฝั่งบริษัทไฟแนนซ์
  * `company_id` มาจาก path ไม่ใช่ body (กันสร้างข้ามบริษัท) · `team_id` ใช้กับกลุ่มนี้ไม่ได้อยู่แล้ว
  */
-export const companyUserCreateSchema = userFields
-  .omit({ teamId: true, companyId: true })
-  .extend({ reason: reasonSchema })
+export const companyUserCreateSchema = refinePasswordPair(
+  userFields
+    .omit({ teamId: true, companyId: true })
+    .extend(passwordPairFields.shape)
+    .extend({ reason: reasonSchema }),
+)
+
+/** `POST /api/users/:id/password` — ผู้ดูแลตั้งรหัสผ่านใหม่ให้ (เหตุผลบังคับ: กระทบสิทธิ์เข้าถึง — `90` §13) */
+export const userPasswordResetSchema = refinePasswordPair(passwordPairFields.extend({ reason: reasonSchema }))
 
 /** `PATCH /:id/suspend` และ `/reactivate` (`08` §14) — เหตุผลบังคับทั้งคู่ (`08` §13) */
 export const userStatusChangeSchema = z.object({ reason: reasonSchema })
@@ -87,4 +102,5 @@ export type UserFieldsInput = z.infer<typeof userFieldsSchema>
 export type UserCreateInput = z.infer<typeof userCreateSchema>
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>
 export type UserStatusChangeInput = z.infer<typeof userStatusChangeSchema>
+export type UserPasswordResetInput = z.infer<typeof userPasswordResetSchema>
 export type UserListQuery = z.infer<typeof userListQuerySchema>

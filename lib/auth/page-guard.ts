@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { LOGIN_PATH } from '@/lib/auth/constants'
+import { CHANGE_PASSWORD_PATH, LOGIN_PATH } from '@/lib/auth/constants'
 import { isAuthError } from '@/lib/auth/errors'
 import { getSessionUser } from '@/lib/auth/session'
 import type { SessionUser } from '@/lib/auth/types'
@@ -21,5 +21,7 @@ export async function requireSessionPage(): Promise<SessionUser> {
 
   if (reason !== null) redirect(`${LOGIN_PATH}?reason=${reason}`)
   if (user === null) redirect(LOGIN_PATH)
+  // ผู้ดูแลตั้ง/รีเซ็ตรหัสให้ → ต้องเปลี่ยนรหัสเองก่อนเข้าหน้าอื่น (API บังคับซ้ำที่ `checkPermission`)
+  if (user.mustChangePassword === true) redirect(CHANGE_PASSWORD_PATH)
   return user
 }

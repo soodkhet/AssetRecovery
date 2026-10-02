@@ -33,7 +33,9 @@ export interface SessionUser {
   id: string
   organizationId: string
   supabaseUid: string
-  email: string
+  /** `users.username` (มติ PO 03/10/2569) — optional ที่ชนิดเพื่อไม่ต้องแก้ fixture เดิมของ test */
+  username?: string | null
+  email: string | null
   fullName: string
   status: UserStatus
   roleId: string
@@ -48,12 +50,18 @@ export interface SessionUser {
   scope: SessionScope
   /** `users.last_login_at` (ISO UTC) — ใช้คำนวณ session timeout 24 ชม. (`05` §10) */
   loginAt: string | null
+  /**
+   * `users.must_change_password` — ผู้ดูแลตั้ง/รีเซ็ตรหัสให้ ต้องเปลี่ยนเองก่อนใช้งาน (มติ PO 03/10/2569)
+   * optional: ไม่ระบุ = false (fixture เดิมของ test ไม่ต้องแก้)
+   */
+  mustChangePassword?: boolean
 }
 
 /** ข้อมูล session ที่ส่งลงฝั่ง client ได้ (ไม่มีข้อมูลอ่อนไหวเกินจำเป็น) */
 export interface ClientSession {
   id: string
-  email: string
+  username: string | null
+  email: string | null
   fullName: string
   roleName: string
   roleGroup: RoleGroup
@@ -65,6 +73,7 @@ export interface ClientSession {
 export function toClientSession(user: SessionUser): ClientSession {
   return {
     id: user.id,
+    username: user.username ?? null,
     email: user.email,
     fullName: user.fullName,
     roleName: user.roleName,

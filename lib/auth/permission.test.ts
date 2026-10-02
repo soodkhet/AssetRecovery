@@ -142,3 +142,17 @@ describe('canAccess (ใช้ร่วมฝั่ง UI)', () => {
     expect(canAccess(companyUser, 'manage', 'view_own_company_data')).toBe(false)
   })
 })
+
+describe('checkPermission — บังคับเปลี่ยนรหัสผ่าน (DEC-010)', () => {
+  it('ผู้ดูแลตั้งรหัสให้แล้วยังไม่เปลี่ยนเอง → ทุก capability ตอบ PASSWORD_CHANGE_REQUIRED แม้เป็น Superadmin', () => {
+    const pending = sessionUser({ mustChangePassword: true })
+    expect(checkPermission(pending, 'view', 'manage_payout_batch', undefined, NOW)).toBe('PASSWORD_CHANGE_REQUIRED')
+    const superadmin = sessionUser({ mustChangePassword: true, isSuperadmin: true })
+    expect(checkPermission(superadmin, 'manage', 'manage_users', undefined, NOW)).toBe('PASSWORD_CHANGE_REQUIRED')
+  })
+
+  it('เปลี่ยนรหัสแล้ว (false) หรือ fixture เดิมที่ไม่ระบุ → ผ่านตามสิทธิ์ปกติ', () => {
+    expect(checkPermission(sessionUser({ mustChangePassword: false }), 'view', 'manage_payout_batch', undefined, NOW)).toBeNull()
+    expect(checkPermission(sessionUser(), 'view', 'manage_payout_batch', undefined, NOW)).toBeNull()
+  })
+})

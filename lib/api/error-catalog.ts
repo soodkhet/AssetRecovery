@@ -44,11 +44,12 @@ export const ERROR_CATALOG = {
   INVALID_PROVINCE: { status: 400, severity: 'reject', source: '24 §6.1' },
   USER_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
   DUPLICATE_USER_EMAIL: { status: 400, severity: 'reject', source: '24 §6.1' },
+  DUPLICATE_USERNAME: { status: 400, severity: 'reject', source: '24 §6.1' },
   DUPLICATE_USER_PHONE: { status: 400, severity: 'reject', source: '24 §6.1' },
   USER_HAS_HISTORY: { status: 400, severity: 'reject', source: '24 §6.1' },
   INVALID_USER_STATUS_TRANSITION: { status: 400, severity: 'reject', source: '24 §6.1' },
-  // 502 = ปลายทางภายนอก (Supabase Auth) ไม่ตอบ ไม่ใช่ข้อมูลผู้เรียกผิด (`08` §14 · D1)
-  INVITE_SEND_FAILED: { status: 502, severity: 'reject', source: '24 §6.1' },
+  // 502 = ปลายทางภายนอก (Supabase Auth) ไม่ตอบ/ปฏิเสธ ไม่ใช่ข้อมูลผู้เรียกผิด (มติ PO 03/10/2569)
+  AUTH_ACCOUNT_SYNC_FAILED: { status: 502, severity: 'reject', source: '24 §6.1' },
   INVALID_USER_SCOPE: { status: 400, severity: 'reject', source: '24 §6.1' },
   BANK_ACCOUNT_NAME_MISMATCH: { status: 200, severity: 'warn', source: '24 §6.1' },
   CYCLE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
@@ -161,6 +162,7 @@ export const ERROR_CATALOG = {
   USER_NOT_PROVISIONED: { status: 403, severity: 'reject', source: '24 §6.9' },
   PERMISSION_DENIED: { status: 403, severity: 'reject', source: '24 §6.9' },
   LAST_SUPERADMIN_REMOVAL: { status: 400, severity: 'reject', source: '24 §6.9' },
+  PASSWORD_CHANGE_REQUIRED: { status: 403, severity: 'reject', source: '24 §6.9' },
   SEED_ROLE_DELETE: { status: 400, severity: 'reject', source: '24 §6.9' },
   SEED_ROLE_RENAME: { status: 400, severity: 'reject', source: '24 §6.9' },
   ROLE_NOT_EDITABLE: { status: 400, severity: 'reject', source: '24 §6.9' },

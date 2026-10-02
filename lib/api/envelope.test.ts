@@ -11,7 +11,7 @@ describe('apiSuccess()', () => {
   })
 
   it('รับ status 201 ตอนสร้าง + แนบ warning ได้ (`08` §14 · D1)', async () => {
-    const warning = { code: 'INVITE_SEND_FAILED', title: 'ส่งคำเชิญไม่สำเร็จ', message: 'ลองส่งใหม่ภายหลัง' }
+    const warning = { code: 'AUTH_EMAIL_NOT_SYNCED', title: 'ย้ายอีเมลไม่สำเร็จ', message: 'ลองบันทึกใหม่ภายหลัง' }
     const response = apiSuccess({ id: 'u1' }, { status: 201, warning })
     expect(response.status).toBe(201)
     expect(await response.json()).toEqual({ success: true, data: { id: 'u1' }, error: null, warning })

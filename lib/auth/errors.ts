@@ -12,6 +12,7 @@ export const AUTH_ERROR_CODES = [
   'PERMISSION_DENIED',
   'LAST_SUPERADMIN_REMOVAL',
   'REQUIRED_MISSING',
+  'PASSWORD_CHANGE_REQUIRED',
 ] as const
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number]
@@ -26,6 +27,7 @@ const HTTP_STATUS: Record<AuthErrorCode, number> = {
   PERMISSION_DENIED: 403,
   LAST_SUPERADMIN_REMOVAL: 400,
   REQUIRED_MISSING: 400,
+  PASSWORD_CHANGE_REQUIRED: 403,
 }
 
 /**
@@ -35,7 +37,7 @@ const HTTP_STATUS: Record<AuthErrorCode, number> = {
 const MESSAGES: Record<AuthErrorCode, { title: string; message: string }> = {
   UNAUTHENTICATED: { title: 'ยังไม่ได้เข้าสู่ระบบ', message: 'กรุณาเข้าสู่ระบบก่อนใช้งาน' },
   SESSION_EXPIRED: { title: 'เซสชันหมดอายุ', message: 'เซสชันมีอายุ 24 ชั่วโมง กรุณาเข้าสู่ระบบใหม่' },
-  INVALID_CREDENTIALS: { title: 'เข้าสู่ระบบไม่สำเร็จ', message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' },
+  INVALID_CREDENTIALS: { title: 'เข้าสู่ระบบไม่สำเร็จ', message: 'อีเมล/ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง' },
   ACCOUNT_INACTIVE: {
     title: 'บัญชีถูกระงับการใช้งาน',
     message: 'กรุณาติดต่อผู้ดูแลระบบ (Superadmin) เพื่อปลดล็อกบัญชี',
@@ -50,6 +52,10 @@ const MESSAGES: Record<AuthErrorCode, { title: string; message: string }> = {
     message: 'ระบบต้องมี Superadmin ที่ใช้งานได้อย่างน้อย 1 คนเสมอ',
   },
   REQUIRED_MISSING: { title: 'ข้อมูลไม่ครบ', message: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' },
+  PASSWORD_CHANGE_REQUIRED: {
+    title: 'ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน',
+    message: 'ผู้ดูแลระบบตั้งรหัสผ่านให้บัญชีนี้ — กรุณาตั้งรหัสผ่านใหม่ของคุณเองก่อนใช้งานต่อ',
+  },
 }
 
 export function authErrorStatus(code: AuthErrorCode): number {

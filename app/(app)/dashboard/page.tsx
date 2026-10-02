@@ -31,9 +31,9 @@ export default async function DashboardPage() {
               <dd className="font-medium text-slate-800">{user.fullName}</dd>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <dt className="text-slate-500">อีเมล</dt>
+              <dt className="text-slate-500">ชื่อผู้ใช้ / อีเมล</dt>
               <dd>
-                <RefText>{user.email}</RefText>
+                <RefText>{[user.username, user.email].filter(Boolean).join(' · ') || '-'}</RefText>
               </dd>
             </div>
             <div className="flex items-center justify-between gap-4">

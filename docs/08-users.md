@@ -13,6 +13,7 @@
 |---|---|---|
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Foundation spec เปล่า |
 | v2 | 03/07/2569 | Reformat + เติมเนื้อหาจริงจาก `02-database-schema-design.md` (users table fields) และยืนยัน tab structure กับ Product Owner (3 tab หลัก, tab เจ้าหน้าที่ติดตามทรัพย์แบ่งย่อย Inhouse/Outsource ภายใน — ตรงกับ `07-roles-permissions.md` §17) |
+| v2.1 | 03/10/2569 | **DEC-010** — เพิ่ม `username` (บังคับ · ใช้ login) · `email` ไม่บังคับ · สร้างผู้ใช้ = ผู้ดูแลตั้งรหัสผ่านเริ่มต้นให้ (ไม่ส่งอีเมลเชิญ) · ตั้งรหัสผ่านใหม่ให้ผู้ใช้ได้ (`POST /api/users/:id/password`) เฉพาะผู้ที่เพิ่มผู้ใช้ได้ · ผู้ใช้ต้องเปลี่ยนรหัสเองครั้งแรก (`must_change_password`) |
 
 ขอบเขตเอกสารนี้: จัดการผู้ใช้งานระบบทั้งหมด — CRUD, การผูก role/team/company, lifecycle (active/suspended/deleted), และการเชื่อมกับ Supabase Auth
 
@@ -61,7 +62,7 @@
 | Consistency | ใช้มาตรฐานเดียวกันทุก module | ลดงานแก้ภายหลัง |
 | Reusability | component/rule ใช้ซ้ำ | Cursor ทำซ้ำได้ |
 | Traceability | ทุก action ต้อง trace | audit/report |
-| User ↔ Supabase Auth | User record ผูกกับ `supabase_uid` เสมอ — ไม่เก็บ password ในระบบเราเอง | Supabase Auth จัดการ authentication ทั้งหมด (ตาม `05-auth-and-access-control.md`) |
+| User ↔ Supabase Auth | User record ผูกกับ `supabase_uid` เสมอ — ไม่เก็บ password ในระบบเราเอง (ผู้ดูแลตั้งรหัสผ่านผ่าน Supabase Admin API — DEC-010) | Supabase Auth จัดการ authentication ทั้งหมด (ตาม `05-auth-and-access-control.md`) |
 
 ## 7. Data Entities / Required Objects
 
@@ -72,7 +73,9 @@
 | id | uuid | yes | — |
 | role_id | uuid | yes | FK → roles (ดูไฟล์ 07) |
 | supabase_uid | uuid | yes (หลัง activate) | FK → Supabase Auth |
-| email | string | yes | unique ต่อ organization |
+| username | string | yes | unique ต่อ organization (ตัวพิมพ์เล็ก a-z 0-9 . _ - ยาว 3–50) · ใช้ login (DEC-010) |
+| email | string | no | unique ต่อ organization ถ้ากรอก · ใช้ login ได้ (DEC-010) |
+| must_change_password | boolean | yes | ผู้ดูแลตั้ง/รีเซ็ตรหัสให้ → ผู้ใช้ต้องเปลี่ยนเองก่อนใช้งาน (DEC-010) |
 | full_name | string | yes | — |
 | phone | string | no | — |
 | employee_code | string | no | รหัสพนักงาน (optional) |
@@ -92,20 +95,23 @@
 ## 8. UI / UX Rules
 
 - **Sub tabs: 3 tab หลัก — แอดมิน (System) / เจ้าหน้าที่ติดตามทรัพย์ / บริษัทไฟแนนซ์** — tab "เจ้าหน้าที่ติดตามทรัพย์" แบ่งย่อยภายในเป็น **Inhouse / Outsource** (เช่น toggle หรือ filter chip ภายใน tab เดียวกัน ไม่ใช่ tab แยกระดับบนสุด) — ยืนยันกับ Product Owner แล้ว (03/07/2569) สอดคล้องกับ `07-roles-permissions.md` §17
-- Search name/phone/email
+- Search name/username/phone/email
 - Filter status/role
 - Role select เปลี่ยนตาม group ที่เลือก (เลือก tab "เจ้าหน้าที่ติดตามทรัพย์" + Inhouse → role select แสดงเฉพาะ 3 role ของ inhouse)
 
 ## 9. Workflow / Lifecycle
 
-- Create user → assign group/role → activate → user can login
+- Create user → assign group/role + ตั้งรหัสผ่านเริ่มต้น → user login ได้ทันที → ถูกบังคับเปลี่ยนรหัสเองครั้งแรก (DEC-010)
+- ผู้ดูแลตั้งรหัสผ่านใหม่ให้ (ลืมรหัส) → user ต้องเปลี่ยนรหัสเองตอน login ครั้งถัดไป
 - Deactivate user → preserve history
 
 ## 10. Security / Control Rules
 
 - User ที่มี transaction history ห้าม delete — ใช้ suspend แทนเสมอ (soft delete เท่านั้น)
 - Deactivate ไม่ลบ audit
-- Email/phone duplicate ต้องตรวจ (unique ต่อ organization)
+- Username/email/phone duplicate ต้องตรวจ (unique ต่อ organization)
+- ตั้งรหัสผ่านให้ผู้ใช้ได้เฉพาะผู้มี `manage:manage_users` ภายใน scope ตัวเอง · ระบบไม่บันทึกรหัสผ่านลง audit (DEC-010)
+- **บัญชีกลุ่มแอดมิน (System) จัดการได้เฉพาะ Superadmin** — สร้าง/แก้ไข/ย้ายเข้ากลุ่ม/ตั้งรหัส/ระงับ/ลบ · ไม่ใช่ Superadmin เปลี่ยน role ของตัวเองไม่ได้ (DEC-010 — กันยกสิทธิ์ตัวเอง)
 - User inactive (suspended/deleted) ห้าม login — บังคับใช้ที่ `05-auth-and-access-control.md` §10
 
 ## 11. Validation & Error Handling
@@ -114,6 +120,8 @@
 |---|---|---|
 | REQUIRED_MISSING | ข้อมูลบังคับไม่ครบ | inline error |
 | DUPLICATE_RECORD | email/phone ซ้ำในองค์กรเดียวกัน | reject พร้อมอธิบาย |
+| DUPLICATE_USERNAME | username ซ้ำในองค์กรเดียวกัน | reject พร้อมอธิบาย |
+| AUTH_ACCOUNT_SYNC_FAILED | Supabase Auth ปฏิเสธ/ไม่ตอบตอนสร้างบัญชีหรือตั้งรหัสผ่าน | reject (502) — ไม่บันทึกผู้ใช้ |
 | PERMISSION_DENIED | ไม่มีสิทธิ์ | UI hide/disable และ API 403 |
 | INVALID_STATUS | สถานะไม่ถูก | reject transition |
 | USER_HAS_HISTORY | พยายาม delete user ที่มี transaction history | reject — ต้อง suspend แทน |
@@ -142,6 +150,7 @@
 | PATCH | /api/users/:id | แก้ไขข้อมูล | audit required |
 | PATCH | /api/users/:id/suspend | ระงับการใช้งาน | ต้องระบุ reason |
 | PATCH | /api/users/:id/reactivate | เปิดใช้งานกลับ | Superadmin/Admin เท่านั้น |
+| POST | /api/users/:id/password | ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้ | `manage:manage_users` · ต้องระบุ reason · ผู้ใช้ต้องเปลี่ยนเองครั้งถัดไป (DEC-010) |
 
 ## 15. Acceptance Criteria
 
@@ -158,6 +167,10 @@
 | Validation | ข้อมูลไม่ครบ | แสดง error ชัดเจน |
 | Delete user ที่มีประวัติ | พยายามลบ user ที่เคยมี expense/case | reject USER_HAS_HISTORY แนะนำ suspend แทน |
 | Email ซ้ำ | สร้าง user ด้วย email ที่มีอยู่แล้วในองค์กรเดียวกัน | reject DUPLICATE_RECORD |
+| Username ซ้ำ | สร้าง user ด้วย username ที่มีอยู่แล้วในองค์กรเดียวกัน | reject DUPLICATE_USERNAME |
+| จัดการบัญชีกลุ่ม System | ผู้ดูแลที่ไม่ใช่ Superadmin สร้าง/แก้/ตั้งรหัส/ระงับ/ลบ ผู้ใช้กลุ่ม System หรือมอบ role กลุ่ม System | 403 PERMISSION_DENIED · UI ซ่อนปุ่มและไม่แสดงกลุ่ม System ในฟอร์ม |
+| เปลี่ยน role ตัวเอง | ผู้ดูแลที่ไม่ใช่ Superadmin แก้ role ของตัวเอง | 403 PERMISSION_DENIED |
+| บังคับเปลี่ยนรหัส | ผู้ดูแลตั้งรหัสให้ → user login | redirect `/auth/change-password` · API อื่นตอบ PASSWORD_CHANGE_REQUIRED จนกว่าจะเปลี่ยน |
 
 ---
 
@@ -165,6 +178,7 @@
 
 - **Sub tab หน้าจัดการผู้ใช้งาน: 3 tab หลัก** (แอดมิน / เจ้าหน้าที่ติดตามทรัพย์ / บริษัทไฟแนนซ์) โดย tab "เจ้าหน้าที่ติดตามทรัพย์" แบ่งย่อย Inhouse/Outsource ภายใน — ยืนยันกับ Product Owner แล้ว (03/07/2569) ตรงกับ `07-roles-permissions.md` §17
 - **User ผูก Supabase Auth ผ่าน `supabase_uid`** ไม่เก็บ password เอง (§6, §7.1)
+- **DEC-010 (03/10/2569)**: login ด้วยอีเมลหรือ username · username บังคับ / email ไม่บังคับ · ผู้ดูแลตั้งรหัสผ่านให้ตอนสร้างและรีเซ็ตได้ (แทน flow เชิญทางอีเมลของ D1) · บังคับผู้ใช้เปลี่ยนรหัสเองครั้งแรก
 - **ห้าม hard-delete user ที่มี transaction history เด็ดขาด** — ใช้ suspend เสมอ (§10, §11)
 - **Field บังคับ conditional ตาม role_group**: `team_id` บังคับถ้า inhouse/outsource, `company_id` บังคับถ้า finance_company (§7.1)
 

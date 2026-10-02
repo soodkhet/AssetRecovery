@@ -30,6 +30,24 @@ export async function createSupabaseServerClient() {
 }
 
 /**
+ * Supabase client สิทธิ์ anon ที่ **ไม่ผูก cookie** — ใช้ตรวจรหัสผ่านโดยไม่แตะ session ของผู้ใช้
+ * (เช่น ยืนยันรหัสปัจจุบันก่อนเปลี่ยนรหัส — DEC-010)
+ */
+export function createSupabaseStatelessClient() {
+  const env = getServerEnv()
+  return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return []
+      },
+      setAll() {
+        // ไม่เก็บ session — ใช้ตรวจรหัสครั้งเดียวแล้วทิ้ง
+      },
+    },
+  })
+}
+
+/**
  * Supabase client สิทธิ์ service_role — bypass ทุก policy
  * ⚠️ ใช้เฉพาะงาน server-side ที่จำเป็นจริง (Storage admin / job) · ห้าม import เข้าโค้ดฝั่ง client เด็ดขาด
  */

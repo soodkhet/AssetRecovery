@@ -16,6 +16,7 @@
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header block, Login sequence diagram, endpoint จริงแทน placeholder, Decisions/Open Items แยกชัดเจน) — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v3 | 03/07/2569 | Product Owner ยืนยัน 2 Open Item: (1) Session timeout = 24 ชั่วโมง (2) MFA ไม่เปิดใช้ในเฟส 1 — ย้ายจาก Open Item เป็น Decision (§17), อัปเดตค่าใน §10 |
 | v3.2 | 14/08/2569 | **ปิด open item D1** ตามมติ PO: การตั้งรหัสผ่านครั้งแรกใช้ลิงก์คำเชิญทางอีเมล (`inviteUserByEmail`) → เพิ่มเป็น Decision ใน §17 พร้อมรายละเอียดหน้าปลายทาง/ผู้ส่งซ้ำ/นโยบายรหัสผ่าน · implement ที่ Phase 1.9 (`lib/users/invite.ts` · `lib/users/provisioning.ts` · `/auth/set-password`) — ไม่กระทบ auth logic เดิม (login/session/route guard เหมือนเดิมทุกข้อ) |
+| v3.3 | 03/10/2569 | **DEC-010** — Login รับอีเมลหรือ username (§6.1) · ยกเลิกลิงก์คำเชิญของ D1: ผู้ดูแลตั้งรหัสผ่านให้ + บังคับผู้ใช้เปลี่ยนเองครั้งแรก (`/auth/change-password`, `PASSWORD_CHANGE_REQUIRED`) · เพิ่ม endpoint `POST /api/auth/change-password` (§14) · หน้า `/auth/set-password` คงไว้เป็นปลายทางลิงก์จาก Supabase (ลิงก์เชิญเดิมที่ค้าง / ลืมรหัสผ่าน D2) |
 | v3.1 | 04/07/2569 | แก้จำนวน role อ้างอิง "14" → "15" ตามการนับใหม่ในไฟล์ 07 v2.2 / seed data ไฟล์ 02 §12 (แก้ตัวเลขอ้างอิงเท่านั้น ไม่กระทบ auth logic) |
 
 ขอบเขตเอกสารนี้: กลไก Authentication/Session/Route Guard เชิงเทคนิค — วิธี login, การตรวจสอบ session, การ guard route ตาม permission
@@ -76,15 +77,17 @@ sequenceDiagram
     participant MW as Permission Middleware
     participant DB as PostgreSQL (Prisma)
 
-    U->>Web: กรอก email/password
-    Web->>Auth: signInWithPassword()
+    U->>Web: กรอก อีเมลหรือ username + password
+    Web->>DB: หา user จากอีเมล/username → supabase_uid
+    Web->>Auth: admin.getUserById() → อีเมลของบัญชี Auth
+    Web->>Auth: signInWithPassword(อีเมลของบัญชี Auth)
     Auth-->>Web: JWT (session token)
     Web->>DB: โหลด user + role + scope (ตาม supabase_uid)
     alt user.status != 'active'
         Web-->>U: ปฏิเสธ login — "บัญชีถูกระงับการใช้งาน"
     else user.status == 'active'
         Web->>Web: cache role+scope ใน server session
-        Web-->>U: Redirect → หน้า Dashboard ตาม role
+        Web-->>U: Redirect → /auth/change-password ถ้า must_change_password · ไม่งั้นหน้า Dashboard ตาม role
     end
 
     Note over U,MW: ทุก request ถัดไปในหน้า Back Office
@@ -161,6 +164,7 @@ sequenceDiagram
 | POST | /api/auth/login | Sign in ผ่าน Supabase Auth | คืน JWT + redirect ตาม role |
 | POST | /api/auth/logout | Sign out | invalidate session |
 | GET | /api/auth/session | ตรวจ session ปัจจุบัน | ใช้ตอน page load เพื่อโหลด role+scope |
+| POST | /api/auth/change-password | ผู้ใช้เปลี่ยนรหัสผ่านของตัวเอง | ใช้ได้แม้ `must_change_password` · ล้างธง + audit (DEC-010) |
 | EVENT | auth.login.failed | บันทึก failed login | ส่งไป audit log ทุกครั้ง |
 
 ## 15. Acceptance Criteria
@@ -191,7 +195,7 @@ sequenceDiagram
 - **Superadmin ห้าม lockout ตัวเอง** — ต้องมี safeguard กันไม่ให้ deactivate Superadmin คนสุดท้ายของระบบ (ข้อ 10, เพิ่ม test case ข้อ 16)
 - **รายชื่อ Role/Permission Matrix แบบเต็มอยู่ที่ `07-roles-permissions.md` เท่านั้น** — ไฟล์นี้ไม่ duplicate รายละเอียด role
 - **Session timeout = 24 ชั่วโมง** — ยืนยันกับ Product Owner 03/07/2569 (เดิมเป็น Open Item)
-- **การตั้งรหัสผ่านครั้งแรก = ลิงก์คำเชิญทางอีเมล (`inviteUserByEmail`)** — ยืนยันกับ Product Owner 14/08/2569 (ปิด open item D1): ผู้ใช้ตั้งรหัสผ่านเองที่หน้า `/auth/set-password` · ระบบไม่เก็บ/ไม่ตั้งรหัสผ่านแทนใคร · ส่งซ้ำได้โดยผู้มีสิทธิ์ `manage_users` ผ่าน `POST /api/users/:id/invite` (บังคับ `reason`) · อายุลิงก์ใช้ค่าของ Supabase project · รหัสผ่านขั้นต่ำ 8 ตัว มีทั้งตัวอักษรและตัวเลข
+- ~~**การตั้งรหัสผ่านครั้งแรก = ลิงก์คำเชิญทางอีเมล (`inviteUserByEmail`)**~~ — มติ D1 (14/08/2569) **ถูกแทนที่ด้วย DEC-010** (03/10/2569): ผู้ดูแลที่มี `manage:manage_users` ตั้งรหัสผ่านเริ่มต้นตอนสร้างผู้ใช้ และตั้งรหัสใหม่ให้ได้ที่ `POST /api/users/:id/password` (บังคับ `reason` · บัญชีกลุ่ม System ตั้งให้ได้เฉพาะ Superadmin) → ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งถัดไป (ต้องกรอกรหัสปัจจุบัน/รหัสชั่วคราว · ระหว่างนั้นทุก endpoint ยกเว้น change-password/logout/session ตอบ `PASSWORD_CHANGE_REQUIRED` — บังคับที่ `requireSession()`) · login ได้ทั้งอีเมลและ username · รหัสผ่านขั้นต่ำ 8 ตัว มีทั้งตัวอักษรและตัวเลข
 - **MFA (Multi-Factor Authentication) ไม่เปิดใช้ในเฟส 1** — ยืนยันกับ Product Owner 03/07/2569 — คงเป็น Open Item สำหรับเฟส 2 ว่าจะเปิดหรือไม่ และถ้าเปิดจะเปิดทุก role หรือเฉพาะ role สูง
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)

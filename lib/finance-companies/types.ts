@@ -35,7 +35,9 @@ export interface FinanceCompanyDto {
 export interface CompanyUserDto {
   id: string
   fullName: string
-  email: string
+  username: string | null
+  /** ไม่บังคับ (มติ PO 03/10/2569) */
+  email: string | null
   phone: string | null
   roleName: string
   status: string
