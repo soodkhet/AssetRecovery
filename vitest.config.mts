@@ -16,6 +16,19 @@ function testDatabaseUrl(): Record<string, string> {
   return url ? { TEST_DATABASE_URL: url } : {}
 }
 
+/**
+ * บังคับ session `TimeZone = UTC` ให้ทุก connection ของเทสต์ (node-pg อ่าน `PGOPTIONS`)
+ *
+ * `@prisma/adapter-pg` สมมติว่า session เป็น UTC: เขียน `Date` เป็นสตริง UTC **ไม่มี offset** และตอนอ่าน
+ * `timestamptz` ก็ตัด offset ที่ server ส่งมาทิ้งแล้วแปะ `+00:00` แทน ⇒ ถ้า Postgres ตั้ง `TimeZone`
+ * เป็นอย่างอื่น (Postgres บนเครื่อง dev ที่ initdb เอา timezone ของเครื่อง = `Asia/Bangkok`) ทุกค่าที่ Prisma
+ * เขียนจะเพี้ยนไป 7 ชม. และเทสต์ที่เทียบกับ `NOW()` ใน raw SQL หรือนับวันจะพังแบบขึ้นกับเวลาที่รัน
+ * Supabase + Postgres ใน CI เป็น UTC อยู่แล้ว — ตรงนี้ทำให้เครื่อง dev ได้ผลเหมือน production
+ */
+function testEnv(): Record<string, string> {
+  return { ...testDatabaseUrl(), PGOPTIONS: '-c TimeZone=UTC' }
+}
+
 const DB_TESTS = '**/*.db.test.ts'
 
 /**
@@ -31,14 +44,14 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    env: testDatabaseUrl(),
+    env: testEnv(),
     projects: [
       {
         test: {
           name: 'unit',
           globals: true,
           environment: 'node',
-          env: testDatabaseUrl(),
+          env: testEnv(),
           // `orchestrator/lib/*.test.mjs` = ยามของ parser PROGRESS.md + run lock — ต้องรันคู่กับเทสต์แอปเสมอ
           // (บั๊กที่มันกัน: parser ทิ้งแถวเงียบ ๆ จน dashboard โชว์ 100% ปลอม · orchestrator หยิบงานซ้ำ 2 session)
           include: ['**/*.{test,spec}.{ts,tsx}', 'orchestrator/**/*.test.mjs'],
@@ -51,7 +64,7 @@ export default defineConfig({
           name: 'db',
           globals: true,
           environment: 'node',
-          env: testDatabaseUrl(),
+          env: testEnv(),
           include: [DB_TESTS],
           exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**'],
           alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
