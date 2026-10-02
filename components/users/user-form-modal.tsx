@@ -87,8 +87,8 @@ function payloadOf(form: FormState, isEdit: boolean): Record<string, unknown> {
     employeeCode: form.employeeCode.trim() === '' ? null : form.employeeCode.trim(),
     teamId: scope === 'team' && form.teamId !== '' ? form.teamId : null,
     companyId: scope === 'company' && form.companyId !== '' ? form.companyId : null,
-    ...(isEdit ? {} : { password: form.password, confirmPassword: form.confirmPassword }),
-    reason: form.reason.trim(),
+    // สร้างผู้ใช้ไม่มีช่องเหตุผล (มติ PO 03/10/2569) · แก้ไขผู้ใช้ยังบังคับ (กระทบสิทธิ์ของคนเดิม)
+    ...(isEdit ? { reason: form.reason.trim() } : { password: form.password, confirmPassword: form.confirmPassword }),
   }
 }
 
@@ -369,14 +369,16 @@ export function UserFormModal({
           </InlineAlert>
         )}
 
-        <Field id="user-reason" label="เหตุผล" required error={errors.reason}>
-          <Textarea
-            id="user-reason"
-            value={form.reason}
-            onChange={(event) => set('reason', event.target.value)}
-            placeholder="เช่น พนักงานใหม่เริ่มงาน 1 ก.ย. 2569"
-          />
-        </Field>
+        {isEdit && (
+          <Field id="user-reason" label="เหตุผล" required error={errors.reason}>
+            <Textarea
+              id="user-reason"
+              value={form.reason}
+              onChange={(event) => set('reason', event.target.value)}
+              placeholder="เช่น ย้ายไปทีมกรุงเทพ 2 ตั้งแต่ 1 ต.ค. 2569"
+            />
+          </Field>
+        )}
       </div>
     </Modal>
   )

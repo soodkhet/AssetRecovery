@@ -184,7 +184,8 @@ export async function getUser(user: SessionUser, userId: string): Promise<UserDt
 interface MutationContext {
   actor: SessionUser
   meta: RequestMeta
-  reason: string
+  /** `null` ได้เฉพาะการสร้างผู้ใช้ (flow ปกติ — `lib/audit/reason-policy.ts`) */
+  reason: string | null
 }
 
 /** ผลของ mutation ที่อาจมีเรื่องต้องเตือนแม้สำเร็จ (เช่น ย้ายอีเมลฝั่ง Supabase Auth ไม่ผ่าน) */

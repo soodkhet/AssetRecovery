@@ -69,9 +69,16 @@ describe('userCreateSchema', () => {
     expect(mismatch.error?.issues[0]?.path).toEqual(['confirmPassword'])
   })
 
-  it('`reason` บังคับทุก mutation (ผู้ใช้กระทบสิทธิ์ — `90` §13)', () => {
-    expect(userCreateSchema.safeParse({ ...valid, reason: '' }).success).toBe(false)
-    expect(userCreateSchema.safeParse({ ...valid, reason: 'สั้น' }).success).toBe(false)
+  it('สร้างผู้ใช้ไม่ต้องมีเหตุผล (มติ PO 03/10/2569 · create = flow ปกติตาม reason-policy)', () => {
+    const { reason: _omit, ...withoutReason } = valid
+    expect(userCreateSchema.safeParse(withoutReason).success).toBe(true)
+  })
+
+  it('แก้ไขผู้ใช้ยังบังคับเหตุผล (กระทบสิทธิ์ของคนเดิม — `90` §13)', () => {
+    expect(userUpdateSchema.safeParse({ ...valid, reason: '' }).success).toBe(false)
+    expect(userUpdateSchema.safeParse({ ...valid, reason: 'สั้น' }).success).toBe(false)
+    const { reason: _omit, ...withoutReason } = valid
+    expect(userUpdateSchema.safeParse(withoutReason).success).toBe(false)
   })
 
   it('ฟอร์มส่ง status มาไม่มีผล — เปลี่ยนสถานะต้องผ่าน endpoint แยก (Rule 04)', () => {
@@ -101,10 +108,10 @@ describe('userUpdateSchema', () => {
 })
 
 describe('userPasswordResetSchema', () => {
-  it('รหัสผ่านใหม่ตามนโยบาย + เหตุผลบังคับ', () => {
-    const good = { password: 'newpass123', confirmPassword: 'newpass123', reason: 'ผู้ใช้ลืมรหัสผ่าน' }
+  it('รหัสผ่านใหม่ตามนโยบาย · ไม่ต้องมีเหตุผล (ระบบเติมให้ — มติ PO 03/10/2569)', () => {
+    const good = { password: 'newpass123', confirmPassword: 'newpass123' }
     expect(userPasswordResetSchema.safeParse(good).success).toBe(true)
-    expect(userPasswordResetSchema.safeParse({ ...good, reason: '' }).success).toBe(false)
+    expect(userPasswordResetSchema.safeParse({ ...good, password: 'short1', confirmPassword: 'short1' }).success).toBe(false)
     expect(userPasswordResetSchema.safeParse({ ...good, confirmPassword: 'other1234' }).success).toBe(false)
   })
 })

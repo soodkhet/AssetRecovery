@@ -42,10 +42,10 @@ export const POST = withApiPermission<RouteContext>(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const company = await getFinanceCompany(user, id)
-    const { reason, password, confirmPassword: _confirm, ...values } = parsed.data
+    const { password, confirmPassword: _confirm, ...values } = parsed.data
 
     const result = await createUser(
-      { actor: user, meta: getRequestMeta(request), reason },
+      { actor: user, meta: getRequestMeta(request), reason: null },
       { ...values, teamId: null, companyId: company.id },
       password,
     )

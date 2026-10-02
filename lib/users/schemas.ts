@@ -10,7 +10,9 @@ import { passwordPairFields, refinePasswordPair } from '@/lib/auth/schemas'
  *   ตาม Rule 04 (transition endpoint) เพื่อบังคับ `reason` และยาม lifecycle ให้ครบทุกทาง
  * - `team_id`/`company_id` เป็น nullable ที่ชั้น schema แล้วบังคับ conditional required ตาม role group
  *   ที่ `assertScopeConsistent()` (ต้องรู้ role group ของ `role_id` ก่อน จึงตรวจที่ชั้น business logic)
- * - `reason` บังคับทุก mutation: ผู้ใช้ = **สิทธิ์** (`90` §13 — เปลี่ยน role/สถานะกระทบการเข้าถึงข้อมูล)
+ * - `reason` บังคับเมื่อ**แก้ของเดิม** (แก้ไข/ระงับ/เปิดใช้/ลบ) — กระทบสิทธิ์ของคนที่มีอยู่แล้ว (`90` §13)
+ *   ส่วน**สร้างผู้ใช้**และ**ผู้ดูแลตั้งรหัสผ่านใหม่**ไม่มีช่องเหตุผล (มติ PO 03/10/2569 · สร้าง = flow ปกติตาม
+ *   `lib/audit/reason-policy.ts` · ตั้งรหัส = ระบบเติมเหตุผลมาตรฐานลง audit ให้เอง)
  * - มติ PO 03/10/2569: `username` บังคับ · `email` ไม่บังคับ · ตอนสร้างผู้ดูแลตั้งรหัสผ่านให้เลย
  *   (ไม่ส่งอีเมลเชิญ) · แก้ไขผู้ใช้ไม่แตะรหัสผ่าน — ตั้งใหม่ผ่าน `POST /api/users/:id/password` เท่านั้น
  */
@@ -57,8 +59,8 @@ const userFields = z.object({
 /** ตัวผู้ใช้ล้วน (ไม่มี `reason`) — FE ใช้ตรวจฟอร์มก่อนเปิดกล่องยืนยันเหตุผล */
 export const userFieldsSchema = userFields
 
-/** สร้างผู้ใช้ = ข้อมูลผู้ใช้ + รหัสผ่านเริ่มต้นที่ผู้ดูแลตั้งให้ (ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งแรก) */
-export const userCreateSchema = refinePasswordPair(userFields.extend(passwordPairFields.shape).extend({ reason: reasonSchema }))
+/** สร้างผู้ใช้ = ข้อมูลผู้ใช้ + รหัสผ่านเริ่มต้นที่ผู้ดูแลตั้งให้ (ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งแรก) · ไม่มีเหตุผล */
+export const userCreateSchema = refinePasswordPair(userFields.extend(passwordPairFields.shape))
 
 /** PATCH ส่งค่าทั้งชุดเหมือนตอนสร้าง (ฟอร์มเดียวกัน) — ไม่ใช่ partial patch · ไม่มีรหัสผ่าน */
 export const userUpdateSchema = userFields.extend({ reason: reasonSchema })
@@ -70,12 +72,14 @@ export const userUpdateSchema = userFields.extend({ reason: reasonSchema })
 export const companyUserCreateSchema = refinePasswordPair(
   userFields
     .omit({ teamId: true, companyId: true })
-    .extend(passwordPairFields.shape)
-    .extend({ reason: reasonSchema }),
+    .extend(passwordPairFields.shape),
 )
 
-/** `POST /api/users/:id/password` — ผู้ดูแลตั้งรหัสผ่านใหม่ให้ (เหตุผลบังคับ: กระทบสิทธิ์เข้าถึง — `90` §13) */
-export const userPasswordResetSchema = refinePasswordPair(passwordPairFields.extend({ reason: reasonSchema }))
+/** `POST /api/users/:id/password` — ผู้ดูแลตั้งรหัสผ่านใหม่ให้ · ไม่มีช่องเหตุผล (ระบบเติม `ADMIN_PASSWORD_RESET_REASON`) */
+export const userPasswordResetSchema = refinePasswordPair(passwordPairFields)
+
+/** เหตุผลที่ระบบเติมลง audit ตอนผู้ดูแลตั้งรหัสผ่านใหม่ — `supabase_uid` อาจเปลี่ยน (ฟิลด์สิทธิ์ใน reason-policy) */
+export const ADMIN_PASSWORD_RESET_REASON = 'ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้'
 
 /** `PATCH /:id/suspend` และ `/reactivate` (`08` §14) — เหตุผลบังคับทั้งคู่ (`08` §13) */
 export const userStatusChangeSchema = z.object({ reason: reasonSchema })

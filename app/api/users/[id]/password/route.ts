@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { getUser, setUserPassword } from '@/lib/users/queries'
-import { userPasswordResetSchema } from '@/lib/users/schemas'
+import { ADMIN_PASSWORD_RESET_REASON, userPasswordResetSchema } from '@/lib/users/schemas'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -11,7 +11,7 @@ type RouteContext = { params: Promise<{ id: string }> }
  *
  * - สิทธิ์ = `manage:manage_users` เท่านั้น (ชุดเดียวกับคนที่เพิ่มผู้ใช้ได้) + scope ทีม/บริษัทที่ `getUser()`
  * - ไม่ใช่ Superadmin ตั้งรหัสให้ Superadmin ไม่ได้ → 403 `PERMISSION_DENIED`
- * - `reason` บังคับ เพราะกระทบสิทธิ์เข้าถึงระบบ (`90` §13) · audit ไม่มีรหัสผ่าน
+ * - ไม่มีช่องเหตุผล (มติ PO 03/10/2569) — ระบบเติม `ADMIN_PASSWORD_RESET_REASON` ลง audit ให้ · audit ไม่มีรหัสผ่าน
  * - ผู้ใช้ต้องเปลี่ยนรหัสเองตอน login ครั้งถัดไป (ยกเว้นตั้งให้ตัวเอง)
  */
 export const POST = withApiPermission<RouteContext>(
@@ -25,7 +25,7 @@ export const POST = withApiPermission<RouteContext>(
 
     const current = await getUser(user, id)
     const updated = await setUserPassword(
-      { actor: user, meta: getRequestMeta(request), reason: parsed.data.reason },
+      { actor: user, meta: getRequestMeta(request), reason: ADMIN_PASSWORD_RESET_REASON },
       current,
       parsed.data.password,
     )

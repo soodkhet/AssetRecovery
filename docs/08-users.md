@@ -150,7 +150,7 @@
 | PATCH | /api/users/:id | แก้ไขข้อมูล | audit required |
 | PATCH | /api/users/:id/suspend | ระงับการใช้งาน | ต้องระบุ reason |
 | PATCH | /api/users/:id/reactivate | เปิดใช้งานกลับ | Superadmin/Admin เท่านั้น |
-| POST | /api/users/:id/password | ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้ | `manage:manage_users` · ต้องระบุ reason · ผู้ใช้ต้องเปลี่ยนเองครั้งถัดไป (DEC-010) |
+| POST | /api/users/:id/password | ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้ | `manage:manage_users` · ไม่มีช่อง reason (ระบบเติมเหตุผลมาตรฐานลง audit) · ผู้ใช้ต้องเปลี่ยนเองครั้งถัดไป (DEC-010) |
 
 ## 15. Acceptance Criteria
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
 import { userPasswordResetSchema } from '@/lib/users/schemas'
@@ -26,12 +26,11 @@ export function UserPasswordModal({
   const { showToast } = useToast()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [reason, setReason] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
   async function save(): Promise<void> {
-    const parsed = userPasswordResetSchema.safeParse({ password, confirmPassword, reason: reason.trim() })
+    const parsed = userPasswordResetSchema.safeParse({ password, confirmPassword })
     if (!parsed.success) {
       const fields: Record<string, string> = {}
       for (const issue of parsed.error.issues) {
@@ -109,14 +108,6 @@ export function UserPasswordModal({
           </Field>
         </div>
 
-        <Field id="reset-reason" label="เหตุผล" required error={errors.reason}>
-          <Textarea
-            id="reset-reason"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="เช่น ผู้ใช้ลืมรหัสผ่าน แจ้งทางโทรศัพท์ 3 ต.ค. 2569"
-          />
-        </Field>
       </div>
     </Modal>
   )

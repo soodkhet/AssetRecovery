@@ -45,8 +45,8 @@ export const POST = withApiPermission(
     const parsed = userCreateSchema.safeParse(await readJsonBody(request))
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
-    const { reason, password, confirmPassword: _confirm, ...values } = parsed.data
-    const result = await createUser({ actor: user, meta: getRequestMeta(request), reason }, values, password)
+    const { password, confirmPassword: _confirm, ...values } = parsed.data
+    const result = await createUser({ actor: user, meta: getRequestMeta(request), reason: null }, values, password)
 
     return Response.json(
       result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
