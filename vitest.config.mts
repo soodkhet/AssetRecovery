@@ -55,7 +55,7 @@ export default defineConfig({
           // `orchestrator/lib/*.test.mjs` = ยามของ parser PROGRESS.md + run lock — ต้องรันคู่กับเทสต์แอปเสมอ
           // (บั๊กที่มันกัน: parser ทิ้งแถวเงียบ ๆ จน dashboard โชว์ 100% ปลอม · orchestrator หยิบงานซ้ำ 2 session)
           include: ['**/*.{test,spec}.{ts,tsx}', 'orchestrator/**/*.test.mjs'],
-          exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**', DB_TESTS],
+          exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**', '.claude/**', DB_TESTS],
           alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
         },
       },
@@ -66,7 +66,7 @@ export default defineConfig({
           environment: 'node',
           env: testEnv(),
           include: [DB_TESTS],
-          exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**'],
+          exclude: ['node_modules/**', '.next/**', 'tools/**', 'reference/**', '_to_delete/**', '.claude/**'],
           alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
           // ทีละไฟล์เท่านั้น — DB ตัวเดียวกัน (ดูหมายเหตุด้านบน)
           // `poolOptions` ถูกถอดออกใน vitest 4 แล้ว — `fileParallelism: false` พอสำหรับกันชนกันเอง

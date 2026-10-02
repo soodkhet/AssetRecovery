@@ -13,6 +13,8 @@ const eslintConfig = [
       'reference/**',
       'Project_info/**',
       '_to_delete/**',
+      // git worktree ของ session อื่น (`.claude/worktrees/*`) มีสำเนาทั้ง repo + node_modules
+      '.claude/**',
       'lib/generated/**',
     ],
   },
