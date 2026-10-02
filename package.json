@@ -21,6 +21,7 @@
     "db:deploy:test": "PRISMA_USE_TEST_DB=1 prisma migrate deploy",
     "db:seed": "prisma db seed",
     "auth:link-superadmin": "tsx scripts/link-superadmin.ts",
+    "auth:dev-admin": "tsx scripts/dev-admin.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
