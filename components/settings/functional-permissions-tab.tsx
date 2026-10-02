@@ -325,21 +325,23 @@ export function FunctionalPermissionsTab() {
                       <span className="truncate text-sm font-semibold text-slate-800">{role.name}</span>
                       <p className="text-[10px] text-slate-400">{roleChipLabel(role)}</p>
                     </div>
-                    <Select
-                      aria-label={`ระดับสิทธิ์ของบทบาท ${role.name}`}
-                      className="w-44"
-                      value={levels[role.id] ?? 'none'}
-                      disabled={!editable || saving}
-                      onChange={(event) =>
-                        setLevels((current) => ({ ...current, [role.id]: event.target.value as MatrixLevel }))
-                      }
-                    >
-                      {MATRIX_LEVELS.map((level) => (
-                        <option key={level} value={level}>
-                          {MATRIX_LEVEL_LABEL[level]}
-                        </option>
-                      ))}
-                    </Select>
+                    {/* กล่องกว้างคงที่ + shrink-0 — ห้ามใส่ w-44 ที่ Select ตรงๆ เพราะ FIELD_CLASS มี w-full อยู่แล้ว (cn ไม่ merge class) */}
+                    <div className="w-44 shrink-0">
+                      <Select
+                        aria-label={`ระดับสิทธิ์ของบทบาท ${role.name}`}
+                        value={levels[role.id] ?? 'none'}
+                        disabled={!editable || saving}
+                        onChange={(event) =>
+                          setLevels((current) => ({ ...current, [role.id]: event.target.value as MatrixLevel }))
+                        }
+                      >
+                        {MATRIX_LEVELS.map((level) => (
+                          <option key={level} value={level}>
+                            {MATRIX_LEVEL_LABEL[level]}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
                   </li>
                 )
               })}
