@@ -1,5 +1,5 @@
 import { emitAudit } from '@/lib/audit/audit'
-import { CHANGE_PASSWORD_PATH } from '@/lib/auth/constants'
+import { CHANGE_PASSWORD_PATH, LOGIN_PATH } from '@/lib/auth/constants'
 import { AuthError, type AuthErrorCode } from '@/lib/auth/errors'
 import { resolveLandingPath } from '@/lib/auth/landing'
 import {
@@ -192,6 +192,9 @@ export async function logout(meta: RequestMeta): Promise<void> {
  * ผู้ใช้เปลี่ยนรหัสผ่านของตัวเอง (`POST /api/auth/change-password` — มติ PO 03/10/2569)
  * บังคับใช้หลังผู้ดูแลตั้ง/รีเซ็ตรหัสให้ (`must_change_password`) และเปลี่ยนเองได้ทุกเมื่อ
  * ตั้งผ่าน service role ฝั่ง server แล้วล้างธงในธุรกรรมเดียวกับ audit · audit ไม่มีรหัสผ่าน
+ *
+ * Supabase เพิกถอน session เดิมทั้งหมดเมื่อรหัสเปลี่ยน ⇒ ต้อง sign in ใหม่ด้วยรหัสใหม่ทันที (cookie ใหม่ลง
+ * response นี้) ผู้ใช้จึงเข้าระบบต่อได้เลย ไม่เด้งไปหน้า login (มติ PO 03/10/2569)
  */
 export async function changeOwnPassword(
   user: SessionUser,
@@ -229,5 +232,13 @@ export async function changeOwnPassword(
   })
 
   invalidateSessionCache(user.supabaseUid)
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: input.password })
+  // รหัสเปลี่ยนสำเร็จแล้ว — ถ้า sign in ใหม่ไม่ผ่าน (Supabase สะดุด) ให้ไปหน้า login แทนการโยน error ที่ทำให้เข้าใจผิด
+  if (error) return LOGIN_PATH
+
+  // เริ่มนับอายุ session 24 ชม. ใหม่จาก session นี้ (`05` §10)
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
   return resolveLandingPath(user.roleGroup, user.roleName)
 }

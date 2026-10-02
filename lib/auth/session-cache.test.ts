@@ -3,6 +3,7 @@ import {
   clearSessionCache,
   getCachedSession,
   invalidateSessionCache,
+  isCacheableSession,
   sessionCacheSize,
   setCachedSession,
 } from '@/lib/auth/session-cache'
@@ -63,5 +64,21 @@ describe('session cache (role+scope — ห้าม query DB ทุก request,
 
   it('uid ที่ไม่เคย cache = null', () => {
     expect(getCachedSession('uid-ไม่มี', T0)).toBeNull()
+  })
+})
+
+describe('session ที่ต้องเปลี่ยนรหัสผ่าน ไม่เสิร์ฟจาก cache (DEC-010)', () => {
+  beforeEach(() => clearSessionCache())
+
+  it('ธง must_change_password = true → ไม่ใช้ cache ให้โหลดจาก DB ใหม่ (กัน instance อื่นถือค่าเก่าแล้ววนหน้าเปลี่ยนรหัส)', () => {
+    setCachedSession(UID, { ...user, mustChangePassword: true }, T0)
+    expect(getCachedSession(UID, T0 + 1000)).toBeNull()
+    expect(isCacheableSession({ ...user, mustChangePassword: true })).toBe(false)
+  })
+
+  it('เปลี่ยนรหัสแล้ว (false) หรือไม่ระบุ → ใช้ cache ได้ตามปกติ', () => {
+    setCachedSession(UID, { ...user, mustChangePassword: false }, T0)
+    expect(getCachedSession(UID, T0 + 1000)?.id).toBe('user-1')
+    expect(isCacheableSession(user)).toBe(true)
   })
 })

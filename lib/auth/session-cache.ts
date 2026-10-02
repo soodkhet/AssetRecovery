@@ -18,11 +18,20 @@ const cache = new Map<string, CacheEntry>()
 export function getCachedSession(supabaseUid: string, now: number = Date.now()): SessionUser | null {
   const entry = cache.get(supabaseUid)
   if (!entry) return null
-  if (entry.expiresAt <= now) {
+  if (entry.expiresAt <= now || !isCacheableSession(entry.value)) {
     cache.delete(supabaseUid)
     return null
   }
   return entry.value
+}
+
+/**
+ * session ที่ยังติดธง `must_change_password` ห้ามเสิร์ฟจาก cache — โหลดจาก DB ใหม่ทุกครั้ง (DEC-010)
+ * เพราะผู้ใช้เปลี่ยนรหัสที่ instance หนึ่ง แต่ instance อื่นบน Vercel ยังถือ cache เก่าอยู่ได้ถึง 5 นาที
+ * ⇒ login ใหม่แล้ววนกลับหน้าเปลี่ยนรหัสไม่จบ (เจอบน staging 03/10/2569) · สถานะนี้สั้น เปลืองแค่ไม่กี่ query
+ */
+export function isCacheableSession(user: SessionUser): boolean {
+  return user.mustChangePassword !== true
 }
 
 export function setCachedSession(
