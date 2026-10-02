@@ -33,6 +33,7 @@ import {
   assertScopeConsistent,
   assertUserDeletable,
   assertUserStatusTransition,
+  describeUserChanges,
   normalizeUserValues,
   toUserAuditPayload,
   type UserValues,
@@ -458,7 +459,7 @@ export async function setUserPassword(context: MutationContext, current: UserDto
 }
 
 export async function updateUser(
-  context: MutationContext,
+  context: Omit<MutationContext, 'reason'>,
   current: UserDto,
   input: UserValues,
 ): Promise<UserMutationResult> {
@@ -511,7 +512,7 @@ export async function updateUser(
         targetId: current.id,
         before: toUserAuditPayload(before, { status: current.status, roleName: current.roleName }),
         after: toUserAuditPayload(values, { status: current.status, roleName: role.name }),
-        reason: context.reason,
+        reason: describeUserChanges({ ...before, roleName: current.roleName }, { ...values, roleName: role.name }),
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
       },

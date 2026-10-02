@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
@@ -39,7 +39,6 @@ interface FormState {
   companyId: string
   password: string
   confirmPassword: string
-  reason: string
 }
 
 function emptyForm(roleGroup: RoleGroup): FormState {
@@ -55,7 +54,6 @@ function emptyForm(roleGroup: RoleGroup): FormState {
     companyId: '',
     password: '',
     confirmPassword: '',
-    reason: '',
   }
 }
 
@@ -72,7 +70,6 @@ function formOf(user: UserDto): FormState {
     companyId: user.companyId ?? '',
     password: '',
     confirmPassword: '',
-    reason: '',
   }
 }
 
@@ -87,8 +84,8 @@ function payloadOf(form: FormState, isEdit: boolean): Record<string, unknown> {
     employeeCode: form.employeeCode.trim() === '' ? null : form.employeeCode.trim(),
     teamId: scope === 'team' && form.teamId !== '' ? form.teamId : null,
     companyId: scope === 'company' && form.companyId !== '' ? form.companyId : null,
-    // สร้างผู้ใช้ไม่มีช่องเหตุผล (มติ PO 03/10/2569) · แก้ไขผู้ใช้ยังบังคับ (กระทบสิทธิ์ของคนเดิม)
-    ...(isEdit ? { reason: form.reason.trim() } : { password: form.password, confirmPassword: form.confirmPassword }),
+    // ไม่มีช่องเหตุผล (มติ PO 03/10/2569) — แก้ไขผู้ใช้ ระบบสรุปสิ่งที่เปลี่ยนลง audit เอง
+    ...(isEdit ? {} : { password: form.password, confirmPassword: form.confirmPassword }),
   }
 }
 
@@ -369,16 +366,6 @@ export function UserFormModal({
           </InlineAlert>
         )}
 
-        {isEdit && (
-          <Field id="user-reason" label="เหตุผล" required error={errors.reason}>
-            <Textarea
-              id="user-reason"
-              value={form.reason}
-              onChange={(event) => set('reason', event.target.value)}
-              placeholder="เช่น ย้ายไปทีมกรุงเทพ 2 ตั้งแต่ 1 ต.ค. 2569"
-            />
-          </Field>
-        )}
       </div>
     </Modal>
   )

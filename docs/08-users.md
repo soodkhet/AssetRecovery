@@ -147,7 +147,7 @@
 |---|---|---|---|
 | GET | /api/users | list พร้อม filter (role_group, team_id, company_id, status) | ตาม permission scope |
 | POST | /api/users | สร้าง user ใหม่ | ต้องมี role_id + team_id/company_id ตาม role_group |
-| PATCH | /api/users/:id | แก้ไขข้อมูล | audit required |
+| PATCH | /api/users/:id | แก้ไขข้อมูล | audit required · ไม่มีช่อง reason — ระบบสรุปฟิลด์ที่เปลี่ยนเป็นเหตุผล (DEC-010) |
 | PATCH | /api/users/:id/suspend | ระงับการใช้งาน | ต้องระบุ reason |
 | PATCH | /api/users/:id/reactivate | เปิดใช้งานกลับ | Superadmin/Admin เท่านั้น |
 | POST | /api/users/:id/password | ผู้ดูแลตั้งรหัสผ่านใหม่ให้ผู้ใช้ | `manage:manage_users` · ไม่มีช่อง reason (ระบบเติมเหตุผลมาตรฐานลง audit) · ผู้ใช้ต้องเปลี่ยนเองครั้งถัดไป (DEC-010) |

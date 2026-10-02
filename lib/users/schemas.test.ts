@@ -74,11 +74,10 @@ describe('userCreateSchema', () => {
     expect(userCreateSchema.safeParse(withoutReason).success).toBe(true)
   })
 
-  it('แก้ไขผู้ใช้ยังบังคับเหตุผล (กระทบสิทธิ์ของคนเดิม — `90` §13)', () => {
-    expect(userUpdateSchema.safeParse({ ...valid, reason: '' }).success).toBe(false)
-    expect(userUpdateSchema.safeParse({ ...valid, reason: 'สั้น' }).success).toBe(false)
+  it('แก้ไขผู้ใช้ไม่มีช่องเหตุผล — ระบบสรุปสิ่งที่เปลี่ยนลง audit เอง (มติ PO 03/10/2569)', () => {
     const { reason: _omit, ...withoutReason } = valid
-    expect(userUpdateSchema.safeParse(withoutReason).success).toBe(false)
+    expect(userUpdateSchema.safeParse(withoutReason).success).toBe(true)
+    expect('reason' in userUpdateSchema.parse(valid)).toBe(false)
   })
 
   it('ฟอร์มส่ง status มาไม่มีผล — เปลี่ยนสถานะต้องผ่าน endpoint แยก (Rule 04)', () => {

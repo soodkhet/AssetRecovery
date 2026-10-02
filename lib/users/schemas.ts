@@ -10,9 +10,9 @@ import { passwordPairFields, refinePasswordPair } from '@/lib/auth/schemas'
  *   ตาม Rule 04 (transition endpoint) เพื่อบังคับ `reason` และยาม lifecycle ให้ครบทุกทาง
  * - `team_id`/`company_id` เป็น nullable ที่ชั้น schema แล้วบังคับ conditional required ตาม role group
  *   ที่ `assertScopeConsistent()` (ต้องรู้ role group ของ `role_id` ก่อน จึงตรวจที่ชั้น business logic)
- * - `reason` บังคับเมื่อ**แก้ของเดิม** (แก้ไข/ระงับ/เปิดใช้/ลบ) — กระทบสิทธิ์ของคนที่มีอยู่แล้ว (`90` §13)
- *   ส่วน**สร้างผู้ใช้**และ**ผู้ดูแลตั้งรหัสผ่านใหม่**ไม่มีช่องเหตุผล (มติ PO 03/10/2569 · สร้าง = flow ปกติตาม
- *   `lib/audit/reason-policy.ts` · ตั้งรหัส = ระบบเติมเหตุผลมาตรฐานลง audit ให้เอง)
+ * - `reason` บังคับเฉพาะ **ระงับ/เปิดใช้/ลบ** (`90` §13) · สร้าง/แก้ไข/ตั้งรหัสผ่านไม่มีช่องเหตุผล (มติ PO
+ *   03/10/2569): สร้าง = flow ปกติตาม `lib/audit/reason-policy.ts` · แก้ไข = ระบบสรุปสิ่งที่เปลี่ยนเป็นเหตุผล
+ *   (`describeUserChanges`) · ตั้งรหัส = ระบบเติมเหตุผลมาตรฐาน
  * - มติ PO 03/10/2569: `username` บังคับ · `email` ไม่บังคับ · ตอนสร้างผู้ดูแลตั้งรหัสผ่านให้เลย
  *   (ไม่ส่งอีเมลเชิญ) · แก้ไขผู้ใช้ไม่แตะรหัสผ่าน — ตั้งใหม่ผ่าน `POST /api/users/:id/password` เท่านั้น
  */
@@ -62,8 +62,8 @@ export const userFieldsSchema = userFields
 /** สร้างผู้ใช้ = ข้อมูลผู้ใช้ + รหัสผ่านเริ่มต้นที่ผู้ดูแลตั้งให้ (ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งแรก) · ไม่มีเหตุผล */
 export const userCreateSchema = refinePasswordPair(userFields.extend(passwordPairFields.shape))
 
-/** PATCH ส่งค่าทั้งชุดเหมือนตอนสร้าง (ฟอร์มเดียวกัน) — ไม่ใช่ partial patch · ไม่มีรหัสผ่าน */
-export const userUpdateSchema = userFields.extend({ reason: reasonSchema })
+/** PATCH ส่งค่าทั้งชุดเหมือนตอนสร้าง (ฟอร์มเดียวกัน) — ไม่ใช่ partial patch · ไม่มีรหัสผ่าน/เหตุผล */
+export const userUpdateSchema = userFields
 
 /**
  * `POST /api/finance-companies/:id/users` (`10` §14) — สร้างบัญชีฝั่งบริษัทไฟแนนซ์

@@ -34,9 +34,8 @@ export const PATCH = withApiPermission<RouteContext>(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const current = await getUser(user, id)
-    const { reason, ...values } = parsed.data
-
-    const result = await updateUser({ actor: user, meta: getRequestMeta(request), reason }, current, values)
+    // ไม่มีช่องเหตุผล — ระบบสรุปสิ่งที่เปลี่ยนเป็นเหตุผลใน audit เอง (มติ PO 03/10/2569)
+    const result = await updateUser({ actor: user, meta: getRequestMeta(request) }, current, parsed.data)
     return Response.json(
       result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
     )

@@ -121,6 +121,33 @@ export function assertUserDeletable(counts: UserReferenceCounts): void {
   }
 }
 
+const CHANGE_LABELS: ReadonlyArray<[keyof UserValues, string]> = [
+  ['username', 'ชื่อผู้ใช้'],
+  ['email', 'อีเมล'],
+  ['fullName', 'ชื่อ-นามสกุล'],
+  ['phone', 'เบอร์โทร'],
+  ['employeeCode', 'รหัสพนักงาน'],
+  ['teamId', 'ทีม'],
+  ['companyId', 'บริษัท'],
+]
+
+/**
+ * เหตุผลที่ระบบสร้างลง audit ตอนแก้ไขผู้ใช้ (มติ PO 03/10/2569 — ฟอร์มแก้ไขไม่มีช่องเหตุผล)
+ * สรุปจากสิ่งที่เปลี่ยนจริง: บทบาทระบุชื่อเดิม → ใหม่ (ฟิลด์สิทธิ์ที่ตรวจย้อนหลังบ่อยที่สุด) · ฟิลด์อื่นระบุแค่ชื่อฟิลด์
+ * (ค่าเต็ม before/after อยู่ใน audit อยู่แล้ว)
+ */
+export function describeUserChanges(
+  before: UserValues & { roleName: string },
+  after: UserValues & { roleName: string },
+): string {
+  const parts: string[] = []
+  if (before.roleId !== after.roleId) parts.push(`บทบาท ${before.roleName} → ${after.roleName}`)
+  for (const [key, label] of CHANGE_LABELS) {
+    if (before[key] !== after[key]) parts.push(label)
+  }
+  return parts.length === 0 ? 'แก้ไขข้อมูลผู้ใช้ (ไม่มีฟิลด์เปลี่ยน)' : `แก้ไขข้อมูลผู้ใช้: ${parts.join(', ')}`
+}
+
 /** payload สำหรับ audit before/after — snake_case ตรงคอลัมน์จริง (`90` §13) */
 export function toUserAuditPayload(
   values: UserValues,

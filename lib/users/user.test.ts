@@ -6,6 +6,7 @@ import {
   assertUserStatusTransition,
   canTransitionUserStatus,
   normalizePhone,
+  describeUserChanges,
   normalizeUserValues,
   referencesInUse,
   requiredScopeFor,
@@ -123,6 +124,24 @@ describe('assertUserDeletable (`08` §10 — USER_HAS_HISTORY)', () => {
 
   it('referencesInUse คัดเฉพาะรายการที่มากกว่า 0', () => {
     expect(referencesInUse({ a: 0, b: 2 })).toEqual({ b: 2 })
+  })
+})
+
+describe('describeUserChanges (เหตุผลที่ระบบสร้างตอนแก้ไขผู้ใช้ — มติ PO 03/10/2569)', () => {
+  const before = { ...normalizeUserValues(base), roleName: 'ธุรการ' }
+
+  it('เปลี่ยนบทบาท → ระบุชื่อเดิม → ใหม่ · ฟิลด์อื่นระบุชื่อฟิลด์', () => {
+    const after = { ...before, roleId: '99999999-9999-4999-8999-999999999999', roleName: 'การเงิน', phone: '0899999999' }
+    expect(describeUserChanges(before, after)).toBe('แก้ไขข้อมูลผู้ใช้: บทบาท ธุรการ → การเงิน, เบอร์โทร')
+  })
+
+  it('ย้ายทีม + เปลี่ยน username', () => {
+    const after = { ...before, teamId: '22222222-2222-4222-8222-222222222222', username: 'somchai.new' }
+    expect(describeUserChanges(before, after)).toBe('แก้ไขข้อมูลผู้ใช้: ชื่อผู้ใช้, ทีม')
+  })
+
+  it('กดบันทึกโดยไม่ได้แก้อะไร', () => {
+    expect(describeUserChanges(before, before)).toBe('แก้ไขข้อมูลผู้ใช้ (ไม่มีฟิลด์เปลี่ยน)')
   })
 })
 
