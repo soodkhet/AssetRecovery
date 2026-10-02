@@ -235,6 +235,14 @@ suite('กล่องแจ้งเตือนของใครของม�
     for (let index = 0; index < 3; index += 1) {
       await notify.notifyUsers({ ...lotConfirmed([USER_A], `lot-${index}`), title: `ล็อตที่ ${index}` })
     }
+    // สร้างติดกันใน ms เดียวกันได้ ⇒ ลำดับเสมอกัน (flaky) — ตรึง `created_at` ห่างกันทีละวินาที
+    const base = Date.now() - 60_000
+    for (let index = 0; index < 3; index += 1) {
+      await db().notification.updateMany({
+        where: { organizationId: ORG_ID, userId: USER_A, title: `ล็อตที่ ${index}` },
+        data: { createdAt: new Date(base + index * 1000) },
+      })
+    }
 
     const limited = await queries.listNotifications(userA, { limit: 2 })
     expect(limited.items).toHaveLength(2)

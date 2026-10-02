@@ -161,7 +161,8 @@ export async function listNotifications(
   const [rows, unreadCount, totalCount] = await Promise.all([
     prisma.notification.findMany({
       where: { ...owner, ...(options.filter === 'unread' ? { readAt: null } : {}) },
-      orderBy: { createdAt: 'desc' },
+      // `id` = ตัวตัดสินเมื่อ `created_at` เท่ากัน (สร้างใน ms เดียวกัน) ให้ลำดับคงที่ทุกครั้งที่เรียก
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
       select: { id: true, eventCode: true, title: true, body: true, linkPath: true, readAt: true, createdAt: true },
     }),
