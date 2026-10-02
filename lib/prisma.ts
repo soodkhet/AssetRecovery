@@ -27,12 +27,37 @@ function createPrismaClient() {
   return client.$extends(auditLogImmutableExtension)
 }
 
+type ExtendedPrismaClient = ReturnType<typeof createPrismaClient>
+
 const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof createPrismaClient> | undefined
+  prisma: ExtendedPrismaClient | undefined
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient()
+let client: ExtendedPrismaClient | undefined
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma
+function getPrismaClient(): ExtendedPrismaClient {
+  if (client) return client
+  client = globalForPrisma.prisma ?? createPrismaClient()
+  if (process.env.NODE_ENV !== 'production') {
+    globalForPrisma.prisma = client
+  }
+  return client
 }
+
+/**
+ * สร้าง client แบบ lazy — ตอนเข้าถึง property ครั้งแรก ไม่ใช่ตอน import
+ * โมดูลที่ import `prisma` เพื่อ export ฟังก์ชัน query จึงโหลดในเทสต์ unit ได้โดยไม่ต้องมี DB
+ * (เดิม throw `ไม่พบ DATABASE_URL` ตั้งแต่โหลดโมดูล) · ถ้าเผลอ query จริงโดยไม่มี `DATABASE_URL`
+ * ก็ยังล้มด้วย error เดิม ณ จุดที่ query
+ * method ถูก bind กับ client จริง เพื่อให้ `this` ภายใน Prisma ไม่ชี้มาที่ Proxy
+ */
+export const prisma: ExtendedPrismaClient = new Proxy({} as ExtendedPrismaClient, {
+  get(_target, prop) {
+    const real = getPrismaClient()
+    const value: unknown = Reflect.get(real, prop, real)
+    return typeof value === 'function' ? value.bind(real) : value
+  },
+  has(_target, prop) {
+    return Reflect.has(getPrismaClient(), prop)
+  },
+})
