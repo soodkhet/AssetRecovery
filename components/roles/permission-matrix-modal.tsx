@@ -177,26 +177,24 @@ export function PermissionMatrixModal({
                       </div>
                       <p className="truncate font-mono text-[10px] text-slate-400">{row.code}</p>
                     </div>
-                    {/* กล่องกว้างคงที่ + shrink-0 — ห้ามใส่ w-44 ที่ Select ตรงๆ เพราะ FIELD_CLASS มี w-full อยู่แล้ว (cn ไม่ merge class) */}
-                    <div className="w-44 shrink-0">
-                      <Select
-                        aria-label={`ระดับสิทธิ์ของ ${row.label}`}
-                        value={levels[row.code] ?? row.level}
-                        disabled={!row.editable || saving}
-                        onChange={(event) =>
-                          setLevels((current) => ({
-                            ...current,
-                            [row.code]: event.target.value as MatrixLevel,
-                          }))
-                        }
-                      >
-                        {MATRIX_LEVELS.map((level) => (
-                          <option key={level} value={level}>
-                            {MATRIX_LEVEL_LABEL[level]}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
+                    <Select
+                      aria-label={`ระดับสิทธิ์ของ ${row.label}`}
+                      className="w-44 shrink-0"
+                      value={levels[row.code] ?? row.level}
+                      disabled={!row.editable || saving}
+                      onChange={(event) =>
+                        setLevels((current) => ({
+                          ...current,
+                          [row.code]: event.target.value as MatrixLevel,
+                        }))
+                      }
+                    >
+                      {MATRIX_LEVELS.map((level) => (
+                        <option key={level} value={level}>
+                          {MATRIX_LEVEL_LABEL[level]}
+                        </option>
+                      ))}
+                    </Select>
                   </li>
                 ))}
               </ul>
