@@ -228,10 +228,10 @@ export function UsersManager() {
         <div className="mb-4 flex flex-col gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3 sm:flex-row">
           <div className="flex-1">
             <Input
-              aria-label="ค้นหาชื่อ เบอร์โทร หรืออีเมล"
+              aria-label="ค้นหาชื่อ ชื่อผู้ใช้ เบอร์โทร หรืออีเมล"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาชื่อ, เบอร์โทร, อีเมล..."
+              placeholder="ค้นหาชื่อ, username, เบอร์โทร, อีเมล..."
             />
           </div>
           <div className="w-full sm:w-56">
