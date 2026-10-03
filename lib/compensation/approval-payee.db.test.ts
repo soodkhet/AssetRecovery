@@ -147,6 +147,7 @@ async function resetPayees(): Promise<void> {
   const tx = db()
   // `audit_logs` ลบไม่ได้แม้ในเทสต์ (immutable ระดับ DB — `02` §13) ⇒ ยืนยันโดยกรองด้วย `target_id` แทน
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM case_evidences WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
@@ -635,6 +636,51 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     // ผู้จัดการยังเห็นรายการที่ผ่านขั้นตนแล้ว แต่ปุ่มกดต้องหาย (ขั้นปัจจุบันเป็นของการเงิน)
     const [managerView] = await approvals.listCompensationApprovals(manager, { status: 'all' })
     expect(managerView?.viewerCanAct).toBe(false)
+  })
+
+  /**
+   * R6-6 (ตีความ UAT Q14) — หลักฐานปิดงานของเคส **ไม่สำเร็จ** ผ่านอัตโนมัติเมื่อค่าตอบแทนของเคส
+   * **อนุมัติครบทุกรายการที่ยังมีผล** ไม่ใช่ตั้งแต่รายการแรกที่ผ่านครบขั้น
+   */
+  it('R6-6 หลักฐานเคสไม่สำเร็จผ่านเมื่อค่าตอบแทนของเคสอนุมัติครบทุกรายการ (ไม่ใช่รายการแรก)', async () => {
+    const payeeId = await seedPayee(AGENT_ID)
+    const firstId = await seedPendingExpense(payeeId, 50_000)
+    const tx = db()
+    const [first] = await tx.$queryRawUnsafe<{ case_id: string; assignment_id: string }[]>(
+      `SELECT case_id, assignment_id FROM expenses WHERE id = '${firstId}'`,
+    )
+    const caseId = first?.case_id ?? ''
+    const assignmentId = first?.assignment_id ?? ''
+    await tx.$executeRawUnsafe(`UPDATE cases SET outcome = 'closed_fail', status = 'closed_fail' WHERE id = '${caseId}'`)
+    const second = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO expenses (
+        organization_id, case_id, assignment_id, payee_id, expense_type, gross_satang, expense_date,
+        status, comp_plan_id, comp_plan_version, calculation_source, created_by
+      ) VALUES (
+        '${ORG_ID}', '${caseId}', '${assignmentId}', '${payeeId}', 'allowance', 20000,
+        DATE '2026-08-10', 'pending_approval', '${PLAN_ID}', 1, 'compensation_plan', '${MANAGER_ID}'
+      ) RETURNING id
+    `)
+    const secondId = second[0]?.id ?? ''
+    const evidence = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO case_evidences (organization_id, case_id, assignment_id, outcome, status, fail_reason, submitted_at, created_by)
+      VALUES ('${ORG_ID}', '${caseId}', '${assignmentId}', 'closed_fail', 'pending', 'ไม่พบลูกหนี้', NOW(), '${AGENT_ID}')
+      RETURNING id
+    `)
+    const evidenceId = evidence[0]?.id ?? ''
+    const statusOf = async () =>
+      (await tx.caseEvidence.findUniqueOrThrow({ where: { id: evidenceId }, select: { status: true } })).status
+
+    await approvals.approveCompensationExpense({ actor: manager, meta }, firstId, { step: 1 })
+    await approvals.approveCompensationExpense({ actor: finance, meta }, firstId, { step: 2 })
+    // ตัวแรกผ่านครบขั้นแล้ว แต่ค่าตอบแทนอีกตัวของเคสยังรอ ⇒ หลักฐานยังไม่ผ่าน
+    expect(await statusOf()).toBe('pending')
+
+    await approvals.approveCompensationExpense({ actor: manager, meta }, secondId, { step: 1 })
+    expect(await statusOf()).toBe('pending')
+    const last = await approvals.approveCompensationExpense({ actor: finance, meta }, secondId, { step: 2 })
+    expect(last.expense.status).toBe('approved')
+    expect(await statusOf()).toBe('approved')
   })
 
   it('รายการที่คลังยังไม่ปล่อย (`pending_warehouse_confirm`) อนุมัติไม่ได้ (`23` §6.3)', async () => {

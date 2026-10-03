@@ -1,6 +1,7 @@
 import { emitAudit } from '@/lib/audit/audit'
 import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
+import { expenseGateOf } from '@/lib/warehouse/revenue-service'
 
 /**
  * หลักฐานปิดงาน **ผ่านอัตโนมัติเมื่อเคสไปต่อ** (มติ PO 03/10/2569 — UAT Q14 · BUG-055 · `41` §10.1)
@@ -8,7 +9,9 @@ import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
  * ระบบไม่มีขั้น "อนุมัติหลักฐาน" แยก — `case_evidences.status` (`evidence_status`: pending/approved/rejected
  * ตาม `02` §3 ไม่สร้างค่าใหม่) เปลี่ยนตามเหตุการณ์ปลายน้ำ:
  * - `closed_success` → `approved` เมื่อ **คลังรับเครื่องเข้า** (`intake` สำเร็จ — `44` §8.2)
- * - `closed_fail`    → `approved` เมื่อ **ค่าตอบแทนของเคสถูกอนุมัติครบขั้น** (`expense.approved` — `16`)
+ * - `closed_fail`    → `approved` เมื่อ **ค่าตอบแทนของเคสถูกอนุมัติครบทุกรายการที่ยังมีผล** (ทุกตัวที่ไม่ใช่
+ *   `superseded`/`rejected` เป็น `approved` — มติ orchestrator ก่อน UAT R6 · R6-6 ตีความ Q14) · เดิมผ่านตั้งแต่
+ *   รายการแรกที่อนุมัติครบขั้น ขณะที่ค่าตอบแทนตัวอื่นของเคสยังรออยู่
  *
  * หลังผ่านแล้ว**ตีกลับไม่ได้** (`EVIDENCE_REJECT_AFTER_FINAL`) และแถวแก้ไม่ได้ระดับ DB
  * (trigger `trg_case_evidences_approved_no_update` — `02` §13)
@@ -47,6 +50,18 @@ export async function autoApproveCaseEvidence(
     select: { id: true, status: true, outcome: true },
   })
   if (latest === null || latest.status !== 'pending' || latest.outcome !== outcome) return null
+
+  // R6-6 — รอให้ค่าตอบแทน **ทุกรายการที่ยังมีผล** ของเคสอนุมัติครบก่อน (กติกา "ยังมีผล" ชุดเดียวกับเกตรายได้)
+  // ผู้เรียกฝั่งอนุมัติเรียก `tryCreateRevenue()` ก่อนในทรานแซกชันเดียวกัน ซึ่งล็อกแถวเคส `FOR UPDATE` ไว้แล้ว
+  // ⇒ อนุมัติตัวสุดท้าย 2 ตัวพร้อมกันไม่ทำให้ต่างฝ่ายเห็นอีกตัวยังรอ (UAT R6-E)
+  if (input.trigger === 'expense_approved') {
+    const expenses = await tx.expense.findMany({
+      where: { organizationId: input.organizationId, caseId: input.caseId, deletedAt: null },
+      select: { status: true },
+    })
+    const gate = expenseGateOf(expenses.map((row) => row.status))
+    if (!gate.hasExpense || gate.expenseState !== 'approved') return null
+  }
 
   const reviewedAt = new Date()
   const claimed = await tx.caseEvidence.updateMany({
