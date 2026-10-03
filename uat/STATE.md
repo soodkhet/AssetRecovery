@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R5 คลังสินค้า** (ธุรการ) — 03/10/2569 · 24/24 ✅ · ยืนยัน BUG-074…078 + ใหม่ 079…084 (ไม่บล็อก) · ไม่มี 500 · ล็อต LOT-2569-001 (CO1: C1,C2,C4) / LOT-2569-002 (CO2: C5) confirmed · expense active 15 แถว 1020000 ทั้งหมด pending_approval · revenue 0 · รายงาน `uat/report/R5-warehouse.md` · ภาพ 55 |
 | snapshot ล่าสุด | `uat/snapshots/R5-end.dump` (ก่อนหน้า: `R4-v2-end`, `R3-end-v2`, …) |
-| รอบปัจจุบัน | merge fixer F → **R6 การเงิน** (step sheet กำลังเขียน, แบ่ง R6a/R6b) · ⚠️ ADV3 overdue job ต้องหลังเที่ยงคืนเวลาไทย |
+| รอบปัจจุบัน | **หยุด R6** (มติ PO Q21: ค่าน้ำมันเหมา + เบี้ยเลี้ยง วันละครั้งต่อพนักงาน เฉลี่ยทุกเคสในวัน สร้างหลังจบวันด้วย job) · fixer G (การเงินก่อน R6, test3) + fixer H (Q21, test7) คู่ขนาน → merge ทั้งคู่ + generate/deploy/restart/verify → `uat/bin/restore.sh R3-end-v2` → ปรับ DATASET v3 + step sheet R4/R5 → เล่น R4–R5 ใหม่ (เช็คอินวันที่ 03/10) → **หลังเที่ยงคืน**: สั่ง job รายวัน (settle 03/10) + job `advance_overdue` → R6 |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 03/10/2569 ~20:45 step sheet R6 เสร็จ (43 ขั้น) · มติ PO R6-A (หน้าคิวอนุมัติของผู้จัดการ) / R6-B (รายการไม่ผูกเคส → ผู้จัดการทีมของผู้เบิก) / Q21 (เหมาจ่ายรายวันต่อพนักงาน) · ข้อมูล R4–R5 เดิมคิดต่อเคส ⇒ ต้องเล่นใหม่
 - 03/10/2569 merge fixer ครบ 5 ตัว (A/B/C/D/E) — migration ใหม่ 4 ตัว · verify 257 files / 3,253 tests · **หลัง merge ที่มี migration ต้อง `pnpm db:generate` + `pnpm db:deploy` + `db:deploy:test` + restart dev server** · restore R3-end → snapshot `R3-end-v2` · DATASET v2 + R4 v2 · ADV4 (out1 ฿1,000 → ใช้จริง ฿1,300 ใน R6 → เบิกส่วนเกิน ฿300 → OUT-2) · bank fixture IN-1 = 5231.00
 - 03/10/2569 ถาม PO 20 ข้อ (ชุดตัวเลือก) → บันทึก `uat/PO-DECISIONS-2569-10-03.md` · merge fixer R4 + `pnpm db:seed` (สร้าง 1 แถว: การเงิน approve_advance) · restore.sh เพิ่ม db:deploy + seed · สร้าง `assetrecovery_test3/4/5` ให้ fixer คู่ขนาน · มติ Q2 (คอมมิชชันตอนปิดงาน) ⇒ ต้องเล่น R4 ใหม่บนโค้ดที่แก้แล้ว
 - 03/10/2569 R4a จบ: C1/C2/C4/C5 closed_success, C3 closed_fail, C7 accepted_unscheduled · asset pending_intake 4 ใบ · ดับเบิลคลิก/race ปิดงานไม่ซ้ำ · บั๊กใหม่ BUG-062…068 (BUG-063 ไม่มี role คลัง บล็อก R5)
