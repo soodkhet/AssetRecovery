@@ -70,6 +70,8 @@ export interface CaseRevenueSnapshot {
   hasExpense: boolean
   expenseState: ExpenseGateState
   lotState: LotGateState
+  /** ทุกวันที่ลงพื้นที่ของเคสถูก settle รายการรายวันแล้ว (มติ PO UAT Q21) — ไม่ระบุ = ถือว่าครบ */
+  fieldDaysSettled?: boolean
   /** มี Revenue ของ **รอบติดตามปัจจุบัน** อยู่แล้วหรือยัง (ตัวกันซ้ำ) */
   hasRevenue: boolean
 }
@@ -94,6 +96,7 @@ export function evaluateCaseRevenueGates(snapshots: readonly CaseRevenueSnapshot
       hasExpense: snapshot.hasExpense,
       expenseState: snapshot.expenseState,
       lotState: snapshot.lotState,
+      ...(snapshot.fieldDaysSettled === undefined ? {} : { fieldDaysSettled: snapshot.fieldDaysSettled }),
     })
     if (decision.shouldCreate) eligibleCaseIds.push(snapshot.caseId)
     else skipped.push({ caseId: snapshot.caseId, reason: decision.blockedBy ?? 'no_outcome' })
@@ -149,7 +152,7 @@ export async function tryCreateRevenue(
        FOR UPDATE
   `
 
-  const [cases, expenses, assets, revenues] = await Promise.all([
+  const [cases, expenses, assets, revenues, unsettledDays] = await Promise.all([
     tx.case.findMany({
       where: { id: { in: caseIds }, organizationId: input.organizationId },
       select: {
@@ -180,11 +183,27 @@ export async function tryCreateRevenue(
       where: { caseId: { in: caseIds }, deletedAt: null },
       select: { caseId: true, trackingRound: true },
     }),
+    // มติ PO 03/10/2569 (UAT Q21): วันลงพื้นที่ (พนักงาน × วันไทยของเช็คอิน) ที่ยังไม่ถูก settle
+    // รายการรายวัน — อ่าน**หลัง**ล็อกแถวเคส จึงเห็นการ settle ที่ commit ก่อนหน้าเสมอ
+    tx.$queryRaw<{ caseId: string }[]>`
+      SELECT DISTINCT ci.case_id::text AS "caseId"
+        FROM check_ins ci
+        JOIN case_assignments a ON a.id = ci.assignment_id
+       WHERE ci.organization_id = ${input.organizationId}::uuid
+         AND ci.case_id = ANY(${caseIds}::uuid[])
+         AND NOT EXISTS (
+               SELECT 1 FROM field_day_settlements s
+                WHERE s.organization_id = ci.organization_id
+                  AND s.agent_id = a.agent_id
+                  AND s.field_date = (ci.checked_in_at AT TIME ZONE 'Asia/Bangkok')::date
+             )
+    `,
   ])
 
   const expensesByCase = groupBy(expenses, (row) => row.caseId)
   const assetsByCase = groupBy(assets, (row) => row.caseId)
   const revenueRounds = new Set(revenues.map((row) => `${row.caseId}#${row.trackingRound}`))
+  const unsettledCaseIds = new Set(unsettledDays.map((row) => row.caseId))
 
   const snapshots: CaseRevenueSnapshot[] = cases.map((row) => {
     const statuses = (expensesByCase.get(row.id) ?? []).map((expense) => expense.status)
@@ -196,6 +215,7 @@ export async function tryCreateRevenue(
       outcome: row.outcome,
       ...expenseGateOf(statuses),
       lotState: lotGateOf(lotStatuses),
+      fieldDaysSettled: !unsettledCaseIds.has(row.id),
       hasRevenue: revenueRounds.has(`${row.id}#${row.trackingRound}`),
     }
   })
