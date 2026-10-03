@@ -2027,6 +2027,8 @@ model Expense {
   sharedWithUserId String? @map("shared_with_user_id") @db.Uuid
   /// ใบเสร็จของรายการเบิกแยก (`41` §6.6 — บังคับสำหรับที่พัก)
   receiptFileUrl   String? @map("receipt_file_url")
+  /// SHA-256 ของใบเสร็จที่ server ดาวน์โหลดมาตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — UAT BUG-072 · `02` v4.10)
+  receiptFileHash  String? @map("receipt_file_hash") @db.VarChar(64)
   /// รายการที่มาแทนหลัง `resubmit_close_case` (`41` §10.1) — ตัวเก่าถูก mark เป็น `superseded`
   supersededByExpenseId String? @map("superseded_by_expense_id") @db.Uuid
 

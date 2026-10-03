@@ -37,6 +37,8 @@ import { toBangkokParts } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { expenseReceiptRule } from '@/lib/uploads/rules'
+import { verifyUploadedFile } from '@/lib/uploads/verify'
 
 /**
  * รายการเบิกของงานภาคสนาม (`41` §6.6 · §7.9 · §7.10 · §10.1) — ชั้น DB
@@ -467,6 +469,7 @@ const expenseSelect = {
   rejectionReason: true,
   revisionNote: true,
   receiptFileUrl: true,
+  receiptFileHash: true,
   sharedWithUserId: true,
   createdAt: true,
   case: { select: { caseRef: true, debtorName: true } },
@@ -594,6 +597,10 @@ export async function submitHotelClaim(
   })
   assertSharedAgentInTeam(input.sharedWithUserId ?? null, teammates.map((row) => row.id))
 
+  // ขยายมติ PO Q13 ถึงใบเสร็จ (UAT BUG-072) — server ดาวน์โหลดมาตรวจเอง (prefix ของผู้เบิก · มีจริง ·
+  // magic bytes รูป/PDF · ขนาด) แล้วเก็บ SHA-256 ที่คำนวณเอง · นอก `$transaction` (I/O เครือข่าย)
+  const receipt = await verifyUploadedFile(input.receiptFileUrl, expenseReceiptRule(user.id))
+
   const created = await prisma.$transaction(async (tx) => {
     const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
       organizationId: user.organizationId,
@@ -613,6 +620,7 @@ export async function submitHotelClaim(
         status: 'pending_approval',
         sharedWithUserId: input.sharedWithUserId ?? null,
         receiptFileUrl: input.receiptFileUrl,
+        receiptFileHash: receipt.sha256,
         revisionNote: input.note ?? null,
         createdBy: context.actor.id,
       },
@@ -632,6 +640,8 @@ export async function submitHotelClaim(
           grossSatang: input.amountSatang,
           expenseDate: input.expenseDate,
           sharedWithUserId: input.sharedWithUserId ?? null,
+          receiptFileUrl: input.receiptFileUrl,
+          receiptFileHash: receipt.sha256,
           status: 'pending_approval',
           events: ['expense.hotel_claim_submitted'],
         },
@@ -680,13 +690,21 @@ export async function resubmitFieldExpense(
 
   // รายการที่ระบบคำนวณให้ (fuel/allowance) แก้ยอดเองไม่ได้ — แก้ได้เฉพาะรายการที่มาจากใบเสร็จ
   const editable = current.assignmentId === null
+  // แนบใบเสร็จใหม่ → ตรวจฝั่ง server แบบเดียวกับตอนเบิก (UAT BUG-072) · path เดิมที่เคยตรวจแล้วไม่ดาวน์โหลดซ้ำ
+  const newReceiptPath = editable && input.receiptFileUrl !== undefined ? input.receiptFileUrl : null
+  const receiptHash =
+    newReceiptPath === null
+      ? null
+      : newReceiptPath === current.receiptFileUrl && current.receiptFileHash !== null
+        ? current.receiptFileHash
+        : (await verifyUploadedFile(newReceiptPath, expenseReceiptRule(user.id))).sha256
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {
         status: nextStatus,
         ...(editable && input.amountSatang !== undefined ? { grossSatang: input.amountSatang } : {}),
-        ...(editable && input.receiptFileUrl !== undefined ? { receiptFileUrl: input.receiptFileUrl } : {}),
+        ...(newReceiptPath !== null ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash } : {}),
         ...(input.note !== undefined ? { revisionNote: input.note } : {}),
         // เคลียร์เหตุผลเดิมทิ้งเมื่อส่งกลับเข้าคิวอนุมัติใหม่
         rejectionReason: null,
@@ -708,6 +726,7 @@ export async function resubmitFieldExpense(
           status: nextStatus,
           grossSatang: row.grossSatang,
           receiptFileUrl: row.receiptFileUrl,
+          receiptFileHash: row.receiptFileHash,
           events: ['expense.resubmitted'],
         },
         reason: input.note ?? 'แก้ไขเอกสารตามที่ผู้อนุมัติจ่ายตีกลับ',
