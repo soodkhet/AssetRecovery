@@ -124,9 +124,9 @@ async function seedRevenue(
   const vat = Math.round(grossSatang * 0.07)
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO revenues (organization_id, case_id, company_id, gross_satang, vat_satang, vat_rate_pct_used,
-                          total_satang, fee_model_snapshot, status, revenue_date, created_by)
+                          total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
     VALUES ('${ORG_ID}', '${caseId}', '${options.companyId ?? COMPANY_A}', ${grossSatang}, ${vat}, 7.00,
-            ${grossSatang + vat}, 'SUCCESS_FEE', 'ready_for_billing', '${options.revenueDate ?? '2026-08-10'}',
+            ${grossSatang + vat}, 'SUCCESS_FEE', 'exclude_vat', 'ready_for_billing', '${options.revenueDate ?? '2026-08-10'}',
             '${FINANCE_ID}')
     RETURNING id
   `)

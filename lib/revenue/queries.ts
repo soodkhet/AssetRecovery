@@ -129,6 +129,7 @@ const revenueSelect = {
   trackingRound: true,
   revenueDate: true,
   feeModelSnapshot: true,
+  vatModeSnapshot: true,
   grossSatang: true,
   vatSatang: true,
   vatRatePctUsed: true,
@@ -154,6 +155,7 @@ function toRevenueDto(row: RevenueRow): RevenueDto {
     trackingRound: row.trackingRound,
     revenueDate: toDateOnlyIso(row.revenueDate),
     feeModelSnapshot: row.feeModelSnapshot,
+    vatModeSnapshot: row.vatModeSnapshot,
     grossSatang: row.grossSatang,
     vatSatang: row.vatSatang,
     vatRatePctUsed: row.vatRatePctUsed.toNumber(),
@@ -176,9 +178,11 @@ const batchSelect = {
   dueDate: true,
   sentAt: true,
   createdAt: true,
-  company: { select: { name: true, vatMode: true } },
+  company: { select: { name: true } },
   createdByUser: { select: { fullName: true } },
   _count: { select: { revenues: true } },
+  // UAT Q6 — ป้าย VAT ของรอบอ่านจาก snapshot ของรายได้ในรอบ ไม่ใช่ค่าปัจจุบันของบริษัท
+  revenues: { select: { vatModeSnapshot: true }, distinct: 'vatModeSnapshot', orderBy: { vatModeSnapshot: 'asc' } },
 } as const
 
 type BatchRow = Prisma.BillingBatchGetPayload<{ select: typeof batchSelect }>
@@ -188,7 +192,7 @@ function toBatchDto(row: BatchRow, asOf: Date): BillingBatchDto {
     id: row.id,
     companyId: row.companyId,
     companyName: row.company.name,
-    companyVatMode: row.company.vatMode,
+    vatModes: row.revenues.map((revenue) => revenue.vatModeSnapshot),
     period: row.period,
     status: row.status,
     totalSatang: row.totalSatang,

@@ -150,9 +150,9 @@ async function seedBilling(
 
   await db().$executeRawUnsafe(`
     INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang,
-                          vat_rate_pct_used, total_satang, fee_model_snapshot, status, revenue_date, created_by)
+                          vat_rate_pct_used, total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
     VALUES ('${ORG_ID}', '${caseId}', '${company}', '${id}', ${gross}, ${vat}, 7.00, ${gross + vat},
-            'SUCCESS_FEE', 'billed', '2026-06-25', '${ACCOUNTING_ID}')
+            'SUCCESS_FEE', 'exclude_vat', 'billed', '2026-06-25', '${ACCOUNTING_ID}')
   `)
 
   return { id, period }

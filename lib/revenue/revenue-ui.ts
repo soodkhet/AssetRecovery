@@ -1,3 +1,4 @@
+import { fmtPercent } from '@/lib/format/money'
 import type { BillingBatchStatus, RevenueStatus, VatMode } from '@/lib/generated/prisma/enums'
 import { canTransitionBillingBatch } from '@/lib/revenue/revenue'
 import type { BillingBatchDto } from '@/lib/revenue/types'
@@ -51,6 +52,21 @@ export const VAT_MODE_LABEL: Readonly<Record<VatMode, string>> = {
   include_vat: 'Include VAT',
   exclude_vat: 'Exclude VAT',
   no_vat: 'ไม่มี VAT',
+}
+
+/**
+ * ป้าย VAT ของรายได้หนึ่งใบ — อ่านจาก **snapshot** (`vat_mode_snapshot` + `vat_rate_pct_used`) เท่านั้น
+ * (มติ PO 03/10/2569 — UAT Q6, BUG-015) เปลี่ยนโหมดของบริษัทภายหลังแล้วป้ายของรายการเก่าต้องไม่เปลี่ยน
+ */
+export function revenueVatLabel(revenue: { vatModeSnapshot: VatMode; vatRatePctUsed: number }): string {
+  if (revenue.vatModeSnapshot === 'no_vat') return VAT_MODE_LABEL.no_vat
+  return `${VAT_MODE_LABEL[revenue.vatModeSnapshot]} ${fmtPercent(revenue.vatRatePctUsed)}`
+}
+
+/** ป้าย VAT ของรอบวางบิล — จาก snapshot ของรายได้ในรอบ (หลายโหมด = บริษัทเปลี่ยนโหมดระหว่างงวด) */
+export function billingBatchVatLabel(batch: Pick<BillingBatchDto, 'vatModes'>): string {
+  if (batch.vatModes.length === 0) return '—'
+  return batch.vatModes.map((mode) => VAT_MODE_LABEL[mode]).join(' / ')
 }
 
 // ── ปุ่มบนแถว (`23` §6.8 — ชุดเดียวกับ API) ─────────────────────────────────

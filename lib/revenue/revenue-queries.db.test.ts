@@ -425,6 +425,23 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     expect(row.vatSatang).toBe(0)
     expect(row.totalSatang).toBe(100_000)
     expect(row.vatRatePctUsed.toNumber()).toBe(0)
+    expect(row.vatModeSnapshot).toBe('no_vat')
+  })
+
+  it('UAT Q6 — snapshot vat_mode ตอนสร้าง · เปลี่ยนโหมดของบริษัทภายหลัง ป้ายของรายการเก่าไม่เปลี่ยน', async () => {
+    const caseId = await seedCase({ companyId: COMPANY_A })
+    await seedExpense(caseId, 'approved')
+    await seedAssetInLot(caseId, 'confirmed', COMPANY_A)
+    await runRevenue([caseId])
+
+    await db().$executeRawUnsafe(`UPDATE finance_companies SET vat_mode = 'include_vat' WHERE id = '${COMPANY_A}'`)
+    try {
+      const rows = await revenue.listRevenues(finance, { status: 'all', unbilledOnly: false })
+      const row = rows.find((candidate) => candidate.caseId === caseId)
+      expect(row?.vatModeSnapshot).toBe('exclude_vat')
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE finance_companies SET vat_mode = 'exclude_vat' WHERE id = '${COMPANY_A}'`)
+    }
   })
 
   it('เคสที่ยังไม่มีฐานคำนวณ ⇒ ข้ามพร้อมเหตุผล `missing_basis` ไม่เดายอดเป็น 0', async () => {
@@ -491,6 +508,7 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
     expect(batch.period).toBe('สิงหาคม 2569')
     expect(batch.status).toBe('draft')
     expect(batch.revenueCount).toBe(2)
+    expect(batch.vatModes).toEqual(['exclude_vat'])
     expect(batch.totalSatang).toBe(214_000)
     expect(batch.outstandingSatang).toBe(214_000)
     // ไม่ระบุรอบบิล ⇒ Net 30 วันจาก `payment_due_days` ของบริษัท (31/08 + 30 = 30/09)
