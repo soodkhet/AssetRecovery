@@ -1,8 +1,10 @@
+import { toInputDate } from '@/lib/format/datetime'
+
 /**
  * ทะเบียน job_type ของระบบ (`91` §6.1) — **pure ล้วน** ใช้ร่วม FE/BE
  *
- * `91` §6.1 ระบุ 5 ตัว (`export_pack`, `bank_file`, `wht_summary`, `reassign_timeout`,
- * `advance_overdue`) พร้อมหมายเหตุว่า "รายการนี้อาจเพิ่มในอนาคตตาม module ใหม่" — ระหว่าง Phase 2–5
+ * `91` §6.1 ระบุ 6 ตัว (`export_pack`, `bank_file`, `wht_summary`, `reassign_timeout`,
+ * `advance_overdue`, `daily_field_allowance` — ตัวหลังสุดเพิ่มตามมติ PO 03/10/2569 UAT Q21) พร้อมหมายเหตุว่า "รายการนี้อาจเพิ่มในอนาคตตาม module ใหม่" — ระหว่าง Phase 2–5
  * มีอีก 2 ตัวเกิดขึ้นจริงจากมติ/สเปคของโมดูล:
  *  · `fuel_distance_retry` — มติ PO 14/08/2569 (D10) ใช้อยู่แล้วตั้งแต่ Phase 2.9
  *  · `wht_filing_reminder` — `33` §6.2/§8 · `90` §6.3 แถว 8 (Phase 5.2)
@@ -22,6 +24,7 @@ export const JOB_TYPES = [
   'wht_filing_reminder',
   'fuel_distance_retry',
   'report_export',
+  'daily_field_allowance',
 ] as const
 
 export type JobTypeCode = (typeof JOB_TYPES)[number]
@@ -39,7 +42,7 @@ export interface JobTypeSpec {
   readonly label: string
   readonly description: string
   readonly source: string
-  /** อยู่ในรายการ §6.1 ของ `91` (5 ตัว) ⇒ dev trigger เรียกได้ */
+  /** อยู่ในรายการ §6.1 ของ `91` (6 ตัว) ⇒ dev trigger เรียกได้ */
   readonly inSpecCatalog: boolean
   readonly schedule: JobSchedule | null
 }
@@ -103,6 +106,17 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
     schedule: null,
   },
 
+  daily_field_allowance: {
+    code: 'daily_field_allowance',
+    label: 'คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวัน',
+    description:
+      'หลังจบวัน: คิดวันละครั้งต่อพนักงานที่มีเช็คอิน แล้วกระจายเท่ากันทุกเคสที่เช็คอินวันนั้น (ประมวลผลเฉพาะวันที่จบแล้ว)',
+    source: 'มติ PO 03/10/2569 (UAT Q21) · DEC-012 · `91` §6.1 · `22` §6.2/§6.3',
+    inSpecCatalog: true,
+    // คีย์กันซ้ำรายวันตามวันไทย ⇒ cron รอบแรกหลังเที่ยงคืนไทยตั้งงานให้ · handler settle วันที่ < วันนี้
+    schedule: { kind: 'daily' },
+  },
+
   fuel_distance_retry: {
     code: 'fuel_distance_retry',
     label: 'คำนวณระยะทางค่าน้ำมันย้อนหลัง',
@@ -125,7 +139,7 @@ export function jobTypeLabel(code: string): string {
 }
 
 /**
- * job_type ที่ `POST /api/dev/trigger-job` รับได้ — **5 ตัวของ `91` §6.1 เท่านั้น**
+ * job_type ที่ `POST /api/dev/trigger-job` รับได้ — **6 ตัวของ `91` §6.1 เท่านั้น**
  * (§14.1 + C8 ใน `docs/02_OPEN_DECISIONS.md`: dev trigger ต้องครบ 5 ตัวรวม `advance_overdue`)
  */
 export const DEV_TRIGGER_JOB_TYPES: readonly JobTypeCode[] = JOB_TYPES.filter(
@@ -160,4 +174,22 @@ export function scheduledIdempotencyKey(code: JobTypeCode, now: Date): string | 
   const { schedule } = JOB_TYPE_SPECS[code]
   if (schedule === null) return null
   return `cron:${code}:${jobScheduleBucket(schedule, now)}`
+}
+
+/** ธงที่ `POST /api/dev/trigger-job` ใส่ใน payload — แยกงานจาก dev trigger ออกจาก cron/ผู้ใช้ */
+export const DEV_TRIGGER_PAYLOAD_FLAG = 'devTrigger'
+
+const SETTLE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * **pure** — วันที่สั่ง settle ของ `daily_field_allowance` ผ่าน dev trigger (มติ PO UAT Q21):
+ * ต้องเป็นวันจริงรูป `YYYY-MM-DD` (ค.ศ. แบบ `<input type="date">`) และ **ไม่เกินวันนี้ตามเวลาไทย**
+ * คืนเที่ยงคืน UTC ของวันนั้น (รูปเดียวกับคอลัมน์ `DATE`) หรือ `null` ถ้าไม่ผ่าน
+ */
+export function parseSettleDate(value: string, now: Date): Date | null {
+  if (!SETTLE_DATE_PATTERN.test(value)) return null
+  const date = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null
+  if (value > toInputDate(now)) return null
+  return date
 }

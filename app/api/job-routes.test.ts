@@ -230,6 +230,38 @@ describe('POST /api/dev/trigger-job (`91` §14.1)', () => {
     expect((await envelopeOf(response)).data).toMatchObject({ outcome: 'completed' })
   })
 
+  it('daily_field_allowance รับ payload date (≤ วันนี้) · ใส่ธง dev trigger + วันที่ในคีย์กันซ้ำ (UAT Q21)', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    queriesMock.createJob.mockResolvedValue({ job: JOB_DETAIL, duplicate: false })
+    queriesMock.getJob.mockResolvedValue({ ...JOB_DETAIL, status: 'completed' })
+    engineMock.runJobById.mockResolvedValue('completed')
+
+    const response = await devTriggerRoute(
+      request('http://localhost/api/dev/trigger-job', 'POST', {
+        jobType: 'daily_field_allowance',
+        payload: { date: '2026-01-15' },
+      }),
+      undefined,
+    )
+
+    expect(response.status).toBe(200)
+    const input = queriesMock.createJob.mock.calls[0]?.[1]
+    expect(input).toMatchObject({ jobType: 'daily_field_allowance', payload: { date: '2026-01-15', devTrigger: true } })
+    expect(String(input?.idempotencyKey)).toMatch(/^dev:daily_field_allowance:.*:2026-01-15$/)
+  })
+
+  it('daily_field_allowance: date อนาคต/ผิดรูป = 400 ไม่สร้าง job', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    for (const date of ['2999-01-01', '2026-02-30', '15/01/2569']) {
+      const response = await devTriggerRoute(
+        request('http://localhost/api/dev/trigger-job', 'POST', { jobType: 'daily_field_allowance', payload: { date } }),
+        undefined,
+      )
+      expect(response.status, date).toBe(400)
+    }
+    expect(queriesMock.createJob).not.toHaveBeenCalled()
+  })
+
   it('job_type ที่อยู่ในทะเบียนแต่ไม่อยู่ใน §6.1 = JOB_INVALID_STATUS', async () => {
     requireSessionMock.mockResolvedValue(SUPERADMIN)
 
