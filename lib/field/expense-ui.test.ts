@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ACTIVE_EXPENSE_STATUSES } from '@/lib/field/expense-status'
 import {
+  closeExpenseToastDescription,
   CASE_BOUND_STATUS_FILTERS,
   EXPENSE_STATUS_LABEL,
   EXPENSE_TYPE_LABEL,
@@ -212,5 +213,40 @@ describe('รวมยอด', () => {
       expense({ grossSatang: 80_000, status: 'superseded' }),
     ]
     expect(sumActiveExpenses(items)).toBe(30_000)
+  })
+})
+
+describe('toast หลังปิดงานสะท้อนรายการที่สร้างจริง (UAT BUG-069)', () => {
+  it('สำเร็จ: น้ำมัน + เบี้ยเลี้ยง + คอมมิชชั่น พร้อมยอด', () => {
+    expect(
+      closeExpenseToastDescription(
+        {
+          createdExpenses: [
+            { expenseType: 'fuel', grossSatang: 25_000 },
+            { expenseType: 'allowance', grossSatang: 20_000 },
+            { expenseType: 'commission', grossSatang: 150_000 },
+          ],
+          fuelDistancePending: false,
+        },
+        false,
+      ),
+    ).toBe('ระบบสร้างรายการเบิกให้อัตโนมัติ: ค่าน้ำมัน ฿250.00 · เบี้ยเลี้ยง ฿200.00 · คอมมิชชั่น ฿1,500.00')
+  })
+
+  it('ไม่สำเร็จ: เบี้ยเสี่ยงโผล่ · ค่าน้ำมันรอคำนวณบอกชัด', () => {
+    const text = closeExpenseToastDescription(
+      { createdExpenses: [{ expenseType: 'no_success_fee', grossSatang: 50_000 }], fuelDistancePending: true },
+      false,
+    )
+    expect(text).toContain('เบี้ยเสี่ยง ฿500.00')
+    expect(text).toContain('ค่าน้ำมันระบบจะคำนวณให้ภายหลัง')
+    expect(text).not.toContain('คอมมิชชั่น')
+  })
+
+  it('ไม่มีรายการ / ส่งหลักฐานใหม่', () => {
+    expect(closeExpenseToastDescription({ createdExpenses: [] }, false)).toBe('เคสนี้ไม่มีรายการเบิกจากแผนค่าตอบแทน')
+    expect(
+      closeExpenseToastDescription({ createdExpenses: [{ expenseType: 'allowance', grossSatang: 20_000 }] }, true),
+    ).toBe('รายการเบิกของรอบเดิมถูกแทนที่ด้วย: เบี้ยเลี้ยง ฿200.00')
   })
 })

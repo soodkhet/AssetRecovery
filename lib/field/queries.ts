@@ -18,6 +18,7 @@ import {
   resolveRoundPricing,
   supersedeCaseExpenses,
   type ExpenseTxClient,
+  type GenerateCaseExpensesResult,
   type PlanSnapshot,
 } from '@/lib/field/expense-queries'
 import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/dispatch'
@@ -190,6 +191,16 @@ function toActionResult(row: AssignmentRow, events: readonly string[]): FieldAct
     scheduleDate: toDateOnly(row.scheduledDate),
     scheduleOrder: row.scheduleOrder,
     events,
+  }
+}
+
+/** ผลของการปิดงาน/ส่งหลักฐานใหม่ที่ toast ต้องใช้ — รายการที่สร้างจริง (UAT BUG-069) */
+function createdExpensesOf(
+  expenses: GenerateCaseExpensesResult,
+): Pick<FieldActionResultDto, 'createdExpenses' | 'fuelDistancePending'> {
+  return {
+    createdExpenses: expenses.drafts.map((draft) => ({ expenseType: draft.expenseType, grossSatang: draft.grossSatang })),
+    fuelDistancePending: expenses.fuelDistancePending,
   }
 }
 
@@ -1270,10 +1281,13 @@ export async function closeFieldCase(
   notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef, current.teamId)
   notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName, current.teamId)
 
-  return toActionResult(result.assignment, [
-    outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
-    ...(result.expenses.expenseIds.length > 0 ? ['expense.case_bound_created'] : []),
-  ])
+  return {
+    ...toActionResult(result.assignment, [
+      outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
+      ...(result.expenses.expenseIds.length > 0 ? ['expense.case_bound_created'] : []),
+    ]),
+    ...createdExpensesOf(result.expenses),
+  }
 }
 
 // ── POST /api/field/reassignment/:id/respond (`41` §7.8 · §8) ──────────────
@@ -1682,5 +1696,5 @@ export async function resubmitCloseCase(
     result.assetStatus,
   )
 
-  return toActionResult(result.assignment, ['case.close_resubmitted'])
+  return { ...toActionResult(result.assignment, ['case.close_resubmitted']), ...createdExpensesOf(result.expenses) }
 }

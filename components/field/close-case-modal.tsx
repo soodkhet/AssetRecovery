@@ -42,6 +42,7 @@ import {
   CLOSE_FAIL_REASONS,
   type CloseFailReason,
 } from '@/lib/field/fail-reasons'
+import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
 import { formatCoordinates, panCenter, staticMapUrl } from '@/lib/field/map-pan'
 import {
@@ -609,18 +610,20 @@ export function CloseCaseModal({
             jsonRequest('POST', closeCasePayload(form)),
           )
 
-      if (response.error !== undefined) {
+      if (response.error !== undefined || response.data === undefined) {
         setShowMissing(true)
-        showToast({ tone: 'error', title: response.error.title, description: response.error.message })
+        showToast({
+          tone: 'error',
+          title: response.error?.title ?? 'บันทึกไม่สำเร็จ',
+          description: response.error?.message,
+        })
         return
       }
 
       showToast({
         tone: 'success',
         title: mode.revision ? 'ส่งหลักฐานกลับให้ตรวจอีกครั้งแล้ว' : 'ปิดงานเรียบร้อย',
-        description: mode.revision
-          ? 'รายการเบิกของรอบเดิมจะถูกแทนที่ด้วยรายการใหม่'
-          : 'ระบบสร้างรายการเบิกค่าน้ำมัน/เบี้ยเลี้ยงให้อัตโนมัติ',
+        description: closeExpenseToastDescription(response.data, mode.revision),
       })
       onDone()
       onClose()

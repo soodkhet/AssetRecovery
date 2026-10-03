@@ -296,6 +296,9 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     expect(closed.group).toBe('closed')
     // Phase 2.9 — ปิดงานสร้างรายการเบิกในทรานแซกชันเดียวกัน (`41` §6.6) ⇒ มี event ของรายการเบิกด้วย
     expect(closed.events).toEqual(['case.closed_success', 'expense.case_bound_created'])
+    // toast อ่านรายการที่สร้างจริงจากผลของ API (UAT BUG-069)
+    expect(closed.createdExpenses?.length).toBeGreaterThan(0)
+    expect(closed.createdExpenses?.map((row) => row.expenseType)).not.toContain('no_success_fee')
 
     const caseRow = await db().case.findUniqueOrThrow({ where: { id: caseId } })
     expect(caseRow.status).toBe('closed_success')
@@ -340,6 +343,7 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     )
     expect(closed.status).toBe('closed_fail')
     expect(closed.events).toEqual(['case.closed_fail', 'expense.case_bound_created'])
+    expect(closed.createdExpenses?.map((row) => row.expenseType)).not.toContain('commission')
     expect((await db().case.findUniqueOrThrow({ where: { id: caseId } })).status).toBe('closed_fail')
     // เหตุผลไม่สำเร็จเก็บกับหลักฐาน (มติ PO 03/10/2569 — UAT Q16 · BUG-057)
     const evidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId } })

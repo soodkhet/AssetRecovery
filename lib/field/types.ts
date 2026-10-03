@@ -201,6 +201,13 @@ export interface FieldActionResultDto {
   scheduleDate: string | null
   scheduleOrder: number | null
   events: readonly string[]
+  /**
+   * รายการเบิกที่ระบบสร้างจริงจากการปิดงาน/ส่งหลักฐานใหม่ (มีเฉพาะ 2 action นั้น) — toast อ่านจากตรงนี้
+   * ไม่ hardcode ชนิด (UAT BUG-069)
+   */
+  createdExpenses?: readonly { expenseType: ExpenseType; grossSatang: number }[]
+  /** ระยะทางคำนวณไม่ได้ตอนปิดงาน — ค่าน้ำมันจะตามมาทีหลัง (D10) */
+  fuelDistancePending?: boolean
 }
 
 export interface FieldReorderResultDto {

@@ -1,6 +1,7 @@
 import { ACTIVE_EXPENSE_STATUSES } from '@/lib/field/expense-status'
 import { matchesMonth, monthKeyOfDateOnly } from '@/lib/field/month-filter'
-import type { FieldExpenseDto } from '@/lib/field/types'
+import type { FieldActionResultDto, FieldExpenseDto } from '@/lib/field/types'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -229,4 +230,23 @@ export function filterSeparateExpenses(
 /** ยอดรวมของรายการชุดหนึ่ง (satang) — นับเฉพาะที่ยังมีผล */
 export function sumActiveExpenses(items: readonly FieldExpenseDto[]): number {
   return items.filter((item) => isActiveExpense(item.status)).reduce((sum, item) => sum + item.grossSatang, 0)
+}
+
+/**
+ * คำอธิบายใน toast หลังปิดงาน/ส่งหลักฐานใหม่ — สร้างจาก **รายการที่ server สร้างจริง** (`createdExpenses`)
+ * ไม่ hardcode ชนิด (UAT BUG-069 · คอมมิชชั่น/เบี้ยเสี่ยงตามมติ Q2 ต้องโผล่ด้วย)
+ */
+export function closeExpenseToastDescription(
+  result: Pick<FieldActionResultDto, 'createdExpenses' | 'fuelDistancePending'>,
+  revision: boolean,
+): string {
+  const created = result.createdExpenses ?? []
+  const items = created.map((row) => `${EXPENSE_TYPE_LABEL[row.expenseType]} ${fmtSatangSymbol(row.grossSatang)}`)
+  const pendingFuel = result.fuelDistancePending === true ? ' · ค่าน้ำมันระบบจะคำนวณให้ภายหลัง' : ''
+  if (items.length === 0) {
+    const none = revision ? 'รอบนี้ไม่มีรายการเบิกจากเคส' : 'เคสนี้ไม่มีรายการเบิกจากแผนค่าตอบแทน'
+    return `${none}${pendingFuel}`
+  }
+  const lead = revision ? 'รายการเบิกของรอบเดิมถูกแทนที่ด้วย' : 'ระบบสร้างรายการเบิกให้อัตโนมัติ'
+  return `${lead}: ${items.join(' · ')}${pendingFuel}`
 }
