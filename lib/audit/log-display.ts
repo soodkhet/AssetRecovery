@@ -62,6 +62,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   assets: 'ทรัพย์ในคลัง',
   handover_lots: 'ล็อตส่งมอบ',
   expenses: 'รายการเบิก',
+  field_day_settlements: 'ค่าน้ำมันเหมา/เบี้ยเลี้ยงรายวัน',
   advances: 'เงินทดรองจ่าย',
   payout_batches: 'รอบจ่ายเงิน',
   payee_profiles: 'ข้อมูลผู้รับเงิน',

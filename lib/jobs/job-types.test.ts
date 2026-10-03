@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   DEV_TRIGGER_JOB_TYPES,
+  parseSettleDate,
   JOB_TYPES,
   JOB_TYPE_SPECS,
   SCHEDULED_JOB_TYPES,
@@ -20,10 +21,11 @@ function doc(file: string): string {
 }
 
 describe('ทะเบียน job_type (`91` §6.1)', () => {
-  it('job_type 5 ตัวของ §6.1 มีครบและเป็นชุดเดียวกับที่ dev trigger รับได้ (§14.1 · C8)', () => {
+  it('job_type 6 ตัวของ §6.1 มีครบและเป็นชุดเดียวกับที่ dev trigger รับได้ (§14.1 · C8 · UAT Q21)', () => {
     expect([...DEV_TRIGGER_JOB_TYPES].sort()).toEqual([
       'advance_overdue',
       'bank_file',
+      'daily_field_allowance',
       'export_pack',
       'reassign_timeout',
       'wht_summary',
@@ -98,5 +100,25 @@ describe('ช่องเวลาและคีย์กันซ้ำขอ�
     )
     expect(scheduledIdempotencyKey('advance_overdue', at)).toBe('cron:advance_overdue:2026-08-15')
     expect(scheduledIdempotencyKey('export_pack', at)).toBeNull()
+  })
+})
+
+describe('parseSettleDate — วันที่ settle ของ daily_field_allowance ผ่าน dev trigger (UAT Q21)', () => {
+  // 03/10/2569 23:30 ไทย = 16:30Z
+  const now = new Date('2026-10-03T16:30:00.000Z')
+
+  it('วันที่ผ่านมาแล้ว/วันนี้ (ตามเวลาไทย) ผ่าน · คืนเที่ยงคืน UTC ของวันนั้น', () => {
+    expect(parseSettleDate('2026-10-02', now)?.toISOString()).toBe('2026-10-02T00:00:00.000Z')
+    expect(parseSettleDate('2026-10-03', now)?.toISOString()).toBe('2026-10-03T00:00:00.000Z')
+  })
+
+  it('วันอนาคต / วันไม่มีจริง / รูปแบบผิด = null', () => {
+    expect(parseSettleDate('2026-10-04', now)).toBeNull()
+    expect(parseSettleDate('2026-02-30', now)).toBeNull()
+    expect(parseSettleDate('03/10/2569', now)).toBeNull()
+  })
+
+  it('หลังเที่ยงคืนไทย (17:00Z) "วันนี้" ขยับเป็นวันถัดไปแล้ว', () => {
+    expect(parseSettleDate('2026-10-04', new Date('2026-10-03T17:00:00.000Z'))).not.toBeNull()
   })
 })

@@ -68,6 +68,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
 /** ข้อ 3 — ตารางธุรกรรม: ต้องมี reason เมื่อ `update`/`delete` (flow ปกติที่ระบบสร้างเองไม่ต้อง) */
 export const TRANSACTIONAL_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>> = {
   expenses: 'money',
+  /// มติ PO UAT Q21 — การ settle ค่าน้ำมันเหมา/เบี้ยเลี้ยงรายวัน (insert-only โดย job)
+  field_day_settlements: 'money',
   advances: 'money',
   payout_batches: 'money',
   payout_batch_items: 'money',

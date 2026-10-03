@@ -259,6 +259,11 @@ export interface FieldExpenseListDto {
   /** สรุปยอดหัวหน้าจอ (`41` §7.9) — superseded/rejected ไม่นับ */
   pendingSatang: number
   approvedSatang: number
+  /**
+   * วันลงพื้นที่ (`YYYY-MM-DD` วันไทย) ที่ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงยังไม่ถูกคำนวณ — มติ PO UAT Q21
+   * (job รายวันคิดหลังจบวัน) · หน้าจอแสดง "รอคำนวณหลังจบวัน" แทนการเดายอด · แท็บ "เบิกแยก" = ว่างเสมอ
+   */
+  pendingFieldDates: string[]
 }
 
 export interface FieldIncomeItemDto {

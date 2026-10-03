@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
+import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 import { assetListQuerySchema, lotListQuerySchema } from '@/lib/warehouse/schemas'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
@@ -144,6 +145,7 @@ async function cleanupCases(): Promise<void> {
     await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`UPDATE expenses SET superseded_by_expense_id = NULL WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
+    await tx.$executeRawUnsafe(`DELETE FROM field_day_settlements WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM assets WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM handover_lots WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM jobs WHERE organization_id = '${ORG_ID}'`)
@@ -282,6 +284,8 @@ async function seedClosedSuccessCase(companyId = COMPANY_A, imei = `35500000000$
     ctx(agent),
   )
   await field.closeFieldCase(agent, caseId, { outcome: 'closed_success', ...MEDIA }, ctx(agent))
+  // UAT Q21 — วันลงพื้นที่ต้องถูก settle (job รายวัน) ก่อนเกตรายได้จะผ่าน
+  await settleFieldDaysToday(ORG_ID)
 
   const asset = await db().asset.findFirstOrThrow({ where: { caseId }, select: { id: true } })
   return { caseId, assetId: asset.id, imei }
@@ -349,13 +353,15 @@ suite('Phase 8.3 — Revenue ของ `closed_fail` ที่ไม่มี ex
       )
       await field.recordCheckin(agent, caseId, { latitude: 18.5801, longitude: 99.0031, checkinType: 'address' }, ctx(agent))
       await field.closeFieldCase(agent, caseId, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, ctx(agent))
+      // UAT Q21 — รายได้เกิดเมื่อ job รายวัน settle วันลงพื้นที่ (ทีมไม่ผูกแผน ⇒ settle ยอด 0 ไม่มี expense)
+      await settleFieldDaysToday(ORG_ID)
     } finally {
       await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_ID}' WHERE id = '${TEAM_ID}'`)
     }
     return caseId
   }
 
-  it('`charge_on_fail = true` → Revenue เกิดทันทีที่ปิดเคส (ไม่ต้องรอ expense/คลัง)', async () => {
+  it('`charge_on_fail = true` → Revenue เกิดเมื่อวันลงพื้นที่ settle แล้ว (ไม่ต้องรอ expense/คลัง)', async () => {
     const caseId = await closeFailWithoutExpense(true)
 
     expect(await db().expense.count({ where: { caseId } })).toBe(0)
@@ -1049,5 +1055,193 @@ suite('Phase 2.13 — scope ระดับแถว (`44` §13 · §17 T15)', (
 
     const asAdmin = await warehouse.getLot(admin, lot.id)
     expect(asAdmin.assets[0]?.agentName).not.toBeNull()
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// มติ PO 03/10/2569 (UAT Q21 · DEC-012) — ค่าน้ำมันเหมา/เบี้ยเลี้ยงวันละครั้งต่อพนักงาน กระจายทุกเคส
+// แผนของทีมนี้: DAILY_FLAT ฿300/วัน + เบี้ยเลี้ยง ฿200/วัน
+// ════════════════════════════════════════════════════════════════════════════
+
+suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพนักงาน · เกตรายได้รอ settle)', () => {
+  beforeEach(cleanupCases)
+
+  const todayIso = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+
+  /** เคส approved → รับงาน → เช็คอิน 1 จุด (ยังไม่ปิดงาน) */
+  async function fieldWork(chargeOnFail = false): Promise<string> {
+    const caseId = await seedApprovedCase(COMPANY_A, `3557000000${String(3000 + caseSeq)}`)
+    if (chargeOnFail) {
+      await db().$executeRawUnsafe(`UPDATE cases SET service_fee_charge_on_fail = true WHERE id = '${caseId}'`)
+    }
+    await assignments.assignCase(manager, caseId, { agentId: agent.id }, ctx(manager))
+    await field.acceptFieldCase(agent, caseId, ctx(agent))
+    await field.scheduleFieldCase(agent, caseId, { scheduleDate: new Date(`${DAY_1}T00:00:00.000Z`) }, ctx(agent))
+    await field.saveCloseDraft(
+      agent,
+      caseId,
+      {
+        outcome: null,
+        photos: [],
+        videos: [],
+        productPhotos: [],
+        travelOrigin: { latitude: 18.58, longitude: 99.0, source: 'gps_auto' },
+      },
+      ctx(agent),
+    )
+    await field.recordCheckin(agent, caseId, { latitude: 18.5801, longitude: 99.0031, checkinType: 'address' }, ctx(agent))
+    return caseId
+  }
+
+  async function closeFail(caseId: string): Promise<void> {
+    await field.closeFieldCase(agent, caseId, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, ctx(agent))
+  }
+
+  const dailyRows = (caseIds: string[]) =>
+    db().expense.findMany({
+      where: { caseId: { in: caseIds }, fieldDaySettlementId: { not: null } },
+      orderBy: [{ expenseType: 'asc' }, { grossSatang: 'desc' }],
+    })
+
+  it('2 เคสวันเดียว → ชนิดละ 2 แถว รวม = D · วันยังไม่จบ cron ไม่แตะ · dev trigger ระบุวันได้ · รันซ้ำไม่เพิ่ม · รายได้รอ settle + อนุมัติครบ', async () => {
+    const job = await import('@/lib/field/daily-allowance-job')
+    const engine = await import('@/lib/jobs/engine')
+    const revenue = await import('@/lib/warehouse/revenue-service')
+    const { prisma } = await import('@/lib/prisma')
+    type RevenueTx = Parameters<typeof revenue.tryCreateRevenue>[0]
+
+    const c1 = await fieldWork(true)
+    const c2 = await fieldWork()
+    await closeFail(c1)
+    await closeFail(c2)
+
+    // ปิดงานไม่สร้าง fuel เหมา/เบี้ยเลี้ยงแล้ว · รายได้ยังไม่เกิดเพราะวันลงพื้นที่ยังไม่ settle
+    expect(await dailyRows([c1, c2])).toEqual([])
+    expect(
+      await db().expense.count({ where: { caseId: { in: [c1, c2] }, expenseType: { in: ['fuel', 'allowance'] } } }),
+    ).toBe(0)
+    expect(await db().revenue.count({ where: { caseId: c1 } })).toBe(0)
+    const blocked = await prisma.$transaction((tx) =>
+      revenue.tryCreateRevenue(tx as unknown as RevenueTx, { organizationId: ORG_ID, caseIds: [c1], actorId: MANAGER_ID }),
+    )
+    expect(blocked.skipped).toEqual([{ caseId: c1, reason: 'field_days_not_settled' }])
+
+    // cron (ไม่ระบุวัน) ประมวลผลเฉพาะวันที่จบแล้ว — เช็คอินวันนี้ยังไม่ถูกแตะ
+    const early = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID })
+    expect(early.settled).toBe(0)
+
+    // dev trigger ส่ง date = วันนี้ ผ่านตัวรันงานกลาง (ธง devTrigger เท่านั้นที่ทำให้ date มีผล)
+    const { job: queued } = await engine.enqueueJob({
+      organizationId: ORG_ID,
+      jobType: 'daily_field_allowance',
+      payload: { date: todayIso(), devTrigger: true },
+      idempotencyKey: `test:q21:${Date.now()}`,
+    })
+    expect(await engine.runJobById(queued.id)).toBe('completed')
+    const done = await db().job.findUniqueOrThrow({ where: { id: queued.id } })
+    expect(done.result).toMatchObject({ settled: 1, expensesCreated: 4 })
+
+    const rows = await dailyRows([c1, c2])
+    // orderBy enum ของ Postgres = ลำดับประกาศ (fuel มาก่อน allowance)
+    expect(rows.map((row) => [row.expenseType, row.grossSatang])).toEqual([
+      ['fuel', 15_000],
+      ['fuel', 15_000],
+      ['allowance', 10_000],
+      ['allowance', 10_000],
+    ])
+    expect(new Set(rows.map((row) => row.caseId))).toEqual(new Set([c1, c2]))
+    expect(rows.every((row) => row.status === 'pending_approval' && row.compPlanId === PLAN_ID)).toBe(true)
+    expect(rows.every((row) => row.expenseDate.toISOString().slice(0, 10) === todayIso())).toBe(true)
+
+    const settlement = await db().fieldDaySettlement.findFirstOrThrow({
+      where: { organizationId: ORG_ID, agentId: AGENT_ID },
+    })
+    expect(settlement).toMatchObject({
+      fuelTotalSatang: 30_000,
+      allowanceTotalSatang: 20_000,
+      caseCount: 2,
+      jobId: queued.id,
+    })
+    const sumOf = (type: string) =>
+      rows.filter((row) => row.expenseType === type).reduce((sum, row) => sum + row.grossSatang, 0)
+    expect(sumOf('fuel')).toBe(settlement.fuelTotalSatang)
+    expect(sumOf('allowance')).toBe(settlement.allowanceTotalSatang)
+    const audit = await db().auditLog.findFirst({ where: { targetType: 'field_day_settlements', targetId: settlement.id } })
+    expect(audit?.actorId).toBeNull()
+    expect(audit?.reason).toContain(`[job:${queued.id}]`)
+
+    // รันซ้ำ = ไม่เพิ่มอะไรเลย (idempotent ต่อ พนักงาน×วัน)
+    const again = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: todayIso() })
+    expect(again.settled).toBe(0)
+    expect(await dailyRows([c1, c2])).toHaveLength(4)
+
+    // settle แล้วแต่แถวรายวันยังไม่อนุมัติ ⇒ รายได้ยังไม่เกิด · อนุมัติครบ ⇒ เกิดครั้งเดียว
+    expect(await db().revenue.count({ where: { caseId: c1 } })).toBe(0)
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${c1}'`)
+    const created = await prisma.$transaction((tx) =>
+      revenue.tryCreateRevenue(tx as unknown as RevenueTx, { organizationId: ORG_ID, caseIds: [c1], actorId: MANAGER_ID }),
+    )
+    expect(created.revenueIdsCreated).toHaveLength(1)
+  })
+
+  it('cron เก็บวันที่จบแล้ว (เมื่อวาน) โดยไม่ต้องระบุวัน · date ในงานที่ไม่ใช่ dev trigger ไม่มีผล', async () => {
+    const job = await import('@/lib/field/daily-allowance-job')
+    const registry = await import('@/lib/jobs/registry')
+
+    const c1 = await fieldWork()
+    await db().$executeRawUnsafe(
+      `UPDATE check_ins SET checked_in_at = checked_in_at - interval '1 day' WHERE case_id = '${c1}'`,
+    )
+    expect(registry.devSettleDateOf({ payload: { date: '2026-01-01' } })).toEqual({})
+    expect(registry.devSettleDateOf({ payload: { date: '2026-01-01', devTrigger: true } })).toEqual({ date: '2026-01-01' })
+
+    const result = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID })
+    expect(result.settled).toBe(1)
+    const rows = await dailyRows([c1])
+    expect(rows.map((row) => row.expenseType).sort()).toEqual(['allowance', 'fuel'])
+    // เคสยังไม่ปิดงาน ⇒ เข้าคิวอนุมัติ (ยังไม่มีทรัพย์ให้รอคลัง)
+    expect(rows.every((row) => row.status === 'pending_approval')).toBe(true)
+    const yesterday = new Date(Date.now() + 7 * 3_600_000 - 86_400_000).toISOString().slice(0, 10)
+    expect(rows.every((row) => row.expenseDate.toISOString().slice(0, 10) === yesterday)).toBe(true)
+
+    // ปิดงานทีหลัง: ไม่สร้างเบี้ยเลี้ยง/น้ำมันเหมาซ้ำ
+    await closeFail(c1)
+    expect(await db().expense.count({ where: { caseId: c1, expenseType: { in: ['fuel', 'allowance'] } } })).toBe(2)
+  })
+
+  it('เคสสำเร็จที่ล็อต confirmed ไปแล้วก่อน settle → แถวรายวันเข้า pending_approval (ไม่ค้างรอคลัง)', async () => {
+    const job = await import('@/lib/field/daily-allowance-job')
+    const { caseId, assetId } = await seedInCustody()
+    const lot = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+    await warehouse.confirmLot(
+      admin,
+      lot.id,
+      { deliveredAt: null, signedDocUrl: SIGNED_DOC, deliveryProofUrl: DELIVERY_PROOF },
+      ctx(admin),
+    )
+
+    // จำลอง "settle หลังล็อต confirmed": ล้างผลการ settle ของ helper แล้วรันใหม่
+    await db().$executeRawUnsafe(
+      `DELETE FROM expenses WHERE field_day_settlement_id IS NOT NULL AND organization_id = '${ORG_ID}'`,
+    )
+    await db().$executeRawUnsafe(`DELETE FROM field_day_settlements WHERE organization_id = '${ORG_ID}'`)
+    await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: todayIso() })
+
+    const rows = await dailyRows([caseId])
+    expect(rows).toHaveLength(2)
+    expect(rows.every((row) => row.status === 'pending_approval')).toBe(true)
   })
 })

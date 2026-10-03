@@ -1,11 +1,12 @@
 import type { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { apiSuccess } from '@/lib/api/envelope'
 import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { MANAGE_JOBS } from '@/lib/jobs/access'
 import { runJobById } from '@/lib/jobs/engine'
 import { JobError } from '@/lib/jobs/errors'
-import { DEV_TRIGGER_JOB_TYPES, isKnownJobType } from '@/lib/jobs/job-types'
+import { DEV_TRIGGER_JOB_TYPES, DEV_TRIGGER_PAYLOAD_FLAG, isKnownJobType, parseSettleDate } from '@/lib/jobs/job-types'
 import { createJob, getJob } from '@/lib/jobs/queries'
 import { jobDevTriggerSchema } from '@/lib/jobs/schemas'
 
@@ -19,7 +20,7 @@ export const runtime = 'nodejs'
  * นอกนั้นเดินทางเดียวกับ `POST /api/jobs` ทุกประการ (คีย์กันซ้ำ + audit + สิทธิ์เดียวกัน) —
  * ต่างแค่ "ไม่ต้องรอรอบเวลา" คือรัน handler ให้เลยหลังสร้าง job
  *
- * job_type รับได้ **5 ตัวของ `91` §6.1 เท่านั้น** (C8 — รวม `advance_overdue`) · นอกรายการ
+ * job_type รับได้ **6 ตัวของ `91` §6.1 เท่านั้น** (C8 — รวม `advance_overdue` · UAT Q21 `daily_field_allowance`) · นอกรายการ
  * ถูกปฏิเสธด้วย `JOB_INVALID_STATUS` ซึ่งคือรูป prefix ตาม `24` §7 ของ `INVALID_STATUS` ใน §14.1
  */
 /** ต้องตอบ 404 **ก่อน**ชั้นสิทธิ์ — ถ้าปล่อยให้ 401/403 ออกไปก่อน คนนอกก็รู้ว่ามี route นี้อยู่ */
@@ -44,13 +45,28 @@ const triggerJob = withApiPermission(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const now = new Date()
+    // `daily_field_allowance` รับ `date` (YYYY-MM-DD วันไทย ≤ วันนี้) ได้เฉพาะทางนี้ — มติ PO UAT Q21
+    // (ตัวรันงานอ่าน `date` เฉพาะงานที่มีธง dev trigger นอก production — cron จริงไม่รับ)
+    const settleDate = parsed.data.payload['date']
+    if (parsed.data.jobType === 'daily_field_allowance' && settleDate !== undefined) {
+      const dateCheck = z
+        .object({
+          date: z
+            .string()
+            .refine((value) => parseSettleDate(value, now) !== null, 'วันที่ต้องเป็นรูปแบบ YYYY-MM-DD และไม่เกินวันนี้'),
+        })
+        .safeParse({ date: settleDate })
+      if (!dateCheck.success) return validationErrorResponse(dateCheck.error)
+    }
+    const dateSuffix = typeof settleDate === 'string' ? `:${settleDate}` : ''
+
     const created = await createJob(
       { actor: user, meta: getRequestMeta(request) },
       {
         jobType: parsed.data.jobType,
-        payload: parsed.data.payload,
+        payload: { ...parsed.data.payload, [DEV_TRIGGER_PAYLOAD_FLAG]: true },
         // คีย์กันซ้ำผูกกับ "นาทีที่กด" — กดรัวในนาทีเดียวกันได้ job เดิม แต่ยังสั่งซ้ำนาทีถัดไปได้
-        idempotencyKey: `dev:${parsed.data.jobType}:${user.id}:${now.toISOString().slice(0, 16)}`,
+        idempotencyKey: `dev:${parsed.data.jobType}:${user.id}:${now.toISOString().slice(0, 16)}${dateSuffix}`,
       },
     )
 

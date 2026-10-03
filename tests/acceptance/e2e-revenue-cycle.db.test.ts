@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
@@ -379,6 +380,8 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
       { outcome: 'closed_success', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
       ctx(agent),
     )
+    // มติ PO UAT Q21 — ค่าน้ำมันเหมา/เบี้ยเลี้ยงเกิดจาก job หลังจบวัน (สั่ง settle วันนี้แบบ dev trigger)
+    await settleFieldDaysToday(ORG_ID)
 
     // ปิดสำเร็จ = เครื่องเข้าคลังรอรับ + รายการเบิกถูกล็อกไว้ก่อน (`44` §6.1 · `19` §6.1)
     const asset = await db().asset.findFirstOrThrow({ where: { caseId } })

@@ -3,9 +3,10 @@ import { runAdvanceOverdueJob } from '@/lib/advances/overdue-job'
 import type { SessionUser } from '@/lib/auth/types'
 import { loadSessionUser } from '@/lib/auth/session'
 import { createExportPack } from '@/lib/exports/queries'
+import { runDailyFieldAllowanceJob } from '@/lib/field/daily-allowance-job'
 import { runFuelDistanceRetryJob } from '@/lib/field/fuel-distance-job'
 import type { JobRow } from '@/lib/jobs/engine'
-import type { JobTypeCode } from '@/lib/jobs/job-types'
+import { DEV_TRIGGER_PAYLOAD_FLAG, type JobTypeCode } from '@/lib/jobs/job-types'
 import { generatePaymentFile } from '@/lib/payout/queries'
 import { prisma } from '@/lib/prisma'
 import { runReportExportJob } from '@/lib/reports/export-job'
@@ -27,6 +28,7 @@ import { runWhtSummaryJob } from '@/lib/wht/summary-job'
  * | `export_pack` | `createExportPack()` | Phase 4.6 (`37` §6.2) |
  * | `bank_file` | `generatePaymentFile()` | Phase 3.4 (`17` §6.3) |
  * | `report_export` | `runReportExportJob()` | Phase 6.1 (E13 · `96` §11) |
+ * | `daily_field_allowance` | `runDailyFieldAllowanceJob()` | มติ PO 03/10/2569 UAT Q21 (DEC-012) |
  *
  * `fuel_distance_retry` **ไม่อยู่ในทะเบียนนี้** — handler เดิม (`runFuelDistanceRetryJob()`) เป็น
  * ตัวกวาดคิว: มันไปหยิบ job ของตัวเองจากตาราง `jobs` แล้วจัดการสถานะ/retry เองครบตั้งแต่ Phase 2.9
@@ -81,6 +83,18 @@ async function actorOf(job: JobRow): Promise<SessionUser> {
   return actor
 }
 
+/**
+ * วันที่ที่สั่ง settle ของ `daily_field_allowance` — **รับเฉพาะงานที่มาจาก dev trigger นอก production**
+ * (มติ PO UAT Q21) · cron/`POST /api/jobs` ใส่ `date` มาก็ไม่มีผล ⇒ งานจริงคิดเฉพาะวันที่จบแล้วเสมอ
+ */
+export function devSettleDateOf(job: Pick<JobRow, 'payload'>): { date?: string } {
+  if (process.env.NODE_ENV === 'production') return {}
+  const payload = payloadOf(job as JobRow)
+  if (payload[DEV_TRIGGER_PAYLOAD_FLAG] !== true) return {}
+  const date = payload['date']
+  return typeof date === 'string' ? { date } : {}
+}
+
 /** งานเบื้องหลังไม่มี request จริง ⇒ ไม่มี IP/User-Agent (audit ยังครบ 9 fields — ค่าเป็น NULL) */
 const JOB_REQUEST_META = { ipAddress: null, userAgent: null }
 
@@ -118,6 +132,16 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
       jobId: job.id,
       ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
       ...(typeof periodId === 'string' ? { periodId } : {}),
+    })
+    return { ...result }
+  },
+
+  daily_field_allowance: async ({ job, now }) => {
+    const result = await runDailyFieldAllowanceJob({
+      now,
+      jobId: job.id,
+      ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
+      ...devSettleDateOf(job),
     })
     return { ...result }
   },

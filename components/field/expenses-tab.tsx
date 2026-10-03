@@ -5,7 +5,7 @@ import { useSession } from '@/components/auth/permission-provider'
 import { HotelClaimModal } from '@/components/field/hotel-claim-modal'
 import { IconAlert, IconChevronRight, IconPlus } from '@/components/field/field-icons'
 import { ResubmitExpenseModal } from '@/components/field/resubmit-expense-modal'
-import { Button, EmptyState, ErrorState, LoadingState, Select, StatusBadge } from '@/components/ui'
+import { Button, EmptyState, ErrorState, InlineAlert, LoadingState, Select, StatusBadge } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
@@ -254,8 +254,10 @@ export function ExpensesTab() {
             <>
               <StatusFilterSelect value={statusFilter} options={CASE_BOUND_STATUS_FILTERS} onChange={setStatusFilter} />
               <p className="text-xs text-slate-400">
-                รายการเหล่านี้ระบบสร้างให้อัตโนมัติทันทีที่ปิดงาน — ไม่ต้องทำเรื่องเบิกเอง
+                ระบบสร้างให้อัตโนมัติ ไม่ต้องทำเรื่องเบิกเอง — ค่าคอมมิชชั่น/เบี้ยเสี่ยง/ค่าน้ำมันตามระยะทางเกิดตอนปิดงาน ·
+                ค่าน้ำมันเหมาจ่ายและเบี้ยเลี้ยงคิดวันละครั้งหลังจบวัน แล้วเฉลี่ยทุกเคสที่ลงพื้นที่วันนั้น
               </p>
+              <PendingFieldDaysNotice dates={data?.pendingFieldDates ?? []} />
               {groups.length === 0 ? (
                 <EmptyState title="ไม่พบรายการตามเงื่อนไขที่กรอง" />
               ) : (
@@ -347,5 +349,15 @@ export function ExpensesTab() {
         />
       )}
     </>
+  )
+}
+
+/** วันลงพื้นที่ที่ยังไม่ถูกคำนวณรายวัน (มติ PO UAT Q21) — แจ้งสถานะ ไม่แสดงยอดประมาณ */
+function PendingFieldDaysNotice({ dates }: { dates: readonly string[] }) {
+  if (dates.length === 0) return null
+  return (
+    <InlineAlert tone="info" title="ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยง — รอคำนวณหลังจบวัน">
+      วันที่ลงพื้นที่: {dates.map((date) => fmtDate(`${date}T00:00:00.000Z`)).join(', ')}
+    </InlineAlert>
   )
 }

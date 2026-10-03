@@ -1,0 +1,364 @@
+import { periodKeyOf } from '@/lib/accounting/period'
+import { periodStatusAt } from '@/lib/accounting/period-guard'
+import { emitAudit } from '@/lib/audit/audit'
+import {
+  initialFieldDayExpenseStatus,
+  planFieldDayExpenses,
+  type FieldDayCase,
+} from '@/lib/field/expense-calc'
+import {
+  bangkokBusinessDate,
+  ensureAgentPayeeId,
+  resolvePlanSnapshot,
+  type ExpenseTxClient,
+  type PlanSnapshot,
+} from '@/lib/field/expense-queries'
+import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
+import { Prisma } from '@/lib/generated/prisma/client'
+import { parseSettleDate } from '@/lib/jobs/job-types'
+import { prisma } from '@/lib/prisma'
+import { isDirectEditRejected } from '@/lib/settings/period-lock'
+import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
+import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
+
+/**
+ * Job `daily_field_allowance` — มติ PO 03/10/2569 (UAT Q21 · DEC-012 · `22` §6.2/§6.3 · `41` §6.6 · `91` §6.1)
+ *
+ * ค่าน้ำมันเหมาจ่าย (`DAILY_FLAT`) + เบี้ยเลี้ยง (ทุกโหมด) = **วันละ 1 ครั้งต่อพนักงานต่อวันปฏิทินไทย**
+ * ที่มีเช็คอินอย่างน้อย 1 เคส → กระจายเฉลี่ยเท่ากันทุกเคสที่เช็คอินวันนั้น (เศษลงเคสแรก) แล้วสร้าง
+ * expense ต่อเคส · รันหลังเที่ยงคืนเวลาไทย ประมวลผลเฉพาะ "วันที่จบแล้ว" (`field_date < วันนี้`)
+ *
+ * ### idempotent (`91` — ทุก job)
+ * - 1 (องค์กร, พนักงาน, วัน) = 1 แถว `field_day_settlements` · UNIQUE ระดับ DB
+ *   `uniq_field_day_settlements_org_agent_date` ⇒ รันซ้ำ/รันพร้อมกัน ตัวที่แพ้ได้ P2002 → ข้าม (ไม่ซ้ำ)
+ * - แถว settlement + expenses + audit + การตรวจรายได้ อยู่ในทรานแซกชันเดียว ⇒ ไม่มีครึ่ง ๆ กลาง ๆ
+ * - วันที่ยอด 0 (ทีมไม่ผูกแผน/แผนไม่ตั้งอัตรา) ก็ยังลงแถว settlement (ยอด 0, ไม่มี expense) — เพื่อให้
+ *   เกตรายได้รู้ว่า "วันนั้นคิดแล้ว" (`19` §6.1)
+ *
+ * ### เช็คอินที่มาหลัง settle (กันยอดเกิน D)
+ * cron settle เฉพาะวันที่จบแล้ว จึงเกิดไม่ได้ตามปกติ · ถ้าสั่ง settle "วันนี้" ผ่าน dev trigger แล้วมี
+ * เช็คอินเพิ่มภายหลัง วันนั้นถือว่าคิดเงินครบแล้ว (ยอด D ถูกกระจายไปแล้วทั้งก้อน) — เคสใหม่ไม่ได้
+ * ส่วนแบ่งเพิ่มและไม่ทำให้ยอดเกิน D
+ *
+ * ### ข้อมูลเดิมก่อนมติ Q21
+ * รอบติดตามที่ตอนปิดงานสร้าง allowance / fuel เหมาจ่าย "ต่อเคส" ไว้แล้ว (แถว `compensation_plan` ที่ไม่มี
+ * `field_day_settlement_id`) = จ่ายวันเหล่านั้นไปแล้ว ⇒ ไม่นับเป็นผู้รับส่วนแบ่งซ้ำ
+ *
+ * actor = ระบบ (`actor_id = NULL`) ⇒ `reason` ต้องมี job id (`90` §13)
+ */
+
+export const DAILY_FIELD_ALLOWANCE_JOB_TYPE = 'daily_field_allowance'
+
+export interface DailyFieldAllowanceJobOptions {
+  organizationId?: string
+  /** id ของ job runner — ลง `reason` ของ audit + `field_day_settlements.job_id` */
+  jobId?: string
+  now?: Date
+  /**
+   * settle เฉพาะวันนี้ (`YYYY-MM-DD` วันไทย) — **รับจาก dev trigger เท่านั้น** (ตัวรันงานกรองให้แล้ว)
+   * ต้อง ≤ วันนี้ · ไม่ระบุ = ทุกวันที่จบแล้วที่ยังไม่ถูก settle (ตามรอบ cron + เก็บตกวันที่พลาด)
+   */
+  date?: string
+  /** จำนวน (พนักงาน, วัน) สูงสุดต่อรอบ */
+  limit?: number
+}
+
+export interface DailyFieldAllowanceJobResult {
+  settled: number
+  /** ชนกับอีก instance ที่ settle ไปก่อน (P2002) */
+  alreadySettled: number
+  /** งวดบัญชีของวันนั้นปิดแล้ว — สร้างรายการเบิกย้อนเข้างวดไม่ได้ (ต้องไป Adjustment) */
+  periodLocked: number
+  expensesCreated: number
+  revenueIdsCreated: string[]
+}
+
+interface PendingFieldDay {
+  organizationId: string
+  agentId: string
+  fieldDate: Date
+}
+
+/** (องค์กร, พนักงาน, วันไทย) ที่มีเช็คอินแต่ยังไม่มีแถว settlement */
+async function findPendingFieldDays(params: {
+  organizationId?: string
+  date: Date | null
+  today: Date
+  limit: number
+}): Promise<PendingFieldDay[]> {
+  const dayExpr = Prisma.sql`(ci.checked_in_at AT TIME ZONE 'Asia/Bangkok')::date`
+  const dateFilter =
+    params.date === null ? Prisma.sql`${dayExpr} < ${params.today}::date` : Prisma.sql`${dayExpr} = ${params.date}::date`
+  const orgFilter =
+    params.organizationId === undefined
+      ? Prisma.empty
+      : Prisma.sql`AND ci.organization_id = ${params.organizationId}::uuid`
+
+  return prisma.$queryRaw<PendingFieldDay[]>`
+    SELECT ci.organization_id::text AS "organizationId",
+           a.agent_id::text        AS "agentId",
+           ${dayExpr}              AS "fieldDate"
+      FROM check_ins ci
+      JOIN case_assignments a ON a.id = ci.assignment_id
+     WHERE ${dateFilter} ${orgFilter}
+       AND NOT EXISTS (
+             SELECT 1 FROM field_day_settlements s
+              WHERE s.organization_id = ci.organization_id
+                AND s.agent_id = a.agent_id
+                AND s.field_date = ${dayExpr}
+           )
+     GROUP BY 1, 2, 3
+     ORDER BY 3, 1, 2
+     LIMIT ${params.limit}
+  `
+}
+
+export async function runDailyFieldAllowanceJob(
+  options: DailyFieldAllowanceJobOptions = {},
+): Promise<DailyFieldAllowanceJobResult> {
+  const now = options.now ?? new Date()
+  const jobId = options.jobId ?? DAILY_FIELD_ALLOWANCE_JOB_TYPE
+  const today = bangkokBusinessDate(now)
+  let date: Date | null = null
+  if (options.date !== undefined) {
+    date = parseSettleDate(options.date, now)
+    if (date === null) throw new RangeError(`วันที่ที่สั่งคำนวณ "${options.date}" ไม่ถูกต้องหรือเกินวันนี้`)
+  }
+
+  const result: DailyFieldAllowanceJobResult = {
+    settled: 0,
+    alreadySettled: 0,
+    periodLocked: 0,
+    expensesCreated: 0,
+    revenueIdsCreated: [],
+  }
+
+  const pending = await findPendingFieldDays({
+    ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
+    date,
+    today,
+    limit: options.limit ?? 500,
+  })
+
+  for (const day of pending) {
+    const outcome = await settleFieldDay(day, { jobId, realJobId: options.jobId ?? null })
+    if (outcome.kind === 'settled') {
+      result.settled += 1
+      result.expensesCreated += outcome.expenseIds.length
+      result.revenueIdsCreated.push(...outcome.revenueIds)
+    } else if (outcome.kind === 'already_settled') result.alreadySettled += 1
+    else result.periodLocked += 1
+  }
+  return result
+}
+
+type SettleOutcome =
+  | { kind: 'settled'; expenseIds: string[]; revenueIds: readonly string[] }
+  | { kind: 'already_settled' }
+  | { kind: 'period_locked' }
+
+async function settleFieldDay(
+  day: PendingFieldDay,
+  trace: { jobId: string; realJobId: string | null },
+): Promise<SettleOutcome> {
+  const checkins = await prisma.checkIn.findMany({
+    where: {
+      organizationId: day.organizationId,
+      assignment: { agentId: day.agentId },
+      checkedInAt: { gte: startOfBangkokDay(day.fieldDate), lte: endOfBangkokDay(day.fieldDate) },
+    },
+    orderBy: [{ checkedInAt: 'asc' }, { id: 'asc' }],
+    select: {
+      caseId: true,
+      assignmentId: true,
+      checkedInAt: true,
+      assignment: { select: { team: { select: { compensationPlanId: true } } } },
+      case: { select: { outcome: true } },
+    },
+  })
+  const first = checkins[0]
+  if (first === undefined) return { kind: 'already_settled' }
+
+  // เคสละ 1 ที่นั่ง — ใช้เช็คอินแรกของเคสในวันนั้น (เวลา + รอบติดตามที่เช็คอิน)
+  const byCase = new Map<string, FieldDayCase & { outcome: (typeof first)['case']['outcome'] }>()
+  for (const row of checkins) {
+    if (!byCase.has(row.caseId)) {
+      byCase.set(row.caseId, {
+        caseId: row.caseId,
+        assignmentId: row.assignmentId,
+        firstCheckedInAt: row.checkedInAt,
+        outcome: row.case.outcome,
+      })
+    }
+  }
+  const allCaseIds = [...byCase.keys()]
+
+  // รอบติดตามที่ปิดงานไปแล้วด้วยกติกาเดิม (allowance / น้ำมันเหมา "ต่อเคส") = จ่ายวันเหล่านั้นไปแล้ว
+  const legacy = await prisma.expense.findMany({
+    where: {
+      organizationId: day.organizationId,
+      assignmentId: { in: [...new Set([...byCase.values()].map((row) => row.assignmentId))] },
+      calculationSource: 'compensation_plan',
+      fieldDaySettlementId: null,
+      status: { not: 'superseded' },
+      deletedAt: null,
+      OR: [{ expenseType: 'allowance' }, { expenseType: 'fuel', distanceKm: null }],
+    },
+    select: { assignmentId: true },
+  })
+  const legacyAssignments = new Set(legacy.map((row) => row.assignmentId))
+  const shareCases = [...byCase.values()].filter((row) => !legacyAssignments.has(row.assignmentId))
+
+  // แผน (เวอร์ชัน) ของทีม ณ วันนั้น — ทีมของรอบติดตามที่เช็คอินแรกของวัน (`92` §7.1 snapshot เมื่อเกิด)
+  const teamPlanId = first.assignment.team.compensationPlanId
+  const plan: PlanSnapshot | null =
+    teamPlanId === null
+      ? null
+      : await resolvePlanSnapshot(prisma as ExpenseTxClient, {
+          organizationId: day.organizationId,
+          planId: teamPlanId,
+          onDate: day.fieldDate,
+        })
+
+  const planned =
+    plan === null
+      ? { fuelTotalSatang: 0, allowanceTotalSatang: 0, orderedCaseIds: [], drafts: [] }
+      : planFieldDayExpenses({ plan, cases: shareCases })
+
+  // Period Lock (`13` §6.11) — สร้างรายการเบิกย้อนเข้างวดที่ปิดแล้วไม่ได้ ⇒ เว้นวันนั้นไว้ให้คนตัดสิน
+  if (planned.drafts.length > 0) {
+    const status = await periodStatusAt(day.organizationId, periodKeyOf(day.fieldDate))
+    if (status !== null && isDirectEditRejected(status, true)) return { kind: 'period_locked' }
+  }
+
+  const draftCaseIds = [...new Set(planned.drafts.map((row) => row.caseId))]
+  const assets = await prisma.asset.findMany({
+    where: { caseId: { in: draftCaseIds }, deletedAt: null },
+    select: { caseId: true, lot: { select: { status: true } } },
+  })
+  const lotConfirmed = (caseId: string): boolean => {
+    const rows = assets.filter((row) => row.caseId === caseId)
+    return rows.length > 0 && rows.every((row) => row.lot?.status === 'confirmed')
+  }
+
+  const fieldDateIso = day.fieldDate.toISOString().slice(0, 10)
+  const reasonPrefix = `[job:${trace.jobId}] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fieldDateIso}`
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const settlement = await tx.fieldDaySettlement.create({
+        data: {
+          organizationId: day.organizationId,
+          agentId: day.agentId,
+          fieldDate: day.fieldDate,
+          compPlanId: plan?.planId ?? null,
+          compPlanVersion: plan?.version ?? null,
+          fuelTotalSatang: planned.fuelTotalSatang,
+          allowanceTotalSatang: planned.allowanceTotalSatang,
+          caseCount: planned.orderedCaseIds.length,
+          jobId: trace.realJobId,
+          createdBy: null,
+        },
+        select: { id: true },
+      })
+
+      const expenseIds: string[] = []
+      if (planned.drafts.length > 0 && plan !== null) {
+        const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
+          organizationId: day.organizationId,
+          userId: day.agentId,
+          actorId: day.agentId,
+        })
+        for (const draft of planned.drafts) {
+          const status = initialFieldDayExpenseStatus(byCase.get(draft.caseId)?.outcome ?? null, lotConfirmed(draft.caseId))
+          const created = await tx.expense.create({
+            data: {
+              organizationId: day.organizationId,
+              caseId: draft.caseId,
+              assignmentId: draft.assignmentId,
+              payeeId,
+              expenseType: draft.expenseType,
+              grossSatang: draft.grossSatang,
+              expenseDate: day.fieldDate,
+              calculationSource: 'compensation_plan',
+              compPlanId: plan.planId,
+              compPlanVersion: plan.version,
+              fieldDaySettlementId: settlement.id,
+              status,
+              // `expenses.created_by` บังคับ NOT NULL — ใช้เจ้าของรายการแบบเดียวกับ `fuel_distance_retry`
+              createdBy: day.agentId,
+            },
+            select: { id: true },
+          })
+          expenseIds.push(created.id)
+
+          await emitAudit(
+            {
+              organizationId: day.organizationId,
+              actorId: null,
+              actorRole: null,
+              action: 'create',
+              targetType: 'expenses',
+              targetId: created.id,
+              after: {
+                caseId: draft.caseId,
+                assignmentId: draft.assignmentId,
+                expenseType: draft.expenseType,
+                grossSatang: draft.grossSatang,
+                expenseDate: fieldDateIso,
+                status,
+                fieldDaySettlementId: settlement.id,
+                compPlanId: plan.planId,
+                compPlanVersion: plan.version,
+                events: ['expense.case_bound_created'],
+              },
+              reason: `${reasonPrefix} — ส่วนแบ่งของเคสนี้`,
+              diffOnly: false,
+            },
+            tx as ExpenseTxClient,
+          )
+        }
+      }
+
+      await emitAudit(
+        {
+          organizationId: day.organizationId,
+          actorId: null,
+          actorRole: null,
+          action: 'create',
+          targetType: 'field_day_settlements',
+          targetId: settlement.id,
+          after: {
+            agentId: day.agentId,
+            fieldDate: fieldDateIso,
+            compPlanId: plan?.planId ?? null,
+            compPlanVersion: plan?.version ?? null,
+            fuelTotalSatang: planned.fuelTotalSatang,
+            allowanceTotalSatang: planned.allowanceTotalSatang,
+            caseIds: planned.orderedCaseIds,
+            legacyCaseIds: allCaseIds.filter((id) => !planned.orderedCaseIds.includes(id)),
+            expenseIds,
+          },
+          reason: `${reasonPrefix} — กระจายเท่ากันทุกเคสที่เช็คอินวันนั้น`,
+          diffOnly: false,
+        },
+        tx as ExpenseTxClient,
+      )
+
+      // เกตรายได้ "ทุกวันที่ลงพื้นที่ settle แล้ว" อาจเพิ่งครบที่นี่ (เคสที่วันนี้ไม่มีแถวใหม่ให้อนุมัติ
+      // เช่น ยอด 0 / ข้อมูลเดิม) ⇒ ตรวจให้เลย · เคสที่มีแถวใหม่ยังติดอนุมัติ — ขั้นอนุมัติแถวสุดท้ายเรียกเอง
+      const revenue = await tryCreateRevenue(tx as WarehouseTxClient, {
+        organizationId: day.organizationId,
+        caseIds: allCaseIds,
+        actorId: day.agentId,
+      })
+
+      return { kind: 'settled' as const, expenseIds, revenueIds: revenue.revenueIdsCreated }
+    })
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return { kind: 'already_settled' }
+    }
+    throw error
+  }
+}

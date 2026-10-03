@@ -43,19 +43,101 @@ export function fuelPerKmSatang(input: {
 }
 
 /**
- * `22` §6.2 — โหมด `DAILY_FLAT` = อัตราเหมาจ่าย (บาท/วัน) × จำนวนวันที่ลงพื้นที่จริง ไม่คำนวณระยะทางเลย
- * มติ PO 03/10/2569 (UAT Q4 · BUG-013): นับวันแบบเดียวกับเบี้ยเลี้ยง (`distinctFieldDays()` — วันปฏิทินไทย)
- * ตามหน่วย "บาท/วัน" ของ `11` · เดิมจ่ายคงที่ต่อเคส
+ * `22` §6.2/§6.3 — ยอด "ต่อพนักงานต่อวัน" (D) ของค่าน้ำมันเหมาจ่ายและเบี้ยเลี้ยง
+ * มติ PO 03/10/2569 (UAT Q21 — แทนการคิดต่อเคสของ Q4): **วันละ 1 ครั้งต่อพนักงานต่อวันปฏิทินไทย**
+ * ที่มีเช็คอินอย่างน้อย 1 เคส · ไปกี่เคสก็ได้ก้อนเดียว ("เหมาจ่ายก็คือเหมาจ่าย")
+ * - fuel = `daily_flat_rate` เฉพาะทีมโหมด `DAILY_FLAT` · โหมด `PER_KM` = 0 (ยังคิดต่อเคสตามระยะทาง §6.1)
+ * - allowance = อัตราต่อวัน — ทุกโหมดน้ำมัน
  */
-export function fuelDailyFlatSatang(dailyFlatSatang: number | null, fieldDays: number): number {
-  if (fieldDays < 0 || !Number.isInteger(fieldDays)) throw new RangeError('จำนวนวันต้องเป็นจำนวนเต็มไม่ติดลบ')
-  return (dailyFlatSatang ?? 0) * fieldDays
+export function fieldDayTotalsSatang(
+  plan: Pick<CompensationSnapshotValues, 'fuelMode' | 'fuelDailyFlatSatang' | 'allowanceSatang'>,
+): { fuelSatang: number; allowanceSatang: number } {
+  const fuelSatang = plan.fuelMode === 'DAILY_FLAT' ? (plan.fuelDailyFlatSatang ?? 0) : 0
+  assertNonNegativeSatang(fuelSatang, 'fuel_daily_flat')
+  assertNonNegativeSatang(plan.allowanceSatang, 'allowance')
+  return { fuelSatang, allowanceSatang: plan.allowanceSatang }
 }
 
-/** `22` §6.3 — เบี้ยเลี้ยง = อัตราต่อวัน × จำนวนวันที่ลงพื้นที่จริงของเคสนั้น */
-export function allowanceSatang(ratePerDaySatang: number, fieldDays: number): number {
-  if (fieldDays < 0 || !Number.isInteger(fieldDays)) throw new RangeError('จำนวนวันต้องเป็นจำนวนเต็มไม่ติดลบ')
-  return ratePerDaySatang * fieldDays
+/**
+ * `22` §6.2/§6.3 — กระจายยอดรายวัน D ให้ N เคสเท่า ๆ กัน: ทุกเคสได้ `floor(D/N)` และ**เศษสตางค์ทั้งหมด
+ * ลงเคสแรก** (index 0 = เคสที่เช็คอินแรกของวันเร็วที่สุด) ⇒ ผลรวมเท่ากับ D เป๊ะเสมอ ไม่ปัดทิ้ง/ไม่เกิน
+ */
+export function splitDailyAmountSatang(totalSatang: number, caseCount: number): number[] {
+  assertNonNegativeSatang(totalSatang, 'ยอดรายวัน')
+  if (!Number.isInteger(caseCount) || caseCount < 1) throw new RangeError('จำนวนเคสต้องเป็นจำนวนเต็มอย่างน้อย 1')
+  const share = Math.floor(totalSatang / caseCount)
+  const remainder = totalSatang - share * caseCount
+  return Array.from({ length: caseCount }, (_, index) => (index === 0 ? share + remainder : share))
+}
+
+/** เคสหนึ่งที่พนักงานเช็คอินในวันที่กำลัง settle — `firstCheckedInAt` = เช็คอินแรกของเคสนั้นในวันนั้น */
+export interface FieldDayCase {
+  caseId: string
+  assignmentId: string
+  firstCheckedInAt: Date
+}
+
+export interface FieldDayExpenseDraft {
+  caseId: string
+  assignmentId: string
+  expenseType: Extract<ExpenseType, 'fuel' | 'allowance'>
+  grossSatang: number
+}
+
+export interface FieldDayExpensePlan {
+  fuelTotalSatang: number
+  allowanceTotalSatang: number
+  /** เคสเรียงตามเวลาเช็คอินแรกของวัน (เคสแรกรับเศษสตางค์) */
+  orderedCaseIds: string[]
+  /** ส่วนแบ่งที่เป็น 0 ไม่สร้างแถว (D10) — ผลรวมของ drafts ต่อชนิดยังเท่ากับยอดรวมเสมอ */
+  drafts: FieldDayExpenseDraft[]
+}
+
+/**
+ * รายการเบิกรายวันของพนักงาน 1 คน 1 วัน (`22` §6.2/§6.3 · `41` §6.6 — มติ PO UAT Q21)
+ * เรียงเคสด้วยเวลาเช็คอินแรก (เท่ากันใช้ caseId) ให้ผลซ้ำได้เสมอ ⇒ job รันซ้ำคิดเหมือนเดิมทุกครั้ง
+ */
+export function planFieldDayExpenses(input: {
+  plan: Pick<CompensationSnapshotValues, 'fuelMode' | 'fuelDailyFlatSatang' | 'allowanceSatang'>
+  cases: readonly FieldDayCase[]
+}): FieldDayExpensePlan {
+  const totals = fieldDayTotalsSatang(input.plan)
+  const ordered = [...input.cases].sort(
+    (a, b) => a.firstCheckedInAt.getTime() - b.firstCheckedInAt.getTime() || a.caseId.localeCompare(b.caseId),
+  )
+  const drafts: FieldDayExpenseDraft[] = []
+  if (ordered.length > 0) {
+    for (const [expenseType, total] of [
+      ['fuel', totals.fuelSatang],
+      ['allowance', totals.allowanceSatang],
+    ] as const) {
+      if (total === 0) continue
+      splitDailyAmountSatang(total, ordered.length).forEach((grossSatang, index) => {
+        const target = ordered[index]
+        if (grossSatang > 0 && target !== undefined) {
+          drafts.push({ caseId: target.caseId, assignmentId: target.assignmentId, expenseType, grossSatang })
+        }
+      })
+    }
+  }
+  return {
+    fuelTotalSatang: ordered.length === 0 ? 0 : totals.fuelSatang,
+    allowanceTotalSatang: ordered.length === 0 ? 0 : totals.allowanceSatang,
+    orderedCaseIds: ordered.map((row) => row.caseId),
+    drafts,
+  }
+}
+
+/**
+ * สถานะเริ่มต้นของแถวรายวัน (มติ PO UAT Q21 ข้อ 6) — ต่างจากแถวตอนปิดงานตรงที่แถวรายวันเกิด**ทีหลัง**
+ * ล็อตอาจ confirmed ไปแล้ว (ขั้นปลดล็อกของ `44` §11 ผ่านไปแล้ว ⇒ ถ้าตั้ง `pending_warehouse_confirm`
+ * จะค้างตลอดกาล)
+ * - สำเร็จ + ทรัพย์ยังไม่ผ่านคลัง → `pending_warehouse_confirm`
+ * - สำเร็จ + ล็อต confirmed แล้ว → `pending_approval`
+ * - ไม่สำเร็จ / ยังไม่ปิดงาน → `pending_approval` (ไม่มีทรัพย์ต้องรอคลัง — ต้นทุนวันนั้นเกิดจริงแล้ว)
+ */
+export function initialFieldDayExpenseStatus(outcome: CaseOutcome | null, lotConfirmed: boolean): ExpenseStatus {
+  return outcome === 'closed_success' && !lotConfirmed ? 'pending_warehouse_confirm' : 'pending_approval'
 }
 
 /**
@@ -105,7 +187,7 @@ export function initialCaseExpenseStatus(outcome: CaseOutcome): ExpenseStatus {
   return outcome === 'closed_success' ? 'pending_warehouse_confirm' : 'pending_approval'
 }
 
-/** ชนิดรายการเบิก "ผูกกับเคส" ที่ระบบสร้างเองตอนปิดงาน (`41` §6.6 + มติ PO 03/10/2569 UAT Q2) */
+/** ชนิดรายการเบิก "ผูกกับเคส" ที่ระบบสร้างเอง (`41` §6.6 + มติ PO 03/10/2569 UAT Q2/Q21) */
 export type CaseBoundExpenseType = Extract<ExpenseType, 'fuel' | 'allowance' | 'commission' | 'no_success_fee'>
 
 export interface CaseExpenseDraft {
@@ -121,8 +203,6 @@ export interface CaseExpenseInput {
   plan: CompensationSnapshotValues
   /** ระยะทางที่คำนวณได้ — `null` = ยังคำนวณไม่ได้ (`PER_KM` เท่านั้น ⇒ ข้ามรายการ fuel ไว้ก่อน) */
   distanceKmHundredths: number | null
-  /** จำนวนวันที่ลงพื้นที่จริงของเคสนั้น (`22` §6.3) */
-  fieldDays: number
 }
 
 export interface CaseExpensePlan {
@@ -132,7 +212,7 @@ export interface CaseExpensePlan {
 }
 
 /**
- * รายการเบิกทั้งชุดของ 1 รอบติดตาม (fuel + allowance + commission/no_success_fee) — ใช้ทั้งตอน `submit_close_case` และ `resubmit_close_case`
+ * รายการเบิกผูกเคสตอนปิดงานของ 1 รอบติดตาม (fuel `PER_KM` + commission/no_success_fee) — ใช้ทั้งตอน `submit_close_case` และ `resubmit_close_case`
  * (`41` §8 — resubmit สร้าง "ตามกฎปกติ" ชุดเดียวกัน จึงต้องเรียกฟังก์ชันนี้ตัวเดียวกันเสมอ)
  */
 export function planCaseExpenses(input: CaseExpenseInput): CaseExpensePlan {
@@ -153,13 +233,9 @@ export function planCaseExpenses(input: CaseExpenseInput): CaseExpensePlan {
         drafts.push({ expenseType: 'fuel', grossSatang: gross, distanceKmHundredths: input.distanceKmHundredths, status })
       }
     }
-  } else {
-    const gross = fuelDailyFlatSatang(input.plan.fuelDailyFlatSatang, input.fieldDays)
-    if (gross > 0) drafts.push({ expenseType: 'fuel', grossSatang: gross, distanceKmHundredths: null, status })
   }
-
-  const allowance = allowanceSatang(input.plan.allowanceSatang, input.fieldDays)
-  if (allowance > 0) drafts.push({ expenseType: 'allowance', grossSatang: allowance, distanceKmHundredths: null, status })
+  // `DAILY_FLAT` fuel + allowance ไม่สร้างตอนปิดงานแล้ว — มติ PO 03/10/2569 (UAT Q21): เกิดวันละครั้งต่อ
+  // พนักงานจาก job `daily_field_allowance` หลังจบวัน (`planFieldDayExpenses()`) แล้วกระจายทุกเคสของวันนั้น
 
   // `22` §6.4 + มติ PO 03/10/2569 (UAT Q2 · BUG-010) — ค่าคอมมิชชั่น (สำเร็จ) / เบี้ยเสี่ยง (ไม่สำเร็จ)
   // เป็นรายการเบิกผูกเคสอีกตัวในชุดเดียวกัน ⇒ สถานะเริ่มต้นกติกาเดียวกับ fuel/allowance

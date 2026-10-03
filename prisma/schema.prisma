@@ -599,6 +599,7 @@ model Organization {
   reassignmentHistory        ReassignmentHistory[]
   assignmentPolicySettings   AssignmentPolicySettings?
   checkIns                   CheckIn[]
+  fieldDaySettlements        FieldDaySettlement[]
   caseEvidences              CaseEvidence[]
   travelOrigins              TravelOrigin[]
   closeCaseDrafts            CloseCaseDraft[]
@@ -678,10 +679,10 @@ model User {
   /// scope: finance_company เท่านั้น
   companyId String? @map("company_id") @db.Uuid
 
-  status      UserStatus @default(active)
-  lastLoginAt DateTime?  @map("last_login_at") @db.Timestamptz(6)
+  status             UserStatus @default(active)
+  lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz(6)
   /// ผู้ดูแลตั้ง/รีเซ็ตรหัสผ่านให้ → ต้องเปลี่ยนรหัสเองก่อนใช้งาน (มติ PO 03/10/2569)
-  mustChangePassword Boolean @default(false) @map("must_change_password")
+  mustChangePassword Boolean    @default(false) @map("must_change_password")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String?   @map("created_by") @db.Uuid
@@ -726,18 +727,18 @@ model User {
   taxDocumentTemplateSettingsUpdated TaxDocumentTemplateSettings[] @relation("tax_doc_templates_updated_by")
 
   // ── Group C–G: งานที่ผู้ใช้คนนี้เกี่ยวข้องโดยตรง ──
-  payeeProfile        PayeeProfile[]        @relation("payee_user")
-  assignmentsAsAgent  CaseAssignment[]      @relation("assignments_agent")
+  payeeProfile         PayeeProfile[]        @relation("payee_user")
+  assignmentsAsAgent   CaseAssignment[]      @relation("assignments_agent")
   /// คำขอเปลี่ยนผู้รับผิดชอบที่ตัวเองเป็นคนถือเคสอยู่ (คนที่ต้องตอบ) — `40` §6.1.1
-  reassignmentsFromMe PendingReassignment[] @relation("pending_reassignments_from_agent")
+  reassignmentsFromMe  PendingReassignment[] @relation("pending_reassignments_from_agent")
   /// คำขอที่ตัวเองเป็นผู้รับงานคนใหม่
-  reassignmentsToMe   PendingReassignment[] @relation("pending_reassignments_new_agent")
-  notifications       Notification[]        @relation("notifications_user")
+  reassignmentsToMe    PendingReassignment[] @relation("pending_reassignments_new_agent")
+  notifications        Notification[]        @relation("notifications_user")
   /// อุปกรณ์ที่ลงทะเบียนรับ Web Push ไว้ (`41` §15 — Phase 2.9)
-  pushSubscriptions   PushSubscription[]    @relation("push_subscriptions_user")
+  pushSubscriptions    PushSubscription[]    @relation("push_subscriptions_user")
   /// รายการเบิกที่พักที่ตัวเองถูกระบุว่า "พักร่วมห้อง" (`41` §6.6 — ไม่ใช่ผู้เบิก)
-  expensesSharedWithMe Expense[]            @relation("expenses_shared_with")
-  auditLogs           AuditLog[]            @relation("audit_actor")
+  expensesSharedWithMe Expense[]             @relation("expenses_shared_with")
+  auditLogs            AuditLog[]            @relation("audit_actor")
 
   // ── Group C–G: back-relation ของ created_by / updated_by / actor อื่นๆ ──
   casesCreated              Case[]                      @relation("cases_created_by")
@@ -758,6 +759,7 @@ model User {
   reassignmentHistoryActor  ReassignmentHistory[]       @relation("reassignment_history_reassigned_by")
   assignmentPolicyUpdated   AssignmentPolicySettings[]  @relation("assignment_policy_settings_updated_by")
   checkInsCreated           CheckIn[]                   @relation("checkins_created_by")
+  fieldDaySettlements       FieldDaySettlement[]        @relation("field_day_settlements_agent")
   evidencesCreated          CaseEvidence[]              @relation("evidences_created_by")
   evidencesUpdated          CaseEvidence[]              @relation("evidences_updated_by")
   evidencesReviewed         CaseEvidence[]              @relation("evidences_reviewed_by")
@@ -957,8 +959,9 @@ model CompensationPlan {
   createdByUser User         @relation("comp_plans_created_by", fields: [createdBy], references: [id])
   updatedByUser User?        @relation("comp_plans_updated_by", fields: [updatedBy], references: [id])
 
-  teams    Team[]
-  expenses Expense[] @relation("expenses_comp_plan")
+  teams               Team[]
+  expenses            Expense[]            @relation("expenses_comp_plan")
+  fieldDaySettlements FieldDaySettlement[] @relation("field_day_settlements_comp_plan")
 
   @@unique([organizationId, name, version])
   @@index([organizationId, isCurrent], map: "idx_comp_plans_org")
@@ -1725,23 +1728,23 @@ model CaseEvidence {
 
   /// URLs หลักฐานตาม `41` §6.4 — เก็บแยกตามประเภท ไม่ใช่ boolean flag เดียว
   /// รูปสินค้ายืนยัน (บังคับเฉพาะ outcome = `closed_success`)
-  productPhotos String[] @default([]) @map("product_photos")
+  productPhotos    String[] @default([]) @map("product_photos")
   /// รูปถ่ายหน้างาน (บังคับ ≥1 ทุก outcome)
-  photos        String[] @default([]) @map("photos")
+  photos           String[] @default([]) @map("photos")
   /// วิดีโอ (บังคับ ≥1 ทุก outcome) — v4.2 แทน `video_url` เดี่ยว เพราะ §6.4 เป็น array
-  videos        String[] @default([]) @map("videos")
+  videos           String[] @default([]) @map("videos")
   /// เสียงบันทึกการสนทนา — ไม่บังคับทุก outcome (`41` §6.4)
-  audioUrl      String?  @map("audio_url")
+  audioUrl         String?  @map("audio_url")
   /// "บันทึกเพิ่มเติม" ของฟอร์มปิดงาน (มติ PO 03/10/2569 — UAT Q15 · BUG-048) — ไม่บังคับ
-  note          String?  @map("note")
+  note             String?  @map("note")
   /// เหตุผลปิดงานไม่สำเร็จ (มติ PO 03/10/2569 — UAT Q16 · BUG-057) — รหัสจาก `CLOSE_FAIL_REASONS`
   /// (`lib/field/fail-reasons.ts`) เก็บเป็น TEXT โดยตั้งใจ ⇒ PO ปรับรายการได้โดยไม่ต้องแก้ schema
   /// · มีค่าได้เฉพาะ outcome = `closed_fail` (CHECK ใน migration) · แถวก่อนมติเป็น NULL
-  failReason       String? @map("fail_reason")
+  failReason       String?  @map("fail_reason")
   /// คำอธิบายเพิ่ม — บังคับเมื่อเลือก "อื่น ๆ" (`other`)
-  failReasonDetail String? @map("fail_reason_detail")
+  failReasonDetail String?  @map("fail_reason_detail")
   /// path → { sha256, mimeType, sizeBytes } ที่ server ตรวจเองจากไฟล์จริง (มติ PO 03/10/2569 — UAT Q13)
-  fileHashes       Json    @default("{}") @map("file_hashes")
+  fileHashes       Json     @default("{}") @map("file_hashes")
 
   reviewedBy   String?   @map("reviewed_by") @db.Uuid
   reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)
@@ -1811,16 +1814,16 @@ model CloseCaseDraft {
   /// null = ยังไม่เลือกผลการติดตาม (draft ไม่บังคับครบ)
   outcome        CaseOutcome?
 
-  photos        String[] @default([]) @map("photos")
-  videos        String[] @default([]) @map("videos")
-  productPhotos String[] @default([]) @map("product_photos")
-  audioUrl      String?  @map("audio_url")
-  note          String?
+  photos           String[] @default([]) @map("photos")
+  videos           String[] @default([]) @map("videos")
+  productPhotos    String[] @default([]) @map("product_photos")
+  audioUrl         String?  @map("audio_url")
+  note             String?
   /// เหตุผลปิดงานไม่สำเร็จที่เลือกค้างไว้ (มติ PO 03/10/2569 — UAT Q16) · รหัสจาก `CLOSE_FAIL_REASONS`
-  failReason       String? @map("fail_reason")
-  failReasonDetail String? @map("fail_reason_detail")
+  failReason       String?  @map("fail_reason")
+  failReasonDetail String?  @map("fail_reason_detail")
   /// path → { sha256, mimeType, sizeBytes } ที่ server ตรวจแล้วตอนบันทึก draft (UAT Q13) — ปิดงานใช้ต่อไม่ต้องโหลดซ้ำ
-  fileHashes       Json    @default("{}") @map("file_hashes")
+  fileHashes       Json     @default("{}") @map("file_hashes")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -1929,13 +1932,13 @@ model HandoverLot {
   confirmedBy String?   @map("confirmed_by") @db.Uuid
 
   /// ① ใบเซ็นรับ — บังคับก่อน confirmed
-  signedDocUrl     String? @map("signed_doc_url")
+  signedDocUrl      String? @map("signed_doc_url")
   /// ② หลักฐานจัดส่ง — บังคับเฉพาะ `we_deliver`
-  deliveryProofUrl String? @map("delivery_proof_url")
+  deliveryProofUrl  String? @map("delivery_proof_url")
   /// SHA-256 ที่ server คำนวณจากไฟล์จริงตอนแนบ (มติ PO 03/10/2569 — UAT Q13)
   signedDocHash     String? @map("signed_doc_hash") @db.VarChar(64)
   deliveryProofHash String? @map("delivery_proof_hash") @db.VarChar(64)
-  note             String?
+  note              String?
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2024,13 +2027,16 @@ model Expense {
   distanceKm  Decimal? @map("distance_km") @db.Decimal(10, 2)
 
   /// ผู้พักร่วมห้องของรายการเบิกที่พัก (`41` §6.6) — ต้องเป็นคนในทีมเดียวกันเท่านั้น (validate ฝั่ง BE)
-  sharedWithUserId String? @map("shared_with_user_id") @db.Uuid
+  sharedWithUserId      String? @map("shared_with_user_id") @db.Uuid
   /// ใบเสร็จของรายการเบิกแยก (`41` §6.6 — บังคับสำหรับที่พัก)
-  receiptFileUrl   String? @map("receipt_file_url")
+  receiptFileUrl        String? @map("receipt_file_url")
   /// SHA-256 ของใบเสร็จที่ server ดาวน์โหลดมาตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — UAT BUG-072 · `02` v4.10)
-  receiptFileHash  String? @map("receipt_file_hash") @db.VarChar(64)
+  receiptFileHash       String? @map("receipt_file_hash") @db.VarChar(64)
   /// รายการที่มาแทนหลัง `resubmit_close_case` (`41` §10.1) — ตัวเก่าถูก mark เป็น `superseded`
   supersededByExpenseId String? @map("superseded_by_expense_id") @db.Uuid
+  /// แถวรายวัน (ค่าน้ำมันเหมา/เบี้ยเลี้ยง) ที่ job `daily_field_allowance` สร้าง — มติ PO 03/10/2569 UAT Q21 · `02` v4.12
+  /// NULL = รายการอื่นทั้งหมด (ปิดงาน/เบิกแยก/Manual Claim) · แถวรายวันไม่ถูก supersede ตอน resubmit (`41` §10.1)
+  fieldDaySettlementId  String? @map("field_day_settlement_id") @db.Uuid
 
   /// compensation_plan | manual | receipt
   calculationSource String? @map("calculation_source")
@@ -2067,19 +2073,20 @@ model Expense {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization            Organization      @relation(fields: [organizationId], references: [id])
-  case                    Case?             @relation(fields: [caseId], references: [id])
-  assignment              CaseAssignment?   @relation(fields: [assignmentId], references: [id])
-  payee                   PayeeProfile      @relation(fields: [payeeId], references: [id])
-  compPlan                CompensationPlan? @relation("expenses_comp_plan", fields: [compPlanId], references: [id])
-  approvalMatrix          ApprovalMatrix?   @relation("expenses_approval_matrix", fields: [approvalMatrixId], references: [id])
-  managerApprovedByUser   User?             @relation("expenses_manager_approved_by", fields: [managerApprovedBy], references: [id])
-  financeApprovedByUser   User?             @relation("expenses_finance_approved_by", fields: [financeApprovedBy], references: [id])
-  executiveApprovedByUser User?             @relation("expenses_executive_approved_by", fields: [executiveApprovedBy], references: [id])
-  createdByUser           User              @relation("expenses_created_by", fields: [createdBy], references: [id])
-  updatedByUser           User?             @relation("expenses_updated_by", fields: [updatedBy], references: [id])
-  sharedWithUser          User?             @relation("expenses_shared_with", fields: [sharedWithUserId], references: [id])
-  supersededBy            Expense?          @relation("expenses_superseded_by", fields: [supersededByExpenseId], references: [id])
+  organization            Organization        @relation(fields: [organizationId], references: [id])
+  case                    Case?               @relation(fields: [caseId], references: [id])
+  assignment              CaseAssignment?     @relation(fields: [assignmentId], references: [id])
+  payee                   PayeeProfile        @relation(fields: [payeeId], references: [id])
+  compPlan                CompensationPlan?   @relation("expenses_comp_plan", fields: [compPlanId], references: [id])
+  approvalMatrix          ApprovalMatrix?     @relation("expenses_approval_matrix", fields: [approvalMatrixId], references: [id])
+  managerApprovedByUser   User?               @relation("expenses_manager_approved_by", fields: [managerApprovedBy], references: [id])
+  financeApprovedByUser   User?               @relation("expenses_finance_approved_by", fields: [financeApprovedBy], references: [id])
+  executiveApprovedByUser User?               @relation("expenses_executive_approved_by", fields: [executiveApprovedBy], references: [id])
+  createdByUser           User                @relation("expenses_created_by", fields: [createdBy], references: [id])
+  updatedByUser           User?               @relation("expenses_updated_by", fields: [updatedBy], references: [id])
+  sharedWithUser          User?               @relation("expenses_shared_with", fields: [sharedWithUserId], references: [id])
+  supersededBy            Expense?            @relation("expenses_superseded_by", fields: [supersededByExpenseId], references: [id])
+  fieldDaySettlement      FieldDaySettlement? @relation(fields: [fieldDaySettlementId], references: [id])
 
   supersedes  Expense[]         @relation("expenses_superseded_by")
   payoutItems PayoutBatchItem[]
@@ -2090,7 +2097,42 @@ model Expense {
   @@index([payeeId, status], map: "idx_expenses_payee")
   /// สรุปรายได้/รายการเบิกของพนักงานตามเดือน (`41` §7.9/§7.10)
   @@index([payeeId, expenseDate], map: "idx_expenses_payee_date")
+  @@index([fieldDaySettlementId], map: "idx_expenses_field_day_settlement")
   @@map("expenses")
+}
+
+/// การ settle ค่าน้ำมันเหมาจ่าย + เบี้ยเลี้ยง "ต่อพนักงานต่อวัน" (มติ PO 03/10/2569 UAT Q21 · `02` v4.12 · `22` §6.2/§6.3)
+/// 1 แถว = พนักงาน 1 คน × วันปฏิทินไทย 1 วัน ที่ job `daily_field_allowance` ประมวลผลแล้ว (แม้ยอด 0 ก็มีแถว)
+/// UNIQUE (organization_id, agent_id, field_date) = ตัวกันซ้ำระดับ DB ของ job · insert-only (ไม่มี updated_*/deleted_at)
+model FieldDaySettlement {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String   @map("organization_id") @db.Uuid
+  agentId              String   @map("agent_id") @db.Uuid
+  /// วันปฏิทินไทยของเช็คอิน (Rule 01 · E7)
+  fieldDate            DateTime @map("field_date") @db.Date
+  /// snapshot แผน (เวอร์ชัน) ของทีม ณ วันนั้น — NULL = ทีมไม่ผูกแผน (ไม่มีฐานคำนวณ)
+  compPlanId           String?  @map("comp_plan_id") @db.Uuid
+  compPlanVersion      Int?     @map("comp_plan_version")
+  /// ยอดรวมต่อวัน (D) ที่กระจายลงเคส — ผลรวมของแถว expenses ที่ผูกต้องเท่านี้เป๊ะ
+  fuelTotalSatang      Int      @map("fuel_total_satang")
+  allowanceTotalSatang Int      @map("allowance_total_satang")
+  /// จำนวนเคสที่รับส่วนแบ่ง (N)
+  caseCount            Int      @map("case_count")
+  /// job ที่ settle (trace — `90` §13 · actor = ระบบ)
+  jobId                String?  @map("job_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// NULL = ระบบ (job ตามรอบเวลา)
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization Organization      @relation(fields: [organizationId], references: [id])
+  agent        User              @relation("field_day_settlements_agent", fields: [agentId], references: [id])
+  compPlan     CompensationPlan? @relation("field_day_settlements_comp_plan", fields: [compPlanId], references: [id])
+  expenses     Expense[]
+
+  @@unique([organizationId, agentId, fieldDate], map: "uniq_field_day_settlements_org_agent_date")
+  @@index([organizationId, fieldDate], map: "idx_field_day_settlements_org_date")
+  @@map("field_day_settlements")
 }
 
 /// เงินทดรองจ่าย (ไฟล์ 15)
@@ -2860,10 +2902,10 @@ model PushSubscription {
   p256dh   String
   auth     String
 
-  userAgent String?  @map("user_agent")
-  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  userAgent    String?  @map("user_agent")
+  lastSeenAt   DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
   /// ส่งไม่สำเร็จติดกันกี่ครั้ง — ปลายทางตอบ 404/410 ให้ปิด subscription (soft delete)
-  failureCount Int    @default(0) @map("failure_count")
+  failureCount Int      @default(0) @map("failure_count")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid

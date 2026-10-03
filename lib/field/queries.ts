@@ -1106,8 +1106,8 @@ function notifyExpenseQueue(
  * ยืนยันปิดงาน — หลักฐานที่ส่งมาใน body คือชุดสุดท้าย (ฟอร์มเป็นเจ้าของสถานะ ไม่ merge กับ draft
  * ไม่งั้นไฟล์ที่ผู้ใช้ลบทิ้งจะกลับมา) ส่วน **เช็คอินอ่านจาก DB เสมอ** เพราะเป็นหลักฐานที่ล็อกแล้ว
  *
- * ปิดงานสำเร็จ = สร้างรายการเบิก fuel/allowance/commission (หรือ no_success_fee) อัตโนมัติในทรานแซกชัน
- * เดียวกัน (`41` §6.6 · §8 · มติ PO 03/10/2569 UAT Q2)
+ * ปิดงานสำเร็จ = สร้างรายการเบิก fuel `PER_KM` + commission (หรือ no_success_fee) อัตโนมัติในทรานแซกชัน
+ * เดียวกัน (`41` §6.6 · §8 · มติ PO 03/10/2569 UAT Q2) · fuel เหมาจ่าย/allowance เกิดจาก job รายวันหลังจบวัน (UAT Q21)
  * — `closed_success` เข้า `pending_warehouse_confirm` เสมอ · `closed_fail` เข้า `pending_approval`
  */
 export async function closeFieldCase(
@@ -1154,7 +1154,7 @@ export async function closeFieldCase(
 
   // I/O ภายนอก (Google Distance Matrix) ต้องอยู่นอก `$transaction` — ห้ามถือ transaction ค้างรอ network
   const fuelMode = current.team.compensationPlan?.fuelMode ?? null
-  const [{ distanceKmHundredths, checkedInAts }, plan] = await Promise.all([
+  const [{ distanceKmHundredths }, plan] = await Promise.all([
     resolveDistanceForClose(current.id, fuelMode),
     loadPlanSnapshot(user, current.team.compensationPlan?.id ?? null, closedAt),
   ])
@@ -1210,8 +1210,8 @@ export async function closeFieldCase(
           })
         : null
 
-    // รายการเบิก fuel/allowance/commission เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
-    // พนักงานไม่ต้องทำเรื่องเบิกเอง) ⇒ ปิดงานสำเร็จแต่ไม่มีรายการเบิกเป็นไปไม่ได้
+    // รายการเบิก fuel `PER_KM`/commission เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
+    // พนักงานไม่ต้องทำเรื่องเบิกเอง) · fuel เหมาจ่าย/allowance = job รายวันหลังจบวัน (มติ PO UAT Q21)
     const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
       organizationId: user.organizationId,
       caseId,
@@ -1220,7 +1220,6 @@ export async function closeFieldCase(
       outcome,
       plan,
       distanceKmHundredths,
-      checkedInAts,
       closedAt,
       actor: context.actor,
       meta: context.meta,
@@ -1543,7 +1542,7 @@ export async function resubmitCloseCase(
   const fuelMode = current.team.compensationPlan?.fuelMode ?? null
   // มติ PO 03/10/2569 (UAT Q7 · BUG-052 · `41` §10.1): ชุดใหม่คิดด้วย **แผน (เวอร์ชัน) + วันที่ของการปิดงาน
   // ครั้งแรก** — ไม่ใช่แผน/วันที่ ณ ตอน resubmit ⇒ แก้แผนระหว่างนั้นยอดต้องเท่าเดิม (`92` §7.1)
-  const [{ distanceKmHundredths, checkedInAts }, pricing] = await Promise.all([
+  const [{ distanceKmHundredths }, pricing] = await Promise.all([
     resolveDistanceForClose(current.id, fuelMode),
     resolveRoundPricing(prisma as ExpenseTxClient, {
       organizationId: user.organizationId,
@@ -1623,7 +1622,6 @@ export async function resubmitCloseCase(
       outcome,
       plan: pricing.plan,
       distanceKmHundredths,
-      checkedInAts,
       // วันที่รายการ = วันปิดงานครั้งแรก (UAT Q7) — สถานะเคส/assignment ยังใช้เวลาส่งใหม่จริง
       closedAt: pricing.pricedAt ?? closedAt,
       actor: context.actor,

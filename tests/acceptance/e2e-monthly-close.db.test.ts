@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
@@ -237,6 +238,8 @@ async function produceRevenue(): Promise<{ caseId: string; revenueId: string; re
     { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
     ctx(agent),
   )
+  // มติ PO UAT Q21 — ค่าน้ำมันเหมา/เบี้ยเลี้ยงเกิดจาก job หลังจบวัน · รายได้รอ settle ก่อน
+  await settleFieldDaysToday(ORG_ID)
 
   const pending = await db().expense.findMany({ where: { caseId }, select: { id: true } })
   for (const row of pending) {
@@ -283,6 +286,7 @@ async function cleanup(): Promise<void> {
       `UPDATE expenses SET superseded_by_expense_id = NULL WHERE organization_id = '${ORG_ID}'`,
     )
     await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
+    await tx.$executeRawUnsafe(`DELETE FROM field_day_settlements WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM jobs WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM close_case_drafts WHERE organization_id = '${ORG_ID}'`)

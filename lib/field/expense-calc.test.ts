@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
-  allowanceSatang,
   distinctFieldDays,
-  fuelDailyFlatSatang,
+  fieldDayTotalsSatang,
   fuelPerKmSatang,
   initialCaseExpenseStatus,
+  initialFieldDayExpenseStatus,
   planCaseExpenses,
+  planFieldDayExpenses,
+  splitDailyAmountSatang,
   type CompensationSnapshotValues,
 } from '@/lib/field/expense-calc'
 
@@ -71,29 +73,132 @@ describe('fuelPerKmSatang (`22` §6.1)', () => {
   })
 })
 
-describe('fuelDailyFlatSatang (`22` §6.2 — ต่อวัน ตามมติ PO 03/10/2569 UAT Q4)', () => {
-  it('ลงพื้นที่ 1 วัน = อัตรา 1 วัน (golden UAT ไม่เปลี่ยน)', () => {
-    expect(fuelDailyFlatSatang(25_000, 1)).toBe(25_000)
+describe('fieldDayTotalsSatang — ยอดต่อพนักงานต่อวัน D (`22` §6.2/§6.3 · มติ PO UAT Q21)', () => {
+  it('DAILY_FLAT: fuel = อัตราเหมาจ่าย 1 ครั้ง + allowance 1 ครั้ง', () => {
+    expect(fieldDayTotalsSatang(dailyFlatPlan)).toEqual({ fuelSatang: 25_000, allowanceSatang: 30_000 })
   })
 
-  it('ลงพื้นที่ 3 วัน = อัตรา × 3 (ไม่ใช่คงที่ต่อเคส — BUG-013)', () => {
-    expect(fuelDailyFlatSatang(25_000, 3)).toBe(75_000)
+  it('PER_KM: ไม่มี fuel รายวัน (คิดต่อเคสตามระยะทาง) แต่ allowance ยังรายวัน', () => {
+    expect(fieldDayTotalsSatang(perKmPlan)).toEqual({ fuelSatang: 0, allowanceSatang: 30_000 })
   })
 
-  it('ไม่มีวันลงพื้นที่ / ไม่ตั้งอัตรา = 0 · จำนวนวันผิดรูป = โยน', () => {
-    expect(fuelDailyFlatSatang(25_000, 0)).toBe(0)
-    expect(fuelDailyFlatSatang(null, 3)).toBe(0)
-    expect(() => fuelDailyFlatSatang(25_000, -1)).toThrow(RangeError)
-    expect(() => fuelDailyFlatSatang(25_000, 1.5)).toThrow(RangeError)
+  it('ไม่ตั้งอัตรา = 0', () => {
+    expect(fieldDayTotalsSatang({ ...dailyFlatPlan, fuelDailyFlatSatang: null, allowanceSatang: 0 })).toEqual({
+      fuelSatang: 0,
+      allowanceSatang: 0,
+    })
   })
 })
 
-describe('allowance (`22` §6.3)', () => {
-  it('อัตราต่อวัน × จำนวนวันที่ลงพื้นที่จริง', () => {
-    expect(allowanceSatang(30_000, 2)).toBe(60_000)
-    expect(allowanceSatang(30_000, 0)).toBe(0)
+describe('splitDailyAmountSatang — กระจาย D เท่ากันทุกเคส เศษลงเคสแรก', () => {
+  it('N=1 ได้เต็ม D', () => {
+    expect(splitDailyAmountSatang(20_000, 1)).toEqual([20_000])
   })
 
+  it('N=2 หารลงตัว', () => {
+    expect(splitDailyAmountSatang(20_000, 2)).toEqual([10_000, 10_000])
+  })
+
+  it('N=3 มีเศษ 2 สตางค์ ลงเคสแรกทั้งหมด · ผลรวม = D เป๊ะ', () => {
+    const shares = splitDailyAmountSatang(20_000, 3)
+    expect(shares).toEqual([6_668, 6_666, 6_666])
+    expect(shares.reduce((sum, value) => sum + value, 0)).toBe(20_000)
+  })
+
+  it('D น้อยกว่า N — เคสหลังได้ 0 (ผลรวมยังเท่า D)', () => {
+    expect(splitDailyAmountSatang(1, 3)).toEqual([1, 0, 0])
+    expect(splitDailyAmountSatang(0, 2)).toEqual([0, 0])
+  })
+
+  it('N ไม่ถูกต้อง / ยอดติดลบ = โยน', () => {
+    expect(() => splitDailyAmountSatang(100, 0)).toThrow(RangeError)
+    expect(() => splitDailyAmountSatang(100, 1.5)).toThrow(RangeError)
+    expect(() => splitDailyAmountSatang(-1, 2)).toThrow()
+  })
+})
+
+describe('planFieldDayExpenses — แถวรายวันต่อเคส (`41` §6.6 · UAT Q21)', () => {
+  const at = (iso: string) => new Date(iso)
+  // แผน in1: น้ำมันเหมา ฿200/วัน + เบี้ยเลี้ยง ฿150/วัน
+  const plan = { fuelMode: 'DAILY_FLAT' as const, fuelDailyFlatSatang: 20_000, allowanceSatang: 15_000 }
+
+  it('golden: 2 เคสวันเดียว → fuel 10,000 + allowance 7,500 ต่อเคส รวมต่อชนิด = D', () => {
+    const result = planFieldDayExpenses({
+      plan,
+      cases: [
+        { caseId: 'c2', assignmentId: 'a2', firstCheckedInAt: at('2026-10-03T05:00:00Z') },
+        { caseId: 'c1', assignmentId: 'a1', firstCheckedInAt: at('2026-10-03T02:00:00Z') },
+      ],
+    })
+    expect(result.orderedCaseIds).toEqual(['c1', 'c2'])
+    expect(result.drafts).toEqual([
+      { caseId: 'c1', assignmentId: 'a1', expenseType: 'fuel', grossSatang: 10_000 },
+      { caseId: 'c2', assignmentId: 'a2', expenseType: 'fuel', grossSatang: 10_000 },
+      { caseId: 'c1', assignmentId: 'a1', expenseType: 'allowance', grossSatang: 7_500 },
+      { caseId: 'c2', assignmentId: 'a2', expenseType: 'allowance', grossSatang: 7_500 },
+    ])
+    expect(result.fuelTotalSatang).toBe(20_000)
+    expect(result.allowanceTotalSatang).toBe(15_000)
+  })
+
+  it('3 เคส: เศษลงเคสที่เช็คอินแรกสุดของวัน', () => {
+    const result = planFieldDayExpenses({
+      plan: { ...plan, allowanceSatang: 10_000 },
+      cases: [
+        { caseId: 'b', assignmentId: 'ab', firstCheckedInAt: at('2026-10-03T03:00:00Z') },
+        { caseId: 'c', assignmentId: 'ac', firstCheckedInAt: at('2026-10-03T04:00:00Z') },
+        { caseId: 'a', assignmentId: 'aa', firstCheckedInAt: at('2026-10-03T01:00:00Z') },
+      ],
+    })
+    const allowance = result.drafts.filter((row) => row.expenseType === 'allowance')
+    expect(allowance.map((row) => [row.caseId, row.grossSatang])).toEqual([
+      ['a', 3_334],
+      ['b', 3_333],
+      ['c', 3_333],
+    ])
+  })
+
+  it('PER_KM: สร้างเฉพาะ allowance', () => {
+    const result = planFieldDayExpenses({
+      plan: { ...plan, fuelMode: 'PER_KM' },
+      cases: [{ caseId: 'c1', assignmentId: 'a1', firstCheckedInAt: at('2026-10-03T02:00:00Z') }],
+    })
+    expect(result.drafts.map((row) => row.expenseType)).toEqual(['allowance'])
+    expect(result.fuelTotalSatang).toBe(0)
+  })
+
+  it('ไม่มีเคส = ไม่มีแถว ยอดรวม 0 · ส่วนแบ่ง 0 ไม่สร้างแถว (D10)', () => {
+    expect(planFieldDayExpenses({ plan, cases: [] })).toEqual({
+      fuelTotalSatang: 0,
+      allowanceTotalSatang: 0,
+      orderedCaseIds: [],
+      drafts: [],
+    })
+    const tiny = planFieldDayExpenses({
+      plan: { fuelMode: 'DAILY_FLAT', fuelDailyFlatSatang: 1, allowanceSatang: 0 },
+      cases: [
+        { caseId: 'c1', assignmentId: 'a1', firstCheckedInAt: at('2026-10-03T02:00:00Z') },
+        { caseId: 'c2', assignmentId: 'a2', firstCheckedInAt: at('2026-10-03T03:00:00Z') },
+      ],
+    })
+    expect(tiny.drafts).toEqual([{ caseId: 'c1', assignmentId: 'a1', expenseType: 'fuel', grossSatang: 1 }])
+  })
+})
+
+describe('initialFieldDayExpenseStatus (UAT Q21 ข้อ 6)', () => {
+  it('สำเร็จ + ยังไม่ผ่านคลัง → รอคลัง', () => {
+    expect(initialFieldDayExpenseStatus('closed_success', false)).toBe('pending_warehouse_confirm')
+  })
+  it('สำเร็จ + ล็อต confirmed แล้ว → เข้าคิวอนุมัติทันที (ขั้นปลดล็อกผ่านไปแล้ว)', () => {
+    expect(initialFieldDayExpenseStatus('closed_success', true)).toBe('pending_approval')
+  })
+  it('ไม่สำเร็จ / ยังไม่ปิดงาน → เข้าคิวอนุมัติ', () => {
+    expect(initialFieldDayExpenseStatus('closed_fail', false)).toBe('pending_approval')
+    expect(initialFieldDayExpenseStatus(null, false)).toBe('pending_approval')
+  })
+})
+
+describe('distinctFieldDays (`22` §6.3)', () => {
   it('นับ DISTINCT วันปฏิทิน**เวลาไทย** — หลายเช็คอินในวันเดียวนับวันเดียว', () => {
     expect(
       distinctFieldDays([
@@ -120,84 +225,51 @@ describe('initialCaseExpenseStatus (`41` §6.6)', () => {
   })
 })
 
-describe('planCaseExpenses — ชุดรายการเบิกตอนปิดงาน (`41` §6.6)', () => {
-  it('PER_KM: สร้าง fuel ตามระยะทาง + allowance ตามจำนวนวัน สถานะรอคลังเมื่อสำเร็จ', () => {
+describe('planCaseExpenses — ชุดรายการเบิกตอนปิดงาน (`41` §6.6 · มติ PO UAT Q21)', () => {
+  it('PER_KM: สร้าง fuel ตามระยะทาง สถานะรอคลังเมื่อสำเร็จ — ไม่มี allowance ตอนปิดงานแล้ว', () => {
     const plan = planCaseExpenses({
       outcome: 'closed_success',
       plan: perKmPlan,
       distanceKmHundredths: 2_000,
-      fieldDays: 1,
     })
 
     expect(plan.fuelDistancePending).toBe(false)
     expect(plan.drafts).toEqual([
       { expenseType: 'fuel', grossSatang: 10_000, distanceKmHundredths: 2_000, status: 'pending_warehouse_confirm' },
-      { expenseType: 'allowance', grossSatang: 30_000, distanceKmHundredths: null, status: 'pending_warehouse_confirm' },
     ])
   })
 
-  it('DAILY_FLAT: ไม่แตะระยะทางเลย (`41` §20) และไม่ค้าง job คำนวณ', () => {
+  it('DAILY_FLAT: ไม่สร้าง fuel/allowance ตอนปิดงาน (เกิดจาก job รายวันหลังจบวัน) และไม่ค้าง job ระยะทาง', () => {
     const plan = planCaseExpenses({
       outcome: 'closed_fail',
       plan: dailyFlatPlan,
       distanceKmHundredths: null,
-      fieldDays: 1,
     })
 
     expect(plan.fuelDistancePending).toBe(false)
-    expect(plan.drafts).toEqual([
-      { expenseType: 'fuel', grossSatang: 25_000, distanceKmHundredths: null, status: 'pending_approval' },
-      { expenseType: 'allowance', grossSatang: 30_000, distanceKmHundredths: null, status: 'pending_approval' },
-    ])
+    expect(plan.drafts).toEqual([])
   })
 
-  it('PER_KM ที่ยังไม่รู้ระยะทาง (Maps ล่ม/ไม่มี key) = ยังไม่สร้าง fuel แต่ allowance เกิดปกติ (D10)', () => {
+  it('PER_KM ที่ยังไม่รู้ระยะทาง (Maps ล่ม/ไม่มี key) = ยังไม่สร้าง fuel แต่ตั้ง job (D10)', () => {
     const plan = planCaseExpenses({
       outcome: 'closed_success',
       plan: perKmPlan,
       distanceKmHundredths: null,
-      fieldDays: 1,
     })
 
     expect(plan.fuelDistancePending).toBe(true)
-    expect(plan.drafts.map((draft) => draft.expenseType)).toEqual(['allowance'])
+    expect(plan.drafts).toEqual([])
   })
 
   it('ยอด 0 ไม่สร้าง record เลย (D10 · DEC-006/D6)', () => {
     const plan = planCaseExpenses({
       outcome: 'closed_fail',
-      plan: { ...perKmPlan, fuelRatePerKmSatang: 0, allowanceSatang: 0 },
+      plan: { ...perKmPlan, fuelRatePerKmSatang: 0 },
       distanceKmHundredths: 1_000,
-      fieldDays: 3,
     })
 
     expect(plan.drafts).toEqual([])
     expect(plan.fuelDistancePending).toBe(false)
-  })
-
-  it('ไม่มีเช็คอินเลย (ปิดงานผ่านทางอื่น) = ไม่มีเบี้ยเลี้ยง และไม่มีน้ำมันเหมาจ่ายรายวัน (UAT Q4)', () => {
-    const plan = planCaseExpenses({
-      outcome: 'closed_fail',
-      plan: dailyFlatPlan,
-      distanceKmHundredths: null,
-      fieldDays: 0,
-    })
-
-    expect(plan.drafts).toEqual([])
-  })
-
-  it('DAILY_FLAT ลงพื้นที่ 3 วัน: น้ำมัน = อัตรา × 3 นับวันเดียวกับเบี้ยเลี้ยง (UAT Q4 · BUG-013)', () => {
-    const plan = planCaseExpenses({
-      outcome: 'closed_fail',
-      plan: dailyFlatPlan,
-      distanceKmHundredths: null,
-      fieldDays: 3,
-    })
-
-    expect(plan.drafts).toEqual([
-      { expenseType: 'fuel', grossSatang: 75_000, distanceKmHundredths: null, status: 'pending_approval' },
-      { expenseType: 'allowance', grossSatang: 90_000, distanceKmHundredths: null, status: 'pending_approval' },
-    ])
   })
 })
 
@@ -206,7 +278,7 @@ describe('planCaseExpenses — ค่าคอมมิชชั่น/เบี
   const withCommission: CompensationSnapshotValues = { ...dailyFlatPlan, commissionSatang: 50_000, noSuccessFeeSatang: 20_000 }
 
   it('ปิดสำเร็จ: สร้าง commission ตามแผน สถานะรอคลังเหมือน fuel/allowance', () => {
-    const plan = planCaseExpenses({ outcome: 'closed_success', plan: withCommission, distanceKmHundredths: null, fieldDays: 1 })
+    const plan = planCaseExpenses({ outcome: 'closed_success', plan: withCommission, distanceKmHundredths: null })
 
     expect(plan.drafts).toContainEqual({
       expenseType: 'commission',
@@ -218,7 +290,7 @@ describe('planCaseExpenses — ค่าคอมมิชชั่น/เบี
   })
 
   it('ปิดไม่สำเร็จ: สร้าง no_success_fee (exclusive กับ commission) เข้าคิวอนุมัติทันที', () => {
-    const plan = planCaseExpenses({ outcome: 'closed_fail', plan: withCommission, distanceKmHundredths: null, fieldDays: 1 })
+    const plan = planCaseExpenses({ outcome: 'closed_fail', plan: withCommission, distanceKmHundredths: null })
 
     expect(plan.drafts).toContainEqual({
       expenseType: 'no_success_fee',
@@ -229,8 +301,8 @@ describe('planCaseExpenses — ค่าคอมมิชชั่น/เบี
     expect(plan.drafts.map((draft) => draft.expenseType)).not.toContain('commission')
   })
 
-  it('คอมไม่ขึ้นกับจำนวนวัน/ระยะทาง — ไม่มีเช็คอินก็ยังได้ค่าตายตัวต่อเคส', () => {
-    const plan = planCaseExpenses({ outcome: 'closed_success', plan: withCommission, distanceKmHundredths: null, fieldDays: 0 })
+  it('คอมไม่ขึ้นกับจำนวนวัน/ระยะทาง — ค่าตายตัวต่อเคส', () => {
+    const plan = planCaseExpenses({ outcome: 'closed_success', plan: withCommission, distanceKmHundredths: null })
 
     expect(plan.drafts.find((draft) => draft.expenseType === 'commission')?.grossSatang).toBe(50_000)
   })
@@ -240,9 +312,8 @@ describe('planCaseExpenses — ค่าคอมมิชชั่น/เบี
       outcome: 'closed_fail',
       plan: { ...withCommission, noSuccessFeeSatang: 0 },
       distanceKmHundredths: null,
-      fieldDays: 1,
     })
 
-    expect(plan.drafts.map((draft) => draft.expenseType)).toEqual(['fuel', 'allowance'])
+    expect(plan.drafts).toEqual([])
   })
 })
