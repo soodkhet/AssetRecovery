@@ -40,17 +40,16 @@ describe('แท็บหน้าการเงิน', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  // Final Test ด่าน 5 (Phase 8.3) — `payee` เคยเป็น `available:false` = ปุ่มเทากดไม่ได้ถาวร
-  // ทั้งที่หน้าจริงเสร็จตั้งแต่ Phase 3.2 แค่ไปอยู่คนละ route ⇒ เปลี่ยนเป็นลิงก์ข้าม
-  it('ทุกแท็บใช้งานได้จริง — `payee` เป็นลิงก์ข้ามไปหน้าตั้งค่าการเงิน ไม่ใช่ปุ่มเทา', () => {
+  // Final Test ด่าน 5 (Phase 8.3) — `payee` เคยเป็นปุ่มเทาถาวร → เคยเป็นลิงก์ข้ามไปหน้าตั้งค่าการเงิน
+  // ซึ่งการเงินเข้าไม่ได้ (UAT R6-C) ⇒ ตอนนี้เป็นแท็บในหน้าการเงินเองตาม mockup `finance.html`
+  it('ทุกแท็บใช้งานได้จริงในหน้านี้ — ไม่มีลิงก์ข้าม route (payee อยู่ในหน้าการเงิน)', () => {
     expect(FINANCE_OPERATION_TABS.filter((tab) => !tab.available)).toEqual([])
-    const crossLinks = FINANCE_OPERATION_TABS.filter((tab) => tab.href !== undefined)
-    expect(crossLinks.map((tab) => tab.id)).toEqual(['payee'])
-    expect(crossLinks[0]?.href).toBe('/settings/finance?tab=payee')
+    expect(FINANCE_OPERATION_TABS.filter((tab) => tab.href !== undefined)).toEqual([])
+    expect(resolveFinanceOperationTab('payee', SUPER)).toBe('payee')
   })
 
-  it('แท็บที่เป็นลิงก์ข้าม route เลือกค้างที่หน้านี้ไม่ได้ (กันการ์ดเปล่า)', () => {
-    expect(resolveFinanceOperationTab('payee', SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+  it('UAT R6-C — การเงินเปิดแท็บผู้รับเงินในหน้าการเงินได้ (การเงินคุม payee)', () => {
+    expect(resolveFinanceOperationTab('payee', roleHolder(FINANCE_ROLE_NAME, 'system'))).toBe('payee')
   })
 
   it('แท็บเริ่มต้น = "ภาพรวม" (`14` §1 — หน้าแรกของโมดูลการเงิน)', () => {
@@ -63,8 +62,10 @@ describe('แท็บหน้าการเงิน', () => {
     }
   })
 
-  it('`?tab=` ที่ชี้แท็บยังไม่เกิด/ไม่มีจริง ตกกลับแท็บเริ่มต้น', () => {
-    expect(resolveFinanceOperationTab('payee', SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+  it('`?tab=` ที่ชี้แท็บยังไม่เกิด/ไม่มีจริง/ไม่มีสิทธิ์ ตกกลับแท็บเริ่มต้น', () => {
+    expect(resolveFinanceOperationTab('payee', roleHolder(EXECUTIVE_ROLE_NAME, 'system'))).toBe(
+      DEFAULT_FINANCE_OPERATION_TAB,
+    )
     expect(resolveFinanceOperationTab('ไม่มีแท็บนี้', SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
     expect(resolveFinanceOperationTab(undefined, SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
   })

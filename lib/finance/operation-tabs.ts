@@ -58,14 +58,14 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
   },
   { id: 'payout', label: 'รอบจ่ายเงิน', source: 'ไฟล์ 17', available: true, capabilities: ['manage_payout_batch'] },
   { id: 'revenue', label: 'รายได้และวางบิล', source: 'ไฟล์ 19', available: true, capabilities: ['manage_billing'] },
-  // ไฟล์ 18 ทำเสร็จตั้งแต่ 3.2 แต่หน้าอยู่ในหน้าตั้งค่าการเงิน (`13`) ตาม mockup `settings.html`
-  // ⇒ แท็บนี้เป็น **ลิงก์ข้ามไปหน้านั้น** ไม่ใช่ปุ่มเทา (หน้าจริงมีอยู่ กดได้)
+  // ไฟล์ 18 — การเงินเป็นผู้จัดการ payee (`18` §12) ⇒ เรนเดอร์ในหน้านี้เลยตาม mockup `finance.html`
+  // (`financeSubTab === 'payee'`) · เดิมเป็นลิงก์ไป `/settings/finance?tab=payee` ซึ่งการเงินเข้าไม่ได้
+  // (เมนูตั้งค่าการเงินเป็นของ Superadmin/บริหาร) ⇒ เด้งกลับแดชบอร์ด (UAT R6-C) · ใช้ component เดียวกับหน้าตั้งค่า
   {
     id: 'payee',
     label: 'ผู้รับเงิน (Payee)',
     source: 'ไฟล์ 18',
     available: true,
-    href: '/settings/finance?tab=payee',
     capabilities: ['manage_payee_profile'],
   },
   {

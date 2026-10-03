@@ -1,3 +1,5 @@
+import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
+
 /**
  * SSOT ของ **13 แท็บ** ในหน้า "ตั้งค่าบัญชี/การเงิน" (ไฟล์ `13` §6.1–6.13 · §16)
  *
@@ -24,13 +26,19 @@ export interface FinanceSettingsTab {
    */
   available: boolean
   plannedPhase?: string
+  /**
+   * capability อ่านที่ API ของแท็บนี้ต้องการ (ถืออย่างใดอย่างหนึ่งระดับ `view`) — ไม่ระบุ = เห็นทุกคนที่เข้าหน้าได้
+   * แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** แทนการเปิดแล้วเจอ 403 (UAT R6-C: บริหารเห็นแท็บผู้รับเงินแต่ API ปฏิเสธ
+   * — `18` §12 ให้สิทธิ์ดู payee เฉพาะการเงิน/บัญชี/เจ้าของ)
+   */
+  capabilities?: readonly string[]
 }
 
 export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'cycles', label: 'รอบบิลและรอบจ่าย', section: '§6.1', available: true },
   { id: 'approval', label: 'สายการอนุมัติ', section: '§6.2 + §6.2.1', available: true },
   { id: 'bank', label: 'บัญชีธนาคารบริษัท', section: '§6.3', available: true },
-  { id: 'payee', label: 'ผู้รับเงิน (Payee)', section: 'ไฟล์ 18', available: true },
+  { id: 'payee', label: 'ผู้รับเงิน (Payee)', section: 'ไฟล์ 18', available: true, capabilities: ['manage_payee_profile'] },
   { id: 'tax', label: 'กติกาภาษี (Tax Profile)', section: '§6.4', available: true },
   { id: 'vat', label: 'อัตรา VAT', section: '§6.5', available: true },
   { id: 'cost', label: 'ศูนย์ต้นทุน', section: '§6.6', available: true },
@@ -47,8 +55,17 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
 
 export const DEFAULT_FINANCE_SETTINGS_TAB = 'cycles'
 
-/** แท็บแรกที่ใช้งานได้จริง — ใช้เป็นปลายทางเมื่อ `?tab=` ชี้ไปแท็บที่ยังไม่เกิด */
-export function resolveFinanceSettingsTab(tab: string | undefined): string {
-  const found = FINANCE_SETTINGS_TABS.find((item) => item.id === tab)
+/** แท็บที่ผู้ใช้คนนี้เห็น — แท็บที่ระบุ `capabilities` ต้องถือสักตัว (Superadmin เห็นทุกแท็บ) */
+export function visibleFinanceSettingsTabs(viewer: CapabilityHolder): FinanceSettingsTab[] {
+  return FINANCE_SETTINGS_TABS.filter(
+    (tab) =>
+      tab.capabilities === undefined ||
+      tab.capabilities.some((capability) => hasCapability(viewer, 'view', capability)),
+  )
+}
+
+/** แท็บแรกที่ใช้งานได้จริงและผู้ใช้เห็น — ใช้เป็นปลายทางเมื่อ `?tab=` ชี้ไปแท็บที่ยังไม่เกิด/ไม่มีสิทธิ์ */
+export function resolveFinanceSettingsTab(tab: string | undefined, viewer: CapabilityHolder): string {
+  const found = visibleFinanceSettingsTabs(viewer).find((item) => item.id === tab)
   return found !== undefined && found.available ? found.id : DEFAULT_FINANCE_SETTINGS_TAB
 }

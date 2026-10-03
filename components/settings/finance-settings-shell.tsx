@@ -19,7 +19,8 @@ import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
 import { VatRatesTab } from '@/components/settings/vat-rates-tab'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { FINANCE_SETTINGS_TABS } from '@/lib/settings/finance-tabs'
+import { useSession } from '@/components/auth/permission-provider'
+import { visibleFinanceSettingsTabs } from '@/lib/settings/finance-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -35,7 +36,10 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
   const [tab, setTab] = useState(initialTab)
   // `initialTab` ผ่าน `resolveFinanceSettingsTab()` มาแล้ว และปุ่มที่กดได้มีแต่แท็บที่ `available`
   // ⇒ หา id ไม่เจอไม่ควรเกิดจริง แต่กันไว้ด้วยแท็บเริ่มต้นแทนที่จะพังทั้งหน้า
-  const current = FINANCE_SETTINGS_TABS.find((item) => item.id === tab)
+  const session = useSession()
+  // แท็บที่ API ปฏิเสธผู้ใช้คนนี้ถูกซ่อน (เช่น ผู้รับเงินของบริหาร — UAT R6-C)
+  const tabs = session === null ? [] : visibleFinanceSettingsTabs(session)
+  const current = tabs.find((item) => item.id === tab)
 
   return (
     <>
@@ -47,7 +51,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
       <div className="flex flex-col gap-6 md:flex-row">
         <aside className="no-scrollbar w-full shrink-0 overflow-y-auto md:max-h-[80vh] md:w-56">
           <nav aria-label="แท็บตั้งค่าบัญชี/การเงิน" className="flex flex-col space-y-1 border-l-4 border-emerald-100 pl-2">
-            {FINANCE_SETTINGS_TABS.map((item) => {
+            {tabs.map((item) => {
               if (!item.available) {
                 return (
                   <span

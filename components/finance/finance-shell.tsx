@@ -10,6 +10,7 @@ import { DashboardTab } from '@/components/finance/dashboard-tab'
 import { PayoutTab } from '@/components/finance/payout-tab'
 import { ProfitTab } from '@/components/finance/profit-tab'
 import { RevenueTab } from '@/components/finance/revenue-tab'
+import { PayeeTab } from '@/components/settings/payee-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
@@ -45,7 +46,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
           className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
         >
           {tabs.map((item) => {
-            // หน้าจริงอยู่คนละ route (เช่น "ผู้รับเงิน" อยู่ในหน้าตั้งค่าการเงิน) — ลิงก์ข้ามไป
+            // หน้าจริงอยู่คนละ route — ลิงก์ข้ามไป (ปัจจุบันไม่มีแท็บแบบนี้ เก็บไว้รองรับในอนาคต)
             if (item.href !== undefined) {
               return (
                 <Link
@@ -96,6 +97,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         {current?.id === 'advances' && <AdvanceTab />}
         {current?.id === 'payout' && <PayoutTab />}
         {current?.id === 'revenue' && <RevenueTab />}
+        {current?.id === 'payee' && <PayeeTab />}
         {current?.id === 'adjustment' && <AdjustmentTab />}
         {current?.id === 'profit' && <ProfitTab />}
         {current === undefined && (
