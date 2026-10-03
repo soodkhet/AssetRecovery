@@ -20,7 +20,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { formatTaxId } from '@/lib/finance-companies/company'
+import { formatCustomerWhtPct, formatTaxId, vatModeLabel } from '@/lib/finance-companies/company'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 
@@ -255,6 +255,12 @@ export function CompaniesManager() {
                     {company.serviceFeeTemplateModel !== null && (
                       <span className="ml-1 text-xs text-slate-500">({company.serviceFeeTemplateModel})</span>
                     )}
+                  </Detail>
+                  <Detail label="รูปแบบราคา/VAT">
+                    {vatModeLabel(company.vatMode)}
+                    <div className="text-xs text-slate-500">
+                      ลูกค้าหักภาษี ณ ที่จ่าย: {formatCustomerWhtPct(company.whtWithheldByCustomerPct)}
+                    </div>
                   </Detail>
                   <Detail label="รูปแบบส่งใบแจ้งหนี้">
                     {company.defaultInvoiceDeliveryFormat === 'e_tax_invoice' ? '📧 e-Tax Invoice' : '📄 กระดาษ/PDF'}

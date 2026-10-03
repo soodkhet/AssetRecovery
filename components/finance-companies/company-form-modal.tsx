@@ -3,7 +3,13 @@
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import type { InvoiceDeliveryFormat } from '@/lib/finance-companies/company'
+import {
+  DEFAULT_CUSTOMER_WHT_PCT,
+  DEFAULT_VAT_MODE,
+  VAT_MODE_OPTIONS,
+  type InvoiceDeliveryFormat,
+  type VatMode,
+} from '@/lib/finance-companies/company'
 import { financeCompanyCreateSchema } from '@/lib/finance-companies/schemas'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
@@ -13,6 +19,10 @@ import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
  *
  * จุดบังคับ: `tax_id` ตัวเลข 13 หลัก (format-only — `10` §7.1 🔶) ห้ามซ้ำ (`DUPLICATE_TAX_ID`) ·
  * ต้องผูกเทมเพลตค่าบริการเสมอ (`10` §9.1) · การเปลี่ยนสถานะทำที่ปุ่ม “ระงับ/เปิดใช้งาน” บนการ์ด
+ *
+ * UAT BUG-001 (มติ PO 03/10/2569): เพิ่มช่อง “รูปแบบราคา/VAT” (`vat_mode`) และ
+ * “ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน (%)” (`wht_withheld_by_customer_pct` — เว้นว่าง = ไม่หัก) ·
+ * ค่าเริ่มต้นของฟอร์มสร้างใหม่ = default ของ DB (`exclude_vat` · 3.00) ไม่เปลี่ยนพฤติกรรมเดิม
  */
 
 interface FormState {
@@ -27,6 +37,9 @@ interface FormState {
   signerName: string
   serviceFeeTemplateId: string
   vatRegistered: boolean
+  vatMode: VatMode
+  /** สตริงของช่องกรอก — ค่าว่าง = ลูกค้าไม่หัก (`null`) */
+  whtWithheldByCustomerPct: string
   defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
   billingDay: string
   paymentDueDays: string
@@ -46,6 +59,8 @@ function emptyForm(defaultTemplateId: string): FormState {
     signerName: '',
     serviceFeeTemplateId: defaultTemplateId,
     vatRegistered: true,
+    vatMode: DEFAULT_VAT_MODE,
+    whtWithheldByCustomerPct: DEFAULT_CUSTOMER_WHT_PCT.toFixed(2),
     defaultInvoiceDeliveryFormat: 'paper_pdf',
     billingDay: '1',
     paymentDueDays: '30',
@@ -66,6 +81,9 @@ function formOf(company: FinanceCompanyDto): FormState {
     signerName: company.signerName ?? '',
     serviceFeeTemplateId: company.serviceFeeTemplateId,
     vatRegistered: company.vatRegistered,
+    vatMode: company.vatMode,
+    whtWithheldByCustomerPct:
+      company.whtWithheldByCustomerPct === null ? '' : company.whtWithheldByCustomerPct.toFixed(2),
     defaultInvoiceDeliveryFormat: company.defaultInvoiceDeliveryFormat,
     billingDay: String(company.billingDay),
     paymentDueDays: String(company.paymentDueDays),
@@ -91,6 +109,10 @@ function payloadOf(form: FormState): Record<string, unknown> {
     signerName: form.signerName,
     serviceFeeTemplateId: form.serviceFeeTemplateId === '' ? undefined : form.serviceFeeTemplateId,
     vatRegistered: form.vatRegistered,
+    vatMode: form.vatMode,
+    // เว้นว่าง = ลูกค้าไม่หัก → ส่ง null ชัดเจน (ถ้าไม่ส่งเลย Zod จะเติม default 3.00 ให้)
+    whtWithheldByCustomerPct:
+      form.whtWithheldByCustomerPct.trim() === '' ? null : toNumber(form.whtWithheldByCustomerPct),
     defaultInvoiceDeliveryFormat: form.defaultInvoiceDeliveryFormat,
     billingDay: toNumber(form.billingDay),
     paymentDueDays: toNumber(form.paymentDueDays),
@@ -287,6 +309,36 @@ export function CompanyFormModal({
               <option value="no">ไม่จด VAT</option>
             </Select>
           </Field>
+          <Field
+            id="co-vat-mode"
+            label="รูปแบบราคา/VAT"
+            required
+            error={errors.vatMode}
+            hint="ใช้คำนวณ VAT ตอนสร้างรายได้ของบริษัทนี้"
+          >
+            <Select id="co-vat-mode" value={form.vatMode} onChange={(event) => set('vatMode', event.target.value as VatMode)}>
+              {VAT_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field
+            id="co-customer-wht"
+            label="ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน (%)"
+            error={errors.whtWithheldByCustomerPct}
+            hint="เว้นว่าง = ลูกค้าไม่หัก · ใช้จับคู่ยอดเงินเข้ากับบิล (ยอดรวม − ภาษีที่ลูกค้าหัก)"
+          >
+            <Input
+              id="co-customer-wht"
+              numeric
+              inputMode="decimal"
+              value={form.whtWithheldByCustomerPct}
+              onChange={(event) => set('whtWithheldByCustomerPct', event.target.value)}
+              placeholder="เว้นว่าง = ไม่หัก"
+            />
+          </Field>
           <Field id="co-billing-day" label="วันตัดรอบบิล (1-31)" required error={errors.billingDay}>
             <Input
               id="co-billing-day"
@@ -306,6 +358,12 @@ export function CompanyFormModal({
             />
           </Field>
         </div>
+
+        {isEdit && company.vatMode !== form.vatMode && (
+          <InlineAlert tone="info" title="เปลี่ยนรูปแบบราคา/VAT">
+            รายได้ที่สร้างไปแล้วเก็บยอด VAT ไว้ที่ตัวรายการ — ยอดเดิมไม่เปลี่ยน · รูปแบบใหม่ใช้กับรายได้ที่เกิดหลังจากนี้
+          </InlineAlert>
+        )}
 
         <Field id="co-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea

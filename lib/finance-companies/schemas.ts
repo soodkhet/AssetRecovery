@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { reasonSchema } from '@/lib/api/validation'
-import { normalizeTaxId } from '@/lib/finance-companies/company'
+import { pctSchema, reasonSchema } from '@/lib/api/validation'
+import { DEFAULT_CUSTOMER_WHT_PCT, DEFAULT_VAT_MODE, normalizeTaxId } from '@/lib/finance-companies/company'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลบริษัทไฟแนนซ์ (ไฟล์ 10 · Rule 04 · Rule 13)
@@ -15,6 +15,16 @@ const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถ�
 
 export const invoiceDeliveryFormatSchema = z.enum(['e_tax_invoice', 'paper_pdf'])
 export const companyStatusSchema = z.enum(['active', 'suspended'])
+/** enum `vat_mode` (`02` §3) — ค่าตรงกับ Prisma `VatMode` เป๊ะ */
+export const vatModeSchema = z.enum(['include_vat', 'exclude_vat', 'no_vat'])
+
+/**
+ * อัตราที่ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน (มติ PO A1 · `02` §5) — 0–100 ทศนิยม ≤ 2 ตำแหน่ง ·
+ * `null` = บริษัทนี้ไม่หัก · ไม่ส่งมาเลย = default ของ DB (3.00) เพื่อไม่เปลี่ยนพฤติกรรมเดิม
+ */
+export const customerWhtPctSchema = pctSchema('อัตราที่ลูกค้าหักภาษี ณ ที่จ่าย')
+  .nullable()
+  .default(DEFAULT_CUSTOMER_WHT_PCT)
 
 /** ตัวเลข 13 หลัก — ยอมให้พิมพ์ `-`/ช่องว่างคั่นแล้ว normalize ทิ้งก่อนตรวจ (`10` §7.1) */
 export const taxIdSchema = z
@@ -47,6 +57,8 @@ const companyFields = z.object({
   signerName: optionalText(200),
   serviceFeeTemplateId: uuidSchema,
   vatRegistered: z.boolean().default(true),
+  vatMode: vatModeSchema.default(DEFAULT_VAT_MODE),
+  whtWithheldByCustomerPct: customerWhtPctSchema,
   defaultInvoiceDeliveryFormat: invoiceDeliveryFormatSchema.default('paper_pdf'),
   billingDay: z.number().int().min(1, 'วันตัดรอบบิลต้องอยู่ระหว่าง 1-31').max(31, 'วันตัดรอบบิลต้องอยู่ระหว่าง 1-31').default(1),
   paymentDueDays: z.number().int().min(0, 'จำนวนวันครบกำหนดต้องไม่ติดลบ').max(365, 'จำนวนวันครบกำหนดยาวเกินไป').default(30),

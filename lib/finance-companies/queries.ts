@@ -39,6 +39,8 @@ const companySelect = {
   signerName: true,
   serviceFeeTemplateId: true,
   vatRegistered: true,
+  vatMode: true,
+  whtWithheldByCustomerPct: true,
   defaultInvoiceDeliveryFormat: true,
   billingDay: true,
   paymentDueDays: true,
@@ -77,6 +79,8 @@ function toDto(row: CompanyRow): FinanceCompanyDto {
     serviceFeeTemplateName: row.serviceFeeTemplate?.name ?? null,
     serviceFeeTemplateModel: row.serviceFeeTemplate?.model ?? null,
     vatRegistered: row.vatRegistered,
+    vatMode: row.vatMode,
+    whtWithheldByCustomerPct: row.whtWithheldByCustomerPct === null ? null : row.whtWithheldByCustomerPct.toNumber(),
     defaultInvoiceDeliveryFormat: row.defaultInvoiceDeliveryFormat,
     billingDay: row.billingDay,
     paymentDueDays: row.paymentDueDays,
@@ -86,6 +90,11 @@ function toDto(row: CompanyRow): FinanceCompanyDto {
     userCount: row._count.users,
     updatedAt: row.updatedAt.toISOString(),
   }
+}
+
+/** NUMERIC(5,2) — แปลงผ่าน `toFixed(2)` กันเศษ float (`null` = ลูกค้าไม่หัก ต้องเก็บเป็น NULL จริง) */
+function toPctDecimal(value: number | null): Prisma.Decimal | null {
+  return value === null ? null : new Prisma.Decimal(value.toFixed(2))
 }
 
 function toValues(dto: FinanceCompanyDto): FinanceCompanyValues {
@@ -101,6 +110,8 @@ function toValues(dto: FinanceCompanyDto): FinanceCompanyValues {
     signerName: dto.signerName,
     serviceFeeTemplateId: dto.serviceFeeTemplateId,
     vatRegistered: dto.vatRegistered,
+    vatMode: dto.vatMode,
+    whtWithheldByCustomerPct: dto.whtWithheldByCustomerPct,
     defaultInvoiceDeliveryFormat: dto.defaultInvoiceDeliveryFormat,
     billingDay: dto.billingDay,
     paymentDueDays: dto.paymentDueDays,
@@ -250,6 +261,8 @@ export async function createFinanceCompany(
         signerName: values.signerName,
         serviceFeeTemplateId: values.serviceFeeTemplateId,
         vatRegistered: values.vatRegistered,
+        vatMode: values.vatMode,
+        whtWithheldByCustomerPct: toPctDecimal(values.whtWithheldByCustomerPct),
         defaultInvoiceDeliveryFormat: values.defaultInvoiceDeliveryFormat,
         billingDay: values.billingDay,
         paymentDueDays: values.paymentDueDays,
@@ -310,6 +323,8 @@ export async function updateFinanceCompany(
         signerName: values.signerName,
         serviceFeeTemplateId: values.serviceFeeTemplateId,
         vatRegistered: values.vatRegistered,
+        vatMode: values.vatMode,
+        whtWithheldByCustomerPct: toPctDecimal(values.whtWithheldByCustomerPct),
         defaultInvoiceDeliveryFormat: values.defaultInvoiceDeliveryFormat,
         billingDay: values.billingDay,
         paymentDueDays: values.paymentDueDays,

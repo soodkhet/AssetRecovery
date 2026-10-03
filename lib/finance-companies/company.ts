@@ -12,6 +12,33 @@ import { FinanceCompanyError } from '@/lib/finance-companies/errors'
 
 export type CompanyStatus = 'active' | 'suspended'
 export type InvoiceDeliveryFormat = 'e_tax_invoice' | 'paper_pdf'
+/** enum `vat_mode` (`02` §3) — รูปแบบราคาค่าบริการเทียบกับ VAT ที่ใช้ตอนสร้าง Revenue (`22` §6.8) */
+export type VatMode = 'include_vat' | 'exclude_vat' | 'no_vat'
+
+/** ค่า default ของคอลัมน์ `finance_companies.vat_mode` (`02` §5) — ฟอร์มสร้างใหม่ต้องตรงกับ DB */
+export const DEFAULT_VAT_MODE: VatMode = 'exclude_vat'
+
+/**
+ * ค่า default ของ `finance_companies.wht_withheld_by_customer_pct` = 3.00 (`02` §5 · มติ PO A1 2026-08-12)
+ * ฟอร์มสร้างใหม่ต้องเริ่มที่ค่านี้ ไม่เปลี่ยนพฤติกรรมของบริษัทเดิม
+ */
+export const DEFAULT_CUSTOMER_WHT_PCT = 3
+
+/** ป้ายของรูปแบบราคา/VAT บนฟอร์มและการ์ด (ลำดับ = ลำดับตัวเลือกใน dropdown) */
+export const VAT_MODE_OPTIONS: ReadonlyArray<{ value: VatMode; label: string }> = [
+  { value: 'exclude_vat', label: 'ราคาก่อน VAT (บวก VAT แยกบรรทัด)' },
+  { value: 'include_vat', label: 'ราคารวม VAT แล้ว (ถอด VAT ออกจากราคา)' },
+  { value: 'no_vat', label: 'ไม่มี VAT' },
+]
+
+export function vatModeLabel(mode: VatMode): string {
+  return VAT_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? mode
+}
+
+/** แสดงอัตราที่ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน — `null` = ไม่หัก (display เท่านั้น) */
+export function formatCustomerWhtPct(pct: number | null): string {
+  return pct === null ? 'ไม่หัก' : `${pct.toFixed(2)}%`
+}
 
 /** ค่าที่ผู้ใช้ตั้งได้ต่อบริษัท — ตรงกับคอลัมน์ `finance_companies` (`02` §5) */
 export interface FinanceCompanyValues {
@@ -32,6 +59,13 @@ export interface FinanceCompanyValues {
   /** **บังคับเสมอตอนสร้าง** — ทุกบริษัทต้องผูกเทมเพลตค่าบริการ (`10` §9.1) */
   serviceFeeTemplateId: string
   vatRegistered: boolean
+  /** รูปแบบราคา/VAT (`02` §5 `vat_mode`) — ใช้ตอนสร้าง Revenue (`22` §6.8) ยอดเก่าเป็น snapshot ไม่เปลี่ยนตาม */
+  vatMode: VatMode
+  /**
+   * อัตรา WHT ที่ลูกค้า (บริษัทไฟแนนซ์) หักจากเราก่อนโอน — NUMERIC(5,2) · `null` = ไม่หัก
+   * (มติ PO A1 2026-08-12 · ใช้กับ auto-match กระทบยอดธนาคาร `total − withheld`)
+   */
+  whtWithheldByCustomerPct: number | null
   defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
   billingDay: number
   paymentDueDays: number
@@ -128,6 +162,8 @@ export function toCompanyAuditPayload(
     signer_name: normalized.signerName,
     service_fee_template_id: normalized.serviceFeeTemplateId,
     vat_registered: normalized.vatRegistered,
+    vat_mode: normalized.vatMode,
+    wht_withheld_by_customer_pct: normalized.whtWithheldByCustomerPct,
     default_invoice_delivery_format: normalized.defaultInvoiceDeliveryFormat,
     billing_day: normalized.billingDay,
     payment_due_days: normalized.paymentDueDays,

@@ -1,4 +1,4 @@
-import type { CompanyStatus, InvoiceDeliveryFormat } from '@/lib/finance-companies/company'
+import type { CompanyStatus, InvoiceDeliveryFormat, VatMode } from '@/lib/finance-companies/company'
 
 /**
  * รูปร่างข้อมูลที่ API ของโมดูลบริษัทไฟแนนซ์ส่งออก — **pure type ล้วน**
@@ -21,6 +21,9 @@ export interface FinanceCompanyDto {
   serviceFeeTemplateName: string | null
   serviceFeeTemplateModel: string | null
   vatRegistered: boolean
+  vatMode: VatMode
+  /** % ที่ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน · `null` = ไม่หัก (มติ PO A1) */
+  whtWithheldByCustomerPct: number | null
   defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
   billingDay: number
   paymentDueDays: number

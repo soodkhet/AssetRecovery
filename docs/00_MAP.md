@@ -156,7 +156,7 @@
 | 189 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 198 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/10-finance-companies.md` (22 KB, 209 บรรทัด)
+### `docs/10-finance-companies.md` (25 KB, 211 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -164,29 +164,29 @@
 | 3 | # 10 — Finance Companies (บริษัทไฟแนนซ์คู่ค้า) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 24 | ## 1. Summary |
-| 28 | ## 2. Purpose |
-| 32 | ## 3. In Scope |
-| 39 | ## 4. Out of Scope |
-| 45 | ## 5. Actors & Responsibilities |
-| 54 | ## 6. Core Concepts |
-| 62 | ## 7. Data Entities / Required Objects |
-| 64 | ### 7.1 Finance Company |
-| 84 | ### 7.2 Company User (บัญชีผู้ใช้ฝั่งบริษัทไฟแนนซ์) |
-| 95 | ## 8. UI / UX Rules |
-| 106 | ## 9. Workflow / Lifecycle |
-| 108 | ### 9.1 สร้างบริษัทใหม่ |
-| 112 | ### 9.2 Service Fee Template Snapshot (แก้ไขแล้ว — ดู Changelog v2) |
-| 123 | ### 9.3 ระงับ/เปิดใช้งานบริษัท |
-| 129 | ## 10. Security / Control Rules |
-| 135 | ## 11. Validation & Error Handling |
-| 145 | ## 12. Permission Requirements |
-| 155 | ## 13. Audit Log Requirements |
-| 161 | ## 14. API / Integration Draft |
-| 173 | ## 15. Acceptance Criteria |
-| 180 | ## 16. Test Cases |
-| 193 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 201 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 25 | ## 1. Summary |
+| 29 | ## 2. Purpose |
+| 33 | ## 3. In Scope |
+| 40 | ## 4. Out of Scope |
+| 46 | ## 5. Actors & Responsibilities |
+| 55 | ## 6. Core Concepts |
+| 63 | ## 7. Data Entities / Required Objects |
+| 65 | ### 7.1 Finance Company |
+| 87 | ### 7.2 Company User (บัญชีผู้ใช้ฝั่งบริษัทไฟแนนซ์) |
+| 98 | ## 8. UI / UX Rules |
+| 109 | ## 9. Workflow / Lifecycle |
+| 111 | ### 9.1 สร้างบริษัทใหม่ |
+| 115 | ### 9.2 Service Fee Template Snapshot (แก้ไขแล้ว — ดู Changelog v2) |
+| 126 | ### 9.3 ระงับ/เปิดใช้งานบริษัท |
+| 132 | ## 10. Security / Control Rules |
+| 138 | ## 11. Validation & Error Handling |
+| 148 | ## 12. Permission Requirements |
+| 158 | ## 13. Audit Log Requirements |
+| 164 | ## 14. API / Integration Draft |
+| 176 | ## 15. Acceptance Criteria |
+| 183 | ## 16. Test Cases |
+| 196 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 204 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/11-compensation.md` (15 KB, 181 บรรทัด)
 

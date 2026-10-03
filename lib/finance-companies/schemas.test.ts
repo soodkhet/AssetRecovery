@@ -38,6 +38,35 @@ describe('financeCompanyCreateSchema', () => {
     expect(parsed.paymentDueDays).toBe(30)
   })
 
+  it('ไม่ส่งรูปแบบ VAT / อัตราที่ลูกค้าหักมา → ใช้ default ของ DB (exclude_vat · 3.00) ไม่เปลี่ยนพฤติกรรมเดิม', () => {
+    const parsed = financeCompanyCreateSchema.parse(validInput)
+    expect(parsed.vatMode).toBe('exclude_vat')
+    expect(parsed.whtWithheldByCustomerPct).toBe(3)
+  })
+
+  it('รับ vat_mode ได้ครบ 3 ค่าตาม enum `02` §3 และปฏิเสธค่าที่ไม่มีจริง', () => {
+    for (const vatMode of ['include_vat', 'exclude_vat', 'no_vat'] as const) {
+      expect(financeCompanyCreateSchema.parse({ ...validInput, vatMode }).vatMode).toBe(vatMode)
+    }
+    expect(fieldsOf({ ...validInput, vatMode: 'vat_7' })).toContain('vatMode')
+  })
+
+  it('ลูกค้าไม่หักภาษี ณ ที่จ่าย → ส่ง null แล้วต้องคงเป็น null (ไม่ถูกเติม 3% ทับ — UAT BUG-001)', () => {
+    expect(financeCompanyCreateSchema.parse({ ...validInput, whtWithheldByCustomerPct: null }).whtWithheldByCustomerPct).toBeNull()
+  })
+
+  it('อัตราที่ลูกค้าหัก: 0–100 ทศนิยมไม่เกิน 2 ตำแหน่ง', () => {
+    expect(financeCompanyCreateSchema.parse({ ...validInput, whtWithheldByCustomerPct: 0 }).whtWithheldByCustomerPct).toBe(0)
+    expect(financeCompanyCreateSchema.parse({ ...validInput, whtWithheldByCustomerPct: 100 }).whtWithheldByCustomerPct).toBe(100)
+    expect(financeCompanyCreateSchema.parse({ ...validInput, whtWithheldByCustomerPct: 1.5 }).whtWithheldByCustomerPct).toBe(1.5)
+    expect(financeCompanyCreateSchema.parse({ ...validInput, whtWithheldByCustomerPct: 2.75 }).whtWithheldByCustomerPct).toBe(2.75)
+    expect(fieldsOf({ ...validInput, whtWithheldByCustomerPct: -0.01 })).toContain('whtWithheldByCustomerPct')
+    expect(fieldsOf({ ...validInput, whtWithheldByCustomerPct: 100.01 })).toContain('whtWithheldByCustomerPct')
+    expect(fieldsOf({ ...validInput, whtWithheldByCustomerPct: 3.125 })).toContain('whtWithheldByCustomerPct')
+    expect(fieldsOf({ ...validInput, whtWithheldByCustomerPct: '3' })).toContain('whtWithheldByCustomerPct')
+    expect(fieldsOf({ ...validInput, whtWithheldByCustomerPct: Number.NaN })).toContain('whtWithheldByCustomerPct')
+  })
+
   it('tax_id ผิดรูปแบบ → reject (13 หลักเท่านั้น)', () => {
     expect(fieldsOf({ ...validInput, taxId: '010551234567' })).toContain('taxId')
     expect(fieldsOf({ ...validInput, taxId: 'ABCDEFGHIJKLM' })).toContain('taxId')

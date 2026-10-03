@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertValidTaxId,
+  DEFAULT_CUSTOMER_WHT_PCT,
+  DEFAULT_VAT_MODE,
+  formatCustomerWhtPct,
   formatTaxId,
   isValidTaxId,
   normalizeCompanyValues,
   normalizeTaxId,
   resolveSuspendedReason,
   toCompanyAuditPayload,
+  VAT_MODE_OPTIONS,
+  vatModeLabel,
   type FinanceCompanyValues,
 } from '@/lib/finance-companies/company'
 import { isFinanceCompanyError } from '@/lib/finance-companies/errors'
@@ -25,6 +30,8 @@ const baseValues: FinanceCompanyValues = {
   signerName: ' คุณสมหญิง ',
   serviceFeeTemplateId: 'tpl-1',
   vatRegistered: true,
+  vatMode: 'include_vat',
+  whtWithheldByCustomerPct: 3,
   defaultInvoiceDeliveryFormat: 'e_tax_invoice',
   billingDay: 5,
   paymentDueDays: 30,
@@ -99,8 +106,37 @@ describe('toCompanyAuditPayload', () => {
       service_fee_template_id: 'tpl-1',
       vat_registered: true,
       default_invoice_delivery_format: 'e_tax_invoice',
+      vat_mode: 'include_vat',
+      wht_withheld_by_customer_pct: 3,
       status: 'suspended',
       suspended_reason: 'ค้างชำระ',
     })
+  })
+
+  it('ลูกค้าไม่หักภาษี (null) ต้องลง audit เป็น null จริง ไม่ใช่ 0 หรือหายไป (UAT BUG-001)', () => {
+    const payload = toCompanyAuditPayload(
+      { ...baseValues, whtWithheldByCustomerPct: null, vatMode: 'no_vat' },
+      { status: 'active', suspendedReason: null },
+    )
+    expect(payload).toHaveProperty('wht_withheld_by_customer_pct', null)
+    expect(payload.vat_mode).toBe('no_vat')
+  })
+})
+
+describe('ค่า default ของรูปแบบ VAT / WHT ที่ลูกค้าหัก (ต้องตรงกับ default ของ DB — `02` §5)', () => {
+  it('vat_mode = exclude_vat · wht_withheld_by_customer_pct = 3.00', () => {
+    expect(DEFAULT_VAT_MODE).toBe('exclude_vat')
+    expect(DEFAULT_CUSTOMER_WHT_PCT).toBe(3)
+  })
+
+  it('ตัวเลือก VAT ครบ 3 ค่าตาม enum `vat_mode` (`02` §3) และมีป้ายภาษาไทย', () => {
+    expect(VAT_MODE_OPTIONS.map((option) => option.value).sort()).toEqual(['exclude_vat', 'include_vat', 'no_vat'])
+    expect(vatModeLabel('no_vat')).toBe('ไม่มี VAT')
+  })
+
+  it('แสดงอัตราที่ลูกค้าหัก — null = ไม่หัก', () => {
+    expect(formatCustomerWhtPct(null)).toBe('ไม่หัก')
+    expect(formatCustomerWhtPct(3)).toBe('3.00%')
+    expect(formatCustomerWhtPct(1.5)).toBe('1.50%')
   })
 })
