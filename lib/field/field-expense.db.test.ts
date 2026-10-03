@@ -604,8 +604,12 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
 
     expect(superseded).toHaveLength(2)
     expect(active).toHaveLength(2)
-    // ไม่หาย: ของเดิมยังอยู่ครบและถูกผูกไปยังรายการใหม่
+    // ไม่หาย: ของเดิมยังอยู่ครบและถูกผูกไปยังรายการใหม่ **ชนิดเดียวกัน** (UAT BUG-051)
     expect(superseded.every((row) => row.supersededByExpenseId !== null)).toBe(true)
+    for (const row of superseded) {
+      const replacement = active.find((each) => each.id === row.supersededByExpenseId)
+      expect(replacement?.expenseType, row.expenseType).toBe(row.expenseType)
+    }
     expect(before.map((row) => row.id).sort()).toEqual(superseded.map((row) => row.id).sort())
     // ไม่ซ้ำ: ชุดใหม่มีชนิดละ 1 รายการ และคิดจากระยะทางใหม่ (3 กม. × ฿5 = ฿15)
     expect(active.map((row) => row.expenseType).sort()).toEqual(['allowance', 'fuel'])

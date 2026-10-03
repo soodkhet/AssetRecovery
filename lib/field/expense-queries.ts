@@ -19,6 +19,7 @@ import {
   nextExpenseStatus,
 } from '@/lib/field/expense-status'
 import { assertHotelClaimFields, assertSharedAgentInTeam } from '@/lib/field/hotel-claim'
+import { pairSupersededExpenses } from '@/lib/field/supersede-pairing'
 import type {
   FieldExpenseListQuery,
   HotelClaimInput,
@@ -354,17 +355,35 @@ export async function supersedeCaseExpenses(
   return rows.map((row) => row.id)
 }
 
-/** ผูกรายการเก่า → รายการใหม่ที่มาแทน (`41` §10.1 — ไล่ประวัติย้อนหลังได้) */
+/**
+ * ผูกรายการเก่า → รายการใหม่ที่มาแทน (`41` §10.1 — ไล่ประวัติย้อนหลังได้)
+ * จับคู่ **ชนิดเดียวกัน** ผ่าน `pairSupersededExpenses()` (UAT BUG-051 — เดิมผูกทุกแถวกับแถวใหม่แถวแรก)
+ */
 export async function linkSupersededExpenses(
   tx: ExpenseTxClient,
   params: { supersededIds: readonly string[]; replacementIds: readonly string[]; actorId: string },
 ): Promise<void> {
-  const replacement = params.replacementIds[0]
-  if (replacement === undefined || params.supersededIds.length === 0) return
-  await tx.expense.updateMany({
-    where: { id: { in: [...params.supersededIds] } },
-    data: { supersededByExpenseId: replacement, updatedBy: params.actorId },
+  if (params.replacementIds.length === 0 || params.supersededIds.length === 0) return
+  const rows = await tx.expense.findMany({
+    where: { id: { in: [...params.supersededIds, ...params.replacementIds] } },
+    select: { id: true, expenseType: true, expenseDate: true },
   })
+  const toCandidate = (row: (typeof rows)[number]) => ({
+    id: row.id,
+    expenseType: row.expenseType,
+    expenseDate: row.expenseDate.toISOString(),
+  })
+  const supersededSet = new Set(params.supersededIds)
+  const pairs = pairSupersededExpenses(
+    rows.filter((row) => supersededSet.has(row.id)).map(toCandidate),
+    rows.filter((row) => !supersededSet.has(row.id)).map(toCandidate),
+  )
+  for (const pair of pairs) {
+    await tx.expense.update({
+      where: { id: pair.supersededId },
+      data: { supersededByExpenseId: pair.replacementId, updatedBy: params.actorId },
+    })
+  }
 }
 
 // ── GET /api/field/expenses (`41` §7.9) ─────────────────────────────────────
