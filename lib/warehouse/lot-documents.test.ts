@@ -5,21 +5,24 @@ import {
   documentExtension,
   lotDocumentMime,
   lotDocumentPath,
+  lotDocumentPrefix,
   lotDocumentSlots,
 } from '@/lib/warehouse/lot-documents'
 
 /** ยามของเอกสารแนบล็อต (`44` §6.3 · §6.4) — จำนวนช่องต้องตรงชนิดล็อตเสมอ */
 
-describe('lotDocumentPath — path ตาม `44` §6.4', () => {
-  it('ใบเซ็นรับ/หลักฐานจัดส่งใช้ชื่อไฟล์ตายตัว 1 ไฟล์ต่อชนิด', () => {
-    expect(lotDocumentPath('lot-1', 'signed_doc', 'ใบเซ็นรับ.pdf')).toBe('handover-lots/lot-1/signed-doc.pdf')
-    expect(lotDocumentPath('lot-1', 'delivery_proof', 'proof.JPG')).toBe('handover-lots/lot-1/delivery-proof.jpg')
+describe('lotDocumentPath — path ต่อเวอร์ชัน ไม่ทับของเดิม (`44` §6.4 · มติ PO 03/10/2569 UAT Q13)', () => {
+  it('แต่ละชนิดอยู่โฟลเดอร์ของตัวเอง + ชื่อไฟล์ไม่ซ้ำต่อครั้งที่แนบ', () => {
+    expect(lotDocumentPath('lot-1', 'signed_doc', 'ใบเซ็นรับ.pdf', 'k1')).toBe('handover-lots/lot-1/signed-doc/k1.pdf')
+    expect(lotDocumentPath('lot-1', 'delivery_proof', 'proof.JPG', 'k2')).toBe('handover-lots/lot-1/delivery-proof/k2.jpg')
+    expect(lotDocumentPath('lot-1', 'signed_doc', 'a.pdf', 'k1')).not.toBe(lotDocumentPath('lot-1', 'signed_doc', 'a.pdf', 'k3'))
+    expect(lotDocumentPrefix('lot-1', 'signed_doc')).toBe('handover-lots/lot-1/signed-doc/')
   })
 
   it('ไฟล์ไม่มีนามสกุล/นามสกุลแปลก ถอยไปใช้ .pdf', () => {
     expect(documentExtension('scan')).toBe('pdf')
     expect(documentExtension('scan.verylongextension')).toBe('pdf')
-    expect(lotDocumentPath('lot-2', 'signed_doc', 'scan')).toBe('handover-lots/lot-2/signed-doc.pdf')
+    expect(lotDocumentPath('lot-2', 'signed_doc', 'scan', 'k')).toBe('handover-lots/lot-2/signed-doc/k.pdf')
   })
 })
 

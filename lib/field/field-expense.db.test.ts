@@ -5,6 +5,11 @@ import { closeFormFromDetail, hasCloseFormRevision } from '@/lib/field/close-for
 import { clearDistanceCache } from '@/lib/field/distance-provider'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
+// UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
+
 /**
  * เทสต์ระดับ DB ของ Phase 2.9 — DoD ตาม `41` §19/§20 + มติ PO 14/08/2569 (D10):
  *  · ปิดงานสร้างรายการเบิกอัตโนมัติ — สำเร็จ = `pending_warehouse_confirm` / ไม่สำเร็จ = `pending_approval`
@@ -398,7 +403,7 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     await field.closeFieldCase(
       agentA,
       caseId,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       { actor: agentA, meta },
     )
 
@@ -416,7 +421,7 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     await field.closeFieldCase(
       agentA,
       caseId,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       { actor: agentA, meta },
     )
 
@@ -624,12 +629,15 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     const resubmitted = await field.resubmitCloseCase(
       agentA,
       caseId,
-      { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
+      { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'], note: 'ถ่ายรูปหน้าบ้านใหม่ให้ชัดขึ้น' },
       { actor: agentA, meta },
     )
 
     // สถานะกลับเป็น outcome เดิม (ห้ามเปลี่ยน outcome) และไม่เพิ่มรอบติดตาม
     expect(resubmitted.status).toBe('closed_success')
+    // บันทึกเพิ่มเติมของรอบส่งกลับเก็บกับหลักฐานชุดใหม่ (มติ PO 03/10/2569 — UAT Q15)
+    const latestEvidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId }, orderBy: { submittedAt: 'desc' } })
+    expect(latestEvidence.note).toBe('ถ่ายรูปหน้าบ้านใหม่ให้ชัดขึ้น')
     const assignment = await db().caseAssignment.findFirstOrThrow({ where: { caseId } })
     expect(assignment.trackingRound).toBe(1)
 
@@ -863,7 +871,7 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     await field.closeFieldCase(
       agentA,
       failCase,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       { actor: agentA, meta },
     )
 

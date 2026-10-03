@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { ASSET_STATUSES } from '@/lib/warehouse/asset-status'
 import { IMEI_LENGTH } from '@/lib/warehouse/imei'
-import { LOT_STATUSES } from '@/lib/warehouse/lot-status'
+import { LOT_DOCUMENTS, LOT_STATUSES } from '@/lib/warehouse/lot-status'
 
 /**
  * Zod ชุดเดียวใช้ร่วม FE/BE ของโมดูลคลัง (`44` §15 · `45` §6.4–6.5)
@@ -167,3 +167,20 @@ export const lotConfirmSchema = z.object({
 })
 
 export type LotConfirmInput = z.infer<typeof lotConfirmSchema>
+
+/**
+ * `POST /api/handover-lots/:id/documents` — ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต (มติ PO 03/10/2569 — UAT Q13 · หนี้ #1)
+ * server ตรวจไฟล์เอง (มีจริง · อยู่ใต้ `handover-lots/<lotId>/<ชนิด>/` · ชนิดจากเนื้อไฟล์ · ขนาด) แล้วเก็บ SHA-256
+ * ของ server · `fileHash` จาก browser ไม่บังคับ — ส่งมาแล้วไม่ตรง = `UPLOAD_HASH_MISMATCH`
+ */
+export const lotDocumentAttachSchema = z.object({
+  document: z.enum(LOT_DOCUMENTS),
+  fileUrl,
+  fileHash: z
+    .string()
+    .trim()
+    .regex(/^[a-f0-9]{64}$/i, 'file_hash ต้องเป็น SHA-256 (hex 64 ตัว)')
+    .optional(),
+})
+
+export type LotDocumentAttachInput = z.infer<typeof lotDocumentAttachSchema>

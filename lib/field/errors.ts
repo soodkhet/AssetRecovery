@@ -20,6 +20,7 @@ export const FIELD_ERROR_CODES = [
   'CLOSE_PHOTO_REQUIRED',
   'CLOSE_VIDEO_REQUIRED',
   'CLOSE_PRODUCT_PHOTO_REQUIRED',
+  'CLOSE_FAIL_REASON_REQUIRED',
   'CHECKIN_GPS_PERMISSION_DENIED',
   'CLOSE_NO_EVIDENCE_REVISION',
   'EVIDENCE_REJECT_AFTER_FINAL',
@@ -37,6 +38,7 @@ const HTTP_STATUS: Record<FieldErrorCode, number> = {
   CLOSE_PHOTO_REQUIRED: 400,
   CLOSE_VIDEO_REQUIRED: 400,
   CLOSE_PRODUCT_PHOTO_REQUIRED: 400,
+  CLOSE_FAIL_REASON_REQUIRED: 400,
   CHECKIN_GPS_PERMISSION_DENIED: 400,
   CLOSE_NO_EVIDENCE_REVISION: 400,
   EVIDENCE_REJECT_AFTER_FINAL: 400,
@@ -70,6 +72,11 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
     title: 'ยังไม่มีรูปสินค้ายืนยัน',
     message: 'เคสที่ปิดแบบสำเร็จต้องมีรูปสินค้ายืนยันอย่างน้อย 1 รูป',
   },
+  // มติ PO 03/10/2569 (UAT Q16 · BUG-057)
+  CLOSE_FAIL_REASON_REQUIRED: {
+    title: 'ยังไม่ได้เลือกเหตุผลที่ไม่สำเร็จ',
+    message: 'ปิดงานไม่สำเร็จต้องเลือกเหตุผล — ถ้าเลือก "อื่น ๆ" ต้องอธิบายเพิ่มด้วย',
+  },
   CHECKIN_GPS_PERMISSION_DENIED: {
     title: 'ไม่ได้รับพิกัดจากอุปกรณ์',
     message: 'เช็คอินต้องใช้พิกัด GPS จริงของอุปกรณ์ — เปิดสิทธิ์ตำแหน่งแล้วลองใหม่',
@@ -81,7 +88,8 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
   EVIDENCE_REJECT_AFTER_FINAL: {
     title: 'เคสนี้ผ่านขั้นสุดท้ายไปแล้ว ตีกลับไม่ได้',
     message:
-      'เคสที่ส่งมอบเข้าล็อตที่ยืนยันแล้ว / เกิดรายได้แล้ว / รายการเบิกเข้ารอบจ่ายแล้ว ถือว่าจบจริง — ' +
+      'หลักฐานที่ผ่านแล้ว (คลังรับเครื่องเข้า / ค่าตอบแทนได้รับอนุมัติ) หรือเคสที่ส่งมอบเข้าล็อตที่ยืนยันแล้ว / ' +
+      'เกิดรายได้แล้ว / รายการเบิกเข้ารอบจ่ายแล้ว ถือว่าจบจริง — ' +
       'แก้ไขต้องผ่านรายการปรับปรุง (Adjustment) เท่านั้น',
   },
   HOTEL_CLAIM_FIELD_REQUIRED: {

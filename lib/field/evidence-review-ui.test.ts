@@ -3,11 +3,17 @@ import { canRejectFieldEvidence, checkinTypeLabel, fieldEvidenceFile } from '@/l
 
 describe('หน้าตรวจหลักฐานปิดงาน (UAT BUG-045)', () => {
   it('ปุ่มตีกลับแสดงเฉพาะสถานะปิดงาน', () => {
-    expect(canRejectFieldEvidence({ assignmentStatus: 'closed_success' })).toBe(true)
-    expect(canRejectFieldEvidence({ assignmentStatus: 'closed_fail' })).toBe(true)
-    expect(canRejectFieldEvidence({ assignmentStatus: 'needs_revision' })).toBe(false)
-    expect(canRejectFieldEvidence({ assignmentStatus: 'scheduled' })).toBe(false)
+    const pending = { evidenceStatus: 'pending' }
+    expect(canRejectFieldEvidence({ ...pending, assignmentStatus: 'closed_success' })).toBe(true)
+    expect(canRejectFieldEvidence({ ...pending, assignmentStatus: 'closed_fail' })).toBe(true)
+    expect(canRejectFieldEvidence({ ...pending, assignmentStatus: 'needs_revision' })).toBe(false)
+    expect(canRejectFieldEvidence({ ...pending, assignmentStatus: 'scheduled' })).toBe(false)
     expect(canRejectFieldEvidence(null)).toBe(false)
+  })
+
+  it('หลักฐานที่ผ่านอัตโนมัติแล้วซ่อนปุ่มตีกลับ (มติ PO 03/10/2569 — UAT Q14)', () => {
+    expect(canRejectFieldEvidence({ assignmentStatus: 'closed_success', evidenceStatus: 'approved' })).toBe(false)
+    expect(canRejectFieldEvidence({ assignmentStatus: 'closed_fail', evidenceStatus: 'approved' })).toBe(false)
   })
 
   it('แปลง path หลักฐานเป็นไฟล์ที่เปิดดูได้ — ตัด uuid นำหน้า และชนิดหลักมาจากช่องที่เก็บ', () => {

@@ -193,6 +193,11 @@ export interface CaseFieldEvidenceDto {
   videos: string[]
   productPhotos: string[]
   audioUrl: string | null
+  /** "บันทึกเพิ่มเติม" ตอนปิดงาน (มติ PO 03/10/2569 — UAT Q15) */
+  note: string | null
+  /** เหตุผลปิดงานไม่สำเร็จ (UAT Q16) — รหัสจาก `CLOSE_FAIL_REASONS` (ป้ายผ่าน `closeFailReasonText()`) */
+  failReason: string | null
+  failReasonDetail: string | null
   submittedAt: string
   rejectReason: string | null
   reviewedAt: string | null
@@ -244,4 +249,9 @@ export interface CaseDetailDto extends CaseListItemDto {
   readiness: CaseReadinessDto
   /** หลักฐานปิดงานชุดล่าสุด — เฉพาะผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) · อื่น ๆ = `null` */
   fieldEvidence: CaseFieldEvidenceDto | null
+  /**
+   * เหตุผลปิดงานไม่สำเร็จของรอบล่าสุด (มติ PO 03/10/2569 — UAT Q16) — เปิดให้ทุกคนที่เห็นเคสนี้ได้
+   * รวมผู้ใช้ฝั่งบริษัทไฟแนนซ์ (เห็นเฉพาะเคสของบริษัทตัวเองผ่าน scope) · ไม่ใช่เคสไม่สำเร็จ/ไม่มีเหตุผล = `null`
+   */
+  closeFailReason: { code: string; detail: string | null } | null
 }

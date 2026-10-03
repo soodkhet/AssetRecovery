@@ -5,7 +5,10 @@ import { ACTIVE_ASSIGNMENT_STATUSES } from '@/lib/assignments/assignment'
 import { AssignmentError } from '@/lib/assignments/errors'
 import { acceptAssignment, respondReassignment } from '@/lib/assignments/queries'
 import { caseScopeWhere } from '@/lib/cases/queries'
-import { assertCloseEvidence, assertDeviceCoordinates, hasEvidenceRevision } from '@/lib/field/evidence'
+import { assertCloseEvidence, assertDeviceCoordinates, evidenceNote, hasEvidenceRevision } from '@/lib/field/evidence'
+import { closeFailReasonForStorage } from '@/lib/field/fail-reasons'
+import { fieldEvidenceFiles } from '@/lib/uploads/rules'
+import { toVerifiedUploadMap, uploadMapJson, verifyUploadedFiles } from '@/lib/uploads/verify'
 import { metersToKmHundredths, routePoints } from '@/lib/field/distance'
 import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
 import {
@@ -230,6 +233,8 @@ function toDraftDto(row: {
   productPhotos: string[]
   audioUrl: string | null
   note: string | null
+  failReason: string | null
+  failReasonDetail: string | null
   updatedAt: Date
 }): FieldCloseDraftDto {
   return {
@@ -239,6 +244,8 @@ function toDraftDto(row: {
     productPhotos: row.productPhotos,
     audioUrl: row.audioUrl,
     note: row.note,
+    failReason: row.failReason,
+    failReasonDetail: row.failReasonDetail,
     updatedAt: row.updatedAt.toISOString(),
   }
 }
@@ -489,6 +496,8 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
         productPhotos: true,
         audioUrl: true,
         note: true,
+        failReason: true,
+        failReasonDetail: true,
         updatedAt: true,
       },
     }),
@@ -514,6 +523,9 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
         videos: true,
         productPhotos: true,
         audioUrl: true,
+        note: true,
+        failReason: true,
+        failReasonDetail: true,
         submittedAt: true,
       },
     }),
@@ -573,6 +585,9 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
             videos: evidence.videos,
             productPhotos: evidence.productPhotos,
             audioUrl: evidence.audioUrl,
+            note: evidence.note,
+            failReason: evidence.failReason,
+            failReasonDetail: evidence.failReasonDetail,
             submittedAt: evidence.submittedAt.toISOString(),
           },
     pendingReassignment:
@@ -846,13 +861,27 @@ export async function saveCloseDraft(
     assertDeviceCoordinates(input.travelOrigin.latitude, input.travelOrigin.longitude)
   }
 
+  // server ตรวจไฟล์ที่เพิ่งแนบ (มติ PO 03/10/2569 — UAT Q13 · BUG-050) — ไฟล์ที่ตรวจไว้แล้วใน draft เดิมไม่โหลดซ้ำ
+  const previousDraft = await prisma.closeCaseDraft.findUnique({
+    where: { assignmentId: current.id },
+    select: { fileHashes: true },
+  })
+  const fileHashes = await verifyUploadedFiles(
+    fieldEvidenceFiles(caseId, input),
+    toVerifiedUploadMap(previousDraft?.fileHashes),
+  )
+
   const draftData = {
+    fileHashes: uploadMapJson(fileHashes),
     outcome: input.outcome ?? null,
     photos: input.photos,
     videos: input.videos,
     productPhotos: input.productPhotos,
     audioUrl: input.audioUrl ?? null,
     note: input.note ?? null,
+    // ค่าที่เลือกค้างไว้ (ไม่บังคับครบตอน draft — `41` §6.5 · UAT Q16)
+    failReason: input.failReason ?? null,
+    failReasonDetail: input.failReasonDetail ?? null,
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -874,6 +903,8 @@ export async function saveCloseDraft(
         productPhotos: true,
         audioUrl: true,
         note: true,
+        failReason: true,
+        failReasonDetail: true,
         updatedAt: true,
       },
     })
@@ -1054,12 +1085,13 @@ export async function closeFieldCase(
   const current = await loadOwnAssignment(user, caseId)
   assertFieldAction(current.status, 'submit_close_case')
 
-  const [checkinCount, travelOrigin] = await Promise.all([
+  const [checkinCount, travelOrigin, draft] = await Promise.all([
     prisma.checkIn.count({ where: { assignmentId: current.id } }),
     prisma.travelOrigin.findUnique({
       where: { assignmentId: current.id },
       select: { latitude: true, longitude: true, source: true },
     }),
+    prisma.closeCaseDraft.findUnique({ where: { assignmentId: current.id }, select: { fileHashes: true } }),
   ])
 
   assertCloseEvidence({
@@ -1070,10 +1102,17 @@ export async function closeFieldCase(
     productPhotoCount: input.productPhotos.length,
     hasTravelOrigin: travelOrigin !== null,
     fuelMode: current.team.compensationPlan?.fuelMode ?? null,
+    failReason: input.failReason ?? null,
+    failReasonDetail: input.failReasonDetail ?? null,
   })
 
   // ผ่าน assertCloseEvidence แล้ว = outcome ไม่เป็น null แน่นอน
   const outcome = input.outcome ?? 'closed_fail'
+  // เหตุผลไม่สำเร็จ (UAT Q16) — เคสสำเร็จทิ้งค่าที่ค้างมาจาก draft เสมอ
+  const failReason = closeFailReasonForStorage(outcome, input.failReason, input.failReasonDetail)
+  // server ตรวจไฟล์หลักฐานทุกไฟล์ (มติ PO 03/10/2569 — UAT Q13 · BUG-050) — นอก transaction ·
+  // ไฟล์ที่ตรวจไว้แล้วตอนบันทึก draft ใช้ผลเดิม
+  const fileHashes = await verifyUploadedFiles(fieldEvidenceFiles(caseId, input), toVerifiedUploadMap(draft?.fileHashes))
   const closedStatus = closedStatusOf(outcome)
   // `case_status` กับ `assignment_status` มีค่า `closed_success`/`closed_fail` ตรงกัน (`02` §3) แต่คนละ enum
   const closedCaseStatus = outcome === 'closed_success' ? ('closed_success' as const) : ('closed_fail' as const)
@@ -1103,6 +1142,10 @@ export async function closeFieldCase(
         videos: input.videos,
         productPhotos: input.productPhotos,
         audioUrl: input.audioUrl ?? null,
+        // "บันทึกเพิ่มเติม" เก็บไว้กับหลักฐานชุดนี้ (มติ PO 03/10/2569 — UAT Q15 · BUG-048)
+        note: evidenceNote(input.note),
+        ...failReason,
+        fileHashes: uploadMapJson(fileHashes),
         // snapshot จุดเริ่มเดินทาง ณ เวลา submit (`92` §7.1 — ตัวคำนวณระยะทางของ 2.9 ใช้ค่านี้)
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
@@ -1162,6 +1205,7 @@ export async function closeFieldCase(
           status: closedStatus,
           outcome,
           evidenceId: evidence.id,
+          failReason: failReason.failReason,
           checkinCount,
           photos: input.photos.length,
           videos: input.videos.length,
@@ -1271,14 +1315,21 @@ async function assertEvidenceStillRejectable(
   caseId: string,
   assignmentId: string,
 ): Promise<void> {
-  const [handedOver, revenue, inPayout] = await Promise.all([
+  const [handedOver, revenue, inPayout, latestEvidence] = await Promise.all([
     prisma.asset.count({ where: { organizationId, caseId, assetStatus: 'handed_over', deletedAt: null } }),
     prisma.revenue.count({ where: { organizationId, caseId, deletedAt: null } }),
     prisma.expense.count({ where: { organizationId, assignmentId, payoutBatchItemId: { not: null }, deletedAt: null } }),
+    prisma.caseEvidence.findFirst({
+      where: { organizationId, assignmentId },
+      orderBy: { submittedAt: 'desc' },
+      select: { status: true },
+    }),
   ])
-  if (handedOver === 0 && revenue === 0 && inPayout === 0) return
+  // หลักฐานที่ผ่านอัตโนมัติแล้ว (คลังรับเข้า / ค่าตอบแทนอนุมัติ — มติ PO 03/10/2569 UAT Q14) ตีกลับไม่ได้
+  const evidenceApproved = latestEvidence?.status === 'approved'
+  if (handedOver === 0 && revenue === 0 && inPayout === 0 && !evidenceApproved) return
   throw new FieldError('EVIDENCE_REJECT_AFTER_FINAL', {
-    detail: `case=${caseId} handedOver=${handedOver} revenue=${revenue} inPayout=${inPayout}`,
+    detail: `case=${caseId} handedOver=${handedOver} revenue=${revenue} inPayout=${inPayout} evidenceApproved=${evidenceApproved}`,
   })
 }
 
@@ -1391,7 +1442,17 @@ export async function resubmitCloseCase(
   const previous = await prisma.caseEvidence.findFirst({
     where: { assignmentId: current.id },
     orderBy: { submittedAt: 'desc' },
-    select: { id: true, outcome: true, photos: true, videos: true, productPhotos: true, audioUrl: true },
+    select: {
+      id: true,
+      outcome: true,
+      photos: true,
+      videos: true,
+      productPhotos: true,
+      audioUrl: true,
+      failReason: true,
+      failReasonDetail: true,
+      fileHashes: true,
+    },
   })
   if (previous === null) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS', { detail: 'ไม่พบหลักฐานรอบก่อนหน้า' })
 
@@ -1435,6 +1496,12 @@ export async function resubmitCloseCase(
     fuelMode: current.team.compensationPlan?.fuelMode ?? null,
   })
 
+  // server ตรวจไฟล์ชุดใหม่ (UAT Q13) — ไฟล์เดิมที่ตรวจไว้แล้วในชุดก่อนใช้ผลเดิม
+  const fileHashes = await verifyUploadedFiles(
+    fieldEvidenceFiles(caseId, input),
+    toVerifiedUploadMap(previous.fileHashes),
+  )
+
   const closedAt = new Date()
   const fuelMode = current.team.compensationPlan?.fuelMode ?? null
   // มติ PO 03/10/2569 (UAT Q7 · BUG-052 · `41` §10.1): ชุดใหม่คิดด้วย **แผน (เวอร์ชัน) + วันที่ของการปิดงาน
@@ -1465,6 +1532,11 @@ export async function resubmitCloseCase(
         videos: input.videos,
         productPhotos: input.productPhotos,
         audioUrl: input.audioUrl ?? null,
+        note: evidenceNote(input.note),
+        // เหตุผลไม่สำเร็จล็อกตามรอบเดิมเหมือน outcome (`41` §10.1 · UAT Q16)
+        failReason: previous.failReason,
+        failReasonDetail: previous.failReasonDetail,
+        fileHashes: uploadMapJson(fileHashes),
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
         travelOriginSource: travelOrigin?.source ?? null,

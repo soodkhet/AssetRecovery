@@ -15,6 +15,7 @@
 | v1 | (เดิม) | ออกแบบเสร็จสมบูรณ์ พร้อม Mockup (`warehouse.html`) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header/Changelog + แยก Decisions/Open Items ชัดเจน) — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง** |
 | v2.1 | 14/08/2569 | §12 เพิ่ม 3 code ที่ตารางเดิมตกหล่น (`ASSET_NOT_FOUND`, `ASSET_INVALID_STATUS`, `LOT_NOT_FOUND`) — code ระดับ "ไม่พบ/สถานะไม่ตรง" ที่ทุก endpoint ของ §15 ต้องใช้ ลงพร้อม implementation Phase 2.13 ตาม Rule 04 (doc + code คอมมิตเดียวกัน) · **business logic เดิมไม่เปลี่ยน** |
+| v2.2 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · หนี้ #1) — แทนที่ "แนบใหม่ = ทับ" ของ §6.4 เดิม**: เอกสารล็อตใช้ path **ต่อเวอร์ชัน** `handover-lots/{lotId}/signed-doc/{uuid}.{ext}` / `handover-lots/{lotId}/delivery-proof/{uuid}.{ext}` (อัปโหลดแบบไม่ทับ — ไฟล์เดิมคงอยู่ให้ตามรอย) + ผูกเข้าล็อตผ่าน `POST /api/handover-lots/:id/documents` (§15) ที่ตรวจว่าล็อตยังไม่ `confirmed` แล้ว server ตรวจไฟล์เอง (มีจริง · path ใต้ล็อต/ชนิดนั้น · PDF/รูปจาก magic bytes · ≤ 10 MB) และเก็บ `signed_doc_hash`/`delivery_proof_hash` · `PATCH …/confirm` ที่ส่ง url ที่ยังไม่ผ่านการตรวจ (หรือไฟล์ที่แนบก่อนมติ) ถูกตรวจแบบเดียวกันก่อนยืนยัน · รูปรับเข้าคลัง (§8.2) ตรวจแบบเดียวกันใต้ `assets/{assetId}/intake/` แล้วเก็บ `assets.photo_hashes` · error `UPLOAD_*` อยู่ `24` §6.3 |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -88,8 +89,9 @@ Asset เกิดขึ้นอัตโนมัติเมื่อ Case �
 ### 6.4 เอกสาร
 - **ใบส่งมอบ PDF**: ออกจากระบบอัตโนมัติตาม template — เลขที่ไม่ซ้ำ ไม่แก้ไขได้ — พิมพ์ให้ผู้รับเซ็น แล้วสแกนแนบกลับ
 - **Export Excel ต่อ Lot**: รายการเครื่องทั้งหมดในล็อต (case ref, ชื่อลูกหนี้, IMEI, สภาพ)
-- **ใบส่งมอบลายเซ็น**: Supabase Storage — `handover-lots/{lotId}/signed-doc.pdf`
-- **หลักฐานจัดส่ง** (we_deliver): Supabase Storage — `handover-lots/{lotId}/delivery-proof.{ext}`
+- **ใบส่งมอบลายเซ็น**: Supabase Storage — `handover-lots/{lotId}/signed-doc/{uuid}.{ext}` (path ต่อเวอร์ชัน — แนบใหม่ = เวอร์ชันใหม่ที่ล็อตชี้ ไม่ทับไฟล์เดิม · มติ PO 03/10/2569 Q13 แทนที่ "ทับ" เดิม)
+- **หลักฐานจัดส่ง** (we_deliver): Supabase Storage — `handover-lots/{lotId}/delivery-proof/{uuid}.{ext}`
+- **ผูกเข้าล็อตผ่าน API เท่านั้น** (`POST /api/handover-lots/:id/documents`): ตรวจว่าล็อตยังไม่ `confirmed` · server ดาวน์โหลดไฟล์มาตรวจเอง (มีจริง · path ใต้ล็อต/ชนิด · PDF หรือรูปจาก magic bytes · ≤ 10 MB) · เก็บ SHA-256 ที่ server คำนวณ (`signed_doc_hash` / `delivery_proof_hash`) — hash ที่ browser ส่งมาใช้เทียบเท่านั้น ไม่ตรง = ปฏิเสธ
 
 ### 6.5 IMEI Validation
 - เปรียบเทียบ `imei_actual` กับ `imei_contract` แบบ **exact match 15 หลัก**
@@ -153,6 +155,7 @@ Asset เกิดขึ้นอัตโนมัติเมื่อ Case �
 | confirmed_at | timestamptz \| null | — | วันยืนยัน |
 | confirmed_by | uuid \| null | — | FK → User |
 | signed_doc_url | string \| null | — | ① ใบส่งมอบลายเซ็น (บังคับก่อน confirmed) |
+| signed_doc_hash / delivery_proof_hash | string \| null | — | SHA-256 ที่ server คำนวณจากไฟล์จริงตอนแนบ (มติ PO 03/10/2569 Q13) |
 | delivery_proof_url | string \| null | — | ② หลักฐานจัดส่ง (บังคับเฉพาะ we_deliver) |
 | note | string \| null | — | หมายเหตุ |
 | created_at | timestamptz | ✅ | UTC |
@@ -525,6 +528,7 @@ limit?:     number   (default: 50)
 | GET | `/api/handover-lots` | internal | List lots with filter |
 | GET | `/api/handover-lots/:id` | internal | Get lot + assets |
 | POST | `/api/handover-lots` | ธุรการ | สร้าง Lot + นัดวัน |
+| POST | `/api/handover-lots/:id/documents` | ธุรการ | ผูกเอกสารที่อัปโหลดแล้ว (body: `document`, `fileUrl`, `fileHash?`) — server ตรวจไฟล์ + เก็บ SHA-256 · ล็อต confirmed แล้วไม่ได้ (§6.4 · มติ PO 03/10/2569 Q13) |
 | PATCH | `/api/handover-lots/:id/confirm` | ธุรการ | ยืนยัน + แนบเอกสาร → trigger side effects |
 | GET | `/api/handover-lots/:id/pdf` | ธุรการ+ | ดาวน์โหลดใบส่งมอบ PDF |
 | GET | `/api/handover-lots/:id/export-excel` | ธุรการ+ | Export รายการเครื่องใน Lot |

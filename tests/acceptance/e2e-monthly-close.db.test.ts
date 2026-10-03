@@ -3,6 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
+// UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
+
 /**
  * **Phase 8.1 — E2E Acceptance: ปิดงวดบัญชี**
  *
@@ -229,7 +234,7 @@ async function produceRevenue(): Promise<{ caseId: string; revenueId: string; re
   await field.closeFieldCase(
     agent,
     caseId,
-    { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+    { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
     ctx(agent),
   )
 
@@ -238,6 +243,8 @@ async function produceRevenue(): Promise<{ caseId: string; revenueId: string; re
     await approvals.approveCompensationExpense(ctx(manager), row.id, {})
     await approvals.approveCompensationExpense(ctx(finance), row.id, { step: 2 })
   }
+  // UAT Q14 — ค่าตอบแทนเคสไม่สำเร็จอนุมัติครบขั้น = หลักฐานปิดงานผ่านอัตโนมัติ
+  expect((await db().caseEvidence.findFirstOrThrow({ where: { caseId } })).status).toBe('approved')
 
   const row = await db().revenue.findFirstOrThrow({ where: { caseId } })
   expect(row.grossSatang).toBe(FEE_BASE_SATANG)
@@ -500,7 +507,7 @@ suite('Phase 8.1 — E2E `29` §6.4: งวด locked → แก้ย้อน�
     await field.closeFieldCase(
       agent,
       secondCase,
-      { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
     const lockedExpense = await db().expense.findFirstOrThrow({ where: { caseId: secondCase } })

@@ -66,6 +66,9 @@ export interface FieldCloseDraftDto {
   productPhotos: string[]
   audioUrl: string | null
   note: string | null
+  /** เหตุผลปิดงานไม่สำเร็จที่เลือกค้างไว้ (UAT Q16) — รหัสจาก `CLOSE_FAIL_REASONS` */
+  failReason: string | null
+  failReasonDetail: string | null
   updatedAt: string
 }
 
@@ -76,6 +79,11 @@ export interface FieldSubmittedEvidenceDto {
   videos: string[]
   productPhotos: string[]
   audioUrl: string | null
+  /** "บันทึกเพิ่มเติม" ของชุดนี้ (มติ PO 03/10/2569 — UAT Q15) */
+  note: string | null
+  /** เหตุผลปิดงานไม่สำเร็จของชุดนี้ (UAT Q16) — ล็อกในโหมดตีกลับ */
+  failReason: string | null
+  failReasonDetail: string | null
   submittedAt: string
 }
 

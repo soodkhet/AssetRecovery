@@ -6,10 +6,11 @@ import { isLotConfirmed, requiredLotDocuments, type LotDocument } from '@/lib/wa
  * เอกสารแนบของล็อตส่งมอบ (`44` §6.4 · §8.4 modal "แนบเอกสาร" · §8.5 modal "ดูเอกสารที่แนบ")
  * — **pure ล้วน** (ตัวอัปโหลดจริงอยู่ `lib/warehouse/upload-client.ts` ฝั่ง browser)
  *
- * `44` §6.4 กำหนด path ไว้เป็น `handover-lots/{lotId}/signed-doc.pdf` และ
- * `handover-lots/{lotId}/delivery-proof.{ext}` ⇒ ที่นี่คงชื่อไฟล์ตายตัวตามนั้น แต่ให้ **นามสกุลเดินตาม
- * ไฟล์จริง** (ใบเซ็นรับที่สแกนมาอาจเป็นรูปถ่าย ไม่ใช่ PDF เสมอไป — mockup รับ `.pdf,image/*`)
- * ⇒ 1 ล็อต = 1 ไฟล์ต่อชนิดเอกสารเสมอ แนบทับได้ก่อนยืนยัน (หลัง `confirmed` ล็อตเป็น terminal แก้ไม่ได้)
+ * **path ต่อเวอร์ชัน ไม่ทับของเดิม** (มติ PO 03/10/2569 — UAT Q13 · แทนที่ "แนบใหม่ = ทับ" ของ `44` §6.4 เดิม):
+ * `handover-lots/{lotId}/signed-doc/{uuid}.{ext}` และ `handover-lots/{lotId}/delivery-proof/{uuid}.{ext}`
+ * — นามสกุลเดินตามไฟล์จริง (ใบเซ็นรับที่สแกนมาอาจเป็นรูปถ่าย — mockup รับ `.pdf,image/*`)
+ * ⇒ แนบใหม่ก่อนยืนยัน = เวอร์ชันใหม่ที่ล็อตชี้ไป · ไฟล์เดิมยังอยู่ใน bucket ให้ตามรอยได้
+ * ⇒ ผูกเข้าล็อตผ่าน `POST /api/handover-lots/:id/documents` เท่านั้น (server ตรวจไฟล์ + เก็บ SHA-256)
  */
 
 export const LOT_DOCUMENT_LABEL: Readonly<Record<LotDocument, string>> = {
@@ -47,9 +48,17 @@ export function documentExtension(fileName: string): string {
   return extension === undefined || extension === '' ? DEFAULT_EXTENSION : extension
 }
 
-/** path ใน bucket ตาม `44` §6.4 — 1 ล็อต = 1 ไฟล์ต่อชนิด (แนบใหม่ = ทับไฟล์เดิม) */
-export function lotDocumentPath(lotId: string, document: LotDocument, fileName: string): string {
-  return `handover-lots/${lotId}/${LOT_DOCUMENT_BASENAME[document]}.${documentExtension(fileName)}`
+/** prefix ของเอกสารแต่ละชนิดในล็อต — server ตรวจว่า path ที่ส่งมาอยู่ใต้ prefix นี้ (UAT Q13) */
+export function lotDocumentPrefix(lotId: string, document: LotDocument): string {
+  return `handover-lots/${lotId}/${LOT_DOCUMENT_BASENAME[document]}/`
+}
+
+/**
+ * path ใน bucket ต่อเวอร์ชัน (`44` §6.4 v2.2 · UAT Q13) — `uniqueKey` ให้ผู้เรียกส่งเข้ามา
+ * (`crypto.randomUUID()`) เพื่อให้ฟังก์ชันนี้ยัง pure/เทสต์ได้
+ */
+export function lotDocumentPath(lotId: string, document: LotDocument, fileName: string, uniqueKey: string): string {
+  return `${lotDocumentPrefix(lotId, document)}${uniqueKey}.${documentExtension(fileName)}`
 }
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'] as const

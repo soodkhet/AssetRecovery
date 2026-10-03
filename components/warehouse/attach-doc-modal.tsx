@@ -25,7 +25,8 @@ import { HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
  *   หรือ 2 ช่อง (`we_deliver`) — หน้าจอไม่ if ชนิดล็อตเอง
  * - ปุ่มยืนยัน disabled จนกว่า `canConfirmLot()` จะผ่าน — **กติกาเดียวกับ `assertLotConfirmDocuments()`
  *   ที่ API** (หน้าจอเป็นแค่ UX ส่วนการบังคับจริงอยู่ที่ endpoint เสมอ — DEC-002)
- * - ไฟล์อัปโหลดขึ้น Storage ทันทีที่เลือก แล้วส่ง **path** ไปกับคำขอ confirm (แนวเดียวกับรูป 7 มุมของ §8.2)
+ * - ไฟล์อัปโหลดขึ้น Storage ทันทีที่เลือก (path ต่อเวอร์ชัน ไม่ทับ) แล้วผูกเข้าล็อตผ่าน
+ *   `POST /api/handover-lots/:id/documents` ซึ่ง server ตรวจไฟล์ + เก็บ SHA-256 (มติ PO 03/10/2569 UAT Q13)
  */
 export function AttachDocModal({
   open,
@@ -65,8 +66,12 @@ export function AttachDocModal({
     if (file === null) return
     setUploading(document)
     try {
-      const path = await uploadLotDocument(lot.id, document, file)
-      setUrls((current) => ({ ...current, [document]: path }))
+      // อัปโหลด + ผูกเข้าล็อตผ่าน API (server ตรวจไฟล์ + เก็บ SHA-256 — UAT Q13) แล้วใช้ path ที่ล็อตชี้จริง
+      const updated = await uploadLotDocument(lot.id, document, file)
+      setUrls((current) => ({
+        ...current,
+        [document]: document === 'signed_doc' ? updated.signedDocUrl : updated.deliveryProofUrl,
+      }))
     } catch (uploadError) {
       showToast({
         tone: 'error',

@@ -1,4 +1,5 @@
 import { FieldError, type FieldErrorCode } from '@/lib/field/errors'
+import { isCloseFailReasonComplete } from '@/lib/field/fail-reasons'
 import type { CaseOutcome, FuelMode } from '@/lib/generated/prisma/enums'
 
 /**
@@ -21,6 +22,12 @@ export interface CloseEvidenceInput {
   hasTravelOrigin: boolean
   /** โหมดค่าน้ำมันของทีมพนักงาน (`11` §7.1) — ไม่มีแผนค่าตอบแทนผูกไว้ = ไม่บังคับจุดเริ่มเดินทาง */
   fuelMode: FuelMode | null
+  /**
+   * เหตุผลปิดงานไม่สำเร็จ (มติ PO 03/10/2569 — UAT Q16) — บังคับเฉพาะ `closed_fail`
+   * `undefined` = **ไม่ตรวจ** (ใช้ตอน `resubmit_close_case` ที่เหตุผลล็อกตามรอบเดิมเหมือน outcome — `41` §10.1)
+   */
+  failReason?: string | null
+  failReasonDetail?: string | null
 }
 
 /** ลำดับของรายการที่ขาด — เรียงตามลำดับ section บนฟอร์ม (`41` §7.6) เพื่อให้ข้อความอ่านเป็นธรรมชาติ */
@@ -33,6 +40,13 @@ export function missingCloseEvidence(input: CloseEvidenceInput): FieldErrorCode[
   if (input.photoCount < 1) missing.push('CLOSE_PHOTO_REQUIRED')
   if (input.videoCount < 1) missing.push('CLOSE_VIDEO_REQUIRED')
   if (input.outcome === 'closed_success' && input.productPhotoCount < 1) missing.push('CLOSE_PRODUCT_PHOTO_REQUIRED')
+  if (
+    input.outcome === 'closed_fail' &&
+    input.failReason !== undefined &&
+    !isCloseFailReasonComplete(input.failReason, input.failReasonDetail)
+  ) {
+    missing.push('CLOSE_FAIL_REASON_REQUIRED')
+  }
 
   return missing
 }
@@ -76,6 +90,15 @@ export function hasEvidenceRevision(before: EvidenceMediaSnapshot, after: Eviden
     sameList(before.productPhotos, after.productPhotos) &&
     before.audioUrl === after.audioUrl
   )
+}
+
+/**
+ * "บันทึกเพิ่มเติม" ของฟอร์มปิดงาน → ค่าที่เก็บลง `case_evidences.note`
+ * (มติ PO 03/10/2569 — UAT Q15 · BUG-048) · ว่าง/มีแต่ช่องว่าง = `null` (ไม่ได้บันทึก)
+ */
+export function evidenceNote(note: string | null | undefined): string | null {
+  const trimmed = (note ?? '').trim()
+  return trimmed === '' ? null : trimmed
 }
 
 /**

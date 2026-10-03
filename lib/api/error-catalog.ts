@@ -81,6 +81,12 @@ export const ERROR_CATALOG = {
   BANK_TRANSACTION_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.3' },
   BANK_TRANSACTION_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.3' },
   STATEMENT_FILE_INVALID: { status: 400, severity: 'reject', source: '24 §6.3' },
+  // เติม `24` §6.3 v4.19 ตามมติ PO 03/10/2569 (UAT Q13) — server ตรวจไฟล์ที่อัปโหลดเอง
+  UPLOAD_PATH_OUT_OF_SCOPE: { status: 400, severity: 'reject', source: '24 §6.3' },
+  UPLOAD_FILE_NOT_FOUND: { status: 400, severity: 'reject', source: '24 §6.3' },
+  UPLOAD_HASH_MISMATCH: { status: 400, severity: 'reject', source: '24 §6.3' },
+  UPLOAD_FILE_TYPE_INVALID: { status: 400, severity: 'reject', source: '24 §6.3' },
+  UPLOAD_FILE_TOO_LARGE: { status: 400, severity: 'reject', source: '24 §6.3' },
 
   // ── 24 §6.4 Claim/Advance/Approval ─────────────────────────────────────
   ADVANCE_PENDING_SETTLEMENT: { status: 400, severity: 'reject', source: '24 §6.4' },
@@ -221,6 +227,8 @@ export const ERROR_CATALOG = {
   CLOSE_PHOTO_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   CLOSE_VIDEO_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   CLOSE_PRODUCT_PHOTO_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
+  // เติมเข้า `41` §12 ตามมติ PO 03/10/2569 (UAT Q16) — doc + code คอมมิตเดียวกัน
+  CLOSE_FAIL_REASON_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   REASSIGNMENT_DECLINE_REASON_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_FIELD_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_INVALID_SHARED_AGENT: { status: 400, severity: 'reject', source: '41 §12' },

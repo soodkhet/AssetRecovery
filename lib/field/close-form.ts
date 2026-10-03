@@ -2,6 +2,7 @@ import { hasEvidenceRevision, missingCloseEvidence, type EvidenceMediaSnapshot }
 import { fieldErrorMessage, type FieldErrorCode } from '@/lib/field/errors'
 import type { CloseCaseInput, CloseDraftInput, ResubmitCloseInput, TravelOriginInput } from '@/lib/field/schemas'
 import type { FieldCaseDetailDto } from '@/lib/field/types'
+import { isCloseFailReason, type CloseFailReason } from '@/lib/field/fail-reasons'
 import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 
 /**
@@ -22,6 +23,9 @@ export interface CloseFormState {
   productPhotos: string[]
   audioUrl: string | null
   note: string | null
+  /** เหตุผลปิดงานไม่สำเร็จ (มติ PO 03/10/2569 — UAT Q16) — ใช้เฉพาะ outcome = `closed_fail` */
+  failReason: CloseFailReason | null
+  failReasonDetail: string | null
 }
 
 export const EMPTY_CLOSE_FORM: CloseFormState = {
@@ -31,6 +35,13 @@ export const EMPTY_CLOSE_FORM: CloseFormState = {
   productPhotos: [],
   audioUrl: null,
   note: null,
+  failReason: null,
+  failReasonDetail: null,
+}
+
+/** รหัสที่เก็บไว้ → ค่าของฟอร์ม (รหัสที่เลิกใช้แล้วไม่ถือเป็นตัวเลือก — ให้เลือกใหม่) */
+function formFailReason(code: string | null): CloseFailReason | null {
+  return code !== null && isCloseFailReason(code) ? code : null
 }
 
 /** ฟิลด์สื่อที่แก้ไขได้ในโหมด `needs_revision` (`41` §7.6) — คีย์ตรงกับ `CloseFormState` */
@@ -83,7 +94,11 @@ export function closeFormFromDetail(detail: FieldCaseDetailDto): CloseFormState 
       videos: [...evidence.videos],
       productPhotos: [...evidence.productPhotos],
       audioUrl: evidence.audioUrl,
-      note: null,
+      // บันทึกเพิ่มเติมของชุดเดิมตั้งเป็นค่าเริ่มต้น — แก้/เติมได้ตอนส่งกลับ (UAT Q15)
+      note: evidence.note,
+      // เหตุผลไม่สำเร็จล็อกตามรอบเดิม — แสดงอย่างเดียว (UAT Q16)
+      failReason: formFailReason(evidence.failReason),
+      failReasonDetail: evidence.failReasonDetail,
     }
   }
 
@@ -97,6 +112,8 @@ export function closeFormFromDetail(detail: FieldCaseDetailDto): CloseFormState 
     productPhotos: [...draft.productPhotos],
     audioUrl: draft.audioUrl,
     note: draft.note,
+    failReason: formFailReason(draft.failReason),
+    failReasonDetail: draft.failReasonDetail,
   }
 }
 
@@ -114,6 +131,7 @@ export function toMediaSnapshot(form: CloseFormState): EvidenceMediaSnapshot {
  * (เช็คอิน/จุดเริ่มเดินทางอยู่ฝั่ง server แล้ว จึงนับจาก `detail` ไม่ใช่จาก state ของฟอร์ม)
  */
 export function closeFormMissing(form: CloseFormState, detail: FieldCaseDetailDto): FieldErrorCode[] {
+  const revision = isRevisionMode(detail)
   return missingCloseEvidence({
     outcome: form.outcome,
     checkinCount: detail.checkins.length,
@@ -122,6 +140,8 @@ export function closeFormMissing(form: CloseFormState, detail: FieldCaseDetailDt
     productPhotoCount: form.productPhotos.length,
     hasTravelOrigin: detail.travelOrigin !== null,
     fuelMode: detail.fuelMode,
+    // โหมดตีกลับ: เหตุผลล็อกตามรอบเดิม ⇒ ไม่ตรวจ (ตรงกับ `resubmitCloseCase()` ฝั่ง API)
+    ...(revision ? {} : { failReason: form.failReason, failReasonDetail: form.failReasonDetail }),
   })
 }
 
@@ -133,6 +153,7 @@ const CLOSE_MISSING_LABEL: Readonly<Partial<Record<FieldErrorCode, string>>> = {
   CLOSE_PHOTO_REQUIRED: 'รูปถ่ายอย่างน้อย 1 รูป',
   CLOSE_VIDEO_REQUIRED: 'วิดีโออย่างน้อย 1 คลิป',
   CLOSE_PRODUCT_PHOTO_REQUIRED: 'รูปสินค้ายืนยันอย่างน้อย 1 รูป',
+  CLOSE_FAIL_REASON_REQUIRED: 'เหตุผลที่ไม่สำเร็จ',
 }
 
 export function closeMissingLabel(code: FieldErrorCode): string {
@@ -172,18 +193,26 @@ function mediaPayload(form: CloseFormState) {
   }
 }
 
+/** เหตุผลไม่สำเร็จที่ส่งไป API — เคสสำเร็จไม่ส่ง (ค่าที่ค้างใน state ไม่ไปปนกับหลักฐาน) */
+function failReasonPayload(form: CloseFormState) {
+  return form.outcome === 'closed_fail'
+    ? { failReason: form.failReason, failReasonDetail: form.failReasonDetail }
+    : { failReason: null, failReasonDetail: null }
+}
+
 /** `POST /api/field/cases/:id/close-draft` — ส่ง `travelOrigin` ไปด้วยเมื่อเพิ่งดึง/ปรับพิกัด */
 export function closeDraftPayload(form: CloseFormState, travelOrigin?: TravelOriginInput): CloseDraftInput {
   return {
     outcome: form.outcome,
     ...mediaPayload(form),
+    ...failReasonPayload(form),
     ...(travelOrigin === undefined ? {} : { travelOrigin }),
   }
 }
 
 /** `POST /api/field/cases/:id/close` */
 export function closeCasePayload(form: CloseFormState): CloseCaseInput {
-  return { outcome: form.outcome, ...mediaPayload(form) }
+  return { outcome: form.outcome, ...mediaPayload(form), ...failReasonPayload(form) }
 }
 
 /** `POST /api/field/cases/:id/resubmit-close` — ไม่มี `outcome` โดยตั้งใจ (ล็อกตามรอบเดิม `41` §10.1) */

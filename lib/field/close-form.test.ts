@@ -132,6 +132,8 @@ describe('closeFormFromDetail (`41` §6.5 draft autoload)', () => {
           productPhotos: [],
           audioUrl: null,
           note: 'ยังไม่ครบ',
+          failReason: null,
+          failReasonDetail: null,
           updatedAt: '2026-08-20T05:00:00.000Z',
         },
       }),
@@ -151,6 +153,9 @@ describe('closeFormFromDetail (`41` §6.5 draft autoload)', () => {
           videos: ['v1'],
           productPhotos: [],
           audioUrl: 'a1',
+          note: 'บ้านปิด เพื่อนบ้านบอกย้ายออกแล้ว',
+          failReason: 'moved_unreachable',
+          failReasonDetail: null,
           submittedAt: '2026-08-20T06:00:00.000Z',
         },
       }),
@@ -158,12 +163,19 @@ describe('closeFormFromDetail (`41` §6.5 draft autoload)', () => {
     expect(form.outcome).toBe('closed_fail')
     expect(form.photos).toEqual(['p1', 'p2'])
     expect(form.audioUrl).toBe('a1')
+    // UAT Q15 — บันทึกเพิ่มเติมของชุดเดิมตั้งเป็นค่าเริ่มต้นของฟอร์มส่งกลับ
+    expect(form.note).toBe('บ้านปิด เพื่อนบ้านบอกย้ายออกแล้ว')
+    // UAT Q16 — เหตุผลไม่สำเร็จของรอบเดิม (ล็อก)
+    expect(form.failReason).toBe('moved_unreachable')
   })
 })
 
 describe('closeFormMissing (`41` §12 · §20 — บอกครบครั้งเดียว)', () => {
   it('มีแค่เช็คอิน ไม่มีรูป/วิดีโอ → บอกทั้งรูปและวิดีโอพร้อมกัน', () => {
-    const missing = closeFormMissing(formOf({ outcome: 'closed_fail' }), detailOf({ checkins: [checkin] }))
+    const missing = closeFormMissing(
+      formOf({ outcome: 'closed_fail', failReason: 'debtor_not_found' }),
+      detailOf({ checkins: [checkin] }),
+    )
     expect(missing).toEqual(['CLOSE_PHOTO_REQUIRED', 'CLOSE_VIDEO_REQUIRED'])
     expect(closeMissingSummary(missing)).toBe('ยังขาด: รูปถ่ายอย่างน้อย 1 รูป · วิดีโออย่างน้อย 1 คลิป')
   })
@@ -178,9 +190,29 @@ describe('closeFormMissing (`41` §12 · §20 — บอกครบครั้
 
   it('ปิดงานไม่สำเร็จไม่ต้องมีรูปสินค้า → ครบ', () => {
     const detail = detailOf({ checkins: [checkin] })
-    const form = formOf({ outcome: 'closed_fail', photos: ['p1'], videos: ['v1'] })
+    const form = formOf({ outcome: 'closed_fail', photos: ['p1'], videos: ['v1'], failReason: 'debtor_refused' })
     expect(closeFormMissing(form, detail)).toEqual([])
     expect(canSubmitCloseForm(form, detail)).toBe(true)
+  })
+
+  it('ปิดงานไม่สำเร็จไม่เลือกเหตุผล → CLOSE_FAIL_REASON_REQUIRED (มติ PO 03/10/2569 Q16)', () => {
+    const detail = detailOf({ checkins: [checkin] })
+    const form = formOf({ outcome: 'closed_fail', photos: ['p1'], videos: ['v1'] })
+    expect(closeFormMissing(form, detail)).toEqual(['CLOSE_FAIL_REASON_REQUIRED'])
+    expect(closeMissingSummary(closeFormMissing(form, detail))).toBe('ยังขาด: เหตุผลที่ไม่สำเร็จ')
+    expect(canSubmitCloseForm(form, detail)).toBe(false)
+  })
+
+  it('เลือก "อื่น ๆ" ต้องอธิบาย — ช่องว่างล้วนไม่นับ', () => {
+    const detail = detailOf({ checkins: [checkin] })
+    const base = { outcome: 'closed_fail' as const, photos: ['p1'], videos: ['v1'], failReason: 'other' as const }
+    expect(closeFormMissing(formOf({ ...base, failReasonDetail: '   ' }), detail)).toEqual(['CLOSE_FAIL_REASON_REQUIRED'])
+    expect(closeFormMissing(formOf({ ...base, failReasonDetail: 'ร้านปิดถาวร' }), detail)).toEqual([])
+  })
+
+  it('ปิดงานสำเร็จไม่ต้องมีเหตุผล', () => {
+    const form = formOf({ outcome: 'closed_success', photos: ['p1'], videos: ['v1'], productPhotos: ['pp1'] })
+    expect(closeFormMissing(form, detailOf({ checkins: [checkin] }))).toEqual([])
   })
 
   it('ยังไม่เลือก outcome → CLOSE_OUTCOME_REQUIRED มาก่อนเสมอ', () => {
@@ -188,7 +220,7 @@ describe('closeFormMissing (`41` §12 · §20 — บอกครบครั้
   })
 
   it('ทีม PER_KM ไม่มีจุดเริ่มเดินทาง → CLOSE_TRAVEL_ORIGIN_REQUIRED (ทีม DAILY_FLAT ไม่เช็ค)', () => {
-    const form = formOf({ outcome: 'closed_fail', photos: ['p1'], videos: ['v1'] })
+    const form = formOf({ outcome: 'closed_fail', photos: ['p1'], videos: ['v1'], failReason: 'debtor_not_found' })
     expect(closeFormMissing(form, detailOf({ fuelMode: 'PER_KM', checkins: [checkin] }))).toEqual([
       'CLOSE_TRAVEL_ORIGIN_REQUIRED',
     ])
@@ -210,6 +242,9 @@ describe('โหมดตีกลับ — ต้องแก้สื่อ�
       videos: ['v1'],
       productPhotos: ['pp1'],
       audioUrl: null,
+      note: null,
+      failReason: null,
+      failReasonDetail: null,
       submittedAt: '2026-08-20T06:00:00.000Z',
     },
   })
@@ -250,6 +285,35 @@ describe('payload ของแต่ละปุ่ม', () => {
     expect(closeCasePayload(form).outcome).toBe('closed_success')
     expect(resubmitClosePayload(form)).not.toHaveProperty('outcome')
     expect(resubmitClosePayload(form).photos).toEqual(['p1'])
+  })
+
+  it('เหตุผลไม่สำเร็จส่งเฉพาะ outcome = ไม่สำเร็จ · resubmit ไม่ส่ง (ล็อกตามรอบเดิม — UAT Q16)', () => {
+    const fail = formOf({ outcome: 'closed_fail', failReason: 'other', failReasonDetail: 'ร้านปิดถาวร' })
+    expect(closeCasePayload(fail)).toMatchObject({ failReason: 'other', failReasonDetail: 'ร้านปิดถาวร' })
+    expect(closeDraftPayload(fail)).toMatchObject({ failReason: 'other', failReasonDetail: 'ร้านปิดถาวร' })
+    // สลับกลับเป็นสำเร็จ — ค่าที่ค้างใน state ไม่ถูกส่งไปปนกับหลักฐาน
+    const switched = { ...fail, outcome: 'closed_success' as const }
+    expect(closeCasePayload(switched)).toMatchObject({ failReason: null, failReasonDetail: null })
+    expect(resubmitClosePayload(fail)).not.toHaveProperty('failReason')
+  })
+
+  it('โหมดตีกลับไม่ตรวจเหตุผล (ล็อกตามรอบเดิม แม้รอบเดิมไม่มี)', () => {
+    const detail = detailOf({
+      status: 'needs_revision',
+      checkins: [checkin],
+      submittedEvidence: {
+        outcome: 'closed_fail',
+        photos: ['p1'],
+        videos: ['v1'],
+        productPhotos: [],
+        audioUrl: null,
+        note: null,
+        failReason: null,
+        failReasonDetail: null,
+        submittedAt: '2026-08-20T06:00:00.000Z',
+      },
+    })
+    expect(closeFormMissing(formOf({ outcome: 'closed_fail', photos: ['p2'], videos: ['v1'] }), detail)).toEqual([])
   })
 })
 

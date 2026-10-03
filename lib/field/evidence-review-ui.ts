@@ -7,8 +7,13 @@ import type { FieldMediaKind } from '@/lib/field/media-upload'
  */
 
 /** ตีกลับได้จากสถานะปิดงานเท่านั้น (`41` §8 `reject_evidence` · state `closed_success`/`closed_fail` → `needs_revision`) */
-export function canRejectFieldEvidence(evidence: Pick<CaseFieldEvidenceDto, 'assignmentStatus'> | null): boolean {
-  return evidence !== null && (evidence.assignmentStatus === 'closed_success' || evidence.assignmentStatus === 'closed_fail')
+export function canRejectFieldEvidence(
+  evidence: Pick<CaseFieldEvidenceDto, 'assignmentStatus' | 'evidenceStatus'> | null,
+): boolean {
+  if (evidence === null) return false
+  // หลักฐานที่ผ่านอัตโนมัติแล้ว (คลังรับเข้า / ค่าตอบแทนอนุมัติ — มติ PO 03/10/2569 UAT Q14) ตีกลับไม่ได้
+  if (evidence.evidenceStatus === 'approved') return false
+  return evidence.assignmentStatus === 'closed_success' || evidence.assignmentStatus === 'closed_fail'
 }
 
 export const CHECKIN_TYPE_LABEL: Readonly<Record<string, string>> = {

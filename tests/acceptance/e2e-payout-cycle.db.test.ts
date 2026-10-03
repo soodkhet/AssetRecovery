@@ -3,6 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
+// UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
+
 /**
  * **Phase 8.1 — E2E Acceptance ฝั่งรายจ่าย**
  *
@@ -472,7 +477,7 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     await field.closeFieldCase(
       agent,
       caseId,
-      { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
 
@@ -771,7 +776,7 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
     await field.closeFieldCase(
       agent,
       caseId,
-      { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
     const pending = await db().expense.findMany({ where: { caseId }, select: { id: true } })

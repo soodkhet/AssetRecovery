@@ -33,6 +33,7 @@ import {
   caseStatusLabel,
 } from '@/lib/cases/status-display'
 import { canRejectFieldEvidence } from '@/lib/field/evidence-review-ui'
+import { closeFailReasonText } from '@/lib/field/fail-reasons'
 import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
 import type { FieldActionResultDto } from '@/lib/field/types'
 import type {
@@ -310,6 +311,11 @@ export function CaseDetailModal({
               <FieldEvidenceSection evidence={detail.fieldEvidence} onView={setViewing} />
             )}
 
+            {/* ผู้ไม่เห็นกล่องหลักฐาน (เช่นบริษัทไฟแนนซ์) ยังเห็นเหตุผลที่ไม่สำเร็จ — UAT Q16 */}
+            {detail.fieldEvidence === null && detail.closeFailReason !== null && (
+              <CloseFailReasonSection reason={detail.closeFailReason} />
+            )}
+
             {detail.recycleHistory.length > 0 && <RecycleHistorySection detail={detail} />}
 
             {showsReasonBox(status) && (
@@ -522,6 +528,16 @@ function DocumentSection({
           </div>
         )}
       </div>
+    </section>
+  )
+}
+
+/** เหตุผลปิดงานไม่สำเร็จของรอบล่าสุด (มติ PO 03/10/2569 — UAT Q16) */
+function CloseFailReasonSection({ reason }: { reason: { code: string; detail: string | null } }) {
+  return (
+    <section data-testid="case-close-fail-reason">
+      <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">เหตุผลที่ติดตามไม่สำเร็จ</h3>
+      <p className="text-xs whitespace-pre-wrap text-slate-700">{closeFailReasonText(reason.code, reason.detail)}</p>
     </section>
   )
 }

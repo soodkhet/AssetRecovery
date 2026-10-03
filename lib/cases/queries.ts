@@ -18,7 +18,9 @@ import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
 import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
-import { loadCaseFieldEvidence } from '@/lib/field/evidence-review'
+import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
+import { caseDocumentRule } from '@/lib/uploads/rules'
+import { verifyUploadedFile } from '@/lib/uploads/verify'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -418,6 +420,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     ),
     // เติมเฉพาะ `getCase()` ของผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) — เส้นเขียนคืน null
     fieldEvidence: null,
+    // เติมเฉพาะ `getCase()` (UAT Q16) — เส้นเขียนคืน null
+    closeFailReason: null,
   }
 }
 
@@ -502,7 +506,13 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
   const submittedAt = (await latestSubmittedAt(user.organizationId, [row.id])).get(row.id) ?? null
-  const detail: CaseDetailDto = { ...toDetailDto(row), submittedAt: submittedAt?.toISOString() ?? null }
+  const closeFailReason = await loadCaseCloseFailReason(user.organizationId, row.id)
+  const detail: CaseDetailDto = {
+    ...toDetailDto(row),
+    submittedAt: submittedAt?.toISOString() ?? null,
+    closeFailReason,
+  }
+  // บริษัทไฟแนนซ์เห็นเหตุผลปิดงานไม่สำเร็จของเคสตัวเองได้ (มติ PO 03/10/2569 — UAT Q16)
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
   const fieldEvidence = await loadCaseFieldEvidence(user, row.id)
   return await withProjectedSourceTemplateName(user.organizationId, { ...detail, fieldEvidence })
@@ -900,6 +910,14 @@ export async function addCaseDocument(
     assertProductPhotoCapacity(existing)
   }
 
+  // server ตรวจไฟล์เอง (มติ PO 03/10/2569 — UAT Q13 · BUG-037): มีจริง · อยู่ใต้ `cases/<caseId>/<slot>/`
+  // · ชนิดจากเนื้อไฟล์ · ขนาด · SHA-256 ของ server (ค่าจาก browser ใช้เทียบเท่านั้น) — นอก transaction
+  const verified = await verifyUploadedFile(
+    input.fileUrl,
+    caseDocumentRule(caseId, input.documentType),
+    input.fileHash ?? null,
+  )
+
   return await prisma.$transaction(async (tx) => {
     const document = await tx.caseDocument.create({
       data: {
@@ -907,10 +925,10 @@ export async function addCaseDocument(
         caseId,
         documentType: input.documentType,
         fileUrl: input.fileUrl,
-        fileHash: input.fileHash,
+        fileHash: verified.sha256,
         originalName: input.originalName,
-        mimeType: input.mimeType,
-        sizeBytes: input.sizeBytes,
+        mimeType: verified.mimeType,
+        sizeBytes: verified.sizeBytes,
         uploadedBy: context.actor.id,
       },
       select: { id: true },
@@ -927,9 +945,11 @@ export async function addCaseDocument(
         after: {
           caseId,
           documentType: input.documentType,
-          fileHash: input.fileHash,
+          fileUrl: input.fileUrl,
+          fileHash: verified.sha256,
+          mimeType: verified.mimeType,
           originalName: input.originalName,
-          sizeBytes: input.sizeBytes,
+          sizeBytes: verified.sizeBytes,
         },
         reason: context.reason,
         ipAddress: context.meta.ipAddress,

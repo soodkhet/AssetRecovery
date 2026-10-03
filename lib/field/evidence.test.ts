@@ -3,6 +3,7 @@ import { ModuleError } from '@/lib/api/errors'
 import {
   assertCloseEvidence,
   assertDeviceCoordinates,
+  evidenceNote,
   hasEvidenceRevision,
   missingCloseEvidence,
   type CloseEvidenceInput,
@@ -119,5 +120,18 @@ describe('ต้องแก้สื่ออย่างน้อย 1 รา�
     expect(hasEvidenceRevision(before, { ...before, videos: [] })).toBe(true)
     expect(hasEvidenceRevision(before, { ...before, productPhotos: ['p2.jpg'] })).toBe(true)
     expect(hasEvidenceRevision(before, { ...before, audioUrl: 'a.m4a' })).toBe(true)
+  })
+})
+
+describe('บันทึกเพิ่มเติมของหลักฐานปิดงาน (มติ PO 03/10/2569 — UAT Q15 · BUG-048)', () => {
+  it('ข้อความจริงถูกเก็บ (ตัดช่องว่างหัวท้าย)', () => {
+    expect(evidenceNote('  ลูกหนี้นัดคืนเครื่องพรุ่งนี้  ')).toBe('ลูกหนี้นัดคืนเครื่องพรุ่งนี้')
+  })
+
+  it('ว่าง / มีแต่ช่องว่าง / ไม่ส่ง = null', () => {
+    expect(evidenceNote('')).toBeNull()
+    expect(evidenceNote('   ')).toBeNull()
+    expect(evidenceNote(null)).toBeNull()
+    expect(evidenceNote(undefined)).toBeNull()
   })
 })

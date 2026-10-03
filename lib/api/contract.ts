@@ -390,6 +390,13 @@ export const API_CONTRACT = {
     source: '44 §15 · 45 §6.5',
     summary: 'ยืนยัน + แนบเอกสาร → unlock expense + Revenue ใน $transaction เดียว (44 §11)',
   },
+  'lot.attachDocument': {
+    method: 'POST',
+    path: '/api/handover-lots/:id/documents',
+    module: 'warehouse',
+    source: '44 §6.4 · §15 · 45 §6.5',
+    summary: 'ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต — server ตรวจไฟล์ + เก็บ SHA-256 (มติ PO 03/10/2569 UAT Q13)',
+  },
   'lot.pdf': {
     method: 'GET',
     path: '/api/handover-lots/:id/pdf',
