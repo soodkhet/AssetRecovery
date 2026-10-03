@@ -50,15 +50,15 @@
 | BUG-042 | R3-sheet | S5 | spec-gap | เหตุผลว่าง/สั้นได้ `REQUIRED_MISSING` แทน `ASSIGNMENT_REASON_REQUIRED` (`40` §12) · UI disable ปุ่มเฉพาะตอนว่าง · error code ของงานมอบหมายนิยามใน `40` §12 ไม่ใช่ `24` | ✅ ยืนยัน (เหตุผล 1–4 ตัวอักษรกดได้ → "ข้อมูลไม่ครบ" ไม่บอกขั้นต่ำ 5) — needs-decision เรื่อง error code |
 | BUG-043 | R3-sheet | S4 | code | timeout แล้ว `reassignment_history.reassigned_by` บันทึกคนที่มอบหมายครั้งแรก แทนคนที่ขอเปลี่ยน | ✅ ยืนยัน + ขยาย: แถวใหม่ของ in1 ก็บันทึก `created_by` เป็นคนมอบหมายครั้งแรก — open |
 | BUG-044 | R3-sheet | S5 | spec-gap | คนที่ไม่ใช่เจ้าของงานตอบคำขอ ได้ 404 `CASE_NOT_FOUND` แต่ spec ว่า `PERMISSION_DENIED` (ไม่ leak — ยอมรับได้?) | ✅ ยืนยัน 404 `CASE_NOT_FOUND` — needs-decision |
-| BUG-045 | R4-sheet | S2 | code | เจ้าหน้าที่อนุมัติเคสไม่มีหน้าจอตีกลับหลักฐาน (`reject_evidence`) และไม่มีหน้าใดนอก /field แสดงหลักฐานปิดงานเลย — มีแต่ API | fixed `02b7ccd` (branch fixer R4 — รอ merge หลัง R4a) · R4a: พนักงานเองก็เปิดดูรูป/วิดีโอที่ส่งแล้วไม่ได้ |
-| BUG-046 | R4-sheet | S2 | code | พนักงานภาคสนามไม่มีหน้าจอขอเงินทดรอง (ปุ่มอยู่ใน /finance ที่พนักงานเข้าไม่ได้) | fixed `3f63c5b` (branch fixer R4 — รอ merge หลัง R4a) |
-| BUG-047 | R4-sheet | S2 | code/seed | ไม่มี role ใดได้ capability `approve_advance` ⇒ ฝ่ายการเงินอนุมัติ/ปฏิเสธเงินทดรองไม่ได้ (Superadmin ได้คนเดียว) | fixed `27f84f8` (branch fixer R4 — รอ merge หลัง R4a) |
+| BUG-045 | R4-sheet | S2 | code | เจ้าหน้าที่อนุมัติเคสไม่มีหน้าจอตีกลับหลักฐาน (`reject_evidence`) และไม่มีหน้าใดนอก /field แสดงหลักฐานปิดงานเลย — มีแต่ API | fixed `02b7ccd` (merge 03/10/2569) · R4a: พนักงานเองก็เปิดดูรูป/วิดีโอที่ส่งแล้วไม่ได้ |
+| BUG-046 | R4-sheet | S2 | code | พนักงานภาคสนามไม่มีหน้าจอขอเงินทดรอง (ปุ่มอยู่ใน /finance ที่พนักงานเข้าไม่ได้) | fixed `3f63c5b` (merge 03/10/2569) |
+| BUG-047 | R4-sheet | S2 | code/seed | ไม่มี role ใดได้ capability `approve_advance` ⇒ ฝ่ายการเงินอนุมัติ/ปฏิเสธเงินทดรองไม่ได้ (Superadmin ได้คนเดียว) | fixed `27f84f8` (merge 03/10/2569) |
 | BUG-048 | R4-sheet | S4 | code | ช่อง "บันทึกเพิ่มเติม" ในฟอร์มปิดงานไม่ถูกบันทึก | ✅ ยืนยันใน R4a (note หายถาวรหลังปิดงาน) · needs-decision — `02` ไม่มีคอลัมน์ note ใน `case_evidences` · ก) เพิ่มคอลัมน์ ข) เอาช่องออก |
-| BUG-049 | R4-sheet | S4 | code | แจ้งเตือน "หลักฐานถูกตีกลับ" ลิงก์ไป `/field/cases/<id>` ซึ่งเป็น 404 | fixed `a38f561` (branch fixer R4 — รอ merge หลัง R4a) |
+| BUG-049 | R4-sheet | S4 | code | แจ้งเตือน "หลักฐานถูกตีกลับ" ลิงก์ไป `/field/cases/<id>` ซึ่งเป็น 404 | fixed `a38f561` (merge 03/10/2569) |
 | BUG-050 | R4-sheet | S4 | spec-gap | server รับ path หลักฐานเป็นข้อความอะไรก็ได้ + ไม่ตรวจเนื้อไฟล์ · ฝั่ง browser ตรวจแค่ MIME prefix (คู่กับ BUG-037) | ✅ ยืนยันใน R4a: ไฟล์ข้อความ 37 ไบต์ชื่อ .mp4 อัปโหลดผ่าน — needs-decision (รวมกับ BUG-037) |
-| BUG-051 | R4-sheet | S4 | code | ลิงก์ superseded ของ expense แถวเก่าชี้แถวทดแทนผิดตัว | fixed `188ce65` (branch fixer R4 — รอ merge หลัง R4a) |
+| BUG-051 | R4-sheet | S4 | code | ลิงก์ superseded ของ expense แถวเก่าชี้แถวทดแทนผิดตัว | fixed `188ce65` (merge 03/10/2569) |
 | BUG-052 | R4-sheet | S3 | code | resubmit คิดราคา expense ใหม่ด้วยแผน/วันที่ ณ ตอน resubmit (ควรยึด snapshot เดิม — `92` §7.1) | needs-decision — `41` §8/§10.1 ให้คำนวณใหม่ตอน resubmit "ตามกฎปกติ" vs `92` §7.1 snapshot เมื่อเกิด · ก) ใช้แผน/วันที่ตอนปิดงานครั้งแรก ข) คงเดิม |
-| BUG-053 | R4-sheet | S5 | code | ปุ่มบันทึกร่างโชว์ toast สำเร็จแม้บันทึกล้ม | fixed `d6ae4c6` (branch fixer R4 — รอ merge หลัง R4a) · R4a ยืนยันว่ายังเกิดบนโค้ด staging ก่อน merge |
+| BUG-053 | R4-sheet | S5 | code | ปุ่มบันทึกร่างโชว์ toast สำเร็จแม้บันทึกล้ม | fixed `d6ae4c6` (merge 03/10/2569) · R4a ยืนยันว่ายังเกิดบนโค้ด staging ก่อน merge |
 | BUG-054 | R4-sheet | S4 | spec-gap | การ์ดเคสและหน้ารายได้ของพนักงานโชว์ค่าคอมมิชชัน ฿500/฿1,000 ที่ระบบไม่เคยจ่ายจริง (ผลกระทบของ BUG-010) | ✅ ยืนยันใน R4a (โชว์ ฿500/฿1,000/เบี้ยเสี่ยง ฿200 ไม่มี expense รองรับ) — needs-decision (ผูก BUG-010) |
 | BUG-055 | R4-sheet | S4 | spec-gap | ไม่มีกระบวนการอนุมัติหลักฐานปิดงาน — `case_evidences` ค้าง `pending` ตลอด (ใครอนุมัติ เมื่อไร?) | needs-decision |
 | BUG-056 | R4-sheet | S3 | spec-gap | เพื่อนร่วมทีมเปิดเคสของคนอื่นแบบอ่านอย่างเดียวได้ เห็นเบอร์/ที่อยู่ลูกหนี้ (คล้าย BUG-022 PDPA) | ✅ ยืนยันใน R4a: เพื่อนร่วมทีม GET เคสคนอื่นได้ 200 พร้อมเลขบัตร/เบอร์/ที่อยู่/เอกสาร/หลักฐาน (เขียนแทนได้ 404) — needs-decision (รวมกับ BUG-022) |
