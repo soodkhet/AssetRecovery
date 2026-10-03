@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { reasonSchema } from '@/lib/api/validation'
+import { reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของผู้รับเงิน (ไฟล์ 18 · Rule 13)
@@ -45,7 +45,7 @@ export const payeeFieldsSchema = z.object({
 
 export const payeeCreateSchema = payeeFieldsSchema.extend({
   /** เจ้าของ Payee — 1 User = 1 Payee Profile (`18` §6.1) */
-  userId: uuidSchema,
+  userId: requiredIdSchema('ผู้ใช้'),
   reason: reasonSchema,
 })
 

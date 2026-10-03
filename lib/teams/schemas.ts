@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { reasonSchema } from '@/lib/api/validation'
+import { reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลทีม (ไฟล์ 09 · Rule 04 · Rule 13)
@@ -20,7 +20,7 @@ export const teamStatusSchema = z.enum(['active', 'inactive'])
 const teamFields = z.object({
   name: z.string().trim().min(2, 'ชื่อทีมสั้นเกินไป').max(120, 'ชื่อทีมยาวเกินไป'),
   side: teamSideSchema,
-  compensationPlanId: uuidSchema,
+  compensationPlanId: requiredIdSchema('แผนค่าตอบแทน'),
   supervisorId: uuidSchema.nullable().default(null),
   managerIds: z.array(uuidSchema).max(20, 'เลือกผู้จัดการได้ไม่เกิน 20 คน').default([]),
   provinces: z

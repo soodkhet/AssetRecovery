@@ -17,6 +17,21 @@ export const reasonSchema = z
   .min(REASON_MIN, `กรุณาระบุเหตุผลอย่างน้อย ${REASON_MIN} ตัวอักษร`)
   .max(REASON_MAX, `เหตุผลยาวเกิน ${REASON_MAX} ตัวอักษร`)
 
+/**
+ * รหัสอ้างอิง (UUID) ของ **dropdown บังคับเลือก** — ยังไม่เลือก (FE ส่ง `undefined`/`''`) ต้องได้
+ * "กรุณาเลือก…" เป็นภาษาไทย ไม่ใช่ข้อความดิบของ Zod "Invalid input: expected string, received undefined"
+ * หรือ "รูปแบบรหัสไม่ถูกต้อง" ที่ทำให้ผู้ใช้งง (UAT BUG-003/BUG-017) · ค่าที่มีแต่ไม่ใช่ UUID ยังได้ข้อความรูปแบบเดิม
+ *
+ * `label` = ชื่อช่องตามที่ผู้ใช้เห็น เช่น `requiredIdSchema('บทบาท')` → "กรุณาเลือกบทบาท"
+ */
+export function requiredIdSchema(label: string) {
+  const required = `กรุณาเลือก${label}`
+  return z
+    .string({ error: () => required })
+    .min(1, required)
+    .uuid('รูปแบบรหัสไม่ถูกต้อง')
+}
+
 /** เพดานเงินต่อช่อง 1,000,000,000 สตางค์ = 10 ล้านบาท — กันพิมพ์ผิดหลักจนล้น INTEGER */
 export const MAX_SATANG = 1_000_000_000
 
