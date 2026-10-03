@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { calculateProjectedRevenue, type ProjectedRevenueTemplate } from '@/lib/cases/projected-revenue'
+import {
+  calculateProjectedRevenue,
+  parseProjectedRevenueSource,
+  projectedRevenueSourceText,
+  type ProjectedRevenueTemplate,
+} from '@/lib/cases/projected-revenue'
 import { pctOfSatang } from '@/lib/finance/satang'
 
 /**
@@ -98,5 +103,61 @@ describe('ประมาณการรายได้ (`38` §6.5)', () => {
     expect(source).toContain('tpl-hybrid')
     expect(source).toContain('v2')
     expect(source).toContain('HYBRID')
+  })
+})
+
+describe('ข้อความที่มาประมาณการสำหรับผู้ใช้ (UAT BUG-034)', () => {
+  const TEMPLATE_ID = '3f2a9c4e-1b7d-4e8a-9c3f-2d1e0b9a8c7d'
+
+  function sourceOf(template: ProjectedRevenueTemplate): string {
+    return calculateProjectedRevenue(template, { debtAmountSatang: 1_000_000, assetValueSatang: null }).source
+  }
+
+  it('อ่านค่าดิบกลับเป็นชิ้นส่วนได้ครบ', () => {
+    const source = sourceOf({
+      model: 'HYBRID',
+      baseSatang: 50_000,
+      ratePct: 15,
+      basis: 'debt_amount',
+      templateId: TEMPLATE_ID,
+      templateVersion: 2,
+    })
+    expect(parseProjectedRevenueSource(source)).toEqual({
+      model: 'HYBRID',
+      templateId: TEMPLATE_ID,
+      templateVersion: 2,
+      baseSatang: 50_000,
+      ratePct: 15,
+      basis: 'debt_amount',
+    })
+  })
+
+  it('HYBRID: ชื่อเทมเพลต + version + สูตรย่อ ไม่มี UUID', () => {
+    const source = sourceOf({
+      model: 'HYBRID',
+      baseSatang: 50_000,
+      ratePct: 15,
+      basis: 'debt_amount',
+      templateId: TEMPLATE_ID,
+      templateVersion: 2,
+    })
+    const text = projectedRevenueSourceText(source, 'ค่าบริการมาตรฐาน')
+    expect(text).toBe('เทมเพลต "ค่าบริการมาตรฐาน" v2 · Hybrid: ฿500.00 + 15% ของมูลหนี้')
+    expect(text).not.toContain(TEMPLATE_ID)
+  })
+
+  it('FLAT / SUCCESS_FEE และกรณีไม่รู้ชื่อเทมเพลต', () => {
+    const flat = sourceOf({ model: 'FLAT', baseSatang: 150_000, ratePct: 0, basis: null, templateVersion: 1 })
+    expect(projectedRevenueSourceText(flat, null)).toBe('เทมเพลต v1 · Flat Rate: ฿1,500.00')
+
+    const success = sourceOf({ model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 2.5, basis: 'asset_value' })
+    expect(projectedRevenueSourceText(success, 'ตามมูลค่าเครื่อง')).toBe(
+      'เทมเพลต "ตามมูลค่าเครื่อง" · Success Fee: 2.5% ของมูลค่าเครื่อง',
+    )
+  })
+
+  it('ค่าดิบรูปแบบที่อ่านไม่ออก → null (UI แสดงข้อความกลางแทน)', () => {
+    expect(projectedRevenueSourceText('อะไรก็ไม่รู้', 'x')).toBeNull()
+    expect(projectedRevenueSourceText('model=UNKNOWN · v1', null)).toBeNull()
   })
 })

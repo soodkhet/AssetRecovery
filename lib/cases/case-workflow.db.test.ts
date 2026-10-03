@@ -203,6 +203,12 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(row?.projected_revenue_satang).toBe(200_000)
     expect(row?.service_fee_template_id).toBeNull()
     expect(row?.service_fee_model_snapshot).toBeNull()
+
+    // UAT BUG-034 — หน้าจอได้ข้อความอ่านง่าย (ชื่อเทมเพลต) ส่วนค่าดิบยังเก็บ template id ไว้ trace
+    const { getCase } = await import('@/lib/cases/queries')
+    const detail = await getCase(actor, caseId)
+    expect(detail.projectedRevenueSource).toContain(`template=${TEMPLATE_V1}`)
+    expect(detail.projectedRevenueSourceLabel).toBe('เทมเพลต "เทมเพลตทดสอบ 2.3" v1 · Hybrid: ฿500.00 + 15% ของมูลหนี้')
   })
 
   it('เอกสาร required ไม่ครบ → CASE_DOCUMENT_INCOMPLETE (ไม่เปลี่ยนสถานะ)', async () => {
@@ -426,6 +432,15 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       )
       expect(crossCompany.items).toEqual([])
       expect(crossCompany.total).toBe(0)
+      // ตัวเลือกบริษัทที่มากับรายการ (UAT BUG-032) ก็ต้องไม่ leak ชื่อบริษัทอื่น
+      expect(crossCompany.companies).toEqual([])
+      const ownCompanyUser: SessionUser = {
+        ...otherCompanyUser,
+        scope: { kind: 'company', teamIds: [], companyId: COMPANY_ID, userId: USER_ID },
+      }
+      expect((await listCases(ownCompanyUser, caseListQuerySchema.parse({}))).companies).toEqual([
+        { id: COMPANY_ID, name: 'ไฟแนนซ์ทดสอบ 2.3' },
+      ])
 
       // ② search ตั้งคีย์ `OR` — ห้ามไปทับ `OR` ของ scope ทีม (เคสนี้ยังไม่มีทีมที่รับผิดชอบ)
       const teamUser: SessionUser = {
@@ -440,6 +455,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       // ยาม: เคสนี้มีอยู่จริงและผู้ที่เห็นทุกแถวค้นเจอ (ไม่ใช่ 0 เพราะ search พัง)
       const asGlobal = await listCases(actor, caseListQuerySchema.parse({ search: caseRef }))
       expect(asGlobal.items.map((item) => item.id)).toEqual([caseId])
+      expect(asGlobal.companies).toContainEqual({ id: COMPANY_ID, name: 'ไฟแนนซ์ทดสอบ 2.3' })
     } finally {
       await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${caseId}'`)
     }
@@ -491,6 +507,109 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     )
     // นำเข้าแล้วเป็น draft เสมอ + เงินในไฟล์เป็น **บาท** ต้องถูกแปลงเป็นสตางค์ (Rule 01)
     expect(created[0]).toEqual({ status: 'draft', source: 'import', debt_amount_satang: 1_000_000 })
+  })
+
+  it('แจ้งเตือน case.approved ไม่พ่วงเหตุผลเชิงระบบ แต่ audit ยังเก็บเหตุผล snapshot เต็ม (BUG-029)', async () => {
+    const caseId = await seedCase('SF-2026-2329', { withDocuments: true })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    const startedAt = new Date()
+    await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+
+    const audits = await db().$queryRawUnsafe<Array<{ reason: string | null }>>(
+      `SELECT reason FROM audit_logs WHERE target_id = '${caseId}' AND action = 'approve' AND created_at >= $1`,
+      startedAt,
+    )
+    expect(audits[0]?.reason).toContain('snapshot ค่าบริการอัตโนมัติ')
+
+    const notificationBodies = async (): Promise<Array<string | null>> => {
+      const rows = await db().$queryRawUnsafe<Array<{ body: string | null }>>(
+        `SELECT body FROM notifications
+          WHERE user_id = '${USER_ID}' AND event_code = 'case.approved'
+            AND body LIKE '%SF-2026-2329%' AND created_at >= $1`,
+        startedAt,
+      )
+      return rows.map((row) => row.body)
+    }
+    for (let attempt = 0; attempt < 20 && (await notificationBodies()).length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    const bodies = await notificationBodies()
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).not.toContain('snapshot')
+  })
+
+  it('รายการเคสมีวันเวลาส่งตรวจ (จาก audit) และวันเวลารับเคส (reviewed_at) (BUG-030)', async () => {
+    const caseRef = 'SF-2026-2330'
+    const caseId = await seedCase(caseRef, { withDocuments: true })
+    const { listCases, getCase } = await import('@/lib/cases/queries')
+    const { caseListQuerySchema } = await import('@/lib/cases/schemas')
+    const query = caseListQuerySchema.parse({ search: caseRef })
+
+    const [draft] = (await listCases(actor, query)).items
+    expect(draft?.submittedAt).toBeNull()
+    expect(draft?.reviewedAt).toBeNull()
+
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    const [pending] = (await listCases(actor, query)).items
+    expect(pending?.submittedAt).not.toBeNull()
+    expect(pending?.reviewedAt).toBeNull()
+
+    await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+    const [approved] = (await listCases(actor, query)).items
+    expect(approved?.submittedAt).toBe(pending?.submittedAt)
+    expect(approved?.reviewedAt).not.toBeNull()
+    expect(Date.parse(approved?.reviewedAt ?? '')).toBeGreaterThanOrEqual(Date.parse(approved?.submittedAt ?? ''))
+    expect((await getCase(actor, caseId)).submittedAt).toBe(pending?.submittedAt)
+  })
+
+  /**
+   * UAT BUG-035 — สองคำสั่งเปลี่ยนสถานะยิงพร้อมกันจากสถานะเดียวกัน ("รับเคส" ชน "ไม่รับเคส")
+   * ต้องสำเร็จแค่ตัวเดียว อีกตัวได้ `CASE_INVALID_STATUS_TRANSITION` · audit + แจ้งเตือนเกิดชุดเดียว
+   */
+  it('เปลี่ยนสถานะพร้อมกัน 2 คำสั่ง → สำเร็จ 1 + ถูกปัด 1 · audit/แจ้งเตือน 1 ชุด (BUG-035)', async () => {
+    const caseId = await seedCase('SF-2026-2335', { withDocuments: true })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    const startedAt = new Date()
+
+    const results = await Promise.allSettled([
+      service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta }),
+      service.changeCaseStatus(actor, caseId, change({ action: 'reject', reason: 'ข้อมูลไม่ตรง' }), {
+        actor,
+        meta,
+      }),
+    ])
+    const fulfilled = results.filter((result) => result.status === 'fulfilled')
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toBeInstanceOf(CaseError)
+    expect(rejected[0]?.reason).toMatchObject({ code: 'CASE_INVALID_STATUS_TRANSITION' })
+
+    const status = (await caseRow(caseId))?.status
+    expect(['approved', 'rejected']).toContain(status)
+
+    const audits = await db().$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM audit_logs
+        WHERE target_id = '${caseId}' AND action IN ('approve', 'reject') AND created_at >= $1`,
+      startedAt,
+    )
+    expect(Number(audits[0]?.count)).toBe(1)
+
+    // แจ้งเตือนส่งแบบ detached หลัง commit ⇒ รอให้ลงก่อนแล้วจึงนับ
+    const countNotifications = async (): Promise<number> => {
+      const rows = await db().$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) AS count FROM notifications
+          WHERE user_id = '${USER_ID}' AND event_code IN ('case.approved', 'case.rejected')
+            AND body LIKE '%SF-2026-2335%' AND created_at >= $1`,
+        startedAt,
+      )
+      return Number(rows[0]?.count)
+    }
+    for (let attempt = 0; attempt < 20 && (await countNotifications()) === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(await countNotifications()).toBe(1)
   })
 
   it('Import dryRun ไม่เขียนอะไรลง DB (preview ก่อนยืนยัน)', async () => {

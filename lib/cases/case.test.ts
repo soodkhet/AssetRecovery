@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { CaseError } from '@/lib/cases/errors'
 import {
+  readinessGapText,
+  REQUIRED_FIELD_LABEL,
   assertCaseEditable,
   assertDocumentsComplete,
   assertIdentityFormats,
@@ -188,5 +190,34 @@ describe('สถานะที่แก้ไขได้ (`38` §8 · §20)', 
         expect.objectContaining({ code: 'CASE_LOCKED_AFTER_APPROVAL' }),
       )
     }
+  })
+})
+
+describe('readinessGapText — แปลงรายการที่ขาดจาก API เป็นภาษาไทย (UAT BUG-028)', () => {
+  it('แสดงชื่อเอกสารและชื่อช่องตามฟอร์ม', () => {
+    const text = readinessGapText({
+      code: 'CASE_DOCUMENT_INCOMPLETE',
+      missing: ['contract_doc', 'product_photo'],
+      missingFields: ['debtorPhoneMobile', 'addressIdCard.detail'],
+    })
+    expect(text).toBe(
+      'เอกสารที่ยังไม่ได้แนบ: สัญญาเช่าซื้อ/สัญญาผ่อนชำระ, รูปสินค้า · ' +
+        'ช่องที่ยังไม่ได้กรอก: เบอร์โทรมือถือ, ที่อยู่ตามบัตรประชาชน — บ้านเลขที่ / หมู่บ้าน / ถนน',
+    )
+  })
+
+  it('ทุกคีย์ที่ missingRequiredFields() คืนได้มีชื่อไทยเสมอ', () => {
+    const keys = [
+      ...missingRequiredFields({ nationality: null }),
+      ...missingRequiredFields({ nationality: 'TH' }),
+      ...missingRequiredFields({ nationality: 'OTHER' }),
+    ]
+    for (const key of keys) expect(REQUIRED_FIELD_LABEL[key], key).toBeDefined()
+  })
+
+  it('payload ไม่มีรายการ / ค่าแปลกปลอม → null', () => {
+    expect(readinessGapText(undefined)).toBeNull()
+    expect(readinessGapText({ code: 'REQUIRED_MISSING' })).toBeNull()
+    expect(readinessGapText({ missing: ['unknown_slot', 5], missingFields: 'x' })).toBeNull()
   })
 })

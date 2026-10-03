@@ -16,6 +16,7 @@ import {
 } from '@/lib/cases/case'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
+import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import type {
   CaseCreateInput,
@@ -26,6 +27,7 @@ import type {
 } from '@/lib/cases/schemas'
 import type {
   CaseAddressDto,
+  CaseCompanyOptionDto,
   CaseDetailDto,
   CaseListItemDto,
   CaseListResultDto,
@@ -92,6 +94,7 @@ const listSelect = {
   assetDescription: true,
   debtAmountSatang: true,
   createdAt: true,
+  reviewedAt: true,
   company: { select: { name: true } },
   suggestedTeam: { select: { name: true } },
   assignedTeam: { select: { name: true } },
@@ -140,7 +143,6 @@ export const detailSelect = {
   serviceFeeBasisSnapshot: true,
   serviceFeeChargeOnFail: true,
   reviewNote: true,
-  reviewedAt: true,
   outcome: true,
   closedAt: true,
   updatedAt: true,
@@ -218,6 +220,7 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     serviceFeeRatePct: null,
     projectedRevenueSatang: null,
     projectedRevenueSource: null,
+    projectedRevenueSourceLabel: null,
     reviewNote: null,
     editHistory: [],
     recycleHistory: detail.recycleHistory.map((entry) => ({ ...entry, decisionNote: null, decidedByName: null })),
@@ -225,7 +228,7 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
   }
 }
 
-function toListDto(row: CaseListRow): CaseListItemDto {
+function toListDto(row: CaseListRow, submittedAt: Date | null = null): CaseListItemDto {
   return {
     id: row.id,
     caseRef: row.caseRef,
@@ -243,7 +246,34 @@ function toListDto(row: CaseListRow): CaseListItemDto {
     documentCount: row._count.documents,
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
+    submittedAt: submittedAt?.toISOString() ?? null,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
   }
+}
+
+/**
+ * วันเวลา "ส่งตรวจ" ล่าสุดของแต่ละเคส (UAT BUG-030) — `02` ไม่มีคอลัมน์ `submitted_at` ที่ `cases`
+ * จึงอ่านจาก audit ของ action `review` (เขียนใน transaction เดียวกับการเปลี่ยนสถานะเสมอ)
+ * · query เดียวต่อหน้า (ใช้ `idx_audit_target` org + target_type + target_id + created_at)
+ */
+async function latestSubmittedAt(organizationId: string, caseIds: readonly string[]): Promise<Map<string, Date>> {
+  const latest = new Map<string, Date>()
+  if (caseIds.length === 0) return latest
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      organizationId,
+      targetType: 'cases',
+      targetId: { in: [...caseIds] },
+      action: 'status_change',
+      afterData: { path: ['action'], equals: 'review' },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { targetId: true, createdAt: true },
+  })
+  for (const row of rows) {
+    if (row.targetId !== null && !latest.has(row.targetId)) latest.set(row.targetId, row.createdAt)
+  }
+  return latest
 }
 
 function address(
@@ -297,6 +327,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetImeiSerial,
     projectedRevenueSatang: row.projectedRevenueSatang,
     projectedRevenueSource: row.projectedRevenueSource,
+    projectedRevenueSourceLabel:
+      row.projectedRevenueSource === null ? null : projectedRevenueSourceText(row.projectedRevenueSource, null),
     suggestedTeamId: row.suggestedTeamId,
     assignedTeamId: row.assignedTeamId,
     teamChangeReason: row.teamChangeReason,
@@ -308,7 +340,6 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     serviceFeeChargeOnFail: row.serviceFeeChargeOnFail,
     allowedActions: allowedActionsFrom(row.status),
     reviewNote: row.reviewNote,
-    reviewedAt: row.reviewedAt?.toISOString() ?? null,
     outcome: row.outcome,
     closedAt: row.closedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -379,6 +410,25 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
 
 // ── อ่าน ────────────────────────────────────────────────────────────────────
 
+/**
+ * ตัวเลือกบริษัทของหน้ารับเคส (UAT BUG-032) — active เท่านั้น · Company User เห็นแค่บริษัทตัวเอง
+ * คืนแค่ id + ชื่อ (ชื่อบริษัทแสดงบนแถวเคสอยู่แล้ว) จึงไม่ต้องขอ `view_master_data`
+ */
+async function listCaseCompanyOptions(user: SessionUser): Promise<CaseCompanyOptionDto[]> {
+  const ownCompanyId = user.scope.kind === 'company' ? user.scope.companyId : undefined
+  if (ownCompanyId === null) return []
+  return await prisma.financeCompany.findMany({
+    where: {
+      organizationId: user.organizationId,
+      deletedAt: null,
+      status: 'active',
+      ...(ownCompanyId === undefined ? {} : { id: ownCompanyId }),
+    },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
 export async function listCases(user: SessionUser, query: CaseListQuery): Promise<CaseListResultDto> {
   // ⚠️ scope กับ filter ต้องอยู่คนละก้อนใน `AND` — spread รวมอ็อบเจ็กต์เดียวทำให้คีย์ซ้ำของ filter
   //    (`companyId`, `OR` ของ search) **ทับ** เงื่อนไข scope ⇒ ผู้จัดการค้นอะไรก็เห็นทุกทีม
@@ -405,7 +455,7 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
     ],
   }
 
-  const [total, rows] = await Promise.all([
+  const [total, rows, companies] = await Promise.all([
     prisma.case.count({ where }),
     prisma.case.findMany({
       where,
@@ -414,14 +464,20 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
       skip: (query.page - 1) * query.limit,
       take: query.limit,
     }),
+    listCaseCompanyOptions(user),
   ])
 
-  const items = rows.map(toListDto)
+  const submitted = await latestSubmittedAt(
+    user.organizationId,
+    rows.map((row) => row.id),
+  )
+  const items = rows.map((row) => toListDto(row, submitted.get(row.id) ?? null))
   return {
     items: isCompanySideViewer(user) ? items.map(redactCaseListForCompany) : items,
     total,
     page: query.page,
     limit: query.limit,
+    companies,
   }
 }
 
@@ -432,9 +488,32 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
     select: detailSelect,
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
-  const detail = toDetailDto(row)
-  return isCompanySideViewer(user) ? redactCaseDetailForCompany(detail) : detail
+  const submittedAt = (await latestSubmittedAt(user.organizationId, [row.id])).get(row.id) ?? null
+  const detail: CaseDetailDto = { ...toDetailDto(row), submittedAt: submittedAt?.toISOString() ?? null }
+  if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
+  return await withProjectedSourceTemplateName(user.organizationId, detail)
 }
+
+/**
+ * เติมชื่อเทมเพลตลงข้อความที่มาประมาณการ (UAT BUG-034) — ค่าดิบเก็บแค่ template id
+ * ⇒ lookup ชื่อจากแถวเทมเพลตเวอร์ชันนั้น (แถวเวอร์ชันเก่าไม่ถูกแก้ จึงได้ชื่อ ณ ตอนคำนวณ)
+ */
+async function withProjectedSourceTemplateName(organizationId: string, detail: CaseDetailDto): Promise<CaseDetailDto> {
+  if (detail.projectedRevenueSource === null) return detail
+  const { templateId } = parseProjectedRevenueSource(detail.projectedRevenueSource)
+  if (templateId === null || !UUID_PATTERN.test(templateId)) return detail
+  const template = await prisma.serviceFeeTemplate.findFirst({
+    where: { id: templateId, organizationId },
+    select: { name: true },
+  })
+  if (template === null) return detail
+  return {
+    ...detail,
+    projectedRevenueSourceLabel: projectedRevenueSourceText(detail.projectedRevenueSource, template.name),
+  }
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ── เขียน ───────────────────────────────────────────────────────────────────
 

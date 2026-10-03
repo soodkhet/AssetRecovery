@@ -162,7 +162,7 @@ function assertActionAllowed(user: SessionUser, action: CaseStatusAction): void 
 }
 
 /** ใช้ unchecked เพื่อเขียน FK เป็นคอลัมน์ตรง ๆ (`assignedTeamId`/`serviceFeeTemplateId`) */
-type CaseUpdateData = Prisma.CaseUncheckedUpdateInput
+type CaseUpdateData = Prisma.CaseUncheckedUpdateManyInput
 
 export interface CaseStatusChangeResult {
   case: CaseDetailDto
@@ -210,11 +210,13 @@ export async function changeCaseStatus(
   // `38` §9 — ข้อมูล required + เอกสาร required ต้องครบก่อนขึ้น `pending_review`
   if (CASE_STATUS_RULES[action].requiresReadiness) {
     const readiness = readinessOf(row)
+    // แนบทั้งสองรายการเสมอ ให้ผู้ใช้เห็นสิ่งที่ขาดครบในครั้งเดียว (UAT BUG-028)
+    const gap = { missing: readiness.missingDocuments, missingFields: readiness.missingFields }
     if (readiness.missingDocuments.length > 0) {
-      throw new CaseError('CASE_DOCUMENT_INCOMPLETE', { context: { missing: readiness.missingDocuments } })
+      throw new CaseError('CASE_DOCUMENT_INCOMPLETE', { context: gap })
     }
     if (readiness.missingFields.length > 0) {
-      throw new CaseError('REQUIRED_MISSING', { context: { missingFields: readiness.missingFields } })
+      throw new CaseError('REQUIRED_MISSING', { context: gap })
     }
   }
 
@@ -305,7 +307,18 @@ export async function changeCaseStatus(
   auditAfter.events = events
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.case.update({ where: { id: caseId }, data, select: detailSelect })
+    // ยามสถานะแบบ optimistic (UAT BUG-035) — สถานะถูกอ่าน**นอก** transaction ⇒ ยืนยันซ้ำตอนเขียน
+    // ไม่งั้นคำสั่งที่กดพร้อมกันสองครั้ง (เช่น "รับเคส" ชน "ไม่รับเคส") ทับผลกันเองแล้วลง audit สองชุด
+    const claimed = await tx.case.updateMany({
+      where: { id: caseId, organizationId, status: row.status, deletedAt: null },
+      data,
+    })
+    if (claimed.count === 0) {
+      throw new CaseError('CASE_INVALID_STATUS_TRANSITION', {
+        context: { status: row.status, action, reason: 'status_changed_concurrently' },
+      })
+    }
+    const next = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })
 
     if (action === 'create_recycle_request') {
       await tx.recycleRequest.create({
@@ -359,11 +372,12 @@ export async function changeCaseStatus(
   })
 
   // แจ้งผู้ส่งเคสหลัง commit (`90` §6.3 แถว 1–2) — ล้มแล้วห้ามพา transaction ล้มตาม
+  // ใช้เฉพาะเหตุผลที่ผู้พิจารณากรอกเอง — เหตุผลเชิงระบบ (`snapshotReason`) มีไว้ให้ audit เท่านั้น (UAT BUG-029)
   const decision = caseDecisionEventOf(events)
   if (decision !== null) {
     dispatchNotification(
       { organizationId, userIds: await caseSubmitterIds(organizationId, caseId) },
-      caseDecisionMessage(decision, { caseId, caseRef: row.caseRef, reason: auditReason }),
+      caseDecisionMessage(decision, { caseId, caseRef: row.caseRef, reason: reason === '' ? null : reason }),
     )
   }
 

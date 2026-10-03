@@ -190,6 +190,59 @@ export function missingRequiredFields(values: CaseCompletenessInput): string[] {
   return missing
 }
 
+/**
+ * ชื่อช่องภาษาไทยตามฟอร์มเคส (`case-form-modal.tsx` / `AddressFields`) ของคีย์ที่ `missingRequiredFields()` คืน
+ * — ใช้แปล `missingFields` ใน error ของ API ให้ผู้ใช้รู้ว่าต้องกรอกช่องไหน (UAT BUG-028)
+ */
+export const REQUIRED_FIELD_LABEL: Record<string, string> = {
+  caseRef: 'เลขที่สัญญา',
+  financeCompanyId: 'บริษัทไฟแนนซ์',
+  debtorName: 'ชื่อ-นามสกุลลูกหนี้',
+  debtorNationality: 'สัญชาติ',
+  debtorNationalId: 'เลขบัตรประชาชน',
+  debtorPassportNo: 'เลข Passport / เอกสารอื่น',
+  debtorNationalityOther: 'ระบุสัญชาติ',
+  debtorPhoneMobile: 'เบอร์โทรมือถือ',
+  'addressCurrent.province': 'ที่อยู่ปัจจุบัน — จังหวัด',
+  'addressCurrent.detail': 'ที่อยู่ปัจจุบัน — บ้านเลขที่ / หมู่บ้าน / ถนน',
+  'addressIdCard.province': 'ที่อยู่ตามบัตรประชาชน — จังหวัด',
+  'addressIdCard.detail': 'ที่อยู่ตามบัตรประชาชน — บ้านเลขที่ / หมู่บ้าน / ถนน',
+  assetType: 'ประเภททรัพย์',
+  assetBrandModel: 'ยี่ห้อ/รุ่นเครื่อง',
+  assetImeiSerial: 'IMEI / Serial Number',
+  outstandingDebtSatang: 'มูลหนี้/มูลค่าสินค้าคงเหลือ',
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+/**
+ * แปลงข้อมูลประกอบของ error gate ส่งตรวจ (`CASE_DOCUMENT_INCOMPLETE` → `missing` ·
+ * `REQUIRED_MISSING` → `missingFields`) เป็นรายการภาษาไทยที่แสดงให้ผู้ใช้ได้ทันที
+ * — รับ payload ดิบจาก API (`unknown`) เพราะ envelope กระจาย context ลงมาเป็นคีย์ระดับบนสุด
+ */
+export function readinessGapLabels(payload: Readonly<Record<string, unknown>> | undefined): {
+  documents: string[]
+  fields: string[]
+} {
+  if (payload === undefined) return { documents: [], fields: [] }
+  const documents = stringList(payload.missing)
+    .filter(isDocumentSlot)
+    .map((slot) => DOCUMENT_SLOT_LABEL[slot])
+  const fields = stringList(payload.missingFields).map((key) => REQUIRED_FIELD_LABEL[key] ?? key)
+  return { documents, fields }
+}
+
+/** ข้อความสรุปสิ่งที่ขาดสำหรับ toast/alert — `null` เมื่อ payload ไม่มีรายการให้แสดง */
+export function readinessGapText(payload: Readonly<Record<string, unknown>> | undefined): string | null {
+  const { documents, fields } = readinessGapLabels(payload)
+  const parts: string[] = []
+  if (documents.length > 0) parts.push(`เอกสารที่ยังไม่ได้แนบ: ${documents.join(', ')}`)
+  if (fields.length > 0) parts.push(`ช่องที่ยังไม่ได้กรอก: ${fields.join(', ')}`)
+  return parts.length === 0 ? null : parts.join(' · ')
+}
+
 // ── ตัวระบุเครื่อง (`38` §6.2 `asset_imei_serial` → `02` §6 imei/serial_no · A6) ─
 
 /**

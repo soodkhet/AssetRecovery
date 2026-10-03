@@ -4,6 +4,7 @@ import {
   CASE_STATUS_LABEL,
   assetTypeLabel,
   caseSourceBadgeClass,
+  caseReviewActionLabel,
   caseSourceLabel,
   caseStatusBadgeGroup,
   caseStatusLabel,
@@ -51,5 +52,16 @@ describe('ป้ายช่องทางรับเคส + ประเภ�
     expect(caseSourceBadgeClass('sms')).toBe(caseSourceBadgeClass('manual'))
     expect(assetTypeLabel('smartphone')).toBe('สมาร์ทโฟน')
     expect(assetTypeLabel(null)).toBe('—')
+  })
+})
+
+describe('caseReviewActionLabel — ชื่อ action ของ reviewed_at บนรายการ (UAT BUG-030)', () => {
+  it('แยกรับเคส / ไม่รับเคส / ขอข้อมูลเพิ่ม จากสถานะปัจจุบัน', () => {
+    expect(caseReviewActionLabel('rejected')).toBe('ไม่รับเคส')
+    expect(caseReviewActionLabel('need_info')).toBe('ขอข้อมูลเพิ่ม')
+    expect(caseReviewActionLabel('draft')).toBe('ขอข้อมูลเพิ่ม')
+    expect(caseReviewActionLabel('pending_review')).toBe('ขอข้อมูลเพิ่ม')
+    expect(caseReviewActionLabel('approved')).toBe('รับเคส')
+    expect(caseReviewActionLabel('closed_success')).toBe('รับเคส')
   })
 })

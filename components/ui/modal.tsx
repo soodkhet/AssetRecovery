@@ -3,10 +3,11 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
+import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
 /**
  * Modal — centered + backdrop ตาม `04` §8/§10
- * ปิดด้วย Esc / คลิก backdrop · ล็อก scroll ของหน้าเบื้องหลังระหว่างเปิด
+ * ปิดด้วย Esc (เฉพาะ modal บนสุดเมื่อซ้อนกัน — `modal-stack.ts`) / คลิก backdrop · ล็อก scroll ของหน้าเบื้องหลังระหว่างเปิด
  * ⚠️ Modal ที่ทำลายข้อมูล (ยกเลิก/ลบ/ปลดล็อก) **ต้อง confirm** และคำบนปุ่มต้องตรง action (`04` §10)
  */
 
@@ -38,12 +39,21 @@ export function Modal({
   children?: ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  // ผู้เรียกมักส่ง `onClose` เป็น arrow ใหม่ทุก render — เก็บใน ref เพื่อให้ effect ด้านล่างผูกกับ `open` อย่างเดียว
+  // (ไม่งั้น modal ข้างหลังที่ re-render จะลงทะเบียนชั้นใหม่ขึ้นไปทับตัวบน + แย่ง focus กลับมา)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
 
+    // modal ซ้อนกัน: Esc ปิดเฉพาะตัวบนสุด (UAT BUG-031 — เดิมตัวข้างหลังปิดแต่หน้าดูไฟล์ค้าง)
+    const token = registerModal()
+
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }
 
     const previousOverflow = document.body.style.overflow
@@ -52,10 +62,11 @@ export function Modal({
     panelRef.current?.focus()
 
     return () => {
+      unregisterModal(token)
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKey)
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

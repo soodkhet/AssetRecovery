@@ -27,12 +27,13 @@ import {
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { THAI_PROVINCES } from '@/lib/address/thai-address'
-import { isCaseEditable } from '@/lib/cases/case'
+import { isCaseEditable, readinessGapText } from '@/lib/cases/case'
 import { caseRowActions, type CaseActionButton } from '@/lib/cases/case-actions'
 import { CASE_EDIT_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { CASE_STATUSES } from '@/lib/cases/state-machine'
 import {
   CASE_SOURCE_CHANNELS,
+  caseReviewActionLabel,
   caseSourceBadgeClass,
   caseSourceLabel,
   caseStatusBadgeGroup,
@@ -44,7 +45,6 @@ import type {
   CaseListResultDto,
   CaseStatusChangeResultDto,
 } from '@/lib/cases/types'
-import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
 
@@ -106,7 +106,6 @@ export function CasesManager() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [page, setPage] = useState(1)
 
-  const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
   const [counts, setCounts] = useState<Readonly<Record<string, number>>>({})
 
   const [formOpen, setFormOpen] = useState(false)
@@ -168,19 +167,6 @@ export function CasesManager() {
     }
   }, [fetchList, fetchCounts])
 
-  // ข้อมูลประกอบ filter (บริษัทไฟแนนซ์) โหลดครั้งเดียวตอนเข้าหน้า
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const response = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active')
-      if (cancelled) return
-      setCompanies(response.data ?? [])
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   function updateFilter(next: Partial<Filters>): void {
     setLoading(true)
     setPage(1)
@@ -226,10 +212,12 @@ export function CasesManager() {
         jsonRequest('PATCH', { action: button.action }),
       )
       if (response.error !== undefined || response.data === undefined) {
+        // gate ส่งตรวจ (`38` §9) แนบรายการที่ขาดมาด้วย — แสดงเป็นชื่อเอกสาร/ชื่อช่องตามฟอร์ม (UAT BUG-028)
+        const gap = readinessGapText(response.error?.payload)
         showToast({
           tone: 'error',
           title: response.error?.title ?? `${button.label}ไม่สำเร็จ`,
-          description: response.error?.message ?? 'กรุณาลองใหม่',
+          description: gap ?? response.error?.message ?? 'กรุณาลองใหม่',
         })
         return
       }
@@ -245,6 +233,9 @@ export function CasesManager() {
     }
   }
 
+  // ตัวเลือกบริษัท (ตัวกรอง + ฟอร์ม) มากับรายการเคส — ไม่เรียก `/api/finance-companies` ที่ต้องใช้
+  // `view_master_data` ซึ่งเจ้าหน้าที่อนุมัติเคสไม่มี (`25` §7.1 · UAT BUG-032)
+  const companies = result?.companies ?? []
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -347,7 +338,7 @@ export function CasesManager() {
                 <Th>ทรัพย์</Th>
                 <Th className="text-right">มูลหนี้คงเหลือ</Th>
                 <Th>ทีมที่เสนอ</Th>
-                <Th>สร้างเมื่อ / โดย</Th>
+                <Th>สร้าง / ส่งตรวจ / พิจารณา</Th>
                 <Th>สถานะ</Th>
                 <Th className="text-right">จัดการ</Th>
               </Tr>
@@ -404,6 +395,7 @@ export function CasesManager() {
                     <Td>
                       <div className="text-xs text-slate-700">{fmtDateTime(item.createdAt)}</div>
                       <div className="text-[11px] text-slate-400">{item.createdByName}</div>
+                      <CaseActionTimes item={item} className="mt-1 text-[11px] text-slate-500" />
                     </Td>
                     <Td>
                       <StatusBadge
@@ -473,6 +465,7 @@ export function CasesManager() {
                 </div>
                 <div className="mb-3 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
                   สร้างเมื่อ {fmtDateTime(item.createdAt)} โดย {item.createdByName}
+                  <CaseActionTimes item={item} />
                 </div>
                 <CaseRowActions
                   item={item}
@@ -610,6 +603,24 @@ function CaseRowActions({
       >
         {item.status === 'pending_review' ? 'พิจารณา' : 'ดูรายละเอียด'}
       </Button>
+    </div>
+  )
+}
+
+/**
+ * วันเวลาของ action สำคัญบนรายการ (Rule 05 · UAT BUG-030) — ส่งตรวจ (จาก audit) + รับเคส/ไม่รับเคส/ขอข้อมูลเพิ่ม
+ * (`reviewed_at`) · ไม่มี action นั้น = ไม่แสดงบรรทัด
+ */
+function CaseActionTimes({ item, className }: { item: CaseListItemDto; className?: string }) {
+  if (item.submittedAt === null && item.reviewedAt === null) return null
+  return (
+    <div className={className}>
+      {item.submittedAt !== null && <div>ส่งตรวจ {fmtDateTime(item.submittedAt)}</div>}
+      {item.reviewedAt !== null && (
+        <div>
+          {caseReviewActionLabel(item.status)} {fmtDateTime(item.reviewedAt)}
+        </div>
+      )}
     </div>
   )
 }

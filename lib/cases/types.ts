@@ -75,6 +75,19 @@ export interface CaseListItemDto {
   documentCount: number
   createdAt: string
   createdByName: string
+  /**
+   * วันเวลา "ส่งตรวจ" ครั้งล่าสุด (action `review` → `pending_review`) — `cases` ไม่มีคอลัมน์นี้ใน `02`
+   * จึงอ่านจาก audit ของเคส (UAT BUG-030 · Rule 05 action สำคัญต้องเห็นวันเวลาบน list)
+   */
+  submittedAt: string | null
+  /** `cases.reviewed_at` — วันเวลาที่ผู้พิจารณารับเคส / ไม่รับเคส / ขอข้อมูลเพิ่มครั้งล่าสุด */
+  reviewedAt: string | null
+}
+
+/** ตัวเลือกบริษัทไฟแนนซ์ของหน้ารับเคส (ตัวกรอง + ฟอร์ม) — ชื่ออย่างเดียว ไม่มีข้อมูลสัญญา/ภาษี */
+export interface CaseCompanyOptionDto {
+  id: string
+  name: string
 }
 
 export interface CaseListResultDto {
@@ -82,6 +95,11 @@ export interface CaseListResultDto {
   total: number
   page: number
   limit: number
+  /**
+   * บริษัท active ที่ผู้เรียกเลือกได้ (Company User = บริษัทตัวเองเท่านั้น) — ส่งมากับรายการเคสเพราะ
+   * `GET /api/finance-companies` ต้องใช้ `view_master_data` ซึ่งเจ้าหน้าที่อนุมัติเคสไม่มี (`25` §7.1 · UAT BUG-032)
+   */
+  companies: CaseCompanyOptionDto[]
 }
 
 /** ความพร้อมขึ้น `pending_review` (`38` §9) — คำนวณจาก pure `caseReadiness()` */
@@ -164,7 +182,10 @@ export interface CaseDetailDto extends CaseListItemDto {
   assetType: string | null
   assetImeiSerial: string | null
   projectedRevenueSatang: number | null
+  /** ค่าดิบ `calculation_source` (มี template id) — เก็บไว้ trace · หน้าจอใช้ `projectedRevenueSourceLabel` */
   projectedRevenueSource: string | null
+  /** ข้อความอ่านง่าย: ชื่อเทมเพลต + version + สูตรย่อ (UAT BUG-034) — `null` เมื่อไม่มีค่าดิบหรืออ่านไม่ออก */
+  projectedRevenueSourceLabel: string | null
   suggestedTeamId: string | null
   assignedTeamId: string | null
   teamChangeReason: string | null
@@ -179,7 +200,6 @@ export interface CaseDetailDto extends CaseListItemDto {
   /** action ที่ทำได้จากสถานะปัจจุบัน (`38` §10) — UX เท่านั้น API ตรวจซ้ำเสมอ */
   allowedActions: string[]
   reviewNote: string | null
-  reviewedAt: string | null
   outcome: string | null
   closedAt: string | null
   updatedAt: string

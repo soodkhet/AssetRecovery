@@ -338,7 +338,7 @@ function ProjectedRevenueBox({ detail }: { detail: CaseDetailDto }) {
       <p className="mt-1 text-[11px] text-slate-500">
         {detail.projectedRevenueSource === null
           ? 'ต้องมีเทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้ก่อน'
-          : `คำนวณจากโมเดล ${detail.projectedRevenueSource}`}{' '}
+          : `คำนวณจาก${detail.projectedRevenueSourceLabel ?? 'เทมเพลตค่าบริการของบริษัทไฟแนนซ์'}`}{' '}
         · เป็นประมาณการก่อนรับเคส ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)
       </p>
     </div>
