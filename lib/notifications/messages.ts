@@ -232,6 +232,45 @@ export function caseClosedSuccessMessage(input: {
   }
 }
 
+/**
+ * ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ (UAT BUG-071) — **ข้อความแยก** จากตอนปิดงานครั้งแรก ไม่ส่ง
+ * "ปิดงานสำเร็จ — รอรับทรัพย์เข้าคลัง" ซ้ำ · ผู้เรียกส่งเฉพาะเมื่อทรัพย์ยังรอรับเข้าคลัง (สายสำเร็จ)
+ */
+export function caseCloseResubmittedMessage(input: {
+  caseRef: string
+  agentName: string | null
+  outcome: 'closed_success' | 'closed_fail'
+}): NotificationMessage {
+  const by = input.agentName === null ? '' : ` โดย ${input.agentName}`
+  const success = input.outcome === 'closed_success'
+  return {
+    eventCode: 'case.close_resubmitted',
+    title: `ส่งหลักฐานใหม่แล้ว — ${input.caseRef}`,
+    body: success
+      ? `เคส ${input.caseRef} ส่งหลักฐานปิดงานใหม่${by} · ทรัพย์ยังรอรับเข้าคลัง`
+      : `เคส ${input.caseRef} ส่งหลักฐานปิดงานไม่สำเร็จชุดใหม่${by}`,
+    linkPath: success ? '/warehouse' : '/cases/assign',
+  }
+}
+
+/**
+ * ใครต้องรู้เมื่อส่งหลักฐานใหม่ (UAT BUG-071) — สายสำเร็จ = คลัง **เฉพาะเมื่อทรัพย์ยังรอรับเข้า**
+ * (`pending_intake` / `intake_rejected` — รับเข้าไปแล้วไม่มีงานให้คลังทำต่อ) · สายไม่สำเร็จ = ผู้มอบหมายของทีม
+ * คืน `null` = ไม่ต้องแจ้งใคร
+ */
+export function caseCloseResubmittedNotice(input: {
+  caseRef: string
+  agentName: string | null
+  outcome: 'closed_success' | 'closed_fail'
+  assetStatus: string | null
+}): { capability: 'intake_asset' | 'assign_case'; message: NotificationMessage } | null {
+  if (input.outcome === 'closed_success') {
+    if (input.assetStatus !== 'pending_intake' && input.assetStatus !== 'intake_rejected') return null
+    return { capability: 'intake_asset', message: caseCloseResubmittedMessage(input) }
+  }
+  return { capability: 'assign_case', message: caseCloseResubmittedMessage(input) }
+}
+
 export function caseClosedFailMessage(input: {
   caseRef: string
   agentName: string | null

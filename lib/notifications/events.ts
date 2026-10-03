@@ -118,6 +118,12 @@ export const NOTIFICATION_EVENTS = {
     source: '90 §6.3 · 41 §17.2',
     description: 'ปิดงานไม่สำเร็จ — ไม่ผ่านคลัง',
   },
+  'case.close_resubmitted': {
+    module: 'ภาคสนาม',
+    level: 'sent',
+    source: '41 §17.2 · UAT BUG-071',
+    description: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แจ้งคนที่ทำงานต่อด้วยข้อความแยกจากตอนปิดงานครั้งแรก',
+  },
   'case.evidence_rejected': {
     module: 'ภาคสนาม',
     level: 'warning',

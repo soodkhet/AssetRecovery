@@ -24,6 +24,7 @@ import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/
 import {
   caseClosedFailMessage,
   caseClosedSuccessMessage,
+  caseCloseResubmittedNotice,
   evidenceRejectedMessage,
   expenseQueueMessage,
 } from '@/lib/notifications/messages'
@@ -1055,6 +1056,28 @@ function notifyCaseClosed(
   dispatchToCapability(organizationId, capability, { teamId }, message)
 }
 
+/**
+ * ส่งหลักฐานใหม่หลังถูกตีกลับ (UAT BUG-071) — ข้อความแยก "ส่งหลักฐานใหม่แล้ว" ไม่ใช่ข้อความปิดงานซ้ำ
+ * ผู้รับ/เงื่อนไขอยู่ที่ `caseCloseResubmittedNotice()` (pure) · กรองตามทีมของเคสเหมือนตอนปิดงาน
+ */
+function notifyCaseResubmitted(
+  organizationId: string,
+  outcome: CaseOutcome,
+  caseRef: string,
+  agentName: string,
+  teamId: string | null,
+  assetStatus: string | null,
+): void {
+  const notice = caseCloseResubmittedNotice({
+    caseRef,
+    agentName,
+    outcome: outcome === 'closed_success' ? 'closed_success' : 'closed_fail',
+    assetStatus,
+  })
+  if (notice === null) return
+  dispatchToCapability(organizationId, notice.capability, { teamId }, notice.message)
+}
+
 /** `41` §15 — รายการเบิกที่เข้า `pending_approval` แล้วต้องแจ้งฝ่ายบัญชี/การเงิน */
 function notifyExpenseQueue(
   organizationId: string,
@@ -1642,11 +1665,22 @@ export async function resubmitCloseCase(
       where: { id: current.id },
       select: assignmentSelect,
     })
-    return { assignment, expenses }
+    const assetStatus =
+      asset === null
+        ? null
+        : (await tx.asset.findUniqueOrThrow({ where: { id: asset.assetId }, select: { assetStatus: true } })).assetStatus
+    return { assignment, expenses, assetStatus }
   })
 
   notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef, current.teamId)
-  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName, current.teamId)
+  notifyCaseResubmitted(
+    user.organizationId,
+    outcome,
+    current.case.caseRef,
+    user.fullName,
+    current.teamId,
+    result.assetStatus,
+  )
 
   return toActionResult(result.assignment, ['case.close_resubmitted'])
 }
