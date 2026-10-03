@@ -75,6 +75,13 @@ export interface CaseListItemDto {
   documentCount: number
   createdAt: string
   createdByName: string
+  /**
+   * วันเวลา "ส่งตรวจ" ครั้งล่าสุด (action `review` → `pending_review`) — `cases` ไม่มีคอลัมน์นี้ใน `02`
+   * จึงอ่านจาก audit ของเคส (UAT BUG-030 · Rule 05 action สำคัญต้องเห็นวันเวลาบน list)
+   */
+  submittedAt: string | null
+  /** `cases.reviewed_at` — วันเวลาที่ผู้พิจารณารับเคส / ไม่รับเคส / ขอข้อมูลเพิ่มครั้งล่าสุด */
+  reviewedAt: string | null
 }
 
 /** ตัวเลือกบริษัทไฟแนนซ์ของหน้ารับเคส (ตัวกรอง + ฟอร์ม) — ชื่ออย่างเดียว ไม่มีข้อมูลสัญญา/ภาษี */
@@ -193,7 +200,6 @@ export interface CaseDetailDto extends CaseListItemDto {
   /** action ที่ทำได้จากสถานะปัจจุบัน (`38` §10) — UX เท่านั้น API ตรวจซ้ำเสมอ */
   allowedActions: string[]
   reviewNote: string | null
-  reviewedAt: string | null
   outcome: string | null
   closedAt: string | null
   updatedAt: string

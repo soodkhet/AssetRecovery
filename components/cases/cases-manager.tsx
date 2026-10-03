@@ -33,6 +33,7 @@ import { CASE_EDIT_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permi
 import { CASE_STATUSES } from '@/lib/cases/state-machine'
 import {
   CASE_SOURCE_CHANNELS,
+  caseReviewActionLabel,
   caseSourceBadgeClass,
   caseSourceLabel,
   caseStatusBadgeGroup,
@@ -337,7 +338,7 @@ export function CasesManager() {
                 <Th>ทรัพย์</Th>
                 <Th className="text-right">มูลหนี้คงเหลือ</Th>
                 <Th>ทีมที่เสนอ</Th>
-                <Th>สร้างเมื่อ / โดย</Th>
+                <Th>สร้าง / ส่งตรวจ / พิจารณา</Th>
                 <Th>สถานะ</Th>
                 <Th className="text-right">จัดการ</Th>
               </Tr>
@@ -394,6 +395,7 @@ export function CasesManager() {
                     <Td>
                       <div className="text-xs text-slate-700">{fmtDateTime(item.createdAt)}</div>
                       <div className="text-[11px] text-slate-400">{item.createdByName}</div>
+                      <CaseActionTimes item={item} className="mt-1 text-[11px] text-slate-500" />
                     </Td>
                     <Td>
                       <StatusBadge
@@ -463,6 +465,7 @@ export function CasesManager() {
                 </div>
                 <div className="mb-3 border-t border-slate-100 pt-2 text-[11px] text-slate-400">
                   สร้างเมื่อ {fmtDateTime(item.createdAt)} โดย {item.createdByName}
+                  <CaseActionTimes item={item} />
                 </div>
                 <CaseRowActions
                   item={item}
@@ -600,6 +603,24 @@ function CaseRowActions({
       >
         {item.status === 'pending_review' ? 'พิจารณา' : 'ดูรายละเอียด'}
       </Button>
+    </div>
+  )
+}
+
+/**
+ * วันเวลาของ action สำคัญบนรายการ (Rule 05 · UAT BUG-030) — ส่งตรวจ (จาก audit) + รับเคส/ไม่รับเคส/ขอข้อมูลเพิ่ม
+ * (`reviewed_at`) · ไม่มี action นั้น = ไม่แสดงบรรทัด
+ */
+function CaseActionTimes({ item, className }: { item: CaseListItemDto; className?: string }) {
+  if (item.submittedAt === null && item.reviewedAt === null) return null
+  return (
+    <div className={className}>
+      {item.submittedAt !== null && <div>ส่งตรวจ {fmtDateTime(item.submittedAt)}</div>}
+      {item.reviewedAt !== null && (
+        <div>
+          {caseReviewActionLabel(item.status)} {fmtDateTime(item.reviewedAt)}
+        </div>
+      )}
     </div>
   )
 }

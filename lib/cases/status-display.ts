@@ -49,6 +49,18 @@ export function caseStatusLabel(status: string | null | undefined): string {
   return isCaseStatus(status) ? CASE_STATUS_LABEL[status] : status
 }
 
+/**
+ * ชื่อ action ของ `reviewed_at` บนรายการเคส (UAT BUG-030) — คอลัมน์เดียวถูกเขียนโดย 3 action
+ * (รับเคส → `approved` · ไม่รับเคส → `rejected` · ขอข้อมูลเพิ่ม → `need_info`) จึงแยกจากสถานะปัจจุบัน:
+ * `need_info`/`draft`/`pending_review` ที่มี `reviewed_at` แปลว่าการพิจารณาล่าสุดคือ "ขอข้อมูลเพิ่ม"
+ * (รับเคสแล้วย้อนกลับเป็นร่างไม่ได้) · `rejected` = ไม่รับเคส · นอกนั้น (approved เป็นต้นไป) = รับเคส
+ */
+export function caseReviewActionLabel(status: string): string {
+  if (status === 'rejected') return 'ไม่รับเคส'
+  if (status === 'need_info' || status === 'draft' || status === 'pending_review') return 'ขอข้อมูลเพิ่ม'
+  return 'รับเคส'
+}
+
 /** กลุ่มสีของสถานะ — สถานะที่ไม่รู้จักตกกลุ่มเทากลาง (เหมือน mapper กลาง) */
 export function caseStatusBadgeGroup(status: string | null | undefined): StatusBadgeGroup {
   if (typeof status !== 'string' || !isCaseStatus(status)) return 'neutral'

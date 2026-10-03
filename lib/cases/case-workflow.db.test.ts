@@ -538,6 +538,30 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(bodies[0]).not.toContain('snapshot')
   })
 
+  it('รายการเคสมีวันเวลาส่งตรวจ (จาก audit) และวันเวลารับเคส (reviewed_at) (BUG-030)', async () => {
+    const caseRef = 'SF-2026-2330'
+    const caseId = await seedCase(caseRef, { withDocuments: true })
+    const { listCases, getCase } = await import('@/lib/cases/queries')
+    const { caseListQuerySchema } = await import('@/lib/cases/schemas')
+    const query = caseListQuerySchema.parse({ search: caseRef })
+
+    const [draft] = (await listCases(actor, query)).items
+    expect(draft?.submittedAt).toBeNull()
+    expect(draft?.reviewedAt).toBeNull()
+
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    const [pending] = (await listCases(actor, query)).items
+    expect(pending?.submittedAt).not.toBeNull()
+    expect(pending?.reviewedAt).toBeNull()
+
+    await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+    const [approved] = (await listCases(actor, query)).items
+    expect(approved?.submittedAt).toBe(pending?.submittedAt)
+    expect(approved?.reviewedAt).not.toBeNull()
+    expect(Date.parse(approved?.reviewedAt ?? '')).toBeGreaterThanOrEqual(Date.parse(approved?.submittedAt ?? ''))
+    expect((await getCase(actor, caseId)).submittedAt).toBe(pending?.submittedAt)
+  })
+
   /**
    * UAT BUG-035 — สองคำสั่งเปลี่ยนสถานะยิงพร้อมกันจากสถานะเดียวกัน ("รับเคส" ชน "ไม่รับเคส")
    * ต้องสำเร็จแค่ตัวเดียว อีกตัวได้ `CASE_INVALID_STATUS_TRANSITION` · audit + แจ้งเตือนเกิดชุดเดียว

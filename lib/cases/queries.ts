@@ -94,6 +94,7 @@ const listSelect = {
   assetDescription: true,
   debtAmountSatang: true,
   createdAt: true,
+  reviewedAt: true,
   company: { select: { name: true } },
   suggestedTeam: { select: { name: true } },
   assignedTeam: { select: { name: true } },
@@ -142,7 +143,6 @@ export const detailSelect = {
   serviceFeeBasisSnapshot: true,
   serviceFeeChargeOnFail: true,
   reviewNote: true,
-  reviewedAt: true,
   outcome: true,
   closedAt: true,
   updatedAt: true,
@@ -228,7 +228,7 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
   }
 }
 
-function toListDto(row: CaseListRow): CaseListItemDto {
+function toListDto(row: CaseListRow, submittedAt: Date | null = null): CaseListItemDto {
   return {
     id: row.id,
     caseRef: row.caseRef,
@@ -246,7 +246,34 @@ function toListDto(row: CaseListRow): CaseListItemDto {
     documentCount: row._count.documents,
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
+    submittedAt: submittedAt?.toISOString() ?? null,
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
   }
+}
+
+/**
+ * วันเวลา "ส่งตรวจ" ล่าสุดของแต่ละเคส (UAT BUG-030) — `02` ไม่มีคอลัมน์ `submitted_at` ที่ `cases`
+ * จึงอ่านจาก audit ของ action `review` (เขียนใน transaction เดียวกับการเปลี่ยนสถานะเสมอ)
+ * · query เดียวต่อหน้า (ใช้ `idx_audit_target` org + target_type + target_id + created_at)
+ */
+async function latestSubmittedAt(organizationId: string, caseIds: readonly string[]): Promise<Map<string, Date>> {
+  const latest = new Map<string, Date>()
+  if (caseIds.length === 0) return latest
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      organizationId,
+      targetType: 'cases',
+      targetId: { in: [...caseIds] },
+      action: 'status_change',
+      afterData: { path: ['action'], equals: 'review' },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { targetId: true, createdAt: true },
+  })
+  for (const row of rows) {
+    if (row.targetId !== null && !latest.has(row.targetId)) latest.set(row.targetId, row.createdAt)
+  }
+  return latest
 }
 
 function address(
@@ -313,7 +340,6 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     serviceFeeChargeOnFail: row.serviceFeeChargeOnFail,
     allowedActions: allowedActionsFrom(row.status),
     reviewNote: row.reviewNote,
-    reviewedAt: row.reviewedAt?.toISOString() ?? null,
     outcome: row.outcome,
     closedAt: row.closedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt.toISOString(),
@@ -441,7 +467,11 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
     listCaseCompanyOptions(user),
   ])
 
-  const items = rows.map(toListDto)
+  const submitted = await latestSubmittedAt(
+    user.organizationId,
+    rows.map((row) => row.id),
+  )
+  const items = rows.map((row) => toListDto(row, submitted.get(row.id) ?? null))
   return {
     items: isCompanySideViewer(user) ? items.map(redactCaseListForCompany) : items,
     total,
@@ -458,8 +488,10 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
     select: detailSelect,
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
-  if (isCompanySideViewer(user)) return redactCaseDetailForCompany(toDetailDto(row))
-  return await withProjectedSourceTemplateName(user.organizationId, toDetailDto(row))
+  const submittedAt = (await latestSubmittedAt(user.organizationId, [row.id])).get(row.id) ?? null
+  const detail: CaseDetailDto = { ...toDetailDto(row), submittedAt: submittedAt?.toISOString() ?? null }
+  if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
+  return await withProjectedSourceTemplateName(user.organizationId, detail)
 }
 
 /**
