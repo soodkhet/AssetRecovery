@@ -170,6 +170,9 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
   // ผู้ใช้งาน `08` §12 + `05` §12 (Phase 1.9): manage = Superadmin (ไม่มี record) / ธุรการ ·
   // view = บริหาร (ระดับองค์กร) และผู้จัดการทีมติดตามทรัพย์ (เห็นเฉพาะคนในทีมตัวเอง — scope
   // ระดับแถวบังคับที่ `lib/users/queries.ts` ไม่ใช่ที่ access_level)
+  // เงินทดรองจ่าย `15` §5 ("การเงิน — อนุมัติ Advance · Full") + `15` §12 (UAT BUG-047):
+  // อนุมัติ/ปฏิเสธ = การเงินระดับ manage · ไม่มีแถว = Superadmin คนเดียวทำได้ (ขัดสเปค)
+  approve_advance: [[finance, 'manage']],
   manage_users: [
     [adminOffice, 'manage'],
     [executive, 'view'],
@@ -203,6 +206,7 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
  */
 export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_compensation_plans',
+  'approve_advance',
   'manage_users',
   'view_audit_log',
   'manage_jobs',

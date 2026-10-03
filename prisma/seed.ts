@@ -175,8 +175,11 @@ async function main() {
 
   // ── 8. Role ↔ Capability (Functional Permission Matrix `25` §7 · `13` §6.10) ──
   // ค่าเริ่มต้นเท่านั้น — Superadmin ปรับได้ทีหลังผ่าน `PATCH /api/roles/:id/permissions`
-  // (ยกเว้นรายการที่ล็อกไว้ตาม `25` §16.1) · upsert = รันซ้ำได้และไม่ทับค่าที่ยังไม่มีการแก้
+  // (ยกเว้นรายการที่ล็อกไว้ตาม `25` §16.1) · **สร้างเฉพาะแถวที่ยังไม่มี** — ระดับสิทธิ์ที่ Superadmin
+  // ปรับไว้แล้วต้องไม่ถูก seed ทับ (UAT BUG-047: รัน seed ซ้ำกับฐานที่ใช้งานแล้วเพื่อเติมแถวใหม่ได้ปลอดภัย)
+  // ⚠️ แถว default ที่ Superadmin เคย "ถอดสิทธิ์" (ลบแถว) จะถูกสร้างกลับ — log ด้านล่างแสดงทุกแถวที่สร้างใหม่
   const roleIdCache = new Map<string, string>()
+  const createdAssignments: string[] = []
   for (const assignment of DEFAULT_ROLE_CAPABILITIES) {
     const roleKey = `${assignment.role.roleGroup}::${assignment.role.name}`
     let roleId = roleIdCache.get(roleKey)
@@ -202,12 +205,21 @@ async function main() {
     })
     if (!capability) throw new Error(`[seed] ไม่พบ capability: ${assignment.capabilityCode}`)
 
-    await prisma.roleCapability.upsert({
+    const existing = await prisma.roleCapability.findUnique({
       where: { roleId_capabilityId: { roleId, capabilityId: capability.id } },
-      update: { accessLevel: assignment.level },
-      create: { roleId, capabilityId: capability.id, accessLevel: assignment.level },
+      select: { roleId: true },
     })
+    if (existing) continue
+    await prisma.roleCapability.create({
+      data: { roleId, capabilityId: capability.id, accessLevel: assignment.level },
+    })
+    createdAssignments.push(`${roleKey} → ${assignment.capabilityCode}=${assignment.level}`)
   }
+  console.log(
+    createdAssignments.length === 0
+      ? '[seed] role_capabilities: ไม่มีแถวใหม่ (แถวที่มีอยู่แล้วไม่ถูกแตะ)'
+      : `[seed] role_capabilities สร้างใหม่ ${createdAssignments.length} แถว (แถวเดิมไม่ถูกแตะ):\n  ${createdAssignments.join('\n  ')}`,
+  )
 
   const [roleCount, matrixCount, capabilityCount, roleCapabilityCount] = await Promise.all([
     prisma.role.count({ where: { organizationId: org.id, isSeed: true } }),
