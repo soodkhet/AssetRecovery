@@ -14,7 +14,7 @@
 | BUG-007 | R1-probe | S4 | code | `parseBahtInput` ปัดเศษเงียบเมื่อกรอกทศนิยมเกิน 2 ตำแหน่ง (ควร inline error) | fixed `b79e086` (merge 03/10/2569) |
 | BUG-008 | R1-probe | S3 | code | Approval Matrix ชื่อ role เป็นข้อความอิสระ พิมพ์ผิดก็บันทึกได้ ไปพังตอนอนุมัติ (`APPROVAL_MATRIX_NOT_FOUND`) + ไม่มีกันแถวซ้ำ | fixed `511a636` (merge 03/10/2569) |
 | BUG-009 | R1-probe | S4 | code? | ทีมรับแผนค่าตอบแทนของอีกฝั่ง (inhouse ↔ outsource) ได้ · R1 ยืนยัน: รายชื่อ supervisor/manager ในฟอร์มทีมมีพนักงานภาคสนามและคนต่างฝั่งปนมา | needs-decision — `09`/`11` ไม่บังคับให้แผน/หัวหน้า/ผู้จัดการเป็นฝั่งเดียวกับทีม (`09` §7.1 ให้ dropdown แสดงทุกแผน) — fixer ไม่แก้ |
-| BUG-010 | DATASET | S1 | code | ค่าคอมมิชชัน/ค่าเสี่ยงไม่ถูกสร้างเป็น expense ตอนปิดงาน (`commissionSatang()` ไม่มีที่เรียกนอกเทสต์) — หน้า income อ่านจากแผนตรง ⇒ ไม่เข้ารอบจ่าย? | ยืนยันใน R4/R6 |
+| BUG-010 | DATASET | S1 | code | ค่าคอมมิชชัน/ค่าเสี่ยงไม่ถูกสร้างเป็น expense ตอนปิดงาน (`commissionSatang()` ไม่มีที่เรียกนอกเทสต์) — หน้า income อ่านจากแผนตรง ⇒ ไม่เข้ารอบจ่าย? | ✅ ยืนยันด้วยข้อมูลจริงใน R4a: ปิดงาน 5 เคส แถวคอมมิชชัน/ค่าเสี่ยง = 0 — needs-decision (PO + นักบัญชี) |
 | BUG-011 | DATASET | S1 | spec-gap | advance คืนเงิน: โค้ด approved − used · `22` §6.13 requested − used · used > requested โค้ดบล็อก แต่ `22`/`15` ว่า return 0 + เบิกส่วนเกินแยก | needs-decision |
 | BUG-012 | DATASET | S5 | spec-gap | `22` §6.11 AR = total − received ยังไม่อัปเดตตามมติ A1 (โค้ดถูกแล้ว: − (received + wht)) | doc fix |
 | BUG-013 | DATASET | S1 | spec-gap | DAILY_FLAT น้ำมัน: โค้ด+`22` §6.2 = ต่อเคส · `11` §81 = บาทต่อวัน (D1) | needs-decision |
@@ -50,23 +50,30 @@
 | BUG-042 | R3-sheet | S5 | spec-gap | เหตุผลว่าง/สั้นได้ `REQUIRED_MISSING` แทน `ASSIGNMENT_REASON_REQUIRED` (`40` §12) · UI disable ปุ่มเฉพาะตอนว่าง · error code ของงานมอบหมายนิยามใน `40` §12 ไม่ใช่ `24` | ✅ ยืนยัน (เหตุผล 1–4 ตัวอักษรกดได้ → "ข้อมูลไม่ครบ" ไม่บอกขั้นต่ำ 5) — needs-decision เรื่อง error code |
 | BUG-043 | R3-sheet | S4 | code | timeout แล้ว `reassignment_history.reassigned_by` บันทึกคนที่มอบหมายครั้งแรก แทนคนที่ขอเปลี่ยน | ✅ ยืนยัน + ขยาย: แถวใหม่ของ in1 ก็บันทึก `created_by` เป็นคนมอบหมายครั้งแรก — open |
 | BUG-044 | R3-sheet | S5 | spec-gap | คนที่ไม่ใช่เจ้าของงานตอบคำขอ ได้ 404 `CASE_NOT_FOUND` แต่ spec ว่า `PERMISSION_DENIED` (ไม่ leak — ยอมรับได้?) | ✅ ยืนยัน 404 `CASE_NOT_FOUND` — needs-decision |
-| BUG-045 | R4-sheet | S2 | code | เจ้าหน้าที่อนุมัติเคสไม่มีหน้าจอตีกลับหลักฐาน (`reject_evidence`) และไม่มีหน้าใดนอก /field แสดงหลักฐานปิดงานเลย — มีแต่ API | fixed `02b7ccd` (branch fixer R4 — รอ merge หลัง R4a) |
+| BUG-045 | R4-sheet | S2 | code | เจ้าหน้าที่อนุมัติเคสไม่มีหน้าจอตีกลับหลักฐาน (`reject_evidence`) และไม่มีหน้าใดนอก /field แสดงหลักฐานปิดงานเลย — มีแต่ API | fixed `02b7ccd` (branch fixer R4 — รอ merge หลัง R4a) · R4a: พนักงานเองก็เปิดดูรูป/วิดีโอที่ส่งแล้วไม่ได้ |
 | BUG-046 | R4-sheet | S2 | code | พนักงานภาคสนามไม่มีหน้าจอขอเงินทดรอง (ปุ่มอยู่ใน /finance ที่พนักงานเข้าไม่ได้) | fixed `3f63c5b` (branch fixer R4 — รอ merge หลัง R4a) |
 | BUG-047 | R4-sheet | S2 | code/seed | ไม่มี role ใดได้ capability `approve_advance` ⇒ ฝ่ายการเงินอนุมัติ/ปฏิเสธเงินทดรองไม่ได้ (Superadmin ได้คนเดียว) | fixed `27f84f8` (branch fixer R4 — รอ merge หลัง R4a) |
-| BUG-048 | R4-sheet | S4 | code | ช่อง "บันทึกเพิ่มเติม" ในฟอร์มปิดงานไม่ถูกบันทึก | needs-decision — `02` ไม่มีคอลัมน์ note ใน `case_evidences` · ก) เพิ่มคอลัมน์ (แก้ `02` + migration) ข) เอาช่องออกจากฟอร์ม |
+| BUG-048 | R4-sheet | S4 | code | ช่อง "บันทึกเพิ่มเติม" ในฟอร์มปิดงานไม่ถูกบันทึก | ✅ ยืนยันใน R4a (note หายถาวรหลังปิดงาน) · needs-decision — `02` ไม่มีคอลัมน์ note ใน `case_evidences` · ก) เพิ่มคอลัมน์ ข) เอาช่องออก |
 | BUG-049 | R4-sheet | S4 | code | แจ้งเตือน "หลักฐานถูกตีกลับ" ลิงก์ไป `/field/cases/<id>` ซึ่งเป็น 404 | fixed `a38f561` (branch fixer R4 — รอ merge หลัง R4a) |
-| BUG-050 | R4-sheet | S4 | spec-gap | server รับ path หลักฐานเป็นข้อความอะไรก็ได้ + ไม่ตรวจเนื้อไฟล์ · ฝั่ง browser ตรวจแค่ MIME prefix (คู่กับ BUG-037) | needs-decision (รวมกับ BUG-037) |
+| BUG-050 | R4-sheet | S4 | spec-gap | server รับ path หลักฐานเป็นข้อความอะไรก็ได้ + ไม่ตรวจเนื้อไฟล์ · ฝั่ง browser ตรวจแค่ MIME prefix (คู่กับ BUG-037) | ✅ ยืนยันใน R4a: ไฟล์ข้อความ 37 ไบต์ชื่อ .mp4 อัปโหลดผ่าน — needs-decision (รวมกับ BUG-037) |
 | BUG-051 | R4-sheet | S4 | code | ลิงก์ superseded ของ expense แถวเก่าชี้แถวทดแทนผิดตัว | fixed `188ce65` (branch fixer R4 — รอ merge หลัง R4a) |
 | BUG-052 | R4-sheet | S3 | code | resubmit คิดราคา expense ใหม่ด้วยแผน/วันที่ ณ ตอน resubmit (ควรยึด snapshot เดิม — `92` §7.1) | needs-decision — `41` §8/§10.1 ให้คำนวณใหม่ตอน resubmit "ตามกฎปกติ" vs `92` §7.1 snapshot เมื่อเกิด · ก) ใช้แผน/วันที่ตอนปิดงานครั้งแรก ข) คงเดิม |
-| BUG-053 | R4-sheet | S5 | code | ปุ่มบันทึกร่างโชว์ toast สำเร็จแม้บันทึกล้ม | fixed `d6ae4c6` (branch fixer R4 — รอ merge หลัง R4a) |
-| BUG-054 | R4-sheet | S4 | spec-gap | การ์ดเคสและหน้ารายได้ของพนักงานโชว์ค่าคอมมิชชัน ฿500/฿1,000 ที่ระบบไม่เคยจ่ายจริง (ผลกระทบของ BUG-010) | needs-decision (ผูก BUG-010) |
+| BUG-053 | R4-sheet | S5 | code | ปุ่มบันทึกร่างโชว์ toast สำเร็จแม้บันทึกล้ม | fixed `d6ae4c6` (branch fixer R4 — รอ merge หลัง R4a) · R4a ยืนยันว่ายังเกิดบนโค้ด staging ก่อน merge |
+| BUG-054 | R4-sheet | S4 | spec-gap | การ์ดเคสและหน้ารายได้ของพนักงานโชว์ค่าคอมมิชชัน ฿500/฿1,000 ที่ระบบไม่เคยจ่ายจริง (ผลกระทบของ BUG-010) | ✅ ยืนยันใน R4a (โชว์ ฿500/฿1,000/เบี้ยเสี่ยง ฿200 ไม่มี expense รองรับ) — needs-decision (ผูก BUG-010) |
 | BUG-055 | R4-sheet | S4 | spec-gap | ไม่มีกระบวนการอนุมัติหลักฐานปิดงาน — `case_evidences` ค้าง `pending` ตลอด (ใครอนุมัติ เมื่อไร?) | needs-decision |
-| BUG-056 | R4-sheet | S3 | spec-gap | เพื่อนร่วมทีมเปิดเคสของคนอื่นแบบอ่านอย่างเดียวได้ เห็นเบอร์/ที่อยู่ลูกหนี้ (คล้าย BUG-022 PDPA) | needs-decision (รวมกับ BUG-022) |
-| BUG-057 | R4-sheet | S5 | spec-gap | ปิดงานไม่สำเร็จไม่มีช่องเหตุผลที่บังคับแยก | needs-decision |
+| BUG-056 | R4-sheet | S3 | spec-gap | เพื่อนร่วมทีมเปิดเคสของคนอื่นแบบอ่านอย่างเดียวได้ เห็นเบอร์/ที่อยู่ลูกหนี้ (คล้าย BUG-022 PDPA) | ✅ ยืนยันใน R4a: เพื่อนร่วมทีม GET เคสคนอื่นได้ 200 พร้อมเลขบัตร/เบอร์/ที่อยู่/เอกสาร/หลักฐาน (เขียนแทนได้ 404) — needs-decision (รวมกับ BUG-022) |
+| BUG-057 | R4-sheet | S5 | spec-gap | ปิดงานไม่สำเร็จไม่มีช่องเหตุผลที่บังคับแยก | ✅ ยืนยันใน R4a — needs-decision |
 | BUG-058 | R4-sheet | S5 | spec-gap | สร้างเงินทดรองด้วยวันครบกำหนดเคลียร์ในอดีตได้ (schema ตรวจแค่รูปแบบ) — UAT ใช้ทำ ADV3 overdue | needs-decision |
 | BUG-059 | R3 | S4 | code | แจ้งเตือน timeout ที่ส่งถึงพนักงานลิงก์ไป `/cases/assign` → เด้งไป `/dashboard` · ข้อความเหมือนกันทั้ง 3 คน พนักงานใหม่ไม่รู้ว่าได้เคสเพิ่ม | open |
 | BUG-060 | R3 | S5 | spec-gap | อัตราสำเร็จก่อนมีเคสปิด: บางจุดแสดง "0.00%" บางจุด "N/A" แอปพนักงาน "-" · ตัวหารควรเป็นเคสที่ปิดแล้วหรือเคสที่ได้รับมอบหมาย + สัญลักษณ์ควรเหมือนกัน (Rule 01: หารศูนย์ = N/A) | needs-decision |
 | BUG-061 | R3 | S5 | code | ตอนโอนเคส `case_assignments.reassign_reason` ของแถวเดิมถูกเขียนทับด้วยเหตุผลที่ถูกโอนออก (`reassignment_history` ยังครบ) | open |
+| BUG-062 | R4.08 | S4 | code | แผนที่เล็กตอนเช็คอินเป็นรูปเสียทุกครั้ง — โหลดจาก `staticmap.openstreetmap.de` ซึ่ง DNS ไม่มีแล้ว (NXDOMAIN) `lib/field/map-pan.ts:82` | open |
+| BUG-063 | R4a | S2 | spec-gap/seed | **ไม่มี role ใดถือ capability คลังเลย** (`intake_asset` และอีก 3 ตัว) ⇒ ปิดงานสำเร็จแล้วไม่มีแจ้งเตือนถึงใคร · งานคลังทำได้แค่ Superadmin · **บล็อก R5** | needs-decision |
+| BUG-064 | R4a | S3 | code | แจ้งเตือน "ปิดงานไม่สำเร็จ"/"มีรายการเบิกใหม่" ส่งถึงทุกคนในองค์กรที่ถือ capability ไม่กรองทีม (mgr.out ได้ของ C3 ทีม A) | open |
+| BUG-065 | R4a | S5 | code | กดรับงานแล้ว toast ไม่มีเลขเคส · "มอบหมายเมื่อ" ใน modal ไม่มีเวลา | open |
+| BUG-066 | R4a | S4 | code | การ์ด "รับงานแล้ว" ไม่แสดงเวลารับงาน · การ์ด "กำลังติดตาม" ไม่มีเลขเคส (Rule 05) | open |
+| BUG-067 | R4a | S5 | code | ไฟล์แนบในฟอร์มปิดงานแสดงเป็นไอคอน ไม่มีภาพย่อ/ชื่อไฟล์ | open |
+| BUG-068 | R4a | S5 | code | ป้ายวันแสดง "วันส 03/10/2569" (ตัดชื่อวันผิด) | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
