@@ -1,4 +1,4 @@
-import { successRate } from '@/lib/assignments/success-rate'
+import { successRateOf } from '@/lib/assignments/success-rate'
 import { momComparison } from '@/lib/reports/kpi'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 
@@ -8,9 +8,8 @@ import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/l
  * ### กติกาที่ห้ามหลุด
  * - ต้นทางคือ **`case_assignments`** (`96` §7) ⇒ "เคสรับทั้งหมด" คือเคสที่พนักงานคนนั้นได้รับมอบหมาย
  *   ในช่วงที่เลือก **นับเคสไม่ซ้ำ** (1 เคสอาจถูกมอบหมายซ้ำหลายรอบ/หลาย tracking round)
- * - **% ความสำเร็จใช้ `successRate()`** (`40` §6.2 — สำเร็จ ÷ ที่ได้รับมอบหมาย) ห้ามเขียนสูตรซ้ำ
- *   ⚠️ นิยามต่างจาก O1 โดยตั้งใจ: O1 วัด "คุณภาพผลลัพธ์ของเคสที่ปิดแล้ว" ส่วน O3 วัด "ภาระงานของคน"
- *   ตัวหารจึงเป็นงานที่รับมาทั้งหมดรวมงานที่ยังค้าง (`40` §6.2 บังคับไว้แบบนั้น)
+ * - **% ความสำเร็จใช้ `successRate()`** ตัวกลาง ห้ามเขียนสูตรซ้ำ — มติ PO 03/10/2569 (UAT Q20):
+ *   สำเร็จ ÷ เคสที่ปิดแล้ว **นิยามเดียวกับ O1 ทุกจุด** (เดิม O3 หารด้วยงานที่รับทั้งหมด) · ยังไม่ปิด = N/A
  * - งานที่ถูกโอนออกไปแล้ว (`reassigned_away`) **ไม่ใช่ภาระของคนเดิม** ⇒ ผู้เรียกกรองออกก่อนส่งเข้ามา
  */
 
@@ -87,7 +86,7 @@ export function buildWorkloadReport(input: {
       successCount,
       failCount,
       openCount: caseCount - successCount - failCount,
-      successPct: successRate({ successCount, assignedCount: caseCount }),
+      successPct: successRateOf(successCount, failCount),
     }
   })
 
@@ -125,9 +124,9 @@ export function buildWorkloadReport(input: {
       {
         key: 'successPct',
         label: '% ความสำเร็จรวม',
-        value: successRate({ successCount: totalSuccess, assignedCount: totalCases }),
+        value: successRateOf(totalSuccess, totalFail),
         type: 'percent',
-        hint: `สำเร็จ ${totalSuccess.toLocaleString('th-TH')} จากงานที่รับ ${totalCases.toLocaleString('th-TH')} เคส`,
+        hint: `สำเร็จ ${totalSuccess.toLocaleString('th-TH')} จากเคสที่ปิดแล้ว ${(totalSuccess + totalFail).toLocaleString('th-TH')}`,
       },
     ],
     totalRow: {
@@ -137,10 +136,10 @@ export function buildWorkloadReport(input: {
       successCount: totalSuccess,
       failCount: totalFail,
       openCount: totalOpen,
-      successPct: successRate({ successCount: totalSuccess, assignedCount: totalCases }),
+      successPct: successRateOf(totalSuccess, totalFail),
     },
     note:
       'นับจากงานที่มอบหมายในช่วงที่เลือก (เคสไม่ซ้ำ) — งานที่ถูกโอนให้คนอื่นไปแล้วไม่นับเป็นภาระของคนเดิม · ' +
-      '% ความสำเร็จ = เคสที่ปิดสำเร็จ ÷ เคสที่ได้รับมอบหมายทั้งหมด ⇒ ต่างจากรายงาน O1 ที่หารด้วยเคสที่ปิดแล้วเท่านั้น',
+      '% ความสำเร็จ = เคสที่ปิดสำเร็จ ÷ เคสที่ปิดแล้ว (นิยามเดียวกับรายงาน O1) · ยังไม่มีเคสปิด = N/A',
   }
 }

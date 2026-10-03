@@ -118,8 +118,8 @@ describe('% ความสำเร็จสะสม (`41` §6.8 — ห้า
     expect(successRatePct(0, 0)).toBeNull()
   })
 
-  it('ปัดเป็นจำนวนเต็ม', () => {
-    expect(successRatePct(2, 1)).toBe(67)
+  it('ใช้ตัวกลาง successRate() — ทศนิยม 1 ตำแหน่งเหมือนทุกจุด (UAT Q20)', () => {
+    expect(successRatePct(2, 1)).toBe(66.7)
     expect(successRatePct(3, 0)).toBe(100)
     expect(successRatePct(0, 4)).toBe(0)
   })

@@ -101,7 +101,15 @@ function columnsOf(dimension: SuccessRateDimension): readonly ReportColumn[] {
  * เป๊ะ ๆ) — ห้ามเขียนสูตร "สำเร็จ ÷ ปิดแล้ว" ขึ้นมาใหม่ที่ไหนอีก
  */
 export function successPctOf(part: number, counterpart: number): number | null {
-  return successRate({ successCount: part, assignedCount: part + counterpart })
+  return successRate({ successCount: part, closedCount: part + counterpart })
+}
+
+/**
+ * MoM ของค่า % — ช่วงปัจจุบันยังไม่มีเคสปิด (`null` = "N/A") ⇒ **เทียบไม่ได้** (changePct `null`)
+ * ห้ามแปลง `null` เป็น 0 แล้วโชว์ "↓ 100%" (มติ PO 03/10/2569 UAT Q20 — ยังไม่มีเคสปิด = N/A ทุกจุด)
+ */
+function pctMom(current: number | null, previous: number | null) {
+  return current === null ? momComparison(0, 0) : momComparison(current, previous ?? 0)
 }
 
 export function buildSuccessRateReport(input: {
@@ -146,7 +154,7 @@ export function buildSuccessRateReport(input: {
       failCount,
       openCount: bucket.cases.size - successCount - failCount,
       successPct: pct,
-      changePct: momComparison(pct ?? 0, baseOf(bucket, index)).changePct,
+      changePct: pctMom(pct, baseOf(bucket, index)).changePct,
     }
   })
 
@@ -188,7 +196,7 @@ export function buildSuccessRateReport(input: {
         value: totalPct,
         type: 'percent',
         hint: `สำเร็จ ${totalSuccess.toLocaleString('th-TH')} จากเคสที่ปิดแล้ว ${closedCount.toLocaleString('th-TH')}`,
-        mom: momComparison(totalPct ?? 0, previousPct ?? 0),
+        mom: pctMom(totalPct, previousPct),
       },
       {
         key: 'failPct',
@@ -196,7 +204,7 @@ export function buildSuccessRateReport(input: {
         value: failPct,
         type: 'percent',
         hint: `ไม่สำเร็จ ${totalFail.toLocaleString('th-TH')} เคส`,
-        mom: momComparison(failPct ?? 0, previousFailPct ?? 0),
+        mom: pctMom(failPct, previousFailPct),
         higherIsBetter: false,
       },
     ],
@@ -207,7 +215,7 @@ export function buildSuccessRateReport(input: {
       failCount: totalFail,
       openCount: totalCases - closedCount,
       successPct: totalPct,
-      changePct: momComparison(totalPct ?? 0, previousPct ?? 0).changePct,
+      changePct: pctMom(totalPct, previousPct).changePct,
     },
     note:
       'ขอบเขต = เคสที่รับเข้าระบบในช่วงที่เลือก (นับเคสไม่ซ้ำ) · ' +

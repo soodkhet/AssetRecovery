@@ -274,9 +274,9 @@ export function CompensationPlanFormModal({
           ) : (
             <Field
               id="fuel-daily"
-              label="เหมาจ่ายต่อวัน (บาท)"
+              label="เหมาจ่ายต่อวัน (บาท/วัน)"
               required
-              hint="ไม่คำนวณตามระยะทาง — คนละตัวกับเพดานของโหมดตามระยะทาง"
+              hint="จ่าย = อัตรานี้ × จำนวนวันที่ลงพื้นที่จริง (นับวันที่มีเช็คอิน เหมือนเบี้ยเลี้ยง) · ไม่คำนวณตามระยะทาง"
               error={errors.fuelDailyFlatSatang}
             >
               <Input
