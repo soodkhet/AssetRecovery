@@ -15,6 +15,8 @@ import type { CaseOutcome, ServiceFeeModel } from '@/lib/generated/prisma/enums'
  * ### เงื่อนไขตาม fee model (`19` §6.1)
  * | model | outcome | ต้องมีอะไรครบ |
  * |---|---|---|
+ * ทุกแถวต้องผ่าน "วันที่ลงพื้นที่ถูก settle ครบ" ก่อน (มติ PO UAT Q21 — `fieldDaysSettled`)
+ *
  * | `SUCCESS_FEE` | `closed_success` | expense approved (ถ้ามี expense) **+ lot confirmed** |
  * | `SUCCESS_FEE` | `closed_fail` | ไม่เกิดเลย (ไม่มีความสำเร็จให้คิดค่าบริการ) |
  * | `FLAT`/`HYBRID` `charge_on_fail = true` | `closed_fail` | expense approved (ถ้ามี expense) — ไม่ต้องผ่านคลัง |
@@ -39,6 +41,11 @@ export interface RevenueTriggerInput {
   hasExpense: boolean
   expenseState: ExpenseGateState
   lotState: LotGateState
+  /**
+   * ทุกวันที่ลงพื้นที่ (วันปฏิทินไทยที่มีเช็คอินของเคส) ถูก settle รายการรายวันแล้วหรือยัง
+   * (มติ PO 03/10/2569 UAT Q21 — ค่าน้ำมันเหมา/เบี้ยเลี้ยงเกิดหลังจบวัน) · ไม่ระบุ = ถือว่าครบ
+   */
+  fieldDaysSettled?: boolean
 }
 
 /** เหตุผลที่ยัง**ไม่**เกิดรายได้ — ใช้อธิบายบนหน้าจอ/audit ว่าติดด่านไหน */
@@ -46,6 +53,7 @@ export type RevenueBlockReason =
   | 'no_snapshot'
   | 'no_outcome'
   | 'model_excludes_fail'
+  | 'field_days_not_settled'
   | 'expense_not_approved'
   | 'warehouse_gate'
 
@@ -68,6 +76,12 @@ export function evaluateRevenueTrigger(input: RevenueTriggerInput): RevenueTrigg
   const chargesOnFail = input.model !== 'SUCCESS_FEE' && input.chargeOnFail === true
   if (input.outcome === 'closed_fail' && !chargesOnFail) {
     return { shouldCreate: false, blockedBy: 'model_excludes_fail' }
+  }
+
+  // มติ PO 03/10/2569 (UAT Q21): รายการรายวัน (fuel เหมา/เบี้ยเลี้ยง) เกิดจาก job หลังจบวัน ⇒ ต้องรอให้
+  // ทุกวันที่ลงพื้นที่ถูก settle ก่อน ไม่งั้น "expense approved ครบ" จะจริงก่อนแถวรายวันถูกสร้าง
+  if (input.fieldDaysSettled === false) {
+    return { shouldCreate: false, blockedBy: 'field_days_not_settled' }
   }
 
   // เคสที่มี expense ต้องผ่านขั้นอนุมัติจ่ายก่อนเสมอ (`19` §6.1 — ขั้นนี้ทำหน้าที่ QC ครั้งสุดท้าย)

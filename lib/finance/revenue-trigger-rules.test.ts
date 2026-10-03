@@ -120,3 +120,28 @@ describe('evaluateRevenueTrigger — ข้อมูลยังไม่พร�
     expect(shouldCreateRevenue(input({ model: 'FLAT', chargeOnFail: null, outcome: 'closed_fail' }))).toBe(false)
   })
 })
+
+describe('evaluateRevenueTrigger — รอ settle รายการรายวัน (มติ PO UAT Q21)', () => {
+  it('วันลงพื้นที่ยังไม่ settle ⇒ ไม่เกิด แม้ expense ที่มีอยู่ approved ครบ + ล็อต confirmed', () => {
+    expect(evaluateRevenueTrigger(input({ fieldDaysSettled: false }))).toEqual({
+      shouldCreate: false,
+      blockedBy: 'field_days_not_settled',
+    })
+  })
+
+  it('settle ครบแล้ว ⇒ ตัดสินตามเกตเดิม', () => {
+    expect(evaluateRevenueTrigger(input({ fieldDaysSettled: true }))).toEqual({ shouldCreate: true })
+    expect(evaluateRevenueTrigger(input({ fieldDaysSettled: true, expenseState: 'not_approved' }))).toEqual({
+      shouldCreate: false,
+      blockedBy: 'expense_not_approved',
+    })
+  })
+
+  it('เคสไม่มี expense เลย (DEC-006/D6) ก็ยังต้องรอ settle', () => {
+    expect(
+      evaluateRevenueTrigger(
+        input({ model: 'FLAT', chargeOnFail: true, outcome: 'closed_fail', hasExpense: false, fieldDaysSettled: false }),
+      ),
+    ).toEqual({ shouldCreate: false, blockedBy: 'field_days_not_settled' })
+  })
+})

@@ -1,9 +1,10 @@
 import {
-  allowanceSatang,
   commissionSatang,
   distinctFieldDays,
-  fuelDailyFlatSatang,
+  fieldDayTotalsSatang,
   fuelPerKmSatang,
+  planFieldDayExpenses,
+  splitDailyAmountSatang,
   type CommissionPlanValues,
   type CommissionResult,
 } from '@/lib/field/expense-calc'
@@ -18,7 +19,14 @@ import { sumSatang } from '@/lib/finance/satang'
  * ที่นี่เหลือแค่ยอดต้นทุนตรงรวมต่อเคสที่ §6.12 (Gross Profit) ต้องใช้
  */
 
-export { allowanceSatang, commissionSatang, distinctFieldDays, fuelDailyFlatSatang, fuelPerKmSatang }
+export {
+  commissionSatang,
+  distinctFieldDays,
+  fieldDayTotalsSatang,
+  fuelPerKmSatang,
+  planFieldDayExpenses,
+  splitDailyAmountSatang,
+}
 export type { CommissionPlanValues, CommissionResult }
 
 /** องค์ประกอบต้นทุนตรงของเคสหนึ่ง (`22` §6.12 — เฉพาะต้นทุนที่ผูกกับเคส/ทีมโดยตรง) */

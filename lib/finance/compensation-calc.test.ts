@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  allowanceSatang,
   commissionSatang,
   directCostSatang,
   distinctFieldDays,
-  fuelDailyFlatSatang,
+  fieldDayTotalsSatang,
   fuelPerKmSatang,
+  splitDailyAmountSatang,
 } from '@/lib/finance/compensation-calc'
 
 /**
@@ -20,15 +20,14 @@ describe('§6.1–6.3 re-export ของ fuel/allowance (บ้านเดิ�
     expect(fuelPerKmSatang({ distanceKmHundredths: 1_250, ratePerKmSatang: 500, maxPerCaseSatang: 5_000 })).toBe(5_000)
   })
 
-  it('DAILY_FLAT: อัตรา × จำนวนวันลงพื้นที่ ไม่คิดระยะทาง · null = 0 (UAT Q4)', () => {
-    expect(fuelDailyFlatSatang(30_000, 1)).toBe(30_000)
-    expect(fuelDailyFlatSatang(30_000, 3)).toBe(90_000)
-    expect(fuelDailyFlatSatang(null, 2)).toBe(0)
+  it('DAILY_FLAT + allowance: ยอดต่อพนักงานต่อวัน (D) ก้อนเดียว ไม่คูณจำนวนเคส (UAT Q21)', () => {
+    const base = { fuelDailyFlatSatang: 30_000, allowanceSatang: 20_000 }
+    expect(fieldDayTotalsSatang({ ...base, fuelMode: 'DAILY_FLAT' })).toEqual({ fuelSatang: 30_000, allowanceSatang: 20_000 })
+    expect(fieldDayTotalsSatang({ ...base, fuelMode: 'PER_KM' })).toEqual({ fuelSatang: 0, allowanceSatang: 20_000 })
   })
 
-  it('allowance = อัตราต่อวัน × จำนวนวันที่ลงพื้นที่จริง (v2 ของ `22` — ไม่ใช่ค่าคงที่ต่อเคส)', () => {
-    expect(allowanceSatang(20_000, 3)).toBe(60_000)
-    expect(allowanceSatang(20_000, 0)).toBe(0)
+  it('กระจาย D ให้ N เคส — เศษลงเคสแรก ผลรวม = D', () => {
+    expect(splitDailyAmountSatang(20_000, 3)).toEqual([6_668, 6_666, 6_666])
   })
 
   it('นับวันลงพื้นที่แบบ DISTINCT ตามวันปฏิทินไทย', () => {
