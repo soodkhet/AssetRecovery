@@ -210,11 +210,13 @@ export async function changeCaseStatus(
   // `38` §9 — ข้อมูล required + เอกสาร required ต้องครบก่อนขึ้น `pending_review`
   if (CASE_STATUS_RULES[action].requiresReadiness) {
     const readiness = readinessOf(row)
+    // แนบทั้งสองรายการเสมอ ให้ผู้ใช้เห็นสิ่งที่ขาดครบในครั้งเดียว (UAT BUG-028)
+    const gap = { missing: readiness.missingDocuments, missingFields: readiness.missingFields }
     if (readiness.missingDocuments.length > 0) {
-      throw new CaseError('CASE_DOCUMENT_INCOMPLETE', { context: { missing: readiness.missingDocuments } })
+      throw new CaseError('CASE_DOCUMENT_INCOMPLETE', { context: gap })
     }
     if (readiness.missingFields.length > 0) {
-      throw new CaseError('REQUIRED_MISSING', { context: { missingFields: readiness.missingFields } })
+      throw new CaseError('REQUIRED_MISSING', { context: gap })
     }
   }
 

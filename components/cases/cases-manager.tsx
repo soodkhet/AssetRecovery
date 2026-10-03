@@ -27,7 +27,7 @@ import {
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { THAI_PROVINCES } from '@/lib/address/thai-address'
-import { isCaseEditable } from '@/lib/cases/case'
+import { isCaseEditable, readinessGapText } from '@/lib/cases/case'
 import { caseRowActions, type CaseActionButton } from '@/lib/cases/case-actions'
 import { CASE_EDIT_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { CASE_STATUSES } from '@/lib/cases/state-machine'
@@ -226,10 +226,12 @@ export function CasesManager() {
         jsonRequest('PATCH', { action: button.action }),
       )
       if (response.error !== undefined || response.data === undefined) {
+        // gate ส่งตรวจ (`38` §9) แนบรายการที่ขาดมาด้วย — แสดงเป็นชื่อเอกสาร/ชื่อช่องตามฟอร์ม (UAT BUG-028)
+        const gap = readinessGapText(response.error?.payload)
         showToast({
           tone: 'error',
           title: response.error?.title ?? `${button.label}ไม่สำเร็จ`,
-          description: response.error?.message ?? 'กรุณาลองใหม่',
+          description: gap ?? response.error?.message ?? 'กรุณาลองใหม่',
         })
         return
       }
