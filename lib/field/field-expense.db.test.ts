@@ -653,6 +653,60 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     expect(active.find((row) => row.expenseType === 'commission')?.grossSatang).toBe(COMMISSION_SATANG)
   })
 
+  it('UAT Q7 (BUG-052) — แก้แผนระหว่างปิดงานกับ resubmit: ชุดใหม่ยังคิดด้วยแผนเวอร์ชัน/วันที่ของการปิดครั้งแรก', async () => {
+    const caseId = await closeSuccessfully()
+    const before = await expensesOf(caseId)
+
+    // จำลองการแก้แผน: ทีมถูกย้ายไปชี้แผนแถวใหม่ที่ยอดต่างจากเดิมทุกช่อง (ชื่อไม่ชนตระกูลแผนหลักของไฟล์นี้)
+    const NEW_PLAN_NAME = 'แผนหลังแก้ (UAT Q7)'
+    const maxVersion = await db().compensationPlan.aggregate({
+      where: { organizationId: ORG_ID, name: NEW_PLAN_NAME },
+      _max: { version: true },
+    })
+    const newPlanRows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO compensation_plans
+        (organization_id, name, side, fuel_mode, fuel_rate_per_km_satang, allowance_satang,
+         commission_satang, no_success_fee_satang, version, effective_from, is_current, created_by)
+      VALUES ('${ORG_ID}', $$${NEW_PLAN_NAME}$$, 'inhouse', 'PER_KM', ${RATE_PER_KM_SATANG * 4}, ${ALLOWANCE_SATANG * 2},
+              ${COMMISSION_SATANG * 3}, ${NO_SUCCESS_FEE_SATANG * 3}, ${(maxVersion._max.version ?? 0) + 1},
+              DATE '2026-01-01', true, '${MANAGER_ID}')
+      RETURNING id
+    `)
+    const newPlanId = newPlanRows[0]?.id ?? ''
+    await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${newPlanId}' WHERE id = '${TEAM_PER_KM}'`)
+
+    try {
+      await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
+      clearDistanceCache()
+      stubDistanceMatrix(2_000)
+      await field.resubmitCloseCase(
+        agentA,
+        caseId,
+        { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
+        { actor: agentA, meta },
+      )
+
+      const active = (await expensesOf(caseId)).filter((row) => row.status !== 'superseded')
+      const summarize = (rows: typeof before) =>
+        rows
+          .map((row) => ({
+            expenseType: row.expenseType,
+            grossSatang: row.grossSatang,
+            compPlanId: row.compPlanId,
+            compPlanVersion: row.compPlanVersion,
+            expenseDate: row.expenseDate.toISOString(),
+          }))
+          .sort((a, b) => a.expenseType.localeCompare(b.expenseType))
+
+      // ยอด/แผน/วันที่ของชุดใหม่ = ชุดเดิมทุกตัว (ไม่หยิบแผนใหม่ของทีม · ไม่ใช้วันที่ส่งใหม่)
+      expect(summarize(active)).toEqual(summarize(before))
+      expect(active.every((row) => row.compPlanId === PLAN_PER_KM)).toBe(true)
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE compensation_plans SET is_current = false WHERE id = '${newPlanId}'`)
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_PER_KM}' WHERE id = '${TEAM_PER_KM}'`)
+    }
+  })
+
   it('reject_expense แตะแค่รายการเบิก ไม่กระทบ assignment_status (`41` §20)', async () => {
     const caseId = await closeSuccessfully()
     // ผ่านขั้นคลังแล้วจึงตีกลับเอกสารได้ (`23` §6.3)

@@ -146,17 +146,84 @@ export async function resolvePlanSnapshot(
   // ไม่มีเวอร์ชันที่ครอบวันนั้น (แผนเพิ่งเริ่มมีผลวันหลัง) → ใช้แถวที่ทีมผูกอยู่ตามเดิม
   const picked = resolved ?? versions.find((row) => row.id === params.planId) ?? null
   if (picked === null) return null
+  return toPlanSnapshot(picked)
+}
 
+const planSnapshotSelect = {
+  id: true,
+  version: true,
+  fuelMode: true,
+  fuelRatePerKmSatang: true,
+  fuelMaxPerCaseSatang: true,
+  fuelDailyFlatSatang: true,
+  allowanceSatang: true,
+  commissionSatang: true,
+  noSuccessFeeSatang: true,
+} as const
+
+function toPlanSnapshot(row: Prisma.CompensationPlanGetPayload<{ select: typeof planSnapshotSelect }>): PlanSnapshot {
   return {
-    planId: picked.id,
-    version: picked.version,
-    fuelMode: picked.fuelMode,
-    fuelRatePerKmSatang: picked.fuelRatePerKmSatang,
-    fuelMaxPerCaseSatang: picked.fuelMaxPerCaseSatang,
-    fuelDailyFlatSatang: picked.fuelDailyFlatSatang,
-    allowanceSatang: picked.allowanceSatang,
-    commissionSatang: picked.commissionSatang,
-    noSuccessFeeSatang: picked.noSuccessFeeSatang,
+    planId: row.id,
+    version: row.version,
+    fuelMode: row.fuelMode,
+    fuelRatePerKmSatang: row.fuelRatePerKmSatang,
+    fuelMaxPerCaseSatang: row.fuelMaxPerCaseSatang,
+    fuelDailyFlatSatang: row.fuelDailyFlatSatang,
+    allowanceSatang: row.allowanceSatang,
+    commissionSatang: row.commissionSatang,
+    noSuccessFeeSatang: row.noSuccessFeeSatang,
+  }
+}
+
+export interface RoundPricing {
+  /** แผน (เวอร์ชัน) ที่ใช้คิดเงินของรอบติดตามนี้ — `null` = ไม่มีฐานคำนวณ (ทีมไม่ผูกแผน) */
+  plan: PlanSnapshot | null
+  /** วันปิดงาน **ครั้งแรก** ของรอบนี้ (`case_evidences.submitted_at` แรกสุด) — `null` = ยังไม่เคยปิด */
+  pricedAt: Date | null
+}
+
+/**
+ * ฐานราคาของรอบติดตามที่**เคยปิดงานไปแล้ว** — มติ PO 03/10/2569 (UAT Q7 · BUG-052 · `41` §10.1):
+ * resubmit / งานคำนวณน้ำมันย้อนหลัง ต้องคิดด้วย **แผน (เวอร์ชัน) + วันที่ของการปิดงานครั้งแรก**
+ * ไม่ใช่ ณ ตอนที่สร้างรายการใหม่ (`92` §7.1 — snapshot เมื่อเกิด)
+ *
+ * 1. รอบนี้เคยมีรายการเบิกจากแผน (รวม `superseded`) ⇒ ใช้ **แผนเวอร์ชันเดียวกับรายการแรกสุดเป๊ะ**
+ *    (กันกรณีแก้แผนวันเดียวกับวันปิด — effective date ยังครอบทั้งสองเวอร์ชัน)
+ * 2. ไม่เคยมี (ยอด 0 ทั้งชุด) ⇒ resolve แผนของทีม ณ วันปิดงานครั้งแรก
+ */
+export async function resolveRoundPricing(
+  client: ExpenseTxClient,
+  params: { organizationId: string; assignmentId: string; teamPlanId: string | null },
+): Promise<RoundPricing> {
+  const [firstEvidence, firstExpense] = await Promise.all([
+    client.caseEvidence.findFirst({
+      where: { organizationId: params.organizationId, assignmentId: params.assignmentId },
+      orderBy: { submittedAt: 'asc' },
+      select: { submittedAt: true },
+    }),
+    client.expense.findFirst({
+      where: {
+        organizationId: params.organizationId,
+        assignmentId: params.assignmentId,
+        calculationSource: 'compensation_plan',
+        compPlanId: { not: null },
+        deletedAt: null,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { compPlan: { select: planSnapshotSelect } },
+    }),
+  ])
+  const pricedAt = firstEvidence?.submittedAt ?? null
+
+  if (firstExpense?.compPlan != null) return { plan: toPlanSnapshot(firstExpense.compPlan), pricedAt }
+  if (params.teamPlanId === null || pricedAt === null) return { plan: null, pricedAt }
+  return {
+    plan: await resolvePlanSnapshot(client, {
+      organizationId: params.organizationId,
+      planId: params.teamPlanId,
+      onDate: pricedAt,
+    }),
+    pricedAt,
   }
 }
 
