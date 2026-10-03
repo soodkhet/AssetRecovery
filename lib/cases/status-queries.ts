@@ -370,11 +370,12 @@ export async function changeCaseStatus(
   })
 
   // แจ้งผู้ส่งเคสหลัง commit (`90` §6.3 แถว 1–2) — ล้มแล้วห้ามพา transaction ล้มตาม
+  // ใช้เฉพาะเหตุผลที่ผู้พิจารณากรอกเอง — เหตุผลเชิงระบบ (`snapshotReason`) มีไว้ให้ audit เท่านั้น (UAT BUG-029)
   const decision = caseDecisionEventOf(events)
   if (decision !== null) {
     dispatchNotification(
       { organizationId, userIds: await caseSubmitterIds(organizationId, caseId) },
-      caseDecisionMessage(decision, { caseId, caseRef: row.caseRef, reason: auditReason }),
+      caseDecisionMessage(decision, { caseId, caseRef: row.caseRef, reason: reason === '' ? null : reason }),
     )
   }
 

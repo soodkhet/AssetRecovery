@@ -493,6 +493,35 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(created[0]).toEqual({ status: 'draft', source: 'import', debt_amount_satang: 1_000_000 })
   })
 
+  it('แจ้งเตือน case.approved ไม่พ่วงเหตุผลเชิงระบบ แต่ audit ยังเก็บเหตุผล snapshot เต็ม (BUG-029)', async () => {
+    const caseId = await seedCase('SF-2026-2329', { withDocuments: true })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    const startedAt = new Date()
+    await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+
+    const audits = await db().$queryRawUnsafe<Array<{ reason: string | null }>>(
+      `SELECT reason FROM audit_logs WHERE target_id = '${caseId}' AND action = 'approve' AND created_at >= $1`,
+      startedAt,
+    )
+    expect(audits[0]?.reason).toContain('snapshot ค่าบริการอัตโนมัติ')
+
+    const notificationBodies = async (): Promise<Array<string | null>> => {
+      const rows = await db().$queryRawUnsafe<Array<{ body: string | null }>>(
+        `SELECT body FROM notifications
+          WHERE user_id = '${USER_ID}' AND event_code = 'case.approved'
+            AND body LIKE '%SF-2026-2329%' AND created_at >= $1`,
+        startedAt,
+      )
+      return rows.map((row) => row.body)
+    }
+    for (let attempt = 0; attempt < 20 && (await notificationBodies()).length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    const bodies = await notificationBodies()
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).not.toContain('snapshot')
+  })
+
   /**
    * UAT BUG-035 — สองคำสั่งเปลี่ยนสถานะยิงพร้อมกันจากสถานะเดียวกัน ("รับเคส" ชน "ไม่รับเคส")
    * ต้องสำเร็จแค่ตัวเดียว อีกตัวได้ `CASE_INVALID_STATUS_TRANSITION` · audit + แจ้งเตือนเกิดชุดเดียว
