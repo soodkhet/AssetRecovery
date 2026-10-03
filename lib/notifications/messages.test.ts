@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FIELD_NAV_ITEMS } from '@/lib/field/field-nav'
 import { NOTIFICATION_ONLY_EVENTS, isNotificationEvent, type NotificationEventCode } from '@/lib/notifications/events'
 import {
   accountantQuestionMessage,
@@ -6,6 +7,7 @@ import {
   assetIntakeRejectedMessage,
   caseClosedFailMessage,
   caseClosedSuccessMessage,
+  evidenceRejectedMessage,
   caseDecisionMessage,
   clip,
   exceptionCreatedMessage,
@@ -39,6 +41,7 @@ const ALL: readonly NotificationMessage[] = [
   expenseRejectedMessage({ grossSatang: 50000, reason: 'ใบเสร็จไม่ชัด' }),
   payoutBatchCompletedMessage({ batchId: 'b1', batchName: 'รอบจ่าย Outsource', netSatang: 9900000, source: 'manual' }),
   advanceOverdueMessage({ advanceId: 'a1', dueClearDate: new Date('2026-08-10T00:00:00Z') }, 'payee'),
+  evidenceRejectedMessage({ caseId: 'c9', caseRef: 'CASE-26-0009', reason: 'รูปไม่ชัด' }),
   exceptionCreatedMessage({ title: 'ใบกำกับหาย', periodLabel: 'สิงหาคม 2569' }),
   whtFilingDueMessage({
     summaryId: 's1',
@@ -64,6 +67,15 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
       expect(message.title.length).toBeGreaterThan(0)
       expect(message.linkPath?.startsWith('/'), message.eventCode).toBe(true)
       expect(message.linkPath?.startsWith('//')).toBe(false)
+    }
+  })
+
+  it('ลิงก์ไปหน้า Field Tracker ต้องเป็นหน้าที่มีอยู่จริงในเมนู (UAT BUG-049)', () => {
+    const fieldHrefs = new Set(FIELD_NAV_ITEMS.map((item) => item.href))
+    for (const message of ALL) {
+      const path = message.linkPath?.split('?')[0] ?? ''
+      if (!path.startsWith('/field')) continue
+      expect(fieldHrefs.has(path), `${message.eventCode} → ${path}`).toBe(true)
     }
   })
 
@@ -131,7 +143,7 @@ describe('รายละเอียดข้อความรายตัว'
 
   it('เงินทดรองเลยกำหนดส่งลิงก์คนละปลายทางตามผู้รับ แต่ใช้คีย์กันซ้ำตัวเดียวกัน', () => {
     const input = { advanceId: 'a9', dueClearDate: new Date('2026-08-10T00:00:00Z') }
-    expect(advanceOverdueMessage(input, 'payee').linkPath).toBe('/field/income')
+    expect(advanceOverdueMessage(input, 'payee').linkPath).toBe('/field/advances')
     expect(advanceOverdueMessage(input, 'finance').linkPath).toBe('/finance?tab=advances')
     expect(advanceOverdueMessage(input, 'payee').dedupeKey).toBe(advanceOverdueMessage(input, 'finance').dedupeKey)
   })

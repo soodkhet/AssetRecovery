@@ -451,7 +451,7 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
     })
     // การเงินในเทสต์ชุดนี้ไม่มีแถว `role_capabilities` จริง ⇒ ผู้รับที่แน่นอนคือผู้ยืมเท่านั้น
     expect(first.filter((row) => row.userId === AGENT_ID)).toHaveLength(1)
-    expect(first.find((row) => row.userId === AGENT_ID)?.linkPath).toBe('/field/income')
+    expect(first.find((row) => row.userId === AGENT_ID)?.linkPath).toBe('/field/advances')
 
     await job.runAdvanceOverdueJob({ organizationId: ORG_ID })
     const second = await db().notification.findMany({
