@@ -1,6 +1,6 @@
 import type { NotificationMessage } from '@/lib/notifications/messages'
 import { notifyUsers, notifyUsersDetached } from '@/lib/notifications/notify'
-import { usersWithCapability } from '@/lib/notifications/recipients'
+import { ORGANIZATION_SCOPE, teamLeadIds, usersWithCapability, type RecipientScope } from '@/lib/notifications/recipients'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -35,7 +35,10 @@ export function dispatchNotification(target: DispatchTarget, message: Notificati
 }
 
 /**
- * ส่งให้ "ทุกคนที่ถือ capability นี้" แบบยิงแล้วลืม — **ทางเข้าเดียว**ของ pattern นี้
+ * ส่งให้ "ทุกคนที่ถือ capability นี้ **และ scope ครอบเรื่องนี้**" แบบยิงแล้วลืม — **ทางเข้าเดียว**ของ pattern นี้
+ *
+ * `scope` บังคับระบุทุกจุดเรียก (มติ PO 03/10/2569 UAT Q17 · BUG-064): เรื่องของเคส = `{ teamId }` ของเคส
+ * (ผู้จัดการทีมอื่นไม่ได้รับ) · เรื่องระดับองค์กร = `ORGANIZATION_SCOPE` (เฉพาะกลุ่ม system) — ดู `recipients.ts`
  *
  * ⚠️ ห้ามเขียน `void usersWithCapability(...).then(...)` เองในโมดูล: `dispatchNotification()`
  * กัน error ของ *การส่ง* ไว้ก็จริง แต่ error ของ *การหาผู้รับ* (query Prisma ล้ม/DB หลุด) จะไม่มี
@@ -44,9 +47,10 @@ export function dispatchNotification(target: DispatchTarget, message: Notificati
 export function dispatchToCapability(
   organizationId: string,
   capabilityCode: string,
+  scope: RecipientScope,
   message: NotificationMessage,
 ): void {
-  void usersWithCapability(organizationId, capabilityCode)
+  void usersWithCapability(organizationId, capabilityCode, scope)
     .then((userIds) => {
       dispatchNotification({ organizationId, userIds }, message)
     })
@@ -57,6 +61,24 @@ export function dispatchToCapability(
         eventCode: message.eventCode,
         error,
       })
+    })
+}
+
+/**
+ * ส่งให้ผู้รับที่ต้อง query หาก่อน (เช่น ผู้มอบหมาย + ผู้จัดการ/หัวหน้าทีม) แบบยิงแล้วลืม
+ * — กัน error ของ *การหาผู้รับ* แบบเดียวกับ `dispatchToCapability()` (ห้าม unhandled rejection)
+ */
+export function dispatchToResolvedUsers(
+  organizationId: string,
+  resolveUserIds: () => Promise<readonly string[]>,
+  message: NotificationMessage,
+): void {
+  void resolveUserIds()
+    .then((userIds) => {
+      dispatchNotification({ organizationId, userIds }, message)
+    })
+    .catch((error: unknown) => {
+      console.error('[notifications] หาผู้รับไม่สำเร็จ', { organizationId, eventCode: message.eventCode, error })
     })
 }
 
@@ -117,4 +139,4 @@ export async function payeeUserIds(organizationId: string, payeeIds: readonly st
   return [...new Set(rows.map((row) => row.userId))]
 }
 
-export { usersWithCapability }
+export { ORGANIZATION_SCOPE, teamLeadIds, usersWithCapability, type RecipientScope }

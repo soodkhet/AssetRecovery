@@ -105,13 +105,20 @@ export async function resolveExpiredReassignments(
       result.caseIds.push(pending.caseId)
       // ทั้งสามคนต้องรู้ผลที่ job ตัดสินให้: คนเดิม คนใหม่ และผู้จัดการที่ขอ (`90` §6.3 แถว 3)
       // await เสมอ — job ต้องมั่นใจว่าเขียนแถวแล้วก่อนจบรอบ · `dedupeKey` ทำให้รันซ้ำไม่แจ้งซ้ำ
-      await dispatchNotificationAwaited(
-        {
-          organizationId: pending.organizationId,
-          userIds: [pending.fromAgentId, pending.newAgentId, pending.requestedBy],
-        },
-        reassignmentTimeoutMessage({ caseRef: pending.case.caseRef, pendingReassignmentId: pending.id }),
-      )
+      // ข้อความ/ลิงก์แยกตามผู้รับ (UAT BUG-059): คนใหม่ได้งาน → หน้างานรอรับ · คนเดิมเสียงาน → แท็บปิดแล้ว ·
+      // ผู้ขอ → หน้ามอบหมาย (พนักงานเปิด `/cases/assign` ไม่ได้)
+      const notice = { caseRef: pending.case.caseRef, pendingReassignmentId: pending.id }
+      const audiences = [
+        [pending.newAgentId, 'new_agent'],
+        [pending.fromAgentId, 'previous_agent'],
+        [pending.requestedBy, 'requester'],
+      ] as const
+      for (const [userId, audience] of audiences) {
+        await dispatchNotificationAwaited(
+          { organizationId: pending.organizationId, userIds: [userId] },
+          reassignmentTimeoutMessage(notice, audience),
+        )
+      }
     } else {
       result.skipped += 1
     }

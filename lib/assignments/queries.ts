@@ -37,8 +37,14 @@ import type {
 } from '@/lib/assignments/types'
 import { caseScopeWhere } from '@/lib/cases/queries'
 import { Prisma } from '@/lib/generated/prisma/client'
-import { dispatchNotification } from '@/lib/notifications/dispatch'
-import { reassignmentRequestedMessage } from '@/lib/notifications/messages'
+import { dispatchNotification, dispatchToResolvedUsers, teamLeadIds } from '@/lib/notifications/dispatch'
+import {
+  assignmentAcceptedMessage,
+  assignmentCreatedMessage,
+  assignmentReassignedMessage,
+  reassignmentRequestedMessage,
+  reassignmentRespondedMessage,
+} from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -395,6 +401,12 @@ export async function assignCase(
     return assignment
   })
 
+  // `40` §15 — พนักงานได้งานใหม่ (มติ PO 03/10/2569 UAT Q17 · BUG-040)
+  dispatchNotification(
+    { organizationId: user.organizationId, userIds: [agent.id] },
+    assignmentCreatedMessage({ caseRef: row.caseRef, assignmentId: created.id }),
+  )
+
   return toActionResult(row.id, created, null, ['assignment.created'])
 }
 
@@ -486,6 +498,17 @@ export async function reassignCase(
       )
       return replacement
     })
+
+    // `40` §15 — โอนทันที: คนใหม่ได้งาน · คนเดิมรู้ว่าเคสถูกโอนออก (UAT Q17 · BUG-040/059)
+    const notice = { caseRef: row.caseRef, assignmentId: next.id, reason }
+    dispatchNotification(
+      { organizationId: user.organizationId, userIds: [agent.id] },
+      assignmentReassignedMessage(notice, 'new_agent'),
+    )
+    dispatchNotification(
+      { organizationId: user.organizationId, userIds: [assignment.agentId] },
+      assignmentReassignedMessage(notice, 'previous_agent'),
+    )
 
     return toActionResult(row.id, next, null, ['assignment.reassigned'])
   }
@@ -637,6 +660,24 @@ export async function respondReassignment(
     return replacement
   })
 
+  // `40` §15 — ผู้ขอรู้ผลการตอบเสมอ · ยินยอม = คนใหม่ได้งาน (UAT Q17 · BUG-040)
+  const responded = {
+    caseRef: row.caseRef,
+    pendingReassignmentId: pending.id,
+    decision: input.decision,
+    declineReason,
+  }
+  dispatchNotification(
+    { organizationId: user.organizationId, userIds: [pending.requestedBy] },
+    reassignmentRespondedMessage(responded, 'requester'),
+  )
+  if (input.decision === 'consent') {
+    dispatchNotification(
+      { organizationId: user.organizationId, userIds: [pending.newAgentId] },
+      reassignmentRespondedMessage(responded, 'new_agent'),
+    )
+  }
+
   const events =
     input.decision === 'consent' ? ['assignment.reassignment_consented'] : ['assignment.reassignment_declined']
   if (result === null) {
@@ -686,6 +727,19 @@ export async function acceptAssignment(
 
     return await tx.caseAssignment.findUniqueOrThrow({ where: { id: current.id }, select: assignmentSelect })
   })
+
+  // `40` §15 — ผู้มอบหมาย + ผู้จัดการ/หัวหน้าของทีมเคส (ทีมอื่นไม่ได้รับ — UAT Q17 · BUG-040/064)
+  const organizationId = user.organizationId
+  dispatchToResolvedUsers(
+    organizationId,
+    async () => [current.createdBy, ...(await teamLeadIds(organizationId, current.teamId))].filter((id) => id !== user.id),
+    assignmentAcceptedMessage({
+      caseRef: row.caseRef,
+      assignmentId: current.id,
+      agentName: user.fullName,
+      acceptedAt,
+    }),
+  )
 
   return toActionResult(row.id, updated, null, ['assignment.accepted'])
 }

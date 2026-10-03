@@ -45,7 +45,7 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { dispatchToCapability } from '@/lib/notifications/dispatch'
+import { dispatchToCapability, ORGANIZATION_SCOPE } from '@/lib/notifications/dispatch'
 import { exceptionCreatedMessage, periodSentToAccountantMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 import { exceptionLinkOf, exceptionModuleLabel } from '@/lib/reports/dashboard'
@@ -442,6 +442,7 @@ async function transitionPeriod(
     dispatchToCapability(
       ctx.actor.organizationId,
       MANAGE_ACCOUNTING_PERIOD,
+      ORGANIZATION_SCOPE,
       periodSentToAccountantMessage({ periodId, periodLabel: updated.periodLabel }),
     )
   }
@@ -612,6 +613,7 @@ export async function createException(
     dispatchToCapability(
       ctx.actor.organizationId,
       MANAGE_EXCEPTIONS,
+      ORGANIZATION_SCOPE,
       exceptionCreatedMessage({ title: created.title, periodLabel: created.period.periodLabel }),
     )
   }

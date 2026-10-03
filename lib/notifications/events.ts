@@ -61,7 +61,37 @@ export const NOTIFICATION_EVENTS = {
     description: 'อนุมัติรีไซเกิลเคส — เคสกลับเข้า pipeline ใหม่ (tracking_round +1)',
   },
 
-  // ── Assignment (40) — `90` §6.3 แถว 3 ─────────────────────────────────
+  // ── Assignment (40) — `90` §6.3 แถว 3 (+ `40` §15 — มติ PO 03/10/2569 UAT Q17) ──
+  'assignment.created': {
+    module: 'มอบหมาย',
+    level: 'sent',
+    source: '90 §6.3 · 40 §15 · 40 §17.2',
+    description: 'พนักงานได้รับมอบหมายเคสใหม่ — ต้องกดรับงาน',
+  },
+  'assignment.reassigned': {
+    module: 'มอบหมาย',
+    level: 'sent',
+    source: '90 §6.3 · 40 §15 · 40 §17.2',
+    description: 'เปลี่ยนผู้รับผิดชอบทันที (เคสยังไม่กดรับ) — คนใหม่ได้งาน คนเดิมเสียงาน',
+  },
+  'assignment.accepted': {
+    module: 'มอบหมาย',
+    level: 'success',
+    source: '90 §6.3 · 40 §15 · 40 §17.2',
+    description: 'พนักงานกดรับงานแล้ว — แจ้งผู้มอบหมายและผู้จัดการ/หัวหน้าทีม',
+  },
+  'assignment.reassignment_consented': {
+    module: 'มอบหมาย',
+    level: 'success',
+    source: '90 §6.3 · 40 §15 · 40 §17.2',
+    description: 'พนักงานคนเดิมยินยอมเปลี่ยนผู้รับผิดชอบ — คนใหม่ได้งาน',
+  },
+  'assignment.reassignment_declined': {
+    module: 'มอบหมาย',
+    level: 'warning',
+    source: '90 §6.3 · 40 §15 · 40 §17.2',
+    description: 'พนักงานคนเดิมไม่ยินยอม (มีเหตุผล) — ผู้ขอต้องตัดสินใจต่อ',
+  },
   'assignment.reassignment_requested': {
     module: 'มอบหมาย',
     level: 'sent',
