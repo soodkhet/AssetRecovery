@@ -15,6 +15,7 @@
 | v1 | (เดิม) | Build Spec Round 1 — ตกลงร่วมกับผู้ใช้งานจริง (สัมภาษณ์รอบที่ 1) แทนที่ Baseline เดิม |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header/Changelog + แยก Decisions/Open Items ชัดเจน) — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง** |
 | v2.1 | 14/08/2569 | **เติม error code 2 ตัวที่ §12 ตกหล่น — implement ใน Phase 2.6** (Rule 04: code ใหม่ต้องอยู่ในเอกสารพร้อมโค้ดคอมมิตเดียวกัน): `ASSIGNMENT_NOT_FOUND` (reassign/accept/respond เคสที่ยังไม่มีการมอบหมาย หรือไม่ใช่เคสของผู้เรียก) และ `ASSIGNMENT_INVALID_STATUS` (สถานะการมอบหมายไม่รองรับ action เช่นกดรับงานซ้ำ) — **ไม่มีการเปลี่ยน business logic** เดิมของ §8–§11 |
+| v2.2 | 03/10/2569 | **มติ PO 03/10/2569 (UAT BUG-002 — "สร้างหน้าตั้งค่าก่อน R3")**: §6.4 ระบุที่ตั้งหน้าจอ + ขอบเขตค่า และ §17.1 เติม `GET/PATCH /api/settings/assignment-policy` — §6.4/§11/§13 กำหนดให้ Superadmin ตั้ง `reassign_timeout_hours` / `supervisor_can_assign_*` / `accept_deadline_hours` ได้ แต่ไม่เคยประกาศ endpoint · หน้าจอวางเป็นแท็บ "นโยบายการมอบหมายงาน" ในหน้าตั้งค่าบัญชี/การเงิน ถัดจากแท็บเกณฑ์ SLA (`13` §6.14 — ตาราง `assignment_policy_settings` เดียวกัน) เพราะแอปยังไม่มีหน้า "ตั้งค่าระบบกลาง" ตาม mockup · **ไม่มี business logic ใหม่** |
 
 ขอบเขตเอกสารนี้: ผู้จัดการทีมติดตามทรัพย์มอบหมายเคสที่ "รับแล้ว" จากไฟล์ 38 ให้พนักงานในทีมตนเองแบบ manual พร้อมข้อมูลประกอบการตัดสินใจ จากนั้นพนักงานต้องกดรับงานก่อนเคสจะเข้าสู่กระบวนการจัดเส้นทาง (ไฟล์ 41) — รวมถึง flow เปลี่ยนผู้รับผิดชอบ (Reassign) ที่ต้องขอความยินยอมเมื่อเคสถูกรับงานแล้ว
 
@@ -110,6 +111,7 @@
 |`supervisor_can_assign_outsource`|boolean|`true`|หัวหน้า Role Group outsource ทำ assign_case/reassign_case ได้หรือไม่|
 
 - ตั้งค่าได้จากเมนู Settings/ตั้งค่าระบบ (Superadmin เท่านั้น)
+- **หน้าจอ (v2.2 — มติ PO 03/10/2569)**: การตั้งค่า → ตั้งค่าบัญชี/การเงิน → แท็บ "นโยบายการมอบหมายงาน" (`/settings/finance?tab=assignment`) รวม `reassign_timeout_hours` (จำนวนเต็ม 1–168 ชม.), สวิตช์ `supervisor_can_assign_*` ทั้ง 3 Role Group และ `accept_deadline_hours` (null = ไม่จำกัด หรือ 1–720 ชม. — ยังไม่บังคับใช้ตาม §11) · บันทึกต้องระบุ `reason` (กระทบสิทธิ์ — `90` §13) · ค่าใหม่มีผลกับคำขอใหม่เท่านั้น — `pending_reassignment.expires_at` ที่สร้างไปแล้วไม่ถูกคำนวณใหม่
 - ค่านี้คุมเฉพาะ**การกระทำ** (assign_case, reassign_case, respond_reassignment_consent ในฐานะผู้จัดการที่ทำแทน) — **ไม่คุมการมองเห็นข้อมูล** หัวหน้าเห็นเมนู, ตาราง, Kanban, agent picker, ประวัติได้เสมอไม่ว่าค่านี้จะเป็นอย่างไร
 
 ## 7. UI Requirements
@@ -286,6 +288,8 @@
 |POST|/api/cases/{id}/reassign|เปลี่ยนพนักงานรับผิดชอบ (body: agent_id, reason) — ถ้าเคสยัง `assigned` เปลี่ยนทันที; ถ้า `accepted` สร้าง `pending_reassignment` แทนและคืนสถานะ `waiting_consent`|
 |POST|/api/cases/{id}/reassignment/respond|พนักงานคนเดิมตอบคำขอ (body: decision: `consent`\|`decline`, decline_reason เมื่อ decline) — เฉพาะ agent ที่ตรงกับ `assigned_agent_id` ปัจจุบัน|
 |POST|/api/cases/{id}/accept|พนักงานกดรับงาน (เฉพาะ agent ที่ถูก assign เท่านั้นเรียกได้)|
+|GET|/api/settings/assignment-policy|อ่านค่าตั้งการมอบหมายงานขององค์กร (§6.4) — ยังไม่เคยตั้ง = ค่าเริ่มต้นของสเปค (v2.2)|
+|PATCH|/api/settings/assignment-policy|Superadmin แก้ค่าตั้ง (body: reassign_timeout_hours, supervisor_can_assign_system/inhouse/outsource, accept_deadline_hours, reason) — audit before/after (v2.2)|
 
 ### 17.2 Events
 - `assignment.created`

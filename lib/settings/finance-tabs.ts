@@ -9,6 +9,8 @@
  * เดียวกันกับผู้ใช้ · `section` ของแท็บนี้จึงอ้างไฟล์ 18 ไม่ใช่ §ของไฟล์ 13
  * ⚠️ แท็บ "เกณฑ์ SLA งานติดตาม" (§6.14) เพิ่มใน Phase 6.3 ตาม**มติ PO 15/08/2569 (D18)** — ค่าเก็บที่
  * `assignment_policy_settings.sla_alert_hours` (ตารางของไฟล์ 40) แต่หน้าจอตั้งค่าอยู่รวมที่นี่
+ * ⚠️ แท็บ "นโยบายการมอบหมายงาน" เป็นของ **ไฟล์ 40 §6.4/§11** (UAT BUG-002 · มติ PO 03/10/2569) —
+ * mockup วางไว้ที่ "ตั้งค่าระบบกลาง" ซึ่งแอปยังไม่มีหน้านั้น ⇒ วางถัดจากแท็บ SLA (ตารางเดียวกัน)
  */
 
 export interface FinanceSettingsTab {
@@ -40,6 +42,7 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'numbering', label: 'เลขที่ใบกำกับภาษี', section: '§6.12', available: true },
   { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: true },
   { id: 'sla', label: 'เกณฑ์ SLA งานติดตาม', section: '§6.14', available: true },
+  { id: 'assignment', label: 'นโยบายการมอบหมายงาน', section: 'ไฟล์ 40 §6.4', available: true },
 ]
 
 export const DEFAULT_FINANCE_SETTINGS_TAB = 'cycles'
