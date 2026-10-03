@@ -591,11 +591,15 @@ suite('Phase 2.6 — ยามสิทธิ์ + ข้อมูลประ�
       UPDATE cases SET status = 'closed_success', outcome = 'closed_success', closed_at = NOW()
       WHERE id = '${closed}'
     `)
+    await db().$executeRawUnsafe(`
+      UPDATE case_assignments SET status = 'closed_success', completed_at = NOW() WHERE case_id = '${closed}'
+    `)
 
     const result = await agentQueries.listTeamAgents(manager, TEAM_A)
     const agent = result.agents.find((each) => each.agentId === AGENT_A)
     expect(agent?.activeCaseCount).toBe(1)
-    expect(agent?.successRate).toBe(50)
+    // มติ PO 03/10/2569 (UAT Q20): สำเร็จ ÷ เคสที่ปิดแล้ว — เคสที่ยังถืออยู่ไม่เข้าตัวหาร ⇒ 1/1
+    expect(agent?.successRate).toBe(100)
     expect(agent?.coveredProvinces).toContain(PROVINCE)
 
     const idle = result.agents.find((each) => each.agentId === AGENT_B)
