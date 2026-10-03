@@ -77,6 +77,9 @@ describe('reassign 2 สาขา (`40` §8/§9)', () => {
     expect(assertReassignReason('  ย้ายพื้นที่รับผิดชอบ  ')).toBe('ย้ายพื้นที่รับผิดชอบ')
     expect(codeOf(() => assertReassignReason('   '))).toBe('ASSIGNMENT_REASON_REQUIRED')
     expect(codeOf(() => assertReassignReason(null))).toBe('ASSIGNMENT_REASON_REQUIRED')
+    // มติ PO 03/10/2569 (UAT Q18 · BUG-042) — สั้นกว่า 5 ตัว = code เดียวกัน (ไม่ใช่ REQUIRED_MISSING)
+    expect(codeOf(() => assertReassignReason(' abcd '))).toBe('ASSIGNMENT_REASON_REQUIRED')
+    expect(assertReassignReason('abcde')).toBe('abcde')
   })
 
   it('reassign สำเร็จรีเซ็ตกลับ assigned + ล้าง accepted_at เสมอ (`40` §11)', () => {

@@ -34,6 +34,7 @@ import type {
   CaseListResultDto,
 } from '@/lib/cases/types'
 import { Prisma } from '@/lib/generated/prisma/client'
+import type { CaseStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -60,9 +61,20 @@ export type CaseTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on
 
 /**
  * ผู้ใช้คนนี้เห็นเคสไหนบ้าง — เพิ่มจาก capability ที่ `withEndpoint()` ตรวจไปแล้ว
- * `global` (system roles) เห็นทุกเคส · ผู้จัดการ/หัวหน้าทีมเห็นเคสของทีมตัวเอง (ที่ระบบเสนอหรือมอบหมายแล้ว) ·
+ * `global` (system roles) เห็นทุกเคส · ผู้จัดการ/หัวหน้าทีมเห็นเคสของทีมตัวเอง **เฉพาะหลังอนุมัติและกำหนดทีมแล้ว**
+ * (`assigned_team_id` + สถานะหลังอนุมัติ — เคส pending_review/need_info/rejected ที่ระบบแค่ "เสนอ" ทีมไว้ไม่อยู่ใน
+ * มุมมองทีม · มติ PO 03/10/2569 UAT Q11 · BUG-023 · `38` §13) ·
  * company user เห็นเฉพาะบริษัทตัวเอง · Field Agent เห็นเฉพาะเคสที่ตัวเองถือ
  */
+/** สถานะเคสที่มุมมองทีมเห็นได้ = หลังผ่านการอนุมัติแล้วเท่านั้น (UAT Q11 · BUG-023) */
+export const TEAM_VISIBLE_CASE_STATUSES = [
+  'approved',
+  'active',
+  'closed_success',
+  'closed_fail',
+  'pending_recycle_review',
+] as const satisfies readonly CaseStatus[]
+
 export function caseScopeWhere(user: SessionUser): Prisma.CaseWhereInput {
   const scope = user.scope
   switch (scope.kind) {
@@ -71,9 +83,7 @@ export function caseScopeWhere(user: SessionUser): Prisma.CaseWhereInput {
     case 'team':
       return scope.teamIds.length === 0
         ? { id: { in: [] } }
-        : {
-            OR: [{ assignedTeamId: { in: [...scope.teamIds] } }, { suggestedTeamId: { in: [...scope.teamIds] } }],
-          }
+        : { assignedTeamId: { in: [...scope.teamIds] }, status: { in: [...TEAM_VISIBLE_CASE_STATUSES] } }
     case 'company':
       return scope.companyId === null ? { id: { in: [] } } : { companyId: scope.companyId }
     case 'self':
@@ -198,15 +208,17 @@ type CaseListRow = Prisma.CaseGetPayload<{ select: typeof listSelect }>
 export type CaseDetailRow = Prisma.CaseGetPayload<{ select: typeof detailSelect }>
 
 /**
- * ตัดฟิลด์ภายในออกก่อนส่งให้ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`97` §6.1 "**ไม่แสดง**: … ทีมที่มอบหมาย"
- * · §6.6 "Service Fee Template … ชื่อ+model เท่านั้น **ไม่แสดงอัตราละเอียด**")
+ * ตัดฟิลด์ภายในออกก่อนส่งให้ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`97` §6.1 "**ไม่แสดง**: … ทีมที่มอบหมาย")
+ * — **ตัวเดียว**ที่ทุก endpoint ฝั่งบริษัทใช้ (รายการ + รายละเอียด) เพื่อให้สม่ำเสมอ (UAT BUG-033)
  *
- * `caseScopeWhere()` คุมว่าเห็น **แถวไหน** เท่านั้น — ก่อน Phase 8.3 แถวที่เห็นยังพก
- * อัตราค่าบริการที่เราคิดกับบริษัทนั้น, ประมาณการรายได้, note ภายใน, ประวัติแก้ไข
- * (พร้อมชื่อพนักงานหลังบ้าน) และชื่อทีมติดออกไปด้วย (Final Test ด่าน 4)
+ * ค่าบริการของเคสตัวเอง **เห็นครบ** — โมเดล อัตรา ฐาน เกณฑ์ คิดเมื่อไม่สำเร็จ และยอดประมาณการ
+ * (มติ PO 03/10/2569 UAT Q10 · `97` §6.6 v-ล่าสุด) · ซ่อนเฉพาะข้อมูลภายใน: รหัส/ชื่อ template ที่ใช้คิด,
+ * ผู้พิจารณา/เวลาพิจารณา/บันทึกของผู้พิจารณา, ทีม, ประวัติแก้ไข และชื่อพนักงานหลังบ้าน
+ *
+ * `caseScopeWhere()` คุมว่าเห็น **แถวไหน** (เฉพาะบริษัทตัวเอง) — ฟังก์ชันนี้คุมว่าเห็น **ฟิลด์ไหน**
  */
 function redactCaseListForCompany(item: CaseListItemDto): CaseListItemDto {
-  return { ...item, suggestedTeamName: null, assignedTeamName: null, createdByName: '' }
+  return { ...item, suggestedTeamName: null, assignedTeamName: null, createdByName: '', reviewedAt: null }
 }
 
 function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
@@ -216,10 +228,8 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     suggestedTeamId: null,
     assignedTeamId: null,
     teamChangeReason: null,
-    // ราคาที่เราคิดกับบริษัท: เห็น model ได้ แต่ฐาน/อัตรา/ประมาณการเป็นข้อมูลภายใน (§6.6)
-    serviceFeeBaseSatang: null,
-    serviceFeeRatePct: null,
-    projectedRevenueSatang: null,
+    // รหัส template + ที่มาดิบ (มี template id/ชื่อ) = ข้อมูลภายใน · โมเดล/ฐาน/อัตรา/ยอดเห็นครบ (UAT Q10)
+    serviceFeeTemplateId: null,
     projectedRevenueSource: null,
     projectedRevenueSourceLabel: null,
     reviewNote: null,

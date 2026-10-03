@@ -1,5 +1,6 @@
 import type { AssignmentStatus } from '@/lib/generated/prisma/enums'
 import { AssignmentError } from '@/lib/assignments/errors'
+import { ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
 import { AuthError } from '@/lib/auth/errors'
 
 /**
@@ -66,10 +67,18 @@ export function assertAgentInCaseTeam(agentTeamId: string | null, caseTeamId: st
   }
 }
 
-/** `40` §12 — reassign ต้องมีเหตุผลทุกครั้ง ไม่ว่าจะสถานะไหน */
+/**
+ * `40` §12 — reassign ต้องมีเหตุผลทุกครั้ง ไม่ว่าจะสถานะไหน · สั้นกว่า `ASSIGNMENT_REASON_MIN`
+ * ได้ code เดียวกัน พร้อมบอกขั้นต่ำใน context (มติ PO 03/10/2569 UAT Q18 · BUG-042)
+ */
 export function assertReassignReason(reason: string | null | undefined): string {
   const trimmed = (reason ?? '').trim()
-  if (trimmed === '') throw new AssignmentError('ASSIGNMENT_REASON_REQUIRED')
+  if (!isAssignmentReasonLongEnough(trimmed)) {
+    throw new AssignmentError('ASSIGNMENT_REASON_REQUIRED', {
+      detail: `เหตุผลต้องยาวอย่างน้อย ${ASSIGNMENT_REASON_MIN} ตัวอักษร`,
+      context: { minLength: ASSIGNMENT_REASON_MIN, length: trimmed.length },
+    })
+  }
   return trimmed
 }
 

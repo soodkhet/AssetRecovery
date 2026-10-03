@@ -1,4 +1,5 @@
 import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
+import { ASSIGNMENT_REASON_MIN } from '@/lib/assignments/schemas'
 
 /**
  * Error code หมวดมอบหมายงาน (ไฟล์ 40 §12) — SSOT อยู่ที่ `docs/40-case-assignment-routing.md` §12
@@ -52,7 +53,7 @@ const MESSAGES: Record<AssignmentErrorCode, ErrorMessage> = {
   },
   ASSIGNMENT_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผล',
-    message: 'การเปลี่ยนผู้รับผิดชอบต้องระบุเหตุผลทุกครั้ง ไม่ว่าพนักงานจะกดรับงานแล้วหรือยัง',
+    message: `การเปลี่ยนผู้รับผิดชอบต้องระบุเหตุผลอย่างน้อย ${ASSIGNMENT_REASON_MIN} ตัวอักษรทุกครั้ง ไม่ว่าพนักงานจะกดรับงานแล้วหรือยัง`,
   },
   ASSIGNMENT_NOT_FOUND: {
     title: 'ยังไม่มีการมอบหมายสำหรับเคสนี้',

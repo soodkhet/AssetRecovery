@@ -16,7 +16,11 @@ import {
   lotConfirmedMessage,
   payoutBatchCompletedMessage,
   periodSentToAccountantMessage,
+  assignmentAcceptedMessage,
+  assignmentCreatedMessage,
+  assignmentReassignedMessage,
   reassignmentRequestedMessage,
+  reassignmentRespondedMessage,
   reassignmentTimeoutMessage,
   whtFilingDueMessage,
   type NotificationMessage,
@@ -32,7 +36,24 @@ import {
 const ALL: readonly NotificationMessage[] = [
   caseDecisionMessage('case.approved', { caseId: 'c1', caseRef: 'CASE-26-0001', reason: 'ครบเอกสาร' }),
   reassignmentRequestedMessage({ caseRef: 'CASE-26-0002', reason: 'ลาป่วย', expiresAt: new Date('2026-08-20T10:00:00Z') }),
-  reassignmentTimeoutMessage({ caseRef: 'CASE-26-0003', pendingReassignmentId: 'p1' }),
+  reassignmentTimeoutMessage({ caseRef: 'CASE-26-0003', pendingReassignmentId: 'p1' }, 'new_agent'),
+  reassignmentTimeoutMessage({ caseRef: 'CASE-26-0003', pendingReassignmentId: 'p1' }, 'previous_agent'),
+  reassignmentTimeoutMessage({ caseRef: 'CASE-26-0003', pendingReassignmentId: 'p1' }, 'requester'),
+  assignmentCreatedMessage({ caseRef: 'CASE-26-0013', assignmentId: 'as1' }),
+  assignmentReassignedMessage({ caseRef: 'CASE-26-0014', assignmentId: 'as2', reason: 'ย้ายพื้นที่' }, 'new_agent'),
+  assignmentReassignedMessage({ caseRef: 'CASE-26-0014', assignmentId: 'as2', reason: 'ย้ายพื้นที่' }, 'previous_agent'),
+  assignmentAcceptedMessage({
+    caseRef: 'CASE-26-0015',
+    assignmentId: 'as3',
+    agentName: 'สมชาย',
+    acceptedAt: new Date('2026-10-03T09:39:00Z'),
+  }),
+  reassignmentRespondedMessage({ caseRef: 'CASE-26-0016', pendingReassignmentId: 'p2', decision: 'consent' }, 'new_agent'),
+  reassignmentRespondedMessage({ caseRef: 'CASE-26-0016', pendingReassignmentId: 'p2', decision: 'consent' }, 'requester'),
+  reassignmentRespondedMessage(
+    { caseRef: 'CASE-26-0016', pendingReassignmentId: 'p2', decision: 'decline', declineReason: 'ใกล้ปิดงาน' },
+    'requester',
+  ),
   caseClosedSuccessMessage({ caseRef: 'CASE-26-0004', agentName: 'สมชาย' }),
   caseClosedFailMessage({ caseRef: 'CASE-26-0005', agentName: null }),
   assetIntakeRejectedMessage({ caseRef: 'CASE-26-0006', reason: 'IMEI ไม่ตรง' }),
@@ -122,6 +143,29 @@ describe('รายละเอียดข้อความรายตัว'
       expiresAt: new Date('2026-08-20T03:00:00Z'),
     })
     expect(message.body).toContain('20/08/2569')
+    // UAT BUG-041 — ต้องมีเวลาด้วย (Asia/Bangkok) ไม่ใช่แค่วันที่
+    expect(message.body).toContain('20/08/2569 10:00')
+  })
+
+  it('แจ้งเตือนงานมอบหมาย: พนักงานลิงก์ไปหน้า Field Tracker · ผู้มอบหมายลิงก์ไปหน้ามอบหมาย (UAT BUG-059)', () => {
+    const notice = { caseRef: 'CASE-26-0017', pendingReassignmentId: 'p3' }
+    expect(reassignmentTimeoutMessage(notice, 'new_agent').linkPath).toBe('/field/pending')
+    expect(reassignmentTimeoutMessage(notice, 'previous_agent').linkPath).toBe('/field/closed')
+    expect(reassignmentTimeoutMessage(notice, 'requester').linkPath).toBe('/cases/assign')
+    // ข้อความของ 3 คนต้องต่างกัน — คนใหม่ต้องรู้ว่าได้เคสเพิ่ม
+    const titles = new Set(
+      (['new_agent', 'previous_agent', 'requester'] as const).map((audience) => reassignmentTimeoutMessage(notice, audience).title),
+    )
+    expect(titles.size).toBe(3)
+    expect(assignmentCreatedMessage({ caseRef: 'CASE-26-0018', assignmentId: 'as4' }).linkPath).toBe('/field/pending')
+    const accepted = assignmentAcceptedMessage({
+      caseRef: 'CASE-26-0019',
+      assignmentId: 'as5',
+      agentName: null,
+      acceptedAt: new Date('2026-10-03T09:39:00Z'),
+    })
+    expect(accepted.linkPath).toBe('/cases/assign')
+    expect(accepted.body).toContain('03/10/2569 16:39')
   })
 
   it('ยอดเงินแสดงจาก satang เป็นบาท (ห้ามคำนวณเองที่หน้าจอ)', () => {

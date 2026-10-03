@@ -13,6 +13,7 @@
 |---|---|---|
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Team CRUD, Manager/Supervisor scope |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + ชี้แจงว่า `manager_ids` (§7.1) implement จริงผ่าน table `team_managers` (N:N join table) ตาม `02-database-schema-design.md` ไม่ใช่ array column ตรงๆ บน `teams` — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
+| v2.1 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q12 · BUG-009) — ทีม/แผน/หัวหน้า/ผู้จัดการต้องเป็นฝั่งเดียวกัน**: §7 dropdown แผนแสดงเฉพาะฝั่งของทีม · §7.1 หัวหน้า = role หัวหน้าทีมติดตามทรัพย์ฝั่งนั้น · ผู้จัดการ = role ผู้จัดการทีมติดตามทรัพย์ฝั่งนั้น · UI กรอง + API ตรวจ (`REQUIRED_MISSING` + field error สำหรับแผน · `INVALID_TEAM_MEMBER` สำหรับคน) |
 
 ขอบเขตเอกสารนี้: จัดการทีม Inhouse/Outsource — ผู้จัดการ (many-to-many ผ่าน `team_managers`), หัวหน้าทีม (1:1), สมาชิก, พื้นที่จังหวัดที่รับผิดชอบ, และการผูก Compensation Plan
 
@@ -70,9 +71,11 @@
 
 > **หมายเหตุ**: `Team.compensation_plan_id` คือการอ้างอิงไปยัง **แผนค่าตอบแทน (Compensation Plan)** (ไฟล์ 11) — ทุกทีมต้องผูกแผนนี้ไว้เสมอตอนสร้างทีม (เหมือนที่ Finance Company ต้องผูก Service Fee Template ตามไฟล์ 10 §9) เพื่อให้ไฟล์ 38 §7.4 ดึงค่าใช้จ่ายของทีมมาแสดงประกอบการพิจารณารับเคสได้ทุกทีมโดยไม่มีกรณี "ทีมไม่มีแผนค่าตอบแทนผูกไว้"
 >
-> **UI (settings.html)**: ตารางทีมแสดงคอลัมน์ "แผนค่าตอบแทน" — แสดงชื่อแผนและ badge inhouse/outsource ของทีมนั้น · ฟอร์มสร้าง/แก้ไขทีมมี dropdown เลือกแผนค่าตอบแทน (แสดงแผนทั้งหมดจาก store.compTemplates)
+> **UI (settings.html)**: ตารางทีมแสดงคอลัมน์ "แผนค่าตอบแทน" — แสดงชื่อแผนและ badge inhouse/outsource ของทีมนั้น · ฟอร์มสร้าง/แก้ไขทีมมี dropdown เลือกแผนค่าตอบแทน — **แสดงเฉพาะแผนฝั่งเดียวกับทีม** (v2.1)
 
 ### 7.1 Manager vs Supervisor Scope
+
+> **บังคับฝั่งเดียวกัน (v2.1 — มติ PO 03/10/2569 UAT Q12 · BUG-009)**: (1) แผนค่าตอบแทนของทีมต้องเป็น `side` เดียวกับทีม (2) หัวหน้าทีม (`supervisor_id`) ต้องเป็นผู้ใช้ role **หัวหน้าทีมติดตามทรัพย์** ของ role group ฝั่งนั้น (3) ผู้จัดการ (`team_managers`) ต้องเป็นผู้ใช้ role **ผู้จัดการทีมติดตามทรัพย์** ของ role group ฝั่งนั้น — UI กรอง dropdown/รายการให้เหลือเฉพาะตัวเลือกที่ถูกฝั่ง (เปลี่ยนฝั่ง = ล้างตัวเลือกที่กลายเป็นคนละฝั่ง) และ **API ตรวจซ้ำเสมอ**: แผนคนละฝั่ง = 400 `REQUIRED_MISSING` + field error `compensationPlanId` (`24` ไม่มี code เฉพาะ) · หัวหน้า/ผู้จัดการไม่ตรง role/ฝั่ง = `INVALID_TEAM_MEMBER` + field error ของช่องนั้น
 
 - `manager_ids` (แนวคิดระดับ API/UI — **implement จริงผ่าน table `team_managers`** ซึ่งเป็น N:N join table ตาม `02-database-schema-design.md` §5, ไม่ใช่ array column บน `teams` โดยตรง): ผู้จัดการของทีม — **ผู้จัดการ 1 คนดูแลได้มากกว่า 1 ทีม** (many-to-many ผ่าน join table นี้)
 - `supervisor_id` (single value, nullable, FK ตรงบน `teams`): หัวหน้าทีมติดตามทรัพย์ (Supervisor) ของทีม — **หัวหน้าทีมติดตามทรัพย์ 1 คนสังกัดได้แค่ทีมเดียวเท่านั้น** ต่างจากผู้จัดการที่ดูแลได้หลายทีม — ฟิลด์นี้เป็นค่าเดี่ยว ไม่ใช่ array

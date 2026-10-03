@@ -11,6 +11,8 @@ import {
   normalizeTeamValues,
   toTeamAuditPayload,
   type TeamValues,
+  assertTeamSideConsistent,
+  isTeamSlotEligible,
 } from '@/lib/teams/team'
 
 /** เทสต์ pure logic ของทีม (`09` §16) — ไม่มีการแตะ DB ในไฟล์นี้ */
@@ -135,5 +137,58 @@ describe('toTeamAuditPayload', () => {
       provinces: ['กรุงเทพมหานคร', 'นนทบุรี'],
       status: 'active',
     })
+  })
+})
+
+describe('ทีม/แผน/หัวหน้า/ผู้จัดการฝั่งเดียวกัน (มติ PO 03/10/2569 UAT Q12 · BUG-009)', () => {
+  const supIn = { id: 's-in', roleGroup: 'inhouse', roleName: 'หัวหน้าทีมติดตามทรัพย์' }
+  const supOut = { id: 's-out', roleGroup: 'outsource', roleName: 'หัวหน้าทีมติดตามทรัพย์' }
+  const mgrIn = { id: 'm-in', roleGroup: 'inhouse', roleName: 'ผู้จัดการทีมติดตามทรัพย์' }
+  const agentIn = { id: 'a-in', roleGroup: 'inhouse', roleName: 'พนักงานติดตามทรัพย์' }
+
+  function errorOf(run: () => void): { code?: string; context?: { fields?: Record<string, string> } } {
+    try {
+      run()
+    } catch (error) {
+      expect(isTeamError(error)).toBe(true)
+      return error as { code?: string; context?: { fields?: Record<string, string> } }
+    }
+    throw new Error('ต้อง throw')
+  }
+
+  it('role ต้องตรงช่อง และ role group ต้องตรงฝั่งทีม', () => {
+    expect(isTeamSlotEligible(supIn, 'supervisor', 'inhouse')).toBe(true)
+    expect(isTeamSlotEligible(supOut, 'supervisor', 'inhouse')).toBe(false)
+    expect(isTeamSlotEligible(mgrIn, 'supervisor', 'inhouse')).toBe(false)
+    expect(isTeamSlotEligible(agentIn, 'manager', 'inhouse')).toBe(false)
+    expect(isTeamSlotEligible(mgrIn, 'manager', 'inhouse')).toBe(true)
+  })
+
+  it('ฝั่งตรงกันทั้งหมด = ผ่าน', () => {
+    expect(() =>
+      assertTeamSideConsistent({ side: 'inhouse', planSide: 'inhouse', supervisor: supIn, managers: [mgrIn] }),
+    ).not.toThrow()
+  })
+
+  it('แผนคนละฝั่ง = 400 REQUIRED_MISSING + field error compensationPlanId', () => {
+    const error = errorOf(() =>
+      assertTeamSideConsistent({ side: 'inhouse', planSide: 'outsource', supervisor: null, managers: [] }),
+    )
+    expect(error.code).toBe('REQUIRED_MISSING')
+    expect(error.context?.fields?.compensationPlanId).toBeDefined()
+  })
+
+  it('หัวหน้าคนละฝั่ง / ผู้จัดการเป็นพนักงาน = INVALID_TEAM_MEMBER + field error ของช่องนั้น', () => {
+    const supervisor = errorOf(() =>
+      assertTeamSideConsistent({ side: 'inhouse', planSide: null, supervisor: supOut, managers: [] }),
+    )
+    expect(supervisor.code).toBe('INVALID_TEAM_MEMBER')
+    expect(supervisor.context?.fields?.supervisorId).toBeDefined()
+
+    const managers = errorOf(() =>
+      assertTeamSideConsistent({ side: 'inhouse', planSide: null, supervisor: null, managers: [mgrIn, agentIn] }),
+    )
+    expect(managers.code).toBe('INVALID_TEAM_MEMBER')
+    expect(managers.context?.fields?.managerIds).toBeDefined()
   })
 })

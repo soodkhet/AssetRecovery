@@ -13,7 +13,7 @@ import type { AccountantQuestionDto, AccountantQuestionListDto } from '@/lib/acc
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import { dispatchToCapability } from '@/lib/notifications/dispatch'
+import { dispatchToCapability, ORGANIZATION_SCOPE } from '@/lib/notifications/dispatch'
 import { accountantQuestionMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
@@ -126,6 +126,7 @@ export async function createAccountantQuestion(
   dispatchToCapability(
     ctx.actor.organizationId,
     MANAGE_ACCOUNTANT_QUESTIONS,
+    ORGANIZATION_SCOPE,
     accountantQuestionMessage({ periodLabel: period.periodLabel, questionText: created.questionText }),
   )
 
