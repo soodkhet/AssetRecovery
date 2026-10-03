@@ -133,8 +133,21 @@ export async function tryCreateRevenue(
   input: TryCreateRevenueInput,
   now: Date = new Date(),
 ): Promise<TryCreateRevenueResult> {
-  const caseIds = [...new Set(input.caseIds)]
+  // เรียง id ให้ทุกทรานแซกชันล็อกตามลำดับเดียวกัน (ล็อตหลายเคส vs อนุมัติทีละเคส ⇒ ไม่ deadlock)
+  const caseIds = [...new Set(input.caseIds)].sort()
   if (caseIds.length === 0) return { revenueIdsCreated: [], eligibleCaseIds: [], skipped: [] }
+
+  // UAT R6-E — ล็อกแถวเคส **ก่อน** อ่านสถานะเกต: อนุมัติรายการเบิกตัวสุดท้ายของเคสพร้อมกัน 2 ตัว
+  // (หรือยืนยันล็อตชนการอนุมัติตัวสุดท้าย) ใน READ COMMITTED เดิมต่างฝ่ายเห็นอีกตัวยังไม่ approved
+  // ⇒ ไม่มีใครสร้างรายได้ และไม่มี job เก็บตก · ล็อกแล้วคนที่สองรอจนคนแรก commit จากนั้นคำสั่งถัดไป
+  // ของมันเห็นผลของคนแรกเสมอ ⇒ คนที่ปิดเกตครบเป็นคนสร้าง (ผู้เรียกต้องเขียนสถานะของตัวเองก่อนเรียก)
+  await tx.$queryRaw`
+    SELECT id::text FROM cases
+     WHERE organization_id = ${input.organizationId}::uuid
+       AND id = ANY(${caseIds}::uuid[])
+     ORDER BY id
+       FOR UPDATE
+  `
 
   const [cases, expenses, assets, revenues] = await Promise.all([
     tx.case.findMany({
@@ -237,7 +250,11 @@ export async function tryCreateRevenue(
       continue
     }
 
-    const created = await tx.revenue.create({
+    // ยามชั้น DB (`uniq_revenues_active_case_round`) — ชนแถวที่มีอยู่แล้ว = idempotent ไม่ใช่ error
+    // ใช้ ON CONFLICT DO NOTHING (`skipDuplicates`) แทนการจับ P2002: error ในทรานแซกชันของ Postgres
+    // ทำให้ทั้งทรานแซกชัน abort (อนุมัติ/ยืนยันล็อตที่ห่ออยู่จะล้มตาม) ⇒ ชนแล้วคืนแถวเดิมเป็น `already_created`
+    const inserted = await tx.revenue.createManyAndReturn({
+      skipDuplicates: true,
       data: {
         organizationId: input.organizationId,
         caseId,
@@ -255,6 +272,11 @@ export async function tryCreateRevenue(
       },
       select: { id: true },
     })
+    const created = inserted[0]
+    if (created === undefined) {
+      skipped.push({ caseId, reason: 'already_created' })
+      continue
+    }
 
     eligibleCaseIds.push(caseId)
     revenueIdsCreated.push(created.id)

@@ -2222,6 +2222,7 @@ model PayoutBatchItem {
 
 /// รายได้ (ไฟล์ 19) — เกิดเมื่อ `expense.approved` **AND** `HandoverLot.confirmed` (DEC-006/D6)
 /// ⚠️ VAT ห้าม hardcode — resolve จาก `vat_rate_history` ตาม `revenueDate` แล้ว snapshot ลง `vatRatePctUsed`
+/// partial unique `uniq_revenues_active_case_round` (org, case, tracking_round) WHERE deleted_at IS NULL ใน raw SQL migration (UAT R6-E)
 model Revenue {
   id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String  @map("organization_id") @db.Uuid
