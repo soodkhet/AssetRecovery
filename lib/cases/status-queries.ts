@@ -162,7 +162,7 @@ function assertActionAllowed(user: SessionUser, action: CaseStatusAction): void 
 }
 
 /** ใช้ unchecked เพื่อเขียน FK เป็นคอลัมน์ตรง ๆ (`assignedTeamId`/`serviceFeeTemplateId`) */
-type CaseUpdateData = Prisma.CaseUncheckedUpdateInput
+type CaseUpdateData = Prisma.CaseUncheckedUpdateManyInput
 
 export interface CaseStatusChangeResult {
   case: CaseDetailDto
@@ -305,7 +305,18 @@ export async function changeCaseStatus(
   auditAfter.events = events
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.case.update({ where: { id: caseId }, data, select: detailSelect })
+    // ยามสถานะแบบ optimistic (UAT BUG-035) — สถานะถูกอ่าน**นอก** transaction ⇒ ยืนยันซ้ำตอนเขียน
+    // ไม่งั้นคำสั่งที่กดพร้อมกันสองครั้ง (เช่น "รับเคส" ชน "ไม่รับเคส") ทับผลกันเองแล้วลง audit สองชุด
+    const claimed = await tx.case.updateMany({
+      where: { id: caseId, organizationId, status: row.status, deletedAt: null },
+      data,
+    })
+    if (claimed.count === 0) {
+      throw new CaseError('CASE_INVALID_STATUS_TRANSITION', {
+        context: { status: row.status, action, reason: 'status_changed_concurrently' },
+      })
+    }
+    const next = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })
 
     if (action === 'create_recycle_request') {
       await tx.recycleRequest.create({

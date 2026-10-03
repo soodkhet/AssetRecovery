@@ -493,6 +493,56 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(created[0]).toEqual({ status: 'draft', source: 'import', debt_amount_satang: 1_000_000 })
   })
 
+  /**
+   * UAT BUG-035 — สองคำสั่งเปลี่ยนสถานะยิงพร้อมกันจากสถานะเดียวกัน ("รับเคส" ชน "ไม่รับเคส")
+   * ต้องสำเร็จแค่ตัวเดียว อีกตัวได้ `CASE_INVALID_STATUS_TRANSITION` · audit + แจ้งเตือนเกิดชุดเดียว
+   */
+  it('เปลี่ยนสถานะพร้อมกัน 2 คำสั่ง → สำเร็จ 1 + ถูกปัด 1 · audit/แจ้งเตือน 1 ชุด (BUG-035)', async () => {
+    const caseId = await seedCase('SF-2026-2335', { withDocuments: true })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    const startedAt = new Date()
+
+    const results = await Promise.allSettled([
+      service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta }),
+      service.changeCaseStatus(actor, caseId, change({ action: 'reject', reason: 'ข้อมูลไม่ตรง' }), {
+        actor,
+        meta,
+      }),
+    ])
+    const fulfilled = results.filter((result) => result.status === 'fulfilled')
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toBeInstanceOf(CaseError)
+    expect(rejected[0]?.reason).toMatchObject({ code: 'CASE_INVALID_STATUS_TRANSITION' })
+
+    const status = (await caseRow(caseId))?.status
+    expect(['approved', 'rejected']).toContain(status)
+
+    const audits = await db().$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM audit_logs
+        WHERE target_id = '${caseId}' AND action IN ('approve', 'reject') AND created_at >= $1`,
+      startedAt,
+    )
+    expect(Number(audits[0]?.count)).toBe(1)
+
+    // แจ้งเตือนส่งแบบ detached หลัง commit ⇒ รอให้ลงก่อนแล้วจึงนับ
+    const countNotifications = async (): Promise<number> => {
+      const rows = await db().$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) AS count FROM notifications
+          WHERE user_id = '${USER_ID}' AND event_code IN ('case.approved', 'case.rejected')
+            AND body LIKE '%SF-2026-2335%' AND created_at >= $1`,
+        startedAt,
+      )
+      return Number(rows[0]?.count)
+    }
+    for (let attempt = 0; attempt < 20 && (await countNotifications()) === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(await countNotifications()).toBe(1)
+  })
+
   it('Import dryRun ไม่เขียนอะไรลง DB (preview ก่อนยืนยัน)', async () => {
     const { importCases } = await import('@/lib/cases/import-queries')
     const result = await importCases(
