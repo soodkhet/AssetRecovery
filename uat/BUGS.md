@@ -15,11 +15,11 @@
 | BUG-008 | R1-probe | S3 | code | Approval Matrix ชื่อ role เป็นข้อความอิสระ พิมพ์ผิดก็บันทึกได้ ไปพังตอนอนุมัติ (`APPROVAL_MATRIX_NOT_FOUND`) + ไม่มีกันแถวซ้ำ | fixed `511a636` (merge 03/10/2569) |
 | BUG-009 | R1-probe | S4 | code? | ทีมรับแผนค่าตอบแทนของอีกฝั่ง (inhouse ↔ outsource) ได้ · R1 ยืนยัน: รายชื่อ supervisor/manager ในฟอร์มทีมมีพนักงานภาคสนามและคนต่างฝั่งปนมา | needs-decision — `09`/`11` ไม่บังคับให้แผน/หัวหน้า/ผู้จัดการเป็นฝั่งเดียวกับทีม (`09` §7.1 ให้ dropdown แสดงทุกแผน) — fixer ไม่แก้ |
 | BUG-010 | DATASET | S1 | code | ค่าคอมมิชชัน/ค่าเสี่ยงไม่ถูกสร้างเป็น expense ตอนปิดงาน (`commissionSatang()` ไม่มีที่เรียกนอกเทสต์) — หน้า income อ่านจากแผนตรง ⇒ ไม่เข้ารอบจ่าย? | fixed `7c34edb` (มติ PO Q2) |
-| BUG-011 | DATASET | S1 | spec-gap | advance คืนเงิน: โค้ด approved − used · `22` §6.13 requested − used · used > requested โค้ดบล็อก แต่ `22`/`15` ว่า return 0 + เบิกส่วนเกินแยก | needs-decision |
+| BUG-011 | DATASET | S1 | spec-gap | advance คืนเงิน: โค้ด approved − used · `22` §6.13 requested − used · used > requested โค้ดบล็อก แต่ `22`/`15` ว่า return 0 + เบิกส่วนเกินแยก | fixed `8d4befc` (มติ PO Q3 — ใช้เกินบันทึกได้ คืน 0 + เบิกส่วนเกินอัตโนมัติ) |
 | BUG-012 | DATASET | S5 | spec-gap | `22` §6.11 AR = total − received ยังไม่อัปเดตตามมติ A1 (โค้ดถูกแล้ว: − (received + wht)) | doc fix |
 | BUG-013 | DATASET | S1 | spec-gap | DAILY_FLAT น้ำมัน: โค้ด+`22` §6.2 = ต่อเคส · `11` §81 = บาทต่อวัน (D1) | fixed `adf437d` (มติ PO Q4 — ต่อวัน) |
-| BUG-014 | DATASET | S1 | spec-gap | WHT threshold 1,000 บาท: โค้ดต่อรายการ — spec ไม่ระบุว่าต่อรายการหรือต่อ payee ต่อรอบ (D4) | needs-decision |
-| BUG-015 | fix BUG-001 | S4 | spec-gap | ตาราง `revenues` ไม่มี snapshot ของ `vat_mode` — ป้าย VAT Flag ในแท็บรายได้อ่านค่าปัจจุบันของบริษัท ⇒ เปลี่ยน vat_mode แล้วป้ายของรายการเก่าเปลี่ยนตาม (ยอดเงินไม่เปลี่ยน) · PATCH บริษัทแบบไม่ส่งฟิลด์ → รีเซ็ตเป็น default 3.00 (ฟอร์มส่งครบ ไม่กระทบ UI) | needs-decision (ต้องแก้ `02`) |
+| BUG-014 | DATASET | S1 | spec-gap | WHT threshold 1,000 บาท: โค้ดต่อรายการ — spec ไม่ระบุว่าต่อรายการหรือต่อ payee ต่อรอบ (D4) | fixed `8d6158c`+`8627a24` (มติ PO Q5 — ต่อ payee ต่อรอบจ่าย) · ⚠️ นักบัญชียืนยัน |
+| BUG-015 | fix BUG-001 | S4 | spec-gap | ตาราง `revenues` ไม่มี snapshot ของ `vat_mode` — ป้าย VAT Flag ในแท็บรายได้อ่านค่าปัจจุบันของบริษัท ⇒ เปลี่ยน vat_mode แล้วป้ายของรายการเก่าเปลี่ยนตาม (ยอดเงินไม่เปลี่ยน) · PATCH บริษัทแบบไม่ส่งฟิลด์ → รีเซ็ตเป็น default 3.00 (ฟอร์มส่งครบ ไม่กระทบ UI) | fixed `2d7d30d` (มติ PO Q6 — migration `20261003113300`) |
 
 | BUG-016 | R1.14 | S2 | code | `POST /api/teams` ชื่อซ้ำยิงพร้อมกัน 2 ครั้ง → ครั้งที่ 2 ได้ 500 body ว่าง (P2002 ไม่ถูกแปลงเป็น `DUPLICATE_TEAM_NAME`) · ยิงทีละครั้งได้ 400 ถูกต้อง · ไม่เกิดแถวซ้ำ | fixed `ebe34bb` (merge 03/10/2569) |
 | BUG-017 | R1.25 | S5 | code | ฟอร์มเพิ่ม payee กดบันทึกได้ก่อน dropdown ผู้ใช้โหลดเสร็จ → ข้อความ "รูปแบบรหัสไม่ถูกต้อง" แทน "กรุณาเลือกผู้ใช้" | fixed `745fa18` (merge 03/10/2569) |
@@ -63,7 +63,7 @@
 | BUG-055 | R4-sheet | S4 | spec-gap | ไม่มีกระบวนการอนุมัติหลักฐานปิดงาน — `case_evidences` ค้าง `pending` ตลอด (ใครอนุมัติ เมื่อไร?) | needs-decision |
 | BUG-056 | R4-sheet | S3 | spec-gap | เพื่อนร่วมทีมเปิดเคสของคนอื่นแบบอ่านอย่างเดียวได้ เห็นเบอร์/ที่อยู่ลูกหนี้ (คล้าย BUG-022 PDPA) | closed — มติ PO Q9: เห็นได้ตามเดิม (accepted risk) |
 | BUG-057 | R4-sheet | S5 | spec-gap | ปิดงานไม่สำเร็จไม่มีช่องเหตุผลที่บังคับแยก | ✅ ยืนยันใน R4a — needs-decision |
-| BUG-058 | R4-sheet | S5 | spec-gap | สร้างเงินทดรองด้วยวันครบกำหนดเคลียร์ในอดีตได้ (schema ตรวจแค่รูปแบบ) — UAT ใช้ทำ ADV3 overdue | needs-decision |
+| BUG-058 | R4-sheet | S5 | spec-gap | สร้างเงินทดรองด้วยวันครบกำหนดเคลียร์ในอดีตได้ (schema ตรวจแค่รูปแบบ) — UAT ใช้ทำ ADV3 overdue | fixed `56d6b1c` (มติ PO Q8) |
 | BUG-059 | R3 | S4 | code | แจ้งเตือน timeout ที่ส่งถึงพนักงานลิงก์ไป `/cases/assign` → เด้งไป `/dashboard` · ข้อความเหมือนกันทั้ง 3 คน พนักงานใหม่ไม่รู้ว่าได้เคสเพิ่ม | open |
 | BUG-060 | R3 | S5 | spec-gap | อัตราสำเร็จก่อนมีเคสปิด: บางจุดแสดง "0.00%" บางจุด "N/A" แอปพนักงาน "-" · ตัวหารควรเป็นเคสที่ปิดแล้วหรือเคสที่ได้รับมอบหมาย + สัญลักษณ์ควรเหมือนกัน (Rule 01: หารศูนย์ = N/A) | fixed `52b3209` (มติ PO Q20) |
 | BUG-061 | R3 | S5 | code | ตอนโอนเคส `case_assignments.reassign_reason` ของแถวเดิมถูกเขียนทับด้วยเหตุผลที่ถูกโอนออก (`reassignment_history` ยังครบ) | open |
