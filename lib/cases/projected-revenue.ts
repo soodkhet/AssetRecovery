@@ -1,4 +1,5 @@
 import { pctOfSatang } from '@/lib/finance/satang'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { ServiceFeeBasis, ServiceFeeModel } from '@/lib/service-fee/template'
 
 /**
@@ -81,4 +82,78 @@ export function calculateProjectedRevenue(
   const rateComponent = pctOfSatang(base, template.ratePct)
   const amountSatang = template.model === 'HYBRID' ? template.baseSatang + rateComponent : rateComponent
   return { amountSatang, source, basisSatang: base, missingBasis: false }
+}
+
+// ── แปล `calculation_source` เป็นข้อความสำหรับผู้ใช้ (UAT BUG-034) ─────────────
+
+export interface ProjectedRevenueSourceParts {
+  model: ServiceFeeModel | null
+  templateId: string | null
+  templateVersion: number | null
+  baseSatang: number | null
+  ratePct: number | null
+  basis: ServiceFeeBasis | null
+}
+
+const MODELS: readonly ServiceFeeModel[] = ['SUCCESS_FEE', 'FLAT', 'HYBRID']
+const BASES: readonly ServiceFeeBasis[] = ['debt_amount', 'asset_value']
+
+/** อ่านค่าดิบที่ `describe()` เขียนไว้กลับเป็นชิ้นส่วน — ชิ้นที่อ่านไม่ออกเป็น `null` (ค่าดิบใน DB ไม่เปลี่ยน) */
+export function parseProjectedRevenueSource(source: string): ProjectedRevenueSourceParts {
+  const parts: ProjectedRevenueSourceParts = {
+    model: null,
+    templateId: null,
+    templateVersion: null,
+    baseSatang: null,
+    ratePct: null,
+    basis: null,
+  }
+  for (const token of source.split('·').map((piece) => piece.trim())) {
+    const version = /^v(\d+)$/.exec(token)
+    if (version !== null) {
+      parts.templateVersion = Number(version[1])
+      continue
+    }
+    const [key, value] = token.split('=', 2)
+    if (value === undefined) continue
+    if (key === 'model') parts.model = MODELS.find((model) => model === value) ?? null
+    else if (key === 'template') parts.templateId = value
+    else if (key === 'base' && /^\d+$/.test(value)) parts.baseSatang = Number(value)
+    else if (key === 'rate' && /^\d+(\.\d+)?%$/.test(value)) parts.ratePct = Number(value.slice(0, -1))
+    else if (key === 'basis') parts.basis = BASES.find((basis) => basis === value) ?? null
+  }
+  return parts
+}
+
+const MODEL_SHORT_LABEL: Readonly<Record<ServiceFeeModel, string>> = {
+  SUCCESS_FEE: 'Success Fee',
+  FLAT: 'Flat Rate',
+  HYBRID: 'Hybrid',
+}
+
+const BASIS_SHORT_LABEL: Readonly<Record<ServiceFeeBasis, string>> = {
+  debt_amount: 'มูลหนี้',
+  asset_value: 'มูลค่าเครื่อง',
+}
+
+/**
+ * ข้อความอ่านง่ายของที่มาประมาณการ เช่น `เทมเพลต "ค่าบริการมาตรฐาน" v2 · Hybrid: ฿500.00 + 15% ของมูลหนี้`
+ * — `templateName` มาจากการ lookup ฝั่ง server (ค่าดิบเก็บแค่ template id) · ไม่มีชื่อ = แสดงแค่เวอร์ชัน
+ * · ค่าดิบที่อ่านไม่ออก (ไม่มี model) คืน `null` ให้ UI แสดงข้อความกลางแทน — ไม่โชว์ UUID/ค่าดิบ
+ */
+export function projectedRevenueSourceText(source: string, templateName: string | null): string | null {
+  const parts = parseProjectedRevenueSource(source)
+  if (parts.model === null) return null
+
+  const template = [templateName === null ? 'เทมเพลต' : `เทมเพลต "${templateName}"`]
+  if (parts.templateVersion !== null) template.push(`v${parts.templateVersion}`)
+
+  const base = parts.baseSatang === null ? null : fmtSatangSymbol(parts.baseSatang)
+  const rate =
+    parts.ratePct === null ? null : `${parts.ratePct}% ของ${BASIS_SHORT_LABEL[parts.basis ?? 'debt_amount']}`
+  const pieces = parts.model === 'FLAT' ? [base] : parts.model === 'SUCCESS_FEE' ? [rate] : [base, rate]
+  const formula = pieces.filter((piece): piece is string => piece !== null).join(' + ')
+
+  const model = MODEL_SHORT_LABEL[parts.model]
+  return `${template.join(' ')} · ${formula === '' ? model : `${model}: ${formula}`}`
 }

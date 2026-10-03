@@ -175,7 +175,10 @@ export interface CaseDetailDto extends CaseListItemDto {
   assetType: string | null
   assetImeiSerial: string | null
   projectedRevenueSatang: number | null
+  /** ค่าดิบ `calculation_source` (มี template id) — เก็บไว้ trace · หน้าจอใช้ `projectedRevenueSourceLabel` */
   projectedRevenueSource: string | null
+  /** ข้อความอ่านง่าย: ชื่อเทมเพลต + version + สูตรย่อ (UAT BUG-034) — `null` เมื่อไม่มีค่าดิบหรืออ่านไม่ออก */
+  projectedRevenueSourceLabel: string | null
   suggestedTeamId: string | null
   assignedTeamId: string | null
   teamChangeReason: string | null

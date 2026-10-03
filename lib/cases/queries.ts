@@ -16,6 +16,7 @@ import {
 } from '@/lib/cases/case'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
+import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import type {
   CaseCreateInput,
@@ -219,6 +220,7 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     serviceFeeRatePct: null,
     projectedRevenueSatang: null,
     projectedRevenueSource: null,
+    projectedRevenueSourceLabel: null,
     reviewNote: null,
     editHistory: [],
     recycleHistory: detail.recycleHistory.map((entry) => ({ ...entry, decisionNote: null, decidedByName: null })),
@@ -298,6 +300,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetImeiSerial,
     projectedRevenueSatang: row.projectedRevenueSatang,
     projectedRevenueSource: row.projectedRevenueSource,
+    projectedRevenueSourceLabel:
+      row.projectedRevenueSource === null ? null : projectedRevenueSourceText(row.projectedRevenueSource, null),
     suggestedTeamId: row.suggestedTeamId,
     assignedTeamId: row.assignedTeamId,
     teamChangeReason: row.teamChangeReason,
@@ -454,9 +458,30 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
     select: detailSelect,
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
-  const detail = toDetailDto(row)
-  return isCompanySideViewer(user) ? redactCaseDetailForCompany(detail) : detail
+  if (isCompanySideViewer(user)) return redactCaseDetailForCompany(toDetailDto(row))
+  return await withProjectedSourceTemplateName(user.organizationId, toDetailDto(row))
 }
+
+/**
+ * เติมชื่อเทมเพลตลงข้อความที่มาประมาณการ (UAT BUG-034) — ค่าดิบเก็บแค่ template id
+ * ⇒ lookup ชื่อจากแถวเทมเพลตเวอร์ชันนั้น (แถวเวอร์ชันเก่าไม่ถูกแก้ จึงได้ชื่อ ณ ตอนคำนวณ)
+ */
+async function withProjectedSourceTemplateName(organizationId: string, detail: CaseDetailDto): Promise<CaseDetailDto> {
+  if (detail.projectedRevenueSource === null) return detail
+  const { templateId } = parseProjectedRevenueSource(detail.projectedRevenueSource)
+  if (templateId === null || !UUID_PATTERN.test(templateId)) return detail
+  const template = await prisma.serviceFeeTemplate.findFirst({
+    where: { id: templateId, organizationId },
+    select: { name: true },
+  })
+  if (template === null) return detail
+  return {
+    ...detail,
+    projectedRevenueSourceLabel: projectedRevenueSourceText(detail.projectedRevenueSource, template.name),
+  }
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ── เขียน ───────────────────────────────────────────────────────────────────
 

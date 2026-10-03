@@ -203,6 +203,12 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(row?.projected_revenue_satang).toBe(200_000)
     expect(row?.service_fee_template_id).toBeNull()
     expect(row?.service_fee_model_snapshot).toBeNull()
+
+    // UAT BUG-034 — หน้าจอได้ข้อความอ่านง่าย (ชื่อเทมเพลต) ส่วนค่าดิบยังเก็บ template id ไว้ trace
+    const { getCase } = await import('@/lib/cases/queries')
+    const detail = await getCase(actor, caseId)
+    expect(detail.projectedRevenueSource).toContain(`template=${TEMPLATE_V1}`)
+    expect(detail.projectedRevenueSourceLabel).toBe('เทมเพลต "เทมเพลตทดสอบ 2.3" v1 · Hybrid: ฿500.00 + 15% ของมูลหนี้')
   })
 
   it('เอกสาร required ไม่ครบ → CASE_DOCUMENT_INCOMPLETE (ไม่เปลี่ยนสถานะ)', async () => {
