@@ -185,6 +185,49 @@ async function openStoredFile(path: string): Promise<boolean> {
   return true
 }
 
+/**
+ * ภาพย่อของไฟล์ที่แนบแล้ว (UAT BUG-067) — รูป = โหลด signed URL แล้วแสดงภาพจริง (ระหว่างโหลด/โหลดไม่ได้
+ * ใช้ไอคอนแทน) · วิดีโอ = ไอคอน + ชื่อไฟล์ ให้รู้ว่าแนบไฟล์ไหนไว้
+ */
+function MediaThumb({ kind, path, icon: Icon }: { kind: FieldMediaKind; path: string; icon: MediaSection['icon'] }) {
+  const isImage = kind === 'photo' || kind === 'product_photo'
+  // ผูกผลกับ path ที่โหลด — path เปลี่ยนจะไม่เห็นรูปเก่าค้าง โดยไม่ต้อง setState ใน effect
+  const [loaded, setLoaded] = useState<{ path: string; url: string | null } | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isImage) return
+    let cancelled = false
+    void signedFileUrl(path).then((url) => {
+      if (!cancelled) setLoaded({ path, url })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isImage, path])
+
+  const url = loaded !== null && loaded.path === path ? loaded.url : null
+  if (isImage && url !== null && failed !== path) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- signed URL ชั่วคราวของ Storage (โดเมนไม่คงที่ ใช้ next/image ไม่ได้)
+      <img
+        src={url}
+        alt={uploadDisplayName(path)}
+        className="h-full w-full rounded-[10px] object-cover"
+        onError={() => setFailed(path)}
+      />
+    )
+  }
+  return (
+    <span className="flex w-full flex-col items-center gap-1 px-1">
+      <Icon className="h-6 w-6" />
+      {!isImage && (
+        <span className="w-full truncate text-center text-[10px] font-bold text-slate-600">{uploadDisplayName(path)}</span>
+      )}
+    </span>
+  )
+}
+
 function MediaGrid({
   section,
   urls,
@@ -219,10 +262,10 @@ function MediaGrid({
             <button
               type="button"
               onClick={() => onOpen(url)}
-              title="เปิดดูไฟล์"
-              className="focus-ring flex h-full w-full items-center justify-center rounded-xl text-emerald-600"
+              title={`เปิดดูไฟล์ ${uploadDisplayName(url)}`}
+              className="focus-ring flex h-full w-full items-center justify-center overflow-hidden rounded-xl text-emerald-600"
             >
-              <Icon className="h-6 w-6" />
+              <MediaThumb kind={section.kind} path={url} icon={Icon} />
             </button>
             <button
               type="button"
@@ -321,9 +364,10 @@ function AudioSection({
           <button
             type="button"
             onClick={() => onOpen(url)}
-            className="focus-ring flex-1 text-left text-xs font-extrabold text-emerald-700"
+            className="focus-ring min-w-0 flex-1 text-left text-xs font-extrabold text-emerald-700"
           >
-            แนบไฟล์เสียงแล้ว — แตะเพื่อเปิดฟัง
+            <span className="block">แนบไฟล์เสียงแล้ว — แตะเพื่อเปิดฟัง</span>
+            <span className="block truncate font-bold text-slate-500">{uploadDisplayName(url)}</span>
           </button>
           <button
             type="button"
