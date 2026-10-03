@@ -74,8 +74,8 @@ const ROLE_CONFIG = {
   },
   admin_office: {
     label: 'ธุรการ (Admin)', group: 'system',
-    menus: ['dashboard', 'cases'],
-    caseSubmenus: ['submit'], // ASSUMMENT: ไฟล์ 06 §7.2 ไม่มีแถวของ "ธุรการ" ในตาราง — อิงจากหน้าที่คีย์ข้อมูลเคส (ไฟล์ 38 §5)
+    menus: ['dashboard', 'cases', 'settings'], // settings = เฉพาะแท็บ "ผู้ใช้งาน" (มติ PO 03/10/2569 · UAT BUG-021 · `06` v2.3 §7.2)
+    caseSubmenus: ['submit'], // อิงหน้าที่คีย์ข้อมูลเคส (ไฟล์ 38 §5)
     landing: 'cases:submit',
   },
   manager_inhouse: {

@@ -4,8 +4,9 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R1 ตั้งค่าระบบ** — 03/10/2569 · 45 ขั้น ✅39 🐞4 ❓2 · รายงาน `uat/report/R1-superadmin.md` · ภาพ 97 ไฟล์ |
 | snapshot ล่าสุด | `uat/snapshots/R1-end.dump` (ก่อนหน้า: `R0-clean`) |
-| รอบถัดไป | **R2 รับเคส** (ธุรการ → เจ้าหน้าที่อนุมัติเคส) — ต้องเขียน step sheet `uat/steps/R2.md` + ไฟล์แนบ fixture (PDF/JPG) |
-| บั๊กเปิด | ดู BUGS.md (21 รายการ) — BUG-001 `898b123` / BUG-002 `c116827` merge แล้ว · ไม่มีตัวบล็อก R2 |
+| รอบปัจจุบัน | **R2 รับเคส — เล่นใหม่ตั้งแต่ R2.00** (ครั้งแรกหยุดที่ R2.02 เพราะไม่มี Storage bucket → BUG-026 แก้แล้ว) · ฐาน restore เป็น `R1-end` แล้ว · step sheet `uat/steps/R2.md` · รายงานครั้งแรกเก็บไว้ที่ `uat/report/R2-intake-attempt1.md` |
+| บั๊กเปิด | ดู BUGS.md — merge fixer ชุด R1 แล้ว (12 commit, verify 249 files / 3,111 tests) · ที่เหลือส่วนใหญ่เป็น needs-decision |
+| Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
 
 ## เครื่องมือ (R0)
@@ -18,6 +19,8 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 03/10/2569 R2 ครั้งแรกหยุดที่ R2.02 (ไม่มี bucket) → restore R1-end · สร้าง Storage ใน `qgshdg…` · merge fixer ชุด R1 (BUG-003…021 + BUG-025 ช่องโหว่ค้นหาผู้ใช้ข้ามทีม) · mockup app-shell: ธุรการเห็น settings
+- 03/10/2569 R2 เริ่ม: ไม่เพิ่ม C9 (ช่องว่าง: ไม่มีการเปลี่ยนทีมจริงพร้อมเหตุผล) · R2 = รอบแรกที่อัปโหลดขึ้น Supabase Storage (`case-documents`) — ไฟล์ค้างหลัง restore ให้จดไว้
 - 03/10/2569 R1: จบครบ ไม่มีตัวบล็อก · 14 persona login + เปลี่ยนรหัสแล้ว (session อยู่ `uat/.auth/`) · template T1/T2 เป็น v2 · merge BUG-002 + verify เขียว (245 files / 3,072 tests) · ตัด `uat/bin/r*/**` ออกจาก eslint (สคริปต์ชั่วคราวต่อรอบ)
 - 03/10/2569 R0: baseline เขียว (typecheck · 241 files / 3,039 tests · lint) · Playwright 1.63 (DEC-011) · snapshot+restore ทดสอบแล้ว
 

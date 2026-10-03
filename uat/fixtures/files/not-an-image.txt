@@ -1,0 +1,1 @@
+UAT fixture: plain text, must be rejected by product_photo slot
