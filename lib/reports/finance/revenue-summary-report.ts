@@ -1,5 +1,6 @@
+import { successRateOf } from '@/lib/assignments/success-rate'
 import { sumSatang } from '@/lib/finance/satang'
-import { momComparison, ratioPct } from '@/lib/reports/kpi'
+import { momComparison } from '@/lib/reports/kpi'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 
 /**
@@ -134,7 +135,7 @@ export function buildRevenueSummary(input: {
       caseCount,
       successCount: bucket.successCases.size,
       failCount: bucket.failCases.size,
-      successPct: ratioPct(bucket.successCases.size, bucket.successCases.size + bucket.failCases.size),
+      successPct: successRateOf(bucket.successCases.size, bucket.failCases.size),
       revenuePerCaseSatang: revenuePerCaseSatang(bucket.revenueSatang, caseCount),
       changePct: momComparison(bucket.revenueSatang, baseOf(bucket, index)).changePct,
     }
@@ -186,7 +187,7 @@ export function buildRevenueSummary(input: {
       caseCount,
       successCount,
       failCount,
-      successPct: ratioPct(successCount, successCount + failCount),
+      successPct: successRateOf(successCount, failCount),
       revenuePerCaseSatang: perCase,
       changePct: momComparison(totalRevenue, previousRevenue).changePct,
     },
