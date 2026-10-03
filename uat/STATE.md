@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R4b v3** — 04/10/2569 00:55–00:59 (+ R4.38b 01:3x) · 15/15 ✅ · บั๊กใหม่ BUG-097…102 (ไม่บล็อก) · expense ทั้งหมด 16 / active 15 = **950000** ✅ (ผูกเคส 890000 + hotel 60000 `pending_approval` ขั้น 1) · C4 commission เดิม superseded · advances 4 ใบ pending (ADV3 เคลียร์ 2026-10-04) · evidence 6 · รายงาน `uat/report/R4b-field-v3.md` · ภาพรวม R4v3 94 · ก่อนหน้า: R4a v3 24/24 890000 |
-| snapshot ล่าสุด | `uat/snapshots/R4-end-v3.dump` (ปลาย R4 v3 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R5 v2 คลังสินค้า** → ปรับ R6 v2 → R6a/R6b · R7 ต้องหลังเที่ยงคืน 05/10 (ADV3 overdue) |
+| รอบล่าสุดที่จบ | **R5 v2 คลังสินค้า** — 04/10/2569 ~01:45–02:05 · 24/24 ✅ · บั๊กใหม่ BUG-103 (env, fixed) / 104 · ไม่มี 500 · **LOT-2569-003** (CO1: C1,C2,C4 · finance_pickup) / **LOT-2569-004** (CO2: C5 · we_deliver) confirmed (เลข 003/004 เพราะ BUG-103 — ใช้ต่อ) · asset handed_over 4 · expense 16: pending_approval 15 = **950000** ✅ (รายวัน 9) · superseded 1 · revenues 0 · evidence approved 4/pending 1 (C3)/rejected 1 · รายงาน `uat/report/R5-warehouse-v2.md` · ภาพ 55 · ก่อนหน้า: R4b v3 15/15, R4a v3 24/24 |
+| snapshot ล่าสุด | `uat/snapshots/R5-end-v3.dump` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R6a v3** (R6.01–R6.20 อนุมัติ) → R6b (R6.21–R6.44 รอบจ่าย) ตาม `uat/steps/R6.md` **v2** · R7 ต้องหลังเที่ยงคืน 05/10 (ADV3 overdue) · ⚠️ DATASET v3 ถ้อยคำยังไม่แก้ตามมติ O4 (`uat/PO-DECISIONS-2569-10-04.md`) — R6.md v2 ใช้ค่าที่ถูกแล้ว |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~02:10 R5 v2 จบ (ดูตารางบน) · step sheet R6 v2 เสร็จ (R6a 20 / R6b 24 ขั้น · golden ลงตัว) · มติ orchestrator + บัญชี A1–A7 → `uat/PO-DECISIONS-2569-10-04.md` (A1/A2 ต้องแก้โค้ด — รอผู้ใช้รีวิว · UAT ยึดโค้ดปัจจุบัน) · ขยะ Storage +4
 - 04/10/2569 ~01:40 R4b v3 จบ + R4.38b (PO เผลอใช้ admin อนุมัติค่าที่พักขั้น 1 → มติ PO ก.: ตีกลับผ่านหน้าจอ + in1 ส่งใหม่) · มติ PO BUG-095 = ก. · **ผู้ใช้อนุญาตให้ orchestrator เดินต่อเองข้ามคืน + ตัดสินเรื่องนักบัญชีตามมาตรฐานบัญชีไทย (จดเหตุผลไว้ให้รีวิว) + ซ่อมฐาน dev ในเครื่องได้** · ขยะ Storage +1
 - 04/10/2569 00:50 R4a v3 จบ (ดูตารางบน) · ก่อนเริ่มพบฐาน dev ขาด 3 migration (BUG-094) → ผู้ใช้อนุญาตให้ orchestrator ซ่อมฐาน dev ในเครื่อง · snapshot `R3-end-v3b` + `R4a-end-v3` · สคริปต์ `uat/bin/r4v3/` (มี s11b-settle, s12–s17 ปรับเป็น R4v3 แล้ว) · ไฟล์ขยะ Storage +1
 - 04/10/2569 00:00 merge fixer H (Q21: job `daily_field_allowance`, ตาราง `field_day_settlements`, เกตรายได้ `field_days_not_settled`, DEC-012) · verify 258 files / 3,313 tests · restore `R3-end-v2` → snapshot `R3-end-v3` · มติ PO: settle วันนี้ผ่าน dev trigger หลังเช็คอินครบ
@@ -47,7 +48,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-102) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-104) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้
@@ -97,4 +98,5 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R5: รูปรับเข้า 13 + เอกสารล็อต 4 (ใช้งานจริง) · ขยะ: รูปปลอม C4 2 ไฟล์ (`…ccddbd4b…-R5-fake-photo.jpg` + อีก 1 ไม่ได้จด path) + ใบเซ็นปลอม 1 ไฟล์ (ไม่ได้จด uuid) — ดู `uat/report/R5-warehouse.md` · ตอนลบให้ลบ object ใต้ `assets/*/intake/` และ `handover-lots/*/` ที่ไม่มีแถว DB อ้างอิง
 - R4a v3: `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/c6a8bc1e-c486-41f1-99e2-66424183fdd4-R4-fake-video.mp4` (ขยะ) · หลักฐานจริง 14 ไฟล์ใช้งานอยู่
 - R4b v3: `case-documents/expenses/88cb577d-32b4-49ff-96fb-06a2e093d339/receipts/f7f77b14-26af-40f1-9883-73f4d694a9c2-R4b-fake-receipt.jpg` (ขยะ)
+- R5 v2 (ขยะ 4): `assets/aa1a2872-d1c0-46c7-98a0-44c3f84fea1f/intake/front/69ba4721-5567-4c24-8eff-7c5693f3105b-R5-fake-photo.jpg` · `assets/5cad8233-fbe1-4ba6-ab92-f886e4434689/intake/front/<uuid>-R5-fake-photo.jpg` · `handover-lots/15db3c66-d183-4a3a-bbb0-2d9decee40af/signed-doc/ffc7dd0c-….pdf` (ปลอม) · `handover-lots/15db3c66-d183-4a3a-bbb0-2d9decee40af/signed-doc/c4826624-a978-4a7b-af42-b93a3a4c68b3.pdf` (v2 แรก ถูกแทน)
 - หลักฐานของ R4a เดิม 14 ไฟล์ (ฐานถูกย้อนแล้ว — ไฟล์ไม่มีแถวอ้างอิง)

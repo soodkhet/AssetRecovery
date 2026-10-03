@@ -6,6 +6,8 @@ export PGPASSWORD=assetrecovery
 f="uat/snapshots/$1.dump"; [ -f "$f" ] || { echo "ไม่พบ $f" >&2; exit 1; }
 ~/bin/dev stop asset >/dev/null
 psql -h localhost -U assetrecovery -d postgres -qc "select pg_terminate_backend(pid) from pg_stat_activity where datname='assetrecovery_dev' and pid<>pg_backend_pid()" >/dev/null
+# --clean ลบเฉพาะ object ที่อยู่ใน dump → sequence เลขเอกสารที่สร้างตามปี (seq_handover_lot_2569 ฯลฯ) หลัง dump จะค้าง ⇒ ลบก่อน (dump จะสร้างตัวที่มีอยู่คืนเอง)
+psql -h localhost -U assetrecovery -d assetrecovery_dev -X -qAt -c "select format('drop sequence if exists public.%I;', sequencename) from pg_sequences where schemaname='public' and sequencename like 'seq\_%'" | psql -h localhost -U assetrecovery -d assetrecovery_dev -X -q
 pg_restore -h localhost -U assetrecovery -d assetrecovery_dev --clean --if-exists --no-owner "$f"
 rm -f uat/.auth/*.json   # session เก่าอาจชี้ผู้ใช้ที่ไม่มีแล้ว
 # dump เก่าอาจมี schema/สิทธิ์ตั้งต้นตามโค้ดตอนนั้น → ยก schema + เติมแถวสิทธิ์ใหม่ให้ตรงโค้ดปัจจุบัน (seed ไม่ทับแถวเดิม)

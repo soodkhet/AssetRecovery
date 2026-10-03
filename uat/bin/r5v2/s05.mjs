@@ -1,0 +1,35 @@
+// R5.05 C1 รับเข้า ครบ 7 มุม + ดับเบิลคลิก
+import { openAs, shot, BASE, settle, sleep, toasts, dlgText, mainText, log, q, R, SQL, F } from './_h.mjs'
+const { browser, page, consoleErrors, serverErrors } = await openAs('uat.admin')
+log('=== s05', new Date().toISOString())
+const res = []
+page.on('response', r => { const u = r.url(); if (r.request().method() !== 'GET' && (u.includes('/api/') || u.includes('supabase'))) res.push(`${r.status()} ${r.request().method()} ${u.replace(/^https?:\/\/[^/]+/, '').slice(0, 140)}`) })
+await page.goto(`${BASE}/warehouse`); await settle(page); await sleep(600)
+await page.locator('tr', { hasText: 'UAT-CO1-001' }).first().getByRole('button', { name: 'รับเข้าคลัง', exact: true }).click(); await sleep(800)
+const dlg = page.locator('[role="dialog"]').last()
+await dlg.getByPlaceholder('พิมพ์หรือสแกน IMEI').fill('356789100000011'); await sleep(300)
+log('R5.05 match:', (await dlg.innerText()).includes('ตรงกับสัญญา'))
+await dlg.getByRole('button', { name: 'ปกติ', exact: true }).click()
+const angles = [['ด้านหน้า', 'front'], ['ด้านหลัง', 'back'], ['ด้านบน', 'top'], ['ด้านล่าง', 'bottom'], ['ด้านซ้าย', 'left'], ['ด้านขวา', 'right'], ['IMEI บนเครื่อง', 'imei']]
+for (const [label, a] of angles) {
+  const lab = dlg.locator('label', { hasText: label }).first()
+  await lab.locator('input[type=file]').setInputFiles(F(`R5-C1-intake-${a}.png`))
+  await lab.getByText('ถ่ายแล้ว').waitFor({ timeout: 30000 })
+  log(`R5.05 ${label}: ถ่ายแล้ว`)
+}
+await sleep(400)
+log('R5.05 photo warning still?', (await dlg.innerText()).includes('รูปยังไม่ครบทุกมุม'))
+await shot(page, R, 'R5.05-c1-photos')
+await dlg.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' }).dblclick()
+const ts = await toasts(page, 2500)
+log('R5.05 toasts:', ts)
+await settle(page); await sleep(800)
+log('R5.05 dialog after:', await page.locator('[role="dialog"]').count())
+log('R5.05 tabs:', JSON.stringify(await page.getByRole('tab').allInnerTexts()))
+log('R5.05 C1 row count:', await page.locator('tr', { hasText: 'UAT-CO1-001' }).count())
+await shot(page, R, 'R5.05-c1-done')
+log('R5.05 responses:', res)
+log('console', consoleErrors, 'server', serverErrors)
+await browser.close()
+log(q(SQL.asset)); log(q(SQL.hash)); log(q(SQL.ev)); log(q(SQL.audit)); log(q(SQL.noti))
+log(q(`select regexp_replace(p,'[0-9a-f-]{36}','<uuid>') p from assets a, unnest(a.photos) p where a.case_ref='UAT-CO1-001'`))
