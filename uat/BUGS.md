@@ -17,7 +17,7 @@
 | BUG-010 | DATASET | S1 | code | ค่าคอมมิชชัน/ค่าเสี่ยงไม่ถูกสร้างเป็น expense ตอนปิดงาน (`commissionSatang()` ไม่มีที่เรียกนอกเทสต์) — หน้า income อ่านจากแผนตรง ⇒ ไม่เข้ารอบจ่าย? | fixed `7c34edb` (มติ PO Q2) |
 | BUG-011 | DATASET | S1 | spec-gap | advance คืนเงิน: โค้ด approved − used · `22` §6.13 requested − used · used > requested โค้ดบล็อก แต่ `22`/`15` ว่า return 0 + เบิกส่วนเกินแยก | fixed `8d4befc` (มติ PO Q3 — ใช้เกินบันทึกได้ คืน 0 + เบิกส่วนเกินอัตโนมัติ) |
 | BUG-012 | DATASET | S5 | spec-gap | `22` §6.11 AR = total − received ยังไม่อัปเดตตามมติ A1 (โค้ดถูกแล้ว: − (received + wht)) | doc fix |
-| BUG-013 | DATASET | S1 | spec-gap | DAILY_FLAT น้ำมัน: โค้ด+`22` §6.2 = ต่อเคส · `11` §81 = บาทต่อวัน (D1) | fixed `adf437d` (มติ PO Q4 — ต่อวัน) |
+| BUG-013 | DATASET | S1 | spec-gap | DAILY_FLAT น้ำมัน: โค้ด+`22` §6.2 = ต่อเคส · `11` §81 = บาทต่อวัน (D1) | fixed `adf437d` (Q4) → แทนที่ด้วยมติ Q21 merge แล้ว (วันละครั้งต่อพนักงาน เฉลี่ยทุกเคส job `daily_field_allowance`) |
 | BUG-014 | DATASET | S1 | spec-gap | WHT threshold 1,000 บาท: โค้ดต่อรายการ — spec ไม่ระบุว่าต่อรายการหรือต่อ payee ต่อรอบ (D4) | fixed `8d6158c`+`8627a24` (มติ PO Q5 — ต่อ payee ต่อรอบจ่าย) · ⚠️ นักบัญชียืนยัน |
 | BUG-015 | fix BUG-001 | S4 | spec-gap | ตาราง `revenues` ไม่มี snapshot ของ `vat_mode` — ป้าย VAT Flag ในแท็บรายได้อ่านค่าปัจจุบันของบริษัท ⇒ เปลี่ยน vat_mode แล้วป้ายของรายการเก่าเปลี่ยนตาม (ยอดเงินไม่เปลี่ยน) · PATCH บริษัทแบบไม่ส่งฟิลด์ → รีเซ็ตเป็น default 3.00 (ฟอร์มส่งครบ ไม่กระทบ UI) | fixed `2d7d30d` (มติ PO Q6 — migration `20261003113300`) |
 
@@ -97,6 +97,8 @@
 | BUG-089 | R6-sheet | S2 | code | **อนุมัติ expense ตัวสุดท้ายของเคสพร้อมกัน → รายได้ไม่เกิดเลย** (ไม่มี row lock / ไม่มี unique) — เทสต์ถอดล็อกแล้วได้ 0 แถวจริง | fixed `005b170` (FOR UPDATE + partial unique `uniq_revenues_active_case_round`, migration `20261003160000`) · ⚠️ ก่อน deploy staging ตรวจรายได้ซ้ำก่อน — migration ล้มโดยตั้งใจถ้ามี |
 | BUG-090 | R6-sheet | S4 | code | บริหารได้ 403 บน payout/advances แต่แท็บโชว์ "0" | fixed `fa778b2` (บัญชี/บริหารดูรอบจ่ายตาม `17` §12 · เงินทดรองซ่อนแท็บ) · ❓ `25` §7.2 ยังไม่ให้ — ต้องปรับ `25` ให้ตรง `17` |
 | BUG-091 | R6-sheet | S5 | code | modal สร้างรอบจ่ายเขียนว่า WHT คิดต่อรายการ (ขัด Q5) | fixed `9ca8427` |
+| BUG-092 | fixer H | S4 | code | job รายวัน settle วันที่มีเคสยังเปิดอยู่ → แถวรายวันของเคสนั้นเป็น `pending_approval` ทันที ถ้าภายหลังเคสปิดสำเร็จ แถวนั้นจะไม่รอคลัง (ควร `pending_warehouse_confirm`) — เกตรายได้ยังบังคับ lot confirmed อยู่ ไม่กระทบรายได้ แต่การอนุมัติค่าตอบแทนก่อนผ่านคลังไม่ตรงหลัก | open |
+| BUG-093 | fixer H | S5 | spec-gap | วันที่อยู่ในงวดบัญชีที่ปิดแล้ว job จะข้าม ไม่ settle ⇒ เคสของวันนั้นติดเกตรายได้ จนกว่าจะทำ Adjustment · หลัง deploy เคสเดิมบน staging จะรอรายได้จนถึงรอบ job คืนแรก | needs-decision |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
