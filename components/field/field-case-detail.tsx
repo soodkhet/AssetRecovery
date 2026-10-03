@@ -6,7 +6,7 @@ import { IconFile, IconImage, IconMapPin, IconPhone, IconUser } from '@/componen
 import { Button, ErrorState, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
+import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   assetSummary,
@@ -335,8 +335,8 @@ export function FieldCaseDetailModal({
   open: boolean
   caseId: string | null
   onClose: () => void
-  /** เรียกหลังรับงานสำเร็จ — ผู้เรียกรีโหลดรายการของตัวเอง */
-  onChanged?: () => void
+  /** เรียกหลังรับงานสำเร็จ (ส่งเคสที่รับมาด้วย ให้ toast มีเลขเคส — UAT BUG-065) — ผู้เรียกรีโหลดรายการของตัวเอง */
+  onChanged?: (accepted: Pick<FieldCaseDetailDto, 'caseId' | 'caseRef'>) => void
   onRespondReassignment?: (detail: FieldCaseDetailDto) => void
   footerActions?: ReactNode
 }) {
@@ -377,7 +377,7 @@ export function FieldCaseDetailModal({
         setActionError(response.error)
         return
       }
-      onChanged?.()
+      onChanged?.({ caseId: detail.caseId, caseRef: detail.caseRef })
       onClose()
     } finally {
       setAccepting(false)
@@ -413,7 +413,7 @@ export function FieldCaseDetailModal({
         <>
           {actionError !== null && <ErrorState title={actionError.title} message={actionError.message} />}
           <FieldCaseDetailBody detail={detail} onRespondReassignment={onRespondReassignment} />
-          <div className="mt-3 text-xs text-slate-400">มอบหมายเมื่อ {fmtDate(detail.assignedAt)}</div>
+          <div className="mt-3 text-xs text-slate-400">มอบหมายเมื่อ {fmtDateTime(detail.assignedAt)}</div>
         </>
       )}
     </Modal>
