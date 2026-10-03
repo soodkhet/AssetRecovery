@@ -266,11 +266,11 @@ export function ServiceFeeTemplatesManager() {
                       }
                     />
                     <div className="col-span-2">
-                      <Stat label="✅ เคสสำเร็จ (closed_success) เรียกเก็บ" tone="emerald" value={chargeText(formula.onSuccess)} />
+                      <Stat label="✅ เคสสำเร็จ เรียกเก็บ" tone="emerald" value={chargeText(formula.onSuccess)} />
                     </div>
                     <div className="col-span-2">
                       <Stat
-                        label="🔄 เคสไม่สำเร็จ (closed_fail) เรียกเก็บ"
+                        label="🔄 เคสไม่สำเร็จ เรียกเก็บ"
                         tone={chargesOnFail ? 'amber' : 'slate'}
                         value={chargeText(formula.onFail)}
                       />
@@ -280,15 +280,15 @@ export function ServiceFeeTemplatesManager() {
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     {template.model === 'SUCCESS_FEE' ? (
                       <Badge className="border border-slate-200 bg-slate-50 text-slate-400">
-                        เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือก charge_on_fail
+                        เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือกเก็บเงินเมื่อไม่สำเร็จ
                       </Badge>
                     ) : template.chargeOnFail ? (
                       <Badge className="border border-amber-200 bg-amber-100 text-amber-800">
-                        ⚠️ charge_on_fail = true — เก็บค่า base เสมอไม่ว่าผลจะเป็นอย่างไร
+                        ⚠️ เก็บค่าเปิดเคสเสมอไม่ว่าผลจะเป็นอย่างไร
                       </Badge>
                     ) : (
                       <Badge className="border border-slate-200 bg-slate-50 text-slate-400">
-                        charge_on_fail = false — เรียกเก็บเฉพาะเคสสำเร็จ
+                        เรียกเก็บเฉพาะเคสสำเร็จ
                       </Badge>
                     )}
                     <Badge className="border border-slate-200 bg-slate-50 text-slate-500">
