@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
@@ -314,6 +315,7 @@ async function cleanup(): Promise<void> {
     await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`UPDATE expenses SET superseded_by_expense_id = NULL WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
+    await tx.$executeRawUnsafe(`DELETE FROM field_day_settlements WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM assets WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM handover_lots WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM jobs WHERE organization_id = '${ORG_ID}'`)
@@ -471,7 +473,7 @@ beforeEach(async () => {
 
 suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็จ → ค่าตอบแทน → จ่ายเงิน → บัญชี', () => {
   it('เดินครบ 5 ขั้น — สูตร `22` §6.1–6.4 · WHT ต่อ payee ต่อรอบ · idempotency ไฟล์โอน · sync บัญชี', async () => {
-    // ── ขั้น 1: ปิดงานไม่สำเร็จ ⇒ ค่าน้ำมัน/เบี้ยเลี้ยงเกิดเอง (`41` §6.6) ──
+    // ── ขั้น 1: ปิดงานไม่สำเร็จ ⇒ เบี้ยเสี่ยงเกิดตอนปิด + ค่าน้ำมันเหมา/เบี้ยเลี้ยงจาก job รายวัน (`41` §6.6) ──
     const caseId = await seedApprovedCase()
     await driveFieldWork(caseId)
     await field.closeFieldCase(
@@ -480,6 +482,8 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
       { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
+    // มติ PO UAT Q21 — ค่าน้ำมันเหมา/เบี้ยเลี้ยงเกิดจาก job หลังจบวัน (สั่ง settle วันนี้แบบ dev trigger)
+    await settleFieldDaysToday(ORG_ID)
 
     const created = await db().expense.findMany({
       where: { caseId, deletedAt: null },
@@ -609,8 +613,13 @@ suite('Phase 8.1 — E2E `29` §6.3: QC ตีกลับก่อนราย�
       { outcome: 'closed_success', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
       ctx(agent),
     )
+    // มติ PO UAT Q21 — ค่าน้ำมันเหมา/เบี้ยเลี้ยงเกิดจาก job หลังจบวัน (สั่ง settle วันนี้แบบ dev trigger)
+    await settleFieldDaysToday(ORG_ID)
 
-    const round1 = await db().expense.findMany({ where: { caseId }, select: { id: true, status: true } })
+    const round1 = await db().expense.findMany({
+      where: { caseId },
+      select: { id: true, status: true, fieldDaySettlementId: true },
+    })
     expect(round1.length).toBeGreaterThan(0)
     expect(round1.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
     expect(await db().revenue.count({ where: { caseId } })).toBe(0)
@@ -640,7 +649,10 @@ suite('Phase 8.1 — E2E `29` §6.3: QC ตีกลับก่อนราย�
     })
     const superseded = afterResubmit.filter((row) => row.status === 'superseded')
     const active = afterResubmit.filter((row) => row.status !== 'superseded')
-    expect(superseded.map((row) => row.id).sort()).toEqual(round1.map((row) => row.id).sort())
+    // แถวรายวัน (UAT Q21) ไม่ผูกกับการส่งหลักฐานใหม่ — supersede เฉพาะชุดที่เกิดตอนปิดงาน (`41` §10.1)
+    expect(superseded.map((row) => row.id).sort()).toEqual(
+      round1.filter((row) => row.fieldDaySettlementId === null).map((row) => row.id).sort(),
+    )
     expect(superseded.every((row) => row.supersededByExpenseId !== null)).toBe(true)
     expect(active.length).toBeGreaterThan(0)
     expect(active.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
@@ -779,6 +791,8 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
       { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
+    // มติ PO UAT Q21 — ค่าน้ำมันเหมา/เบี้ยเลี้ยงเกิดจาก job หลังจบวัน (สั่ง settle วันนี้แบบ dev trigger)
+    await settleFieldDaysToday(ORG_ID)
     const pending = await db().expense.findMany({ where: { caseId }, select: { id: true } })
     await approveAllSteps(pending.map((row) => row.id))
 

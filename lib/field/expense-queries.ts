@@ -7,7 +7,6 @@ import { assertCanRejectExpense } from '@/lib/compensation/approval-queries'
 import { resolvePlanVersionAt } from '@/lib/compensation/plan'
 import { kmHundredthsToDecimalString } from '@/lib/field/distance'
 import {
-  distinctFieldDays,
   planCaseExpenses,
   type CaseExpensePlan,
   type CompensationSnapshotValues,
@@ -238,7 +237,6 @@ export interface GenerateCaseExpensesParams {
   plan: PlanSnapshot | null
   /** ระยะทางที่คำนวณได้ก่อนเข้า transaction — `null` = คำนวณไม่ได้ (D10) */
   distanceKmHundredths: number | null
-  checkedInAts: readonly Date[]
   closedAt: Date
   actor: SessionUser
   meta: RequestMeta
@@ -249,8 +247,9 @@ export interface GenerateCaseExpensesResult extends CaseExpensePlan {
 }
 
 /**
- * สร้างรายการเบิก fuel/allowance + commission/no_success_fee อัตโนมัติตอนปิดงาน
- * (`41` §6.6 · §8 · `22` §6.4 — มติ PO 03/10/2569 UAT Q2)
+ * สร้างรายการเบิก fuel `PER_KM` + commission/no_success_fee อัตโนมัติตอนปิดงาน
+ * (`41` §6.6 · §8 · `22` §6.4 — มติ PO 03/10/2569 UAT Q2) · fuel เหมาจ่าย/allowance **ไม่สร้างที่นี่แล้ว**
+ * (มติ PO UAT Q21 — job `daily_field_allowance` สร้างหลังจบวัน ดู `lib/field/daily-allowance-job.ts`)
  * **จุดเดียวของระบบ** ที่สร้างรายการกลุ่ม "ผูกกับเคส" — ใช้ทั้ง `submit_close_case`
  * และ `resubmit_close_case` (§10.1 บอกให้สร้าง "ตามกฎปกติ" ⇒ ต้องเป็นทางเดียวกันเป๊ะ)
  *
@@ -270,7 +269,6 @@ export async function generateCaseExpenses(
     outcome: params.outcome,
     plan,
     distanceKmHundredths: params.distanceKmHundredths,
-    fieldDays: distinctFieldDays(params.checkedInAts),
   })
 
   const expenseDate = bangkokBusinessDate(params.closedAt)
@@ -390,6 +388,8 @@ export async function supersedeCaseExpenses(
       // ไม่งั้น `payout_batch_items` จะชี้ไปที่รายการที่ถูกแทนที่ ขณะชุดใหม่ยอดเดียวกันรอเข้ารอบจ่ายอีก
       // = จ่ายซ้ำ · ชั้นแรกคือยาม `EVIDENCE_REJECT_AFTER_FINAL` ที่ `rejectFieldEvidence()`
       payoutBatchItemId: null,
+      // แถวรายวัน (มติ PO UAT Q21) = ต้นทุนวันลงพื้นที่ที่เกิดจริงแล้ว ไม่ผูกกับการส่งหลักฐานใหม่ (`41` §10.1)
+      fieldDaySettlementId: null,
       deletedAt: null,
     },
     select: { id: true, status: true, expenseType: true, grossSatang: true },
@@ -514,7 +514,7 @@ export async function listFieldExpenses(
 ): Promise<FieldExpenseListDto> {
   const payeeId = await findOwnPayeeId(user)
   if (payeeId === null) {
-    return { type: query.type, items: [], pendingSatang: 0, approvedSatang: 0 }
+    return { type: query.type, items: [], pendingSatang: 0, approvedSatang: 0, pendingFieldDates: [] }
   }
 
   const rows = await prisma.expense.findMany({
@@ -561,7 +561,32 @@ export async function listFieldExpenses(
     .filter((item) => item.status === 'approved')
     .reduce((sum, item) => sum + item.grossSatang, 0)
 
-  return { type: query.type, items, pendingSatang, approvedSatang }
+  const pendingFieldDates = query.type === 'caseBound' ? await pendingFieldDatesOf(user) : []
+
+  return { type: query.type, items, pendingSatang, approvedSatang, pendingFieldDates }
+}
+
+/**
+ * วันลงพื้นที่ของพนักงานที่ยังไม่ถูก settle รายวัน (มติ PO UAT Q21) — ล่าสุดก่อน · จำกัด 31 วัน
+ * อ่านอย่างเดียว ไม่เดายอด: ยอดจริงเกิดเมื่อ job `daily_field_allowance` สร้างแถวแล้วเท่านั้น
+ */
+async function pendingFieldDatesOf(user: SessionUser): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ fieldDate: Date }[]>`
+    SELECT DISTINCT (ci.checked_in_at AT TIME ZONE 'Asia/Bangkok')::date AS "fieldDate"
+      FROM check_ins ci
+      JOIN case_assignments a ON a.id = ci.assignment_id
+     WHERE ci.organization_id = ${user.organizationId}::uuid
+       AND a.agent_id = ${user.id}::uuid
+       AND NOT EXISTS (
+             SELECT 1 FROM field_day_settlements s
+              WHERE s.organization_id = ci.organization_id
+                AND s.agent_id = a.agent_id
+                AND s.field_date = (ci.checked_in_at AT TIME ZONE 'Asia/Bangkok')::date
+           )
+     ORDER BY 1 DESC
+     LIMIT 31
+  `
+  return rows.map((row) => row.fieldDate.toISOString().slice(0, 10))
 }
 
 // ── POST /api/field/expenses/hotel (`41` §6.6 · §7.9) ───────────────────────

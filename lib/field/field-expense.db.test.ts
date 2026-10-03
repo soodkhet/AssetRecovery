@@ -73,6 +73,7 @@ let expenses: ExpenseQueries
 let assignments: AssignmentQueries
 let fuelJob: FuelJob
 let uploads: typeof import('@/tests/helpers/fake-uploads')
+let fieldDay: typeof import('@/tests/helpers/field-day')
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -149,6 +150,7 @@ async function cleanupCases(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM field_day_settlements WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM jobs WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM close_case_drafts WHERE organization_id = '${ORG_ID}'`)
@@ -172,6 +174,7 @@ beforeAll(async () => {
   assignments = await import('@/lib/assignments/queries')
   fuelJob = await import('@/lib/field/fuel-distance-job')
   uploads = await import('@/tests/helpers/fake-uploads')
+  fieldDay = await import('@/tests/helpers/field-day')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -348,7 +351,7 @@ async function expensesOf(caseId: string) {
 suite('Phase 2.9 — รายการเบิกอัตโนมัติตอนปิดงาน (`41` §6.6 · §20)', () => {
   beforeEach(cleanupCases)
 
-  it('PER_KM: ระยะทางรวมทุกช่วงตามลำดับเวลา → fuel ตามสูตร `22` §6.1 + allowance ต่อวัน', async () => {
+  it('PER_KM: ระยะทางรวมทุกช่วงตามลำดับเวลา → fuel ตามสูตร `22` §6.1 · allowance เกิดหลังจบวัน (UAT Q21)', async () => {
     const fetchMock = stubDistanceMatrix(6_000)
     const caseId = await seedReadyToClose(agentA, TEAM_PER_KM, [
       { latitude: 18.5801, longitude: 99.0031 },
@@ -359,6 +362,15 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
 
     // 2 เช็คอิน = 2 ช่วง (origin→1, 1→2) × 6 กม. = 12.00 กม. × ฿5 = ฿60.00
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    const atClose = await expensesOf(caseId)
+    // มติ PO UAT Q21 — ปิดงานไม่สร้างเบี้ยเลี้ยงแล้ว
+    expect(atClose.some((row) => row.expenseType === 'allowance')).toBe(false)
+    // หน้ารายการเบิกแจ้ง "รอคำนวณหลังจบวัน" ของวันนี้ (ไม่เดายอด)
+    const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+    expect((await expenses.listFieldExpenses(agentA, { type: 'caseBound' })).pendingFieldDates).toEqual([today])
+
+    await fieldDay.settleFieldDaysToday(ORG_ID)
+    expect((await expenses.listFieldExpenses(agentA, { type: 'caseBound' })).pendingFieldDates).toEqual([])
     const rows = await expensesOf(caseId)
     const fuel = rows.find((row) => row.expenseType === 'fuel')
     const allowance = rows.find((row) => row.expenseType === 'allowance')
@@ -370,6 +382,8 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     expect(fuel?.compPlanVersion).toBe(1)
     expect(allowance?.grossSatang).toBe(ALLOWANCE_SATANG)
     expect(allowance?.distanceKm).toBeNull()
+    expect(allowance?.fieldDaySettlementId).not.toBeNull()
+    expect(allowance?.compPlanId).toBe(PLAN_PER_KM)
   })
 
   it('เคสสำเร็จ = รายการเบิกรอคลังยืนยันเสมอ ห้ามข้ามไป pending_approval (`41` §20)', async () => {
@@ -377,8 +391,9 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     const caseId = await seedReadyToClose()
     await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
 
+    await fieldDay.settleFieldDaysToday(ORG_ID)
     const rows = await expensesOf(caseId)
-    // fuel + allowance + commission (มติ PO 03/10/2569 UAT Q2) — ทุกตัวรอคลังเหมือนกัน
+    // fuel + commission (ปิดงาน) + allowance (รายวันหลังจบวัน — UAT Q21) — ทุกตัวรอคลังเหมือนกัน
     expect(rows.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
     expect(rows.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
   })
@@ -448,6 +463,9 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     await field.closeFieldCase(agentFlat, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentFlat, meta })
 
     expect(fetchMock).not.toHaveBeenCalled()
+    // UAT Q21 — น้ำมันเหมาจ่ายไม่เกิดตอนปิดงาน แต่เกิดจาก job รายวัน
+    expect((await expensesOf(caseId)).some((row) => row.expenseType === 'fuel')).toBe(false)
+    await fieldDay.settleFieldDaysToday(ORG_ID)
     const fuel = (await expensesOf(caseId)).find((row) => row.expenseType === 'fuel')
     expect(fuel?.grossSatang).toBe(DAILY_FLAT_SATANG)
     expect(fuel?.distanceKm).toBeNull()
@@ -474,7 +492,7 @@ suite('Phase 2.9 — D10: Google Maps ใช้ไม่ได้ตอนปิ
     // ปิดงานต้องสำเร็จ — ห้ามล้มเพราะปลายทางภายนอก
     expect(closed.status).toBe('closed_success')
     const afterClose = await expensesOf(caseId)
-    expect(afterClose.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission'])
+    expect(afterClose.map((row) => row.expenseType).sort()).toEqual(['commission'])
 
     const assignmentId = afterClose[0]?.assignmentId ?? ''
     const job = await db().job.findFirstOrThrow({ where: { jobType: 'fuel_distance_retry', organizationId: ORG_ID } })
@@ -620,8 +638,12 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
 
   it('resubmit_close → รายการเบิกเดิม superseded + สร้างชุดใหม่ ไม่ซ้ำไม่หาย (DoD)', async () => {
     const caseId = await closeSuccessfully()
-    const before = await expensesOf(caseId)
-    expect(before).toHaveLength(3)
+    // แถวรายวัน (UAT Q21) เกิดก่อนตีกลับ — ต้องไม่ถูก supersede ตาม (`41` §10.1)
+    await fieldDay.settleFieldDaysToday(ORG_ID)
+    const daily = (await expensesOf(caseId)).filter((row) => row.fieldDaySettlementId !== null)
+    expect(daily.map((row) => row.expenseType)).toEqual(['allowance'])
+    const before = (await expensesOf(caseId)).filter((row) => row.fieldDaySettlementId === null)
+    expect(before).toHaveLength(2)
 
     await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
 
@@ -647,8 +669,10 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     const superseded = all.filter((row) => row.status === 'superseded')
     const active = all.filter((row) => row.status !== 'superseded')
 
-    expect(superseded).toHaveLength(3)
+    expect(superseded).toHaveLength(2)
     expect(active).toHaveLength(3)
+    // แถวรายวันตัวเดิมยังมีผล ไม่ซ้ำ ไม่หาย
+    expect(active.filter((row) => row.fieldDaySettlementId !== null).map((row) => row.id)).toEqual(daily.map((row) => row.id))
     // ไม่หาย: ของเดิมยังอยู่ครบและถูกผูกไปยังรายการใหม่ **ชนิดเดียวกัน** (UAT BUG-051)
     expect(superseded.every((row) => row.supersededByExpenseId !== null)).toBe(true)
     for (const row of superseded) {
@@ -860,7 +884,7 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     const caseBound = await expenses.listFieldExpenses(agentA, { type: 'caseBound' })
     const separate = await expenses.listFieldExpenses(agentA, { type: 'separate' })
 
-    expect(caseBound.items.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
+    expect(caseBound.items.map((row) => row.expenseType).sort()).toEqual(['commission', 'fuel'])
     expect(separate.items.map((row) => row.expenseType)).toEqual(['hotel'])
   })
 
