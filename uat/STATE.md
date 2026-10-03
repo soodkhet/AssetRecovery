@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R4 v2 ครบ** (R4a+R4b เล่นใหม่หลังแก้ตามมติ) — 03/10/2569 · R4b ✅15 🐞3 ❓2 · ไม่มี 500 · expense active 1020000 = golden · advance 4 ใบ pending (ADV3 วันเคลียร์ 03/10/2569) · รายงาน `uat/report/R4a-field-v2.md` + `R4b-field-v2.md` |
-| snapshot ล่าสุด | `uat/snapshots/R4-v2-end.dump` (ก่อนหน้า: `R4a-v2-end`, `R3-end-v2`, …) |
-| รอบปัจจุบัน | **R5 คลังสินค้า** (ธุรการ) — step sheet กำลังเขียน · fixer F (BUG-062/065–073) ใน worktree — merge หลัง R5 · ⚠️ R6 หลังเที่ยงคืนเวลาไทย |
+| รอบล่าสุดที่จบ | **R5 คลังสินค้า** (ธุรการ) — 03/10/2569 · 24/24 ✅ · ยืนยัน BUG-074…078 + ใหม่ 079…084 (ไม่บล็อก) · ไม่มี 500 · ล็อต LOT-2569-001 (CO1: C1,C2,C4) / LOT-2569-002 (CO2: C5) confirmed · expense active 15 แถว 1020000 ทั้งหมด pending_approval · revenue 0 · รายงาน `uat/report/R5-warehouse.md` · ภาพ 55 |
+| snapshot ล่าสุด | `uat/snapshots/R5-end.dump` (ก่อนหน้า: `R4-v2-end`, `R3-end-v2`, …) |
+| รอบปัจจุบัน | merge fixer F → **R6 การเงิน** (step sheet กำลังเขียน, แบ่ง R6a/R6b) · ⚠️ ADV3 overdue job ต้องหลังเที่ยงคืนเวลาไทย |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -58,4 +58,5 @@ BUG-009 แผน/หัวหน้าข้ามฝั่ง · BUG-010 ค�
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/4b1dcc07-6a53-4d69-9745-b62394b20e73-R4-fake-video.mp4` (R4a เดิม)
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/aa8879c5-b474-4cd8-bf71-f8d170e48831-R4-fake-video.mp4` (R4a v2)
 - R4b v2: `cases/d4d82f78…/field_evidence/product_photo/7d772c98-…-R4-C4-product-v2.jpg`, `expenses/88cb577d…/receipts/91324d20-…-R4-C1-photo.jpg` (ใช้งานจริง ไม่ใช่ขยะ)
+- R5: รูปรับเข้า 13 + เอกสารล็อต 4 (ใช้งานจริง) · ขยะ: รูปปลอม C4 2 ไฟล์ (`…ccddbd4b…-R5-fake-photo.jpg` + อีก 1 ไม่ได้จด path) + ใบเซ็นปลอม 1 ไฟล์ (ไม่ได้จด uuid) — ดู `uat/report/R5-warehouse.md` · ตอนลบให้ลบ object ใต้ `assets/*/intake/` และ `handover-lots/*/` ที่ไม่มีแถว DB อ้างอิง
 - หลักฐานของ R4a เดิม 14 ไฟล์ (ฐานถูกย้อนแล้ว — ไฟล์ไม่มีแถวอ้างอิง)

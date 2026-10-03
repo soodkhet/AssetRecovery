@@ -1,0 +1,71 @@
+// R5.06 C2 ตีกลับ → probe → ดูเหตุผล → รับใหม่ · กระดิ่ง in1
+import { openAs, shot, BASE, settle, sleep, waitToast, dlgText, log, q, api, guard2xx, R, SQL, F, A, CO1 } from './_h.mjs'
+const { browser, page, consoleErrors, serverErrors } = await openAs('uat.admin')
+log('=== s06', new Date().toISOString())
+const res = []
+page.on('response', r => { const u = r.url(); if (r.request().method() !== 'GET' && (u.includes('/api/') || u.includes('supabase'))) res.push(`${r.status()} ${r.request().method()} ${u.replace(/^https?:\/\/[^/]+/, '').slice(0, 130)}`) })
+await page.goto(`${BASE}/warehouse`); await settle(page); await sleep(600)
+const row = () => page.locator('tr', { hasText: 'UAT-CO1-002' }).first()
+// ทำ 1
+await row().getByRole('button', { name: 'รับเข้าคลัง', exact: true }).click(); await sleep(700)
+let dlg = page.locator('[role="dialog"]').last()
+await dlg.getByPlaceholder('พิมพ์หรือสแกน IMEI').fill('356789100000999'); await sleep(300)
+log('R5.06.1 mismatch box:', (await dlg.innerText()).includes('IMEI ที่ตรวจจริงไม่ตรงกับสัญญา'))
+await dlg.getByRole('button', { name: 'ยกเลิก' }).click(); await sleep(500)
+await row().getByRole('button', { name: 'ตีกลับ', exact: true }).click(); await sleep(700)
+dlg = page.locator('[role="dialog"]').last()
+log('R5.06.1 reject modal:', await dlgText(page, 900))
+const nBefore = res.length
+await dlg.getByRole('button', { name: 'ยืนยันตีกลับ' }).click().catch(e => log('click err', e.message)); await sleep(700)
+log('R5.06.1 empty reason:', await dlgText(page, 700), '| new requests:', res.slice(nBefore))
+const REASON = 'IMEI บนเครื่อง 356789100000999 ไม่ตรงกับสัญญา 356789100000029 — ให้พนักงานตรวจเครื่องอีกครั้ง'
+await dlg.getByPlaceholder('เช่น IMEI บนเครื่องไม่ตรงกับสัญญา / เครื่องไม่ตรงรุ่นที่ระบุ').fill(REASON)
+await dlg.getByRole('button', { name: 'ยืนยันตีกลับ' }).click()
+log('R5.06.1 toast:', await waitToast(page))
+await settle(page); await sleep(700)
+log('R5.06.1 row:', (await row().innerText()).replace(/\s*\n+\s*/g, ' | '))
+await shot(page, R, 'R5.06-c2-rejected')
+// ทำ 2 probe
+let r = await api(page, 'POST', `/api/assets/${A.C2}/reject-intake`, { rejectReason: 'ซ้ำ' }); log('R5.06.2 reject again:', r); guard2xx('reject again', r)
+const now = new Date(Date.now() + 7 * 3600e3 - 30 * 60e3).toISOString().slice(0, 16)
+r = await api(page, 'POST', '/api/handover-lots', { companyId: CO1, assetIds: [A.C2], type: 'finance_pickup', scheduledAt: `${now}:00+07:00` }); log('R5.06.2 lot with C2:', r); guard2xx('lot C2', r)
+log(q('select count(*) lots from handover_lots'))
+try { log(q(SQL.seq)) } catch (e) { log('seq:', String(e.stderr ?? e.message).split('\n').find(l => l.includes('ERROR'))) }
+// ทำ 3 ดูเหตุผล
+await row().getByRole('button', { name: 'ดูเหตุผล', exact: true }).click(); await sleep(700)
+log('R5.06.3 reason modal:', await dlgText(page, 900))
+await shot(page, R, 'R5.06-c2-reason')
+await page.locator('[role="dialog"]').last().getByRole('button', { name: 'ปิดหน้าต่าง' }).click(); await sleep(400)
+// ทำ 4 รับใหม่
+await row().getByRole('button', { name: 'รับใหม่', exact: true }).click(); await sleep(800)
+dlg = page.locator('[role="dialog"]').last()
+log('R5.06.4 retry modal title:', (await dlgText(page, 200)))
+await dlg.getByPlaceholder('พิมพ์หรือสแกน IMEI').fill('356789100000029'); await sleep(200)
+await dlg.getByRole('button', { name: 'ปกติ', exact: true }).click()
+for (const [label, a] of [['ด้านหน้า', 'front'], ['IMEI บนเครื่อง', 'imei']]) {
+  const lab = dlg.locator('label', { hasText: label }).first()
+  await lab.locator('input[type=file]').setInputFiles(F(`R5-C2-intake-${a}.png`))
+  await lab.getByText('ถ่ายแล้ว').waitFor({ timeout: 30000 })
+}
+const txt = await dlg.innerText(); const k = txt.indexOf('รูปยังไม่ครบ')
+log('R5.06.4 warning:', k >= 0 ? txt.slice(k, k + 120).replace(/\n/g, ' | ') : '(none)')
+await dlg.getByRole('button', { name: 'ยืนยันรับเข้าคลัง' }).click()
+log('R5.06.4 toast:', await waitToast(page))
+await settle(page); await sleep(800)
+log('R5.06.4 tabs:', JSON.stringify(await page.getByRole('tab').allInnerTexts()))
+await shot(page, R, 'R5.06-c2-retry-done')
+log('R5.06 responses:', res)
+log('console', consoleErrors, 'server', serverErrors)
+await browser.close()
+// กระดิ่ง in1
+const s = await openAs('uat.agent.in1', { mobile: true })
+await s.page.goto(`${BASE}/field`); await settle(s.page); await sleep(800)
+await s.page.getByRole('button', { name: /แจ้งเตือน/ }).first().click(); await sleep(1200)
+const bt = (await s.page.locator('body').innerText()).replace(/\s*\n+\s*/g, ' | '); const j = bt.indexOf('คลังตีกลับ')
+log('R5.06 in1 bell:', j >= 0 ? bt.slice(j, j + 300) : '(not found) ' + bt.slice(0, 400))
+await shot(s.page, R, 'R5.06-in1-bell')
+await s.page.getByText('คลังตีกลับการรับเข้า').first().click().catch(e => log('click err', e.message)); await sleep(2000); await settle(s.page)
+log('R5.06 in1 click →', new URL(s.page.url()).pathname, 'console', s.consoleErrors, 'server', s.serverErrors)
+await s.browser.close()
+log(q(SQL.asset)); log(q(SQL.ev)); log(q(SQL.audit)); log(q(SQL.noti))
+log(q(`select action, after_data->'events' ev, after_data ? 'imeiActual' has_imei, before_data from audit_logs where created_at > '2026-10-03 13:12:30+00' and target_type='assets' order by created_at`))
