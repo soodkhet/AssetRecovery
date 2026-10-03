@@ -71,7 +71,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - `uat/fixtures/bank-R7.csv` IN-1 = 4891.50 แล้ว · แทนค่า `{{R7_DATE}}` ก่อนนำเข้า
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
-### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม)
+### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
 - migration ใหม่จาก UAT **7 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261003170000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
