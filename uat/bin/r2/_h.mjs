@@ -83,3 +83,35 @@ export const SQL = {
   audit: ref => `select a.action,a.actor_role,a.target_type,left(a.reason,90) reason,a.created_at from audit_logs a where a.target_id in (select id from cases where case_ref='${ref}') or a.target_id in (select d.id from case_documents d join cases c on c.id=d.case_id where c.case_ref='${ref}') order by a.created_at`,
   noti: `select n.event_code,n.title,left(n.body,120) body,u.username,n.created_at from notifications n join users u on u.id=n.user_id order by n.created_at desc limit 10`,
 }
+
+/** เก็บ toast/alert ทุกข้อความที่โผล่ระหว่าง ms (poll ทุก 250ms) */
+export async function collect(page, ms = 4000) {
+  const seen = new Set(); const end = Date.now() + ms
+  while (Date.now() < end) {
+    for (const t of await page.getByRole('status').allInnerTexts().catch(() => [])) { const s = t.replace(/\s+/g, ' ').trim(); if (s) seen.add(s) }
+    for (const t of await page.getByRole('alert').allInnerTexts().catch(() => [])) { const s = t.replace(/\s+/g, ' ').trim(); if (s) seen.add('ALERT ' + s) }
+    await new Promise(r => setTimeout(r, 250))
+  }
+  return [...seen]
+}
+/** ติดตาม response ของ /api ที่ไม่ใช่ GET (status + body สั้น) */
+export function trackApi(page) {
+  const out = []
+  page.on('response', async r => {
+    const m = r.request().method(); const u = r.url()
+    if (m !== 'GET' && (u.includes('/api/') || u.includes('/storage/v1/'))) {
+      let b = ''; try { b = (await r.text()).slice(0, 220) } catch {}
+      out.push(`${r.status()} ${m} ${u.replace(/^https?:\/\/[^/]+/, '').slice(0, 90)} :: ${b}`)
+    }
+  })
+  return out
+}
+export const rowText = async (page, ref) => (await page.locator('tr', { hasText: ref }).first().innerText().catch(() => 'NO ROW')).replace(/\s+/g, ' ')
+import { readFileSync as _rf } from 'node:fs'
+const SUMS = Object.fromEntries(_rf('uat/fixtures/files/SHA256SUMS.tsv', 'utf8').trim().split('\n').slice(1).map(l => { const [f, b, h] = l.split('\t'); return [f, { b: +b, h }] }))
+/** ตรวจ case_documents ของเคสเทียบ SHA256SUMS → คืนสรุป */
+export function checkDocs(ref) {
+  const rows = q(`select d.document_type||'|'||d.original_name||'|'||d.mime_type||'|'||d.size_bytes||'|'||d.file_hash||'|'||d.file_url||'|'||(d.file_url like 'cases/'||c.id||'/%') from case_documents d join cases c on c.id=d.case_id where c.case_ref='${ref}' and d.deleted_at is null order by 1`)
+    .split('\n').filter(l => l.includes('|') && !l.includes('?column?')).map(l => l.trim())
+  return rows.map(l => { const [t, n, m, s, h, u, pre] = l.split('|'); const e = SUMS[n]; return `${t} ${n} ${m} ${s}B hash${e && e.h === h && e.b === +s ? '=OK' : '≠SUMS'} prefix=${pre} ${u.split('/').slice(0, 3).join('/')}` })
+}
