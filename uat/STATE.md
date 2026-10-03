@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R2 รับเคส** (เล่นครั้งที่ 2) — 03/10/2569 · 32 ขั้น ✅22 🐞8 ⚠️1 ❓1 · ไม่มี S1–S2 / ไม่มี 500 · รายงาน `uat/report/R2-intake.md` · ภาพ 51 · อัปโหลด Storage 24 object |
 | snapshot ล่าสุด | `uat/snapshots/R2-end.dump` (ก่อนหน้า: `R1-end`, `R0-clean`) |
-| รอบถัดไป | **R3 มอบหมายงาน** (ผู้จัดการทีม/หัวหน้าทีม) — ยังไม่มี step sheet |
+| รอบปัจจุบัน | **R3 มอบหมายงาน** — role agent กำลังรัน · step sheet `uat/steps/R3.md` (26 ขั้น) · รายงาน `uat/report/R3-assign.md` · fixer R2 merge แล้วก่อนเริ่มรอบ |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 03/10/2569 R3: merge fixer R2 ก่อนเริ่ม (7 commit, verify 250 files / 3,124 tests) · มติ orchestrator: C7 ทดสอบ timeout แบบ "คำขอเปลี่ยนผู้รับผิดชอบรอความยินยอม" ตาม `40` · ทำให้หมดเวลาด้วยการ**รอจริง 1 ชม.** (ไม่ time-travel DB)
 - 03/10/2569 R2 ครั้งที่ 2 จบครบ: เคส 8 ใบตรงตาราง (C1–C5,C7 approved · C6 pending_review · C8 rejected) · snapshot template v2 ทุกใบ · race/ดับเบิลคลิกไม่เกิดซ้ำ · scope บริษัทไม่รั่ว (มีแค่ฟิลด์ค่าบริการบางตัว — BUG-033)
 - 03/10/2569 R2 ครั้งแรกหยุดที่ R2.02 (ไม่มี bucket) → restore R1-end · สร้าง Storage ใน `qgshdg…` · merge fixer ชุด R1 (BUG-003…021 + BUG-025 ช่องโหว่ค้นหาผู้ใช้ข้ามทีม) · mockup app-shell: ธุรการเห็น settings
 - 03/10/2569 R2 เริ่ม: ไม่เพิ่ม C9 (ช่องว่าง: ไม่มีการเปลี่ยนทีมจริงพร้อมเหตุผล) · R2 = รอบแรกที่อัปโหลดขึ้น Supabase Storage (`case-documents`) — ไฟล์ค้างหลัง restore ให้จดไว้

@@ -89,7 +89,7 @@ pg_restore -c -d assetrecovery_dev uat/snapshots/R<n>-<label>.dump
 | C4 | 1 | A / agent.in2 | สำเร็จ → approver ตีกลับหลักฐาน → แก้แล้วส่งใหม่ | resubmit_close: expense เดิม superseded ไม่ซ้ำไม่หาย · revenue ยังไม่เกิดก่อนอนุมัติ |
 | C5 | 2 | C / agent.out1 | สำเร็จ, เบิกยอดสูง > เพดาน | Approval ขั้นบริหาร · WHT payee-level ชนะ plan-level · ฝั่ง outsource แยกรอบจ่าย |
 | C6 | 1 | — | ส่งซ้ำ `case_ref` เดิม (รอบติดตามเดียวกัน) | DUPLICATE ถูกปัด · กดส่งพร้อมกัน 2 แท็บ |
-| C7 | 2 | A → ไม่มีคนรับจน timeout → มอบหมายใหม่ | assignment timeout job + reassign | job idempotent · แจ้งเตือน · วันเวลาบน list |
+| C7 | 2 | A / in2 รับงานแล้ว → ผู้จัดการขอเปลี่ยนเป็น in1 → in2 ไม่ตอบจนหมดเวลา (timeout) → ระบบโอนให้ in1 อัตโนมัติ | reassign timeout job (`40` §8–§11 — timeout ใช้กับคำขอเปลี่ยนผู้รับผิดชอบที่รอความยินยอมเท่านั้น; "มอบหมายแล้วไม่มีใครรับ" ไม่มี timeout) | job idempotent · `timeout_auto` · แจ้งเตือน · วันเวลาบน list |
 | C8 | 1 | A / agent.in1 | approver **ไม่รับเคส** (reject พร้อมเหตุผล) | reason บังคับ · ไม่เข้าคิวมอบหมาย |
 
 **เงินทดรอง (R4/R6)**: agent.in1 ขอ 1 ใบ อนุมัติ → ขอใบที่ 2 ซ้อนต้องถูกปัด → ใช้จริงน้อยกว่าที่ขอ → ยอดคืน ≥ 0 · อีก 1 ใบปล่อยให้เกินกำหนด → สั่ง overdue job
