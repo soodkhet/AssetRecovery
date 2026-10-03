@@ -34,6 +34,7 @@ import type {
   CaseListResultDto,
 } from '@/lib/cases/types'
 import { Prisma } from '@/lib/generated/prisma/client'
+import type { CaseStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -60,9 +61,20 @@ export type CaseTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on
 
 /**
  * ผู้ใช้คนนี้เห็นเคสไหนบ้าง — เพิ่มจาก capability ที่ `withEndpoint()` ตรวจไปแล้ว
- * `global` (system roles) เห็นทุกเคส · ผู้จัดการ/หัวหน้าทีมเห็นเคสของทีมตัวเอง (ที่ระบบเสนอหรือมอบหมายแล้ว) ·
+ * `global` (system roles) เห็นทุกเคส · ผู้จัดการ/หัวหน้าทีมเห็นเคสของทีมตัวเอง **เฉพาะหลังอนุมัติและกำหนดทีมแล้ว**
+ * (`assigned_team_id` + สถานะหลังอนุมัติ — เคส pending_review/need_info/rejected ที่ระบบแค่ "เสนอ" ทีมไว้ไม่อยู่ใน
+ * มุมมองทีม · มติ PO 03/10/2569 UAT Q11 · BUG-023 · `38` §13) ·
  * company user เห็นเฉพาะบริษัทตัวเอง · Field Agent เห็นเฉพาะเคสที่ตัวเองถือ
  */
+/** สถานะเคสที่มุมมองทีมเห็นได้ = หลังผ่านการอนุมัติแล้วเท่านั้น (UAT Q11 · BUG-023) */
+export const TEAM_VISIBLE_CASE_STATUSES = [
+  'approved',
+  'active',
+  'closed_success',
+  'closed_fail',
+  'pending_recycle_review',
+] as const satisfies readonly CaseStatus[]
+
 export function caseScopeWhere(user: SessionUser): Prisma.CaseWhereInput {
   const scope = user.scope
   switch (scope.kind) {
@@ -71,9 +83,7 @@ export function caseScopeWhere(user: SessionUser): Prisma.CaseWhereInput {
     case 'team':
       return scope.teamIds.length === 0
         ? { id: { in: [] } }
-        : {
-            OR: [{ assignedTeamId: { in: [...scope.teamIds] } }, { suggestedTeamId: { in: [...scope.teamIds] } }],
-          }
+        : { assignedTeamId: { in: [...scope.teamIds] }, status: { in: [...TEAM_VISIBLE_CASE_STATUSES] } }
     case 'company':
       return scope.companyId === null ? { id: { in: [] } } : { companyId: scope.companyId }
     case 'self':

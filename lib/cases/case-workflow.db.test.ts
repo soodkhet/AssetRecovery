@@ -461,6 +461,29 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     }
   })
 
+  it('มุมมองทีมเห็นเคสเฉพาะหลังอนุมัติและกำหนดทีมแล้ว — ทีมที่ระบบเสนอยังไม่เห็น (UAT Q11 · BUG-023)', async () => {
+    const caseId = await seedCase('SF-2026-2398', { withDocuments: true })
+    const { listCases } = await import('@/lib/cases/queries')
+    const { caseListQuerySchema } = await import('@/lib/cases/schemas')
+    const teamUser: SessionUser = {
+      ...actor,
+      isSuperadmin: false,
+      scope: { kind: 'team', teamIds: [TEAM_ID], companyId: null, userId: USER_ID },
+    }
+    const visibleIds = async () =>
+      (await listCases(teamUser, caseListQuerySchema.parse({}))).items.map((item) => item.id)
+    try {
+      await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+      // pending_review + suggested_team_id = ทีมนี้ ⇒ ยังไม่อยู่ในมุมมองทีม
+      expect(await visibleIds()).not.toContain(caseId)
+
+      await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+      expect(await visibleIds()).toContain(caseId)
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${caseId}'`)
+    }
+  })
+
   it('ผู้ที่ไม่มีสิทธิ์อนุมัติเคสกด accept ไม่ได้ (`38` §13)', async () => {
     const caseId = await seedCase('SF-2026-2309', { withDocuments: true })
     await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
