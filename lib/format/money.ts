@@ -105,14 +105,35 @@ export function toBahtInput(satang: number | null | undefined): string {
   return (satang / 100).toFixed(2)
 }
 
+/** ข้อความที่ผู้ใช้กรอกมีทศนิยมเกิน 2 ตำแหน่ง (= เศษสตางค์) หรือไม่ */
+export function hasExcessBahtDecimals(value: string): boolean {
+  return /\.\d{3,}/.test(value.trim().replace(/,/g, ''))
+}
+
 /**
  * `"100.50"` → `10050` — คืน `null` เมื่อช่องว่าง (แปลว่า "ไม่กำหนด" เช่นเพดานไม่จำกัด)
- * และคืน `NaN` เมื่อกรอกค่าที่ไม่ใช่ตัวเลข เพื่อให้ชั้นฟอร์มเลือกวิธีแจ้งเตือนเอง
+ * และคืน `NaN` เมื่อกรอกค่าที่ไม่ใช่ตัวเลข **หรือมีทศนิยมเกิน 2 ตำแหน่ง** เพื่อให้ชั้นฟอร์มแจ้ง inline error
+ *
+ * ห้ามปัดเศษเงียบ (UAT BUG-007): เงินเก็บเป็น INTEGER satang (Rule 01) และ "ปัดเฉพาะตอนแสดงผล"
+ * (`02_OPEN_DECISIONS` E5) — `100.505` ต้องถูกปฏิเสธให้ผู้ใช้แก้เอง ไม่ใช่กลายเป็น `10051` โดยไม่รู้ตัว
+ * ข้อความเตือนที่ตรงเหตุใช้ `bahtInputError()` หรือ `satangSchema()` (แจ้งเรื่องทศนิยมให้แล้ว)
  */
 export function parseBahtInput(value: string): number | null | typeof NaN {
   const trimmed = value.trim().replace(/,/g, '')
   if (trimmed === '') return null
+  if (hasExcessBahtDecimals(trimmed)) return Number.NaN
   const baht = Number(trimmed)
   if (!Number.isFinite(baht)) return Number.NaN
   return Math.round(baht * 100)
+}
+
+/**
+ * ข้อความ inline error ของช่องกรอกเงิน (บาท) — `null` = ใช้ได้ (รวมช่องว่าง ให้ชั้นฟอร์มตัดสินเรื่องบังคับกรอกเอง)
+ * `label` = ชื่อช่องตามที่ผู้ใช้เห็น
+ */
+export function bahtInputError(value: string, label: string): string | null {
+  if (hasExcessBahtDecimals(value)) return `${label}กรอกทศนิยมได้ไม่เกิน 2 ตำแหน่ง`
+  const parsed = parseBahtInput(value)
+  if (parsed !== null && Number.isNaN(parsed)) return `${label}ต้องเป็นตัวเลข`
+  return null
 }

@@ -10,7 +10,7 @@ import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
+import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
 
 /**
  * แก้ไขรายการเบิกที่ถูกตีกลับแล้วส่งใหม่ (`41` §6.6 · §8 `resubmit_expense`)
@@ -49,7 +49,7 @@ export function ResubmitExpenseModal({
     if (editable) {
       const parsed = parseBahtInput(amountBaht)
       if (parsed === null || Number.isNaN(parsed) || parsed <= 0) {
-        setError('จำนวนเงินต้องมากกว่า 0')
+        setError(bahtInputError(amountBaht, 'จำนวนเงิน') ?? 'จำนวนเงินต้องมากกว่า 0')
         return
       }
       amountSatang = parsed

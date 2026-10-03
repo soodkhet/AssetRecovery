@@ -8,6 +8,8 @@ import {
   fmtSatangRounded,
   fmtSatangSymbol,
   MoneyFormatError,
+  bahtInputError,
+  hasExcessBahtDecimals,
   parseBahtInput,
   toBahtInput,
 } from '@/lib/format/money'
@@ -108,10 +110,27 @@ describe('toBahtInput / parseBahtInput (ช่องกรอกเงินใ�
     expect(() => toBahtInput(100.5)).toThrow(MoneyFormatError)
   })
 
-  it('แปลงข้อความบาท → สตางค์จำนวนเต็ม (ปัดที่ทศนิยมที่ 2)', () => {
+  it('แปลงข้อความบาท → สตางค์จำนวนเต็ม', () => {
     expect(parseBahtInput('100.50')).toBe(10_050)
     expect(parseBahtInput('1,234.56')).toBe(123_456)
-    expect(parseBahtInput('0.005')).toBe(1)
+    expect(parseBahtInput('100.5')).toBe(10_050)
+    expect(parseBahtInput('100')).toBe(10_000)
+    expect(parseBahtInput('0.29')).toBe(29)
+  })
+
+  it('ทศนิยมเกิน 2 ตำแหน่ง = NaN ไม่ปัดเศษเงียบ (UAT BUG-007)', () => {
+    expect(parseBahtInput('0.005')).toBeNaN()
+    expect(parseBahtInput('100.505')).toBeNaN()
+    expect(parseBahtInput('1,234.567')).toBeNaN()
+    expect(hasExcessBahtDecimals(' 100.555 ')).toBe(true)
+    expect(hasExcessBahtDecimals('100.50')).toBe(false)
+  })
+
+  it('bahtInputError() ให้ข้อความ inline ตรงเหตุ', () => {
+    expect(bahtInputError('100.505', 'จำนวนเงิน')).toBe('จำนวนเงินกรอกทศนิยมได้ไม่เกิน 2 ตำแหน่ง')
+    expect(bahtInputError('abc', 'จำนวนเงิน')).toBe('จำนวนเงินต้องเป็นตัวเลข')
+    expect(bahtInputError('100.50', 'จำนวนเงิน')).toBeNull()
+    expect(bahtInputError('', 'จำนวนเงิน')).toBeNull()
   })
 
   it('ช่องว่าง = ไม่กำหนดค่า (null) · ข้อความที่ไม่ใช่ตัวเลข = NaN', () => {

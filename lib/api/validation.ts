@@ -41,7 +41,8 @@ export const MAX_SATANG = 1_000_000_000
  */
 export function satangSchema(label: string) {
   return z
-    .number({ message: `${label} ต้องเป็นตัวเลข` })
+    // NaN มาจาก `parseBahtInput()` เมื่อกรอกตัวอักษรหรือทศนิยมเกิน 2 ตำแหน่ง (UAT BUG-007) — บอกทั้งสองเหตุ
+    .number({ message: `${label} ต้องเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง` })
     .int(`${label} ต้องเป็นจำนวนเต็มสตางค์ (ห้ามมีทศนิยม)`)
     .min(0, `${label} ต้องไม่ติดลบ`)
     .max(MAX_SATANG, `${label} เกินเพดานที่ระบบรับได้`)
