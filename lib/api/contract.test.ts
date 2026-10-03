@@ -36,9 +36,9 @@ const contractEndpoints = new Set(
 )
 
 describe('API contract ↔ docs/45 §6', () => {
-  it('ครอบคลุมทุก endpoint ที่ไฟล์ 45 ประกาศไว้ (48 ตัว)', () => {
+  it('ครอบคลุมทุก endpoint ที่ไฟล์ 45 ประกาศไว้ (49 ตัว)', () => {
     const fromDoc = docEndpoints()
-    expect(fromDoc.size).toBe(48)
+    expect(fromDoc.size).toBe(49)
     expect([...fromDoc].filter((entry) => !contractEndpoints.has(entry))).toEqual([])
   })
 

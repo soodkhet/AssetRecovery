@@ -92,8 +92,11 @@ export type CaseUpdateInput = z.infer<typeof caseUpdateSchema>
 export const caseDocumentUploadSchema = z.object({
   documentType: z.enum(DOCUMENT_SLOTS),
   fileUrl: trimmedText.min(1, 'ไม่พบที่อยู่ไฟล์').max(1000),
-  /** SHA-256 hex 64 ตัว (ไฟล์ 01 — object storage rule) */
-  fileHash: trimmedText.regex(/^[a-f0-9]{64}$/i, 'file_hash ต้องเป็น SHA-256 (hex 64 ตัว)'),
+  /**
+   * SHA-256 hex 64 ตัวที่ browser คำนวณ (ไฟล์ 01) — **ไม่บังคับ และไม่ถูกเชื่อ**: server ดาวน์โหลดไฟล์มา
+   * คำนวณเองแล้วเก็บค่าของ server · ส่งมาแล้วไม่ตรง = `UPLOAD_HASH_MISMATCH` (มติ PO 03/10/2569 UAT Q13)
+   */
+  fileHash: trimmedText.regex(/^[a-f0-9]{64}$/i, 'file_hash ต้องเป็น SHA-256 (hex 64 ตัว)').optional(),
   originalName: trimmedText.min(1).max(255),
   mimeType: trimmedText.min(1).max(150),
   sizeBytes: z.number().int('ขนาดไฟล์ต้องเป็นจำนวนเต็ม').positive('ขนาดไฟล์ต้องมากกว่า 0'),

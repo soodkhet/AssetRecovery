@@ -19,6 +19,8 @@ import { CaseError } from '@/lib/cases/errors'
 import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
+import { caseDocumentRule } from '@/lib/uploads/rules'
+import { verifyUploadedFile } from '@/lib/uploads/verify'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -898,6 +900,14 @@ export async function addCaseDocument(
     assertProductPhotoCapacity(existing)
   }
 
+  // server ตรวจไฟล์เอง (มติ PO 03/10/2569 — UAT Q13 · BUG-037): มีจริง · อยู่ใต้ `cases/<caseId>/<slot>/`
+  // · ชนิดจากเนื้อไฟล์ · ขนาด · SHA-256 ของ server (ค่าจาก browser ใช้เทียบเท่านั้น) — นอก transaction
+  const verified = await verifyUploadedFile(
+    input.fileUrl,
+    caseDocumentRule(caseId, input.documentType),
+    input.fileHash ?? null,
+  )
+
   return await prisma.$transaction(async (tx) => {
     const document = await tx.caseDocument.create({
       data: {
@@ -905,10 +915,10 @@ export async function addCaseDocument(
         caseId,
         documentType: input.documentType,
         fileUrl: input.fileUrl,
-        fileHash: input.fileHash,
+        fileHash: verified.sha256,
         originalName: input.originalName,
-        mimeType: input.mimeType,
-        sizeBytes: input.sizeBytes,
+        mimeType: verified.mimeType,
+        sizeBytes: verified.sizeBytes,
         uploadedBy: context.actor.id,
       },
       select: { id: true },
@@ -925,9 +935,11 @@ export async function addCaseDocument(
         after: {
           caseId,
           documentType: input.documentType,
-          fileHash: input.fileHash,
+          fileUrl: input.fileUrl,
+          fileHash: verified.sha256,
+          mimeType: verified.mimeType,
           originalName: input.originalName,
-          sizeBytes: input.sizeBytes,
+          sizeBytes: verified.sizeBytes,
         },
         reason: context.reason,
         ipAddress: context.meta.ipAddress,

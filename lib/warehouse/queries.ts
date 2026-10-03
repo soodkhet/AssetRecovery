@@ -19,7 +19,17 @@ import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
 import { DELIVERY_DOC_PREFIX, LOT_PREFIX, handoverNumberYear } from '@/lib/warehouse/numbering'
 import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
-import type { AssetIntakeInput, AssetListQuery, LotConfirmInput, LotCreateInput, LotListQuery } from '@/lib/warehouse/schemas'
+import type {
+  AssetIntakeInput,
+  AssetListQuery,
+  LotConfirmInput,
+  LotCreateInput,
+  LotDocumentAttachInput,
+  LotListQuery,
+} from '@/lib/warehouse/schemas'
+import type { LotDocument } from '@/lib/warehouse/lot-status'
+import { intakePhotoRule, lotDocumentRule } from '@/lib/uploads/rules'
+import { toVerifiedUploadMap, uploadMapJson, verifyUploadedFile, verifyUploadedFiles } from '@/lib/uploads/verify'
 import type {
   AssetDetailDto,
   AssetListDto,
@@ -207,6 +217,8 @@ const lotSelect = {
   trackingNo: true,
   signedDocUrl: true,
   deliveryProofUrl: true,
+  signedDocHash: true,
+  deliveryProofHash: true,
   note: true,
   createdAt: true,
   company: { select: { name: true } },
@@ -366,6 +378,14 @@ export async function intakeAsset(
   const retry = isIntakeRetry(current.assetStatus)
   const receivedAt = new Date()
 
+  // server ตรวจรูปรับเข้าคลังเอง (มติ PO 03/10/2569 — UAT Q13): อยู่ใต้ `assets/<assetId>/intake/` · มีจริง ·
+  // เป็นรูปจริงจากเนื้อไฟล์ · ขนาด — นอก transaction · รูปที่ตรวจไว้แล้วรอบก่อน (รับใหม่หลังตีกลับ) ใช้ผลเดิม
+  const previousPhotos = await prisma.asset.findUnique({ where: { id: assetId }, select: { photoHashes: true } })
+  const photoHashes = await verifyUploadedFiles(
+    input.photos.map((path) => ({ path, rule: intakePhotoRule(assetId) })),
+    toVerifiedUploadMap(previousPhotos?.photoHashes),
+  )
+
   const updated = await prisma.$transaction(async (tx) => {
     // ยึดสถานะเดิมไว้ก่อนเขียน — กันธุรการสองคนกดรับเครื่องเดียวกันพร้อมกัน
     const claimed = await tx.asset.updateMany({
@@ -377,6 +397,7 @@ export async function intakeAsset(
         condition: input.condition,
         conditionNote: input.conditionNote,
         photos: input.photos,
+        photoHashes: uploadMapJson(photoHashes),
         receivedAt,
         rejectReason: null,
         rejectedAt: null,
@@ -691,6 +712,83 @@ export async function createLot(
   return getLot(user, lotId)
 }
 
+// ── POST /api/handover-lots/:id/documents (`44` §6.4 · มติ PO 03/10/2569 UAT Q13) ──
+
+const LOT_DOCUMENT_COLUMNS: Readonly<Record<LotDocument, { url: 'signedDocUrl' | 'deliveryProofUrl'; hash: 'signedDocHash' | 'deliveryProofHash' }>> = {
+  signed_doc: { url: 'signedDocUrl', hash: 'signedDocHash' },
+  delivery_proof: { url: 'deliveryProofUrl', hash: 'deliveryProofHash' },
+}
+
+/**
+ * ผูกเอกสารที่ browser อัปโหลดแล้วเข้าล็อต (ปิดหนี้ #1 — เดิม upsert ทับ path ตายตัวและไม่ผ่าน API)
+ *
+ * - path ต้องเป็นเวอร์ชันใหม่ใต้ `handover-lots/<lotId>/<ชนิด>/` (ไม่ทับของเดิม — `44` §6.4 v2.2)
+ * - server ตรวจไฟล์เอง + เก็บ SHA-256 ของ server (`signed_doc_hash` / `delivery_proof_hash`)
+ * - ล็อตที่ `confirmed` แล้ว = `LOT_ALREADY_CONFIRMED` (terminal — `44` §10) · ยึดด้วยสถานะเดิมกันแข่งกับคนกดยืนยัน
+ * - audit event `lot.doc_attached` เก็บ path/hash เดิมและใหม่ (ตามรอยเวอร์ชันได้)
+ */
+export async function attachLotDocument(
+  user: SessionUser,
+  lotId: string,
+  input: LotDocumentAttachInput,
+  context: WarehouseMutationContext,
+): Promise<LotDetailDto> {
+  const current = await loadLot(user, lotId)
+  assertLotMutable(current.status)
+
+  const verified = await verifyUploadedFile(input.fileUrl, lotDocumentRule(lotId, input.document), input.fileHash ?? null)
+  const columns = LOT_DOCUMENT_COLUMNS[input.document]
+
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.handoverLot.updateMany({
+      where: { id: lotId, status: current.status },
+      data: { [columns.url]: input.fileUrl, [columns.hash]: verified.sha256, updatedBy: context.actor.id },
+    })
+    if (claimed.count === 0) throw new WarehouseError('LOT_ALREADY_CONFIRMED')
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'update',
+        targetType: 'handover_lots',
+        targetId: lotId,
+        before: { document: input.document, fileUrl: current[columns.url], fileHash: current[columns.hash] },
+        after: {
+          document: input.document,
+          fileUrl: input.fileUrl,
+          fileHash: verified.sha256,
+          mimeType: verified.mimeType,
+          sizeBytes: verified.sizeBytes,
+          events: ['lot.doc_attached'],
+        },
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx as WarehouseTxClient,
+    )
+  })
+
+  return await getLot(user, lotId)
+}
+
+/**
+ * เอกสารที่ใช้ยืนยันล็อต + hash ของมัน — ไฟล์ที่แนบผ่าน {@link attachLotDocument} แล้วใช้ hash เดิม ·
+ * url ใหม่ที่ส่งมากับคำขอ confirm หรือไฟล์เก่าที่ยังไม่เคยตรวจ (แนบก่อนมติ UAT Q13) ต้องผ่านการตรวจของ server ก่อน
+ */
+async function resolveLotDocument(
+  lotId: string,
+  document: LotDocument,
+  url: string | null,
+  stored: { url: string | null; hash: string | null },
+): Promise<string | null> {
+  if (url === null) return null
+  if (url === stored.url && stored.hash !== null) return stored.hash
+  return (await verifyUploadedFile(url, lotDocumentRule(lotId, document))).sha256
+}
+
 // ── PATCH /api/handover-lots/:id/confirm (`44` §11) ─────────────────────────
 
 /**
@@ -721,6 +819,15 @@ export async function confirmLot(
   const signedDocUrl = input.signedDocUrl ?? current.signedDocUrl
   const deliveryProofUrl = input.deliveryProofUrl ?? current.deliveryProofUrl
   assertLotConfirmDocuments(current.type, { signedDocUrl, deliveryProofUrl })
+  // server ตรวจไฟล์ที่ยังไม่เคยตรวจ (มติ PO 03/10/2569 — UAT Q13) — นอก transaction
+  const signedDocHash = await resolveLotDocument(lotId, 'signed_doc', signedDocUrl, {
+    url: current.signedDocUrl,
+    hash: current.signedDocHash,
+  })
+  const deliveryProofHash = await resolveLotDocument(lotId, 'delivery_proof', deliveryProofUrl, {
+    url: current.deliveryProofUrl,
+    hash: current.deliveryProofHash,
+  })
 
   const confirmedAt = new Date()
   const deliveredAt = input.deliveredAt === null ? confirmedAt : new Date(input.deliveredAt)
@@ -745,6 +852,8 @@ export async function confirmLot(
           deliveredAt,
           signedDocUrl,
           deliveryProofUrl,
+          signedDocHash,
+          deliveryProofHash,
           updatedBy: context.actor.id,
         },
       })
@@ -799,6 +908,8 @@ export async function confirmLot(
             deliveredAt,
             signedDocUrl,
             deliveryProofUrl,
+            signedDocHash,
+            deliveryProofHash,
             assetIdsHandedOver: assetIds,
             expenseIdsUnlocked,
             revenueIdsCreated: revenue.revenueIdsCreated,

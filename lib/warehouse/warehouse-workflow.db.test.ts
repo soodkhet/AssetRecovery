@@ -1,8 +1,14 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
 import { assetListQuerySchema, lotListQuerySchema } from '@/lib/warehouse/schemas'
+
+// UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
 
 /**
  * เทสต์ระดับ DB ของ Phase 2.13 — DoD ตาม `44` §17
@@ -783,6 +789,120 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     await expect(
       db().$executeRawUnsafe(`UPDATE handover_lots SET note = 'แก้ย้อนหลัง' WHERE id = '${lotId}'`),
     ).rejects.toThrowError(/LOT_ALREADY_CONFIRMED/)
+  })
+})
+
+suite('UAT Q13 (BUG-037/050 · หนี้ #1) — server ตรวจไฟล์เอกสารล็อต + รูปรับเข้าคลัง', () => {
+  beforeEach(async () => {
+    await cleanupCases()
+    resetFakeUploads()
+  })
+  afterAll(resetFakeUploads)
+
+  async function seedLot(): Promise<string> {
+    const { assetId } = await seedInCustody()
+    const lot = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+    return lot.id
+  }
+
+  it('แนบเอกสารผ่าน API = เก็บ hash ของ server · แนบใหม่เป็นเวอร์ชันใหม่ (ไฟล์เดิมยังอยู่) · confirm ใช้ hash เดิม', async () => {
+    const lotId = await seedLot()
+    uploadTestState.realVerify = true
+    const v1 = `handover-lots/${lotId}/signed-doc/v1.pdf`
+    const v2 = `handover-lots/${lotId}/signed-doc/v2.jpg`
+    putFakeUpload(v1, sampleBytes('pdf', 'v1'))
+    putFakeUpload(v2, sampleBytes('jpeg', 'v2'))
+
+    const first = await warehouse.attachLotDocument(admin, lotId, { document: 'signed_doc', fileUrl: v1 }, ctx(admin))
+    expect(first.signedDocUrl).toBe(v1)
+    await warehouse.attachLotDocument(
+      admin,
+      lotId,
+      { document: 'signed_doc', fileUrl: v2, fileHash: sha256Of(sampleBytes('jpeg', 'v2')) },
+      ctx(admin),
+    )
+    const stored = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+    expect(stored.signedDocUrl).toBe(v2)
+    expect(stored.signedDocHash).toBe(sha256Of(sampleBytes('jpeg', 'v2')))
+    const audits = await db().auditLog.findMany({ where: { targetType: 'handover_lots', targetId: lotId, action: 'update' } })
+    expect(audits).toHaveLength(2)
+
+    await warehouse.confirmLot(admin, lotId, { deliveredAt: null, signedDocUrl: null, deliveryProofUrl: null }, ctx(admin))
+    const confirmed = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+    expect(confirmed.status).toBe('confirmed')
+    expect(confirmed.signedDocHash).toBe(sha256Of(sampleBytes('jpeg', 'v2')))
+
+    // ล็อต confirmed แล้วแนบไม่ได้
+    await expectCode(
+      () => warehouse.attachLotDocument(admin, lotId, { document: 'signed_doc', fileUrl: v1 }, ctx(admin)),
+      'LOT_ALREADY_CONFIRMED',
+    )
+  })
+
+  it('ไฟล์ไม่มีจริง / นอกล็อต / ไม่ใช่ PDF-รูป / hash ไม่ตรง = ปฏิเสธ และล็อตไม่ขยับ', async () => {
+    const lotId = await seedLot()
+    uploadTestState.realVerify = true
+    const good = `handover-lots/${lotId}/signed-doc/a.pdf`
+    putFakeUpload(good, sampleBytes('pdf'))
+    putFakeUpload(`handover-lots/${lotId}/signed-doc/fake.pdf`, sampleBytes('text'))
+    const attach = (fileUrl: string, fileHash?: string) => () =>
+      warehouse.attachLotDocument(admin, lotId, { document: 'signed_doc', fileUrl, fileHash }, ctx(admin))
+
+    await expectCode(attach(`handover-lots/${lotId}/signed-doc/missing.pdf`), 'UPLOAD_FILE_NOT_FOUND')
+    await expectCode(attach('handover-lots/other-lot/signed-doc/a.pdf'), 'UPLOAD_PATH_OUT_OF_SCOPE')
+    await expectCode(attach(`handover-lots/${lotId}/delivery-proof/a.pdf`), 'UPLOAD_PATH_OUT_OF_SCOPE')
+    await expectCode(attach(`handover-lots/${lotId}/signed-doc/fake.pdf`), 'UPLOAD_FILE_TYPE_INVALID')
+    await expectCode(attach(good, 'f'.repeat(64)), 'UPLOAD_HASH_MISMATCH')
+    // confirm พร้อม url ที่ยังไม่ผ่านการตรวจก็ต้องตรวจเหมือนกัน
+    await expectCode(
+      () =>
+        warehouse.confirmLot(
+          admin,
+          lotId,
+          { deliveredAt: null, signedDocUrl: `handover-lots/${lotId}/signed-doc/missing.pdf`, deliveryProofUrl: null },
+          ctx(admin),
+        ),
+      'UPLOAD_FILE_NOT_FOUND',
+    )
+    const lot = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+    expect(lot.signedDocUrl).toBeNull()
+    expect(lot.status).toBe('pending_attach')
+  })
+
+  it('รูปรับเข้าคลัง: ต้องอยู่ใต้ assets/<assetId>/intake/ และเป็นรูปจริง — hash เก็บที่ photo_hashes', async () => {
+    const { assetId, imei } = await seedClosedSuccessCase()
+    uploadTestState.realVerify = true
+    const photo = `assets/${assetId}/intake/front/k-front.jpg`
+    putFakeUpload(photo, sampleBytes('jpeg', 'front'))
+    putFakeUpload(`assets/${assetId}/intake/back/k-back.jpg`, sampleBytes('text'))
+
+    await expectCode(
+      () =>
+        warehouse.intakeAsset(admin, assetId, { ...intakeInput(imei), photos: [`assets/${assetId}/intake/back/k-back.jpg`] }, ctx(admin)),
+      'UPLOAD_FILE_TYPE_INVALID',
+    )
+    await expectCode(
+      () => warehouse.intakeAsset(admin, assetId, { ...intakeInput(imei), photos: ['assets/other/intake/front/x.jpg'] }, ctx(admin)),
+      'UPLOAD_PATH_OUT_OF_SCOPE',
+    )
+    await warehouse.intakeAsset(admin, assetId, { ...intakeInput(imei), photos: [photo] }, ctx(admin))
+    const asset = await db().asset.findUniqueOrThrow({ where: { id: assetId } })
+    expect(asset.photoHashes).toEqual({
+      [photo]: { sha256: sha256Of(sampleBytes('jpeg', 'front')), mimeType: 'image/jpeg', sizeBytes: sampleBytes('jpeg', 'front').length },
+    })
   })
 })
 

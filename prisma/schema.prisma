@@ -1740,6 +1740,8 @@ model CaseEvidence {
   failReason       String? @map("fail_reason")
   /// คำอธิบายเพิ่ม — บังคับเมื่อเลือก "อื่น ๆ" (`other`)
   failReasonDetail String? @map("fail_reason_detail")
+  /// path → { sha256, mimeType, sizeBytes } ที่ server ตรวจเองจากไฟล์จริง (มติ PO 03/10/2569 — UAT Q13)
+  fileHashes       Json    @default("{}") @map("file_hashes")
 
   reviewedBy   String?   @map("reviewed_by") @db.Uuid
   reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)
@@ -1817,6 +1819,8 @@ model CloseCaseDraft {
   /// เหตุผลปิดงานไม่สำเร็จที่เลือกค้างไว้ (มติ PO 03/10/2569 — UAT Q16) · รหัสจาก `CLOSE_FAIL_REASONS`
   failReason       String? @map("fail_reason")
   failReasonDetail String? @map("fail_reason_detail")
+  /// path → { sha256, mimeType, sizeBytes } ที่ server ตรวจแล้วตอนบันทึก draft (UAT Q13) — ปิดงานใช้ต่อไม่ต้องโหลดซ้ำ
+  fileHashes       Json    @default("{}") @map("file_hashes")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -1868,6 +1872,8 @@ model Asset {
   conditionNote String?         @map("condition_note")
   /// Supabase Storage URLs
   photos        String[]        @default([])
+  /// path → { sha256, mimeType, sizeBytes } ที่ server ตรวจเอง (มติ PO 03/10/2569 — UAT Q13)
+  photoHashes   Json            @default("{}") @map("photo_hashes")
 
   /// snapshot จาก `cases.closed_at`
   closedAt   DateTime  @map("closed_at") @db.Timestamptz(6)
@@ -1926,6 +1932,9 @@ model HandoverLot {
   signedDocUrl     String? @map("signed_doc_url")
   /// ② หลักฐานจัดส่ง — บังคับเฉพาะ `we_deliver`
   deliveryProofUrl String? @map("delivery_proof_url")
+  /// SHA-256 ที่ server คำนวณจากไฟล์จริงตอนแนบ (มติ PO 03/10/2569 — UAT Q13)
+  signedDocHash     String? @map("signed_doc_hash") @db.VarChar(64)
+  deliveryProofHash String? @map("delivery_proof_hash") @db.VarChar(64)
   note             String?
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

@@ -1,7 +1,13 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
+
+// UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
 
 /**
  * เทสต์ระดับ DB ของ Phase 2.8 — DoD ตาม `41` §19/§20:
@@ -342,6 +348,43 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     // เหตุผลนี้คือสิ่งที่รายละเอียดเคสส่งให้ทุกคนที่เห็นเคส รวมบริษัทไฟแนนซ์เจ้าของเคส
     const { loadCaseCloseFailReason } = await import('@/lib/field/evidence-review')
     expect(await loadCaseCloseFailReason(ORG_ID, caseId)).toEqual({ code: 'other', detail: 'ร้านปิดกิจการถาวร' })
+  })
+
+  it('UAT Q13 (BUG-050) — server ตรวจไฟล์หลักฐานเอง: วิดีโอปลอมถูกปฏิเสธ · hash ของ server เก็บกับหลักฐาน · draft ไม่โหลดซ้ำ', async () => {
+    const caseId = await seedReadyToClose()
+    uploadTestState.realVerify = true
+    try {
+      const photo = `cases/${caseId}/field_evidence/photo/k-p.jpg`
+      const fakeVideo = `cases/${caseId}/field_evidence/video/k-fake.mp4`
+      const video = `cases/${caseId}/field_evidence/video/k-v.mp4`
+      putFakeUpload(photo, sampleBytes('jpeg', 'p'))
+      putFakeUpload(fakeVideo, sampleBytes('text'))
+      putFakeUpload(video, sampleBytes('mp4', 'v'))
+      const base = { outcome: 'closed_fail' as const, failReason: 'debtor_not_found' as const, productPhotos: [] }
+
+      await expectCode(
+        () => field.closeFieldCase(agentA, caseId, { ...base, photos: [photo], videos: [fakeVideo] }, { actor: agentA, meta }),
+        'UPLOAD_FILE_TYPE_INVALID',
+      )
+      await expectCode(
+        () =>
+          field.closeFieldCase(agentA, caseId, { ...base, photos: ['p1.jpg'], videos: [video] }, { actor: agentA, meta }),
+        'UPLOAD_PATH_OUT_OF_SCOPE',
+      )
+
+      // draft ตรวจรูปไว้แล้ว → ลบไฟล์ออกจาก store ก็ยังปิดงานได้ (ใช้ผลเดิม ไม่โหลดซ้ำ)
+      await field.saveCloseDraft(agentA, caseId, { ...base, photos: [photo], videos: [] }, { actor: agentA, meta })
+      uploadTestState.files.delete(photo)
+      await field.closeFieldCase(agentA, caseId, { ...base, photos: [photo], videos: [video] }, { actor: agentA, meta })
+
+      const evidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId } })
+      expect(evidence.fileHashes).toMatchObject({
+        [photo]: { sha256: sha256Of(sampleBytes('jpeg', 'p')), mimeType: 'image/jpeg' },
+        [video]: { sha256: sha256Of(sampleBytes('mp4', 'v')), mimeType: 'video/mp4' },
+      })
+    } finally {
+      resetFakeUploads()
+    }
   })
 
   it('ปิดงานไม่สำเร็จต้องเลือกเหตุผล · "อื่น ๆ" ต้องอธิบาย = CLOSE_FAIL_REASON_REQUIRED (UAT Q16)', async () => {

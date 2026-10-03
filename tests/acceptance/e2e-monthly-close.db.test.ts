@@ -3,6 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
+// UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
+
 /**
  * **Phase 8.1 — E2E Acceptance: ปิดงวดบัญชี**
  *
