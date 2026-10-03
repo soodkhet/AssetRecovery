@@ -68,6 +68,18 @@ export interface SlaPolicyDto {
   updatedAt: string | null
 }
 
+/** นโยบายการมอบหมายงาน (`40` §6.4/§11) — เก็บที่ `assignment_policy_settings` แถวเดียวกับเกณฑ์ SLA */
+export interface AssignmentPolicyDto {
+  reassignTimeoutHours: number
+  supervisorCanAssignSystem: boolean
+  supervisorCanAssignInhouse: boolean
+  supervisorCanAssignOutsource: boolean
+  /** `null` = ไม่จำกัดเวลากดรับงาน */
+  acceptDeadlineHours: number | null
+  /** `null` = ยังไม่เคยตั้งค่า (ค่าที่เห็นคือค่าเริ่มต้นของระบบ ยังไม่มีแถวใน DB) */
+  updatedAt: string | null
+}
+
 export interface BankAccountDto {
   id: string
   bankName: string

@@ -51,6 +51,8 @@ type TimeoutJob = typeof import('@/lib/assignments/timeout-job')
 let queries: Queries
 let agentQueries: AgentQueries
 let timeoutJob: TimeoutJob
+type SettingsQueries = typeof import('@/lib/settings/queries/assignment-policy')
+let settingsQueries: SettingsQueries
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -130,6 +132,7 @@ beforeAll(async () => {
   queries = await import('@/lib/assignments/queries')
   agentQueries = await import('@/lib/assignments/agent-queries')
   timeoutJob = await import('@/lib/assignments/timeout-job')
+  settingsQueries = await import('@/lib/settings/queries/assignment-policy')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -639,5 +642,106 @@ suite('Phase 2.6 — ยามสิทธิ์ + ข้อมูลประ�
     const agentView = await queries.listAssignments(agentA, { page: 1, limit: 50, status: 'assigned' })
     expect(agentView.items.map((item) => item.caseId)).toEqual([mine])
     expect(agentView.total).toBe(1)
+  })
+})
+
+suite('UAT BUG-002 — หน้าตั้งค่านโยบายการมอบหมายงาน (`40` §6.4/§11 · มติ PO 03/10/2569)', () => {
+  beforeEach(cleanupCases)
+
+  const superadmin = sessionUser({ id: MANAGER_ID, roleName: 'Superadmin', roleGroup: 'system', isSuperadmin: true })
+  const settingsContext = (reason: string) => ({ actor: superadmin, meta, reason })
+  const values = {
+    reassignTimeoutHours: 3,
+    supervisorCanAssignSystem: true,
+    supervisorCanAssignInhouse: true,
+    supervisorCanAssignOutsource: true,
+    acceptDeadlineHours: null,
+  }
+
+  async function latestPolicyAudit(since: Date) {
+    return db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'assignment_policy_settings', createdAt: { gte: since } },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
+
+  it('GET ก่อนเคยตั้งค่าคืนค่าเริ่มต้นโดยไม่สร้างแถว · PATCH ครั้งแรก = audit create พร้อมเหตุผล', async () => {
+    const initial = await settingsQueries.getAssignmentPolicySettings(ORG_ID)
+    expect(initial).toEqual({ ...values, updatedAt: null })
+    expect(await db().assignmentPolicySettings.count({ where: { organizationId: ORG_ID } })).toBe(0)
+
+    const startedAt = new Date(Date.now() - 1000)
+    const saved = await settingsQueries.updateAssignmentPolicySettings(settingsContext('ตั้งค่าครั้งแรกของ UAT'), {
+      ...values,
+      reassignTimeoutHours: 6,
+    })
+    expect(saved.reassignTimeoutHours).toBe(6)
+    expect(saved.updatedAt).not.toBeNull()
+
+    const audit = await latestPolicyAudit(startedAt)
+    expect(audit?.action).toBe('create')
+    expect(audit?.actorId).toBe(MANAGER_ID)
+    expect(audit?.targetId).toBe(ORG_ID)
+    expect(audit?.reason).toBe('ตั้งค่าครั้งแรกของ UAT')
+    expect(audit?.afterData).toMatchObject({ reassign_timeout_hours: 6, supervisor_can_assign_inhouse: true })
+  })
+
+  it('PATCH ครั้งถัดไป = audit update เก็บ before/after และไม่แตะ sla_alert_hours · ยามหัวหน้าทีมใช้ค่าใหม่ทันที', async () => {
+    await db().$executeRawUnsafe(`
+      INSERT INTO assignment_policy_settings (organization_id, sla_alert_hours) VALUES ('${ORG_ID}', 48)
+    `)
+
+    const startedAt = new Date(Date.now() - 1000)
+    await settingsQueries.updateAssignmentPolicySettings(settingsContext('ปิดสิทธิ์หัวหน้าทีม Inhouse'), {
+      ...values,
+      supervisorCanAssignInhouse: false,
+    })
+
+    const row = await db().assignmentPolicySettings.findUnique({ where: { organizationId: ORG_ID } })
+    expect(row?.supervisorCanAssignInhouse).toBe(false)
+    expect(row?.slaAlertHours).toBe(48)
+    expect(row?.updatedBy).toBe(MANAGER_ID)
+
+    const audit = await latestPolicyAudit(startedAt)
+    expect(audit?.action).toBe('update')
+    expect(audit?.reason).toBe('ปิดสิทธิ์หัวหน้าทีม Inhouse')
+    expect(audit?.beforeData).toMatchObject({ supervisor_can_assign_inhouse: true })
+    expect(audit?.afterData).toMatchObject({ supervisor_can_assign_inhouse: false })
+    expect(JSON.stringify(audit?.afterData ?? {})).not.toContain('sla_alert_hours')
+
+    const caseId = await seedApprovedCase()
+    await expectCode(
+      () => queries.assignCase(supervisor, caseId, { agentId: AGENT_A }, { actor: supervisor, meta }),
+      'PERMISSION_DENIED',
+    )
+  })
+
+  it('timeout ใหม่ใช้กับคำขอใหม่เท่านั้น — คำขอที่ค้างอยู่คง expires_at เดิม (snapshot)', async () => {
+    const HOUR = 60 * 60 * 1000
+
+    // คำขอแรกส่งตอนยังเป็นค่าเริ่มต้น 3 ชม.
+    const oldCase = await seedApprovedCase()
+    await queries.assignCase(manager, oldCase, { agentId: AGENT_A }, { actor: manager, meta })
+    await queries.acceptAssignment(agentA, oldCase, { actor: agentA, meta })
+    await queries.reassignCase(manager, oldCase, { agentId: AGENT_B, reason: 'คำขอก่อนเปลี่ยนค่า' }, { actor: manager, meta })
+    const oldPending = await db().pendingReassignment.findFirstOrThrow({ where: { caseId: oldCase } })
+    expect(oldPending.expiresAt.getTime() - oldPending.requestedAt.getTime()).toBe(3 * HOUR)
+
+    await settingsQueries.updateAssignmentPolicySettings(settingsContext('ขยายเวลารอความยินยอมเป็น 8 ชั่วโมง'), {
+      ...values,
+      reassignTimeoutHours: 8,
+    })
+
+    // คำขอใหม่หลังเปลี่ยนค่า ใช้ 8 ชม.
+    const newCase = await seedApprovedCase()
+    await queries.assignCase(manager, newCase, { agentId: AGENT_A }, { actor: manager, meta })
+    await queries.acceptAssignment(agentA, newCase, { actor: agentA, meta })
+    await queries.reassignCase(manager, newCase, { agentId: AGENT_B, reason: 'คำขอหลังเปลี่ยนค่า' }, { actor: manager, meta })
+    const newPending = await db().pendingReassignment.findFirstOrThrow({ where: { caseId: newCase } })
+    expect(newPending.expiresAt.getTime() - newPending.requestedAt.getTime()).toBe(8 * HOUR)
+
+    // คำขอเดิมไม่ถูกแก้ย้อนหลัง
+    const oldAfter = await db().pendingReassignment.findUniqueOrThrow({ where: { id: oldPending.id } })
+    expect(oldAfter.expiresAt.getTime()).toBe(oldPending.expiresAt.getTime())
   })
 })

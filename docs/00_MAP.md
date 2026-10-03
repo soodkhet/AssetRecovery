@@ -694,7 +694,7 @@
 | 442 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 454 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/40-case-assignment-routing.md` (78 KB, 357 บรรทัด)
+### `docs/40-case-assignment-routing.md` (78 KB, 364 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -702,42 +702,42 @@
 | 3 | # 40 — Case Assignment & Routing (มอบหมายและวางแผนงาน) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 24 | ## 1. Summary |
-| 27 | ## 2. Purpose |
-| 30 | ## 3. Scope |
-| 32 | ### 3.1 In Scope |
-| 39 | ### 3.2 Out of Scope (ส่งต่อเอกสารอื่น/Sprint ถัดไป) |
-| 46 | ## 4. Actors & Responsibilities |
-| 58 | ## 5. Menu & Navigation |
-| 63 | ## 6. Data Requirements |
-| 65 | ### 6.1 Required Fields |
-| 79 | ### 6.1.1 Pending Reassignment Object |
-| 91 | ### 6.2 Agent Decision-Support Fields (แสดงเฉพาะหน้ามอบหมาย ไม่ผูกกับ case) |
-| 99 | ### 6.3 Derived / Computed Fields |
-| 103 | ### 6.4 Settings Config — Supervisor Action Permission |
-| 114 | ## 7. UI Requirements |
-| 116 | ### 7.1 Page Layout |
-| 122 | ### 7.2 Table Behavior |
-| 135 | ### 7.3 Assignment Modal (Manager) — Consolidated: Case Detail + Agent Picker |
-| 154 | ### 7.4 Agent Accept UI |
-| 159 | ### 7.5 Kanban Board — ภาพรวม Workload ของทีม |
-| 167 | ## 8. Actions & Buttons |
-| 176 | ## 9. Workflow |
-| 198 | ## 10. Status / State Machine |
-| 208 | ## 11. Business Rules |
-| 224 | ## 12. Validation & Error Handling |
-| 235 | ## 13. Permissions |
-| 252 | ## 14. Audit Log |
-| 260 | ## 15. Notifications |
-| 267 | ## 16. Integration Points |
-| 273 | ## 17. API / Event Contract Draft |
-| 275 | ### 17.1 API Endpoints |
-| 287 | ### 17.2 Events |
-| 296 | ## 18. Export / Document Requirements |
-| 299 | ## 19. Acceptance Criteria |
-| 309 | ## 20. Test Cases |
-| 336 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 348 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 26 | ## 1. Summary |
+| 29 | ## 2. Purpose |
+| 32 | ## 3. Scope |
+| 34 | ### 3.1 In Scope |
+| 41 | ### 3.2 Out of Scope (ส่งต่อเอกสารอื่น/Sprint ถัดไป) |
+| 48 | ## 4. Actors & Responsibilities |
+| 60 | ## 5. Menu & Navigation |
+| 65 | ## 6. Data Requirements |
+| 67 | ### 6.1 Required Fields |
+| 81 | ### 6.1.1 Pending Reassignment Object |
+| 93 | ### 6.2 Agent Decision-Support Fields (แสดงเฉพาะหน้ามอบหมาย ไม่ผูกกับ case) |
+| 101 | ### 6.3 Derived / Computed Fields |
+| 105 | ### 6.4 Settings Config — Supervisor Action Permission |
+| 117 | ## 7. UI Requirements |
+| 119 | ### 7.1 Page Layout |
+| 125 | ### 7.2 Table Behavior |
+| 138 | ### 7.3 Assignment Modal (Manager) — Consolidated: Case Detail + Agent Picker |
+| 157 | ### 7.4 Agent Accept UI |
+| 162 | ### 7.5 Kanban Board — ภาพรวม Workload ของทีม |
+| 170 | ## 8. Actions & Buttons |
+| 179 | ## 9. Workflow |
+| 201 | ## 10. Status / State Machine |
+| 211 | ## 11. Business Rules |
+| 227 | ## 12. Validation & Error Handling |
+| 240 | ## 13. Permissions |
+| 257 | ## 14. Audit Log |
+| 265 | ## 15. Notifications |
+| 272 | ## 16. Integration Points |
+| 278 | ## 17. API / Event Contract Draft |
+| 280 | ### 17.1 API Endpoints |
+| 294 | ### 17.2 Events |
+| 303 | ## 18. Export / Document Requirements |
+| 306 | ## 19. Acceptance Criteria |
+| 316 | ## 20. Test Cases |
+| 343 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 355 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/41-field-tracker-mobile.md` (115 KB, 548 บรรทัด)
 

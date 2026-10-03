@@ -5,7 +5,8 @@ import { prisma } from '@/lib/prisma'
  * ค่าตั้งของการมอบหมายงานต่อองค์กร (`40` §6.4) — ชั้น DB
  * ยังไม่มีองค์กรไหนตั้งค่า = ใช้ค่า default ของสเปค (ไม่บังคับให้ seed ก่อนใช้งาน)
  *
- * หน้าจอตั้งค่า (Superadmin) ยังไม่มี endpoint ใน `45` — งานของ Settings รอบถัดไป
+ * หน้าจอตั้งค่า (Superadmin) = `/settings/finance?tab=assignment` → `PATCH /api/settings/assignment-policy`
+ * (`lib/settings/queries/assignment-policy.ts` — UAT BUG-002) · อ่านสดทุกคำขอ ไม่แคช ⇒ ค่าใหม่มีผลทันที
  */
 export async function getAssignmentPolicy(organizationId: string): Promise<AssignmentPolicy> {
   const row = await prisma.assignmentPolicySettings.findUnique({

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ApprovalMatrixTab } from '@/components/settings/approval-matrix-tab'
+import { AssignmentPolicyTab } from '@/components/settings/assignment-policy-tab'
 import { BankAccountsTab } from '@/components/settings/bank-accounts-tab'
 import { BankFileFormatsTab } from '@/components/settings/bank-file-formats-tab'
 import { CostCentersTab } from '@/components/settings/cost-centers-tab'
@@ -96,6 +97,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'numbering' && <InvoiceNumberingTab />}
           {current?.id === 'taxdoc' && <TaxDocTemplatesTab />}
           {current?.id === 'sla' && <SlaPolicyTab />}
+          {current?.id === 'assignment' && <AssignmentPolicyTab />}
           {current !== undefined && !current.available && (
             <EmptyState
               title={current.label}

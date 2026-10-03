@@ -10,11 +10,13 @@ import {
  * 15/08/2569 (D18 — เกณฑ์ SLA) + 1 แท็บของ **ไฟล์ 18** ("ผู้รับเงิน") ที่ Phase 3.2 เพิ่มเข้ามา
  */
 describe('FINANCE_SETTINGS_TABS', () => {
-  it('มีครบ 14 แท็บของไฟล์ 13 (13 + §6.14 SLA) + แท็บผู้รับเงินของไฟล์ 18', () => {
-    expect(FINANCE_SETTINGS_TABS).toHaveLength(15)
+  it('มีครบ 14 แท็บของไฟล์ 13 (13 + §6.14 SLA) + แท็บผู้รับเงินของไฟล์ 18 + นโยบายการมอบหมายงานของไฟล์ 40', () => {
+    expect(FINANCE_SETTINGS_TABS).toHaveLength(16)
     expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(14)
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'payee')?.section).toBe('ไฟล์ 18')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'sla')?.section).toBe('§6.14')
+    // UAT BUG-002 · มติ PO 03/10/2569 — วางถัดจากแท็บ SLA (ตาราง `assignment_policy_settings` เดียวกัน)
+    expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'assignment')?.section).toBe('ไฟล์ 40 §6.4')
   })
 
   it('id ห้ามซ้ำ (ใช้เป็นค่า `?tab=` และ key ของ React)', () => {
@@ -46,6 +48,7 @@ describe('FINANCE_SETTINGS_TABS', () => {
       'numbering',
       'taxdoc',
       'sla',
+      'assignment',
     ])
   })
 })
@@ -60,6 +63,7 @@ describe('resolveFinanceSettingsTab', () => {
     expect(resolveFinanceSettingsTab('permission')).toBe('permission')
     expect(resolveFinanceSettingsTab('payee')).toBe('payee')
     expect(resolveFinanceSettingsTab('sla')).toBe('sla')
+    expect(resolveFinanceSettingsTab('assignment')).toBe('assignment')
   })
 
   it('ค่าที่ไม่รู้จักหรือไม่ได้ส่งมา ตกกลับแท็บเริ่มต้น', () => {

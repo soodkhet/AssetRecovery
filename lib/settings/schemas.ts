@@ -9,6 +9,12 @@ import {
   MIN_AGING_BUCKETS,
 } from '@/lib/settings/finance-policy'
 import { MAX_DIGIT_LENGTH, MIN_DIGIT_LENGTH } from '@/lib/settings/numbering'
+import {
+  MAX_ACCEPT_DEADLINE_HOURS,
+  MAX_REASSIGN_TIMEOUT_HOURS,
+  MIN_ACCEPT_DEADLINE_HOURS,
+  MIN_REASSIGN_TIMEOUT_HOURS,
+} from '@/lib/settings/assignment-policy'
 import { MAX_SLA_ALERT_HOURS, MIN_SLA_ALERT_HOURS } from '@/lib/settings/sla-policy'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
@@ -164,6 +170,29 @@ const slaPolicyFields = z.object({
 
 export const slaPolicyFieldsSchema = slaPolicyFields
 export const slaPolicyUpdateSchema = slaPolicyFields.extend({ reason: reasonSchema })
+
+// ── นโยบายการมอบหมายงาน (`40` §6.4/§11 · 1 record/องค์กร · UAT BUG-002) ──────
+const assignmentPolicyFields = z.object({
+  reassignTimeoutHours: z
+    .number()
+    .int('เวลารอความยินยอมต้องเป็นจำนวนเต็มชั่วโมง')
+    .min(MIN_REASSIGN_TIMEOUT_HOURS, `เวลารอความยินยอมต้องอย่างน้อย ${MIN_REASSIGN_TIMEOUT_HOURS} ชั่วโมง`)
+    .max(MAX_REASSIGN_TIMEOUT_HOURS, `เวลารอความยินยอมต้องไม่เกิน ${MAX_REASSIGN_TIMEOUT_HOURS} ชั่วโมง`),
+  supervisorCanAssignSystem: z.boolean(),
+  supervisorCanAssignInhouse: z.boolean(),
+  supervisorCanAssignOutsource: z.boolean(),
+  /** `null` = ไม่จำกัดเวลากดรับงาน (ค่าเริ่มต้นของสเปค) */
+  acceptDeadlineHours: z
+    .number()
+    .int('เส้นตายกดรับงานต้องเป็นจำนวนเต็มชั่วโมง')
+    .min(MIN_ACCEPT_DEADLINE_HOURS, `เส้นตายกดรับงานต้องอย่างน้อย ${MIN_ACCEPT_DEADLINE_HOURS} ชั่วโมง`)
+    .max(MAX_ACCEPT_DEADLINE_HOURS, `เส้นตายกดรับงานต้องไม่เกิน ${MAX_ACCEPT_DEADLINE_HOURS} ชั่วโมง`)
+    .nullable(),
+})
+
+export const assignmentPolicyFieldsSchema = assignmentPolicyFields
+/** กระทบสิทธิ์ของหัวหน้าทีม ⇒ `reason` บังคับ (`90` §13 · `assignment_policy_settings` = หมวด permission) */
+export const assignmentPolicyUpdateSchema = assignmentPolicyFields.extend({ reason: reasonSchema })
 
 // ── §6.3 บัญชีธนาคารบริษัท ─────────────────────────────────────────────
 export const bankAccountUsageSchema = z.enum(['receive', 'pay', 'both'])
