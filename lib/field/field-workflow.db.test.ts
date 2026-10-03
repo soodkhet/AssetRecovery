@@ -322,12 +322,54 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     const closed = await field.closeFieldCase(
       agentA,
       caseId,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      {
+        outcome: 'closed_fail',
+        failReason: 'other',
+        failReasonDetail: '  ร้านปิดกิจการถาวร  ',
+        photos: ['p.jpg'],
+        videos: ['v.mp4'],
+        productPhotos: [],
+      },
       { actor: agentA, meta },
     )
     expect(closed.status).toBe('closed_fail')
     expect(closed.events).toEqual(['case.closed_fail', 'expense.case_bound_created'])
     expect((await db().case.findUniqueOrThrow({ where: { id: caseId } })).status).toBe('closed_fail')
+    // เหตุผลไม่สำเร็จเก็บกับหลักฐาน (มติ PO 03/10/2569 — UAT Q16 · BUG-057)
+    const evidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId } })
+    expect(evidence.failReason).toBe('other')
+    expect(evidence.failReasonDetail).toBe('ร้านปิดกิจการถาวร')
+    // เหตุผลนี้คือสิ่งที่รายละเอียดเคสส่งให้ทุกคนที่เห็นเคส รวมบริษัทไฟแนนซ์เจ้าของเคส
+    const { loadCaseCloseFailReason } = await import('@/lib/field/evidence-review')
+    expect(await loadCaseCloseFailReason(ORG_ID, caseId)).toEqual({ code: 'other', detail: 'ร้านปิดกิจการถาวร' })
+  })
+
+  it('ปิดงานไม่สำเร็จต้องเลือกเหตุผล · "อื่น ๆ" ต้องอธิบาย = CLOSE_FAIL_REASON_REQUIRED (UAT Q16)', async () => {
+    const caseId = await seedReadyToClose()
+    const media = { photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] }
+    await expectCode(
+      () => field.closeFieldCase(agentA, caseId, { outcome: 'closed_fail', ...media }, { actor: agentA, meta }),
+      'CLOSE_FAIL_REASON_REQUIRED',
+    )
+    await expectCode(
+      () =>
+        field.closeFieldCase(
+          agentA,
+          caseId,
+          { outcome: 'closed_fail', failReason: 'other', failReasonDetail: '   ', ...media },
+          { actor: agentA, meta },
+        ),
+      'CLOSE_FAIL_REASON_REQUIRED',
+    )
+    // เคสสำเร็จไม่เก็บเหตุผล แม้ draft/ฟอร์มค้างค่าไว้
+    await field.closeFieldCase(
+      agentA,
+      caseId,
+      { outcome: 'closed_success', failReason: 'debtor_refused', ...MEDIA },
+      { actor: agentA, meta },
+    )
+    const evidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId } })
+    expect(evidence.failReason).toBeNull()
   })
 
   it('ข้ามขั้นไม่ได้: จัดวันก่อนกดรับ / เช็คอินก่อนจัดวัน / ปิดงานซ้ำ', async () => {
@@ -356,9 +398,9 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     )
 
     const ready = await seedReadyToClose()
-    await field.closeFieldCase(agentA, ready, { outcome: 'closed_fail', ...MEDIA }, { actor: agentA, meta })
+    await field.closeFieldCase(agentA, ready, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, { actor: agentA, meta })
     await expectCode(
-      () => field.closeFieldCase(agentA, ready, { outcome: 'closed_fail', ...MEDIA }, { actor: agentA, meta }),
+      () => field.closeFieldCase(agentA, ready, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, { actor: agentA, meta }),
       'ASSIGNMENT_INVALID_STATUS',
     )
   })
@@ -406,7 +448,7 @@ suite('Phase 2.8 — หลักฐานบังคับตาม outcome (`
         field.closeFieldCase(
           agentA,
           caseId,
-          { outcome: 'closed_fail', photos: [], videos: ['v.mp4'], productPhotos: [] },
+          { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: [], videos: ['v.mp4'], productPhotos: [] },
           { actor: agentA, meta },
         ),
       'CLOSE_PHOTO_REQUIRED',
@@ -416,7 +458,7 @@ suite('Phase 2.8 — หลักฐานบังคับตาม outcome (`
         field.closeFieldCase(
           agentA,
           caseId,
-          { outcome: 'closed_fail', photos: ['p.jpg'], videos: [], productPhotos: [] },
+          { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: [], productPhotos: [] },
           { actor: agentA, meta },
         ),
       'CLOSE_VIDEO_REQUIRED',
@@ -452,7 +494,7 @@ suite('Phase 2.8 — หลักฐานบังคับตาม outcome (`
       { actor: agentA, meta },
     )
     await expectCode(
-      () => field.closeFieldCase(agentA, perKm, { outcome: 'closed_fail', ...MEDIA }, { actor: agentA, meta }),
+      () => field.closeFieldCase(agentA, perKm, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, { actor: agentA, meta }),
       'CLOSE_TRAVEL_ORIGIN_REQUIRED',
     )
 
@@ -472,7 +514,7 @@ suite('Phase 2.8 — หลักฐานบังคับตาม outcome (`
     const closed = await field.closeFieldCase(
       agentFlat,
       flat,
-      { outcome: 'closed_fail', ...MEDIA },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA },
       { actor: agentFlat, meta },
     )
     expect(closed.status).toBe('closed_fail')
@@ -705,7 +747,7 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
 
   it('เคสที่ปิดแล้วอยู่กลุ่ม "จบงาน" พร้อมวันเวลาปิดงาน (§7.11)', async () => {
     const caseId = await seedReadyToClose()
-    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_fail', ...MEDIA }, { actor: agentA, meta })
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, { actor: agentA, meta })
 
     const closed = await field.listFieldCases(agentA, { status: 'closed', view: 'own' })
     expect(closed.items).toHaveLength(1)

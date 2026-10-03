@@ -340,7 +340,7 @@ suite('Phase 8.3 — Revenue ของ `closed_fail` ที่ไม่มี ex
         ctx(agent),
       )
       await field.recordCheckin(agent, caseId, { latitude: 18.5801, longitude: 99.0031, checkinType: 'address' }, ctx(agent))
-      await field.closeFieldCase(agent, caseId, { outcome: 'closed_fail', ...MEDIA }, ctx(agent))
+      await field.closeFieldCase(agent, caseId, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, ctx(agent))
     } finally {
       await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_ID}' WHERE id = '${TEAM_ID}'`)
     }
@@ -400,7 +400,7 @@ suite('Phase 2.13 — Asset auto-create hook (`44` §6.1)', () => {
     await field.closeFieldCase(
       agent,
       caseId,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       ctx(agent),
     )
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { dateOnlySchema } from '@/lib/api/validation'
+import { CLOSE_FAIL_REASONS } from '@/lib/field/fail-reasons'
 import { FIELD_GROUPS } from '@/lib/field/field-status'
 
 /**
@@ -68,6 +69,15 @@ export const travelOriginSchema = z.object({
 
 export type TravelOriginInput = z.infer<typeof travelOriginSchema>
 
+/**
+ * เหตุผลปิดงานไม่สำเร็จ (มติ PO 03/10/2569 — UAT Q16) — schema รับได้ทั้ง 2 outcome แบบ optional
+ * เพื่อให้ error ที่ผู้ใช้เห็นเป็น `CLOSE_FAIL_REASON_REQUIRED` (ตัวบังคับจริงอยู่ `missingCloseEvidence()`)
+ */
+const failReasonShape = {
+  failReason: z.enum(CLOSE_FAIL_REASONS).nullish(),
+  failReasonDetail: trimmedText.max(1000).nullish(),
+}
+
 const evidenceMediaShape = {
   photos: fileList,
   videos: fileList,
@@ -82,6 +92,7 @@ const evidenceMediaShape = {
 export const closeDraftSchema = z.object({
   outcome: z.enum(['closed_success', 'closed_fail']).nullish(),
   ...evidenceMediaShape,
+  ...failReasonShape,
   note: trimmedText.max(2000).nullish(),
   travelOrigin: travelOriginSchema.optional(),
 })
@@ -96,6 +107,7 @@ export type CloseDraftInput = z.infer<typeof closeDraftSchema>
 export const closeCaseSchema = z.object({
   outcome: z.enum(['closed_success', 'closed_fail']).nullish(),
   ...evidenceMediaShape,
+  ...failReasonShape,
   note: trimmedText.max(2000).nullish(),
 })
 
@@ -103,7 +115,8 @@ export type CloseCaseInput = z.infer<typeof closeCaseSchema>
 
 /**
  * `POST /api/field/cases/:id/resubmit-close` (`41` §8 `resubmit_close_case`)
- * ส่งได้เฉพาะ **สื่อ** — outcome/เช็คอินล็อกตามเดิม (`41` §10.1) จึงไม่มีช่อง `outcome` ที่นี่โดยตั้งใจ
+ * ส่งได้เฉพาะ **สื่อ** — outcome/เช็คอิน/เหตุผลไม่สำเร็จล็อกตามเดิม (`41` §10.1 · UAT Q16)
+ * จึงไม่มีช่อง `outcome`/`failReason` ที่นี่โดยตั้งใจ
  */
 export const resubmitCloseSchema = z.object({
   ...evidenceMediaShape,

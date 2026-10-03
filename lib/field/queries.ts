@@ -6,6 +6,7 @@ import { AssignmentError } from '@/lib/assignments/errors'
 import { acceptAssignment, respondReassignment } from '@/lib/assignments/queries'
 import { caseScopeWhere } from '@/lib/cases/queries'
 import { assertCloseEvidence, assertDeviceCoordinates, evidenceNote, hasEvidenceRevision } from '@/lib/field/evidence'
+import { closeFailReasonForStorage } from '@/lib/field/fail-reasons'
 import { metersToKmHundredths, routePoints } from '@/lib/field/distance'
 import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
 import {
@@ -229,6 +230,8 @@ function toDraftDto(row: {
   productPhotos: string[]
   audioUrl: string | null
   note: string | null
+  failReason: string | null
+  failReasonDetail: string | null
   updatedAt: Date
 }): FieldCloseDraftDto {
   return {
@@ -238,6 +241,8 @@ function toDraftDto(row: {
     productPhotos: row.productPhotos,
     audioUrl: row.audioUrl,
     note: row.note,
+    failReason: row.failReason,
+    failReasonDetail: row.failReasonDetail,
     updatedAt: row.updatedAt.toISOString(),
   }
 }
@@ -488,6 +493,8 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
         productPhotos: true,
         audioUrl: true,
         note: true,
+        failReason: true,
+        failReasonDetail: true,
         updatedAt: true,
       },
     }),
@@ -514,6 +521,8 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
         productPhotos: true,
         audioUrl: true,
         note: true,
+        failReason: true,
+        failReasonDetail: true,
         submittedAt: true,
       },
     }),
@@ -574,6 +583,8 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
             productPhotos: evidence.productPhotos,
             audioUrl: evidence.audioUrl,
             note: evidence.note,
+            failReason: evidence.failReason,
+            failReasonDetail: evidence.failReasonDetail,
             submittedAt: evidence.submittedAt.toISOString(),
           },
     pendingReassignment:
@@ -854,6 +865,9 @@ export async function saveCloseDraft(
     productPhotos: input.productPhotos,
     audioUrl: input.audioUrl ?? null,
     note: input.note ?? null,
+    // ค่าที่เลือกค้างไว้ (ไม่บังคับครบตอน draft — `41` §6.5 · UAT Q16)
+    failReason: input.failReason ?? null,
+    failReasonDetail: input.failReasonDetail ?? null,
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -875,6 +889,8 @@ export async function saveCloseDraft(
         productPhotos: true,
         audioUrl: true,
         note: true,
+        failReason: true,
+        failReasonDetail: true,
         updatedAt: true,
       },
     })
@@ -1056,10 +1072,14 @@ export async function closeFieldCase(
     productPhotoCount: input.productPhotos.length,
     hasTravelOrigin: travelOrigin !== null,
     fuelMode: current.team.compensationPlan?.fuelMode ?? null,
+    failReason: input.failReason ?? null,
+    failReasonDetail: input.failReasonDetail ?? null,
   })
 
   // ผ่าน assertCloseEvidence แล้ว = outcome ไม่เป็น null แน่นอน
   const outcome = input.outcome ?? 'closed_fail'
+  // เหตุผลไม่สำเร็จ (UAT Q16) — เคสสำเร็จทิ้งค่าที่ค้างมาจาก draft เสมอ
+  const failReason = closeFailReasonForStorage(outcome, input.failReason, input.failReasonDetail)
   const closedStatus = closedStatusOf(outcome)
   // `case_status` กับ `assignment_status` มีค่า `closed_success`/`closed_fail` ตรงกัน (`02` §3) แต่คนละ enum
   const closedCaseStatus = outcome === 'closed_success' ? ('closed_success' as const) : ('closed_fail' as const)
@@ -1091,6 +1111,7 @@ export async function closeFieldCase(
         audioUrl: input.audioUrl ?? null,
         // "บันทึกเพิ่มเติม" เก็บไว้กับหลักฐานชุดนี้ (มติ PO 03/10/2569 — UAT Q15 · BUG-048)
         note: evidenceNote(input.note),
+        ...failReason,
         // snapshot จุดเริ่มเดินทาง ณ เวลา submit (`92` §7.1 — ตัวคำนวณระยะทางของ 2.9 ใช้ค่านี้)
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
@@ -1150,6 +1171,7 @@ export async function closeFieldCase(
           status: closedStatus,
           outcome,
           evidenceId: evidence.id,
+          failReason: failReason.failReason,
           checkinCount,
           photos: input.photos.length,
           videos: input.videos.length,
@@ -1379,7 +1401,16 @@ export async function resubmitCloseCase(
   const previous = await prisma.caseEvidence.findFirst({
     where: { assignmentId: current.id },
     orderBy: { submittedAt: 'desc' },
-    select: { id: true, outcome: true, photos: true, videos: true, productPhotos: true, audioUrl: true },
+    select: {
+      id: true,
+      outcome: true,
+      photos: true,
+      videos: true,
+      productPhotos: true,
+      audioUrl: true,
+      failReason: true,
+      failReasonDetail: true,
+    },
   })
   if (previous === null) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS', { detail: 'ไม่พบหลักฐานรอบก่อนหน้า' })
 
@@ -1448,6 +1479,9 @@ export async function resubmitCloseCase(
         productPhotos: input.productPhotos,
         audioUrl: input.audioUrl ?? null,
         note: evidenceNote(input.note),
+        // เหตุผลไม่สำเร็จล็อกตามรอบเดิมเหมือน outcome (`41` §10.1 · UAT Q16)
+        failReason: previous.failReason,
+        failReasonDetail: previous.failReasonDetail,
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
         travelOriginSource: travelOrigin?.source ?? null,

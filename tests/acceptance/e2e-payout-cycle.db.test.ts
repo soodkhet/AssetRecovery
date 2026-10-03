@@ -457,7 +457,7 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     await field.closeFieldCase(
       agent,
       caseId,
-      { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
 
@@ -754,7 +754,7 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
     await field.closeFieldCase(
       agent,
       caseId,
-      { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
     const pending = await db().expense.findMany({ where: { caseId }, select: { id: true } })

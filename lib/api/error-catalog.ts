@@ -222,6 +222,8 @@ export const ERROR_CATALOG = {
   CLOSE_PHOTO_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   CLOSE_VIDEO_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   CLOSE_PRODUCT_PHOTO_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
+  // เติมเข้า `41` §12 ตามมติ PO 03/10/2569 (UAT Q16) — doc + code คอมมิตเดียวกัน
+  CLOSE_FAIL_REASON_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   REASSIGNMENT_DECLINE_REASON_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_FIELD_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_INVALID_SHARED_AGENT: { status: 400, severity: 'reject', source: '41 §12' },

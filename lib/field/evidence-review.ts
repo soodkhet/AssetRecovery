@@ -34,6 +34,8 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
         productPhotos: true,
         audioUrl: true,
         note: true,
+        failReason: true,
+        failReasonDetail: true,
         submittedAt: true,
         rejectReason: true,
         reviewedAt: true,
@@ -67,6 +69,8 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
     productPhotos: evidence.productPhotos,
     audioUrl: evidence.audioUrl,
     note: evidence.note,
+    failReason: evidence.failReason,
+    failReasonDetail: evidence.failReasonDetail,
     submittedAt: evidence.submittedAt.toISOString(),
     rejectReason: evidence.rejectReason,
     reviewedAt: evidence.reviewedAt?.toISOString() ?? null,
@@ -81,4 +85,24 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
       checkedInAt: row.checkedInAt.toISOString(),
     })),
   }
+}
+
+/**
+ * เหตุผลปิดงานไม่สำเร็จของหลักฐานชุดล่าสุดของเคส (มติ PO 03/10/2569 — UAT Q16)
+ *
+ * ต่างจาก {@link loadCaseFieldEvidence} ตรงที่**ไม่จำกัดสิทธิ์ `reject_evidence`** — เหตุผลเป็นผลการติดตาม
+ * ที่บริษัทไฟแนนซ์ต้องเห็นในเคสของตัวเอง (ผู้เรียกกรองแถวด้วย `caseScopeWhere()` มาแล้ว) และไม่มีรูป/วิดีโอ
+ * หรือพิกัดของลูกหนี้ติดไปด้วย · ชุดล่าสุดไม่ใช่ `closed_fail` หรือไม่มีเหตุผล (ก่อนมติ) = `null`
+ */
+export async function loadCaseCloseFailReason(
+  organizationId: string,
+  caseId: string,
+): Promise<{ code: string; detail: string | null } | null> {
+  const latest = await prisma.caseEvidence.findFirst({
+    where: { caseId, organizationId },
+    orderBy: { submittedAt: 'desc' },
+    select: { outcome: true, failReason: true, failReasonDetail: true },
+  })
+  if (latest === null || latest.outcome !== 'closed_fail' || latest.failReason === null) return null
+  return { code: latest.failReason, detail: latest.failReasonDetail }
 }

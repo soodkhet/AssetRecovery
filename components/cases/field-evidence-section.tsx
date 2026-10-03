@@ -4,6 +4,7 @@ import type { ViewableFile } from '@/components/cases/file-viewer-modal'
 import { InlineAlert, StatusBadge } from '@/components/ui'
 import type { CaseFieldEvidenceDto } from '@/lib/cases/types'
 import { checkinTypeLabel, fieldEvidenceFile } from '@/lib/field/evidence-review-ui'
+import { closeFailReasonText } from '@/lib/field/fail-reasons'
 import { fieldStatusBadgeGroup, fieldStatusLabel, mapsPointHref } from '@/lib/field/field-ui'
 import { FIELD_MEDIA_LABEL, type FieldMediaKind } from '@/lib/field/media-upload'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -31,6 +32,7 @@ export function FieldEvidenceSection({
     { kind: 'audio', files: evidence.audioUrl === null ? [] : [evidence.audioUrl] },
   ]
   const status = evidence.assignmentStatus as AssignmentStatus
+  const failReason = closeFailReasonText(evidence.failReason, evidence.failReasonDetail)
 
   return (
     <section>
@@ -54,6 +56,13 @@ export function FieldEvidenceSection({
               </span>
             )}
           </InlineAlert>
+        </div>
+      )}
+
+      {failReason !== null && (
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2" data-testid="evidence-fail-reason">
+          <div className="text-xs font-semibold text-slate-700">เหตุผลที่ไม่สำเร็จ</div>
+          <p className="mt-1 text-xs whitespace-pre-wrap text-slate-700">{failReason}</p>
         </div>
       )}
 

@@ -20,6 +20,7 @@ export const FIELD_ERROR_CODES = [
   'CLOSE_PHOTO_REQUIRED',
   'CLOSE_VIDEO_REQUIRED',
   'CLOSE_PRODUCT_PHOTO_REQUIRED',
+  'CLOSE_FAIL_REASON_REQUIRED',
   'CHECKIN_GPS_PERMISSION_DENIED',
   'CLOSE_NO_EVIDENCE_REVISION',
   'EVIDENCE_REJECT_AFTER_FINAL',
@@ -37,6 +38,7 @@ const HTTP_STATUS: Record<FieldErrorCode, number> = {
   CLOSE_PHOTO_REQUIRED: 400,
   CLOSE_VIDEO_REQUIRED: 400,
   CLOSE_PRODUCT_PHOTO_REQUIRED: 400,
+  CLOSE_FAIL_REASON_REQUIRED: 400,
   CHECKIN_GPS_PERMISSION_DENIED: 400,
   CLOSE_NO_EVIDENCE_REVISION: 400,
   EVIDENCE_REJECT_AFTER_FINAL: 400,
@@ -69,6 +71,11 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
   CLOSE_PRODUCT_PHOTO_REQUIRED: {
     title: 'ยังไม่มีรูปสินค้ายืนยัน',
     message: 'เคสที่ปิดแบบสำเร็จต้องมีรูปสินค้ายืนยันอย่างน้อย 1 รูป',
+  },
+  // มติ PO 03/10/2569 (UAT Q16 · BUG-057)
+  CLOSE_FAIL_REASON_REQUIRED: {
+    title: 'ยังไม่ได้เลือกเหตุผลที่ไม่สำเร็จ',
+    message: 'ปิดงานไม่สำเร็จต้องเลือกเหตุผล — ถ้าเลือก "อื่น ๆ" ต้องอธิบายเพิ่มด้วย',
   },
   CHECKIN_GPS_PERMISSION_DENIED: {
     title: 'ไม่ได้รับพิกัดจากอุปกรณ์',

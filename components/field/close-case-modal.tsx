@@ -36,6 +36,12 @@ import {
   resubmitClosePayload,
   type CloseFormState,
 } from '@/lib/field/close-form'
+import {
+  CLOSE_FAIL_REASON_LABEL,
+  CLOSE_FAIL_REASON_OTHER,
+  CLOSE_FAIL_REASONS,
+  type CloseFailReason,
+} from '@/lib/field/fail-reasons'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
 import { formatCoordinates, panCenter, staticMapUrl } from '@/lib/field/map-pan'
 import {
@@ -102,6 +108,67 @@ function SectionTitle({ children, note }: { children: React.ReactNode; note?: st
     <div className="mb-2 flex items-center justify-between gap-2">
       <div className="text-xs font-extrabold text-slate-600">{children}</div>
       {note !== undefined && <span className="text-[11px] font-bold text-orange-600">{note}</span>}
+    </div>
+  )
+}
+
+/**
+ * เหตุผลปิดงานไม่สำเร็จ (มติ PO 03/10/2569 — UAT Q16 · BUG-057) — บังคับเลือก 1 ข้อ · "อื่น ๆ" ต้องอธิบาย
+ * รายการมาจาก `CLOSE_FAIL_REASONS` ชุดเดียวกับ API · โหมดตีกลับล็อกตามรอบเดิม (แสดงอย่างเดียว)
+ */
+function FailReasonSection({
+  value,
+  detail,
+  locked,
+  onSelect,
+  onDetailChange,
+  onDetailBlur,
+}: {
+  value: CloseFailReason | null
+  detail: string | null
+  locked: boolean
+  onSelect: (reason: CloseFailReason) => void
+  onDetailChange: (text: string) => void
+  onDetailBlur: () => void
+}) {
+  const needsDetail = value === CLOSE_FAIL_REASON_OTHER
+  return (
+    <div>
+      <SectionTitle note={locked ? 'ล็อกไว้ตามรอบเดิม — แก้ไม่ได้' : undefined}>
+        เหตุผลที่ไม่สำเร็จ <span className="font-bold text-slate-400">(บังคับ)</span>
+      </SectionTitle>
+      <div role="radiogroup" aria-label="เหตุผลที่ไม่สำเร็จ" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {CLOSE_FAIL_REASONS.map((reason) => {
+          const selected = value === reason
+          return (
+            <button
+              key={reason}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              disabled={locked}
+              onClick={() => onSelect(reason)}
+              className={cn(
+                'focus-ring rounded-xl border-2 px-3 py-2.5 text-left text-xs font-bold',
+                selected ? 'border-slate-700 bg-slate-100 text-slate-800' : 'border-slate-200 text-slate-500',
+                locked && 'cursor-not-allowed opacity-60',
+              )}
+            >
+              {CLOSE_FAIL_REASON_LABEL[reason]}
+            </button>
+          )
+        })}
+      </div>
+      <Textarea
+        className="mt-2"
+        rows={2}
+        aria-label="อธิบายเหตุผลเพิ่มเติม"
+        disabled={locked}
+        value={detail ?? ''}
+        onChange={(event) => onDetailChange(event.target.value)}
+        onBlur={onDetailBlur}
+        placeholder={needsDetail ? 'อธิบายเหตุผล (บังคับเมื่อเลือก “อื่น ๆ”)' : 'อธิบายเพิ่มเติม (ไม่บังคับ)'}
+      />
     </div>
   )
 }
@@ -835,6 +902,17 @@ export function CloseCaseModal({
                 onRemove={() => updateForm({ ...form, audioUrl: null })}
                 onOpen={(url) => void openFile(url)}
               />
+
+              {form.outcome === 'closed_fail' && (
+                <FailReasonSection
+                  value={form.failReason}
+                  detail={form.failReasonDetail}
+                  locked={mode.outcomeLocked}
+                  onSelect={(failReason) => updateForm({ ...form, failReason })}
+                  onDetailChange={(text) => setForm({ ...form, failReasonDetail: text === '' ? null : text })}
+                  onDetailBlur={() => void persistDraft(form, { revision: mode.revision })}
+                />
+              )}
 
               <div>
                 <SectionTitle>บันทึกเพิ่มเติม (ไม่บังคับ)</SectionTitle>

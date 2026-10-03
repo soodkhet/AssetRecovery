@@ -381,7 +381,7 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     await field.closeFieldCase(
       agentA,
       caseId,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       { actor: agentA, meta },
     )
 
@@ -775,7 +775,7 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     await field.closeFieldCase(
       agentA,
       failCase,
-      { outcome: 'closed_fail', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       { actor: agentA, meta },
     )
 

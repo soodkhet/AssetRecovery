@@ -229,7 +229,7 @@ async function produceRevenue(): Promise<{ caseId: string; revenueId: string; re
   await field.closeFieldCase(
     agent,
     caseId,
-    { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+    { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
     ctx(agent),
   )
 
@@ -498,7 +498,7 @@ suite('Phase 8.1 — E2E `29` §6.4: งวด locked → แก้ย้อน�
     await field.closeFieldCase(
       agent,
       secondCase,
-      { outcome: 'closed_fail', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p1.jpg'], videos: ['v1.mp4'], productPhotos: [] },
       ctx(agent),
     )
     const lockedExpense = await db().expense.findFirstOrThrow({ where: { caseId: secondCase } })

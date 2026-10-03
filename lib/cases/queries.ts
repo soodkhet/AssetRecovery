@@ -18,7 +18,7 @@ import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
 import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
-import { loadCaseFieldEvidence } from '@/lib/field/evidence-review'
+import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -408,6 +408,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     ),
     // เติมเฉพาะ `getCase()` ของผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) — เส้นเขียนคืน null
     fieldEvidence: null,
+    // เติมเฉพาะ `getCase()` (UAT Q16) — เส้นเขียนคืน null
+    closeFailReason: null,
   }
 }
 
@@ -492,7 +494,13 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
   const submittedAt = (await latestSubmittedAt(user.organizationId, [row.id])).get(row.id) ?? null
-  const detail: CaseDetailDto = { ...toDetailDto(row), submittedAt: submittedAt?.toISOString() ?? null }
+  const closeFailReason = await loadCaseCloseFailReason(user.organizationId, row.id)
+  const detail: CaseDetailDto = {
+    ...toDetailDto(row),
+    submittedAt: submittedAt?.toISOString() ?? null,
+    closeFailReason,
+  }
+  // บริษัทไฟแนนซ์เห็นเหตุผลปิดงานไม่สำเร็จของเคสตัวเองได้ (มติ PO 03/10/2569 — UAT Q16)
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
   const fieldEvidence = await loadCaseFieldEvidence(user, row.id)
   return await withProjectedSourceTemplateName(user.organizationId, { ...detail, fieldEvidence })

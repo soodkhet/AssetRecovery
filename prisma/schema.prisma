@@ -1734,6 +1734,12 @@ model CaseEvidence {
   audioUrl      String?  @map("audio_url")
   /// "บันทึกเพิ่มเติม" ของฟอร์มปิดงาน (มติ PO 03/10/2569 — UAT Q15 · BUG-048) — ไม่บังคับ
   note          String?  @map("note")
+  /// เหตุผลปิดงานไม่สำเร็จ (มติ PO 03/10/2569 — UAT Q16 · BUG-057) — รหัสจาก `CLOSE_FAIL_REASONS`
+  /// (`lib/field/fail-reasons.ts`) เก็บเป็น TEXT โดยตั้งใจ ⇒ PO ปรับรายการได้โดยไม่ต้องแก้ schema
+  /// · มีค่าได้เฉพาะ outcome = `closed_fail` (CHECK ใน migration) · แถวก่อนมติเป็น NULL
+  failReason       String? @map("fail_reason")
+  /// คำอธิบายเพิ่ม — บังคับเมื่อเลือก "อื่น ๆ" (`other`)
+  failReasonDetail String? @map("fail_reason_detail")
 
   reviewedBy   String?   @map("reviewed_by") @db.Uuid
   reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)
@@ -1808,6 +1814,9 @@ model CloseCaseDraft {
   productPhotos String[] @default([]) @map("product_photos")
   audioUrl      String?  @map("audio_url")
   note          String?
+  /// เหตุผลปิดงานไม่สำเร็จที่เลือกค้างไว้ (มติ PO 03/10/2569 — UAT Q16) · รหัสจาก `CLOSE_FAIL_REASONS`
+  failReason       String? @map("fail_reason")
+  failReasonDetail String? @map("fail_reason_detail")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
