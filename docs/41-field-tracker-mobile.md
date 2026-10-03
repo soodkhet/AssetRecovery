@@ -19,6 +19,7 @@
 | v2.2 | 04/07/2569 | ✅ Product Owner **ยืนยันชื่อ endpoint** `resubmit-close`/`resubmit` แล้ว (DEC-006/D9) — ปิด 🔶 ที่ตั้งไว้ใน v2.1 |
 | v2.3 | 16/08/2569 | **เติม §12** (Final Test ด่าน 1 — Phase 8.3): `EVIDENCE_REJECT_AFTER_FINAL` · §10.1 เดิมให้ `reject_evidence` ทำได้จาก `closed_success`/`closed_fail` โดยไม่มีเงื่อนไขอื่น ⇒ ตีกลับเคสที่ล็อตยืนยันแล้ว/เกิด Revenue แล้ว/รายการเบิกเข้ารอบจ่ายแล้วได้ ซึ่งขัดกับ `19` §6.1 และทำให้รายการเบิกชุดใหม่ค้างที่ `pending_warehouse_confirm` ตลอดกาล (ล็อตเดิม confirmed = terminal · asset เป็น `handed_over` เข้าล็อตใหม่ไม่ได้) — ไม่เปลี่ยน business logic เดิม เป็นการปิดช่องที่สเปคตั้งใจห้ามอยู่แล้ว |
 | v2.4 | 03/10/2569 | **§6.6 / §8 / §10.1** ตามมติ PO 03/10/2569 (UAT Q2 · BUG-010/054): รายการเบิก "ผูกกับเคส" ที่ระบบสร้างตอนปิดงานเพิ่ม `commission` (เคสสำเร็จ) / `no_success_fee` (เคสไม่สำเร็จ) ตามแผนที่ snapshot (`22` §6.4) — สถานะเริ่มต้นกติกาเดียวกับ fuel/allowance · resubmit supersede + สร้างใหม่ครบทุกชนิด · หน้า "รายได้" (§7.10) อ่านยอดจากรายการเบิกจริง |
+| v2.5 | 03/10/2569 | **§6.6** ตามมติ PO 03/10/2569 (UAT Q4 · BUG-013): fuel โหมด `DAILY_FLAT` = `daily_flat_rate × จำนวนวันที่ลงพื้นที่จริง` (นับแบบเดียวกับ allowance — `22` §6.2) ไม่ใช่ค่าคงที่ต่อเคส |
 
 ขอบเขตเอกสารนี้: แอปสำหรับพนักงานติดตามทรัพย์ใช้รับงาน, จัดวันลงพื้นที่, เช็คอิน/บันทึกหลักฐาน, ปิดงาน, ตอบรับ/ปฏิเสธคำขอเปลี่ยนผู้รับผิดชอบ, และเบิกค่าใช้จ่าย — เป็นจุดสุดท้ายของ pipeline งานสนาม ต่อจากไฟล์ 40 และส่งผลลัพธ์กลับไปไฟล์ 38 (ผ่าน recycle flow ถ้าไม่สำเร็จ)
 
@@ -162,7 +163,7 @@ Draft ผูกกับ `case_id` 1 ต่อ 1 — เปิดฟอร์ม
 |---|---|---|
 |case_id|uuid|เคสที่ปิดงานแล้วสร้างรายการนี้|
 |type|enum|`fuel` (ค่าน้ำมัน) / `allowance` (เบี้ยเลี้ยง) / `commission` (ค่าคอมมิชชั่น — เคสสำเร็จ) / `no_success_fee` (เบี้ยเสี่ยง — เคสไม่สำเร็จ · exclusive กับ commission) — คำนวณจาก Compensation Template ของทีม (ไฟล์ 11 · สูตร `22` §6.1–6.4) · commission/no_success_fee เพิ่มตามมติ PO 03/10/2569 (UAT Q2) · ยอด 0 ไม่สร้างแถว|
-|amount|decimal|จำนวนเงิน — สำหรับ `type = fuel` โหมด `PER_KM`: คำนวณจาก `travel_origin` + ลำดับ `evidence.checkins` ตามสูตรใน §6.4.2 (ผ่าน Google Maps Distance Matrix API); โหมด `DAILY_FLAT`: ใช้ `daily_flat_rate` คงที่ ไม่ต้องคำนวณระยะทาง — ดู Compensation Template ไฟล์ 11 §7.1|
+|amount|decimal|จำนวนเงิน — สำหรับ `type = fuel` โหมด `PER_KM`: คำนวณจาก `travel_origin` + ลำดับ `evidence.checkins` ตามสูตรใน §6.4.2 (ผ่าน Google Maps Distance Matrix API); โหมด `DAILY_FLAT`: `daily_flat_rate` (บาท/วัน) × จำนวนวันที่ลงพื้นที่จริง (นับแบบเดียวกับ allowance — `22` §6.2) ไม่ต้องคำนวณระยะทาง — ดู Compensation Template ไฟล์ 11 §7.1|
 |distance_km|decimal \| null|เฉพาะ `type = fuel` โหมด `PER_KM` — ระยะทางจริงที่คำนวณได้ (กม.) เก็บไว้เพื่อ audit/ตรวจสอบยอดย้อนหลัง — เป็น null สำหรับ `DAILY_FLAT` หรือ `type = allowance`|
 |status|enum|`pending_warehouse_confirm` (เฉพาะเคสสำเร็จ — รอ flag ยืนยันคืนคลังสินค้า) / `pending_approval` (เฉพาะเคสไม่สำเร็จ หรือผ่านขั้นคลังแล้ว — รอ Manager อนุมัติ) / `pending_finance_approval` (ผ่านขั้น Manager แล้ว — รอ Finance อนุมัติ) / `approved` / `rejected` / `needs_revision` (ผู้อนุมัติตีกลับ — รอ field agent แก้ไขเอกสาร) / `superseded` (ถูกแทนที่ด้วยรายการใหม่ — ดู §10.1)|
 |date|date|วันที่เกิดรายการ (= วันปิดงาน)|

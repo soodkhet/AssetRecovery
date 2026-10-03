@@ -42,9 +42,14 @@ export function fuelPerKmSatang(input: {
   return Math.min(raw, cap)
 }
 
-/** `22` §6.2 — โหมด `DAILY_FLAT` จ่ายค่าคงที่ต่อเคส ไม่คำนวณระยะทางเลย */
-export function fuelDailyFlatSatang(dailyFlatSatang: number | null): number {
-  return dailyFlatSatang ?? 0
+/**
+ * `22` §6.2 — โหมด `DAILY_FLAT` = อัตราเหมาจ่าย (บาท/วัน) × จำนวนวันที่ลงพื้นที่จริง ไม่คำนวณระยะทางเลย
+ * มติ PO 03/10/2569 (UAT Q4 · BUG-013): นับวันแบบเดียวกับเบี้ยเลี้ยง (`distinctFieldDays()` — วันปฏิทินไทย)
+ * ตามหน่วย "บาท/วัน" ของ `11` · เดิมจ่ายคงที่ต่อเคส
+ */
+export function fuelDailyFlatSatang(dailyFlatSatang: number | null, fieldDays: number): number {
+  if (fieldDays < 0 || !Number.isInteger(fieldDays)) throw new RangeError('จำนวนวันต้องเป็นจำนวนเต็มไม่ติดลบ')
+  return (dailyFlatSatang ?? 0) * fieldDays
 }
 
 /** `22` §6.3 — เบี้ยเลี้ยง = อัตราต่อวัน × จำนวนวันที่ลงพื้นที่จริงของเคสนั้น */
@@ -149,7 +154,7 @@ export function planCaseExpenses(input: CaseExpenseInput): CaseExpensePlan {
       }
     }
   } else {
-    const gross = fuelDailyFlatSatang(input.plan.fuelDailyFlatSatang)
+    const gross = fuelDailyFlatSatang(input.plan.fuelDailyFlatSatang, input.fieldDays)
     if (gross > 0) drafts.push({ expenseType: 'fuel', grossSatang: gross, distanceKmHundredths: null, status })
   }
 
