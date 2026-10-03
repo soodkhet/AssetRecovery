@@ -16,6 +16,8 @@ const eslintConfig = [
       // git worktree ของ session อื่น (`.claude/worktrees/*`) มีสำเนาทั้ง repo + node_modules
       '.claude/**',
       'lib/generated/**',
+      // สคริปต์ชั่วคราวที่ role agent ของ UAT เขียนต่อรอบ (uat/bin/r1/, r2/ …) — เครื่องมือกลาง uat/bin/*.mjs ยังถูก lint
+      'uat/bin/r*/**',
     ],
   },
   ...nextCoreWebVitals,

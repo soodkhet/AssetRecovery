@@ -1,0 +1,23 @@
+import { openAs, shot, BASE, settle, log, sleep } from './_h.mjs'
+const s = await openAs('admin')
+const { page } = s
+const wait = async () => { await settle(page); await page.getByText('กำลังโหลดข้อมูล...').waitFor({ state: 'detached', timeout: 15000 }).catch(() => {}); await sleep(300) }
+const rows = async () => (await page.locator('tbody tr').allInnerTexts()).map(r => r.replace(/\s+/g, ' ').slice(0, 150))
+await page.goto(`${BASE}/settings/users`); await wait()
+await page.getByRole('tab', { name: /แอดมิน/ }).click(); await wait()
+log('admin', (await rows()).length, JSON.stringify(await rows()))
+await shot(page, 'R1', 'R1.22-users-admin', { fullPage: true })
+await page.getByRole('tab', { name: /เจ้าหน้าที่ติดตามทรัพย์/ }).click(); await wait()
+log('field toggles', JSON.stringify(await page.locator('main').getByRole('button').allInnerTexts()), JSON.stringify(await page.locator('main [role=radio], main [aria-pressed]').allInnerTexts()))
+log('inhouse', (await rows()).length)
+await shot(page, 'R1', 'R1.22-users-inhouse', { fullPage: true })
+const os = page.locator('main').getByText('Outsource', { exact: false }).first()
+await os.click(); await wait()
+log('outsource', (await rows()).length, JSON.stringify(await rows()))
+await shot(page, 'R1', 'R1.22-users-outsource', { fullPage: true })
+await page.getByRole('tab', { name: /บริษัทไฟแนนซ์/ }).click(); await wait()
+log('company', (await rows()).length, JSON.stringify(await rows()))
+log('row buttons', JSON.stringify(await page.locator('tbody tr').first().getByRole('button').allInnerTexts()))
+await shot(page, 'R1', 'R1.22-users-company', { fullPage: true })
+log('consoleErrors', s.consoleErrors, 'serverErrors', s.serverErrors)
+await s.browser.close()

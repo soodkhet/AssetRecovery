@@ -22,6 +22,8 @@
 |---|---|---|---|---|---|---|---|
 | M2.T1 | UAT Success 5% | SUCCESS_FEE | 0 | 5.00 | debt_amount | false | false |
 | M2.T2 | UAT Flat 7,490 | FLAT | **749000 (฿7,490.00)** | 0 | null | **false** | false |
+
+> **หลัง R1 (03/10/2569)**: T1/T2 ที่ใช้งานจริงคือ **version 2** — R1 ลืมเอาติ๊ก "คิดค่าบริการต่อรอบการติดตาม" ออกตอนสร้าง (ฟอร์ม default = ติ๊ก ตาม `02`) จึงแก้ผ่านหน้าแก้ไข ได้ v2 ที่ `charge_per_tracking_round = false` · ยอดเงินเท่าเดิม · ค่าคาดหวังที่อ้าง "v1" ให้อ่านเป็น v2 (case snapshot ตอน approved ต้องเป็น v2)
 - basis ต้องเป็น debt_amount (ฟอร์มเคสไม่มี assetValue) · T2 charge_on_fail=false ⇒ C3 (fail) ไม่มี revenue
 - T2 = ราคารวม VAT (CO2 include_vat): VAT = 749000×7/107 = **49000**, ก่อน VAT = **700000**
 
