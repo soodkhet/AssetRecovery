@@ -90,6 +90,13 @@
 | BUG-082 | R5.15 | S5 | code | modal "เอกสารที่แนบ" แสดง path ภายใน Storage แทนชื่อเอกสาร | open |
 | BUG-083 | R5.04 | S5 | code | IMEI รูปแบบผิดขึ้นข้อความ "ระบบบันทึกค่าที่ตรวจจริงไว้แล้วและรับเข้าคลังต่อได้" ขัดกับ "รูปแบบ IMEI ไม่ถูกต้อง" | open |
 | BUG-084 | R5 | S5 | spec-gap | บริหาร Export ใบส่งมอบได้ — `44` §13 ระบุแค่ธุรการ/การเงิน/บัญชี | needs-decision |
+| BUG-085 | R6-sheet | S2 | spec-gap | ผู้จัดการทีมไม่มีหน้าจออนุมัติค่าตอบแทนขั้น 1 (`16` vs `06`) | fixed `2b0e9d9` (มติ PO R6-A — เมนูการเงิน → แท็บ "ค่าตอบแทน" เฉพาะผู้ถือ `approve_expense_manager`) |
+| BUG-086 | R6-sheet | S2 | code | รายการเบิกไม่ผูกเคสไม่มีผู้จัดการทีมคนไหนเห็นในขั้น 1 | fixed `c0a0d21` (มติ PO R6-B — ทีมของผู้เบิก) |
+| BUG-087 | R6-sheet | S3 | code | การเงินเปิดหน้าผู้รับเงินไม่ได้ (ลิงก์ไป `/settings/finance` แล้ว redirect) | fixed `220a495` (`/finance?tab=payee`) |
+| BUG-088 | R6-sheet | S4 | code | ตีกลับ/ปฏิเสธไม่มีเหตุผลได้ `REQUIRED_MISSING` แทน `REJECT_REASON_REQUIRED`/`REJECTION_REASON_REQUIRED` | fixed `dfbddfc` |
+| BUG-089 | R6-sheet | S2 | code | **อนุมัติ expense ตัวสุดท้ายของเคสพร้อมกัน → รายได้ไม่เกิดเลย** (ไม่มี row lock / ไม่มี unique) — เทสต์ถอดล็อกแล้วได้ 0 แถวจริง | fixed `005b170` (FOR UPDATE + partial unique `uniq_revenues_active_case_round`, migration `20261003160000`) · ⚠️ ก่อน deploy staging ตรวจรายได้ซ้ำก่อน — migration ล้มโดยตั้งใจถ้ามี |
+| BUG-090 | R6-sheet | S4 | code | บริหารได้ 403 บน payout/advances แต่แท็บโชว์ "0" | fixed `fa778b2` (บัญชี/บริหารดูรอบจ่ายตาม `17` §12 · เงินทดรองซ่อนแท็บ) · ❓ `25` §7.2 ยังไม่ให้ — ต้องปรับ `25` ให้ตรง `17` |
+| BUG-091 | R6-sheet | S5 | code | modal สร้างรอบจ่ายเขียนว่า WHT คิดต่อรายการ (ขัด Q5) | fixed `9ca8427` |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->

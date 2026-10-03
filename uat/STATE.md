@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 03/10/2569 merge fixer G (R6-A/B, race รายได้, หน้าผู้รับเงิน …) + seed 2 แถว (บัญชี/บริหาร ดูรอบจ่าย) · migration `20261003160000` ล้มบนฐานทดสอบหลักเพราะรายได้ซ้ำจากเทสต์เก่า 33 กลุ่ม → soft-delete 462 แถวในฐานทดสอบ (ไม่ใช่ข้อมูลจริง) + `migrate resolve --rolled-back` + deploy ใหม่ · verify 258 files / 3,292 tests · **⚠️ ก่อน `db:deploy` staging: ตรวจ `select case_id, tracking_round, count(*) from revenues where deleted_at is null group by 1,2 having count(*)>1` ต้องว่าง**
 - 03/10/2569 ~20:45 step sheet R6 เสร็จ (43 ขั้น) · มติ PO R6-A (หน้าคิวอนุมัติของผู้จัดการ) / R6-B (รายการไม่ผูกเคส → ผู้จัดการทีมของผู้เบิก) / Q21 (เหมาจ่ายรายวันต่อพนักงาน) · ข้อมูล R4–R5 เดิมคิดต่อเคส ⇒ ต้องเล่นใหม่
 - 03/10/2569 merge fixer ครบ 5 ตัว (A/B/C/D/E) — migration ใหม่ 4 ตัว · verify 257 files / 3,253 tests · **หลัง merge ที่มี migration ต้อง `pnpm db:generate` + `pnpm db:deploy` + `db:deploy:test` + restart dev server** · restore R3-end → snapshot `R3-end-v2` · DATASET v2 + R4 v2 · ADV4 (out1 ฿1,000 → ใช้จริง ฿1,300 ใน R6 → เบิกส่วนเกิน ฿300 → OUT-2) · bank fixture IN-1 = 5231.00
 - 03/10/2569 ถาม PO 20 ข้อ (ชุดตัวเลือก) → บันทึก `uat/PO-DECISIONS-2569-10-03.md` · merge fixer R4 + `pnpm db:seed` (สร้าง 1 แถว: การเงิน approve_advance) · restore.sh เพิ่ม db:deploy + seed · สร้าง `assetrecovery_test3/4/5` ให้ fixer คู่ขนาน · มติ Q2 (คอมมิชชันตอนปิดงาน) ⇒ ต้องเล่น R4 ใหม่บนโค้ดที่แก้แล้ว
