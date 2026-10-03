@@ -1,13 +1,15 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Field, Input, Select } from '@/components/ui'
 import {
   THAI_PROVINCE_REGIONS,
+  commonPostalArea,
   getDistricts,
   getSubDistricts,
   isValidPostalCode,
   lookupPostalCode,
+  type PostalCodeArea,
 } from '@/lib/address/thai-address'
 import type { AddressValue } from '@/lib/address/address-value'
 import { digitsOnly } from '@/lib/cases/case'
@@ -17,7 +19,9 @@ import { digitsOnly } from '@/lib/cases/case'
  * (เคส 3 ที่อยู่ของไฟล์ 38 · ไฟล์ 41 ตอนจุดลงพื้นที่) ห้ามเขียนช่องที่อยู่เองในโมดูลตัวเอง
  *
  * ลำดับฟิลด์บังคับตาม §6.1.2: บ้านเลขที่ → รหัสไปรษณีย์ (auto-complete) → จังหวัด → อำเภอ → ตำบล
- * - กรอกรหัสไปรษณีย์ครบ 5 หลัก → ค้นอัตโนมัติ (`lookupPostalCode()`) แล้วเติม 3 ระดับให้
+ * - กรอกรหัสไปรษณีย์ครบ 5 หลัก → ค้นอัตโนมัติ (`lookupPostalCode()` — ข้อมูลจริงทั้งประเทศ)
+ *   พบพื้นที่เดียว = เติม 3 ระดับให้ · พบหลายตำบล (ปกติของรหัสไปรษณีย์ไทย) = เติมส่วนที่ร่วมกัน
+ *   (จังหวัด/อำเภอ) แล้วแสดง dropdown "เลือกตำบล/แขวงของรหัสนี้" ให้เลือก
  * - หาไม่เจอ = ไม่ block ให้กรอกเองต่อทีละขั้น (ตามที่ §6.1.2 กำหนดไว้)
  * - จังหวัดที่ยังไม่มี master data อำเภอ/ตำบล (Open Item `38` §22 ข้อ 5) สลับเป็นช่องพิมพ์เอง
  *   ส่วนจังหวัดที่มีข้อมูลใช้ `<datalist>` ช่วยเลือกแบบ cascading
@@ -27,13 +31,19 @@ import { digitsOnly } from '@/lib/cases/case'
  * (กับดัก `react-hooks/set-state-in-effect` ใน REUSE_INDEX)
  */
 
-type LookupState = 'idle' | 'loading' | 'found' | 'notfound'
+type LookupState = 'idle' | 'loading' | 'found' | 'multiple' | 'notfound' | 'error'
+
+function areaKey(area: Pick<PostalCodeArea, 'province' | 'district' | 'subdistrict'>): string {
+  return `${area.province}|${area.district}|${area.subdistrict}`
+}
 
 const LOOKUP_HINT: Readonly<Record<LookupState, string>> = {
   idle: 'กรอกรหัสไปรษณีย์ 5 หลักเพื่อให้ระบบเติมจังหวัด/อำเภอ/ตำบลให้ หรือเลือกเองทีละขั้นก็ได้',
   loading: 'กำลังค้นหารหัสไปรษณีย์…',
   found: 'เติมจังหวัด/อำเภอ/ตำบลจากรหัสไปรษณีย์แล้ว — แก้ไขเองได้',
+  multiple: 'รหัสไปรษณีย์นี้ครอบคลุมหลายตำบล — เลือกตำบล/แขวงจากรายการด้านบน หรือกรอกเอง',
   notfound: 'ไม่พบรหัสไปรษณีย์นี้ในระบบ — กรุณาเลือกจังหวัด/อำเภอ/ตำบลเอง',
+  error: 'โหลดข้อมูลรหัสไปรษณีย์ไม่สำเร็จ — กรุณาเลือกจังหวัด/อำเภอ/ตำบลเอง',
 }
 
 export interface AddressFieldsProps {
@@ -59,6 +69,9 @@ export function AddressFields({
 }: AddressFieldsProps) {
   const fieldId = useId()
   const [lookup, setLookup] = useState<LookupState>('idle')
+  const [choices, setChoices] = useState<readonly PostalCodeArea[]>([])
+  /** รหัสล่าสุดที่สั่งค้น — กันผลค้นเก่าทับของใหม่ และกัน blur ค้นซ้ำทับตำบลที่ผู้ใช้เลือกไว้แล้ว */
+  const lastLookupCode = useRef<string | null>(null)
 
   const districts = getDistricts(value.province)
   const subdistricts = getSubDistricts(value.province, value.district)
@@ -67,33 +80,64 @@ export function AddressFields({
     onChange({ ...value, ...next })
   }
 
-  /** ค้นรหัสไปรษณีย์แล้วเติม 3 ระดับ — เรียกตอนครบ 5 หลัก และตอน blur */
+  /** ค้นรหัสไปรษณีย์แล้วเติม 3 ระดับ — เรียกตอนครบ 5 หลัก และตอน blur (รหัสเดิมไม่ค้นซ้ำ) */
   async function runLookup(code: string): Promise<void> {
     if (!isValidPostalCode(code)) {
+      lastLookupCode.current = null
+      setChoices([])
       setLookup('idle')
       return
     }
+    if (lastLookupCode.current === code) return
+    lastLookupCode.current = code
     setLookup('loading')
-    const area = await lookupPostalCode(code)
-    if (area === null) {
+    let areas: readonly PostalCodeArea[]
+    try {
+      areas = await lookupPostalCode(code)
+    } catch {
+      if (lastLookupCode.current !== code) return
+      lastLookupCode.current = null // ให้ลองใหม่ได้ตอน blur/พิมพ์ใหม่
+      setChoices([])
+      setLookup('error')
+      return
+    }
+    if (lastLookupCode.current !== code) return // ผู้ใช้เปลี่ยนรหัสระหว่างรอ — ทิ้งผลเก่า
+    if (areas.length === 0) {
+      setChoices([])
       setLookup('notfound')
       return
     }
-    setLookup('found')
+    // ค่าที่กรอกไว้ตรงกับพื้นที่หนึ่งของรหัสนี้อยู่แล้ว (เช่น แก้ไขเคสเดิม) → คงไว้ ไม่ล้าง
+    const current = areas.find((area) => areaKey(area) === areaKey(value))
+    const fill = current ?? commonPostalArea(areas)
+    setChoices(areas.length > 1 ? areas : [])
+    setLookup(areas.length > 1 && current === undefined ? 'multiple' : 'found')
     onChange({
       ...value,
       postalCode: code,
-      province: area.province,
-      district: area.district,
-      subdistrict: area.subdistrict,
+      province: fill.province,
+      district: fill.district,
+      subdistrict: fill.subdistrict,
     })
+  }
+
+  function onChooseArea(key: string): void {
+    const area = choices.find((choice) => areaKey(choice) === key)
+    if (area === undefined) return
+    setLookup('found')
+    patch({ province: area.province, district: area.district, subdistrict: area.subdistrict })
   }
 
   function onPostalChange(raw: string): void {
     const code = digitsOnly(raw).slice(0, 5)
     patch({ postalCode: code })
-    if (code.length === 5) void runLookup(code)
-    else if (lookup !== 'idle') setLookup('idle')
+    if (code.length === 5) {
+      void runLookup(code)
+    } else {
+      lastLookupCode.current = null
+      if (choices.length > 0) setChoices([])
+      if (lookup !== 'idle') setLookup('idle')
+    }
   }
 
   return (
@@ -150,6 +194,26 @@ export function AddressFields({
           />
         </Field>
       </div>
+
+      {choices.length > 1 && (
+        <div className="mt-3">
+          <Field id={`${fieldId}-postal-choice`} label={`เลือกตำบล/แขวงของรหัส ${value.postalCode}`}>
+            <Select
+              id={`${fieldId}-postal-choice`}
+              value={choices.some((choice) => areaKey(choice) === areaKey(value)) ? areaKey(value) : ''}
+              disabled={disabled}
+              onChange={(event) => onChooseArea(event.target.value)}
+            >
+              <option value="">— เลือกตำบล/แขวง ({choices.length} รายการ) —</option>
+              {choices.map((choice) => (
+                <option key={areaKey(choice)} value={areaKey(choice)}>
+                  {choice.subdistrict} · {choice.district} · {choice.province}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field id={`${fieldId}-province`} label="จังหวัด" required={required} error={errors?.province}>
@@ -219,7 +283,7 @@ export function AddressFields({
 
       <p
         className={
-          lookup === 'notfound'
+          lookup === 'notfound' || lookup === 'error'
             ? 'mt-2 text-[11px] font-semibold text-amber-600'
             : 'mt-2 text-[11px] text-slate-400'
         }

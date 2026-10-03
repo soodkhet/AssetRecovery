@@ -14,6 +14,7 @@ import {
   teamSideLabel,
   type AssignmentTarget,
 } from '@/lib/assignments/assignment-ui'
+import { ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
 import type { AssignmentActionResultDto, TeamAgentDto } from '@/lib/assignments/types'
 
 /**
@@ -156,7 +157,11 @@ export function AssignmentModal({
 
                 {reasonRequired && (
                   <div className="mt-4">
-                    <Field id="reassign-reason" label="เหตุผลในการเปลี่ยนผู้รับผิดชอบ (จำเป็น)">
+                    <Field
+                      id="reassign-reason"
+                      label="เหตุผลในการเปลี่ยนผู้รับผิดชอบ (จำเป็น)"
+                      hint={`อย่างน้อย ${ASSIGNMENT_REASON_MIN} ตัวอักษร (พิมพ์แล้ว ${reason.trim().length})`}
+                    >
                       <Textarea
                         id="reassign-reason"
                         value={reason}
@@ -174,12 +179,12 @@ export function AssignmentModal({
           blocked || target.teamId === null ? null : (
             <Button
               loading={busy}
-              disabled={busy || agent === null || (reasonRequired && reason.trim() === '')}
+              disabled={busy || agent === null || (reasonRequired && !isAssignmentReasonLongEnough(reason))}
               title={
                 agent === null
                   ? 'เลือกพนักงานก่อน'
-                  : reasonRequired && reason.trim() === ''
-                    ? 'ต้องกรอกเหตุผลก่อน'
+                  : reasonRequired && !isAssignmentReasonLongEnough(reason)
+                    ? `ต้องกรอกเหตุผลอย่างน้อย ${ASSIGNMENT_REASON_MIN} ตัวอักษรก่อน`
                     : undefined
               }
               onClick={() => void submit()}

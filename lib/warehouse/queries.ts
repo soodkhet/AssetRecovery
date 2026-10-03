@@ -946,6 +946,8 @@ export async function confirmLot(
   dispatchToCapability(
     user.organizationId,
     'manage_billing',
+    // ล็อต = 1 บริษัทไฟแนนซ์ (`44` §6.2) ⇒ scope ของเรื่องคือบริษัทนั้น (UAT Q17 · BUG-064)
+    { companyId: lot.companyId },
     lotConfirmedMessage({
       lotId,
       lotNumber: lot.lotNumber,

@@ -27,7 +27,7 @@ import {
 import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
+import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { MANAGE_BILLING } from '@/lib/revenue/revenue'
 import {
   BILLING_STATUS_FILTERS,
@@ -40,8 +40,9 @@ import {
   REVENUE_STATUS_FILTERS,
   REVENUE_STATUS_LABEL,
   revenueStatusBadgeGroup,
+  billingBatchVatLabel,
+  revenueVatLabel,
   totalArOutstandingSatang,
-  VAT_MODE_LABEL,
   type BillingStatusFilter,
   type RevenueStatusFilter,
 } from '@/lib/revenue/revenue-ui'
@@ -214,7 +215,7 @@ export function RevenueTab() {
                       <Td>
                         <p className="font-semibold text-slate-900">{batch.companyName}</p>
                         <p className="mt-0.5 text-[10px] text-slate-400">
-                          {fmtCount(batch.revenueCount)} รายการ · {VAT_MODE_LABEL[batch.companyVatMode]}
+                          {fmtCount(batch.revenueCount)} รายการ · {billingBatchVatLabel(batch)}
                         </p>
                       </Td>
                       <Td>
@@ -345,7 +346,7 @@ export function RevenueTab() {
                       </p>
                     </Td>
                     <Td className="text-xs">
-                      {revenue.vatRatePctUsed > 0 ? `VAT ${fmtPercent(revenue.vatRatePctUsed)}` : VAT_MODE_LABEL.no_vat}
+                      {revenueVatLabel(revenue)}
                     </Td>
                     <Td className="text-xs">
                       {revenue.billingBatchPeriod === null ? (

@@ -1038,20 +1038,34 @@ async function loadPlanSnapshot(user: SessionUser, planId: string | null, onDate
  * - `closed_success` → คลัง (`intake_asset`) เพราะต้องรับทรัพย์เข้าคลังก่อนรายได้จะเกิด (`19` §6.1)
  * - `closed_fail` → ผู้จัดการ/หัวหน้าทีม (`assign_case`) เพราะต้องตัดสินใจมอบหมายใหม่/รีไซเกิล (`38` §6.6)
  */
-function notifyCaseClosed(organizationId: string, outcome: CaseOutcome, caseRef: string, agentName: string): void {
+function notifyCaseClosed(
+  organizationId: string,
+  outcome: CaseOutcome,
+  caseRef: string,
+  agentName: string,
+  teamId: string | null,
+): void {
   const capability = outcome === 'closed_success' ? 'intake_asset' : 'assign_case'
   const message =
     outcome === 'closed_success'
       ? caseClosedSuccessMessage({ caseRef, agentName })
       : caseClosedFailMessage({ caseRef, agentName })
 
-  dispatchToCapability(organizationId, capability, message)
+  // กรองตามทีมของเคส — ผู้จัดการ/หัวหน้าทีมอื่นต้องไม่ได้รับ (มติ PO 03/10/2569 UAT Q17 · BUG-064)
+  dispatchToCapability(organizationId, capability, { teamId }, message)
 }
 
 /** `41` §15 — รายการเบิกที่เข้า `pending_approval` แล้วต้องแจ้งฝ่ายบัญชี/การเงิน */
-function notifyExpenseQueue(organizationId: string, outcome: CaseOutcome, count: number, caseRef: string): void {
+function notifyExpenseQueue(
+  organizationId: string,
+  outcome: CaseOutcome,
+  count: number,
+  caseRef: string,
+  teamId: string | null,
+): void {
   if (count === 0 || outcome !== 'closed_fail') return
-  dispatchToCapability(organizationId, 'approve_expense_manager', expenseQueueMessage({ caseRef, count }))
+  // ผู้อนุมัติขั้นผู้จัดการ = ผู้จัดการของทีมเคสนี้เท่านั้น (UAT Q17 · BUG-064)
+  dispatchToCapability(organizationId, 'approve_expense_manager', { teamId }, expenseQueueMessage({ caseRef, count }))
 }
 
 /**
@@ -1230,8 +1244,8 @@ export async function closeFieldCase(
     return { assignment, expenses }
   })
 
-  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef)
-  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName)
+  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef, current.teamId)
+  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName, current.teamId)
 
   return toActionResult(result.assignment, [
     outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
@@ -1631,8 +1645,8 @@ export async function resubmitCloseCase(
     return { assignment, expenses }
   })
 
-  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef)
-  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName)
+  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef, current.teamId)
+  notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName, current.teamId)
 
   return toActionResult(result.assignment, ['case.close_resubmitted'])
 }

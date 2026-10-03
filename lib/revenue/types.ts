@@ -17,6 +17,8 @@ export interface RevenueDto {
   /** `YYYY-MM-DD` — วันปิดงานของเคสตามปฏิทินไทย */
   revenueDate: string
   feeModelSnapshot: ServiceFeeModel
+  /** snapshot `vat_mode` ของบริษัทตอนสร้างรายได้ (มติ PO 03/10/2569 — UAT Q6) — ป้าย VAT อ่านจากตัวนี้ */
+  vatModeSnapshot: VatMode
   grossSatang: number
   vatSatang: number
   /** snapshot อัตราที่ใช้จริง — 0 เมื่อบริษัท `no_vat` */
@@ -33,7 +35,8 @@ export interface BillingBatchDto {
   id: string
   companyId: string
   companyName: string
-  companyVatMode: VatMode
+  /** โหมด VAT ที่ snapshot ไว้กับรายได้ในรอบ (UAT Q6) — ปกติมีค่าเดียว · หลายค่า = บริษัทเปลี่ยนโหมดระหว่างงวด */
+  vatModes: VatMode[]
   /** เช่น "มิถุนายน 2569" (พ.ศ.) */
   period: string
   status: BillingBatchStatus

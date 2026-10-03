@@ -18,6 +18,7 @@
 | v4 | 04/07/2569 | **Batch 6 (DEC-006/D3)**: ตาราง `notifications` เพิ่มเข้า `02-database-schema-design.md` v3.5 แล้ว (เดิม endpoint ใน §14 มีอยู่แต่ไม่มี entity รองรับใน schema) + เติม endpoint `PATCH /api/notifications/read-all` ที่ขาด + อัปเดตหมายเหตุ §7 ให้ครอบคลุมตาราง notifications |
 | v2.3 | 15/08/2569 | **มติ PO ตอนรีวิว Phase 5 (D16) — ถอน 2 event ที่สคีมาไม่มีที่ให้เกิดออกจาก §6.3**: `payout_batch.failed` (`02` §3 `payout_batch_status` ไม่มีสถานะล้มเหลว) และ "Exception ใกล้ deadline" (`02` §9 `exceptions` ไม่มีคอลัมน์กำหนดเส้นตาย) — ตอน implement Phase 5.2 ต่อสายครบทุกแถวยกเว้นสองตัวนี้ เพราะไม่มีจุดใดในระบบยิงได้ · ยึดลำดับเอกสาร `02` ชนะไฟล์ spec ของโมดูล ⇒ **ไม่ประดิษฐ์ status/คอลัมน์ใหม่** · ต่อสายได้เมื่อมีมติเพิ่ม `payout_batch_status = 'failed'` + `exceptions.due_date` ลง `02` · ส่วน "Exception ใหม่" ยังอยู่ (จำกัดที่ระดับ critical ตาม `37` ซึ่งเป็นตัวบล็อก Export Pack) |
 | v4.1 | 04/07/2569 | แก้จำนวนรายงานอ้างอิง "13" → **"17"** — นับจริงจากไฟล์ 96: F1–F5 (5) + O1–O5 (5) + A1–A4 (4) + E1–E3 (3) = 17 (เลข 13 เดิมนับผิด คัดลอกต่อกันใน README/implementation-todo — แก้พร้อมกันแล้ว) |
+| v4.2 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q17 · BUG-040/041/059/064)** — §6.3 แถว Assignment ขยายให้ตรง `40` §15: พนักงานได้งานใหม่ (`assignment.created`) / ถูกโอนงานทันที (`assignment.reassigned` — คนใหม่ + คนเดิม) / ผู้มอบหมาย + ผู้จัดการ/หัวหน้าทีมได้แจ้งเมื่อพนักงานกดรับ (`assignment.accepted`) / ผู้ขอได้ผลการตอบ (`assignment.reassignment_consented`/`_declined`) · คำขอเปลี่ยนแสดงวันและเวลาที่ต้องตอบ · timeout แยกข้อความ/ลิงก์ 3 ผู้รับ · เพิ่มกติกา "ผู้รับต้องอยู่ใน scope ของเรื่อง" สำหรับการแจ้งเตือนตาม capability (ทีม/บริษัท/องค์กร) และ "ลิงก์ต้องเปิดได้โดยผู้รับ" |
 
 ขอบเขตเอกสารนี้: ระบบกลางสำหรับ Audit Log, Notification, Exception และ Reporting ที่ใช้ร่วมกันข้ามทุกโมดูล
 
@@ -126,7 +127,7 @@ sequenceDiagram
 |---|---|---|
 | Case (38) | `need_info_requested`, `rejected`, `approved` | `38-case-submission.md` §10 |
 | Case (38) | `recycle_approved` (เคสกลับเข้า pipeline ใหม่) | `38-case-submission.md` §6.6 |
-| Assignment (40) | `reassignment_requested`, `reassignment_timeout` | `40-case-assignment-routing.md` |
+| Assignment (40) | `assignment.created` (พนักงานได้งานใหม่) · `assignment.reassigned` (โอนทันที — คนใหม่ได้งาน/คนเดิมถูกโอนออก) · `assignment.accepted` (ถึงผู้มอบหมาย + ผู้จัดการ/หัวหน้าทีมของเคส) · `assignment.reassignment_requested` (ถึงคนเดิม พร้อมวัน**และเวลา**ที่ต้องตอบ) · `assignment.reassignment_consented` / `assignment.reassignment_declined` (ถึงผู้ขอ · ยินยอม = คนใหม่ได้งานด้วย) · `assignment.reassignment_timeout_resolved` (3 ข้อความแยกตามผู้รับ: คนใหม่/คนเดิม/ผู้ขอ) — v4.2 | `40-case-assignment-routing.md` §15 |
 | Field Tracker (41) | `case.closed_success`, `case.closed_fail`, `evidence.reject_evidence` | `41-field-tracker-mobile.md` |
 | Warehouse (44) | `asset.intake_rejected` (IMEI ไม่ตรง), `lot.confirmed` | `44-asset-custody-handover.md` |
 | Finance (15/16) | `expense.rejected`, `expense.approved` | `16-compensation-approval.md` |
@@ -134,6 +135,8 @@ sequenceDiagram
 | Accounting (33) | WHT ใกล้ครบกำหนดยื่น (reminder) | `33-accounting-wht-data.md` |
 | Accounting (34) | Exception ใหม่ (ระดับ critical) | `34-accounting-document-checklist-exceptions.md` |
 
+> **ผู้รับต้องอยู่ใน scope ของเรื่องเสมอ (v4.2 — มติ PO 03/10/2569 UAT Q17 · BUG-064)**: การแจ้งเตือนที่หาผู้รับจาก capability ต้องกรองตาม scope ระดับแถวด้วย — เรื่องของเคส = ทีมของเคส (ผู้จัดการ/หัวหน้าทีมอื่นไม่ได้รับ แม้ถือ capability เดียวกัน) · เรื่องของบริษัทไฟแนนซ์ = บริษัทนั้น · เรื่องระดับองค์กร = เฉพาะ role กลุ่ม system · **ลิงก์ต้องพาไปหน้าที่ผู้รับคนนั้นเปิดได้** (พนักงานภาคสนาม = หน้า Field Tracker ของตัวเอง ไม่ใช่หน้ามอบหมาย — UAT BUG-059)
+>
 > รายการนี้เป็นจุดเริ่มต้นตาม state machine ที่มีอยู่ — เมื่อ implement แต่ละโมดูลจริงให้ตรวจสอบ event เพิ่มเติมที่อาจตกหล่นและอัปเดตตารางนี้กลับมา (ตามหลักการ §17 ของไฟล์นี้)
 >
 > **ถอนออก 15/08/2569 (v2.3 — มติ PO ตอนรีวิว Phase 5, ข้อ D16)**: `payout_batch.failed` และ "Exception ใกล้ deadline" ถูกตัดออกจากตารางนี้เพราะ **สคีมาไม่มีที่ให้เกิด** — `02` §3 `payout_batch_status` มีแค่ `draft/pending_approval/approved/paid` (ไม่มีสถานะล้มเหลว) และ `02` §9 `exceptions` ไม่มีคอลัมน์กำหนดเส้นตาย จึงคำนวณ "ใกล้ครบกำหนด" ไม่ได้ · ยึดลำดับเอกสาร (`02` ชนะไฟล์ spec ของโมดูล) ⇒ ไม่ประดิษฐ์ status/คอลัมน์ใหม่เพื่อรองรับ event · จะกลับมาต่อสายได้เมื่อมีมติเพิ่ม `payout_batch_status = 'failed'` และ `exceptions.due_date` ลง `02` (เปิดเป็น item ใหม่ได้ตอนนั้น)

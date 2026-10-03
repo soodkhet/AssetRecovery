@@ -174,10 +174,12 @@ beforeAll(async () => {
   await tx.$executeRawUnsafe(`
     INSERT INTO roles (id, organization_id, name, role_group, is_seed) VALUES
       ('${ROLE_MANAGER}', '${ORG_ID}', 'เจ้าหน้าที่อนุมัติเคส 2.13', 'inhouse', false),
-      ('${ROLE_AGENT}', '${ORG_ID}', 'พนักงานติดตามทรัพย์ 2.13', 'inhouse', false),
+      ('${ROLE_AGENT}', '${ORG_ID}', 'พนักงานติดตามทรัพย์', 'inhouse', false),
       ('${ROLE_ADMIN}', '${ORG_ID}', 'ธุรการคลัง 2.13', 'system', false)
     ON CONFLICT (id) DO NOTHING
   `)
+  // ผู้รับงานต้องเป็น role พนักงานติดตามทรัพย์จริง (UAT BUG-039) — แก้ชื่อแถวเก่าใน DB ทดสอบที่ค้างจากรอบก่อน
+  await tx.$executeRawUnsafe(`UPDATE roles SET name = 'พนักงานติดตามทรัพย์' WHERE id = '${ROLE_AGENT}'`)
   await tx.$executeRawUnsafe(`
     INSERT INTO users (id, organization_id, role_id, email, full_name, status) VALUES
       ('${MANAGER_ID}', '${ORG_ID}', '${ROLE_MANAGER}', 'approver213@test.local', 'ผู้อนุมัติเคส 2.13', 'active'),

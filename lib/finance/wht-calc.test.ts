@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  calculatePayeeBatchWht,
   calculateCustomerWithheldWht,
   calculateWht,
   calculateWhtForPayee,
@@ -188,5 +189,82 @@ describe('calculateCustomerWithheldWht — A1 ลูกค้าหักภา�
   it('ยอดติดลบ / อัตรานอกช่วง ⇒ โยนทิ้ง ไม่ปล่อยค่าเพี้ยนลงฐาน', () => {
     expect(() => calculateCustomerWithheldWht({ amountBeforeVatSatang: -1, whtPct: 3 })).toThrow()
     expect(() => calculateCustomerWithheldWht({ amountBeforeVatSatang: 750_000, whtPct: 120 })).toThrow()
+  })
+})
+
+describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อรอบจ่าย (มติ PO 03/10/2569 — UAT Q5, BUG-014)', () => {
+  const profile3 = { whtPct: 3, whtBasis: 'before_vat' as const, whtMinThresholdSatang: 100_000 }
+  const item = (grossSatang: number, planWhtPct: number | null = 5) => ({
+    grossSatang,
+    source: { payeeTaxProfile: profile3, planWhtPct },
+  })
+
+  it('3 รายการ × ฿600 อัตรา 3% → ฐานรวม ฿1,800 ถึงเกณฑ์ → หักรวม ฿54 (รายการละ ฿18)', () => {
+    const result = calculatePayeeBatchWht([item(60_000), item(60_000), item(60_000)])
+    expect(result.belowThreshold).toBe(false)
+    expect(result.totalBaseSatang).toBe(180_000)
+    expect(result.totalWhtSatang).toBe(5_400)
+    expect(result.lines.map((line) => line.whtSatang)).toEqual([1_800, 1_800, 1_800])
+    expect(result.lines.map((line) => line.netSatang)).toEqual([58_200, 58_200, 58_200])
+  })
+
+  it('ฐานรวมต่ำกว่าเกณฑ์ (฿350 + ฿350 = ฿700) → ไม่หักทุกรายการ', () => {
+    const result = calculatePayeeBatchWht([item(35_000), item(35_000)])
+    expect(result.belowThreshold).toBe(true)
+    expect(result.totalWhtSatang).toBe(0)
+    expect(result.lines.every((line) => line.whtSatang === 0 && line.netSatang === 35_000)).toBe(true)
+  })
+
+  it('ฐานรวมเท่าเกณฑ์พอดี (฿1,000) → หัก (เกณฑ์คือ "ต่ำกว่า" จึงไม่หัก)', () => {
+    expect(calculatePayeeBatchWht([item(50_000), item(50_000)]).totalWhtSatang).toBe(3_000)
+  })
+
+  it('รายการเดียว = ผลเท่ากับ calculateWhtForPayee() เดิม (golden OUT-1: ฿5,500 × 3% = ฿165)', () => {
+    const batch = calculatePayeeBatchWht([item(550_000)])
+    const single = calculateWhtForPayee({ grossSatang: 550_000, source: item(550_000).source })
+    expect(batch.lines[0]).toEqual(single)
+    expect(batch.totalWhtSatang).toBe(16_500)
+  })
+
+  it('กระจายเศษไม่หาย: ฿333.33 × 3 อัตรา 3% → รวม = pct ของฐานรวม และ net = gross − wht ทุกแถว', () => {
+    const result = calculatePayeeBatchWht([item(33_333), item(33_333), item(33_334)])
+    expect(result.totalWhtSatang).toBe(3_000) // 100,000 × 3% ปัดครั้งเดียว
+    expect(result.lines.reduce((sum, line) => sum + line.whtSatang, 0)).toBe(result.totalWhtSatang)
+    for (const line of result.lines) expect(line.netSatang + line.whtSatang).toBe(line.baseSatang)
+    expect(result.lines.map((line) => line.whtSatang)).toEqual([1_000, 1_000, 1_000])
+  })
+
+  it('เศษแจกให้รายการที่เศษมากสุดก่อน (เสมอกัน = รายการแรก) — 7 สตางค์แบ่ง 3 ส่วนเท่ากัน → 3/2/2', () => {
+    // ฐานรวม 233 สตางค์ × 3% = 6.99 → 7 · เกณฑ์ 0 เพื่อให้หัก
+    const tiny = { whtPct: 3, whtBasis: 'before_vat' as const, whtMinThresholdSatang: 0 }
+    const result = calculatePayeeBatchWht(
+      [78, 78, 77].map((grossSatang) => ({ grossSatang, source: { payeeTaxProfile: tiny, planWhtPct: null } })),
+    )
+    expect(result.totalWhtSatang).toBe(7)
+    expect(result.lines.map((line) => line.whtSatang)).toEqual([3, 2, 2])
+  })
+
+  it('payee ไม่มี Tax Profile + แผนต่างอัตรา → เทียบเกณฑ์จากฐานรวม แล้วคิดแยกตามอัตรา พร้อม warning', () => {
+    const result = calculatePayeeBatchWht([
+      { grossSatang: 60_000, source: { payeeTaxProfile: null, planWhtPct: 3 } },
+      { grossSatang: 60_000, source: { payeeTaxProfile: null, planWhtPct: 5 } },
+    ])
+    expect(result.belowThreshold).toBe(false)
+    expect(result.lines.map((line) => line.whtSatang)).toEqual([1_800, 3_000])
+    expect(result.lines.every((line) => line.rate.source === 'plan' && line.rate.warning !== undefined)).toBe(true)
+  })
+
+  it('ไม่มีรายการ → ศูนย์ทั้งหมด', () => {
+    expect(calculatePayeeBatchWht([])).toEqual({ lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true })
+  })
+
+  it('เกณฑ์ขั้นต่ำไม่เท่ากันในชุดเดียว (ปน payee) → ล้ม ไม่เดา', () => {
+    expect(() =>
+      calculatePayeeBatchWht([
+        item(60_000),
+        { grossSatang: 60_000, source: { payeeTaxProfile: null, planWhtPct: 3 } },
+        { grossSatang: 60_000, source: { payeeTaxProfile: { ...profile3, whtMinThresholdSatang: 50_000 }, planWhtPct: 3 } },
+      ]),
+    ).toThrow(RangeError)
   })
 })

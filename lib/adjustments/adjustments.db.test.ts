@@ -121,8 +121,8 @@ async function seedRevenue(revenueDate = '2026-08-20'): Promise<string> {
       ) RETURNING id
     )
     INSERT INTO revenues (organization_id, case_id, company_id, gross_satang, vat_satang, vat_rate_pct_used,
-                          total_satang, fee_model_snapshot, status, revenue_date, created_by)
-    SELECT '${ORG_ID}', id, '${COMPANY_A}', 100000, 7000, 7.00, 107000, 'SUCCESS_FEE', 'ready_for_billing',
+                          total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
+    SELECT '${ORG_ID}', id, '${COMPANY_A}', 100000, 7000, 7.00, 107000, 'SUCCESS_FEE', 'exclude_vat', 'ready_for_billing',
            '${revenueDate}', '${FINANCE_ID}'
     FROM new_case
     RETURNING id

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { BillingBatchStatus } from '@/lib/generated/prisma/enums'
 import {
+  billingBatchVatLabel,
+  revenueVatLabel,
   BILLING_STATUS_FILTERS,
   BILLING_STATUS_LABEL,
   billingStatusBadgeGroup,
@@ -85,5 +87,19 @@ describe('AR แดงเมื่อ > 0 (`19` §8)', () => {
   it('ยอดค้างรวมนับเฉพาะรอบที่เป็นลูกหนี้จริง', () => {
     const rows = [batch('sent', 300_00), batch('draft', 900_00), batch('paid', 0), batch('partially_paid', 50_00)]
     expect(totalArOutstandingSatang(rows)).toBe(350_00)
+  })
+})
+
+describe('ป้าย VAT อ่านจาก snapshot (มติ PO 03/10/2569 — UAT Q6, BUG-015)', () => {
+  it('รายได้: โหมด + อัตราที่ snapshot ไว้ · no_vat ไม่แสดงอัตรา', () => {
+    expect(revenueVatLabel({ vatModeSnapshot: 'exclude_vat', vatRatePctUsed: 7 })).toBe('Exclude VAT 7.00%')
+    expect(revenueVatLabel({ vatModeSnapshot: 'include_vat', vatRatePctUsed: 7 })).toBe('Include VAT 7.00%')
+    expect(revenueVatLabel({ vatModeSnapshot: 'no_vat', vatRatePctUsed: 0 })).toBe('ไม่มี VAT')
+  })
+
+  it('รอบวางบิล: รวมโหมดของรายได้ในรอบ (ปกติค่าเดียว)', () => {
+    expect(billingBatchVatLabel({ vatModes: ['exclude_vat'] })).toBe('Exclude VAT')
+    expect(billingBatchVatLabel({ vatModes: ['exclude_vat', 'include_vat'] })).toBe('Exclude VAT / Include VAT')
+    expect(billingBatchVatLabel({ vatModes: [] })).toBe('—')
   })
 })

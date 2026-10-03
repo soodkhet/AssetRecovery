@@ -16,6 +16,8 @@
 | v2 | 03/07/2569 | **แก้ไข §6.3 (Allowance)**: เดิมเขียนว่า "ค่าคงที่ต่อเคสที่ปิดงาน" ซึ่ง**ขัดแย้ง**กับ `11-compensation.md` §10 ที่นิยามหน่วยเป็น "บาท/**วัน**" อย่างชัดเจน — ยืนยันกับ Product Owner แล้วว่า **allowance คำนวณต่อวันที่ลงพื้นที่จริง** (`rate × จำนวนวันที่มี check-in`) ไม่ใช่ค่าคงที่ต่อเคส — แก้สูตรให้ถูกต้องแล้ว + Reformat header ตามมาตรฐานเอกสารชุดใหม่ |
 | v3 | 03/10/2569 | **§6.4 จุดเกิดรายการ** ตามมติ PO 03/10/2569 (UAT Q2 · BUG-010/054): ค่าคอมมิชชั่น (`closed_success`) / เบี้ยเสี่ยง (`closed_fail`) **ระบบสร้างเป็นรายการเบิก (`expenses.expense_type = commission / no_success_fee`) อัตโนมัติตอนปิดงาน** ในชุดเดียวกับ fuel/allowance — snapshot แผน (`comp_plan_id` + version) · สถานะเริ่มต้นกติกาเดียวกัน (สำเร็จ = `pending_warehouse_confirm`, ไม่สำเร็จ = `pending_approval`) · เข้าอนุมัติ/รอบจ่ายตามปกติ · resubmit สร้างชุดใหม่หลัง supersede ด้วย · ยอด 0 ไม่สร้างแถว (D10) — สูตรไม่เปลี่ยน |
 | v3.1 | 03/10/2569 | **แก้ §6.2 (Fuel DAILY_FLAT)** ตามมติ PO 03/10/2569 (UAT Q4 · BUG-013): เดิมเขียนว่า "ค่าคงที่" (โค้ดตีความเป็นต่อเคส) ซึ่งขัดกับหน่วย "บาท/วัน" ของ `11` §7.1 — แก้เป็น **`daily_flat_rate × จำนวนวันที่ลงพื้นที่จริง`** นับวันแบบเดียวกับเบี้ยเลี้ยง §6.3 (COUNT DISTINCT วันปฏิทินไทยของ check-in ของเคสนั้น) |
+| v3.2 | 03/10/2569 | **แก้ §6.13 ตามมติ PO 03/10/2569 (UAT Q3, BUG-011)**: (1) ฐานยอดคืนเปลี่ยนจาก requested เป็น **approved** (= เงินที่ออกจริง ตรงกับ generated column ใน `02` §5 ที่ใช้อยู่แล้ว) · (2) ใช้เกินยอด → **เคลียร์ยอดได้ ไม่บล็อก** ยอดคืน 0 และระบบ**สร้างคำขอเบิกส่วนเกินอัตโนมัติ** (Manual Claim ของ payee เดียวกัน) แทนการปฏิเสธ — `USED_EXCEEDS_REQUEST_NO_TOPUP` ถูกยกเลิกจาก `24` |
+| v3.3 | 03/10/2569 | **แก้ §6.9 ตามมติ PO 03/10/2569 (UAT Q5, BUG-014)**: เกณฑ์ขั้นต่ำ WHT (ค่าเริ่มต้น ฿1,000) เทียบกับ **ฐานรวมของ payee ต่อรอบจ่าย** (เดิมโค้ดเทียบต่อรายการ) แล้วกระจายภาษีกลับลงรายการแบบ largest remainder ให้ `net = gross − wht` ทุกแถวและผลรวมตรงไม่มีเศษหาย · 🔶 นักบัญชียืนยันก่อน go-live |
 
 ขอบเขตเอกสารนี้: รวมสูตรคำนวณทางการเงิน/บัญชีทั้งหมดของระบบไว้ในที่เดียว เป็น single source of truth สำหรับทีมพัฒนา — ป้องกันสูตรไม่ตรงกันระหว่างโมดูล
 
@@ -154,12 +156,25 @@ snapshot vat_rate_used ไว้ที่ Revenue Record เสมอ ไม่�
 ฐานหัก = gross_amount                           ถ้า wht_basis = before_vat (มาตรฐานทั่วไป)
        = gross_amount + vat_amount               ถ้า wht_basis = gross_amount (ไม่ปกติ แต่รองรับได้)
 
-ถ้า ฐานหัก < wht_min_threshold (ค่าเริ่มต้น 1,000 บาท): wht_amount = 0
-ถ้า ฐานหัก >= wht_min_threshold:
-  wht_amount = ฐานหัก × (wht_rate / 100)   (ค่าเริ่มต้น wht_rate = 3% สำหรับค่าจ้างทำของ มาตรา 40(7)/40(8))
+เกณฑ์ขั้นต่ำเทียบ "ต่อ payee ต่อรอบจ่าย" (มติ PO 03/10/2569 — UAT Q5):
+  ฐานรวม_payee = SUM(ฐานหัก) ของทุกรายการค่าตอบแทนของ payee นั้นในรอบจ่ายเดียวกัน
+                 (ไม่รวมเงินทดรองจ่าย — ไม่ใช่เงินได้ ไม่หัก WHT)
 
-net_amount = gross_amount - wht_amount
+ถ้า ฐานรวม_payee < wht_min_threshold (ค่าเริ่มต้น 1,000 บาท): wht_amount = 0 ทุกรายการของ payee
+ถ้า ฐานรวม_payee >= wht_min_threshold:
+  จัดกลุ่มรายการของ payee ตาม wht_rate ที่ resolve ได้ (ปกติกลุ่มเดียว — อัตราจาก Tax Profile ของ payee)
+  wht_กลุ่ม = round(ฐานรวม_กลุ่ม × (wht_rate / 100))   ปัดครั้งเดียวต่อกลุ่ม (ค่าเริ่มต้น wht_rate = 3% มาตรา 40(7)/40(8))
+  กระจาย wht_กลุ่ม ลงแต่ละรายการตามสัดส่วนฐานหัก แบบ largest remainder:
+    ส่วนแบ่ง_i = floor(wht_กลุ่ม × ฐาน_i / ฐานรวม_กลุ่ม)
+    เศษที่เหลือ (wht_กลุ่ม − SUM(ส่วนแบ่ง)) แจกทีละ 1 สตางค์ให้รายการที่เศษหารมากสุดก่อน (เสมอกัน = รายการที่มาก่อน)
+  ⇒ SUM(wht_amount ของรายการ) = wht_กลุ่ม เป๊ะ ไม่มีเศษสตางค์หาย
+
+net_amount = gross_amount - wht_amount   (ทุกแถว)
 ```
+
+> ตัวอย่าง: payee อัตรา 3% มี 3 รายการ × ฿600 ในรอบเดียว → ฐานรวม ฿1,800 ≥ ฿1,000 → หักรวม ฿54 (รายการละ ฿18) · ถ้ามี 2 รายการ × ฿350 → ฐานรวม ฿700 → ไม่หัก
+> ใบ 50 ทวิ ออกต่อรายการที่มี wht > 0 (`33`) และสรุป ภ.ง.ด. = ผลรวมของรายการ ⇒ ตรงกับยอดรวมของ payee โดยอัตโนมัติ
+> pure module: `lib/finance/wht-calc.ts` (`calculatePayeeBatchWht()`) · 🔶 นักบัญชียืนยันก่อน go-live
 
 ### 6.10 ยอด Payout Batch รวม (อ้างอิงไฟล์ 17)
 
@@ -185,14 +200,25 @@ gross_profit = revenue - direct_cost
 margin_pct = (gross_profit / revenue) × 100   ถ้า revenue > 0, มิฉะนั้นแสดง "N/A" ไม่หารด้วย 0
 ```
 
-### 6.13 เงินทดรองจ่าย — ยอดคืน (อ้างอิงไฟล์ 15)
+### 6.13 เงินทดรองจ่าย — ยอดคืน (อ้างอิงไฟล์ 15) — แก้ไขแล้ว (มติ PO 03/10/2569 — UAT Q3)
 
 ```
-ถ้า used_amount <= requested_amount:
-  return_amount = requested_amount - used_amount
-ถ้า used_amount > requested_amount:
-  return_amount = 0   (ส่วนที่เกินต้องสร้าง Claim เพิ่มแยกต่างหาก ไม่ใช่ return_amount ติดลบ)
+ฐาน = approved_amount (ยอดที่อนุมัติ = เงินที่จ่ายออกไปจริง — ตรงกับ generated column `advances.return_satang` ใน `02` §5)
+
+return_amount = max(0, approved_amount - used_amount)          ห้ามติดลบเด็ดขาด
+excess_amount = max(0, used_amount - approved_amount)
+
+ถ้า excess_amount > 0:
+  เคลียร์ยอดได้ตามปกติ (ไม่บล็อก) → return_amount = 0
+  ระบบสร้าง "คำขอเบิกส่วนเกิน" อัตโนมัติในทรานแซกชันเดียวกับการเคลียร์ยอด:
+    expense_type = manual, gross_amount = excess_amount, case_id = NULL
+    payee = payee เดียวกับเงินทดรอง (WHT ใช้ Tax Profile ของ payee — §6.9)
+    comp_plan snapshot = แผนของทีมผู้รับเงิน ณ ตอนเคลียร์ยอด (fallback อัตรา WHT เท่านั้น)
+    status = pending_approval (เข้าสายอนุมัติค่าตอบแทนตามปกติ แล้วจ่ายผ่านรอบจ่าย)
 ```
+
+> ตัวอย่าง: อนุมัติ ฿3,000 ใช้ ฿2,450 → คืน ฿550 · ใช้ ฿3,000 → คืน 0 · ใช้ ฿3,100 → คืน 0 + คำขอเบิกส่วนเกิน ฿100
+> pure module: `lib/finance/advance-calc.ts` (`advanceSettlement()`)
 
 ## 7. Data Entities / Required Objects
 

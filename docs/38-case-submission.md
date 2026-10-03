@@ -16,6 +16,7 @@
 | v3 | 14/08/2569 | **เติม §12 สอง code ที่ตกหล่น** (Phase 2.3 — Rule 04 doc + code คอมมิตเดียวกัน): `CASE_INVALID_STATUS_TRANSITION` (action ไม่ตรงตาราง §10) และ `CASE_STATUS_REASON_REQUIRED` (ไม่รับเคส/ขอข้อมูลเพิ่ม/เปลี่ยนทีม โดยไม่กรอกเหตุผล — §13 + body ของ `PATCH /:id/status` บังคับไว้แล้วแต่ไม่มี code รองรับ) · ไม่กระทบ business logic เดิม |
 | v3.1 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · BUG-037)** — §6.3 `POST /api/cases/:id/documents`: server ไม่เชื่อ path/SHA-256 จาก browser อีกต่อไป — ดาวน์โหลดไฟล์ด้วย service role ตรวจเอง (มีจริง · อยู่ใต้ `cases/<caseId>/<slot>/` · ชนิดจาก magic bytes: PDF/รูป หรือรูปเท่านั้นสำหรับรูปสินค้า · ≤ 10 MB) แล้วเก็บ `file_hash`/`mime_type`/`size_bytes` ที่ server ตรวจได้ · `fileHash` จาก browser ไม่บังคับ ส่งมาแล้วไม่ตรง = `UPLOAD_HASH_MISMATCH` (`24` §6.3) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + **แก้ reference "ไฟล์ 42/43" ที่ล้าสมัย** (ทั้งคู่ merge เข้าไฟล์ 41 แล้วตาม `README.md`) เป็น "ไฟล์ 41" ทุกจุด + **เพิ่ม `pending_recycle_review` เข้า enum `case_status`** ใน `02-database-schema-design.md` ที่ขาดหายไป (comment เดิมของ `closed_fail` ใบ้ไว้แล้วว่า "รอ recycle" แต่ไม่มี enum value รองรับจริง) — แยก Decisions/Open Items ชัดเจน — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง**
+| v3.1 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q11 · BUG-023) — ผู้จัดการ/หัวหน้าทีมเห็นเคสเมื่อไร**: §13 เพิ่มแถว "ดูเคสของทีม" — มุมมองทีมเห็นเฉพาะเคสหลังอนุมัติและกำหนดทีมแล้ว · เคส pending_review/need_info/rejected ที่ระบบแค่เสนอทีมไว้ไม่อยู่ในมุมมองทีม |
 
 ขอบเขตเอกสารนี้: รับเคสติดตามทรัพย์จากบริษัทไฟแนนซ์เข้าสู่ระบบ ผ่าน 3 ช่องทาง (API / Import ไฟล์ / กรอกฟอร์มมือ) ตรวจสอบความครบถ้วนและความซ้ำซ้อนของข้อมูล จากนั้นระบบเสนอทีมที่ดูแลพื้นที่ให้เจ้าหน้าที่อนุมัติเคสพิจารณารับเคสและยืนยัน/เปลี่ยนทีมเอง — รวมถึง Recycle Flow สำหรับเคสไม่สำเร็จที่ไฟแนนซ์ขอให้ลองใหม่
 
@@ -347,6 +348,7 @@
 | แก้ไขเคส (edit_case) | Admin/ธุรการ/Manager | เฉพาะเคสสถานะ draft/pending_review/need_info ตาม scope เดียวกับสิทธิ์สร้าง/พิจารณา |
 | สร้าง/อนุมัติ/ไม่อนุมัติคำขอรีไซเกิล | เจ้าหน้าที่อนุมัติเคส (Case Approver) | ทุกเคสในระบบที่ปิดงานด้วยผล `closed_fail` — เป็นคนเดียวกันที่ทำได้ทั้ง 3 action (สร้างคำขอ, อนุมัติ, ไม่อนุมัติ) เพราะเป็นผู้รับผิดชอบความสัมพันธ์กับไฟแนนซ์เจ้านั้นโดยตรง |
 | ดูเคสทั้งหมด (ไม่จำกัดพื้นที่) | Superadmin/บริหาร | read scope กว้างกว่า manager |
+| ดูเคสของทีม (มุมมองทีม) | ผู้จัดการ/หัวหน้าทีมติดตามทรัพย์ | **เฉพาะเคสที่อนุมัติแล้วและกำหนดทีม (`assigned_team_id`) เป็นทีมที่ตนดูแล/สังกัด** — สถานะ `approved` / `active` / `closed_success` / `closed_fail` / `pending_recycle_review` · เคส `draft` / `pending_review` / `need_info` / `rejected` ไม่อยู่ในมุมมองทีม แม้ระบบจะ*เสนอ*ทีมนั้นไว้ (`suggested_team_id`) — นอก scope ตอบ `CASE_NOT_FOUND` (v3.1 — มติ PO 03/10/2569 UAT Q11) |
 | ตั้งค่า service account สำหรับ API ingestion | Superadmin | env-scoped |
 
 ## 14. Audit Log

@@ -4,8 +4,8 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  * Error code หมวดเงินทดรองจ่าย (ไฟล์ 15) — SSOT อยู่ที่ `docs/24-finance-validation-rules.md` §6.4
  * ⚠️ ห้ามตั้ง code ใหม่ที่นี่โดยไม่เพิ่มลงไฟล์ 24 ใน commit เดียวกัน (Rule 04)
  *
- * `USED_EXCEEDS_REQUEST_NO_TOPUP` **ไม่อยู่ในรายการนี้โดยตั้งใจ** — เป็นของ `FinanceError`
- * (`lib/finance/errors.ts`) ที่ `assertSettlementAllowed()` ของ Phase 3.1 โยนอยู่แล้ว ห้าม declare ซ้ำ
+ * (`USED_EXCEEDS_REQUEST_NO_TOPUP` ถูกยกเลิกจาก `24` แล้ว — มติ PO 03/10/2569 UAT Q3: ใช้เกินยอด
+ * เคลียร์ได้ + สร้างคำขอเบิกส่วนเกินอัตโนมัติ ไม่มีการปฏิเสธอีก)
  */
 
 export const ADVANCE_ERROR_CODES = [

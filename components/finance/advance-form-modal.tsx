@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { minDueClearInputDate } from '@/lib/advances/advance'
 import { advanceRequestErrorText } from '@/lib/advances/advance-ui'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
 import type { AdvanceDto } from '@/lib/advances/types'
@@ -114,7 +115,13 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
         </Field>
 
         <Field label="กำหนดเคลียร์ยอด" required error={errors.dueClearDate}>
-          <Input type="date" value={dueClearDate} onChange={(event) => setDueClearDate(event.target.value)} />
+          <Input
+            type="date"
+            // UAT Q8 — ปฏิทินเลือกวันที่ผ่านมาแล้วไม่ได้ (UX) · ด่านจริงคือ `advanceCreateSchema` ฝั่ง API
+            min={minDueClearInputDate(new Date())}
+            value={dueClearDate}
+            onChange={(event) => setDueClearDate(event.target.value)}
+          />
         </Field>
       </div>
     </Modal>

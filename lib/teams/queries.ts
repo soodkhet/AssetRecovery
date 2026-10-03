@@ -17,6 +17,8 @@ import {
   normalizeTeamValues,
   toTeamAuditPayload,
   TEAM_ROLE_GROUPS,
+  assertTeamSideConsistent,
+  type TeamSide,
   type TeamValues,
 } from '@/lib/teams/team'
 import type { TeamListQuery } from '@/lib/teams/schemas'
@@ -206,13 +208,17 @@ function rethrowDuplicateName(name: string): never {
   throw new TeamError('DUPLICATE_TEAM_NAME', { detail: `name=${name} (unique violation)` })
 }
 
-/** ทุกทีมต้องผูกแผนค่าตอบแทนที่ยังใช้งานอยู่และเป็นเวอร์ชันปัจจุบัน (`09` §7 · `11` §10) */
-async function assertPlanUsable(organizationId: string, planId: string): Promise<void> {
+/**
+ * ทุกทีมต้องผูกแผนค่าตอบแทนที่ยังใช้งานอยู่และเป็นเวอร์ชันปัจจุบัน (`09` §7 · `11` §10)
+ * และเป็น **ฝั่งเดียวกับทีม** (มติ PO 03/10/2569 UAT Q12 · BUG-009)
+ */
+async function assertPlanUsable(organizationId: string, planId: string, side: TeamSide): Promise<void> {
   const plan = await prisma.compensationPlan.findFirst({
     where: { id: planId, organizationId, deletedAt: null, isCurrent: true },
-    select: { id: true },
+    select: { id: true, side: true },
   })
   if (!plan) throw new TeamError('PLAN_NOT_FOUND', { detail: `plan=${planId}` })
+  assertTeamSideConsistent({ side, planSide: plan.side, supervisor: null, managers: [] })
 }
 
 /** ตรวจผู้จัดการ/หัวหน้าทีมทีเดียวทั้งชุด แล้วส่งต่อให้ยาม pure ตัดสิน */
@@ -230,7 +236,7 @@ async function assertPeopleUsable(
     select: {
       id: true,
       status: true,
-      role: { select: { roleGroup: true } },
+      role: { select: { roleGroup: true, name: true } },
       supervisedTeams: { where: { deletedAt: null }, select: { id: true }, take: 1 },
     },
   })
@@ -244,6 +250,18 @@ async function assertPeopleUsable(
       supervisedTeamId: candidate.supervisedTeams[0]?.id ?? null,
     })),
   )
+
+  // ฝั่งเดียวกับทีม + role ตรงช่อง (UAT Q12 · BUG-009) — candidate ครบทุกคนแล้วจากยามด้านบน
+  const asPerson = (id: string) => {
+    const candidate = candidates.find((each) => each.id === id)
+    return { id, roleGroup: candidate?.role.roleGroup ?? '', roleName: candidate?.role.name ?? '' }
+  }
+  assertTeamSideConsistent({
+    side: values.side,
+    planSide: null,
+    supervisor: values.supervisorId === null ? null : asPerson(values.supervisorId),
+    managers: values.managerIds.map(asPerson),
+  })
 
   if (values.supervisorId !== null) {
     const supervisor = candidates.find((candidate) => candidate.id === values.supervisorId)
@@ -269,7 +287,7 @@ export async function createTeam(context: MutationContext, input: TeamValues): P
 
   assertProvincesKnown(values.provinces)
   await assertNameAvailable(organizationId, values.name)
-  await assertPlanUsable(organizationId, values.compensationPlanId)
+  await assertPlanUsable(organizationId, values.compensationPlanId, values.side)
   await assertPeopleUsable(organizationId, values, null)
 
   const created = await prisma.$transaction(async (tx) => {
@@ -321,8 +339,9 @@ export async function updateTeam(
 
   assertProvincesKnown(values.provinces)
   if (values.name !== current.name) await assertNameAvailable(organizationId, values.name, current.id)
-  if (values.compensationPlanId !== current.compensationPlanId) {
-    await assertPlanUsable(organizationId, values.compensationPlanId)
+  // เปลี่ยนแผนหรือเปลี่ยนฝั่ง = ตรวจแผนใหม่ (ฝั่งต้องตรงกัน — UAT Q12)
+  if (values.compensationPlanId !== current.compensationPlanId || values.side !== current.side) {
+    await assertPlanUsable(organizationId, values.compensationPlanId, values.side)
   }
   await assertPeopleUsable(organizationId, values, current.id)
 

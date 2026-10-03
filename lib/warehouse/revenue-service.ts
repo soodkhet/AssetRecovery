@@ -248,6 +248,7 @@ export async function tryCreateRevenue(
         vatRatePctUsed: new Prisma.Decimal(built.values.vatRatePctUsed.toFixed(2)),
         totalSatang: built.values.totalSatang,
         feeModelSnapshot: built.values.feeModelSnapshot,
+        vatModeSnapshot: built.values.vatModeSnapshot,
         status: 'ready_for_billing',
         revenueDate,
         createdBy: input.actorId,

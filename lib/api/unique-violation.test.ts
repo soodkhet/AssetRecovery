@@ -101,7 +101,7 @@ describe('onUniqueViolation()', () => {
 
 describe('P2002 จากคำขอพร้อมกัน → error code ของโมดูล (ไม่ใช่ 500)', () => {
   it('POST /api/teams ชื่อซ้ำ → DUPLICATE_TEAM_NAME (400)', async () => {
-    prismaMock.compensationPlan.findFirst.mockResolvedValue({ id: 'plan-1' })
+    prismaMock.compensationPlan.findFirst.mockResolvedValue({ id: 'plan-1', side: 'inhouse' })
     await expect(
       createTeam(context, {
         name: 'ทีมกรุงเทพ',
@@ -116,7 +116,7 @@ describe('P2002 จากคำขอพร้อมกัน → error code ข
   })
 
   it('pre-check ซ้ำเจอแถวของอีกคำขอแล้ว → ยังได้ DUPLICATE_TEAM_NAME', async () => {
-    prismaMock.compensationPlan.findFirst.mockResolvedValue({ id: 'plan-1' })
+    prismaMock.compensationPlan.findFirst.mockResolvedValue({ id: 'plan-1', side: 'inhouse' })
     prismaMock.team.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'team-winner' })
     await expect(
       createTeam(context, {

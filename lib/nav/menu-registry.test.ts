@@ -55,7 +55,7 @@ const TOP_NAV_MATRIX: Record<MenuAudience, readonly string[]> = {
   accounting: ['dashboard', 'accounting', 'warehouse', 'reports', 'settings'],
   case_approver: ['dashboard', 'cases'],
   // มติ PO 03/10/2569 (UAT BUG-021) — "การตั้งค่า" เฉพาะแท็บผู้ใช้งาน
-  admin_office: ['dashboard', 'cases', 'settings'],
+  admin_office: ['dashboard', 'cases', 'warehouse', 'settings'],
   team_lead: ['dashboard', 'cases', 'warehouse', 'reports'],
   field_agent: ['dashboard', 'cases'],
   company_user: ['dashboard', 'cases', 'warehouse'],

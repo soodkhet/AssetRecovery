@@ -125,9 +125,9 @@ async function seedRevenueIn(billingId: string, grossSatang: number, vatSatang: 
   `)
   await db().$executeRawUnsafe(`
     INSERT INTO revenues (organization_id, case_id, company_id, gross_satang, vat_satang, total_satang,
-                          fee_model_snapshot, status, revenue_date, billing_batch_id, created_by)
+                          fee_model_snapshot, vat_mode_snapshot, status, revenue_date, billing_batch_id, created_by)
     VALUES ('${ORG_ID}', '${caseRows[0]?.id ?? ''}', '${COMPANY_A}', ${grossSatang}, ${vatSatang},
-            ${grossSatang + vatSatang}, 'SUCCESS_FEE', 'billed', '2026-07-31', '${billingId}', '${ACCOUNTING_ID}')
+            ${grossSatang + vatSatang}, 'SUCCESS_FEE', 'exclude_vat', 'billed', '2026-07-31', '${billingId}', '${ACCOUNTING_ID}')
   `)
 }
 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
-import type { AdvanceDto } from '@/lib/advances/types'
+import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
@@ -13,8 +13,8 @@ import { fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
  * ยอดคืนที่แสดงคำนวณด้วย `advanceSettlement()` (pure ของ 3.1 — มิเรอร์ generated column ของ DB)
  * **เพื่อแสดงผลล่วงหน้าเท่านั้น** ค่าจริงมาจาก DB หลังบันทึก (Rule 01 — ห้ามคำนวณเงินที่ display layer เอง)
  *
- * ใช้จริงเกิน **ยอดที่ขอ** = ปุ่มบันทึกไม่ทำงาน (API ตอบ `USED_EXCEEDS_REQUEST_NO_TOPUP` ซ้ำเสมอ)
- * — ส่วนเกินต้องสร้าง Claim ใหม่แยก ไม่ใช่เพิ่มยอดทดรองย้อนหลัง (`15` §11)
+ * มติ PO 03/10/2569 (UAT Q3, BUG-011): ใช้จริงเกินยอดอนุมัติ = **บันทึกได้** ยอดคืน 0 และระบบสร้าง
+ * คำขอเบิกส่วนเกินให้อัตโนมัติ (เข้าคิวอนุมัติค่าตอบแทน) — ไม่เพิ่มยอดทดรองย้อนหลัง (`15` §9.1)
  */
 export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   advance: AdvanceDto | null
@@ -40,12 +40,11 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         usedSatang,
       })
     : null
-  const exceedsRequest = validUsed && usedSatang > advance.requestedSatang
 
   async function submit(): Promise<void> {
-    if (advance === null || !validUsed || exceedsRequest) return
+    if (advance === null || !validUsed) return
     setSaving(true)
-    const result = await callApi(
+    const result = await callApi<AdvanceSettleResult>(
       `/api/advances/${advance.id}/settle`,
       jsonRequest('PATCH', { usedSatang, receiptFileUrl: receiptUrl.trim(), note: note.trim() }),
     )
@@ -54,7 +53,15 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
-    showToast({ tone: 'success', title: 'เคลียร์ยอดเงินทดรองสำเร็จ', description: 'รายการนี้ปิดแล้ว ขอเบิกรอบใหม่ได้' })
+    const settled = result.data
+    const excessClaimCreated = settled !== undefined && settled.excessClaimId !== null
+    showToast({
+      tone: 'success',
+      title: 'เคลียร์ยอดเงินทดรองสำเร็จ',
+      description: excessClaimCreated
+        ? `สร้างคำขอเบิกส่วนเกิน ${fmtSatangSymbol(settled?.excessSatang)} ให้อัตโนมัติแล้ว (รออนุมัติ) — ขอเบิกรอบใหม่ได้`
+        : 'รายการนี้ปิดแล้ว ขอเบิกรอบใหม่ได้',
+    })
     setUsed('')
     setReceiptUrl('')
     setNote('')
@@ -73,7 +80,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           <Button variant="ghost" onClick={onClose}>
             ยกเลิก
           </Button>
-          <Button loading={saving} disabled={!validUsed || exceedsRequest} onClick={() => void submit()}>
+          <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>
             บันทึกการเคลียร์ยอด
           </Button>
         </>
@@ -100,20 +107,14 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           />
         </Field>
 
-        {exceedsRequest ? (
-          <InlineAlert tone="error">
-            ใช้จริงเกินยอดที่ขอเบิก ({fmtSatangSymbol(advance.requestedSatang)}) — ต้องสร้าง Claim เพิ่มเติมสำหรับส่วนที่เกินแยกต่างหาก
-            (ยอดคืนติดลบไม่ได้)
+        {preview !== null && preview.needsExtraClaim ? (
+          <InlineAlert tone="warning">
+            ใช้เกินยอดที่อนุมัติไป {fmtSatangSymbol(preview.excessSatang)} — ยอดคืนเป็น 0 และระบบจะสร้างคำขอเบิกส่วนเกิน
+            {' '}{fmtSatangSymbol(preview.excessSatang)} ให้อัตโนมัติ (เข้าคิวอนุมัติค่าตอบแทน)
           </InlineAlert>
         ) : (
           <InlineAlert tone="warning">
-            ถ้าใช้จริงมากกว่ายอดที่ยืม → ต้องสร้าง Claim เพิ่มเติมสำหรับส่วนที่เกิน (ป้องกันยอดคืนติดลบ)
-          </InlineAlert>
-        )}
-
-        {preview !== null && preview.needsExtraClaim && !exceedsRequest && (
-          <InlineAlert tone="warning">
-            ใช้เกินยอดที่อนุมัติไป {fmtSatangSymbol(preview.excessSatang)} — ยอดคืนเป็น 0 และต้องเบิกส่วนเกินเป็นรายการใหม่
+            ถ้าใช้จริงมากกว่ายอดที่ยืม → ระบบสร้างคำขอเบิกส่วนเกินให้อัตโนมัติ (ยอดคืนไม่ติดลบ)
           </InlineAlert>
         )}
 

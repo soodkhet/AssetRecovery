@@ -41,6 +41,8 @@ const TEAM_A = '00000000-0000-4000-8000-0000000026a7'
 const TEAM_B = '00000000-0000-4000-8000-0000000026a8'
 const COMPANY_ID = '00000000-0000-4000-8000-0000000026a9'
 const TEMPLATE_ID = '00000000-0000-4000-8000-0000000026aa'
+/** ผู้จัดการคนที่ 2 — สังกัดทีม A (team_id) ด้วย ใช้ทดสอบ BUG-039 (ผู้รับต้องเป็น role พนักงาน) + BUG-043 */
+const MANAGER_2 = '00000000-0000-4000-8000-0000000026ab'
 const PROVINCE = 'ลำปาง'
 const OTHER_PROVINCE = 'พะเยา'
 
@@ -86,6 +88,7 @@ function sessionUser(overrides: Partial<SessionUser> & Pick<SessionUser, 'id'>):
 }
 
 const manager = sessionUser({ id: MANAGER_ID })
+const manager2 = sessionUser({ id: MANAGER_2 })
 const supervisor = sessionUser({
   id: MANAGER_ID,
   roleName: 'หัวหน้าทีมติดตามทรัพย์',
@@ -151,7 +154,8 @@ beforeAll(async () => {
       ('${MANAGER_ID}', '${ORG_ID}', '${ROLE_MANAGER}', 'manager26@test.local', 'ผู้จัดการ 2.6', 'active'),
       ('${AGENT_A}', '${ORG_ID}', '${ROLE_AGENT}', 'agent26a@test.local', 'พนักงาน A', 'active'),
       ('${AGENT_B}', '${ORG_ID}', '${ROLE_AGENT}', 'agent26b@test.local', 'พนักงาน B', 'active'),
-      ('${AGENT_C}', '${ORG_ID}', '${ROLE_AGENT}', 'agent26c@test.local', 'พนักงาน C', 'active')
+      ('${AGENT_C}', '${ORG_ID}', '${ROLE_AGENT}', 'agent26c@test.local', 'พนักงาน C', 'active'),
+      ('${MANAGER_2}', '${ORG_ID}', '${ROLE_MANAGER}', 'manager26b@test.local', 'ผู้จัดการ 2.6 คนที่ 2', 'active')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -164,6 +168,7 @@ beforeAll(async () => {
     UPDATE users SET team_id = CASE WHEN id = '${AGENT_C}' THEN '${TEAM_B}'::uuid ELSE '${TEAM_A}'::uuid END
     WHERE id IN ('${AGENT_A}', '${AGENT_B}', '${AGENT_C}')
   `)
+  await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}'::uuid WHERE id = '${MANAGER_2}'`)
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
       (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
@@ -224,6 +229,20 @@ suite('Phase 2.6 — assign / accept (`40` §8 · §20)', () => {
     const caseId = await seedApprovedCase({ teamId: TEAM_A })
     await expectCode(
       () => queries.assignCase(manager, caseId, { agentId: AGENT_C }, { actor: manager, meta }),
+      'ASSIGNMENT_TEAM_MISMATCH',
+    )
+  })
+
+  it('มอบหมายให้ผู้ที่ไม่ใช่พนักงานติดตามทรัพย์ (แม้อยู่ทีมเดียวกับเคส) = ASSIGNMENT_TEAM_MISMATCH (UAT BUG-039)', async () => {
+    const caseId = await seedApprovedCase({ teamId: TEAM_A })
+    await expectCode(
+      () => queries.assignCase(manager, caseId, { agentId: MANAGER_2 }, { actor: manager, meta }),
+      'ASSIGNMENT_TEAM_MISMATCH',
+    )
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    await expectCode(
+      () =>
+        queries.reassignCase(manager, caseId, { agentId: MANAGER_2, reason: 'ส่งต่อให้หัวหน้า' }, { actor: manager, meta }),
       'ASSIGNMENT_TEAM_MISMATCH',
     )
   })
@@ -289,6 +308,33 @@ suite('Phase 2.6 — reassign 2 สาขา (`40` §9 · §11 · §20)', () => 
       () => queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: '   ' }, { actor: manager, meta }),
       'ASSIGNMENT_REASON_REQUIRED',
     )
+  })
+
+  it('เหตุผลสั้นกว่า 5 ตัวอักษร = ASSIGNMENT_REASON_REQUIRED พร้อมบอกขั้นต่ำ (UAT Q18 · BUG-042)', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    await expect(
+      queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: ' abcd ' }, { actor: manager, meta }),
+    ).rejects.toSatisfy(
+      (error: unknown) =>
+        codeOf(error) === 'ASSIGNMENT_REASON_REQUIRED' &&
+        (error as { context?: { minLength?: number } }).context?.minLength === 5,
+    )
+    // ครบ 5 ตัวพอดีผ่าน
+    const ok = await queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: 'abcde' }, { actor: manager, meta })
+    expect(ok.agentId).toBe(AGENT_B)
+  })
+
+  it('โอนเคสซ้ำ: reassign_reason ของแถวเดิมไม่ถูกเขียนทับด้วยเหตุผลที่ถูกโอนออก (UAT BUG-061)', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    await queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: 'เหตุผลรอบแรก' }, { actor: manager, meta })
+    await queries.reassignCase(manager, caseId, { agentId: AGENT_A, reason: 'เหตุผลรอบสอง' }, { actor: manager, meta })
+
+    const rows = await db().caseAssignment.findMany({ where: { caseId }, orderBy: { createdAt: 'asc' } })
+    expect(rows.map((row) => row.reassignReason)).toEqual([null, 'เหตุผลรอบแรก', 'เหตุผลรอบสอง'])
+    const history = await db().reassignmentHistory.findMany({ where: { caseId }, orderBy: { createdAt: 'asc' } })
+    expect(history.map((row) => row.reason)).toEqual(['เหตุผลรอบแรก', 'เหตุผลรอบสอง'])
   })
 
   it('กดรับแล้ว: สร้างคำขอรอความยินยอม — เคสยังเป็นของคนเดิมและไม่ถูก freeze', async () => {
@@ -430,6 +476,24 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
       orderBy: { createdAt: 'desc' },
     })
     expect(audit?.reason).toContain('test-job-1')
+  })
+
+  it('timeout: reassigned_by + created_by ของแถวใหม่ = ผู้ขอเปลี่ยน ไม่ใช่ผู้มอบหมายครั้งแรก (UAT BUG-043)', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager2, caseId, { agentId: AGENT_A }, { actor: manager2, meta })
+    await queries.acceptAssignment(agentA, caseId, { actor: agentA, meta })
+    await queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: 'ขอเปลี่ยนคน' }, { actor: manager, meta })
+    await expireLatestRequest(caseId)
+
+    await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId: 'test-job-043' })
+
+    const history = await db().reassignmentHistory.findFirstOrThrow({ where: { caseId } })
+    expect(history.reassignedBy).toBe(MANAGER_ID)
+    expect(history.createdBy).toBe(MANAGER_ID)
+    const rows = await db().caseAssignment.findMany({ where: { caseId }, orderBy: { createdAt: 'asc' } })
+    expect(rows[0]?.createdBy).toBe(MANAGER_2)
+    expect(rows[1]?.createdBy).toBe(MANAGER_ID)
+    expect(rows[0]?.reassignReason).toBeNull()
   })
 
   it('job รันซ้ำแล้วผลไม่เปลี่ยน (idempotent — `91` §17)', async () => {
