@@ -46,7 +46,7 @@ const VIEWERS: Record<MenuAudience, MenuViewer> = {
   company_user: viewer('ผู้จัดการ', 'finance_company'),
 }
 
-/** `06` §7.2 — ✅ ในตารางเท่านั้น (ธุรการไม่มีในตาราง §7.2 → ยึด mockup `app-shell.html`) */
+/** `06` §7.2 — ✅/🔸/🔹 ในตาราง (คอลัมน์ธุรการเพิ่มใน v2.3 — มติ PO 03/10/2569) */
 const TOP_NAV_MATRIX: Record<MenuAudience, readonly string[]> = {
   superadmin: ['dashboard', 'cases', 'finance', 'accounting', 'warehouse', 'reports', 'settings'],
   executive: ['dashboard', 'cases', 'finance', 'accounting', 'warehouse', 'reports', 'settings'],
@@ -54,7 +54,8 @@ const TOP_NAV_MATRIX: Record<MenuAudience, readonly string[]> = {
   finance: ['dashboard', 'finance', 'warehouse', 'reports', 'settings'],
   accounting: ['dashboard', 'accounting', 'warehouse', 'reports', 'settings'],
   case_approver: ['dashboard', 'cases'],
-  admin_office: ['dashboard', 'cases'],
+  // มติ PO 03/10/2569 (UAT BUG-021) — "การตั้งค่า" เฉพาะแท็บผู้ใช้งาน
+  admin_office: ['dashboard', 'cases', 'settings'],
   team_lead: ['dashboard', 'cases', 'warehouse', 'reports'],
   field_agent: ['dashboard', 'cases'],
   company_user: ['dashboard', 'cases', 'warehouse'],
@@ -128,11 +129,31 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
     }
   })
 
-  it('มีเฉพาะ Superadmin/บริหาร/การเงิน/บัญชี ที่เห็น "การตั้งค่า"', () => {
+  it('มีเฉพาะ Superadmin/บริหาร/การเงิน/บัญชี/ธุรการ ที่เห็น "การตั้งค่า"', () => {
     const seeSettings = (Object.keys(VIEWERS) as MenuAudience[]).filter((audience) =>
       canViewMenu(VIEWERS[audience], 'settings'),
     )
-    expect(seeSettings).toEqual(['superadmin', 'executive', 'finance', 'accounting'])
+    expect(seeSettings).toEqual(['superadmin', 'executive', 'finance', 'accounting', 'admin_office'])
+  })
+
+  /** มติ PO 03/10/2569 (UAT BUG-021) — ธุรการถือ `manage:manage_users` แต่แท็บตั้งค่าอื่นยังห้าม (ซ่อน ไม่ใช่ disable) */
+  it('ธุรการเห็น "การตั้งค่า" เฉพาะแท็บผู้ใช้งาน', () => {
+    const settings = visibleMenus(VIEWERS.admin_office).find((item) => item.id === 'settings')
+    expect(settings?.children?.map((child) => child.id)).toEqual(['settings.users'])
+    expect(canViewMenu(VIEWERS.admin_office, 'settings.users')).toBe(true)
+    for (const other of [
+      'settings.roles',
+      'settings.compensation',
+      'settings.service-fee',
+      'settings.teams',
+      'settings.companies',
+      'settings.finance',
+      'settings.audit-logs',
+      'settings.jobs',
+    ]) {
+      expect(canViewMenu(VIEWERS.admin_office, other), other).toBe(false)
+    }
+    expect(firstVisibleChildPath(VIEWERS.admin_office, 'settings')).toBe('/settings/users')
   })
 
   /** `/settings` ไม่มีเนื้อหาของตัวเอง — ต้องพาไปแท็บแรก**ที่ผู้ใช้เห็น** ไม่ใช่ `/settings/roles` ตายตัว */

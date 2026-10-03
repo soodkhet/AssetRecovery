@@ -3,6 +3,8 @@ import {
   canChangeOwnRole,
   canManageAccountIn,
   canSetPasswordFor,
+  canViewAccountsIn,
+  hiddenAccountGroups,
   isEmailAlreadyRegistered,
   mustChangeAfterAdminSet,
 } from '@/lib/users/auth-account'
@@ -55,5 +57,24 @@ describe('isEmailAlreadyRegistered', () => {
   it('error อื่นไม่ถูกตีความว่าอีเมลซ้ำ', () => {
     expect(isEmailAlreadyRegistered({ code: 'weak_password' })).toBe(false)
     expect(isEmailAlreadyRegistered(null)).toBe(false)
+  })
+})
+
+describe('canViewAccountsIn / hiddenAccountGroups — ธุรการเห็นเฉพาะกลุ่มที่จัดการได้ (UAT BUG-021)', () => {
+  const superadmin = { isSuperadmin: true, capabilities: {} }
+  const adminOffice = { isSuperadmin: false, capabilities: { manage_users: 'manage' as const } }
+  const executive = { isSuperadmin: false, capabilities: { manage_users: 'view' as const } }
+
+  it('ผู้ดูแลบัญชีที่ไม่ใช่ Superadmin ไม่เห็นกลุ่ม system', () => {
+    expect(canViewAccountsIn(adminOffice, 'system')).toBe(false)
+    expect(canViewAccountsIn(adminOffice, 'inhouse')).toBe(true)
+    expect(canViewAccountsIn(adminOffice, 'outsource')).toBe(true)
+    expect(canViewAccountsIn(adminOffice, 'finance_company')).toBe(true)
+    expect(hiddenAccountGroups(adminOffice)).toEqual(['system'])
+  })
+
+  it('Superadmin และผู้ถือแค่ view ไม่ถูกจำกัดกลุ่ม', () => {
+    expect(hiddenAccountGroups(superadmin)).toEqual([])
+    expect(hiddenAccountGroups(executive)).toEqual([])
   })
 })

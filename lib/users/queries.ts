@@ -20,6 +20,8 @@ import {
   canManageAccountIn,
   canSetPasswordFor,
   mustChangeAfterAdminSet,
+  canViewAccountsIn,
+  hiddenAccountGroups,
 } from '@/lib/users/auth-account'
 import { UserError } from '@/lib/users/errors'
 import {
@@ -145,27 +147,45 @@ function assertUserInScope(actor: SessionUser, target: { id: string; teamId: str
   }
 }
 
+/**
+ * กรองกลุ่มบัญชีที่ผู้เรียกมองไม่เห็น (ธุรการไม่เห็นกลุ่ม system — UAT BUG-021) รวมกับตัวกรองกลุ่มจาก query
+ * ตัวเองเห็นเสมอ (หน้าโปรไฟล์/ข้อมูลตัวเอง)
+ */
+function roleGroupFilter(user: SessionUser, requested: readonly RoleGroup[] | undefined): Prisma.UserWhereInput {
+  const hidden = hiddenAccountGroups(user)
+  const requestedFilter: Prisma.UserWhereInput =
+    requested === undefined ? {} : { role: { roleGroup: { in: [...requested] } } }
+  if (hidden.length === 0) return requestedFilter
+  return {
+    AND: [requestedFilter, { OR: [{ role: { roleGroup: { notIn: hidden } } }, { id: user.id }] }],
+  }
+}
+
 export async function listUsers(user: SessionUser, query: UserListQuery): Promise<UserDto[]> {
   const rows = await prisma.user.findMany({
     where: {
       organizationId: user.organizationId,
       deletedAt: null,
-      ...userScopeFilter(user),
       status: query.status === 'all' ? { in: ['active', 'suspended'] } : query.status,
       roleId: query.roleId,
       teamId: query.teamId,
       companyId: query.companyId,
-      role: query.roleGroup === undefined ? undefined : { roleGroup: { in: query.roleGroup } },
-      ...(query.search === undefined
-        ? {}
-        : {
-            OR: [
-              { fullName: { contains: query.search, mode: 'insensitive' } },
-              { username: { contains: query.search, mode: 'insensitive' } },
-              { email: { contains: query.search, mode: 'insensitive' } },
-              { phone: { contains: query.search.replace(/[\s-]/g, '') } },
-            ],
-          }),
+      // ⚠️ ตัวกรองที่ใช้ `OR` ต้องอยู่ใน `AND` แยกก้อนเสมอ — เดิม spread ต่อกัน ทำให้ `OR` ของคำค้น
+      // ทับ `OR` ของ scope ทีม (ผู้จัดการทีมค้นชื่อแล้วเห็นผู้ใช้นอกทีมทั้งองค์กร)
+      AND: [
+        userScopeFilter(user),
+        roleGroupFilter(user, query.roleGroup),
+        query.search === undefined
+          ? {}
+          : {
+              OR: [
+                { fullName: { contains: query.search, mode: 'insensitive' } },
+                { username: { contains: query.search, mode: 'insensitive' } },
+                { email: { contains: query.search, mode: 'insensitive' } },
+                { phone: { contains: query.search.replace(/[\s-]/g, '') } },
+              ],
+            },
+      ],
     },
     select: userSelect,
     orderBy: [{ status: 'asc' }, { fullName: 'asc' }],
@@ -180,6 +200,10 @@ export async function getUser(user: SessionUser, userId: string): Promise<UserDt
   })
   if (!row) throw new UserError('USER_NOT_FOUND', { detail: `user=${userId}` })
   assertUserInScope(user, { id: row.id, teamId: row.teamId, companyId: row.companyId })
+  // กลุ่มที่มองไม่เห็น (ธุรการ ↔ กลุ่ม system — UAT BUG-021) = 403 เหมือนแถวนอก scope · ตัวเองเห็นเสมอ
+  if (row.id !== user.id && !canViewAccountsIn(user, row.role.roleGroup)) {
+    throw new AuthError('PERMISSION_DENIED', `target=${row.id} roleGroup=${row.role.roleGroup} user=${user.id}`)
+  }
   return toDto(row)
 }
 

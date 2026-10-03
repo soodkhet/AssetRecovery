@@ -15,6 +15,7 @@ export function RoleGroupTabs({
   onTabChange,
   subGroup,
   onSubGroupChange,
+  tabs,
   className,
 }: {
   tab: RoleGroupTabId
@@ -22,6 +23,8 @@ export function RoleGroupTabs({
   /** role group ที่เลือกอยู่ภายในแท็บที่มี sub-toggle */
   subGroup: RoleGroup
   onSubGroupChange: (roleGroup: RoleGroup) => void
+  /** แท็บที่ผู้ใช้เห็น (ไม่ส่ง = ครบทุกแท็บ) — หน้าผู้ใช้งานซ่อนแท็บ "แอดมิน" จากธุรการ (UAT BUG-021) */
+  tabs?: readonly RoleGroupTabId[]
   className?: string
 }) {
   const active = findRoleGroupTab(tab)
@@ -29,7 +32,7 @@ export function RoleGroupTabs({
   return (
     <div className={className}>
       <div className="flex gap-6 border-b border-slate-200" role="tablist" aria-label="กลุ่มบทบาท">
-        {ROLE_GROUP_TABS.map((item) => (
+        {ROLE_GROUP_TABS.filter((item) => tabs === undefined || tabs.includes(item.id)).map((item) => (
           <button
             key={item.id}
             type="button"
