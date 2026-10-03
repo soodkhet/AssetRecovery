@@ -81,7 +81,8 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        {/* เนื้อหาแท็บ — ห้ามใช้ <main> ซ้ำ: AppShell มี <main> อยู่แล้ว (UAT BUG-018) */}
+        <section className="min-w-0 flex-1" aria-label={current?.label}>
           {current?.id === 'cycles' && <CyclesTab />}
           {current?.id === 'approval' && <ApprovalMatrixTab />}
           {current?.id === 'bank' && <BankAccountsTab />}
@@ -104,7 +105,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
               description={`หน้าจริงเกิดใน Phase ${current.plannedPhase ?? '-'}`}
             />
           )}
-        </main>
+        </section>
       </div>
     </>
   )
