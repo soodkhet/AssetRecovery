@@ -26,6 +26,7 @@ import type {
 } from '@/lib/cases/schemas'
 import type {
   CaseAddressDto,
+  CaseCompanyOptionDto,
   CaseDetailDto,
   CaseListItemDto,
   CaseListResultDto,
@@ -379,6 +380,25 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
 
 // ── อ่าน ────────────────────────────────────────────────────────────────────
 
+/**
+ * ตัวเลือกบริษัทของหน้ารับเคส (UAT BUG-032) — active เท่านั้น · Company User เห็นแค่บริษัทตัวเอง
+ * คืนแค่ id + ชื่อ (ชื่อบริษัทแสดงบนแถวเคสอยู่แล้ว) จึงไม่ต้องขอ `view_master_data`
+ */
+async function listCaseCompanyOptions(user: SessionUser): Promise<CaseCompanyOptionDto[]> {
+  const ownCompanyId = user.scope.kind === 'company' ? user.scope.companyId : undefined
+  if (ownCompanyId === null) return []
+  return await prisma.financeCompany.findMany({
+    where: {
+      organizationId: user.organizationId,
+      deletedAt: null,
+      status: 'active',
+      ...(ownCompanyId === undefined ? {} : { id: ownCompanyId }),
+    },
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
 export async function listCases(user: SessionUser, query: CaseListQuery): Promise<CaseListResultDto> {
   // ⚠️ scope กับ filter ต้องอยู่คนละก้อนใน `AND` — spread รวมอ็อบเจ็กต์เดียวทำให้คีย์ซ้ำของ filter
   //    (`companyId`, `OR` ของ search) **ทับ** เงื่อนไข scope ⇒ ผู้จัดการค้นอะไรก็เห็นทุกทีม
@@ -405,7 +425,7 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
     ],
   }
 
-  const [total, rows] = await Promise.all([
+  const [total, rows, companies] = await Promise.all([
     prisma.case.count({ where }),
     prisma.case.findMany({
       where,
@@ -414,6 +434,7 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
       skip: (query.page - 1) * query.limit,
       take: query.limit,
     }),
+    listCaseCompanyOptions(user),
   ])
 
   const items = rows.map(toListDto)
@@ -422,6 +443,7 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
     total,
     page: query.page,
     limit: query.limit,
+    companies,
   }
 }
 

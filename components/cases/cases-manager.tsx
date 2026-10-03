@@ -44,7 +44,6 @@ import type {
   CaseListResultDto,
   CaseStatusChangeResultDto,
 } from '@/lib/cases/types'
-import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
 
@@ -106,7 +105,6 @@ export function CasesManager() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [page, setPage] = useState(1)
 
-  const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
   const [counts, setCounts] = useState<Readonly<Record<string, number>>>({})
 
   const [formOpen, setFormOpen] = useState(false)
@@ -167,19 +165,6 @@ export function CasesManager() {
       cancelled = true
     }
   }, [fetchList, fetchCounts])
-
-  // ข้อมูลประกอบ filter (บริษัทไฟแนนซ์) โหลดครั้งเดียวตอนเข้าหน้า
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const response = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active')
-      if (cancelled) return
-      setCompanies(response.data ?? [])
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   function updateFilter(next: Partial<Filters>): void {
     setLoading(true)
@@ -247,6 +232,9 @@ export function CasesManager() {
     }
   }
 
+  // ตัวเลือกบริษัท (ตัวกรอง + ฟอร์ม) มากับรายการเคส — ไม่เรียก `/api/finance-companies` ที่ต้องใช้
+  // `view_master_data` ซึ่งเจ้าหน้าที่อนุมัติเคสไม่มี (`25` §7.1 · UAT BUG-032)
+  const companies = result?.companies ?? []
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))

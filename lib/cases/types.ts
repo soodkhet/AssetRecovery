@@ -77,11 +77,22 @@ export interface CaseListItemDto {
   createdByName: string
 }
 
+/** ตัวเลือกบริษัทไฟแนนซ์ของหน้ารับเคส (ตัวกรอง + ฟอร์ม) — ชื่ออย่างเดียว ไม่มีข้อมูลสัญญา/ภาษี */
+export interface CaseCompanyOptionDto {
+  id: string
+  name: string
+}
+
 export interface CaseListResultDto {
   items: CaseListItemDto[]
   total: number
   page: number
   limit: number
+  /**
+   * บริษัท active ที่ผู้เรียกเลือกได้ (Company User = บริษัทตัวเองเท่านั้น) — ส่งมากับรายการเคสเพราะ
+   * `GET /api/finance-companies` ต้องใช้ `view_master_data` ซึ่งเจ้าหน้าที่อนุมัติเคสไม่มี (`25` §7.1 · UAT BUG-032)
+   */
+  companies: CaseCompanyOptionDto[]
 }
 
 /** ความพร้อมขึ้น `pending_review` (`38` §9) — คำนวณจาก pure `caseReadiness()` */

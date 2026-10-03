@@ -426,6 +426,15 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       )
       expect(crossCompany.items).toEqual([])
       expect(crossCompany.total).toBe(0)
+      // ตัวเลือกบริษัทที่มากับรายการ (UAT BUG-032) ก็ต้องไม่ leak ชื่อบริษัทอื่น
+      expect(crossCompany.companies).toEqual([])
+      const ownCompanyUser: SessionUser = {
+        ...otherCompanyUser,
+        scope: { kind: 'company', teamIds: [], companyId: COMPANY_ID, userId: USER_ID },
+      }
+      expect((await listCases(ownCompanyUser, caseListQuerySchema.parse({}))).companies).toEqual([
+        { id: COMPANY_ID, name: 'ไฟแนนซ์ทดสอบ 2.3' },
+      ])
 
       // ② search ตั้งคีย์ `OR` — ห้ามไปทับ `OR` ของ scope ทีม (เคสนี้ยังไม่มีทีมที่รับผิดชอบ)
       const teamUser: SessionUser = {
@@ -440,6 +449,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       // ยาม: เคสนี้มีอยู่จริงและผู้ที่เห็นทุกแถวค้นเจอ (ไม่ใช่ 0 เพราะ search พัง)
       const asGlobal = await listCases(actor, caseListQuerySchema.parse({ search: caseRef }))
       expect(asGlobal.items.map((item) => item.id)).toEqual([caseId])
+      expect(asGlobal.companies).toContainEqual({ id: COMPANY_ID, name: 'ไฟแนนซ์ทดสอบ 2.3' })
     } finally {
       await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${caseId}'`)
     }
