@@ -34,18 +34,49 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 - 03/10/2569 R1: จบครบ ไม่มีตัวบล็อก · 14 persona login + เปลี่ยนรหัสแล้ว (session อยู่ `uat/.auth/`) · template T1/T2 เป็น v2 · merge BUG-002 + verify เขียว (245 files / 3,072 tests) · ตัด `uat/bin/r*/**` ออกจาก eslint (สคริปต์ชั่วคราวต่อรอบ)
 - 03/10/2569 R0: baseline เขียว (typecheck · 241 files / 3,039 tests · lint) · Playwright 1.63 (DEC-011) · snapshot+restore ทดสอบแล้ว
 
-## ▶️ HANDOFF — session ถัดไปเริ่มตรงนี้ (เขียน 03/10/2569 หลังจบ R2)
-อ่านแค่: `UAT_PLAN.md` (§5 แถว R3, §6, §10–§12) + ไฟล์นี้ + `uat/BUGS.md` (แถวที่ยังไม่ fixed)
+## ▶️ HANDOFF — session ใหม่เริ่มตรงนี้ (เขียน 04/10/2569 ~00:30 หลังเตรียม R4 v3)
 
-1. **ปล่อยคู่ขนาน 2 agent**
-   - **step-sheet writer R3** → `uat/steps/R3.md` (prompt แบบ R2: ใช้ 80 บรรทัดแรกของ `uat/steps/R2.md` เป็นแบบ, probe อ่านอย่างเดียว, งบ ≤ 200k) · เนื้อหา: `uat.mgr.in`/`uat.sup.in` มอบหมาย C1,C2 → `uat.agent.in1` · C3,C4 → `uat.agent.in2` · `uat.mgr.out` C5 → `uat.agent.out1` · C7 → ทีม A แล้ว**ไม่มีใครรับ** → admin ตั้ง timeout ต่ำสุดที่ `/settings/finance?tab=assignment` (กรอกเหตุผล) → สั่ง job `reassign_timeout` ผ่าน `POST /api/dev/trigger-job` → มอบหมายใหม่ให้ `uat.agent.in1` · ปิด "หัวหน้าทีมกลุ่ม Inhouse มอบหมายได้" แล้วตรวจว่าปุ่มของ `uat.sup.in` **ซ่อน** (ไม่ใช่ disable) แล้วเปิดคืน · ลองมอบหมายให้ทีม B (ว่าง) · race มอบหมายเคสเดียวกัน 2 แท็บ · `uat.mgr.out` ห้ามเห็น/มอบหมายเคสทีม A · วันเวลามอบหมาย พ.ศ. บน list · notification ถึงพนักงาน · job รันซ้ำต้องไม่สร้างซ้ำ (`JOB_DUPLICATE`) · ⚠️ `accept_deadline_hours` บันทึกได้แต่ระบบยังไม่บังคับ อย่าทดสอบการบังคับ
-   - **fixer batch R2** ใน worktree (`isolation: worktree`; ก่อนเริ่ม `git merge staging` + `pnpm install --frozen-lockfile`; เทสต์ด้วย `TEST_DATABASE_URL=postgresql://assetrecovery:assetrecovery@localhost:5432/assetrecovery_test2`) → BUG-028, 029, 030, 031, 032, 034, 035 (+036 ถ้ามีแหล่งรหัสไปรษณีย์ที่ไม่ต้องดึงจากภายนอก ไม่งั้นรายงานกลับ) · 1 commit ต่อ 1 บั๊ก · ห้ามแตะ BUG-033/037 (รอมติ)
-2. ปล่อย **role agent R3** (prompt แบบ R2 replay) → รายงาน `uat/report/R3-assign.md` · ระหว่างรันห้าม merge อะไรเข้า staging
-3. จบ R3: `uat/bin/snap.sh R3-end` → รวมบั๊ก → merge fixer (`git merge --no-ff`) → `~/bin/dev restart asset` → verify เต็ม (typecheck + lint + test) → commit → ต่อ R4 (ภาคสนาม: มือถือจำลอง `openAs(u,{mobile:true})`, fixture รูป/วิดีโอหลักฐาน, พิกัด GPS ผ่าน `context.setGeolocation` + `permissions:['geolocation']`)
-4. งบ orchestrator: 2–3 รอบต่อ session แล้ว handoff แบบนี้
+### 0. สถานะ ณ ตอนส่งต่อ
+- staging HEAD: ดู `git log -1` (ล่าสุดตอนเขียน = commit ที่มีไฟล์นี้) · ยังไม่ push · migration ใหม่ทั้งหมดตั้งแต่ R0 ต้อง deploy กับ staging ทีหลัง (ดู §6)
+- ฐาน dev = `R3-end-v3` (ปลาย R3 + schema/สิทธิ์ล่าสุด) — **ยังไม่ได้เล่นอะไรต่อจากนี้** · C1,C2,C7 → in1 · C3,C4 → in2 · C5 → out1 ทุกใบ `pending_accept` · ไม่มี expense/asset/advance/revenue
+- เอกสารที่ใช้: `uat/DATASET.md` **v3** · `uat/steps/R4.md` **v3** · `uat/steps/R5.md` **v2** · `uat/steps/R6.md` **v1 (ต้องปรับก่อนเล่น — §4)**
+- มติทั้งหมด: `uat/PO-DECISIONS-2569-10-03.md` (Q1–Q21 + R6-A/B + มติจังหวะเวลา 04/10) — มีผลกับโค้ดแล้วทุกข้อ
+- dev server: `~/bin/dev asset` (pm2) → http://localhost:3000 · **ตรวจก่อนเริ่มทุกครั้ง** `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login` ต้องได้ 200 (เคยหลุดหายจาก pm2 ระหว่างคืน) · smoke: `node uat/bin/smoke.mjs`
 
-### รอมติ PO (ไม่บล็อก UAT — สะสมไว้ถามรวด)
-BUG-009 แผน/หัวหน้าข้ามฝั่ง · BUG-010 คอมมิชชันไม่ถูกสร้างเป็น expense (S1 — ยืนยันใน R4/R6) · BUG-011 สูตรคืนเงินทดรอง · BUG-013 DAILY_FLAT ต่อเคส/ต่อวัน · BUG-014 WHT threshold ต่อรายการ · BUG-015 snapshot vat_mode · BUG-022 PDPA การเงิน/บัญชีเห็นข้อมูลลูกหนี้ · BUG-023 ผู้จัดการเห็นเคส pending · BUG-033 บริษัทเห็นโมเดลค่าบริการ · BUG-037 hash เอกสารจาก browser
+### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
+1. ปล่อย role agent (prompt §2) แบบ background
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-093) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
+4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
+5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้
+
+### 2. Prompt ของ role agent R4a v3 (ใช้ได้ทันที)
+> คุณคือ **role agent ของรอบ R4a v3 "ภาคสนาม (มือถือ)"** ใน UAT ของ AssetRecovery (~/AssetRecovery) — เล่นเป็นพนักงาน `uat.agent.in1`, `uat.agent.in2`, `uat.agent.out1` บนมือถือจำลอง (iPhone 14), ธุรการ `uat.admin` (ดูงานรอรับเข้าคลัง) และ `admin` (สั่ง job รายวัน R4.23b) ผ่านเบราว์เซอร์จริงด้วย Playwright แล้วผลิตรายงานแบบคู่มือพร้อมภาพหน้าจอ
+> **ขอบเขต: R4.01–R4.23b ใน `uat/steps/R4.md` v3** (ห้ามทำ R4.24 ขึ้นไป) · ต้นรอบ = `R3-end-v3` (C1,C2,C7 → in1 · C3,C4 → in2 · C5 → out1 ทุกใบ pending_accept)
+> **อ่าน**: `UAT_PLAN.md` §6 §7 §10.2 §11 · `uat/steps/R4.md` v3 (changelog + หัวไฟล์ + R4.01–R4.23b) · `uat/DATASET.md` v3 (golden: ปิดงานสร้างแค่ commission/no_success_fee · หลังสั่ง job รายวันต่อเคส in1 C1/C2 และ in2 C3/C4 = fuel 10000 + allowance 7500, out1 C5 = fuel 550000 · `field_day_settlements` 3 แถว) · `uat/report/_TEMPLATE.md` · ตัวอย่าง `uat/report/R4a-field-v2.md` (60 บรรทัดแรก) · สคริปต์เดิม `uat/bin/r4v2/` → **คัดลอกเป็น `uat/bin/r4v3/` แล้วแก้ตามตารางในหัว R4.md**
+> **ต้องยืนยัน**: ปิดงานไม่สร้างค่าน้ำมัน/เบี้ยเลี้ยง + หน้าเบิกแสดง "รอคำนวณหลังจบวัน" · toast แสดงรายการที่สร้างจริง · C3 ต้องเลือกเหตุผลไม่สำเร็จ · บันทึกเพิ่มเติมถูกเก็บ · ไฟล์ปลอมถูก server ปัด (ฟอร์มเอาไฟล์ออกเอง) · แจ้งเตือนถูกคน · **R4.23b ต้องทำหลังเช็คอิน/ปิดงานของทุกคนครบ**: `admin` → `POST /api/dev/trigger-job` `{"jobType":"daily_field_allowance","payload":{"date":"2026-10-04"}}` (วันที่ต้องตรงวันที่เช็คอินจริงตามเวลาไทย — ถ้าเล่นข้ามเที่ยงคืน ให้ใช้วันที่ของเช็คอินจริงและรายงาน) → ตรวจแถวรายวัน/ผลรวมต่อพนักงาน/สั่งซ้ำ duplicate/วันอนาคต 400/การเงิน 403 · ข้อสังเกตในท้าย R4.md (R4v3-A/B/C) — ยืนยัน/หักล้าง
+> **กติกา**: GPS `context.grantPermissions(['geolocation'],{origin})` + `setGeolocation` · วิดีโอสร้างด้วย Chrome MediaRecorder · เก็บไฟล์ Storage ทุกไฟล์ ห้ามลบ · session หมดอายุ `openAs` login ใหม่เอง · S1/S2 ที่บล็อก → หยุดรายงาน · **ห้าม**: แก้โค้ด/docs/, แก้ `uat/BUGS.md` `uat/STATE.md` `uat/DATASET.md` `uat/steps/`, restore DB, commit, ติดตั้งแพ็กเกจ, รีสตาร์ต server, เขียน DB ด้วย SQL, พิมพ์รหัสผ่าน
+> **เครื่องมือ**: `uat/bin/lib.mjs` (`openAs(u,{mobile:true})`, `shot(page,'R4v3','NN-slug')`) · `uat/bin/q.sh` (read-only) · `uat/bin/counts.sh` · log `PATH=/opt/homebrew/bin:$PATH pm2 logs asset-web --nostream --lines 40` (ห้าม `~/bin/dev logs`)
+> **รายงาน**: `uat/report/R4a-field-v3.md` แบบคู่มือสำหรับพนักงาน + ท้ายรายงาน "🐞 บั๊กที่พบ" (`R4v3-B01`…) + "❓ ต้องตัดสินใจ" · งบ context ≤ 250k
+> **คืน (≤ 1,100 tokens)**: step ที่ทำถึง + ✅/🐞/⚠️/❓ · บั๊กละ 1 บรรทัด · ผลยืนยันแต่ละข้อ · ตารางปลายรอบ (expense ต่อเคส/ชนิด/ยอด/สถานะ, field_day_settlements, asset, case_evidences) · ผลรวม expense active เทียบ golden v3 (ผูกเคส 890000 ก่อนค่าที่พัก) · `counts.sh` · จำนวนภาพ/ไฟล์อัปโหลด
+
+### 3. หลัง R4a
+snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเดียวกับ §2 เปลี่ยนขอบเขต + ยืนยัน: ตีกลับหลักฐาน C4 ผ่านหน้าจอ, resubmit แทนที่เฉพาะ commission (แถวรายวันไม่ถูกแทน), ค่าที่พัก in1 ฿600 ผ่านหน้าจอ + ตรวจไฟล์ใบเสร็จฝั่ง server, เงินทดรอง ADV1/ADV2/ADV3 (วันเคลียร์ 04/10)/ADV-MAX/ADV4 ผ่าน `/field/advances` ทุกใบค้าง pending) → snapshot `R4-end-v3` → R5 v2 (prompt แบบ R5 เดิมในประวัติ: ธุรการทำคลัง, ไม่กด "ยืนยันรับทั้งที่ IMEI ไม่ตรง", ยืนยันล็อตต้องปลดล็อกแถวรายวันด้วย) → snapshot `R5-end-v3`
+
+### 4. ก่อน R6
+- ปรับ `uat/steps/R6.md` → v2 ด้วย subagent: golden ตาม DATASET v3 (IN-1 495000/5850/489150 · IN-2 305000/3150/301850 · OUT-1 730500 · OUT-2 30000 · 50 ทวิ 15 ใบ 28500) + หน้าจอใหม่ของ fixer G (ผู้จัดการ: เมนู "การเงิน" → แท็บ "ค่าตอบแทน" ปุ่ม "อนุมัติขั้น {n}"/"ตีกลับ" · การเงิน: `/finance?tab=payee`) + รายการไม่ผูกเคส → ผู้จัดการทีมของผู้เบิก + payee unverified = **ปฏิเสธการสร้างรอบทั้งรอบ** (`UNVERIFIED_PAYEE_IN_PAYOUT`) + bank file format ต้องกด "ทดสอบ" ก่อน · ⚠️ ฐาน WHT ของ in2 เกินเกณฑ์แค่ ฿50 — ทุกรายการของ in2 ต้อง approved ก่อนสร้าง IN-2
+- R6 แบ่ง R6a/R6b · IN-1 ค้าง `file_generated` ไว้ถึง R7
+### 5. R7 ขึ้นไป
+- ต้น R7: ADV3 overdue (`advance_overdue` ผ่าน dev trigger) — ต้องหลังเที่ยงคืนของวันเคลียร์ (05/10 เป็นต้นไป)
+- `uat/fixtures/bank-R7.csv` IN-1 = 4891.50 แล้ว · แทนค่า `{{R7_DATE}}` ก่อนนำเข้า
+- R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
+
+### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม)
+- migration ใหม่จาก UAT (ตั้งแต่ `20261003113300` ถึง `20261003170000`) → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging)
+
+### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)
+ดูท้าย `uat/PO-DECISIONS-2569-10-03.md` (คำถามนักบัญชี 3 ข้อ + ข้อสังเกตหลังแก้: ผู้จัดการรับเข้าคลังได้ไหม, `38` §13 แถว edit_case, วันที่รายได้หลัง resubmit ข้ามเดือน, เพดานค่าที่พักต่อคืน, ภาพแผนที่จริง) + BUGS ที่สถานะ needs-decision (BUG-076, 078, 084, 090 (`25` ให้ตรง `17`), 093)
 
 ## มติระหว่างทาง
 - 03/10/2569 ผู้ใช้: เติม `wht_withheld_by_customer_pct` + `vat_mode` ในฟอร์มบริษัทก่อน R1 (BUG-001) · สร้างหน้าตั้งค่านโยบายมอบหมายงานก่อน R3 (BUG-002)
