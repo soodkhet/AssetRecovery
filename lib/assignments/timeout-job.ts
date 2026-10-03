@@ -92,6 +92,7 @@ export async function resolveExpiredReassignments(
         resolution: 'timeout_auto',
         actorId: null,
         actorRole: null,
+        requestedBy: pending.requestedBy,
         pendingReassignmentId: pending.id,
         events: ['assignment.reassignment_timeout_resolved'],
         auditReason: `[job:${jobId}] หมดเวลารอความยินยอม — ${pending.reason}`,

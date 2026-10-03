@@ -1,4 +1,5 @@
 import { emitAudit } from '@/lib/audit/audit'
+import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
 import { AuthError } from '@/lib/auth/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isWithinScope } from '@/lib/auth/scope'
@@ -182,14 +183,21 @@ async function assertCanAct(user: SessionUser): Promise<void> {
   }
 }
 
-/** พนักงานที่เลือกต้องเป็นสมาชิก **ทีมของเคส** (`40` §11) — ไม่พบ/ต่างทีม = ตอบ code เดียวกันไม่ leak */
+/**
+ * พนักงานที่เลือกต้องเป็น **พนักงานติดตามทรัพย์** ที่เป็นสมาชิก **ทีมของเคส** (`40` §11/§12)
+ * ไม่พบ/ต่างทีม/ไม่ใช่ role พนักงาน (เช่น หัวหน้า/ผู้จัดการที่สังกัดทีมเดียวกัน — UAT BUG-039)
+ * = ตอบ `ASSIGNMENT_TEAM_MISMATCH` ตัวเดียวกันไม่ leak · ตรงกับตัวกรองของ agent picker (`agent-queries.ts`)
+ */
 async function loadAgentInCaseTeam(organizationId: string, agentId: string, caseTeamId: string | null) {
   const agent = await prisma.user.findFirst({
     where: { id: agentId, organizationId, deletedAt: null, status: 'active' },
-    select: { id: true, fullName: true, teamId: true },
+    select: { id: true, fullName: true, teamId: true, role: { select: { name: true } } },
   })
   if (agent === null) {
     throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH', { detail: `ไม่พบพนักงาน ${agentId}` })
+  }
+  if (agent.role.name !== FIELD_AGENT_ROLE_NAME) {
+    throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH', { detail: `ผู้รับ ${agentId} ไม่ใช่พนักงานติดตามทรัพย์` })
   }
   assertAgentInCaseTeam(agent.teamId, caseTeamId)
   return agent
@@ -418,7 +426,9 @@ export async function reassignCase(
       const outcome = reassignOutcome()
       await tx.caseAssignment.update({
         where: { id: assignment.id },
-        data: { status: outcome.previousStatus, reassignReason: reason, updatedBy: context.actor.id },
+        // ⚠️ ไม่แตะ `reassign_reason` ของแถวเดิม (UAT BUG-061) — ช่องนี้คือ "เหตุผลที่แถวนี้เกิด"
+        //    เหตุผลที่ถูกโอนออกอยู่ที่ `reassignment_history` + แถวใหม่ (`reassigned_from`) แล้ว
+        data: { status: outcome.previousStatus, updatedBy: context.actor.id },
       })
       const replacement = await tx.caseAssignment.create({
         data: {
@@ -618,6 +628,7 @@ export async function respondReassignment(
       resolvedAt,
       resolution: 'consented',
       actorId: context.actor.id,
+      requestedBy: pending.requestedBy,
       actorRole: context.actor.roleName,
       pendingReassignmentId: pending.id,
       events: ['assignment.reassignment_consented'],
@@ -695,6 +706,8 @@ export interface SwapAssignmentInput {
   resolution: 'consented' | 'timeout_auto'
   /** NULL = ระบบ (timeout job) — `reason` ต้องมี job id ตาม `90` §13 */
   actorId: string | null
+  /** ผู้ส่งคำขอเปลี่ยน (`pending_reassignments.requested_by`) = ผู้เปลี่ยนผู้รับผิดชอบตัวจริง (UAT BUG-043) */
+  requestedBy: string
   actorRole: string | null
   pendingReassignmentId: string
   events: readonly string[]
@@ -720,7 +733,8 @@ export async function swapAssignment(
 
   await tx.caseAssignment.update({
     where: { id: input.assignmentId },
-    data: { status: outcome.previousStatus, reassignReason: input.reason, updatedBy: input.actorId },
+    // ไม่เขียนทับ `reassign_reason` ของแถวเดิม (UAT BUG-061 — ดู `reassignCase`)
+    data: { status: outcome.previousStatus, updatedBy: input.actorId },
   })
 
   const replacement = await tx.caseAssignment.create({
@@ -734,7 +748,8 @@ export async function swapAssignment(
       acceptedAt: outcome.acceptedAt,
       reassignedFrom: input.assignmentId,
       reassignReason: input.reason,
-      createdBy: input.actorId ?? previous.createdBy,
+      // timeout (ไม่มี actor) = ผู้ขอเปลี่ยน ไม่ใช่คนมอบหมายครั้งแรก (UAT BUG-043)
+      createdBy: input.actorId ?? input.requestedBy,
     },
     select: assignmentSelect,
   })
@@ -746,14 +761,15 @@ export async function swapAssignment(
       pendingReassignmentId: input.pendingReassignmentId,
       fromAgentId: input.fromAgentId,
       toAgentId: input.toAgentId,
-      reassignedBy: input.actorId ?? previous.createdBy,
+      // คนที่ "เปลี่ยนผู้รับผิดชอบ" คือผู้ส่งคำขอเสมอ — ทั้งสาขายินยอมและ timeout (UAT BUG-043)
+      reassignedBy: input.requestedBy,
       requestedAt: input.requestedAt,
       resolvedAt: input.resolvedAt,
       resolution: input.resolution,
       reason: input.reason,
       // สาขานี้ใช้เฉพาะเคสที่พนักงานกดรับแล้ว (สาขา immediate ลง history เองที่ `reassignCase`)
       wasAcceptedBeforeReassign: true,
-      createdBy: input.actorId ?? previous.createdBy,
+      createdBy: input.actorId ?? input.requestedBy,
     },
   })
 
