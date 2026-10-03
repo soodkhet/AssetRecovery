@@ -17,6 +17,9 @@ const perKmPlan: CompensationSnapshotValues = {
   fuelDailyFlatSatang: null,
   // ฿300/วัน
   allowanceSatang: 30_000,
+  // ยอด 0 = ไม่สร้างรายการ — ชุดเทสต์ fuel/allowance เดิมไม่ปนคอม (เทสต์คอมแยกด้านล่าง)
+  commissionSatang: 0,
+  noSuccessFeeSatang: 0,
 }
 
 const dailyFlatPlan: CompensationSnapshotValues = {
@@ -26,6 +29,8 @@ const dailyFlatPlan: CompensationSnapshotValues = {
   // ฿250/วัน
   fuelDailyFlatSatang: 25_000,
   allowanceSatang: 30_000,
+  commissionSatang: 0,
+  noSuccessFeeSatang: 0,
 }
 
 describe('fuelPerKmSatang (`22` §6.1)', () => {
@@ -169,5 +174,51 @@ describe('planCaseExpenses — ชุดรายการเบิกตอน�
     })
 
     expect(plan.drafts.map((draft) => draft.expenseType)).toEqual(['fuel'])
+  })
+})
+
+describe('planCaseExpenses — ค่าคอมมิชชั่น/เบี้ยเสี่ยง (`22` §6.4 · มติ PO 03/10/2569 UAT Q2)', () => {
+  // แผน PLAN_IN ของ UAT (DATASET M5): คอม ฿500 / เบี้ยเสี่ยง ฿200
+  const withCommission: CompensationSnapshotValues = { ...dailyFlatPlan, commissionSatang: 50_000, noSuccessFeeSatang: 20_000 }
+
+  it('ปิดสำเร็จ: สร้าง commission ตามแผน สถานะรอคลังเหมือน fuel/allowance', () => {
+    const plan = planCaseExpenses({ outcome: 'closed_success', plan: withCommission, distanceKmHundredths: null, fieldDays: 1 })
+
+    expect(plan.drafts).toContainEqual({
+      expenseType: 'commission',
+      grossSatang: 50_000,
+      distanceKmHundredths: null,
+      status: 'pending_warehouse_confirm',
+    })
+    expect(plan.drafts.map((draft) => draft.expenseType)).not.toContain('no_success_fee')
+  })
+
+  it('ปิดไม่สำเร็จ: สร้าง no_success_fee (exclusive กับ commission) เข้าคิวอนุมัติทันที', () => {
+    const plan = planCaseExpenses({ outcome: 'closed_fail', plan: withCommission, distanceKmHundredths: null, fieldDays: 1 })
+
+    expect(plan.drafts).toContainEqual({
+      expenseType: 'no_success_fee',
+      grossSatang: 20_000,
+      distanceKmHundredths: null,
+      status: 'pending_approval',
+    })
+    expect(plan.drafts.map((draft) => draft.expenseType)).not.toContain('commission')
+  })
+
+  it('คอมไม่ขึ้นกับจำนวนวัน/ระยะทาง — ไม่มีเช็คอินก็ยังได้ค่าตายตัวต่อเคส', () => {
+    const plan = planCaseExpenses({ outcome: 'closed_success', plan: withCommission, distanceKmHundredths: null, fieldDays: 0 })
+
+    expect(plan.drafts.find((draft) => draft.expenseType === 'commission')?.grossSatang).toBe(50_000)
+  })
+
+  it('แผนตั้งยอด 0 = ไม่สร้างแถว (D10)', () => {
+    const plan = planCaseExpenses({
+      outcome: 'closed_fail',
+      plan: { ...withCommission, noSuccessFeeSatang: 0 },
+      distanceKmHundredths: null,
+      fieldDays: 1,
+    })
+
+    expect(plan.drafts.map((draft) => draft.expenseType)).toEqual(['fuel', 'allowance'])
   })
 })

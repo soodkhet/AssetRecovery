@@ -84,6 +84,12 @@ const ALLOWANCE_SATANG = 50_000
 /** Payee-level 3% ชนะ Plan-level 5% เสมอ (`18` §6.3) */
 const PAYEE_WHT_PCT = 3
 const FUEL_WHT_SATANG = 4_500
+/**
+ * ค่าตอบแทนตามผลต่อเคส (`22` §6.4) — ปิดงานสร้างเป็นรายการเบิกด้วย (มติ PO 03/10/2569 UAT Q2)
+ * ยอดต่ำกว่าเกณฑ์ WHT ทั้งคู่ และไม่ชนกับยอดเบี้ยเลี้ยง (ให้เรียงตามยอดได้ deterministic)
+ */
+const COMMISSION_SATANG = 80_000
+const NO_SUCCESS_FEE_SATANG = 60_000
 
 let client: PrismaClient | null = null
 let assignments: typeof import('@/lib/assignments/queries')
@@ -363,8 +369,10 @@ beforeAll(async () => {
       (id, organization_id, name, side, fuel_mode, fuel_daily_flat_satang, allowance_satang,
        commission_satang, no_success_fee_satang, wht_pct, version, effective_from, is_current, created_by)
     VALUES ('${PLAN_ID}', '${ORG_ID}', 'แผนเหมารายวัน 8.1ข', 'inhouse', 'DAILY_FLAT', ${FUEL_SATANG},
-            ${ALLOWANCE_SATANG}, 150000, 50000, 5.00, 1, DATE '2026-01-01', true, '${ADMIN_ID}')
-    ON CONFLICT (id) DO NOTHING
+            ${ALLOWANCE_SATANG}, ${COMMISSION_SATANG}, ${NO_SUCCESS_FEE_SATANG}, 5.00, 1, DATE '2026-01-01', true, '${ADMIN_ID}')
+    -- แผนลบไม่ได้ ⇒ ฐานทดสอบที่รันมาก่อนค่าคอมเปลี่ยนต้องได้ค่าปัจจุบันของ fixture เสมอ
+    ON CONFLICT (id) DO UPDATE SET commission_satang = EXCLUDED.commission_satang,
+                                   no_success_fee_satang = EXCLUDED.no_success_fee_satang
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO teams (id, organization_id, name, side, provinces, status, compensation_plan_id, created_by)
@@ -466,8 +474,8 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
       select: { id: true, expenseType: true, grossSatang: true, status: true, payeeId: true },
       orderBy: { grossSatang: 'asc' },
     })
-    expect(created.map((row) => row.expenseType)).toEqual(['allowance', 'fuel'])
-    expect(created.map((row) => row.grossSatang)).toEqual([ALLOWANCE_SATANG, FUEL_SATANG])
+    expect(created.map((row) => row.expenseType)).toEqual(['allowance', 'no_success_fee', 'fuel'])
+    expect(created.map((row) => row.grossSatang)).toEqual([ALLOWANCE_SATANG, NO_SUCCESS_FEE_SATANG, FUEL_SATANG])
     // `closed_fail` ไม่ผ่านคลัง ⇒ เข้าคิวอนุมัติทันที (ไม่ใช่ `pending_warehouse_confirm`)
     expect(created.every((row) => row.status === 'pending_approval')).toBe(true)
     expect(created.every((row) => row.payeeId === PAYEE_ID)).toBe(true)
@@ -499,18 +507,18 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
       cutoffDate,
       name: null,
     })
-    expect(batch.itemCount).toBe(2)
-    expect(batch.grossSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG)
+    expect(batch.itemCount).toBe(3)
+    expect(batch.grossSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG + NO_SUCCESS_FEE_SATANG)
     // Payee-level ชนะ Plan-level + เกณฑ์ขั้นต่ำคิดต่อรายการ ⇒ หักเฉพาะค่าน้ำมัน
     expect(batch.whtSatang).toBe(FUEL_WHT_SATANG)
-    expect(batch.netSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG - FUEL_WHT_SATANG)
+    expect(batch.netSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG + NO_SUCCESS_FEE_SATANG - FUEL_WHT_SATANG)
 
     const items = await db().payoutBatchItem.findMany({
       where: { payoutBatchId: batch.id },
       select: { grossSatang: true, whtSatang: true, whtPctSnapshot: true, taxProfileId: true },
       orderBy: { grossSatang: 'asc' },
     })
-    expect(items.map((row) => row.whtSatang)).toEqual([0, FUEL_WHT_SATANG])
+    expect(items.map((row) => row.whtSatang)).toEqual([0, 0, FUEL_WHT_SATANG])
     expect(items.every((row) => row.taxProfileId === TAX_PROFILE_ID)).toBe(true)
     expect(items.every((row) => row.whtPctSnapshot?.toNumber() === PAYEE_WHT_PCT)).toBe(true)
 
@@ -529,7 +537,7 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     }
     const firstFile = await payout.generatePaymentFile(ctx(finance), batch.id, generateInput)
     expect(firstFile.result.generated).toBe(true)
-    expect(firstFile.result.rowCount).toBe(2)
+    expect(firstFile.result.rowCount).toBe(3)
     expect(firstFile.result.fileHash).toMatch(/^[a-f0-9]{64}$/)
 
     const withKey = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
@@ -558,7 +566,7 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     expect(done.status).toBe('completed')
 
     const records = await db().expenseRecord.findMany({ where: { organizationId: ORG_ID } })
-    expect(records).toHaveLength(2)
+    expect(records).toHaveLength(3)
     expect(records.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(FUEL_WHT_SATANG)
 
     const certificates = await wht.listWhtCertificates(finance, {})
@@ -569,7 +577,7 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
 
     // เรียก sync ซ้ำ (เช่น job เก็บตก) ต้องไม่สร้างเอกสารซ้ำ
     await expenses.syncExpenseRecordsFromPayout(ctx(finance), batch.id)
-    expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(2)
+    expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(3)
     expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 })
@@ -794,7 +802,7 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
 
     const completed = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
     expect(completed.status).toBe('completed')
-    expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(2)
+    expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(3)
     expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 })

@@ -32,6 +32,7 @@ import type {
   FieldExpenseListDto,
   FieldIncomeSummaryDto,
 } from '@/lib/field/types'
+import { sumSatang } from '@/lib/finance/satang'
 import { toBangkokParts } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseOutcome } from '@/lib/generated/prisma/enums'
@@ -93,8 +94,6 @@ export async function ensureAgentPayeeId(tx: ExpenseTxClient, params: {
 export interface PlanSnapshot extends CompensationSnapshotValues {
   planId: string
   version: number
-  commissionSatang: number
-  noSuccessFeeSatang: number
 }
 
 /**
@@ -181,7 +180,8 @@ export interface GenerateCaseExpensesResult extends CaseExpensePlan {
 }
 
 /**
- * สร้างรายการเบิก fuel/allowance อัตโนมัติตอนปิดงาน (`41` §6.6 · §8)
+ * สร้างรายการเบิก fuel/allowance + commission/no_success_fee อัตโนมัติตอนปิดงาน
+ * (`41` §6.6 · §8 · `22` §6.4 — มติ PO 03/10/2569 UAT Q2)
  * **จุดเดียวของระบบ** ที่สร้างรายการกลุ่ม "ผูกกับเคส" — ใช้ทั้ง `submit_close_case`
  * และ `resubmit_close_case` (§10.1 บอกให้สร้าง "ตามกฎปกติ" ⇒ ต้องเป็นทางเดียวกันเป๊ะ)
  *
@@ -748,10 +748,11 @@ export async function rejectFieldExpense(
 // ── GET /api/field/income-summary (`41` §7.10) ──────────────────────────────
 
 /**
- * สรุปรายได้ของพนักงาน — ค่าคอมมิชชั่น/เบี้ยเสี่ยงมาจาก **แผนที่ snapshot ไว้กับรายการเบิกของเคสนั้น**
- * (`41` §6.8 — ค่าตายตัวต่อเคสตาม `22` §6.4) ไม่ใช่แผนปัจจุบัน
+ * สรุปรายได้ของพนักงาน — ค่าคอมมิชชั่น/เบี้ยเสี่ยงอ่านจาก **รายการเบิกจริง** (`commission` /
+ * `no_success_fee`) ที่ระบบสร้างตอนปิดงาน (มติ PO 03/10/2569 UAT Q2 · BUG-054) — ยอดจึงเป็น
+ * ตัวเดียวกับที่เข้าอนุมัติ/รอบจ่ายจริง ไม่ใช่อ่านจากแผนตรง (`92` §7.1 — snapshot เมื่อเกิด)
  *
- * เคส `reassigned_away` ไม่นับ (ไม่ใช่ผลการปิดงาน — `41` §10)
+ * เคส `reassigned_away` ไม่นับ (ไม่ใช่ผลการปิดงาน — `41` §10) · รายการที่ `superseded`/ลบแล้วไม่นับ
  */
 export async function getIncomeSummary(
   user: SessionUser,
@@ -773,42 +774,32 @@ export async function getIncomeSummary(
       caseId: true,
       status: true,
       completedAt: true,
-      teamId: true,
       case: { select: { caseRef: true, debtorName: true } },
       expenses: {
-        where: { deletedAt: null, status: { in: [...ACTIVE_EXPENSE_STATUSES] } },
-        select: { compPlanId: true },
-        take: 1,
+        where: {
+          deletedAt: null,
+          status: { in: [...ACTIVE_EXPENSE_STATUSES] },
+          expenseType: { in: ['commission', 'no_success_fee'] },
+        },
+        select: { grossSatang: true },
       },
     },
   })
 
-  // ⚠️ **ห้าม fallback ไปแผนปัจจุบันของทีม** (Rule: Snapshot pattern · `92` §7.1) — ตัวชี้ของทีม
-  // ถูกย้ายไปเวอร์ชันใหม่ทุกครั้งที่แก้แผน (`lib/compensation/queries.ts`) ⇒ ยอดของเคสที่ปิดไป
-  // เมื่อเดือนก่อนจะ**ขยับเอง**หลังการเงินแก้แผน · งานที่ไม่มี snapshot (ไม่มีรายการเบิก active)
-  // แปลว่ายังไม่มีค่าตอบแทนบันทึกไว้จริง ⇒ แสดง 0 ไม่ใช่เดาจากแผนสด
-  const planIds = [...new Set(assignments.map((row) => row.expenses[0]?.compPlanId ?? null))].filter(
-    (id): id is string => id !== null,
-  )
-
-  const plans = await prisma.compensationPlan.findMany({
-    where: { id: { in: planIds }, organizationId: user.organizationId },
-    select: { id: true, commissionSatang: true, noSuccessFeeSatang: true },
-  })
-  const planById = new Map(plans.map((plan) => [plan.id, plan]))
-
+  // ⚠️ **ห้าม fallback ไปแผนของทีม** — งานที่ไม่มีรายการเบิกคอม/เบี้ยเสี่ยง active (แผนตั้งยอด 0
+  // หรือทีมไม่ผูกแผน) แปลว่าไม่มีค่าตอบแทนส่วนนี้บันทึกไว้จริง ⇒ แสดง 0 ไม่ใช่เดาจากแผนสด
   const items = assignments.map((row) => {
-    const planId = row.expenses[0]?.compPlanId ?? null
-    const plan = planId === null ? undefined : planById.get(planId)
     const success = row.status === 'closed_success'
-    const amountSatang = success ? (plan?.commissionSatang ?? 0) : (plan?.noSuccessFeeSatang ?? 0)
     return {
       caseId: row.caseId,
       caseRef: row.case.caseRef,
       debtorName: row.case.debtorName,
       outcome: (success ? 'closed_success' : 'closed_fail') as CaseOutcome,
       closedAt: row.completedAt?.toISOString() ?? null,
-      amountSatang,
+      amountSatang: sumSatang(
+        row.expenses.map((expense) => expense.grossSatang),
+        'ค่าตอบแทนต่อเคส',
+      ),
     }
   })
 
@@ -819,8 +810,8 @@ export async function getIncomeSummary(
     month: query.month ?? null,
     successCount: successItems.length,
     failCount: failItems.length,
-    commissionSatang: successItems.reduce((sum, item) => sum + item.amountSatang, 0),
-    noSuccessFeeSatang: failItems.reduce((sum, item) => sum + item.amountSatang, 0),
+    commissionSatang: sumSatang(successItems.map((item) => item.amountSatang), 'ค่าคอมมิชชั่นรวม'),
+    noSuccessFeeSatang: sumSatang(failItems.map((item) => item.amountSatang), 'เบี้ยเสี่ยงรวม'),
     items,
   }
 }

@@ -1026,7 +1026,8 @@ function notifyExpenseQueue(organizationId: string, outcome: CaseOutcome, count:
  * ยืนยันปิดงาน — หลักฐานที่ส่งมาใน body คือชุดสุดท้าย (ฟอร์มเป็นเจ้าของสถานะ ไม่ merge กับ draft
  * ไม่งั้นไฟล์ที่ผู้ใช้ลบทิ้งจะกลับมา) ส่วน **เช็คอินอ่านจาก DB เสมอ** เพราะเป็นหลักฐานที่ล็อกแล้ว
  *
- * ปิดงานสำเร็จ = สร้างรายการเบิก fuel/allowance อัตโนมัติในทรานแซกชันเดียวกัน (`41` §6.6 · §8)
+ * ปิดงานสำเร็จ = สร้างรายการเบิก fuel/allowance/commission (หรือ no_success_fee) อัตโนมัติในทรานแซกชัน
+ * เดียวกัน (`41` §6.6 · §8 · มติ PO 03/10/2569 UAT Q2)
  * — `closed_success` เข้า `pending_warehouse_confirm` เสมอ · `closed_fail` เข้า `pending_approval`
  */
 export async function closeFieldCase(
@@ -1117,7 +1118,7 @@ export async function closeFieldCase(
           })
         : null
 
-    // รายการเบิก fuel/allowance เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
+    // รายการเบิก fuel/allowance/commission เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
     // พนักงานไม่ต้องทำเรื่องเบิกเอง) ⇒ ปิดงานสำเร็จแต่ไม่มีรายการเบิกเป็นไปไม่ได้
     const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
       organizationId: user.organizationId,

@@ -101,8 +101,9 @@ describe('F4 — ตารางรายพนักงาน (drill-down)', ()
       grossSatang: 520_000,
     })
 
+    // เบี้ยเสี่ยงลงช่องเดียวกับคอมมิชชั่น (`22` §6.4 คู่ exclusive · มติ PO 03/10/2569 UAT Q2)
     const outsourced = data.rows.find((row) => row[ROW_KEY] === 'p3')
-    expect(outsourced).toMatchObject({ otherSatang: 40_000, grossSatang: 40_000 })
+    expect(outsourced).toMatchObject({ commissionSatang: 40_000, otherSatang: 0, grossSatang: 40_000 })
   })
 
   it('แถวรวมของช่องย่อยบวกกันได้เท่ากับ Gross รวม', () => {
