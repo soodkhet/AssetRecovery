@@ -29,7 +29,7 @@ describe('ทะเบียนเมนู Field Tracker (`41` §5)', () => {
       'tracking',
       'closed',
     ])
-    expect(sections[1]?.items.map((item) => item.id)).toEqual(['expenses', 'income'])
+    expect(sections[1]?.items.map((item) => item.id)).toEqual(['expenses', 'advances', 'income'])
   })
 
   it('badge ของ "กำลังติดตาม" เป็นสีม่วงและผูกกับคำขอเปลี่ยนผู้รับผิดชอบ ไม่ใช่จำนวนเคส', () => {
@@ -50,6 +50,7 @@ describe('ทะเบียนเมนู Field Tracker (`41` §5)', () => {
     expect(activeFieldNavId('/field/tracking')).toBe('tracking')
     expect(activeFieldNavId('/field/accepted')).toBe('accepted')
     expect(activeFieldNavId('/field/expenses')).toBe('expenses')
+    expect(activeFieldNavId('/field/advances')).toBe('advances')
     expect(activeFieldNavId('/warehouse')).toBeNull()
   })
 

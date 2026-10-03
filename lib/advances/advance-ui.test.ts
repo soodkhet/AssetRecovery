@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  advanceRequestErrorText,
   ADVANCE_STATUS_LABEL,
   advanceStatusBadgeGroup,
   advanceStatusLabel,
@@ -151,5 +152,33 @@ describe('ยอดค้าง + ตัวกรองของแท็บเ�
       'cleared',
       'rejected',
     ])
+  })
+})
+
+describe('ข้อความ error ตอนขอเงินทดรอง (UAT BUG-046)', () => {
+  it('เกินเพดาน: บอกยอดสูงสุดที่ขอได้เป็นบาท', () => {
+    const text = advanceRequestErrorText({
+      code: 'ADVANCE_EXCEEDS_MAX',
+      title: 't',
+      message: 'm',
+      payload: { requestedSatang: 600_000, maxSatang: 500_000 },
+    })
+    expect(text.title).toBe('ยอดขอเบิกเกินเพดานต่อครั้ง')
+    expect(text.message).toContain('฿5,000.00')
+  })
+
+  it('เกินเพดานแต่ไม่มีข้อมูลเพดาน: ยังเป็นข้อความภาษาไทยที่บอกทางแก้', () => {
+    expect(advanceRequestErrorText({ code: 'ADVANCE_EXCEEDS_MAX', title: 't', message: 'm' }).message).toContain(
+      'ลดยอด',
+    )
+  })
+
+  it('ยอดค้างเคลียร์: บอกให้เคลียร์ยอดเดิมก่อน', () => {
+    const text = advanceRequestErrorText({ code: 'ADVANCE_PENDING_SETTLEMENT', title: 't', message: 'm' })
+    expect(text.message).toContain('เคลียร์ยอดรายการเดิม')
+  })
+
+  it('code อื่นคืนข้อความจาก API ตรง ๆ', () => {
+    expect(advanceRequestErrorText({ code: 'X', title: 'ก', message: 'ข' })).toEqual({ title: 'ก', message: 'ข' })
   })
 })

@@ -1,5 +1,6 @@
 import { canAdvanceAction } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -78,3 +79,33 @@ export const ADVANCE_STATUS_FILTERS = [
 ] as const satisfies readonly { value: string; label: string }[]
 
 export type AdvanceStatusFilter = (typeof ADVANCE_STATUS_FILTERS)[number]['value']
+
+/**
+ * ข้อความ error ของการ "ขอเงินทดรอง" ที่ผู้ขอ (พนักงานภาคสนาม) อ่านแล้วรู้ว่าต้องทำอะไรต่อ (UAT BUG-046)
+ * — ใช้ข้อมูลประกอบที่ API แนบมา (`maxSatang` ของ `ADVANCE_EXCEEDS_MAX`) · code อื่นคืนข้อความจาก API ตรง ๆ
+ */
+export function advanceRequestErrorText(error: {
+  code?: string
+  title: string
+  message: string
+  payload?: Readonly<Record<string, unknown>>
+}): { title: string; message: string } {
+  if (error.code === 'ADVANCE_PENDING_SETTLEMENT') {
+    return {
+      title: 'ยังมีเงินทดรองที่ไม่ได้เคลียร์ยอด',
+      message:
+        'คุณมีเงินทดรองที่อนุมัติแล้วหรือเลยกำหนดเคลียร์ค้างอยู่ — เคลียร์ยอดรายการเดิมให้เสร็จก่อน จึงขอเบิกรอบใหม่ได้',
+    }
+  }
+  if (error.code === 'ADVANCE_EXCEEDS_MAX') {
+    const max = error.payload?.maxSatang
+    return {
+      title: 'ยอดขอเบิกเกินเพดานต่อครั้ง',
+      message:
+        typeof max === 'number'
+          ? `ขอได้สูงสุดครั้งละ ${fmtSatangSymbol(max)} — ลดยอดแล้วส่งคำขอใหม่`
+          : 'ยอดที่ขอเกินเพดานเงินทดรองต่อครั้งที่องค์กรตั้งไว้ — ลดยอดแล้วส่งคำขอใหม่',
+    }
+  }
+  return { title: error.title, message: error.message }
+}
