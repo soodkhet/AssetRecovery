@@ -99,7 +99,10 @@ describe('ปฏิทินของ Calendar Picker (`41` §7.4)', () => {
 
   it('ชื่อวันคำนวณจาก UTC (ไม่ขึ้นกับเขตเวลาเครื่อง) และวันที่ยังผ่าน fmtDate เป็น พ.ศ.', () => {
     expect(weekdayIndex('2026-08-14')).toBe(5)
-    expect(withWeekdayPrefix('2026-08-14', fmtDate('2026-08-14'))).toBe('วันศ 14/08/2569')
+    expect(withWeekdayPrefix('2026-08-14', fmtDate('2026-08-14'))).toBe('วันศุกร์ 14/08/2569')
+    // UAT BUG-068 — เคยได้ "วันส 03/10/2569"
+    expect(withWeekdayPrefix('2026-10-03', fmtDate('2026-10-03'))).toBe('วันเสาร์ 03/10/2569')
+    expect(withWeekdayPrefix('2026-10-01', fmtDate('2026-10-01'))).toBe('วันพฤหัสบดี 01/10/2569')
   })
 
   it('toDateIso เติมศูนย์หน้าเสมอ', () => {

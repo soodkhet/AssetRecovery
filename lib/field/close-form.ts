@@ -230,3 +230,40 @@ export function removeMediaAt(list: readonly string[], index: number): string[] 
   if (index < 0 || index >= list.length) return [...list]
   return list.filter((_, position) => position !== index)
 }
+
+// ── ไฟล์ที่ server ปัด (UAT BUG-070) ─────────────────────────────────────────
+
+/**
+ * path ของไฟล์ที่ server ปัด จาก error ของ API — มีเมื่อ code เป็นกลุ่ม `UPLOAD_*` และ server แนบ `path` มา
+ * (ดู `verifyUploadedFile()`) · อย่างอื่นคืน `null`
+ */
+export function rejectedUploadPath(
+  error: { code?: string; payload?: Readonly<Record<string, unknown>> } | undefined,
+): string | null {
+  if (error?.code === undefined || !error.code.startsWith('UPLOAD_')) return null
+  const path = error.payload?.['path']
+  return typeof path === 'string' && path !== '' ? path : null
+}
+
+/** เอาไฟล์ที่ถูกปัดออกจากทุกช่องของฟอร์ม — ไม่อยู่ในฟอร์มเลยคืนตัวเดิม (เทียบ `===` ได้) */
+export function withoutUpload(form: CloseFormState, path: string): CloseFormState {
+  const inForm =
+    form.photos.includes(path) ||
+    form.videos.includes(path) ||
+    form.productPhotos.includes(path) ||
+    form.audioUrl === path
+  if (!inForm) return form
+  return {
+    ...form,
+    photos: form.photos.filter((item) => item !== path),
+    videos: form.videos.filter((item) => item !== path),
+    productPhotos: form.productPhotos.filter((item) => item !== path),
+    audioUrl: form.audioUrl === path ? null : form.audioUrl,
+  }
+}
+
+/** ชื่อไฟล์ที่ผู้ใช้เลือกมา จาก path ใน Storage (`<uuid>-<ชื่อไฟล์>`) — ตัด uuid ที่ตัวอัปโหลดเติมหน้าออก */
+export function uploadDisplayName(path: string): string {
+  const last = path.split('/').pop() ?? path
+  return last.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i, '')
+}

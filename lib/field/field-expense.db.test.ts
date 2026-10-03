@@ -72,6 +72,7 @@ let field: FieldQueries
 let expenses: ExpenseQueries
 let assignments: AssignmentQueries
 let fuelJob: FuelJob
+let uploads: typeof import('@/tests/helpers/fake-uploads')
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -170,6 +171,7 @@ beforeAll(async () => {
   expenses = await import('@/lib/field/expense-queries')
   assignments = await import('@/lib/assignments/queries')
   fuelJob = await import('@/lib/field/fuel-distance-job')
+  uploads = await import('@/tests/helpers/fake-uploads')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -860,6 +862,75 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
 
     expect(caseBound.items.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
     expect(separate.items.map((row) => row.expenseType)).toEqual(['hotel'])
+  })
+
+  describe('ใบเสร็จผ่านการตรวจฝั่ง server (ขยายมติ Q13 — UAT BUG-072)', () => {
+    const receiptPath = (name: string) => `expenses/${AGENT_A}/receipts/${name}`
+    const hotelInput = (receiptFileUrl: string) => ({
+      expenseDate: new Date(`${DAY_1}T00:00:00.000Z`),
+      amountSatang: 60_000,
+      sharedWithUserId: null,
+      receiptFileUrl,
+      note: null,
+    })
+
+    beforeEach(() => {
+      uploads.resetFakeUploads()
+      uploads.uploadTestState.realVerify = true
+    })
+    afterEach(() => uploads.resetFakeUploads())
+
+    it('ใบเสร็จจริง (PDF ใต้ prefix ของผู้เบิก) → เก็บ SHA-256 ที่ server คำนวณเอง', async () => {
+      const bytes = uploads.sampleBytes('pdf', 'hotel-receipt')
+      uploads.putFakeUpload(receiptPath('r1.pdf'), bytes)
+
+      const claim = await expenses.submitHotelClaim(agentA, hotelInput(receiptPath('r1.pdf')), { actor: agentA, meta })
+
+      const row = await db().expense.findFirstOrThrow({ where: { id: claim.id } })
+      expect(row.receiptFileHash).toBe(uploads.sha256Of(bytes))
+    })
+
+    it('path นอกพื้นที่ของผู้เบิก / ไม่มีไฟล์ / ไฟล์ปลอม → ปฏิเสธ ไม่สร้างรายการ', async () => {
+      uploads.putFakeUpload(`expenses/${AGENT_B}/receipts/other.pdf`, uploads.sampleBytes('pdf'))
+      uploads.putFakeUpload(receiptPath('fake.jpg'), uploads.sampleBytes('text'))
+
+      await expectCode(
+        () => expenses.submitHotelClaim(agentA, hotelInput(`expenses/${AGENT_B}/receipts/other.pdf`), { actor: agentA, meta }),
+        'UPLOAD_PATH_OUT_OF_SCOPE',
+      )
+      await expectCode(
+        () => expenses.submitHotelClaim(agentA, hotelInput(receiptPath('missing.pdf')), { actor: agentA, meta }),
+        'UPLOAD_FILE_NOT_FOUND',
+      )
+      await expectCode(
+        () => expenses.submitHotelClaim(agentA, hotelInput(receiptPath('fake.jpg')), { actor: agentA, meta }),
+        'UPLOAD_FILE_TYPE_INVALID',
+      )
+      expect(await db().expense.count({ where: { organizationId: ORG_ID, expenseType: 'hotel' } })).toBe(0)
+    })
+
+    it('resubmit_expense แนบใบเสร็จใหม่ → ตรวจใหม่ + hash ใหม่ · ใบปลอมถูกปฏิเสธ', async () => {
+      const first = uploads.sampleBytes('jpeg', 'first')
+      const second = uploads.sampleBytes('png', 'second')
+      uploads.putFakeUpload(receiptPath('a.jpg'), first)
+      uploads.putFakeUpload(receiptPath('b.png'), second)
+      uploads.putFakeUpload(receiptPath('bad.png'), uploads.sampleBytes('text'))
+
+      const claim = await expenses.submitHotelClaim(agentA, hotelInput(receiptPath('a.jpg')), { actor: agentA, meta })
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+
+      await expectCode(
+        () =>
+          expenses.resubmitFieldExpense(agentA, claim.id, { receiptFileUrl: receiptPath('bad.png') }, { actor: agentA, meta }),
+        'UPLOAD_FILE_TYPE_INVALID',
+      )
+
+      await expenses.resubmitFieldExpense(agentA, claim.id, { receiptFileUrl: receiptPath('b.png') }, { actor: agentA, meta })
+      const row = await db().expense.findFirstOrThrow({ where: { id: claim.id } })
+      expect(row.status).toBe('pending_approval')
+      expect(row.receiptFileUrl).toBe(receiptPath('b.png'))
+      expect(row.receiptFileHash).toBe(uploads.sha256Of(second))
+    })
   })
 
   it('สรุปรายได้: สำเร็จได้คอมมิชชั่น · ไม่สำเร็จได้เบี้ยเสี่ยง (อ่านจากรายการเบิกจริง — UAT Q2/BUG-054)', async () => {

@@ -12,6 +12,9 @@ import type { FieldCaseListItemDto } from '@/lib/field/types'
 
 export const WEEKDAY_LABELS_TH = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] as const
 
+/** ชื่อวันเต็มสำหรับป้าย "วัน…" — ตัวย่อหัวคอลัมน์ปฏิทินต่อท้าย "วัน" ไม่ได้ (เคยได้ "วันส" — UAT BUG-068) */
+export const WEEKDAY_NAMES_TH = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'] as const
+
 export const MONTH_NAMES_TH = [
   'มกราคม',
   'กุมภาพันธ์',
@@ -133,10 +136,10 @@ export function buildMonthGrid(input: {
 }
 
 /**
- * ป้ายวันแบบมีชื่อวัน เช่น `วันพฤ 14/08/2569` (`41` §7.5 หัว section ต่อวัน)
+ * ป้ายวันแบบมีชื่อวัน เช่น `วันพฤหัสบดี 14/08/2569` (`41` §7.5 หัว section ต่อวัน)
  * ส่วนวันที่ใช้ `fmtDate` ที่ caller ส่งเข้ามา — **ห้าม format วันที่เองที่นี่** (Rule 01)
  */
 export function withWeekdayPrefix(dateIso: string, formattedDate: string): string {
-  const weekday = WEEKDAY_LABELS_TH[weekdayIndex(dateIso)] ?? ''
+  const weekday = WEEKDAY_NAMES_TH[weekdayIndex(dateIso)] ?? ''
   return `วัน${weekday} ${formattedDate}`
 }

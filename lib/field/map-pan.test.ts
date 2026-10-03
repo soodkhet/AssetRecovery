@@ -4,7 +4,6 @@ import {
   formatCoordinates,
   metersPerPixel,
   panCenter,
-  staticMapUrl,
   wrapLongitude,
 } from '@/lib/field/map-pan'
 
@@ -61,21 +60,7 @@ describe('panCenter', () => {
   })
 })
 
-describe('staticMapUrl / formatCoordinates', () => {
-  it('ประกอบ URL ของ static map พร้อมหมุดสีที่กำหนด', () => {
-    const url = staticMapUrl(BANGKOK, { zoom: 14, width: 400, height: 130, marker: 'blue-pushpin' })
-    expect(url).toContain('center=13.756300,100.501800')
-    expect(url).toContain('zoom=14')
-    expect(url).toContain('size=400x130')
-    expect(url).toContain('markers=13.756300,100.501800,blue-pushpin')
-  })
-
-  it('ค่าตั้งต้น = หมุดแดง zoom 15', () => {
-    const url = staticMapUrl(BANGKOK)
-    expect(url).toContain('zoom=15')
-    expect(url).toContain('red-pushpin')
-  })
-
+describe('formatCoordinates', () => {
   it('พิกัดบนหน้าจอเป็นทศนิยม 6 ตำแหน่งเสมอ', () => {
     expect(formatCoordinates({ latitude: 13.7, longitude: 100 })).toBe('13.700000, 100.000000')
   })

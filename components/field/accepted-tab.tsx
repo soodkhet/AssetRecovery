@@ -12,6 +12,7 @@ import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { assetSummary, fieldCardAction, groupCasesByAgent } from '@/lib/field/field-ui'
 import type { FieldCaseListItemDto, FieldCaseListResultDto } from '@/lib/field/types'
+import { fmtDateTime } from '@/lib/format/datetime'
 
 /**
  * แท็บ "รับงานแล้ว (จัดวันที่)" (`41` §7.3)
@@ -109,6 +110,8 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
                     </div>
                     <div className="mt-0.5 text-[11px] text-slate-400">
                       <RefText>{item.caseRef}</RefText>
+                      {/* Rule 05 — action สำคัญต้องเห็นวันเวลาบน list (UAT BUG-066) */}
+                      {item.acceptedAt !== null && <> · รับงานเมื่อ {fmtDateTime(item.acceptedAt)}</>}
                     </div>
                   </button>
                   {action?.kind === 'schedule' && (

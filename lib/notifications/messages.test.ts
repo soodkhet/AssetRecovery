@@ -7,6 +7,8 @@ import {
   assetIntakeRejectedMessage,
   caseClosedFailMessage,
   caseClosedSuccessMessage,
+  caseCloseResubmittedMessage,
+  caseCloseResubmittedNotice,
   evidenceRejectedMessage,
   caseDecisionMessage,
   clip,
@@ -56,6 +58,7 @@ const ALL: readonly NotificationMessage[] = [
   ),
   caseClosedSuccessMessage({ caseRef: 'CASE-26-0004', agentName: 'สมชาย' }),
   caseClosedFailMessage({ caseRef: 'CASE-26-0005', agentName: null }),
+  caseCloseResubmittedMessage({ caseRef: 'CASE-26-0004', agentName: 'สมชาย', outcome: 'closed_success' }),
   assetIntakeRejectedMessage({ caseRef: 'CASE-26-0006', reason: 'IMEI ไม่ตรง' }),
   lotConfirmedMessage({ lotId: 'l1', lotNumber: 'LOT-2569-001', companyName: 'สยามไฟแนนซ์', assetCount: 3, revenueCount: 2 }),
   expenseApprovedMessage({ grossSatang: 125050, caseRef: 'CASE-26-0007' }),
@@ -209,5 +212,31 @@ describe('clip()', () => {
   it('ยาวเกินกำหนดถูกตัดพร้อมจุดไข่ปลา', () => {
     expect(clip('ก'.repeat(200))).toHaveLength(120)
     expect(clip('ก'.repeat(200))?.endsWith('…')).toBe(true)
+  })
+})
+
+describe('ส่งหลักฐานใหม่หลังถูกตีกลับ — ข้อความแยก ไม่ส่งข้อความปิดงานซ้ำ (UAT BUG-071)', () => {
+  const base = { caseRef: 'CASE-26-0004', agentName: 'สมชาย' }
+
+  it('สายสำเร็จ + ทรัพย์ยังรอรับเข้า → แจ้งคลังด้วยหัวข้อ "ส่งหลักฐานใหม่แล้ว — <เลขเคส>"', () => {
+    for (const assetStatus of ['pending_intake', 'intake_rejected']) {
+      const notice = caseCloseResubmittedNotice({ ...base, outcome: 'closed_success', assetStatus })
+      expect(notice?.capability).toBe('intake_asset')
+      expect(notice?.message.title).toBe('ส่งหลักฐานใหม่แล้ว — CASE-26-0004')
+      expect(notice?.message.eventCode).toBe('case.close_resubmitted')
+      expect(notice?.message.title).not.toBe(caseClosedSuccessMessage(base).title)
+    }
+  })
+
+  it('สายสำเร็จแต่รับเข้าคลังไปแล้ว / ไม่มีเครื่อง → ไม่แจ้ง', () => {
+    for (const assetStatus of ['in_custody', 'handover_pending', 'handed_over', null]) {
+      expect(caseCloseResubmittedNotice({ ...base, outcome: 'closed_success', assetStatus })).toBeNull()
+    }
+  })
+
+  it('สายไม่สำเร็จ → แจ้งผู้มอบหมายของทีม', () => {
+    const notice = caseCloseResubmittedNotice({ ...base, outcome: 'closed_fail', assetStatus: null })
+    expect(notice?.capability).toBe('assign_case')
+    expect(notice?.message.title).toBe('ส่งหลักฐานใหม่แล้ว — CASE-26-0004')
   })
 })

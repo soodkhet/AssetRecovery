@@ -106,8 +106,12 @@ export function PendingAcceptTab() {
         open={detailCaseId !== null}
         caseId={detailCaseId}
         onClose={() => setDetailCaseId(null)}
-        onChanged={() => {
-          showToast({ tone: 'success', title: 'รับงานแล้ว', description: 'ไปจัดวันที่ติดตามได้ที่แท็บ "รับงานแล้ว"' })
+        onChanged={(accepted) => {
+          showToast({
+            tone: 'success',
+            title: 'รับงานแล้ว',
+            description: `${accepted.caseRef} — ไปจัดวันที่ติดตามได้ที่แท็บ "รับงานแล้ว"`,
+          })
           void reload()
         }}
       />

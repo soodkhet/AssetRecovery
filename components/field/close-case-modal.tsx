@@ -32,8 +32,11 @@ import {
   closeFormMode,
   closeMissingSummary,
   hasCloseFormRevision,
+  rejectedUploadPath,
   removeMediaAt,
   resubmitClosePayload,
+  uploadDisplayName,
+  withoutUpload,
   type CloseFormState,
 } from '@/lib/field/close-form'
 import {
@@ -42,8 +45,10 @@ import {
   CLOSE_FAIL_REASONS,
   type CloseFailReason,
 } from '@/lib/field/fail-reasons'
+import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
-import { formatCoordinates, panCenter, staticMapUrl } from '@/lib/field/map-pan'
+import { mapsPointHref } from '@/lib/field/field-ui'
+import { formatCoordinates, panCenter } from '@/lib/field/map-pan'
 import {
   FIELD_MEDIA_ACCEPT,
   FIELD_MEDIA_CAPTURE,
@@ -101,7 +106,6 @@ const OUTCOME_CHOICES: readonly { outcome: CaseOutcome; label: string; emoji: st
 
 /** zoom ของแผนที่จุดเริ่มเดินทาง — ต้องคงที่เพราะใช้แปลงพิกเซล↔พิกัดตอนลาก */
 const ORIGIN_MAP_ZOOM = 15
-const ORIGIN_MAP_SIZE = { width: 400, height: 160 }
 
 function SectionTitle({ children, note }: { children: React.ReactNode; note?: string }) {
   return (
@@ -181,6 +185,49 @@ async function openStoredFile(path: string): Promise<boolean> {
   return true
 }
 
+/**
+ * ภาพย่อของไฟล์ที่แนบแล้ว (UAT BUG-067) — รูป = โหลด signed URL แล้วแสดงภาพจริง (ระหว่างโหลด/โหลดไม่ได้
+ * ใช้ไอคอนแทน) · วิดีโอ = ไอคอน + ชื่อไฟล์ ให้รู้ว่าแนบไฟล์ไหนไว้
+ */
+function MediaThumb({ kind, path, icon: Icon }: { kind: FieldMediaKind; path: string; icon: MediaSection['icon'] }) {
+  const isImage = kind === 'photo' || kind === 'product_photo'
+  // ผูกผลกับ path ที่โหลด — path เปลี่ยนจะไม่เห็นรูปเก่าค้าง โดยไม่ต้อง setState ใน effect
+  const [loaded, setLoaded] = useState<{ path: string; url: string | null } | null>(null)
+  const [failed, setFailed] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isImage) return
+    let cancelled = false
+    void signedFileUrl(path).then((url) => {
+      if (!cancelled) setLoaded({ path, url })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isImage, path])
+
+  const url = loaded !== null && loaded.path === path ? loaded.url : null
+  if (isImage && url !== null && failed !== path) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- signed URL ชั่วคราวของ Storage (โดเมนไม่คงที่ ใช้ next/image ไม่ได้)
+      <img
+        src={url}
+        alt={uploadDisplayName(path)}
+        className="h-full w-full rounded-[10px] object-cover"
+        onError={() => setFailed(path)}
+      />
+    )
+  }
+  return (
+    <span className="flex w-full flex-col items-center gap-1 px-1">
+      <Icon className="h-6 w-6" />
+      {!isImage && (
+        <span className="w-full truncate text-center text-[10px] font-bold text-slate-600">{uploadDisplayName(path)}</span>
+      )}
+    </span>
+  )
+}
+
 function MediaGrid({
   section,
   urls,
@@ -215,10 +262,10 @@ function MediaGrid({
             <button
               type="button"
               onClick={() => onOpen(url)}
-              title="เปิดดูไฟล์"
-              className="focus-ring flex h-full w-full items-center justify-center rounded-xl text-emerald-600"
+              title={`เปิดดูไฟล์ ${uploadDisplayName(url)}`}
+              className="focus-ring flex h-full w-full items-center justify-center overflow-hidden rounded-xl text-emerald-600"
             >
-              <Icon className="h-6 w-6" />
+              <MediaThumb kind={section.kind} path={url} icon={Icon} />
             </button>
             <button
               type="button"
@@ -317,9 +364,10 @@ function AudioSection({
           <button
             type="button"
             onClick={() => onOpen(url)}
-            className="focus-ring flex-1 text-left text-xs font-extrabold text-emerald-700"
+            className="focus-ring min-w-0 flex-1 text-left text-xs font-extrabold text-emerald-700"
           >
-            แนบไฟล์เสียงแล้ว — แตะเพื่อเปิดฟัง
+            <span className="block">แนบไฟล์เสียงแล้ว — แตะเพื่อเปิดฟัง</span>
+            <span className="block truncate font-bold text-slate-500">{uploadDisplayName(url)}</span>
           </button>
           <button
             type="button"
@@ -367,23 +415,55 @@ export function CloseCaseModal({
   const dragStart = useRef<{ x: number; y: number } | null>(null)
 
   /**
+   * server ปัดไฟล์ (`UPLOAD_*` + path) → เอาไฟล์นั้นออกจากฟอร์มทันทีแล้วบอกชื่อไฟล์ — ไม่ถือไว้ให้ autosave
+   * ล้มซ้ำทุกครั้ง (UAT BUG-070) · คืนฟอร์มที่เอาออกแล้ว หรือ `null` = error นี้ไม่ใช่ไฟล์ในฟอร์ม
+   */
+  const dropRejectedUpload = useCallback(
+    (current: CloseFormState, error: ApiCallError): CloseFormState | null => {
+      const path = rejectedUploadPath(error)
+      if (path === null) return null
+      const cleaned = withoutUpload(current, path)
+      if (cleaned === current) return null
+      setForm((latest) => withoutUpload(latest, path))
+      showToast({
+        tone: 'error',
+        title: `ไฟล์ "${uploadDisplayName(path)}" ถูกปฏิเสธ — นำออกจากฟอร์มแล้ว`,
+        description: `${error.message} — กรุณาแนบไฟล์ใหม่แทน`,
+      })
+      return cleaned
+    },
+    [showToast],
+  )
+
+  /**
    * บันทึก draft เงียบ ๆ ทุกครั้งที่ฟอร์มเปลี่ยน (mockup `saveDraftSilently`) — โหมดตีกลับไม่มี draft
    * คืน `false` เมื่อบันทึกล้ม (โชว์ toast error แล้ว) — ปุ่ม "บันทึก Draft" ห้ามโชว์สำเร็จทับ (UAT BUG-053)
+   * ไฟล์ที่ server ปัดถูกเอาออกแล้วบันทึกชุดที่เหลือ (UAT BUG-070) — คืน `false` เพื่อให้ผู้ใช้เห็นฟอร์มก่อนปิด
    */
   const persistDraft = useCallback(
     async (next: CloseFormState, options?: { revision?: boolean }): Promise<boolean> => {
       if (options?.revision === true) return true
-      const response = await callApi<FieldCloseDraftResultDto>(
-        apiPath('field.closeDraft', { id: caseId }),
-        jsonRequest('POST', closeDraftPayload(next)),
-      )
-      if (response.error !== undefined) {
-        showToast({ tone: 'error', title: response.error.title, description: response.error.message })
-        return false
+      let payloadForm = next
+      let dropped = false
+      // ไฟล์ปลอมหลายไฟล์ = server ปัดทีละไฟล์ — วนจนชุดที่เหลือผ่าน (เพดานเท่าจำนวนไฟล์ในฟอร์ม)
+      const maxAttempts = next.photos.length + next.videos.length + next.productPhotos.length + 2
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const response = await callApi<FieldCloseDraftResultDto>(
+          apiPath('field.closeDraft', { id: caseId }),
+          jsonRequest('POST', closeDraftPayload(payloadForm)),
+        )
+        if (response.error === undefined) return !dropped
+        const cleaned = dropRejectedUpload(payloadForm, response.error)
+        if (cleaned === null) {
+          showToast({ tone: 'error', title: response.error.title, description: response.error.message })
+          return false
+        }
+        payloadForm = cleaned
+        dropped = true
       }
-      return true
+      return false
     },
-    [caseId, showToast],
+    [caseId, dropRejectedUpload, showToast],
   )
 
   // โหลดรายละเอียด + ดึง GPS เป็นจุดเริ่มเดินทางทันทีที่เปิดฟอร์มครั้งแรกของเคส (`41` §7.6/§8)
@@ -609,18 +689,26 @@ export function CloseCaseModal({
             jsonRequest('POST', closeCasePayload(form)),
           )
 
-      if (response.error !== undefined) {
+      if (response.error !== undefined || response.data === undefined) {
         setShowMissing(true)
-        showToast({ tone: 'error', title: response.error.title, description: response.error.message })
+        const cleaned = response.error === undefined ? null : dropRejectedUpload(form, response.error)
+        if (cleaned !== null) {
+          // เก็บ draft ชุดที่เอาไฟล์ออกแล้ว — ไม่งั้นเปิดฟอร์มใหม่ไฟล์ที่ถูกปัดจะกลับมา
+          void persistDraft(cleaned, { revision: mode.revision })
+          return
+        }
+        showToast({
+          tone: 'error',
+          title: response.error?.title ?? 'บันทึกไม่สำเร็จ',
+          description: response.error?.message,
+        })
         return
       }
 
       showToast({
         tone: 'success',
         title: mode.revision ? 'ส่งหลักฐานกลับให้ตรวจอีกครั้งแล้ว' : 'ปิดงานเรียบร้อย',
-        description: mode.revision
-          ? 'รายการเบิกของรอบเดิมจะถูกแทนที่ด้วยรายการใหม่'
-          : 'ระบบสร้างรายการเบิกค่าน้ำมัน/เบี้ยเลี้ยงให้อัตโนมัติ',
+        description: closeExpenseToastDescription(response.data, mode.revision),
       })
       onDone()
       onClose()
@@ -732,26 +820,23 @@ export function CloseCaseModal({
                     onPointerUp={endDrag}
                     onPointerCancel={endDrag}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- รูปแผนที่นิ่งจากบริการภายนอก (โดเมนไม่ผ่าน next/image) */}
-                    <img
-                      src={staticMapUrl(originCenter, {
-                        zoom: ORIGIN_MAP_ZOOM,
-                        width: ORIGIN_MAP_SIZE.width,
-                        height: ORIGIN_MAP_SIZE.height,
-                        marker: 'blue-pushpin',
-                      })}
-                      alt="แผนที่จุดเริ่มเดินทาง"
-                      draggable={false}
-                      className="h-full w-full object-cover"
-                      style={
-                        dragOffset === null
-                          ? undefined
-                          : { transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }
-                      }
+                    {/* UAT BUG-062 — ไม่โหลดรูปแผนที่ภายนอกแล้ว: พื้นตารางเลื่อนตามนิ้ว หมุดอยู่กลางกรอบ ·
+                        ตรวจจุดจริงด้วยลิงก์ Google Maps ด้านล่าง */}
+                    <div
+                      aria-hidden
+                      className="absolute inset-0"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                        backgroundPosition:
+                          dragOffset === null ? '0 0' : `${dragOffset.x}px ${dragOffset.y}px`,
+                      }}
                     />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                      <IconMapPin className="h-7 w-7 text-blue-600" />
                       <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-extrabold text-slate-700 shadow">
-                        ลากแผนที่เพื่อปรับตำแหน่ง
+                        ลากเพื่อปรับตำแหน่ง
                       </span>
                     </div>
                   </div>
@@ -764,6 +849,14 @@ export function CloseCaseModal({
                       <div className="truncate font-mono text-[11px] text-blue-600">
                         {formatCoordinates(originCenter)} · {fmtDateTime(origin.setAt)}
                       </div>
+                      <a
+                        href={mapsPointHref(originCenter.latitude, originCenter.longitude)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="focus-ring inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 underline"
+                      >
+                        <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
+                      </a>
                     </div>
                     <button
                       type="button"
@@ -828,22 +921,19 @@ export function CloseCaseModal({
                 <div className="space-y-2">
                   {detail.checkins.map((checkin, index) => (
                     <div key={checkin.id} className="overflow-hidden rounded-xl border-2 border-emerald-300 bg-white">
+                      {/* UAT BUG-062 — ไม่โหลดรูปแผนที่ภายนอกแล้ว: แสดงพิกัด + ลิงก์เปิด Google Maps แทน */}
                       <a
-                        href={`https://www.google.com/maps?q=${checkin.latitude},${checkin.longitude}`}
+                        href={mapsPointHref(checkin.latitude, checkin.longitude)}
                         target="_blank"
                         rel="noreferrer"
-                        className="focus-ring relative block h-28 bg-slate-100"
+                        aria-label={`เปิดจุดเช็คอินที่ ${index + 1} ใน Google Maps`}
+                        className="focus-ring flex items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/60 px-3 py-2.5"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- รูปแผนที่นิ่งจากบริการภายนอก (โดเมนไม่ผ่าน next/image) */}
-                        <img
-                          src={staticMapUrl(checkin, { zoom: 15, width: 400, height: 150 })}
-                          alt={`แผนที่จุดเช็คอินที่ ${index + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-extrabold text-slate-700 shadow">
-                            <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
-                          </span>
+                        <span className="truncate font-mono text-[11px] text-slate-600">
+                          {formatCoordinates(checkin)}
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-extrabold text-emerald-700">
+                          <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
                         </span>
                       </a>
                       <div className="flex items-center gap-2.5 p-3">

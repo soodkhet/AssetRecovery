@@ -6,7 +6,7 @@ import { FieldCaseDetailModal } from '@/components/field/field-case-detail'
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { IconAlert, IconGrip, IconMapPin } from '@/components/field/field-icons'
 import { useReassignment } from '@/components/field/reassignment-provider'
-import { Button, EmptyState, ErrorState, LoadingState, StatusBadge, useToast } from '@/components/ui'
+import { Button, EmptyState, ErrorState, LoadingState, RefText, StatusBadge, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -140,6 +140,9 @@ export function TrackingTab() {
                         {[item.district, item.province].filter((part) => part !== null).join(', ') || '—'} · รอบที่{' '}
                         {item.trackingRound}
                       </div>
+                      <div className="mt-0.5 text-[11px] text-slate-400">
+                        <RefText>{item.caseRef}</RefText>
+                      </div>
                     </button>
                     {action !== null && <CardButton action={action} onClick={() => runAction(action, item.caseId)} />}
                   </div>
@@ -234,6 +237,9 @@ export function TrackingTab() {
                               <IconMapPin className="h-4 w-4 shrink-0" />
                               {[item.district, item.province].filter((part) => part !== null).join(', ') || '—'} · รอบที่{' '}
                               {item.trackingRound}
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-slate-400">
+                              <RefText>{item.caseRef}</RefText>
                             </div>
                           </button>
 
