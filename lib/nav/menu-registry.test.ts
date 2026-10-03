@@ -282,3 +282,29 @@ describe('ความสอดคล้องของ registry', () => {
     }
   })
 })
+
+/**
+ * `06` §7.2 v2.5 — มติ PO 03/10/2569 (UAT R6-A): ผู้จัดการ/หัวหน้าทีมเห็นเมนู "การเงิน" **เฉพาะเมื่อเป็น
+ * ผู้อนุมัติค่าตอบแทนตาม matrix** (แท็บข้างในเหลือคิวอนุมัติค่าตอบแทนอย่างเดียว — `operation-tabs.test.ts`)
+ */
+describe('เมนูการเงินของผู้จัดการทีม (UAT R6-A)', () => {
+  it('ผู้จัดการที่ถือ approve_expense_manager ⇒ เห็นเมนูการเงิน', () => {
+    for (const roleGroup of ['inhouse', 'outsource'] as const) {
+      const manager = {
+        ...viewer(TEAM_MANAGER_ROLE_NAME, roleGroup),
+        capabilities: { approve_expense_manager: 'manage' as const },
+      }
+      expect(canViewMenu(manager, 'finance')).toBe(true)
+    }
+  })
+
+  it('หัวหน้าทีม/ผู้จัดการที่ไม่ได้เป็นผู้อนุมัติ ⇒ ไม่เห็นเมนูการเงิน (hide)', () => {
+    expect(canViewMenu({ ...viewer(TEAM_SUPERVISOR_ROLE_NAME, 'inhouse'), capabilities: {} }, 'finance')).toBe(false)
+    expect(canViewMenu(viewer(TEAM_MANAGER_ROLE_NAME, 'inhouse'), 'finance')).toBe(false)
+  })
+
+  it('ประตู capability ไม่กระทบ role อื่น — การเงิน/บริหารเห็นตามเดิมแม้ไม่ส่ง capability', () => {
+    expect(canViewMenu(VIEWERS.finance, 'finance')).toBe(true)
+    expect(canViewMenu(VIEWERS.executive, 'finance')).toBe(true)
+  })
+})

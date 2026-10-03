@@ -12,6 +12,9 @@ import {
   TEAM_MANAGER_ROLE_NAME,
   TEAM_SUPERVISOR_ROLE_NAME,
 } from '@/lib/auth/constants'
+import { hasCapability } from '@/lib/auth/permission'
+import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
+import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
 
 /**
  * Menu registry — SSOT ของเมนูฝั่ง UI (`06` §7.1.1 Role Group Matrix + §7.2 Top Nav Visibility Matrix)
@@ -64,6 +67,12 @@ export interface MenuItem {
   plannedPhase?: string
   /** แท็บย่อยของเมนู (`06` §8) — `cases` มี sub-menu จริงตาม §7.1.1 ที่เหลือเป็นรายการรอพัฒนา */
   children?: readonly MenuItem[]
+  /**
+   * เงื่อนไขเพิ่มสำหรับบาง audience — ต้องถือ capability อย่างใดอย่างหนึ่ง (ระดับ `view`) ด้วยถึงจะเห็น
+   * ใช้กับ role ที่เห็นเมนูแบบ "บางส่วนตามหน้าที่" เช่น ผู้จัดการทีมเห็นเมนูการเงินเฉพาะเมื่อเป็นผู้อนุมัติ
+   * ค่าตอบแทนตาม matrix (มติ PO 03/10/2569 — UAT R6-A) · หัวหน้าทีมที่ไม่มีสิทธิ์อนุมัติไม่เห็นเมนู
+   */
+  capabilityGate?: { audiences: readonly MenuAudience[]; anyOf: readonly string[] }
 }
 
 const ALL_AUDIENCES: readonly MenuAudience[] = [
@@ -88,6 +97,11 @@ const ALL_AUDIENCES: readonly MenuAudience[] = [
  * + "การตั้งค่า" **เฉพาะแท็บผู้ใช้งาน** (`06` §7.2 v2.3 — มติ PO 03/10/2569 UAT BUG-021: ธุรการถือ
  * `manage:manage_users` ตาม `05` §12 · บัญชีกลุ่ม system ยังจัดการได้เฉพาะ Superadmin — DEC-010)
  */
+/** capability ที่เปิดแท็บใดแท็บหนึ่งของหน้าการเงินได้ — ประตูเมนูการเงินของผู้จัดการทีม (UAT R6-A) */
+const FINANCE_TAB_CAPABILITIES: readonly string[] = [
+  ...new Set(FINANCE_OPERATION_TABS.flatMap((tab) => tab.capabilities)),
+]
+
 export const MENU_ITEMS: readonly MenuItem[] = [
   {
     id: 'dashboard',
@@ -146,7 +160,10 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     id: 'finance',
     label: 'การเงิน',
     path: '/finance',
-    audiences: ['superadmin', 'executive', 'finance'],
+    // ผู้จัดการ/หัวหน้าทีม = เห็น **เฉพาะแท็บคิวอนุมัติค่าตอบแทน** และเฉพาะคนที่เป็นผู้อนุมัติตาม matrix
+    // (`06` §7.2 v2.5 — มติ PO 03/10/2569 UAT R6-A) · แท็บอื่นซ่อนด้วย capability ใน `lib/finance/operation-tabs.ts`
+    audiences: ['superadmin', 'executive', 'finance', 'team_lead'],
+    capabilityGate: { audiences: ['team_lead'], anyOf: FINANCE_TAB_CAPABILITIES },
     available: true,
     plannedPhase: '3.3',
   },
@@ -280,6 +297,8 @@ export interface MenuViewer {
   isSuperadmin: boolean
   roleGroup: RoleGroup
   roleName: string
+  /** ใช้กับ `capabilityGate` เท่านั้น — ไม่ส่งมา = ไม่ผ่านประตู (least privilege) */
+  capabilities?: Readonly<Record<string, CapabilityAccessLevel>>
 }
 
 /**
@@ -321,7 +340,14 @@ export function resolveMenuAudience(viewer: MenuViewer): MenuAudience | null {
   }
 }
 
-function filterByAudience(items: readonly MenuItem[], audience: MenuAudience | null): MenuItem[] {
+function passesCapabilityGate(item: MenuItem, audience: MenuAudience, viewer: MenuViewer): boolean {
+  const gate = item.capabilityGate
+  if (gate === undefined || !gate.audiences.includes(audience)) return true
+  const holder = { isSuperadmin: viewer.isSuperadmin, capabilities: viewer.capabilities ?? {} }
+  return gate.anyOf.some((capability) => hasCapability(holder, 'view', capability))
+}
+
+function filterByAudience(items: readonly MenuItem[], audience: MenuAudience | null, viewer: MenuViewer): MenuItem[] {
   if (audience === null) {
     // custom role — เห็นเฉพาะเมนูที่ทุกคอลัมน์ของ matrix เห็น (ปัจจุบัน = แดชบอร์ด)
     return items
@@ -330,15 +356,15 @@ function filterByAudience(items: readonly MenuItem[], audience: MenuAudience | n
   }
 
   return items
-    .filter((item) => item.audiences.includes(audience))
+    .filter((item) => item.audiences.includes(audience) && passesCapabilityGate(item, audience, viewer))
     .map((item) =>
-      item.children === undefined ? item : { ...item, children: filterByAudience(item.children, audience) },
+      item.children === undefined ? item : { ...item, children: filterByAudience(item.children, audience, viewer) },
     )
 }
 
 /** เมนูที่ผู้ใช้คนนี้เห็น (กรอง sub-menu ให้ด้วย) — ใช้ทั้ง top nav, `GET /api/meta/menu` และ route guard ของหน้า */
 export function visibleMenus(viewer: MenuViewer): MenuItem[] {
-  return filterByAudience(MENU_ITEMS, resolveMenuAudience(viewer))
+  return filterByAudience(MENU_ITEMS, resolveMenuAudience(viewer), viewer)
 }
 
 /** ผู้ใช้คนนี้เห็นเมนู/แท็บย่อยนี้หรือไม่ (`id` = `dashboard`, `cases`, `cases.submit`, …) */

@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EXECUTIVE_ROLE_NAME,
+  FINANCE_ROLE_NAME,
+  TEAM_MANAGER_ROLE_NAME,
+  TEAM_SUPERVISOR_ROLE_NAME,
+} from '@/lib/auth/constants'
+import type { CapabilityHolder } from '@/lib/auth/permission'
+import {
   DEFAULT_FINANCE_OPERATION_TAB,
   FINANCE_OPERATION_TABS,
   resolveFinanceOperationTab,
+  visibleFinanceOperationTabs,
 } from '@/lib/finance/operation-tabs'
+import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
+import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
+
+const SUPER: CapabilityHolder = { isSuperadmin: true, capabilities: {} }
+
+/** สิทธิ์ตั้งต้นของ role ตาม seed (`lib/roles/default-matrix.ts`) */
+function roleHolder(name: string, roleGroup: RoleGroup): CapabilityHolder {
+  const capabilities: Record<string, CapabilityAccessLevel> = {}
+  for (const grant of DEFAULT_ROLE_CAPABILITIES) {
+    if (grant.role.name === name && grant.role.roleGroup === roleGroup) capabilities[grant.capabilityCode] = grant.level
+  }
+  return { isSuperadmin: false, capabilities }
+}
+
+const tabIds = (holder: CapabilityHolder) => visibleFinanceOperationTabs(holder).map((tab) => tab.id)
 
 /** ยามของโครงหน้าการเงิน (`06` §8 · mockup `finance.html`) — เพิ่ม/ลบแท็บต้องตั้งใจเสมอ */
 
@@ -27,7 +50,7 @@ describe('แท็บหน้าการเงิน', () => {
   })
 
   it('แท็บที่เป็นลิงก์ข้าม route เลือกค้างที่หน้านี้ไม่ได้ (กันการ์ดเปล่า)', () => {
-    expect(resolveFinanceOperationTab('payee')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+    expect(resolveFinanceOperationTab('payee', SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
   })
 
   it('แท็บเริ่มต้น = "ภาพรวม" (`14` §1 — หน้าแรกของโมดูลการเงิน)', () => {
@@ -41,18 +64,46 @@ describe('แท็บหน้าการเงิน', () => {
   })
 
   it('`?tab=` ที่ชี้แท็บยังไม่เกิด/ไม่มีจริง ตกกลับแท็บเริ่มต้น', () => {
-    expect(resolveFinanceOperationTab('payee')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
-    expect(resolveFinanceOperationTab('ไม่มีแท็บนี้')).toBe(DEFAULT_FINANCE_OPERATION_TAB)
-    expect(resolveFinanceOperationTab(undefined)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+    expect(resolveFinanceOperationTab('payee', SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+    expect(resolveFinanceOperationTab('ไม่มีแท็บนี้', SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
+    expect(resolveFinanceOperationTab(undefined, SUPER)).toBe(DEFAULT_FINANCE_OPERATION_TAB)
   })
 
   it('แท็บที่เปิดแล้วถูกเลือกได้ตรงตัว', () => {
-    expect(resolveFinanceOperationTab('comp')).toBe('comp')
-    expect(resolveFinanceOperationTab('payout')).toBe('payout')
-    expect(resolveFinanceOperationTab('approval')).toBe('approval')
-    expect(resolveFinanceOperationTab('revenue')).toBe('revenue')
-    expect(resolveFinanceOperationTab('adjustment')).toBe('adjustment')
-    expect(resolveFinanceOperationTab('profit')).toBe('profit')
-    expect(resolveFinanceOperationTab('dashboard')).toBe('dashboard')
+    expect(resolveFinanceOperationTab('comp', SUPER)).toBe('comp')
+    expect(resolveFinanceOperationTab('payout', SUPER)).toBe('payout')
+    expect(resolveFinanceOperationTab('approval', SUPER)).toBe('approval')
+    expect(resolveFinanceOperationTab('revenue', SUPER)).toBe('revenue')
+    expect(resolveFinanceOperationTab('adjustment', SUPER)).toBe('adjustment')
+    expect(resolveFinanceOperationTab('profit', SUPER)).toBe('profit')
+    expect(resolveFinanceOperationTab('dashboard', SUPER)).toBe('dashboard')
+  })
+
+  it('ผู้จัดการทีม (ผู้อนุมัติขั้น 1) เห็นเฉพาะแท็บคิวอนุมัติค่าตอบแทน — มติ PO 03/10/2569 (UAT R6-A)', () => {
+    for (const group of ['inhouse', 'outsource'] as const) {
+      const manager = roleHolder(TEAM_MANAGER_ROLE_NAME, group)
+      expect(tabIds(manager)).toEqual(['comp'])
+      expect(resolveFinanceOperationTab(undefined, manager)).toBe('comp')
+      expect(resolveFinanceOperationTab('payout', manager)).toBe('comp')
+    }
+  })
+
+  it('หัวหน้าทีมที่ไม่ได้เป็นผู้อนุมัติตาม matrix ไม่เห็นแท็บใดเลย', () => {
+    expect(tabIds(roleHolder(TEAM_SUPERVISOR_ROLE_NAME, 'inhouse'))).toEqual([])
+  })
+
+  it('การเงินเห็นครบทุกแท็บ', () => {
+    expect(tabIds(roleHolder(FINANCE_ROLE_NAME, 'system'))).toEqual(FINANCE_OPERATION_TABS.map((tab) => tab.id))
+  })
+
+  it('Superadmin เห็นครบทุกแท็บ', () => {
+    expect(tabIds(SUPER)).toHaveLength(FINANCE_OPERATION_TABS.length)
+  })
+
+  it('บริหารไม่เห็นแท็บที่ API อ่านไม่ได้ (เงินทดรอง/ผู้รับเงิน) — ซ่อนแทนการโชว์ตารางว่าง', () => {
+    const executive = tabIds(roleHolder(EXECUTIVE_ROLE_NAME, 'system'))
+    expect(executive).not.toContain('advances')
+    expect(executive).not.toContain('payee')
+    expect(executive).toContain('comp')
   })
 })

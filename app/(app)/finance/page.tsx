@@ -9,7 +9,7 @@ import { requireMenuPage } from '@/lib/nav/menu-guard'
  * `requireMenuPage()` = ยามระดับเมนู (UX) — สิทธิ์จริงถูกตรวจซ้ำที่ทุก endpoint (DEC-002)
  */
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  await requireMenuPage('finance')
+  const user = await requireMenuPage('finance')
   const { tab } = await searchParams
-  return <FinanceShell initialTab={resolveFinanceOperationTab(tab)} />
+  return <FinanceShell initialTab={resolveFinanceOperationTab(tab, user)} />
 }
