@@ -1,8 +1,19 @@
 import type { NextRequest } from 'next/server'
 import { z } from 'zod'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  fieldErrorResponse,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
-import { createApprovalMatrix, listApprovalMatrices } from '@/lib/settings/queries/approval-matrix'
+import {
+  createApprovalMatrix,
+  findInvalidApprovalSteps,
+  invalidApprovalStepsMessage,
+  listApprovalMatrices,
+} from '@/lib/settings/queries/approval-matrix'
 import { approvalMatrixCreateSchema } from '@/lib/settings/schemas'
 
 /**
@@ -32,6 +43,10 @@ export const POST = withApiPermission(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const { reason, ...values } = parsed.data
+    // ชื่อ role ต้องมีจริงในองค์กรและเป็นผู้อนุมัติได้ — เดิมพิมพ์ผิดก็บันทึกได้ (UAT BUG-008)
+    const invalid = await findInvalidApprovalSteps(user.organizationId, values.approvalFlow)
+    if (invalid.length > 0) return fieldErrorResponse({ approvalFlow: invalidApprovalStepsMessage(invalid) })
+
     const matrix = await createApprovalMatrix({ actor: user, meta: getRequestMeta(request), reason }, values)
     return Response.json({ data: matrix }, { status: 201 })
   },

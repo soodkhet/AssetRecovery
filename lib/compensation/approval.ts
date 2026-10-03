@@ -1,12 +1,8 @@
 import { ModuleError } from '@/lib/api/errors'
-import {
-  EXECUTIVE_ROLE_NAME,
-  FINANCE_ROLE_NAME,
-  TEAM_MANAGER_ROLE_NAME,
-} from '@/lib/auth/constants'
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import { resetApprovalToFirstStep } from '@/lib/finance/approval-flow-resolver'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
+import { approvalRoleColumn, type ApproverColumn } from '@/lib/settings/approval-matrix'
 import { SettingsError } from '@/lib/settings/errors'
 
 /**
@@ -90,8 +86,7 @@ export function expenseStatusForPendingStep(pendingStep: number | null): Expense
   return pendingStep === 1 ? 'pending_approval' : 'pending_finance_approval'
 }
 
-/** คอลัมน์ผู้อนุมัติบน `expenses` ที่ขั้นนั้นต้องประทับ (`02` §8 · `16` §7 DEC-006/D5) */
-export type ApproverColumn = 'manager' | 'finance' | 'executive'
+export type { ApproverColumn }
 
 interface ApprovalRoleContract {
   capability: string
@@ -105,14 +100,10 @@ interface ApprovalRoleContract {
  * รับทั้งชื่อ role ตาม seed (`07` §5) และชื่ออังกฤษที่ `13` §6.2 ยกเป็นตัวอย่าง (`[Manager, FinanceAdmin]`)
  * — ชื่อนอกรายการนี้ = **ตั้งค่าสายผิด** ไม่ใช่ "ใครก็อนุมัติได้" จึงต้องปฏิเสธ
  */
-export const APPROVAL_ROLE_CONTRACTS: Readonly<Record<string, ApprovalRoleContract>> = {
-  [TEAM_MANAGER_ROLE_NAME]: { capability: 'approve_expense_manager', column: 'manager' },
-  [FINANCE_ROLE_NAME]: { capability: 'approve_expense_finance', column: 'finance' },
-  [EXECUTIVE_ROLE_NAME]: { capability: 'approve_expense_executive', column: 'executive' },
-  manager: { capability: 'approve_expense_manager', column: 'manager' },
-  finance: { capability: 'approve_expense_finance', column: 'finance' },
-  financeadmin: { capability: 'approve_expense_finance', column: 'finance' },
-  executive: { capability: 'approve_expense_executive', column: 'executive' },
+const COLUMN_CAPABILITY: Readonly<Record<ApproverColumn, string>> = {
+  manager: 'approve_expense_manager',
+  finance: 'approve_expense_finance',
+  executive: 'approve_expense_executive',
 }
 
 /**
@@ -126,10 +117,9 @@ export const APPROVAL_STEP_CAPABILITIES: readonly string[] = [
 ]
 
 export function approvalRoleContract(roleName: string): ApprovalRoleContract {
-  const exact = APPROVAL_ROLE_CONTRACTS[roleName.trim()]
-  if (exact !== undefined) return exact
-  const folded = APPROVAL_ROLE_CONTRACTS[roleName.trim().toLowerCase().replace(/\s+/g, '')]
-  if (folded !== undefined) return folded
+  // ตัวจับคู่ชื่อ → คอลัมน์อยู่ `lib/settings/approval-matrix.ts` ที่เดียว (ตัวตั้งค่าใช้ตัวเดียวกัน — UAT BUG-008)
+  const column = approvalRoleColumn(roleName)
+  if (column !== null) return { capability: COLUMN_CAPABILITY[column], column }
   throw new SettingsError('APPROVAL_MATRIX_NOT_FOUND', {
     detail: `สายอนุมัติอ้างบทบาท "${roleName}" ที่ไม่มี capability รองรับ`,
     context: { role: roleName },

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_APPROVAL_STEPS,
+  approvalRoleColumn,
+  approvalRoleOptions,
+  invalidApprovalSteps,
   describeApprovalFlow,
   duplicateApprovalSteps,
   isApprovalFlowConsistent,
@@ -111,5 +114,25 @@ describe('toApprovalMatrixAuditPayload', () => {
       approval_flow: ['ผู้จัดการ', 'การเงิน'],
       enforce_segregation_of_duties: false,
     })
+  })
+})
+
+describe('ตัวเลือก role ของสายอนุมัติ (UAT BUG-008)', () => {
+  const orgRoles = ['ผู้จัดการทีมติดตามทรัพย์', 'ผู้จัดการทีมติดตามทรัพย์', 'การเงิน', 'บริหาร', 'ธุรการ', 'Superadmin']
+
+  it('approvalRoleOptions() = ชื่อ role ที่มีจริงและอนุมัติได้ ไม่ซ้ำ', () => {
+    expect(approvalRoleOptions(orgRoles)).toEqual(['ผู้จัดการทีมติดตามทรัพย์', 'การเงิน', 'บริหาร'])
+  })
+
+  it('invalidApprovalSteps() คืนขั้นที่พิมพ์ผิด/ไม่มีในองค์กร/อนุมัติไม่ได้', () => {
+    expect(invalidApprovalSteps(['ผู้จัดการทีมติดตามทรัพย์', 'การเงิน'], orgRoles)).toEqual([])
+    expect(invalidApprovalSteps(['ผู้จัดการทีม', 'การเงิน', 'ธุรการ'], orgRoles)).toEqual(['ผู้จัดการทีม', 'ธุรการ'])
+    expect(invalidApprovalSteps(['บริหาร'], ['การเงิน'])).toEqual(['บริหาร'])
+  })
+
+  it('approvalRoleColumn() ใช้ตัวจับคู่เดียวกับตัวอนุมัติ', () => {
+    expect(approvalRoleColumn('การเงิน')).toBe('finance')
+    expect(approvalRoleColumn(' Finance Admin ')).toBe('finance')
+    expect(approvalRoleColumn('ฝ่ายจัดซื้อ')).toBeNull()
   })
 })
