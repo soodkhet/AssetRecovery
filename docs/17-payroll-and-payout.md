@@ -15,6 +15,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Payout Batch แยกฝั่ง, WHT calculation, Idempotency Key |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + เติมสถานะ `draft` ใน §7.1 ที่ตกหล่นจาก enum `payout_batch_status` ใน `02-database-schema-design.md` (schema มี 4 ค่า: draft/checking/file_generated/completed แต่เอกสารเดิมมีแค่ 3 ค่า ไม่มี draft) + แยก Decisions/Open Items ชัดเจน — **เนื้อหา business logic เดิมคงไว้ครบ** |
 | v2.1 | 04/07/2569 | **ระบุ trigger ของ transition `draft → checking` ให้ชัดใน §9** — เดิม §7.1 บอกแล้วว่า `draft` เป็น transient state แต่ §9 ไม่ได้ระบุว่าใคร/อะไรเป็นคนเปลี่ยนเป็น `checking` — ชี้แจงว่าเป็น **ระบบเปลี่ยนอัตโนมัติทันทีที่ดึงรายการ approved ครบตาม cutoff** (ไม่มีปุ่มให้ user กด) ตามความหมาย transient ที่ §7.1 นิยามไว้แล้ว — เป็นการขยายความ ไม่ใช่ logic ใหม่ |
+| v2.2 | 03/10/2569 | **แก้ §6.2 ตามมติ PO 03/10/2569 (UAT Q5, BUG-014)**: เกณฑ์ขั้นต่ำ WHT คิด**ต่อ payee ต่อรอบจ่าย** (รวมฐานของ payee ก่อนเทียบเกณฑ์) แล้วกระจายยอดหักลงรายการ — สูตรอยู่ `22` §6.9 |
 
 ขอบเขตเอกสารนี้: รวมรายการค่าตอบแทนที่ผ่านการอนุมัติแล้ว (ไฟล์ 16) เป็นรอบจ่ายเงิน (Payout Batch) แยกฝั่ง inhouse/outsource พร้อมหัก WHT และสร้างไฟล์โอนเงินธนาคาร
 
@@ -57,7 +58,7 @@
 
 ### 6.2 WHT Calculation ต่อ Payout Batch
 
-แต่ละรายการใน batch หัก WHT ตาม Tax Profile ที่ผูกกับ Payee นั้น (ไฟล์ 18) — ยอดรวม WHT ของ batch = ผลรวม WHT ของทุกรายการ — `net = gross - wht` ที่โอนจริง
+แต่ละรายการใน batch หัก WHT ตาม Tax Profile ที่ผูกกับ Payee นั้น (ไฟล์ 18) — **เกณฑ์ขั้นต่ำเทียบกับยอดรวมของ payee ทั้งรอบจ่าย แล้วกระจายยอดหักกลับลงรายการ** (สูตรเต็ม `22` §6.9 — มติ PO 03/10/2569 UAT Q5) — ยอดรวม WHT ของ batch = ผลรวม WHT ของทุกรายการ — `net = gross - wht` ที่โอนจริง
 
 ### 6.3 Idempotency Key (กันโอนซ้ำ) 🔶 สำคัญมากด้านความปลอดภัยทางการเงิน
 

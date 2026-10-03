@@ -11,8 +11,6 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  */
 
 export const FINANCE_ERROR_CODES = [
-  // §6.4 เงินทดรองจ่าย (ไฟล์ 15)
-  'USED_EXCEEDS_REQUEST_NO_TOPUP',
   // §6.4 ขั้นอนุมัติค่าตอบแทน (ไฟล์ 16)
   'APPROVAL_STEP_OUT_OF_ORDER',
   'SEGREGATION_OF_DUTIES_VIOLATION',
@@ -24,18 +22,12 @@ export type FinanceErrorCode = (typeof FINANCE_ERROR_CODES)[number]
 
 /** 400 = ผิดกติกาข้อมูล/สถานะ · 403 = สิทธิ์/ระดับผู้อนุมัติไม่พอ (ไม่ใช่ข้อมูลผิด) — ตรงกับ `lib/api/error-catalog.ts` */
 const HTTP_STATUS: Record<FinanceErrorCode, number> = {
-  USED_EXCEEDS_REQUEST_NO_TOPUP: 400,
   APPROVAL_STEP_OUT_OF_ORDER: 400,
   SEGREGATION_OF_DUTIES_VIOLATION: 403,
   INSUFFICIENT_APPROVAL_LEVEL: 403,
 }
 
 const MESSAGES: Record<FinanceErrorCode, ErrorMessage> = {
-  USED_EXCEEDS_REQUEST_NO_TOPUP: {
-    title: 'ยอดใช้จริงเกินยอดที่ขอเบิก',
-    message:
-      'ยอดใช้จริงมากกว่ายอดที่ขอเบิก — ระบบไม่เพิ่มยอดทดรองย้อนหลัง ให้สร้างรายการเบิกใหม่สำหรับส่วนที่เกินแยกต่างหาก',
-  },
   APPROVAL_STEP_OUT_OF_ORDER: {
     title: 'อนุมัติข้ามขั้น',
     message: 'รายการนี้ยังไม่ถึงขั้นอนุมัติของคุณ — ต้องผ่านขั้นก่อนหน้าให้ครบก่อน',

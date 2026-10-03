@@ -79,6 +79,7 @@ describe('buildRevenueRow — โหมด VAT อื่น', () => {
 
   it('include_vat = ถอด VAT ออกจากราคาที่ตกลง — total ไม่บวกเพิ่ม (บทเรียน 3.1)', () => {
     const row = values({ vatMode: 'include_vat' })
+    expect(row.vatModeSnapshot).toBe('include_vat')
     expect(row.totalSatang).toBe(100_000)
     expect(row.grossSatang + row.vatSatang).toBe(100_000)
     expect(row.vatRatePctUsed).toBe(7)

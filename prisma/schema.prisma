@@ -2217,6 +2217,9 @@ model Revenue {
   totalSatang    Int     @map("total_satang")
 
   feeModelSnapshot ServiceFeeModel @map("fee_model_snapshot")
+  /// snapshot `finance_companies.vat_mode` ตอนสร้างรายได้ (มติ PO 03/10/2569 — UAT Q6, BUG-015)
+  /// ป้าย VAT ของรายได้/รอบวางบิลอ่านจากคอลัมน์นี้ ไม่ใช่ค่าปัจจุบันของบริษัท
+  vatModeSnapshot  VatMode         @map("vat_mode_snapshot")
   status           RevenueStatus   @default(ready_for_billing)
   revenueDate      DateTime        @map("revenue_date") @db.Date
 

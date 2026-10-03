@@ -12,7 +12,8 @@ type RouteContext = { params: Promise<{ id: string }> }
  *
  * ทำได้ทั้งจากสถานะ `approved` และ `overdue` · **เจ้าของคำขอกรอกยอดใช้จริงเองได้**
  * (`15` §12) ส่วนการเงินทำแทนได้ด้วยสิทธิ์อนุมัติ — scope ระดับแถวบังคับในชั้นข้อมูล
- * · `used > requested` ⇒ `USED_EXCEEDS_REQUEST_NO_TOPUP` (ยอดคืนห้ามติดลบ — Rule 01)
+ * · ใช้เกินยอดอนุมัติ ⇒ บันทึกได้ ยอดคืน 0 + สร้างคำขอเบิกส่วนเกินอัตโนมัติ (มติ PO 03/10/2569 UAT Q3)
+ *   — ตอบ `excessClaimId` กลับไปให้หน้าจอแจ้งผู้ใช้
  */
 export const PATCH = withApiPermission<RouteContext>(
   'manage',

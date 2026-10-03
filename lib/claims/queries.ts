@@ -68,51 +68,93 @@ export async function createManualClaim(
           })
         : await assertPayeeInOrganization(tx as ExpenseTxClient, user.organizationId, input.payeeId)
 
-    const row = await tx.expense.create({
-      data: {
-        organizationId: user.organizationId,
-        // `02` §8 — Manual Claim ไม่ผูกเคส (ไม่กระทบเกต Revenue ของเคส)
-        caseId: null,
-        assignmentId: null,
-        payeeId,
-        expenseType: input.claimType,
-        grossSatang: input.grossSatang,
-        expenseDate: input.expenseDate,
-        calculationSource: MANUAL_CLAIM_CALCULATION_SOURCE,
-        status: MANUAL_CLAIM_INITIAL_STATUS,
-        receiptFileUrl: input.receiptFileUrl,
-        revisionNote: input.note,
-        createdBy: user.id,
-      },
-      select: { id: true, payeeId: true },
+    return insertManualClaim(tx as ExpenseTxClient, context, {
+      payeeId,
+      claimType: input.claimType,
+      grossSatang: input.grossSatang,
+      expenseDate: input.expenseDate,
+      receiptFileUrl: input.receiptFileUrl,
+      note: input.note,
+      compPlanId: null,
+      compPlanVersion: null,
     })
-
-    await emitAudit(
-      {
-        organizationId: user.organizationId,
-        actorId: user.id,
-        actorRole: user.roleName,
-        action: 'create',
-        targetType: 'expenses',
-        targetId: row.id,
-        after: {
-          payee_id: payeeId,
-          expense_type: input.claimType,
-          gross_satang: input.grossSatang,
-          expense_date: input.expenseDate.toISOString().slice(0, 10),
-          calculation_source: MANUAL_CLAIM_CALCULATION_SOURCE,
-          status: MANUAL_CLAIM_INITIAL_STATUS,
-        },
-        reason: input.note,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-        diffOnly: false,
-      },
-      tx,
-    )
-
-    return { id: row.id, payeeId: row.payeeId }
   })
+}
+
+export interface ManualClaimInsert {
+  payeeId: string
+  claimType: ClaimCreateInput['claimType']
+  grossSatang: number
+  expenseDate: Date
+  receiptFileUrl: string | null
+  note: string | null
+  /**
+   * snapshot แผนค่าตอบแทน (`92` §7.1) — ใช้เป็น **fallback อัตรา WHT** ตอนเข้ารอบจ่ายเมื่อ payee
+   * ยังไม่มี Tax Profile (`18` §6.3) · Manual Claim จากฟอร์มส่ง `null` (ไม่มีแผนเกี่ยวข้อง)
+   */
+  compPlanId: string | null
+  compPlanVersion: number | null
+}
+
+/**
+ * แทรก Manual Claim + audit **ภายในทรานแซกชันของผู้เรียก** — ใช้ร่วมระหว่างฟอร์มเบิก (`createManualClaim`)
+ * กับคำขอเบิกส่วนเกินอัตโนมัติตอนเคลียร์ยอดเงินทดรอง (มติ PO 03/10/2569 — UAT Q3) ⇒ แถวหน้าตาเดียวกันเสมอ
+ * ผู้เรียกต้องตรวจ Period Lock + ขอบเขต payee มาก่อนแล้ว
+ */
+export async function insertManualClaim(
+  tx: ExpenseTxClient,
+  context: ClaimMutationContext,
+  input: ManualClaimInsert,
+): Promise<ManualClaimResult> {
+  const user = context.actor
+  const row = await tx.expense.create({
+    data: {
+      organizationId: user.organizationId,
+      // `02` §8 — Manual Claim ไม่ผูกเคส (ไม่กระทบเกต Revenue ของเคส)
+      caseId: null,
+      assignmentId: null,
+      payeeId: input.payeeId,
+      expenseType: input.claimType,
+      grossSatang: input.grossSatang,
+      expenseDate: input.expenseDate,
+      calculationSource: MANUAL_CLAIM_CALCULATION_SOURCE,
+      compPlanId: input.compPlanId,
+      compPlanVersion: input.compPlanVersion,
+      status: MANUAL_CLAIM_INITIAL_STATUS,
+      receiptFileUrl: input.receiptFileUrl,
+      revisionNote: input.note,
+      createdBy: user.id,
+    },
+    select: { id: true, payeeId: true },
+  })
+
+  await emitAudit(
+    {
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.roleName,
+      action: 'create',
+      targetType: 'expenses',
+      targetId: row.id,
+      after: {
+        payee_id: input.payeeId,
+        expense_type: input.claimType,
+        gross_satang: input.grossSatang,
+        expense_date: input.expenseDate.toISOString().slice(0, 10),
+        calculation_source: MANUAL_CLAIM_CALCULATION_SOURCE,
+        comp_plan_id: input.compPlanId,
+        comp_plan_version: input.compPlanVersion,
+        status: MANUAL_CLAIM_INITIAL_STATUS,
+      },
+      reason: input.note,
+      ipAddress: context.meta.ipAddress,
+      userAgent: context.meta.userAgent,
+      diffOnly: false,
+    },
+    tx,
+  )
+
+  return { id: row.id, payeeId: row.payeeId }
 }
 
 async function assertPayeeInOrganization(

@@ -34,3 +34,8 @@ export interface AdvanceDto {
   /** ผู้ขอเบิก (`15` §7.2 requester) */
   requesterName: string
 }
+
+/** ผลของการเคลียร์ยอด — `excessClaimId` = คำขอเบิกส่วนเกินที่ระบบสร้างให้ (มติ PO 03/10/2569 UAT Q3) · `null` = ไม่ได้ใช้เกิน */
+export interface AdvanceSettleResult extends AdvanceDto {
+  excessClaimId: string | null
+}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ADVANCE_ACTIONS,
   assertAdvanceRejectionReason,
@@ -10,8 +10,11 @@ import {
   resolveApprovedSatang,
   TERMINAL_ADVANCE_STATUSES,
   UNCLEARED_ADVANCE_STATUSES,
+  isDueClearDateInPast,
+  minDueClearInputDate,
 } from '@/lib/advances/advance'
 import { AdvanceError } from '@/lib/advances/errors'
+import { advanceCreateSchema } from '@/lib/advances/schemas'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 
 /** `15` §16 + `23` §6.4 — เทสต์ตามเคสที่เอกสารระบุชื่อไว้ตรง ๆ */
@@ -149,5 +152,52 @@ describe('เลยกำหนดเคลียร์ยอด — เที�
   it('เวลา UTC ก่อนเที่ยงคืนไทยยังนับเป็นวันไทยถัดไปแล้ว', () => {
     // 2026-08-15T18:00:00Z = 16/08/2569 01:00 น. ไทย ⇒ กำหนด 15/08 ถือว่าเลยแล้ว
     expect(isAdvanceOverdue('2026-08-15', new Date('2026-08-15T18:00:00Z'))).toBe(true)
+  })
+})
+
+describe('มติ PO 03/10/2569 (UAT Q8, BUG-058) — กำหนดเคลียร์ยอดห้ามเป็นวันที่ผ่านมาแล้ว (ปฏิทินไทย)', () => {
+  // 03/10/2569 23:30 น. ไทย = 16:30Z · 04/10/2569 00:30 น. ไทย = 03/10 17:30Z (UTC ยังเป็นวันเก่า)
+  const lateEvening = new Date('2026-10-03T16:30:00Z')
+  const afterMidnightBangkok = new Date('2026-10-03T17:30:00Z')
+
+  it('เมื่อวาน = ผ่านมาแล้ว · วันนี้/พรุ่งนี้ = ได้', () => {
+    expect(isDueClearDateInPast('2026-10-02', lateEvening)).toBe(true)
+    expect(isDueClearDateInPast('2026-10-03', lateEvening)).toBe(false)
+    expect(isDueClearDateInPast('2026-10-04', lateEvening)).toBe(false)
+  })
+
+  it('อิงวันไทย ไม่ใช่ UTC — หลังเที่ยงคืนไทย วันที่ 03 กลายเป็นอดีตแล้ว', () => {
+    expect(isDueClearDateInPast(new Date('2026-10-03T00:00:00Z'), afterMidnightBangkok)).toBe(true)
+    expect(minDueClearInputDate(afterMidnightBangkok)).toBe('2026-10-04')
+  })
+
+  describe('advanceCreateSchema (schema เดียวใช้ร่วม FE/BE)', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    const payload = (dueClearDate: string) => ({
+      requestedSatang: 300_000,
+      purpose: 'ไปติดตามทรัพย์ต่างจังหวัด',
+      dueClearDate,
+    })
+
+    it('วันที่ผ่านมาแล้ว → field error ที่ dueClearDate', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(lateEvening)
+      const parsed = advanceCreateSchema.safeParse(payload('2026-10-02'))
+      expect(parsed.success).toBe(false)
+      if (!parsed.success) {
+        expect(parsed.error.issues[0]?.path).toEqual(['dueClearDate'])
+        expect(parsed.error.issues[0]?.message).toContain('วันที่ผ่านมาแล้ว')
+      }
+    })
+
+    it('วันนี้ (ADV3 ของ UAT) และวันถัดไป → ผ่าน', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(lateEvening)
+      expect(advanceCreateSchema.safeParse(payload('2026-10-03')).success).toBe(true)
+      expect(advanceCreateSchema.safeParse(payload('2026-10-10')).success).toBe(true)
+    })
   })
 })
