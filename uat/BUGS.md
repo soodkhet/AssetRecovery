@@ -100,8 +100,14 @@
 | BUG-092 | fixer H | S4 | code | job รายวัน settle วันที่มีเคสยังเปิดอยู่ → แถวรายวันของเคสนั้นเป็น `pending_approval` ทันที ถ้าภายหลังเคสปิดสำเร็จ แถวนั้นจะไม่รอคลัง (ควร `pending_warehouse_confirm`) — เกตรายได้ยังบังคับ lot confirmed อยู่ ไม่กระทบรายได้ แต่การอนุมัติค่าตอบแทนก่อนผ่านคลังไม่ตรงหลัก | open |
 | BUG-093 | fixer H | S5 | spec-gap | วันที่อยู่ในงวดบัญชีที่ปิดแล้ว job จะข้าม ไม่ settle ⇒ เคสของวันนั้นติดเกตรายได้ จนกว่าจะทำ Adjustment · หลัง deploy เคสเดิมบน staging จะรอรายได้จนถึงรอบ job คืนแรก | needs-decision |
 | BUG-094 | R4a-v3 R4.01 | S2 | env | snapshot `R3-end-v3` มีตาราง `field_day_settlements` ว่างแต่ `_prisma_migrations` ไม่มี 170000 → `restore.sh` ซ่อน error ของ `db:deploy` ⇒ ฐาน dev ขาด 3 migration · `/api/field/expenses` 500 (`expenses.receipt_file_hash` ไม่มี) | fixed (04/10/2569 orchestrator: drop ตารางว่าง + `migrate resolve --rolled-back` + deploy · snapshot `R3-end-v3b` · `restore.sh` ไม่ซ่อน error + หยุดถ้า migrate status ไม่สะอาด) |
-| BUG-095 | R4a-v3 R4.23b | S4 | code | หน้าอนุมัติ (`/finance?tab=comp`) คอลัมน์ "สูตร/ฐานคิด" ของแถวรายวันแสดงอัตราเต็ม ("1 วัน × 150.00 บาท/วัน", "เหมาจ่ายรายวัน 200.00 บาท/วัน") คู่ยอดที่หารแล้ว ฿75/฿100 ไม่บอกว่าหารกี่เคส ⇒ ดูเหมือนยอดผิด | needs-decision (รูปแบบข้อความ) |
+| BUG-095 | R4a-v3 R4.23b | S4 | code | หน้าอนุมัติ (`/finance?tab=comp`) คอลัมน์ "สูตร/ฐานคิด" ของแถวรายวันแสดงอัตราเต็ม ("1 วัน × 150.00 บาท/วัน", "เหมาจ่ายรายวัน 200.00 บาท/วัน") คู่ยอดที่หารแล้ว ฿75/฿100 ไม่บอกว่าหารกี่เคส ⇒ ดูเหมือนยอดผิด | needs-decision → ✅ PO เลือก ก. 04/10/2569: แสดง "อัตรา/วัน ÷ จำนวนเคสของวันนั้น (วันที่) = ยอด" เช่น "150.00 บาท/วัน ÷ 2 เคส (04/10/2569) = 75.00" · open (รอ fixer) |
 | BUG-096 | R4a-v3 R4.12 | S4 | code | แจ้งเตือน `expense.case_bound_created` ลิงก์ไป `/finance/approvals` (`lib/notifications/messages.ts:307`) → หน้าไม่พบ · คิวจริงอยู่ `/finance?tab=comp` | open |
+| BUG-097 | R4b-v3 R4.30 | S5 | code | audit ของ commission เดิมที่ถูกแทน (resubmit_close) ไม่มี `supersededByExpenseId` และ events `[]` — ลิงก์ไปใบใหม่อยู่แค่คอลัมน์ `expenses.superseded_by_expense_id` | open |
+| BUG-098 | R4b-v3 R4.38b | S4 | code | ส่งรายการเบิกใหม่หลังถูกตีกลับ → ข้อความชี้แจงเขียนทับหมายเหตุตอนเบิก (ใช้ฟิลด์ `revision_note` ร่วม) · audit ไม่เก็บค่าเดิม ⇒ หมายเหตุเดิมหาย · หน้าเบิกแสดงข้อความชี้แจงแทนชื่อรายการ | open |
+| BUG-099 | R4b-v3 R4.38b | S5 | code | แจ้งเตือน "รายการเบิกถูกตีกลับ" ลิงก์ไป `/field/income` แทนหน้าเบิก | open |
+| BUG-100 | R4b-v3 R4.31 | S5 | spec-gap | resubmit ปิดงานเขียนทับ `cases.completed_at` → หน้าจบงาน/สรุปรายได้แสดงเวลาปิดล่าสุด (00:56 แทน 00:45) · ถ้าข้ามเดือนจะย้ายเคสไปเดือนใหม่ในตัวกรองรายได้ | needs-decision · ข้อเสนอ orchestrator: คงเวลาปิดครั้งแรกไว้แสดง + แสดง "ส่งหลักฐานใหม่เมื่อ" แยก (โยงคำถามค้าง "วันที่รายได้หลัง resubmit ข้ามเดือน") |
+| BUG-101 | R4b-v3 R4.33 | S5 | spec-gap | หน้าเบิกของพนักงาน กล่อง "รอดำเนินการ" แสดงยอดแยกต่อแท็บ (ผูกเคส ฿1,350 / เบิกแยก ฿600) ไม่มียอดรวม ฿1,950 | needs-decision · ข้อเสนอ orchestrator: เพิ่มยอดรวมทุกแท็บ |
+| BUG-102 | R4b-v3 R4.34 | S5 | spec-gap | ช่อง "พักร่วมกับ" ของค่าที่พักให้เลือกผู้จัดการ/หัวหน้าทีมได้ | needs-decision · ข้อเสนอ orchestrator: จำกัดเฉพาะพนักงานภาคสนาม |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -110,6 +116,9 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R4b v3: ยืนยัน BUG-071/072/073 แก้แล้ว · step sheet R4.36 ยังคาด `closed_success` 5 แถว — ค่าจริงถูก: 4 แถว + `case.close_resubmitted` 1 แถว (แก้ step sheet รอบหน้า)
+- R4b v3: เบิกค่าที่พัก/ส่งใหม่ ไม่มีแจ้งเตือนถึงผู้จัดการทีม · ค่าที่พัก/เงินทดรองไม่มีแจ้งเตือน — ให้ R6 ดูต่อ
+- R4b v3 R4.38b: PO เผลอใช้ admin อนุมัติขั้น 1 ค่าที่พัก 01:24 → ตีกลับผ่านหน้าจอ + in1 ส่งใหม่ (ไม่ใช่บั๊ก — approval_history มี approve+reject ค้างเป็นร่องรอย)
 - R4a v3 (R4v3-A): เช็คอินหลัง job รายวัน settle แล้ว — ไม่มีคำเตือนใน response (ทดสอบสดไม่ได้ เพราะกติการอบห้ามเช็คอินหลัง settle) · S4 ข้อสังเกต
 - R4a v3 (R4v3-B ยืนยัน): job รายวันไม่ส่งแจ้งเตือน (29 → 29) · แจ้งเตือนปิดงาน C3 เขียน "1 รายการ" แต่คิวมี 3 แถวหลัง settle
 - R4a v3 (R4v3-C ยืนยัน): หน้ารายได้/ยอดคอมมิชชันบนแดชบอร์ดของพนักงานไม่เปลี่ยนหลัง settle (ไม่รวมค่าน้ำมัน/เบี้ยเลี้ยง)
