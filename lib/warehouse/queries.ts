@@ -13,6 +13,7 @@ import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import { WarehouseError } from '@/lib/warehouse/errors'
 import type { HandoverParty } from '@/lib/warehouse/handover-doc'
 import { compareAssetIdentity } from '@/lib/warehouse/imei'
+import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
 import { assertIntakeCondition, assertRejectReason, imeiMismatchWarning } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
@@ -385,6 +386,15 @@ export async function intakeAsset(
     })
     if (claimed.count === 0) throw new WarehouseError('ASSET_INVALID_STATUS')
 
+    // หลักฐานปิดงานของเคสสำเร็จผ่านอัตโนมัติเมื่อคลังรับเข้า (มติ PO 03/10/2569 — UAT Q14 · BUG-055)
+    const evidenceApprovedId = await autoApproveCaseEvidence(tx as WarehouseTxClient, {
+      organizationId: user.organizationId,
+      caseId: current.caseId,
+      trigger: 'asset_intake',
+      actorId: context.actor.id,
+      actorRole: context.actor.roleName,
+    })
+
     await emitAudit(
       {
         organizationId: user.organizationId,
@@ -402,6 +412,7 @@ export async function intakeAsset(
           condition: input.condition,
           photosCount: input.photos.length,
           receivedAt,
+          evidenceApprovedId,
           events: retry ? ['asset.intake_retry', 'asset.intake'] : ['asset.intake'],
         },
         ipAddress: context.meta.ipAddress,

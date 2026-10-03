@@ -37,6 +37,7 @@ import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notificati
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
+import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
 import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 
@@ -473,6 +474,19 @@ export async function approveCompensationExpense(
           })
         : { eligibleCaseIds: [] as string[], revenueIdsCreated: [] as string[], skipped: [] }
 
+    // หลักฐานปิดงานของเคสไม่สำเร็จผ่านอัตโนมัติเมื่อค่าตอบแทนอนุมัติครบขั้น (มติ PO 03/10/2569 — UAT Q14)
+    // ฟังก์ชันเช็ค outcome เอง — เคสสำเร็จไม่ผ่านที่นี่ (รอคลังรับเข้า)
+    const evidenceApprovedId =
+      progress.isComplete && row.caseId !== null
+        ? await autoApproveCaseEvidence(tx as WarehouseTxClient, {
+            organizationId: user.organizationId,
+            caseId: row.caseId,
+            trigger: 'expense_approved',
+            actorId: user.id,
+            actorRole: user.roleName,
+          })
+        : null
+
     const events = progress.isComplete ? (['expense.approved'] as const) : ([] as const)
 
     await emitAudit(
@@ -497,6 +511,7 @@ export async function approveCompensationExpense(
           gross_satang: row.grossSatang,
           revenue_eligible_case_ids: revenue.eligibleCaseIds,
           revenue_ids_created: revenue.revenueIdsCreated,
+          evidence_approved_id: evidenceApprovedId,
           events: [...events],
         },
         // `16` §13 — บันทึกทุกขั้น · เหตุผลมีเมื่อผู้อนุมัติใส่หมายเหตุ (อนุมัติไม่บังคับเหตุผล)

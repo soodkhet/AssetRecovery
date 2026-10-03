@@ -438,6 +438,25 @@ suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`4
     expect(stored.receivedAt).not.toBeNull()
   })
 
+  it('UAT Q14 (BUG-055) — คลังรับเข้า = หลักฐานปิดงานเคสสำเร็จผ่านอัตโนมัติ แล้วตีกลับไม่ได้', async () => {
+    const { caseId, assetId, imei } = await seedClosedSuccessCase()
+    expect((await db().caseEvidence.findFirstOrThrow({ where: { caseId } })).status).toBe('pending')
+
+    await warehouse.intakeAsset(admin, assetId, intakeInput(imei), ctx(admin))
+
+    const evidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId } })
+    expect(evidence.status).toBe('approved')
+    expect(evidence.reviewedBy).toBe(admin.id)
+    expect(evidence.reviewedAt).not.toBeNull()
+    const audit = await db().auditLog.findFirst({ where: { targetType: 'case_evidences', targetId: evidence.id } })
+    expect(audit?.action).toBe('approve')
+
+    await expectCode(
+      () => field.rejectFieldEvidence(manager, caseId, { reason: 'ขอรูปเพิ่มอีกชุด' }, ctx(manager)),
+      'EVIDENCE_REJECT_AFTER_FINAL',
+    )
+  })
+
   it('T03 — IMEI ไม่ตรงก็รับเข้าได้ แต่ต้องเตือนและบันทึกค่าที่ตรวจจริงไว้', async () => {
     const { assetId, imei } = await seedClosedSuccessCase()
     const result = await warehouse.intakeAsset(admin, assetId, intakeInput('355000000000999'), ctx(admin))

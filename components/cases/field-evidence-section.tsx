@@ -46,6 +46,19 @@ export function FieldEvidenceSection({
         {fmtDateTime(evidence.submittedAt)}
       </p>
 
+      {evidence.evidenceStatus === 'approved' && (
+        <div className="mb-3" data-testid="evidence-approved">
+          <InlineAlert tone="success" title="หลักฐานชุดนี้ผ่านแล้ว">
+            {evidence.outcome === 'closed_success'
+              ? 'ผ่านอัตโนมัติเมื่อคลังรับเครื่องเข้า — ตีกลับไม่ได้แล้ว'
+              : 'ผ่านอัตโนมัติเมื่อค่าตอบแทนของเคสได้รับอนุมัติ — ตีกลับไม่ได้แล้ว'}
+            {evidence.reviewedAt !== null && (
+              <span className="mt-1 block text-[11px]">{fmtDateTime(evidence.reviewedAt)}</span>
+            )}
+          </InlineAlert>
+        </div>
+      )}
+
       {evidence.evidenceStatus === 'rejected' && evidence.rejectReason !== null && (
         <div className="mb-3">
           <InlineAlert tone="warning" title="หลักฐานชุดนี้ถูกตีกลับแล้ว">

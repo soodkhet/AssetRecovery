@@ -238,6 +238,8 @@ async function produceRevenue(): Promise<{ caseId: string; revenueId: string; re
     await approvals.approveCompensationExpense(ctx(manager), row.id, {})
     await approvals.approveCompensationExpense(ctx(finance), row.id, { step: 2 })
   }
+  // UAT Q14 — ค่าตอบแทนเคสไม่สำเร็จอนุมัติครบขั้น = หลักฐานปิดงานผ่านอัตโนมัติ
+  expect((await db().caseEvidence.findFirstOrThrow({ where: { caseId } })).status).toBe('approved')
 
   const row = await db().revenue.findFirstOrThrow({ where: { caseId } })
   expect(row.grossSatang).toBe(FEE_BASE_SATANG)

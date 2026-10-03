@@ -1283,14 +1283,21 @@ async function assertEvidenceStillRejectable(
   caseId: string,
   assignmentId: string,
 ): Promise<void> {
-  const [handedOver, revenue, inPayout] = await Promise.all([
+  const [handedOver, revenue, inPayout, latestEvidence] = await Promise.all([
     prisma.asset.count({ where: { organizationId, caseId, assetStatus: 'handed_over', deletedAt: null } }),
     prisma.revenue.count({ where: { organizationId, caseId, deletedAt: null } }),
     prisma.expense.count({ where: { organizationId, assignmentId, payoutBatchItemId: { not: null }, deletedAt: null } }),
+    prisma.caseEvidence.findFirst({
+      where: { organizationId, assignmentId },
+      orderBy: { submittedAt: 'desc' },
+      select: { status: true },
+    }),
   ])
-  if (handedOver === 0 && revenue === 0 && inPayout === 0) return
+  // หลักฐานที่ผ่านอัตโนมัติแล้ว (คลังรับเข้า / ค่าตอบแทนอนุมัติ — มติ PO 03/10/2569 UAT Q14) ตีกลับไม่ได้
+  const evidenceApproved = latestEvidence?.status === 'approved'
+  if (handedOver === 0 && revenue === 0 && inPayout === 0 && !evidenceApproved) return
   throw new FieldError('EVIDENCE_REJECT_AFTER_FINAL', {
-    detail: `case=${caseId} handedOver=${handedOver} revenue=${revenue} inPayout=${inPayout}`,
+    detail: `case=${caseId} handedOver=${handedOver} revenue=${revenue} inPayout=${inPayout} evidenceApproved=${evidenceApproved}`,
   })
 }
 
