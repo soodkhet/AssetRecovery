@@ -32,6 +32,7 @@
 | v4.9 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · BUG-037/050 · หนี้ #1)** — server ตรวจไฟล์ที่อัปโหลดเองแล้วเก็บ SHA-256 ของ server: `case_evidences.file_hashes` + `close_case_drafts.file_hashes` + `assets.photo_hashes` (JSONB NOT NULL DEFAULT '{}' รูปแบบ `{ "<path>": { "sha256", "mimeType", "sizeBytes" } }`) · `handover_lots.signed_doc_hash` / `delivery_proof_hash` VARCHAR(64) · `case_documents.file_hash` เดิมเปลี่ยนความหมายเป็นค่าที่ server คำนวณ (ไม่ใช่ค่าจาก browser) · migration: `20261003120000_upload_server_verification` |
 | v4.10 | 03/10/2569 | **ขยายมติ PO Q13 ถึงใบเสร็จรายการเบิกแยก (UAT BUG-072)** — `expenses`: เพิ่ม `receipt_file_hash VARCHAR(64)` (nullable) = SHA-256 ที่ server คำนวณเองหลังดาวน์โหลดใบเสร็จมาตรวจ (path ต้องอยู่ใต้ `expenses/<userId ผู้เบิก>/receipts/` · มีจริงใน Storage · magic bytes รูป/PDF · ≤ 10 MB) ทั้งตอน `submit_hotel_claim` และ `resubmit_expense` ที่แนบใบใหม่ · แถวเดิม = NULL (ยังไม่เคยตรวจ) · migration: `20261003150000_expense_receipt_hash` |
 | v4.11 | 03/10/2569 | **UAT R6-E (บั๊กเงิน S2)** — `revenues`: เพิ่ม **partial unique `uniq_revenues_active_case_round` ON (organization_id, case_id, tracking_round) WHERE deleted_at IS NULL** = ยามชั้น DB ของกติกา "1 เคส 1 รอบติดตาม เกิดรายได้ได้ครั้งเดียว" (`19` §6.1 idempotent ต่อเคส · B3) · ตัวกันหลักที่ชั้น service คือ `SELECT … FOR UPDATE` แถว `cases` ก่อนประเมินเกตรายได้ (เดิมอนุมัติรายการเบิกตัวสุดท้ายของเคสพร้อมกัน 2 ตัว ⇒ ต่างฝ่ายเห็นอีกตัวยังไม่ approved ⇒ **รายได้ไม่เกิดเลย**) · `revenue_status` ไม่มีสถานะยกเลิก ⇒ "ยังมีผล" = `deleted_at IS NULL` · ไม่มีตาราง/คอลัมน์/enum ใหม่ · migration: `20261003160000_revenue_unique_case_round` |
+| v4.12 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q21 · DEC-012)** — ตารางใหม่ **`field_day_settlements`** (insert-only: `id, organization_id, agent_id, field_date DATE, comp_plan_id, comp_plan_version, fuel_total_satang, allowance_total_satang, case_count, job_id, created_at, created_by` · **UNIQUE `uniq_field_day_settlements_org_agent_date` (organization_id, agent_id, field_date)** = ยามกันซ้ำของ job `daily_field_allowance` · CHECK ยอด/จำนวน ≥ 0) · `expenses`: เพิ่ม `field_day_settlement_id UUID` (nullable FK) = แถวรายวันค่าน้ำมันเหมา/เบี้ยเลี้ยง · `uniq_active_case_expense_per_assignment` ยกเว้นแถวรายวัน (`AND field_day_settlement_id IS NULL`) + partial unique ใหม่ `uniq_expenses_field_day_case_type` (field_day_settlement_id, case_id, expense_type) · migration: `20261003170000_field_day_settlements` |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -1317,6 +1318,7 @@ CREATE TABLE expenses (
   receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
   receipt_file_hash     VARCHAR(64),        -- v4.10 SHA-256 ของใบเสร็จที่ server ตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — BUG-072)
   superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)
+  field_day_settlement_id UUID REFERENCES field_day_settlements(id),  -- v4.12 แถวรายวันค่าน้ำมันเหมา/เบี้ยเลี้ยง (UAT Q21) · NULL = รายการอื่น
   -- Payout (FK → payout_batch_items เมื่อเข้ารอบจ่าย)
   payout_batch_item_id  UUID,   -- FK กลับไป (set หลัง payout_batch_items สร้าง)
   -- Audit
@@ -1332,9 +1334,39 @@ CREATE INDEX idx_expenses_payee      ON expenses(payee_id, status);
 CREATE INDEX idx_expenses_payee_date ON expenses(payee_id, expense_date);   -- เพิ่ม 14/08/2569 (Phase 2.9) — รายการเบิก/สรุปรายได้รายเดือน (ไฟล์ 41 §7.9/§7.10)
 -- เพิ่ม 14/08/2569 (Phase 2.9) — รายการเบิกผูกเคสมีได้ชนิดละ 1 รายการที่ยังมีผลต่อ 1 รอบติดตาม
 -- (ไฟล์ 41 §10.1 — สร้างรายการใหม่ได้ต่อเมื่อรายการเดิม mark `superseded` แล้ว · กันกด submit/resubmit ซ้อน)
+-- v4.12 (UAT Q21): แถวรายวัน (field_day_settlement_id ไม่ว่าง) ยกเว้นจากกติกานี้ — เคสลงพื้นที่หลายวันมี allowance หลายแถวได้
 CREATE UNIQUE INDEX uniq_active_case_expense_per_assignment
   ON expenses(assignment_id, expense_type)
-  WHERE assignment_id IS NOT NULL AND status <> 'superseded' AND deleted_at IS NULL;
+  WHERE assignment_id IS NOT NULL AND status <> 'superseded' AND deleted_at IS NULL
+    AND field_day_settlement_id IS NULL;
+CREATE INDEX idx_expenses_field_day_settlement ON expenses(field_day_settlement_id);
+CREATE UNIQUE INDEX uniq_expenses_field_day_case_type
+  ON expenses(field_day_settlement_id, case_id, expense_type)
+  WHERE field_day_settlement_id IS NOT NULL AND deleted_at IS NULL;
+
+-- ── field_day_settlements ────────────────────────────────────
+-- v4.12 มติ PO 03/10/2569 (UAT Q21 · DEC-012 · `22` §6.2/§6.3): ค่าน้ำมันเหมาจ่าย + เบี้ยเลี้ยง วันละครั้ง
+-- ต่อพนักงานต่อวันปฏิทินไทย — 1 แถว = (พนักงาน, วัน) ที่ job `daily_field_allowance` settle แล้ว (ยอด 0 ก็มีแถว)
+-- insert-only (ไม่มี updated_* / deleted_at) · เกตรายได้ (`19` §6.1) ใช้ตรวจว่าทุกวันลงพื้นที่ของเคส settle แล้ว
+CREATE TABLE field_day_settlements (
+  id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id         UUID        NOT NULL REFERENCES organizations(id),
+  agent_id                UUID        NOT NULL REFERENCES users(id),
+  field_date              DATE        NOT NULL,               -- วันปฏิทินไทยของเช็คอิน
+  comp_plan_id            UUID        REFERENCES compensation_plans(id),  -- snapshot แผน (เวอร์ชัน) ของทีม ณ วันนั้น · NULL = ทีมไม่ผูกแผน
+  comp_plan_version       INTEGER,
+  fuel_total_satang       INTEGER     NOT NULL,               -- D ของค่าน้ำมันเหมา (0 ถ้าโหมด PER_KM)
+  allowance_total_satang  INTEGER     NOT NULL,               -- D ของเบี้ยเลี้ยง
+  case_count              INTEGER     NOT NULL,               -- N เคสที่รับส่วนแบ่ง
+  job_id                  UUID,                               -- job ที่ settle (trace — actor = system)
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by              UUID,                               -- NULL = ระบบ
+  CONSTRAINT chk_field_day_settlements_non_negative
+    CHECK (fuel_total_satang >= 0 AND allowance_total_satang >= 0 AND case_count >= 0)
+);
+CREATE UNIQUE INDEX uniq_field_day_settlements_org_agent_date
+  ON field_day_settlements(organization_id, agent_id, field_date);
+CREATE INDEX idx_field_day_settlements_org_date ON field_day_settlements(organization_id, field_date);
 
 -- ── advances ─────────────────────────────────────────────────
 -- เงินทดรองจ่าย ตามไฟล์ 15
@@ -1876,7 +1908,7 @@ CREATE INDEX idx_push_subscriptions_user ON push_subscriptions(organization_id, 
 CREATE TABLE jobs (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID        REFERENCES organizations(id),
-  job_type        TEXT        NOT NULL,  -- 'export_pack' | 'bank_file' | 'wht_summary' | 'reassign_timeout' | 'advance_overdue' (ไฟล์ 15 §9.1)
+  job_type        TEXT        NOT NULL,  -- 'export_pack' | 'bank_file' | 'wht_summary' | 'reassign_timeout' | 'advance_overdue' (ไฟล์ 15 §9.1) | 'daily_field_allowance' (v4.12 UAT Q21)
   status          job_status  NOT NULL DEFAULT 'pending',
   payload         JSONB       NOT NULL DEFAULT '{}',
   result          JSONB,
