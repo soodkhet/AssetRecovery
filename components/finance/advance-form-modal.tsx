@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { advanceRequestErrorText } from '@/lib/advances/advance-ui'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -27,6 +28,8 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
   const [dueClearDate, setDueClearDate] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // error จาก API ค้างบนฟอร์ม (UAT BUG-046) — toast หายเร็วเกินกว่าพนักงานบนมือถือจะอ่านทัน
+  const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null)
 
   if (!open) return null
 
@@ -44,11 +47,14 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
     }
 
     setSaving(true)
+    setSubmitError(null)
     // ส่ง payload ดิบ (วันที่ยังเป็นสตริง) — `parsed.data.dueClearDate` ถูก transform เป็น Date แล้ว
     const result = await callApi<AdvanceDto>('/api/advances', jsonRequest('POST', payload))
     setSaving(false)
     if (result.error !== undefined) {
-      showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+      const text = advanceRequestErrorText(result.error)
+      setSubmitError(text)
+      showToast({ tone: 'error', title: text.title, description: text.message })
       return
     }
     showToast({ tone: 'success', title: 'ส่งคำขอแล้ว', description: 'รอการเงินอนุมัติก่อนรับเงิน' })
@@ -56,6 +62,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
     setPurpose('')
     setDueClearDate('')
     setErrors({})
+    setSubmitError(null)
     if (result.data !== undefined) onCreated(result.data)
     onClose()
   }
@@ -80,6 +87,12 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
         <InlineAlert tone="warning">
           ⚠️ กฎ: ต้องเคลียร์ยอดเดิมให้เสร็จก่อนขอเบิกรอบใหม่ได้เสมอ — ยอดที่อนุมัติแล้วหรือเลยกำหนดเคลียร์ถือว่ายังค้างทั้งคู่
         </InlineAlert>
+
+        {submitError !== null && (
+          <InlineAlert tone="error" title={submitError.title}>
+            {submitError.message}
+          </InlineAlert>
+        )}
 
         <Field label="ยอดเงินที่ขอเบิก (บาท)" required error={errors.requestedSatang}>
           <Input

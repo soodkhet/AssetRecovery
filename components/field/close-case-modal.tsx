@@ -299,17 +299,22 @@ export function CloseCaseModal({
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
   const dragStart = useRef<{ x: number; y: number } | null>(null)
 
-  /** บันทึก draft เงียบ ๆ ทุกครั้งที่ฟอร์มเปลี่ยน (mockup `saveDraftSilently`) — โหมดตีกลับไม่มี draft */
+  /**
+   * บันทึก draft เงียบ ๆ ทุกครั้งที่ฟอร์มเปลี่ยน (mockup `saveDraftSilently`) — โหมดตีกลับไม่มี draft
+   * คืน `false` เมื่อบันทึกล้ม (โชว์ toast error แล้ว) — ปุ่ม "บันทึก Draft" ห้ามโชว์สำเร็จทับ (UAT BUG-053)
+   */
   const persistDraft = useCallback(
-    async (next: CloseFormState, options?: { revision?: boolean }): Promise<void> => {
-      if (options?.revision === true) return
+    async (next: CloseFormState, options?: { revision?: boolean }): Promise<boolean> => {
+      if (options?.revision === true) return true
       const response = await callApi<FieldCloseDraftResultDto>(
         apiPath('field.closeDraft', { id: caseId }),
         jsonRequest('POST', closeDraftPayload(next)),
       )
       if (response.error !== undefined) {
         showToast({ tone: 'error', title: response.error.title, description: response.error.message })
+        return false
       }
+      return true
     },
     [caseId, showToast],
   )
@@ -501,7 +506,8 @@ export function CloseCaseModal({
   async function saveDraftAndClose(): Promise<void> {
     setSubmitting(true)
     try {
-      await persistDraft(form)
+      // บันทึกล้ม = ค้างฟอร์มไว้ (toast error ขึ้นจาก persistDraft แล้ว) ไม่ปิดหน้าต่างทิ้งข้อมูล
+      if (!(await persistDraft(form))) return
       showToast({ tone: 'success', title: 'บันทึก Draft แล้ว', description: 'กลับมาทำต่อได้ทีหลัง' })
       onDone()
       onClose()

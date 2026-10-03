@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
-import { FileViewerModal } from '@/components/cases/file-viewer-modal'
+import { FieldEvidenceSection } from '@/components/cases/field-evidence-section'
+import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
@@ -31,6 +32,9 @@ import {
   caseStatusBadgeGroup,
   caseStatusLabel,
 } from '@/lib/cases/status-display'
+import { canRejectFieldEvidence } from '@/lib/field/evidence-review-ui'
+import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
+import type { FieldActionResultDto } from '@/lib/field/types'
 import type {
   CaseDetailDto,
   CaseDocumentDto,
@@ -104,7 +108,12 @@ export function CaseDetailModal({
   const [teamReason, setTeamReason] = useState('')
   const [chosenTeam, setChosenTeam] = useState<{ id: string; reason: string } | null>(null)
 
-  const [viewing, setViewing] = useState<CaseDocumentDto | null>(null)
+  const [viewing, setViewing] = useState<ViewableFile | null>(null)
+
+  // ตีกลับหลักฐานปิดงาน (UAT BUG-045 · `41` §8 `reject_evidence`) — ปุ่มซ่อนเมื่อไม่มีสิทธิ์
+  const [rejectEvidenceOpen, setRejectEvidenceOpen] = useState(false)
+  const [rejectEvidenceReason, setRejectEvidenceReason] = useState('')
+  const [rejectingEvidence, setRejectingEvidence] = useState(false)
 
   const load = useCallback(async (id: string) => await callApi<CaseDetailDto>(apiPath('case.detail', { id })), [])
 
@@ -168,6 +177,41 @@ export function CaseDetailModal({
     }
   }
 
+  const showRejectEvidence =
+    detail !== null &&
+    can('manage', FIELD_REJECT_EVIDENCE_CAPABILITY) &&
+    canRejectFieldEvidence(detail.fieldEvidence)
+
+  async function rejectEvidence(): Promise<void> {
+    if (detail === null) return
+    setActionError(null)
+    setRejectingEvidence(true)
+    try {
+      const response = await callApi<FieldActionResultDto>(
+        apiPath('case.rejectEvidence', { id: detail.id }),
+        jsonRequest('POST', { reason: rejectEvidenceReason }),
+      )
+      setRejectEvidenceOpen(false)
+      if (response.error !== undefined || response.data === undefined) {
+        setActionError(response.error ?? { title: 'ตีกลับหลักฐานไม่สำเร็จ', message: 'กรุณาลองใหม่' })
+        return
+      }
+      showToast({
+        tone: 'success',
+        title: 'ตีกลับหลักฐานปิดงานแล้ว',
+        description: `${detail.caseRef} — แจ้งพนักงานให้แก้ไขหลักฐานในหน้าติดตามภาคสนามแล้ว`,
+      })
+      setRejectEvidenceReason('')
+      const reloaded = await load(detail.id)
+      if (reloaded.data !== undefined) {
+        setDetail(reloaded.data)
+        onChanged?.(reloaded.data)
+      }
+    } finally {
+      setRejectingEvidence(false)
+    }
+  }
+
   const selectedTeamId = chosenTeam?.id ?? detail?.assignedTeamId ?? detail?.suggestedTeamId ?? null
 
   return (
@@ -207,6 +251,18 @@ export function CaseDetailModal({
                 {button.label}
               </Button>
             ))}
+            {showRejectEvidence && (
+              <Button
+                variant="danger"
+                disabled={busyAction !== null || rejectingEvidence}
+                onClick={() => {
+                  setRejectEvidenceReason('')
+                  setRejectEvidenceOpen(true)
+                }}
+              >
+                ตีกลับหลักฐานปิดงาน
+              </Button>
+            )}
             {footerActions}
           </>
         }
@@ -250,6 +306,10 @@ export function CaseDetailModal({
 
             <DocumentSection detail={detail} onView={setViewing} />
 
+            {detail.fieldEvidence !== null && (
+              <FieldEvidenceSection evidence={detail.fieldEvidence} onView={setViewing} />
+            )}
+
             {detail.recycleHistory.length > 0 && <RecycleHistorySection detail={detail} />}
 
             {showsReasonBox(status) && (
@@ -292,6 +352,19 @@ export function CaseDetailModal({
           setTeamPick(null)
         }}
         placeholder="เช่น ทีมภาคใต้มีคิวเต็ม ให้ทีมภูเก็ตรับแทน"
+      />
+
+      <ReasonConfirmModal
+        open={rejectEvidenceOpen}
+        title={`ตีกลับหลักฐานปิดงาน — ${detail?.caseRef ?? ''}`}
+        description="เคสจะถูกส่งกลับให้พนักงานแก้ไขหลักฐานในหน้าติดตามภาคสนาม — เช็คอินและผลการติดตามล็อกไว้ตามเดิม แก้ได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า"
+        confirmLabel="ยืนยันตีกลับ"
+        loading={rejectingEvidence}
+        reason={rejectEvidenceReason}
+        onReasonChange={setRejectEvidenceReason}
+        onClose={() => setRejectEvidenceOpen(false)}
+        onConfirm={() => void rejectEvidence()}
+        placeholder="เช่น รูปหลักฐานไม่ชัด ดูไม่เหมือนสถานที่จริงตามที่อยู่ลูกหนี้ (5–1,000 ตัวอักษร)"
       />
 
       <FileViewerModal open={viewing !== null} document={viewing} onClose={() => setViewing(null)} />

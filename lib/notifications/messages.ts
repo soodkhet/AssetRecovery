@@ -118,13 +118,17 @@ export function caseClosedFailMessage(input: {
   }
 }
 
-/** `90` §6.3 แถว 4 — หลักฐานปิดงานถูกตีกลับ ต้องบอกพนักงานคนที่ถือเคส */
+/**
+ * `90` §6.3 แถว 4 — หลักฐานปิดงานถูกตีกลับ ต้องบอกพนักงานคนที่ถือเคส
+ * ลิงก์ไปแท็บ "กำลังติดตาม" ซึ่งเป็นที่อยู่ของเคส `needs_revision` (`fieldGroupOf()`) — รายละเอียดเคสของ
+ * Field Tracker เป็น modal ไม่มีหน้า `/field/cases/:id` (เดิมลิงก์ไปที่นั่น = 404 · UAT BUG-049)
+ */
 export function evidenceRejectedMessage(input: { caseId: string; caseRef: string; reason: string }): NotificationMessage {
   return {
     eventCode: 'case.evidence_rejected',
     title: 'หลักฐานปิดงานถูกตีกลับ',
     body: withReason(`เคส ${input.caseRef}`, input.reason),
-    linkPath: `/field/cases/${input.caseId}`,
+    linkPath: '/field/tracking',
   }
 }
 
@@ -235,7 +239,8 @@ export function advanceOverdueMessage(
     eventCode: 'advance.overdue',
     title: 'เงินทดรองเลยกำหนดเคลียร์',
     body: `ครบกำหนดเคลียร์ยอดวันที่ ${fmtDate(input.dueClearDate)} — ระบบมาร์คเป็นเลยกำหนดแล้ว`,
-    linkPath: audience === 'payee' ? '/field/income' : '/finance?tab=advances',
+    // ผู้ยืมไปหน้าเงินทดรองของตัวเองใน Field Tracker (มีหน้าแล้วตั้งแต่ UAT BUG-046)
+    linkPath: audience === 'payee' ? '/field/advances' : '/finance?tab=advances',
     dedupeKey: `advance-${input.advanceId}`,
   }
 }

@@ -7,6 +7,7 @@ import { PermissionProvider } from '@/components/auth/permission-provider'
 import { FieldCasesProvider, useFieldCases } from '@/components/field/field-cases-provider'
 import {
   IconCalendar,
+  IconBanknote,
   IconChart,
   IconCheck,
   IconChevronRight,
@@ -55,6 +56,7 @@ const NAV_ICON: Readonly<Record<FieldNavId, (props: { className?: string }) => R
   tracking: IconCompass,
   closed: IconCheck,
   expenses: IconWallet,
+  advances: IconBanknote,
   income: IconChart,
 }
 

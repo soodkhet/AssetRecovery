@@ -166,6 +166,40 @@ export interface CaseImportResultDto {
   rows: CaseImportRowResultDto[]
 }
 
+/** เช็คอินของรอบที่ส่งหลักฐาน — อ่านอย่างเดียว (เช็คอินล็อกตลอด แก้ไม่ได้ — `41` §10.1) */
+export interface CaseFieldCheckinDto {
+  id: string
+  checkinType: string
+  latitude: number
+  longitude: number
+  addressNote: string | null
+  note: string | null
+  checkedInAt: string
+}
+
+/**
+ * หลักฐานปิดงานชุดล่าสุดของเคส (UAT BUG-045) — ให้เจ้าหน้าที่อนุมัติเคสตรวจก่อนตีกลับ (`41` §8/§10.1)
+ * ส่งเฉพาะผู้ถือ `reject_evidence` (หรือ Superadmin) · ผู้อื่นได้ `null` เสมอ
+ * ไฟล์เป็น path ใน bucket ส่วนตัว — หน้าจอขอ signed URL ตอนเปิดทุกครั้ง
+ */
+export interface CaseFieldEvidenceDto {
+  assignmentId: string
+  /** `assignment_status` ปัจจุบัน — ตีกลับได้เฉพาะ `closed_success`/`closed_fail` */
+  assignmentStatus: string
+  agentName: string
+  outcome: string
+  evidenceStatus: string
+  photos: string[]
+  videos: string[]
+  productPhotos: string[]
+  audioUrl: string | null
+  submittedAt: string
+  rejectReason: string | null
+  reviewedAt: string | null
+  reviewedByName: string | null
+  checkins: CaseFieldCheckinDto[]
+}
+
 export interface CaseDetailDto extends CaseListItemDto {
   caseRefNormalized: string
   debtorNationality: string | null
@@ -208,4 +242,6 @@ export interface CaseDetailDto extends CaseListItemDto {
   editHistory: CaseEditHistoryDto[]
   recycleHistory: CaseRecycleHistoryDto[]
   readiness: CaseReadinessDto
+  /** หลักฐานปิดงานชุดล่าสุด — เฉพาะผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) · อื่น ๆ = `null` */
+  fieldEvidence: CaseFieldEvidenceDto | null
 }

@@ -18,6 +18,7 @@ import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
 import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
+import { loadCaseFieldEvidence } from '@/lib/field/evidence-review'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -405,6 +406,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
       },
       documentCounts(row.documents),
     ),
+    // เติมเฉพาะ `getCase()` ของผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) — เส้นเขียนคืน null
+    fieldEvidence: null,
   }
 }
 
@@ -491,7 +494,8 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   const submittedAt = (await latestSubmittedAt(user.organizationId, [row.id])).get(row.id) ?? null
   const detail: CaseDetailDto = { ...toDetailDto(row), submittedAt: submittedAt?.toISOString() ?? null }
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
-  return await withProjectedSourceTemplateName(user.organizationId, detail)
+  const fieldEvidence = await loadCaseFieldEvidence(user, row.id)
+  return await withProjectedSourceTemplateName(user.organizationId, { ...detail, fieldEvidence })
 }
 
 /**

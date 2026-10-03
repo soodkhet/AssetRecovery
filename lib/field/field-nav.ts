@@ -17,6 +17,7 @@ export const FIELD_NAV_IDS = [
   'tracking',
   'closed',
   'expenses',
+  'advances',
   'income',
 ] as const
 export type FieldNavId = (typeof FIELD_NAV_IDS)[number]
@@ -113,6 +114,19 @@ export const FIELD_NAV_ITEMS: readonly FieldNavItem[] = [
     label: 'เบิกค่าใช้จ่าย',
     menuLabel: 'เบิกค่าใช้จ่าย',
     href: '/field/expenses',
+    section: 'finance',
+    bottomNavOrder: null,
+    badge: null,
+    badgeTone: null,
+    group: null,
+  },
+  // UAT BUG-046 — พนักงานขอ/เคลียร์ยอดเงินทดรองของตัวเอง (`15` §5/§12 · `25` §7.2)
+  // mockup ไฟล์ 41 ไม่มีเมนูนี้ — วางในหมวด "การเงิน" คู่กับเบิกค่าใช้จ่าย (จุดเบี่ยงที่รายงานไว้)
+  {
+    id: 'advances',
+    label: 'เงินทดรองจ่าย',
+    menuLabel: 'เงินทดรองจ่าย',
+    href: '/field/advances',
     section: 'finance',
     bottomNavOrder: null,
     badge: null,
