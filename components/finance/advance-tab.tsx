@@ -64,20 +64,26 @@ export function AdvanceTab() {
 
   const awaiting = countAwaitingSettlement(items)
   const overdue = countOverdue(items)
+  // โหลดไม่สำเร็จ ⇒ "—" ไม่ใช่ "0" ที่ดูเหมือนไม่มีข้อมูล (UAT R6-F)
+  const failed = error !== null
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="ยอดเงินทดรองที่ยังอยู่กับผู้เบิก"
-          value={fmtSatangSymbol(outstandingAdvanceSatang(items))}
-          hint="นับจากยอดที่อนุมัติของรายการที่ยังไม่เคลียร์"
+          value={failed ? '—' : fmtSatangSymbol(outstandingAdvanceSatang(items))}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'นับจากยอดที่อนุมัติของรายการที่ยังไม่เคลียร์'}
         />
-        <StatCard label="รายการที่รอเคลียร์ยอด" value={fmtCount(awaiting)} hint="รวมที่เลยกำหนดแล้ว" />
+        <StatCard
+          label="รายการที่รอเคลียร์ยอด"
+          value={failed ? '—' : fmtCount(awaiting)}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'รวมที่เลยกำหนดแล้ว'}
+        />
         <StatCard
           label="เลยกำหนดเคลียร์ (Overdue)"
-          value={fmtCount(overdue)}
-          hint="ระบบเปลี่ยนสถานะให้อัตโนมัติทุกวัน"
+          value={failed ? '—' : fmtCount(overdue)}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'ระบบเปลี่ยนสถานะให้อัตโนมัติทุกวัน'}
           className={overdue > 0 ? 'border-red-300 bg-red-50' : undefined}
         />
       </div>

@@ -106,5 +106,7 @@ describe('แท็บหน้าการเงิน', () => {
     expect(executive).not.toContain('advances')
     expect(executive).not.toContain('payee')
     expect(executive).toContain('comp')
+    // `17` §12 — บริหารดูรอบจ่ายได้ (read-only · UAT R6-F)
+    expect(executive).toContain('payout')
   })
 })

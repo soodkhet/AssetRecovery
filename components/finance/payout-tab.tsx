@@ -95,19 +95,26 @@ export function PayoutTab() {
     void reload()
   }
 
+  // โหลดไม่สำเร็จ (เช่น ไม่มีสิทธิ์) ⇒ การ์ดสรุปแสดง "—" ไม่ใช่ "0" ที่ดูเหมือนไม่มีข้อมูล (UAT R6-F)
+  const failed = error !== null
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="เงินรอจ่าย (Payout)"
-          value={fmtSatangSymbol(pendingPayoutNetSatang(items))}
-          hint={`${fmtCount(countPendingPayoutBatches(items))} รอบที่ยังไม่จ่ายสำเร็จ`}
+          value={failed ? '—' : fmtSatangSymbol(pendingPayoutNetSatang(items))}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : `${fmtCount(countPendingPayoutBatches(items))} รอบที่ยังไม่จ่ายสำเร็จ`}
         />
-        <StatCard label="รอบทั้งหมดตามตัวกรอง" value={fmtCount(items.length)} hint="เรียงจากรอบล่าสุด" />
+        <StatCard
+          label="รอบทั้งหมดตามตัวกรอง"
+          value={failed ? '—' : fmtCount(items.length)}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'เรียงจากรอบล่าสุด'}
+        />
         <StatCard
           label="รอบที่รอสร้างไฟล์โอน"
-          value={fmtCount(items.filter((batch) => batch.status === 'checking').length)}
-          hint="ตรวจยอดให้ครบก่อนสร้างไฟล์"
+          value={failed ? '—' : fmtCount(items.filter((batch) => batch.status === 'checking').length)}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'ตรวจยอดให้ครบก่อนสร้างไฟล์'}
         />
       </div>
 

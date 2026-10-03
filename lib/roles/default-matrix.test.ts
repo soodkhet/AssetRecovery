@@ -94,6 +94,13 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
     expect([...bound].sort()).toEqual([...BOUND_NON_MATRIX_CAPABILITIES].sort())
   })
 
+  it('รอบจ่ายเงิน (`17` §12 · UAT R6-F): การเงิน manage · บัญชี/บริหาร ดูอย่างเดียว', () => {
+    const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'manage_payout_batch')
+    const byRole = rows.map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
+
+    expect(byRole).toEqual(['system:การเงิน=manage', 'system:บัญชี=view', 'system:บริหาร=view'])
+  })
+
   it('เงินทดรองจ่าย (`15` §5/§12 · UAT BUG-047): อนุมัติ/ปฏิเสธ = การเงิน manage เท่านั้น', () => {
     const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'approve_advance')
     const byRole = rows.map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
