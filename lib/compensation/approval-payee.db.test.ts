@@ -583,6 +583,43 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     )
   })
 
+  /**
+   * มติ PO 03/10/2569 (UAT R6-B) — รายการไม่ผูกเคส (ค่าที่พัก / Manual Claim / เบิกส่วนเกินจากเงินทดรอง)
+   * ไม่มี `assignment` ⇒ ขั้น 1 ใช้ **ทีมของพนักงานผู้เบิก** (`payee → user → team`)
+   */
+  it('R6-B รายการไม่ผูกเคส ⇒ ผู้จัดการทีมของผู้เบิกเห็น/อนุมัติได้ · ผู้จัดการทีมอื่นไม่เห็น (404 ไม่ leak)', async () => {
+    const payeeId = await seedPayee(AGENT_ID)
+    const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO expenses (
+        organization_id, case_id, assignment_id, payee_id, expense_type, gross_satang, expense_date,
+        status, calculation_source, created_by
+      ) VALUES (
+        '${ORG_ID}', NULL, NULL, '${payeeId}', 'hotel', 80000, DATE '2026-08-10',
+        'pending_approval', 'manual_claim', '${AGENT_ID}'
+      ) RETURNING id
+    `)
+    const hotelId = rows[0]?.id ?? ''
+
+    expect((await approvals.listCompensationApprovals(manager, { status: 'all' })).map((row) => row.id)).toEqual([
+      hotelId,
+    ])
+
+    const otherManager = sessionUser({
+      ...manager,
+      id: FINANCE_2_ID,
+      scope: { kind: 'team', teamIds: [OTHER_TEAM_ID], companyId: null, userId: FINANCE_2_ID },
+    })
+    expect(await approvals.listCompensationApprovals(otherManager, { status: 'all' })).toEqual([])
+    await expectCode(
+      () => approvals.approveCompensationExpense({ actor: otherManager, meta }, hotelId, {}),
+      'EXPENSE_NOT_FOUND',
+    )
+
+    const approved = await approvals.approveCompensationExpense({ actor: manager, meta }, hotelId, { step: 1 })
+    expect(approved.expense.status).toBe('pending_finance_approval')
+    expect(approved.expense.approvalStepCurrent).toBe(2)
+  })
+
   it('รายการที่คลังยังไม่ปล่อย (`pending_warehouse_confirm`) อนุมัติไม่ได้ (`23` §6.3)', async () => {
     const expenseId = await seedPendingExpense(await seedPayee(AGENT_ID))
     await db().expense.update({ where: { id: expenseId }, data: { status: 'pending_warehouse_confirm' } })

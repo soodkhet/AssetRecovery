@@ -289,6 +289,14 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow): CompensationApprovalDto {
 /**
  * `16` §10 — ผู้อนุมัติขั้น Manager เห็นเฉพาะทีมที่ตนดูแล (`team_managers` → `user.scope.teamIds`)
  * · ผู้ถือสิทธิ์ขั้นการเงิน/บริหารเห็นทั้งองค์กร · scope แยกจาก filter ของผู้เรียกด้วย `AND` เสมอ
+ *
+ * ทีมของรายการ:
+ * - รายการผูกงาน (`assignment_id` ไม่ว่าง) = ทีมของงานนั้น (`case_assignments.team_id`)
+ * - รายการ **ไม่ผูกงาน** (ค่าที่พัก / Manual Claim / เบิกส่วนเกินจากเงินทดรอง) = **ทีมของพนักงานผู้เบิก**
+ *   (`payee → user → team_id`) — มติ PO 03/10/2569 (UAT R6-B) · เดิมกรองด้วย `assignment.teamId`
+ *   อย่างเดียว ⇒ รายการไม่ผูกเคสหลุดจากทุกคิวขั้น 1 (ผู้จัดการไม่เห็น/กดได้ `EXPENSE_NOT_FOUND`)
+ * - ⚠️ ใช้ทีมของผู้เบิก **เฉพาะเมื่อไม่มีงาน** — รายการผูกงานยังยึดทีมของงานเสมอ (พนักงานย้ายทีม
+ *   ภายหลังไม่ทำให้ผู้จัดการทีมใหม่เห็นค่าตอบแทนของงานเก่า)
  */
 function scopeFilter(user: SessionUser): Prisma.ExpenseWhereInput {
   if (user.isSuperadmin) return {}
@@ -298,7 +306,13 @@ function scopeFilter(user: SessionUser): Prisma.ExpenseWhereInput {
   ) {
     return {}
   }
-  return { assignment: { teamId: { in: [...user.scope.teamIds] } } }
+  const teamIds = [...user.scope.teamIds]
+  return {
+    OR: [
+      { assignment: { teamId: { in: teamIds } } },
+      { assignmentId: null, payee: { user: { teamId: { in: teamIds } } } },
+    ],
+  }
 }
 
 const STATUS_FILTER: Readonly<Record<CompensationApprovalListQuery['status'], readonly ExpenseStatus[]>> = {
