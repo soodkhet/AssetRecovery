@@ -1,0 +1,22 @@
+// R6.19 KPI แท็บเงินทดรอง (อ่านอย่างเดียว) · R6.20 ตรวจปลาย R6a
+import { openAs, shot, BASE, settle, sleep, log, R, q, SQL, flat } from './_h.mjs'
+log('=== s20', new Date().toISOString())
+const f = await openAs('uat.finance'); const p = f.page
+await f.context.route('**/api/**', r => (r.request().method() === 'GET' || r.request().url().includes('/api/auth/')) ? r.continue() : r.abort())
+await p.goto(`${BASE}/finance?tab=advances`); await settle(p); await sleep(800)
+log('R6.19 advances tab:', flat(await p.locator('main').innerText()).match(/ยอดเงินทดรองที่ยังอยู่กับผู้เบิก.{0,200}/)?.[0])
+await shot(p, R, 'R6.19-advance-tab-kpi', { fullPage: true })
+await p.goto(`${BASE}/finance?tab=revenue`); await settle(p); await sleep(800)
+log('R6.20 revenue tab:', flat(await p.locator('main').innerText()).slice(300, 1100))
+await shot(p, R, 'R6.20-finance-revenue-tab', { fullPage: true })
+await p.goto(`${BASE}/finance?tab=comp`); await settle(p); await sleep(800)
+await shot(p, R, 'R6.20-finance-comp-end', { fullPage: true })
+log('5xx', f.serverErrors, f.consoleErrors.slice(0, 3))
+await f.browser.close()
+log(q(`select (select count(*) from revenues) rev, (select sum(gross_satang) from revenues) rev_g, (select sum(total_satang) from revenues) rev_t, (select count(*) from expenses where status='approved') appr, (select sum(gross_satang) from expenses where status='approved') appr_sum, (select count(*) from expenses where status='pending_finance_approval') pfa, (select count(*) from expenses where status in ('pending_approval','needs_revision')) other, (select count(*) from payee_profiles where is_verified) verified, (select string_agg(status::text, ',' order by created_at) from advances) adv, (select count(*) from payout_batches) pb`))
+log(q(`select status, count(*), sum(gross_satang) from expenses group by 1 order by 1`))
+log(q(`select p.full_name, sum(e.gross_satang) filter (where e.status='approved') appr, sum(e.gross_satang) filter (where e.status='pending_finance_approval') pfa from expenses e join payee_profiles p on p.id=e.payee_id where e.status<>'superseded' group by 1 order by 1`))
+log(q(`select c.case_ref, ce.status, count(*) from case_evidences ce join cases c on c.id=ce.case_id group by 1,2 order by 1,2`))
+log(q(`select case_id, tracking_round, count(*) from revenues group by 1,2 having count(*)>1`))
+log(q(SQL.auditN))
+log(q(`select n.event_code,u.username,count(*) from notifications n join users u on u.id=n.user_id where n.created_at > '2026-10-03 18:57:52+00' group by 1,2 order by 1,2`))

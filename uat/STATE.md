@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R5 v2 คลังสินค้า** — 04/10/2569 ~01:45–02:05 · 24/24 ✅ · บั๊กใหม่ BUG-103 (env, fixed) / 104 · ไม่มี 500 · **LOT-2569-003** (CO1: C1,C2,C4 · finance_pickup) / **LOT-2569-004** (CO2: C5 · we_deliver) confirmed (เลข 003/004 เพราะ BUG-103 — ใช้ต่อ) · asset handed_over 4 · expense 16: pending_approval 15 = **950000** ✅ (รายวัน 9) · superseded 1 · revenues 0 · evidence approved 4/pending 1 (C3)/rejected 1 · รายงาน `uat/report/R5-warehouse-v2.md` · ภาพ 55 · ก่อนหน้า: R4b v3 15/15, R4a v3 24/24 |
-| snapshot ล่าสุด | `uat/snapshots/R5-end-v3.dump` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R6a v3** (R6.01–R6.20 อนุมัติ) → R6b (R6.21–R6.44 รอบจ่าย) ตาม `uat/steps/R6.md` **v2** · R7 ต้องหลังเที่ยงคืน 05/10 (ADV3 overdue) · ⚠️ DATASET v3 ถ้อยคำยังไม่แก้ตามมติ O4 (`uat/PO-DECISIONS-2569-10-04.md`) — R6.md v2 ใช้ค่าที่ถูกแล้ว |
+| รอบล่าสุดที่จบ | **R6a v3 อนุมัติ** — 04/10/2569 01:57–02:11 · 20/20 ✅ ตรง golden R6.md v2 · บั๊กใหม่ BUG-105/106 (ไม่บล็อก) · expense approved 9 = 845000 · pending_finance_approval 6 (C3×3, C4×3) = 105000 · superseded 1 · revenues 3 (C1 98975 · C2 133215 · C5 749000 · total 981190 · VAT 7.00 · 2026-10-04) · ADV1/ADV4 approved · ADV2 rejected · ADV3 pending · payee verified 0 · รายงาน `uat/report/R6a-approval-v3.md` · ภาพ 37 · ก่อนหน้า: R5 v2 24/24, R4b v3, R4a v3 |
+| snapshot ล่าสุด | `uat/snapshots/R6a-end-v3.dump` (ปลาย R6a) · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R6b v3** (R6.21–R6.44 รอบจ่าย) ตาม `uat/steps/R6.md` **v2** · R7 ต้องหลังเที่ยงคืน 05/10 (ADV3 overdue) · ⚠️ DATASET v3 ถ้อยคำยังไม่แก้ตามมติ O4 (`uat/PO-DECISIONS-2569-10-04.md`) — R6.md v2 ใช้ค่าที่ถูกแล้ว |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~02:20 R6a v3 จบ (ดูตารางบน) → เริ่ม R6b
 - 04/10/2569 ~02:10 R5 v2 จบ (ดูตารางบน) · step sheet R6 v2 เสร็จ (R6a 20 / R6b 24 ขั้น · golden ลงตัว) · มติ orchestrator + บัญชี A1–A7 → `uat/PO-DECISIONS-2569-10-04.md` (A1/A2 ต้องแก้โค้ด — รอผู้ใช้รีวิว · UAT ยึดโค้ดปัจจุบัน) · ขยะ Storage +4
 - 04/10/2569 ~01:40 R4b v3 จบ + R4.38b (PO เผลอใช้ admin อนุมัติค่าที่พักขั้น 1 → มติ PO ก.: ตีกลับผ่านหน้าจอ + in1 ส่งใหม่) · มติ PO BUG-095 = ก. · **ผู้ใช้อนุญาตให้ orchestrator เดินต่อเองข้ามคืน + ตัดสินเรื่องนักบัญชีตามมาตรฐานบัญชีไทย (จดเหตุผลไว้ให้รีวิว) + ซ่อมฐาน dev ในเครื่องได้** · ขยะ Storage +1
 - 04/10/2569 00:50 R4a v3 จบ (ดูตารางบน) · ก่อนเริ่มพบฐาน dev ขาด 3 migration (BUG-094) → ผู้ใช้อนุญาตให้ orchestrator ซ่อมฐาน dev ในเครื่อง · snapshot `R3-end-v3b` + `R4a-end-v3` · สคริปต์ `uat/bin/r4v3/` (มี s11b-settle, s12–s17 ปรับเป็น R4v3 แล้ว) · ไฟล์ขยะ Storage +1
@@ -48,7 +49,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-104) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-106) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้

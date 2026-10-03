@@ -1,0 +1,71 @@
+// R6.16 ADV1 อนุมัติ · R6.17 ADV2 ถูกปัด → ปฏิเสธ · R6.18 in1 ขอซ้อน (มือถือ) · R6.19 ADV4 อนุมัติ
+import { openAs, shot, BASE, settle, sleep, log, R, ADV, q, SQL, api, guard2xx, waitToast, dlgText, flat } from './_h.mjs'
+log('=== s16-19', new Date().toISOString())
+const s = await openAs('uat.finance'); const p = s.page
+const advRes = []; p.on('response', r => { if (r.url().includes('/api/advances/') && r.request().method() !== 'GET') advRes.push(`${r.status()} ${r.request().method()} ${r.url().split('/api/')[1]}`) })
+await p.goto(`${BASE}/finance?tab=approval`); await settle(p); await sleep(800)
+const advTable = p.locator('table').filter({ hasText: 'UAT ADV1' })
+const advRow = (who, amt) => p.locator('tbody tr').filter({ hasText: who }).filter({ hasText: amt })
+log('R6.16 adv rows:', JSON.stringify((await p.locator('tbody tr').filter({ hasText: /UAT ADV/ }).allInnerTexts()).map(x => x.replace(/\s+/g, ' ').slice(0, 160))))
+await shot(p, R, 'R6.16-finance-approval-tab', { fullPage: true })
+// ADV1
+await advRow('อนันต์ ตามทรัพย์', '3,000.00').getByRole('button', { name: 'อนุมัติ', exact: true }).click(); await sleep(600)
+log('R6.16 modal:', await dlgText(p, 700)); await shot(p, R, 'R6.16-adv1-approve-modal')
+await p.locator('[role="dialog"]').last().getByRole('button', { name: 'อนุมัติและปล่อยเงิน' }).dblclick()
+log('R6.16 toast:', await waitToast(p, 8000)); await sleep(1500); log('R6.16 responses:', advRes.splice(0))
+// ADV2 approve → blocked
+await p.reload(); await settle(p); await sleep(600)
+await advRow('อนันต์ ตามทรัพย์', '1,000.00').getByRole('button', { name: 'อนุมัติ', exact: true }).click(); await sleep(600)
+await p.locator('[role="dialog"]').last().getByRole('button', { name: 'อนุมัติและปล่อยเงิน' }).click()
+log('R6.17 toast:', await waitToast(p, 8000)); await sleep(800); log('R6.17 responses:', advRes.splice(0))
+await shot(p, R, 'R6.17-adv2-blocked')
+log('R6.17 dialog still open:', await p.locator('[role="dialog"]').count())
+if (await p.locator('[role="dialog"]').count()) { await p.locator('[role="dialog"]').last().getByRole('button', { name: /ยกเลิก/ }).click().catch(() => p.keyboard.press('Escape')); await sleep(400) }
+log('R6.17 ADV2:', q(`select status from advances where id='${ADV.A2}'`))
+// reject probe
+await advRow('อนันต์ ตามทรัพย์', '1,000.00').getByRole('button', { name: 'ปฏิเสธ', exact: true }).click(); await sleep(600)
+const dlg = p.locator('[role="dialog"]').last()
+log('R6.17 reject modal:', await dlgText(p, 500))
+log('R6.17 confirm disabled (empty)=', await dlg.getByRole('button', { name: 'ยืนยันปฏิเสธ' }).isDisabled())
+const pr = await api(p, 'PATCH', `/api/advances/${ADV.A2}/reject`, { rejectionReason: '' }); log('R6.17 API empty reason:', pr); guard2xx('adv reject empty', pr)
+await dlg.locator('textarea').fill('มีเงินทดรอง ADV1 ค้างเคลียร์ ขอซ้อนไม่ได้'); await shot(p, R, 'R6.17-adv2-reject-modal')
+await dlg.getByRole('button', { name: 'ยืนยันปฏิเสธ' }).click()
+log('R6.17 reject toast:', await waitToast(p, 8000)); await sleep(800); log('R6.17 responses:', advRes.splice(0))
+log('5xx', s.serverErrors, s.consoleErrors.slice(0, 3))
+await s.browser.close()
+// R6.18
+const a = await openAs('uat.agent.in1', { mobile: true }); const ap = a.page
+const ar = []; ap.on('response', r => { if (r.url().includes('/api/advances') && r.request().method() !== 'GET') ar.push(`${r.status()} ${r.request().method()}`) })
+await ap.goto(`${BASE}/field/advances`); await settle(ap); await sleep(800)
+log('R6.18 page:', flat(await ap.locator('main, body').first().innerText()).slice(0, 500))
+await shot(ap, R, 'R6.18-in1-advances', { fullPage: true })
+const b = ap.getByRole('button', { name: /ขอเงินทดรอง/ }).first()
+log('R6.18 request btn count/disabled:', await b.count(), (await b.count()) ? await b.isDisabled() : '-')
+if ((await b.count()) && !(await b.isDisabled())) {
+  await b.click(); await sleep(700)
+  const d = ap.locator('[role="dialog"]').last()
+  log('R6.18 modal:', await dlgText(ap, 500))
+  await d.getByPlaceholder('0.00').fill('500')
+  await d.locator('textarea').first().fill('UAT R6 ลองขอซ้อน')
+  const date = d.locator('input[type=date]'); if (await date.count()) await date.fill('2026-10-11')
+  await shot(ap, R, 'R6.18-in1-request-form')
+  await d.getByRole('button', { name: /ส่ง|ยืนยัน|บันทึก/ }).last().click()
+  log('R6.18 toast:', await waitToast(ap, 8000)); await sleep(800); log('R6.18 responses:', ar)
+  log('R6.18 inline:', flat(await d.innerText().catch(() => '')).slice(0, 300))
+  await shot(ap, R, 'R6.18-in1-request-blocked')
+}
+await a.browser.close()
+log('R6.18 advances count:', q(`select count(*) from advances`))
+// R6.19 ADV4
+const f = await openAs('uat.finance'); const fp = f.page
+await fp.goto(`${BASE}/finance?tab=approval`); await settle(fp); await sleep(700)
+await fp.locator('tbody tr').filter({ hasText: 'ประเสริฐ รับเหมา' }).filter({ hasText: '1,000.00' }).filter({ has: fp.getByRole('button', { name: 'อนุมัติ', exact: true }) }).getByRole('button', { name: 'อนุมัติ', exact: true }).click(); await sleep(600)
+await fp.locator('[role="dialog"]').last().getByRole('button', { name: 'อนุมัติและปล่อยเงิน' }).click()
+log('R6.19 toast:', await waitToast(fp, 8000)); await sleep(800)
+await fp.goto(`${BASE}/finance?tab=advance`); await settle(fp); await sleep(800)
+log('R6.19 advance tab:', flat(await fp.locator('main').innerText()).slice(0, 700))
+await shot(fp, R, 'R6.19-advance-tab-kpi', { fullPage: true })
+log('5xx', f.serverErrors, f.consoleErrors.slice(0, 3))
+await f.browser.close()
+log(q(SQL.adv))
+log(q(`select action,actor_role,left(target_id::text,8),reason from audit_logs where target_type='advances' and created_at > '2026-10-03 18:57:52+00' order by created_at`))

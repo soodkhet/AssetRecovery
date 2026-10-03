@@ -1,0 +1,21 @@
+// R6.14 บริหารขั้น 3 C5 fuel · R6.15 ตรวจปลาย C
+import { openAs, shot, BASE, settle, sleep, log, R, X, q, SQL, uiApprove, TL } from './_h.mjs'
+log('=== s14-15', new Date().toISOString())
+const s = await openAs('uat.exec'); const p = s.page
+await p.goto(`${BASE}/finance?tab=comp`); await settle(p); await sleep(600)
+const rows = await p.locator('tbody tr').allInnerTexts()
+log('R6.14 exec rows:', rows.length, 'approve3 btns:', await p.getByRole('button', { name: 'อนุมัติขั้น 3' }).count(), 'any approve:', await p.getByRole('button', { name: /อนุมัติขั้น/ }).count())
+for (const r of rows) log('   ', r.replace(/\s+/g, ' ').slice(0, 200))
+await shot(p, R, 'R6.14-exec-queue', { fullPage: true })
+const [st, ts] = await uiApprove(p, 'UAT-CO2-005', TL.f, 3); log('R6.14 exec approve:', st.slice(0, 4), ts.at(-1))
+await sleep(800); await p.reload(); await settle(p); await sleep(500)
+await shot(p, R, 'R6.14-exec-after', { fullPage: true })
+await p.goto(`${BASE}/finance?tab=revenue`); await settle(p); await sleep(800)
+await shot(p, R, 'R6.15-exec-revenue-tab', { fullPage: true })
+log('5xx', s.serverErrors, s.consoleErrors.slice(0, 3))
+await s.browser.close()
+log(q(SQL.rev))
+log(q(`select status,executive_approved_by=(select id from users where username='uat.exec') x_ok,jsonb_array_length(approval_history) h from expenses where id='${X.C5f}'`))
+log(q(`select c.case_ref, count(e.*) filter (where e.status='approved') appr, count(e.*) filter (where e.status<>'approved') other, (select count(*) from revenues r where r.case_id=c.id) rev from cases c join expenses e on e.case_id=c.id and e.status<>'superseded' group by c.id, c.case_ref order by 1`))
+log(q(`select (select count(*) from expenses where status='approved') appr, (select sum(gross_satang) from expenses where status='approved') appr_sum, (select count(*) from expenses where status='pending_finance_approval') pfa, (select sum(gross_satang) from expenses where status='pending_finance_approval') pfa_sum, (select count(*) from case_evidences ce join cases c on c.id=ce.case_id where c.case_ref='UAT-CO2-003' and ce.status='pending') c3_ev`))
+log(q(`select u.username,count(*) from notifications n join users u on u.id=n.user_id where n.created_at > '2026-10-03 18:57:52+00' group by 1`))
