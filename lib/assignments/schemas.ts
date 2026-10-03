@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { reasonSchema } from '@/lib/api/validation'
 
 /**
  * Zod ชุดเดียวใช้ร่วม FE/BE ของโมดูลมอบหมายงาน (`40` §17.1 · `45` §6.2)
@@ -19,10 +18,27 @@ export const assignCaseSchema = z.object({
 
 export type AssignCaseInput = z.infer<typeof assignCaseSchema>
 
-/** `POST /api/cases/:id/reassign` — reason บังคับทุกกรณี (`40` §12 `ASSIGNMENT_REASON_REQUIRED`) */
+/**
+ * ความยาวขั้นต่ำของเหตุผลเปลี่ยนผู้รับผิดชอบ — เท่ากับ `reasonSchema` กลาง (`90` §13) · FE ใช้ค่าเดียวกัน
+ * ปิดปุ่มจนกว่าจะครบ (มติ PO 03/10/2569 UAT Q18 · BUG-042)
+ */
+export const ASSIGNMENT_REASON_MIN = 5
+export const ASSIGNMENT_REASON_MAX = 500
+
+/** เหตุผลผ่านเกณฑ์ขั้นต่ำหรือยัง — ใช้ทั้งปุ่มฝั่ง FE และยามฝั่ง BE (`assertReassignReason`) */
+export function isAssignmentReasonLongEnough(reason: string | null | undefined): boolean {
+  return (reason ?? '').trim().length >= ASSIGNMENT_REASON_MIN
+}
+
+/**
+ * `POST /api/cases/:id/reassign` — reason บังคับทุกกรณี (`40` §12 `ASSIGNMENT_REASON_REQUIRED`)
+ * schema ปล่อยเหตุผลสั้น/ว่างผ่าน (คุมแค่ความยาวสูงสุด) เพื่อให้ตัวบังคับจริง `assertReassignReason()`
+ * ตอบ `ASSIGNMENT_REASON_REQUIRED` ตาม `40` §12 ไม่ใช่ `REQUIRED_MISSING` (UAT Q18 · BUG-042) —
+ * แนวเดียวกับ `declineReason` ด้านล่าง
+ */
 export const reassignCaseSchema = z.object({
   agentId: z.uuid('พนักงานไม่ถูกต้อง'),
-  reason: reasonSchema,
+  reason: trimmedText.max(ASSIGNMENT_REASON_MAX, `เหตุผลยาวเกิน ${ASSIGNMENT_REASON_MAX} ตัวอักษร`).optional(),
 })
 
 export type ReassignCaseInput = z.infer<typeof reassignCaseSchema>
