@@ -1,0 +1,72 @@
+// R6.27 (ต่อ) ไฟล์ IN-1 ซ้ำ + v2 · R6.28 ไฟล์ OUT-1 + ยืนยันจ่าย
+import { writeFileSync, mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { openAs, shot, BASE, settle, sleep, log, R, q, waitToast, flat, dlgText, api, guard2xx, SQLB, BFF, BACC, pbId, dlgReasonConfirm } from './_hb.mjs'
+log('=== s27b (ต่อจาก s25-28 ที่ล้มหลังสร้างไฟล์ IN-1 v1 — ปุ่มปิด 2 ตัว)', new Date().toISOString())
+const IN1 = pbId('UAT IN-1'), OUT1 = pbId('UAT OUT-1')
+const DL = 'uat/fixtures/downloads-R6b'; mkdirSync(DL, { recursive: true })
+let f = await openAs('uat.finance'); let p = f.page
+await p.goto(`${BASE}/finance?tab=payout`); await settle(p); await sleep(1000)
+const rowOf = n => p.locator('tbody tr').filter({ hasText: n })
+async function genFile(batch, reason, shotName) {
+  await rowOf(batch).getByRole('button', { name: /สร้างไฟล์โอน/ }).click(); await sleep(1500)
+  const d = p.locator('[role="dialog"]').last()
+  log(`${batch} options:`, JSON.stringify(await d.locator('select').first().locator('option').evaluateAll(os => os.map(o => `${o.textContent}|disabled=${o.disabled}`))), '| acc:', JSON.stringify(await d.locator('select').nth(1).locator('option').evaluateAll(os => os.map(o => o.textContent))))
+  await d.locator('select').first().selectOption(BFF); await d.locator('select').nth(1).selectOption(BACC)
+  log(`${batch} modal:`, await dlgText(p, 900))
+  const res = await dlgReasonConfirm(p, reason, /^สร้างไฟล์โอน$|ยืนยันสร้างซ้ำ/, '/generate-payment-file')
+  log(`${batch} gen:`, res); log('toast', await waitToast(p, 6000)); await sleep(800)
+  log(`${batch} after:`, await dlgText(p, 900))
+  if (shotName) await shot(p, R, shotName)
+  return res
+}
+const k1 = q(`select idempotency_key, payment_file_url from payout_batches where id='${IN1}'`); log('after v1', k1)
+// ดาวน์โหลด v1
+async function dl(id, tag) { const r = await p.request.get(`${BASE}/api/payout-batches/${id}/payment-file`); const b = await r.body(); const fn = `${DL}/${tag}.csv`; writeFileSync(fn, b); log(`download ${tag}`, r.status(), r.headers()['content-type'], r.headers()['content-disposition'], 'sha256', createHash('sha256').update(b).digest('hex'), 'bytes', b.length); return b.toString('utf8') }
+log('IN-1 v1 csv:\n' + (await dl(IN1, 'IN-1-v1')))
+// ซ้ำ: ครั้งแรกได้ warning
+await p.reload(); await settle(p); await sleep(1000)
+await rowOf('UAT IN-1').getByRole('button', { name: /สร้างไฟล์โอน/ }).click(); await sleep(1500)
+let d = p.locator('[role="dialog"]').last()
+log('dup modal pre:', await dlgText(p, 700))
+await d.locator('select').first().selectOption(BFF); await d.locator('select').nth(1).selectOption(BACC)
+const dup1 = await dlgReasonConfirm(p, 'UAT R6 ทดสอบสร้างไฟล์ซ้ำ', 'สร้างไฟล์โอน', '/generate-payment-file')
+log('dup step1:', dup1); log('toast', await waitToast(p, 6000)); await sleep(600)
+log('dup modal:', await dlgText(p, 900)); await shot(p, R, '50-R6.27-in1-duplicate-warning')
+log('db after warn', q(`select idempotency_key, payment_file_url, payment_file_generated_at from payout_batches where id='${IN1}'`))
+d = p.locator('[role="dialog"]').last()
+const [resp] = await Promise.all([p.waitForResponse(x => x.url().includes('/generate-payment-file'), { timeout: 20000 }), d.getByRole('button', { name: /ยืนยันสร้างซ้ำ/ }).click()])
+log('dup step2:', resp.status(), (await resp.text()).slice(0, 400)); log('toast', await waitToast(p, 6000)); await sleep(800)
+await shot(p, R, '51-R6.27-in1-file-v2')
+await p.keyboard.press('Escape'); await sleep(500)
+log('IN-1 v2 csv:\n' + (await dl(IN1, 'IN-1-v2')))
+log(q(`select status, idempotency_key, payment_file_url, payment_file_generated_at, bank_account_id from payout_batches where id='${IN1}'`))
+log(q(`select action, after_data->>'payment_file_version' v, after_data->>'regenerated' regen, after_data->>'idempotency_key' k, after_data->>'file_hash' h, reason from audit_logs where target_type='payout_batches' and action='export' and created_at > '2026-10-03 19:14:00+00' order by created_at`))
+// R6.28 OUT-1
+await p.reload(); await settle(p); await sleep(1000)
+await genFile('UAT OUT-1', 'UAT R6 สร้างไฟล์โอนรอบ OUT-1')
+await p.keyboard.press('Escape'); await sleep(500)
+log('OUT-1 csv:\n' + (await dl(OUT1, 'OUT-1')))
+await p.reload(); await settle(p); await sleep(1000)
+await rowOf('UAT OUT-1').getByRole('button', { name: '✓ ยืนยันจ่ายแล้ว' }).click(); await sleep(600)
+d = p.locator('[role="dialog"]').last()
+log('complete modal:', await dlgText(p, 700))
+log('empty reason disabled:', await d.getByRole('button', { name: 'ยืนยันจ่ายแล้ว' }).isDisabled())
+await d.locator('textarea').fill('ตรวจสลิปโอนไทยพาณิชย์ครบ UAT R6')
+await shot(p, R, '52-R6.28-out1-complete-modal')
+const cr = []
+p.on('response', async r => { if (r.url().includes(`/api/payout-batches/${OUT1}/`) && r.request().method() !== 'GET') cr.push(`${r.status()} ${(await r.text().catch(() => '')).slice(0, 200)}`) })
+await d.getByRole('button', { name: 'ยืนยันจ่ายแล้ว' }).dblclick()
+log('toast', await waitToast(p, 8000)); await sleep(2500)
+log('complete responses', cr)
+const again = await api(p, 'PATCH', `/api/payout-batches/${OUT1}/complete`, { reason: 'ทดสอบยืนยันซ้ำ UAT R6' }); log('complete again', again)
+await p.reload(); await settle(p); await sleep(1000)
+await shot(p, R, '53-R6.28-payout-after-out1', { fullPage: true })
+log(q(SQLB.pb))
+log(q(`select count(*), sum(gross_satang), sum(wht_satang), sum(net_satang) from expense_records`))
+log(q(`select w.certificate_number, w.gross_satang, w.wht_satang, w.filing_form, w.status, w.payment_date from wht_certificates w order by 2 desc`))
+log(q(`select to_char(n.created_at,'HH24:MI:SS') t,u.username,n.event_code,n.title from notifications n join users u on u.id=n.user_id where n.created_at > '2026-10-03 19:14:00+00' order by 1`))
+log(q(`select count(*) from accounting_exceptions where created_at > '2026-10-03 19:14:00+00'`))
+log(q(SQLB.auditNB))
+log('5xx', f.serverErrors, f.consoleErrors.slice(0, 3))
+await f.browser.close()

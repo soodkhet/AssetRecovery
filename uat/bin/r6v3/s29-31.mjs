@@ -1,0 +1,56 @@
+// R6.29 in1 เคลียร์ ADV1 2,450 · R6.30 out1 เคลียร์ ADV4 1,300 (ส่วนเกิน 300) · R6.31 อนุมัติคำขอส่วนเกิน
+import { openAs, shot, BASE, settle, sleep, log, R, q, waitToast, flat, dlgText, api, guard2xx, uiApprove, SQLB, PY, ADV, T0B } from './_hb.mjs'
+log('=== s29-31', new Date().toISOString())
+async function settleAdv(user, used, probes, shotPre, shotForm) {
+  const s = await openAs(user, { mobile: true }); const p = s.page
+  await p.goto(`${BASE}/field/advances`); await settle(p); await sleep(1200)
+  log(`${user} page:`, flat(await p.locator('main').innerText()).slice(0, 700))
+  if (shotPre) await shot(p, R, shotPre, { fullPage: true })
+  await p.getByRole('button', { name: 'เคลียร์ยอด' }).first().click(); await sleep(600)
+  const d = p.locator('[role="dialog"]').last()
+  const inp = d.locator('input[inputmode="decimal"]')
+  const btn = d.getByRole('button', { name: 'บันทึกการเคลียร์ยอด' })
+  const reqs = []; p.on('request', r => { if (r.method() !== 'GET' && r.url().includes('/api/')) reqs.push(r.url()) })
+  for (const v of probes) { await inp.fill(v); await sleep(200); log(`probe '${v}' disabled=`, await btn.isDisabled(), '|', (await dlgText(p, 400)).slice(0, 250)) }
+  log('probe requests', reqs.length)
+  await inp.fill(used); await sleep(300)
+  log('dialog:', await dlgText(p, 900))
+  await shot(p, R, shotForm)
+  const [resp] = await Promise.all([p.waitForResponse(x => x.url().includes('/settle'), { timeout: 20000 }), btn.click()])
+  log('settle', resp.status(), (await resp.text()).slice(0, 400)); log('toast', await waitToast(p, 6000)); await sleep(1000)
+  log('after:', flat(await p.locator('main').innerText()).slice(0, 500))
+  log('5xx', s.serverErrors, s.consoleErrors.slice(0, 3))
+  await s.browser.close()
+}
+await settleAdv('uat.agent.in1', '2450', ['-1', '0.5'], '54-R6.29-in1-advances', '55-R6.29-in1-settle-form')
+log(q(`select status,approved_satang,used_satang,return_satang,payout_batch_item_id is not null in_b from advances where id='${ADV.A1}'`))
+await settleAdv('uat.agent.out1', '1300', [], null, '56-R6.30-out1-settle-excess')
+log(q(`select status,approved_satang,used_satang,return_satang,payout_batch_item_id is not null in_b from advances where id='${ADV.A4}'`))
+log(q(`select e.id, e.expense_type, e.gross_satang, e.status, e.calculation_source, e.case_id, e.assignment_id, e.comp_plan_id is not null plan, e.approval_step_current cur from expenses e where e.payee_id='${PY.out1}' and e.created_at > '${T0B}'`))
+log(q(`select action,target_type,actor_role,after_data->>'excess_satang' ex,after_data->>'excess_claim_id' cid,to_char(created_at,'HH24:MI:SS.MS') t from audit_logs where created_at > '${T0B}' and target_type in ('advances','expenses') order by created_at`))
+const EX = q(`select id from expenses where payee_id='${PY.out1}' and created_at > '${T0B}'`).split('\n').map(s => s.trim()).find(s => /^[0-9a-f-]{36}$/.test(s))
+log('excess id', EX)
+// R6.31
+const mi = await openAs('uat.mgr.in')
+const pr = await api(mi.page, 'PATCH', `/api/compensation/${EX}/approve`, { step: 1 }); log('mgr.in probe', pr); guard2xx('mgr-in-excess', pr)
+await mi.page.goto(`${BASE}/finance?tab=comp`); await settle(mi.page); await sleep(1000)
+log('mgr.in sees ประเสริฐ?', (await mi.page.locator('tbody tr').filter({ hasText: 'ประเสริฐ' }).count()))
+await mi.browser.close()
+const mo = await openAs('uat.mgr.out'); const po = mo.page
+await po.goto(`${BASE}/finance?tab=comp`); await settle(po); await sleep(1200)
+const r = po.locator('tbody tr').filter({ hasText: 'ไม่ผูกเคส' })
+log('mgr.out rows ไม่ผูกเคส:', await r.count(), flat(await r.first().innerText().catch(() => '')).slice(0, 300))
+await shot(po, R, '57-R6.31-mgr-out-excess-row', { fullPage: true })
+const lab = (await r.first().locator('td:nth-child(2)').innerText()).split('\n')[0].trim()
+const [s1, t1] = await uiApprove(po, 'ไม่ผูกเคส', lab, 1); log('R6.31 mgr.out step1', s1.slice(0, 120), t1.at(-1))
+await mo.browser.close()
+const fi = await openAs('uat.finance'); const pf = fi.page
+await pf.goto(`${BASE}/finance?tab=comp`); await settle(pf); await sleep(1200)
+log('finance rows ไม่ผูกเคส:', flat(await pf.locator('tbody tr').filter({ hasText: 'ไม่ผูกเคส' }).allInnerTexts().then(a => a.join(' ## '))).slice(0, 500))
+const [s2, t2] = await uiApprove(pf, "ไม่ผูกเคส", lab, 2); log('R6.31 finance step2', s2.slice(0, 120), t2.at(-1))
+await sleep(800); await shot(pf, R, '58-R6.31-finance-excess-approved', { fullPage: true })
+await fi.browser.close()
+log(q(`select e.status,e.approval_step_current cur,e.approval_step_total tot,m.condition mx,(select username from users where id=e.manager_approved_by) mgr,(select username from users where id=e.finance_approved_by) fin from expenses e left join approval_matrices m on m.id=e.approval_matrix_id where e.id='${EX}'`))
+log(q(`select to_char(n.created_at,'HH24:MI:SS') t,u.username,n.event_code,left(n.body,80) from notifications n join users u on u.id=n.user_id where n.created_at > '${T0B}' order by 1`))
+log(q(SQL_ADV()))
+function SQL_ADV() { return `select left(id::text,8) id,status,approved_satang,used_satang,return_satang,payout_batch_item_id is not null in_b from advances order by created_at` }

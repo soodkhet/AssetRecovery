@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R6a v3 อนุมัติ** — 04/10/2569 01:57–02:11 · 20/20 ✅ ตรง golden R6.md v2 · บั๊กใหม่ BUG-105/106 (ไม่บล็อก) · expense approved 9 = 845000 · pending_finance_approval 6 (C3×3, C4×3) = 105000 · superseded 1 · revenues 3 (C1 98975 · C2 133215 · C5 749000 · total 981190 · VAT 7.00 · 2026-10-04) · ADV1/ADV4 approved · ADV2 rejected · ADV3 pending · payee verified 0 · รายงาน `uat/report/R6a-approval-v3.md` · ภาพ 37 · ก่อนหน้า: R5 v2 24/24, R4b v3, R4a v3 |
-| snapshot ล่าสุด | `uat/snapshots/R6a-end-v3.dump` (ปลาย R6a) · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R6b v3** (R6.21–R6.44 รอบจ่าย) ตาม `uat/steps/R6.md` **v2** · R7 ต้องหลังเที่ยงคืน 05/10 (ADV3 overdue) · ⚠️ DATASET v3 ถ้อยคำยังไม่แก้ตามมติ O4 (`uat/PO-DECISIONS-2569-10-04.md`) — R6.md v2 ใช้ค่าที่ถูกแล้ว |
+| รอบล่าสุดที่จบ | **R6b v3 รอบจ่าย** — 04/10/2569 02:14–02:26 · 22 ✅ / 🐞 2 · **เงิน/ภาษีตรง golden ทุกตัว** · บั๊กใหม่ BUG-107 (S3 หน้าล่มเมื่อพิมพ์ตัวอักษรในยอดเคลียร์) / 108 / 109 / 110 · payout 4 รอบ gross 1580000 / WHT 28500 / net **1551500** (IN-1 489150 `file_generated` v2 — ค้างไว้ R7 · OUT-1 730500 · IN-2 301850 · OUT-2 30000 completed) · 50 ทวิ 8 ใบ / 22650 · revenues 4 billed = 1148110 · billing 2 (UATL 399110 ครบกำหนด 03/11 · UATC 749000 ครบกำหนด 19/10) · expense approved 16 = 980000 · ADV1/ADV4 เคลียร์ · ADV3 approved ครบกำหนด 04/10 · payee verified 3 · รายงาน `uat/report/R6b-payout-v3.md` · ก่อนหน้า: R6a 20/20, R5 v2 24/24, R4 v3 |
+| snapshot ล่าสุด | `uat/snapshots/R6-end-v3.dump` (ปลาย R6 = ต้น R7) · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R7 v? (เงินทดรองเกินกำหนด + นำเข้า statement ธนาคาร/จับคู่ IN-1)** — เริ่มได้**หลัง 00:00 น. 05/10/2569** เท่านั้น · ดู HANDOFF ด้านล่าง |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~02:35 R6b v3 จบ (ดูตารางบน) · มติ O8/O9 · Storage `payment-files` +5 bank file (ใช้งานจริง ไม่ใช่ขยะ) · สำเนาในเครื่อง `uat/fixtures/downloads-R6b/` · orchestrator หยุดรอเวลา R7
 - 04/10/2569 ~02:20 R6a v3 จบ (ดูตารางบน) → เริ่ม R6b
 - 04/10/2569 ~02:10 R5 v2 จบ (ดูตารางบน) · step sheet R6 v2 เสร็จ (R6a 20 / R6b 24 ขั้น · golden ลงตัว) · มติ orchestrator + บัญชี A1–A7 → `uat/PO-DECISIONS-2569-10-04.md` (A1/A2 ต้องแก้โค้ด — รอผู้ใช้รีวิว · UAT ยึดโค้ดปัจจุบัน) · ขยะ Storage +4
 - 04/10/2569 ~01:40 R4b v3 จบ + R4.38b (PO เผลอใช้ admin อนุมัติค่าที่พักขั้น 1 → มติ PO ก.: ตีกลับผ่านหน้าจอ + in1 ส่งใหม่) · มติ PO BUG-095 = ก. · **ผู้ใช้อนุญาตให้ orchestrator เดินต่อเองข้ามคืน + ตัดสินเรื่องนักบัญชีตามมาตรฐานบัญชีไทย (จดเหตุผลไว้ให้รีวิว) + ซ่อมฐาน dev ในเครื่องได้** · ขยะ Storage +1
@@ -38,7 +39,24 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 - 03/10/2569 R1: จบครบ ไม่มีตัวบล็อก · 14 persona login + เปลี่ยนรหัสแล้ว (session อยู่ `uat/.auth/`) · template T1/T2 เป็น v2 · merge BUG-002 + verify เขียว (245 files / 3,072 tests) · ตัด `uat/bin/r*/**` ออกจาก eslint (สคริปต์ชั่วคราวต่อรอบ)
 - 03/10/2569 R0: baseline เขียว (typecheck · 241 files / 3,039 tests · lint) · Playwright 1.63 (DEC-011) · snapshot+restore ทดสอบแล้ว
 
-## ▶️ HANDOFF — session ใหม่เริ่มตรงนี้ (เขียน 04/10/2569 ~00:30 หลังเตรียม R4 v3)
+## ▶️ HANDOFF — session ใหม่เริ่มตรงนี้ (เขียน 04/10/2569 ~02:35 หลัง R6b v3)
+
+### 0. สถานะ
+- ฐาน dev = `R6-end-v3` (ปลาย R6) · staging HEAD = `git log -1` · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ)
+- รอบที่จบในคืน 04/10: R4a v3 → R4b v3 (+R4.38b) → R5 v2 → R6a v3 → R6b v3 · ทุกรอบเงินตรง golden · ไม่มี S1/S2 เปิด
+- ⚠️ **รอผู้ใช้รีวิว**: `uat/PO-DECISIONS-2569-10-04.md` (O1–O9 + บัญชี A1–A7 — A1 ฐาน WHT ไม่รวมค่าใช้จ่ายจริงตามใบเสร็จ / A2 50 ทวิ 1 ใบต่อผู้รับต่อรอบ = ต้องแก้โค้ด เปลี่ยน golden IN-1 → ยังไม่ทำ) · คำถามนักบัญชี 3 ข้อเดิมใน `uat/PO-DECISIONS-2569-10-03.md` (orchestrator เปิดอ่านส่วนนั้นไม่ได้ — ให้ผู้ใช้ดูเอง) · BUGS needs-decision: 076, 078, 084, 090, 093, 100, 101, 102, 106, 109
+- บั๊ก open ที่แก้ได้ทันที (ไม่ต้องรอมติ): BUG-095 (มติ ก.), 096, 097, 098, 099, 104, 105, 107 (S3), 108, 110 — เสนอให้ fixer ชุดเดียวใน worktree **ก่อน R7** ถ้าผู้ใช้อนุญาต (ห้าม merge ขณะ role agent รัน)
+- ⚠️ DATASET v3 ถ้อยคำยังไม่แก้ตามมติ O4 · step sheet R6.md v2 ยังไม่แก้ตาม O9 (R6.09 14→15 แถว, R6.41 บัญชีคาด redirect) · R5.md §0.6 asset id เก่า
+
+### 1. R7 (ต้องหลัง 00:00 น. 05/10/2569)
+1. ตรวจ dev server (`curl … /login` = 200) + `pnpm prisma migrate status` สะอาด
+2. ปรับ `uat/steps/R7.md` ให้ตรง DATASET v3 + สถานะปลาย R6 จริง (subagent — ถ้ายังไม่มี v ที่ตรง): ต้น R7 = `advance_overdue` ผ่าน dev trigger (ADV3 ครบกำหนด 04/10 → overdue) · `uat/fixtures/bank-R7.csv` (IN-1 = 4891.50) แทน `{{R7_DATE}}` ก่อนนำเข้า · IN-1 ค้าง `file_generated` v2 รอจับคู่ → auto-match → 50 ทวิ รวมเป็น 15 ใบ / 28500 (E9) · ตรวจ W1: ภ.ง.ด.3 ไม่นับแถวเงินทดรอง
+3. วงจรต่อรอบเหมือน HANDOFF เดิม §1 (prompt role agent แบบ R6b: ขอบเขต/สถานะต้นรอบ/ต้องยืนยัน/กติกา/คืนผล ≤ 1,200 tokens)
+4. ต่อ R8 บริหาร (ปิดงวด ต.ค./Adjustment) → R9 รายงาน (golden DATASET v3 E10) → R10 สิทธิ์ (API ขนาน 12 persona) → รวมเล่มรายงาน (`UAT_PLAN.md` §11.3)
+
+### 2. ก่อน push staging — ดู §6 ของ HANDOFF เก่าด้านล่าง (migration 7 ตัว + ตรวจรายได้ซ้ำ + seed staging)
+
+## HANDOFF เก่า (04/10/2569 ~00:30 — ก่อน R4 v3 · เก็บไว้อ้างอิง §1 วงจรต่อรอบ + §6 ก่อน push)
 
 ### 0. สถานะ ณ ตอนส่งต่อ
 - staging HEAD: ดู `git log -1` (ล่าสุดตอนเขียน = commit ที่มีไฟล์นี้) · ยังไม่ push · migration ใหม่ทั้งหมดตั้งแต่ R0 ต้อง deploy กับ staging ทีหลัง (ดู §6)
@@ -49,7 +67,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-106) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-110) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้

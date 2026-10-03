@@ -112,6 +112,10 @@
 | BUG-104 | R5-v2 R5.16 | S5 | code | audit `lot.confirmed` ไม่เก็บเหตุผลที่ข้ามการสร้างรายได้ต่อเคส (`expense_not_approved`/`field_days_not_settled`) — ตรวจย้อนหลังไม่ได้ว่าทำไมไม่เกิดรายได้ | open |
 | BUG-105 | R6a-v3 | S4 | code | ผู้อนุมัติกดปุ่มจากหน้าที่ค้างหลังรายการผ่านขั้นนั้นไปแล้ว → toast "อนุมัติข้ามขั้น — รายการนี้ยังไม่ถึงขั้นอนุมัติของคุณ" ผิดทิศ (`APPROVAL_STEP_OUT_OF_ORDER` requestedStep 1 < currentStep 2 ควรบอกว่า "รายการนี้ผ่านขั้นของคุณแล้ว") · ไม่กระทบข้อมูล | open |
 | BUG-106 | R6a-v3 R6.01 | S5 | spec-gap | ไม่มีแจ้งเตือนถึงผู้อนุมัติเมื่อมีรายการเข้าคิว (ค่าที่พัก/แถวรายวัน/หลังล็อตปลดล็อก/C5 ถึงขั้น 3 ของบริหาร) — มีแค่แจ้งเตือนปิดงาน C3 · `90` ไม่ได้กำหนด (R6-N1) | needs-decision · ข้อเสนอ orchestrator (O5): แจ้งเตือนสรุปรายวันต่อผู้อนุมัติ |
+| BUG-107 | R6b-v3 R6.39 | S3 | code | modal เคลียร์เงินทดรอง: พิมพ์ `abc` ในช่อง "ยอดที่ใช้จริง (บาท)" → ทั้งหน้าล่ม "ระบบขัดข้อง" (`MoneyFormatError NaN`) — `components/finance/settle-advance-modal.tsx:92` ส่ง NaN เข้า `fmtSatangSymbol` (เช็คแค่ `!== null`) · ใช้ร่วมหน้ามือถือ + หน้าการเงิน · ข้อมูลไม่เสีย | open |
+| BUG-108 | R6b-v3 | S4 | code | คำอธิบายตารางรายได้แสดง markdown ดิบ `**และ**` (`components/finance/revenue-tab.tsx:290`) | open |
+| BUG-109 | R6b-v3 R6.39 | S5 | spec-gap | เงินคืนจากเงินทดรอง (ADV1 ฿550) ระบบบันทึกยอดคืนแต่ไม่มีการรับเงินคืน/หักกลบ | needs-decision · มติ orchestrator A6: บันทึกเป็นลูกหนี้พนักงาน + หักกลบในรอบจ่ายถัดไปของผู้รับ |
+| BUG-110 | R6b-v3 R6.35 | S5 | code | toast `UNVERIFIED_PAYEE_IN_PAYOUT` ไม่บอกว่าผู้รับคนไหนยังไม่ยืนยัน | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -120,6 +124,9 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R6b v3 (W1): แถวเงินทดรองใน `payout_batch_items` เก็บ tax profile id ของผู้รับ แต่ WHT 0%/0 — ยอดถูก · **R7/R9 ตรวจว่ารายงาน ภ.ง.ด.3 ไม่นับเงินทดรอง**
+- R6b v3 (W3): บัญชีเปิดหน้ารอบจ่ายไม่ได้ (เด้ง dashboard) แต่ GET API ได้ — ตรง `06` (บัญชีไม่มีเมนูการเงิน) · step sheet R6.41 คาดผิด
+- R6b v3: อนุมัติ expense/advance ไม่มีเหตุผลใน audit — ตรงกติกา (reason บังคับเฉพาะ reject/ตีกลับ) · มติ orchestrator O8
 - R6a v3: step sheet R6.09 นับการเงินเห็น 14 แถว — จริง 15 (13 ทีม A + C5 2) ถูกแล้ว · หน้าจอสะกด "คอมมิชชั่น" · เห็นซ้ำ BUG-095/096/099/103
 - R5 v2: ยืนยัน BUG-071 แก้แล้ว · BUG-074…084 ยังอยู่ (ไม่บล็อก) · step sheet R5 §0.6 asset id เก่า + สคริปต์ s07/s15 เป็นเวอร์ชันต่อรอบ ("b") — ผลเทียบเท่า (probe รูปปลอมทำบน C5 แทน C4 · เอกสารล็อต CO1 มี v2 แรกเพิ่ม 1 ไฟล์)
 - R4b v3: ยืนยัน BUG-071/072/073 แก้แล้ว · step sheet R4.36 ยังคาด `closed_success` 5 แถว — ค่าจริงถูก: 4 แถว + `case.close_resubmitted` 1 แถว (แก้ step sheet รอบหน้า)
