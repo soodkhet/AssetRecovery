@@ -1,0 +1,6 @@
+# ข้อมูลลับ/ไฟล์ใหญ่ของ UAT — ไม่ commit
+personas.json
+.auth/
+snapshots/
+traces/
+shots/

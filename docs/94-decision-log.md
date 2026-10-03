@@ -19,6 +19,7 @@
 | v3.1 | 05/07/2569 | **เพิ่ม DEC-007 (Mockup Audit 04/07/2569), DEC-008 (Service Fee Template แสดงเป็นการ์ด), DEC-009 (Functional Permission 3 ระดับ)** — เก็บตกการตัดสินใจ 2 รอบหลังที่ยังไม่ได้ลงบันทึก · DEC-009 มี doc sync ค้าง (schema `role_capabilities.access_level` + ไฟล์ 13 §6.10 + ไฟล์ 25) ⏳ รอ Product Owner สั่งเดิน |
 | v3.2 | 05/07/2569 | **ปิด doc sync ของ DEC-009** — Product Owner สั่งเดิน: `02` v3.6 / `13` v3.1 / `25` v2.2 เสร็จครบ อัปเดตช่อง Impact ของ DEC-009 เป็น ✅ |
 | v3.3 | 03/10/2569 | **เพิ่ม DEC-010** (login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ — แทนมติ D1 เดิม) |
+| v3.4 | 03/10/2569 | **เพิ่ม DEC-011** (Playwright เป็นเครื่องมือ UAT ฝั่ง dev — ไม่แตะ runtime/production) |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
 
@@ -241,6 +242,16 @@
 | Reason | เจ้าหน้าที่ภาคสนามจำนวนมากไม่มีอีเมล/ไม่สะดวกเปิดอีเมล และ flow เชิญพึ่ง SMTP ของ Supabase — ผู้ดูแลต้องเปิดบัญชีและช่วยรีเซ็ตรหัสได้ทันที |
 | Impact | `02` (`users.username`, `users.must_change_password`, `email` nullable + CHECK ต้องมีอย่างใดอย่างหนึ่ง) · `05` §6.1/§14/§17 · `08` §7.1/§10/§11/§14/§17 · `24` v4.16 (`DUPLICATE_USERNAME`, `AUTH_ACCOUNT_SYNC_FAILED`, `PASSWORD_CHANGE_REQUIRED` · ลบ `INVITE_SEND_FAILED`) · migration `20261003000000_user_username_admin_password` (backfill username จากส่วนหน้า @ ของอีเมล) |
 | Reversible | ปานกลาง — คอลัมน์ใหม่ไม่กระทบตารางอื่น · กลับไปใช้ invite ได้โดยไม่ต้องย้ายข้อมูล |
+
+### DEC-011 — Playwright เป็นเครื่องมือ UAT ฝั่ง dev (03/10/2569)
+
+| Field | Value |
+|---|---|
+| Decision | เพิ่ม `@playwright/test` เป็น **devDependency** สำหรับ UAT แบบ agent เล่นแทนคนทีละ role (`UAT_PLAN.md` §10–§12) · ขับ **Google Chrome ที่ติดตั้งในเครื่อง** (`channel: 'chrome'`) ไม่ดาวน์โหลด browser เพิ่ม · สคริปต์อยู่ `uat/` แยกจาก `tests/` — **vitest ยังเป็นตัวรันเทสต์หลักของ verify ทุก task** (ไม่ใส่ Playwright ใน `pnpm test`/CI) · ใช้กับ localhost + ฐาน dev บนเครื่องเท่านั้น |
+| Approved by | Product Owner — อนุมัติในแชท 03/10/2569 |
+| Reason | browser ในแอป Claude บันทึก screenshot ลงไฟล์ไม่ได้ ถือ cookie ได้ชุดเดียว และแนบไฟล์ไม่ได้ — Playwright ให้ screenshot ลงไฟล์ (ทำคู่มือ/รายงาน UAT), `storageState` แยกต่อ role (ทดสอบหลาย role/race พร้อมกัน), `setInputFiles`, จำลองมือถือ |
+| Impact | `package.json` (devDependencies) เท่านั้น · ไม่กระทบ build/Vercel/โค้ดแอป |
+| Reversible | สูง — `pnpm remove @playwright/test` + ลบ `uat/bin/*.mjs` |
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 

@@ -1,0 +1,57 @@
+// ตัวช่วยกลางของ UAT — ใช้ร่วมทุก role agent
+import { chromium, devices } from '@playwright/test'
+import { readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { dirname } from 'node:path'
+
+export const BASE = process.env.UAT_BASE ?? 'http://localhost:3000'
+
+/** อ่านรหัสของ persona จาก uat/personas.json (ไม่ commit) — admin ใช้ dev alias */
+export function credentials(username) {
+  if (username === 'admin') return { username: 'admin', password: 'admin' }
+  const all = JSON.parse(readFileSync('uat/personas.json', 'utf8'))
+  const p = all[username]
+  if (!p) throw new Error(`ไม่พบ persona ${username} ใน uat/personas.json`)
+  return { username, password: p.password }
+}
+
+/**
+ * เปิด browser context ของ role — ใช้ session ที่เก็บไว้ (uat/.auth/<username>.json) ถ้ามี ไม่งั้น login ใหม่ผ่าน UI
+ * opts.mobile = true → จำลอง iPhone (หน้า Field Agent)
+ */
+export async function openAs(username, opts = {}) {
+  const browser = await chromium.launch({ channel: 'chrome', headless: opts.headed ? false : true })
+  const statePath = `uat/.auth/${username}.json`
+  const base = opts.mobile ? devices['iPhone 14'] : { viewport: { width: 1440, height: 900 } }
+  const context = await browser.newContext({
+    ...base,
+    locale: 'th-TH',
+    timezoneId: 'Asia/Bangkok',
+    storageState: existsSync(statePath) && !opts.fresh ? statePath : undefined,
+  })
+  const page = await context.newPage()
+  const consoleErrors = []
+  page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()) })
+  page.on('pageerror', e => consoleErrors.push(`pageerror: ${e.message}`))
+  const serverErrors = []
+  page.on('response', r => { if (r.status() >= 500) serverErrors.push(`${r.status()} ${r.request().method()} ${r.url()}`) })
+
+  await page.goto(`${BASE}/`)
+  if (page.url().includes('/login')) {
+    const { password } = credentials(username)
+    await page.locator('#identifier').fill(username)
+    await page.locator('#password').fill(password)
+    await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click()
+    await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 20000 })
+    mkdirSync(dirname(statePath), { recursive: true })
+    await context.storageState({ path: statePath })
+  }
+  return { browser, context, page, consoleErrors, serverErrors }
+}
+
+/** ถ่ายภาพลง uat/shots/<round>/<name>.png แล้วคืน path สัมพัทธ์สำหรับใส่ในรายงาน */
+export async function shot(page, round, name, opts = {}) {
+  const path = `uat/shots/${round}/${name}.png`
+  mkdirSync(dirname(path), { recursive: true })
+  await page.screenshot({ path, fullPage: opts.fullPage ?? false })
+  return `../shots/${round}/${name}.png`
+}
