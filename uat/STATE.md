@@ -72,8 +72,8 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม)
-- migration ใหม่จาก UAT (ตั้งแต่ `20261003113300` ถึง `20261003170000`) → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
-- Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging)
+- migration ใหม่จาก UAT **7 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261003170000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)
 ดูท้าย `uat/PO-DECISIONS-2569-10-03.md` (คำถามนักบัญชี 3 ข้อ + ข้อสังเกตหลังแก้: ผู้จัดการรับเข้าคลังได้ไหม, `38` §13 แถว edit_case, วันที่รายได้หลัง resubmit ข้ามเดือน, เพดานค่าที่พักต่อคืน, ภาพแผนที่จริง) + BUGS ที่สถานะ needs-decision (BUG-076, 078, 084, 090 (`25` ให้ตรง `17`), 093)
