@@ -155,8 +155,13 @@ export function AuditLogsManager() {
                 </Td>
                 <Td className="text-slate-600">{auditActorLabel(row.actorName, row.actorRole)}</Td>
                 <Td className="text-slate-600">
-                  {auditTargetLabel(row.targetType)}
-                  {row.targetId !== null && <RefText className="ml-2 text-xs">{row.targetId.slice(0, 8)}</RefText>}
+                  {/* ชื่อชนิดเป้าหมายกับรหัสแยกบรรทัด — เดิมต่อกันเป็น "ผู้ใช้งานa880581e" (UAT BUG-006) */}
+                  <div>{auditTargetLabel(row.targetType)}</div>
+                  {row.targetId !== null && (
+                    <RefText className="block text-[11px] text-slate-400" title={row.targetId}>
+                      {row.targetId.slice(0, 8)}
+                    </RefText>
+                  )}
                 </Td>
                 <Td className="max-w-md truncate text-xs text-slate-500">{row.reason ?? '—'}</Td>
               </Tr>
