@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R4a v2 ภาคสนาม** (เล่นใหม่หลังแก้ตามมติ) — 03/10/2569 · R4.01–R4.23 ✅21 🐞2 (S5) · ไม่มี 500 · expense active 960000 ตรง golden · มติ Q2/Q13/Q15/Q16/Q17/Q20 ใช้ได้จริง · รายงาน `uat/report/R4a-field-v2.md` · ภาพ 54 |
-| snapshot ล่าสุด | `uat/snapshots/R4a-v2-end.dump` (ก่อนหน้า: `R3-end-v2`, …) |
-| รอบปัจจุบัน | **R4b v2** (R4.24–R4.38: ตีกลับหลักฐาน C4 ผ่านหน้าจอ, ค่าที่พัก in1 ฿600, เงินทดรอง ADV1/2/3/ADV-MAX/ADV4) role agent กำลังรัน → R5 (ธุรการทำคลัง) · ⚠️ R6 หลังเที่ยงคืนเวลาไทย |
+| รอบล่าสุดที่จบ | **R4 v2 ครบ** (R4a+R4b เล่นใหม่หลังแก้ตามมติ) — 03/10/2569 · R4b ✅15 🐞3 ❓2 · ไม่มี 500 · expense active 1020000 = golden · advance 4 ใบ pending (ADV3 วันเคลียร์ 03/10/2569) · รายงาน `uat/report/R4a-field-v2.md` + `R4b-field-v2.md` |
+| snapshot ล่าสุด | `uat/snapshots/R4-v2-end.dump` (ก่อนหน้า: `R4a-v2-end`, `R3-end-v2`, …) |
+| รอบปัจจุบัน | **R5 คลังสินค้า** (ธุรการ) — step sheet กำลังเขียน · fixer F (BUG-062/065–073) ใน worktree — merge หลัง R5 · ⚠️ R6 หลังเที่ยงคืนเวลาไทย |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -57,4 +57,5 @@ BUG-009 แผน/หัวหน้าข้ามฝั่ง · BUG-010 ค�
 ## ไฟล์ทดสอบใน Storage ที่ตั้งใจให้ค้าง (ไว้ลบตอน go-live)
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/4b1dcc07-6a53-4d69-9745-b62394b20e73-R4-fake-video.mp4` (R4a เดิม)
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/aa8879c5-b474-4cd8-bf71-f8d170e48831-R4-fake-video.mp4` (R4a v2)
+- R4b v2: `cases/d4d82f78…/field_evidence/product_photo/7d772c98-…-R4-C4-product-v2.jpg`, `expenses/88cb577d…/receipts/91324d20-…-R4-C1-photo.jpg` (ใช้งานจริง ไม่ใช่ขยะ)
 - หลักฐานของ R4a เดิม 14 ไฟล์ (ฐานถูกย้อนแล้ว — ไฟล์ไม่มีแถวอ้างอิง)
