@@ -44,6 +44,11 @@ export interface CompensationApprovalDto {
   /** role ที่ขั้นปัจจุบันรออยู่ — `null` = ตั้งค่าสายอนุมัติไม่ครอบยอดนี้ (`APPROVAL_MATRIX_NOT_FOUND`) */
   pendingStepRole: string | null
   approvalHistory: readonly ApprovalHistoryEntry[]
+  /**
+   * ผู้เรียกถือ capability ระดับ `manage` ของ **ขั้นที่รายการรออยู่** ไหม (UAT R6-7) — หน้าจอใช้ซ่อนปุ่ม
+   * อนุมัติ/ตีกลับรายแถว แทนการโชว์ปุ่มที่กดแล้วได้ 403 · UX เท่านั้น API ตรวจซ้ำเสมอ (DEC-002)
+   */
+  viewerCanAct: boolean
   rejectReason: string | null
   createdAt: string
 }

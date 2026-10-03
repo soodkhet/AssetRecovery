@@ -6,8 +6,10 @@ import {
   approversInCurrentRound,
   approverStampFor,
   assertActorCanApproveStep,
+  canActOnApprovalStep,
   CLEARED_APPROVER_STAMPS,
   expenseStatusForPendingStep,
+  isApprovalItemVisibleTo,
   parseApprovalHistory,
   type ApprovalActor,
   type ApprovalHistoryEntry,
@@ -226,5 +228,54 @@ describe('รอยประทับผู้อนุมัติ (`02` §8 ·
       executiveApprovedBy: 'user-9',
       executiveApprovedAt: at,
     })
+  })
+})
+
+describe('`16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7)', () => {
+  const steps3 = [TEAM_MANAGER_ROLE_NAME, FINANCE_ROLE_NAME, EXECUTIVE_ROLE_NAME]
+  const manager = actor({ capabilities: { approve_expense_manager: 'manage' } })
+  const finance = actor({ capabilities: { approve_expense_finance: 'manage' } })
+  const executive = actor({ capabilities: { approve_expense_executive: 'manage' } })
+
+  it('รายการรอขั้น 1 (ผู้จัดการ) ⇒ การเงิน/บริหารไม่เห็น ผู้จัดการเห็นและกดได้', () => {
+    const item = { status: 'pending_approval' as const, approvalStepCurrent: 1, steps: steps3 }
+    expect(isApprovalItemVisibleTo(manager, item)).toBe(true)
+    expect(canActOnApprovalStep(manager, item)).toBe(true)
+    expect(isApprovalItemVisibleTo(finance, item)).toBe(false)
+    expect(isApprovalItemVisibleTo(executive, item)).toBe(false)
+  })
+
+  it('รายการรอขั้น 2 (การเงิน) ⇒ การเงินเห็น+กดได้ · ผู้จัดการเห็นแต่กดไม่ได้ · บริหารยังไม่เห็น', () => {
+    const item = { status: 'pending_finance_approval' as const, approvalStepCurrent: 2, steps: steps3 }
+    expect(isApprovalItemVisibleTo(finance, item)).toBe(true)
+    expect(canActOnApprovalStep(finance, item)).toBe(true)
+    expect(isApprovalItemVisibleTo(manager, item)).toBe(true)
+    expect(canActOnApprovalStep(manager, item)).toBe(false)
+    expect(isApprovalItemVisibleTo(executive, item)).toBe(false)
+  })
+
+  it('รายการรอขั้น 3 (บริหาร) ⇒ บริหารเห็น+กดได้ · การเงินเห็นแต่กดไม่ได้', () => {
+    const item = { status: 'pending_finance_approval' as const, approvalStepCurrent: 3, steps: steps3 }
+    expect(canActOnApprovalStep(executive, item)).toBe(true)
+    expect(isApprovalItemVisibleTo(finance, item)).toBe(true)
+    expect(canActOnApprovalStep(finance, item)).toBe(false)
+  })
+
+  it('อนุมัติแล้ว/ถูกตีกลับ = ไม่ได้รอใคร ⇒ ผู้อนุมัติเห็นเป็นประวัติ แต่ไม่มีใครกดได้', () => {
+    for (const status of ['approved', 'needs_revision'] as const) {
+      const item = { status, approvalStepCurrent: 1, steps: steps3 }
+      expect(isApprovalItemVisibleTo(executive, item)).toBe(true)
+      expect(canActOnApprovalStep(actor({ isSuperadmin: true, capabilities: {} }), item)).toBe(false)
+    }
+  })
+
+  it('สิทธิ์ระดับ view เห็นได้แต่กดไม่ได้ · Superadmin เห็นและกดได้ทุกขั้น', () => {
+    const item = { status: 'pending_approval' as const, approvalStepCurrent: 1, steps: steps3 }
+    const viewer = actor({ capabilities: { approve_expense_manager: 'view' } })
+    expect(isApprovalItemVisibleTo(viewer, item)).toBe(true)
+    expect(canActOnApprovalStep(viewer, item)).toBe(false)
+    const superadmin = actor({ isSuperadmin: true, capabilities: {} })
+    expect(isApprovalItemVisibleTo(superadmin, item)).toBe(true)
+    expect(canActOnApprovalStep(superadmin, item)).toBe(true)
   })
 })

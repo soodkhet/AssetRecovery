@@ -1,6 +1,6 @@
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
-import { hasCapability } from '@/lib/auth/permission'
+import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { fmtSatang } from '@/lib/format/money'
 import type { SessionUser } from '@/lib/auth/types'
@@ -10,6 +10,8 @@ import {
   approverStampFor,
   assertActorCanApproveStep,
   buildRejectExpenseUpdate,
+  canActOnApprovalStep,
+  isApprovalItemVisibleTo,
   expenseStatusForPendingStep,
   parseApprovalHistory,
   type ApprovalHistoryEntry,
@@ -234,7 +236,7 @@ export function describeExpenseBasis(row: {
 
 // ── DTO ─────────────────────────────────────────────────────────────────────
 
-function toDto(row: ExpenseRow, flow: ResolvedFlow): CompensationApprovalDto {
+function toDto(row: ExpenseRow, flow: ResolvedFlow, viewer: CapabilityHolder): CompensationApprovalDto {
   const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
   const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
 
@@ -279,6 +281,11 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow): CompensationApprovalDto {
     approvalStepTotal: flow.totalSteps,
     pendingStepRole,
     approvalHistory: parseApprovalHistory(row.approvalHistory),
+    viewerCanAct: canActOnApprovalStep(viewer, {
+      status: row.status,
+      approvalStepCurrent: row.approvalStepCurrent,
+      steps: flow.steps,
+    }),
     rejectReason: row.rejectionReason,
     createdAt: row.createdAt.toISOString(),
   }
@@ -347,7 +354,17 @@ export async function listCompensationApprovals(
   if (rows.length === 0) return []
 
   const candidates = await loadMatrixCandidates(user.organizationId)
-  return rows.map((row) => toDto(row, flowOf(row, candidates)))
+  // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
+  // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
+  return rows.flatMap((row) => {
+    const flow = flowOf(row, candidates)
+    const visible = isApprovalItemVisibleTo(user, {
+      status: row.status,
+      approvalStepCurrent: row.approvalStepCurrent,
+      steps: flow.steps,
+    })
+    return visible ? [toDto(row, flow, user)] : []
+  })
 }
 
 // ── PATCH /api/compensation/:id/approve · /reject ────────────────────────────
@@ -552,7 +569,7 @@ export async function approveCompensationExpense(
   }
 
   return {
-    expense: toDto(outcome.row, { ...flow, projected: false }),
+    expense: toDto(outcome.row, { ...flow, projected: false }, user),
     events: outcome.events,
     revenueEligibleCaseIds: outcome.revenueEligibleCaseIds,
   }
@@ -665,7 +682,7 @@ export async function rejectCompensationExpense(
   )
 
   return {
-    expense: toDto(updated, flow ?? fallbackFlow(updated)),
+    expense: toDto(updated, flow ?? fallbackFlow(updated), user),
     events: ['expense.rejected'],
   }
 }

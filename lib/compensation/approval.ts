@@ -157,6 +157,53 @@ export function assertActorCanApproveStep(actor: ApprovalActor, stepRole: string
   return contract
 }
 
+/** ถือ capability ของ role ที่ขั้นนี้รออยู่ไหม — role ที่ไม่รู้จัก = ไม่ถือ (ไม่ throw: ใช้กรองการมองเห็น) */
+function holdsStepCapability(actor: CapabilityHolder, stepRole: string | undefined, action: 'view' | 'manage'): boolean {
+  if (stepRole === undefined) return false
+  const column = approvalRoleColumn(stepRole)
+  return column !== null && hasCapability(actor, action, COLUMN_CAPABILITY[column])
+}
+
+/** สถานะที่ "รอผู้อนุมัติสักขั้น" อยู่จริง (`23` §6.3) — สถานะอื่นไม่ได้รอใครในสายอนุมัติ */
+const AWAITING_APPROVER: readonly ExpenseStatus[] = ['pending_approval', 'pending_finance_approval']
+
+export interface ApprovalVisibilityInput {
+  status: ExpenseStatus
+  approvalStepCurrent: number
+  /** role ของแต่ละขั้นตามสาย (snapshot หรือคาดการณ์) — ลำดับมีความหมาย */
+  steps: readonly string[]
+}
+
+/**
+ * `16` §10 — "ผู้อนุมัติขั้นที่ N เห็นได้แค่รายการที่ผ่านขั้น 1 ถึง N-1 มาแล้วเท่านั้น" (UAT R6-7)
+ *
+ * - รายการที่ **รออนุมัติ** เห็นได้เมื่อผู้ใช้ถือ capability ของขั้นใดขั้นหนึ่งตั้งแต่ขั้น 1 ถึงขั้นที่
+ *   รายการค้างอยู่ — เช่น การเงิน (ขั้น 2) ไม่เห็นรายการที่ยังรอผู้จัดการ (ขั้น 1)
+ * - รายการที่ไม่ได้รอใคร (อนุมัติแล้ว / ถูกตีกลับรอผู้เบิกแก้) ผู้อนุมัติใน scope เห็นได้ (ประวัติ)
+ * - Superadmin เห็นทั้งหมดโดยนิยาม (DEC-009)
+ *
+ * ⚠️ เป็นการกรอง **การมองเห็นในคิว** — สิทธิ์กดจริงยังตรวจซ้ำที่ `assertActorCanApproveStep()` เสมอ
+ */
+export function isApprovalItemVisibleTo(actor: CapabilityHolder, item: ApprovalVisibilityInput): boolean {
+  if (actor.isSuperadmin) return true
+  if (!AWAITING_APPROVER.includes(item.status)) return true
+  const reached = Math.min(item.approvalStepCurrent, item.steps.length)
+  for (let step = 1; step <= reached; step += 1) {
+    if (holdsStepCapability(actor, item.steps[step - 1], 'view')) return true
+  }
+  return false
+}
+
+/**
+ * ผู้ใช้กด "อนุมัติ/ตีกลับ" รายการนี้ได้ไหม — ถือ capability ระดับ `manage` ของ **ขั้นที่รายการรออยู่**
+ * (หน้าจอใช้ซ่อนปุ่มรายแถว แทนการโชว์ปุ่มที่กดแล้วได้ 403 — UAT R6-7) · API ตรวจซ้ำเสมอ (DEC-002)
+ */
+export function canActOnApprovalStep(actor: CapabilityHolder, item: ApprovalVisibilityInput): boolean {
+  if (!AWAITING_APPROVER.includes(item.status)) return false
+  if (actor.isSuperadmin) return true
+  return holdsStepCapability(actor, item.steps[item.approvalStepCurrent - 1], 'manage')
+}
+
 /** คอลัมน์ผู้อนุมัติที่ต้องเขียนเมื่อผ่านขั้นนี้ (คอลัมน์ที่ไม่ตรงขั้นไม่ถูกแตะ) */
 export function approverStampFor(column: ApproverColumn, actorId: string, at: Date) {
   if (column === 'manager') return { managerApprovedBy: actorId, managerApprovedAt: at }
