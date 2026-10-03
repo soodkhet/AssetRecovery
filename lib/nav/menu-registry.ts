@@ -84,6 +84,7 @@ const ALL_AUDIENCES: readonly MenuAudience[] = [
  * หมายเหตุ **ธุรการ (admin_office)**: ตาราง §7.2 ไม่มีคอลัมน์ของ role นี้ — ยึดตาม mockup
  * `reference/app-shell.html` (`ROLE_CONFIG.admin_office`) ซึ่งเป็น source of truth ด้าน UI:
  * เห็น "แดชบอร์ด" + "จัดการเคส" (แท็บรับเคส) ตามหน้าที่คีย์ข้อมูลเคสในไฟล์ 38 §5
+ * + "คลังสินค้า" ตามหน้าที่ทำงานคลังใน `44` §5 (`06` §7.2 v2.4 — มติ PO 03/10/2569 UAT Q1 · BUG-063)
  * + "การตั้งค่า" **เฉพาะแท็บผู้ใช้งาน** (`06` §7.2 v2.3 — มติ PO 03/10/2569 UAT BUG-021: ธุรการถือ
  * `manage:manage_users` ตาม `05` §12 · บัญชีกลุ่ม system ยังจัดการได้เฉพาะ Superadmin — DEC-010)
  */
@@ -162,7 +163,8 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     label: 'คลังสินค้า',
     path: '/warehouse',
     // การเงิน/บัญชี/หัวหน้าทีม/บริษัทไฟแนนซ์ = read เท่านั้น (ระดับสิทธิ์บังคับที่ API ไม่ใช่ที่เมนู)
-    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'team_lead', 'company_user'],
+    // ธุรการ = ผู้ทำงานคลัง `44` §5 (`06` §7.2 v2.4 — มติ PO 03/10/2569 UAT Q1 · BUG-063)
+    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'admin_office', 'team_lead', 'company_user'],
     available: true,
     plannedPhase: '2.14',
   },

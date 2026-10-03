@@ -101,6 +101,15 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
     expect(byRole).toEqual(['system:การเงิน=manage'])
   })
 
+  it('คลังสินค้า (`44` §5/§13 · มติ PO 03/10/2569 UAT Q1 · BUG-063): ธุรการ manage ครบ 4 capability', () => {
+    for (const code of ['intake_asset', 'reject_asset_intake', 'create_handover_lot', 'confirm_handover_lot']) {
+      const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === code)
+      const byRole = rows.map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
+
+      expect(byRole, code).toEqual(['system:ธุรการ=manage'])
+    }
+  })
+
   it('แผนค่าตอบแทน (`11` §12): บริหาร/การเงิน = manage · บัญชี/ผู้จัดการทีม = view', () => {
     const rows = DEFAULT_ROLE_CAPABILITIES.filter(
       (each) => each.capabilityCode === 'manage_compensation_plans',

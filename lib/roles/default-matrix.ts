@@ -20,7 +20,7 @@ import {
  * - **Superadmin ไม่มี record** — `manage` ทุกอย่างโดยนิยาม enforce ที่ middleware (DEC-009)
  * - capability ที่ถูกล็อก ("✅ only") ของ Superadmin จึงไม่มีแถวที่นี่เลย ส่วนของ **บริหาร (Executive)**
  *   3 รายการยังต้องมีแถวจริง เพราะสิทธิ์เป็นของ Executive ไม่ใช่ Superadmin (ดู `lib/roles/capability-locks.ts`)
- * - capability นอก matrix (`functional_group = null` เช่น `manage_users`, `intake_asset`) **ยังไม่ผูกที่นี่**
+ * - capability นอก matrix (`functional_group = null` เช่น `manage_users`, `intake_asset`) **ผูกเฉพาะที่ระบุใน `BOUND_NON_MATRIX_CAPABILITIES`**
  *   — เจ้าของสิทธิ์อยู่ในสเปคของโมดูลนั้น (08/09/11/13/15/30/44) ให้ task ของโมดูลนั้นผูกเอง
  *
  * pure ล้วน — `prisma/seed.ts` และเทสต์ใช้ตัวเดียวกัน (seed จึงตรวจสอบได้โดยไม่ต้องมี DB)
@@ -173,6 +173,14 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
   // เงินทดรองจ่าย `15` §5 ("การเงิน — อนุมัติ Advance · Full") + `15` §12 (UAT BUG-047):
   // อนุมัติ/ปฏิเสธ = การเงินระดับ manage · ไม่มีแถว = Superadmin คนเดียวทำได้ (ขัดสเปค)
   approve_advance: [[finance, 'manage']],
+  // คลังสินค้า `44` §5 + §13 (มติ PO 03/10/2569 UAT Q1 · BUG-063): ธุรการเป็นผู้ทำงานคลังทั้งสาย —
+  // รับเข้า/ตรวจ IMEI/ตีกลับ/สร้างล็อต/นัดวัน/แนบเอกสาร/ยืนยัน · ไม่มีแถว = Superadmin คนเดียวทำได้
+  // ⇒ ปิดงานสำเร็จแล้วไม่มีใครรับแจ้งเตือน "รอรับเข้าคลัง" · สิทธิ์ดูของการเงิน/บัญชี/บริหารมาจาก
+  // `view_master_data` อยู่แล้ว (`lib/warehouse/permissions.ts`)
+  intake_asset: [[adminOffice, 'manage']],
+  reject_asset_intake: [[adminOffice, 'manage']],
+  create_handover_lot: [[adminOffice, 'manage']],
+  confirm_handover_lot: [[adminOffice, 'manage']],
   manage_users: [
     [adminOffice, 'manage'],
     [executive, 'view'],
@@ -207,6 +215,10 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
 export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_compensation_plans',
   'approve_advance',
+  'intake_asset',
+  'reject_asset_intake',
+  'create_handover_lot',
+  'confirm_handover_lot',
   'manage_users',
   'view_audit_log',
   'manage_jobs',
