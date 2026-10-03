@@ -3,8 +3,8 @@
 | ฟิลด์ | ค่า |
 |---|---|
 | รอบล่าสุดที่จบ | **R5 คลังสินค้า** (ธุรการ) — 03/10/2569 · 24/24 ✅ · ยืนยัน BUG-074…078 + ใหม่ 079…084 (ไม่บล็อก) · ไม่มี 500 · ล็อต LOT-2569-001 (CO1: C1,C2,C4) / LOT-2569-002 (CO2: C5) confirmed · expense active 15 แถว 1020000 ทั้งหมด pending_approval · revenue 0 · รายงาน `uat/report/R5-warehouse.md` · ภาพ 55 |
-| snapshot ล่าสุด | `uat/snapshots/R5-end.dump` (ก่อนหน้า: `R4-v2-end`, `R3-end-v2`, …) |
-| รอบปัจจุบัน | **หยุด R6** (มติ PO Q21: ค่าน้ำมันเหมา + เบี้ยเลี้ยง วันละครั้งต่อพนักงาน เฉลี่ยทุกเคสในวัน สร้างหลังจบวันด้วย job) · fixer G (การเงินก่อน R6, test3) + fixer H (Q21, test7) คู่ขนาน → merge ทั้งคู่ + generate/deploy/restart/verify → `uat/bin/restore.sh R3-end-v2` → ปรับ DATASET v3 + step sheet R4/R5 → เล่น R4–R5 ใหม่ (เช็คอินวันที่ 03/10) → **หลังเที่ยงคืน**: สั่ง job รายวัน (settle 03/10) + job `advance_overdue` → R6 |
+| snapshot ล่าสุด | `uat/snapshots/R3-end-v3.dump` = ปลาย R3 + schema/สิทธิ์หลัง Q21 + fixer G (ต้นรอบ R4 v3) · เก่า (กติกาเดิม ไม่ใช้แล้ว): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R4 v3 → R5 v2** (เล่นใหม่หลัง Q21) — updater กำลังทำ DATASET v3 + step sheet R4 v3 / R5 v2 · ท้าย R4a: `admin` สั่ง `daily_field_allowance` date 2026-10-04 (มติ PO 04/10) · แล้ว R6 (step sheet R6 v1 ต้องปรับตาม DATASET v3 + หน้าจอใหม่ของ fixer G) · ADV3 overdue → R7 (หลังเที่ยงคืน 05/10) |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 00:00 merge fixer H (Q21: job `daily_field_allowance`, ตาราง `field_day_settlements`, เกตรายได้ `field_days_not_settled`, DEC-012) · verify 258 files / 3,313 tests · restore `R3-end-v2` → snapshot `R3-end-v3` · มติ PO: settle วันนี้ผ่าน dev trigger หลังเช็คอินครบ
 - 03/10/2569 merge fixer G (R6-A/B, race รายได้, หน้าผู้รับเงิน …) + seed 2 แถว (บัญชี/บริหาร ดูรอบจ่าย) · migration `20261003160000` ล้มบนฐานทดสอบหลักเพราะรายได้ซ้ำจากเทสต์เก่า 33 กลุ่ม → soft-delete 462 แถวในฐานทดสอบ (ไม่ใช่ข้อมูลจริง) + `migrate resolve --rolled-back` + deploy ใหม่ · verify 258 files / 3,292 tests · **⚠️ ก่อน `db:deploy` staging: ตรวจ `select case_id, tracking_round, count(*) from revenues where deleted_at is null group by 1,2 having count(*)>1` ต้องว่าง**
 - 03/10/2569 ~20:45 step sheet R6 เสร็จ (43 ขั้น) · มติ PO R6-A (หน้าคิวอนุมัติของผู้จัดการ) / R6-B (รายการไม่ผูกเคส → ผู้จัดการทีมของผู้เบิก) / Q21 (เหมาจ่ายรายวันต่อพนักงาน) · ข้อมูล R4–R5 เดิมคิดต่อเคส ⇒ ต้องเล่นใหม่
 - 03/10/2569 merge fixer ครบ 5 ตัว (A/B/C/D/E) — migration ใหม่ 4 ตัว · verify 257 files / 3,253 tests · **หลัง merge ที่มี migration ต้อง `pnpm db:generate` + `pnpm db:deploy` + `db:deploy:test` + restart dev server** · restore R3-end → snapshot `R3-end-v2` · DATASET v2 + R4 v2 · ADV4 (out1 ฿1,000 → ใช้จริง ฿1,300 ใน R6 → เบิกส่วนเกิน ฿300 → OUT-2) · bank fixture IN-1 = 5231.00
