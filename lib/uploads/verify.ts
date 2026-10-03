@@ -19,10 +19,23 @@ export async function verifyUploadedFile(
   rule: UploadRule,
   claimedSha256?: string | null,
 ): Promise<VerifiedUpload> {
-  assertUploadPathInScope(path, rule.prefix)
-  const bytes = await downloadUploadedFile(path)
-  if (bytes === null) throw new UploadError('UPLOAD_FILE_NOT_FOUND', { detail: `path=${path}` })
-  return inspectUploadedBytes(bytes, rule, claimedSha256)
+  try {
+    assertUploadPathInScope(path, rule.prefix)
+    const bytes = await downloadUploadedFile(path)
+    if (bytes === null) throw new UploadError('UPLOAD_FILE_NOT_FOUND', { detail: `path=${path}` })
+    return inspectUploadedBytes(bytes, rule, claimedSha256)
+  } catch (error) {
+    throw withRejectedPath(error, path)
+  }
+}
+
+/**
+ * แนบ `path` ของไฟล์ที่ถูกปัดไปกับ error (กระจายลง payload ของ API เป็น `path`) — ฟอร์มใช้เอาไฟล์นั้นออก
+ * แล้วบอกผู้ใช้ว่าไฟล์ไหนถูกปัด แทนการถือไว้แล้ว autosave ล้มซ้ำ (UAT BUG-070) · path เป็นไฟล์ของผู้เรียกเอง
+ */
+function withRejectedPath(error: unknown, path: string): unknown {
+  if (!(error instanceof UploadError) || error.context?.['path'] !== undefined) return error
+  return new UploadError(error.code, { detail: error.detail, context: { ...error.context, path } })
 }
 
 /**
@@ -38,18 +51,26 @@ export async function verifyUploadedFiles(
   for (const { path, rule } of files) {
     // path ซ้ำ (เช่นไฟล์เดียวกันในสองช่อง) ยังต้องผ่าน prefix ของช่องนั้นเสมอ
     if (result[path] !== undefined) {
-      assertUploadPathInScope(path, rule.prefix)
+      assertPathInScopeOrReject(path, rule)
       continue
     }
     const previous = known[path]
     if (previous !== undefined) {
-      assertUploadPathInScope(path, rule.prefix)
+      assertPathInScopeOrReject(path, rule)
       result[path] = previous
       continue
     }
     result[path] = await verifyUploadedFile(path, rule)
   }
   return result
+}
+
+function assertPathInScopeOrReject(path: string, rule: UploadRule): void {
+  try {
+    assertUploadPathInScope(path, rule.prefix)
+  } catch (error) {
+    throw withRejectedPath(error, path)
+  }
 }
 
 /** อ่าน JSONB ที่เก็บไว้กลับเป็น map — ค่าที่รูปไม่ตรงถูกทิ้ง (ถือว่ายังไม่เคยตรวจ) */

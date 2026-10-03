@@ -32,8 +32,11 @@ import {
   closeFormMode,
   closeMissingSummary,
   hasCloseFormRevision,
+  rejectedUploadPath,
   removeMediaAt,
   resubmitClosePayload,
+  uploadDisplayName,
+  withoutUpload,
   type CloseFormState,
 } from '@/lib/field/close-form'
 import {
@@ -368,23 +371,55 @@ export function CloseCaseModal({
   const dragStart = useRef<{ x: number; y: number } | null>(null)
 
   /**
+   * server ปัดไฟล์ (`UPLOAD_*` + path) → เอาไฟล์นั้นออกจากฟอร์มทันทีแล้วบอกชื่อไฟล์ — ไม่ถือไว้ให้ autosave
+   * ล้มซ้ำทุกครั้ง (UAT BUG-070) · คืนฟอร์มที่เอาออกแล้ว หรือ `null` = error นี้ไม่ใช่ไฟล์ในฟอร์ม
+   */
+  const dropRejectedUpload = useCallback(
+    (current: CloseFormState, error: ApiCallError): CloseFormState | null => {
+      const path = rejectedUploadPath(error)
+      if (path === null) return null
+      const cleaned = withoutUpload(current, path)
+      if (cleaned === current) return null
+      setForm((latest) => withoutUpload(latest, path))
+      showToast({
+        tone: 'error',
+        title: `ไฟล์ "${uploadDisplayName(path)}" ถูกปฏิเสธ — นำออกจากฟอร์มแล้ว`,
+        description: `${error.message} — กรุณาแนบไฟล์ใหม่แทน`,
+      })
+      return cleaned
+    },
+    [showToast],
+  )
+
+  /**
    * บันทึก draft เงียบ ๆ ทุกครั้งที่ฟอร์มเปลี่ยน (mockup `saveDraftSilently`) — โหมดตีกลับไม่มี draft
    * คืน `false` เมื่อบันทึกล้ม (โชว์ toast error แล้ว) — ปุ่ม "บันทึก Draft" ห้ามโชว์สำเร็จทับ (UAT BUG-053)
+   * ไฟล์ที่ server ปัดถูกเอาออกแล้วบันทึกชุดที่เหลือ (UAT BUG-070) — คืน `false` เพื่อให้ผู้ใช้เห็นฟอร์มก่อนปิด
    */
   const persistDraft = useCallback(
     async (next: CloseFormState, options?: { revision?: boolean }): Promise<boolean> => {
       if (options?.revision === true) return true
-      const response = await callApi<FieldCloseDraftResultDto>(
-        apiPath('field.closeDraft', { id: caseId }),
-        jsonRequest('POST', closeDraftPayload(next)),
-      )
-      if (response.error !== undefined) {
-        showToast({ tone: 'error', title: response.error.title, description: response.error.message })
-        return false
+      let payloadForm = next
+      let dropped = false
+      // ไฟล์ปลอมหลายไฟล์ = server ปัดทีละไฟล์ — วนจนชุดที่เหลือผ่าน (เพดานเท่าจำนวนไฟล์ในฟอร์ม)
+      const maxAttempts = next.photos.length + next.videos.length + next.productPhotos.length + 2
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const response = await callApi<FieldCloseDraftResultDto>(
+          apiPath('field.closeDraft', { id: caseId }),
+          jsonRequest('POST', closeDraftPayload(payloadForm)),
+        )
+        if (response.error === undefined) return !dropped
+        const cleaned = dropRejectedUpload(payloadForm, response.error)
+        if (cleaned === null) {
+          showToast({ tone: 'error', title: response.error.title, description: response.error.message })
+          return false
+        }
+        payloadForm = cleaned
+        dropped = true
       }
-      return true
+      return false
     },
-    [caseId, showToast],
+    [caseId, dropRejectedUpload, showToast],
   )
 
   // โหลดรายละเอียด + ดึง GPS เป็นจุดเริ่มเดินทางทันทีที่เปิดฟอร์มครั้งแรกของเคส (`41` §7.6/§8)
@@ -612,6 +647,12 @@ export function CloseCaseModal({
 
       if (response.error !== undefined || response.data === undefined) {
         setShowMissing(true)
+        const cleaned = response.error === undefined ? null : dropRejectedUpload(form, response.error)
+        if (cleaned !== null) {
+          // เก็บ draft ชุดที่เอาไฟล์ออกแล้ว — ไม่งั้นเปิดฟอร์มใหม่ไฟล์ที่ถูกปัดจะกลับมา
+          void persistDraft(cleaned, { revision: mode.revision })
+          return
+        }
         showToast({
           tone: 'error',
           title: response.error?.title ?? 'บันทึกไม่สำเร็จ',

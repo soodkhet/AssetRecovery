@@ -45,6 +45,13 @@ describe('verifyUploadedFile', () => {
     )
   })
 
+  it('error แนบ path ของไฟล์ที่ถูกปัด ให้ฟอร์มเอาไฟล์นั้นออกได้ (UAT BUG-070)', async () => {
+    putFakeUpload(path, sampleBytes('text'))
+    const error = await verifyUploadedFile(path, rule).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(ModuleError)
+    expect((error as ModuleError<string>).context).toMatchObject({ path })
+  })
+
   it('hash จาก browser ไม่ตรง = UPLOAD_HASH_MISMATCH', async () => {
     putFakeUpload(path, sampleBytes('pdf'))
     expect(await codeOf(() => verifyUploadedFile(path, rule, sha256Of('อื่น')))).toBe('UPLOAD_HASH_MISMATCH')

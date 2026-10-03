@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  rejectedUploadPath,
+  uploadDisplayName,
+  withoutUpload,
   EMPTY_CLOSE_FORM,
   appendMedia,
   canSubmitCloseForm,
@@ -324,5 +327,35 @@ describe('ตัวช่วยรายการสื่อ', () => {
     expect(removeMediaAt(list, 0)).toEqual(['b'])
     expect(removeMediaAt(list, 9)).toEqual(['a', 'b'])
     expect(list).toEqual(['a', 'b'])
+  })
+})
+
+describe('ไฟล์ที่ server ปัดต้องออกจากฟอร์ม ไม่ถือไว้ให้ autosave ล้มซ้ำ (UAT BUG-070)', () => {
+  const bad = 'cases/c1/field_evidence/photo/0b6f3c1e-2a4d-4f7e-9c1a-1234567890ab-fake.jpg'
+  const form: CloseFormState = {
+    ...EMPTY_CLOSE_FORM,
+    outcome: 'closed_success',
+    photos: ['p-ok.jpg', bad],
+    videos: ['v.mp4'],
+  }
+
+  it('อ่าน path จาก error กลุ่ม UPLOAD_* เท่านั้น', () => {
+    expect(rejectedUploadPath({ code: 'UPLOAD_FILE_TYPE_INVALID', payload: { path: bad } })).toBe(bad)
+    expect(rejectedUploadPath({ code: 'CLOSE_PHOTO_REQUIRED', payload: { path: bad } })).toBeNull()
+    expect(rejectedUploadPath({ code: 'UPLOAD_FILE_NOT_FOUND' })).toBeNull()
+    expect(rejectedUploadPath(undefined)).toBeNull()
+  })
+
+  it('เอาไฟล์ออกจากทุกช่อง · ไม่อยู่ในฟอร์มคืนตัวเดิม', () => {
+    const cleaned = withoutUpload(form, bad)
+    expect(cleaned.photos).toEqual(['p-ok.jpg'])
+    expect(cleaned.videos).toEqual(['v.mp4'])
+    expect(withoutUpload(form, 'อื่น')).toBe(form)
+    expect(withoutUpload({ ...form, audioUrl: bad }, bad).audioUrl).toBeNull()
+  })
+
+  it('ชื่อไฟล์ที่ผู้ใช้เห็นตัด uuid หน้าออก', () => {
+    expect(uploadDisplayName(bad)).toBe('fake.jpg')
+    expect(uploadDisplayName('a/b/plain.png')).toBe('plain.png')
   })
 })
