@@ -208,15 +208,17 @@ type CaseListRow = Prisma.CaseGetPayload<{ select: typeof listSelect }>
 export type CaseDetailRow = Prisma.CaseGetPayload<{ select: typeof detailSelect }>
 
 /**
- * ตัดฟิลด์ภายในออกก่อนส่งให้ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`97` §6.1 "**ไม่แสดง**: … ทีมที่มอบหมาย"
- * · §6.6 "Service Fee Template … ชื่อ+model เท่านั้น **ไม่แสดงอัตราละเอียด**")
+ * ตัดฟิลด์ภายในออกก่อนส่งให้ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (`97` §6.1 "**ไม่แสดง**: … ทีมที่มอบหมาย")
+ * — **ตัวเดียว**ที่ทุก endpoint ฝั่งบริษัทใช้ (รายการ + รายละเอียด) เพื่อให้สม่ำเสมอ (UAT BUG-033)
  *
- * `caseScopeWhere()` คุมว่าเห็น **แถวไหน** เท่านั้น — ก่อน Phase 8.3 แถวที่เห็นยังพก
- * อัตราค่าบริการที่เราคิดกับบริษัทนั้น, ประมาณการรายได้, note ภายใน, ประวัติแก้ไข
- * (พร้อมชื่อพนักงานหลังบ้าน) และชื่อทีมติดออกไปด้วย (Final Test ด่าน 4)
+ * ค่าบริการของเคสตัวเอง **เห็นครบ** — โมเดล อัตรา ฐาน เกณฑ์ คิดเมื่อไม่สำเร็จ และยอดประมาณการ
+ * (มติ PO 03/10/2569 UAT Q10 · `97` §6.6 v-ล่าสุด) · ซ่อนเฉพาะข้อมูลภายใน: รหัส/ชื่อ template ที่ใช้คิด,
+ * ผู้พิจารณา/เวลาพิจารณา/บันทึกของผู้พิจารณา, ทีม, ประวัติแก้ไข และชื่อพนักงานหลังบ้าน
+ *
+ * `caseScopeWhere()` คุมว่าเห็น **แถวไหน** (เฉพาะบริษัทตัวเอง) — ฟังก์ชันนี้คุมว่าเห็น **ฟิลด์ไหน**
  */
 function redactCaseListForCompany(item: CaseListItemDto): CaseListItemDto {
-  return { ...item, suggestedTeamName: null, assignedTeamName: null, createdByName: '' }
+  return { ...item, suggestedTeamName: null, assignedTeamName: null, createdByName: '', reviewedAt: null }
 }
 
 function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
@@ -226,10 +228,8 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     suggestedTeamId: null,
     assignedTeamId: null,
     teamChangeReason: null,
-    // ราคาที่เราคิดกับบริษัท: เห็น model ได้ แต่ฐาน/อัตรา/ประมาณการเป็นข้อมูลภายใน (§6.6)
-    serviceFeeBaseSatang: null,
-    serviceFeeRatePct: null,
-    projectedRevenueSatang: null,
+    // รหัส template + ที่มาดิบ (มี template id/ชื่อ) = ข้อมูลภายใน · โมเดล/ฐาน/อัตรา/ยอดเห็นครบ (UAT Q10)
+    serviceFeeTemplateId: null,
     projectedRevenueSource: null,
     projectedRevenueSourceLabel: null,
     reviewNote: null,

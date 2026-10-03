@@ -369,11 +369,11 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
   })
 
   /**
-   * Final Test ด่าน 4 (Phase 8.3) — scope ระดับแถวคุมแค่ว่า "เห็นเคสไหน"
-   * เคสที่เห็นยังพกอัตราค่าบริการที่เราคิดกับบริษัทนั้น + note ภายใน + ชื่อพนักงานหลังบ้านออกไปด้วย
-   * (`97` §6.6 "ชื่อ+model เท่านั้น **ไม่แสดงอัตราละเอียด**" · §6.1 ไม่แสดงทีมที่มอบหมาย)
+   * Final Test ด่าน 4 (Phase 8.3) + มติ PO 03/10/2569 (UAT Q10 · BUG-033) — scope ระดับแถวคุมแค่ว่า "เห็นเคสไหน"
+   * ฝั่งบริษัทเห็นค่าบริการของเคสตัวเอง **ครบ** (โมเดล อัตรา ฐาน ยอด) แต่ข้อมูลภายในต้องถูกตัดเสมอ:
+   * รหัส template/ที่มาดิบ, ผู้พิจารณา/เวลาพิจารณา/note, ประวัติแก้ไข, ทีม, ชื่อพนักงานหลังบ้าน
    */
-  it('Company User ต้องไม่เห็นอัตราค่าบริการ/ประมาณการ/note ภายใน/ประวัติแก้ไข (`97` §6.6)', async () => {
+  it('Company User เห็นค่าบริการเคสตัวเองครบ แต่ไม่เห็นข้อมูลภายใน · เคสบริษัทอื่นไม่ leak (UAT Q10 · BUG-033)', async () => {
     const caseId = await seedCase('SF-2026-2321', { withDocuments: true })
     try {
       const { getCase, listCases } = await import('@/lib/cases/queries')
@@ -385,6 +385,8 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       const asGlobal = await getCase(actor, caseId)
       expect(asGlobal.serviceFeeRatePct).not.toBeNull()
       expect(asGlobal.serviceFeeModelSnapshot).not.toBeNull()
+      expect(asGlobal.serviceFeeTemplateId).not.toBeNull()
+      expect(asGlobal.reviewedAt).not.toBeNull()
       expect(asGlobal.createdByName).not.toBe('')
 
       const companyUser: SessionUser = {
@@ -393,21 +395,35 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
         scope: { kind: 'company', teamIds: [], companyId: COMPANY_ID, userId: USER_ID },
       }
       const detail = await getCase(companyUser, caseId)
-      expect(detail.serviceFeeRatePct).toBeNull()
-      expect(detail.serviceFeeBaseSatang).toBeNull()
-      expect(detail.projectedRevenueSatang).toBeNull()
+      // ค่าบริการของเคสตัวเองเห็นครบ (UAT Q10)
+      expect(detail.serviceFeeModelSnapshot).toBe(asGlobal.serviceFeeModelSnapshot)
+      expect(detail.serviceFeeRatePct).toBe(asGlobal.serviceFeeRatePct)
+      expect(detail.serviceFeeBaseSatang).toBe(asGlobal.serviceFeeBaseSatang)
+      expect(detail.serviceFeeBasisSnapshot).toBe(asGlobal.serviceFeeBasisSnapshot)
+      expect(detail.serviceFeeChargeOnFail).toBe(asGlobal.serviceFeeChargeOnFail)
+      expect(detail.projectedRevenueSatang).toBe(asGlobal.projectedRevenueSatang)
+      // ข้อมูลภายในถูกตัด
+      expect(detail.serviceFeeTemplateId).toBeNull()
       expect(detail.projectedRevenueSource).toBeNull()
+      expect(detail.projectedRevenueSourceLabel).toBeNull()
+      expect(detail.reviewedAt).toBeNull()
       expect(detail.reviewNote).toBeNull()
       expect(detail.editHistory).toEqual([])
       expect(detail.assignedTeamId).toBeNull()
       expect(detail.assignedTeamName).toBeNull()
       expect(detail.createdByName).toBe('')
-      // model ยังเห็นได้ตาม §6.6 ("ชื่อ+model เท่านั้น")
-      expect(detail.serviceFeeModelSnapshot).toBe(asGlobal.serviceFeeModelSnapshot)
+
+      // บริษัทอื่นเปิดเคสนี้ไม่ได้ = ไม่พบ (ไม่ leak ว่ามีอยู่)
+      const otherCompanyViewer: SessionUser = {
+        ...companyUser,
+        scope: { kind: 'company', teamIds: [], companyId: '00000000-0000-4000-8000-0000000233ff', userId: USER_ID },
+      }
+      await expect(getCase(otherCompanyViewer, caseId)).rejects.toMatchObject({ code: 'CASE_NOT_FOUND' })
 
       const [listItem] = (await listCases(companyUser, caseListQuerySchema.parse({}))).items
       expect(listItem?.createdByName).toBe('')
       expect(listItem?.assignedTeamName).toBeNull()
+      expect(listItem?.reviewedAt).toBeNull()
     } finally {
       await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${caseId}'`)
     }
