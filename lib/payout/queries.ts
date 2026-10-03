@@ -7,7 +7,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
-import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
+import { calculatePayeeBatchWht, type PayeeWhtResult } from '@/lib/finance/wht-calc'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
@@ -64,7 +64,7 @@ import type { WhtBasis } from '@/lib/settings/tax-profile'
  * ### กติกาที่ห้ามหลุด
  * - **payee ที่ยังไม่ยืนยัน ห้ามเข้ารอบ** (`17` §10) — ตัดสินจาก `payee_profiles.is_verified`
  *   ผ่านยาม `assertPayeesVerified()` (`lib/payout/payout.ts`) ห้ามเช็คคอลัมน์ดิบเอง
- * - **WHT คิดที่ `calculateWhtForPayee()` (3.1) เท่านั้น** — กฎ "Payee ชนะ Plan" มีบ้านเดียว
+ * - **WHT คิดที่ `calculatePayeeBatchWht()` (3.1) เท่านั้น** — กฎ "Payee ชนะ Plan" + เกณฑ์ต่อ payee ต่อรอบ (UAT Q5) มีบ้านเดียว
  *   · ยอดรวมของรอบมาจาก `summarizePayoutBatch()` (`22` §6.10) ห้ามบวกเอง
  * - **1 รายการเข้าได้รอบเดียว** — ยึดสิทธิ์ด้วย `updateMany(... payoutBatchItemId: null)` ในทรานแซกชัน
  *   (สองรอบที่สร้างพร้อมกันจะมีรอบเดียวที่ได้รายการนั้น อีกรอบ rollback ทั้งก้อน)
@@ -311,14 +311,37 @@ async function collectExpenseCandidates(
     orderBy: [{ expenseDate: 'asc' }],
   })
 
-  return rows.map((row) => {
-    const wht = calculateWhtForPayee({
-      grossSatang: row.grossSatang,
-      source: {
-        payeeTaxProfile: payeeTaxValues(row.payee),
-        planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
-      },
+  // `22` §6.9 — มติ PO 03/10/2569 (UAT Q5, BUG-014): เกณฑ์ขั้นต่ำเทียบกับ **ฐานรวมของ payee ทั้งรอบจ่าย**
+  // แล้วกระจายภาษีกลับลงรายการ (`calculatePayeeBatchWht()`) — payee หนึ่งคนอยู่ฝั่งเดียวเสมอ
+  // (`resolvePayoutSide()` อิงทีม/role ของ payee) ⇒ จัดกลุ่มก่อนคัดฝั่งได้โดยไม่ปนรอบ
+  const indicesByPayee = new Map<string, number[]>()
+  rows.forEach((row, index) => {
+    const members = indicesByPayee.get(row.payee.id) ?? []
+    members.push(index)
+    indicesByPayee.set(row.payee.id, members)
+  })
+  const whtByIndex = new Array<PayeeWhtResult | undefined>(rows.length)
+  for (const members of indicesByPayee.values()) {
+    const { lines } = calculatePayeeBatchWht(
+      members.map((index) => {
+        const row = rows[index]!
+        return {
+          grossSatang: row.grossSatang,
+          source: {
+            payeeTaxProfile: payeeTaxValues(row.payee),
+            planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
+          },
+        }
+      }),
+    )
+    members.forEach((index, position) => {
+      whtByIndex[index] = lines[position]
     })
+  }
+
+  return rows.map((row, index) => {
+    const wht = whtByIndex[index]
+    if (wht === undefined) throw new Error(`คำนวณ WHT ไม่ครบ — expense ${row.id}`)
     return {
       source: 'expense',
       sourceId: row.id,

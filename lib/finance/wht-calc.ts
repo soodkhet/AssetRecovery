@@ -143,6 +143,115 @@ export function calculateWhtForPayee(input: {
   return { ...calculation, rate }
 }
 
+export interface PayeeBatchWhtItem {
+  /** ยอดก่อนหักภาษีของรายการ (`payout_batch_items.gross_satang`) */
+  grossSatang: number
+  vatSatang?: number
+  /** แหล่งอัตรา — Tax Profile ของ payee (เหมือนกันทุกรายการของ payee) + อัตราแผนที่ snapshot ไว้กับรายการ */
+  source: WhtRateSource
+}
+
+export interface PayeeBatchWht {
+  /** ผลต่อรายการ **ลำดับเดียวกับ input** — `net = gross − wht` ทุกแถว */
+  lines: PayeeWhtResult[]
+  /** ฐานหักรวมของ payee ในรอบจ่าย — ตัวที่ใช้เทียบเกณฑ์ขั้นต่ำ */
+  totalBaseSatang: number
+  /** ภาษีรวมของ payee ในรอบ = ผลรวม `lines[].whtSatang` เป๊ะ (ไม่มีเศษสตางค์หาย) */
+  totalWhtSatang: number
+  /** true = ฐานรวมของ payee ต่ำกว่าเกณฑ์ ⇒ ไม่หักทุกรายการ */
+  belowThreshold: boolean
+}
+
+/**
+ * **WHT ต่อ payee ต่อรอบจ่าย** (`22` §6.9 — มติ PO 03/10/2569 UAT Q5, BUG-014)
+ *
+ * เกณฑ์ขั้นต่ำ (ค่าเริ่มต้น ฿1,000) เทียบกับ **ฐานรวมของ payee ทั้งรอบจ่าย** ไม่ใช่ต่อรายการ แล้วกระจาย
+ * ภาษีรวมกลับลงรายการ:
+ * 1. resolve อัตราต่อรายการด้วย `resolveWhtRate()` (Payee ชนะ Plan — `18` §6.3)
+ * 2. ฐานรวม < เกณฑ์ ⇒ ทุกรายการ wht = 0
+ * 3. ไม่งั้นจัดกลุ่มตามอัตรา → ภาษีของกลุ่ม = `pctOfSatang(ฐานรวมของกลุ่ม, อัตรา)` (ปัดครั้งเดียวต่อกลุ่ม)
+ * 4. กระจายภาษีของกลุ่มลงรายการตามสัดส่วนฐาน ด้วย **largest remainder** (ปัดลงก่อน แล้วแจกเศษทีละ
+ *    1 สตางค์ให้รายการที่เศษมากสุด · เสมอกันให้รายการที่มาก่อน) ⇒ ผลรวมรายการ = ภาษีของกลุ่มเป๊ะ
+ *
+ * ทุกรายการต้องเป็นของ payee เดียวกัน (ผู้เรียกจัดกลุ่มเอง) — เกณฑ์ขั้นต่ำต่างกันในชุดเดียว = ข้อมูลพัง
+ */
+export function calculatePayeeBatchWht(items: readonly PayeeBatchWhtItem[]): PayeeBatchWht {
+  const prepared = items.map((item) => {
+    assertNonNegativeSatang(item.grossSatang, 'ยอดก่อนหักภาษี')
+    assertNonNegativeSatang(item.vatSatang ?? 0, 'VAT ของรายการ')
+    const rate = resolveWhtRate(item.source)
+    const baseSatang = rate.whtBasis === 'gross_amount' ? item.grossSatang + (item.vatSatang ?? 0) : item.grossSatang
+    return { item, rate, baseSatang }
+  })
+  if (prepared.length === 0) return { lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true }
+
+  const threshold = prepared[0]!.rate.minThresholdSatang
+  if (prepared.some((entry) => entry.rate.minThresholdSatang !== threshold)) {
+    throw new RangeError('calculatePayeeBatchWht: เกณฑ์ขั้นต่ำ WHT ไม่เท่ากันภายใน payee เดียว — ต้องจัดกลุ่มต่อ payee ก่อน')
+  }
+  const totalBaseSatang = prepared.reduce((sum, entry) => sum + entry.baseSatang, 0)
+  const belowThreshold = totalBaseSatang < threshold
+
+  const whtByIndex = new Array<number>(prepared.length).fill(0)
+  if (!belowThreshold) {
+    const groups = new Map<number, number[]>()
+    prepared.forEach((entry, index) => {
+      const members = groups.get(entry.rate.whtPct) ?? []
+      members.push(index)
+      groups.set(entry.rate.whtPct, members)
+    })
+    for (const [pct, members] of groups) {
+      const groupBase = members.reduce((sum, index) => sum + prepared[index]!.baseSatang, 0)
+      const groupWht = pctOfSatang(groupBase, pct)
+      allocateLargestRemainder(groupWht, members.map((index) => prepared[index]!.baseSatang)).forEach(
+        (share, position) => {
+          whtByIndex[members[position]!] = share
+        },
+      )
+    }
+  }
+
+  const lines = prepared.map((entry, index): PayeeWhtResult => {
+    const whtSatang = whtByIndex[index]!
+    return {
+      baseSatang: entry.baseSatang,
+      whtSatang,
+      netSatang: entry.item.grossSatang - whtSatang,
+      belowThreshold,
+      whtPctUsed: entry.rate.whtPct,
+      whtBasisUsed: entry.rate.whtBasis,
+      rate: entry.rate,
+    }
+  })
+  return { lines, totalBaseSatang, totalWhtSatang: whtByIndex.reduce((sum, value) => sum + value, 0), belowThreshold }
+}
+
+/**
+ * แบ่ง `total` สตางค์ตามสัดส่วน `weights` แบบ largest remainder — ผลรวมเท่า `total` เสมอ
+ * ใช้ BigInt คูณกันเพื่อไม่ให้ `total × weight` ล้น 2^53 (ยอดระดับร้อยล้านสตางค์ × ร้อยล้าน)
+ */
+function allocateLargestRemainder(total: number, weights: readonly number[]): number[] {
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0)
+  if (weightSum === 0) return weights.map(() => 0)
+  const bigTotal = BigInt(total)
+  const bigSum = BigInt(weightSum)
+  const shares = weights.map((weight) => {
+    const numerator = bigTotal * BigInt(weight)
+    return { floor: numerator / bigSum, remainder: numerator % bigSum }
+  })
+  let leftover = total - shares.reduce((sum, share) => sum + Number(share.floor), 0)
+  const order = shares
+    .map((share, index) => ({ index, remainder: share.remainder }))
+    .sort((a, b) => (a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1))
+  const result = shares.map((share) => Number(share.floor))
+  for (const { index } of order) {
+    if (leftover <= 0) break
+    result[index]! += 1
+    leftover -= 1
+  }
+  return result
+}
+
 /**
  * **A1 — WHT ที่ "ลูกค้าหักจากเรา" ก่อนโอน** (มติ PO 2026-08-12 · `02_OPEN_DECISIONS` A1)
  *

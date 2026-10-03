@@ -331,6 +331,31 @@ suite('batch builder (`17` §9)', () => {
     )
   })
 
+  it('UAT Q5 เกณฑ์ ฿1,000 ต่อ payee ต่อรอบ: 3 รายการ × ฿600 อัตรา 3% → หักรวม ฿54 (รายการละ ฿18)', async () => {
+    const ids = ['00000000-0000-4000-8000-0000000034d1', '00000000-0000-4000-8000-0000000034d2', '00000000-0000-4000-8000-0000000034d3']
+    for (const id of ids) await seedExpense({ id, payeeId: PAYEE_OUT_ID, grossSatang: 60_000 })
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+
+    expect(batch.grossSatang).toBe(180_000)
+    expect(batch.whtSatang).toBe(5_400)
+    expect(batch.netSatang).toBe(174_600)
+    expect(batch.items.map((item) => item.whtSatang)).toEqual([1_800, 1_800, 1_800])
+    for (const item of batch.items) expect(item.netSatang).toBe(item.grossSatang - item.whtSatang)
+  })
+
+  it('UAT Q5 ฐานรวมของ payee ต่ำกว่าเกณฑ์ → ไม่หัก · เงินทดรองไม่นับรวมฐาน', async () => {
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034d4', payeeId: PAYEE_OUT_ID, grossSatang: 35_000 })
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034d5', payeeId: PAYEE_OUT_ID, grossSatang: 35_000 })
+    await seedAdvance({ id: '00000000-0000-4000-8000-0000000034d6', payeeId: PAYEE_OUT_ID, satang: 300_000 })
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+
+    expect(batch.itemCount).toBe(3)
+    expect(batch.whtSatang).toBe(0)
+    expect(batch.netSatang).toBe(370_000)
+  })
+
   it('เงินทดรองเข้ารอบจ่ายได้ และไม่ถูกหัก WHT (A4 — ไม่ใช่เงินได้)', async () => {
     await seedAdvance({ id: '00000000-0000-4000-8000-0000000034c6', payeeId: PAYEE_OUT_ID, satang: 200_000 })
 
