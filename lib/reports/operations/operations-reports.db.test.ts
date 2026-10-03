@@ -421,7 +421,8 @@ suite('O3 — ปริมาณงานรายพนักงาน', () => 
       caseCount: 2,
       successCount: 1,
       openCount: 1,
-      successPct: 50,
+      // สำเร็จ ÷ ปิดแล้ว (มติ PO 03/10/2569 UAT Q20) — งานที่ค้างไม่เข้าตัวหาร
+      successPct: 100,
     })
   })
 

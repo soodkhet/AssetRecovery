@@ -58,7 +58,7 @@ async function loadTeamAgents(organizationId: string, teamId: string) {
  * (ทีมหนึ่งมีพนักงานหลักสิบคน จึงยิงเป็นชุดต่อคนได้ · ถ้าทีมโตกว่านี้ค่อยย้ายไป materialized view)
  */
 async function agentCounts(organizationId: string, agentId: string) {
-  const [activeCaseCount, assignedCount, successCount] = await Promise.all([
+  const [activeCaseCount, closedCount, successCount] = await Promise.all([
     prisma.case.count({
       where: {
         organizationId,
@@ -67,13 +67,16 @@ async function agentCounts(organizationId: string, agentId: string) {
         assignments: { some: { agentId, status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] } } },
       },
     }),
-    prisma.case.count({ where: { organizationId, assignments: { some: { agentId } } } }),
-    // "เคสที่ outcome สำเร็จ" ตามไฟล์ 43 = `cases.outcome = closed_success` (`02` §3 `case_outcome`)
+    // มติ PO 03/10/2569 (UAT Q20): ตัวหาร = เคสที่ **คนนี้** ปิดแล้ว (สำเร็จ/ไม่สำเร็จ) — งานที่ยังค้าง
+    // และงานที่ถูกโอนออก (`reassigned_away` — `41` §10) ไม่เข้าตัวหาร · ตัวตั้ง = เคสที่คนนี้ปิดสำเร็จ
     prisma.case.count({
-      where: { organizationId, outcome: 'closed_success', assignments: { some: { agentId } } },
+      where: { organizationId, assignments: { some: { agentId, status: { in: ['closed_success', 'closed_fail'] } } } },
+    }),
+    prisma.case.count({
+      where: { organizationId, assignments: { some: { agentId, status: 'closed_success' } } },
     }),
   ])
-  return { activeCaseCount, assignedCount, successCount }
+  return { activeCaseCount, closedCount, successCount }
 }
 
 /** `GET /api/teams/:team_id/agents` (`40` §17.1) */

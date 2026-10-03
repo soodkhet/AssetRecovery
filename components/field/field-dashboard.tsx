@@ -12,7 +12,7 @@ import { callApi } from '@/lib/api/types'
 import { buildFieldDashboard, buildSevenDayTrend, successRatePct } from '@/lib/field/dashboard'
 import type { FieldCaseListItemDto, FieldCaseListResultDto, FieldIncomeSummaryDto } from '@/lib/field/types'
 import { toInputDate } from '@/lib/format/datetime'
-import { fmtSatangSymbol } from '@/lib/format/money'
+import { fmtRatioPct, fmtSatangSymbol } from '@/lib/format/money'
 
 /**
  * หน้าแรกของ Field Tracker (`41` §7.1) — 5 บล็อก
@@ -176,7 +176,7 @@ export function FieldDashboard() {
 
   const rateCard = (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
-      <div className="text-[28px] font-extrabold text-slate-900">{rate === null ? '-' : `${rate}%`}</div>
+      <div className="text-[28px] font-extrabold text-slate-900">{fmtRatioPct(rate)}</div>
       <div className="text-[11px] font-bold text-slate-400">% ความสำเร็จสะสม</div>
     </div>
   )

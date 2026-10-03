@@ -6,7 +6,7 @@ import {
   bangkokBusinessDate,
   ensureAgentPayeeId,
   FUEL_DISTANCE_JOB_TYPE,
-  resolvePlanSnapshot,
+  resolveRoundPricing,
   type ExpenseTxClient,
 } from '@/lib/field/expense-queries'
 import { Prisma } from '@/lib/generated/prisma/client'
@@ -177,12 +177,15 @@ async function createFuelExpense(params: {
   ])
   if (origin === null) return 'skipped'
 
-  const closedAt = assignment.completedAt ?? params.now
-  const plan = await resolvePlanSnapshot(prisma as ExpenseTxClient, {
+  // ฐานราคา = แผน (เวอร์ชัน) + วันปิดงานครั้งแรกของรอบนี้ — รอบที่ resubmit แล้วก็ยังยึดค่าเดิม
+  // (มติ PO 03/10/2569 UAT Q7 · `41` §10.1) ไม่ใช่ `completed_at` ที่ขยับตามการส่งใหม่
+  const pricing = await resolveRoundPricing(prisma as ExpenseTxClient, {
     organizationId: params.organizationId,
-    planId,
-    onDate: closedAt,
+    assignmentId: assignment.id,
+    teamPlanId: planId,
   })
+  const closedAt = pricing.pricedAt ?? assignment.completedAt ?? params.now
+  const plan = pricing.plan
   if (plan === null) return 'skipped'
 
   // โยน DistanceUnavailableError ออกไปให้ตัว job จัดการ retry (ยังไม่สร้างอะไรทั้งนั้น)

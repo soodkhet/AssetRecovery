@@ -1,30 +1,38 @@
 /**
- * % ความสำเร็จของพนักงาน (`40` §6.2 · §11) — **ค่ากลางของทั้งระบบ**
+ * % ความสำเร็จ (`40` §6.2 · §11) — **ค่ากลางของทั้งระบบ** (การ์ดพนักงาน/Kanban/แอปพนักงาน/รายงาน O1/O3/E)
  *
- * "% ความสำเร็จสะสมตลอดการทำงาน = (เคสที่ outcome สำเร็จ ÷ เคสที่ได้รับมอบหมายทั้งหมดสะสม) × 100"
+ * มติ PO 03/10/2569 (UAT Q20 · BUG-060):
+ * "% ความสำเร็จ = (เคสที่ปิดสำเร็จ ÷ เคสที่ปิดแล้ว (สำเร็จ + ไม่สำเร็จ)) × 100"
+ * — เคสที่ยังค้าง/ถูกโอนออก (`reassigned_away`) ไม่เข้าตัวหาร · **ยังไม่มีเคสปิด = `null` แสดง "N/A" ทุกจุด**
+ * (เดิมหารด้วยเคสที่ได้รับมอบหมายทั้งหมด ⇒ ยังไม่ปิดสักเคสก็ขึ้น "0.00%")
  *
- * ⚠️ Report รายบุคคล/ทีมในอนาคต (`96`) ต้องเรียกตัวนี้ ห้ามคำนวณสูตรซ้ำในโมดูลตัวเอง
- * — ตัวนับจริงจาก DB อยู่ที่ `lib/assignments/agent-queries.ts` (`agentPerformance()`)
+ * ⚠️ ห้ามคำนวณสูตรซ้ำในโมดูลอื่น — เรียกตัวนี้ แล้วแสดงด้วย `fmtRatioPct()` (`lib/format/money.ts`) ตัวเดียว
+ * — ตัวนับจริงจาก DB ของการ์ดพนักงานอยู่ที่ `lib/assignments/agent-queries.ts` (`agentCounts()`)
  *
- * **pure ล้วน** — ไม่มีการหารศูนย์: ไม่เคยได้รับมอบหมายเลย → `null` (หน้าจอแสดง "N/A" ด้วย `fmtRatioPct`)
+ * **pure ล้วน** — ไม่มีการหารศูนย์
  */
 
 export interface SuccessRateInput {
-  /** จำนวนเคสที่ปิดด้วยผลสำเร็จ (`cases.outcome = 'success'` — ไฟล์ 43) */
+  /** จำนวนเคสที่ปิดด้วยผลสำเร็จ */
   successCount: number
-  /** จำนวนเคสที่เคยได้รับมอบหมายทั้งหมดสะสม (นับเคสไม่ซ้ำ ไม่ใช่จำนวนแถว assignment) */
-  assignedCount: number
+  /** จำนวนเคสที่ปิดแล้ว (สำเร็จ + ไม่สำเร็จ · นับเคสไม่ซ้ำ) */
+  closedCount: number
 }
 
 /** ที่มาของตัวเลข — เก็บคู่กับค่าตาม `40` §6.3 (`calculation_source`) */
-export const SUCCESS_RATE_SOURCE = '40 §6.2 lifetime (success_cases / assigned_cases)'
+export const SUCCESS_RATE_SOURCE = '40 §6.2 lifetime (success_cases / closed_cases) — มติ PO 03/10/2569 UAT Q20'
 
-/** ปัดเป็นทศนิยม 1 ตำแหน่ง — 7/10 = 70 · 2/3 = 66.7 */
+/** ปัดเป็นทศนิยม 1 ตำแหน่ง — 7/10 = 70 · 2/3 = 66.7 · ยังไม่มีเคสปิด = `null` */
 export function successRate(input: SuccessRateInput): number | null {
-  const { successCount, assignedCount } = input
-  if (!Number.isFinite(assignedCount) || assignedCount <= 0) return null
-  const capped = Math.min(Math.max(successCount, 0), assignedCount)
-  return Math.round((capped / assignedCount) * 1000) / 10
+  const { successCount, closedCount } = input
+  if (!Number.isFinite(closedCount) || closedCount <= 0) return null
+  const capped = Math.min(Math.max(successCount, 0), closedCount)
+  return Math.round((capped / closedCount) * 1000) / 10
+}
+
+/** รูปที่ใช้บ่อย — สำเร็จ/ไม่สำเร็จแยกกัน (ตัวหาร = ผลรวม) */
+export function successRateOf(successCount: number, failCount: number): number | null {
+  return successRate({ successCount, closedCount: successCount + failCount })
 }
 
 export interface AgentDecisionSupport {
@@ -39,7 +47,7 @@ export interface AgentDecisionSupport {
 export function toDecisionSupport(input: {
   activeCaseCount: number
   successCount: number
-  assignedCount: number
+  closedCount: number
   coveredProvinces: readonly string[]
 }): AgentDecisionSupport {
   return {

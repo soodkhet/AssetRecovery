@@ -1,3 +1,4 @@
+import { successRateOf } from '@/lib/assignments/success-rate'
 import type { FieldCaseListItemDto } from '@/lib/field/types'
 
 /**
@@ -88,11 +89,9 @@ export function buildSevenDayTrend(
 }
 
 /**
- * % ความสำเร็จสะสม (`41` §6.8) — คืน `null` เมื่อยังไม่เคยปิดงาน (**ห้ามหารศูนย์** Rule 01)
- * หน้าจอแสดง `-` แทนเมื่อเป็น `null`
+ * % ความสำเร็จสะสม (`41` §6.8) — เรียก `successRate()` ตัวกลางของระบบ (สำเร็จ ÷ ปิดแล้ว · มติ PO
+ * 03/10/2569 UAT Q20) · ยังไม่เคยปิดงาน = `null` ⇒ หน้าจอแสดง "N/A" ด้วย `fmtRatioPct()` เหมือนทุกจุด
  */
 export function successRatePct(successCount: number, failCount: number): number | null {
-  const total = successCount + failCount
-  if (total === 0) return null
-  return Math.round((successCount / total) * 100)
+  return successRateOf(successCount, failCount)
 }

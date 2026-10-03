@@ -49,8 +49,14 @@ const UNASSIGNED_TEAM_LABEL = 'ไม่สังกัดทีม'
 const BREAKDOWN_TYPES = ['commission', 'fuel', 'allowance'] as const
 type BreakdownType = (typeof BREAKDOWN_TYPES)[number]
 
-function isBreakdownType(value: string | null): value is BreakdownType {
-  return value !== null && (BREAKDOWN_TYPES as readonly string[]).includes(value)
+/**
+ * ช่อง "Commission" ของ `96` §6-F4 = ค่าตอบแทนตามผลต่อเคสของ `22` §6.4 ทั้งก้อน — เบี้ยเสี่ยง
+ * (`no_success_fee`) คือคู่ exclusive ของ commission จึงลงช่องเดียวกัน (มติ PO 03/10/2569 UAT Q2:
+ * ระบบสร้างทั้งสองชนิดเป็นรายการเบิกตอนปิดงานแล้ว) ไม่ตกไปช่อง "อื่น ๆ"
+ */
+function breakdownTypeOf(value: string | null): BreakdownType | null {
+  if (value === 'no_success_fee') return 'commission'
+  return BREAKDOWN_TYPES.find((type) => type === value) ?? null
 }
 
 interface Bucket {
@@ -104,7 +110,8 @@ function groupItems(items: readonly CompensationItemEntry[], groupBy: Compensati
     bucket.grossSatang += item.grossSatang
     bucket.whtSatang += item.whtSatang
     bucket.netSatang += item.netSatang
-    if (isBreakdownType(item.expenseType)) bucket.byType[item.expenseType] += item.grossSatang
+    const breakdown = breakdownTypeOf(item.expenseType)
+    if (breakdown !== null) bucket.byType[breakdown] += item.grossSatang
     else bucket.otherSatang += item.grossSatang
   }
 
@@ -127,7 +134,7 @@ const EMPLOYEE_COLUMNS: readonly ReportColumn[] = [
   { key: 'group', header: 'ชื่อพนักงาน', type: 'text', width: 26 },
   { key: 'teamName', header: 'ทีม', type: 'text', width: 20 },
   { key: 'caseCount', header: 'จำนวนเคส', type: 'number' },
-  { key: 'commissionSatang', header: 'ค่าคอมมิชชั่น', type: 'money' },
+  { key: 'commissionSatang', header: 'ค่าคอมมิชชั่น/เบี้ยเสี่ยง', type: 'money' },
   { key: 'fuelSatang', header: 'ค่าน้ำมัน', type: 'money' },
   { key: 'allowanceSatang', header: 'เบี้ยเลี้ยง', type: 'money' },
   { key: 'otherSatang', header: 'อื่น ๆ', type: 'money' },
