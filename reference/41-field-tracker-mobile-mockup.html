@@ -637,7 +637,8 @@ function renderScheduledTab() {
 
 function formatDateTH(isoDate) {
   const d = new Date(isoDate + 'T00:00:00');
-  const days = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+  // ชื่อวันเต็ม — ตัวย่อต่อท้าย "วัน" อ่านผิด ("วันส") · UAT BUG-068 (`41` v2.12)
+  const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
   const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   return `วัน${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
