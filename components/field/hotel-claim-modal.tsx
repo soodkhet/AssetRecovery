@@ -5,10 +5,11 @@ import { IconFile } from '@/components/field/field-icons'
 import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { hotelClaimFormError } from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
-import { bahtInputError, parseBahtInput } from '@/lib/format/money'
+import { parseBahtInput } from '@/lib/format/money'
 
 /**
  * ฟอร์มเบิกค่าที่พัก (`41` §6.6 กลุ่ม "เบิกแยก" · §7.9)
@@ -52,13 +53,10 @@ export function HotelClaimModal({
   }, [])
 
   async function submit(): Promise<void> {
+    const formError = hotelClaimFormError({ expenseDate, amountBaht, hasReceipt: receipt !== null })
     const amountSatang = parseBahtInput(amountBaht)
-    if (expenseDate === '' || amountSatang === null || Number.isNaN(amountSatang) || amountSatang <= 0) {
-      setError(bahtInputError(amountBaht, 'จำนวนเงิน') ?? 'กรุณากรอกวันที่และจำนวนเงิน')
-      return
-    }
-    if (receipt === null) {
-      setError('ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
+    if (formError !== null || receipt === null || amountSatang === null) {
+      setError(formError ?? 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
       return
     }
 

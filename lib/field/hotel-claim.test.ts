@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { FieldError } from '@/lib/field/errors'
-import { assertHotelClaimFields, assertSharedAgentInTeam, missingHotelClaimFields } from '@/lib/field/hotel-claim'
+import {
+  assertHotelClaimFields,
+  assertSharedAgentInTeam,
+  hotelClaimFormError,
+  missingHotelClaimFields,
+} from '@/lib/field/hotel-claim'
 
 const valid = {
   expenseDate: new Date('2026-08-10T00:00:00Z'),
@@ -57,5 +62,23 @@ describe('ผู้พักร่วมต้องอยู่ทีมเด�
     } catch (error) {
       expect((error as FieldError).code).toBe('HOTEL_CLAIM_INVALID_SHARED_AGENT')
     }
+  })
+})
+
+describe('ข้อความของฟอร์มเบิกที่พักแยกต่อช่อง (UAT BUG-073)', () => {
+  const ok = { expenseDate: '2026-10-03', amountBaht: '600', hasReceipt: true }
+
+  it('ยอด 0 / ติดลบ → "จำนวนเงินต้องมากกว่า 0" ไม่ปนกับเรื่องวันที่', () => {
+    expect(hotelClaimFormError({ ...ok, amountBaht: '0' })).toBe('จำนวนเงินต้องมากกว่า 0')
+    expect(hotelClaimFormError({ ...ok, amountBaht: '-100' })).toBe('จำนวนเงินต้องมากกว่า 0')
+  })
+
+  it('แต่ละช่องมีข้อความของตัวเอง', () => {
+    expect(hotelClaimFormError({ ...ok, expenseDate: '' })).toBe('กรุณาเลือกวันที่เข้าพัก')
+    expect(hotelClaimFormError({ ...ok, amountBaht: '' })).toBe('กรุณากรอกจำนวนเงิน')
+    expect(hotelClaimFormError({ ...ok, amountBaht: '600.505' })).toBe('จำนวนเงินกรอกทศนิยมได้ไม่เกิน 2 ตำแหน่ง')
+    expect(hotelClaimFormError({ ...ok, amountBaht: 'abc' })).toBe('จำนวนเงินต้องเป็นตัวเลข')
+    expect(hotelClaimFormError({ ...ok, hasReceipt: false })).toBe('ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
+    expect(hotelClaimFormError(ok)).toBeNull()
   })
 })

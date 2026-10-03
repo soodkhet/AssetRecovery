@@ -1,4 +1,5 @@
 import { FieldError } from '@/lib/field/errors'
+import { bahtInputError, parseBahtInput } from '@/lib/format/money'
 
 /**
  * เบิกที่พัก — กลุ่ม "เบิกแยก" ของ `41` §6.6 · §11 · §12 — **pure ล้วน ใช้ร่วม FE/BE**
@@ -44,4 +45,21 @@ export function assertSharedAgentInTeam(
   if (!teammateIds.includes(sharedWithUserId)) {
     throw new FieldError('HOTEL_CLAIM_INVALID_SHARED_AGENT', { context: { sharedWithUserId } })
   }
+}
+
+/**
+ * ข้อความ inline ของฟอร์มเบิกที่พัก — แยกต่อช่อง (UAT BUG-073: ยอด 0/ติดลบเคยขึ้นข้อความรวม
+ * "กรุณากรอกวันที่และจำนวนเงิน" ทำให้เข้าใจว่าวันที่ว่าง) · คืน `null` = ผ่าน
+ * ⚠️ UX guard ฝั่งฟอร์ม — ตัวบังคับจริงคือ `assertHotelClaimFields()` + Zod ฝั่ง BE
+ */
+export function hotelClaimFormError(input: { expenseDate: string; amountBaht: string; hasReceipt: boolean }): string | null {
+  if (input.expenseDate.trim() === '') return 'กรุณาเลือกวันที่เข้าพัก'
+  const amountSatang = parseBahtInput(input.amountBaht)
+  if (amountSatang === null) return 'กรุณากรอกจำนวนเงิน'
+  const formatError = bahtInputError(input.amountBaht, 'จำนวนเงิน')
+  if (formatError !== null) return formatError
+  if (Number.isNaN(amountSatang)) return 'จำนวนเงินต้องเป็นตัวเลข'
+  if (amountSatang <= 0) return 'จำนวนเงินต้องมากกว่า 0'
+  if (!input.hasReceipt) return 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก'
+  return null
 }
