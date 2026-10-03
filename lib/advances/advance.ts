@@ -114,6 +114,20 @@ export function isAdvanceOverdue(dueClearDate: Date | string, now: Date): boolea
 }
 
 /**
+ * มติ PO 03/10/2569 (UAT Q8, BUG-058) — ตอนขอเบิก กำหนดเคลียร์ยอดต้อง **ไม่ก่อนวันนี้** (ปฏิทินไทย)
+ * วันนี้ยังได้ (UAT ADV3 ใช้วันครบกำหนด = วันที่ขอ แล้วรอข้ามวันจึงเป็น overdue) — เกณฑ์เดียวกับ
+ * `isAdvanceOverdue()` เพื่อไม่ให้ "สร้างมาก็เกินกำหนดทันที"
+ */
+export function isDueClearDateInPast(dueClearDate: Date | string, now: Date): boolean {
+  return isAdvanceOverdue(dueClearDate, now)
+}
+
+/** ค่า `min` ของช่อง `<input type="date">` กำหนดเคลียร์ยอด — วันนี้ตามเวลาไทย (ISO ค.ศ. ตามข้อยกเว้นของ browser) */
+export function minDueClearInputDate(now: Date): string {
+  return toInputDate(now)
+}
+
+/**
  * ชื่อ capability ของไฟล์ 15 (`25` §7.2) — วางไว้ในโมดูล pure เพื่อให้ **หน้าจอ client import ได้**
  * โดยไม่ลาก Prisma เข้า bundle (กับดักเดียวกับ `types.ts` — ดู REUSE_INDEX)
  */
