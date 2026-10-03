@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R4a ภาคสนาม** — 03/10/2569 · R4.01–R4.22 ✅15 🐞7 ❓2 · ไม่มี 500 · expense active 690000 ตรง golden · คอมมิชชัน 0 แถว (BUG-010) · รายงาน `uat/report/R4a-field.md` · ภาพ 42 · Storage +15 ไฟล์ (มี .mp4 ปลอมค้าง 1 ไฟล์ใน bucket — เก็บไว้) |
-| snapshot ล่าสุด | `uat/snapshots/R3-end-v2.dump` = ปลาย R3 + schema/สิทธิ์หลังแก้ตามมติ (ใช้เป็นต้นรอบ R4 ใหม่) · เก่า: `R4a-end` (โค้ดก่อนแก้ — ไม่ใช้แล้ว), `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R4a v2** (เล่นใหม่บนโค้ดหลังแก้ตามมติ — R4.01–R4.23) role agent กำลังรัน → R4b v2 (R4.24–R4.38) → R5 (ธุรการทำคลัง) · DATASET v2 / step sheet R4 v2 · ⚠️ R6 ต้องเล่นหลังเที่ยงคืนเวลาไทยของวันที่ขอ ADV3 (job overdue) |
+| รอบล่าสุดที่จบ | **R4a v2 ภาคสนาม** (เล่นใหม่หลังแก้ตามมติ) — 03/10/2569 · R4.01–R4.23 ✅21 🐞2 (S5) · ไม่มี 500 · expense active 960000 ตรง golden · มติ Q2/Q13/Q15/Q16/Q17/Q20 ใช้ได้จริง · รายงาน `uat/report/R4a-field-v2.md` · ภาพ 54 |
+| snapshot ล่าสุด | `uat/snapshots/R4a-v2-end.dump` (ก่อนหน้า: `R3-end-v2`, …) |
+| รอบปัจจุบัน | **R4b v2** (R4.24–R4.38: ตีกลับหลักฐาน C4 ผ่านหน้าจอ, ค่าที่พัก in1 ฿600, เงินทดรอง ADV1/2/3/ADV-MAX/ADV4) role agent กำลังรัน → R5 (ธุรการทำคลัง) · ⚠️ R6 หลังเที่ยงคืนเวลาไทย |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -52,4 +52,9 @@ BUG-009 แผน/หัวหน้าข้ามฝั่ง · BUG-010 ค�
 - 03/10/2569 PO ยืนยันช่วงค่าหน้านโยบายมอบหมายงาน: timeout 1–168 ชม. · เส้นตายกดรับงาน 1–720 ชม. ⇒ เติมเป็น `docs/40` v2.3 แล้ว
 
 ## บัญชี Supabase Auth กำพร้า (สะสมจากการ restore — ไว้ลบตอน go-live)
-- (ยังไม่มี)
+- (ยังไม่มีบัญชี Auth กำพร้า)
+
+## ไฟล์ทดสอบใน Storage ที่ตั้งใจให้ค้าง (ไว้ลบตอน go-live)
+- `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/4b1dcc07-6a53-4d69-9745-b62394b20e73-R4-fake-video.mp4` (R4a เดิม)
+- `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/aa8879c5-b474-4cd8-bf71-f8d170e48831-R4-fake-video.mp4` (R4a v2)
+- หลักฐานของ R4a เดิม 14 ไฟล์ (ฐานถูกย้อนแล้ว — ไฟล์ไม่มีแถวอ้างอิง)
