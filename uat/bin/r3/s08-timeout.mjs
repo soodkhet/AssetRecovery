@@ -1,0 +1,53 @@
+// R3.20 หมดเวลา → job · R3.21 idempotent · R3.22 in2 ตอบช้า + หน้า field
+import { openAs, shot, BASE, log, q, SQL, post, get, sleep, rowText, C, U } from './_h.mjs'
+const go = async (p) => { await p.goto(`${BASE}/cases/assign`); await p.waitForLoadState('networkidle'); await sleep(800) }
+log('\n===== R3.20', new Date().toISOString())
+log(q(`select now() > expires_at expired, expires_at, now() from pending_reassignments where status='waiting_consent'`))
+const m = await openAs('uat.mgr.in'); await go(m.page)
+log('row C7 expired-before-job:', await rowText(m.page, 'UAT-CO2-007'))
+await shot(m.page, 'R3', '20-expired-badge')
+const ad = await openAs('admin')
+while (new Date().getSeconds() > 45) await sleep(1000)
+const jr = await post(ad.page, '/api/dev/trigger-job', { jobType: 'reassign_timeout' })
+log('job run:', jr)
+log('\n===== R3.21a (same minute)', new Date().toISOString())
+log('job dup:', await post(ad.page, '/api/dev/trigger-job', { jobType: 'reassign_timeout' }))
+log(q(SQL.job)); log(q(SQL.pr)); log(q(SQL.asg)); log(q(SQL.hist))
+log(q(`select a.id,a.agent_id=${"'"}${U.in1}${"'"} is_in1,a.status,a.accepted_at,a.reassigned_from,a.reassign_reason from case_assignments a where a.case_id='${C.C7}' order by a.created_at`))
+log(q(`select to_char(a.created_at,'HH24:MI:SS') t,a.actor_id,a.actor_role,a.action,a.target_type,a.reason,a.after_data->'events' ev from audit_logs a where a.created_at > now() - interval '3 minutes' order by a.created_at`))
+log(q(SQL.noti))
+await go(m.page)
+log('row C7 after job:', await rowText(m.page, 'UAT-CO2-007'))
+const r7 = m.page.locator('tr', { hasText: 'UAT-CO2-007' }).first()
+log('btn เปลี่ยน:', await r7.getByRole('button', { name: 'เปลี่ยนผู้รับผิดชอบ' }).count())
+await shot(m.page, 'R3', '20-after-job-list')
+const before = q(`select (select count(*) from case_assignments)||'/'||(select count(*) from reassignment_history)||'/'||(select count(*) from notifications where event_code like '%timeout%')||'/'||(select count(*) from audit_logs where target_type='case_assignments' and action='update')`).split('\n')[2].trim()
+log('counts asg/hist/noti-timeout/audit-update:', before)
+
+log('\n===== R3.21b (new minute)', new Date().toISOString())
+const startMin = new Date().getMinutes(); while (new Date().getMinutes() === startMin) await sleep(1000); await sleep(1500)
+log('job new minute:', await post(ad.page, '/api/dev/trigger-job', { jobType: 'reassign_timeout' }))
+log(q(SQL.job))
+const after = q(`select (select count(*) from case_assignments)||'/'||(select count(*) from reassignment_history)||'/'||(select count(*) from notifications where event_code like '%timeout%')||'/'||(select count(*) from audit_logs where target_type='case_assignments' and action='update')`).split('\n')[2].trim()
+log('counts after:', after, after === before ? 'SAME' : 'DIFF')
+
+log('\n===== R3.22', new Date().toISOString())
+const a2 = await openAs('uat.agent.in2', { mobile: true })
+log('in2 consent:', await post(a2.page, `/api/cases/${C.C7}/reassignment/respond`, { decision: 'consent' }))
+log('in2 decline:', await post(a2.page, `/api/cases/${C.C7}/reassignment/respond`, { decision: 'decline', declineReason: 'probe ตอบหลังหมดเวลา' }))
+log(q(SQL.pr))
+const a1 = await openAs('uat.agent.in1', { mobile: true }), o1 = await openAs('uat.agent.out1', { mobile: true })
+for (const [who, x] of [['in1', a1], ['in2', a2], ['out1', o1]]) {
+  for (const tab of ['pending', 'accepted']) {
+    await x.page.goto(`${BASE}/field/${tab}`); await x.page.waitForLoadState('networkidle'); await sleep(1500)
+    const t = (await x.page.locator('body').innerText()).replace(/\s*\n+\s*/g, ' | ')
+    log(`${who} /field/${tab} dialogs=${await x.page.getByRole('dialog').count()} C7=${t.includes('UAT-CO2-007')} :`, t.slice(t.indexOf('ไม่ทำก็ใช้แอปได้ตามปกติ') + 25).slice(0, 600))
+    if (tab === 'pending') await shot(x.page, 'R3', `22-${who}-pending`, { fullPage: true })
+  }
+}
+await a2.page.goto(`${BASE}/field`); await a2.page.waitForLoadState('networkidle'); await sleep(1500)
+const h = (await a2.page.locator('body').innerText()).replace(/\s*\n+\s*/g, ' | ')
+log('in2 home: request-card=', h.includes('มีคำขอเปลี่ยนผู้รับผิดชอบ'), 'transferred msg=', h.includes('ถูกโอน'), h.slice(h.indexOf('สรุปภาพรวม')).slice(0, 500))
+await shot(a2.page, 'R3', '22-in2-home', { fullPage: true })
+log('console m:', m.consoleErrors, m.serverErrors, 'ad:', ad.serverErrors, 'a1:', a1.consoleErrors, a1.serverErrors, 'a2:', a2.consoleErrors, a2.serverErrors, 'o1:', o1.consoleErrors)
+for (const x of [m, ad, a1, a2, o1]) await x.browser.close()
