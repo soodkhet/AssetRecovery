@@ -1,6 +1,7 @@
 import { AdvanceError } from '@/lib/advances/errors'
 import { toInputDate } from '@/lib/format/datetime'
-import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
+import { fmtSatangSymbol } from '@/lib/format/money'
+import type { AdvanceStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 
 /**
  * เงินทดรองจ่าย — state machine + กติกาธุรกิจ (`15` · `23` §6.4) — **pure ล้วน ไม่มี I/O**
@@ -118,3 +119,15 @@ export function isAdvanceOverdue(dueClearDate: Date | string, now: Date): boolea
  */
 export const REQUEST_ADVANCE = 'request_advance'
 export const APPROVE_ADVANCE = 'approve_advance'
+
+/**
+ * คำขอเบิกส่วนเกินอัตโนมัติตอนเคลียร์ยอด (มติ PO 03/10/2569 — UAT Q3, BUG-011 · `15` §9.1 · `22` §6.13)
+ * ใช้ค่า `manual` ของ `expense_type` (`02` §3) — ไม่สร้าง enum ใหม่ · เข้าคิวอนุมัติสายเดียวกับ Manual Claim
+ */
+export const ADVANCE_EXCESS_CLAIM_TYPE: ExpenseType = 'manual'
+
+/** หมายเหตุของคำขอเบิกส่วนเกิน — บอกที่มาให้ผู้อนุมัติเห็นโดยไม่ต้องเปิด audit */
+export function advanceExcessClaimNote(input: { purpose: string; approvedSatang: number; usedSatang: number }): string {
+  const note = `เบิกส่วนเกินเงินทดรองอัตโนมัติ (ใช้จริง ${fmtSatangSymbol(input.usedSatang)} เกินยอดอนุมัติ ${fmtSatangSymbol(input.approvedSatang)}) — ${input.purpose}`
+  return note.length > 500 ? `${note.slice(0, 499)}…` : note
+}

@@ -1,5 +1,7 @@
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import {
+  ADVANCE_EXCESS_CLAIM_TYPE,
+  advanceExcessClaimNote,
   APPROVE_ADVANCE,
   assertAdvanceRejectionReason,
   assertNoUnclearedAdvance,
@@ -11,13 +13,14 @@ import {
 } from '@/lib/advances/advance'
 import { AdvanceError } from '@/lib/advances/errors'
 import type { AdvanceCreateInput, AdvanceApproveInput, AdvanceListQuery, AdvanceRejectInput, AdvanceSettleInput } from '@/lib/advances/schemas'
-import type { AdvanceDto } from '@/lib/advances/types'
+import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
-import { ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
-import { advanceSettlement, assertSettlementAllowed } from '@/lib/finance/advance-calc'
+import { bangkokBusinessDate, ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
+import { insertManualClaim } from '@/lib/claims/queries'
+import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
@@ -362,20 +365,27 @@ export async function rejectAdvance(
 
 /**
  * เคลียร์ยอด (`15` §9.1) — ยอดคืนถูกคำนวณโดย **DB (generated column)** ไม่ใช่โค้ดนี้
- * `assertSettlementAllowed()` (3.1) เทียบกับ **ยอดที่ขอ** ตาม `24` §6.4 (`USED_EXCEEDS_REQUEST_NO_TOPUP`)
+ *
+ * **มติ PO 03/10/2569 (UAT Q3, BUG-011)**: ใช้เกินยอดอนุมัติ ⇒ **บันทึกได้ ไม่บล็อก** ยอดคืน = 0
+ * และสร้าง **คำขอเบิกส่วนเกินอัตโนมัติ** ในทรานแซกชันเดียวกัน (`22` §6.13 · `15` §9.1):
+ * - เป็น Manual Claim (`expense_type = manual`, ไม่ผูกเคส) ของ **payee เดียวกับเงินทดรอง** ⇒ WHT ใช้
+ *   Tax Profile ของ payee ตามกติกา Payee ชนะ Plan (`18` §6.3)
+ * - snapshot แผนค่าตอบแทนของทีมผู้รับเงินไว้เป็น fallback อัตรา WHT — payee ที่ยังไม่มี Tax Profile
+ *   จะไม่ทำให้การสร้างรอบจ่ายล้มทั้งรอบ (หนี้ #3: ไม่มีทั้ง Tax Profile และแผน)
+ * - ยอดเท่ากับ `excessSatang` ของ `advanceSettlement()` (3.1) — ไม่คำนวณซ้ำที่นี่
  *
  * เจ้าของคำขอกรอกยอดใช้จริงได้เอง (`15` §12) — scope บังคับที่ `findAdvance()`
+ * กันเคลียร์ซ้ำพร้อมกัน (ซึ่งจะสร้างคำขอเบิกส่วนเกินซ้ำ) ด้วย `updateMany` ที่ผูกสถานะเดิม
  */
 export async function settleAdvance(
   context: AdvanceMutationContext,
   advanceId: string,
   input: AdvanceSettleInput,
   now: Date = new Date(),
-): Promise<AdvanceDto> {
+): Promise<AdvanceSettleResult> {
   const user = context.actor
   const current = await findAdvance(user, advanceId)
   const status = nextAdvanceStatus(current.status, 'settle')
-  assertSettlementAllowed({ requestedSatang: current.requestedSatang, usedSatang: input.usedSatang })
   await assertPeriodOpenAt({
     organizationId: user.organizationId,
     at: now,
@@ -389,13 +399,32 @@ export async function settleAdvance(
   })
   const at = new Date()
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.advance.update({
-      where: { id: advanceId },
+  const { row: updated, excessClaimId } = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.advance.updateMany({
+      where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
       // ⚠️ ห้ามส่ง `returnSatang` — เป็น generated column ของ DB (`02` §5)
       data: { status, usedSatang: input.usedSatang, clearedAt: at, updatedBy: user.id },
-      select: advanceSelect,
     })
+    if (claimed.count !== 1) {
+      throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
+    }
+    const row = await tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
+
+    const excessClaim = preview.needsExtraClaim
+      ? await insertManualClaim(tx as ExpenseTxClient, context, {
+          payeeId: current.payeeId,
+          claimType: ADVANCE_EXCESS_CLAIM_TYPE,
+          grossSatang: preview.excessSatang,
+          expenseDate: bangkokBusinessDate(at),
+          receiptFileUrl: input.receiptFileUrl,
+          note: advanceExcessClaimNote({
+            purpose: current.purpose,
+            approvedSatang: current.approvedSatang ?? 0,
+            usedSatang: input.usedSatang,
+          }),
+          ...(await resolveTeamPlanSnapshot(tx as ExpenseTxClient, current.payeeId)),
+        })
+      : null
 
     await emitAudit(
       {
@@ -411,6 +440,7 @@ export async function settleAdvance(
           used_satang: row.usedSatang,
           return_satang: row.returnSatang,
           excess_satang: preview.excessSatang,
+          excess_claim_id: excessClaim?.id ?? null,
           // `15` §13 — ใบเสร็จอ้างอิงเก็บใน audit (ตาราง `advances` ไม่มีคอลัมน์เก็บไฟล์)
           receipt_file_url: input.receiptFileUrl,
         },
@@ -422,8 +452,24 @@ export async function settleAdvance(
       tx,
     )
 
-    return row
+    return { row, excessClaimId: excessClaim?.id ?? null }
   })
 
-  return toDto(updated, now)
+  return { ...toDto(updated, now), excessClaimId }
+}
+
+/**
+ * แผนค่าตอบแทนของทีมผู้รับเงิน ณ ตอนเคลียร์ยอด (snapshot `92` §7.1) — fallback อัตรา WHT เท่านั้น
+ * ไม่มีทีม/ไม่มีแผน ⇒ `null` (payee ที่มี Tax Profile ไม่ต้องใช้อยู่แล้ว)
+ */
+async function resolveTeamPlanSnapshot(
+  tx: ExpenseTxClient,
+  payeeId: string,
+): Promise<{ compPlanId: string | null; compPlanVersion: number | null }> {
+  const payee = await tx.payeeProfile.findUnique({
+    where: { id: payeeId },
+    select: { user: { select: { team: { select: { compensationPlan: { select: { id: true, version: true } } } } } } },
+  })
+  const plan = payee?.user.team?.compensationPlan ?? null
+  return { compPlanId: plan?.id ?? null, compPlanVersion: plan?.version ?? null }
 }

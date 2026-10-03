@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — สูตรคำนวณ fuel/allowance/commission/VAT/WHT/GP รวม 13 สูตร |
 | v2 | 03/07/2569 | **แก้ไข §6.3 (Allowance)**: เดิมเขียนว่า "ค่าคงที่ต่อเคสที่ปิดงาน" ซึ่ง**ขัดแย้ง**กับ `11-compensation.md` §10 ที่นิยามหน่วยเป็น "บาท/**วัน**" อย่างชัดเจน — ยืนยันกับ Product Owner แล้วว่า **allowance คำนวณต่อวันที่ลงพื้นที่จริง** (`rate × จำนวนวันที่มี check-in`) ไม่ใช่ค่าคงที่ต่อเคส — แก้สูตรให้ถูกต้องแล้ว + Reformat header ตามมาตรฐานเอกสารชุดใหม่ |
+| v2.1 | 03/10/2569 | **แก้ §6.13 ตามมติ PO 03/10/2569 (UAT Q3, BUG-011)**: (1) ฐานยอดคืนเปลี่ยนจาก requested เป็น **approved** (= เงินที่ออกจริง ตรงกับ generated column ใน `02` §5 ที่ใช้อยู่แล้ว) · (2) ใช้เกินยอด → **เคลียร์ยอดได้ ไม่บล็อก** ยอดคืน 0 และระบบ**สร้างคำขอเบิกส่วนเกินอัตโนมัติ** (Manual Claim ของ payee เดียวกัน) แทนการปฏิเสธ — `USED_EXCEEDS_REQUEST_NO_TOPUP` ถูกยกเลิกจาก `24` |
 
 ขอบเขตเอกสารนี้: รวมสูตรคำนวณทางการเงิน/บัญชีทั้งหมดของระบบไว้ในที่เดียว เป็น single source of truth สำหรับทีมพัฒนา — ป้องกันสูตรไม่ตรงกันระหว่างโมดูล
 
@@ -177,14 +178,25 @@ gross_profit = revenue - direct_cost
 margin_pct = (gross_profit / revenue) × 100   ถ้า revenue > 0, มิฉะนั้นแสดง "N/A" ไม่หารด้วย 0
 ```
 
-### 6.13 เงินทดรองจ่าย — ยอดคืน (อ้างอิงไฟล์ 15)
+### 6.13 เงินทดรองจ่าย — ยอดคืน (อ้างอิงไฟล์ 15) — แก้ไขแล้ว (มติ PO 03/10/2569 — UAT Q3)
 
 ```
-ถ้า used_amount <= requested_amount:
-  return_amount = requested_amount - used_amount
-ถ้า used_amount > requested_amount:
-  return_amount = 0   (ส่วนที่เกินต้องสร้าง Claim เพิ่มแยกต่างหาก ไม่ใช่ return_amount ติดลบ)
+ฐาน = approved_amount (ยอดที่อนุมัติ = เงินที่จ่ายออกไปจริง — ตรงกับ generated column `advances.return_satang` ใน `02` §5)
+
+return_amount = max(0, approved_amount - used_amount)          ห้ามติดลบเด็ดขาด
+excess_amount = max(0, used_amount - approved_amount)
+
+ถ้า excess_amount > 0:
+  เคลียร์ยอดได้ตามปกติ (ไม่บล็อก) → return_amount = 0
+  ระบบสร้าง "คำขอเบิกส่วนเกิน" อัตโนมัติในทรานแซกชันเดียวกับการเคลียร์ยอด:
+    expense_type = manual, gross_amount = excess_amount, case_id = NULL
+    payee = payee เดียวกับเงินทดรอง (WHT ใช้ Tax Profile ของ payee — §6.9)
+    comp_plan snapshot = แผนของทีมผู้รับเงิน ณ ตอนเคลียร์ยอด (fallback อัตรา WHT เท่านั้น)
+    status = pending_approval (เข้าสายอนุมัติค่าตอบแทนตามปกติ แล้วจ่ายผ่านรอบจ่าย)
 ```
+
+> ตัวอย่าง: อนุมัติ ฿3,000 ใช้ ฿2,450 → คืน ฿550 · ใช้ ฿3,000 → คืน 0 · ใช้ ฿3,100 → คืน 0 + คำขอเบิกส่วนเกิน ฿100
+> pure module: `lib/finance/advance-calc.ts` (`advanceSettlement()`)
 
 ## 7. Data Entities / Required Objects
 

@@ -10,7 +10,7 @@ import { PrismaClient } from '@/lib/generated/prisma/client'
  *  · ยิงพร้อมกัน 2 คำขอ ⇒ partial unique `uniq_active_advance_per_payee` ปล่อยผ่านได้ใบเดียว
  *  · เพดานต่อครั้ง (`ADVANCE_EXCEEDS_MAX`) · `null` = ไม่จำกัด
  *  · เคลียร์ยอด: requested 5,000 used 4,200 ⇒ return 800 (generated column ของ DB)
- *  · เคลียร์ยอดใช้เกิน ⇒ `USED_EXCEEDS_REQUEST_NO_TOPUP`
+ *  · เคลียร์ยอดใช้เกิน ⇒ บันทึกได้ คืน 0 + คำขอเบิกส่วนเกินอัตโนมัติ (มติ PO 03/10/2569 UAT Q3)
  *  · ปฏิเสธไม่กรอกเหตุผล ⇒ `REJECTION_REASON_REQUIRED`
  *  · scope: พนักงานเห็นเฉพาะของตัวเอง · job auto-overdue **idempotent** (รันซ้ำไม่เปลี่ยนซ้ำ)
  *
@@ -121,6 +121,7 @@ async function reset(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(
     `UPDATE finance_policy_settings SET advance_max_amount_per_request_satang = NULL WHERE organization_id = '${ORG_ID}'`,
@@ -300,14 +301,66 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     expect(settled.returnSatang).toBe(50_000)
   })
 
-  it('ใช้เกินยอดที่ขอ → USED_EXCEEDS_REQUEST_NO_TOPUP (ยอดคืนห้ามติดลบ)', async () => {
+  it('UAT Q3 ใช้น้อยกว่ายอดอนุมัติ: ADV1 ฿3,000 ใช้ ฿2,450 → คืน ฿550 ไม่สร้างคำขอเบิกส่วนเกิน', async () => {
+    const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 300_000 }))
+    await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
+
+    const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 245_000, receiptFileUrl: null, note: null })
+    expect(settled.returnSatang).toBe(55_000)
+    expect(settled.excessClaimId).toBeNull()
+    expect(await db().expense.count({ where: { organizationId: ORG_ID } })).toBe(0)
+  })
+
+  it('UAT Q3 ใช้เท่ายอดอนุมัติ → คืน 0 ไม่สร้างคำขอเบิกส่วนเกิน', async () => {
+    const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 300_000 }))
+    await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
+
+    const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 300_000, receiptFileUrl: null, note: null })
+    expect(settled.returnSatang).toBe(0)
+    expect(settled.excessClaimId).toBeNull()
+    expect(await db().expense.count({ where: { organizationId: ORG_ID } })).toBe(0)
+  })
+
+  it('UAT Q3 ใช้เกินยอด → บันทึกได้ (ไม่บล็อก) คืน 0 + คำขอเบิกส่วนเกินอัตโนมัติของ payee เดียวกัน', async () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 500_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
 
-    await expectCode(
-      () => advances.settleAdvance(ctx(agent), created.id, { usedSatang: 550_000, receiptFileUrl: null, note: null }),
-      'USED_EXCEEDS_REQUEST_NO_TOPUP',
-    )
+    const settled = await advances.settleAdvance(ctx(agent), created.id, {
+      usedSatang: 550_000,
+      receiptFileUrl: 'expenses/receipt-over.pdf',
+      note: null,
+    })
+    expect(settled.status).toBe('cleared')
+    expect(settled.returnSatang).toBe(0)
+    expect(settled.excessSatang).toBe(50_000)
+    expect(settled.excessClaimId).not.toBeNull()
+
+    const claim = await db().expense.findUniqueOrThrow({ where: { id: settled.excessClaimId as string } })
+    expect(claim).toMatchObject({
+      payeeId: settled.payeeId,
+      grossSatang: 50_000,
+      expenseType: 'manual',
+      calculationSource: 'manual',
+      status: 'pending_approval',
+      caseId: null,
+      receiptFileUrl: 'expenses/receipt-over.pdf',
+    })
+    expect(claim.revisionNote).toContain('เบิกส่วนเกินเงินทดรองอัตโนมัติ')
+
+    const audit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'advances', targetId: created.id, action: 'status_change' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect((audit?.afterData as Record<string, unknown>).excess_claim_id).toBe(claim.id)
+  })
+
+  it('UAT Q3 ส่วนเกินคิดจากยอดอนุมัติ: ขอ ฿5,000 อนุมัติ ฿4,000 ใช้ ฿4,500 → เบิกเพิ่ม ฿500', async () => {
+    const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 500_000 }))
+    await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: 400_000, note: null })
+
+    const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 450_000, receiptFileUrl: null, note: null })
+    const claim = await db().expense.findUniqueOrThrow({ where: { id: settled.excessClaimId as string } })
+    expect(claim.grossSatang).toBe(50_000)
   })
 
   it('เคลียร์ยอดจากสถานะ overdue ได้ (`15` §9.1)', async () => {

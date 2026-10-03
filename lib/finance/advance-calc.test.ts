@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { advanceReturnSatang, advanceSettlement, assertSettlementAllowed } from '@/lib/finance/advance-calc'
-import { isFinanceError } from '@/lib/finance/errors'
+import { advanceReturnSatang, advanceSettlement } from '@/lib/finance/advance-calc'
 
 /** `22` §6.13 · `15` §16 — ยอดคืนเงินทดรองจ่าย (ห้ามติดลบ) */
 
@@ -54,21 +53,36 @@ describe('advanceSettlement — ยอดคืน + ส่วนเกินส
   })
 })
 
-describe('assertSettlementAllowed — `USED_EXCEEDS_REQUEST_NO_TOPUP` (`24` §6.4)', () => {
-  it('ใช้ไม่เกินยอดที่ขอ → ผ่าน', () => {
-    expect(() => assertSettlementAllowed({ requestedSatang: 500_000, usedSatang: 500_000 })).not.toThrow()
+describe('มติ PO 03/10/2569 (UAT Q3) — คืน = max(0, อนุมัติ − ใช้จริง) · ใช้เกิน = เบิกส่วนเกินอัตโนมัติ', () => {
+  it('ADV1 (golden UAT): อนุมัติ ฿3,000 ใช้ ฿2,450 → คืน ฿550 ไม่มีส่วนเกิน', () => {
+    expect(advanceSettlement({ requestedSatang: 300_000, approvedSatang: 300_000, usedSatang: 245_000 })).toEqual({
+      returnSatang: 55_000,
+      excessSatang: 0,
+      needsExtraClaim: false,
+    })
   })
 
-  it('ใช้เกินยอดที่ขอ → reject พร้อม code จากทะเบียน', () => {
-    try {
-      assertSettlementAllowed({ requestedSatang: 500_000, usedSatang: 550_000 })
-      expect.unreachable('ต้องโยน USED_EXCEEDS_REQUEST_NO_TOPUP')
-    } catch (error) {
-      expect(isFinanceError(error)).toBe(true)
-      if (isFinanceError(error)) {
-        expect(error.code).toBe('USED_EXCEEDS_REQUEST_NO_TOPUP')
-        expect(error.status).toBe(400)
-      }
-    }
+  it('ใช้เท่ายอดอนุมัติพอดี → คืน 0 ไม่มีส่วนเกิน', () => {
+    expect(advanceSettlement({ requestedSatang: 300_000, approvedSatang: 300_000, usedSatang: 300_000 })).toEqual({
+      returnSatang: 0,
+      excessSatang: 0,
+      needsExtraClaim: false,
+    })
+  })
+
+  it('ใช้เกินยอดที่ขอ (ADV-OVER ฿3,100 จาก ฿3,000) → ไม่ throw · คืน 0 · ส่วนเกิน ฿100 ต้องเบิกเพิ่ม', () => {
+    expect(advanceSettlement({ requestedSatang: 300_000, approvedSatang: 300_000, usedSatang: 310_000 })).toEqual({
+      returnSatang: 0,
+      excessSatang: 10_000,
+      needsExtraClaim: true,
+    })
+  })
+
+  it('ส่วนเกินคิดจากยอดอนุมัติ (เงินที่ออกจริง) ไม่ใช่ยอดที่ขอ — อนุมัติ ฿2,000 จากที่ขอ ฿3,000 ใช้ ฿2,500 → เบิกเพิ่ม ฿500', () => {
+    expect(advanceSettlement({ requestedSatang: 300_000, approvedSatang: 200_000, usedSatang: 250_000 })).toEqual({
+      returnSatang: 0,
+      excessSatang: 50_000,
+      needsExtraClaim: true,
+    })
   })
 })
