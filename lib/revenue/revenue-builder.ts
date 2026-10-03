@@ -43,6 +43,8 @@ export interface RevenueRowValues {
   /** snapshot ลง `revenues.vat_rate_pct_used` — `no_vat` = 0 (ไม่ใช่อัตราปัจจุบัน) */
   vatRatePctUsed: number
   feeModelSnapshot: ServiceFeeModel
+  /** snapshot ลง `revenues.vat_mode_snapshot` (มติ PO 03/10/2569 — UAT Q6) — โหมดที่ใช้คิด VAT ของใบนี้จริง */
+  vatModeSnapshot: VatMode
   /** คำอธิบายสูตรสำหรับ audit/หน้าจอ "ดูสูตร" — ไม่ใช่ตัวเลขที่เอาไปคิดต่อ */
   formula: string
 }
@@ -73,6 +75,7 @@ export function buildRevenueRow(input: RevenueRowInput): RevenueRowResult {
       vatSatang: vat.vatSatang,
       totalSatang: vat.totalSatang,
       vatRatePctUsed: vat.vatRatePctUsed,
+      vatModeSnapshot: input.vatMode,
       feeModelSnapshot: input.snapshot.model,
       formula: fee.formula,
     },

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isDueClearDateInPast } from '@/lib/advances/advance'
 import { dateOnlySchema, satangSchema } from '@/lib/api/validation'
 
 /**
@@ -23,7 +24,14 @@ export const advanceCreateSchema = z.object({
   requestedSatang: satangSchema('ยอดที่ขอเบิก').refine((value) => value > 0, 'ยอดที่ขอเบิกต้องมากกว่า 0'),
   /** `15` §7.2 — บังคับกรอก (`REQUIRED_MISSING`) */
   purpose: z.string().trim().min(5, 'ระบุวัตถุประสงค์อย่างน้อย 5 ตัวอักษร').max(500, 'วัตถุประสงค์ยาวเกินไป'),
-  dueClearDate: dateOnlySchema('กำหนดเคลียร์ยอด'),
+  /**
+   * มติ PO 03/10/2569 (UAT Q8, BUG-058) — ห้ามวันที่ผ่านมาแล้วตามปฏิทินไทย (วันนี้ได้) · ตรวจทั้ง FE/BE
+   * ด้วย schema เดียวนี้ · ผิด = 400 + field error (`REQUIRED_MISSING` ของ `fieldErrorResponse()` — ไม่ตั้ง code ใหม่)
+   */
+  dueClearDate: dateOnlySchema('กำหนดเคลียร์ยอด').refine(
+    (date) => !isDueClearDateInPast(date, new Date()),
+    'กำหนดเคลียร์ยอดต้องเป็นวันนี้หรือวันถัดไป — เลือกวันที่ผ่านมาแล้วไม่ได้',
+  ),
   /**
    * ขอเบิกแทนผู้อื่น — ใช้ได้เฉพาะผู้ถือสิทธิ์อนุมัติ (การเงิน) เท่านั้น
    * ผู้ขอทั่วไปเว้นว่าง ระบบผูกกับ payee ของตัวเองเสมอ (`15` §12 — own scope)

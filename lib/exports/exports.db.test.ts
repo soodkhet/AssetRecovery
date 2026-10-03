@@ -213,8 +213,8 @@ async function seedException(level: string, status: string): Promise<string> {
 async function seedRevenue(): Promise<void> {
   await db().$executeRawUnsafe(`
     INSERT INTO revenues (organization_id, case_id, company_id, gross_satang, vat_satang, vat_rate_pct_used,
-                          total_satang, fee_model_snapshot, revenue_date, created_by)
-    VALUES ('${ORG_ID}', '${CASE_ID}', '${COMPANY_ID}', 1200000, 84000, 7.00, 1284000, 'FLAT', '2026-06-25',
+                          total_satang, fee_model_snapshot, vat_mode_snapshot, revenue_date, created_by)
+    VALUES ('${ORG_ID}', '${CASE_ID}', '${COMPANY_ID}', 1200000, 84000, 7.00, 1284000, 'FLAT', 'exclude_vat', '2026-06-25',
             '${USER_ID}')
   `)
 }

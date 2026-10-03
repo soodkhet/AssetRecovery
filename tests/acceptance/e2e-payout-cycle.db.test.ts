@@ -77,16 +77,21 @@ const RUN = `${process.pid}${Date.now() % 100_000}`
 
 /**
  * แผนค่าตอบแทน: น้ำมันเหมาวันละ 1,500 บาท + เบี้ยเลี้ยงวันละ 500 บาท
- * ⇒ พิสูจน์ว่าเกณฑ์ขั้นต่ำ WHT 1,000 บาท คิด**ต่อรายการ** (`22` §6.9) — น้ำมันถูกหัก เบี้ยเลี้ยงไม่ถูกหัก
+ * ⇒ พิสูจน์ว่าเกณฑ์ขั้นต่ำ WHT 1,000 บาท คิด**ต่อ payee ต่อรอบจ่าย** (`22` §6.9 — มติ PO 03/10/2569 UAT Q5)
+ *   ฐานรวมของ payee = 1,500 + 500 + 600 = 2,600 บาท ≥ เกณฑ์ ⇒ หักทุกรายการ แม้รายการเดี่ยวจะต่ำกว่าเกณฑ์
  */
 const FUEL_SATANG = 150_000
 const ALLOWANCE_SATANG = 50_000
 /** Payee-level 3% ชนะ Plan-level 5% เสมอ (`18` §6.3) */
 const PAYEE_WHT_PCT = 3
 const FUEL_WHT_SATANG = 4_500
+/** ภาษีของรอบ = 260,000 × 3% = 7,800 สตางค์ → กระจายตามฐาน: เบี้ยเลี้ยง 1,500 · ค่าเสี่ยง 1,800 · น้ำมัน 4,500 */
+const ALLOWANCE_WHT_SATANG = 1_500
+const NO_SUCCESS_FEE_WHT_SATANG = 1_800
+const BATCH_WHT_SATANG = FUEL_WHT_SATANG + ALLOWANCE_WHT_SATANG + NO_SUCCESS_FEE_WHT_SATANG
 /**
  * ค่าตอบแทนตามผลต่อเคส (`22` §6.4) — ปิดงานสร้างเป็นรายการเบิกด้วย (มติ PO 03/10/2569 UAT Q2)
- * ยอดต่ำกว่าเกณฑ์ WHT ทั้งคู่ และไม่ชนกับยอดเบี้ยเลี้ยง (ให้เรียงตามยอดได้ deterministic)
+ * รายเดี่ยวต่ำกว่าเกณฑ์ WHT ทั้งคู่ (แต่ถูกหักเพราะฐานรวมของ payee ถึงเกณฑ์ — UAT Q5) และไม่ชนกับยอดเบี้ยเลี้ยง (ให้เรียงตามยอดได้ deterministic)
  */
 const COMMISSION_SATANG = 80_000
 const NO_SUCCESS_FEE_SATANG = 60_000
@@ -458,7 +463,7 @@ beforeEach(async () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็จ → ค่าตอบแทน → จ่ายเงิน → บัญชี', () => {
-  it('เดินครบ 5 ขั้น — สูตร `22` §6.1–6.4 · WHT ต่อรายการ · idempotency ไฟล์โอน · sync บัญชี', async () => {
+  it('เดินครบ 5 ขั้น — สูตร `22` §6.1–6.4 · WHT ต่อ payee ต่อรอบ · idempotency ไฟล์โอน · sync บัญชี', async () => {
     // ── ขั้น 1: ปิดงานไม่สำเร็จ ⇒ ค่าน้ำมัน/เบี้ยเลี้ยงเกิดเอง (`41` §6.6) ──
     const caseId = await seedApprovedCase()
     await driveFieldWork(caseId)
@@ -509,16 +514,16 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     })
     expect(batch.itemCount).toBe(3)
     expect(batch.grossSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG + NO_SUCCESS_FEE_SATANG)
-    // Payee-level ชนะ Plan-level + เกณฑ์ขั้นต่ำคิดต่อรายการ ⇒ หักเฉพาะค่าน้ำมัน
-    expect(batch.whtSatang).toBe(FUEL_WHT_SATANG)
-    expect(batch.netSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG + NO_SUCCESS_FEE_SATANG - FUEL_WHT_SATANG)
+    // Payee-level ชนะ Plan-level + เกณฑ์ขั้นต่ำเทียบฐานรวมของ payee ในรอบ (UAT Q5) ⇒ หักทุกรายการ
+    expect(batch.whtSatang).toBe(BATCH_WHT_SATANG)
+    expect(batch.netSatang).toBe(FUEL_SATANG + ALLOWANCE_SATANG + NO_SUCCESS_FEE_SATANG - BATCH_WHT_SATANG)
 
     const items = await db().payoutBatchItem.findMany({
       where: { payoutBatchId: batch.id },
       select: { grossSatang: true, whtSatang: true, whtPctSnapshot: true, taxProfileId: true },
       orderBy: { grossSatang: 'asc' },
     })
-    expect(items.map((row) => row.whtSatang)).toEqual([0, 0, FUEL_WHT_SATANG])
+    expect(items.map((row) => row.whtSatang)).toEqual([ALLOWANCE_WHT_SATANG, NO_SUCCESS_FEE_WHT_SATANG, FUEL_WHT_SATANG])
     expect(items.every((row) => row.taxProfileId === TAX_PROFILE_ID)).toBe(true)
     expect(items.every((row) => row.whtPctSnapshot?.toNumber() === PAYEE_WHT_PCT)).toBe(true)
 
@@ -567,18 +572,20 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
 
     const records = await db().expenseRecord.findMany({ where: { organizationId: ORG_ID } })
     expect(records).toHaveLength(3)
-    expect(records.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(FUEL_WHT_SATANG)
+    expect(records.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(BATCH_WHT_SATANG)
 
+    // ใบ 50 ทวิ ออกต่อรายการที่มีภาษีหัก — ผลรวมทุกใบ = ภาษีของ payee ทั้งรอบ (ตรงยอดใหม่ของ UAT Q5)
     const certificates = await wht.listWhtCertificates(finance, {})
-    expect(certificates.items).toHaveLength(1)
-    expect(certificates.items[0]?.whtSatang).toBe(FUEL_WHT_SATANG)
-    expect(certificates.items[0]?.grossSatang).toBe(FUEL_SATANG)
-    expect(certificates.items[0]?.status).toBe('active')
+    expect(certificates.items).toHaveLength(3)
+    expect(certificates.items.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(BATCH_WHT_SATANG)
+    const fuelCertificate = certificates.items.find((row) => row.grossSatang === FUEL_SATANG)
+    expect(fuelCertificate?.whtSatang).toBe(FUEL_WHT_SATANG)
+    expect(certificates.items.every((row) => row.status === 'active')).toBe(true)
 
     // เรียก sync ซ้ำ (เช่น job เก็บตก) ต้องไม่สร้างเอกสารซ้ำ
     await expenses.syncExpenseRecordsFromPayout(ctx(finance), batch.id)
     expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(3)
-    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(3)
   })
 })
 
@@ -803,6 +810,6 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
     const completed = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
     expect(completed.status).toBe('completed')
     expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(3)
-    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(3)
   })
 })
