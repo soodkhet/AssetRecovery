@@ -9,11 +9,13 @@
  * - **อำเภอ/ตำบล**: ยังไม่มี master data ทางการ (กรมการปกครอง) ในระบบ — ชุดตัวอย่างด้านล่างมาจาก
  *   mockup `38-case-submission-mockup.html` (`DISTRICT_DATA`) เท่านั้น จังหวัดที่ไม่มีข้อมูลให้ฟอร์ม
  *   รับค่าพิมพ์เองได้ตามที่ §6.1.2 อนุญาต ("ถ้าไม่พบในระบบ ให้ผู้ใช้กรอกต่อแบบ manual ทีละขั้น")
- * - **รหัสไปรษณีย์**: `lookupPostalCode()` เป็น async ตั้งแต่วันแรกเพื่อให้สลับไปเรียก Thailand Post API
- *   จริงได้โดยไม่ต้องแก้จุดเรียกใช้ — ตอนนี้ค้นจากตารางตัวอย่างในไฟล์นี้
+ * - **รหัสไปรษณีย์ครบทั้งประเทศ** (มติ PO 03/10/2569 — UAT Q19, BUG-036): 966 รหัส / 7,436 ตำบล
+ *   จาก kongvut/thai-province-data (MIT — `lib/address/data/THIRD_PARTY_LICENSE.md`) แปลงด้วย
+ *   `scripts/build-thai-postal-data.ts` เป็น `lib/address/data/thai-postal.json` · `lookupPostalCode()`
+ *   โหลดไฟล์นี้แบบ **dynamic import ครั้งแรกที่เรียก** (แยก chunk — ไม่บวม bundle หน้าแรกฝั่ง client)
  *
- * เติม master data จริง = แก้ `DISTRICT_DATA` / `POSTAL_CODE_AREAS` ที่นี่ที่เดียว (หรือเปลี่ยนตัวใน
- * `lookupPostalCode()` เป็น fetch) — หน้าจอที่ใช้ `<AddressFields>` ไม่ต้องแก้อะไรเลย
+ * เติม master data อำเภอ/ตำบล = แก้ `DISTRICT_DATA` ที่นี่ที่เดียว · อัปเดตรหัสไปรษณีย์ = รันสคริปต์สร้างใหม่
+ * — หน้าจอที่ใช้ `<AddressFields>` ไม่ต้องแก้อะไรเลย
  */
 
 export interface ProvinceRegionGroup {
@@ -184,25 +186,63 @@ export interface PostalCodeArea {
 }
 
 /**
- * ตารางรหัสไปรษณีย์ตัวอย่าง (mockup `POSTAL_CODE_LOOKUP`) — **placeholder ของ Thailand Post API**
- * ทุกแถวต้องชี้ไปยังจังหวัด/อำเภอ/ตำบลที่มีอยู่จริงใน `DISTRICT_DATA` (มีเทสต์ยาม)
+ * รูปแบบไฟล์ `data/thai-postal.json`: รหัส → `[จังหวัด, อำเภอ/เขต, ตำบล/แขวง[]][]`
+ * ชื่อไม่มีคำนำหน้า (ไม่มี "เขต/อำเภอ/แขวง/ตำบล") — ตรงกับค่าที่ฟอร์ม/ข้อมูลเคสใช้
  */
-export const POSTAL_CODE_AREAS: Readonly<Record<string, PostalCodeArea>> = {
-  '10260': { postalCode: '10260', province: 'กรุงเทพมหานคร', district: 'บางนา', subdistrict: 'บางนา' },
-  '10900': { postalCode: '10900', province: 'กรุงเทพมหานคร', district: 'จตุจักร', subdistrict: 'จตุจักร' },
-  '11000': { postalCode: '11000', province: 'นนทบุรี', district: 'เมืองนนทบุรี', subdistrict: 'สวนใหญ่' },
-  '50200': { postalCode: '50200', province: 'เชียงใหม่', district: 'เมืองเชียงใหม่', subdistrict: 'ศรีภูมิ' },
-  '83000': { postalCode: '83000', province: 'ภูเก็ต', district: 'เมืองภูเก็ต', subdistrict: 'ตลาดใหญ่' },
+type PostalTable = Readonly<Record<string, readonly (readonly unknown[])[]>>
+
+let postalTablePromise: Promise<PostalTable> | null = null
+
+/** โหลดตารางครั้งเดียวแล้ว cache (dynamic import → bundler แยกเป็น chunk ที่โหลดเมื่อใช้จริง) */
+function loadPostalTable(): Promise<PostalTable> {
+  if (postalTablePromise === null) {
+    postalTablePromise = import('./data/thai-postal.json').then(
+      (mod) => mod.default as PostalTable,
+      (error: unknown) => {
+        postalTablePromise = null // โหลดพลาด (เช่น เน็ตหลุด) → ครั้งหน้าลองใหม่ได้
+        throw error
+      },
+    )
+  }
+  return postalTablePromise
+}
+
+function toAreas(code: string, groups: readonly (readonly unknown[])[]): PostalCodeArea[] {
+  const areas: PostalCodeArea[] = []
+  for (const [province, district, subdistricts] of groups) {
+    if (typeof province !== 'string' || typeof district !== 'string' || !Array.isArray(subdistricts)) continue
+    for (const subdistrict of subdistricts) {
+      if (typeof subdistrict === 'string') areas.push({ postalCode: code, province, district, subdistrict })
+    }
+  }
+  return areas
 }
 
 /**
- * ค้นจังหวัด/อำเภอ/ตำบลจากรหัสไปรษณีย์ (`38` §6.1.2 ข้อ 2)
+ * ค้นจังหวัด/อำเภอ/ตำบลจากรหัสไปรษณีย์ (`38` §6.1.2 ข้อ 2) — ข้อมูลจริงทั้งประเทศ
  *
- * **async ตั้งแต่วันแรกโดยตั้งใจ** — เมื่อเลือก provider จริงได้แล้ว (Open Item `38` §22 ข้อ 4)
- * ให้เปลี่ยนไส้ในเป็น fetch + fallback ที่นี่ที่เดียว จุดเรียกใช้ไม่ต้องแก้
- * ไม่พบ = คืน `null` (ไม่ throw) เพราะฟอร์มต้องให้กรอกเองต่อได้ ไม่ใช่ block
+ * รหัสเดียวมักครอบคลุม**หลายตำบล** (บางรหัสข้ามอำเภอ/ข้ามจังหวัด) จึงคืนทุกพื้นที่ที่ตรง
+ * ให้ฟอร์มเลือก · ไม่พบ/รูปแบบผิด = คืน array ว่าง (ไม่ throw เพราะฟอร์มต้องให้กรอกเองต่อได้)
  */
-export async function lookupPostalCode(code: string): Promise<PostalCodeArea | null> {
-  if (!isValidPostalCode(code)) return null
-  return POSTAL_CODE_AREAS[code.trim()] ?? null
+export async function lookupPostalCode(code: string): Promise<readonly PostalCodeArea[]> {
+  if (!isValidPostalCode(code)) return []
+  const key = code.trim()
+  const table = await loadPostalTable()
+  const groups = Object.hasOwn(table, key) ? table[key] : undefined
+  return groups === undefined ? [] : toAreas(key, groups)
+}
+
+/** ส่วนที่ทุกพื้นที่ของรหัสนี้ใช้ร่วมกัน (จังหวัด/อำเภอเดียวกันหมด) — ใช้เติมให้ล่วงหน้าก่อนผู้ใช้เลือกตำบล */
+export function commonPostalArea(
+  areas: readonly PostalCodeArea[],
+): { province: string; district: string; subdistrict: string } {
+  const first = areas[0]
+  if (first === undefined) return { province: '', district: '', subdistrict: '' }
+  const sameProvince = areas.every((area) => area.province === first.province)
+  const sameDistrict = sameProvince && areas.every((area) => area.district === first.district)
+  return {
+    province: sameProvince ? first.province : '',
+    district: sameDistrict ? first.district : '',
+    subdistrict: areas.length === 1 ? first.subdistrict : '',
+  }
 }
