@@ -6,7 +6,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CompensationPlanListDto } from '@/lib/compensation/types'
 import { PROVINCE_DATA } from '@/lib/teams/provinces'
 import { teamCreateSchema } from '@/lib/teams/schemas'
-import type { TeamSide, TeamStatus } from '@/lib/teams/team'
+import { isTeamSlotEligible, type TeamSide, type TeamStatus } from '@/lib/teams/team'
 import type { EligibleMemberDto, TeamDto } from '@/lib/teams/types'
 
 /**
@@ -85,7 +85,7 @@ export function TeamFormModal({
 }) {
   const { showToast } = useToast()
   const [form, setForm] = useState<FormState>(
-    team === null ? emptyForm(plans[0]?.id ?? '') : formOf(team),
+    team === null ? emptyForm(plans.find((plan) => plan.side === 'inhouse')?.id ?? '') : formOf(team),
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -100,6 +100,33 @@ export function TeamFormModal({
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  // ทีม/แผน/หัวหน้า/ผู้จัดการต้องเป็นฝั่งเดียวกัน (มติ PO 03/10/2569 UAT Q12) — dropdown แสดงเฉพาะตัวเลือกของฝั่งทีม
+  // ชุดกรองเดียวกับยาม API (`isTeamSlotEligible`) · API ยังตรวจซ้ำเสมอ
+  const sidePlans = plans.filter((plan) => plan.side === form.side)
+  const supervisorOptions = members.filter((member) => isTeamSlotEligible(member, 'supervisor', form.side))
+  const managerOptions = members.filter((member) => isTeamSlotEligible(member, 'manager', form.side))
+
+  /** เปลี่ยนฝั่ง = ล้างตัวเลือกที่กลายเป็นคนละฝั่ง (กันส่งค่าที่ API จะปฏิเสธแน่นอน) */
+  function changeSide(side: TeamSide): void {
+    setForm((current) => {
+      const plan = plans.find((each) => each.id === current.compensationPlanId)
+      const supervisor = members.find((each) => each.id === current.supervisorId)
+      return {
+        ...current,
+        side,
+        compensationPlanId:
+          plan !== undefined && plan.side === side
+            ? current.compensationPlanId
+            : (plans.find((each) => each.side === side)?.id ?? ''),
+        supervisorId: supervisor !== undefined && isTeamSlotEligible(supervisor, 'supervisor', side) ? current.supervisorId : '',
+        managerIds: current.managerIds.filter((id) => {
+          const manager = members.find((each) => each.id === id)
+          return manager !== undefined && isTeamSlotEligible(manager, 'manager', side)
+        }),
+      }
+    })
   }
 
   function toggle(key: 'managerIds' | 'provinces', value: string): void {
@@ -132,6 +159,8 @@ export function TeamFormModal({
         jsonRequest(isEdit ? 'PATCH' : 'POST', parsed.data),
       )
       if (result.error !== undefined) {
+        // field error จาก API (เช่น เลือกแผน/หัวหน้า/ผู้จัดการคนละฝั่งกับทีม — UAT Q12) แสดงใต้ช่องนั้น
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -184,7 +213,7 @@ export function TeamFormModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="team-side" label="ฝั่ง (Group)" required error={errors.side}>
-            <Select id="team-side" value={form.side} onChange={(event) => set('side', event.target.value as TeamSide)}>
+            <Select id="team-side" value={form.side} onChange={(event) => changeSide(event.target.value as TeamSide)}>
               <option value="inhouse">Inhouse</option>
               <option value="outsource">Outsource</option>
             </Select>
@@ -197,7 +226,7 @@ export function TeamFormModal({
               onChange={(event) => set('compensationPlanId', event.target.value)}
             >
               <option value="">— เลือกแผนค่าตอบแทน —</option>
-              {plans.map((plan) => (
+              {sidePlans.map((plan) => (
                 <option key={plan.id} value={plan.id}>
                   {plan.name} ({plan.side} · v{plan.version})
                 </option>
@@ -219,7 +248,7 @@ export function TeamFormModal({
               onChange={(event) => set('supervisorId', event.target.value)}
             >
               <option value="">— ยังไม่กำหนด —</option>
-              {members.map((member) => (
+              {supervisorOptions.map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.fullName} ({member.roleName})
                   {member.supervisedTeamId !== null && member.supervisedTeamId !== team?.id
@@ -259,11 +288,11 @@ export function TeamFormModal({
           <legend className="px-1 text-xs font-semibold text-slate-600">
             ผู้จัดการทีม (เลือกได้มากกว่า 1 คน) — {form.managerIds.length} คน
           </legend>
-          {members.length === 0 ? (
-            <p className="p-2 text-xs text-slate-400">ยังไม่มีผู้ใช้ในกลุ่ม Inhouse/Outsource ให้เลือก</p>
+          {managerOptions.length === 0 ? (
+            <p className="p-2 text-xs text-slate-400">ยังไม่มีผู้ใช้ role ผู้จัดการทีมติดตามทรัพย์ฝั่งนี้ให้เลือก</p>
           ) : (
             <div className="grid max-h-40 grid-cols-1 gap-2 overflow-y-auto p-1 sm:grid-cols-2">
-              {members.map((member) => (
+              {managerOptions.map((member) => (
                 <label key={member.id} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"

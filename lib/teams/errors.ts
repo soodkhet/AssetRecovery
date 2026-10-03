@@ -13,6 +13,8 @@ export const TEAM_ERROR_CODES = [
   'INVALID_TEAM_MEMBER',
   'INVALID_PROVINCE',
   'PLAN_NOT_FOUND',
+  // ใช้ code กลางของ `24` §6.1 + `fields` สำหรับแผนคนละฝั่งกับทีม (UAT Q12 — ไม่มี code เฉพาะ)
+  'REQUIRED_MISSING',
 ] as const
 
 export type TeamErrorCode = (typeof TEAM_ERROR_CODES)[number]
@@ -26,6 +28,7 @@ const HTTP_STATUS: Record<TeamErrorCode, number> = {
   INVALID_TEAM_MEMBER: 400,
   INVALID_PROVINCE: 400,
   PLAN_NOT_FOUND: 404,
+  REQUIRED_MISSING: 400,
 }
 
 const MESSAGES: Record<TeamErrorCode, ErrorMessage> = {
@@ -47,11 +50,15 @@ const MESSAGES: Record<TeamErrorCode, ErrorMessage> = {
   },
   INVALID_TEAM_MEMBER: {
     title: 'ผู้ใช้ที่เลือกใช้กับทีมไม่ได้',
-    message: 'ผู้จัดการ/หัวหน้าทีมต้องเป็นผู้ใช้ที่ยัง active และอยู่ในกลุ่ม Inhouse หรือ Outsource เท่านั้น',
+    message: 'ผู้จัดการ/หัวหน้าทีมต้องเป็นผู้ใช้ที่ยัง active และเป็น role ผู้จัดการ/หัวหน้าทีมติดตามทรัพย์ฝั่งเดียวกับทีม (Inhouse/Outsource)',
   },
   INVALID_PROVINCE: {
     title: 'จังหวัดไม่ถูกต้อง',
     message: 'มีจังหวัดที่ไม่อยู่ในรายการพื้นที่ให้บริการ',
+  },
+  REQUIRED_MISSING: {
+    title: 'ข้อมูลไม่ถูกต้อง',
+    message: 'ตรวจสอบช่องที่แจ้งเตือน — แผนค่าตอบแทนต้องเป็นฝั่งเดียวกับทีม',
   },
   PLAN_NOT_FOUND: {
     title: 'ไม่พบแผนค่าตอบแทน',

@@ -1,3 +1,4 @@
+import { TEAM_MANAGER_ROLE_NAME, TEAM_SUPERVISOR_ROLE_NAME } from '@/lib/auth/constants'
 import { TeamError } from '@/lib/teams/errors'
 import { unknownProvinces } from '@/lib/teams/provinces'
 
@@ -83,6 +84,73 @@ export interface TeamMemberCandidate {
   status: string
   roleGroup: string
   supervisedTeamId?: string | null
+}
+
+const SIDE_LABEL: Readonly<Record<TeamSide, string>> = { inhouse: 'Inhouse', outsource: 'Outsource' }
+
+/** ข้อความ field error ของการเลือกคนละฝั่ง — FE ใช้ข้อความเดียวกันตอนกรอง dropdown (UAT Q12) */
+export function teamSideFieldMessage(field: 'compensationPlanId' | 'supervisorId' | 'managerIds', side: TeamSide): string {
+  const label = SIDE_LABEL[side]
+  switch (field) {
+    case 'compensationPlanId':
+      return `แผนค่าตอบแทนต้องเป็นฝั่ง ${label} เดียวกับทีม`
+    case 'supervisorId':
+      return `หัวหน้าทีมต้องเป็นผู้ใช้ role "${TEAM_SUPERVISOR_ROLE_NAME}" ฝั่ง ${label}`
+    case 'managerIds':
+      return `ผู้จัดการทีมต้องเป็นผู้ใช้ role "${TEAM_MANAGER_ROLE_NAME}" ฝั่ง ${label}`
+  }
+}
+
+export interface TeamPersonRole {
+  id: string
+  roleGroup: string
+  roleName: string
+}
+
+/** ผู้ใช้คนนี้เป็น role ที่ถูกต้องของช่องนั้นในฝั่งของทีมหรือไม่ — ใช้ทั้งกรอง dropdown (FE) และยาม API */
+export function isTeamSlotEligible(person: Pick<TeamPersonRole, 'roleGroup' | 'roleName'>, slot: 'supervisor' | 'manager', side: TeamSide): boolean {
+  const roleName = slot === 'supervisor' ? TEAM_SUPERVISOR_ROLE_NAME : TEAM_MANAGER_ROLE_NAME
+  return person.roleGroup === side && person.roleName === roleName
+}
+
+/**
+ * ทีม/แผน/หัวหน้า/ผู้จัดการต้องเป็น **ฝั่งเดียวกัน** (มติ PO 03/10/2569 UAT Q12 · BUG-009 · `09` §7.1):
+ * - แผนค่าตอบแทน = ฝั่งของทีม → ไม่ตรง = 400 `REQUIRED_MISSING` + field error `compensationPlanId`
+ *   (`24` ไม่มี code เฉพาะ — ไม่ตั้ง code ใหม่ตาม Rule 04)
+ * - หัวหน้าทีม = role หัวหน้าทีมติดตามทรัพย์ของฝั่งนั้น · ผู้จัดการ = role ผู้จัดการทีมติดตามทรัพย์ของฝั่งนั้น
+ *   → ไม่ตรง = `INVALID_TEAM_MEMBER` + field error ของช่องนั้น
+ */
+export function assertTeamSideConsistent(input: {
+  side: TeamSide
+  planSide: string | null
+  supervisor: TeamPersonRole | null
+  managers: readonly TeamPersonRole[]
+}): void {
+  if (input.planSide !== null && input.planSide !== input.side) {
+    throw new TeamError('REQUIRED_MISSING', {
+      detail: `plan side=${input.planSide} team side=${input.side}`,
+      context: { fields: { compensationPlanId: teamSideFieldMessage('compensationPlanId', input.side) } },
+    })
+  }
+  if (input.supervisor !== null && !isTeamSlotEligible(input.supervisor, 'supervisor', input.side)) {
+    throw new TeamError('INVALID_TEAM_MEMBER', {
+      detail: `supervisor=${input.supervisor.id}`,
+      context: {
+        invalidUserIds: [input.supervisor.id],
+        fields: { supervisorId: teamSideFieldMessage('supervisorId', input.side) },
+      },
+    })
+  }
+  const invalidManagers = input.managers.filter((manager) => !isTeamSlotEligible(manager, 'manager', input.side))
+  if (invalidManagers.length > 0) {
+    throw new TeamError('INVALID_TEAM_MEMBER', {
+      detail: `managers=${invalidManagers.map((manager) => manager.id).join(',')}`,
+      context: {
+        invalidUserIds: invalidManagers.map((manager) => manager.id),
+        fields: { managerIds: teamSideFieldMessage('managerIds', input.side) },
+      },
+    })
+  }
 }
 
 /**
