@@ -358,9 +358,11 @@ beforeAll(async () => {
       ('${ROLE_ADMIN}', '${ORG_ID}', 'ธุรการ 8.1ข', 'system', false),
       ('${ROLE_MANAGER}', '${ORG_ID}', 'ผู้จัดการทีม 8.1ข', 'inhouse', false),
       ('${ROLE_FINANCE}', '${ORG_ID}', 'การเงิน 8.1ข', 'system', false),
-      ('${ROLE_AGENT}', '${ORG_ID}', 'พนักงานติดตามทรัพย์ 8.1ข', 'inhouse', false)
+      ('${ROLE_AGENT}', '${ORG_ID}', 'พนักงานติดตามทรัพย์', 'inhouse', false)
     ON CONFLICT (id) DO NOTHING
   `)
+  // ผู้รับงานต้องเป็น role พนักงานติดตามทรัพย์จริง (UAT BUG-039) — แก้ชื่อแถวเก่าใน DB ทดสอบที่ค้างจากรอบก่อน
+  await tx.$executeRawUnsafe(`UPDATE roles SET name = 'พนักงานติดตามทรัพย์' WHERE id = '${ROLE_AGENT}'`)
   await tx.$executeRawUnsafe(`
     INSERT INTO users (id, organization_id, role_id, email, full_name, status) VALUES
       ('${ADMIN_ID}', '${ORG_ID}', '${ROLE_ADMIN}', 'admin81b@test.local', 'ธุรการ 8.1ข', 'active'),
