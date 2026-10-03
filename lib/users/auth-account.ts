@@ -1,4 +1,4 @@
-import type { RoleGroup } from '@/lib/generated/prisma/enums'
+import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
 
 /**
  * กติกา pure ของบัญชีเข้าสู่ระบบ (DEC-010 · มติ PO 03/10/2569 — แทน flow เชิญทางอีเมลของ D1)
@@ -15,6 +15,32 @@ import type { RoleGroup } from '@/lib/generated/prisma/enums'
 /** ผู้กระทำจัดการบัญชีที่อยู่ (หรือจะย้ายไปอยู่) ใน role group นี้ได้ไหม */
 export function canManageAccountIn(actor: { isSuperadmin: boolean }, roleGroup: RoleGroup): boolean {
   return actor.isSuperadmin || roleGroup !== 'system'
+}
+
+/**
+ * กลุ่มบัญชีที่ผู้ใช้คนนี้ **มองเห็น** ในหน้า/API ผู้ใช้งาน (มติ PO 03/10/2569 — UAT BUG-021)
+ *
+ * ผู้ดูแลบัญชีที่ไม่ใช่ Superadmin (ถือ `manage:manage_users` เช่น ธุรการ — `05` §12) เห็นทั้งองค์กร
+ * **เฉพาะกลุ่มที่ตัวเองจัดการได้** (ไม่เห็นกลุ่ม `system` เลย เพราะจัดการไม่ได้ตาม DEC-010) — spec
+ * เขียนแค่ "ตามสิทธิ์ที่ได้รับมอบหมาย / Assigned scope" โดยไม่มีกลไกมอบหมาย จึงยึดแนวที่ PO เลือก
+ * ผู้ถือแค่ `view` (บริหาร/ผู้จัดการทีม) และ Superadmin ไม่ถูกจำกัดที่นี่ (scope ระดับแถวยังบังคับที่ชั้นข้อมูล)
+ * ตัดสินด้วย capability ไม่ผูกชื่อ role
+ */
+export function canViewAccountsIn(
+  actor: { isSuperadmin: boolean; capabilities: Readonly<Record<string, CapabilityAccessLevel>> },
+  roleGroup: RoleGroup,
+): boolean {
+  if (actor.isSuperadmin || actor.capabilities.manage_users !== 'manage') return true
+  return canManageAccountIn(actor, roleGroup)
+}
+
+/** กลุ่มบัญชีที่ต้องกรองออกจากรายการของผู้ใช้คนนี้ (ว่าง = ไม่กรอง) */
+export function hiddenAccountGroups(actor: {
+  isSuperadmin: boolean
+  capabilities: Readonly<Record<string, CapabilityAccessLevel>>
+}): RoleGroup[] {
+  const groups: RoleGroup[] = ['system', 'inhouse', 'outsource', 'finance_company']
+  return groups.filter((group) => !canViewAccountsIn(actor, group))
 }
 
 export function canSetPasswordFor(actor: { isSuperadmin: boolean }, target: { roleGroup: RoleGroup }): boolean {

@@ -48,7 +48,12 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
             <Item label="ผู้ดำเนินการ">{auditActorLabel(detail.actorName, detail.actorRole)}</Item>
             <Item label="เป้าหมาย">
               {auditTargetLabel(detail.targetType)}
-              {detail.targetId !== null && <RefText className="ml-2">{detail.targetId}</RefText>}
+              {detail.targetId !== null && (
+                <>
+                  {' '}
+                  <RefText className="ml-1 break-all">{detail.targetId}</RefText>
+                </>
+              )}
             </Item>
             <Item label="เหตุผล">{detail.reason ?? '—'}</Item>
             <Item label="ที่มาการเรียก">

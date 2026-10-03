@@ -29,7 +29,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang, parseBahtInput, toBahtInput } from '@/lib/format/money'
-import { MAX_APPROVAL_STEPS, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
+import { MAX_APPROVAL_STEPS, approvalRoleOptions, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
 import { approvalMatrixCreateSchema } from '@/lib/settings/schemas'
 import type { ApprovalMatrixDto } from '@/lib/settings/types'
 
@@ -71,6 +71,9 @@ export function ApprovalMatrixTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  /** ชื่อ role ผู้อนุมัติที่มีจริงในองค์กร — ขั้นอนุมัติเลือกจากรายการนี้เท่านั้น (UAT BUG-008) */
+  const [roleOptions, setRoleOptions] = useState<readonly string[]>([])
+  const [rolesLoading, setRolesLoading] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<ApprovalMatrixDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
@@ -128,6 +131,18 @@ export function ApprovalMatrixTab() {
     )
     setErrors({})
     setFormOpen(true)
+    void loadRoleOptions()
+  }
+
+  async function loadRoleOptions(): Promise<void> {
+    setRolesLoading(true)
+    const result = await callApi<{ name: string }[]>('/api/roles')
+    if (result.error !== undefined) {
+      setErrors({ approvalFlow: `โหลดรายชื่อบทบาทไม่สำเร็จ — ${result.error.message}` })
+    } else {
+      setRoleOptions(approvalRoleOptions((result.data ?? []).map((role) => role.name)))
+    }
+    setRolesLoading(false)
   }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
@@ -184,6 +199,7 @@ export function ApprovalMatrixTab() {
         jsonRequest(editing === null ? 'POST' : 'PATCH', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -361,7 +377,7 @@ export function ApprovalMatrixTab() {
             <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
             </Button>
-            <Button onClick={() => void save()} loading={saving}>
+            <Button onClick={() => void save()} loading={saving} disabled={rolesLoading}>
               {editing === null ? 'เพิ่มกติกา' : 'บันทึกการแก้ไข'}
             </Button>
           </>
@@ -394,12 +410,23 @@ export function ApprovalMatrixTab() {
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-12 shrink-0 font-mono text-[10px] font-semibold text-slate-500">ขั้น {index + 1}</span>
                   <div className="flex-1">
-                    <Input
+                    <Select
                       aria-label={`บทบาทผู้อนุมัติขั้นที่ ${index + 1}`}
                       value={role}
+                      disabled={rolesLoading}
                       onChange={(event) => setStep(index, event.target.value)}
-                      placeholder='เช่น "ผู้จัดการทีม" หรือ "ผู้บริหาร"'
-                    />
+                    >
+                      <option value="">{rolesLoading ? 'กำลังโหลดรายชื่อบทบาท…' : '— เลือกบทบาท —'}</option>
+                      {roleOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                      {/* ค่าเดิมที่ไม่มีในรายชื่อแล้ว (ข้อมูลก่อนแก้ BUG-008) — โชว์ให้เห็นว่าต้องเลือกใหม่ */}
+                      {role !== '' && !roleOptions.includes(role) && !rolesLoading && (
+                        <option value={role}>{role} (ไม่พบในระบบ — เลือกใหม่)</option>
+                      )}
+                    </Select>
                   </div>
                   {form.approvalFlow.length > 1 && (
                     <button

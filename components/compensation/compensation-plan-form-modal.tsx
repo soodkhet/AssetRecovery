@@ -321,7 +321,7 @@ export function CompensationPlanFormModal({
             id="plan-commission"
             label="ค่าคอมมิชชั่น (บาท/เคส)"
             required
-            hint="จ่ายเมื่อปิดเคส **สำเร็จ**"
+            hint="จ่ายเมื่อปิดเคสสำเร็จ"
             error={errors.commissionSatang}
           >
             <Input
@@ -337,7 +337,7 @@ export function CompensationPlanFormModal({
             id="plan-no-success"
             label="เบี้ยเสี่ยง (บาท/เคส)"
             required
-            hint="จ่ายเมื่อปิดเคส **ไม่สำเร็จ** — เคสหนึ่งได้อย่างใดอย่างหนึ่งเท่านั้น"
+            hint="จ่ายเมื่อปิดเคสไม่สำเร็จ — เคสหนึ่งได้อย่างใดอย่างหนึ่งเท่านั้น"
             error={errors.noSuccessFeeSatang}
           >
             <Input

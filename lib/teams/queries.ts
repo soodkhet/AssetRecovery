@@ -1,4 +1,5 @@
 import { emitAudit } from '@/lib/audit/audit'
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { AuthError } from '@/lib/auth/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isWithinScope } from '@/lib/auth/scope'
@@ -197,6 +198,14 @@ async function assertNameAvailable(organizationId: string, name: string, exceptT
   if (duplicate) throw new TeamError('DUPLICATE_TEAM_NAME', { detail: `name=${name}` })
 }
 
+/**
+ * ชน unique `(organization_id, name)` ระดับ DB — คำขอที่ยิงพร้อมกันหลุด pre-check ทั้งคู่ หรือชื่อตรงกับ
+ * ทีมที่ถูกลบไปแล้ว (unique ไม่ partial) ⇒ `DUPLICATE_TEAM_NAME` แทน 500 (UAT BUG-016)
+ */
+function rethrowDuplicateName(name: string): never {
+  throw new TeamError('DUPLICATE_TEAM_NAME', { detail: `name=${name} (unique violation)` })
+}
+
 /** ทุกทีมต้องผูกแผนค่าตอบแทนที่ยังใช้งานอยู่และเป็นเวอร์ชันปัจจุบัน (`09` §7 · `11` §10) */
 async function assertPlanUsable(organizationId: string, planId: string): Promise<void> {
   const plan = await prisma.compensationPlan.findFirst({
@@ -296,7 +305,7 @@ export async function createTeam(context: MutationContext, input: TeamValues): P
     )
 
     return team
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateName(values.name)))
 
   return toDto(created)
 }
@@ -367,7 +376,7 @@ export async function updateTeam(
     )
 
     return team
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateName(values.name)))
 
   return toDto(updated)
 }

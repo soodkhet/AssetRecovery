@@ -167,7 +167,7 @@ export function CompensationPlansManager() {
                 setFormOpen(true)
               }}
             >
-              + สร้างเทมเพลต
+              + สร้างแผนค่าตอบแทน
             </Button>
           </Can>
         }
@@ -206,7 +206,7 @@ export function CompensationPlansManager() {
             }
           />}
         {!loading && error === null && plans.length === 0 && (
-          <EmptyState title="ยังไม่มีแผนค่าตอบแทน" description="สร้างเทมเพลตแรกเพื่อผูกกับทีมติดตามทรัพย์" />
+          <EmptyState title="ยังไม่มีแผนค่าตอบแทน" description="สร้างแผนแรกเพื่อผูกกับทีมติดตามทรัพย์" />
         )}
 
         {!loading && error === null && plans.length > 0 && (

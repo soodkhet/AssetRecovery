@@ -50,6 +50,19 @@ export function Badge({ children, className }: { children: ReactNode; className?
 }
 
 /** ข้อความรหัส/เลขอ้างอิง (case ref, IMEI, เลขบัญชี, เลขภาษี) — บังคับ `font-mono` (`04` §8.1) */
-export function RefText({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('font-mono text-xs text-slate-700', className)}>{children}</span>
+export function RefText({
+  children,
+  className,
+  title,
+}: {
+  children: ReactNode
+  className?: string
+  /** ค่าเต็มตอน hover — ใช้เมื่อแสดงรหัสแบบย่อ */
+  title?: string
+}) {
+  return (
+    <span className={cn('font-mono text-xs text-slate-700', className)} title={title}>
+      {children}
+    </span>
+  )
 }

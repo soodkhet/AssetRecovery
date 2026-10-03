@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { pctSchema, reasonSchema } from '@/lib/api/validation'
+import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 import { DEFAULT_CUSTOMER_WHT_PCT, DEFAULT_VAT_MODE, normalizeTaxId } from '@/lib/finance-companies/company'
 
 /**
@@ -10,8 +10,6 @@ import { DEFAULT_CUSTOMER_WHT_PCT, DEFAULT_VAT_MODE, normalizeTaxId } from '@/li
  *
  * `reason` บังคับทุก mutation — `finance_companies` อยู่หมวด **เงิน** (`90` §13 · `10` §13)
  */
-
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const invoiceDeliveryFormatSchema = z.enum(['e_tax_invoice', 'paper_pdf'])
 export const companyStatusSchema = z.enum(['active', 'suspended'])
@@ -55,7 +53,7 @@ const companyFields = z.object({
   contactName: optionalText(200),
   contactPhone: optionalText(20),
   signerName: optionalText(200),
-  serviceFeeTemplateId: uuidSchema,
+  serviceFeeTemplateId: requiredIdSchema('เทมเพลตค่าบริการ'),
   vatRegistered: z.boolean().default(true),
   vatMode: vatModeSchema.default(DEFAULT_VAT_MODE),
   whtWithheldByCustomerPct: customerWhtPctSchema,

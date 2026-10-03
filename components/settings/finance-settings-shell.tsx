@@ -20,6 +20,7 @@ import { VatRatesTab } from '@/components/settings/vat-rates-tab'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { FINANCE_SETTINGS_TABS } from '@/lib/settings/finance-tabs'
+import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
  * หน้า "ตั้งค่าบัญชี/การเงิน" — โครงตาม mockup `settings.html` (`renderSettingsLayout`):
@@ -51,11 +52,11 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
                 return (
                   <span
                     key={item.id}
-                    title={`หน้าจริงเกิดใน Phase ${item.plannedPhase ?? '-'}`}
+                    title={UNDER_DEVELOPMENT_TEXT}
                     className="cursor-not-allowed rounded-lg px-4 py-2.5 text-sm font-medium text-slate-400"
                   >
                     {item.label}
-                    <span className="ml-1 font-mono text-[10px] text-slate-300">Phase {item.plannedPhase ?? '-'}</span>
+                    <span className="ml-1 text-[10px] text-slate-300">{UNDER_DEVELOPMENT_TEXT}</span>
                   </span>
                 )
               }
@@ -81,7 +82,8 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           </nav>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        {/* เนื้อหาแท็บ — ห้ามใช้ <main> ซ้ำ: AppShell มี <main> อยู่แล้ว (UAT BUG-018) */}
+        <section className="min-w-0 flex-1" aria-label={current?.label}>
           {current?.id === 'cycles' && <CyclesTab />}
           {current?.id === 'approval' && <ApprovalMatrixTab />}
           {current?.id === 'bank' && <BankAccountsTab />}
@@ -101,10 +103,10 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current !== undefined && !current.available && (
             <EmptyState
               title={current.label}
-              description={`หน้าจริงเกิดใน Phase ${current.plannedPhase ?? '-'}`}
+              description={`${UNDER_DEVELOPMENT_TEXT} — จะเปิดใช้งานเร็ว ๆ นี้`}
             />
           )}
-        </main>
+        </section>
       </div>
     </>
   )

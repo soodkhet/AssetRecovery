@@ -118,6 +118,8 @@ export function PayeeTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  /** รายชื่อผู้ใช้ของ dropdown ยังโหลดไม่เสร็จ — ห้ามกดบันทึกระหว่างนี้ (UAT BUG-017) */
+  const [candidatesLoading, setCandidatesLoading] = useState(false)
 
   const [verifyTarget, setVerifyTarget] = useState<PayeeDto | null>(null)
   const [verifyReason, setVerifyReason] = useState('')
@@ -174,8 +176,11 @@ export function PayeeTab() {
     setErrors({})
     setFormOpen(true)
     if (target === null) {
+      setCandidatesLoading(true)
       const result = await callApi<Candidate[]>('/api/payees/candidates')
       setCandidates(result.data ?? [])
+      if (result.error) setErrors({ userId: `โหลดรายชื่อผู้ใช้ไม่สำเร็จ — ${result.error.message}` })
+      setCandidatesLoading(false)
     }
   }
 
@@ -407,7 +412,11 @@ export function PayeeTab() {
             <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
             </Button>
-            <Button onClick={() => void save()} loading={saving}>
+            <Button
+              onClick={() => void save()}
+              loading={saving}
+              disabled={editing === null && candidatesLoading}
+            >
               {editing === null ? 'เพิ่มผู้รับเงิน' : 'บันทึกการแก้ไข'}
             </Button>
           </>
@@ -422,8 +431,13 @@ export function PayeeTab() {
 
           {editing === null ? (
             <Field id="payee-user" label="ผู้ใช้เจ้าของข้อมูล" required error={errors.userId}>
-              <Select id="payee-user" value={form.userId} onChange={(event) => set('userId', event.target.value)}>
-                <option value="">— เลือกผู้ใช้ —</option>
+              <Select
+                id="payee-user"
+                value={form.userId}
+                disabled={candidatesLoading}
+                onChange={(event) => set('userId', event.target.value)}
+              >
+                <option value="">{candidatesLoading ? 'กำลังโหลดรายชื่อผู้ใช้…' : '— เลือกผู้ใช้ —'}</option>
                 {candidates.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
                     {candidate.fullName} · {candidate.teamName ?? candidate.roleName}

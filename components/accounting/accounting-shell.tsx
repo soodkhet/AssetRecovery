@@ -13,6 +13,7 @@ import { WhtTab } from '@/components/accounting/wht-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { ACCOUNTING_TABS } from '@/lib/accounting/accounting-tabs'
+import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
  * หน้า "บัญชี (Accounting)" — โครงตาม mockup `accounting.html` (`renderAccountingOperations`):
@@ -42,7 +43,7 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
               return (
                 <span
                   key={item.id}
-                  title={`หน้าจริงเกิดใน Phase ${item.plannedPhase ?? '-'}`}
+                  title={UNDER_DEVELOPMENT_TEXT}
                   className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300"
                 >
                   {item.label}

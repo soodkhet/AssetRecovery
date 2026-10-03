@@ -1,9 +1,17 @@
 import type { NextRequest } from 'next/server'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  fieldErrorResponse,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import {
   deleteApprovalMatrix,
+  findInvalidApprovalSteps,
   getApprovalMatrix,
+  invalidApprovalStepsMessage,
   updateApprovalMatrix,
 } from '@/lib/settings/queries/approval-matrix'
 import { approvalMatrixDeleteSchema, approvalMatrixUpdateSchema } from '@/lib/settings/schemas'
@@ -32,6 +40,9 @@ export const PATCH = withApiPermission<RouteContext>(
 
     const current = await getApprovalMatrix(user.organizationId, id)
     const { reason, ...values } = parsed.data
+    // ชื่อ role ต้องมีจริงในองค์กรและเป็นผู้อนุมัติได้ (UAT BUG-008)
+    const invalid = await findInvalidApprovalSteps(user.organizationId, values.approvalFlow)
+    if (invalid.length > 0) return fieldErrorResponse({ approvalFlow: invalidApprovalStepsMessage(invalid) })
     const matrix = await updateApprovalMatrix({ actor: user, meta: getRequestMeta(request), reason }, current, values)
     return Response.json({ data: matrix })
   },

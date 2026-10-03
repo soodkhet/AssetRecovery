@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
@@ -225,6 +226,20 @@ export async function listPayeeCandidates(
   }))
 }
 
+/** 1 ผู้ใช้ = 1 payee (unique `organization_id, user_id`) — แนบ id payee เดิมให้ UI ลิงก์ไปเปิดได้ */
+async function assertNoPayeeForUser(organizationId: string, userId: string): Promise<void> {
+  const duplicate = await prisma.payeeProfile.findFirst({
+    where: { organizationId, userId },
+    select: { id: true },
+  })
+  if (duplicate !== null) {
+    throw new PayeeError('PAYEE_ALREADY_EXISTS', {
+      detail: `user=${userId} payee=${duplicate.id}`,
+      context: { payeeId: duplicate.id },
+    })
+  }
+}
+
 export async function createPayee(
   context: PayeeMutationContext,
   input: PayeeFieldsInput & { userId: string },
@@ -236,16 +251,7 @@ export async function createPayee(
   })
   if (owner === null) throw new PayeeError('PAYEE_NOT_FOUND', { detail: `user=${input.userId}` })
 
-  const duplicate = await prisma.payeeProfile.findFirst({
-    where: { organizationId, userId: input.userId },
-    select: { id: true },
-  })
-  if (duplicate !== null) {
-    throw new PayeeError('PAYEE_ALREADY_EXISTS', {
-      detail: `user=${input.userId} payee=${duplicate.id}`,
-      context: { payeeId: duplicate.id },
-    })
-  }
+  await assertNoPayeeForUser(organizationId, input.userId)
 
   await assertTaxProfileUsable(organizationId, input.taxProfileId)
   const data = toWriteData(input)
@@ -273,7 +279,13 @@ export async function createPayee(
     )
 
     return row
-  })
+  }).catch(
+    // ชน unique `(organization_id, user_id)` — 1 ผู้ใช้ = 1 payee · คำขอพร้อมกันหลุด pre-check ทั้งคู่ (UAT BUG-016)
+    onUniqueViolation(async () => {
+      await assertNoPayeeForUser(organizationId, input.userId)
+      throw new PayeeError('PAYEE_ALREADY_EXISTS', { detail: `user=${input.userId} (unique violation)` })
+    }),
+  )
 
   return { payee: toDto(created, true), warning: bankNameWarning(owner.fullName, data.accountName) }
 }

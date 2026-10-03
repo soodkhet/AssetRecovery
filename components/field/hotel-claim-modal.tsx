@@ -8,7 +8,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
-import { parseBahtInput } from '@/lib/format/money'
+import { bahtInputError, parseBahtInput } from '@/lib/format/money'
 
 /**
  * ฟอร์มเบิกค่าที่พัก (`41` §6.6 กลุ่ม "เบิกแยก" · §7.9)
@@ -54,7 +54,7 @@ export function HotelClaimModal({
   async function submit(): Promise<void> {
     const amountSatang = parseBahtInput(amountBaht)
     if (expenseDate === '' || amountSatang === null || Number.isNaN(amountSatang) || amountSatang <= 0) {
-      setError('กรุณากรอกวันที่และจำนวนเงิน')
+      setError(bahtInputError(amountBaht, 'จำนวนเงิน') ?? 'กรุณากรอกวันที่และจำนวนเงิน')
       return
     }
     if (receipt === null) {

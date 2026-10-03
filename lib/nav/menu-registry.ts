@@ -24,7 +24,13 @@ import {
  * ซึ่งบังคับที่ API + `<Can>` ต่างหาก การผูก role ↔ capability จริงเกิดใน Phase 1.6
  */
 
-/** คอลัมน์ของ matrix `06` §7.2 (8 คอลัมน์) + `admin_office` ที่ตารางตกหล่น — ดูหมายเหตุที่ `MENU_ITEMS` */
+/** คอลัมน์ของ matrix `06` §7.2 (9 คอลัมน์ — `admin_office` เพิ่มใน v2.3) — ดูหมายเหตุที่ `MENU_ITEMS` */
+/**
+ * ข้อความกลางของเมนู/แท็บ/หน้าที่ยังไม่เปิดใช้ — ผู้ใช้ต้องไม่เห็นป้ายเฟสพัฒนา ("Phase 7.3" ฯลฯ — UAT BUG-020)
+ * `plannedPhase` ยังเก็บไว้ในทะเบียนเพื่อวางแผนงานภายในเท่านั้น ห้าม render
+ */
+export const UNDER_DEVELOPMENT_TEXT = 'อยู่ระหว่างพัฒนา'
+
 export type MenuAudience =
   | 'superadmin'
   | 'executive'
@@ -54,7 +60,7 @@ export interface MenuItem {
    * `menu-registry.test.ts` จึงล็อกไว้ว่า **ทุก path ที่มี `page.tsx` จริงต้องเป็น `true`**
    */
   available: boolean
-  /** phase ที่หน้าจริงเกิด (ใช้แสดงบน placeholder เมื่อ `available = false`) */
+  /** phase ที่หน้าจริงเกิด — ใช้วางแผนงานภายในเท่านั้น **ห้าม render ให้ผู้ใช้เห็น** (UAT BUG-020) */
   plannedPhase?: string
   /** แท็บย่อยของเมนู (`06` §8) — `cases` มี sub-menu จริงตาม §7.1.1 ที่เหลือเป็นรายการรอพัฒนา */
   children?: readonly MenuItem[]
@@ -78,6 +84,8 @@ const ALL_AUDIENCES: readonly MenuAudience[] = [
  * หมายเหตุ **ธุรการ (admin_office)**: ตาราง §7.2 ไม่มีคอลัมน์ของ role นี้ — ยึดตาม mockup
  * `reference/app-shell.html` (`ROLE_CONFIG.admin_office`) ซึ่งเป็น source of truth ด้าน UI:
  * เห็น "แดชบอร์ด" + "จัดการเคส" (แท็บรับเคส) ตามหน้าที่คีย์ข้อมูลเคสในไฟล์ 38 §5
+ * + "การตั้งค่า" **เฉพาะแท็บผู้ใช้งาน** (`06` §7.2 v2.3 — มติ PO 03/10/2569 UAT BUG-021: ธุรการถือ
+ * `manage:manage_users` ตาม `05` §12 · บัญชีกลุ่ม system ยังจัดการได้เฉพาะ Superadmin — DEC-010)
  */
 export const MENU_ITEMS: readonly MenuItem[] = [
   {
@@ -174,7 +182,8 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     // `06` §7.2 v1.2 (มติ PO 15/08/2569 — D17): การเงิน/บัญชีเห็นเมนูนี้แบบ **บางส่วน** เพื่อเข้าถึง
     // "บันทึกการใช้งาน" + "งานเบื้องหลัง" ที่ `90` §12 / `91` §12 ให้สิทธิ์ไว้ · แท็บอื่นยังถูกกรองออก
     // ด้วย audience ของลูกแต่ละตัว (`filterByAudience` กรองลูกซ้ำอีกชั้น)
-    audiences: ['superadmin', 'executive', 'finance', 'accounting'],
+    // ธุรการเห็นเฉพาะแท็บ "ผู้ใช้งาน" (มติ PO 03/10/2569 UAT BUG-021) — แท็บอื่นกรองออกด้วย audience ของลูก
+    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'admin_office'],
     // ครบทุกแท็บที่วางไว้แล้วตั้งแต่ 1.11 (`/settings` เปลี่ยนเส้นทางไปแท็บแรก**ที่ผู้ใช้เห็น**)
     available: true,
     children: [
@@ -197,7 +206,8 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         id: 'settings.users',
         label: 'ผู้ใช้งาน',
         path: '/settings/users',
-        audiences: ['superadmin', 'executive'],
+        // ธุรการ = ผู้ถือ `manage:manage_users` (`05` §12) — มติ PO 03/10/2569 (UAT BUG-021)
+        audiences: ['superadmin', 'executive', 'admin_office'],
         available: true,
       },
       {

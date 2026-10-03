@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -187,6 +188,26 @@ async function assertNameAvailable(organizationId: string, name: string, exceptN
   if (duplicate) throw new CompensationError('DUPLICATE_TEMPLATE_NAME', { detail: `name=${name}` })
 }
 
+/**
+ * ชน unique `(organization_id, name, version)` ระดับ DB ⇒ แปลงเป็น code ของโมดูลแทน 500 (UAT BUG-016)
+ * - สร้างใหม่พร้อมกัน 2 คำขอชื่อเดียวกัน (version 1 ทั้งคู่) ⇒ `DUPLICATE_TEMPLATE_NAME`
+ * - แก้พร้อมกัน 2 คำขอ (ต่างคนต่างสร้าง version ถัดไปเลขเดียวกัน) ⇒ ถ้าไม่ใช่เพราะเปลี่ยนชื่อไปชนชุดอื่น
+ *   แปลว่าเวอร์ชันที่แก้ถูกอีกคำขอแทนที่ไปแล้ว ⇒ `VERSION_NOT_CURRENT` (ให้โหลดเวอร์ชันล่าสุดแล้วแก้ใหม่)
+ */
+async function rethrowDuplicateName(organizationId: string, name: string): Promise<never> {
+  await assertNameAvailable(organizationId, name)
+  throw new CompensationError('DUPLICATE_TEMPLATE_NAME', { detail: `name=${name} (unique violation)` })
+}
+
+async function rethrowVersionConflict(
+  organizationId: string,
+  current: { id: string; name: string },
+  nextName: string,
+): Promise<never> {
+  await assertNameAvailable(organizationId, nextName, current.name)
+  throw new CompensationError('VERSION_NOT_CURRENT', { detail: `plan=${current.id} (unique violation)` })
+}
+
 export async function createCompensationPlan(
   context: MutationContext,
   values: CompensationPlanValues,
@@ -223,7 +244,7 @@ export async function createCompensationPlan(
     )
 
     return plan
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateName(organizationId, values.name)))
 
   return toRecord(created)
 }
@@ -300,7 +321,7 @@ export async function updateCompensationPlan(
     )
 
     return plan
-  })
+  }).catch(onUniqueViolation(() => rethrowVersionConflict(organizationId, current, next.values.name)))
 
   return toRecord(updated)
 }

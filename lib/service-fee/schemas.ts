@@ -82,7 +82,7 @@ function refineByModel(value: ServiceFeeTemplateFields, ctx: z.RefinementCtx): v
     ctx.addIssue({
       code: 'custom',
       path: ['chargeOnFail'],
-      message: 'model SUCCESS_FEE เก็บเฉพาะเคสสำเร็จโดยนิยาม ตั้ง charge_on_fail ไม่ได้',
+      message: 'โมเดล Success Fee เก็บเฉพาะเคสสำเร็จโดยนิยาม — ตั้งให้เรียกเก็บเมื่อไม่สำเร็จไม่ได้',
     })
   }
 }

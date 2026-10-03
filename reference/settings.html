@@ -971,7 +971,7 @@ function renderOrganizationContent() {
 }
 
 function renderCompensationContent() {
-  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">แผนค่าตอบแทน (จ่ายออก)</h2><button data-action="open-create-comp" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างเทมเพลต</button></div>
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">แผนค่าตอบแทน (จ่ายออก)</h2><button data-action="open-create-comp" class="flex items-center gap-1.5 bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-800 focus-ring">${Icon.plus} สร้างแผนค่าตอบแทน</button></div>
   <p class="text-xs text-slate-500 mb-4">commission = จ่ายเมื่อปิดสำเร็จ | เบี้ยเสี่ยง (no_success_fee) = จ่ายเมื่อไม่สำเร็จ — mutual exclusive ต่อเคส</p>
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">${store.compTemplates.map(ct => {
     const fuelLabel = ct.fuel.mode === 'PER_KM'
@@ -1004,7 +1004,7 @@ function renderServiceFeeContent() {
       : sf.model === 'FLAT' ? `${sf.base.toLocaleString('th-TH')} บาท (เหมาคงที่)`
       : `${sf.base.toLocaleString('th-TH')} บาท + ${sf.rate}% × ${basisLabel}`;
     const failFormula = sf.model === 'SUCCESS_FEE' ? 'ไม่เรียกเก็บ (0 บาท)'
-      : (sf.chargeOnFail ? `${sf.base.toLocaleString('th-TH')} บาท (base — charge_on_fail)` : 'ไม่เรียกเก็บ (0 บาท)');
+      : (sf.chargeOnFail ? `${sf.base.toLocaleString('th-TH')} บาท (ค่าเปิดเคส)` : 'ไม่เรียกเก็บ (0 บาท)');
     return `<div class="border border-slate-200 rounded-lg p-5 shadow-sm">
     <div class="flex justify-between items-start mb-4">
       <div>
@@ -1016,14 +1016,14 @@ function renderServiceFeeContent() {
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">💰 ค่าเปิดเคส (Base)</span><span class="font-bold text-slate-800 text-sm">${sf.base > 0 ? sf.base.toLocaleString('th-TH') + ' บาท' : '—'}</span></div>
       <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100"><span class="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-1">📊 อัตราความสำเร็จ</span><span class="font-bold text-slate-800 text-sm">${sf.rate > 0 ? `${sf.rate}% <span class="font-medium text-xs text-slate-500">× ${basisLabel}</span>` : '—'}</span></div>
-      <div class="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 col-span-2"><span class="text-emerald-600 block text-[10px] uppercase font-bold tracking-wider mb-1">✅ เคสสำเร็จ (closed_success) เรียกเก็บ</span><span class="font-bold text-emerald-700 text-sm">${okFormula}</span></div>
-      <div class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'} p-2.5 rounded-lg border col-span-2"><span class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-600' : 'text-slate-400'} block text-[10px] uppercase font-bold tracking-wider mb-1">🔄 เคสไม่สำเร็จ (closed_fail) เรียกเก็บ</span><span class="font-bold ${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-700' : 'text-slate-600'} text-sm">${failFormula}</span></div>
+      <div class="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 col-span-2"><span class="text-emerald-600 block text-[10px] uppercase font-bold tracking-wider mb-1">✅ เคสสำเร็จ เรียกเก็บ</span><span class="font-bold text-emerald-700 text-sm">${okFormula}</span></div>
+      <div class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'} p-2.5 rounded-lg border col-span-2"><span class="${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-600' : 'text-slate-400'} block text-[10px] uppercase font-bold tracking-wider mb-1">🔄 เคสไม่สำเร็จ เรียกเก็บ</span><span class="font-bold ${sf.model !== 'SUCCESS_FEE' && sf.chargeOnFail ? 'text-amber-700' : 'text-slate-600'} text-sm">${failFormula}</span></div>
     </div>
     ${sf.model === 'SUCCESS_FEE'
-      ? '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือก charge_on_fail</div>'
+      ? '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือกเก็บเงินเมื่อไม่สำเร็จ</div>'
       : (sf.chargeOnFail
-        ? '<div class="text-[11px] text-amber-800 font-bold bg-amber-100 px-2.5 py-1 rounded inline-block mb-3 border border-amber-200">⚠️ charge_on_fail = true — เก็บค่า base เสมอไม่ว่าผลจะเป็นอย่างไร</div>'
-        : '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">charge_on_fail = false — เรียกเก็บเฉพาะเคสสำเร็จ</div>')}
+        ? '<div class="text-[11px] text-amber-800 font-bold bg-amber-100 px-2.5 py-1 rounded inline-block mb-3 border border-amber-200">⚠️ เก็บค่าเปิดเคสเสมอไม่ว่าผลจะเป็นอย่างไร</div>'
+        : '<div class="text-[11px] text-slate-400 bg-slate-50 px-2.5 py-1 rounded inline-block mb-3 border border-slate-200">เรียกเก็บเฉพาะเคสสำเร็จ</div>')}
     <div class="pt-3 border-t border-slate-100 text-right"><button data-action="open-edit-sf" data-id="${sf.id}" class="text-xs text-slate-600 hover:text-slate-900 font-semibold px-3 py-1.5 border border-slate-200 rounded hover:bg-slate-50">⚙️ แก้ไขข้อมูล</button></div>
     </div>`;
   }).join('')}</div></div>`;

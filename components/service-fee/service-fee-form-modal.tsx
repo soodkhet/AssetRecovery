@@ -206,7 +206,7 @@ export function ServiceFeeFormModal({
                 onChange={(event) => set('chargeOnFail', event.target.checked)}
                 className="h-4 w-4 rounded border-slate-300"
               />
-              เรียกเก็บค่าเปิดเคสแม้เคสไม่สำเร็จ (`charge_on_fail`)
+              เรียกเก็บค่าเปิดเคสแม้เคสไม่สำเร็จ
             </label>
           </div>
         )}
@@ -247,7 +247,7 @@ export function ServiceFeeFormModal({
             onChange={(event) => set('chargePerTrackingRound', event.target.checked)}
             className="h-4 w-4 rounded border-slate-300"
           />
-          คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ — มติ PO 2026-08-12 ข้อ A3)
+          คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบคิดแยกกัน)
         </label>
 
         <Field id="sf-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (กระทบรายได้)" error={errors.reason}>

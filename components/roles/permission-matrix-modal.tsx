@@ -172,10 +172,12 @@ export function PermissionMatrixModal({
                   <li key={row.code} className="flex items-center gap-3 px-4 py-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-semibold text-slate-800">{row.label}</span>
+                        {/* รหัส capability เป็นข้อมูลภายใน — mockup ไม่แสดง จึงเก็บไว้แค่ tooltip (UAT BUG-019) */}
+                        <span className="truncate text-sm font-semibold text-slate-800" title={row.code}>
+                          {row.label}
+                        </span>
                         {row.locked && <Badge className="bg-slate-900 text-white">🔒 {row.lockOwner}</Badge>}
                       </div>
-                      <p className="truncate font-mono text-[10px] text-slate-400">{row.code}</p>
                     </div>
                     <Select
                       aria-label={`ระดับสิทธิ์ของ ${row.label}`}

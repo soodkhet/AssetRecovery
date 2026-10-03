@@ -177,7 +177,7 @@ export function CustodyTab({
       showToast({
         tone: 'info',
         title: 'ยังเปิดใช้งานไม่ได้',
-        description: `เลือกไว้ ${selectedHere.length} เครื่อง — หน้าจอนัดวันส่งมอบจะเปิดใช้ใน Phase 2.15`,
+        description: `เลือกไว้ ${selectedHere.length} เครื่อง — หน้าจอนัดวันส่งมอบอยู่ระหว่างพัฒนา`,
       })
       return
     }

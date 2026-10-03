@@ -28,9 +28,9 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
-import { ROLE_GROUP_LABEL, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
+import { ROLE_GROUP_LABEL, ROLE_GROUP_TABS, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
-import { canManageAccountIn } from '@/lib/users/auth-account'
+import { canManageAccountIn, canViewAccountsIn } from '@/lib/users/auth-account'
 import type { TeamDto } from '@/lib/teams/types'
 import type { UserDto } from '@/lib/users/types'
 
@@ -85,7 +85,16 @@ export function UsersManager() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
 
-  const [tab, setTab] = useState<RoleGroupTabId>('admin')
+  const [selectedTab, setTab] = useState<RoleGroupTabId>('admin')
+  // ผู้ดูแลบัญชีที่ไม่ใช่ Superadmin (ธุรการ) ไม่เห็นแท็บ "แอดมิน" เลย — ซ่อน ไม่ใช่ disable (UAT BUG-021)
+  const visibleTabs: readonly RoleGroupTabId[] = useMemo(
+    () =>
+      ROLE_GROUP_TABS.filter(
+        (item) => session === null || item.roleGroups.every((group) => canViewAccountsIn(session, group)),
+      ).map((item) => item.id),
+    [session],
+  )
+  const tab: RoleGroupTabId = visibleTabs.includes(selectedTab) ? selectedTab : (visibleTabs[0] ?? selectedTab)
   const [subGroup, setSubGroup] = useState<RoleGroup>('inhouse')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [roleId, setRoleId] = useState('all')
@@ -212,6 +221,7 @@ export function UsersManager() {
         <RoleGroupTabs
           className="mb-4"
           tab={tab}
+          tabs={visibleTabs}
           onTabChange={(next) => {
             setLoading(true)
             setRoleId('all')

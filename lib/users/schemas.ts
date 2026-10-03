@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { reasonSchema } from '@/lib/api/validation'
+import { reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 import { USERNAME_PATTERN } from '@/lib/auth/login-identifier'
 import { passwordPairFields, refinePasswordPair } from '@/lib/auth/schemas'
 
@@ -35,7 +35,7 @@ const phoneSchema = optionalText(
 ).pipe(z.string().nullable())
 
 const userFields = z.object({
-  roleId: uuidSchema,
+  roleId: requiredIdSchema('บทบาท'),
   username: z
     .string()
     .trim()

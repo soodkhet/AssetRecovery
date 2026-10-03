@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { emitAudit } from '@/lib/audit/audit'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -87,6 +88,11 @@ async function assertNameAvailable(organizationId: string, name: string, exceptI
   if (duplicate) throw new SettingsError('DUPLICATE_TAX_PROFILE_NAME', { detail: `name=${name}` })
 }
 
+/** ชน unique `(organization_id, name)` ระดับ DB (คำขอพร้อมกันหลุด pre-check ทั้งคู่) ⇒ code เดียวกับ pre-check แทน 500 (UAT BUG-016) */
+function rethrowDuplicateName(name: string): never {
+  throw new SettingsError('DUPLICATE_TAX_PROFILE_NAME', { detail: `name=${name} (unique violation)` })
+}
+
 /** จำนวนที่อ้าง profile นี้อยู่ — payee ที่ผูกไว้ + รายการจ่ายที่ snapshot ไปแล้ว */
 export async function countTaxProfileUsage(
   organizationId: string,
@@ -144,7 +150,7 @@ export async function createTaxProfile(
     )
 
     return row
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateName(normalized.name)))
 
   return toDto(created)
 }
@@ -184,7 +190,7 @@ export async function updateTaxProfile(
     )
 
     return row
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateName(normalized.name)))
 
   return toDto(updated)
 }

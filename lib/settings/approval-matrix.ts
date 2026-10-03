@@ -9,6 +9,52 @@
  * เพื่อไม่ให้เดา semantics ของ `16` §9 ล่วงหน้า
  */
 
+import { EXECUTIVE_ROLE_NAME, FINANCE_ROLE_NAME, TEAM_MANAGER_ROLE_NAME } from '@/lib/auth/constants'
+
+/** คอลัมน์ผู้อนุมัติบน `expenses` ที่ขั้นนั้นต้องประทับ (`02` §8 · `16` §7 DEC-006/D5) */
+export type ApproverColumn = 'manager' | 'finance' | 'executive'
+
+/**
+ * ชื่อ role ในสายอนุมัติ → คอลัมน์ผู้อนุมัติ — ตัวจับคู่เดียวของทั้งระบบ (ตัวตั้งค่า + ตัวอนุมัติใน
+ * `lib/compensation/approval.ts`) · รับชื่อ role ตาม seed (`07` §5) และชื่ออังกฤษที่ `13` §6.2 ยกเป็นตัวอย่าง
+ * (ข้อมูลเก่า) — ชื่อนอกรายการ = ตั้งค่าสายผิด
+ */
+const APPROVAL_ROLE_COLUMNS: Readonly<Record<string, ApproverColumn>> = {
+  [TEAM_MANAGER_ROLE_NAME]: 'manager',
+  [FINANCE_ROLE_NAME]: 'finance',
+  [EXECUTIVE_ROLE_NAME]: 'executive',
+  manager: 'manager',
+  finance: 'finance',
+  financeadmin: 'finance',
+  executive: 'executive',
+}
+
+/** คอลัมน์ผู้อนุมัติของชื่อ role ในสาย — `null` = ไม่มี role อนุมัติชื่อนี้ */
+export function approvalRoleColumn(roleName: string): ApproverColumn | null {
+  const exact = APPROVAL_ROLE_COLUMNS[roleName.trim()]
+  if (exact !== undefined) return exact
+  return APPROVAL_ROLE_COLUMNS[roleName.trim().toLowerCase().replace(/\s+/g, '')] ?? null
+}
+
+/**
+ * ตัวเลือกของ dropdown ขั้นอนุมัติ — ชื่อ role **ที่มีอยู่จริงในองค์กร** (ไม่ซ้ำ — ชื่อเดียวกันข้ามกลุ่ม
+ * นับครั้งเดียว) และตัวอนุมัติรู้จัก (UAT BUG-008: เดิมพิมพ์อิสระ พิมพ์ผิดก็บันทึกได้แล้วไปพังตอนอนุมัติ)
+ */
+export function approvalRoleOptions(roleNames: readonly string[]): string[] {
+  const options: string[] = []
+  for (const name of roleNames) {
+    const trimmed = name.trim()
+    if (approvalRoleColumn(trimmed) !== null && !options.includes(trimmed)) options.push(trimmed)
+  }
+  return options
+}
+
+/** ขั้นในสายที่ไม่ใช่ตัวเลือกที่ใช้ได้ (ไม่มี role ชื่อนี้ในองค์กร หรือ role นี้อนุมัติไม่ได้) — ว่าง = ผ่าน */
+export function invalidApprovalSteps(approvalFlow: readonly string[], roleNames: readonly string[]): string[] {
+  const options = approvalRoleOptions(roleNames)
+  return [...new Set(approvalFlow.map((step) => step.trim()).filter((step) => !options.includes(step)))]
+}
+
 export interface ApprovalMatrixValues {
   condition: string
   conditionThresholdSatang: number | null

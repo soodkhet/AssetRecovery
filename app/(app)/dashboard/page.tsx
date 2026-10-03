@@ -3,7 +3,7 @@ import { Card, CardHeader, PageHeader } from '@/components/ui/card'
 import { InlineAlert } from '@/components/ui/states'
 import { requireSessionPage } from '@/lib/auth/page-guard'
 import { fmtDateTime } from '@/lib/format/datetime'
-import { visibleMenus } from '@/lib/nav/menu-registry'
+import { UNDER_DEVELOPMENT_TEXT, visibleMenus } from '@/lib/nav/menu-registry'
 
 /**
  * แดชบอร์ดหลัก — **placeholder** ตามแผน Phase 1.5
@@ -18,8 +18,8 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         title="แดชบอร์ด"
-        description="ภาพรวมงานประจำวัน — เนื้อหาจริงเกิดใน Phase 6.6 (รอ Product Owner อนุมัติ mockup)"
-        action={<Badge>Phase 6.6</Badge>}
+        description="ภาพรวมงานประจำวัน — เนื้อหาเต็มจะเปิดใช้งานเร็ว ๆ นี้"
+        action={<Badge>{UNDER_DEVELOPMENT_TEXT}</Badge>}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

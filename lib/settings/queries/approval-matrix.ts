@@ -2,6 +2,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
+  invalidApprovalSteps,
   normalizeApprovalMatrixValues,
   sortApprovalMatrices,
   toApprovalMatrixAuditPayload,
@@ -79,6 +80,23 @@ function toWriteData(values: ApprovalMatrixValues) {
     approvalFlow: normalized.approvalFlow,
     enforceSegregationOfDuties: normalized.enforceSegregationOfDuties,
   }
+}
+
+/**
+ * ขั้นในสายที่ไม่ใช่ role อนุมัติที่มีอยู่จริงในองค์กร (UAT BUG-008) — ว่าง = ผ่าน
+ * route ใช้ตัวนี้ตอบ 400 + field error ที่ช่อง `approvalFlow` ก่อนเขียน
+ */
+export async function findInvalidApprovalSteps(organizationId: string, approvalFlow: readonly string[]): Promise<string[]> {
+  const roles = await prisma.role.findMany({ where: { organizationId, deletedAt: null }, select: { name: true } })
+  return invalidApprovalSteps(
+    approvalFlow,
+    roles.map((role) => role.name),
+  )
+}
+
+/** ข้อความ field error ของช่องลำดับขั้นอนุมัติ */
+export function invalidApprovalStepsMessage(invalid: readonly string[]): string {
+  return `ไม่พบบทบาทผู้อนุมัติ: ${invalid.join(', ')} — เลือกจากรายชื่อบทบาทในระบบ`
 }
 
 export async function createApprovalMatrix(

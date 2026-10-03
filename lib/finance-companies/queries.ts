@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -227,6 +228,15 @@ async function assertTaxIdAvailable(organizationId: string, taxId: string, excep
   }
 }
 
+/**
+ * ชน unique `(organization_id, tax_id)` ระดับ DB (คำขอพร้อมกัน / เลขตรงกับบริษัทที่ถูกลบแล้ว — unique ไม่ partial)
+ * ⇒ รัน pre-check ซ้ำเพื่อได้ชื่อบริษัทเดิม แล้ว fallback `DUPLICATE_TAX_ID` แทน 500 (UAT BUG-016)
+ */
+async function rethrowDuplicateTaxId(organizationId: string, taxId: string, exceptId?: string): Promise<never> {
+  await assertTaxIdAvailable(organizationId, taxId, exceptId)
+  throw new FinanceCompanyError('DUPLICATE_TAX_ID', { detail: `tax_id=${taxId} (unique violation)` })
+}
+
 /** ทุกบริษัทต้องผูกเทมเพลตค่าบริการที่ยังใช้งานอยู่และเป็นเวอร์ชันปัจจุบัน (`10` §9.1 · `12` §9) */
 async function assertTemplateUsable(organizationId: string, templateId: string): Promise<void> {
   const template = await prisma.serviceFeeTemplate.findFirst({
@@ -289,7 +299,7 @@ export async function createFinanceCompany(
     )
 
     return company
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateTaxId(organizationId, values.taxId)))
 
   return toDto(created)
 }
@@ -351,7 +361,7 @@ export async function updateFinanceCompany(
     )
 
     return company
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateTaxId(organizationId, values.taxId, current.id)))
 
   return toDto(updated)
 }

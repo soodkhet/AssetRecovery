@@ -50,11 +50,19 @@ export function withApiPermission<Ctx = unknown>(
 
 /** 400 + field errors ตาม `24` §6.1 `REQUIRED_MISSING` (FE ใช้ `fields` แสดง inline error) */
 export function validationErrorResponse(error: z.ZodError): Response {
+  return fieldErrorResponse(toFieldErrors(error))
+}
+
+/**
+ * 400 + field errors แบบเดียวกับ `validationErrorResponse()` สำหรับข้อที่ Zod ตรวจเองไม่ได้เพราะต้องอ่าน DB
+ * (เช่น ชื่อ role ในสายอนุมัติต้องมีจริงในองค์กร — UAT BUG-008) · ไม่ตั้ง error code ใหม่ (Rule 04)
+ */
+export function fieldErrorResponse(fields: Record<string, string>): Response {
   return apiFailure(
     {
       code: 'REQUIRED_MISSING',
       ...authErrorMessage('REQUIRED_MISSING'),
-      fields: toFieldErrors(error),
+      fields,
     },
     400,
   )
