@@ -589,12 +589,15 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     const resubmitted = await field.resubmitCloseCase(
       agentA,
       caseId,
-      { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
+      { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'], note: 'ถ่ายรูปหน้าบ้านใหม่ให้ชัดขึ้น' },
       { actor: agentA, meta },
     )
 
     // สถานะกลับเป็น outcome เดิม (ห้ามเปลี่ยน outcome) และไม่เพิ่มรอบติดตาม
     expect(resubmitted.status).toBe('closed_success')
+    // บันทึกเพิ่มเติมของรอบส่งกลับเก็บกับหลักฐานชุดใหม่ (มติ PO 03/10/2569 — UAT Q15)
+    const latestEvidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId }, orderBy: { submittedAt: 'desc' } })
+    expect(latestEvidence.note).toBe('ถ่ายรูปหน้าบ้านใหม่ให้ชัดขึ้น')
     const assignment = await db().caseAssignment.findFirstOrThrow({ where: { caseId } })
     expect(assignment.trackingRound).toBe(1)
 

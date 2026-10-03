@@ -151,6 +151,7 @@ describe('closeFormFromDetail (`41` §6.5 draft autoload)', () => {
           videos: ['v1'],
           productPhotos: [],
           audioUrl: 'a1',
+          note: 'บ้านปิด เพื่อนบ้านบอกย้ายออกแล้ว',
           submittedAt: '2026-08-20T06:00:00.000Z',
         },
       }),
@@ -158,6 +159,8 @@ describe('closeFormFromDetail (`41` §6.5 draft autoload)', () => {
     expect(form.outcome).toBe('closed_fail')
     expect(form.photos).toEqual(['p1', 'p2'])
     expect(form.audioUrl).toBe('a1')
+    // UAT Q15 — บันทึกเพิ่มเติมของชุดเดิมตั้งเป็นค่าเริ่มต้นของฟอร์มส่งกลับ
+    expect(form.note).toBe('บ้านปิด เพื่อนบ้านบอกย้ายออกแล้ว')
   })
 })
 
@@ -210,6 +213,7 @@ describe('โหมดตีกลับ — ต้องแก้สื่อ�
       videos: ['v1'],
       productPhotos: ['pp1'],
       audioUrl: null,
+      note: null,
       submittedAt: '2026-08-20T06:00:00.000Z',
     },
   })

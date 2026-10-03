@@ -83,7 +83,8 @@ export function closeFormFromDetail(detail: FieldCaseDetailDto): CloseFormState 
       videos: [...evidence.videos],
       productPhotos: [...evidence.productPhotos],
       audioUrl: evidence.audioUrl,
-      note: null,
+      // บันทึกเพิ่มเติมของชุดเดิมตั้งเป็นค่าเริ่มต้น — แก้/เติมได้ตอนส่งกลับ (UAT Q15)
+      note: evidence.note,
     }
   }
 

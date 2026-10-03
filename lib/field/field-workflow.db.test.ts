@@ -283,7 +283,7 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     const closed = await field.closeFieldCase(
       agentA,
       caseId,
-      { outcome: 'closed_success', ...MEDIA },
+      { outcome: 'closed_success', ...MEDIA, note: '  ลูกหนี้นำเครื่องมาคืนเองที่หน้าบ้าน  ' },
       { actor: agentA, meta },
     )
     expect(closed.status).toBe('closed_success')
@@ -303,6 +303,8 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     expect(evidence.videos).toEqual(MEDIA.videos)
     expect(evidence.productPhotos).toEqual(MEDIA.productPhotos)
     expect(evidence.travelOriginLat?.toNumber()).toBeCloseTo(18.58, 4)
+    // บันทึกเพิ่มเติมเก็บไว้กับหลักฐาน (มติ PO 03/10/2569 — UAT Q15 · BUG-048)
+    expect(evidence.note).toBe('ลูกหนี้นำเครื่องมาคืนเองที่หน้าบ้าน')
 
     // draft ถูกลบทันทีที่ปิดงานสำเร็จ (`41` §6.5)
     expect(await db().closeCaseDraft.count({ where: { caseId } })).toBe(0)

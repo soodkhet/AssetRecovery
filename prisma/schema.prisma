@@ -1732,6 +1732,8 @@ model CaseEvidence {
   videos        String[] @default([]) @map("videos")
   /// เสียงบันทึกการสนทนา — ไม่บังคับทุก outcome (`41` §6.4)
   audioUrl      String?  @map("audio_url")
+  /// "บันทึกเพิ่มเติม" ของฟอร์มปิดงาน (มติ PO 03/10/2569 — UAT Q15 · BUG-048) — ไม่บังคับ
+  note          String?  @map("note")
 
   reviewedBy   String?   @map("reviewed_by") @db.Uuid
   reviewedAt   DateTime? @map("reviewed_at") @db.Timestamptz(6)

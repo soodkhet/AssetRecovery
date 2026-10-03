@@ -193,6 +193,8 @@ export interface CaseFieldEvidenceDto {
   videos: string[]
   productPhotos: string[]
   audioUrl: string | null
+  /** "บันทึกเพิ่มเติม" ตอนปิดงาน (มติ PO 03/10/2569 — UAT Q15) */
+  note: string | null
   submittedAt: string
   rejectReason: string | null
   reviewedAt: string | null

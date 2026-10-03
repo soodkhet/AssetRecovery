@@ -79,6 +79,15 @@ export function hasEvidenceRevision(before: EvidenceMediaSnapshot, after: Eviden
 }
 
 /**
+ * "บันทึกเพิ่มเติม" ของฟอร์มปิดงาน → ค่าที่เก็บลง `case_evidences.note`
+ * (มติ PO 03/10/2569 — UAT Q15 · BUG-048) · ว่าง/มีแต่ช่องว่าง = `null` (ไม่ได้บันทึก)
+ */
+export function evidenceNote(note: string | null | undefined): string | null {
+  const trimmed = (note ?? '').trim()
+  return trimmed === '' ? null : trimmed
+}
+
+/**
  * พิกัดต้องมาจาก device GPS จริง (`41` §11) — ค่าที่อยู่นอกช่วงพิกัดโลกหรือไม่ใช่ตัวเลข
  * แปลว่าไม่ได้มาจาก Geolocation API ⇒ ปฏิเสธด้วย `CHECKIN_GPS_PERMISSION_DENIED`
  *

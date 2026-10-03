@@ -57,6 +57,13 @@ export function FieldEvidenceSection({
         </div>
       )}
 
+      {evidence.note !== null && (
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2" data-testid="evidence-note">
+          <div className="text-xs font-semibold text-slate-700">บันทึกเพิ่มเติม</div>
+          <p className="mt-1 text-xs whitespace-pre-wrap text-slate-700">{evidence.note}</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {groups.map(({ kind, files }) => (
           <div key={kind} className="rounded-lg border border-slate-200 p-2">

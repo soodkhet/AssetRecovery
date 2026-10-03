@@ -5,7 +5,7 @@ import { ACTIVE_ASSIGNMENT_STATUSES } from '@/lib/assignments/assignment'
 import { AssignmentError } from '@/lib/assignments/errors'
 import { acceptAssignment, respondReassignment } from '@/lib/assignments/queries'
 import { caseScopeWhere } from '@/lib/cases/queries'
-import { assertCloseEvidence, assertDeviceCoordinates, hasEvidenceRevision } from '@/lib/field/evidence'
+import { assertCloseEvidence, assertDeviceCoordinates, evidenceNote, hasEvidenceRevision } from '@/lib/field/evidence'
 import { metersToKmHundredths, routePoints } from '@/lib/field/distance'
 import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
 import {
@@ -513,6 +513,7 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
         videos: true,
         productPhotos: true,
         audioUrl: true,
+        note: true,
         submittedAt: true,
       },
     }),
@@ -572,6 +573,7 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
             videos: evidence.videos,
             productPhotos: evidence.productPhotos,
             audioUrl: evidence.audioUrl,
+            note: evidence.note,
             submittedAt: evidence.submittedAt.toISOString(),
           },
     pendingReassignment:
@@ -1087,6 +1089,8 @@ export async function closeFieldCase(
         videos: input.videos,
         productPhotos: input.productPhotos,
         audioUrl: input.audioUrl ?? null,
+        // "บันทึกเพิ่มเติม" เก็บไว้กับหลักฐานชุดนี้ (มติ PO 03/10/2569 — UAT Q15 · BUG-048)
+        note: evidenceNote(input.note),
         // snapshot จุดเริ่มเดินทาง ณ เวลา submit (`92` §7.1 — ตัวคำนวณระยะทางของ 2.9 ใช้ค่านี้)
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
@@ -1443,6 +1447,7 @@ export async function resubmitCloseCase(
         videos: input.videos,
         productPhotos: input.productPhotos,
         audioUrl: input.audioUrl ?? null,
+        note: evidenceNote(input.note),
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
         travelOriginSource: travelOrigin?.source ?? null,
