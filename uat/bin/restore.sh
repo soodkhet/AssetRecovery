@@ -9,7 +9,8 @@ psql -h localhost -U assetrecovery -d postgres -qc "select pg_terminate_backend(
 pg_restore -h localhost -U assetrecovery -d assetrecovery_dev --clean --if-exists --no-owner "$f"
 rm -f uat/.auth/*.json   # session เก่าอาจชี้ผู้ใช้ที่ไม่มีแล้ว
 # dump เก่าอาจมี schema/สิทธิ์ตั้งต้นตามโค้ดตอนนั้น → ยก schema + เติมแถวสิทธิ์ใหม่ให้ตรงโค้ดปัจจุบัน (seed ไม่ทับแถวเดิม)
-pnpm -s db:deploy >/dev/null
+pnpm -s db:deploy 2>&1 | tail -3
+pnpm -s prisma migrate status >/dev/null 2>&1 || { echo "❌ migrate status ไม่สะอาด — หยุด (ดู pnpm prisma migrate status)"; exit 1; }
 pnpm -s db:seed 2>&1 | grep "สร้างใหม่" || true
 ~/bin/dev asset >/dev/null
 for i in $(seq 1 40); do [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login)" = 200 ] && break; sleep 2; done

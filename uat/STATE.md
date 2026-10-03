@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R5 คลังสินค้า** (ธุรการ) — 03/10/2569 · 24/24 ✅ · ยืนยัน BUG-074…078 + ใหม่ 079…084 (ไม่บล็อก) · ไม่มี 500 · ล็อต LOT-2569-001 (CO1: C1,C2,C4) / LOT-2569-002 (CO2: C5) confirmed · expense active 15 แถว 1020000 ทั้งหมด pending_approval · revenue 0 · รายงาน `uat/report/R5-warehouse.md` · ภาพ 55 |
-| snapshot ล่าสุด | `uat/snapshots/R3-end-v3.dump` = ปลาย R3 + schema/สิทธิ์หลัง Q21 + fixer G (ต้นรอบ R4 v3) · เก่า (กติกาเดิม ไม่ใช้แล้ว): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R4 v3 → R5 v2** (เล่นใหม่หลัง Q21) — updater กำลังทำ DATASET v3 + step sheet R4 v3 / R5 v2 · ท้าย R4a: `admin` สั่ง `daily_field_allowance` date 2026-10-04 (มติ PO 04/10) · แล้ว R6 (step sheet R6 v1 ต้องปรับตาม DATASET v3 + หน้าจอใหม่ของ fixer G) · ADV3 overdue → R7 (หลังเที่ยงคืน 05/10) |
+| รอบล่าสุดที่จบ | **R4a v3 ภาคสนาม** — 04/10/2569 00:40–00:49 · 24/24 ✅ · บั๊กใหม่ BUG-094 (env, fixed) / 095 (needs-decision) / 096 · ไม่มี 500 หลังซ่อมฐาน · expense active 14 แถว = 890000 ตรง golden v3 · `field_day_settlements` 3 แถว (job 00:47:56) · asset pending_intake 4 · evidence 5 pending · รายงาน `uat/report/R4a-field-v3.md` · ภาพ 59 |
+| snapshot ล่าสุด | `uat/snapshots/R4a-end-v3.dump` (ปลาย R4a v3) · ต้น R4 v3 = `R3-end-v3b` (schema ครบ — **ห้ามใช้ `R3-end-v3`** ขาด 3 migration, BUG-094) · เก่า (กติกาเดิม ไม่ใช้แล้ว): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R4b v3** (R4.24–R4.38) → R5 v2 · แล้ว R6 (step sheet R6 v1 ต้องปรับตาม DATASET v3 + หน้าจอใหม่ของ fixer G) · ADV3 overdue → R7 (หลังเที่ยงคืน 05/10) |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 00:50 R4a v3 จบ (ดูตารางบน) · ก่อนเริ่มพบฐาน dev ขาด 3 migration (BUG-094) → ผู้ใช้อนุญาตให้ orchestrator ซ่อมฐาน dev ในเครื่อง · snapshot `R3-end-v3b` + `R4a-end-v3` · สคริปต์ `uat/bin/r4v3/` (มี s11b-settle, s12–s17 ปรับเป็น R4v3 แล้ว) · ไฟล์ขยะ Storage +1
 - 04/10/2569 00:00 merge fixer H (Q21: job `daily_field_allowance`, ตาราง `field_day_settlements`, เกตรายได้ `field_days_not_settled`, DEC-012) · verify 258 files / 3,313 tests · restore `R3-end-v2` → snapshot `R3-end-v3` · มติ PO: settle วันนี้ผ่าน dev trigger หลังเช็คอินครบ
 - 03/10/2569 merge fixer G (R6-A/B, race รายได้, หน้าผู้รับเงิน …) + seed 2 แถว (บัญชี/บริหาร ดูรอบจ่าย) · migration `20261003160000` ล้มบนฐานทดสอบหลักเพราะรายได้ซ้ำจากเทสต์เก่า 33 กลุ่ม → soft-delete 462 แถวในฐานทดสอบ (ไม่ใช่ข้อมูลจริง) + `migrate resolve --rolled-back` + deploy ใหม่ · verify 258 files / 3,292 tests · **⚠️ ก่อน `db:deploy` staging: ตรวจ `select case_id, tracking_round, count(*) from revenues where deleted_at is null group by 1,2 having count(*)>1` ต้องว่าง**
 - 03/10/2569 ~20:45 step sheet R6 เสร็จ (43 ขั้น) · มติ PO R6-A (หน้าคิวอนุมัติของผู้จัดการ) / R6-B (รายการไม่ผูกเคส → ผู้จัดการทีมของผู้เบิก) / Q21 (เหมาจ่ายรายวันต่อพนักงาน) · ข้อมูล R4–R5 เดิมคิดต่อเคส ⇒ ต้องเล่นใหม่
@@ -45,7 +46,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-093) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-096) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้
@@ -93,4 +94,5 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/aa8879c5-b474-4cd8-bf71-f8d170e48831-R4-fake-video.mp4` (R4a v2)
 - R4b v2: `cases/d4d82f78…/field_evidence/product_photo/7d772c98-…-R4-C4-product-v2.jpg`, `expenses/88cb577d…/receipts/91324d20-…-R4-C1-photo.jpg` (ใช้งานจริง ไม่ใช่ขยะ)
 - R5: รูปรับเข้า 13 + เอกสารล็อต 4 (ใช้งานจริง) · ขยะ: รูปปลอม C4 2 ไฟล์ (`…ccddbd4b…-R5-fake-photo.jpg` + อีก 1 ไม่ได้จด path) + ใบเซ็นปลอม 1 ไฟล์ (ไม่ได้จด uuid) — ดู `uat/report/R5-warehouse.md` · ตอนลบให้ลบ object ใต้ `assets/*/intake/` และ `handover-lots/*/` ที่ไม่มีแถว DB อ้างอิง
+- R4a v3: `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/c6a8bc1e-c486-41f1-99e2-66424183fdd4-R4-fake-video.mp4` (ขยะ) · หลักฐานจริง 14 ไฟล์ใช้งานอยู่
 - หลักฐานของ R4a เดิม 14 ไฟล์ (ฐานถูกย้อนแล้ว — ไฟล์ไม่มีแถวอ้างอิง)

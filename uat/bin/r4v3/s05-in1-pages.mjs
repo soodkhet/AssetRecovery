@@ -1,0 +1,35 @@
+// R4.12 in1 มือถือ: เบิกค่าใช้จ่าย / สรุปรายได้ / จบงาน / แดชบอร์ด + เปิดดูไฟล์หลักฐาน
+import { openAs, shot, BASE, settle, sleep, mainText, log, get } from './_h.mjs'
+const R = 'R4v3'
+const { browser, page, consoleErrors, serverErrors } = await openAs('uat.agent.in1', { mobile: true })
+const failed = []; page.on('requestfailed', r => failed.push(`${r.failure()?.errorText} ${r.url().slice(0, 100)}`))
+log('=== s05 v3', new Date().toISOString())
+await page.goto(`${BASE}/field/expenses`); await settle(page); await sleep(1000)
+log('R4.12 expenses:', await mainText(page, 1500))
+await shot(page, R, '12-in1-expenses-pending-day', { fullPage: true })
+log('R4.12 API caseBound:', await get(page, '/api/field/expenses?type=caseBound'))
+log('R4.12 box:', await page.getByText('รอคำนวณหลังจบวัน').count(), await page.getByText('วันที่ลงพื้นที่: 04/10/2569').count())
+await page.getByRole('button', { name: 'เบิกแยก' }).first().click().catch(e => log('no เบิกแยก tab', e.message.slice(0, 80))); await sleep(800)
+log('R4.12 expenses เบิกแยก:', await mainText(page, 600))
+await page.goto(`${BASE}/field/income`); await settle(page); await sleep(1000)
+log('R4.12 income:', await mainText(page, 1500))
+await shot(page, R, '12-in1-income', { fullPage: true })
+await page.goto(`${BASE}/field/closed`); await settle(page); await sleep(1000)
+for (const t of ['ทั้งหมด', 'สำเร็จ', 'ไม่สำเร็จ']) {
+  await page.getByRole('button', { name: t, exact: true }).first().click().catch(() => {}); await sleep(500)
+  log(`R4.12 closed[${t}]:`, await mainText(page, 500))
+}
+await page.getByRole('button', { name: 'ทั้งหมด', exact: true }).first().click().catch(() => {}); await sleep(400)
+await shot(page, R, '12-in1-closed', { fullPage: true })
+// เปิดการ์ด C1 ดูรายละเอียด/ไฟล์
+await page.getByText('นายสมชาย ใจดีมาก').first().click(); await sleep(1500)
+const d = page.getByRole('dialog').last()
+const dtxt = await d.innerText().catch(() => 'NO DIALOG')
+log('R4.12 closed detail:', dtxt.replace(/\s*\n+\s*/g, ' | ').slice(0, 1500))
+await shot(page, R, '12-in1-closed-detail', { fullPage: true })
+log('R4.12 buttons in detail:', (await d.getByRole('button').allInnerTexts().catch(() => [])).map(s => s.trim()).filter(Boolean).join(' / ').slice(0, 500))
+await page.goto(`${BASE}/field`); await settle(page); await sleep(1000)
+log('R4.12 dashboard:', await mainText(page, 800))
+await shot(page, R, '12-in1-dashboard', { fullPage: true })
+log('failed', failed, 'console', consoleErrors, 'server', serverErrors)
+await browser.close()

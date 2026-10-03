@@ -99,6 +99,9 @@
 | BUG-091 | R6-sheet | S5 | code | modal สร้างรอบจ่ายเขียนว่า WHT คิดต่อรายการ (ขัด Q5) | fixed `9ca8427` |
 | BUG-092 | fixer H | S4 | code | job รายวัน settle วันที่มีเคสยังเปิดอยู่ → แถวรายวันของเคสนั้นเป็น `pending_approval` ทันที ถ้าภายหลังเคสปิดสำเร็จ แถวนั้นจะไม่รอคลัง (ควร `pending_warehouse_confirm`) — เกตรายได้ยังบังคับ lot confirmed อยู่ ไม่กระทบรายได้ แต่การอนุมัติค่าตอบแทนก่อนผ่านคลังไม่ตรงหลัก | open |
 | BUG-093 | fixer H | S5 | spec-gap | วันที่อยู่ในงวดบัญชีที่ปิดแล้ว job จะข้าม ไม่ settle ⇒ เคสของวันนั้นติดเกตรายได้ จนกว่าจะทำ Adjustment · หลัง deploy เคสเดิมบน staging จะรอรายได้จนถึงรอบ job คืนแรก | needs-decision |
+| BUG-094 | R4a-v3 R4.01 | S2 | env | snapshot `R3-end-v3` มีตาราง `field_day_settlements` ว่างแต่ `_prisma_migrations` ไม่มี 170000 → `restore.sh` ซ่อน error ของ `db:deploy` ⇒ ฐาน dev ขาด 3 migration · `/api/field/expenses` 500 (`expenses.receipt_file_hash` ไม่มี) | fixed (04/10/2569 orchestrator: drop ตารางว่าง + `migrate resolve --rolled-back` + deploy · snapshot `R3-end-v3b` · `restore.sh` ไม่ซ่อน error + หยุดถ้า migrate status ไม่สะอาด) |
+| BUG-095 | R4a-v3 R4.23b | S4 | code | หน้าอนุมัติ (`/finance?tab=comp`) คอลัมน์ "สูตร/ฐานคิด" ของแถวรายวันแสดงอัตราเต็ม ("1 วัน × 150.00 บาท/วัน", "เหมาจ่ายรายวัน 200.00 บาท/วัน") คู่ยอดที่หารแล้ว ฿75/฿100 ไม่บอกว่าหารกี่เคส ⇒ ดูเหมือนยอดผิด | needs-decision (รูปแบบข้อความ) |
+| BUG-096 | R4a-v3 R4.12 | S4 | code | แจ้งเตือน `expense.case_bound_created` ลิงก์ไป `/finance/approvals` (`lib/notifications/messages.ts:307`) → หน้าไม่พบ · คิวจริงอยู่ `/finance?tab=comp` | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -107,4 +110,8 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R4a v3 (R4v3-A): เช็คอินหลัง job รายวัน settle แล้ว — ไม่มีคำเตือนใน response (ทดสอบสดไม่ได้ เพราะกติการอบห้ามเช็คอินหลัง settle) · S4 ข้อสังเกต
+- R4a v3 (R4v3-B ยืนยัน): job รายวันไม่ส่งแจ้งเตือน (29 → 29) · แจ้งเตือนปิดงาน C3 เขียน "1 รายการ" แต่คิวมี 3 แถวหลัง settle
+- R4a v3 (R4v3-C ยืนยัน): หน้ารายได้/ยอดคอมมิชชันบนแดชบอร์ดของพนักงานไม่เปลี่ยนหลัง settle (ไม่รวมค่าน้ำมัน/เบี้ยเลี้ยง)
+- R4a v3: BUG-065/BUG-068 ไม่เกิดซ้ำ (ยืนยันแก้แล้ว)
 - R1.43: ผู้ใช้กลุ่มบริษัทไฟแนนซ์เข้า `/dashboard`, `/cases`, `/warehouse` ในแอปภายในได้ และ `/api/cases`, `/api/assets`, `/api/handover-lots` ตอบ 200 — **ตรง `06` §7.2** (Company User เห็นแดชบอร์ด/จัดการเคส/คลัง read company scope) ⇒ R2 และ R5 ต้องพิสูจน์ว่าเห็นเฉพาะข้อมูลบริษัทตัวเอง (`uat.co2.admin` ห้ามเห็นเคส CO1)
