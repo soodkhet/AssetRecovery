@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R4a ภาคสนาม** — 03/10/2569 · R4.01–R4.22 ✅15 🐞7 ❓2 · ไม่มี 500 · expense active 690000 ตรง golden · คอมมิชชัน 0 แถว (BUG-010) · รายงาน `uat/report/R4a-field.md` · ภาพ 42 · Storage +15 ไฟล์ (มี .mp4 ปลอมค้าง 1 ไฟล์ใน bucket — เก็บไว้) |
 | snapshot ล่าสุด | `uat/snapshots/R4a-end.dump` (ก่อนหน้า: `R3-end`, `R2-end`, `R1-end`, `R0-clean`) |
-| รอบปัจจุบัน | ถามคำถามค้างเป็นชุดตัวเลือก (ผู้ใช้สั่งก่อน R4b) → merge fixer R4 → `pnpm db:seed` → restart → **R4b** (R4.23–R4.36) · R5 ถูกบล็อกด้วย BUG-063 (ไม่มี role คลัง) |
+| รอบปัจจุบัน | **แก้ตามมติ PO 20 ข้อ** (`uat/PO-DECISIONS-2569-10-03.md`) — fixer 4 ตัวใน worktree คู่ขนาน: A ค่าตอบแทน (Q2,4,7,20 · test2) · B เงินทดรอง/ภาษี (Q3,5,6,8 · test3) · C หลักฐาน/เอกสาร (Q13,14,15,16 + หนี้ #1 · test4) · D สิทธิ์/แจ้งเตือน (Q1,10,11,12,17,18 + BUG-039/041/043/059/061/064 · test5) → merge ทีละตัว + verify → `uat/bin/restore.sh R3-end` (restore ยก schema + seed ให้เอง) → อัปเดต golden ใน DATASET → **เล่น R4 ใหม่ทั้งรอบ** (R4a+R4b) → R5 (ธุรการทำคลัง) |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 03/10/2569 ถาม PO 20 ข้อ (ชุดตัวเลือก) → บันทึก `uat/PO-DECISIONS-2569-10-03.md` · merge fixer R4 + `pnpm db:seed` (สร้าง 1 แถว: การเงิน approve_advance) · restore.sh เพิ่ม db:deploy + seed · สร้าง `assetrecovery_test3/4/5` ให้ fixer คู่ขนาน · มติ Q2 (คอมมิชชันตอนปิดงาน) ⇒ ต้องเล่น R4 ใหม่บนโค้ดที่แก้แล้ว
 - 03/10/2569 R4a จบ: C1/C2/C4/C5 closed_success, C3 closed_fail, C7 accepted_unscheduled · asset pending_intake 4 ใบ · ดับเบิลคลิก/race ปิดงานไม่ซ้ำ · บั๊กใหม่ BUG-062…068 (BUG-063 ไม่มี role คลัง บล็อก R5)
 - 03/10/2569 R3 จบ: C1,C2,C7 → in1 · C3,C4 → in2 · C5 → out1 (ทุกใบ pending_accept, active 1 แถว/เคส) · BUG-038 race ไม่เกิดจริง · ยืนยัน BUG-039…044 · บั๊กใหม่ BUG-059…061 · fixer R4 เสร็จ (BUG-045/046/047/049/051/053) — seed ใหม่ทดสอบบน test2 แล้ว: แถวที่ถูกแก้ไม่ถูกทับ
 - 03/10/2569 step sheet R4 เสร็จ (36 ขั้น แบ่ง R4a ภาคสนาม R4.01–R4.22 / R4b ตีกลับหลักฐาน+เงินทดรอง R4.23–R4.36) · มติ orchestrator: เล่น R4a ทันทีหลัง R3 · fixer แก้ BUG-045/046/047 (+048,049,051,052,053) คู่ขนาน → merge → เล่น R4b ผ่านหน้าจอจริง (ไม่ใช้ API แทน UI) · ADV3 ใช้วันครบกำหนดในอดีต (โค้ดยอม — BUG-058) · เพิ่ม hotel claim 1 ใบของ in1 ฿600 ใน R4b (payee มี Tax Profile แล้ว ไม่ชนหนี้ #3; ต่ำกว่า threshold ไม่หัก WHT ⇒ IN-1 net +60000)

@@ -371,8 +371,43 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
 
     const rows = await expensesOf(caseId)
-    expect(rows).toHaveLength(2)
+    // fuel + allowance + commission (มติ PO 03/10/2569 UAT Q2) — ทุกตัวรอคลังเหมือนกัน
+    expect(rows.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
     expect(rows.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
+  })
+
+  it('UAT Q2 (BUG-010) — ปิดสำเร็จสร้างค่าคอมมิชชั่นตามแผนที่ snapshot · ไม่มีเบี้ยเสี่ยง', async () => {
+    stubDistanceMatrix(1_000)
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
+
+    const rows = await expensesOf(caseId)
+    const commission = rows.find((row) => row.expenseType === 'commission')
+    expect(commission?.grossSatang).toBe(COMMISSION_SATANG)
+    expect(commission?.status).toBe('pending_warehouse_confirm')
+    expect(commission?.calculationSource).toBe('compensation_plan')
+    expect(commission?.compPlanId).toBe(PLAN_PER_KM)
+    expect(commission?.compPlanVersion).toBe(1)
+    expect(commission?.distanceKm).toBeNull()
+    expect(rows.some((row) => row.expenseType === 'no_success_fee')).toBe(false)
+  })
+
+  it('UAT Q2 (BUG-010) — ปิดไม่สำเร็จสร้างเบี้ยเสี่ยงเข้าคิวอนุมัติทันที · ไม่มีคอมมิชชั่น', async () => {
+    stubDistanceMatrix(1_000)
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(
+      agentA,
+      caseId,
+      { outcome: 'closed_fail', failReason: 'debtor_not_found', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { actor: agentA, meta },
+    )
+
+    const rows = await expensesOf(caseId)
+    const fee = rows.find((row) => row.expenseType === 'no_success_fee')
+    expect(fee?.grossSatang).toBe(NO_SUCCESS_FEE_SATANG)
+    expect(fee?.status).toBe('pending_approval')
+    expect(fee?.compPlanId).toBe(PLAN_PER_KM)
+    expect(rows.some((row) => row.expenseType === 'commission')).toBe(false)
   })
 
   it('เคสไม่สำเร็จ = เข้าคิวอนุมัติทันที (`41` §20)', async () => {
@@ -432,7 +467,7 @@ suite('Phase 2.9 — D10: Google Maps ใช้ไม่ได้ตอนปิ
     // ปิดงานต้องสำเร็จ — ห้ามล้มเพราะปลายทางภายนอก
     expect(closed.status).toBe('closed_success')
     const afterClose = await expensesOf(caseId)
-    expect(afterClose.map((row) => row.expenseType)).toEqual(['allowance'])
+    expect(afterClose.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission'])
 
     const assignmentId = afterClose[0]?.assignmentId ?? ''
     const job = await db().job.findFirstOrThrow({ where: { jobType: 'fuel_distance_retry', organizationId: ORG_ID } })
@@ -579,7 +614,7 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
   it('resubmit_close → รายการเบิกเดิม superseded + สร้างชุดใหม่ ไม่ซ้ำไม่หาย (DoD)', async () => {
     const caseId = await closeSuccessfully()
     const before = await expensesOf(caseId)
-    expect(before).toHaveLength(2)
+    expect(before).toHaveLength(3)
 
     await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
 
@@ -605,8 +640,8 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     const superseded = all.filter((row) => row.status === 'superseded')
     const active = all.filter((row) => row.status !== 'superseded')
 
-    expect(superseded).toHaveLength(2)
-    expect(active).toHaveLength(2)
+    expect(superseded).toHaveLength(3)
+    expect(active).toHaveLength(3)
     // ไม่หาย: ของเดิมยังอยู่ครบและถูกผูกไปยังรายการใหม่ **ชนิดเดียวกัน** (UAT BUG-051)
     expect(superseded.every((row) => row.supersededByExpenseId !== null)).toBe(true)
     for (const row of superseded) {
@@ -615,8 +650,64 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     }
     expect(before.map((row) => row.id).sort()).toEqual(superseded.map((row) => row.id).sort())
     // ไม่ซ้ำ: ชุดใหม่มีชนิดละ 1 รายการ และคิดจากระยะทางใหม่ (3 กม. × ฿5 = ฿15)
-    expect(active.map((row) => row.expenseType).sort()).toEqual(['allowance', 'fuel'])
+    // ชุดใหม่หลัง supersede ต้องมีคอมมิชชั่นด้วย (มติ PO 03/10/2569 UAT Q2)
+    expect(active.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
     expect(active.find((row) => row.expenseType === 'fuel')?.grossSatang).toBe(1_500)
+    expect(active.find((row) => row.expenseType === 'commission')?.grossSatang).toBe(COMMISSION_SATANG)
+  })
+
+  it('UAT Q7 (BUG-052) — แก้แผนระหว่างปิดงานกับ resubmit: ชุดใหม่ยังคิดด้วยแผนเวอร์ชัน/วันที่ของการปิดครั้งแรก', async () => {
+    const caseId = await closeSuccessfully()
+    const before = await expensesOf(caseId)
+
+    // จำลองการแก้แผน: ทีมถูกย้ายไปชี้แผนแถวใหม่ที่ยอดต่างจากเดิมทุกช่อง (ชื่อไม่ชนตระกูลแผนหลักของไฟล์นี้)
+    const NEW_PLAN_NAME = 'แผนหลังแก้ (UAT Q7)'
+    const maxVersion = await db().compensationPlan.aggregate({
+      where: { organizationId: ORG_ID, name: NEW_PLAN_NAME },
+      _max: { version: true },
+    })
+    const newPlanRows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO compensation_plans
+        (organization_id, name, side, fuel_mode, fuel_rate_per_km_satang, allowance_satang,
+         commission_satang, no_success_fee_satang, version, effective_from, is_current, created_by)
+      VALUES ('${ORG_ID}', $$${NEW_PLAN_NAME}$$, 'inhouse', 'PER_KM', ${RATE_PER_KM_SATANG * 4}, ${ALLOWANCE_SATANG * 2},
+              ${COMMISSION_SATANG * 3}, ${NO_SUCCESS_FEE_SATANG * 3}, ${(maxVersion._max.version ?? 0) + 1},
+              DATE '2026-01-01', true, '${MANAGER_ID}')
+      RETURNING id
+    `)
+    const newPlanId = newPlanRows[0]?.id ?? ''
+    await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${newPlanId}' WHERE id = '${TEAM_PER_KM}'`)
+
+    try {
+      await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
+      clearDistanceCache()
+      stubDistanceMatrix(2_000)
+      await field.resubmitCloseCase(
+        agentA,
+        caseId,
+        { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
+        { actor: agentA, meta },
+      )
+
+      const active = (await expensesOf(caseId)).filter((row) => row.status !== 'superseded')
+      const summarize = (rows: typeof before) =>
+        rows
+          .map((row) => ({
+            expenseType: row.expenseType,
+            grossSatang: row.grossSatang,
+            compPlanId: row.compPlanId,
+            compPlanVersion: row.compPlanVersion,
+            expenseDate: row.expenseDate.toISOString(),
+          }))
+          .sort((a, b) => a.expenseType.localeCompare(b.expenseType))
+
+      // ยอด/แผน/วันที่ของชุดใหม่ = ชุดเดิมทุกตัว (ไม่หยิบแผนใหม่ของทีม · ไม่ใช้วันที่ส่งใหม่)
+      expect(summarize(active)).toEqual(summarize(before))
+      expect(active.every((row) => row.compPlanId === PLAN_PER_KM)).toBe(true)
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE compensation_plans SET is_current = false WHERE id = '${newPlanId}'`)
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_PER_KM}' WHERE id = '${TEAM_PER_KM}'`)
+    }
   })
 
   it('reject_expense แตะแค่รายการเบิก ไม่กระทบ assignment_status (`41` §20)', async () => {
@@ -762,11 +853,11 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     const caseBound = await expenses.listFieldExpenses(agentA, { type: 'caseBound' })
     const separate = await expenses.listFieldExpenses(agentA, { type: 'separate' })
 
-    expect(caseBound.items.map((row) => row.expenseType).sort()).toEqual(['allowance', 'fuel'])
+    expect(caseBound.items.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
     expect(separate.items.map((row) => row.expenseType)).toEqual(['hotel'])
   })
 
-  it('สรุปรายได้: สำเร็จได้คอมมิชชั่น · ไม่สำเร็จได้เบี้ยเสี่ยง (ค่าจากแผนที่ snapshot ไว้)', async () => {
+  it('สรุปรายได้: สำเร็จได้คอมมิชชั่น · ไม่สำเร็จได้เบี้ยเสี่ยง (อ่านจากรายการเบิกจริง — UAT Q2/BUG-054)', async () => {
     stubDistanceMatrix(1_000)
     const successCase = await seedReadyToClose()
     await field.closeFieldCase(agentA, successCase, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })

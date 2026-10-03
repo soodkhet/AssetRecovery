@@ -1,3 +1,4 @@
+import { assertNonNegativeSatang } from '@/lib/finance/satang'
 import { toBangkokParts } from '@/lib/format/datetime'
 import type { CaseOutcome, ExpenseStatus, ExpenseType, FuelMode } from '@/lib/generated/prisma/enums'
 
@@ -18,6 +19,10 @@ export interface CompensationSnapshotValues {
   fuelMaxPerCaseSatang: number | null
   fuelDailyFlatSatang: number | null
   allowanceSatang: number
+  /** `22` §6.4 — จ่ายเมื่อ `closed_success` (มติ PO 03/10/2569 UAT Q2: สร้างเป็นรายการเบิกตอนปิดงาน) */
+  commissionSatang: number
+  /** `22` §6.4 — เบี้ยเสี่ยง จ่ายเมื่อ `closed_fail` — exclusive กับ commission */
+  noSuccessFeeSatang: number
 }
 
 /** `22` §6.1 — ยอดดิบ = ระยะทาง(กม.) × rate · ยอดจ่ายจริง = MIN(ยอดดิบ, เพดาน) ถ้าตั้งเพดานไว้ */
@@ -37,9 +42,14 @@ export function fuelPerKmSatang(input: {
   return Math.min(raw, cap)
 }
 
-/** `22` §6.2 — โหมด `DAILY_FLAT` จ่ายค่าคงที่ต่อเคส ไม่คำนวณระยะทางเลย */
-export function fuelDailyFlatSatang(dailyFlatSatang: number | null): number {
-  return dailyFlatSatang ?? 0
+/**
+ * `22` §6.2 — โหมด `DAILY_FLAT` = อัตราเหมาจ่าย (บาท/วัน) × จำนวนวันที่ลงพื้นที่จริง ไม่คำนวณระยะทางเลย
+ * มติ PO 03/10/2569 (UAT Q4 · BUG-013): นับวันแบบเดียวกับเบี้ยเลี้ยง (`distinctFieldDays()` — วันปฏิทินไทย)
+ * ตามหน่วย "บาท/วัน" ของ `11` · เดิมจ่ายคงที่ต่อเคส
+ */
+export function fuelDailyFlatSatang(dailyFlatSatang: number | null, fieldDays: number): number {
+  if (fieldDays < 0 || !Number.isInteger(fieldDays)) throw new RangeError('จำนวนวันต้องเป็นจำนวนเต็มไม่ติดลบ')
+  return (dailyFlatSatang ?? 0) * fieldDays
 }
 
 /** `22` §6.3 — เบี้ยเลี้ยง = อัตราต่อวัน × จำนวนวันที่ลงพื้นที่จริงของเคสนั้น */
@@ -62,6 +72,31 @@ export function distinctFieldDays(checkedInAts: readonly Date[]): number {
   return days.size
 }
 
+/** ค่าจากแผนค่าตอบแทนที่ **snapshot ไว้ในตัว expense แล้ว** (`92` §7.1) — ห้ามอ่าน live plan มาคิดย้อนหลัง */
+export type CommissionPlanValues = Pick<CompensationSnapshotValues, 'commissionSatang' | 'noSuccessFeeSatang'>
+
+export interface CommissionResult {
+  /** ชนิดรายการเบิกที่ต้องสร้าง — `null` เมื่อยอดเป็น 0 (ยอด 0 ไม่สร้าง record ตาม D10) */
+  expenseType: Extract<ExpenseType, 'commission' | 'no_success_fee'> | null
+  grossSatang: number
+}
+
+/**
+ * `22` §6.4 — ค่าตายตัวต่อเคสตาม outcome (**ไม่ใช่ % ของมูลหนี้** และ **ไม่มีการหารเฉลี่ยต่อวัน**
+ * — "กฎหาร 4" ถูกยกเลิกแล้ว) · commission กับ no-success fee เป็น mutually exclusive เสมอ
+ */
+export function commissionSatang(outcome: CaseOutcome, plan: CommissionPlanValues): CommissionResult {
+  assertNonNegativeSatang(plan.commissionSatang, 'commission')
+  assertNonNegativeSatang(plan.noSuccessFeeSatang, 'no_success_fee')
+
+  const grossSatang = outcome === 'closed_success' ? plan.commissionSatang : plan.noSuccessFeeSatang
+  if (grossSatang === 0) return { expenseType: null, grossSatang: 0 }
+  return {
+    expenseType: outcome === 'closed_success' ? 'commission' : 'no_success_fee',
+    grossSatang,
+  }
+}
+
 /**
  * สถานะเริ่มต้นของรายการเบิกผูกเคส (`41` §6.6 กฎ "สถานะสำเร็จต้องรอคลังก่อน")
  * — `closed_success` เข้า `pending_warehouse_confirm` **เสมอ** ห้ามข้ามไป `pending_approval`
@@ -70,8 +105,11 @@ export function initialCaseExpenseStatus(outcome: CaseOutcome): ExpenseStatus {
   return outcome === 'closed_success' ? 'pending_warehouse_confirm' : 'pending_approval'
 }
 
+/** ชนิดรายการเบิก "ผูกกับเคส" ที่ระบบสร้างเองตอนปิดงาน (`41` §6.6 + มติ PO 03/10/2569 UAT Q2) */
+export type CaseBoundExpenseType = Extract<ExpenseType, 'fuel' | 'allowance' | 'commission' | 'no_success_fee'>
+
 export interface CaseExpenseDraft {
-  expenseType: Extract<ExpenseType, 'fuel' | 'allowance'>
+  expenseType: CaseBoundExpenseType
   grossSatang: number
   /** ร้อยของกิโลเมตร — null สำหรับ `DAILY_FLAT`/`allowance` (`41` §6.6) */
   distanceKmHundredths: number | null
@@ -94,7 +132,7 @@ export interface CaseExpensePlan {
 }
 
 /**
- * รายการเบิกทั้งชุดของ 1 รอบติดตาม — ใช้ทั้งตอน `submit_close_case` และ `resubmit_close_case`
+ * รายการเบิกทั้งชุดของ 1 รอบติดตาม (fuel + allowance + commission/no_success_fee) — ใช้ทั้งตอน `submit_close_case` และ `resubmit_close_case`
  * (`41` §8 — resubmit สร้าง "ตามกฎปกติ" ชุดเดียวกัน จึงต้องเรียกฟังก์ชันนี้ตัวเดียวกันเสมอ)
  */
 export function planCaseExpenses(input: CaseExpenseInput): CaseExpensePlan {
@@ -116,12 +154,20 @@ export function planCaseExpenses(input: CaseExpenseInput): CaseExpensePlan {
       }
     }
   } else {
-    const gross = fuelDailyFlatSatang(input.plan.fuelDailyFlatSatang)
+    const gross = fuelDailyFlatSatang(input.plan.fuelDailyFlatSatang, input.fieldDays)
     if (gross > 0) drafts.push({ expenseType: 'fuel', grossSatang: gross, distanceKmHundredths: null, status })
   }
 
   const allowance = allowanceSatang(input.plan.allowanceSatang, input.fieldDays)
   if (allowance > 0) drafts.push({ expenseType: 'allowance', grossSatang: allowance, distanceKmHundredths: null, status })
+
+  // `22` §6.4 + มติ PO 03/10/2569 (UAT Q2 · BUG-010) — ค่าคอมมิชชั่น (สำเร็จ) / เบี้ยเสี่ยง (ไม่สำเร็จ)
+  // เป็นรายการเบิกผูกเคสอีกตัวในชุดเดียวกัน ⇒ สถานะเริ่มต้นกติกาเดียวกับ fuel/allowance
+  // (สำเร็จต้องรอคลังก่อน) และเข้าอนุมัติ/รอบจ่ายตามปกติ · ยอด 0 ไม่สร้าง record (D10)
+  const commission = commissionSatang(input.outcome, input.plan)
+  if (commission.expenseType !== null) {
+    drafts.push({ expenseType: commission.expenseType, grossSatang: commission.grossSatang, distanceKmHundredths: null, status })
+  }
 
   return { drafts, fuelDistancePending }
 }

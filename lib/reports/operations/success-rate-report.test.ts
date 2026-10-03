@@ -115,3 +115,19 @@ describe('buildSuccessRateReport', () => {
     expect(report.totalRow?.successPct).toBeNull()
   })
 })
+
+describe('UAT Q20 (BUG-060) — ยังไม่มีเคสปิด = N/A ทุกจุด รวมถึง MoM', () => {
+  it('ช่วงนี้มีแต่เคสค้าง แต่ช่วงก่อนมีเคสปิด ⇒ % = null และ MoM เทียบไม่ได้ (ไม่ใช่ ↓ 100%)', () => {
+    const report = buildSuccessRateReport({
+      dimension: 'team',
+      entries: [entry('c1', null), entry('c2', null)],
+      previousEntries: [entry('p1', 'closed_success'), entry('p2', 'closed_fail')],
+    })
+
+    const row = rowOf(report.rows, 'team-a')
+    expect(row.successPct).toBeNull()
+    expect(row.changePct).toBeNull()
+    expect(report.totalRow?.changePct).toBeNull()
+    expect(report.kpis?.find((kpi) => kpi.key === 'successPct')?.mom?.changePct).toBeNull()
+  })
+})

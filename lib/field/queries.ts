@@ -13,6 +13,7 @@ import {
   generateCaseExpenses,
   linkSupersededExpenses,
   resolvePlanSnapshot,
+  resolveRoundPricing,
   supersedeCaseExpenses,
   type ExpenseTxClient,
   type PlanSnapshot,
@@ -1044,7 +1045,8 @@ function notifyExpenseQueue(organizationId: string, outcome: CaseOutcome, count:
  * ยืนยันปิดงาน — หลักฐานที่ส่งมาใน body คือชุดสุดท้าย (ฟอร์มเป็นเจ้าของสถานะ ไม่ merge กับ draft
  * ไม่งั้นไฟล์ที่ผู้ใช้ลบทิ้งจะกลับมา) ส่วน **เช็คอินอ่านจาก DB เสมอ** เพราะเป็นหลักฐานที่ล็อกแล้ว
  *
- * ปิดงานสำเร็จ = สร้างรายการเบิก fuel/allowance อัตโนมัติในทรานแซกชันเดียวกัน (`41` §6.6 · §8)
+ * ปิดงานสำเร็จ = สร้างรายการเบิก fuel/allowance/commission (หรือ no_success_fee) อัตโนมัติในทรานแซกชัน
+ * เดียวกัน (`41` §6.6 · §8 · มติ PO 03/10/2569 UAT Q2)
  * — `closed_success` เข้า `pending_warehouse_confirm` เสมอ · `closed_fail` เข้า `pending_approval`
  */
 export async function closeFieldCase(
@@ -1142,7 +1144,7 @@ export async function closeFieldCase(
           })
         : null
 
-    // รายการเบิก fuel/allowance เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
+    // รายการเบิก fuel/allowance/commission เกิดในทรานแซกชันเดียวกับการปิดงาน (`41` §6.6 · §11 —
     // พนักงานไม่ต้องทำเรื่องเบิกเอง) ⇒ ปิดงานสำเร็จแต่ไม่มีรายการเบิกเป็นไปไม่ได้
     const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
       organizationId: user.organizationId,
@@ -1456,9 +1458,15 @@ export async function resubmitCloseCase(
 
   const closedAt = new Date()
   const fuelMode = current.team.compensationPlan?.fuelMode ?? null
-  const [{ distanceKmHundredths, checkedInAts }, plan] = await Promise.all([
+  // มติ PO 03/10/2569 (UAT Q7 · BUG-052 · `41` §10.1): ชุดใหม่คิดด้วย **แผน (เวอร์ชัน) + วันที่ของการปิดงาน
+  // ครั้งแรก** — ไม่ใช่แผน/วันที่ ณ ตอน resubmit ⇒ แก้แผนระหว่างนั้นยอดต้องเท่าเดิม (`92` §7.1)
+  const [{ distanceKmHundredths, checkedInAts }, pricing] = await Promise.all([
     resolveDistanceForClose(current.id, fuelMode),
-    loadPlanSnapshot(user, current.team.compensationPlan?.id ?? null, closedAt),
+    resolveRoundPricing(prisma as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      assignmentId: current.id,
+      teamPlanId: current.team.compensationPlan?.id ?? null,
+    }),
   ])
 
   const result = await prisma.$transaction(async (tx) => {
@@ -1529,10 +1537,11 @@ export async function resubmitCloseCase(
       assignmentId: current.id,
       agentId: user.id,
       outcome,
-      plan,
+      plan: pricing.plan,
       distanceKmHundredths,
       checkedInAts,
-      closedAt,
+      // วันที่รายการ = วันปิดงานครั้งแรก (UAT Q7) — สถานะเคส/assignment ยังใช้เวลาส่งใหม่จริง
+      closedAt: pricing.pricedAt ?? closedAt,
       actor: context.actor,
       meta: context.meta,
     })

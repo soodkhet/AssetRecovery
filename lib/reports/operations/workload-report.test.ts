@@ -15,7 +15,7 @@ function rowOf(rows: readonly ReportRow[], key: string): ReportRow {
 }
 
 describe('buildWorkloadReport', () => {
-  it('แยกปิดสำเร็จ / ปิดไม่สำเร็จ / ค้างอยู่ และ % ความสำเร็จหารด้วยงานที่รับทั้งหมด (`40` §6.2)', () => {
+  it('แยกปิดสำเร็จ / ปิดไม่สำเร็จ / ค้างอยู่ และ % ความสำเร็จหารด้วยเคสที่ปิดแล้ว (มติ PO 03/10/2569 UAT Q20)', () => {
     const report = buildWorkloadReport({
       entries: [
         entry('c1', 'closed_success'),
@@ -31,8 +31,14 @@ describe('buildWorkloadReport', () => {
     expect(row.successCount).toBe(2)
     expect(row.failCount).toBe(1)
     expect(row.openCount).toBe(1)
-    // 2/4 = 50% (ต่างจาก O1 ที่จะได้ 2/3 = 66.7%)
-    expect(row.successPct).toBe(50)
+    // 2/3 = 66.7% — งานที่ยังค้างไม่เข้าตัวหาร (นิยามเดียวกับ O1)
+    expect(row.successPct).toBe(66.7)
+  })
+
+  it('รับงานแล้วแต่ยังไม่ปิดสักเคส ⇒ % ความสำเร็จ = null (แสดง N/A) ไม่ใช่ 0% (BUG-060)', () => {
+    const report = buildWorkloadReport({ entries: [entry('c1', 'open'), entry('c2', 'open')], previousEntries: [] })
+    expect(rowOf(report.rows, 'agent-a').successPct).toBeNull()
+    expect(report.totalRow?.['successPct']).toBeNull()
   })
 
   it('นับเคสไม่ซ้ำเมื่อเคสเดิมถูกมอบหมายหลายรอบ', () => {
