@@ -68,6 +68,17 @@ export function fieldErrorResponse(fields: Record<string, string>): Response {
   )
 }
 
+/**
+ * อ่านค่าสตริงของ field หนึ่งจาก body ที่ **ยังไม่ผ่าน Zod** — ใช้ส่งต่อให้ยามเฉพาะของโมดูลก่อนตกไป
+ * `REQUIRED_MISSING` ทั่วไป (เช่น ตีกลับ/ปฏิเสธไม่มีเหตุผล ⇒ `REJECT_REASON_REQUIRED` /
+ * `REJECTION_REASON_REQUIRED` ตาม `24` — UAT R6-D) · ไม่ใช่สตริง/ไม่มี = `null`
+ */
+export function bodyStringField(body: unknown, key: string): string | null {
+  if (typeof body !== 'object' || body === null) return null
+  const value = (body as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : null
+}
+
 /** อ่าน JSON body — body ที่ไม่ใช่ JSON ต้องได้ 400 ไม่ใช่ 500 */
 export async function readJsonBody(request: NextRequest): Promise<unknown> {
   try {

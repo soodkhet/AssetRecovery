@@ -1,10 +1,17 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  bodyStringField,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { APPROVAL_STEP_CAPABILITIES } from '@/lib/compensation/approval'
 import { rejectCompensationExpense } from '@/lib/compensation/approval-queries'
 import { compensationRejectSchema } from '@/lib/compensation/approval-types'
+import { assertRejectReason } from '@/lib/field/expense-status'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -20,8 +27,13 @@ export const PATCH = withApiPermission<RouteContext>(
   toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
-    const parsed = compensationRejectSchema.safeParse(await readJsonBody(request))
-    if (!parsed.success) return validationErrorResponse(parsed.error)
+    const body = await readJsonBody(request)
+    const parsed = compensationRejectSchema.safeParse(body)
+    if (!parsed.success) {
+      // ไม่มี/สั้นเกิน ⇒ `REJECT_REASON_REQUIRED` (`16` §11 · `24`) ไม่ใช่ `REQUIRED_MISSING` (UAT R6-D)
+      assertRejectReason(bodyStringField(body, 'reason'))
+      return validationErrorResponse(parsed.error)
+    }
 
     const result = await rejectCompensationExpense({ actor: user, meta: getRequestMeta(request) }, id, parsed.data)
     return apiSuccess(result)
