@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
 import { authEmailFor } from '@/lib/auth/login-identifier'
@@ -237,6 +238,19 @@ async function assertUsernameAvailable(organizationId: string, username: string,
   if (duplicate) throw new UserError('DUPLICATE_USERNAME', { detail: `username=${username}` })
 }
 
+/**
+ * ชน unique ระดับ DB (คำขอที่ยิงพร้อมกันหลุด pre-check ทั้งคู่ / อีเมลตรงกับผู้ใช้ที่ถูกลบแล้ว — unique
+ * `(organization_id, email)` ไม่ partial) ⇒ รัน pre-check ซ้ำเพื่อได้ code ตรงช่อง แล้ว fallback แทน 500 (UAT BUG-016)
+ */
+async function rethrowDuplicateUser(organizationId: string, values: UserValues, exceptUserId?: string): Promise<never> {
+  await assertUsernameAvailable(organizationId, values.username, exceptUserId)
+  await assertEmailAvailable(organizationId, values.email, exceptUserId)
+  if (values.email !== null) {
+    throw new UserError('DUPLICATE_USER_EMAIL', { detail: `email=${values.email} (unique violation)` })
+  }
+  throw new UserError('DUPLICATE_USERNAME', { detail: `username=${values.username} (unique violation)` })
+}
+
 /** uid ของ Supabase Auth ถูกผู้ใช้ในระบบถืออยู่แล้วหรือยัง (รวมคนที่ลบแล้ว — `supabase_uid` unique ทั้งตาราง) */
 async function isAuthUidTaken(uid: string): Promise<boolean> {
   const holder = await prisma.user.findUnique({ where: { supabaseUid: uid }, select: { id: true } })
@@ -375,7 +389,7 @@ export async function createUser(
       )
 
       return user
-    })
+    }).catch(onUniqueViolation(() => rethrowDuplicateUser(organizationId, values)))
   } catch (error) {
     await compensateAuthAccount(authUid)
     throw error
@@ -520,7 +534,7 @@ export async function updateUser(
     )
 
     return user
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateUser(organizationId, values, current.id)))
 
   invalidateSession(updated.supabaseUid)
 

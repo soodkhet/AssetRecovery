@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { emitAudit } from '@/lib/audit/audit'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -155,6 +156,11 @@ async function demoteOtherPrimaries(
   })
 }
 
+/** ชน unique `(organization_id, account_number)` ระดับ DB (คำขอพร้อมกันหลุด pre-check ทั้งคู่) ⇒ code เดียวกับ pre-check แทน 500 (UAT BUG-016) */
+function rethrowDuplicateAccount(accountNumber: string): never {
+  throw new SettingsError('DUPLICATE_BANK_ACCOUNT', { detail: `account=${accountNumber} (unique violation)` })
+}
+
 export async function createBankAccount(
   context: SettingsMutationContext,
   values: BankAccountValues,
@@ -188,7 +194,7 @@ export async function createBankAccount(
     )
 
     return row
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateAccount(normalized.accountNumber)))
 
   return toDto(created)
 }
@@ -229,7 +235,7 @@ export async function updateBankAccount(
     )
 
     return row
-  })
+  }).catch(onUniqueViolation(() => rethrowDuplicateAccount(normalized.accountNumber)))
 
   return toDto(updated)
 }

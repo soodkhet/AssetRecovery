@@ -1,3 +1,4 @@
+import { onUniqueViolation } from '@/lib/api/unique-violation'
 import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -205,7 +206,12 @@ export async function createRole(
     )
 
     return role
-  })
+  }).catch(
+    // ชน unique `(organization_id, name, role_group)` — คำขอพร้อมกัน / ชื่อตรงกับ role ที่ถูกลบแล้ว (unique ไม่ partial) (UAT BUG-016)
+    onUniqueViolation(() => {
+      throw new RoleError('DUPLICATE_ROLE_NAME', `${input.roleGroup}:${input.name} (unique violation)`)
+    }),
+  )
 
   const { _count, ...rest } = created
   return { ...rest, userCount: _count.users }
@@ -258,7 +264,11 @@ export async function updateRole(
     )
 
     return next
-  })
+  }).catch(
+    onUniqueViolation(() => {
+      throw new RoleError('DUPLICATE_ROLE_NAME', `${role.roleGroup}:${nextName} (unique violation)`)
+    }),
+  )
 
   clearSessionCache()
 
