@@ -25,6 +25,12 @@ import {
  */
 
 /** คอลัมน์ของ matrix `06` §7.2 (8 คอลัมน์) + `admin_office` ที่ตารางตกหล่น — ดูหมายเหตุที่ `MENU_ITEMS` */
+/**
+ * ข้อความกลางของเมนู/แท็บ/หน้าที่ยังไม่เปิดใช้ — ผู้ใช้ต้องไม่เห็นป้ายเฟสพัฒนา ("Phase 7.3" ฯลฯ — UAT BUG-020)
+ * `plannedPhase` ยังเก็บไว้ในทะเบียนเพื่อวางแผนงานภายในเท่านั้น ห้าม render
+ */
+export const UNDER_DEVELOPMENT_TEXT = 'อยู่ระหว่างพัฒนา'
+
 export type MenuAudience =
   | 'superadmin'
   | 'executive'

@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/states'
 import { requireSessionPage } from '@/lib/auth/page-guard'
+import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
  * Client Portal (ไฟล์ 97) — **placeholder ของ Phase 1.5**
@@ -20,7 +21,7 @@ export default async function ClientPortalPage() {
           <p className="mt-0.5 text-xs text-slate-500">{user.fullName}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge>Phase 7.3</Badge>
+          <Badge>{UNDER_DEVELOPMENT_TEXT}</Badge>
           <LogoutButton />
         </div>
       </div>

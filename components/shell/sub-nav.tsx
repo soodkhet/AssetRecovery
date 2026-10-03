@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/components/ui/cn'
-import type { MenuItem } from '@/lib/nav/menu-registry'
+import { type MenuItem, UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
  * แถบแท็บย่อยใต้ Top Nav (`06` §8 · mockup `app-shell.html` `renderCaseSubNav()`)
@@ -30,11 +30,11 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
             return (
               <span
                 key={item.id}
-                title={`หน้าจริงเกิดใน Phase ${item.plannedPhase ?? '-'}`}
+                title={UNDER_DEVELOPMENT_TEXT}
                 className="cursor-not-allowed rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-slate-400"
               >
                 {item.label}
-                <span className="ml-1 font-mono text-[10px] text-slate-300">Phase {item.plannedPhase ?? '-'}</span>
+                <span className="ml-1 text-[10px] text-slate-300">{UNDER_DEVELOPMENT_TEXT}</span>
               </span>
             )
           }
