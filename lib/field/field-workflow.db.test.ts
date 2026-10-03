@@ -710,4 +710,38 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
     expect(closed.items[0]?.status).toBe('closed_fail')
     expect(closed.items[0]?.closedAt).not.toBeNull()
   })
+
+  it('หลักฐานปิดงานในรายละเอียดเคส: เห็นเฉพาะผู้ถือ reject_evidence และสะท้อนผลตีกลับ (UAT BUG-045)', async () => {
+    const { loadCaseFieldEvidence } = await import('@/lib/field/evidence-review')
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
+
+    // ผู้ใช้ fixture คนเดิม (FK ของผู้ตรวจ) แต่ถือ capability ของเจ้าหน้าที่อนุมัติเคส
+    const approver = sessionUser({
+      id: MANAGER_ID,
+      roleName: 'เจ้าหน้าที่อนุมัติเคส',
+      roleGroup: 'system',
+      teamId: null,
+      capabilities: { reject_evidence: 'manage', approve_case: 'manage' },
+      scope: { kind: 'global', teamIds: [], companyId: null, userId: MANAGER_ID },
+    })
+
+    expect(await loadCaseFieldEvidence(manager, caseId)).toBeNull()
+
+    const evidence = await loadCaseFieldEvidence(approver, caseId)
+    expect(evidence?.assignmentStatus).toBe('closed_success')
+    expect(evidence?.photos).toEqual(MEDIA.photos)
+    expect(evidence?.videos).toEqual(MEDIA.videos)
+    expect(evidence?.productPhotos).toEqual(MEDIA.productPhotos)
+    expect(evidence?.agentName).toBe('พนักงาน A 2.8')
+    expect(evidence?.checkins.length).toBeGreaterThan(0)
+    expect(evidence?.evidenceStatus).toBe('pending')
+
+    await field.rejectFieldEvidence(approver, caseId, { reason: 'รูปไม่ชัด ถ่ายใหม่' }, { actor: approver, meta })
+    const afterReject = await loadCaseFieldEvidence(approver, caseId)
+    expect(afterReject?.assignmentStatus).toBe('needs_revision')
+    expect(afterReject?.evidenceStatus).toBe('rejected')
+    expect(afterReject?.rejectReason).toBe('รูปไม่ชัด ถ่ายใหม่')
+    expect(afterReject?.reviewedByName).toBe('ผู้จัดการ 2.8')
+  })
 })

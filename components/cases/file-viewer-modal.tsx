@@ -20,7 +20,7 @@ export interface ViewableFile {
 
 /**
  * ตัวเปิดดูไฟล์แนบ (`38` §7.5 — "เอกสารแนบต้องเปิดดูได้จริง")
- * PDF เปิดใน viewer ในตัว · รูปภาพเปิดแบบ lightbox เต็มจอ · ชนิดอื่นให้ดาวน์โหลด
+ * PDF เปิดใน viewer ในตัว · รูปภาพเปิดแบบ lightbox เต็มจอ · วิดีโอ/เสียงเล่นในหน้า · ชนิดอื่นให้ดาวน์โหลด
  *
  * bucket เป็น private ⇒ ขอ **signed URL** ตอนเปิดทุกครั้ง (ไม่เก็บลิงก์ถาวรไว้ในหน้า)
  * **shared component** — โมดูล 40/41 ที่ต้องเปิดดูหลักฐานใช้ตัวนี้ซ้ำ
@@ -90,6 +90,11 @@ export function FileViewerModal({
         <LoadingState message="กำลังเตรียมไฟล์..." />
       ) : isPdfMime(document.mimeType) ? (
         <iframe src={url} title={document.originalName} className="h-[70vh] w-full rounded-lg border border-slate-200" />
+      ) : document.mimeType.startsWith('video/') ? (
+        // หลักฐานวิดีโอปิดงาน (UAT BUG-045) — เล่นในหน้าได้เลย
+        <video src={url} controls className="mx-auto max-h-[70vh] w-full rounded-lg bg-black" />
+      ) : document.mimeType.startsWith('audio/') ? (
+        <audio src={url} controls className="w-full" />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element -- signed URL ชั่วคราวของ Storage (โดเมนไม่คงที่ ใช้ next/image ไม่ได้)
         <img src={url} alt={document.originalName} className="mx-auto max-h-[70vh] rounded-lg object-contain" />
