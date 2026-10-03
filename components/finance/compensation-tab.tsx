@@ -82,7 +82,7 @@ export function CompensationTab() {
             {!loading &&
               error === null &&
               items.map((item) => {
-                const actions = expenseRowActions({ status: item.status, canApprove })
+                const actions = expenseRowActions({ status: item.status, canApprove: canApprove && item.viewerCanAct })
                 const highlight = expenseRowHighlight(item.status)
                 return (
                   <Tr key={item.id} className={highlight ?? undefined}>

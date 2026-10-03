@@ -149,7 +149,10 @@ export function ApprovalTab() {
               {!claims.loading &&
                 claims.error === null &&
                 visibleClaims.map((item) => {
-                  const actions = expenseRowActions({ status: item.status, canApprove: claims.canApprove })
+                  const actions = expenseRowActions({
+                    status: item.status,
+                    canApprove: claims.canApprove && item.viewerCanAct,
+                  })
                   return (
                     <Tr key={item.id} className={expenseRowHighlight(item.status) ?? undefined}>
                       <Td>

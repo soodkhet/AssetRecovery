@@ -398,6 +398,64 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     expect(await db().revenue.count({ where: { caseId } })).toBe(1)
   })
 
+  /**
+   * UAT R6-E (บั๊กเงิน S2) — อนุมัติรายการเบิก **ตัวสุดท้าย 2 ตัวของเคสเดียวกันพร้อมกัน**
+   * จำลองลำดับที่แย่ที่สุดแบบกำหนดได้: ทั้งสองทรานแซกชันเขียน `approved` ของตัวเองเสร็จก่อน (barrier)
+   * แล้วจึงเรียก `tryCreateRevenue()` ในทรานแซกชันเดียวกัน — เหมือน `approveCompensationExpense()`
+   * เดิม (ไม่ล็อกแถวเคส) ต่างฝ่ายเห็นอีกตัวยังไม่ approved ⇒ รายได้ไม่เกิดเลย · ต้องเกิด 1 แถวเสมอ
+   */
+  it('R6-E อนุมัติตัวสุดท้าย 2 ตัวพร้อมกัน ⇒ Revenue เกิด 1 แถวเสมอ (ไม่หาย ไม่ซ้ำ)', async () => {
+    for (let round = 0; round < 3; round += 1) {
+      const caseId = await seedCase()
+      await seedExpense(caseId, 'pending_finance_approval')
+      await seedExpense(caseId, 'pending_finance_approval')
+      await seedAssetInLot(caseId, 'confirmed')
+      const expenseIds = (
+        await db().expense.findMany({ where: { caseId }, select: { id: true }, orderBy: { createdAt: 'asc' } })
+      ).map((row) => row.id)
+      expect(expenseIds).toHaveLength(2)
+
+      let arrived = 0
+      let release: () => void = () => {}
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve
+      })
+
+      const approveLast = (expenseId: string) =>
+        appPrisma.$transaction(
+          async (tx) => {
+            await tx.expense.update({ where: { id: expenseId }, data: { status: 'approved' } })
+            arrived += 1
+            if (arrived === 2) release()
+            await barrier
+            return service.tryCreateRevenue(tx, { organizationId: ORG_ID, caseIds: [caseId], actorId: FINANCE_ID })
+          },
+          { timeout: 15_000 },
+        )
+
+      const results = await Promise.all(expenseIds.map((id) => approveLast(id)))
+      expect(results.flatMap((result) => result.revenueIdsCreated)).toHaveLength(1)
+      expect(await db().revenue.count({ where: { caseId, deletedAt: null } })).toBe(1)
+    }
+  })
+
+  it('R6-E ยามชั้น DB — แทรกรายได้ซ้ำ (เคส, รอบติดตาม) ตรง ๆ ไม่ได้ (`uniq_revenues_active_case_round`)', async () => {
+    const caseId = await seedCase()
+    await seedExpense(caseId, 'approved')
+    await seedAssetInLot(caseId, 'confirmed')
+    await runRevenue([caseId])
+    const insertDuplicate = () =>
+      db().$executeRawUnsafe(`
+        INSERT INTO revenues (organization_id, case_id, company_id, gross_satang, total_satang,
+                              fee_model_snapshot, vat_mode_snapshot, revenue_date, created_by)
+        SELECT organization_id, case_id, company_id, gross_satang, total_satang,
+               fee_model_snapshot, vat_mode_snapshot, revenue_date, created_by
+          FROM revenues WHERE case_id = '${caseId}'
+      `)
+    await expect(insertDuplicate()).rejects.toThrow(/uniq_revenues_active_case_round|23505|Unique constraint/)
+    expect(await db().revenue.count({ where: { caseId } })).toBe(1)
+  })
+
   it('T2 — เปลี่ยนอัตรา VAT ไม่กระทบใบเก่า (คิดจาก revenue_date ของใบตัวเอง)', async () => {
     const oldCase = await seedCase({ closedAt: '2026-09-30T03:00:00Z' })
     const newCase = await seedCase({ closedAt: '2026-10-01T03:00:00Z' })

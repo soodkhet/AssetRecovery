@@ -38,6 +38,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     approvalStepTotal: 2,
     pendingStepRole: 'ผู้จัดการทีมติดตามทรัพย์',
     approvalHistory: [],
+    viewerCanAct: true,
     rejectReason: null,
     createdAt: '2026-08-01T03:00:00.000Z',
     ...overrides,

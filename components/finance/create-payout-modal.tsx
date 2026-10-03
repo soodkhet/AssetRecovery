@@ -93,9 +93,11 @@ export function CreatePayoutModal({
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
         </Field>
 
+        {/* มติ PO 03/10/2569 (UAT Q5 · R6-G) — เกณฑ์ WHT ต่อ payee ต่อรอบจ่าย ไม่ใช่ต่อรายการ */}
         <InlineAlert tone="info">
           ระบบดึงรายการ <b>ที่อนุมัติแล้ว</b> ของผู้รับเงินที่ <b>ยืนยันแล้ว</b> ถึงวันตัดรอบมารวมอัตโนมัติ —
-          WHT คิดต่อรายการตาม Tax Profile ของแต่ละคน (เงินทดรองจ่ายไม่หัก WHT)
+          WHT คิดจากยอดรวมของผู้รับเงินแต่ละคนในรอบจ่ายนี้ ตาม Tax Profile ของคนนั้น — หักเมื่อยอดรวมถึงเกณฑ์
+          ขั้นต่ำ (เงินทดรองจ่ายไม่หัก WHT)
         </InlineAlert>
 
         <Field label="ชื่อรอบจ่าย (เว้นว่าง = ระบบตั้งให้จากฝั่ง + วันตัดรอบ)">

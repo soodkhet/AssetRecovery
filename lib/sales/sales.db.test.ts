@@ -128,13 +128,18 @@ let companyId = ''
 let caseId = ''
 let monthCursor = 0
 
-/** รอบวางบิลใหม่ 1 รอบ (เดือนไม่ซ้ำกันในไฟล์เทสต์) + รายได้ 1 ใบ — คืน id ของรอบและป้ายงวด */
+/**
+ * รอบวางบิลใหม่ 1 รอบ (เดือนไม่ซ้ำกันในไฟล์เทสต์) + รายได้ 1 ใบ — คืน id ของรอบและป้ายงวด
+ * รายได้ทุกใบผูกเคสเดียวกัน ⇒ ใช้ `tracking_round` ไม่ซ้ำกัน (partial unique `uniq_revenues_active_case_round` — UAT R6-E)
+ */
 async function seedBilling(
   options: { status?: string; grossSatang?: number; vatSatang?: number; company?: string } = {},
 ): Promise<{ id: string; period: string }> {
   const month = MONTHS[monthCursor % 12] ?? 'มกราคม'
   const yearBe = 2569 + Math.floor(monthCursor / 12)
   monthCursor += 1
+  // จับค่าไว้ก่อน await — seedBilling ถูกเรียกพร้อมกันได้ (เทสต์ออกเลขพร้อมกัน)
+  const trackingRound = monthCursor
   const period = `${month} ${yearBe}`
   const gross = options.grossSatang ?? 1_200_000
   const vat = options.vatSatang ?? 84_000
@@ -149,9 +154,9 @@ async function seedBilling(
   const id = rows[0]?.id ?? ''
 
   await db().$executeRawUnsafe(`
-    INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang,
+    INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, tracking_round, gross_satang, vat_satang,
                           vat_rate_pct_used, total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
-    VALUES ('${ORG_ID}', '${caseId}', '${company}', '${id}', ${gross}, ${vat}, 7.00, ${gross + vat},
+    VALUES ('${ORG_ID}', '${caseId}', '${company}', '${id}', ${trackingRound}, ${gross}, ${vat}, 7.00, ${gross + vat},
             'SUCCESS_FEE', 'exclude_vat', 'billed', '2026-06-25', '${ACCOUNTING_ID}')
   `)
 

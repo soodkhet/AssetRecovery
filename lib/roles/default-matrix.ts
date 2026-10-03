@@ -86,7 +86,13 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [agentOut, 'manage'],
     [finance, 'view'],
   ],
-  manage_payout_batch: [[finance, 'manage']],
+  // `17` §12 "ดู Payout Batch: บัญชี, ผู้บริหาร (read-only)" — spec ของโมดูลชนะ reference กลาง `25` §7.2
+  // (ลำดับเอกสารใน CLAUDE.md) · เดิมไม่มีแถว ⇒ บริหารเปิดแท็บรอบจ่ายแล้วได้ 403 แต่การ์ดโชว์ "0" (UAT R6-F)
+  manage_payout_batch: [
+    [finance, 'manage'],
+    [accounting, 'view'],
+    [executive, 'view'],
+  ],
   generate_payment_file: [[finance, 'manage']],
   manage_payee_profile: [
     [finance, 'manage'],

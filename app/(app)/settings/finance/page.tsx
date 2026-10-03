@@ -13,7 +13,7 @@ export default async function FinanceSettingsPage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
-  await requireMenuPage('settings.finance')
+  const user = await requireMenuPage('settings.finance')
   const { tab } = await searchParams
-  return <FinanceSettingsShell initialTab={resolveFinanceSettingsTab(tab)} />
+  return <FinanceSettingsShell initialTab={resolveFinanceSettingsTab(tab, user)} />
 }

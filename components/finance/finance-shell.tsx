@@ -10,9 +10,11 @@ import { DashboardTab } from '@/components/finance/dashboard-tab'
 import { PayoutTab } from '@/components/finance/payout-tab'
 import { ProfitTab } from '@/components/finance/profit-tab'
 import { RevenueTab } from '@/components/finance/revenue-tab'
+import { PayeeTab } from '@/components/settings/payee-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
+import { useSession } from '@/components/auth/permission-provider'
+import { visibleFinanceOperationTabs } from '@/lib/finance/operation-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -24,8 +26,12 @@ import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
  */
 export function FinanceShell({ initialTab }: { initialTab: string }) {
   const [tab, setTab] = useState(initialTab)
+  const session = useSession()
+  // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** (ไม่ใช่โชว์ตารางว่าง) — ผู้จัดการทีมเห็นเฉพาะคิวอนุมัติค่าตอบแทน
+  // (มติ PO 03/10/2569 — UAT R6-A) · API ตรวจสิทธิ์ซ้ำทุก endpoint (DEC-002)
+  const tabs = session === null ? [] : visibleFinanceOperationTabs(session)
   // `initialTab` ผ่าน `resolveFinanceOperationTab()` มาแล้ว และปุ่มที่กดได้มีแต่แท็บที่ `available`
-  const current = FINANCE_OPERATION_TABS.find((item) => item.id === tab)
+  const current = tabs.find((item) => item.id === tab)
 
   return (
     <>
@@ -39,8 +45,8 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
           aria-label="แท็บงานการเงิน"
           className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
         >
-          {FINANCE_OPERATION_TABS.map((item) => {
-            // หน้าจริงอยู่คนละ route (เช่น "ผู้รับเงิน" อยู่ในหน้าตั้งค่าการเงิน) — ลิงก์ข้ามไป
+          {tabs.map((item) => {
+            // หน้าจริงอยู่คนละ route — ลิงก์ข้ามไป (ปัจจุบันไม่มีแท็บแบบนี้ เก็บไว้รองรับในอนาคต)
             if (item.href !== undefined) {
               return (
                 <Link
@@ -91,6 +97,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         {current?.id === 'advances' && <AdvanceTab />}
         {current?.id === 'payout' && <PayoutTab />}
         {current?.id === 'revenue' && <RevenueTab />}
+        {current?.id === 'payee' && <PayeeTab />}
         {current?.id === 'adjustment' && <AdjustmentTab />}
         {current?.id === 'profit' && <ProfitTab />}
         {current === undefined && (
