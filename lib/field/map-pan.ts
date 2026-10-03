@@ -1,8 +1,9 @@
 /**
  * แผนที่แบบรูปนิ่ง (static map) ของฟอร์มปิดงาน (`41` §6.4 · §7.6) — **pure ล้วน**
  *
- * ใช้ static map ของ OpenStreetMap ตัวเดียวกับ mockup (ไม่ต้องมี API key และไม่เพิ่ม dependency)
- * — จุดเช็คอินเป็นรูป**ดูอย่างเดียว** ส่วนจุดเริ่มเดินทางลากปรับตำแหน่งได้ (§6.4.1)
+ * ⚠️ UAT BUG-062: เลิกโหลดรูปแผนที่จากบริการภายนอกแล้ว (`staticmap.openstreetmap.de` ของ mockup ปิดตัว และ spec
+ * ไม่ได้กำหนดผู้ให้บริการ) — หน้าจอแสดง **พิกัด + ลิงก์เปิด Google Maps** (`mapsPointHref()`) แทน
+ * จุดเริ่มเดินทางยังลากปรับได้ (§6.4.1) บนพื้นตาราง — ตัวแปลงพิกเซล → พิกัดด้านล่างยังใช้ตามเดิม
  *
  * การ "ลากปรับตำแหน่ง" ทำโดยเลื่อนรูปแล้วแปลงระยะพิกเซลกลับเป็นพิกัดด้วยสูตร Web Mercator
  * ({@link panCenter}) — หมุดอยู่กลางกรอบเสมอ ⇒ ลากรูปไปทางไหน = ย้ายหมุดไปทางตรงข้ามเท่านั้น
@@ -59,30 +60,6 @@ export function panCenter(center: MapPoint, zoom: number, dxPixels: number, dyPi
   const nextLatitude = (180 / Math.PI) * Math.atan(Math.sinh(n))
 
   return { latitude: clampLatitude(nextLatitude), longitude: wrapLongitude(nextLongitude) }
-}
-
-export interface StaticMapOptions {
-  zoom?: number
-  width?: number
-  height?: number
-  /** สีหมุดของ staticmap.openstreetmap.de — เช็คอิน = แดง · จุดเริ่มเดินทาง = น้ำเงิน (mockup §7.6) */
-  marker?: 'red-pushpin' | 'blue-pushpin'
-}
-
-/** URL รูปแผนที่นิ่ง — ปัดพิกัด 6 ตำแหน่ง (≈0.1 ม.) เพื่อให้ URL ซ้ำเดิม เบราว์เซอร์ cache ได้ */
-export function staticMapUrl(point: MapPoint, options: StaticMapOptions = {}): string {
-  const zoom = options.zoom ?? 15
-  const width = options.width ?? 400
-  const height = options.height ?? 150
-  const marker = options.marker ?? 'red-pushpin'
-  const latitude = clampLatitude(point.latitude).toFixed(6)
-  const longitude = wrapLongitude(point.longitude).toFixed(6)
-
-  return (
-    'https://staticmap.openstreetmap.de/staticmap.php' +
-    `?center=${latitude},${longitude}&zoom=${zoom}&size=${width}x${height}` +
-    `&markers=${latitude},${longitude},${marker}`
-  )
 }
 
 /** พิกัดแบบอ่านง่ายบนหน้าจอ (6 ตำแหน่ง) — แสดงคู่กับแผนที่เสมอเพื่อให้ตรวจสอบย้อนหลังได้ */

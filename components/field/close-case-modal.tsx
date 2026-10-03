@@ -47,7 +47,8 @@ import {
 } from '@/lib/field/fail-reasons'
 import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
-import { formatCoordinates, panCenter, staticMapUrl } from '@/lib/field/map-pan'
+import { mapsPointHref } from '@/lib/field/field-ui'
+import { formatCoordinates, panCenter } from '@/lib/field/map-pan'
 import {
   FIELD_MEDIA_ACCEPT,
   FIELD_MEDIA_CAPTURE,
@@ -105,7 +106,6 @@ const OUTCOME_CHOICES: readonly { outcome: CaseOutcome; label: string; emoji: st
 
 /** zoom ของแผนที่จุดเริ่มเดินทาง — ต้องคงที่เพราะใช้แปลงพิกเซล↔พิกัดตอนลาก */
 const ORIGIN_MAP_ZOOM = 15
-const ORIGIN_MAP_SIZE = { width: 400, height: 160 }
 
 function SectionTitle({ children, note }: { children: React.ReactNode; note?: string }) {
   return (
@@ -820,26 +820,23 @@ export function CloseCaseModal({
                     onPointerUp={endDrag}
                     onPointerCancel={endDrag}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- รูปแผนที่นิ่งจากบริการภายนอก (โดเมนไม่ผ่าน next/image) */}
-                    <img
-                      src={staticMapUrl(originCenter, {
-                        zoom: ORIGIN_MAP_ZOOM,
-                        width: ORIGIN_MAP_SIZE.width,
-                        height: ORIGIN_MAP_SIZE.height,
-                        marker: 'blue-pushpin',
-                      })}
-                      alt="แผนที่จุดเริ่มเดินทาง"
-                      draggable={false}
-                      className="h-full w-full object-cover"
-                      style={
-                        dragOffset === null
-                          ? undefined
-                          : { transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }
-                      }
+                    {/* UAT BUG-062 — ไม่โหลดรูปแผนที่ภายนอกแล้ว: พื้นตารางเลื่อนตามนิ้ว หมุดอยู่กลางกรอบ ·
+                        ตรวจจุดจริงด้วยลิงก์ Google Maps ด้านล่าง */}
+                    <div
+                      aria-hidden
+                      className="absolute inset-0"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)',
+                        backgroundSize: '20px 20px',
+                        backgroundPosition:
+                          dragOffset === null ? '0 0' : `${dragOffset.x}px ${dragOffset.y}px`,
+                      }}
                     />
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                      <IconMapPin className="h-7 w-7 text-blue-600" />
                       <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-extrabold text-slate-700 shadow">
-                        ลากแผนที่เพื่อปรับตำแหน่ง
+                        ลากเพื่อปรับตำแหน่ง
                       </span>
                     </div>
                   </div>
@@ -852,6 +849,14 @@ export function CloseCaseModal({
                       <div className="truncate font-mono text-[11px] text-blue-600">
                         {formatCoordinates(originCenter)} · {fmtDateTime(origin.setAt)}
                       </div>
+                      <a
+                        href={mapsPointHref(originCenter.latitude, originCenter.longitude)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="focus-ring inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 underline"
+                      >
+                        <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
+                      </a>
                     </div>
                     <button
                       type="button"
@@ -916,22 +921,19 @@ export function CloseCaseModal({
                 <div className="space-y-2">
                   {detail.checkins.map((checkin, index) => (
                     <div key={checkin.id} className="overflow-hidden rounded-xl border-2 border-emerald-300 bg-white">
+                      {/* UAT BUG-062 — ไม่โหลดรูปแผนที่ภายนอกแล้ว: แสดงพิกัด + ลิงก์เปิด Google Maps แทน */}
                       <a
-                        href={`https://www.google.com/maps?q=${checkin.latitude},${checkin.longitude}`}
+                        href={mapsPointHref(checkin.latitude, checkin.longitude)}
                         target="_blank"
                         rel="noreferrer"
-                        className="focus-ring relative block h-28 bg-slate-100"
+                        aria-label={`เปิดจุดเช็คอินที่ ${index + 1} ใน Google Maps`}
+                        className="focus-ring flex items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/60 px-3 py-2.5"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- รูปแผนที่นิ่งจากบริการภายนอก (โดเมนไม่ผ่าน next/image) */}
-                        <img
-                          src={staticMapUrl(checkin, { zoom: 15, width: 400, height: 150 })}
-                          alt={`แผนที่จุดเช็คอินที่ ${index + 1}`}
-                          className="h-full w-full object-cover"
-                        />
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-extrabold text-slate-700 shadow">
-                            <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
-                          </span>
+                        <span className="truncate font-mono text-[11px] text-slate-600">
+                          {formatCoordinates(checkin)}
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-extrabold text-emerald-700">
+                          <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
                         </span>
                       </a>
                       <div className="flex items-center gap-2.5 p-3">

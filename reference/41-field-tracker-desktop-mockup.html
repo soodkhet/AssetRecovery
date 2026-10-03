@@ -973,7 +973,7 @@ function renderTravelOriginSection() {
       <button onclick="setTravelOrigin()" class="text-[12px] font-extrabold text-rose-600 underline">ลองดึงตำแหน่งอีกครั้ง</button>
     </div>` : `
     <div class="bg-white border-2 border-blue-300 rounded-xl overflow-hidden">
-      <div class="relative h-24 bg-slate-100" style="background-image:url('https://staticmap.openstreetmap.de/staticmap.php?center=${origin.lat},${origin.lng}&zoom=14&size=400x130&markers=${origin.lat},${origin.lng},blue-pushpin');background-size:cover;background-position:center;">
+      <div class="relative h-24 bg-slate-100" style="background-image:linear-gradient(#e2e8f0 1px,transparent 1px),linear-gradient(90deg,#e2e8f0 1px,transparent 1px);background-size:20px 20px;">
         <div class="absolute inset-0 flex items-center justify-center" style="background:rgba(0,0,0,0.05)"></div>
       </div>
       <div class="flex items-center gap-2.5 p-3">
@@ -1019,7 +1019,7 @@ function renderEvidenceSection(outcome, isRevisionMode = false) {
       <div class="space-y-2">
         ${checkins.map((ci, i) => `
           <div class="bg-white border-2 border-emerald-300 rounded-xl overflow-hidden">
-            <a href="https://www.google.com/maps?q=${ci.lat},${ci.lng}" target="_blank" rel="noopener noreferrer" class="block relative h-28 bg-slate-100" style="background-image:url('https://staticmap.openstreetmap.de/staticmap.php?center=${ci.lat},${ci.lng}&zoom=15&size=400x150&markers=${ci.lat},${ci.lng},red-pushpin');background-size:cover;background-position:center;">
+            <a href="https://www.google.com/maps?q=${ci.lat},${ci.lng}" target="_blank" rel="noopener noreferrer" class="block relative h-28 bg-slate-100" style="background-image:linear-gradient(#e2e8f0 1px,transparent 1px),linear-gradient(90deg,#e2e8f0 1px,transparent 1px);background-size:20px 20px;">
               <div class="absolute inset-0 flex items-center justify-center" style="background:rgba(0,0,0,0.05)">
                 <span class="bg-white/90 text-[11px] font-extrabold text-slate-700 px-2.5 py-1 rounded-full shadow flex items-center gap-1">${Icon.map} เปิดใน Google Maps</span>
               </div>
