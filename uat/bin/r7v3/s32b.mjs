@@ -1,0 +1,18 @@
+// R7.32 ซ้ำ 1 ครั้งเพื่อเก็บภาพ/ข้อความบนจอเมื่อ export-pack ได้ 500 (Storage key ภาษาไทย)
+import { openAs, shot, R, ID, log, q, settle, sleep, waitToast, dlgText, BASE } from './_h.mjs'
+log('=== R7.32b', new Date().toISOString())
+const s = await openAs('uat.account'); const p = s.page
+await p.goto(`${BASE}/accounting?tab=export`); await settle(p); await sleep(900)
+await p.locator('main').getByRole('button', { name: 'สร้างชุดเอกสารใหม่' }).click(); await sleep(800)
+const d = p.locator('[role="dialog"]').last()
+await d.locator('textarea').fill('UAT R7 ชุดแรก')
+await shot(p, R, '32b-export-modal-stale-critical')
+const rp = p.waitForResponse(r => r.url().includes('/api/accounting/export-pack') && r.request().method() === 'POST', { timeout: 60000 })
+await d.getByRole('button', { name: 'ดาวน์โหลดไฟล์ (.zip)' }).click()
+const resp = await rp; log('32b resp', resp.status(), resp.headers()['content-type'], JSON.stringify((await resp.text()).slice(0, 200)))
+log('32b toast', await waitToast(p)); await sleep(500)
+await shot(p, R, '32c-export-500-toast')
+log('32b dlg still', await dlgText(p, 200))
+log('32b sql', q('select count(*) from export_records'))
+log('errs', s.consoleErrors.slice(0, 4), s.serverErrors)
+await s.browser.close()

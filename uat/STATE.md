@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R7a+R7b v3** — 04/10/2569 11:40–11:52 · 25/25 ✅ ตรง golden · บั๊กใหม่ BUG-111…115 (ไม่บล็อก) · bank 4 แถว (IN-1/UATL/UATC จับคู่ · 123.45 ค้างไว้ R7c) · payout 4 รอบ completed · billing paid 2 · AR 0 · ใบกำกับ INV-0001/0002 · 50 ทวิ 15 ใบ / 28500 · ภ.ง.ด.3 28500 · ADV3 **overdue** (asOf 2026-10-05 จำลอง) · งวด ต.ค. collecting · รายงาน `uat/report/R7ab-bankrecon-v3.md` · ภาพ 32 |
 | snapshot ล่าสุด | `uat/snapshots/R7b-end-v3.dump` (ปลาย R7b = ต้น R7c) · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R7c v3** (R7.26–R7.36 งานบัญชี: ยกเลิก-ออกแทน 50 ทวิ, ภ.ง.ด., Exception, ความพร้อมปิดงวด, Export Pack, ส่งสำนักงานบัญชี) → R8 (step sheet กำลังร่าง) → R9 → R10 · มติผู้ใช้: ไม่รอเที่ยงคืน (O10) |
+| รอบปัจจุบัน | **R7c v3 ต่อจาก R7.32** (R7.26–R7.31 + R7.35 ผ่านแล้ว · หยุดที่ R7.32 ด้วย BUG-116 → แก้แล้ว) → R8 → R9 → R10 (step sheet ครบทุกรอบ) · snapshot ล่าสุด `R7c-partial-v3` (ก่อน merge fixer M/N/O/P/Q — ฐานตอนนี้มีคอลัมน์ `cases.document_mode`/`product_photo_in_contract` เพิ่ม) |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~14:00 R7c หยุดที่ R7.32 (BUG-116 Export Pack 500) → merge fixer M `ee165e5` (เอกสารชุด) · N `1c68bd5` (แม่แบบนำเข้าไทย) · Q `00c5734` (แม่แบบ .xlsx + DEC-013) · P `eb852fa` (ติ๊กรูปสินค้า/จำโหมด/ลบเอกสาร · migration `20261004140000_case_document_mode`) · O `7f11527` (BUG-111…120) · verify 269 files / 3,431 tests · step sheet R8 `bc4da82` / R9 `a4ddf8c` / R10 `613464e` · migration ใหม่จาก UAT รวม **9 ตัว** (ถึง `20261004140000`)
 - 04/10/2569 ~12:00 R7a+R7b จบ (ตารางบน) · มติผู้ใช้ O10 เล่นต่อไม่รอเที่ยงคืน → fixer K `ebd11e9` (dev trigger asOf) · step sheet R7 v1 `9841db2` · คำขอผู้ใช้ระหว่างรอบ: (1) กรอบโฟกัสแท็บ/เมนูย่อย → fixer L (2) เอกสารแนบรับเคสแบบชุดเดียว 25 MB → fixer M (3) แม่แบบนำเข้าภาษาไทยทุกจุด → fixer N
 - 04/10/2569 ~03:00 ผู้ใช้อนุญาต fixer ชุดก่อน R7 → merge fixer I `2faed64` (BUG-095/105/107/108/110) + fixer J `46b31d4` (BUG-096/097/098/099/104 · migration `20261004100000_expense_resubmit_note` → ฐาน dev+test แล้ว) · verify typecheck/lint/260 files 3,330 tests ✅ · snapshot **`R6-end-v3-fixed`** = ต้น R7 · migration ใหม่จาก UAT รวม **8 ตัว** (ถึง `20261004100000`)
 - 04/10/2569 ~02:35 R6b v3 จบ (ดูตารางบน) · มติ O8/O9 · Storage `payment-files` +5 bank file (ใช้งานจริง ไม่ใช่ขยะ) · สำเนาในเครื่อง `uat/fixtures/downloads-R6b/` · orchestrator หยุดรอเวลา R7
@@ -69,7 +70,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-115) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-120) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้
@@ -96,7 +97,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
-- migration ใหม่จาก UAT **8 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261004100000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- migration ใหม่จาก UAT **9 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261004140000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)

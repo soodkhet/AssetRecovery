@@ -116,11 +116,16 @@
 | BUG-108 | R6b-v3 | S4 | code | คำอธิบายตารางรายได้แสดง markdown ดิบ `**และ**` (`components/finance/revenue-tab.tsx:290`) | fixed `c02cc2e` (merge `2faed64` 04/10/2569) |
 | BUG-109 | R6b-v3 R6.39 | S5 | spec-gap | เงินคืนจากเงินทดรอง (ADV1 ฿550) ระบบบันทึกยอดคืนแต่ไม่มีการรับเงินคืน/หักกลบ | needs-decision · มติ orchestrator A6: บันทึกเป็นลูกหนี้พนักงาน + หักกลบในรอบจ่ายถัดไปของผู้รับ |
 | BUG-110 | R6b-v3 R6.35 | S5 | code | toast `UNVERIFIED_PAYEE_IN_PAYOUT` ไม่บอกว่าผู้รับคนไหนยังไม่ยืนยัน | fixed `11fff87` (merge `2faed64` 04/10/2569) |
-| BUG-111 | R7-v3 R7.12 | S4 | code | `PATCH /api/bank-reconciliation/transactions/<id>/match` และ `/resolve-unmatched` ด้วย id ที่ไม่ใช่ UUID → 500 (ควร 400/404) · ข้อมูลไม่เสีย · หน้าจอกดไม่เจอ | open |
-| BUG-112 | R7-v3 R7.12 | S5 | code | `BANK_TRANSACTION_INVALID_STATUS` ข้อความเดียว "รายการที่ปิดไปแล้ว…" ใช้ทั้งกรณีจับคู่ผิดฝั่ง และปิดแถวที่จับคู่แล้ว → ผู้ใช้เข้าใจผิด | open |
-| BUG-113 | R7-v3 | S5 | code | หน้าแดชบอร์ดแสดง "(DEC-002)" ให้ผู้ใช้เห็น (ขัด Rule 05 ห้ามเลขอ้างอิงในข้อความผู้ใช้) | open |
-| BUG-114 | R7-v3 R7.19 | S5 | code | dev trigger: `wht_filing_reminder` ได้ `JOB_INVALID_STATUS` ข้อความไม่ตรงเหตุ (ควรบอกว่า dev trigger ไม่รองรับ job นี้) · jobType ไม่รู้จักได้ข้อความ Zod ภาษาอังกฤษดิบ | open |
-| BUG-115 | R7-v3 R7.25 | S5 | code | catalog รายงาน F5 (อายุเงินทดรอง) ชี้ path ที่ไม่มี route จริง → 404 (R7-N3) | open |
+| BUG-111 | R7-v3 R7.12 | S4 | code | `PATCH /api/bank-reconciliation/transactions/<id>/match` และ `/resolve-unmatched` ด้วย id ที่ไม่ใช่ UUID → 500 (ควร 400/404) · ข้อมูลไม่เสีย · หน้าจอกดไม่เจอ | fixed (fixer O · merge `7f11527` 04/10/2569) |
+| BUG-112 | R7-v3 R7.12 | S5 | code | `BANK_TRANSACTION_INVALID_STATUS` ข้อความเดียว "รายการที่ปิดไปแล้ว…" ใช้ทั้งกรณีจับคู่ผิดฝั่ง และปิดแถวที่จับคู่แล้ว → ผู้ใช้เข้าใจผิด | fixed (fixer O · merge `7f11527` 04/10/2569) |
+| BUG-113 | R7-v3 | S5 | code | หน้าแดชบอร์ดแสดง "(DEC-002)" ให้ผู้ใช้เห็น (ขัด Rule 05 ห้ามเลขอ้างอิงในข้อความผู้ใช้) | fixed (fixer O · merge `7f11527` 04/10/2569) |
+| BUG-114 | R7-v3 R7.19 | S5 | code | dev trigger: `wht_filing_reminder` ได้ `JOB_INVALID_STATUS` ข้อความไม่ตรงเหตุ (ควรบอกว่า dev trigger ไม่รองรับ job นี้) · jobType ไม่รู้จักได้ข้อความ Zod ภาษาอังกฤษดิบ | fixed (fixer O · merge `7f11527` 04/10/2569) |
+| BUG-115 | R7-v3 R7.25 | S5 | code | catalog รายงาน F5 (อายุเงินทดรอง) ชี้ path ที่ไม่มี route จริง → 404 (R7-N3) | fixed (fixer O · merge `7f11527` 04/10/2569) |
+| BUG-116 | R7c-v3 R7.32 | S2 | code | `POST /api/accounting/export-pack` → 500 body ว่าง: object key Storage มีอักษรไทย (`AccountingPack_ตุลาคม_2569_v1.0.zip`) → Supabase "Invalid key" · อัปโหลดแบบ `Promise.all` ทิ้งไฟล์กำพร้า · `PackStorageError` ไม่ map error code · (`report_export` มีปัญหาเดียวกัน) | fixed `e7d464c` (merge `7f11527`) — key ASCII + ชื่อไทยตอนดาวน์โหลด + ล้างไฟล์ attempt ที่ล้ม + `EXPORT_STORAGE_FAILED` |
+| BUG-117 | R7c-v3 R7.30 | S4 | code | ปิด exception critical แล้ว แท็บรอบส่งบัญชียังแถบแดง "มีข้อยกเว้นวิกฤตเปิดอยู่ 1" + modal Export "ไม่สามารถ Export ได้" (`toPeriodDto` ใช้ `criticalCount` รวม resolved) | fixed `5e16b78` (merge `7f11527`) |
+| BUG-118 | R7c-v3 R7.26 | S5 | code | ยกเลิก 50 ทวิ ไม่มีเหตุผล → `REQUIRED_MISSING` แทน `WHT_CANCEL_REQUIRES_REASON` · ปิดรายการธนาคารไม่มีเหตุผล → `REQUIRED_MISSING` แทน `MATCH_NOTE_REQUIRED` | fixed `d46caba` (merge `7f11527`) |
+| BUG-119 | R7c-v3 | S5 | code | ป้ายโมดูล Exception มีเลขสเปค "(19)" "(15/16)" + ตัวเลือกซ้ำ · modal ความพร้อมแสดงรหัสดิบ "expense" · modal ยกเลิก 50 ทวิ มี "(replaces_certificate_id)" | fixed `8a1b0db` (merge `7f11527`) |
+| BUG-120 | R7c-v3 R7.28 | S4 | code | **PDF ทุกเอกสาร** (50 ทวิ/ใบกำกับ/ใบส่งมอบ ฯลฯ) ตัดอักษรท้ายข้อความเท่าจำนวน "ำ" ในข้อความนั้น (เช่น "มาตรา 40(8" วงเล็บหาย) — ฟอนต์แตก "ำ" เป็น 2 glyph ใน react-pdf | fixed `43b7bef` (merge `7f11527`) — `components/pdf/text.tsx` แยก ำ เป็น ํ + า · มีเทสต์ extract ข้อความจาก PDF · **PDF ที่ออกไปแล้วใน UAT (ใบกำกับ INV-0001/0002, 50 ทวิ 001–016) ข้อความขาดตามบั๊กนี้** |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
