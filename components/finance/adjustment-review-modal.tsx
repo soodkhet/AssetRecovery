@@ -51,8 +51,11 @@ export function AdjustmentReviewModal({
     setSaving(true)
     const result =
       mode === 'approve'
-        ? await callApi(`/api/adjustments/${adjustment.id}/approve`, jsonRequest('PATCH', { note: note.trim() }))
-        : await callApi(
+        ? await callApi<AdjustmentDto>(
+            `/api/adjustments/${adjustment.id}/approve`,
+            jsonRequest('PATCH', { note: note.trim() }),
+          )
+        : await callApi<AdjustmentDto>(
             `/api/adjustments/${adjustment.id}/reject`,
             jsonRequest('PATCH', { rejectionReason: rejectionReason.trim() }),
           )
@@ -61,13 +64,16 @@ export function AdjustmentReviewModal({
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
-    const stillPending = mode === 'approve' && adjustment.missingApproverRoles.length > 1
+    // BUG-126 — สถานะ "ยังรอใคร" ต้องอ่านจากผลหลังอนุมัติที่ API คืนมา ไม่ใช่ค่าก่อนกด
+    const after = result.data
+    const remainingRoles = (after?.missingApproverRoles ?? []).filter((role) => role !== '')
+    const stillPending = mode === 'approve' && after?.status === 'pending_approval' && remainingRoles.length > 0
     showToast({
       tone: 'success',
       title: mode === 'approve' ? (stillPending ? 'บันทึกการอนุมัติแล้ว' : 'อนุมัติรายการปรับปรุงแล้ว') : 'ปฏิเสธรายการแล้ว',
       description:
         mode === 'approve' && stillPending
-          ? `ยังรออนุมัติจาก: ${adjustment.missingApproverRoles.filter((role) => role !== '').join(', ')}`
+          ? `ยังรออนุมัติจาก: ${remainingRoles.join(', ')}`
           : `${adjustment.targetRef} — ${fmtSatangSymbol(adjustment.amountSatang)}`,
     })
     onDone()
@@ -100,7 +106,7 @@ export function AdjustmentReviewModal({
         {locked && (
           <InlineAlert tone="error" title="รอบบัญชีปิดแล้ว">
             รายการนี้อ้างอิงรอบบัญชีที่ปิดแล้ว — ผู้บริหารเท่านั้นที่อนุมัติได้
-            (ผู้ไม่มีสิทธิ์จะได้ INSUFFICIENT_APPROVAL_LEVEL) และระบบจะบันทึก audit log แยกอีกใบ
+            และระบบจะบันทึกประวัติการอนุมัติแยกอีกรายการเพื่อการตรวจสอบ
           </InlineAlert>
         )}
 
