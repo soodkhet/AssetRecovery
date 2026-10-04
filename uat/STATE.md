@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~02:10 merge Portal-P1 `79b0d04` (capability portal 5 ตัว · `COMPANY_SUSPENDED` · audit `access_denied` migration `20261005120000` · spec `97` v5/`07`/`25`/`06`/`24`) · seed +12 แถว · verify 273/3,470 · migration ใหม่รวม **11 ตัว** → เริ่ม P2
 - 05/10/2569 ~01:50 merge fixer U `4c06e5c` (U9 cache DB + U10 ✅ only 9) · migration ใหม่รวม **10 ตัว** (ถึง `20261005090000`)
 - 04/10/2569 ~14:45 รวมเล่มรายงาน `b769b0a` (`uat/report/final/` 3 ไฟล์) · merge fixer S `d8a0ac8` (BUG-132…139,141,142) · verify 272 files / 3,459 tests ✅ · **UAT จบ**
 - 04/10/2569 ~14:15 R10 จบ (ตารางบน) → UAT เล่นครบ R0–R10 · snapshot `R10-end-v3` · ไฟล์ขยะ Storage +3 (R10g)
@@ -113,7 +114,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
-- migration ใหม่จาก UAT **10 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005090000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- migration ใหม่จาก UAT **11 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005120000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)
