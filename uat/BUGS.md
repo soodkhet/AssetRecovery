@@ -144,6 +144,10 @@
 | BUG-136 | R9-v3 | S5 | code | console error React duplicate key "—" ใน F1 หลังสลับมิติ/drill-down | open |
 | BUG-137 | R9-v3 | S5 | code | ข้อความ error ชวนสับสน: ใส่แค่วันเริ่ม → "วันเริ่มอยู่หลังวันสิ้นสุด" · `refresh=1` → `REQUIRED_MISSING` (ควรรับ 1/true หรือบอกชัด) | open |
 | BUG-138 | R9-v3 | S5 | code | ป้าย "ยังไม่ระบุทีม" vs "ไม่ระบุทีม" ไม่ตรงกัน · กราฟ E1 "ย้อนหลัง 12 เดือน" มี พ.ย.–ธ.ค. ในอนาคต · ฿ เกินใน hint E1 | open |
+| BUG-139 | R10-v3 R10.20 | S2 | code | `PATCH /api/settings/functional-permissions` มอบรายการ "✅ only" → **500** แทน 400 (`toModuleErrorResponse` ไม่แปลง `RoleError`) · ยามล็อกยังกันได้ ไม่มีการบันทึก | open |
+| BUG-140 | R10-v3 R10.03 | S5 | code | login ตอบเร็วต่างกันระหว่างบัญชีที่มีจริง (~210 ms) กับไม่มีจริง (~60–100 ms) ≈ 3 เท่า → ไล่เดา username ได้ (timing) | open |
+| BUG-141 | R10-v3 R10g | S4 | code | preview นำเข้าเคสแสดงชื่อฟิลด์ดิบ `assetImeiSerial:` ในข้อความ error และเลขที่สัญญาของแถวที่ไม่ผ่านขึ้น "–" | open |
+| BUG-142 | R10-v3 R10g | S4 | code | error ตอนรับเคสเอกสารชุดโดยไม่ติ๊กยืนยัน ขึ้นบนสุดของ modal ที่เลื่อนลงอยู่ → ผู้ใช้ไม่เห็น | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -152,6 +156,9 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R10 v3: matrix 1,213/1,213 ตรง (5xx 0 · write 2xx 0) · scope บริษัท/ทีม/พนักงานไม่รั่ว (ยกเว้น BUG-056 เดิม in2 เปิด C1 ได้) · "✅ only" 9 รายการล็อกครบ · เมนูตรง 15 บัญชี · race 300 คำขอตรงเจ้าของ · replay cookie หลัง logout = 401 · ยืนยัน BUG-025/064/111 ไม่กลับมา · R10g ฟีเจอร์ใหม่ (กรอบโฟกัส/แม่แบบ .xlsx/เอกสารชุด/ติ๊กรูปสินค้า/จำโหมด/ลบเอกสาร) ผ่านหน้าจอครบ 5 ข้อ
+- R10 ข้อสังเกต (N1–N4): `/portal` เปิดได้ทุก session (Client Portal ยังไม่มี — O34) · บริหารเห็นแท็บบัญชีที่ไม่มีสิทธิ์แทนการซ่อน · in2 เห็น C7 จากประวัติการมอบ · บันทึกเคสที่ไม่มีช่องเปลี่ยนเกิด audit `{}`→`{}` · R10-N4 users นอก scope 403 vs id สุ่ม 404 (leak เล็ก) · logout = ออกทุกอุปกรณ์ · login ผิดหลายครั้งไม่ล็อกบัญชี
+- R10 เหตุการณ์: ต้นรอบ role agent ใช้ sed ปิดรหัสผ่านไม่สำเร็จ รหัสใน `uat/personas.json` โผล่ใน context ของ agent 1 ครั้ง (ไม่ได้เขียนลงไฟล์/log/รายงาน — ตรวจด้วย grep แล้ว) · เป็นรหัสของบัญชีทดสอบ UAT เท่านั้น
 - R9 v3: เงินทุกตัวตรง golden หลัง Adjustment · permission sweep 15 persona × 17 รายงานตรง matrix (การเงิน E1 = 403 ✓) · BUG-115/120 ยืนยันแก้แล้ว · **ค้างตรวจซ้ำตามวันที่: F5 ตั้งแต่ 05/10/2569 (คาด ADV3 1 แถว 200000) · O4 ตั้งแต่ 06/10/2569 14:02 (คาด 2 แถว 849000)** · F4 golden ต่อคนต้องแก้ใน step sheet (no_success_fee อยู่คอลัมน์คอมมิชชัน = O33) · Client Portal ยังไม่มี (O34)
 - fixer R (BUG-128): cache รายงานอยู่ใน memory ต่อ process → บน Vercel หลาย instance ล้างได้แค่ instance ที่รับคำขอ — needs-decision ก่อน production (ย้าย cache ไป Redis/DB หรือ TTL สั้น)
 - R8 v3: probe หลัง lock 13 จุด → `PERIOD_LOCKED_DIRECT_EDIT` ทุกจุด ไม่มี mutation · golden หลัง Adjustment ตรงทุกตัว · R8-N8 หักล้าง (ป้าย "วางบิล" ไม่มีเลขสเปคแล้ว) · R8-N4 ยืนยัน: ไม่มีแจ้งเตือนผู้อนุมัติ Adjustment (= BUG-106) · step sheet คาด expense ≥ 19 แต่จริง 17 (ชีตคลาด)

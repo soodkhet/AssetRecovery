@@ -1,0 +1,306 @@
+{
+ "menus": {
+  "admin": {
+   "audience": "superadmin",
+   "menu": []
+  },
+  "uat.admin": {
+   "audience": "admin_office",
+   "menu": []
+  },
+  "uat.approver": {
+   "audience": "case_approver",
+   "menu": []
+  },
+  "uat.finance": {
+   "audience": "finance",
+   "menu": []
+  },
+  "uat.account": {
+   "audience": "accounting",
+   "menu": []
+  },
+  "uat.exec": {
+   "audience": "executive",
+   "menu": []
+  },
+  "uat.mgr.in": {
+   "audience": "team_lead",
+   "menu": []
+  },
+  "uat.sup.in": {
+   "audience": "team_lead",
+   "menu": []
+  },
+  "uat.agent.in1": {
+   "audience": "field_agent",
+   "menu": []
+  },
+  "uat.agent.in2": {
+   "audience": "field_agent",
+   "menu": []
+  },
+  "uat.mgr.out": {
+   "audience": "team_lead",
+   "menu": []
+  },
+  "uat.agent.out1": {
+   "audience": "field_agent",
+   "menu": []
+  },
+  "uat.co1.mgr": {
+   "audience": "company_user",
+   "menu": []
+  },
+  "uat.co1.sup": {
+   "audience": "company_user",
+   "menu": []
+  },
+  "uat.co2.admin": {
+   "audience": "company_user",
+   "menu": []
+  }
+ },
+ "res": {
+  "admin": {
+   "/cases/submit": "stay",
+   "/cases/assign": "stay",
+   "/field": "stay",
+   "/finance": "stay",
+   "/accounting": "stay",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay",
+   "/settings/roles": "stay",
+   "/settings/finance": "stay",
+   "/settings/companies": "stay",
+   "/settings/users": "stay",
+   "/settings/audit-logs": "stay",
+   "/portal": "stay"
+  },
+  "uat.admin": {
+   "/cases/submit": "stay",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/dashboard",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "stay",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.approver": {
+   "/cases/submit": "stay",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/dashboard",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "→/dashboard",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.finance": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/dashboard",
+   "/finance": "stay",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay:500",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "stay",
+   "/portal": "stay"
+  },
+  "uat.account": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/dashboard",
+   "/finance": "→/dashboard",
+   "/accounting": "stay",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay:500",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "stay",
+   "/portal": "stay"
+  },
+  "uat.exec": {
+   "/cases/submit": "stay",
+   "/cases/assign": "stay",
+   "/field": "→/dashboard",
+   "/finance": "stay",
+   "/accounting": "stay",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay",
+   "/settings/roles": "stay",
+   "/settings/finance": "stay",
+   "/settings/companies": "stay",
+   "/settings/users": "stay",
+   "/settings/audit-logs": "stay",
+   "/portal": "stay"
+  },
+  "uat.mgr.in": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "stay",
+   "/field": "→/dashboard",
+   "/finance": "stay",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay:500",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.sup.in": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "stay",
+   "/field": "→/dashboard",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay:500",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.agent.in1": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "stay",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "→/dashboard",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.agent.in2": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "stay",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "→/dashboard",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.mgr.out": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "stay",
+   "/field": "→/dashboard",
+   "/finance": "stay",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "stay",
+   "/reports/kpi-summary": "stay:500",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.agent.out1": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "stay",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "→/dashboard",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.co1.mgr": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/portal",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.co1.sup": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/portal",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  },
+  "uat.co2.admin": {
+   "/cases/submit": "→/dashboard",
+   "/cases/assign": "→/dashboard",
+   "/field": "→/portal",
+   "/finance": "→/dashboard",
+   "/accounting": "→/dashboard",
+   "/warehouse": "stay",
+   "/reports": "→/dashboard",
+   "/reports/kpi-summary": "→/dashboard",
+   "/settings/roles": "→/dashboard",
+   "/settings/finance": "→/dashboard",
+   "/settings/companies": "→/dashboard",
+   "/settings/users": "→/dashboard",
+   "/settings/audit-logs": "→/dashboard",
+   "/portal": "stay"
+  }
+ }
+}

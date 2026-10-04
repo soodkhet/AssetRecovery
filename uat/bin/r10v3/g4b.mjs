@@ -1,0 +1,36 @@
+// R10g.4b ติ๊กรูปสินค้า → บันทึก → เปิดใหม่ · ลบบัตร/สัญญา (ConfirmModal) · สลับโหมดชุด → บันทึก → เปิดใหม่
+import { openAs, shot, BASE } from '../lib.mjs'
+import { log, qa } from './_h.mjs'
+const o = await openAs('uat.admin'); const pg = o.page
+const resps = []; pg.on('response', async (x) => { if (/\/api\/cases\//.test(x.url()) && x.request().method() !== 'GET') resps.push(x.request().method() + ' ' + x.url().replace(BASE, '').replace(/[0-9a-f-]{36}/g, (m) => m.slice(0, 4)) + ' ' + x.status() + ' ' + (x.status() >= 400 ? (await x.text().catch(() => '')).slice(0, 200) : '')) })
+await pg.goto(BASE + '/cases/submit'); await pg.waitForLoadState('networkidle')
+const row = pg.locator('tr', { hasText: 'UAT-CO1-902' })
+const open = async () => { await row.getByRole('button', { name: 'แก้ไข' }).click(); await pg.waitForTimeout(1200); return pg.getByRole('dialog').first() }
+let dlg = await open()
+const cb = dlg.getByRole('checkbox', { name: /รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว/ })
+await cb.check(); await dlg.getByRole('button', { name: 'บันทึกการแก้ไข' }).click(); await pg.waitForTimeout(3000)
+dlg = await open()
+log('reopen tick still on =', await dlg.getByRole('checkbox', { name: /รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว/ }).isChecked())
+await dlg.getByRole('checkbox', { name: /รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว/ }).scrollIntoViewIfNeeded(); await shot(pg, 'R10v3', 'g4-03-photo-in-contract-ticked')
+// ลบบัตร
+await dlg.getByRole('button', { name: 'ลบไฟล์ R10g-902-idcard.png' }).click(); await pg.waitForTimeout(600)
+const cm = pg.getByRole('dialog').last()
+log('confirm modal:', (await cm.innerText()).replace(/\n/g, ' ').slice(0, 250))
+await shot(pg, 'R10v3', 'g4-04-delete-confirm')
+await cm.getByRole('button').filter({ hasText: /ลบ/ }).last().click(); await pg.waitForTimeout(2500)
+log('after delete idcard:', qa(`select d.document_type||':'||(d.deleted_at is not null)||':'||d.file_url from case_documents d join cases c on c.id=d.case_id where c.case_ref='UAT-CO1-902' order by d.document_type`))
+// สลับโหมดก่อนลบสัญญา (คาดถูกห้าม)
+await dlg.getByText('เอกสารชุดเดียว (สแกนรวมเล่ม)', { exact: true }).click(); await pg.waitForTimeout(500)
+log('switch with contract present:', ((await dlg.innerText()).match(/[^\n]*สลับเป็น[^\n]*/) ?? ['(ไม่มีข้อความ)'])[0])
+await shot(pg, 'R10v3', 'g4-05-switch-blocked')
+await dlg.getByRole('button', { name: 'ลบไฟล์ R10g-902-contract.pdf' }).click(); await pg.waitForTimeout(600)
+await pg.getByRole('dialog').last().getByRole('button').filter({ hasText: /ลบ/ }).last().click(); await pg.waitForTimeout(2500)
+await dlg.getByText('เอกสารชุดเดียว (สแกนรวมเล่ม)', { exact: true }).click(); await pg.waitForTimeout(500)
+log('bundle radio checked =', await dlg.getByRole('radio', { name: 'เอกสารชุดเดียว (สแกนรวมเล่ม)' }).isChecked())
+await dlg.getByRole('button', { name: 'บันทึกการแก้ไข' }).click(); await pg.waitForTimeout(3000)
+dlg = await open()
+log('reopen mode bundle =', await dlg.getByRole('radio', { name: 'เอกสารชุดเดียว (สแกนรวมเล่ม)' }).isChecked())
+await dlg.getByText('รูปแบบเอกสารที่ได้รับ').scrollIntoViewIfNeeded(); await shot(pg, 'R10v3', 'g4-06-reopen-bundle-mode')
+log('resps', resps.join(' || '))
+log('srvErr', o.serverErrors.join(';'), 'console', o.consoleErrors.slice(0, 2).join(';'))
+await o.browser.close()
