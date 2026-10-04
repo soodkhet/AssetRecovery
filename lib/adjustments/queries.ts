@@ -625,7 +625,12 @@ export async function approveAdjustment(
   })
 
   // BUG-128 — อนุมัติครบ = ตัวเลขของงวดเดิมเปลี่ยน ⇒ ทิ้งแคชรายงานขององค์กร (หลัง commit เท่านั้น)
-  if (completed) invalidateOrganizationReportCache(user.organizationId)
+  // แคชอยู่ใน Postgres (UAT U9) ⇒ ล้างครั้งเดียวมีผลทุก instance · ล้างไม่สำเร็จไม่ทำให้การอนุมัติที่ commit แล้วล้ม
+  if (completed) {
+    await invalidateOrganizationReportCache(user.organizationId).catch((error: unknown) => {
+      console.error('[adjustments] ล้างแคชรายงานไม่สำเร็จ', error)
+    })
+  }
 
   return getAdjustment(user, adjustmentId)
 }

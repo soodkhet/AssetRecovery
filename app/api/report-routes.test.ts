@@ -3,7 +3,8 @@ import type { NextRequest } from 'next/server'
 import { AuthError } from '@/lib/auth/errors'
 import { resolveScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
-import { clearReportCache } from '@/lib/reports/cache'
+import { setReportCacheStore } from '@/lib/reports/cache'
+import { createMemoryReportCacheStore } from '@/lib/reports/cache-store'
 import type { ReportData } from '@/lib/reports/payload'
 import { REPORT_PROVIDERS } from '@/lib/reports/providers'
 
@@ -101,7 +102,7 @@ beforeEach(() => {
   requireSessionMock.mockReset()
   enqueueJobMock.mockReset()
   emitAuditMock.mockReset()
-  clearReportCache()
+  setReportCacheStore(createMemoryReportCacheStore())
 })
 
 /** ทะเบียนจริง (หมวด F เปิดใช้งานแล้วตั้งแต่ 6.2) — คืนสภาพหลังทุกเทสต์ */

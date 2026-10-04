@@ -1,34 +1,50 @@
 import { toBangkokParts } from '@/lib/format/datetime'
+import { postgresReportCacheStore, type ReportCacheStore } from '@/lib/reports/cache-store'
 import type { ReportCacheMode } from '@/lib/reports/catalog'
 
 /**
  * แคชของรายงาน 3 โหมดตาม `96` §8 (daily / hourly / realtime) + ปุ่ม "รีเฟรชตอนนี้"
  *
- * ### ทำไมเป็น in-memory ไม่ใช่ตารางในฐานข้อมูล
- * `96` §8 กำหนดแค่ "นโยบายความสด" ไม่ได้กำหนดกลไก และ `21` §7/§18 (รายงานตัวแรกของระบบ
- * ที่ทำไปแล้วใน Phase 3.8) ระบุชัดว่ารายงาน **ไม่มี entity ของตัวเอง** ⇒ ไม่มีตาราง `report_cache`
- * ใน `02` และการเพิ่มตารางใหม่ต้องแก้ schema SSOT ซึ่งต้องมีมติก่อน (Rule 02)
- * ⇒ Phase 6.1 คงกลไกเดิมของ 3.8 ไว้ทั้งหมด: แคชอยู่ในหน่วยความจำของ process
- * (แคชหายเมื่อ process รีสตาร์ต = คำนวณใหม่ ผลลัพธ์เท่าเดิมเสมอเพราะเป็นการอ่านอย่างเดียว)
- * — จุดสลับกลไกอยู่ที่ไฟล์นี้ไฟล์เดียว ผู้เรียกทุกคนเห็นแค่ `withReportCache()`
+ * ### เก็บที่ไหน — มติ PO 05/10/2569 (UAT U9)
+ * เดิม (Phase 3.8/6.1) แคชอยู่ในหน่วยความจำของ process ⇒ บน Vercel หลาย instance การล้างแคช
+ * (หลังอนุมัติ Adjustment — BUG-128) มีผลแค่ instance เดียว · ตอนนี้เก็บในตาราง `report_cache_entries`
+ * ของ Postgres (`02` v4.16 · ผ่าน `lib/reports/cache-store.ts`) — ล้างครั้งเดียวทุก instance เห็นทันที
+ * ผู้เรียกทุกคนยังเห็นแค่ `withReportCache()` / `withDailyCache()` เหมือนเดิม
  *
  * ### กติกา
  * - **`daily` หมดอายุเที่ยงคืนตามเวลาไทย** ไม่ใช่ TTL นับถอยหลัง (รายงานของวันใหม่ต้องเป็นข้อมูลใหม่)
  * - **`hourly` หมดอายุต้นชั่วโมงถัดไป** · **`realtime` ไม่แคชเลย** (คำนวณสดทุกครั้ง)
  * - `refresh = true` ข้ามแคชแล้วเขียนทับ — แต่มี **cooldown 5 นาทีต่อคีย์** (E14) กันกดรัวจน DB ตาย
  * - อ่านอย่างเดียว ⇒ ไม่มี audit (`21` §13) และ idempotent โดยธรรมชาติ
- * - คีย์ต้องขึ้นต้นด้วย `organization_id` เสมอ (multi-tenant — ห้ามให้องค์กรหนึ่งเห็นแคชของอีกองค์กร)
+ * - ทุกแถวผูก `organization_id` และคีย์ต้องขึ้นต้นด้วย `<org>:` หรือ `profit:<org>:` (ตรวจที่ `assertScopedKey`)
+ * - คีย์ต้องรวมมิติ scope ของผู้เรียก (ทีม/บริษัท) — ผู้ใช้ต่างขอบเขตห้ามได้แคชก้อนเดียวกัน
+ * - ค่าที่แคชต้องเป็น JSON ล้วน (เก็บเป็น JSONB — `Date` จะกลายเป็นสตริง)
  */
 
-interface CacheEntry<T> {
-  value: T
-  /** instant ที่ค่าหมดอายุ — `null` = ไม่มีวันหมดอายุด้วยตัวเอง (ไม่ใช้กับ `realtime`) */
-  expiresAt: number | null
-  /** instant ที่คำนวณค่านี้ — ส่งกลับให้ UI บอกผู้ใช้ว่า "ข้อมูล ณ เวลา…" */
-  computedAt: Date
+/** คีย์แคช = องค์กร + คีย์เต็ม */
+export interface ReportCacheKey {
+  readonly organizationId: string
+  readonly key: string
 }
 
-const store = new Map<string, CacheEntry<unknown>>()
+let activeStore: ReportCacheStore = postgresReportCacheStore
+
+/**
+ * สลับที่เก็บแคช — **เทสต์ unit ที่ไม่มี DB เท่านั้น** (ใช้คู่กับ `createMemoryReportCacheStore()`)
+ * คืนที่เก็บเดิมเพื่อคืนค่าหลังเทสต์
+ */
+export function setReportCacheStore(store: ReportCacheStore): ReportCacheStore {
+  const previous = activeStore
+  activeStore = store
+  return previous
+}
+
+/** กันคีย์ที่ไม่ผูกองค์กร — prefix ที่ยอมรับ: `<org>:` (รายงาน 17 ตัว) · `profit:<org>:` (กำไรขั้นต้น) */
+function assertScopedKey({ organizationId, key }: ReportCacheKey): void {
+  if (organizationId === '' || !(key.startsWith(`${organizationId}:`) || key.startsWith(`profit:${organizationId}:`))) {
+    throw new RangeError(`report cache: คีย์ไม่ผูกองค์กร (${key})`)
+  }
+}
 
 /** ระยะห้ามกดรีเฟรชซ้ำต่อคีย์ (E14 — "ปุ่มรีเฟรช cooldown 5 นาที/รายงาน") */
 export const REPORT_REFRESH_COOLDOWN_MS = 5 * 60 * 1000
@@ -97,12 +113,13 @@ export interface ReportCacheOptions {
   readonly cooldown?: boolean
 }
 
+
 /**
  * อ่านจากแคชตามโหมด — ไม่มี/หมดอายุ/ถูกสั่ง refresh (และพ้น cooldown) ⇒ เรียก `compute()`
- * แล้วเก็บลงแคช · `compute` ถูกเรียกอย่างมากครั้งเดียวต่อการเรียกฟังก์ชันนี้
+ * แล้วเขียนทับลงแคช (upsert) · `compute` ถูกเรียกอย่างมากครั้งเดียวต่อการเรียกฟังก์ชันนี้
  */
 export async function withReportCache<T>(
-  key: string,
+  cacheKey: ReportCacheKey,
   options: ReportCacheOptions,
   compute: () => Promise<T>,
 ): Promise<CachedResult<T>> {
@@ -122,19 +139,21 @@ export async function withReportCache<T>(
     }
   }
 
-  const cached = store.get(key) as CacheEntry<T> | undefined
-  const fresh = cached !== undefined && (cached.expiresAt === null || cached.expiresAt > now.getTime())
-  const cooldownUntil = cached === undefined ? null : new Date(cached.computedAt.getTime() + REPORT_REFRESH_COOLDOWN_MS)
+  assertScopedKey(cacheKey)
+  const { organizationId, key } = cacheKey
+  const cached = await activeStore.get(organizationId, key, now)
+  const cooldownUntil = cached === null ? null : new Date(cached.computedAt.getTime() + REPORT_REFRESH_COOLDOWN_MS)
   const throttled =
     (options.cooldown ?? false) && refresh && cooldownUntil !== null && cooldownUntil.getTime() > now.getTime()
 
-  if (cached !== undefined && (!refresh || throttled) && fresh) {
+  if (cached !== null && (!refresh || throttled)) {
     return {
-      value: cached.value,
+      // ค่าใน JSONB เป็นค่าที่ `compute()` ของคีย์เดียวกันคืนไว้ (คีย์ผูกรายงาน/มิติ ⇒ รูปเดียวกัน)
+      value: cached.value as T,
       computedAt: cached.computedAt,
       fromCache: true,
       mode,
-      expiresAt: cached.expiresAt === null ? null : new Date(cached.expiresAt),
+      expiresAt: cached.expiresAt,
       stale: staleAt(cached.computedAt, now),
       refreshAvailableAt: cooldownUntil,
       refreshThrottled: throttled,
@@ -143,7 +162,7 @@ export async function withReportCache<T>(
 
   const value = await compute()
   const expiresAt = reportCacheExpiry(mode, now)
-  store.set(key, { value, expiresAt: expiresAt === null ? null : expiresAt.getTime(), computedAt: now })
+  await activeStore.put(organizationId, key, { value, computedAt: now, expiresAt }, now)
   return {
     value,
     computedAt: now,
@@ -161,26 +180,19 @@ export async function withReportCache<T>(
  * เป็นเพียง wrapper บาง ๆ ของ `withReportCache()` โหมด `daily` เพื่อไม่ให้มีสองกลไกซ้อนกัน
  */
 export async function withDailyCache<T>(
-  key: string,
+  cacheKey: ReportCacheKey,
   options: { refresh: boolean; now: Date },
   compute: () => Promise<T>,
 ): Promise<CachedResult<T>> {
-  return withReportCache(key, { mode: 'daily', refresh: options.refresh, now: options.now }, compute)
+  return withReportCache(cacheKey, { mode: 'daily', refresh: options.refresh, now: options.now }, compute)
 }
 
 /**
- * ทิ้งแคชทุกคีย์ที่ขึ้นต้นด้วย prefix (ใช้กับ endpoint รีเฟรช — คีย์ของรายงานหนึ่งมีได้หลายตัวตามฟิลเตอร์)
- * คืนจำนวนคีย์ที่ถูกทิ้ง · **prefix ต้องขึ้นต้นด้วย `organization_id`** ไม่งั้นจะล้างข้ามองค์กร
+ * ทิ้งแคชทุกคีย์ขององค์กรที่ขึ้นต้นด้วย prefix (ใช้กับ endpoint รีเฟรช — คีย์ของรายงานหนึ่งมีได้หลายตัวตามฟิลเตอร์)
+ * คืนจำนวนคีย์ที่ถูกทิ้ง · ลบเฉพาะแถวของ `organizationId` เท่านั้น (ไม่มีทางล้างข้ามองค์กร)
  */
-export function invalidateReportCache(prefix: string): number {
-  let removed = 0
-  for (const key of [...store.keys()]) {
-    if (key.startsWith(prefix)) {
-      store.delete(key)
-      removed += 1
-    }
-  }
-  return removed
+export async function invalidateReportCache(organizationId: string, prefix: string): Promise<number> {
+  return activeStore.deleteByPrefixes(organizationId, [prefix])
 }
 
 /**
@@ -188,19 +200,22 @@ export function invalidateReportCache(prefix: string): number {
  * (Adjustment ได้รับอนุมัติ — UAT BUG-128) เพื่อไม่ให้ผู้บริหารเห็นยอดเก่าจนหมดวัน
  *
  * ครอบคีย์ทั้ง 2 รูปแบบที่ระบบใช้: `<org>:report:…` (รายงาน 17 ตัว) และ `profit:<org>:…` (กำไรขั้นต้น)
- * ไม่แตะ cooldown ของปุ่มรีเฟรช (ไม่ใช่การกดของผู้ใช้) · แคชอยู่ใน process ⇒ ล้างได้เฉพาะ instance นี้
+ * ไม่แตะ cooldown ของปุ่มรีเฟรช (ไม่ใช่การกดของผู้ใช้) · ลบแถวใน DB ⇒ มีผลทุก instance ทันที (UAT U9)
  */
-export function invalidateOrganizationReportCache(organizationId: string): number {
-  return invalidateReportCache(`${organizationId}:`) + invalidateReportCache(`profit:${organizationId}:`)
+export async function invalidateOrganizationReportCache(organizationId: string): Promise<number> {
+  return activeStore.deleteByPrefixes(organizationId, [`${organizationId}:`, `profit:${organizationId}:`])
 }
 
-/** เวลาที่คำนวณค่าล่าสุดของคีย์ (ไม่ทำให้ค่าถูกคำนวณใหม่) — ใช้เช็ค cooldown ก่อนล้างแคช */
-export function reportCacheComputedAt(key: string): Date | null {
-  return store.get(key)?.computedAt ?? null
+/** เวลาที่คำนวณค่าล่าสุดของคีย์ (ไม่ทำให้ค่าถูกคำนวณใหม่) — `null` = ไม่มี/หมดอายุแล้ว */
+export async function reportCacheComputedAt(cacheKey: ReportCacheKey, now: Date = new Date()): Promise<Date | null> {
+  const entry = await activeStore.get(cacheKey.organizationId, cacheKey.key, now)
+  return entry?.computedAt ?? null
 }
 
-/** prefix → instant ที่เพิ่งสั่งรีเฟรชไป (คุม cooldown ระดับรายงาน ไม่ใช่ระดับคีย์ฟิลเตอร์) */
-const refreshedAt = new Map<string, number>()
+/** คีย์ของแถวคุม cooldown ระดับรายงาน — ไม่ขึ้นต้นด้วย `<org>:` ⇒ การล้างแคชไม่ลบ cooldown ทิ้ง */
+function refreshMarkerKey(prefix: string): string {
+  return `refresh-cooldown:${prefix}`
+}
 
 export interface ReportRefreshResult {
   /** พ้น cooldown แล้วจึงล้างแคชให้จริง */
@@ -213,23 +228,24 @@ export interface ReportRefreshResult {
 
 /**
  * สั่งรีเฟรชรายงานหนึ่งตัว (endpoint `POST /api/reports/:id/refresh`) — ล้างแคชทุกฟิลเตอร์ของรายงานนั้น
- * ให้คำขอ GET ครั้งถัดไปคำนวณสด · ติด cooldown 5 นาทีต่อรายงานต่อองค์กร (E14)
+ * ให้คำขอ GET ครั้งถัดไปคำนวณสด · ติด cooldown 5 นาทีต่อรายงานต่อองค์กร (E14) — นับร่วมทุก instance
  */
-export function requestReportRefresh(prefix: string, now: Date): ReportRefreshResult {
-  const last = refreshedAt.get(prefix)
-  if (last !== undefined && now.getTime() - last < REPORT_REFRESH_COOLDOWN_MS) {
-    return { allowed: false, invalidated: 0, availableAt: new Date(last + REPORT_REFRESH_COOLDOWN_MS) }
-  }
-  refreshedAt.set(prefix, now.getTime())
+export async function requestReportRefresh(
+  organizationId: string,
+  prefix: string,
+  now: Date,
+): Promise<ReportRefreshResult> {
+  assertScopedKey({ organizationId, key: prefix })
+  const claim = await activeStore.claimRefresh(organizationId, refreshMarkerKey(prefix), now, REPORT_REFRESH_COOLDOWN_MS)
+  if (!claim.allowed) return { allowed: false, invalidated: 0, availableAt: claim.availableAt }
   return {
     allowed: true,
-    invalidated: invalidateReportCache(prefix),
-    availableAt: new Date(now.getTime() + REPORT_REFRESH_COOLDOWN_MS),
+    invalidated: await activeStore.deleteByPrefixes(organizationId, [prefix]),
+    availableAt: claim.availableAt,
   }
 }
 
-/** ล้างแคชทั้งหมด — ใช้ในเทสต์เท่านั้น (โปรดักชันปล่อยให้หมดอายุเองตามรอบ) */
-export function clearReportCache(): void {
-  store.clear()
-  refreshedAt.clear()
+/** ล้างแคชทั้งหมด (ทุกองค์กร รวม cooldown) — ใช้ในเทสต์เท่านั้น (โปรดักชันปล่อยให้หมดอายุเองตามรอบ) */
+export async function clearReportCache(): Promise<void> {
+  await activeStore.clear()
 }

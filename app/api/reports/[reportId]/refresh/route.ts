@@ -27,7 +27,7 @@ export const POST = async (_request: Request, context: RouteContext): Promise<Re
     if (report === null) throw new ReportError('REPORT_NOT_FOUND', { detail: `report=${reportId}` })
     assertReportAccess(user, report)
 
-    const outcome = requestReportRefresh(reportCacheKeyPrefix(user, report), new Date())
+    const outcome = await requestReportRefresh(user.organizationId, reportCacheKeyPrefix(user, report), new Date())
     return apiSuccess({
       reportId: report.id,
       allowed: outcome.allowed,

@@ -246,7 +246,7 @@ async function cleanup(): Promise<void> {
   } finally {
     await tx.$executeRawUnsafe(`ALTER TABLE handover_lots ENABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
   }
-  clearReportCache()
+  await clearReportCache()
 }
 
 beforeAll(async () => {
@@ -390,7 +390,7 @@ suite('O2 — ประสิทธิภาพทีม / SLA', () => {
     expect(rowBy(byDefault, 'team', 'ทีม A 6.3')).toMatchObject({ withinSla: 0, overSla: 1 })
 
     await setSlaAlertHours(120)
-    clearReportCache()
+    await clearReportCache()
     const relaxed = await run('team-performance')
     expect(rowBy(relaxed, 'team', 'ทีม A 6.3')).toMatchObject({ withinSla: 1, overSla: 0 })
     expect(kpiOf(relaxed, 'withinSlaPct')).toBe(100)

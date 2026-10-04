@@ -628,6 +628,7 @@ model Organization {
   exportRecords              ExportRecord[]
   auditLogs                  AuditLog[]
   notifications              Notification[]
+  reportCacheEntries         ReportCacheEntry[]
   pushSubscriptions          PushSubscription[]
   jobs                       Job[]
   files                      StoredFile[]
@@ -2874,6 +2875,31 @@ model AuditLog {
 }
 
 /// In-app notification เฟส 1 (`90` §6.3 — DEC-006/D3)
+/// แคชรายงาน (มติ PO 05/10/2569 — UAT U9) — ย้ายจากหน่วยความจำของ process มาไว้ใน Postgres
+/// เพื่อให้การล้างแคช (เช่นหลังอนุมัติ Adjustment — BUG-128) มีผลกับทุก instance บน Vercel ทันที
+/// ตารางชั่วคราว (ลบ/เขียนทับได้ทุกเมื่อ ค่าคำนวณใหม่ได้จากข้อมูลต้นทางเสมอ) ⇒ ไม่มี created_by/updated_by/deleted_at
+/// (`02` §10 อธิบายเหตุผล) · คีย์ต้องรวมมิติ scope ของผู้เรียก (ทีม/บริษัท) เสมอ — สร้างที่ lib/reports/run.ts + queries.ts
+model ReportCacheEntry {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  /// คีย์เต็ม เช่น `<org>:report:<id>:<range>|<params>|<scope>` · `profit:<org>:<scope>:…` · `refresh-cooldown:<prefix>`
+  cacheKey       String    @map("cache_key")
+  /// ค่าที่คำนวณแล้ว (JSON) — NULL สำหรับแถวคุม cooldown ของปุ่มรีเฟรช
+  payload        Json?
+  computedAt     DateTime  @map("computed_at") @db.Timestamptz(6)
+  /// NULL = ไม่หมดอายุเอง (ไม่ใช้จริงในปัจจุบัน — realtime ไม่เก็บแคช)
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, cacheKey], map: "uniq_report_cache_entries_org_key")
+  @@index([organizationId, expiresAt], map: "idx_report_cache_entries_organization_id_expires_at")
+  @@map("report_cache_entries")
+}
+
 model Notification {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String    @map("organization_id") @db.Uuid

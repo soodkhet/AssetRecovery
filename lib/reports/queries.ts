@@ -261,7 +261,7 @@ async function resolveProfitEntries(
   const range = resolveReportPeriod(query.period, query.asOf ?? now)
   const scope = profitEntryScope(user)
   const key = `profit:${user.organizationId}:${profitScopeKey(scope)}:${query.dimension}:${reportPeriodKey(range)}`
-  const cached = await withDailyCache(key, { refresh: query.refresh, now }, () =>
+  const cached = await withDailyCache({ organizationId: user.organizationId, key }, { refresh: query.refresh, now }, () =>
     loadProfitEntries(user.organizationId, query.dimension, range, scope),
   )
   return { entries: cached.value, range, computedAt: cached.computedAt, fromCache: cached.fromCache }

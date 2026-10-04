@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthError } from '@/lib/auth/errors'
 import { resolveScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
-import { clearReportCache } from '@/lib/reports/cache'
+import { setReportCacheStore } from '@/lib/reports/cache'
+import { createMemoryReportCacheStore } from '@/lib/reports/cache-store'
 import { findReport } from '@/lib/reports/catalog'
 import { ReportError } from '@/lib/reports/errors'
 import type { ReportData } from '@/lib/reports/payload'
@@ -77,7 +78,7 @@ function register(id: string, provider: ReportProvider): void {
 const ORIGINAL_PROVIDERS = { ...REPORT_PROVIDERS }
 
 beforeEach(() => {
-  clearReportCache()
+  setReportCacheStore(createMemoryReportCacheStore())
 })
 
 afterEach(() => {
