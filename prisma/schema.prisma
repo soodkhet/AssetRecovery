@@ -483,8 +483,34 @@ enum TaxInvoiceStatus {
 enum WhtFilingForm {
   PND3 // บุคคลธรรมดา (ภ.ง.ด.3)
   PND53 // นิติบุคคล (ภ.ง.ด.53)
+  PND1 // เงินได้ 40(2) (ภ.ง.ด.1) — มติ PO 05/10/2569 (UAT U7)
 
   @@map("wht_filing_form")
+}
+
+/// รูปแบบการออกใบ 50 ทวิ (มติ PO 05/10/2569 UAT U4)
+enum WhtCertificateMode {
+  per_payee_batch // 1 ใบต่อผู้รับต่อรอบจ่าย (ค่าเริ่มต้น)
+  per_item // 1 ใบต่อรายการที่มีการหักภาษี (พฤติกรรมเดิม)
+
+  @@map("wht_certificate_mode")
+}
+
+/// โหมดประเภทเงินได้ของรอบจ่าย (มติ PO 05/10/2569 UAT U5)
+enum WhtIncomeTypeMode {
+  all_40_8 // 40(8) ทั้งหมด (ค่าเริ่มต้น)
+  all_40_2 // 40(2) ทั้งหมด
+  by_team_side // inhouse = 40(2) · outsource = 40(8)
+
+  @@map("wht_income_type_mode")
+}
+
+/// ประเภทเงินได้ของผู้รับในรอบจ่าย (snapshot ต่อรายการ)
+enum WhtIncomeCategory {
+  sec_40_8
+  sec_40_2
+
+  @@map("wht_income_category")
 }
 
 enum WhtFilingStatus {
@@ -580,6 +606,7 @@ model Organization {
   serviceFeeTemplates         ServiceFeeTemplate[]
   taxProfiles                 TaxProfile[]
   vatRateHistory              VatRateHistory[]
+  whtPolicyHistory            WhtPolicyHistory[]
   bankAccounts                BankAccount[]
   costCenters                 CostCenter[]
   billingPayoutCycles         BillingPayoutCycle[]
@@ -715,6 +742,7 @@ model User {
   serviceFeeTemplatesUpdated         ServiceFeeTemplate[]          @relation("service_fee_templates_updated_by")
   taxProfilesCreated                 TaxProfile[]                  @relation("tax_profiles_created_by")
   vatRateHistoryCreated              VatRateHistory[]              @relation("vat_rate_history_created_by")
+  whtPolicyHistoryCreated            WhtPolicyHistory[]            @relation("wht_policy_history_created_by")
   bankAccountsCreated                BankAccount[]                 @relation("bank_accounts_created_by")
   costCentersCreated                 CostCenter[]                  @relation("cost_centers_created_by")
   billingPayoutCyclesCreated         BillingPayoutCycle[]          @relation("cycles_created_by")
@@ -1117,6 +1145,31 @@ model VatRateHistory {
 
   @@index([organizationId, effectiveFrom], map: "idx_vat_rates_org_date")
   @@map("vat_rate_history")
+}
+
+/// ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8 · `13` §6.4.1)
+/// insert-only แบบ `vat_rate_history`: ไม่มี updated_at/updated_by/deleted_at · ไม่มีแถว = ค่าเริ่มต้นตามมติ
+/// รอบจ่ายใช้แถวที่ `effective_from` ใหม่สุดที่ ≤ วันที่สร้างรอบ (วันเดียวกัน = แถวล่าสุด) แล้ว snapshot ลง `payout_batches`
+model WhtPolicyHistory {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String             @map("organization_id") @db.Uuid
+  effectiveFrom    DateTime           @map("effective_from") @db.Date
+  /// ชนิดรายการที่รวมในฐาน WHT — ชนิดที่ไม่อยู่ในรายการจ่ายตามปกติแต่ไม่หัก
+  baseExpenseTypes ExpenseType[]      @map("base_expense_types")
+  certificateMode  WhtCertificateMode @map("certificate_mode")
+  incomeTypeMode   WhtIncomeTypeMode  @map("income_type_mode")
+  /// เหตุผลบังคับ (กระทบภาษี — `90` §13)
+  reason           String
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  createdByUser User          @relation("wht_policy_history_created_by", fields: [createdBy], references: [id])
+  payoutBatches PayoutBatch[] @relation("payout_wht_policy")
+
+  @@index([organizationId, effectiveFrom], map: "idx_wht_policy_history_org_date")
+  @@map("wht_policy_history")
 }
 
 /// บัญชีธนาคารบริษัท (ไฟล์ 13 §6.3)
@@ -1977,6 +2030,9 @@ model PayeeProfile {
   payeeType      PayeeType @default(individual) @map("payee_type")
   /// Payee level ชนะ Plan level (`18` §6.3) — NULL = fallback Plan พร้อม warning
   taxProfileId   String?   @map("tax_profile_id") @db.Uuid
+  /// อัตราหัก 40(2) ต่อคน (สำนักงานบัญชีคำนวณให้ — ไม่คิดอัตราก้าวหน้าในระบบ) · ใช้เมื่อรอบจ่ายจัดผู้รับเป็น 40(2)
+  /// NULL = ยังไม่กรอก ⇒ สร้างรอบจ่ายที่มีผู้รับ 40(2) ไม่ได้ · CHECK 0–100 ใน raw SQL (มติ PO 05/10/2569 UAT U7)
+  wht402Pct      Decimal?  @map("wht_40_2_pct") @db.Decimal(5, 2)
 
   bankName      String? @map("bank_name")
   accountName   String? @map("account_name")
@@ -2209,20 +2265,29 @@ model PayoutBatch {
   /// ป้องกันโอนซ้ำ (`17` §6.3)
   idempotencyKey         String?   @unique @map("idempotency_key")
 
+  /// snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — NULL ทั้งชุด = รอบที่สร้างก่อนมีค่าตั้ง
+  /// (ตีความเป็นพฤติกรรมเดิม: ทุกชนิดในฐาน · ใบต่อรายการ · 40(8)) · `whtPolicyId` NULL = ใช้ค่าเริ่มต้น (ยังไม่เคยตั้ง)
+  whtPolicyId         String?             @map("wht_policy_id") @db.Uuid
+  whtBaseExpenseTypes ExpenseType[]       @map("wht_base_expense_types")
+  whtCertificateMode  WhtCertificateMode? @map("wht_certificate_mode")
+  whtIncomeTypeMode   WhtIncomeTypeMode?  @map("wht_income_type_mode")
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  bankAccount   BankAccount? @relation("payout_bank_account", fields: [bankAccountId], references: [id])
-  createdByUser User         @relation("payout_batches_created_by", fields: [createdBy], references: [id])
-  updatedByUser User?        @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
+  organization  Organization      @relation(fields: [organizationId], references: [id])
+  bankAccount   BankAccount?      @relation("payout_bank_account", fields: [bankAccountId], references: [id])
+  whtPolicy     WhtPolicyHistory? @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
+  createdByUser User              @relation("payout_batches_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?             @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
 
   items            PayoutBatchItem[]
   adjustments      Adjustment[]
   bankTransactions BankTransaction[] @relation("bank_tx_matched_payout")
+  whtCertificates  WhtCertificate[]  @relation("wht_cert_payout_batch")
 
   @@index([organizationId, status], map: "idx_payout_batches_org")
   @@map("payout_batches")
@@ -2248,8 +2313,12 @@ model PayoutBatchItem {
   netSatang   Int @map("net_satang")
 
   /// snapshot ณ เวลาสร้าง — Payee level ชนะ Plan level (`18` §6.3)
-  taxProfileId   String?  @map("tax_profile_id") @db.Uuid
-  whtPctSnapshot Decimal? @map("wht_pct_snapshot") @db.Decimal(5, 2)
+  taxProfileId      String?            @map("tax_profile_id") @db.Uuid
+  whtPctSnapshot    Decimal?           @map("wht_pct_snapshot") @db.Decimal(5, 2)
+  /// snapshot: รายการนี้อยู่ในฐาน WHT ตามค่าตั้งของรอบ (มติ PO 05/10/2569 UAT U3) — false = จ่ายเต็มไม่หัก
+  whtBaseIncluded   Boolean            @default(true) @map("wht_base_included")
+  /// snapshot ประเภทเงินได้ของผู้รับ ณ วันสร้างรอบ (UAT U5) — NULL = รอบเก่า/เงินทดรองจ่าย (ไม่ใช่เงินได้)
+  whtIncomeCategory WhtIncomeCategory? @map("wht_income_category")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -2563,17 +2632,22 @@ model ExpenseRecord {
 /// ใบ 50 ทวิ ที่**เราออกให้ผู้รับเงิน** (ไฟล์ 33)
 /// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE/reverse — ออกใบใหม่อ้าง `replacesCertificateId` (DEC-006/D4)
 model WhtCertificate {
-  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId    String            @map("organization_id") @db.Uuid
-  certificateNumber String            @unique @map("certificate_number")
-  payeeId           String            @map("payee_id") @db.Uuid
-  expenseRecordId   String            @map("expense_record_id") @db.Uuid
-  incomeType        String            @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
-  paymentDate       DateTime          @map("payment_date") @db.Date
-  grossSatang       Int               @map("gross_satang")
-  whtSatang         Int               @map("wht_satang")
-  filingForm        WhtFilingForm     @map("filing_form")
-  deliveryFormat    WhtDeliveryFormat @default(paper) @map("delivery_format")
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  certificateNumber String             @unique @map("certificate_number")
+  payeeId           String             @map("payee_id") @db.Uuid
+  expenseRecordId   String             @map("expense_record_id") @db.Uuid
+  incomeType        String             @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
+  paymentDate       DateTime           @map("payment_date") @db.Date
+  grossSatang       Int                @map("gross_satang")
+  whtSatang         Int                @map("wht_satang")
+  filingForm        WhtFilingForm      @map("filing_form")
+  deliveryFormat    WhtDeliveryFormat  @default(paper) @map("delivery_format")
+  /// รูปแบบการออก (มติ PO 05/10/2569 UAT U4) — `per_payee_batch` = ยอดรวมของผู้รับทั้งรอบ ·
+  /// `expense_record_id` ชี้รายการแรกของผู้รับในรอบเป็น "จุดยึด" (กันออกซ้ำด้วย partial unique เดิม)
+  /// CHECK `wht_cert_batch_mode_has_batch` (per_payee_batch ⇒ payout_batch_id NOT NULL) ใน raw SQL
+  issueMode         WhtCertificateMode @default(per_item) @map("issue_mode")
+  payoutBatchId     String?            @map("payout_batch_id") @db.Uuid
 
   status                WhtCertificateStatus @default(active)
   /// บังคับกรอกเมื่อ cancelled (WHT_CANCEL_REQUIRES_REASON)
@@ -2588,6 +2662,7 @@ model WhtCertificate {
   organization    Organization    @relation(fields: [organizationId], references: [id])
   payee           PayeeProfile    @relation(fields: [payeeId], references: [id])
   expenseRecord   ExpenseRecord   @relation(fields: [expenseRecordId], references: [id])
+  payoutBatch     PayoutBatch?    @relation("wht_cert_payout_batch", fields: [payoutBatchId], references: [id])
   replaces        WhtCertificate? @relation("wht_replaces", fields: [replacesCertificateId], references: [id])
   cancelledByUser User?           @relation("wht_certs_cancelled_by", fields: [cancelledBy], references: [id])
   createdByUser   User            @relation("wht_certs_created_by", fields: [createdBy], references: [id])
@@ -2611,6 +2686,8 @@ model WhtFilingSummary {
   filingDueDate  DateTime        @map("filing_due_date") @db.Date
   pnd3Satang     Int             @default(0) @map("pnd3_satang")
   pnd53Satang    Int             @default(0) @map("pnd53_satang")
+  /// ภ.ง.ด.1 — เงินได้ 40(2) (มติ PO 05/10/2569 UAT U7)
+  pnd1Satang     Int             @default(0) @map("pnd1_satang")
   status         WhtFilingStatus @default(pending)
   filedAt        DateTime?       @map("filed_at") @db.Timestamptz(6)
   filedBy        String?         @map("filed_by") @db.Uuid

@@ -71,6 +71,7 @@ export const WHT_BASIS_LABEL: Readonly<Record<WhtBasis, string>> = {
 export const WHT_FILING_FORM_LABEL: Readonly<Record<WhtFilingForm, string>> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
+  PND1: 'ภ.ง.ด.1 (เงินได้ 40(2))',
 }
 
 /** รูปแบบเดินเลขใบกำกับภาษี (`13` §6.12) */

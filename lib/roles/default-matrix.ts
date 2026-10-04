@@ -166,6 +166,9 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
 
   // ── capability นอก matrix ที่โมดูลเจ้าของสิทธิ์ผูกแล้ว (ดูหมายเหตุหัวไฟล์) ──
   // แผนค่าตอบแทน `11` §12 (Phase 1.7): manage = Superadmin/บริหาร/การเงิน · view = บัญชี/ผู้จัดการทีม
+  // ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8): Superadmin (ไม่มี record) + บริหาร แก้ได้ ·
+  // การอ่านค่าตั้งใช้ `view_master_data` เหมือนอัตรา VAT
+  manage_wht_policy: [[executive, 'manage']],
   manage_compensation_plans: [
     [executive, 'manage'],
     [finance, 'manage'],
@@ -228,6 +231,7 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_users',
   'view_audit_log',
   'manage_jobs',
+  'manage_wht_policy',
 ]
 
 export const DEFAULT_ROLE_CAPABILITIES: readonly DefaultAssignment[] = Object.entries(MATRIX).flatMap(

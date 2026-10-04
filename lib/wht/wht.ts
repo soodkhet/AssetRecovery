@@ -57,6 +57,7 @@ export const WHT_FILING_STATUS_LABEL: Record<WhtFilingStatus, string> = {
 export const WHT_FILING_FORM_LABEL: Record<WhtFilingForm, string> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
+  PND1: 'ภ.ง.ด.1 (เงินได้ 40(2))',
 }
 
 export const WHT_DELIVERY_FORMAT_LABEL: Record<WhtDeliveryFormat, string> = {
