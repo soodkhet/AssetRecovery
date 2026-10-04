@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~05:40 merge Portal-P10 `8975347` (หน้าส่งมอบ · ตรวจด้วยตา port 3103 ผ่าน · ดาวน์โหลดใบเซ็นรับ LOT-2569-003 ได้) + P9 `e3ff0df` (หน้าวางบิล + ใบกำกับภาษี · DTO ใบกำกับเพิ่ม `totalBeforeVatSatang`/`vatSatang` จาก sales_records) · verify 298/3,831 · P9 ตรวจด้วยตาไม่ได้ใน worktree (classifier บล็อก pg_restore ลงฐาน test) → ตรวจบน dev หลักแทน · รอ P8
 - 05/10/2569 ~05:00 merge Portal-P7 `f15128f` (shell 6 แท็บตามสิทธิ์ · ภาพรวม KPI/กราฟ/AR · ข้อมูลบริษัท · ตรวจด้วยตา 3 role ผ่าน port 3100) · verify 296/3,801 → เริ่ม P8/P9/P10 คู่ขนาน (port 3101/3102/3103)
 - 05/10/2569 ~04:30 merge Portal-P5 + P4 (`6dee9c1`) → API portal ครบ 13 endpoint · ลบข้อยกเว้น `PENDING_PARALLEL_ROUTES` (contract↔route บังคับครบ) · verify 295 files / 3,775 tests · มติ O46 → เริ่ม UI P7
 - 05/10/2569 ~04:00 merge Portal-P6 `5e71af0` (API ล็อตส่งมอบ list/detail/download ใบเซ็นรับเฉพาะ confirmed · GET-only บังคับด้วย ESLint + AST test · contract↔route: ทิศ contract→route ยกเว้น 10 path ของ P4/P5 ใน `PENDING_PARALLEL_ROUTES` — **ลบรายการนี้เมื่อ P4/P5 merge ครบ**) · verify 291/3,713
