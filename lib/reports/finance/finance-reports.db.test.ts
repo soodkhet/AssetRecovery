@@ -261,7 +261,7 @@ async function cleanup(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM billing_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
-  clearReportCache()
+  await clearReportCache()
 }
 
 beforeAll(async () => {

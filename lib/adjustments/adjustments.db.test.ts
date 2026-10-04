@@ -376,27 +376,35 @@ suite('Phase 3.7 — ระดับอนุมัติตาม `period_statu
     expect(afterExec.approvedByName).toBe('ผู้บริหาร 3.7')
   })
 
-  /** UAT BUG-128 — อนุมัติครบแล้วแคชรายงานขององค์กรต้องถูกล้าง (อนุมัติบางส่วนยังไม่ล้าง · องค์กรอื่นไม่โดน) */
+  /**
+   * UAT BUG-128 + U9 — อนุมัติครบแล้วแคชรายงานขององค์กรต้องถูกล้าง (อนุมัติบางส่วนยังไม่ล้าง · องค์กรอื่นไม่โดน)
+   * แคชอยู่ใน Postgres (มติ PO 05/10/2569) ⇒ ตรวจจากแถวใน DB ตรง ๆ = ทุก instance เห็นผลเดียวกัน
+   */
   it('อนุมัติครบ = ล้างแคชรายงานขององค์กร', async () => {
     const cache = await import('@/lib/reports/cache')
+    const otherOrg = '00000000-0000-4000-8000-0000000037ff'
+    await db().$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address)
+      VALUES ('${otherOrg}', 'Phase37Other', '9999999993799', 'ที่อยู่ทดสอบ 3.7 อื่น') ON CONFLICT (id) DO NOTHING
+    `)
     const now = new Date()
-    const seed = async (key: string): Promise<void> => {
+    const reportKey = { organizationId: ORG_ID, key: `${ORG_ID}:report:E1:range` }
+    const profitKey = { organizationId: ORG_ID, key: `profit:${ORG_ID}:all:company:range` }
+    const otherOrgKey = { organizationId: otherOrg, key: `${otherOrg}:report:E1:range` }
+    for (const key of [reportKey, profitKey, otherOrgKey]) {
       await cache.withDailyCache(key, { refresh: false, now }, () => Promise.resolve(1))
     }
-    const reportKey = `${ORG_ID}:report:E1:range`
-    const profitKey = `profit:${ORG_ID}:all:company:range`
-    const otherOrgKey = '00000000-0000-4000-8000-0000000000ff:report:E1:range'
-    for (const key of [reportKey, profitKey, otherOrgKey]) await seed(key)
 
     const created = await newAdjustment('sent_to_accountant')
     await adjustments.approveAdjustment(ctx(), created.id, { note: '' })
-    expect(cache.reportCacheComputedAt(reportKey)).not.toBeNull()
+    expect(await cache.reportCacheComputedAt(reportKey, now)).not.toBeNull()
 
     await adjustments.approveAdjustment(ctx(executive), created.id, { note: 'อนุมัติ' })
-    expect(cache.reportCacheComputedAt(reportKey)).toBeNull()
-    expect(cache.reportCacheComputedAt(profitKey)).toBeNull()
-    expect(cache.reportCacheComputedAt(otherOrgKey)).not.toBeNull()
-    cache.clearReportCache()
+    expect(await cache.reportCacheComputedAt(reportKey, now)).toBeNull()
+    expect(await cache.reportCacheComputedAt(profitKey, now)).toBeNull()
+    expect(await cache.reportCacheComputedAt(otherOrgKey, now)).not.toBeNull()
+    await cache.clearReportCache()
+    await db().$executeRawUnsafe(`DELETE FROM organizations WHERE id = '${otherOrg}'`)
   })
 
   it('§16 เคส 1 — รอบ locked: การเงินอนุมัติไม่ได้ ⇒ `INSUFFICIENT_APPROVAL_LEVEL` (สถานะไม่เปลี่ยน)', async () => {

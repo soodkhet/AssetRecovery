@@ -163,6 +163,8 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'notifications',
   // `41` §15 — อุปกรณ์ที่ผู้ใช้ลงทะเบียนรับ Web Push เอง (ไม่ใช่เงิน/สิทธิ์/ธนาคาร)
   'push_subscriptions',
+  // มติ PO 05/10/2569 (UAT U9) — แคชรายงาน ค่าคำนวณใหม่ได้เสมอ (รายงานอ่านอย่างเดียว ไม่ลง audit)
+  'report_cache_entries',
   'jobs',
   'files',
   'audit_logs',

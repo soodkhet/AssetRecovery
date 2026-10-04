@@ -80,7 +80,7 @@ export async function runReport(
   const key = reportCacheKey(user, report, options.range, params, teamIds)
 
   const cached = await withReportCache<ReportData>(
-    key,
+    { organizationId: user.organizationId, key },
     { mode: report.cacheMode, refresh: options.refresh, now, cooldown: true },
     () => provider(context),
   )

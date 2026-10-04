@@ -243,7 +243,7 @@ async function cleanup(): Promise<void> {
     await tx.$executeRawUnsafe(`ALTER TABLE export_records ENABLE TRIGGER trg_export_records_no_delete`)
     await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices ENABLE TRIGGER trg_tax_invoices_no_delete`)
   }
-  clearReportCache()
+  await clearReportCache()
 }
 
 beforeAll(async () => {

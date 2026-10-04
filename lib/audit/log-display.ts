@@ -106,6 +106,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   audit_logs: 'บันทึกการใช้งาน',
   notifications: 'การแจ้งเตือน',
   push_subscriptions: 'การรับแจ้งเตือนบนอุปกรณ์',
+  report_cache_entries: 'แคชรายงาน',
   jobs: 'งานเบื้องหลังของระบบ',
   files: 'ไฟล์แนบ',
   // ชื่อเป้าหมายแบบเอกพจน์ที่บางโมดูลใช้ใน audit
