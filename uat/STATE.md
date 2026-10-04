@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~02:45 SMOKE-W ผ่าน: อัป/ดาวน์โหลดผ่าน signed URL จาก server ทำงานกับ policy เดิมบน cloud · นอก scope ถูกปฏิเสธครบ · ไม่มี 500 · BUG-144/145 (S5) · ขยะ Storage +1 (`…/76ef07bb…/bundle_doc/…SMOKE-W-bundle.pdf`)
 - 05/10/2569 ~02:30 merge fixer W `ee14b9e` (BUG-143 โค้ด · DEC-014) · `uat/STORAGE_SETUP.md` §2 ยกเลิก policy เดิม
 - 05/10/2569 ~02:10 merge Portal-P1 `79b0d04` (capability portal 5 ตัว · `COMPANY_SUSPENDED` · audit `access_denied` migration `20261005120000` · spec `97` v5/`07`/`25`/`06`/`24`) · seed +12 แถว · verify 273/3,470 · migration ใหม่รวม **11 ตัว** → เริ่ม P2
 - 05/10/2569 ~01:50 merge fixer U `4c06e5c` (U9 cache DB + U10 ✅ only 9) · migration ใหม่รวม **10 ตัว** (ถึง `20261005090000`)
@@ -141,4 +142,5 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R5 v2 (ขยะ 4): `assets/aa1a2872-d1c0-46c7-98a0-44c3f84fea1f/intake/front/69ba4721-5567-4c24-8eff-7c5693f3105b-R5-fake-photo.jpg` · `assets/5cad8233-fbe1-4ba6-ab92-f886e4434689/intake/front/<uuid>-R5-fake-photo.jpg` · `handover-lots/15db3c66-d183-4a3a-bbb0-2d9decee40af/signed-doc/ffc7dd0c-….pdf` (ปลอม) · `handover-lots/15db3c66-d183-4a3a-bbb0-2d9decee40af/signed-doc/c4826624-a978-4a7b-af42-b93a3a4c68b3.pdf` (v2 แรก ถูกแทน)
 - R7c: `accounting-packs/00000000-0000-0000-0000-000000000001/2569-10/v1/20261004-0501083-d900aa1f/` + `…/v1/20261004-0502016-ade15be9/` (กำพร้าจาก BUG-116 — ขยะ) · ใช้งานจริง: `…/v1/20261004-0542110-47110c36/`, `…/v2/20261004-0542169-24efa374/`
 - R10g: `case-documents/cases/b976a24e-af0d-490c-a8be-e402f9b9ecd4/bundle_doc/…R10g-bundle-12MB-8pages.pdf` · `case-documents/cases/76ef07bb-4a2f-4b39-8c37-2492cf2b4e38/{contract_doc,national_id_doc}/…` (soft-delete แล้ว) · เคสตัวอย่าง UAT-CO1-901/902 · ในเครื่อง `uat/fixtures/files/R10g/` (PDF 12 MB + 26 MB — ไม่ commit)
+- SMOKE-W: `case-documents/cases/76ef07bb-4a2f-4b39-8c37-2492cf2b4e38/bundle_doc/cd7c9943-c189-4be6-bb4e-1e7655de407a-SMOKE-W-bundle.pdf`
 - หลักฐานของ R4a เดิม 14 ไฟล์ (ฐานถูกย้อนแล้ว — ไฟล์ไม่มีแถวอ้างอิง)
