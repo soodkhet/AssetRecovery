@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { z } from 'zod'
-import { requiredIdSchema } from '@/lib/api/validation'
+import { z } from 'zod'
+import { periodReasonSchema } from '@/lib/accounting/schemas'
+import { requiredIdSchema, toFieldErrors } from '@/lib/api/validation'
 import { financeCompanyFieldsSchema } from '@/lib/finance-companies/schemas'
 import { payeeCreateSchema } from '@/lib/payees/schemas'
 import { teamFieldsSchema } from '@/lib/teams/schemas'
@@ -46,5 +47,33 @@ describe('dropdown บังคับของฟอร์ม master data', () =
   ] as const)('%s ไม่เลือก → %s', (_label, schema, path, expected) => {
     expect(messageAt(schema, {}, path)).toBe(expected)
     expect(messageAt(schema, { [path]: '' }, path)).toBe(expected)
+  })
+})
+
+/** UAT BUG-122 — ข้อความที่ Zod สร้างเอง (อังกฤษ) ต้องถูกแปลงเป็นไทยก่อนถึงผู้ใช้ */
+describe('toFieldErrors() — ข้อความไทยเสมอ', () => {
+  it('ส่งงวดโดยไม่มี reason → ข้อความไทย ไม่ใช่ Zod อังกฤษดิบ', () => {
+    const parsed = periodReasonSchema.safeParse({})
+    if (parsed.success) throw new Error('ต้อง fail')
+    expect(toFieldErrors(parsed.error).reason).toBe('กรุณาระบุข้อมูลช่องนี้')
+  })
+
+  it('ข้อความไทยที่ schema ตั้งเองคงเดิม', () => {
+    const parsed = periodReasonSchema.safeParse({ reason: '   ' })
+    if (parsed.success) throw new Error('ต้อง fail')
+    expect(toFieldErrors(parsed.error).reason).toBe('ต้องระบุเหตุผล')
+  })
+
+  const cases: ReadonlyArray<[z.ZodType, Record<string, unknown>, string]> = [
+    [z.object({ a: z.string() }), { a: 5 }, 'รูปแบบข้อมูลไม่ถูกต้อง'],
+    [z.object({ a: z.string().max(2) }), { a: 'abc' }, 'ยาวเกิน 2 ตัวอักษร'],
+    [z.object({ a: z.enum(['x', 'y']) }), { a: 'z' }, 'ค่าที่เลือกไม่อยู่ในตัวเลือกที่ระบบรองรับ'],
+    [z.object({ a: z.string().uuid() }), { a: 'nope' }, 'รูปแบบข้อมูลไม่ถูกต้อง'],
+    [z.object({ a: z.number().min(3) }), { a: 1 }, 'ค่าต้องไม่น้อยกว่า 3'],
+  ]
+  it.each(cases)('แปลงข้อความ default ของ Zod เป็นไทย (%#)', (schema, input, expected) => {
+    const parsed = schema.safeParse(input)
+    if (parsed.success) throw new Error('ต้อง fail')
+    expect(toFieldErrors(parsed.error).a).toBe(expected)
   })
 })

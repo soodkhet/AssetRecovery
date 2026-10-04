@@ -95,7 +95,41 @@ export function toFieldErrors(error: z.ZodError): Record<string, string> {
   const fields: Record<string, string> = {}
   for (const issue of error.issues) {
     const path = issue.path.join('.') || '_'
-    if (fields[path] === undefined) fields[path] = issue.message
+    if (fields[path] === undefined) fields[path] = userFacingIssueMessage(issue)
   }
   return fields
+}
+
+const THAI_CHAR = /[\u0E00-\u0E7F]/
+
+/**
+ * ข้อความ field ที่ผู้ใช้เห็นต้องเป็นภาษาไทยเสมอ (UAT BUG-122) — schema ส่วนใหญ่ตั้งข้อความไทยเองแล้ว
+ * แต่กรณีที่ Zod สร้างข้อความเอง (เช่น ไม่ส่ง key มาเลย → "Invalid input: expected string, received
+ * undefined") จะหลุดเป็นอังกฤษดิบ ⇒ ข้อความที่ไม่มีอักษรไทยแปลงเป็นข้อความไทยตามชนิด issue ที่นี่จุดเดียว
+ */
+export function userFacingIssueMessage(issue: z.core.$ZodIssue): string {
+  if (THAI_CHAR.test(issue.message)) return issue.message
+  switch (issue.code) {
+    case 'invalid_type':
+      // Zod 4 ไม่แนบ `input` มากับ issue โดยปริยาย — ดูจากข้อความ default "…, received undefined"
+      return /received (undefined|null)/.test(issue.message) ? 'กรุณาระบุข้อมูลช่องนี้' : 'รูปแบบข้อมูลไม่ถูกต้อง'
+    case 'too_small':
+      if (issue.origin === 'string') {
+        return Number(issue.minimum) <= 1 ? 'กรุณาระบุข้อมูลช่องนี้' : `ต้องมีอย่างน้อย ${String(issue.minimum)} ตัวอักษร`
+      }
+      if (issue.origin === 'array' || issue.origin === 'set') return `ต้องเลือกอย่างน้อย ${String(issue.minimum)} รายการ`
+      return `ค่าต้องไม่น้อยกว่า ${String(issue.minimum)}`
+    case 'too_big':
+      if (issue.origin === 'string') return `ยาวเกิน ${String(issue.maximum)} ตัวอักษร`
+      if (issue.origin === 'array' || issue.origin === 'set') return `เลือกได้ไม่เกิน ${String(issue.maximum)} รายการ`
+      return `ค่าต้องไม่เกิน ${String(issue.maximum)}`
+    case 'invalid_format':
+      return 'รูปแบบข้อมูลไม่ถูกต้อง'
+    case 'invalid_value':
+      return 'ค่าที่เลือกไม่อยู่ในตัวเลือกที่ระบบรองรับ'
+    case 'unrecognized_keys':
+      return 'มีข้อมูลที่ระบบไม่รู้จักปนมา'
+    default:
+      return 'ข้อมูลไม่ถูกต้อง'
+  }
 }
