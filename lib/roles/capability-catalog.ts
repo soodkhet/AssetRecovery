@@ -78,6 +78,15 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'confirm_handover_lot', label: 'ยืนยันส่งมอบล็อต', module: 'warehouse', functionalGroup: null, description: 'transaction 4 ขั้น + trigger Revenue' },
   { code: 'view_audit_log', label: 'ดูบันทึกการใช้งาน (Audit Log)', module: 'platform', functionalGroup: null, description: 'Superadmin/บริหาร/บัญชี/การเงิน · อ่านอย่างเดียวเสมอ' },
   { code: 'manage_jobs', label: 'จัดการงานเบื้องหลัง (Background Job)', module: 'platform', functionalGroup: null, description: 'view = ดู Job Log · manage = สั่งงาน (Trigger job) · retry ได้เฉพาะ Superadmin เท่านั้น' },
+
+  // ── นอก Functional Matrix: พอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U6/O43 D1 · `97` §3.3 · `07` §5.3) ──
+  // สิทธิ์ 3 ระดับของผู้ใช้บริษัทแยกตามหมวดเมนู portal — อ่านอย่างเดียวเสมอ (`/api/portal/*` = GET)
+  // ⇒ `manage` มีผลเท่ากับ `view` · Superadmin ปรับค่าได้ที่หน้าจัดการ Role (ไม่ใช่ "✅ only")
+  { code: 'portal_cases', label: 'พอร์ทัล: ภาพรวมและสถานะเคส', module: 'portal', functionalGroup: null, description: 'หน้าภาพรวมและรายการเคสของบริษัทตัวเอง' },
+  { code: 'portal_finance', label: 'พอร์ทัล: วางบิล/ใบกำกับภาษี/ยอดค้างชำระ', module: 'portal', functionalGroup: null, description: 'รอบวางบิลที่ส่งแล้ว ใบกำกับภาษี และยอดค้างชำระของบริษัทตัวเอง' },
+  { code: 'portal_handover', label: 'พอร์ทัล: ล็อตส่งมอบทรัพย์', module: 'portal', functionalGroup: null, description: 'ล็อตส่งมอบ รายการทรัพย์ และรูปทรัพย์ของบริษัทตัวเอง' },
+  { code: 'portal_profile', label: 'พอร์ทัล: ข้อมูลบริษัท', module: 'portal', functionalGroup: null, description: 'ข้อมูลบริษัทและผู้ติดต่อของบริษัทตัวเอง' },
+  { code: 'portal_download', label: 'พอร์ทัล: ดาวน์โหลดเอกสาร', module: 'portal', functionalGroup: null, description: 'ดาวน์โหลด PDF/Excel ได้เฉพาะหมวดที่มีสิทธิ์เห็น' },
 ]
 
 /** capability ที่อยู่ใน Functional Permission Matrix (`13` §6.10 — ต้องเท่ากับ 37 เสมอ) */

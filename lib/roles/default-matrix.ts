@@ -212,6 +212,30 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [finance, 'view'],
     [accounting, 'view'],
   ],
+
+  // ── นอก matrix: พอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U6/O43 D1 · `97` §3.3 · `07` §5.3) ──
+  // ผู้จัดการ = ทุกหมวด · หัวหน้า = ภาพรวม/เคส + ส่งมอบ + ข้อมูลบริษัท (ไม่เห็นการเงิน) ·
+  // แอดมิน = เคส + ข้อมูลบริษัท · ดาวน์โหลด = ทุก role (ไฟล์ที่โหลดได้จำกัดตามหมวดที่เห็น — บังคับที่ guard)
+  portal_cases: [
+    [companyManager, 'view'],
+    [companySupervisor, 'view'],
+    [companyAdmin, 'view'],
+  ],
+  portal_finance: [[companyManager, 'view']],
+  portal_handover: [
+    [companyManager, 'view'],
+    [companySupervisor, 'view'],
+  ],
+  portal_profile: [
+    [companyManager, 'view'],
+    [companySupervisor, 'view'],
+    [companyAdmin, 'view'],
+  ],
+  portal_download: [
+    [companyManager, 'view'],
+    [companySupervisor, 'view'],
+    [companyAdmin, 'view'],
+  ],
 }
 
 /**
@@ -228,6 +252,12 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_users',
   'view_audit_log',
   'manage_jobs',
+  // พอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U6/O43 D1)
+  'portal_cases',
+  'portal_finance',
+  'portal_handover',
+  'portal_profile',
+  'portal_download',
 ]
 
 export const DEFAULT_ROLE_CAPABILITIES: readonly DefaultAssignment[] = Object.entries(MATRIX).flatMap(

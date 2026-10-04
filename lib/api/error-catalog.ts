@@ -165,6 +165,8 @@ export const ERROR_CATALOG = {
   SESSION_EXPIRED: { status: 401, severity: 'reject', source: '24 §6.9' },
   INVALID_CREDENTIALS: { status: 401, severity: 'reject', source: '24 §6.9' },
   ACCOUNT_INACTIVE: { status: 403, severity: 'reject', source: '24 §6.9' },
+  // มติ PO 05/10/2569 (U6/O43 D5) — บริษัทไฟแนนซ์ถูกระงับ ⇒ ผู้ใช้บริษัทเข้าพอร์ทัลไม่ได้
+  COMPANY_SUSPENDED: { status: 403, severity: 'reject', source: '24 §6.9' },
   USER_NOT_PROVISIONED: { status: 403, severity: 'reject', source: '24 §6.9' },
   PERMISSION_DENIED: { status: 403, severity: 'reject', source: '24 §6.9' },
   LAST_SUPERADMIN_REMOVAL: { status: 400, severity: 'reject', source: '24 §6.9' },

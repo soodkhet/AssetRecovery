@@ -8,6 +8,7 @@ export const AUTH_ERROR_CODES = [
   'SESSION_EXPIRED',
   'INVALID_CREDENTIALS',
   'ACCOUNT_INACTIVE',
+  'COMPANY_SUSPENDED',
   'USER_NOT_PROVISIONED',
   'PERMISSION_DENIED',
   'LAST_SUPERADMIN_REMOVAL',
@@ -23,6 +24,7 @@ const HTTP_STATUS: Record<AuthErrorCode, number> = {
   SESSION_EXPIRED: 401,
   INVALID_CREDENTIALS: 401,
   ACCOUNT_INACTIVE: 403,
+  COMPANY_SUSPENDED: 403,
   USER_NOT_PROVISIONED: 403,
   PERMISSION_DENIED: 403,
   LAST_SUPERADMIN_REMOVAL: 400,
@@ -41,6 +43,11 @@ const MESSAGES: Record<AuthErrorCode, { title: string; message: string }> = {
   ACCOUNT_INACTIVE: {
     title: 'บัญชีถูกระงับการใช้งาน',
     message: 'กรุณาติดต่อผู้ดูแลระบบ (Superadmin) เพื่อปลดล็อกบัญชี',
+  },
+  // มติ PO 05/10/2569 (O43 D5) — ไม่บอกเหตุผลการระงับของบริษัท
+  COMPANY_SUSPENDED: {
+    title: 'บริษัทถูกระงับการใช้งาน',
+    message: 'บัญชีบริษัทของคุณถูกระงับการใช้งานชั่วคราว กรุณาติดต่อผู้ให้บริการ',
   },
   USER_NOT_PROVISIONED: {
     title: 'บัญชียังไม่ถูกผูกกับระบบ',

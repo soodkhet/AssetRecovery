@@ -23,6 +23,24 @@ describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
     expect(sections.map((section) => section.id)).toEqual(['ops', 'finance', 'accounting', 'admin', 'other'])
   })
 
+  it('capability พอร์ทัล (module portal นอก matrix) แยกหมวดของตัวเอง ก่อนกลุ่ม "อื่นๆ" และแก้ได้', () => {
+    const withPortal: CapabilityInfo[] = [
+      ...capabilities,
+      { code: 'portal_cases', label: 'พอร์ทัล: เคส', module: 'portal', functionalGroup: null, description: null },
+      { code: 'view_own_company_data', label: 'ดูของบริษัท', module: 'portal', functionalGroup: 'ops', description: null },
+    ]
+    const sections = buildRoleMatrix({ name: 'ผู้จัดการ', isEditable: true }, withPortal, { portal_cases: 'view' })
+
+    expect(sections.map((section) => section.id)).toEqual(['ops', 'finance', 'accounting', 'admin', 'portal', 'other'])
+    const portal = sections.find((section) => section.id === 'portal')
+    expect(portal?.rows.map((row) => row.code)).toEqual(['portal_cases'])
+    expect(portal?.rows[0]?.level).toBe('view')
+    expect(portal?.rows[0]?.editable).toBe(true)
+    expect(sections.find((section) => section.id === 'ops')?.rows.map((row) => row.code)).toContain(
+      'view_own_company_data',
+    )
+  })
+
   it('ไม่มี record = none · view/manage อ่านจาก assignments', () => {
     const sections = buildRoleMatrix(
       { name: 'การเงิน', isEditable: true },
