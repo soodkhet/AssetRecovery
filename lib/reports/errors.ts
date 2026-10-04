@@ -61,8 +61,16 @@ export function reportErrorMessage(code: ReportErrorCode): ErrorMessage {
 }
 
 export class ReportError extends ModuleError<ReportErrorCode> {
-  constructor(code: ReportErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /**
+   * `message` = ข้อความผู้ใช้ที่เจาะจงกว่าข้อความกลางของ code (เช่น ใส่วันเริ่มอย่างเดียว ต้องไม่บอกว่า
+   * "วันเริ่มอยู่หลังวันสิ้นสุด" — UAT BUG-137) · ไม่ระบุ = ข้อความกลาง
+   */
+  constructor(
+    code: ReportErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const messages = options?.message === undefined ? MESSAGES[code] : { ...MESSAGES[code], message: options.message }
+    super(code, messages, HTTP_STATUS[code], { detail: options?.detail, context: options?.context })
     this.name = 'ReportError'
   }
 }

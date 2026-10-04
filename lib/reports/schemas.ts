@@ -12,8 +12,13 @@ import { REPORT_RANGE_PRESETS } from '@/lib/reports/range'
  * ⇒ ที่นี่ตรวจแค่รูปร่างของ query string ไม่มีกติกาธุรกิจ
  */
 
+/** query string แบบธง — รับ `true`/`1` = เปิด · `false`/`0`/ไม่ส่ง = ปิด (UAT BUG-137: `refresh=1` เคยโดนปฏิเสธ) */
 const booleanFlag = z
-  .preprocess((value) => (value === 'true' ? true : value === 'false' || value === undefined ? false : value), z.boolean())
+  .preprocess(
+    (value) =>
+      value === 'true' || value === '1' ? true : value === 'false' || value === '0' || value === undefined ? false : value,
+    z.boolean(),
+  )
   .default(false)
 
 export const profitabilityQuerySchema = z.object({
