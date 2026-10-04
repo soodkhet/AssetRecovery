@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~02:30 merge fixer W `ee14b9e` (BUG-143 โค้ด · DEC-014) · `uat/STORAGE_SETUP.md` §2 ยกเลิก policy เดิม
 - 05/10/2569 ~02:10 merge Portal-P1 `79b0d04` (capability portal 5 ตัว · `COMPANY_SUSPENDED` · audit `access_denied` migration `20261005120000` · spec `97` v5/`07`/`25`/`06`/`24`) · seed +12 แถว · verify 273/3,470 · migration ใหม่รวม **11 ตัว** → เริ่ม P2
 - 05/10/2569 ~01:50 merge fixer U `4c06e5c` (U9 cache DB + U10 ✅ only 9) · migration ใหม่รวม **10 ตัว** (ถึง `20261005090000`)
 - 04/10/2569 ~14:45 รวมเล่มรายงาน `b769b0a` (`uat/report/final/` 3 ไฟล์) · merge fixer S `d8a0ac8` (BUG-132…139,141,142) · verify 272 files / 3,459 tests ✅ · **UAT จบ**
@@ -55,7 +56,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 1. **fixer T — ค่าตั้งภาษี** (U3/U4/U5/U7/U8): ฐาน WHT เลือกชนิดรายการได้ · การออก 50 ทวิ ต่อผู้รับต่อรอบ/ต่อรายการ · ประเภทเงินได้ 40(8) ทั้งหมด / 40(2) ทั้งหมด / แยกตามประเภททีม · 40(2) ใช้อัตราต่อคนใน Tax Profile + ภ.ง.ด.1 · Superadmin/บริหารแก้ได้ + เหตุผล + audit + effective-dated + snapshot ในรอบจ่าย · ค่าเริ่มต้น = มติ (ฐานไม่รวมค่าใช้จ่ายตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบ · 40(8))
 2. ✅ **fixer U เสร็จ** merge `4c06e5c` — cache รายงานใน Postgres (`report_cache_entries`, migration `20261005090000`) + "✅ only" = 9 ใน CLAUDE.md/Rule 03/`94` · verify 273 files / 3,467 tests
 3. **Client Portal (U6)** — แผน 11 ก้อน (มติ O43 · D1–D12 = ก.): **P1** schema/capability portal 5 ตัว (`portal_cases`,`portal_finance`,`portal_handover`,`portal_profile`,`portal_download`) + seed 3 ระดับ + `COMPANY_SUSPENDED` + audit `access_denied` + sync spec `07`/`25`/`97`/`06` → **P2** pure `lib/portal/*` (status-map/serializers whitelist/access/contract) → **P3** guard `requirePortalAccess` + login เช็คบริษัท suspended + ตัดผู้ใช้บริษัทออกจากภายใน → **P4** API เคส/dashboard/profile/รูปทรัพย์ ‖ **P5** API การเงิน (billing/ใบกำกับ/F2/F3 สด) ‖ **P6** API ส่งมอบ + test GET-only → **P7** UI shell+ภาพรวม → **P8** เคส ‖ **P9** วางบิล/ใบกำกับ ‖ **P10** ส่งมอบ → **P11** acceptance R12 · Plan เต็มอยู่ในประวัติ session (สรุปนี้พอสำหรับ fixer)
-3b. **fixer W — BUG-143 (S3)** Storage `case-documents` เปิดให้ authenticated ทุกคน → signed URL ฝั่ง server + policy จำกัด (แก้สคริปต์ ไม่ apply) · **apply policy บน Supabase จริงต้องรอผู้ใช้อนุมัติ**
+3b. ✅ **fixer W เสร็จ** merge `ee14b9e` — BUG-143 ปิดในโค้ด (upload/download ผ่าน server + signed URL · DEC-014 · verify 276/3,538) · **⚠️ ผู้ใช้ต้อง apply policy บน Supabase: `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging --dry-run` → ตรวจ → รันจริง (ตัด `--dry-run`) → ลองอัป/เปิดไฟล์เคส/หลักฐาน/รับเข้าคลัง/ล็อต/ใบเสร็จ**
 4. ✅ **F5 ตรวจแล้ว 05/10/2569 01:23** (ADV3 1 แถว 200000 เลยกำหนด 1 วัน · ตรงคาด) · O4 ตรวจได้ 06/10/2569 14:02 (คาด 2 แถว 849000)
 5. ทุก merge: verify `pnpm typecheck && pnpm lint && pnpm test` + migration → `db:generate`/`db:deploy`/`db:deploy:test`/`db:seed` + restart dev · ห้าม push
 

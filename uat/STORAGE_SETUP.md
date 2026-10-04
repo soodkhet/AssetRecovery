@@ -11,7 +11,10 @@
 | `accounting-packs` | server (service role) | Accounting Pack ต่อเวอร์ชัน |
 | `report-exports` | server (service role) | ไฟล์ export รายงานแบบงานเบื้องหลัง |
 
-## 2. Policy ของ `case-documents` (Dashboard → Storage → Policies → `case-documents` → New policy → For full customization)
+## 2. Policy ของ `case-documents` — ⚠️ **ยกเลิกแล้ว (BUG-143 · DEC-014 · 05/10/2569)**
+> ตั้งแต่ fixer W (`ee14b9e`) ทุกการอัปโหลด/ดาวน์โหลดผ่าน server (`POST /api/storage/upload-url`, `POST /api/storage/download-url`) ด้วย signed URL · **ห้ามสร้าง policy ให้ `authenticated`** · ถอด policy เดิมด้วย `pnpm storage:setup --expect-ref <ref> --env .env.local --db-env .env.staging --dry-run` แล้วรันจริงโดยตัด `--dry-run` (**รอผู้ใช้อนุมัติ** — project ใช้ร่วม localhost + staging) · ข้อความด้านล่างเก็บไว้เป็นประวัติเท่านั้น
+
+### (ประวัติ) policy เดิม
 ระบบตรวจสิทธิ์จริงที่ API layer (DEC-002) — policy นี้แค่เปิดให้ผู้ใช้ที่ login แล้วอัปโหลด/อ่านไฟล์ใน bucket นี้ได้
 
 | ชื่อ policy | Operation | Target role | USING / WITH CHECK |

@@ -148,7 +148,7 @@
 | BUG-140 | R10-v3 R10.03 | S5 | code | login ตอบเร็วต่างกันระหว่างบัญชีที่มีจริง (~210 ms) กับไม่มีจริง (~60–100 ms) ≈ 3 เท่า → ไล่เดา username ได้ (timing) | open |
 | BUG-141 | R10-v3 R10g | S4 | code | preview นำเข้าเคสแสดงชื่อฟิลด์ดิบ `assetImeiSerial:` ในข้อความ error และเลขที่สัญญาของแถวที่ไม่ผ่านขึ้น "–" | fixed `37f8467` (merge `d8a0ac8` 04/10/2569) |
 | BUG-142 | R10-v3 R10g | S4 | code | error ตอนรับเคสเอกสารชุดโดยไม่ติ๊กยืนยัน ขึ้นบนสุดของ modal ที่เลื่อนลงอยู่ → ผู้ใช้ไม่เห็น | fixed `2c7898f` (merge `d8a0ac8` 04/10/2569) |
-| BUG-143 | Portal-plan D10 | **S3** | code | Storage policy ของ bucket `case-documents` (`scripts/setup-storage.ts`) เปิด SELECT/INSERT/UPDATE ให้ `authenticated` **ทุกคน** + client สร้าง signed URL เองได้ → ผู้ใช้ที่ login แล้วทุกคน (พนักงานภาคสนาม/ผู้ใช้บริษัท) อ่าน/อัปโหลด/เขียนทับ object ใดก็ได้ในบัคเก็ต รวมสัญญา/บัตรประชาชนลูกหนี้/รูปทรัพย์ของบริษัทอื่น · project `qgshdg…` ใช้ร่วม localhost + staging | open — fixer W เตรียมโค้ด (signed URL ฝั่ง server + policy จำกัด) · **การ apply policy บน Supabase จริงรอผู้ใช้อนุมัติ** |
+| BUG-143 | Portal-plan D10 | **S3** | code | Storage policy ของ bucket `case-documents` (`scripts/setup-storage.ts`) เปิด SELECT/INSERT/UPDATE ให้ `authenticated` **ทุกคน** + client สร้าง signed URL เองได้ → ผู้ใช้ที่ login แล้วทุกคน (พนักงานภาคสนาม/ผู้ใช้บริษัท) อ่าน/อัปโหลด/เขียนทับ object ใดก็ได้ในบัคเก็ต รวมสัญญา/บัตรประชาชนลูกหนี้/รูปทรัพย์ของบริษัทอื่น · project `qgshdg…` ใช้ร่วม localhost + staging | fixed ในโค้ด `b86d940` (merge `ee14b9e` 05/10/2569 · DEC-014) · **policy บน Supabase cloud ยังเปิดอยู่จนกว่าผู้ใช้จะรัน `pnpm storage:setup … --dry-run` → รันจริง** |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
