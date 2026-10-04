@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
+  approvalErrorToast,
   approvalHistoryLabel,
   approvalStepText,
   approvalStepTone,
@@ -133,5 +134,35 @@ describe('รายละเอียดตาราง', () => {
       dto({ id: 'd', status: 'needs_revision', grossSatang: 50_000 }),
     ])
     expect(total).toBe(30_000)
+  })
+})
+
+describe('approvalErrorToast — ทิศของ APPROVAL_STEP_OUT_OF_ORDER (BUG-105)', () => {
+  const base = { code: 'APPROVAL_STEP_OUT_OF_ORDER', title: 'อนุมัติข้ามขั้น', message: 'รายการนี้ยังไม่ถึงขั้นอนุมัติของคุณ' }
+  const payload = (requestedStep: number, currentStep: number) => ({ ...base, requestedStep, currentStep })
+
+  it('ขั้นที่ขอ < ขั้นปัจจุบัน (หน้าค้าง) → "ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า"', () => {
+    expect(approvalErrorToast({ ...base, payload: payload(1, 2) })).toEqual({
+      title: 'รายการนี้ผ่านขั้นของคุณแล้ว',
+      message: 'รายการนี้ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า',
+      stale: true,
+    })
+  })
+
+  it('ขั้นที่ขอ > ขั้นปัจจุบัน → ข้อความเดิม "ยังไม่ถึงขั้น"', () => {
+    expect(approvalErrorToast({ ...base, payload: payload(3, 2) })).toEqual({
+      title: base.title,
+      message: base.message,
+      stale: false,
+    })
+  })
+
+  it('ไม่มีรายละเอียดขั้น หรือ code อื่น → ข้อความจาก API ตรงๆ', () => {
+    expect(approvalErrorToast(base).stale).toBe(false)
+    expect(approvalErrorToast({ code: 'SEGREGATION_OF_DUTIES_VIOLATION', title: 't', message: 'm' })).toEqual({
+      title: 't',
+      message: 'm',
+      stale: false,
+    })
   })
 })
