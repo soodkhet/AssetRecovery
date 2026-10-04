@@ -1,6 +1,13 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  bodyStringField,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
+import { BankReconError } from '@/lib/bank-recon/errors'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { resolveUnmatchedTransaction, MANAGE_BANK_RECONCILIATION } from '@/lib/bank-recon/queries'
 import { resolveUnmatchedSchema } from '@/lib/bank-recon/schemas'
@@ -19,8 +26,13 @@ export const PATCH = withApiPermission<RouteContext>(
   toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
-    const parsed = resolveUnmatchedSchema.safeParse(await readJsonBody(request))
-    if (!parsed.success) return validationErrorResponse(parsed.error)
+    const body = await readJsonBody(request)
+    const parsed = resolveUnmatchedSchema.safeParse(body)
+    if (!parsed.success) {
+      // ไม่มีเหตุผล ⇒ `MATCH_NOTE_REQUIRED` (`24` §6.3) ไม่ใช่ `REQUIRED_MISSING` (UAT R7cv3-B03)
+      if ((bodyStringField(body, 'matchNote') ?? '').trim() === '') throw new BankReconError('MATCH_NOTE_REQUIRED')
+      return validationErrorResponse(parsed.error)
+    }
 
     return apiSuccess(
       await resolveUnmatchedTransaction({ actor: user, meta: getRequestMeta(request) }, id, parsed.data),

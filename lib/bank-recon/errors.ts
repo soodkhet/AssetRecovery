@@ -50,7 +50,7 @@ const MESSAGES: Record<BankReconErrorCode, ErrorMessage> = {
   MATCH_NOTE_REQUIRED: {
     title: 'ต้องกรอกหมายเหตุชี้แจง',
     message:
-      'ยอดที่จับคู่ไม่ตรงกันเป๊ะ หรือเป็นการเปลี่ยนการจับคู่เดิม — ต้องอธิบายเหตุผลไว้เสมอ',
+      'ยอดที่จับคู่ไม่ตรงกันเป๊ะ เป็นการเปลี่ยนการจับคู่เดิม หรือปิดรายการโดยไม่จับคู่ — ต้องอธิบายเหตุผลไว้เสมอ',
   },
   ALREADY_MATCHED: {
     title: 'รายการนี้จับคู่ไปแล้ว',
@@ -67,8 +67,16 @@ export function bankReconErrorMessage(code: BankReconErrorCode): ErrorMessage {
 }
 
 export class BankReconError extends ModuleError<BankReconErrorCode> {
-  constructor(code: BankReconErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /**
+   * `message` = ข้อความผู้ใช้เฉพาะกรณี (code เดิม — ไม่ตั้ง code ใหม่) ใช้แยกเหตุของ
+   * `BANK_TRANSACTION_INVALID_STATUS` ให้ผู้ใช้รู้ว่าผิดตรงไหน (UAT BUG-112)
+   */
+  constructor(
+    code: BankReconErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const base = MESSAGES[code]
+    super(code, options?.message === undefined ? base : { ...base, message: options.message }, HTTP_STATUS[code], options)
     this.name = 'BankReconError'
   }
 }

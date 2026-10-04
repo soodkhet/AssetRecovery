@@ -489,6 +489,15 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
         }),
       'BANK_TRANSACTION_INVALID_STATUS',
     )
+    // ข้อความบอกเหตุจริง (ผิดฝั่ง) ไม่ใช่ "ปิดไปแล้ว" (UAT BUG-112)
+    await expect(
+      recon.matchBankTransaction(ctx, id, {
+        targetKind: 'payout',
+        targetId: PAYOUT_A,
+        matchNote: 'ลองผิดฝั่ง',
+        confirmRematch: false,
+      }),
+    ).rejects.toMatchObject({ userMessage: expect.stringContaining('เงินเข้า') })
   })
 
   it('ALREADY_MATCHED — เตือนก่อนโดยไม่เปลี่ยนอะไร แล้วยืนยันจึงเปลี่ยนการจับคู่ + ถอนเงินรับเดิม', async () => {
@@ -597,6 +606,9 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
       () => recon.resolveUnmatchedTransaction(ctx, matched?.id ?? '', { matchNote: 'ขอปิดทั้งที่จับคู่แล้ว' }),
       'BANK_TRANSACTION_INVALID_STATUS',
     )
+    await expect(
+      recon.resolveUnmatchedTransaction(ctx, matched?.id ?? '', { matchNote: 'ขอปิดทั้งที่จับคู่แล้ว' }),
+    ).rejects.toMatchObject({ userMessage: expect.stringContaining('จับคู่ไปแล้ว') })
 
     await recon.resolveUnmatchedTransaction(ctx, interest?.id ?? '', { matchNote: 'ดอกเบี้ยรับจากธนาคาร' })
     await expectCode(
@@ -620,6 +632,23 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
           matchNote: 'x',
           confirmRematch: false,
         }),
+      'BANK_TRANSACTION_NOT_FOUND',
+    )
+  })
+
+  it('id ใน URL ไม่ใช่ UUID ⇒ BANK_TRANSACTION_NOT_FOUND ไม่ใช่ 500 (UAT BUG-111)', async () => {
+    await expectCode(
+      () =>
+        recon.matchBankTransaction(ctx, 'not-a-uuid', {
+          targetKind: 'billing',
+          targetId: BILLING_A,
+          matchNote: 'x',
+          confirmRematch: false,
+        }),
+      'BANK_TRANSACTION_NOT_FOUND',
+    )
+    await expectCode(
+      () => recon.resolveUnmatchedTransaction(ctx, 'not-a-uuid', { matchNote: 'x' }),
       'BANK_TRANSACTION_NOT_FOUND',
     )
   })
