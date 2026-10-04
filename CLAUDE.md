@@ -33,7 +33,7 @@
 
 1. **เงิน = `INTEGER` satang เท่านั้น** ห้าม float/DECIMAL (฿100.50 → `10050`) — ข้อยกเว้นเดียว: `rate_pct`/`wht_pct` = `NUMERIC(5,2)` (`02` §2.2)
 2. **Datetime**: เก็บ UTC (`TIMESTAMPTZ`) / แสดง Asia/Bangkok + **พ.ศ. เท่านั้น** format `DD/MM/YYYY [HH:mm]` — ยกเว้น `<input type="date">` (`03` §6.5, DEC-005)
-3. **Permission ตรวจที่ API layer ทุก endpoint** ผ่าน `requirePermission(action, resource, scope)` — UI hide/disable เป็นแค่ UX ไม่ใช่ security (DEC-002, `25`)
+3. **Permission ตรวจที่ API layer ทุก endpoint** ผ่าน `requirePermission(action, resource, scope)` — UI hide/disable เป็นแค่ UX ไม่ใช่ security (DEC-002, `25`) · capability "✅ only" ล็อก **9 รายการ** (Superadmin 6 + บริหาร 3 — `lib/roles/capability-locks.ts`, Rule 03)
 4. **Audit log ทุก mutation** 9 fields (`actor_id, role, action, target_type, target_id, before, after, reason, created_at`) — immutable ห้าม UPDATE/DELETE แม้ Superadmin, `reason` บังคับเมื่อกระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period (`90` §13)
 5. **Revenue trigger**: เกิดเมื่อ `expense.approved` **AND** `HandoverLot.confirmed` (Warehouse gate ใช้กับ `closed_success` **เสมอ** รวมเคสไม่มี expense — DEC-006/D6) — `closed_fail` ไม่ผ่านคลัง (`19` §6.1, `44` §11)
 6. **Lot confirmed = `$transaction` 4 steps** (assets→handed_over, unlock expenses, audit, tryCreateRevenue) — fail ข้อใด rollback ทั้งหมด (`44` §11)

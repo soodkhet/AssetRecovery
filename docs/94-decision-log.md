@@ -20,6 +20,7 @@
 | v3.2 | 05/07/2569 | **ปิด doc sync ของ DEC-009** — Product Owner สั่งเดิน: `02` v3.6 / `13` v3.1 / `25` v2.2 เสร็จครบ อัปเดตช่อง Impact ของ DEC-009 เป็น ✅ |
 | v3.3 | 03/10/2569 | **เพิ่ม DEC-010** (login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ — แทนมติ D1 เดิม) |
 | v3.4 | 03/10/2569 | **เพิ่ม DEC-011** (Playwright เป็นเครื่องมือ UAT ฝั่ง dev — ไม่แตะ runtime/production) |
+| v3.6 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U10)** — DEC-009 ข้อ (3) เติมหมายเหตุ: รายการ "✅ only" = **9** (Superadmin 6 + บริหาร 3) ตามโค้ดและมติ 14/08/2569 ไม่ใช่ 7 — ข้อความเดิมคงไว้เป็นประวัติ · ไม่มีการเปลี่ยนสิทธิ์ |
 | v3.5 | 03/10/2569 | **เพิ่ม DEC-012** (job รายวัน `daily_field_allowance` — ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงเกิดหลังจบวันแทนตอนปิดงาน · มติ PO UAT Q21) |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
@@ -228,7 +229,7 @@
 
 | Field | Value |
 |---|---|
-| Decision | (1) รายการสิทธิ์ในหน้า "สิทธิ์บัญชี/การเงิน" ต้องครบตาม **ไฟล์ 25 เป๊ะ** — เพิ่ม 9 รายการที่ขาด (กลุ่ม Adjustment 3, Authorized Exception, จัดการ Exception, สร้างไฟล์โอนเงิน, เงินทดรอง Field Agent, map Cost Center, ตอบ Accountant Question, Tax Invoice Numbering, ดู Dashboard/Profitability) + แยกข้อซ้ำซ้อน (ปลดล็อกรอบ ≠ อนุมัติเกินเพดาน) → รวม **37 รายการ 4 กลุ่ม** (2) ระดับสิทธิ์เป็น **3 ระดับ**: ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว (view) / ✅ ทำได้ (manage) — UI เป็น dropdown ต่อ role ตรง semantic ✅/👁️ ของไฟล์ 25 (3) Superadmin มีสิทธิ์ทุกรายการโดยนิยาม ไม่แสดงในตาราง · รายการ "✅ only" 7 ตัวล็อกเป็น 🔒 แก้ไม่ได้ |
+| Decision | (1) รายการสิทธิ์ในหน้า "สิทธิ์บัญชี/การเงิน" ต้องครบตาม **ไฟล์ 25 เป๊ะ** — เพิ่ม 9 รายการที่ขาด (กลุ่ม Adjustment 3, Authorized Exception, จัดการ Exception, สร้างไฟล์โอนเงิน, เงินทดรอง Field Agent, map Cost Center, ตอบ Accountant Question, Tax Invoice Numbering, ดู Dashboard/Profitability) + แยกข้อซ้ำซ้อน (ปลดล็อกรอบ ≠ อนุมัติเกินเพดาน) → รวม **37 รายการ 4 กลุ่ม** (2) ระดับสิทธิ์เป็น **3 ระดับ**: ไม่มีสิทธิ์ / 👁️ ดูอย่างเดียว (view) / ✅ ทำได้ (manage) — UI เป็น dropdown ต่อ role ตรง semantic ✅/👁️ ของไฟล์ 25 (3) Superadmin มีสิทธิ์ทุกรายการโดยนิยาม ไม่แสดงในตาราง · รายการ "✅ only" 7 ตัวล็อกเป็น 🔒 แก้ไม่ได้ — **หมายเหตุ (มติ PO 14/08/2569 · ยืนยันซ้ำ 05/10/2569 UAT U10)**: ตัวเลข "7" นับตกหล่น — ที่ถูกต้องคือ **9 รายการ = Superadmin 6** (`manage_companies`, `manage_service_fees`, `manage_tax_profiles`, `manage_period_lock_policy`, `manage_invoice_numbering`, `manage_roles`) **+ บริหาร 3** (`approve_adjustment_locked`, `unlock_period`, `authorize_exception`) ล็อกกับ role เจ้าของ (ไม่ใช่ Superadmin เสมอไป) ตาม `25` §16.1 · `13` §6.10 · โค้ด `lib/roles/capability-locks.ts` |
 | Approved by | Product Owner (Boonphone) — ตอบผ่านชุดตัวเลือก 05/07/2569 |
 | Reason | Audit พบ mockup มีสิทธิ์ให้ติ๊กแค่ 20/29 รายการของไฟล์ 25 และ checkbox เปิด/ปิดค่าเดียวแสดงมิติ "ดูอย่างเดียว" ไม่ได้ |
 | Impact | `settings.html` (ทำแล้ว) — **✅ doc sync ครบแล้ว 05/07/2569**: `02` v3.6 (`capability_access_level` enum + `role_capabilities.access_level`), ไฟล์ `13` v3.1 (§6.10 โมเดลระดับ), ไฟล์ `25` v2.2 (§16.1 mapping ✅→manage / 👁️→view) |

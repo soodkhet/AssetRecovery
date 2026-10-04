@@ -4,7 +4,7 @@
 - ตรวจที่ **API layer ทุก endpoint** ผ่าน `requirePermission(action, resource, scope)` — ไม่มีข้อยกเว้น · UI hide/disable เป็นแค่ UX
 - **ไม่ใช้ Supabase RLS** เป็น permission layer (DEC-002) — Supabase ใช้แค่ Auth + Storage
 - Role 15 ตัว 4 กลุ่ม (`07` §5) — seed ห้ามลบ/เปลี่ยนชื่อ · role ชื่อซ้ำข้ามกลุ่ม = คนละ record
-- สิทธิ์ 3 ระดับ (DEC-009): ไม่มี record = มองไม่เห็น / `view` / `manage` — เก็บที่ `role_capabilities.access_level` · Superadmin = manage ทุกอย่างโดยนิยาม **ไม่เก็บ record** enforce ที่ middleware · 7 รายการ "✅ only" ล็อก Superadmin มอบให้ role อื่นไม่ได้
+- สิทธิ์ 3 ระดับ (DEC-009): ไม่มี record = มองไม่เห็น / `view` / `manage` — เก็บที่ `role_capabilities.access_level` · Superadmin = manage ทุกอย่างโดยนิยาม **ไม่เก็บ record** enforce ที่ middleware · **9 รายการ "✅ only"** ล็อกกับ role เจ้าของ มอบให้ role อื่น/แก้ระดับไม่ได้ (มติ PO 14/08/2569 · ยืนยัน 05/10/2569 U10) — **Superadmin 6**: `manage_companies`, `manage_service_fees`, `manage_tax_profiles`, `manage_period_lock_policy`, `manage_invoice_numbering`, `manage_roles` · **บริหาร 3**: `approve_adjustment_locked`, `unlock_period`, `authorize_exception` (SSOT ในโค้ด `lib/roles/capability-locks.ts`)
 - Scope ย่อย ("ทีมตัวเอง"/"own"/"company") enforce ที่ business logic เพิ่มจาก access_level — Manager เห็นเฉพาะทีมใน `team_managers` · Company User เห็นเฉพาะ `company_id` ตัวเอง (403 แบบไม่ leak)
 - endpoint ที่กระทบเงิน/ภาษี → เช็ค matrix `25` ก่อนเขียนเสมอ · `/api/portal/*` = GET เท่านั้น
 
