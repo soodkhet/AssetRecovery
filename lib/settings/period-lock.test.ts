@@ -92,6 +92,9 @@ describe('assertPeriodEditable', () => {
       if (isSettingsError(error)) {
         expect(error.code).toBe('PERIOD_LOCKED_DIRECT_EDIT')
         expect(error.context).toMatchObject({ periodStatus: 'sent_to_accountant', affectsAmount: true })
+        // BUG-121 — ถ้อยคำต้องตรงสถานะจริง ไม่บอกว่า "ล็อก/ปิด" ตอนงวดเพิ่งส่งสำนักงานบัญชี
+        expect(error.title).toContain('ส่งสำนักงานบัญชีแล้ว')
+        expect(`${error.title} ${error.userMessage}`).not.toMatch(/ล็อก|ปิดแล้ว/)
       }
     }
   })
@@ -117,6 +120,7 @@ describe('assertPeriodEditable', () => {
         expect(error.status).toBe(400)
         expect(error.context).toMatchObject({ targetType: 'expenses', periodStatus: 'locked' })
         expect(error.userMessage).toContain('Adjustment')
+        expect(error.title).toContain('ล็อกแล้ว')
       }
     }
   })
