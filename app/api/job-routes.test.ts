@@ -66,6 +66,19 @@ function sessionUser(overrides: Partial<SessionUser> = {}): SessionUser {
 }
 
 const SUPERADMIN = sessionUser()
+/** การเงินดู Job Log ได้แต่สั่งงานไม่ได้ — ไม่มี `manage:manage_jobs` */
+const FINANCE_USER = sessionUser({
+  id: 'user-fin',
+  roleName: 'Finance',
+  isSuperadmin: false,
+  capabilities: { manage_jobs: 'view' },
+})
+
+/** วันตามปฏิทินไทย (YYYY-MM-DD) ห่างจากวันนี้ n วัน — ช่วงที่ asOf รับได้อิงวันไทย */
+function bangkokDayOffset(days: number): string {
+  const todayBangkok = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+  return new Date(new Date(`${todayBangkok}T00:00:00.000Z`).getTime() + days * 86_400_000).toISOString().slice(0, 10)
+}
 
 function request(url: string, method: 'GET' | 'POST' = 'GET', body?: unknown, headers?: Record<string, string>): NextRequest {
   const base = new Request(url, {
@@ -259,6 +272,100 @@ describe('POST /api/dev/trigger-job (`91` §14.1)', () => {
       )
       expect(response.status, date).toBe(400)
     }
+    expect(queriesMock.createJob).not.toHaveBeenCalled()
+  })
+
+  it('advance_overdue รับ payload asOf (วันนี้..+31 วันไทย) · ใส่ธง dev trigger + asOf ในคีย์กันซ้ำ', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    queriesMock.createJob.mockResolvedValue({ job: JOB_DETAIL, duplicate: false })
+    queriesMock.getJob.mockResolvedValue({ ...JOB_DETAIL, status: 'completed' })
+    engineMock.runJobById.mockResolvedValue('completed')
+    const asOf = bangkokDayOffset(1)
+
+    const response = await devTriggerRoute(
+      request('http://localhost/api/dev/trigger-job', 'POST', { jobType: 'advance_overdue', payload: { asOf } }),
+      undefined,
+    )
+
+    expect(response.status).toBe(200)
+    const input = queriesMock.createJob.mock.calls[0]?.[1]
+    expect(input).toMatchObject({ jobType: 'advance_overdue', payload: { asOf, devTrigger: true } })
+    expect(String(input?.idempotencyKey)).toMatch(new RegExp(`^dev:advance_overdue:.*:asOf=${asOf}$`))
+  })
+
+  it('advance_overdue: asOf วันนี้ / +31 วัน ผ่าน', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    queriesMock.createJob.mockResolvedValue({ job: JOB_DETAIL, duplicate: false })
+    queriesMock.getJob.mockResolvedValue(JOB_DETAIL)
+    engineMock.runJobById.mockResolvedValue('completed')
+    for (const asOf of [bangkokDayOffset(0), bangkokDayOffset(31)]) {
+      const response = await devTriggerRoute(
+        request('http://localhost/api/dev/trigger-job', 'POST', { jobType: 'advance_overdue', payload: { asOf } }),
+        undefined,
+      )
+      expect(response.status, asOf).toBe(200)
+    }
+  })
+
+  it('advance_overdue: asOf อดีต / เกิน 31 วัน / ผิดรูป / ไม่ใช่ข้อความ = 400 REQUIRED_MISSING + field asOf ไม่สร้าง job', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    for (const asOf of [bangkokDayOffset(-1), bangkokDayOffset(32), '2026-02-30', '05/10/2569', 20261005]) {
+      const response = await devTriggerRoute(
+        request('http://localhost/api/dev/trigger-job', 'POST', { jobType: 'advance_overdue', payload: { asOf } }),
+        undefined,
+      )
+      expect(response.status, String(asOf)).toBe(400)
+      const body = (await response.json()) as { error: { code: string; fields?: Record<string, string> } }
+      expect(body.error.code).toBe('REQUIRED_MISSING')
+      expect(body.error.fields).toHaveProperty('asOf')
+    }
+    expect(queriesMock.createJob).not.toHaveBeenCalled()
+    expect(engineMock.runJobById).not.toHaveBeenCalled()
+  })
+
+  it('asOf กับ job_type อื่น = 400 ไม่สร้าง job', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    for (const jobType of ['daily_field_allowance', 'reassign_timeout', 'wht_summary']) {
+      const response = await devTriggerRoute(
+        request('http://localhost/api/dev/trigger-job', 'POST', { jobType, payload: { asOf: bangkokDayOffset(1) } }),
+        undefined,
+      )
+      expect(response.status, jobType).toBe(400)
+    }
+    expect(queriesMock.createJob).not.toHaveBeenCalled()
+  })
+
+  it('advance_overdue + asOf สั่งซ้ำ: คีย์กันซ้ำเดียวกัน (ในนาทีเดียวกัน) ⇒ job เดิม duplicate', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-04T05:00:30.000Z'))
+    try {
+      requireSessionMock.mockResolvedValue(SUPERADMIN)
+      queriesMock.createJob
+        .mockResolvedValueOnce({ job: JOB_DETAIL, duplicate: false })
+        .mockResolvedValueOnce({ job: JOB_DETAIL, duplicate: true })
+      queriesMock.getJob.mockResolvedValue({ ...JOB_DETAIL, status: 'completed' })
+      engineMock.runJobById.mockResolvedValue('completed')
+      const body = { jobType: 'advance_overdue', payload: { asOf: '2026-10-05' } }
+
+      await devTriggerRoute(request('http://localhost/api/dev/trigger-job', 'POST', body), undefined)
+      const second = await devTriggerRoute(request('http://localhost/api/dev/trigger-job', 'POST', body), undefined)
+
+      const keys = queriesMock.createJob.mock.calls.map((call) => String(call[1]?.idempotencyKey))
+      expect(keys[0]).toBe('dev:advance_overdue:user-1:2026-10-04T05:00:asOf=2026-10-05')
+      expect(keys[1]).toBe(keys[0])
+      expect((await envelopeOf(second)).data).toMatchObject({ duplicate: true })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('การเงิน (ไม่มี manage:manage_jobs) ส่ง asOf = 403 เหมือนเดิม ไม่สร้าง job', async () => {
+    requireSessionMock.mockResolvedValue(FINANCE_USER)
+    const response = await devTriggerRoute(
+      request('http://localhost/api/dev/trigger-job', 'POST', { jobType: 'advance_overdue', payload: { asOf: bangkokDayOffset(1) } }),
+      undefined,
+    )
+    expect(response.status).toBe(403)
     expect(queriesMock.createJob).not.toHaveBeenCalled()
   })
 

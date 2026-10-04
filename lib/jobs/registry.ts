@@ -6,7 +6,7 @@ import { createExportPack } from '@/lib/exports/queries'
 import { runDailyFieldAllowanceJob } from '@/lib/field/daily-allowance-job'
 import { runFuelDistanceRetryJob } from '@/lib/field/fuel-distance-job'
 import type { JobRow } from '@/lib/jobs/engine'
-import { DEV_TRIGGER_PAYLOAD_FLAG, type JobTypeCode } from '@/lib/jobs/job-types'
+import { DEV_TRIGGER_PAYLOAD_FLAG, simulatedAsOfInstant, type JobTypeCode } from '@/lib/jobs/job-types'
 import { generatePaymentFile } from '@/lib/payout/queries'
 import { prisma } from '@/lib/prisma'
 import { runReportExportJob } from '@/lib/reports/export-job'
@@ -95,6 +95,19 @@ export function devSettleDateOf(job: Pick<JobRow, 'payload'>): { date?: string }
   return typeof date === 'string' ? { date } : {}
 }
 
+/**
+ * "วันที่จำลอง" ของ `advance_overdue` — **รับเฉพาะงานที่มาจาก dev trigger นอก production**
+ * (มติผู้ใช้ 04/10/2569 · UAT R7–R10) · route ตรวจช่วงวัน (วันนี้ ถึง +31 วัน) ก่อนสร้างงานแล้ว
+ * ที่นี่ตรวจซ้ำแค่รูปแบบ · cron/`POST /api/jobs` ใส่ `asOf` มาก็ไม่มีผล ⇒ งานจริงใช้เวลาจริงเสมอ
+ */
+export function devSimulatedNowOf(job: Pick<JobRow, 'payload'>): Date | null {
+  if (process.env.NODE_ENV === 'production') return null
+  const payload = payloadOf(job as JobRow)
+  if (payload[DEV_TRIGGER_PAYLOAD_FLAG] !== true) return null
+  const asOf = payload['asOf']
+  return typeof asOf === 'string' ? simulatedAsOfInstant(asOf) : null
+}
+
 /** งานเบื้องหลังไม่มี request จริง ⇒ ไม่มี IP/User-Agent (audit ยังครบ 9 fields — ค่าเป็น NULL) */
 const JOB_REQUEST_META = { ipAddress: null, userAgent: null }
 
@@ -109,8 +122,10 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
   },
 
   advance_overdue: async ({ job, now }) => {
+    const simulatedNow = devSimulatedNowOf(job)
     const result = await runAdvanceOverdueJob({
-      now,
+      now: simulatedNow ?? now,
+      simulated: simulatedNow !== null,
       jobId: job.id,
       ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
     })
