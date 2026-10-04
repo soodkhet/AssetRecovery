@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R10 v3 สิทธิ์/ขอบเขต + ฟีเจอร์ใหม่** — 04/10/2569 · R10a–f ✅ 33 · R10g ✅ 5 · matrix 1,213/1,213 ตรง · ไม่พบสิทธิ์รั่ว · บั๊กใหม่ BUG-139 (S2 500 ไม่บันทึก) / 140 / 141 / 142 · เคสใหม่ UAT-CO1-901 (approved เอกสารชุด) / 902 (ร่าง) · รายงาน `uat/report/R10-permissions-v3.md` · ภาพ 29 · **UAT เล่นครบ R0–R10 แล้ว** |
 | snapshot ล่าสุด | `uat/snapshots/R10-end-v3.dump` (ปลาย UAT) · `R9-end-v3` · `R8-end-v3` · `R7-end-v3` · `R7c-partial-v3` · `R7b-end-v3` · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **UAT จบครบ R0–R10 + รวมเล่มแล้ว** (`uat/report/final/`) · รอผู้ใช้: รีวิว `uat/report/final/OPEN-ITEMS.md` · ค้างตรวจตามวันที่: F5 ≥ 05/10/2569 (คาด ADV3 1 แถว 200000) · O4 ≥ 06/10/2569 14:02 (คาด 2 แถว 849000) · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ — ผู้ใช้เป็นคนกด) |
+| รอบปัจจุบัน | **UAT จบครบ R0–R10 + รวมเล่มแล้ว** (`uat/report/final/`) · รอผู้ใช้: รีวิว `uat/report/final/OPEN-ITEMS.md` · F5 ✅ ตรวจแล้ว 05/10 · ค้างตรวจ O4 ≥ 06/10/2569 14:02 (คาด 2 แถว 849000) · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ — ผู้ใช้เป็นคนกด) |
 | บั๊กเปิด | ดู BUGS.md (142 รายการ: fixed 114 · open 12 · needs-decision 11 · ปิดแบบยอมรับ 5) · ไม่มี S1 เปิด |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -53,7 +53,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 1. **fixer T — ค่าตั้งภาษี** (U3/U4/U5/U7/U8): ฐาน WHT เลือกชนิดรายการได้ · การออก 50 ทวิ ต่อผู้รับต่อรอบ/ต่อรายการ · ประเภทเงินได้ 40(8) ทั้งหมด / 40(2) ทั้งหมด / แยกตามประเภททีม · 40(2) ใช้อัตราต่อคนใน Tax Profile + ภ.ง.ด.1 · Superadmin/บริหารแก้ได้ + เหตุผล + audit + effective-dated + snapshot ในรอบจ่าย · ค่าเริ่มต้น = มติ (ฐานไม่รวมค่าใช้จ่ายตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบ · 40(8))
 2. **fixer U — cache รายงานใน Postgres (U9) + แก้เอกสาร "✅ only" = 9 (U10: CLAUDE.md + `.claude/rules/03` + `docs/94`)**
 3. **Client Portal (U6)** — Plan agent แตกงานจาก `docs/97` เป็นก้อน (API GET-only → สิทธิ์ 3 ระดับผู้ใช้บริษัท → หน้าจอ) แล้ว fixer ทีละก้อน commit ทีละก้อน
-4. **ตรวจรายงาน F5 (05/10)** คาด ADV3 1 แถว 200000 · O4 ตรวจได้ 06/10/2569 14:02 (คาด 2 แถว 849000)
+4. ✅ **F5 ตรวจแล้ว 05/10/2569 01:23** (ADV3 1 แถว 200000 เลยกำหนด 1 วัน · ตรงคาด) · O4 ตรวจได้ 06/10/2569 14:02 (คาด 2 แถว 849000)
 5. ทุก merge: verify `pnpm typecheck && pnpm lint && pnpm test` + migration → `db:generate`/`db:deploy`/`db:deploy:test`/`db:seed` + restart dev · ห้าม push
 
 ## HANDOFF ก่อนหน้า (04/10/2569 ~02:35 — หลัง R6b · เก็บไว้อ้างอิงเช็คลิสต์ §2 ก่อน push)
