@@ -964,6 +964,42 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
       expect(row.receiptFileUrl).toBe(receiptPath('b.png'))
       expect(row.receiptFileHash).toBe(uploads.sha256Of(second))
     })
+
+    it('UAT BUG-098 — ส่งใหม่: หมายเหตุตอนเบิกคงเดิม · ข้อความชี้แจงเก็บแยก · audit เก็บ before/after ของทั้งสอง', async () => {
+      uploads.putFakeUpload(receiptPath('n.jpg'), uploads.sampleBytes('jpeg', 'note'))
+      const claim = await expenses.submitHotelClaim(
+        agentA,
+        { ...hotelInput(receiptPath('n.jpg')), note: 'ที่พักคืนวันที่ 10 โรงแรมสุขใจ' },
+        { actor: agentA, meta },
+      )
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+
+      const first = await expenses.resubmitFieldExpense(agentA, claim.id, { note: 'แนบใบเสร็จฉบับเต็มแล้ว' }, { actor: agentA, meta })
+      expect(first.note).toBe('ที่พักคืนวันที่ 10 โรงแรมสุขใจ')
+      expect(first.resubmitNote).toBe('แนบใบเสร็จฉบับเต็มแล้ว')
+
+      // ตีกลับซ้ำแล้วส่งรอบสอง — ข้อความชี้แจงรอบแรกยังไล่ได้จาก audit
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+      await expenses.resubmitFieldExpense(agentA, claim.id, { note: 'แก้ยอดตามใบเสร็จ' }, { actor: agentA, meta })
+      const row = await db().expense.findFirstOrThrow({ where: { id: claim.id } })
+      expect(row.revisionNote).toBe('ที่พักคืนวันที่ 10 โรงแรมสุขใจ')
+      expect(row.resubmitNote).toBe('แก้ยอดตามใบเสร็จ')
+
+      const audits = await db().auditLog.findMany({
+        where: { targetType: 'expenses', targetId: claim.id, action: 'status_change' },
+        orderBy: { createdAt: 'asc' },
+      })
+      expect(audits.map((audit) => [audit.beforeData, audit.afterData])).toMatchObject([
+        [
+          { note: 'ที่พักคืนวันที่ 10 โรงแรมสุขใจ', resubmitNote: null },
+          { note: 'ที่พักคืนวันที่ 10 โรงแรมสุขใจ', resubmitNote: 'แนบใบเสร็จฉบับเต็มแล้ว' },
+        ],
+        [
+          { note: 'ที่พักคืนวันที่ 10 โรงแรมสุขใจ', resubmitNote: 'แนบใบเสร็จฉบับเต็มแล้ว' },
+          { note: 'ที่พักคืนวันที่ 10 โรงแรมสุขใจ', resubmitNote: 'แก้ยอดตามใบเสร็จ' },
+        ],
+      ])
+    })
   })
 
   it('สรุปรายได้: สำเร็จได้คอมมิชชั่น · ไม่สำเร็จได้เบี้ยเสี่ยง (อ่านจากรายการเบิกจริง — UAT Q2/BUG-054)', async () => {

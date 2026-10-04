@@ -167,6 +167,10 @@ function NeedsRevisionBlock({
                 {item.caseRef ?? fmtDate(item.expenseDate)}
                 {item.rejectReason === null ? '' : ` · เหตุผล: ${item.rejectReason}`}
               </div>
+              {item.note !== null && <div className="mt-0.5 truncate text-xs text-slate-500">หมายเหตุ: {item.note}</div>}
+              {item.resubmitNote !== null && (
+                <div className="mt-0.5 truncate text-xs text-slate-500">ชี้แจงครั้งก่อน: {item.resubmitNote}</div>
+              )}
             </div>
             <Button onClick={() => onFix(item)}>แก้ไขและส่งใหม่</Button>
           </div>
@@ -309,6 +313,9 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                           วันที่ {fmtDate(item.expenseDate)}
                           {item.sharedWithName === null ? '' : ` · พักร่วมกับ ${item.sharedWithName}`}
                         </div>
+                        {item.resubmitNote !== null && (
+                          <div className="truncate text-xs text-slate-500">ชี้แจงตอนส่งใหม่: {item.resubmitNote}</div>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="text-base font-bold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</div>
