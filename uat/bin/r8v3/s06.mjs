@@ -1,0 +1,38 @@
+// R8.06 ผู้บริหารล็อกงวด ต.ค. 2569
+import { openAs, shot, R, ID, T0, log, q, q1, settle, sleep, waitToast, mainText, dlgText, BASE, api, guard2xx, fp, auditSince } from './_h.mjs'
+log('=== R8.06', new Date().toISOString())
+const P = `/api/accounting/periods/${ID.PERIOD}`
+const s = await openAs('uat.exec'); const p = s.page
+await p.goto(`${BASE}/accounting?tab=closing`); await settle(p); await sleep(1200)
+let r = await api(p, 'PATCH', `${P}/lock`, { reason: '' }); log('06 lock reason ว่าง', r); guard2xx('lock-empty', r)
+r = await api(p, 'PATCH', `${P}/lock`, { reason: '   ' }); log('06 lock reason ช่องว่าง', r); guard2xx('lock-space', r)
+r = await api(p, 'PATCH', `${P}/lock`, {}); log('06 lock ไม่มี reason', r); guard2xx('lock-none', r)
+await p.locator('main').getByRole('button', { name: 'ล็อกงวด' }).first().click(); await sleep(900)
+const d = p.locator('[role="dialog"]').last()
+log('06 dlg', await dlgText(p, 1500))
+const btnNames = (await d.locator('button').allInnerTexts()).map(x => x.trim()); log('06 dlg buttons', btnNames.join(' / '))
+const cb = d.getByRole('button', { name: /ยืนยัน/ }).last()
+log('06 confirm disabled (ว่าง)', await cb.isDisabled())
+await shot(p, R, '06a-lock-modal-empty')
+await d.locator('textarea').fill('   '); log('06 confirm disabled (ช่องว่าง)', await cb.isDisabled())
+await d.locator('textarea').fill('ปิดงวด ต.ค. 2569 — สำนักงานบัญชีรับชุดเอกสาร v2 แล้ว UAT R8')
+await shot(p, R, '06b-lock-modal-filled')
+const resps = []
+p.on('response', x => { if (x.url().includes(`/periods/${ID.PERIOD}/lock`)) resps.push(x) })
+await cb.dblclick(); await sleep(3000)
+for (const x of resps) { let b = ''; try { b = JSON.stringify(await x.json()).slice(0, 400) } catch {} log('06 ui lock resp', x.status(), b) }
+log('06 toast', await waitToast(p)); await sleep(1500); await settle(p)
+log('06 closing after', await mainText(p, 1600))
+log('06 buttons after', (await p.locator('main button').allInnerTexts()).map(x => x.trim()).join(' / '))
+await shot(p, R, '06c-closing-locked', { fullPage: true })
+r = await api(p, 'PATCH', `${P}/lock`, { reason: 'ล็อกซ้ำ probe' }); log('06 lock ซ้ำ', r); guard2xx('lock-again', r)
+log('06 sql period', q(`select status, locked_at, locked_by=(select id from users where username='uat.exec') by_exec, sent_at is not null sent, sent_by=(select id from users where username='uat.account') sent_by_acc from accounting_periods where id='${ID.PERIOD}'`))
+log('06 audit periods', q(`select action, actor_role, reason, before_data->>'status' b, after_data->>'status' a from audit_logs where target_type='accounting_periods' and created_at > '${T0}' order by created_at`))
+log('FP1', fp())
+const acc = await openAs('uat.account')
+await acc.page.goto(`${BASE}/accounting?tab=closing`); await settle(acc.page); await sleep(1000)
+log('06 account buttons after', (await acc.page.locator('main button').allInnerTexts()).map(x => x.trim()).join(' / '))
+log('06 account row', await mainText(acc.page, 1100))
+await shot(acc.page, R, '06d-account-closing-locked', { fullPage: true })
+log('errs', s.serverErrors, s.consoleErrors.slice(0, 4), acc.serverErrors)
+await Promise.all([s.browser.close(), acc.browser.close()])

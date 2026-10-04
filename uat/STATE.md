@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R7 v3 ครบ (R7a/R7b/R7c)** — 04/10/2569 · R7c ส่วนที่ 2 12:41–12:48 · golden R7.36 ตรง 15/15 · Export Pack v1.0 (generated) + v1.1 (sent) key ASCII · งวด ต.ค. `sent_to_accountant` · ข้อซักถาม 1 (ตอบแล้ว) · บั๊กใหม่ BUG-121…123 · ยืนยัน BUG-116/117/120 แก้แล้ว · รายงาน `uat/report/R7c-accounting-v3.md` |
-| snapshot ล่าสุด | `uat/snapshots/R7-end-v3.dump` (ปลาย R7 = ต้น R8) · `R7c-partial-v3` · `R7b-end-v3` · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R8 v3** (ปิดงวด/lock/Adjustment ตาม `uat/steps/R8.md` v1) → R9 → R10 → รวมเล่ม · ผู้ใช้ออกไปข้างนอก (04/10 ~12:50): ให้ทำต่อจนจบ เก็บคำถามไว้ถามทีเดียว |
+| รอบล่าสุดที่จบ | **R8 v3 ปิดงวด/Adjustment** — 04/10/2569 12:52–13:11 · 33 ✅ / 🐞 8 (BUG-124…131 ไม่บล็อก) · งวด ต.ค. **locked** (lock 12:54 exec → unlock 13:10 exec → relock 13:10 account) · probe หลัง lock 13 จุดปัดครบ · A1 C1 −10000 approved (exec) · A2 OUT-2 +5000 rejected · golden หลัง Adjustment ตรงทุกตัว (รวม 1063000/890000/173000/16.27%) · Export v3 มี 07_Adjustment_Log · exceptions 2 (resolved 1 + authorized 1) · รายงาน `uat/report/R8-period-v3.md` · ภาพ 58 |
+| snapshot ล่าสุด | `uat/snapshots/R8-end-v3.dump` (ปลาย R8 = ต้น R9) · `R7-end-v3` · `R7c-partial-v3` · `R7b-end-v3` · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R9 v3** (รายงาน 17 ตัว ตาม `uat/steps/R9.md` v1) → R10 → รวมเล่ม · ผู้ใช้ออกไปข้างนอก (04/10 ~12:50): ให้ทำต่อจนจบ เก็บคำถามไว้ถามทีเดียว |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~13:15 R8 จบ (ตารางบน) · snapshot `R8-end-v3` · Storage `accounting-packs` +1 (v3 ใช้งานจริง)
 - 04/10/2569 ~12:50 R7c ส่วนที่ 2 จบ → R7 ครบ · snapshot `R7-end-v3` · มติ O41/O42 · Storage `accounting-packs` +2 โฟลเดอร์ (v1/v2 ใช้งานจริง) · ⚠️ เวลาที่ orchestrator เขียนใน log ก่อนหน้า (~14:00/14:10) คลาดจากเวลาจริง — เวลาจริงประมาณ 12:xx
 - 04/10/2569 ~14:00 R7c หยุดที่ R7.32 (BUG-116 Export Pack 500) → merge fixer M `ee165e5` (เอกสารชุด) · N `1c68bd5` (แม่แบบนำเข้าไทย) · Q `00c5734` (แม่แบบ .xlsx + DEC-013) · P `eb852fa` (ติ๊กรูปสินค้า/จำโหมด/ลบเอกสาร · migration `20261004140000_case_document_mode`) · O `7f11527` (BUG-111…120) · verify 269 files / 3,431 tests · step sheet R8 `bc4da82` / R9 `a4ddf8c` / R10 `613464e` · migration ใหม่จาก UAT รวม **9 ตัว** (ถึง `20261004140000`)
 - 04/10/2569 ~12:00 R7a+R7b จบ (ตารางบน) · มติผู้ใช้ O10 เล่นต่อไม่รอเที่ยงคืน → fixer K `ebd11e9` (dev trigger asOf) · step sheet R7 v1 `9841db2` · คำขอผู้ใช้ระหว่างรอบ: (1) กรอบโฟกัสแท็บ/เมนูย่อย → fixer L (2) เอกสารแนบรับเคสแบบชุดเดียว 25 MB → fixer M (3) แม่แบบนำเข้าภาษาไทยทุกจุด → fixer N
@@ -71,7 +72,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-123) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-131) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้

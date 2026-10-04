@@ -129,6 +129,14 @@
 | BUG-121 | R7c-v3 R7.33 | S5 | code | `PERIOD_LOCKED_DIRECT_EDIT` ตอนงวดเป็น `sent_to_accountant` ขึ้นข้อความ "รอบบัญชีถูกล็อกแล้ว / ปิดแล้ว" ทั้งที่ยังไม่ล็อก → ควรแยกข้อความตามสถานะงวด | open |
 | BUG-122 | R7c-v3 R7.33 | S5 | code | ส่งงวดทาง API โดยไม่ใส่ `reason` → ข้อความ field เป็น Zod อังกฤษดิบ | open |
 | BUG-123 | R7c-v3 R7.32 | S5 | spec-gap | Export Pack ไม่มีไฟล์ใบกำกับภาษี/ยอดรวม VAT (step sheet คาด 1148110 แต่ `37` กำหนด 8 ไฟล์) · ไฟล์เงินรับไม่มีคอลัมน์ภาษีที่ลูกค้าหัก (111.90) · checklist (08) แถว exception resolved แสดง "-" · หน้าจอ mark-sent ไม่มีช่องหมายเหตุ (audit reason ว่าง) | needs-decision · ข้อเสนอ orchestrator: เพิ่มไฟล์ใบกำกับภาษี + คอลัมน์ภาษีถูกหักในเงินรับ (สำนักงานบัญชีต้องใช้ยื่น ภ.พ.30 และเครดิตภาษี) |
+| BUG-124 | R8-v3 R8.18 | S4 | code | ฟอร์ม Adjustment: ป้ายรายการต้นทางแสดงวันที่ ISO ค.ศ. (`DISPLAY_CE_YEAR`) · รอบจ่ายแสดงวันตาม UTC (OUT-2 ขึ้น 03/10 ทั้งที่สร้าง 04/10 ไทย) · enum ดิบ "outsource" | open |
+| BUG-125 | R8-v3 | S5 | code | รหัส error โผล่บนจอ `(REASON_REQUIRED)` และ `INSUFFICIENT_APPROVAL_LEVEL` ใน modal Adjustment | open |
+| BUG-126 | R8-v3 R8.30 | S4 | code | toast หลังการเงินอนุมัติ Adjustment บางส่วนบอก "ยังรอ: การเงิน, บริหาร" (ใช้ค่าก่อนอนุมัติ — `components/finance/adjustment-review-modal.tsx:70`) | open |
+| BUG-127 | R8-v3 | S4 | code | หน้า Audit Log แสดงการอนุมัติ Adjustment ในงวดล็อกเป็น "ปลดล็อกงวด" | open |
+| BUG-128 | R8-v3 R8.21 | S4 | code | อนุมัติ Adjustment แล้ว cache รายงานไม่ล้าง — ยังเห็น 373000 จนกด refresh | open |
+| BUG-129 | R8-v3 R8.24 | S4 | spec-gap | `08_Document_Checklist.xlsx` นับ exception ที่ authorized เป็น "ครบถ้วน" และตัดหัวข้อทิ้ง → สำนักงานบัญชีไม่รู้ว่ายังขาดต้นฉบับ 50 ทวิ จากลูกค้า | needs-decision · ข้อเสนอ orchestrator: แสดงเป็น "อนุญาตให้ปิดงวด — ยังรอเอกสาร" พร้อมหัวข้อ |
+| BUG-130 | R8-v3 | S5 | code | การเงินเห็นปุ่มอนุมัติ/ปฏิเสธ Adjustment ในงวดล็อก แล้วได้ 403 (ควรซ่อน/disable ตามสิทธิ์) | open |
+| BUG-131 | R8-v3 | S5 | code | ตัวกรองหน้า Audit Log มีชื่อตารางดิบ (`cash_receipts`, `jobs` ฯลฯ) | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -137,6 +145,7 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R8 v3: probe หลัง lock 13 จุด → `PERIOD_LOCKED_DIRECT_EDIT` ทุกจุด ไม่มี mutation · golden หลัง Adjustment ตรงทุกตัว · R8-N8 หักล้าง (ป้าย "วางบิล" ไม่มีเลขสเปคแล้ว) · R8-N4 ยืนยัน: ไม่มีแจ้งเตือนผู้อนุมัติ Adjustment (= BUG-106) · step sheet คาด expense ≥ 19 แต่จริง 17 (ชีตคลาด)
 - R7c v3 ส่วนที่ 2: ยืนยัน BUG-116/117/120 แก้แล้ว · PDF ที่ออกก่อนแก้ BUG-120 (INV-0001/0002, WHT-2569-001…016 รุ่นก่อน) ข้อความยังขาด — ดาวน์โหลดใหม่ได้ข้อความครบ
 - R7ab v3: เช็คซ้ำ BUG-095/096/099/104/107/108 ✅ (105/110 ข้ามตามมติ O13) · W1 ปิดได้ (ภ.ง.ด.3 ไม่นับแถวเงินทดรอง) · F5 วันนี้ 0 แถว = ข้อจำกัดที่รู้ (O15)
 - R7 spec-gap (มติ A8/A9): ใบเงินรับไม่มีช่องอ้างเลข 50 ทวิ ที่ลูกค้าออกให้ · ไม่มีสถานะ "เงินรับรอตรวจสอบ" (ปิดรายการเป็นสถานะสุดท้าย — รู้ผู้โอนภายหลังจับคู่ไม่ได้)
