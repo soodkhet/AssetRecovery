@@ -149,14 +149,14 @@ describe('สิทธิ์ของโมดูล WHT (DEC-002 · `33` §12 �
 describe('ยกเลิกหนังสือรับรอง (`33` §14)', () => {
   beforeEach(() => requireSessionMock.mockResolvedValue(ACCOUNTANT))
 
-  it('ไม่ระบุเหตุผล ⇒ 400 REQUIRED_MISSING และไม่แตะ DB', async () => {
+  it('ไม่ระบุเหตุผล ⇒ 400 WHT_CANCEL_REQUIRES_REASON และไม่แตะ DB (UAT R7cv3-B03)', async () => {
     const response = await cancelCertificate(
       jsonRequest(`http://localhost/api/accounting/wht-certificates/${CERT_ID}/cancel`, 'PATCH', { reason: '  ' }),
       params(CERT_ID),
     )
 
     expect(response.status).toBe(400)
-    expect((await envelopeOf(response)).error?.code).toBe('REQUIRED_MISSING')
+    expect((await envelopeOf(response)).error?.code).toBe('WHT_CANCEL_REQUIRES_REASON')
     expect(whtQueriesMock.cancelWhtCertificate).not.toHaveBeenCalled()
   })
 
