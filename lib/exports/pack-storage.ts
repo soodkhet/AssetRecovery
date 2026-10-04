@@ -60,6 +60,23 @@ export async function uploadPackFile(input: {
   }
 }
 
+/**
+ * ลบไฟล์ของ "ครั้งที่พยายาม" ที่ล้มกลางทาง — **best-effort** ใช้เก็บกวาดเฉพาะ path ที่เพิ่งอัปโหลด
+ * ใน attempt เดียวกัน (ยังไม่มีแถว `export_records` อ้าง) ไม่ใช่การลบชุดที่ส่งมอบแล้ว (Rule 09)
+ *
+ * คืนรายชื่อ path ที่ลบไม่สำเร็จ — ผู้เรียก log ไว้ให้คนตามเก็บ ห้ามโยน error ทับสาเหตุจริง
+ */
+export async function removePackFiles(paths: readonly string[]): Promise<string[]> {
+  if (paths.length === 0) return []
+  try {
+    const supabase = createSupabaseAdminClient()
+    const { error } = await supabase.storage.from(ACCOUNTING_PACK_BUCKET).remove([...paths])
+    return error === null ? [] : [...paths]
+  } catch {
+    return [...paths]
+  }
+}
+
 export async function downloadPackFile(path: string): Promise<Uint8Array> {
   const supabase = createSupabaseAdminClient()
   const { data, error } = await supabase.storage.from(ACCOUNTING_PACK_BUCKET).download(path)

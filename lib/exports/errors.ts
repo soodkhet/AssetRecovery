@@ -19,6 +19,7 @@ export const EXPORT_ERROR_CODES = [
   'EXPORT_INVALID_STATUS',
   'EXPORT_PAYEE_TAX_ID_MISSING',
   'EXPORT_VERSION_CONFLICT',
+  'EXPORT_STORAGE_FAILED',
 ] as const
 
 export type ExportErrorCode = (typeof EXPORT_ERROR_CODES)[number]
@@ -28,6 +29,7 @@ const HTTP_STATUS: Record<ExportErrorCode, number> = {
   EXPORT_INVALID_STATUS: 400,
   EXPORT_PAYEE_TAX_ID_MISSING: 400,
   EXPORT_VERSION_CONFLICT: 409,
+  EXPORT_STORAGE_FAILED: 502,
 }
 
 const MESSAGES: Record<ExportErrorCode, ErrorMessage> = {
@@ -47,6 +49,11 @@ const MESSAGES: Record<ExportErrorCode, ErrorMessage> = {
   EXPORT_VERSION_CONFLICT: {
     title: 'มีคนสร้างชุดส่งข้อมูลของรอบนี้พร้อมกัน',
     message: 'มีผู้ใช้อื่นเพิ่งสร้างชุดส่งข้อมูลของงวดนี้ไปแล้ว — กดสร้างใหม่อีกครั้งเพื่อให้ได้เวอร์ชันถัดไป',
+  },
+  EXPORT_STORAGE_FAILED: {
+    title: 'บันทึกไฟล์ชุดส่งบัญชีไม่สำเร็จ',
+    message:
+      'ระบบจัดเก็บไฟล์ไม่รับไฟล์ชุดนี้ จึงยังไม่ได้สร้างเวอร์ชันใหม่ — กรุณาลองใหม่อีกครั้ง หากยังไม่ได้ให้แจ้งผู้ดูแลระบบ',
   },
 }
 

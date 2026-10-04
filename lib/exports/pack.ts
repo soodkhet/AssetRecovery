@@ -113,9 +113,28 @@ export const PACK_COVER_FILE_NAME = '00_Cover_Sheet.pdf'
 /** คีย์ของไฟล์ `.zip` ทั้งชุดใน `file_urls` */
 export const PACK_ZIP_KEY = 'pack'
 
-export function packZipFileName(periodLabel: string, version: number): string {
-  const slug = periodLabel.replace(/\s+/g, '_')
+/**
+ * ชื่อ object ของไฟล์ `.zip` ใน bucket — **ASCII ล้วน** (`AccountingPack_2569-10_v1.0.zip`)
+ *
+ * Supabase Storage ปฏิเสธ key ที่มีอักษรนอกชุด `[A-Za-z0-9!-_.*'()/]` ("Invalid key") ⇒ ห้ามเอา
+ * ชื่อรอบภาษาไทย ("ตุลาคม 2569") มาประกอบ key (UAT R7cv3-B01) · ชื่อไทยใช้แค่ตอนดาวน์โหลด
+ * ผ่าน `packZipDownloadName()` + `Content-Disposition: filename*=UTF-8''…`
+ */
+export function packZipFileName(yearBe: number, month: number, version: number): string {
+  return `AccountingPack_${yearBe}-${String(month).padStart(2, '0')}_${exportVersionLabel(version)}.zip`
+}
+
+/** ชื่อไฟล์ที่ผู้ใช้เห็น/ได้ตอนดาวน์โหลด — ภาษาไทยได้ (ไม่ใช่ key ใน Storage) */
+export function packZipDownloadName(periodLabel: string, version: number): string {
+  const slug = periodLabel.trim().replace(/\s+/g, '_')
   return `AccountingPack_${slug}_${exportVersionLabel(version)}.zip`
+}
+
+/** อักขระที่ Supabase Storage ยอมให้อยู่ใน object key */
+const STORAGE_KEY_PATTERN = /^[A-Za-z0-9!\-_.*'()/]+$/
+
+export function isSafeStorageKey(key: string): boolean {
+  return key.length > 0 && STORAGE_KEY_PATTERN.test(key)
 }
 
 /**
@@ -146,7 +165,10 @@ export function packStoragePath(input: {
   fileName: string
 }): string {
   const month = String(input.month).padStart(2, '0')
-  return `${input.organizationId}/${input.yearBe}-${month}/v${input.version}/${input.attempt}/${input.fileName}`
+  const path = `${input.organizationId}/${input.yearBe}-${month}/v${input.version}/${input.attempt}/${input.fileName}`
+  // กันพลาดตั้งแต่ต้นทาง — key ที่ Storage ไม่รับจะล้มกลางการอัปโหลดแล้วทิ้งไฟล์ชุดเดียวกันค้าง
+  if (!isSafeStorageKey(path)) throw new RangeError(`path ในที่เก็บไฟล์มีอักขระที่ไม่รองรับ: ${path}`)
+  return path
 }
 
 // ── 01_Revenue.csv (ไฟล์ 19) ────────────────────────────────────────────────

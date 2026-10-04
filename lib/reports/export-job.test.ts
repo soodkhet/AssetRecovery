@@ -91,14 +91,15 @@ describe('report_export — path ต้องคงที่ตลอดทุ�
     expect(first.fileName).toBe(second.fileName)
     // ชื่อไฟล์ยึดเวลา "ที่สั่งงาน" (10:00 ตามเวลาไทยของ 03:00Z) + ปี พ.ศ.
     expect(first.fileName).toBe('F1_กำไรขั้นต้น_16-08-2569_10-00.xlsx')
-    expect(first.storagePath).toBe(`${ORG_ID}/${JOB_ID}/${first.fileName}`)
+    // key ใน Storage ต้องเป็น ASCII ล้วน (Supabase ปฏิเสธอักษรไทย) — ชื่อไทยอยู่ใน fileName สำหรับดาวน์โหลด
+    expect(first.storagePath).toBe(`${ORG_ID}/${JOB_ID}/F1_16-08-2569_10-00.xlsx`)
   })
 
   it('ไฟล์ของ attempt ก่อนอยู่ครบแล้ว (409) ⇒ งานสำเร็จ ไม่ใช่ล้มจนตกเป็น dead letter', async () => {
     uploadMock.mockResolvedValue(false)
 
     const result = await run(new Date('2026-08-16T03:07:45Z'))
-    expect(result.storagePath).toBe(`${ORG_ID}/${JOB_ID}/${result.fileName}`)
+    expect(result.storagePath).toBe(`${ORG_ID}/${JOB_ID}/F1_16-08-2569_10-00.xlsx`)
     expect(result.rowCount).toBe(1)
   })
 

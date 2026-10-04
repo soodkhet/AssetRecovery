@@ -67,13 +67,28 @@ export async function buildReportExportFile(options: {
   return { fileName, contentType, bytes: new Uint8Array(pdf) }
 }
 
+/**
+ * ชื่อ object ใน Storage — **ASCII ล้วน** · Supabase Storage ปฏิเสธ key ที่มีอักษรไทย ("Invalid key")
+ * ⇒ ตัดชื่อรายงานภาษาไทยทิ้งจาก key (`F1_กำไรขั้นต้น_16-08-2569_10-00.xlsx` → `F1_16-08-2569_10-00.xlsx`)
+ * ชื่อไทยเต็มยังอยู่ใน `fileName` ของผลงาน ใช้ตอนดาวน์โหลด (UAT R7cv3-B01 — ตรวจทั้งระบบ)
+ */
+export function reportExportStorageFileName(fileName: string): string {
+  const ascii = fileName
+    .normalize('NFC')
+    .replace(/[^A-Za-z0-9._-]+/g, '')
+    .replace(/_{2,}/g, '_')
+    .replace(/-{2,}/g, '-')
+    .replace(/^[-_.]+/, '')
+  return ascii.startsWith('.') || ascii === '' ? `report${ascii}` : ascii
+}
+
 /** path ของไฟล์ในถัง — ขึ้นต้นด้วย `organization_id` เสมอ (multi-tenant) + job id กันชนกัน */
 export function reportExportStoragePath(input: {
   organizationId: string
   jobId: string
   fileName: string
 }): string {
-  return `${input.organizationId}/${input.jobId}/${input.fileName}`
+  return `${input.organizationId}/${input.jobId}/${reportExportStorageFileName(input.fileName)}`
 }
 
 /**
