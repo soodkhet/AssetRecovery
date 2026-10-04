@@ -3,9 +3,13 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isCompanySideViewer } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import {
+  assertCaseDocumentDeletable,
   assertCaseEditable,
   assertIdentityFormats,
   assertDocumentModeCompatible,
+  assertDocumentModeSelectable,
+  documentModeAfterAdding,
+  effectiveDocumentMode,
   assertProductPhotoCapacity,
   countDocuments,
   caseReadiness,
@@ -161,6 +165,8 @@ export const detailSelect = {
   outcome: true,
   closedAt: true,
   updatedAt: true,
+  documentMode: true,
+  productPhotoInContract: true,
   contacts: {
     orderBy: { createdAt: 'asc' },
     select: { id: true, contactName: true, relation: true, phone: true },
@@ -375,6 +381,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
         uploadedBy: document.uploadedBy,
         uploadedByName: document.uploadedByUser.fullName,
       })),
+    documentMode: effectiveDocumentMode(documentCounts(row.documents), row.documentMode),
+    productPhotoInContract: row.productPhotoInContract,
     editHistory: row.editHistory.map((entry) => ({
       id: entry.id,
       note: entry.note,
@@ -414,6 +422,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
         debtAmountSatang: row.debtAmountSatang,
       },
       documentCounts(row.documents),
+      { documentMode: row.documentMode, productPhotoInContract: row.productPhotoInContract },
     ),
     // เติมเฉพาะ `getCase()` ของผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) — เส้นเขียนคืน null
     fieldEvidence: null,
@@ -674,6 +683,9 @@ export async function createCase(
           imei: identifier.imei,
           serialNo: identifier.serialNo,
           debtAmountSatang: input.outstandingDebtSatang ?? null,
+          // จำโหมดเอกสาร + ติ๊กรูปสินค้า (มติ PO 04/10/2569 v3.4) — เคสใหม่ยังไม่มีไฟล์ จึงไม่มีอะไรขัด
+          documentMode: input.documentMode ?? 'separate',
+          productPhotoInContract: input.productPhotoInContract ?? false,
           createdBy: context.actor.id,
           contacts:
             input.contacts && input.contacts.length > 0
@@ -752,6 +764,10 @@ export async function updateCase(
   if (values.caseRef !== undefined || values.financeCompanyId !== undefined) {
     await assertCaseRefAvailable(organizationId, companyId, values.caseRef ?? current.caseRef, caseId)
   }
+  // โหมดเอกสารที่เลือกต้องไม่ขัดกับไฟล์ที่อัปโหลดแล้ว (มติ PO 04/10/2569 v3.4 — ลบไฟล์โหมดเดิมก่อนจึงสลับได้)
+  if (values.documentMode !== undefined) {
+    assertDocumentModeSelectable(countDocuments(current.documents), values.documentMode)
+  }
 
   const identifier =
     values.assetImeiSerial === undefined ? undefined : splitAssetIdentifier(values.assetImeiSerial)
@@ -772,6 +788,8 @@ export async function updateCase(
     assetBrandModel: current.assetDescription,
     assetImeiSerial: joinAssetIdentifier(current.imei, current.serialNo),
     outstandingDebtSatang: current.debtAmountSatang,
+    documentMode: current.documentMode,
+    productPhotoInContract: current.productPhotoInContract,
     addressCurrent: address(
       current.addrDetail,
       current.addrPostalCode,
@@ -827,6 +845,10 @@ export async function updateCase(
           ...(values.outstandingDebtSatang === undefined
             ? {}
             : { debtAmountSatang: values.outstandingDebtSatang }),
+          ...(values.documentMode === undefined ? {} : { documentMode: values.documentMode }),
+          ...(values.productPhotoInContract === undefined
+            ? {}
+            : { productPhotoInContract: values.productPhotoInContract }),
           updatedBy: context.actor.id,
         },
         select: detailSelect,
@@ -897,7 +919,12 @@ export async function addCaseDocument(
   const organizationId = context.actor.organizationId
   const current = await prisma.case.findFirst({
     where: { id: caseId, organizationId, deletedAt: null, ...caseScopeWhere(user) },
-    select: { id: true, status: true, documents: { where: { deletedAt: null }, select: { documentType: true } } },
+    select: {
+      id: true,
+      status: true,
+      documentMode: true,
+      documents: { where: { deletedAt: null }, select: { documentType: true } },
+    },
   })
   if (current === null) throw new CaseError('CASE_NOT_FOUND')
   assertCaseEditable(current.status)
@@ -918,7 +945,13 @@ export async function addCaseDocument(
     input.fileHash ?? null,
   )
 
+  // ไฟล์ชนะคอลัมน์ — แนบเอกสารชุด ⇒ โหมดชุด · แนบสัญญา/บัตรแยก ⇒ โหมดแยกประเภท (มติ PO 04/10/2569 v3.4)
+  const nextMode = documentModeAfterAdding(current.documentMode, input.documentType)
+
   return await prisma.$transaction(async (tx) => {
+    if (nextMode !== current.documentMode) {
+      await tx.case.update({ where: { id: caseId }, data: { documentMode: nextMode, updatedBy: context.actor.id } })
+    }
     const document = await tx.caseDocument.create({
       data: {
         organizationId,
@@ -950,8 +983,99 @@ export async function addCaseDocument(
           mimeType: verified.mimeType,
           originalName: input.originalName,
           sizeBytes: verified.sizeBytes,
+          documentMode: nextMode,
+          ...(nextMode === current.documentMode ? {} : { documentModeBefore: current.documentMode }),
         },
         reason: context.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+      },
+      tx as CaseTxClient,
+    )
+
+    const refreshed = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })
+    return toDetailDto(refreshed)
+  })
+}
+
+/**
+ * ลบเอกสารที่แนบผิด (มติ PO 04/10/2569 v3.4) — **soft-delete** (`deleted_at`) เท่านั้น
+ *
+ * - ทำได้เฉพาะเคสสถานะ ร่าง / ขอข้อมูลเพิ่ม (ก่อนส่งตรวจ) — นอกนั้น `CASE_DOCUMENT_DELETE_NOT_ALLOWED`
+ * - **ไม่ลบไฟล์ใน Storage** (เก็บไว้ตรวจย้อน) — แถวยังอยู่พร้อม `file_url`/`file_hash` เดิม
+ * - audit `delete` ของ `case_documents` เก็บ before/after ครบ · โหมดที่บันทึกไว้ไม่เปลี่ยน
+ *   (ลบไฟล์โหมดเดิมหมดแล้ว ผู้ใช้จึงเลือกโหมดใหม่บนฟอร์มได้ — `assertDocumentModeSelectable()`)
+ */
+/** เหตุผลมาตรฐานลง audit เมื่อผู้ใช้ไม่ได้ระบุเหตุผลตอนลบเอกสาร */
+export const CASE_DOCUMENT_DELETE_DEFAULT_REASON = 'ลบเอกสารที่แนบผิดก่อนส่งตรวจ'
+
+export async function deleteCaseDocument(
+  user: SessionUser,
+  caseId: string,
+  documentId: string,
+  context: CaseMutationContext,
+): Promise<CaseDetailDto> {
+  const organizationId = context.actor.organizationId
+  if (!UUID_PATTERN.test(caseId)) throw new CaseError('CASE_NOT_FOUND')
+  if (!UUID_PATTERN.test(documentId)) throw new CaseError('CASE_DOCUMENT_NOT_FOUND')
+
+  return await prisma.$transaction(async (tx) => {
+    // อ่านสถานะในธุรกรรมเดียวกับการลบ + ล็อกแถวเคส กันชนกับการกดส่งตรวจพร้อมกัน
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM cases WHERE id = ${caseId}::uuid AND organization_id = ${organizationId}::uuid FOR UPDATE`
+    const current =
+      locked.length === 0
+        ? null
+        : await tx.case.findFirst({
+            where: { id: caseId, organizationId, deletedAt: null, ...caseScopeWhere(user) },
+            select: { id: true, status: true },
+          })
+    if (current === null) throw new CaseError('CASE_NOT_FOUND')
+    assertCaseDocumentDeletable(current.status)
+
+    const document = await tx.caseDocument.findFirst({
+      where: { id: documentId, caseId, organizationId, deletedAt: null },
+      select: {
+        id: true,
+        documentType: true,
+        fileUrl: true,
+        fileHash: true,
+        originalName: true,
+        mimeType: true,
+        sizeBytes: true,
+        uploadedAt: true,
+        uploadedBy: true,
+      },
+    })
+    if (document === null) throw new CaseError('CASE_DOCUMENT_NOT_FOUND', { context: { documentId } })
+
+    const deletedAt = new Date()
+    await tx.caseDocument.update({ where: { id: document.id }, data: { deletedAt } })
+
+    const before = {
+      caseId,
+      documentType: document.documentType,
+      fileUrl: document.fileUrl,
+      fileHash: document.fileHash,
+      originalName: document.originalName,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      uploadedAt: document.uploadedAt.toISOString(),
+      uploadedBy: document.uploadedBy,
+      deletedAt: null,
+    }
+    await emitAudit(
+      {
+        organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'delete',
+        targetType: 'case_documents',
+        targetId: document.id,
+        before,
+        after: { ...before, deletedAt: deletedAt.toISOString(), caseStatus: current.status, storageFileKept: true },
+        // `delete` ต้องมี reason เสมอ (reason-policy) — ผู้ใช้ไม่กรอก = เหตุผลมาตรฐานของ action นี้
+        reason: context.reason ?? CASE_DOCUMENT_DELETE_DEFAULT_REASON,
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
       },

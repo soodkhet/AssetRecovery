@@ -8,7 +8,6 @@ import {
   DOCUMENT_MODE_LABEL,
   DOCUMENT_MODES,
   DOCUMENT_SLOT_LABEL,
-  documentModeOf,
   PRODUCT_PHOTO_MAX,
   type DocumentMode,
   type DocumentSlot,
@@ -35,6 +34,9 @@ import type { CaseDocumentDto } from '@/lib/cases/types'
  * - โหมด "แยกตามประเภท" (ค่าเริ่มต้น) / "เอกสารชุดเดียว (สแกนรวมเล่ม)" (มติ PO 04/10/2569) — โหมดชุดใช้ช่อง
  *   `bundle_doc` ช่องเดียว (ไฟล์ละ ≤ 25 MB) นับแทนสัญญา/บัตรประชาชน · สลับโหมดเมื่อมีไฟล์ค้าง = ถามก่อนนำออก
  *   (ไฟล์ที่อัปโหลดแล้ว = บล็อก) — ไม่ทิ้งไฟล์เงียบ ๆ
+ * - v3.4 (มติ PO 04/10/2569): โหมดเป็น **controlled** จากฟอร์ม (บันทึกลงเคสตอนกดบันทึก) · ช่องติ๊ก
+ *   "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" (โหมดแยกประเภท) · ไฟล์ที่อัปโหลดแล้วมีปุ่ม "ลบ" เมื่อผู้เรียกส่ง
+ *   `onDeleteDocument` มา (เฉพาะเคสที่ยังไม่ส่งตรวจ) — ลบไฟล์โหมดเดิมหมดแล้วสลับโหมดได้
  */
 
 export interface StagedFile {
@@ -57,16 +59,26 @@ export function CaseAttachmentsFields({
   documents,
   staged,
   onChange,
+  mode,
+  onModeChange,
+  productPhotoInContract,
+  onProductPhotoInContractChange,
+  onDeleteDocument,
 }: {
   /** ไฟล์ที่อัปโหลดไว้แล้ว (โหมดแก้ไข) */
   documents: readonly CaseDocumentDto[]
   staged: readonly StagedFile[]
   onChange: (next: StagedFile[]) => void
+  /** โหมดเอกสารที่เลือก (จำไว้ที่เคส) */
+  mode: DocumentMode
+  onModeChange: (next: DocumentMode) => void
+  productPhotoInContract: boolean
+  onProductPhotoInContractChange: (next: boolean) => void
+  /** ส่งมา = แสดงปุ่ม "ลบ" ต่อไฟล์ที่อัปโหลดแล้ว (ผู้เรียกเปิด ConfirmModal + เรียก API เอง) */
+  onDeleteDocument?: (document: CaseDocumentDto) => void
 }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
-  // โหมดอนุมานจากไฟล์ที่อัปโหลดแล้ว (เคสเดิมทั้งหมด = แยกตามประเภท)
-  const [mode, setMode] = useState<DocumentMode>(() => documentModeOf(countDocuments(documents)))
   const [pendingSwitch, setPendingSwitch] = useState<{ next: DocumentMode; dropCount: number } | null>(null)
   const photoInput = useRef<HTMLInputElement | null>(null)
 
@@ -137,7 +149,7 @@ export function CaseAttachmentsFields({
     )
     if (plan.kind === 'blocked') {
       setNotice(
-        `เคสนี้มีไฟล์ “${plan.slots.map((slot) => DOCUMENT_SLOT_LABEL[slot]).join('”, “')}” ที่อัปโหลดแล้ว — สลับเป็น “${DOCUMENT_MODE_LABEL[next]}” ไม่ได้`,
+        `เคสนี้มีไฟล์ “${plan.slots.map((slot) => DOCUMENT_SLOT_LABEL[slot]).join('”, “')}” ที่อัปโหลดแล้ว — สลับเป็น “${DOCUMENT_MODE_LABEL[next]}” ไม่ได้${onDeleteDocument === undefined ? '' : ' (กด “ลบ” ไฟล์เหล่านั้นให้หมดก่อน)'}`,
       )
       return
     }
@@ -146,7 +158,7 @@ export function CaseAttachmentsFields({
       return
     }
     setNotice(null)
-    setMode(next)
+    onModeChange(next)
   }
 
   function confirmSwitch(): void {
@@ -156,7 +168,7 @@ export function CaseAttachmentsFields({
       if (excluded.includes(item.slot) && item.previewUrl !== null) URL.revokeObjectURL(item.previewUrl)
     }
     onChange(staged.filter((item) => !excluded.includes(item.slot)))
-    setMode(pendingSwitch.next)
+    onModeChange(pendingSwitch.next)
     setPendingSwitch(null)
     setNotice(null)
   }
@@ -166,6 +178,10 @@ export function CaseAttachmentsFields({
     if (target?.previewUrl != null) URL.revokeObjectURL(target.previewUrl)
     onChange(staged.filter((item) => item.key !== key))
     setNotice(null)
+  }
+
+  function uploadedOf(slot: DocumentSlot): readonly CaseDocumentDto[] {
+    return documents.filter((document) => document.documentType === slot)
   }
 
   const photos = staged.filter((item) => item.slot === 'product_photo')
@@ -241,6 +257,32 @@ export function CaseAttachmentsFields({
                   </label>
                 </div>
 
+                {uploadedOf(slot).length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {uploadedOf(slot).map((document) => (
+                      <li
+                        key={document.id}
+                        className="flex items-center justify-between gap-2 rounded border border-emerald-100 bg-emerald-50/50 px-2 py-1 text-xs"
+                      >
+                        <span className="truncate text-slate-700">
+                          {isPdfMime(document.mimeType) ? '📄' : '🖼'} {document.originalName}
+                          <span className="ml-1 text-[10px] text-emerald-700">อัปโหลดแล้ว</span>
+                        </span>
+                        {onDeleteDocument !== undefined && (
+                          <button
+                            type="button"
+                            className="focus-ring rounded px-1.5 font-semibold text-red-600 hover:bg-red-50"
+                            aria-label={`ลบไฟล์ ${document.originalName}`}
+                            onClick={() => onDeleteDocument(document)}
+                          >
+                            ลบ
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 {slotFiles.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {slotFiles.map((item) => (
@@ -284,11 +326,33 @@ export function CaseAttachmentsFields({
             {mode === 'bundle' && (
               <span className="ml-2 text-[11px] font-normal text-slate-500">ไม่บังคับเมื่อแนบเอกสารชุด — เพิ่มได้</span>
             )}
+            {mode === 'separate' && productPhotoInContract && (
+              <span className="ml-2 text-[11px] font-normal text-slate-500">
+                ไม่บังคับ — รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว
+              </span>
+            )}
           </h3>
           <span className="text-[11px] text-slate-500">
             {photoCount}/{PRODUCT_PHOTO_MAX} รูป
           </span>
         </div>
+
+        {mode === 'separate' && (
+          <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-emerald-600"
+              checked={productPhotoInContract}
+              onChange={(event) => onProductPhotoInContractChange(event.target.checked)}
+            />
+            <span>
+              <span className="font-semibold">รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว</span>
+              <span className="block text-[11px] text-slate-500">
+                ติ๊กเมื่อไฟล์สัญญามีรูปสินค้าอยู่แล้ว — ไม่บังคับแนบรูปสินค้าก่อนส่งตรวจ (ยังแนบเพิ่มได้)
+              </span>
+            </span>
+          </label>
+        )}
 
         <div
           className={`focus-ring rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
@@ -338,10 +402,22 @@ export function CaseAttachmentsFields({
             {existingPhotos.map((document) => (
               <div
                 key={document.id}
-                className="flex aspect-square items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-2 text-center text-[10px] text-slate-500"
+                className="relative flex aspect-square items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-2 text-center text-[10px] text-slate-500"
               >
-                อัปโหลดแล้ว ✓<br />
-                <span className="truncate">{document.originalName}</span>
+                <span>
+                  อัปโหลดแล้ว ✓<br />
+                  <span className="truncate">{document.originalName}</span>
+                </span>
+                {onDeleteDocument !== undefined && (
+                  <button
+                    type="button"
+                    className="focus-ring absolute top-1 right-1 rounded bg-white/90 px-1.5 text-[10px] font-semibold text-red-600 shadow"
+                    aria-label={`ลบรูป ${document.originalName}`}
+                    onClick={() => onDeleteDocument(document)}
+                  >
+                    ลบ
+                  </button>
+                )}
               </div>
             ))}
             {photos.map((item) => (

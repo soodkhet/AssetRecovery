@@ -5,7 +5,7 @@ import { AddressFields } from '@/components/address/address-fields'
 import { CaseAttachmentsFields, type StagedFile } from '@/components/cases/case-attachments-fields'
 import { CaseContactsFields } from '@/components/cases/case-contacts-fields'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
 import {
@@ -13,6 +13,8 @@ import {
   DEBTOR_NATIONALITIES,
   DEBTOR_NATIONALITY_LABEL,
   digitsOnly,
+  DOCUMENT_SLOT_LABEL,
+  isCaseDocumentDeletable,
   type DebtorNationalityCode,
 } from '@/lib/cases/case'
 import {
@@ -28,7 +30,7 @@ import {
 import { CaseError } from '@/lib/cases/errors'
 import { caseCreateSchema, caseUpdateSchema } from '@/lib/cases/schemas'
 import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
-import type { CaseDetailDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
+import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
 import { parseBahtInput } from '@/lib/format/money'
 
@@ -62,6 +64,8 @@ export interface CaseFormModalProps {
   onSaved: (saved: CaseDetailDto) => void
   /** เปิดดูเคสที่ใช้เลขที่สัญญาซ้ำ (ลิงก์ตาม `38` §7.3) */
   onOpenExistingCase?: (info: { id: string; caseRef: string }) => void
+  /** เอกสารของเคสเปลี่ยนโดยไม่ได้กดบันทึก (เช่น ลบไฟล์) — ให้หน้ารายการรีเฟรชจำนวนเอกสาร */
+  onDocumentsChanged?: () => void
 }
 
 export function CaseFormModal({
@@ -71,6 +75,7 @@ export function CaseFormModal({
   onClose,
   onSaved,
   onOpenExistingCase,
+  onDocumentsChanged,
 }: CaseFormModalProps) {
   const { showToast } = useToast()
   const [form, setForm] = useState<CaseFormState>(() => caseFormFromDetail(editing))
@@ -81,12 +86,18 @@ export function CaseFormModal({
   const [submitting, setSubmitting] = useState(false)
   const [staged, setStaged] = useState<StagedFile[]>([])
   const [teamOptions, setTeamOptions] = useState<readonly CaseTeamOptionDto[]>([])
+  /** ไฟล์ที่อัปโหลดแล้ว — อัปเดตทันทีหลังลบ (มติ PO 04/10/2569 v3.4) โดยไม่ต้องปิดฟอร์ม */
+  const [documents, setDocuments] = useState<readonly CaseDocumentDto[]>(editing?.documents ?? [])
+  const [deleteTarget, setDeleteTarget] = useState<CaseDocumentDto | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   // เปลี่ยนเป้าหมายของ modal (สร้าง ↔ แก้ไขเคสอื่น) = โหลดค่าเริ่มต้นใหม่ระหว่าง render
   // (ไม่ใช้ `useEffect` — กฎ `react-hooks/set-state-in-effect` ใน REUSE_INDEX)
   const targetId = editing?.id ?? null
   if (targetId !== loadedId) {
     setLoadedId(targetId)
+    setDocuments(editing?.documents ?? [])
     setForm(caseFormFromDetail(editing))
     setFieldErrors({})
     setFormError(null)
@@ -175,6 +186,35 @@ export function CaseFormModal({
       onSaved(saved)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  /**
+   * ลบเอกสารที่แนบผิด (ก่อนส่งตรวจ — มติ PO 04/10/2569 v3.4) — server soft-delete + audit · ไฟล์ใน Storage ยังอยู่
+   * ลบไฟล์ของโหมดเดิมหมดแล้ว ตัวเลือกโหมดเอกสารสลับได้ทันที (คำนวณจาก `documents` ล่าสุด)
+   */
+  async function confirmDeleteDocument(): Promise<void> {
+    if (editing === null || deleteTarget === null) return
+    setDeleting(true)
+    try {
+      const response = await callApi<CaseDetailDto>(
+        apiPath('case.deleteDocument', { id: editing.id, documentId: deleteTarget.id }),
+        jsonRequest('DELETE', { reason: deleteReason }),
+      )
+      if (response.error !== undefined || response.data === undefined) {
+        showToast({
+          tone: 'error',
+          title: response.error?.title ?? 'ลบเอกสารไม่สำเร็จ',
+          description: response.error?.message ?? 'กรุณาลองใหม่',
+        })
+        return
+      }
+      setDocuments(response.data.documents)
+      showToast({ tone: 'success', title: 'ลบเอกสารแล้ว', description: deleteTarget.originalName })
+      setDeleteTarget(null)
+      onDocumentsChanged?.()
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -540,7 +580,42 @@ export function CaseFormModal({
           </div>
         </section>
 
-        <CaseAttachmentsFields documents={editing?.documents ?? []} staged={staged} onChange={setStaged} />
+        <CaseAttachmentsFields
+          documents={documents}
+          staged={staged}
+          onChange={setStaged}
+          mode={form.documentMode}
+          onModeChange={(documentMode) => patch({ documentMode })}
+          productPhotoInContract={form.productPhotoInContract}
+          onProductPhotoInContractChange={(productPhotoInContract) => patch({ productPhotoInContract })}
+          onDeleteDocument={
+            isEdit && isCaseDocumentDeletable(editing.status)
+              ? (document) => {
+                  setDeleteReason('')
+                  setDeleteTarget(document)
+                }
+              : undefined
+          }
+        />
+        <ConfirmModal
+          open={deleteTarget !== null}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => void confirmDeleteDocument()}
+          title="ลบเอกสารที่แนบ"
+          description={`ลบ “${deleteTarget?.originalName ?? ''}” (${deleteTarget === null ? '' : DOCUMENT_SLOT_LABEL[deleteTarget.documentType]}) ออกจากเคสนี้ — ระบบเก็บประวัติไว้ตรวจย้อนหลัง แต่ไฟล์นี้จะไม่นับเป็นเอกสารของเคสอีก`}
+          confirmLabel="ลบเอกสาร"
+          confirmVariant="danger"
+          loading={deleting}
+        >
+          <Field id="delete-document-reason" label="เหตุผล (ไม่บังคับ)" hint="เช่น แนบผิดเคส / ไฟล์ไม่ชัด">
+            <Input
+              id="delete-document-reason"
+              value={deleteReason}
+              maxLength={500}
+              onChange={(event) => setDeleteReason(event.target.value)}
+            />
+          </Field>
+        </ConfirmModal>
 
         <TeamSuggestionPanel
           province={form.addressCurrent.province}

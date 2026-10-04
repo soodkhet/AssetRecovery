@@ -1,6 +1,6 @@
 import {
   DOCUMENT_SLOT_LABEL,
-  SEPARATE_ONLY_SLOTS,
+  slotsExcludedBy,
   type DocumentCounts,
   type DocumentMode,
   type DocumentSlot,
@@ -91,10 +91,8 @@ export function formSlotsFor(mode: DocumentMode): readonly DocumentSlot[] {
   return mode === 'bundle' ? ['bundle_doc', 'other_doc'] : ['contract_doc', 'national_id_doc', 'other_doc']
 }
 
-/** slot ที่ใช้ไม่ได้เมื่ออยู่ในโหมด `mode` (ต้องไม่มีไฟล์ค้างก่อนสลับเข้าโหมดนั้น) */
-export function slotsExcludedBy(mode: DocumentMode): readonly DocumentSlot[] {
-  return mode === 'bundle' ? SEPARATE_ONLY_SLOTS : ['bundle_doc']
-}
+/** slot ที่ใช้ไม่ได้เมื่ออยู่ในโหมด `mode` — ตัวจริงอยู่ `lib/cases/case.ts` (server ใช้ตัวเดียวกันตอนบันทึกโหมด) */
+export { slotsExcludedBy }
 
 export type DocumentModeSwitchPlan =
   | { kind: 'switch' }

@@ -1386,6 +1386,12 @@ model Case {
   debtAmountSatang Int?       @map("debt_amount_satang")
   assetValueSatang Int?       @map("asset_value_satang")
 
+  // เอกสารแนบ (`38` §6.3.2 · มติ PO 04/10/2569 UAT — จำโหมด/ติ๊กรูปสินค้า)
+  /// separate | bundle — CHECK `chk_cases_document_mode` (raw SQL) · มีไฟล์ `bundle_doc` ที่ยังไม่ถูกลบ ⇒ ต้องเป็น bundle
+  documentMode           String  @default("separate") @map("document_mode")
+  /// โหมดแยกประเภท: ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" ⇒ ไม่บังคับ `product_photo` ก่อนส่งตรวจ
+  productPhotoInContract Boolean @default(false) @map("product_photo_in_contract")
+
   // Team assignment (`38` §6.4)
   suggestedTeamId  String? @map("suggested_team_id") @db.Uuid
   assignedTeamId   String? @map("assigned_team_id") @db.Uuid

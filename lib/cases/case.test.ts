@@ -4,8 +4,14 @@ import {
   readinessGapText,
   REQUIRED_FIELD_LABEL,
   assertBundleConfirmed,
+  assertCaseDocumentDeletable,
   assertCaseEditable,
   assertDocumentModeCompatible,
+  assertDocumentModeSelectable,
+  documentModeAfterAdding,
+  effectiveDocumentMode,
+  isCaseDocumentDeletable,
+  requiredDocumentSlots,
   assertDocumentsComplete,
   countDocuments,
   documentModeOf,
@@ -272,5 +278,72 @@ describe('เอกสารชุดเดียว (สแกนรวมเ�
     expect(() =>
       assertBundleConfirmed({ contract_doc: 1, national_id_doc: 1, product_photo: 1 }, undefined),
     ).not.toThrow()
+  })
+})
+
+// ── มติ PO 04/10/2569 v3.4 — ติ๊กรูปสินค้า / จำโหมด / ลบเอกสาร ─────────────────
+describe('เอกสารแนบ v3.4 — ติ๊กรูปสินค้า · จำโหมด · ลบเอกสาร', () => {
+  const separateNoPhoto = { contract_doc: 1, national_id_doc: 1 }
+
+  it('โหมดแยกประเภท ไม่ติ๊ก = ยังบังคับรูปสินค้า · ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" = ไม่บังคับ', () => {
+    expect(missingRequiredDocuments(separateNoPhoto)).toEqual(['product_photo'])
+    expect(missingRequiredDocuments(separateNoPhoto, { productPhotoInContract: false })).toEqual(['product_photo'])
+    expect(missingRequiredDocuments(separateNoPhoto, { productPhotoInContract: true })).toEqual([])
+    expect(() => assertDocumentsComplete(separateNoPhoto, { productPhotoInContract: true })).not.toThrow()
+    // ติ๊กแล้วสัญญา/บัตรยังบังคับเหมือนเดิม
+    expect(missingRequiredDocuments({}, { productPhotoInContract: true })).toEqual(['contract_doc', 'national_id_doc'])
+  })
+
+  it('caseReadiness ส่งค่าติ๊กต่อไปถึงเงื่อนไขเอกสาร', () => {
+    expect(caseReadiness(complete, separateNoPhoto).ready).toBe(false)
+    expect(caseReadiness(complete, separateNoPhoto, { productPhotoInContract: true }).ready).toBe(true)
+  })
+
+  it('requiredDocumentSlots ต่อโหมด — ชุด = bundle_doc · ติ๊กมีผลเฉพาะโหมดแยกประเภท', () => {
+    expect(requiredDocumentSlots('bundle')).toEqual(['bundle_doc'])
+    expect(requiredDocumentSlots('bundle', true)).toEqual(['bundle_doc'])
+    expect(requiredDocumentSlots('separate')).toEqual(REQUIRED_DOCUMENT_SLOTS)
+    expect(requiredDocumentSlots('separate', true)).toEqual(['contract_doc', 'national_id_doc'])
+  })
+
+  it('จำโหมด: บันทึกโหมดชุดไว้แต่ยังไม่มีไฟล์ = ขาด "เอกสารชุด" · ไฟล์ชนะคอลัมน์เสมอ', () => {
+    expect(missingRequiredDocuments({}, { documentMode: 'bundle' })).toEqual(['bundle_doc'])
+    expect(effectiveDocumentMode({}, 'bundle')).toBe('bundle')
+    expect(effectiveDocumentMode({}, null)).toBe('separate')
+    expect(effectiveDocumentMode({}, 'ค่าแปลก')).toBe('separate')
+    expect(effectiveDocumentMode({ bundle_doc: 1 }, 'separate')).toBe('bundle')
+    expect(missingRequiredDocuments({ bundle_doc: 1 }, { documentMode: 'separate' })).toEqual([])
+  })
+
+  it('บันทึกโหมดที่ขัดกับไฟล์ที่อัปโหลดแล้ว → CASE_DOCUMENT_MODE_CONFLICT · ไม่มีไฟล์ขัด = ได้', () => {
+    expect(() => assertDocumentModeSelectable({ contract_doc: 1 }, 'bundle')).toThrow(
+      expect.objectContaining({ code: 'CASE_DOCUMENT_MODE_CONFLICT' }),
+    )
+    expect(() => assertDocumentModeSelectable({ bundle_doc: 1 }, 'separate')).toThrow(
+      expect.objectContaining({ code: 'CASE_DOCUMENT_MODE_CONFLICT' }),
+    )
+    // หลังลบสัญญา/บัตรออกหมด เหลือรูปสินค้า/เอกสารอื่น → สลับเป็นโหมดชุดได้
+    expect(() => assertDocumentModeSelectable({ product_photo: 2, other_doc: 1 }, 'bundle')).not.toThrow()
+    expect(() => assertDocumentModeSelectable({}, 'separate')).not.toThrow()
+  })
+
+  it('แนบไฟล์แล้วโหมดต้องสอดคล้องกับไฟล์ — ชุด ⇒ bundle · สัญญา/บัตร ⇒ separate · อื่น ๆ คงค่าเดิม', () => {
+    expect(documentModeAfterAdding('separate', 'bundle_doc')).toBe('bundle')
+    expect(documentModeAfterAdding('bundle', 'contract_doc')).toBe('separate')
+    expect(documentModeAfterAdding('bundle', 'national_id_doc')).toBe('separate')
+    expect(documentModeAfterAdding('bundle', 'product_photo')).toBe('bundle')
+    expect(documentModeAfterAdding('separate', 'other_doc')).toBe('separate')
+    expect(documentModeAfterAdding(null, 'other_doc')).toBe('separate')
+  })
+
+  it('ลบเอกสารได้เฉพาะ ร่าง / ขอข้อมูลเพิ่ม — สถานะอื่น CASE_DOCUMENT_DELETE_NOT_ALLOWED', () => {
+    expect(isCaseDocumentDeletable('draft')).toBe(true)
+    expect(isCaseDocumentDeletable('need_info')).toBe(true)
+    for (const status of ['pending_review', 'approved', 'rejected', 'pending_recycle_review']) {
+      expect(isCaseDocumentDeletable(status)).toBe(false)
+      expect(() => assertCaseDocumentDeletable(status)).toThrow(
+        expect.objectContaining({ code: 'CASE_DOCUMENT_DELETE_NOT_ALLOWED' }),
+      )
+    }
   })
 })

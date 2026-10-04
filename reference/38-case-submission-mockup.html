@@ -647,7 +647,11 @@ function renderCreateCaseModal(existingCase = null) {
                 <div class="text-[11px] ${slot.uploaded ? 'text-emerald-600' : 'text-slate-400'}">${slot.uploaded ? 'อัปโหลดแล้ว ✓' : 'ยังไม่อัปโหลด'}</div>
               </div>
             </div>
-            <button class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 flex items-center gap-1.5">${Icon.upload} อัปโหลด</button>
+            <div class="flex items-center gap-1.5">
+              <!-- มติ PO 04/10/2569 v3.4: ไฟล์ที่อัปโหลดแล้วมีปุ่ม "ลบ" (เฉพาะเคสร่าง/ขอข้อมูลเพิ่ม) → ConfirmModal destructive -->
+              ${slot.uploaded && existingCase ? `<button class="text-xs font-semibold px-2 py-1.5 rounded-lg text-red-600 hover:bg-red-50">ลบ</button>` : ''}
+              <button class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 flex items-center gap-1.5">${Icon.upload} อัปโหลด</button>
+            </div>
           </div>
         `).join('')}
       </div>
@@ -655,6 +659,11 @@ function renderCreateCaseModal(existingCase = null) {
 
     <div>
       <h3 class="text-sm font-bold text-slate-800 mb-3 pb-2 border-b border-slate-100">รูปสินค้า (ทรัพย์ที่ติดตาม) <span class="text-red-500">*</span></h3>
+      <!-- มติ PO 04/10/2569 v3.4: โหมดแยกประเภทมีช่องติ๊กนี้ (บันทึกพร้อมเคส) — ติ๊ก = ไม่บังคับรูปสินค้า · โหมดชุดไม่แสดง -->
+      <label class="mb-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 cursor-pointer">
+        <input type="checkbox" class="mt-0.5 accent-emerald-600">
+        <span><span class="font-semibold">รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว</span><span class="block text-[11px] text-slate-500">ติ๊กเมื่อไฟล์สัญญามีรูปสินค้าอยู่แล้ว — ไม่บังคับแนบรูปสินค้าก่อนส่งตรวจ (ยังแนบเพิ่มได้)</span></span>
+      </label>
       ${renderPhotoUploader()}
     </div>
 
@@ -736,6 +745,8 @@ function renderReviewModal(c) {
 
     <div class="border border-slate-200 rounded-lg p-3">
       <div class="text-xs font-bold text-slate-600 mb-2">เอกสารแนบ — คลิกเพื่อเปิดดู</div>
+      <!-- มติ PO 04/10/2569 v3.4: เคสแยกประเภทที่ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" แสดงป้ายนี้ — ตัวอย่างซ่อนไว้ -->
+      <span class="hidden mb-2 inline-flex rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว</span>
       <!-- เคสโหมดเอกสารชุด: ป้าย "เอกสารชุด" + ช่องติ๊กยืนยันก่อนรับเคส (มติ PO 04/10/2569) — ตัวอย่างนี้เป็นเคสแยกประเภทจึงซ่อน -->
       <label class="hidden mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><input type="checkbox" class="mt-0.5 accent-emerald-600"> <span><span class="font-semibold">ตรวจเอกสารชุดแล้ว — ในชุดมีสัญญาเช่าซื้อ/ผ่อนชำระ และบัตรประชาชน/Passport ลูกหนี้ครบ</span><span class="block text-[11px] text-amber-800">ต้องติ๊กก่อนกด “รับเคส”</span></span></label>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">

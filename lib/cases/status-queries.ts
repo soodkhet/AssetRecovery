@@ -134,6 +134,8 @@ function readinessOf(row: CaseDetailRow) {
       debtAmountSatang: row.debtAmountSatang,
     },
     documentCountsOf(row.documents),
+    // โหมดที่จำไว้ + ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" (มติ PO 04/10/2569 v3.4)
+    { documentMode: row.documentMode, productPhotoInContract: row.productPhotoInContract },
   )
 }
 
@@ -260,6 +262,9 @@ export async function changeCaseStatus(
       if (documentModeOf(counts) === 'bundle') {
         auditAfter.documentMode = 'bundle'
         auditAfter.bundleDocumentsConfirmed = true
+      } else if (row.productPhotoInContract) {
+        // ผู้ตรวจรับเคสที่ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" (มติ PO 04/10/2569 v3.4) — เก็บลง audit ของการอนุมัติ
+        auditAfter.productPhotoInContract = true
       }
 
       data.assignedTeamId = confirmedTeamId

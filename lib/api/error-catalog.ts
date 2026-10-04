@@ -211,6 +211,9 @@ export const ERROR_CATALOG = {
   // เติมเข้า `38` §12 ตามมติ PO 04/10/2569 — เอกสารชุดเดียว (Rule 04 — doc + code คอมมิตเดียวกัน)
   CASE_DOCUMENT_MODE_CONFLICT: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_BUNDLE_CONFIRMATION_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },
+  // เติมเข้า `38` §12 ตามมติ PO 04/10/2569 v3.4 — ลบเอกสารที่แนบผิด (ก่อนส่งตรวจ)
+  CASE_DOCUMENT_NOT_FOUND: { status: 404, severity: 'reject', source: '38 §12' },
+  CASE_DOCUMENT_DELETE_NOT_ALLOWED: { status: 400, severity: 'reject', source: '38 §12' },
 
   // ── 40 §12 Case Assignment & Routing ───────────────────────────────────
   ASSIGNMENT_TEAM_MISMATCH: { status: 400, severity: 'reject', source: '40 §12' },

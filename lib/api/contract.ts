@@ -77,6 +77,13 @@ export const API_CONTRACT = {
     source: '38 §17.1 · 45 §6.1',
     summary: 'อัปโหลดเอกสารต่อ slot (document_type ระบุใน payload)',
   },
+  'case.deleteDocument': {
+    method: 'DELETE',
+    path: '/api/cases/:id/documents/:documentId',
+    module: 'case',
+    source: '38 §17.1 (v3.4) · 45 §6.1',
+    summary: 'ลบเอกสารที่แนบผิด (soft-delete · เฉพาะ draft/need_info · ไม่ลบไฟล์ใน Storage)',
+  },
   'case.changeStatus': {
     method: 'PATCH',
     path: '/api/cases/:id/status',

@@ -516,6 +516,7 @@ export function CasesManager() {
         editing={editing}
         companies={companies}
         onClose={() => setFormOpen(false)}
+        onDocumentsChanged={() => void reload()}
         onSaved={() => {
           setFormOpen(false)
           setLoading(true)

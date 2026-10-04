@@ -106,8 +106,9 @@ export const REQUIRED_DOCUMENT_SLOTS: readonly DocumentSlot[] = ['contract_doc',
  * - `separate` = แยกตามประเภท (ค่าเริ่มต้น — พฤติกรรมเดิมทุกเคส)
  * - `bundle`   = พาร์ทเนอร์ส่งเอกสาร 1 ชุดเย็บเล่ม แอดมินสแกนเป็นไฟล์ `bundle_doc` (1 ไฟล์ขึ้นไป)
  *
- * ไม่มีคอลัมน์โหมดที่ `cases` — โหมด **อนุมานจากไฟล์** (มี `bundle_doc` ที่ยังไม่ถูกลบ ≥ 1 = `bundle`)
- * เพื่อไม่ให้สถานะสองแหล่งขัดกันเอง · กติกา `assertDocumentModeCompatible()` กันไม่ให้สองโหมดปนกันในเคสเดียว
+ * โหมดที่ผู้ใช้เลือกถูก **จำไว้ที่ `cases.document_mode`** (v3.4 — มติ PO 04/10/2569 จำโหมด) แต่ไฟล์ชนะเสมอ:
+ * มี `bundle_doc` ที่ยังไม่ถูกลบ ≥ 1 = `bundle` (`effectiveDocumentMode()`) · ฝั่ง server จัดคอลัมน์ให้ตรงกับไฟล์
+ * ทุกครั้งที่แนบ (`documentModeAfterAdding()`) · `assertDocumentModeCompatible()` กันไม่ให้สองโหมดปนกันในเคสเดียว
  */
 export const DOCUMENT_MODES = ['separate', 'bundle'] as const
 export type DocumentMode = (typeof DOCUMENT_MODES)[number]
@@ -119,12 +120,6 @@ export const DOCUMENT_MODE_LABEL: Record<DocumentMode, string> = {
 
 /** slot ที่เป็น "ตัวแทน" ของโหมดแยกประเภท — ปนกับ `bundle_doc` ในเคสเดียวกันไม่ได้ */
 export const SEPARATE_ONLY_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc']
-
-/**
- * slot ที่เอกสารชุดนับแทนได้ตอน gate ส่งตรวจ — สัญญา + บัตรประชาชน (ผู้ตรวจต้องติ๊กยืนยันตอนรับเคส)
- * และรูปสินค้า (อาจอยู่ในชุด — ในโหมดชุดจึงไม่บังคับ แต่ยังอัปเพิ่มได้ตามเพดานเดิม)
- */
-export const BUNDLE_COVERED_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc', 'product_photo']
 
 export function isDocumentSlot(value: string): value is DocumentSlot {
   return (DOCUMENT_SLOTS as readonly string[]).includes(value)
@@ -146,15 +141,53 @@ export function countDocuments(documents: ReadonlyArray<{ documentType: string }
   return counts
 }
 
+/**
+ * ค่าที่บันทึกไว้ที่เคส ซึ่งมีผลกับเงื่อนไขเอกสารก่อนส่งตรวจ (v3.4 — มติ PO 04/10/2569)
+ * - `documentMode` = `cases.document_mode` (ไม่ส่ง = อนุมานจากไฟล์อย่างเดียว)
+ * - `productPhotoInContract` = ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" (มีผลเฉพาะโหมดแยกประเภท)
+ */
+export interface DocumentRequirementOptions {
+  documentMode?: DocumentMode | string | null
+  productPhotoInContract?: boolean | null
+}
+
+export function isDocumentMode(value: unknown): value is DocumentMode {
+  return typeof value === 'string' && (DOCUMENT_MODES as readonly string[]).includes(value)
+}
+
+/** โหมดที่มีผลจริง — ไฟล์ชนะคอลัมน์: มี `bundle_doc` = `bundle` เสมอ ไม่งั้นใช้ค่าที่บันทึกไว้ (ค่าเริ่มต้น `separate`) */
+export function effectiveDocumentMode(counts: DocumentCounts, stored?: DocumentMode | string | null): DocumentMode {
+  if ((counts.bundle_doc ?? 0) > 0) return 'bundle'
+  return isDocumentMode(stored) ? stored : 'separate'
+}
+
+/**
+ * slot ที่ต้องมี ≥ 1 ไฟล์ก่อนส่งตรวจ ต่อโหมด
+ * - `bundle` → `bundle_doc` (นับแทนสัญญา + บัตรประชาชน · รูปสินค้าไม่บังคับ — `38` §6.3.2)
+ * - `separate` → สัญญา + บัตรประชาชน + รูปสินค้า — ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" = ไม่บังคับรูปสินค้า (v3.4)
+ */
+export function requiredDocumentSlots(mode: DocumentMode, productPhotoInContract = false): readonly DocumentSlot[] {
+  if (mode === 'bundle') return ['bundle_doc']
+  return productPhotoInContract
+    ? REQUIRED_DOCUMENT_SLOTS.filter((slot) => slot !== 'product_photo')
+    : REQUIRED_DOCUMENT_SLOTS
+}
+
 /** slot บังคับที่ยังไม่มีไฟล์ — ใช้ทั้งบน UI (แสดงว่าขาดอะไร) และตอน gate `pending_review` */
-export function missingRequiredDocuments(counts: DocumentCounts): DocumentSlot[] {
-  const covered = documentModeOf(counts) === 'bundle' ? BUNDLE_COVERED_SLOTS : []
-  return REQUIRED_DOCUMENT_SLOTS.filter((slot) => !covered.includes(slot) && (counts[slot] ?? 0) < 1)
+export function missingRequiredDocuments(
+  counts: DocumentCounts,
+  options: DocumentRequirementOptions = {},
+): DocumentSlot[] {
+  const mode = effectiveDocumentMode(counts, options.documentMode)
+  // โหมดชุดที่ยังไม่มีไฟล์ชุดเลย แต่บันทึกโหมดไว้ = ขาด "เอกสารชุด" · ไม่บันทึกโหมด = แสดงตามโหมดแยกประเภท (เดิม)
+  return requiredDocumentSlots(mode, options.productPhotoInContract === true).filter(
+    (slot) => (counts[slot] ?? 0) < 1,
+  )
 }
 
 /** gate ก่อนเปลี่ยนสถานะเป็น `pending_review` (`38` §12 `CASE_DOCUMENT_INCOMPLETE`) */
-export function assertDocumentsComplete(counts: DocumentCounts): void {
-  const missing = missingRequiredDocuments(counts)
+export function assertDocumentsComplete(counts: DocumentCounts, options: DocumentRequirementOptions = {}): void {
+  const missing = missingRequiredDocuments(counts, options)
   if (missing.length > 0) {
     throw new CaseError('CASE_DOCUMENT_INCOMPLETE', {
       context: { missing, missingLabels: missing.map((slot) => DOCUMENT_SLOT_LABEL[slot]) },
@@ -174,6 +207,50 @@ export function assertDocumentModeCompatible(existing: DocumentCounts, adding: D
     throw new CaseError('CASE_DOCUMENT_MODE_CONFLICT', {
       context: { adding, existing: found, mode: documentModeOf(existing) },
     })
+  }
+}
+
+/** slot ที่ใช้ไม่ได้เมื่ออยู่ในโหมด `mode` (ต้องไม่มีไฟล์ค้างก่อนเลือกโหมดนั้น) */
+export function slotsExcludedBy(mode: DocumentMode): readonly DocumentSlot[] {
+  return mode === 'bundle' ? SEPARATE_ONLY_SLOTS : ['bundle_doc']
+}
+
+/**
+ * บันทึกโหมดเอกสารที่เลือกบนฟอร์ม (v3.4 จำโหมด) — เลือกโหมดที่ขัดกับไฟล์ที่ **อัปโหลดแล้ว** ไม่ได้
+ * (`38` §12 `CASE_DOCUMENT_MODE_CONFLICT`) · ลบไฟล์ของโหมดเดิมออกหมดก่อนจึงสลับได้
+ */
+export function assertDocumentModeSelectable(existing: DocumentCounts, mode: DocumentMode): void {
+  const found = slotsExcludedBy(mode).filter((slot) => (existing[slot] ?? 0) > 0)
+  if (found.length > 0) {
+    throw new CaseError('CASE_DOCUMENT_MODE_CONFLICT', {
+      context: { selecting: mode, existing: found, mode: documentModeOf(existing) },
+    })
+  }
+}
+
+/**
+ * โหมดที่ต้องบันทึกหลังแนบไฟล์ slot `adding` — ไฟล์ชนะ: แนบเอกสารชุด ⇒ `bundle` · แนบสัญญา/บัตรแยก ⇒ `separate`
+ * (เรียกหลัง `assertDocumentModeCompatible()` ผ่านแล้ว) · รูปสินค้า/เอกสารอื่น ⇒ คงค่าเดิม
+ */
+export function documentModeAfterAdding(stored: DocumentMode | string | null | undefined, adding: DocumentSlot): DocumentMode {
+  if (adding === 'bundle_doc') return 'bundle'
+  if (SEPARATE_ONLY_SLOTS.includes(adding)) return 'separate'
+  return isDocumentMode(stored) ? stored : 'separate'
+}
+
+// ── ลบเอกสารที่แนบผิด (v3.4 — มติ PO 04/10/2569) ────────────────────────────
+
+/** ลบ (soft-delete) เอกสารได้เฉพาะก่อนส่งตรวจ — ร่าง / ขอข้อมูลเพิ่ม (ตีกลับให้แก้) */
+export const DOCUMENT_DELETABLE_CASE_STATUSES = ['draft', 'need_info'] as const
+
+export function isCaseDocumentDeletable(status: string): boolean {
+  return (DOCUMENT_DELETABLE_CASE_STATUSES as readonly string[]).includes(status)
+}
+
+/** `38` §12 `CASE_DOCUMENT_DELETE_NOT_ALLOWED` — ส่งตรวจ/อนุมัติแล้วลบไม่ได้ (ไฟล์เป็นหลักฐานที่ผู้ตรวจเห็นแล้ว) */
+export function assertCaseDocumentDeletable(status: string): void {
+  if (!isCaseDocumentDeletable(status)) {
+    throw new CaseError('CASE_DOCUMENT_DELETE_NOT_ALLOWED', { context: { status } })
   }
 }
 
@@ -337,9 +414,13 @@ export interface CaseReadiness {
   missingDocuments: DocumentSlot[]
 }
 
-export function caseReadiness(values: CaseCompletenessInput, documents: DocumentCounts): CaseReadiness {
+export function caseReadiness(
+  values: CaseCompletenessInput,
+  documents: DocumentCounts,
+  documentOptions: DocumentRequirementOptions = {},
+): CaseReadiness {
   const missingFields = missingRequiredFields(values)
-  const missingDocuments = missingRequiredDocuments(documents)
+  const missingDocuments = missingRequiredDocuments(documents, documentOptions)
   return { ready: missingFields.length === 0 && missingDocuments.length === 0, missingFields, missingDocuments }
 }
 
