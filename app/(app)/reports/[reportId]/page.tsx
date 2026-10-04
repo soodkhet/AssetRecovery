@@ -1,11 +1,12 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { ReportScreen } from '@/components/reports/report-screen'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
-import { requireSession } from '@/lib/auth/session'
-import { assertReportAccess } from '@/lib/reports/access'
+import { canViewReport } from '@/lib/reports/access'
 import { findReport } from '@/lib/reports/catalog'
 import { hasReportProvider } from '@/lib/reports/providers'
+
+const REPORTS_INDEX_PATH = '/reports'
 
 type PageProps = { params: Promise<{ reportId: string }> }
 
@@ -16,15 +17,15 @@ type PageProps = { params: Promise<{ reportId: string }> }
  * (ซึ่งห่อ `<ReportView>` อีกที ส่ง `filters`/`chart`) — ห้ามสร้างตาราง/ปุ่มส่งออกชุดใหม่
  */
 export default async function ReportPage({ params }: PageProps) {
-  await requireMenuPage('reports')
-  const user = await requireSession()
+  const user = await requireMenuPage('reports')
 
   const { reportId } = await params
   const report = findReport(reportId)
   if (report === null) notFound()
 
-  // สิทธิ์รายหมวด (`96` §10) — ไม่มีสิทธิ์ต้องไม่เห็นแม้แต่หัวเรื่องของรายงาน
-  assertReportAccess(user, report)
+  // สิทธิ์รายหมวด (`96` §10) — ไม่มีสิทธิ์ต้องไม่เห็นแม้แต่หัวเรื่องของรายงาน ⇒ เด้งกลับหน้ารวมรายงาน
+  // (เดิม throw ระหว่าง render = หน้า error 500 — UAT BUG-133) · ยามจริงของข้อมูลอยู่ที่ API (`runReport()`)
+  if (!canViewReport(user, report)) redirect(REPORTS_INDEX_PATH)
 
   if (!hasReportProvider(report.id)) {
     return (
