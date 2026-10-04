@@ -60,6 +60,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   // ภาษี
   tax_profiles: 'tax',
   vat_rate_history: 'tax',
+  // ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8)
+  wht_policy_history: 'tax',
   tax_document_template_settings: 'tax',
   // ปิด/เปิดงวด
   accounting_periods: 'period_lock',

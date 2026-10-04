@@ -35,6 +35,8 @@ export const SETTINGS_ERROR_CODES = [
   'BANK_FILE_NOT_TESTED',
   // §6.12 เลขที่ใบกำกับภาษี
   'NUMBERING_SEQ_NOT_EDITABLE',
+  // §6.4.1 ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8)
+  'WHT_POLICY_EFFECTIVE_DATE_PAST',
   // §6.11 ล็อกรอบบัญชี (โครง — บังคับเต็มรูปแบบ Phase 4.1)
   'PERIOD_LOCKED_DIRECT_EDIT',
 ] as const
@@ -60,6 +62,7 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   BANK_FILE_FORMAT_NOT_FOUND: 404,
   BANK_FILE_NOT_TESTED: 400,
   NUMBERING_SEQ_NOT_EDITABLE: 400,
+  WHT_POLICY_EFFECTIVE_DATE_PAST: 400,
   PERIOD_LOCKED_DIRECT_EDIT: 400,
 }
 
@@ -132,6 +135,11 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   NUMBERING_SEQ_NOT_EDITABLE: {
     title: 'แก้เลขล่าสุดด้วยมือไม่ได้',
     message: 'เลขที่ใบกำกับภาษีล่าสุดระบบเดินให้อัตโนมัติ ห้ามแก้มือ (เลขต้องต่อเนื่องตามกฎหมาย)',
+  },
+  WHT_POLICY_EFFECTIVE_DATE_PAST: {
+    title: 'วันที่มีผลย้อนหลังไม่ได้',
+    message:
+      'ค่าตั้งภาษีหัก ณ ที่จ่ายมีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผลเป็นต้นไป — เลือกวันนี้หรือวันในอนาคต (รอบจ่ายที่สร้างแล้วใช้ค่าเดิมเสมอ)',
   },
   PERIOD_LOCKED_DIRECT_EDIT: {
     title: 'รอบบัญชีถูกล็อกแล้ว',

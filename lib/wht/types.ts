@@ -36,6 +36,8 @@ export interface WhtCertificateDto {
   replacesCertificateNumber: string | null
   /** รายการค่าใช้จ่ายต้นทาง (ไฟล์ 32) + รอบจ่ายเงิน (ไฟล์ 17) */
   expenseRecordId: string
+  /** ต่อผู้รับต่อรอบ / ต่อรายการ (มติ PO 05/10/2569 UAT U4) */
+  issueMode: 'per_payee_batch' | 'per_item'
   payoutBatchId: string
   payoutBatchName: string
   periodId: string
@@ -56,6 +58,8 @@ export interface WhtFilingSummaryDto {
   filingDueDate: string
   pnd3Satang: number
   pnd53Satang: number
+  /** ภ.ง.ด.1 — เงินได้ 40(2) */
+  pnd1Satang: number
   status: WhtFilingStatus
   statusLabel: string
   filedAt: string | null

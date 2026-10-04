@@ -27,11 +27,11 @@ import {
   filingDueDateOf,
   filingFormOf,
   filingOverdueWarning,
+  groupCertificateSources,
   incomeTypeOf,
   isFilingOverdue,
   nextCertificateSequence,
   requireWhtCancelReason,
-  shouldIssueCertificate,
   summarizeFilingTotals,
   whtCertificateNumber,
   whtCertificateNumberPrefix,
@@ -39,8 +39,10 @@ import {
   WHT_DELIVERY_FORMAT_LABEL,
   WHT_FILING_FORM_LABEL,
   WHT_FILING_STATUS_LABEL,
+  type CertificateGroup,
   type WhtCertificateDocSource,
 } from '@/lib/wht/wht'
+import type { WhtCertificateMode } from '@/lib/settings/wht-policy'
 
 /**
  * WHT Data (ไฟล์ 33) — ชั้น DB (`33` §14)
@@ -80,6 +82,8 @@ const CERT_SELECT = {
   cancelReason: true,
   cancelledAt: true,
   replacesCertificateId: true,
+  issueMode: true,
+  payoutBatchId: true,
   createdAt: true,
   payee: { select: { nationalId: true, user: { select: { fullName: true, phone: true } } } },
   cancelledByUser: { select: { fullName: true } },
@@ -118,6 +122,7 @@ function toCertDto(row: CertRow): WhtCertificateDto {
     replacesCertificateId: row.replacesCertificateId,
     replacesCertificateNumber: row.replaces?.certificateNumber ?? null,
     expenseRecordId: row.expenseRecordId,
+    issueMode: row.issueMode,
     payoutBatchId: row.expenseRecord.payoutBatchItem.payoutBatchId,
     payoutBatchName: row.expenseRecord.payoutBatchItem.payoutBatch.name,
     periodId: row.expenseRecord.periodId,
@@ -133,6 +138,7 @@ const FILING_SELECT = {
   filingDueDate: true,
   pnd3Satang: true,
   pnd53Satang: true,
+  pnd1Satang: true,
   status: true,
   filedAt: true,
   filedByUser: { select: { fullName: true } },
@@ -148,6 +154,7 @@ function toFilingDto(row: FilingRow, now: Date): WhtFilingSummaryDto {
     filingDueDate: row.filingDueDate.toISOString(),
     pnd3Satang: row.pnd3Satang,
     pnd53Satang: row.pnd53Satang,
+    pnd1Satang: row.pnd1Satang,
     status: row.status,
     statusLabel: WHT_FILING_STATUS_LABEL[row.status],
     filedAt: row.filedAt === null ? null : row.filedAt.toISOString(),
@@ -197,6 +204,7 @@ export async function refreshFilingSummary(
         filingDueDate,
         pnd3Satang: totals.pnd3Satang,
         pnd53Satang: totals.pnd53Satang,
+        pnd1Satang: totals.pnd1Satang,
       },
       select: FILING_SELECT,
     })
@@ -204,7 +212,12 @@ export async function refreshFilingSummary(
 
   return tx.whtFilingSummary.update({
     where: { id: existing.id },
-    data: { pnd3Satang: totals.pnd3Satang, pnd53Satang: totals.pnd53Satang, filingDueDate },
+    data: {
+      pnd3Satang: totals.pnd3Satang,
+      pnd53Satang: totals.pnd53Satang,
+      pnd1Satang: totals.pnd1Satang,
+      filingDueDate,
+    },
     select: FILING_SELECT,
   })
 }
@@ -248,7 +261,18 @@ const EXPENSE_SOURCE_SELECT = {
   payoutBatchItem: {
     select: {
       payoutBatchId: true,
-      payoutBatch: { select: { name: true, status: true, paymentFileGeneratedAt: true, updatedAt: true } },
+      payeeId: true,
+      whtBaseIncluded: true,
+      whtIncomeCategory: true,
+      payoutBatch: {
+        select: {
+          name: true,
+          status: true,
+          paymentFileGeneratedAt: true,
+          updatedAt: true,
+          whtCertificateMode: true,
+        },
+      },
       payee: { select: { id: true, payeeType: true, user: { select: { fullName: true } } } },
       taxProfile: { select: { filingForm: true, incomeType: true } },
     },
@@ -257,6 +281,36 @@ const EXPENSE_SOURCE_SELECT = {
 
 type ExpenseSourceRow = Prisma.ExpenseRecordGetPayload<{ select: typeof EXPENSE_SOURCE_SELECT }>
 
+/** แถวต้นทางพร้อมฟิลด์ที่ `groupCertificateSources()` ใช้ */
+type SourceItem = ExpenseSourceRow & { payeeId: string; whtBaseIncluded: boolean }
+type SourceGroup = CertificateGroup<SourceItem>
+
+function toSourceItem(row: ExpenseSourceRow): SourceItem {
+  return { ...row, payeeId: row.payoutBatchItem.payeeId, whtBaseIncluded: row.payoutBatchItem.whtBaseIncluded }
+}
+
+/** รูปแบบการออกใบของรอบ — snapshot NULL = รอบที่สร้างก่อนมีค่าตั้ง ⇒ ต่อรายการ (พฤติกรรมเดิม) */
+function batchCertificateMode(row: ExpenseSourceRow): WhtCertificateMode {
+  return row.payoutBatchItem.payoutBatch.whtCertificateMode ?? 'per_item'
+}
+
+/** รายการค่าใช้จ่ายของรอบจ่าย (ทั้งรอบ หรือเฉพาะผู้รับหนึ่งคน) เรียงตามเวลาสร้าง — ลำดับนี้กำหนด "จุดยึด" ของใบ */
+async function loadBatchSources(
+  organizationId: string,
+  payoutBatchId: string,
+  payeeId?: string,
+): Promise<SourceItem[]> {
+  const rows = await prisma.expenseRecord.findMany({
+    where: {
+      organizationId,
+      payoutBatchItem: { payoutBatchId, ...(payeeId === undefined ? {} : { payeeId }) },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: EXPENSE_SOURCE_SELECT,
+  })
+  return rows.map(toSourceItem)
+}
+
 /** วันที่จ่ายจริง (`32` §7.1 — ใช้นิยามเดียวกับบัญชีค่าใช้จ่าย) แปลงเป็นวันตามปฏิทินไทย */
 function paymentDateOf(row: ExpenseSourceRow): Date {
   const batch = row.payoutBatchItem.payoutBatch
@@ -264,23 +318,27 @@ function paymentDateOf(row: ExpenseSourceRow): Date {
 }
 
 /**
- * ออกใบ 50 ทวิ 1 ใบจากรายการค่าใช้จ่าย — เรียกภายในทรานแซกชันเท่านั้น
- * `replacesId` = ฉบับที่ถูกยกเลิกและใบนี้ออกแทน (`33` §9)
+ * ออกใบ 50 ทวิ 1 ใบจากกลุ่มรายการ (ต่อรายการ หรือต่อผู้รับต่อรอบ — `groupCertificateSources()`)
+ * เรียกภายในทรานแซกชันเท่านั้น · `replacesId` = ฉบับที่ถูกยกเลิกและใบนี้ออกแทน (`33` §9)
  */
 async function issueCertificate(
   tx: TxClient,
   ctx: AccountingMutationContext,
-  source: ExpenseSourceRow,
+  group: SourceGroup,
   replacesId: string | null,
 ): Promise<CertRow> {
   const organizationId = ctx.actor.organizationId
+  const source = group.anchor
   const item = source.payoutBatchItem
   const paymentDate = paymentDateOf(source)
   const certificateNumber = await reserveCertificateNumber(tx, paymentDate)
+  const incomeCategory = item.whtIncomeCategory
   const filingForm = filingFormOf({
     taxProfileFilingForm: item.taxProfile?.filingForm ?? null,
     payeeType: item.payee.payeeType,
+    incomeCategory,
   })
+  const perBatch = group.mode === 'per_payee_batch'
 
   const created = await tx.whtCertificate.create({
     data: {
@@ -288,11 +346,13 @@ async function issueCertificate(
       certificateNumber,
       payeeId: item.payee.id,
       expenseRecordId: source.id,
-      incomeType: incomeTypeOf(item.taxProfile?.incomeType ?? null),
+      incomeType: incomeTypeOf(item.taxProfile?.incomeType ?? null, incomeCategory),
       paymentDate,
-      grossSatang: source.grossSatang,
-      whtSatang: source.whtSatang,
+      grossSatang: group.grossSatang,
+      whtSatang: group.whtSatang,
       filingForm,
+      issueMode: group.mode,
+      payoutBatchId: perBatch ? item.payoutBatchId : null,
       replacesCertificateId: replacesId,
       createdBy: ctx.actor.id,
     },
@@ -312,9 +372,11 @@ async function issueCertificate(
         payee_name: item.payee.user.fullName,
         expense_record_id: source.id,
         payout_batch_id: item.payoutBatchId,
+        issue_mode: group.mode,
+        expense_record_ids: group.members.map((member) => member.id),
         payment_date: paymentDate.toISOString(),
-        gross_satang: source.grossSatang,
-        wht_satang: source.whtSatang,
+        gross_satang: group.grossSatang,
+        wht_satang: group.whtSatang,
         filing_form: filingForm,
         replaces_certificate_id: replacesId,
       },
@@ -348,16 +410,15 @@ export async function syncWhtCertificatesFromPayout(
   payoutBatchId: string,
 ): Promise<WhtCertificateDto[]> {
   const organizationId = ctx.actor.organizationId
-  const records = await prisma.expenseRecord.findMany({
-    where: { organizationId, payoutBatchItem: { payoutBatchId } },
-    orderBy: { createdAt: 'asc' },
-    select: EXPENSE_SOURCE_SELECT,
-  })
+  const records = await loadBatchSources(organizationId, payoutBatchId)
+  if (records.length === 0) return []
+  // รูปแบบการออกเป็น snapshot ของรอบ (มติ PO 05/10/2569 UAT U4) — ไม่ใช่ค่าตั้งปัจจุบัน
+  const groups = groupCertificateSources(records, batchCertificateMode(records[0]!))
 
   const issued: CertRow[] = []
-  for (const record of records) {
-    if (!shouldIssueCertificate({ whtSatang: record.whtSatang })) continue
-
+  for (const group of groups) {
+    // ใบผูกกับ "จุดยึด" ของกลุ่ม (รายการแรกของผู้รับในรอบ / ตัวรายการเอง) ⇒ partial unique เดิมกันออกซ้ำได้ทั้งสองแบบ
+    const record = group.anchor
     const existing = await prisma.whtCertificate.findFirst({
       where: { organizationId, expenseRecordId: record.id },
       orderBy: { createdAt: 'desc' },
@@ -371,7 +432,7 @@ export async function syncWhtCertificatesFromPayout(
 
     try {
       issued.push(
-        await prisma.$transaction((tx) => issueCertificate(tx, ctx, record, existing?.id ?? null)),
+        await prisma.$transaction((tx) => issueCertificate(tx, ctx, group, existing?.id ?? null)),
       )
     } catch (error) {
       // แข่งกันออกใบพร้อมกัน (รอบจ่ายเป็น `completed` ได้ 2 ทาง — ยืนยันด้วยมือกับกระทบยอดธนาคาร)
@@ -450,13 +511,22 @@ export async function cancelWhtCertificate(
     targetId: certificate.id,
   })
 
-  const source = await prisma.expenseRecord.findFirst({
+  const anchorRow = await prisma.expenseRecord.findFirst({
     where: { id: certificate.expenseRecordId, organizationId },
     select: EXPENSE_SOURCE_SELECT,
   })
-  if (source === null) {
+  if (anchorRow === null) {
     throw new WhtError('WHT_CERTIFICATE_NOT_FOUND', { detail: `expense_record=${certificate.expenseRecordId}` })
   }
+  const source = toSourceItem(anchorRow)
+  // ออกแทนด้วยรูปแบบเดียวกับใบเดิม (ใบเดิมคือหลักฐานของรูปแบบที่ใช้ ไม่ดูค่าตั้งปัจจุบัน)
+  const replacementGroup: SourceGroup | null =
+    certificate.issueMode === 'per_payee_batch'
+      ? (groupCertificateSources(
+          await loadBatchSources(organizationId, source.payoutBatchItem.payoutBatchId, certificate.payeeId),
+          'per_payee_batch',
+        )[0] ?? null)
+      : (groupCertificateSources([source], 'per_item')[0] ?? null)
 
   return prisma.$transaction(async (tx) => {
     // ยึดด้วยสถานะเดิม — สองคนกดยกเลิกพร้อมกัน คนที่สองได้ 0 แถวแล้วโดนปฏิเสธ
@@ -492,7 +562,8 @@ export async function cancelWhtCertificate(
       tx,
     )
 
-    const replacement = input.reissue ? await issueCertificate(tx, ctx, source, certificate.id) : null
+    const replacement =
+      input.reissue && replacementGroup !== null ? await issueCertificate(tx, ctx, replacementGroup, certificate.id) : null
 
     // ยกเลิกอย่างเดียวก็ต้องคำนวณยอดรอบใหม่ (ออกใบแทนคำนวณให้แล้วใน `issueCertificate()`)
     if (replacement === null) {
@@ -634,6 +705,18 @@ export async function getWhtCertificateDocSource(
 ): Promise<WhtCertificateDocSource> {
   const certificate = await findCertificate(user, certificateId)
   const payer = await loadPayer(user.organizationId)
+  const coverage =
+    certificate.issueMode === 'per_payee_batch' && certificate.payoutBatchId !== null
+      ? {
+          payoutBatchName: certificate.expenseRecord.payoutBatchItem.payoutBatch.name,
+          itemCount: await prisma.expenseRecord.count({
+            where: {
+              organizationId: user.organizationId,
+              payoutBatchItem: { payoutBatchId: certificate.payoutBatchId, payeeId: certificate.payeeId },
+            },
+          }),
+        }
+      : null
 
   return {
     certificateNumber: certificate.certificateNumber,
@@ -647,6 +730,7 @@ export async function getWhtCertificateDocSource(
     paymentDate: certificate.paymentDate,
     grossSatang: certificate.grossSatang,
     whtSatang: certificate.whtSatang,
+    coverage,
     payer: { ...payer },
     payee: {
       name: certificate.payee.user.fullName,

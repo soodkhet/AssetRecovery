@@ -66,6 +66,7 @@ export const ERROR_CATALOG = {
   DUPLICATE_TAX_PROFILE_NAME: { status: 400, severity: 'reject', source: '24 §6.2' },
   TAX_PROFILE_IN_USE: { status: 400, severity: 'reject', source: '24 §6.2' },
   NUMBERING_SEQ_NOT_EDITABLE: { status: 400, severity: 'reject', source: '24 §6.2' },
+  WHT_POLICY_EFFECTIVE_DATE_PAST: { status: 400, severity: 'reject', source: '24 §6.2' },
 
   // ── 24 §6.3 ธนาคาร/ไฟล์ ────────────────────────────────────────────────
   BANK_FILE_NOT_TESTED: { status: 400, severity: 'reject', source: '24 §6.3' },
@@ -109,6 +110,7 @@ export const ERROR_CATALOG = {
   PAYOUT_BATCH_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.5' },
   NO_ITEMS_TO_PAY: { status: 400, severity: 'reject', source: '24 §6.5' },
   PAYMENT_FILE_NOT_GENERATED: { status: 404, severity: 'reject', source: '24 §6.5' },
+  WHT_40_2_RATE_MISSING: { status: 400, severity: 'reject', source: '24 §6.5' },
 
   // ── 24 §6.6 Revenue/Billing ────────────────────────────────────────────
   NO_REVENUE_TO_BILL: { status: 400, severity: 'reject', source: '24 §6.6' },

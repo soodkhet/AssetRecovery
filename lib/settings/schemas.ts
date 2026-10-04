@@ -18,6 +18,7 @@ import {
 import { MAX_SLA_ALERT_HOURS, MIN_SLA_ALERT_HOURS } from '@/lib/settings/sla-policy'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
+import { WHT_CERTIFICATE_MODES, WHT_INCOME_TYPE_MODES, WHT_POLICY_EXPENSE_TYPES } from '@/lib/settings/wht-policy'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของการตั้งค่าการเงิน/บัญชี (ไฟล์ 13 · Rule 04 · Rule 13)
@@ -276,6 +277,17 @@ export const vatRateCreateSchema = vatRateFieldsBase.extend({ reason: reasonSche
 export const vatRateUpdateSchema = vatRateCreateSchema
 
 export const vatRateResolveQuerySchema = z.object({ date: dateOnlySchema('วันที่') })
+
+// ── §6.4.1 ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated — มติ PO 05/10/2569 UAT U3/U4/U5/U8) ──
+export const whtPolicyCreateSchema = z.object({
+  /** วันที่มีผล — ย้อนหลังไม่ได้ (ตรวจซ้ำที่ service ด้วยเวลาเซิร์ฟเวอร์ — `WHT_POLICY_EFFECTIVE_DATE_PAST`) */
+  effectiveFrom: dateOnlySchema('วันที่มีผล'),
+  /** ชนิดรายการที่รวมในฐาน WHT — ว่างได้ (= ไม่มีรายการใดถูกหัก) */
+  baseExpenseTypes: z.array(z.enum(WHT_POLICY_EXPENSE_TYPES)).max(WHT_POLICY_EXPENSE_TYPES.length),
+  certificateMode: z.enum(WHT_CERTIFICATE_MODES),
+  incomeTypeMode: z.enum(WHT_INCOME_TYPE_MODES),
+  reason: reasonSchema,
+})
 
 // ── §6.6 ศูนย์ต้นทุน (code = running number อัตโนมัติ) ──────────────────
 const costCenterFields = z.object({

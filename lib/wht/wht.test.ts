@@ -151,6 +151,7 @@ describe('ยอดรวมของรอบนำส่ง (`33` §16)', () =
     expect(summarizeFilingTotals([])).toEqual({
       pnd3Satang: 0,
       pnd53Satang: 0,
+      pnd1Satang: 0,
       activeCount: 0,
       cancelledCount: 0,
       grossSatang: 0,

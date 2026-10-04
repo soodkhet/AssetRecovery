@@ -17,7 +17,7 @@ export type WhtStatusFilter = 'all' | 'active' | 'cancelled'
 
 const EMPTY_CERTS: WhtCertificateListDto = {
   items: [],
-  summary: { pnd3Satang: 0, pnd53Satang: 0, activeCount: 0, cancelledCount: 0, grossSatang: 0 },
+  summary: { pnd3Satang: 0, pnd53Satang: 0, pnd1Satang: 0, activeCount: 0, cancelledCount: 0, grossSatang: 0 },
 }
 
 const EMPTY_FILINGS: WhtFilingSummaryListDto = { items: [], pending: null, warning: null }

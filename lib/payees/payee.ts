@@ -26,6 +26,11 @@ export interface PayeeValues {
   accountName: string | null
   accountNumber: string | null
   idDocumentUrl: string | null
+  /**
+   * อัตราหัก 40(2) ต่อคน (%) — สำนักงานบัญชีคำนวณให้ ระบบไม่คิดอัตราก้าวหน้า (มติ PO 05/10/2569 UAT U7)
+   * `null` = ยังไม่กรอก · ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) เท่านั้น
+   */
+  wht402Pct: number | null
 }
 
 /**
@@ -42,6 +47,8 @@ export const PAYEE_VERIFICATION_RESET_FIELDS = [
   'bankName',
   'accountName',
   'accountNumber',
+  // อัตราหัก 40(2) กระทบยอดภาษีที่หักโดยตรง (มติ PO 05/10/2569 UAT U7)
+  'wht402Pct',
 ] as const satisfies readonly (keyof PayeeValues)[]
 
 export type PayeeVerificationResetField = (typeof PAYEE_VERIFICATION_RESET_FIELDS)[number]
@@ -69,6 +76,7 @@ export function normalizePayeeValues(values: PayeeValues): PayeeValues {
     accountName: trimOrNull(values.accountName),
     accountNumber: normalizeAccountNumber(values.accountNumber),
     idDocumentUrl: trimOrNull(values.idDocumentUrl),
+    wht402Pct: values.wht402Pct ?? null,
   }
 }
 
@@ -184,5 +192,6 @@ export function toPayeeAuditPayload(values: PayeeValues): Record<string, unknown
     account_name: normalized.accountName,
     account_number: normalized.accountNumber,
     id_document_url: normalized.idDocumentUrl,
+    wht_40_2_pct: normalized.wht402Pct,
   }
 }

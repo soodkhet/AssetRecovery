@@ -1,4 +1,6 @@
+import type { WhtCertificateMode, WhtIncomeTypeMode, WhtPolicyValues } from '@/lib/settings/wht-policy'
 import type {
+  ExpenseType,
   BankAccountUsage,
   BankFileEncoding,
   BankFileTestStatus,
@@ -120,6 +122,30 @@ export interface VatRateDto {
   /** ช่วงนี้ครอบคลุมวันนี้หรือไม่ — timeline บน UI ไฮไลต์ช่วงที่ใช้อยู่ */
   isCurrent: boolean
   createdAt: string
+}
+
+/** ค่าตั้งภาษีหัก ณ ที่จ่าย 1 แถวของประวัติ (มติ PO 05/10/2569 UAT U3/U4/U5/U8) */
+export interface WhtPolicyDto {
+  id: string
+  effectiveFrom: string
+  baseExpenseTypes: ExpenseType[]
+  certificateMode: WhtCertificateMode
+  incomeTypeMode: WhtIncomeTypeMode
+  reason: string
+  createdAt: string
+  createdByName: string
+  /** แถวนี้คือค่าที่มีผลวันนี้ */
+  isCurrent: boolean
+}
+
+export interface WhtPolicyOverviewDto {
+  /** ค่าที่มีผลวันนี้ (ไม่มีแถวที่มีผล = ค่าเริ่มต้นตามมติ) */
+  current: WhtPolicyValues
+  currentId: string | null
+  isDefault: boolean
+  defaults: WhtPolicyValues
+  /** ใหม่ → เก่า (รวมแถวที่วันที่มีผลยังไม่ถึง) */
+  history: WhtPolicyDto[]
 }
 
 export interface CostCenterDto {

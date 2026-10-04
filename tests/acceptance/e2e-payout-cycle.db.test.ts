@@ -585,18 +585,20 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     expect(records).toHaveLength(3)
     expect(records.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(BATCH_WHT_SATANG)
 
-    // ใบ 50 ทวิ ออกต่อรายการที่มีภาษีหัก — ผลรวมทุกใบ = ภาษีของ payee ทั้งรอบ (ตรงยอดใหม่ของ UAT Q5)
+    // ใบ 50 ทวิ ค่าเริ่มต้นใหม่ = 1 ใบต่อผู้รับต่อรอบจ่าย (มติ PO 05/10/2569 UAT U4) — ยอดภาษีของใบ =
+    // ภาษีของ payee ทั้งรอบ (ตรงยอดของ UAT Q5) · ยอดจ่ายบนใบ = ผลรวมรายการในฐาน (น้ำมัน/เบี้ยเลี้ยง/เบี้ยเสี่ยง)
     const certificates = await wht.listWhtCertificates(finance, {})
-    expect(certificates.items).toHaveLength(3)
-    expect(certificates.items.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(BATCH_WHT_SATANG)
-    const fuelCertificate = certificates.items.find((row) => row.grossSatang === FUEL_SATANG)
-    expect(fuelCertificate?.whtSatang).toBe(FUEL_WHT_SATANG)
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]!.issueMode).toBe('per_payee_batch')
+    expect(certificates.items[0]!.whtSatang).toBe(BATCH_WHT_SATANG)
+    expect(certificates.items[0]!.grossSatang).toBe(records.reduce((sum, row) => sum + row.grossSatang, 0))
+    expect(records.some((row) => row.grossSatang === FUEL_SATANG && row.whtSatang === FUEL_WHT_SATANG)).toBe(true)
     expect(certificates.items.every((row) => row.status === 'active')).toBe(true)
 
     // เรียก sync ซ้ำ (เช่น job เก็บตก) ต้องไม่สร้างเอกสารซ้ำ
     await expenses.syncExpenseRecordsFromPayout(ctx(finance), batch.id)
     expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(3)
-    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(3)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 })
 
@@ -831,6 +833,7 @@ suite('Phase 8.1 — E2E จุดเชื่อม `29` §7: Expense → Payou
     const completed = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
     expect(completed.status).toBe('completed')
     expect(await db().expenseRecord.count({ where: { organizationId: ORG_ID } })).toBe(3)
-    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(3)
+    // ค่าเริ่มต้น = 1 ใบต่อผู้รับต่อรอบจ่าย (มติ PO 05/10/2569 UAT U4)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 })

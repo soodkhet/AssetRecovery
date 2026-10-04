@@ -71,6 +71,7 @@ const whtSummaryProvider: ReportProvider = async (ctx: ReportContext): Promise<R
       filingDueDate: true,
       pnd3Satang: true,
       pnd53Satang: true,
+      pnd1Satang: true,
       status: true,
       period: { select: { yearBe: true, month: true } },
     },
@@ -84,6 +85,7 @@ const whtSummaryProvider: ReportProvider = async (ctx: ReportContext): Promise<R
     filingDueDate: row.filingDueDate,
     pnd3Satang: row.pnd3Satang,
     pnd53Satang: row.pnd53Satang,
+    pnd1Satang: row.pnd1Satang,
     status: row.status,
   }))
 
