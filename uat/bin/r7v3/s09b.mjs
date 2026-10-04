@@ -1,0 +1,20 @@
+import { openAs, R, ID, log, q, q1, api, guard2xx, BASE } from './_h.mjs'
+log('=== R7.09 rerun', new Date().toISOString())
+const Tp = q1('select now()'); log('T_probe', Tp)
+const tx = a => q1(`select id from bank_transactions where amount_satang=${a}`)
+const t749 = tx(749000), t123 = tx(12345); log('ids', t749, t123)
+if (!/^[0-9a-f-]{36}$/.test(t749) || !/^[0-9a-f-]{36}$/.test(t123)) process.exit(2)
+const a = await openAs('uat.account'); const p = a.page
+let x
+x = await api(p, 'PATCH', `/api/bank-reconciliation/transactions/${t749}/match`, { targetKind: 'billing', targetId: ID.UATL }); log('09a rematch no confirm', x)
+x = await api(p, 'PATCH', `/api/bank-reconciliation/transactions/${t123}/match`, { targetKind: 'payout', targetId: ID.IN1 }); log('09b wrong side', x); guard2xx('wrong side', x)
+x = await api(p, 'PATCH', `/api/bank-reconciliation/transactions/${t123}/match`, { targetKind: 'billing', targetId: ID.UATL, matchNote: null }); log('09c mismatch paid bill', x); guard2xx('mismatch', x)
+x = await api(p, 'PATCH', `/api/bank-reconciliation/transactions/${t749}/resolve-unmatched`, { matchNote: 'probe' }); log('09e resolve matched', x); guard2xx('resolve matched', x)
+x = await api(p, 'PATCH', `/api/bank-reconciliation/transactions/not-a-uuid/match`, { targetKind: 'billing', targetId: ID.UATL }); log('09f bad id', x); guard2xx('bad id', x)
+await a.browser.close()
+const f = await openAs('uat.finance')
+x = await api(f.page, 'PATCH', `/api/bank-reconciliation/transactions/${t123}/match`, { targetKind: 'billing', targetId: ID.UATL, matchNote: 'probe' }); log('10 finance match (real id)', x); guard2xx('fin', x)
+x = await api(f.page, 'PATCH', `/api/bank-reconciliation/transactions/${t123}/resolve-unmatched`, { matchNote: 'probe' }); log('10 finance resolve (real id)', x); guard2xx('fin2', x)
+await f.browser.close()
+log(q(`select match_status, count(*) from bank_transactions group by 1`))
+log(q(`select (select count(*) from cash_receipts) cr,(select count(*) from audit_logs where created_at > '${Tp}' and action not in ('login','logout')) aud, (select count(*) from audit_logs where created_at > '2026-10-04 04:45:00+00' and action not in ('login','logout')) aud_since_reimport`))

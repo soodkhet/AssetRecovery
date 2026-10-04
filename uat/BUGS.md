@@ -116,6 +116,11 @@
 | BUG-108 | R6b-v3 | S4 | code | คำอธิบายตารางรายได้แสดง markdown ดิบ `**และ**` (`components/finance/revenue-tab.tsx:290`) | fixed `c02cc2e` (merge `2faed64` 04/10/2569) |
 | BUG-109 | R6b-v3 R6.39 | S5 | spec-gap | เงินคืนจากเงินทดรอง (ADV1 ฿550) ระบบบันทึกยอดคืนแต่ไม่มีการรับเงินคืน/หักกลบ | needs-decision · มติ orchestrator A6: บันทึกเป็นลูกหนี้พนักงาน + หักกลบในรอบจ่ายถัดไปของผู้รับ |
 | BUG-110 | R6b-v3 R6.35 | S5 | code | toast `UNVERIFIED_PAYEE_IN_PAYOUT` ไม่บอกว่าผู้รับคนไหนยังไม่ยืนยัน | fixed `11fff87` (merge `2faed64` 04/10/2569) |
+| BUG-111 | R7-v3 R7.12 | S4 | code | `PATCH /api/bank-reconciliation/transactions/<id>/match` และ `/resolve-unmatched` ด้วย id ที่ไม่ใช่ UUID → 500 (ควร 400/404) · ข้อมูลไม่เสีย · หน้าจอกดไม่เจอ | open |
+| BUG-112 | R7-v3 R7.12 | S5 | code | `BANK_TRANSACTION_INVALID_STATUS` ข้อความเดียว "รายการที่ปิดไปแล้ว…" ใช้ทั้งกรณีจับคู่ผิดฝั่ง และปิดแถวที่จับคู่แล้ว → ผู้ใช้เข้าใจผิด | open |
+| BUG-113 | R7-v3 | S5 | code | หน้าแดชบอร์ดแสดง "(DEC-002)" ให้ผู้ใช้เห็น (ขัด Rule 05 ห้ามเลขอ้างอิงในข้อความผู้ใช้) | open |
+| BUG-114 | R7-v3 R7.19 | S5 | code | dev trigger: `wht_filing_reminder` ได้ `JOB_INVALID_STATUS` ข้อความไม่ตรงเหตุ (ควรบอกว่า dev trigger ไม่รองรับ job นี้) · jobType ไม่รู้จักได้ข้อความ Zod ภาษาอังกฤษดิบ | open |
+| BUG-115 | R7-v3 R7.25 | S5 | code | catalog รายงาน F5 (อายุเงินทดรอง) ชี้ path ที่ไม่มี route จริง → 404 (R7-N3) | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -124,6 +129,8 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R7ab v3: เช็คซ้ำ BUG-095/096/099/104/107/108 ✅ (105/110 ข้ามตามมติ O13) · W1 ปิดได้ (ภ.ง.ด.3 ไม่นับแถวเงินทดรอง) · F5 วันนี้ 0 แถว = ข้อจำกัดที่รู้ (O15)
+- R7 spec-gap (มติ A8/A9): ใบเงินรับไม่มีช่องอ้างเลข 50 ทวิ ที่ลูกค้าออกให้ · ไม่มีสถานะ "เงินรับรอตรวจสอบ" (ปิดรายการเป็นสถานะสุดท้าย — รู้ผู้โอนภายหลังจับคู่ไม่ได้)
 - R6b v3 (W1): แถวเงินทดรองใน `payout_batch_items` เก็บ tax profile id ของผู้รับ แต่ WHT 0%/0 — ยอดถูก · **R7/R9 ตรวจว่ารายงาน ภ.ง.ด.3 ไม่นับเงินทดรอง**
 - R6b v3 (W3): บัญชีเปิดหน้ารอบจ่ายไม่ได้ (เด้ง dashboard) แต่ GET API ได้ — ตรง `06` (บัญชีไม่มีเมนูการเงิน) · step sheet R6.41 คาดผิด
 - R6b v3: อนุมัติ expense/advance ไม่มีเหตุผลใน audit — ตรงกติกา (reason บังคับเฉพาะ reject/ตีกลับ) · มติ orchestrator O8

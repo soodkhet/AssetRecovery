@@ -2,9 +2,9 @@
 
 | ฟิลด์ | ค่า |
 |---|---|
-| รอบล่าสุดที่จบ | **R6b v3 รอบจ่าย** — 04/10/2569 02:14–02:26 · 22 ✅ / 🐞 2 · **เงิน/ภาษีตรง golden ทุกตัว** · บั๊กใหม่ BUG-107 (S3 หน้าล่มเมื่อพิมพ์ตัวอักษรในยอดเคลียร์) / 108 / 109 / 110 · payout 4 รอบ gross 1580000 / WHT 28500 / net **1551500** (IN-1 489150 `file_generated` v2 — ค้างไว้ R7 · OUT-1 730500 · IN-2 301850 · OUT-2 30000 completed) · 50 ทวิ 8 ใบ / 22650 · revenues 4 billed = 1148110 · billing 2 (UATL 399110 ครบกำหนด 03/11 · UATC 749000 ครบกำหนด 19/10) · expense approved 16 = 980000 · ADV1/ADV4 เคลียร์ · ADV3 approved ครบกำหนด 04/10 · payee verified 3 · รายงาน `uat/report/R6b-payout-v3.md` · ก่อนหน้า: R6a 20/20, R5 v2 24/24, R4 v3 |
-| snapshot ล่าสุด | `uat/snapshots/R6-end-v3.dump` (ปลาย R6 = ต้น R7) · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **R7 v? (เงินทดรองเกินกำหนด + นำเข้า statement ธนาคาร/จับคู่ IN-1)** — เริ่มได้**หลัง 00:00 น. 05/10/2569** เท่านั้น · ดู HANDOFF ด้านล่าง |
+| รอบล่าสุดที่จบ | **R7a+R7b v3** — 04/10/2569 11:40–11:52 · 25/25 ✅ ตรง golden · บั๊กใหม่ BUG-111…115 (ไม่บล็อก) · bank 4 แถว (IN-1/UATL/UATC จับคู่ · 123.45 ค้างไว้ R7c) · payout 4 รอบ completed · billing paid 2 · AR 0 · ใบกำกับ INV-0001/0002 · 50 ทวิ 15 ใบ / 28500 · ภ.ง.ด.3 28500 · ADV3 **overdue** (asOf 2026-10-05 จำลอง) · งวด ต.ค. collecting · รายงาน `uat/report/R7ab-bankrecon-v3.md` · ภาพ 32 |
+| snapshot ล่าสุด | `uat/snapshots/R7b-end-v3.dump` (ปลาย R7b = ต้น R7c) · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
+| รอบปัจจุบัน | **R7c v3** (R7.26–R7.36 งานบัญชี: ยกเลิก-ออกแทน 50 ทวิ, ภ.ง.ด., Exception, ความพร้อมปิดงวด, Export Pack, ส่งสำนักงานบัญชี) → R8 (step sheet กำลังร่าง) → R9 → R10 · มติผู้ใช้: ไม่รอเที่ยงคืน (O10) |
 | บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~12:00 R7a+R7b จบ (ตารางบน) · มติผู้ใช้ O10 เล่นต่อไม่รอเที่ยงคืน → fixer K `ebd11e9` (dev trigger asOf) · step sheet R7 v1 `9841db2` · คำขอผู้ใช้ระหว่างรอบ: (1) กรอบโฟกัสแท็บ/เมนูย่อย → fixer L (2) เอกสารแนบรับเคสแบบชุดเดียว 25 MB → fixer M (3) แม่แบบนำเข้าภาษาไทยทุกจุด → fixer N
 - 04/10/2569 ~03:00 ผู้ใช้อนุญาต fixer ชุดก่อน R7 → merge fixer I `2faed64` (BUG-095/105/107/108/110) + fixer J `46b31d4` (BUG-096/097/098/099/104 · migration `20261004100000_expense_resubmit_note` → ฐาน dev+test แล้ว) · verify typecheck/lint/260 files 3,330 tests ✅ · snapshot **`R6-end-v3-fixed`** = ต้น R7 · migration ใหม่จาก UAT รวม **8 ตัว** (ถึง `20261004100000`)
 - 04/10/2569 ~02:35 R6b v3 จบ (ดูตารางบน) · มติ O8/O9 · Storage `payment-files` +5 bank file (ใช้งานจริง ไม่ใช่ขยะ) · สำเนาในเครื่อง `uat/fixtures/downloads-R6b/` · orchestrator หยุดรอเวลา R7
 - 04/10/2569 ~02:20 R6a v3 จบ (ดูตารางบน) → เริ่ม R6b
@@ -68,7 +69,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 ### 1. วงจรต่อรอบ (ทำซ้ำทุกรอบ — orchestrator ห้ามอ่านไฟล์ใหญ่เอง ให้ subagent ทำ)
 1. ปล่อย role agent (prompt §2) แบบ background
-2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-110) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
+2. จบรอบ: `uat/bin/snap.sh <ชื่อ>` → รวมบั๊กเข้า `uat/BUGS.md` (เลขต่อจาก BUG-115) → อัปเดตตารางบนสุดของไฟล์นี้ + Log → commit (`test(uat): …` + บรรทัด Co-Authored-By) · ตรวจไม่มีรหัสผ่านหลุด: `! grep -rq "Uat-[A-Za-z0-9_-]\{8,\}" <ไฟล์ที่จะ commit>`
 3. บั๊ก S1/S2 ที่บล็อก → fixer ใน worktree (`isolation: worktree`, ฐานทดสอบแยก test2…test7 ที่มีอยู่แล้ว, `git merge staging` + `pnpm install --frozen-lockfile` + `pnpm db:generate` ก่อน) → merge **ระหว่างรอบเท่านั้น** (ห้าม merge ขณะ role agent รัน)
 4. หลัง merge ที่มี migration: `pnpm db:generate` → `pnpm db:deploy` → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` → `pnpm db:seed` (ไม่ทับแถวเดิม) → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test`
 5. คำถามที่ต้องให้ผู้ใช้ตัดสิน: ถามเป็นชุดตัวเลือกภาษาไทย (AskUserQuestion) พร้อมตัวอย่างตัวเลข — ผู้ใช้ชอบแบบนี้
