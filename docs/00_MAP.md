@@ -644,7 +644,7 @@
 | 153 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 160 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/38-case-submission.md` (86 KB, 469 บรรทัด)
+### `docs/38-case-submission.md` (99 KB, 500 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -652,47 +652,48 @@
 | 3 | # 38 — Case Submission (รับเคส) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 24 | ## 1. Summary |
-| 28 | ## 2. Purpose |
-| 32 | ## 3. Scope |
-| 34 | ### 3.1 In Scope |
-| 42 | ### 3.2 Out of Scope (ยกไป Sprint ถัดไป / เอกสารอื่น) |
-| 49 | ## 4. Actors & Responsibilities |
-| 62 | ## 5. Menu & Navigation |
-| 68 | ## 6. Data Requirements |
-| 70 | ### 6.1 Required Fields — ข้อมูลลูกหนี้/คู่สัญญา |
-| 92 | ### 6.1.1 Identity Document — Conditional ตามสัญชาติ |
-| 100 | ### 6.1.2 Address Structure (ใช้ร่วมกันทั้ง 3 ที่อยู่) |
-| 114 | ### 6.1.3 Contact Persons (ผู้ติดต่ออื่น) — Repeatable |
-| 121 | ### 6.2 Required Fields — ข้อมูลทรัพย์/สินค้า |
-| 130 | ### 6.3 Document Checklist (เอกสารแนบ) |
-| 145 | ### 6.3.1 Product Photo (รูปสินค้า) — แยกเป็น Section ของตัวเอง |
-| 155 | ### 6.4 Derived / Computed Fields |
-| 171 | ### 6.5 Projected Revenue Calculation (ประมาณการรายได้ก่อนรับเคส) |
-| 187 | ### 6.6 Re-track / Recycle Flow (เคสไม่สำเร็จ — ไฟแนนซ์ขอให้ลองใหม่) |
-| 198 | ## 7. UI Requirements |
-| 200 | ### 7.1 Page Layout |
-| 206 | ### 7.2 Table Behavior |
-| 215 | ### 7.3 Form / Modal Behavior (Manual Entry) |
-| 228 | ### 7.4 Team Suggestion UI |
-| 238 | ### 7.5 Case Detail / Review Modal (Consolidated) |
-| 258 | ## 8. Actions & Buttons |
-| 275 | ## 9. Workflow |
-| 291 | ## 10. Status / State Machine |
-| 306 | ## 11. Business Rules |
-| 317 | ## 12. Validation & Error Handling |
-| 333 | ## 13. Permissions |
-| 346 | ## 14. Audit Log |
-| 357 | ## 15. Notifications |
-| 363 | ## 16. Integration Points |
-| 371 | ## 17. API / Event Contract Draft |
-| 373 | ### 17.1 API Endpoints |
-| 385 | ### 17.2 Events |
-| 395 | ## 18. Export / Document Requirements |
-| 399 | ## 19. Acceptance Criteria |
-| 408 | ## 20. Test Cases |
-| 442 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 454 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 28 | ## 1. Summary |
+| 32 | ## 2. Purpose |
+| 36 | ## 3. Scope |
+| 38 | ### 3.1 In Scope |
+| 46 | ### 3.2 Out of Scope (ยกไป Sprint ถัดไป / เอกสารอื่น) |
+| 53 | ## 4. Actors & Responsibilities |
+| 66 | ## 5. Menu & Navigation |
+| 72 | ## 6. Data Requirements |
+| 74 | ### 6.1 Required Fields — ข้อมูลลูกหนี้/คู่สัญญา |
+| 96 | ### 6.1.1 Identity Document — Conditional ตามสัญชาติ |
+| 104 | ### 6.1.2 Address Structure (ใช้ร่วมกันทั้ง 3 ที่อยู่) |
+| 118 | ### 6.1.3 Contact Persons (ผู้ติดต่ออื่น) — Repeatable |
+| 125 | ### 6.2 Required Fields — ข้อมูลทรัพย์/สินค้า |
+| 134 | ### 6.3 Document Checklist (เอกสารแนบ) |
+| 149 | ### 6.3.1 Product Photo (รูปสินค้า) — แยกเป็น Section ของตัวเอง |
+| 159 | ### 6.3.2 โหมดเอกสารชุดเดียว (สแกนรวมเล่ม) — v3.2 |
+| 172 | ### 6.4 Derived / Computed Fields |
+| 188 | ### 6.5 Projected Revenue Calculation (ประมาณการรายได้ก่อนรับเคส) |
+| 204 | ### 6.6 Re-track / Recycle Flow (เคสไม่สำเร็จ — ไฟแนนซ์ขอให้ลองใหม่) |
+| 215 | ## 7. UI Requirements |
+| 217 | ### 7.1 Page Layout |
+| 223 | ### 7.2 Table Behavior |
+| 232 | ### 7.3 Form / Modal Behavior (Manual Entry) |
+| 246 | ### 7.4 Team Suggestion UI |
+| 256 | ### 7.5 Case Detail / Review Modal (Consolidated) |
+| 277 | ## 8. Actions & Buttons |
+| 294 | ## 9. Workflow |
+| 310 | ## 10. Status / State Machine |
+| 325 | ## 11. Business Rules |
+| 336 | ## 12. Validation & Error Handling |
+| 358 | ## 13. Permissions |
+| 372 | ## 14. Audit Log |
+| 384 | ## 15. Notifications |
+| 390 | ## 16. Integration Points |
+| 398 | ## 17. API / Event Contract Draft |
+| 400 | ### 17.1 API Endpoints |
+| 412 | ### 17.2 Events |
+| 422 | ## 18. Export / Document Requirements |
+| 426 | ## 19. Acceptance Criteria |
+| 435 | ## 20. Test Cases |
+| 474 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 486 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/40-case-assignment-routing.md` (78 KB, 364 บรรทัด)
 

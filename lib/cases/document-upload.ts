@@ -1,4 +1,10 @@
-import { DOCUMENT_SLOT_LABEL, type DocumentSlot } from '@/lib/cases/case'
+import {
+  DOCUMENT_SLOT_LABEL,
+  SEPARATE_ONLY_SLOTS,
+  type DocumentCounts,
+  type DocumentMode,
+  type DocumentSlot,
+} from '@/lib/cases/case'
 
 /**
  * กติกาการแนบไฟล์ของเคส (`38` §6.3 · §6.3.1 · ไฟล์ 01 object storage rule) — **pure ล้วน**
@@ -17,6 +23,17 @@ export const CASE_DOCUMENT_BUCKET = 'case-documents'
 /** เพดานขนาดไฟล์ต่อชิ้นฝั่งฟอร์ม — กันผู้ใช้รออัปโหลดนานแล้วค่อยพัง (ไม่ใช่ error code ของ `24`) */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
+/**
+ * เพดานต่อไฟล์ของ **เอกสารชุด** (`bundle_doc` — สแกนรวมเล่มทั้งสัญญา/บัตร/รูป) = 25 MB
+ * (มติ PO 04/10/2569 UAT เอกสารชุดเดียว) · ไฟล์แยกประเภทยังคง 10 MB · server บังคับค่าเดียวกันที่ `caseDocumentRule()`
+ */
+export const BUNDLE_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
+/** เพดานขนาดไฟล์ต่อ slot — จุดเดียวที่ทั้งฟอร์มและ server ใช้ */
+export function maxUploadBytes(slot: DocumentSlot): number {
+  return slot === 'bundle_doc' ? BUNDLE_MAX_UPLOAD_BYTES : MAX_UPLOAD_BYTES
+}
+
 const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const
 const DOCUMENT_MIMES = ['application/pdf', ...IMAGE_MIMES] as const
 
@@ -26,6 +43,7 @@ export const SLOT_ACCEPTED_MIMES: Readonly<Record<DocumentSlot, readonly string[
   national_id_doc: DOCUMENT_MIMES,
   other_doc: DOCUMENT_MIMES,
   product_photo: IMAGE_MIMES,
+  bundle_doc: DOCUMENT_MIMES,
 }
 
 export function isImageMime(mimeType: string): boolean {
@@ -60,11 +78,46 @@ export function checkUploadCandidate(slot: DocumentSlot, file: UploadCandidate):
     const kinds = slot === 'product_photo' ? 'รูปภาพ (JPG/PNG/WebP/HEIC)' : 'PDF หรือรูปภาพ'
     return `“${DOCUMENT_SLOT_LABEL[slot]}” รับเฉพาะ${kinds} — ไฟล์ ${file.name} ไม่รองรับ`
   }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    return `ไฟล์ ${file.name} ใหญ่เกิน ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`
+  const maxBytes = maxUploadBytes(slot)
+  if (file.size > maxBytes) {
+    return `ไฟล์ ${file.name} ใหญ่เกิน ${Math.floor(maxBytes / 1024 / 1024)} MB`
   }
   if (file.size <= 0) return `ไฟล์ ${file.name} ว่างเปล่า`
   return null
+}
+
+/** slot ที่ฟอร์มแสดงในส่วน "เอกสารแนบ" ต่อโหมด (รูปสินค้าอยู่ section ของตัวเองทั้งสองโหมด) */
+export function formSlotsFor(mode: DocumentMode): readonly DocumentSlot[] {
+  return mode === 'bundle' ? ['bundle_doc', 'other_doc'] : ['contract_doc', 'national_id_doc', 'other_doc']
+}
+
+/** slot ที่ใช้ไม่ได้เมื่ออยู่ในโหมด `mode` (ต้องไม่มีไฟล์ค้างก่อนสลับเข้าโหมดนั้น) */
+export function slotsExcludedBy(mode: DocumentMode): readonly DocumentSlot[] {
+  return mode === 'bundle' ? SEPARATE_ONLY_SLOTS : ['bundle_doc']
+}
+
+export type DocumentModeSwitchPlan =
+  | { kind: 'switch' }
+  /** มีไฟล์ที่ **อัปโหลดแล้ว** ในช่องของโหมดเดิม — สลับไม่ได้ (ห้ามทิ้งไฟล์เงียบ ๆ) */
+  | { kind: 'blocked'; slots: DocumentSlot[] }
+  /** มีไฟล์ที่ **เลือกไว้แต่ยังไม่อัปโหลด** — ต้องถามก่อนนำออก */
+  | { kind: 'confirm'; dropCount: number; slots: DocumentSlot[] }
+
+/**
+ * วางแผนการสลับโหมดเอกสารแนบบนฟอร์ม (มติ PO 04/10/2569) — `existing` = ไฟล์ที่อัปโหลดแล้ว ·
+ * `stagedSlots` = slot ของไฟล์ที่เลือกไว้แต่ยังไม่อัปโหลด
+ */
+export function planDocumentModeSwitch(
+  next: DocumentMode,
+  existing: DocumentCounts,
+  stagedSlots: readonly DocumentSlot[],
+): DocumentModeSwitchPlan {
+  const excluded = slotsExcludedBy(next)
+  const uploaded = excluded.filter((slot) => (existing[slot] ?? 0) > 0)
+  if (uploaded.length > 0) return { kind: 'blocked', slots: uploaded }
+  const dropping = stagedSlots.filter((slot) => excluded.includes(slot))
+  if (dropping.length > 0) return { kind: 'confirm', dropCount: dropping.length, slots: [...new Set(dropping)] }
+  return { kind: 'switch' }
 }
 
 /**

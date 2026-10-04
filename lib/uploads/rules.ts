@@ -1,5 +1,5 @@
 import type { DocumentSlot } from '@/lib/cases/case'
-import { MAX_UPLOAD_BYTES } from '@/lib/cases/document-upload'
+import { MAX_UPLOAD_BYTES, maxUploadBytes } from '@/lib/cases/document-upload'
 import { EXPENSE_RECEIPT_MAX_BYTES, FIELD_MEDIA_MAX_BYTES, type FieldMediaKind } from '@/lib/field/media-upload'
 import { AUDIO_KINDS, DOCUMENT_KINDS, IMAGE_KINDS, VIDEO_KINDS, type FileKind, type UploadRule } from '@/lib/uploads/inspect'
 import { lotDocumentPrefix } from '@/lib/warehouse/lot-documents'
@@ -13,11 +13,12 @@ import type { LotDocument } from '@/lib/warehouse/lot-status'
  * ⚠️ ฝั่ง server เท่านั้น (ลาก `node:crypto` ผ่าน `inspect.ts`)
  */
 
+/** เอกสารเคสต่อ slot — เอกสารชุด (`bundle_doc`) รับ PDF/รูปเหมือนช่องเอกสาร แต่เพดาน 25 MB (มติ PO 04/10/2569) */
 export function caseDocumentRule(caseId: string, slot: DocumentSlot): UploadRule {
   return {
     prefix: `cases/${caseId}/${slot}/`,
     accept: slot === 'product_photo' ? IMAGE_KINDS : DOCUMENT_KINDS,
-    maxBytes: MAX_UPLOAD_BYTES,
+    maxBytes: maxUploadBytes(slot),
   }
 }
 

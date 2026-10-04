@@ -629,6 +629,14 @@ function renderCreateCaseModal(existingCase = null) {
 
     <div>
       <h3 class="text-sm font-bold text-slate-800 mb-3 pb-2 border-b border-slate-100">เอกสารแนบ</h3>
+      <!-- มติ PO 04/10/2569 (UAT — เอกสารชุดเดียว): เลือกโหมด แยกตามประเภท (ค่าเริ่มต้น) / เอกสารชุดเดียว — โหมดชุดแทนช่องสัญญา+บัตรด้วยช่อง "เอกสารชุด (สแกนรวมเล่ม)" ไฟล์ละ ≤ 25 MB -->
+      <fieldset class="mb-3">
+        <legend class="text-xs font-semibold text-slate-600 mb-1.5">รูปแบบเอกสารที่ได้รับ</legend>
+        <div class="flex flex-wrap gap-2">
+          <label class="flex items-center gap-2 rounded-lg border border-emerald-500 bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs font-semibold cursor-pointer"><input type="radio" name="doc_mode" checked class="accent-emerald-600"> แยกตามประเภท</label>
+          <label class="flex items-center gap-2 rounded-lg border border-slate-300 bg-white text-slate-700 px-3 py-1.5 text-xs font-semibold cursor-pointer"><input type="radio" name="doc_mode" class="accent-emerald-600"> เอกสารชุดเดียว (สแกนรวมเล่ม)</label>
+        </div>
+      </fieldset>
       <div class="space-y-2">
         ${docSlots.map(slot => `
           <div class="flex items-center justify-between border border-slate-200 rounded-lg px-4 py-3 ${slot.uploaded ? 'bg-emerald-50/40 border-emerald-200' : 'bg-white'}">
@@ -728,6 +736,8 @@ function renderReviewModal(c) {
 
     <div class="border border-slate-200 rounded-lg p-3">
       <div class="text-xs font-bold text-slate-600 mb-2">เอกสารแนบ — คลิกเพื่อเปิดดู</div>
+      <!-- เคสโหมดเอกสารชุด: ป้าย "เอกสารชุด" + ช่องติ๊กยืนยันก่อนรับเคส (มติ PO 04/10/2569) — ตัวอย่างนี้เป็นเคสแยกประเภทจึงซ่อน -->
+      <label class="hidden mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><input type="checkbox" class="mt-0.5 accent-emerald-600"> <span><span class="font-semibold">ตรวจเอกสารชุดแล้ว — ในชุดมีสัญญาเช่าซื้อ/ผ่อนชำระ และบัตรประชาชน/Passport ลูกหนี้ครบ</span><span class="block text-[11px] text-amber-800">ต้องติ๊กก่อนกด “รับเคส”</span></span></label>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <div class="text-[11px] font-semibold ${files.contract.length ? 'text-emerald-600' : 'text-red-500'} mb-1 flex items-center gap-1">${Icon.check} สัญญา ${files.contract.length ? `(${files.contract.length})` : '✗ ยังไม่มี'}</div>

@@ -88,7 +88,7 @@ export const caseUpdateSchema = caseCreateSchema
 
 export type CaseUpdateInput = z.infer<typeof caseUpdateSchema>
 
-/** อัปโหลดเอกสารต่อ slot (`38` §6.3) — ไฟล์จริงขึ้น Storage แล้วส่ง metadata มาผูกกับเคส */
+/** อัปโหลดเอกสารต่อ slot (`38` §6.3 · เอกสารชุด `bundle_doc` §6.3.2) — ไฟล์จริงขึ้น Storage แล้วส่ง metadata มาผูกกับเคส */
 export const caseDocumentUploadSchema = z.object({
   documentType: z.enum(DOCUMENT_SLOTS),
   fileUrl: trimmedText.min(1, 'ไม่พบที่อยู่ไฟล์').max(1000),
@@ -116,6 +116,11 @@ export const caseStatusChangeSchema = z.object({
   reason: optionalText(1000),
   teamId: z.uuid('ทีมไม่ถูกต้อง').nullable().optional(),
   teamChangeReason: optionalText(500),
+  /**
+   * ผู้ตรวจติ๊กยืนยันว่าเอกสารชุด (สแกนรวมเล่ม) มีสัญญาและบัตรประชาชนครบ — บังคับเฉพาะ `accept` ของเคสโหมดชุด
+   * (มติ PO 04/10/2569 · ตัวบังคับอยู่ที่ `assertBundleConfirmed()`)
+   */
+  bundleDocumentsConfirmed: z.boolean().optional(),
 })
 
 export type CaseStatusChangeInput = z.infer<typeof caseStatusChangeSchema>

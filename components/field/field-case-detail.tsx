@@ -84,7 +84,7 @@ function ContactLink({ icon, label, value, href }: { icon: ReactNode; label: str
   )
 }
 
-function FileRow({ file, onOpen }: { file: ViewableFile; onOpen: () => void }) {
+function FileRow({ file, onOpen, tag }: { file: ViewableFile; onOpen: () => void; tag?: string }) {
   return (
     <button
       type="button"
@@ -93,6 +93,9 @@ function FileRow({ file, onOpen }: { file: ViewableFile; onOpen: () => void }) {
     >
       <IconFile className="h-4 w-4 shrink-0 text-slate-400" />
       <span className="truncate font-semibold">{file.originalName}</span>
+      {tag !== undefined && (
+        <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{tag}</span>
+      )}
     </button>
   )
 }
@@ -272,7 +275,13 @@ export function FieldCaseDetailBody({
             <div className="text-sm text-slate-400 italic">— ไม่มีเอกสารแนบ —</div>
           ) : (
             detail.documents.map((file) => (
-              <FileRow key={file.id} file={file} onOpen={() => setViewing(file)} />
+              <FileRow
+                key={file.id}
+                file={file}
+                onOpen={() => setViewing(file)}
+                // เอกสารชุด (สแกนรวมเล่ม — มติ PO 04/10/2569) อาจมีสัญญา/บัตร/รูปสินค้าอยู่ในไฟล์เดียว
+                tag={file.documentType === 'bundle_doc' ? 'เอกสารชุด' : undefined}
+              />
             ))
           )}
         </div>

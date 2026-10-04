@@ -208,6 +208,9 @@ export const ERROR_CATALOG = {
   CASE_RECYCLE_INVALID_STATUS: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_RECYCLE_NOTE_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },
   CASE_RECYCLE_REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },
+  // เติมเข้า `38` §12 ตามมติ PO 04/10/2569 — เอกสารชุดเดียว (Rule 04 — doc + code คอมมิตเดียวกัน)
+  CASE_DOCUMENT_MODE_CONFLICT: { status: 400, severity: 'reject', source: '38 §12' },
+  CASE_BUNDLE_CONFIRMATION_REQUIRED: { status: 400, severity: 'reject', source: '38 §12' },
 
   // ── 40 §12 Case Assignment & Routing ───────────────────────────────────
   ASSIGNMENT_TEAM_MISMATCH: { status: 400, severity: 'reject', source: '40 §12' },

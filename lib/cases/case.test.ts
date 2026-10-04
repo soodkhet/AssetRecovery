@@ -3,8 +3,12 @@ import { CaseError } from '@/lib/cases/errors'
 import {
   readinessGapText,
   REQUIRED_FIELD_LABEL,
+  assertBundleConfirmed,
   assertCaseEditable,
+  assertDocumentModeCompatible,
   assertDocumentsComplete,
+  countDocuments,
+  documentModeOf,
   assertIdentityFormats,
   assertProductPhotoCapacity,
   caseReadiness,
@@ -219,5 +223,54 @@ describe('readinessGapText — แปลงรายการที่ขาด�
     expect(readinessGapText(undefined)).toBeNull()
     expect(readinessGapText({ code: 'REQUIRED_MISSING' })).toBeNull()
     expect(readinessGapText({ missing: ['unknown_slot', 5], missingFields: 'x' })).toBeNull()
+  })
+})
+
+describe('เอกสารชุดเดียว (สแกนรวมเล่ม — มติ PO 04/10/2569)', () => {
+  it('โหมดอนุมานจากไฟล์ — ไม่มี bundle_doc = แยกตามประเภท (เคสเดิมไม่กระทบ)', () => {
+    expect(documentModeOf({})).toBe('separate')
+    expect(documentModeOf({ contract_doc: 1, national_id_doc: 1, product_photo: 1 })).toBe('separate')
+    expect(documentModeOf({ bundle_doc: 1 })).toBe('bundle')
+  })
+
+  it('countDocuments นับต่อ slot และข้ามชนิดที่ไม่รู้จัก', () => {
+    expect(
+      countDocuments([{ documentType: 'bundle_doc' }, { documentType: 'bundle_doc' }, { documentType: 'unknown' }]),
+    ).toEqual({ bundle_doc: 2 })
+  })
+
+  it('โหมดชุด: bundle_doc 1 ไฟล์นับครบสัญญา + บัตรประชาชน และรูปสินค้าไม่บังคับ', () => {
+    expect(missingRequiredDocuments({ bundle_doc: 1 })).toEqual([])
+    expect(() => assertDocumentsComplete({ bundle_doc: 2, product_photo: 3 })).not.toThrow()
+  })
+
+  it('โหมดแยกประเภทยังบังคับครบ 3 slot เหมือนเดิม', () => {
+    expect(missingRequiredDocuments({ contract_doc: 1 })).toEqual(['national_id_doc', 'product_photo'])
+    expect(missingRequiredDocuments({})).toEqual(['contract_doc', 'national_id_doc', 'product_photo'])
+  })
+
+  it('ปนสองโหมดไม่ได้ → CASE_DOCUMENT_MODE_CONFLICT · รูปสินค้า/เอกสารอื่นเพิ่มได้ทั้งสองโหมด', () => {
+    expect(() => assertDocumentModeCompatible({ contract_doc: 1 }, 'bundle_doc')).toThrow(
+      expect.objectContaining({ code: 'CASE_DOCUMENT_MODE_CONFLICT' }),
+    )
+    expect(() => assertDocumentModeCompatible({ bundle_doc: 1 }, 'national_id_doc')).toThrow(
+      expect.objectContaining({ code: 'CASE_DOCUMENT_MODE_CONFLICT' }),
+    )
+    expect(() => assertDocumentModeCompatible({ bundle_doc: 1 }, 'product_photo')).not.toThrow()
+    expect(() => assertDocumentModeCompatible({ bundle_doc: 1 }, 'other_doc')).not.toThrow()
+    expect(() => assertDocumentModeCompatible({ bundle_doc: 1 }, 'bundle_doc')).not.toThrow()
+    expect(() => assertDocumentModeCompatible({ product_photo: 2, other_doc: 1 }, 'bundle_doc')).not.toThrow()
+  })
+
+  it('รับเคสโหมดชุดต้องติ๊กยืนยัน → CASE_BUNDLE_CONFIRMATION_REQUIRED · โหมดแยกประเภทไม่ต้อง', () => {
+    for (const confirmed of [undefined, false]) {
+      expect(() => assertBundleConfirmed({ bundle_doc: 1 }, confirmed)).toThrow(
+        expect.objectContaining({ code: 'CASE_BUNDLE_CONFIRMATION_REQUIRED' }),
+      )
+    }
+    expect(() => assertBundleConfirmed({ bundle_doc: 1 }, true)).not.toThrow()
+    expect(() =>
+      assertBundleConfirmed({ contract_doc: 1, national_id_doc: 1, product_photo: 1 }, undefined),
+    ).not.toThrow()
   })
 })
