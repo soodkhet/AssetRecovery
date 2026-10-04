@@ -89,14 +89,52 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   bank_file_formats: 'รูปแบบไฟล์โอนเงิน',
   organizations: 'องค์กร',
   sessions: 'การเข้าใช้งาน',
+  // UAT BUG-131 — ตารางที่ยังไม่มีป้าย (ตัวกรองโชว์ชื่อตารางดิบ)
+  capabilities: 'รายการสิทธิ์',
+  team_managers: 'ผู้จัดการทีม',
+  case_contacts: 'ผู้ติดต่อของเคส',
+  case_edit_history: 'ประวัติแก้ไขเคส',
+  reassignment_history: 'ประวัติเปลี่ยนผู้รับผิดชอบ',
+  assignment_policy_settings: 'นโยบายการมอบหมายงาน',
+  travel_origins: 'จุดเริ่มเดินทาง',
+  close_case_drafts: 'ร่างปิดงาน',
+  payout_batch_items: 'รายการในรอบจ่าย',
+  cash_receipts: 'รายการรับเงิน',
+  bank_transaction_allocations: 'การจับคู่รายการเดินบัญชี',
+  customer_wht_certificates: 'หนังสือรับรองหัก ณ ที่จ่ายจากลูกค้า',
+  tax_document_template_settings: 'แม่แบบเอกสารภาษี',
+  audit_logs: 'บันทึกการใช้งาน',
+  notifications: 'การแจ้งเตือน',
+  push_subscriptions: 'การรับแจ้งเตือนบนอุปกรณ์',
+  jobs: 'งานเบื้องหลังของระบบ',
+  files: 'ไฟล์แนบ',
+  // ชื่อเป้าหมายแบบเอกพจน์ที่บางโมดูลใช้ใน audit
+  revenue: 'รายได้',
+  expense: 'รายการเบิก',
+  billing_batch: 'รอบวางบิล',
 }
 
 export function auditTargetLabel(targetType: string): string {
   return TARGET_TYPE_LABEL[targetType] ?? targetType
 }
 
-export function auditActionLabel(action: AuditAction): string {
-  return AUDIT_ACTION_LABEL[action]
+/**
+ * ป้าย action ที่ขึ้นกับเป้าหมาย (UAT BUG-127) — `unlock` บน `adjustments` คือ "audit แยก" ของการอนุมัติ
+ * รายการปรับปรุงในงวดที่ล็อก (`20` §6.2) **ไม่ใช่การปลดล็อกงวด** — งวดยังล็อกอยู่
+ */
+const ACTION_LABEL_BY_TARGET: Partial<Record<AuditAction, Readonly<Record<string, string>>>> = {
+  unlock: { adjustments: 'อนุมัติปรับปรุงในงวดที่ล็อก' },
+}
+
+export function auditActionLabel(action: AuditAction, targetType?: string): string {
+  const byTarget = targetType === undefined ? undefined : ACTION_LABEL_BY_TARGET[action]?.[targetType]
+  return byTarget ?? AUDIT_ACTION_LABEL[action]
+}
+
+/** ป้ายของตัวกรอง action — ตัวกรองไม่รู้เป้าหมาย จึงต้องครอบทุกความหมายของ action นั้น */
+export const AUDIT_ACTION_FILTER_LABEL: Readonly<Record<AuditAction, string>> = {
+  ...AUDIT_ACTION_LABEL,
+  unlock: 'ปลดล็อกงวด / อนุมัติปรับปรุงในงวดที่ล็อก',
 }
 
 /** ผู้ดำเนินการที่แสดงบนตาราง — job ของระบบไม่มีชื่อผู้ใช้ (`02` §10 `actor_id` NULL) */

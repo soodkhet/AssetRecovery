@@ -43,7 +43,7 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Item label="วันเวลา">{fmtDateTime(detail.createdAt)}</Item>
             <Item label="การกระทำ">
-              <StatusBadge group={AUDIT_ACTION_GROUP[detail.action]} label={auditActionLabel(detail.action)} />
+              <StatusBadge group={AUDIT_ACTION_GROUP[detail.action]} label={auditActionLabel(detail.action, detail.targetType)} />
             </Item>
             <Item label="ผู้ดำเนินการ">{auditActorLabel(detail.actorName, detail.actorRole)}</Item>
             <Item label="เป้าหมาย">
