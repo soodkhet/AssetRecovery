@@ -3,6 +3,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { fmtSatang } from '@/lib/format/money'
+import { fmtDate } from '@/lib/format/datetime'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   appendApprovalHistory,
@@ -112,6 +113,10 @@ const expenseSelect = {
   },
   case: { select: { id: true, caseRef: true, debtorName: true } },
   assignment: { select: { teamId: true, agent: { select: { fullName: true } } } },
+  /** snapshot การกระจายรายวัน — ฐานคิด "อัตรา/วัน ÷ จำนวนเคส (วันที่)" ของแถวรายวัน (มติ PO U1 · BUG-095) */
+  fieldDaySettlement: {
+    select: { fieldDate: true, caseCount: true, fuelTotalSatang: true, allowanceTotalSatang: true },
+  },
 } as const
 
 type ExpenseRow = Prisma.ExpenseGetPayload<{ select: typeof expenseSelect }>
@@ -218,7 +223,20 @@ export function describeExpenseBasis(row: {
     fuelDailyFlatSatang: number | null
     allowanceSatang: number | null
   } | null
+  /** แถวรายวัน (ผูก `field_day_settlement_id`) — ใช้ snapshot ของวันนั้น ไม่ใช่แผนปัจจุบัน */
+  fieldDaySettlement?: {
+    fieldDate: Date
+    caseCount: number
+    fuelTotalSatang: number
+    allowanceTotalSatang: number
+  } | null
 }): string {
+  // มติ PO U1 (BUG-095): แถวรายวันแสดง "อัตรา/วัน ÷ จำนวนเคสของวันนั้น (วันที่) = ยอด"
+  const settlement = row.fieldDaySettlement
+  if (settlement && (row.expenseType === 'fuel' || row.expenseType === 'allowance')) {
+    const dailySatang = row.expenseType === 'fuel' ? settlement.fuelTotalSatang : settlement.allowanceTotalSatang
+    return `${satangToBaht(dailySatang)} บาท/วัน ÷ ${settlement.caseCount} เคส (${fmtDate(settlement.fieldDate)}) = ${satangToBaht(row.grossSatang)}`
+  }
   if (row.expenseType === 'fuel') {
     if (row.distanceKm !== null && row.compPlan?.fuelRatePerKmSatang != null) {
       return `${row.distanceKm.toFixed(2)} กม. × ${satangToBaht(row.compPlan.fuelRatePerKmSatang)} บาท/กม.`

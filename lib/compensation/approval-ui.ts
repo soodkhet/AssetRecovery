@@ -1,3 +1,4 @@
+import type { ApiCallError } from '@/lib/api/types'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { isManualClaim } from '@/lib/claims/claim'
@@ -87,4 +88,27 @@ export function pendingClaimTotalSatang(items: readonly CompensationApprovalDto[
   return items
     .filter((item) => item.status === 'pending_approval' || item.status === 'pending_finance_approval')
     .reduce((sum, item) => sum + item.grossSatang, 0)
+}
+
+/**
+ * ข้อความ toast เมื่ออนุมัติไม่ผ่าน — `APPROVAL_STEP_OUT_OF_ORDER` มีสองทิศ (BUG-105):
+ * ขั้นที่ส่งมา **น้อยกว่า** ขั้นปัจจุบัน = หน้าค้าง รายการผ่านขั้นนี้ไปแล้ว (ไม่ใช่ "ยังไม่ถึงขั้น")
+ * — ใช้ code เดิมจาก `24` §6.4 อ่านทิศจาก `requestedStep`/`currentStep` ที่ API แนบมา
+ */
+export function approvalErrorToast(error: ApiCallError): { title: string; message: string; stale: boolean } {
+  const requested = error.payload?.requestedStep
+  const current = error.payload?.currentStep
+  if (
+    error.code === 'APPROVAL_STEP_OUT_OF_ORDER' &&
+    typeof requested === 'number' &&
+    typeof current === 'number' &&
+    requested < current
+  ) {
+    return {
+      title: 'รายการนี้ผ่านขั้นของคุณแล้ว',
+      message: 'รายการนี้ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า',
+      stale: true,
+    }
+  }
+  return { title: error.title, message: error.message, stale: false }
 }

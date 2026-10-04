@@ -5,6 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { APPROVAL_STEP_CAPABILITIES } from '@/lib/compensation/approval'
+import { approvalErrorToast } from '@/lib/compensation/approval-ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 
@@ -84,7 +85,10 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
       )
       setBusyId(null)
       if (result.error !== undefined) {
-        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+        const toast = approvalErrorToast(result.error)
+        showToast({ tone: 'error', title: toast.title, description: toast.message })
+        // หน้าค้าง (BUG-105) — โหลดคิวใหม่ให้ทันที สถานะบนจอจะได้ตรงกับฐานข้อมูล
+        if (toast.stale) await reload()
         return
       }
       showToast({

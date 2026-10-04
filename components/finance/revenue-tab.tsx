@@ -287,7 +287,7 @@ export function RevenueTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รายการรายได้ (Revenue)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติ **และ** คลังยืนยันส่งมอบแล้ว — ไม่มีการสร้าง/แก้ด้วยมือ
+              เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบแล้ว — ไม่มีการสร้าง/แก้ด้วยมือ
             </p>
           </div>
           <FilterGroup

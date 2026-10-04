@@ -10,7 +10,9 @@ import {
   countOverdue,
   ADVANCE_STATUS_FILTERS,
   outstandingAdvanceSatang,
+  settleUsedField,
 } from '@/lib/advances/advance-ui'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AdvanceDto } from '@/lib/advances/types'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 
@@ -180,5 +182,25 @@ describe('ข้อความ error ตอนขอเงินทดรอง
 
   it('code อื่นคืนข้อความจาก API ตรง ๆ', () => {
     expect(advanceRequestErrorText({ code: 'X', title: 'ก', message: 'ข' })).toEqual({ title: 'ก', message: 'ข' })
+  })
+})
+
+describe('settleUsedField — ช่องยอดที่ใช้จริงของ modal เคลียร์เงินทดรอง (BUG-107)', () => {
+  it('พิมพ์ "abc" → ไม่มียอด + ข้อความใต้ช่อง และการแสดงผลไม่ล่ม', () => {
+    const field = settleUsedField('abc')
+    expect(field).toEqual({ usedSatang: null, error: 'ยอดที่ใช้จริงต้องเป็นตัวเลข' })
+    expect(() => fmtSatangSymbol(field.usedSatang)).not.toThrow()
+    expect(fmtSatangSymbol(field.usedSatang)).toBe('—')
+  })
+
+  it('ทศนิยมเกิน 2 ตำแหน่ง / ติดลบ → เตือนตรงเหตุ', () => {
+    expect(settleUsedField('10.555').error).toBe('ยอดที่ใช้จริงกรอกทศนิยมได้ไม่เกิน 2 ตำแหน่ง')
+    expect(settleUsedField('-5')).toEqual({ usedSatang: null, error: 'ยอดที่ใช้จริงต้องไม่ติดลบ' })
+  })
+
+  it('ช่องว่าง = ยังไม่กรอก (ไม่เตือน) · ค่าปกติแปลงเป็นสตางค์', () => {
+    expect(settleUsedField('')).toEqual({ usedSatang: null, error: null })
+    expect(settleUsedField('1,450.50')).toEqual({ usedSatang: 145050, error: null })
+    expect(settleUsedField('0')).toEqual({ usedSatang: 0, error: null })
   })
 })
