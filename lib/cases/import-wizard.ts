@@ -18,6 +18,32 @@ export function importFieldLabel(field: ImportField): string {
   return FIELD_LABEL.get(field) ?? field
 }
 
+/** key ของ error ที่ไม่ใช่คอลัมน์นำเข้าโดยตรง (ระดับ object ของ schema หรือฟิลด์ที่ระบบเติมให้) */
+const ERROR_KEY_LABEL: Readonly<Record<string, string>> = {
+  financeCompanyId: 'บริษัทไฟแนนซ์',
+  sourceChannel: 'ช่องทางรับเคส',
+  addressCurrent: 'ที่อยู่ปัจจุบัน',
+  addressWork: 'ที่อยู่ที่ทำงาน',
+  addressIdCard: 'ที่อยู่ตามบัตร',
+  contacts: 'ผู้ติดต่อ',
+  outstandingDebtSatang: 'มูลหนี้คงเหลือ (บาท)',
+  documentMode: 'รูปแบบเอกสาร',
+  productPhotoInContract: 'รูปสินค้าในสัญญา',
+}
+
+/**
+ * ป้ายไทยของ key ใน `fields` ของแถวที่นำเข้าไม่ผ่าน — preview ต้องไม่โชว์ชื่อฟิลด์ดิบ เช่น
+ * `assetImeiSerial:` (UAT BUG-141) · key ย่อยของที่อยู่ที่ไม่มีคอลัมน์ตรงตัวใช้ป้ายของกลุ่มที่อยู่
+ */
+export function importErrorFieldLabel(key: string): string {
+  const exact = FIELD_LABEL.get(key as ImportField)
+  if (exact !== undefined) return exact
+  const known = ERROR_KEY_LABEL[key]
+  if (known !== undefined) return known
+  const head = key.split('.')[0] ?? key
+  return FIELD_LABEL.get(head as ImportField) ?? ERROR_KEY_LABEL[head] ?? 'ข้อมูลในแถว'
+}
+
 /** ฟิลด์ที่ต้อง map ให้ครบก่อนนำเข้าได้ — `case_ref` เป็นค่าเดียวที่ schema บังคับ (`38` §11) */
 export const REQUIRED_IMPORT_FIELDS: readonly ImportField[] = ['caseRef']
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { planImport } from '@/lib/cases/import'
 import {
+  importErrorFieldLabel,
   applyHeaderMapping,
   autoMapping,
   collectHeaders,
@@ -83,5 +84,20 @@ describe('applyHeaderMapping', () => {
   it('ค่าว่าง/null ไม่ทำให้แถวพัง', () => {
     const mapped = applyHeaderMapping([{ 'เลขที่สัญญา': null }], { 'เลขที่สัญญา': 'caseRef' })
     expect(mapped[0]?.['เลขที่สัญญา']).toBe('')
+  })
+})
+
+describe('importErrorFieldLabel — ป้ายไทยของ error ต่อแถว (BUG-141)', () => {
+  it('ฟิลด์ที่เป็นคอลัมน์นำเข้าใช้ป้ายของคอลัมน์ ไม่โชว์ชื่อฟิลด์ดิบ', () => {
+    expect(importErrorFieldLabel('assetImeiSerial')).toBe('IMEI / Serial')
+    expect(importErrorFieldLabel('caseRef')).toBe('เลขที่สัญญา')
+    expect(importErrorFieldLabel('addressCurrent.province')).toBe('จังหวัด (ปัจจุบัน)')
+  })
+
+  it('key ระดับ object / ฟิลด์ที่ระบบเติมให้ มีป้ายไทย · ไม่รู้จัก = ข้อความกลาง', () => {
+    expect(importErrorFieldLabel('addressWork')).toBe('ที่อยู่ที่ทำงาน')
+    expect(importErrorFieldLabel('outstandingDebtSatang')).toBe('มูลหนี้คงเหลือ (บาท)')
+    expect(importErrorFieldLabel('contacts.0.phone')).toBe('ผู้ติดต่อ')
+    expect(importErrorFieldLabel('somethingElse')).toBe('ข้อมูลในแถว')
   })
 })

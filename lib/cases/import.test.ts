@@ -87,6 +87,8 @@ describe('planImport — validate ต่อแถว', () => {
     expect(plan.rows[0]?.input.caseRef).toBe('SF-001')
     expect(plan.errors.map((error) => error.rowNumber)).toEqual([3, 4])
     expect(plan.errors.every((error) => error.code === 'API_VALIDATION_FAILED')).toBe(true)
+    // BUG-141 — แถวที่ไม่ผ่านต้องคืนเลขที่สัญญาดิบให้ preview แสดง (ไม่มี = null)
+    expect(plan.errors.map((error) => error.caseRef)).toEqual([null, 'SF-002'])
   })
 
   it('เลขแถวเริ่มที่ 2 (แถวแรกของไฟล์คือหัวคอลัมน์)', () => {

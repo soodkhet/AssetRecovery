@@ -43,6 +43,7 @@ import {
   collectHeaders,
   duplicateMappedFields,
   ignoredHeaders,
+  importErrorFieldLabel,
   importFieldLabel,
   missingRequiredFields,
 } from '@/lib/cases/import-wizard'
@@ -375,7 +376,7 @@ export function CaseImportWizard({
                       {row.fields !== null && (
                         <div className="text-[11px] text-red-600">
                           {Object.entries(row.fields)
-                            .map(([field, message]) => `${field}: ${message}`)
+                            .map(([field, message]) => `${importErrorFieldLabel(field)}: ${message}`)
                             .join(' · ')}
                         </div>
                       )}

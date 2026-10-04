@@ -527,6 +527,8 @@ export interface ImportRowError {
   /** code ตาม `38` §12 (แถวที่ mapping/validate ไม่ผ่าน) */
   code: 'API_VALIDATION_FAILED'
   fields: Record<string, string>
+  /** เลขที่สัญญาดิบของแถวนั้น (ยังไม่ validate) — preview แสดงให้ผู้ใช้หาแถวเจอ · ไม่มี = `null` (BUG-141) */
+  caseRef: string | null
 }
 
 export interface ImportRowValue {
@@ -557,7 +559,13 @@ export function planImport(
 
     if (!parsed.success || Object.keys(mappingErrors).length > 0) {
       const fieldErrors = parsed.success ? {} : toFieldErrors(parsed.error)
-      errors.push({ rowNumber, code: 'API_VALIDATION_FAILED', fields: { ...fieldErrors, ...mappingErrors } })
+      const rawCaseRef = typeof payload.caseRef === 'string' && payload.caseRef !== '' ? payload.caseRef : null
+      errors.push({
+        rowNumber,
+        code: 'API_VALIDATION_FAILED',
+        fields: { ...fieldErrors, ...mappingErrors },
+        caseRef: rawCaseRef,
+      })
       return
     }
     rows.push({ rowNumber, input: parsed.data })
