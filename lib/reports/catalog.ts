@@ -192,6 +192,23 @@ export function findReport(id: string): ReportDefinition | null {
   return BY_ID.get(id) ?? null
 }
 
+/** ชื่อหมวดใน path ของ `96` §9 (`/api/reports/<หมวด>/<ชื่อ>`) */
+export const REPORT_PATH_SEGMENT: Readonly<Record<ReportCategory, string>> = {
+  F: 'finance',
+  O: 'operations',
+  A: 'accounting',
+  E: 'executive',
+}
+
+/**
+ * หา definition จาก path ชื่อพ้องรายหมวดของ `96` §9 — `/api/reports/finance/advance-overdue` ⇒ F5
+ * หมวดใน path ต้องตรงกับหมวดของรายงาน (ไม่งั้นคืน null ⇒ route ตอบ 404) · UAT BUG-115
+ */
+export function findReportByPath(segment: string, slug: string): ReportDefinition | null {
+  const path = `/api/reports/${segment}/${slug}`
+  return REPORT_DEFINITIONS.find((report) => report.path === path) ?? null
+}
+
 export function reportsOfCategory(category: ReportCategory): readonly ReportDefinition[] {
   return REPORT_DEFINITIONS.filter((report) => report.category === category)
 }
