@@ -32,7 +32,7 @@ const COLUMNS: readonly ReportColumn[] = [
   { key: 'team', header: 'ทีม', type: 'text', width: 18 },
   { key: 'status', header: 'สถานะเคส', type: 'text', width: 16 },
   { key: 'receivedAt', header: 'วันที่รับเคส', type: 'date' },
-  { key: 'overdueDays', header: 'เกิน SLA (วัน)', type: 'number', tone: 'danger' },
+  { key: 'overdueDays', header: 'เกิน SLA (วัน)', type: 'days', tone: 'danger' },
   { key: 'projectedRevenueSatang', header: 'ประมาณการรายได้', type: 'money' },
 ]
 
@@ -90,7 +90,7 @@ export function buildSlaBreachReport(input: {
         key: 'worstOverdue',
         label: 'ค้างนานที่สุด (วัน)',
         value: worst,
-        type: 'number',
+        type: 'days',
         higherIsBetter: false,
       },
     ],

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { TBody, Table, TableState, Td, Th, THead, Tr } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { formatCellText, type ReportColumn, type ReportRow } from '@/lib/reports/payload'
+import { NUMERIC_COLUMN_TYPES, formatCellText, type ReportColumn, type ReportRow } from '@/lib/reports/payload'
 import {
   VIRTUAL_OVERSCAN,
   VIRTUAL_ROW_HEIGHT,
@@ -22,10 +22,9 @@ import {
  * - loading / empty / error ครบตาม `04` §9 ผ่าน `<TableState>` ตัวกลาง
  */
 
-const NUMERIC_TYPES = new Set(['money', 'number', 'percent'])
 
 export function isNumericColumn(column: ReportColumn): boolean {
-  return NUMERIC_TYPES.has(column.type)
+  return NUMERIC_COLUMN_TYPES.has(column.type)
 }
 
 function cellClass(column: ReportColumn): string | undefined {

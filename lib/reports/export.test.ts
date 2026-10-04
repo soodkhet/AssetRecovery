@@ -129,4 +129,14 @@ describe('การจัดรูปค่าในเซลล์ (Rule 01)', 
     expect(formatCellForSheet('2026-08-20', 'date')).toBe('20/08/2569')
     expect(formatCellText('2026-08-20T10:30:00Z', 'datetime')).toBe('20/08/2569 17:30')
   })
+
+  it('คอลัมน์จำนวนวันแสดงทศนิยม 1 ตำแหน่ง — TAT 0.4 วันต้องไม่กลายเป็น "0" (BUG-132)', () => {
+    expect(formatCellText(0.4, 'days')).toBe('0.4')
+    expect(formatCellText(3, 'days')).toBe('3.0')
+    expect(formatCellText(1234.5, 'days')).toBe('1,234.5')
+    expect(formatCellText(null, 'days')).toBe('—')
+    expect(formatCellForSheet(0.4, 'days')).toBe(0.4)
+    // จำนวนนับยังเป็นจำนวนเต็มเหมือนเดิม
+    expect(formatCellText(12, 'number')).toBe('12')
+  })
 })
