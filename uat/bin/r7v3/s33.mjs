@@ -1,0 +1,57 @@
+// R7.33 ส่งงวด ต.ค. ให้สำนักงานบัญชี + mark-sent v2 + probe การเขียนที่กระทบยอดก่อน/หลังส่ง
+import { openAs, shot, R, ID, log, q, q1, settle, sleep, waitToast, mainText, dlgText, BASE, auditSince, api, guard2xx } from './_h.mjs'
+log('=== R7.33', new Date().toISOString())
+const T = q1('select now()'); log('T', T)
+const V2 = q1('select id from export_records where version=2')
+const fin = await openAs('uat.finance'); const in2 = await openAs('uat.agent.in2')
+// probe ไม่ทำลาย: การเงินสร้างรอบจ่าย (ไม่มีรายการค้าง ⇒ ถ้ายามงวดไม่ทำงานจะได้ NO_ITEMS_TO_PAY) · in2 ขอเบิก (ADV3 overdue ⇒ ถ้ายามไม่ทำงานได้ ADVANCE_PENDING_SETTLEMENT)
+async function probes(tag) {
+  const a = await api(fin.page, 'POST', '/api/payout-batches', { side: 'inhouse', cutoffDate: '2026-10-04', name: `probe ${tag}` }); log(`33 ${tag} finance POST payout-batches`, a); guard2xx('payout', a)
+  const b = await api(in2.page, 'POST', '/api/advances', { requestedSatang: 100000, purpose: `UAT probe ${tag} ห้ามสร้าง`, dueClearDate: '2026-10-10' }); log(`33 ${tag} in2 POST advances`, b); guard2xx('advance', b)
+}
+await probes('ก่อนส่ง')
+
+const s = await openAs('uat.account'); const p = s.page
+await p.goto(`${BASE}/accounting?tab=closing`); await settle(p); await sleep(1000)
+const e1 = await api(p, 'PATCH', `/api/accounting/periods/${ID.PERIOD}/send`, { reason: '' }); log('33 send reason ว่าง', e1); guard2xx('send-empty', e1)
+const e2 = await api(p, 'PATCH', `/api/accounting/periods/${ID.PERIOD}/send`, {}); log('33 send ไม่มี reason', e2); guard2xx('send-none', e2)
+await p.locator('main').getByRole('button', { name: 'ส่งสำนักงานบัญชี' }).first().click(); await sleep(900)
+const d = p.locator('[role="dialog"]').last()
+log('33 dlg', await dlgText(p, 1200))
+log('33 confirm disabled (ว่าง)', await d.getByRole('button', { name: 'ยืนยันส่งมอบ' }).isDisabled())
+await shot(p, R, '33a-send-modal-empty')
+await d.locator('textarea').fill('ส่งชุดเอกสาร ต.ค. 2569 v2 ให้สำนักงานบัญชี UAT R7')
+await shot(p, R, '33b-send-modal-filled')
+const resps = []
+p.on('response', r => { if (r.url().includes(`/periods/${ID.PERIOD}/send`)) resps.push(r) })
+await d.getByRole('button', { name: 'ยืนยันส่งมอบ' }).dblclick()
+await sleep(3000)
+for (const r of resps) { let b = ''; try { b = JSON.stringify(await r.json()).slice(0, 400) } catch {} log('33 ui send resp', r.status(), b) }
+log('33 toast', await waitToast(p)); await sleep(1500); await settle(p)
+log('33 closing after', await mainText(p, 1500))
+await shot(p, R, '33c-closing-sent', { fullPage: true })
+const e3 = await api(p, 'PATCH', `/api/accounting/periods/${ID.PERIOD}/send`, { reason: 'ส่งซ้ำ probe' }); log('33 send ซ้ำ', e3); guard2xx('send-again', e3)
+
+// mark-sent v2 (UI)
+await p.goto(`${BASE}/accounting?tab=export`); await settle(p); await sleep(1000)
+const row = p.locator('main tr', { hasText: 'v1.1' })
+await row.getByRole('button', { name: 'Mark ว่าส่งแล้ว' }).click(); await sleep(800)
+const d2 = p.locator('[role="dialog"]').last()
+log('33 mark dlg', await dlgText(p, 800))
+if (await d2.locator('textarea').count()) await d2.locator('textarea').fill('ส่ง v1.1 ให้สำนักงานบัญชีทางอีเมลนอกระบบ UAT R7')
+await shot(p, R, '33d-mark-sent-modal')
+const rp = p.waitForResponse(r => r.url().includes(`/export-history/${V2}/mark-sent`), { timeout: 30000 })
+await d2.getByRole('button', { name: 'ยืนยันว่าส่งแล้ว' }).click()
+const mr = await rp; log('33 mark-sent resp', mr.status(), JSON.stringify(await mr.json()).slice(0, 300))
+log('33 mark toast', await waitToast(p)); await sleep(1500); await settle(p)
+log('33 export after', await mainText(p, 1600))
+await shot(p, R, '33e-export-v2-sent', { fullPage: true })
+const e4 = await api(p, 'PATCH', `/api/accounting/export-history/${V2}/mark-sent`, { note: 'ซ้ำ probe' }); log('33 mark-sent ซ้ำ', e4); guard2xx('mark-again', e4)
+
+await probes('หลังส่ง')
+log('33 sql period', q("select status, sent_at, sent_by is not null sent_by, export_ready, last_readiness_checked_at from accounting_periods where id='" + ID.PERIOD + "'"))
+log('33 sql export', q('select version, status, sent_at, sent_by is not null sb from export_records order by version'))
+log('33 sql guards', q("select (select count(*) from payout_batches) pb, (select count(*) from advances) adv"))
+log('33 audit', q(auditSince(T)))
+log('errs', s.consoleErrors.slice(0, 6), s.serverErrors, fin.serverErrors, in2.serverErrors)
+await Promise.all([s.browser.close(), fin.browser.close(), in2.browser.close()])
