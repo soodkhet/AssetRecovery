@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~03:00 ผู้ใช้อนุญาต fixer ชุดก่อน R7 → merge fixer I `2faed64` (BUG-095/105/107/108/110) + fixer J `46b31d4` (BUG-096/097/098/099/104 · migration `20261004100000_expense_resubmit_note` → ฐาน dev+test แล้ว) · verify typecheck/lint/260 files 3,330 tests ✅ · snapshot **`R6-end-v3-fixed`** = ต้น R7 · migration ใหม่จาก UAT รวม **8 ตัว** (ถึง `20261004100000`)
 - 04/10/2569 ~02:35 R6b v3 จบ (ดูตารางบน) · มติ O8/O9 · Storage `payment-files` +5 bank file (ใช้งานจริง ไม่ใช่ขยะ) · สำเนาในเครื่อง `uat/fixtures/downloads-R6b/` · orchestrator หยุดรอเวลา R7
 - 04/10/2569 ~02:20 R6a v3 จบ (ดูตารางบน) → เริ่ม R6b
 - 04/10/2569 ~02:10 R5 v2 จบ (ดูตารางบน) · step sheet R6 v2 เสร็จ (R6a 20 / R6b 24 ขั้น · golden ลงตัว) · มติ orchestrator + บัญชี A1–A7 → `uat/PO-DECISIONS-2569-10-04.md` (A1/A2 ต้องแก้โค้ด — รอผู้ใช้รีวิว · UAT ยึดโค้ดปัจจุบัน) · ขยะ Storage +4
@@ -42,10 +43,10 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 ## ▶️ HANDOFF — session ใหม่เริ่มตรงนี้ (เขียน 04/10/2569 ~02:35 หลัง R6b v3)
 
 ### 0. สถานะ
-- ฐาน dev = `R6-end-v3` (ปลาย R6) · staging HEAD = `git log -1` · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ)
+- ฐาน dev = **`R6-end-v3-fixed`** (ปลาย R6 + fixer I/J + migration `20261004100000`) · staging HEAD = `git log -1` · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ)
 - รอบที่จบในคืน 04/10: R4a v3 → R4b v3 (+R4.38b) → R5 v2 → R6a v3 → R6b v3 · ทุกรอบเงินตรง golden · ไม่มี S1/S2 เปิด
 - ⚠️ **รอผู้ใช้รีวิว**: `uat/PO-DECISIONS-2569-10-04.md` (O1–O9 + บัญชี A1–A7 — A1 ฐาน WHT ไม่รวมค่าใช้จ่ายจริงตามใบเสร็จ / A2 50 ทวิ 1 ใบต่อผู้รับต่อรอบ = ต้องแก้โค้ด เปลี่ยน golden IN-1 → ยังไม่ทำ) · คำถามนักบัญชี 3 ข้อเดิมใน `uat/PO-DECISIONS-2569-10-03.md` (orchestrator เปิดอ่านส่วนนั้นไม่ได้ — ให้ผู้ใช้ดูเอง) · BUGS needs-decision: 076, 078, 084, 090, 093, 100, 101, 102, 106, 109
-- บั๊ก open ที่แก้ได้ทันที (ไม่ต้องรอมติ): BUG-095 (มติ ก.), 096, 097, 098, 099, 104, 105, 107 (S3), 108, 110 — เสนอให้ fixer ชุดเดียวใน worktree **ก่อน R7** ถ้าผู้ใช้อนุญาต (ห้าม merge ขณะ role agent รัน)
+- ✅ บั๊ก 095–099, 104, 105, 107, 108, 110 แก้แล้ว (fixer I/J) · ใน R7 ให้ role agent ยืนยันซ้ำแบบเบา ๆ: ลิงก์แจ้งเตือน, audit lot/superseded, หมายเหตุ resubmit (`resubmit_note`), ยอดเคลียร์เงินทดรองพิมพ์ตัวอักษรไม่ล่ม · ข้อสังเกต fixer: หน้าอนุมัติการเงินยังไม่แสดง `resubmit_note` · `expense.approved` ยังลิงก์ `/field/income` · ไม่มี DOM test infra (BUG-107 ใช้ unit test ของ pure fn)
 - ⚠️ DATASET v3 ถ้อยคำยังไม่แก้ตามมติ O4 · step sheet R6.md v2 ยังไม่แก้ตาม O9 (R6.09 14→15 แถว, R6.41 บัญชีคาด redirect) · R5.md §0.6 asset id เก่า
 
 ### 1. R7 (ต้องหลัง 00:00 น. 05/10/2569)
@@ -94,7 +95,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
-- migration ใหม่จาก UAT **7 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261003170000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- migration ใหม่จาก UAT **8 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261004100000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)
