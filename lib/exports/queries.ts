@@ -18,6 +18,7 @@ import {
   packFileName,
   packStoragePath,
   packZipFileName,
+  packZipDownloadName,
   paymentCsv,
   payeesMissingTaxId,
   revenueCsv,
@@ -35,6 +36,7 @@ import {
 import {
   downloadPackFile,
   packContentDigest,
+  removePackFiles,
   sha256Hex,
   uploadPackFile,
 } from '@/lib/exports/pack-storage'
@@ -123,7 +125,8 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     attachmentCount: 0,
     files: entries.map((entry) => ({ key: entry.key, fileName: fileNameOf(entry.path) })),
     fileHash: row.fileHash,
-    zipFileName: zip === undefined ? null : fileNameOf(zip.path),
+    // ชื่อที่ผู้ใช้เห็น (ไทยได้) — key จริงใน Storage เป็น ASCII ดู `packZipFileName()`
+    zipFileName: zip === undefined ? null : packZipDownloadName(row.period.periodLabel, row.version),
     generatedAt: row.generatedAt.toISOString(),
     generatedByName: row.generatedByUser.fullName,
     sentAt: row.sentAt === null ? null : row.sentAt.toISOString(),
@@ -625,7 +628,8 @@ export async function createExportPack(
     ...dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })),
   ]
   const zipBytes = buildZip(entries, generatedAt)
-  const zipFileName = packZipFileName(scope.periodLabel, version)
+  // key ใน Storage = ASCII ล้วน · ชื่อไทยใช้ตอนดาวน์โหลดเท่านั้น (UAT R7cv3-B01)
+  const zipFileName = packZipFileName(scope.yearBe, scope.month, version)
 
   // ⑤ อัปโหลดทั้งชุด — `upsert: false` ⇒ ไฟล์เวอร์ชันเดิมไม่มีวันถูกทับ (Rule 09)
   // path มีชั้น "ครั้งที่พยายาม" คั่นไว้ ⇒ ความพยายามที่ล้มหลังอัปโหลด (tx ล้ม / สองคนกดพร้อมกัน)
@@ -656,7 +660,7 @@ export async function createExportPack(
     },
     { key: PACK_ZIP_KEY, path: pathFor(zipFileName), bytes: zipBytes, contentType: CONTENT_TYPE.zip },
   ]
-  await Promise.all(uploads.map((file) => uploadPackFile(file)))
+  await uploadAttempt(uploads)
 
   const fileUrls: Record<string, string> = {}
   for (const file of uploads) fileUrls[file.key] = file.path
@@ -704,7 +708,9 @@ export async function createExportPack(
       tx,
     )
     return row
-  }).catch((error: unknown) => {
+  }).catch(async (error: unknown) => {
+    // ไม่มีแถวอ้างไฟล์ชุดนี้ ⇒ เก็บกวาดไฟล์ของครั้งนี้ทิ้ง (path มีชั้น attempt — ไม่แตะชุดของคนอื่น)
+    await cleanupAttempt(uploads.map((file) => file.path))
     if (isUniqueViolation(error)) {
       throw new ExportError('EXPORT_VERSION_CONFLICT', {
         detail: `period=${scope.id} version=${version}`,
@@ -716,6 +722,36 @@ export async function createExportPack(
   return toExportDto(created)
 }
 
+
+/**
+ * อัปโหลดไฟล์ทั้งชุดของ "ครั้งที่พยายาม" นี้ — ล้มแม้ไฟล์เดียว ⇒ ลบไฟล์ที่ขึ้นไปแล้ว (best-effort)
+ * แล้วตอบ `EXPORT_STORAGE_FAILED` (ไม่สร้าง `export_records` — ชุดไม่ครบต้องไม่ถูกอ้างถึง)
+ */
+async function uploadAttempt(
+  uploads: readonly { path: string; bytes: Uint8Array; contentType: string }[],
+): Promise<void> {
+  const results = await Promise.allSettled(uploads.map((file) => uploadPackFile(file)))
+  const failed = results.flatMap((result, index) =>
+    result.status === 'rejected' ? [{ path: uploads[index]?.path ?? '', reason: result.reason }] : [],
+  )
+  if (failed.length === 0) return
+
+  const uploaded = uploads.filter((_file, index) => results[index]?.status === 'fulfilled').map((file) => file.path)
+  await cleanupAttempt(uploaded)
+  const first = failed[0]
+  throw new ExportError('EXPORT_STORAGE_FAILED', {
+    detail: `${failed.length}/${uploads.length} ไฟล์ล้ม · ${first?.path ?? ''}: ${
+      first?.reason instanceof Error ? first.reason.message : String(first?.reason)
+    }`,
+  })
+}
+
+async function cleanupAttempt(paths: readonly string[]): Promise<void> {
+  const leftovers = await removePackFiles(paths)
+  if (leftovers.length > 0) {
+    console.error('[export-pack] ลบไฟล์ของครั้งที่ล้มไม่สำเร็จ — ต้องตามลบเอง', leftovers)
+  }
+}
 
 /** Prisma `P2002` = ชน unique constraint — ที่นี่คือ `uniq_export_period_version` */
 function isUniqueViolation(error: unknown): boolean {
@@ -796,5 +832,9 @@ export async function getExportPackDownload(
     throw new ExportError('EXPORT_RECORD_NOT_FOUND', { detail: `export=${id} ไม่มีไฟล์ .zip ในระเบียน` })
   }
 
-  return { bytes: await downloadPackFile(zip.path), fileName: fileNameOf(zip.path), fileHash: row.fileHash }
+  return {
+    bytes: await downloadPackFile(zip.path),
+    fileName: packZipDownloadName(row.period.periodLabel, row.version),
+    fileHash: row.fileHash,
+  }
 }

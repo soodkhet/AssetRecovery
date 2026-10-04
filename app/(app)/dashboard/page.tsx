@@ -70,8 +70,9 @@ export default async function DashboardPage() {
               </li>
             ))}
           </ul>
+          {/* ซ่อนเมนูเป็นแค่ UX — API ตรวจสิทธิ์ซ้ำเสมอ (DEC-002) · ห้ามแสดงเลขอ้างอิงบนจอ (UAT BUG-113) */}
           <InlineAlert tone="info" className="mt-4">
-            การซ่อนเมนูเป็นเพียง UX — ทุก endpoint ยังตรวจสิทธิ์ซ้ำที่ API layer เสมอ (DEC-002)
+            เมนูที่เห็นขึ้นกับสิทธิ์ของคุณ — ระบบตรวจสิทธิ์ซ้ำทุกครั้งที่ทำรายการ
           </InlineAlert>
         </Card>
       </div>

@@ -346,6 +346,13 @@ suite('Phase 4.1 — Exception (`34` §16)', () => {
     expect(list.summary.resolved.warning).toBe(1)
     expect(list.summary.open.total).toBe(0)
     expect(list.summary.blockingCritical).toBe(0)
+
+    // หน้ารอบส่งบัญชี/modal Export ต้องไม่นับรายการที่ปิดแล้วเป็น "วิกฤตเปิดอยู่" (UAT R7cv3-B02)
+    const periods = await accounting.listPeriods(ctx(), { limit: 36 }, IN_PERIOD)
+    const period = periods.find((row) => row.id === periodId)
+    expect(period?.criticalCount).toBe(1)
+    expect(period?.blockingCritical).toBe(0)
+    expect(period?.openWarningCount).toBe(0)
   })
 })
 

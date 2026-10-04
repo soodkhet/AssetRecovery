@@ -1,4 +1,5 @@
-import { Document, Page, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
+import { Text } from '@/components/pdf/text'
 import {
   MetaRow,
   OfficialFooter,

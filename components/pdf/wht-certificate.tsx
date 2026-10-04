@@ -1,4 +1,5 @@
-import { Document, Page, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
+import { Text } from '@/components/pdf/text'
 import { MetaRow, OfficialFooter, OfficialHeader, PartyBox, officialStyles } from '@/components/pdf/official-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { WhtCertificateDoc } from '@/lib/wht/wht'

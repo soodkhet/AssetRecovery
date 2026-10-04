@@ -572,7 +572,14 @@ export async function importStatement(
 
 // ── จับคู่ (auto/manual ใช้เส้นทางเดียวกัน) ──────────────────────────────────
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 async function loadTransaction(organizationId: string, id: string): Promise<TxRow> {
+  // id จาก URL ที่ไม่ใช่ UUID ⇒ Postgres โยน "invalid input syntax for type uuid" เป็น 500 (UAT BUG-111)
+  // ⇒ ตอบเหมือนไม่พบรายการ (404 ไม่ leak) ก่อนถึง DB
+  if (!UUID_PATTERN.test(id)) {
+    throw new BankReconError('BANK_TRANSACTION_NOT_FOUND', { detail: `transaction=${id} ไม่ใช่ UUID` })
+  }
   const row = await prisma.bankTransaction.findFirst({
     where: { id, organizationId },
     select: TX_SELECT,
@@ -789,6 +796,7 @@ export async function matchBankTransaction(
   if (transaction.matchStatus === 'unmatched_resolved') {
     throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
       detail: 'unmatched_resolved เป็นสถานะสุดท้าย จับคู่ต่อไม่ได้',
+      message: 'รายการนี้ถูกปิดโดยไม่จับคู่ไปแล้ว — จับคู่ต่อไม่ได้',
     })
   }
 
@@ -796,6 +804,10 @@ export async function matchBankTransaction(
   if (input.targetKind !== expectedKind) {
     throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
       detail: `รายการฝั่ง ${transactionSide(transaction.amountSatang)} จับคู่กับ ${input.targetKind} ไม่ได้`,
+      message:
+        transactionSide(transaction.amountSatang) === 'in'
+          ? 'รายการนี้เป็นเงินเข้า — จับคู่ได้กับรอบวางบิล (รับชำระ) เท่านั้น'
+          : 'รายการนี้เป็นเงินออก — จับคู่ได้กับรอบจ่ายเงินเท่านั้น',
     })
   }
 
@@ -848,6 +860,10 @@ export async function resolveUnmatchedTransaction(
   if (status === null) {
     throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
       detail: `${before.matchStatus} → unmatched_resolved (ปิดได้เฉพาะรายการที่ยังไม่จับคู่)`,
+      message:
+        before.matchStatus === 'unmatched_resolved'
+          ? 'รายการนี้ถูกปิดโดยไม่จับคู่ไปแล้ว'
+          : 'รายการนี้จับคู่ไปแล้ว — ปิดโดยไม่จับคู่ได้เฉพาะรายการที่ยังไม่จับคู่',
     })
   }
   if (!hasNote(input.matchNote)) throw new BankReconError('MATCH_NOTE_REQUIRED')

@@ -1,10 +1,16 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  bodyStringField,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { cancelWhtCertificate } from '@/lib/wht/queries'
 import { whtCancelSchema } from '@/lib/wht/schemas'
-import { MANAGE_WHT } from '@/lib/wht/wht'
+import { MANAGE_WHT, requireWhtCancelReason } from '@/lib/wht/wht'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -21,8 +27,13 @@ export const PATCH = withApiPermission<RouteContext>(
   toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
-    const parsed = whtCancelSchema.safeParse(await readJsonBody(request))
-    if (!parsed.success) return validationErrorResponse(parsed.error)
+    const body = await readJsonBody(request)
+    const parsed = whtCancelSchema.safeParse(body)
+    if (!parsed.success) {
+      // ไม่มีเหตุผล ⇒ `WHT_CANCEL_REQUIRES_REASON` (`24` §6.8) ไม่ใช่ `REQUIRED_MISSING` (UAT R7cv3-B03)
+      requireWhtCancelReason(bodyStringField(body, 'reason'))
+      return validationErrorResponse(parsed.error)
+    }
 
     return apiSuccess(await cancelWhtCertificate({ actor: user, meta: getRequestMeta(request) }, id, parsed.data))
   },

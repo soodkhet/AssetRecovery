@@ -378,7 +378,23 @@ describe('POST /api/dev/trigger-job (`91` §14.1)', () => {
     )
 
     expect(response.status).toBe(400)
-    expect((await envelopeOf(response)).error?.code).toBe('JOB_INVALID_STATUS')
+    const envelope = (await response.json()) as { error: { code: string; message: string } | null }
+    expect(envelope.error?.code).toBe('JOB_INVALID_STATUS')
+    // ข้อความบอกเหตุจริง (ทางลัดไม่รองรับงานนี้) ไม่ใช่ "สั่งงานใหม่ได้เฉพาะงานที่ล้มเหลว" (UAT BUG-114)
+    expect(envelope.error?.message).toContain('ทางลัดทดสอบไม่รองรับ')
+    expect(queriesMock.createJob).not.toHaveBeenCalled()
+  })
+
+  it('job_type ที่ไม่รู้จัก/ไม่ส่ง ⇒ JOB_INVALID_STATUS ข้อความไทย ไม่ใช่ข้อความ Zod อังกฤษดิบ (UAT BUG-114)', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+
+    for (const body of [{ jobType: 'no_such_job' }, {}]) {
+      const response = await devTriggerRoute(request('http://localhost/api/dev/trigger-job', 'POST', body), undefined)
+      expect(response.status).toBe(400)
+      const envelope = (await response.json()) as { error: { code: string; message: string } | null }
+      expect(envelope.error?.code).toBe('JOB_INVALID_STATUS')
+      expect(envelope.error?.message).toMatch(/^ทางลัดทดสอบไม่รองรับประเภทงานที่ส่งมา/)
+    }
     expect(queriesMock.createJob).not.toHaveBeenCalled()
   })
 })

@@ -1,10 +1,12 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   REPORT_CATEGORIES,
   REPORT_DEFINITIONS,
+  REPORT_PATH_SEGMENT,
   findReport,
+  findReportByPath,
   reportsOfCategory,
 } from '@/lib/reports/catalog'
 
@@ -73,5 +75,24 @@ describe('ทะเบียนรายงาน ↔ `96`', () => {
     expect(findReport('kpi-summary')?.category).toBe('E')
     expect(findReport('ไม่มีจริง')).toBeNull()
     expect(findReport('')).toBeNull()
+  })
+})
+
+describe('path ชื่อพ้องรายหมวดใน catalog มี route จริง (UAT BUG-115)', () => {
+  it('ทุกรายงาน: path = /api/reports/<หมวด>/<ชื่อ> · หา definition กลับได้ · มีไฟล์ route ของหมวดนั้น', () => {
+    for (const report of REPORT_DEFINITIONS) {
+      const segment = REPORT_PATH_SEGMENT[report.category]
+      const prefix = `/api/reports/${segment}/`
+      expect(report.path.startsWith(prefix), `${report.code} ${report.path}`).toBe(true)
+      expect(findReportByPath(segment, report.path.slice(prefix.length))?.code).toBe(report.code)
+      const routeFile = fileURLToPath(new URL(`../../app/api/reports/${segment}/[reportId]/route.ts`, import.meta.url))
+      expect(existsSync(routeFile), routeFile).toBe(true)
+    }
+  })
+
+  it('หมวดใน path ไม่ตรงกับรายงาน ⇒ null (route ตอบ 404)', () => {
+    expect(findReportByPath('finance', 'advance-overdue')?.code).toBe('F5')
+    expect(findReportByPath('executive', 'advance-overdue')).toBeNull()
+    expect(findReportByPath('finance', 'ไม่มีจริง')).toBeNull()
   })
 })

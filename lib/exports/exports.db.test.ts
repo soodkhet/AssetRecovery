@@ -36,6 +36,10 @@ if (!url) {
 
 /** ที่เก็บไฟล์จำลอง — path → ไบต์ (แทน bucket `accounting-packs`) */
 const storage = new Map<string, Uint8Array>()
+/** จำลอง Storage ปฏิเสธบาง path (เช่น "Invalid key") — คืน true = ล้ม */
+let rejectUpload: ((path: string) => boolean) | null = null
+/** path ที่ถูกขอให้ลบ (เก็บกวาดหลังล้ม) */
+const removed: string[] = []
 
 vi.mock('@/lib/exports/pack-storage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/exports/pack-storage')>()
@@ -44,7 +48,15 @@ vi.mock('@/lib/exports/pack-storage', async (importOriginal) => {
     uploadPackFile: async (input: { path: string; bytes: Uint8Array }) => {
       // `upsert: false` ของจริง — เขียนทับ path เดิมไม่ได้เด็ดขาด (Rule 09)
       if (storage.has(input.path)) throw new Error(`ไฟล์ซ้ำ: ${input.path}`)
+      if (rejectUpload?.(input.path) === true) throw new Error(`Invalid key: ${input.path}`)
       storage.set(input.path, input.bytes)
+    },
+    removePackFiles: async (paths: readonly string[]) => {
+      for (const path of paths) {
+        removed.push(path)
+        storage.delete(path)
+      }
+      return []
     },
     downloadPackFile: async (path: string) => {
       const bytes = storage.get(path)
@@ -527,5 +539,45 @@ suite('Final Test ด่าน 6 — สองคนกดสร้างชุ�
     const retried = await exportsApi.createExportPack(ctx, { periodId })
     expect(retried.version).toBe(2)
     expect(retried.versionLabel).toBe('v1.1')
+  })
+})
+
+suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บไฟล์ล้มกลางชุด', () => {
+  it('key ทุกไฟล์เป็น ASCII · ไฟล์ .zip ใช้เลขรอบ ไม่ใช่ชื่อเดือนภาษาไทย', async () => {
+    await resetOrgData()
+    await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 500000, wht: 15000 }])
+    const periodId = await junePeriodId()
+
+    const record = await exportsApi.createExportPack(ctx, { periodId })
+    const row = await db().exportRecord.findUniqueOrThrow({ where: { id: record.id }, select: { fileUrls: true } })
+    const paths = Object.values(row.fileUrls as Record<string, string>)
+    expect(paths).toHaveLength(10)
+    for (const path of paths) expect(path, path).toMatch(/^[A-Za-z0-9!\-_.*'()/]+$/)
+    expect(paths.some((path) => path.endsWith('/AccountingPack_2569-06_v1.0.zip'))).toBe(true)
+    // ชื่อที่ผู้ใช้เห็น/ได้ตอนดาวน์โหลดยังเป็นภาษาไทย
+    expect(record.zipFileName).toBe('AccountingPack_มิถุนายน_2569_v1.0.zip')
+    const download = await exportsApi.getExportPackDownload(accountant, record.id)
+    expect(download.fileName).toBe('AccountingPack_มิถุนายน_2569_v1.0.zip')
+  })
+
+  it('ไฟล์ใดไฟล์หนึ่งล้ม ⇒ EXPORT_STORAGE_FAILED · ลบไฟล์ที่ขึ้นไปแล้ว · ไม่มีแถว/audit · ครั้งถัดไปได้ v1.0', async () => {
+    await resetOrgData()
+    await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 500000, wht: 15000 }])
+    const periodId = await junePeriodId()
+    removed.length = 0
+    rejectUpload = (path) => path.endsWith('.zip')
+
+    try {
+      await expectCode(() => exportsApi.createExportPack(ctx, { periodId }), 'EXPORT_STORAGE_FAILED')
+    } finally {
+      rejectUpload = null
+    }
+
+    expect(storage.size).toBe(0)
+    expect(removed).toHaveLength(9)
+    expect(await db().exportRecord.count({ where: { periodId } })).toBe(0)
+
+    const retried = await exportsApi.createExportPack(ctx, { periodId })
+    expect(retried.versionLabel).toBe('v1.0')
   })
 })

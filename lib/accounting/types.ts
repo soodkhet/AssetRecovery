@@ -53,6 +53,13 @@ export interface AccountingPeriodDto {
   /** derived จากตาราง `exceptions` ทุกครั้ง (`30` §7.1 — ไม่มีคอลัมน์ใน DB) */
   criticalCount: number
   warningCount: number
+  /**
+   * critical ที่ยัง `open` (ตัวที่บล็อกปิดงวด/Export จริง) — UI ทุกจุดที่เตือน "ส่ง/Export ไม่ได้" ต้องใช้ตัวนี้
+   * ไม่ใช่ `criticalCount` ที่นับรวมรายการที่แก้แล้ว/อนุมัติยกเว้นแล้ว (UAT R7cv3-B02)
+   */
+  blockingCritical: number
+  /** คำเตือนที่ยัง `open` */
+  openWarningCount: number
   /** ผลตรวจความพร้อมครั้งล่าสุดที่บันทึกไว้ (ไม่ใช่ผลสด — ผลสดเรียก `/readiness`) */
   exportReady: boolean
   lastReadinessCheckedAt: string | null

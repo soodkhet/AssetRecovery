@@ -578,7 +578,7 @@ suite('Dashboard — Exceptions (`14` §6.2/§8)', () => {
     expect(list.counts).toEqual({ critical: 1, warning: 1, info: 1, total: 3 })
     expect(list.rows[0]).toMatchObject({ link: '/accounting', periodLabel: 'สิงหาคม 2569' })
     expect(list.rows.find((row) => row.sourceModule === 'payout')?.link).toBe('/finance?tab=payout')
-    expect(list.rows.find((row) => row.sourceModule === 'billing')?.sourceModuleLabel).toBe('วางบิล (19)')
+    expect(list.rows.find((row) => row.sourceModule === 'billing')?.sourceModuleLabel).toBe('วางบิล')
   })
 
   it('ค่าเริ่มต้นแสดงเฉพาะที่ยังเปิดอยู่ · กรองตามระดับได้', async () => {

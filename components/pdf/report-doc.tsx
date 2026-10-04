@@ -1,4 +1,5 @@
-import { Document, Page, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
+import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import { fmtDateTime } from '@/lib/format/datetime'

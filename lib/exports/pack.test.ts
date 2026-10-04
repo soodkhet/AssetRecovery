@@ -19,6 +19,8 @@ import {
   packAttemptId,
   packStoragePath,
   packZipFileName,
+  packZipDownloadName,
+  isSafeStorageKey,
   paymentCsv,
   payeesMissingTaxId,
   revenueCsv,
@@ -29,6 +31,7 @@ import {
   CASH_RECEIPT_HEADERS,
   CHECKLIST_HEADERS,
   EXPENSE_HEADERS,
+  PACK_COVER_FILE_NAME,
   PACK_FILES,
   PAYMENT_HEADERS,
   REVENUE_HEADERS,
@@ -63,7 +66,7 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
   })
 
   it('ชื่อไฟล์ .zip และ path ใน bucket เดินตาม version (ห้ามทับของเดิม — Rule 09)', () => {
-    expect(packZipFileName('มิถุนายน 2569', 3)).toBe('AccountingPack_มิถุนายน_2569_v1.2.zip')
+    expect(packZipFileName(2569, 6, 3)).toBe('AccountingPack_2569-06_v1.2.zip')
     expect(
       packStoragePath({
         organizationId: 'org-1',
@@ -74,6 +77,34 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
         fileName: '01_Revenue.csv',
       }),
     ).toBe('org-1/2569-06/v2/20260816-0032-ab12cd34/01_Revenue.csv')
+  })
+
+  it('key ใน Storage เป็น ASCII ล้วน — ชื่อไทยใช้แค่ตอนดาวน์โหลด (UAT R7cv3-B01)', () => {
+    const at = new Date('2026-10-04T05:01:08.300Z')
+    const attempt = packAttemptId(at, 'd900aa1f-1111-4000-8000-000000000000')
+    const names = [...PACK_FILES.map((file) => file.fileName), PACK_COVER_FILE_NAME, packZipFileName(2569, 10, 1)]
+    for (const fileName of names) {
+      const path = packStoragePath({
+        organizationId: '00000000-0000-0000-0000-000000000001',
+        yearBe: 2569,
+        month: 10,
+        version: 1,
+        attempt,
+        fileName,
+      })
+      expect(isSafeStorageKey(path), path).toBe(true)
+    }
+    expect(packZipDownloadName('ตุลาคม 2569', 1)).toBe('AccountingPack_ตุลาคม_2569_v1.0.zip')
+    expect(() =>
+      packStoragePath({
+        organizationId: 'org-1',
+        yearBe: 2569,
+        month: 10,
+        version: 1,
+        attempt,
+        fileName: 'AccountingPack_ตุลาคม_2569_v1.0.zip',
+      }),
+    ).toThrow(RangeError)
   })
 
   it('ครั้งที่พยายามต่างกัน = path ต่างกัน แม้ version เท่ากัน (ล้มกลางทางแล้วต้อง Export ซ้ำได้)', () => {
