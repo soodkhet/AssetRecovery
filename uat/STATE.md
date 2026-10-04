@@ -4,8 +4,8 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R10 v3 สิทธิ์/ขอบเขต + ฟีเจอร์ใหม่** — 04/10/2569 · R10a–f ✅ 33 · R10g ✅ 5 · matrix 1,213/1,213 ตรง · ไม่พบสิทธิ์รั่ว · บั๊กใหม่ BUG-139 (S2 500 ไม่บันทึก) / 140 / 141 / 142 · เคสใหม่ UAT-CO1-901 (approved เอกสารชุด) / 902 (ร่าง) · รายงาน `uat/report/R10-permissions-v3.md` · ภาพ 29 · **UAT เล่นครบ R0–R10 แล้ว** |
 | snapshot ล่าสุด | `uat/snapshots/R10-end-v3.dump` (ปลาย UAT) · `R9-end-v3` · `R8-end-v3` · `R7-end-v3` · `R7c-partial-v3` · `R7b-end-v3` · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **รวมเล่มรายงาน** (`UAT_PLAN.md` §11.3) + fixer S (BUG-139 S2 + 500 ที่ค้าง) · ค้างตรวจตามวันที่: F5 ≥ 05/10 · O4 ≥ 06/10 14:02 |
-| บั๊กเปิด | ดู BUGS.md (37 รายการ) — ชุด R2 (BUG-028…037) ยังไม่ได้แก้ · ไม่มีตัวบล็อก R3 |
+| รอบปัจจุบัน | **UAT จบครบ R0–R10 + รวมเล่มแล้ว** (`uat/report/final/`) · รอผู้ใช้: รีวิว `uat/report/final/OPEN-ITEMS.md` · ค้างตรวจตามวันที่: F5 ≥ 05/10/2569 (คาด ADV3 1 แถว 200000) · O4 ≥ 06/10/2569 14:02 (คาด 2 แถว 849000) · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ — ผู้ใช้เป็นคนกด) |
+| บั๊กเปิด | ดู BUGS.md (142 รายการ: fixed 114 · open 12 · needs-decision 11 · ปิดแบบยอมรับ 5) · ไม่มี S1 เปิด |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
 
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 04/10/2569 ~14:45 รวมเล่มรายงาน `b769b0a` (`uat/report/final/` 3 ไฟล์) · merge fixer S `d8a0ac8` (BUG-132…139,141,142) · verify 272 files / 3,459 tests ✅ · **UAT จบ**
 - 04/10/2569 ~14:15 R10 จบ (ตารางบน) → UAT เล่นครบ R0–R10 · snapshot `R10-end-v3` · ไฟล์ขยะ Storage +3 (R10g)
 - 04/10/2569 ~13:40 R9 จบ (ตารางบน) · snapshot `R9-end-v3` · merge fixer R (BUG-121,122,124…128,130,131 + ส่วนเล็ก 123)
 - 04/10/2569 ~13:15 R8 จบ (ตารางบน) · snapshot `R8-end-v3` · Storage `accounting-packs` +1 (v3 ใช้งานจริง)

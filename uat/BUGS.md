@@ -137,17 +137,17 @@
 | BUG-129 | R8-v3 R8.24 | S4 | spec-gap | `08_Document_Checklist.xlsx` นับ exception ที่ authorized เป็น "ครบถ้วน" และตัดหัวข้อทิ้ง → สำนักงานบัญชีไม่รู้ว่ายังขาดต้นฉบับ 50 ทวิ จากลูกค้า | needs-decision · ข้อเสนอ orchestrator: แสดงเป็น "อนุญาตให้ปิดงวด — ยังรอเอกสาร" พร้อมหัวข้อ |
 | BUG-130 | R8-v3 | S5 | code | การเงินเห็นปุ่มอนุมัติ/ปฏิเสธ Adjustment ในงวดล็อก แล้วได้ 403 (ควรซ่อน/disable ตามสิทธิ์) | fixed `53965c8` (merge `59eab93` 04/10/2569) |
 | BUG-131 | R8-v3 | S5 | code | ตัวกรองหน้า Audit Log มีชื่อตารางดิบ (`cash_receipts`, `jobs` ฯลฯ) | fixed `61e8d46` (merge `59eab93` 04/10/2569) |
-| BUG-132 | R9-v3 | S4 | code | รายงานปัดคอลัมน์ตัวเลขเป็นจำนวนเต็ม (`fmtCount` ใน `lib/reports/payload.ts`) → TAT 0.4 วันแสดง "0" ใน O2/E3 ทั้งบนจอและ PDF | open |
-| BUG-133 | R9-v3 | S4 | code | เปิด `/reports/{slug}` โดยไม่มีสิทธิ์ → HTTP 500 หน้า error ทั่วไป (`assertReportAccess` throw ระหว่าง render) · ไม่ leak ตัวเลข · ควร redirect/403 | open |
-| BUG-134 | R9-v3 | S5 | code | ไฟล์ Excel รายงานไม่มี number format (margin 44.2148…, เงินไม่มี 2 ทศนิยม, N/A เป็นช่องว่าง) และไม่มี KPI/หมายเหตุ (PDF มี) | open |
-| BUG-135 | R9-v3 | S5 | code | หมายเหตุ A1 แสดงรหัส "(FILING_OVERDUE_WARNING)" ให้ผู้ใช้เห็น | open |
-| BUG-136 | R9-v3 | S5 | code | console error React duplicate key "—" ใน F1 หลังสลับมิติ/drill-down | open |
-| BUG-137 | R9-v3 | S5 | code | ข้อความ error ชวนสับสน: ใส่แค่วันเริ่ม → "วันเริ่มอยู่หลังวันสิ้นสุด" · `refresh=1` → `REQUIRED_MISSING` (ควรรับ 1/true หรือบอกชัด) | open |
-| BUG-138 | R9-v3 | S5 | code | ป้าย "ยังไม่ระบุทีม" vs "ไม่ระบุทีม" ไม่ตรงกัน · กราฟ E1 "ย้อนหลัง 12 เดือน" มี พ.ย.–ธ.ค. ในอนาคต · ฿ เกินใน hint E1 | open |
-| BUG-139 | R10-v3 R10.20 | S2 | code | `PATCH /api/settings/functional-permissions` มอบรายการ "✅ only" → **500** แทน 400 (`toModuleErrorResponse` ไม่แปลง `RoleError`) · ยามล็อกยังกันได้ ไม่มีการบันทึก | open |
+| BUG-132 | R9-v3 | S4 | code | รายงานปัดคอลัมน์ตัวเลขเป็นจำนวนเต็ม (`fmtCount` ใน `lib/reports/payload.ts`) → TAT 0.4 วันแสดง "0" ใน O2/E3 ทั้งบนจอและ PDF | fixed `bf9b5db` (merge `d8a0ac8` 04/10/2569) |
+| BUG-133 | R9-v3 | S4 | code | เปิด `/reports/{slug}` โดยไม่มีสิทธิ์ → HTTP 500 หน้า error ทั่วไป (`assertReportAccess` throw ระหว่าง render) · ไม่ leak ตัวเลข · ควร redirect/403 | fixed `54440be` (merge `d8a0ac8` 04/10/2569) |
+| BUG-134 | R9-v3 | S5 | code | ไฟล์ Excel รายงานไม่มี number format (margin 44.2148…, เงินไม่มี 2 ทศนิยม, N/A เป็นช่องว่าง) และไม่มี KPI/หมายเหตุ (PDF มี) | fixed `53cb600` (merge `d8a0ac8` 04/10/2569) · Excel ยังไม่มีการ์ด KPI/หมายเหตุ |
+| BUG-135 | R9-v3 | S5 | code | หมายเหตุ A1 แสดงรหัส "(FILING_OVERDUE_WARNING)" ให้ผู้ใช้เห็น | fixed `dfb8821` (merge `d8a0ac8` 04/10/2569) |
+| BUG-136 | R9-v3 | S5 | code | console error React duplicate key "—" ใน F1 หลังสลับมิติ/drill-down | fixed `e461dd1` (merge `d8a0ac8` 04/10/2569) |
+| BUG-137 | R9-v3 | S5 | code | ข้อความ error ชวนสับสน: ใส่แค่วันเริ่ม → "วันเริ่มอยู่หลังวันสิ้นสุด" · `refresh=1` → `REQUIRED_MISSING` (ควรรับ 1/true หรือบอกชัด) | fixed `d78af71` (merge `d8a0ac8` 04/10/2569) |
+| BUG-138 | R9-v3 | S5 | code | ป้าย "ยังไม่ระบุทีม" vs "ไม่ระบุทีม" ไม่ตรงกัน · กราฟ E1 "ย้อนหลัง 12 เดือน" มี พ.ย.–ธ.ค. ในอนาคต · ฿ เกินใน hint E1 | fixed `91f540b+acdfb98` (merge `d8a0ac8` 04/10/2569) |
+| BUG-139 | R10-v3 R10.20 | S2 | code | `PATCH /api/settings/functional-permissions` มอบรายการ "✅ only" → **500** แทน 400 (`toModuleErrorResponse` ไม่แปลง `RoleError`) · ยามล็อกยังกันได้ ไม่มีการบันทึก | fixed `a63b18e` (merge `d8a0ac8` 04/10/2569) |
 | BUG-140 | R10-v3 R10.03 | S5 | code | login ตอบเร็วต่างกันระหว่างบัญชีที่มีจริง (~210 ms) กับไม่มีจริง (~60–100 ms) ≈ 3 เท่า → ไล่เดา username ได้ (timing) | open |
-| BUG-141 | R10-v3 R10g | S4 | code | preview นำเข้าเคสแสดงชื่อฟิลด์ดิบ `assetImeiSerial:` ในข้อความ error และเลขที่สัญญาของแถวที่ไม่ผ่านขึ้น "–" | open |
-| BUG-142 | R10-v3 R10g | S4 | code | error ตอนรับเคสเอกสารชุดโดยไม่ติ๊กยืนยัน ขึ้นบนสุดของ modal ที่เลื่อนลงอยู่ → ผู้ใช้ไม่เห็น | open |
+| BUG-141 | R10-v3 R10g | S4 | code | preview นำเข้าเคสแสดงชื่อฟิลด์ดิบ `assetImeiSerial:` ในข้อความ error และเลขที่สัญญาของแถวที่ไม่ผ่านขึ้น "–" | fixed `37f8467` (merge `d8a0ac8` 04/10/2569) |
+| BUG-142 | R10-v3 R10g | S4 | code | error ตอนรับเคสเอกสารชุดโดยไม่ติ๊กยืนยัน ขึ้นบนสุดของ modal ที่เลื่อนลงอยู่ → ผู้ใช้ไม่เห็น | fixed `2c7898f` (merge `d8a0ac8` 04/10/2569) |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
