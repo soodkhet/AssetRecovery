@@ -1,6 +1,6 @@
 import { canAdvanceAction } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
-import { fmtSatangSymbol } from '@/lib/format/money'
+import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -108,4 +108,22 @@ export function advanceRequestErrorText(error: {
     }
   }
   return { title: error.title, message: error.message }
+}
+
+/**
+ * ช่อง "ยอดที่ใช้จริง (บาท)" ของ modal เคลียร์เงินทดรอง — คืน `usedSatang` เฉพาะค่าที่ใช้ได้จริง
+ * (จำนวนเต็มสตางค์ ≥ 0) ไม่งั้น `null` + ข้อความใต้ช่อง
+ *
+ * BUG-107: `parseBahtInput()` คืน `NaN` เมื่อพิมพ์ค่าที่ไม่ใช่ตัวเลข — ถ้าส่งต่อเข้า `fmtSatangSymbol()`
+ * จะโยน `MoneyFormatError` ระหว่าง render = ทั้งหน้าล่ม · ช่องว่าง = ยังไม่กรอก (ไม่เตือน ปุ่มบันทึกปิดอยู่แล้ว)
+ */
+export function settleUsedField(value: string): { usedSatang: number | null; error: string | null } {
+  const parsed = parseBahtInput(value)
+  if (parsed === null) return { usedSatang: null, error: null }
+  const formatError = bahtInputError(value, 'ยอดที่ใช้จริง')
+  if (formatError !== null || !Number.isInteger(parsed)) {
+    return { usedSatang: null, error: formatError ?? 'ยอดที่ใช้จริงต้องเป็นตัวเลข' }
+  }
+  if (parsed < 0) return { usedSatang: null, error: 'ยอดที่ใช้จริงต้องไม่ติดลบ' }
+  return { usedSatang: parsed, error: null }
 }

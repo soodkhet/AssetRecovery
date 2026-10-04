@@ -5,7 +5,8 @@ import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
-import { fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
+import { settleUsedField } from '@/lib/advances/advance-ui'
+import { fmtSatangSymbol } from '@/lib/format/money'
 
 /**
  * Modal "เคลียร์ยอดเงินทดรอง" (`15` §8/§9.1 · mockup `finance.html` `action-clear-advance`)
@@ -29,10 +30,10 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
 
   if (advance === null) return null
 
-  const usedSatang = parseBahtInput(used)
-  // `parseBahtInput()` คืน `NaN` เมื่อกรอกค่าที่ไม่ใช่ตัวเลข — ถ้าปล่อยเข้า `advanceSettlement()`
-  // ตัว `assertNonNegativeSatang()` จะโยน `RangeError` **ระหว่าง render** = จอขาว ไม่ใช่ข้อความเตือน
-  const validUsed = usedSatang !== null && Number.isInteger(usedSatang) && usedSatang >= 0
+  // BUG-107: ค่าที่ parse ไม่ได้ต้องไม่ไหลเข้า `fmtSatangSymbol()`/`advanceSettlement()` (โยนระหว่าง render
+  // = ทั้งหน้าล่ม) — `settleUsedField()` คืนเฉพาะยอดที่ใช้ได้ + ข้อความใต้ช่อง
+  const { usedSatang, error: usedError } = settleUsedField(used)
+  const validUsed = usedSatang !== null
   const preview = validUsed
     ? advanceSettlement({
         requestedSatang: advance.requestedSatang,
@@ -89,7 +90,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <Summary label="ยอดที่ยืม (อนุมัติ)" value={fmtSatangSymbol(advance.approvedSatang ?? advance.requestedSatang)} />
-          <Summary label="ใช้จริง (กรอก)" value={usedSatang === null ? '—' : fmtSatangSymbol(usedSatang)} tone="blue" />
+          <Summary label="ใช้จริง (กรอก)" value={fmtSatangSymbol(usedSatang)} tone="blue" />
           <Summary
             label="ยอดต้องคืน"
             value={preview === null ? '—' : fmtSatangSymbol(preview.returnSatang)}
@@ -97,11 +98,12 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           />
         </div>
 
-        <Field label="ยอดที่ใช้จริง (บาท)" required>
+        <Field label="ยอดที่ใช้จริง (บาท)" required error={usedError}>
           <Input
             numeric
             inputMode="decimal"
             placeholder="0.00"
+            invalid={usedError !== null}
             value={used}
             onChange={(event) => setUsed(event.target.value)}
           />
