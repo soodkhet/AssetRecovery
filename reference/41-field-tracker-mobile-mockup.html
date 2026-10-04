@@ -10,7 +10,8 @@
   * { -webkit-tap-highlight-color: transparent; }
   body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; max-width: 480px; margin: 0 auto; min-height: 100vh; position: relative; }
   ::-webkit-scrollbar { display: none; }
-  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 1px; }
+  .focus-ring:focus-visible { outline: 2px solid #0f172a; outline-offset: 1px; }
+  .focus-ring-inset:focus-visible { outline: 2px solid #0f172a; outline-offset: -2px; }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   .animate-fade-in { animation: fadeIn 0.18s ease-out forwards; }

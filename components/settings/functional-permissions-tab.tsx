@@ -179,7 +179,7 @@ export function FunctionalPermissionsTab() {
               onClick={() => setSectionId(section.id)}
               aria-current={section.id === currentSection?.id ? 'true' : undefined}
               className={cn(
-                'focus-ring rounded-md px-4 py-1.5 text-xs font-medium transition-colors',
+                'focus-ring-inset rounded-md px-4 py-1.5 text-xs font-medium transition-colors',
                 section.id === currentSection?.id
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700',

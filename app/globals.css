@@ -14,10 +14,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* focus ring มาตรฐาน + animation ที่ mockup ใช้ (login.html) */
+/* focus ring มาตรฐาน + animation ที่ mockup ใช้ (login.html)
+ * มติ PO 04/10/2569: คลิกเมาส์ = ไม่มีกรอบ (เห็นแค่สถานะ active) · คีย์บอร์ด (Tab) = กรอบครบ
+ * → ใช้ :focus-visible เท่านั้น (ช่องกรอกข้อความ browser ถือเป็น focus-visible เสมอ จึงยังเห็นกรอบตอนคลิก)
+ * .focus-ring        = ปุ่ม/ช่องกรอกทั่วไป (กรอบวาดนอกปุ่ม)
+ * .focus-ring-inset  = แท็บ/เมนูย่อย/เมนูหลัก/segmented control — วาดด้านใน ไม่ถูก container overflow ตัด */
 .focus-ring:focus {
+  outline: none;
+}
+.focus-ring:focus-visible {
   outline: 2px solid #0f172a;
   outline-offset: 2px;
+}
+.focus-ring-inset:focus {
+  outline: none;
+}
+.focus-ring-inset:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: -2px;
 }
 
 @keyframes fadeIn {
