@@ -11,6 +11,7 @@ import {
   DEV_TRIGGER_JOB_TYPES,
   DEV_TRIGGER_PAYLOAD_FLAG,
   isKnownJobType,
+  jobTypeLabel,
   parseSettleDate,
   parseSimulatedAsOf,
 } from '@/lib/jobs/job-types'
@@ -49,9 +50,17 @@ const triggerJob = withApiPermission(
   async (request: NextRequest, _context: unknown, user) => {
     const body = await readJsonBody(request)
     const requestedType = (body as { jobType?: unknown } | null)?.jobType
-    if (typeof requestedType === 'string' && isKnownJobType(requestedType) && !DEV_TRIGGER_JOB_TYPES.includes(requestedType)) {
+    // นอกรายการ (รู้จักแต่ไม่รองรับ / ไม่รู้จัก / ไม่ส่ง) ⇒ บอกเหตุจริงเป็นภาษาไทย ไม่ใช่ข้อความ
+    // "สั่งงานใหม่ได้เฉพาะงานที่ล้มเหลว" หรือข้อความ Zod ภาษาอังกฤษดิบ (UAT BUG-114)
+    const supported = typeof requestedType === 'string' && DEV_TRIGGER_JOB_TYPES.some((type) => type === requestedType)
+    if (!supported) {
+      const requestedLabel =
+        typeof requestedType === 'string' && isKnownJobType(requestedType)
+          ? `งาน "${jobTypeLabel(requestedType)}"`
+          : 'ประเภทงานที่ส่งมา'
       throw new JobError('JOB_INVALID_STATUS', {
-        detail: `dev trigger รองรับเฉพาะ ${DEV_TRIGGER_JOB_TYPES.join('/')} (ขอ ${requestedType})`,
+        detail: `dev trigger รองรับเฉพาะ ${DEV_TRIGGER_JOB_TYPES.join('/')} (ขอ ${String(requestedType)})`,
+        message: `ทางลัดทดสอบไม่รองรับ${requestedLabel} — สั่งได้เฉพาะ: ${DEV_TRIGGER_JOB_TYPES.map(jobTypeLabel).join(' · ')}`,
       })
     }
 

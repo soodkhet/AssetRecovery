@@ -45,8 +45,13 @@ export function jobErrorMessage(code: JobErrorCode): ErrorMessage {
 }
 
 export class JobError extends ModuleError<JobErrorCode> {
-  constructor(code: JobErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความผู้ใช้เฉพาะกรณี (code เดิม) — เช่น dev trigger ไม่รองรับงานนี้ (UAT BUG-114) */
+  constructor(
+    code: JobErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const base = MESSAGES[code]
+    super(code, options?.message === undefined ? base : { ...base, message: options.message }, HTTP_STATUS[code], options)
     this.name = 'JobError'
   }
 }
