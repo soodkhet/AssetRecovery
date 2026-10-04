@@ -34,3 +34,16 @@ export async function findPortalCompanyProfile(
     }),
   }
 }
+
+/**
+ * ชื่อบริษัทของผู้ใช้พอร์ทัลสำหรับ Top Bar (`97` §5 — "AssetRecovery + พอร์ทัลบริษัทไฟแนนซ์ · [ชื่อบริษัท]")
+ * · เรียกหลัง `requirePortalPage()` เท่านั้น (ยามตรวจ role/บริษัท active แล้ว) · id จาก session เสมอ
+ */
+export async function findPortalCompanyName(organizationId: string, companyId: string | null): Promise<string | null> {
+  if (companyId === null) return null
+  const company = await prisma.financeCompany.findFirst({
+    where: { id: companyId, organizationId, deletedAt: null },
+    select: { name: true },
+  })
+  return company?.name ?? null
+}
