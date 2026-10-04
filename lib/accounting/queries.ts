@@ -231,6 +231,8 @@ function toPeriodDto(row: PeriodRow, summary: ExceptionSummary, exportedAt: Date
     statusLabel: periodStatusLabel(row.status),
     criticalCount: summary.criticalCount,
     warningCount: summary.warningCount,
+    blockingCritical: summary.blockingCritical,
+    openWarningCount: summary.open.warning,
     exportReady: row.exportReady,
     lastReadinessCheckedAt: row.lastReadinessCheckedAt?.toISOString() ?? null,
     exportedAt: exportedAt?.toISOString() ?? null,

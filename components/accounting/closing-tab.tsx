@@ -111,7 +111,7 @@ export function ClosingTab() {
     await reload()
   }
 
-  const blockingTotal = items.reduce((sum, period) => sum + period.criticalCount, 0)
+  const blockingTotal = items.reduce((sum, period) => sum + period.blockingCritical, 0)
 
   return (
     <div className="space-y-6">
@@ -171,14 +171,14 @@ export function ClosingTab() {
                       <div className="flex flex-wrap items-center gap-2 text-xs">
                         <span
                           className={
-                            period.criticalCount > 0 ? 'font-bold text-red-600' : 'text-slate-400'
+                            period.blockingCritical > 0 ? 'font-bold text-red-600' : 'text-slate-400'
                           }
                         >
-                          {fmtCount(period.criticalCount)} วิกฤต
+                          {fmtCount(period.blockingCritical)} วิกฤต
                         </span>
-                        {period.warningCount > 0 && (
+                        {period.openWarningCount > 0 && (
                           <span className="font-semibold text-orange-600">
-                            {fmtCount(period.warningCount)} คำเตือน
+                            {fmtCount(period.openWarningCount)} คำเตือน
                           </span>
                         )}
                       </div>

@@ -35,7 +35,7 @@ export function ExportPackModal({
 
   const selected = periods.find((period) => period.id === periodId) ?? periods[0]
   const targetId = selected?.id ?? ''
-  const criticalCount = selected?.criticalCount ?? 0
+  const criticalCount = selected?.blockingCritical ?? 0
 
   async function submit(): Promise<void> {
     if (targetId === '') return
