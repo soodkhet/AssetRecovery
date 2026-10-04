@@ -2,7 +2,12 @@ import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
 import { caseStatusLabel } from '@/lib/cases/status-display'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
 import type { ArAgingRow } from '@/lib/finance/ar-calc'
-import type { AdjustmentStatus, AdjustmentType, AdvanceStatus } from '@/lib/generated/prisma/enums'
+import type {
+  AdjustmentStatus,
+  AdjustmentType,
+  AdvanceStatus,
+  BillingBatchStatus,
+} from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { ReportError } from '@/lib/reports/errors'
 import {
@@ -215,11 +220,23 @@ function revenueGroupOf(
   return { groupKey: sort, groupLabel: period.label, groupSort: sort }
 }
 
-async function loadRevenueEntries(
+/**
+ * ตัวกรองเพิ่มของรายงานที่ scope เฉพาะ**บริษัทไฟแนนซ์เดียว** (พอร์ทัล `97` §6.5 · มติ O43 D9)
+ * — ใช้ query/สูตรชุดเดียวกับรายงานภายใน (ไม่ทำสูตรซ้ำ) แค่จำกัดแถว
+ */
+export interface CompanyReportFilter {
+  /** เฉพาะบริษัทนี้ */
+  companyId?: string
+  /** เฉพาะรายได้ที่อยู่ในรอบวางบิลสถานะเหล่านี้ (พอร์ทัล = `sent` ขึ้นไป — draft ห้ามรั่ว) */
+  billingStatuses?: readonly BillingBatchStatus[]
+}
+
+export async function loadRevenueEntries(
   organizationId: string,
   groupBy: RevenueGroupBy,
   range: { startDate: Date; endDate: Date },
   teamIds: readonly string[] | null,
+  filter: CompanyReportFilter = {},
 ): Promise<RevenueSummaryEntry[]> {
   const rows = await prisma.revenue.findMany({
     where: {
@@ -227,6 +244,10 @@ async function loadRevenueEntries(
       deletedAt: null,
       revenueDate: { gte: range.startDate, lte: range.endDate },
       ...(teamIds === null ? {} : { case: { assignedTeamId: { in: [...teamIds] } } }),
+      ...(filter.companyId === undefined ? {} : { companyId: filter.companyId }),
+      ...(filter.billingStatuses === undefined
+        ? {}
+        : { billingBatch: { deletedAt: null, status: { in: [...filter.billingStatuses] } } }),
     },
     select: {
       id: true,
@@ -284,13 +305,17 @@ const revenueSummaryProvider: ReportProvider = async (ctx: ReportContext): Promi
  * ยอดที่คืนเป็นยอดบิล**หลังรายการปรับปรุงที่อนุมัติแล้ว** (`20` §9) ส่วนการหักเงินรับ/WHT ที่ลูกค้า
  * หักไว้อยู่ในสูตร `arOutstandingSatang()` (`22` §6.11) ซึ่งผู้เรียกเป็นคนเรียกเอง
  */
-export async function loadArAgingCompanies(organizationId: string): Promise<ArAgingCompanyEntry[]> {
+export async function loadArAgingCompanies(
+  organizationId: string,
+  filter: Pick<CompanyReportFilter, 'companyId'> = {},
+): Promise<ArAgingCompanyEntry[]> {
   const rows = await prisma.billingBatch.findMany({
     where: {
       organizationId,
       deletedAt: null,
       // บิลที่ยัง `draft` ยังไม่ได้ส่งให้ลูกค้า ⇒ ยังไม่ใช่ลูกหนี้การค้า (`19` §9.1)
       status: { in: ['sent', 'partially_paid', 'paid'] },
+      ...(filter.companyId === undefined ? {} : { companyId: filter.companyId }),
     },
     select: {
       id: true,
