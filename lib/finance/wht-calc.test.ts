@@ -222,7 +222,7 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
   it('รายการเดียว = ผลเท่ากับ calculateWhtForPayee() เดิม (golden OUT-1: ฿5,500 × 3% = ฿165)', () => {
     const batch = calculatePayeeBatchWht([item(550_000)])
     const single = calculateWhtForPayee({ grossSatang: 550_000, source: item(550_000).source })
-    expect(batch.lines[0]).toEqual(single)
+    expect(batch.lines[0]).toEqual({ ...single, includedInBase: true, incomeCategory: 'sec_40_8' })
     expect(batch.totalWhtSatang).toBe(16_500)
   })
 
@@ -255,7 +255,7 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
   })
 
   it('ไม่มีรายการ → ศูนย์ทั้งหมด', () => {
-    expect(calculatePayeeBatchWht([])).toEqual({ lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true })
+    expect(calculatePayeeBatchWht([])).toEqual({ lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true, incomeCategory: 'sec_40_8' })
   })
 
   it('เกณฑ์ขั้นต่ำไม่เท่ากันในชุดเดียว (ปน payee) → ล้ม ไม่เดา', () => {

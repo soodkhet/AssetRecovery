@@ -4,6 +4,7 @@ import {
   assertWhtPctValid,
   type WhtBasis,
 } from '@/lib/settings/tax-profile'
+import type { WhtIncomeCategory } from '@/lib/settings/wht-policy'
 
 /**
  * ภาษีหัก ณ ที่จ่าย (`22` §6.9 · `18` §6.3 · `13` §6.4) — **pure ล้วน ไม่มี I/O**
@@ -149,17 +150,49 @@ export interface PayeeBatchWhtItem {
   vatSatang?: number
   /** แหล่งอัตรา — Tax Profile ของ payee (เหมือนกันทุกรายการของ payee) + อัตราแผนที่ snapshot ไว้กับรายการ */
   source: WhtRateSource
+  /**
+   * รายการนี้อยู่ในฐาน WHT หรือไม่ (ค่าตั้งฐาน WHT — มติ PO 05/10/2569 U3 · `isInWhtBase()`)
+   * `false` = จ่ายเต็มตามปกติแต่ไม่นับเข้าฐาน/เกณฑ์ และไม่ถูกหัก · ไม่ระบุ = `true` (พฤติกรรมเดิม)
+   */
+  includedInBase?: boolean
+}
+
+/** ตัวเลือกระดับผู้รับ (มติ PO 05/10/2569 U5/U7) — ไม่ระบุ = 40(8) ตามพฤติกรรมเดิม */
+export interface PayeeBatchWhtOptions {
+  /** ประเภทเงินได้ของผู้รับในรอบนี้ (`resolveIncomeCategory()`) */
+  incomeCategory?: WhtIncomeCategory
+  /**
+   * อัตราหัก 40(2) ต่อคน (`payee_profiles.wht_40_2_pct` — สำนักงานบัญชีคำนวณให้ · 0.00 ได้)
+   * ใช้เมื่อ `incomeCategory = sec_40_2` เท่านั้น · `null` ⇒ คิดไม่ได้ (ผู้เรียกต้องปัดการสร้างรอบก่อน)
+   */
+  section402Pct?: number | null
+}
+
+export interface PayeeBatchWhtLine extends PayeeWhtResult {
+  /** อยู่ในฐาน WHT หรือไม่ — `false` ⇒ `baseSatang = 0` และ `whtSatang = 0` */
+  includedInBase: boolean
+  incomeCategory: WhtIncomeCategory
 }
 
 export interface PayeeBatchWht {
   /** ผลต่อรายการ **ลำดับเดียวกับ input** — `net = gross − wht` ทุกแถว */
-  lines: PayeeWhtResult[]
-  /** ฐานหักรวมของ payee ในรอบจ่าย — ตัวที่ใช้เทียบเกณฑ์ขั้นต่ำ */
+  lines: PayeeBatchWhtLine[]
+  /** ฐานหักรวมของ payee ในรอบจ่าย (เฉพาะรายการที่อยู่ในฐาน) — ตัวที่ใช้เทียบเกณฑ์ขั้นต่ำ */
   totalBaseSatang: number
   /** ภาษีรวมของ payee ในรอบ = ผลรวม `lines[].whtSatang` เป๊ะ (ไม่มีเศษสตางค์หาย) */
   totalWhtSatang: number
-  /** true = ฐานรวมของ payee ต่ำกว่าเกณฑ์ ⇒ ไม่หักทุกรายการ */
+  /** true = ฐานรวมของ payee ต่ำกว่าเกณฑ์ ⇒ ไม่หักทุกรายการ (40(2) ไม่มีเกณฑ์ ⇒ false เสมอ) */
   belowThreshold: boolean
+  incomeCategory: WhtIncomeCategory
+}
+
+/** 40(2) ไม่มีเกณฑ์ขั้นต่ำ ฿1,000 และฐานเป็นยอดก่อน VAT เสมอ (มติ PO 05/10/2569 U7) */
+function section402Rate(pct: number | null | undefined): WhtRateResolution {
+  if (pct === null || pct === undefined) {
+    throw new RangeError('calculatePayeeBatchWht: ผู้รับเงินประเภท 40(2) ยังไม่มีอัตราหัก — ต้องปัดการสร้างรอบก่อนถึงสูตร')
+  }
+  assertWhtPctValid(pct)
+  return { whtPct: pct, whtBasis: 'before_vat', minThresholdSatang: 0, source: 'payee' }
 }
 
 /**
@@ -174,28 +207,46 @@ export interface PayeeBatchWht {
  *    1 สตางค์ให้รายการที่เศษมากสุด · เสมอกันให้รายการที่มาก่อน) ⇒ ผลรวมรายการ = ภาษีของกลุ่มเป๊ะ
  *
  * ทุกรายการต้องเป็นของ payee เดียวกัน (ผู้เรียกจัดกลุ่มเอง) — เกณฑ์ขั้นต่ำต่างกันในชุดเดียว = ข้อมูลพัง
+ *
+ * **ค่าตั้งภาษี (มติ PO 05/10/2569 U3/U5/U7)**
+ * - รายการที่ `includedInBase = false` (เช่นค่าที่พัก/เบิกตามใบเสร็จ) ไม่นับเข้าฐานรวม/เกณฑ์ และไม่ถูกหัก
+ *   — ยังจ่ายเต็มยอด (`net = gross`)
+ * - `incomeCategory = sec_40_2` ⇒ อัตรา = `section402Pct` ของผู้รับ (ไม่ใช่ Tax Profile/Plan)
+ *   **ไม่มีเกณฑ์ขั้นต่ำ** · ไม่คำนวณอัตราก้าวหน้า (Hybrid Boundary)
  */
-export function calculatePayeeBatchWht(items: readonly PayeeBatchWhtItem[]): PayeeBatchWht {
+export function calculatePayeeBatchWht(
+  items: readonly PayeeBatchWhtItem[],
+  options: PayeeBatchWhtOptions = {},
+): PayeeBatchWht {
+  const incomeCategory = options.incomeCategory ?? 'sec_40_8'
+  const hasIncludedItem = items.some((item) => item.includedInBase !== false)
+  // 40(2) ต้องมีอัตราต่อคน — ตรวจเฉพาะเมื่อมีรายการในฐานจริง (ทุกรายการไม่อยู่ในฐาน = ไม่มีอะไรให้หัก)
+  const rate402 = incomeCategory === 'sec_40_2' && hasIncludedItem ? section402Rate(options.section402Pct) : null
   const prepared = items.map((item) => {
     assertNonNegativeSatang(item.grossSatang, 'ยอดก่อนหักภาษี')
     assertNonNegativeSatang(item.vatSatang ?? 0, 'VAT ของรายการ')
-    const rate = resolveWhtRate(item.source)
-    const baseSatang = rate.whtBasis === 'gross_amount' ? item.grossSatang + (item.vatSatang ?? 0) : item.grossSatang
-    return { item, rate, baseSatang }
+    const includedInBase = item.includedInBase !== false
+    const rate = rate402 ?? resolveWhtRate(item.source)
+    const fullBase = rate.whtBasis === 'gross_amount' ? item.grossSatang + (item.vatSatang ?? 0) : item.grossSatang
+    return { item, rate, includedInBase, baseSatang: includedInBase ? fullBase : 0 }
   })
-  if (prepared.length === 0) return { lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true }
+  if (prepared.length === 0) {
+    return { lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true, incomeCategory }
+  }
 
-  const threshold = prepared[0]!.rate.minThresholdSatang
-  if (prepared.some((entry) => entry.rate.minThresholdSatang !== threshold)) {
+  const inBase = prepared.filter((entry) => entry.includedInBase)
+  const threshold = inBase[0]?.rate.minThresholdSatang ?? 0
+  if (inBase.some((entry) => entry.rate.minThresholdSatang !== threshold)) {
     throw new RangeError('calculatePayeeBatchWht: เกณฑ์ขั้นต่ำ WHT ไม่เท่ากันภายใน payee เดียว — ต้องจัดกลุ่มต่อ payee ก่อน')
   }
-  const totalBaseSatang = prepared.reduce((sum, entry) => sum + entry.baseSatang, 0)
-  const belowThreshold = totalBaseSatang < threshold
+  const totalBaseSatang = inBase.reduce((sum, entry) => sum + entry.baseSatang, 0)
+  const belowThreshold = inBase.length === 0 || totalBaseSatang < threshold
 
   const whtByIndex = new Array<number>(prepared.length).fill(0)
   if (!belowThreshold) {
     const groups = new Map<number, number[]>()
     prepared.forEach((entry, index) => {
+      if (!entry.includedInBase) return
       const members = groups.get(entry.rate.whtPct) ?? []
       members.push(index)
       groups.set(entry.rate.whtPct, members)
@@ -211,7 +262,7 @@ export function calculatePayeeBatchWht(items: readonly PayeeBatchWhtItem[]): Pay
     }
   }
 
-  const lines = prepared.map((entry, index): PayeeWhtResult => {
+  const lines = prepared.map((entry, index): PayeeBatchWhtLine => {
     const whtSatang = whtByIndex[index]!
     return {
       baseSatang: entry.baseSatang,
@@ -221,9 +272,17 @@ export function calculatePayeeBatchWht(items: readonly PayeeBatchWhtItem[]): Pay
       whtPctUsed: entry.rate.whtPct,
       whtBasisUsed: entry.rate.whtBasis,
       rate: entry.rate,
+      includedInBase: entry.includedInBase,
+      incomeCategory,
     }
   })
-  return { lines, totalBaseSatang, totalWhtSatang: whtByIndex.reduce((sum, value) => sum + value, 0), belowThreshold }
+  return {
+    lines,
+    totalBaseSatang,
+    totalWhtSatang: whtByIndex.reduce((sum, value) => sum + value, 0),
+    belowThreshold,
+    incomeCategory,
+  }
 }
 
 /**
