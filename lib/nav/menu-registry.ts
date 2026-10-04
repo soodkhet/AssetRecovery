@@ -75,6 +75,10 @@ export interface MenuItem {
   capabilityGate?: { audiences: readonly MenuAudience[]; anyOf: readonly string[] }
 }
 
+/**
+ * ทุกคอลัมน์ของเมนูภายใน — **ไม่รวม `company_user`**: ผู้ใช้บริษัทไฟแนนซ์ใช้พอร์ทัลทางเดียว ไม่เห็นเมนูภายในใดเลย
+ * (`06` v2.6 §7.2 · มติ PO 05/10/2569 U6/O43 D2) — audience ยังคงอยู่เพื่อให้ `resolveMenuAudience()` แยกกลุ่มได้
+ */
 const ALL_AUDIENCES: readonly MenuAudience[] = [
   'superadmin',
   'executive',
@@ -84,7 +88,6 @@ const ALL_AUDIENCES: readonly MenuAudience[] = [
   'admin_office',
   'team_lead',
   'field_agent',
-  'company_user',
 ]
 
 /**
@@ -122,7 +125,6 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       'admin_office',
       'team_lead',
       'field_agent',
-      'company_user',
     ],
     available: true,
     plannedPhase: '2.4',
@@ -179,9 +181,9 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     id: 'warehouse',
     label: 'คลังสินค้า',
     path: '/warehouse',
-    // การเงิน/บัญชี/หัวหน้าทีม/บริษัทไฟแนนซ์ = read เท่านั้น (ระดับสิทธิ์บังคับที่ API ไม่ใช่ที่เมนู)
+    // การเงิน/บัญชี/หัวหน้าทีม = read เท่านั้น (ระดับสิทธิ์บังคับที่ API ไม่ใช่ที่เมนู)
     // ธุรการ = ผู้ทำงานคลัง `44` §5 (`06` §7.2 v2.4 — มติ PO 03/10/2569 UAT Q1 · BUG-063)
-    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'admin_office', 'team_lead', 'company_user'],
+    audiences: ['superadmin', 'executive', 'finance', 'accounting', 'admin_office', 'team_lead'],
     available: true,
     plannedPhase: '2.14',
   },

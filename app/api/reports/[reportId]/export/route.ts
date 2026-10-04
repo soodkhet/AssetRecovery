@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
 import { toModuleErrorResponse, validationErrorResponse } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
-import { requireSession } from '@/lib/auth/session'
+import { requireInternalSession } from '@/lib/auth/internal-session'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { findReport } from '@/lib/reports/catalog'
 import { ReportError } from '@/lib/reports/errors'
@@ -26,7 +26,7 @@ export const runtime = 'nodejs'
  */
 export const POST = async (request: NextRequest, context: RouteContext): Promise<Response> => {
   try {
-    const user = await requireSession()
+    const user = await requireInternalSession()
     const { reportId } = await context.params
     const report = findReport(reportId)
     if (report === null) throw new ReportError('REPORT_NOT_FOUND', { detail: `report=${reportId}` })

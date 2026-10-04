@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canAccess, checkPermission, hasCapability, isSessionExpired } from '@/lib/auth/permission'
+import { canAccess, checkPermission, hasCapability, isPortalCapability, isPortalOnlyUser, isSessionExpired } from '@/lib/auth/permission'
 import { resolveScope } from '@/lib/auth/scope'
 import { SESSION_MAX_AGE_MS, FIELD_AGENT_ROLE_NAME, SUPERADMIN_ROLE_NAME } from '@/lib/auth/constants'
 import type { SessionUser } from '@/lib/auth/types'
@@ -154,5 +154,35 @@ describe('checkPermission — บังคับเปลี่ยนรหั�
   it('เปลี่ยนรหัสแล้ว (false) หรือ fixture เดิมที่ไม่ระบุ → ผ่านตามสิทธิ์ปกติ', () => {
     expect(checkPermission(sessionUser({ mustChangePassword: false }), 'view', 'manage_payout_batch', undefined, NOW)).toBeNull()
     expect(checkPermission(sessionUser(), 'view', 'manage_payout_batch', undefined, NOW)).toBeNull()
+  })
+})
+
+describe('checkPermission — ผู้ใช้บริษัทไฟแนนซ์ใช้พอร์ทัลทางเดียว (มติ PO 05/10/2569 O43 D2)', () => {
+  const companyUser = sessionUser({
+    roleGroup: 'finance_company',
+    roleName: 'ผู้จัดการ',
+    companyId: 'company-a',
+    capabilities: { view_own_company_data: 'view', manage_billing: 'manage', portal_cases: 'view' },
+    scope: { kind: 'company', teamIds: [], companyId: 'company-a', userId: 'user-1' },
+  })
+
+  it('capability ภายในทุกตัว → PERMISSION_DENIED แม้ role ถูกผูกไว้', () => {
+    expect(checkPermission(companyUser, 'view', 'view_own_company_data', { companyId: 'company-a' }, NOW)).toBe('PERMISSION_DENIED')
+    expect(checkPermission(companyUser, 'manage', 'manage_billing', undefined, NOW)).toBe('PERMISSION_DENIED')
+  })
+
+  it('capability พอร์ทัล → ผ่านตามระดับ/scope ปกติ', () => {
+    expect(checkPermission(companyUser, 'view', 'portal_cases', { companyId: 'company-a' }, NOW)).toBeNull()
+    expect(checkPermission(companyUser, 'view', 'portal_cases', { companyId: 'company-b' }, NOW)).toBe('PERMISSION_DENIED')
+    expect(checkPermission(companyUser, 'view', 'portal_finance', undefined, NOW)).toBe('PERMISSION_DENIED')
+  })
+
+  it('ผู้ใช้ภายในไม่ถูกกระทบ · Superadmin ไม่นับเป็นผู้ใช้พอร์ทัล', () => {
+    expect(checkPermission(sessionUser({ capabilities: { manage_billing: 'manage' } }), 'manage', 'manage_billing', undefined, NOW)).toBeNull()
+    expect(isPortalOnlyUser({ roleGroup: 'system', isSuperadmin: true })).toBe(false)
+    expect(isPortalOnlyUser({ roleGroup: 'finance_company', isSuperadmin: false })).toBe(true)
+    expect(isPortalOnlyUser({ roleGroup: 'inhouse', isSuperadmin: false })).toBe(false)
+    expect(isPortalCapability('portal_download')).toBe(true)
+    expect(isPortalCapability('view_own_company_data')).toBe(false)
   })
 })

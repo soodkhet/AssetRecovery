@@ -8,7 +8,8 @@
  *  - `approve_case` — เจ้าหน้าที่อนุมัติเคส (คนพิจารณา)
  *  - `assign_case` — ผู้จัดการ/หัวหน้าทีม (เห็นเฉพาะเคสของทีมตัวเองผ่าน scope)
  *  - `view_master_data` — บริหาร/การเงิน/บัญชี (ดูอย่างเดียว)
- *  - `view_own_company_data` — ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (เห็นเฉพาะบริษัทตัวเองผ่าน scope)
+ *  - ~~`view_own_company_data`~~ — **ถอดแล้ว** (มติ PO 05/10/2569 U6/O43 D2): ผู้ใช้บริษัทไฟแนนซ์ใช้พอร์ทัล
+ *    ทางเดียว (`/api/portal/*`) — route ภายในปฏิเสธที่ `checkPermission()` · โค้ด redaction ฝั่งบริษัทยังคงไว้
  *
  * Superadmin ผ่านทุกตัวโดยนิยาม (ไม่มี record — `07` §6)
  */
@@ -17,7 +18,6 @@ export const CASE_READ_CAPABILITIES = [
   'approve_case',
   'assign_case',
   'view_master_data',
-  'view_own_company_data',
 ] as const
 
 /** สร้างเคส + อัปโหลดเอกสาร = ธุรการ/แอดมิน (`38` §13 — 2 แถวแรกของตาราง) */

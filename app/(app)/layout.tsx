@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { AppShell } from '@/components/shell/app-shell'
-import { requireSessionPage } from '@/lib/auth/page-guard'
+import { requireInternalSessionPage } from '@/lib/auth/page-guard'
 import { toClientSession } from '@/lib/auth/types'
 import { visibleMenus } from '@/lib/nav/menu-registry'
 
@@ -12,7 +12,7 @@ import { visibleMenus } from '@/lib/nav/menu-registry'
  * · `/portal` (ไฟล์ 97 portal shell ของตัวเอง)
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const user = await requireSessionPage()
+  const user = await requireInternalSessionPage()
 
   return (
     <AppShell session={toClientSession(user)} menus={visibleMenus(user)}>

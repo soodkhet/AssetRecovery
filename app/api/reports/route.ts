@@ -1,6 +1,6 @@
 import { apiSuccess } from '@/lib/api/envelope'
 import { withAuthErrors } from '@/lib/auth/require-permission'
-import { requireSession } from '@/lib/auth/session'
+import { requireInternalSession } from '@/lib/auth/internal-session'
 import { canViewReport } from '@/lib/reports/access'
 import { REPORT_CATEGORY_LABEL, REPORT_DEFINITIONS } from '@/lib/reports/catalog'
 import { hasReportProvider } from '@/lib/reports/providers'
@@ -13,7 +13,7 @@ import { hasReportProvider } from '@/lib/reports/providers'
  * ไม่เห็นแม้แต่ชื่อรายงานของหมวดนั้น (ไม่ leak ว่ามีรายงานอะไรอยู่)
  */
 export const GET = withAuthErrors(async () => {
-  const user = await requireSession()
+  const user = await requireInternalSession()
 
   const reports = REPORT_DEFINITIONS.filter((report) => canViewReport(user, report)).map((report) => ({
     code: report.code,

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { DASHBOARD_PATH } from '@/lib/auth/constants'
-import { requireSessionPage } from '@/lib/auth/page-guard'
+import { requireInternalSessionPage } from '@/lib/auth/page-guard'
 import type { SessionUser } from '@/lib/auth/types'
 import { canViewMenu } from '@/lib/nav/menu-registry'
 
@@ -11,7 +11,7 @@ import { canViewMenu } from '@/lib/nav/menu-registry'
  * เรียก `requirePermission()` เองอยู่ดี (DEC-002) · ไม่ตอบ 403 ตรง ๆ เพื่อไม่ leak ว่ามีหน้านี้อยู่
  */
 export async function requireMenuPage(menuId: string): Promise<SessionUser> {
-  const user = await requireSessionPage()
+  const user = await requireInternalSessionPage()
   if (!canViewMenu(user, menuId)) redirect(DASHBOARD_PATH)
   return user
 }

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
 import { withAuthErrors } from '@/lib/auth/require-permission'
-import { requireSession } from '@/lib/auth/session'
+import { requireInternalSession } from '@/lib/auth/internal-session'
 import { markNotificationsRead } from '@/lib/notifications/queries'
 
 /**
@@ -11,6 +11,6 @@ import { markNotificationsRead } from '@/lib/notifications/queries'
  * ⚠️ path นี้เป็น segment คงที่ จึงชนะ `[id]` ของ Next.js เสมอ — `read-all` ไม่มีทางถูกอ่านเป็น id
  */
 export const PATCH = withAuthErrors(async (_request: NextRequest) => {
-  const user = await requireSession()
+  const user = await requireInternalSession()
   return apiSuccess(await markNotificationsRead(user))
 })

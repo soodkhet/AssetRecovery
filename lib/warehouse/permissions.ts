@@ -7,10 +7,11 @@
  * ให้ตรงกับผู้ที่เห็นเมนู `warehouse` ใน `06` §7.1.1:
  *  - `intake_asset` / `create_handover_lot` / `confirm_handover_lot` — ธุรการ + ผู้จัดการทีม (คนทำงานคลัง)
  *  - `view_master_data` — บริหาร/การเงิน/บัญชี (ดูอย่างเดียว — `44` §13 แถวแรก)
- *  - `view_own_company_data` — ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (เห็นเฉพาะบริษัทตัวเองผ่าน scope ระดับแถว)
+ *  - ~~`view_own_company_data`~~ — **ถอดแล้ว** (มติ PO 05/10/2569 U6/O43 D2): ผู้ใช้บริษัทไฟแนนซ์ใช้พอร์ทัล
+ *    ทางเดียว (`/api/portal/*`) — route ภายในปฏิเสธที่ `checkPermission()` · โค้ด redaction ฝั่งบริษัทยังคงไว้
  *
  * ⚠️ capability เปิดประตูแค่ "เข้าถึง endpoint ได้" — **ขอบเขตแถว**บังคับซ้ำเสมอที่ `assetScopeWhere()` /
- *    `lotScopeWhere()` (Company User ที่ถือ `view_own_company_data` ยังเห็นเฉพาะบริษัทตัวเอง · T15)
+ *    `lotScopeWhere()` (scope `company` ยังกรองเฉพาะบริษัทตัวเอง · T15 — ใช้ซ้ำได้ในชั้นข้อมูลของพอร์ทัล)
  * Superadmin ผ่านทุกตัวโดยนิยาม (ไม่มี record — `07` §6)
  */
 
@@ -19,7 +20,6 @@ export const WAREHOUSE_READ_CAPABILITIES = [
   'create_handover_lot',
   'confirm_handover_lot',
   'view_master_data',
-  'view_own_company_data',
 ] as const
 
 /** รับเครื่องเข้าคลัง (`44` §13 — ธุรการ, ผู้จัดการทีม) */

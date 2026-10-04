@@ -58,7 +58,8 @@ const TOP_NAV_MATRIX: Record<MenuAudience, readonly string[]> = {
   admin_office: ['dashboard', 'cases', 'warehouse', 'settings'],
   team_lead: ['dashboard', 'cases', 'warehouse', 'reports'],
   field_agent: ['dashboard', 'cases'],
-  company_user: ['dashboard', 'cases', 'warehouse'],
+  // `06` v2.6 — ผู้ใช้บริษัทใช้พอร์ทัลทางเดียว ไม่เห็นเมนูภายในใดเลย (มติ PO 05/10/2569 O43 D2)
+  company_user: [],
 }
 
 /** `06` §7.1.1 — sub-menu ของ "จัดการเคส" */
@@ -164,10 +165,11 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
     expect(firstVisibleChildPath(VIEWERS.field_agent, 'settings')).toBeNull()
   })
 
-  it('ทุก role เห็น "แดชบอร์ด"', () => {
+  it('ทุก role ภายในเห็น "แดชบอร์ด" · ผู้ใช้บริษัทไม่เห็นเมนูภายในใดเลย (`06` v2.6)', () => {
     for (const audience of Object.keys(VIEWERS) as MenuAudience[]) {
-      expect(canViewMenu(VIEWERS[audience], 'dashboard')).toBe(true)
+      expect(canViewMenu(VIEWERS[audience], 'dashboard')).toBe(audience !== 'company_user')
     }
+    expect(visibleMenus(VIEWERS.company_user)).toEqual([])
   })
 
   it('Field Agent ไม่เห็น "คลังสินค้า"/"รายงาน" (`06` §7.2)', () => {

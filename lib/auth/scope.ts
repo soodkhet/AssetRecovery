@@ -108,6 +108,9 @@ export function assertOrgWideReadable(user: SessionUser, resource: string): void
  * ไม่ได้คุมว่าแถวนั้นมี **คอลัมน์อะไรติดมา**
  *
  * (แนวเดียวกับ `isCompanySideViewer()` ของโมดูล revenue ที่กรอง billing batch `draft` ออก)
+ *
+ * ⚠️ ตั้งแต่มติ PO 05/10/2569 (U6/O43 D2) ผู้ใช้บริษัทเข้า route ภายในไม่ได้แล้ว (`checkPermission()` ปฏิเสธ)
+ * — คง redaction นี้ไว้เป็นชั้นป้องกันซ้อนและให้ชั้นข้อมูลของพอร์ทัลใช้ซ้ำ
  */
 export function isCompanySideViewer(user: SessionUser): boolean {
   return !user.isSuperadmin && user.scope.kind === 'company'

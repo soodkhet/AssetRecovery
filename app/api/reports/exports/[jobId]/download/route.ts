@@ -1,5 +1,5 @@
 import { toModuleErrorResponse } from '@/lib/api/http'
-import { requireSession } from '@/lib/auth/session'
+import { requireInternalSession } from '@/lib/auth/internal-session'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { getReportExportDownload } from '@/lib/reports/export-download'
 
@@ -15,7 +15,7 @@ export const runtime = 'nodejs'
  */
 export const GET = async (_request: Request, context: RouteContext): Promise<Response> => {
   try {
-    const user = await requireSession()
+    const user = await requireInternalSession()
     const { jobId } = await context.params
     const file = await getReportExportDownload(user, jobId)
 

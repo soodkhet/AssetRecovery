@@ -1,4 +1,4 @@
-import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
+import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
 import type { AuthErrorCode } from '@/lib/auth/errors'
 import { isWithinScope } from '@/lib/auth/scope'
 import type { PermissionAction, ScopeTarget, SessionScope, SessionUser } from '@/lib/auth/types'
@@ -38,6 +38,22 @@ export function canAccess(
   return hasCapability(user, action, resource) && isWithinScope(user.scope, target)
 }
 
+/** capability ของพอร์ทัลบริษัทไฟแนนซ์ขึ้นต้นด้วย `portal_` ทุกตัว (`97` §3.3 · `lib/portal/access.ts`) */
+export const PORTAL_CAPABILITY_PREFIX = 'portal_'
+
+export function isPortalCapability(code: string): boolean {
+  return code.startsWith(PORTAL_CAPABILITY_PREFIX)
+}
+
+/**
+ * ผู้ใช้กลุ่มบริษัทไฟแนนซ์ = ใช้พอร์ทัลทางเดียว (มติ PO 05/10/2569 U6/O43 D2 · `06` v2.6 §7.2 · `97` §11)
+ * ⇒ หน้า/API ภายในทั้งหมดปฏิเสธ แม้ role จะถูกผูก capability ภายในไว้ (เช่น `view_own_company_data` เดิม)
+ * Superadmin ไม่นับ (อยู่กลุ่ม `system` เสมอ — กันไว้ซ้ำ)
+ */
+export function isPortalOnlyUser(user: { roleGroup: RoleGroup; isSuperadmin: boolean }): boolean {
+  return !user.isSuperadmin && user.roleGroup === 'finance_company'
+}
+
 /** session หมดอายุหรือยัง — 24 ชั่วโมงนับจาก login ล่าสุด (`05` §10, §17) */
 export function isSessionExpired(loginAt: string | Date | null, now: Date, maxAgeMs = SESSION_MAX_AGE_MS): boolean {
   if (loginAt === null) return true
@@ -48,7 +64,7 @@ export function isSessionExpired(loginAt: string | Date | null, now: Date, maxAg
 }
 
 /**
- * ตรวจสิทธิ์ครบชุด: สถานะบัญชี → อายุ session → ต้องเปลี่ยนรหัสผ่าน → capability → scope ย่อย
+ * ตรวจสิทธิ์ครบชุด: สถานะบัญชี → อายุ session → ต้องเปลี่ยนรหัสผ่าน → ผู้ใช้บริษัท (พอร์ทัลเท่านั้น) → capability → scope ย่อย
  * คืน `null` = ผ่าน · คืน error code = ปฏิเสธ (caller เป็นคนโยน `AuthError`)
  */
 export function checkPermission(
@@ -62,6 +78,8 @@ export function checkPermission(
   if (isSessionExpired(user.loginAt, now)) return 'SESSION_EXPIRED'
   // ผู้ดูแลตั้ง/รีเซ็ตรหัสให้ → ใช้ endpoint ที่ต้องมีสิทธิ์ไม่ได้จนกว่าจะเปลี่ยนรหัสเอง (มติ PO 03/10/2569)
   if (user.mustChangePassword === true) return 'PASSWORD_CHANGE_REQUIRED'
+  // ผู้ใช้บริษัทไฟแนนซ์เข้าได้เฉพาะ capability พอร์ทัล — route ภายในทุกตัว 403 (มติ O43 D2)
+  if (isPortalOnlyUser(user) && !isPortalCapability(resource)) return 'PERMISSION_DENIED'
   if (!hasCapability(user, action, resource)) return 'PERMISSION_DENIED'
   // scope ย่อย ("ทีมตัวเอง"/"own"/"company") บังคับเพิ่มจาก access_level — `25` §16.1
   if (!isWithinScope(user.scope, target)) return 'PERMISSION_DENIED'

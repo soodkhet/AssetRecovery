@@ -17,6 +17,7 @@
 | v3 | 03/07/2569 | Product Owner ยืนยัน 2 Open Item: (1) Session timeout = 24 ชั่วโมง (2) MFA ไม่เปิดใช้ในเฟส 1 — ย้ายจาก Open Item เป็น Decision (§17), อัปเดตค่าใน §10 |
 | v3.2 | 14/08/2569 | **ปิด open item D1** ตามมติ PO: การตั้งรหัสผ่านครั้งแรกใช้ลิงก์คำเชิญทางอีเมล (`inviteUserByEmail`) → เพิ่มเป็น Decision ใน §17 พร้อมรายละเอียดหน้าปลายทาง/ผู้ส่งซ้ำ/นโยบายรหัสผ่าน · implement ที่ Phase 1.9 (`lib/users/invite.ts` · `lib/users/provisioning.ts` · `/auth/set-password`) — ไม่กระทบ auth logic เดิม (login/session/route guard เหมือนเดิมทุกข้อ) |
 | v3.3 | 03/10/2569 | **DEC-010** — Login รับอีเมลหรือ username (§6.1) · ยกเลิกลิงก์คำเชิญของ D1: ผู้ดูแลตั้งรหัสผ่านให้ + บังคับผู้ใช้เปลี่ยนเองครั้งแรก (`/auth/change-password`, `PASSWORD_CHANGE_REQUIRED`) · เพิ่ม endpoint `POST /api/auth/change-password` (§14) · หน้า `/auth/set-password` คงไว้เป็นปลายทางลิงก์จาก Supabase (ลิงก์เชิญเดิมที่ค้าง / ลืมรหัสผ่าน D2) |
+| v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (U6/O43 D2/D5/D11)** — §17: ผู้ใช้กลุ่ม `finance_company` login ไม่ได้เมื่อบริษัทไม่ `active` (`COMPANY_SUSPENDED` · signOut + audit login failed) และหลัง login ไป `/portal` เสมอ · หน้า/API ภายในตอบผู้ใช้บริษัท 403 / เด้งไป `/portal` (บังคับที่ `checkPermission()` + `requireInternalSession()`/`requireInternalSessionPage()`) · ผู้ใช้ภายใน/Superadmin เปิด `/portal` → `/dashboard` — sync `97` v5.1 |
 | v3.1 | 04/07/2569 | แก้จำนวน role อ้างอิง "14" → "15" ตามการนับใหม่ในไฟล์ 07 v2.2 / seed data ไฟล์ 02 §12 (แก้ตัวเลขอ้างอิงเท่านั้น ไม่กระทบ auth logic) |
 
 ขอบเขตเอกสารนี้: กลไก Authentication/Session/Route Guard เชิงเทคนิค — วิธี login, การตรวจสอบ session, การ guard route ตาม permission
@@ -192,6 +193,7 @@ sequenceDiagram
 - **Role + scope cache ใน server session** ไม่ query DB ทุก request — ตาม `01-architecture.md` §6.1
 - **API permission สำคัญกว่า UI เสมอ** — UI hide/disable เป็นแค่ UX (ข้อ 8, 10)
 - **User ที่ status ≠ active ห้าม login เด็ดขาด** (ข้อ 10)
+- **ผู้ใช้บริษัทไฟแนนซ์: บริษัทต้อง `active` ทั้งตอน login และทุก request ของพอร์ทัล** (`COMPANY_SUSPENDED` — มติ PO 05/10/2569 O43 D5) · ผู้ใช้บริษัทใช้พอร์ทัลทางเดียว — หน้า/API ภายในปฏิเสธ (O43 D2 · `97` §11)
 - **Superadmin ห้าม lockout ตัวเอง** — ต้องมี safeguard กันไม่ให้ deactivate Superadmin คนสุดท้ายของระบบ (ข้อ 10, เพิ่ม test case ข้อ 16)
 - **รายชื่อ Role/Permission Matrix แบบเต็มอยู่ที่ `07-roles-permissions.md` เท่านั้น** — ไฟล์นี้ไม่ duplicate รายละเอียด role
 - **Session timeout = 24 ชั่วโมง** — ยืนยันกับ Product Owner 03/07/2569 (เดิมเป็น Open Item)

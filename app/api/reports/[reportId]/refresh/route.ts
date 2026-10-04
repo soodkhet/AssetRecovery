@@ -1,6 +1,6 @@
 import { apiSuccess } from '@/lib/api/envelope'
 import { toModuleErrorResponse } from '@/lib/api/http'
-import { requireSession } from '@/lib/auth/session'
+import { requireInternalSession } from '@/lib/auth/internal-session'
 import { assertReportAccess } from '@/lib/reports/access'
 import { requestReportRefresh } from '@/lib/reports/cache'
 import { findReport } from '@/lib/reports/catalog'
@@ -21,7 +21,7 @@ type RouteContext = { params: Promise<{ reportId: string }> }
  */
 export const POST = async (_request: Request, context: RouteContext): Promise<Response> => {
   try {
-    const user = await requireSession()
+    const user = await requireInternalSession()
     const { reportId } = await context.params
     const report = findReport(reportId)
     if (report === null) throw new ReportError('REPORT_NOT_FOUND', { detail: `report=${reportId}` })

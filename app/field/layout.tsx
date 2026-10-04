@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { FieldShell } from '@/components/field/field-shell'
 import { DASHBOARD_PATH, FIELD_TRACKER_PATH } from '@/lib/auth/constants'
-import { requireSessionPage } from '@/lib/auth/page-guard'
+import { requireInternalSessionPage } from '@/lib/auth/page-guard'
 import { resolveLandingPath } from '@/lib/auth/landing'
 import { hasCapability } from '@/lib/auth/permission'
 import { toClientSession } from '@/lib/auth/types'
@@ -16,7 +16,7 @@ import { FIELD_CAPABILITY } from '@/lib/field/permissions'
  * ข้อมูลจริงยังผ่าน `requirePermission('view'|'manage', 'perform_field_work')` ที่ API ทุก endpoint (DEC-002)
  */
 export default async function FieldLayout({ children }: { children: ReactNode }) {
-  const user = await requireSessionPage()
+  const user = await requireInternalSessionPage()
 
   if (!hasCapability(user, 'view', FIELD_CAPABILITY)) {
     // กันวนซ้ำ: พนักงานภาคสนามที่ถูกถอดสิทธิ์จะได้ปลายทางเป็น `/field` เอง — ส่งไปแดชบอร์ดแทน

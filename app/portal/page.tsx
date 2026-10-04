@@ -2,16 +2,17 @@ import { LogoutButton } from '@/components/auth/logout-button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/states'
-import { requireSessionPage } from '@/lib/auth/page-guard'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
+import { requirePortalPage } from '@/lib/portal/page-guard'
 
 /**
  * Client Portal (ไฟล์ 97) — **placeholder ของ Phase 1.5**
  * ตั้งใจไม่อยู่ใน route group `(app)`: portal มีเมนู/เปลือกของตัวเอง และ `/api/portal/*` = GET เท่านั้น
- * หน้าจริงเกิดใน Phase 7.3 (🔒 ปลดล็อกเมื่อ PO ตอบเรื่อง Auth method — `97` §22 #2)
+ * หน้าจริงเกิดในก้อน Portal-P7+ (มติ PO 05/10/2569 U6)
  */
 export default async function ClientPortalPage() {
-  const user = await requireSessionPage()
+  // ผู้ใช้ภายใน/Superadmin เด้งไปแดชบอร์ด · บริษัทถูกระงับเด้งไปหน้า login (มติ O43 D2/D5/D11)
+  const user = await requirePortalPage()
 
   return (
     <main className="mx-auto max-w-2xl p-4">

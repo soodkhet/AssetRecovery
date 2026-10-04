@@ -1,7 +1,9 @@
 import { emitAudit } from '@/lib/audit/audit'
+import { isCompanyActive, loadCompanyStatus } from '@/lib/auth/company-status'
 import { CHANGE_PASSWORD_PATH, LOGIN_PATH } from '@/lib/auth/constants'
 import { AuthError, type AuthErrorCode } from '@/lib/auth/errors'
 import { resolveLandingPath } from '@/lib/auth/landing'
+import { isPortalOnlyUser } from '@/lib/auth/permission'
 import {
   INTERNAL_AUTH_EMAIL_DOMAIN,
   parseLoginIdentifier,
@@ -21,7 +23,7 @@ import { getAuthEmail, setAuthPassword, verifyPassword } from '@/lib/users/provi
  * Login / Logout ตาม `05` §6.1 (Login Flow) + §10 (Security Rules)
  *
  * ลำดับบังคับ: หาผู้ใช้จากอีเมล/username → Supabase Auth (ตัวตน) → โหลด user+role+scope จาก DB
- *            → ตรวจ status → cache → audit
+ *            → ตรวจ status → (ผู้ใช้บริษัท) ตรวจบริษัท active → cache → audit
  * มติ PO 03/10/2569: ช่องเดียวรับทั้งอีเมลและ username — อีเมลที่ใช้ sign in กับ Supabase อ่านจาก
  * บัญชี Auth ตรง (`getAuthEmail`) ไม่เดาจาก DB เพราะผู้ใช้ไม่มีอีเมลใช้อีเมลภายใน และกันกรณีย้ายอีเมลค้าง
  * ⚠️ user ที่ `status ≠ active` ห้าม login เด็ดขาด (`05` §10) และต้อง signOut ทิ้ง session ของ Supabase ด้วย
@@ -138,6 +140,26 @@ export async function login(input: LoginInput, meta: RequestMeta): Promise<Login
       userAgent: meta.userAgent,
     })
     throw new AuthError('ACCOUNT_INACTIVE', `user=${sessionAccount.id}`)
+  }
+
+  // ผู้ใช้บริษัทไฟแนนซ์: บริษัทต้อง active (มติ PO 05/10/2569 O43 D5 · `97` §12) — ตรวจซ้ำทุก request ที่ยามพอร์ทัล
+  if (isPortalOnlyUser(sessionAccount)) {
+    const companyStatus = await loadCompanyStatus(sessionAccount.organizationId, sessionAccount.companyId)
+    if (!isCompanyActive(companyStatus)) {
+      await supabase.auth.signOut()
+      await emitAudit({
+        organizationId: sessionAccount.organizationId,
+        actorId: sessionAccount.id,
+        actorRole: sessionAccount.roleName,
+        action: 'login',
+        targetType: 'users',
+        targetId: sessionAccount.id,
+        after: { result: 'failed', code: 'COMPANY_SUSPENDED', company_id: sessionAccount.companyId, company_status: companyStatus },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      })
+      throw new AuthError('COMPANY_SUSPENDED', `user=${sessionAccount.id} company=${sessionAccount.companyId ?? '-'}`)
+    }
   }
 
   // เวลาเริ่ม session — ใช้คำนวณ timeout 24 ชม. (`05` §10)
