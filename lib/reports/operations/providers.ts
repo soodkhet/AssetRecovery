@@ -8,6 +8,7 @@ import type { ReportData } from '@/lib/reports/payload'
 import { resolveReportPeriod, toIsoDateOnly } from '@/lib/reports/period'
 import type { ReportContext, ReportProvider } from '@/lib/reports/providers'
 import { elapsedHours } from '@/lib/reports/operations/sla'
+import { UNASSIGNED_TEAM_LABEL } from '@/lib/reports/operations/team-performance-report'
 import { buildSlaBreachReport, type SlaBreachCaseEntry } from '@/lib/reports/operations/sla-breach-report'
 import {
   SUCCESS_RATE_DIMENSIONS,
@@ -84,8 +85,9 @@ function successRateGroupOf(
   if (dimension === 'team') {
     return {
       groupKey: row.assignedTeamId ?? '__unassigned__',
-      groupLabel: row.assignedTeam?.name ?? 'ยังไม่ระบุทีม',
-      groupSort: row.assignedTeam?.name ?? 'ยังไม่ระบุทีม',
+      // ป้ายเดียวกับ O2/E3 ("ไม่ระบุทีม") — UAT BUG-138
+      groupLabel: row.assignedTeam?.name ?? UNASSIGNED_TEAM_LABEL,
+      groupSort: row.assignedTeam?.name ?? UNASSIGNED_TEAM_LABEL,
     }
   }
   const period = resolveReportPeriod('month', row.createdAt)

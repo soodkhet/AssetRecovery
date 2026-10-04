@@ -1,3 +1,4 @@
+import { ModuleError } from '@/lib/api/errors'
 import { toAuthErrorResponse } from '@/lib/auth/errors'
 
 /**
@@ -74,19 +75,14 @@ export function roleErrorMessage(code: RoleErrorCode): { title: string; message:
   return MESSAGES[code]
 }
 
-/** error ของโมดูล Roles & Permissions — route handler แปลงเป็น response ด้วย `toRoleErrorResponse()` */
-export class RoleError extends Error {
-  readonly code: RoleErrorCode
-  readonly status: number
-  /** รายละเอียดสำหรับ log ฝั่ง server เท่านั้น — ห้ามส่งออก response */
-  readonly detail?: string
-
+/**
+ * error ของโมดูล Roles & Permissions — สืบจาก `ModuleError` เพื่อให้ตัวแปลงกลาง `toModuleErrorResponse()`
+ * แปลงเป็น 400/404 ได้ด้วย (route ใน Settings ที่ใช้ตัวแปลงกลางเคยตก 500 — UAT BUG-139)
+ */
+export class RoleError extends ModuleError<RoleErrorCode> {
   constructor(code: RoleErrorCode, detail?: string) {
-    super(`${code}: ${MESSAGES[code].message}`)
+    super(code, MESSAGES[code], HTTP_STATUS[code], { detail })
     this.name = 'RoleError'
-    this.code = code
-    this.status = HTTP_STATUS[code]
-    this.detail = detail
   }
 }
 

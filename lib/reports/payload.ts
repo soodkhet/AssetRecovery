@@ -17,7 +17,20 @@ import type { MoMComparison } from '@/lib/reports/kpi'
  * - `null` = ไม่มีค่า (แสดง `—`) — ห้ามส่ง 0 แทน "ไม่มีข้อมูล"
  */
 
-export type ReportColumnType = 'text' | 'money' | 'number' | 'percent' | 'date' | 'datetime'
+/**
+ * `number` = จำนวนนับ (แสดงเป็นจำนวนเต็ม) · `days` = จำนวนวันแบบทศนิยม 1 ตำแหน่ง (TAT / เกิน SLA —
+ * ผู้คำนวณปัดไว้ที่ `hoursToDays()` แล้ว · เดิมใช้ `number` ทำให้ 0.4 วันแสดงเป็น "0" — UAT BUG-132)
+ */
+export type ReportColumnType = 'text' | 'money' | 'number' | 'days' | 'percent' | 'date' | 'datetime'
+
+/** ชนิดคอลัมน์ที่เป็นตัวเลข (จัดชิดขวาบนจอ/PDF) */
+export const NUMERIC_COLUMN_TYPES: ReadonlySet<ReportColumnType> = new Set(['money', 'number', 'days', 'percent'])
+
+const DAYS_DECIMALS = 1
+const daysFormatter = new Intl.NumberFormat('th-TH', {
+  minimumFractionDigits: DAYS_DECIMALS,
+  maximumFractionDigits: DAYS_DECIMALS,
+})
 
 export interface ReportColumn {
   readonly key: string
@@ -117,6 +130,8 @@ export function formatCellText(value: ReportCellValue, type: ReportColumnType): 
       return typeof value === 'number' ? fmtSatang(value) : String(value)
     case 'number':
       return typeof value === 'number' ? fmtCount(value) : String(value)
+    case 'days':
+      return typeof value === 'number' && Number.isFinite(value) ? daysFormatter.format(value) : String(value)
     case 'percent':
       return typeof value === 'number' ? fmtRatioPct(value) : String(value)
     case 'date':
@@ -134,12 +149,14 @@ export function formatCellText(value: ReportCellValue, type: ReportColumnType): 
  * จะกลายเป็น ค.ศ. บนหน้าจอผู้ใช้ทันที = bug `DISPLAY_CE_YEAR`)
  */
 export function formatCellForSheet(value: ReportCellValue, type: ReportColumnType): string | number {
-  if (value === null) return ''
+  // อัตราส่วนที่คำนวณไม่ได้ต้องเขียน "N/A" ให้ตรงกับจอ ไม่ใช่ช่องว่าง (UAT BUG-134)
+  if (value === null) return type === 'percent' ? fmtRatioPct(null) : ''
   switch (type) {
     case 'money':
       // satang → บาท ด้วยจำนวนเต็มก่อนหาร (ไม่มีการปัดเศษหาย — Rule 01)
       return typeof value === 'number' ? Math.round(value) / 100 : String(value)
     case 'number':
+    case 'days':
     case 'percent':
       return typeof value === 'number' ? value : String(value)
     case 'date':
@@ -151,10 +168,33 @@ export function formatCellForSheet(value: ReportCellValue, type: ReportColumnTyp
   }
 }
 
+/**
+ * รูปแบบตัวเลขของเซลล์ Excel ตามชนิดคอลัมน์ (UAT BUG-134) — ค่าในเซลล์ยังเป็นตัวเลขจริง (`SUM` ได้)
+ * · เงินเป็นบาทจาก satang/100 → 2 ทศนิยม · % เก็บเป็นเลขร้อยละ (44.21) จึงต่อท้าย "%" แบบข้อความ
+ *   ไม่ใช้รูปแบบ % ของ Excel (ซึ่งจะคูณ 100 ซ้ำ) · ชนิดที่ไม่ใช่ตัวเลข = `null`
+ */
+export function sheetNumberFormat(type: ReportColumnType): string | null {
+  switch (type) {
+    case 'money':
+      return '#,##0.00'
+    case 'number':
+      return '#,##0'
+    case 'days':
+      return '#,##0.0'
+    case 'percent':
+      return '0.00"%"'
+    case 'text':
+    case 'date':
+    case 'datetime':
+      return null
+  }
+}
+
 const DEFAULT_WIDTH: Readonly<Record<ReportColumnType, number>> = {
   text: 24,
   money: 16,
   number: 12,
+  days: 12,
   percent: 12,
   date: 14,
   datetime: 18,

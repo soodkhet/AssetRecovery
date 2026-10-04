@@ -37,7 +37,7 @@ export async function importCases(
 
   const results: CaseImportRowResultDto[] = plan.errors.map((error) => ({
     rowNumber: error.rowNumber,
-    caseRef: null,
+    caseRef: error.caseRef,
     status: 'failed',
     caseId: null,
     errorCode: error.code,

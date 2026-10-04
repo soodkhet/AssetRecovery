@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
+import { userFacingIssueMessage } from '@/lib/api/validation'
 import { authErrorMessage, type AuthErrorCode } from '@/lib/auth/errors'
 import { loginSchema } from '@/lib/auth/schemas'
 
@@ -40,7 +41,7 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
     const parsed = loginSchema.safeParse({ identifier, password })
     if (!parsed.success) {
       const first = parsed.error.issues[0]
-      fail({ title: 'ข้อมูลไม่ครบ', message: first?.message ?? 'กรุณากรอกข้อมูลให้ครบถ้วน' })
+      fail({ title: 'ข้อมูลไม่ครบ', message: first === undefined ? 'กรุณากรอกข้อมูลให้ครบถ้วน' : userFacingIssueMessage(first) })
       return
     }
 

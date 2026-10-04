@@ -9,6 +9,7 @@ import {
 import {
   buildKpiSummaryReport,
   lastMonthlyPeriods,
+  trendAnchorDate,
   TREND_MONTHS,
   type ExecutiveMonthEntry,
   type ExecutiveTotals,
@@ -153,7 +154,7 @@ async function loadArByCompany(organizationId: string): Promise<Map<string, numb
 const kpiSummaryProvider: ReportProvider = async (ctx: ReportContext): Promise<ReportData> => {
   const organizationId = ctx.user.organizationId
   const teamIds = ctx.teamIds
-  const months = lastMonthlyPeriods(ctx.range.endDate, TREND_MONTHS)
+  const months = lastMonthlyPeriods(trendAnchorDate(ctx.range.endDate, ctx.now), TREND_MONTHS)
   const trendWindow: DateWindow = {
     startDate: months[0]?.startDate ?? ctx.range.startDate,
     endDate: months.at(-1)?.endDate ?? ctx.range.endDate,

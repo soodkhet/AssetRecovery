@@ -87,7 +87,7 @@ describe('เนื้อไฟล์ตรงกับ UI (`96` §13)', () => {
     const rows = reportSheetRows(PAYLOAD)
     expect(rows[0]).toEqual(['ไฟแนนซ์ ก', 1234.56, 12, 75, '20/08/2569'])
     // แถวว่างต้องเป็นค่าว่าง ไม่ใช่ 0 (0 ทำให้ผู้อ่านเข้าใจว่ามีข้อมูลจริง)
-    expect(rows[1]).toEqual(['ไฟแนนซ์ ข', 0, 0, '', ''])
+    expect(rows[1]).toEqual(['ไฟแนนซ์ ข', 0, 0, 'N/A', '']) // อัตราส่วนว่าง = "N/A" ตรงจอ (BUG-134)
   })
 
   it('Excel: แถวรวมท้ายตารางถูกต่อท้ายเป็นแถวสุดท้ายเสมอ', () => {
@@ -113,7 +113,7 @@ describe('เนื้อไฟล์ตรงกับ UI (`96` §13)', () => {
 
   it('จำนวนช่องต่อแถวเท่ากับจำนวนคอลัมน์เสมอ (คอลัมน์ที่แถวนั้นไม่มีค่า = ว่าง ไม่ใช่เลื่อนตำแหน่ง)', () => {
     const sparse: ReportPayload = { ...PAYLOAD, rows: [{ company: 'มีแค่ชื่อ' }], totalRow: null }
-    expect(reportSheetRows(sparse)[0]).toEqual(['มีแค่ชื่อ', '', '', '', ''])
+    expect(reportSheetRows(sparse)[0]).toEqual(['มีแค่ชื่อ', '', '', 'N/A', ''])
     expect(reportTextRows(sparse)[0]).toEqual(['มีแค่ชื่อ', '—', '—', 'N/A', '—'])
   })
 })
@@ -128,5 +128,15 @@ describe('การจัดรูปค่าในเซลล์ (Rule 01)', 
   it('วันที่/เวลาบนไฟล์เป็น พ.ศ. ทุกทาง (ห้าม ค.ศ. หลุด)', () => {
     expect(formatCellForSheet('2026-08-20', 'date')).toBe('20/08/2569')
     expect(formatCellText('2026-08-20T10:30:00Z', 'datetime')).toBe('20/08/2569 17:30')
+  })
+
+  it('คอลัมน์จำนวนวันแสดงทศนิยม 1 ตำแหน่ง — TAT 0.4 วันต้องไม่กลายเป็น "0" (BUG-132)', () => {
+    expect(formatCellText(0.4, 'days')).toBe('0.4')
+    expect(formatCellText(3, 'days')).toBe('3.0')
+    expect(formatCellText(1234.5, 'days')).toBe('1,234.5')
+    expect(formatCellText(null, 'days')).toBe('—')
+    expect(formatCellForSheet(0.4, 'days')).toBe(0.4)
+    // จำนวนนับยังเป็นจำนวนเต็มเหมือนเดิม
+    expect(formatCellText(12, 'number')).toBe('12')
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ReportError } from '@/lib/reports/errors'
 import { toIsoDateOnly } from '@/lib/reports/period'
+import { reportRangeQuerySchema } from '@/lib/reports/schemas'
 import {
   REPORT_RANGE_PRESETS,
   previousReportRange,
@@ -71,6 +72,30 @@ describe('resolveReportRange — preset ของ `96` §11', () => {
       expect((error as ReportError).code).toBe('REPORT_DATE_INVALID')
       expect((error as ReportError).status).toBe(400)
     }
+  })
+
+  it('ใส่แค่วันเริ่ม ⇒ ข้อความบอกว่าต้องระบุทั้งสองวัน ไม่ใช่ "วันเริ่มอยู่หลังวันสิ้นสุด" (BUG-137)', () => {
+    const messageOf = (input: { from?: string; to?: string }): string => {
+      try {
+        resolveReportRange({ preset: 'custom', ...input }, NOW)
+      } catch (error) {
+        return (error as ReportError).userMessage
+      }
+      return ''
+    }
+    expect(messageOf({ from: '2026-08-01' })).toContain('ทั้งวันเริ่มต้นและวันสิ้นสุด')
+    expect(messageOf({ from: '2026-08-01' })).not.toContain('หลังวันสิ้นสุด')
+    expect(messageOf({ from: '2026-08-15', to: '2026-08-01' })).toContain('ไม่อยู่หลังวันสิ้นสุด')
+  })
+
+  it('refresh รับ 1/true = เปิด · 0/false/ไม่ส่ง = ปิด (BUG-137)', () => {
+    const refreshOf = (refresh?: string) => reportRangeQuerySchema.parse(refresh === undefined ? {} : { refresh }).refresh
+    expect(refreshOf('1')).toBe(true)
+    expect(refreshOf('true')).toBe(true)
+    expect(refreshOf('0')).toBe(false)
+    expect(refreshOf('false')).toBe(false)
+    expect(refreshOf()).toBe(false)
+    expect(reportRangeQuerySchema.safeParse({ refresh: 'yes' }).success).toBe(false)
   })
 
   it('ทุก preset คืนช่วงที่ขอบล่างไม่เกินขอบบน', () => {

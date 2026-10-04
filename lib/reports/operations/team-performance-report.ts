@@ -23,7 +23,8 @@ export interface TeamPerformanceEntry {
 }
 
 const UNASSIGNED_KEY = '__unassigned__'
-const UNASSIGNED_LABEL = 'ไม่ระบุทีม'
+/** ป้ายกลุ่มของเคสที่ยังไม่ถูกมอบหมายทีม — ใช้ชุดเดียวกันทุกรายงานหมวด O (O1/O2) ให้ตรงกับ E3 */
+export const UNASSIGNED_TEAM_LABEL = 'ไม่ระบุทีม'
 
 interface Bucket {
   key: string
@@ -36,9 +37,9 @@ interface Bucket {
 const COLUMNS: readonly ReportColumn[] = [
   { key: 'team', header: 'ทีม', type: 'text', width: 26 },
   { key: 'caseCount', header: 'เคสที่ปิดในช่วงนี้', type: 'number' },
-  { key: 'avgTatDays', header: 'TAT เฉลี่ย (วัน)', type: 'number' },
-  { key: 'minTatDays', header: 'เร็วสุด (วัน)', type: 'number' },
-  { key: 'maxTatDays', header: 'ช้าสุด (วัน)', type: 'number' },
+  { key: 'avgTatDays', header: 'TAT เฉลี่ย (วัน)', type: 'days' },
+  { key: 'minTatDays', header: 'เร็วสุด (วัน)', type: 'days' },
+  { key: 'maxTatDays', header: 'ช้าสุด (วัน)', type: 'days' },
   { key: 'withinSla', header: 'ภายใน SLA', type: 'number' },
   { key: 'overSla', header: 'เกิน SLA', type: 'number', tone: 'warning' },
   { key: 'withinSlaPct', header: '% ภายใน SLA', type: 'percent' },
@@ -65,7 +66,7 @@ export function buildTeamPerformanceReport(input: {
     const key = entry.teamId ?? UNASSIGNED_KEY
     let bucket = buckets.get(key)
     if (bucket === undefined) {
-      bucket = { key, label: entry.teamName ?? UNASSIGNED_LABEL, tatHours: [], withinSla: 0, overSla: 0 }
+      bucket = { key, label: entry.teamName ?? UNASSIGNED_TEAM_LABEL, tatHours: [], withinSla: 0, overSla: 0 }
       buckets.set(key, bucket)
     }
     bucket.tatHours.push(entry.tatHours)
@@ -102,7 +103,7 @@ export function buildTeamPerformanceReport(input: {
         key: 'avgTat',
         label: 'TAT เฉลี่ย (วัน)',
         value: toDays(avgAll),
-        type: 'number',
+        type: 'days',
         hint: `จากเคสที่ปิดในช่วงนี้ ${entries.length.toLocaleString('th-TH')} เคส`,
         higherIsBetter: false,
       },

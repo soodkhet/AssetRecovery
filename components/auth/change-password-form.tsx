@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
+import { userFacingIssueMessage } from '@/lib/api/validation'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { changePasswordSchema, PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
 
@@ -32,7 +33,7 @@ export function ChangePasswordForm({ forced, displayName }: { forced: boolean; d
     const parsed = changePasswordSchema.safeParse({ currentPassword, password, confirmPassword })
     if (!parsed.success) {
       const first = parsed.error.issues[0]
-      setError({ title: 'รหัสผ่านไม่ผ่านเงื่อนไข', message: first?.message ?? 'กรุณาตรวจสอบรหัสผ่าน' })
+      setError({ title: 'รหัสผ่านไม่ผ่านเงื่อนไข', message: first === undefined ? 'กรุณาตรวจสอบรหัสผ่าน' : userFacingIssueMessage(first) })
       return
     }
 

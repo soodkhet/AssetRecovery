@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { FieldEvidenceSection } from '@/components/cases/field-evidence-section'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
@@ -110,6 +110,18 @@ export function CaseDetailModal({
   const [chosenTeam, setChosenTeam] = useState<{ id: string; reason: string } | null>(null)
   // เอกสารชุดเดียว (มติ PO 04/10/2569) — ผู้ตรวจต้องติ๊กยืนยันว่าในชุดมีสัญญา + บัตรประชาชนครบก่อนรับเคส
   const [bundleConfirmed, setBundleConfirmed] = useState(false)
+  // error ของการยืนยันเอกสารชุด แสดงติดช่องติ๊ก (ไม่ใช่บนสุดของ modal ที่ผู้ใช้เลื่อนลงมาแล้ว — UAT BUG-142)
+  const [bundleError, setBundleError] = useState<string | null>(null)
+  const actionErrorRef = useRef<HTMLDivElement>(null)
+  const bundleConfirmRef = useRef<HTMLDivElement>(null)
+
+  // error ใด ๆ ที่โผล่ ต้องเลื่อนมาให้เห็นทันที — modal มักถูกเลื่อนลงไปถึงปุ่มด้านล่างแล้ว
+  useEffect(() => {
+    if (actionError !== null) actionErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [actionError])
+  useEffect(() => {
+    if (bundleError !== null) bundleConfirmRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [bundleError])
 
   const [viewing, setViewing] = useState<ViewableFile | null>(null)
 
@@ -148,6 +160,7 @@ export function CaseDetailModal({
   async function runAction(button: CaseActionButton): Promise<void> {
     if (detail === null) return
     setActionError(null)
+    setBundleError(null)
     setBusyAction(button.action)
     try {
       const teamChanged = button.action === 'accept' && chosenTeam !== null
@@ -161,6 +174,10 @@ export function CaseDetailModal({
         }),
       )
 
+      if (response.error?.code === 'CASE_BUNDLE_CONFIRMATION_REQUIRED') {
+        setBundleError(response.error.message)
+        return
+      }
       if (response.error !== undefined || response.data === undefined) {
         setActionError(response.error ?? { title: 'ทำรายการไม่สำเร็จ', message: 'กรุณาลองใหม่' })
         return
@@ -278,9 +295,11 @@ export function CaseDetailModal({
         ) : (
           <div className="space-y-5">
             {actionError !== null && (
-              <InlineAlert tone="error" title={actionError.title}>
-                {actionError.message}
-              </InlineAlert>
+              <div ref={actionErrorRef}>
+                <InlineAlert tone="error" title={actionError.title}>
+                  {actionError.message}
+                </InlineAlert>
+              </div>
             )}
 
             {headerSlot}
@@ -311,9 +330,18 @@ export function CaseDetailModal({
             <DocumentSection
               detail={detail}
               onView={setViewing}
+              bundleConfirmRef={bundleConfirmRef}
               bundleConfirm={
                 actions.some((button) => button.action === 'accept')
-                  ? { checked: bundleConfirmed, onChange: setBundleConfirmed, disabled: busyAction !== null }
+                  ? {
+                      checked: bundleConfirmed,
+                      onChange: (checked: boolean) => {
+                        setBundleConfirmed(checked)
+                        if (checked) setBundleError(null)
+                      },
+                      disabled: busyAction !== null,
+                      error: bundleError,
+                    }
                   : undefined
               }
             />
@@ -485,11 +513,20 @@ function DocumentSection({
   detail,
   onView,
   bundleConfirm,
+  bundleConfirmRef,
 }: {
   detail: CaseDetailDto
   onView: (document: CaseDocumentDto) => void
   /** มีเมื่อผู้ใช้กด "รับเคส" ได้ — ช่องติ๊กยืนยันเอกสารชุด */
-  bundleConfirm?: { checked: boolean; onChange: (checked: boolean) => void; disabled: boolean }
+  bundleConfirm?: {
+    checked: boolean
+    onChange: (checked: boolean) => void
+    disabled: boolean
+    /** error จาก API (`CASE_BUNDLE_CONFIRMATION_REQUIRED`) — แสดงใต้ช่องติ๊กตรงนี้ */
+    error: string | null
+  }
+  /** กล่องช่องติ๊ก — ผู้เรียกเลื่อนมาที่นี่เมื่อมี error */
+  bundleConfirmRef?: RefObject<HTMLDivElement | null>
 }) {
   const photos = detail.documents.filter((document) => document.documentType === 'product_photo')
   const isBundle = documentModeOf(countDocuments(detail.documents)) === 'bundle'
@@ -505,7 +542,12 @@ function DocumentSection({
         {photoInContract && <Badge className="bg-sky-50 text-sky-700">รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว</Badge>}
       </h3>
       {isBundle && bundleConfirm !== undefined && (
-        <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <div ref={bundleConfirmRef} className="mb-3">
+          <label
+          className={`flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-xs text-amber-900 ${
+            bundleConfirm.error !== null ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'
+          }`}
+        >
           <input
             type="checkbox"
             className="mt-0.5 accent-emerald-600"
@@ -518,6 +560,12 @@ function DocumentSection({
             <span className="mt-0.5 block text-[11px] text-amber-800">ต้องติ๊กก่อนกด “รับเคส”</span>
           </span>
         </label>
+          {bundleConfirm.error !== null && (
+            <p role="alert" className="mt-1 text-xs font-semibold text-red-600">
+              {bundleConfirm.error}
+            </p>
+          )}
+        </div>
       )}
       <div className="space-y-2">
         {slots.map((slot) => {

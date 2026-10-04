@@ -47,7 +47,7 @@ const COLUMNS: readonly ReportColumn[] = [
   { key: 'memberCount', header: 'พนักงาน', type: 'number' },
   { key: 'caseCount', header: 'เคสทั้งหมด', type: 'number' },
   { key: 'successPct', header: '% สำเร็จ', type: 'percent' },
-  { key: 'avgTatDays', header: 'TAT เฉลี่ย (วัน)', type: 'number' },
+  { key: 'avgTatDays', header: 'TAT เฉลี่ย (วัน)', type: 'days' },
   { key: 'directCostSatang', header: 'ต้นทุนตรง', type: 'money' },
   { key: 'grossProfitSatang', header: 'กำไรขั้นต้น', type: 'money' },
 ]
@@ -126,7 +126,7 @@ export function buildTeamScorecardReport(input: {
         key: 'avgTatDays',
         label: 'TAT เฉลี่ย (วัน)',
         value: averageDays(allTatHours),
-        type: 'number',
+        type: 'days',
         hint: `จากเคสที่ปิดในช่วงนี้ ${allTatHours.length.toLocaleString('th-TH')} เคส`,
         higherIsBetter: false,
       },

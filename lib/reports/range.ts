@@ -100,7 +100,8 @@ export function resolveReportRange(input: ReportRangeInput, now: Date): ReportRa
       const from = input.from === undefined || input.from === null ? null : parseIsoDateOnly(input.from)
       const to = input.to === undefined || input.to === null ? null : parseIsoDateOnly(input.to)
       if (from === null || to === null) {
-        throw new ReportError('REPORT_DATE_INVALID', { detail: 'ช่วงวันที่กำหนดเองต้องระบุทั้งวันเริ่มและวันสิ้นสุด' })
+        const message = 'ช่วงวันที่กำหนดเองต้องระบุทั้งวันเริ่มต้นและวันสิ้นสุด (รูปแบบ YYYY-MM-DD)'
+        throw new ReportError('REPORT_DATE_INVALID', { detail: message, message })
       }
       if (from.getTime() > to.getTime()) {
         throw new ReportError('REPORT_DATE_INVALID', { detail: 'วันเริ่มต้นต้องไม่อยู่หลังวันสิ้นสุด' })

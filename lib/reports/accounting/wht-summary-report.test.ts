@@ -83,5 +83,7 @@ describe('buildWhtSummaryReport', () => {
   it('หมายเหตุระบุว่าใบที่ยกเลิกไม่ถูกนับ', () => {
     const report = buildWhtSummaryReport({ filings: [], asOf: ASOF })
     expect(report.note).toContain('ยกเลิก')
+    // BUG-135 — หมายเหตุที่ผู้ใช้เห็นต้องไม่มีรหัส error ดิบ (เช่น FILING_OVERDUE_WARNING)
+    expect(report.note).not.toMatch(/[A-Z]+_[A-Z_]+/)
   })
 })

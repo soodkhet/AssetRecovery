@@ -90,7 +90,10 @@ export function ReportBarChart({
                 fill={POSITIVE}
               >
                 {stack === undefined &&
-                  data.map((entry) => <Cell key={entry.label} fill={entry.value < 0 ? NEGATIVE : POSITIVE} />)}
+                  // key ตามลำดับ — ป้ายซ้ำกันได้ (เช่น "—" หลายแถวตอน drill-down) จน React เตือน duplicate key (BUG-136)
+                  data.map((entry, index) => (
+                    <Cell key={`${index}:${entry.label}`} fill={entry.value < 0 ? NEGATIVE : POSITIVE} />
+                  ))}
               </Bar>
               {stack !== undefined && (
                 <Bar dataKey="stacked" name="stacked" stackId="total" radius={[3, 3, 0, 0]} maxBarSize={56} fill={SECONDARY} />

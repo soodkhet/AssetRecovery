@@ -4,7 +4,7 @@ import { DocFooter, DocHeader, MetaCell, docStyles } from '@/components/pdf/inte
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { reportTextRows } from '@/lib/reports/export'
-import { formatCellText, type ReportPayload } from '@/lib/reports/payload'
+import { NUMERIC_COLUMN_TYPES, formatCellText, type ReportPayload } from '@/lib/reports/payload'
 
 /**
  * PDF ของเมนูรายงาน (`96` §11 "ทุกรายงานมีปุ่ม Export PDF" · E13 "PDF ฝัง Noto Sans Thai")
@@ -15,7 +15,6 @@ import { formatCellText, type ReportPayload } from '@/lib/reports/payload'
  * แนวนอน (landscape) เพราะรายงานส่วนใหญ่กว้างเกิน A4 ตั้ง (สูงสุด ~10 คอลัมน์ตาม `96` §6)
  */
 
-const NUMERIC_TYPES = new Set(['money', 'number', 'percent'])
 
 function columnFlex(payload: ReportPayload, index: number): number {
   const column = payload.columns[index]
@@ -67,7 +66,7 @@ export function ReportDocument({
                 style={[
                   docStyles.th,
                   { flex: columnFlex(payload, index) },
-                  ...(NUMERIC_TYPES.has(column.type) ? [docStyles.amount] : []),
+                  ...(NUMERIC_COLUMN_TYPES.has(column.type) ? [docStyles.amount] : []),
                 ]}
               >
                 {column.header}
@@ -85,7 +84,7 @@ export function ReportDocument({
                     style={[
                       isTotal ? docStyles.tdBold : docStyles.td,
                       { flex: columnFlex(payload, index) },
-                      ...(NUMERIC_TYPES.has(payload.columns[index]?.type ?? 'text') ? [docStyles.amount] : []),
+                      ...(NUMERIC_COLUMN_TYPES.has(payload.columns[index]?.type ?? 'text') ? [docStyles.amount] : []),
                     ]}
                   >
                     {cell}

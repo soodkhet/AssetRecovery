@@ -41,6 +41,14 @@ export interface MonthlyPeriod {
  * ขอบเดือนมาจาก `resolveReportPeriod()` (ปฏิทินไทย — 3.8) **ห้ามคิดขอบเดือนเอง**
  * · เดินถอยหลังด้วย "วันก่อนวันแรกของเดือน" จึงข้ามปี/เดือนสั้นได้ถูกเสมอ
  */
+/**
+ * วันอ้างอิงเดือนสุดท้ายของเทรนด์ — ช่วงที่เลือกเลยวันนี้ไปแล้ว (เช่น "ปีนี้" จบ 31 ธ.ค.) ต้องหยุดที่
+ * **เดือนปัจจุบัน** ห้ามมีเดือนอนาคตยอด 0 ในกราฟ (UAT BUG-138)
+ */
+export function trendAnchorDate(rangeEndDate: Date, now: Date): Date {
+  return rangeEndDate.getTime() > now.getTime() ? now : rangeEndDate
+}
+
 export function lastMonthlyPeriods(endDate: Date, count: number): readonly MonthlyPeriod[] {
   if (count <= 0) return []
   const periods: MonthlyPeriod[] = []
@@ -178,7 +186,7 @@ export function buildKpiSummaryReport(input: {
         label: 'กำไรขั้นต้น',
         value: currentProfit.grossProfitSatang,
         type: 'money',
-        hint: `ต้นทุนตรง ฿ ${fmtSatang(current.directCostSatang)}`,
+        hint: `ต้นทุนตรง ${fmtSatang(current.directCostSatang)} บาท`,
         mom: momComparison(currentProfit.grossProfitSatang, previousProfit.grossProfitSatang),
       },
       {
