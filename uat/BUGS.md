@@ -151,6 +151,8 @@
 | BUG-143 | Portal-plan D10 | **S3** | code | Storage policy ของ bucket `case-documents` (`scripts/setup-storage.ts`) เปิด SELECT/INSERT/UPDATE ให้ `authenticated` **ทุกคน** + client สร้าง signed URL เองได้ → ผู้ใช้ที่ login แล้วทุกคน (พนักงานภาคสนาม/ผู้ใช้บริษัท) อ่าน/อัปโหลด/เขียนทับ object ใดก็ได้ในบัคเก็ต รวมสัญญา/บัตรประชาชนลูกหนี้/รูปทรัพย์ของบริษัทอื่น · project `qgshdg…` ใช้ร่วม localhost + staging | fixed ในโค้ด `b86d940` (merge `ee14b9e` 05/10/2569 · DEC-014) · **policy บน Supabase cloud ยังเปิดอยู่จนกว่าผู้ใช้จะรัน `pnpm storage:setup … --dry-run` → รันจริง** |
 | BUG-144 | SMOKE-W | S5 | spec-gap | หน้าเบิกของพนักงาน (มือถือ) ไม่มีปุ่ม/ลิงก์เปิดดูใบเสร็จที่แนบแล้ว (มีมาก่อน fixer W) · API ดาวน์โหลดของตัวเองใช้ได้ | open |
 | BUG-145 | SMOKE-W | S5 | code | การปฏิเสธนอก scope ไม่สม่ำเสมอ: ดาวน์โหลดเอกสารเคสตอบ 404 ของโมดูล แต่ดาวน์โหลดใบเสร็จ/ขอ upload-url นอก scope ตอบ 403 (บอกใบ้ว่า path มีอยู่) | open |
+| BUG-146 | PORTAL-P9-visual | S5 | code | กราฟรายได้หน้า `/portal` บนมือถือ ป้ายเดือนสั้นถูกแล้วแต่ป้ายแกน X ยังทับกัน (หมุน -15° กว้าง ~39px แต่ tick ห่าง ~27px) — ควรหมุนมากขึ้น/แสดงทุก 2 เดือน | open |
+| BUG-147 | PORTAL-P9-visual | S5 | spec-gap | หน้าวางบิล portal: "ชำระแล้ว" ฿3,879.20 น้อยกว่ายอดรวม ฿111.90 (= ภาษีที่ลูกค้าหัก 3%) แต่สถานะ "รับชำระครบ" ไม่มีคำอธิบาย → ลูกค้าอาจสับสน · ข้อเสนอ: แสดงแถว "ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)" | needs-decision |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
