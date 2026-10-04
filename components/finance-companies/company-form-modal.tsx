@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toFieldErrors } from '@/lib/api/validation'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -150,12 +151,8 @@ export function CompanyFormModal({
   async function save(): Promise<void> {
     const parsed = financeCompanyCreateSchema.safeParse(payloadOf(form))
     if (!parsed.success) {
-      const fields: Record<string, string> = {}
-      for (const issue of parsed.error.issues) {
-        const path = issue.path.join('.') || '_'
-        if (fields[path] === undefined) fields[path] = issue.message
-      }
-      setErrors(fields)
+      // ตัวแปลงกลาง — ข้อความ default ภาษาอังกฤษของ Zod ถูกแปลงเป็นไทยที่เดียว (UAT BUG-138)
+      setErrors(toFieldErrors(parsed.error))
       return
     }
 

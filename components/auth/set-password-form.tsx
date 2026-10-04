@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, type FormEvent } from 'react'
+import { userFacingIssueMessage } from '@/lib/api/validation'
 import { setPasswordSchema } from '@/lib/auth/schemas'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
@@ -55,7 +56,7 @@ export function SetPasswordForm() {
     const parsed = setPasswordSchema.safeParse({ password, confirmPassword })
     if (!parsed.success) {
       const first = parsed.error.issues[0]
-      setError({ title: 'รหัสผ่านไม่ผ่านเงื่อนไข', message: first?.message ?? 'กรุณาตรวจสอบรหัสผ่าน' })
+      setError({ title: 'รหัสผ่านไม่ผ่านเงื่อนไข', message: first === undefined ? 'กรุณาตรวจสอบรหัสผ่าน' : userFacingIssueMessage(first) })
       return
     }
 
