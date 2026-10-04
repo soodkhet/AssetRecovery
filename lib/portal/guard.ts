@@ -187,7 +187,26 @@ export async function requirePortalRow<T extends { companyId: string | null }>(
   )
 }
 
-type PortalHandler<Ctx> = (request: NextRequest, context: Ctx, portal: PortalContext) => Response | Promise<Response>
+/**
+ * ปฏิเสธแถวที่ **เป็นของบริษัทผู้เรียกแล้ว** แต่ยังไม่อยู่ในขอบเขตที่พอร์ทัลเปิดให้ (เช่น รูปทรัพย์ของเคสที่ยังไม่
+ * "ติดตามสำเร็จ") — ตอบ 403 `PERMISSION_DENIED` แบบเดียวกับ `requirePortalRow()` (ไม่บอกเหตุผล) + audit
+ * `access_denied` โดยระบุ `after.cause` ตามที่ route ส่งมา (Portal-P4)
+ */
+export async function denyPortalRow(
+  ctx: PortalContext,
+  target: PortalRowTarget,
+  cause: string,
+  options: { request?: Request; download?: boolean } = {},
+): Promise<never> {
+  return denyPortal(
+    ctx.user,
+    'PERMISSION_DENIED',
+    { section: ctx.section, download: options.download === true, cause, targetType: target.type, requestedId: target.id },
+    options.request,
+  )
+}
+
+type PortalHandler<Ctx> =(request: NextRequest, context: Ctx, portal: PortalContext) => Response | Promise<Response>
 
 /**
  * ห่อ route `GET /api/portal/*` — ยามหมวด + แปลง `AuthError` เป็น response มาตรฐาน

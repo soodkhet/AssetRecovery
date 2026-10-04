@@ -78,24 +78,6 @@ function exportedNames(source: string, fileName: string): string[] {
 const files = routeFiles(PORTAL_DIR)
 const contractPaths = new Set(PORTAL_ENDPOINTS.map((endpoint) => endpoint.path))
 
-/**
- * path ใน contract ที่ fixer คู่ขนานเป็นเจ้าของและ **ยังไม่ merge** ตอน P6 commit (P4: dashboard/cases/company-profile/assets ·
- * P5: billing-batches/tax-invoices/reports) — ยอมให้ยังไม่มีไฟล์ได้ชั่วคราว · เมื่อ P4/P5 merge ครบให้ลบรายการนี้ทิ้ง
- * (test "รายการค้าง" ด้านล่างจะบอกว่าตัวไหนมีไฟล์แล้ว) แล้วทิศ contract → route จะบังคับครบ 13 ตัวเอง
- */
-const PENDING_PARALLEL_ROUTES: ReadonlySet<string> = new Set([
-  '/api/portal/dashboard',
-  '/api/portal/cases',
-  '/api/portal/cases/:id',
-  '/api/portal/company-profile',
-  '/api/portal/assets/:id/photos/:index',
-  '/api/portal/billing-batches',
-  '/api/portal/tax-invoices',
-  '/api/portal/tax-invoices/:id/download',
-  '/api/portal/reports/revenue-summary',
-  '/api/portal/reports/ar-aging',
-])
-
 describe('namespace /api/portal — GET เท่านั้น', () => {
   it('มีไฟล์ route ของพอร์ทัลให้สแกน', () => {
     expect(files.length).toBeGreaterThan(0)
@@ -122,17 +104,12 @@ describe('route ↔ lib/portal/contract.ts', () => {
     expect(outside).toEqual([])
   })
 
-  it('ทุก path ใน contract มีไฟล์ route จริง (ยกเว้นรายการค้างของ fixer คู่ขนาน)', () => {
+  it('ทุก path ใน contract มีไฟล์ route จริง (ครบ 13 endpoint หลัง P4/P5/P6 merge)', () => {
     const existing = new Set(files.map(apiPathOf))
-    const missing = [...contractPaths].filter((apiPath) => !existing.has(apiPath) && !PENDING_PARALLEL_ROUTES.has(apiPath))
+    const missing = [...contractPaths].filter((apiPath) => !existing.has(apiPath))
     expect(missing).toEqual([])
+    expect(contractPaths.size).toBe(13)
   })
-
-  it('รายการค้างต้องเป็น path ใน contract เท่านั้น', () => {
-    expect([...PENDING_PARALLEL_ROUTES].filter((apiPath) => !contractPaths.has(apiPath))).toEqual([])
-  })
-
-  it.todo('เปิดเมื่อ P4/P5 merge: ลบ PENDING_PARALLEL_ROUTES ⇒ contract → route บังคับครบ 13 endpoint')
 })
 
 describe('กฎ ESLint ของ app/api/portal/**', () => {
