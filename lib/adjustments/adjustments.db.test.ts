@@ -376,6 +376,29 @@ suite('Phase 3.7 — ระดับอนุมัติตาม `period_statu
     expect(afterExec.approvedByName).toBe('ผู้บริหาร 3.7')
   })
 
+  /** UAT BUG-128 — อนุมัติครบแล้วแคชรายงานขององค์กรต้องถูกล้าง (อนุมัติบางส่วนยังไม่ล้าง · องค์กรอื่นไม่โดน) */
+  it('อนุมัติครบ = ล้างแคชรายงานขององค์กร', async () => {
+    const cache = await import('@/lib/reports/cache')
+    const now = new Date()
+    const seed = async (key: string): Promise<void> => {
+      await cache.withDailyCache(key, { refresh: false, now }, () => Promise.resolve(1))
+    }
+    const reportKey = `${ORG_ID}:report:E1:range`
+    const profitKey = `profit:${ORG_ID}:all:company:range`
+    const otherOrgKey = '00000000-0000-4000-8000-0000000000ff:report:E1:range'
+    for (const key of [reportKey, profitKey, otherOrgKey]) await seed(key)
+
+    const created = await newAdjustment('sent_to_accountant')
+    await adjustments.approveAdjustment(ctx(), created.id, { note: '' })
+    expect(cache.reportCacheComputedAt(reportKey)).not.toBeNull()
+
+    await adjustments.approveAdjustment(ctx(executive), created.id, { note: 'อนุมัติ' })
+    expect(cache.reportCacheComputedAt(reportKey)).toBeNull()
+    expect(cache.reportCacheComputedAt(profitKey)).toBeNull()
+    expect(cache.reportCacheComputedAt(otherOrgKey)).not.toBeNull()
+    cache.clearReportCache()
+  })
+
   it('§16 เคส 1 — รอบ locked: การเงินอนุมัติไม่ได้ ⇒ `INSUFFICIENT_APPROVAL_LEVEL` (สถานะไม่เปลี่ยน)', async () => {
     const created = await newAdjustment('locked')
     expect(created.periodStatusAtTarget).toBe('locked')

@@ -7,6 +7,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import {
   Button,
   ConfirmModal,
+  Field,
   InlineAlert,
   RefText,
   StatusBadge,
@@ -16,6 +17,7 @@ import {
   TableState,
   Td,
   Th,
+  Textarea,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -40,13 +42,15 @@ export function ExportTab() {
   const [exporting, setExporting] = useState(false)
   const [pending, setPending] = useState<{ record: ExportRecordDto; action: 'mark-sent' | 'accept' } | null>(null)
   const [saving, setSaving] = useState(false)
+  // UAT BUG-123 — หมายเหตุ (ไม่บังคับ) ลงเป็นเหตุผลใน audit ของการเดินสถานะ
+  const [note, setNote] = useState('')
 
   async function runTransition(): Promise<void> {
     if (pending === null) return
     setSaving(true)
     const result = await callApi<ExportRecordDto>(
       `/api/accounting/export-history/${pending.record.id}/${pending.action}`,
-      jsonRequest('PATCH', {}),
+      jsonRequest('PATCH', note.trim() === '' ? {} : { note: note.trim() }),
     )
     setSaving(false)
 
@@ -62,6 +66,7 @@ export function ExportTab() {
           : `บันทึกว่าสำนักงานบัญชีตอบรับ ${pending.record.periodLabel} ${pending.record.versionLabel} แล้ว`,
     })
     setPending(null)
+    setNote('')
     await reload()
   }
 
@@ -181,7 +186,10 @@ export function ExportTab() {
 
       <ConfirmModal
         open={pending !== null}
-        onClose={() => setPending(null)}
+        onClose={() => {
+          setPending(null)
+          setNote('')
+        }}
         onConfirm={() => void runTransition()}
         loading={saving}
         title={
@@ -195,7 +203,11 @@ export function ExportTab() {
             ? ''
             : `${pending.record.periodLabel} · ${pending.record.versionLabel} · สร้างเมื่อ ${fmtDateTime(pending.record.generatedAt)} — การส่งจริงเกิดนอกระบบ ที่นี่บันทึกไว้เพื่อให้ตามสถานะได้`
         }
-      />
+      >
+        <Field label="หมายเหตุ (ถ้ามี)" hint="เช่น ส่งทางอีเมลถึงผู้ทำบัญชี — บันทึกไว้ในประวัติการใช้งาน">
+          <Textarea rows={2} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
+        </Field>
+      </ConfirmModal>
     </div>
   )
 }

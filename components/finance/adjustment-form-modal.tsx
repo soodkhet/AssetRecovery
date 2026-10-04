@@ -249,7 +249,7 @@ export function AdjustmentFormModal({
           </Field>
         </div>
 
-        <Field label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร (REASON_REQUIRED)">
+        <Field label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร">
           <Textarea
             rows={3}
             value={reason}

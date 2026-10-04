@@ -24,8 +24,7 @@ import {
 import { cn } from '@/components/ui/cn'
 import {
   ADJUSTMENT_TARGET_LABEL,
-  APPROVE_ADJUSTMENT,
-  APPROVE_ADJUSTMENT_LOCKED,
+  approvalCapabilityFor,
   CREATE_ADJUSTMENT,
 } from '@/lib/adjustments/adjustment'
 import {
@@ -55,7 +54,10 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 export function AdjustmentTab() {
   const { can } = usePermission()
   const canCreate = can('manage', CREATE_ADJUSTMENT)
-  const canApprove = can('manage', APPROVE_ADJUSTMENT) || can('manage', APPROVE_ADJUSTMENT_LOCKED)
+  // BUG-130 — ปุ่มอนุมัติ/ปฏิเสธต้องถือ capability "ของระดับนั้น" (รอบ locked = ผู้บริหารเท่านั้น)
+  // ตัวเดียวกับที่ API ตรวจ (`approvalCapabilityFor`) — ซ่อนเป็นแค่ UX, API ยังปฏิเสธเองเสมอ (DEC-002)
+  const canReview = (row: AdjustmentDto): boolean =>
+    canActOnAdjustment(row.status) && can('manage', approvalCapabilityFor(row.periodStatusAtTarget))
 
   const [status, setStatus] = useState<AdjustmentStatusFilter>('all')
   const [targetType, setTargetType] = useState<AdjustmentTargetFilter>('all')
@@ -193,7 +195,7 @@ export function AdjustmentTab() {
                     </Td>
                     <Td className="text-right whitespace-nowrap">
                       <div className="inline-flex flex-col items-end gap-1">
-                        {canApprove && canActOnAdjustment(row.status) && (
+                        {canReview(row) && (
                           <>
                             <Button size="sm" onClick={() => setReview({ adjustment: row, mode: 'approve' })}>
                               ✓ อนุมัติ

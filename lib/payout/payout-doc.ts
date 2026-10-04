@@ -214,7 +214,7 @@ export function buildPayoutSummaryDoc(
     totalGrossText: fmtSatang(totals.grossSatang),
     totalWhtText: fmtSatang(totals.whtSatang),
     totalNetText: fmtSatang(totals.netSatang),
-    note: 'ใช้รูปแบบไฟล์ธนาคารที่ test_status = passed เท่านั้นในการตัดโอนจริง (BANK_FILE_NOT_TESTED)',
+    note: 'ใช้รูปแบบไฟล์ธนาคารที่ผ่านการทดสอบแล้วเท่านั้นในการตัดโอนจริง',
   }
 }
 

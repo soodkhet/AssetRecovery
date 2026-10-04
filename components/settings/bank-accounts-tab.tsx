@@ -500,7 +500,7 @@ export function BankAccountsTab() {
       <ReasonConfirmModal
         open={deleteTarget !== null}
         title={`ปิดใช้งานบัญชี "${deleteTarget?.accountNumberMasked ?? ''}"`}
-        description="บัญชีที่มีรายการรับ/จ่ายผูกอยู่ปิดไม่ได้ (BANK_ACCOUNT_IN_USE) — รายการเดินบัญชีเก่ายังอ้างบัญชีนี้ได้"
+        description="บัญชีที่มีรายการรับ/จ่ายผูกอยู่ปิดไม่ได้ — รายการเดินบัญชีเก่ายังอ้างบัญชีนี้ได้"
         confirmLabel="ยืนยันปิดใช้งาน"
         loading={deleting}
         reason={deleteReason}

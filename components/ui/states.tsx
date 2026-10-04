@@ -64,7 +64,10 @@ export function ErrorState({
 }: {
   title?: string
   message?: ReactNode
-  /** error code จาก `24` (ถ้ามี) — ช่วยให้ผู้ใช้แจ้งปัญหาได้ตรงจุด */
+  /**
+   * error code จาก `24` (ถ้ามี) — **ไม่แสดงบนจอ** (ข้อความผู้ใช้ห้ามมีรหัส error ดิบ — UAT BUG-125)
+   * เก็บไว้เป็น `data-error-code` ให้ทีมซัพพอร์ต/เทสต์อ่านจาก DOM ได้
+   */
   code?: string
   action?: ReactNode
   className?: string
@@ -80,7 +83,7 @@ export function ErrorState({
         {title}
       </p>
       <p className="max-w-md text-xs text-slate-500">{message}</p>
-      {code !== undefined && <p className="font-mono text-[11px] text-slate-400">{code}</p>}
+      {code !== undefined && <span hidden data-error-code={code} />}
       {action !== undefined && <div className="mt-1">{action}</div>}
     </StateShell>
   )

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import {
   auditActionLabel,
   auditActorLabel,
@@ -31,6 +33,24 @@ describe('ป้ายของ audit log', () => {
   it('ตารางที่ยังไม่ได้ตั้งชื่อไทยแสดง code ดิบ (หน้าจอไม่พัง)', () => {
     expect(auditTargetLabel('cases')).toBe('เคส')
     expect(auditTargetLabel('some_new_table')).toBe('some_new_table')
+  })
+
+  /** UAT BUG-131 — ตัวกรองต้องไม่โชว์ชื่อตารางดิบ: ทุกตารางใน schema ต้องมีป้ายไทย */
+  it('ทุกตารางใน prisma schema มีป้ายไทย', () => {
+    const schema = readFileSync(path.join(process.cwd(), 'prisma/schema.prisma'), 'utf8')
+    const tables = [...schema.matchAll(/^model \w+ \{[\s\S]*?@@map\("([a-z_]+)"\)/gm)].map((match) => match[1] ?? '')
+    expect(tables.length).toBeGreaterThan(40)
+    const missing = tables.filter((table) => auditTargetLabel(table) === table)
+    expect(missing).toEqual([])
+    expect(auditTargetLabel('cash_receipts')).toBe('รายการรับเงิน')
+    expect(auditTargetLabel('jobs')).toBe('งานเบื้องหลังของระบบ')
+  })
+
+  /** UAT BUG-127 — audit แยกของการอนุมัติ Adjustment งวดล็อก ไม่ใช่ "ปลดล็อกงวด" */
+  it('unlock บน adjustments แสดงเป็นการอนุมัติปรับปรุงในงวดที่ล็อก', () => {
+    expect(auditActionLabel('unlock', 'adjustments')).toBe('อนุมัติปรับปรุงในงวดที่ล็อก')
+    expect(auditActionLabel('unlock', 'accounting_periods')).toBe('ปลดล็อกงวด')
+    expect(auditActionLabel('unlock')).toBe('ปลดล็อกงวด')
   })
 
   it('งานอัตโนมัติของระบบ (actor = null) แสดงว่า "ระบบ"', () => {

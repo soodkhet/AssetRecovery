@@ -1,5 +1,5 @@
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { SettingsError } from '@/lib/settings/errors'
+import { PERIOD_LOCKED_MESSAGES_BY_STATUS, SettingsError } from '@/lib/settings/errors'
 
 /**
  * นโยบายล็อกรอบบัญชี (`13` §6.11) — **pure ล้วน**
@@ -105,5 +105,6 @@ export function assertPeriodEditable(input: {
   throw new SettingsError('PERIOD_LOCKED_DIRECT_EDIT', {
     detail: `target=${input.targetType}:${input.targetId ?? '-'} period_status=${input.periodStatus}`,
     context: { targetType: input.targetType, periodStatus: input.periodStatus, affectsAmount },
+    messages: input.periodStatus === 'collecting' ? undefined : PERIOD_LOCKED_MESSAGES_BY_STATUS[input.periodStatus],
   })
 }

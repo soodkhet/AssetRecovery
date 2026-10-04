@@ -127,7 +127,7 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   },
   BANK_FILE_NOT_TESTED: {
     title: 'รูปแบบไฟล์ธนาคารยังไม่ผ่านการทดสอบ',
-    message: 'ต้องทดสอบไฟล์ตัวอย่างให้ผ่าน (test_status = passed) ก่อนนำไปสร้างไฟล์โอนเงินจริง',
+    message: 'ต้องทดสอบไฟล์ตัวอย่างให้ผ่านก่อนนำไปสร้างไฟล์โอนเงินจริง',
   },
   NUMBERING_SEQ_NOT_EDITABLE: {
     title: 'แก้เลขล่าสุดด้วยมือไม่ได้',
@@ -135,8 +135,21 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   },
   PERIOD_LOCKED_DIRECT_EDIT: {
     title: 'รอบบัญชีถูกล็อกแล้ว',
-    message: 'รอบบัญชีนี้ปิดแล้ว แก้ข้อมูลต้นทางโดยตรงไม่ได้ — ต้องสร้างรายการปรับปรุง (Adjustment) แทน',
+    message: 'รอบบัญชีนี้ล็อกแล้ว แก้ข้อมูลต้นทางโดยตรงไม่ได้ — ต้องสร้างรายการปรับปรุง (Adjustment) แทน',
   },
+}
+
+/**
+ * ข้อความ `PERIOD_LOCKED_DIRECT_EDIT` แยกตามสถานะงวดจริง (BUG-121) — code เดิม แต่ถ้อยคำต้องไม่บอกว่า
+ * "ล็อกแล้ว" ตอนงวดเพิ่งส่งสำนักงานบัญชี (ยังปลดได้โดยไม่ต้องผ่านผู้บริหาร — `13` §6.11)
+ */
+export const PERIOD_LOCKED_MESSAGES_BY_STATUS: Record<'sent_to_accountant' | 'locked', ErrorMessage> = {
+  sent_to_accountant: {
+    title: 'รอบบัญชีส่งสำนักงานบัญชีแล้ว',
+    message:
+      'รอบบัญชีนี้ส่งสำนักงานบัญชีแล้ว แก้ข้อมูลที่กระทบยอดโดยตรงไม่ได้ — ต้องสร้างรายการปรับปรุง (Adjustment) แทน',
+  },
+  locked: MESSAGES.PERIOD_LOCKED_DIRECT_EDIT,
 }
 
 export function settingsErrorStatus(code: SettingsErrorCode): number {
@@ -148,8 +161,11 @@ export function settingsErrorMessage(code: SettingsErrorCode): ErrorMessage {
 }
 
 export class SettingsError extends ModuleError<SettingsErrorCode> {
-  constructor(code: SettingsErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  constructor(
+    code: SettingsErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; messages?: ErrorMessage },
+  ) {
+    super(code, options?.messages ?? MESSAGES[code], HTTP_STATUS[code], options)
     this.name = 'SettingsError'
   }
 }

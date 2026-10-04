@@ -78,8 +78,8 @@ export function CreatePayoutModal({
     >
       <div className="space-y-4">
         <InlineAlert tone="warning">
-          ห้ามรวม Inhouse + Outsource ในรอบเดียวกัน (MIXED_SIDE_BATCH) — ผู้รับเงินที่ยังไม่ยืนยันข้อมูล
-          ธนาคาร/ภาษีจะถูกบล็อกทั้งรอบ (UNVERIFIED_PAYEE_IN_PAYOUT)
+          ห้ามรวม Inhouse + Outsource ในรอบเดียวกัน — ผู้รับเงินที่ยังไม่ยืนยันข้อมูล
+          ธนาคาร/ภาษีจะถูกบล็อกทั้งรอบ
         </InlineAlert>
 
         <Field label="ฝั่งของรอบการจ่าย" required>

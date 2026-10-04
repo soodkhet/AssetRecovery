@@ -33,11 +33,15 @@ import {
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
 import { isRevenueError } from '@/lib/revenue/errors'
 import { assertRevenueAmountEditable } from '@/lib/revenue/queries'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { isDirectEditBlocked } from '@/lib/settings/period-lock'
-import { toDateOnlyIso, toIso } from '@/lib/settings/queries/shared'
+import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { fmtDate, toInputDate } from '@/lib/format/datetime'
+import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
+import { toIso } from '@/lib/settings/queries/shared'
 
 /**
  * รายการปรับปรุง (ไฟล์ 20) — ชั้น DB (`27` §6.8)
@@ -112,7 +116,7 @@ async function revenueTarget(user: SessionUser, targetId: string): Promise<RawTa
 
   return {
     targetRef: row.case.caseRef,
-    targetLabel: `${row.company.name} · รายได้ ${toDateOnlyIso(row.revenueDate)} (รอบติดตามที่ ${row.trackingRound})`,
+    targetLabel: `${row.company.name} · รายได้ ${fmtDate(row.revenueDate)} (รอบติดตามที่ ${row.trackingRound})`,
     currentSatang: row.totalSatang,
     targetDate: row.revenueDate,
     moduleDirectEditBlocked,
@@ -135,7 +139,7 @@ async function expenseTarget(user: SessionUser, targetId: string): Promise<RawTa
 
   return {
     targetRef: row.case?.caseRef ?? targetId.slice(0, 8),
-    targetLabel: `${row.payee.user.fullName} · ${row.expenseType} (${row.status})`,
+    targetLabel: `${row.payee.user.fullName} · ${EXPENSE_TYPE_LABEL[row.expenseType]} (${EXPENSE_STATUS_LABEL[row.status]})`,
     currentSatang: row.grossSatang,
     targetDate: row.expenseDate,
     moduleDirectEditBlocked: false,
@@ -173,7 +177,8 @@ async function payoutBatchTarget(user: SessionUser, targetId: string): Promise<R
   return {
     targetRef: row.name,
     // `02` §8 ไม่มีคอลัมน์วันตัดรอบ ⇒ งวดของรอบจ่ายยึดวันที่สร้างรอบ (ดู PROGRESS_ARCHIVE 3.4)
-    targetLabel: `รอบจ่าย ${row.side} · สร้าง ${toDateOnlyIso(row.createdAt)}`,
+    // BUG-124 — วันที่สร้างเป็น instant ⇒ แสดงตามวันไทย (fmtDate) ไม่ใช่วัน UTC
+    targetLabel: `รอบจ่าย ${PAYOUT_SIDE_LABEL[row.side]} · สร้าง ${fmtDate(row.createdAt)}`,
     currentSatang: row.netSatang,
     targetDate: row.createdAt,
     moduleDirectEditBlocked: false,
@@ -212,7 +217,8 @@ async function describeTarget(
     targetRef: raw.targetRef,
     targetLabel: raw.targetLabel,
     currentSatang: raw.currentSatang,
-    targetDate: toDateOnlyIso(raw.targetDate),
+    // วันของรายการตามปฏิทินไทย — รอบจ่ายใช้ `created_at` (instant) ถ้าตัดตาม UTC จะถอยไป 1 วันช่วง 00:00–07:00 (BUG-124)
+    targetDate: toInputDate(raw.targetDate),
     periodStatusAtTarget: periodStatus,
     approvalPolicyLabel: policy.label,
     requiredApproverRoles: policy.requiredRoles,
@@ -330,14 +336,14 @@ function targetTextOf(row: AdjustmentRow, targetType: AdjustmentTargetType): { r
   if (targetType === 'expense' && row.expense !== null) {
     return {
       ref: row.expense.case?.caseRef ?? (row.expenseId ?? '').slice(0, 8),
-      label: `${row.expense.payee.user.fullName} · ${row.expense.expenseType}`,
+      label: `${row.expense.payee.user.fullName} · ${EXPENSE_TYPE_LABEL[row.expense.expenseType]}`,
     }
   }
   if (targetType === 'billing_batch' && row.billingBatch !== null) {
     return { ref: row.billingBatch.period, label: `${row.billingBatch.company.name} · รอบวางบิล` }
   }
   if (targetType === 'payout_batch' && row.payoutBatch !== null) {
-    return { ref: row.payoutBatch.name, label: `รอบจ่าย ${row.payoutBatch.side}` }
+    return { ref: row.payoutBatch.name, label: `รอบจ่าย ${PAYOUT_SIDE_LABEL[row.payoutBatch.side]}` }
   }
   return { ref: '—', label: '—' }
 }
@@ -532,7 +538,7 @@ export async function approveAdjustment(
 
   const note = input.note.trim() === '' ? null : input.note.trim()
 
-  await prisma.$transaction(async (tx) => {
+  const completed = await prisma.$transaction(async (tx) => {
     const previous = (await approverRolesByAdjustment(tx, user.organizationId, [adjustmentId])).get(adjustmentId) ?? []
     const stampedRoles = approverRolesOf(user, periodStatus)
     const roles = [...previous, ...stampedRoles.filter((role) => !previous.includes(role))]
@@ -615,7 +621,11 @@ export async function approveAdjustment(
         tx,
       )
     }
+    return complete
   })
+
+  // BUG-128 — อนุมัติครบ = ตัวเลขของงวดเดิมเปลี่ยน ⇒ ทิ้งแคชรายงานขององค์กร (หลัง commit เท่านั้น)
+  if (completed) invalidateOrganizationReportCache(user.organizationId)
 
   return getAdjustment(user, adjustmentId)
 }

@@ -356,8 +356,8 @@ describe('08_Document_Checklist.xlsx', () => {
     expect(checklistDocStatus({ level: 'critical', status: 'resolved' })).toBe('ครบถ้วน')
   })
 
-  it('แถวที่ปิดแล้วไม่โชว์ severity/สรุปข้อยกเว้น (ตรงกับตัวอย่าง 08)', () => {
-    expect(checklistRows(rows)[2]).toEqual(['tax_invoice', 'INV-2569-0014', 'ครบถ้วน', '-', '-', '-'])
+  it('แถวที่ปิดแล้วไม่โชว์ severity แต่ยังบอกหัวข้อข้อยกเว้น (UAT BUG-123)', () => {
+    expect(checklistRows(rows)[2]).toEqual(['tax_invoice', 'INV-2569-0014', 'ครบถ้วน', '-', 'เอกสารครบแล้ว', '-'])
     expect(checklistRows(rows)[0]).toEqual([
       'case',
       'SF-2026-00815',

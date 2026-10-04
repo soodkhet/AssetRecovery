@@ -341,7 +341,7 @@ export function CostCentersTab() {
       <ReasonConfirmModal
         open={deleteTarget !== null}
         title={`ปิดใช้งานศูนย์ต้นทุน "${deleteTarget?.code ?? ''}"`}
-        description="ศูนย์ต้นทุนที่มีรายการค่าใช้จ่ายผูกอยู่ปิดไม่ได้ (COST_CENTER_IN_USE) — เอกสารเก่ายังอ้างชื่อเดิมได้เสมอ"
+        description="ศูนย์ต้นทุนที่มีรายการค่าใช้จ่ายผูกอยู่ปิดไม่ได้ — เอกสารเก่ายังอ้างชื่อเดิมได้เสมอ"
         confirmLabel="ยืนยันปิดใช้งาน"
         loading={deleting}
         reason={deleteReason}

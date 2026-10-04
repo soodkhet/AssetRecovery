@@ -20,7 +20,13 @@ import {
   Th,
   Tr,
 } from '@/components/ui'
-import { AUDIT_ACTION_GROUP, AUDIT_ACTION_LABEL, auditActorLabel, auditTargetLabel } from '@/lib/audit/log-display'
+import {
+  AUDIT_ACTION_FILTER_LABEL,
+  AUDIT_ACTION_GROUP,
+  auditActionLabel,
+  auditActorLabel,
+  auditTargetLabel,
+} from '@/lib/audit/log-display'
 import type { AuditLogAction } from '@/lib/audit/log-schemas'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount } from '@/lib/format/money'
@@ -35,7 +41,7 @@ import { fmtCount } from '@/lib/format/money'
  *    Export Engine กลางของ Phase 6.1 (`96` §12) เพื่อไม่ให้เกิดตัวส่งออกซ้ำสองระบบ
  */
 
-const ACTION_OPTIONS = Object.entries(AUDIT_ACTION_LABEL) as [AuditLogAction, string][]
+const ACTION_OPTIONS = Object.entries(AUDIT_ACTION_FILTER_LABEL) as [AuditLogAction, string][]
 
 export function AuditLogsManager() {
   const [filters, setFilters] = useState<AuditLogFilters>(EMPTY_AUDIT_FILTERS)
@@ -151,7 +157,7 @@ export function AuditLogsManager() {
               <Tr key={row.id} interactive onClick={() => setOpenedId(row.id)}>
                 <Td className="text-xs whitespace-nowrap text-slate-500">{fmtDateTime(row.createdAt)}</Td>
                 <Td>
-                  <StatusBadge group={AUDIT_ACTION_GROUP[row.action]} label={AUDIT_ACTION_LABEL[row.action]} />
+                  <StatusBadge group={AUDIT_ACTION_GROUP[row.action]} label={auditActionLabel(row.action, row.targetType)} />
                 </Td>
                 <Td className="text-slate-600">{auditActorLabel(row.actorName, row.actorRole)}</Td>
                 <Td className="text-slate-600">

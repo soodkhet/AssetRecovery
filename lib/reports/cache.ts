@@ -183,6 +183,17 @@ export function invalidateReportCache(prefix: string): number {
   return removed
 }
 
+/**
+ * ทิ้งแคชรายงาน **ทุกตัวขององค์กรหนึ่ง** — เรียกหลังเหตุการณ์ที่เปลี่ยนตัวเลขย้อนหลังของงวดที่ปิดไปแล้ว
+ * (Adjustment ได้รับอนุมัติ — UAT BUG-128) เพื่อไม่ให้ผู้บริหารเห็นยอดเก่าจนหมดวัน
+ *
+ * ครอบคีย์ทั้ง 2 รูปแบบที่ระบบใช้: `<org>:report:…` (รายงาน 17 ตัว) และ `profit:<org>:…` (กำไรขั้นต้น)
+ * ไม่แตะ cooldown ของปุ่มรีเฟรช (ไม่ใช่การกดของผู้ใช้) · แคชอยู่ใน process ⇒ ล้างได้เฉพาะ instance นี้
+ */
+export function invalidateOrganizationReportCache(organizationId: string): number {
+  return invalidateReportCache(`${organizationId}:`) + invalidateReportCache(`profit:${organizationId}:`)
+}
+
 /** เวลาที่คำนวณค่าล่าสุดของคีย์ (ไม่ทำให้ค่าถูกคำนวณใหม่) — ใช้เช็ค cooldown ก่อนล้างแคช */
 export function reportCacheComputedAt(key: string): Date | null {
   return store.get(key)?.computedAt ?? null

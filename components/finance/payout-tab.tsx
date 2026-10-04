@@ -147,8 +147,8 @@ export function PayoutTab() {
 
         <div className="mb-4">
           <InlineAlert tone="warning">
-            ห้ามรวม <b>Inhouse</b> กับ <b>Outsource</b> ในรอบเดียวกัน (MIXED_SIDE_BATCH) — ผู้รับเงินที่ยัง
-            ไม่ยืนยันข้อมูลถูกบล็อกทั้งรอบ (UNVERIFIED_PAYEE_IN_PAYOUT)
+            ห้ามรวม <b>Inhouse</b> กับ <b>Outsource</b> ในรอบเดียวกัน — ผู้รับเงินที่ยัง
+            ไม่ยืนยันข้อมูลถูกบล็อกทั้งรอบ
           </InlineAlert>
         </div>
 
