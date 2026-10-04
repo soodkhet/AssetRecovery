@@ -7,6 +7,7 @@ import type { PortalDataState } from '@/components/portal/use-portal-data'
 import { Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, TBody, THead, Table, Td, Th, Tr } from '@/components/ui'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { portalShortMonthLabel } from '@/lib/portal/finance-ui'
 import { revenueSummaryIsEmpty, type PortalKpiTone } from '@/lib/portal/nav'
 import type { PortalArAgingBucketDto, PortalArAgingDto, PortalRevenueSummaryDto } from '@/lib/portal/serializers'
 
@@ -54,7 +55,11 @@ export function PortalRevenueSummaryCard({ state }: { state: LoadState<PortalRev
             <div className="space-y-4">
               <ReportBarChart
                 title="ยอดเรียกเก็บรายเดือน"
-                rows={data.months.map((month) => ({ label: month.label, revenueSatang: month.revenueSatang }))}
+                // ป้ายสั้น "พ.ค. 69" — ป้ายเต็มซ้อนกันบนจอแคบ (ตารางด้านล่างยังใช้ป้ายเต็ม)
+                rows={data.months.map((month) => ({
+                  label: portalShortMonthLabel(month.month, month.label),
+                  revenueSatang: month.revenueSatang,
+                }))}
                 labelKey="label"
                 valueKey="revenueSatang"
               />

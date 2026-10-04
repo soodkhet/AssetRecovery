@@ -150,6 +150,8 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
         invoiceNumber: 'INV-2569-0001',
         invoiceDate: new Date('2026-09-30T00:00:00Z'),
         status: 'cancelled',
+        totalBeforeVatSatang: 100_000,
+        vatSatang: 7_000,
         totalSatang: 107_000,
         deliveryFormat: 'paper_pdf',
       }),

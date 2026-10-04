@@ -1,0 +1,210 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import { PortalKpiTile } from '@/components/portal/portal-kpi-card'
+import { usePortalData } from '@/components/portal/use-portal-data'
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  FilterGroup,
+  LoadingState,
+  PageHeader,
+  StatusBadge,
+  TBody,
+  THead,
+  Table,
+  Td,
+  Th,
+  Tr,
+  cn,
+} from '@/components/ui'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
+import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import {
+  bangkokToday,
+  filterPortalBillingRows,
+  isPortalBillingOverdue,
+  portalBillingFilterOptions,
+  portalBillingSummary,
+  type PortalBillingFilter,
+} from '@/lib/portal/finance-ui'
+import type { PortalBillingBatchDto } from '@/lib/portal/serializers'
+
+const FILTER_OPTIONS = portalBillingFilterOptions()
+
+/**
+ * หน้า "รอบวางบิล / ยอดค้างชำระ" ของพอร์ทัล — `GET /api/portal/billing-batches` (`97` §6.2 · mockup `renderBilling()`
+ * desktop / `renderFinance()` มือถือ) · อ่านอย่างเดียว · API ส่งเฉพาะรอบที่ส่งบิลแล้วขึ้นไป (draft ไม่มีทางมาถึง)
+ *
+ * ยอดค้างต่อรอบมาจาก API (สูตรกลางฝั่ง server) — หน้านี้แค่รวมยอดค้างของรอบที่แสดงเพื่อทำการ์ดสรุป
+ */
+export function PortalBillingBatches() {
+  const state = usePortalData<PortalBillingBatchDto[]>('/api/portal/billing-batches')
+  const [filter, setFilter] = useState<PortalBillingFilter>('all')
+  const today = bangkokToday()
+
+  const rows = useMemo(() => state.data ?? [], [state.data])
+  const summary = useMemo(() => portalBillingSummary(rows, today), [rows, today])
+  const filtered = useMemo(() => filterPortalBillingRows(rows, filter), [rows, filter])
+  const ready = !state.loading && state.error === null && state.data !== null
+
+  return (
+    <div>
+      <PageHeader
+        title="รอบวางบิล / ยอดค้างชำระ"
+        description="แสดงเฉพาะรอบที่ส่งบิลถึงบริษัทของท่านแล้ว (รอบที่ยังจัดทำอยู่จะไม่ปรากฏที่นี่)"
+      />
+
+      {ready && rows.length > 0 && (
+        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4">
+          <div className="col-span-2 md:col-span-1">
+            <PortalKpiTile
+              label="ยอดค้างชำระรวม"
+              value={fmtSatangSymbol(summary.outstandingSatang)}
+              hint={
+                summary.overdueCount > 0
+                  ? `เลยกำหนด ${fmtCount(summary.overdueCount)} รอบ · ${fmtSatangSymbol(summary.overdueSatang)}`
+                  : 'ทุกรอบที่ยังชำระไม่ครบ'
+              }
+              tone={summary.outstandingSatang > 0 ? 'red' : 'emerald'}
+            />
+          </div>
+          <PortalKpiTile label="รอบที่ยังค้างชำระ" value={fmtCount(summary.openCount)} hint="รอบ" tone="amber" />
+          <PortalKpiTile label="รอบวางบิลทั้งหมด" value={fmtCount(summary.batchCount)} hint="ที่ส่งบิลแล้ว" tone="slate" />
+        </div>
+      )}
+
+      <Card padded={ready}>
+        {state.loading ? (
+          <LoadingState />
+        ) : state.error !== null ? (
+          <ErrorState
+            title={state.error.title}
+            message={state.error.message}
+            {...(state.error.code === undefined ? {} : { code: state.error.code })}
+            action={
+              <Button variant="secondary" onClick={state.reload}>
+                ลองใหม่
+              </Button>
+            }
+          />
+        ) : rows.length === 0 ? (
+          <EmptyState title="ยังไม่มีรอบวางบิล" description="เมื่อมีการส่งบิลถึงบริษัทของท่าน รายการจะแสดงที่นี่" />
+        ) : (
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <FilterGroup options={FILTER_OPTIONS} value={filter} onChange={setFilter} />
+              <div className="ml-auto text-xs text-slate-400">ทั้งหมด {fmtCount(filtered.length)} รายการ</div>
+            </div>
+            {filtered.length === 0 ? (
+              <EmptyState title="ไม่พบรอบวางบิลที่ตรงกับเงื่อนไข" />
+            ) : (
+              <>
+                <BillingTable rows={filtered} today={today} />
+                <BillingCards rows={filtered} today={today} />
+              </>
+            )}
+          </>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+function OutstandingText({ satang, className }: { satang: number; className?: string }) {
+  return satang > 0 ? (
+    <span className={cn('font-bold text-red-600', className)}>{fmtSatangSymbol(satang)}</span>
+  ) : (
+    <span className={cn('text-slate-300', className)}>—</span>
+  )
+}
+
+function DueDate({ row, today }: { row: PortalBillingBatchDto; today: string }) {
+  const overdue = isPortalBillingOverdue(row, today)
+  return (
+    <span className={overdue ? 'font-semibold text-red-600' : 'text-slate-500'}>
+      {fmtDate(row.dueDate)}
+      {overdue && <span className="ml-1 text-[11px]">(เลยกำหนด)</span>}
+    </span>
+  )
+}
+
+/** desktop — ตาราง (md+) */
+function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[]; today: string }) {
+  return (
+    <Table className="hidden md:block">
+      <THead>
+        <tr>
+          <Th>รอบเดือน</Th>
+          <Th numeric>ยอดรวม</Th>
+          <Th numeric>ชำระแล้ว</Th>
+          <Th numeric>ค้างชำระ</Th>
+          <Th>ครบกำหนด</Th>
+          <Th>ส่งบิลเมื่อ</Th>
+          <Th>สถานะ</Th>
+        </tr>
+      </THead>
+      <TBody>
+        {rows.map((row) => (
+          <Tr key={row.id} className={row.outstandingSatang > 0 ? 'bg-red-50/20' : undefined}>
+            <Td className="font-semibold whitespace-nowrap">{row.period}</Td>
+            <Td numeric className="font-semibold">
+              {fmtSatangSymbol(row.totalSatang)}
+            </Td>
+            <Td numeric className="text-emerald-600">
+              {fmtSatangSymbol(row.receivedSatang)}
+            </Td>
+            <Td numeric>
+              <OutstandingText satang={row.outstandingSatang} />
+            </Td>
+            <Td className="text-xs whitespace-nowrap">
+              <DueDate row={row} today={today} />
+            </Td>
+            <Td className="text-xs whitespace-nowrap text-slate-500">{fmtDateTime(row.sentAt)}</Td>
+            <Td>
+              <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
+            </Td>
+          </Tr>
+        ))}
+      </TBody>
+    </Table>
+  )
+}
+
+/** มือถือ — การ์ดต่อรอบ (mockup มือถือ `renderFinance()`) */
+function BillingCards({ rows, today }: { rows: readonly PortalBillingBatchDto[]; today: string }) {
+  return (
+    <ul className="space-y-2 md:hidden">
+      {rows.map((row) => (
+        <li key={row.id} className="rounded-xl border border-slate-200 bg-white p-3.5">
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="text-sm font-semibold text-slate-800">รอบ {row.period}</div>
+            <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
+          </div>
+          <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 text-center">
+            <div>
+              <div className="text-[12px] text-slate-400">ยอดรวม</div>
+              <div className="text-xs font-bold">{fmtSatangSymbol(row.totalSatang)}</div>
+            </div>
+            <div>
+              <div className="text-[12px] text-slate-400">ชำระแล้ว</div>
+              <div className="text-xs font-bold text-emerald-600">{fmtSatangSymbol(row.receivedSatang)}</div>
+            </div>
+            <div>
+              <div className="text-[12px] text-slate-400">ค้างชำระ</div>
+              <OutstandingText satang={row.outstandingSatang} className="text-xs" />
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-[13px] text-slate-400">
+            <span>
+              ครบกำหนด <DueDate row={row} today={today} />
+            </span>
+            <span>ส่งเมื่อ {fmtDateTime(row.sentAt)}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
