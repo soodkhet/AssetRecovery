@@ -335,7 +335,6 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
 
       {hotelFormOpen && session !== null && (
         <HotelClaimModal
-          userId={session.id}
           onClose={() => setHotelFormOpen(false)}
           onCreated={() => {
             void load(view)
@@ -347,7 +346,6 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
         <ResubmitExpenseModal
           key={fixing.id}
           expense={fixing}
-          userId={session.id}
           onClose={() => setFixing(null)}
           onDone={() => {
             setFixing(null)

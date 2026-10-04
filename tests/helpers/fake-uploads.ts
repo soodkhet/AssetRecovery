@@ -48,7 +48,11 @@ export function sha256Of(bytes: Uint8Array | string): string {
 
 export async function fakeStorageModule(): Promise<typeof StorageModule> {
   return {
+    SIGNED_DOWNLOAD_TTL_SECONDS: 300,
     downloadUploadedFile: async (path: string) => uploadTestState.files.get(path) ?? null,
+    createSignedUpload: async (path: string) => ({ path, token: `token:${path}` }),
+    createSignedDownloadUrl: async (path: string) =>
+      uploadTestState.files.has(path) ? `https://storage.test/signed/${path}` : null,
   }
 }
 

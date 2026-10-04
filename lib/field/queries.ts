@@ -286,6 +286,14 @@ async function loadOwnAssignment(user: SessionUser, caseId: string): Promise<Ass
   return row
 }
 
+/**
+ * ยามของการออกโทเคนอัปโหลดหลักฐานปิดงาน (BUG-143) — ผ่านเฉพาะ **ผู้ถือ assignment รอบปัจจุบันของเคสเอง**
+ * (กติกาเดียวกับ endpoint ปิดงานที่จะผูกไฟล์ทีหลัง) · ไม่ผ่าน = `ASSIGNMENT_NOT_FOUND`/`ASSIGNMENT_INVALID_STATUS`
+ */
+export async function assertOwnFieldCase(user: SessionUser, caseId: string): Promise<void> {
+  await loadOwnAssignment(user, caseId)
+}
+
 async function pendingReassignmentCaseIds(caseIds: readonly string[]): Promise<Set<string>> {
   if (caseIds.length === 0) return new Set()
   const rows = await prisma.pendingReassignment.findMany({

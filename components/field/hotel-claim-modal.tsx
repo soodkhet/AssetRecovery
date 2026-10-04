@@ -21,11 +21,9 @@ import { parseBahtInput } from '@/lib/format/money'
  * - `<input type="date">` เป็นข้อยกเว้นเดียวที่ใช้ ค.ศ. บนหน้าจอ (Rule 01)
  */
 export function HotelClaimModal({
-  userId,
   onClose,
   onCreated,
 }: {
-  userId: string
   onClose: () => void
   onCreated: (expense: FieldExpenseDto) => void
 }) {
@@ -63,7 +61,7 @@ export function HotelClaimModal({
     setSubmitting(true)
     setError(null)
     try {
-      const receiptFileUrl = await uploadExpenseReceipt(userId, receipt)
+      const receiptFileUrl = await uploadExpenseReceipt(receipt)
       const response = await callApi<FieldExpenseDto>(
         apiPath('field.hotelClaim'),
         jsonRequest('POST', {

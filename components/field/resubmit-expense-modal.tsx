@@ -21,12 +21,10 @@ import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/
  */
 export function ResubmitExpenseModal({
   expense,
-  userId,
   onClose,
   onDone,
 }: {
   expense: FieldExpenseDto
-  userId: string
   onClose: () => void
   onDone: () => void
 }) {
@@ -58,7 +56,7 @@ export function ResubmitExpenseModal({
     setSubmitting(true)
     setError(null)
     try {
-      const receiptFileUrl = receipt === null ? undefined : await uploadExpenseReceipt(userId, receipt)
+      const receiptFileUrl = receipt === null ? undefined : await uploadExpenseReceipt(receipt)
       const response = await callApi<FieldExpenseDto>(
         apiPath('field.resubmitExpense', { id: expense.id }),
         jsonRequest('POST', {
