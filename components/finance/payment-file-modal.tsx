@@ -131,7 +131,7 @@ export function PaymentFileModal({
       open
       onClose={close}
       size="lg"
-      title={confirming ? '⚠️ สร้างไฟล์โอนซ้ำ (DUPLICATE_PAYMENT_FILE)' : 'สร้างไฟล์โอนเงินธนาคาร'}
+      title={confirming ? '⚠️ สร้างไฟล์โอนซ้ำ' : 'สร้างไฟล์โอนเงินธนาคาร'}
       description={batch.name}
       footer={
         generated === null ? (

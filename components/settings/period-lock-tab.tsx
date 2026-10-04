@@ -149,8 +149,7 @@ export function PeriodLockTab() {
 
       <p className="mt-3 text-[11px] text-slate-400">
         การปลดล็อกรอบที่ปิดแล้วทำที่หน้างวดบัญชี พร้อมบันทึก audit log และเหตุผลทุกครั้ง —
-        รอบที่ <span className="font-mono">locked</span> ทุก write จะถูกปฏิเสธด้วย{' '}
-        <span className="font-mono">PERIOD_LOCKED_DIRECT_EDIT</span>
+        รอบที่ล็อกแล้วระบบจะปฏิเสธการแก้ไขข้อมูลต้นทางโดยตรงทุกกรณี — ต้องแก้ผ่านรายการปรับปรุง
       </p>
     </Card>
   )

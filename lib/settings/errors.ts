@@ -127,7 +127,7 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   },
   BANK_FILE_NOT_TESTED: {
     title: 'รูปแบบไฟล์ธนาคารยังไม่ผ่านการทดสอบ',
-    message: 'ต้องทดสอบไฟล์ตัวอย่างให้ผ่าน (test_status = passed) ก่อนนำไปสร้างไฟล์โอนเงินจริง',
+    message: 'ต้องทดสอบไฟล์ตัวอย่างให้ผ่านก่อนนำไปสร้างไฟล์โอนเงินจริง',
   },
   NUMBERING_SEQ_NOT_EDITABLE: {
     title: 'แก้เลขล่าสุดด้วยมือไม่ได้',

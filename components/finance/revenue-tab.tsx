@@ -299,7 +299,7 @@ export function RevenueTab() {
 
         <div className="mb-4">
           <InlineAlert tone="info">
-            แก้ยอดรายได้ที่ถูกวางบิลไปแล้วไม่ได้ (EDIT_BILLED_REVENUE) — ต้องสร้างรายการปรับปรุงที่แท็บ “ปรับปรุง”
+            แก้ยอดรายได้ที่ถูกวางบิลไปแล้วไม่ได้ — ต้องสร้างรายการปรับปรุงที่แท็บ “ปรับปรุง”
           </InlineAlert>
         </div>
 

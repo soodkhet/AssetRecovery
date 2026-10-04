@@ -205,7 +205,7 @@ export function InvoiceNumberingTab() {
 
       <p className="mt-3 text-[11px] text-slate-400">
         ตัวเดินเลข (<span className="font-mono">last_number</span>) ระบบจัดการให้เองแบบ atomic ตอนออกเอกสาร —{' '}
-        <b>แก้มือไม่ได้ทุกกรณี</b> เพื่อกันเลขซ้ำ/เลขขาด (<span className="font-mono">INVOICE_NUMBER_GAP</span>)
+        <b>แก้มือไม่ได้ทุกกรณี</b> เพื่อกันเลขซ้ำ/เลขขาด
       </p>
 
       <Modal

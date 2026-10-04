@@ -274,13 +274,13 @@ export function TeamFormModal({
         {supervisorConflict !== undefined && (
           <InlineAlert tone="warning" title="หัวหน้าทีมคนนี้สังกัดทีมอื่นอยู่แล้ว">
             {supervisorConflict.fullName} เป็นหัวหน้าทีม “{supervisorConflict.supervisedTeamName ?? '-'}” — ต้องถอดออกจากทีมเดิมก่อน
-            ไม่งั้นระบบจะปฏิเสธด้วย `SUPERVISOR_ALREADY_ASSIGNED`
+            ไม่งั้นระบบจะไม่ให้บันทึก
           </InlineAlert>
         )}
 
         {isEdit && team.activeCaseCount > 0 && form.status === 'inactive' && (
           <InlineAlert tone="warning" title={`ทีมนี้ยังมี ${team.activeCaseCount} เคสที่ยังไม่ปิด`}>
-            ย้ายเคสไปทีมอื่นให้หมดก่อน ไม่งั้นระบบจะปฏิเสธด้วย `TEAM_HAS_ACTIVE_CASES`
+            ย้ายเคสไปทีมอื่นให้หมดก่อน ไม่งั้นระบบจะไม่ให้ปิดใช้งานทีม
           </InlineAlert>
         )}
 

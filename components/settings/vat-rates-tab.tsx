@@ -187,7 +187,7 @@ export function VatRatesTab() {
       </div>
 
       <InlineAlert tone="warning" title="ช่วงวันที่ต้องไม่ทับซ้อนกัน">
-        ระบบตรวจก่อนบันทึกทุกครั้ง (<span className="font-mono">VAT_RATE_OVERLAP</span>) — ต้องการหยุดใช้อัตราเดิมให้{' '}
+        ระบบตรวจก่อนบันทึกทุกครั้ง — ต้องการหยุดใช้อัตราเดิมให้{' '}
         <b>ปิดช่วง</b> ด้วยวันสิ้นสุด ไม่มีการลบอัตราออกจากประวัติ
       </InlineAlert>
 
@@ -209,7 +209,7 @@ export function VatRatesTab() {
             error={error}
             isEmpty={items.length === 0}
             emptyTitle="ยังไม่มีอัตรา VAT"
-            emptyDescription="ต้องมีอย่างน้อย 1 ช่วง ไม่งั้นระบบออกใบกำกับภาษีไม่ได้ (VAT_RATE_NOT_FOUND)"
+            emptyDescription="ต้องมีอย่างน้อย 1 ช่วง ไม่งั้นระบบออกใบกำกับภาษีไม่ได้"
             onRetry={
               <Button
                 variant="secondary"
@@ -319,7 +319,7 @@ export function VatRatesTab() {
               {overlapping
                 .map((period) => `${period.ratePct}% (${fmtDate(period.effectiveFrom)} เป็นต้นไป)`)
                 .join(', ')}{' '}
-              — ปิดช่วงเดิมด้วยวันสิ้นสุดก่อน ไม่งั้นระบบจะปฏิเสธด้วย VAT_RATE_OVERLAP
+              — ปิดช่วงเดิมด้วยวันสิ้นสุดก่อน ไม่งั้นระบบจะไม่ให้บันทึกเพราะช่วงวันที่ทับซ้อนกัน
             </InlineAlert>
           )}
 
