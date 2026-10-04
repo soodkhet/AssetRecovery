@@ -193,3 +193,38 @@ export function parseSettleDate(value: string, now: Date): Date | null {
   if (value > toInputDate(now)) return null
   return date
 }
+
+/** จำลองวันที่ของ `advance_overdue` ได้ไกลสุดกี่วันข้างหน้า (มติผู้ใช้ 04/10/2569 — UAT R7–R10) */
+export const ADVANCE_OVERDUE_AS_OF_MAX_DAYS = 31
+
+const MS_PER_DAY = 86_400_000
+const BANGKOK_NOON_UTC_HOUR = 5
+
+/**
+ * **pure** — "วันที่จำลอง" (`asOf`) ของ `advance_overdue` ผ่าน dev trigger เท่านั้น
+ * (มติผู้ใช้ 04/10/2569: ให้รายการที่ครบกำหนดวันนี้เป็น overdue ได้ทันทีโดยไม่ต้องรอข้ามวัน และไม่แก้ข้อมูลในฐาน)
+ *
+ * ต้องเป็นวันจริงรูป `YYYY-MM-DD` (ค.ศ. แบบ `<input type="date">`) และอยู่ในช่วง
+ * **วันนี้ตามเวลาไทย ถึง วันนี้ + {@link ADVANCE_OVERDUE_AS_OF_MAX_DAYS} วัน** (จำลองไปข้างหน้าเท่านั้น)
+ *
+ * คืน **เที่ยงวันตามเวลาไทย** ของวันนั้น (05:00Z) — ห่างขอบวันทั้งสองข้าง ⇒ `bangkokBusinessDate()`
+ * ได้วันนั้นแน่นอน · ไม่ผ่าน = `null`
+ */
+export function parseSimulatedAsOf(value: string, now: Date): Date | null {
+  const instant = simulatedAsOfInstant(value)
+  if (instant === null) return null
+  const today = toInputDate(now)
+  const latest = new Date(new Date(`${today}T00:00:00.000Z`).getTime() + ADVANCE_OVERDUE_AS_OF_MAX_DAYS * MS_PER_DAY)
+    .toISOString()
+    .slice(0, 10)
+  if (value < today || value > latest) return null
+  return instant
+}
+
+/** แปลง `YYYY-MM-DD` เป็นเที่ยงวันตามเวลาไทย — ตรวจแค่รูปแบบ/วันจริง (ช่วงวันตรวจที่ {@link parseSimulatedAsOf}) */
+export function simulatedAsOfInstant(value: string): Date | null {
+  if (!SETTLE_DATE_PATTERN.test(value)) return null
+  const midnight = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== value) return null
+  return new Date(midnight.getTime() + BANGKOK_NOON_UTC_HOUR * 60 * MS_PER_MINUTE)
+}

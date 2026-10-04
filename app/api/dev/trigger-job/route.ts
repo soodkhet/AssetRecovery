@@ -6,7 +6,14 @@ import { getRequestMeta } from '@/lib/auth/request-meta'
 import { MANAGE_JOBS } from '@/lib/jobs/access'
 import { runJobById } from '@/lib/jobs/engine'
 import { JobError } from '@/lib/jobs/errors'
-import { DEV_TRIGGER_JOB_TYPES, DEV_TRIGGER_PAYLOAD_FLAG, isKnownJobType, parseSettleDate } from '@/lib/jobs/job-types'
+import {
+  ADVANCE_OVERDUE_AS_OF_MAX_DAYS,
+  DEV_TRIGGER_JOB_TYPES,
+  DEV_TRIGGER_PAYLOAD_FLAG,
+  isKnownJobType,
+  parseSettleDate,
+  parseSimulatedAsOf,
+} from '@/lib/jobs/job-types'
 import { createJob, getJob } from '@/lib/jobs/queries'
 import { jobDevTriggerSchema } from '@/lib/jobs/schemas'
 
@@ -22,6 +29,13 @@ export const runtime = 'nodejs'
  *
  * job_type รับได้ **6 ตัวของ `91` §6.1 เท่านั้น** (C8 — รวม `advance_overdue` · UAT Q21 `daily_field_allowance`) · นอกรายการ
  * ถูกปฏิเสธด้วย `JOB_INVALID_STATUS` ซึ่งคือรูป prefix ตาม `24` §7 ของ `INVALID_STATUS` ใน §14.1
+ *
+ * payload พิเศษที่รับได้เฉพาะทางนี้ (ตัวรันงานอ่านเฉพาะงานที่มีธง `DEV_TRIGGER_PAYLOAD_FLAG` นอก production):
+ *  · `daily_field_allowance` + `{ date: 'YYYY-MM-DD' }` — settle วันนั้น (≤ วันนี้ตามเวลาไทย · UAT Q21)
+ *  · `advance_overdue` + `{ asOf: 'YYYY-MM-DD' }` — **จำลองว่าวันนี้คือ asOf** (วันนี้ ถึง +31 วันตามเวลาไทย ·
+ *    มติผู้ใช้ 04/10/2569) ⇒ รายการที่ `due_clear_date < asOf` ถูกมาร์ค overdue ทันที ไม่ต้องรอข้ามวัน ·
+ *    audit reason มี `[จำลองวันที่ DD/MM/YYYY]` · ใส่ asOf กับ job_type อื่น = 400
+ *    ตัวอย่าง: `{ "jobType": "advance_overdue", "payload": { "asOf": "2026-10-05" } }`
  */
 /** ต้องตอบ 404 **ก่อน**ชั้นสิทธิ์ — ถ้าปล่อยให้ 401/403 ออกไปก่อน คนนอกก็รู้ว่ามี route นี้อยู่ */
 function notFound(): Response {
@@ -60,13 +74,34 @@ const triggerJob = withApiPermission(
     }
     const dateSuffix = typeof settleDate === 'string' ? `:${settleDate}` : ''
 
+    // `advance_overdue` รับ `asOf` (วันที่จำลอง วันนี้..+31 วันตามเวลาไทย) ได้เฉพาะทางนี้ — มติผู้ใช้ 04/10/2569
+    const asOf = parsed.data.payload['asOf']
+    if (asOf !== undefined) {
+      const asOfCheck = z
+        .object({
+          asOf: z
+            .string()
+            .refine(
+              () => parsed.data.jobType === 'advance_overdue',
+              'วันที่จำลองใช้ได้เฉพาะงานมาร์คเงินทดรองจ่ายที่เลยกำหนดเคลียร์',
+            )
+            .refine(
+              (value) => parsed.data.jobType !== 'advance_overdue' || parseSimulatedAsOf(value, now) !== null,
+              `วันที่จำลองต้องเป็นรูปแบบ YYYY-MM-DD ตั้งแต่วันนี้ถึงอีก ${ADVANCE_OVERDUE_AS_OF_MAX_DAYS} วันข้างหน้า`,
+            ),
+        })
+        .safeParse({ asOf })
+      if (!asOfCheck.success) return validationErrorResponse(asOfCheck.error)
+    }
+    const asOfSuffix = typeof asOf === 'string' ? `:asOf=${asOf}` : ''
+
     const created = await createJob(
       { actor: user, meta: getRequestMeta(request) },
       {
         jobType: parsed.data.jobType,
         payload: { ...parsed.data.payload, [DEV_TRIGGER_PAYLOAD_FLAG]: true },
         // คีย์กันซ้ำผูกกับ "นาทีที่กด" — กดรัวในนาทีเดียวกันได้ job เดิม แต่ยังสั่งซ้ำนาทีถัดไปได้
-        idempotencyKey: `dev:${parsed.data.jobType}:${user.id}:${now.toISOString().slice(0, 16)}${dateSuffix}`,
+        idempotencyKey: `dev:${parsed.data.jobType}:${user.id}:${now.toISOString().slice(0, 16)}${dateSuffix}${asOfSuffix}`,
       },
     )
 

@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DEV_TRIGGER_JOB_TYPES,
+  ADVANCE_OVERDUE_AS_OF_MAX_DAYS,
   parseSettleDate,
+  parseSimulatedAsOf,
+  simulatedAsOfInstant,
   JOB_TYPES,
   JOB_TYPE_SPECS,
   SCHEDULED_JOB_TYPES,
@@ -12,7 +15,7 @@ import {
   jobTypeLabel,
   scheduledIdempotencyKey,
 } from '@/lib/jobs/job-types'
-import { SWEEPER_JOB_TYPES } from '@/lib/jobs/registry'
+import { SWEEPER_JOB_TYPES, devSimulatedNowOf } from '@/lib/jobs/registry'
 
 /** ทะเบียน job_type ต้องตรงกับ `91` §6.1 เสมอ — เทสต์นี้แดง = โค้ดกับสเปคเริ่มไม่ตรงกัน */
 
@@ -120,5 +123,59 @@ describe('parseSettleDate — วันที่ settle ของ daily_field_al
 
   it('หลังเที่ยงคืนไทย (17:00Z) "วันนี้" ขยับเป็นวันถัดไปแล้ว', () => {
     expect(parseSettleDate('2026-10-04', new Date('2026-10-03T17:00:00.000Z'))).not.toBeNull()
+  })
+})
+
+describe('parseSimulatedAsOf — วันที่จำลองของ advance_overdue ผ่าน dev trigger (มติผู้ใช้ 04/10/2569)', () => {
+  // 04/10/2569 23:30 ไทย = 16:30Z
+  const now = new Date('2026-10-04T16:30:00.000Z')
+
+  it('วันนี้ถึง +31 วัน (ตามเวลาไทย) ผ่าน · คืนเที่ยงวันไทย (05:00Z) ของวันนั้น', () => {
+    expect(ADVANCE_OVERDUE_AS_OF_MAX_DAYS).toBe(31)
+    expect(parseSimulatedAsOf('2026-10-04', now)?.toISOString()).toBe('2026-10-04T05:00:00.000Z')
+    expect(parseSimulatedAsOf('2026-10-05', now)?.toISOString()).toBe('2026-10-05T05:00:00.000Z')
+    expect(parseSimulatedAsOf('2026-11-04', now)?.toISOString()).toBe('2026-11-04T05:00:00.000Z')
+  })
+
+  it('อดีต / เกิน 31 วัน / วันไม่มีจริง / รูปแบบผิด = null', () => {
+    expect(parseSimulatedAsOf('2026-10-03', now)).toBeNull()
+    expect(parseSimulatedAsOf('2026-11-05', now)).toBeNull()
+    expect(parseSimulatedAsOf('2026-02-30', now)).toBeNull()
+    expect(parseSimulatedAsOf('05/10/2569', now)).toBeNull()
+  })
+
+  it('หลังเที่ยงคืนไทย (17:00Z) "วันนี้" ขยับเป็นวันถัดไป ⇒ วันก่อนหน้ากลายเป็นอดีต', () => {
+    const afterMidnight = new Date('2026-10-04T17:00:00.000Z')
+    expect(parseSimulatedAsOf('2026-10-04', afterMidnight)).toBeNull()
+    expect(parseSimulatedAsOf('2026-11-05', afterMidnight)).not.toBeNull()
+  })
+
+  it('simulatedAsOfInstant ตรวจแค่รูปแบบ/วันจริง', () => {
+    expect(simulatedAsOfInstant('2020-01-01')?.toISOString()).toBe('2020-01-01T05:00:00.000Z')
+    expect(simulatedAsOfInstant('2026-13-01')).toBeNull()
+  })
+})
+
+describe('devSimulatedNowOf — ตัวรันงานอ่าน asOf เฉพาะงานจาก dev trigger นอก production', () => {
+  it('มีธง dev trigger → เที่ยงวันไทยของ asOf', () => {
+    expect(devSimulatedNowOf({ payload: { devTrigger: true, asOf: '2026-10-05' } })?.toISOString()).toBe(
+      '2026-10-05T05:00:00.000Z',
+    )
+  })
+
+  it('ไม่มีธง (cron / POST /api/jobs) หรือไม่มี asOf / asOf ผิดรูป → null (ใช้เวลาจริง)', () => {
+    expect(devSimulatedNowOf({ payload: { asOf: '2026-10-05' } })).toBeNull()
+    expect(devSimulatedNowOf({ payload: { devTrigger: true } })).toBeNull()
+    expect(devSimulatedNowOf({ payload: { devTrigger: true, asOf: 'x' } })).toBeNull()
+    expect(devSimulatedNowOf({ payload: null })).toBeNull()
+  })
+
+  it('production → null เสมอ แม้มีธง dev trigger', () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    try {
+      expect(devSimulatedNowOf({ payload: { devTrigger: true, asOf: '2026-10-05' } })).toBeNull()
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })

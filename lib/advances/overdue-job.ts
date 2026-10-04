@@ -1,6 +1,7 @@
 import { nextAdvanceStatus } from '@/lib/advances/advance'
 import { emitAudit } from '@/lib/audit/audit'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
+import { fmtDate } from '@/lib/format/datetime'
 import { dispatchNotificationAwaited, payeeUserIds, usersWithCapability } from '@/lib/notifications/dispatch'
 import { advanceOverdueMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
@@ -26,6 +27,11 @@ export interface AdvanceOverdueJobOptions {
   /** id ของ job runner ที่สั่ง — ลง `reason` ของ audit เพื่อ trace (`90` §13) */
   jobId?: string
   now?: Date
+  /**
+   * `now` เป็นวันที่จำลองจาก dev trigger (มติผู้ใช้ 04/10/2569 · UAT) — ระบุใน `reason` ของ audit
+   * ว่าเป็นการจำลอง เพื่อไม่ให้สับสนกับการมาร์คตามเวลาจริง
+   */
+  simulated?: boolean
   limit?: number
 }
 
@@ -44,6 +50,7 @@ export async function runAdvanceOverdueJob(
   // เที่ยงคืน UTC ของ "วันนี้" ตามเวลาไทย ⇒ `dueClearDate < today` = เลยกำหนดแล้วจริง (Rule 01)
   const today = bangkokBusinessDate(now)
   const result: AdvanceOverdueJobResult = { marked: 0, skipped: 0 }
+  const simulatedTag = options.simulated === true ? ` [จำลองวันที่ ${fmtDate(now)}]` : ''
 
   const due = await prisma.advance.findMany({
     where: {
@@ -84,7 +91,7 @@ export async function runAdvanceOverdueJob(
             payee_id: advance.payeeId,
             auto_marked: true,
           },
-          reason: `[job:${jobId}] เลยกำหนดเคลียร์ยอดแล้วยังไม่เคลียร์ — มาร์คเป็น overdue อัตโนมัติ`,
+          reason: `[job:${jobId}]${simulatedTag} เลยกำหนดเคลียร์ยอดแล้วยังไม่เคลียร์ — มาร์คเป็น overdue อัตโนมัติ`,
           diffOnly: false,
         },
         tx,

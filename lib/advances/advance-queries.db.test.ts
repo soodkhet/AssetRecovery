@@ -2,6 +2,8 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { fmtDate, toInputDate } from '@/lib/format/datetime'
+import { parseSimulatedAsOf } from '@/lib/jobs/job-types'
 
 /**
  * เทสต์ระดับ DB ของ Phase 3.3 — DoD ตาม `15` §16:
@@ -525,5 +527,39 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
     const systemLog = logs.find((log) => log.actorId === null)
     expect(systemLog).toBeDefined()
     expect(systemLog?.reason).toContain('[job:advance_overdue_test]')
+  })
+
+  it('จำลองวันที่ (dev trigger asOf = พรุ่งนี้ไทย): ใบที่ครบกำหนดวันนี้ถูกมาร์ค · ไม่จำลอง = ไม่แตะ · reason ระบุการจำลอง', async () => {
+    const created = await advances.createAdvance(ctx(agent), createInput())
+    await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
+    const realNow = new Date()
+    const todayBangkok = toInputDate(realNow)
+    await db().$executeRawUnsafe(
+      `UPDATE advances SET due_clear_date = DATE '${todayBangkok}' WHERE id = '${created.id}'`,
+    )
+
+    // ครบกำหนดวันนี้ = ยังไม่เลย ⇒ เวลาจริงไม่มาร์ค
+    const real = await job.runAdvanceOverdueJob({ organizationId: ORG_ID, now: realNow })
+    expect(real.marked).toBe(0)
+
+    const tomorrow = new Date(new Date(`${todayBangkok}T00:00:00.000Z`).getTime() + 86_400_000).toISOString().slice(0, 10)
+    const simulatedNow = parseSimulatedAsOf(tomorrow, realNow)
+    expect(simulatedNow).not.toBeNull()
+    const simulated = await job.runAdvanceOverdueJob({
+      organizationId: ORG_ID,
+      jobId: 'advance_overdue_sim',
+      now: simulatedNow ?? realNow,
+      simulated: true,
+    })
+    expect(simulated.marked).toBe(1)
+
+    const row = await db().advance.findUniqueOrThrow({ where: { id: created.id }, select: { status: true } })
+    expect(row.status).toBe('overdue')
+    const log = await db().auditLog.findFirst({
+      where: { targetType: 'advances', targetId: created.id, action: 'status_change', actorId: null },
+      select: { reason: true },
+    })
+    expect(log?.reason).toContain(`[job:advance_overdue_sim] [จำลองวันที่ ${fmtDate(simulatedNow)}]`)
+    expect(log?.reason).toMatch(/\[จำลองวันที่ \d{2}\/\d{2}\/25\d{2}\]/)
   })
 })
