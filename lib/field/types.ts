@@ -244,7 +244,10 @@ export interface FieldExpenseDto {
   expenseDate: string
   status: ExpenseStatus
   rejectReason: string | null
+  /** หมายเหตุตอนเบิก (`revision_note`) — ไม่เปลี่ยนตอนส่งใหม่ */
   note: string | null
+  /** ข้อความชี้แจงตอนส่งใหม่ครั้งล่าสุด (`resubmit_note` · UAT BUG-098) */
+  resubmitNote: string | null
   receiptFileUrl: string | null
   sharedWithUserId: string | null
   sharedWithName: string | null

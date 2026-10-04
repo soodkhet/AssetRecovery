@@ -2062,7 +2062,10 @@ model Expense {
   approvalMatrixId    String? @map("approval_matrix_id") @db.Uuid
 
   rejectionReason String? @map("rejection_reason")
+  /// หมายเหตุของผู้เบิกตอนสร้างรายการ (ชื่อรายการ/รายละเอียด) — ไม่ถูกเขียนทับตอนส่งใหม่ (UAT BUG-098)
   revisionNote    String? @map("revision_note")
+  /// ข้อความชี้แจงของผู้เบิกตอนส่งใหม่หลังถูกตีกลับ (ครั้งล่าสุด · ประวัติทุกครั้งอยู่ใน audit) — `02` v4.13
+  resubmitNote    String? @map("resubmit_note")
 
   /// ตั้งค่าหลังสร้าง `payout_batch_items` — เก็บเป็นคอลัมน์อ้างอิงตาม `02` §8 (ไม่ประกาศเป็น relation เพื่อเลี่ยง 1:1 วนกลับ)
   payoutBatchItemId String? @map("payout_batch_item_id") @db.Uuid

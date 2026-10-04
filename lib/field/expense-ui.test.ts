@@ -38,6 +38,7 @@ function expense(overrides: Partial<FieldExpenseDto> = {}): FieldExpenseDto {
     status: 'pending_approval',
     rejectReason: null,
     note: null,
+    resubmitNote: null,
     receiptFileUrl: null,
     sharedWithUserId: null,
     sharedWithName: null,

@@ -98,6 +98,8 @@ export function ResubmitExpenseModal({
             {expense.rejectReason}
           </InlineAlert>
         )}
+        {/* หมายเหตุตอนเบิกคงเดิม — ข้อความชี้แจงด้านล่างเก็บแยก ไม่เขียนทับ (UAT BUG-098) */}
+        {expense.note !== null && <div className="text-xs text-slate-500">หมายเหตุตอนเบิก: {expense.note}</div>}
 
         {editable ? (
           <>

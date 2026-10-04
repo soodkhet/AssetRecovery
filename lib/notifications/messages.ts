@@ -304,7 +304,8 @@ export function expenseQueueMessage(input: { caseRef: string; count: number }): 
     eventCode: 'expense.case_bound_created',
     title: 'มีรายการเบิกใหม่รออนุมัติ',
     body: `เคส ${input.caseRef} ปิดงานไม่สำเร็จ — มีรายการเบิก ${input.count} รายการเข้าคิวอนุมัติ`,
-    linkPath: '/finance/approvals',
+    // ไม่มีหน้า `/finance/approvals` — คิวอนุมัติค่าตอบแทนอยู่ที่แท็บ comp ของหน้าการเงิน (UAT BUG-096)
+    linkPath: '/finance?tab=comp',
   }
 }
 
@@ -360,15 +361,20 @@ export function expenseApprovedMessage(input: {
   }
 }
 
+/**
+ * ตีกลับแล้วผู้เบิกต้องแก้ที่หน้าเบิก (ไม่ใช่หน้ารายได้ · UAT BUG-099) — เปิดขอบแท็บให้ตรงชนิดรายการ:
+ * ผูกกับงานภาคสนาม (`assignment_id` ไม่ว่าง) = แท็บ "ผูกกับเคส" (ค่าเริ่มต้น) · ไม่ผูก = แท็บ "เบิกแยก"
+ */
 export function expenseRejectedMessage(input: {
   grossSatang: number
   reason: string
+  caseBound: boolean
 }): NotificationMessage {
   return {
     eventCode: 'expense.rejected',
     title: 'รายการเบิกถูกตีกลับ',
     body: withReason(`ยอด ${fmtSatangSymbol(input.grossSatang)}`, input.reason),
-    linkPath: '/field/income',
+    linkPath: input.caseBound ? '/field/expenses' : '/field/expenses?view=separate',
   }
 }
 
