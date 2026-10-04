@@ -1606,13 +1606,12 @@ export async function resubmitCloseCase(
         : null
 
     // ลำดับสำคัญ: supersede ของเดิม **ก่อน** สร้างชุดใหม่ (partial unique ระดับ DB บังคับอยู่แล้ว)
-    const supersededIds = await supersedeCaseExpenses(tx as ExpenseTxClient, {
+    const superseded = await supersedeCaseExpenses(tx as ExpenseTxClient, {
       organizationId: user.organizationId,
       assignmentId: current.id,
-      actor: context.actor,
-      meta: context.meta,
-      reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แทนที่รายการเบิกรอบเดิม',
+      actorId: context.actor.id,
     })
+    const supersededIds = superseded.map((row) => row.id)
 
     const expenses = await generateCaseExpenses(tx as ExpenseTxClient, {
       organizationId: user.organizationId,
@@ -1628,10 +1627,14 @@ export async function resubmitCloseCase(
       meta: context.meta,
     })
 
+    // ลง audit ของใบเดิมที่นี่ (หลังรู้ใบใหม่) — after มี `supersededByExpenseId` (UAT BUG-097)
     await linkSupersededExpenses(tx as ExpenseTxClient, {
-      supersededIds,
+      organizationId: user.organizationId,
+      superseded,
       replacementIds: expenses.expenseIds,
-      actorId: context.actor.id,
+      actor: context.actor,
+      meta: context.meta,
+      reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แทนที่รายการเบิกรอบเดิม',
     })
 
     await emitAudit(

@@ -680,6 +680,15 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
       expect(replacement?.expenseType, row.expenseType).toBe(row.expenseType)
     }
     expect(before.map((row) => row.id).sort()).toEqual(superseded.map((row) => row.id).sort())
+    // UAT BUG-097 — audit ของใบเดิมชี้ใบใหม่ได้ (ตรวจย้อนจาก audit ได้โดยไม่ต้องเปิดตาราง expenses)
+    for (const row of superseded) {
+      const audit = await db().auditLog.findFirstOrThrow({
+        where: { targetType: 'expenses', targetId: row.id, action: 'status_change' },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(audit.afterData).toMatchObject({ status: 'superseded', supersededByExpenseId: row.supersededByExpenseId })
+      expect(audit.beforeData).toMatchObject({ supersededByExpenseId: null })
+    }
     // ไม่ซ้ำ: ชุดใหม่มีชนิดละ 1 รายการ และคิดจากระยะทางใหม่ (3 กม. × ฿5 = ฿15)
     // ชุดใหม่หลัง supersede ต้องมีคอมมิชชั่นด้วย (มติ PO 03/10/2569 UAT Q2)
     expect(active.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])

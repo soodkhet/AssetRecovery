@@ -34,7 +34,7 @@ import type {
 import { sumSatang } from '@/lib/finance/satang'
 import { toBangkokParts } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { CaseOutcome } from '@/lib/generated/prisma/enums'
+import type { CaseOutcome, ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
@@ -371,14 +371,26 @@ export async function enqueueFuelDistanceJob(
   })
 }
 
+/** รายการเบิกรอบเดิมที่เพิ่งถูก mark `superseded` — ค่าที่ต้องใช้ลง audit หลังรู้ใบใหม่ที่มาแทน */
+export interface SupersededExpense {
+  id: string
+  previousStatus: ExpenseStatus
+  status: ExpenseStatus
+  expenseType: ExpenseType
+  grossSatang: number
+}
+
 /**
  * `41` §10.1 — รายการเบิกของรอบเดิม mark `superseded` ก่อนสร้างชุดใหม่
- * คืนจำนวนรายการที่ถูกแทนที่ (0 = รอบนั้นไม่เคยมีรายการเบิก เช่น ยอด 0 ตาม D10)
+ * คืนรายการที่ถูกแทนที่ (ว่าง = รอบนั้นไม่เคยมีรายการเบิก เช่น ยอด 0 ตาม D10)
+ *
+ * **ยังไม่ลง audit ที่นี่** — audit ของใบเดิมต้องมี `supersededByExpenseId` ซึ่งรู้หลังสร้างชุดใหม่แล้วเท่านั้น
+ * ผู้เรียกต้องเรียก `linkSupersededExpenses()` ต่อใน transaction เดียวกันเสมอ (UAT BUG-097)
  */
 export async function supersedeCaseExpenses(
   tx: ExpenseTxClient,
-  params: { organizationId: string; assignmentId: string; actor: SessionUser; meta: RequestMeta; reason: string },
-): Promise<string[]> {
+  params: { organizationId: string; assignmentId: string; actorId: string },
+): Promise<SupersededExpense[]> {
   const rows = await tx.expense.findMany({
     where: {
       organizationId: params.organizationId,
@@ -395,13 +407,68 @@ export async function supersedeCaseExpenses(
     select: { id: true, status: true, expenseType: true, grossSatang: true },
   })
 
+  const superseded: SupersededExpense[] = []
   for (const row of rows) {
     const nextStatus = nextExpenseStatus(row.status, 'supersede')
     await tx.expense.update({
       where: { id: row.id },
-      data: { status: nextStatus, updatedBy: params.actor.id },
+      data: { status: nextStatus, updatedBy: params.actorId },
     })
+    superseded.push({
+      id: row.id,
+      previousStatus: row.status,
+      status: nextStatus,
+      expenseType: row.expenseType,
+      grossSatang: row.grossSatang,
+    })
+  }
+  return superseded
+}
 
+/**
+ * ผูกรายการเก่า → รายการใหม่ที่มาแทน (`41` §10.1 — ไล่ประวัติย้อนหลังได้) + ลง audit ของใบเดิม
+ * จับคู่ **ชนิดเดียวกัน** ผ่าน `pairSupersededExpenses()` (UAT BUG-051 — เดิมผูกทุกแถวกับแถวใหม่แถวแรก)
+ * audit ของใบเดิมเก็บ `supersededByExpenseId` ใน after (null = ไม่มีใบใหม่ชนิดเดียวกันมาแทน) — UAT BUG-097
+ */
+export async function linkSupersededExpenses(
+  tx: ExpenseTxClient,
+  params: {
+    organizationId: string
+    superseded: readonly SupersededExpense[]
+    replacementIds: readonly string[]
+    actor: SessionUser
+    meta: RequestMeta
+    reason: string
+  },
+): Promise<void> {
+  if (params.superseded.length === 0) return
+  const supersededIds = params.superseded.map((row) => row.id)
+  const rows =
+    params.replacementIds.length === 0
+      ? []
+      : await tx.expense.findMany({
+          where: { id: { in: [...supersededIds, ...params.replacementIds] } },
+          select: { id: true, expenseType: true, expenseDate: true },
+        })
+  const toCandidate = (row: (typeof rows)[number]) => ({
+    id: row.id,
+    expenseType: row.expenseType,
+    expenseDate: row.expenseDate.toISOString(),
+  })
+  const supersededSet = new Set(supersededIds)
+  const pairs = pairSupersededExpenses(
+    rows.filter((row) => supersededSet.has(row.id)).map(toCandidate),
+    rows.filter((row) => !supersededSet.has(row.id)).map(toCandidate),
+  )
+  const replacementOf = new Map(pairs.map((pair) => [pair.supersededId, pair.replacementId]))
+  for (const pair of pairs) {
+    await tx.expense.update({
+      where: { id: pair.supersededId },
+      data: { supersededByExpenseId: pair.replacementId, updatedBy: params.actor.id },
+    })
+  }
+
+  for (const row of params.superseded) {
     await emitAudit(
       {
         organizationId: params.organizationId,
@@ -410,8 +477,14 @@ export async function supersedeCaseExpenses(
         action: 'status_change',
         targetType: 'expenses',
         targetId: row.id,
-        before: { status: row.status },
-        after: { status: nextStatus, expenseType: row.expenseType, grossSatang: row.grossSatang, events: [] },
+        before: { status: row.previousStatus, supersededByExpenseId: null },
+        after: {
+          status: row.status,
+          expenseType: row.expenseType,
+          grossSatang: row.grossSatang,
+          supersededByExpenseId: replacementOf.get(row.id) ?? null,
+          events: [],
+        },
         reason: params.reason,
         ipAddress: params.meta.ipAddress,
         userAgent: params.meta.userAgent,
@@ -419,39 +492,6 @@ export async function supersedeCaseExpenses(
       },
       tx,
     )
-  }
-
-  return rows.map((row) => row.id)
-}
-
-/**
- * ผูกรายการเก่า → รายการใหม่ที่มาแทน (`41` §10.1 — ไล่ประวัติย้อนหลังได้)
- * จับคู่ **ชนิดเดียวกัน** ผ่าน `pairSupersededExpenses()` (UAT BUG-051 — เดิมผูกทุกแถวกับแถวใหม่แถวแรก)
- */
-export async function linkSupersededExpenses(
-  tx: ExpenseTxClient,
-  params: { supersededIds: readonly string[]; replacementIds: readonly string[]; actorId: string },
-): Promise<void> {
-  if (params.replacementIds.length === 0 || params.supersededIds.length === 0) return
-  const rows = await tx.expense.findMany({
-    where: { id: { in: [...params.supersededIds, ...params.replacementIds] } },
-    select: { id: true, expenseType: true, expenseDate: true },
-  })
-  const toCandidate = (row: (typeof rows)[number]) => ({
-    id: row.id,
-    expenseType: row.expenseType,
-    expenseDate: row.expenseDate.toISOString(),
-  })
-  const supersededSet = new Set(params.supersededIds)
-  const pairs = pairSupersededExpenses(
-    rows.filter((row) => supersededSet.has(row.id)).map(toCandidate),
-    rows.filter((row) => !supersededSet.has(row.id)).map(toCandidate),
-  )
-  for (const pair of pairs) {
-    await tx.expense.update({
-      where: { id: pair.supersededId },
-      data: { supersededByExpenseId: pair.replacementId, updatedBy: params.actorId },
-    })
   }
 }
 
