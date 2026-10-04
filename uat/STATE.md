@@ -47,7 +47,16 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 - 03/10/2569 R1: จบครบ ไม่มีตัวบล็อก · 14 persona login + เปลี่ยนรหัสแล้ว (session อยู่ `uat/.auth/`) · template T1/T2 เป็น v2 · merge BUG-002 + verify เขียว (245 files / 3,072 tests) · ตัด `uat/bin/r*/**` ออกจาก eslint (สคริปต์ชั่วคราวต่อรอบ)
 - 03/10/2569 R0: baseline เขียว (typecheck · 241 files / 3,039 tests · lint) · Playwright 1.63 (DEC-011) · snapshot+restore ทดสอบแล้ว
 
-## ▶️ HANDOFF — session ใหม่เริ่มตรงนี้ (เขียน 04/10/2569 ~02:35 หลัง R6b v3)
+## ▶️ HANDOFF — หลัง UAT (เขียน 05/10/2569 ~00:30 · ผู้ใช้สั่ง "ทำเลยทั้งหมด" ตามมติ U3–U10)
+
+**งานคืนนี้ (orchestrator ทำต่อใน session เดิม — ถ้าหลุด ให้ session ใหม่ทำต่อจากนี้):** มติอยู่ใน `uat/PO-DECISIONS-2569-10-04.md` แถว U3–U10
+1. **fixer T — ค่าตั้งภาษี** (U3/U4/U5/U7/U8): ฐาน WHT เลือกชนิดรายการได้ · การออก 50 ทวิ ต่อผู้รับต่อรอบ/ต่อรายการ · ประเภทเงินได้ 40(8) ทั้งหมด / 40(2) ทั้งหมด / แยกตามประเภททีม · 40(2) ใช้อัตราต่อคนใน Tax Profile + ภ.ง.ด.1 · Superadmin/บริหารแก้ได้ + เหตุผล + audit + effective-dated + snapshot ในรอบจ่าย · ค่าเริ่มต้น = มติ (ฐานไม่รวมค่าใช้จ่ายตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบ · 40(8))
+2. **fixer U — cache รายงานใน Postgres (U9) + แก้เอกสาร "✅ only" = 9 (U10: CLAUDE.md + `.claude/rules/03` + `docs/94`)**
+3. **Client Portal (U6)** — Plan agent แตกงานจาก `docs/97` เป็นก้อน (API GET-only → สิทธิ์ 3 ระดับผู้ใช้บริษัท → หน้าจอ) แล้ว fixer ทีละก้อน commit ทีละก้อน
+4. **ตรวจรายงาน F5 (05/10)** คาด ADV3 1 แถว 200000 · O4 ตรวจได้ 06/10/2569 14:02 (คาด 2 แถว 849000)
+5. ทุก merge: verify `pnpm typecheck && pnpm lint && pnpm test` + migration → `db:generate`/`db:deploy`/`db:deploy:test`/`db:seed` + restart dev · ห้าม push
+
+## HANDOFF ก่อนหน้า (04/10/2569 ~02:35 — หลัง R6b · เก็บไว้อ้างอิงเช็คลิสต์ §2 ก่อน push)
 
 ### 0. สถานะ
 - ฐาน dev = **`R6-end-v3-fixed`** (ปลาย R6 + fixer I/J + migration `20261004100000`) · staging HEAD = `git log -1` · ยังไม่ push (มติผู้ใช้: push ทีเดียวหลัง UAT จบ)
