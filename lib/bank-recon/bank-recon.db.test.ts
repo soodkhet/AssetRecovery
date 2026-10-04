@@ -672,3 +672,53 @@ suite('Phase 4.2 — Readiness + Period Lock', () => {
     )
   })
 })
+
+suite('ไฟล์ตัวอย่าง statement — มติ PO 04/10/2569 (UAT แม่แบบนำเข้าภาษาไทย)', () => {
+  const FORMAT_NAME = 'รูปแบบทดสอบแม่แบบ 4.2'
+
+  it('ไม่ระบุบัญชี / บัญชีที่ยังไม่ตั้งรูปแบบ ⇒ แม่แบบมาตรฐาน · บัญชีนอกองค์กร ⇒ BANK_ACCOUNT_NOT_FOUND', async () => {
+    const standard = await recon.getStatementImportTemplate(accountant, null)
+    expect(standard.usedConfiguredMapping).toBe(false)
+    const account = await recon.getStatementImportTemplate(accountant, BANK_ACCOUNT_ID)
+    expect(account.usedConfiguredMapping).toBe(false)
+    expect(account.bankAccountId).toBe(BANK_ACCOUNT_ID)
+    await expectCode(
+      () => recon.getStatementImportTemplate(accountant, '00000000-0000-4000-8000-0000000042ff'),
+      'BANK_ACCOUNT_NOT_FOUND',
+    )
+  })
+
+  it('บัญชีที่ตั้งรูปแบบไว้ ⇒ แม่แบบเรียงตาม column_mapping และนำเข้าไฟล์แม่แบบได้ครบทุกแถว', async () => {
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO bank_file_formats (organization_id, bank_name, file_type, encoding, column_mapping, created_by)
+      VALUES ('${ORG_ID}', '${FORMAT_NAME}', 'CSV', 'UTF-8', 'description,transaction_date,amount,balance',
+              '${ACCOUNTING_ID}')
+    `)
+    await tx.$executeRawUnsafe(
+      `UPDATE bank_accounts SET statement_format = '${FORMAT_NAME}' WHERE id = '${BANK_ACCOUNT_ID}'`,
+    )
+    try {
+      const template = await recon.getStatementImportTemplate(accountant, BANK_ACCOUNT_ID)
+      expect(template.usedConfiguredMapping).toBe(true)
+      expect(template.statementFormat).toBe(FORMAT_NAME)
+      expect(template.columns.map((column) => column.header)).toEqual([
+        'รายละเอียด',
+        'วันที่',
+        'จำนวนเงิน',
+        'ยอดคงเหลือ',
+      ])
+
+      const result = await recon.importStatement(ctx, {
+        bankAccountId: BANK_ACCOUNT_ID,
+        fileName: template.fileName,
+        csv: template.csv,
+      })
+      expect(result.imported).toBe(2)
+      expect(result.skippedRows).toEqual([])
+    } finally {
+      await tx.$executeRawUnsafe(`UPDATE bank_accounts SET statement_format = NULL WHERE id = '${BANK_ACCOUNT_ID}'`)
+      await tx.$executeRawUnsafe(`DELETE FROM bank_file_formats WHERE organization_id = '${ORG_ID}'`)
+    }
+  })
+})

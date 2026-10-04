@@ -24,6 +24,7 @@ import type {
   StatementImportInput,
 } from '@/lib/bank-recon/schemas'
 import {
+  buildStatementImportTemplate,
   parseStatementCsv,
   StatementParseError,
   statementRowKey,
@@ -35,6 +36,7 @@ import type {
   MatchCandidateDto,
   MatchResultDto,
   StatementImportResultDto,
+  StatementImportTemplateDto,
 } from '@/lib/bank-recon/types'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
@@ -365,6 +367,42 @@ interface PreparedRow extends StatementRow {
  * ขั้นตอน: อ่านไฟล์ตาม format ที่ตั้งไว้ → ผูกงวดด้วย `ensurePeriodForDate()` → กันแถวซ้ำ →
  * บันทึก + audit ต่อแถว → พยายาม auto-match ทีละรายการ (ผลข้างเคียงเดินผ่านทางเดียวกับ manual)
  */
+/** `column_mapping` ของรูปแบบ statement ที่ผูกกับบัญชี (`13` §6.3 → §6.8) — ไม่ได้ตั้ง = `null` */
+async function statementColumnMappingOf(organizationId: string, statementFormat: string | null): Promise<string | null> {
+  if (statementFormat === null) return null
+  const format = await prisma.bankFileFormat.findFirst({
+    where: { organizationId, deletedAt: null, bankName: statementFormat },
+    select: { columnMapping: true },
+  })
+  return format?.columnMapping ?? null
+}
+
+/**
+ * ไฟล์ตัวอย่างสำหรับนำเข้า statement (มติ PO 04/10/2569 — UAT แม่แบบนำเข้าภาษาไทย)
+ * ระบุบัญชี ⇒ เรียงคอลัมน์ตามรูปแบบที่ตั้งไว้กับบัญชีนั้น · ไม่ระบุ/ยังไม่ตั้ง ⇒ รูปแบบมาตรฐานของระบบ
+ * อ่านอย่างเดียว (ไม่มี audit) · ผู้เรียกต้องผ่าน `manage` ของกระทบยอดธนาคารเหมือนตัวนำเข้า
+ */
+export async function getStatementImportTemplate(
+  user: SessionUser,
+  bankAccountId: string | null,
+): Promise<StatementImportTemplateDto> {
+  assertOrgWideReadable(user, 'bank-transactions')
+  if (bankAccountId === null) {
+    return { ...buildStatementImportTemplate(null), bankAccountId: null, statementFormat: null }
+  }
+  const account = await prisma.bankAccount.findFirst({
+    where: { id: bankAccountId, organizationId: user.organizationId, deletedAt: null },
+    select: { id: true, statementFormat: true },
+  })
+  if (account === null) throw new SettingsError('BANK_ACCOUNT_NOT_FOUND', { detail: bankAccountId })
+  const columnMapping = await statementColumnMappingOf(user.organizationId, account.statementFormat)
+  return {
+    ...buildStatementImportTemplate(columnMapping),
+    bankAccountId: account.id,
+    statementFormat: account.statementFormat,
+  }
+}
+
 export async function importStatement(
   ctx: AccountingMutationContext,
   input: StatementImportInput,
@@ -377,21 +415,11 @@ export async function importStatement(
   // code ของโมดูลตั้งค่า (`13` §10 · `24` §6.3) — ใช้ซ้ำ ไม่ประกาศใหม่ (Rule 04)
   if (account === null) throw new SettingsError('BANK_ACCOUNT_NOT_FOUND', { detail: input.bankAccountId })
 
-  const format =
-    account.statementFormat === null
-      ? null
-      : await prisma.bankFileFormat.findFirst({
-          where: {
-            organizationId: ctx.actor.organizationId,
-            deletedAt: null,
-            bankName: account.statementFormat,
-          },
-          select: { columnMapping: true },
-        })
+  const columnMapping = await statementColumnMappingOf(ctx.actor.organizationId, account.statementFormat)
 
   let parsed
   try {
-    parsed = parseStatementCsv({ csv: input.csv, columnMapping: format?.columnMapping ?? null })
+    parsed = parseStatementCsv({ csv: input.csv, columnMapping })
   } catch (error) {
     if (error instanceof StatementParseError) {
       throw new BankReconError('STATEMENT_FILE_INVALID', { detail: error.message })

@@ -19,7 +19,16 @@ import {
 } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { IMPORT_COLUMNS, parseCsv, type ImportField } from '@/lib/cases/import'
+import { ImportTemplateHelp } from '@/components/imports/import-template-help'
+import {
+  buildCaseImportTemplate,
+  CASE_IMPORT_TEMPLATE_DOCS,
+  CASE_IMPORT_TEMPLATE_FILE_NAME,
+  IMPORT_COLUMNS,
+  parseCsv,
+  type ImportField,
+} from '@/lib/cases/import'
+import { downloadTextFile } from '@/lib/imports/download-client'
 import {
   applyHeaderMapping,
   autoMapping,
@@ -220,6 +229,14 @@ export function CaseImportWizard({
               />
             </label>
           </div>
+        )}
+
+        {step === 'file' && (
+          <ImportTemplateHelp
+            columns={CASE_IMPORT_TEMPLATE_DOCS}
+            onDownload={() => downloadTextFile(CASE_IMPORT_TEMPLATE_FILE_NAME, buildCaseImportTemplate())}
+            note="หัวคอลัมน์ในไฟล์ตัวอย่างเป็นภาษาไทยที่ระบบรู้จัก · มีข้อมูลสมมติ 2 แถว ลบแล้วกรอกข้อมูลจริงแทน · มูลหนี้กรอกเป็นบาท"
+          />
         )}
 
         {step === 'mapping' && (

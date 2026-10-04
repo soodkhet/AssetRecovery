@@ -1,3 +1,11 @@
+import {
+  buildImportTemplateCsv,
+  templateColumnDocs,
+  type ImportColumnRequirement,
+  type ImportTemplateColumn,
+  type ImportTemplateColumnDoc,
+} from '@/lib/imports/template'
+
 /**
  * นำเข้า Bank Statement (ไฟล์ 35 §3 · `13` §6.3/§6.8) — **pure ล้วน ไม่มี I/O**
  *
@@ -339,4 +347,98 @@ export function statementRowKey(row: {
 }): string {
   const date = row.transactionDate.toISOString().slice(0, 10)
   return `${date}|${row.amountSatang}|${row.description.trim().toLowerCase()}`
+}
+
+// ── ไฟล์ตัวอย่าง (แม่แบบ) — มติ PO 04/10/2569 (UAT — แม่แบบนำเข้าภาษาไทย) ─────────────
+
+/**
+ * หัวคอลัมน์ภาษาไทย + รูปแบบ + ค่าตัวอย่างต่อคอลัมน์มาตรฐาน — หัวคอลัมน์ทุกตัว**ต้องอยู่ใน `HEADER_ALIASES`**
+ * (เทสต์ยืนยัน) เพื่อให้แม่แบบที่ไม่ได้ตั้ง `column_mapping` ก็ยังอ่านออกจากหัวตาราง
+ * วันที่ตัวอย่างเป็น พ.ศ. `DD/MM/YYYY` (รูปแบบที่ระบบแสดง — parser รับทั้ง พ.ศ./ค.ศ.)
+ */
+const STATEMENT_COLUMN_TEMPLATE: Record<StatementColumn, { header: string; format: string; examples: readonly [string, string] }> = {
+  transaction_date: {
+    header: 'วันที่',
+    format: 'วัน/เดือน/ปี พ.ศ. เช่น 01/10/2569 (รับ ค.ศ. หรือ ปปปป-ดด-วว ได้ด้วย)',
+    examples: ['01/10/2569', '02/10/2569'],
+  },
+  description: {
+    header: 'รายละเอียด',
+    format: 'ข้อความจาก statement',
+    examples: ['รับโอนจาก บจก. ตัวอย่างไฟแนนซ์', 'โอนจ่ายค่าตอบแทนทีมภาคสนาม'],
+  },
+  reference: { header: 'เลขที่อ้างอิง', format: 'เลขอ้างอิงของธนาคาร', examples: ['REF0000001', 'REF0000002'] },
+  amount_in: {
+    header: 'เงินเข้า',
+    format: 'จำนวนเงินบาท ทศนิยมไม่เกิน 2 ตำแหน่ง · เว้นว่างถ้าเป็นรายการเงินออก',
+    examples: ['18089.42', ''],
+  },
+  amount_out: {
+    header: 'เงินออก',
+    format: 'จำนวนเงินบาท ทศนิยมไม่เกิน 2 ตำแหน่ง · เว้นว่างถ้าเป็นรายการเงินเข้า',
+    examples: ['', '8245.00'],
+  },
+  amount: {
+    header: 'จำนวนเงิน',
+    format: 'จำนวนเงินบาท · เงินออกใส่เครื่องหมายลบ เช่น -8245.00',
+    examples: ['18089.42', '-8245.00'],
+  },
+  balance: { header: 'ยอดคงเหลือ', format: 'ไม่นำไปใช้ (อ่านข้าม)', examples: ['118089.42', '109844.42'] },
+}
+
+/** ลำดับคอลัมน์มาตรฐานของระบบ — ใช้เมื่อบัญชีนั้นยังไม่ได้ตั้งรูปแบบ statement */
+export const DEFAULT_STATEMENT_TEMPLATE_COLUMNS: readonly StatementColumn[] = [
+  'transaction_date',
+  'description',
+  'reference',
+  'amount_in',
+  'amount_out',
+]
+
+export const STATEMENT_IMPORT_TEMPLATE_FILE_NAME = 'bank-statement-template.csv'
+
+function statementColumnRequirement(
+  column: StatementColumn,
+  columns: readonly StatementColumn[],
+): ImportColumnRequirement {
+  if (column === 'transaction_date') return 'required'
+  const amountColumns = columns.filter((item) => item === 'amount' || item === 'amount_in' || item === 'amount_out')
+  if (column === 'amount' || column === 'amount_in' || column === 'amount_out') {
+    // มีช่องยอดช่องเดียว ⇒ บังคับ · มีหลายช่อง ⇒ ใส่ช่องใดช่องหนึ่งต่อแถว
+    return amountColumns.length === 1 ? 'required' : 'conditional'
+  }
+  return 'optional'
+}
+
+export interface StatementImportTemplate {
+  fileName: string
+  csv: string
+  columns: ImportTemplateColumnDoc[]
+  /** `true` = แม่แบบเรียงตาม `column_mapping` ที่ตั้งไว้กับบัญชี · `false` = รูปแบบมาตรฐานของระบบ */
+  usedConfiguredMapping: boolean
+}
+
+/**
+ * แม่แบบ statement: ตั้ง `column_mapping` ที่ใช้ได้ไว้ ⇒ เรียงคอลัมน์ตามนั้นเป๊ะ (parser อ่านตามตำแหน่ง
+ * และข้ามแถวหัวตารางภาษาไทยให้เอง) · ไม่ได้ตั้ง ⇒ รูปแบบมาตรฐาน (parser อ่านจากหัวตาราง)
+ */
+export function buildStatementImportTemplate(columnMapping?: string | null): StatementImportTemplate {
+  const configured = parseStatementColumnMapping(columnMapping)
+  const usedConfiguredMapping = isUsableStatementMapping(configured)
+  const order = usedConfiguredMapping ? configured : DEFAULT_STATEMENT_TEMPLATE_COLUMNS
+  const columns: ImportTemplateColumn[] = order.map((column) => ({
+    ...STATEMENT_COLUMN_TEMPLATE[column],
+    requirement: statementColumnRequirement(column, order),
+  }))
+  return {
+    fileName: STATEMENT_IMPORT_TEMPLATE_FILE_NAME,
+    csv: buildImportTemplateCsv(columns),
+    columns: templateColumnDocs(columns),
+    usedConfiguredMapping,
+  }
+}
+
+/** หัวคอลัมน์ภาษาไทยของแม่แบบ → คอลัมน์มาตรฐาน (ใช้ในเทสต์ยืนยันว่าแม่แบบกับ parser ไม่เพี้ยน) */
+export function statementHeaderColumn(header: string): StatementColumn | null {
+  return mapHeaderRow([header])[0] ?? null
 }

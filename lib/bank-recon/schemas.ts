@@ -29,6 +29,11 @@ export const statementImportSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
 })
 
+/** `GET /api/bank-reconciliation/import/template` — ไม่ระบุบัญชี = แม่แบบรูปแบบมาตรฐานของระบบ */
+export const statementTemplateQuerySchema = z.object({
+  bank_account_id: uuidSchema.optional(),
+})
+
 export const matchTargetKindSchema = z.enum(['billing', 'payout'])
 
 export const bankMatchSchema = z.object({
