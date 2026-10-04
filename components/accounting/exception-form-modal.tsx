@@ -5,7 +5,7 @@ import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/compo
 import type { AccountingPeriodDto, ExceptionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { ExceptionLevel } from '@/lib/generated/prisma/enums'
-import { EXCEPTION_LEVEL_LABEL, EXCEPTION_MODULE_LABEL } from '@/lib/reports/dashboard'
+import { EXCEPTION_LEVEL_LABEL, EXCEPTION_MODULE_OPTIONS } from '@/lib/reports/dashboard'
 
 /**
  * ฟอร์มสร้าง/แก้ไขข้อยกเว้น (`34` §8 · mockup `accounting.html` `new-exception`/`exception-form`)
@@ -22,7 +22,7 @@ const LEVEL_HINT: Readonly<Record<ExceptionLevel, string>> = {
   critical: 'บล็อกการส่งชุดเอกสารบัญชีจนกว่าจะแก้จริงหรือผู้บริหารอนุมัติยกเว้น',
 }
 
-const MODULE_OPTIONS = Object.entries(EXCEPTION_MODULE_LABEL)
+const MODULE_OPTIONS = EXCEPTION_MODULE_OPTIONS
 
 export function ExceptionFormModal({
   open,

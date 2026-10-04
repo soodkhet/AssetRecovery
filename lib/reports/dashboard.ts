@@ -106,23 +106,34 @@ export function exceptionLinkOf(sourceModule: string): string | null {
   }
 }
 
+/**
+ * ป้ายโมดูลต้นทางของข้อยกเว้น — **ห้ามมีเลขอ้างอิงสเปค** (Rule 05 · UAT R7cv3-B04)
+ * ที่มา: billing/revenue `19` · payout `17` · expense/claim `15`/`16` · advance `15` · adjustment `20`
+ * · warehouse `44` · case `38` · bank `35` · sales/tax_invoice `31` · wht `33` · period `30` · export `37`
+ */
 export const EXCEPTION_MODULE_LABEL: Readonly<Record<string, string>> = {
-  billing: 'วางบิล (19)',
-  revenue: 'รายได้ (19)',
-  payout: 'รอบจ่ายเงิน (17)',
-  expense: 'รายการเบิก (15/16)',
-  claim: 'รายการเบิก (15/16)',
-  advance: 'เงินทดรองจ่าย (15)',
-  adjustment: 'ปรับปรุง (20)',
-  warehouse: 'คลัง (44)',
-  case: 'เคส (38)',
-  bank: 'กระทบยอดธนาคาร (35)',
-  sales: 'ขาย/ใบเสร็จ (31)',
-  tax_invoice: 'ใบกำกับภาษี (31)',
-  wht: 'ภาษีหัก ณ ที่จ่าย (33)',
-  period: 'ปิดงวด (30)',
-  export: 'ส่งข้อมูลบัญชี (37)',
+  billing: 'วางบิล',
+  revenue: 'รายได้',
+  payout: 'รอบจ่ายเงิน',
+  expense: 'รายการเบิก',
+  // `claim` = ค่าเดิมที่อาจมีในข้อมูลเก่า (โมดูลเดียวกับ `expense`) — แสดงป้ายเดียวกัน แต่ไม่ให้เลือกซ้ำในฟอร์ม
+  claim: 'รายการเบิก',
+  advance: 'เงินทดรองจ่าย',
+  adjustment: 'ปรับปรุงรายการ',
+  warehouse: 'คลังสินค้า',
+  case: 'เคส',
+  bank: 'กระทบยอดธนาคาร',
+  sales: 'ขาย/ใบเสร็จ',
+  tax_invoice: 'ใบกำกับภาษี',
+  wht: 'ภาษีหัก ณ ที่จ่าย',
+  period: 'ปิดงวด',
+  export: 'ส่งข้อมูลบัญชี',
 }
+
+/** ตัวเลือกโมดูลในฟอร์มข้อยกเว้น — ไม่ซ้ำป้าย (`claim` รวมอยู่ใน `expense`) */
+export const EXCEPTION_MODULE_OPTIONS: readonly (readonly [string, string])[] = Object.entries(
+  EXCEPTION_MODULE_LABEL,
+).filter(([value]) => value !== 'claim')
 
 /** ป้ายโมดูลที่ผู้ใช้อ่านรู้เรื่อง — โมดูลนอกทะเบียนแสดงค่าดิบ (ดีกว่าซ่อนข้อมูล) */
 export function exceptionModuleLabel(sourceModule: string): string {

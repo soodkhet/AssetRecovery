@@ -87,7 +87,7 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
   {
     fileName: '05_WHT_Data.csv',
     format: 'CSV UTF-8',
-    content: 'ข้อมูลหัก ณ ที่จ่าย — `payee_tax_id` เป็นตัวเลข 13 หลักล้วนไม่มีขีดคั่น (DEC-006/D10)',
+    content: 'ข้อมูลหัก ณ ที่จ่าย — `payee_tax_id` เป็นตัวเลข 13 หลักล้วนไม่มีขีดคั่น' /* DEC-006/D10 */,
     sourceFile: '33',
   },
   {

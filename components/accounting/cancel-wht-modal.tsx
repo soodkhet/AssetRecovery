@@ -109,8 +109,8 @@ export function CancelWhtModal({
             onChange={(event) => setReissue(event.target.checked)}
           />
           <span>
+            {/* ใบใหม่อ้างกลับด้วย `replaces_certificate_id` — ชื่อคอลัมน์ไม่แสดงบนจอ (UAT R7cv3-B05) */}
             ออกใบแทนทันทีด้วยข้อมูลปัจจุบัน — ใบใหม่จะได้เลขที่ถัดไปและอ้างกลับฉบับนี้
-            (replaces_certificate_id)
           </span>
         </label>
 

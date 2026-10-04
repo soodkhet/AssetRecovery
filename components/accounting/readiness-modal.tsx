@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Button, InlineAlert, LoadingState, Modal, RefText } from '@/components/ui'
+import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
 import type { AccountingPeriodDto, PeriodReadinessDto } from '@/lib/accounting/types'
 import { callApi } from '@/lib/api/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { exceptionModuleLabel } from '@/lib/reports/dashboard'
 
 /**
  * Modal "ตรวจความพร้อม" (`30` §8 · mockup `accounting.html` `accounting-checklist`)
@@ -114,7 +115,7 @@ export function ReadinessModal({
               </div>
               {data.criticalOpen.map((item) => (
                 <div key={item.id} className="border-t border-red-100 px-3 py-2 text-xs text-slate-700">
-                  <RefText>{item.sourceModule}</RefText> · {item.title}
+                  <span className="font-semibold">{exceptionModuleLabel(item.sourceModule)}</span> · {item.title}
                 </div>
               ))}
             </div>

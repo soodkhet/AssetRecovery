@@ -66,7 +66,7 @@ describe('exceptionLinkOf (`14` §15 — คลิกแล้วต้องไ
 
 describe('exceptionModuleLabel', () => {
   it('แปลงเป็นป้ายไทย · โมดูลนอกทะเบียนคืนค่าดิบ', () => {
-    expect(exceptionModuleLabel('billing')).toBe('วางบิล (19)')
+    expect(exceptionModuleLabel('billing')).toBe('วางบิล')
     expect(exceptionModuleLabel('unknown_module')).toBe('unknown_module')
   })
 })
