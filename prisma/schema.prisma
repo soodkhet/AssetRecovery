@@ -1147,7 +1147,7 @@ model VatRateHistory {
   @@map("vat_rate_history")
 }
 
-/// ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8 · `13` §6.4.1)
+/// ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8 · `13` §6.4.2)
 /// insert-only แบบ `vat_rate_history`: ไม่มี updated_at/updated_by/deleted_at · ไม่มีแถว = ค่าเริ่มต้นตามมติ
 /// รอบจ่ายใช้แถวที่ `effective_from` ใหม่สุดที่ ≤ วันที่สร้างรอบ (วันเดียวกัน = แถวล่าสุด) แล้ว snapshot ลง `payout_batches`
 model WhtPolicyHistory {

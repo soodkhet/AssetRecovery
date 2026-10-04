@@ -15,6 +15,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Payout Batch แยกฝั่ง, WHT calculation, Idempotency Key |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + เติมสถานะ `draft` ใน §7.1 ที่ตกหล่นจาก enum `payout_batch_status` ใน `02-database-schema-design.md` (schema มี 4 ค่า: draft/checking/file_generated/completed แต่เอกสารเดิมมีแค่ 3 ค่า ไม่มี draft) + แยก Decisions/Open Items ชัดเจน — **เนื้อหา business logic เดิมคงไว้ครบ** |
 | v2.1 | 04/07/2569 | **ระบุ trigger ของ transition `draft → checking` ให้ชัดใน §9** — เดิม §7.1 บอกแล้วว่า `draft` เป็น transient state แต่ §9 ไม่ได้ระบุว่าใคร/อะไรเป็นคนเปลี่ยนเป็น `checking` — ชี้แจงว่าเป็น **ระบบเปลี่ยนอัตโนมัติทันทีที่ดึงรายการ approved ครบตาม cutoff** (ไม่มีปุ่มให้ user กด) ตามความหมาย transient ที่ §7.1 นิยามไว้แล้ว — เป็นการขยายความ ไม่ใช่ logic ใหม่ |
+| v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: §6.2 รอบจ่ายใช้ค่าตั้งภาษีที่มีผล ณ วันสร้างรอบ (ฐาน WHT เลือกชนิดรายการ · ประเภทเงินได้ 40(8)/40(2)/แยกตามทีม · 40(2) อัตราต่อคนไม่มีเกณฑ์) แล้ว **snapshot** ลงรอบ/รายการ · ผู้รับ 40(2) ไม่มีอัตรา ⇒ `WHT_40_2_RATE_MISSING` · §7.1/§7.2 ฟิลด์ snapshot |
 | v2.2 | 03/10/2569 | **แก้ §6.2 ตามมติ PO 03/10/2569 (UAT Q5, BUG-014)**: เกณฑ์ขั้นต่ำ WHT คิด**ต่อ payee ต่อรอบจ่าย** (รวมฐานของ payee ก่อนเทียบเกณฑ์) แล้วกระจายยอดหักลงรายการ — สูตรอยู่ `22` §6.9 |
 
 ขอบเขตเอกสารนี้: รวมรายการค่าตอบแทนที่ผ่านการอนุมัติแล้ว (ไฟล์ 16) เป็นรอบจ่ายเงิน (Payout Batch) แยกฝั่ง inhouse/outsource พร้อมหัก WHT และสร้างไฟล์โอนเงินธนาคาร
@@ -60,6 +61,8 @@
 
 แต่ละรายการใน batch หัก WHT ตาม Tax Profile ที่ผูกกับ Payee นั้น (ไฟล์ 18) — **เกณฑ์ขั้นต่ำเทียบกับยอดรวมของ payee ทั้งรอบจ่าย แล้วกระจายยอดหักกลับลงรายการ** (สูตรเต็ม `22` §6.9 — มติ PO 03/10/2569 UAT Q5) — ยอดรวม WHT ของ batch = ผลรวม WHT ของทุกรายการ — `net = gross - wht` ที่โอนจริง
 
+**ค่าตั้งภาษี (มติ PO 05/10/2569 — UAT U3/U5/U7/U8 · ไฟล์ 13 §6.4.2 · สูตร `22` §6.9.1)**: ตอนสร้างรอบ ระบบเลือกค่าตั้งที่มีผล ณ วันสร้างรอบ (ปฏิทินไทย) แล้ว **snapshot** ลงรอบ (`wht_policy_id`, `wht_base_expense_types`, `wht_certificate_mode`, `wht_income_type_mode`) และรายการ (`wht_base_included`, `wht_income_category`) — รายการนอกฐาน (ค่าเริ่มต้น: ค่าที่พัก/เบิกตามใบเสร็จ/รายการกรอกเอง) จ่ายเต็มไม่หัก · ผู้รับ 40(2) ใช้อัตราต่อคน ไม่มีเกณฑ์ · ผู้รับ 40(2) ฝั่งเดียวกับรอบที่มีรายการในฐานแต่ไม่มีอัตรา ⇒ ปัดทั้งรอบ `WHT_40_2_RATE_MISSING` พร้อมรายชื่อ · เปลี่ยนค่าตั้งภายหลังไม่กระทบรอบเดิม
+
 ### 6.3 Idempotency Key (กันโอนซ้ำ) 🔶 สำคัญมากด้านความปลอดภัยทางการเงิน
 
 ตามที่ UI ระบุไว้ชัดเจน ("ระบบจะสร้างไฟล์เข้ารหัสและแนบ Idempotency Key ป้องกันการนำไฟล์ไปอัปโหลดซ้ำสองครั้งอัตโนมัติ") — ทุกครั้งที่สร้างไฟล์โอนเงิน ระบบ generate unique key ผูกกับ Payout Batch นั้น ถ้ามีการพยายามสร้าง/ดาวน์โหลดไฟล์โอนซ้ำสำหรับ batch เดียวกันที่จ่ายไปแล้ว ต้องเตือนชัดเจนว่า "Batch นี้สร้างไฟล์โอนไปแล้วเมื่อ [วันที่] — แน่ใจหรือไม่ว่าต้องการสร้างซ้ำ"
@@ -81,6 +84,7 @@
 | status | enum | yes | **`draft`** (กำลังรวบรวมรายการ — transient state ทันทีหลังสร้าง ก่อนระบบดึงรายการมาครบ) / `checking` (กำลังตรวจสอบก่อนสร้างไฟล์) / `file_generated` / `completed` (ดู §9) — ตรงกับ enum `payout_batch_status` ใน `02-database-schema-design.md` §3 |
 | idempotency_key | string | yes | unique key ผูกกับ batch — generate ตอนสร้างไฟล์โอนครั้งแรก |
 | payment_file_generated_at | timestamptz \| null | — | — |
+| wht_policy_id, wht_base_expense_types, wht_certificate_mode, wht_income_type_mode | uuid/enum[]/enum/enum \| null | — | snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (§6.2) — NULL = รอบที่สร้างก่อนมีค่าตั้ง |
 
 ### 7.2 Payout Batch Item
 
@@ -91,6 +95,7 @@
 | payee_id | uuid | yes | ผูกกับไฟล์ 18 — ต้อง `verified` เท่านั้น |
 | source_expense_id | uuid | yes | อ้างอิงรายการเบิกต้นทาง (ไฟล์ 41/15/16) |
 | gross_amount, wht_amount, net_amount | decimal | yes | — |
+| wht_base_included, wht_income_category | boolean / enum \| null | — | snapshot: อยู่ในฐาน WHT · ประเภทเงินได้ของผู้รับ (§6.2) |
 
 ## 8. UI / UX Rules
 

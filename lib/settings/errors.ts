@@ -35,7 +35,7 @@ export const SETTINGS_ERROR_CODES = [
   'BANK_FILE_NOT_TESTED',
   // §6.12 เลขที่ใบกำกับภาษี
   'NUMBERING_SEQ_NOT_EDITABLE',
-  // §6.4.1 ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8)
+  // §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8)
   'WHT_POLICY_EFFECTIVE_DATE_PAST',
   // §6.11 ล็อกรอบบัญชี (โครง — บังคับเต็มรูปแบบ Phase 4.1)
   'PERIOD_LOCKED_DIRECT_EDIT',

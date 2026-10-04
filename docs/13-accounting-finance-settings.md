@@ -15,6 +15,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — 13 sub-section ครบ (§6.1-6.13) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + **แก้ไข §3**: เดิมเขียนว่า "ทั้ง 10 sub-section" แต่เนื้อหาจริงมี **13 sub-section** (§6.1 ถึง §6.13) ตรงกับที่ระบุใน `README.md` ("ตั้งค่าบัญชี/การเงิน 13 sub-tabs") — แก้ไขให้ตรงกันแล้ว + แยก Decisions/Open Items ชัดเจน — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v3 | 04/07/2569 | **Batch 6 — Product Owner อนุมัติ DEC-006 (D1=B, D2=A)**: (1) ย้ายค่านโยบายการเงินระดับองค์กร 3 ตัว (`advance_max_amount_per_request`, `require_payee_id_document`, `ar_aging_buckets`) ออกจากตาราง §6.2 Approval Matrix ไปเป็น **§6.2.1 Finance Policy Settings** (1 record/org) — เดิมฝังใน matrix ทำให้ค่า duplicate ต่อแถว (2) ทุก entity ในไฟล์นี้มีตารางรองรับใน `02-database-schema-design.md` v3.5 ครบแล้ว (`billing_payout_cycles`, `approval_matrices`, `finance_policy_settings`, `bank_file_formats`, `tax_document_template_settings`, numbering columns บน `organizations`, `functional_group` บน `capabilities`) (3) §6.3 sync กับ schema แล้ว — `is_payout_account` เดิมถูก deprecate แทนด้วย `usage` (4) หมายเหตุ: field เงินทุกตัว (เช่น `condition_threshold`) เก็บใน DB เป็น **INTEGER satang** ตาม convention — ที่เขียน decimal ในไฟล์นี้เป็นระดับ spec เท่านั้น |
+| v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: เพิ่ม §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (ฐาน WHT / การออก 50 ทวิ / ประเภทเงินได้) effective-dated + snapshot ลงรอบจ่าย · แก้ได้เฉพาะ Superadmin/บริหาร (`manage_wht_policy`) พร้อมเหตุผล · §11/§13 เติมสิทธิ์/endpoint |
 | v3.3 | 15/08/2569 | **มติ PO 15/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม Phase 6.3 (D18)** — เพิ่ม **§6.14 เกณฑ์ SLA งานติดตาม** (แท็บที่ 14): ไฟล์ 96 §6-O2/O4 อ้าง `slaAlertHours` ว่าอยู่ใน "Finance Settings (ไฟล์ 03)" แต่ไฟล์ 03 ไม่เคยนิยาม ⇒ ตั้งค่าที่ไฟล์นี้ เก็บที่ `assignment_policy_settings.sla_alert_hours` (ไฟล์ 02 v4.4) ค่าเริ่มต้น 72 ชม. = 3 วัน · ใช้กับ**รายงาน O2/O4 เท่านั้น** ไม่บล็อก flow ใด · §7 แก้ "13 แท็บ" → "14 แท็บ" |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
@@ -124,6 +125,21 @@
 #### 6.4.1 หมายเหตุสำคัญ — เงินเดือนพนักงาน inhouse ไม่อยู่ในขอบเขตของ AssetRecovery
 
 พนักงาน inhouse เป็นพนักงานประจำ ได้รับเงินเดือนตามมาตรา 40(1) ซึ่งกฎหมายกำหนดให้คำนวณภาษีหัก ณ ที่จ่ายแบบ**ขั้นบันได** (เทียบเงินได้พึงประเมินทั้งปี หักค่าใช้จ่าย/ค่าลดหย่อน แล้วหารเฉลี่ยเป็นรายเดือน) ไม่ใช่อัตราคงที่แบบ outsource — **ยืนยันแล้วว่าเรื่องเงินเดือน inhouse (ภ.ง.ด.1, ประกันสังคม, กองทุนสำรองเลี้ยงชีพ ฯลฯ) ไม่อยู่ในขอบเขตของระบบนี้เลย** จัดการแยกในระบบ/บริการ payroll อื่นโดยเฉพาะ (เช่น ผ่านสำนักงานบัญชีหรือโปรแกรมเงินเดือนแยก) — Tax Profile ในไฟล์นี้ใช้กับ **ค่าตอบแทนจากการทำเคส** เท่านั้น (ค่าน้ำมัน/เบี้ยเลี้ยง/คอมมิชชั่นตามไฟล์ 11) ไม่ครอบคลุมเงินเดือนประจำ
+
+#### 6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 — UAT U3/U4/U5/U7/U8)
+
+ค่าตั้ง 3 ตัว เก็บที่ `wht_policy_history` แบบ **effective-dated insert-only** (แนวเดียวกับ §6.5): แก้ค่า = เพิ่มชุดใหม่พร้อมวันที่มีผล (ประวัติไม่ถูกแก้/ลบ) · วันเดียวกันหลายชุด ⇒ ชุดที่บันทึกล่าสุดชนะ · **วันที่มีผลย้อนหลังไม่ได้** (`WHT_POLICY_EFFECTIVE_DATE_PAST`) · มีผลกับรอบจ่ายที่**สร้าง**ตั้งแต่วันที่มีผล (วันตามปฏิทินไทย) · รอบที่สร้างแล้ว **snapshot** ค่าที่ใช้ (ไฟล์ 17 §7.1) ห้ามคำนวณย้อนหลัง · ไม่มีชุดใดมีผล = ค่าเริ่มต้นตามมติ
+
+| ค่าตั้ง | ตัวเลือก | ค่าเริ่มต้น |
+|---|---|---|
+| ฐาน WHT (`base_expense_types expense_type[]`) | เลือกชนิดรายการ (`expense_type`) ที่รวมในฐาน — ชนิดที่ไม่รวมยังจ่ายตามปกติแต่ไม่หัก/ไม่นับเกณฑ์ | คอมมิชชัน · เบี้ยเสี่ยง · ค่าน้ำมัน · เบี้ยเลี้ยง = รวม · ค่าที่พัก · ค่าใช้จ่ายตามใบเสร็จ · รายการกรอกเอง = ไม่รวม (เงินคืนค่าใช้จ่ายตามใบเสร็จในนามบริษัทไม่ใช่เงินได้ — มติ A1) |
+| การออก 50 ทวิ (`certificate_mode`) | `per_payee_batch` (ต่อผู้รับต่อรอบจ่าย) / `per_item` (ต่อรายการ) | `per_payee_batch` |
+| ประเภทเงินได้ (`income_type_mode`) | `all_40_8` / `all_40_2` / `by_team_side` (inhouse = 40(2) · outsource = 40(8) ตามฝั่งผู้รับ ณ วันสร้างรอบ) | `all_40_8` (3% + เกณฑ์ ฿1,000 → ภ.ง.ด.3/53 ตามเดิม) |
+
+- 40(2) ใช้ "อัตราหัก 40(2)" ต่อคนใน `payee_profiles.wht_40_2_pct` (ไฟล์ 18 §6.3) — ระบบไม่คำนวณอัตราก้าวหน้า (Hybrid Boundary) · ไม่มีเกณฑ์ ฿1,000 · ยื่น ภ.ง.ด.1 · สูตรเต็ม `22` §6.9.1
+- สิทธิ์: อ่าน = `view_master_data` · แก้ = `manage_wht_policy` (Superadmin โดยนิยาม + บริหาร manage — seed) · **เหตุผลบังคับ** + audit before (ค่าที่มีผล ณ วันนั้น) / after
+- หน้าจอ: แท็บ "ค่าตั้งภาษีหัก ณ ที่จ่าย" ถัดจาก Tax Profile — แสดงค่าที่มีผลวันนี้ + ประวัติ + ฟอร์มชุดใหม่ (mockup `settings.html` → `renderSettingsWhtPolicy`)
+- 🔶 ประเภทเงินได้จริง (40(2)/40(8)) รอนักบัญชียืนยันตามสัญญาจ้าง (A3) — ค่าตั้งให้เปลี่ยนได้โดยไม่ต้องแก้โค้ด
 
 ### 6.5 VAT Rate Setting (อัตราภาษีมูลค่าเพิ่ม) 🔶 สำคัญมาก — ติดตามใกล้ชิด
 
@@ -316,6 +332,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | GET / POST / PATCH | /api/settings/bank-accounts | Corporate Banks |
 | GET / POST / PATCH | /api/settings/tax-profiles | Tax Profile |
 | GET / POST / PATCH | /api/settings/vat-rates | VAT Rate (effective-dated) |
+| GET / POST | /api/settings/wht-policy | ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated insert-only — §6.4.2) |
 | GET / PATCH | /api/settings/tax-invoice-numbering | Tax Invoice Numbering Format |
 | GET / POST / PATCH | /api/settings/cost-centers | Cost Center |
 | GET | /api/settings/document-templates | Internal Doc Templates (read-only, ดูไฟล์ 28 สำหรับแก้ไข) |

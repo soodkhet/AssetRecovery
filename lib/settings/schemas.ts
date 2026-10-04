@@ -278,7 +278,7 @@ export const vatRateUpdateSchema = vatRateCreateSchema
 
 export const vatRateResolveQuerySchema = z.object({ date: dateOnlySchema('วันที่') })
 
-// ── §6.4.1 ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated — มติ PO 05/10/2569 UAT U3/U4/U5/U8) ──
+// ── §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated — มติ PO 05/10/2569 UAT U3/U4/U5/U8) ──
 export const whtPolicyCreateSchema = z.object({
   /** วันที่มีผล — ย้อนหลังไม่ได้ (ตรวจซ้ำที่ service ด้วยเวลาเซิร์ฟเวอร์ — `WHT_POLICY_EFFECTIVE_DATE_PAST`) */
   effectiveFrom: dateOnlySchema('วันที่มีผล'),

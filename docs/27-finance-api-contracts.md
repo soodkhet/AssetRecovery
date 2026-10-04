@@ -17,6 +17,7 @@
 | v3.1 | 04/07/2569 | **เติม §6.12**: `PATCH /api/accounting/wht-certificates/:id/cancel` ตามไฟล์ 33 v3 (DEC-006/D4) |
 | v3.6 | 15/08/2569 | **เติม §6.14** (Phase 4.2 — กระทบยอดธนาคาร `35`): `GET /api/bank-reconciliation/match-candidates` — Modal "จับคู่ Manual" ของ `35` §8 มี dropdown "ค้นหารายการที่จะจับคู่" ซึ่งต้องอ่านรอบวางบิล `sent` / รอบจ่าย `file_generated` ที่ผู้ถือ `manage_bank_reconciliation` (บัญชี) **ไม่มีสิทธิ์** เรียกผ่าน `/api/billing-batches` หรือ `/api/payout-batches` ได้ (`25` §7.4 ให้สองตัวนั้นกับการเงิน) ⇒ ต้องมี endpoint ของโมดูล 35 เอง เป็น endpoint ที่ flow ใน §8 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2–v3.5) |
 | v3.5 | 15/08/2569 | **เติม §6.3/§6.6 ที่ตกหล่นตอนรีวิว Phase 3**: `GET /api/payees/candidates` (ฟอร์มสร้าง Payee ต้องเลือกจากผู้ใช้ที่ยังไม่มี Payee Profile — กติกา "1 User = 1 Payee" ของ `18` §6.1 บังคับอยู่แล้ว) และ PDF ภายในของรอบจ่าย 3 ใบ `GET /api/payout-batches/:id/{summary,voucher,payslip}-pdf` (เอกสารทั้งสามถูกกำหนดไว้แล้วที่ `28` §6.1 + `01_PLAN` §3.4 แต่ไม่เคยถูกเติมลงรายการ endpoint) — implementation มีอยู่จริงตั้งแต่ Phase 3.2/3.4 เอกสารเป็นฝั่งที่ตามไม่ทัน ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3.2–v3.4) |
+| v3.7 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: เติม `GET/POST /api/settings/wht-policy` (ค่าตั้งภาษีหัก ณ ที่จ่าย effective-dated — ไฟล์ 13 §6.4.2) |
 | v3.4 | 15/08/2569 | **เติม §6.8** (Phase 3.7 — Adjustment `20`): `GET /api/adjustments/targets` — ฟอร์มสร้าง Adjustment ตาม `20` §8 ต้องค้นรายการต้นทางจากเลขที่อ้างอิง แล้วแสดง `period_status_at_target` + ระดับอนุมัติที่ต้องใช้ก่อนกดสร้าง ซึ่งอ่านจาก `accounting_periods` ที่หน้าจอเข้าไม่ถึง — เป็น endpoint ที่ flow ใน §8 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2/v3.3 · sync `20` §14 v2.2 แล้ว) |
 | v3.3 | 15/08/2569 | **เติม §6.7** (Phase 3.6 — Revenue/Billing `19`): `GET /api/billing-batches/:id` (ปุ่ม "เอกสาร" ของตาราง `19` §8 ต้องเปิดรายละเอียดรอบ + รายการรายได้ในรอบ) และ `DELETE /api/billing-batches/:id` (`19` §10 ระบุกติกา "ห้ามลบ Billing Batch ที่ `status != draft`" ไว้ตรง ๆ ⇒ ต้องมี endpoint ให้ลบรอบ `draft` ได้จริง) — เป็น endpoint ที่ flow ใน `19` §8/§10 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2) |
 | v3.2 | 15/08/2569 | **เติม §6.6** (Phase 3.4 — Payout Batch `17`): `GET /api/payout-batches/:id` (ปุ่ม "ดู" ของตารางรอบจ่าย `17` §8 ต้องมีรายละเอียด+รายการในรอบ) และ `GET /api/payout-batches/:id/payment-file` (ไฟล์โอนเก็บใน bucket private ⇒ ดาวน์โหลดต้องผ่าน endpoint ที่ตรวจ `generate_payment_file` ทุกครั้ง ห้ามแจก signed URL) — เป็น endpoint ที่ flow ใน `17` §8/§9 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3) |
@@ -49,6 +50,7 @@ GET/POST/PATCH /api/settings/approval-matrix
 GET/POST/PATCH /api/settings/bank-accounts
 GET/POST/PATCH /api/settings/tax-profiles
 GET/POST/PATCH /api/settings/vat-rates
+GET/POST       /api/settings/wht-policy          ← ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 · insert-only)
 GET/PATCH      /api/settings/tax-invoice-numbering
 GET/POST/PATCH /api/settings/cost-centers
 GET            /api/settings/document-templates

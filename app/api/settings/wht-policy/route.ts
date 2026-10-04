@@ -5,7 +5,7 @@ import { createWhtPolicy, getWhtPolicyOverview } from '@/lib/settings/queries/wh
 import { whtPolicyCreateSchema } from '@/lib/settings/schemas'
 
 /**
- * ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U3/U4/U5/U8 · `13` §6.4.1) — `GET`/`POST /api/settings/wht-policy`
+ * ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U3/U4/U5/U8 · `13` §6.4.2) — `GET`/`POST /api/settings/wht-policy`
  *
  * - `GET` = ค่าที่มีผลวันนี้ + ประวัติ + ค่าเริ่มต้น · อ่านด้วย `view_master_data` (แนวเดียวกับอัตรา VAT)
  * - `POST` = เพิ่มค่าตั้งชุดใหม่พร้อมวันที่มีผล (insert-only ไม่มี PATCH/DELETE) · `manage_wht_policy`

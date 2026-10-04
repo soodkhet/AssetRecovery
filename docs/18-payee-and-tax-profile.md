@@ -80,6 +80,8 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 
 **การ implement**: ไฟล์ 22 §6.9 (WHT Net Calculation) ต้องดึง rate จาก `PayeeProfile.tax_profile.wht_rate` ก่อนเสมอ ถ้า null ค่อย fallback ไป `CompensationPlan.wht_rate`
 
+> **อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 — UAT U7)**: เมื่อค่าตั้งภาษี (ไฟล์ 13 §6.4.2) จัดผู้รับเป็นเงินได้ **40(2)** ระบบใช้ `payee_profiles.wht_40_2_pct` ของผู้รับคนนั้น (**ไม่ใช่** Tax Profile/Plan) — สำนักงานบัญชีคำนวณอัตราให้ (Hybrid Boundary — ระบบไม่คำนวณอัตราก้าวหน้า ม.50(1)) · `NUMERIC(5,2)` 0.00–100.00 · ไม่มีเกณฑ์ ฿1,000 · ยื่น ภ.ง.ด.1 · ว่าง = ยังไม่กรอก ⇒ สร้างรอบจ่ายที่มีผู้รับคนนั้น (และมีรายการในฐาน) ไม่ได้ `WHT_40_2_RATE_MISSING` · แก้ค่านี้ของผู้รับที่ยืนยันแล้ว ⇒ กลับเป็น unverified (ข้อมูลภาษี §9) · API ที่ไม่ส่งฟิลด์นี้มา = คงค่าเดิม
+
 ## 7. Data Entities / Required Objects
 
 ### 7.1 Payee Profile (field name ตรงกับ `02-database-schema-design.md` §8 หลังเติม column ที่ขาดแล้ว)
@@ -97,6 +99,7 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | bank_account_name | account_name | string | yes | ชื่อบัญชีธนาคาร — ต้องตรงกับชื่อ payee เพื่อกันโอนผิดบัญชี (validate ตรงกันหรือเตือนถ้าไม่ตรง) |
 | status | *(derive จาก `is_verified` boolean)* | enum/boolean | yes | `verified` / `unverified` (ดู §9) — schema เก็บเป็น `is_verified BOOLEAN` ไม่ใช่ enum แต่ความหมายเดียวกัน |
 | verified_by, verified_at | verified_by, verified_at | uuid, timestamptz \| null | — | — |
+| wht_40_2_pct | wht_40_2_pct | decimal(5,2) \| null | — | อัตราหัก 40(2) ต่อคน (%) — ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็น 40(2) เท่านั้น (§6.3 · มติ PO 05/10/2569 UAT U7) |
 | id_document_url | id_document_url | string \| null | — | ไฟล์แนบยืนยันตัวตน (สำเนาบัตรประชาชน/หนังสือรับรองบริษัท) — ไม่บังคับเป็นค่าเริ่มต้น แต่ตั้งค่าให้บังคับได้ที่ไฟล์ 13 (ดู §10) — **เพิ่มเข้า schema แล้ว (v2)** |
 
 ## 8. UI / UX Rules
@@ -163,6 +166,8 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | รวม unverified payee เข้า payout | พยายามสร้าง Payout Batch ที่มี payee unverified อยู่ในรายการ | reject UNVERIFIED_PAYEE_IN_PAYOUT |
 | WHT Priority | Payee มี tax_profile ตั้ง 1% แต่ plan ของทีมตั้ง 3% | ใช้ 1% (Payee level ชนะ) |
 | WHT Fallback | Payee ยังไม่มี tax_profile ผูกไว้ | ใช้ WHT rate จาก plan เป็น fallback พร้อมเตือนเจ้าหน้าที่ |
+| 40(2) ไม่มีอัตรา | ค่าตั้งเป็น 40(2) / แยกตามทีม และผู้รับ inhouse ยังไม่กรอก wht_40_2_pct | reject WHT_40_2_RATE_MISSING พร้อมรายชื่อ — ฝั่ง outsource สร้างรอบได้ตามปกติ |
+| 40(2) อัตรา 2.50% | ผู้รับ 40(2) ฐาน ฿500 | หัก ฿12.50 (ไม่มีเกณฑ์ ฿1,000) · ใบ 50 ทวิ ภ.ง.ด.1 |
 
 ---
 

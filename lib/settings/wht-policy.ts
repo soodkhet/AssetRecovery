@@ -2,7 +2,7 @@ import type { ExpenseType, PayoutBatchSide } from '@/lib/generated/prisma/enums'
 import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
 
 /**
- * ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (`22` §6.9 · `13` §6.4.1 · `33` — มติ PO 05/10/2569 UAT U3/U4/U5/U7/U8)
+ * ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (`22` §6.9 · `13` §6.4.2 · `33` — มติ PO 05/10/2569 UAT U3/U4/U5/U7/U8)
  * **pure ล้วน ใช้ร่วม FE/BE**
  *
  * 1. **ฐาน WHT** (U3) — ชนิดรายการ (`expense_type`) ใดรวมในฐาน · ค่าเริ่มต้น = รายการเหมาจ่าย
