@@ -678,7 +678,7 @@ export async function rejectCompensationExpense(
   // `90` §6.3 แถว 6 — ตีกลับแล้วผู้เบิกต้องแก้เอง ⇒ ต้องรู้ทันทีพร้อมเหตุผล
   dispatchNotification(
     { organizationId: user.organizationId, userIds: [updated.payee.userId] },
-    expenseRejectedMessage({ grossSatang: updated.grossSatang, reason }),
+    expenseRejectedMessage({ grossSatang: updated.grossSatang, reason, caseBound: updated.assignmentId !== null }),
   )
 
   return {

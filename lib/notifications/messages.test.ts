@@ -1,5 +1,10 @@
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { ACCOUNTING_TABS } from '@/lib/accounting/accounting-tabs'
 import { FIELD_NAV_ITEMS } from '@/lib/field/field-nav'
+import { EXPENSE_VIEW_TYPES } from '@/lib/field/schemas'
+import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
 import { NOTIFICATION_ONLY_EVENTS, isNotificationEvent, type NotificationEventCode } from '@/lib/notifications/events'
 import {
   accountantQuestionMessage,
@@ -14,6 +19,7 @@ import {
   clip,
   exceptionCreatedMessage,
   expenseApprovedMessage,
+  expenseQueueMessage,
   expenseRejectedMessage,
   lotConfirmedMessage,
   payoutBatchCompletedMessage,
@@ -62,7 +68,9 @@ const ALL: readonly NotificationMessage[] = [
   assetIntakeRejectedMessage({ caseRef: 'CASE-26-0006', reason: 'IMEI ไม่ตรง' }),
   lotConfirmedMessage({ lotId: 'l1', lotNumber: 'LOT-2569-001', companyName: 'สยามไฟแนนซ์', assetCount: 3, revenueCount: 2 }),
   expenseApprovedMessage({ grossSatang: 125050, caseRef: 'CASE-26-0007' }),
-  expenseRejectedMessage({ grossSatang: 50000, reason: 'ใบเสร็จไม่ชัด' }),
+  expenseQueueMessage({ caseRef: 'CASE-26-0008', count: 2 }),
+  expenseRejectedMessage({ grossSatang: 50000, reason: 'ใบเสร็จไม่ชัด', caseBound: true }),
+  expenseRejectedMessage({ grossSatang: 80000, reason: 'ใบเสร็จไม่ชัด', caseBound: false }),
   payoutBatchCompletedMessage({ batchId: 'b1', batchName: 'รอบจ่าย Outsource', netSatang: 9900000, source: 'manual' }),
   advanceOverdueMessage({ advanceId: 'a1', dueClearDate: new Date('2026-08-10T00:00:00Z') }, 'payee'),
   evidenceRejectedMessage({ caseId: 'c9', caseRef: 'CASE-26-0009', reason: 'รูปไม่ชัด' }),
@@ -101,6 +109,37 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
       if (!path.startsWith('/field')) continue
       expect(fieldHrefs.has(path), `${message.eventCode} → ${path}`).toBe(true)
     }
+  })
+
+  it('ทุกลิงก์ชี้หน้าที่มีอยู่จริงใน app/ และ ?tab=/?view= เป็นค่าที่หน้านั้นรู้จัก (UAT BUG-096/099)', () => {
+    // route group `(app)` ไม่อยู่ใน URL ⇒ ลองทั้งสองที่
+    const pageExists = (urlPath: string): boolean =>
+      ['app', path.join('app', '(app)')].some((root) =>
+        existsSync(path.join(process.cwd(), root, ...urlPath.split('/').filter(Boolean), 'page.tsx')),
+      )
+    const knownQuery: Readonly<Record<string, { key: string; values: readonly string[] }>> = {
+      '/finance': { key: 'tab', values: FINANCE_OPERATION_TABS.map((tab) => tab.id) },
+      '/accounting': { key: 'tab', values: ACCOUNTING_TABS.map((tab) => tab.id) },
+      '/field/expenses': { key: 'view', values: EXPENSE_VIEW_TYPES },
+    }
+    for (const message of ALL) {
+      const [urlPath = '', query] = (message.linkPath ?? '').split('?')
+      expect(pageExists(urlPath), `${message.eventCode} → ${message.linkPath}`).toBe(true)
+      if (query === undefined) continue
+      const rule = knownQuery[urlPath]
+      expect(rule, `${message.eventCode} → ${message.linkPath} ใช้ query ที่หน้านี้ไม่อ่าน`).toBeDefined()
+      const params = new URLSearchParams(query)
+      expect([...params.keys()], message.linkPath ?? '').toEqual([rule?.key])
+      expect(rule?.values, message.linkPath ?? '').toContain(params.get(rule?.key ?? ''))
+    }
+  })
+
+  it('ตีกลับรายการเบิก → หน้าเบิกตามขอบแท็บของรายการ ไม่ใช่หน้ารายได้ (UAT BUG-099)', () => {
+    expect(expenseRejectedMessage({ grossSatang: 1, reason: 'x', caseBound: true }).linkPath).toBe('/field/expenses')
+    expect(expenseRejectedMessage({ grossSatang: 1, reason: 'x', caseBound: false }).linkPath).toBe(
+      '/field/expenses?view=separate',
+    )
+    expect(expenseQueueMessage({ caseRef: 'CASE-26-0008', count: 1 }).linkPath).toBe('/finance?tab=comp')
   })
 
   it('ไม่มีปี ค.ศ. หลุดลงข้อความ — วันที่ต้องเป็น พ.ศ. (Rule 01)', () => {

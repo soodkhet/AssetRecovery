@@ -176,9 +176,9 @@ function NeedsRevisionBlock({
   )
 }
 
-export function ExpensesTab() {
+export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: ExpenseViewType }) {
   const session = useSession()
-  const [view, setView] = useState<ExpenseViewType>('caseBound')
+  const [view, setView] = useState<ExpenseViewType>(initialView)
   const [data, setData] = useState<FieldExpenseListDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
