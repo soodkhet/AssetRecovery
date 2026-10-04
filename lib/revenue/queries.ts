@@ -70,8 +70,11 @@ import { toDateOnlyIso, toIso } from '@/lib/settings/queries/shared'
 
 export { MANAGE_BILLING } from '@/lib/revenue/revenue'
 
-/** capability ที่เปิดประตูเข้า endpoint อ่าน (`19` §12) — ขอบเขตแถวบังคับซ้ำที่ `*ScopeWhere()` */
-export const BILLING_READ_CAPABILITIES = ['manage_billing', 'view_own_company_data'] as const
+/**
+ * capability ที่เปิดประตูเข้า endpoint อ่าน (`19` §12) — ขอบเขตแถวบังคับซ้ำที่ `*ScopeWhere()`
+ * ถอด `view_own_company_data` แล้ว (มติ PO 05/10/2569 U6/O43 D2 — ผู้ใช้บริษัทดูยอดผ่านพอร์ทัล `portal_finance`)
+ */
+export const BILLING_READ_CAPABILITIES = ['manage_billing'] as const
 
 const TARGET = 'billing_batches'
 

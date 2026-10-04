@@ -92,10 +92,11 @@ export async function getAuthenticatedUid(): Promise<string | null> {
 }
 
 /**
- * session ปัจจุบัน — `null` = ยังไม่ได้ login (ให้ caller redirect ไปหน้า login)
- * โยน `AuthError` เมื่อ login แล้วแต่ใช้งานต่อไม่ได้: บัญชีไม่ active / ไม่ถูกผูกกับระบบ / session หมดอายุ
+ * session ปัจจุบัน **ก่อน** ตรวจสถานะบัญชี/อายุ session — `null` = ยังไม่ได้ login
+ * ใช้กับยามที่ต้องรู้ตัวผู้ใช้ก่อนปฏิเสธ (เช่น พอร์ทัลลง audit `access_denied` ของผู้ใช้ที่ถูกปิดใช้ — `97` §14)
+ * จุดอื่นให้ใช้ `getSessionUser()`/`requireSession()` เสมอ
  */
-export async function getSessionUser(now: Date = new Date()): Promise<SessionUser | null> {
+export async function getRawSessionUser(now: Date = new Date()): Promise<SessionUser | null> {
   const uid = await getAuthenticatedUid()
   if (uid === null) return null
 
@@ -103,6 +104,16 @@ export async function getSessionUser(now: Date = new Date()): Promise<SessionUse
   const sessionUser = cached ?? (await loadSessionUser(uid))
   if (!sessionUser) throw new AuthError('USER_NOT_PROVISIONED', `supabase_uid=${uid}`)
   if (!cached) setCachedSession(uid, sessionUser, now.getTime())
+  return sessionUser
+}
+
+/**
+ * session ปัจจุบัน — `null` = ยังไม่ได้ login (ให้ caller redirect ไปหน้า login)
+ * โยน `AuthError` เมื่อ login แล้วแต่ใช้งานต่อไม่ได้: บัญชีไม่ active / ไม่ถูกผูกกับระบบ / session หมดอายุ
+ */
+export async function getSessionUser(now: Date = new Date()): Promise<SessionUser | null> {
+  const sessionUser = await getRawSessionUser(now)
+  if (sessionUser === null) return null
 
   if (sessionUser.status !== 'active') throw new AuthError('ACCOUNT_INACTIVE', `user=${sessionUser.id}`)
   if (isSessionExpired(sessionUser.loginAt, now)) throw new AuthError('SESSION_EXPIRED', `user=${sessionUser.id}`)

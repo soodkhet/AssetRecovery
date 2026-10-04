@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
 import { toModuleErrorResponse, validationErrorResponse } from '@/lib/api/http'
-import { requireSession } from '@/lib/auth/session'
+import { requireInternalSession } from '@/lib/auth/internal-session'
 import { findReport } from '@/lib/reports/catalog'
 import { ReportError } from '@/lib/reports/errors'
 import { resolveReportRange } from '@/lib/reports/range'
@@ -21,7 +21,7 @@ type RouteContext = { params: Promise<{ reportId: string }> }
  */
 export const GET = async (request: NextRequest, context: RouteContext): Promise<Response> => {
   try {
-    const user = await requireSession()
+    const user = await requireInternalSession()
     const { reportId } = await context.params
     const report = findReport(reportId)
     if (report === null) throw new ReportError('REPORT_NOT_FOUND', { detail: `report=${reportId}` })

@@ -1,7 +1,7 @@
 import { Badge, RefText } from '@/components/ui/badge'
 import { Card, CardHeader, PageHeader } from '@/components/ui/card'
 import { InlineAlert } from '@/components/ui/states'
-import { requireSessionPage } from '@/lib/auth/page-guard'
+import { requireInternalSessionPage } from '@/lib/auth/page-guard'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { UNDER_DEVELOPMENT_TEXT, visibleMenus } from '@/lib/nav/menu-registry'
 
@@ -11,7 +11,7 @@ import { UNDER_DEVELOPMENT_TEXT, visibleMenus } from '@/lib/nav/menu-registry'
  * mockup `dashboard.html` ยังเป็น 🔶 DRAFT — ห้ามเดา business logic จากมัน (`06` §8)
  */
 export default async function DashboardPage() {
-  const user = await requireSessionPage()
+  const user = await requireInternalSessionPage()
   const menus = visibleMenus(user)
 
   return (

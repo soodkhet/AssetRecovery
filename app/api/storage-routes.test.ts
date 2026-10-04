@@ -52,7 +52,7 @@ function sessionUser(id: string, capabilities: Record<string, 'view' | 'manage'>
     status: 'active',
     roleId: 'role-1',
     roleName: 'ทดสอบ',
-    roleGroup: companyId === null ? 'system' : 'company',
+    roleGroup: companyId === null ? 'system' : 'finance_company',
     isSuperadmin: false,
     teamId: null,
     companyId,
@@ -234,11 +234,13 @@ describe('POST /api/storage/download-url', () => {
     expect(caseQueries.getCase).toHaveBeenCalledWith(ADMIN, CASE_ID)
   })
 
-  it('ผู้ใช้บริษัทอื่นเปิดเอกสารเคส = CASE_NOT_FOUND (ไม่ leak)', async () => {
+  // มติ PO 05/10/2569 (U6/O43 D2) — ผู้ใช้บริษัทใช้พอร์ทัลทางเดียว: route ภายในตอบ 403 ก่อนแตะข้อมูล
+  it('ผู้ใช้บริษัทไฟแนนซ์เปิดเอกสารเคสผ่าน route ภายใน = 403 (ใช้พอร์ทัลทางเดียว)', async () => {
     requireSessionMock.mockResolvedValue(COMPANY_USER)
     caseQueries.getCase.mockRejectedValue(new CaseError('CASE_NOT_FOUND'))
     const response = await postDownloadUrl(downloadReq(`cases/${CASE_ID}/national_id_doc/u-id.jpg`))
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(403)
+    expect(caseQueries.getCase).not.toHaveBeenCalled()
     expect(storageMock.createSignedDownloadUrl).not.toHaveBeenCalled()
   })
 
