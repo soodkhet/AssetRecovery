@@ -1,4 +1,5 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/renderer'
+import { Text } from '@/components/pdf/text'
 import { ensureThaiFont, THAI_FONT } from '@/components/pdf/thai-font'
 import type { HandoverDocModel } from '@/lib/warehouse/handover-doc'
 import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'

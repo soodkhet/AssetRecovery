@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from '@react-pdf/renderer'
+import { StyleSheet, View } from '@react-pdf/renderer'
+import { Text } from '@/components/pdf/text'
 import { THAI_FONT } from '@/components/pdf/thai-font'
 
 /**

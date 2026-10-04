@@ -1,4 +1,5 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/renderer'
+import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, SignatureRow, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { PaymentVoucherDoc } from '@/lib/payout/payout-doc'
