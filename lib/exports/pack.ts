@@ -482,7 +482,8 @@ export function checklistRows(rows: readonly ChecklistExportRow[]): string[][] {
       row.sourceRef ?? CSV_EMPTY,
       docStatus,
       closed ? CSV_EMPTY : row.level,
-      closed ? CSV_EMPTY : row.title,
+      // UAT BUG-123 — แถวที่ปิดแล้วยังต้องบอกหัวข้อ ไม่งั้นสำนักงานบัญชีไม่รู้ว่าเคยขาดอะไร
+      row.title,
       row.responsibleName ?? CSV_EMPTY,
     ]
   })
