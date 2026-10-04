@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~05:00 merge Portal-P7 `f15128f` (shell 6 แท็บตามสิทธิ์ · ภาพรวม KPI/กราฟ/AR · ข้อมูลบริษัท · ตรวจด้วยตา 3 role ผ่าน port 3100) · verify 296/3,801 → เริ่ม P8/P9/P10 คู่ขนาน (port 3101/3102/3103)
 - 05/10/2569 ~04:30 merge Portal-P5 + P4 (`6dee9c1`) → API portal ครบ 13 endpoint · ลบข้อยกเว้น `PENDING_PARALLEL_ROUTES` (contract↔route บังคับครบ) · verify 295 files / 3,775 tests · มติ O46 → เริ่ม UI P7
 - 05/10/2569 ~04:00 merge Portal-P6 `5e71af0` (API ล็อตส่งมอบ list/detail/download ใบเซ็นรับเฉพาะ confirmed · GET-only บังคับด้วย ESLint + AST test · contract↔route: ทิศ contract→route ยกเว้น 10 path ของ P4/P5 ใน `PENDING_PARALLEL_ROUTES` — **ลบรายการนี้เมื่อ P4/P5 merge ครบ**) · verify 291/3,713
 - 05/10/2569 ~03:35 merge Portal-P3 `3f7a08a` (guard `requirePortalAccess`/`requirePortalRow`/`withPortal` · page guard · login บริษัท suspended · ผู้ใช้บริษัท 403 ทุก API ภายใน + redirect `/portal` · ผู้ใช้ภายในเปิด `/portal` → `/dashboard`) · verify 289 files / 3,683 tests · **golden R10 ของผู้ใช้บริษัทเปลี่ยน (403 ทุก route ภายใน)** → เริ่ม P4/P5/P6 คู่ขนาน
