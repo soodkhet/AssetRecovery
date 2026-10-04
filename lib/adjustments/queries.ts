@@ -33,6 +33,7 @@ import {
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
 import { isRevenueError } from '@/lib/revenue/errors'
 import { assertRevenueAmountEditable } from '@/lib/revenue/queries'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
@@ -537,7 +538,7 @@ export async function approveAdjustment(
 
   const note = input.note.trim() === '' ? null : input.note.trim()
 
-  await prisma.$transaction(async (tx) => {
+  const completed = await prisma.$transaction(async (tx) => {
     const previous = (await approverRolesByAdjustment(tx, user.organizationId, [adjustmentId])).get(adjustmentId) ?? []
     const stampedRoles = approverRolesOf(user, periodStatus)
     const roles = [...previous, ...stampedRoles.filter((role) => !previous.includes(role))]
@@ -620,7 +621,11 @@ export async function approveAdjustment(
         tx,
       )
     }
+    return complete
   })
+
+  // BUG-128 — อนุมัติครบ = ตัวเลขของงวดเดิมเปลี่ยน ⇒ ทิ้งแคชรายงานขององค์กร (หลัง commit เท่านั้น)
+  if (completed) invalidateOrganizationReportCache(user.organizationId)
 
   return getAdjustment(user, adjustmentId)
 }
