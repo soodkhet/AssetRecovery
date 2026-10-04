@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { satangSchema } from '@/lib/api/validation'
-import { DEBTOR_NATIONALITIES, DOCUMENT_SLOTS } from '@/lib/cases/case'
+import { DEBTOR_NATIONALITIES, DOCUMENT_MODES, DOCUMENT_SLOTS } from '@/lib/cases/case'
 import { CASE_STATUS_ACTIONS, CASE_STATUSES } from '@/lib/cases/state-machine'
 
 /**
@@ -73,6 +73,14 @@ export const caseCreateSchema = z.object({
   assetImeiSerial: optionalText(100),
   /** มูลหนี้คงเหลือ — **สตางค์** (Rule 01) FE แปลงจากบาทด้วย `parseBahtInput()` ก่อนส่ง */
   outstandingDebtSatang: satangSchema('มูลค่าหนี้คงเหลือ').nullable().optional(),
+
+  /**
+   * โหมดเอกสารแนบที่เลือกบนฟอร์ม — จำไว้ที่ `cases.document_mode` (มติ PO 04/10/2569 v3.4)
+   * ไม่ส่ง = คงค่าเดิม (สร้างใหม่ = `separate`) · ขัดกับไฟล์ที่อัปโหลดแล้ว = `CASE_DOCUMENT_MODE_CONFLICT`
+   */
+  documentMode: z.enum(DOCUMENT_MODES).optional(),
+  /** ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" — โหมดแยกประเภทไม่บังคับรูปสินค้าก่อนส่งตรวจ (v3.4) */
+  productPhotoInContract: z.boolean().optional(),
 })
 
 export type CaseCreateInput = z.infer<typeof caseCreateSchema>
@@ -111,6 +119,13 @@ export type CaseDocumentUploadInput = z.infer<typeof caseDocumentUploadSchema>
  * ต้องมีค่าอยู่ที่ `assertStatusChange()` (`lib/cases/state-machine.ts`) ที่เดียว ไม่ซ้ำที่ schema
  * `teamId` = ทีมที่ผู้พิจารณายืนยันตอน `accept` (ต่างจากที่ระบบเสนอ ⇒ ต้องมี `teamChangeReason`)
  */
+/** ลบเอกสารที่แนบผิด (มติ PO 04/10/2569 v3.4) — เหตุผลไม่บังคับ (ไม่กรอก = เหตุผลมาตรฐานลง audit) */
+export const caseDocumentDeleteSchema = z.object({
+  reason: optionalText(500),
+})
+
+export type CaseDocumentDeleteInput = z.infer<typeof caseDocumentDeleteSchema>
+
 export const caseStatusChangeSchema = z.object({
   action: z.enum(CASE_STATUS_ACTIONS),
   reason: optionalText(1000),

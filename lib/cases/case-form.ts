@@ -1,6 +1,11 @@
 import type { z } from 'zod'
 import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
-import { DEBTOR_NATIONALITIES, identityDocumentKind, type DebtorNationalityCode } from '@/lib/cases/case'
+import {
+  DEBTOR_NATIONALITIES,
+  identityDocumentKind,
+  type DebtorNationalityCode,
+  type DocumentMode,
+} from '@/lib/cases/case'
 import type { CaseDetailDto } from '@/lib/cases/types'
 import { parseBahtInput, toBahtInput } from '@/lib/format/money'
 
@@ -39,6 +44,10 @@ export interface CaseFormState {
   contacts: CaseContactForm[]
   /** หมายเหตุที่จะลง `case_edit_history` — ใช้เฉพาะโหมดแก้ไข (`38` §6.4) */
   editNote: string
+  /** โหมดเอกสารแนบ — จำไว้ที่เคส (มติ PO 04/10/2569 v3.4) */
+  documentMode: DocumentMode
+  /** ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" — โหมดแยกประเภทไม่บังคับรูปสินค้า */
+  productPhotoInContract: boolean
 }
 
 /** แถวผู้ติดต่ออื่นบนฟอร์ม — `key` ใช้เป็น React key เท่านั้น ไม่ส่งขึ้น API */
@@ -99,6 +108,8 @@ export const EMPTY_CASE_FORM: CaseFormState = {
   outstandingDebtBaht: '',
   contacts: [],
   editNote: '',
+  documentMode: 'separate',
+  productPhotoInContract: false,
 }
 
 /** เคสเดิม → ค่าเริ่มต้นของฟอร์ม (`38` §8 `edit_case` = pre-fill ทุก field รวม `case_ref`) */
@@ -131,6 +142,8 @@ export function caseFormFromDetail(detail: CaseDetailDto | null): CaseFormState 
       contactPhone: contact.contactPhone ?? '',
     })),
     editNote: '',
+    documentMode: detail.documentMode,
+    productPhotoInContract: detail.productPhotoInContract,
   }
 }
 
@@ -171,6 +184,8 @@ export function buildCasePayload(
     assetBrandModel: form.assetBrandModel,
     assetImeiSerial: form.assetImeiSerial,
     outstandingDebtSatang: Number.isNaN(debt) ? form.outstandingDebtBaht : debt,
+    documentMode: form.documentMode,
+    productPhotoInContract: form.productPhotoInContract,
     ...(mode === 'edit' ? { editNote: form.editNote } : {}),
   }
 }

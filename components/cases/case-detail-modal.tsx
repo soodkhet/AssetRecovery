@@ -494,12 +494,15 @@ function DocumentSection({
   const photos = detail.documents.filter((document) => document.documentType === 'product_photo')
   const isBundle = documentModeOf(countDocuments(detail.documents)) === 'bundle'
   const slots = isBundle ? BUNDLE_VIEW_SLOTS : VIEW_SLOTS
+  // ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" ตอนรับเคส (มติ PO 04/10/2569 v3.4) — มีผลเฉพาะโหมดแยกประเภท
+  const photoInContract = !isBundle && detail.productPhotoInContract
 
   return (
     <section>
-      <h3 className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">
+      <h3 className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">
         เอกสารแนบ
         {isBundle && <Badge className="bg-sky-50 text-sky-700">เอกสารชุด</Badge>}
+        {photoInContract && <Badge className="bg-sky-50 text-sky-700">รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว</Badge>}
       </h3>
       {isBundle && bundleConfirm !== undefined && (
         <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">

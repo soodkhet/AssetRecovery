@@ -8,6 +8,7 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  * code ที่เติมเข้า `38` §12 พร้อมงาน Phase 2.2: `CASE_NOT_FOUND`, `CASE_PRODUCT_PHOTO_LIMIT`
  * code ที่เติมเข้า `38` §12 พร้อมงาน Phase 2.3: `CASE_INVALID_STATUS_TRANSITION`, `CASE_STATUS_REASON_REQUIRED`
  * code ที่เติมเข้า `38` §12 ตามมติ PO 04/10/2569 (เอกสารชุดเดียว): `CASE_DOCUMENT_MODE_CONFLICT`, `CASE_BUNDLE_CONFIRMATION_REQUIRED`
+ * code ที่เติมเข้า `38` §12 ตามมติ PO 04/10/2569 (v3.4 ลบเอกสาร): `CASE_DOCUMENT_NOT_FOUND`, `CASE_DOCUMENT_DELETE_NOT_ALLOWED`
  *
  * **pure ล้วน** — ห้าม import อะไรที่แตะ Prisma (ฟอร์มฝั่ง client เรียกตัว assert ชุดเดียวกัน)
  */
@@ -19,6 +20,8 @@ export const CASE_ERROR_CODES = [
   'CASE_PRODUCT_PHOTO_LIMIT',
   'CASE_DOCUMENT_MODE_CONFLICT',
   'CASE_BUNDLE_CONFIRMATION_REQUIRED',
+  'CASE_DOCUMENT_NOT_FOUND',
+  'CASE_DOCUMENT_DELETE_NOT_ALLOWED',
   'CASE_INVALID_NATIONAL_ID',
   'CASE_INVALID_PHONE_FORMAT',
   'CASE_LOCKED_AFTER_APPROVAL',
@@ -46,6 +49,8 @@ const HTTP_STATUS: Record<CaseErrorCode, number> = {
   CASE_PRODUCT_PHOTO_LIMIT: 400,
   CASE_DOCUMENT_MODE_CONFLICT: 400,
   CASE_BUNDLE_CONFIRMATION_REQUIRED: 400,
+  CASE_DOCUMENT_NOT_FOUND: 404,
+  CASE_DOCUMENT_DELETE_NOT_ALLOWED: 400,
   CASE_INVALID_NATIONAL_ID: 400,
   CASE_INVALID_PHONE_FORMAT: 400,
   CASE_LOCKED_AFTER_APPROVAL: 400,
@@ -75,7 +80,7 @@ const MESSAGES: Record<CaseErrorCode, ErrorMessage> = {
   CASE_DOCUMENT_INCOMPLETE: {
     title: 'เอกสารแนบยังไม่ครบ',
     message:
-      'ต้องมีสัญญา, บัตรประชาชน/passport และรูปสินค้าอย่างน้อย 1 รูป (หรือแนบเอกสารชุดเดียวแบบสแกนรวมเล่ม) ก่อนส่งให้พิจารณา',
+      'ต้องมีสัญญา, บัตรประชาชน/passport และรูปสินค้าอย่างน้อย 1 รูป (หรือติ๊กว่ารูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว · หรือแนบเอกสารชุดเดียวแบบสแกนรวมเล่ม) ก่อนส่งให้พิจารณา',
   },
   CASE_PRODUCT_PHOTO_LIMIT: {
     title: 'รูปสินค้าเกินจำนวนที่รับได้',
@@ -84,11 +89,19 @@ const MESSAGES: Record<CaseErrorCode, ErrorMessage> = {
   CASE_DOCUMENT_MODE_CONFLICT: {
     title: 'แนบเอกสารปนสองแบบไม่ได้',
     message:
-      'เคสนี้แนบเอกสารอีกแบบไว้แล้ว — เอกสารชุดเดียว (สแกนรวมเล่ม) ใช้ร่วมกับไฟล์สัญญา/บัตรประชาชนแบบแยกประเภทไม่ได้',
+      'เคสนี้แนบเอกสารอีกแบบไว้แล้ว — เอกสารชุดเดียว (สแกนรวมเล่ม) ใช้ร่วมกับไฟล์สัญญา/บัตรประชาชนแบบแยกประเภทไม่ได้ (ลบไฟล์แบบเดิมออกให้หมดก่อนจึงสลับได้)',
   },
   CASE_BUNDLE_CONFIRMATION_REQUIRED: {
     title: 'ต้องยืนยันเอกสารชุดก่อนรับเคส',
     message: 'เคสนี้ใช้เอกสารชุดเดียว — ตรวจไฟล์แล้วติ๊กยืนยันว่าในชุดมีสัญญาและบัตรประชาชน/Passport ครบ ก่อนรับเคส',
+  },
+  CASE_DOCUMENT_NOT_FOUND: {
+    title: 'ไม่พบเอกสาร',
+    message: 'ไม่พบเอกสารที่ระบุในเคสนี้ หรือเอกสารถูกลบไปแล้ว — รีเฟรชหน้าแล้วลองใหม่',
+  },
+  CASE_DOCUMENT_DELETE_NOT_ALLOWED: {
+    title: 'ลบเอกสารไม่ได้แล้ว',
+    message: 'ลบเอกสารได้เฉพาะเคสสถานะ ร่าง / ขอข้อมูลเพิ่ม (ก่อนส่งตรวจ) เท่านั้น — เคสที่ส่งตรวจหรืออนุมัติแล้วต้องเก็บเอกสารไว้ตามเดิม',
   },
   CASE_INVALID_NATIONAL_ID: {
     title: 'เลขบัตรประชาชนไม่ถูกต้อง',

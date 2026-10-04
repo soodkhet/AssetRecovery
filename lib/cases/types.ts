@@ -1,4 +1,4 @@
-import type { DocumentSlot } from '@/lib/cases/case'
+import type { DocumentMode, DocumentSlot } from '@/lib/cases/case'
 import type { TeamCostSnapshot } from '@/lib/cases/team-cost'
 import type { TeamSuggestionResult } from '@/lib/cases/team-suggestion'
 
@@ -244,6 +244,10 @@ export interface CaseDetailDto extends CaseListItemDto {
   updatedAt: string
   contacts: CaseContactDto[]
   documents: CaseDocumentDto[]
+  /** โหมดเอกสารที่มีผลจริง (ไฟล์ชนะคอลัมน์ — มี `bundle_doc` = `bundle`) · มติ PO 04/10/2569 v3.4 */
+  documentMode: DocumentMode
+  /** ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" (มีผลเฉพาะโหมดแยกประเภท) */
+  productPhotoInContract: boolean
   editHistory: CaseEditHistoryDto[]
   recycleHistory: CaseRecycleHistoryDto[]
   readiness: CaseReadinessDto

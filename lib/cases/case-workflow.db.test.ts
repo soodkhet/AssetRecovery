@@ -136,7 +136,7 @@ afterAll(async () => {
 /** เคสที่ข้อมูล required ครบตาม `38` §6.1–6.2 (เอกสารเติมทีหลังตาม `withDocuments`) */
 async function seedCase(
   caseRef: string,
-  options: { withDocuments: boolean | 'bundle'; status?: string },
+  options: { withDocuments: boolean | 'bundle' | 'no_photo'; status?: string },
 ): Promise<string> {
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO cases (
@@ -157,7 +157,13 @@ async function seedCase(
 
   if (options.withDocuments !== false) {
     // `bundle` = เอกสารชุดเดียว (สแกนรวมเล่ม — มติ PO 04/10/2569) ไม่มีสัญญา/บัตร/รูปสินค้าแยก
-    const slots = options.withDocuments === 'bundle' ? ['bundle_doc'] : ['contract_doc', 'national_id_doc', 'product_photo']
+    // `no_photo` = สัญญา + บัตรประชาชน ไม่มีรูปสินค้า (ทดสอบติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" — v3.4)
+    const slots =
+      options.withDocuments === 'bundle'
+        ? ['bundle_doc']
+        : options.withDocuments === 'no_photo'
+          ? ['contract_doc', 'national_id_doc']
+          : ['contract_doc', 'national_id_doc', 'product_photo']
     for (const [index, slot] of slots.entries()) {
       await db().$executeRawUnsafe(`
         INSERT INTO case_documents
@@ -308,6 +314,126 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     await expect(
       addCaseDocument(actor, separateCase, upload(separateCase, 'bundle_doc'), { actor, meta }),
     ).rejects.toMatchObject({ code: 'CASE_DOCUMENT_MODE_CONFLICT' })
+  })
+
+  // ── v3.4 มติ PO 04/10/2569 — ติ๊กรูปสินค้า / จำโหมด / ลบเอกสาร ─────────────────
+
+  it('ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว": ไม่ติ๊ก = ส่งตรวจไม่ผ่าน · ติ๊ก = ผ่าน + จำค่า + audit', async () => {
+    const { updateCase, getCase } = await import('@/lib/cases/queries')
+    const caseId = await seedCase('SF-2026-2350', { withDocuments: 'no_photo' })
+    await expect(
+      service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta }),
+    ).rejects.toMatchObject({ code: 'CASE_DOCUMENT_INCOMPLETE', context: { missing: ['product_photo'] } })
+
+    await updateCase(actor, caseId, { productPhotoInContract: true }, { actor, meta })
+    const reopened = await getCase(actor, caseId)
+    expect(reopened.productPhotoInContract).toBe(true)
+    expect(reopened.readiness.missingDocuments).toEqual([])
+    const updateAudit = await db().$queryRawUnsafe<Array<{ before_data: Record<string, unknown>; after_data: Record<string, unknown> }>>(
+      `SELECT before_data, after_data FROM audit_logs WHERE target_id = '${caseId}' AND action = 'update'`,
+    )
+    expect(updateAudit[0]?.before_data).toMatchObject({ productPhotoInContract: false })
+    expect(updateAudit[0]?.after_data).toMatchObject({ productPhotoInContract: true })
+
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+    expect((await caseRow(caseId))?.status).toBe('approved')
+    const approve = await db().$queryRawUnsafe<Array<{ after_data: Record<string, unknown> | null }>>(
+      `SELECT after_data FROM audit_logs WHERE target_id = '${caseId}' AND action = 'approve'`,
+    )
+    expect(approve[0]?.after_data).toMatchObject({ productPhotoInContract: true })
+  })
+
+  it('จำโหมดเอกสาร: สร้างเคสร่างโหมดชุด → เปิดใหม่ได้โหมดชุด + ขาด "เอกสารชุด" · CHECK ปัดค่านอกรายการ', async () => {
+    const { createCase, getCase } = await import('@/lib/cases/queries')
+    const { caseCreateSchema } = await import('@/lib/cases/schemas')
+    const created = await createCase(
+      caseCreateSchema.parse({ caseRef: 'SF-2026-2351', financeCompanyId: COMPANY_ID, documentMode: 'bundle' }),
+      { actor, meta },
+    )
+    const reopened = await getCase(actor, created.id)
+    expect(reopened.documentMode).toBe('bundle')
+    expect(reopened.readiness.missingDocuments).toEqual(['bundle_doc'])
+
+    await expect(
+      db().$executeRawUnsafe(`UPDATE cases SET document_mode = 'mixed' WHERE id = '${created.id}'`),
+    ).rejects.toThrow(/chk_cases_document_mode/)
+  })
+
+  it('ลบเอกสาร: soft-delete (แถว + file_url ยังอยู่ ไม่แตะ Storage) + audit before/after + เหตุผลมาตรฐาน', async () => {
+    const { deleteCaseDocument, CASE_DOCUMENT_DELETE_DEFAULT_REASON } = await import('@/lib/cases/queries')
+    const caseId = await seedCase('SF-2026-2352', { withDocuments: true })
+    const [target] = await db().$queryRawUnsafe<Array<{ id: string; file_url: string }>>(
+      `SELECT id, file_url FROM case_documents WHERE case_id = '${caseId}' AND document_type = 'contract_doc'`,
+    )
+    if (target === undefined) throw new Error('ไม่พบเอกสารที่ seed')
+
+    const detail = await deleteCaseDocument(actor, caseId, target.id, { actor, meta })
+    expect(detail.documents.map((document) => document.documentType)).not.toContain('contract_doc')
+    expect(detail.readiness.missingDocuments).toEqual(['contract_doc'])
+
+    const [row] = await db().$queryRawUnsafe<Array<{ deleted_at: Date | null; file_url: string }>>(
+      `SELECT deleted_at, file_url FROM case_documents WHERE id = '${target.id}'`,
+    )
+    expect(row?.deleted_at).not.toBeNull()
+    expect(row?.file_url).toBe(target.file_url)
+
+    const [audit] = await db().$queryRawUnsafe<
+      Array<{ before_data: Record<string, unknown>; after_data: Record<string, unknown>; reason: string; target_type: string }>
+    >(`SELECT before_data, after_data, reason, target_type FROM audit_logs WHERE target_id = '${target.id}' AND action = 'delete'`)
+    expect(audit?.target_type).toBe('case_documents')
+    expect(audit?.reason).toBe(CASE_DOCUMENT_DELETE_DEFAULT_REASON)
+    expect(audit?.before_data).toMatchObject({ caseId, documentType: 'contract_doc', deletedAt: null })
+    expect(audit?.after_data).toMatchObject({ caseId, documentType: 'contract_doc', storageFileKept: true })
+    expect(audit?.after_data.deletedAt).toEqual(expect.any(String))
+
+    // ลบซ้ำ = ไม่พบเอกสาร
+    await expect(deleteCaseDocument(actor, caseId, target.id, { actor, meta })).rejects.toMatchObject({
+      code: 'CASE_DOCUMENT_NOT_FOUND',
+    })
+  })
+
+  it('ลบเอกสารได้เฉพาะ ร่าง/ขอข้อมูลเพิ่ม — ส่งตรวจ/อนุมัติแล้ว CASE_DOCUMENT_DELETE_NOT_ALLOWED · เอกสารเคสอื่น = ไม่พบ', async () => {
+    const { deleteCaseDocument } = await import('@/lib/cases/queries')
+    const firstDoc = async (caseId: string) => {
+      const [document] = await db().$queryRawUnsafe<Array<{ id: string }>>(
+        `SELECT id FROM case_documents WHERE case_id = '${caseId}' ORDER BY document_type LIMIT 1`,
+      )
+      if (document === undefined) throw new Error('ไม่พบเอกสารที่ seed')
+      return document.id
+    }
+    for (const status of ['pending_review', 'approved']) {
+      const caseId = await seedCase(`SF-2026-2353-${status}`, { withDocuments: true, status })
+      await expect(
+        deleteCaseDocument(actor, caseId, await firstDoc(caseId), { actor, meta, reason: 'แนบผิด' }),
+      ).rejects.toMatchObject({ code: 'CASE_DOCUMENT_DELETE_NOT_ALLOWED' })
+    }
+
+    const needInfo = await seedCase('SF-2026-2354', { withDocuments: true, status: 'need_info' })
+    const deleted = await deleteCaseDocument(actor, needInfo, await firstDoc(needInfo), { actor, meta, reason: 'ไฟล์ไม่ชัด' })
+    expect(deleted.documents).toHaveLength(2)
+
+    const other = await seedCase('SF-2026-2355', { withDocuments: true })
+    await expect(
+      deleteCaseDocument(actor, needInfo, await firstDoc(other), { actor, meta }),
+    ).rejects.toMatchObject({ code: 'CASE_DOCUMENT_NOT_FOUND' })
+  })
+
+  it('ลบสัญญา/บัตรแยกประเภทออกหมดแล้ว สลับเป็นโหมดชุดได้ (ก่อนลบ = CASE_DOCUMENT_MODE_CONFLICT)', async () => {
+    const { deleteCaseDocument, updateCase } = await import('@/lib/cases/queries')
+    const caseId = await seedCase('SF-2026-2356', { withDocuments: true })
+    await expect(updateCase(actor, caseId, { documentMode: 'bundle' }, { actor, meta })).rejects.toMatchObject({
+      code: 'CASE_DOCUMENT_MODE_CONFLICT',
+    })
+
+    const separate = await db().$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM case_documents WHERE case_id = '${caseId}' AND document_type IN ('contract_doc', 'national_id_doc')`,
+    )
+    for (const document of separate) await deleteCaseDocument(actor, caseId, document.id, { actor, meta })
+
+    const switched = await updateCase(actor, caseId, { documentMode: 'bundle' }, { actor, meta })
+    expect(switched.documentMode).toBe('bundle')
+    expect(switched.readiness.missingDocuments).toEqual(['bundle_doc'])
   })
 
   it('เคสแยกประเภทเดิมรับเคสได้โดยไม่ต้องยืนยันเอกสารชุด และ audit ไม่มีฟิลด์ชุด', async () => {
