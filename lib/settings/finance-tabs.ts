@@ -40,6 +40,8 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'bank', label: 'บัญชีธนาคารบริษัท', section: '§6.3', available: true },
   { id: 'payee', label: 'ผู้รับเงิน (Payee)', section: 'ไฟล์ 18', available: true, capabilities: ['manage_payee_profile'] },
   { id: 'tax', label: 'กติกาภาษี (Tax Profile)', section: '§6.4', available: true },
+  // มติ PO 05/10/2569 (UAT U3/U4/U5/U8) — ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (effective-dated) ถัดจาก Tax Profile
+  { id: 'whtpolicy', label: 'ค่าตั้งภาษีหัก ณ ที่จ่าย', section: '§6.4.1', available: true },
   { id: 'vat', label: 'อัตรา VAT', section: '§6.5', available: true },
   { id: 'cost', label: 'ศูนย์ต้นทุน', section: '§6.6', available: true },
   { id: 'docs', label: 'รูปแบบเอกสารภายใน', section: '§6.7', available: true },

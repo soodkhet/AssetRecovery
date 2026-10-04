@@ -70,7 +70,7 @@ export function MarkWhtFiledModal({
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-center">
             <div className="text-xs font-bold text-red-500">ภ.ง.ด.3</div>
             <div className="mt-1 text-xl font-extrabold text-red-700">{fmtSatangSymbol(summary.pnd3Satang)}</div>
@@ -80,6 +80,11 @@ export function MarkWhtFiledModal({
             <div className="text-xs font-bold text-orange-500">ภ.ง.ด.53</div>
             <div className="mt-1 text-xl font-extrabold text-orange-700">{fmtSatangSymbol(summary.pnd53Satang)}</div>
             <div className="mt-1 text-[10px] text-slate-400">นิติบุคคล</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+            <div className="text-xs font-bold text-slate-500">ภ.ง.ด.1</div>
+            <div className="mt-1 text-xl font-extrabold text-slate-700">{fmtSatangSymbol(summary.pnd1Satang)}</div>
+            <div className="mt-1 text-[10px] text-slate-400">เงินได้ 40(2)</div>
           </div>
         </div>
 

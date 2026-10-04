@@ -14,8 +14,10 @@ const SUPER = { isSuperadmin: true, capabilities: {} }
  */
 describe('FINANCE_SETTINGS_TABS', () => {
   it('มีครบ 14 แท็บของไฟล์ 13 (13 + §6.14 SLA) + แท็บผู้รับเงินของไฟล์ 18 + นโยบายการมอบหมายงานของไฟล์ 40', () => {
-    expect(FINANCE_SETTINGS_TABS).toHaveLength(16)
-    expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(14)
+    // + แท็บค่าตั้งภาษีหัก ณ ที่จ่าย §6.4.1 (มติ PO 05/10/2569 UAT U8)
+    expect(FINANCE_SETTINGS_TABS).toHaveLength(17)
+    expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(15)
+    expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'whtpolicy')?.section).toBe('§6.4.1')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'payee')?.section).toBe('ไฟล์ 18')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'sla')?.section).toBe('§6.14')
     // UAT BUG-002 · มติ PO 03/10/2569 — วางถัดจากแท็บ SLA (ตาราง `assignment_policy_settings` เดียวกัน)
@@ -41,6 +43,7 @@ describe('FINANCE_SETTINGS_TABS', () => {
       'bank',
       'payee',
       'tax',
+      'whtpolicy',
       'vat',
       'cost',
       'docs',

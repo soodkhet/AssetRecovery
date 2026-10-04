@@ -75,6 +75,8 @@ interface FormState {
   accountName: string
   accountNumber: string
   idDocumentUrl: string
+  /** อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7) — ว่าง = ยังไม่กรอก */
+  wht402Pct: string
   reason: string
 }
 
@@ -87,6 +89,7 @@ const EMPTY_FORM: FormState = {
   accountName: '',
   accountNumber: '',
   idDocumentUrl: '',
+  wht402Pct: '',
   reason: '',
 }
 
@@ -100,6 +103,7 @@ function toForm(payee: PayeeDto): FormState {
     accountName: payee.accountName ?? '',
     accountNumber: payee.accountNumber ?? '',
     idDocumentUrl: payee.idDocumentUrl ?? '',
+    wht402Pct: payee.wht402Pct === null ? '' : String(payee.wht402Pct),
     reason: '',
   }
 }
@@ -193,6 +197,7 @@ export function PayeeTab() {
       accountName: form.accountName,
       accountNumber: form.accountNumber,
       idDocumentUrl: form.idDocumentUrl,
+      wht402Pct: form.wht402Pct.trim() === '' ? null : Number(form.wht402Pct),
       reason: form.reason.trim(),
     }
     const parsed =
@@ -493,6 +498,22 @@ export function PayeeTab() {
                 </option>
               ))}
             </Select>
+          </Field>
+
+          <Field
+            id="payee-wht-40-2"
+            label="อัตราหัก 40(2) (%)"
+            error={errors.wht402Pct}
+            hint="ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) เท่านั้น — กรอกอัตราที่สำนักงานบัญชีคำนวณให้ (0.00 ได้) · เว้นว่าง = ยังไม่กรอก"
+          >
+            <Input
+              id="payee-wht-40-2"
+              numeric
+              inputMode="decimal"
+              value={form.wht402Pct}
+              onChange={(event) => set('wht402Pct', event.target.value)}
+              placeholder="เช่น 2.50"
+            />
           </Field>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
