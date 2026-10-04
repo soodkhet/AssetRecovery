@@ -1,0 +1,56 @@
+{
+ "status": 200,
+ "body": {
+  "success": true,
+  "data": {
+   "reports": [
+    {
+     "code": "F1",
+     "id": "gross-profit",
+     "title": "กำไรขั้นต้น",
+     "category": "F",
+     "categoryLabel": "รายงานการเงิน",
+     "cacheMode": "daily",
+     "available": true
+    },
+    {
+     "code": "F2",
+     "id": "revenue-summary",
+     "title": "สรุปรายได้",
+     "category": "F",
+     "categoryLabel": "รายงานการเงิน",
+     "cacheMode": "daily",
+     "available": true
+    },
+    {
+     "code": "F3",
+     "id": "ar-aging",
+     "title": "อายุหนี้ลูกค้า",
+     "category": "F",
+     "categoryLabel": "รายงานการเงิน",
+     "cacheMode": "daily",
+     "available": true
+    },
+    {
+     "code": "F4",
+     "id": "compensation",
+     "title": "สรุปค่าตอบแทน",
+     "category": "F",
+     "categoryLabel": "รายงานการเงิน",
+     "cacheMode": "realtime",
+     "available": true
+    },
+    {
+     "code": "F5",
+     "id": "advance-overdue",
+     "title": "เงินทดรองค้างเคลียร์",
+     "category": "F",
+     "categoryLabel": "รายงานการเงิน",
+     "cacheMode": "realtime",
+     "available": true
+    }
+   ]
+  },
+  "error": null
+ }
+}

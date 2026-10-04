@@ -137,6 +137,13 @@
 | BUG-129 | R8-v3 R8.24 | S4 | spec-gap | `08_Document_Checklist.xlsx` นับ exception ที่ authorized เป็น "ครบถ้วน" และตัดหัวข้อทิ้ง → สำนักงานบัญชีไม่รู้ว่ายังขาดต้นฉบับ 50 ทวิ จากลูกค้า | needs-decision · ข้อเสนอ orchestrator: แสดงเป็น "อนุญาตให้ปิดงวด — ยังรอเอกสาร" พร้อมหัวข้อ |
 | BUG-130 | R8-v3 | S5 | code | การเงินเห็นปุ่มอนุมัติ/ปฏิเสธ Adjustment ในงวดล็อก แล้วได้ 403 (ควรซ่อน/disable ตามสิทธิ์) | open |
 | BUG-131 | R8-v3 | S5 | code | ตัวกรองหน้า Audit Log มีชื่อตารางดิบ (`cash_receipts`, `jobs` ฯลฯ) | open |
+| BUG-132 | R9-v3 | S4 | code | รายงานปัดคอลัมน์ตัวเลขเป็นจำนวนเต็ม (`fmtCount` ใน `lib/reports/payload.ts`) → TAT 0.4 วันแสดง "0" ใน O2/E3 ทั้งบนจอและ PDF | open |
+| BUG-133 | R9-v3 | S4 | code | เปิด `/reports/{slug}` โดยไม่มีสิทธิ์ → HTTP 500 หน้า error ทั่วไป (`assertReportAccess` throw ระหว่าง render) · ไม่ leak ตัวเลข · ควร redirect/403 | open |
+| BUG-134 | R9-v3 | S5 | code | ไฟล์ Excel รายงานไม่มี number format (margin 44.2148…, เงินไม่มี 2 ทศนิยม, N/A เป็นช่องว่าง) และไม่มี KPI/หมายเหตุ (PDF มี) | open |
+| BUG-135 | R9-v3 | S5 | code | หมายเหตุ A1 แสดงรหัส "(FILING_OVERDUE_WARNING)" ให้ผู้ใช้เห็น | open |
+| BUG-136 | R9-v3 | S5 | code | console error React duplicate key "—" ใน F1 หลังสลับมิติ/drill-down | open |
+| BUG-137 | R9-v3 | S5 | code | ข้อความ error ชวนสับสน: ใส่แค่วันเริ่ม → "วันเริ่มอยู่หลังวันสิ้นสุด" · `refresh=1` → `REQUIRED_MISSING` (ควรรับ 1/true หรือบอกชัด) | open |
+| BUG-138 | R9-v3 | S5 | code | ป้าย "ยังไม่ระบุทีม" vs "ไม่ระบุทีม" ไม่ตรงกัน · กราฟ E1 "ย้อนหลัง 12 เดือน" มี พ.ย.–ธ.ค. ในอนาคต · ฿ เกินใน hint E1 | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
@@ -145,6 +152,8 @@
 - R0: `pnpm add` ระหว่าง dev server รัน → Turbopack ถือ module graph เก่า ทุก API ตอบ 500 (`next/headers … instantiated because it was required from…`) — แก้ด้วย `~/bin/dev restart asset` · **กฎ: ติดตั้งแพ็กเกจแล้วต้อง restart dev server เสมอ**
 
 ## ข้อสังเกตที่ต้องตรวจต่อ (ยังไม่ใช่บั๊ก)
+- R9 v3: เงินทุกตัวตรง golden หลัง Adjustment · permission sweep 15 persona × 17 รายงานตรง matrix (การเงิน E1 = 403 ✓) · BUG-115/120 ยืนยันแก้แล้ว · **ค้างตรวจซ้ำตามวันที่: F5 ตั้งแต่ 05/10/2569 (คาด ADV3 1 แถว 200000) · O4 ตั้งแต่ 06/10/2569 14:02 (คาด 2 แถว 849000)** · F4 golden ต่อคนต้องแก้ใน step sheet (no_success_fee อยู่คอลัมน์คอมมิชชัน = O33) · Client Portal ยังไม่มี (O34)
+- fixer R (BUG-128): cache รายงานอยู่ใน memory ต่อ process → บน Vercel หลาย instance ล้างได้แค่ instance ที่รับคำขอ — needs-decision ก่อน production (ย้าย cache ไป Redis/DB หรือ TTL สั้น)
 - R8 v3: probe หลัง lock 13 จุด → `PERIOD_LOCKED_DIRECT_EDIT` ทุกจุด ไม่มี mutation · golden หลัง Adjustment ตรงทุกตัว · R8-N8 หักล้าง (ป้าย "วางบิล" ไม่มีเลขสเปคแล้ว) · R8-N4 ยืนยัน: ไม่มีแจ้งเตือนผู้อนุมัติ Adjustment (= BUG-106) · step sheet คาด expense ≥ 19 แต่จริง 17 (ชีตคลาด)
 - R7c v3 ส่วนที่ 2: ยืนยัน BUG-116/117/120 แก้แล้ว · PDF ที่ออกก่อนแก้ BUG-120 (INV-0001/0002, WHT-2569-001…016 รุ่นก่อน) ข้อความยังขาด — ดาวน์โหลดใหม่ได้ข้อความครบ
 - R7ab v3: เช็คซ้ำ BUG-095/096/099/104/107/108 ✅ (105/110 ข้ามตามมติ O13) · W1 ปิดได้ (ภ.ง.ด.3 ไม่นับแถวเงินทดรอง) · F5 วันนี้ 0 แถว = ข้อจำกัดที่รู้ (O15)

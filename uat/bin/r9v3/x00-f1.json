@@ -1,0 +1,146 @@
+{
+ "status": 200,
+ "body": {
+  "success": true,
+  "data": {
+   "report": {
+    "code": "F1",
+    "id": "gross-profit",
+    "title": "กำไรขั้นต้น",
+    "category": "F"
+   },
+   "range": {
+    "preset": "this_month",
+    "label": "ตุลาคม 2569",
+    "from": "2026-10-01",
+    "to": "2026-10-31"
+   },
+   "columns": [
+    {
+     "key": "dimension",
+     "header": "บริษัทไฟแนนซ์",
+     "type": "text",
+     "width": 28
+    },
+    {
+     "key": "revenueSatang",
+     "header": "รายได้",
+     "type": "money"
+    },
+    {
+     "key": "directCostSatang",
+     "header": "ต้นทุนตรง",
+     "type": "money"
+    },
+    {
+     "key": "grossProfitSatang",
+     "header": "กำไรขั้นต้น",
+     "type": "money"
+    },
+    {
+     "key": "marginPct",
+     "header": "Margin %",
+     "type": "percent"
+    },
+    {
+     "key": "revenueCaseCount",
+     "header": "เคสที่มีรายได้",
+     "type": "number"
+    },
+    {
+     "key": "costCaseCount",
+     "header": "เคสที่มีต้นทุน",
+     "type": "number"
+    }
+   ],
+   "rows": [
+    {
+     "__key": "e27e79bf-2344-4f52-8979-c58be09a9de6",
+     "dimension": "บริษัท ยูเอที ลิสซิ่ง จำกัด",
+     "revenueSatang": 363000,
+     "directCostSatang": 202500,
+     "grossProfitSatang": 160500,
+     "marginPct": 44.214876033057855,
+     "revenueCaseCount": 3,
+     "costCaseCount": 3
+    },
+    {
+     "__key": "dd5c5017-775f-4e5f-8d5d-4735cc88ad56",
+     "dimension": "บริษัท ยูเอที แคปปิตอล จำกัด",
+     "revenueSatang": 700000,
+     "directCostSatang": 687500,
+     "grossProfitSatang": 12500,
+     "marginPct": 1.7857142857142856,
+     "revenueCaseCount": 1,
+     "costCaseCount": 2
+    }
+   ],
+   "kpis": [
+    {
+     "key": "revenue",
+     "label": "รายได้รวม",
+     "value": 1063000,
+     "type": "money",
+     "mom": {
+      "current": 1063000,
+      "previous": 0,
+      "changePct": null,
+      "direction": "up"
+     }
+    },
+    {
+     "key": "directCost",
+     "label": "ต้นทุนตรงรวม",
+     "value": 890000,
+     "type": "money",
+     "mom": {
+      "current": 890000,
+      "previous": 0,
+      "changePct": null,
+      "direction": "up"
+     },
+     "higherIsBetter": false
+    },
+    {
+     "key": "grossProfit",
+     "label": "กำไรขั้นต้น",
+     "value": 173000,
+     "type": "money",
+     "mom": {
+      "current": 173000,
+      "previous": 0,
+      "changePct": null,
+      "direction": "up"
+     }
+    },
+    {
+     "key": "margin",
+     "label": "Margin %",
+     "value": 16.27469426152399,
+     "type": "percent",
+     "hint": "2 บริษัทไฟแนนซ์"
+    }
+   ],
+   "totalRow": {
+    "dimension": "รวมทั้งหมด",
+    "revenueSatang": 1063000,
+    "directCostSatang": 890000,
+    "grossProfitSatang": 173000,
+    "marginPct": 16.27469426152399,
+    "revenueCaseCount": 4,
+    "costCaseCount": 5
+   },
+   "note": "นับเฉพาะรายได้ที่เกิดจริง และต้นทุนตรงที่อนุมัติแล้ว 4 ชนิด — เคสที่ปิดไม่สำเร็จแต่มีต้นทุนถูกนับด้วยเสมอ · ทุกยอดเป็นยอดหลังรายการปรับปรุงที่อนุมัติแล้ว",
+   "cache": {
+    "mode": "daily",
+    "computedAt": "2026-10-04T06:16:55.144Z",
+    "fromCache": true,
+    "stale": false,
+    "expiresAt": "2026-10-04T17:00:00.000Z",
+    "refreshAvailableAt": "2026-10-04T06:21:55.144Z",
+    "refreshThrottled": false
+   }
+  },
+  "error": null
+ }
+}

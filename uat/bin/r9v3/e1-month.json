@@ -1,0 +1,292 @@
+{
+ "report": {
+  "code": "E1",
+  "id": "kpi-summary",
+  "title": "KPI ภาพรวม",
+  "category": "E"
+ },
+ "range": {
+  "preset": "this_month",
+  "label": "ตุลาคม 2569",
+  "from": "2026-10-01",
+  "to": "2026-10-31"
+ },
+ "columns": [
+  {
+   "key": "month",
+   "header": "เดือน",
+   "type": "text",
+   "width": 20
+  },
+  {
+   "key": "revenueSatang",
+   "header": "รายได้",
+   "type": "money"
+  },
+  {
+   "key": "directCostSatang",
+   "header": "ต้นทุนตรง",
+   "type": "money"
+  },
+  {
+   "key": "grossProfitSatang",
+   "header": "กำไรขั้นต้น",
+   "type": "money"
+  },
+  {
+   "key": "marginPct",
+   "header": "Margin %",
+   "type": "percent"
+  },
+  {
+   "key": "caseCount",
+   "header": "เคสรับเข้า",
+   "type": "number"
+  },
+  {
+   "key": "successCount",
+   "header": "ปิดสำเร็จ",
+   "type": "number"
+  },
+  {
+   "key": "failCount",
+   "header": "ปิดไม่สำเร็จ",
+   "type": "number"
+  },
+  {
+   "key": "successPct",
+   "header": "% สำเร็จ",
+   "type": "percent"
+  }
+ ],
+ "rows": [
+  {
+   "__key": "2025-11-01",
+   "month": "พฤศจิกายน 2568",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2025-12-01",
+   "month": "ธันวาคม 2568",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-01-01",
+   "month": "มกราคม 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-02-01",
+   "month": "กุมภาพันธ์ 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-03-01",
+   "month": "มีนาคม 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-04-01",
+   "month": "เมษายน 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-05-01",
+   "month": "พฤษภาคม 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-06-01",
+   "month": "มิถุนายน 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-07-01",
+   "month": "กรกฎาคม 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-08-01",
+   "month": "สิงหาคม 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-09-01",
+   "month": "กันยายน 2569",
+   "revenueSatang": 0,
+   "directCostSatang": 0,
+   "grossProfitSatang": 0,
+   "marginPct": null,
+   "caseCount": 0,
+   "successCount": 0,
+   "failCount": 0,
+   "successPct": null
+  },
+  {
+   "__key": "2026-10-01",
+   "month": "ตุลาคม 2569",
+   "revenueSatang": 1063000,
+   "directCostSatang": 890000,
+   "grossProfitSatang": 173000,
+   "marginPct": 16.27469426152399,
+   "caseCount": 8,
+   "successCount": 4,
+   "failCount": 1,
+   "successPct": 80
+  }
+ ],
+ "kpis": [
+  {
+   "key": "revenue",
+   "label": "รายได้รวม",
+   "value": 1063000,
+   "type": "money",
+   "hint": "ตุลาคม 2569",
+   "mom": {
+    "current": 1063000,
+    "previous": 0,
+    "changePct": null,
+    "direction": "up"
+   }
+  },
+  {
+   "key": "grossProfit",
+   "label": "กำไรขั้นต้น",
+   "value": 173000,
+   "type": "money",
+   "hint": "ต้นทุนตรง ฿ 8,900.00",
+   "mom": {
+    "current": 173000,
+    "previous": 0,
+    "changePct": null,
+    "direction": "up"
+   }
+  },
+  {
+   "key": "marginPct",
+   "label": "Margin %",
+   "value": 16.27469426152399,
+   "type": "percent",
+   "hint": "กำไรขั้นต้น ÷ รายได้"
+  },
+  {
+   "key": "caseCount",
+   "label": "เคสทั้งหมด",
+   "value": 8,
+   "type": "number",
+   "hint": "ปิดแล้ว 5 · ยังไม่ปิด 3",
+   "mom": {
+    "current": 8,
+    "previous": 0,
+    "changePct": null,
+    "direction": "up"
+   }
+  },
+  {
+   "key": "successPct",
+   "label": "% สำเร็จ",
+   "value": 80,
+   "type": "percent",
+   "hint": "สำเร็จ 4 จากเคสที่ปิดแล้ว 5"
+  },
+  {
+   "key": "arOutstanding",
+   "label": "AR ค้างรับ",
+   "value": 0,
+   "type": "money",
+   "hint": "0 บริษัทที่ยังมียอดค้าง",
+   "higherIsBetter": false
+  }
+ ],
+ "totalRow": {
+  "month": "รวม พฤศจิกายน 2568 – ตุลาคม 2569",
+  "revenueSatang": 1063000,
+  "directCostSatang": 890000,
+  "grossProfitSatang": 173000,
+  "marginPct": 16.27469426152399,
+  "caseCount": 8,
+  "successCount": 4,
+  "failCount": 1,
+  "successPct": 80
+ },
+ "note": "การ์ด KPI คิดจากช่วงที่เลือก (ตุลาคม 2569) เทียบกับช่วงก่อนหน้าที่ยาวเท่ากัน · ตารางและกราฟเป็นเทรนด์ 12 เดือนย้อนหลัง (พฤศจิกายน 2568 – ตุลาคม 2569) จึงมีขอบเขตกว้างกว่าการ์ด · เคสนับจากวันที่รับเข้าระบบ · % สำเร็จ คิดจากเคสที่ปิดแล้วเท่านั้น · AR ค้างรับเป็นยอด ณ วันที่คำนวณ ไม่ใช่ยอดของช่วงเวลา ⇒ ไม่มีการเทียบกับงวดก่อน",
+ "cache": {
+  "mode": "daily",
+  "computedAt": "2026-10-04T06:27:05.144Z",
+  "fromCache": false,
+  "stale": false,
+  "expiresAt": "2026-10-04T17:00:00.000Z",
+  "refreshAvailableAt": "2026-10-04T06:32:05.144Z",
+  "refreshThrottled": false
+ }
+}
