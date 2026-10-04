@@ -18,7 +18,7 @@ import { assertIntakeCondition, assertRejectReason, imeiMismatchWarning } from '
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
 import { DELIVERY_DOC_PREFIX, LOT_PREFIX, handoverNumberYear } from '@/lib/warehouse/numbering'
-import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
+import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-service'
 import type {
   AssetIntakeInput,
   AssetListQuery,
@@ -914,6 +914,8 @@ export async function confirmLot(
             expenseIdsUnlocked,
             revenueIdsCreated: revenue.revenueIdsCreated,
             revenueEligibleCaseIds: revenue.eligibleCaseIds,
+            // ผลต่อเคส รวมเหตุผลที่ยังไม่เกิดรายได้ (เช่น expense_not_approved) — UAT BUG-104
+            revenueByCase: revenueOutcomeByCase(caseIds, revenue),
             events: ['lot.doc_attached', 'lot.confirmed'],
           },
           ipAddress: context.meta.ipAddress,

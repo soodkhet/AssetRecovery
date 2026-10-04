@@ -714,6 +714,14 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     expect(result.revenueEligibleCaseIds).toEqual([])
     expect(result.revenueIdsCreated).toEqual([])
     expect(await db().revenue.count({ where: { caseId } })).toBe(0)
+    // UAT BUG-104 — audit เก็บเหตุผลที่ข้ามการสร้างรายได้ต่อเคส
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'handover_lots', targetId: lotId, action: 'confirm' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({
+      revenueByCase: [{ caseId, result: 'skipped', reason: 'expense_not_approved' }],
+    })
   })
 
   it('T12 — expense อนุมัติแล้ว + ล็อต confirmed = เคสเข้าเงื่อนไขสร้าง Revenue', async () => {
@@ -727,6 +735,11 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     expect(result.revenueIdsCreated).toHaveLength(1)
     const created = await db().revenue.findFirstOrThrow({ where: { caseId } })
     expect(created.status).toBe('ready_for_billing')
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'handover_lots', targetId: lotId, action: 'confirm' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({ revenueByCase: [{ caseId, result: 'created', revenueId: created.id }] })
     expect(created.vatRatePctUsed.toNumber()).toBe(7)
   })
 

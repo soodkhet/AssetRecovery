@@ -3,6 +3,7 @@ import {
   evaluateCaseRevenueGates,
   expenseGateOf,
   lotGateOf,
+  revenueOutcomeByCase,
   type CaseRevenueSnapshot,
 } from '@/lib/warehouse/revenue-service'
 
@@ -124,6 +125,35 @@ describe('evaluateCaseRevenueGates', () => {
     expect(result.skipped).toEqual([
       { caseId: 'blocked', reason: 'expense_not_approved' },
       { caseId: 'done', reason: 'already_created' },
+    ])
+  })
+})
+
+describe('revenueOutcomeByCase — ผลต่อเคสสำหรับ audit lot.confirmed (UAT BUG-104)', () => {
+  it('จับคู่เคสที่เกิดรายได้กับ revenue id และเก็บเหตุผลของเคสที่ข้าม ตามลำดับเคสในล็อต', () => {
+    const outcome = revenueOutcomeByCase(['c1', 'c2', 'c3', 'c4'], {
+      revenueIdsCreated: ['r3'],
+      eligibleCaseIds: ['c3'],
+      skipped: [
+        { caseId: 'c1', reason: 'expense_not_approved' },
+        { caseId: 'c2', reason: 'field_days_not_settled' },
+        { caseId: 'c4', reason: 'already_created' },
+      ],
+    })
+    expect(outcome).toEqual([
+      { caseId: 'c1', result: 'skipped', reason: 'expense_not_approved' },
+      { caseId: 'c2', result: 'skipped', reason: 'field_days_not_settled' },
+      { caseId: 'c3', result: 'created', revenueId: 'r3' },
+      { caseId: 'c4', result: 'skipped', reason: 'already_created' },
+    ])
+  })
+
+  it('เคสซ้ำในรายการนับครั้งเดียว · เคสที่ไม่มีผลใดเลยไม่หายเงียบ', () => {
+    expect(
+      revenueOutcomeByCase(['c1', 'c1', 'c9'], { revenueIdsCreated: [], eligibleCaseIds: [], skipped: [] }),
+    ).toEqual([
+      { caseId: 'c1', result: 'skipped', reason: 'no_snapshot' },
+      { caseId: 'c9', result: 'skipped', reason: 'no_snapshot' },
     ])
   })
 })

@@ -61,6 +61,33 @@ export interface TryCreateRevenueResult {
   skipped: readonly RevenueSkip[]
 }
 
+/** ผลการสร้างรายได้ของเคสหนึ่ง — ลง audit `lot.confirmed` ให้ตรวจย้อนได้ว่าเคสไหนเกิด/ข้ามเพราะอะไร (UAT BUG-104) */
+export type CaseRevenueOutcome =
+  | { caseId: string; result: 'created'; revenueId: string }
+  | { caseId: string; result: 'skipped'; reason: RevenueSkipReason }
+
+/**
+ * แปลงผล `tryCreateRevenue()` เป็นรายการต่อเคสตามลำดับ `caseIds` — ไม่ประเมินเกตใหม่ (อ่านผลที่คืนมาเท่านั้น)
+ * เคสที่ไม่อยู่ทั้งสองชุด (ไม่ควรเกิด) ลงเป็น `no_snapshot` เพื่อไม่ให้หายจาก audit แบบเงียบ ๆ
+ */
+export function revenueOutcomeByCase(
+  caseIds: readonly string[],
+  result: TryCreateRevenueResult,
+): CaseRevenueOutcome[] {
+  const createdByCase = new Map(
+    result.eligibleCaseIds.flatMap((caseId, index) => {
+      const revenueId = result.revenueIdsCreated[index]
+      return revenueId === undefined ? [] : [[caseId, revenueId] as const]
+    }),
+  )
+  const skippedByCase = new Map(result.skipped.map((skip) => [skip.caseId, skip.reason]))
+  return [...new Set(caseIds)].map((caseId): CaseRevenueOutcome => {
+    const revenueId = createdByCase.get(caseId)
+    if (revenueId !== undefined) return { caseId, result: 'created', revenueId }
+    return { caseId, result: 'skipped', reason: skippedByCase.get(caseId) ?? 'no_snapshot' }
+  })
+}
+
 /** ข้อมูลของเคสหนึ่งเท่าที่เกตต้องรู้ — แยกออกมาให้เทสต์ป้อนตรงได้โดยไม่ต้องมี DB */
 export interface CaseRevenueSnapshot {
   caseId: string
