@@ -35,6 +35,34 @@ const eslintConfig = [
       'assetrecovery/no-unregistered-event': 'error',
     },
   },
+  {
+    // พอร์ทัลบริษัทไฟแนนซ์ = GET เท่านั้น (`97` §11 · Rule 03 · มติ PO 05/10/2569 U6/O43) — คู่กับ
+    // `lib/portal/route-guard.test.ts` ที่สแกนไฟล์ route จริง · HEAD/OPTIONS ให้ Next ทำเอง ห้ามเขียนเพิ่ม
+    files: ['app/api/portal/**/*.ts', 'app/api/portal/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ExportNamedDeclaration > FunctionDeclaration[id.name=/^(POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/]',
+          message: 'พอร์ทัล (/api/portal/*) อ่านอย่างเดียว — export ได้เฉพาะ GET',
+        },
+        {
+          selector:
+            'ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.name=/^(POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/]',
+          message: 'พอร์ทัล (/api/portal/*) อ่านอย่างเดียว — export ได้เฉพาะ GET',
+        },
+        {
+          selector: 'ExportSpecifier[exported.name=/^(POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/]',
+          message: 'พอร์ทัล (/api/portal/*) อ่านอย่างเดียว — export ได้เฉพาะ GET',
+        },
+        {
+          selector: 'ExportAllDeclaration',
+          message: 'พอร์ทัล (/api/portal/*) ห้าม `export *` — ต้องเห็นชัดว่า export แค่ GET',
+        },
+      ],
+    },
+  },
 ]
 
 export default eslintConfig

@@ -207,3 +207,22 @@ export function withPortal<Ctx = unknown>(
     }
   }
 }
+
+/**
+ * ปฏิเสธแถวที่ **เป็นของบริษัทผู้เรียกจริง** แต่สถานะยังไม่เปิดให้ทำสิ่งที่ขอ (เช่น ดาวน์โหลดใบเซ็นรับของล็อตที่ยังไม่
+ * `confirmed` — `97` §6.4 · มติ O43 D8) → 403 `PERMISSION_DENIED` + audit `access_denied` (`97` §14 — ทุก 403 ของพอร์ทัล)
+ * · `cause` = เหตุผลภายใน (เก็บใน audit `after` เท่านั้น ไม่ส่งออก response)
+ */
+export async function rejectPortalRow(
+  ctx: PortalContext,
+  target: PortalRowTarget,
+  cause: string,
+  options: { request?: Request; download?: boolean } = {},
+): Promise<never> {
+  return denyPortal(
+    ctx.user,
+    'PERMISSION_DENIED',
+    { section: ctx.section, download: options.download === true, cause, targetType: target.type, requestedId: target.id },
+    options.request,
+  )
+}
