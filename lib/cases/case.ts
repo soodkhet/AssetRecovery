@@ -87,7 +87,7 @@ export function assertIdentityFormats(values: {
 
 // ── เอกสารแนบ (`38` §6.3 · §6.3.1) ───────────────────────────────────────────
 
-export const DOCUMENT_SLOTS = ['contract_doc', 'national_id_doc', 'product_photo', 'other_doc'] as const
+export const DOCUMENT_SLOTS = ['contract_doc', 'national_id_doc', 'product_photo', 'other_doc', 'bundle_doc'] as const
 export type DocumentSlot = (typeof DOCUMENT_SLOTS)[number]
 
 export const DOCUMENT_SLOT_LABEL: Record<DocumentSlot, string> = {
@@ -95,13 +95,36 @@ export const DOCUMENT_SLOT_LABEL: Record<DocumentSlot, string> = {
   national_id_doc: 'บัตรประชาชน/Passport ลูกหนี้',
   product_photo: 'รูปสินค้า',
   other_doc: 'เอกสารอื่นจากไฟแนนซ์',
+  bundle_doc: 'เอกสารชุด (สแกนรวมเล่ม)',
 }
 
-/** slot ที่ต้องมีอย่างน้อย 1 ไฟล์ก่อนเข้าสถานะ `pending_review` (`38` §6.3 ตาราง + §6.3.1) */
+/** slot ที่ต้องมีอย่างน้อย 1 ไฟล์ก่อนเข้าสถานะ `pending_review` (`38` §6.3 ตาราง + §6.3.1) — โหมดแยกตามประเภท */
 export const REQUIRED_DOCUMENT_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc', 'product_photo']
 
-/** `38` §6.3.1 — รูปสินค้าสูงสุด 8 รูปต่อเคส */
-export const PRODUCT_PHOTO_MAX = 8
+/**
+ * โหมดเอกสารแนบของเคส (`38` §6.3.2 — มติ PO 04/10/2569 UAT เอกสารชุดเดียว)
+ * - `separate` = แยกตามประเภท (ค่าเริ่มต้น — พฤติกรรมเดิมทุกเคส)
+ * - `bundle`   = พาร์ทเนอร์ส่งเอกสาร 1 ชุดเย็บเล่ม แอดมินสแกนเป็นไฟล์ `bundle_doc` (1 ไฟล์ขึ้นไป)
+ *
+ * ไม่มีคอลัมน์โหมดที่ `cases` — โหมด **อนุมานจากไฟล์** (มี `bundle_doc` ที่ยังไม่ถูกลบ ≥ 1 = `bundle`)
+ * เพื่อไม่ให้สถานะสองแหล่งขัดกันเอง · กติกา `assertDocumentModeCompatible()` กันไม่ให้สองโหมดปนกันในเคสเดียว
+ */
+export const DOCUMENT_MODES = ['separate', 'bundle'] as const
+export type DocumentMode = (typeof DOCUMENT_MODES)[number]
+
+export const DOCUMENT_MODE_LABEL: Record<DocumentMode, string> = {
+  separate: 'แยกตามประเภท',
+  bundle: 'เอกสารชุดเดียว (สแกนรวมเล่ม)',
+}
+
+/** slot ที่เป็น "ตัวแทน" ของโหมดแยกประเภท — ปนกับ `bundle_doc` ในเคสเดียวกันไม่ได้ */
+export const SEPARATE_ONLY_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc']
+
+/**
+ * slot ที่เอกสารชุดนับแทนได้ตอน gate ส่งตรวจ — สัญญา + บัตรประชาชน (ผู้ตรวจต้องติ๊กยืนยันตอนรับเคส)
+ * และรูปสินค้า (อาจอยู่ในชุด — ในโหมดชุดจึงไม่บังคับ แต่ยังอัปเพิ่มได้ตามเพดานเดิม)
+ */
+export const BUNDLE_COVERED_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc', 'product_photo']
 
 export function isDocumentSlot(value: string): value is DocumentSlot {
   return (DOCUMENT_SLOTS as readonly string[]).includes(value)
@@ -109,9 +132,24 @@ export function isDocumentSlot(value: string): value is DocumentSlot {
 
 export type DocumentCounts = Partial<Record<DocumentSlot, number>>
 
+export function documentModeOf(counts: DocumentCounts): DocumentMode {
+  return (counts.bundle_doc ?? 0) > 0 ? 'bundle' : 'separate'
+}
+
+/** นับไฟล์ต่อ slot จากรายการเอกสาร (ข้ามชนิดที่ไม่รู้จัก) — ใช้ทั้ง FE/BE */
+export function countDocuments(documents: ReadonlyArray<{ documentType: string }>): DocumentCounts {
+  const counts: DocumentCounts = {}
+  for (const document of documents) {
+    if (!isDocumentSlot(document.documentType)) continue
+    counts[document.documentType] = (counts[document.documentType] ?? 0) + 1
+  }
+  return counts
+}
+
 /** slot บังคับที่ยังไม่มีไฟล์ — ใช้ทั้งบน UI (แสดงว่าขาดอะไร) และตอน gate `pending_review` */
 export function missingRequiredDocuments(counts: DocumentCounts): DocumentSlot[] {
-  return REQUIRED_DOCUMENT_SLOTS.filter((slot) => (counts[slot] ?? 0) < 1)
+  const covered = documentModeOf(counts) === 'bundle' ? BUNDLE_COVERED_SLOTS : []
+  return REQUIRED_DOCUMENT_SLOTS.filter((slot) => !covered.includes(slot) && (counts[slot] ?? 0) < 1)
 }
 
 /** gate ก่อนเปลี่ยนสถานะเป็น `pending_review` (`38` §12 `CASE_DOCUMENT_INCOMPLETE`) */
@@ -123,6 +161,34 @@ export function assertDocumentsComplete(counts: DocumentCounts): void {
     })
   }
 }
+
+/**
+ * กันสองโหมดปนกันในเคสเดียว (`38` §12 `CASE_DOCUMENT_MODE_CONFLICT`) — `existing` = ไฟล์ที่มีอยู่แล้ว
+ * เอกสารชุด ห้ามเพิ่มเมื่อมีสัญญา/บัตรประชาชนแยกอยู่แล้ว และกลับกัน · รูปสินค้า/เอกสารอื่นเพิ่มได้ทั้งสองโหมด
+ */
+export function assertDocumentModeCompatible(existing: DocumentCounts, adding: DocumentSlot): void {
+  const conflicting: readonly DocumentSlot[] =
+    adding === 'bundle_doc' ? SEPARATE_ONLY_SLOTS : SEPARATE_ONLY_SLOTS.includes(adding) ? ['bundle_doc'] : []
+  const found = conflicting.filter((slot) => (existing[slot] ?? 0) > 0)
+  if (found.length > 0) {
+    throw new CaseError('CASE_DOCUMENT_MODE_CONFLICT', {
+      context: { adding, existing: found, mode: documentModeOf(existing) },
+    })
+  }
+}
+
+/**
+ * ตอนรับเคส (`accept`) ที่ใช้เอกสารชุด ผู้ตรวจต้องยืนยันว่าในชุดมีสัญญาและบัตรประชาชนครบ
+ * (`38` §12 `CASE_BUNDLE_CONFIRMATION_REQUIRED`) — โหมดแยกประเภทไม่ต้องยืนยัน
+ */
+export function assertBundleConfirmed(counts: DocumentCounts, confirmed: boolean | undefined): void {
+  if (documentModeOf(counts) === 'bundle' && confirmed !== true) {
+    throw new CaseError('CASE_BUNDLE_CONFIRMATION_REQUIRED', { context: { documentMode: 'bundle' } })
+  }
+}
+
+/** `38` §6.3.1 — รูปสินค้าสูงสุด 8 รูปต่อเคส */
+export const PRODUCT_PHOTO_MAX = 8
 
 /** เพดานรูปสินค้า — `existing` = จำนวนรูปที่มีอยู่แล้ว (ไม่นับที่ลบไปแล้ว) */
 export function assertProductPhotoCapacity(existing: number, adding = 1): void {

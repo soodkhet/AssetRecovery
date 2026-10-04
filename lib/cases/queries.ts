@@ -5,7 +5,9 @@ import type { SessionUser } from '@/lib/auth/types'
 import {
   assertCaseEditable,
   assertIdentityFormats,
+  assertDocumentModeCompatible,
   assertProductPhotoCapacity,
+  countDocuments,
   caseReadiness,
   isDocumentSlot,
   joinAssetIdentifier,
@@ -300,12 +302,7 @@ function address(
 }
 
 function documentCounts(documents: CaseDetailRow['documents']): DocumentCounts {
-  const counts: DocumentCounts = {}
-  for (const document of documents) {
-    if (!isDocumentSlot(document.documentType)) continue
-    counts[document.documentType] = (counts[document.documentType] ?? 0) + 1
-  }
-  return counts
+  return countDocuments(documents)
 }
 
 export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
@@ -904,6 +901,9 @@ export async function addCaseDocument(
   })
   if (current === null) throw new CaseError('CASE_NOT_FOUND')
   assertCaseEditable(current.status)
+
+  // เอกสารชุดเดียวกับไฟล์สัญญา/บัตรแยกประเภท ปนกันในเคสเดียวไม่ได้ (มติ PO 04/10/2569)
+  assertDocumentModeCompatible(countDocuments(current.documents), input.documentType)
 
   if (input.documentType === 'product_photo') {
     const existing = current.documents.filter((document) => document.documentType === 'product_photo').length

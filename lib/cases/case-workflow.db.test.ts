@@ -134,7 +134,10 @@ afterAll(async () => {
 })
 
 /** เคสที่ข้อมูล required ครบตาม `38` §6.1–6.2 (เอกสารเติมทีหลังตาม `withDocuments`) */
-async function seedCase(caseRef: string, options: { withDocuments: boolean; status?: string }): Promise<string> {
+async function seedCase(
+  caseRef: string,
+  options: { withDocuments: boolean | 'bundle'; status?: string },
+): Promise<string> {
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO cases (
       organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
@@ -152,8 +155,10 @@ async function seedCase(caseRef: string, options: { withDocuments: boolean; stat
   const caseId = rows[0]?.id
   if (caseId === undefined) throw new Error('seedCase ไม่ได้ id กลับมา')
 
-  if (options.withDocuments) {
-    for (const [index, slot] of ['contract_doc', 'national_id_doc', 'product_photo'].entries()) {
+  if (options.withDocuments !== false) {
+    // `bundle` = เอกสารชุดเดียว (สแกนรวมเล่ม — มติ PO 04/10/2569) ไม่มีสัญญา/บัตร/รูปสินค้าแยก
+    const slots = options.withDocuments === 'bundle' ? ['bundle_doc'] : ['contract_doc', 'national_id_doc', 'product_photo']
+    for (const [index, slot] of slots.entries()) {
       await db().$executeRawUnsafe(`
         INSERT INTO case_documents
           (organization_id, case_id, document_type, file_url, file_hash, original_name, mime_type, size_bytes, uploaded_by)
@@ -252,6 +257,68 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     await db().$executeRawUnsafe(
       `UPDATE finance_companies SET service_fee_template_id = '${TEMPLATE_V1}' WHERE id = '${COMPANY_ID}'`,
     )
+  })
+
+  it('เอกสารชุดเดียว: ส่งตรวจได้โดยไม่มีสัญญา/บัตร/รูปแยก · รับเคสต้องติ๊กยืนยัน + audit เก็บการยืนยัน (มติ PO 04/10/2569)', async () => {
+    const caseId = await seedCase('SF-2026-2340', { withDocuments: 'bundle' })
+    const reviewed = await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    expect(reviewed.case.status).toBe('pending_review')
+
+    await expect(
+      service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta }),
+    ).rejects.toMatchObject({ code: 'CASE_BUNDLE_CONFIRMATION_REQUIRED' })
+    await expect(
+      service.changeCaseStatus(
+        actor,
+        caseId,
+        change({ action: 'accept', teamId: TEAM_ID, bundleDocumentsConfirmed: false }),
+        { actor, meta },
+      ),
+    ).rejects.toMatchObject({ code: 'CASE_BUNDLE_CONFIRMATION_REQUIRED' })
+    expect((await caseRow(caseId))?.status).toBe('pending_review')
+
+    await service.changeCaseStatus(
+      actor,
+      caseId,
+      change({ action: 'accept', teamId: TEAM_ID, bundleDocumentsConfirmed: true }),
+      { actor, meta },
+    )
+    expect((await caseRow(caseId))?.status).toBe('approved')
+    const audits = await db().$queryRawUnsafe<Array<{ after_data: Record<string, unknown> | null }>>(
+      `SELECT after_data FROM audit_logs WHERE target_id = '${caseId}' AND action = 'approve'`,
+    )
+    expect(audits[0]?.after_data).toMatchObject({ documentMode: 'bundle', bundleDocumentsConfirmed: true })
+  })
+
+  it('แนบเอกสารปนสองโหมดถูกปัดก่อนแตะ Storage — CASE_DOCUMENT_MODE_CONFLICT ทั้งสองทิศ', async () => {
+    const { addCaseDocument } = await import('@/lib/cases/queries')
+    const upload = (caseId: string, documentType: 'bundle_doc' | 'contract_doc') => ({
+      documentType,
+      fileUrl: `cases/${caseId}/${documentType}/x-scan.pdf`,
+      originalName: 'scan.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 1024,
+    })
+    const bundleCase = await seedCase('SF-2026-2342', { withDocuments: 'bundle' })
+    await expect(
+      addCaseDocument(actor, bundleCase, upload(bundleCase, 'contract_doc'), { actor, meta }),
+    ).rejects.toMatchObject({ code: 'CASE_DOCUMENT_MODE_CONFLICT' })
+
+    const separateCase = await seedCase('SF-2026-2343', { withDocuments: true })
+    await expect(
+      addCaseDocument(actor, separateCase, upload(separateCase, 'bundle_doc'), { actor, meta }),
+    ).rejects.toMatchObject({ code: 'CASE_DOCUMENT_MODE_CONFLICT' })
+  })
+
+  it('เคสแยกประเภทเดิมรับเคสได้โดยไม่ต้องยืนยันเอกสารชุด และ audit ไม่มีฟิลด์ชุด', async () => {
+    const caseId = await seedCase('SF-2026-2341', { withDocuments: true })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+    expect((await caseRow(caseId))?.status).toBe('approved')
+    const audits = await db().$queryRawUnsafe<Array<{ after_data: Record<string, unknown> | null }>>(
+      `SELECT after_data FROM audit_logs WHERE target_id = '${caseId}' AND action = 'approve'`,
+    )
+    expect(audits[0]?.after_data).not.toHaveProperty('bundleDocumentsConfirmed')
   })
 
   it('ไม่รับเคสต้องมีเหตุผล และเมื่อมีเหตุผลแล้วไปสถานะ rejected', async () => {

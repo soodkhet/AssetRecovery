@@ -3,8 +3,14 @@ import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
 import { hasCapability } from '@/lib/auth/permission'
 import type { SessionUser } from '@/lib/auth/types'
-import { caseReadiness, type DebtorNationalityCode, type DocumentCounts, type DocumentSlot } from '@/lib/cases/case'
-import { isDocumentSlot } from '@/lib/cases/case'
+import {
+  assertBundleConfirmed,
+  caseReadiness,
+  countDocuments,
+  documentModeOf,
+  type DebtorNationalityCode,
+  type DocumentCounts,
+} from '@/lib/cases/case'
 import { CaseError } from '@/lib/cases/errors'
 import { calculateProjectedRevenue } from '@/lib/cases/projected-revenue'
 import {
@@ -104,13 +110,7 @@ async function loadCompanyTemplate(organizationId: string, companyId: string): P
 }
 
 function documentCountsOf(documents: CaseDetailRow['documents']): DocumentCounts {
-  const counts: DocumentCounts = {}
-  for (const document of documents) {
-    if (!isDocumentSlot(document.documentType)) continue
-    const slot: DocumentSlot = document.documentType
-    counts[slot] = (counts[slot] ?? 0) + 1
-  }
-  return counts
+  return countDocuments(documents)
 }
 
 function readinessOf(row: CaseDetailRow) {
@@ -253,6 +253,14 @@ export async function changeCaseStatus(
         select: { id: true },
       })
       if (team === null) throw new CaseError('TEAM_NOT_FOUND', { context: { teamId: confirmedTeamId } })
+
+      // เอกสารชุดเดียว (มติ PO 04/10/2569): ผู้ตรวจต้องยืนยันว่าในชุดมีสัญญา + บัตรประชาชนครบ — เก็บลง audit
+      const counts = documentCountsOf(row.documents)
+      assertBundleConfirmed(counts, input.bundleDocumentsConfirmed)
+      if (documentModeOf(counts) === 'bundle') {
+        auditAfter.documentMode = 'bundle'
+        auditAfter.bundleDocumentsConfirmed = true
+      }
 
       data.assignedTeamId = confirmedTeamId
       data.reviewedBy = context.actor.id

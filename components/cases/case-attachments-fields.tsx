@@ -1,14 +1,26 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, InlineAlert } from '@/components/ui'
+import { Badge, Button, ConfirmModal, InlineAlert } from '@/components/ui'
 import {
   assertProductPhotoCapacity,
+  countDocuments,
+  DOCUMENT_MODE_LABEL,
+  DOCUMENT_MODES,
   DOCUMENT_SLOT_LABEL,
+  documentModeOf,
   PRODUCT_PHOTO_MAX,
+  type DocumentMode,
   type DocumentSlot,
 } from '@/lib/cases/case'
-import { acceptAttribute, checkUploadCandidate, isPdfMime } from '@/lib/cases/document-upload'
+import {
+  acceptAttribute,
+  checkUploadCandidate,
+  formSlotsFor,
+  isPdfMime,
+  planDocumentModeSwitch,
+  slotsExcludedBy,
+} from '@/lib/cases/document-upload'
 import { CaseError } from '@/lib/cases/errors'
 import type { CaseDocumentDto } from '@/lib/cases/types'
 
@@ -20,6 +32,9 @@ import type { CaseDocumentDto } from '@/lib/cases/types'
  *   และปุ่ม ✕ ต่อรูปเพื่อนำออก **ก่อน submit** · สูงสุด 8 รูป (§6.3.1)
  * - ไฟล์ที่เลือกยัง **ไม่ถูกอัปโหลดจนกว่าจะกดบันทึก** เพราะเคสใหม่ยังไม่มี `case_id` ให้ผูกไฟล์
  *   (ผู้เรียกอัปโหลดต่อด้วย `uploadCaseFile()` หลังบันทึกเคสสำเร็จ)
+ * - โหมด "แยกตามประเภท" (ค่าเริ่มต้น) / "เอกสารชุดเดียว (สแกนรวมเล่ม)" (มติ PO 04/10/2569) — โหมดชุดใช้ช่อง
+ *   `bundle_doc` ช่องเดียว (ไฟล์ละ ≤ 25 MB) นับแทนสัญญา/บัตรประชาชน · สลับโหมดเมื่อมีไฟล์ค้าง = ถามก่อนนำออก
+ *   (ไฟล์ที่อัปโหลดแล้ว = บล็อก) — ไม่ทิ้งไฟล์เงียบ ๆ
  */
 
 export interface StagedFile {
@@ -34,9 +49,9 @@ const DOCUMENT_SLOT_HINT: Partial<Record<DocumentSlot, string>> = {
   contract_doc: 'PDF หรือรูปถ่ายสัญญา — บังคับก่อนส่งตรวจสอบ',
   national_id_doc: 'หน้า-หลังแนบได้หลายไฟล์ — บังคับก่อนส่งตรวจสอบ',
   other_doc: 'ใบรับรองสินค้า / ใบเสร็จ ฯลฯ — ไม่บังคับ',
+  bundle_doc:
+    'สแกนเอกสารทั้งชุด (สัญญา บัตรประชาชน รูปสินค้า ฯลฯ) แยกหลายไฟล์ได้ ไฟล์ละไม่เกิน 25 MB — นับแทนสัญญาและบัตรประชาชน',
 }
-
-const FORM_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc', 'other_doc']
 
 export function CaseAttachmentsFields({
   documents,
@@ -50,6 +65,9 @@ export function CaseAttachmentsFields({
 }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+  // โหมดอนุมานจากไฟล์ที่อัปโหลดแล้ว (เคสเดิมทั้งหมด = แยกตามประเภท)
+  const [mode, setMode] = useState<DocumentMode>(() => documentModeOf(countDocuments(documents)))
+  const [pendingSwitch, setPendingSwitch] = useState<{ next: DocumentMode; dropCount: number } | null>(null)
   const photoInput = useRef<HTMLInputElement | null>(null)
 
   // คืนหน่วยความจำของ object URL ตอนปิดฟอร์ม (ไฟล์ที่ยังไม่ได้อัปโหลดถูกทิ้งไปพร้อมกัน)
@@ -110,6 +128,39 @@ export function CaseAttachmentsFields({
     if (accepted.length > 0) onChange([...staged, ...accepted])
   }
 
+  function requestMode(next: DocumentMode): void {
+    if (next === mode) return
+    const plan = planDocumentModeSwitch(
+      next,
+      countDocuments(documents),
+      staged.map((item) => item.slot),
+    )
+    if (plan.kind === 'blocked') {
+      setNotice(
+        `เคสนี้มีไฟล์ “${plan.slots.map((slot) => DOCUMENT_SLOT_LABEL[slot]).join('”, “')}” ที่อัปโหลดแล้ว — สลับเป็น “${DOCUMENT_MODE_LABEL[next]}” ไม่ได้`,
+      )
+      return
+    }
+    if (plan.kind === 'confirm') {
+      setPendingSwitch({ next, dropCount: plan.dropCount })
+      return
+    }
+    setNotice(null)
+    setMode(next)
+  }
+
+  function confirmSwitch(): void {
+    if (pendingSwitch === null) return
+    const excluded = slotsExcludedBy(pendingSwitch.next)
+    for (const item of staged) {
+      if (excluded.includes(item.slot) && item.previewUrl !== null) URL.revokeObjectURL(item.previewUrl)
+    }
+    onChange(staged.filter((item) => !excluded.includes(item.slot)))
+    setMode(pendingSwitch.next)
+    setPendingSwitch(null)
+    setNotice(null)
+  }
+
   function remove(key: string): void {
     const target = staged.find((item) => item.key === key)
     if (target?.previewUrl != null) URL.revokeObjectURL(target.previewUrl)
@@ -126,6 +177,30 @@ export function CaseAttachmentsFields({
     <>
       <section>
         <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">เอกสารแนบ</h3>
+        <fieldset className="mb-3">
+          <legend className="mb-1.5 text-xs font-semibold text-slate-600">รูปแบบเอกสารที่ได้รับ</legend>
+          <div className="flex flex-wrap gap-2">
+            {DOCUMENT_MODES.map((option) => (
+              <label
+                key={option}
+                className={`focus-within:ring-2 focus-within:ring-emerald-500 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                  mode === option
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="case-document-mode"
+                  className="accent-emerald-600"
+                  checked={mode === option}
+                  onChange={() => requestMode(option)}
+                />
+                {DOCUMENT_MODE_LABEL[option]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         {notice !== null && (
           <div className="mb-3">
             <InlineAlert tone="warning" title="ไฟล์บางรายการใช้ไม่ได้">
@@ -134,7 +209,7 @@ export function CaseAttachmentsFields({
           </div>
         )}
         <div className="space-y-3">
-          {FORM_SLOTS.map((slot) => {
+          {formSlotsFor(mode).map((slot) => {
             const count = countOf(slot)
             const slotFiles = staged.filter((item) => item.slot === slot)
             return (
@@ -192,11 +267,24 @@ export function CaseAttachmentsFields({
             )
           })}
         </div>
+        <ConfirmModal
+          open={pendingSwitch !== null}
+          onClose={() => setPendingSwitch(null)}
+          onConfirm={confirmSwitch}
+          title={`สลับเป็น “${pendingSwitch === null ? '' : DOCUMENT_MODE_LABEL[pendingSwitch.next]}”`}
+          description={`ไฟล์ที่เลือกไว้ ${pendingSwitch?.dropCount ?? 0} ไฟล์ในช่องของรูปแบบเดิมจะถูกนำออกจากฟอร์ม (ยังไม่ได้อัปโหลด) — ต้องการสลับหรือไม่`}
+          confirmLabel="นำไฟล์ออกและสลับรูปแบบ"
+        />
       </section>
 
       <section>
         <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2">
-          <h3 className="text-sm font-bold text-slate-800">รูปสินค้า</h3>
+          <h3 className="text-sm font-bold text-slate-800">
+            รูปสินค้า
+            {mode === 'bundle' && (
+              <span className="ml-2 text-[11px] font-normal text-slate-500">ไม่บังคับเมื่อแนบเอกสารชุด — เพิ่มได้</span>
+            )}
+          </h3>
           <span className="text-[11px] text-slate-500">
             {photoCount}/{PRODUCT_PHOTO_MAX} รูป
           </span>

@@ -22,7 +22,7 @@ import {
 } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { DOCUMENT_SLOT_LABEL, type DocumentSlot } from '@/lib/cases/case'
+import { countDocuments, DOCUMENT_SLOT_LABEL, documentModeOf, type DocumentSlot } from '@/lib/cases/case'
 import { caseDetailMode, caseModalActions, showsReasonBox, type CaseActionButton } from '@/lib/cases/case-actions'
 import { isImageMime } from '@/lib/cases/document-upload'
 import {
@@ -108,6 +108,8 @@ export function CaseDetailModal({
   const [teamPick, setTeamPick] = useState<CaseTeamOptionDto | null>(null)
   const [teamReason, setTeamReason] = useState('')
   const [chosenTeam, setChosenTeam] = useState<{ id: string; reason: string } | null>(null)
+  // เอกสารชุดเดียว (มติ PO 04/10/2569) — ผู้ตรวจต้องติ๊กยืนยันว่าในชุดมีสัญญา + บัตรประชาชนครบก่อนรับเคส
+  const [bundleConfirmed, setBundleConfirmed] = useState(false)
 
   const [viewing, setViewing] = useState<ViewableFile | null>(null)
 
@@ -155,6 +157,7 @@ export function CaseDetailModal({
           action: button.action,
           reason,
           ...(teamChanged ? { teamId: chosenTeam.id, teamChangeReason: chosenTeam.reason } : {}),
+          ...(button.action === 'accept' ? { bundleDocumentsConfirmed: bundleConfirmed } : {}),
         }),
       )
 
@@ -305,7 +308,15 @@ export function CaseDetailModal({
 
             <ContactSection detail={detail} />
 
-            <DocumentSection detail={detail} onView={setViewing} />
+            <DocumentSection
+              detail={detail}
+              onView={setViewing}
+              bundleConfirm={
+                actions.some((button) => button.action === 'accept')
+                  ? { checked: bundleConfirmed, onChange: setBundleConfirmed, disabled: busyAction !== null }
+                  : undefined
+              }
+            />
 
             {detail.fieldEvidence !== null && (
               <FieldEvidenceSection evidence={detail.fieldEvidence} onView={setViewing} />
@@ -467,21 +478,46 @@ function ContactSection({ detail }: { detail: CaseDetailDto }) {
 }
 
 const VIEW_SLOTS: readonly DocumentSlot[] = ['contract_doc', 'national_id_doc', 'other_doc']
+/** เคสโหมดเอกสารชุด — แสดงชุดก่อน ตามด้วยไฟล์แยกที่อาจมี (ช่องที่ไม่มีไฟล์ของโหมดอื่นไม่ต้องแสดง) */
+const BUNDLE_VIEW_SLOTS: readonly DocumentSlot[] = ['bundle_doc', 'other_doc']
 
 function DocumentSection({
   detail,
   onView,
+  bundleConfirm,
 }: {
   detail: CaseDetailDto
   onView: (document: CaseDocumentDto) => void
+  /** มีเมื่อผู้ใช้กด "รับเคส" ได้ — ช่องติ๊กยืนยันเอกสารชุด */
+  bundleConfirm?: { checked: boolean; onChange: (checked: boolean) => void; disabled: boolean }
 }) {
   const photos = detail.documents.filter((document) => document.documentType === 'product_photo')
+  const isBundle = documentModeOf(countDocuments(detail.documents)) === 'bundle'
+  const slots = isBundle ? BUNDLE_VIEW_SLOTS : VIEW_SLOTS
 
   return (
     <section>
-      <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">เอกสารแนบ</h3>
+      <h3 className="mb-3 flex items-center gap-2 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">
+        เอกสารแนบ
+        {isBundle && <Badge className="bg-sky-50 text-sky-700">เอกสารชุด</Badge>}
+      </h3>
+      {isBundle && bundleConfirm !== undefined && (
+        <label className="mb-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <input
+            type="checkbox"
+            className="mt-0.5 accent-emerald-600"
+            checked={bundleConfirm.checked}
+            disabled={bundleConfirm.disabled}
+            onChange={(event) => bundleConfirm.onChange(event.target.checked)}
+          />
+          <span>
+            <span className="font-semibold">ตรวจเอกสารชุดแล้ว — ในชุดมีสัญญาเช่าซื้อ/ผ่อนชำระ และบัตรประชาชน/Passport ลูกหนี้ครบ</span>
+            <span className="mt-0.5 block text-[11px] text-amber-800">ต้องติ๊กก่อนกด “รับเคส”</span>
+          </span>
+        </label>
+      )}
       <div className="space-y-2">
-        {VIEW_SLOTS.map((slot) => {
+        {slots.map((slot) => {
           const files = detail.documents.filter((document) => document.documentType === slot)
           return (
             <div key={slot} className="rounded-lg border border-slate-200 p-2">
