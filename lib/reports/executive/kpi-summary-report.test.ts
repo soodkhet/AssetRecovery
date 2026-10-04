@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildKpiSummaryReport,
   lastMonthlyPeriods,
+  trendAnchorDate,
   TREND_MONTHS,
   type ExecutiveMonthEntry,
   type ExecutiveTotals,
@@ -57,6 +58,20 @@ function kpi(report: ReturnType<typeof build>, key: string) {
   if (found === undefined) throw new Error(`ไม่พบ KPI ${key}`)
   return found
 }
+
+describe('trendAnchorDate — เทรนด์ไม่มีเดือนอนาคต (BUG-138)', () => {
+  it('ช่วง "ปีนี้" ที่จบ 31 ธ.ค. แต่วันนี้คือ ต.ค. ⇒ เดือนสุดท้ายของเทรนด์ = ต.ค.', () => {
+    const now = new Date('2026-10-04T03:00:00.000Z')
+    const periods = lastMonthlyPeriods(trendAnchorDate(new Date('2026-12-31T16:59:59.999Z'), now), TREND_MONTHS)
+    expect(periods.at(-1)?.key).toBe('2026-10-01')
+    expect(periods.some((period) => period.key > '2026-10-01')).toBe(false)
+  })
+
+  it('ช่วงที่จบในอดีตใช้ขอบของช่วงตามเดิม', () => {
+    const end = new Date('2026-08-31T16:59:59.999Z')
+    expect(trendAnchorDate(end, new Date('2026-10-04T03:00:00.000Z'))).toBe(end)
+  })
+})
 
 describe('lastMonthlyPeriods', () => {
   it('คืน 12 เดือนย้อนหลังโดยเดือนของ endDate เป็นเดือนสุดท้าย และเรียงเก่า → ใหม่', () => {

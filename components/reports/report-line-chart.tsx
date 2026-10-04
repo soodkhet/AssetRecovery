@@ -63,7 +63,7 @@ export function ReportLineChart({
                 }}
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey="value"
                 name={title}
                 stroke={LINE_COLOR}

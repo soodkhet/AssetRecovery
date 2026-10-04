@@ -23,7 +23,8 @@ export interface TeamPerformanceEntry {
 }
 
 const UNASSIGNED_KEY = '__unassigned__'
-const UNASSIGNED_LABEL = 'ไม่ระบุทีม'
+/** ป้ายกลุ่มของเคสที่ยังไม่ถูกมอบหมายทีม — ใช้ชุดเดียวกันทุกรายงานหมวด O (O1/O2) ให้ตรงกับ E3 */
+export const UNASSIGNED_TEAM_LABEL = 'ไม่ระบุทีม'
 
 interface Bucket {
   key: string
@@ -65,7 +66,7 @@ export function buildTeamPerformanceReport(input: {
     const key = entry.teamId ?? UNASSIGNED_KEY
     let bucket = buckets.get(key)
     if (bucket === undefined) {
-      bucket = { key, label: entry.teamName ?? UNASSIGNED_LABEL, tatHours: [], withinSla: 0, overSla: 0 }
+      bucket = { key, label: entry.teamName ?? UNASSIGNED_TEAM_LABEL, tatHours: [], withinSla: 0, overSla: 0 }
       buckets.set(key, bucket)
     }
     bucket.tatHours.push(entry.tatHours)
