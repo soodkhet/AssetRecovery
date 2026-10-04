@@ -1,3 +1,5 @@
+import { ModuleError } from '@/lib/api/errors'
+
 /**
  * Error code หมวด Audit (Platform) — SSOT อยู่ที่ `docs/24-finance-validation-rules.md` §6.10
  * ⚠️ ห้ามตั้ง code ใหม่ที่นี่โดยไม่เพิ่มลงไฟล์ 24 ใน commit เดียวกัน (Rule 04)
@@ -46,19 +48,14 @@ export function auditErrorMessage(code: AuditErrorCode): { title: string; messag
   return MESSAGES[code]
 }
 
-/** error กลางของชั้น audit — route handler จับแล้วแปลงเป็น response */
-export class AuditError extends Error {
-  readonly code: AuditErrorCode
-  readonly status: number
-  /** รายละเอียดสำหรับ log ฝั่ง server เท่านั้น — ห้ามส่งออก response */
-  readonly detail?: string
-
+/**
+ * error กลางของชั้น audit — สืบจาก `ModuleError` เพื่อให้ตัวแปลงกลาง `toModuleErrorResponse()` ตอบ
+ * 400/403/404 ตาม code แทนการตก 500 (เช่น mutation ที่ลืมเหตุผล ⇒ `AUDIT_REASON_REQUIRED` — UAT BUG-139)
+ */
+export class AuditError extends ModuleError<AuditErrorCode> {
   constructor(code: AuditErrorCode, detail?: string) {
-    super(`${code}: ${MESSAGES[code].message}${detail ? ` (${detail})` : ''}`)
+    super(code, MESSAGES[code], HTTP_STATUS[code], { detail })
     this.name = 'AuditError'
-    this.code = code
-    this.status = HTTP_STATUS[code]
-    this.detail = detail
   }
 }
 
