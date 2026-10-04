@@ -1,0 +1,593 @@
+import { PrismaPg } from '@prisma/adapter-pg'
+import type { NextRequest } from 'next/server'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  COMPANY_ADMIN_ROLE_NAME,
+  COMPANY_MANAGER_ROLE_NAME,
+  COMPANY_SUPERVISOR_ROLE_NAME,
+} from '@/lib/auth/constants'
+import type { SessionUser } from '@/lib/auth/types'
+import { bangkokBusinessDate } from '@/lib/field/expense-queries'
+import { PrismaClient } from '@/lib/generated/prisma/client'
+import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
+import type {
+  PortalArAgingDto,
+  PortalBillingBatchDto,
+  PortalRevenueSummaryDto,
+  PortalTaxInvoiceDto,
+} from '@/lib/portal/serializers'
+import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
+
+/**
+ * เทสต์ระดับ DB ของ API การเงินในพอร์ทัล (Portal-P5 · `97` §6.2/§6.3/§6.5/§17/§20 · มติ U6/O43 D7/D9/O44)
+ *
+ * - CO1 เห็นเฉพาะของ CO1 · รอบวางบิล `draft` ไม่แสดงและไม่นับในยอดใด ๆ
+ * - ยอดค้าง (รายการ + AR aging) **เท่ากับ AR ภายใน** (`getArAging`) ของบริษัทเดียวกัน — สูตรเดียว
+ *   (`arOutstandingSatang` หัก WHT ที่ลูกค้าหักแล้ว)
+ * - หัวหน้า/แอดมินบริษัท (ค่าเริ่มต้นไม่มี `portal_finance`) / ผู้ใช้ภายใน ⇒ 403 + audit `access_denied`
+ * - ดาวน์โหลดใบกำกับของ CO2 ด้วยผู้ใช้ CO1 ⇒ 403 · ของตัวเอง ⇒ PDF จริง + audit `export`
+ *
+ * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
+ */
+
+const getRawSessionUserMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/auth/session', () => ({ getRawSessionUser: getRawSessionUserMock, requireSession: vi.fn() }))
+
+const url = process.env.TEST_DATABASE_URL
+
+function assertLocalTestDatabase(connectionString: string): void {
+  const parsed = new URL(connectionString)
+  const isLocal = ['localhost', '127.0.0.1', '::1', 'postgres'].includes(parsed.hostname)
+  if (!isLocal || !parsed.pathname.includes('test')) {
+    throw new Error(`TEST_DATABASE_URL ต้องเป็น DB ทดสอบบนเครื่อง/CI เท่านั้น (host=${parsed.hostname}) — Rule 07`)
+  }
+}
+
+const suite = url ? describe : describe.skip
+if (!url) console.warn('[portal-finance-routes.db.test] ข้ามเทสต์ระดับ DB — ไม่มี TEST_DATABASE_URL')
+
+const ORG_ID = '00000000-0000-4000-8000-0000000975a0'
+const ROLE_FINANCE = '00000000-0000-4000-8000-0000000975a1'
+const ROLE_CO_MANAGER = '00000000-0000-4000-8000-0000000975a2'
+const ROLE_CO_SUPERVISOR = '00000000-0000-4000-8000-0000000975a3'
+const ROLE_CO_ADMIN = '00000000-0000-4000-8000-0000000975a4'
+const FINANCE_ID = '00000000-0000-4000-8000-0000000975b0'
+const CO1_MANAGER_ID = '00000000-0000-4000-8000-0000000975b1'
+const CO1_SUPERVISOR_ID = '00000000-0000-4000-8000-0000000975b2'
+const CO1_ADMIN_ID = '00000000-0000-4000-8000-0000000975b3'
+const CO2_MANAGER_ID = '00000000-0000-4000-8000-0000000975b4'
+const CO1 = '00000000-0000-4000-8000-0000000975c1'
+const CO2 = '00000000-0000-4000-8000-0000000975c2'
+
+const MS_PER_DAY = 86_400_000
+/** วันนี้ตามปฏิทินไทย (date-only) — route ใช้ `new Date()` จริง ⇒ fixture อิงวันนี้ */
+const TODAY = bangkokBusinessDate(new Date())
+const dayOffset = (days: number): string => new Date(TODAY.getTime() + days * MS_PER_DAY).toISOString().slice(0, 10)
+
+let client: PrismaClient | null = null
+
+function db(): PrismaClient {
+  if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
+  if (!client) {
+    assertLocalTestDatabase(url)
+    client = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) })
+  }
+  return client
+}
+
+type Routes = {
+  billing: typeof import('@/app/api/portal/billing-batches/route')
+  invoices: typeof import('@/app/api/portal/tax-invoices/route')
+  download: typeof import('@/app/api/portal/tax-invoices/[id]/download/route')
+  revenue: typeof import('@/app/api/portal/reports/revenue-summary/route')
+  aging: typeof import('@/app/api/portal/reports/ar-aging/route')
+  revenueQueries: typeof import('@/lib/revenue/queries')
+}
+let routes: Routes
+
+function defaultCapabilities(roleName: string): Record<string, CapabilityAccessLevel> {
+  const caps: Record<string, CapabilityAccessLevel> = {}
+  for (const grant of DEFAULT_ROLE_CAPABILITIES) {
+    if (grant.role.name === roleName && grant.role.roleGroup === 'finance_company') caps[grant.capabilityCode] = grant.level
+  }
+  return caps
+}
+
+function companyUser(id: string, roleId: string, roleName: string, companyId: string): SessionUser {
+  return {
+    id,
+    organizationId: ORG_ID,
+    supabaseUid: `uid-${id}`,
+    email: null,
+    fullName: `${roleName} ทดสอบ`,
+    status: 'active',
+    roleId,
+    roleName,
+    roleGroup: 'finance_company',
+    isSuperadmin: false,
+    teamId: null,
+    companyId,
+    capabilities: defaultCapabilities(roleName),
+    scope: { kind: 'company', teamIds: [], companyId, userId: id },
+    loginAt: new Date().toISOString(),
+  }
+}
+
+const CO1_MANAGER = companyUser(CO1_MANAGER_ID, ROLE_CO_MANAGER, COMPANY_MANAGER_ROLE_NAME, CO1)
+const CO1_SUPERVISOR = companyUser(CO1_SUPERVISOR_ID, ROLE_CO_SUPERVISOR, COMPANY_SUPERVISOR_ROLE_NAME, CO1)
+const CO1_ADMIN = companyUser(CO1_ADMIN_ID, ROLE_CO_ADMIN, COMPANY_ADMIN_ROLE_NAME, CO1)
+const CO2_MANAGER = companyUser(CO2_MANAGER_ID, ROLE_CO_MANAGER, COMPANY_MANAGER_ROLE_NAME, CO2)
+const INTERNAL_FINANCE: SessionUser = {
+  ...companyUser(FINANCE_ID, ROLE_FINANCE, 'การเงิน P5', CO1),
+  roleGroup: 'system',
+  companyId: null,
+  // ผู้ใช้ภายในต่อให้ถือ portal_* ก็เข้าพอร์ทัลไม่ได้ (D2/D11)
+  capabilities: { manage_billing: 'manage', portal_finance: 'view', portal_download: 'view' },
+  scope: { kind: 'global', teamIds: [], companyId: null, userId: FINANCE_ID },
+}
+
+function request(path: string): NextRequest {
+  const full = `http://localhost${path}`
+  return Object.assign(new Request(full), { nextUrl: new URL(full) }) as unknown as NextRequest
+}
+
+const params = (id: string) => ({ params: Promise.resolve({ id }) })
+
+async function dataOf<T>(response: Response): Promise<T> {
+  expect(response.status).toBe(200)
+  return ((await response.json()) as { data: T }).data
+}
+
+async function codeOf(response: Response): Promise<string | undefined> {
+  return ((await response.json()) as { error?: { code?: string } }).error?.code
+}
+
+/** deep-scan: ห้ามมีฟิลด์ภายในหลุดออกพอร์ทัล */
+const FORBIDDEN_KEYS = new Set([
+  'organizationId',
+  'companyId',
+  'companyName',
+  'createdBy',
+  'createdByName',
+  'whtWithheldByCustomerSatang',
+  'vatModes',
+  'revenueCount',
+  'revenues',
+  'daysOverdue',
+  'cancelReason',
+  'cancelledBy',
+  'salesRecordId',
+  'billingBatchId',
+  'columns',
+  'note',
+  'kpis',
+  '__key',
+  'imei',
+  'imeiContract',
+  'teamId',
+])
+
+function forbiddenKeysIn(value: unknown, path = '$'): string[] {
+  if (Array.isArray(value)) return value.flatMap((item, index) => forbiddenKeysIn(item, `${path}[${index}]`))
+  if (value === null || typeof value !== 'object') return []
+  return Object.entries(value).flatMap(([key, child]) => [
+    ...(FORBIDDEN_KEYS.has(key) ? [`${path}.${key}`] : []),
+    ...forbiddenKeysIn(child, `${path}.${key}`),
+  ])
+}
+
+async function auditsSince(since: Date, action: string, actorId: string) {
+  return db().auditLog.findMany({
+    where: { organizationId: ORG_ID, action: action as 'export', actorId, createdAt: { gte: since } },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+// ── seed ────────────────────────────────────────────────────────────────────
+
+let seq = 0
+const RUN = Date.now().toString(36)
+
+async function seedCase(companyId: string, outcome: 'closed_success' | 'closed_fail'): Promise<string> {
+  seq += 1
+  const caseRef = `P5-${RUN}-${seq}`
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO cases (
+      organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
+      debtor_name, addr_province, addr_district, asset_kind, asset_description,
+      debt_amount_satang, outcome, closed_at,
+      service_fee_model_snapshot, service_fee_base_satang, service_fee_rate_pct, service_fee_basis_snapshot
+    ) VALUES (
+      '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${companyId}', 'manual', '${outcome}', '${FINANCE_ID}',
+      'ลูกหนี้ ${seq}', 'เชียงใหม่', 'เมือง', 'smartphone', 'iPhone 15',
+      1000000, '${outcome}', NOW(), 'SUCCESS_FEE', 0, 10, 'debt_amount'
+    ) RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function seedBatch(options: {
+  companyId: string
+  status: 'draft' | 'sent' | 'partially_paid' | 'paid'
+  totalSatang: number
+  receivedSatang?: number
+  whtSatang?: number
+  dueDate: string
+}): Promise<string> {
+  seq += 1
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, received_satang,
+                                 wht_withheld_by_customer_satang, due_date, sent_at, created_by)
+    VALUES ('${ORG_ID}', '${options.companyId}', 'รอบ P5 ${seq}', '${options.status}', ${options.totalSatang},
+            ${options.receivedSatang ?? 0}, ${options.whtSatang ?? 0}, '${options.dueDate}',
+            ${options.status === 'draft' ? 'NULL' : 'NOW()'}, '${FINANCE_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function seedRevenue(caseId: string, companyId: string, grossSatang: number, batchId: string | null): Promise<void> {
+  const vat = Math.round((grossSatang * 7) / 100)
+  await db().$executeRawUnsafe(`
+    INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang,
+                          vat_rate_pct_used, total_satang, fee_model_snapshot, vat_mode_snapshot, status,
+                          revenue_date, created_by)
+    VALUES ('${ORG_ID}', '${caseId}', '${companyId}', ${batchId === null ? 'NULL' : `'${batchId}'`}, ${grossSatang},
+            ${vat}, 7.00, ${grossSatang + vat}, 'SUCCESS_FEE', 'exclude_vat',
+            '${batchId === null ? 'ready_for_billing' : 'billed'}', '${dayOffset(0)}', '${FINANCE_ID}')
+  `)
+}
+
+let periodId = ''
+
+async function seedInvoice(options: {
+  batchId: string
+  companyId: string
+  totalSatang: number
+  cancelled?: boolean
+}): Promise<string> {
+  seq += 1
+  const beforeVat = Math.round((options.totalSatang * 100) / 107)
+  const sales = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id,
+                               total_before_vat_satang, vat_satang, total_satang, created_by)
+    VALUES ('${ORG_ID}', '${periodId}', '${options.batchId}', '${options.companyId}',
+            ${beforeVat}, ${options.totalSatang - beforeVat}, ${options.totalSatang}, '${FINANCE_ID}')
+    RETURNING id
+  `)
+  const cancelled = options.cancelled === true
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, status,
+                              cancel_reason, cancelled_by, cancelled_at, created_by)
+    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INVP5-${RUN}-${seq}', '${dayOffset(0)}',
+            '${cancelled ? 'cancelled' : 'active'}',
+            ${cancelled ? `$$ยกเลิกในเทสต์$$, '${FINANCE_ID}', NOW()` : 'NULL, NULL, NULL'}, '${FINANCE_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function cleanup(): Promise<void> {
+  const tx = db()
+  // ใบกำกับห้ามลบที่ระดับ DB (`02` §13) — ปิด trigger ชั่วคราวเฉพาะการล้าง fixture ของเทสต์ (แบบเดียวกับ accounting-reports.db.test)
+  await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices DISABLE TRIGGER trg_tax_invoices_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices ENABLE TRIGGER trg_tax_invoices_no_delete`)
+  }
+  await tx.$executeRawUnsafe(`DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM adjustments WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM billing_batches WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
+}
+
+interface Fixture {
+  co1Sent: string
+  co1Partial: string
+  co1Paid: string
+  co1Draft: string
+  co1InvoiceActive: string
+  co1InvoiceCancelled: string
+  co1InvoiceOnDraft: string
+  co2Invoice: string
+}
+let fx: Fixture
+
+async function seedFixture(): Promise<Fixture> {
+  const periods = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+    VALUES ('${ORG_ID}', 'งวดทดสอบ P5', 2569, 10, 'collecting', '${FINANCE_ID}') RETURNING id
+  `)
+  periodId = periods[0]?.id ?? ''
+
+  // CO1: ค้างเต็ม · ชำระบางส่วน + ลูกค้าหัก WHT · ชำระครบ (รวม WHT) · draft (ห้ามแสดง/นับ)
+  const co1Sent = await seedBatch({ companyId: CO1, status: 'sent', totalSatang: 1_070_000, dueDate: dayOffset(-10) })
+  const co1Partial = await seedBatch({
+    companyId: CO1,
+    status: 'partially_paid',
+    totalSatang: 2_140_000,
+    receivedSatang: 1_000_000,
+    whtSatang: 60_000,
+    dueDate: dayOffset(-45),
+  })
+  const co1Paid = await seedBatch({
+    companyId: CO1,
+    status: 'paid',
+    totalSatang: 535_000,
+    receivedSatang: 520_000,
+    whtSatang: 15_000,
+    dueDate: dayOffset(-100),
+  })
+  const co1Draft = await seedBatch({ companyId: CO1, status: 'draft', totalSatang: 999_900, dueDate: dayOffset(-120) })
+  const co2Sent = await seedBatch({ companyId: CO2, status: 'sent', totalSatang: 777_700, dueDate: dayOffset(-5) })
+
+  // รายได้: นับเฉพาะที่อยู่ในรอบ sent ขึ้นไปของ CO1
+  await seedRevenue(await seedCase(CO1, 'closed_success'), CO1, 1_000_000, co1Sent)
+  await seedRevenue(await seedCase(CO1, 'closed_fail'), CO1, 500_000, co1Draft)
+  await seedRevenue(await seedCase(CO1, 'closed_success'), CO1, 300_000, null)
+  await seedRevenue(await seedCase(CO2, 'closed_success'), CO2, 400_000, co2Sent)
+
+  return {
+    co1Sent,
+    co1Partial,
+    co1Paid,
+    co1Draft,
+    co1InvoiceActive: await seedInvoice({ batchId: co1Sent, companyId: CO1, totalSatang: 1_070_000 }),
+    co1InvoiceCancelled: await seedInvoice({ batchId: co1Partial, companyId: CO1, totalSatang: 2_140_000, cancelled: true }),
+    co1InvoiceOnDraft: await seedInvoice({ batchId: co1Draft, companyId: CO1, totalSatang: 999_900 }),
+    co2Invoice: await seedInvoice({ batchId: co2Sent, companyId: CO2, totalSatang: 777_700 }),
+  }
+}
+
+beforeAll(async () => {
+  if (!url) return
+  process.env.DATABASE_URL = url
+  routes = {
+    billing: await import('@/app/api/portal/billing-batches/route'),
+    invoices: await import('@/app/api/portal/tax-invoices/route'),
+    download: await import('@/app/api/portal/tax-invoices/[id]/download/route'),
+    revenue: await import('@/app/api/portal/reports/revenue-summary/route'),
+    aging: await import('@/app/api/portal/reports/ar-aging/route'),
+    revenueQueries: await import('@/lib/revenue/queries'),
+  }
+
+  const tx = db()
+  await tx.$executeRawUnsafe(`
+    INSERT INTO organizations (id, name, tax_id, address)
+    VALUES ('${ORG_ID}', 'PortalP5Test', '9999999997500', 'ที่อยู่ทดสอบ P5') ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO roles (id, organization_id, name, role_group, is_seed) VALUES
+      ('${ROLE_FINANCE}', '${ORG_ID}', 'การเงิน P5', 'system', false),
+      ('${ROLE_CO_MANAGER}', '${ORG_ID}', '${COMPANY_MANAGER_ROLE_NAME}', 'finance_company', false),
+      ('${ROLE_CO_SUPERVISOR}', '${ORG_ID}', '${COMPANY_SUPERVISOR_ROLE_NAME}', 'finance_company', false),
+      ('${ROLE_CO_ADMIN}', '${ORG_ID}', '${COMPANY_ADMIN_ROLE_NAME}', 'finance_company', false)
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO users (id, organization_id, role_id, email, full_name, status) VALUES
+      ('${FINANCE_ID}', '${ORG_ID}', '${ROLE_FINANCE}', 'finance-p5@test.local', 'การเงิน P5', 'active')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days,
+                                   address, created_by) VALUES
+      ('${CO1}', '${ORG_ID}', 'ไฟแนนซ์หนึ่ง P5', 'CO1P5', '0105512975001', 'exclude_vat', 30, '1 ถ.สีลม', '${FINANCE_ID}'),
+      ('${CO2}', '${ORG_ID}', 'ไฟแนนซ์สอง P5', 'CO2P5', '0105512975002', 'exclude_vat', 30, '2 ถ.สาทร', '${FINANCE_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO users (id, organization_id, role_id, email, full_name, status, company_id) VALUES
+      ('${CO1_MANAGER_ID}', '${ORG_ID}', '${ROLE_CO_MANAGER}', 'co1-mgr-p5@test.local', 'ผู้จัดการ CO1', 'active', '${CO1}'),
+      ('${CO1_SUPERVISOR_ID}', '${ORG_ID}', '${ROLE_CO_SUPERVISOR}', 'co1-sup-p5@test.local', 'หัวหน้า CO1', 'active', '${CO1}'),
+      ('${CO1_ADMIN_ID}', '${ORG_ID}', '${ROLE_CO_ADMIN}', 'co1-adm-p5@test.local', 'แอดมิน CO1', 'active', '${CO1}'),
+      ('${CO2_MANAGER_ID}', '${ORG_ID}', '${ROLE_CO_MANAGER}', 'co2-mgr-p5@test.local', 'ผู้จัดการ CO2', 'active', '${CO2}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await cleanup()
+})
+
+afterAll(async () => {
+  if (url) await cleanup()
+  await client?.$disconnect()
+})
+
+beforeEach(async () => {
+  if (!url) return
+  getRawSessionUserMock.mockReset()
+  await cleanup()
+  fx = await seedFixture()
+})
+
+const as = (user: SessionUser): void => {
+  getRawSessionUserMock.mockResolvedValue(user)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+
+suite('GET /api/portal/billing-batches', () => {
+  it('CO1 เห็นเฉพาะรอบของ CO1 ที่ sent ขึ้นไป — draft ไม่แสดง (§20 Billing draft ถูกกรอง)', async () => {
+    as(CO1_MANAGER)
+    const items = await dataOf<PortalBillingBatchDto[]>(await routes.billing.GET(request('/api/portal/billing-batches'), undefined))
+
+    expect(items.map((item) => item.id).sort()).toEqual([fx.co1Sent, fx.co1Partial, fx.co1Paid].sort())
+    expect(items.map((item) => item.id)).not.toContain(fx.co1Draft)
+    expect(items.every((item) => item.statusDisplay.code !== ('draft' as string))).toBe(true)
+
+    const partial = items.find((item) => item.id === fx.co1Partial)
+    // ยอดค้าง = ยอดบิล − รับแล้ว − WHT ที่ลูกค้าหัก (O44)
+    expect(partial).toMatchObject({ totalSatang: 2_140_000, receivedSatang: 1_000_000, outstandingSatang: 1_080_000 })
+    expect(partial?.statusDisplay.code).toBe('partially_paid')
+    expect(items.find((item) => item.id === fx.co1Paid)?.outstandingSatang).toBe(0)
+    expect(forbiddenKeysIn(items)).toEqual([])
+  })
+
+  it('CO2 ไม่เห็นรอบของ CO1', async () => {
+    as(CO2_MANAGER)
+    const items = await dataOf<PortalBillingBatchDto[]>(await routes.billing.GET(request('/api/portal/billing-batches'), undefined))
+    expect(items).toHaveLength(1)
+    expect(items.map((item) => item.id)).not.toContain(fx.co1Sent)
+  })
+
+  it('ยอดค้างรวมเท่ากับ AR ภายใน (getArAging) ของบริษัทเดียวกัน — ไม่รวม draft', async () => {
+    as(CO1_MANAGER)
+    const items = await dataOf<PortalBillingBatchDto[]>(await routes.billing.GET(request('/api/portal/billing-batches'), undefined))
+    const internal = await routes.revenueQueries.getArAging(INTERNAL_FINANCE, { companyId: CO1 })
+
+    const portalOutstanding = items.reduce((sum, item) => sum + Math.max(0, item.outstandingSatang), 0)
+    expect(portalOutstanding).toBe(1_070_000 + 1_080_000)
+    expect(portalOutstanding).toBe(internal.totalOutstandingSatang)
+  })
+
+  it('หัวหน้า/แอดมินบริษัท (ค่าเริ่มต้นไม่มี portal_finance) ⇒ 403 + audit access_denied (§20 สิทธิ์ตามหมวด)', async () => {
+    for (const user of [CO1_SUPERVISOR, CO1_ADMIN]) {
+      const since = new Date(Date.now() - 1000)
+      as(user)
+      const response = await routes.billing.GET(request('/api/portal/billing-batches'), undefined)
+      expect(response.status).toBe(403)
+      expect(await codeOf(response)).toBe('PERMISSION_DENIED')
+      const audits = await auditsSince(since, 'access_denied', user.id)
+      expect(audits.length).toBeGreaterThanOrEqual(1)
+      expect(audits.at(-1)?.afterData).toMatchObject({ section: 'finance', cause: 'missing_capability' })
+    }
+  })
+
+  it('ผู้ใช้ภายใน (แม้ถือ portal_finance) ⇒ 403 + audit (D2/D11)', async () => {
+    const since = new Date(Date.now() - 1000)
+    as(INTERNAL_FINANCE)
+    const responses = await Promise.all([
+      routes.billing.GET(request('/api/portal/billing-batches'), undefined),
+      routes.invoices.GET(request('/api/portal/tax-invoices'), undefined),
+      routes.revenue.GET(request('/api/portal/reports/revenue-summary'), undefined),
+      routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined),
+      routes.download.GET(request(`/api/portal/tax-invoices/${fx.co1InvoiceActive}/download`), params(fx.co1InvoiceActive)),
+    ])
+    for (const response of responses) expect(response.status).toBe(403)
+    const audits = await auditsSince(since, 'access_denied', FINANCE_ID)
+    expect(audits.length).toBeGreaterThanOrEqual(5)
+  })
+})
+
+suite('GET /api/portal/tax-invoices', () => {
+  it('list ของ CO1 เท่านั้น · active/cancelled แสดงสถานะ · ใบของรอบ draft ไม่แสดง', async () => {
+    as(CO1_MANAGER)
+    const items = await dataOf<PortalTaxInvoiceDto[]>(await routes.invoices.GET(request('/api/portal/tax-invoices'), undefined))
+
+    expect(items.map((item) => item.id).sort()).toEqual([fx.co1InvoiceActive, fx.co1InvoiceCancelled].sort())
+    expect(items.find((item) => item.id === fx.co1InvoiceActive)?.statusDisplay.code).toBe('active')
+    expect(items.find((item) => item.id === fx.co1InvoiceCancelled)?.statusDisplay.code).toBe('cancelled')
+    expect(items.find((item) => item.id === fx.co1InvoiceActive)).toMatchObject({ totalSatang: 1_070_000 })
+    expect(items.map((item) => item.id)).not.toContain(fx.co2Invoice)
+    expect(items.map((item) => item.id)).not.toContain(fx.co1InvoiceOnDraft)
+    expect(forbiddenKeysIn(items)).toEqual([])
+  })
+})
+
+suite('GET /api/portal/tax-invoices/:id/download', () => {
+  it('ใบของตัวเอง ⇒ PDF จริง (renderer เดียวกับภายใน) + audit export', async () => {
+    const since = new Date(Date.now() - 1000)
+    as(CO1_MANAGER)
+    const response = await routes.download.GET(
+      request(`/api/portal/tax-invoices/${fx.co1InvoiceActive}/download`),
+      params(fx.co1InvoiceActive),
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('application/pdf')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const bytes = Buffer.from(await response.arrayBuffer())
+    expect(bytes.subarray(0, 4).toString('latin1')).toBe('%PDF')
+
+    const audits = await auditsSince(since, 'export', CO1_MANAGER_ID)
+    expect(audits).toHaveLength(1)
+    expect(audits[0]).toMatchObject({ targetType: 'tax_invoices', targetId: fx.co1InvoiceActive })
+    expect(audits[0]?.afterData).toMatchObject({ channel: 'portal', document: 'tax_invoice_pdf' })
+  }, 30_000)
+
+  it('ใบของ CO2 ด้วยผู้ใช้ CO1 ⇒ 403 + audit cross_company · id สุ่ม / ใบของรอบ draft ⇒ 403 (ไม่ใช่ 404)', async () => {
+    const since = new Date(Date.now() - 1000)
+    as(CO1_MANAGER)
+    const cross = await routes.download.GET(request(`/api/portal/tax-invoices/${fx.co2Invoice}/download`), params(fx.co2Invoice))
+    expect(cross.status).toBe(403)
+    expect(await codeOf(cross)).toBe('PERMISSION_DENIED')
+
+    const randomId = '00000000-0000-4000-8000-0000000975ff'
+    const random = await routes.download.GET(request(`/api/portal/tax-invoices/${randomId}/download`), params(randomId))
+    expect(random.status).toBe(403)
+    const garbage = await routes.download.GET(request('/api/portal/tax-invoices/not-a-uuid/download'), params('not-a-uuid'))
+    expect(garbage.status).toBe(403)
+    const onDraft = await routes.download.GET(
+      request(`/api/portal/tax-invoices/${fx.co1InvoiceOnDraft}/download`),
+      params(fx.co1InvoiceOnDraft),
+    )
+    expect(onDraft.status).toBe(403)
+
+    const denied = await auditsSince(since, 'access_denied', CO1_MANAGER_ID)
+    const causes = denied.map((row) => (row.afterData as { cause?: string } | null)?.cause)
+    expect(causes).toContain('cross_company')
+    expect(causes.filter((cause) => cause === 'row_not_found').length).toBeGreaterThanOrEqual(3)
+    expect(denied.find((row) => (row.afterData as { cause?: string }).cause === 'cross_company')?.targetId).toBe(fx.co2Invoice)
+    // ปฏิเสธแล้วต้องไม่มี audit การดาวน์โหลด (ไฟล์ไม่ถูก render)
+    const exported = await auditsSince(since, 'export', CO1_MANAGER_ID)
+    expect(exported.filter((row) => row.targetId === fx.co2Invoice || row.targetId === fx.co1InvoiceOnDraft)).toEqual([])
+  })
+
+  it('ไม่มี portal_download ⇒ 403 ก่อนแตะแถว', async () => {
+    as({ ...CO1_MANAGER, capabilities: { portal_finance: 'view' } })
+    const response = await routes.download.GET(
+      request(`/api/portal/tax-invoices/${fx.co1InvoiceActive}/download`),
+      params(fx.co1InvoiceActive),
+    )
+    expect(response.status).toBe(403)
+  })
+})
+
+suite('GET /api/portal/reports/*', () => {
+  it('revenue-summary: นับเฉพาะรายได้ในรอบ sent ขึ้นไปของ CO1 · ครบ 6 เดือน · คำนวณสด', async () => {
+    as(CO1_MANAGER)
+    const dto = await dataOf<PortalRevenueSummaryDto>(
+      await routes.revenue.GET(request('/api/portal/reports/revenue-summary'), undefined),
+    )
+    expect(dto.months).toHaveLength(6)
+    expect(dto.total).toMatchObject({ revenueSatang: 1_000_000, caseCount: 1, successCount: 1, failCount: 0 })
+    expect(dto.months.at(-1)?.revenueSatang).toBe(1_000_000)
+    expect(dto.months.slice(0, 5).every((month) => month.revenueSatang === 0)).toBe(true)
+    expect(forbiddenKeysIn(dto)).toEqual([])
+
+    // คำนวณสด — ย้าย draft เป็น sent แล้วยอดเปลี่ยนทันที (ไม่มีแคช)
+    await db().$executeRawUnsafe(`UPDATE billing_batches SET status = 'sent' WHERE id = '${fx.co1Draft}'`)
+    const after = await dataOf<PortalRevenueSummaryDto>(
+      await routes.revenue.GET(request('/api/portal/reports/revenue-summary?months=3'), undefined),
+    )
+    expect(after.months).toHaveLength(3)
+    expect(after.total).toMatchObject({ revenueSatang: 1_500_000, caseCount: 2, successCount: 1, failCount: 1 })
+  })
+
+  it('revenue-summary: months ผิดรูป ⇒ 400', async () => {
+    as(CO1_MANAGER)
+    const response = await routes.revenue.GET(request('/api/portal/reports/revenue-summary?months=99'), undefined)
+    expect(response.status).toBe(400)
+  })
+
+  it('ar-aging: เท่ากับ AR ภายในของบริษัทเดียวกัน · draft ไม่นับ · จัดช่วงตามวันครบกำหนด', async () => {
+    as(CO1_MANAGER)
+    const dto = await dataOf<PortalArAgingDto>(await routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined))
+    const internal = await routes.revenueQueries.getArAging(INTERNAL_FINANCE, { companyId: CO1 })
+
+    expect(dto.totalOutstandingSatang).toBe(2_150_000)
+    expect(dto.totalOutstandingSatang).toBe(internal.totalOutstandingSatang)
+    expect(dto.buckets.map((bucket) => bucket.outstandingSatang)).toEqual(
+      internal.buckets.map((bucket) => bucket.outstandingSatang),
+    )
+    expect(dto.buckets.map((bucket) => bucket.label)).toEqual(internal.buckets.map((bucket) => bucket.label))
+    expect(dto.batchCount).toBe(2)
+    expect(forbiddenKeysIn(dto)).toEqual([])
+
+    // CO2 เห็นเฉพาะของตัวเอง
+    as(CO2_MANAGER)
+    const co2 = await dataOf<PortalArAgingDto>(await routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined))
+    expect(co2.totalOutstandingSatang).toBe(777_700)
+  })
+})

@@ -24,6 +24,7 @@ import {
   type PortalLotStatusCode,
   type PortalStatusDisplay,
 } from '@/lib/portal/status-map'
+import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import { ASSET_CONDITION_LABEL, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -452,4 +453,129 @@ export function serializePortalDashboard(
   }
   if (canAccess('handover', capabilities)) dto.pendingLots = { count: source.pendingLotCount }
   return dto
+}
+
+// ── รายงานสรุป (`97` §6.5 · มติ O43 D9 — Portal-P5) ─────────────────────────
+//
+// รับ `ReportData` จาก builder ภายในตัวเดิม (`buildRevenueSummary` F2 / `buildArAgingReport` F3) ที่
+// query layer scope เฉพาะบริษัท + เฉพาะ batch `sent` ขึ้นไปแล้ว → ดึงเฉพาะค่าที่อนุญาตทีละคีย์
+// (ไม่ส่ง `columns`/`note`/`__key` ของรายงานภายในออกไป · ไม่มีชื่อ/รหัสบริษัท)
+
+function cellNumber(row: ReportRow | null | undefined, key: string): number {
+  const value = row?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function cellNumberOrNull(row: ReportRow | null | undefined, key: string): number | null {
+  const value = row?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function kpiNumber(report: ReportData, key: string): number {
+  const value = report.kpis?.find((kpi) => kpi.key === key)?.value
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+export interface PortalRevenueSummaryMonth {
+  /** `YYYY-MM-DD` วันแรกของเดือน (= คีย์แถวของ F2 แบบรายเดือน) */
+  key: string
+  /** ป้าย พ.ศ. เช่น "สิงหาคม 2569" */
+  label: string
+}
+
+export interface PortalRevenueSummaryFigures {
+  revenueSatang: number
+  caseCount: number
+  successCount: number
+  failCount: number
+  /** `null` = ยังไม่มีเคสปิด (แสดง N/A — ห้ามหารศูนย์) */
+  successPct: number | null
+  revenuePerCaseSatang: number | null
+}
+
+export interface PortalRevenueSummaryRowDto extends PortalRevenueSummaryFigures {
+  /** `YYYY-MM-DD` วันแรกของเดือน */
+  month: string
+  label: string
+}
+
+export interface PortalRevenueSummaryDto {
+  rangeStart: string
+  rangeEnd: string
+  /** ครบทุกเดือนในช่วง (เดือนที่ไม่มีรายได้ = 0) เรียงเก่า → ใหม่ */
+  months: PortalRevenueSummaryRowDto[]
+  total: PortalRevenueSummaryFigures
+}
+
+function revenueFiguresOf(row: ReportRow | null | undefined): PortalRevenueSummaryFigures {
+  return {
+    revenueSatang: cellNumber(row, 'revenueSatang'),
+    caseCount: cellNumber(row, 'caseCount'),
+    successCount: cellNumber(row, 'successCount'),
+    failCount: cellNumber(row, 'failCount'),
+    successPct: cellNumberOrNull(row, 'successPct'),
+    revenuePerCaseSatang: cellNumberOrNull(row, 'revenuePerCaseSatang'),
+  }
+}
+
+/** ผลของ `buildRevenueSummary({ groupBy: 'month' })` → DTO พอร์ทัล (whitelist) */
+export function serializePortalRevenueSummary(input: {
+  report: ReportData
+  months: readonly PortalRevenueSummaryMonth[]
+  rangeStart: Date
+  rangeEnd: Date
+}): PortalRevenueSummaryDto {
+  const byKey = new Map<string, ReportRow>()
+  for (const row of input.report.rows) {
+    const key = row[ROW_KEY]
+    if (typeof key === 'string') byKey.set(key, row)
+  }
+  return {
+    rangeStart: dateOnly(input.rangeStart),
+    rangeEnd: dateOnly(input.rangeEnd),
+    months: input.months.map((month) => ({
+      month: month.key,
+      label: month.label,
+      ...revenueFiguresOf(byKey.get(month.key)),
+    })),
+    total: revenueFiguresOf(input.report.totalRow),
+  }
+}
+
+export interface PortalArAgingBucketDto {
+  /** ป้ายช่วงจากค่าตั้งองค์กร เช่น `0-30 วัน` / `90+ วัน` */
+  label: string
+  outstandingSatang: number
+  tone: 'default' | 'warning' | 'danger'
+}
+
+export interface PortalArAgingDto {
+  asOf: string
+  totalOutstandingSatang: number
+  over60Satang: number
+  over90Satang: number
+  /** จำนวนรอบวางบิลที่ยังค้างชำระ */
+  batchCount: number
+  buckets: PortalArAgingBucketDto[]
+}
+
+const AGING_BUCKET_KEY = /^bucket\d+$/
+
+/** ผลของ `buildArAgingReport()` (scope บริษัทเดียว) → DTO พอร์ทัล (whitelist) */
+export function serializePortalArAging(report: ReportData, asOf: Date): PortalArAgingDto {
+  const totalRow = report.totalRow ?? null
+  return {
+    asOf: dateOnly(asOf),
+    totalOutstandingSatang: kpiNumber(report, 'outstanding'),
+    over60Satang: kpiNumber(report, 'over60'),
+    over90Satang: kpiNumber(report, 'over90'),
+    batchCount: cellNumber(totalRow, 'batchCount'),
+    buckets: report.columns
+      .filter((column) => AGING_BUCKET_KEY.test(column.key))
+      .map((column) => ({
+        label: column.header,
+        outstandingSatang: cellNumber(totalRow, column.key),
+        tone: column.tone ?? 'default',
+      })),
+  }
 }
