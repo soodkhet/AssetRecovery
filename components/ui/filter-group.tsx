@@ -29,7 +29,7 @@ export function FilterGroup<T extends string>({
           onClick={() => onChange(option.value)}
           aria-pressed={value === option.value}
           className={cn(
-            'focus-ring rounded-md px-3 py-1 text-xs font-semibold transition-colors',
+            'focus-ring-inset rounded-md px-3 py-1 text-xs font-semibold transition-colors',
             value === option.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
           )}
         >

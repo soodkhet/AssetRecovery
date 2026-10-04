@@ -52,7 +52,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
                 <Link
                   key={item.id}
                   href={item.href}
-                  className="focus-ring border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800"
+                  className="focus-ring-inset border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800"
                 >
                   {item.label}
                 </Link>
@@ -79,7 +79,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
                 onClick={() => setTab(item.id)}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'focus-ring border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+                  'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
                   active
                     ? 'border-slate-900 text-slate-900'
                     : 'border-transparent text-slate-500 hover:text-slate-800',

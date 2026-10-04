@@ -176,8 +176,8 @@ export function TeamsManager() {
               }}
               className={
                 side === value
-                  ? 'rounded-md bg-white px-4 py-1.5 text-sm font-medium text-slate-900 shadow-sm'
-                  : 'rounded-md px-4 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700'
+                  ? 'focus-ring-inset rounded-md bg-white px-4 py-1.5 text-sm font-medium text-slate-900 shadow-sm'
+                  : 'focus-ring-inset rounded-md px-4 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700'
               }
             >
               {value === 'inhouse' ? 'Inhouse' : 'Outsource'}

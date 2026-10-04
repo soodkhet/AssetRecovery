@@ -45,7 +45,7 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
               href={item.path}
               aria-current={current ? 'page' : undefined}
               className={cn(
-                'focus-ring rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
+                'focus-ring-inset rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
                 current
                   ? 'border border-slate-300 bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800',

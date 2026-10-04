@@ -8,7 +8,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; }
-  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 2px; }
+  .focus-ring:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+  .focus-ring-inset:focus-visible { outline: 2px solid #0f172a; outline-offset: -2px; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -260,7 +261,7 @@ function renderTopNav() {
           <span class="font-bold text-slate-900 text-sm tracking-tight">AssetRecovery</span>
         </div>
         <div class="flex gap-1">
-          ${tabs.map(t => `<button data-action="set-main" data-id="${t.id}" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors focus-ring ${state.mainTab === t.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}">${t.label}</button>`).join('')}
+          ${tabs.map(t => `<button data-action="set-main" data-id="${t.id}" class="px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors focus-ring-inset ${state.mainTab === t.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}">${t.label}</button>`).join('')}
         </div>
         <div class="ml-auto flex items-center gap-3">
           <div class="text-right hidden sm:block">
@@ -807,7 +808,7 @@ function renderAccountingOperations() {
   </div>
   <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 animate-fade-in">
     <div class="flex gap-6 border-b border-slate-200 mb-6 overflow-x-auto no-scrollbar">
-      ${tabs.map(t => `<button data-action="set-sub" data-parent="accountingSubTab" data-id="${t.id}" class="py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap focus-ring ${state.accountingSubTab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
+      ${tabs.map(t => `<button data-action="set-sub" data-parent="accountingSubTab" data-id="${t.id}" class="py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap focus-ring-inset ${state.accountingSubTab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800'}">${t.label}</button>`).join('')}
     </div>
     ${content}
   </div>`;

@@ -73,7 +73,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
                   onClick={() => setTab(item.id)}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'focus-ring rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors',
+                    'focus-ring-inset rounded-lg px-4 py-2.5 text-left text-sm font-medium transition-colors',
                     active
                       ? 'border border-emerald-200 bg-emerald-50 text-emerald-900 shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',

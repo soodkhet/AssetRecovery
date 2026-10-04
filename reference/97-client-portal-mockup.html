@@ -15,7 +15,8 @@
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 2px; }
+  .focus-ring:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+  .focus-ring-inset:focus-visible { outline: 2px solid #0f172a; outline-offset: -2px; }
   .modal-backdrop { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(2px); }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }

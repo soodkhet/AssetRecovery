@@ -14,7 +14,8 @@
   ::-webkit-scrollbar { display: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .focus-ring:focus { outline: 2px solid #0f172a; outline-offset: 1px; }
+  .focus-ring:focus-visible { outline: 2px solid #0f172a; outline-offset: 1px; }
+  .focus-ring-inset:focus-visible { outline: 2px solid #0f172a; outline-offset: -2px; }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
   .active-scale:active { transform: scale(0.97); }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }

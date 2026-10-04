@@ -24,7 +24,7 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
         href={menu.path}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'focus-ring rounded-md px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors',
+          'focus-ring-inset rounded-md px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors',
           active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900',
         )}
       >
