@@ -38,7 +38,15 @@ export const FUNCTIONAL_GROUP_ORDER: readonly FunctionalGroup[] = ['ops', 'finan
 export const OTHER_GROUP_ID = 'other'
 export const OTHER_GROUP_LABEL = 'อื่นๆ (นอก Functional Matrix)'
 
-export type MatrixSectionId = FunctionalGroup | typeof OTHER_GROUP_ID
+/**
+ * capability ของพอร์ทัลบริษัทไฟแนนซ์ (`module = 'portal'` และอยู่นอก matrix) — แยกเป็นหมวดของตัวเอง
+ * ให้ Superadmin ปรับสิทธิ์ผู้ใช้บริษัทได้ชัด (มติ PO 05/10/2569 U6/O43 D1) · เป็นการจัดกลุ่มบนหน้าจอเท่านั้น
+ */
+export const PORTAL_GROUP_ID = 'portal'
+export const PORTAL_GROUP_LABEL = 'พอร์ทัลบริษัทไฟแนนซ์ (Client Portal)'
+export const PORTAL_MODULE = 'portal'
+
+export type MatrixSectionId = FunctionalGroup | typeof PORTAL_GROUP_ID | typeof OTHER_GROUP_ID
 
 export interface CapabilityInfo {
   code: string
@@ -105,20 +113,23 @@ export function buildMatrixRow(
 }
 
 function sectionIdOf(capability: CapabilityInfo): MatrixSectionId {
-  return capability.functionalGroup ?? OTHER_GROUP_ID
+  if (capability.functionalGroup !== null) return capability.functionalGroup
+  return capability.module === PORTAL_MODULE ? PORTAL_GROUP_ID : OTHER_GROUP_ID
 }
 
 function sectionLabel(id: MatrixSectionId): string {
-  return id === OTHER_GROUP_ID ? OTHER_GROUP_LABEL : FUNCTIONAL_GROUP_LABEL[id]
+  if (id === OTHER_GROUP_ID) return OTHER_GROUP_LABEL
+  if (id === PORTAL_GROUP_ID) return PORTAL_GROUP_LABEL
+  return FUNCTIONAL_GROUP_LABEL[id]
 }
 
-/** matrix ของ role หนึ่งตัว จัดกลุ่มตาม `13` §6.10 (4 กลุ่ม) + กลุ่ม "อื่นๆ" ท้ายสุด */
+/** matrix ของ role หนึ่งตัว จัดกลุ่มตาม `13` §6.10 (4 กลุ่ม) + หมวดพอร์ทัล + กลุ่ม "อื่นๆ" ท้ายสุด */
 export function buildRoleMatrix(
   role: MatrixRoleInput,
   capabilities: readonly CapabilityInfo[],
   assignments: Readonly<Record<string, CapabilityAccessLevel>>,
 ): MatrixSection[] {
-  const order: MatrixSectionId[] = [...FUNCTIONAL_GROUP_ORDER, OTHER_GROUP_ID]
+  const order: MatrixSectionId[] = [...FUNCTIONAL_GROUP_ORDER, PORTAL_GROUP_ID, OTHER_GROUP_ID]
 
   return order
     .map((id) => ({

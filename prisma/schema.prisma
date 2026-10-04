@@ -531,6 +531,8 @@ enum AuditAction {
   import
   login
   logout
+  /// มติ PO 05/10/2569 (O43 D4) — พอร์ทัลบริษัทปฏิเสธการเข้าถึง (403) ต้องบันทึก audit
+  access_denied
 
   @@map("audit_action")
 }

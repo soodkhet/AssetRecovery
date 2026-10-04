@@ -11,8 +11,9 @@ import { BOUND_NON_MATRIX_CAPABILITIES, DEFAULT_ROLE_CAPABILITIES } from '@/lib/
 describe('capability catalog (`02` §12 · `13` §6.10)', () => {
   // 49 = 47 ของ Phase 1.2/1.6 + `view_audit_log` (Phase 5.2 · `90` §12) + `manage_jobs`
   // (Phase 5.3 · `91` §12) — ทั้งสองตัวอยู่นอก Functional Matrix 37 รายการ
-  it('มี 49 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
-    expect(CAPABILITIES).toHaveLength(49)
+  // 54 = 49 + พอร์ทัลบริษัท 5 หมวด (มติ PO 05/10/2569 U6/O43 D1) — นอก Functional Matrix เช่นกัน
+  it('มี 54 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
+    expect(CAPABILITIES).toHaveLength(54)
     expect(MATRIX_CAPABILITIES).toHaveLength(37)
     expect(new Set(MATRIX_CAPABILITIES.map((capability) => capability.functionalGroup)).size).toBe(4)
   })
@@ -156,6 +157,33 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
       .sort()
 
     expect(groups).toEqual(['inhouse', 'outsource'])
+  })
+
+  it('พอร์ทัลบริษัท (มติ PO 05/10/2569 U6/O43 D1): ค่าเริ่มต้น 3 role ผู้ใช้บริษัท ระดับ view เท่านั้น', () => {
+    const byCode = (code: string) =>
+      DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === code)
+        .map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
+        .sort()
+    const all = ['finance_company:ผู้จัดการ=view', 'finance_company:หัวหน้า=view', 'finance_company:แอดมิน=view'].sort()
+
+    expect(byCode('portal_cases')).toEqual(all)
+    expect(byCode('portal_profile')).toEqual(all)
+    expect(byCode('portal_download')).toEqual(all)
+    expect(byCode('portal_finance')).toEqual(['finance_company:ผู้จัดการ=view'])
+    expect(byCode('portal_handover')).toEqual(['finance_company:ผู้จัดการ=view', 'finance_company:หัวหน้า=view'])
+  })
+
+  it('capability พอร์ทัลไม่ถูกล็อก (Superadmin ปรับได้) และไม่มีเลขอ้างอิงสเปคในข้อความ', () => {
+    const portal = CAPABILITIES.filter((each) => each.code.startsWith('portal_'))
+    expect(portal.map((each) => each.code).sort()).toEqual(
+      ['portal_cases', 'portal_download', 'portal_finance', 'portal_handover', 'portal_profile'].sort(),
+    )
+    for (const capability of portal) {
+      expect(capabilityLockOwner(capability.code), capability.code).toBeNull()
+      expect(capability.module).toBe('portal')
+      expect(capability.functionalGroup).toBeNull()
+      expect(`${capability.label} ${capability.description ?? ''}`).not.toMatch(/§|`\d{2}`|ไฟล์ \d{2}/)
+    }
   })
 
   it('ไม่มีคู่ (role, capability) ซ้ำ — กัน upsert ชนกันตอน seed', () => {

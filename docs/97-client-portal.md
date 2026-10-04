@@ -17,6 +17,7 @@
 | v3 | 03/07/2569 | **ปรับจาก feedback บน HTML Mockup เวอร์ชัน Mobile**: (1) Dashboard (ภาพรวม) ตัดรายการเคสออก รวมเนื้อหา Reports (แนวโน้ม 6 เดือน + AR Aging) เข้ามาเป็นหน้าเดียว — ตัดเมนู "รายงานสรุป" ออกจาก nav (2) เพิ่มตัวกรองสถานะให้ Billing Batch และ HandoverLot (3) หน้าส่งมอบทรัพย์ (§6.4): เพิ่ม drill-down ดูรายการ+รายละเอียดทรัพย์ทีละชิ้นในแต่ละ Lot รวมรูปถ่าย 7 มุมตอนรับเข้าคลัง (4) §6.1 (เคสของเรา): เคสสถานะ "ติดตามสำเร็จ" อนุญาตให้แสดงรูปสินค้าตอนรับเข้าคลัง (Asset.photos จับคู่ผ่าน case_ref) เพิ่มเติมจากเดิม — ยังคง**ไม่แสดง**หลักฐานปิดงานภาคสนาม (checkins/GPS, videos, audio) เนื่องจากอ่อนไหวกว่า (5) label ฝั่ง UI ปรับให้เป็นมุมมองบริษัทไฟแนนซ์: "สรุปรายได้"→"สรุปยอดเรียกเก็บค่าบริการ", ประเภทส่งมอบ "มารับที่คลัง/จัดส่งให้"→"รับเอง/จัดส่ง", Billing card "รับแล้ว/ค้าง"→"ชำระแล้ว/ค้างชำระ" |
 | v4 | 04/07/2569 | **กลับคำตัดสินใจ Layout เดิม (v1/§21) ตามคำสั่ง PO**: (1) เปลี่ยนจาก Sidebar ฝั่งซ้าย → Top Bar Nav แบบเดียวกับ Back Office ทุกโมดูล (`finance.html`/`settings.html`/`warehouse.html`) — header 64px + tab strip แนวนอน underline style (2) ยกเลิกการขยาย base font-size เป็น 18px เฉพาะพอร์ทัลนี้ กลับไปใช้ 16px มาตรฐานเดียวกับหน้าอื่น (3) ปรับ `badge()`/`kpi()` component ให้ใช้ Tailwind class ตรงกับ `statusBadge()`/`kpi()` ของ `finance.html`/`settings.html` เป๊ะ (text-[10px] badge, การ์ด KPI ขอบสี) (4) ย้ายข้อความ "แสดงเฉพาะข้อมูลบริษัท / โหมดดูอย่างเดียว" จาก sidebar footer เดิม → บรรทัดท้ายเนื้อหาแต่ละหน้าแทน (5) แก้ §5 ให้ตรงกับโครงสร้างเมนูจริงใน mockup (flat 6 เมนู ไม่มี "การเงิน" parent/"รายงานสรุป" ซ้อนแล้วตาม v3 ที่เคยตัดไปแต่ §5 เดิมยังไม่ได้อัปเดตตาม) — Mobile mockup (`97-client-portal-mobile-mockup.html`) **ไม่เปลี่ยน** ยังคง bottom-nav + hamburger ตามเดิม เพราะคำสั่งนี้ระบุเฉพาะเวอร์ชัน Desktop |
 | v4.1 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q10 · BUG-033)** — §6.6 เพิ่มหมายเหตุ: ผู้ใช้บริษัทเห็นค่าบริการของเคสตัวเองครบ (โมเดล อัตรา ฐาน ยอด) ซ่อนเฉพาะข้อมูลภายใน (รหัส template, ผู้พิจารณา/เวลาพิจารณา) · ข้อจำกัด "ไม่แสดงอัตราละเอียด" คงไว้เฉพาะหน้าข้อมูล template ของบริษัท |
+| v5 | 05/10/2569 | **มติ PO 05/10/2569 (U6 "ทำ Portal ให้เสร็จก่อน go-live" + O43 D1–D12)** — ปิด Open Item §22 ข้อ 1 (Phase: ก่อน go-live) และข้อ 4 (สิทธิ์ 3 ระดับ): (1) §3.3/§4/§11/§13 สิทธิ์แยกตามหมวดด้วย capability 5 ตัว `portal_cases`/`portal_finance`/`portal_handover`/`portal_profile`/`portal_download` (D1 — ค่าเริ่มต้น ผู้จัดการ = ทุกหมวด · หัวหน้า = ภาพรวม/เคส + ส่งมอบ + ข้อมูลบริษัท · แอดมิน = เคส + ข้อมูลบริษัท · Superadmin ปรับได้ ไม่ใช่ "✅ only") (2) ผู้ใช้บริษัทใช้พอร์ทัลทางเดียว ไม่เข้าหน้า/API ภายใน (D2) (3) §12 ตอบ 403 `PERMISSION_DENIED` ทั้ง id ที่ไม่มีจริงและ id ข้ามบริษัท + บันทึก audit action `access_denied` (D3/D4) (4) §12 `COMPANY_SUSPENDED` เป็น error code จริง (`24` §6.9) + ผู้ใช้ปิดใช้งานใช้ `ACCOUNT_INACTIVE` (แทน `USER_DEACTIVATED` เดิมที่ไม่มีใน `24`) ตรวจทุก request (D5) (5) §17 endpoint 11 → 13 ตัว เพิ่มรายละเอียดล็อต + รูปทรัพย์ (D6) (6) §6.3/§18 ใบกำกับภาษีใช้ renderer เดียวกับภายใน (D7) (7) §6.4/§18 ใบเซ็นรับดาวน์โหลดได้ (D8) (8) §6.2 นับเฉพาะ batch `sent` ขึ้นไป คำนวณสด (D9) (9) §4/§11/§13 Superadmin ไม่เข้าพอร์ทัล (D11) (10) §17 KPI ยึดตาม §5 (D12) |
 
 ขอบเขตเอกสารนี้: พอร์ทัล **read-only** สำหรับ Company User ให้ดูสถานะเคส/เอกสารการเงิน-บัญชี/รายงานสรุปของบริษัทตัวเอง แทนการให้เจ้าหน้าที่ภายในส่งข้อมูลให้ทีละครั้ง — ไม่มีการสร้าง/แก้ไขข้อมูลใดๆ ผ่านพอร์ทัลนี้
 
@@ -51,16 +52,28 @@
 - Phase ที่จะเปิดใช้งาน (Phase 1 หรือ Phase 2)
 - Authentication method
 - Notification channel
-- ความแตกต่างของสิทธิ์เห็นข้อมูลระหว่าง 3 ระดับ (ผู้จัดการ/หัวหน้า/แอดมิน) — **สมมติฐานชั่วคราวสำหรับ spec/mockup รอบนี้**: ทั้ง 3 ระดับเห็นข้อมูล scope เดียวกันทั้งหมดของบริษัท (company-wide) เพราะไฟล์ 07 §5.3 ยังไม่ระบุการแบ่งย่อยเชิง feature — เมื่อ PO ยืนยันความแตกต่างจริงจึงค่อยแก้ mockup ให้ตรง (ห้ามถือว่าเป็นค่า final)
+- ~~ความแตกต่างของสิทธิ์เห็นข้อมูลระหว่าง 3 ระดับ~~ → **ตัดสินแล้ว (มติ PO 05/10/2569 O43 D1)**: แยกตาม**หมวดเมนู**ด้วย capability 5 ตัว (เก็บที่ `role_capabilities` ตามโมเดล 3 ระดับ DEC-009 — Superadmin ปรับได้ที่หน้าจัดการ Role · ไม่ใช่ "✅ only") — ทุกระดับยังเห็นข้อมูล **scope ทั้งบริษัทของตัวเอง** ในหมวดที่ได้สิทธิ์ (ไม่แบ่งย่อยระดับแถว)
+
+| Capability | หมวด (เมนู / endpoint) | ผู้จัดการ | หัวหน้า | แอดมิน |
+|---|---|---|---|---|
+| `portal_cases` | ภาพรวม + เคสของเรา (`/dashboard`, `/cases*`) | 👁️ | 👁️ | 👁️ |
+| `portal_finance` | รอบวางบิล/ยอดค้างชำระ + ใบกำกับภาษี + รายงานสรุป (`/billing-batches`, `/tax-invoices*`, `/reports/*`) | 👁️ | — | — |
+| `portal_handover` | ใบส่งมอบทรัพย์ (`/handover-lots*`, `/assets/:id/photos/:index`) | 👁️ | 👁️ | — |
+| `portal_profile` | ข้อมูลบริษัท (`/company-profile`) | 👁️ | 👁️ | 👁️ |
+| `portal_download` | ดาวน์โหลดเอกสาร (`*/download`, รูปทรัพย์) — **ต้องมีสิทธิ์หมวดของเอกสารนั้นด้วย** | 👁️ | 👁️ | 👁️ |
+
+> พอร์ทัลอ่านอย่างเดียวทั้งหมด ⇒ ระดับ `manage` มีผลเท่ากับ `view` · ไม่มี record = ไม่เห็นเมนูหมวดนั้นและ endpoint ตอบ 403 `PERMISSION_DENIED` · หน้า "ภาพรวม" แสดงเฉพาะการ์ด KPI ของหมวดที่มีสิทธิ์ (เช่น หัวหน้าไม่เห็นการ์ด AR ค้าง)
 
 ## 4. Actors & Responsibilities
 
 |Actor / Role|Responsibilities|Access Scope|Role Group|
 |---|---|---|---|
 |ผู้จัดการ (Company Manager)|เห็นข้อมูลทั้งหมดของบริษัทตัวเอง (ทุกเคส, ทุกยอดวางบิล, ทุก user ของบริษัท)|Company scope — เต็มรูป|finance_company|
-|หัวหน้า (Company Supervisor)|เห็นเหมือนผู้จัดการ ณ ตอนนี้ (ยังไม่มีการแบ่งย่อย — ดู §3.3)|Company scope — เต็มรูป (ชั่วคราว)|finance_company|
-|แอดมิน (Company Admin)|เห็นเหมือนผู้จัดการ ณ ตอนนี้ (ยังไม่มีการแบ่งย่อย — ดู §3.3)|Company scope — เต็มรูป (ชั่วคราว)|finance_company|
-|Superadmin|สร้าง/แก้ไข Company User (ไฟล์ 10 §12) — ไม่ใช่ actor ของพอร์ทัลนี้โดยตรง|global|system|
+|หัวหน้า (Company Supervisor)|ภาพรวม + เคส + ใบส่งมอบ + ข้อมูลบริษัท — ไม่เห็นหมวดการเงิน (ค่าเริ่มต้นตาม §3.3)|Company scope — ตามหมวดที่ได้สิทธิ์|finance_company|
+|แอดมิน (Company Admin)|ภาพรวม/เคส + ข้อมูลบริษัท (ค่าเริ่มต้นตาม §3.3)|Company scope — ตามหมวดที่ได้สิทธิ์|finance_company|
+|Superadmin|สร้าง/แก้ไข Company User (ไฟล์ 10 §12) + ปรับสิทธิ์หมวดพอร์ทัลของ 3 role ที่หน้าจัดการ Role — **ไม่เข้าพอร์ทัล** (มติ O43 D11: ไม่มีบริษัทของตัวเอง ⇒ `/portal` และ `/api/portal/*` ปฏิเสธ แม้ implicit manage ทุก capability)|global|system|
+
+> **ผู้ใช้บริษัทใช้พอร์ทัลทางเดียว** (มติ O43 D2) — role กลุ่ม `finance_company` ไม่เห็นเมนู/หน้า/API ภายใน (`06` §7.2 · `25` §7.3) · หลัง login ถูกส่งไป `/portal` เสมอ
 
 ## 5. Menu & Navigation
 
@@ -101,14 +114,18 @@ Text size: ใช้ base font-size เดียวกับหน้าอื�
 period, total_amount, received_amount, outstanding (= total - received), status_display (`draft`→ไม่แสดง เพราะยังไม่ส่งบริษัท / `sent`/`partially_paid`/`paid`), due_date
 
 > **Business Rule**: Billing Batch ที่ `status = draft` **ห้ามแสดงในพอร์ทัล** — บริษัทเห็นได้ตั้งแต่ `sent` เป็นต้นไปเท่านั้น เพราะ draft ยังไม่ถูกยืนยันความถูกต้องจากฝั่งเรา
+>
+> **ยอดทุกจุดในพอร์ทัล** (การ์ด AR ค้างบนภาพรวม, รายงานสรุป §6.5, AR Aging) **นับเฉพาะ batch ที่ `sent` ขึ้นไปและคำนวณสดทุกครั้ง** (มติ O43 D9) — ไม่ใช้แคชรายงานภายใน เพื่อไม่ให้ยอดของ draft รั่วเข้าตัวเลขรวม
 
 ### 6.3 ใบกำกับภาษี (จากไฟล์ 31)
-invoice_number, issue_date, total_amount, delivery_format, status (`active`/`cancelled`), ปุ่มดาวน์โหลด PDF
+invoice_number, issue_date, total_amount, delivery_format, status (`active`/`cancelled`), ปุ่มดาวน์โหลด PDF — PDF สร้างด้วย **renderer เดียวกับฝั่งภายใน** (มติ O43 D7 — เอกสารต้องเหมือนฉบับที่ฝ่ายบัญชีเห็นทุกตัวอักษร ห้ามทำ template แยกของพอร์ทัล)
 
 ### 6.4 ใบส่งมอบทรัพย์ (จากไฟล์ 44)
 lot_number, doc_ref, type (`finance_pickup`/`we_deliver`), status_display (ดู §10.2), จำนวนเครื่องใน Lot, ปุ่มดาวน์โหลดใบส่งมอบ (เฉพาะ Lot ที่ `confirmed` แล้ว)
 
 > **Business Rule**: Lot ที่ `pending_attach`/`pending_delivery_proof` แสดงได้ (สถานะ "รอดำเนินการส่งมอบ") แต่ปุ่มดาวน์โหลดเอกสารจะ disable จนกว่าจะ `confirmed`
+>
+> **รายละเอียดล็อต + รูปทรัพย์** (มติ O43 D6): เปิดดูรายการทรัพย์ในล็อตและรูปทรัพย์ได้ (`GET /api/portal/handover-lots/:id`, `GET /api/portal/assets/:id/photos/:index`) · **ใบเซ็นรับที่แนบในล็อต (มี IMEI) ดาวน์โหลดได้** เพราะเป็นเอกสารของบริษัทเอง (มติ O43 D8)
 
 ### 6.5 รายงานสรุป
 - Revenue Summary: รายเดือน — รายได้รวม, จำนวนเคส, success/fail, revenue/เคสเฉลี่ย (scope เฉพาะบริษัทตัวเอง จากไฟล์ 96 §F2)
@@ -178,33 +195,38 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 - **ทุก endpoint เป็น read-only (GET เท่านั้น)** — ห้ามมี POST/PATCH/DELETE ใดๆ ในพอร์ทัลนี้
 - **Billing Batch `draft` ต้องถูกกรองออกเสมอ** ก่อนถึง response (ดู §6.2)
 - **ไม่ expose raw enum ของ case/assignment/field status** — ต้อง map เป็น label ตาม §10.1 เสมอที่ backend
-- **3 ระดับสิทธิ์เห็นข้อมูล scope เดียวกันทั้งหมด** จนกว่า PO จะยืนยันการแบ่งย่อย (ดู §3.3 — เป็นสมมติฐานชั่วคราว ไม่ใช่กฎถาวร)
+- **สิทธิ์ 3 ระดับแยกตามหมวด** ด้วย capability `portal_*` (§3.3 · มติ O43 D1) — ตรวจที่ API layer ทุก endpoint (สิทธิ์หมวด + `company_id` + สถานะผู้ใช้/บริษัท ทุก request) · UI ซ่อนเมนูเป็นแค่ UX
+- **Superadmin ไม่เข้าพอร์ทัล** (มติ O43 D11) · ผู้ใช้บริษัทไม่เข้าหน้า/API ภายใน (มติ O43 D2)
 - **ห้ามมีปุ่ม/endpoint สร้างเคสในพอร์ทัลนี้เด็ดขาด** — ผูกกับการตัดสินใจถาวรใน §3.2
 
 ## 12. Validation & Error Handling
 
 | Code / Scenario | Condition | System Behavior |
 |---|---|---|
-| PERMISSION_DENIED | Company User พยายามเข้าถึงข้อมูลของ `company_id` อื่น | reject 403 — ไม่ leak ว่ามีข้อมูลนั้นอยู่จริงหรือไม่ |
-| COMPANY_SUSPENDED | บริษัทที่ user สังกัดมีสถานะ `suspended` (ไฟล์ 10) | บล็อก login พร้อมข้อความแจ้งให้ติดต่อเจ้าหน้าที่ |
-| USER_DEACTIVATED | Company User มีสถานะ `deactivated` (ไฟล์ 10 §7.2) | บล็อก login |
+| PERMISSION_DENIED | Company User เข้าถึงข้อมูลของ `company_id` อื่น **หรือ id ที่ไม่มีอยู่จริง** หรือหมวดที่ไม่มีสิทธิ์ (§3.3) | reject 403 **แบบเดียวกันทุกกรณี** (ไม่ตอบ 404) — ไม่ leak ว่ามีข้อมูลนั้นอยู่จริงหรือไม่ + บันทึก audit `access_denied` (มติ O43 D3/D4 · §14) |
+| COMPANY_SUSPENDED | บริษัทที่ user สังกัดมีสถานะไม่ใช่ `active` (ไฟล์ 10) | reject 403 **ทุก request** (ไม่ใช่เฉพาะตอน login) พร้อมข้อความให้ติดต่อผู้ให้บริการ — code ใน `24` §6.9 (มติ O43 D5) |
+| ACCOUNT_INACTIVE | Company User ถูกปิดใช้งาน (ไฟล์ 10 §7.2) | reject 403 ทุก request — ใช้ code เดิมของ `24` §6.9 (แทน `USER_DEACTIVATED` ที่ไม่มีใน dictionary — มติ O43 D5) |
 | NO_DATA | ไม่มีข้อมูลในหมวดนั้น (เช่น ยังไม่มีเคสเลย) | แสดง empty state ปกติ ไม่ใช่ error |
 
 ## 13. Permissions
 
+ค่าเริ่มต้น (มติ PO 05/10/2569 O43 D1 — ปรับได้ที่หน้าจัดการ Role · รายละเอียด capability ↔ endpoint ดู §3.3):
+
 | Capability | ผู้จัดการ | หัวหน้า | แอดมิน | Superadmin |
 |---|---|---|---|---|
-| ดูเคสของบริษัทตัวเอง | ✅ | ✅ (ชั่วคราว เหมือนผู้จัดการ) | ✅ (ชั่วคราว) | — (ไม่ใช่ actor ของพอร์ทัลนี้) |
-| ดู Billing/AR ของบริษัทตัวเอง | ✅ | ✅ (ชั่วคราว) | ✅ (ชั่วคราว) | — |
-| ดาวน์โหลดใบกำกับภาษี/ใบส่งมอบ | ✅ | ✅ (ชั่วคราว) | ✅ (ชั่วคราว) | — |
-| ดูรายงานสรุปของบริษัทตัวเอง | ✅ | ✅ (ชั่วคราว) | ✅ (ชั่วคราว) | — |
+| `portal_cases` — ภาพรวม + เคสของบริษัทตัวเอง | 👁️ | 👁️ | 👁️ | — (ไม่เข้าพอร์ทัล — D11) |
+| `portal_finance` — Billing/AR + ใบกำกับภาษี + รายงานสรุป | 👁️ | — | — | — |
+| `portal_handover` — ใบส่งมอบ + รายการ/รูปทรัพย์ในล็อต | 👁️ | 👁️ | — | — |
+| `portal_profile` — ข้อมูลบริษัท (ดูอย่างเดียว) | 👁️ | 👁️ | 👁️ | — |
+| `portal_download` — ดาวน์โหลดเอกสารของหมวดที่เห็น | 👁️ | 👁️ | 👁️ | — |
+| ปรับสิทธิ์หมวดพอร์ทัลของ 3 role | ❌ | ❌ | ❌ | ✅ (หน้าจัดการ Role) |
 | แก้ไขข้อมูลบริษัท/จัดการ Company User | ❌ (ต้องแจ้ง Superadmin) | ❌ | ❌ | ✅ (ที่ไฟล์ 10) |
 
 ## 14. Audit Log
 
 - บันทึก login/logout ของ Company User (`actor_id`, `role`, `company_id`, `ip`, `created_at`) ตามมาตรฐานกลาง (ไฟล์ 90)
 - **ไม่บันทึก audit log ของการ "ดู" ข้อมูลรายแถว** (view-only) — จะทำให้ log ใหญ่เกินจำเป็นโดยไม่มี actor เปลี่ยนแปลงข้อมูลจริง เว้นแต่ PO ต้องการ compliance log ระดับนั้น (ยังไม่ระบุ — ถือเป็นค่าเริ่มต้น)
-- บันทึก event `PERMISSION_DENIED` ทุกครั้งที่เกิด (เพื่อตรวจจับความพยายามเข้าถึงข้ามบริษัท)
+- บันทึก audit action **`access_denied`** (enum `audit_action` — `02` §3 · มติ O43 D4) ทุกครั้งที่พอร์ทัลตอบ 403 `PERMISSION_DENIED` (เพื่อตรวจจับความพยายามเข้าถึงข้ามบริษัท/id สุ่ม) — `target_type`/`target_id` = สิ่งที่ร้องขอ · `after` = endpoint + เหตุผลภายใน · ไม่บังคับ `reason` (ไม่ใช่ mutation)
 
 ## 15. Notifications
 - ยังไม่ออกแบบ — ขึ้นกับ Open Item เรื่อง Notification channel โดยรวม (`DECISIONS-NEEDED.md` §1.3) — ดู §22
@@ -214,25 +236,27 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 
 ## 17. API / Event Contract Draft
 
-> Namespace ใหม่ `/api/portal/*` แยกจาก internal API เดิม (27/45) โดยสิ้นเชิง เพื่อให้บังคับ `company_id` scope ที่ middleware ชั้นเดียวได้ง่าย — ทุก endpoint ด้านล่างเป็น **GET เท่านั้น**
+> Namespace ใหม่ `/api/portal/*` แยกจาก internal API เดิม (27/45) โดยสิ้นเชิง เพื่อให้บังคับ `company_id` scope ที่ middleware ชั้นเดียวได้ง่าย — ทุก endpoint ด้านล่างเป็น **GET เท่านั้น** · **13 endpoint** (มติ O43 D6 เพิ่ม 2 ตัวท้ายตาราง) · ทุกตัวตรวจตามลำดับ: role กลุ่ม `finance_company` (Superadmin/role ภายใน = 403 — D11/D2) → ผู้ใช้ active (`ACCOUNT_INACTIVE`) → บริษัท active (`COMPANY_SUSPENDED`) → capability ของหมวด (§3.3) → `company_id` ของแถว (id สุ่ม/ข้ามบริษัท = 403 `PERMISSION_DENIED` + audit `access_denied` — D3/D4)
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | /api/portal/dashboard | KPI สรุปหน้าแรก |
-| GET | /api/portal/cases | list เคสของบริษัทตัวเอง (filter: status_display, search) |
-| GET | /api/portal/cases/:id | รายละเอียดเคส (mapped fields ตาม §6.1) |
-| GET | /api/portal/billing-batches | list รอบวางบิล (กรอง `draft` ออกเสมอ) |
-| GET | /api/portal/tax-invoices | list ใบกำกับภาษี |
-| GET | /api/portal/tax-invoices/:id/download | ดาวน์โหลด PDF |
-| GET | /api/portal/handover-lots | list Lot ของบริษัทตัวเอง |
-| GET | /api/portal/handover-lots/:id/download | ดาวน์โหลดใบส่งมอบ (เฉพาะ `confirmed`) |
-| GET | /api/portal/reports/revenue-summary | รายงานสรุปรายได้ |
-| GET | /api/portal/reports/ar-aging | รายงานอายุหนี้ |
-| GET | /api/portal/company-profile | ข้อมูลบริษัทตัวเอง (read-only) |
+| Method | Endpoint | Capability | Purpose |
+|---|---|---|---|
+| GET | /api/portal/dashboard | `portal_cases` | KPI สรุปหน้าแรก (ยึด KPI ตาม §5 — D12 · การ์ดของหมวดที่ไม่มีสิทธิ์ไม่ถูกส่งกลับ) |
+| GET | /api/portal/cases | `portal_cases` | list เคสของบริษัทตัวเอง (filter: status_display, search) |
+| GET | /api/portal/cases/:id | `portal_cases` | รายละเอียดเคส (mapped fields ตาม §6.1) |
+| GET | /api/portal/billing-batches | `portal_finance` | list รอบวางบิล (กรอง `draft` ออกเสมอ) |
+| GET | /api/portal/tax-invoices | `portal_finance` | list ใบกำกับภาษี |
+| GET | /api/portal/tax-invoices/:id/download | `portal_finance` + `portal_download` | ดาวน์โหลด PDF (renderer เดียวกับภายใน — D7) |
+| GET | /api/portal/handover-lots | `portal_handover` | list Lot ของบริษัทตัวเอง |
+| GET | /api/portal/handover-lots/:id/download | `portal_handover` + `portal_download` | ดาวน์โหลดใบส่งมอบ/ใบเซ็นรับ (เฉพาะ `confirmed` — D8) |
+| GET | /api/portal/reports/revenue-summary | `portal_finance` | รายงานสรุปรายได้ (นับ batch `sent` ขึ้นไป คำนวณสด — D9) |
+| GET | /api/portal/reports/ar-aging | `portal_finance` | รายงานอายุหนี้ (นับ batch `sent` ขึ้นไป คำนวณสด — D9) |
+| GET | /api/portal/company-profile | `portal_profile` | ข้อมูลบริษัทตัวเอง (read-only) |
+| GET | /api/portal/handover-lots/:id | `portal_handover` | รายละเอียดล็อต + รายการทรัพย์ในล็อต (มติ O43 D6) |
+| GET | /api/portal/assets/:id/photos/:index | `portal_handover` + `portal_download` | รูปทรัพย์ลำดับที่ `index` ของทรัพย์ในล็อตของบริษัทตัวเอง (มติ O43 D6) |
 
 ## 18. Export / Document Requirements
-- ดาวน์โหลดใบกำกับภาษี PDF — ใช้ไฟล์ที่มีอยู่แล้วจากไฟล์ 31/28 (ไม่ generate ใหม่)
-- ดาวน์โหลดใบส่งมอบทรัพย์ PDF — ใช้ไฟล์ที่มีอยู่แล้วจากไฟล์ 44 (`signed_doc_url`)
+- ดาวน์โหลดใบกำกับภาษี PDF — ใช้ renderer เดียวกับฝั่งภายใน (ไฟล์ 31/28) ไม่ทำ template แยกของพอร์ทัล (มติ O43 D7)
+- ดาวน์โหลดใบส่งมอบทรัพย์ PDF / ใบเซ็นรับ — ใช้ไฟล์ที่มีอยู่แล้วจากไฟล์ 44 (`signed_doc_url`) · ใบเซ็นรับมี IMEI ดาวน์โหลดได้เพราะเป็นเอกสารของบริษัทเอง (มติ O43 D8)
 - ไม่มี export format ใหม่เฉพาะพอร์ทัลนี้ (ไม่มี Excel/CSV export ในรอบนี้)
 
 ## 19. Acceptance Criteria
@@ -240,18 +264,22 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 - Billing Batch สถานะ `draft` ไม่ปรากฏในพอร์ทัลเด็ดขาด
 - Case status ที่แสดงเป็น label ที่ map แล้วเท่านั้น ไม่มี raw enum หลุดออกมา
 - ทุก endpoint เป็น read-only จริง — ไม่มี mutation endpoint ใดๆ หลุดเข้ามาใน namespace `/api/portal/*`
-- Company ที่ถูก suspend หรือ user ที่ deactivated ไม่สามารถ login ได้
+- Company ที่ถูก suspend หรือ user ที่ deactivated ใช้พอร์ทัลไม่ได้ทุก request (`COMPANY_SUSPENDED` / `ACCOUNT_INACTIVE`)
+- ผู้ใช้แต่ละระดับเห็นเฉพาะหมวดที่ได้สิทธิ์ (§3.3) · Superadmin เข้าพอร์ทัลไม่ได้
 
 ## 20. Test Cases
 
 | Test Case | Steps | Expected Result |
 |---|---|---|
-| Cross-company access | Login บริษัท A แล้วเรียก `/api/portal/cases/:id` ของเคสบริษัท B | reject 403 PERMISSION_DENIED |
+| Cross-company access | Login บริษัท A แล้วเรียก `/api/portal/cases/:id` ของเคสบริษัท B | reject 403 PERMISSION_DENIED + audit `access_denied` |
+| id ที่ไม่มีจริง | เรียก `/api/portal/cases/:id` ด้วย uuid สุ่ม | reject 403 PERMISSION_DENIED (ไม่ใช่ 404 — D3) |
+| สิทธิ์ตามหมวด | หัวหน้าเรียก `/api/portal/billing-batches` · แอดมินเรียก `/api/portal/handover-lots` | reject 403 PERMISSION_DENIED (ค่าเริ่มต้น D1) |
+| Superadmin ไม่เข้าพอร์ทัล | Superadmin เรียก `/api/portal/dashboard` | reject 403 (D11) |
 | Billing draft ถูกกรอง | บริษัทมี Billing Batch สถานะ draft 1 รายการ | ไม่ปรากฏใน list `/api/portal/billing-batches` |
 | Case status mapping ถูกต้อง | เคสสถานะ `need_info` พร้อม reason | portal แสดง "ขอข้อมูลเพิ่มเติม" พร้อม reason ไม่ใช่ raw enum |
 | ดาวน์โหลด Lot ที่ยังไม่ confirmed | Lot สถานะ `pending_attach` | ปุ่มดาวน์โหลด disabled |
-| User deactivated | Company User สถานะ `deactivated` พยายาม login | บล็อก พร้อมข้อความแจ้งเหตุผล |
-| Company suspended | บริษัทสถานะ `suspended` | ทุก user ของบริษัทนั้น login ไม่ได้ |
+| User deactivated | Company User ถูกปิดใช้งาน แล้วเรียก endpoint พอร์ทัล | 403 `ACCOUNT_INACTIVE` |
+| Company suspended | บริษัทถูกระงับระหว่างที่ผู้ใช้ยัง login อยู่ แล้วเรียก endpoint พอร์ทัล | 403 `COMPANY_SUSPENDED` ทุก request |
 
 ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions — ยืนยันในรอบสนทนานี้ 03/07/2569)
 
@@ -266,10 +294,10 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 
 ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 
-1. **Phase ของ Client Portal (Phase 1 หรือ Phase 2)** — สเปคนี้เขียนพร้อม implement ได้ทันทีที่ตัดสินใจ Phase (`DECISIONS-NEEDED.md` §1.2, `00-project-overview.md` §18)
+1. ~~**Phase ของ Client Portal**~~ — **ปิดแล้ว (มติ PO 05/10/2569 U6): ทำให้เสร็จก่อน go-live** · (ข้อความเดิม) สเปคนี้เขียนพร้อม implement ได้ทันทีที่ตัดสินใจ Phase (`DECISIONS-NEEDED.md` §1.2, `00-project-overview.md` §18)
 2. **Authentication method** — ใช้ระบบ login เดียวกับ internal user (Supabase Auth เดิม) หรือแยกต่างหาก (เช่น magic link) ยังไม่ตัดสินใจ — กระทบ §5 (Login screen) และ Auth flow ที่ยังไม่ได้ออกแบบในไฟล์นี้
 3. **Notification channel** — ขึ้นกับผลตัดสินใจ `DECISIONS-NEEDED.md` §1.3 (Email/LINE OA/SMS/Push) (§15)
-4. **ความแตกต่างของสิทธิ์เห็นข้อมูลระหว่าง 3 ระดับ** (ผู้จัดการ/หัวหน้า/แอดมิน) — สเปคนี้ใช้สมมติฐานชั่วคราวว่าเหมือนกันหมด (§3.3, §4, §13) ต้องแก้เมื่อ PO ยืนยันการแบ่งย่อยจริง
+4. ~~**ความแตกต่างของสิทธิ์เห็นข้อมูลระหว่าง 3 ระดับ**~~ — **ปิดแล้ว (มติ O43 D1 — ดู §3.3)** · (ข้อความเดิม) (ผู้จัดการ/หัวหน้า/แอดมิน) — สเปคนี้ใช้สมมติฐานชั่วคราวว่าเหมือนกันหมด (§3.3, §4, §13) ต้องแก้เมื่อ PO ยืนยันการแบ่งย่อยจริง
 5. **Audit log ระดับ "การดู" ข้อมูล** — ตอนนี้ไม่บันทึก (§14) ต้องยืนยันถ้าต้องการ compliance log ละเอียดกว่านี้
 
 ---

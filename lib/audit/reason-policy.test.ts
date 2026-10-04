@@ -104,6 +104,9 @@ describe('reasonRequirement — background job ต้อง trace กลับ�
   it('failed login (ยังไม่รู้ตัวตน) ไม่ต้องมี reason', () => {
     expect(reasonRequirement({ action: 'login', targetType: 'users', actorId: null }).required).toBe(false)
     expect(reasonRequirement({ action: 'logout', targetType: 'users', actorId: null }).required).toBe(false)
+    // พอร์ทัลปฏิเสธ 403 (มติ PO 05/10/2569 O43 D4) — ไม่ใช่ mutation แม้เป้าหมายเป็นตารางเงิน
+    expect(reasonRequirement({ action: 'access_denied', targetType: 'billing_batches', actorId: 'u-1' }).required).toBe(false)
+    expect(reasonRequirement({ action: 'access_denied', targetType: 'tax_invoices', actorId: 'u-1' }).required).toBe(false)
   })
 })
 
