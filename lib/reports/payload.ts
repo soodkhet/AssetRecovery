@@ -149,7 +149,8 @@ export function formatCellText(value: ReportCellValue, type: ReportColumnType): 
  * จะกลายเป็น ค.ศ. บนหน้าจอผู้ใช้ทันที = bug `DISPLAY_CE_YEAR`)
  */
 export function formatCellForSheet(value: ReportCellValue, type: ReportColumnType): string | number {
-  if (value === null) return ''
+  // อัตราส่วนที่คำนวณไม่ได้ต้องเขียน "N/A" ให้ตรงกับจอ ไม่ใช่ช่องว่าง (UAT BUG-134)
+  if (value === null) return type === 'percent' ? fmtRatioPct(null) : ''
   switch (type) {
     case 'money':
       // satang → บาท ด้วยจำนวนเต็มก่อนหาร (ไม่มีการปัดเศษหาย — Rule 01)
@@ -164,6 +165,28 @@ export function formatCellForSheet(value: ReportCellValue, type: ReportColumnTyp
       return fmtDateTime(value)
     case 'text':
       return String(value)
+  }
+}
+
+/**
+ * รูปแบบตัวเลขของเซลล์ Excel ตามชนิดคอลัมน์ (UAT BUG-134) — ค่าในเซลล์ยังเป็นตัวเลขจริง (`SUM` ได้)
+ * · เงินเป็นบาทจาก satang/100 → 2 ทศนิยม · % เก็บเป็นเลขร้อยละ (44.21) จึงต่อท้าย "%" แบบข้อความ
+ *   ไม่ใช้รูปแบบ % ของ Excel (ซึ่งจะคูณ 100 ซ้ำ) · ชนิดที่ไม่ใช่ตัวเลข = `null`
+ */
+export function sheetNumberFormat(type: ReportColumnType): string | null {
+  switch (type) {
+    case 'money':
+      return '#,##0.00'
+    case 'number':
+      return '#,##0'
+    case 'days':
+      return '#,##0.0'
+    case 'percent':
+      return '0.00"%"'
+    case 'text':
+    case 'date':
+    case 'datetime':
+      return null
   }
 }
 

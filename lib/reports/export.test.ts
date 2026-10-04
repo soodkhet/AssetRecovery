@@ -87,7 +87,7 @@ describe('เนื้อไฟล์ตรงกับ UI (`96` §13)', () => {
     const rows = reportSheetRows(PAYLOAD)
     expect(rows[0]).toEqual(['ไฟแนนซ์ ก', 1234.56, 12, 75, '20/08/2569'])
     // แถวว่างต้องเป็นค่าว่าง ไม่ใช่ 0 (0 ทำให้ผู้อ่านเข้าใจว่ามีข้อมูลจริง)
-    expect(rows[1]).toEqual(['ไฟแนนซ์ ข', 0, 0, '', ''])
+    expect(rows[1]).toEqual(['ไฟแนนซ์ ข', 0, 0, 'N/A', '']) // อัตราส่วนว่าง = "N/A" ตรงจอ (BUG-134)
   })
 
   it('Excel: แถวรวมท้ายตารางถูกต่อท้ายเป็นแถวสุดท้ายเสมอ', () => {
@@ -113,7 +113,7 @@ describe('เนื้อไฟล์ตรงกับ UI (`96` §13)', () => {
 
   it('จำนวนช่องต่อแถวเท่ากับจำนวนคอลัมน์เสมอ (คอลัมน์ที่แถวนั้นไม่มีค่า = ว่าง ไม่ใช่เลื่อนตำแหน่ง)', () => {
     const sparse: ReportPayload = { ...PAYLOAD, rows: [{ company: 'มีแค่ชื่อ' }], totalRow: null }
-    expect(reportSheetRows(sparse)[0]).toEqual(['มีแค่ชื่อ', '', '', '', ''])
+    expect(reportSheetRows(sparse)[0]).toEqual(['มีแค่ชื่อ', '', '', 'N/A', ''])
     expect(reportTextRows(sparse)[0]).toEqual(['มีแค่ชื่อ', '—', '—', 'N/A', '—'])
   })
 })

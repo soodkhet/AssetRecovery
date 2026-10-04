@@ -5,18 +5,29 @@ import {
   reportSheetName,
   reportSheetRows,
 } from '@/lib/reports/export'
-import type { ReportPayload } from '@/lib/reports/payload'
+import { sheetNumberFormat, type ReportPayload } from '@/lib/reports/payload'
 
 /**
  * Excel ของเมนูรายงาน (SheetJS ตาม `96` §15) — โครงเดียวกับ `lib/warehouse/handover-excel.ts` (2.13)
  * ⚠️ ตรรกะการจัดค่าทั้งหมดอยู่ใน `lib/reports/export.ts` (pure + เทสต์ได้) — ไฟล์นี้แค่ประกอบ workbook
  */
 export function buildReportWorkbook(payload: ReportPayload, generatedAt: Date): Uint8Array {
-  const sheet = utils.aoa_to_sheet([
-    ...reportSheetHeaderBlock(payload, generatedAt),
-    payload.columns.map((column) => column.header),
-    ...reportSheetRows(payload),
-  ])
+  const headerBlock = reportSheetHeaderBlock(payload, generatedAt)
+  const dataRows = reportSheetRows(payload)
+  const sheet = utils.aoa_to_sheet([...headerBlock, payload.columns.map((column) => column.header), ...dataRows])
+
+  // ใส่รูปแบบตัวเลขรายคอลัมน์ (เงิน 2 ทศนิยม · % 2 ทศนิยม · วัน 1 ทศนิยม) — BUG-134
+  const firstDataRow = headerBlock.length + 1
+  payload.columns.forEach((column, columnIndex) => {
+    const format = sheetNumberFormat(column.type)
+    if (format === null) return
+    dataRows.forEach((_row, rowOffset) => {
+      const cell = sheet[utils.encode_cell({ r: firstDataRow + rowOffset, c: columnIndex })] as
+        | { t?: string; z?: string }
+        | undefined
+      if (cell !== undefined && cell.t === 'n') cell.z = format
+    })
+  })
   sheet['!cols'] = reportSheetColumnWidths(payload).map((width) => ({ wch: width }))
 
   const workbook = utils.book_new()
