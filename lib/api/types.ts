@@ -40,10 +40,21 @@ export interface ApiCallResult<T> {
   error?: ApiCallError
 }
 
-/** ต่อท้ายข้อมูลประกอบที่ error บางตัวส่งมา เช่นรายชื่อบริษัทของ `TEMPLATE_IN_USE` (`12` §11) */
-function withContextSuffix(message: string, companies: unknown): string {
-  if (!Array.isArray(companies) || companies.length === 0) return message
-  return `${message} (${companies.join(', ')})`
+/** คีย์ข้อมูลประกอบที่เป็นรายชื่อ (string[]) และควรต่อท้ายข้อความให้ผู้ใช้เห็น */
+const CONTEXT_NAME_KEYS = ['companies', 'payees'] as const
+
+/**
+ * ต่อท้ายรายชื่อที่ error บางตัวส่งมา เช่นบริษัทของ `TEMPLATE_IN_USE` (`12` §11) หรือผู้รับเงินที่ยัง
+ * ไม่ยืนยันของ `UNVERIFIED_PAYEE_IN_PAYOUT` (`17` §11 · BUG-110) — รับเฉพาะ string ล้วน (รายการที่เป็น object ไม่ต่อ)
+ */
+export function withContextSuffix(message: string, payload: Partial<Record<string, unknown>>): string {
+  for (const key of CONTEXT_NAME_KEYS) {
+    const value = payload[key]
+    if (!Array.isArray(value)) continue
+    const names = value.filter((name): name is string => typeof name === 'string' && name.length > 0)
+    if (names.length > 0) return `${message} (${names.join(', ')})`
+  }
+  return message
 }
 
 /**
@@ -61,7 +72,7 @@ export async function callApi<T>(input: string, init?: RequestInit): Promise<Api
         error: {
           code,
           title,
-          message: withContextSuffix(message, envelope.error.companies),
+          message: withContextSuffix(message, envelope.error),
           ...(fields === undefined ? {} : { fields }),
           payload: envelope.error,
         },
