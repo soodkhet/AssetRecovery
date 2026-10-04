@@ -243,6 +243,9 @@ export interface PortalTaxInvoiceSource {
   invoiceNumber: string
   invoiceDate: Date
   status: TaxInvoiceStatus
+  /** ยอด snapshot จาก `sales_records` (ไม่คำนวณใหม่ — ตัวเดียวกับที่พิมพ์ลง PDF) */
+  totalBeforeVatSatang: number
+  vatSatang: number
   totalSatang: number
   deliveryFormat: InvoiceDeliveryFormat
 }
@@ -251,6 +254,8 @@ export interface PortalTaxInvoiceDto {
   id: string
   invoiceNumber: string
   issueDate: string
+  totalBeforeVatSatang: number
+  vatSatang: number
   totalSatang: number
   deliveryFormat: InvoiceDeliveryFormat
   deliveryFormatLabel: string
@@ -262,6 +267,8 @@ export function serializePortalTaxInvoice(row: PortalTaxInvoiceSource): PortalTa
     id: row.id,
     invoiceNumber: row.invoiceNumber,
     issueDate: dateOnly(row.invoiceDate),
+    totalBeforeVatSatang: row.totalBeforeVatSatang,
+    vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
     deliveryFormat: row.deliveryFormat,
     deliveryFormatLabel: INVOICE_DELIVERY_FORMAT_LABEL[row.deliveryFormat],
