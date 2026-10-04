@@ -56,7 +56,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 3. วงจรต่อรอบเหมือน HANDOFF เดิม §1 (prompt role agent แบบ R6b: ขอบเขต/สถานะต้นรอบ/ต้องยืนยัน/กติกา/คืนผล ≤ 1,200 tokens)
 4. ต่อ R8 บริหาร (ปิดงวด ต.ค./Adjustment) → R9 รายงาน (golden DATASET v3 E10) → R10 สิทธิ์ (API ขนาน 12 persona) → รวมเล่มรายงาน (`UAT_PLAN.md` §11.3)
 
-### 2. ก่อน push staging — ดู §6 ของ HANDOFF เก่าด้านล่าง (migration 7 ตัว + ตรวจรายได้ซ้ำ + seed staging)
+### 2. ก่อน push staging — ดู §6 ของ HANDOFF เก่าด้านล่าง (migration + ตรวจรายได้ซ้ำ + seed staging) · **เพิ่ม: ยืนยัน `CRON_SECRET` ตั้งบน Vercel staging/production (มติ O40)** · **Supabase: ตรวจ "Upload file size limit" ของ project ≥ 100 MB (วิดีโอ) และ ≥ 25 MB (เอกสารชุด)** · ไฟล์กำพร้า bucket `accounting-packs` จาก R7c (2 attempt) — ลบตอน go-live
 
 ## HANDOFF เก่า (04/10/2569 ~00:30 — ก่อน R4 v3 · เก็บไว้อ้างอิง §1 วงจรต่อรอบ + §6 ก่อน push)
 
