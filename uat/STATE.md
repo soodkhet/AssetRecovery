@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~01:50 merge fixer U `4c06e5c` (U9 cache DB + U10 ✅ only 9) · migration ใหม่รวม **10 ตัว** (ถึง `20261005090000`)
 - 04/10/2569 ~14:45 รวมเล่มรายงาน `b769b0a` (`uat/report/final/` 3 ไฟล์) · merge fixer S `d8a0ac8` (BUG-132…139,141,142) · verify 272 files / 3,459 tests ✅ · **UAT จบ**
 - 04/10/2569 ~14:15 R10 จบ (ตารางบน) → UAT เล่นครบ R0–R10 · snapshot `R10-end-v3` · ไฟล์ขยะ Storage +3 (R10g)
 - 04/10/2569 ~13:40 R9 จบ (ตารางบน) · snapshot `R9-end-v3` · merge fixer R (BUG-121,122,124…128,130,131 + ส่วนเล็ก 123)
@@ -51,7 +52,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 
 **งานคืนนี้ (orchestrator ทำต่อใน session เดิม — ถ้าหลุด ให้ session ใหม่ทำต่อจากนี้):** มติอยู่ใน `uat/PO-DECISIONS-2569-10-04.md` แถว U3–U10
 1. **fixer T — ค่าตั้งภาษี** (U3/U4/U5/U7/U8): ฐาน WHT เลือกชนิดรายการได้ · การออก 50 ทวิ ต่อผู้รับต่อรอบ/ต่อรายการ · ประเภทเงินได้ 40(8) ทั้งหมด / 40(2) ทั้งหมด / แยกตามประเภททีม · 40(2) ใช้อัตราต่อคนใน Tax Profile + ภ.ง.ด.1 · Superadmin/บริหารแก้ได้ + เหตุผล + audit + effective-dated + snapshot ในรอบจ่าย · ค่าเริ่มต้น = มติ (ฐานไม่รวมค่าใช้จ่ายตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบ · 40(8))
-2. **fixer U — cache รายงานใน Postgres (U9) + แก้เอกสาร "✅ only" = 9 (U10: CLAUDE.md + `.claude/rules/03` + `docs/94`)**
+2. ✅ **fixer U เสร็จ** merge `4c06e5c` — cache รายงานใน Postgres (`report_cache_entries`, migration `20261005090000`) + "✅ only" = 9 ใน CLAUDE.md/Rule 03/`94` · verify 273 files / 3,467 tests
 3. **Client Portal (U6)** — แผน 11 ก้อน (มติ O43 · D1–D12 = ก.): **P1** schema/capability portal 5 ตัว (`portal_cases`,`portal_finance`,`portal_handover`,`portal_profile`,`portal_download`) + seed 3 ระดับ + `COMPANY_SUSPENDED` + audit `access_denied` + sync spec `07`/`25`/`97`/`06` → **P2** pure `lib/portal/*` (status-map/serializers whitelist/access/contract) → **P3** guard `requirePortalAccess` + login เช็คบริษัท suspended + ตัดผู้ใช้บริษัทออกจากภายใน → **P4** API เคส/dashboard/profile/รูปทรัพย์ ‖ **P5** API การเงิน (billing/ใบกำกับ/F2/F3 สด) ‖ **P6** API ส่งมอบ + test GET-only → **P7** UI shell+ภาพรวม → **P8** เคส ‖ **P9** วางบิล/ใบกำกับ ‖ **P10** ส่งมอบ → **P11** acceptance R12 · Plan เต็มอยู่ในประวัติ session (สรุปนี้พอสำหรับ fixer)
 3b. **fixer W — BUG-143 (S3)** Storage `case-documents` เปิดให้ authenticated ทุกคน → signed URL ฝั่ง server + policy จำกัด (แก้สคริปต์ ไม่ apply) · **apply policy บน Supabase จริงต้องรอผู้ใช้อนุมัติ**
 4. ✅ **F5 ตรวจแล้ว 05/10/2569 01:23** (ADV3 1 แถว 200000 เลยกำหนด 1 วัน · ตรงคาด) · O4 ตรวจได้ 06/10/2569 14:02 (คาด 2 แถว 849000)
@@ -112,7 +113,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
-- migration ใหม่จาก UAT **9 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261004140000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- migration ใหม่จาก UAT **10 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005090000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)
