@@ -17,6 +17,7 @@ import { SlaPolicyTab } from '@/components/settings/sla-policy-tab'
 import { TaxDocTemplatesTab } from '@/components/settings/tax-doc-templates-tab'
 import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
 import { VatRatesTab } from '@/components/settings/vat-rates-tab'
+import { WhtPolicyTab } from '@/components/settings/wht-policy-tab'
 import { EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
@@ -94,6 +95,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'payee' && <PayeeTab />}
           {current?.id === 'tax' && <TaxProfilesTab />}
           {current?.id === 'vat' && <VatRatesTab />}
+          {current?.id === 'whtpolicy' && <WhtPolicyTab />}
           {current?.id === 'cost' && <CostCentersTab />}
           {current?.id === 'docs' && <InternalDocumentsTab />}
           {current?.id === 'bankfile' && <BankFileFormatsTab />}

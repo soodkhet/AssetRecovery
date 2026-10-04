@@ -26,6 +26,7 @@ function batch(overrides: Partial<PayoutBatchDto> = {}): PayoutBatchDto {
     idempotencyKey: null,
     paymentFileUrl: null,
     paymentFileGeneratedAt: null,
+    whtPolicy: null,
     createdAt: '2026-06-30T02:00:00.000Z',
     createdByName: 'การเงิน ทดสอบ',
     updatedAt: '2026-06-30T02:00:00.000Z',

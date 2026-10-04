@@ -16,6 +16,7 @@
 | v3 | 04/07/2569 | (1) **ปิด Open Item §18**: ตรวจ error code หมวด §6.8 (ไฟล์ 31/32/33/34) เทียบกับไฟล์ต้นทาง v2 หลัง Batch 5 ครบแล้ว — ตรงกันทุกตัว ไม่พบ conflict (2) **เติม §6.7**: `NOT_READY_BILLING_REVENUE_MISMATCH` — Readiness Check ของไฟล์ 30 §6.2 มี 3 เงื่อนไข แต่เดิมมี error code รองรับแค่ 2 (ขาดเงื่อนไข "ยอดบิลตรงกับรายได้") (3) **อัปเดต §6.4**: `REJECTION_REASON_REQUIRED` ขยาย source ครอบคลุมไฟล์ 20 (ปฏิเสธ Adjustment) — ความหมายเดียวกัน ใช้ code ร่วมกันตาม pattern ของ `REJECT_REASON_REQUIRED` |
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
 | v4.21 | 05/10/2569 | **เติม §6.9 ตามมติ PO 05/10/2569 (U6/O43 D5 — Client Portal)**: `COMPANY_SUSPENDED` (403) — ผู้ใช้บริษัทไฟแนนซ์ที่บริษัทถูกระงับ (`finance_companies.status ≠ active`) เรียกพอร์ทัล ⇒ ปฏิเสธทุก request (เช็คทุกครั้ง ไม่ใช่เฉพาะตอน login) · ผู้ใช้ที่ถูกปิดใช้งานเองยังใช้ `ACCOUNT_INACTIVE` เดิม · id สุ่ม/ข้ามบริษัทใช้ `PERMISSION_DENIED` เดิม (D3 — ไม่ leak) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) |
+| v4.22 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8 — ค่าตั้งภาษีหัก ณ ที่จ่าย)**: เติม §6.2 `WHT_POLICY_EFFECTIVE_DATE_PAST` (วันที่มีผลของค่าตั้งย้อนหลังไม่ได้) · เติม §6.5 `WHT_40_2_RATE_MISSING` (ผู้รับ 40(2) ไม่มีอัตราหักต่อคน ⇒ ปัดการสร้างรอบพร้อมรายชื่อ) · ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) |
 | v4.20 | 04/10/2569 | **เติม §6.8 (UAT R7cv3-B01)**: `EXPORT_STORAGE_FAILED` (502) — อัปโหลดไฟล์ Accounting Pack เข้า Storage ไม่สำเร็จ ⇒ ลบไฟล์ที่อัปขึ้นไปแล้วของครั้งนั้น (best-effort) ไม่สร้าง `export_records` แล้วตอบ code นี้แทน 500 body ว่าง · `37` §11 ไม่มี code สำหรับกรณีที่เก็บไฟล์ล้ม |
 | v4.19 | 03/10/2569 | **เติม §6.3 ตามมติ PO 03/10/2569 (UAT Q13 · BUG-037/050 · หนี้ #1)**: `UPLOAD_PATH_OUT_OF_SCOPE`, `UPLOAD_FILE_NOT_FOUND`, `UPLOAD_HASH_MISMATCH`, `UPLOAD_FILE_TYPE_INVALID`, `UPLOAD_FILE_TOO_LARGE` — server ตรวจไฟล์ที่ browser อัปโหลดขึ้น Storage เองก่อนผูกกับข้อมูล (เอกสารเคส `38` · หลักฐานปิดงาน `41` · รูปรับเข้าคลัง + เอกสารล็อต `44`) · เดิมไม่มี code กลุ่มนี้เพราะ server เชื่อ path/hash จาก browser · ใช้ร่วมหลายโมดูลจึงวางในหมวดไฟล์ · ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) · reject ทั้งหมด (รายชื่อ "เตือนไม่บล็อก" ไม่เปลี่ยน) |
 | v4.18 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q12 · BUG-009)** — ขยายความหมาย `INVALID_TEAM_MEMBER` (§6.1) ให้ครอบคลุมหัวหน้า/ผู้จัดการที่ไม่ใช่ role ของฝั่งเดียวกับทีม · แผนค่าตอบแทนคนละฝั่งกับทีมใช้ `REQUIRED_MISSING` + field error (ไม่ตั้ง code ใหม่) |
@@ -115,6 +116,7 @@
 | DUPLICATE_TAX_PROFILE_NAME | ชื่อ Tax Profile ซ้ำในองค์กร (UNIQUE `organization_id, name` — `02` §5) | 13 |
 | TAX_PROFILE_IN_USE | ลบ Tax Profile ที่ผูกกับ payee/รายการจ่ายไปแล้ว — แก้อัตราได้แต่ลบไม่ได้ (ยอดภาษีเดิมต้องอ้างอิงได้) | 13, 18 |
 | NUMBERING_SEQ_NOT_EDITABLE | พยายามแก้ `tax_invoice_seq`/`last_reset_year` ด้วยมือ — ระบบเดินเลขให้เอง เลขต้องต่อเนื่องตามกฎหมาย (`13` §6.12) | 13, 31 |
+| WHT_POLICY_EFFECTIVE_DATE_PAST | บันทึกค่าตั้งภาษีหัก ณ ที่จ่าย (`wht_policy_history`) ด้วยวันที่มีผลก่อนวันนี้ (ปฏิทินไทย) — ค่าตั้งมีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผลเท่านั้น ย้อนหลังไม่ได้ (มติ PO 05/10/2569 UAT U8) | 13, 22 |
 
 ### 6.3 หมวดธนาคาร/ไฟล์ (ไฟล์ 13, 17, 35)
 
@@ -160,6 +162,7 @@
 | PAYOUT_BATCH_INVALID_STATUS | สั่ง action ที่สถานะปัจจุบันของรอบจ่ายทำไม่ได้ตาม `23` §6.6 (เช่น ยืนยันจ่ายสำเร็จก่อนสร้างไฟล์โอน) | 17 |
 | NO_ITEMS_TO_PAY | สร้างรอบจ่ายแต่ไม่มีรายการที่ `approved` และยังไม่ถูกจ่ายภายในวันตัดรอบ/ฝั่งที่เลือก | 17 |
 | PAYMENT_FILE_NOT_GENERATED | ขอดาวน์โหลดไฟล์โอนของรอบจ่ายที่ยังไม่เคยสร้างไฟล์ | 17 |
+| WHT_40_2_RATE_MISSING | สร้างรอบจ่ายที่ค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) (และมีรายการในฐาน WHT) แต่ผู้รับยังไม่มี `payee_profiles.wht_40_2_pct` ⇒ ปัดทั้งรอบพร้อมรายชื่อผู้รับใน `context.payees` (มติ PO 05/10/2569 UAT U7 — ระบบไม่คำนวณอัตราก้าวหน้าเอง) | 17, 18, 22 |
 | PAYEE_NOT_FOUND | อ้าง Payee ที่ไม่มีในองค์กร (หรือไม่อยู่ใน scope ของผู้เรียก) | 18 |
 | PAYEE_ALREADY_EXISTS | สร้าง Payee ให้ผู้ใช้ที่มี Payee Profile อยู่แล้ว (1 User = 1 Payee — `18` §6.1) | 18 |
 | PAYEE_ID_DOCUMENT_REQUIRED | ยืนยัน Payee โดยไม่มี `id_document_url` ขณะที่ `require_payee_id_document = true` | 18, 13 |

@@ -10,7 +10,7 @@ import { z } from 'zod'
 const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const whtCertificateStatusSchema = z.enum(['active', 'cancelled'])
-export const whtFilingFormSchema = z.enum(['PND3', 'PND53'])
+export const whtFilingFormSchema = z.enum(['PND3', 'PND53', 'PND1'])
 
 export const whtCertificateListQuerySchema = z.object({
   periodId: uuidSchema.optional(),

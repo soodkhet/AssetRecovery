@@ -36,6 +36,8 @@ function item(overrides: Partial<PayoutBatchItemDto> = {}): PayoutBatchItemDto {
     taxProfileId: 'tax-1',
     taxProfileName: 'บุคคลธรรมดา 3%',
     whtPctSnapshot: 3,
+    whtBaseIncluded: true,
+    whtIncomeCategory: 'sec_40_8',
     bankName: 'ธนาคารกสิกรไทย',
     accountNumberMasked: 'xxx-x-x1234-x',
     ...overrides,
@@ -60,6 +62,7 @@ function batch(items: readonly PayoutBatchItemDto[], overrides: Partial<PayoutBa
     paymentFileUrl: 'payout-batches/x/PB-OUT-25690705-ABCDEF-v1.csv',
     // 05/07/2569 07:00 ICT
     paymentFileGeneratedAt: '2026-07-05T00:00:00.000Z',
+    whtPolicy: null,
     createdAt: '2026-06-30T02:00:00.000Z',
     createdByName: 'การเงิน ทดสอบ',
     updatedAt: '2026-07-05T00:00:00.000Z',

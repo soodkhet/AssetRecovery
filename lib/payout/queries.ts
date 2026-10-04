@@ -7,7 +7,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
-import { calculatePayeeBatchWht, type PayeeWhtResult } from '@/lib/finance/wht-calc'
+import { calculatePayeeBatchWht, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
@@ -57,6 +57,14 @@ import { prisma } from '@/lib/prisma'
 import { assertBankFileUsable } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
+import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
+import {
+  isInWhtBase,
+  normalizeBaseExpenseTypes,
+  resolveIncomeCategory,
+  type WhtIncomeCategory,
+  type WhtPolicyValues,
+} from '@/lib/settings/wht-policy'
 
 /**
  * รอบจ่ายเงิน — ชั้น DB (ไฟล์ 17 · `27` §6.6)
@@ -80,6 +88,8 @@ const TARGET = 'payout_batches'
 export interface PayoutMutationContext {
   actor: SessionUser
   meta: RequestMeta
+  /** เวลาอ้างอิงของคำขอ (เลือกค่าตั้งภาษีที่มีผล) — ไม่ระบุ = ตอนนี้ · เทสต์ใช้ตรึงวัน */
+  now?: Date
 }
 
 const batchSelect = {
@@ -94,6 +104,9 @@ const batchSelect = {
   idempotencyKey: true,
   paymentFileUrl: true,
   paymentFileGeneratedAt: true,
+  whtBaseExpenseTypes: true,
+  whtCertificateMode: true,
+  whtIncomeTypeMode: true,
   createdAt: true,
   updatedAt: true,
   bankAccount: { select: { bankName: true, accountNumber: true } },
@@ -114,6 +127,8 @@ const itemSelect = {
   netSatang: true,
   taxProfileId: true,
   whtPctSnapshot: true,
+  whtBaseIncluded: true,
+  whtIncomeCategory: true,
   taxProfile: { select: { name: true } },
   payee: {
     select: {
@@ -148,6 +163,15 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
     idempotencyKey: row.idempotencyKey,
     paymentFileUrl: row.paymentFileUrl,
     paymentFileGeneratedAt: row.paymentFileGeneratedAt?.toISOString() ?? null,
+    // snapshot ค่าตั้งภาษี (มติ PO 05/10/2569 UAT U8) — รอบที่สร้างก่อนมีค่าตั้ง = null
+    whtPolicy:
+      row.whtCertificateMode === null || row.whtIncomeTypeMode === null
+        ? null
+        : {
+            baseExpenseTypes: normalizeBaseExpenseTypes(row.whtBaseExpenseTypes),
+            certificateMode: row.whtCertificateMode,
+            incomeTypeMode: row.whtIncomeTypeMode,
+          },
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
     updatedAt: row.updatedAt.toISOString(),
@@ -175,6 +199,8 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     taxProfileId: row.taxProfileId,
     taxProfileName: row.taxProfile?.name ?? null,
     whtPctSnapshot: row.whtPctSnapshot === null ? null : Number(row.whtPctSnapshot),
+    whtBaseIncluded: row.whtBaseIncluded,
+    whtIncomeCategory: row.whtIncomeCategory,
     bankName: row.payee.bankName,
     accountNumberMasked: maskAccountNumber(row.payee.accountNumber),
   }
@@ -258,6 +284,10 @@ interface Candidate {
   whtPctSnapshot: number
   /** `true` = คิด WHT ด้วยอัตราของ Plan เพราะ Payee ยังไม่มี Tax Profile ⇒ ต้องเตือน (`18` §6.3) */
   whtRateFromPlan: boolean
+  /** snapshot: อยู่ในฐาน WHT ตามค่าตั้งของรอบ (มติ PO 05/10/2569 UAT U3) */
+  whtBaseIncluded: boolean
+  /** snapshot ประเภทเงินได้ของผู้รับ (UAT U5) — `null` = เงินทดรองจ่าย (ไม่ใช่เงินได้) */
+  whtIncomeCategory: WhtIncomeCategory | null
 }
 
 /** payee ที่ verified แล้วต้องมี Tax Profile เสมอ (`18` §9) ⇒ ค่านี้ไม่ควรเป็น null ตอนคิด WHT */
@@ -282,6 +312,8 @@ function payeeTaxValues(payee: PayeeTaxRow) {
 async function collectExpenseCandidates(
   organizationId: string,
   cutoffDate: Date,
+  side: PayoutBatchSide,
+  policy: WhtPolicyValues,
 ): Promise<Candidate[]> {
   const rows = await prisma.expense.findMany({
     where: {
@@ -294,6 +326,7 @@ async function collectExpenseCandidates(
     select: {
       id: true,
       grossSatang: true,
+      expenseType: true,
       compPlan: { select: { whtPct: true } },
       case: { select: { trackingRound: true } },
       payee: {
@@ -301,6 +334,7 @@ async function collectExpenseCandidates(
           id: true,
           isVerified: true,
           taxProfileId: true,
+          wht402Pct: true,
           taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
           user: {
             select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
@@ -311,35 +345,73 @@ async function collectExpenseCandidates(
     orderBy: [{ expenseDate: 'asc' }],
   })
 
+  // คัดฝั่งก่อนคิดภาษี — ผู้รับ "อีกฝั่ง" ไม่ควรบล็อกรอบนี้ (`17` §6.1) รวมถึงกรณีขาดอัตรา 40(2) ·
+  // payee หนึ่งคนอยู่ฝั่งเดียวเสมอ (`resolvePayoutSide()` อิงทีม/role ของ payee) ⇒ คัดก่อนจัดกลุ่มไม่ปนรอบ
+  const sided = rows
+    .map((row) => ({
+      row,
+      side: resolvePayoutSide({
+        teamSide: row.payee.user.team?.side ?? null,
+        roleGroup: row.payee.user.role.roleGroup,
+      }),
+    }))
+    .filter((entry) => entry.side === side)
+
   // `22` §6.9 — มติ PO 03/10/2569 (UAT Q5, BUG-014): เกณฑ์ขั้นต่ำเทียบกับ **ฐานรวมของ payee ทั้งรอบจ่าย**
-  // แล้วกระจายภาษีกลับลงรายการ (`calculatePayeeBatchWht()`) — payee หนึ่งคนอยู่ฝั่งเดียวเสมอ
-  // (`resolvePayoutSide()` อิงทีม/role ของ payee) ⇒ จัดกลุ่มก่อนคัดฝั่งได้โดยไม่ปนรอบ
+  // แล้วกระจายภาษีกลับลงรายการ (`calculatePayeeBatchWht()`)
+  // มติ PO 05/10/2569 (UAT U3/U5/U7): ฐานเฉพาะชนิดรายการที่ค่าตั้งรวม · ประเภทเงินได้ตามค่าตั้ง+ฝั่งของผู้รับ ·
+  // 40(2) ใช้อัตราต่อคน (`payee_profiles.wht_40_2_pct`) ไม่มีเกณฑ์
   const indicesByPayee = new Map<string, number[]>()
-  rows.forEach((row, index) => {
-    const members = indicesByPayee.get(row.payee.id) ?? []
+  sided.forEach((entry, index) => {
+    const members = indicesByPayee.get(entry.row.payee.id) ?? []
     members.push(index)
-    indicesByPayee.set(row.payee.id, members)
+    indicesByPayee.set(entry.row.payee.id, members)
   })
-  const whtByIndex = new Array<PayeeWhtResult | undefined>(rows.length)
+
+  // ผู้รับ 40(2) ที่มีรายการในฐานแต่ไม่มีอัตรา ⇒ ปัดทั้งรอบพร้อมรายชื่อ (ไม่เดาอัตรา — Hybrid Boundary)
+  const missing402: string[] = []
   for (const members of indicesByPayee.values()) {
+    const first = sided[members[0]!]!
+    const category = resolveIncomeCategory(policy.incomeTypeMode, first.side)
+    const hasBaseItem = members.some((index) => isInWhtBase(policy, sided[index]!.row.expenseType))
+    if (category === 'sec_40_2' && hasBaseItem && first.row.payee.wht402Pct === null) {
+      missing402.push(first.row.payee.user.fullName)
+    }
+  }
+  if (missing402.length > 0) {
+    throw new PayoutError('WHT_40_2_RATE_MISSING', {
+      detail: `payees=${missing402.join(', ')}`,
+      context: { payees: missing402 },
+    })
+  }
+
+  const whtByIndex = new Array<PayeeBatchWhtLine | undefined>(sided.length)
+  for (const members of indicesByPayee.values()) {
+    const first = sided[members[0]!]!
+    const incomeCategory = resolveIncomeCategory(policy.incomeTypeMode, first.side)
     const { lines } = calculatePayeeBatchWht(
       members.map((index) => {
-        const row = rows[index]!
+        const row = sided[index]!.row
         return {
           grossSatang: row.grossSatang,
+          includedInBase: isInWhtBase(policy, row.expenseType),
           source: {
             payeeTaxProfile: payeeTaxValues(row.payee),
             planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
           },
         }
       }),
+      {
+        incomeCategory,
+        section402Pct: first.row.payee.wht402Pct === null ? null : Number(first.row.payee.wht402Pct),
+      },
     )
     members.forEach((index, position) => {
       whtByIndex[index] = lines[position]
     })
   }
 
-  return rows.map((row, index) => {
+  return sided.map(({ row, side: payeeSide }, index) => {
     const wht = whtByIndex[index]
     if (wht === undefined) throw new Error(`คำนวณ WHT ไม่ครบ — expense ${row.id}`)
     return {
@@ -348,17 +420,17 @@ async function collectExpenseCandidates(
       payeeId: row.payee.id,
       payeeName: row.payee.user.fullName,
       isVerified: row.payee.isVerified,
-      side: resolvePayoutSide({
-        teamSide: row.payee.user.team?.side ?? null,
-        roleGroup: row.payee.user.role.roleGroup,
-      }),
+      side: payeeSide,
       trackingRound: row.case?.trackingRound ?? 1,
       grossSatang: row.grossSatang,
       whtSatang: wht.whtSatang,
       netSatang: wht.netSatang,
       taxProfileId: row.payee.taxProfileId,
       whtPctSnapshot: wht.rate.whtPct,
-      whtRateFromPlan: wht.rate.source === 'plan',
+      // fallback อัตราของ Plan มีความหมายเฉพาะรายการที่อยู่ในฐาน 40(8) จริง
+      whtRateFromPlan: wht.rate.source === 'plan' && wht.includedInBase,
+      whtBaseIncluded: wht.includedInBase,
+      whtIncomeCategory: wht.incomeCategory,
     }
   })
 }
@@ -429,6 +501,9 @@ async function collectAdvanceCandidates(
       whtPctSnapshot: 0,
       // เงินทดรองไม่หัก WHT อยู่แล้ว ⇒ ไม่มีการ fallback อัตราให้ต้องเตือน
       whtRateFromPlan: false,
+      // ไม่ใช่เงินได้ ⇒ ไม่อยู่ในฐาน WHT และไม่มีประเภทเงินได้
+      whtBaseIncluded: false,
+      whtIncomeCategory: null,
     }
   })
 }
@@ -453,8 +528,12 @@ export async function createPayoutBatch(
     targetType: 'payout_batches',
   })
 
+  // ค่าตั้งภาษีที่มีผล ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — snapshot ลงรอบด้านล่าง
+  // รอบที่สร้างแล้วไม่ถูกคิดใหม่เมื่อค่าตั้งเปลี่ยน (Rule 08)
+  const whtPolicy = await resolveWhtPolicyForPayout(user.organizationId, context.now ?? new Date())
+
   const [expenses, advances] = await Promise.all([
-    collectExpenseCandidates(user.organizationId, input.cutoffDate),
+    collectExpenseCandidates(user.organizationId, input.cutoffDate, input.side, whtPolicy.values),
     collectAdvanceCandidates(user.organizationId, input.cutoffDate),
   ])
 
@@ -475,6 +554,10 @@ export async function createPayoutBatch(
         name,
         side: input.side,
         status: 'draft',
+        whtPolicyId: whtPolicy.policyId,
+        whtBaseExpenseTypes: normalizeBaseExpenseTypes(whtPolicy.values.baseExpenseTypes),
+        whtCertificateMode: whtPolicy.values.certificateMode,
+        whtIncomeTypeMode: whtPolicy.values.incomeTypeMode,
         createdBy: user.id,
       },
       select: { id: true },
@@ -494,6 +577,8 @@ export async function createPayoutBatch(
           netSatang: candidate.netSatang,
           taxProfileId: candidate.taxProfileId,
           whtPctSnapshot: new Prisma.Decimal(candidate.whtPctSnapshot.toFixed(2)),
+          whtBaseIncluded: candidate.whtBaseIncluded,
+          whtIncomeCategory: candidate.whtIncomeCategory,
           createdBy: user.id,
         },
         select: { id: true },
@@ -546,6 +631,10 @@ export async function createPayoutBatch(
           wht_satang: totals.whtSatang,
           net_satang: totals.netSatang,
           item_count: totals.itemCount,
+          wht_policy_id: whtPolicy.policyId,
+          wht_base_expense_types: normalizeBaseExpenseTypes(whtPolicy.values.baseExpenseTypes),
+          wht_certificate_mode: whtPolicy.values.certificateMode,
+          wht_income_type_mode: whtPolicy.values.incomeTypeMode,
         },
         reason: null,
         ipAddress: context.meta.ipAddress,

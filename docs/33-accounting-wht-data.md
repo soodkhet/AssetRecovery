@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | (เดิม) | Drafted from UI Reference — WHT Certificate (ใบ 50 ทวิ), ภ.ง.ด.3/53, due date countdown |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — ตรวจสอบ enum `wht_filing_status` เทียบกับ `02-database-schema-design.md` แล้ว **ตรงกันทุกตัว ไม่พบ conflict** (ยืนยันตามที่บันทึกไว้แล้วใน `23-finance-state-machines.md` §6.11) — **เนื้อหา business logic เดิมคงไว้ครบ** |
+| v3.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: §6.3 รูปแบบการออกใบตามค่าตั้ง (ต่อผู้รับต่อรอบ = ค่าเริ่มต้น / ต่อรายการ) · §6.1/§7.2 เพิ่ม ภ.ง.ด.1 (เงินได้ 40(2)) + `pnd1_total` · §7.1 `issue_mode`/`payout_batch_id` + `filing_form = PND1` · §9/§16 ปรับตาม · ใบ/รอบเดิมไม่เปลี่ยน |
 | v3 | 04/07/2569 | **Batch 6 (DEC-006/D4) — เติมกลไกยกเลิกหนังสือรับรองให้ครบวงจร**: §10 เดิมกำหนดว่า "ผิดต้องออกใหม่พร้อมอ้างอิงยกเลิกฉบับเดิม" แต่ schema ไม่มี field รองรับ — เพิ่ม `status` (`active`/`cancelled`), `cancel_reason`, `replaces_certificate_id` (§7.1), endpoint cancel (§14), validation `WHT_CANCEL_REQUIRES_REASON` (§11), workflow (§9), test case (§16) — sync `02` v3.5 (รวมแก้ `delivery_format` TEXT → enum) และไฟล์ 24/27 แล้ว — หลักการเดียวกับ Tax Invoice ไฟล์ 31 |
 
 ขอบเขตเอกสารนี้: สรุปข้อมูลภาษีหัก ณ ที่จ่ายทั้งหมดที่เกิดจากการจ่ายเงิน (ไฟล์ 17/32) พร้อมออกหนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) ให้ผู้ถูกหัก และเตรียมข้อมูลสำหรับยื่นแบบ ภ.ง.ด.3/53 ส่งกรมสรรพากร
@@ -55,6 +56,7 @@
 
 - **ภ.ง.ด.3**: ผู้ถูกหักเป็นบุคคลธรรมดา
 - **ภ.ง.ด.53**: ผู้ถูกหักเป็นนิติบุคคล
+- **ภ.ง.ด.1**: เงินได้ 40(2) — เมื่อค่าตั้งภาษีจัดผู้รับเป็น 40(2) (มติ PO 05/10/2569 UAT U7 · `pnd1_satang`) — ประเภทเงินได้มาจาก snapshot ของรายการในรอบจ่าย ไม่ใช่ Tax Profile
 
 ### 6.2 กำหนดเวลานำส่งภาษี 🔶 มีโทษปรับจริงหากพลาด — ต้องเตือนให้ชัดเจน
 
@@ -63,6 +65,11 @@
 ### 6.3 หนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ)
 
 ออกให้ผู้ถูกหักทุกราย — ต้องมีข้อมูลครบตามที่กฎหมายกำหนด (ผู้จ่าย, ผู้ถูกหัก, ประเภทเงินได้, วันที่จ่าย, จำนวนเงินที่จ่าย, ภาษีที่หัก) — ออกได้ทั้งกระดาษและอิเล็กทรอนิกส์ (สอดคล้องกับนโยบาย e-Withholding Tax ที่กรมสรรพากรผลักดัน)
+
+**รูปแบบการออก (มติ PO 05/10/2569 — UAT U4 · ค่าตั้งไฟล์ 13 §6.4.2 snapshot ไว้กับรอบจ่าย)**:
+- **ต่อผู้รับต่อรอบจ่าย** (ค่าเริ่มต้น): 1 ใบต่อผู้รับที่มีภาษีหักในรอบ · ยอดจ่าย = ผลรวม gross ของรายการ**ในฐาน WHT** · ภาษี = ผลรวมภาษีของผู้รับในรอบ · `issue_mode = per_payee_batch` + `payout_batch_id` · `expense_record_id` ชี้รายการแรกของผู้รับในรอบ (จุดยึด — partial unique เดิมกันออกซ้ำ) · PDF มีหมายเหตุ "ยอดรวมทุกรายการของผู้รับในรอบจ่าย … (n รายการ)"
+- **ต่อรายการ** (พฤติกรรมเดิม): 1 รายการที่หักภาษี = 1 ใบ · รอบจ่ายที่สร้างก่อนมีค่าตั้งใช้แบบนี้เสมอ
+- ยอดภาษีรวมเท่ากันทั้งสองแบบ · ยกเลิก/ออกแทนใช้ได้ทั้งสองแบบ (ใบแทนใช้รูปแบบเดียวกับใบเดิม — ต่อรอบคำนวณกลุ่มของผู้รับในรอบนั้นใหม่จาก snapshot)
 
 ## 7. Data Entities / Required Objects
 
@@ -78,7 +85,9 @@
 | payment_date | date | yes | — |
 | gross_amount | decimal | yes | — |
 | wht_amount | decimal | yes | — |
-| filing_form | enum | yes | `PND3` (บุคคลธรรมดา) / `PND53` (นิติบุคคล) |
+| filing_form | enum | yes | `PND3` (บุคคลธรรมดา) / `PND53` (นิติบุคคล) / `PND1` (เงินได้ 40(2) — มติ PO 05/10/2569 UAT U7) |
+| issue_mode | enum | yes | `per_payee_batch` / `per_item` (default — ใบเดิมทั้งหมด) — §6.3 |
+| payout_batch_id | uuid \| null | conditional | บังคับเมื่อ `issue_mode = per_payee_batch` (CHECK `wht_cert_batch_mode_has_batch`) |
 | delivery_format | enum | yes | `e_withholding` / `paper` — สอดคล้องกับ pattern เดียวกันที่ไฟล์ 31 ใช้กับใบกำกับภาษี (schema: enum `wht_delivery_format`) |
 | status | enum | yes | `active` (ออกแล้วใช้งานอยู่) / `cancelled` (ยกเลิก, terminal — ห้ามลบ) — เพิ่ม 04/07/2569 DEC-006/D4 |
 | cancel_reason | string \| null | conditional | บังคับกรอกเมื่อ status = `cancelled` (WHT_CANCEL_REQUIRES_REASON) |
@@ -91,7 +100,7 @@
 | id | uuid | yes | — |
 | period | string | yes | รอบเดือนที่จ่ายเงิน |
 | filing_due_date | date | yes | คำนวณอัตโนมัติ: วันที่ 7 ของเดือนถัดไป (กระดาษ) หรือวันที่ 15 (อิเล็กทรอนิกส์) — ใช้ค่าหลังเป็น default เพราะสนับสนุนทิศทางของกรมสรรพากร |
-| pnd3_total, pnd53_total | decimal | yes | ยอดรวม WHT แยกตามแบบ |
+| pnd3_total, pnd53_total, pnd1_total | decimal | yes | ยอดรวม WHT แยกตามแบบ (`pnd1` = เงินได้ 40(2) — มติ PO 05/10/2569) |
 | status | enum | yes | `pending` / `filed` (บัญชี mark เองว่ายื่นแล้วนอกระบบ) |
 
 ## 8. UI / UX Rules
@@ -103,7 +112,7 @@
 
 ## 9. Workflow / Lifecycle
 
-`Payout Batch completed (ไฟล์ 17) → สร้าง WHT Certificate อัตโนมัติต่อรายการ (status = active) → รวมเป็น WHT Filing Period Summary ต่อเดือน → บัญชีดาวน์โหลด/ส่งหนังสือรับรองให้ผู้ถูกหัก → ยื่นแบบจริงนอกระบบ → mark status = filed`
+`Payout Batch completed (ไฟล์ 17) → สร้าง WHT Certificate อัตโนมัติตามรูปแบบที่ snapshot ไว้กับรอบ — ต่อผู้รับต่อรอบ/ต่อรายการ (status = active) → รวมเป็น WHT Filing Period Summary ต่อเดือน → บัญชีดาวน์โหลด/ส่งหนังสือรับรองให้ผู้ถูกหัก → ยื่นแบบจริงนอกระบบ → mark status = filed`
 
 **ยกเลิกหนังสือรับรอง (เพิ่ม 04/07/2569 — DEC-006/D4)**: `พบข้อผิดพลาดในใบที่ออกแล้ว → บัญชีกด "ยกเลิก" กรอก cancel_reason บังคับ → status: cancelled (terminal — ยอดใบนี้ไม่ถูกนับใน pnd3_total/pnd53_total อีก) → ออกใบใหม่ตาม flow ปกติ พร้อม replaces_certificate_id ชี้กลับฉบับเดิม`
 
@@ -152,6 +161,8 @@
 | แยกแบบถูกประเภท | มี payee ทั้งบุคคลธรรมดาและนิติบุคคลในรอบเดียวกัน | แยกยอด pnd3_total/pnd53_total ถูกต้อง |
 | ยกเลิกไม่กรอกเหตุผล | กดยกเลิกหนังสือรับรองโดยไม่กรอก cancel_reason | reject WHT_CANCEL_REQUIRES_REASON |
 | ยอดใบยกเลิกไม่ถูกนับ | ยกเลิกใบรับรอง 1 ฉบับแล้วดู Filing Summary | pnd3_total/pnd53_total ไม่รวมยอดของใบที่ cancelled |
+| ต่อรอบ vs ต่อรายการ | รอบเดียวกัน ออกแบบต่อผู้รับต่อรอบ และแบบต่อรายการ | ยอดภาษีรวมเท่ากัน · ต่อรอบ = 1 ใบต่อผู้รับ (ยอดจ่ายเฉพาะรายการในฐาน) |
+| 40(2) → ภ.ง.ด.1 | ผู้รับ 40(2) ในรอบที่จ่ายแล้ว | ใบ filing_form = PND1 ประเภทเงินได้ 40(2) · pnd1_total นับยอด |
 
 ---
 

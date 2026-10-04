@@ -1,0 +1,419 @@
+import { PrismaPg } from '@prisma/adapter-pg'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import type { SessionUser } from '@/lib/auth/types'
+import { PrismaClient } from '@/lib/generated/prisma/client'
+
+/**
+ * เทสต์ระดับ DB — ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U3/U4/U5/U7/U8)
+ *
+ *  - ค่าเริ่มต้น: ฐาน WHT ไม่รวมค่าที่พัก/เบิกตามใบเสร็จ (A1 — in1 ฐาน ฿1,950 → ฐาน WHT ฿1,350 → หัก 4,050 สตางค์)
+ *    + snapshot ค่าตั้งลงรอบจ่าย
+ *  - snapshot: เปลี่ยนค่าตั้งหลังสร้างรอบแล้ว รอบเดิมไม่เปลี่ยน · รอบใหม่ใช้ค่าใหม่
+ *  - effective date: ค่าตั้งที่วันที่มีผลยังไม่ถึงไม่กระทบรอบที่สร้างวันนี้ · ย้อนหลังไม่ได้
+ *  - 40(2) แยกตามประเภททีม: ผู้รับ inhouse ไม่มีอัตรา ⇒ `WHT_40_2_RATE_MISSING` (ฝั่ง outsource ไม่โดน)
+ *    · มีอัตรา 2.50% ⇒ หักไม่มีเกณฑ์ · ใบ 50 ทวิ = ภ.ง.ด.1 + สรุปรอบนำส่ง pnd1
+ *  - ใบ 50 ทวิ ต่อผู้รับต่อรอบ (ค่าเริ่มต้น) vs ต่อรายการ — ยอดภาษีรวมเท่ากัน · ยกเลิก/ออกแทนได้ทั้งสองแบบ
+ *
+ * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
+ */
+
+const url = process.env.TEST_DATABASE_URL
+
+function assertLocalTestDatabase(connectionString: string): void {
+  const parsed = new URL(connectionString)
+  const isLocal = ['localhost', '127.0.0.1', '::1', 'postgres'].includes(parsed.hostname)
+  if (!isLocal || !parsed.pathname.includes('test')) {
+    throw new Error(`TEST_DATABASE_URL ต้องเป็น DB ทดสอบบนเครื่อง/CI เท่านั้น (host=${parsed.hostname}) — Rule 07`)
+  }
+}
+
+const suite = url ? describe : describe.skip
+if (!url) {
+  console.warn('[wht-policy.db.test] ข้ามเทสต์ระดับ DB — ไม่มี TEST_DATABASE_URL (ดู .env.example)')
+}
+
+const ORG_ID = '00000000-0000-4000-8000-0000000057a0'
+const ROLE_ID = '00000000-0000-4000-8000-0000000057a1'
+const FINANCE_ID = '00000000-0000-4000-8000-0000000057a2'
+const AGENT_IN_ID = '00000000-0000-4000-8000-0000000057a3'
+const AGENT_OUT_ID = '00000000-0000-4000-8000-0000000057a4'
+const TEAM_IN_ID = '00000000-0000-4000-8000-0000000057a5'
+const TEAM_OUT_ID = '00000000-0000-4000-8000-0000000057a6'
+const TAX_PROFILE_ID = '00000000-0000-4000-8000-0000000057a7'
+const PLAN_ID = '00000000-0000-4000-8000-0000000057a8'
+const PAYEE_IN_ID = '00000000-0000-4000-8000-0000000057a9'
+const PAYEE_OUT_ID = '00000000-0000-4000-8000-0000000057b0'
+
+/** วันสร้างรอบ (ตรึงเวลา) = 05/10/2569 10:00 เวลาไทย · วันตัดรอบ 04/10/2569 */
+const NOW = new Date('2026-10-05T03:00:00Z')
+const CUTOFF = new Date(Date.UTC(2026, 9, 4))
+const PAYMENT_AT = '2026-10-05T04:00:00Z'
+
+let client: PrismaClient | null = null
+type PayoutQueries = typeof import('@/lib/payout/queries')
+type PolicyQueries = typeof import('@/lib/settings/queries/wht-policy')
+type ExpenseQueries = typeof import('@/lib/expenses/queries')
+type WhtQueries = typeof import('@/lib/wht/queries')
+let payout: PayoutQueries
+let policy: PolicyQueries
+let expenses: ExpenseQueries
+let wht: WhtQueries
+
+function db(): PrismaClient {
+  if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
+  if (!client) {
+    assertLocalTestDatabase(url)
+    client = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) })
+  }
+  return client
+}
+
+const meta = { ipAddress: null, userAgent: null }
+
+const finance: SessionUser = {
+  id: FINANCE_ID,
+  organizationId: ORG_ID,
+  supabaseUid: 'uid-finance-57',
+  email: 'finance57@test.local',
+  fullName: 'การเงิน ค่าตั้งภาษี',
+  status: 'active',
+  roleId: ROLE_ID,
+  roleName: 'การเงิน',
+  roleGroup: 'system',
+  isSuperadmin: false,
+  teamId: null,
+  companyId: null,
+  capabilities: {
+    manage_payout_batch: 'manage',
+    manage_wht: 'manage',
+    manage_sales_expenses: 'manage',
+    manage_wht_policy: 'manage',
+  },
+  scope: { kind: 'global', teamIds: [], companyId: null, userId: FINANCE_ID },
+  loginAt: new Date().toISOString(),
+}
+
+const ctx = { actor: finance, meta, now: NOW }
+const policyCtx = (reason: string) => ({ actor: finance, meta, reason })
+
+function codeOf(error: unknown): string {
+  return (error as { code?: string }).code ?? String(error)
+}
+
+async function seedExpense(payeeId: string, type: string, grossSatang: number): Promise<void> {
+  await db().$executeRawUnsafe(`
+    INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status,
+                          comp_plan_id, comp_plan_version, receipt_file_url, created_by)
+    VALUES ('${ORG_ID}', '${payeeId}', '${type}', ${grossSatang}, '2026-10-03', 'approved',
+            '${PLAN_ID}', 1, 'field/receipts/ok.jpg', '${FINANCE_ID}')
+  `)
+}
+
+/** in1 ตาม A1: คอมมิชชัน 1,000 + น้ำมัน 200 + เบี้ยเลี้ยง 150 + ค่าที่พัก 600 = ฿1,950 */
+async function seedIn1(): Promise<void> {
+  await seedExpense(PAYEE_IN_ID, 'commission', 100_000)
+  await seedExpense(PAYEE_IN_ID, 'fuel', 20_000)
+  await seedExpense(PAYEE_IN_ID, 'allowance', 15_000)
+  await seedExpense(PAYEE_IN_ID, 'hotel', 60_000)
+}
+
+/** จำลองว่าโอนเงินจริงแล้ว (สถานะ completed + วันจ่าย) แล้วให้ไฟล์ 32 sync บัญชี + ใบ 50 ทวิ */
+async function completeAndSync(batchId: string): Promise<void> {
+  await db().$executeRawUnsafe(`
+    UPDATE payout_batches SET status = 'completed', payment_file_generated_at = '${PAYMENT_AT}' WHERE id = '${batchId}'
+  `)
+  await expenses.syncExpenseRecordsFromPayout(ctx, batchId)
+}
+
+async function reset(): Promise<void> {
+  const tx = db()
+  await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
+  }
+  for (const statement of [
+    `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM wht_policy_history WHERE organization_id = '${ORG_ID}'`,
+    `UPDATE payee_profiles SET wht_40_2_pct = NULL WHERE organization_id = '${ORG_ID}'`,
+  ]) {
+    await tx.$executeRawUnsafe(statement)
+  }
+}
+
+beforeAll(async () => {
+  if (!url) return
+  process.env.DATABASE_URL = url
+  payout = await import('@/lib/payout/queries')
+  policy = await import('@/lib/settings/queries/wht-policy')
+  expenses = await import('@/lib/expenses/queries')
+  wht = await import('@/lib/wht/queries')
+
+  const tx = db()
+  await tx.$executeRawUnsafe(`
+    INSERT INTO organizations (id, name, tax_id, address)
+    VALUES ('${ORG_ID}', 'WhtPolicyTest', '9999999995700', 'ที่อยู่ทดสอบค่าตั้งภาษี') ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+    VALUES ('${ROLE_ID}', '${ORG_ID}', 'การเงิน 57', 'system', false) ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO users (id, organization_id, role_id, email, full_name, status) VALUES
+      ('${FINANCE_ID}', '${ORG_ID}', '${ROLE_ID}', 'finance57@test.local', 'การเงิน ค่าตั้งภาษี', 'active'),
+      ('${AGENT_IN_ID}', '${ORG_ID}', '${ROLE_ID}', 'in57@test.local', 'อินหนึ่ง ในบ้าน', 'active'),
+      ('${AGENT_OUT_ID}', '${ORG_ID}', '${ROLE_ID}', 'out57@test.local', 'เอาท์หนึ่ง นอกบ้าน', 'active')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO teams (id, organization_id, name, side, provinces, status, created_by) VALUES
+      ('${TEAM_IN_ID}', '${ORG_ID}', 'ทีมใน 57', 'inhouse', ARRAY['เชียงใหม่'], 'active', '${FINANCE_ID}'),
+      ('${TEAM_OUT_ID}', '${ORG_ID}', 'ทีมนอก 57', 'outsource', ARRAY['ลำพูน'], 'active', '${FINANCE_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_IN_ID}' WHERE id = '${AGENT_IN_ID}'`)
+  await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_OUT_ID}' WHERE id = '${AGENT_OUT_ID}'`)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO tax_profiles (id, organization_id, name, wht_pct, wht_basis, wht_min_threshold_satang, created_by)
+    VALUES ('${TAX_PROFILE_ID}', '${ORG_ID}', 'ค่าจ้างทำของ 3% (57)', 3.00, 'before_vat', 100000, '${FINANCE_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO compensation_plans (id, organization_id, name, side, fuel_mode, fuel_rate_per_km_satang,
+                                    allowance_satang, commission_satang, wht_pct, version, effective_from, created_by)
+    VALUES ('${PLAN_ID}', '${ORG_ID}', 'แผน 57', 'inhouse', 'PER_KM', 500, 30000, 150000, 3.00, 1, '2026-01-01', '${FINANCE_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO payee_profiles (id, organization_id, user_id, payee_type, tax_profile_id, bank_name,
+                                account_name, account_number, national_id, is_verified, created_by) VALUES
+      ('${PAYEE_IN_ID}', '${ORG_ID}', '${AGENT_IN_ID}', 'individual', '${TAX_PROFILE_ID}', 'ธนาคารกสิกรไทย',
+       'อินหนึ่ง ในบ้าน', '1234567890', '1100000005701', true, '${FINANCE_ID}'),
+      ('${PAYEE_OUT_ID}', '${ORG_ID}', '${AGENT_OUT_ID}', 'individual', '${TAX_PROFILE_ID}', 'ธนาคารไทยพาณิชย์',
+       'เอาท์หนึ่ง นอกบ้าน', '9876543210', '1100000005702', true, '${FINANCE_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+})
+
+afterAll(async () => {
+  if (url) await reset()
+  await client?.$disconnect()
+})
+
+beforeEach(async () => {
+  if (url) await reset()
+})
+
+suite('ฐาน WHT + snapshot (U3/U8)', () => {
+  it('(ก) ค่าเริ่มต้น — A1: in1 ฐาน ฿1,950 → ฐาน WHT ฿1,350 → หัก 4,050 สตางค์ · ค่าที่พักจ่ายเต็ม · snapshot ค่าตั้ง', async () => {
+    await seedIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+
+    expect(batch.grossSatang).toBe(195_000)
+    expect(batch.whtSatang).toBe(4050)
+    expect(batch.netSatang).toBe(190_950)
+    expect(batch.whtPolicy).toEqual({
+      baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+      certificateMode: 'per_payee_batch',
+      incomeTypeMode: 'all_40_8',
+    })
+    const hotel = batch.items.find((item) => item.grossSatang === 60_000)!
+    expect(hotel.whtBaseIncluded).toBe(false)
+    expect(hotel.whtSatang).toBe(0)
+    expect(hotel.netSatang).toBe(60_000)
+    expect(batch.items.filter((item) => item.whtBaseIncluded)).toHaveLength(3)
+    expect(batch.items.every((item) => item.whtIncomeCategory === 'sec_40_8')).toBe(true)
+
+    const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
+    expect(row.whtPolicyId).toBeNull() // ยังไม่เคยตั้ง = ค่าเริ่มต้นตามมติ
+    expect(row.whtCertificateMode).toBe('per_payee_batch')
+  })
+
+  it('(ฉ) เปลี่ยนค่าตั้งหลังสร้างรอบแล้ว — รอบเดิมไม่เปลี่ยน · รอบใหม่ใช้ค่าใหม่ (ชี้แถวค่าตั้ง)', async () => {
+    await seedIn1()
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+
+    const created = await policy.createWhtPolicy(
+      policyCtx('ทดลองให้ค่าที่พักอยู่ในฐาน และออกใบต่อรายการ'),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance', 'hotel'],
+        certificateMode: 'per_item',
+        incomeTypeMode: 'all_40_8',
+      },
+      NOW,
+    )
+
+    const before = await payout.getPayoutBatch(finance, first.batch.id)
+    expect(before.whtSatang).toBe(4050)
+    expect(before.whtPolicy?.certificateMode).toBe('per_payee_batch')
+    expect(before.items.find((item) => item.grossSatang === 60_000)?.whtBaseIncluded).toBe(false)
+
+    await seedIn1()
+    const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: 'รอบที่สอง' })
+    expect(second.batch.whtSatang).toBe(5850) // 1,950 × 3%
+    expect(second.batch.whtPolicy?.certificateMode).toBe('per_item')
+    const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: second.batch.id } })
+    expect(row.whtPolicyId).toBe(created.id)
+
+    // audit มี before/after + reason
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'wht_policy_history', targetId: created.id },
+    })
+    expect(audit.reason).toBe('ทดลองให้ค่าที่พักอยู่ในฐาน และออกใบต่อรายการ')
+    expect(audit.beforeData).toMatchObject({ certificate_mode: 'per_payee_batch' })
+    expect(audit.afterData).toMatchObject({ certificate_mode: 'per_item', effective_from: '2026-10-05' })
+  })
+
+  it('(ช) วันที่มีผลยังไม่ถึง ⇒ รอบที่สร้างวันนี้ใช้ค่าเดิม · ย้อนหลัง ⇒ WHT_POLICY_EFFECTIVE_DATE_PAST', async () => {
+    await policy.createWhtPolicy(
+      policyCtx('เตรียมค่าตั้งเดือนหน้า'),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 10, 1)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance', 'hotel'],
+        certificateMode: 'per_item',
+        incomeTypeMode: 'all_40_8',
+      },
+      NOW,
+    )
+    await seedIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtSatang).toBe(4050)
+    expect(batch.whtPolicy?.certificateMode).toBe('per_payee_batch')
+
+    const overview = await policy.getWhtPolicyOverview(ORG_ID, NOW)
+    expect(overview.isDefault).toBe(true)
+    expect(overview.history).toHaveLength(1)
+    expect(overview.history[0]?.isCurrent).toBe(false)
+
+    await expect(
+      policy.createWhtPolicy(
+        policyCtx('ย้อนหลัง'),
+        { effectiveFrom: new Date(Date.UTC(2026, 9, 4)), ...overview.defaults },
+        NOW,
+      ),
+    ).rejects.toSatisfy((error: unknown) => codeOf(error) === 'WHT_POLICY_EFFECTIVE_DATE_PAST')
+  })
+})
+
+suite('ประเภทเงินได้ 40(2) (U5/U7)', () => {
+  async function useByTeamSide(): Promise<void> {
+    await policy.createWhtPolicy(
+      policyCtx('ให้ inhouse เป็น 40(2) ตามสัญญาจ้าง'),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+        certificateMode: 'per_payee_batch',
+        incomeTypeMode: 'by_team_side',
+      },
+      NOW,
+    )
+  }
+
+  it('(ง) ผู้รับ inhouse ไม่มีอัตรา 40(2) ⇒ ปัดพร้อมรายชื่อ · ฝั่ง outsource (40(8)) สร้างได้ตามปกติ', async () => {
+    await useByTeamSide()
+    await seedIn1()
+    await seedExpense(PAYEE_OUT_ID, 'commission', 200_000)
+
+    const error = await payout
+      .createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+      .catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('WHT_40_2_RATE_MISSING')
+    expect((error as { context?: { payees?: string[] } }).context?.payees).toEqual(['อินหนึ่ง ในบ้าน'])
+    expect(await db().payoutBatch.count({ where: { organizationId: ORG_ID } })).toBe(0)
+
+    const outsource = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    expect(outsource.batch.whtSatang).toBe(6000)
+    expect(outsource.batch.items[0]?.whtIncomeCategory).toBe('sec_40_8')
+  })
+
+  it('(ค) อัตรา 2.50% ⇒ หักจากฐาน (ไม่มีเกณฑ์) · ใบ 50 ทวิ ภ.ง.ด.1 ประเภทเงินได้ 40(2) · สรุปรอบนำส่ง pnd1', async () => {
+    await useByTeamSide()
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_40_2_pct = 2.50 WHERE id = '${PAYEE_IN_ID}'`)
+    // ฐาน ฿500 (ต่ำกว่า ฿1,000) ก็ยังหัก เพราะ 40(2) ไม่มีเกณฑ์
+    await seedExpense(PAYEE_IN_ID, 'commission', 30_000)
+    await seedExpense(PAYEE_IN_ID, 'fuel', 20_000)
+    await seedExpense(PAYEE_IN_ID, 'hotel', 60_000)
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtSatang).toBe(1250)
+    expect(batch.items.every((item) => item.whtIncomeCategory === 'sec_40_2')).toBe(true)
+    expect(batch.items.find((item) => item.grossSatang === 30_000)?.whtPctSnapshot).toBe(2.5)
+
+    await completeAndSync(batch.id)
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({
+      filingForm: 'PND1',
+      incomeType: 'ค่าธรรมเนียม ค่านายหน้า มาตรา 40(2)',
+      grossSatang: 50_000,
+      whtSatang: 1250,
+      issueMode: 'per_payee_batch',
+    })
+    expect(certificates.summary.pnd1Satang).toBe(1250)
+    const filing = await db().whtFilingSummary.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(filing.pnd1Satang).toBe(1250)
+    expect(filing.pnd3Satang).toBe(0)
+  })
+})
+
+suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต่อรายการ (U4)', () => {
+  it('(จ) ต่อผู้รับต่อรอบ: 1 ใบ ยอดรวมของรอบ · ยกเลิกพร้อมออกแทนได้ยอดเท่าเดิม · sync ซ้ำไม่ออกซ้ำ', async () => {
+    await seedIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await completeAndSync(batch.id)
+
+    const first = await wht.listWhtCertificates(finance, {})
+    expect(first.items).toHaveLength(1)
+    const certificate = first.items[0]!
+    expect(certificate).toMatchObject({ grossSatang: 135_000, whtSatang: 4050, filingForm: 'PND3' })
+
+    const { cancelled, replacement } = await wht.cancelWhtCertificate(
+      { actor: finance, meta },
+      certificate.id,
+      { reason: 'สะกดชื่อผิด', reissue: true },
+    )
+    expect(cancelled.status).toBe('cancelled')
+    expect(replacement).toMatchObject({
+      grossSatang: 135_000,
+      whtSatang: 4050,
+      issueMode: 'per_payee_batch',
+      replacesCertificateId: certificate.id,
+    })
+
+    await wht.syncWhtCertificatesFromPayout({ actor: finance, meta }, batch.id)
+    const all = await db().whtCertificate.findMany({ where: { organizationId: ORG_ID } })
+    expect(all).toHaveLength(2)
+    expect(all.filter((row) => row.status === 'active')).toHaveLength(1)
+
+    const doc = await wht.getWhtCertificateDocSource(finance, replacement!.id)
+    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 4 })
+  })
+
+  it('(จ) ต่อรายการ: ใบต่อรายการที่หักภาษี — ยอดภาษีรวมเท่ากับแบบต่อรอบ', async () => {
+    await policy.createWhtPolicy(
+      policyCtx('ออกใบต่อรายการตามที่สำนักงานบัญชีขอ'),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+        certificateMode: 'per_item',
+        incomeTypeMode: 'all_40_8',
+      },
+      NOW,
+    )
+    await seedIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await completeAndSync(batch.id)
+
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(3)
+    expect(certificates.items.every((row) => row.issueMode === 'per_item')).toBe(true)
+    expect(certificates.items.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(4050)
+  })
+})

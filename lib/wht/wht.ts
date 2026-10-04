@@ -11,13 +11,19 @@ import type {
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { formatInvoiceNumber, type NumberingFormat } from '@/lib/settings/numbering'
+import {
+  INCOME_TYPE_TEXT_40_2,
+  type WhtCertificateMode,
+  type WhtIncomeCategory,
+} from '@/lib/settings/wht-policy'
 import { WhtError } from '@/lib/wht/errors'
 
 /**
  * กติกาของหนังสือรับรองหัก ณ ที่จ่าย + สรุปรอบนำส่ง (ไฟล์ 33) — **pure ล้วน ไม่มี I/O** ใช้ร่วม FE/BE
  *
  * ### กติกาที่ห้ามหลุด
- * - **1 รายการจ่ายที่มีการหักภาษี = 1 ใบรับรอง** และเกิดจาก payout ที่ `completed` เท่านั้น
+ * - **ใบ 50 ทวิ ออกตามรูปแบบที่ snapshot ไว้กับรอบจ่าย** (มติ PO 05/10/2569 UAT U4): ต่อผู้รับต่อรอบ
+ *   (ค่าเริ่มต้นใหม่) หรือ 1 รายการที่หักภาษี = 1 ใบ (เดิม/รอบเก่า) — `groupCertificateSources()` · เกิดจาก payout ที่ `completed` เท่านั้น
  *   (`33` §9 · §17) — รายการที่ `wht = 0` (เช่นเงินทดรองจ่าย A4) **ไม่ออกใบ** เพราะใบ 50 ทวิ
  *   คือหลักฐาน "ภาษีที่หักไว้" ไม่มีภาษีก็ไม่มีอะไรให้รับรอง (ดู `shouldIssueCertificate()`)
  * - **ใบที่ออกแล้วแก้ยอดไม่ได้** — ผิดต้อง `active → cancelled` (terminal, ห้ามลบ/ห้าม reverse)
@@ -57,6 +63,7 @@ export const WHT_FILING_STATUS_LABEL: Record<WhtFilingStatus, string> = {
 export const WHT_FILING_FORM_LABEL: Record<WhtFilingForm, string> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
+  PND1: 'ภ.ง.ด.1 (เงินได้ 40(2))',
 }
 
 export const WHT_DELIVERY_FORMAT_LABEL: Record<WhtDeliveryFormat, string> = {
@@ -81,21 +88,83 @@ export function shouldIssueCertificate(item: { whtSatang: number }): boolean {
   return item.whtSatang > 0
 }
 
-/** แบบที่ต้องยื่น — Tax Profile ที่ snapshot ไว้ชนะเสมอ (`18` §6.3) · ไม่มีก็เดาจากชนิดผู้รับเงิน */
+/**
+ * แบบที่ต้องยื่น — เงินได้ 40(2) ⇒ **ภ.ง.ด.1** เสมอ (มติ PO 05/10/2569 UAT U7) · 40(8) ใช้ Tax Profile
+ * ที่ snapshot ไว้ (`18` §6.3) · ไม่มีก็เดาจากชนิดผู้รับเงิน
+ */
 export function filingFormOf(input: {
   taxProfileFilingForm: WhtFilingForm | null
   payeeType: PayeeType
+  /** snapshot `payout_batch_items.wht_income_category` — `null` = รอบเก่า (40(8)) */
+  incomeCategory?: WhtIncomeCategory | null
 }): WhtFilingForm {
-  if (input.taxProfileFilingForm !== null) return input.taxProfileFilingForm
+  if (input.incomeCategory === 'sec_40_2') return 'PND1'
+  if (input.taxProfileFilingForm !== null && input.taxProfileFilingForm !== 'PND1') return input.taxProfileFilingForm
   return input.payeeType === 'corporate' ? 'PND53' : 'PND3'
 }
 
 /** ประเภทเงินได้พึงประเมิน (`28` §6.3 ฟิลด์บังคับ) — จาก Tax Profile ที่ snapshot ไว้ */
 export const DEFAULT_INCOME_TYPE = 'ค่าจ้างทำของ มาตรา 40(8)'
 
-export function incomeTypeOf(taxProfileIncomeType: string | null): string {
+/** 40(2) ⇒ ข้อความ 40(2) เสมอ (Tax Profile เป็นของ 40(8)) · 40(8) ⇒ ข้อความจาก Tax Profile */
+export function incomeTypeOf(taxProfileIncomeType: string | null, incomeCategory: WhtIncomeCategory | null = null): string {
+  if (incomeCategory === 'sec_40_2') return INCOME_TYPE_TEXT_40_2
   const trimmed = (taxProfileIncomeType ?? '').trim()
   return trimmed === '' ? DEFAULT_INCOME_TYPE : trimmed
+}
+
+// ── การจัดกลุ่มรายการเป็นใบ 50 ทวิ (มติ PO 05/10/2569 UAT U4) ─────────────────
+
+export interface CertificateSourceItem {
+  /** `expense_records.id` */
+  id: string
+  payeeId: string
+  grossSatang: number
+  whtSatang: number
+  /** snapshot `payout_batch_items.wht_base_included` — รายการนอกฐานไม่ใช่เงินได้ ไม่พิมพ์ในยอดจ่ายของใบ */
+  whtBaseIncluded: boolean
+}
+
+export interface CertificateGroup<T extends CertificateSourceItem> {
+  /** รายการแรกของกลุ่ม (ลำดับ input) — ใบผูก `expense_record_id` กับรายการนี้ (กันออกซ้ำด้วย unique เดิม) */
+  anchor: T
+  members: T[]
+  mode: WhtCertificateMode
+  /** ยอดเงินได้ที่จ่าย = ผลรวม gross ของรายการที่อยู่ในฐาน */
+  grossSatang: number
+  whtSatang: number
+}
+
+/**
+ * จัดรายการของรอบจ่ายเป็นใบ 50 ทวิ ตามรูปแบบที่ snapshot ไว้กับรอบ
+ * - `per_item` (เดิม) = 1 รายการที่หักภาษี = 1 ใบ
+ * - `per_payee_batch` (ค่าเริ่มต้นใหม่) = 1 ใบต่อผู้รับ รวมทุกรายการของผู้รับในรอบ
+ *
+ * ทั้งสองแบบ **ยอดภาษีรวมเท่ากันเสมอ** (ผลรวมของ snapshot รายการเดียวกัน) · กลุ่มที่ภาษีรวม = 0 ไม่ออกใบ
+ * (`shouldIssueCertificate()`) · ลำดับกลุ่ม/สมาชิกตามลำดับ input (ผู้เรียกเรียงตามเวลาสร้าง)
+ */
+export function groupCertificateSources<T extends CertificateSourceItem>(
+  items: readonly T[],
+  mode: WhtCertificateMode,
+): CertificateGroup<T>[] {
+  const buckets = new Map<string, T[]>()
+  items.forEach((item) => {
+    const key = mode === 'per_item' ? item.id : item.payeeId
+    const members = buckets.get(key) ?? []
+    members.push(item)
+    buckets.set(key, members)
+  })
+  const groups: CertificateGroup<T>[] = []
+  for (const members of buckets.values()) {
+    const whtSatang = members.reduce((sum, member) => sum + member.whtSatang, 0)
+    if (!shouldIssueCertificate({ whtSatang })) continue
+    const grossSatang =
+      mode === 'per_item'
+        ? members[0]!.grossSatang
+        : members.filter((member) => member.whtBaseIncluded).reduce((sum, member) => sum + member.grossSatang, 0)
+    groups.push({ anchor: members[0]!, members, mode, grossSatang, whtSatang })
+  }
+  return groups
 }
 
 // ── เลขที่หนังสือรับรอง (D11 default — ตัวเดินเลขจริงล็อกแถวใน transaction) ──
@@ -204,6 +273,8 @@ export interface FilingTotalSource {
 export interface FilingTotals {
   pnd3Satang: number
   pnd53Satang: number
+  /** ภ.ง.ด.1 — เงินได้ 40(2) (มติ PO 05/10/2569 UAT U7) */
+  pnd1Satang: number
   /** จำนวนใบที่นับยอด (ไม่รวมใบที่ยกเลิก) */
   activeCount: number
   cancelledCount: number
@@ -221,12 +292,13 @@ export function summarizeFilingTotals(rows: readonly FilingTotalSource[]): Filin
       return {
         pnd3Satang: totals.pnd3Satang + (row.filingForm === 'PND3' ? row.whtSatang : 0),
         pnd53Satang: totals.pnd53Satang + (row.filingForm === 'PND53' ? row.whtSatang : 0),
+        pnd1Satang: totals.pnd1Satang + (row.filingForm === 'PND1' ? row.whtSatang : 0),
         activeCount: totals.activeCount + 1,
         cancelledCount: totals.cancelledCount,
         grossSatang: totals.grossSatang + row.grossSatang,
       }
     },
-    { pnd3Satang: 0, pnd53Satang: 0, activeCount: 0, cancelledCount: 0, grossSatang: 0 },
+    { pnd3Satang: 0, pnd53Satang: 0, pnd1Satang: 0, activeCount: 0, cancelledCount: 0, grossSatang: 0 },
   )
 }
 
@@ -275,6 +347,8 @@ export interface WhtCertificateDocSource {
   paymentDate: Date
   grossSatang: number
   whtSatang: number
+  /** ใบแบบต่อผู้รับต่อรอบจ่าย — แสดงว่าเป็นยอดรวมของรอบไหนกี่รายการ (`null` = ใบต่อรายการ) */
+  coverage?: { payoutBatchName: string; itemCount: number } | null
   /** ผู้จ่ายเงิน = องค์กรเจ้าของระบบ (`28` §6.3) */
   payer: WhtCertificateParty
   /** ผู้ถูกหักภาษี = payee (`18`) */
@@ -291,6 +365,8 @@ export interface WhtCertificateDoc {
   isCancelled: boolean
   cancelNote: string | null
   replacesNote: string | null
+  /** ใบต่อรอบ: "ยอดรวมทุกรายการของผู้รับในรอบจ่าย … (n รายการ)" · ใบต่อรายการ = null */
+  coverageNote: string | null
   deliveryFormatLabel: string
   filingFormLabel: string
   filingForm: WhtFilingForm
@@ -325,6 +401,10 @@ export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCert
       source.replacesCertificateNumber === null
         ? null
         : `ออกแทนหนังสือรับรองเลขที่ ${source.replacesCertificateNumber} ที่ถูกยกเลิก`,
+    coverageNote:
+      source.coverage === undefined || source.coverage === null
+        ? null
+        : `ยอดรวมทุกรายการของผู้รับในรอบจ่าย "${source.coverage.payoutBatchName}" (${source.coverage.itemCount} รายการ)`,
     deliveryFormatLabel: WHT_DELIVERY_FORMAT_LABEL[source.deliveryFormat],
     filingFormLabel: WHT_FILING_FORM_LABEL[source.filingForm],
     filingForm: source.filingForm,

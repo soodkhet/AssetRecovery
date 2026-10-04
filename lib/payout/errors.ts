@@ -16,6 +16,8 @@ export const PAYOUT_ERROR_CODES = [
   'PAYOUT_BATCH_INVALID_STATUS',
   'NO_ITEMS_TO_PAY',
   'PAYMENT_FILE_NOT_GENERATED',
+  // มติ PO 05/10/2569 (UAT U7) — ผู้รับประเภท 40(2) ต้องมีอัตราหักต่อคนก่อนสร้างรอบ
+  'WHT_40_2_RATE_MISSING',
 ] as const
 
 export type PayoutErrorCode = (typeof PAYOUT_ERROR_CODES)[number]
@@ -28,6 +30,7 @@ const HTTP_STATUS: Record<PayoutErrorCode, number> = {
   PAYOUT_BATCH_INVALID_STATUS: 400,
   NO_ITEMS_TO_PAY: 400,
   PAYMENT_FILE_NOT_GENERATED: 404,
+  WHT_40_2_RATE_MISSING: 400,
 }
 
 const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
@@ -55,6 +58,11 @@ const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
   PAYMENT_FILE_NOT_GENERATED: {
     title: 'ยังไม่มีไฟล์โอนเงิน',
     message: 'รอบจ่ายนี้ยังไม่ได้สร้างไฟล์โอนเงิน — กด "สร้างไฟล์โอน" ก่อน',
+  },
+  WHT_40_2_RATE_MISSING: {
+    title: 'ผู้รับเงินประเภท 40(2) ยังไม่มีอัตราหัก',
+    message:
+      'ค่าตั้งภาษีจัดผู้รับเงินบางคนเป็นเงินได้ 40(2) แต่ยังไม่ได้กรอก "อัตราหัก 40(2)" ในข้อมูลผู้รับเงิน — กรอกอัตราที่สำนักงานบัญชีคำนวณให้ก่อนสร้างรอบจ่าย',
   },
 }
 

@@ -169,8 +169,13 @@ export function PayoutDetailModal({
                       {fmtSatangSymbol(item.whtSatang)}
                       {item.whtPctSnapshot !== null && item.whtSatang > 0 && (
                         <p className="text-[10px] text-slate-400">
-                          {fmtPercent(item.whtPctSnapshot)} · {item.taxProfileName ?? '—'}
+                          {fmtPercent(item.whtPctSnapshot)} ·{' '}
+                          {item.whtIncomeCategory === 'sec_40_2' ? 'เงินได้ 40(2)' : (item.taxProfileName ?? '—')}
                         </p>
+                      )}
+                      {/* ค่าตั้งฐาน WHT (มติ PO 05/10/2569 UAT U3) — รายการนอกฐานจ่ายเต็ม ไม่หัก */}
+                      {item.source === 'expense' && !item.whtBaseIncluded && (
+                        <p className="text-[10px] text-slate-400">ไม่อยู่ในฐานภาษี</p>
                       )}
                     </Td>
                     <Td numeric className="font-semibold text-emerald-700">

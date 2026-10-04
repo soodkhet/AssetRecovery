@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { reasonSchema, requiredIdSchema } from '@/lib/api/validation'
+import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของผู้รับเงิน (ไฟล์ 18 · Rule 13)
@@ -41,6 +41,14 @@ export const payeeFieldsSchema = z.object({
   accountName: optionalText(120, 'ชื่อบัญชี'),
   accountNumber: optionalText(30, 'เลขบัญชี'),
   idDocumentUrl: optionalText(500, 'ลิงก์เอกสารยืนยันตัวตน'),
+  /**
+   * อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7) — 0.00–100.00 · ว่าง = ยังไม่กรอก
+   * ไม่ส่งมา (`undefined`) = **คงค่าเดิม** ตอนแก้ไข / ว่างตอนสร้าง — กันผู้เรียกที่ไม่รู้จักฟิลด์ล้างอัตราทิ้ง
+   */
+  wht402Pct: z.preprocess(
+    (value) => (value === '' ? null : typeof value === 'string' ? Number(value) : value),
+    pctSchema('อัตราหัก 40(2)').nullable().optional(),
+  ),
 })
 
 export const payeeCreateSchema = payeeFieldsSchema.extend({

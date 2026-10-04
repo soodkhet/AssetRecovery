@@ -18,12 +18,20 @@ function filing(month: number, overrides: Partial<WhtFilingSummaryEntry> = {}): 
     filingDueDate: new Date(Date.UTC(2026, month, 15)),
     pnd3Satang: 100_00,
     pnd53Satang: 50_00,
+    pnd1Satang: 0,
     status: 'filed',
     ...overrides,
   }
 }
 
 describe('buildWhtSummaryReport', () => {
+  it('ภ.ง.ด.1 (40(2)) แยกคอลัมน์/KPI และรวมใน "รวม WHT" (มติ PO 05/10/2569 UAT U7)', () => {
+    const report = buildWhtSummaryReport({ filings: [filing(6, { pnd1Satang: 1_250 })], asOf: ASOF })
+    expect(report.rows[0]).toMatchObject({ pnd1Satang: 1_250, totalSatang: 150_00 + 1_250 })
+    expect(report.kpis?.find((kpi) => kpi.key === 'pnd1')?.value).toBe(1_250)
+    expect(report.totalRow).toMatchObject({ pnd1Satang: 1_250, totalSatang: 150_00 + 1_250 })
+  })
+
   it('รวมยอดสองแบบเป็น "รวม WHT" ต่อแถวและมีแถวรวมท้ายตาราง', () => {
     const report = buildWhtSummaryReport({
       filings: [filing(6, { pnd3Satang: 8_400_00, pnd53Satang: 2_160_00 }), filing(7)],

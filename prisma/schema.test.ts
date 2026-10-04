@@ -79,7 +79,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // + debtor_nationality / asset_kind (`38` §6.1.1/§6.2 — Phase 2.2)
     // + pending_reassignment_status / reassignment_resolution (`40` §6.1/§6.1.1 — Phase 2.6)
     // + travel_origin_source (`41` §6.4.1 — Phase 2.8)
-    expect(enums.length).toBe(61)
+    // + wht_certificate_mode / wht_income_type_mode / wht_income_category (มติ PO 05/10/2569 UAT U4/U5)
+    expect(enums.length).toBe(64)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

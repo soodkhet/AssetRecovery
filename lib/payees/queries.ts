@@ -56,6 +56,7 @@ const payeeSelect = {
   accountName: true,
   accountNumber: true,
   idDocumentUrl: true,
+  wht402Pct: true,
   isVerified: true,
   verifiedAt: true,
   updatedAt: true,
@@ -75,6 +76,7 @@ function toValues(row: PayeeRow): PayeeValues {
     accountName: row.accountName,
     accountNumber: row.accountNumber,
     idDocumentUrl: row.idDocumentUrl,
+    wht402Pct: row.wht402Pct === null ? null : row.wht402Pct.toNumber(),
   }
 }
 
@@ -97,6 +99,7 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean): PayeeDto {
     accountNumber: canSeeFullAccount ? row.accountNumber : null,
     accountNumberMasked: maskAccountNumber(row.accountNumber),
     idDocumentUrl: row.idDocumentUrl,
+    wht402Pct: values.wht402Pct,
     isVerified: row.isVerified,
     verifiedAt: row.verifiedAt?.toISOString() ?? null,
     verifiedByName: row.verifiedByUser?.fullName ?? null,
@@ -189,6 +192,7 @@ function toWriteData(values: PayeeValues) {
     accountName: normalized.accountName,
     accountNumber: normalized.accountNumber,
     idDocumentUrl: normalized.idDocumentUrl,
+    wht402Pct: normalized.wht402Pct,
   }
 }
 
@@ -254,7 +258,7 @@ export async function createPayee(
   await assertNoPayeeForUser(organizationId, input.userId)
 
   await assertTaxProfileUsable(organizationId, input.taxProfileId)
-  const data = toWriteData(input)
+  const data = toWriteData({ ...input, wht402Pct: input.wht402Pct ?? null })
 
   const created = await prisma.$transaction(async (tx) => {
     const row = await tx.payeeProfile.create({
@@ -300,7 +304,8 @@ export async function updatePayee(
   await assertTaxProfileUsable(organizationId, input.taxProfileId)
 
   const before = toValues(current)
-  const data = toWriteData(input)
+  // ไม่ส่งอัตรา 40(2) มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
+  const data = toWriteData({ ...input, wht402Pct: input.wht402Pct === undefined ? before.wht402Pct : input.wht402Pct })
   // `18` §9 — verified + แก้ธนาคาร/ภาษี ⇒ ต้องยืนยันใหม่ (ล้างผู้ยืนยันเดิมออกด้วย ไม่ใช่แค่ flag)
   const reset = shouldResetVerification({ isVerified: current.isVerified, before, after: data })
 

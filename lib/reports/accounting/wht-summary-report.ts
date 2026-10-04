@@ -27,6 +27,8 @@ export interface WhtFilingSummaryEntry {
   filingDueDate: Date
   pnd3Satang: number
   pnd53Satang: number
+  /** ภ.ง.ด.1 — เงินได้ 40(2) (มติ PO 05/10/2569 UAT U7) */
+  pnd1Satang: number
   status: WhtFilingStatus
 }
 
@@ -34,6 +36,7 @@ const COLUMNS: readonly ReportColumn[] = [
   { key: 'period', header: 'รอบเดือน', type: 'text', width: 22 },
   { key: 'pnd3Satang', header: 'ภ.ง.ด.3', type: 'money' },
   { key: 'pnd53Satang', header: 'ภ.ง.ด.53', type: 'money' },
+  { key: 'pnd1Satang', header: 'ภ.ง.ด.1', type: 'money' },
   { key: 'totalSatang', header: 'รวม WHT', type: 'money' },
   { key: 'filingDueDate', header: 'กำหนดยื่น', type: 'date' },
   { key: 'statusLabel', header: 'สถานะ', type: 'text', width: 20 },
@@ -60,13 +63,16 @@ export function buildWhtSummaryReport(input: {
     period: entry.periodLabel,
     pnd3Satang: entry.pnd3Satang,
     pnd53Satang: entry.pnd53Satang,
-    totalSatang: entry.pnd3Satang + entry.pnd53Satang,
+    pnd1Satang: entry.pnd1Satang,
+    totalSatang: entry.pnd3Satang + entry.pnd53Satang + entry.pnd1Satang,
     filingDueDate: toIsoDateOnly(entry.filingDueDate),
     statusLabel: filingStatusLabel(entry, asOf),
   }))
 
   const pnd3Total = sumSatang(sorted.map((entry) => entry.pnd3Satang), 'ภ.ง.ด.3 รวม')
   const pnd53Total = sumSatang(sorted.map((entry) => entry.pnd53Satang), 'ภ.ง.ด.53 รวม')
+  const pnd1Total = sumSatang(sorted.map((entry) => entry.pnd1Satang), 'ภ.ง.ด.1 รวม')
+  const grandTotal = pnd3Total + pnd53Total + pnd1Total
   const pending = sorted.filter((entry) => entry.status === 'pending')
   const overdue = pending.filter((entry) => isFilingOverdue(entry.status, entry.filingDueDate, asOf))
 
@@ -76,10 +82,11 @@ export function buildWhtSummaryReport(input: {
     kpis: [
       { key: 'pnd3', label: 'ภ.ง.ด.3 (บุคคลธรรมดา)', value: pnd3Total, type: 'money' },
       { key: 'pnd53', label: 'ภ.ง.ด.53 (นิติบุคคล)', value: pnd53Total, type: 'money' },
+      { key: 'pnd1', label: 'ภ.ง.ด.1 (เงินได้ 40(2))', value: pnd1Total, type: 'money' },
       {
         key: 'total',
         label: 'รวม WHT',
-        value: pnd3Total + pnd53Total,
+        value: grandTotal,
         type: 'money',
         hint: `${sorted.length.toLocaleString('th-TH')} รอบนำส่ง`,
       },
@@ -99,12 +106,13 @@ export function buildWhtSummaryReport(input: {
             period: 'รวมทั้งหมด',
             pnd3Satang: pnd3Total,
             pnd53Satang: pnd53Total,
-            totalSatang: pnd3Total + pnd53Total,
+            pnd1Satang: pnd1Total,
+            totalSatang: grandTotal,
             filingDueDate: null,
             statusLabel: null,
           },
     note:
-      'ยอดมาจากสรุปรอบนำส่ง WHT — ใบ 50 ทวิ ที่ถูกยกเลิกไม่ถูกนับในยอดทั้งสองแบบ · ' +
+      'ยอดมาจากสรุปรอบนำส่ง WHT — ใบ 50 ทวิ ที่ถูกยกเลิกไม่ถูกนับในยอดทุกแบบ · ' +
       'รอบที่เลยกำหนดยื่นเป็นการเตือน ไม่บล็อกการทำงาน — ' +
       'เอกสารยื่นจริงออกโดยสำนักงานบัญชีนอกระบบ',
   }

@@ -1,4 +1,5 @@
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
+import type { WhtIncomeCategory, WhtPolicyValues } from '@/lib/settings/wht-policy'
 
 /**
  * DTO ของรอบจ่ายเงินที่ส่งออก API (ไฟล์ 17 §8/§14)
@@ -21,6 +22,8 @@ export interface PayoutBatchDto {
   idempotencyKey: string | null
   paymentFileUrl: string | null
   paymentFileGeneratedAt: string | null
+  /** snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — `null` = รอบที่สร้างก่อนมีค่าตั้ง (พฤติกรรมเดิม) */
+  whtPolicy: WhtPolicyValues | null
   createdAt: string
   createdByName: string
   updatedAt: string
@@ -47,6 +50,10 @@ export interface PayoutBatchItemDto {
   taxProfileId: string | null
   taxProfileName: string | null
   whtPctSnapshot: number | null
+  /** snapshot: อยู่ในฐาน WHT หรือไม่ — `false` = จ่ายเต็มไม่หัก (เช่นค่าที่พัก/เบิกตามใบเสร็จ) */
+  whtBaseIncluded: boolean
+  /** snapshot ประเภทเงินได้ — `null` = รอบเก่า/เงินทดรองจ่าย */
+  whtIncomeCategory: WhtIncomeCategory | null
   bankName: string | null
   accountNumberMasked: string | null
 }

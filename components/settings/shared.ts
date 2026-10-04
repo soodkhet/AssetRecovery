@@ -27,6 +27,8 @@ export const VIEW_MASTER_DATA = 'view_master_data'
  * ไม่งั้นปุ่มโผล่ให้กดแล้วโดน 403 (UI hide เป็นแค่ UX — API ปฏิเสธซ้ำเสมอ ตาม DEC-002)
  */
 export const MANAGE_TAX_PROFILES = 'manage_tax_profiles'
+/** ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8) — Superadmin/บริหาร */
+export const MANAGE_WHT_POLICY = 'manage_wht_policy'
 export const MANAGE_INVOICE_NUMBERING = 'manage_invoice_numbering'
 export const MANAGE_ROLES = 'manage_roles'
 
@@ -71,6 +73,7 @@ export const WHT_BASIS_LABEL: Readonly<Record<WhtBasis, string>> = {
 export const WHT_FILING_FORM_LABEL: Readonly<Record<WhtFilingForm, string>> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
+  PND1: 'ภ.ง.ด.1 (เงินได้ 40(2))',
 }
 
 /** รูปแบบเดินเลขใบกำกับภาษี (`13` §6.12) */

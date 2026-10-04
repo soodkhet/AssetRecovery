@@ -71,6 +71,8 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'manage_users', label: 'จัดการผู้ใช้', module: 'user', functionalGroup: null },
   { code: 'manage_teams', label: 'จัดการทีม', module: 'team', functionalGroup: null },
   { code: 'manage_compensation_plans', label: 'จัดการแผนค่าตอบแทน', module: 'master_data', functionalGroup: null },
+  // ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (มติ PO 05/10/2569 UAT U8 · `13` §6.4.2) — Superadmin/บริหาร แก้ได้
+  { code: 'manage_wht_policy', label: 'แก้ไขค่าตั้งภาษีหัก ณ ที่จ่าย (ฐาน/50 ทวิ/ประเภทเงินได้)', module: 'settings', functionalGroup: null, description: 'Superadmin/บริหาร · ต้องมีเหตุผล · มีผลกับรอบจ่ายถัดไป' },
   { code: 'manage_settings', label: 'จัดการการตั้งค่าระบบ', module: 'settings', functionalGroup: null },
   { code: 'intake_asset', label: 'รับทรัพย์เข้าคลัง', module: 'warehouse', functionalGroup: null },
   { code: 'reject_asset_intake', label: 'ปฏิเสธการรับเข้าคลัง', module: 'warehouse', functionalGroup: null },

@@ -22,7 +22,20 @@ const complete = (overrides: Partial<PayeeValues> = {}): PayeeValues => ({
   accountName: 'สมชาย ใจดี',
   accountNumber: '1234567890',
   idDocumentUrl: null,
+  wht402Pct: null,
   ...overrides,
+})
+
+describe('อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7)', () => {
+  it('แก้อัตรา 40(2) ของผู้รับที่ยืนยันแล้ว ⇒ ต้องยืนยันใหม่ (กระทบยอดภาษี)', () => {
+    expect(changedVerificationFields(complete(), complete({ wht402Pct: 2.5 }))).toEqual(['wht402Pct'])
+    expect(shouldResetVerification({ isVerified: true, before: complete(), after: complete({ wht402Pct: 2.5 }) })).toBe(true)
+  })
+
+  it('อัตรา 40(2) ลง audit เป็น wht_40_2_pct · ไม่บังคับก่อนยืนยัน (ใช้เฉพาะเมื่อค่าตั้งเป็น 40(2))', () => {
+    expect(toPayeeAuditPayload(complete({ wht402Pct: 0 })).wht_40_2_pct).toBe(0)
+    expect(missingFieldsForVerification(complete())).toEqual([])
+  })
 })
 
 describe('normalize (`18` §7.1)', () => {
@@ -179,6 +192,7 @@ describe('การแสดงผล / audit', () => {
       account_name: 'สมชาย ใจดี',
       account_number: '1234567890',
       id_document_url: null,
+      wht_40_2_pct: null,
     })
   })
 })

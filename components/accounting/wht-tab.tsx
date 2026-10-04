@@ -78,10 +78,11 @@ export function WhtTab() {
         </InlineAlert>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
         <StatCard label="ใบที่ใช้งานอยู่" value={fmtCount(certificates.summary.activeCount)} hint="ตามตัวกรองปัจจุบัน" />
         <StatCard label="ภ.ง.ด.3 (บุคคลธรรมดา)" value={fmtSatangSymbol(certificates.summary.pnd3Satang)} hint="ไม่รวมใบที่ยกเลิก" />
         <StatCard label="ภ.ง.ด.53 (นิติบุคคล)" value={fmtSatangSymbol(certificates.summary.pnd53Satang)} hint="ไม่รวมใบที่ยกเลิก" />
+        <StatCard label="ภ.ง.ด.1 (เงินได้ 40(2))" value={fmtSatangSymbol(certificates.summary.pnd1Satang)} hint="ไม่รวมใบที่ยกเลิก" />
         <StatCard label="ใบที่ยกเลิก" value={fmtCount(certificates.summary.cancelledCount)} hint="เก็บไว้เป็นหลักฐาน ห้ามลบ" />
       </div>
 
@@ -101,6 +102,7 @@ export function WhtTab() {
                 <Th>กำหนดนำส่ง</Th>
                 <Th numeric>ภ.ง.ด.3</Th>
                 <Th numeric>ภ.ง.ด.53</Th>
+                <Th numeric>ภ.ง.ด.1</Th>
                 <Th>สถานะ</Th>
                 <Th className="text-right">จัดการ</Th>
               </Tr>
@@ -111,7 +113,7 @@ export function WhtTab() {
               isEmpty={filings.items.length === 0}
               emptyTitle="ยังไม่มีรอบนำส่ง WHT"
               emptyDescription="รอบจะเกิดเองเมื่อมีการจ่ายเงินที่หักภาษี ณ ที่จ่ายในเดือนนั้น"
-              colSpan={6}
+              colSpan={7}
             />
             <TBody>
               {!loading &&
@@ -127,6 +129,9 @@ export function WhtTab() {
                     </Td>
                     <Td numeric className="font-semibold">
                       {fmtSatangSymbol(row.pnd53Satang)}
+                    </Td>
+                    <Td numeric className="font-semibold">
+                      {fmtSatangSymbol(row.pnd1Satang)}
                     </Td>
                     <Td>
                       <StatusBadge status={row.status} label={row.statusLabel} />

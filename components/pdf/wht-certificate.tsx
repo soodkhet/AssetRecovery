@@ -47,6 +47,7 @@ export function WhtCertificatePDF({ doc }: { doc: WhtCertificateDoc }): React.JS
           <MetaRow label="แบบที่ยื่นรายการ" value={doc.filingFormLabel} />
           <MetaRow label="รูปแบบการส่งเอกสาร" value={doc.deliveryFormatLabel} />
           {doc.replacesNote === null ? null : <MetaRow label="หมายเหตุ" value={doc.replacesNote} />}
+          {doc.coverageNote === null ? null : <MetaRow label="ยอดรวมของรอบ" value={doc.coverageNote} />}
         </View>
 
         <View style={officialStyles.table}>

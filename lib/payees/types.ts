@@ -25,6 +25,8 @@ export interface PayeeDto {
   accountNumber: string | null
   accountNumberMasked: string | null
   idDocumentUrl: string | null
+  /** อัตราหัก 40(2) ต่อคน (%) — ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) · `null` = ยังไม่กรอก */
+  wht402Pct: number | null
   isVerified: boolean
   verifiedAt: string | null
   verifiedByName: string | null
