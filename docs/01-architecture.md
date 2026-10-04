@@ -15,6 +15,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Architecture concepts, permission model draft |
 | v1.1 | 02/07/2569 | ปิด DEC-001, DEC-002, DEC-003 (Tech Stack, Permission Architecture, File Storage) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header block, component diagram, Decisions/Open Items แยกชัดเจน) — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
+| v2.1 | 05/10/2569 | **DEC-014 (BUG-143)**: Storage ไม่มี policy ให้ role `authenticated`/`anon` — browser อัปโหลด/เปิดดูไฟล์ผ่านโทเคน/signed URL ที่ API ออกให้หลัง `requirePermission` + scope (`POST /api/storage/upload-url` · `POST /api/storage/download-url`) |
 
 ขอบเขตเอกสารนี้: โครงสร้างระบบระดับ technical — Tech Stack, Permission Architecture, Layer Architecture, Background Jobs, Audit/Export service สำหรับ Back Office/API/Database/Storage
 
@@ -69,9 +70,9 @@
 | **ORM** | **Prisma** | Type-safe, migration tool ครบ, เหมาะ schema ซับซ้อน (state machine + relation หลายชั้น) |
 | **Database** | **PostgreSQL** (Supabase managed) | ACID, FK constraint, JSON field, full-text search |
 | **Permission** | **Backend middleware (API layer)** | Role logic ซับซ้อน 10+ roles หลาย scope — RLS SQL ดูแลยาก, middleware test ง่ายกว่า |
-| **File Storage** | **Supabase Storage** | Native กับ Supabase, signed URL, access policy ต่อ bucket |
+| **File Storage** | **Supabase Storage** | Native กับ Supabase, signed URL — bucket private ทั้งหมด **ไม่มี policy ให้ผู้ใช้** ทุกการเข้าถึงผ่าน API + โทเคน/signed URL อายุสั้นที่ server ออกให้หลังตรวจสิทธิ์ (DEC-014) |
 | **Hosting** | **Vercel** | Next.js native, edge functions, zero DevOps, auto-scale |
-| **Auth** | **Supabase Auth** | JWT + session, SSO-ready, ผูกกับ Supabase Storage policy |
+| **Auth** | **Supabase Auth** | JWT + session, SSO-ready (สิทธิ์ไฟล์ใน Storage ไม่ผูกกับ JWT/policy — ตรวจที่ API ตาม DEC-014) |
 | **Background Jobs** | **Vercel Cron / QStash (Upstash)** | Export pack, bank file, WHT summary, notification |
 
 > **หมายเหตุ Supabase**: ใช้ Supabase สำหรับ PostgreSQL + Auth + Storage เท่านั้น — **ไม่ใช้ Supabase RLS** เป็น permission layer หลัก (ใช้ backend middleware แทน ดู §6.1)
@@ -100,7 +101,8 @@ graph TB
     Static -->|Auth middleware: verify JWT| Auth
     Static -->|Permission middleware: check role+scope| Static
     Static -->|Prisma| DB
-    Static -->|signed URL upload/download| Storage
+    Static -->|ออกโทเคนอัปโหลด / signed URL อายุสั้น หลังตรวจสิทธิ์| Storage
+    Web -->|อัปโหลดด้วยโทเคน / เปิดดูด้วย signed URL| Storage
     Cron -->|export pack / bank file / WHT summary| Storage
     Cron -->|Prisma| DB
     DB -->|audit trigger| Static
@@ -219,6 +221,7 @@ Request → Next.js API Route/Server Action
 - **DEC-001 — Tech Stack**: Next.js App Router + TypeScript + Prisma + PostgreSQL (Supabase) + Vercel (02/07/2569) — เหตุผลเต็มดู `94-decision-log.md`
 - **DEC-002 — Permission Architecture**: Backend middleware (API layer) — **ไม่ใช้ Supabase RLS เป็นหลัก** (02/07/2569) — Supabase ใช้เฉพาะ Auth + Storage
 - **DEC-003 — File Storage**: Supabase Storage (02/07/2569)
+- **DEC-014 — Storage access ผ่าน server เท่านั้น**: ไม่มี policy ให้ `authenticated`/`anon` · อัปโหลดด้วยโทเคนต่อ path ที่ server ประกอบ · เปิดดูด้วย signed URL อายุสั้น (05/10/2569 — BUG-143)
 - **Permission check เกิดที่ API layer เสมอ** — UI hide/disable เป็นแค่ UX ไม่ใช่ security (ข้อ 6.1, 10)
 - **ทุก endpoint ต้องมี `requirePermission(action, resource, scope)` wrapper** — ไม่มีข้อยกเว้น (ข้อ 6.1)
 - **Job ทุกตัวต้อง idempotent** — ใช้ idempotency_key ป้องกันสร้างซ้ำเมื่อ retry (ข้อ 10, 11, 14)

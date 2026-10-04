@@ -22,6 +22,7 @@
 | v3.4 | 03/10/2569 | **เพิ่ม DEC-011** (Playwright เป็นเครื่องมือ UAT ฝั่ง dev — ไม่แตะ runtime/production) |
 | v3.6 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U10)** — DEC-009 ข้อ (3) เติมหมายเหตุ: รายการ "✅ only" = **9** (Superadmin 6 + บริหาร 3) ตามโค้ดและมติ 14/08/2569 ไม่ใช่ 7 — ข้อความเดิมคงไว้เป็นประวัติ · ไม่มีการเปลี่ยนสิทธิ์ |
 | v3.5 | 03/10/2569 | **เพิ่ม DEC-012** (job รายวัน `daily_field_allowance` — ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงเกิดหลังจบวันแทนตอนปิดงาน · มติ PO UAT Q21) |
+| v3.6 | 05/10/2569 | **เพิ่ม DEC-014** (Storage ไม่มี policy ให้ผู้ใช้ — อัปโหลด/เปิดดูไฟล์ผ่านโทเคน/signed URL ที่ API ออกให้หลังตรวจสิทธิ์ · ปิด BUG-143) |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
 
@@ -274,6 +275,16 @@
 | Reason | ผู้พัฒนา SheetJS เผยแพร่รุ่นใหม่ผ่าน cdn.sheetjs.com เท่านั้น — รุ่นบน npm registry ค้างที่ 0.18.5 และมีช่องโหว่ที่รู้จัก (prototype pollution / ReDoS) |
 | Impact | `package.json` + `pnpm-lock.yaml` (ใช้ tarball 0.20.3 อยู่แล้วตั้งแต่ Phase 2.13 — บันทึกให้เป็นกติกา) · CI/Vercel ต้องเข้าถึง cdn.sheetjs.com ตอน install |
 | Reversible | สูง — เปลี่ยน URL/เวอร์ชันใน `package.json` แล้ว `pnpm install` |
+
+### DEC-014 — Storage: ไม่มี policy ให้ผู้ใช้ · ทุกการเข้าถึงไฟล์ผ่าน server + โทเคน/signed URL อายุสั้น (05/10/2569)
+
+| Field | Value |
+|---|---|
+| Decision | bucket ทั้ง 4 ตัว (`case-documents`, `payment-files`, `accounting-packs`, `report-exports`) เป็น private และ **ไม่มี policy บน `storage.objects` ให้ role `authenticated`/`anon` เลย** — เหลือแค่ service role · **อัปโหลด**: browser เรียก `POST /api/storage/upload-url` บอกแค่ target (เคส+slot / หลักฐานปิดงาน / ใบเสร็จของตัวเอง / รูปรับเข้าคลัง / เอกสารล็อต) → server ตรวจ `requirePermission` + scope ตัวเดียวกับ endpoint ที่จะผูกไฟล์ แล้ว **ประกอบ path เอง** และออกโทเคน `createSignedUploadUrl` (ไม่ทับของเดิม) → browser `uploadToSignedUrl()` · ไฟล์ยังต้องผ่าน server-verify (magic bytes/ขนาด/SHA-256) ตอนผูกเหมือนเดิม · **เปิดดู**: `POST /api/storage/download-url` → ตรวจสิทธิ์ตาม **เจ้าของ path** (เคส/เครื่อง/ล็อต/ผู้เบิก) ด้วย loader ตัวเดียวกับหน้ารายละเอียด (นอก scope = NOT_FOUND ของโมดูล) แล้วออก signed URL อายุ 300 วินาที · client ห้ามเรียก `upload`/`createSignedUrl`/`createSignedUploadUrl` ตรง (เทสต์สแกนโค้ดกันไว้) · `scripts/setup-storage.ts` DROP policy เดิม (`case-docs read/insert/update`) แบบ idempotent + มีโหมด `--dry-run` |
+| Approved by | ผู้ใช้ — แผนแก้ BUG-143 (S3) หลัง UAT 05/10/2569 · การ apply บน project จริงผู้ใช้เป็นผู้สั่งเอง |
+| Reason | policy เดิมเปิด SELECT/INSERT/UPDATE ทั้ง bucket `case-documents` ให้ผู้ใช้ login แล้วทุกคน + client สร้าง signed URL เองได้ ⇒ พนักงานภาคสนาม/ผู้ใช้บริษัทอ่าน/อัปโหลด/เขียนทับเอกสารลูกหนี้ของใครก็ได้ — ขัด DEC-002 (สิทธิ์ต้องตรวจที่ API) |
+| Impact | `lib/uploads/{targets,access,client,storage}.ts` · `app/api/storage/{upload-url,download-url}/route.ts` · ตัวอัปโหลดฝั่ง browser 3 ไฟล์ (`lib/{cases,field,warehouse}/upload-client.ts`) · `scripts/setup-storage.ts` · DEC-003 ยังใช้ Supabase Storage เหมือนเดิม แต่ "access policy ต่อ bucket" ถูกแทนด้วยการตรวจที่ API |
+| Reversible | สูง — เพิ่ม policy กลับได้ด้วย SQL (แต่จะเปิดรูเดิม) |
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 
