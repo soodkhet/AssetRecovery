@@ -14,6 +14,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Bank Transaction, Auto/Manual matching |
 | v2 | 03/07/2569 | **แก้ไขสำคัญ**: (1) `matched_with_type`/`matched_with_id` (polymorphic) → **Separate FK columns** (`matched_billing_id`/`matched_payout_id`) ตาม DEC-004 ที่ตัดสินใจไว้แล้ว (2) **เติมสถานะที่ขาดจาก schema**: เดิมมีแค่ `matched`/`unmatched` (2 สถานะ) แต่ schema จริงมี 4 สถานะ (`unmatched`/`auto_matched`/`manual_matched`/`unmatched_resolved`) — เพิ่ม `unmatched_resolved` เป็น concept ใหม่สำหรับรายการที่ไม่มีทางจับคู่ได้จริง (เช่น ค่าธรรมเนียมธนาคาร ดอกเบี้ย) แต่ต้องบันทึกอธิบายไว้ ไม่ปล่อยเป็น unmatched ค้างตลอดไป — ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.14 |
 | v2.1 | 04/10/2569 | **มติ PO 04/10/2569 (UAT — แม่แบบนำเข้าภาษาไทย)** — §8 Modal "Import Statement" มีปุ่ม "ดาวน์โหลดไฟล์ตัวอย่าง" (`bank-statement-template.csv` · CSV UTF-8 + BOM) ผ่าน `GET /api/bank-reconciliation/import/template?bank_account_id=` (สิทธิ์ `manage` เดียวกับตัวนำเข้า): บัญชีที่ตั้งรูปแบบ statement (`13` §6.8) ⇒ เรียงคอลัมน์ตาม `column_mapping` เป๊ะ · ยังไม่ตั้ง ⇒ รูปแบบมาตรฐาน วันที่/รายละเอียด/เลขที่อ้างอิง/เงินเข้า/เงินออก · หัวคอลัมน์ภาษาไทยที่ parser รู้จัก วันที่ตัวอย่างเป็น พ.ศ. · มีเทสต์ แม่แบบ → parser ผ่าน 100% |
+| v2.2 | 04/10/2569 | **มติผู้ใช้ 04/10/2569 (แม่แบบ .xlsx)** — §8 ไฟล์ตัวอย่างหลักเป็น **`bank-statement-template.xlsx`** (คอลัมน์ชุดเดียวกับ CSV จาก endpoint เดิม — DTO เพิ่ม `xlsxFileName` + `templateColumns` · ทุกเซลล์ข้อความ `@` · แผ่น "คำอธิบาย") + ลิงก์รอง "หรือ CSV" · Modal รับไฟล์ **.xlsx และ .csv** — .xlsx อ่านแผ่นแรกที่ client (ไม่ประมวลผลสูตร/มาโคร · เซลล์วันที่จริงของ Excel → `YYYY-MM-DD`) แล้วแปลงเป็น CSV ส่ง API เดิม ⇒ parser statement ทางเดิม 100% · เพดาน 2 MB เดิม · SheetJS จาก cdn.sheetjs.com (DEC-013) |
 
 ขอบเขตเอกสารนี้: นำเข้า Bank Statement แล้วจับคู่ (reconcile) กับรายการในระบบ — เงินเข้าจับคู่กับ Billing Batch (ไฟล์ 19) สร้าง Cash Receipt อัตโนมัติ (ไฟล์ 31), เงินออกจับคู่กับ Payout Batch (ไฟล์ 17) ยืนยันการจ่ายสำเร็จ
 
@@ -93,7 +94,7 @@
 
 - Table: วันที่, รายละเอียด statement (+เลขอ้างอิง), เงินเข้า (เขียว)/เงินออก (แดง), จับคู่กับ, สถานะ (badge 4 สี: unmatched=แดง/auto_matched=เขียว/manual_matched=ฟ้า/unmatched_resolved=เทา), ปุ่ม "จับคู่ Manual" (เฉพาะ unmatched) หรือ "ทำเครื่องหมายว่าไม่ต้องจับคู่" (unmatched → unmatched_resolved)
 - Modal "จับคู่ Manual": แสดงข้อมูล transaction ที่กำลังจับคู่ (การ์ดสรุปด้านบน) + dropdown ค้นหารายการที่จะจับคู่ + textarea หมายเหตุชี้แจง
-- Modal "Import Statement": เลือกบัญชีธนาคาร + drag-drop file CSV + ปุ่ม "ดาวน์โหลดไฟล์ตัวอย่าง" ตามรูปแบบ statement ของบัญชีที่เลือก พร้อมคำอธิบายคอลัมน์ (v2.1)
+- Modal "Import Statement": เลือกบัญชีธนาคาร + drag-drop file .xlsx/.csv (v2.2) + ปุ่ม "ดาวน์โหลดไฟล์ตัวอย่าง (.xlsx)" + ลิงก์รอง "หรือ CSV" (v2.2) ตามรูปแบบ statement ของบัญชีที่เลือก พร้อมคำอธิบายคอลัมน์ (v2.1)
 
 ## 9. Workflow / Lifecycle
 

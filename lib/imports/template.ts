@@ -61,14 +61,35 @@ export function templateColumnDocs(columns: readonly ImportTemplateColumn[]): Im
   return columns.map(({ header, requirement, format }) => ({ header, requirement, format }))
 }
 
+/** แถวตัวอย่างของแม่แบบ (ตามลำดับคอลัมน์ที่ส่งมา) — จำนวนแถว = ตัวอย่างที่ยาวที่สุด · ใช้ร่วม CSV/.xlsx */
+export function templateExampleRows(columns: readonly ImportTemplateColumn[]): string[][] {
+  const rowCount = Math.max(0, ...columns.map((column) => column.examples.length))
+  return Array.from({ length: rowCount }, (_, rowIndex) => columns.map((column) => column.examples[rowIndex] ?? ''))
+}
+
 /** คอลัมน์ (ตามลำดับที่ส่งมา) → เนื้อไฟล์ CSV แม่แบบ: หัวคอลัมน์ 1 แถว + แถวตัวอย่างเท่าจำนวนตัวอย่างที่ยาวที่สุด */
 export function buildImportTemplateCsv(columns: readonly ImportTemplateColumn[]): string {
-  const rowCount = Math.max(0, ...columns.map((column) => column.examples.length))
-  const rows = Array.from({ length: rowCount }, (_, rowIndex) =>
-    columns.map((column) => column.examples[rowIndex] ?? ''),
-  )
   return buildCsv(
     columns.map((column) => column.header),
-    rows,
+    templateExampleRows(columns),
   )
+}
+
+/** ชื่อไฟล์แม่แบบ .xlsx คู่กับชื่อไฟล์ .csv เดิม (`x.csv` → `x.xlsx`) */
+export function xlsxTemplateFileName(csvFileName: string): string {
+  return csvFileName.replace(/\.csv$/i, '') + '.xlsx'
+}
+
+/**
+ * ค่าที่ดูเป็น **เลขยกกำลัง** (`3.5E+14`, `8.12E8`) — เกิดเมื่อ Excel แปลงตัวเลขยาวในเซลล์รูปแบบ "ทั่วไป"
+ * ค่าเดิมกู้คืนไม่ได้ (หลักท้าย ๆ หายไปแล้ว) ⇒ ผู้เรียกต้อง reject แถวนั้น ห้ามเดาค่าคืน
+ * (มติผู้ใช้ 04/10/2569 — IMEI ต้องตรงเป๊ะ 15 หลัก)
+ */
+export function looksLikeScientificNotation(value: string): boolean {
+  return /^[+-]?\d+(?:[.,]\d+)?[eE][+-]?\d+$/.test(value.trim())
+}
+
+/** ข้อความ error ภาษาไทยของเซลล์ที่ Excel แปลงเป็นเลขยกกำลัง — ใช้ร่วมทุกจุดนำเข้า */
+export function scientificNotationMessage(label: string, value: string): string {
+  return `${label} "${value.trim()}" ถูก Excel แปลงเป็นเลขยกกำลัง ตัวเลขเดิมหายไปแล้ว — ตั้งรูปแบบเซลล์ของคอลัมน์นี้เป็น “ข้อความ” แล้วพิมพ์เลขใหม่`
 }
