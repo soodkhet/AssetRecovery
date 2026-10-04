@@ -5,15 +5,21 @@ import { ImportTemplateHelp } from '@/components/imports/import-template-help'
 import { Button, Field, InlineAlert, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { StatementImportResultDto, StatementImportTemplateDto } from '@/lib/bank-recon/types'
-import { downloadTextFile } from '@/lib/imports/download-client'
+import {
+  downloadTextFile,
+  downloadXlsxTemplate,
+  IMPORT_FILE_ACCEPT,
+  readImportFileAsCsv,
+} from '@/lib/imports/download-client'
 import { fmtCount } from '@/lib/format/money'
 import type { BankAccountDto } from '@/lib/settings/types'
 
 /**
  * Modal "นำเข้า Bank Statement" (`35` §8 · mockup `accounting.html` `import-statement`)
  *
- * เลือกบัญชีธนาคาร + ลากไฟล์ CSV มาวาง — **งวดบัญชีระบบผูกให้เองจากวันที่ในไฟล์** (ไม่ให้คนเลือก
- * เพื่อไม่ให้รายการไปอยู่ผิดงวด) · ไฟล์ถูกอ่านเป็นข้อความฝั่ง client แล้วส่งขึ้น API
+ * เลือกบัญชีธนาคาร + ลากไฟล์ .xlsx/.csv มาวาง — **งวดบัญชีระบบผูกให้เองจากวันที่ในไฟล์** (ไม่ให้คนเลือก
+ * เพื่อไม่ให้รายการไปอยู่ผิดงวด) · ไฟล์ถูกอ่านเป็นข้อความ CSV ฝั่ง client (.xlsx แปลงด้วย SheetJS —
+ * มติผู้ใช้ 04/10/2569) แล้วส่งขึ้น API ⇒ parser statement ฝั่ง server ใช้ทางเดิม
  */
 export function ImportStatementModal({
   open,
@@ -76,7 +82,18 @@ export function ImportStatementModal({
   async function submit(): Promise<void> {
     if (!ready || file === null) return
     setSaving(true)
-    const csv = await file.text()
+    let csv: string
+    try {
+      csv = await readImportFileAsCsv(file)
+    } catch (readError) {
+      setSaving(false)
+      showToast({
+        tone: 'error',
+        title: 'อ่านไฟล์ไม่ได้',
+        description: readError instanceof Error ? readError.message : 'กรุณาลองใหม่',
+      })
+      return
+    }
     const result = await callApi<StatementImportResultDto>(
       '/api/bank-reconciliation/import',
       jsonRequest('POST', { bankAccountId, csv, fileName: file.name }),
@@ -150,12 +167,12 @@ export function ImportStatementModal({
             {file === null ? 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่' : file.name}
           </div>
           <div className="mt-1 text-xs text-slate-400">
-            รองรับไฟล์ CSV ตามรูปแบบ statement ที่ตั้งไว้กับบัญชีนั้น (ตั้งค่าที่หน้าตั้งค่าการเงิน)
+            รองรับไฟล์ Excel (.xlsx) หรือ CSV ตามรูปแบบ statement ที่ตั้งไว้กับบัญชีนั้น (ตั้งค่าที่หน้าตั้งค่าการเงิน)
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept={IMPORT_FILE_ACCEPT}
             className="hidden"
             onChange={(event) => pickFile(event.target.files?.[0])}
           />
@@ -164,7 +181,12 @@ export function ImportStatementModal({
         {template !== null ? (
           <ImportTemplateHelp
             columns={template.columns}
-            onDownload={() => downloadTextFile(template.fileName, template.csv)}
+            onDownload={() =>
+              void downloadXlsxTemplate(template.xlsxFileName, template.templateColumns).catch(() =>
+                showToast({ tone: 'error', title: 'สร้างไฟล์ตัวอย่างไม่สำเร็จ', description: 'ลองดาวน์โหลดแบบ CSV แทน' }),
+              )
+            }
+            onDownloadCsv={() => downloadTextFile(template.fileName, template.csv)}
             note={
               template.usedConfiguredMapping
                 ? `ไฟล์ตัวอย่างเรียงคอลัมน์ตามรูปแบบ statement "${template.statementFormat ?? ''}" ที่ตั้งไว้กับบัญชีนี้ · ระบบอ่านตามตำแหน่งคอลัมน์ แถวหัวคอลัมน์จะถูกข้ามให้`

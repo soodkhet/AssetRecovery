@@ -22,13 +22,21 @@ import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { ImportTemplateHelp } from '@/components/imports/import-template-help'
 import {
   buildCaseImportTemplate,
+  CASE_IMPORT_TEMPLATE_COLUMNS,
   CASE_IMPORT_TEMPLATE_DOCS,
   CASE_IMPORT_TEMPLATE_FILE_NAME,
+  CASE_IMPORT_TEMPLATE_XLSX_FILE_NAME,
   IMPORT_COLUMNS,
+  MAX_CASE_IMPORT_ROWS,
   parseCsv,
   type ImportField,
 } from '@/lib/cases/import'
-import { downloadTextFile } from '@/lib/imports/download-client'
+import {
+  downloadTextFile,
+  downloadXlsxTemplate,
+  IMPORT_FILE_ACCEPT,
+  readImportFileAsCsv,
+} from '@/lib/imports/download-client'
 import {
   applyHeaderMapping,
   autoMapping,
@@ -48,8 +56,8 @@ import type { CaseImportResultDto } from '@/lib/cases/types'
  * - mapping ใช้ `IMPORT_COLUMNS` ชุดเดียวกับ backend แล้วส่ง `rows` ที่หัวคอลัมน์ถูกแปลงเป็น
  *   label มาตรฐานแล้ว (ตรรกะ mapping มีชุดเดียวทั้งระบบ — ดู `lib/cases/import-wizard.ts`)
  *
- * ⚠️ รอบนี้อ่านได้เฉพาะ **CSV** — ไฟล์ `.xlsx` ต้องใช้ SheetJS (`96` §15) ซึ่งยังไม่ได้ติดตั้ง
- * ในโปรเจกต์ (มาพร้อมงานรายงาน/Export) · จุดเสียบอยู่ที่ `readRowsFromFile()` ที่เดียว
+ * - รับไฟล์ **.xlsx และ .csv** (มติผู้ใช้ 04/10/2569) — .xlsx แปลงเป็นข้อความ CSV ด้วย SheetJS แล้วเข้า
+ *   `parseCsv()` ทางเดียวกับ .csv · จุดอ่านไฟล์อยู่ที่ `readRowsFromFile()` ที่เดียว
  */
 
 type Step = 'file' | 'mapping' | 'preview'
@@ -93,14 +101,16 @@ export function CaseImportWizard({
 
   async function readRowsFromFile(file: File): Promise<void> {
     setError(null)
-    if (!file.name.toLowerCase().endsWith('.csv')) {
+    let text: string
+    try {
+      text = await readImportFileAsCsv(file, { maxDataRows: MAX_CASE_IMPORT_ROWS })
+    } catch (readError) {
       setError({
-        title: 'ไฟล์นี้ยังอ่านไม่ได้',
-        message: 'รอบนี้รองรับเฉพาะไฟล์ .csv — เปิดไฟล์ Excel แล้ว “บันทึกเป็น CSV UTF-8” ก่อนนำเข้า',
+        title: 'อ่านไฟล์ไม่ได้',
+        message: readError instanceof Error ? readError.message : 'กรุณาลองใหม่',
       })
       return
     }
-    const text = await file.text()
     const parsed = parseCsv(text)
     if (parsed.length === 0) {
       setError({ title: 'ไฟล์ว่าง', message: 'ไม่พบแถวข้อมูลในไฟล์ (แถวแรกต้องเป็นหัวคอลัมน์)' })
@@ -211,7 +221,7 @@ export function CaseImportWizard({
 
         {step === 'file' && (
           <div className="rounded-xl border-2 border-dashed border-slate-300 p-6 text-center">
-            <p className="text-sm font-semibold text-slate-700">เลือกไฟล์ CSV ที่จะนำเข้า</p>
+            <p className="text-sm font-semibold text-slate-700">เลือกไฟล์ Excel (.xlsx) หรือ CSV ที่จะนำเข้า</p>
             <p className="mt-1 text-xs text-slate-500">
               แถวแรกต้องเป็นหัวคอลัมน์ · ระบบรู้จักหัวคอลัมน์ทั้งภาษาไทยและอังกฤษ · สูงสุด 1,000 แถวต่อครั้ง
             </p>
@@ -219,7 +229,7 @@ export function CaseImportWizard({
               เลือกไฟล์
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept={IMPORT_FILE_ACCEPT}
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0]
@@ -234,7 +244,12 @@ export function CaseImportWizard({
         {step === 'file' && (
           <ImportTemplateHelp
             columns={CASE_IMPORT_TEMPLATE_DOCS}
-            onDownload={() => downloadTextFile(CASE_IMPORT_TEMPLATE_FILE_NAME, buildCaseImportTemplate())}
+            onDownload={() =>
+              void downloadXlsxTemplate(CASE_IMPORT_TEMPLATE_XLSX_FILE_NAME, CASE_IMPORT_TEMPLATE_COLUMNS).catch(() =>
+                showToast({ tone: 'error', title: 'สร้างไฟล์ตัวอย่างไม่สำเร็จ', description: 'ลองดาวน์โหลดแบบ CSV แทน' }),
+              )
+            }
+            onDownloadCsv={() => downloadTextFile(CASE_IMPORT_TEMPLATE_FILE_NAME, buildCaseImportTemplate())}
             note="หัวคอลัมน์ในไฟล์ตัวอย่างเป็นภาษาไทยที่ระบบรู้จัก · มีข้อมูลสมมติ 2 แถว ลบแล้วกรอกข้อมูลจริงแทน · มูลหนี้กรอกเป็นบาท"
           />
         )}

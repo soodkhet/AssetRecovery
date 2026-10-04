@@ -264,6 +264,16 @@
 | Impact | จังหวะการเกิด expense เปลี่ยน (ปิดงาน → หลังเที่ยงคืน) · `02` v4.12 · `22` §6.2/§6.3 · `41` §6.6/§10.1 · `11` · `19` §6.1 · `91` §6.1/§14.1 · ข้อมูลเดิมที่ปิดงานด้วยกติกาเก่า (มีแถว allowance/fuel เหมาต่อเคสแล้ว) ไม่ถูกคิดซ้ำ · รายได้ของเคสเกิดช้าลงอย่างน้อยจนถึงหลังเที่ยงคืนของวันลงพื้นที่สุดท้าย |
 | Reversible | ปานกลาง — คืนการคิดตอนปิดงานได้ด้วยการปิด job + ถอดเกต settle ออกจาก revenue trigger · ตาราง/คอลัมน์ใหม่ไม่กระทบตารางอื่น |
 
+### DEC-013 — SheetJS ติดตั้งจาก cdn.sheetjs.com (pin tarball) ไม่ใช่ npm registry (04/10/2569)
+
+| Field | Value |
+|---|---|
+| Decision | แพ็กเกจ `xlsx` (SheetJS Community Edition — Excel ตาม `96` §15) ติดตั้งจาก **tarball ที่ pin เวอร์ชันบน cdn.sheetjs.com** เท่านั้น (`"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"` ใน `package.json` + integrity ใน lockfile) · ห้ามติดตั้ง `xlsx` จาก npm registry · อัปเวอร์ชัน = เปลี่ยน URL tarball (ดูเวอร์ชันล่าสุดที่ cdn.sheetjs.com) แล้วรันเทสต์ export/import ทั้งหมด · ใช้กับ export Excel (รายงาน/ใบส่งมอบ/checklist) และ **แม่แบบ + นำเข้า .xlsx** (มติผู้ใช้ 04/10/2569) — ฝั่ง client โหลดแบบ dynamic `import()` เท่านั้น |
+| Approved by | ผู้ใช้ — มติ 04/10/2569 (แม่แบบนำเข้า .xlsx · อนุมัติการเปลี่ยน lockfile) |
+| Reason | ผู้พัฒนา SheetJS เผยแพร่รุ่นใหม่ผ่าน cdn.sheetjs.com เท่านั้น — รุ่นบน npm registry ค้างที่ 0.18.5 และมีช่องโหว่ที่รู้จัก (prototype pollution / ReDoS) |
+| Impact | `package.json` + `pnpm-lock.yaml` (ใช้ tarball 0.20.3 อยู่แล้วตั้งแต่ Phase 2.13 — บันทึกให้เป็นกติกา) · CI/Vercel ต้องเข้าถึง cdn.sheetjs.com ตอน install |
+| Reversible | สูง — เปลี่ยน URL/เวอร์ชันใน `package.json` แล้ว `pnpm install` |
+
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 
 - [ ] ยืนยันรายละเอียดเมื่อเริ่ม sprint เฉพาะ module (Open Item เดิม)

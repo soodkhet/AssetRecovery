@@ -4,6 +4,8 @@ import { caseCreateSchema, type CaseCreateInput } from '@/lib/cases/schemas'
 import { toFieldErrors } from '@/lib/api/validation'
 import {
   buildImportTemplateCsv,
+  looksLikeScientificNotation,
+  scientificNotationMessage,
   sortTemplateColumns,
   templateColumnDocs,
   type ImportColumnRequirement,
@@ -18,8 +20,9 @@ import {
  * - แถวที่ผิด reject เฉพาะแถวนั้น (`API_VALIDATION_FAILED`) **ไม่ reject ทั้งไฟล์** (`38` §12)
  * - แถวที่ผ่านถูกสร้างเป็น `draft` เสมอ (`38` §9) — ความครบถ้วนบังคับตอนขอขึ้น `pending_review`
  *
- * การอ่านไฟล์: ฝั่ง wizard (Phase 2.5) แปลง Excel เป็นแถว object ด้วย SheetJS แล้วส่ง `rows` มาที่ API
- * ส่วน CSV รองรับตรงที่ backend ด้วย `parseCsv()` ด้านล่าง (ไม่ต้องพึ่ง dependency เพิ่ม)
+ * การอ่านไฟล์: wizard รับ .xlsx และ .csv — .xlsx ถูกแปลงเป็นข้อความ CSV ด้วย SheetJS (`lib/imports/xlsx.ts`)
+ * แล้วเข้า `parseCsv()` ด้านล่างทางเดียวกับไฟล์ .csv (มติผู้ใช้ 04/10/2569) ก่อนส่ง `rows` มาที่ API
+ * · API ยังรับ `csv` ดิบได้ (backend แยกเองด้วย `parseCsv()`)
  */
 
 // ── CSV (RFC 4180 แบบย่อ — คั่นด้วย `,` มี quote ได้) ────────────────────────
@@ -326,6 +329,11 @@ export const CASE_IMPORT_TEMPLATE_DOCS: readonly ImportTemplateColumnDoc[] = tem
 )
 
 export const CASE_IMPORT_TEMPLATE_FILE_NAME = 'case-import-template.csv'
+/** แม่แบบหลัก (มติผู้ใช้ 04/10/2569) — สร้างด้วย `buildImportTemplateXlsx(CASE_IMPORT_TEMPLATE_COLUMNS)` */
+export const CASE_IMPORT_TEMPLATE_XLSX_FILE_NAME = 'case-import-template.xlsx'
+
+/** เพดานแถวข้อมูลต่อการนำเข้า 1 ครั้ง (ตรงกับ `caseImportSchema.rows`) */
+export const MAX_CASE_IMPORT_ROWS = 1000
 
 /** เนื้อไฟล์ `case-import-template.csv` (UTF-8 + BOM) — ไม่มีข้อมูลจริง สร้างฝั่ง client ได้ */
 export function buildCaseImportTemplate(): string {
@@ -346,6 +354,10 @@ const ALIAS_TO_FIELD = new Map<string, ImportField>(
     ...column.aliases.map((alias) => [normalizeHeader(alias), column.field] as const),
   ]),
 )
+
+function importColumnLabel(field: ImportField): string {
+  return IMPORT_COLUMNS.find((column) => column.field === field)?.label ?? field
+}
 
 /** หัวคอลัมน์ → ฟิลด์ปลายทาง (`null` = คอลัมน์ที่ระบบไม่รู้จัก — ข้ามไป ไม่ทำให้แถวผิด) */
 export function resolveImportField(header: string): ImportField | null {
@@ -403,6 +415,26 @@ export function parseAssetType(value: string): 'smartphone' | 'tablet' | null | 
 
 type MappedRow = Record<string, unknown>
 
+/**
+ * คอลัมน์ตัวเลขยาวที่ Excel ชอบแปลงเพี้ยน — ค่าเลขยกกำลัง (`3.5E+14`) ต้อง reject แถว ห้ามเดาค่าคืน
+ * (มติผู้ใช้ 04/10/2569 · IMEI exact match 15 หลัก) — key = ชื่อฟิลด์ใน error ของแถว
+ */
+const NUMERIC_TEXT_FIELDS: ReadonlyArray<{ field: ImportField; errorKey: string }> = [
+  { field: 'caseRef', errorKey: 'caseRef' },
+  { field: 'debtorNationalId', errorKey: 'debtorNationalId' },
+  { field: 'debtorPassportNo', errorKey: 'debtorPassportNo' },
+  { field: 'debtorPhoneMobile', errorKey: 'debtorPhoneMobile' },
+  { field: 'debtorPhoneWork', errorKey: 'debtorPhoneWork' },
+  { field: 'assetImeiSerial', errorKey: 'assetImeiSerial' },
+]
+
+/** เบอร์โทรไทยขึ้นต้นด้วย 0 เสมอ — ตัวเลขล้วน 8–9 หลักที่ไม่ขึ้นต้น 0 = เลข 0 นำหน้าถูก Excel ตัดทิ้ง */
+const PHONE_FIELDS: readonly ImportField[] = ['debtorPhoneMobile', 'debtorPhoneWork']
+
+export function looksLikeLostLeadingZeroPhone(value: string): boolean {
+  return /^[1-9]\d{7,8}$/.test(value.trim())
+}
+
 /** ประกอบ payload ของ `POST /api/cases` จากแถวดิบ (ยังไม่ validate — ค่าที่แปลงไม่ได้ถูกทิ้งไว้ให้ Zod จับ) */
 export function mapImportRow(
   raw: Record<string, unknown>,
@@ -419,6 +451,20 @@ export function mapImportRow(
   }
 
   const text = (field: ImportField): string | undefined => values.get(field)
+
+  for (const { field, errorKey } of NUMERIC_TEXT_FIELDS) {
+    const value = text(field)
+    if (value !== undefined && looksLikeScientificNotation(value)) {
+      errors[errorKey] = scientificNotationMessage(importColumnLabel(field), value)
+    }
+  }
+  for (const field of PHONE_FIELDS) {
+    const value = text(field)
+    if (value !== undefined && errors[field] === undefined && looksLikeLostLeadingZeroPhone(value)) {
+      errors[field] = `${importColumnLabel(field)} "${value}" ไม่มีเลข 0 นำหน้า (Excel อาจตัดทิ้ง) — ตั้งรูปแบบเซลล์เป็น “ข้อความ” แล้วพิมพ์เบอร์ใหม่ให้ครบ`
+    }
+  }
+
   const addressOf = (prefix: 'addressCurrent' | 'addressWork' | 'addressIdCard') => {
     const block = {
       detail: text(`${prefix}.detail` as ImportField) ?? null,

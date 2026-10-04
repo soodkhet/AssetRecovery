@@ -396,6 +396,8 @@ export const DEFAULT_STATEMENT_TEMPLATE_COLUMNS: readonly StatementColumn[] = [
 ]
 
 export const STATEMENT_IMPORT_TEMPLATE_FILE_NAME = 'bank-statement-template.csv'
+/** แม่แบบหลัก .xlsx (มติผู้ใช้ 04/10/2569) — หน้าจอสร้างจาก `templateColumns` ด้วย `buildImportTemplateXlsx()` */
+export const STATEMENT_IMPORT_TEMPLATE_XLSX_FILE_NAME = 'bank-statement-template.xlsx'
 
 function statementColumnRequirement(
   column: StatementColumn,
@@ -413,6 +415,10 @@ function statementColumnRequirement(
 export interface StatementImportTemplate {
   fileName: string
   csv: string
+  /** ชื่อไฟล์แม่แบบ .xlsx (ปุ่มหลัก) */
+  xlsxFileName: string
+  /** คอลัมน์ชุดเดียวกับ CSV พร้อมค่าตัวอย่าง — หน้าจอใช้สร้างแม่แบบ .xlsx */
+  templateColumns: ImportTemplateColumn[]
   columns: ImportTemplateColumnDoc[]
   /** `true` = แม่แบบเรียงตาม `column_mapping` ที่ตั้งไว้กับบัญชี · `false` = รูปแบบมาตรฐานของระบบ */
   usedConfiguredMapping: boolean
@@ -433,6 +439,8 @@ export function buildStatementImportTemplate(columnMapping?: string | null): Sta
   return {
     fileName: STATEMENT_IMPORT_TEMPLATE_FILE_NAME,
     csv: buildImportTemplateCsv(columns),
+    xlsxFileName: STATEMENT_IMPORT_TEMPLATE_XLSX_FILE_NAME,
+    templateColumns: columns,
     columns: templateColumnDocs(columns),
     usedConfiguredMapping,
   }
