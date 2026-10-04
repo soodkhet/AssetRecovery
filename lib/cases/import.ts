@@ -2,6 +2,14 @@ import { parseBahtInput } from '@/lib/format/money'
 import { DEBTOR_NATIONALITIES, type DebtorNationalityCode } from '@/lib/cases/case'
 import { caseCreateSchema, type CaseCreateInput } from '@/lib/cases/schemas'
 import { toFieldErrors } from '@/lib/api/validation'
+import {
+  buildImportTemplateCsv,
+  sortTemplateColumns,
+  templateColumnDocs,
+  type ImportColumnRequirement,
+  type ImportTemplateColumn,
+  type ImportTemplateColumnDoc,
+} from '@/lib/imports/template'
 
 /**
  * Import เคสจากไฟล์ Excel/CSV (ไฟล์ 38 §8 `import_cases` · §12) — **pure ล้วน ใช้ร่วม FE/BE**
@@ -205,6 +213,124 @@ export const IMPORT_COLUMNS: readonly ImportColumn[] = [
     aliases: ['มูลหนี้คงเหลือ', 'มูลหนี้', 'ยอดหนี้', 'outstanding_debt', 'debt_amount'],
   },
 ]
+
+// ── ไฟล์ตัวอย่าง (แม่แบบ) — มติ PO 04/10/2569 (UAT — แม่แบบนำเข้าภาษาไทย) ─────────────
+
+interface ImportColumnTemplateSpec {
+  requirement: ImportColumnRequirement
+  format: string
+  /** แถวตัวอย่าง 2 แถว: [ลูกหนี้สัญชาติไทย, ลูกหนี้ต่างชาติ] — ค่าสมมติทั้งหมด ไม่ใช่ข้อมูลจริง */
+  examples: readonly [string, string]
+}
+
+/**
+ * ระดับความจำเป็น + รูปแบบ + ค่าตัวอย่างต่อฟิลด์ — `Record<ImportField>` บังคับให้ครบทุกฟิลด์ของ `IMPORT_COLUMNS`
+ * - `required` = schema บังคับตั้งแต่ตอนนำเข้า (`caseRef` ตัวเดียว — แถวที่ไม่มีถูก reject)
+ * - `required_before_review` / `conditional` = ตรงกับ `missingRequiredFields()` (`lib/cases/case.ts`) —
+ *   นำเข้าเป็น `draft` ได้แม้ว่าง แต่ต้องครบก่อนขอขึ้น `pending_review` (`38` §9/§11)
+ */
+const IMPORT_COLUMN_TEMPLATE: Record<ImportField, ImportColumnTemplateSpec> = {
+  caseRef: {
+    requirement: 'required',
+    format: 'ไม่เกิน 100 ตัวอักษร · ห้ามซ้ำกับเคสเดิมของบริษัทเดียวกัน',
+    examples: ['CT-2569-00001', 'CT-2569-00002'],
+  },
+  debtorName: { requirement: 'required_before_review', format: 'ชื่อ-นามสกุล', examples: ['นายสมชาย ตัวอย่าง', 'Mr. Aung Example'] },
+  debtorNationality: {
+    requirement: 'required_before_review',
+    format: 'ไทย / พม่า / ลาว / กัมพูชา / อื่นๆ',
+    examples: ['ไทย', 'พม่า'],
+  },
+  debtorNationalityOther: { requirement: 'conditional', format: 'กรอกเมื่อสัญชาติเป็น "อื่นๆ"', examples: ['', ''] },
+  debtorNationalId: {
+    requirement: 'conditional',
+    format: 'ตัวเลข 13 หลัก · บังคับเมื่อสัญชาติไทย',
+    examples: ['1234567890121', ''],
+  },
+  debtorPassportNo: {
+    requirement: 'conditional',
+    format: 'บังคับเมื่อไม่ใช่สัญชาติไทย',
+    examples: ['', 'MA0000001'],
+  },
+  debtorPhoneMobile: {
+    requirement: 'required_before_review',
+    format: 'ตัวเลข เช่น 0812345678',
+    examples: ['0812345678', '0898765432'],
+  },
+  debtorPhoneWork: { requirement: 'optional', format: 'ตัวเลข', examples: ['021234567', ''] },
+  debtorLineId: { requirement: 'optional', format: 'ข้อความ', examples: ['somchai.example', ''] },
+  debtorFacebook: { requirement: 'optional', format: 'ชื่อหรือลิงก์', examples: ['', ''] },
+
+  'addressCurrent.detail': {
+    requirement: 'required_before_review',
+    format: 'บ้านเลขที่ หมู่ ซอย ถนน',
+    examples: ['99/1 หมู่ 2 ถนนตัวอย่าง', 'ห้อง 305 อาคารตัวอย่าง'],
+  },
+  'addressCurrent.postalCode': { requirement: 'optional', format: 'ตัวเลข 5 หลัก', examples: ['10110', '10400'] },
+  'addressCurrent.province': {
+    requirement: 'required_before_review',
+    format: 'ชื่อจังหวัดเต็ม',
+    examples: ['กรุงเทพมหานคร', 'กรุงเทพมหานคร'],
+  },
+  'addressCurrent.district': { requirement: 'optional', format: 'ชื่ออำเภอ/เขต', examples: ['คลองเตย', 'พญาไท'] },
+  'addressCurrent.subdistrict': { requirement: 'optional', format: 'ชื่อตำบล/แขวง', examples: ['คลองเตย', 'สามเสนใน'] },
+
+  'addressWork.detail': { requirement: 'optional', format: 'บ้านเลขที่ หมู่ ซอย ถนน', examples: ['', ''] },
+  'addressWork.postalCode': { requirement: 'optional', format: 'ตัวเลข 5 หลัก', examples: ['', ''] },
+  'addressWork.province': { requirement: 'optional', format: 'ชื่อจังหวัดเต็ม', examples: ['', ''] },
+  'addressWork.district': { requirement: 'optional', format: 'ชื่ออำเภอ/เขต', examples: ['', ''] },
+  'addressWork.subdistrict': { requirement: 'optional', format: 'ชื่อตำบล/แขวง', examples: ['', ''] },
+
+  'addressIdCard.detail': {
+    requirement: 'required_before_review',
+    format: 'บ้านเลขที่ หมู่ ซอย ถนน',
+    examples: ['12 หมู่ 3', 'ห้อง 305 อาคารตัวอย่าง'],
+  },
+  'addressIdCard.postalCode': { requirement: 'optional', format: 'ตัวเลข 5 หลัก', examples: ['50200', '10400'] },
+  'addressIdCard.province': {
+    requirement: 'required_before_review',
+    format: 'ชื่อจังหวัดเต็ม',
+    examples: ['เชียงใหม่', 'กรุงเทพมหานคร'],
+  },
+  'addressIdCard.district': { requirement: 'optional', format: 'ชื่ออำเภอ/เขต', examples: ['เมืองเชียงใหม่', 'พญาไท'] },
+  'addressIdCard.subdistrict': { requirement: 'optional', format: 'ชื่อตำบล/แขวง', examples: ['ศรีภูมิ', 'สามเสนใน'] },
+
+  assetType: { requirement: 'required_before_review', format: 'มือถือ หรือ แท็บเล็ต', examples: ['มือถือ', 'แท็บเล็ต'] },
+  assetBrandModel: {
+    requirement: 'required_before_review',
+    format: 'ยี่ห้อและรุ่น',
+    examples: ['Samsung Galaxy A55', 'iPad 10th Gen'],
+  },
+  assetImeiSerial: {
+    requirement: 'required_before_review',
+    format: 'IMEI ตัวเลข 15 หลัก (หรือ Serial ของเครื่อง)',
+    examples: ['350000000000001', '350000000000019'],
+  },
+  outstandingDebtBaht: {
+    requirement: 'required_before_review',
+    format: 'จำนวนเงินบาท ทศนิยมไม่เกิน 2 ตำแหน่ง ไม่ต้องใส่จุลภาค',
+    examples: ['15000.00', '8500.50'],
+  },
+}
+
+/**
+ * คอลัมน์ของไฟล์แม่แบบ — หัวคอลัมน์ = `label` ภาษาไทย (อยู่ในชุดที่ `resolveImportField()` รู้จัก)
+ * เรียงคอลัมน์บังคับก่อนแล้วตามด้วยไม่บังคับ
+ */
+export const CASE_IMPORT_TEMPLATE_COLUMNS: readonly ImportTemplateColumn[] = sortTemplateColumns(
+  IMPORT_COLUMNS.map((column) => ({ header: column.label, ...IMPORT_COLUMN_TEMPLATE[column.field] })),
+)
+
+export const CASE_IMPORT_TEMPLATE_DOCS: readonly ImportTemplateColumnDoc[] = templateColumnDocs(
+  CASE_IMPORT_TEMPLATE_COLUMNS,
+)
+
+export const CASE_IMPORT_TEMPLATE_FILE_NAME = 'case-import-template.csv'
+
+/** เนื้อไฟล์ `case-import-template.csv` (UTF-8 + BOM) — ไม่มีข้อมูลจริง สร้างฝั่ง client ได้ */
+export function buildCaseImportTemplate(): string {
+  return buildImportTemplateCsv(CASE_IMPORT_TEMPLATE_COLUMNS)
+}
 
 /** เทียบหัวคอลัมน์แบบไม่สนตัวพิมพ์/ช่องว่าง/`_`/`-`/วงเล็บ */
 export function normalizeHeader(value: string): string {

@@ -1,4 +1,5 @@
 import type { MatchTargetKind } from '@/lib/bank-recon/matching'
+import type { StatementImportTemplate } from '@/lib/bank-recon/statement'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
 
 /**
@@ -85,4 +86,11 @@ export interface MatchResultDto {
     | { kind: 'billing'; cashReceiptId: string; billingStatus: string; outstandingSatang: number }
     | { kind: 'payout'; payoutStatus: string }
     | null
+}
+
+/** `GET /api/bank-reconciliation/import/template` — ไฟล์ตัวอย่าง statement (มติ PO 04/10/2569) */
+export interface StatementImportTemplateDto extends StatementImportTemplate {
+  bankAccountId: string | null
+  /** ชื่อรูปแบบ statement ที่ผูกกับบัญชี (`null` = ยังไม่ตั้ง ⇒ แม่แบบมาตรฐาน) */
+  statementFormat: string | null
 }

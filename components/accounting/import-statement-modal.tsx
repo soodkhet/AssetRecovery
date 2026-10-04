@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ImportTemplateHelp } from '@/components/imports/import-template-help'
 import { Button, Field, InlineAlert, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import type { StatementImportResultDto } from '@/lib/bank-recon/types'
+import type { StatementImportResultDto, StatementImportTemplateDto } from '@/lib/bank-recon/types'
+import { downloadTextFile } from '@/lib/imports/download-client'
 import { fmtCount } from '@/lib/format/money'
 import type { BankAccountDto } from '@/lib/settings/types'
 
@@ -29,6 +31,8 @@ export function ImportStatementModal({
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [template, setTemplate] = useState<StatementImportTemplateDto | null>(null)
+  const [templateError, setTemplateError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -42,6 +46,22 @@ export function ImportStatementModal({
       cancelled = true
     }
   }, [open])
+
+  // แม่แบบตามรูปแบบ statement ของบัญชีที่เลือก (ยังไม่เลือก = รูปแบบมาตรฐานของระบบ)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void (async () => {
+      const query = bankAccountId === '' ? '' : `?bank_account_id=${encodeURIComponent(bankAccountId)}`
+      const result = await callApi<StatementImportTemplateDto>(`/api/bank-reconciliation/import/template${query}`)
+      if (cancelled) return
+      setTemplate(result.data ?? null)
+      setTemplateError(result.error === undefined ? null : result.error.message)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, bankAccountId])
 
   if (!open) return null
 
@@ -140,6 +160,24 @@ export function ImportStatementModal({
             onChange={(event) => pickFile(event.target.files?.[0])}
           />
         </div>
+
+        {template !== null ? (
+          <ImportTemplateHelp
+            columns={template.columns}
+            onDownload={() => downloadTextFile(template.fileName, template.csv)}
+            note={
+              template.usedConfiguredMapping
+                ? `ไฟล์ตัวอย่างเรียงคอลัมน์ตามรูปแบบ statement "${template.statementFormat ?? ''}" ที่ตั้งไว้กับบัญชีนี้ · ระบบอ่านตามตำแหน่งคอลัมน์ แถวหัวคอลัมน์จะถูกข้ามให้`
+                : `ไฟล์ตัวอย่างเป็นรูปแบบมาตรฐานของระบบ${
+                    template.bankAccountId === null
+                      ? ' (เลือกบัญชีก่อน ถ้าบัญชีนั้นตั้งรูปแบบ statement ไว้ ไฟล์ตัวอย่างจะเรียงตามรูปแบบนั้น)'
+                      : ' (บัญชีนี้ยังไม่ได้ตั้งรูปแบบ statement)'
+                  } · ระบบอ่านจากชื่อหัวคอลัมน์ · วันที่กรอกเป็น พ.ศ. ได้`
+            }
+          />
+        ) : (
+          templateError !== null && <InlineAlert tone="warning">โหลดไฟล์ตัวอย่างไม่สำเร็จ — {templateError}</InlineAlert>
+        )}
 
         <InlineAlert tone="info">
           ระบบจับคู่อัตโนมัติเมื่อยอดตรงเป๊ะและอยู่ในช่วง
