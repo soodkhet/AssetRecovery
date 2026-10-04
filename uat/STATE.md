@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~03:35 merge Portal-P3 `3f7a08a` (guard `requirePortalAccess`/`requirePortalRow`/`withPortal` · page guard · login บริษัท suspended · ผู้ใช้บริษัท 403 ทุก API ภายใน + redirect `/portal` · ผู้ใช้ภายในเปิด `/portal` → `/dashboard`) · verify 289 files / 3,683 tests · **golden R10 ของผู้ใช้บริษัทเปลี่ยน (403 ทุก route ภายใน)** → เริ่ม P4/P5/P6 คู่ขนาน
 - 05/10/2569 ~03:15 merge fixer T `f19ba1e` (ค่าตั้งภาษี U3–U8) · conflict `02`/`24` changelog (T → v4.18/v4.22) + default-matrix (capability รวม 55) · verify 285 files / 3,636 tests · migration ใหม่รวม **12 ตัว** (ถึง `20261005120000`) · ⚠️ golden UAT เดิมของ IN-1 (WHT 5850 / 50 ทวิ 15 ใบ) ใช้กับรอบที่สร้างแล้วเท่านั้น (snapshot) — รอบใหม่ใช้ค่าตั้งใหม่ (ฐานไม่รวมใบเสร็จ · 1 ใบต่อผู้รับต่อรอบ)
 - 05/10/2569 ~02:45 SMOKE-W ผ่าน: อัป/ดาวน์โหลดผ่าน signed URL จาก server ทำงานกับ policy เดิมบน cloud · นอก scope ถูกปฏิเสธครบ · ไม่มี 500 · BUG-144/145 (S5) · ขยะ Storage +1 (`…/76ef07bb…/bundle_doc/…SMOKE-W-bundle.pdf`)
 - 05/10/2569 ~02:30 merge fixer W `ee14b9e` (BUG-143 โค้ด · DEC-014) · `uat/STORAGE_SETUP.md` §2 ยกเลิก policy เดิม
