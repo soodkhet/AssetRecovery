@@ -499,7 +499,7 @@ enum CreditNoteType {
 enum WhtFilingForm {
   PND3 // บุคคลธรรมดา (ภ.ง.ด.3)
   PND53 // นิติบุคคล (ภ.ง.ด.53)
-  PND1 // เงินได้ 40(2) (ภ.ง.ด.1) — มติ PO 05/10/2569 (UAT U7)
+  PND1 // เงินได้ 40(1)/40(2) (ภ.ง.ด.1) — มติ PO 05/10/2569 (UAT U7 · U33)
 
   @@map("wht_filing_form")
 }
@@ -516,7 +516,7 @@ enum WhtCertificateMode {
 enum WhtIncomeTypeMode {
   all_40_8 // 40(8) ทั้งหมด (ค่าเริ่มต้น)
   all_40_2 // 40(2) ทั้งหมด
-  by_team_side // inhouse = 40(2) · outsource = 40(8)
+  by_team_side // เลือกประเภทเงินได้ต่อประเภททีม (UAT U33 — ค่าเริ่มต้น inhouse 40(2) · outsource 40(8))
 
   @@map("wht_income_type_mode")
 }
@@ -525,6 +525,7 @@ enum WhtIncomeTypeMode {
 enum WhtIncomeCategory {
   sec_40_8
   sec_40_2
+  sec_40_1 // เงินเดือน/ค่าจ้าง 40(1) — กติกาเดียวกับ 40(2) (มติ PO 05/10/2569 UAT U33)
 
   @@map("wht_income_category")
 }
@@ -1183,6 +1184,10 @@ model WhtPolicyHistory {
   incomeTypeMode              WhtIncomeTypeMode  @map("income_type_mode")
   /// เงินได้ 40(2) อัตรา 0% ⇒ ออก 50 ทวิ ยอดภาษี 0 + รวมใน ภ.ง.ด.1 (มติ PO 05/10/2569 UAT U16 · ค่าเริ่มต้น = ออก)
   issueZeroRate402Certificate Boolean            @default(true) @map("issue_zero_rate_40_2_certificate")
+  /// โหมด `by_team_side`: ประเภทเงินได้ของผู้รับฝั่ง inhouse / outsource (มติ PO 05/10/2569 UAT U33)
+  /// ค่าเริ่มต้น = การจับคู่เดิม (inhouse 40(2) · outsource 40(8)) · โหมดอื่นเก็บไว้แต่ไม่ใช้
+  inhouseIncomeCategory       WhtIncomeCategory  @default(sec_40_2) @map("inhouse_income_category")
+  outsourceIncomeCategory     WhtIncomeCategory  @default(sec_40_8) @map("outsource_income_category")
   /// เหตุผลบังคับ (กระทบภาษี — `90` §13)
   reason                      String
 
@@ -2055,7 +2060,8 @@ model PayeeProfile {
   payeeType      PayeeType @default(individual) @map("payee_type")
   /// Payee level ชนะ Plan level (`18` §6.3) — NULL = fallback Plan พร้อม warning
   taxProfileId   String?   @map("tax_profile_id") @db.Uuid
-  /// อัตราหัก 40(2) ต่อคน (สำนักงานบัญชีคำนวณให้ — ไม่คิดอัตราก้าวหน้าในระบบ) · ใช้เมื่อรอบจ่ายจัดผู้รับเป็น 40(2)
+  /// อัตราหัก 40(1)/40(2) ต่อคน (สำนักงานบัญชีคำนวณให้ — ไม่คิดอัตราก้าวหน้าในระบบ) · ใช้เมื่อรอบจ่ายจัดผู้รับเป็น 40(1) หรือ 40(2)
+  /// (ช่องเดียวใช้ทั้งสองประเภท — ผู้รับหนึ่งคนอยู่ประเภทเดียวต่อรอบ · มติ PO 05/10/2569 UAT U33)
   /// NULL = ยังไม่กรอก ⇒ สร้างรอบจ่ายที่มีผู้รับ 40(2) ไม่ได้ · CHECK 0–100 ใน raw SQL (มติ PO 05/10/2569 UAT U7)
   wht402Pct      Decimal?  @map("wht_40_2_pct") @db.Decimal(5, 2)
 
@@ -2298,6 +2304,9 @@ model PayoutBatch {
   whtIncomeTypeMode              WhtIncomeTypeMode?  @map("wht_income_type_mode")
   /// snapshot ค่าตั้ง "40(2) อัตรา 0% ออก 50 ทวิ" (มติ PO 05/10/2569 UAT U16) — NULL = รอบเก่า (ไม่ออก · พฤติกรรมเดิม)
   whtIssueZeroRate402Certificate Boolean?            @map("wht_issue_zero_rate_40_2_certificate")
+  /// snapshot การจับคู่ประเภทเงินได้ต่อประเภททีม (มติ PO 05/10/2569 UAT U33) — NULL = รอบเก่า (inhouse 40(2) · outsource 40(8))
+  whtInhouseIncomeCategory       WhtIncomeCategory?  @map("wht_inhouse_income_category")
+  whtOutsourceIncomeCategory     WhtIncomeCategory?  @map("wht_outsource_income_category")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid

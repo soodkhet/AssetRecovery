@@ -84,7 +84,7 @@ export function MarkWhtFiledModal({
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
             <div className="text-xs font-bold text-slate-500">ภ.ง.ด.1</div>
             <div className="mt-1 text-xl font-extrabold text-slate-700">{fmtSatangSymbol(summary.pnd1Satang)}</div>
-            <div className="mt-1 text-[10px] text-slate-400">เงินได้ 40(2)</div>
+            <div className="mt-1 text-[10px] text-slate-400">เงินได้ 40(1)/40(2)</div>
           </div>
         </div>
 

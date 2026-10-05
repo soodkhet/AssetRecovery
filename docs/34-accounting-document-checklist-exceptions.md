@@ -14,6 +14,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Exception (info/warning/critical), Authorized Exception เป็น entity แยก, state `open→in_progress→resolved` |
 | v2 | 03/07/2569 | **แก้ไขสำคัญ**: (1) ตัดสถานะ `in_progress` ออก — ไม่มีจริงใน enum `exception_status` ของ schema (2) **ยุบ "Authorized Exception Record" เข้าเป็น field ในตาราง `exceptions` เอง** (`authorized_by`/`authorized_at`/`authorize_note`) ไม่ใช่ entity แยกอีกต่อไป ตรงกับ schema จริง (3) **authorize แล้ว status เปลี่ยนเป็น `authorized` ทันที** (ไม่ใช่ยัง `open` แบบเดิม) — ยืนยันกับ Product Owner แล้ว พร้อมเพิ่มมาตรการกันปัญหา "หายเงียบ": `authorized` ต้องแสดงแยกจาก `resolved` เสมอในทุกรายงาน และ**ไม่สืบทอดข้ามรอบบัญชีใหม่** — ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.12 |
 | v2.1 | 04/07/2569 | **เติม §14**: `PATCH /api/exceptions/:id` (แก้ไขรายละเอียด level/title/description/module ขณะยัง `open`) — endpoint นี้อยู่ในไฟล์ 27 §6.13 มาตลอดและสอดคล้องกับ §8 (ฟอร์มสร้าง/แก้ไข) + §12 (สิทธิ์ "สร้าง/แก้ไข/resolve") แต่ตกหล่นจากตาราง API ของไฟล์นี้ — sync สองทางกับไฟล์ 27 v3 แล้ว (ฝั่ง 27 เติม `/resolve` ที่ขาด) |
+| v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (U31 · BUG-129)**: ไฟล์ `08_Document_Checklist` แสดง `authorized` เป็น "อนุญาตปิดงวด — ยังรอเอกสาร" แยกจาก "ครบถ้วน" (ตามกติกา §6.3 แสดง authorized แยกจาก resolved เสมอ) — รายละเอียดไฟล์ 37 §6.1 |
 
 ขอบเขตเอกสารนี้: รวมรายการ "ปัญหา/ข้อมูลไม่ครบ" ทั้งระบบเป็นจุดเดียว (Exception) ให้บัญชีไล่แก้ก่อนปิดงวด — เป็นฐานที่ไฟล์ 14 (Dashboard) และ 30 (Monthly Close) ใช้เช็คว่าพร้อม Export Accounting Pack หรือยัง
 

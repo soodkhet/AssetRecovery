@@ -18,7 +18,12 @@ import {
 import { MAX_SLA_ALERT_HOURS, MIN_SLA_ALERT_HOURS } from '@/lib/settings/sla-policy'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
-import { WHT_CERTIFICATE_MODES, WHT_INCOME_TYPE_MODES, WHT_POLICY_EXPENSE_TYPES } from '@/lib/settings/wht-policy'
+import {
+  WHT_CERTIFICATE_MODES,
+  WHT_INCOME_TYPE_MODES,
+  WHT_POLICY_EXPENSE_TYPES,
+  WHT_TEAM_SIDE_INCOME_CATEGORIES,
+} from '@/lib/settings/wht-policy'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของการตั้งค่าการเงิน/บัญชี (ไฟล์ 13 · Rule 04 · Rule 13)
@@ -288,6 +293,12 @@ export const whtPolicyCreateSchema = z.object({
   incomeTypeMode: z.enum(WHT_INCOME_TYPE_MODES),
   /** 40(2) อัตรา 0% ⇒ ออก 50 ทวิ ยอดภาษี 0 + รวมใน ภ.ง.ด.1 (มติ PO 05/10/2569 UAT U16) — ไม่ส่ง = ออก (ค่าเริ่มต้น) */
   issueZeroRate402Certificate: z.boolean().default(true),
+  /**
+   * โหมดแยกตามประเภททีม: ประเภทเงินได้ของ inhouse / outsource (มติ PO 05/10/2569 UAT U33)
+   * เลือกได้ 40(1)/40(2)/40(8) แยกกัน · ไม่ส่ง = การจับคู่เดิม (inhouse 40(2) · outsource 40(8))
+   */
+  inhouseIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_2'),
+  outsourceIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_8'),
   reason: reasonSchema,
 })
 

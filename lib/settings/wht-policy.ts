@@ -9,10 +9,13 @@ import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
  *    (คอมมิชชัน/เบี้ยเสี่ยง/น้ำมัน/เบี้ยเลี้ยง) รวม · ค่าที่พัก/เบิกตามใบเสร็จ/รายการกรอกเอง **ไม่รวม**
  *    (เงินคืนค่าใช้จ่ายที่จ่ายแทนบริษัทตามใบเสร็จไม่ใช่เงินได้ของผู้รับ) — รายการที่ไม่รวมยังจ่ายตามปกติ
  * 2. **การออก 50 ทวิ** (U4) — ต่อผู้รับต่อรอบจ่าย (ค่าเริ่มต้น) / ต่อรายการ (พฤติกรรมเดิม)
- * 3. **ประเภทเงินได้** (U5/U7) — 40(8) ทั้งหมด (ค่าเริ่มต้น) / 40(2) ทั้งหมด / แยกตามประเภททีม
- *    (inhouse = 40(2) · outsource = 40(8)) · 40(2) ใช้อัตราต่อคนจาก `payee_profiles.wht_40_2_pct`
- *    ไม่คำนวณอัตราก้าวหน้า (Hybrid Boundary — สำนักงานบัญชีคำนวณให้) · ยื่น ภ.ง.ด.1
- * 4. **40(2) อัตรา 0% ออก 50 ทวิ** (U16) — เปิด (ค่าเริ่มต้น) = ผู้รับ 40(2) ที่อัตรา 0% ได้ใบ 50 ทวิ
+ * 3. **ประเภทเงินได้** (U5/U7/U33) — 40(8) ทั้งหมด (ค่าเริ่มต้น) / 40(2) ทั้งหมด / แยกตามประเภททีม
+ *    — โหมดแยกตามประเภททีม **เลือกประเภทเงินได้ของ inhouse / outsource เองแยกกัน** จาก 40(1)/40(2)/40(8)
+ *    (U33 · ค่าเริ่มต้นของการจับคู่ inhouse = 40(2) · outsource = 40(8) = พฤติกรรมก่อน U33)
+ *    · 40(1) และ 40(2) ใช้กติกาเดียวกัน (`usesPerPayeeWhtRate()`): อัตราต่อคนจาก `payee_profiles.wht_40_2_pct`
+ *    (ช่องเดียวกัน — ผู้รับหนึ่งคนอยู่ประเภทเดียวต่อรอบ) ไม่มีเกณฑ์ ฿1,000 ไม่คำนวณอัตราก้าวหน้า
+ *    (Hybrid Boundary — สำนักงานบัญชีคำนวณให้) · ยื่น ภ.ง.ด.1
+ * 4. **40(1)/40(2) อัตรา 0% ออก 50 ทวิ** (U16 · U33 ขยายถึง 40(1)) — เปิด (ค่าเริ่มต้น) = ผู้รับ 40(1)/40(2) ที่อัตรา 0% ได้ใบ 50 ทวิ
  *    ยอดภาษี 0 และนับในสรุป ภ.ง.ด.1 (ผู้รับใช้ยื่น ภ.ง.ด.90/91) · ปิด = ไม่ออก (พฤติกรรมเดิม) ·
  *    40(8) ที่ต่ำกว่าเกณฑ์ ฿1,000 **ไม่เกี่ยว** — ยังไม่ออกใบเหมือนเดิม
  *
@@ -24,7 +27,9 @@ import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
 /** ค่าตรง enum `wht_certificate_mode` / `wht_income_type_mode` / `wht_income_category` ของ `02` §3 */
 export const WHT_CERTIFICATE_MODES = ['per_payee_batch', 'per_item'] as const
 export const WHT_INCOME_TYPE_MODES = ['all_40_8', 'all_40_2', 'by_team_side'] as const
-export const WHT_INCOME_CATEGORIES = ['sec_40_8', 'sec_40_2'] as const
+export const WHT_INCOME_CATEGORIES = ['sec_40_8', 'sec_40_2', 'sec_40_1'] as const
+/** ตัวเลือกประเภทเงินได้ต่อประเภททีมในโหมด `by_team_side` (มติ PO 05/10/2569 UAT U33) — เรียงตามมาตรา */
+export const WHT_TEAM_SIDE_INCOME_CATEGORIES = ['sec_40_1', 'sec_40_2', 'sec_40_8'] as const
 
 export type WhtCertificateMode = (typeof WHT_CERTIFICATE_MODES)[number]
 export type WhtIncomeTypeMode = (typeof WHT_INCOME_TYPE_MODES)[number]
@@ -46,8 +51,12 @@ export interface WhtPolicyValues {
   baseExpenseTypes: readonly ExpenseType[]
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
-  /** เงินได้ 40(2) อัตรา 0% ⇒ ออก 50 ทวิ ยอดภาษี 0 + รวมใน ภ.ง.ด.1 (U16) */
+  /** เงินได้ 40(1)/40(2) อัตรา 0% ⇒ ออก 50 ทวิ ยอดภาษี 0 + รวมใน ภ.ง.ด.1 (U16 · U33) */
   issueZeroRate402Certificate: boolean
+  /** โหมด `by_team_side`: ประเภทเงินได้ของผู้รับฝั่ง inhouse (U33) — โหมดอื่นเก็บไว้แต่ไม่ใช้ */
+  inhouseIncomeCategory: WhtIncomeCategory
+  /** โหมด `by_team_side`: ประเภทเงินได้ของผู้รับฝั่ง outsource (U33) — โหมดอื่นเก็บไว้แต่ไม่ใช้ */
+  outsourceIncomeCategory: WhtIncomeCategory
 }
 
 /** ค่าเริ่มต้นตามมติ (ใช้เมื่อองค์กรยังไม่เคยตั้งค่า — ไม่มีแถวใน `wht_policy_history`) */
@@ -56,6 +65,8 @@ export const DEFAULT_WHT_POLICY: WhtPolicyValues = {
   certificateMode: 'per_payee_batch',
   incomeTypeMode: 'all_40_8',
   issueZeroRate402Certificate: true,
+  inhouseIncomeCategory: 'sec_40_2',
+  outsourceIncomeCategory: 'sec_40_8',
 }
 
 /**
@@ -67,6 +78,9 @@ export const LEGACY_WHT_POLICY: WhtPolicyValues = {
   certificateMode: 'per_item',
   incomeTypeMode: 'all_40_8',
   issueZeroRate402Certificate: false,
+  // การจับคู่ก่อน U33 (fix ไว้ในโค้ด) — รอบเก่าที่ snapshot การจับคู่เป็น NULL ตีความตามนี้
+  inhouseIncomeCategory: 'sec_40_2',
+  outsourceIncomeCategory: 'sec_40_8',
 }
 
 export const WHT_CERTIFICATE_MODE_LABEL: Record<WhtCertificateMode, string> = {
@@ -77,19 +91,30 @@ export const WHT_CERTIFICATE_MODE_LABEL: Record<WhtCertificateMode, string> = {
 export const WHT_INCOME_TYPE_MODE_LABEL: Record<WhtIncomeTypeMode, string> = {
   all_40_8: 'มาตรา 40(8) ทั้งหมด',
   all_40_2: 'มาตรา 40(2) ทั้งหมด',
-  by_team_side: 'แยกตามประเภททีม (Inhouse = 40(2) · Outsource = 40(8))',
+  by_team_side: 'แยกตามประเภททีม (เลือกประเภทเงินได้ของ Inhouse / Outsource เอง)',
 }
 
 export const WHT_INCOME_CATEGORY_LABEL: Record<WhtIncomeCategory, string> = {
-  sec_40_8: 'มาตรา 40(8)',
+  sec_40_1: 'มาตรา 40(1)',
   sec_40_2: 'มาตรา 40(2)',
+  sec_40_8: 'มาตรา 40(8)',
 }
 
 /** ป้ายของค่าตั้ง U16 บนหน้าตั้งค่า/รายละเอียดรอบจ่าย */
-export const ISSUE_ZERO_RATE_40_2_LABEL = 'เงินได้ 40(2) อัตรา 0%: ออก 50 ทวิ (ยอดภาษี 0) และรวมใน ภ.ง.ด.1'
+export const ISSUE_ZERO_RATE_40_2_LABEL = 'เงินได้ 40(1)/40(2) อัตรา 0%: ออก 50 ทวิ (ยอดภาษี 0) และรวมใน ภ.ง.ด.1'
 
 /** ข้อความประเภทเงินได้บนใบ 50 ทวิ ของ 40(2) — 40(8) ใช้ `income_type` ของ Tax Profile ตามเดิม */
 export const INCOME_TYPE_TEXT_40_2 = 'ค่าธรรมเนียม ค่านายหน้า มาตรา 40(2)'
+/** ข้อความประเภทเงินได้บนใบ 50 ทวิ ของ 40(1) (มติ PO 05/10/2569 UAT U33) — แถวที่ 1 ของแบบ 50 ทวิ */
+export const INCOME_TYPE_TEXT_40_1 = 'เงินเดือน ค่าจ้าง เบี้ยเลี้ยง โบนัส ฯลฯ มาตรา 40(1)'
+
+/**
+ * ประเภทเงินได้ที่ใช้ **อัตราต่อคน** (`payee_profiles.wht_40_2_pct`) · ไม่มีเกณฑ์ขั้นต่ำ · ยื่น **ภ.ง.ด.1**
+ * = 40(1) และ 40(2) (มติ PO 05/10/2569 UAT U7 · U33 "40(1) ใช้กติกาเดียวกับ 40(2)") · 40(8) ใช้ Tax Profile
+ */
+export function usesPerPayeeWhtRate(category: WhtIncomeCategory | null | undefined): boolean {
+  return category === 'sec_40_1' || category === 'sec_40_2'
+}
 
 /** อยู่ในฐาน WHT หรือไม่ — `null` (เงินทดรองจ่าย ไม่มีชนิด) ไม่ใช่เงินได้ ⇒ ไม่อยู่ในฐานเสมอ */
 export function isInWhtBase(policy: Pick<WhtPolicyValues, 'baseExpenseTypes'>, expenseType: ExpenseType | null): boolean {
@@ -98,13 +123,19 @@ export function isInWhtBase(policy: Pick<WhtPolicyValues, 'baseExpenseTypes'>, e
 }
 
 /**
- * ประเภทเงินได้ของผู้รับ ณ วันสร้างรอบ (U5) — `side` คือฝั่งของผู้รับที่ resolve แล้ว
- * (`resolvePayoutSide()` อิงทีม/role ของผู้รับ) · ไม่มีฝั่ง ⇒ 40(8) (ค่าเริ่มต้นตามมติ)
+ * ประเภทเงินได้ของผู้รับ ณ วันสร้างรอบ (U5 · U33) — `side` คือฝั่งของผู้รับที่ resolve แล้ว
+ * (`resolvePayoutSide()` อิงทีม/role ของผู้รับ) · โหมด `by_team_side` ใช้การจับคู่ที่ตั้งไว้ต่อประเภททีม
+ * · ไม่มีฝั่ง ⇒ 40(8) (ค่าเริ่มต้นตามมติ)
  */
-export function resolveIncomeCategory(mode: WhtIncomeTypeMode, side: PayoutBatchSide | null): WhtIncomeCategory {
-  if (mode === 'all_40_2') return 'sec_40_2'
-  if (mode === 'all_40_8') return 'sec_40_8'
-  return side === 'inhouse' ? 'sec_40_2' : 'sec_40_8'
+export function resolveIncomeCategory(
+  policy: Pick<WhtPolicyValues, 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
+  side: PayoutBatchSide | null,
+): WhtIncomeCategory {
+  if (policy.incomeTypeMode === 'all_40_2') return 'sec_40_2'
+  if (policy.incomeTypeMode === 'all_40_8') return 'sec_40_8'
+  if (side === 'inhouse') return policy.inhouseIncomeCategory
+  if (side === 'outsource') return policy.outsourceIncomeCategory
+  return 'sec_40_8'
 }
 
 // ── effective-dated (U8 — แบบ `vat_rate_history`) ──────────────────────────
@@ -162,6 +193,8 @@ export function toWhtPolicyAuditPayload(values: WhtPolicyValues & { effectiveFro
     certificate_mode: values.certificateMode,
     income_type_mode: values.incomeTypeMode,
     issue_zero_rate_40_2_certificate: values.issueZeroRate402Certificate,
+    inhouse_income_category: values.inhouseIncomeCategory,
+    outsource_income_category: values.outsourceIncomeCategory,
   }
 }
 
@@ -175,6 +208,9 @@ export function payoutBatchWhtPolicy(snapshot: {
   whtIncomeTypeMode: WhtIncomeTypeMode | null
   /** NULL = รอบที่สร้างก่อนมีค่าตั้ง U16 ⇒ ไม่ออกใบ 0% (พฤติกรรมเดิม) */
   whtIssueZeroRate402Certificate: boolean | null
+  /** NULL = รอบที่สร้างก่อนมีค่าตั้ง U33 ⇒ การจับคู่เดิม inhouse 40(2) · outsource 40(8) */
+  whtInhouseIncomeCategory: WhtIncomeCategory | null
+  whtOutsourceIncomeCategory: WhtIncomeCategory | null
 }): WhtPolicyValues {
   return {
     baseExpenseTypes: snapshot.whtBaseExpenseTypes ?? LEGACY_WHT_POLICY.baseExpenseTypes,
@@ -182,5 +218,7 @@ export function payoutBatchWhtPolicy(snapshot: {
     incomeTypeMode: snapshot.whtIncomeTypeMode ?? LEGACY_WHT_POLICY.incomeTypeMode,
     issueZeroRate402Certificate:
       snapshot.whtIssueZeroRate402Certificate ?? LEGACY_WHT_POLICY.issueZeroRate402Certificate,
+    inhouseIncomeCategory: snapshot.whtInhouseIncomeCategory ?? LEGACY_WHT_POLICY.inhouseIncomeCategory,
+    outsourceIncomeCategory: snapshot.whtOutsourceIncomeCategory ?? LEGACY_WHT_POLICY.outsourceIncomeCategory,
   }
 }

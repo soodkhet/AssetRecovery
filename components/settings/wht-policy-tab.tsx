@@ -32,18 +32,22 @@ import type { WhtPolicyOverviewDto } from '@/lib/settings/types'
 import {
   WHT_CERTIFICATE_MODES,
   WHT_CERTIFICATE_MODE_LABEL,
+  WHT_INCOME_CATEGORY_LABEL,
   WHT_INCOME_TYPE_MODES,
   WHT_INCOME_TYPE_MODE_LABEL,
   WHT_POLICY_EXPENSE_TYPES,
+  WHT_TEAM_SIDE_INCOME_CATEGORIES,
   ISSUE_ZERO_RATE_40_2_LABEL,
   normalizeBaseExpenseTypes,
+  usesPerPayeeWhtRate,
   type WhtCertificateMode,
+  type WhtIncomeCategory,
   type WhtIncomeTypeMode,
   type WhtPolicyValues,
 } from '@/lib/settings/wht-policy'
 
 /**
- * แท็บ "ค่าตั้งภาษีหัก ณ ที่จ่าย" (`13` §6.4.2 — มติ PO 05/10/2569 UAT U3/U4/U5/U7/U8)
+ * แท็บ "ค่าตั้งภาษีหัก ณ ที่จ่าย" (`13` §6.4.2 — มติ PO 05/10/2569 UAT U3/U4/U5/U7/U8/U33)
  *
  * effective-dated แบบอัตรา VAT แต่ **insert-only**: แก้ค่า = เพิ่มชุดใหม่พร้อมวันที่มีผล (ประวัติไม่ถูกแก้/ลบ)
  * · มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล · รอบที่สร้างแล้วใช้ค่าที่ snapshot ไว้ · แก้ได้เฉพาะ Superadmin/บริหาร
@@ -58,6 +62,8 @@ interface FormState {
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
   issueZeroRate402Certificate: boolean
+  inhouseIncomeCategory: WhtIncomeCategory
+  outsourceIncomeCategory: WhtIncomeCategory
   reason: string
 }
 
@@ -68,6 +74,14 @@ function baseTypesText(types: readonly ExpenseType[]): string {
 /** มติ PO 05/10/2569 UAT U16 */
 function zeroRateText(issue: boolean): string {
   return issue ? 'ออก 50 ทวิ (ภาษี 0) + รวมใน ภ.ง.ด.1' : 'ไม่ออก 50 ทวิ'
+}
+
+/** ประเภทเงินได้ที่แสดงบนหน้าจอ — โหมดแยกตามประเภททีมแสดงการจับคู่ที่ตั้งไว้ (มติ PO 05/10/2569 UAT U33) */
+function incomeTypeText(
+  values: Pick<WhtPolicyValues, 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
+): string {
+  if (values.incomeTypeMode !== 'by_team_side') return WHT_INCOME_TYPE_MODE_LABEL[values.incomeTypeMode]
+  return `แยกตามประเภททีม: Inhouse = ${WHT_INCOME_CATEGORY_LABEL[values.inhouseIncomeCategory]} · Outsource = ${WHT_INCOME_CATEGORY_LABEL[values.outsourceIncomeCategory]}`
 }
 
 function PolicySummary({ values }: { values: WhtPolicyValues }) {
@@ -85,10 +99,10 @@ function PolicySummary({ values }: { values: WhtPolicyValues }) {
       </div>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">ประเภทเงินได้</dt>
-        <dd className="mt-1 text-slate-900">{WHT_INCOME_TYPE_MODE_LABEL[values.incomeTypeMode]}</dd>
+        <dd className="mt-1 text-slate-900">{incomeTypeText(values)}</dd>
       </div>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <dt className="font-semibold text-slate-500">40(2) อัตรา 0%</dt>
+        <dt className="font-semibold text-slate-500">40(1)/40(2) อัตรา 0%</dt>
         <dd className="mt-1 text-slate-900">{zeroRateText(values.issueZeroRate402Certificate)}</dd>
       </div>
     </dl>
@@ -140,6 +154,8 @@ export function WhtPolicyTab() {
       certificateMode: overview.current.certificateMode,
       incomeTypeMode: overview.current.incomeTypeMode,
       issueZeroRate402Certificate: overview.current.issueZeroRate402Certificate,
+      inhouseIncomeCategory: overview.current.inhouseIncomeCategory,
+      outsourceIncomeCategory: overview.current.outsourceIncomeCategory,
       reason: '',
     })
     setErrors({})
@@ -192,7 +208,7 @@ export function WhtPolicyTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">ค่าตั้งภาษีหัก ณ ที่จ่าย (Effective-dated)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ฐาน WHT · การออกหนังสือรับรอง 50 ทวิ · ประเภทเงินได้ · 40(2) อัตรา 0% — มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล
+            ฐาน WHT · การออกหนังสือรับรอง 50 ทวิ · ประเภทเงินได้ · 40(1)/40(2) อัตรา 0% — มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล
             รอบที่สร้างแล้วใช้ค่าเดิมเสมอ
           </p>
         </div>
@@ -214,7 +230,7 @@ export function WhtPolicyTab() {
       )}
 
       <InlineAlert tone="info" title="ระบบเตรียมข้อมูลภาษีเท่านั้น">
-        เงินได้ 40(2) ใช้ &quot;อัตราหัก 40(2)&quot; ที่กรอกในข้อมูลผู้รับเงินแต่ละคน (สำนักงานบัญชีคำนวณให้ ระบบไม่คิดอัตราก้าวหน้า)
+        เงินได้ 40(1) และ 40(2) ใช้ &quot;อัตราหัก 40(1)/40(2)&quot; ที่กรอกในข้อมูลผู้รับเงินแต่ละคน (สำนักงานบัญชีคำนวณให้ ระบบไม่คิดอัตราก้าวหน้า)
         และยื่น ภ.ง.ด.1 · เงินได้ 40(8) หักตามกติกาภาษีของผู้รับ (ไม่หักเมื่อฐานต่ำกว่าเกณฑ์ต่อคนต่อรอบ)
       </InlineAlert>
 
@@ -226,7 +242,7 @@ export function WhtPolicyTab() {
               <Th>ฐาน WHT (รวม)</Th>
               <Th>การออก 50 ทวิ</Th>
               <Th>ประเภทเงินได้</Th>
-              <Th>40(2) อัตรา 0%</Th>
+              <Th>40(1)/40(2) อัตรา 0%</Th>
               <Th>เหตุผล / ผู้บันทึก</Th>
               <Th className="text-right">สถานะ</Th>
             </Tr>
@@ -237,7 +253,7 @@ export function WhtPolicyTab() {
             error={error}
             isEmpty={history.length === 0}
             emptyTitle="ยังไม่เคยตั้งค่า — ใช้ค่าเริ่มต้น"
-            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(2) อัตรา 0% ออก 50 ทวิ"
+            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(1)/40(2) อัตรา 0% ออก 50 ทวิ"
             onRetry={
               <Button
                 variant="secondary"
@@ -265,7 +281,7 @@ export function WhtPolicyTab() {
                     <span className="text-xs text-slate-700">{WHT_CERTIFICATE_MODE_LABEL[item.certificateMode]}</span>
                   </Td>
                   <Td>
-                    <span className="text-xs text-slate-700">{WHT_INCOME_TYPE_MODE_LABEL[item.incomeTypeMode]}</span>
+                    <span className="text-xs text-slate-700">{incomeTypeText(item)}</span>
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{zeroRateText(item.issueZeroRate402Certificate)}</span>
@@ -380,6 +396,51 @@ export function WhtPolicyTab() {
               </Select>
             </Field>
 
+            {form.incomeTypeMode === 'by_team_side' && (
+              <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+                <Field
+                  id="wht-policy-inhouse"
+                  label="ประเภทเงินได้ของทีม Inhouse"
+                  required
+                  error={errors.inhouseIncomeCategory}
+                >
+                  <Select
+                    id="wht-policy-inhouse"
+                    value={form.inhouseIncomeCategory}
+                    onChange={(event) => set('inhouseIncomeCategory', event.target.value as WhtIncomeCategory)}
+                  >
+                    {WHT_TEAM_SIDE_INCOME_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {WHT_INCOME_CATEGORY_LABEL[category]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field
+                  id="wht-policy-outsource"
+                  label="ประเภทเงินได้ของทีม Outsource"
+                  required
+                  error={errors.outsourceIncomeCategory}
+                >
+                  <Select
+                    id="wht-policy-outsource"
+                    value={form.outsourceIncomeCategory}
+                    onChange={(event) => set('outsourceIncomeCategory', event.target.value as WhtIncomeCategory)}
+                  >
+                    {WHT_TEAM_SIDE_INCOME_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {WHT_INCOME_CATEGORY_LABEL[category]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <p className="text-[11px] text-slate-500 sm:col-span-2">
+                  ตั้งตามคำแนะนำของสำนักงานบัญชี — 40(1)/40(2) หักตามอัตราต่อคนและยื่น ภ.ง.ด.1 · 40(8) หักตามกติกาภาษีของผู้รับ
+                  และยื่น ภ.ง.ด.3/53
+                </p>
+              </div>
+            )}
+
             <div>
               <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
                 <input
@@ -392,14 +453,17 @@ export function WhtPolicyTab() {
                 {ISSUE_ZERO_RATE_40_2_LABEL}
               </label>
               <p className="mt-1.5 text-[11px] text-slate-500">
-                ผู้รับเงินได้ 40(2) ที่อัตราหัก 0% จะได้หนังสือรับรองยอดภาษี 0 (เงินได้ = ยอดที่จ่ายในฐาน) เพื่อใช้ยื่น ภ.ง.ด.90/91
+                ผู้รับเงินได้ 40(1)/40(2) ที่อัตราหัก 0% จะได้หนังสือรับรองยอดภาษี 0 (เงินได้ = ยอดที่จ่ายในฐาน) เพื่อใช้ยื่น ภ.ง.ด.90/91
                 และนับในสรุป ภ.ง.ด.1 · ไม่เกี่ยวกับเงินได้ 40(8) ที่ต่ำกว่าเกณฑ์ขั้นต่ำ (ยังไม่ออกหนังสือรับรอง)
               </p>
             </div>
 
-            {form.incomeTypeMode !== 'all_40_8' && (
-              <InlineAlert tone="warning" title="ผู้รับเงิน 40(2) ต้องมีอัตราหักก่อนสร้างรอบจ่าย">
-                กรอก &quot;อัตราหัก 40(2)&quot; ในข้อมูลผู้รับเงินทุกคนที่เข้าข่าย — ถ้าขาด ระบบจะไม่ให้สร้างรอบจ่ายและแสดงรายชื่อ
+            {(form.incomeTypeMode === 'all_40_2' ||
+              (form.incomeTypeMode === 'by_team_side' &&
+                (usesPerPayeeWhtRate(form.inhouseIncomeCategory) ||
+                  usesPerPayeeWhtRate(form.outsourceIncomeCategory)))) && (
+              <InlineAlert tone="warning" title="ผู้รับเงิน 40(1)/40(2) ต้องมีอัตราหักก่อนสร้างรอบจ่าย">
+                กรอก &quot;อัตราหัก 40(1)/40(2)&quot; ในข้อมูลผู้รับเงินทุกคนที่เข้าข่าย — ถ้าขาด ระบบจะไม่ให้สร้างรอบจ่ายและแสดงรายชื่อ
               </InlineAlert>
             )}
 

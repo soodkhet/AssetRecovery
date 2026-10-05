@@ -637,6 +637,7 @@ async function checklistRowsOf(organizationId: string, scope: PeriodScope): Prom
       level: true,
       status: true,
       title: true,
+      authorizeNote: true,
       resolvedByUser: { select: { fullName: true } },
       createdByUser: { select: { fullName: true } },
     },
@@ -650,6 +651,7 @@ async function checklistRowsOf(organizationId: string, scope: PeriodScope): Prom
     title: row.title,
     // สคีมาไม่มีคอลัมน์ "ผู้รับผิดชอบ" — ใช้ผู้ที่ปิดรายการ ถ้ายังไม่ปิดใช้ผู้บันทึก (`34` §7.1)
     responsibleName: row.resolvedByUser?.fullName ?? row.createdByUser.fullName,
+    authorizeNote: row.authorizeNote,
   }))
 }
 

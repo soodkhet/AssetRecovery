@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { calculatePayeeBatchWht } from '@/lib/finance/wht-calc'
-import { isInWhtBase, DEFAULT_WHT_POLICY, resolveIncomeCategory } from '@/lib/settings/wht-policy'
+import {
+  DEFAULT_WHT_POLICY,
+  isInWhtBase,
+  resolveIncomeCategory,
+  usesPerPayeeWhtRate,
+  type WhtIncomeCategory,
+  type WhtIncomeTypeMode,
+} from '@/lib/settings/wht-policy'
 
 /**
  * `22` §6.9 — ค่าตั้งภาษี มติ PO 05/10/2569 (UAT U3/U5/U7)
@@ -91,26 +98,108 @@ describe('40(2) อัตราต่อคน (U7)', () => {
   })
 })
 
+/** ค่าตั้งโหมดประเภทเงินได้ + การจับคู่ต่อประเภททีมค่าเริ่มต้น (inhouse 40(2) · outsource 40(8)) */
+function mode(
+  incomeTypeMode: WhtIncomeTypeMode,
+  inhouseIncomeCategory: WhtIncomeCategory = 'sec_40_2',
+  outsourceIncomeCategory: WhtIncomeCategory = 'sec_40_8',
+) {
+  return { incomeTypeMode, inhouseIncomeCategory, outsourceIncomeCategory }
+}
+
 describe('(ง) แยกตามประเภททีม (U5)', () => {
   it('inhouse = 40(2) · outsource = 40(8) · โหมดทั้งหมดไม่สนฝั่ง', () => {
-    expect(resolveIncomeCategory('by_team_side', 'inhouse')).toBe('sec_40_2')
-    expect(resolveIncomeCategory('by_team_side', 'outsource')).toBe('sec_40_8')
-    expect(resolveIncomeCategory('by_team_side', null)).toBe('sec_40_8')
-    expect(resolveIncomeCategory('all_40_2', 'outsource')).toBe('sec_40_2')
-    expect(resolveIncomeCategory('all_40_8', 'inhouse')).toBe('sec_40_8')
+    expect(resolveIncomeCategory(mode('by_team_side'), 'inhouse')).toBe('sec_40_2')
+    expect(resolveIncomeCategory(mode('by_team_side'), 'outsource')).toBe('sec_40_8')
+    expect(resolveIncomeCategory(mode('by_team_side'), null)).toBe('sec_40_8')
+    expect(resolveIncomeCategory(mode('all_40_2'), 'outsource')).toBe('sec_40_2')
+    expect(resolveIncomeCategory(mode('all_40_8'), 'inhouse')).toBe('sec_40_8')
   })
 
   it('ผู้รับ inhouse ฐาน ฿600 อัตรา 2% หัก · ผู้รับ outsource ฐาน ฿600 ต่ำกว่าเกณฑ์ ไม่หัก', () => {
     const inhouse = calculatePayeeBatchWht([line(60_000, true)], {
-      incomeCategory: resolveIncomeCategory('by_team_side', 'inhouse'),
+      incomeCategory: resolveIncomeCategory(mode('by_team_side'), 'inhouse'),
       section402Pct: 2,
     })
     const outsource = calculatePayeeBatchWht([line(60_000, true)], {
-      incomeCategory: resolveIncomeCategory('by_team_side', 'outsource'),
+      incomeCategory: resolveIncomeCategory(mode('by_team_side'), 'outsource'),
       section402Pct: null,
     })
     expect(inhouse.totalWhtSatang).toBe(1200)
     expect(outsource.totalWhtSatang).toBe(0)
     expect(outsource.belowThreshold).toBe(true)
+  })
+})
+
+describe('(ช) U33 — ประเภทเงินได้ต่อประเภททีมเป็นค่าตั้ง + 40(1) (มติ PO 05/10/2569)', () => {
+  const categories: WhtIncomeCategory[] = ['sec_40_1', 'sec_40_2', 'sec_40_8']
+
+  it('ทุกชุดผสม inhouse × outsource (3 × 3) — แต่ละฝั่งได้ประเภทที่ตั้งไว้ · ไม่มีฝั่ง = 40(8)', () => {
+    for (const inhouse of categories) {
+      for (const outsource of categories) {
+        const policy = mode('by_team_side', inhouse, outsource)
+        expect(resolveIncomeCategory(policy, 'inhouse')).toBe(inhouse)
+        expect(resolveIncomeCategory(policy, 'outsource')).toBe(outsource)
+        expect(resolveIncomeCategory(policy, null)).toBe('sec_40_8')
+      }
+    }
+  })
+
+  it('โหมด "ทั้งหมด" ไม่สนการจับคู่ที่เก็บไว้', () => {
+    for (const inhouse of categories) {
+      for (const outsource of categories) {
+        expect(resolveIncomeCategory(mode('all_40_8', inhouse, outsource), 'inhouse')).toBe('sec_40_8')
+        expect(resolveIncomeCategory(mode('all_40_2', inhouse, outsource), 'outsource')).toBe('sec_40_2')
+      }
+    }
+  })
+
+  it('40(1)/40(2) ใช้อัตราต่อคน · 40(8) ไม่ใช้', () => {
+    expect(usesPerPayeeWhtRate('sec_40_1')).toBe(true)
+    expect(usesPerPayeeWhtRate('sec_40_2')).toBe(true)
+    expect(usesPerPayeeWhtRate('sec_40_8')).toBe(false)
+    expect(usesPerPayeeWhtRate(null)).toBe(false)
+  })
+
+  it('40(1) กติกาเดียวกับ 40(2): อัตราต่อคน · ไม่มีเกณฑ์ ฿1,000 · ฐานก่อน VAT', () => {
+    const items = [line(60_000, true), line(20_000, false)]
+    const sec401 = calculatePayeeBatchWht(items, { incomeCategory: 'sec_40_1', section402Pct: 5 })
+    const sec402 = calculatePayeeBatchWht(items, { incomeCategory: 'sec_40_2', section402Pct: 5 })
+    expect(sec401.lines.map((each) => each.whtSatang)).toEqual([3000, 0])
+    expect(sec401.totalWhtSatang).toBe(sec402.totalWhtSatang)
+    expect(sec401.belowThreshold).toBe(false)
+    expect(sec401.incomeCategory).toBe('sec_40_1')
+    expect(sec401.lines[0]!.rate.source).toBe('payee')
+  })
+
+  it('40(1) อัตรา 0% — คิดได้ ภาษี 0', () => {
+    const result = calculatePayeeBatchWht([line(100_000, true)], { incomeCategory: 'sec_40_1', section402Pct: 0 })
+    expect(result.totalWhtSatang).toBe(0)
+    expect(result.lines[0]!.netSatang).toBe(100_000)
+  })
+
+  it('40(1) ไม่มีอัตราต่อคน + มีรายการในฐาน ⇒ คิดไม่ได้ (ผู้เรียกต้องปัดรอบก่อน)', () => {
+    expect(() => calculatePayeeBatchWht([line(100_000, true)], { incomeCategory: 'sec_40_1', section402Pct: null })).toThrow(
+      RangeError,
+    )
+    // ทุกรายการนอกฐาน = ไม่มีอะไรให้หัก ไม่ต้องมีอัตรา
+    expect(
+      calculatePayeeBatchWht([line(100_000, false)], { incomeCategory: 'sec_40_1', section402Pct: null }).totalWhtSatang,
+    ).toBe(0)
+  })
+
+  it('outsource ตั้งเป็น 40(1) ⇒ ฐาน ฿600 ก็หัก (ไม่มีเกณฑ์) · inhouse ตั้งเป็น 40(8) ⇒ ต่ำกว่าเกณฑ์ไม่หัก', () => {
+    const policy = mode('by_team_side', 'sec_40_8', 'sec_40_1')
+    const outsource = calculatePayeeBatchWht([line(60_000, true)], {
+      incomeCategory: resolveIncomeCategory(policy, 'outsource'),
+      section402Pct: 3,
+    })
+    const inhouse = calculatePayeeBatchWht([line(60_000, true)], {
+      incomeCategory: resolveIncomeCategory(policy, 'inhouse'),
+      section402Pct: 3,
+    })
+    expect(outsource.totalWhtSatang).toBe(1800)
+    expect(inhouse.totalWhtSatang).toBe(0)
+    expect(inhouse.belowThreshold).toBe(true)
   })
 })

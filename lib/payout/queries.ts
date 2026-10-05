@@ -59,9 +59,11 @@ import { SettingsError } from '@/lib/settings/errors'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import {
+  LEGACY_WHT_POLICY,
   isInWhtBase,
   normalizeBaseExpenseTypes,
   resolveIncomeCategory,
+  usesPerPayeeWhtRate,
   type WhtIncomeCategory,
   type WhtPolicyValues,
 } from '@/lib/settings/wht-policy'
@@ -108,6 +110,8 @@ const batchSelect = {
   whtCertificateMode: true,
   whtIncomeTypeMode: true,
   whtIssueZeroRate402Certificate: true,
+  whtInhouseIncomeCategory: true,
+  whtOutsourceIncomeCategory: true,
   createdAt: true,
   updatedAt: true,
   bankAccount: { select: { bankName: true, accountNumber: true } },
@@ -174,6 +178,9 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
             incomeTypeMode: row.whtIncomeTypeMode,
             // NULL = รอบที่สร้างก่อนมีค่าตั้ง U16 ⇒ ไม่ออกใบ 0% (พฤติกรรมเดิม)
             issueZeroRate402Certificate: row.whtIssueZeroRate402Certificate ?? false,
+            // NULL = รอบที่สร้างก่อนมีค่าตั้ง U33 ⇒ การจับคู่เดิม (inhouse 40(2) · outsource 40(8))
+            inhouseIncomeCategory: row.whtInhouseIncomeCategory ?? LEGACY_WHT_POLICY.inhouseIncomeCategory,
+            outsourceIncomeCategory: row.whtOutsourceIncomeCategory ?? LEGACY_WHT_POLICY.outsourceIncomeCategory,
           },
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
@@ -371,13 +378,14 @@ async function collectExpenseCandidates(
     indicesByPayee.set(entry.row.payee.id, members)
   })
 
-  // ผู้รับ 40(2) ที่มีรายการในฐานแต่ไม่มีอัตรา ⇒ ปัดทั้งรอบพร้อมรายชื่อ (ไม่เดาอัตรา — Hybrid Boundary)
+  // ผู้รับ 40(1)/40(2) ที่มีรายการในฐานแต่ไม่มีอัตรา ⇒ ปัดทั้งรอบพร้อมรายชื่อ (ไม่เดาอัตรา — Hybrid Boundary)
+  // (มติ PO 05/10/2569 UAT U33 — 40(1) ใช้กติกาเดียวกับ 40(2))
   const missing402: string[] = []
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
-    const category = resolveIncomeCategory(policy.incomeTypeMode, first.side)
+    const category = resolveIncomeCategory(policy, first.side)
     const hasBaseItem = members.some((index) => isInWhtBase(policy, sided[index]!.row.expenseType))
-    if (category === 'sec_40_2' && hasBaseItem && first.row.payee.wht402Pct === null) {
+    if (usesPerPayeeWhtRate(category) && hasBaseItem && first.row.payee.wht402Pct === null) {
       missing402.push(first.row.payee.user.fullName)
     }
   }
@@ -391,7 +399,7 @@ async function collectExpenseCandidates(
   const whtByIndex = new Array<PayeeBatchWhtLine | undefined>(sided.length)
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
-    const incomeCategory = resolveIncomeCategory(policy.incomeTypeMode, first.side)
+    const incomeCategory = resolveIncomeCategory(policy, first.side)
     const { lines } = calculatePayeeBatchWht(
       members.map((index) => {
         const row = sided[index]!.row
@@ -562,6 +570,8 @@ export async function createPayoutBatch(
         whtCertificateMode: whtPolicy.values.certificateMode,
         whtIncomeTypeMode: whtPolicy.values.incomeTypeMode,
         whtIssueZeroRate402Certificate: whtPolicy.values.issueZeroRate402Certificate,
+        whtInhouseIncomeCategory: whtPolicy.values.inhouseIncomeCategory,
+        whtOutsourceIncomeCategory: whtPolicy.values.outsourceIncomeCategory,
         createdBy: user.id,
       },
       select: { id: true },
@@ -639,6 +649,8 @@ export async function createPayoutBatch(
           wht_base_expense_types: normalizeBaseExpenseTypes(whtPolicy.values.baseExpenseTypes),
           wht_certificate_mode: whtPolicy.values.certificateMode,
           wht_income_type_mode: whtPolicy.values.incomeTypeMode,
+          wht_inhouse_income_category: whtPolicy.values.inhouseIncomeCategory,
+          wht_outsource_income_category: whtPolicy.values.outsourceIncomeCategory,
         },
         reason: null,
         ipAddress: context.meta.ipAddress,

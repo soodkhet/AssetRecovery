@@ -1,4 +1,9 @@
-import type { WhtCertificateMode, WhtIncomeTypeMode, WhtPolicyValues } from '@/lib/settings/wht-policy'
+import type {
+  WhtCertificateMode,
+  WhtIncomeCategory,
+  WhtIncomeTypeMode,
+  WhtPolicyValues,
+} from '@/lib/settings/wht-policy'
 import type {
   ExpenseType,
   BankAccountUsage,
@@ -133,6 +138,9 @@ export interface WhtPolicyDto {
   incomeTypeMode: WhtIncomeTypeMode
   /** 40(2) อัตรา 0% ออก 50 ทวิ + รวมใน ภ.ง.ด.1 (U16) */
   issueZeroRate402Certificate: boolean
+  /** โหมดแยกตามประเภททีม: ประเภทเงินได้ของ inhouse / outsource (U33) */
+  inhouseIncomeCategory: WhtIncomeCategory
+  outsourceIncomeCategory: WhtIncomeCategory
   reason: string
   createdAt: string
   createdByName: string
