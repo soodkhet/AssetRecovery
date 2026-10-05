@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { Button, cn } from '@/components/ui'
 import { readEnvelope } from '@/lib/api/envelope'
 import { downloadFile } from '@/lib/imports/download-client'
@@ -38,6 +39,7 @@ export function HandoverDownloadButton({
   /** เต็มความกว้าง (การ์ด) */
   block?: boolean
 }) {
+  const apiUrl = usePortalApiUrl()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const state = portalLotDownloadState({ downloadable, canDownload })
@@ -48,7 +50,7 @@ export function HandoverDownloadButton({
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(portalLotDocumentApiUrl(lotId, kind), { cache: 'no-store' })
+      const response = await fetch(apiUrl(portalLotDocumentApiUrl(lotId, kind)), { cache: 'no-store' })
       const contentType = response.headers.get('content-type') ?? ''
       if (response.ok && !contentType.includes('application/json')) {
         const bytes = await response.arrayBuffer()

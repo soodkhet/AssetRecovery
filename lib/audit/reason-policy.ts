@@ -197,7 +197,7 @@ const NOT_REQUIRED: ReasonRequirement = { required: false }
  * action ที่ระบบใช้บันทึกเหตุการณ์ auth/การเข้าถึง — ไม่ใช่ mutation ข้อมูลธุรกิจ
  * (`access_denied` = พอร์ทัลปฏิเสธ 403 · มติ PO 05/10/2569 O43 D4)
  */
-const AUTH_ACTIONS: readonly AuditAction[] = ['login', 'logout', 'access_denied']
+const AUTH_ACTIONS: readonly AuditAction[] = ['login', 'logout', 'access_denied', 'view_as']
 
 function matchesSensitiveField(target: string, changedFields: readonly string[] | undefined): boolean {
   const config = FIELD_SENSITIVE_TARGETS[target]
@@ -229,6 +229,8 @@ export function reasonRequirement(input: ReasonRequirementInput): ReasonRequirem
 
   // การปฏิเสธการเข้าถึงไม่ใช่การแก้ข้อมูล — ไม่บังคับ reason แม้เป้าหมายเป็นตารางเงิน/ภาษี (O43 D3/D4)
   if (action === 'access_denied') return NOT_REQUIRED
+  // เปิดโหมดดู portal ในฐานะลูกค้า (มติ U59) — อ่านอย่างเดียว ไม่ใช่การแก้ข้อมูลบริษัท
+  if (action === 'view_as') return NOT_REQUIRED
 
   if (REASON_REQUIRED_ACTIONS.includes(action)) {
     return { required: true, sensitivity: targetSensitivity(targetType) ?? undefined, rule: `action:${action}` }

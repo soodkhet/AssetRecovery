@@ -256,6 +256,10 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [companySupervisor, 'view'],
     [companyAdmin, 'view'],
   ],
+
+  // ── นอก matrix: ผู้ใช้ภายในดูพอร์ทัลในฐานะลูกค้า (มติ PO 05/10/2569 U59 · `97` §13.1) ──
+  // ค่าเริ่มต้น = ธุรการ (ช่วยลูกค้า) · Superadmin โดยนิยาม (ไม่มี record) · role ภายในอื่นมอบได้ที่หน้าจัดการ Role
+  view_client_portal_as: [[adminOffice, 'view']],
 }
 
 /**
@@ -280,6 +284,8 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'portal_handover',
   'portal_profile',
   'portal_download',
+  // ผู้ใช้ภายในดูพอร์ทัลในฐานะลูกค้า (มติ PO 05/10/2569 U59)
+  'view_client_portal_as',
 ]
 
 export const DEFAULT_ROLE_CAPABILITIES: readonly DefaultAssignment[] = Object.entries(MATRIX).flatMap(

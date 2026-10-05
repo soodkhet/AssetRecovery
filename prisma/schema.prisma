@@ -617,6 +617,8 @@ enum AuditAction {
   logout
   /// มติ PO 05/10/2569 (O43 D4) — พอร์ทัลบริษัทปฏิเสธการเข้าถึง (403) ต้องบันทึก audit
   access_denied
+  /// มติ PO 05/10/2569 (U59) — ผู้ใช้ภายในเปิด "ดู portal ในฐานะลูกค้า" (ครั้งแรกต่อ session ต่อบริษัท)
+  view_as
 
   @@map("audit_action")
 }

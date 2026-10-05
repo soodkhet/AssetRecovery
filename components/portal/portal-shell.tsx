@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { PortalIcon, PortalLogo } from '@/components/portal/portal-icons'
+import { PortalScopeProvider } from '@/components/portal/portal-scope'
 import { cn } from '@/components/ui/cn'
 import type { PortalSection } from '@/lib/portal/access'
 import {
@@ -15,6 +16,7 @@ import {
   type PortalNavItem,
   type PortalNavKey,
 } from '@/lib/portal/nav'
+import { portalPageHref, stripPortalViewAsPrefix } from '@/lib/portal/view-as'
 
 export interface PortalShellProps {
   companyName: string
@@ -23,6 +25,16 @@ export interface PortalShellProps {
   /** หมวดที่ผู้ใช้เห็น (`visiblePortalSections()` ฝั่ง server) */
   sections: readonly PortalSection[]
   children: ReactNode
+  /** โหมดดูในฐานะลูกค้าของผู้ใช้ภายใน (มติ U59) — ไม่ส่ง = ผู้ใช้บริษัทดู portal ของตัวเอง */
+  viewAs?: PortalShellViewAs
+}
+
+export interface PortalShellViewAs {
+  companyId: string
+  /** บริษัทถูกระงับ — ยังเปิดดูได้แต่ป้ายบนสุดบอกสถานะ */
+  suspended: boolean
+  /** ลิงก์กลับระบบภายใน (หน้าบริษัทไฟแนนซ์) */
+  backHref: string
 }
 
 /**
@@ -33,42 +45,82 @@ export interface PortalShellProps {
  * - Mobile: header 56px (ชื่อหน้า + ชื่อบริษัท + ปุ่มเมนู) · เมนูเลื่อนจากขวา · bottom nav 4 ปุ่มหลัก
  * - แท็บของหมวดที่ไม่มีสิทธิ์ถูก **ซ่อน** · ไม่มีกระดิ่งแจ้งเตือน (`97` §7)
  * - บรรทัด "โหมดดูอย่างเดียว" ท้ายเนื้อหาทุกหน้า (`97` §5)
+ * - โหมดดูในฐานะลูกค้า (มติ U59): ป้ายบนสุดทุกหน้า + ลิงก์ทุกตัวชี้ `/portal/view-as/<id>/...` + API ได้ `?as=<id>`
  */
-export function PortalShell({ companyName, userName, roleName, sections, children }: PortalShellProps) {
+export function PortalShell({ companyName, userName, roleName, sections, children, viewAs }: PortalShellProps) {
   const pathname = usePathname()
-  const activeKey = activePortalNavKey(pathname)
-  const navItems = portalNavItems(sections)
+  const viewAsCompanyId = viewAs?.companyId ?? null
+  const activeKey = activePortalNavKey(stripPortalViewAsPrefix(pathname))
+  const navItems = portalNavItems(sections).map((item) => ({ ...item, href: portalPageHref(item.href, viewAsCompanyId) }))
   const activeItem = navItems.find((item) => item.key === activeKey)
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      <PortalTopBar companyName={companyName} userName={userName} roleName={roleName} />
-      <PortalMobileHeader
-        title={activeItem?.label ?? 'AssetRecovery'}
-        companyName={companyName}
-        userName={userName}
-        roleName={roleName}
-        navItems={navItems}
-        activeKey={activeKey}
-      />
+    <PortalScopeProvider viewAsCompanyId={viewAsCompanyId}>
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        {viewAs !== undefined && <PortalViewAsBanner companyName={companyName} viewAs={viewAs} />}
+        <PortalTopBar
+          companyName={companyName}
+          userName={userName}
+          roleName={roleName}
+          homeHref={portalPageHref(PORTAL_HOME_PATH, viewAsCompanyId)}
+        />
+        <PortalMobileHeader
+          title={activeItem?.label ?? 'AssetRecovery'}
+          companyName={companyName}
+          userName={userName}
+          roleName={roleName}
+          navItems={navItems}
+          activeKey={activeKey}
+        />
 
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-28 sm:px-6 md:py-8 lg:px-8">
-        <PortalTabs items={navItems} activeKey={activeKey} />
-        <div>{children}</div>
-        <PortalReadOnlyNote companyName={companyName} />
-      </main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-4 pb-28 sm:px-6 md:py-8 lg:px-8">
+          <PortalTabs items={navItems} activeKey={activeKey} />
+          <div>{children}</div>
+          <PortalReadOnlyNote companyName={companyName} />
+        </main>
 
-      <PortalBottomNav sections={sections} activeKey={activeKey} />
+        <PortalBottomNav sections={sections} activeKey={activeKey} viewAsCompanyId={viewAsCompanyId} />
+      </div>
+    </PortalScopeProvider>
+  )
+}
+
+/** ป้ายบนสุดของโหมดดูในฐานะลูกค้า (มติ U59) — ผู้ใช้ภายในต้องรู้ตัวตลอดว่ากำลังดูข้อมูลของบริษัทไหน */
+export function PortalViewAsBanner({ companyName, viewAs }: { companyName: string; viewAs: PortalShellViewAs }) {
+  return (
+    <div role="status" className="border-b border-amber-200 bg-amber-50 text-amber-900">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs sm:px-6 lg:px-8">
+        <span className="font-bold">กำลังดูในฐานะ {companyName} (ดูอย่างเดียว)</span>
+        {viewAs.suspended && (
+          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-800">
+            บริษัทนี้ถูกระงับการใช้งาน — ผู้ใช้ของบริษัทเข้าพอร์ทัลไม่ได้
+          </span>
+        )}
+        <span className="text-amber-700">ทุกการเปิดดูและดาวน์โหลดถูกบันทึกในชื่อของท่าน</span>
+        <Link href={viewAs.backHref} className="focus-ring ml-auto rounded font-semibold underline underline-offset-2">
+          กลับระบบภายใน
+        </Link>
+      </div>
     </div>
   )
 }
 
-export function PortalTopBar({ companyName, userName, roleName }: { companyName: string; userName: string; roleName: string }) {
+export function PortalTopBar({
+  companyName,
+  userName,
+  roleName,
+  homeHref = PORTAL_HOME_PATH,
+}: {
+  companyName: string
+  userName: string
+  roleName: string
+  homeHref?: string
+}) {
   return (
     <header className="sticky top-0 z-30 hidden border-b border-slate-200 bg-white md:block">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
-          <Link href={PORTAL_HOME_PATH} className="focus-ring flex min-w-0 items-center gap-3 rounded">
+          <Link href={homeHref} className="focus-ring flex min-w-0 items-center gap-3 rounded">
             <PortalLogo />
             <span className="min-w-0">
               <span className="text-lg font-bold tracking-tight text-slate-900">AssetRecovery</span>
@@ -206,8 +258,16 @@ function PortalMobileHeader({
   )
 }
 
-export function PortalBottomNav({ sections, activeKey }: { sections: readonly PortalSection[]; activeKey: PortalNavKey | null }) {
-  const items = portalBottomNavItems(sections)
+export function PortalBottomNav({
+  sections,
+  activeKey,
+  viewAsCompanyId = null,
+}: {
+  sections: readonly PortalSection[]
+  activeKey: PortalNavKey | null
+  viewAsCompanyId?: string | null
+}) {
+  const items = portalBottomNavItems(sections).map((item) => ({ ...item, href: portalPageHref(item.href, viewAsCompanyId) }))
   return (
     <nav
       aria-label="เมนูหลัก (จอเล็ก)"

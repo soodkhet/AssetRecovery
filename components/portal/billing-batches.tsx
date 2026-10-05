@@ -12,6 +12,7 @@ import {
   InlineAlert,
   LoadingState,
   PageHeader,
+  RefText,
   StatusBadge,
   TBody,
   THead,
@@ -44,6 +45,7 @@ const FILTER_OPTIONS = portalBillingFilterOptions()
  *
  * ยอดค้างต่อรอบมาจาก API (สูตรกลางฝั่ง server) — หน้านี้แค่รวมยอดค้างของรอบที่แสดงเพื่อทำการ์ดสรุป
  * · ยอดรวม = ยอดตามใบกำกับที่ออกจริง (มติ U14) · รวม = ชำระแล้ว + ภาษีที่ลูกค้าหัก + ค้างชำระ (มติ U11)
+ * · เลขที่รอบวางบิล + จำนวนเคส ตาม mockup (มติ U62)
  */
 export function PortalBillingBatches() {
   const state = usePortalData<PortalBillingBatchDto[]>('/api/portal/billing-batches')
@@ -131,6 +133,10 @@ function OutstandingText({ satang, className }: { satang: number; className?: st
   )
 }
 
+function BatchNumber({ value }: { value: string | null }) {
+  return value === null ? <span className="text-slate-300">—</span> : <RefText className="text-xs font-semibold">{value}</RefText>
+}
+
 function CustomerWhtText({ satang, className }: { satang: number; className?: string }) {
   return satang > 0 ? (
     <span className={cn('font-semibold text-slate-700', className)}>{fmtSatangSymbol(satang)}</span>
@@ -155,7 +161,9 @@ function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[];
     <Table className="hidden md:block">
       <THead>
         <tr>
+          <Th>เลขที่รอบวางบิล</Th>
           <Th>รอบเดือน</Th>
+          <Th numeric>จำนวนเคส</Th>
           <Th numeric>ยอดรวม</Th>
           <Th numeric>ชำระแล้ว</Th>
           <Th numeric>ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)</Th>
@@ -168,7 +176,11 @@ function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[];
       <TBody>
         {rows.map((row) => (
           <Tr key={row.id} className={row.outstandingSatang > 0 ? 'bg-red-50/20' : undefined}>
+            <Td className="whitespace-nowrap">
+              <BatchNumber value={row.batchNumber} />
+            </Td>
             <Td className="font-semibold whitespace-nowrap">{row.period}</Td>
+            <Td numeric>{fmtCount(row.caseCount)}</Td>
             <Td numeric className="font-semibold">
               {fmtSatangSymbol(row.totalSatang)}
             </Td>
@@ -202,7 +214,12 @@ function BillingCards({ rows, today }: { rows: readonly PortalBillingBatchDto[];
       {rows.map((row) => (
         <li key={row.id} className="rounded-xl border border-slate-200 bg-white p-3.5">
           <div className="mb-2 flex items-start justify-between gap-2">
-            <div className="text-sm font-semibold text-slate-800">รอบ {row.period}</div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-800">รอบ {row.period}</div>
+              <div className="text-[12px] text-slate-400">
+                <BatchNumber value={row.batchNumber} /> · {fmtCount(row.caseCount)} เคส
+              </div>
+            </div>
             <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-center">

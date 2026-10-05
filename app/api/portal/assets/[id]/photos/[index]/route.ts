@@ -9,6 +9,7 @@ import {
   portalPhotoContentType,
 } from '@/lib/portal/queries/assets'
 import { portalAssetPhotoMeta } from '@/lib/portal/serializers'
+import { PORTAL_VIEW_AS_CAPABILITIES, readPortalViewAsParam } from '@/lib/portal/view-as'
 import { UploadError } from '@/lib/uploads/errors'
 import { downloadUploadedFile } from '@/lib/uploads/storage'
 import { WarehouseError } from '@/lib/warehouse/errors'
@@ -28,8 +29,10 @@ type RouteContext = { params: Promise<{ id: string; index: string }> }
 export async function GET(request: NextRequest, context: RouteContext): Promise<Response> {
   try {
     // เลือกหมวดจากสิทธิ์ของผู้เรียก (session ถูกแคช — ยามด้านล่างโหลดซ้ำไม่แพง) · ไม่มี session ⇒ ยามตอบ 401 เอง
+    // โหมดดูแทนของผู้ใช้ภายใน (มติ U59) ใช้สิทธิ์เท่าผู้จัดการบริษัท — ยามตรวจสิทธิ์ผู้ดูจริงเองข้างล่าง
     const sessionUser = await getRawSessionUser()
-    const section = sessionUser === null ? 'handover' : portalAssetPhotoSection(sessionUser.capabilities)
+    const capabilities = readPortalViewAsParam(request) === null ? sessionUser?.capabilities : PORTAL_VIEW_AS_CAPABILITIES
+    const section = capabilities === undefined ? 'handover' : portalAssetPhotoSection(capabilities)
     const portal = await requirePortalAccess(section, { download: true, request })
 
     const { id, index } = await context.params

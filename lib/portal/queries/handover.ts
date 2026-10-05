@@ -7,7 +7,7 @@ import { getRequestMeta } from '@/lib/auth/request-meta'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { HandoverLotStatus, type HandoverType } from '@/lib/generated/prisma/enums'
-import { rejectPortalRow, requirePortalRow, type PortalContext } from '@/lib/portal/guard'
+import { portalViewAsAuditFields, rejectPortalRow, requirePortalRow, type PortalContext } from '@/lib/portal/guard'
 import {
   serializePortalLotDetail,
   serializePortalLotListItem,
@@ -266,7 +266,7 @@ async function auditLotExport(
     action: 'export',
     targetType: PORTAL_LOT_TARGET,
     targetId: lot.id,
-    after: { channel: 'portal', document, company_id: ctx.companyId, lot_number: lot.lotNumber },
+    after: { channel: 'portal', document, company_id: ctx.companyId, lot_number: lot.lotNumber, ...portalViewAsAuditFields(ctx) },
     ipAddress: meta.ipAddress,
     userAgent: meta.userAgent,
   })

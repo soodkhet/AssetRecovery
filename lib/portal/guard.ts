@@ -14,6 +14,13 @@ import {
   type PortalSection,
   type PortalViewer,
 } from '@/lib/portal/access'
+import {
+  canViewPortalAs,
+  isPortalViewAsCompanyId,
+  PORTAL_VIEW_AS_CAPABILITIES,
+  readPortalViewAsParam,
+} from '@/lib/portal/view-as'
+import { prisma } from '@/lib/prisma'
 
 /**
  * ยามของ `/api/portal/*` (`97` §11/§12/§14/§17 · มติ PO 05/10/2569 U6/O43 D2/D3/D4/D5/D11)
@@ -28,6 +35,13 @@ import {
  *
  * ทุกการปฏิเสธข้อ 2–6 ลง audit action `access_denied` (ไม่บังคับ reason — ไม่ใช่ mutation · `97` §14)
  * ข้อความตอบกลับไม่บอกเหตุผลภายใน (รายละเอียดอยู่ใน audit `after` เท่านั้น)
+ *
+ * **โหมดดูในฐานะลูกค้า** (มติ PO U59 · `97` §13.1) — request มี `?as=<companyId>`:
+ * - ผู้ใช้บริษัทจริงส่งมา → 403 `PERMISSION_DENIED` (`cause = view_as_by_company_user`) — ห้ามใช้ข้ามบริษัท
+ * - ผู้ใช้ภายในไม่มี `view_client_portal_as` → 403 · บัญชีปิดใช้ → 403 `ACCOUNT_INACTIVE`
+ * - id ไม่ใช่ uuid / ไม่มีบริษัทนี้ใน org (หรือถูกลบ) → 403 (`cause = view_as_company_not_found`)
+ * - ผ่าน → context ของบริษัทนั้น + สิทธิ์เท่าผู้จัดการของบริษัท (ทุกหมวด + ดาวน์โหลด) · บริษัทถูกระงับยังดูได้
+ *   (เพื่อช่วยลูกค้า — หน้าแสดงป้ายสถานะ) · ผู้ใช้ยังเป็นตัวเอง (`ctx.user` = ผู้ใช้ภายใน) ทุก audit จึงระบุผู้ดูจริง
  */
 
 export interface PortalContext {
@@ -36,6 +50,28 @@ export interface PortalContext {
   companyId: string
   capabilities: PortalCapabilities
   section: PortalSection
+  /** โหมดดูในฐานะลูกค้าของผู้ใช้ภายใน (มติ U59) — ไม่มี = ผู้ใช้บริษัทเอง */
+  viewAs?: PortalViewAsScope | null
+}
+
+export interface PortalViewAsScope {
+  companyId: string
+  /** `finance_companies.status` ของบริษัทที่เปิดดู (`suspended` ยังดูได้) */
+  companyStatus: string
+}
+
+/** ฟิลด์เพิ่มใน audit `after` ของการนำเอกสารออกทาง portal — ระบุว่าเป็นผู้ใช้ภายในในโหมดดูแทน (มติ U59) */
+export function portalViewAsAuditFields(ctx: PortalContext): Record<string, string | boolean> {
+  return ctx.viewAs ? { mode: 'view_as', view_as: true, viewer_role_group: ctx.user.roleGroup } : {}
+}
+
+/**
+ * ผู้ใช้สำหรับเรียก service ภายในที่ตรวจ scope บริษัทซ้ำ (เช่น `getTaxInvoiceDocSource`) — โหมดดูแทนบังคับ scope
+ * `company` = บริษัทที่เปิดดู (ผู้ดูภายในบาง role มี scope ทีม/ตัวเอง ซึ่งจะถูกปฏิเสธโดยไม่จำเป็น)
+ */
+export function portalScopedUser(ctx: PortalContext): SessionUser {
+  if (!ctx.viewAs) return ctx.user
+  return { ...ctx.user, scope: { kind: 'company', teamIds: [], companyId: ctx.companyId, userId: ctx.user.id } }
 }
 
 export interface PortalGuardOptions extends PortalAccessOptions {
@@ -57,6 +93,8 @@ interface DenyDetail {
   cause: string
   targetType?: string
   requestedId?: string
+  /** บริษัทเป้าหมายของโหมดดูแทน (ถ้ามี) — ลง audit `after.view_as_company_id` */
+  viewAsCompanyId?: string | null
 }
 
 function endpointOf(request: Request | undefined): string | null {
@@ -93,6 +131,9 @@ async function denyPortal(
         cause: detail.cause,
         endpoint: endpointOf(request),
         company_id: user.companyId,
+        ...(detail.viewAsCompanyId !== undefined && detail.viewAsCompanyId !== null
+          ? { mode: 'view_as', view_as_company_id: detail.viewAsCompanyId.slice(0, 64) }
+          : {}),
         ...(requestedId !== undefined && !UUID_PATTERN.test(requestedId) ? { requested_id: requestedId.slice(0, 64) } : {}),
       },
       ipAddress: meta.ipAddress,
@@ -122,6 +163,9 @@ export async function requirePortalAccess(
   const user = await getRawSessionUser(now)
   if (user === null) throw new AuthError('UNAUTHENTICATED')
   if (isSessionExpired(user.loginAt, now)) throw new AuthError('SESSION_EXPIRED', `user=${user.id}`)
+
+  const viewAsParam = readPortalViewAsParam(options.request)
+  if (viewAsParam !== null) return resolveViewAs(user, viewAsParam, section, download, options.request)
 
   const viewer = toViewer(user)
   if (!isPortalViewer(viewer)) {
@@ -153,6 +197,38 @@ export async function requirePortalAccess(
   return { user, companyId: user.companyId, capabilities: user.capabilities, section }
 }
 
+/** ทางเข้าโหมดดูในฐานะลูกค้า (มติ U59) — ดูหัวไฟล์ */
+async function resolveViewAs(
+  user: SessionUser,
+  rawCompanyId: string,
+  section: PortalSection,
+  download: boolean,
+  request: Request | undefined,
+): Promise<PortalContext> {
+  const deny = (code: PortalDenyCode, cause: string): Promise<never> =>
+    denyPortal(user, code, { section, download, cause, viewAsCompanyId: rawCompanyId }, request)
+
+  if (isPortalViewer(toViewer(user))) return deny('PERMISSION_DENIED', 'view_as_by_company_user')
+  if (user.status !== 'active') return deny('ACCOUNT_INACTIVE', `user_status:${user.status}`)
+  if (!canViewPortalAs(user)) return deny('PERMISSION_DENIED', 'view_as_missing_capability')
+  if (user.mustChangePassword === true) throw new AuthError('PASSWORD_CHANGE_REQUIRED', `user=${user.id}`)
+  if (!isPortalViewAsCompanyId(rawCompanyId)) return deny('PERMISSION_DENIED', 'view_as_company_not_found')
+
+  const company = await prisma.financeCompany.findFirst({
+    where: { id: rawCompanyId, organizationId: user.organizationId, deletedAt: null },
+    select: { id: true, status: true },
+  })
+  if (company === null) return deny('PERMISSION_DENIED', 'view_as_company_not_found')
+
+  return {
+    user,
+    companyId: company.id,
+    capabilities: PORTAL_VIEW_AS_CAPABILITIES,
+    section,
+    viewAs: { companyId: company.id, companyStatus: company.status },
+  }
+}
+
 export interface PortalRowTarget {
   /** ชื่อตารางของแถวที่ร้องขอ (snake_case ตาม `02`) เช่น `cases` / `handover_lots` */
   type: string
@@ -182,6 +258,7 @@ export async function requirePortalRow<T extends { companyId: string | null }>(
       cause,
       targetType: target.type,
       requestedId: target.id,
+      viewAsCompanyId: ctx.viewAs?.companyId ?? null,
     },
     options.request,
   )
@@ -201,7 +278,14 @@ export async function denyPortalRow(
   return denyPortal(
     ctx.user,
     'PERMISSION_DENIED',
-    { section: ctx.section, download: options.download === true, cause, targetType: target.type, requestedId: target.id },
+    {
+      section: ctx.section,
+      download: options.download === true,
+      cause,
+      targetType: target.type,
+      requestedId: target.id,
+      viewAsCompanyId: ctx.viewAs?.companyId ?? null,
+    },
     options.request,
   )
 }
@@ -241,7 +325,14 @@ export async function rejectPortalRow(
   return denyPortal(
     ctx.user,
     'PERMISSION_DENIED',
-    { section: ctx.section, download: options.download === true, cause, targetType: target.type, requestedId: target.id },
+    {
+      section: ctx.section,
+      download: options.download === true,
+      cause,
+      targetType: target.type,
+      requestedId: target.id,
+      viewAsCompanyId: ctx.viewAs?.companyId ?? null,
+    },
     options.request,
   )
 }

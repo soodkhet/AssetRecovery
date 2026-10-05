@@ -257,7 +257,10 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         id: 'settings.companies',
         label: 'บริษัทไฟแนนซ์',
         path: '/settings/companies',
-        audiences: ['superadmin', 'executive'],
+        // ธุรการเห็นเฉพาะเมื่อถือ `view_client_portal_as` — ทางเข้าปุ่ม "เปิด portal ของลูกค้า" (มติ PO U59 ·
+        // `06` §7.2 v2.7) · หน้านี้สำหรับธุรการเป็นอ่านอย่างเดียว (ปุ่มแก้ไข/ระงับต้อง `manage_companies`)
+        audiences: ['superadmin', 'executive', 'admin_office'],
+        capabilityGate: { audiences: ['admin_office'], anyOf: ['view_client_portal_as'] },
         available: true,
       },
       // `06` §9 — แท็บที่สองของหน้าตั้งค่าตาม mockup `settings.html` ("ตั้งค่าบัญชี/การเงิน")

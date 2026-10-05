@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { usePortalPageHref } from '@/components/portal/portal-scope'
 import { RefText, StatCard } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { fmtDate } from '@/lib/format/datetime'
@@ -47,6 +48,7 @@ export function PortalKpiTile({
 
 /** การ์ด KPI หน้าภาพรวม — คลิกไปหน้าหมวดนั้น */
 export function PortalKpiCard({ card }: { card: PortalKpiCardModel }) {
+  const pageHref = usePortalPageHref()
   const { value } = card
   let display: ReactNode
   let hint: ReactNode = card.hint
@@ -67,7 +69,7 @@ export function PortalKpiCard({ card }: { card: PortalKpiCardModel }) {
   }
 
   return (
-    <Link href={card.href} className="focus-ring block rounded-xl transition-opacity hover:opacity-90">
+    <Link href={pageHref(card.href)} className="focus-ring block rounded-xl transition-opacity hover:opacity-90">
       <PortalKpiTile label={card.label} value={display} hint={hint} tone={card.tone} />
     </Link>
   )

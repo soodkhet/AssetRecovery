@@ -17,6 +17,7 @@ import {
   PageHeader,
   Select,
   Textarea,
+  buttonClass,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -25,6 +26,7 @@ import type { CustomerWhtCompanySummary, CustomerWhtListDto } from '@/lib/custom
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { formatCustomerWhtPct, formatTaxId, vatModeLabel } from '@/lib/finance-companies/company'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
+import { portalViewAsHomePath, VIEW_CLIENT_PORTAL_AS_CAPABILITY } from '@/lib/portal/view-as'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 
 /**
@@ -32,6 +34,8 @@ import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
  * การ์ดเรียง active ก่อน suspended · แสดงเหตุผลระงับเป็นกล่องแดงเมื่อถูกระงับ
  *
  * สิทธิ์บนปุ่มเป็นแค่ UX — API ตรวจ `manage_companies` (Superadmin) ซ้ำเสมอ (DEC-002 · `10` §12)
+ * ปุ่ม "เปิด portal ของลูกค้า" (มติ PO U59) — ผู้ถือ `view_client_portal_as` เปิดแท็บใหม่ดูพอร์ทัลของบริษัทนั้น
+ * แบบดูอย่างเดียว · ยามจริงอยู่ที่หน้า `/portal/view-as/*` และ `/api/portal/*?as=` (DEC-002)
  */
 
 const MANAGE_RESOURCE = 'manage_companies'
@@ -301,28 +305,41 @@ export function CompaniesManager() {
                     <span className="font-bold text-slate-800">{company.caseCount}</span> เคส |{' '}
                     <span className="font-bold text-slate-800">{company.userCount}</span> บัญชีผู้ใช้
                   </div>
-                  <Can action="manage" resource={MANAGE_RESOURCE}>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setFormCompany(company)
-                          setFormOpen(true)
-                        }}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Can action="view" resource={VIEW_CLIENT_PORTAL_AS_CAPABILITY}>
+                      <a
+                        href={portalViewAsHomePath(company.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={buttonClass('secondary')}
+                        aria-label={`เปิด portal ของลูกค้า ${company.name} ในแท็บใหม่ (ดูอย่างเดียว)`}
                       >
-                        ⚙️ แก้ไขบริษัท
-                      </Button>
-                      <Button
-                        variant={company.status === 'active' ? 'danger' : 'secondary'}
-                        onClick={() => {
-                          setStatusTarget(company)
-                          setStatusReason('')
-                        }}
-                      >
-                        {company.status === 'active' ? '🚫 ระงับ' : '✓ เปิดใช้งาน'}
-                      </Button>
-                    </div>
-                  </Can>
+                        เปิด portal ของลูกค้า ↗
+                      </a>
+                    </Can>
+                    <Can action="manage" resource={MANAGE_RESOURCE}>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setFormCompany(company)
+                            setFormOpen(true)
+                          }}
+                        >
+                          ⚙️ แก้ไขบริษัท
+                        </Button>
+                        <Button
+                          variant={company.status === 'active' ? 'danger' : 'secondary'}
+                          onClick={() => {
+                            setStatusTarget(company)
+                            setStatusReason('')
+                          }}
+                        >
+                          {company.status === 'active' ? '🚫 ระงับ' : '✓ เปิดใช้งาน'}
+                        </Button>
+                      </div>
+                    </Can>
+                  </div>
                 </div>
               </div>
             ))}
