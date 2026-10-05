@@ -152,6 +152,8 @@ describe('ยอดรวมของรอบนำส่ง (`33` §16)', () =
       pnd3Satang: 0,
       pnd53Satang: 0,
       pnd1Satang: 0,
+      pnd1Count: 0,
+      pnd1GrossSatang: 0,
       activeCount: 0,
       cancelledCount: 0,
       grossSatang: 0,

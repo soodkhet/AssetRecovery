@@ -17,7 +17,7 @@ import {
 } from '@/lib/settings/wht-policy'
 
 /**
- * ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8 · `13` §6.4.2) — ชั้น DB
+ * ค่าตั้งภาษีหัก ณ ที่จ่าย แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8/U16 · `13` §6.4.2) — ชั้น DB
  *
  * - **insert-only** (แบบ `vat_rate_history`): ไม่มี PATCH/DELETE — แก้ค่า = เพิ่มแถวใหม่พร้อมวันที่มีผล
  *   (ประวัติเดิมอยู่ครบให้ตรวจย้อนหลัง) · วันเดียวกันหลายแถว ⇒ แถวล่าสุดชนะ
@@ -34,6 +34,7 @@ const policySelect = {
   baseExpenseTypes: true,
   certificateMode: true,
   incomeTypeMode: true,
+  issueZeroRate402Certificate: true,
   reason: true,
   createdAt: true,
   createdByUser: { select: { fullName: true } },
@@ -45,6 +46,7 @@ interface PolicyRow {
   baseExpenseTypes: ExpenseType[]
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
+  issueZeroRate402Certificate: boolean
   reason: string
   createdAt: Date
   createdByUser: { fullName: string }
@@ -58,6 +60,7 @@ function toEntry(row: PolicyRow): WhtPolicyEntry & { row: PolicyRow } {
     baseExpenseTypes: normalizeBaseExpenseTypes(row.baseExpenseTypes),
     certificateMode: row.certificateMode,
     incomeTypeMode: row.incomeTypeMode,
+    issueZeroRate402Certificate: row.issueZeroRate402Certificate,
     row,
   }
 }
@@ -69,6 +72,7 @@ function toDto(entry: WhtPolicyEntry & { row: PolicyRow }, currentId: string | n
     baseExpenseTypes: [...entry.baseExpenseTypes],
     certificateMode: entry.certificateMode,
     incomeTypeMode: entry.incomeTypeMode,
+    issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
     reason: entry.row.reason,
     createdAt: toIso(entry.createdAt),
     createdByName: entry.row.createdByUser.fullName,
@@ -87,6 +91,7 @@ function valuesOf(entry: WhtPolicyValues | null): WhtPolicyValues {
     baseExpenseTypes: [...entry.baseExpenseTypes],
     certificateMode: entry.certificateMode,
     incomeTypeMode: entry.incomeTypeMode,
+    issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
   }
 }
 
@@ -145,6 +150,7 @@ export async function createWhtPolicy(
         baseExpenseTypes,
         certificateMode: values.certificateMode,
         incomeTypeMode: values.incomeTypeMode,
+        issueZeroRate402Certificate: values.issueZeroRate402Certificate,
         reason: context.reason,
         createdBy: context.actor.id,
       },
@@ -164,6 +170,7 @@ export async function createWhtPolicy(
           baseExpenseTypes,
           certificateMode: values.certificateMode,
           incomeTypeMode: values.incomeTypeMode,
+          issueZeroRate402Certificate: values.issueZeroRate402Certificate,
           effectiveFrom: toDateOnlyIso(values.effectiveFrom),
         }),
         reason: context.reason,

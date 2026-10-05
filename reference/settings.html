@@ -1108,13 +1108,14 @@ function renderSettingsWhtPolicy() {
   const box = (title, body, sub) => `<div class="rounded-lg border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">${title}</div><div class="mt-1 text-xs text-slate-900">${body}</div>${sub ? `<div class="mt-1 text-xs text-slate-500">${sub}</div>` : ''}</div>`;
   return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">ค่าตั้งภาษีหัก ณ ที่จ่าย (Effective-dated)</h2><button class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} ตั้งค่าชุดใหม่</button></div>
   <p class="text-xs text-slate-500 mb-3">มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล — รอบที่สร้างแล้วใช้ค่าเดิมเสมอ · แก้ได้เฉพาะ Superadmin/บริหาร พร้อมเหตุผล</p>
-  <div class="grid grid-cols-3 gap-3 mb-4">
+  <div class="grid grid-cols-4 gap-3 mb-4">
     ${box('ฐาน WHT (รวม)', 'คอมมิชชั่น · เบี้ยเสี่ยง · ค่าน้ำมัน · เบี้ยเลี้ยง', 'ไม่รวม: ค่าที่พัก · ค่าใช้จ่ายตามใบเสร็จ · รายการกรอกเอง')}
     ${box('การออก 50 ทวิ', 'ต่อผู้รับต่อรอบจ่าย (1 ใบรวมทุกรายการของผู้รับในรอบ)')}
     ${box('ประเภทเงินได้', 'มาตรา 40(8) ทั้งหมด', '40(2) ใช้อัตราหักต่อคนในข้อมูลผู้รับเงิน · ยื่น ภ.ง.ด.1')}
+    ${box('40(2) อัตรา 0%', 'ออก 50 ทวิ (ภาษี 0) + รวมใน ภ.ง.ด.1', 'ช่องติ๊กในฟอร์มชุดใหม่ · ไม่เกี่ยวกับ 40(8) ต่ำกว่าเกณฑ์')}
   </div>
-  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">มีผลตั้งแต่</th><th class="px-4 py-3 font-medium">ฐาน WHT</th><th class="px-4 py-3 font-medium">การออก 50 ทวิ</th><th class="px-4 py-3 font-medium">ประเภทเงินได้</th><th class="px-4 py-3 font-medium">เหตุผล / ผู้บันทึก</th><th class="px-4 py-3 font-medium text-right">สถานะ</th></tr></thead><tbody class="divide-y divide-slate-100">
-  <tr><td colspan="6" class="px-4 py-6 text-center text-xs text-slate-500">ยังไม่เคยตั้งค่า — ใช้ค่าเริ่มต้น</td></tr>
+  <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">มีผลตั้งแต่</th><th class="px-4 py-3 font-medium">ฐาน WHT</th><th class="px-4 py-3 font-medium">การออก 50 ทวิ</th><th class="px-4 py-3 font-medium">ประเภทเงินได้</th><th class="px-4 py-3 font-medium">40(2) อัตรา 0%</th><th class="px-4 py-3 font-medium">เหตุผล / ผู้บันทึก</th><th class="px-4 py-3 font-medium text-right">สถานะ</th></tr></thead><tbody class="divide-y divide-slate-100">
+  <tr><td colspan="7" class="px-4 py-6 text-center text-xs text-slate-500">ยังไม่เคยตั้งค่า — ใช้ค่าเริ่มต้น</td></tr>
   </tbody></table></div>`;
 }
 

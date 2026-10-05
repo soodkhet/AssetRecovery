@@ -131,6 +131,8 @@ export interface WhtPolicyDto {
   baseExpenseTypes: ExpenseType[]
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
+  /** 40(2) อัตรา 0% ออก 50 ทวิ + รวมใน ภ.ง.ด.1 (U16) */
+  issueZeroRate402Certificate: boolean
   reason: string
   createdAt: string
   createdByName: string

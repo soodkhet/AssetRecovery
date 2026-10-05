@@ -89,6 +89,29 @@ export function shouldIssueCertificate(item: { whtSatang: number }): boolean {
 }
 
 /**
+ * **ข้อยกเว้นของ `shouldIssueCertificate()`** — เงินได้ 40(2) อัตรา 0% (มติ PO 05/10/2569 UAT U16)
+ *
+ * ค่าตั้ง `issueZeroRate402Certificate` เปิด (ค่าเริ่มต้น) ⇒ ผู้รับ 40(2) ที่ภาษีรวม 0 แต่มีเงินได้ในฐาน
+ * ได้ใบ 50 ทวิ ยอดภาษี 0 (เงินได้ = ฐานที่จ่าย) และนับในสรุป ภ.ง.ด.1 — ผู้รับใช้ยื่น ภ.ง.ด.90/91
+ * 40(2) ไม่มีเกณฑ์ขั้นต่ำ (`22` §6.9.1) ⇒ ภาษี 0 ทั้งที่มีเงินได้ในฐาน = อัตรา 0% เท่านั้น
+ * **40(8) ต่ำกว่าเกณฑ์ ฿1,000 ไม่เกี่ยว** — ยังไม่ออกใบเหมือนเดิม · ค่าตั้งปิด/รอบเก่า = ไม่ออก
+ */
+export function shouldIssueZeroRate402Certificate(input: {
+  issueZeroRate402Certificate: boolean
+  incomeCategory: WhtIncomeCategory | null
+  whtSatang: number
+  /** ยอดเงินได้ในฐาน WHT ของกลุ่ม — 0 = ไม่มีเงินได้ (เช่นทุกรายการนอกฐาน) ไม่มีอะไรให้รับรอง */
+  grossSatang: number
+}): boolean {
+  return (
+    input.issueZeroRate402Certificate &&
+    input.incomeCategory === 'sec_40_2' &&
+    input.whtSatang === 0 &&
+    input.grossSatang > 0
+  )
+}
+
+/**
  * แบบที่ต้องยื่น — เงินได้ 40(2) ⇒ **ภ.ง.ด.1** เสมอ (มติ PO 05/10/2569 UAT U7) · 40(8) ใช้ Tax Profile
  * ที่ snapshot ไว้ (`18` §6.3) · ไม่มีก็เดาจากชนิดผู้รับเงิน
  */
@@ -123,6 +146,13 @@ export interface CertificateSourceItem {
   whtSatang: number
   /** snapshot `payout_batch_items.wht_base_included` — รายการนอกฐานไม่ใช่เงินได้ ไม่พิมพ์ในยอดจ่ายของใบ */
   whtBaseIncluded: boolean
+  /** snapshot `payout_batch_items.wht_income_category` — ใช้ตัดสินใบ 40(2) อัตรา 0% (U16) · ไม่ระบุ = 40(8) */
+  incomeCategory?: WhtIncomeCategory | null
+}
+
+export interface CertificateGroupingOptions {
+  /** snapshot ค่าตั้ง U16 ของรอบจ่าย — ไม่ระบุ = `false` (พฤติกรรมเดิม: ภาษี 0 ไม่ออกใบ) */
+  issueZeroRate402Certificate?: boolean
 }
 
 export interface CertificateGroup<T extends CertificateSourceItem> {
@@ -141,12 +171,15 @@ export interface CertificateGroup<T extends CertificateSourceItem> {
  * - `per_payee_batch` (ค่าเริ่มต้นใหม่) = 1 ใบต่อผู้รับ รวมทุกรายการของผู้รับในรอบ
  *
  * ทั้งสองแบบ **ยอดภาษีรวมเท่ากันเสมอ** (ผลรวมของ snapshot รายการเดียวกัน) · กลุ่มที่ภาษีรวม = 0 ไม่ออกใบ
- * (`shouldIssueCertificate()`) · ลำดับกลุ่ม/สมาชิกตามลำดับ input (ผู้เรียกเรียงตามเวลาสร้าง)
+ * (`shouldIssueCertificate()`) — ยกเว้นเงินได้ 40(2) อัตรา 0% เมื่อค่าตั้ง U16 เปิด
+ * (`shouldIssueZeroRate402Certificate()`) · ลำดับกลุ่ม/สมาชิกตามลำดับ input (ผู้เรียกเรียงตามเวลาสร้าง)
  */
 export function groupCertificateSources<T extends CertificateSourceItem>(
   items: readonly T[],
   mode: WhtCertificateMode,
+  options: CertificateGroupingOptions = {},
 ): CertificateGroup<T>[] {
+  const issueZeroRate402Certificate = options.issueZeroRate402Certificate ?? false
   const buckets = new Map<string, T[]>()
   items.forEach((item) => {
     const key = mode === 'per_item' ? item.id : item.payeeId
@@ -157,11 +190,19 @@ export function groupCertificateSources<T extends CertificateSourceItem>(
   const groups: CertificateGroup<T>[] = []
   for (const members of buckets.values()) {
     const whtSatang = members.reduce((sum, member) => sum + member.whtSatang, 0)
-    if (!shouldIssueCertificate({ whtSatang })) continue
     const grossSatang =
       mode === 'per_item'
         ? members[0]!.grossSatang
         : members.filter((member) => member.whtBaseIncluded).reduce((sum, member) => sum + member.grossSatang, 0)
+    const zeroRate402 = shouldIssueZeroRate402Certificate({
+      issueZeroRate402Certificate,
+      // ประเภทเงินได้เป็นระดับผู้รับต่อรอบ ⇒ ทุกรายการของผู้รับเหมือนกัน
+      incomeCategory: members[0]!.incomeCategory ?? null,
+      whtSatang,
+      // เฉพาะเงินได้ในฐาน — รายการนอกฐาน (ค่าที่พัก/เบิกตามใบเสร็จ) ไม่ใช่เงินได้ ไม่ทำให้เกิดใบ
+      grossSatang: members.filter((member) => member.whtBaseIncluded).reduce((sum, m) => sum + m.grossSatang, 0),
+    })
+    if (!shouldIssueCertificate({ whtSatang }) && !zeroRate402) continue
     groups.push({ anchor: members[0]!, members, mode, grossSatang, whtSatang })
   }
   return groups
@@ -275,6 +316,12 @@ export interface FilingTotals {
   pnd53Satang: number
   /** ภ.ง.ด.1 — เงินได้ 40(2) (มติ PO 05/10/2569 UAT U7) */
   pnd1Satang: number
+  /**
+   * จำนวนใบ/เงินได้ของ ภ.ง.ด.1 — รวมใบ 40(2) อัตรา 0% ที่ภาษี 0 (มติ PO 05/10/2569 UAT U16)
+   * ภ.ง.ด.1 ต้องแสดงรายผู้มีเงินได้แม้ไม่มีภาษีถูกหัก ⇒ ยอดภาษีอย่างเดียวไม่พอ
+   */
+  pnd1Count: number
+  pnd1GrossSatang: number
   /** จำนวนใบที่นับยอด (ไม่รวมใบที่ยกเลิก) */
   activeCount: number
   cancelledCount: number
@@ -293,12 +340,23 @@ export function summarizeFilingTotals(rows: readonly FilingTotalSource[]): Filin
         pnd3Satang: totals.pnd3Satang + (row.filingForm === 'PND3' ? row.whtSatang : 0),
         pnd53Satang: totals.pnd53Satang + (row.filingForm === 'PND53' ? row.whtSatang : 0),
         pnd1Satang: totals.pnd1Satang + (row.filingForm === 'PND1' ? row.whtSatang : 0),
+        pnd1Count: totals.pnd1Count + (row.filingForm === 'PND1' ? 1 : 0),
+        pnd1GrossSatang: totals.pnd1GrossSatang + (row.filingForm === 'PND1' ? row.grossSatang : 0),
         activeCount: totals.activeCount + 1,
         cancelledCount: totals.cancelledCount,
         grossSatang: totals.grossSatang + row.grossSatang,
       }
     },
-    { pnd3Satang: 0, pnd53Satang: 0, pnd1Satang: 0, activeCount: 0, cancelledCount: 0, grossSatang: 0 },
+    {
+      pnd3Satang: 0,
+      pnd53Satang: 0,
+      pnd1Satang: 0,
+      pnd1Count: 0,
+      pnd1GrossSatang: 0,
+      activeCount: 0,
+      cancelledCount: 0,
+      grossSatang: 0,
+    },
   )
 }
 

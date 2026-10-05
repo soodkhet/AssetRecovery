@@ -28,6 +28,7 @@ import {
   filingFormOf,
   filingOverdueWarning,
   groupCertificateSources,
+  type CertificateGroupingOptions,
   incomeTypeOf,
   isFilingOverdue,
   nextCertificateSequence,
@@ -42,7 +43,7 @@ import {
   type CertificateGroup,
   type WhtCertificateDocSource,
 } from '@/lib/wht/wht'
-import type { WhtCertificateMode } from '@/lib/settings/wht-policy'
+import type { WhtCertificateMode, WhtIncomeCategory } from '@/lib/settings/wht-policy'
 
 /**
  * WHT Data (ไฟล์ 33) — ชั้น DB (`33` §14)
@@ -271,6 +272,7 @@ const EXPENSE_SOURCE_SELECT = {
           paymentFileGeneratedAt: true,
           updatedAt: true,
           whtCertificateMode: true,
+          whtIssueZeroRate402Certificate: true,
         },
       },
       payee: { select: { id: true, payeeType: true, user: { select: { fullName: true } } } },
@@ -282,16 +284,33 @@ const EXPENSE_SOURCE_SELECT = {
 type ExpenseSourceRow = Prisma.ExpenseRecordGetPayload<{ select: typeof EXPENSE_SOURCE_SELECT }>
 
 /** แถวต้นทางพร้อมฟิลด์ที่ `groupCertificateSources()` ใช้ */
-type SourceItem = ExpenseSourceRow & { payeeId: string; whtBaseIncluded: boolean }
+type SourceItem = ExpenseSourceRow & {
+  payeeId: string
+  whtBaseIncluded: boolean
+  incomeCategory: WhtIncomeCategory | null
+}
 type SourceGroup = CertificateGroup<SourceItem>
 
 function toSourceItem(row: ExpenseSourceRow): SourceItem {
-  return { ...row, payeeId: row.payoutBatchItem.payeeId, whtBaseIncluded: row.payoutBatchItem.whtBaseIncluded }
+  return {
+    ...row,
+    payeeId: row.payoutBatchItem.payeeId,
+    whtBaseIncluded: row.payoutBatchItem.whtBaseIncluded,
+    incomeCategory: row.payoutBatchItem.whtIncomeCategory,
+  }
 }
 
 /** รูปแบบการออกใบของรอบ — snapshot NULL = รอบที่สร้างก่อนมีค่าตั้ง ⇒ ต่อรายการ (พฤติกรรมเดิม) */
 function batchCertificateMode(row: ExpenseSourceRow): WhtCertificateMode {
   return row.payoutBatchItem.payoutBatch.whtCertificateMode ?? 'per_item'
+}
+
+/**
+ * ค่าตั้ง "40(2) อัตรา 0% ออก 50 ทวิ" ที่ snapshot ไว้กับรอบ (มติ PO 05/10/2569 UAT U16)
+ * NULL = รอบที่สร้างก่อนมีค่าตั้ง ⇒ ไม่ออก (พฤติกรรมเดิม) — ไม่ดูค่าตั้งปัจจุบัน (Rule 08)
+ */
+function batchGroupingOptions(row: ExpenseSourceRow): CertificateGroupingOptions {
+  return { issueZeroRate402Certificate: row.payoutBatchItem.payoutBatch.whtIssueZeroRate402Certificate ?? false }
 }
 
 /** รายการค่าใช้จ่ายของรอบจ่าย (ทั้งรอบ หรือเฉพาะผู้รับหนึ่งคน) เรียงตามเวลาสร้าง — ลำดับนี้กำหนด "จุดยึด" ของใบ */
@@ -413,7 +432,7 @@ export async function syncWhtCertificatesFromPayout(
   const records = await loadBatchSources(organizationId, payoutBatchId)
   if (records.length === 0) return []
   // รูปแบบการออกเป็น snapshot ของรอบ (มติ PO 05/10/2569 UAT U4) — ไม่ใช่ค่าตั้งปัจจุบัน
-  const groups = groupCertificateSources(records, batchCertificateMode(records[0]!))
+  const groups = groupCertificateSources(records, batchCertificateMode(records[0]!), batchGroupingOptions(records[0]!))
 
   const issued: CertRow[] = []
   for (const group of groups) {
@@ -525,8 +544,9 @@ export async function cancelWhtCertificate(
       ? (groupCertificateSources(
           await loadBatchSources(organizationId, source.payoutBatchItem.payoutBatchId, certificate.payeeId),
           'per_payee_batch',
+          batchGroupingOptions(anchorRow),
         )[0] ?? null)
-      : (groupCertificateSources([source], 'per_item')[0] ?? null)
+      : (groupCertificateSources([source], 'per_item', batchGroupingOptions(anchorRow))[0] ?? null)
 
   return prisma.$transaction(async (tx) => {
     // ยึดด้วยสถานะเดิม — สองคนกดยกเลิกพร้อมกัน คนที่สองได้ 0 แถวแล้วโดนปฏิเสธ

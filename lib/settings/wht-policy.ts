@@ -12,6 +12,9 @@ import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
  * 3. **ประเภทเงินได้** (U5/U7) — 40(8) ทั้งหมด (ค่าเริ่มต้น) / 40(2) ทั้งหมด / แยกตามประเภททีม
  *    (inhouse = 40(2) · outsource = 40(8)) · 40(2) ใช้อัตราต่อคนจาก `payee_profiles.wht_40_2_pct`
  *    ไม่คำนวณอัตราก้าวหน้า (Hybrid Boundary — สำนักงานบัญชีคำนวณให้) · ยื่น ภ.ง.ด.1
+ * 4. **40(2) อัตรา 0% ออก 50 ทวิ** (U16) — เปิด (ค่าเริ่มต้น) = ผู้รับ 40(2) ที่อัตรา 0% ได้ใบ 50 ทวิ
+ *    ยอดภาษี 0 และนับในสรุป ภ.ง.ด.1 (ผู้รับใช้ยื่น ภ.ง.ด.90/91) · ปิด = ไม่ออก (พฤติกรรมเดิม) ·
+ *    40(8) ที่ต่ำกว่าเกณฑ์ ฿1,000 **ไม่เกี่ยว** — ยังไม่ออกใบเหมือนเดิม
  *
  * **effective-dated แบบ `vat_rate_history`** (U8): ตาราง `wht_policy_history` insert-only ·
  * รอบจ่ายใช้ค่าที่มีผล ณ วันที่สร้างรอบ (วันตามปฏิทินไทย) แล้ว **snapshot ลง `payout_batches`** —
@@ -43,6 +46,8 @@ export interface WhtPolicyValues {
   baseExpenseTypes: readonly ExpenseType[]
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
+  /** เงินได้ 40(2) อัตรา 0% ⇒ ออก 50 ทวิ ยอดภาษี 0 + รวมใน ภ.ง.ด.1 (U16) */
+  issueZeroRate402Certificate: boolean
 }
 
 /** ค่าเริ่มต้นตามมติ (ใช้เมื่อองค์กรยังไม่เคยตั้งค่า — ไม่มีแถวใน `wht_policy_history`) */
@@ -50,6 +55,7 @@ export const DEFAULT_WHT_POLICY: WhtPolicyValues = {
   baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
   certificateMode: 'per_payee_batch',
   incomeTypeMode: 'all_40_8',
+  issueZeroRate402Certificate: true,
 }
 
 /**
@@ -60,6 +66,7 @@ export const LEGACY_WHT_POLICY: WhtPolicyValues = {
   baseExpenseTypes: WHT_POLICY_EXPENSE_TYPES,
   certificateMode: 'per_item',
   incomeTypeMode: 'all_40_8',
+  issueZeroRate402Certificate: false,
 }
 
 export const WHT_CERTIFICATE_MODE_LABEL: Record<WhtCertificateMode, string> = {
@@ -77,6 +84,9 @@ export const WHT_INCOME_CATEGORY_LABEL: Record<WhtIncomeCategory, string> = {
   sec_40_8: 'มาตรา 40(8)',
   sec_40_2: 'มาตรา 40(2)',
 }
+
+/** ป้ายของค่าตั้ง U16 บนหน้าตั้งค่า/รายละเอียดรอบจ่าย */
+export const ISSUE_ZERO_RATE_40_2_LABEL = 'เงินได้ 40(2) อัตรา 0%: ออก 50 ทวิ (ยอดภาษี 0) และรวมใน ภ.ง.ด.1'
 
 /** ข้อความประเภทเงินได้บนใบ 50 ทวิ ของ 40(2) — 40(8) ใช้ `income_type` ของ Tax Profile ตามเดิม */
 export const INCOME_TYPE_TEXT_40_2 = 'ค่าธรรมเนียม ค่านายหน้า มาตรา 40(2)'
@@ -151,6 +161,7 @@ export function toWhtPolicyAuditPayload(values: WhtPolicyValues & { effectiveFro
     base_expense_types: normalizeBaseExpenseTypes(values.baseExpenseTypes),
     certificate_mode: values.certificateMode,
     income_type_mode: values.incomeTypeMode,
+    issue_zero_rate_40_2_certificate: values.issueZeroRate402Certificate,
   }
 }
 
@@ -162,10 +173,14 @@ export function payoutBatchWhtPolicy(snapshot: {
   whtBaseExpenseTypes: readonly ExpenseType[] | null
   whtCertificateMode: WhtCertificateMode | null
   whtIncomeTypeMode: WhtIncomeTypeMode | null
+  /** NULL = รอบที่สร้างก่อนมีค่าตั้ง U16 ⇒ ไม่ออกใบ 0% (พฤติกรรมเดิม) */
+  whtIssueZeroRate402Certificate: boolean | null
 }): WhtPolicyValues {
   return {
     baseExpenseTypes: snapshot.whtBaseExpenseTypes ?? LEGACY_WHT_POLICY.baseExpenseTypes,
     certificateMode: snapshot.whtCertificateMode ?? LEGACY_WHT_POLICY.certificateMode,
     incomeTypeMode: snapshot.whtIncomeTypeMode ?? LEGACY_WHT_POLICY.incomeTypeMode,
+    issueZeroRate402Certificate:
+      snapshot.whtIssueZeroRate402Certificate ?? LEGACY_WHT_POLICY.issueZeroRate402Certificate,
   }
 }

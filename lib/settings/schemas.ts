@@ -286,6 +286,8 @@ export const whtPolicyCreateSchema = z.object({
   baseExpenseTypes: z.array(z.enum(WHT_POLICY_EXPENSE_TYPES)).max(WHT_POLICY_EXPENSE_TYPES.length),
   certificateMode: z.enum(WHT_CERTIFICATE_MODES),
   incomeTypeMode: z.enum(WHT_INCOME_TYPE_MODES),
+  /** 40(2) อัตรา 0% ⇒ ออก 50 ทวิ ยอดภาษี 0 + รวมใน ภ.ง.ด.1 (มติ PO 05/10/2569 UAT U16) — ไม่ส่ง = ออก (ค่าเริ่มต้น) */
+  issueZeroRate402Certificate: z.boolean().default(true),
   reason: reasonSchema,
 })
 

@@ -90,6 +90,7 @@ describe('(ฉ) snapshot ของรอบจ่าย', () => {
       whtBaseExpenseTypes: ['commission', 'fuel', 'allowance', 'no_success_fee', 'hotel'] as const,
       whtCertificateMode: 'per_item' as const,
       whtIncomeTypeMode: 'all_40_8' as const,
+      whtIssueZeroRate402Certificate: false,
     }
     const before = payoutBatchWhtPolicy({ ...snapshot, whtBaseExpenseTypes: [...snapshot.whtBaseExpenseTypes] })
     // ค่าตั้งเปลี่ยนเป็นค่าเริ่มต้นใหม่ (ไม่รวมค่าที่พัก · ต่อรอบ) — รอบเดิมยังอ่านค่าเดิม
@@ -100,7 +101,12 @@ describe('(ฉ) snapshot ของรอบจ่าย', () => {
   })
 
   it('รอบที่สร้างก่อนมีค่าตั้ง (snapshot NULL) → พฤติกรรมเดิม: ทุกชนิดในฐาน · ใบต่อรายการ · 40(8)', () => {
-    const legacy = payoutBatchWhtPolicy({ whtBaseExpenseTypes: null, whtCertificateMode: null, whtIncomeTypeMode: null })
+    const legacy = payoutBatchWhtPolicy({
+      whtBaseExpenseTypes: null,
+      whtCertificateMode: null,
+      whtIncomeTypeMode: null,
+      whtIssueZeroRate402Certificate: null,
+    })
     expect(legacy).toEqual(LEGACY_WHT_POLICY)
     expect(isInWhtBase(legacy, 'hotel')).toBe(true)
     expect(legacy.certificateMode).toBe('per_item')
@@ -118,6 +124,30 @@ describe('normalize/audit', () => {
       base_expense_types: ['commission', 'no_success_fee', 'fuel', 'allowance'],
       certificate_mode: 'per_payee_batch',
       income_type_mode: 'all_40_8',
+      issue_zero_rate_40_2_certificate: true,
     })
+  })
+})
+
+describe('U16 — 40(2) อัตรา 0% ออก 50 ทวิ (มติ PO 05/10/2569)', () => {
+  it('ค่าเริ่มต้น = ออก · พฤติกรรมเดิม (รอบเก่า) = ไม่ออก', () => {
+    expect(DEFAULT_WHT_POLICY.issueZeroRate402Certificate).toBe(true)
+    expect(LEGACY_WHT_POLICY.issueZeroRate402Certificate).toBe(false)
+  })
+
+  it('snapshot ของรอบ: true/false ใช้ตามรอบ · NULL (รอบก่อนมีค่าตั้ง) = ไม่ออก', () => {
+    const base = { whtBaseExpenseTypes: null, whtCertificateMode: 'per_payee_batch' as const, whtIncomeTypeMode: 'all_40_2' as const }
+    expect(payoutBatchWhtPolicy({ ...base, whtIssueZeroRate402Certificate: true }).issueZeroRate402Certificate).toBe(true)
+    expect(payoutBatchWhtPolicy({ ...base, whtIssueZeroRate402Certificate: false }).issueZeroRate402Certificate).toBe(false)
+    expect(payoutBatchWhtPolicy({ ...base, whtIssueZeroRate402Certificate: null }).issueZeroRate402Certificate).toBe(false)
+  })
+
+  it('effective-dated — แถวที่มีผลกำหนดค่า', () => {
+    const entries = [
+      entry('a', '2026-10-01', '2026-10-01T03:00:00Z'),
+      entry('b', '2026-11-01', '2026-10-05T03:00:00Z', { issueZeroRate402Certificate: false }),
+    ]
+    expect(effectiveWhtPolicy(entries, new Date('2026-10-20T03:00:00Z')).issueZeroRate402Certificate).toBe(true)
+    expect(effectiveWhtPolicy(entries, new Date('2026-11-02T03:00:00Z')).issueZeroRate402Certificate).toBe(false)
   })
 })

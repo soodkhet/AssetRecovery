@@ -35,6 +35,7 @@ import {
   WHT_INCOME_TYPE_MODES,
   WHT_INCOME_TYPE_MODE_LABEL,
   WHT_POLICY_EXPENSE_TYPES,
+  ISSUE_ZERO_RATE_40_2_LABEL,
   normalizeBaseExpenseTypes,
   type WhtCertificateMode,
   type WhtIncomeTypeMode,
@@ -56,6 +57,7 @@ interface FormState {
   baseExpenseTypes: ExpenseType[]
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
+  issueZeroRate402Certificate: boolean
   reason: string
 }
 
@@ -63,10 +65,15 @@ function baseTypesText(types: readonly ExpenseType[]): string {
   return types.length === 0 ? 'ไม่มี (ไม่หักทุกรายการ)' : types.map((type) => EXPENSE_TYPE_LABEL[type]).join(' · ')
 }
 
+/** มติ PO 05/10/2569 UAT U16 */
+function zeroRateText(issue: boolean): string {
+  return issue ? 'ออก 50 ทวิ (ภาษี 0) + รวมใน ภ.ง.ด.1' : 'ไม่ออก 50 ทวิ'
+}
+
 function PolicySummary({ values }: { values: WhtPolicyValues }) {
   const excluded = WHT_POLICY_EXPENSE_TYPES.filter((type) => !values.baseExpenseTypes.includes(type))
   return (
-    <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">ฐาน WHT (รวม)</dt>
         <dd className="mt-1 text-slate-900">{baseTypesText(values.baseExpenseTypes)}</dd>
@@ -79,6 +86,10 @@ function PolicySummary({ values }: { values: WhtPolicyValues }) {
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">ประเภทเงินได้</dt>
         <dd className="mt-1 text-slate-900">{WHT_INCOME_TYPE_MODE_LABEL[values.incomeTypeMode]}</dd>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <dt className="font-semibold text-slate-500">40(2) อัตรา 0%</dt>
+        <dd className="mt-1 text-slate-900">{zeroRateText(values.issueZeroRate402Certificate)}</dd>
       </div>
     </dl>
   )
@@ -128,6 +139,7 @@ export function WhtPolicyTab() {
       baseExpenseTypes: [...overview.current.baseExpenseTypes],
       certificateMode: overview.current.certificateMode,
       incomeTypeMode: overview.current.incomeTypeMode,
+      issueZeroRate402Certificate: overview.current.issueZeroRate402Certificate,
       reason: '',
     })
     setErrors({})
@@ -180,7 +192,7 @@ export function WhtPolicyTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">ค่าตั้งภาษีหัก ณ ที่จ่าย (Effective-dated)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ฐาน WHT · การออกหนังสือรับรอง 50 ทวิ · ประเภทเงินได้ — มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล
+            ฐาน WHT · การออกหนังสือรับรอง 50 ทวิ · ประเภทเงินได้ · 40(2) อัตรา 0% — มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล
             รอบที่สร้างแล้วใช้ค่าเดิมเสมอ
           </p>
         </div>
@@ -214,17 +226,18 @@ export function WhtPolicyTab() {
               <Th>ฐาน WHT (รวม)</Th>
               <Th>การออก 50 ทวิ</Th>
               <Th>ประเภทเงินได้</Th>
+              <Th>40(2) อัตรา 0%</Th>
               <Th>เหตุผล / ผู้บันทึก</Th>
               <Th className="text-right">สถานะ</Th>
             </Tr>
           </THead>
           <TableState
-            colSpan={6}
+            colSpan={7}
             loading={loading}
             error={error}
             isEmpty={history.length === 0}
             emptyTitle="ยังไม่เคยตั้งค่า — ใช้ค่าเริ่มต้น"
-            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด"
+            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(2) อัตรา 0% ออก 50 ทวิ"
             onRetry={
               <Button
                 variant="secondary"
@@ -253,6 +266,9 @@ export function WhtPolicyTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{WHT_INCOME_TYPE_MODE_LABEL[item.incomeTypeMode]}</span>
+                  </Td>
+                  <Td>
+                    <span className="text-xs text-slate-700">{zeroRateText(item.issueZeroRate402Certificate)}</span>
                   </Td>
                   <Td>
                     <div className="text-xs text-slate-700">{item.reason}</div>
@@ -363,6 +379,23 @@ export function WhtPolicyTab() {
                 ))}
               </Select>
             </Field>
+
+            <div>
+              <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
+                <input
+                  id="wht-policy-zero-rate"
+                  type="checkbox"
+                  checked={form.issueZeroRate402Certificate}
+                  onChange={(event) => set('issueZeroRate402Certificate', event.target.checked)}
+                  className="focus-ring mt-0.5 h-4 w-4 rounded border-slate-300"
+                />
+                {ISSUE_ZERO_RATE_40_2_LABEL}
+              </label>
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                ผู้รับเงินได้ 40(2) ที่อัตราหัก 0% จะได้หนังสือรับรองยอดภาษี 0 (เงินได้ = ยอดที่จ่ายในฐาน) เพื่อใช้ยื่น ภ.ง.ด.90/91
+                และนับในสรุป ภ.ง.ด.1 · ไม่เกี่ยวกับเงินได้ 40(8) ที่ต่ำกว่าเกณฑ์ขั้นต่ำ (ยังไม่ออกหนังสือรับรอง)
+              </p>
+            </div>
 
             {form.incomeTypeMode !== 'all_40_8' && (
               <InlineAlert tone="warning" title="ผู้รับเงิน 40(2) ต้องมีอัตราหักก่อนสร้างรอบจ่าย">
