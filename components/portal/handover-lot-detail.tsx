@@ -12,6 +12,7 @@ import type { PortalLotAssetDto, PortalLotDetailDto } from '@/lib/portal/seriali
  * รายละเอียดล็อตส่งมอบ (modal — mockup `lot-detail` + `asset-detail` รวมเป็นหน้าต่างเดียว)
  * `GET /api/portal/handover-lots/:id` (มติ O43 D6) — รายการทรัพย์ **ไม่มี IMEI/serial** (O44: DTO ไม่มีช่องนี้)
  * · รูปทรัพย์ `GET /api/portal/assets/:id/photos/:index` ต้องมีสิทธิ์ดาวน์โหลด ⇒ ไม่มีสิทธิ์ = ไม่โหลดรูปเลย
+ * · เอกสาร (มติ U13): ใบส่งมอบ PDF จากระบบ (ตั้งแต่สร้างล็อต) · หลักฐานการจัดส่ง (เฉพาะล็อตเราส่งที่แนบแล้ว) · ใบเซ็นรับ
  */
 export function HandoverLotDetailModal({
   lotId,
@@ -34,7 +35,23 @@ export function HandoverLotDetailModal({
       footer={
         <>
           {lot !== null && !state.loading && state.error === null ? (
-            <div className="mr-auto">
+            <div className="mr-auto flex flex-wrap items-start gap-2">
+              <HandoverDownloadButton
+                kind="delivery_note"
+                lotId={lot.id}
+                docRef={lot.docRef}
+                downloadable
+                canDownload={canDownload}
+              />
+              {lot.deliveryProofAvailable ? (
+                <HandoverDownloadButton
+                  kind="delivery_proof"
+                  lotId={lot.id}
+                  docRef={lot.docRef}
+                  downloadable
+                  canDownload={canDownload}
+                />
+              ) : null}
               <HandoverDownloadButton
                 lotId={lot.id}
                 docRef={lot.docRef}

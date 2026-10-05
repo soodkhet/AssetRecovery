@@ -229,6 +229,14 @@ export interface CompanyReportFilter {
   companyId?: string
   /** เฉพาะรายได้ที่อยู่ในรอบวางบิลสถานะเหล่านี้ (พอร์ทัล = `sent` ขึ้นไป — draft ห้ามรั่ว) */
   billingStatuses?: readonly BillingBatchStatus[]
+  /**
+   * แทนยอด "หลังรายการปรับปรุง" ด้วยยอดที่ผู้เรียกกำหนดต่อ `revenue.id` — พอร์ทัลใช้ยอดตามเอกสาร
+   * (ใบกำกับ/ใบลดหนี้ — มติ PO 05/10/2569 U14) · ไม่ระบุ = ยอดหลัง Adjustment ตามรายงานภายใน (`22` §6.12)
+   * · revenue ที่ไม่มีคีย์ใน Map ⇒ 0
+   */
+  revenueAmounts?: (
+    rows: readonly { id: string; billingBatchId: string | null; grossSatang: number }[],
+  ) => Promise<ReadonlyMap<string, number>>
 }
 
 export async function loadRevenueEntries(
@@ -253,12 +261,23 @@ export async function loadRevenueEntries(
       id: true,
       caseId: true,
       companyId: true,
+      billingBatchId: true,
       grossSatang: true,
       revenueDate: true,
       company: { select: { name: true } },
       case: { select: { status: true } },
     },
   })
+
+  if (filter.revenueAmounts !== undefined) {
+    const amounts = rows.length === 0 ? new Map<string, number>() : await filter.revenueAmounts(rows)
+    return rows.map((row) => ({
+      ...revenueGroupOf(groupBy, { revenueDate: row.revenueDate, companyId: row.companyId, companyName: row.company.name }),
+      caseId: row.caseId,
+      caseStatus: row.case.status,
+      revenueSatang: amounts.get(row.id) ?? 0,
+    }))
+  }
 
   const adjustments =
     rows.length === 0

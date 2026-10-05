@@ -46,6 +46,8 @@ const IMEI_CO1 = '356938035643809'
 const SERIAL_CO1 = 'SN-P6-SECRET-001'
 const SIGNED_PATH = 'handover-lots/p6-confirmed/signed-doc/v1.pdf'
 const SIGNED_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37])
+const PROOF_PATH = 'handover-lots/p6-confirmed/delivery-proof/v1.jpg'
+const PROOF_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
 
 let client: PrismaClient | null = null
 
@@ -101,15 +103,20 @@ const internal: SessionUser = {
 type ListRoute = typeof import('@/app/api/portal/handover-lots/route')
 type DetailRoute = typeof import('@/app/api/portal/handover-lots/[id]/route')
 type DownloadRoute = typeof import('@/app/api/portal/handover-lots/[id]/download/route')
+type NoteRoute = typeof import('@/app/api/portal/handover-lots/[id]/delivery-note/route')
+type ProofRoute = typeof import('@/app/api/portal/handover-lots/[id]/delivery-proof/route')
 let listRoute: ListRoute
 let detailRoute: DetailRoute
 let downloadRoute: DownloadRoute
+let noteRoute: NoteRoute
+let proofRoute: ProofRoute
 
-const lots: Record<'co1Pending' | 'co1Dispatched' | 'co1Confirmed' | 'co2Confirmed', string> = {
+const lots: Record<'co1Pending' | 'co1Dispatched' | 'co1Confirmed' | 'co2Confirmed' | 'co1Pickup', string> = {
   co1Pending: '',
   co1Dispatched: '',
   co1Confirmed: '',
   co2Confirmed: '',
+  co1Pickup: '',
 }
 
 function req(path: string): NextRequest {
@@ -167,13 +174,15 @@ async function insertLot(
   status: 'pending_attach' | 'pending_delivery_proof' | 'confirmed',
   createdAt: string,
   signedDocUrl: string | null,
+  extra: { type?: 'we_deliver' | 'finance_pickup'; deliveryProofUrl?: string } = {},
 ): Promise<string> {
   const confirmed = status === 'confirmed'
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO handover_lots (organization_id, company_id, lot_number, doc_ref, type, status, signed_doc_url,
-                               confirmed_at, confirmed_by, created_by, created_at)
-    VALUES ('${ORG_ID}', '${companyId}', 'LOT-2569-97${suffix}', 'DLV-2569-97${suffix}', 'we_deliver', '${status}',
+                               delivery_proof_url, confirmed_at, confirmed_by, created_by, created_at)
+    VALUES ('${ORG_ID}', '${companyId}', 'LOT-2569-97${suffix}', 'DLV-2569-97${suffix}', '${extra.type ?? 'we_deliver'}', '${status}',
             ${signedDocUrl === null ? 'NULL' : `'${signedDocUrl}'`},
+            ${extra.deliveryProofUrl === undefined ? 'NULL' : `'${extra.deliveryProofUrl}'`},
             ${confirmed ? `'${createdAt}'` : 'NULL'}, ${confirmed ? `'${INTERNAL_ID}'` : 'NULL'},
             '${INTERNAL_ID}', '${createdAt}')
     RETURNING id`)
@@ -198,6 +207,8 @@ beforeAll(async () => {
   listRoute = await import('@/app/api/portal/handover-lots/route')
   detailRoute = await import('@/app/api/portal/handover-lots/[id]/route')
   downloadRoute = await import('@/app/api/portal/handover-lots/[id]/download/route')
+  noteRoute = await import('@/app/api/portal/handover-lots/[id]/delivery-note/route')
+  proofRoute = await import('@/app/api/portal/handover-lots/[id]/delivery-proof/route')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -230,7 +241,9 @@ beforeAll(async () => {
   await cleanup()
   lots.co1Pending = await insertLot('001', CO1, 'pending_attach', '2026-09-02T03:00:00Z', null)
   lots.co1Dispatched = await insertLot('002', CO1, 'pending_delivery_proof', '2026-09-10T03:00:00Z', SIGNED_PATH)
-  lots.co1Confirmed = await insertLot('003', CO1, 'confirmed', '2026-09-20T03:00:00Z', SIGNED_PATH)
+  lots.co1Confirmed = await insertLot('003', CO1, 'confirmed', '2026-09-20T03:00:00Z', SIGNED_PATH, {
+    deliveryProofUrl: PROOF_PATH,
+  })
   lots.co2Confirmed = await insertLot('004', CO2, 'confirmed', '2026-09-21T03:00:00Z', SIGNED_PATH)
   await insertAsset(lots.co1Confirmed, CO1, 1, IMEI_CO1, SERIAL_CO1)
   await insertAsset(lots.co1Confirmed, CO1, 2, '356938035643817', 'SN-P6-SECRET-002')
@@ -248,6 +261,7 @@ beforeEach(() => {
   getRawSessionUserMock.mockReset()
   resetFakeUploads()
   putFakeUpload(SIGNED_PATH, SIGNED_BYTES)
+  putFakeUpload(PROOF_PATH, PROOF_BYTES)
 })
 
 suite('GET /api/portal/handover-lots — list', () => {
@@ -427,5 +441,88 @@ suite('GET /api/portal/handover-lots/:id/download — ใบเซ็นรั�
     } finally {
       await db().$executeRawUnsafe(`UPDATE finance_companies SET status = 'active' WHERE id = '${CO1}'`)
     }
+  })
+})
+
+suite('มติ U13 — ใบส่งมอบ PDF จากระบบ + หลักฐานการจัดส่ง', () => {
+  // ล็อตแบบบริษัทมารับเอง — สร้างเฉพาะชุดนี้ (ไม่ให้กระทบจำนวนล็อตของเทสต์ list ด้านบน)
+  beforeAll(async () => {
+    if (!url) return
+    lots.co1Pickup = await insertLot('005', CO1, 'pending_attach', '2026-09-03T03:00:00Z', null, { type: 'finance_pickup' })
+  })
+  afterAll(async () => {
+    if (!url || lots.co1Pickup === '') return
+    await db().$executeRawUnsafe(`DELETE FROM handover_lots WHERE id = '${lots.co1Pickup}'`)
+  })
+
+  async function exportAudit(lotId: string) {
+    return db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, actorId: CO1_MANAGER_ID, action: 'export', targetId: lotId, createdAt: { gte: testStartedAt } },
+      orderBy: { createdAt: 'desc' },
+    })
+  }
+
+  it('รายละเอียดล็อตบอกว่ามีหลักฐานการจัดส่งหรือไม่ (ไม่ส่ง path ออกไป)', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const withProof = await json(await detailRoute.GET(req(`/api/portal/handover-lots/${lots.co1Confirmed}`), params(lots.co1Confirmed)))
+    expect(withProof.data).toMatchObject({ deliveryProofAvailable: true })
+    expect(JSON.stringify(withProof.data)).not.toContain(PROOF_PATH)
+    const without = await json(await detailRoute.GET(req(`/api/portal/handover-lots/${lots.co1Pickup}`), params(lots.co1Pickup)))
+    expect(without.data).toMatchObject({ deliveryProofAvailable: false })
+  })
+
+  it('ใบส่งมอบ PDF: ดาวน์โหลดได้ตั้งแต่สร้างล็อต (pending_attach) + ล็อต confirmed · audit export delivery_note', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    for (const id of [lots.co1Pending, lots.co1Confirmed]) {
+      const response = await noteRoute.GET(req(`/api/portal/handover-lots/${id}/delivery-note`), params(id))
+      expect(response.status).toBe(200)
+      expect(response.headers.get('content-type')).toBe('application/pdf')
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      expect(Buffer.from(await response.arrayBuffer()).subarray(0, 4).toString('latin1')).toBe('%PDF')
+      expect((await exportAudit(id))?.afterData).toMatchObject({ channel: 'portal', document: 'delivery_note' })
+    }
+  }, 30_000)
+
+  it('ใบส่งมอบ PDF ใช้ข้อมูลชุดเดียวกับภายใน — มี IMEI (ไม่ถูกตัดแบบมุมมองบริษัท)', async () => {
+    const { getHandoverDocSourceForCompany } = await import('@/lib/warehouse/queries')
+    const source = await getHandoverDocSourceForCompany(ORG_ID, CO1, lots.co1Confirmed)
+    expect(source.lot.assets.map((asset) => asset.imeiContract)).toContain(IMEI_CO1)
+    expect(source.lot.assets.every((asset) => asset.imeiActual !== null)).toBe(true)
+    await expect(getHandoverDocSourceForCompany(ORG_ID, CO2, lots.co1Confirmed)).rejects.toThrow()
+  })
+
+  it('id ล็อต CO2 / id สุ่ม → 403 + audit (ทั้งสอง endpoint) · ไม่มี portal_download → 403', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    for (const id of [lots.co2Confirmed, RANDOM_ID]) {
+      expect((await noteRoute.GET(req(`/api/portal/handover-lots/${id}/delivery-note`), params(id))).status).toBe(403)
+      expect((await proofRoute.GET(req(`/api/portal/handover-lots/${id}/delivery-proof`), params(id))).status).toBe(403)
+    }
+    const causes = (await deniedAudits(CO1_MANAGER_ID)).slice(-4).map((audit) => (audit.afterData as { cause: string }).cause)
+    expect(causes).toEqual(['cross_company', 'cross_company', 'row_not_found', 'row_not_found'])
+
+    getRawSessionUserMock.mockResolvedValue({ ...co1Manager, capabilities: { portal_handover: 'view' } })
+    expect((await noteRoute.GET(req(`/api/portal/handover-lots/${lots.co1Confirmed}/delivery-note`), params(lots.co1Confirmed))).status).toBe(403)
+    expect((await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Confirmed}/delivery-proof`), params(lots.co1Confirmed))).status).toBe(403)
+  })
+
+  it('หลักฐานการจัดส่ง: ล็อตเราส่งที่แนบแล้ว → stream ไฟล์ + audit export delivery_proof', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const response = await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Confirmed}/delivery-proof`), params(lots.co1Confirmed))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toContain('DLV-2569-97003-delivery-proof.jpg')
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(PROOF_BYTES)
+    expect((await exportAudit(lots.co1Confirmed))?.afterData).toMatchObject({ document: 'delivery_proof' })
+  })
+
+  it('หลักฐานการจัดส่ง: ล็อตที่บริษัทมารับเอง → 403 + audit not_we_deliver · เราส่งแต่ยังไม่แนบ → LOT_MISSING_DELIVERY_PROOF', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const pickup = await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Pickup}/delivery-proof`), params(lots.co1Pickup))
+    expect(pickup.status).toBe(403)
+    const last = (await deniedAudits(CO1_MANAGER_ID)).at(-1)
+    expect((last?.afterData as { cause: string }).cause).toBe('not_we_deliver:finance_pickup')
+
+    const missing = await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Dispatched}/delivery-proof`), params(lots.co1Dispatched))
+    expect(missing.status).toBe(400)
+    expect(await errorCode(missing)).toBe('LOT_MISSING_DELIVERY_PROOF')
   })
 })

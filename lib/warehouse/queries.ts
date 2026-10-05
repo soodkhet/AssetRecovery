@@ -986,9 +986,13 @@ export interface HandoverDocSource {
  */
 export async function getHandoverDocSource(user: SessionUser, lotId: string): Promise<HandoverDocSource> {
   const lot = await getLot(user, lotId)
+  return withHandoverParties(user.organizationId, lot)
+}
+
+async function withHandoverParties(organizationId: string, lot: LotDetailDto): Promise<HandoverDocSource> {
   const [organization, company] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
-      where: { id: user.organizationId },
+      where: { id: organizationId },
       select: { name: true, address: true, taxId: true, phone: true },
     }),
     prisma.financeCompany.findUniqueOrThrow({
@@ -1002,4 +1006,27 @@ export async function getHandoverDocSource(user: SessionUser, lotId: string): Pr
     issuer: organization,
     recipient: company,
   }
+}
+
+/**
+ * ข้อมูลใบส่งมอบ**ฉบับเดียวกับภายในทุกตัวอักษร** สำหรับพอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U13 · `97` §18)
+ * — ไม่ตัด IMEI/ค่าที่ตรวจจริงออก เพราะใบส่งมอบเป็นเอกสารของบริษัทผู้รับเอง (มติ O43 D8)
+ * ⚠️ ผู้เรียกต้องตรวจสิทธิ์พอร์ทัล + `company_id` ของล็อตมาก่อนแล้ว (`requirePortalRow`) — ที่นี่ scope บริษัทซ้ำอีกชั้น
+ */
+export async function getHandoverDocSourceForCompany(
+  organizationId: string,
+  companyId: string,
+  lotId: string,
+): Promise<HandoverDocSource> {
+  const row = await prisma.handoverLot.findFirst({
+    where: { id: lotId, organizationId, companyId, deletedAt: null },
+    select: lotSelect,
+  })
+  if (row === null) throw new WarehouseError('LOT_NOT_FOUND')
+  const assets = await prisma.asset.findMany({
+    where: { lotId, organizationId, deletedAt: null },
+    select: assetSelect,
+    orderBy: [{ caseRef: 'asc' }],
+  })
+  return withHandoverParties(organizationId, toLotDetail(row, assets.map(toAssetListItem)))
 }

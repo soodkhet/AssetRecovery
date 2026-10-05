@@ -189,6 +189,7 @@ export interface PortalBillingBatchSource {
   id: string
   period: string
   status: BillingBatchStatus
+  /** ยอดตามเอกสาร (ใบกำกับ − ใบลดหนี้ — `documentedBillingAmounts()` · มติ U14) ไม่ใช่ยอดหลัง Adjustment ภายใน */
   totalSatang: number
   receivedSatang: number
   whtWithheldByCustomerSatang: number
@@ -201,6 +202,8 @@ export interface PortalBillingBatchDto {
   period: string
   totalSatang: number
   receivedSatang: number
+  /** ภาษีหัก ณ ที่จ่ายที่ลูกค้าหักไว้ (มติ U11) — รวม = ชำระแล้ว + ลูกค้าหัก + ค้าง */
+  customerWhtSatang: number
   outstandingSatang: number
   dueDate: string
   sentAt: string | null
@@ -216,6 +219,7 @@ export function serializePortalBillingBatch(row: PortalBillingBatchSource): Port
     period: row.period,
     totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
+    customerWhtSatang: row.whtWithheldByCustomerSatang,
     // สูตรกลาง `22` §6.11 (รวม WHT ที่ลูกค้าหัก — ตัวเดียวกับฝั่งภายใน)
     outstandingSatang: arOutstandingSatang({
       totalSatang: row.totalSatang,
@@ -340,10 +344,14 @@ export interface PortalLotAssetDto {
 }
 
 export interface PortalLotDetailSource extends Omit<PortalLotSource, 'assetCount'> {
+  /** ล็อตเราส่งที่แนบหลักฐานการจัดส่งแล้ว (คำนวณที่ query — path ไม่เข้ามาถึง serializer) */
+  hasDeliveryProof: boolean
   assets: readonly PortalLotAssetSource[]
 }
 
 export interface PortalLotDetailDto extends PortalLotListItemDto {
+  /** มีหลักฐานการจัดส่งให้ดาวน์โหลด (เฉพาะล็อตแบบเราส่ง — มติ U13) */
+  deliveryProofAvailable: boolean
   assets: PortalLotAssetDto[]
 }
 
@@ -363,6 +371,7 @@ export function serializePortalLotAsset(row: PortalLotAssetSource): PortalLotAss
 export function serializePortalLotDetail(row: PortalLotDetailSource): PortalLotDetailDto {
   return {
     ...serializePortalLotListItem({ ...row, assetCount: row.assets.length }),
+    deliveryProofAvailable: row.hasDeliveryProof,
     assets: row.assets.map(serializePortalLotAsset),
   }
 }

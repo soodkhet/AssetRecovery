@@ -30,6 +30,7 @@ export function ReportBarChart({
   valueType = 'money',
   emptyDescription = 'ยังไม่มีข้อมูลพอจะวาดกราฟในช่วงเวลานี้',
   stack,
+  xAxis,
 }: {
   title: string
   rows: readonly ReportRow[]
@@ -39,6 +40,8 @@ export function ReportBarChart({
   emptyDescription?: string
   /** ซ้อนแท่งที่สองบนแท่งแรก — ทั้งสองค่าต้องเป็นหน่วยเดียวกันและเป็นส่วนย่อยของยอดรวมเดียวกัน */
   stack?: { valueKey: string; valueLabel: string; baseLabel: string }
+  /** ปรับป้ายแกน X (เช่น จอแคบ: เอียงมากขึ้น/แสดงเว้นป้าย) — ไม่ระบุ = ทุกป้าย เอียง −15° */
+  xAxis?: { interval?: number; angle?: number; height?: number }
 }) {
   const data = rows.map((row) => ({
     label: String(row[labelKey] ?? '—'),
@@ -59,7 +62,15 @@ export function ReportBarChart({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-15} height={48} dy={10} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                interval={xAxis?.interval ?? 0}
+                angle={xAxis?.angle ?? -15}
+                height={xAxis?.height ?? 48}
+                dy={10}
+                textAnchor={(xAxis?.angle ?? -15) <= -30 ? 'end' : 'middle'}
+              />
               <YAxis
                 tick={{ fontSize: 11, fill: '#64748b' }}
                 width={80}

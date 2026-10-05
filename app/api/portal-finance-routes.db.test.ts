@@ -81,7 +81,9 @@ type Routes = {
   download: typeof import('@/app/api/portal/tax-invoices/[id]/download/route')
   revenue: typeof import('@/app/api/portal/reports/revenue-summary/route')
   aging: typeof import('@/app/api/portal/reports/ar-aging/route')
+  dashboard: typeof import('@/app/api/portal/dashboard/route')
   revenueQueries: typeof import('@/lib/revenue/queries')
+  providers: typeof import('@/lib/reports/finance/providers')
 }
 let routes: Routes
 
@@ -226,15 +228,25 @@ async function seedBatch(options: {
   return rows[0]?.id ?? ''
 }
 
-async function seedRevenue(caseId: string, companyId: string, grossSatang: number, batchId: string | null): Promise<void> {
+async function seedRevenue(caseId: string, companyId: string, grossSatang: number, batchId: string | null): Promise<string> {
   const vat = Math.round((grossSatang * 7) / 100)
-  await db().$executeRawUnsafe(`
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang,
                           vat_rate_pct_used, total_satang, fee_model_snapshot, vat_mode_snapshot, status,
                           revenue_date, created_by)
     VALUES ('${ORG_ID}', '${caseId}', '${companyId}', ${batchId === null ? 'NULL' : `'${batchId}'`}, ${grossSatang},
             ${vat}, 7.00, ${grossSatang + vat}, 'SUCCESS_FEE', 'exclude_vat',
             '${batchId === null ? 'ready_for_billing' : 'billed'}', '${dayOffset(0)}', '${FINANCE_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+/** รายการปรับปรุงภายในที่อนุมัติแล้ว (ยังไม่มีใบลดหนี้) — พอร์ทัลต้องไม่สะท้อน (มติ U14) */
+async function seedApprovedDecrease(target: 'revenue_id' | 'billing_batch_id', targetId: string, amountSatang: number): Promise<void> {
+  await db().$executeRawUnsafe(`
+    INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, ${target}, created_by)
+    VALUES ('${ORG_ID}', 'decrease', ${amountSatang}, 'ปรับลดภายในทดสอบ U14', 'approved', '${targetId}', '${FINANCE_ID}')
   `)
 }
 
@@ -351,7 +363,9 @@ beforeAll(async () => {
     download: await import('@/app/api/portal/tax-invoices/[id]/download/route'),
     revenue: await import('@/app/api/portal/reports/revenue-summary/route'),
     aging: await import('@/app/api/portal/reports/ar-aging/route'),
+    dashboard: await import('@/app/api/portal/dashboard/route'),
     revenueQueries: await import('@/lib/revenue/queries'),
+    providers: await import('@/lib/reports/finance/providers'),
   }
 
   const tx = db()
@@ -562,7 +576,8 @@ suite('GET /api/portal/reports/*', () => {
       await routes.revenue.GET(request('/api/portal/reports/revenue-summary?months=3'), undefined),
     )
     expect(after.months).toHaveLength(3)
-    expect(after.total).toMatchObject({ revenueSatang: 1_500_000, caseCount: 2, successCount: 1, failCount: 1 })
+    // รอบที่ย้ายมามีใบกำกับ 999,900 (ก่อน VAT 934,486) ⇒ พอร์ทัลนับยอดก่อน VAT ตามใบกำกับ ไม่ใช่ gross ของรายได้ (มติ U14)
+    expect(after.total).toMatchObject({ revenueSatang: 1_000_000 + 934_486, caseCount: 2, successCount: 1, failCount: 1 })
   })
 
   it('revenue-summary: months ผิดรูป ⇒ 400', async () => {
@@ -589,5 +604,73 @@ suite('GET /api/portal/reports/*', () => {
     as(CO2_MANAGER)
     const co2 = await dataOf<PortalArAgingDto>(await routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined))
     expect(co2.totalOutstandingSatang).toBe(777_700)
+  })
+})
+
+suite('มติ U14/U11 — ยอดตามเอกสารที่ออกจริง (ไม่ใช่ยอดหลัง Adjustment ภายใน)', () => {
+  /** สถานการณ์ CO1 จาก UAT: ใบกำกับ 373,000 + VAT 26,110 = 399,110 · รับ 387,920 + ลูกค้าหัก 11,190 · ปรับลดภายใน 10,000 */
+  async function seedCo1Scenario(): Promise<{ batchId: string; revenueId: string }> {
+    const batchId = await seedBatch({
+      companyId: CO1,
+      status: 'paid',
+      totalSatang: 39_911_000,
+      receivedSatang: 38_792_000,
+      whtSatang: 1_119_000,
+      dueDate: dayOffset(-3),
+    })
+    const revenueId = await seedRevenue(await seedCase(CO1, 'closed_success'), CO1, 37_300_000, batchId)
+    await seedInvoice({ batchId, companyId: CO1, totalSatang: 39_911_000 })
+    await seedApprovedDecrease('revenue_id', revenueId, 1_000_000)
+    await seedApprovedDecrease('billing_batch_id', batchId, 1_070_000)
+    return { batchId, revenueId }
+  }
+
+  it('กราฟรายได้ = ยอดก่อน VAT ตามใบกำกับ (373,000) ขณะที่รายงานภายใน F2 ยังหลัง Adjustment (363,000)', async () => {
+    await seedCo1Scenario()
+    as(CO1_MANAGER)
+    const dto = await dataOf<PortalRevenueSummaryDto>(
+      await routes.revenue.GET(request('/api/portal/reports/revenue-summary'), undefined),
+    )
+    // 1,000,000 (รอบ sent เดิม) + 37,300,000 ตามใบกำกับ — ไม่ใช่ 36,300,000
+    expect(dto.months.at(-1)?.revenueSatang).toBe(38_300_000)
+    expect(dto.total.revenueSatang).toBe(38_300_000)
+
+    // ภายในไม่เปลี่ยน: loader เดิมยังหัก Adjustment ที่อนุมัติแล้ว
+    const now = new Date()
+    const internal = await routes.providers.loadRevenueEntries(
+      ORG_ID,
+      'month',
+      { startDate: new Date(now.getTime() - 40 * MS_PER_DAY), endDate: new Date(now.getTime() + MS_PER_DAY) },
+      null,
+      { companyId: CO1, billingStatuses: ['sent', 'partially_paid', 'paid'] },
+    )
+    expect(internal.reduce((sum, entry) => sum + entry.revenueSatang, 0)).toBe(37_300_000)
+  })
+
+  it('วางบิล: รวม 399,110 = ชำระ 387,920 + ลูกค้าหัก 11,190 + ค้าง 0 · AR aging/dashboard = 0 สำหรับรอบนี้', async () => {
+    const { batchId } = await seedCo1Scenario()
+    as(CO1_MANAGER)
+    const items = await dataOf<PortalBillingBatchDto[]>(await routes.billing.GET(request('/api/portal/billing-batches'), undefined))
+    const row = items.find((item) => item.id === batchId)
+    expect(row).toMatchObject({
+      totalSatang: 39_911_000,
+      receivedSatang: 38_792_000,
+      customerWhtSatang: 1_119_000,
+      outstandingSatang: 0,
+    })
+    expect((row?.receivedSatang ?? 0) + (row?.customerWhtSatang ?? 0) + (row?.outstandingSatang ?? 0)).toBe(row?.totalSatang)
+    expect(forbiddenKeysIn(items)).toEqual([])
+
+    // AR aging ของพอร์ทัลไม่ติดลบจาก Adjustment ภายใน — ยอดเดิม 2,150,000 ไม่เปลี่ยน
+    const aging = await dataOf<PortalArAgingDto>(await routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined))
+    expect(aging.totalOutstandingSatang).toBe(2_150_000)
+    // ภายในยังหลัง Adjustment (รอบนี้ค้าง −10,700 ⇒ ไม่นับในยอดค้าง)
+    const internalCompanies = await routes.providers.loadArAgingCompanies(ORG_ID, { companyId: CO1 })
+    expect(internalCompanies[0]?.batches.some((batch) => batch.totalSatang === 39_911_000 - 1_070_000)).toBe(true)
+
+    const dashboard = await dataOf<{ arOutstanding?: { outstandingSatang: number } }>(
+      await routes.dashboard.GET(request('/api/portal/dashboard'), undefined),
+    )
+    expect(dashboard.arOutstanding?.outstandingSatang).toBe(1_070_000 + 1_080_000 + 0 + 0)
   })
 })
