@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 merge fixer BD `cf703ab` (U96 #14 `receipt_in_company_name` + คอลัมน์ไฟล์ 03 · #18 F5 → อายุเงินทดรองคงค้าง · U97 `data_retention_settings` + job `purge_debtor_documents` + `manage_data_retention`) · migration `20261006140000` + `20261006150000` · regenerate 00_MAP · verify 336/4,532 · migration ใหม่รวม **33 ตัว** · มติ O58/O59 · รอ fixer BA (U95)
 - 06/10/2569 merge fixer BB `3b99b93` (ที่อยู่/คำนำหน้า/สาขา/เงื่อนไขการหักของผู้รับ · ปิด D15 · นิติบุคคล → ภ.ง.ด.53 ทุกโหมด · 50 ทวิ แบบทางการ 2 ฉบับ + snapshot · ไฟล์ 05 คอลัมน์ใหม่) · migration `20261006141000_payee_tax_address_wht_snapshot` · verify 333/4,504 · migration ใหม่รวม **31 ตัว** · มติ O55–O57 · Q18 นักบัญชี
 - 06/10/2569 ผู้ใช้ยอมรับ O54 · มติ U98: เล่น R14 รอบยืนยันหลัง U95 (หลัง merge BA/BB/BD/Export Pack U94)
 - 06/10/2569 merge fixer AW `3a9b17c` (U93 ปฏิทินวันหยุด `public_holidays` · `manage_holidays` · กำหนดยื่น ภ.ง.ด. เลื่อนเป็นวันทำการ) · migration `20261006130000_public_holidays` (มี backfill เลื่อนกำหนดยื่น pending ที่ตรงเสาร์-อาทิตย์ — dev ภ.ง.ด. ต.ค. 15/11 → 16/11/2569 ไม่มี audit แถว) · verify 332/4,467 · migration ใหม่รวม **30 ตัว** · ปรับ `docs/QUESTIONS-FOR-ACCOUNTANT.md` เป็น 3 ส่วน (U93) · ต่อ: ตรวจ flow การเงิน/บัญชีเทียบมาตรฐาน (อ่านอย่างเดียว)
