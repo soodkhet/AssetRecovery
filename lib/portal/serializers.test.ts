@@ -160,7 +160,7 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
     for (const status of Object.values(HandoverLotStatus)) {
       const lot = { ...FORBIDDEN, id: 'lot-1', lotNumber: 'LOT-2569-001', docRef: 'DLV-2569-001', type: 'we_deliver' as const, status, createdAt: CREATED, confirmedAt: null }
       deepScan(serializePortalLotListItem({ ...lot, assetCount: 1 }))
-      deepScan(serializePortalLotDetail({ ...lot, assets: [lotAsset] }))
+      deepScan(serializePortalLotDetail({ ...lot, hasDeliveryProof: true, assets: [lotAsset] }))
     }
     deepScan(
       serializePortalCompanyProfile({

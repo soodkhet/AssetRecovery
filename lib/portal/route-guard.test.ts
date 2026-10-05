@@ -104,11 +104,11 @@ describe('route ↔ lib/portal/contract.ts', () => {
     expect(outside).toEqual([])
   })
 
-  it('ทุก path ใน contract มีไฟล์ route จริง (ครบ 13 endpoint หลัง P4/P5/P6 merge)', () => {
+  it('ทุก path ใน contract มีไฟล์ route จริง (ครบ 15 endpoint — U13 +2)', () => {
     const existing = new Set(files.map(apiPathOf))
     const missing = [...contractPaths].filter((apiPath) => !existing.has(apiPath))
     expect(missing).toEqual([])
-    expect(contractPaths.size).toBe(13)
+    expect(contractPaths.size).toBe(15)
   })
 })
 

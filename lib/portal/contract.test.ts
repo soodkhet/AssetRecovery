@@ -32,16 +32,16 @@ function specRows(): SpecRow[] {
 describe('portal contract ↔ 97 §17', () => {
   const rows = specRows()
 
-  it('13 endpoint ตรงกับ spec ทั้งลำดับ path และ capability', () => {
-    expect(rows).toHaveLength(13)
-    expect(PORTAL_ENDPOINTS).toHaveLength(13)
+  it('15 endpoint ตรงกับ spec ทั้งลำดับ path และ capability', () => {
+    expect(rows).toHaveLength(15)
+    expect(PORTAL_ENDPOINTS).toHaveLength(15)
     expect(PORTAL_ENDPOINTS.map((endpoint) => ({ method: endpoint.method, path: endpoint.path, capabilities: [...endpoint.capabilities] }))).toEqual(rows)
   })
 
   it('GET เท่านั้น · namespace /api/portal/ · path ไม่ซ้ำ', () => {
     expect(rows.every((row) => row.method === 'GET')).toBe(true)
     expect(PORTAL_ENDPOINTS.every((endpoint) => endpoint.method === 'GET' && endpoint.path.startsWith('/api/portal/'))).toBe(true)
-    expect(new Set(PORTAL_ENDPOINTS.map((endpoint) => endpoint.path)).size).toBe(13)
+    expect(new Set(PORTAL_ENDPOINTS.map((endpoint) => endpoint.path)).size).toBe(15)
   })
 
   it('section/download สอดคล้องกับ capability', () => {

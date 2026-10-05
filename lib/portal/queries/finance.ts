@@ -1,5 +1,6 @@
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
 import type { BillingBatchStatus } from '@/lib/generated/prisma/enums'
+import { documentedAmountsForBatches, documentedRevenueAmounts } from '@/lib/portal/documented-amounts'
 import type { PortalContext } from '@/lib/portal/guard'
 import { portalRevenueMonths } from '@/lib/portal/report-range'
 import {
@@ -14,7 +15,7 @@ import {
 } from '@/lib/portal/serializers'
 import { prisma } from '@/lib/prisma'
 import { buildArAgingReport } from '@/lib/reports/finance/ar-aging-report'
-import { loadArAgingCompanies, loadRevenueEntries } from '@/lib/reports/finance/providers'
+import { loadRevenueEntries } from '@/lib/reports/finance/providers'
 import { buildRevenueSummary } from '@/lib/reports/finance/revenue-summary-report'
 import { previousReportRange } from '@/lib/reports/range'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -26,9 +27,12 @@ import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
  * - กรอง `organization_id` + `company_id = ctx.companyId` ทุก query (ค่าจาก session — ไม่รับจาก client)
  * - **รอบวางบิล `draft` ไม่แสดงและไม่นับในยอดใด ๆ** (D9) — ทุก query จำกัด `PORTAL_VISIBLE_BILLING_STATUSES`
  * - **คำนวณสดทุกครั้ง** — ไม่ผ่าน `runReport()`/แคชรายงานภายใน (D9)
+ * - **ยอดตามเอกสาร** (มติ PO 05/10/2569 U14): ยอดบิล/AR/กราฟรายได้ใช้ `documentedBillingAmounts()`
+ *   (`lib/portal/documented-amounts.ts` — ใบกำกับ − ใบลดหนี้) **ไม่ใช่ยอดหลัง Adjustment ภายใน**
+ *   · รายงานภายใน F2/F3 ไม่เปลี่ยน (ยังหลัง Adjustment)
  * - **ไม่มีสูตรเงินที่นี่** — ยอดค้าง = `arOutstandingSatang()` (`22` §6.11 · หัก WHT ที่ลูกค้าหักแล้ว — O44)
- *   ผ่าน serializer · รายงานใช้ loader + builder ตัวเดียวกับ F2/F3 ภายใน (`loadRevenueEntries` /
- *   `buildRevenueSummary` · `loadArAgingCompanies` / `buildArAgingReport`) แค่ scope บริษัทเดียว
+ *   ผ่าน serializer · รายงานใช้ builder ตัวเดียวกับ F2/F3 ภายใน (`buildRevenueSummary` / `buildArAgingReport`)
+ *   แค่ scope บริษัทเดียว + ป้อนยอดตามเอกสาร
  */
 
 /** สถานะรอบวางบิลที่ฝั่งบริษัทเห็น/นับได้ (`97` §6.2/§10.3) */
@@ -65,7 +69,30 @@ export async function listPortalBillingBatches(ctx: PortalContext): Promise<Port
     orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }],
     take: LIST_LIMIT,
   })
-  return serializePortalBillingBatches(rows)
+  return serializePortalBillingBatches(await withDocumentedTotals(ctx, rows))
+}
+
+/** แทน `totalSatang` ดิบของรอบด้วยยอดตามเอกสาร (U14) — รอบที่หาเอกสารไม่เจอคงยอดของรอบ (ยอดที่ส่งบิลจริง) */
+async function withDocumentedTotals<T extends { id: string; totalSatang: number }>(
+  ctx: PortalContext,
+  rows: readonly T[],
+): Promise<T[]> {
+  const documented = await documentedAmountsForBatches(
+    ctx.user.organizationId,
+    rows.map((row) => row.id),
+  )
+  return rows.map((row) => ({ ...row, totalSatang: documented.get(row.id)?.documented.totalSatang ?? row.totalSatang }))
+}
+
+/** รอบวางบิลที่บริษัทเห็นได้พร้อมยอดตามเอกสาร — ฐานของการ์ด AR ค้าง (dashboard) และ AR aging */
+export async function loadPortalDocumentedBatches(
+  ctx: PortalContext,
+): Promise<{ id: string; dueDate: Date; totalSatang: number; receivedSatang: number; whtWithheldByCustomerSatang: number }[]> {
+  const rows = await prisma.billingBatch.findMany({
+    where: visibleBatchWhere(ctx),
+    select: { id: true, dueDate: true, totalSatang: true, receivedSatang: true, whtWithheldByCustomerSatang: true },
+  })
+  return withDocumentedTotals(ctx, rows)
 }
 
 // ── GET /api/portal/tax-invoices ────────────────────────────────────────────
@@ -138,7 +165,17 @@ export async function getPortalRevenueSummary(
   options: { months: number; now?: Date },
 ): Promise<PortalRevenueSummaryDto> {
   const { months, range } = portalRevenueMonths(options.months, options.now ?? new Date())
-  const filter = { companyId: ctx.companyId, billingStatuses: PORTAL_VISIBLE_BILLING_STATUSES }
+  const organizationId = ctx.user.organizationId
+  const filter = {
+    companyId: ctx.companyId,
+    billingStatuses: PORTAL_VISIBLE_BILLING_STATUSES,
+    // ยอดก่อน VAT ตามเอกสาร (U14) แทนยอดหลัง Adjustment ภายใน
+    revenueAmounts: (rows: readonly { billingBatchId: string | null }[]) =>
+      documentedRevenueAmounts(
+        organizationId,
+        rows.flatMap((row) => (row.billingBatchId === null ? [] : [row.billingBatchId])),
+      ),
+  }
   const [entries, previousEntries] = await Promise.all([
     loadRevenueEntries(ctx.user.organizationId, 'month', range, null, filter),
     loadRevenueEntries(ctx.user.organizationId, 'month', previousReportRange(range), null, filter),
@@ -151,13 +188,13 @@ export async function getPortalRevenueSummary(
 
 export async function getPortalArAging(ctx: PortalContext, now: Date = new Date()): Promise<PortalArAgingDto> {
   const asOf = bangkokBusinessDate(now)
-  const [policy, companies] = await Promise.all([
+  const [policy, batches] = await Promise.all([
     getFinancePolicy(ctx.user.organizationId),
-    // `loadArAgingCompanies` นับเฉพาะ `sent` ขึ้นไปอยู่แล้ว + ยอดหลัง Adjustment — ชุดเดียวกับ F3/E1 ภายใน
-    loadArAgingCompanies(ctx.user.organizationId, { companyId: ctx.companyId }),
+    // เฉพาะ `sent` ขึ้นไป + ยอดตามเอกสาร (U14 — ต่างจาก F3 ภายในที่ใช้ยอดหลัง Adjustment)
+    loadPortalDocumentedBatches(ctx),
   ])
   const report = buildArAgingReport({
-    companies: companies.filter((company) => company.companyId === ctx.companyId),
+    companies: batches.length === 0 ? [] : [{ companyId: ctx.companyId, companyName: '', batches }],
     buckets: policy.arAgingBuckets,
     asOf,
   })

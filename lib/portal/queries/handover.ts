@@ -6,7 +6,7 @@ import { dateOnlySchema } from '@/lib/api/validation'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { HandoverLotStatus } from '@/lib/generated/prisma/enums'
+import { HandoverLotStatus, type HandoverType } from '@/lib/generated/prisma/enums'
 import { rejectPortalRow, requirePortalRow, type PortalContext } from '@/lib/portal/guard'
 import {
   serializePortalLotDetail,
@@ -21,8 +21,11 @@ import {
   type PortalLotStatusCode,
 } from '@/lib/portal/status-map'
 import { prisma } from '@/lib/prisma'
+import { renderHandoverNote } from '@/components/pdf/handover-note'
 import { downloadUploadedFile } from '@/lib/uploads/storage'
+import { buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
 import { documentExtension, lotDocumentMime } from '@/lib/warehouse/lot-documents'
+import { getHandoverDocSourceForCompany } from '@/lib/warehouse/queries'
 
 /**
  * ชั้น query ของหมวด "ส่งมอบทรัพย์" ในพอร์ทัลบริษัทไฟแนนซ์ (`97` §6.4 · §10.2 · §17 · มติ PO 05/10/2569 O43 D6/D8 · O44)
@@ -33,6 +36,9 @@ import { documentExtension, lotDocumentMime } from '@/lib/warehouse/lot-document
  * - **ไม่ select IMEI/serial ของทรัพย์เลย** (O44) — DTO ของ serializer ไม่มีช่องนี้อยู่แล้ว แต่ไม่ดึงขึ้นมาตั้งแต่ต้น
  * - **ดาวน์โหลด** = ใบส่งมอบที่มีลายเซ็นผู้รับ (`handover_lots.signed_doc_url`) เฉพาะล็อต `confirmed` (D8 — เป็นเอกสาร
  *   ของบริษัทเอง แม้มี IMEI) · ไฟล์ถูกอ่านด้วย service role แล้ว stream ผ่าน server (DEC-014 — ไม่ส่ง URL ของ bucket ออกไป)
+ * - **ใบส่งมอบ PDF จากระบบ** (มติ U13) — renderer เดียวกับภายใน ดาวน์โหลดได้ตั้งแต่สร้างล็อต (มี IMEI — เอกสารของบริษัทเอง)
+ * - **หลักฐานการจัดส่ง** (มติ U13) — เฉพาะล็อตแบบเราส่ง (`we_deliver`) ที่แนบหลักฐานแล้ว · stream ผ่าน server
+ * - ดาวน์โหลดสำเร็จทุกชนิดลง audit `export` (`after.document` = `signed_doc` / `delivery_note` / `delivery_proof`)
  */
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -151,6 +157,8 @@ const lotDetailSelect = {
   status: true,
   createdAt: true,
   confirmedAt: true,
+  // ใช้ตัดสินว่ามีหลักฐานการจัดส่งหรือไม่เท่านั้น — serializer ไม่ส่ง path ออกไป
+  deliveryProofUrl: true,
 } as const
 
 /** ช่องของทรัพย์ที่พอร์ทัลอ่าน — **ไม่มี** `imei*`/`serial*` (O44) */
@@ -171,13 +179,13 @@ export async function getPortalLotDetail(
 ): Promise<PortalLotDetailDto> {
   const where = lotByIdWhere(ctx, lotId)
   const row = where === null ? null : await prisma.handoverLot.findFirst({ where, select: lotDetailSelect })
-  const lot = await requirePortalRow(ctx, row, { type: PORTAL_LOT_TARGET, id: lotId }, { request })
+  const { deliveryProofUrl, ...lot } = await requirePortalRow(ctx, row, { type: PORTAL_LOT_TARGET, id: lotId }, { request })
   const assets = await prisma.asset.findMany({
     where: { lotId: lot.id, organizationId: ctx.user.organizationId, companyId: ctx.companyId, deletedAt: null },
     select: lotAssetSelect,
     orderBy: [{ caseRef: 'asc' }, { id: 'asc' }],
   })
-  return serializePortalLotDetail({ ...lot, assets })
+  return serializePortalLotDetail({ ...lot, hasDeliveryProof: hasDeliveryProof(lot.type, deliveryProofUrl), assets })
 }
 
 export interface PortalLotFile {
@@ -232,6 +240,24 @@ export async function getPortalLotSignedDoc(
   const bytes = await downloadUploadedFile(path)
   if (bytes === null) throw missingSignedDoc(`lot=${lot.id} storage object missing`)
 
+  await auditLotExport(ctx, lot, 'signed_doc', request)
+
+  return {
+    bytes,
+    contentType: lotDocumentMime(path),
+    fileName: `${lot.docRef}-signed.${documentExtension(path)}`,
+  }
+}
+
+type PortalLotDocument = 'signed_doc' | 'delivery_note' | 'delivery_proof'
+
+/** ร่องรอยการนำเอกสารล็อตออกทางพอร์ทัล (Rule 03) */
+async function auditLotExport(
+  ctx: PortalContext,
+  lot: { id: string; lotNumber: string },
+  document: PortalLotDocument,
+  request: Request | undefined,
+): Promise<void> {
   const meta = request ? getRequestMeta(request) : { ipAddress: null, userAgent: null }
   await emitAudit({
     organizationId: ctx.user.organizationId,
@@ -240,14 +266,87 @@ export async function getPortalLotSignedDoc(
     action: 'export',
     targetType: PORTAL_LOT_TARGET,
     targetId: lot.id,
-    after: { channel: 'portal', document: 'signed_doc', company_id: ctx.companyId, lot_number: lot.lotNumber },
+    after: { channel: 'portal', document, company_id: ctx.companyId, lot_number: lot.lotNumber },
     ipAddress: meta.ipAddress,
     userAgent: meta.userAgent,
   })
+}
+
+/** ล็อตแบบเราส่ง (`we_deliver`) ที่แนบหลักฐานการจัดส่งแล้ว (ล็อตที่บริษัทมารับเองไม่มีหลักฐานชนิดนี้) */
+export function hasDeliveryProof(type: HandoverType, deliveryProofUrl: string | null): boolean {
+  return type === 'we_deliver' && (deliveryProofUrl ?? '').trim() !== ''
+}
+
+/**
+ * ใบส่งมอบ PDF จากระบบ (มติ PO 05/10/2569 U13 · `97` §18) — renderer + template เดียวกับ `GET /api/handover-lots/:id/pdf`
+ * ภายใน (เอกสารเหมือนกันทุกตัวอักษร มี IMEI) · ดาวน์โหลดได้ตั้งแต่สร้างล็อต (ไม่ต้องรอ `confirmed`)
+ * - ไม่พบ/ข้ามบริษัท → 403 + audit (`requirePortalRow`) · สำเร็จ → audit `export`
+ */
+export async function getPortalLotDeliveryNote(
+  ctx: PortalContext,
+  lotId: string,
+  request?: Request,
+): Promise<PortalLotFile> {
+  const where = lotByIdWhere(ctx, lotId)
+  const row =
+    where === null
+      ? null
+      : await prisma.handoverLot.findFirst({ where, select: { id: true, companyId: true, lotNumber: true } })
+  const lot = await requirePortalRow(ctx, row, { type: PORTAL_LOT_TARGET, id: lotId }, { request, download: true })
+
+  const source = await getHandoverDocSourceForCompany(ctx.user.organizationId, ctx.companyId, lot.id)
+  const pdf = await renderHandoverNote(buildHandoverDoc(source.lot, source.issuer, source.recipient))
+  await auditLotExport(ctx, lot, 'delivery_note', request)
+
+  return { bytes: new Uint8Array(pdf), contentType: 'application/pdf', fileName: handoverFileName(source.lot, 'pdf') }
+}
+
+/** ล็อตเราส่งที่ยังไม่มีไฟล์หลักฐานการจัดส่งให้อ่าน — ข้อความสำหรับฝั่งบริษัท */
+function missingDeliveryProof(detail: string): ModuleError<'LOT_MISSING_DELIVERY_PROOF'> {
+  return new ModuleError(
+    'LOT_MISSING_DELIVERY_PROOF',
+    {
+      title: 'ยังไม่มีหลักฐานการจัดส่ง',
+      message: 'ล็อตนี้ยังไม่มีหลักฐานการจัดส่ง กรุณาติดต่อผู้ให้บริการ',
+    },
+    errorCodeStatus('LOT_MISSING_DELIVERY_PROOF'),
+    { detail },
+  )
+}
+
+/**
+ * หลักฐานการจัดส่ง (มติ PO 05/10/2569 U13) — เฉพาะล็อตแบบเราส่ง (`we_deliver`) · ไฟล์ stream ผ่าน server
+ * - ไม่พบ/ข้ามบริษัท → 403 + audit · ล็อตที่บริษัทมารับเอง → 403 + audit (`cause = not_we_deliver`)
+ * - เราส่งแต่ยังไม่แนบ/ไฟล์หายจาก Storage → `LOT_MISSING_DELIVERY_PROOF` · สำเร็จ → audit `export`
+ */
+export async function getPortalLotDeliveryProof(
+  ctx: PortalContext,
+  lotId: string,
+  request?: Request,
+): Promise<PortalLotFile> {
+  const target = { type: PORTAL_LOT_TARGET, id: lotId }
+  const where = lotByIdWhere(ctx, lotId)
+  const row =
+    where === null
+      ? null
+      : await prisma.handoverLot.findFirst({
+          where,
+          select: { id: true, companyId: true, lotNumber: true, docRef: true, type: true, deliveryProofUrl: true },
+        })
+  const lot = await requirePortalRow(ctx, row, target, { request, download: true })
+  if (lot.type !== 'we_deliver') {
+    return rejectPortalRow(ctx, target, `not_we_deliver:${lot.type}`, { request, download: true })
+  }
+
+  const path = (lot.deliveryProofUrl ?? '').trim()
+  if (path === '') throw missingDeliveryProof(`lot=${lot.id} delivery_proof_url empty`)
+  const bytes = await downloadUploadedFile(path)
+  if (bytes === null) throw missingDeliveryProof(`lot=${lot.id} storage object missing`)
+  await auditLotExport(ctx, lot, 'delivery_proof', request)
 
   return {
     bytes,
     contentType: lotDocumentMime(path),
-    fileName: `${lot.docRef}-signed.${documentExtension(path)}`,
+    fileName: `${lot.docRef}-delivery-proof.${documentExtension(path)}`,
   }
 }

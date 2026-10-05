@@ -289,7 +289,7 @@ export function calculatePayeeBatchWht(
  * แบ่ง `total` สตางค์ตามสัดส่วน `weights` แบบ largest remainder — ผลรวมเท่า `total` เสมอ
  * ใช้ BigInt คูณกันเพื่อไม่ให้ `total × weight` ล้น 2^53 (ยอดระดับร้อยล้านสตางค์ × ร้อยล้าน)
  */
-function allocateLargestRemainder(total: number, weights: readonly number[]): number[] {
+export function allocateLargestRemainder(total: number, weights: readonly number[]): number[] {
   const weightSum = weights.reduce((sum, weight) => sum + weight, 0)
   if (weightSum === 0) return weights.map(() => 0)
   const bigTotal = BigInt(total)

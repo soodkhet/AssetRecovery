@@ -22,6 +22,7 @@
 | v5.1 | 05/10/2569 | **มติ PO 05/10/2569 (U6/O43 D2/D3/D5/D11) — Portal-P3 guard**: §13 เพิ่มหมายเหตุ capability `view_own_company_data` เดิม (คงในทะเบียน/seed — ไม่ทับแถวเดิม — แต่ไม่เปิด route ภายในใดแล้ว) · §14 `access_denied` บันทึกทั้งการปฏิเสธระดับหมวด (`target_type = portal` + `after.section`) และระดับแถว (`target_type` = ตารางที่ร้องขอ · `after.cause` = `row_not_found`/`cross_company`) รวมถึง `ACCOUNT_INACTIVE`/`COMPANY_SUSPENDED` · login ของผู้ใช้บริษัทตรวจบริษัท active ด้วย (`05` v3.4) |
 | v5.3 | 05/10/2569 | **Portal-P5 API การเงิน (มติ U6/O43 D7/D9/O44 — ไม่เปลี่ยนกติกา แค่บันทึกรายละเอียด implementation)**: `billing-batches`/`tax-invoices` กรอง `sent` ขึ้นไปทุกจุด (ใบกำกับของรอบที่ยัง draft/ถูกลบก็ไม่แสดง/ดาวน์โหลดไม่ได้ = 403 แบบ id สุ่ม) · ยอดค้าง = สูตรกลาง `22` §6.11 (หัก WHT ที่ลูกค้าหักแล้ว) · `tax-invoices/:id/download` ใช้ source+renderer ตัวเดียวกับ route ภายใน + audit `export` (`after.channel = portal`) · `reports/revenue-summary?months=1..12` (ค่าเริ่มต้น 6 เดือนปฏิทินไทยรวมเดือนปัจจุบัน) = loader/builder F2 ตัวเดิม scope บริษัท + เฉพาะรายได้ในรอบ `sent` ขึ้นไป · `reports/ar-aging` = loader/builder F3 ตัวเดิม scope บริษัท (ยอดหลัง Adjustment เท่ากับ AR ภายใน) · ทั้งสองคำนวณสดทุกครั้ง ไม่ผ่านแคชรายงาน |
 | v5.4 | 05/10/2569 | **Portal-P4 (มติ U6/O43/O44) — API ชุดที่ 1 dashboard/เคส/ข้อมูลบริษัท/รูปทรัพย์**: §17 เติม "รายละเอียด endpoint ชุดที่ 1" ใต้ตาราง (query/response shape · ตัวกรองสถานะใช้รหัสฝั่งบริษัท · รูปทรัพย์ stream ผ่าน server ไม่ส่ง path/signed URL) · รูปทรัพย์เปิดได้ 2 ทาง (หมวดส่งมอบตามตาราง หรือหมวดเคสเฉพาะเคส "ติดตามสำเร็จ" ที่หน้ารายละเอียดเคส §6.1 แสดงจำนวนรูป — กันผู้ใช้ที่ไม่มีหมวดส่งมอบเห็นจำนวนรูปแต่เปิดไม่ได้) · ทรัพย์ของบริษัทตัวเองแต่ยังเปิดไม่ได้ → 403 เดียวกัน + audit `after.cause = asset_not_viewable` · index นอกช่วง → 404 `ASSET_NOT_FOUND` (ทรัพย์เป็นของผู้เรียกแล้ว ไม่ leak) · §6.6 หมายเหตุ v4.1 "เคสบริษัทอื่น = 404" ถูกแทนด้วย §12 (403 — D3) |
+| v5.5 | 05/10/2569 | **มติ PO 05/10/2569 (U11/U13/U14)**: (1) U14 §6.2 — ยอดทุกจุดในพอร์ทัล (การ์ด AR ค้าง/ใบกำกับล่าสุด, รอบวางบิล, AR Aging, กราฟรายได้) ใช้**ยอดตามเอกสารที่ออกจริง** (ใบกำกับ − ใบลดหนี้) ผ่าน `documentedBillingAmounts()` จุดเดียว — Adjustment ภายในที่ยังไม่มีใบลดหนี้ไม่สะท้อน · รายงานภายในไม่เปลี่ยน (2) U11 §6.2 — คอลัมน์ "ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)" + หมายเหตุให้ส่ง 50 ทวิ ต้นฉบับ (DTO `customerWhtSatang`) (3) U13 §6.4/§17/§18 — เพิ่ม `GET /api/portal/handover-lots/:id/delivery-note` (ใบส่งมอบ PDF จากระบบ ตั้งแต่สร้างล็อต) และ `GET /api/portal/handover-lots/:id/delivery-proof` (หลักฐานการจัดส่ง เฉพาะ `we_deliver`) ⇒ §17 = **15 endpoint** |
 
 ขอบเขตเอกสารนี้: พอร์ทัล **read-only** สำหรับ Company User ให้ดูสถานะเคส/เอกสารการเงิน-บัญชี/รายงานสรุปของบริษัทตัวเอง แทนการให้เจ้าหน้าที่ภายในส่งข้อมูลให้ทีละครั้ง — ไม่มีการสร้าง/แก้ไขข้อมูลใดๆ ผ่านพอร์ทัลนี้
 
@@ -120,6 +121,10 @@ period, total_amount, received_amount, outstanding (= total - received), status_
 > **Business Rule**: Billing Batch ที่ `status = draft` **ห้ามแสดงในพอร์ทัล** — บริษัทเห็นได้ตั้งแต่ `sent` เป็นต้นไปเท่านั้น เพราะ draft ยังไม่ถูกยืนยันความถูกต้องจากฝั่งเรา
 >
 > **ยอดทุกจุดในพอร์ทัล** (การ์ด AR ค้างบนภาพรวม, รายงานสรุป §6.5, AR Aging) **นับเฉพาะ batch ที่ `sent` ขึ้นไปและคำนวณสดทุกครั้ง** (มติ O43 D9) — ไม่ใช้แคชรายงานภายใน เพื่อไม่ให้ยอดของ draft รั่วเข้าตัวเลขรวม
+>
+> **ยอดตามเอกสารที่ออกจริง** (มติ PO 05/10/2569 U14 · ม.86/10): ยอดบิล/ยอดค้าง/AR Aging/กราฟรายได้ในพอร์ทัลใช้ยอดจากใบกำกับภาษีที่ออกแล้ว (snapshot `sales_records` — ก่อน VAT/VAT/รวม) หักใบลดหนี้ที่ออกแล้ว (เมื่อมีการบันทึกใบลดหนี้) ผ่านฟังก์ชันกลาง `documentedBillingAmounts()` จุดเดียว · **Adjustment ภายในที่ยังไม่มีใบลดหนี้ไม่สะท้อนในพอร์ทัล** · รายงานภายใน (F1/F2/F3 ฯลฯ) ยังใช้ยอดหลัง Adjustment ตามเดิม · กราฟรายได้ติดป้าย "ยอดตามใบกำกับ (ก่อน VAT)"
+>
+> **ภาษีหัก ณ ที่จ่ายที่ลูกค้าหัก** (มติ U11): หน้ารอบวางบิลแสดงคอลัมน์ "ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)" จากยอดที่บันทึกตอนรับเงิน ⇒ ยอดรวม = ชำระแล้ว + ลูกค้าหัก + ค้างชำระ · เมื่อมียอดลูกค้าหัก แสดงหมายเหตุเตือนให้ส่งหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ต้นฉบับ
 
 ### 6.3 ใบกำกับภาษี (จากไฟล์ 31)
 invoice_number, issue_date, total_amount, delivery_format, status (`active`/`cancelled`), ปุ่มดาวน์โหลด PDF — PDF สร้างด้วย **renderer เดียวกับฝั่งภายใน** (มติ O43 D7 — เอกสารต้องเหมือนฉบับที่ฝ่ายบัญชีเห็นทุกตัวอักษร ห้ามทำ template แยกของพอร์ทัล)
@@ -128,6 +133,8 @@ invoice_number, issue_date, total_amount, delivery_format, status (`active`/`can
 lot_number, doc_ref, type (`finance_pickup`/`we_deliver`), status_display (ดู §10.2), จำนวนเครื่องใน Lot, ปุ่มดาวน์โหลดใบส่งมอบ (เฉพาะ Lot ที่ `confirmed` แล้ว)
 
 > **Business Rule**: Lot ที่ `pending_attach`/`pending_delivery_proof` แสดงได้ (สถานะ "รอดำเนินการส่งมอบ") แต่ปุ่มดาวน์โหลดเอกสารจะ disable จนกว่าจะ `confirmed`
+>
+> **เอกสารเพิ่ม** (มติ PO 05/10/2569 U13): นอกจากใบเซ็นรับ — (1) **ใบส่งมอบ PDF จากระบบ** (เลข DLV-…) render ด้วย renderer เดียวกับภายใน มี IMEI (เอกสารของบริษัทเอง) ดาวน์โหลดได้**ตั้งแต่สร้างล็อต** (2) **หลักฐานการจัดส่ง** เฉพาะล็อตแบบเราส่ง (`we_deliver`) ที่แนบแล้ว · ทั้งสองต้องมี `portal_handover` + `portal_download` · id ข้ามบริษัท = 403 + audit · ดาวน์โหลดสำเร็จลง audit `export`
 >
 > **รายละเอียดล็อต + รูปทรัพย์** (มติ O43 D6): เปิดดูรายการทรัพย์ในล็อตและรูปทรัพย์ได้ (`GET /api/portal/handover-lots/:id`, `GET /api/portal/assets/:id/photos/:index`) · **ใบเซ็นรับที่แนบในล็อต (มี IMEI) ดาวน์โหลดได้** เพราะเป็นเอกสารของบริษัทเอง (มติ O43 D8)
 
@@ -242,7 +249,7 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 
 ## 17. API / Event Contract Draft
 
-> Namespace ใหม่ `/api/portal/*` แยกจาก internal API เดิม (27/45) โดยสิ้นเชิง เพื่อให้บังคับ `company_id` scope ที่ middleware ชั้นเดียวได้ง่าย — ทุก endpoint ด้านล่างเป็น **GET เท่านั้น** · **13 endpoint** (มติ O43 D6 เพิ่ม 2 ตัวท้ายตาราง) · ทุกตัวตรวจตามลำดับ: role กลุ่ม `finance_company` (Superadmin/role ภายใน = 403 — D11/D2) → ผู้ใช้ active (`ACCOUNT_INACTIVE`) → บริษัท active (`COMPANY_SUSPENDED`) → capability ของหมวด (§3.3) → `company_id` ของแถว (id สุ่ม/ข้ามบริษัท = 403 `PERMISSION_DENIED` + audit `access_denied` — D3/D4)
+> Namespace ใหม่ `/api/portal/*` แยกจาก internal API เดิม (27/45) โดยสิ้นเชิง เพื่อให้บังคับ `company_id` scope ที่ middleware ชั้นเดียวได้ง่าย — ทุก endpoint ด้านล่างเป็น **GET เท่านั้น** · **15 endpoint** (มติ O43 D6 เพิ่ม 2 ตัว · มติ U13 เพิ่มอีก 2 ตัวท้ายตาราง) · ทุกตัวตรวจตามลำดับ: role กลุ่ม `finance_company` (Superadmin/role ภายใน = 403 — D11/D2) → ผู้ใช้ active (`ACCOUNT_INACTIVE`) → บริษัท active (`COMPANY_SUSPENDED`) → capability ของหมวด (§3.3) → `company_id` ของแถว (id สุ่ม/ข้ามบริษัท = 403 `PERMISSION_DENIED` + audit `access_denied` — D3/D4)
 
 | Method | Endpoint | Capability | Purpose |
 |---|---|---|---|
@@ -259,6 +266,8 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 | GET | /api/portal/company-profile | `portal_profile` | ข้อมูลบริษัทตัวเอง (read-only) |
 | GET | /api/portal/handover-lots/:id | `portal_handover` | รายละเอียดล็อต + รายการทรัพย์ในล็อต (มติ O43 D6) |
 | GET | /api/portal/assets/:id/photos/:index | `portal_handover` + `portal_download` | รูปทรัพย์ลำดับที่ `index` ของทรัพย์ในล็อตของบริษัทตัวเอง (มติ O43 D6) |
+| GET | /api/portal/handover-lots/:id/delivery-note | `portal_handover` + `portal_download` | ใบส่งมอบ PDF จากระบบ (DLV-…) — renderer เดียวกับภายใน มี IMEI · ดาวน์โหลดได้ตั้งแต่สร้างล็อต (มติ U13) |
+| GET | /api/portal/handover-lots/:id/delivery-proof | `portal_handover` + `portal_download` | หลักฐานการจัดส่ง — เฉพาะล็อตแบบเราส่ง (`we_deliver`) ที่แนบแล้ว · stream ผ่าน server (มติ U13) |
 
 **รายละเอียด endpoint ชุดที่ 1 (Portal-P4 · v5.2)** — ทุกตัวตอบ envelope กลาง `{ success, data, error }` · เงิน = satang · วันเวลา ISO UTC (UI แปลง พ.ศ.) · สถานะ = `statusDisplay { code, label, tone, outline }` (ไม่มี raw enum)
 
@@ -271,6 +280,7 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 ## 18. Export / Document Requirements
 - ดาวน์โหลดใบกำกับภาษี PDF — ใช้ renderer เดียวกับฝั่งภายใน (ไฟล์ 31/28) ไม่ทำ template แยกของพอร์ทัล (มติ O43 D7)
 - ดาวน์โหลดใบส่งมอบทรัพย์ PDF / ใบเซ็นรับ — ใช้ไฟล์ที่มีอยู่แล้วจากไฟล์ 44 (`signed_doc_url`) · ใบเซ็นรับมี IMEI ดาวน์โหลดได้เพราะเป็นเอกสารของบริษัทเอง (มติ O43 D8) · ไฟล์ส่งผ่าน server เฉพาะล็อต `confirmed` (ยังไม่ confirmed = 403 `PERMISSION_DENIED` + audit `access_denied`) · ดาวน์โหลดสำเร็จลง audit `export` (v5.2)
+- ใบส่งมอบ PDF จากระบบ + หลักฐานการจัดส่ง (มติ U13 — ดู §6.4 · §17) · ไม่ต้องรอ `confirmed` สำหรับใบส่งมอบจากระบบ · หลักฐานการจัดส่งเฉพาะ `we_deliver`
 - ไม่มี export format ใหม่เฉพาะพอร์ทัลนี้ (ไม่มี Excel/CSV export ในรอบนี้)
 
 ## 19. Acceptance Criteria
