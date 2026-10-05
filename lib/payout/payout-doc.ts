@@ -61,9 +61,10 @@ function orDash(value: string | null | undefined): string {
 /**
  * `draft` เป็น transient state ที่ยังรวบรวมรายการไม่ครบ (`17` §7.1) — เอกสารทุกใบต้องรอ `checking`
  * ขึ้นไป ไม่งั้นยอดบนกระดาษจะไม่ตรงกับรอบจริง
+ * · `cancelled` (มติ PO U67) — ไม่มีการจ่ายจริง ⇒ ห้ามออกเอกสารทุกใบ (กันใช้เป็นหลักฐานผิด)
  */
 export function assertPayoutDocReady(status: PayoutBatchStatus): void {
-  if (status !== 'draft') return
+  if (status !== 'draft' && status !== 'cancelled') return
   throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', {
     detail: `document requested at ${status}`,
     context: { currentStatus: status },
@@ -77,6 +78,8 @@ export function assertPayoutDocReady(status: PayoutBatchStatus): void {
  */
 export function assertVoucherReady(status: PayoutBatchStatus): void {
   if (status === 'file_generated' || status === 'completed') return
+  // มติ PO U67 — รอบที่ยกเลิกแล้วไม่ใช่ "ยังไม่สร้างไฟล์" แต่เป็นสถานะที่ออกเอกสารไม่ได้เลย
+  if (status === 'cancelled') assertPayoutDocReady(status)
   throw new PayoutError('PAYMENT_FILE_NOT_GENERATED', {
     detail: `voucher requested at ${status}`,
     context: { currentStatus: status },

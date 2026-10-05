@@ -487,7 +487,8 @@ const compensationProvider: ReportProvider = async (ctx: ReportContext): Promise
   const rows = await prisma.payoutBatchItem.findMany({
     where: {
       organizationId: ctx.user.organizationId,
-      payoutBatch: { deletedAt: null },
+      // มติ PO U67 — รอบที่ยกเลิกไม่นับ (รายการกลับไปรอจ่ายแล้วจะถูกนับจากรอบใหม่ครั้งเดียว)
+      payoutBatch: { deletedAt: null, status: { not: 'cancelled' } },
       // รายการเงินทดรองจ่าย (A4) ไม่ใช่ค่าตอบแทน — เอาเฉพาะที่มาจากรายการเบิก
       expenseId: { not: null },
       // งวดของรายงานอิง **วันที่เกิดรายการเบิก** (คอลัมน์ `DATE` ปฏิทินไทย) ฐานเดียวกับต้นทุนตรงของ F1

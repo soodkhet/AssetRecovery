@@ -109,6 +109,9 @@ export const ERROR_CATALOG = {
   WHT_RATE_FALLBACK_TO_PLAN: { status: 200, severity: 'warn', source: '24 §6.5' },
   PAYOUT_BATCH_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.5' },
   PAYOUT_BATCH_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.5' },
+  // มติ PO U67 — ยกเลิกรอบจ่าย (`CANCEL_REQUIRES_REASON` ใช้ร่วมกับ §6.8)
+  PAYOUT_BATCH_ALREADY_PAID: { status: 400, severity: 'reject', source: '24 §6.5' },
+  PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.5' },
   NO_ITEMS_TO_PAY: { status: 400, severity: 'reject', source: '24 §6.5' },
   PAYMENT_FILE_NOT_GENERATED: { status: 404, severity: 'reject', source: '24 §6.5' },
   WHT_40_2_RATE_MISSING: { status: 400, severity: 'reject', source: '24 §6.5' },

@@ -17,6 +17,7 @@ export const PAYOUT_STATUS_LABEL_SHORT: Readonly<Record<PayoutBatchStatus, strin
   checking: 'รอตรวจสอบ',
   file_generated: 'สร้างไฟล์โอนแล้ว',
   completed: 'จ่ายสำเร็จ',
+  cancelled: 'ยกเลิกแล้ว',
 }
 
 /** สีจาก 10 กลุ่มของ `04` §8.1 เท่านั้น — `file_generated` = "ส่งแล้ว/รอขั้นถัดไป" (เงินยังไม่เข้าปลายทาง) */
@@ -25,6 +26,8 @@ const PAYOUT_STATUS_GROUP: Readonly<Record<PayoutBatchStatus, StatusBadgeGroup>>
   checking: 'pending',
   file_generated: 'sent',
   completed: 'success',
+  // มติ PO U67 — กลุ่มเดียวกับเอกสารที่ถูกยกเลิกใน mapper กลาง (`cancelled` → แดง)
+  cancelled: 'critical',
 }
 
 export function payoutStatusBadgeGroup(status: PayoutBatchStatus): StatusBadgeGroup {
@@ -43,6 +46,7 @@ export const PAYOUT_STATUS_FILTERS = [
   { value: 'checking', label: 'รอตรวจสอบ' },
   { value: 'file_generated', label: 'สร้างไฟล์โอนแล้ว' },
   { value: 'completed', label: 'จ่ายสำเร็จ' },
+  { value: 'cancelled', label: 'ยกเลิกแล้ว' },
 ] as const satisfies readonly { value: string; label: string }[]
 
 export type PayoutStatusFilter = (typeof PAYOUT_STATUS_FILTERS)[number]['value']
@@ -65,9 +69,20 @@ export function canCompletePayout(status: PayoutBatchStatus): boolean {
   return canPayoutAction(status, 'complete')
 }
 
-/** ดาวน์โหลดไฟล์โอนซ้ำได้เมื่อมีไฟล์อยู่จริงเท่านั้น (ไม่งั้น endpoint ตอบ `PAYMENT_FILE_NOT_GENERATED`) */
-export function canDownloadPaymentFile(batch: Pick<PayoutBatchDto, 'paymentFileUrl'>): boolean {
-  return batch.paymentFileUrl !== null
+/**
+ * ปุ่ม "ยกเลิกรอบจ่าย" (มติ PO U67) — ตารางเดียวกับ API · ยามละเอียด (โอนแล้ว/ยืนยันไฟล์) อยู่ที่
+ * `assertPayoutCancellable()` ฝั่ง API
+ */
+export function canCancelPayout(status: PayoutBatchStatus): boolean {
+  return canPayoutAction(status, 'cancel')
+}
+
+/**
+ * ดาวน์โหลดไฟล์โอนซ้ำได้เมื่อมีไฟล์อยู่จริงเท่านั้น (ไม่งั้น endpoint ตอบ `PAYMENT_FILE_NOT_GENERATED`)
+ * · รอบที่ยกเลิกแล้วห้ามดาวน์โหลด (มติ PO U67 — กันอัปโหลดไฟล์เก่าเข้าธนาคาร)
+ */
+export function canDownloadPaymentFile(batch: Pick<PayoutBatchDto, 'paymentFileUrl' | 'status'>): boolean {
+  return batch.paymentFileUrl !== null && batch.status !== 'cancelled'
 }
 
 /** เคยสร้างไฟล์มาแล้ว = ครั้งต่อไปต้องยืนยัน `DUPLICATE_PAYMENT_FILE` ก่อนเสมอ (`17` §6.3) */
@@ -75,13 +90,21 @@ export function isDuplicatePaymentFile(batch: Pick<PayoutBatchDto, 'paymentFileG
   return batch.paymentFileGeneratedAt !== null
 }
 
+/**
+ * รอบที่ยังรอเงินออก — ไม่ใช่ `completed` (จ่ายแล้ว) และไม่ใช่ `cancelled` (มติ PO U67 — รายการกลับไปรอจ่าย
+ * แล้ว ถ้านับซ้ำจะเห็นยอดรอจ่ายเกินจริง)
+ */
+export function isPendingPayoutStatus(status: PayoutBatchStatus): boolean {
+  return status !== 'completed' && status !== 'cancelled'
+}
+
 /** ยอดเงินที่ยังไม่ออกจากบัญชีบริษัท — KPI หัวแท็บ (`14` §6.1 นับรอบที่ยังไม่ `completed`) */
 export function pendingPayoutNetSatang(batches: readonly PayoutBatchDto[]): number {
   return batches
-    .filter((batch) => batch.status !== 'completed')
+    .filter((batch) => isPendingPayoutStatus(batch.status))
     .reduce((total, batch) => total + batch.netSatang, 0)
 }
 
 export function countPendingPayoutBatches(batches: readonly PayoutBatchDto[]): number {
-  return batches.filter((batch) => batch.status !== 'completed').length
+  return batches.filter((batch) => isPendingPayoutStatus(batch.status)).length
 }

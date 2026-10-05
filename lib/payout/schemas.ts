@@ -49,6 +49,16 @@ export const payoutCompleteSchema = z.object({
 })
 
 /**
+ * ยกเลิกรอบจ่าย (มติ PO U67) — `reason` ตรวจแค่ "เป็นสตริง" ที่นี่ ความยาวขั้นต่ำบังคับที่
+ * `requirePayoutCancelReason()` (pure) เพื่อให้ได้ code `CANCEL_REQUIRES_REASON` ตรงตามทะเบียน
+ * `confirmFileNotSent` = ยืนยันว่ายังไม่ได้อัปโหลดไฟล์โอนเข้าธนาคาร (บังคับเมื่อรอบสร้างไฟล์แล้ว)
+ */
+export const payoutCancelSchema = z.object({
+  reason: z.string().max(500, 'เหตุผลยาวเกินไป').default(''),
+  confirmFileNotSent: z.boolean().default(false),
+})
+
+/**
  * ตัวกรองของเอกสารภายใน (`28` §6.1) — ระบุ `payeeId` = ออกเฉพาะของคนนั้น
  * ไม่ระบุ = ออกทั้งรอบ (1 คน = 1 หน้า) สำหรับพิมพ์ทีเดียวจบ
  */
@@ -57,12 +67,13 @@ export const payoutDocQuerySchema = z.object({
 })
 
 export const payoutBatchListQuerySchema = z.object({
-  status: z.enum(['all', 'draft', 'checking', 'file_generated', 'completed']).default('all'),
+  status: z.enum(['all', 'draft', 'checking', 'file_generated', 'completed', 'cancelled']).default('all'),
   side: z.enum(['all', 'inhouse', 'outsource']).default('all'),
 })
 
 export type PayoutBatchCreateInput = z.infer<typeof payoutBatchCreateSchema>
 export type PaymentFileGenerateInput = z.infer<typeof paymentFileGenerateSchema>
 export type PayoutCompleteInput = z.infer<typeof payoutCompleteSchema>
+export type PayoutCancelInput = z.infer<typeof payoutCancelSchema>
 export type PayoutBatchListQuery = z.infer<typeof payoutBatchListQuerySchema>
 export type PayoutDocQuery = z.infer<typeof payoutDocQuerySchema>

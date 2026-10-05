@@ -33,6 +33,10 @@ import type { PayoutDocIssuer } from '@/lib/payout/payout-doc'
 import {
   assertHasItemsToPay,
   assertPayeesVerified,
+  assertPayoutCancellable,
+  assertPayoutNotCancelled,
+  requirePayoutCancelReason,
+  statusesAllowing,
   assertSingleSide,
   buildIdempotencyKey,
   buildPayoutBatchName,
@@ -57,6 +61,7 @@ import type {
 import type {
   PaymentFileGenerateInput,
   PayoutBatchCreateInput,
+  PayoutCancelInput,
   PayoutBatchListQuery,
   PayoutCompleteInput,
 } from '@/lib/payout/schemas'
@@ -125,8 +130,11 @@ const batchSelect = {
   whtOutsourceIncomeCategory: true,
   createdAt: true,
   updatedAt: true,
+  cancelledAt: true,
+  cancelReason: true,
   bankAccount: { select: { bankName: true, accountNumber: true } },
   createdByUser: { select: { fullName: true } },
+  cancelledByUser: { select: { fullName: true } },
   _count: { select: { items: true } },
 } as const
 
@@ -204,6 +212,9 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
     updatedAt: row.updatedAt.toISOString(),
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    cancelledByName: row.cancelledByUser?.fullName ?? null,
+    cancelReason: row.cancelReason,
   }
 }
 
@@ -910,8 +921,9 @@ async function claimIdempotencyKey(
 ): Promise<string> {
   if (batch.idempotencyKey !== null) return batch.idempotencyKey
 
+  // จองได้เฉพาะรอบที่ยังสร้างไฟล์ได้ — รอบที่เพิ่งถูกยกเลิก (มติ PO U67) ต้องไม่ได้คีย์ใหม่
   await prisma.payoutBatch.updateMany({
-    where: { id: batch.id, idempotencyKey: null },
+    where: { id: batch.id, idempotencyKey: null, status: { in: statusesAllowing('generate_file') } },
     data: {
       idempotencyKey: buildIdempotencyKey({ side: batch.side, generatedAt: now, uniqueSuffix: randomUUID() }),
     },
@@ -919,8 +931,11 @@ async function claimIdempotencyKey(
 
   const claimed = await prisma.payoutBatch.findUnique({
     where: { id: batch.id },
-    select: { idempotencyKey: true },
+    select: { idempotencyKey: true, status: true },
   })
+  if (claimed !== null && !statusesAllowing('generate_file').includes(claimed.status)) {
+    throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batch.id} at ${claimed.status}` })
+  }
   // ไปไม่ถึงบรรทัดนี้ — แถวเพิ่งถูกอ่านมาแล้ว และคีย์ไม่มีทางถูกล้างกลับเป็น NULL
   if (claimed?.idempotencyKey == null) {
     throw new Error(`claimIdempotencyKey: จองคีย์กันโอนซ้ำของรอบ ${batch.id} ไม่สำเร็จ`)
@@ -937,6 +952,8 @@ export async function generatePaymentFile(
   const user = context.actor
   const batch = await findBatch(user, batchId)
   const previousGeneratedAt = batch.paymentFileGeneratedAt
+  // ตรวจสถานะก่อนคำเตือนไฟล์ซ้ำ — รอบที่ยกเลิก/จ่ายแล้วต้องถูกปฏิเสธทันที ไม่ใช่ได้คำเตือนก่อน (มติ PO U67)
+  const status = nextPayoutBatchStatus(batch.status, 'generate_file')
 
   await assertPeriodOpenAt({
     organizationId: user.organizationId,
@@ -959,8 +976,6 @@ export async function generatePaymentFile(
       warning: duplicatePaymentFileWarning(previousGeneratedAt),
     }
   }
-
-  const status = nextPayoutBatchStatus(batch.status, 'generate_file')
 
   const [format, account, items] = await Promise.all([
     prisma.bankFileFormat.findFirst({
@@ -1045,8 +1060,10 @@ export async function generatePaymentFile(
   await uploadPaymentFile({ path, bytes, contentType: PAYMENT_FILE_MIME[format.fileType] })
 
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.payoutBatch.update({
-      where: { id: batchId },
+    // มติ PO U67 — แข่งกับการยกเลิกรอบ: อัปเดตเฉพาะเมื่อสถานะยังสร้างไฟล์ได้ (Postgres ตรวจ WHERE ซ้ำหลัง
+    // รอล็อกแถว) ⇒ ยกเลิกชนะก่อน = 0 แถว = ปฏิเสธ (ไฟล์ที่อัปโหลดไปแล้วเป็นไฟล์กำพร้า ไม่มีแถวชี้ถึง)
+    const claimed = await tx.payoutBatch.updateMany({
+      where: { id: batchId, status: { in: statusesAllowing('generate_file') } },
       data: {
         status,
         idempotencyKey,
@@ -1055,8 +1072,11 @@ export async function generatePaymentFile(
         paymentFileGeneratedAt: now,
         updatedBy: user.id,
       },
-      select: batchSelect,
     })
+    if (claimed.count !== 1) {
+      throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batchId} changed during generate_file` })
+    }
+    const row = await tx.payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: batchSelect })
 
     await emitAudit(
       {
@@ -1115,6 +1135,8 @@ export async function readPaymentFile(
   batchId: string,
 ): Promise<{ fileName: string; bytes: Uint8Array; contentType: string }> {
   const batch = await findBatch(user, batchId)
+  // มติ PO U67 — ไฟล์โอนของรอบที่ยกเลิกห้ามดาวน์โหลดซ้ำ (กันเผลออัปโหลดเข้าธนาคาร = โอนซ้ำกับรอบใหม่)
+  assertPayoutNotCancelled(batch.status, 'payment_file')
   if (batch.paymentFileUrl === null) {
     throw new PayoutError('PAYMENT_FILE_NOT_GENERATED', { detail: `batch=${batchId}` })
   }
@@ -1150,11 +1172,15 @@ export async function completePayoutBatch(
   })
 
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.payoutBatch.update({
-      where: { id: batchId },
+    // แข่งกับการยกเลิก (มติ PO U67) — ยืนยันจ่ายได้เฉพาะเมื่อยังเป็น `file_generated` อยู่จริง
+    const claimed = await tx.payoutBatch.updateMany({
+      where: { id: batchId, status: { in: statusesAllowing('complete') } },
       data: { status, updatedBy: user.id },
-      select: batchSelect,
     })
+    if (claimed.count !== 1) {
+      throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batchId} changed during complete` })
+    }
+    const row = await tx.payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: batchSelect })
 
     await emitAudit(
       {
@@ -1211,10 +1237,14 @@ export async function syncPayoutBatchCompleted(input: {
   const status = nextPayoutBatchStatus(batch.status, 'complete')
 
   await prisma.$transaction(async (tx) => {
-    await tx.payoutBatch.update({
-      where: { id: batch.id },
+    // แข่งกับการยกเลิก (มติ PO U67) — รอบที่ถูกยกเลิกไปก่อนห้ามถูกจับคู่ปิดเป็นจ่ายสำเร็จ
+    const claimed = await tx.payoutBatch.updateMany({
+      where: { id: batch.id, status: { in: statusesAllowing('complete') } },
       data: { status, updatedBy: input.actorId },
     })
+    if (claimed.count !== 1) {
+      throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batch.id} changed during sync` })
+    }
     await emitAudit(
       {
         organizationId: input.organizationId,
@@ -1242,6 +1272,175 @@ export async function syncPayoutBatchCompleted(input: {
   await notifyPayoutCompleted(input.organizationId, batch, 'bank_reconciliation')
 
   return status
+}
+
+// ── POST /api/payout-batches/:id/cancel (มติ PO U67 · `23` §6.6) ────────────
+
+export interface PayoutCancelOutcome {
+  batch: PayoutBatchDto
+  /** รายการเบิกที่กลับไปรอจ่าย (พร้อมถูกดึงเข้ารอบใหม่) */
+  releasedExpenseCount: number
+  /** เงินทดรองจ่ายที่กลับไปรอจ่าย */
+  releasedAdvanceCount: number
+  /** แถวหักคืนเงินทดรองที่ถูกกลับรายการ ⇒ ยอดคืนกลับเป็นค้าง */
+  reversedAdvanceOffsetCount: number
+}
+
+/**
+ * ยกเลิกรอบจ่าย — **ได้เฉพาะก่อนโอนจริง** (มติ PO U67) · เหตุผลบังคับ · terminal
+ *
+ * ทำทั้งหมดใน**ทรานแซกชันเดียว** (ล้มข้อใด rollback ทั้งก้อน):
+ * 1. ล็อกแถวรอบจ่าย (`FOR UPDATE`) แล้วตรวจสถานะ ณ ตอนนั้น ⇒ แข่งกับสร้างไฟล์/ยืนยันจ่าย/จับคู่ธนาคาร
+ *    มีผู้ชนะคนเดียว (ฝั่งนั้นอัปเดตแบบมีเงื่อนไขสถานะ — ดู `statusesAllowing()`)
+ * 2. ปลดรายการต้นทาง (`expenses` / `advances`.`payout_batch_item_id` → NULL) ⇒ กลับไปรอจ่าย ไม่หาย
+ *    · แถว `payout_batch_items` ของรอบนี้คงไว้เป็นประวัติ (snapshot) · รอบใหม่สร้างรายการใหม่ได้ครั้งเดียว
+ *    เพราะการยึดรายการยังเป็น `updateMany(... payoutBatchItemId: null)` เหมือนเดิม
+ * 3. กลับรายการหักคืนเงินทดรอง (`releasePayoutAdvanceOffsets()` — U30) ⇒ ยอดคืนกลับเป็นค้าง
+ * 4. สถานะ `cancelled` + ผู้ยกเลิก/เวลา/เหตุผล + audit (before/after)
+ *
+ * idempotency key ของรอบที่ยกเลิก**คงไว้** (UNIQUE ระดับ DB) — ไม่ถูกนำกลับมาใช้ · รอบใหม่ได้คีย์ใหม่ตอน
+ * สร้างไฟล์ ⇒ ไม่ชนกัน · ไฟล์โอนของรอบที่ยกเลิกดาวน์โหลดซ้ำไม่ได้อีก (`assertPayoutNotCancelled()`)
+ *
+ * 50 ทวิ / บัญชีค่าใช้จ่าย: เกิดเมื่อรอบ `completed` เท่านั้น (`32` §6.1 · `33` §9) ⇒ รอบที่ยกเลิกได้
+ * ไม่มีเอกสารเหล่านี้โดยโครงสร้าง · ถ้าพบบัญชีค่าใช้จ่ายของรอบ = เงินออกแล้ว ⇒ `PAYOUT_BATCH_ALREADY_PAID`
+ */
+export async function cancelPayoutBatch(
+  context: PayoutMutationContext,
+  batchId: string,
+  input: PayoutCancelInput,
+): Promise<PayoutCancelOutcome> {
+  const user = context.actor
+  const organizationId = user.organizationId
+  const reason = requirePayoutCancelReason(input.reason)
+  const batch = await findBatch(user, batchId)
+  const now = context.now ?? new Date()
+
+  await assertPeriodOpenAt({
+    organizationId,
+    at: batch.createdAt,
+    targetType: 'payout_batches',
+    targetId: batchId,
+  })
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<
+      Array<{ status: PayoutBatchStatus; payment_file_generated_at: Date | null; idempotency_key: string | null }>
+    >`
+      SELECT status, payment_file_generated_at, idempotency_key FROM payout_batches
+       WHERE id = ${batchId}::uuid AND organization_id = ${organizationId}::uuid AND deleted_at IS NULL
+       FOR UPDATE`
+    const current = locked[0]
+    if (current === undefined) throw new PayoutError('PAYOUT_BATCH_NOT_FOUND', { detail: `batch=${batchId}` })
+
+    const items = await tx.payoutBatchItem.findMany({
+      where: { payoutBatchId: batchId, organizationId },
+      select: { id: true },
+    })
+    const itemIds = items.map((item) => item.id)
+
+    const [expenseRecordCount, bankMatchCount] = await Promise.all([
+      itemIds.length === 0
+        ? Promise.resolve(0)
+        : tx.expenseRecord.count({ where: { organizationId, payoutBatchItemId: { in: itemIds } } }),
+      tx.bankTransaction.count({
+        where: {
+          organizationId,
+          matchedPayoutId: batchId,
+          matchStatus: { in: ['auto_matched', 'manual_matched'] },
+        },
+      }),
+    ])
+
+    const status = assertPayoutCancellable({
+      status: current.status,
+      paymentFileGenerated: current.payment_file_generated_at !== null,
+      confirmFileNotSent: input.confirmFileNotSent,
+      hasExpenseRecords: expenseRecordCount > 0,
+      hasBankMatch: bankMatchCount > 0,
+    })
+
+    // ปลดรายการต้นทาง — เฉพาะที่ยังชี้มาที่รอบนี้ (idempotent ในตัว)
+    const [expenseRows, advanceRows] = await Promise.all([
+      tx.expense.findMany({
+        where: { organizationId, payoutBatchItemId: { in: itemIds } },
+        select: { id: true },
+      }),
+      tx.advance.findMany({
+        where: { organizationId, payoutBatchItemId: { in: itemIds } },
+        select: { id: true },
+      }),
+    ])
+    if (expenseRows.length > 0) {
+      await tx.expense.updateMany({
+        where: { id: { in: expenseRows.map((row) => row.id) } },
+        data: { payoutBatchItemId: null, updatedBy: user.id },
+      })
+    }
+    if (advanceRows.length > 0) {
+      await tx.advance.updateMany({
+        where: { id: { in: advanceRows.map((row) => row.id) } },
+        data: { payoutBatchItemId: null, updatedBy: user.id },
+      })
+    }
+
+    const reversedAdvanceOffsetCount = await releasePayoutAdvanceOffsets(tx, {
+      organizationId,
+      payoutBatchItemIds: itemIds,
+      actorId: user.id,
+      actorRole: user.roleName,
+      reason: `ยกเลิกรอบจ่าย "${batch.name}": ${reason}`,
+      meta: context.meta,
+      now,
+    })
+
+    await tx.payoutBatch.update({
+      where: { id: batchId },
+      data: { status, cancelledAt: now, cancelledBy: user.id, cancelReason: reason, updatedBy: user.id },
+    })
+
+    await emitAudit(
+      {
+        organizationId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        action: 'status_change',
+        targetType: TARGET,
+        targetId: batchId,
+        before: {
+          status: current.status,
+          payment_file_generated_at: current.payment_file_generated_at?.toISOString() ?? null,
+          idempotency_key: current.idempotency_key,
+          net_satang: batch.netSatang,
+          advance_offset_satang: batch.advanceOffsetSatang,
+        },
+        after: {
+          status,
+          cancelled_at: now.toISOString(),
+          cancel_reason: reason,
+          // key คงไว้กับรอบที่ยกเลิก (ไม่ถูกนำกลับมาใช้) — รอบใหม่ได้ key ใหม่
+          idempotency_key: current.idempotency_key,
+          confirm_file_not_sent: current.payment_file_generated_at === null ? null : input.confirmFileNotSent,
+          released_expense_ids: expenseRows.map((row) => row.id),
+          released_advance_ids: advanceRows.map((row) => row.id),
+          reversed_advance_offset_count: reversedAdvanceOffsetCount,
+          item_count: itemIds.length,
+        },
+        reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+
+    return {
+      releasedExpenseCount: expenseRows.length,
+      releasedAdvanceCount: advanceRows.length,
+      reversedAdvanceOffsetCount,
+    }
+  })
+
+  return { batch: toBatchDto(await findBatch(user, batchId)), ...outcome }
 }
 
 /**

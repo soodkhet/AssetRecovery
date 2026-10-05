@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
+import { CancelPayoutModal } from '@/components/finance/cancel-payout-modal'
 import { CreatePayoutModal } from '@/components/finance/create-payout-modal'
 import { PaymentFileModal } from '@/components/finance/payment-file-modal'
 import { PayoutDetailModal } from '@/components/finance/payout-detail-modal'
@@ -69,6 +70,7 @@ export function PayoutTab() {
   const [createOpen, setCreateOpen] = useState(false)
   const [fileTarget, setFileTarget] = useState<PayoutBatchDto | null>(null)
   const [detailTarget, setDetailTarget] = useState<PayoutBatchDto | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<PayoutBatchDto | null>(null)
   const [completeTarget, setCompleteTarget] = useState<PayoutBatchDto | null>(null)
   const [completeReason, setCompleteReason] = useState('')
   const [completing, setCompleting] = useState(false)
@@ -218,6 +220,9 @@ export function PayoutTab() {
                           ไฟล์: {fmtDateTime(batch.paymentFileGeneratedAt)}
                         </p>
                       )}
+                      {batch.cancelledAt !== null && (
+                        <p className="mt-1 text-[10px] text-red-600">ยกเลิก: {fmtDateTime(batch.cancelledAt)}</p>
+                      )}
                     </Td>
                     <Td className="text-right whitespace-nowrap">
                       <div className="inline-flex flex-col items-end gap-1">
@@ -264,6 +269,19 @@ export function PayoutTab() {
         key={detailTarget?.id ?? 'none'}
         batch={detailTarget}
         onClose={() => setDetailTarget(null)}
+        canManage={canManageBatch}
+        onCancelRequest={(batch) => {
+          setDetailTarget(null)
+          setCancelTarget(batch)
+        }}
+      />
+
+      {/* มติ PO U67 — ยกเลิกรอบจ่าย (เปิดจากรายละเอียดรอบ) · `key` ⇒ เปิดรอบใหม่ฟอร์มเริ่มว่างเสมอ */}
+      <CancelPayoutModal
+        key={`cancel-${cancelTarget?.id ?? 'none'}`}
+        batch={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onCancelled={() => void reload()}
       />
 
       <ReasonConfirmModal

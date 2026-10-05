@@ -14,6 +14,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — รวม state machine 16 entity |
 | v2 | 03/07/2569 | **Sync กับการแก้ไขใน Batch 3**: §6.3 (Expense) เติม `pending_warehouse_confirm`/`pending_finance_approval`/`superseded` ที่ตกหล่น, §6.4 (Advance) แก้เป็น 5 สถานะใหม่ (`pending_approval`/`approved`/`overdue`/`cleared`/`rejected` — ตรงกับไฟล์ 15 v2), §6.6 (Payout Batch) เติม `draft` ที่ตกหล่น — **ส่วน state machine ฝั่ง Accounting (§6.10-6.16) ยังไม่ตรวจสอบกับ schema เพราะไฟล์ 30-37 ยังไม่ถึงคิว reformat (Batch 5)** ทำเครื่องหมายไว้ใน Open Items ชัดเจน ไม่เดาแก้เอง |
 | v2.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 หมายเหตุ: การปิดยอดคืนเงินทดรอง **ไม่เพิ่ม state** ใน `advance_status` (ยอดค้าง/ปิด อนุมานจากสมุดย่อย `advance_returns`) |
+| v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U67)** — §6.6 เพิ่มสถานะ terminal `cancelled` (ยกเลิกรอบจ่ายก่อนโอนจริง จาก `draft`/`checking`/`file_generated` · `completed` ยกเลิกไม่ได้) — enum `payout_batch_status` ใน `02` §3 v4.25 |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -86,7 +87,10 @@ pending_approval (step=1) → approve step 1 → step=2 → ... → approve step
 
 ```
 draft (กำลังรวบรวมรายการ) → checking → file_generated → completed
+draft | checking | file_generated --(ยกเลิก + เหตุผล)--> cancelled   (มติ PO U67)
 ```
+
+> **`cancelled` (มติ PO 05/10/2569 — UAT U67)** — terminal · ได้เฉพาะ**ก่อนโอนจริง** (`completed` / มีบัญชีค่าใช้จ่ายของรอบ / จับคู่รายการเดินบัญชีแล้ว ⇒ `PAYOUT_BATCH_ALREADY_PAID` — แก้ผ่าน Adjustment) · `file_generated` ต้องยืนยันว่ายังไม่ส่งไฟล์เข้าธนาคาร (`PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED`) · เหตุผลบังคับ (`CANCEL_REQUIRES_REASON`) · endpoint `POST /api/payout-batches/:id/cancel` · ผลในทรานแซกชันเดียว: รายการเบิก (§6.3 `approved`) / เงินทดรอง (§6.4 `approved`/`overdue`) **ไม่เปลี่ยนสถานะ** แค่หลุดจากรอบกลับไปรอจ่าย + ยอดหักคืนเงินทดรองของรอบกลับเป็นค้าง · รายละเอียด `17` §9.1
 
 > เติม `draft` ที่ตกหล่นจาก v1 — ตรงกับ enum `payout_batch_status` ใน `02-database-schema-design.md` §3 และไฟล์ 17 v2
 

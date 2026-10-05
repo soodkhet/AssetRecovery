@@ -19,7 +19,7 @@ import { callApi } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
-import { PAYOUT_STATUS_LABEL_SHORT, payoutStatusBadgeGroup } from '@/lib/payout/payout-ui'
+import { canCancelPayout, PAYOUT_STATUS_LABEL_SHORT, payoutStatusBadgeGroup } from '@/lib/payout/payout-ui'
 import type { PayoutBatchDetailDto, PayoutBatchDto } from '@/lib/payout/types'
 
 /**
@@ -33,9 +33,14 @@ import type { PayoutBatchDetailDto, PayoutBatchDto } from '@/lib/payout/types'
 export function PayoutDetailModal({
   batch,
   onClose,
+  canManage = false,
+  onCancelRequest,
 }: {
   batch: PayoutBatchDto | null
   onClose: () => void
+  /** มีสิทธิ์จัดการรอบจ่าย (manage) — ใช้แสดงปุ่ม "ยกเลิกรอบจ่าย" (มติ PO U67) */
+  canManage?: boolean
+  onCancelRequest?: (batch: PayoutBatchDto) => void
 }) {
   const [detail, setDetail] = useState<PayoutBatchDetailDto | null>(null)
   const [loading, setLoading] = useState(true)
@@ -75,6 +80,9 @@ export function PayoutDetailModal({
 
   const items = detail?.items ?? []
   const canPrintVoucher = batch.status === 'file_generated' || batch.status === 'completed'
+  // มติ PO U67 — รอบที่ยกเลิกไม่มีการจ่ายจริง ⇒ ไม่มีเอกสารจ่ายเงินให้พิมพ์ (API ปฏิเสธด้วย)
+  const isCancelled = batch.status === 'cancelled'
+  const showCancel = canManage && onCancelRequest !== undefined && canCancelPayout(batch.status)
 
   return (
     <Modal
@@ -84,9 +92,16 @@ export function PayoutDetailModal({
       title={batch.name}
       description={`${PAYOUT_SIDE_LABEL[batch.side]} · ${fmtCount(batch.itemCount)} รายการ`}
       footer={
-        <Button variant="ghost" onClick={onClose}>
-          ปิดหน้าต่าง
-        </Button>
+        <>
+          {showCancel && (
+            <Button variant="danger" onClick={() => onCancelRequest(batch)}>
+              ยกเลิกรอบจ่าย
+            </Button>
+          )}
+          <Button variant="ghost" onClick={onClose}>
+            ปิดหน้าต่าง
+          </Button>
+        </>
       }
     >
       <div className="space-y-4">
@@ -111,14 +126,25 @@ export function PayoutDetailModal({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <DocLink href={`/api/payout-batches/${batch.id}/summary-pdf`}>สรุปรอบจ่าย PDF</DocLink>
-            <DocLink href={`/api/payout-batches/${batch.id}/payslip-pdf`}>สลิปค่าตอบแทน</DocLink>
-            {canPrintVoucher && (
-              <DocLink href={`/api/payout-batches/${batch.id}/voucher-pdf`}>ใบสำคัญจ่าย</DocLink>
-            )}
-          </div>
+          {!isCancelled && (
+            <div className="flex flex-wrap items-center gap-2">
+              <DocLink href={`/api/payout-batches/${batch.id}/summary-pdf`}>สรุปรอบจ่าย PDF</DocLink>
+              <DocLink href={`/api/payout-batches/${batch.id}/payslip-pdf`}>สลิปค่าตอบแทน</DocLink>
+              {canPrintVoucher && (
+                <DocLink href={`/api/payout-batches/${batch.id}/voucher-pdf`}>ใบสำคัญจ่าย</DocLink>
+              )}
+            </div>
+          )}
         </div>
+
+        {isCancelled && (
+          <InlineAlert tone="error" title="รอบจ่ายนี้ถูกยกเลิกแล้ว">
+            {batch.cancelledAt !== null && `เมื่อ ${fmtDateTime(batch.cancelledAt)}`}
+            {batch.cancelledByName !== null && ` โดย ${batch.cancelledByName}`}
+            {batch.cancelReason !== null && ` — เหตุผล: ${batch.cancelReason}`}
+            {' · '}รายการทั้งหมดกลับไปรอจ่ายแล้ว ตารางด้านล่างเป็นประวัติ ณ วันที่สร้างรอบ
+          </InlineAlert>
+        )}
 
         {batch.idempotencyKey !== null && (
           <InlineAlert tone="info">

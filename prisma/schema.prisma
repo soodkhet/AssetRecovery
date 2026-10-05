@@ -423,6 +423,8 @@ enum PayoutBatchStatus {
   checking
   file_generated
   completed
+  /// ยกเลิกรอบจ่าย (มติ PO U67 · 05/10/2569) — ได้เฉพาะก่อนโอนจริง · terminal · รายการกลับไปรอจ่าย
+  cancelled
 
   @@map("payout_batch_status")
 }
@@ -869,6 +871,7 @@ model User {
   advancesApproved          Advance[]                   @relation("advances_approved_by")
   payoutBatchesCreated      PayoutBatch[]               @relation("payout_batches_created_by")
   payoutBatchesUpdated      PayoutBatch[]               @relation("payout_batches_updated_by")
+  payoutBatchesCancelled    PayoutBatch[]               @relation("payout_batches_cancelled_by")
   payoutItemsCreated        PayoutBatchItem[]           @relation("payout_items_created_by")
   revenuesCreated           Revenue[]                   @relation("revenues_created_by")
   revenuesUpdated           Revenue[]                   @relation("revenues_updated_by")
@@ -2338,6 +2341,12 @@ model PayoutBatch {
   /// ป้องกันโอนซ้ำ (`17` §6.3)
   idempotencyKey         String?   @unique @map("idempotency_key")
 
+  /// ยกเลิกรอบจ่าย (มติ PO U67) — ครบทั้ง 3 ช่องเมื่อ `status = cancelled` เท่านั้น (CHECK ใน raw SQL
+  /// `20261005190100_payout_batch_cancel`) · key กันโอนซ้ำของรอบที่ยกเลิกคงไว้ (ห้ามนำกลับมาใช้)
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy  String?   @map("cancelled_by") @db.Uuid
+  cancelReason String?   @map("cancel_reason")
+
   /// snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — NULL ทั้งชุด = รอบที่สร้างก่อนมีค่าตั้ง
   /// (ตีความเป็นพฤติกรรมเดิม: ทุกชนิดในฐาน · ใบต่อรายการ · 40(8)) · `whtPolicyId` NULL = ใช้ค่าเริ่มต้น (ยังไม่เคยตั้ง)
   whtPolicyId                    String?             @map("wht_policy_id") @db.Uuid
@@ -2356,11 +2365,12 @@ model PayoutBatch {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization  Organization      @relation(fields: [organizationId], references: [id])
-  bankAccount   BankAccount?      @relation("payout_bank_account", fields: [bankAccountId], references: [id])
-  whtPolicy     WhtPolicyHistory? @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
-  createdByUser User              @relation("payout_batches_created_by", fields: [createdBy], references: [id])
-  updatedByUser User?             @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  bankAccount     BankAccount?      @relation("payout_bank_account", fields: [bankAccountId], references: [id])
+  whtPolicy       WhtPolicyHistory? @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
+  createdByUser   User              @relation("payout_batches_created_by", fields: [createdBy], references: [id])
+  updatedByUser   User?             @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
+  cancelledByUser User?             @relation("payout_batches_cancelled_by", fields: [cancelledBy], references: [id])
 
   items            PayoutBatchItem[]
   advanceReturns   AdvanceReturn[]

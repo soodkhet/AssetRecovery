@@ -172,7 +172,8 @@ async function billingBatchTarget(user: SessionUser, targetId: string): Promise<
 
 async function payoutBatchTarget(user: SessionUser, targetId: string): Promise<RawTarget> {
   const row = await prisma.payoutBatch.findFirst({
-    where: { id: targetId, organizationId: user.organizationId, deletedAt: null },
+    // มติ PO U67 — รอบที่ยกเลิกไม่มีเงินออก ⇒ ไม่มีอะไรให้ปรับปรุง
+    where: { id: targetId, organizationId: user.organizationId, deletedAt: null, status: { not: 'cancelled' } },
     select: { name: true, netSatang: true, side: true, createdAt: true },
   })
   if (row === null) throw new AdjustmentError('ADJUSTMENT_TARGET_NOT_FOUND', { detail: `payout_batch=${targetId}` })
@@ -292,7 +293,12 @@ async function searchTargetIds(user: SessionUser, targetType: AdjustmentTargetTy
   }
 
   const rows = await prisma.payoutBatch.findMany({
-    where: { organizationId, deletedAt: null, ...(q === '' ? {} : { name: { contains: q } }) },
+    where: {
+      organizationId,
+      deletedAt: null,
+      status: { not: 'cancelled' },
+      ...(q === '' ? {} : { name: { contains: q } }),
+    },
     select: { id: true },
     orderBy: [{ createdAt: 'desc' }],
     take,

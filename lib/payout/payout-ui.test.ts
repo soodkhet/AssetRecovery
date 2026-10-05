@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 import {
+  canCancelPayout,
   canCompletePayout,
   canDownloadPaymentFile,
   canGeneratePaymentFile,
@@ -32,6 +33,9 @@ function batch(overrides: Partial<PayoutBatchDto> = {}): PayoutBatchDto {
     createdAt: '2026-06-30T02:00:00.000Z',
     createdByName: 'การเงิน ทดสอบ',
     updatedAt: '2026-06-30T02:00:00.000Z',
+    cancelledAt: null,
+    cancelledByName: null,
+    cancelReason: null,
     ...overrides,
   }
 }
@@ -57,6 +61,27 @@ describe('payout-ui — ปุ่มมาจาก state machine เดีย�
     expect(isDuplicatePaymentFile(batch({ paymentFileGeneratedAt: '2026-07-05T00:00:00.000Z' }))).toBe(true)
   })
 
+  it('มติ PO U67 — ปุ่มยกเลิกรอบจ่ายโผล่เฉพาะก่อนโอน · รอบที่ยกเลิกทำอะไรต่อไม่ได้', () => {
+    expect(canCancelPayout('draft')).toBe(true)
+    expect(canCancelPayout('checking')).toBe(true)
+    expect(canCancelPayout('file_generated')).toBe(true)
+    expect(canCancelPayout('completed')).toBe(false)
+    expect(canCancelPayout('cancelled')).toBe(false)
+    expect(canGeneratePaymentFile('cancelled')).toBe(false)
+    expect(canCompletePayout('cancelled')).toBe(false)
+    // ไฟล์โอนของรอบที่ยกเลิกห้ามดาวน์โหลดซ้ำ
+    expect(
+      canDownloadPaymentFile(batch({ status: 'cancelled', paymentFileUrl: 'payout-batches/x/f-v1.csv' })),
+    ).toBe(false)
+    expect(payoutStatusBadgeGroup('cancelled')).toBe('critical')
+  })
+
+  it('มติ PO U67 — KPI เงินรอจ่ายไม่นับรอบที่ยกเลิก', () => {
+    const batches = [batch(), batch({ id: 'b2', status: 'cancelled', netSatang: 700_000 })]
+    expect(pendingPayoutNetSatang(batches)).toBe(1_823_600)
+    expect(countPendingPayoutBatches(batches)).toBe(1)
+  })
+
   it('สีสถานะมาจาก 10 กลุ่มของ `04` §8.1', () => {
     expect(payoutStatusBadgeGroup('draft')).toBe('neutral')
     expect(payoutStatusBadgeGroup('checking')).toBe('pending')
@@ -71,7 +96,7 @@ describe('payout-ui — ปุ่มมาจาก state machine เดีย�
   })
 
   it('ตัวกรองสถานะทุกค่าเป็นค่าที่ API รับจริง', () => {
-    const accepted = new Set(['all', 'draft', 'checking', 'file_generated', 'completed'])
+    const accepted = new Set(['all', 'draft', 'checking', 'file_generated', 'completed', 'cancelled'])
     for (const filter of PAYOUT_STATUS_FILTERS) expect(accepted.has(filter.value)).toBe(true)
   })
 })

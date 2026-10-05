@@ -110,6 +110,9 @@ function docSource(overrides: Partial<PayoutBatchDetailDto> = {}) {
     createdAt: '2026-06-30T02:00:00.000Z',
     createdByName: 'การเงิน ทดสอบ',
     updatedAt: '2026-07-05T00:00:00.000Z',
+    cancelledAt: null,
+    cancelledByName: null,
+    cancelReason: null,
     items: [item()],
     ...overrides,
   }

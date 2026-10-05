@@ -634,6 +634,21 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
     `จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} ${input.mode === 'auto' ? 'อัตโนมัติ' : 'โดยเจ้าหน้าที่'}`
 
   const { cashReceiptId } = await prisma.$transaction(async (tx) => {
+    // มติ PO U67 — ล็อกแถวรอบจ่ายก่อนผูกรายการเดินบัญชี ⇒ แข่งกับการยกเลิกรอบได้ผู้ชนะคนเดียว
+    // (การยกเลิกล็อกแถวเดียวกันแล้วตรวจว่ามีรายการเดินบัญชีจับคู่หรือยัง)
+    if (input.candidate.kind === 'payout') {
+      const locked = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT status::text AS status FROM payout_batches
+         WHERE id = ${input.candidate.id}::uuid AND organization_id = ${ctx.actor.organizationId}::uuid
+         FOR UPDATE`
+      const payoutStatus = locked[0]?.status
+      if (payoutStatus !== 'file_generated' && payoutStatus !== 'completed') {
+        throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', {
+          detail: `batch=${input.candidate.id} at ${payoutStatus ?? 'missing'}`,
+        })
+      }
+    }
+
     // เปลี่ยนการจับคู่เดิม (re-match) — ถอน Cash Receipt ของการจับคู่เดิมออกก่อน ไม่ให้ยอดรับซ้ำ
     if (previousBillingId !== null) {
       const stale = await tx.cashReceipt.findMany({
