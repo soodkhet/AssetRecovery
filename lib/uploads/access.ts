@@ -13,6 +13,7 @@ import { assertBankTransactionInScope } from '@/lib/bank-recon/queries'
 import { MANAGE_CUSTOMER_WHT } from '@/lib/customer-wht/customer-wht'
 import { assertCustomerWhtInScope } from '@/lib/customer-wht/queries'
 import { MANAGE_SALES_EXPENSES, MAP_COST_CENTER } from '@/lib/expenses/expense-record'
+import { ExpenseStateError } from '@/lib/field/expense-status'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
 import { MANAGE_TAX_INVOICE, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
 import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
@@ -41,6 +42,14 @@ import { getAsset, getLot } from '@/lib/warehouse/queries'
 /**
  * ตัดสินสิทธิ์เข้าถึงไฟล์ใน bucket `case-documents` (BUG-143 · DEC-014) — **ทางเดียว** ที่ browser จะได้
  * URL/โทเคนของ Storage · bucket ไม่มี policy ให้ `authenticated` แล้ว (DEC-002: สิทธิ์อยู่ที่ API layer)
+ *
+ * รูปแบบการปฏิเสธ (สม่ำเสมอทุก kind — UAT BUG-145 · มติ PO U64):
+ * - **403 `PERMISSION_DENIED`** = ผู้เรียกไม่มี capability/ระดับ scope ของไฟล์ชนิดนั้นเลย — ตัดสินจาก role ล้วน
+ *   ก่อนแตะข้อมูลใด ๆ ⇒ ผลเหมือนกันทุก id ไม่ว่ารายการมีจริงหรือไม่ (ไม่ leak)
+ * - **404 NOT_FOUND ของโมดูลเจ้าของ** = มี capability แต่รายการ "ไม่มี" หรือ "อยู่นอก scope" — สองกรณีนี้ต้องตอบเหมือนกันเป๊ะ
+ *   (เคส `CASE_NOT_FOUND`/`ASSIGNMENT_NOT_FOUND` · เครื่อง/ล็อต · ใบกำกับ · เงินทดรอง `ADVANCE_NOT_FOUND`
+ *   · ใบเสร็จของคนอื่น `EXPENSE_NOT_FOUND` · 50 ทวิ ลูกค้า · รายการเดินบัญชี)
+ * - ห้ามโยน 403 หลังจากรู้แล้วว่ารายการเป็นของใคร (เช่น ใบเสร็จของพนักงานอื่น) — ใช้ 404 แทน
  *
  * กติกา = "ทำ action ปลายทางได้ ⇒ ได้โทเคน" — ใช้ capability + scope ตัวเดียวกับ endpoint ที่ผูก/แสดงไฟล์นั้น
  * (ออกโทเคนให้แล้วก็ยังต้องผ่าน `verify.ts` ตอนผูกไฟล์เข้าข้อมูลเหมือนเดิม)
@@ -235,9 +244,11 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
       return
     }
     case 'expense_receipt': {
-      if (owner.userId === user.id && hasAny(user, 'view', [FIELD_CAPABILITY])) return
       if (hasAny(user, 'view', RECEIPT_REVIEW_CAPABILITIES)) return
-      throw denied(user, `view:receipt owner=${owner.userId}`)
+      if (!hasAny(user, 'view', [FIELD_CAPABILITY])) throw denied(user, `view:receipt owner=${owner.userId}`)
+      if (owner.userId === user.id) return
+      // ใบเสร็จของพนักงานคนอื่น = นอก scope ⇒ ตอบเหมือน "ไม่มีรายการเบิกนี้" (ไม่ leak — UAT BUG-145)
+      throw new ExpenseStateError('EXPENSE_NOT_FOUND', { detail: `view:receipt owner=${owner.userId} user=${user.id}` })
     }
     case 'tax_invoice': {
       if (!hasAny(user, 'view', SALES_READ_CAPABILITIES)) throw denied(user, `view:credit-note invoice=${owner.taxInvoiceId}`)

@@ -16,6 +16,7 @@
 | v1.1 | 02/07/2569 | ปิด DEC-001, DEC-002, DEC-003 (Tech Stack, Permission Architecture, File Storage) |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header block, component diagram, Decisions/Open Items แยกชัดเจน) — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v2.1 | 05/10/2569 | **DEC-014 (BUG-143)**: Storage ไม่มี policy ให้ role `authenticated`/`anon` — browser อัปโหลด/เปิดดูไฟล์ผ่านโทเคน/signed URL ที่ API ออกให้หลัง `requirePermission` + scope (`POST /api/storage/upload-url` · `POST /api/storage/download-url`) |
+| v2.2 | 05/10/2569 | **มติ PO U64 (UAT BUG-145)** — รูปแบบการปฏิเสธของ `POST /api/storage/upload-url` + `download-url` สม่ำเสมอทุกชนิดไฟล์: **403 `PERMISSION_DENIED`** เฉพาะเมื่อไม่มี capability/ระดับ scope ของไฟล์ชนิดนั้นเลย (ตัดสินจาก role ล้วน ผลเหมือนกันทุก id) · มี capability แต่รายการไม่มีจริงหรืออยู่นอก scope = **404 NOT_FOUND ของโมดูลเจ้าของ** ตอบเหมือนกันเป๊ะ (ใบเสร็จของพนักงานอื่นเปลี่ยนจาก 403 เป็น `EXPENSE_NOT_FOUND`) · ไม่มี error code ใหม่ |
 
 ขอบเขตเอกสารนี้: โครงสร้างระบบระดับ technical — Tech Stack, Permission Architecture, Layer Architecture, Background Jobs, Audit/Export service สำหรับ Back Office/API/Database/Storage
 
@@ -70,7 +71,7 @@
 | **ORM** | **Prisma** | Type-safe, migration tool ครบ, เหมาะ schema ซับซ้อน (state machine + relation หลายชั้น) |
 | **Database** | **PostgreSQL** (Supabase managed) | ACID, FK constraint, JSON field, full-text search |
 | **Permission** | **Backend middleware (API layer)** | Role logic ซับซ้อน 10+ roles หลาย scope — RLS SQL ดูแลยาก, middleware test ง่ายกว่า |
-| **File Storage** | **Supabase Storage** | Native กับ Supabase, signed URL — bucket private ทั้งหมด **ไม่มี policy ให้ผู้ใช้** ทุกการเข้าถึงผ่าน API + โทเคน/signed URL อายุสั้นที่ server ออกให้หลังตรวจสิทธิ์ (DEC-014) |
+| **File Storage** | **Supabase Storage** | Native กับ Supabase, signed URL — bucket private ทั้งหมด **ไม่มี policy ให้ผู้ใช้** ทุกการเข้าถึงผ่าน API + โทเคน/signed URL อายุสั้นที่ server ออกให้หลังตรวจสิทธิ์ (DEC-014) · ปฏิเสธ: ไม่มี capability ของชนิดไฟล์ = 403 · ไม่มีจริง/นอก scope = 404 ของโมดูลเจ้าของ (เหมือนกัน — มติ PO U64) |
 | **Hosting** | **Vercel** | Next.js native, edge functions, zero DevOps, auto-scale |
 | **Auth** | **Supabase Auth** | JWT + session, SSO-ready (สิทธิ์ไฟล์ใน Storage ไม่ผูกกับ JWT/policy — ตรวจที่ API ตาม DEC-014) |
 | **Background Jobs** | **Vercel Cron / QStash (Upstash)** | Export pack, bank file, WHT summary, notification |

@@ -264,11 +264,35 @@ describe('POST /api/storage/download-url', () => {
     requireSessionMock.mockResolvedValue(AGENT)
     expect((await postDownloadUrl(downloadReq(path))).status).toBe(200)
 
+    // ใบเสร็จของพนักงานคนอื่น = นอก scope ⇒ 404 แบบเดียวกับรายการที่ไม่มี (BUG-145 — เดิมตอบ 403)
     requireSessionMock.mockResolvedValue(sessionUser(OTHER_AGENT_ID, { perform_field_work: 'manage' }))
-    expect((await postDownloadUrl(downloadReq(path))).status).toBe(403)
+    const foreign = await postDownloadUrl(downloadReq(path))
+    expect(foreign.status).toBe(404)
+    expect(await errorCode(foreign)).toBe('EXPENSE_NOT_FOUND')
 
     requireSessionMock.mockResolvedValue(FINANCE)
     expect((await postDownloadUrl(downloadReq(path))).status).toBe(200)
+  })
+
+  it('BUG-145 — มี capability แล้ว: รายการ "ไม่มีจริง" กับ "นอก scope" ตอบเหมือนกันเป๊ะ (status + code + ข้อความ)', async () => {
+    const ghost = '00000000-0000-4000-8000-0000000000ff'
+    const otherAgent = sessionUser(OTHER_AGENT_ID, { perform_field_work: 'manage' })
+    requireSessionMock.mockResolvedValue(otherAgent)
+    const foreignReceipt = await postDownloadUrl(downloadReq(`expenses/${AGENT_ID}/receipts/u-r.pdf`))
+    const ghostReceipt = await postDownloadUrl(downloadReq(`expenses/${ghost}/receipts/u-r.pdf`))
+    expect(foreignReceipt.status).toBe(ghostReceipt.status)
+    expect(await foreignReceipt.json()).toEqual(await ghostReceipt.json())
+
+    // เคส: ตัวโหลดตาม scope โยน NOT_FOUND ทั้งสองกรณี ⇒ route ส่งต่อแบบเดียวกัน
+    requireSessionMock.mockResolvedValue(ADMIN)
+    caseQueries.getCase.mockRejectedValue(new CaseError('CASE_NOT_FOUND'))
+    const caseDownload = await postDownloadUrl(downloadReq(`cases/${CASE_ID}/contract_doc/u-a.pdf`))
+    const caseUpload = await postUploadUrl(
+      uploadReq({ target: { kind: 'case_document', caseId: CASE_ID, slot: 'contract_doc' }, fileName: 'a.pdf', sizeBytes: 10 }),
+    )
+    expect([caseDownload.status, caseUpload.status]).toEqual([404, 404])
+    expect(await errorCode(caseDownload)).toBe('CASE_NOT_FOUND')
+    expect(await errorCode(caseUpload)).toBe('CASE_NOT_FOUND')
   })
 
   it('ไฟล์คลัง (รูปรับเข้า/เอกสารล็อต) ต้องมีสิทธิ์ดูคลัง — พนักงานภาคสนาม = 403', async () => {
