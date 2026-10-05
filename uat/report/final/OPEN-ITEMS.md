@@ -227,3 +227,11 @@
 ### เพิ่ม 05/10/2569 — สิ่งที่ผู้ใช้ต้องทำ
 - **BUG-143 (S3)**: apply policy Supabase Storage — `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging --dry-run` → ตรวจ → รันจริง (ตัด `--dry-run`)
 - ก่อน push: migration ใหม่ **12 ตัว** + `db:seed` บน staging (สิทธิ์ใหม่: `manage_wht_policy`, portal 5 หมวด)
+
+### เพิ่ม 05/10/2569 บ่าย — คำถามจากงานใบลดหนี้ (fixer X2) และ Export Pack
+1. ยกเลิกใบกำกับที่มีใบลดหนี้ active ยังทำได้ — ควรบล็อกไหม (ข้อเสนอ: บล็อก ต้องยกเลิกใบลดหนี้ก่อน)
+2. Adjustment แบบ **เพิ่ม** ยอดหลังออกใบกำกับ ต้องมี **ใบเพิ่มหนี้** (ม.86/9) — ยังไม่มีในระบบ (ข้อเสนอ: ทำแบบเดียวกับใบลดหนี้)
+3. บันทึกใบลดหนี้ในงวด `sent_to_accountant` ถูกปฏิเสธ (ใช้ยามงวดกลาง) — ต้องการแบบนี้ไหม
+4. ระบบไม่ตรวจว่ายอดใบลดหนี้ตรงกับยอด Adjustment ที่อ้าง (ข้อเสนอ: เตือน ไม่บล็อก)
+5. รอบวางบิลที่มีหลายอัตรา VAT บันทึกใบลดหนี้ไม่ได้ (`CREDIT_NOTE_VAT_MISMATCH`)
+6. Export Pack: เสนอเพิ่มไฟล์ `09_Credit_Notes.csv` (ต้องแก้ `docs/37` + samples + แจ้งสำนักงานบัญชี)

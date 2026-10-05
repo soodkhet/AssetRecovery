@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~15:00 merge fixer X2 `47e9756` (บันทึกใบลดหนี้ · ตาราง `credit_notes` migration `20261005130000` · API `/api/accounting/credit-notes` · ป้าย "รอใบลดหนี้" · error `CREDIT_NOTE_*` 7 ตัว) + fixer Z `462aae5` (BUG-150 session cache S2 · BUG-151 · BUG-152) · eslint ยกเว้น `uat/bin/*/**` · verify 304 files / 3,936 tests · migration ใหม่รวม **14 ตัว** → fixer X3 ต่อใบลดหนี้เข้ายอด portal
 - 05/10/2569 ~14:20 มติ U11–U17 · **ถอด Storage policy บน Supabase แล้ว (U17)** → ทดสอบ 8/8 ผ่าน BUG-143 ปิดจริง · merge fixer Y `23b7801` (U15/U16 · migration `20261005140000`) + X1 `154792f` (U11/U13/U14 · portal 15 endpoint) · verify 301/3,887 (1 flaky BUG-152) · BUG-150 (S2 session cache) → fixer Z · migration ใหม่รวม **13 ตัว**
 - 05/10/2569 ~07:00 R12 Portal ทดสอบรับงานผ่าน (ตารางบน) · snapshot `R12-end-v1` · **งานคืนนี้ตามมติ U3–U10 ครบทุกข้อ** · ยังไม่ push
 - 05/10/2569 ~06:10 merge Portal-P8 `856f35d` (หน้าเคส · verify 299/3,850) · ตรวจหน้าวางบิล/ใบกำกับบน dev หลักผ่าน (ดาวน์โหลด INV-0001 PDF ได้ · หัวหน้า/แอดมินถูกกันครบ) · BUG-146/147 (S5) → เริ่ม R12 ทดสอบรับงาน Portal
@@ -125,7 +126,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
-- migration ใหม่จาก UAT **13 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005140000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- migration ใหม่จาก UAT **14 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005140000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)

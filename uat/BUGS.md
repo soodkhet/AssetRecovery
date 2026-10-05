@@ -155,9 +155,9 @@
 | BUG-147 | PORTAL-P9-visual / R12-B03 | S5 | spec-gap | หน้าวางบิล portal: "ชำระแล้ว" ฿3,879.20 น้อยกว่ายอดรวม ฿111.90 (= ภาษีที่ลูกค้าหัก 3%) แต่สถานะ "รับชำระครบ" ไม่มีคำอธิบาย → ลูกค้าอาจสับสน · ข้อเสนอ: แสดงแถว "ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)" | needs-decision |
 | BUG-148 | R12 | S4 | spec-gap | กราฟภาพรวม portal ป้าย "ยอดวางบิล" แสดง ฿3,630.00 (หลัง Adjustment −100) แต่ใบกำกับที่ลูกค้าถือคือ ฿3,730 + VAT — ไม่มีคำอธิบาย (โยง O46/❓-R12-1) | needs-decision · ข้อเสนอ ก.: ทุกจุดใน portal ใช้ยอดตามเอกสารที่ออกให้ลูกค้าจริง (ใบกำกับ/ใบลดหนี้) |
 | BUG-149 | R12 | S5 | code | การ์ดยอดค้าง ฿0 เป็นสีแดงในหน้าภาพรวม แต่สีเขียวในหน้าวางบิล · คอลัมน์ "ไม่สำเร็จ 0" สีแดง | open |
-| BUG-150 | STORAGE-AFTER | **S2** | code | session หมดอายุ (24 ชม.) แล้ว login ใหม่สำเร็จ แต่ถูกเด้งกลับ `/login?reason=SESSION_EXPIRED` นานสูงสุด ~5 นาที (ยืนยัน `uat.admin` 13:51–13:59) — น่าจะเพราะ `lib/auth/session-cache.ts` cache session ที่หมดอายุ 5 นาที · เกิดทุกครั้งที่ผู้ใช้กลับมาวันถัดไป | open → fixer Z |
-| BUG-151 | STORAGE-AFTER | S5 | code | dialog เอกสารล็อตในหน้าคลังแสดง storage path ดิบแทนชื่อไฟล์ | open → fixer Z |
-| BUG-152 | merge X1+Y | S5 | test | `lib/portal/handover.db.test.ts` (U13 ใบส่งมอบ/หลักฐานจัดส่ง 403+audit) ล้มเป็นครั้งคราวตอนรันทั้งชุดพร้อมกัน (ผ่านเมื่อรันแยก + ทั้งชุดอีก 2 รอบ) — flaky | open → fixer Z |
+| BUG-150 | STORAGE-AFTER | **S2** | code | session หมดอายุ (24 ชม.) แล้ว login ใหม่สำเร็จ แต่ถูกเด้งกลับ `/login?reason=SESSION_EXPIRED` นานสูงสุด ~5 นาที (ยืนยัน `uat.admin` 13:51–13:59) — น่าจะเพราะ `lib/auth/session-cache.ts` cache session ที่หมดอายุ 5 นาที · เกิดทุกครั้งที่ผู้ใช้กลับมาวันถัดไป | fixed (fixer Z · merge `462aae5` 05/10/2569) |
+| BUG-151 | STORAGE-AFTER | S5 | code | dialog เอกสารล็อตในหน้าคลังแสดง storage path ดิบแทนชื่อไฟล์ | fixed (fixer Z · merge `462aae5` 05/10/2569) |
+| BUG-152 | merge X1+Y | S5 | test | `lib/portal/handover.db.test.ts` (U13 ใบส่งมอบ/หลักฐานจัดส่ง 403+audit) ล้มเป็นครั้งคราวตอนรันทั้งชุดพร้อมกัน (ผ่านเมื่อรันแยก + ทั้งชุดอีก 2 รอบ) — flaky | fixed (fixer Z · merge `462aae5` 05/10/2569) |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
