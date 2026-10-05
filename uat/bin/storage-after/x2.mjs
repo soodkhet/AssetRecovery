@@ -1,0 +1,11 @@
+import { shot, BASE } from '../lib.mjs'; import { open } from './h.mjs'
+const { browser, page, serverErrors } = await open('uat.admin')
+await page.goto(BASE + '/cases'); await page.waitForLoadState('networkidle')
+await page.getByPlaceholder(/ค้นหา/).first().fill('UAT-CO1-902'); await page.waitForTimeout(1500)
+await page.getByRole('button', { name: 'แก้ไข' }).first().click(); await page.waitForTimeout(2500)
+await shot(page, 'STORAGE-AFTER', '01a-902-edit', { fullPage: true })
+console.log(page.url())
+const inputs = await page.locator('input[type=file]').evaluateAll(es => es.map(e => ({ name: e.name, id: e.id, accept: e.accept, label: e.closest('label,div')?.innerText?.slice(0, 80) })))
+console.log(JSON.stringify(inputs, null, 1))
+const t = await page.locator('body').innerText(); const i = t.indexOf('เอกสาร'); console.log(t.slice(Math.max(0,i-200), i + 900))
+await browser.close()

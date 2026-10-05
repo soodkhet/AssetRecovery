@@ -1,0 +1,11 @@
+import { shot, BASE } from '../lib.mjs'; import { open } from './h.mjs'
+const { browser, page } = await open('uat.admin')
+await page.goto(BASE + '/cases'); await page.waitForLoadState('networkidle')
+await page.getByPlaceholder(/ค้นหา/).first().fill('UAT-CO1-902'); await page.waitForTimeout(1500)
+await page.getByRole('button', { name: 'แก้ไข' }).first().click(); await page.waitForTimeout(2500)
+const dlg = page.getByRole('dialog')
+const info = await page.locator('input[type=file]').evaluateAll(es => es.map(e => { let n = e; for (let i = 0; i < 5; i++) n = n.parentElement; return n.innerText.slice(0, 300) }))
+info.forEach((t, i) => console.log('--', i, t.replace(/\n+/g, ' | ')))
+await page.getByText('เลือกไฟล์').first().scrollIntoViewIfNeeded()
+await shot(page, 'STORAGE-AFTER', '01b-902-docs-section')
+await browser.close()
