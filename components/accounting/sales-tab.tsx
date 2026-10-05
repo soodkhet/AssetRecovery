@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { CreditNoteModal, type CreditNoteInvoice } from '@/components/accounting/credit-note-modal'
 import { IssueTaxInvoiceModal } from '@/components/accounting/issue-tax-invoice-modal'
+import { useAwaitingCreditNotes, useCreditNotes } from '@/components/accounting/use-credit-notes'
 import { useSalesRecords, type SalesInvoiceFilter } from '@/components/accounting/use-sales'
 import { usePermission } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
@@ -22,10 +24,12 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { AWAITING_CREDIT_NOTE_LABEL, netInvoiceAmounts, sumActiveCreditNotes } from '@/lib/credit-notes/credit-note'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
+import type { CreditNoteDto } from '@/lib/credit-notes/types'
 import type { SalesRecordDto, TaxInvoiceDto } from '@/lib/sales/types'
 
 /**
@@ -34,6 +38,7 @@ import type { SalesRecordDto, TaxInvoiceDto } from '@/lib/sales/types'
  * ⚠️ **ไม่มีปุ่มสร้าง/แก้/ลบรายการขาย** โดยเจตนา — รายการเกิดอัตโนมัติเมื่อรอบวางบิลถูกส่ง (`31` §6.1)
  * ⚠️ ออก/ยกเลิกใบกำกับภาษี = สิทธิ์บัญชี (`manage_tax_invoice`) เท่านั้น · การเงินดูได้อย่างเดียว
  * ⚠️ ใบที่ยกเลิกยัง**แสดงในทะเบียน** เพื่อพิสูจน์ความต่อเนื่องของเลขที่ (`31` §9.1 — ห้ามลบ)
+ * ใบลดหนี้ (มติ PO U14): ปุ่ม "ใบลดหนี้" ต่อใบกำกับ · ยอดสุทธิหลังหักใบลดหนี้ · ป้าย "รอใบลดหนี้"
  */
 
 const INVOICE_FILTERS: readonly { value: SalesInvoiceFilter; label: string }[] = [
@@ -56,6 +61,28 @@ export function SalesTab() {
   const [saving, setSaving] = useState(false)
 
   const activeInvoice = cancelling?.activeTaxInvoice ?? null
+
+  const creditNotes = useCreditNotes()
+  const awaitingCreditNotes = useAwaitingCreditNotes()
+  const [creditInvoice, setCreditInvoice] = useState<CreditNoteInvoice | null>(null)
+
+  function openCreditNotes(row: SalesRecordDto): void {
+    const invoice = row.activeTaxInvoice
+    if (invoice === null) return
+    setCreditInvoice({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      companyName: row.companyName,
+      totalBeforeVatSatang: row.totalBeforeVatSatang,
+      vatSatang: row.vatSatang,
+      totalSatang: row.totalSatang,
+    })
+  }
+
+  async function reloadCreditNotes(): Promise<void> {
+    await Promise.all([creditNotes.reload(), awaitingCreditNotes.reload()])
+  }
 
   async function runCancel(): Promise<void> {
     if (activeInvoice === null) return
@@ -154,6 +181,13 @@ export function SalesTab() {
                         <div className="mt-0.5 text-[10px] text-slate-400">
                           {fmtDate(row.activeTaxInvoice.invoiceDate)}
                         </div>
+                        <CreditNoteSummaryCell
+                          notes={creditNotes.byInvoice.get(row.activeTaxInvoice.id) ?? []}
+                          invoice={row}
+                          awaiting={awaitingCreditNotes.items.some(
+                            (item) => item.taxInvoiceId === row.activeTaxInvoice?.id,
+                          )}
+                        />
                       </>
                     )}
                     {row.taxInvoices
@@ -179,6 +213,11 @@ export function SalesTab() {
                           }
                         >
                           พิมพ์ PDF
+                        </Button>
+                      )}
+                      {row.activeTaxInvoice !== null && (
+                        <Button size="sm" variant="ghost" onClick={() => openCreditNotes(row)}>
+                          {canManageInvoice ? 'บันทึกใบลดหนี้' : 'ใบลดหนี้'}
                         </Button>
                       )}
                       {canManageInvoice && row.activeTaxInvoice === null && (
@@ -218,6 +257,16 @@ export function SalesTab() {
         onIssued={() => void reload()}
       />
 
+      <CreditNoteModal
+        key={`credit-${creditInvoice?.id ?? 'none'}`}
+        invoice={creditInvoice}
+        notes={creditInvoice === null ? [] : (creditNotes.byInvoice.get(creditInvoice.id) ?? [])}
+        awaiting={awaitingCreditNotes.items.filter((item) => item.taxInvoiceId === creditInvoice?.id)}
+        canManage={canManageInvoice}
+        onClose={() => setCreditInvoice(null)}
+        onChanged={() => void reloadCreditNotes()}
+      />
+
       <ReasonConfirmModal
         open={cancelling !== null && activeInvoice !== null}
         title={`ยกเลิกใบกำกับภาษีเลขที่ ${activeInvoice?.invoiceNumber ?? ''}`}
@@ -230,6 +279,35 @@ export function SalesTab() {
         onConfirm={() => void runCancel()}
         placeholder="เช่น ระบุชื่อผู้ซื้อผิด ต้องออกใบใหม่ให้ถูกต้อง"
       />
+    </div>
+  )
+}
+
+/** ยอดใบลดหนี้ + ยอดสุทธิของใบกำกับในตาราง (ยอดจาก pure SSOT — ไม่คำนวณเงินบนจอเอง) */
+function CreditNoteSummaryCell({
+  notes,
+  invoice,
+  awaiting,
+}: {
+  notes: readonly CreditNoteDto[]
+  invoice: SalesRecordDto
+  awaiting: boolean
+}) {
+  const active = notes.filter((note) => note.status === 'active')
+  if (active.length === 0 && !awaiting) return null
+  const used = sumActiveCreditNotes(active)
+  const net = netInvoiceAmounts(invoice, active)
+  return (
+    <div className="mt-1 space-y-0.5">
+      {active.length > 0 && (
+        <>
+          <div className="text-[10px] text-amber-700">
+            ลดหนี้ {fmtCount(active.length)} ใบ −{fmtSatangSymbol(used.totalSatang)}
+          </div>
+          <div className="text-[10px] font-semibold text-slate-700">สุทธิ {fmtSatangSymbol(net.totalSatang)}</div>
+        </>
+      )}
+      {awaiting && <StatusBadge group="pending" label={AWAITING_CREDIT_NOTE_LABEL} />}
     </div>
   )
 }

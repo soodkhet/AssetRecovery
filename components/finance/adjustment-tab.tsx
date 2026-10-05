@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useAwaitingCreditNotes } from '@/components/accounting/use-credit-notes'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdjustmentFormModal } from '@/components/finance/adjustment-form-modal'
 import { AdjustmentReviewModal } from '@/components/finance/adjustment-review-modal'
@@ -41,6 +42,7 @@ import {
   type AdjustmentTargetFilter,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto } from '@/lib/adjustments/types'
+import { AWAITING_CREDIT_NOTE_LABEL } from '@/lib/credit-notes/credit-note'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 
@@ -62,6 +64,9 @@ export function AdjustmentTab() {
   const [status, setStatus] = useState<AdjustmentStatusFilter>('all')
   const [targetType, setTargetType] = useState<AdjustmentTargetFilter>('all')
   const { items, loading, error, reload } = useAdjustments(status, targetType)
+  // มติ PO U14 — ลดยอดหลังออกใบกำกับแล้วต้องมีใบลดหนี้ (สำนักงานบัญชีออก) · ลูกค้าเห็นยอดลดเมื่อบันทึกใบลดหนี้แล้ว
+  const awaitingCreditNotes = useAwaitingCreditNotes()
+  const awaitingInvoiceOf = new Map(awaitingCreditNotes.items.map((item) => [item.adjustmentId, item.invoiceNumber]))
 
   const [createOpen, setCreateOpen] = useState(false)
   const [review, setReview] = useState<{ adjustment: AdjustmentDto; mode: 'approve' | 'reject' } | null>(null)
@@ -181,6 +186,14 @@ export function AdjustmentTab() {
                         group={adjustmentStatusBadgeGroup(row.status)}
                         label={ADJUSTMENT_STATUS_LABEL[row.status]}
                       />
+                      {awaitingInvoiceOf.has(row.id) && (
+                        <div className="mt-1">
+                          <StatusBadge group="pending" label={AWAITING_CREDIT_NOTE_LABEL} />
+                          <p className="mt-0.5 text-[10px] text-slate-400">
+                            ใบกำกับ <span className="font-mono">{awaitingInvoiceOf.get(row.id)}</span>
+                          </p>
+                        </div>
+                      )}
                       {/* Rule 05 — วันเวลาที่อนุมัติต้องอยู่บน list คู่กับชื่อผู้อนุมัติ */}
                       {row.approvedByName !== null && (
                         <p className="mt-1 text-[10px] text-slate-400">
@@ -225,7 +238,10 @@ export function AdjustmentTab() {
         adjustment={review?.adjustment ?? null}
         mode={review?.mode ?? 'approve'}
         onClose={() => setReview(null)}
-        onDone={() => void reload()}
+        onDone={() => {
+          void reload()
+          void awaitingCreditNotes.reload()
+        }}
       />
     </div>
   )
