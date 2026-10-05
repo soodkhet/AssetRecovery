@@ -257,7 +257,7 @@ export function CreditNoteModal({
                         {note.creditNoteNumber}
                       </RefText>
                       <div className="mt-0.5 text-[10px] text-slate-400">
-                        {fmtDate(note.issueDate)} · บันทึกโดย {note.createdByName}
+                        {fmtDate(note.issueDate)} · {note.buyerBranchLabel} · บันทึกโดย {note.createdByName}
                       </div>
                       <div className="mt-0.5">
                         <StatusBadge status={note.status} label={note.statusLabel} />

@@ -624,13 +624,13 @@ suite('มติ PO U40/U41 — Export Pack 10_Customer_WHT.csv + 11_Suspense_Re
       decoder.decode(packStorage.get([...packStorage.keys()].find((path) => path.endsWith(suffix)) ?? '') ?? new Uint8Array())
 
     const customer = fileText('10_Customer_WHT.csv').slice(CSV_BOM.length).split('\r\n')
-    // อ้างรอบ = เลขรอบจริง BL-<พ.ศ.>-NNN · รอบเดือน (มติ U76)
-    expect(customer[1]).toMatch(/^05\/08\/2569,ไฟแนนซ์ CO1 U40,0105540400001,BL-25\d{2}-\d{3,} · 2569-05,-,111\.90,-,-,-,pending$/)
+    // มติ U79 — `billing_ref` คงเป็นรอบเดือน · เลขรอบจริง BL-<พ.ศ.>-NNN อยู่คอลัมน์ต่อท้าย
+    expect(customer[1]).toMatch(/^05\/08\/2569,ไฟแนนซ์ CO1 U40,0105540400001,2569-05,-,111\.90,-,-,-,pending,BL-25\d{2}-\d{3,}$/)
 
     const suspense = fileText('11_Suspense_Receipts.csv').slice(CSV_BOM.length).split('\r\n')
     expect(suspense).toHaveLength(3)
-    expect(suspense[1]).toMatch(/^09\/08\/2569,โอนเข้าไม่ระบุผู้โอน[^,]*,123\.45,\d{2}\/\d{2}\/25\d{2},ไม่ทราบที่มา,suspense,-,-,-$/)
+    expect(suspense[1]).toMatch(/^09\/08\/2569,โอนเข้าไม่ระบุผู้โอน[^,]*,123\.45,\d{2}\/\d{2}\/25\d{2},ไม่ทราบที่มา,suspense,-,-,-,-$/)
 
-    expect(fileText('06_Bank_Reconciliation.csv')).toContain(',suspense\r\n')
+    expect(fileText('06_Bank_Reconciliation.csv')).toContain(',suspense,-\r\n')
   })
 })

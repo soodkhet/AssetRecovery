@@ -196,6 +196,17 @@ export interface NumberingDto {
   issuedInvoiceCount: number
 }
 
+/** ข้อมูลผู้ขายบนใบกำกับภาษี (มติ PO U82) — ชื่อ/เลขผู้เสียภาษีอ่านอย่างเดียว · แก้ได้เฉพาะสาขา */
+export interface SellerBranchDto {
+  name: string
+  taxId: string
+  vatRegistered: boolean
+  /** `00000` = สำนักงานใหญ่ */
+  branchCode: string
+  /** "สำนักงานใหญ่" / "สาขาที่ 00001" */
+  branchLabel: string
+}
+
 export interface TaxDocTemplateDto {
   documentType: TaxDocumentType
   documentTypeLabel: string

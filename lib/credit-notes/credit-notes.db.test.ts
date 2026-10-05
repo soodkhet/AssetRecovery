@@ -261,8 +261,8 @@ suite('ใบลดหนี้ — บันทึก (มติ U14/B1)', () =
     await expect(
       db().$executeRawUnsafe(`
         INSERT INTO credit_notes (organization_id, tax_invoice_id, credit_note_number, issue_date,
-                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by)
-        VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 300000, 21000, 321000, 7, 'ตรง', '${ACCOUNTING_ID}')
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by, buyer_branch_code)
+        VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 300000, 21000, 321000, 7, 'ตรง', '${ACCOUNTING_ID}', '00000')
       `),
     ).rejects.toThrow(/CREDIT_NOTE_EXCEEDS_INVOICE/)
 
@@ -277,8 +277,8 @@ suite('ใบลดหนี้ — บันทึก (มติ U14/B1)', () =
     await expect(
       db().$executeRawUnsafe(`
         INSERT INTO credit_notes (organization_id, tax_invoice_id, credit_note_number, issue_date,
-                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by)
-        VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 100, 7, 999, 7, 'ตรง', '${ACCOUNTING_ID}')
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by, buyer_branch_code)
+        VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 100, 7, 999, 7, 'ตรง', '${ACCOUNTING_ID}', '00000')
       `),
     ).rejects.toThrow(/chk_credit_notes_total|check constraint/i)
   })
@@ -595,13 +595,51 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     const lines = csv.slice(1).split('\r\n')
     expect(csv.charCodeAt(0)).toBe(0xfeff)
     expect(lines[0]).toBe(
-      'document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref',
+      'document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref,company_branch',
     )
     const cnLine = lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`)) ?? ''
     expect(cnLine).toMatch(
-      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3}$`),
+      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3},สำนักงานใหญ่$`),
     )
     const dnLine = lines.find((line) => line.startsWith(`DN,${dn.creditNoteNumber},`)) ?? ''
-    expect(dnLine).toMatch(/,50\.00,3\.50,53\.50,.+,cancelled,-$/)
+    expect(dnLine).toMatch(/,50\.00,3\.50,53\.50,.+,cancelled,-,สำนักงานใหญ่$/)
+  })
+})
+
+suite('มติ PO U82 (ม.86/4) — ใบลดหนี้/ใบเพิ่มหนี้เก็บสาขาผู้ซื้อตามใบกำกับเดิม', () => {
+  it('snapshot จากใบกำกับ (ไม่ใช่ค่าปัจจุบันของบริษัท) · DB บังคับให้ตรงใบกำกับ · แก้ไม่ได้ · ไฟล์ 09 คอลัมน์ต่อท้าย', async () => {
+    await db().$executeRawUnsafe(`UPDATE finance_companies SET branch_code = '00004' WHERE id = '${companyId}'`)
+    let seeded: Seeded
+    try {
+      seeded = await seedInvoice()
+    } finally {
+      // บริษัทย้ายกลับสำนักงานใหญ่หลังออกใบ — ใบลดหนี้ต้องยังอ้างสาขาตามใบกำกับเดิม
+      await db().$executeRawUnsafe(`UPDATE finance_companies SET branch_code = '00000' WHERE id = '${companyId}'`)
+    }
+    const cn = await credit.createCreditNote(ctx, input(seeded))
+    expect(cn).toMatchObject({ buyerBranchCode: '00004', buyerBranchLabel: 'สาขาที่ 00004' })
+    const dn = await credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', creditNoteNumber: `DN-${RUN}-u82` }))
+    expect(dn.buyerBranchCode).toBe('00004')
+    expect((await credit.creditNotesByInvoice([seeded.invoiceId])).get(seeded.invoiceId)?.map((row) => row.buyerBranchCode)).toEqual([
+      '00004',
+      '00004',
+    ])
+
+    await expect(
+      db().$executeRawUnsafe(`
+        INSERT INTO credit_notes (organization_id, tax_invoice_id, credit_note_number, issue_date,
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by, buyer_branch_code)
+        VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 100, 7, 107, 7, 'ผิดสาขา', '${ACCOUNTING_ID}', '00000')
+      `),
+      'สาขาผู้ซื้อไม่ตรงใบกำกับเดิม',
+    ).rejects.toThrow(/CREDIT_NOTE_BRANCH_MISMATCH/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE credit_notes SET buyer_branch_code = '00000' WHERE id = '${cn.id}'`),
+      'snapshot แก้ไม่ได้',
+    ).rejects.toThrow(/CREDIT_NOTE_IMMUTABLE/)
+
+    const { buildCreditNotePackFile } = await import('@/lib/exports/queries')
+    const lines = (await buildCreditNotePackFile(ORG_ID, 2569, 10)).slice(1).split('\r\n')
+    expect(lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`))).toMatch(/,สาขาที่ 00004$/)
   })
 })

@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
 import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
@@ -750,6 +751,13 @@ suite('Phase 8.1 — E2E เงินทดรอง 5 สถานะ (`29` §1
     expect(marked.marked).toBe(1)
     expect((await db().advance.findUniqueOrThrow({ where: { id: requested.id } })).status).toBe('overdue')
     expect((await overdueJob.runAdvanceOverdueJob({ organizationId: ORG_ID, now: AFTER_DUE })).marked).toBe(0)
+
+    // มติ PO U83 — ยังไม่เคยจ่ายจริง (ไม่อยู่ในรอบจ่าย completed) ⇒ เคลียร์ไม่ได้
+    await expectCode(
+      () => advances.settleAdvance(ctx(finance), requested.id, { usedSatang: 180_000, receiptFileUrl: null, note: null }),
+      'ADVANCE_IN_PENDING_PAYOUT',
+    )
+    await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: requested.id, actorId: FINANCE_ID })
 
     // cleared — เคลียร์ยอด ยอดคืนมาจาก generated column ของ DB (ห้ามคำนวณเอง)
     const cleared = await advances.settleAdvance(ctx(finance), requested.id, {

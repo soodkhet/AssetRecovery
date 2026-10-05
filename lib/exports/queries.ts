@@ -453,7 +453,8 @@ async function bankReconFile(organizationId: string, scope: PeriodScope): Promis
       let matchedRef: string | null = null
       if (row.matchedBilling !== null) {
         matchedType = 'billing_batch'
-        matchedRef = `${row.matchedBilling.company.name} ${row.matchedBilling.batchNumber} ${row.matchedBilling.period}`
+        // มติ U79 — คงรูปแบบอ้างอิงเดิม · เลขรอบอยู่คอลัมน์ `billing_batch_number` ต่อท้าย
+        matchedRef = `${row.matchedBilling.company.name} ${row.matchedBilling.period}`
       } else if (row.matchedPayout !== null) {
         matchedType = 'payout_batch'
         matchedRef = row.matchedPayout.name
@@ -472,6 +473,7 @@ async function bankReconFile(organizationId: string, scope: PeriodScope): Promis
         matchStatus: row.matchStatus,
         matchedType,
         matchedRef,
+        billingBatchNumber: row.matchedBilling?.batchNumber ?? null,
       }
     }),
   )
@@ -554,7 +556,7 @@ async function adjustmentLogOf(
         : row.expense !== null
           ? { type: 'expense', ref: row.expense.case?.caseRef ?? null }
           : row.billingBatch !== null
-            ? { type: 'billing_batch', ref: `${row.billingBatch.batchNumber} ${row.billingBatch.period}` }
+            ? { type: 'billing_batch', ref: row.billingBatch.period }
             : { type: 'payout_batch', ref: row.payoutBatch?.name ?? null }
 
     entries.push({
@@ -566,6 +568,8 @@ async function adjustmentLogOf(
         reason: row.reason,
         approvedByName: row.approvedByUser?.fullName ?? null,
         approvedAt: row.approvedAt,
+        // มติ U79 — เลขรอบแยกเป็นคอลัมน์ต่อท้าย (`target_ref` คงเป็นรอบเดือนแบบเดิม)
+        billingBatchNumber: row.billingBatch?.batchNumber ?? null,
       },
     })
   }
@@ -619,10 +623,8 @@ async function suspenseFile(organizationId: string, scope: PeriodScope): Promise
       suspendedAt: row.suspendedAt ?? row.transactionDate,
       suspenseNote: row.suspenseNote ?? '',
       matchStatus: row.matchStatus,
-      matchedRef:
-        row.matchedBilling === null
-          ? null
-          : `${row.matchedBilling.company.name} ${row.matchedBilling.batchNumber} ${row.matchedBilling.period}`,
+      // มติ U79 — คงรูปแบบอ้างอิงเดิม · เลขรอบอยู่คอลัมน์ `billing_batch_number` ต่อท้าย
+      matchedRef: row.matchedBilling === null ? null : `${row.matchedBilling.company.name} ${row.matchedBilling.period}`,
       resolvedDate:
         row.matchStatus === 'suspense_refunded'
           ? row.refundDate
@@ -630,6 +632,7 @@ async function suspenseFile(organizationId: string, scope: PeriodScope): Promise
             ? null
             : row.matchedAt,
       refundNote: row.refundNote,
+      billingBatchNumber: row.matchedBilling?.batchNumber ?? null,
     })),
   )
 }
@@ -660,6 +663,7 @@ async function creditNoteFile(organizationId: string, scope: PeriodScope): Promi
       totalSatang: true,
       reason: true,
       status: true,
+      buyerBranchCode: true,
       taxInvoice: { select: { invoiceNumber: true, salesRecord: { select: { company: { select: { name: true } } } } } },
       adjustment: {
         select: {
@@ -704,6 +708,8 @@ async function creditNoteFile(organizationId: string, scope: PeriodScope): Promi
       reason: row.reason,
       status: row.status,
       adjustmentRef: await refOf(row.adjustment),
+      // มติ PO U82 — snapshot สาขาผู้ซื้อตามใบกำกับเดิม (คอลัมน์ต่อท้าย)
+      companyBranchCode: row.buyerBranchCode,
     })
   }
   return creditNoteCsv(exportRows)
@@ -788,6 +794,7 @@ async function taxInvoiceFile(
     totalSatang: invoice.source.amounts.totalSatang,
     vatRatesPct: invoice.source.vatRatesPct,
     billingRef: invoice.billingRef,
+    billingBatchNumber: invoice.billingBatchNumber,
     status: invoice.source.status,
     cancelledAt: invoice.source.cancelledAt,
     cancelReason: invoice.source.cancelReason,

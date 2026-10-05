@@ -271,11 +271,11 @@ async function seedCreditNote(options: {
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO credit_notes (organization_id, tax_invoice_id, adjustment_id, credit_note_number, issue_date,
                               amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason,
-                              file_path, created_by)
+                              file_path, created_by, buyer_branch_code)
     VALUES ('${ORG_ID}', '${options.invoiceId}', ${options.adjustmentId === undefined ? 'NULL' : `'${options.adjustmentId}'`},
             'CNP5-${RUN}-${seq}', '${dayOffset(0)}', ${options.beforeVatSatang}, ${options.vatSatang},
             ${options.beforeVatSatang + options.vatSatang}, 7.00, $$เหตุผลลดหนี้ภายใน$$,
-            'tax-invoices/secret/credit-notes/scan.pdf', '${FINANCE_ID}')
+            'tax-invoices/secret/credit-notes/scan.pdf', '${FINANCE_ID}', '00000')
     RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -306,9 +306,9 @@ async function seedInvoice(options: {
   `)
   const cancelled = options.cancelled === true
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, status,
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, status,
                               cancel_reason, cancelled_by, cancelled_at, created_by)
-    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INVP5-${RUN}-${seq}', '${dayOffset(0)}', '00000',
+    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INVP5-${RUN}-${seq}', '${dayOffset(0)}', '00000', '00000',
             '${cancelled ? 'cancelled' : 'active'}',
             ${cancelled ? `$$ยกเลิกในเทสต์$$, '${FINANCE_ID}', NOW()` : 'NULL, NULL, NULL'}, '${FINANCE_ID}')
     RETURNING id
@@ -761,9 +761,15 @@ suite('มติ U14 (fixer X3) — ใบลดหนี้ active หักย
     })
     expect(invoice?.creditNotes).toHaveLength(1)
     expect(Object.keys(invoice?.creditNotes[0] ?? {}).sort()).toEqual(
-      ['amountBeforeVatSatang', 'creditNoteNumber', 'id', 'issueDate', 'totalSatang', 'vatSatang'].sort(),
+      ['amountBeforeVatSatang', 'branchLabel', 'creditNoteNumber', 'id', 'issueDate', 'totalSatang', 'vatSatang'].sort(),
     )
-    expect(invoice?.creditNotes[0]).toMatchObject({ id: creditNoteId, issueDate: dayOffset(0), totalSatang: 10_700 })
+    // มติ PO U82 — สาขาลูกค้าตามใบกำกับเดิม (ข้อความ ไม่ส่งรหัสดิบ)
+    expect(invoice?.creditNotes[0]).toMatchObject({
+      id: creditNoteId,
+      issueDate: dayOffset(0),
+      totalSatang: 10_700,
+      branchLabel: 'สำนักงานใหญ่',
+    })
     expect(t.invoices.find((item) => item.id === fx.co1InvoiceCancelled)?.creditNotes).toEqual([])
     expect(forbiddenKeysIn(t)).toEqual([])
     expect(JSON.stringify(t)).not.toContain('เหตุผลลดหนี้ภายใน')

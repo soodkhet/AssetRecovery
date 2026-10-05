@@ -12,7 +12,7 @@ import type {
   ServiceFeeModel,
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
-import { formatBranch } from '@/lib/finance-companies/company'
+import { formatBranch } from '@/lib/format/branch'
 import { canAccess, type PortalCapabilities } from '@/lib/portal/access'
 import {
   portalBillingStatusDisplay,
@@ -281,6 +281,8 @@ export interface PortalCreditNoteSource {
   amountBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
+  /** snapshot สาขาผู้ซื้อตามใบกำกับเดิม (มติ PO U82) — `00000` = สำนักงานใหญ่ */
+  buyerBranchCode: string
 }
 
 /** ใบลดหนี้/ใบเพิ่มหนี้ที่ลูกค้าเห็น — ไม่มีเหตุผลภายใน/ผู้บันทึก/ไฟล์สแกน/Adjustment ต้นเหตุ */
@@ -291,6 +293,8 @@ export interface PortalCreditNoteDto {
   amountBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
+  /** สำนักงานใหญ่/สาขาของลูกค้าตามใบกำกับเดิม — "สำนักงานใหญ่" / "สาขาที่ 00001" (มติ PO U82) */
+  branchLabel: string
 }
 
 export interface PortalTaxInvoiceDto {
@@ -348,6 +352,7 @@ export function serializePortalCreditNote(note: PortalCreditNoteSource): PortalC
     creditNoteNumber: note.creditNoteNumber,
     issueDate: typeof note.issueDate === 'string' ? note.issueDate.slice(0, 10) : dateOnly(note.issueDate),
     ...amountsOf(note),
+    branchLabel: formatBranch(note.buyerBranchCode),
   }
 }
 

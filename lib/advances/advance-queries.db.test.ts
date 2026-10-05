@@ -4,6 +4,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { parseSimulatedAsOf } from '@/lib/jobs/job-types'
+import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
 
 /**
  * เทสต์ระดับ DB ของ Phase 3.3 — DoD ตาม `15` §16:
@@ -119,9 +120,16 @@ function createInput(overrides: Partial<{ requestedSatang: number; purpose: stri
   }
 }
 
+/** มติ PO U83 — เคลียร์ได้เฉพาะเงินทดรองที่จ่ายจริงแล้ว ⇒ ทำ fixture รอบจ่าย completed ก่อนเคลียร์ */
+async function markPaid(advanceId: string): Promise<void> {
+  await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId, actorId: FINANCE_ID })
+}
+
 async function reset(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
@@ -200,6 +208,7 @@ suite('ห้ามเบิกซ้อน (`15` §9.2/§16)', () => {
   it('เคลียร์ยอดแล้วขอใหม่ได้', async () => {
     const first = await advances.createAdvance(ctx(agent), createInput())
     await advances.approveAdvance(ctx(finance), first.id, { approvedSatang: null, note: null })
+    await markPaid(first.id)
     await advances.settleAdvance(ctx(agent), first.id, { usedSatang: 400_000, receiptFileUrl: null, note: null })
 
     const second = await advances.createAdvance(ctx(agent), createInput())
@@ -276,11 +285,34 @@ suite('เพดานยอดต่อครั้ง (`15` §11 · `13` §6.2
   })
 })
 
+suite('มติ PO U83 — เคลียร์ยอดได้เฉพาะเงินทดรองที่จ่ายจริงแล้ว', () => {
+  it('อนุมัติแล้วแต่ยังไม่เคยอยู่ในรอบจ่าย completed → ADVANCE_IN_PENDING_PAYOUT "ยังไม่ได้จ่าย…" · ไม่มีอะไรเปลี่ยน · DTO บอกว่ายังไม่จ่าย', async () => {
+    const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 300_000 }))
+    const approved = await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
+    expect(approved.paidOut).toBe(false)
+
+    const error = await advances
+      .settleAdvance(ctx(agent), created.id, { usedSatang: 245_000, receiptFileUrl: null, note: null })
+      .catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('ADVANCE_IN_PENDING_PAYOUT')
+    expect((error as { userMessage?: string }).userMessage).toBe('ยังไม่ได้จ่ายเงินทดรองนี้ — เคลียร์ได้หลังจ่ายแล้ว')
+    const row = await db().advance.findUniqueOrThrow({ where: { id: created.id }, select: { status: true, usedSatang: true } })
+    expect(row).toEqual({ status: 'approved', usedSatang: 0 })
+
+    // จ่ายจริงแล้ว (รอบจ่าย completed) → เคลียร์ได้
+    await markPaid(created.id)
+    const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 245_000, receiptFileUrl: null, note: null })
+    expect(settled.status).toBe('cleared')
+    expect(settled.paidOut).toBe(true)
+  })
+})
+
 suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
   it('requested 5,000 ใช้จริง 4,200 → ยอดคืน 800 (generated column)', async () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 500_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, {
       usedSatang: 420_000,
       receiptFileUrl: 'expenses/receipt-33.pdf',
@@ -295,6 +327,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 500_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: 400_000, note: null })
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, {
       usedSatang: 350_000,
       receiptFileUrl: null,
@@ -307,6 +340,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 300_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 245_000, receiptFileUrl: null, note: null })
     expect(settled.returnSatang).toBe(55_000)
     expect(settled.excessClaimId).toBeNull()
@@ -317,6 +351,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 300_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 300_000, receiptFileUrl: null, note: null })
     expect(settled.returnSatang).toBe(0)
     expect(settled.excessClaimId).toBeNull()
@@ -327,6 +362,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 500_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, {
       usedSatang: 550_000,
       receiptFileUrl: 'expenses/receipt-over.pdf',
@@ -360,6 +396,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     const created = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 500_000 }))
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: 400_000, note: null })
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 450_000, receiptFileUrl: null, note: null })
     const claim = await db().expense.findUniqueOrThrow({ where: { id: settled.excessClaimId as string } })
     expect(claim.grossSatang).toBe(50_000)
@@ -370,6 +407,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
     await db().$executeRawUnsafe(`UPDATE advances SET status = 'overdue' WHERE id = '${created.id}'`)
 
+    await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, {
       usedSatang: 500_000,
       receiptFileUrl: null,
@@ -381,6 +419,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
   it('เคลียร์ยอดซ้ำไม่ได้ (terminal)', async () => {
     const created = await advances.createAdvance(ctx(agent), createInput())
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
+    await markPaid(created.id)
     await advances.settleAdvance(ctx(agent), created.id, { usedSatang: 100_000, receiptFileUrl: null, note: null })
 
     await expectCode(

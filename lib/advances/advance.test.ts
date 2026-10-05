@@ -14,7 +14,10 @@ import {
   minDueClearInputDate,
 } from '@/lib/advances/advance'
 import {
+  ADVANCE_NOT_PAID_SETTLE_MESSAGE,
   assertSettleNotInPendingPayout,
+  isAdvancePaidOut,
+  settlePayoutBlockMessage,
   PENDING_PAYOUT_BATCH_STATUSES,
   pendingPayoutBlockingSettle,
 } from '@/lib/advances/advance'
@@ -214,15 +217,15 @@ describe('มติ PO U74 — เคลียร์ยอดขณะอยู�
     status,
   })
 
-  it('ไม่อยู่ในรอบจ่าย → ผ่าน', () => {
+  it('ไม่อยู่ในรอบจ่าย (แต่เคยจ่ายแล้ว) → ผ่าน', () => {
     expect(pendingPayoutBlockingSettle(null)).toBeNull()
-    expect(() => assertSettleNotInPendingPayout('adv-1', null)).not.toThrow()
+    expect(() => assertSettleNotInPendingPayout('adv-1', null, true)).not.toThrow()
   })
 
   it.each(['draft', 'checking', 'file_generated'] as const)('รอบ %s → ADVANCE_IN_PENDING_PAYOUT + ชื่อรอบ', (status) => {
     let caught: unknown = null
     try {
-      assertSettleNotInPendingPayout('adv-1', batch(status))
+      assertSettleNotInPendingPayout('adv-1', batch(status), false)
     } catch (error) {
       caught = error
     }
@@ -234,7 +237,41 @@ describe('มติ PO U74 — เคลียร์ยอดขณะอยู�
     expect(error.context).toMatchObject({ payoutBatchId: 'pb-1', payoutBatchStatus: status })
   })
 
-  it.each(['completed', 'cancelled'] as const)('รอบ %s → ผ่าน', (status) => {
-    expect(() => assertSettleNotInPendingPayout('adv-1', batch(status))).not.toThrow()
+  it.each(['completed', 'cancelled'] as const)('รอบ %s (เคยจ่ายแล้ว) → ผ่าน', (status) => {
+    expect(() => assertSettleNotInPendingPayout('adv-1', batch(status), true)).not.toThrow()
+  })
+})
+
+describe('มติ PO U83 — เคลียร์ยอดได้เฉพาะเงินทดรองที่จ่ายจริงแล้ว (เคยอยู่ในรอบจ่าย completed)', () => {
+  it('จ่ายแล้ว = มีรอบ completed อย่างน้อยหนึ่งรอบ · รอบยกเลิก/ยังไม่โอน/ไม่มีรอบ = ยังไม่จ่าย', () => {
+    expect(isAdvancePaidOut([])).toBe(false)
+    expect(isAdvancePaidOut([{ status: 'cancelled' }])).toBe(false)
+    expect(isAdvancePaidOut([{ status: 'draft' }, { status: 'file_generated' }])).toBe(false)
+    expect(isAdvancePaidOut([{ status: 'cancelled' }, { status: 'completed' }])).toBe(true)
+  })
+
+  it.each([
+    ['ไม่เคยอยู่ในรอบใด', null],
+    ['รอบเดิมถูกยกเลิก', { id: 'pb-x', name: 'รอบที่ยกเลิก', status: 'cancelled' as const }],
+  ])('%s → ADVANCE_IN_PENDING_PAYOUT ข้อความ "ยังไม่ได้จ่าย…"', (_label, current) => {
+    let caught: unknown = null
+    try {
+      assertSettleNotInPendingPayout('adv-1', current, false)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(AdvanceError)
+    const error = caught as AdvanceError
+    expect(error.code).toBe('ADVANCE_IN_PENDING_PAYOUT')
+    expect(error.status).toBe(400)
+    expect(error.userMessage).toBe('ยังไม่ได้จ่ายเงินทดรองนี้ — เคลียร์ได้หลังจ่ายแล้ว')
+    expect(error.context).toMatchObject({ payoutBatchId: null })
+  })
+
+  it('ข้อความเดียวกันทั้งปุ่มและ API · รอบค้างโอนมาก่อน (บอกชื่อรอบ)', () => {
+    expect(settlePayoutBlockMessage(null, false)).toBe(ADVANCE_NOT_PAID_SETTLE_MESSAGE)
+    expect(settlePayoutBlockMessage(null, true)).toBeNull()
+    expect(settlePayoutBlockMessage({ id: 'pb-1', name: 'รอบ A', status: 'checking' }, false)).toContain('รอบ A')
+    expect(ADVANCE_NOT_PAID_SETTLE_MESSAGE).not.toMatch(/§|ไฟล์ \d/)
   })
 })

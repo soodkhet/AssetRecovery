@@ -96,6 +96,7 @@ function docSource(overrides: Partial<TaxInvoiceDocSource> = {}): TaxInvoiceDocS
       phone: null,
     },
     buyerBranchCode: '00000',
+    sellerBranchCode: '00000',
     description: 'ค่าบริการติดตามทรัพย์ รอบเดือน มิถุนายน 2569',
     periodLabel: 'มิถุนายน 2569',
     amounts: { totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 },

@@ -650,6 +650,9 @@ model Organization {
   /// Supabase Storage URL
   logoUrl       String? @map("logo_url")
   vatRegistered Boolean @default(true) @map("vat_registered")
+  /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
+  /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
+  branchCode    String  @default("00000") @map("branch_code") @db.VarChar(5)
 
   // Tax invoice numbering (ไฟล์ 13 §6.12) — เลขที่ห้าม gap
   taxInvoicePrefix        String               @default("INV") @map("tax_invoice_prefix") @db.VarChar(20)
@@ -2718,18 +2721,21 @@ model SalesRecord {
 /// ใบกำกับภาษี (`31` §8) — เลขที่ auto-gen **ห้าม gap ห้ามแก้**
 /// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE ห้าม reverse cancel
 model TaxInvoice {
-  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId  String           @map("organization_id") @db.Uuid
-  salesRecordId   String           @map("sales_record_id") @db.Uuid
-  invoiceNumber   String           @unique @map("invoice_number")
-  invoiceDate     DateTime         @map("invoice_date") @db.Date
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String           @map("organization_id") @db.Uuid
+  salesRecordId    String           @map("sales_record_id") @db.Uuid
+  invoiceNumber    String           @unique @map("invoice_number")
+  invoiceDate      DateTime         @map("invoice_date") @db.Date
   /// snapshot สาขาผู้ซื้อ ณ ตอนออกใบ (มติ PO U77 · ม.86/4) — `00000` = สำนักงานใหญ่ · ไม่มี default (ต้องส่งทุกครั้ง)
   /// CHECK + ยาม immutable อยู่ใน raw SQL `20261005201000_finance_company_branch_code`
-  buyerBranchCode String           @map("buyer_branch_code") @db.VarChar(5)
-  status          TaxInvoiceStatus @default(active)
-  cancelReason    String?          @map("cancel_reason")
-  cancelledBy     String?          @map("cancelled_by") @db.Uuid
-  cancelledAt     DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+  buyerBranchCode  String           @map("buyer_branch_code") @db.VarChar(5)
+  /// snapshot สาขาผู้ขาย (องค์กรเรา) ณ ตอนออกใบ (มติ PO U82) — ไม่มี default · CHECK + ยาม immutable อยู่ใน raw SQL
+  /// `20261005202000_seller_branch_credit_note_buyer_branch`
+  sellerBranchCode String           @map("seller_branch_code") @db.VarChar(5)
+  status           TaxInvoiceStatus @default(active)
+  cancelReason     String?          @map("cancel_reason")
+  cancelledBy      String?          @map("cancelled_by") @db.Uuid
+  cancelledAt      DateTime?        @map("cancelled_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -2771,6 +2777,9 @@ model CreditNote {
   totalSatang           Int              @map("total_satang")
   /// snapshot อัตรา VAT ของใบกำกับเดิม (จาก `revenues.vat_rate_pct_used` ของรอบวางบิล)
   vatRatePctUsed        Decimal          @map("vat_rate_pct_used") @db.Decimal(5, 2)
+  /// snapshot สาขาผู้ซื้อตามใบกำกับเดิม (`tax_invoices.buyer_branch_code` — มติ PO U82) · ไม่มี default
+  /// trigger ตรวจให้ตรงใบกำกับ + immutable อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
+  buyerBranchCode       String           @map("buyer_branch_code") @db.VarChar(5)
   reason                String
   /// path ไฟล์สแกนใน bucket `case-documents` (`tax-invoices/<id>/credit-notes/…`)
   filePath              String?          @map("file_path")

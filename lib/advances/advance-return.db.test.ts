@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import type { PayoutTxClient } from '@/lib/payout/queries'
+import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
 
 /**
  * เทสต์ระดับ DB — มติ PO 05/10/2569 (UAT U30 · BUG-109 · A6): ปิดยอดคืนเงินทดรอง
@@ -140,6 +141,8 @@ async function seedApprovedAdvance(id: string, approvedSatang: number): Promise<
     VALUES ('${id}', '${ORG_ID}', '${PAYEE_ID}', ${approvedSatang}, ${approvedSatang}, 'ค่าเดินทางล่วงหน้า U30',
             '2026-12-31', 'approved', '2026-08-20T03:00:00Z', '${FINANCE_ID}', '${AGENT_ID}')
   `)
+  // มติ PO U83 — เคลียร์ได้เฉพาะเงินทดรองที่จ่ายจริงแล้ว (เคยอยู่ในรอบจ่าย completed)
+  await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: id, actorId: FINANCE_ID })
 }
 
 /** ADV1 ของ UAT: อนุมัติ ฿3,000 ใช้ ฿2,450 → คืน ฿550 */

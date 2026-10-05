@@ -162,6 +162,7 @@ describe('แบบข้อมูลเอกสาร PDF (`28` §6.2)', () =>
     seller: { ...completeFields.seller, name: 'บริษัท แอสเซ็ทรีคัฟเวอรี่ จำกัด', taxId: '0105560000001', address: '99 ถนนพระราม 9 กรุงเทพฯ', phone: '021234567' },
     buyer: { name: 'บริษัท สยามไฟแนนซ์ จำกัด', taxId: '0105512420001', address: '1 ถนนสีลม กรุงเทพฯ', phone: null },
     buyerBranchCode: '00000',
+    sellerBranchCode: '00000',
     description: invoiceDescriptionOf('มิถุนายน 2569'),
     periodLabel: 'มิถุนายน 2569',
     amounts: { totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 },
@@ -196,8 +197,13 @@ describe('แบบข้อมูลเอกสาร PDF (`28` §6.2)', () =>
   it('มติ PO U77 (ม.86/4) — พิมพ์สำนักงานใหญ่/สาขาของผู้ซื้อจาก snapshot บนใบ', () => {
     expect(buildTaxInvoiceDoc(source).buyer.branchLabel).toBe('สำนักงานใหญ่')
     expect(buildTaxInvoiceDoc({ ...source, buyerBranchCode: '00001' }).buyer.branchLabel).toBe('สาขาที่ 00001')
-    // ผู้ขายไม่ถูกเติมข้อความสาขา (ไม่อยู่ในขอบเขตมตินี้)
-    expect(buildTaxInvoiceDoc(source).seller).not.toHaveProperty('branchLabel')
+  })
+
+  it('มติ PO U82 (ม.86/4) — พิมพ์สำนักงานใหญ่/สาขาของผู้ขายจาก snapshot บนใบ (แยกจากสาขาผู้ซื้อ)', () => {
+    expect(buildTaxInvoiceDoc(source).seller.branchLabel).toBe('สำนักงานใหญ่')
+    const branchDoc = buildTaxInvoiceDoc({ ...source, sellerBranchCode: '00002', buyerBranchCode: '00001' })
+    expect(branchDoc.seller.branchLabel).toBe('สาขาที่ 00002')
+    expect(branchDoc.buyer.branchLabel).toBe('สาขาที่ 00001')
   })
 
   it('หลายอัตรา VAT ในรอบเดียว ⇒ ไม่ระบุ % บนหัวคอลัมน์', () => {

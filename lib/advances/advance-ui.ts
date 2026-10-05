@@ -1,7 +1,6 @@
 import {
   canAdvanceAction,
-  pendingPayoutBlockingSettle,
-  pendingPayoutSettleMessage,
+  settlePayoutBlockMessage,
   type AdvanceReturnState,
 } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
@@ -52,13 +51,14 @@ export function canSettleAdvance(status: AdvanceStatus): boolean {
 }
 
 /**
- * มติ PO U74 — เหตุผลที่ปุ่ม "เคลียร์ยอด" ถูกปิด (`null` = กดได้) · ใช้คู่กับ `canSettleAdvance()`
- * เงินทดรองอยู่ในรอบจ่ายที่ยังไม่ยืนยันโอน ⇒ ปิดปุ่ม + บอกชื่อรอบ (API ปฏิเสธ `ADVANCE_IN_PENDING_PAYOUT` อยู่แล้ว)
+ * เหตุผลที่ปุ่ม "เคลียร์ยอด" ถูกปิด (`null` = กดได้) · ใช้คู่กับ `canSettleAdvance()`
+ * · มติ PO U74: อยู่ในรอบจ่ายที่ยังไม่ยืนยันโอน ⇒ บอกชื่อรอบ
+ * · มติ PO U83: ยังไม่เคยอยู่ในรอบจ่ายที่โอนสำเร็จ ⇒ "ยังไม่ได้จ่าย…"
+ * (API ปฏิเสธ `ADVANCE_IN_PENDING_PAYOUT` อยู่แล้ว — ตรงนี้เป็นแค่ UX)
  */
-export function settleBlockedReason(advance: Pick<AdvanceDto, 'status' | 'payoutBatch'>): string | null {
+export function settleBlockedReason(advance: Pick<AdvanceDto, 'status' | 'payoutBatch' | 'paidOut'>): string | null {
   if (!canSettleAdvance(advance.status)) return null
-  const blocking = pendingPayoutBlockingSettle(advance.payoutBatch)
-  return blocking === null ? null : pendingPayoutSettleMessage(blocking.name)
+  return settlePayoutBlockMessage(advance.payoutBatch, advance.paidOut)
 }
 
 /** แถวที่ยังถือเงินทดรองอยู่ — ใช้ขึ้นแถบเตือนหัวตาราง (`15` §8 · mockup `finance.html`) */

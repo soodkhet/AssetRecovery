@@ -89,6 +89,7 @@ const TAX_INVOICE_SELECT = {
   invoiceNumber: true,
   invoiceDate: true,
   buyerBranchCode: true,
+  sellerBranchCode: true,
   status: true,
   cancelReason: true,
   cancelledAt: true,
@@ -322,10 +323,12 @@ async function loadSeller(organizationId: string): Promise<{
   address: string
   phone: string | null
   vatRegistered: boolean
+  /** สำนักงานใหญ่/สาขาปัจจุบันขององค์กร — ใช้ตอน**ออกใบ**เท่านั้น (snapshot ลง `tax_invoices.seller_branch_code` · U82) */
+  branchCode: string
 }> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { name: true, taxId: true, address: true, phone: true, vatRegistered: true },
+    select: { name: true, taxId: true, address: true, phone: true, vatRegistered: true, branchCode: true },
   })
   if (org === null) throw new Error(`loadSeller: ไม่พบองค์กร ${organizationId}`)
   return org
@@ -442,6 +445,8 @@ export async function issueTaxInvoice(
         invoiceDate,
         // มติ PO U77 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ซื้อ ณ ตอนออกใบ
         buyerBranchCode: buyer.branchCode,
+        // มติ PO U82 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ขาย (องค์กรเรา) ณ ตอนออกใบ
+        sellerBranchCode: seller.branchCode,
         createdBy: ctx.actor.id,
       },
       select: TAX_INVOICE_SELECT,
@@ -459,6 +464,7 @@ export async function issueTaxInvoice(
           invoice_number: invoice.invoiceNumber,
           invoice_date: invoice.invoiceDate.toISOString(),
           buyer_branch_code: invoice.buyerBranchCode,
+          seller_branch_code: invoice.sellerBranchCode,
           status: invoice.status,
           sales_record_id: sales.id,
           total_satang: sales.totalSatang,
@@ -607,7 +613,7 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
 function docSourceOf(
   invoice: Pick<
     TaxInvoiceRow,
-    'invoiceNumber' | 'invoiceDate' | 'status' | 'cancelReason' | 'cancelledAt' | 'buyerBranchCode'
+    'invoiceNumber' | 'invoiceDate' | 'status' | 'cancelReason' | 'cancelledAt' | 'buyerBranchCode' | 'sellerBranchCode'
   >,
   sales: Pick<SalesRow, 'totalBeforeVatSatang' | 'vatSatang' | 'totalSatang'> & {
     billingBatch: { period: string }
@@ -629,6 +635,8 @@ function docSourceOf(
     buyer: { name: buyer.name, taxId: buyer.taxId, address: buyer.address ?? '', phone: buyer.phone },
     // snapshot บนใบ (มติ PO U77) — ไม่ใช่ `buyer.branchCode` ปัจจุบันของบริษัท
     buyerBranchCode: invoice.buyerBranchCode,
+    // snapshot บนใบ (มติ PO U82) — ไม่ใช่ `organizations.branch_code` ปัจจุบัน
+    sellerBranchCode: invoice.sellerBranchCode,
     description: invoiceDescriptionOf(sales.billingBatch.period),
     periodLabel: sales.period.periodLabel,
     amounts: amountsOf(sales),
@@ -650,6 +658,7 @@ export async function taxInvoicesForPack(
     source: TaxInvoiceDocSource
     companyName: string
     billingRef: string
+    billingBatchNumber: string
     replacedBy: string | null
   }[]
 > {
@@ -671,6 +680,7 @@ export async function taxInvoicesForPack(
       cancelledAt: true,
       createdAt: true,
       buyerBranchCode: true,
+      sellerBranchCode: true,
       salesRecord: {
         select: {
           companyId: true,
@@ -679,7 +689,7 @@ export async function taxInvoicesForPack(
           vatSatang: true,
           totalSatang: true,
           period: { select: { periodLabel: true } },
-          billingBatch: { select: { period: true } },
+          billingBatch: { select: { period: true, batchNumber: true } },
           taxInvoices: {
             where: { status: 'active' },
             orderBy: { createdAt: 'asc' },
@@ -723,6 +733,7 @@ export async function taxInvoicesForPack(
       source: docSourceOf(row, sales, seller, buyer, ratesOf.get(sales.billingBatchId) ?? []),
       companyName: buyer.name,
       billingRef: sales.billingBatch.period,
+      billingBatchNumber: sales.billingBatch.batchNumber,
       replacedBy: replacement?.invoiceNumber ?? null,
     }
   })

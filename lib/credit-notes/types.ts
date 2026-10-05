@@ -18,6 +18,10 @@ export interface CreditNoteDto {
   totalSatang: number
   /** อัตรา VAT ของใบกำกับเดิม เช่น `"7"` */
   vatRatePctUsed: string
+  /** snapshot สาขาผู้ซื้อตามใบกำกับเดิม (มติ PO U82) — `00000` = สำนักงานใหญ่ */
+  buyerBranchCode: string
+  /** "สำนักงานใหญ่" / "สาขาที่ 00001" */
+  buyerBranchLabel: string
   reason: string
   filePath: string | null
   status: CreditNoteStatus
@@ -57,6 +61,8 @@ export interface CreditNoteSummary {
   amountBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
+  /** snapshot สาขาผู้ซื้อตามใบกำกับเดิม (มติ PO U82) */
+  buyerBranchCode: string
 }
 
 /** Adjustment ที่อนุมัติแล้วแต่ยังไม่มีเอกสาร — ป้าย "รอใบลดหนี้" (ลดยอด) / "รอใบเพิ่มหนี้" (เพิ่มยอด — U19) */

@@ -1,7 +1,7 @@
 import type { ReadinessCheck } from '@/lib/accounting/period'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
-import { formatBranch } from '@/lib/finance-companies/company'
+import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import type {
@@ -379,6 +379,7 @@ export const BANK_RECON_HEADERS = [
   'matched_type',
   'matched_ref',
   'status',
+  'billing_batch_number',
 ] as const
 
 /** ชนิดของสิ่งที่รายการเดินบัญชีถูกจับคู่ด้วย — ค่าดิบเพื่อให้สำนักงานบัญชี map เข้าระบบตัวเองได้ */
@@ -392,6 +393,8 @@ export interface BankReconExportRow {
   matchStatus: BankMatchStatus
   matchedType: MatchedType | null
   matchedRef: string | null
+  /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` เมื่อจับคู่กับรอบวางบิล (มติ U79 — คอลัมน์ต่อท้าย) · อื่น ๆ = null */
+  billingBatchNumber: string | null
 }
 
 /** บวก = เงินเข้า (credit) · ลบ = เงินออก (debit) — ตามตัวอย่างไฟล์ 06 */
@@ -412,6 +415,7 @@ export function bankReconCsv(rows: readonly BankReconExportRow[]): string {
       csvText(row.matchedRef),
       // enum เต็มตามสคีมา ห้ามแปลไทย (DEC-006/D10 · U41 เพิ่ม suspense/suspense_refunded)
       row.matchStatus,
+      csvText(row.billingBatchNumber),
     ]),
   )
 }
@@ -426,6 +430,7 @@ export const ADJUSTMENT_HEADERS = [
   'reason',
   'approved_by',
   'approved_date',
+  'billing_batch_number',
 ] as const
 
 export interface AdjustmentExportRow {
@@ -436,6 +441,8 @@ export interface AdjustmentExportRow {
   reason: string
   approvedByName: string | null
   approvedAt: Date | null
+  /** เลขรอบวางบิลเมื่อ `target_type` = `billing_batch` (มติ U79 — คอลัมน์ต่อท้าย) · อื่น ๆ = null */
+  billingBatchNumber: string | null
 }
 
 /** เลขที่รายการปรับปรุงแบบ deterministic — `ADJ-<พ.ศ.>-<เดือน>-<ลำดับในรอบ>` (ดูหัวไฟล์) */
@@ -458,6 +465,7 @@ export function adjustmentCsv(
       row.reason,
       csvText(row.approvedByName),
       csvDate(row.approvedAt),
+      csvText(row.billingBatchNumber),
     ]),
   )
 }
@@ -468,6 +476,8 @@ export function adjustmentCsv(
  * ใบลดหนี้ (`CN`) + ใบเพิ่มหนี้ (`DN`) ที่**ลงวันที่ในรอบ** (ภาษีขายปรับในเดือนที่ออกเอกสาร) รวมใบที่ยกเลิก
  * (`status` = enum เต็มแบบไฟล์ 06) · ยอดเป็นบวกเสมอ — ทิศทางดูจาก `document_type`
  * · `adjustment_ref` = เลขที่รายการปรับปรุงในไฟล์ 07 ของงวดเป้าหมายของ Adjustment (`adjustmentRef()`) · ไม่ผูก ⇒ `-`
+ * · `company_branch` (มติ PO U82 · ม.86/4 — คอลัมน์ต่อท้าย) = "สำนักงานใหญ่" / "สาขาที่ 00001" ตาม snapshot
+ *   สาขาผู้ซื้อของใบกำกับเดิม (รูปแบบเดียวกับไฟล์ 12 — มติ U84)
  */
 export const CREDIT_NOTE_HEADERS = [
   'document_type',
@@ -481,6 +491,7 @@ export const CREDIT_NOTE_HEADERS = [
   'reason',
   'status',
   'adjustment_ref',
+  'company_branch',
 ] as const
 
 export interface CreditNoteExportRow {
@@ -495,6 +506,8 @@ export interface CreditNoteExportRow {
   reason: string
   status: string
   adjustmentRef: string | null
+  /** snapshot สาขาผู้ซื้อตามใบกำกับเดิม (`credit_notes.buyer_branch_code` · `00000` = สำนักงานใหญ่) */
+  companyBranchCode: string
 }
 
 export function creditNoteCsv(rows: readonly CreditNoteExportRow[]): string {
@@ -512,6 +525,7 @@ export function creditNoteCsv(rows: readonly CreditNoteExportRow[]): string {
       row.reason,
       row.status,
       csvText(row.adjustmentRef),
+      formatBranch(row.companyBranchCode),
     ]),
   )
 }
@@ -534,6 +548,7 @@ export const CUSTOMER_WHT_HEADERS = [
   'cert_date',
   'cert_wht_baht',
   'status',
+  'billing_batch_number',
 ] as const
 
 export interface CustomerWhtExportRow {
@@ -547,6 +562,8 @@ export interface CustomerWhtExportRow {
   certificateDate: Date | null
   whtSatang: number | null
   status: 'pending' | 'received'
+  /** เลขรอบวางบิล (มติ U79 — คอลัมน์ต่อท้าย · `billing_ref` คงเป็นรอบเดือน) */
+  billingBatchNumber: string | null
 }
 
 export function customerWhtCsv(rows: readonly CustomerWhtExportRow[]): string {
@@ -563,6 +580,7 @@ export function customerWhtCsv(rows: readonly CustomerWhtExportRow[]): string {
       csvDate(row.certificateDate),
       row.whtSatang === null ? CSV_EMPTY : csvBaht(row.whtSatang),
       row.status,
+      csvText(row.billingBatchNumber),
     ]),
   )
 }
@@ -584,6 +602,7 @@ export const SUSPENSE_HEADERS = [
   'resolved_ref',
   'resolved_date',
   'refund_reason',
+  'billing_batch_number',
 ] as const
 
 export interface SuspenseExportRow {
@@ -598,6 +617,8 @@ export interface SuspenseExportRow {
   /** วันที่จับคู่ภายหลัง หรือวันที่คืนเงิน */
   resolvedDate: Date | null
   refundNote: string | null
+  /** เลขรอบวางบิลที่จับคู่ภายหลัง (มติ U79 — คอลัมน์ต่อท้าย) */
+  billingBatchNumber: string | null
 }
 
 export function suspenseCsv(rows: readonly SuspenseExportRow[]): string {
@@ -613,6 +634,7 @@ export function suspenseCsv(rows: readonly SuspenseExportRow[]): string {
       csvText(row.matchedRef),
       csvDate(row.resolvedDate),
       csvText(row.refundNote),
+      csvText(row.billingBatchNumber),
     ]),
   )
 }
@@ -644,6 +666,7 @@ export const TAX_INVOICE_HEADERS = [
   'replaced_by',
   'pdf_file',
   'company_branch',
+  'billing_batch_number',
 ] as const
 
 export interface TaxInvoiceExportRow {
@@ -665,6 +688,8 @@ export interface TaxInvoiceExportRow {
   replacedBy: string | null
   /** path ใน zip (`tax_invoices/…pdf`) — null = ไม่ได้แนบ */
   pdfFile: string | null
+  /** เลขรอบวางบิล (มติ U79 — คอลัมน์ต่อท้าย · `billing_ref` คงเป็นรอบเดือน) */
+  billingBatchNumber: string | null
 }
 
 /** อัตรา VAT แบบทศนิยม 2 ตำแหน่ง ไม่ซ้ำ เรียงน้อยไปมาก — ไม่มีรายได้ผูก ⇒ `-` */
@@ -699,6 +724,7 @@ export function taxInvoiceCsv(rows: readonly TaxInvoiceExportRow[]): string {
       csvText(row.replacedBy),
       csvText(row.pdfFile),
       formatBranch(row.companyBranchCode),
+      csvText(row.billingBatchNumber),
     ]),
   )
 }

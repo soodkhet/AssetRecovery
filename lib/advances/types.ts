@@ -50,6 +50,8 @@ export interface AdvanceDto {
    * รอบยังไม่ `completed` ⇒ ปุ่มเคลียร์ยอดปิดพร้อมเหตุผล (`pendingPayoutBlockingSettle()`)
    */
   payoutBatch: AdvancePayoutBatchRef | null
+  /** มติ PO U83 — เคยอยู่ในรอบจ่ายที่ `completed` (จ่ายเงินทดรองจริงแล้ว) ⇒ เคลียร์ยอดได้ */
+  paidOut: boolean
 }
 
 /** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */
