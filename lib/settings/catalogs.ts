@@ -51,7 +51,7 @@ export const INTERNAL_DOCUMENT_TEMPLATES: readonly InternalDocumentTemplate[] = 
 ]
 
 export interface ExportFormatSpec {
-  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–11 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41) */
+  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–13 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68) */
   fileName: string
   format: 'CSV UTF-8' | 'XLSX'
   content: string
@@ -128,5 +128,20 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     format: 'CSV UTF-8',
     content: 'เงินรับรอตรวจสอบ — amount, reason, status, resolved_ref, refund_date',
     sourceFile: '35',
+  },
+  // มติ PO 05/10/2569 U57 — ใบกำกับภาษีที่ออก/ยกเลิกในรอบ (+ สำเนา PDF ในโฟลเดอร์ tax_invoices/ ของ zip)
+  {
+    fileName: '12_Tax_Invoices.csv',
+    format: 'CSV UTF-8',
+    content:
+      'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — invoice_number, invoice_date, company, company_tax_id, before_vat, vat, total, vat_rate_pct, status, replaced_by (+ PDF ในโฟลเดอร์ tax_invoices/)',
+    sourceFile: '31',
+  },
+  // มติ PO 05/10/2569 U68 — รับคืนเงินทดรอง (หักกลบในรอบจ่าย / รับคืนแยก)
+  {
+    fileName: '13_Advance_Returns.csv',
+    format: 'CSV UTF-8',
+    content: 'รับคืนเงินทดรอง — return_date, advance_ref, payee, amount, channel (payout_offset/cash/bank_transfer), payout_batch_ref, status',
+    sourceFile: '15',
   },
 ]

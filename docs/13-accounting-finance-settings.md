@@ -20,6 +20,7 @@
 | v3.7 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U45 · รีวิว C3)**: §6.4.2 เพิ่มค่าตั้ง "วิธียื่น ภ.ง.ด." (`filing_method`: ออนไลน์ = กำหนดยื่นวันที่ 15 / กระดาษ = วันที่ 7 ของเดือนถัดไป · ค่าเริ่มต้นออนไลน์) ในชุดค่าตั้งภาษีหัก ณ ที่จ่ายเดิม (effective-dated + `manage_wht_policy` + เหตุผล + audit) · ไม่ snapshot ลงรอบจ่าย — มีผลกับวันกำหนดยื่นของสรุปรอบนำส่ง (`33`) |
 | v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: เพิ่ม §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (ฐาน WHT / การออก 50 ทวิ / ประเภทเงินได้) effective-dated + snapshot ลงรอบจ่าย · แก้ได้เฉพาะ Superadmin/บริหาร (`manage_wht_policy`) พร้อมเหตุผล · §11/§13 เติมสิทธิ์/endpoint |
 | v3.3 | 15/08/2569 | **มติ PO 15/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม Phase 6.3 (D18)** — เพิ่ม **§6.14 เกณฑ์ SLA งานติดตาม** (แท็บที่ 14): ไฟล์ 96 §6-O2/O4 อ้าง `slaAlertHours` ว่าอยู่ใน "Finance Settings (ไฟล์ 03)" แต่ไฟล์ 03 ไม่เคยนิยาม ⇒ ตั้งค่าที่ไฟล์นี้ เก็บที่ `assignment_policy_settings.sla_alert_hours` (ไฟล์ 02 v4.4) ค่าเริ่มต้น 72 ชม. = 3 วัน · ใช้กับ**รายงาน O2/O4 เท่านั้น** ไม่บล็อก flow ใด · §7 แก้ "13 แท็บ" → "14 แท็บ" |
+| v3.8 | 05/10/2569 | **มติ PO 05/10/2569 (U57/U68)**: §6.9 ชุดไฟล์ Export Pack 11 → 13 ไฟล์ — `12_Tax_Invoices.csv` (ใบกำกับภาษีที่ออก/ยกเลิกในรอบ + PDF ในโฟลเดอร์ `tax_invoices/` ของ zip) + `13_Advance_Returns.csv` (รับคืนเงินทดรอง หักกลบ/รับแยก/กลับรายการ) · รายละเอียดที่ `37` §6.1 v2.7 |
 | v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (U40/U41)**: §6.9 ชุดไฟล์ Export Pack 9 → 11 ไฟล์ — `10_Customer_WHT.csv` + `11_Suspense_Receipts.csv` (`37` v2.5) · ยังเป็นชุดตายตัว |
 | v3.3 | 05/10/2569 | **มติ PO 05/10/2569 (U21)**: §6.9 ชุดไฟล์ Export Pack 8 → 9 ไฟล์ — เพิ่ม `09_Credit_Notes.csv` (ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — `37` v2.3) · ยังเป็นชุดตายตัว ผู้ใช้เพิ่ม/ลบไม่ได้ |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
@@ -218,6 +219,8 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | 09_Credit_Notes.csv | CSV UTF-8 | ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat (มติ PO 05/10/2569 U21) | 31 |
 | 10_Customer_WHT.csv | CSV UTF-8 | ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status (มติ PO 05/10/2569 U40) | 31 |
 | 11_Suspense_Receipts.csv | CSV UTF-8 | เงินรับรอตรวจสอบ — amount, reason, status, resolved_ref, refund_date (มติ PO 05/10/2569 U41) | 35 |
+| 12_Tax_Invoices.csv | CSV UTF-8 | ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — invoice_number, invoice_date, company, company_tax_id, before_vat, vat, total, vat_rate_pct, status, replaced_by (+ PDF ในโฟลเดอร์ tax_invoices/ ของ zip) (มติ PO 05/10/2569 U57) | 31 |
+| 13_Advance_Returns.csv | CSV UTF-8 | รับคืนเงินทดรอง — return_date, advance_ref, payee, amount, channel (payout_offset/cash/bank_transfer), payout_batch_ref, status (มติ PO 05/10/2569 U68) | 15 |
 
 ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี)
 

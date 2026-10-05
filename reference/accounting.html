@@ -828,6 +828,8 @@ function renderAccountingOperations() {
         <div>📄 09_Credit_Notes.csv</div>
         <div>📄 10_Customer_WHT.csv</div>
         <div>📄 11_Suspense_Receipts.csv</div>
+        <div>📄 12_Tax_Invoices.csv</div>
+        <div>📄 13_Advance_Returns.csv</div>
       </div>
       <div class="text-xs text-blue-700 mt-2">Version Control: Export ซ้ำรอบเดียวกันได้ — ระบบ auto-increment version (v1.0 → v1.1 → v1.2) ไม่เขียนทับของเดิม</div>
     </div>`;
@@ -1567,8 +1569,10 @@ function renderModal() {
           <div class="flex items-center gap-1.5">📄 09_Credit_Notes.csv</div>
           <div class="flex items-center gap-1.5">📄 10_Customer_WHT.csv</div>
           <div class="flex items-center gap-1.5">📄 11_Suspense_Receipts.csv</div>
+          <div class="flex items-center gap-1.5">📄 12_Tax_Invoices.csv</div>
+          <div class="flex items-center gap-1.5">📄 13_Advance_Returns.csv</div>
         </div>
-        <div class="mt-3 text-[10px] text-slate-400 font-sans">+ เอกสารแนบ (ใบเสร็จ/หลักฐาน) จากทุกรายการ</div>
+        <div class="mt-3 text-[10px] text-slate-400 font-sans">+ หน้าปกชุดเอกสาร พร้อม SHA-256 · สำเนา PDF ใบกำกับภาษีของรอบในโฟลเดอร์ tax_invoices/</div>
       </div>
     </div>`;
   }

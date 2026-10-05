@@ -353,7 +353,7 @@ async function loadBuyer(companyId: string): Promise<{
   return company
 }
 
-function amountsOf(sales: SalesRow): SalesAmounts {
+function amountsOf(sales: SalesAmounts): SalesAmounts {
   return {
     totalBeforeVatSatang: sales.totalBeforeVatSatang,
     vatSatang: sales.vatSatang,
@@ -586,6 +586,26 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
     }),
   ])
 
+  return docSourceOf(
+    invoice,
+    sales,
+    seller,
+    buyer,
+    revenues.map((row) => row.vatRatePctUsed.toString()),
+  )
+}
+
+/** ประกอบข้อมูลเอกสารจากแถวที่โหลดแล้ว — ตัวเดียวกันทั้งพิมพ์รายใบและแนบใน Export Pack (U57) */
+function docSourceOf(
+  invoice: Pick<TaxInvoiceRow, 'invoiceNumber' | 'invoiceDate' | 'status' | 'cancelReason' | 'cancelledAt'>,
+  sales: Pick<SalesRow, 'totalBeforeVatSatang' | 'vatSatang' | 'totalSatang'> & {
+    billingBatch: { period: string }
+    period: { periodLabel: string }
+  },
+  seller: Awaited<ReturnType<typeof loadSeller>>,
+  buyer: Awaited<ReturnType<typeof loadBuyer>>,
+  vatRatesPct: readonly string[],
+): TaxInvoiceDocSource {
   return {
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.invoiceDate,
@@ -599,8 +619,99 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
     description: invoiceDescriptionOf(sales.billingBatch.period),
     periodLabel: sales.period.periodLabel,
     amounts: amountsOf(sales),
-    vatRatesPct: revenues.map((row) => row.vatRatePctUsed.toString()),
+    vatRatesPct,
   }
+}
+
+/**
+ * ใบกำกับภาษีของ Export Pack (มติ PO 05/10/2569 U57) — ใบที่**ลงวันที่ในช่วง** + ใบที่**ถูกยกเลิกในช่วง**
+ * พร้อมข้อมูลเอกสาร PDF (ตัวเดียวกับ `GET /tax-invoices/:id/pdf`) · ระดับองค์กร — ผู้เรียกตรวจสิทธิ์ระดับทั้งองค์กรแล้ว
+ * · `replacedBy` = ใบ `active` ที่ออกภายหลังบนรายการขายเดียวกัน (ใบที่ออกแทนใบที่ยกเลิก)
+ */
+export async function taxInvoicesForPack(
+  organizationId: string,
+  range: { start: Date; end: Date; startAt: Date; endAt: Date },
+): Promise<
+  {
+    id: string
+    source: TaxInvoiceDocSource
+    companyName: string
+    billingRef: string
+    replacedBy: string | null
+  }[]
+> {
+  const rows = await prisma.taxInvoice.findMany({
+    where: {
+      organizationId,
+      OR: [
+        { invoiceDate: { gte: range.start, lt: range.end } },
+        { status: 'cancelled', cancelledAt: { gte: range.startAt, lt: range.endAt } },
+      ],
+    },
+    orderBy: [{ invoiceDate: 'asc' }, { invoiceNumber: 'asc' }],
+    select: {
+      id: true,
+      invoiceNumber: true,
+      invoiceDate: true,
+      status: true,
+      cancelReason: true,
+      cancelledAt: true,
+      createdAt: true,
+      salesRecord: {
+        select: {
+          companyId: true,
+          billingBatchId: true,
+          totalBeforeVatSatang: true,
+          vatSatang: true,
+          totalSatang: true,
+          period: { select: { periodLabel: true } },
+          billingBatch: { select: { period: true } },
+          taxInvoices: {
+            where: { status: 'active' },
+            orderBy: { createdAt: 'asc' },
+            select: { invoiceNumber: true, createdAt: true },
+          },
+        },
+      },
+    },
+  })
+  if (rows.length === 0) return []
+
+  const companyIds = [...new Set(rows.map((row) => row.salesRecord.companyId))]
+  const billingIds = [...new Set(rows.map((row) => row.salesRecord.billingBatchId))]
+  const [seller, buyers, revenues] = await Promise.all([
+    loadSeller(organizationId),
+    Promise.all(companyIds.map(async (id) => [id, await loadBuyer(id)] as const)),
+    prisma.revenue.findMany({
+      where: { organizationId, billingBatchId: { in: billingIds }, deletedAt: null },
+      select: { billingBatchId: true, vatRatePctUsed: true },
+    }),
+  ])
+  const buyerOf = new Map(buyers)
+  const ratesOf = new Map<string, string[]>()
+  for (const revenue of revenues) {
+    if (revenue.billingBatchId === null) continue
+    const list = ratesOf.get(revenue.billingBatchId) ?? []
+    list.push(revenue.vatRatePctUsed.toString())
+    ratesOf.set(revenue.billingBatchId, list)
+  }
+
+  return rows.map((row) => {
+    const sales = row.salesRecord
+    const buyer = buyerOf.get(sales.companyId)
+    if (buyer === undefined) throw new Error(`taxInvoicesForPack: ไม่พบบริษัทไฟแนนซ์ ${sales.companyId}`)
+    const replacement =
+      row.status === 'cancelled'
+        ? sales.taxInvoices.find((other) => other.createdAt > row.createdAt && other.invoiceNumber !== row.invoiceNumber)
+        : undefined
+    return {
+      id: row.id,
+      source: docSourceOf(row, sales, seller, buyer, ratesOf.get(sales.billingBatchId) ?? []),
+      companyName: buyer.name,
+      billingRef: sales.billingBatch.period,
+      replacedBy: replacement?.invoiceNumber ?? null,
+    }
+  })
 }
 
 // ── GET /api/accounting/cash-receipts (อ่านอย่างเดียว — `31` §6.3) ──────────

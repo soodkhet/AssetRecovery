@@ -1,6 +1,6 @@
 import type { ReadinessCheck } from '@/lib/accounting/period'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
-import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY } from '@/lib/exports/csv'
+import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
 import { fmtDate } from '@/lib/format/datetime'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import type {
@@ -20,6 +20,8 @@ import type {
  *   · `09_Credit_Notes.csv` เพิ่มตามมติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ · ไฟล์ 01–08 ไม่เปลี่ยน
  *   · `10_Customer_WHT.csv` (U40 — 50 ทวิ ที่ลูกค้าหักเรา) + `11_Suspense_Receipts.csv` (U41 — เงินรับรอตรวจสอบ)
  *     เพิ่มตามมติ PO 05/10/2569 · ไฟล์ 01–09 ไม่เปลี่ยน
+ *   · `12_Tax_Invoices.csv` (U57 — ใบกำกับภาษีที่ออก/ยกเลิกในรอบ + PDF ในโฟลเดอร์ `tax_invoices/` ของ zip)
+ *     + `13_Advance_Returns.csv` (U68 — รับคืนเงินทดรอง หักกลบ/รับแยก) เพิ่มตามมติ PO 05/10/2569 · ไฟล์ 01–11 ไม่เปลี่ยน
  * - `05_WHT_Data.csv` — `payee_tax_id` เป็น **ตัวเลข 13 หลักล้วน** (DEC-006/D10) ⇒ payee ที่ยังไม่กรอก
  *   เลขประจำตัวผู้เสียภาษีต้องหยุดตั้งแต่ต้น (`assertPayeeTaxIdsComplete()`) ไม่ใช่ปล่อยช่องว่างไปถึง
  *   สำนักงานบัญชี
@@ -104,6 +106,8 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat', sourceDoc: '31' },
   { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
+  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — number, date, company, tax_id, before_vat, vat, total, status (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
+  { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status', sourceDoc: '15' },
 ]
 
 /** ชื่อไฟล์ตามเลขลำดับ — ผู้ประกอบชุดอ้างเลข ไม่ใช่ตำแหน่งใน array (`37` §6.1) */
@@ -612,6 +616,179 @@ export function suspenseCsv(rows: readonly SuspenseExportRow[]): string {
   )
 }
 
+// ── 12_Tax_Invoices.csv (ไฟล์ 31 — มติ PO 05/10/2569 U57 · O41/BUG-123) ─────
+
+/**
+ * ใบกำกับภาษีขาย (ใช้ทำรายงานภาษีขาย/ภ.พ.30) · แถว = ใบที่**ลงวันที่ในรอบ** (รวมใบที่ยกเลิกภายหลัง) +
+ * ใบของรอบก่อนที่**ถูกยกเลิกในรอบนี้** · ยอดมาจาก snapshot ของรายการขาย (ไม่คำนวณใหม่) ·
+ * `vat_rate_pct` = `vat_rate_pct_used` ของรายได้ในรอบวางบิล (หลายอัตรา ⇒ คั่นด้วยช่องว่าง) ·
+ * `status` = enum ดิบ (`active`/`cancelled`) · `replaced_by` = ใบที่ออกแทนใบที่ยกเลิก (รายการขายเดียวกัน)
+ * · `pdf_file` = path ของสำเนา PDF ใน zip (ไม่ได้แนบ ⇒ `-` + รายชื่อใน `tax_invoices/NOT_ATTACHED.txt`)
+ */
+export const TAX_INVOICE_HEADERS = [
+  'invoice_number',
+  'invoice_date',
+  'company',
+  'company_tax_id',
+  'amount_before_vat_baht',
+  'vat_baht',
+  'total_baht',
+  'vat_rate_pct',
+  'billing_ref',
+  'status',
+  'cancelled_date',
+  'cancel_reason',
+  'replaced_by',
+  'pdf_file',
+] as const
+
+export interface TaxInvoiceExportRow {
+  invoiceNumber: string
+  invoiceDate: Date
+  companyName: string
+  companyTaxId: string | null
+  amountBeforeVatSatang: number
+  vatSatang: number
+  totalSatang: number
+  /** snapshot `revenues.vat_rate_pct_used` ของรอบวางบิล (NUMERIC เป็นข้อความ) */
+  vatRatesPct: readonly string[]
+  billingRef: string | null
+  status: 'active' | 'cancelled'
+  cancelledAt: Date | null
+  cancelReason: string | null
+  replacedBy: string | null
+  /** path ใน zip (`tax_invoices/…pdf`) — null = ไม่ได้แนบ */
+  pdfFile: string | null
+}
+
+/** อัตรา VAT แบบทศนิยม 2 ตำแหน่ง ไม่ซ้ำ เรียงน้อยไปมาก — ไม่มีรายได้ผูก ⇒ `-` */
+export function vatRatesText(rates: readonly string[]): string {
+  const unique = [
+    ...new Set(
+      rates
+        .map((rate) => Number(rate))
+        .filter((rate) => Number.isFinite(rate))
+        .map((rate) => rate.toFixed(2)),
+    ),
+  ].sort((a, b) => Number(a) - Number(b))
+  return unique.length === 0 ? CSV_EMPTY : unique.join(' ')
+}
+
+export function taxInvoiceCsv(rows: readonly TaxInvoiceExportRow[]): string {
+  return buildCsv(
+    TAX_INVOICE_HEADERS,
+    rows.map((row) => [
+      row.invoiceNumber,
+      csvDate(row.invoiceDate),
+      row.companyName,
+      normalizeTaxId(row.companyTaxId) ?? CSV_EMPTY,
+      csvBaht(row.amountBeforeVatSatang),
+      csvBaht(row.vatSatang),
+      csvBaht(row.totalSatang),
+      vatRatesText(row.vatRatesPct),
+      csvText(row.billingRef),
+      row.status,
+      row.status === 'cancelled' ? csvDate(row.cancelledAt) : CSV_EMPTY,
+      row.status === 'cancelled' ? csvText(row.cancelReason) : CSV_EMPTY,
+      csvText(row.replacedBy),
+      csvText(row.pdfFile),
+    ]),
+  )
+}
+
+/** โฟลเดอร์สำเนา PDF ใบกำกับภาษีใน zip (U57) */
+export const PACK_TAX_INVOICE_PDF_DIR = 'tax_invoices'
+/** ไฟล์รายชื่อใบที่ไม่ได้แนบ PDF (เกินเพดาน) — มีเฉพาะเมื่อมีใบที่ไม่ได้แนบ */
+export const PACK_TAX_INVOICE_NOT_ATTACHED_FILE = `${PACK_TAX_INVOICE_PDF_DIR}/NOT_ATTACHED.txt`
+/**
+ * เพดานจำนวน PDF ต่อชุด — กันคำขอ Export ยาวเกินเวลาที่ฟังก์ชันบน Vercel อนุญาต
+ * (ใบเกินเพดานยังอยู่ใน `12_Tax_Invoices.csv` ครบ · ดาวน์โหลด PDF รายใบจากหน้ารายการขายได้)
+ */
+export const PACK_TAX_INVOICE_PDF_LIMIT = 200
+/** เพดานเวลาประกอบ PDF ทั้งหมดต่อชุด (มิลลิวินาที) — เกินแล้วหยุดแนบ ใบที่เหลือไปอยู่ในรายชื่อไม่ได้แนบ */
+export const PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS = 60_000
+
+/** ชื่อไฟล์ PDF ใน zip — ตัดอักขระที่ใช้เป็นชื่อไฟล์ไม่ได้ (เลขที่ใบกำกับตั้ง prefix เองได้) */
+export function taxInvoicePdfEntryName(invoiceNumber: string): string {
+  const safe = invoiceNumber.trim().replace(/[\\/:*?"<>|\s]+/g, '_')
+  return `${PACK_TAX_INVOICE_PDF_DIR}/${safe === '' ? 'invoice' : safe}.pdf`
+}
+
+/** เนื้อไฟล์ `NOT_ATTACHED.txt` — บอกสำนักงานบัญชีว่าใบไหนไม่มี PDF ในชุด และไปเอาจากที่ไหน */
+export function taxInvoiceNotAttachedText(invoiceNumbers: readonly string[]): string {
+  return [
+    `ใบกำกับภาษีที่ไม่ได้แนบ PDF ในชุดนี้ ${invoiceNumbers.length} ใบ (เกินจำนวน/เวลาที่ประกอบได้ต่อครั้ง)`,
+    'ข้อมูลของทุกใบยังอยู่ครบใน 12_Tax_Invoices.csv — ขอสำเนา PDF รายใบได้จากผู้ดูแลระบบ',
+    '',
+    ...invoiceNumbers,
+    '',
+  ].join(CSV_NEWLINE)
+}
+
+// ── 13_Advance_Returns.csv (ไฟล์ 15 — มติ PO 05/10/2569 U68 · จาก U30) ──────
+
+/**
+ * รับคืนเงินทดรอง (ลดลูกหนี้เงินทดรอง) · แถว = 1 แถวของ `advance_returns`
+ * - `payout_offset` (หักกลบในรอบจ่าย) — วันที่ = วันจ่ายของรอบ (ตัวเดียวกับ `04_Payments.csv`) · `payout_batch_ref`
+ *   = ตัวอ้างอิงรอบเดียวกับไฟล์ 04 · ยอดหักนี้คือส่วนต่างระหว่าง `amount_baht` กับ `transfer_baht` ของไฟล์ 04
+ * - `cash` / `bank_transfer` (รับคืนแยก) — วันที่ = วันที่รับเงิน · `evidence_file` = ชื่อไฟล์หลักฐาน
+ * - `status` = `active` / `reversed` (กลับรายการ — ยอดกลับเป็นค้าง) + วันที่/เหตุผลกลับรายการ
+ */
+export const ADVANCE_RETURN_HEADERS = [
+  'return_date',
+  'advance_ref',
+  'payee',
+  'amount_baht',
+  'channel',
+  'payout_batch_ref',
+  'evidence_file',
+  'status',
+  'reversed_date',
+  'reversal_reason',
+] as const
+
+export type AdvanceReturnExportChannel = 'payout_offset' | 'cash' | 'bank_transfer'
+
+export interface AdvanceReturnExportRow {
+  returnDate: Date
+  advanceRef: string
+  payeeName: string
+  amountSatang: number
+  channel: AdvanceReturnExportChannel
+  payoutBatchRef: string | null
+  evidenceFilePath: string | null
+  reversedAt: Date | null
+  reversalReason: string | null
+}
+
+/** ชื่อไฟล์หลักฐาน (ไม่เปิดเผย path ใน bucket) */
+export function evidenceFileName(path: string | null): string | null {
+  if (path === null) return null
+  const name = path.slice(path.lastIndexOf('/') + 1).trim()
+  return name === '' ? null : name
+}
+
+export function advanceReturnCsv(rows: readonly AdvanceReturnExportRow[]): string {
+  return buildCsv(
+    ADVANCE_RETURN_HEADERS,
+    rows.map((row) => {
+      const reversed = row.reversedAt !== null
+      return [
+        csvDate(row.returnDate),
+        row.advanceRef,
+        row.payeeName,
+        csvBaht(row.amountSatang),
+        row.channel,
+        row.channel === 'payout_offset' ? csvText(row.payoutBatchRef) : CSV_EMPTY,
+        csvText(evidenceFileName(row.evidenceFilePath)),
+        reversed ? 'reversed' : 'active',
+        reversed ? csvDate(row.reversedAt) : CSV_EMPTY,
+        reversed ? csvText(row.reversalReason) : CSV_EMPTY,
+      ]
+    }),
+  )
+}
+
 // ── 08_Document_Checklist.xlsx (ไฟล์ 34) ────────────────────────────────────
 
 export const CHECKLIST_HEADERS = [
@@ -750,7 +927,7 @@ export interface PackCoverDoc {
   versionLabel: string
   generatedByName: string
   generatedAtLabel: string
-  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–09** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
+  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–13** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
   contentDigest: string
   checks: readonly { label: string; passed: boolean }[]
   files: readonly PackCoverFileRow[]

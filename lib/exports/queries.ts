@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { renderPackCover } from '@/components/pdf/pack-cover'
+import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
+import { advanceRef } from '@/lib/advances/advance'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
 import { findPeriodById, getPeriodReadiness, type AccountingMutationContext } from '@/lib/accounting/queries'
 import { emitAudit } from '@/lib/audit/audit'
@@ -9,6 +11,15 @@ import { ExportError } from '@/lib/exports/errors'
 import {
   adjustmentCsv,
   adjustmentRef,
+  advanceReturnCsv,
+  taxInvoiceCsv,
+  taxInvoiceNotAttachedText,
+  taxInvoicePdfEntryName,
+  PACK_TAX_INVOICE_NOT_ATTACHED_FILE,
+  PACK_TAX_INVOICE_PDF_LIMIT,
+  PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS,
+  type AdvanceReturnExportRow,
+  type TaxInvoiceExportRow,
   creditNoteCsv,
   customerWhtCsv,
   suspenseCsv,
@@ -58,6 +69,8 @@ import { prisma } from '@/lib/prisma'
 import { buddhistYear, startOfBangkokDay } from '@/lib/format/datetime'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { customerWhtExportSources } from '@/lib/customer-wht/queries'
+import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
+import { taxInvoicesForPack } from '@/lib/sales/queries'
 
 /**
  * Accounting Pack Export (ไฟล์ 37) — ชั้น DB + ตัวประกอบชุดเอกสาร (`37` §14)
@@ -126,7 +139,7 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     status: row.status,
     statusLabel: EXPORT_STATUS_LABEL[row.status],
     statusGroup: EXPORT_STATUS_GROUP[row.status],
-    // นับเฉพาะไฟล์หลัก 01–11 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
+    // นับเฉพาะไฟล์หลัก 01–13 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
     // เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมในชุด — ดูหมายเหตุที่ `37` §7.1 ใน PROGRESS_ARCHIVE 4.6
     attachmentCount: 0,
@@ -284,6 +297,16 @@ function expenseFile(rows: readonly ExpenseRecordRow[]): string {
   )
 }
 
+/** ตัวอ้างอิงรอบเดียวกับที่พิมพ์บนเอกสาร (3.5): idempotency key ถ้ามี ไม่งั้น 8 ตัวแรกของ id — ไฟล์ 04/13 ใช้ร่วมกัน */
+function payoutBatchRefOf(batch: { id: string; idempotencyKey: string | null }): string {
+  return batch.idempotencyKey ?? batch.id.slice(0, 8).toUpperCase()
+}
+
+/** `02` §8 ไม่มีคอลัมน์วันจ่ายจริง — ยึดวันสร้างไฟล์โอน เหมือนที่ไฟล์ 32 ใช้ผูกงวด (4.4) · ไฟล์ 04/13 ใช้ร่วมกัน */
+function payoutPaymentDateOf(batch: { paymentFileGeneratedAt: Date | null; updatedAt: Date }): Date {
+  return batch.paymentFileGeneratedAt ?? batch.updatedAt
+}
+
 /**
  * `04_Payments.csv` — 1 แถว = 1 ใบสำคัญจ่าย (ผู้รับเงิน 1 คนต่อรอบจ่าย) เพื่อให้เลขอ้างอิงตรงกับ
  * ใบสำคัญจ่ายที่พิมพ์จริงจาก 3.5 (`voucherNumber()` — ลำดับผู้รับเงินภายในรอบจ่ายนั้น)
@@ -317,10 +340,8 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
   const paidItemIds = new Set(rows.map((row) => row.payoutBatchItem.id))
   const out = []
   for (const batch of batches) {
-    // ตัวอ้างอิงรอบเดียวกับที่พิมพ์บนเอกสาร (3.5): idempotency key ถ้ามี ไม่งั้น 8 ตัวแรกของ id
-    const batchRef = batch.idempotencyKey ?? batch.id.slice(0, 8).toUpperCase()
-    // `02` §8 ไม่มีคอลัมน์วันจ่ายจริง — ยึดวันสร้างไฟล์โอน เหมือนที่ไฟล์ 32 ใช้ผูกงวด (4.4)
-    const paymentDate = batch.paymentFileGeneratedAt ?? batch.updatedAt
+    const batchRef = payoutBatchRefOf(batch)
+    const paymentDate = payoutPaymentDateOf(batch)
     const beYear = buddhistYear(paymentDate) ?? 0
 
     // จัดกลุ่มตามผู้รับเงินโดยคง**ลำดับรายการในรอบ** ให้ตรงกับตอนพิมพ์ใบสำคัญจ่าย (3.5)
@@ -697,6 +718,153 @@ function fmtYearMonth(date: Date): { yearBe: number; month: number } {
   return { yearBe: date.getUTCFullYear() + 543, month: date.getUTCMonth() + 1 }
 }
 
+interface PackPdfEntry {
+  name: string
+  data: Uint8Array
+}
+
+export interface TaxInvoicePackResult {
+  csv: string
+  /** PDF ใน `tax_invoices/` (+ `NOT_ATTACHED.txt` เมื่อมีใบที่ไม่ได้แนบ) */
+  entries: PackPdfEntry[]
+  attached: number
+  notAttached: string[]
+}
+
+/**
+ * `12_Tax_Invoices.csv` + PDF ในโฟลเดอร์ `tax_invoices/` (มติ PO 05/10/2569 U57 · O41/BUG-123)
+ * — ใบที่ลงวันที่ในงวด + ใบที่ยกเลิกในงวด · ยอดจาก snapshot รายการขาย · PDF จาก renderer เดียวกับ
+ * `GET /tax-invoices/:id/pdf` · มีเพดานจำนวน/เวลา (`PACK_TAX_INVOICE_PDF_LIMIT`/`…_TIME_BUDGET_MS`)
+ * กันฟังก์ชันหมดเวลา — ใบที่ไม่ได้แนบยังอยู่ใน CSV ครบ (`pdf_file` = `-`) + รายชื่อใน `NOT_ATTACHED.txt`
+ */
+async function taxInvoiceFile(
+  organizationId: string,
+  scope: Pick<PeriodScope, 'start' | 'end'>,
+  options: { limit?: number; timeBudgetMs?: number; now?: () => number } = {},
+): Promise<TaxInvoicePackResult> {
+  const limit = options.limit ?? PACK_TAX_INVOICE_PDF_LIMIT
+  const budget = options.timeBudgetMs ?? PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS
+  const now = options.now ?? Date.now
+  const invoices = await taxInvoicesForPack(organizationId, {
+    start: scope.start,
+    end: scope.end,
+    // วันที่ยกเลิกเป็น timestamp ⇒ ใช้ขอบวันตามเวลาไทยของงวด
+    startAt: startOfBangkokDay(scope.start),
+    endAt: startOfBangkokDay(scope.end),
+  })
+
+  const entries: PackPdfEntry[] = []
+  const pdfFileOf = new Map<string, string>()
+  const notAttached: string[] = []
+  const usedNames = new Set<string>()
+  const startedAt = now()
+  for (const invoice of invoices) {
+    if (entries.length >= limit || now() - startedAt > budget) {
+      notAttached.push(invoice.source.invoiceNumber)
+      continue
+    }
+    let name = taxInvoicePdfEntryName(invoice.source.invoiceNumber)
+    // เลขที่ใบกำกับ unique อยู่แล้ว — กันชื่อชนหลังตัดอักขระ (เช่น `A/1` กับ `A_1`)
+    if (usedNames.has(name)) name = name.replace(/\.pdf$/, `_${invoice.id.slice(0, 8)}.pdf`)
+    usedNames.add(name)
+    const pdf = await renderTaxInvoice(buildTaxInvoiceDoc(invoice.source))
+    entries.push({ name, data: new Uint8Array(pdf) })
+    pdfFileOf.set(invoice.id, name)
+  }
+  if (notAttached.length > 0) {
+    entries.push({ name: PACK_TAX_INVOICE_NOT_ATTACHED_FILE, data: encoder.encode(taxInvoiceNotAttachedText(notAttached)) })
+  }
+
+  const rows: TaxInvoiceExportRow[] = invoices.map((invoice) => ({
+    invoiceNumber: invoice.source.invoiceNumber,
+    invoiceDate: invoice.source.invoiceDate,
+    companyName: invoice.companyName,
+    companyTaxId: invoice.source.buyer.taxId,
+    amountBeforeVatSatang: invoice.source.amounts.totalBeforeVatSatang,
+    vatSatang: invoice.source.amounts.vatSatang,
+    totalSatang: invoice.source.amounts.totalSatang,
+    vatRatesPct: invoice.source.vatRatesPct,
+    billingRef: invoice.billingRef,
+    status: invoice.source.status,
+    cancelledAt: invoice.source.cancelledAt,
+    cancelReason: invoice.source.cancelReason,
+    replacedBy: invoice.replacedBy,
+    pdfFile: pdfFileOf.get(invoice.id) ?? null,
+  }))
+  return { csv: taxInvoiceCsv(rows), entries, attached: pdfFileOf.size, notAttached }
+}
+
+/** เนื้อไฟล์ `12_Tax_Invoices.csv` + PDF ของงวด (ปี พ.ศ./เดือน) — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
+export async function buildTaxInvoicePackFiles(
+  organizationId: string,
+  yearBe: number,
+  month: number,
+  options: { limit?: number; timeBudgetMs?: number; now?: () => number } = {},
+): Promise<TaxInvoicePackResult> {
+  return taxInvoiceFile(organizationId, periodRange(yearBe, month), options)
+}
+
+/**
+ * `13_Advance_Returns.csv` (มติ PO 05/10/2569 U68 · จาก U30) — แถวของ `advance_returns` ในงวด:
+ * - หักกลบในรอบจ่าย: รายการจ่ายที่ถูกหักอยู่ในงวดนี้ (ตัวเดียวกับที่ทำให้แถวอยู่ใน `04_Payments.csv`)
+ * - รับคืนแยก (เงินสด/โอน): วันที่รับเงินอยู่ในงวด
+ * - กลับรายการในงวด: แสดงซ้ำพร้อมสถานะ `reversed` (เฉพาะแถวที่เคยมีผลจริง — หักกลบที่ยังไม่จ่ายไม่นับ)
+ */
+async function advanceReturnFile(organizationId: string, scope: PeriodScope): Promise<string> {
+  const startAt = startOfBangkokDay(scope.start)
+  const endAt = startOfBangkokDay(scope.end)
+  const paidInPeriod = { is: { expenseRecord: { is: { periodId: scope.id } } } }
+  const rows = await prisma.advanceReturn.findMany({
+    where: {
+      organizationId,
+      OR: [
+        { channel: { in: ['cash', 'bank_transfer'] }, receivedDate: { gte: scope.start, lt: scope.end } },
+        { channel: 'payout_offset', payoutBatchItem: paidInPeriod },
+        {
+          reversedAt: { gte: startAt, lt: endAt },
+          OR: [
+            { channel: { in: ['cash', 'bank_transfer'] } },
+            { payoutBatchItem: { is: { expenseRecord: { isNot: null } } } },
+          ],
+        },
+      ],
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      advanceId: true,
+      channel: true,
+      amountSatang: true,
+      receivedDate: true,
+      evidenceFilePath: true,
+      reversedAt: true,
+      reversalReason: true,
+      createdAt: true,
+      payee: { select: { user: { select: { fullName: true } } } },
+      payoutBatch: { select: { id: true, idempotencyKey: true, paymentFileGeneratedAt: true, updatedAt: true } },
+    },
+  })
+
+  const exportRows: (AdvanceReturnExportRow & { createdAt: Date })[] = rows.map((row) => ({
+    returnDate:
+      row.channel === 'payout_offset' && row.payoutBatch !== null
+        ? payoutPaymentDateOf(row.payoutBatch)
+        : (row.receivedDate ?? row.createdAt),
+    advanceRef: advanceRef(row.advanceId),
+    payeeName: row.payee.user.fullName,
+    amountSatang: row.amountSatang,
+    channel: row.channel,
+    payoutBatchRef: row.payoutBatch === null ? null : payoutBatchRefOf(row.payoutBatch),
+    evidenceFilePath: row.evidenceFilePath,
+    reversedAt: row.reversedAt,
+    reversalReason: row.reversalReason,
+    createdAt: row.createdAt,
+  }))
+  exportRows.sort(
+    (a, b) => a.returnDate.getTime() - b.returnDate.getTime() || a.createdAt.getTime() - b.createdAt.getTime(),
+  )
+  return advanceReturnCsv(exportRows)
+}
+
 async function checklistRowsOf(organizationId: string, scope: PeriodScope): Promise<ChecklistExportRow[]> {
   const rows = await prisma.exception.findMany({
     where: { organizationId, periodId: scope.id },
@@ -754,7 +922,7 @@ export async function createExportPack(
   })
   assertExportNotBlocked(exceptions)
 
-  // ② ประกอบเนื้อไฟล์ทั้ง 11 (อ่านอย่างเดียว — ยิงขนานได้)
+  // ② ประกอบเนื้อไฟล์ทั้ง 13 (อ่านอย่างเดียว — ยิงขนานได้)
   const expenseRecords = await expenseRecordsOf(actor.organizationId, scope)
   const [
     revenue,
@@ -769,6 +937,8 @@ export async function createExportPack(
     creditNotes,
     customerWht,
     suspense,
+    taxInvoices,
+    advanceReturns,
   ] = await Promise.all([
       revenueFile(actor.organizationId, scope),
       cashReceiptFile(actor.organizationId, scope),
@@ -782,6 +952,8 @@ export async function createExportPack(
       creditNoteFile(actor.organizationId, scope),
       customerWhtFile(actor.organizationId, scope),
       suspenseFile(actor.organizationId, scope),
+      taxInvoiceFile(actor.organizationId, scope),
+      advanceReturnFile(actor.organizationId, scope),
     ])
 
   const generatedAt = new Date()
@@ -809,6 +981,9 @@ export async function createExportPack(
     // มติ PO 05/10/2569 (U40/U41) — 50 ทวิ ที่ลูกค้าหักเรา · เงินรับรอตรวจสอบ
     { key: '10', fileName: packFileName('10'), bytes: encoder.encode(customerWht), kind: 'csv' },
     { key: '11', fileName: packFileName('11'), bytes: encoder.encode(suspense), kind: 'csv' },
+    // มติ PO 05/10/2569 (U57/U68) — ใบกำกับภาษีที่ออก/ยกเลิกในรอบ · รับคืนเงินทดรอง
+    { key: '12', fileName: packFileName('12'), bytes: encoder.encode(taxInvoices.csv), kind: 'csv' },
+    { key: '13', fileName: packFileName('13'), bytes: encoder.encode(advanceReturns), kind: 'csv' },
   ]
 
   // ③ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
@@ -819,7 +994,7 @@ export async function createExportPack(
   })
   const version = (last?.version ?? 0) + 1
 
-  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–11" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
+  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–13" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
   const contentDigest = packContentDigest(dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })))
   const cover = await renderPackCover(
     buildPackCoverDoc({
@@ -836,6 +1011,8 @@ export async function createExportPack(
   const entries: ZipEntry[] = [
     { name: PACK_COVER_FILE_NAME, data: new Uint8Array(cover) },
     ...dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })),
+    // U57 — สำเนา PDF ใบกำกับภาษีของงวด อยู่ใน zip เท่านั้น (ไม่อัปโหลดแยกทีละใบ — ดาวน์โหลดรายใบได้จากหน้ารายการขาย)
+    ...taxInvoices.entries,
   ]
   const zipBytes = buildZip(entries, generatedAt)
   // key ใน Storage = ASCII ล้วน · ชื่อไทยใช้ตอนดาวน์โหลดเท่านั้น (UAT R7cv3-B01)
@@ -908,6 +1085,7 @@ export async function createExportPack(
           version: exportVersionLabel(version),
           file_names: entries.map((entry) => entry.name),
           zip_file: zipFileName,
+          tax_invoice_pdfs: { attached: taxInvoices.attached, not_attached: taxInvoices.notAttached },
           file_hash: row.fileHash,
           content_digest: contentDigest,
         },
