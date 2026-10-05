@@ -35,6 +35,7 @@ import { FinanceError } from '@/lib/finance/errors'
 import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
+import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { dispatchNotification } from '@/lib/notifications/dispatch'
 import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
@@ -574,6 +575,9 @@ export async function approveCompensationExpense(
 
     return { row, events: [...events], revenueEligibleCaseIds: revenue.eligibleCaseIds }
   })
+
+  // มติ PO U29 — ผ่านขั้นกลาง ⇒ แจ้งผู้อนุมัติขั้นถัดไปทันที (ผู้อนุมัติขั้นนี้ถูกตัดออกถ้าบังคับแบ่งแยกหน้าที่)
+  if (!progress.isComplete) notifyExpensesAwaitingApproval(user.organizationId, [expenseId])
 
   // `90` §6.3 แถว 6 — แจ้งผู้รับเงินเมื่อผ่าน**ครบทุกขั้น**เท่านั้น (ขั้นกลางไม่ใช่ผลลัพธ์ของเขา)
   if (progress.isComplete) {

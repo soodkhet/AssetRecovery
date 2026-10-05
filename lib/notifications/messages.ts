@@ -298,17 +298,6 @@ export function evidenceRejectedMessage(input: { caseId: string; caseRef: string
   }
 }
 
-/** `41` §15 — รายการเบิกที่เข้า `pending_approval` หลังปิดงานไม่สำเร็จ */
-export function expenseQueueMessage(input: { caseRef: string; count: number }): NotificationMessage {
-  return {
-    eventCode: 'expense.case_bound_created',
-    title: 'มีรายการเบิกใหม่รออนุมัติ',
-    body: `เคส ${input.caseRef} ปิดงานไม่สำเร็จ — มีรายการเบิก ${input.count} รายการเข้าคิวอนุมัติ`,
-    // ไม่มีหน้า `/finance/approvals` — คิวอนุมัติค่าตอบแทนอยู่ที่แท็บ comp ของหน้าการเงิน (UAT BUG-096)
-    linkPath: '/finance?tab=comp',
-  }
-}
-
 // ── Warehouse (44 §14) ──────────────────────────────────────────────────────
 
 export function assetIntakeRejectedMessage(input: {
@@ -375,6 +364,113 @@ export function expenseRejectedMessage(input: {
     title: 'รายการเบิกถูกตีกลับ',
     body: withReason(`ยอด ${fmtSatangSymbol(input.grossSatang)}`, input.reason),
     linkPath: input.caseBound ? '/field/expenses' : '/field/expenses?view=separate',
+  }
+}
+
+// ── คิวอนุมัติ (มติ PO 05/10/2569 U29 · BUG-106) ──────────────────────────────
+//
+// แจ้ง "ผู้อนุมัติขั้นที่รออยู่" ทันทีที่รายการเข้าคิว/ขยับขั้น — ผู้รับ + การจัดกลุ่มอยู่ที่
+// `lib/notifications/approval-queue.ts` · ที่นี่แค่ประกอบข้อความ (ชนิด · ผู้ขอ · ยอด) + ลิงก์ไปหน้าคิว
+// `dedupeKey` มาจากผู้เรียกเสมอ (สถานะของรายการ ณ ขั้นนั้น — ไม่มีเวลาปัจจุบัน) ⇒ event ส่งซ้ำไม่แจ้งซ้ำ
+
+/** ลิงก์คิวอนุมัติค่าตอบแทน — ผู้จัดการทีมเห็นแท็บนี้แท็บเดียวในหน้าการเงิน (มติ R6-A · UAT BUG-096) */
+const COMP_QUEUE_PATH = '/finance?tab=comp'
+
+/** รายการเบิก (ทุกแหล่ง) รออนุมัติขั้นของผู้รับ — 1 ข้อความต่อ (ผู้ขอ × ขั้น) ของเหตุการณ์เดียวกัน */
+export function expenseApprovalRequestedMessage(input: {
+  /** ชื่อชนิดภาษาไทย ไม่ซ้ำ ตามลำดับที่พบ (เช่น ค่าน้ำมัน, เบี้ยเลี้ยง) */
+  typeLabels: readonly string[]
+  requesterName: string
+  count: number
+  totalSatang: number
+  step: number
+  totalSteps: number
+  caseRefs: readonly string[]
+  dedupeKey: string
+}): NotificationMessage {
+  const types = input.typeLabels.join(', ')
+  const cases =
+    input.caseRefs.length === 0
+      ? ''
+      : input.caseRefs.length <= 2
+        ? ` (เคส ${input.caseRefs.join(', ')})`
+        : ` (เคส ${input.caseRefs.slice(0, 2).join(', ')} และอีก ${input.caseRefs.length - 2} เคส)`
+  const step = input.totalSteps > 1 ? ` ขั้น ${input.step}/${input.totalSteps}` : ''
+  return {
+    eventCode: 'expense.approval_requested',
+    title: `รายการเบิกรออนุมัติ${step}`,
+    body: `${types} · ผู้ขอ ${input.requesterName} · ${input.count} รายการ รวม ${fmtSatangSymbol(input.totalSatang)}${cases}`,
+    linkPath: COMP_QUEUE_PATH,
+    dedupeKey: input.dedupeKey,
+  }
+}
+
+/** คำขอเงินทดรองใหม่รออนุมัติ */
+export function advanceApprovalRequestedMessage(input: {
+  advanceId: string
+  requesterName: string
+  requestedSatang: number
+  purpose: string
+  dueClearDate: Date
+}): NotificationMessage {
+  return {
+    eventCode: 'advance.approval_requested',
+    title: 'คำขอเงินทดรองรออนุมัติ',
+    body: withReason(
+      `ผู้ขอ ${input.requesterName} · ยอด ${fmtSatangSymbol(input.requestedSatang)} · เคลียร์ภายใน ${fmtDate(input.dueClearDate)}`,
+      input.purpose,
+    ),
+    linkPath: '/finance?tab=advances',
+    dedupeKey: `advance-approval-${input.advanceId}`,
+  }
+}
+
+/**
+ * รายการปรับปรุงรออนุมัติจาก "บทบาทที่ยังขาด" (`20` §6.2) — รอบที่ต้องสองบทบาท แจ้งบทบาทแรกตอนสร้าง
+ * แล้วแจ้งบทบาทถัดไปเมื่อบทบาทแรกอนุมัติ ⇒ คีย์กันซ้ำผูกกับชุดบทบาทที่รออยู่
+ */
+export function adjustmentApprovalRequestedMessage(input: {
+  adjustmentId: string
+  adjustmentTypeLabel: string
+  amountSatang: number
+  targetLabel: string
+  requesterName: string
+  waitingRoles: readonly string[]
+}): NotificationMessage {
+  return {
+    eventCode: 'adjustment.approval_requested',
+    title: 'รายการปรับปรุงรออนุมัติ',
+    body: `${input.adjustmentTypeLabel} ${fmtSatangSymbol(input.amountSatang)} · ${input.targetLabel} · ผู้ขอ ${input.requesterName} — รออนุมัติจาก ${input.waitingRoles.join(' + ')}`,
+    linkPath: '/finance?tab=adjustment',
+    dedupeKey: `adjustment-approval-${input.adjustmentId}-${[...input.waitingRoles].sort().join('+')}`,
+  }
+}
+
+// ── job รายวัน — วันที่อยู่ในงวดปิดแล้ว (มติ PO 05/10/2569 U25 · BUG-093) ───────
+
+/**
+ * job `daily_field_allowance` ข้ามวันที่อยู่ในงวดบัญชีที่ปิดแล้ว (ไม่ settle ข้ามงวด) ⇒ แจ้งฝ่ายการเงิน
+ * ให้ทำรายการปรับปรุงพร้อมยอดที่คำนวณไว้ให้ (ยอดมาจาก `planFieldDayExpenses()` สูตรเดียวกับวันปกติ)
+ * · 1 พนักงาน × 1 วัน = 1 การแจ้งเตือน — job รันซ้ำทุกคืนก็ไม่แจ้งซ้ำ (คีย์ไม่มีเวลาปัจจุบัน)
+ */
+export function fieldAllowancePeriodLockedMessage(input: {
+  agentId: string
+  agentName: string
+  fieldDate: Date
+  caseCount: number
+  fuelSatang: number
+  allowanceSatang: number
+}): NotificationMessage {
+  const total = input.fuelSatang + input.allowanceSatang
+  return {
+    eventCode: 'field_allowance.period_locked',
+    title: 'ค่าน้ำมัน/เบี้ยเลี้ยงรายวันเข้างวดที่ปิดแล้วไม่ได้',
+    body:
+      `วันที่ ${fmtDate(input.fieldDate)} คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — ${input.agentName} ${input.caseCount} เคส ` +
+      `ค่าน้ำมัน ${fmtSatangSymbol(input.fuelSatang)} เบี้ยเลี้ยง ${fmtSatangSymbol(input.allowanceSatang)} ` +
+      `รวม ${fmtSatangSymbol(total)} กรุณาทำรายการปรับปรุง`,
+    linkPath: '/finance?tab=adjustment',
+    dedupeKey: `field-day-locked-${input.agentId}-${input.fieldDate.toISOString().slice(0, 10)}`,
   }
 }
 

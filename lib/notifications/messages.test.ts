@@ -19,7 +19,10 @@ import {
   clip,
   exceptionCreatedMessage,
   expenseApprovedMessage,
-  expenseQueueMessage,
+  expenseApprovalRequestedMessage,
+  advanceApprovalRequestedMessage,
+  adjustmentApprovalRequestedMessage,
+  fieldAllowancePeriodLockedMessage,
   expenseRejectedMessage,
   lotConfirmedMessage,
   payoutBatchCompletedMessage,
@@ -68,7 +71,39 @@ const ALL: readonly NotificationMessage[] = [
   assetIntakeRejectedMessage({ caseRef: 'CASE-26-0006', reason: 'IMEI ไม่ตรง' }),
   lotConfirmedMessage({ lotId: 'l1', lotNumber: 'LOT-2569-001', companyName: 'สยามไฟแนนซ์', assetCount: 3, revenueCount: 2 }),
   expenseApprovedMessage({ grossSatang: 125050, caseRef: 'CASE-26-0007' }),
-  expenseQueueMessage({ caseRef: 'CASE-26-0008', count: 2 }),
+  expenseApprovalRequestedMessage({
+    typeLabels: ['ค่าน้ำมัน', 'เบี้ยเสี่ยง'],
+    requesterName: 'สมชาย',
+    count: 2,
+    totalSatang: 65_000,
+    step: 1,
+    totalSteps: 2,
+    caseRefs: ['CASE-26-0008'],
+    dedupeKey: 'expense-approval-x',
+  }),
+  advanceApprovalRequestedMessage({
+    advanceId: 'adv1',
+    requesterName: 'สมหญิง',
+    requestedSatang: 500_000,
+    purpose: 'ค่าเดินทางต่างจังหวัด',
+    dueClearDate: new Date('2026-10-20T00:00:00Z'),
+  }),
+  adjustmentApprovalRequestedMessage({
+    adjustmentId: 'adj1',
+    adjustmentTypeLabel: 'ลดยอด',
+    amountSatang: 12_345,
+    targetLabel: 'CASE-26-0010 · ไฟแนนซ์ A · รายได้',
+    requesterName: 'การเงิน 1',
+    waitingRoles: ['บริหาร'],
+  }),
+  fieldAllowancePeriodLockedMessage({
+    agentId: 'u1',
+    agentName: 'in1',
+    fieldDate: new Date('2026-09-30T00:00:00Z'),
+    caseCount: 2,
+    fuelSatang: 30_000,
+    allowanceSatang: 20_000,
+  }),
   expenseRejectedMessage({ grossSatang: 50000, reason: 'ใบเสร็จไม่ชัด', caseBound: true }),
   expenseRejectedMessage({ grossSatang: 80000, reason: 'ใบเสร็จไม่ชัด', caseBound: false }),
   payoutBatchCompletedMessage({ batchId: 'b1', batchName: 'รอบจ่าย Outsource', netSatang: 9900000, source: 'manual' }),
@@ -139,7 +174,6 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
     expect(expenseRejectedMessage({ grossSatang: 1, reason: 'x', caseBound: false }).linkPath).toBe(
       '/field/expenses?view=separate',
     )
-    expect(expenseQueueMessage({ caseRef: 'CASE-26-0008', count: 1 }).linkPath).toBe('/finance?tab=comp')
   })
 
   it('ไม่มีปี ค.ศ. หลุดลงข้อความ — วันที่ต้องเป็น พ.ศ. (Rule 01)', () => {
@@ -277,5 +311,84 @@ describe('ส่งหลักฐานใหม่หลังถูกตี�
     const notice = caseCloseResubmittedNotice({ ...base, outcome: 'closed_fail', assetStatus: null })
     expect(notice?.capability).toBe('assign_case')
     expect(notice?.message.title).toBe('ส่งหลักฐานใหม่แล้ว — CASE-26-0004')
+  })
+})
+
+describe('แจ้งผู้อนุมัติเมื่อรายการเข้าคิว (มติ PO U29)', () => {
+  const base = {
+    typeLabels: ['ค่าน้ำมัน', 'เบี้ยเสี่ยง'],
+    requesterName: 'สมชาย',
+    count: 2,
+    totalSatang: 65_050,
+    step: 1,
+    totalSteps: 2,
+    caseRefs: ['CASE-26-0008'],
+    dedupeKey: 'expense-approval-abc',
+  }
+
+  it('รายการเบิก: บอกชนิด ผู้ขอ จำนวน ยอดรวม (฿ จาก satang) ขั้น + ลิงก์คิวค่าตอบแทน + คีย์กันซ้ำจากผู้เรียก', () => {
+    const message = expenseApprovalRequestedMessage(base)
+    expect(message.eventCode).toBe('expense.approval_requested')
+    expect(message.title).toBe('รายการเบิกรออนุมัติ ขั้น 1/2')
+    expect(message.body).toBe('ค่าน้ำมัน, เบี้ยเสี่ยง · ผู้ขอ สมชาย · 2 รายการ รวม ฿650.50 (เคส CASE-26-0008)')
+    expect(message.linkPath).toBe('/finance?tab=comp')
+    expect(message.dedupeKey).toBe('expense-approval-abc')
+  })
+
+  it('สายขั้นเดียวไม่โชว์เลขขั้น · ไม่ผูกเคสไม่มีวงเล็บ · เคสเกิน 2 สรุปจำนวนที่เหลือ', () => {
+    expect(expenseApprovalRequestedMessage({ ...base, totalSteps: 1, caseRefs: [] }).title).toBe('รายการเบิกรออนุมัติ')
+    expect(expenseApprovalRequestedMessage({ ...base, caseRefs: [] }).body).toBe(
+      'ค่าน้ำมัน, เบี้ยเสี่ยง · ผู้ขอ สมชาย · 2 รายการ รวม ฿650.50',
+    )
+    expect(expenseApprovalRequestedMessage({ ...base, caseRefs: ['A', 'B', 'C', 'D'] }).body).toContain(
+      '(เคส A, B และอีก 2 เคส)',
+    )
+  })
+
+  it('เงินทดรอง: ยอด + วันเคลียร์ พ.ศ. + วัตถุประสงค์ · คีย์ผูก id', () => {
+    const message = advanceApprovalRequestedMessage({
+      advanceId: 'adv1',
+      requesterName: 'สมหญิง',
+      requestedSatang: 500_000,
+      purpose: 'ค่าเดินทาง',
+      dueClearDate: new Date('2026-10-20T00:00:00Z'),
+    })
+    expect(message.body).toBe('ผู้ขอ สมหญิง · ยอด ฿5,000.00 · เคลียร์ภายใน 20/10/2569 — ค่าเดินทาง')
+    expect(message.linkPath).toBe('/finance?tab=advances')
+    expect(message.dedupeKey).toBe('advance-approval-adv1')
+  })
+
+  it('Adjustment: คีย์ผูกชุดบทบาทที่รอ (บทบาทแรกอนุมัติแล้วแจ้งบทบาทถัดไปได้ ไม่ชนคีย์เดิม)', () => {
+    const input = {
+      adjustmentId: 'adj1',
+      adjustmentTypeLabel: 'ลดยอด',
+      amountSatang: 12_345,
+      targetLabel: 'CASE-1 · รายได้',
+      requesterName: 'การเงิน 1',
+    }
+    const both = adjustmentApprovalRequestedMessage({ ...input, waitingRoles: ['การเงิน', 'บริหาร'] })
+    const exec = adjustmentApprovalRequestedMessage({ ...input, waitingRoles: ['บริหาร'] })
+    expect(both.body).toBe('ลดยอด ฿123.45 · CASE-1 · รายได้ · ผู้ขอ การเงิน 1 — รออนุมัติจาก การเงิน + บริหาร')
+    expect(both.dedupeKey).not.toBe(exec.dedupeKey)
+    expect(exec.linkPath).toBe('/finance?tab=adjustment')
+  })
+})
+
+describe('job รายวันเจองวดปิดแล้ว (มติ PO U25)', () => {
+  it('บอกวันที่ พ.ศ. · พนักงาน · จำนวนเคส · ค่าน้ำมัน/เบี้ยเลี้ยง/รวม · ให้ทำรายการปรับปรุง · คีย์ต่อพนักงาน×วัน', () => {
+    const message = fieldAllowancePeriodLockedMessage({
+      agentId: 'u1',
+      agentName: 'in1',
+      fieldDate: new Date('2026-09-30T00:00:00Z'),
+      caseCount: 2,
+      fuelSatang: 30_000,
+      allowanceSatang: 20_000,
+    })
+    expect(message.eventCode).toBe('field_allowance.period_locked')
+    expect(message.body).toBe(
+      'วันที่ 30/09/2569 คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — in1 2 เคส ค่าน้ำมัน ฿300.00 เบี้ยเลี้ยง ฿200.00 รวม ฿500.00 กรุณาทำรายการปรับปรุง',
+    )
+    expect(message.linkPath).toBe('/finance?tab=adjustment')
+    expect(message.dedupeKey).toBe('field-day-locked-u1-2026-09-30')
   })
 })

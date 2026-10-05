@@ -23,6 +23,7 @@ import { insertManualClaim } from '@/lib/claims/queries'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
+import { notifyAdvanceAwaitingApproval, notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 
@@ -236,6 +237,8 @@ export async function createAdvance(
     return row
   }).catch(rethrowDuplicateAdvance)
 
+  // มติ PO U29 — คำขอใหม่เข้าคิวอนุมัติ ⇒ แจ้งผู้ถือสิทธิ์อนุมัติเงินทดรองทันที (หลัง commit)
+  notifyAdvanceAwaitingApproval(user.organizationId, created.id)
   return toDto(created, now)
 }
 
@@ -455,6 +458,8 @@ export async function settleAdvance(
     return { row, excessClaimId: excessClaim?.id ?? null }
   })
 
+  // มติ PO U29 — คำขอเบิกส่วนเกินเข้าคิวอนุมัติค่าตอบแทน ⇒ แจ้งผู้อนุมัติขั้น 1
+  if (excessClaimId !== null) notifyExpensesAwaitingApproval(user.organizationId, [excessClaimId])
   return { ...toDto(updated, now), excessClaimId }
 }
 

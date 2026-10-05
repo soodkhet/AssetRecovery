@@ -52,6 +52,12 @@ export const EVENT_NAMES = [
   // Compensation Approval (16 §9) — จุดที่ Revenue เกิด (`19` §6.1)
   'expense.approved',
   'expense.rejected',
+  // คิวอนุมัติ (มติ PO 05/10/2569 U29 · BUG-106) — แจ้งผู้อนุมัติ "ขั้นที่รออยู่" ทันทีที่รายการเข้าคิว/ขยับขั้น
+  'expense.approval_requested',
+  'advance.approval_requested',
+  'adjustment.approval_requested',
+  // job รายวัน (มติ PO 05/10/2569 U25 · BUG-093) — วันที่อยู่ในงวดปิดแล้ว ต้องทำรายการปรับปรุงแทน
+  'field_allowance.period_locked',
   // Payout (17 §9) + Advance job (15 §9.1) — ชื่อตาม `90` §6.3 (ไฟล์ต้นทางไม่มีตาราง event ของตัวเอง)
   'payout_batch.completed',
   'advance.overdue',

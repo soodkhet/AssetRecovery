@@ -10,6 +10,7 @@ import {
   type ExpenseTxClient,
 } from '@/lib/field/expense-queries'
 import { Prisma } from '@/lib/generated/prisma/client'
+import { notifyExpensesAwaitingApprovalAwaited } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -211,7 +212,7 @@ async function createFuelExpense(params: {
   const outcome = assignment.case.outcome ?? (assignment.status === 'closed_success' ? 'closed_success' : 'closed_fail')
   const status = initialCaseExpenseStatus(outcome)
 
-  await prisma.$transaction(async (tx) => {
+  const createdId = await prisma.$transaction(async (tx) => {
     const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
       organizationId: params.organizationId,
       userId: assignment.agentId,
@@ -260,7 +261,13 @@ async function createFuelExpense(params: {
       },
       tx as ExpenseTxClient,
     )
+    return created.id
   })
 
+  // มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ปิดงานไม่สำเร็จ) แจ้งผู้อนุมัติขั้น 1 · รอบสำเร็จยังรอคลัง = ข้ามเอง
+  // แจ้งไม่สำเร็จห้ามทำให้งานคำนวณที่ commit แล้วถูก retry (จะได้รายการซ้ำไม่ได้อยู่แล้ว แต่ไม่ต้องเสียรอบ)
+  await notifyExpensesAwaitingApprovalAwaited(params.organizationId, [createdId]).catch((error: unknown) => {
+    console.error('[fuel_distance_retry] แจ้งผู้อนุมัติไม่สำเร็จ', { expenseId: createdId, error })
+  })
   return 'created'
 }

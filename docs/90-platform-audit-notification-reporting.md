@@ -19,6 +19,7 @@
 | v2.3 | 15/08/2569 | **มติ PO ตอนรีวิว Phase 5 (D16) — ถอน 2 event ที่สคีมาไม่มีที่ให้เกิดออกจาก §6.3**: `payout_batch.failed` (`02` §3 `payout_batch_status` ไม่มีสถานะล้มเหลว) และ "Exception ใกล้ deadline" (`02` §9 `exceptions` ไม่มีคอลัมน์กำหนดเส้นตาย) — ตอน implement Phase 5.2 ต่อสายครบทุกแถวยกเว้นสองตัวนี้ เพราะไม่มีจุดใดในระบบยิงได้ · ยึดลำดับเอกสาร `02` ชนะไฟล์ spec ของโมดูล ⇒ **ไม่ประดิษฐ์ status/คอลัมน์ใหม่** · ต่อสายได้เมื่อมีมติเพิ่ม `payout_batch_status = 'failed'` + `exceptions.due_date` ลง `02` · ส่วน "Exception ใหม่" ยังอยู่ (จำกัดที่ระดับ critical ตาม `37` ซึ่งเป็นตัวบล็อก Export Pack) |
 | v4.1 | 04/07/2569 | แก้จำนวนรายงานอ้างอิง "13" → **"17"** — นับจริงจากไฟล์ 96: F1–F5 (5) + O1–O5 (5) + A1–A4 (4) + E1–E3 (3) = 17 (เลข 13 เดิมนับผิด คัดลอกต่อกันใน README/implementation-todo — แก้พร้อมกันแล้ว) |
 | v4.2 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q17 · BUG-040/041/059/064)** — §6.3 แถว Assignment ขยายให้ตรง `40` §15: พนักงานได้งานใหม่ (`assignment.created`) / ถูกโอนงานทันที (`assignment.reassigned` — คนใหม่ + คนเดิม) / ผู้มอบหมาย + ผู้จัดการ/หัวหน้าทีมได้แจ้งเมื่อพนักงานกดรับ (`assignment.accepted`) / ผู้ขอได้ผลการตอบ (`assignment.reassignment_consented`/`_declined`) · คำขอเปลี่ยนแสดงวันและเวลาที่ต้องตอบ · timeout แยกข้อความ/ลิงก์ 3 ผู้รับ · เพิ่มกติกา "ผู้รับต้องอยู่ใน scope ของเรื่อง" สำหรับการแจ้งเตือนตาม capability (ทีม/บริษัท/องค์กร) และ "ลิงก์ต้องเปิดได้โดยผู้รับ" |
+| v4.3 | 05/10/2569 | **มติ PO 05/10/2569 (U25 · U29)** — §6.3 เติม 4 แถว: `expense.approval_requested` / `advance.approval_requested` / `adjustment.approval_requested` (ผู้อนุมัติขั้นที่รออยู่ — U29) และ `field_allowance.period_locked` (job รายวันเจองวดปิดแล้ว → แจ้งผู้ทำรายการปรับปรุง — U25) · ทั้งหมดกันแจ้งซ้ำด้วยคีย์ของเหตุการณ์ |
 
 ขอบเขตเอกสารนี้: ระบบกลางสำหรับ Audit Log, Notification, Exception และ Reporting ที่ใช้ร่วมกันข้ามทุกโมดูล
 
@@ -134,6 +135,8 @@ sequenceDiagram
 | Finance (17) | `payout_batch.completed` | `17-payroll-and-payout.md` |
 | Accounting (33) | WHT ใกล้ครบกำหนดยื่น (reminder) | `33-accounting-wht-data.md` |
 | Accounting (34) | Exception ใหม่ (ระดับ critical) | `34-accounting-document-checklist-exceptions.md` |
+| คิวอนุมัติ (15/16/20) | `expense.approval_requested` (ผู้ถือ capability ของขั้นที่รออยู่ · ผู้จัดการเฉพาะทีมของรายการ) · `advance.approval_requested` (ผู้ถือ `approve_advance`) · `adjustment.approval_requested` (บทบาทที่ยังขาดตามสถานะงวด) — แจ้งทันทีเมื่อเข้าคิว/ขยับขั้น · ผู้ขอไม่ได้รับของตัวเอง — v4.3 มติ PO 05/10/2569 U29 | `16` §9.1 · `15` · `20` §6.2 |
+| Field job (41/91) | `field_allowance.period_locked` — job `daily_field_allowance` ข้ามวันที่อยู่ในงวดปิดแล้ว → แจ้งผู้ถือ `create_adjustment` พร้อมยอดที่คำนวณไว้ (1 พนักงาน × 1 วัน = 1 ครั้ง) — v4.3 มติ PO 05/10/2569 U25 | `41` §6.6 · `91` §6.1 |
 
 > **ผู้รับต้องอยู่ใน scope ของเรื่องเสมอ (v4.2 — มติ PO 03/10/2569 UAT Q17 · BUG-064)**: การแจ้งเตือนที่หาผู้รับจาก capability ต้องกรองตาม scope ระดับแถวด้วย — เรื่องของเคส = ทีมของเคส (ผู้จัดการ/หัวหน้าทีมอื่นไม่ได้รับ แม้ถือ capability เดียวกัน) · เรื่องของบริษัทไฟแนนซ์ = บริษัทนั้น · เรื่องระดับองค์กร = เฉพาะ role กลุ่ม system · **ลิงก์ต้องพาไปหน้าที่ผู้รับคนนั้นเปิดได้** (พนักงานภาคสนาม = หน้า Field Tracker ของตัวเอง ไม่ใช่หน้ามอบหมาย — UAT BUG-059)
 >

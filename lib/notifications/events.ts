@@ -158,6 +158,12 @@ export const NOTIFICATION_EVENTS = {
     source: '90 §6.3 · 16 §9',
     description: 'รายการเบิกผ่านครบทุกขั้นของสายอนุมัติ',
   },
+  'expense.approval_requested': {
+    module: 'ค่าตอบแทน',
+    level: 'sent',
+    source: '16 §9.1 · 90 §6.3 (มติ PO U29)',
+    description: 'รายการเบิกรออนุมัติขั้นของผู้รับ — เข้าคิวใหม่ ส่งกลับหลังแก้ ปลดจากคลัง หรือผ่านขั้นก่อนหน้าแล้ว',
+  },
   'expense.case_bound_created': {
     module: 'ค่าตอบแทน',
     level: 'sent',
@@ -177,6 +183,24 @@ export const NOTIFICATION_EVENTS = {
     level: 'critical',
     source: '90 §6.3 · 17 §9',
     description: 'รอบจ่ายล้มเหลว — ต้องตรวจไฟล์โอน/บัญชีปลายทางก่อนทำใหม่',
+  },
+  'advance.approval_requested': {
+    module: 'การเงิน',
+    level: 'sent',
+    source: '15 §9 · 90 §6.3 (มติ PO U29)',
+    description: 'คำขอเงินทดรองใหม่รออนุมัติ',
+  },
+  'adjustment.approval_requested': {
+    module: 'การเงิน',
+    level: 'sent',
+    source: '20 §6.2 · 90 §6.3 (มติ PO U29)',
+    description: 'รายการปรับปรุงรออนุมัติจากบทบาทของผู้รับ',
+  },
+  'field_allowance.period_locked': {
+    module: 'การเงิน',
+    level: 'warning',
+    source: '41 §6.6 · 91 §6.1 · 90 §6.3 (มติ PO U25)',
+    description: 'ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงของวันที่อยู่ในงวดปิดแล้วคำนวณเข้าไม่ได้ — ต้องทำรายการปรับปรุงแทน',
   },
   'advance.overdue': {
     module: 'การเงิน',

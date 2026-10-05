@@ -11,6 +11,7 @@ import type { ClaimCreateInput } from '@/lib/claims/schemas'
 import { AuthError } from '@/lib/auth/errors'
 import { ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
 import { ExpenseStateError } from '@/lib/field/expense-status'
+import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -58,7 +59,7 @@ export async function createManualClaim(
     targetType: 'expenses',
   })
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     const payeeId =
       input.payeeId === null
         ? await ensureAgentPayeeId(tx as ExpenseTxClient, {
@@ -79,6 +80,10 @@ export async function createManualClaim(
       compPlanVersion: null,
     })
   })
+
+  // มติ PO U29 — เข้าคิวอนุมัติทันที ⇒ แจ้งผู้อนุมัติขั้น 1 (หลัง commit)
+  notifyExpensesAwaitingApproval(user.organizationId, [created.id])
+  return created
 }
 
 export interface ManualClaimInsert {

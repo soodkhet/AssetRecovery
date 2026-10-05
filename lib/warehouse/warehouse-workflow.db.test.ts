@@ -1257,4 +1257,71 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
     expect(rows).toHaveLength(2)
     expect(rows.every((row) => row.status === 'pending_approval')).toBe(true)
   })
+
+  /**
+   * มติ PO 05/10/2569 U25 (BUG-093 · ปิดช่องเทสต์ตามมติ O23) — วันที่อยู่ในงวดที่ปิดแล้ว:
+   * ข้ามเหมือนเดิม (ไม่ settle ข้ามงวด · ไม่มีแถว settlement/expense) แต่แจ้งผู้ถือสิทธิ์สร้างรายการปรับปรุง
+   * พร้อมยอดที่คำนวณไว้ (สูตรเดียวกับวันปกติ) · job รันซ้ำวันเดิมไม่แจ้งซ้ำ
+   */
+  it('งวดปิดแล้ว → period_locked ไม่ settle · แจ้งการเงินพร้อมยอด · รันซ้ำไม่แจ้งซ้ำ', async () => {
+    const job = await import('@/lib/field/daily-allowance-job')
+    const { fmtDate } = await import('@/lib/format/datetime')
+    const ROLE_FINANCE = '00000000-0000-4000-8000-0000000213b0'
+    const FINANCE_ID = '00000000-0000-4000-8000-0000000213b1'
+    const today = todayIso()
+    const [year = '0', month = '0'] = today.split('-')
+    const tx = db()
+
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE_FINANCE}', '${ORG_ID}', 'การเงิน 2.13', 'system', false) ON CONFLICT (id) DO NOTHING
+    `)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+      VALUES ('${FINANCE_ID}', '${ORG_ID}', '${ROLE_FINANCE}', 'finance213@test.local', 'การเงิน 2.13', 'active')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    await tx.$executeRawUnsafe(
+      `INSERT INTO capabilities (code, label, module) VALUES ('create_adjustment', 'สร้าง Adjustment', 'adjustment') ON CONFLICT (code) DO NOTHING`,
+    )
+    await tx.$executeRawUnsafe(`
+      INSERT INTO role_capabilities (role_id, capability_id, access_level)
+      SELECT '${ROLE_FINANCE}', id, 'manage' FROM capabilities WHERE code = 'create_adjustment' ON CONFLICT DO NOTHING
+    `)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ U25', ${Number(year) + 543}, ${Number(month)}, 'locked', '${FINANCE_ID}')
+    `)
+    try {
+      const c1 = await fieldWork()
+      const c2 = await fieldWork()
+
+      const first = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: today })
+      expect(first).toMatchObject({ settled: 0, periodLocked: 1, periodLockedNotified: 1, expensesCreated: 0 })
+      expect(await db().fieldDaySettlement.count({ where: { organizationId: ORG_ID } })).toBe(0)
+      expect(await dailyRows([c1, c2])).toEqual([])
+
+      const notices = await db().notification.findMany({
+        where: { organizationId: ORG_ID, eventCode: 'field_allowance.period_locked' },
+      })
+      // ผู้รับ = ผู้ถือสิทธิ์สร้างรายการปรับปรุงเท่านั้น (พนักงาน/ผู้จัดการ/ธุรการคลังไม่ได้)
+      expect(notices.map((row) => row.userId)).toEqual([FINANCE_ID])
+      // แผน DAILY_FLAT: น้ำมัน 300 + เบี้ยเลี้ยง 200 ต่อวัน (กระจาย 2 เคส แต่ยอดวันเดียวกัน)
+      expect(notices[0]?.body).toBe(
+        `วันที่ ${fmtDate(new Date(`${today}T00:00:00.000Z`))} คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — พนักงาน 2.13 2 เคส ` +
+          'ค่าน้ำมัน ฿300.00 เบี้ยเลี้ยง ฿200.00 รวม ฿500.00 กรุณาทำรายการปรับปรุง',
+      )
+      expect(notices[0]?.linkPath).toBe('/finance?tab=adjustment')
+
+      // รันซ้ำ (cron คืนถัดไป) — ยังข้ามวันเดิม แต่ไม่แจ้งซ้ำ
+      const again = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: today })
+      expect(again).toMatchObject({ settled: 0, periodLocked: 1, periodLockedNotified: 0 })
+      expect(
+        await db().notification.count({ where: { organizationId: ORG_ID, eventCode: 'field_allowance.period_locked' } }),
+      ).toBe(1)
+    } finally {
+      await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+      await tx.$executeRawUnsafe(`DELETE FROM role_capabilities WHERE role_id = '${ROLE_FINANCE}'`)
+    }
+  })
 })
