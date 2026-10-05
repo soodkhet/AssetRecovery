@@ -14,7 +14,7 @@ import { PrismaClient } from '@/lib/generated/prisma/client'
  *  7. lot ยังไม่ confirmed ⇒ ยังไม่เกิด (Warehouse gate)
  *  8. เคสถูกตีกลับก่อนถึงจุดนั้น ⇒ ไม่มี Revenue เลย
  *  + DEC-006/D6: เคส **ไม่มี expense** ก็ยังติด Warehouse gate
- * และกติกาของรอบวางบิล: `NO_REVENUE_TO_BILL` · 1 บริษัท/งวด · ส่งซ้ำไม่ได้ · ลบได้เฉพาะ draft ·
+ * และกติกาของรอบวางบิล: `NO_REVENUE_TO_BILL` · หลายรอบต่อเดือน (U86) · ส่งซ้ำไม่ได้ · ลบได้เฉพาะ draft ·
  * AR Aging ตาม bucket ของ `13` · hook รับชำระของไฟล์ 35 (idempotent)
  *
  * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
@@ -613,39 +613,48 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
     expect(batch.revenues.every((row) => row.companyId === COMPANY_A)).toBe(true)
   })
 
-  it('รายได้นอกงวด (เดือนก่อนหน้า) ไม่ถูกดึงเข้ารอบเดือนนี้', async () => {
-    await seedBillableRevenue(COMPANY_A, '2026-07-20T03:00:00Z')
-    await expectCode(
-      () =>
-        revenue.createBillingBatch(ctx(), {
-          companyId: COMPANY_A,
-          cutoffDate: CUTOFF,
-          cycleId: null,
-          reason: 'วางบิลรอบสิงหาคม',
-        }),
-      'NO_REVENUE_TO_BILL',
-    )
+  it('U86 — รายได้ค้างจากเดือนก่อนถูกดึงเข้ารอบ · รายได้หลังวันตัดรอบไม่ถูกดึง', async () => {
+    const julyCase = await seedBillableRevenue(COMPANY_A, '2026-07-20T03:00:00Z')
+    const septCase = await seedBillableRevenue(COMPANY_A, '2026-09-05T03:00:00Z')
+    const batch = await revenue.createBillingBatch(ctx(), {
+      companyId: COMPANY_A,
+      cutoffDate: CUTOFF,
+      cycleId: null,
+      reason: 'วางบิลรอบสิงหาคม',
+    })
+    expect(batch.period).toBe('สิงหาคม 2569')
+    expect(batch.revenues.map((row) => row.caseId)).toEqual([julyCase])
+    const sept = await db().revenue.findFirstOrThrow({ where: { caseId: septCase } })
+    expect(sept.billingBatchId).toBeNull()
+    expect(sept.status).toBe('ready_for_billing')
   })
 
-  it('1 บริษัท 1 งวด = 1 รอบ — สร้างซ้ำงวดเดิมไม่ได้', async () => {
+  it('U86 — ยังมีรอบร่างของบริษัทเดียวกันค้าง ⇒ สร้างรอบใหม่ไม่ได้ พร้อมข้อความบอกเลขรอบที่ค้าง', async () => {
     await seedBillableRevenue()
-    await revenue.createBillingBatch(ctx(), {
+    const first = await revenue.createBillingBatch(ctx(), {
       companyId: COMPANY_A,
       cutoffDate: CUTOFF,
       cycleId: null,
       reason: 'วางบิลรอบสิงหาคม',
     })
     await seedBillableRevenue()
-    await expectCode(
-      () =>
-        revenue.createBillingBatch(ctx(), {
-          companyId: COMPANY_A,
-          cutoffDate: CUTOFF,
-          cycleId: null,
-          reason: 'วางบิลรอบสิงหาคมซ้ำ',
-        }),
-      'BILLING_BATCH_INVALID_STATUS',
-    )
+    await expect(
+      revenue.createBillingBatch(ctx(), {
+        companyId: COMPANY_A,
+        cutoffDate: CUTOFF,
+        cycleId: null,
+        reason: 'วางบิลรอบสิงหาคมเพิ่ม',
+      }),
+    ).rejects.toMatchObject({
+      code: 'BILLING_BATCH_INVALID_STATUS',
+      title: 'มีรอบวางบิลร่างค้างอยู่',
+      userMessage: expect.stringContaining(first.batchNumber) as unknown,
+    })
+    // รอบร่างของบริษัทอื่นไม่ขวาง
+    await seedBillableRevenue(COMPANY_B)
+    await expect(
+      revenue.createBillingBatch(ctx(), { companyId: COMPANY_B, cutoffDate: CUTOFF, cycleId: null, reason: 'วางบิล B' }),
+    ).resolves.toMatchObject({ revenueCount: 1 })
   })
 
   it('ส่งบิล draft → sent + ลง audit พร้อม reason · ส่งซ้ำไม่ได้', async () => {
@@ -875,5 +884,139 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
     })
     expect(result.status).toBe('paid')
     expect((await revenue.getArAging(finance, {})).totalOutstandingSatang).toBe(0)
+  })
+})
+
+/**
+ * มติ PO U86 · BUG-155 — หลายรอบวางบิลต่อบริษัทต่อเดือน
+ * รอบที่ 2 ในเดือนเดียวกันดึงเฉพาะรายได้ใหม่ · ไม่ซ้ำภายใต้ concurrency · ลบรอบร่างแล้วสร้างงวดเดิมใหม่ได้ ·
+ * Readiness ปิดงวดผ่านเมื่อวางบิลครบ · AR / พอร์ทัลเห็นครบทั้ง 2 รอบ
+ */
+suite('U86 — หลายรอบวางบิลต่อเดือน (BUG-155)', () => {
+  type AccountingQueries = typeof import('@/lib/accounting/queries')
+  type PortalFinance = typeof import('@/lib/portal/queries/finance')
+  let accounting: AccountingQueries
+  let portal: PortalFinance
+
+  const MID_AUGUST = new Date(Date.UTC(2026, 7, 15))
+
+  beforeAll(async () => {
+    accounting = await import('@/lib/accounting/queries')
+    portal = await import('@/lib/portal/queries/finance')
+  })
+  beforeEach(cleanup)
+
+  async function createAndSend(cutoffDate: Date, reason: string): Promise<{ id: string; batchNumber: string }> {
+    const created = await revenue.createBillingBatch(ctx(), { companyId: COMPANY_A, cutoffDate, cycleId: null, reason })
+    await revenue.sendBillingBatch({ actor: finance, meta, reason: `ส่ง ${reason}` }, created.id, {
+      reason: `ส่ง ${reason}`,
+    })
+    return { id: created.id, batchNumber: created.batchNumber }
+  }
+
+  it('รอบที่ 2 ในเดือนเดียวกันดึงเฉพาะรายได้ใหม่ — ไม่ซ้ำกับรอบแรก · เลขรอบต่างกัน งวดเดียวกัน', async () => {
+    const firstCase = await seedBillableRevenue(COMPANY_A, '2026-08-10T03:00:00Z')
+    const first = await createAndSend(MID_AUGUST, 'วางบิลรอบแรก')
+
+    const secondCase = await seedBillableRevenue(COMPANY_A, '2026-08-20T03:00:00Z')
+    const second = await revenue.createBillingBatch(ctx(), {
+      companyId: COMPANY_A,
+      cutoffDate: CUTOFF,
+      cycleId: null,
+      reason: 'วางบิลรอบเพิ่ม',
+    })
+
+    expect(second.period).toBe('สิงหาคม 2569')
+    expect(second.batchNumber).not.toBe(first.batchNumber)
+    expect(second.revenues.map((row) => row.caseId)).toEqual([secondCase])
+    expect(second.totalSatang).toBe(107_000)
+
+    const firstDetail = await revenue.getBillingBatch(finance, first.id)
+    expect(firstDetail.revenues.map((row) => row.caseId)).toEqual([firstCase])
+    expect(await db().billingBatch.count({ where: { organizationId: ORG_ID, period: 'สิงหาคม 2569' } })).toBe(2)
+  })
+
+  it('รอบเพิ่มดึงรายได้ค้างจากเดือนก่อน (เกิดหลังรอบของเดือนนั้นส่งไปแล้ว) รวมกับรายได้เดือนนี้', async () => {
+    await seedBillableRevenue(COMPANY_A, '2026-07-10T03:00:00Z')
+    await createAndSend(new Date(Date.UTC(2026, 6, 15)), 'วางบิลรอบกรกฎาคม')
+
+    const lateJuly = await seedBillableRevenue(COMPANY_A, '2026-07-25T03:00:00Z')
+    const august = await seedBillableRevenue(COMPANY_A, '2026-08-20T03:00:00Z')
+    const batch = await revenue.createBillingBatch(ctx(), {
+      companyId: COMPANY_A,
+      cutoffDate: CUTOFF,
+      cycleId: null,
+      reason: 'วางบิลรอบสิงหาคม',
+    })
+    expect(batch.period).toBe('สิงหาคม 2569')
+    expect(batch.revenues.map((row) => row.caseId).sort()).toEqual([lateJuly, august].sort())
+  })
+
+  it('กดสร้างพร้อมกัน 2 คำขอ ⇒ สำเร็จ 1 รอบ · อีกคำขอได้ข้อความรอบร่างค้าง · รายได้ไม่ถูกวางบิลซ้ำ', async () => {
+    await seedBillableRevenue()
+    await seedBillableRevenue()
+
+    const input = { companyId: COMPANY_A, cutoffDate: CUTOFF, cycleId: null }
+    const results = await Promise.allSettled([
+      revenue.createBillingBatch(ctx('พร้อมกัน 1'), { ...input, reason: 'พร้อมกัน 1' }),
+      revenue.createBillingBatch(ctx('พร้อมกัน 2'), { ...input, reason: 'พร้อมกัน 2' }),
+    ])
+    const fulfilled = results.filter((result) => result.status === 'fulfilled')
+    const rejected = results.filter((result) => result.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect(codeOf(rejected[0]?.reason)).toBe('BILLING_BATCH_INVALID_STATUS')
+
+    expect(await db().billingBatch.count({ where: { organizationId: ORG_ID, deletedAt: null } })).toBe(1)
+    const billed = await db().revenue.findMany({ where: { organizationId: ORG_ID }, select: { billingBatchId: true } })
+    expect(new Set(billed.map((row) => row.billingBatchId)).size).toBe(1)
+    expect(billed.every((row) => row.billingBatchId !== null)).toBe(true)
+  })
+
+  it('ลบรอบร่างแล้วสร้างรอบของงวดเดิมใหม่ได้ (เดิมติด unique ของรอบที่ลบไปแล้ว)', async () => {
+    await seedBillableRevenue()
+    const input = { companyId: COMPANY_A, cutoffDate: CUTOFF, cycleId: null }
+    const draft = await revenue.createBillingBatch(ctx(), { ...input, reason: 'รอบร่าง' })
+    await revenue.deleteBillingBatch({ actor: finance, meta, reason: 'ลบรอบร่างเพื่อรวมใหม่' }, draft.id, {
+      reason: 'ลบรอบร่างเพื่อรวมใหม่',
+    })
+    await seedBillableRevenue()
+    const recreated = await revenue.createBillingBatch(ctx(), { ...input, reason: 'สร้างใหม่' })
+    expect(recreated.period).toBe('สิงหาคม 2569')
+    expect(recreated.revenueCount).toBe(2)
+  })
+
+  it('Readiness ปิดงวด — มีรายได้ค้างวางบิลไม่ผ่าน · วางบิลรอบเพิ่มครบแล้วผ่าน (2 รอบ/เดือน ยอดตรง)', async () => {
+    await seedBillableRevenue(COMPANY_A, '2026-08-10T03:00:00Z')
+    await createAndSend(MID_AUGUST, 'วางบิลรอบแรก')
+    await seedBillableRevenue(COMPANY_A, '2026-08-20T03:00:00Z')
+
+    const period = await accounting.ensurePeriod({ actor: finance, meta }, { yearBe: 2569, month: 8 })
+    const before = await accounting.getPeriodReadiness(finance, period.id)
+    expect(before.billingMismatches.map((row) => row.reason)).toEqual(['not_billed'])
+
+    await createAndSend(CUTOFF, 'วางบิลรอบเพิ่ม')
+    const after = await accounting.getPeriodReadiness(finance, period.id)
+    expect(after.billingMismatches).toEqual([])
+  })
+
+  it('AR aging + พอร์ทัล — เห็นครบทั้ง 2 รอบของเดือนเดียวกัน ยอดค้างรวมถูกต้อง', async () => {
+    await seedBillableRevenue(COMPANY_A, '2026-08-10T03:00:00Z')
+    const first = await createAndSend(MID_AUGUST, 'วางบิลรอบแรก')
+    await seedBillableRevenue(COMPANY_A, '2026-08-20T03:00:00Z')
+    const second = await createAndSend(CUTOFF, 'วางบิลรอบเพิ่ม')
+
+    const aging = await revenue.getArAging(finance, { companyId: COMPANY_A, asOf: new Date(Date.UTC(2026, 8, 1)) })
+    expect(aging.totalOutstandingSatang).toBe(214_000)
+
+    const rows = await portal.listPortalBillingBatches({
+      user: companyUser,
+      companyId: COMPANY_A,
+      capabilities: { portal_finance: 'view' },
+      section: 'finance',
+    })
+    expect(rows.map((row) => row.batchNumber).sort()).toEqual([first.batchNumber, second.batchNumber].sort())
+    expect(rows.every((row) => row.period === 'สิงหาคม 2569')).toBe(true)
+    expect(rows.reduce((sum, row) => sum + row.outstandingSatang, 0)).toBe(214_000)
   })
 })

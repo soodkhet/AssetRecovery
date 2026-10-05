@@ -3,11 +3,13 @@ import {
   assertBillingBatchDeletable,
   assertBillingBatchSendable,
   assertHasRevenueToBill,
+  assertNoOpenDraftBatch,
   assertRevenueEditable,
+  billableRevenueDateFilter,
   billingPeriodLabel,
   canTransitionBillingBatch,
   parseBillingPeriodLabel,
-  periodStartOf,
+  isRevenueBillableAt,
   resolveBillingStatusAfterReceipt,
   summarizeBillingBatch,
   toBangkokDateOnly,
@@ -36,15 +38,59 @@ describe('toBangkokDateOnly', () => {
   })
 })
 
-describe('billingPeriodLabel / periodStartOf', () => {
+describe('billingPeriodLabel', () => {
   it('ชื่อรอบเป็นเดือนไทย + ปี พ.ศ. (Rule 01)', () => {
     expect(billingPeriodLabel(new Date('2026-06-30T00:00:00.000Z'))).toBe('มิถุนายน 2569')
     expect(billingPeriodLabel(new Date('2026-01-15T00:00:00.000Z'))).toBe('มกราคม 2569')
     expect(billingPeriodLabel(new Date('2026-12-31T00:00:00.000Z'))).toBe('ธันวาคม 2569')
   })
 
-  it('ต้นเดือนของวันตัดรอบ = ขอบล่างของช่วงที่ดึงรายได้เข้ารอบ', () => {
-    expect(periodStartOf(new Date('2026-08-31T00:00:00.000Z')).toISOString()).toBe('2026-08-01T00:00:00.000Z')
+})
+
+/** มติ PO U86 · BUG-155 — หลายรอบวางบิลต่อเดือน · รอบใหม่ดึงรายได้ค้างทั้งหมดถึงวันตัดรอบ */
+describe('isRevenueBillableAt / billableRevenueDateFilter (U86)', () => {
+  const cutoff = new Date('2026-11-05T00:00:00.000Z')
+  const base = { status: 'ready_for_billing', billingBatchId: null, revenueDate: new Date('2026-11-01T00:00:00.000Z') }
+
+  it('ไม่มีขอบล่าง — ช่วงคือ revenue_date ≤ วันตัดรอบ เท่านั้น', () => {
+    expect(billableRevenueDateFilter(cutoff)).toEqual({ lte: cutoff })
+  })
+
+  it('รายได้ค้างจากเดือนก่อน (ต.ค.) ถูกดึงเข้ารอบที่ตัดรอบเดือน พ.ย.', () => {
+    expect(isRevenueBillableAt({ ...base, revenueDate: new Date('2026-10-28T00:00:00.000Z') }, cutoff)).toBe(true)
+  })
+
+  it('รายได้วันเดียวกับวันตัดรอบถูกดึง · หลังวันตัดรอบไม่ถูกดึง', () => {
+    expect(isRevenueBillableAt({ ...base, revenueDate: cutoff }, cutoff)).toBe(true)
+    expect(isRevenueBillableAt({ ...base, revenueDate: new Date('2026-11-06T00:00:00.000Z') }, cutoff)).toBe(false)
+  })
+
+  it('ใบที่ผูกรอบอื่นแล้ว / billed / ลบแล้ว ไม่ถูกดึงซ้ำ (1:1)', () => {
+    expect(isRevenueBillableAt({ ...base, billingBatchId: 'b1' }, cutoff)).toBe(false)
+    expect(isRevenueBillableAt({ ...base, status: 'billed' }, cutoff)).toBe(false)
+    expect(isRevenueBillableAt({ ...base, deletedAt: new Date() }, cutoff)).toBe(false)
+  })
+})
+
+describe('assertNoOpenDraftBatch (U86)', () => {
+  it('ไม่มีรอบร่างค้าง = ผ่าน', () => {
+    expect(codeOf(() => assertNoOpenDraftBatch(null, 'บริษัท ก'))).toBe('NO_ERROR')
+  })
+
+  it('มีรอบร่างค้าง = BILLING_BATCH_INVALID_STATUS พร้อมข้อความบอกเลขรอบที่ค้าง (ไม่ใช่ข้อความกลาง)', () => {
+    let caught: unknown
+    try {
+      assertNoOpenDraftBatch({ id: 'x', batchNumber: 'BL-2569-007', period: 'ตุลาคม 2569' }, 'บริษัท ก')
+    } catch (error) {
+      caught = error
+    }
+    const error = caught as { code: string; title: string; userMessage: string; context: Record<string, unknown> }
+    expect(error.code).toBe('BILLING_BATCH_INVALID_STATUS')
+    expect(error.title).toBe('มีรอบวางบิลร่างค้างอยู่')
+    expect(error.userMessage).toContain('BL-2569-007')
+    expect(error.userMessage).toContain('บริษัท ก')
+    expect(error.userMessage).not.toMatch(/§|`\d{2}`/)
+    expect(error.context).toMatchObject({ existingBatchNumber: 'BL-2569-007' })
   })
 })
 

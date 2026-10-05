@@ -33,8 +33,8 @@ export function toBangkokDateOnly(instant: Date): Date {
 
 /**
  * ชื่อรอบวางบิลตาม `19` §7.2 (`period` = "มิถุนายน 2569") — เดือน**ไทย** + ปี **พ.ศ.** เสมอ (Rule 01)
- * ค่านี้เป็นทั้งป้ายที่ผู้ใช้เห็นและกุญแจของ unique `(organization_id, company_id, period)` (`02` §8)
- * ⇒ 1 บริษัท 1 เดือน = 1 รอบวางบิลเท่านั้น
+ * ค่านี้เป็นป้ายงวดของรอบ (= เดือนของวันตัดรอบ) — **ไม่ใช่กุญแจไม่ซ้ำอีกต่อไป** (มติ PO U86 · BUG-155):
+ * 1 บริษัทมีหลายรอบในเดือนเดียวกันได้ ⇒ อ้างรอบด้วย `batch_number` (U76) เสมอ
  */
 export function billingPeriodLabel(cutoffDate: Date): string {
   const month = MONTH_NAMES_TH[cutoffDate.getUTCMonth()]
@@ -57,9 +57,46 @@ export function parseBillingPeriodLabel(period: string): { yearBe: number; month
   return { yearBe, month: index + 1 }
 }
 
-/** ต้นเดือนของวันตัดรอบ (date-only) — ขอบล่างของช่วง `revenue_date` ที่ถูกรวมเข้ารอบนั้น */
-export function periodStartOf(cutoffDate: Date): Date {
-  return new Date(Date.UTC(cutoffDate.getUTCFullYear(), cutoffDate.getUTCMonth(), 1))
+/**
+ * ช่วง `revenue_date` ที่รอบวางบิลใหม่ดึงเข้า (มติ PO U86 · BUG-155) — **ไม่มีขอบล่าง**:
+ * รายได้ที่ยังไม่เคยวางบิลทั้งหมดของบริษัทที่ `revenue_date ≤ วันตัดรอบ` (รวมที่ค้างจากเดือนก่อน)
+ * เดิมเริ่มที่ต้นเดือนของวันตัดรอบ ⇒ รายได้เดือนก่อนที่เกิดหลังสร้างรอบของเดือนนั้นแล้วค้างถาวร
+ */
+export function billableRevenueDateFilter(cutoffDate: Date): { lte: Date } {
+  return { lte: cutoffDate }
+}
+
+/** รายได้ใบนี้ถูกดึงเข้ารอบวางบิลที่ตัดรอบวันที่ `cutoffDate` ได้ไหม — กติกาเดียวกับ query ของ `createBillingBatch()` */
+export function isRevenueBillableAt(
+  revenue: { status: string; billingBatchId: string | null; revenueDate: Date; deletedAt?: Date | null },
+  cutoffDate: Date,
+): boolean {
+  return (
+    (revenue.deletedAt ?? null) === null &&
+    revenue.status === 'ready_for_billing' &&
+    revenue.billingBatchId === null &&
+    revenue.revenueDate.getTime() <= billableRevenueDateFilter(cutoffDate).lte.getTime()
+  )
+}
+
+/**
+ * ห้ามมีรอบวางบิล**ร่าง**ซ้อนกัน 2 รอบของบริษัทเดียวกัน (มติ U86 — `19` §6.2 v2.5)
+ * รอบใหม่ดึงรายได้ค้างทั้งหมดถึงวันตัดรอบ ⇒ ถ้ามีรอบร่างค้างอยู่ ให้ส่งบิลหรือลบรอบร่างนั้นก่อน
+ * (ลบรอบร่าง = รายได้กลับเป็นรอวางบิล แล้วสร้างรอบใหม่ที่รวมทุกใบ) — ข้อความบอกเลขรอบที่ค้างตรง ๆ
+ */
+export function assertNoOpenDraftBatch(
+  draft: { id: string; batchNumber: string; period: string } | null,
+  companyName: string,
+): void {
+  if (draft === null) return
+  throw new RevenueError('BILLING_BATCH_INVALID_STATUS', {
+    detail: `company=${companyName} draft=${draft.id} (${draft.batchNumber} ${draft.period})`,
+    context: { existingBatchId: draft.id, existingBatchNumber: draft.batchNumber, period: draft.period },
+    message: {
+      title: 'มีรอบวางบิลร่างค้างอยู่',
+      message: `${companyName} มีรอบวางบิล ${draft.batchNumber} (${draft.period}) ที่ยังเป็นฉบับร่าง — ส่งบิลหรือลบรอบร่างนั้นก่อนจึงจะสร้างรอบใหม่ได้`,
+    },
+  })
 }
 
 // ── State machine (`23` §6.8) ───────────────────────────────────────────────
