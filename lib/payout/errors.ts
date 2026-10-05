@@ -18,6 +18,11 @@ export const PAYOUT_ERROR_CODES = [
   'PAYMENT_FILE_NOT_GENERATED',
   // มติ PO 05/10/2569 (UAT U7) — ผู้รับประเภท 40(2) ต้องมีอัตราหักต่อคนก่อนสร้างรอบ
   'WHT_40_2_RATE_MISSING',
+  // มติ PO U67 (05/10/2569) — ยกเลิกรอบจ่าย: เหตุผลบังคับ (code ร่วมกับหมวดเอกสาร) · โอนแล้วยกเลิกไม่ได้
+  // · รอบที่สร้างไฟล์โอนแล้วต้องยืนยันว่ายังไม่ได้ส่งไฟล์เข้าธนาคาร
+  'CANCEL_REQUIRES_REASON',
+  'PAYOUT_BATCH_ALREADY_PAID',
+  'PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED',
 ] as const
 
 export type PayoutErrorCode = (typeof PAYOUT_ERROR_CODES)[number]
@@ -31,6 +36,9 @@ const HTTP_STATUS: Record<PayoutErrorCode, number> = {
   NO_ITEMS_TO_PAY: 400,
   PAYMENT_FILE_NOT_GENERATED: 404,
   WHT_40_2_RATE_MISSING: 400,
+  CANCEL_REQUIRES_REASON: 400,
+  PAYOUT_BATCH_ALREADY_PAID: 400,
+  PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED: 400,
 }
 
 const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
@@ -63,6 +71,20 @@ const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
     title: 'ผู้รับเงินประเภท 40(1)/40(2) ยังไม่มีอัตราหัก',
     message:
       'ค่าตั้งภาษีจัดผู้รับเงินบางคนเป็นเงินได้ 40(1) หรือ 40(2) แต่ยังไม่ได้กรอก "อัตราหัก 40(1)/40(2)" ในข้อมูลผู้รับเงิน — กรอกอัตราที่สำนักงานบัญชีคำนวณให้ก่อนสร้างรอบจ่าย',
+  },
+  CANCEL_REQUIRES_REASON: {
+    title: 'ต้องระบุเหตุผลการยกเลิก',
+    message: 'การยกเลิกรอบจ่ายกระทบยอดเงินที่ต้องจ่าย — กรอกเหตุผลอย่างน้อย 5 ตัวอักษรก่อนยืนยัน',
+  },
+  PAYOUT_BATCH_ALREADY_PAID: {
+    title: 'รอบจ่ายนี้โอนเงินแล้ว',
+    message:
+      'ยกเลิกได้เฉพาะรอบที่ยังไม่ได้โอนเงินจริง — รอบที่จ่ายสำเร็จแล้วต้องแก้ไขผ่านรายการปรับปรุง (Adjustment)',
+  },
+  PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED: {
+    title: 'ต้องยืนยันว่ายังไม่ได้ส่งไฟล์โอนเข้าธนาคาร',
+    message:
+      'รอบจ่ายนี้สร้างไฟล์โอนแล้ว — ตรวจสอบกับระบบธนาคารว่ายังไม่ได้อัปโหลดไฟล์และยังไม่มีการโอน แล้วติ๊กยืนยันก่อนยกเลิก (ไม่งั้นรายการที่สร้างรอบใหม่อาจถูกโอนซ้ำ)',
   },
 }
 

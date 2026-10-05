@@ -16,6 +16,7 @@
 | v2.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 หมายเหตุ: การปิดยอดคืนเงินทดรอง **ไม่เพิ่ม state** ใน `advance_status` (ยอดค้าง/ปิด อนุมานจากสมุดย่อย `advance_returns`) |
 | v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U40/U41)**: §6.14 Bank Transaction เพิ่ม `suspense` (เงินรับรอตรวจสอบ — เงินเข้าไม่ทราบที่มา) + `suspense_refunded` (คืนเงินผู้โอน — terminal) · §6.14.1 ใหม่: 50 ทวิ ที่ลูกค้าหักเรา (`customer_wht_status` `pending → received`) — enum ตาม `02` v4.23 |
 | v2.3 | 05/10/2569 | **UAT BUG-092 (S4 — งานแก้ของ fixer AK ตามรายการที่ PO มอบ 05/10/2569)** — §6.3 เพิ่ม transition `pending_approval → pending_warehouse_confirm` (action `hold_for_warehouse`) **เฉพาะแถวรายวัน** (job `daily_field_allowance` / เบิกย้อนหลัง U50) ที่ถูกสร้างตอนเคสยังเปิด แล้วเคสปิดสำเร็จภายหลัง — ทำในทรานแซกชันเดียวกับการปิดงาน (และการส่งหลักฐานใหม่) เฉพาะแถวที่ยังไม่มีผู้อนุมัติขั้นใดประทับ/ไม่อยู่ในรอบจ่าย · ปลดกลับด้วย `warehouse_confirm` ตอนล็อต confirmed ตามเดิม · แถวที่มีผู้อนุมัติแล้วบางขั้น/อนุมัติครบ/ตีกลับ/เข้ารอบจ่าย **ไม่แตะ** (รอมติ PO) · ไม่มี state ใหม่ |
+| v2.4 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U67)** — §6.6 เพิ่มสถานะ terminal `cancelled` (ยกเลิกรอบจ่ายก่อนโอนจริง จาก `draft`/`checking`/`file_generated` · `completed` ยกเลิกไม่ได้) — enum `payout_batch_status` ใน `02` §3 v4.25 |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -89,7 +90,10 @@ pending_approval (step=1) → approve step 1 → step=2 → ... → approve step
 
 ```
 draft (กำลังรวบรวมรายการ) → checking → file_generated → completed
+draft | checking | file_generated --(ยกเลิก + เหตุผล)--> cancelled   (มติ PO U67)
 ```
+
+> **`cancelled` (มติ PO 05/10/2569 — UAT U67)** — terminal · ได้เฉพาะ**ก่อนโอนจริง** (`completed` / มีบัญชีค่าใช้จ่ายของรอบ / จับคู่รายการเดินบัญชีแล้ว ⇒ `PAYOUT_BATCH_ALREADY_PAID` — แก้ผ่าน Adjustment) · `file_generated` ต้องยืนยันว่ายังไม่ส่งไฟล์เข้าธนาคาร (`PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED`) · เหตุผลบังคับ (`CANCEL_REQUIRES_REASON`) · endpoint `POST /api/payout-batches/:id/cancel` · ผลในทรานแซกชันเดียว: รายการเบิก (§6.3 `approved`) / เงินทดรอง (§6.4 `approved`/`overdue`) **ไม่เปลี่ยนสถานะ** แค่หลุดจากรอบกลับไปรอจ่าย + ยอดหักคืนเงินทดรองของรอบกลับเป็นค้าง · รายละเอียด `17` §9.1
 
 > เติม `draft` ที่ตกหล่นจาก v1 — ตรงกับ enum `payout_batch_status` ใน `02-database-schema-design.md` §3 และไฟล์ 17 v2
 

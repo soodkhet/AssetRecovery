@@ -24,7 +24,7 @@ export const MANAGE_PAYOUT_BATCH = 'manage_payout_batch'
 export const GENERATE_PAYMENT_FILE = 'generate_payment_file'
 
 /** action ของ state machine (`23` §6.6) — ชื่อตรงกับ endpoint ที่เรียกใช้ */
-export type PayoutBatchAction = 'collect' | 'generate_file' | 'complete'
+export type PayoutBatchAction = 'collect' | 'generate_file' | 'complete' | 'cancel'
 
 const TRANSITIONS: Readonly<Record<PayoutBatchAction, Readonly<Record<string, PayoutBatchStatus>>>> = {
   // ระบบดึงรายการครบแล้วเปลี่ยนเองทันที (`17` §9 v2.1)
@@ -33,6 +33,9 @@ const TRANSITIONS: Readonly<Record<PayoutBatchAction, Readonly<Record<string, Pa
   generate_file: { checking: 'file_generated', file_generated: 'file_generated' },
   // sync จากไฟล์ 35 (Phase 4.2) เป็นหลัก · manual confirm เป็นทางเลือกสำรอง (`17` §9/§18)
   complete: { file_generated: 'completed' },
+  // มติ PO U67 — ยกเลิกได้เฉพาะก่อนโอนจริง · `completed` = เงินออกแล้ว (แก้ผ่าน Adjustment) · `cancelled` = terminal
+  // `file_generated` ยกเลิกได้แต่ต้องยืนยันว่ายังไม่ส่งไฟล์เข้าธนาคาร (`assertPayoutCancellable()`)
+  cancel: { draft: 'cancelled', checking: 'cancelled', file_generated: 'cancelled' },
 }
 
 export function nextPayoutBatchStatus(current: PayoutBatchStatus, action: PayoutBatchAction): PayoutBatchStatus {
@@ -44,6 +47,23 @@ export function nextPayoutBatchStatus(current: PayoutBatchStatus, action: Payout
     })
   }
   return next
+}
+
+/** สถานะต้นทางทั้งหมดที่ทำ action นี้ได้ — ใช้เป็นเงื่อนไข `WHERE status IN (…)` กันแข่งกันเปลี่ยนสถานะ */
+export function statusesAllowing(action: PayoutBatchAction): PayoutBatchStatus[] {
+  return Object.keys(TRANSITIONS[action]) as PayoutBatchStatus[]
+}
+
+/**
+ * รอบที่ยกเลิกแล้ว (มติ PO U67) ห้ามดาวน์โหลดไฟล์โอน/ออกเอกสารจ่ายเงิน — ไม่มีการจ่ายจริงเกิดขึ้น
+ * `purpose` ใช้ลงรายละเอียดของ error เท่านั้น
+ */
+export function assertPayoutNotCancelled(status: PayoutBatchStatus, purpose: 'payment_file' | 'document'): void {
+  if (status !== 'cancelled') return
+  throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', {
+    detail: `cancelled batch: ${purpose}`,
+    context: { currentStatus: status },
+  })
 }
 
 /**
@@ -124,6 +144,54 @@ export const PAYOUT_STATUS_LABEL: Readonly<Record<PayoutBatchStatus, string>> = 
   checking: 'กำลังตรวจสอบ',
   file_generated: 'สร้างไฟล์โอนแล้ว',
   completed: 'จ่ายสำเร็จ',
+  cancelled: 'ยกเลิกแล้ว',
+}
+
+/** ความยาวขั้นต่ำของเหตุผล — เท่ากับ action อื่นของรอบจ่าย (`reasonSchema` ใน `schemas.ts`) */
+export const PAYOUT_CANCEL_REASON_MIN_LENGTH = 5
+
+/**
+ * มติ PO U67 · Rule 04 — ยกเลิกรอบจ่ายต้องมีเหตุผลเสมอ (`CANCEL_REQUIRES_REASON`) · คืนค่าที่ trim แล้ว
+ * ตรวจที่ชั้น pure (ไม่ใช่ field error ของ Zod) เพื่อให้ผู้ใช้ได้ code ตรงตามทะเบียน
+ */
+export function requirePayoutCancelReason(reason: string | null | undefined): string {
+  const trimmed = (reason ?? '').trim()
+  if (trimmed.length < PAYOUT_CANCEL_REASON_MIN_LENGTH) throw new PayoutError('CANCEL_REQUIRES_REASON')
+  return trimmed
+}
+
+export interface PayoutCancelGuardInput {
+  status: PayoutBatchStatus
+  /** เคยสร้างไฟล์โอนแล้ว (`payment_file_generated_at`) */
+  paymentFileGenerated: boolean
+  /** ผู้ใช้ติ๊กยืนยันว่ายังไม่ได้อัปโหลดไฟล์โอนเข้าธนาคาร */
+  confirmFileNotSent: boolean
+  /** มีบัญชีค่าใช้จ่าย (`expense_records`) ของรายการในรอบแล้ว = เงินออกแล้วในมุมบัญชี */
+  hasExpenseRecords: boolean
+  /** มีรายการเดินบัญชีจับคู่กับรอบนี้แล้ว = ธนาคารเห็นเงินออกแล้ว */
+  hasBankMatch: boolean
+}
+
+/**
+ * มติ PO U67 — **ยกเลิกได้เฉพาะก่อนโอนจริง** (ยามเดียวของทั้ง API และปุ่มบนหน้าจอ)
+ * ลำดับ: โอนแล้ว (`PAYOUT_BATCH_ALREADY_PAID`) → สถานะ (`PAYOUT_BATCH_INVALID_STATUS`) →
+ * ไฟล์โอนที่สร้างแล้วต้องยืนยันว่ายังไม่ส่งธนาคาร (`PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED`)
+ *
+ * ⚠️ ระบบรู้ไม่ได้ว่าไฟล์ถูกอัปโหลดเข้าธนาคารแล้วหรือยัง ⇒ ให้คนยืนยันและบันทึกลง audit
+ *    (รอบใหม่จะได้ idempotency key ใหม่ — ถ้าไฟล์เดิมถูกโอนไปแล้ว ธนาคารจับซ้ำไม่ได้)
+ */
+export function assertPayoutCancellable(input: PayoutCancelGuardInput): PayoutBatchStatus {
+  if (input.status === 'completed' || input.hasExpenseRecords || input.hasBankMatch) {
+    throw new PayoutError('PAYOUT_BATCH_ALREADY_PAID', {
+      detail: `status=${input.status} expense_records=${input.hasExpenseRecords} bank_match=${input.hasBankMatch}`,
+      context: { currentStatus: input.status },
+    })
+  }
+  const next = nextPayoutBatchStatus(input.status, 'cancel')
+  if (input.paymentFileGenerated && !input.confirmFileNotSent) {
+    throw new PayoutError('PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED', { context: { currentStatus: input.status } })
+  }
+  return next
 }
 
 /**

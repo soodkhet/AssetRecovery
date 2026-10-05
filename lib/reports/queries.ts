@@ -376,7 +376,8 @@ export async function getDashboardKpi(
       select: { id: true, grossSatang: true },
     }),
     prisma.payoutBatch.findMany({
-      where: { organizationId, deletedAt: null, status: { not: 'completed' } },
+      // ยังรอเงินออก = ไม่ใช่ completed และไม่ใช่ cancelled (มติ PO U67)
+      where: { organizationId, deletedAt: null, status: { notIn: ['completed', 'cancelled'] } },
       select: { id: true, netSatang: true },
     }),
     prisma.billingBatch.findMany({

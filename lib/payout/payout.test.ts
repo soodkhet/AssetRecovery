@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   assertBatchItemsEditable,
   assertHasItemsToPay,
+  assertPayoutCancellable,
+  assertPayoutNotCancelled,
   assertPayeesVerified,
   assertSingleSide,
   buildIdempotencyKey,
@@ -11,7 +13,9 @@ import {
   nextPayoutBatchStatus,
   paymentFileName,
   paymentFileStoragePath,
+  requirePayoutCancelReason,
   resolvePayoutSide,
+  statusesAllowing,
   whtFallbackWarning,
 } from '@/lib/payout/payout'
 
@@ -58,6 +62,67 @@ describe('state machine (`23` §6.6)', () => {
     expect(() => assertBatchItemsEditable('checking')).not.toThrow()
     expect(codeOf(() => assertBatchItemsEditable('file_generated'))).toBe('PAYOUT_BATCH_INVALID_STATUS')
     expect(codeOf(() => assertBatchItemsEditable('completed'))).toBe('PAYOUT_BATCH_INVALID_STATUS')
+  })
+})
+
+describe('ยกเลิกรอบจ่าย (มติ PO U67 · `23` §6.6)', () => {
+  const guard = {
+    paymentFileGenerated: false,
+    confirmFileNotSent: false,
+    hasExpenseRecords: false,
+    hasBankMatch: false,
+  }
+
+  it('ยกเลิกได้จาก draft / checking / file_generated → cancelled', () => {
+    expect(nextPayoutBatchStatus('draft', 'cancel')).toBe('cancelled')
+    expect(nextPayoutBatchStatus('checking', 'cancel')).toBe('cancelled')
+    expect(nextPayoutBatchStatus('file_generated', 'cancel')).toBe('cancelled')
+    expect(statusesAllowing('cancel').sort()).toEqual(['checking', 'draft', 'file_generated'])
+  })
+
+  it('cancelled เป็น terminal — ทำ action ใดต่อไม่ได้', () => {
+    for (const action of ['collect', 'generate_file', 'complete', 'cancel'] as const) {
+      expect(codeOf(() => nextPayoutBatchStatus('cancelled', action))).toBe('PAYOUT_BATCH_INVALID_STATUS')
+    }
+  })
+
+  it('โอนแล้ว (completed / มีบัญชีค่าใช้จ่าย / จับคู่ธนาคาร) = PAYOUT_BATCH_ALREADY_PAID', () => {
+    expect(codeOf(() => assertPayoutCancellable({ ...guard, status: 'completed' }))).toBe('PAYOUT_BATCH_ALREADY_PAID')
+    expect(
+      codeOf(() => assertPayoutCancellable({ ...guard, status: 'file_generated', hasExpenseRecords: true })),
+    ).toBe('PAYOUT_BATCH_ALREADY_PAID')
+    expect(
+      codeOf(() =>
+        assertPayoutCancellable({ ...guard, status: 'file_generated', paymentFileGenerated: true, confirmFileNotSent: true, hasBankMatch: true }),
+      ),
+    ).toBe('PAYOUT_BATCH_ALREADY_PAID')
+  })
+
+  it('ยกเลิกซ้ำ = PAYOUT_BATCH_INVALID_STATUS', () => {
+    expect(codeOf(() => assertPayoutCancellable({ ...guard, status: 'cancelled' }))).toBe('PAYOUT_BATCH_INVALID_STATUS')
+  })
+
+  it('สร้างไฟล์โอนแล้วต้องยืนยันว่ายังไม่ส่งธนาคาร', () => {
+    expect(
+      codeOf(() => assertPayoutCancellable({ ...guard, status: 'file_generated', paymentFileGenerated: true })),
+    ).toBe('PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED')
+    expect(
+      assertPayoutCancellable({ ...guard, status: 'file_generated', paymentFileGenerated: true, confirmFileNotSent: true }),
+    ).toBe('cancelled')
+    expect(assertPayoutCancellable({ ...guard, status: 'checking' })).toBe('cancelled')
+  })
+
+  it('เหตุผลบังคับ ≥ 5 ตัวอักษร (CANCEL_REQUIRES_REASON) · คืนค่าที่ trim แล้ว', () => {
+    expect(codeOf(() => requirePayoutCancelReason(''))).toBe('CANCEL_REQUIRES_REASON')
+    expect(codeOf(() => requirePayoutCancelReason('   '))).toBe('CANCEL_REQUIRES_REASON')
+    expect(codeOf(() => requirePayoutCancelReason(undefined))).toBe('CANCEL_REQUIRES_REASON')
+    expect(codeOf(() => requirePayoutCancelReason('abcd'))).toBe('CANCEL_REQUIRES_REASON')
+    expect(requirePayoutCancelReason('  ดึงรายการผิด  ')).toBe('ดึงรายการผิด')
+  })
+
+  it('รอบที่ยกเลิกห้ามดาวน์โหลดไฟล์โอน/ออกเอกสารจ่าย', () => {
+    expect(codeOf(() => assertPayoutNotCancelled('cancelled', 'payment_file'))).toBe('PAYOUT_BATCH_INVALID_STATUS')
+    expect(codeOf(() => assertPayoutNotCancelled('file_generated', 'document'))).toBe('NO_THROW')
   })
 })
 

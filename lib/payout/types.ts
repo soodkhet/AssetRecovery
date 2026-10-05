@@ -31,6 +31,10 @@ export interface PayoutBatchDto {
   createdAt: string
   createdByName: string
   updatedAt: string
+  /** ยกเลิกรอบจ่าย (มติ PO U67) — มีค่าเฉพาะ `status = cancelled` */
+  cancelledAt: string | null
+  cancelledByName: string | null
+  cancelReason: string | null
 }
 
 /** แหล่งที่มาของรายการในรอบ (`02` §8 A4 — separate FK, exactly-one non-null) */
