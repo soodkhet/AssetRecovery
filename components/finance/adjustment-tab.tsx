@@ -42,7 +42,6 @@ import {
   type AdjustmentTargetFilter,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto } from '@/lib/adjustments/types'
-import { AWAITING_CREDIT_NOTE_LABEL } from '@/lib/credit-notes/credit-note'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 
@@ -66,7 +65,8 @@ export function AdjustmentTab() {
   const { items, loading, error, reload } = useAdjustments(status, targetType)
   // มติ PO U14 — ลดยอดหลังออกใบกำกับแล้วต้องมีใบลดหนี้ (สำนักงานบัญชีออก) · ลูกค้าเห็นยอดลดเมื่อบันทึกใบลดหนี้แล้ว
   const awaitingCreditNotes = useAwaitingCreditNotes()
-  const awaitingInvoiceOf = new Map(awaitingCreditNotes.items.map((item) => [item.adjustmentId, item.invoiceNumber]))
+  // ป้าย "รอใบลดหนี้" (ลดยอด) / "รอใบเพิ่มหนี้" (เพิ่มยอด — มติ PO U19) มาจาก server พร้อมเลขใบกำกับ
+  const awaitingInvoiceOf = new Map(awaitingCreditNotes.items.map((item) => [item.adjustmentId, item]))
 
   const [createOpen, setCreateOpen] = useState(false)
   const [review, setReview] = useState<{ adjustment: AdjustmentDto; mode: 'approve' | 'reject' } | null>(null)
@@ -188,9 +188,9 @@ export function AdjustmentTab() {
                       />
                       {awaitingInvoiceOf.has(row.id) && (
                         <div className="mt-1">
-                          <StatusBadge group="pending" label={AWAITING_CREDIT_NOTE_LABEL} />
+                          <StatusBadge group="pending" label={awaitingInvoiceOf.get(row.id)?.label ?? ''} />
                           <p className="mt-0.5 text-[10px] text-slate-400">
-                            ใบกำกับ <span className="font-mono">{awaitingInvoiceOf.get(row.id)}</span>
+                            ใบกำกับ <span className="font-mono">{awaitingInvoiceOf.get(row.id)?.invoiceNumber}</span>
                           </p>
                         </div>
                       )}
