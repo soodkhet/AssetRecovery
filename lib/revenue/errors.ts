@@ -28,7 +28,7 @@ const HTTP_STATUS: Record<RevenueErrorCode, number> = {
 const MESSAGES: Record<RevenueErrorCode, ErrorMessage> = {
   NO_REVENUE_TO_BILL: {
     title: 'ไม่มีรายได้ให้วางบิล',
-    message: 'ไม่มีรายการรายได้ที่รอวางบิลของบริษัทนี้ภายในรอบที่เลือก',
+    message: 'ไม่มีรายการรายได้ที่ยังไม่วางบิลของบริษัทนี้จนถึงวันตัดรอบที่เลือก',
   },
   EDIT_BILLED_REVENUE: {
     title: 'แก้รายได้ที่วางบิลแล้วไม่ได้',
@@ -54,8 +54,18 @@ export function revenueErrorMessage(code: RevenueErrorCode): ErrorMessage {
 }
 
 export class RevenueError extends ModuleError<RevenueErrorCode> {
-  constructor(code: RevenueErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /**
+   * `message` = ข้อความเฉพาะสถานการณ์แทนข้อความกลางของ code (code/HTTP status คงเดิม) — ใช้เมื่อข้อความกลาง
+   * บอกสาเหตุจริงไม่ได้ เช่น สร้างรอบวางบิลไม่ได้เพราะยังมีรอบร่างค้าง (มติ U86 · BUG-155)
+   */
+  constructor(
+    code: RevenueErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: ErrorMessage },
+  ) {
+    super(code, options?.message ?? MESSAGES[code], HTTP_STATUS[code], {
+      detail: options?.detail,
+      context: options?.context,
+    })
     this.name = 'RevenueError'
   }
 }

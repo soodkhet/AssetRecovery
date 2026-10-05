@@ -108,7 +108,7 @@ export function RevenueTab() {
       title: action.kind === 'send' ? 'ส่งบิลแล้ว' : 'ลบรอบวางบิลแล้ว',
       description:
         action.kind === 'send'
-          ? `${action.batch.companyName} งวด ${action.batch.period} — ${fmtSatangSymbol(action.batch.totalSatang)}`
+          ? `${action.batch.batchNumber} · ${action.batch.companyName} งวด ${action.batch.period} — ${fmtSatangSymbol(action.batch.totalSatang)}`
           : `รายได้ในรอบถูกปล่อยกลับเป็น "รอวางบิล" ทั้งหมด`,
     })
     setAction(null)
@@ -143,7 +143,7 @@ export function RevenueTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รอบวางบิล (Billing Batches)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              1 บริษัท 1 งวด = 1 รอบ · รับชำระจริงมาจากการจับคู่รายการเดินบัญชี ไม่ใช่กรอกมือ
+              เดือนเดียวมีได้หลายรอบ · รับชำระจริงมาจากการจับคู่รายการเดินบัญชี ไม่ใช่กรอกมือ
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -386,7 +386,7 @@ export function RevenueTab() {
       <ReasonConfirmModal
         open={action !== null}
         title={action?.kind === 'delete' ? 'ลบรอบวางบิล (Draft)' : 'ส่งบิลให้บริษัทไฟแนนซ์'}
-        description={action === null ? undefined : `${action.batch.companyName} งวด ${action.batch.period}`}
+        description={action === null ? undefined : `${action.batch.batchNumber} · ${action.batch.companyName} งวด ${action.batch.period}`}
         confirmLabel={action?.kind === 'delete' ? 'ลบรอบวางบิล' : 'ยืนยันส่งบิล'}
         confirmVariant={action?.kind === 'delete' ? 'danger' : 'primary'}
         loading={busy}

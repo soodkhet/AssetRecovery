@@ -2594,7 +2594,9 @@ model BillingBatch {
   allocations             BankTransactionAllocation[]
   customerWhtCertificates CustomerWhtCertificate[]
 
-  @@unique([organizationId, companyId, period])
+  /// มติ PO U86 (BUG-155) — ถอด UNIQUE(org, company, period) แล้ว: 1 บริษัทมีหลายรอบวางบิลในเดือนเดียวกันได้
+  /// เหลือ index ธรรมดาไว้ค้นรอบตามงวด · ตัวกันวางบิลซ้ำคือ 1:1 `revenues.billing_batch_id` (ยึดเฉพาะใบที่ยังว่าง)
+  @@index([organizationId, companyId, period], map: "idx_billing_org_company_period")
   @@unique([organizationId, batchNumber], map: "uniq_billing_batch_number")
   @@index([organizationId, status], map: "idx_billing_org_status")
   @@index([companyId, status], map: "idx_billing_company")

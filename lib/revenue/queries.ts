@@ -23,9 +23,10 @@ import {
   assertBillingBatchDeletable,
   assertBillingBatchSendable,
   assertHasRevenueToBill,
+  assertNoOpenDraftBatch,
   assertRevenueEditable,
+  billableRevenueDateFilter,
   billingPeriodLabel,
-  periodStartOf,
   resolveBillingStatusAfterReceipt,
   summarizeBillingBatch,
   toBangkokDateOnly,
@@ -58,9 +59,10 @@ import { toDateOnlyIso, toIso } from '@/lib/settings/queries/shared'
  * - **การสร้าง Revenue ไม่ได้อยู่ที่นี่** — เกิดอัตโนมัติจาก `tryCreateRevenue()`
  *   (`lib/warehouse/revenue-service.ts`) ตอน lot confirm / expense approved เท่านั้น (`19` §6.1)
  *   ไม่มี endpoint ให้สร้าง/แก้ยอดรายได้ด้วยมือ — แก้ยอดต้องผ่าน Adjustment (ไฟล์ 20)
- * - **1 บริษัท 1 รอบเดือน = 1 Billing Batch** (`19` §6.2) บังคับด้วย unique
- *   `(organization_id, company_id, period)` ของ `02` §8 — ชนกันเมื่อไหร่คืน `NO_REVENUE_TO_BILL`
- *   ไม่ได้ เพราะคนละเรื่อง ⇒ ปล่อยให้ Prisma โยน P2002 ขึ้นไปเป็น 500 ไม่ได้เช่นกัน จึงเช็คก่อนสร้าง
+ * - **หลายรอบวางบิลต่อบริษัทต่อเดือนได้** (มติ PO U86 · BUG-155 — `19` §6.2 v2.5) — รอบใหม่ดึงรายได้
+ *   ที่ยังไม่เคยวางบิลทั้งหมดของบริษัทที่ `revenue_date ≤ วันตัดรอบ` (รวมค้างจากเดือนก่อน) · ไม่ซ้ำกับรอบอื่น
+ *   ด้วย 1:1 `revenues.billing_batch_id` (ยึดเฉพาะใบที่ยังว่าง) + ล็อกแถวบริษัท `FOR UPDATE` ต่อคิวการสร้าง
+ *   · ห้ามมีรอบ**ร่าง**ซ้อนของบริษัทเดียวกัน (ต้องส่งหรือลบรอบร่างเดิมก่อน)
  * - **ยอดรวมของรอบมาจาก `summarizeBillingBatch()`** (pure) ห้ามบวกเองที่นี่ ·
  *   ยอดค้างจาก `arOutstandingSatang()` (`22` §6.11) · ช่วงอายุหนี้จาก `finance_policy_settings`
  * - **`received_amount` ห้ามกรอกมือ** (`19` §9.2) — อัปเดตผ่าน `applyBillingReceipt()` ที่ไฟล์ 35
@@ -355,7 +357,6 @@ export async function createBillingBatch(
   if (company === null) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${input.companyId}` })
 
   const period = billingPeriodLabel(input.cutoffDate)
-  const periodStart = periodStartOf(input.cutoffDate)
 
   // Period Lock (`13` §6.11 · Phase 4.1) — งวดที่ปิดแล้วห้ามสร้างรอบวางบิลย้อนหลัง ต้องใช้ Adjustment
   await assertPeriodOpenForLabel({
@@ -363,18 +364,6 @@ export async function createBillingBatch(
     periodLabel: period,
     targetType: 'billing_batches',
   })
-
-  // 1 บริษัท 1 รอบเดือน = 1 batch (`19` §6.2 + unique `02` §8) — เช็คก่อนเพื่อไม่ให้ P2002 กลายเป็น 500
-  const existing = await prisma.billingBatch.findFirst({
-    where: { organizationId: user.organizationId, companyId: company.id, period },
-    select: { id: true, status: true },
-  })
-  if (existing !== null) {
-    throw new RevenueError('BILLING_BATCH_INVALID_STATUS', {
-      detail: `มีรอบวางบิลของ ${company.name} งวด ${period} อยู่แล้ว (id=${existing.id} status=${existing.status})`,
-      context: { existingBatchId: existing.id, period },
-    })
-  }
 
   const { dueDate, source } = await resolveBatchDueDate({
     organizationId: user.organizationId,
@@ -384,7 +373,19 @@ export async function createBillingBatch(
   })
 
   const batchId = await prisma.$transaction(async (tx) => {
-    // รายได้ที่พร้อมวางบิลของบริษัทนี้ในงวด — ยึดเฉพาะใบที่ยังไม่ผูกรอบใด (กันสองรอบแย่งใบเดียวกัน)
+    // ต่อคิวการสร้างรอบของบริษัทเดียวกัน (มติ U86) — สองคนกดพร้อมกัน คนที่สองรอจนคนแรก commit
+    // แล้วเห็นรอบร่างของคนแรก ⇒ ได้ข้อความ "มีรอบร่างค้าง" แทนการแย่งรายได้ชุดเดียวกัน
+    await tx.$queryRaw`SELECT id FROM finance_companies WHERE id = ${company.id}::uuid FOR UPDATE`
+
+    const openDraft = await tx.billingBatch.findFirst({
+      where: { organizationId: user.organizationId, companyId: company.id, status: 'draft', deletedAt: null },
+      select: { id: true, batchNumber: true, period: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    assertNoOpenDraftBatch(openDraft, company.name)
+
+    // รายได้ที่ยังไม่เคยวางบิลทั้งหมดของบริษัทถึงวันตัดรอบ (รวมค้างจากเดือนก่อน — มติ U86)
+    // ยึดเฉพาะใบที่ยังไม่ผูกรอบใด (1:1 — กันสองรอบแย่งใบเดียวกัน)
     const candidates = await tx.revenue.findMany({
       where: {
         organizationId: user.organizationId,
@@ -392,7 +393,7 @@ export async function createBillingBatch(
         deletedAt: null,
         status: 'ready_for_billing',
         billingBatchId: null,
-        revenueDate: { gte: periodStart, lte: input.cutoffDate },
+        revenueDate: billableRevenueDateFilter(input.cutoffDate),
       },
       select: { id: true, grossSatang: true, vatSatang: true, totalSatang: true },
     })
