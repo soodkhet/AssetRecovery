@@ -45,6 +45,8 @@ export interface HandoverDocModel {
   typeLabel: string
   /** วันที่บนหัวเอกสาร — วันส่งมอบจริงถ้ามี ไม่งั้นวันนัด ไม่งั้นวันที่สร้างล็อต */
   issuedAtLabel: string
+  /** หัวข้อของวันนัด — รับเอง = "วันนัดรับ" · เราจัดส่ง = "กำหนดจัดส่ง" (ตรงกับหน้าดูตัวอย่างใบส่งมอบ) */
+  scheduledAtCaption: string
   scheduledAtLabel: string
   deliveredAtLabel: string
   confirmedAtLabel: string
@@ -82,6 +84,11 @@ export function documentIdentifierActual(row: {
   return actual === contract ? null : actual
 }
 
+/** หัวข้อวันนัดตามรูปแบบการส่งมอบ (UAT BUG-080 — ใบส่งมอบต้องแสดงวันนัดเหมือนหน้าดูตัวอย่าง) */
+export function scheduledAtCaption(type: LotDetailDto['type']): string {
+  return type === 'finance_pickup' ? 'วันนัดรับ' : 'กำหนดจัดส่ง'
+}
+
 export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recipient: HandoverParty): HandoverDocModel {
   const issuedAt = lot.deliveredAt ?? lot.scheduledAt ?? lot.createdAt
   return {
@@ -90,6 +97,7 @@ export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recip
     lotNumber: lot.lotNumber,
     typeLabel: HANDOVER_TYPE_LABEL[lot.type],
     issuedAtLabel: fmtDate(issuedAt),
+    scheduledAtCaption: scheduledAtCaption(lot.type),
     scheduledAtLabel: fmtDateTime(lot.scheduledAt),
     deliveredAtLabel: fmtDate(lot.deliveredAt),
     confirmedAtLabel: fmtDateTime(lot.confirmedAt),

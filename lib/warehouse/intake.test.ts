@@ -4,9 +4,12 @@ import { WARNING_ONLY_CODES } from '@/lib/api/error-catalog'
 import { compareAssetIdentity } from '@/lib/warehouse/imei'
 import {
   assertIntakeCondition,
+  assertIntakeIdentity,
   assertRejectReason,
+  IMEI_MISMATCH_FORM_WARNING,
   imeiMismatchWarning,
   INTAKE_PHOTO_ANGLES,
+  requiredIntakeIdentity,
   requiresConditionNote,
 } from '@/lib/warehouse/intake'
 
@@ -101,5 +104,47 @@ describe('รูปหลักฐาน 7 มุม (§8.2 ขั้น 3/3)', 
   it('มีครบ 7 มุมและไม่ซ้ำกัน', () => {
     expect(INTAKE_PHOTO_ANGLES).toHaveLength(7)
     expect(new Set(INTAKE_PHOTO_ANGLES).size).toBe(7)
+  })
+})
+
+describe('assertIntakeIdentity — ต้องกรอกค่าที่ตรวจจริงก่อนรับเข้า (UAT BUG-074)', () => {
+  const codeOf = (run: () => void): string | null => {
+    try {
+      run()
+      return null
+    } catch (error) {
+      return error instanceof ModuleError ? error.code : String(error)
+    }
+  }
+
+  it('สัญญามี IMEI ⇒ ต้องกรอก IMEI (กรอกแค่ serial ไม่พอ)', () => {
+    const contract = { imeiContract: IMEI, serialContract: 'SN-1' }
+    expect(requiredIntakeIdentity(contract)).toBe('imei')
+    expect(codeOf(() => assertIntakeIdentity(contract, { imeiActual: null, serialActual: 'SN-1' }))).toBe(
+      'REQUIRED_MISSING',
+    )
+    expect(codeOf(() => assertIntakeIdentity(contract, { imeiActual: IMEI, serialActual: null }))).toBeNull()
+  })
+
+  it('เครื่องที่ไม่มี IMEI (มีแค่ serial) ⇒ ต้องกรอก serial แทน ไม่บังคับ IMEI', () => {
+    const contract = { imeiContract: null, serialContract: 'SN-TAB-001' }
+    expect(requiredIntakeIdentity(contract)).toBe('serial')
+    expect(codeOf(() => assertIntakeIdentity(contract, { imeiActual: null, serialActual: '  ' }))).toBe(
+      'REQUIRED_MISSING',
+    )
+    expect(codeOf(() => assertIntakeIdentity(contract, { imeiActual: null, serialActual: 'SN-TAB-001' }))).toBeNull()
+  })
+
+  it('สัญญาไม่มีทั้งคู่ ⇒ กรอกช่องใดก็ได้ · ว่างทั้งคู่ = ปฏิเสธ', () => {
+    const contract = { imeiContract: null, serialContract: null }
+    expect(requiredIntakeIdentity(contract)).toBe('either')
+    expect(codeOf(() => assertIntakeIdentity(contract, { imeiActual: null, serialActual: null }))).toBe(
+      'REQUIRED_MISSING',
+    )
+    expect(codeOf(() => assertIntakeIdentity(contract, { imeiActual: null, serialActual: 'SN-X' }))).toBeNull()
+  })
+
+  it('ข้อความเตือนบนฟอร์ม (ก่อนบันทึก) ไม่อ้างว่า "บันทึกไว้แล้ว" (UAT BUG-083)', () => {
+    expect(IMEI_MISMATCH_FORM_WARNING.message).not.toContain('บันทึกค่าที่ตรวจจริงไว้แล้ว')
   })
 })

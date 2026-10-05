@@ -23,7 +23,7 @@ import {
 import { AssetDetailModal } from '@/components/warehouse/asset-detail-modal'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
-import { fmtDate } from '@/lib/format/datetime'
+import { fmtDateTime } from '@/lib/format/datetime'
 import {
   EMPTY_ASSET_FILTERS,
   FILTER_ALL,
@@ -384,7 +384,7 @@ export function CustodyTab({
                       </div>
                     </Td>
                     <Td>
-                      <span className="text-xs text-slate-600">{fmtDate(item.receivedAt)}</span>
+                      <span className="text-xs text-slate-600">{fmtDateTime(item.receivedAt)}</span>
                     </Td>
                     <Td>
                       <StatusBadge

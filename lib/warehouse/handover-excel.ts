@@ -45,6 +45,7 @@ export function handoverSheetHeaderBlock(doc: HandoverDocModel): string[][] {
     ['เลขที่ใบส่งมอบ', doc.docRef, 'เลขล็อต', doc.lotNumber],
     ['ผู้ส่งมอบ', doc.issuer.name, 'ผู้รับมอบ', doc.recipient.name],
     ['รูปแบบการส่งมอบ', doc.typeLabel, 'วันที่', doc.issuedAtLabel],
+    [doc.scheduledAtCaption, doc.scheduledAtLabel],
     ['จำนวนเครื่อง', String(doc.totalCount)],
     [],
   ]

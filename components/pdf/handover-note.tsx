@@ -93,6 +93,10 @@ export function HandoverNote({ doc }: { doc: HandoverDocModel }): React.JSX.Elem
             <Text style={styles.headerMeta}>เลขล็อต: {doc.lotNumber}</Text>
             <Text style={styles.headerMeta}>วันที่: {doc.issuedAtLabel}</Text>
             <Text style={styles.headerMeta}>รูปแบบ: {doc.typeLabel}</Text>
+            {/* UAT BUG-080 — วันนัดต้องอยู่บนใบส่งมอบ (หน้าดูตัวอย่างแสดง) */}
+            <Text style={styles.headerMeta}>
+              {doc.scheduledAtCaption}: {doc.scheduledAtLabel}
+            </Text>
           </View>
         </View>
 

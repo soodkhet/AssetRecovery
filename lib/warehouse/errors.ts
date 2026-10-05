@@ -8,7 +8,8 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  * (ตาราง §12 เดิมมีแต่ code ของกติกาธุรกิจ ไม่ได้ลิสต์ code "ไม่พบ/สถานะไม่ตรง" ที่ทุก endpoint ต้องใช้)
  *
  * code ที่ **ไม่** ประกาศซ้ำที่นี่ (ใช้ของโมดูลเดิม):
- * - `PERMISSION_DENIED` → `AuthError` · `REQUIRED_MISSING` → ตัวห่อ validation ของ `lib/api/http.ts`
+ * - `PERMISSION_DENIED` → `AuthError` · `REQUIRED_MISSING` ของ body ที่ผิด schema → ตัวห่อ validation ของ
+ *   `lib/api/http.ts` (`REQUIRED_MISSING` ในรายการนี้ใช้กับกติกาที่ schema ตรวจไม่ได้ — ค่าที่ตรวจจริงของเครื่อง)
  * - `IMEI_MISMATCH` = **เตือน ไม่ block** (Rule 04) — เดินทางมากับ `warning` ของ envelope ไม่ใช่ error
  *   จึงไม่มีในรายการนี้ (ดู `imeiMismatchWarning()` ที่ `lib/warehouse/intake.ts`)
  *
@@ -30,6 +31,8 @@ export const WAREHOUSE_ERROR_CODES = [
   'ASSET_NOT_FOUND',
   'ASSET_INVALID_STATUS',
   'LOT_NOT_FOUND',
+  // code กลาง — คลังใช้กับ "ยืนยันรับเข้าโดยไม่กรอก IMEI/serial ที่ตรวจจริง" (UAT BUG-074)
+  'REQUIRED_MISSING',
 ] as const
 
 export type WarehouseErrorCode = (typeof WAREHOUSE_ERROR_CODES)[number]
@@ -53,6 +56,7 @@ const HTTP_STATUS: Record<WarehouseErrorCode, number> = {
   ASSET_NOT_FOUND: 404,
   ASSET_INVALID_STATUS: 400,
   LOT_NOT_FOUND: 404,
+  REQUIRED_MISSING: 400,
 }
 
 const MESSAGES: Record<WarehouseErrorCode, ErrorMessage> = {
@@ -111,6 +115,10 @@ const MESSAGES: Record<WarehouseErrorCode, ErrorMessage> = {
   LOT_NOT_FOUND: {
     title: 'ไม่พบล็อตส่งมอบ',
     message: 'ไม่พบล็อตที่ระบุ หรือล็อตนี้อยู่นอกขอบเขตข้อมูลของคุณ',
+  },
+  REQUIRED_MISSING: {
+    title: 'ยังไม่ได้กรอก IMEI ที่ตรวจจริง',
+    message: 'ต้องกรอก IMEI ที่ตรวจจริงบนเครื่องก่อนยืนยันรับเข้าคลัง (เครื่องที่ไม่มี IMEI ให้กรอก Serial แทน)',
   },
 }
 

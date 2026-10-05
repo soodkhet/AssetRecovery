@@ -17,6 +17,7 @@
 | v2.1 | 14/08/2569 | §12 เพิ่ม 3 code ที่ตารางเดิมตกหล่น (`ASSET_NOT_FOUND`, `ASSET_INVALID_STATUS`, `LOT_NOT_FOUND`) — code ระดับ "ไม่พบ/สถานะไม่ตรง" ที่ทุก endpoint ของ §15 ต้องใช้ ลงพร้อม implementation Phase 2.13 ตาม Rule 04 (doc + code คอมมิตเดียวกัน) · **business logic เดิมไม่เปลี่ยน** |
 | v2.2 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · หนี้ #1) — แทนที่ "แนบใหม่ = ทับ" ของ §6.4 เดิม**: เอกสารล็อตใช้ path **ต่อเวอร์ชัน** `handover-lots/{lotId}/signed-doc/{uuid}.{ext}` / `handover-lots/{lotId}/delivery-proof/{uuid}.{ext}` (อัปโหลดแบบไม่ทับ — ไฟล์เดิมคงอยู่ให้ตามรอย) + ผูกเข้าล็อตผ่าน `POST /api/handover-lots/:id/documents` (§15) ที่ตรวจว่าล็อตยังไม่ `confirmed` แล้ว server ตรวจไฟล์เอง (มีจริง · path ใต้ล็อต/ชนิดนั้น · PDF/รูปจาก magic bytes · ≤ 10 MB) และเก็บ `signed_doc_hash`/`delivery_proof_hash` · `PATCH …/confirm` ที่ส่ง url ที่ยังไม่ผ่านการตรวจ (หรือไฟล์ที่แนบก่อนมติ) ถูกตรวจแบบเดียวกันก่อนยืนยัน · รูปรับเข้าคลัง (§8.2) ตรวจแบบเดียวกันใต้ `assets/{assetId}/intake/` แล้วเก็บ `assets.photo_hashes` · error `UPLOAD_*` อยู่ `24` §6.3 |
 | v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U22–U24)**: (U22 · BUG-076) §5/§13 ผู้จัดการทีม/หัวหน้าทีม **อ่านคลังอย่างเดียว** เฉพาะทรัพย์ของเคสในทีมที่ตนดูแล (`team_managers` / ทีมของหัวหน้า — `06` §7.2 "✅ (read)") ผ่าน `intake_asset` ระดับ `view` · ทีมอื่นไม่เห็น (list กรอง · detail ตอบ `ASSET_NOT_FOUND`/`LOT_NOT_FOUND`) · ล็อตเห็นเฉพาะเครื่องของทีมตัวเอง ไม่เห็นไฟล์ทั้งล็อตและ export ไม่ได้ · ค่าเริ่มต้นไม่ให้สิทธิ์รับเข้า/ตีกลับกับผู้จัดการทีม (มอบเพิ่มได้ที่ตั้งค่าสิทธิ์) · (U23 · BUG-084) §13 Export Excel/PDF เพิ่ม **บริหาร** (อ่านอย่างเดียว ไม่แก้ล็อต) · (U24 · BUG-078) §6.5/§10/§18 IMEI รับเข้า = ตัดเฉพาะตัวคั่น ช่องว่าง/ขีด/จุด ทุกตำแหน่ง แล้วต้องเหลือตัวเลขล้วน 15 หลักพอดี — มีอักขระอื่นหรือไม่ครบ/เกิน = ปฏิเสธว่ารูปแบบผิด (ไม่ตัดทิ้งเงียบ ๆ) · เก็บเป็นตัวเลข 15 หลักล้วน · เทียบ exact ทุกหลัก ไม่ fuzzy ไม่ตรวจ Luhn (แทนข้อความเดิม "ห้าม trim, ห้าม ignore dash") |
+| v2.4 | 05/10/2569 | **มติ PO U64 (แก้บั๊ก UAT ค้าง)**: (BUG-074) §8.2 ขั้น 1/3 + §12 — ยืนยันรับเข้าโดย**ไม่กรอกค่าที่ตรวจจริง** = `REQUIRED_MISSING` (code กลางของ `24` §6.1 — ไม่ตั้ง code ใหม่): สัญญามี IMEI ⇒ บังคับ IMEI · เครื่องที่มีแค่ serial (A6) ⇒ บังคับ serial แทน · สัญญาไม่มีทั้งคู่ ⇒ กรอกช่องใดก็ได้ — "ว่าง" = ยังไม่ได้ตรวจ ต่างจาก "ไม่ตรงสัญญา" (`IMEI_MISMATCH` เตือนแล้วไปต่อได้เหมือนเดิม) · (BUG-075) §15 body ของ `reject-intake` รับ `imeiActual`/`serialActual` ที่ตรวจพบ (ไม่บังคับ — อ่าน IMEI ไม่ได้ก็ตีกลับได้ · รูปแบบผ่าน `parseImei()`) บันทึกลงเครื่อง + audit `asset.intake_rejected` เก็บ before/after ตาม §14 · (BUG-080) §6.4 ใบส่งมอบ PDF/Excel แสดง "วันนัดรับ"/"กำหนดจัดส่ง" ตามหน้าดูตัวอย่าง · (BUG-077) คอลัมน์วันที่รับเข้าแสดงวันเวลา · ไม่มีการเปลี่ยน state/enum |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -434,6 +435,7 @@ WHEN HandoverLot.status → confirmed:
 |---|---|---|
 | `IMEI_MISMATCH` | imei_actual ≠ imei_contract (exact) | แสดงค่าทั้งสองเปรียบเทียบ + เตือน แต่ไม่ block (ธุรการยืนยันได้) |
 | `INTAKE_MISSING_CONDITION` | ยืนยันรับโดยไม่เลือกสภาพ | reject — inline error |
+| `REQUIRED_MISSING` | ยืนยันรับโดยไม่กรอกค่าที่ตรวจจริง (IMEI · หรือ serial สำหรับเครื่องที่ไม่มี IMEI) | reject — inline error (code กลาง `24` §6.1) |
 | `INTAKE_MISSING_NOTE` | condition = damaged/partial_loss ไม่มี note | reject — inline error |
 | `REJECT_MISSING_REASON` | กดตีกลับโดยไม่กรอก reason | reject — inline error |
 | `MIXED_COMPANY_LOT` | Asset ใน Lot มี company_id ต่างกัน | reject — show mismatched companies |
@@ -522,9 +524,12 @@ limit?:     number   (default: 50)
 **POST /api/assets/:id/reject-intake — Request Body:**
 ```json
 {
-  "rejectReason": "IMEI บนเครื่อง (355000000000999) ไม่ตรงกับสัญญา (355000000000001)"
+  "rejectReason": "IMEI บนเครื่อง (355000000000999) ไม่ตรงกับสัญญา (355000000000001)",
+  "imeiActual":   "355000000000999",
+  "serialActual": null
 }
 ```
+`imeiActual`/`serialActual` ไม่บังคับ (v2.4) — ไม่ส่ง = คงค่าเดิมของเครื่อง
 
 ### HandoverLots
 
