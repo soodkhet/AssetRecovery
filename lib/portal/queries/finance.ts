@@ -1,3 +1,4 @@
+import { creditNotesByInvoice } from '@/lib/credit-notes/queries'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
 import type { BillingBatchStatus } from '@/lib/generated/prisma/enums'
 import { documentedAmountsForBatches, documentedRevenueAmounts } from '@/lib/portal/documented-amounts'
@@ -121,6 +122,11 @@ export async function listPortalTaxInvoices(ctx: PortalContext): Promise<PortalT
     }),
   ])
   if (company === null) return []
+  // ใบลดหนี้ active ของใบที่ผ่าน scope บริษัทแล้วเท่านั้น (คำสั่งเดียว — มติ U14)
+  const creditNotes = await creditNotesByInvoice(
+    rows.map((row) => row.id),
+    { organizationId: ctx.user.organizationId },
+  )
   return rows.map((row) =>
     serializePortalTaxInvoice({
       id: row.id,
@@ -131,6 +137,7 @@ export async function listPortalTaxInvoices(ctx: PortalContext): Promise<PortalT
       vatSatang: row.salesRecord.vatSatang,
       totalSatang: row.salesRecord.totalSatang,
       deliveryFormat: company.defaultInvoiceDeliveryFormat,
+      creditNotes: creditNotes.get(row.id) ?? [],
     }),
   )
 }

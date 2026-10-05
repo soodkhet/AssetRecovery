@@ -154,6 +154,22 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
         vatSatang: 7_000,
         totalSatang: 107_000,
         deliveryFormat: 'paper_pdf',
+        // ใบลดหนี้ (มติ U14): แถวภายในมี reason/ไฟล์สแกน/Adjustment/ผู้บันทึก — ต้องไม่หลุด
+        creditNotes: [
+          {
+            ...FORBIDDEN,
+            reason: 'เหตุผลลดหนี้ภายในลับ',
+            filePath: 'storage/secret/credit-note.pdf',
+            fileSha256: 'b'.repeat(64),
+            adjustmentId: 'adjustment-uuid-secret',
+            id: 'cn-1',
+            creditNoteNumber: 'CN-2569-0001',
+            issueDate: '2026-10-01T00:00:00.000Z',
+            amountBeforeVatSatang: 10_000,
+            vatSatang: 700,
+            totalSatang: 10_700,
+          } as Parameters<typeof serializePortalTaxInvoice>[0]['creditNotes'][number],
+        ],
       }),
     )
     const lotAsset = { ...FORBIDDEN, id: 'asset-1', caseRef: 'SF-1', debtorName: 'ก', deviceDesc: 'iPhone 15', condition: null, conditionNote: null, photos: [PHOTO_PATH] }
@@ -185,6 +201,37 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
 })
 
 describe('portal serializers — เนื้อหา', () => {
+  it('ใบกำกับ + ใบลดหนี้ (U14): ยอดหน้าใบไม่หัก · ยอดสุทธิ = หน้าใบ − ใบลดหนี้ · ใบลดหนี้มีแค่ฟิลด์ whitelist', () => {
+    const dto = serializePortalTaxInvoice({
+      id: 'ti-2',
+      invoiceNumber: 'INV-2569-0002',
+      invoiceDate: new Date('2026-09-30T00:00:00Z'),
+      status: 'active',
+      totalBeforeVatSatang: 100_000,
+      vatSatang: 7_000,
+      totalSatang: 107_000,
+      deliveryFormat: 'paper_pdf',
+      creditNotes: [
+        {
+          id: 'cn-1',
+          creditNoteNumber: 'CN-1',
+          issueDate: new Date('2026-10-01T00:00:00Z'),
+          amountBeforeVatSatang: 10_000,
+          vatSatang: 700,
+          totalSatang: 10_700,
+          reason: 'ลับ',
+          createdBy: 'u-1',
+          filePath: 'x/y.pdf',
+          adjustmentId: 'adj-1',
+        } as Parameters<typeof serializePortalTaxInvoice>[0]['creditNotes'][number],
+      ],
+    })
+    expect(dto).toMatchObject({ totalSatang: 107_000, netBeforeVatSatang: 90_000, netVatSatang: 6_300, netTotalSatang: 96_300 })
+    expect(dto.creditNotes).toEqual([
+      { id: 'cn-1', creditNoteNumber: 'CN-1', issueDate: '2026-10-01', amountBeforeVatSatang: 10_000, vatSatang: 700, totalSatang: 10_700 },
+    ])
+  })
+
   it('need_info + reason → "ขอข้อมูลเพิ่มเติม" พร้อมเหตุผล (97 §20)', () => {
     const dto = serializePortalCaseListItem(caseRow('need_info'))
     expect(dto.statusDisplay.label).toBe('ขอข้อมูลเพิ่มเติม')

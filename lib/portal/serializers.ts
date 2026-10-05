@@ -1,3 +1,4 @@
+import { netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
 import { arOutstandingSatang } from '@/lib/finance/ar-calc'
 import type {
   AssetCondition,
@@ -252,6 +253,28 @@ export interface PortalTaxInvoiceSource {
   vatSatang: number
   totalSatang: number
   deliveryFormat: InvoiceDeliveryFormat
+  /** ใบลดหนี้ **active** ที่อ้างถึงใบนี้ (มติ U14) — แถวภายในส่งมาได้ แต่ส่งออกเฉพาะฟิลด์ใน `PortalCreditNoteDto` */
+  creditNotes: readonly PortalCreditNoteSource[]
+}
+
+export interface PortalCreditNoteSource {
+  id: string
+  creditNoteNumber: string
+  /** ISO (date-only หรือ timestamp) — ส่งออกเป็น `YYYY-MM-DD` */
+  issueDate: string | Date
+  amountBeforeVatSatang: number
+  vatSatang: number
+  totalSatang: number
+}
+
+/** ใบลดหนี้ที่ลูกค้าเห็น — ไม่มีเหตุผลภายใน/ผู้บันทึก/ไฟล์สแกน/Adjustment ต้นเหตุ */
+export interface PortalCreditNoteDto {
+  id: string
+  creditNoteNumber: string
+  issueDate: string
+  amountBeforeVatSatang: number
+  vatSatang: number
+  totalSatang: number
 }
 
 export interface PortalTaxInvoiceDto {
@@ -264,9 +287,19 @@ export interface PortalTaxInvoiceDto {
   deliveryFormat: InvoiceDeliveryFormat
   deliveryFormatLabel: string
   statusDisplay: PortalStatusDisplay<TaxInvoiceStatus>
+  /** ใบลดหนี้ active (เรียงตามวันที่ออก) — ยอดหน้าใบด้านบนไม่หัก (ใบลดหนี้เป็นเอกสารแยก) */
+  creditNotes: PortalCreditNoteDto[]
+  /** ยอดสุทธิหลังหักใบลดหนี้ active = ยอดหน้าใบ − ใบลดหนี้ (ไม่มีใบลดหนี้ ⇒ เท่ายอดหน้าใบ) */
+  netBeforeVatSatang: number
+  netVatSatang: number
+  netTotalSatang: number
 }
 
 export function serializePortalTaxInvoice(row: PortalTaxInvoiceSource): PortalTaxInvoiceDto {
+  const net = netInvoiceAmounts(
+    { totalBeforeVatSatang: row.totalBeforeVatSatang, vatSatang: row.vatSatang, totalSatang: row.totalSatang },
+    row.creditNotes.map((note) => ({ ...amountsOf(note), status: 'active' as const })),
+  )
   return {
     id: row.id,
     invoiceNumber: row.invoiceNumber,
@@ -277,6 +310,23 @@ export function serializePortalTaxInvoice(row: PortalTaxInvoiceSource): PortalTa
     deliveryFormat: row.deliveryFormat,
     deliveryFormatLabel: INVOICE_DELIVERY_FORMAT_LABEL[row.deliveryFormat],
     statusDisplay: portalTaxInvoiceStatusDisplay(row.status),
+    creditNotes: row.creditNotes.map(serializePortalCreditNote),
+    netBeforeVatSatang: net.totalBeforeVatSatang,
+    netVatSatang: net.vatSatang,
+    netTotalSatang: net.totalSatang,
+  }
+}
+
+function amountsOf(note: PortalCreditNoteSource): { amountBeforeVatSatang: number; vatSatang: number; totalSatang: number } {
+  return { amountBeforeVatSatang: note.amountBeforeVatSatang, vatSatang: note.vatSatang, totalSatang: note.totalSatang }
+}
+
+export function serializePortalCreditNote(note: PortalCreditNoteSource): PortalCreditNoteDto {
+  return {
+    id: note.id,
+    creditNoteNumber: note.creditNoteNumber,
+    issueDate: typeof note.issueDate === 'string' ? note.issueDate.slice(0, 10) : dateOnly(note.issueDate),
+    ...amountsOf(note),
   }
 }
 

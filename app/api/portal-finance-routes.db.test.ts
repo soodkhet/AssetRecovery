@@ -84,6 +84,7 @@ type Routes = {
   dashboard: typeof import('@/app/api/portal/dashboard/route')
   revenueQueries: typeof import('@/lib/revenue/queries')
   providers: typeof import('@/lib/reports/finance/providers')
+  documented: typeof import('@/lib/portal/documented-amounts')
 }
 let routes: Routes
 
@@ -167,6 +168,13 @@ const FORBIDDEN_KEYS = new Set([
   'imei',
   'imeiContract',
   'teamId',
+  // ใบลดหนี้ (มติ U14): เหตุผลภายใน/ไฟล์สแกน/Adjustment ต้นเหตุ/ผู้ยกเลิก ห้ามหลุด
+  'reason',
+  'filePath',
+  'fileSha256',
+  'adjustmentId',
+  'vatRatePctUsed',
+  'cancelledAt',
 ])
 
 function forbiddenKeysIn(value: unknown, path = '$'): string[] {
@@ -252,6 +260,35 @@ async function seedApprovedDecrease(target: 'revenue_id' | 'billing_batch_id', t
 
 let periodId = ''
 
+/** ใบลดหนี้ active (เลขที่จากสำนักงานบัญชี) — trigger DB ตรวจยอดไม่เกินใบกำกับ */
+async function seedCreditNote(options: {
+  invoiceId: string
+  beforeVatSatang: number
+  vatSatang: number
+  adjustmentId?: string
+}): Promise<string> {
+  seq += 1
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO credit_notes (organization_id, tax_invoice_id, adjustment_id, credit_note_number, issue_date,
+                              amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason,
+                              file_path, created_by)
+    VALUES ('${ORG_ID}', '${options.invoiceId}', ${options.adjustmentId === undefined ? 'NULL' : `'${options.adjustmentId}'`},
+            'CNP5-${RUN}-${seq}', '${dayOffset(0)}', ${options.beforeVatSatang}, ${options.vatSatang},
+            ${options.beforeVatSatang + options.vatSatang}, 7.00, $$เหตุผลลดหนี้ภายใน$$,
+            'tax-invoices/secret/credit-notes/scan.pdf', '${FINANCE_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function cancelCreditNoteRow(id: string): Promise<void> {
+  await db().$executeRawUnsafe(`
+    UPDATE credit_notes SET status = 'cancelled', cancel_reason = $$ออกผิด$$, cancelled_by = '${FINANCE_ID}',
+                            cancelled_at = NOW()
+    WHERE id = '${id}'
+  `)
+}
+
 async function seedInvoice(options: {
   batchId: string
   companyId: string
@@ -282,6 +319,13 @@ async function seedInvoice(options: {
 async function cleanup(): Promise<void> {
   const tx = db()
   // ใบกำกับห้ามลบที่ระดับ DB (`02` §13) — ปิด trigger ชั่วคราวเฉพาะการล้าง fixture ของเทสต์ (แบบเดียวกับ accounting-reports.db.test)
+  // ใบลดหนี้ห้ามลบเช่นกัน (ยกเลิกเท่านั้น) — ปิด trigger ชั่วคราวเฉพาะการล้าง fixture
+  await tx.$executeRawUnsafe(`ALTER TABLE credit_notes DISABLE TRIGGER trg_credit_notes_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM credit_notes WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE credit_notes ENABLE TRIGGER trg_credit_notes_no_delete`)
+  }
   await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices DISABLE TRIGGER trg_tax_invoices_no_delete`)
   try {
     await tx.$executeRawUnsafe(`DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`)
@@ -366,6 +410,7 @@ beforeAll(async () => {
     dashboard: await import('@/app/api/portal/dashboard/route'),
     revenueQueries: await import('@/lib/revenue/queries'),
     providers: await import('@/lib/reports/finance/providers'),
+    documented: await import('@/lib/portal/documented-amounts'),
   }
 
   const tx = db()
@@ -672,5 +717,106 @@ suite('มติ U14/U11 — ยอดตามเอกสารที่ออ
       await routes.dashboard.GET(request('/api/portal/dashboard'), undefined),
     )
     expect(dashboard.arOutstanding?.outstandingSatang).toBe(1_070_000 + 1_080_000 + 0 + 0)
+  })
+})
+
+suite('มติ U14 (fixer X3) — ใบลดหนี้ active หักยอดตามเอกสารในพอร์ทัล', () => {
+  async function portalTotals(user: SessionUser) {
+    as(user)
+    const [billing, aging, revenue, dashboard, invoices] = await Promise.all([
+      routes.billing.GET(request('/api/portal/billing-batches'), undefined).then(dataOf<PortalBillingBatchDto[]>),
+      routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined).then(dataOf<PortalArAgingDto>),
+      routes.revenue.GET(request('/api/portal/reports/revenue-summary'), undefined).then(dataOf<PortalRevenueSummaryDto>),
+      routes.dashboard
+        .GET(request('/api/portal/dashboard'), undefined)
+        .then(dataOf<{ arOutstanding?: { outstandingSatang: number } }>),
+      routes.invoices.GET(request('/api/portal/tax-invoices'), undefined).then(dataOf<PortalTaxInvoiceDto[]>),
+    ])
+    return { billing, aging, revenue, dashboard, invoices }
+  }
+
+  it('ใบลดหนี้ 100.00 + VAT 7.00 ⇒ กราฟเดือนนั้น −10,000 · วางบิล/AR/dashboard −10,700 · ใบกำกับยังยอดหน้าใบ + แสดงใบลดหนี้ · ยกเลิกแล้วยอดกลับ', async () => {
+    const creditNoteId = await seedCreditNote({ invoiceId: fx.co1InvoiceActive, beforeVatSatang: 10_000, vatSatang: 700 })
+    const t = await portalTotals(CO1_MANAGER)
+
+    expect(t.revenue.months.at(-1)?.revenueSatang).toBe(1_000_000 - 10_000)
+    expect(t.revenue.total.revenueSatang).toBe(990_000)
+    expect(t.billing.find((item) => item.id === fx.co1Sent)).toMatchObject({
+      totalSatang: 1_070_000 - 10_700,
+      outstandingSatang: 1_070_000 - 10_700,
+    })
+    expect(t.aging.totalOutstandingSatang).toBe(2_150_000 - 10_700)
+    expect(t.dashboard.arOutstanding?.outstandingSatang).toBe(2_150_000 - 10_700)
+
+    const invoice = t.invoices.find((item) => item.id === fx.co1InvoiceActive)
+    expect(invoice).toMatchObject({
+      totalBeforeVatSatang: 1_000_000,
+      vatSatang: 70_000,
+      totalSatang: 1_070_000,
+      netBeforeVatSatang: 990_000,
+      netVatSatang: 69_300,
+      netTotalSatang: 1_059_300,
+    })
+    expect(invoice?.creditNotes).toHaveLength(1)
+    expect(Object.keys(invoice?.creditNotes[0] ?? {}).sort()).toEqual(
+      ['amountBeforeVatSatang', 'creditNoteNumber', 'id', 'issueDate', 'totalSatang', 'vatSatang'].sort(),
+    )
+    expect(invoice?.creditNotes[0]).toMatchObject({ id: creditNoteId, issueDate: dayOffset(0), totalSatang: 10_700 })
+    expect(t.invoices.find((item) => item.id === fx.co1InvoiceCancelled)?.creditNotes).toEqual([])
+    expect(forbiddenKeysIn(t)).toEqual([])
+    expect(JSON.stringify(t)).not.toContain('เหตุผลลดหนี้ภายใน')
+    expect(JSON.stringify(t)).not.toContain('scan.pdf')
+
+    await cancelCreditNoteRow(creditNoteId)
+    const back = await portalTotals(CO1_MANAGER)
+    expect(back.revenue.total.revenueSatang).toBe(1_000_000)
+    expect(back.billing.find((item) => item.id === fx.co1Sent)?.totalSatang).toBe(1_070_000)
+    expect(back.aging.totalOutstandingSatang).toBe(2_150_000)
+    expect(back.dashboard.arOutstanding?.outstandingSatang).toBe(2_150_000)
+    expect(back.invoices.find((item) => item.id === fx.co1InvoiceActive)).toMatchObject({ creditNotes: [], netTotalSatang: 1_070_000 })
+  })
+
+  it('ใบลดหนี้ของบริษัทอื่น (CO2) ไม่กระทบยอดของ CO1 · CO2 เห็นยอดหักของตัวเอง', async () => {
+    await seedCreditNote({ invoiceId: fx.co2Invoice, beforeVatSatang: 50_000, vatSatang: 3_500 })
+    const co1 = await portalTotals(CO1_MANAGER)
+    expect(co1.aging.totalOutstandingSatang).toBe(2_150_000)
+    expect(co1.revenue.total.revenueSatang).toBe(1_000_000)
+    expect(co1.invoices.every((item) => item.creditNotes.length === 0)).toBe(true)
+
+    as(CO2_MANAGER)
+    const co2 = await dataOf<PortalArAgingDto>(await routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined))
+    expect(co2.totalOutstandingSatang).toBe(777_700 - 53_500)
+  })
+
+  it('documentedAmountsForBatches หลายรอบ: หักเฉพาะรอบที่มีใบลดหนี้ · รอบอื่น creditNotes = 0', async () => {
+    await seedCreditNote({ invoiceId: fx.co1InvoiceActive, beforeVatSatang: 20_000, vatSatang: 1_400 })
+    const map = await routes.documented.documentedAmountsForBatches(ORG_ID, [fx.co1Sent, fx.co1Partial])
+    expect(map.get(fx.co1Sent)?.creditNotes).toEqual({ beforeVatSatang: 20_000, vatSatang: 1_400, totalSatang: 21_400 })
+    expect(map.get(fx.co1Sent)?.documented.totalSatang).toBe(1_070_000 - 21_400)
+    expect(map.get(fx.co1Partial)?.creditNotes).toEqual({ beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 })
+  })
+
+  it('กราฟ: ใบลดหนี้ผูก Adjustment → รายได้ ⇒ หักตรงรายได้ใบนั้น · ไม่ผูก ⇒ กระจายตามสัดส่วน', async () => {
+    const batchId = await seedBatch({ companyId: CO1, status: 'sent', totalSatang: 428_000, dueDate: dayOffset(-1) })
+    const revA = await seedRevenue(await seedCase(CO1, 'closed_success'), CO1, 100_000, batchId)
+    const revB = await seedRevenue(await seedCase(CO1, 'closed_success'), CO1, 300_000, batchId)
+    const invoiceId = await seedInvoice({ batchId, companyId: CO1, totalSatang: 428_000 })
+    const adjustment = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, revenue_id, created_by)
+      VALUES ('${ORG_ID}', 'decrease', 40000, 'ปรับลด X3', 'approved', '${revA}', '${FINANCE_ID}') RETURNING id
+    `)
+    await seedCreditNote({ invoiceId, beforeVatSatang: 40_000, vatSatang: 2_800, adjustmentId: adjustment[0]?.id })
+    await seedCreditNote({ invoiceId, beforeVatSatang: 12_000, vatSatang: 840 })
+
+    const amounts = await routes.documented.documentedRevenueAmounts(ORG_ID, [batchId])
+    // ตรง: A 100,000 − 40,000 = 60,000 · จากนั้น 12,000 กระจาย 60,000:300,000 = 2,000:10,000
+    expect(amounts.get(revA)).toBe(58_000)
+    expect(amounts.get(revB)).toBe(290_000)
+
+    as(CO1_MANAGER)
+    const dto = await dataOf<PortalRevenueSummaryDto>(
+      await routes.revenue.GET(request('/api/portal/reports/revenue-summary'), undefined),
+    )
+    expect(dto.total.revenueSatang).toBe(1_000_000 + 400_000 - 52_000)
   })
 })
