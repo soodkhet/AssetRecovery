@@ -16,7 +16,7 @@ import {
 } from '@/lib/portal/serializers'
 import { prisma } from '@/lib/prisma'
 import { buildArAgingReport } from '@/lib/reports/finance/ar-aging-report'
-import { loadRevenueEntries } from '@/lib/reports/finance/providers'
+import { loadRevenueEntries, loadRevenueFailCases } from '@/lib/reports/finance/providers'
 import { buildRevenueSummary } from '@/lib/reports/finance/revenue-summary-report'
 import { previousReportRange } from '@/lib/reports/range'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -183,11 +183,13 @@ export async function getPortalRevenueSummary(
         rows.flatMap((row) => (row.billingBatchId === null ? [] : [row.billingBatchId])),
       ),
   }
-  const [entries, previousEntries] = await Promise.all([
+  const [entries, previousEntries, failCases] = await Promise.all([
     loadRevenueEntries(ctx.user.organizationId, 'month', range, null, filter),
     loadRevenueEntries(ctx.user.organizationId, 'month', previousReportRange(range), null, filter),
+    // U55 — นิยามเดียวกับ F2 ภายใน: เคสของบริษัทนี้ที่ปิดไม่สำเร็จในเดือนนั้นเข้าตัวหาร % สำเร็จ
+    loadRevenueFailCases(ctx.user.organizationId, 'month', range, null, { companyId: ctx.companyId }),
   ])
-  const report = buildRevenueSummary({ groupBy: 'month', entries, previousEntries })
+  const report = buildRevenueSummary({ groupBy: 'month', entries, previousEntries, failCases })
   return serializePortalRevenueSummary({ report, months, rangeStart: range.startDate, rangeEnd: range.endDate })
 }
 

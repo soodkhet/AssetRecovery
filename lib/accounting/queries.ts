@@ -55,6 +55,7 @@ import { exceptionLinkOf, exceptionModuleLabel } from '@/lib/reports/dashboard'
 import { summarizeBillingBatch } from '@/lib/revenue/revenue'
 import { periodLockPolicyFor } from '@/lib/settings/period-lock'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
+import { fmtDate } from '@/lib/format/datetime'
 
 /**
  * รอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — ชั้น DB (`27` §6.13 · §6.16)
@@ -406,12 +407,31 @@ export async function getPeriodReadiness(
 
 // ── รอบบัญชี: เปลี่ยนสถานะ (`23` §6.13) ──────────────────────────────────────
 
+/**
+ * ทางลัดจำลองวันที่ของการส่ง/ล็อกงวด — **เฉพาะ dev** (มติ PO 05/10/2569 U65 · แบบเดียวกับ O10)
+ * เข้าได้ทาง `/api/dev/accounting-periods/:id/(send|lock)` เท่านั้น (production = 404) · route จริงไม่รับเวลาจากผู้เรียก
+ * วันจำลองใช้กับ**ยามสิ้นเดือน + Readiness** เท่านั้น · เวลาที่บันทึก (`sent_at`/`locked_at`) เป็นเวลาจริงเสมอ
+ */
+export interface PeriodCloseSimulation {
+  simulatedNow: Date
+}
+
+/** ป้ายติด audit เมื่อใช้วันจำลอง — `[จำลองวันที่ DD/MM/YYYY]` (พ.ศ. ผ่าน `fmtDate()` กลาง) */
+export function simulatedDateTag(simulatedNow: Date): string {
+  return `[จำลองวันที่ ${fmtDate(simulatedNow)}]`
+}
+
+/** production ห้ามมีวันจำลองหลุดเข้ามาเด็ดขาด (กันชั้นที่สองต่อจาก route ที่ตอบ 404) */
+function effectiveSimulation(simulation: PeriodCloseSimulation | undefined): PeriodCloseSimulation | undefined {
+  return process.env.NODE_ENV === 'production' ? undefined : simulation
+}
+
 async function transitionPeriod(
   ctx: AccountingMutationContext,
   periodId: string,
   to: AccountingPeriodStatus,
   input: PeriodReasonInput,
-  extra: { readiness?: ReadinessResult; unlock?: boolean } = {},
+  extra: { readiness?: ReadinessResult; unlock?: boolean; simulation?: PeriodCloseSimulation } = {},
   now: Date = new Date(),
 ): Promise<AccountingPeriodDto> {
   const row = await findPeriodById(ctx.actor, periodId)
@@ -445,8 +465,15 @@ async function transitionPeriod(
         targetType: PERIOD_TARGET,
         targetId: periodId,
         before: { status: row.status, locked_at: row.lockedAt },
-        after: { status: next.status, locked_at: next.lockedAt },
-        reason: input.reason,
+        after: {
+          status: next.status,
+          locked_at: next.lockedAt,
+          ...(extra.simulation === undefined ? {} : { simulated_as_of: simulatedDateTag(extra.simulation.simulatedNow) }),
+        },
+        reason:
+          extra.simulation === undefined
+            ? input.reason
+            : `${input.reason} ${simulatedDateTag(extra.simulation.simulatedNow)}`,
         ipAddress: ctx.meta.ipAddress,
         userAgent: ctx.meta.userAgent,
       },
@@ -465,28 +492,38 @@ async function transitionPeriod(
     )
   }
 
-  return toPeriodDto(updated, summarizeExceptionCounts([]), undefined, now)
+  return toPeriodDto(updated, summarizeExceptionCounts([]), undefined, extra.simulation?.simulatedNow ?? now)
 }
 
 /**
  * `collecting → sent_to_accountant` — ผ่าน Readiness Check เสมอ **ห้าม force ข้าม** (`30` §10)
  * + ต้องสิ้นเดือนของงวดแล้ว (มติ PO U51 — `PERIOD_NOT_ENDED`) · `now` เปิดไว้ให้เทสต์เส้นขอบเท่านั้น
- * (route ไม่รับเวลาจากผู้เรียก — ไม่มีทางลัดจำลองวันที่ฝั่ง API)
+ * (route จริงไม่รับเวลาจากผู้เรียก) · `simulation` = วันจำลองของทางลัด dev เท่านั้น (U65 — {@link PeriodCloseSimulation})
  */
 export async function sendPeriod(
   ctx: AccountingMutationContext,
   periodId: string,
   input: PeriodReasonInput,
   now: Date = new Date(),
+  simulation?: PeriodCloseSimulation,
 ): Promise<AccountingPeriodDto> {
   assertOrgWideReadable(ctx.actor, 'accounting-periods')
+  const sim = effectiveSimulation(simulation)
+  const asOf = sim?.simulatedNow ?? now
   const row = await findPeriodById(ctx.actor, periodId)
   // เฉพาะ `collecting` — รอบที่ `locked` ต้องไปทาง `unlockPeriod()` ที่บังคับสิทธิ์ผู้บริหาร (`30` §10)
   assertPeriodActionStatus('send', row.status)
-  assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, now)
-  const readiness = await readinessOf(ctx.actor.organizationId, row, now)
+  assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, asOf)
+  const readiness = await readinessOf(ctx.actor.organizationId, row, asOf)
   assertReadyToSend(readiness)
-  return transitionPeriod(ctx, periodId, 'sent_to_accountant', input, { readiness }, now)
+  return transitionPeriod(
+    ctx,
+    periodId,
+    'sent_to_accountant',
+    input,
+    { readiness, ...(sim === undefined ? {} : { simulation: sim }) },
+    now,
+  )
 }
 
 /** `sent_to_accountant → locked` — บัญชี/ผู้บริหารยืนยันปิดงวด (`30` §9) · ต้องสิ้นเดือนแล้ว (U51) */
@@ -495,12 +532,14 @@ export async function lockPeriod(
   periodId: string,
   input: PeriodReasonInput,
   now: Date = new Date(),
+  simulation?: PeriodCloseSimulation,
 ): Promise<AccountingPeriodDto> {
   assertOrgWideReadable(ctx.actor, 'accounting-periods')
+  const sim = effectiveSimulation(simulation)
   const row = await findPeriodById(ctx.actor, periodId)
   assertPeriodActionStatus('lock', row.status)
-  assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, now)
-  return transitionPeriod(ctx, periodId, 'locked', input, {}, now)
+  assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, sim?.simulatedNow ?? now)
+  return transitionPeriod(ctx, periodId, 'locked', input, sim === undefined ? {} : { simulation: sim }, now)
 }
 
 /**

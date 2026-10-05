@@ -135,6 +135,8 @@ export function planFieldDayExpenses(input: {
  * - สำเร็จ + ทรัพย์ยังไม่ผ่านคลัง → `pending_warehouse_confirm`
  * - สำเร็จ + ล็อต confirmed แล้ว → `pending_approval`
  * - ไม่สำเร็จ / ยังไม่ปิดงาน → `pending_approval` (ไม่มีทรัพย์ต้องรอคลัง — ต้นทุนวันนั้นเกิดจริงแล้ว)
+ *   — เคสที่ยังไม่ปิดแล้ว**ปิดสำเร็จภายหลัง**: การปิดงานย้ายแถวที่ยังไม่มีผู้อนุมัติไปรอคลัง
+ *   (`holdFieldDayExpensesForWarehouse()` · BUG-092)
  */
 export function initialFieldDayExpenseStatus(outcome: CaseOutcome | null, lotConfirmed: boolean): ExpenseStatus {
   return outcome === 'closed_success' && !lotConfirmed ? 'pending_warehouse_confirm' : 'pending_approval'

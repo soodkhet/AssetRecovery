@@ -103,6 +103,7 @@ async function seedCase(options: {
   companyId?: string
   teamId?: string
   outcome?: 'closed_success' | 'closed_fail'
+  closedAt?: string
 }): Promise<string> {
   seq += 1
   const caseRef = `RPT62-${seq}-${Date.now()}`
@@ -117,7 +118,7 @@ async function seedCase(options: {
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${options.companyId ?? COMPANY_A}', 'manual',
       '${outcome}', '${FINANCE_ID}',
       'ลูกหนี้ ${seq}', 'เชียงใหม่', 'เมือง', 'smartphone', 'iPhone 15',
-      1000000, '${options.teamId ?? TEAM_A}', '${outcome}', '2026-08-10T03:00:00Z',
+      1000000, '${options.teamId ?? TEAM_A}', '${outcome}', '${options.closedAt ?? '2026-08-10T03:00:00Z'}',
       'SUCCESS_FEE', 0, 10, 'debt_amount'
     ) RETURNING id
   `)
@@ -399,6 +400,26 @@ suite('F2 — สรุปรายได้', () => {
       failCount: 1,
       successPct: 50,
       revenuePerCaseSatang: 35_000_00,
+    })
+  })
+
+  it('U55 — เคสปิดไม่สำเร็จ (ไม่มีรายได้) เข้าตัวหาร % สำเร็จตามวันที่ปิด · ปิดนอกช่วงไม่นับ', async () => {
+    const success = await seedCase({ outcome: 'closed_success' })
+    await seedRevenue(success, 70_000_00)
+    await seedCase({ outcome: 'closed_fail' })
+    // ปิด 31/07 23:30 เวลาไทย = นอกช่วงเดือนสิงหาคม
+    await seedCase({ outcome: 'closed_fail', closedAt: '2026-07-31T16:30:00Z' })
+
+    const payload = await run('revenue-summary', { groupBy: 'company' })
+
+    expect(payload.rows).toHaveLength(1)
+    expect(payload.rows[0]).toMatchObject({
+      revenueSatang: 70_000_00,
+      caseCount: 1,
+      successCount: 1,
+      failCount: 1,
+      successPct: 50,
+      revenuePerCaseSatang: 70_000_00,
     })
   })
 

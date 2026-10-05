@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — ตรวจสอบ enum `accounting_period_status` เทียบกับ `02-database-schema-design.md` แล้ว **ตรงกันทุกตัว ไม่พบ conflict** (ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.13) — **เนื้อหา business logic เดิมคงไว้ครบ** |
 | v2.1 | 04/07/2569 | **เติม error code เงื่อนไขที่ 3 ของ Readiness Check**: §6.2 กำหนด 3 เงื่อนไข แต่ §11 เดิมมี error code แค่ 2 ตัว — เติม `NOT_READY_BILLING_REVENUE_MISMATCH` (ยอดบิลไม่ตรงกับรายได้) พร้อม test case §16 — sync กับไฟล์ 24 v3 แล้ว — หมายเหตุเพิ่มเติม: `critical_count`/`warning_count` ใน §7.1 เป็น **derived field** (นับ real-time จากตาราง `exceptions` ผ่าน index `idx_exceptions_period`) ไม่ใช่ column จริงในตาราง `accounting_periods` — ระบุให้ชัดกัน dev สร้าง column ซ้ำซ้อน |
 | v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (U51/O25)**: ห้าม "ส่งสำนักงานบัญชี" และ "ล็อกงวด" ก่อนงวดนั้นสิ้นเดือน — งวดเดือน M ทำได้ตั้งแต่ **00:00 น. วันที่ 1 ของเดือนถัดไป เวลาไทย** (งวด ต.ค. 2569 → 01/11/2569 00:00 น.) · เติม §6.2a + Readiness ข้อ "งวดสิ้นเดือนแล้ว" · §8 ปุ่มส่ง/ล็อก disable พร้อมข้อความ "ส่ง/ล็อกได้ตั้งแต่ DD/MM/YYYY" · §11/§16 `PERIOD_NOT_ENDED` (sync `24` v4.26) · ไม่มี dev override วันที่ (เทสต์ฉีดเวลาที่ service เท่านั้น) |
+| v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (U65)**: เพิ่มทางลัด **dev เท่านั้น** ส่ง/ล็อกงวดด้วยวันที่จำลอง (`POST /api/dev/accounting-periods/{id}/send|lock` + `asOf` — รายละเอียด `91` §14.2) เพื่อทดสอบ UAT ก่อนสิ้นเดือน · production = 404 · สิทธิ์เดียวกับ route จริง · audit ติด `[จำลองวันที่ DD/MM/YYYY]` · route จริงยังไม่รับเวลาจากผู้เรียก (ยกเลิกถ้อยคำ "ไม่มี dev override วันที่" ของ v2.2 เฉพาะทางลัดนี้) |
 
 ขอบเขตเอกสารนี้: จัดการ "รอบบัญชี" (Accounting Period) แต่ละเดือน — ติดตามสถานะตั้งแต่เก็บข้อมูล จนถึงส่งมอบและล็อกรอบ ครอบคลุม flow ของทั้งกลุ่ม Accounting (31-37) — เป็น**จุดควบคุมกลาง**ที่ Period Lock Policy บังคับใช้
 
@@ -73,6 +74,7 @@
 - ก่อนเวลานั้น → reject `PERIOD_NOT_ENDED` พร้อมวันที่ที่ทำได้ (พ.ศ.) · Readiness Check แสดงข้อ "งวดสิ้นเดือนแล้ว" เป็นข้อแรก (ไม่ผ่าน = ยังไม่พร้อม)
 - ใช้กับ `lock` ด้วยแม้รอบจะถูกส่งไปแล้ว (รอบที่ถูกส่งก่อนมีมตินี้ต้องรอสิ้นเดือนจึงล็อกได้) · `unlock` ไม่ถูกจำกัด
 - UI: ปุ่ม "ส่งสำนักงานบัญชี"/"ล็อกงวด" แสดงแต่ disable พร้อมข้อความ "ส่ง/ล็อกได้ตั้งแต่ DD/MM/YYYY"
+- ทดสอบก่อนสิ้นเดือน (dev/UAT เท่านั้น — มติ PO U65): ทางลัด `POST /api/dev/accounting-periods/{id}/send|lock` รับ `asOf` จำลองวันนี้ให้ยามข้อนี้ · production ตอบ 404 · audit ติด `[จำลองวันที่ DD/MM/YYYY]` (`91` §14.2)
 
 ## 7. Data Entities / Required Objects
 

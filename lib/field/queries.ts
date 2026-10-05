@@ -13,6 +13,7 @@ import { metersToKmHundredths, routePoints } from '@/lib/field/distance'
 import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
 import {
   generateCaseExpenses,
+  holdFieldDayExpensesForWarehouse,
   linkSupersededExpenses,
   resolvePlanSnapshot,
   resolveRoundPricing,
@@ -1236,6 +1237,18 @@ export async function closeFieldCase(
       meta: context.meta,
     })
 
+    // BUG-092 — แถวรายวันที่ job สร้างตอนเคสยังเปิด (`pending_approval`) ต้องรอคลังเหมือนรายการอื่นของเคสสำเร็จ
+    // (หลัง `cases` ถูกอัปเดต ⇒ job ที่กำลังรันรอล็อกแถวเคสแล้วเห็นผลใหม่ — ไม่มีแถวหลุด)
+    const fieldDayHold =
+      outcome === 'closed_success'
+        ? await holdFieldDayExpensesForWarehouse(tx as ExpenseTxClient, {
+            organizationId: user.organizationId,
+            caseId,
+            actor: context.actor,
+            meta: context.meta,
+          })
+        : null
+
     await emitAudit(
       {
         organizationId: user.organizationId,
@@ -1257,6 +1270,9 @@ export async function closeFieldCase(
           expenseIds: expenses.expenseIds,
           fuelDistancePending: expenses.fuelDistancePending,
           assetId: asset?.assetId ?? null,
+          ...(fieldDayHold === null
+            ? {}
+            : { fieldDayExpensesHeld: fieldDayHold.heldIds, fieldDayExpensesNotHeld: fieldDayHold.notHeld }),
           events: [
             outcome === 'closed_success' ? 'case.closed_success' : 'case.closed_fail',
             ...(expenses.expenseIds.length > 0 ? ['expense.case_bound_created'] : []),
@@ -1656,6 +1672,18 @@ export async function resubmitCloseCase(
       reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ — แทนที่รายการเบิกรอบเดิม',
     })
 
+    // BUG-092 — แถวรายวันไม่ถูก supersede (ต้นทุนวันลงพื้นที่เกิดจริง) ⇒ แถวที่ job สร้างระหว่างรอแก้หลักฐาน
+    // ยังต้องรอคลังเมื่อเคสกลับมา `closed_success`
+    const fieldDayHold =
+      outcome === 'closed_success'
+        ? await holdFieldDayExpensesForWarehouse(tx as ExpenseTxClient, {
+            organizationId: user.organizationId,
+            caseId,
+            actor: context.actor,
+            meta: context.meta,
+          })
+        : null
+
     await emitAudit(
       {
         organizationId: user.organizationId,
@@ -1675,6 +1703,9 @@ export async function resubmitCloseCase(
           assetId: asset?.assetId ?? null,
           closedAt: firstClosedAt.toISOString(),
           resubmittedAt: resubmittedAt.toISOString(),
+          ...(fieldDayHold === null
+            ? {}
+            : { fieldDayExpensesHeld: fieldDayHold.heldIds, fieldDayExpensesNotHeld: fieldDayHold.notHeld }),
           events: ['case.close_resubmitted'],
         },
         reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ',
