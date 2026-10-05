@@ -157,6 +157,17 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
     expect(firstVisibleChildPath(VIEWERS.admin_office, 'settings')).toBe('/settings/users')
   })
 
+  /** มติ PO 05/10/2569 U59 — ธุรการที่ถือ `view_client_portal_as` เห็นแท็บบริษัทไฟแนนซ์ (ทางเข้าปุ่มเปิด portal ของลูกค้า) */
+  it('ธุรการที่ถือสิทธิ์ดูพอร์ทัลในฐานะลูกค้าเห็นแท็บบริษัทไฟแนนซ์เพิ่ม — role อื่นไม่เปลี่ยน', () => {
+    const withCapability: MenuViewer = { ...VIEWERS.admin_office, capabilities: { view_client_portal_as: 'view' } }
+    const settings = visibleMenus(withCapability).find((item) => item.id === 'settings')
+    expect(settings?.children?.map((child) => child.id)).toEqual(['settings.users', 'settings.companies'])
+    expect(canViewMenu(withCapability, 'settings.companies')).toBe(true)
+    // ประตูนี้ใช้กับธุรการเท่านั้น — การเงิน/บัญชีถือสิทธิ์เดียวกันก็ไม่เห็นแท็บ (ตามตาราง `06` §7.2)
+    expect(canViewMenu({ ...VIEWERS.finance, capabilities: { view_client_portal_as: 'view' } }, 'settings.companies')).toBe(false)
+    expect(canViewMenu(VIEWERS.executive, 'settings.companies')).toBe(true)
+  })
+
   /** `/settings` ไม่มีเนื้อหาของตัวเอง — ต้องพาไปแท็บแรก**ที่ผู้ใช้เห็น** ไม่ใช่ `/settings/roles` ตายตัว */
   it('แท็บแรกของ "การตั้งค่า" ต่างกันตาม role', () => {
     expect(firstVisibleChildPath(VIEWERS.superadmin, 'settings')).toBe('/settings/roles')

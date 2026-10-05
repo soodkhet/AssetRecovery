@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { HandoverDownloadButton } from '@/components/portal/handover-download-button'
+import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import { Button, EmptyState, ErrorState, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
@@ -127,6 +128,7 @@ function Meta({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function AssetItem({ asset, order, canDownload }: { asset: PortalLotAssetDto; order: number; canDownload: boolean }) {
+  const apiUrl = usePortalApiUrl()
   const photoIndexes = Array.from({ length: asset.photoCount }, (_, index) => index)
 
   return (
@@ -156,7 +158,7 @@ function AssetItem({ asset, order, canDownload }: { asset: PortalLotAssetDto; or
           <div className="mb-1.5 text-[11px] font-bold text-slate-600">ภาพถ่ายสภาพเครื่อง ({photoIndexes.length} รูป)</div>
           <div className="flex flex-wrap gap-2">
             {photoIndexes.map((index) => {
-              const src = portalAssetPhotoApiUrl(asset.id, index)
+              const src = apiUrl(portalAssetPhotoApiUrl(asset.id, index))
               return (
                 <a
                   key={index}

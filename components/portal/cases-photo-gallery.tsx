@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { PortalIcon } from '@/components/portal/portal-icons'
+import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { InlineAlert } from '@/components/ui'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { portalAssetPhotoPath, wrapPhotoIndex } from '@/lib/portal/cases-view'
@@ -25,6 +26,7 @@ export function PortalCasePhotoGallery({
   canView: boolean
   caseRef: string
 }) {
+  const apiUrl = usePortalApiUrl()
   const [openIndex, setOpenIndex] = useState<number | null>(null)
   const [failed, setFailed] = useState<ReadonlySet<number>>(() => new Set())
 
@@ -60,7 +62,7 @@ export function PortalCasePhotoGallery({
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element -- รูป stream ผ่าน API ที่ตรวจสิทธิ์ (ไม่ผ่าน image optimizer)
                 <img
-                  src={portalAssetPhotoPath(assetId, index)}
+                  src={apiUrl(portalAssetPhotoPath(assetId, index))}
                   alt={`รูปสินค้า ${caseRef} รูปที่ ${index + 1}`}
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   onError={() => markFailed(index)}
@@ -106,6 +108,7 @@ function PhotoLightbox({
   onChange: (index: number) => void
   onClose: () => void
 }) {
+  const apiUrl = usePortalApiUrl()
   const panelRef = useRef<HTMLDivElement>(null)
   // ผูก handler ล่าสุดผ่าน ref — effect ลงทะเบียนชั้น modal ครั้งเดียวตอนเปิด (แนวเดียวกับ `<Modal>`)
   const latest = useRef({ index, count, onChange, onClose })
@@ -157,7 +160,7 @@ function PhotoLightbox({
           // eslint-disable-next-line @next/next/no-img-element -- รูป stream ผ่าน API ที่ตรวจสิทธิ์
           <img
             key={index}
-            src={portalAssetPhotoPath(assetId, index)}
+            src={apiUrl(portalAssetPhotoPath(assetId, index))}
             alt={`รูปสินค้า ${caseRef} รูปที่ ${index + 1}`}
             className="h-full w-full object-contain"
             onClick={(event) => event.stopPropagation()}

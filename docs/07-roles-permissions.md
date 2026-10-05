@@ -17,6 +17,7 @@
 | v2.2 | 04/07/2569 | **แก้จำนวน role "14" → "15" ทั้งไฟล์**: นับจริงจาก §5 ได้ 15 role records (system 6 + inhouse 3 + outsource 3 + finance_company 3 — role ชื่อซ้ำคนละกลุ่มเป็น record แยกจริงตาม Core Concepts §6) ตรงกับ seed data จริงใน `02-database-schema-design.md` §12 ซึ่ง insert 15 records — ตัวเลข 14 เดิมเป็นการนับผิด (🔶 รอ Product Owner ยืนยันตัวเลขสุดท้าย) + แก้คำอธิบายการแบ่งกลุ่มจาก "3 Role Group" เป็น "**4 Role Group ใน 3 กลุ่มหลัก**" ให้ตรงกับ Core Concepts §6 ที่ระบุ 4 กลุ่มมาตลอด — **ไม่มีการเพิ่ม/ลด/เปลี่ยนชื่อ role ใดๆ** |
 | v2.3 | 04/07/2569 | ✅ Product Owner **ยืนยันจำนวน 15** แล้ว (DEC-006/D8) — ปิด 🔶 ที่ตั้งไว้ใน v2.2 |
 | v2.4 | 05/10/2569 | **มติ PO 05/10/2569 (U6/O43 D1/D2/D11) — สิทธิ์ 3 ระดับของผู้ใช้บริษัทไฟแนนซ์**: §5.3 แทนคำอธิบายเดิม ("ตามที่ผู้จัดการมอบหมาย") ด้วยการแยกตามหมวดพอร์ทัลผ่าน capability 5 ตัว `portal_cases`/`portal_finance`/`portal_handover`/`portal_profile`/`portal_download` + ค่าเริ่มต้นต่อ role · Superadmin ปรับได้ (ไม่ล็อก) · Superadmin ไม่เข้าพอร์ทัล · ผู้ใช้บริษัทไม่เข้าหน้า/API ภายใน — sync `97` v5 / `25` / `06` |
+| v2.5 | 05/10/2569 | **มติ PO 05/10/2569 (U59)**: §5.1 ธุรการ — เพิ่มค่าเริ่มต้น capability `view_client_portal_as` (ดูพอร์ทัลในฐานะลูกค้าแบบดูอย่างเดียว เพื่อช่วยลูกค้า) · Superadmin โดยนิยาม · role ภายในอื่นมอบได้ (ไม่ใช่ "✅ only") · ไม่สลับ session (ผู้ใช้ภายในยังเป็นตัวเอง) — sync `97` §13.1 / `25` §7.3 / `06` §7.2 |
 
 ขอบเขตเอกสารนี้: รายชื่อ Role ทั้งหมด 15 ตัวของระบบ แบ่ง 4 Role Group ใน 3 กลุ่มหลัก (System, ทีมติดตามทรัพย์ Inhouse/Outsource, Finance Company) พร้อม Permission Matrix สรุปรวมที่ทุกโมดูลต้องอ้างอิง — เป็นไฟล์ที่ไฟล์อื่นทั้งหมด (06, 09, 38, 40, 41, 10-37) อ้างถึงเมื่อพูดถึง role
 
@@ -54,7 +55,7 @@
 | บริหาร (Executive) | อนุมัติ policy, exception, lock/unlock รอบบัญชี, Adjustment ของรอบ locked, รายการเกินเพดาน | Organization | 13, 16, 20, 30, 34 |
 | การเงิน (Finance) | ควบคุม Claim, Advance, Payout, Payee, Billing | Finance scope | 15-19 |
 | บัญชี (Accounting) | ตรวจข้อมูลบัญชี, ส่งออก Accounting Pack, กระทบยอดธนาคาร, WHT | Accounting scope | 31-37 |
-| ธุรการ (Admin) | บันทึกข้อมูลและแนบเอกสารตามสิทธิ์ที่ได้รับมอบหมาย | Assigned scope | 38 |
+| ธุรการ (Admin) | บันทึกข้อมูลและแนบเอกสารตามสิทธิ์ที่ได้รับมอบหมาย · เปิด "ดู portal ในฐานะลูกค้า" (ดูอย่างเดียว — ค่าเริ่มต้น `view_client_portal_as` · มติ U59 · `97` §13.1) | Assigned scope | 38 |
 
 ### 5.2 กลุ่ม Inhouse / Outsource (ทีมติดตามทรัพย์ — แยก role ต่อ Role Group)
 

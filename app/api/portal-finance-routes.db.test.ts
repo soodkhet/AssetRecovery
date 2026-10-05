@@ -820,3 +820,124 @@ suite('มติ U14 (fixer X3) — ใบลดหนี้ active หักย
     expect(dto.total.revenueSatang).toBe(1_000_000 + 400_000 - 52_000)
   })
 })
+
+// ════════════════════════════════════════════════════════════════════════════
+// โหมด "ดู portal ในฐานะลูกค้า" ของผู้ใช้ภายใน (มติ PO 05/10/2569 U59) + เลขรอบ/จำนวนเคส (U62)
+// ════════════════════════════════════════════════════════════════════════════
+
+const OTHER_ORG_ID = '00000000-0000-4000-8000-0000000975d0'
+const OTHER_ORG_COMPANY = '00000000-0000-4000-8000-0000000975d1'
+
+/** ผู้ใช้ภายในที่ถือ `view_client_portal_as` (แถวผู้ใช้จริงใน DB — audit อ้าง FK ได้) */
+const VIEW_AS_STAFF: SessionUser = {
+  ...INTERNAL_FINANCE,
+  capabilities: { view_client_portal_as: 'view' },
+  // scope แคบ (ทีม) — ดาวน์โหลดใบกำกับต้องยังได้ เพราะโหมดดูแทนบังคับ scope เป็นบริษัทที่เปิดดู
+  scope: { kind: 'team', teamIds: [], companyId: null, userId: FINANCE_ID },
+}
+
+const asQuery = (path: string, companyId: string): string => `${path}${path.includes('?') ? '&' : '?'}as=${companyId}`
+
+suite('โหมดดู portal ในฐานะลูกค้า (มติ U59)', () => {
+  beforeAll(async () => {
+    if (!url) return
+    await db().$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address)
+      VALUES ('${OTHER_ORG_ID}', 'PortalViewAsOtherOrg', '9999999997599', 'ที่อยู่องค์กรอื่น') ON CONFLICT (id) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days,
+                                     address, created_by)
+      VALUES ('${OTHER_ORG_COMPANY}', '${OTHER_ORG_ID}', 'ไฟแนนซ์องค์กรอื่น', 'OTHERORG', '0105512975099',
+              'exclude_vat', 30, '9 ถ.อื่น', '${FINANCE_ID}')
+      ON CONFLICT (id) DO NOTHING
+    `)
+  })
+
+  it('ผู้ใช้ภายในที่มีสิทธิ์ เห็นข้อมูลของ CO1 เท่ากับผู้จัดการ CO1 ทุกหมวด · มีเลขรอบ/จำนวนเคส (U62)', async () => {
+    as(CO1_MANAGER)
+    const own = await dataOf<PortalBillingBatchDto[]>(await routes.billing.GET(request('/api/portal/billing-batches'), undefined))
+    const ownInvoices = await dataOf<PortalTaxInvoiceDto[]>(await routes.invoices.GET(request('/api/portal/tax-invoices'), undefined))
+
+    as(VIEW_AS_STAFF)
+    const viewed = await dataOf<PortalBillingBatchDto[]>(
+      await routes.billing.GET(request(asQuery('/api/portal/billing-batches', CO1)), undefined),
+    )
+    expect(viewed).toEqual(own)
+    expect(viewed.map((item) => item.id)).not.toContain(fx.co1Draft)
+    // จำนวนเคส = รายได้ที่ผูกรอบ · รอบเดือนรูปแบบทดสอบ ("รอบ P5 n") อ่านไม่ได้ ⇒ ไม่เดาเลขรอบ
+    expect(viewed.find((item) => item.id === fx.co1Sent)?.caseCount).toBe(1)
+    expect(viewed.find((item) => item.id === fx.co1Partial)?.caseCount).toBe(0)
+    expect(viewed.every((item) => item.batchNumber === null)).toBe(true)
+
+    const invoices = await dataOf<PortalTaxInvoiceDto[]>(
+      await routes.invoices.GET(request(asQuery('/api/portal/tax-invoices', CO1)), undefined),
+    )
+    expect(invoices).toEqual(ownInvoices)
+    const dashboard = await routes.dashboard.GET(request(asQuery('/api/portal/dashboard', CO1)), undefined)
+    expect(dashboard.status).toBe(200)
+    const aging = await routes.aging.GET(request(asQuery('/api/portal/reports/ar-aging', CO1)), undefined)
+    expect(aging.status).toBe(200)
+  })
+
+  it('ดาวน์โหลดได้ + audit export ระบุผู้ดูภายใน + บริษัท + โหมด view_as · แถวของบริษัทอื่นยังรั่วไม่ได้', async () => {
+    const since = new Date(Date.now() - 1000)
+    as(VIEW_AS_STAFF)
+    const ok = await routes.download.GET(
+      request(asQuery(`/api/portal/tax-invoices/${fx.co1InvoiceActive}/download`, CO1)),
+      params(fx.co1InvoiceActive),
+    )
+    expect(ok.status).toBe(200)
+    expect(ok.headers.get('content-type')).toBe('application/pdf')
+    const exported = await auditsSince(since, 'export', FINANCE_ID)
+    expect(exported).toHaveLength(1)
+    expect(exported[0]).toMatchObject({ actorId: FINANCE_ID, targetId: fx.co1InvoiceActive })
+    expect(exported[0]?.afterData).toMatchObject({ channel: 'portal', company_id: CO1, mode: 'view_as', view_as: true })
+
+    // ดูในฐานะ CO1 แต่ขอใบของ CO2 ⇒ 403 cross_company (ขอบเขตยังเป็นบริษัทที่เปิดดูเท่านั้น)
+    const cross = await routes.download.GET(
+      request(asQuery(`/api/portal/tax-invoices/${fx.co2Invoice}/download`, CO1)),
+      params(fx.co2Invoice),
+    )
+    expect(cross.status).toBe(403)
+    const denied = await auditsSince(since, 'access_denied', FINANCE_ID)
+    expect(denied.at(-1)?.afterData).toMatchObject({ cause: 'cross_company', mode: 'view_as', view_as_company_id: CO1 })
+  }, 30_000)
+
+  it('ไม่มีสิทธิ์ / ผู้ใช้บริษัทส่ง as / บริษัทข้าม org / id มั่ว ⇒ 403 + audit access_denied', async () => {
+    const cases: { user: SessionUser; companyId: string; cause: string }[] = [
+      { user: INTERNAL_FINANCE, companyId: CO1, cause: 'view_as_missing_capability' },
+      { user: CO1_MANAGER, companyId: CO2, cause: 'view_as_by_company_user' },
+      { user: CO1_MANAGER, companyId: CO1, cause: 'view_as_by_company_user' },
+      { user: VIEW_AS_STAFF, companyId: OTHER_ORG_COMPANY, cause: 'view_as_company_not_found' },
+      { user: VIEW_AS_STAFF, companyId: '00000000-0000-4000-8000-0000000975ee', cause: 'view_as_company_not_found' },
+      { user: VIEW_AS_STAFF, companyId: 'not-a-uuid', cause: 'view_as_company_not_found' },
+    ]
+    for (const each of cases) {
+      const since = new Date(Date.now() - 1000)
+      as(each.user)
+      const response = await routes.billing.GET(request(asQuery('/api/portal/billing-batches', each.companyId)), undefined)
+      expect(response.status, each.cause).toBe(403)
+      expect(await codeOf(response)).toBe('PERMISSION_DENIED')
+      const audits = await auditsSince(since, 'access_denied', each.user.id)
+      expect(audits.at(-1)?.afterData, each.cause).toMatchObject({ cause: each.cause, mode: 'view_as' })
+    }
+  })
+
+  it('บริษัทถูกระงับ ⇒ ผู้ใช้บริษัทเข้าไม่ได้ แต่ผู้ใช้ภายในยังเปิดดูได้ (ช่วยลูกค้า)', async () => {
+    await db().$executeRawUnsafe(`UPDATE finance_companies SET status = 'suspended' WHERE id = '${CO2}'`)
+    try {
+      as(CO2_MANAGER)
+      const blocked = await routes.billing.GET(request('/api/portal/billing-batches'), undefined)
+      expect(await codeOf(blocked)).toBe('COMPANY_SUSPENDED')
+
+      as(VIEW_AS_STAFF)
+      const items = await dataOf<PortalBillingBatchDto[]>(
+        await routes.billing.GET(request(asQuery('/api/portal/billing-batches', CO2)), undefined),
+      )
+      expect(items).toHaveLength(1)
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE finance_companies SET status = 'active' WHERE id = '${CO2}'`)
+    }
+  })
+})

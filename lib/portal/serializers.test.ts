@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AssignmentStatus, CaseStatus, HandoverLotStatus } from '@/lib/generated/prisma/enums'
 import {
   portalAssetPhotoMeta,
+  portalBillingBatchNumber,
   serializePortalBillingBatch,
   serializePortalBillingBatches,
   serializePortalCaseDetail,
@@ -141,6 +142,7 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
       whtWithheldByCustomerSatang: 3_000,
       dueDate: new Date('2026-10-31T00:00:00Z'),
       sentAt: CREATED,
+      caseCount: 3,
     }
     deepScan(serializePortalBillingBatches([billing]))
     deepScan(
@@ -265,12 +267,23 @@ describe('portal serializers — เนื้อหา', () => {
   })
 
   it('billing draft ถูกกรอง · ยอดค้างใช้สูตรกลาง', () => {
-    const base = { id: 'b', period: '09/2569', totalSatang: 100_000, receivedSatang: 40_000, whtWithheldByCustomerSatang: 3_000, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null }
+    const base = { id: 'b', period: '09/2569', totalSatang: 100_000, receivedSatang: 40_000, whtWithheldByCustomerSatang: 3_000, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 4 }
     expect(serializePortalBillingBatch({ ...base, status: 'draft' })).toBeNull()
     expect(serializePortalBillingBatches([{ ...base, status: 'draft' }, { ...base, id: 'c', status: 'sent' }]).map((row) => row.id)).toEqual(['c'])
     const dto = serializePortalBillingBatch({ ...base, status: 'sent' })
     expect(dto?.outstandingSatang).toBe(57_000)
     expect(dto?.dueDate).toBe('2026-10-31')
+  })
+
+  it('รอบวางบิลมีเลขที่รอบ + จำนวนเคส (มติ U62) — เลขที่สร้างจากรอบเดือน พ.ศ.', () => {
+    const base = { id: 'b', totalSatang: 100_000, receivedSatang: 0, whtWithheldByCustomerSatang: 0, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 5, status: 'sent' as const }
+    const dto = serializePortalBillingBatch({ ...base, period: 'มิถุนายน 2569' })
+    expect(dto?.batchNumber).toBe('BB-2569-06')
+    expect(dto?.caseCount).toBe(5)
+    expect(serializePortalBillingBatch({ ...base, period: 'ธันวาคม 2570' })?.batchNumber).toBe('BB-2570-12')
+    // รอบเดือนรูปแบบอื่น (ข้อมูลเก่า) — ไม่เดาเลข แสดงรอบเดือนอย่างเดียว
+    expect(portalBillingBatchNumber('09/2569')).toBeNull()
+    expect(portalBillingBatchNumber('')).toBeNull()
   })
 
   it('ล็อต pending_attach ดาวน์โหลดไม่ได้ · confirmed ได้', () => {

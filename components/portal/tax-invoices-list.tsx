@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useState } from "react";
+import { usePortalApiUrl } from "@/components/portal/portal-scope";
 import { usePortalData } from "@/components/portal/use-portal-data";
 import {
   Button,
@@ -48,6 +49,7 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
   const state = usePortalData<PortalTaxInvoiceDto[]>(
     "/api/portal/tax-invoices",
   );
+  const apiUrl = usePortalApiUrl();
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<DownloadError | null>(
     null,
@@ -57,7 +59,9 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
     setDownloadingId(invoice.id);
     setDownloadError(null);
     try {
-      const response = await fetch(portalTaxInvoiceDownloadUrl(invoice.id));
+      const response = await fetch(
+        apiUrl(portalTaxInvoiceDownloadUrl(invoice.id)),
+      );
       const contentType = response.headers.get("content-type") ?? "";
       if (response.ok && contentType.includes("application/pdf")) {
         const blob = await response.blob();
@@ -97,7 +101,7 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
     } finally {
       setDownloadingId(null);
     }
-  }, []);
+  }, [apiUrl]);
 
   const rows = state.data ?? [];
   const ready = !state.loading && state.error === null && state.data !== null;

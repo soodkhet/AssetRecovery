@@ -66,11 +66,14 @@ export async function listPortalBillingBatches(ctx: PortalContext): Promise<Port
       whtWithheldByCustomerSatang: true,
       dueDate: true,
       sentAt: true,
+      // จำนวนเคสในรอบ (มติ U62) = รายการรายได้ที่ผูกรอบนี้ (1 เคส 1 รายการ — trigger idempotent ต่อเคส)
+      _count: { select: { revenues: { where: { deletedAt: null } } } },
     },
     orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }],
     take: LIST_LIMIT,
   })
-  return serializePortalBillingBatches(await withDocumentedTotals(ctx, rows))
+  const withCounts = rows.map(({ _count, ...row }) => ({ ...row, caseCount: _count.revenues }))
+  return serializePortalBillingBatches(await withDocumentedTotals(ctx, withCounts))
 }
 
 /** แทน `totalSatang` ดิบของรอบด้วยยอดตามเอกสาร (U14) — รอบที่หาเอกสารไม่เจอคงยอดของรอบ (ยอดที่ส่งบิลจริง) */

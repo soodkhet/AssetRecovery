@@ -28,6 +28,7 @@ export const auditActionSchema = z.enum([
   'login',
   'logout',
   'access_denied',
+  'view_as',
 ])
 
 const dateOnly = z

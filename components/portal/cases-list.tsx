@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { PortalCaseDetailDrawer } from '@/components/portal/cases-detail-drawer'
 import { PortalStatusBadge } from '@/components/portal/cases-status-badge'
+import { usePortalPageHref } from '@/components/portal/portal-scope'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import {
   Button,
@@ -53,6 +54,7 @@ const COLUMN_COUNT = 6
  */
 export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
   const router = useRouter()
+  const pageHref = usePortalPageHref()
   const searchParams = useSearchParams()
   const filters = useMemo(() => parsePortalCasesFilters(searchParams), [searchParams])
   const apiPath = useMemo(
@@ -63,9 +65,9 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
 
   const navigate = useCallback(
     (next: PortalCasesFilters) => {
-      router.replace(`${PORTAL_CASES_PATH}${portalCasesPageQuery(next)}`, { scroll: false })
+      router.replace(pageHref(`${PORTAL_CASES_PATH}${portalCasesPageQuery(next)}`), { scroll: false })
     },
-    [router],
+    [router, pageHref],
   )
 
   // ช่องค้นหา: พิมพ์แล้วหน่วงก่อนยิง (หรือกด Enter) — URL เปลี่ยนจากที่อื่น (ล้างตัวกรอง/ย้อนกลับ) ให้ช่องตามด้วย

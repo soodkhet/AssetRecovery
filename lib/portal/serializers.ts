@@ -26,6 +26,7 @@ import {
   type PortalStatusDisplay,
 } from '@/lib/portal/status-map'
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
+import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import { ASSET_CONDITION_LABEL, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -196,11 +197,17 @@ export interface PortalBillingBatchSource {
   whtWithheldByCustomerSatang: number
   dueDate: Date
   sentAt: Date | null
+  /** จำนวนรายการรายได้ (= เคส) ในรอบ — 1 เคส 1 รายการรายได้ (มติ U62) */
+  caseCount: number
 }
 
 export interface PortalBillingBatchDto {
   id: string
+  /** เลขรอบวางบิล `BB-<ปี พ.ศ.>-<เดือน 2 หลัก>` จากรอบเดือน (มติ U62) · อ่านรอบเดือนไม่ได้ = `null` */
+  batchNumber: string | null
   period: string
+  /** จำนวนเคสในรอบ (มติ U62) */
+  caseCount: number
   totalSatang: number
   receivedSatang: number
   /** ภาษีหัก ณ ที่จ่ายที่ลูกค้าหักไว้ (มติ U11) — รวม = ชำระแล้ว + ลูกค้าหัก + ค้าง */
@@ -211,13 +218,26 @@ export interface PortalBillingBatchDto {
   statusDisplay: PortalStatusDisplay<PortalBillingStatusCode>
 }
 
+/**
+ * เลขรอบวางบิลที่แสดงในพอร์ทัล (มติ PO U62 · mockup "เลขที่รอบวางบิล") — ระบบไม่มีเลขเอกสารของรอบเก็บแยก
+ * จึงสร้างจาก `period` ซึ่ง unique ต่อบริษัทอยู่แล้ว (1 บริษัท 1 เดือน = 1 รอบ) ⇒ ค่าคงที่ ไม่เปลี่ยนตามเวลา
+ * · "มิถุนายน 2569" → `BB-2569-06` · รูปแบบอื่น → `null` (หน้าแสดงรอบเดือนอย่างเดียว)
+ */
+export function portalBillingBatchNumber(period: string): string | null {
+  const parsed = parseBillingPeriodLabel(period)
+  if (parsed === null) return null
+  return `BB-${parsed.yearBe}-${String(parsed.month).padStart(2, '0')}`
+}
+
 /** `draft` → `null` (ห้ามแสดงในพอร์ทัล — `97` §6.2) */
 export function serializePortalBillingBatch(row: PortalBillingBatchSource): PortalBillingBatchDto | null {
   const statusDisplay = portalBillingStatusDisplay(row.status)
   if (statusDisplay === null) return null
   return {
     id: row.id,
+    batchNumber: portalBillingBatchNumber(row.period),
     period: row.period,
+    caseCount: row.caseCount,
     totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
     customerWhtSatang: row.whtWithheldByCustomerSatang,

@@ -2,7 +2,7 @@ import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { emitAudit } from '@/lib/audit/audit'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { attachmentHeader } from '@/lib/format/attachment'
-import { requirePortalRow, withPortal } from '@/lib/portal/guard'
+import { portalScopedUser, portalViewAsAuditFields, requirePortalRow, withPortal } from '@/lib/portal/guard'
 import { findPortalTaxInvoiceRow } from '@/lib/portal/queries/finance'
 import { getTaxInvoiceDocSource } from '@/lib/sales/queries'
 import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
@@ -30,7 +30,8 @@ export const GET = withPortal<RouteContext>('finance', { download: true }, async
   })
 
   // ผู้ใช้บริษัทมี scope `company` ⇒ ยามใน `getTaxInvoiceDocSource` ตรวจบริษัทซ้ำอีกชั้น
-  const source = await getTaxInvoiceDocSource(portal.user, row.id)
+  // (โหมดดูแทนของผู้ใช้ภายใน — บังคับ scope เป็นบริษัทที่เปิดดู · มติ U59)
+  const source = await getTaxInvoiceDocSource(portalScopedUser(portal), row.id)
   const doc = buildTaxInvoiceDoc(source)
   const pdf = await renderTaxInvoice(doc)
 
@@ -49,6 +50,7 @@ export const GET = withPortal<RouteContext>('finance', { download: true }, async
       invoice_number: row.invoiceNumber,
       file_name: doc.fileName,
       company_id: portal.companyId,
+      ...portalViewAsAuditFields(portal),
     },
     reason: null,
     ipAddress: meta.ipAddress,

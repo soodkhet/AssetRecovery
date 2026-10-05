@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { callApi } from '@/lib/api/types'
 
 /**
@@ -8,6 +9,7 @@ import { callApi } from '@/lib/api/types'
  * `components/reports/use-report-data.ts`: setState หลัง `await` อยู่ใน IIFE ของ `useEffect` เท่านั้น
  *
  * `enabled = false` = ผู้ใช้ไม่มีสิทธิ์หมวดนั้น → ไม่ยิง request เลย (`loading` เป็น false ทันที)
+ * · โหมดดูในฐานะลูกค้า (มติ U59) เติม `?as=<companyId>` ให้เอง — ผู้เรียกส่ง path ของ API ตามปกติ
  */
 export interface PortalDataState<T> {
   data: T | null
@@ -16,7 +18,8 @@ export interface PortalDataState<T> {
   reload: () => void
 }
 
-export function usePortalData<T>(url: string, enabled = true): PortalDataState<T> {
+export function usePortalData<T>(path: string, enabled = true): PortalDataState<T> {
+  const url = usePortalApiUrl()(path)
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<PortalDataState<T>['error']>(null)

@@ -25,6 +25,7 @@ export const AUDIT_ACTION_LABEL: Readonly<Record<AuditAction, string>> = {
   login: 'เข้าสู่ระบบ',
   logout: 'ออกจากระบบ',
   access_denied: 'ถูกปฏิเสธการเข้าถึง',
+  view_as: 'ดูพอร์ทัลในฐานะลูกค้า',
 }
 
 /** กลุ่มสีของ action — ใช้ 10 กลุ่มสีของ `04` §8.1 เท่านั้น (ห้ามตั้งสีเอง) */
@@ -43,6 +44,7 @@ export const AUDIT_ACTION_GROUP: Readonly<Record<AuditAction, StatusBadgeGroup>>
   login: 'neutral',
   logout: 'neutral',
   access_denied: 'warning',
+  view_as: 'info',
 }
 
 /** ชื่อไทยของตารางปลายทางเท่าที่ระบบมีจริง — ตารางที่ยังไม่ได้ตั้งชื่อจะแสดง code ดิบ (ไม่พัง) */
