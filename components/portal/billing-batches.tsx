@@ -9,6 +9,7 @@ import {
   EmptyState,
   ErrorState,
   FilterGroup,
+  InlineAlert,
   LoadingState,
   PageHeader,
   StatusBadge,
@@ -26,7 +27,10 @@ import {
   bangkokToday,
   filterPortalBillingRows,
   isPortalBillingOverdue,
+  PORTAL_CUSTOMER_WHT_NOTICE,
+  portalAlertTone,
   portalBillingFilterOptions,
+  portalHasCustomerWht,
   portalBillingSummary,
   type PortalBillingFilter,
 } from '@/lib/portal/finance-ui'
@@ -39,6 +43,7 @@ const FILTER_OPTIONS = portalBillingFilterOptions()
  * desktop / `renderFinance()` มือถือ) · อ่านอย่างเดียว · API ส่งเฉพาะรอบที่ส่งบิลแล้วขึ้นไป (draft ไม่มีทางมาถึง)
  *
  * ยอดค้างต่อรอบมาจาก API (สูตรกลางฝั่ง server) — หน้านี้แค่รวมยอดค้างของรอบที่แสดงเพื่อทำการ์ดสรุป
+ * · ยอดรวม = ยอดตามใบกำกับที่ออกจริง (มติ U14) · รวม = ชำระแล้ว + ภาษีที่ลูกค้าหัก + ค้างชำระ (มติ U11)
  */
 export function PortalBillingBatches() {
   const state = usePortalData<PortalBillingBatchDto[]>('/api/portal/billing-batches')
@@ -68,7 +73,7 @@ export function PortalBillingBatches() {
                   ? `เลยกำหนด ${fmtCount(summary.overdueCount)} รอบ · ${fmtSatangSymbol(summary.overdueSatang)}`
                   : 'ทุกรอบที่ยังชำระไม่ครบ'
               }
-              tone={summary.outstandingSatang > 0 ? 'red' : 'emerald'}
+              tone={portalAlertTone(summary.outstandingSatang)}
             />
           </div>
           <PortalKpiTile label="รอบที่ยังค้างชำระ" value={fmtCount(summary.openCount)} hint="รอบ" tone="amber" />
@@ -104,6 +109,11 @@ export function PortalBillingBatches() {
               <>
                 <BillingTable rows={filtered} today={today} />
                 <BillingCards rows={filtered} today={today} />
+                {portalHasCustomerWht(filtered) && (
+                  <InlineAlert tone="info" className="mt-4" title="ภาษีหัก ณ ที่จ่ายที่บริษัทของท่านหักไว้">
+                    {PORTAL_CUSTOMER_WHT_NOTICE} · ยอดรวม = ชำระแล้ว + ภาษีหัก ณ ที่จ่าย + ค้างชำระ
+                  </InlineAlert>
+                )}
               </>
             )}
           </>
@@ -116,6 +126,14 @@ export function PortalBillingBatches() {
 function OutstandingText({ satang, className }: { satang: number; className?: string }) {
   return satang > 0 ? (
     <span className={cn('font-bold text-red-600', className)}>{fmtSatangSymbol(satang)}</span>
+  ) : (
+    <span className={cn('text-slate-300', className)}>—</span>
+  )
+}
+
+function CustomerWhtText({ satang, className }: { satang: number; className?: string }) {
+  return satang > 0 ? (
+    <span className={cn('font-semibold text-slate-700', className)}>{fmtSatangSymbol(satang)}</span>
   ) : (
     <span className={cn('text-slate-300', className)}>—</span>
   )
@@ -140,6 +158,7 @@ function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[];
           <Th>รอบเดือน</Th>
           <Th numeric>ยอดรวม</Th>
           <Th numeric>ชำระแล้ว</Th>
+          <Th numeric>ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)</Th>
           <Th numeric>ค้างชำระ</Th>
           <Th>ครบกำหนด</Th>
           <Th>ส่งบิลเมื่อ</Th>
@@ -155,6 +174,9 @@ function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[];
             </Td>
             <Td numeric className="text-emerald-600">
               {fmtSatangSymbol(row.receivedSatang)}
+            </Td>
+            <Td numeric>
+              <CustomerWhtText satang={row.customerWhtSatang} />
             </Td>
             <Td numeric>
               <OutstandingText satang={row.outstandingSatang} />
@@ -183,7 +205,7 @@ function BillingCards({ rows, today }: { rows: readonly PortalBillingBatchDto[];
             <div className="text-sm font-semibold text-slate-800">รอบ {row.period}</div>
             <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
           </div>
-          <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 text-center">
+          <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-center">
             <div>
               <div className="text-[12px] text-slate-400">ยอดรวม</div>
               <div className="text-xs font-bold">{fmtSatangSymbol(row.totalSatang)}</div>
@@ -191,6 +213,10 @@ function BillingCards({ rows, today }: { rows: readonly PortalBillingBatchDto[];
             <div>
               <div className="text-[12px] text-slate-400">ชำระแล้ว</div>
               <div className="text-xs font-bold text-emerald-600">{fmtSatangSymbol(row.receivedSatang)}</div>
+            </div>
+            <div>
+              <div className="text-[12px] text-slate-400">ภาษีหัก ณ ที่จ่าย (ลูกค้าหัก)</div>
+              <CustomerWhtText satang={row.customerWhtSatang} className="text-xs" />
             </div>
             <div>
               <div className="text-[12px] text-slate-400">ค้างชำระ</div>

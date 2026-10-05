@@ -132,6 +132,21 @@ export function portalLotDownloadApiUrl(lotId: string): string {
   return `/api/portal/handover-lots/${encodeURIComponent(lotId)}/download`
 }
 
+/** เอกสารของล็อตที่ดาวน์โหลดได้จากพอร์ทัล (ใบเซ็นรับ — D8 · ใบส่งมอบจากระบบ + หลักฐานการจัดส่ง — มติ U13) */
+export type PortalLotDocumentKind = 'signed_doc' | 'delivery_note' | 'delivery_proof'
+
+export const PORTAL_LOT_DOCUMENTS: Readonly<
+  Record<PortalLotDocumentKind, { label: string; pathSegment: string; fallbackSuffix: string }>
+> = {
+  signed_doc: { label: 'ดาวน์โหลดใบเซ็นรับ', pathSegment: 'download', fallbackSuffix: '-signed.pdf' },
+  delivery_note: { label: 'ดาวน์โหลดใบส่งมอบ (PDF)', pathSegment: 'delivery-note', fallbackSuffix: '.pdf' },
+  delivery_proof: { label: 'ดาวน์โหลดหลักฐานการจัดส่ง', pathSegment: 'delivery-proof', fallbackSuffix: '-delivery-proof' },
+}
+
+export function portalLotDocumentApiUrl(lotId: string, kind: PortalLotDocumentKind): string {
+  return `/api/portal/handover-lots/${encodeURIComponent(lotId)}/${PORTAL_LOT_DOCUMENTS[kind].pathSegment}`
+}
+
 export function portalAssetPhotoApiUrl(assetId: string, index: number): string {
   return `/api/portal/assets/${encodeURIComponent(assetId)}/photos/${index}`
 }

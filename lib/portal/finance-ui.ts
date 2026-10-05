@@ -1,4 +1,5 @@
 import { toInputDate } from '@/lib/format/datetime'
+import type { PortalKpiTone } from '@/lib/portal/nav'
 import { portalBillingStatusDisplay, type PortalBillingStatusCode } from '@/lib/portal/status-map'
 
 /**
@@ -84,6 +85,36 @@ export function portalBillingSummary(rows: readonly PortalBillingRowLike[], toda
   return { outstandingSatang, batchCount: rows.length, openCount, overdueCount, overdueSatang }
 }
 
+// ── สีตามค่า (BUG-149) ───────────────────────────────────────────────────────
+
+/**
+ * สีของตัวเลขที่ "มีค่า = ต้องระวัง" (ยอดค้าง/เคสไม่สำเร็จ/ยอดเลยกำหนด) — **ใช้ตัวนี้ทุกหน้าของพอร์ทัล**
+ * · 0 หรือน้อยกว่า = ปกติ (เขียว) · มากกว่า 0 = เตือน (แดง) ⇒ การ์ด/ตารางคนละหน้าแสดงสีตรงกันเสมอ
+ */
+export function portalAlertTone(value: number): Extract<PortalKpiTone, 'emerald' | 'red'> {
+  return value > 0 ? 'red' : 'emerald'
+}
+
+const ALERT_TEXT_CLASS: Readonly<Record<ReturnType<typeof portalAlertTone>, string>> = {
+  emerald: 'text-emerald-700',
+  red: 'text-red-600',
+}
+
+/** class สีตัวอักษรตาม `portalAlertTone()` (ใช้ในตาราง/ข้อความ) */
+export function portalAlertTextClass(value: number): string {
+  return ALERT_TEXT_CLASS[portalAlertTone(value)]
+}
+
+// ── ภาษีหัก ณ ที่จ่ายที่ลูกค้าหัก (มติ U11) ──────────────────────────────────
+
+/** หมายเหตุเตือนเมื่อมียอดที่ลูกค้าหักภาษี ณ ที่จ่ายไว้ (ต้องได้หนังสือรับรองต้นฉบับเพื่อใช้เครดิตภาษี) */
+export const PORTAL_CUSTOMER_WHT_NOTICE = 'กรุณาส่งหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ต้นฉบับ ให้แก่ผู้ให้บริการ'
+
+/** มีรอบใดที่ลูกค้าหักภาษีไว้หรือไม่ (แสดงหมายเหตุเตือนเฉพาะเมื่อมี) */
+export function portalHasCustomerWht(rows: readonly { customerWhtSatang: number }[]): boolean {
+  return rows.some((row) => row.customerWhtSatang > 0)
+}
+
 // ── ใบกำกับภาษี / ไฟล์ดาวน์โหลด ─────────────────────────────────────────────
 
 /**
@@ -108,6 +139,17 @@ export function portalTaxInvoiceDownloadUrl(id: string): string {
 }
 
 // ── ป้ายเดือนแบบสั้นของกราฟ (จอแคบป้ายยาวซ้อนกัน) ───────────────────────────
+
+/** ฐานของยอดในกราฟ/ตารางรายได้ของพอร์ทัล (มติ U14 — ยอดตามเอกสาร ไม่ใช่ยอดหลังปรับปรุงภายใน) */
+export const PORTAL_REVENUE_BASIS_LABEL = 'ยอดตามใบกำกับ (ก่อน VAT)'
+
+/**
+ * ป้ายแกน X ของกราฟรายได้ (BUG-146) — จอแคบป้าย 6 เดือนทับกัน ⇒ เอียง −40° และแสดงเว้นเดือน (`interval = 1`)
+ * · จอกว้างแสดงทุกเดือน เอียงเล็กน้อยตามค่าเดิม
+ */
+export function portalRevenueChartAxis(narrow: boolean): { interval: number; angle: number; height: number } {
+  return narrow ? { interval: 1, angle: -40, height: 56 } : { interval: 0, angle: -15, height: 48 }
+}
 
 const THAI_MONTH_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'] as const
 

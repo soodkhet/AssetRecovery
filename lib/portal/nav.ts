@@ -1,4 +1,5 @@
 import type { PortalSection } from '@/lib/portal/access'
+import { portalAlertTone } from '@/lib/portal/finance-ui'
 import type { PortalDashboardDto } from '@/lib/portal/serializers'
 
 /**
@@ -123,7 +124,8 @@ export function portalKpiCards(dto: PortalDashboardDto): PortalKpiCardModel[] {
       key: 'arOutstanding',
       label: 'ยอดค้างชำระรวม',
       hint: 'ทุกรอบวางบิลที่ยังชำระไม่ครบ',
-      tone: 'red',
+      // สีตามค่า (BUG-149) — ตัวเดียวกับการ์ดในหน้าวางบิล
+      tone: portalAlertTone(dto.arOutstanding.outstandingSatang),
       href: '/portal/billing',
       value: { kind: 'money', satang: dto.arOutstanding.outstandingSatang },
     })

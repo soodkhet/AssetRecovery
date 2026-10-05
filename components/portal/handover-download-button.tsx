@@ -4,10 +4,17 @@ import { useState } from 'react'
 import { Button, cn } from '@/components/ui'
 import { readEnvelope } from '@/lib/api/envelope'
 import { downloadFile } from '@/lib/imports/download-client'
-import { fileNameFromDisposition, portalLotDownloadApiUrl, portalLotDownloadState } from '@/lib/portal/handover-view'
+import {
+  fileNameFromDisposition,
+  PORTAL_LOT_DOCUMENTS,
+  portalLotDocumentApiUrl,
+  portalLotDownloadState,
+  type PortalLotDocumentKind,
+} from '@/lib/portal/handover-view'
 
 /**
- * ปุ่ม "ดาวน์โหลดใบเซ็นรับ" ของล็อต (`97` §6.4/§18 · มติ O43 D8)
+ * ปุ่มดาวน์โหลดเอกสารของล็อต (`97` §6.4/§18) — ใบเซ็นรับ (มติ O43 D8 · ค่าเริ่มต้น) / ใบส่งมอบ PDF จากระบบ /
+ * หลักฐานการจัดส่ง (มติ U13 — `kind`)
  *
  * - ไม่มีสิทธิ์ดาวน์โหลด (`portal_download`) ⇒ ไม่ render เลย
  * - ล็อตยังไม่ยืนยัน ⇒ disabled + คำอธิบายใต้ปุ่ม (ปุ่มที่ disabled ไม่รับ hover จึงไม่พึ่ง tooltip)
@@ -20,11 +27,14 @@ export function HandoverDownloadButton({
   downloadable,
   canDownload,
   block = false,
+  kind = 'signed_doc',
 }: {
   lotId: string
   docRef: string
   downloadable: boolean
   canDownload: boolean
+  /** ชนิดเอกสาร — ไม่ระบุ = ใบเซ็นรับ */
+  kind?: PortalLotDocumentKind
   /** เต็มความกว้าง (การ์ด) */
   block?: boolean
 }) {
@@ -32,17 +42,18 @@ export function HandoverDownloadButton({
   const [error, setError] = useState<string | null>(null)
   const state = portalLotDownloadState({ downloadable, canDownload })
   if (!state.visible) return null
+  const lotDocument = PORTAL_LOT_DOCUMENTS[kind]
 
   async function download() {
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(portalLotDownloadApiUrl(lotId), { cache: 'no-store' })
+      const response = await fetch(portalLotDocumentApiUrl(lotId, kind), { cache: 'no-store' })
       const contentType = response.headers.get('content-type') ?? ''
       if (response.ok && !contentType.includes('application/json')) {
         const bytes = await response.arrayBuffer()
         downloadFile(
-          fileNameFromDisposition(response.headers.get('content-disposition'), `${docRef}-signed.pdf`),
+          fileNameFromDisposition(response.headers.get('content-disposition'), `${docRef}${lotDocument.fallbackSuffix}`),
           bytes,
           contentType === '' ? 'application/octet-stream' : contentType,
         )
@@ -68,13 +79,13 @@ export function HandoverDownloadButton({
           void download()
         }}
         fullWidth={block}
-        aria-describedby={state.enabled ? undefined : `lot-download-hint-${lotId}`}
+        aria-describedby={state.enabled ? undefined : `lot-download-hint-${kind}-${lotId}`}
       >
         {state.enabled ? <DownloadIcon /> : <LockIcon />}
-        ดาวน์โหลดใบเซ็นรับ
+        {lotDocument.label}
       </Button>
       {!state.enabled ? (
-        <p id={`lot-download-hint-${lotId}`} className="mt-1.5 text-[11px] text-slate-400">
+        <p id={`lot-download-hint-${kind}-${lotId}`} className="mt-1.5 text-[11px] text-slate-400">
           {state.hint}
         </p>
       ) : null}
