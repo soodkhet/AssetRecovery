@@ -11,9 +11,10 @@ import { BOUND_NON_MATRIX_CAPABILITIES, DEFAULT_ROLE_CAPABILITIES } from '@/lib/
 describe('capability catalog (`02` §12 · `13` §6.10)', () => {
   // 57 = 47 ของ Phase 1.2/1.6 + `view_audit_log` (Phase 5.2 · `90` §12) + `manage_jobs` (Phase 5.3 · `91` §12)
   // + `manage_wht_policy` (มติ PO 05/10/2569 UAT U8) + พอร์ทัลบริษัท 5 หมวด (มติ PO 05/10/2569 U6/O43 D1)
-  // + `manage_customer_wht` (มติ PO 05/10/2569 U40) + `view_client_portal_as` (มติ PO 05/10/2569 U59) — ทั้งหมดอยู่นอก Functional Matrix 37 รายการ
-  it('มี 57 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
-    expect(CAPABILITIES).toHaveLength(57)
+  // + `manage_customer_wht` (มติ PO 05/10/2569 U40) + `view_client_portal_as` (มติ PO 05/10/2569 U59)
+  // + `manage_holidays` (มติ PO 06/10/2569 UAT U93) — ทั้งหมดอยู่นอก Functional Matrix 37 รายการ
+  it('มี 58 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
+    expect(CAPABILITIES).toHaveLength(58)
     expect(MATRIX_CAPABILITIES).toHaveLength(37)
     expect(new Set(MATRIX_CAPABILITIES.map((capability) => capability.functionalGroup)).size).toBe(4)
   })
@@ -216,6 +217,19 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
     const capability = CAPABILITIES.find((each) => each.code === 'view_client_portal_as')
     expect(capability?.functionalGroup).toBeNull()
     expect(capability?.code.startsWith('portal_')).toBe(false)
+    expect(`${capability?.label ?? ''} ${capability?.description ?? ''}`).not.toMatch(/§|`\d{2}`|ไฟล์ \d{2}/)
+  })
+
+  it('ปฏิทินวันหยุด (มติ PO 06/10/2569 U93): ธุรการ/บัญชี/การเงิน manage · บริหาร view · ไม่ล็อก', () => {
+    const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'manage_holidays')
+      .map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
+      .sort()
+    expect(rows).toEqual(
+      ['system:ธุรการ=manage', 'system:บัญชี=manage', 'system:การเงิน=manage', 'system:บริหาร=view'].sort(),
+    )
+    expect(capabilityLockOwner('manage_holidays')).toBeNull()
+    const capability = CAPABILITIES.find((each) => each.code === 'manage_holidays')
+    expect(capability?.functionalGroup).toBeNull()
     expect(`${capability?.label ?? ''} ${capability?.description ?? ''}`).not.toMatch(/§|`\d{2}`|ไฟล์ \d{2}/)
   })
 

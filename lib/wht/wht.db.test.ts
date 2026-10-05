@@ -190,6 +190,8 @@ async function resetOrgData(): Promise<void> {
       `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
       // ค่าตั้งวิธียื่น (U45) ที่เทสต์เพิ่ม — ห้ามค้างข้ามรอบรัน (วันกำหนดของงวดถัดไปจะเพี้ยน)
       `DELETE FROM wht_policy_history WHERE organization_id = '${ORG_ID}'`,
+      // ปฏิทินวันหยุด (U93) ที่เทสต์เพิ่ม — กำหนดยื่นของงวดถัดไปจะเลื่อนถ้าค้าง
+      `DELETE FROM public_holidays WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
     ]) {
       await tx.$executeRawUnsafe(statement)
@@ -342,6 +344,126 @@ suite('Phase 4.5 — ออกใบ 50 ทวิ อัตโนมัติจ
     }
     const back = await wht.listWhtFilingSummaries(accountant, {}, new Date('2026-07-02T03:00:00Z'))
     expect(back.items.find((item) => item.periodLabel === 'มิถุนายน 2569')?.filingDueDate).toBe('2026-07-15T00:00:00.000Z')
+  })
+
+  it('U93 — เพิ่มวันหยุดตรงกำหนดยื่น ⇒ รอบ pending เลื่อนเป็นวันทำการถัดไป + ป้าย + audit · ลบ ⇒ กลับ', async () => {
+    const holidays = await import('@/lib/settings/queries/holidays')
+    const now = new Date('2026-07-02T03:00:00Z')
+    const june = async () =>
+      (await wht.listWhtFilingSummaries(accountant, {}, now)).items.find((item) => item.periodLabel === 'มิถุนายน 2569')
+    const hctx = (reason: string) => ({ actor: accountant, meta, reason })
+
+    // 1) เพิ่ม 15/07/2569 (พุธ) ⇒ เลื่อนเป็นพฤหัส 16/07/2569
+    const added = await holidays.createHoliday(hctx('ประกาศวันหยุดพิเศษ'), {
+      holidayDate: new Date('2026-07-15T00:00:00Z'),
+      name: 'วันหยุดพิเศษทดสอบ',
+    })
+    expect(added.created[0]?.holidayDate).toBe('2026-07-15')
+    expect(added.created[0]?.yearBe).toBe(2569)
+    expect(added.refreshedFilings).toEqual([{ periodLabel: 'มิถุนายน 2569', fromDate: '2026-07-15', toDate: '2026-07-16' }])
+    let row = await june()
+    expect(row?.filingDueDate).toBe('2026-07-16T00:00:00.000Z')
+    expect(row?.filingNominalDueDate).toBe('2026-07-15T00:00:00.000Z')
+    expect(row?.filingDueLabel).toBe('15/07/2569 → 16/07/2569 (เลื่อนจากวันหยุด) (ยื่นออนไลน์)')
+    expect(row?.daysRemaining).toBe(14)
+
+    const holidayAudit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'public_holidays', targetId: added.created[0]?.id, action: 'create' },
+      select: { reason: true, afterData: true, actorId: true },
+    })
+    expect(holidayAudit?.reason).toBe('ประกาศวันหยุดพิเศษ')
+    expect(holidayAudit?.actorId).toBe(USER_ID)
+    expect(JSON.stringify(holidayAudit?.afterData)).toContain('"holiday_date":"2026-07-15"')
+    const filingAudit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'wht_filing_summaries', targetId: row?.id, action: 'update' },
+      orderBy: { createdAt: 'desc' },
+      select: { reason: true, beforeData: true, afterData: true },
+    })
+    expect(filingAudit?.reason).toBe('ประกาศวันหยุดพิเศษ')
+    expect(JSON.stringify(filingAudit?.beforeData)).toContain('2026-07-15')
+    expect(JSON.stringify(filingAudit?.afterData)).toContain('2026-07-16')
+
+    // 2) วันซ้ำ ⇒ DUPLICATE_HOLIDAY_DATE
+    await expectCode(
+      () => holidays.createHoliday(hctx('เพิ่มซ้ำโดยไม่ตั้งใจ'), { holidayDate: new Date('2026-07-15T00:00:00Z'), name: 'ซ้ำ' }),
+      'DUPLICATE_HOLIDAY_DATE',
+    )
+
+    // 3) นำเข้า 16/07 (ใหม่) + 15/07 (มีอยู่แล้ว ⇒ ข้าม) ⇒ เลื่อนต่อเป็นศุกร์ 17/07/2569
+    const imported = await holidays.importHolidays(hctx('นำเข้าวันหยุดต่อเนื่อง'), [
+      { holidayDate: new Date('2026-07-16T00:00:00Z'), name: 'วันหยุดต่อเนื่อง' },
+      { holidayDate: new Date('2026-07-15T00:00:00Z'), name: 'ซ้ำในชุดนำเข้า' },
+    ])
+    expect(imported.created.map((item) => item.holidayDate)).toEqual(['2026-07-16'])
+    expect(imported.skippedDates).toEqual(['2026-07-15'])
+    expect((await june())?.filingDueDate).toBe('2026-07-17T00:00:00.000Z')
+    const listed = await holidays.listHolidays(ORG_ID, 2569)
+    expect(listed.items.map((item) => `${item.holidayDate} ${item.weekdayLabel}`)).toEqual([
+      '2026-07-15 พุธ',
+      '2026-07-16 พฤหัสบดี',
+    ])
+    expect(listed.years).toEqual([2569])
+    expect((await holidays.listHolidays(ORG_ID, 2570)).items).toEqual([])
+
+    // 4) ลบ 15/07 ⇒ วันตามปฏิทินเป็นวันทำการอีกครั้ง ⇒ กลับเป็น 15/07/2569 (ไม่แสดงการเลื่อน)
+    const first = await holidays.getHoliday(ORG_ID, added.created[0]?.id ?? '')
+    const removed = await holidays.deleteHoliday(hctx('ใส่วันผิด'), first)
+    expect(removed.refreshedFilings[0]?.toDate).toBe('2026-07-15')
+    row = await june()
+    expect(row?.filingDueDate).toBe('2026-07-15T00:00:00.000Z')
+    expect(row?.filingNominalDueDate).toBeNull()
+    expect(row?.filingDueLabel).toBe('15/07/2569 (ยื่นออนไลน์)')
+    const deleteAudit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'public_holidays', targetId: first.id, action: 'delete' },
+      select: { reason: true },
+    })
+    expect(deleteAudit?.reason).toBe('ใส่วันผิด')
+    // แถวยังอยู่ (soft delete) · หาไม่เจอจาก API · ลบซ้ำไม่ได้
+    const softDeleted = await db().publicHoliday.findUnique({ where: { id: first.id }, select: { deletedAt: true } })
+    expect(softDeleted?.deletedAt).not.toBeNull()
+    await expectCode(() => holidays.getHoliday(ORG_ID, first.id), 'HOLIDAY_NOT_FOUND')
+
+    // 5) ลบ 16/07 ⇒ ไม่กระทบกำหนดยื่น (ไม่มีรอบเปลี่ยน) · เพิ่ม 15/07 ใหม่หลังลบได้ (partial unique)
+    const second = listed.items[1]
+    if (second === undefined) throw new Error('ไม่พบวันหยุดที่นำเข้า')
+    const removedSecond = await holidays.deleteHoliday(hctx('ยกเลิกวันหยุดต่อเนื่อง'), second)
+    expect(removedSecond.refreshedFilings).toEqual([])
+    const again = await holidays.createHoliday(hctx('เพิ่มกลับหลังลบ'), {
+      holidayDate: new Date('2026-07-15T00:00:00Z'),
+      name: 'เพิ่มกลับ',
+    })
+    expect(again.created).toHaveLength(1)
+    await holidays.deleteHoliday(hctx('คืนค่าเทสต์'), again.created[0] as NonNullable<(typeof again.created)[0]>)
+    expect((await june())?.filingDueDate).toBe('2026-07-15T00:00:00.000Z')
+  })
+
+  it('U93 — ออกใบ/คิดสรุปรอบใหม่ใช้ปฏิทินวันหยุดด้วย (refreshFilingSummary)', async () => {
+    const holidays = await import('@/lib/settings/queries/holidays')
+    const added = await holidays.createHoliday(
+      { actor: accountant, meta, reason: 'ทดสอบคิดสรุปรอบใหม่' },
+      { holidayDate: new Date('2026-07-15T00:00:00Z'), name: 'วันหยุดทดสอบ' },
+    )
+    try {
+      // คืนกำหนดยื่นเป็นค่าเดิมด้วยมือ แล้วให้ตัวคิดสรุปรอบ (เส้นทางออก/ยกเลิกใบ) คำนวณเอง
+      const period = await db().accountingPeriod.findFirstOrThrow({
+        where: { organizationId: ORG_ID, yearBe: 2569, month: 6 },
+        select: { id: true, periodLabel: true },
+      })
+      await db().whtFilingSummary.update({ where: { periodId: period.id }, data: { filingDueDate: new Date('2026-07-15T00:00:00Z') } })
+      const { prisma } = await import('@/lib/prisma')
+      await wht.refreshFilingSummary(prisma, {
+        organizationId: ORG_ID,
+        periodId: period.id,
+        periodLabel: period.periodLabel,
+        yearBe: 2569,
+        month: 6,
+      })
+      const summary = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId: period.id } })
+      expect(summary.filingDueDate.toISOString()).toBe('2026-07-16T00:00:00.000Z')
+    } finally {
+      const current = added.created[0]
+      if (current !== undefined) await holidays.deleteHoliday({ actor: accountant, meta, reason: 'คืนค่าเทสต์' }, current)
+    }
   })
 
   it('เลยกำหนดแล้วยังไม่ยื่น ⇒ FILING_OVERDUE_WARNING (เตือน ไม่ block — ยังคืนรายการปกติ)', async () => {

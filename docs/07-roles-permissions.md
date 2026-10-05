@@ -18,6 +18,7 @@
 | v2.3 | 04/07/2569 | ✅ Product Owner **ยืนยันจำนวน 15** แล้ว (DEC-006/D8) — ปิด 🔶 ที่ตั้งไว้ใน v2.2 |
 | v2.4 | 05/10/2569 | **มติ PO 05/10/2569 (U6/O43 D1/D2/D11) — สิทธิ์ 3 ระดับของผู้ใช้บริษัทไฟแนนซ์**: §5.3 แทนคำอธิบายเดิม ("ตามที่ผู้จัดการมอบหมาย") ด้วยการแยกตามหมวดพอร์ทัลผ่าน capability 5 ตัว `portal_cases`/`portal_finance`/`portal_handover`/`portal_profile`/`portal_download` + ค่าเริ่มต้นต่อ role · Superadmin ปรับได้ (ไม่ล็อก) · Superadmin ไม่เข้าพอร์ทัล · ผู้ใช้บริษัทไม่เข้าหน้า/API ภายใน — sync `97` v5 / `25` / `06` |
 | v2.5 | 05/10/2569 | **มติ PO 05/10/2569 (U59)**: §5.1 ธุรการ — เพิ่มค่าเริ่มต้น capability `view_client_portal_as` (ดูพอร์ทัลในฐานะลูกค้าแบบดูอย่างเดียว เพื่อช่วยลูกค้า) · Superadmin โดยนิยาม · role ภายในอื่นมอบได้ (ไม่ใช่ "✅ only") · ไม่สลับ session (ผู้ใช้ภายในยังเป็นตัวเอง) — sync `97` §13.1 / `25` §7.3 / `06` §7.2 |
+| v2.6 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93)**: §5.1 ธุรการ/บัญชี/การเงิน — ค่าเริ่มต้น capability ใหม่ `manage_holidays` ระดับ manage (ปฏิทินวันหยุด `13` §6.15 · บริหาร view) · ไม่ล็อก มอบ role อื่นได้ |
 
 ขอบเขตเอกสารนี้: รายชื่อ Role ทั้งหมด 15 ตัวของระบบ แบ่ง 4 Role Group ใน 3 กลุ่มหลัก (System, ทีมติดตามทรัพย์ Inhouse/Outsource, Finance Company) พร้อม Permission Matrix สรุปรวมที่ทุกโมดูลต้องอ้างอิง — เป็นไฟล์ที่ไฟล์อื่นทั้งหมด (06, 09, 38, 40, 41, 10-37) อ้างถึงเมื่อพูดถึง role
 
@@ -53,9 +54,9 @@
 | Superadmin | กำหนดค่าและเข้าถึงทุกส่วนของระบบ รวมภาษี/VAT/Permission Matrix | Global | 13, ทุกไฟล์ |
 | เจ้าหน้าที่อนุมัติเคส (Case Approver) | พิจารณารับ/ไม่รับเคส (ไฟล์ 38), ยืนยัน/เปลี่ยนทีมที่ระบบเสนอ, อนุมัติคำขอ recycle, ตีกลับหลักฐานปิดงาน (`reject_evidence`) | Global — ทุกเคสในระบบ ไม่ผูกพื้นที่/ทีม | 38 §5, 41 §10.1 |
 | บริหาร (Executive) | อนุมัติ policy, exception, lock/unlock รอบบัญชี, Adjustment ของรอบ locked, รายการเกินเพดาน | Organization | 13, 16, 20, 30, 34 |
-| การเงิน (Finance) | ควบคุม Claim, Advance, Payout, Payee, Billing | Finance scope | 15-19 |
-| บัญชี (Accounting) | ตรวจข้อมูลบัญชี, ส่งออก Accounting Pack, กระทบยอดธนาคาร, WHT | Accounting scope | 31-37 |
-| ธุรการ (Admin) | บันทึกข้อมูลและแนบเอกสารตามสิทธิ์ที่ได้รับมอบหมาย · เปิด "ดู portal ในฐานะลูกค้า" (ดูอย่างเดียว — ค่าเริ่มต้น `view_client_portal_as` · มติ U59 · `97` §13.1) | Assigned scope | 38 |
+| การเงิน (Finance) | ควบคุม Claim, Advance, Payout, Payee, Billing · กรอกปฏิทินวันหยุด (`manage_holidays` — มติ U93) | Finance scope | 15-19, 13 §6.15 |
+| บัญชี (Accounting) | ตรวจข้อมูลบัญชี, ส่งออก Accounting Pack, กระทบยอดธนาคาร, WHT · กรอกปฏิทินวันหยุด (`manage_holidays` — มติ U93) | Accounting scope | 31-37, 13 §6.15 |
+| ธุรการ (Admin) | บันทึกข้อมูลและแนบเอกสารตามสิทธิ์ที่ได้รับมอบหมาย · เปิด "ดู portal ในฐานะลูกค้า" (ดูอย่างเดียว — ค่าเริ่มต้น `view_client_portal_as` · มติ U59 · `97` §13.1) · กรอกปฏิทินวันหยุดปีละครั้ง (`manage_holidays` — มติ U93) | Assigned scope | 38, 13 §6.15 |
 
 ### 5.2 กลุ่ม Inhouse / Outsource (ทีมติดตามทรัพย์ — แยก role ต่อ Role Group)
 

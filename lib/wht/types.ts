@@ -56,7 +56,14 @@ export interface WhtFilingSummaryDto {
   id: string
   periodId: string
   periodLabel: string
+  /** วันกำหนดยื่นจริง (เลื่อนวันหยุดแล้ว — U93) */
   filingDueDate: string
+  /** วันตามปฏิทินก่อนเลื่อน — `null` = ไม่ได้ถูกเลื่อน (มติ PO U93) */
+  filingNominalDueDate: string | null
+  /** ป้ายพร้อมแสดง: "15/11/2569 → 16/11/2569 (เลื่อนจากวันหยุด) (ยื่นออนไลน์)" หรือ "07/07/2569 (ยื่นแบบกระดาษ)" */
+  filingDueLabel: string
+  /** เฉพาะส่วนวันที่ของป้าย (ไม่มีวิธียื่น) — ใช้ในตาราง */
+  filingDueDateText: string
   /** วิธียื่นที่ใช้คิดวันกำหนดยื่น (มติ PO U45) */
   filingMethod: WhtFilingMethod
   /** "(ยื่นออนไลน์)" / "(ยื่นแบบกระดาษ)" — ต่อท้ายวันกำหนดยื่นบนจอ */

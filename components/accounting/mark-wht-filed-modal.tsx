@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtFilingSummaryDto } from '@/lib/wht/types'
 
@@ -92,7 +91,7 @@ export function MarkWhtFiledModal({
           <div className="flex justify-between">
             <span className="text-slate-400">กำหนดนำส่ง:</span>
             <span className={summary.isOverdue ? 'font-bold text-red-600' : 'font-bold'}>
-              {fmtDate(summary.filingDueDate)}
+              {summary.filingDueLabel}
             </span>
           </div>
           <div className="flex justify-between">

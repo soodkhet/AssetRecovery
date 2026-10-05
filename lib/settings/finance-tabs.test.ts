@@ -14,9 +14,9 @@ const SUPER = { isSuperadmin: true, capabilities: {} }
  */
 describe('FINANCE_SETTINGS_TABS', () => {
   it('มีครบ 14 แท็บของไฟล์ 13 (13 + §6.14 SLA) + แท็บผู้รับเงินของไฟล์ 18 + นโยบายการมอบหมายงานของไฟล์ 40', () => {
-    // + แท็บค่าตั้งภาษีหัก ณ ที่จ่าย §6.4.2 (มติ PO 05/10/2569 UAT U8)
-    expect(FINANCE_SETTINGS_TABS).toHaveLength(17)
-    expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(15)
+    // + แท็บค่าตั้งภาษีหัก ณ ที่จ่าย §6.4.2 (มติ PO 05/10/2569 UAT U8) + ปฏิทินวันหยุด §6.15 (มติ PO U93)
+    expect(FINANCE_SETTINGS_TABS).toHaveLength(18)
+    expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(16)
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'whtpolicy')?.section).toBe('§6.4.2')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'payee')?.section).toBe('ไฟล์ 18')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'sla')?.section).toBe('§6.14')
@@ -55,6 +55,7 @@ describe('FINANCE_SETTINGS_TABS', () => {
       'taxdoc',
       'sla',
       'assignment',
+      'holidays',
     ])
   })
 })
@@ -88,5 +89,41 @@ describe('แท็บตามสิทธิ์ (UAT R6-C)', () => {
   it('ผู้ถือ manage_payee_profile เห็นแท็บผู้รับเงิน', () => {
     const finance = { isSuperadmin: false, capabilities: { manage_payee_profile: 'manage' as const } }
     expect(resolveFinanceSettingsTab('payee', finance)).toBe('payee')
+  })
+})
+
+describe('ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93)', () => {
+  const staff = (roleName: string, capabilities: Record<string, 'view' | 'manage'>) => ({
+    isSuperadmin: false,
+    roleGroup: 'system' as const,
+    roleName,
+    capabilities,
+  })
+
+  it('แท็บปฏิทินวันหยุดอยู่ท้ายสุด เปิดให้กลุ่มปฏิบัติการ ต้องถือ manage_holidays', () => {
+    const tab = FINANCE_SETTINGS_TABS.at(-1)
+    expect(tab?.id).toBe('holidays')
+    expect(tab?.staffAccess).toBe(true)
+    expect(tab?.capabilities).toEqual(['manage_holidays'])
+  })
+
+  it('การเงิน/บัญชี/ธุรการ เห็นเฉพาะแท็บปฏิทินวันหยุด แม้ถือสิทธิ์อื่นด้วย · tab อื่นตกไปแท็บนี้', () => {
+    for (const roleName of ['การเงิน', 'บัญชี', 'ธุรการ']) {
+      const viewer = staff(roleName, { manage_holidays: 'manage', view_master_data: 'view', manage_payee_profile: 'manage' })
+      expect(visibleFinanceSettingsTabs(viewer).map((tab) => tab.id)).toEqual(['holidays'])
+      expect(resolveFinanceSettingsTab('cycles', viewer)).toBe('holidays')
+      expect(resolveFinanceSettingsTab(undefined, viewer)).toBe('holidays')
+    }
+  })
+
+  it('บริหารเห็นทุกแท็บเดิม + ปฏิทินวันหยุด (ถือ view) · ไม่ถือสิทธิ์ = ไม่เห็นแท็บนี้', () => {
+    const executive = staff('บริหาร', { view_master_data: 'view', manage_holidays: 'view' })
+    const ids = visibleFinanceSettingsTabs(executive).map((tab) => tab.id)
+    expect(ids).toContain('cycles')
+    expect(ids).toContain('holidays')
+    expect(resolveFinanceSettingsTab(undefined, executive)).toBe(DEFAULT_FINANCE_SETTINGS_TAB)
+    const without = staff('บริหาร', { view_master_data: 'view' })
+    expect(visibleFinanceSettingsTabs(without).map((tab) => tab.id)).not.toContain('holidays')
+    expect(resolveFinanceSettingsTab('holidays', SUPER)).toBe('holidays')
   })
 })

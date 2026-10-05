@@ -180,3 +180,37 @@ export function fromInputDateTime(value: string | null | undefined): Date | null
   const date = new Date(`${withSeconds}${BANGKOK_UTC_OFFSET}`)
   return Number.isNaN(date.getTime()) ? null : date
 }
+
+// ── วันทำการ (มติ PO 06/10/2569 UAT U93) ─────────────────────────────────────
+
+/** คีย์วันที่แบบ date-only `YYYY-MM-DD` (ค.ศ.) ของค่าเที่ยงคืน UTC — ใช้เทียบกับปฏิทินวันหยุด (คอลัมน์ `DATE`) */
+export function dateOnlyKey(dateOnlyUtc: Date): string {
+  return dateOnlyUtc.toISOString().slice(0, 10)
+}
+
+/** เสาร์/อาทิตย์ — อ่านจากค่า date-only (เที่ยงคืน UTC) ⇒ ใช้ `getUTCDay()` ไม่ใช่เวลาเครื่อง */
+export function isWeekendDateOnly(dateOnlyUtc: Date): boolean {
+  const day = dateOnlyUtc.getUTCDay()
+  return day === 0 || day === 6
+}
+
+/** เพดานกันวนไม่จบ (ปฏิทินที่กรอกผิดจนหยุดทั้งปี) — วันหยุดต่อเนื่องจริงไม่เกินนี้แน่นอน */
+const MAX_BUSINESS_DAY_SHIFT = 366
+
+/**
+ * **วันทำการแรกที่ ≥ วันที่ให้มา** — วันนั้นเป็นวันทำการอยู่แล้วคืนวันเดิม · ตรงเสาร์/อาทิตย์หรือวันหยุดในปฏิทิน
+ * ขององค์กร (`public_holidays`) ⇒ เลื่อนไปทีละวันจนเจอวันทำการ (ข้ามวันหยุดต่อเนื่อง/ข้ามเดือน/ข้ามปีได้)
+ *
+ * รับ/คืน **date-only เที่ยงคืน UTC** (แบบคอลัมน์ `DATE`) · `holidays` = คีย์ `YYYY-MM-DD` (ดู {@link dateOnlyKey})
+ * ใช้เลื่อนกำหนดยื่นภาษีที่ตรงวันหยุด (มติ PO U93 · ประมวลรัษฎากร: ครบกำหนดวันหยุดราชการ ⇒ ยื่นวันทำการถัดไปได้)
+ */
+export function nextBusinessDay(dateOnlyUtc: Date, holidays: ReadonlySet<string> | readonly string[] = []): Date {
+  const holidaySet = new Set<string>(holidays)
+  const DAY_MS = 86_400_000
+  let current = new Date(Date.UTC(dateOnlyUtc.getUTCFullYear(), dateOnlyUtc.getUTCMonth(), dateOnlyUtc.getUTCDate()))
+  for (let step = 0; step < MAX_BUSINESS_DAY_SHIFT; step += 1) {
+    if (!isWeekendDateOnly(current) && !holidaySet.has(dateOnlyKey(current))) return current
+    current = new Date(current.getTime() + DAY_MS)
+  }
+  return current
+}

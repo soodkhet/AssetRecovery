@@ -30,6 +30,8 @@ export const MANAGE_TAX_PROFILES = 'manage_tax_profiles'
 /** ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8) — Superadmin/บริหาร */
 export const MANAGE_WHT_POLICY = 'manage_wht_policy'
 export const MANAGE_INVOICE_NUMBERING = 'manage_invoice_numbering'
+/** ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93) — ธุรการ/บัญชี/การเงิน manage · บริหาร view */
+export const MANAGE_HOLIDAYS = 'manage_holidays'
 export const MANAGE_ROLES = 'manage_roles'
 
 export type StatusFilter = 'active' | 'inactive' | 'all'

@@ -683,6 +683,7 @@ model Organization {
   whtPolicyHistory            WhtPolicyHistory[]
   bankAccounts                BankAccount[]
   costCenters                 CostCenter[]
+  publicHolidays              PublicHoliday[]
   billingPayoutCycles         BillingPayoutCycle[]
   approvalMatrices            ApprovalMatrix[]
   financePolicySettings       FinancePolicySettings?
@@ -822,6 +823,8 @@ model User {
   whtPolicyHistoryCreated            WhtPolicyHistory[]            @relation("wht_policy_history_created_by")
   bankAccountsCreated                BankAccount[]                 @relation("bank_accounts_created_by")
   costCentersCreated                 CostCenter[]                  @relation("cost_centers_created_by")
+  publicHolidaysCreated              PublicHoliday[]               @relation("public_holidays_created_by")
+  publicHolidaysUpdated              PublicHoliday[]               @relation("public_holidays_updated_by")
   billingPayoutCyclesCreated         BillingPayoutCycle[]          @relation("cycles_created_by")
   billingPayoutCyclesUpdated         BillingPayoutCycle[]          @relation("cycles_updated_by")
   approvalMatricesCreated            ApprovalMatrix[]              @relation("approval_matrices_created_by")
@@ -1327,6 +1330,30 @@ model CostCenter {
 
   @@unique([organizationId, code])
   @@map("cost_centers")
+}
+
+/// ปฏิทินวันหยุดขององค์กร (มติ PO 06/10/2569 UAT U93 · `13` §6.15) — ธุรการ/บัญชี/การเงินกรอกปีละครั้ง
+/// ใช้เลื่อนกำหนดยื่นภาษีที่ตรงวันหยุด/เสาร์-อาทิตย์เป็นวันทำการถัดไป (`nextBusinessDay()` · `33` §6.2)
+/// ลบ = soft delete (`deleted_at`) · วันเดียวกันมีได้แถวเดียวที่ยังไม่ลบ — partial unique
+/// `uniq_public_holidays_active_date` + CHECK ชื่อห้ามว่าง อยู่ใน raw SQL `20261006130000_public_holidays`
+model PublicHoliday {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  holidayDate    DateTime @map("holiday_date") @db.Date
+  name           String
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User         @relation("public_holidays_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("public_holidays_updated_by", fields: [updatedBy], references: [id])
+
+  @@index([organizationId, holidayDate], map: "idx_public_holidays_org_date")
+  @@map("public_holidays")
 }
 
 /// รอบบิล/รอบจ่าย (ไฟล์ 13 §6.1)
