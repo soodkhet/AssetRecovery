@@ -1,4 +1,4 @@
-import type { ExpenseType, PayoutBatchSide } from '@/lib/generated/prisma/enums'
+import type { ExpenseType, PayeeType, PayoutBatchSide } from '@/lib/generated/prisma/enums'
 import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
 
 /**
@@ -133,6 +133,11 @@ export const ISSUE_ZERO_RATE_40_2_LABEL = 'เงินได้ 40(1)/40(2) อ
 export const INCOME_TYPE_TEXT_40_2 = 'ค่าธรรมเนียม ค่านายหน้า มาตรา 40(2)'
 /** ข้อความประเภทเงินได้บนใบ 50 ทวิ ของ 40(1) (มติ PO 05/10/2569 UAT U33) — แถวที่ 1 ของแบบ 50 ทวิ */
 export const INCOME_TYPE_TEXT_40_1 = 'เงินเดือน ค่าจ้าง เบี้ยเลี้ยง โบนัส ฯลฯ มาตรา 40(1)'
+/**
+ * ข้อความประเภทเงินได้ของผู้รับ**นิติบุคคล** (มติ PO 06/10/2569 UAT U96 #2) — ค่าบริการ/ค่าจ้างทำของที่หัก ณ ที่จ่าย
+ * ตามคำสั่งกรมสรรพากรที่ออกตาม ม.3 เตรส (ยื่น ภ.ง.ด.53 ตาม ม.69 ทวิ) — แถวที่ 5 ของแบบ 50 ทวิ ไม่ใช่ "มาตรา 40(8)"
+ */
+export const INCOME_TYPE_TEXT_CORPORATE = 'ค่าบริการ / ค่าจ้างทำของ (หัก ณ ที่จ่ายตามมาตรา 3 เตรส)'
 
 /**
  * ประเภทเงินได้ที่ใช้ **อัตราต่อคน** (`payee_profiles.wht_40_2_pct`) · ไม่มีเกณฑ์ขั้นต่ำ · ยื่น **ภ.ง.ด.1**
@@ -156,7 +161,14 @@ export function isInWhtBase(policy: Pick<WhtPolicyValues, 'baseExpenseTypes'>, e
 export function resolveIncomeCategory(
   policy: Pick<WhtPolicyValues, 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
   side: PayoutBatchSide | null,
+  /**
+   * ชนิดผู้รับ (มติ PO 06/10/2569 UAT U96 #2) — **นิติบุคคลไม่มีเงินได้ 40(1)/40(2)** (มาตรา 40 เป็นเงินได้ของ
+   * บุคคลธรรมดา) ⇒ ทุกโหมดคืนหมวดที่ใช้ Tax Profile (`sec_40_8` = ค่าบริการ/ค่าจ้างทำของ หัก ณ ที่จ่ายตาม
+   * ม.3 เตรส · ม.69 ทวิ) และยื่น ภ.ง.ด.53 (`filingFormOf()`) · ไม่ใช้อัตราต่อคน · ไม่ระบุ = บุคคลธรรมดา (เดิม)
+   */
+  payeeType: PayeeType = 'individual',
 ): WhtIncomeCategory {
+  if (payeeType === 'corporate') return 'sec_40_8'
   if (policy.incomeTypeMode === 'all_40_2') return 'sec_40_2'
   if (policy.incomeTypeMode === 'all_40_8') return 'sec_40_8'
   if (side === 'inhouse') return policy.inhouseIncomeCategory

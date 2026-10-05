@@ -382,6 +382,8 @@ async function collectExpenseCandidates(
           isVerified: true,
           taxProfileId: true,
           wht402Pct: true,
+          // นิติบุคคล ⇒ ไม่ใช่เงินได้ 40(1)/40(2) ไม่ว่าโหมดค่าตั้งเป็นอะไร (มติ PO U96 #2)
+          payeeType: true,
           taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
           user: {
             select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
@@ -420,7 +422,7 @@ async function collectExpenseCandidates(
   const missing402: string[] = []
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
-    const category = resolveIncomeCategory(policy, first.side)
+    const category = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType)
     const hasBaseItem = members.some((index) => isInWhtBase(policy, sided[index]!.row.expenseType))
     if (usesPerPayeeWhtRate(category) && hasBaseItem && first.row.payee.wht402Pct === null) {
       missing402.push(first.row.payee.user.fullName)
@@ -436,7 +438,7 @@ async function collectExpenseCandidates(
   const whtByIndex = new Array<PayeeBatchWhtLine | undefined>(sided.length)
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
-    const incomeCategory = resolveIncomeCategory(policy, first.side)
+    const incomeCategory = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType)
     const { lines } = calculatePayeeBatchWht(
       members.map((index) => {
         const row = sided[index]!.row

@@ -304,6 +304,10 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
     whtSatang: 25500,
     whtPct: '3.00',
     filingForm: 'PND3',
+    payeeTitle: 'นาย',
+    payeeAddress: '12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100',
+    payeeBranchCode: null,
+    whtCondition: 'withhold',
   }
 
   it('ตัดขีด/ช่องว่างออกเหลือ 13 หลักล้วน', () => {
@@ -329,7 +333,7 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
 
   it('แถวออกมาตรงรูปแบบตัวอย่าง', () => {
     expect(whtCsv([base]).slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3',
+      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold',
     )
   })
 
@@ -344,6 +348,10 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
       'wht_baht',
       'wht_pct',
       'filing_form',
+      'payee_title',
+      'payee_address',
+      'payee_branch',
+      'wht_condition',
     ])
     const lines = whtCsv([
       base,
@@ -352,9 +360,28 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
     ])
       .slice(CSV_BOM.length)
       .split('\r\n')
-    expect(lines.slice(1, 4).map((line) => line.split(',').at(-1))).toEqual(['PND3', 'PND53', 'PND1'])
+    expect(lines.slice(1, 4).map((line) => line.split(',')[8])).toEqual(['PND3', 'PND53', 'PND1'])
     // 40(2) อัตรา 0% (U16) — ภาษี 0 แต่ยังเป็นแถวของ ภ.ง.ด.1
-    expect(lines[3]).toBe('0144,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,0.00,0.00,PND1')
+    expect(lines[3]?.startsWith('0144,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,0.00,0.00,PND1,')).toBe(true)
+  })
+
+  it('U94 — คอลัมน์ผู้ถูกหักต่อท้าย: นิติบุคคลมีรหัสสาขา ไม่มีคำนำหน้า · ที่อยู่มีจุลภาคถูก quote · เงื่อนไขการหักเป็นรหัส', () => {
+    const [, person, company] = whtCsv([
+      { ...base, payeeAddress: null, whtCondition: 'pay_once' },
+      {
+        ...base,
+        certificateNumber: '0145',
+        payeeName: 'บริษัท เร็วดี จำกัด',
+        payeeTitle: null,
+        payeeAddress: '1 อาคาร A, ชั้น 2 แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500',
+        payeeBranchCode: '00001',
+        filingForm: 'PND53',
+      },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(person?.endsWith(',PND3,นาย,-,-,pay_once')).toBe(true)
+    expect(company?.endsWith(',PND53,-,"1 อาคาร A, ชั้น 2 แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500",00001,withhold')).toBe(true)
   })
 })
 

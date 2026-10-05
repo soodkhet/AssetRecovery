@@ -149,8 +149,13 @@ describe('PDF 50 ทวิ แบบต่อรอบ', () => {
     paymentDate: new Date('2026-10-05T00:00:00Z'),
     grossSatang: 135_000,
     whtSatang: 4050,
-    payer: { name: 'บริษัท', taxId: '0105555000000', address: '—', phone: null },
-    payee: { name: 'in1', taxId: '1100000000001', address: '—', phone: null },
+    issuedAt: new Date('2026-10-05T03:00:00Z'),
+    payeeType: 'individual',
+    incomeCategory: 'sec_40_2',
+    whtCondition: 'withhold',
+    filingSequence: 1,
+    payer: { name: 'บริษัท', taxId: '0105555000000', address: '—', branchLabel: 'สำนักงานใหญ่' },
+    payee: { name: 'in1', taxId: '1100000000001', address: '—', branchLabel: null },
   }
 
   it('แสดงยอดรวมของรอบ + หมายเหตุว่ารวมกี่รายการ', () => {
@@ -167,9 +172,9 @@ describe('PDF 50 ทวิ แบบต่อรอบ', () => {
 })
 
 describe('U33 — เงินได้ 40(1) ใช้กติกาเดียวกับ 40(2) (มติ PO 05/10/2569)', () => {
-  it('แบบที่ยื่น = ภ.ง.ด.1 เสมอ (ไม่สน Tax Profile / ชนิดผู้รับ)', () => {
+  it('แบบที่ยื่น = ภ.ง.ด.1 เสมอสำหรับบุคคลธรรมดา (ไม่สน Tax Profile) · นิติบุคคล = ภ.ง.ด.53 (มติ PO U96 #2)', () => {
     expect(filingFormOf({ taxProfileFilingForm: 'PND3', payeeType: 'individual', incomeCategory: 'sec_40_1' })).toBe('PND1')
-    expect(filingFormOf({ taxProfileFilingForm: 'PND53', payeeType: 'corporate', incomeCategory: 'sec_40_1' })).toBe('PND1')
+    expect(filingFormOf({ taxProfileFilingForm: 'PND53', payeeType: 'corporate', incomeCategory: 'sec_40_1' })).toBe('PND53')
     expect(filingFormOf({ taxProfileFilingForm: null, payeeType: 'individual', incomeCategory: 'sec_40_8' })).toBe('PND3')
   })
 

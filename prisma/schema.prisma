@@ -521,6 +521,17 @@ enum CreditNoteType {
   @@map("credit_note_type")
 }
 
+/// เงื่อนไขการหักภาษี ณ ที่จ่ายของผู้รับ (ช่อง "ผู้จ่ายเงิน" บนแบบ 50 ทวิ — มติ PO 06/10/2569 UAT U94 ข้อ 1)
+/// `withhold` = (1) หัก ณ ที่จ่าย (ค่าเริ่มต้น) · `pay_always` = (2) ออกให้ตลอดไป · `pay_once` = (3) ออกให้ครั้งเดียว
+/// ⚠️ ระบบคำนวณภาษีแบบ (1) เสมอ — (2)/(3) รองรับเฉพาะการบันทึกและพิมพ์ ไม่เปลี่ยนสูตร (`22` §6.9)
+enum WhtCondition {
+  withhold
+  pay_always
+  pay_once
+
+  @@map("wht_condition")
+}
+
 enum WhtFilingForm {
   PND3 // บุคคลธรรมดา (ภ.ง.ด.3)
   PND53 // นิติบุคคล (ภ.ง.ด.53)
@@ -2164,6 +2175,22 @@ model PayeeProfile {
   accountName   String? @map("account_name")
   accountNumber String? @map("account_number")
   nationalId    String? @map("national_id") @db.VarChar(13)
+
+  /// คำนำหน้าชื่อ (บุคคลธรรมดา: นาย/นาง/นางสาว/อื่น ๆ — เก็บเป็นข้อความ) — มติ PO U94 ข้อ 1 · พิมพ์บนใบ 50 ทวิ
+  nameTitle          String?      @map("name_title") @db.VarChar(50)
+  /// ที่อยู่ผู้ถูกหักภาษี (มติ PO U94 ข้อ 1 · ปิด D15) — โครงเดียวกับที่อยู่ของเคส (`AddressFields`)
+  /// บังคับครบก่อน "ยืนยัน" ผู้รับ · CHECK รหัสไปรษณีย์ 5 หลักใน raw SQL `20261006141000_payee_tax_address_wht_snapshot`
+  addressDetail      String?      @map("address_detail")
+  addressSubdistrict String?      @map("address_subdistrict")
+  addressDistrict    String?      @map("address_district")
+  addressProvince    String?      @map("address_province")
+  addressPostalCode  String?      @map("address_postal_code") @db.VarChar(5)
+  /// สำนักงานใหญ่/สาขา (นิติบุคคล — ม.50 ทวิ/ม.86/4 · มติ PO U94) `00000` = สำนักงานใหญ่ · บุคคลธรรมดาไม่ใช้
+  /// CHECK `^[0-9]{5}$` ใน raw SQL
+  branchCode         String       @default("00000") @map("branch_code") @db.VarChar(5)
+  /// เงื่อนไขการหัก (1)/(2)/(3) — บันทึก/พิมพ์เท่านั้น ไม่เปลี่ยนสูตร (มติ PO U94)
+  whtCondition       WhtCondition @default(withhold) @map("wht_condition")
+
   /// บังคับเมื่อ `finance_policy_settings.require_payee_id_document = true` (`13` §6.2)
   idDocumentUrl String? @map("id_document_url")
 
@@ -2626,10 +2653,10 @@ model BillingBatch {
   allocations             BankTransactionAllocation[]
   customerWhtCertificates CustomerWhtCertificate[]
 
+  @@unique([organizationId, batchNumber], map: "uniq_billing_batch_number")
   /// มติ PO U86 (BUG-155) — ถอด UNIQUE(org, company, period) แล้ว: 1 บริษัทมีหลายรอบวางบิลในเดือนเดียวกันได้
   /// เหลือ index ธรรมดาไว้ค้นรอบตามงวด · ตัวกันวางบิลซ้ำคือ 1:1 `revenues.billing_batch_id` (ยึดเฉพาะใบที่ยังว่าง)
   @@index([organizationId, companyId, period], map: "idx_billing_org_company_period")
-  @@unique([organizationId, batchNumber], map: "uniq_billing_batch_number")
   @@index([organizationId, status], map: "idx_billing_org_status")
   @@index([companyId, status], map: "idx_billing_company")
   @@map("billing_batches")
@@ -2918,6 +2945,24 @@ model WhtCertificate {
   /// CHECK `wht_cert_batch_mode_has_batch` (per_payee_batch ⇒ payout_batch_id NOT NULL) ใน raw SQL
   issueMode         WhtCertificateMode @default(per_item) @map("issue_mode")
   payoutBatchId     String?            @map("payout_batch_id") @db.Uuid
+
+  /// ── snapshot ผู้ถูกหัก/ผู้หัก ณ วันออกใบ (มติ PO 06/10/2569 UAT U96 #4) — **immutable** (trigger
+  /// `wht_certificates_immutable`) · PDF/ไฟล์ 05 อ่านจากตรงนี้เท่านั้น ห้ามอ่านโปรไฟล์ปัจจุบันย้อนหลัง (Rule 08)
+  /// ใบที่ออกก่อน migration `20261006141000_payee_tax_address_wht_snapshot` = เติมจากค่าปัจจุบัน ณ วัน migrate
+  payeeName       String       @map("payee_name")
+  payeeNameTitle  String?      @map("payee_name_title") @db.VarChar(50)
+  payeeType       PayeeType    @map("payee_type")
+  /// เลขประจำตัวผู้เสียภาษี 13 หลักของผู้ถูกหัก — NULL = โปรไฟล์ยังไม่กรอกตอนออกใบ
+  payeeTaxId      String?      @map("payee_tax_id") @db.VarChar(13)
+  /// ที่อยู่ที่ประกอบเป็นบรรทัดเดียวแล้ว (`formatThaiAddress()`) — NULL = ยังไม่กรอกตอนออกใบ
+  payeeAddress    String?      @map("payee_address")
+  /// นิติบุคคลเท่านั้น (`00000` = สำนักงานใหญ่) · บุคคลธรรมดา = NULL
+  payeeBranchCode String?      @map("payee_branch_code") @db.VarChar(5)
+  whtCondition    WhtCondition @map("wht_condition")
+  payerName       String       @map("payer_name")
+  payerTaxId      String       @map("payer_tax_id") @db.VarChar(13)
+  payerAddress    String       @map("payer_address")
+  payerBranchCode String       @map("payer_branch_code") @db.VarChar(5)
 
   status                WhtCertificateStatus @default(active)
   /// บังคับกรอกเมื่อ cancelled (WHT_CANCEL_REQUIRES_REASON)

@@ -1,4 +1,5 @@
-import type { PayeeType } from '@/lib/generated/prisma/enums'
+import type { AddressDtoLike } from '@/lib/address/address-value'
+import type { PayeeType, WhtCondition } from '@/lib/generated/prisma/enums'
 
 /**
  * DTO ของผู้รับเงินที่ส่งออก API (ไฟล์ 18 §8/§14)
@@ -27,6 +28,16 @@ export interface PayeeDto {
   idDocumentUrl: string | null
   /** อัตราหัก 40(2) ต่อคน (%) — ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) · `null` = ยังไม่กรอก */
   wht402Pct: number | null
+  /** คำนำหน้าชื่อ (บุคคลธรรมดา) — มติ PO U94 ข้อ 1 */
+  nameTitle: string | null
+  /** ที่อยู่ผู้ถูกหักภาษี 5 ช่อง (ค่าที่ยังไม่กรอก = `null`) */
+  address: AddressDtoLike
+  /** ที่อยู่ประกอบเป็นบรรทัดเดียวแล้ว — `null` = ยังไม่กรอก */
+  addressLine: string | null
+  /** `00000` = สำนักงานใหญ่ (มีความหมายเฉพาะนิติบุคคล) */
+  branchCode: string
+  /** เงื่อนไขการหัก (1)/(2)/(3) — พิมพ์บนใบ 50 ทวิ */
+  whtCondition: WhtCondition
   isVerified: boolean
   verifiedAt: string | null
   verifiedByName: string | null

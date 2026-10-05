@@ -1,4 +1,5 @@
 import { assertOrgWideReadable } from '@/lib/auth/scope'
+import { payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
@@ -34,6 +35,7 @@ import {
   filingNominalDueDateOf,
   filingFormOf,
   filingOverdueWarning,
+  filingSequenceNumber,
   groupCertificateSources,
   type CertificateGroupingOptions,
   incomeTypeOf,
@@ -49,6 +51,7 @@ import {
   WHT_FILING_STATUS_LABEL,
   type CertificateGroup,
   type WhtCertificateDocSource,
+  whtPartyBranchLabel,
 } from '@/lib/wht/wht'
 import type { WhtCertificateMode, WhtIncomeCategory } from '@/lib/settings/wht-policy'
 
@@ -93,14 +96,27 @@ const CERT_SELECT = {
   issueMode: true,
   payoutBatchId: true,
   createdAt: true,
-  payee: { select: { nationalId: true, user: { select: { fullName: true, phone: true } } } },
+  // snapshot ผู้ถูกหัก/ผู้หัก ณ วันออกใบ (มติ PO U96 #4) — เอกสาร/ทะเบียนอ่านจากตรงนี้ ไม่อ่านโปรไฟล์ปัจจุบัน
+  payeeName: true,
+  payeeNameTitle: true,
+  payeeType: true,
+  payeeTaxId: true,
+  payeeAddress: true,
+  payeeBranchCode: true,
+  whtCondition: true,
+  payerName: true,
+  payerTaxId: true,
+  payerAddress: true,
+  payerBranchCode: true,
   cancelledByUser: { select: { fullName: true } },
   replaces: { select: { certificateNumber: true } },
   expenseRecord: {
     select: {
       periodId: true,
       period: { select: { periodLabel: true, yearBe: true, month: true } },
-      payoutBatchItem: { select: { payoutBatchId: true, payoutBatch: { select: { name: true } } } },
+      payoutBatchItem: {
+        select: { payoutBatchId: true, whtIncomeCategory: true, payoutBatch: { select: { name: true } } },
+      },
     },
   },
 } satisfies Prisma.WhtCertificateSelect
@@ -112,8 +128,8 @@ function toCertDto(row: CertRow): WhtCertificateDto {
     id: row.id,
     certificateNumber: row.certificateNumber,
     payeeId: row.payeeId,
-    payeeName: row.payee.user.fullName,
-    payeeTaxId: row.payee.nationalId,
+    payeeName: payeeDisplayName({ name: row.payeeName, nameTitle: row.payeeNameTitle, payeeType: row.payeeType }),
+    payeeTaxId: row.payeeTaxId,
     incomeType: row.incomeType,
     paymentDate: row.paymentDate.toISOString(),
     grossSatang: row.grossSatang,
@@ -298,7 +314,22 @@ const EXPENSE_SOURCE_SELECT = {
           whtIssueZeroRate402Certificate: true,
         },
       },
-      payee: { select: { id: true, payeeType: true, user: { select: { fullName: true } } } },
+      payee: {
+        select: {
+          id: true,
+          payeeType: true,
+          nationalId: true,
+          nameTitle: true,
+          addressDetail: true,
+          addressSubdistrict: true,
+          addressDistrict: true,
+          addressProvince: true,
+          addressPostalCode: true,
+          branchCode: true,
+          whtCondition: true,
+          user: { select: { fullName: true } },
+        },
+      },
       taxProfile: { select: { filingForm: true, incomeType: true } },
     },
   },
@@ -381,14 +412,32 @@ async function issueCertificate(
     incomeCategory,
   })
   const perBatch = group.mode === 'per_payee_batch'
+  const payee = item.payee
+  // ผู้หัก = องค์กร ณ วันออกใบ (snapshot — มติ PO U96 #4)
+  const payer = await tx.organization.findUniqueOrThrow({
+    where: { id: organizationId },
+    select: { name: true, taxId: true, address: true, branchCode: true },
+  })
 
   const created = await tx.whtCertificate.create({
     data: {
       organizationId,
       certificateNumber,
-      payeeId: item.payee.id,
+      payeeId: payee.id,
       expenseRecordId: source.id,
-      incomeType: incomeTypeOf(item.taxProfile?.incomeType ?? null, incomeCategory),
+      incomeType: incomeTypeOf(item.taxProfile?.incomeType ?? null, incomeCategory, payee.payeeType),
+      // snapshot ผู้ถูกหักจากโปรไฟล์ ณ วันออกใบ — แก้โปรไฟล์ภายหลังไม่กระทบใบนี้ (immutable ที่ DB)
+      payeeName: payee.user.fullName,
+      payeeNameTitle: payee.payeeType === 'corporate' ? null : payee.nameTitle,
+      payeeType: payee.payeeType,
+      payeeTaxId: payee.nationalId,
+      payeeAddress: payeeAddressLine(payee),
+      payeeBranchCode: payee.payeeType === 'corporate' ? payee.branchCode : null,
+      whtCondition: payee.whtCondition,
+      payerName: payer.name,
+      payerTaxId: payer.taxId,
+      payerAddress: payer.address,
+      payerBranchCode: payer.branchCode,
       paymentDate,
       grossSatang: group.grossSatang,
       whtSatang: group.whtSatang,
@@ -412,6 +461,10 @@ async function issueCertificate(
       after: {
         certificate_number: certificateNumber,
         payee_name: item.payee.user.fullName,
+        payee_tax_id: payee.nationalId,
+        payee_address: payeeAddressLine(payee),
+        payee_branch_code: payee.payeeType === 'corporate' ? payee.branchCode : null,
+        wht_condition: payee.whtCondition,
         expense_record_id: source.id,
         payout_batch_id: item.payoutBatchId,
         issue_mode: group.mode,
@@ -734,28 +787,30 @@ export async function markWhtFilingFiled(
 
 // ── GET /api/accounting/wht-certificates/:id/pdf (`28` §6.3) ────────────────
 
-/** ผู้จ่ายเงิน = องค์กรเจ้าของระบบ (`28` §6.3 — ฟิลด์บังคับตามกฎหมาย) */
-async function loadPayer(organizationId: string): Promise<{
-  name: string
-  taxId: string
-  address: string
-  phone: string | null
-}> {
-  const org = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { name: true, taxId: true, address: true, phone: true },
+/**
+ * ลำดับที่ในแบบ ภ.ง.ด. ของผู้รับ (มติ PO U96 #13) — นับในงวด + แบบเดียวกับใบนี้ (ชุดเดียวกับที่สรุปรอบนำส่ง/ไฟล์ 05 ใช้)
+ */
+async function loadFilingSequence(organizationId: string, certificate: CertRow): Promise<number | null> {
+  const entries = await prisma.whtCertificate.findMany({
+    where: {
+      organizationId,
+      filingForm: certificate.filingForm,
+      expenseRecord: { periodId: certificate.expenseRecord.periodId },
+    },
+    select: { payeeId: true, certificateNumber: true, status: true },
   })
-  if (org === null) throw new Error(`loadPayer: ไม่พบองค์กร ${organizationId}`)
-  return org
+  return filingSequenceNumber(entries, certificate.payeeId)
 }
 
-/** ข้อมูลดิบของใบ 50 ทวิ สำหรับ PDF — ประกอบเป็นข้อความที่ `buildWhtCertificateDoc()` */
+/**
+ * ข้อมูลดิบของใบ 50 ทวิ สำหรับ PDF — ประกอบเป็นข้อความที่ `buildWhtCertificateDoc()`
+ * คู่สัญญาอ่านจาก **snapshot ของใบ** เท่านั้น (มติ PO U96 #4) — แก้โปรไฟล์/ข้อมูลองค์กรภายหลังไม่เปลี่ยนใบเดิม
+ */
 export async function getWhtCertificateDocSource(
   user: SessionUser,
   certificateId: string,
 ): Promise<WhtCertificateDocSource> {
   const certificate = await findCertificate(user, certificateId)
-  const payer = await loadPayer(user.organizationId)
   const coverage =
     certificate.issueMode === 'per_payee_batch' && certificate.payoutBatchId !== null
       ? {
@@ -781,14 +836,28 @@ export async function getWhtCertificateDocSource(
     paymentDate: certificate.paymentDate,
     grossSatang: certificate.grossSatang,
     whtSatang: certificate.whtSatang,
+    issuedAt: certificate.createdAt,
+    payeeType: certificate.payeeType,
+    incomeCategory: certificate.expenseRecord.payoutBatchItem.whtIncomeCategory,
+    whtCondition: certificate.whtCondition,
+    filingSequence: await loadFilingSequence(user.organizationId, certificate),
     coverage,
-    payer: { ...payer },
+    payer: {
+      name: certificate.payerName,
+      taxId: certificate.payerTaxId,
+      address: certificate.payerAddress.trim() === '' ? EMPTY_FIELD_TEXT : certificate.payerAddress,
+      branchLabel: whtPartyBranchLabel(certificate.payerBranchCode),
+    },
     payee: {
-      name: certificate.payee.user.fullName,
-      // `payee_profiles` ไม่มีคอลัมน์ที่อยู่ (D15) — ห้ามเว้นว่างบนเอกสารทางการ
-      taxId: certificate.payee.nationalId ?? EMPTY_FIELD_TEXT,
-      address: EMPTY_FIELD_TEXT,
-      phone: certificate.payee.user.phone,
+      name: payeeDisplayName({
+        name: certificate.payeeName,
+        nameTitle: certificate.payeeNameTitle,
+        payeeType: certificate.payeeType,
+      }),
+      // ค่าที่ไม่มีตอนออกใบ — ห้ามเว้นว่างบนเอกสารทางการ
+      taxId: certificate.payeeTaxId ?? EMPTY_FIELD_TEXT,
+      address: certificate.payeeAddress ?? EMPTY_FIELD_TEXT,
+      branchLabel: whtPartyBranchLabel(certificate.payeeBranchCode, certificate.payeeType),
     },
   }
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { AddressFields } from '@/components/address/address-fields'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
@@ -22,10 +23,23 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
+import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
+import { branchCodeFromForm, branchKindOf, formatBranch, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
+import type { WhtCondition } from '@/lib/generated/prisma/enums'
+import {
+  nameTitleChoiceOf,
+  nameTitleFromForm,
+  PAYEE_NAME_TITLE_OPTIONS,
+  PAYEE_REQUIRED_ADDRESS_FIELDS,
+  WHT_CONDITION_LABEL,
+  WHT_CONDITIONS,
+  whtConditionAffectsFormula,
+  type PayeeNameTitleChoice,
+} from '@/lib/payees/payee'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
 import type { TaxProfileDto } from '@/lib/settings/types'
@@ -57,7 +71,7 @@ const PAYEE_TYPE_LABEL: Readonly<Record<'individual' | 'corporate', string>> = {
 }
 
 /** ฟิลด์ที่แก้แล้ว payee ที่ยืนยันแล้วต้องยืนยันใหม่ (`18` §9) — ใช้เตือนล่วงหน้าในฟอร์ม */
-const RESET_LABELS = 'ประเภท / Tax ID / กติกาภาษี / ข้อมูลธนาคาร'
+const RESET_LABELS = 'ประเภท / Tax ID / คำนำหน้า / ที่อยู่ / สาขา / เงื่อนไขการหัก / กติกาภาษี / ข้อมูลธนาคาร'
 
 interface Candidate {
   id: string
@@ -77,6 +91,15 @@ interface FormState {
   idDocumentUrl: string
   /** อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7) — ว่าง = ยังไม่กรอก */
   wht402Pct: string
+  /** คำนำหน้า (บุคคลธรรมดา — มติ PO U94 ข้อ 1) */
+  nameTitleChoice: PayeeNameTitleChoice
+  nameTitleOther: string
+  /** ที่อยู่ผู้ถูกหักภาษี — บังคับครบก่อนยืนยัน */
+  address: AddressValue
+  /** สำนักงานใหญ่/สาขา (นิติบุคคล) */
+  branchKind: BranchKind
+  branchNumber: string
+  whtCondition: WhtCondition
   reason: string
 }
 
@@ -90,6 +113,12 @@ const EMPTY_FORM: FormState = {
   accountNumber: '',
   idDocumentUrl: '',
   wht402Pct: '',
+  nameTitleChoice: '',
+  nameTitleOther: '',
+  address: EMPTY_ADDRESS,
+  branchKind: 'head_office',
+  branchNumber: '',
+  whtCondition: 'withhold',
   reason: '',
 }
 
@@ -104,7 +133,24 @@ function toForm(payee: PayeeDto): FormState {
     accountNumber: payee.accountNumber ?? '',
     idDocumentUrl: payee.idDocumentUrl ?? '',
     wht402Pct: payee.wht402Pct === null ? '' : String(payee.wht402Pct),
+    nameTitleChoice: nameTitleChoiceOf(payee.nameTitle),
+    nameTitleOther: nameTitleChoiceOf(payee.nameTitle) === 'other' ? (payee.nameTitle ?? '') : '',
+    address: addressFromDto(payee.address),
+    branchKind: branchKindOf(payee.branchCode),
+    branchNumber: isHeadOfficeBranch(payee.branchCode) ? '' : payee.branchCode,
+    whtCondition: payee.whtCondition,
     reason: '',
+  }
+}
+
+/** error ของช่องที่อยู่จาก Zod (`address.postalCode` …) → คีย์ของ `AddressFields` */
+function addressErrors(errors: Record<string, string>): Partial<Record<keyof AddressValue, string>> {
+  return {
+    detail: errors['address.detail'],
+    postalCode: errors['address.postalCode'],
+    province: errors['address.province'],
+    district: errors['address.district'],
+    subdistrict: errors['address.subdistrict'],
   }
 }
 
@@ -198,6 +244,10 @@ export function PayeeTab() {
       accountNumber: form.accountNumber,
       idDocumentUrl: form.idDocumentUrl,
       wht402Pct: form.wht402Pct.trim() === '' ? null : Number(form.wht402Pct),
+      nameTitle: form.payeeType === 'individual' ? nameTitleFromForm(form.nameTitleChoice, form.nameTitleOther) : '',
+      address: form.address,
+      branchCode: form.payeeType === 'corporate' ? branchCodeFromForm(form.branchKind, form.branchNumber) : '00000',
+      whtCondition: form.whtCondition,
       reason: form.reason.trim(),
     }
     const parsed =
@@ -353,6 +403,16 @@ export function PayeeTab() {
                 </Td>
                 <Td>
                   <span className="font-mono text-xs">{item.nationalId ?? '—'}</span>
+                  {item.payeeType === 'corporate' && (
+                    <div className="text-[10px] text-slate-500">{formatBranch(item.branchCode)}</div>
+                  )}
+                  {item.addressLine === null ? (
+                    <div className="text-[10px] font-semibold text-amber-600">ยังไม่กรอกที่อยู่</div>
+                  ) : (
+                    <div className="max-w-[220px] truncate text-[10px] text-slate-500" title={item.addressLine}>
+                      {item.addressLine}
+                    </div>
+                  )}
                 </Td>
                 <Td>
                   <span className="text-xs text-slate-600">{item.bankName ?? '—'}</span>
@@ -392,7 +452,7 @@ export function PayeeTab() {
                           disabled={item.missingForVerification.length > 0}
                           title={
                             item.missingForVerification.length > 0
-                              ? 'กรอกข้อมูลภาษีและบัญชีธนาคารให้ครบก่อนยืนยัน'
+                              ? 'กรอกข้อมูลภาษี ที่อยู่ และบัญชีธนาคารให้ครบก่อนยืนยัน'
                               : undefined
                           }
                         >
@@ -475,6 +535,72 @@ export function PayeeTab() {
             </Select>
           </Field>
 
+          {form.payeeType === 'individual' ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                id="payee-name-title"
+                label="คำนำหน้าชื่อ"
+                hint="พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่าย"
+                error={errors.nameTitle}
+              >
+                <Select
+                  id="payee-name-title"
+                  value={form.nameTitleChoice}
+                  onChange={(event) => set('nameTitleChoice', event.target.value as PayeeNameTitleChoice)}
+                >
+                  <option value="">— ไม่ระบุ —</option>
+                  {PAYEE_NAME_TITLE_OPTIONS.map((title) => (
+                    <option key={title} value={title}>
+                      {title}
+                    </option>
+                  ))}
+                  <option value="other">อื่น ๆ (ระบุ)</option>
+                </Select>
+              </Field>
+              {form.nameTitleChoice === 'other' && (
+                <Field id="payee-name-title-other" label="ระบุคำนำหน้า" required error={errors.nameTitle}>
+                  <Input
+                    id="payee-name-title-other"
+                    value={form.nameTitleOther}
+                    onChange={(event) => set('nameTitleOther', event.target.value)}
+                    placeholder="เช่น ดร."
+                  />
+                </Field>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                id="payee-branch-kind"
+                label="สำนักงานใหญ่ / สาขา"
+                required
+                hint="พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่ายต่อจากเลขประจำตัวผู้เสียภาษี"
+              >
+                <Select
+                  id="payee-branch-kind"
+                  value={form.branchKind}
+                  onChange={(event) => set('branchKind', event.target.value as BranchKind)}
+                >
+                  <option value="head_office">สำนักงานใหญ่</option>
+                  <option value="branch">สาขาที่</option>
+                </Select>
+              </Field>
+              {form.branchKind === 'branch' && (
+                <Field id="payee-branch-no" label="เลขที่สาขา (5 หลัก)" required error={errors.branchCode}>
+                  <Input
+                    id="payee-branch-no"
+                    numeric
+                    inputMode="numeric"
+                    maxLength={5}
+                    value={form.branchNumber}
+                    onChange={(event) => set('branchNumber', event.target.value)}
+                    placeholder="00001"
+                  />
+                </Field>
+              )}
+            </div>
+          )}
+
           <Field
             id="payee-national-id"
             label="เลขบัตรประชาชน / เลขทะเบียนนิติบุคคล (13 หลัก)"
@@ -519,6 +645,39 @@ export function PayeeTab() {
               onChange={(event) => set('wht402Pct', event.target.value)}
               placeholder="เช่น 2.50"
             />
+          </Field>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <AddressFields
+              label="ที่อยู่ผู้ถูกหักภาษี (พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่าย — ต้องครบก่อนยืนยัน)"
+              value={form.address}
+              onChange={(next) => set('address', next)}
+              requiredFields={PAYEE_REQUIRED_ADDRESS_FIELDS}
+              errors={addressErrors(errors)}
+            />
+          </div>
+
+          <Field
+            id="payee-wht-condition"
+            label="เงื่อนไขการหักภาษี ณ ที่จ่าย"
+            error={errors.whtCondition}
+            hint={
+              whtConditionAffectsFormula(form.whtCondition)
+                ? 'ระบบยังคำนวณยอดแบบหัก ณ ที่จ่ายตามปกติ — ใช้พิมพ์บนหนังสือรับรองเท่านั้น ภาษีที่บริษัทออกให้ต้องให้สำนักงานบัญชีคำนวณ'
+                : 'พิมพ์ในช่อง “ผู้จ่ายเงิน” บนหนังสือรับรองการหักภาษี ณ ที่จ่าย'
+            }
+          >
+            <Select
+              id="payee-wht-condition"
+              value={form.whtCondition}
+              onChange={(event) => set('whtCondition', event.target.value as WhtCondition)}
+            >
+              {WHT_CONDITIONS.map((condition) => (
+                <option key={condition} value={condition}>
+                  {WHT_CONDITION_LABEL[condition]}
+                </option>
+              ))}
+            </Select>
           </Field>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">

@@ -294,6 +294,13 @@ beforeAll(async () => {
            ('${PAYEE_NO_TAX_ID}', '${ORG_ID}', '${NO_TAX_ID_USER}', 'individual', NULL, true, '${USER_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
+  // มติ PO U94 ข้อ 1 — คำนำหน้า/ที่อยู่ของผู้ถูกหัก (ไฟล์ 05 คอลัมน์ต่อท้าย) · UPDATE แยกเพราะแถวอาจค้างจากรอบรันก่อน
+  await tx.$executeRawUnsafe(`
+    UPDATE payee_profiles
+    SET name_title = 'นาย', address_detail = '12 ม.3', address_subdistrict = 'ป่าแดด',
+        address_district = 'เมืองเชียงใหม่', address_province = 'เชียงใหม่', address_postal_code = '50100'
+    WHERE id = '${PAYEE_ID}'
+  `)
   await tx.$executeRawUnsafe(`
     INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, address, contact_name,
                                    contact_phone, created_by)
@@ -416,8 +423,10 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     expect(whtCsv).toContain('ประยุทธ์ บุญมี,3100000004600,25/06/2569')
     expect(whtCsv).toContain('8500.00,255.00,3.00')
     // มติ PO 05/10/2569 (U15) — filing_form ต่อท้ายสุด ค่าจาก `wht_certificates.filing_form`
-    expect(whtCsv).toContain('wht_baht,wht_pct,filing_form\r\n')
-    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3\r\n')
+    expect(whtCsv).toContain('wht_baht,wht_pct,filing_form,')
+    // มติ PO 06/10/2569 (U94 ข้อ 1) — คอลัมน์ผู้ถูกหักต่อท้าย · ค่าจาก snapshot ของใบ (U96 #4)
+    expect(whtCsv).toContain('filing_form,payee_title,payee_address,payee_branch,wht_condition\r\n')
+    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold\r\n')
   })
 
   it('Export ซ้ำรอบเดิม ⇒ v1.1 คนละแถว ไฟล์เดิมยังอยู่ครบ (`37` §16 — ไม่เขียนทับ)', async () => {
