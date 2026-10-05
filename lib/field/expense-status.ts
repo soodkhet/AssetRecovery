@@ -12,6 +12,7 @@ import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
  * needs_revision → pending_approval                       (resubmit_expense — ไม่ผ่านคลังซ้ำ)
  * pending_approval → rejected                             (terminal)
  * (ทุกสถานะที่ยังไม่เข้ารอบจ่าย) → superseded              (resubmit_close_case — `41` §10.1)
+ * pending_approval → pending_warehouse_confirm            (hold_for_warehouse — แถวรายวันของเคสที่เพิ่งปิดสำเร็จ · BUG-092)
  * ```
  *
  * ⚠️ **2 เส้นทางตีกลับห้ามสลับกัน** (`41` §10.1): `reject_expense` แตะแค่ `expense.status`
@@ -26,6 +27,7 @@ export const EXPENSE_ACTIONS = [
   'resubmit_expense',
   'reject_permanent',
   'supersede',
+  'hold_for_warehouse',
 ] as const
 export type ExpenseAction = (typeof EXPENSE_ACTIONS)[number]
 
@@ -43,6 +45,40 @@ const TRANSITIONS: Readonly<Record<ExpenseAction, { from: readonly ExpenseStatus
     from: ['pending_warehouse_confirm', 'pending_approval', 'pending_finance_approval', 'needs_revision', 'approved'],
     to: 'superseded',
   },
+  // แถวรายวัน (UAT Q21) ที่ job สร้างตอนเคสยังเปิด = `pending_approval` · เคสปิดสำเร็จภายหลัง ⇒ ต้องรอคลังเหมือน
+  // รายการอื่นของเคส (`41` §6.6 กฎ "สถานะสำเร็จต้องรอคลังก่อน" · `44` §11) — **เฉพาะแถวที่ยังไม่มีใครอนุมัติ**
+  // (เงื่อนไขครบอยู่ที่ `isFieldDayExpenseHoldable()`) · ปลดกลับด้วย `warehouse_confirm` ตอนล็อต confirmed
+  hold_for_warehouse: { from: ['pending_approval'], to: 'pending_warehouse_confirm' },
+}
+
+/** ข้อมูลขั้นต่ำของแถวที่ใช้ตัดสินว่าย้ายไปรอคลังได้ไหม (BUG-092) */
+export interface FieldDayHoldCandidate {
+  status: ExpenseStatus
+  fieldDaySettlementId: string | null
+  approvalStepCurrent: number
+  managerApprovedAt: Date | null
+  financeApprovedAt: Date | null
+  executiveApprovedAt: Date | null
+  payoutBatchItemId: string | null
+}
+
+/**
+ * **pure** — แถวรายวันนี้ย้ายไป `pending_warehouse_confirm` ได้ไหมเมื่อเคสปิดสำเร็จ (BUG-092)
+ *
+ * ได้เฉพาะแถวรายวัน (`field_day_settlement_id` ไม่ว่าง) ที่ `pending_approval` **ขั้นแรก ยังไม่มีผู้อนุมัติขั้นใดประทับ**
+ * และยังไม่เข้ารอบจ่าย — แถวที่มีคนอนุมัติไปบางขั้น/อนุมัติครบ/ถูกตีกลับ/เข้ารอบจ่ายแล้ว **ไม่แตะ**
+ * (ย้อนการอนุมัติของคนอื่นเป็นการตัดสินเชิงธุรกิจ — รอมติ PO)
+ */
+export function isFieldDayExpenseHoldable(row: FieldDayHoldCandidate): boolean {
+  return (
+    row.fieldDaySettlementId !== null &&
+    canExpenseAction(row.status, 'hold_for_warehouse') &&
+    row.approvalStepCurrent <= 1 &&
+    row.managerApprovedAt === null &&
+    row.financeApprovedAt === null &&
+    row.executiveApprovedAt === null &&
+    row.payoutBatchItemId === null
+  )
 }
 
 /** สถานะที่นับเป็น "ยังมีผล" (ไม่ถูกแทนที่/ไม่ถูกปฏิเสธถาวร) — ใช้ทั้ง query และ partial unique ระดับ DB */

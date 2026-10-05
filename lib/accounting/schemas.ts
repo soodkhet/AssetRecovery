@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ADVANCE_OVERDUE_AS_OF_MAX_DAYS, parseSimulatedAsOf } from '@/lib/jobs/job-types'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของรอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — Rule 13
@@ -89,3 +90,19 @@ export type ExceptionResolveInput = z.infer<typeof exceptionResolveSchema>
 export type ExceptionAuthorizeInput = z.infer<typeof exceptionAuthorizeSchema>
 export type PeriodListQuery = z.infer<typeof periodListQuerySchema>
 export type PeriodReasonInput = z.infer<typeof periodReasonSchema>
+
+/**
+ * body ของทางลัด dev `/api/dev/accounting-periods/:id/(send|lock)` (มติ PO 05/10/2569 U65)
+ * = เหตุผลเดิม + `asOf` (`YYYY-MM-DD` วันไทย · วันนี้ ถึง +31 วัน — ช่วงเดียวกับ asOf ของงานเงินทดรอง O10)
+ * route จริงใช้ `periodReasonSchema` (ไม่มี asOf) — ส่ง asOf ไปทางนั้นก็ถูกตัดทิ้ง
+ */
+export function devPeriodCloseSchema(now: Date) {
+  return periodReasonSchema.extend({
+    asOf: z
+      .string()
+      .refine(
+        (value) => parseSimulatedAsOf(value, now) !== null,
+        `วันที่จำลองต้องเป็นรูปแบบ YYYY-MM-DD ตั้งแต่วันนี้ถึงอีก ${ADVANCE_OVERDUE_AS_OF_MAX_DAYS} วันข้างหน้า`,
+      ),
+  })
+}

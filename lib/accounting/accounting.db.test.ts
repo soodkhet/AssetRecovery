@@ -1,5 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
@@ -449,6 +449,53 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     await expectCode(() => accounting.lockPeriod(ctx(), periodId, reason, beforeMidnight), 'PERIOD_NOT_ENDED')
     const locked = await accounting.lockPeriod(ctx(), periodId, reason, midnight)
     expect(locked.status).toBe('locked')
+  })
+
+  it('มติ PO U65: ทางลัด dev ส่ง/ล็อกด้วยวันจำลอง — ผ่านยามสิ้นเดือน · เวลาที่บันทึกเป็นเวลาจริง · audit ติด [จำลองวันที่]', async () => {
+    const realNow = new Date('2026-08-20T03:00:00Z') // 20/08/2569 — งวด ส.ค. ยังไม่สิ้นเดือน
+    const simulation = { simulatedNow: new Date('2026-09-01T05:00:00Z') } // 01/09/2569 เที่ยงวันไทย
+
+    const periodId = await seedPeriod()
+    await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason, realNow), 'PERIOD_NOT_ENDED')
+
+    const sent = await accounting.sendPeriod(ctx(), periodId, reason, realNow, simulation)
+    expect(sent.status).toBe('sent_to_accountant')
+    const locked = await accounting.lockPeriod(ctx(), periodId, reason, realNow, simulation)
+    expect(locked.status).toBe('locked')
+
+    const row = await db().accountingPeriod.findUniqueOrThrow({
+      where: { id: periodId },
+      select: { sentAt: true, lockedAt: true },
+    })
+    expect(row.sentAt?.toISOString()).toBe(realNow.toISOString())
+    expect(row.lockedAt?.toISOString()).toBe(realNow.toISOString())
+
+    const audits = await db().auditLog.findMany({
+      where: { organizationId: ORG_ID, targetType: 'accounting_periods', targetId: periodId },
+      select: { action: true, reason: true, afterData: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(audits.map((audit) => audit.action)).toEqual(['status_change', 'lock'])
+    for (const audit of audits) {
+      expect(audit.reason).toBe(`${reason.reason} [จำลองวันที่ 01/09/2569]`)
+      expect(audit.afterData).toMatchObject({ simulated_as_of: '[จำลองวันที่ 01/09/2569]' })
+    }
+  })
+
+  it('มติ PO U65: production ไม่อ่านวันจำลองเลย (กันชั้นที่สองต่อจาก route 404)', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    try {
+      const periodId = await seedPeriod()
+      await expectCode(
+        () =>
+          accounting.sendPeriod(ctx(), periodId, reason, new Date('2026-08-20T03:00:00Z'), {
+            simulatedNow: new Date('2026-09-01T05:00:00Z'),
+          }),
+        'PERIOD_NOT_ENDED',
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('ปลดล็อกโดยบัญชี ⇒ UNLOCK_REQUIRES_EXECUTIVE · ผู้บริหารทำได้และกลับไป sent_to_accountant', async () => {

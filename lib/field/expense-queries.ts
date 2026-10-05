@@ -15,6 +15,7 @@ import {
   ACTIVE_EXPENSE_STATUSES,
   assertRejectReason,
   ExpenseStateError,
+  isFieldDayExpenseHoldable,
   nextExpenseStatus,
 } from '@/lib/field/expense-status'
 import { assertHotelClaimFields, assertSharedAgentInTeam } from '@/lib/field/hotel-claim'
@@ -425,6 +426,86 @@ export async function supersedeCaseExpenses(
     })
   }
   return superseded
+}
+
+export interface FieldDayHoldResult {
+  /** แถวรายวันที่ย้ายไปรอคลังแล้ว */
+  heldIds: string[]
+  /** แถวรายวันของเคสที่ไม่ได้ย้าย เพราะมีผู้อนุมัติไปแล้ว/ตีกลับ/เข้ารอบจ่าย — รอมติ PO (ลง audit ของการปิดงาน) */
+  notHeld: { id: string; status: ExpenseStatus }[]
+}
+
+/**
+ * BUG-092 — เคสเพิ่งเข้า `closed_success` ⇒ แถวรายวันของเคส (job `daily_field_allowance` / เบิกย้อนหลัง U50)
+ * ที่ถูกสร้างตอนเคสยังเปิดเป็น `pending_approval` ต้องกลับไปรอคลังยืนยันเหมือนรายการอื่นของเคส
+ * (`41` §6.6 กฎ "สถานะสำเร็จต้องรอคลังก่อน" · `44` §11) — ปลดอีกครั้งพร้อมกันตอนล็อต confirmed (Step 2)
+ *
+ * - เรียก**ในทรานแซกชันเดียวกับการปิดงาน หลัง `cases` ถูกอัปเดตแล้ว** — job รายวันล็อกแถว `cases` แบบ FOR SHARE
+ *   ก่อนอ่านผลเคส ⇒ ฝั่งใดได้ล็อกก่อน อีกฝั่งเห็นผลที่ commit แล้ว (ไม่มีแถวหลุดเป็น `pending_approval`)
+ * - ย้ายเฉพาะแถวที่ `isFieldDayExpenseHoldable()` (ยังไม่มีใครอนุมัติ/ไม่อยู่ในรอบจ่าย) · ไม่สร้าง/ไม่ลบแถว
+ *   (ยอด/จำนวนแถวเท่าเดิม — ไม่ซ้ำไม่หาย) · ยาม optimistic ด้วย `updateMany where status/step` เดิม
+ * - audit `status_change` ต่อแถว (reason ระบุเหตุ)
+ */
+export async function holdFieldDayExpensesForWarehouse(
+  tx: ExpenseTxClient,
+  params: { organizationId: string; caseId: string; actor: SessionUser; meta: RequestMeta },
+): Promise<FieldDayHoldResult> {
+  const rows = await tx.expense.findMany({
+    where: {
+      organizationId: params.organizationId,
+      caseId: params.caseId,
+      fieldDaySettlementId: { not: null },
+      status: { in: ['pending_approval', 'pending_finance_approval', 'needs_revision', 'approved'] },
+      deletedAt: null,
+    },
+    orderBy: [{ expenseDate: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      status: true,
+      fieldDaySettlementId: true,
+      approvalStepCurrent: true,
+      managerApprovedAt: true,
+      financeApprovedAt: true,
+      executiveApprovedAt: true,
+      payoutBatchItemId: true,
+    },
+  })
+
+  const result: FieldDayHoldResult = { heldIds: [], notHeld: [] }
+  for (const row of rows) {
+    if (!isFieldDayExpenseHoldable(row)) {
+      result.notHeld.push({ id: row.id, status: row.status })
+      continue
+    }
+    const nextStatus = nextExpenseStatus(row.status, 'hold_for_warehouse')
+    const claimed = await tx.expense.updateMany({
+      where: { id: row.id, status: row.status, approvalStepCurrent: row.approvalStepCurrent, payoutBatchItemId: null },
+      data: { status: nextStatus, updatedBy: params.actor.id },
+    })
+    if (claimed.count === 0) {
+      result.notHeld.push({ id: row.id, status: row.status })
+      continue
+    }
+    result.heldIds.push(row.id)
+    await emitAudit(
+      {
+        organizationId: params.organizationId,
+        actorId: params.actor.id,
+        actorRole: params.actor.roleName,
+        action: 'status_change',
+        targetType: 'expenses',
+        targetId: row.id,
+        before: { status: row.status },
+        after: { status: nextStatus, caseId: params.caseId, fieldDaySettlementId: row.fieldDaySettlementId },
+        reason: 'เคสปิดงานสำเร็จ — รายการค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของเคสต้องรอคลังยืนยันรับเครื่องก่อนเข้าคิวอนุมัติ',
+        ipAddress: params.meta.ipAddress,
+        userAgent: params.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+  }
+  return result
 }
 
 /**

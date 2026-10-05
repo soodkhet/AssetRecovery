@@ -18,6 +18,7 @@
 | v2.3 | 15/08/2569 | **sync §14.1/§17 ให้ครบ 5 job_type** (ปิด C8 ใน `docs/02_OPEN_DECISIONS.md` ตามมติ PO 12/08/2569 ข้อ 1 — ใช้ตัวเลือก default): §6.1 เติม `advance_overdue` ไปตั้งแต่ v2.2 แต่ §14.1 และ §17 ยังเขียน 4 ตัว · Phase 5.3 implement dev trigger ให้รับครบ 5 ตัวตาม §6.1 จึงแก้ถ้อยคำให้ตรงกัน **ไม่มีการเปลี่ยน business logic** |
 | v2.5 | 05/10/2569 | **มติ PO 05/10/2569 (U25 · BUG-093)** — §6.1 `daily_field_allowance`: วันที่งวดบัญชีปิดแล้วยังข้าม (ไม่ settle ข้ามงวด) แต่แจ้งเตือนในระบบถึงผู้ถือ `create_adjustment` พร้อมยอดที่คำนวณไว้ · idempotent: คีย์กันซ้ำต่อ (พนักงาน, วัน) — รันซ้ำไม่แจ้งซ้ำ · ผลของ job เพิ่ม `periodLockedNotified` / `approvalNotified` · แถวที่ settle แล้วเข้าคิวอนุมัติทันทีแจ้งผู้อนุมัติขั้น 1 (U29 — `16` §9.1) |
 | v2.6 | 05/10/2569 | **มติ PO 05/10/2569 (U50)** — §6.1 `daily_field_allowance`: วันที่งวดปิดแจ้ง**ทั้งการเงินและบัญชี** (คนละลิงก์ · กันซ้ำต่อผู้รับ) · การเงินสร้างรายการเบิกย้อนหลังลงงวดที่เปิดอยู่ได้ (`41` §6.6) — สร้างแถว `field_day_settlements` ของวันนั้น ⇒ job รอบถัดไปไม่เห็นวันนั้นอีก (ไม่ settle ซ้ำ) · job กับปุ่มชนกันได้ชุดเดียวด้วย UNIQUE เดิม |
+| v2.7 | 05/10/2569 | **มติ PO 05/10/2569 (U65)** — เพิ่ม §14.2 ทางลัด dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`POST /api/dev/accounting-periods/{id}/send` · `/lock`) แบบเดียวกับ asOf ของ `advance_overdue` (O10): production = 404 ก่อนชั้นสิทธิ์ · สิทธิ์ชุดเดียวกับ route จริง · วันจำลองใช้กับยามสิ้นเดือน (`30` §6.2a) + Readiness เท่านั้น · audit ติด `[จำลองวันที่ DD/MM/YYYY]` · route จริงไม่รับเวลาจากผู้เรียก |
 | v2.4 | 03/10/2569 | **เพิ่ม job_type `daily_field_allowance`** ตามมติ PO 03/10/2569 (UAT Q21 · DEC-012): ค่าน้ำมันเหมาจ่าย (`DAILY_FLAT`) + เบี้ยเลี้ยง คิดวันละครั้งต่อพนักงานต่อวันปฏิทินไทย แล้วกระจายเท่ากันทุกเคสที่เช็คอินวันนั้น — สร้างรายการเบิกหลังจบวันด้วย job รายวัน (cron รอบแรกหลังเที่ยงคืนไทย · ประมวลผลเฉพาะวันที่จบแล้ว · เก็บตกวันที่พลาด) · idempotent ต่อ (พนักงาน, วัน) ด้วย UNIQUE ของ `field_day_settlements` (`02` v4.12) · §14.1 dev trigger รับครบ 6 ตัว และรับ payload `date` (`YYYY-MM-DD` ≤ วันนี้) **เฉพาะ job นี้ผ่าน dev trigger** — cron จริงไม่รับ |
 | v2.2 | 04/07/2569 | **เติม job_type `advance_overdue` ใน §6.1** — background job auto-mark Advance ที่เลย `due_clear_date` เป็น `overdue` ถูกกำหนดไว้แล้วในไฟล์ 15 (§9.1/§10/§13/EVENT `advance.overdue`) แต่ตกหล่นจากรายการ job_type — sync comment ใน `02-database-schema-design.md` (ตาราง jobs) แล้วเช่นกัน |
 
@@ -168,6 +169,22 @@ stateDiagram-v2
 - `daily_field_allowance` รับ `payload.date` (`YYYY-MM-DD` วันไทย ต้อง ≤ วันนี้ ไม่งั้น 400) เพื่อ settle วันที่ระบุทันที (รวม "วันนี้" สำหรับทดสอบ) — ตัวรันงานอ่าน `date` เฉพาะงานที่สร้างจาก dev trigger นอก production เท่านั้น · cron จริงไม่รับ (settle เฉพาะวันที่จบแล้ว) · ตัวอย่าง body: `{ "jobType": "daily_field_allowance", "payload": { "date": "2026-10-03" } }`
 - ยังต้องสร้าง job record ผ่าน flow เดียวกับ `POST /api/jobs` ปกติ (มี `idempotency_key`, บันทึก audit log) — ไม่ใช่ shortcut ที่ข้าม business logic แค่ข้าม "การรอเวลา cron" เท่านั้น
 - จำกัดสิทธิ์เรียกเฉพาะ role ที่มีสิทธิ์ Trigger job ตาม §12 เช่นเดียวกับ production endpoint
+
+### 14.2 Dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`/api/dev/accounting-periods/{id}/send|lock` — มติ PO 05/10/2569 U65)
+
+**วัตถุประสงค์**: `30` §6.2a (U51) ห้ามส่งสำนักงานบัญชี/ล็อกงวดก่อนสิ้นเดือน ⇒ UAT ปิดงวดของเดือนปัจจุบันไม่ได้จนกว่าจะข้ามเดือนจริง — ทางลัดนี้ให้จำลอง "วันนี้" ตอนส่ง/ล็อก โดยไม่แก้ข้อมูลในฐานและไม่เปิดช่องใน route จริง (แบบเดียวกับ `asOf` ของ `advance_overdue` ใน §14.1)
+
+| Method | Path | สิทธิ์ (ชุดเดียวกับ route จริง) | Body |
+|---|---|---|---|
+| POST | `/api/dev/accounting-periods/{id}/send` | `manage:manage_accounting_period` (= `PATCH /api/accounting/periods/{id}/send`) | `{ "reason": string, "asOf": "YYYY-MM-DD" }` |
+| POST | `/api/dev/accounting-periods/{id}/lock` | `manage:manage_accounting_period` หรือ `manage:unlock_period` (= `PATCH …/lock`) | เหมือนกัน |
+
+**กฎบังคับ**:
+- `NODE_ENV === 'production'` ⇒ **404 ก่อนชั้นสิทธิ์** (ไม่ล็อกอินก็ได้ 404 ไม่ใช่ 401) · service ยังตัดวันจำลองทิ้งอีกชั้นเมื่อเป็น production
+- `asOf` = วันไทยรูป `YYYY-MM-DD` ตั้งแต่วันนี้ถึง +31 วัน (ช่วงเดียวกับ asOf ของ O10) ไม่งั้น 400 · ระบบใช้เที่ยงวันไทยของวันนั้นเป็น "วันนี้จำลอง"
+- วันจำลองใช้กับ**ยามสิ้นเดือน + Readiness Check** เท่านั้น — เงื่อนไขอื่นของ Readiness (critical/กระทบยอด/ยอดบิล) ยังบังคับเต็ม · `sent_at`/`locked_at` บันทึกเวลาจริง
+- audit (`status_change`/`lock`) ต่อท้าย `reason` ด้วย `[จำลองวันที่ DD/MM/YYYY]` (พ.ศ.) และ `after.simulated_as_of` ค่าเดียวกัน
+- route จริง (`PATCH /api/accounting/periods/{id}/send|lock`) **ไม่รับเวลาจากผู้เรียก** — ส่ง `asOf` ไปก็ถูกตัดทิ้ง
 
 ## 15. Acceptance Criteria
 

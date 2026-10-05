@@ -4,7 +4,9 @@ import {
   assertRejectReason,
   canExpenseAction,
   ExpenseStateError,
+  isFieldDayExpenseHoldable,
   nextExpenseStatus,
+  type FieldDayHoldCandidate,
 } from '@/lib/field/expense-status'
 
 describe('state machine ของรายการเบิก (`23` §6.3)', () => {
@@ -62,5 +64,36 @@ describe('assertRejectReason (`41` §6.6 — reject ต้องมีเหต�
 
   it('คืนค่าที่ trim แล้ว', () => {
     expect(assertRejectReason('  ใบเสร็จไม่ชัด อ่านยอดไม่ออก  ')).toBe('ใบเสร็จไม่ชัด อ่านยอดไม่ออก')
+  })
+})
+
+describe('BUG-092 — แถวรายวันของเคสที่ปิดสำเร็จภายหลังกลับไปรอคลัง', () => {
+  const fresh: FieldDayHoldCandidate = {
+    status: 'pending_approval',
+    fieldDaySettlementId: 'settlement-1',
+    approvalStepCurrent: 1,
+    managerApprovedAt: null,
+    financeApprovedAt: null,
+    executiveApprovedAt: null,
+    payoutBatchItemId: null,
+  }
+
+  it('transition `hold_for_warehouse` ทำได้จาก pending_approval เท่านั้น', () => {
+    expect(nextExpenseStatus('pending_approval', 'hold_for_warehouse')).toBe('pending_warehouse_confirm')
+    for (const status of ['pending_finance_approval', 'approved', 'needs_revision', 'rejected', 'superseded'] as const) {
+      expect(canExpenseAction(status, 'hold_for_warehouse')).toBe(false)
+    }
+  })
+
+  it('ย้ายได้เฉพาะแถวรายวันที่ยังไม่มีใครอนุมัติและยังไม่เข้ารอบจ่าย', () => {
+    expect(isFieldDayExpenseHoldable(fresh)).toBe(true)
+    expect(isFieldDayExpenseHoldable({ ...fresh, fieldDaySettlementId: null })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, approvalStepCurrent: 2 })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, managerApprovedAt: new Date() })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, financeApprovedAt: new Date() })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, executiveApprovedAt: new Date() })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, payoutBatchItemId: 'item-1' })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, status: 'approved' })).toBe(false)
+    expect(isFieldDayExpenseHoldable({ ...fresh, status: 'needs_revision' })).toBe(false)
   })
 })

@@ -11,6 +11,9 @@ import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/l
  *   ของบริษัท (`22` §6.12) ⇒ ผู้เรียกต้องส่งยอดที่ผ่าน `netAfterAdjustments()` มาแล้ว
  * - **% สำเร็จ นับจากเคสที่ปิดแล้วเท่านั้น** (`96` §13 O1 — `success / (success + fail)`) เคสที่ยัง
  *   ไม่ปิดไม่เข้าตัวหาร · ตัวหารเป็น 0 ⇒ `null` แสดง "N/A" **ห้ามหารศูนย์** (Rule 01)
+ * - **เคส `closed_fail` ต้องเข้าตัวหาร** (มติ PO 05/10/2569 U55/O30 — CO2 สำเร็จ 1 + ไม่สำเร็จ 1 = 50%)
+ *   เคสไม่สำเร็จไม่มีรายได้ จึงไม่โผล่ใน `entries` ⇒ ผู้เรียกส่งแยกมาทาง `failCases` (จัดกลุ่มตามวันที่ปิดเคส)
+ *   — นับเฉพาะคอลัมน์ "ไม่สำเร็จ" + ตัวหาร % สำเร็จ · **ไม่**นับใน "เคสทั้งหมด"/"รายได้ต่อเคส" (ฐานเคสที่มีรายได้)
  * - **Revenue ต่อเคสหารด้วยจำนวนเคสไม่ซ้ำ** (1 เคสอาจมีรายได้หลายใบจาก recycle) — คิดด้วย
  *   จำนวนเต็มสตางค์แล้วปัดครั้งเดียว ห้ามคำนวณฝั่งแสดงผล
  * - MoM ของ **รายเดือน/รายไตรมาส** เทียบกับ**งวดก่อนหน้าในอนุกรมเดียวกัน** (งวดแรกใช้งวดสุดท้าย
@@ -45,6 +48,12 @@ export interface RevenueSummaryEntry {
   revenueSatang: number
 }
 
+/**
+ * เคสที่ปิดไม่สำเร็จในช่วงรายงาน (U55) — จัดกลุ่มด้วยวันที่ปิดเคส (เวลาไทย) / บริษัทของเคส
+ * ใช้เติมตัวหารของ % สำเร็จเท่านั้น
+ */
+export type RevenueSummaryFailCase = Pick<RevenueSummaryEntry, 'groupKey' | 'groupLabel' | 'groupSort' | 'caseId'>
+
 interface Bucket {
   key: string
   label: string
@@ -55,9 +64,12 @@ interface Bucket {
   failCases: Set<string>
 }
 
-function groupEntries(entries: readonly RevenueSummaryEntry[]): Bucket[] {
+function groupEntries(
+  entries: readonly RevenueSummaryEntry[],
+  failCases: readonly RevenueSummaryFailCase[] = [],
+): Bucket[] {
   const buckets = new Map<string, Bucket>()
-  for (const entry of entries) {
+  const bucketOf = (entry: RevenueSummaryFailCase): Bucket => {
     let bucket = buckets.get(entry.groupKey)
     if (bucket === undefined) {
       bucket = {
@@ -71,6 +83,11 @@ function groupEntries(entries: readonly RevenueSummaryEntry[]): Bucket[] {
       }
       buckets.set(entry.groupKey, bucket)
     }
+    return bucket
+  }
+  for (const failCase of failCases) bucketOf(failCase).failCases.add(failCase.caseId)
+  for (const entry of entries) {
+    const bucket = bucketOf(entry)
     bucket.revenueSatang += entry.revenueSatang
     bucket.cases.add(entry.caseId)
     if (entry.caseStatus === 'closed_success') bucket.successCases.add(entry.caseId)
@@ -109,10 +126,13 @@ export function buildRevenueSummary(input: {
   entries: readonly RevenueSummaryEntry[]
   /** รายได้ของ**ช่วงก่อนหน้าที่ยาวเท่ากัน** — ฐานของคอลัมน์ MoM และ badge บน KPI */
   previousEntries: readonly RevenueSummaryEntry[]
+  /** เคสที่ปิดไม่สำเร็จในช่วง (U55) — เข้าตัวหาร % สำเร็จ · ไม่ระบุ = ไม่มี */
+  failCases?: readonly RevenueSummaryFailCase[]
 }): ReportData {
   const { groupBy, entries, previousEntries } = input
+  const failCases = input.failCases ?? []
 
-  const buckets = sortBuckets(groupEntries(entries), groupBy)
+  const buckets = sortBuckets(groupEntries(entries, failCases), groupBy)
   const previousBuckets = sortBuckets(groupEntries(previousEntries), groupBy)
   const previousByKey = new Map(previousBuckets.map((bucket) => [bucket.key, bucket.revenueSatang]))
   const previousTail = previousBuckets.at(-1)?.revenueSatang ?? 0
@@ -148,9 +168,10 @@ export function buildRevenueSummary(input: {
   const successCount = new Set(
     entries.filter((entry) => entry.caseStatus === 'closed_success').map((entry) => entry.caseId),
   ).size
-  const failCount = new Set(
-    entries.filter((entry) => entry.caseStatus === 'closed_fail').map((entry) => entry.caseId),
-  ).size
+  const failCount = new Set([
+    ...entries.filter((entry) => entry.caseStatus === 'closed_fail').map((entry) => entry.caseId),
+    ...failCases.map((failCase) => failCase.caseId),
+  ]).size
   const perCase = revenuePerCaseSatang(totalRevenue, caseCount)
   const previousPerCase = revenuePerCaseSatang(previousRevenue, previousCaseCount)
 
@@ -193,7 +214,8 @@ export function buildRevenueSummary(input: {
     },
     note:
       'รายได้เป็นยอดก่อน VAT หลังรายการปรับปรุงที่อนุมัติแล้ว · จำนวนเคสนับแบบไม่ซ้ำ (เคสรีไซเกิลที่ทำรายได้หลายรอบนับเคสเดียว) · ' +
-      '% สำเร็จ คิดจากเคสที่ปิดแล้วเท่านั้น · MoM เทียบกับ' +
+      'ไม่สำเร็จ = เคสที่ปิดไม่สำเร็จในช่วง (ไม่มีรายได้ จึงไม่นับในเคสทั้งหมดและรายได้ต่อเคส) · ' +
+      '% สำเร็จ = สำเร็จ ÷ (สำเร็จ + ไม่สำเร็จ) — เคสที่ยังไม่ปิดไม่เข้าตัวหาร · MoM เทียบกับ' +
       (groupBy === 'company' ? 'บริษัทเดียวกันในช่วงก่อนหน้าที่ยาวเท่ากัน' : 'งวดก่อนหน้าในอนุกรมเดียวกัน'),
   }
 }

@@ -114,4 +114,55 @@ describe('F2 — สรุปรายได้', () => {
     })
     expect(data.kpis?.find((kpi) => kpi.key === 'revenue')?.mom?.changePct).toBeCloseTo(100, 6)
   })
+
+  describe('U55 — เคสปิดไม่สำเร็จเข้าตัวหาร % สำเร็จ', () => {
+    it('ตัวอย่าง CO2: สำเร็จ 1 (มีรายได้) + closed_fail 1 = 50% · เคสทั้งหมด/รายได้ต่อเคสคิดจากเคสที่มีรายได้', () => {
+      const data = buildRevenueSummary({
+        groupBy: 'company',
+        entries: [
+          entry({ groupKey: 'co1', groupLabel: 'CO1', caseId: 'a1', revenueSatang: 124_000 }),
+          entry({ groupKey: 'co1', groupLabel: 'CO1', caseId: 'a2', revenueSatang: 124_000 }),
+          entry({ groupKey: 'co1', groupLabel: 'CO1', caseId: 'a3', revenueSatang: 125_000 }),
+          entry({ groupKey: 'co2', groupLabel: 'CO2', caseId: 'b1', revenueSatang: 700_000 }),
+        ],
+        previousEntries: [],
+        failCases: [{ groupKey: 'co2', groupLabel: 'CO2', groupSort: 'CO2', caseId: 'b2' }],
+      })
+      const co2 = data.rows.find((row) => row[ROW_KEY] === 'co2')
+      expect(co2).toMatchObject({ caseCount: 1, successCount: 1, failCount: 1, successPct: 50, revenuePerCaseSatang: 700_000 })
+      expect(data.rows.find((row) => row[ROW_KEY] === 'co1')).toMatchObject({ successPct: 100, revenuePerCaseSatang: 124_333 })
+      expect(data.totalRow).toMatchObject({ caseCount: 4, successCount: 4, failCount: 1, successPct: 80, revenuePerCaseSatang: 268_250 })
+      expect(data.kpis?.find((kpi) => kpi.key === 'caseCount')?.hint).toContain('ไม่สำเร็จ 1')
+    })
+
+    it('กลุ่มที่มีแต่เคสไม่สำเร็จ ⇒ แถวรายได้ 0 · % สำเร็จ 0 · รายได้ต่อเคส N/A (ไม่หารศูนย์)', () => {
+      const data = buildRevenueSummary({
+        groupBy: 'month',
+        entries: [],
+        previousEntries: [],
+        failCases: [{ groupKey: '2026-09-01', groupLabel: 'กันยายน 2569', groupSort: '2026-09-01', caseId: 'f1' }],
+      })
+      expect(data.rows).toHaveLength(1)
+      expect(data.rows[0]).toMatchObject({ revenueSatang: 0, caseCount: 0, failCount: 1, successPct: 0, revenuePerCaseSatang: null })
+    })
+
+    it('ไม่มีเคสปิดเลย ⇒ % สำเร็จ N/A · เคส closed_fail ที่ซ้ำกับรายได้นับครั้งเดียว', () => {
+      const none = buildRevenueSummary({
+        groupBy: 'company',
+        entries: [entry({ groupKey: 'co1', caseId: 'x', caseStatus: 'in_progress' })],
+        previousEntries: [],
+        failCases: [],
+      })
+      expect(none.totalRow?.['successPct']).toBeNull()
+
+      const dup = buildRevenueSummary({
+        groupBy: 'company',
+        entries: [entry({ groupKey: 'co1', caseId: 'x', caseStatus: 'closed_fail' })],
+        previousEntries: [],
+        failCases: [{ groupKey: 'co1', groupLabel: 'co1', groupSort: 'co1', caseId: 'x' }],
+      })
+      expect(dup.totalRow).toMatchObject({ failCount: 1, successPct: 0 })
+      expect(dup.rows[0]).toMatchObject({ failCount: 1 })
+    })
+  })
 })

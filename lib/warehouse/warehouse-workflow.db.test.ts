@@ -1622,3 +1622,155 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
     }
   })
 })
+
+/**
+ * BUG-092 — job รายวัน settle วันที่เคสยังเปิด ⇒ แถวรายวันเป็น `pending_approval` · เคสปิดสำเร็จภายหลัง
+ * ต้องย้ายแถวเหล่านั้นไปรอคลัง (`41` §6.6 · `44` §11) โดยไม่ทำให้แถวซ้ำ/หาย และปลดพร้อมกันตอนล็อต confirmed
+ */
+suite('BUG-092 — แถวรายวันของเคสที่ปิดสำเร็จภายหลังต้องรอคลัง', () => {
+  beforeEach(cleanupCases)
+
+  /** เคสที่รับงาน + เช็คอินวันนี้แล้ว ยังไม่ปิดงาน */
+  async function openCaseWithCheckin(): Promise<{ caseId: string; imei: string }> {
+    const imei = `35560000000${String(3000 + caseSeq)}`
+    const caseId = await seedApprovedCase(COMPANY_A, imei)
+    await assignments.assignCase(manager, caseId, { agentId: agent.id }, ctx(manager))
+    await field.acceptFieldCase(agent, caseId, ctx(agent))
+    await field.scheduleFieldCase(agent, caseId, { scheduleDate: new Date(`${DAY_1}T00:00:00.000Z`) }, ctx(agent))
+    await field.saveCloseDraft(
+      agent,
+      caseId,
+      {
+        outcome: null,
+        photos: [],
+        videos: [],
+        productPhotos: [],
+        travelOrigin: { latitude: 18.58, longitude: 99.0, source: 'gps_auto' },
+      },
+      ctx(agent),
+    )
+    await field.recordCheckin(agent, caseId, { latitude: 18.5801, longitude: 99.0031, checkinType: 'address' }, ctx(agent))
+    return { caseId, imei }
+  }
+
+  const dailyRows = async (caseId: string) =>
+    (
+      await db().expense.findMany({
+        where: { caseId, fieldDaySettlementId: { not: null } },
+        select: { id: true, status: true, expenseType: true, grossSatang: true },
+      })
+    ).sort((a, b) => a.expenseType.localeCompare(b.expenseType))
+
+  it('ปิดสำเร็จ ⇒ แถวรายวัน pending_approval → pending_warehouse_confirm (ไม่ซ้ำไม่หาย) · ล็อต confirmed ปลดพร้อมรายการอื่น', async () => {
+    const { caseId, imei } = await openCaseWithCheckin()
+    await settleFieldDaysToday(ORG_ID)
+    const before = await dailyRows(caseId)
+    expect(before.map((row) => [row.expenseType, row.grossSatang, row.status])).toEqual([
+      ['allowance', 20_000, 'pending_approval'],
+      ['fuel', 30_000, 'pending_approval'],
+    ])
+
+    await field.closeFieldCase(agent, caseId, { outcome: 'closed_success', ...MEDIA }, ctx(agent))
+
+    const after = await dailyRows(caseId)
+    expect(after.map((row) => row.id)).toEqual(before.map((row) => row.id))
+    expect(after.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
+    expect(await db().fieldDaySettlement.count({ where: { organizationId: ORG_ID } })).toBe(1)
+    // job รอบถัดไปไม่ settle ซ้ำ
+    expect((await settleFieldDaysToday(ORG_ID)).settled).toBe(0)
+    expect(await db().expense.count({ where: { caseId, fieldDaySettlementId: { not: null } } })).toBe(2)
+
+    const audits = await db().auditLog.findMany({
+      where: { targetType: 'expenses', targetId: { in: before.map((row) => row.id) }, action: 'status_change' },
+      select: { afterData: true, reason: true },
+    })
+    expect(audits).toHaveLength(2)
+    expect(audits.every((row) => (row.afterData as { status?: string }).status === 'pending_warehouse_confirm')).toBe(true)
+    expect(audits.every((row) => (row.reason ?? '').includes('รอคลังยืนยัน'))).toBe(true)
+
+    const asset = await db().asset.findFirstOrThrow({ where: { caseId }, select: { id: true } })
+    await warehouse.intakeAsset(admin, asset.id, intakeInput(imei), ctx(admin))
+    const lot = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [asset.id],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+    const confirmed = await warehouse.confirmLot(
+      admin,
+      lot.id,
+      { deliveredAt: null, signedDocUrl: SIGNED_DOC, deliveryProofUrl: null },
+      ctx(admin),
+    )
+    expect(confirmed.expenseIdsUnlocked).toEqual(expect.arrayContaining(before.map((row) => row.id)))
+    const released = await db().expense.findMany({ where: { caseId }, select: { status: true } })
+    expect(released.every((row) => row.status === 'pending_approval')).toBe(true)
+  })
+
+  it('แถวที่มีผู้อนุมัติไปแล้วบางขั้นไม่ถูกย้อน (รอมติ) — บันทึกไว้ใน audit การปิดงาน', async () => {
+    const { caseId } = await openCaseWithCheckin()
+    await settleFieldDaysToday(ORG_ID)
+    const [approvedRow, untouchedRow] = await dailyRows(caseId)
+    if (approvedRow === undefined || untouchedRow === undefined) throw new Error('ต้องมีแถวรายวัน 2 แถว')
+    await db().expense.update({
+      where: { id: approvedRow.id },
+      data: {
+        status: 'pending_finance_approval',
+        approvalStepCurrent: 2,
+        managerApprovedBy: MANAGER_ID,
+        managerApprovedAt: new Date(),
+      },
+    })
+
+    await field.closeFieldCase(agent, caseId, { outcome: 'closed_success', ...MEDIA }, ctx(agent))
+
+    const rows = new Map((await dailyRows(caseId)).map((row) => [row.id, row.status]))
+    expect(rows.get(approvedRow.id)).toBe('pending_finance_approval')
+    expect(rows.get(untouchedRow.id)).toBe('pending_warehouse_confirm')
+
+    const closeAudit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'case_assignments', action: 'status_change', organizationId: ORG_ID },
+      orderBy: { createdAt: 'desc' },
+      select: { afterData: true },
+    })
+    expect(closeAudit.afterData).toMatchObject({
+      fieldDayExpensesHeld: [untouchedRow.id],
+      fieldDayExpensesNotHeld: [{ id: approvedRow.id, status: 'pending_finance_approval' }],
+    })
+  })
+
+  it('job คำนวณตอนเคสยังเปิด แต่เคสปิดสำเร็จก่อน job เขียน ⇒ แถวเริ่มที่ pending_warehouse_confirm (อ่านผลเคสใหม่ใต้ล็อก)', async () => {
+    const { caseId } = await openCaseWithCheckin()
+    const job = await import('@/lib/field/daily-allowance-job')
+    const { bangkokBusinessDate } = await import('@/lib/field/expense-queries')
+    const day = { organizationId: ORG_ID, agentId: AGENT_ID, fieldDate: bangkokBusinessDate(new Date()) }
+    const stale = await job.computeFieldDay(day)
+    if (stale === null) throw new Error('ต้องมีเช็คอินวันนี้')
+    expect(stale.byCase.get(caseId)?.outcome).toBeNull()
+
+    await field.closeFieldCase(agent, caseId, { outcome: 'closed_success', ...MEDIA }, ctx(agent))
+    const outcome = await job.persistFieldDaySettlement(day, stale, { kind: 'job', jobId: 'bug-092', realJobId: null })
+
+    expect(outcome.kind).toBe('settled')
+    const rows = await dailyRows(caseId)
+    expect(rows).toHaveLength(2)
+    expect(rows.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
+  })
+
+  it('ปิดไม่สำเร็จ ⇒ แถวรายวันคง pending_approval (ไม่มีของต้องรอคลัง)', async () => {
+    const { caseId } = await openCaseWithCheckin()
+    await settleFieldDaysToday(ORG_ID)
+    await field.closeFieldCase(agent, caseId, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, ctx(agent))
+    const rows = await dailyRows(caseId)
+    expect(rows).toHaveLength(2)
+    expect(rows.every((row) => row.status === 'pending_approval')).toBe(true)
+  })
+})

@@ -1,6 +1,7 @@
 import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
 import { sumSatang } from '@/lib/finance/satang'
 import { caseStatusLabel } from '@/lib/cases/status-display'
+import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
 import type { ArAgingRow } from '@/lib/finance/ar-calc'
 import type {
@@ -34,6 +35,7 @@ import {
   REVENUE_GROUP_BYS,
   type RevenueGroupBy,
   type RevenueSummaryEntry,
+  type RevenueSummaryFailCase,
 } from '@/lib/reports/finance/revenue-summary-report'
 import {
   buildRevenueReconciliation,
@@ -313,6 +315,45 @@ export async function loadRevenueEntries(
 }
 
 /**
+ * เคสที่**ปิดไม่สำเร็จ**ในช่วงรายงาน — ตัวหารของ % สำเร็จใน F2 (มติ PO 05/10/2569 U55/O30)
+ * เคส `closed_fail` ไม่มีรายได้ ⇒ `loadRevenueEntries()` มองไม่เห็น · จัดกลุ่มด้วย**วันที่ปิดเคส (เวลาไทย)**
+ * และบริษัทของเคส · ใช้ตัวกรองทีม/บริษัทชุดเดียวกับรายได้ (`billingStatuses` ไม่เกี่ยว — เคสนี้ไม่มีบิล)
+ */
+export async function loadRevenueFailCases(
+  organizationId: string,
+  groupBy: RevenueGroupBy,
+  range: { startDate: Date; endDate: Date },
+  teamIds: readonly string[] | null,
+  filter: Pick<CompanyReportFilter, 'companyId'> = {},
+): Promise<RevenueSummaryFailCase[]> {
+  const rows = await prisma.case.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      status: 'closed_fail',
+      closedAt: { gte: startOfBangkokDay(range.startDate), lte: endOfBangkokDay(range.endDate) },
+      ...(teamIds === null ? {} : { assignedTeamId: { in: [...teamIds] } }),
+      ...(filter.companyId === undefined ? {} : { companyId: filter.companyId }),
+    },
+    select: { id: true, closedAt: true, companyId: true, company: { select: { name: true } } },
+  })
+  return rows.flatMap((row) =>
+    row.closedAt === null
+      ? []
+      : [
+          {
+            ...revenueGroupOf(groupBy, {
+              revenueDate: bangkokBusinessDate(row.closedAt),
+              companyId: row.companyId,
+              companyName: row.company.name,
+            }),
+            caseId: row.id,
+          },
+        ],
+  )
+}
+
+/**
  * ข้อมูลของบรรทัดกระทบยอด F2 ↔ ใบกำกับภาษี (มติ PO 05/10/2569 U44) — รายได้ในช่วงเดียวกับรายงาน
  * + Adjustment ที่อนุมัติแล้วของรายได้/รอบวางบิลนั้น + ใบลดหนี้/ใบเพิ่มหนี้ active ของใบกำกับในรอบเหล่านั้น
  * (สูตรอยู่ที่ `buildRevenueReconciliation()` — ที่นี่แค่ query · ไม่กรองทีม: ผู้เรียกใช้เฉพาะมุมมององค์กร)
@@ -385,13 +426,14 @@ export async function loadRevenueReconciliationInput(
 
 const revenueSummaryProvider: ReportProvider = async (ctx: ReportContext): Promise<ReportData> => {
   const groupBy = pickParam<RevenueGroupBy>(ctx.params['groupBy'], REVENUE_GROUP_BYS, 'month')
-  const [entries, previousEntries, reconciliationInput] = await Promise.all([
+  const [entries, previousEntries, failCases, reconciliationInput] = await Promise.all([
     loadRevenueEntries(ctx.user.organizationId, groupBy, ctx.range, ctx.teamIds),
     loadRevenueEntries(ctx.user.organizationId, groupBy, previousReportRange(ctx.range), ctx.teamIds),
+    loadRevenueFailCases(ctx.user.organizationId, groupBy, ctx.range, ctx.teamIds),
     // U44 — กระทบยอดกับเอกสารภาษีเป็นมุมมองระดับองค์กร (เอกสารออกต่อรอบวางบิล ไม่ใช่ต่อทีม) ⇒ ผู้ที่เห็นเฉพาะทีมไม่ได้บรรทัดนี้
     ctx.teamIds === null ? loadRevenueReconciliationInput(ctx.user.organizationId, ctx.range) : Promise.resolve(null),
   ])
-  const summary = buildRevenueSummary({ groupBy, entries, previousEntries })
+  const summary = buildRevenueSummary({ groupBy, entries, previousEntries, failCases })
   if (reconciliationInput === null) return summary
   const reportTotalSatang = sumSatang(entries.map((entry) => entry.revenueSatang), 'รายได้รวม')
   return {

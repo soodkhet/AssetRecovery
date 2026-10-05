@@ -344,6 +344,27 @@ async function settleFieldDay(day: PendingFieldDay, mode: FieldDaySettleMode): P
 }
 
 /**
+ * ล็อกแถวเคส (FOR UPDATE · เรียงตาม id — โหมด/ลำดับเดียวกับ `tryCreateRevenue()`) แล้วคืนผลเคสล่าสุด — BUG-092
+ */
+async function lockCaseOutcomes(
+  tx: ExpenseTxClient,
+  organizationId: string,
+  caseIds: readonly string[],
+): Promise<Map<string, CaseOutcome | null>> {
+  const sorted = [...new Set(caseIds)].sort()
+  if (sorted.length === 0) return new Map()
+  const rows = await tx.$queryRaw<{ id: string; outcome: CaseOutcome | null }[]>`
+    SELECT id::text AS id, outcome::text AS outcome
+      FROM cases
+     WHERE organization_id = ${organizationId}::uuid
+       AND id = ANY(${sorted}::uuid[])
+     ORDER BY id
+       FOR UPDATE
+  `
+  return new Map(rows.map((row) => [row.id, row.outcome]))
+}
+
+/**
  * เขียนแถว settlement + expenses + audit + ตรวจรายได้ ในทรานแซกชันเดียว — ใช้ร่วม job และเบิกย้อนหลัง (U50)
  * UNIQUE (องค์กร, พนักงาน, วัน) ⇒ สองทางชนกัน/กดซ้ำ ตัวที่แพ้ได้ `already_settled` (ไม่สร้างซ้ำ)
  */
@@ -386,6 +407,13 @@ export async function persistFieldDaySettlement(
 
   try {
     return await prisma.$transaction(async (tx) => {
+      // BUG-092 — ผลเคสที่อ่านไว้นอกทรานแซกชันอาจเก่าแล้ว (พนักงานปิดงานสำเร็จระหว่างที่ job คำนวณ) ⇒ ล็อกแถว
+      // `cases` แล้วอ่านใหม่: ถ้าการปิดงานได้ล็อกก่อน ที่นี่รอจน commit แล้วเห็น `closed_success`
+      // (แถวเริ่มที่ `pending_warehouse_confirm`) · ถ้าที่นี่ได้ก่อน การปิดงานรอ แล้ว `holdFieldDayExpensesForWarehouse()`
+      // เห็นแถวที่ commit แล้วและย้ายไปรอคลังให้ ⇒ ไม่มีแถวของเคสสำเร็จหลุดเป็น `pending_approval`
+      // ล็อก **ชุดเดียวกับ** `tryCreateRevenue()` ท้ายทรานแซกชัน (ทุกเคสของวัน · FOR UPDATE · เรียง id) — ไม่งั้น
+      // สองทรานแซกชันที่ถือล็อกคนละชุด/คนละโหมดแล้วขอเพิ่มทีหลังจะ deadlock กันเอง
+      const currentOutcomes = await lockCaseOutcomes(tx as ExpenseTxClient, day.organizationId, allCaseIds)
       const settlement = await tx.fieldDaySettlement.create({
         data: {
           organizationId: day.organizationId,
@@ -410,7 +438,10 @@ export async function persistFieldDaySettlement(
           actorId: ownerId,
         })
         for (const draft of planned.drafts) {
-          const status = initialFieldDayExpenseStatus(byCase.get(draft.caseId)?.outcome ?? null, lotConfirmed(draft.caseId))
+          const outcome = currentOutcomes.has(draft.caseId)
+            ? (currentOutcomes.get(draft.caseId) ?? null)
+            : (byCase.get(draft.caseId)?.outcome ?? null)
+          const status = initialFieldDayExpenseStatus(outcome, lotConfirmed(draft.caseId))
           const created = await tx.expense.create({
             data: {
               organizationId: day.organizationId,

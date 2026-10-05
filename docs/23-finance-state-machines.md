@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **Sync กับการแก้ไขใน Batch 3**: §6.3 (Expense) เติม `pending_warehouse_confirm`/`pending_finance_approval`/`superseded` ที่ตกหล่น, §6.4 (Advance) แก้เป็น 5 สถานะใหม่ (`pending_approval`/`approved`/`overdue`/`cleared`/`rejected` — ตรงกับไฟล์ 15 v2), §6.6 (Payout Batch) เติม `draft` ที่ตกหล่น — **ส่วน state machine ฝั่ง Accounting (§6.10-6.16) ยังไม่ตรวจสอบกับ schema เพราะไฟล์ 30-37 ยังไม่ถึงคิว reformat (Batch 5)** ทำเครื่องหมายไว้ใน Open Items ชัดเจน ไม่เดาแก้เอง |
 | v2.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 หมายเหตุ: การปิดยอดคืนเงินทดรอง **ไม่เพิ่ม state** ใน `advance_status` (ยอดค้าง/ปิด อนุมานจากสมุดย่อย `advance_returns`) |
 | v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U40/U41)**: §6.14 Bank Transaction เพิ่ม `suspense` (เงินรับรอตรวจสอบ — เงินเข้าไม่ทราบที่มา) + `suspense_refunded` (คืนเงินผู้โอน — terminal) · §6.14.1 ใหม่: 50 ทวิ ที่ลูกค้าหักเรา (`customer_wht_status` `pending → received`) — enum ตาม `02` v4.23 |
+| v2.3 | 05/10/2569 | **UAT BUG-092 (S4 — งานแก้ของ fixer AK ตามรายการที่ PO มอบ 05/10/2569)** — §6.3 เพิ่ม transition `pending_approval → pending_warehouse_confirm` (action `hold_for_warehouse`) **เฉพาะแถวรายวัน** (job `daily_field_allowance` / เบิกย้อนหลัง U50) ที่ถูกสร้างตอนเคสยังเปิด แล้วเคสปิดสำเร็จภายหลัง — ทำในทรานแซกชันเดียวกับการปิดงาน (และการส่งหลักฐานใหม่) เฉพาะแถวที่ยังไม่มีผู้อนุมัติขั้นใดประทับ/ไม่อยู่ในรอบจ่าย · ปลดกลับด้วย `warehouse_confirm` ตอนล็อต confirmed ตามเดิม · แถวที่มีผู้อนุมัติแล้วบางขั้น/อนุมัติครบ/ตีกลับ/เข้ารอบจ่าย **ไม่แตะ** (รอมติ PO) · ไม่มี state ใหม่ |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -59,6 +60,7 @@ pending_approval → pending_finance_approval → approved
 pending_approval/pending_finance_approval → needs_revision (reject_expense, ต้องมี reason) → pending_approval (resubmit)
 pending_approval → rejected (terminal — ปฏิเสธถาวร ไม่ใช่ขอแก้ไข)
 approved → superseded (ถูกแทนที่ด้วยรอบ recycle ใหม่ — ไฟล์ 41)
+pending_approval → pending_warehouse_confirm (hold_for_warehouse — เฉพาะแถวรายวันที่ยังไม่มีผู้อนุมัติ เมื่อเคสปิดสำเร็จภายหลัง · BUG-092)
 ```
 
 > เติม `pending_warehouse_confirm`, `pending_finance_approval`, `superseded` ที่ตกหล่นจาก v1 — ตรงกับ enum `expense_status` เต็มใน `02-database-schema-design.md` §3
