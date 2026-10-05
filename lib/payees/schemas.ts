@@ -47,7 +47,7 @@ export const payeeFieldsSchema = z.object({
    */
   wht402Pct: z.preprocess(
     (value) => (value === '' ? null : typeof value === 'string' ? Number(value) : value),
-    pctSchema('อัตราหัก 40(2)').nullable().optional(),
+    pctSchema('อัตราหัก 40(1)/40(2)').nullable().optional(),
   ),
 })
 

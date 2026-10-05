@@ -9,6 +9,7 @@ import {
   bankReconCsv,
   canTransitionExport,
   cashReceiptCsv,
+  CHECKLIST_AUTHORIZED_PENDING,
   checklistDocStatus,
   checklistRows,
   checklistSheet,
@@ -391,7 +392,8 @@ describe('08_Document_Checklist.xlsx', () => {
     expect(checklistDocStatus({ level: 'critical', status: 'open' })).toBe('ขาดเอกสาร')
     expect(checklistDocStatus({ level: 'warning', status: 'open' })).toBe('รอตรวจสอบ')
     expect(checklistDocStatus({ level: 'info', status: 'open' })).toBe('รอตรวจสอบ')
-    expect(checklistDocStatus({ level: 'critical', status: 'authorized' })).toBe('ครบถ้วน')
+    expect(checklistDocStatus({ level: 'critical', status: 'authorized' })).toBe('อนุญาตปิดงวด — ยังรอเอกสาร')
+    expect(checklistDocStatus({ level: 'warning', status: 'authorized' })).toBe(CHECKLIST_AUTHORIZED_PENDING)
     expect(checklistDocStatus({ level: 'critical', status: 'resolved' })).toBe('ครบถ้วน')
   })
 
@@ -408,7 +410,7 @@ describe('08_Document_Checklist.xlsx', () => {
   })
 
   it('สรุปนับ 3 กลุ่มตรงกับจำนวนแถว', () => {
-    expect(checklistSummary(rows)).toEqual({ complete: 1, missingCritical: 1, pending: 1 })
+    expect(checklistSummary(rows)).toEqual({ complete: 1, missingCritical: 1, pending: 1, authorizedPending: 0 })
   })
 
   it('ชีตมีหัวเรื่อง 2 บรรทัด ตาราง สรุป และหมายเหตุท้ายไฟล์ (ตาม samples/08)', () => {
@@ -423,6 +425,51 @@ describe('08_Document_Checklist.xlsx', () => {
     expect(sheet[3]).toEqual([...CHECKLIST_HEADERS])
     expect(sheet).toContainEqual(['ขาดเอกสาร (Critical)', '1'])
     expect(sheet.at(-1)?.[0]).toContain('ห้าม Export Accounting Pack')
+  })
+})
+
+describe('08_Document_Checklist — exception ที่อนุญาตปิดงวด (มติ PO 05/10/2569 U31 · BUG-129)', () => {
+  const authorized: ChecklistExportRow = {
+    sourceModule: 'expense',
+    sourceRef: 'EXP-2569-0351',
+    level: 'critical',
+    status: 'authorized',
+    title: 'รอใบเสร็จค่าที่พักฉบับจริง',
+    responsibleName: 'ประยุทธ์ บุญมี',
+    authorizeNote: 'ผู้บริหารอนุญาตปิดงวด เอกสารตามมาเดือนหน้า',
+  }
+  const resolved: ChecklistExportRow = { ...authorized, sourceRef: 'EXP-2569-0352', status: 'resolved', authorizeNote: null }
+
+  it('แถว authorized ไม่นับว่าครบถ้วน · แสดงระดับ + หัวข้อเอกสารที่รอ + เหตุผลที่อนุญาต', () => {
+    expect(checklistRows([authorized])[0]).toEqual([
+      'expense',
+      'EXP-2569-0351',
+      'อนุญาตปิดงวด — ยังรอเอกสาร',
+      'critical',
+      'รอใบเสร็จค่าที่พักฉบับจริง (อนุญาตปิดงวด: ผู้บริหารอนุญาตปิดงวด เอกสารตามมาเดือนหน้า)',
+      'ประยุทธ์ บุญมี',
+    ])
+  })
+
+  it('ไม่มีเหตุผลอนุญาต ⇒ แสดงหัวข้ออย่างเดียว', () => {
+    expect(checklistRows([{ ...authorized, authorizeNote: null }])[0]?.[4]).toBe('รอใบเสร็จค่าที่พักฉบับจริง')
+  })
+
+  it('สรุปนับแยก "อนุญาตปิดงวด" ออกจาก "ครบถ้วน" — ชีตมีบรรทัดสรุปของกลุ่มนี้', () => {
+    expect(checklistSummary([authorized, resolved])).toEqual({
+      complete: 1,
+      missingCritical: 0,
+      pending: 0,
+      authorizedPending: 1,
+    })
+    const sheet = checklistSheet({
+      periodLabel: 'กันยายน 2569',
+      generatedByName: 'บัญชี',
+      generatedAt: new Date('2026-10-05T03:00:00Z'),
+      rows: [authorized, resolved],
+    })
+    expect(sheet).toContainEqual(['ครบถ้วน', '1'])
+    expect(sheet).toContainEqual(['อนุญาตปิดงวด — ยังรอเอกสาร', '1'])
   })
 })
 

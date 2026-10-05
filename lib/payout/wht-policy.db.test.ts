@@ -13,6 +13,8 @@ import { PrismaClient } from '@/lib/generated/prisma/client'
  *  - 40(2) แยกตามประเภททีม: ผู้รับ inhouse ไม่มีอัตรา ⇒ `WHT_40_2_RATE_MISSING` (ฝั่ง outsource ไม่โดน)
  *    · มีอัตรา 2.50% ⇒ หักไม่มีเกณฑ์ · ใบ 50 ทวิ = ภ.ง.ด.1 + สรุปรอบนำส่ง pnd1
  *  - ใบ 50 ทวิ ต่อผู้รับต่อรอบ (ค่าเริ่มต้น) vs ต่อรายการ — ยอดภาษีรวมเท่ากัน · ยกเลิก/ออกแทนได้ทั้งสองแบบ
+ *  - U33: การจับคู่ประเภทเงินได้ต่อประเภททีมเป็นค่าตั้ง (40(1)/40(2)/40(8)) · 40(1) = อัตราต่อคน + ภ.ง.ด.1
+ *    + 50 ทวิ ระบุ 40(1) · snapshot ลงรอบ · audit มีการจับคู่
  *
  * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
  */
@@ -223,6 +225,8 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
       certificateMode: 'per_payee_batch',
       incomeTypeMode: 'all_40_8',
       issueZeroRate402Certificate: true,
+      inhouseIncomeCategory: 'sec_40_2',
+      outsourceIncomeCategory: 'sec_40_8',
     })
     const hotel = batch.items.find((item) => item.grossSatang === 60_000)!
     expect(hotel.whtBaseIncluded).toBe(false)
@@ -248,6 +252,8 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         certificateMode: 'per_item',
         incomeTypeMode: 'all_40_8',
         issueZeroRate402Certificate: true,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
       },
       NOW,
     )
@@ -282,6 +288,8 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         certificateMode: 'per_item',
         incomeTypeMode: 'all_40_8',
         issueZeroRate402Certificate: true,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
       },
       NOW,
     )
@@ -315,6 +323,8 @@ suite('ประเภทเงินได้ 40(2) (U5/U7)', () => {
         certificateMode: 'per_payee_batch',
         incomeTypeMode: 'by_team_side',
         issueZeroRate402Certificate: true,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
       },
       NOW,
     )
@@ -409,6 +419,8 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
         certificateMode: 'per_item',
         incomeTypeMode: 'all_40_8',
         issueZeroRate402Certificate: true,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
       },
       NOW,
     )
@@ -433,6 +445,8 @@ suite('40(2) อัตรา 0% ออก 50 ทวิ ยอดภาษี 0 (
         certificateMode: 'per_payee_batch',
         incomeTypeMode: 'by_team_side',
         issueZeroRate402Certificate,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
       },
       NOW,
     )
@@ -531,5 +545,112 @@ suite('40(2) อัตรา 0% ออก 50 ทวิ ยอดภาษี 0 (
     )
     await completeAndSync(batch.id)
     expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(0)
+  })
+})
+
+suite('U33 — ประเภทเงินได้ต่อประเภททีมเป็นค่าตั้ง + 40(1) (มติ PO 05/10/2569)', () => {
+  async function useMapping(
+    inhouseIncomeCategory: 'sec_40_1' | 'sec_40_2' | 'sec_40_8',
+    outsourceIncomeCategory: 'sec_40_1' | 'sec_40_2' | 'sec_40_8',
+    reason: string,
+  ) {
+    return policy.createWhtPolicy(
+      policyCtx(reason),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+        certificateMode: 'per_payee_batch',
+        incomeTypeMode: 'by_team_side',
+        issueZeroRate402Certificate: true,
+        inhouseIncomeCategory,
+        outsourceIncomeCategory,
+      },
+      NOW,
+    )
+  }
+
+  it('outsource = 40(1) ไม่มีอัตรา ⇒ WHT_40_2_RATE_MISSING · inhouse = 40(8) สร้างได้ (ต่ำกว่าเกณฑ์ไม่หัก)', async () => {
+    await useMapping('sec_40_8', 'sec_40_1', 'สำนักงานบัญชีให้ outsource เป็น 40(1)')
+    await seedExpense(PAYEE_OUT_ID, 'commission', 50_000)
+    await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
+
+    const error = await payout
+      .createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+      .catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('WHT_40_2_RATE_MISSING')
+    expect((error as { context?: { payees?: string[] } }).context?.payees).toEqual(['เอาท์หนึ่ง นอกบ้าน'])
+
+    const inhouse = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(inhouse.batch.whtSatang).toBe(0)
+    expect(inhouse.batch.items[0]?.whtIncomeCategory).toBe('sec_40_8')
+  })
+
+  it('outsource = 40(1) อัตรา 3% ⇒ หักไม่มีเกณฑ์ · snapshot การจับคู่ลงรอบ · 50 ทวิ ภ.ง.ด.1 ระบุ 40(1) · pnd1', async () => {
+    await useMapping('sec_40_2', 'sec_40_1', 'สำนักงานบัญชีให้ outsource เป็น 40(1)')
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_40_2_pct = 3.00 WHERE id = '${PAYEE_OUT_ID}'`)
+    await seedExpense(PAYEE_OUT_ID, 'commission', 50_000)
+    await seedExpense(PAYEE_OUT_ID, 'hotel', 20_000)
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtSatang).toBe(1500)
+    expect(batch.items.every((item) => item.whtIncomeCategory === 'sec_40_1')).toBe(true)
+    expect(batch.whtPolicy).toMatchObject({
+      incomeTypeMode: 'by_team_side',
+      inhouseIncomeCategory: 'sec_40_2',
+      outsourceIncomeCategory: 'sec_40_1',
+    })
+    const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
+    expect(row.whtInhouseIncomeCategory).toBe('sec_40_2')
+    expect(row.whtOutsourceIncomeCategory).toBe('sec_40_1')
+
+    await completeAndSync(batch.id)
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({
+      filingForm: 'PND1',
+      incomeType: 'เงินเดือน ค่าจ้าง เบี้ยเลี้ยง โบนัส ฯลฯ มาตรา 40(1)',
+      grossSatang: 50_000,
+      whtSatang: 1500,
+    })
+    expect(certificates.summary.pnd1Satang).toBe(1500)
+    const filing = await db().whtFilingSummary.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(filing.pnd1Satang).toBe(1500)
+    expect(filing.pnd3Satang).toBe(0)
+  })
+
+  it('40(1) อัตรา 0% + ค่าตั้งเปิด ⇒ 50 ทวิ ภาษี 0 นับใน ภ.ง.ด.1', async () => {
+    await useMapping('sec_40_1', 'sec_40_8', 'inhouse เป็น 40(1)')
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_40_2_pct = 0 WHERE id = '${PAYEE_IN_ID}'`)
+    await seedExpense(PAYEE_IN_ID, 'commission', 40_000)
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtSatang).toBe(0)
+    await completeAndSync(batch.id)
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({ filingForm: 'PND1', whtSatang: 0, grossSatang: 40_000 })
+  })
+
+  it('เปลี่ยนการจับคู่หลังสร้างรอบ ⇒ รอบเดิมคง snapshot · audit before/after มีการจับคู่ + เหตุผล', async () => {
+    await useMapping('sec_40_2', 'sec_40_8', 'ชุดแรก')
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_40_2_pct = 2.00 WHERE id = '${PAYEE_IN_ID}'`)
+    await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(first.batch.items[0]?.whtIncomeCategory).toBe('sec_40_2')
+
+    const created = await useMapping('sec_40_1', 'sec_40_2', 'สำนักงานบัญชีเปลี่ยนคำแนะนำ')
+    expect(created.inhouseIncomeCategory).toBe('sec_40_1')
+    expect(created.outsourceIncomeCategory).toBe('sec_40_2')
+
+    const again = await payout.getPayoutBatch(finance, first.batch.id)
+    expect(again.whtPolicy).toMatchObject({ inhouseIncomeCategory: 'sec_40_2', outsourceIncomeCategory: 'sec_40_8' })
+    expect(again.items[0]?.whtIncomeCategory).toBe('sec_40_2')
+
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'wht_policy_history', targetId: created.id },
+    })
+    expect(audit.reason).toBe('สำนักงานบัญชีเปลี่ยนคำแนะนำ')
+    expect(audit.beforeData).toMatchObject({ inhouse_income_category: 'sec_40_2', outsource_income_category: 'sec_40_8' })
+    expect(audit.afterData).toMatchObject({ inhouse_income_category: 'sec_40_1', outsource_income_category: 'sec_40_2' })
   })
 })

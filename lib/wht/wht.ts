@@ -12,7 +12,9 @@ import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { formatInvoiceNumber, type NumberingFormat } from '@/lib/settings/numbering'
 import {
+  INCOME_TYPE_TEXT_40_1,
   INCOME_TYPE_TEXT_40_2,
+  usesPerPayeeWhtRate,
   type WhtCertificateMode,
   type WhtIncomeCategory,
 } from '@/lib/settings/wht-policy'
@@ -63,7 +65,14 @@ export const WHT_FILING_STATUS_LABEL: Record<WhtFilingStatus, string> = {
 export const WHT_FILING_FORM_LABEL: Record<WhtFilingForm, string> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
-  PND1: 'ภ.ง.ด.1 (เงินได้ 40(2))',
+  PND1: 'ภ.ง.ด.1 (เงินได้ 40(1)/40(2))',
+}
+
+/** ชื่อแบบสั้น (ไม่มีคำอธิบาย) — ใช้ในประโยคท้ายใบ 50 ทวิ */
+export const WHT_FILING_FORM_SHORT_LABEL: Record<WhtFilingForm, string> = {
+  PND3: 'ภ.ง.ด.3',
+  PND53: 'ภ.ง.ด.53',
+  PND1: 'ภ.ง.ด.1',
 }
 
 export const WHT_DELIVERY_FORMAT_LABEL: Record<WhtDeliveryFormat, string> = {
@@ -89,9 +98,10 @@ export function shouldIssueCertificate(item: { whtSatang: number }): boolean {
 }
 
 /**
- * **ข้อยกเว้นของ `shouldIssueCertificate()`** — เงินได้ 40(2) อัตรา 0% (มติ PO 05/10/2569 UAT U16)
+ * **ข้อยกเว้นของ `shouldIssueCertificate()`** — เงินได้ 40(1)/40(2) อัตรา 0% (มติ PO 05/10/2569 UAT U16 ·
+ * U33 "40(1) ใช้กติกาเดียวกับ 40(2)")
  *
- * ค่าตั้ง `issueZeroRate402Certificate` เปิด (ค่าเริ่มต้น) ⇒ ผู้รับ 40(2) ที่ภาษีรวม 0 แต่มีเงินได้ในฐาน
+ * ค่าตั้ง `issueZeroRate402Certificate` เปิด (ค่าเริ่มต้น) ⇒ ผู้รับ 40(1)/40(2) ที่ภาษีรวม 0 แต่มีเงินได้ในฐาน
  * ได้ใบ 50 ทวิ ยอดภาษี 0 (เงินได้ = ฐานที่จ่าย) และนับในสรุป ภ.ง.ด.1 — ผู้รับใช้ยื่น ภ.ง.ด.90/91
  * 40(2) ไม่มีเกณฑ์ขั้นต่ำ (`22` §6.9.1) ⇒ ภาษี 0 ทั้งที่มีเงินได้ในฐาน = อัตรา 0% เท่านั้น
  * **40(8) ต่ำกว่าเกณฑ์ ฿1,000 ไม่เกี่ยว** — ยังไม่ออกใบเหมือนเดิม · ค่าตั้งปิด/รอบเก่า = ไม่ออก
@@ -105,14 +115,14 @@ export function shouldIssueZeroRate402Certificate(input: {
 }): boolean {
   return (
     input.issueZeroRate402Certificate &&
-    input.incomeCategory === 'sec_40_2' &&
+    usesPerPayeeWhtRate(input.incomeCategory) &&
     input.whtSatang === 0 &&
     input.grossSatang > 0
   )
 }
 
 /**
- * แบบที่ต้องยื่น — เงินได้ 40(2) ⇒ **ภ.ง.ด.1** เสมอ (มติ PO 05/10/2569 UAT U7) · 40(8) ใช้ Tax Profile
+ * แบบที่ต้องยื่น — เงินได้ 40(1)/40(2) ⇒ **ภ.ง.ด.1** เสมอ (มติ PO 05/10/2569 UAT U7 · U33) · 40(8) ใช้ Tax Profile
  * ที่ snapshot ไว้ (`18` §6.3) · ไม่มีก็เดาจากชนิดผู้รับเงิน
  */
 export function filingFormOf(input: {
@@ -121,7 +131,7 @@ export function filingFormOf(input: {
   /** snapshot `payout_batch_items.wht_income_category` — `null` = รอบเก่า (40(8)) */
   incomeCategory?: WhtIncomeCategory | null
 }): WhtFilingForm {
-  if (input.incomeCategory === 'sec_40_2') return 'PND1'
+  if (usesPerPayeeWhtRate(input.incomeCategory)) return 'PND1'
   if (input.taxProfileFilingForm !== null && input.taxProfileFilingForm !== 'PND1') return input.taxProfileFilingForm
   return input.payeeType === 'corporate' ? 'PND53' : 'PND3'
 }
@@ -129,8 +139,12 @@ export function filingFormOf(input: {
 /** ประเภทเงินได้พึงประเมิน (`28` §6.3 ฟิลด์บังคับ) — จาก Tax Profile ที่ snapshot ไว้ */
 export const DEFAULT_INCOME_TYPE = 'ค่าจ้างทำของ มาตรา 40(8)'
 
-/** 40(2) ⇒ ข้อความ 40(2) เสมอ (Tax Profile เป็นของ 40(8)) · 40(8) ⇒ ข้อความจาก Tax Profile */
+/**
+ * 40(1)/40(2) ⇒ ข้อความของมาตรานั้นเสมอ (Tax Profile เป็นของ 40(8)) · 40(8) ⇒ ข้อความจาก Tax Profile
+ * (มติ PO 05/10/2569 UAT U7 · U33 — 50 ทวิ ต้องระบุประเภท 40(1) ให้ตรงแถวของแบบ)
+ */
 export function incomeTypeOf(taxProfileIncomeType: string | null, incomeCategory: WhtIncomeCategory | null = null): string {
+  if (incomeCategory === 'sec_40_1') return INCOME_TYPE_TEXT_40_1
   if (incomeCategory === 'sec_40_2') return INCOME_TYPE_TEXT_40_2
   const trimmed = (taxProfileIncomeType ?? '').trim()
   return trimmed === '' ? DEFAULT_INCOME_TYPE : trimmed

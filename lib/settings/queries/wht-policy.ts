@@ -11,13 +11,14 @@ import {
   resolveWhtPolicyAt,
   toWhtPolicyAuditPayload,
   type WhtCertificateMode,
+  type WhtIncomeCategory,
   type WhtIncomeTypeMode,
   type WhtPolicyEntry,
   type WhtPolicyValues,
 } from '@/lib/settings/wht-policy'
 
 /**
- * ค่าตั้งภาษีหัก ณ ที่จ่าย แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8/U16 · `13` §6.4.2) — ชั้น DB
+ * ค่าตั้งภาษีหัก ณ ที่จ่าย แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8/U16/U33 · `13` §6.4.2) — ชั้น DB
  *
  * - **insert-only** (แบบ `vat_rate_history`): ไม่มี PATCH/DELETE — แก้ค่า = เพิ่มแถวใหม่พร้อมวันที่มีผล
  *   (ประวัติเดิมอยู่ครบให้ตรวจย้อนหลัง) · วันเดียวกันหลายแถว ⇒ แถวล่าสุดชนะ
@@ -35,6 +36,8 @@ const policySelect = {
   certificateMode: true,
   incomeTypeMode: true,
   issueZeroRate402Certificate: true,
+  inhouseIncomeCategory: true,
+  outsourceIncomeCategory: true,
   reason: true,
   createdAt: true,
   createdByUser: { select: { fullName: true } },
@@ -47,6 +50,8 @@ interface PolicyRow {
   certificateMode: WhtCertificateMode
   incomeTypeMode: WhtIncomeTypeMode
   issueZeroRate402Certificate: boolean
+  inhouseIncomeCategory: WhtIncomeCategory
+  outsourceIncomeCategory: WhtIncomeCategory
   reason: string
   createdAt: Date
   createdByUser: { fullName: string }
@@ -61,6 +66,8 @@ function toEntry(row: PolicyRow): WhtPolicyEntry & { row: PolicyRow } {
     certificateMode: row.certificateMode,
     incomeTypeMode: row.incomeTypeMode,
     issueZeroRate402Certificate: row.issueZeroRate402Certificate,
+    inhouseIncomeCategory: row.inhouseIncomeCategory,
+    outsourceIncomeCategory: row.outsourceIncomeCategory,
     row,
   }
 }
@@ -73,6 +80,8 @@ function toDto(entry: WhtPolicyEntry & { row: PolicyRow }, currentId: string | n
     certificateMode: entry.certificateMode,
     incomeTypeMode: entry.incomeTypeMode,
     issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
+    inhouseIncomeCategory: entry.inhouseIncomeCategory,
+    outsourceIncomeCategory: entry.outsourceIncomeCategory,
     reason: entry.row.reason,
     createdAt: toIso(entry.createdAt),
     createdByName: entry.row.createdByUser.fullName,
@@ -92,6 +101,8 @@ function valuesOf(entry: WhtPolicyValues | null): WhtPolicyValues {
     certificateMode: entry.certificateMode,
     incomeTypeMode: entry.incomeTypeMode,
     issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
+    inhouseIncomeCategory: entry.inhouseIncomeCategory,
+    outsourceIncomeCategory: entry.outsourceIncomeCategory,
   }
 }
 
@@ -151,6 +162,8 @@ export async function createWhtPolicy(
         certificateMode: values.certificateMode,
         incomeTypeMode: values.incomeTypeMode,
         issueZeroRate402Certificate: values.issueZeroRate402Certificate,
+        inhouseIncomeCategory: values.inhouseIncomeCategory,
+        outsourceIncomeCategory: values.outsourceIncomeCategory,
         reason: context.reason,
         createdBy: context.actor.id,
       },
@@ -171,6 +184,8 @@ export async function createWhtPolicy(
           certificateMode: values.certificateMode,
           incomeTypeMode: values.incomeTypeMode,
           issueZeroRate402Certificate: values.issueZeroRate402Certificate,
+          inhouseIncomeCategory: values.inhouseIncomeCategory,
+          outsourceIncomeCategory: values.outsourceIncomeCategory,
           effectiveFrom: toDateOnlyIso(values.effectiveFrom),
         }),
         reason: context.reason,

@@ -511,7 +511,13 @@ export const CHECKLIST_HEADERS = [
 
 export const CHECKLIST_SHEET_NAME = 'Document Checklist'
 
-export type ChecklistDocStatus = 'ครบถ้วน' | 'ขาดเอกสาร' | 'รอตรวจสอบ'
+/**
+ * สถานะเอกสารในไฟล์ 08 · `อนุญาตปิดงวด — ยังรอเอกสาร` = exception ที่ผู้บริหารอนุญาตให้ปิดงวด (`authorized`)
+ * **ยังไม่ใช่แก้จริง** ต้องแยกจาก "ครบถ้วน" เสมอ (มติ PO 05/10/2569 UAT U31 · BUG-129)
+ */
+export const CHECKLIST_AUTHORIZED_PENDING = 'อนุญาตปิดงวด — ยังรอเอกสาร'
+
+export type ChecklistDocStatus = 'ครบถ้วน' | 'ขาดเอกสาร' | 'รอตรวจสอบ' | typeof CHECKLIST_AUTHORIZED_PENDING
 
 export interface ChecklistExportRow {
   sourceModule: string
@@ -521,18 +527,30 @@ export interface ChecklistExportRow {
   title: string
   /** ผู้รับผิดชอบ = ผู้ที่ปิดรายการแล้ว ถ้ายังไม่ปิดคือผู้บันทึก (สคีมาไม่มีคอลัมน์ผู้รับผิดชอบแยก) */
   responsibleName: string | null
+  /** `exceptions.authorize_note` — เหตุผลที่ผู้บริหารอนุญาตปิดงวด (เฉพาะ `authorized`) */
+  authorizeNote?: string | null
 }
 
 /**
  * สถานะเอกสารของแต่ละแถว (`34` §6.1) — แปลงจากสถานะ+ระดับของ Exception:
- * ปิดแล้ว/ยกเว้นแล้ว = ครบถ้วน · critical ที่ยังเปิด = ขาดเอกสาร · ที่เหลือ = รอตรวจสอบ
+ * แก้แล้ว (`resolved`) = ครบถ้วน · อนุญาตปิดงวด (`authorized`) = **อนุญาตปิดงวด — ยังรอเอกสาร**
+ * (ไม่นับว่าครบ — มติ PO 05/10/2569 UAT U31 · `34` §6.3 แยก authorized จาก resolved เสมอ) ·
+ * critical ที่ยังเปิด = ขาดเอกสาร · ที่เหลือ = รอตรวจสอบ
  */
 export function checklistDocStatus(row: {
   level: ExceptionLevel
   status: ExceptionStatus
 }): ChecklistDocStatus {
-  if (row.status !== 'open') return 'ครบถ้วน'
+  if (row.status === 'resolved') return 'ครบถ้วน'
+  if (row.status === 'authorized') return CHECKLIST_AUTHORIZED_PENDING
   return row.level === 'critical' ? 'ขาดเอกสาร' : 'รอตรวจสอบ'
+}
+
+/** หัวข้อ exception — แถวที่อนุญาตปิดงวดต่อท้ายเหตุผลที่อนุญาต ให้สำนักงานบัญชีรู้ว่ายังรอเอกสารอะไร (U31) */
+function checklistSummaryText(row: ChecklistExportRow): string {
+  const note = (row.authorizeNote ?? '').trim()
+  if (row.status !== 'authorized' || note === '') return row.title
+  return `${row.title} (อนุญาตปิดงวด: ${note})`
 }
 
 export function checklistRows(rows: readonly ChecklistExportRow[]): string[][] {
@@ -545,7 +563,7 @@ export function checklistRows(rows: readonly ChecklistExportRow[]): string[][] {
       docStatus,
       closed ? CSV_EMPTY : row.level,
       // UAT BUG-123 — แถวที่ปิดแล้วยังต้องบอกหัวข้อ ไม่งั้นสำนักงานบัญชีไม่รู้ว่าเคยขาดอะไร
-      row.title,
+      checklistSummaryText(row),
       row.responsibleName ?? CSV_EMPTY,
     ]
   })
@@ -555,14 +573,17 @@ export interface ChecklistSummary {
   complete: number
   missingCritical: number
   pending: number
+  /** อนุญาตปิดงวดแต่ยังรอเอกสาร — นับแยก ไม่รวมใน "ครบถ้วน" (U31) */
+  authorizedPending: number
 }
 
 export function checklistSummary(rows: readonly ChecklistExportRow[]): ChecklistSummary {
-  const summary: ChecklistSummary = { complete: 0, missingCritical: 0, pending: 0 }
+  const summary: ChecklistSummary = { complete: 0, missingCritical: 0, pending: 0, authorizedPending: 0 }
   for (const row of rows) {
     const status = checklistDocStatus(row)
     if (status === 'ครบถ้วน') summary.complete += 1
     else if (status === 'ขาดเอกสาร') summary.missingCritical += 1
+    else if (status === CHECKLIST_AUTHORIZED_PENDING) summary.authorizedPending += 1
     else summary.pending += 1
   }
   return summary
@@ -593,6 +614,7 @@ export function checklistSheet(input: {
     ['ครบถ้วน', String(summary.complete)],
     ['ขาดเอกสาร (Critical)', String(summary.missingCritical)],
     ['รอตรวจสอบ', String(summary.pending)],
+    [CHECKLIST_AUTHORIZED_PENDING, String(summary.authorizedPending)],
     [],
     [CHECKLIST_FOOTER_NOTE],
   ]

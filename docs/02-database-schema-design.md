@@ -42,6 +42,7 @@
 | v4.18 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8) — ค่าตั้งภาษีหัก ณ ที่จ่าย** (migration `20261005100000_wht_policy_settings`): enum ใหม่ `wht_certificate_mode` / `wht_income_type_mode` / `wht_income_category` + `wht_filing_form` เพิ่ม `PND1` · ตารางใหม่ `wht_policy_history` (insert-only แบบ `vat_rate_history` — ไม่มี updated_*/deleted_at) · `payout_batches` + snapshot `wht_policy_id`/`wht_base_expense_types`/`wht_certificate_mode`/`wht_income_type_mode` (NULL = รอบเก่า) · `payout_batch_items` + `wht_base_included`/`wht_income_category` · `payee_profiles` + `wht_40_2_pct` (CHECK 0–100) · `wht_certificates` + `issue_mode`/`payout_batch_id` (CHECK `wht_cert_batch_mode_has_batch`) · `wht_filing_summaries` + `pnd1_satang` · ข้อมูลเดิมไม่เปลี่ยน |
 | v4.20 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก) + มติบัญชี B1** (migration `20261005130000_credit_notes`): ตารางใหม่ **`credit_notes`** (Group F ต่อจาก `tax_invoices`) + enum `credit_note_status` (`active`/`cancelled`) — FK `tax_invoice_id` / `adjustment_id` (nullable) · เงิน satang · `vat_rate_pct_used NUMERIC(5,2)` snapshot อัตราของใบกำกับเดิม · CHECK ยอด > 0 / total = ก่อน VAT + VAT / ฟิลด์ยกเลิกครบ · partial unique เลขที่ต่อ org และ adjustment ต่อใบ (เฉพาะ active) · trigger กันยอดรวมเกินใบกำกับ + immutable (§13) · ไม่มี `deleted_at` (ยกเลิกแทนลบ เหมือน `tax_invoices`) |
 | v4.21 | 05/10/2569 | **มติ PO 05/10/2569 (U19 — ใบเพิ่มหนี้ ม.86/9)** (migration `20261005150000_debit_notes`): enum ใหม่ `credit_note_type` (`credit`/`debit`) + `credit_notes.note_type NOT NULL DEFAULT 'credit'` (แถวเดิมทั้งหมด = ใบลดหนี้ · ไม่ย้ายข้อมูล — เลือกเพิ่มคอลัมน์แทนเปลี่ยนชื่อตารางเพื่อความปลอดภัยของข้อมูลเดิม) · partial unique เลขที่เปลี่ยนเป็น `(organization_id, note_type, credit_note_number)` · trigger ยอดเกินใบกำกับตรวจ/นับเฉพาะ `credit` (ใบเพิ่มหนี้ไม่มีเพดาน) · immutable trigger เพิ่ม `note_type` |
+| v4.22 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U33) — ประเภทเงินได้ต่อประเภททีมเป็นค่าตั้ง + เงินได้ 40(1)** (migration `20261005163300_wht_income_category_40_1`): enum `wht_income_category` เพิ่ม `sec_40_1` · `wht_policy_history` + `inhouse_income_category` (DEFAULT `sec_40_2`) / `outsource_income_category` (DEFAULT `sec_40_8`) — ใช้เมื่อ `income_type_mode = by_team_side` (ค่าเริ่มต้น = การจับคู่เดิม แถวเดิมไม่เปลี่ยนความหมาย) · `payout_batches` + snapshot `wht_inhouse_income_category` / `wht_outsource_income_category` (NULL = รอบเก่า ⇒ inhouse 40(2) · outsource 40(8)) · 40(1) ใช้ `payee_profiles.wht_40_2_pct` ช่องเดียวกับ 40(2) + ยื่น `PND1` |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -389,13 +390,13 @@ CREATE TYPE tax_invoice_status AS ENUM (
 CREATE TYPE wht_filing_form AS ENUM (
   'PND3',  -- บุคคลธรรมดา (ภ.ง.ด.3)
   'PND53', -- นิติบุคคล (ภ.ง.ด.53)
-  'PND1'   -- เงินได้ 40(2) (ภ.ง.ด.1) — มติ PO 05/10/2569 UAT U7
+  'PND1'   -- เงินได้ 40(1)/40(2) (ภ.ง.ด.1) — มติ PO 05/10/2569 UAT U7 · U33
 );
 
 -- ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U4/U5 — ไฟล์ 13 §6.4.2)
 CREATE TYPE wht_certificate_mode AS ENUM ('per_payee_batch', 'per_item');
 CREATE TYPE wht_income_type_mode AS ENUM ('all_40_8', 'all_40_2', 'by_team_side');
-CREATE TYPE wht_income_category AS ENUM ('sec_40_8', 'sec_40_2');
+CREATE TYPE wht_income_category AS ENUM ('sec_40_8', 'sec_40_2', 'sec_40_1');  -- sec_40_1 เพิ่ม v4.22 (UAT U33)
 
 CREATE TYPE wht_filing_status AS ENUM ('pending', 'filed');
 
@@ -697,7 +698,9 @@ CREATE TABLE wht_policy_history (
   base_expense_types expense_type[],                  -- ชนิดรายการที่รวมในฐาน WHT
   certificate_mode   wht_certificate_mode NOT NULL,
   income_type_mode   wht_income_type_mode NOT NULL,
-  issue_zero_rate_40_2_certificate BOOLEAN NOT NULL DEFAULT true,  -- 40(2) อัตรา 0% ออก 50 ทวิ ภาษี 0 + รวม ภ.ง.ด.1 (v4.19 มติ PO 05/10/2569 UAT U16)
+  issue_zero_rate_40_2_certificate BOOLEAN NOT NULL DEFAULT true,  -- 40(1)/40(2) อัตรา 0% ออก 50 ทวิ ภาษี 0 + รวม ภ.ง.ด.1 (v4.19 มติ PO 05/10/2569 UAT U16 · U33)
+  inhouse_income_category   wht_income_category NOT NULL DEFAULT 'sec_40_2',  -- โหมด by_team_side: ประเภทเงินได้ฝั่ง inhouse (v4.22 UAT U33)
+  outsource_income_category wht_income_category NOT NULL DEFAULT 'sec_40_8',  -- โหมด by_team_side: ประเภทเงินได้ฝั่ง outsource (v4.22 UAT U33)
   reason             TEXT                 NOT NULL CHECK (btrim(reason) <> ''),
   created_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   created_by         UUID                 NOT NULL REFERENCES users(id)
@@ -1307,7 +1310,7 @@ CREATE TABLE payee_profiles (
   account_number  TEXT,
   national_id     VARCHAR(13),
   id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2)
-  wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 — ไฟล์ 18 §6.3)
+  wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(1)/40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 · U33 ช่องเดียวใช้ทั้งสองประเภท — ไฟล์ 18 §6.3)
   is_verified     BOOLEAN NOT NULL DEFAULT false,
   verified_by     UUID    REFERENCES users(id),
   verified_at     TIMESTAMPTZ,
@@ -1464,6 +1467,8 @@ CREATE TABLE payout_batches (
   wht_certificate_mode   wht_certificate_mode,
   wht_income_type_mode   wht_income_type_mode,
   wht_issue_zero_rate_40_2_certificate BOOLEAN,  -- snapshot U16 (v4.19) — NULL = รอบเก่า ⇒ ไม่ออกใบ 0%
+  wht_inhouse_income_category   wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(2)
+  wht_outsource_income_category wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(8)
   -- Audit
   created_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   created_by            UUID                 NOT NULL REFERENCES users(id),

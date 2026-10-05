@@ -83,7 +83,7 @@ export function WhtTab() {
         <StatCard label="ภ.ง.ด.3 (บุคคลธรรมดา)" value={fmtSatangSymbol(certificates.summary.pnd3Satang)} hint="ไม่รวมใบที่ยกเลิก" />
         <StatCard label="ภ.ง.ด.53 (นิติบุคคล)" value={fmtSatangSymbol(certificates.summary.pnd53Satang)} hint="ไม่รวมใบที่ยกเลิก" />
         <StatCard
-          label="ภ.ง.ด.1 (เงินได้ 40(2))"
+          label="ภ.ง.ด.1 (เงินได้ 40(1)/40(2))"
           value={fmtSatangSymbol(certificates.summary.pnd1Satang)}
           // จำนวนราย/เงินได้รวมใบอัตรา 0% (ภาษี 0) ด้วย — มติ PO 05/10/2569 UAT U16
           hint={`${fmtCount(certificates.summary.pnd1Count)} ใบ · เงินได้ ${fmtSatangSymbol(certificates.summary.pnd1GrossSatang)} · ไม่รวมใบที่ยกเลิก`}

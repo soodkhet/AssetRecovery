@@ -4,7 +4,7 @@ import {
   assertWhtPctValid,
   type WhtBasis,
 } from '@/lib/settings/tax-profile'
-import type { WhtIncomeCategory } from '@/lib/settings/wht-policy'
+import { usesPerPayeeWhtRate, type WhtIncomeCategory } from '@/lib/settings/wht-policy'
 
 /**
  * ภาษีหัก ณ ที่จ่าย (`22` §6.9 · `18` §6.3 · `13` §6.4) — **pure ล้วน ไม่มี I/O**
@@ -162,8 +162,9 @@ export interface PayeeBatchWhtOptions {
   /** ประเภทเงินได้ของผู้รับในรอบนี้ (`resolveIncomeCategory()`) */
   incomeCategory?: WhtIncomeCategory
   /**
-   * อัตราหัก 40(2) ต่อคน (`payee_profiles.wht_40_2_pct` — สำนักงานบัญชีคำนวณให้ · 0.00 ได้)
-   * ใช้เมื่อ `incomeCategory = sec_40_2` เท่านั้น · `null` ⇒ คิดไม่ได้ (ผู้เรียกต้องปัดการสร้างรอบก่อน)
+   * อัตราหัก 40(1)/40(2) ต่อคน (`payee_profiles.wht_40_2_pct` — สำนักงานบัญชีคำนวณให้ · 0.00 ได้)
+   * ใช้เมื่อ `incomeCategory = sec_40_1 | sec_40_2` เท่านั้น (`usesPerPayeeWhtRate()` — มติ PO U33)
+   * · `null` ⇒ คิดไม่ได้ (ผู้เรียกต้องปัดการสร้างรอบก่อน)
    */
   section402Pct?: number | null
 }
@@ -181,15 +182,15 @@ export interface PayeeBatchWht {
   totalBaseSatang: number
   /** ภาษีรวมของ payee ในรอบ = ผลรวม `lines[].whtSatang` เป๊ะ (ไม่มีเศษสตางค์หาย) */
   totalWhtSatang: number
-  /** true = ฐานรวมของ payee ต่ำกว่าเกณฑ์ ⇒ ไม่หักทุกรายการ (40(2) ไม่มีเกณฑ์ ⇒ false เสมอ) */
+  /** true = ฐานรวมของ payee ต่ำกว่าเกณฑ์ ⇒ ไม่หักทุกรายการ (40(1)/40(2) ไม่มีเกณฑ์ ⇒ false เมื่อมีรายการในฐาน) */
   belowThreshold: boolean
   incomeCategory: WhtIncomeCategory
 }
 
-/** 40(2) ไม่มีเกณฑ์ขั้นต่ำ ฿1,000 และฐานเป็นยอดก่อน VAT เสมอ (มติ PO 05/10/2569 U7) */
+/** 40(1)/40(2) ไม่มีเกณฑ์ขั้นต่ำ ฿1,000 และฐานเป็นยอดก่อน VAT เสมอ (มติ PO 05/10/2569 U7 · U33) */
 function section402Rate(pct: number | null | undefined): WhtRateResolution {
   if (pct === null || pct === undefined) {
-    throw new RangeError('calculatePayeeBatchWht: ผู้รับเงินประเภท 40(2) ยังไม่มีอัตราหัก — ต้องปัดการสร้างรอบก่อนถึงสูตร')
+    throw new RangeError('calculatePayeeBatchWht: ผู้รับเงินประเภท 40(1)/40(2) ยังไม่มีอัตราหัก — ต้องปัดการสร้างรอบก่อนถึงสูตร')
   }
   assertWhtPctValid(pct)
   return { whtPct: pct, whtBasis: 'before_vat', minThresholdSatang: 0, source: 'payee' }
@@ -211,7 +212,7 @@ function section402Rate(pct: number | null | undefined): WhtRateResolution {
  * **ค่าตั้งภาษี (มติ PO 05/10/2569 U3/U5/U7)**
  * - รายการที่ `includedInBase = false` (เช่นค่าที่พัก/เบิกตามใบเสร็จ) ไม่นับเข้าฐานรวม/เกณฑ์ และไม่ถูกหัก
  *   — ยังจ่ายเต็มยอด (`net = gross`)
- * - `incomeCategory = sec_40_2` ⇒ อัตรา = `section402Pct` ของผู้รับ (ไม่ใช่ Tax Profile/Plan)
+ * - `incomeCategory = sec_40_1 | sec_40_2` ⇒ อัตรา = `section402Pct` ของผู้รับ (ไม่ใช่ Tax Profile/Plan)
  *   **ไม่มีเกณฑ์ขั้นต่ำ** · ไม่คำนวณอัตราก้าวหน้า (Hybrid Boundary)
  */
 export function calculatePayeeBatchWht(
@@ -220,8 +221,9 @@ export function calculatePayeeBatchWht(
 ): PayeeBatchWht {
   const incomeCategory = options.incomeCategory ?? 'sec_40_8'
   const hasIncludedItem = items.some((item) => item.includedInBase !== false)
-  // 40(2) ต้องมีอัตราต่อคน — ตรวจเฉพาะเมื่อมีรายการในฐานจริง (ทุกรายการไม่อยู่ในฐาน = ไม่มีอะไรให้หัก)
-  const rate402 = incomeCategory === 'sec_40_2' && hasIncludedItem ? section402Rate(options.section402Pct) : null
+  // 40(1)/40(2) ต้องมีอัตราต่อคน — ตรวจเฉพาะเมื่อมีรายการในฐานจริง (ทุกรายการไม่อยู่ในฐาน = ไม่มีอะไรให้หัก)
+  const rate402 =
+    usesPerPayeeWhtRate(incomeCategory) && hasIncludedItem ? section402Rate(options.section402Pct) : null
   const prepared = items.map((item) => {
     assertNonNegativeSatang(item.grossSatang, 'ยอดก่อนหักภาษี')
     assertNonNegativeSatang(item.vatSatang ?? 0, 'VAT ของรายการ')

@@ -9,8 +9,11 @@ import {
   payoutBatchWhtPolicy,
   resolveWhtPolicyAt,
   toWhtPolicyAuditPayload,
+  WHT_INCOME_CATEGORY_LABEL,
+  WHT_TEAM_SIDE_INCOME_CATEGORIES,
   type WhtPolicyEntry,
 } from '@/lib/settings/wht-policy'
+import { whtPolicyCreateSchema } from '@/lib/settings/schemas'
 
 /** ค่าตั้งภาษีหัก ณ ที่จ่าย — มติ PO 05/10/2569 (UAT U3/U4/U5/U8) */
 
@@ -91,6 +94,8 @@ describe('(ฉ) snapshot ของรอบจ่าย', () => {
       whtCertificateMode: 'per_item' as const,
       whtIncomeTypeMode: 'all_40_8' as const,
       whtIssueZeroRate402Certificate: false,
+      whtInhouseIncomeCategory: 'sec_40_1' as const,
+      whtOutsourceIncomeCategory: 'sec_40_2' as const,
     }
     const before = payoutBatchWhtPolicy({ ...snapshot, whtBaseExpenseTypes: [...snapshot.whtBaseExpenseTypes] })
     // ค่าตั้งเปลี่ยนเป็นค่าเริ่มต้นใหม่ (ไม่รวมค่าที่พัก · ต่อรอบ) — รอบเดิมยังอ่านค่าเดิม
@@ -98,6 +103,8 @@ describe('(ฉ) snapshot ของรอบจ่าย', () => {
     expect(after).toEqual(before)
     expect(isInWhtBase(after, 'hotel')).toBe(true)
     expect(after.certificateMode).toBe('per_item')
+    expect(after.inhouseIncomeCategory).toBe('sec_40_1')
+    expect(after.outsourceIncomeCategory).toBe('sec_40_2')
   })
 
   it('รอบที่สร้างก่อนมีค่าตั้ง (snapshot NULL) → พฤติกรรมเดิม: ทุกชนิดในฐาน · ใบต่อรายการ · 40(8)', () => {
@@ -106,6 +113,8 @@ describe('(ฉ) snapshot ของรอบจ่าย', () => {
       whtCertificateMode: null,
       whtIncomeTypeMode: null,
       whtIssueZeroRate402Certificate: null,
+      whtInhouseIncomeCategory: null,
+      whtOutsourceIncomeCategory: null,
     })
     expect(legacy).toEqual(LEGACY_WHT_POLICY)
     expect(isInWhtBase(legacy, 'hotel')).toBe(true)
@@ -125,6 +134,8 @@ describe('normalize/audit', () => {
       certificate_mode: 'per_payee_batch',
       income_type_mode: 'all_40_8',
       issue_zero_rate_40_2_certificate: true,
+      inhouse_income_category: 'sec_40_2',
+      outsource_income_category: 'sec_40_8',
     })
   })
 })
@@ -136,7 +147,13 @@ describe('U16 — 40(2) อัตรา 0% ออก 50 ทวิ (มติ PO 
   })
 
   it('snapshot ของรอบ: true/false ใช้ตามรอบ · NULL (รอบก่อนมีค่าตั้ง) = ไม่ออก', () => {
-    const base = { whtBaseExpenseTypes: null, whtCertificateMode: 'per_payee_batch' as const, whtIncomeTypeMode: 'all_40_2' as const }
+    const base = {
+      whtBaseExpenseTypes: null,
+      whtCertificateMode: 'per_payee_batch' as const,
+      whtIncomeTypeMode: 'all_40_2' as const,
+      whtInhouseIncomeCategory: null,
+      whtOutsourceIncomeCategory: null,
+    }
     expect(payoutBatchWhtPolicy({ ...base, whtIssueZeroRate402Certificate: true }).issueZeroRate402Certificate).toBe(true)
     expect(payoutBatchWhtPolicy({ ...base, whtIssueZeroRate402Certificate: false }).issueZeroRate402Certificate).toBe(false)
     expect(payoutBatchWhtPolicy({ ...base, whtIssueZeroRate402Certificate: null }).issueZeroRate402Certificate).toBe(false)
@@ -149,5 +166,60 @@ describe('U16 — 40(2) อัตรา 0% ออก 50 ทวิ (มติ PO 
     ]
     expect(effectiveWhtPolicy(entries, new Date('2026-10-20T03:00:00Z')).issueZeroRate402Certificate).toBe(true)
     expect(effectiveWhtPolicy(entries, new Date('2026-11-02T03:00:00Z')).issueZeroRate402Certificate).toBe(false)
+  })
+})
+
+describe('U33 — การจับคู่ประเภทเงินได้ต่อประเภททีม (มติ PO 05/10/2569)', () => {
+  it('ค่าเริ่มต้นไม่เปลี่ยน: โหมด 40(8) ทั้งหมด · การจับคู่ inhouse 40(2) · outsource 40(8) (= พฤติกรรมเดิม)', () => {
+    expect(DEFAULT_WHT_POLICY.incomeTypeMode).toBe('all_40_8')
+    expect(DEFAULT_WHT_POLICY.inhouseIncomeCategory).toBe('sec_40_2')
+    expect(DEFAULT_WHT_POLICY.outsourceIncomeCategory).toBe('sec_40_8')
+    expect(LEGACY_WHT_POLICY.inhouseIncomeCategory).toBe('sec_40_2')
+    expect(LEGACY_WHT_POLICY.outsourceIncomeCategory).toBe('sec_40_8')
+  })
+
+  it('ตัวเลือกต่อประเภททีม = 40(1)/40(2)/40(8) · ป้ายครบทุกค่า', () => {
+    expect([...WHT_TEAM_SIDE_INCOME_CATEGORIES]).toEqual(['sec_40_1', 'sec_40_2', 'sec_40_8'])
+    for (const category of WHT_TEAM_SIDE_INCOME_CATEGORIES) {
+      expect(WHT_INCOME_CATEGORY_LABEL[category]).toMatch(/^มาตรา 40\((1|2|8)\)$/)
+    }
+  })
+
+  it('schema: ไม่ส่งการจับคู่ = ค่าเริ่มต้น · ค่านอกตัวเลือกถูกปัด', () => {
+    const base = {
+      effectiveFrom: '2026-10-06',
+      baseExpenseTypes: ['commission'],
+      certificateMode: 'per_payee_batch',
+      incomeTypeMode: 'by_team_side',
+      reason: 'สำนักงานบัญชีแนะนำ',
+    }
+    const parsed = whtPolicyCreateSchema.parse(base)
+    expect(parsed.inhouseIncomeCategory).toBe('sec_40_2')
+    expect(parsed.outsourceIncomeCategory).toBe('sec_40_8')
+    const custom = whtPolicyCreateSchema.parse({
+      ...base,
+      inhouseIncomeCategory: 'sec_40_1',
+      outsourceIncomeCategory: 'sec_40_1',
+    })
+    expect(custom.inhouseIncomeCategory).toBe('sec_40_1')
+    expect(custom.outsourceIncomeCategory).toBe('sec_40_1')
+    expect(whtPolicyCreateSchema.safeParse({ ...base, inhouseIncomeCategory: 'sec_40_3' }).success).toBe(false)
+  })
+
+  it('snapshot ของรอบ: การจับคู่ NULL (รอบก่อน U33) = การจับคู่เดิม · มีค่า = ใช้ค่าของรอบ', () => {
+    const base = {
+      whtBaseExpenseTypes: null,
+      whtCertificateMode: 'per_payee_batch' as const,
+      whtIncomeTypeMode: 'by_team_side' as const,
+      whtIssueZeroRate402Certificate: true,
+    }
+    const old = payoutBatchWhtPolicy({ ...base, whtInhouseIncomeCategory: null, whtOutsourceIncomeCategory: null })
+    expect([old.inhouseIncomeCategory, old.outsourceIncomeCategory]).toEqual(['sec_40_2', 'sec_40_8'])
+    const fresh = payoutBatchWhtPolicy({
+      ...base,
+      whtInhouseIncomeCategory: 'sec_40_1',
+      whtOutsourceIncomeCategory: 'sec_40_2',
+    })
+    expect([fresh.inhouseIncomeCategory, fresh.outsourceIncomeCategory]).toEqual(['sec_40_1', 'sec_40_2'])
   })
 })

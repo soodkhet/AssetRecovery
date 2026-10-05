@@ -82,7 +82,7 @@ export function buildWhtSummaryReport(input: {
     kpis: [
       { key: 'pnd3', label: 'ภ.ง.ด.3 (บุคคลธรรมดา)', value: pnd3Total, type: 'money' },
       { key: 'pnd53', label: 'ภ.ง.ด.53 (นิติบุคคล)', value: pnd53Total, type: 'money' },
-      { key: 'pnd1', label: 'ภ.ง.ด.1 (เงินได้ 40(2))', value: pnd1Total, type: 'money' },
+      { key: 'pnd1', label: 'ภ.ง.ด.1 (เงินได้ 40(1)/40(2))', value: pnd1Total, type: 'money' },
       {
         key: 'total',
         label: 'รวม WHT',

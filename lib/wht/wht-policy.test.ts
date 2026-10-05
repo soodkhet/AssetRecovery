@@ -6,10 +6,12 @@ import {
   incomeTypeOf,
   shouldIssueZeroRate402Certificate,
   summarizeFilingTotals,
+  WHT_FILING_FORM_LABEL,
+  WHT_FILING_FORM_SHORT_LABEL,
   type CertificateSourceItem,
   type WhtCertificateDocSource,
 } from '@/lib/wht/wht'
-import { INCOME_TYPE_TEXT_40_2 } from '@/lib/settings/wht-policy'
+import { INCOME_TYPE_TEXT_40_1, INCOME_TYPE_TEXT_40_2 } from '@/lib/settings/wht-policy'
 
 /** ใบ 50 ทวิ ตามค่าตั้งภาษี — มติ PO 05/10/2569 (UAT U4/U7) */
 
@@ -161,5 +163,39 @@ describe('PDF 50 ทวิ แบบต่อรอบ', () => {
 
   it('ใบต่อรายการไม่มีหมายเหตุ', () => {
     expect(buildWhtCertificateDoc(base).coverageNote).toBeNull()
+  })
+})
+
+describe('U33 — เงินได้ 40(1) ใช้กติกาเดียวกับ 40(2) (มติ PO 05/10/2569)', () => {
+  it('แบบที่ยื่น = ภ.ง.ด.1 เสมอ (ไม่สน Tax Profile / ชนิดผู้รับ)', () => {
+    expect(filingFormOf({ taxProfileFilingForm: 'PND3', payeeType: 'individual', incomeCategory: 'sec_40_1' })).toBe('PND1')
+    expect(filingFormOf({ taxProfileFilingForm: 'PND53', payeeType: 'corporate', incomeCategory: 'sec_40_1' })).toBe('PND1')
+    expect(filingFormOf({ taxProfileFilingForm: null, payeeType: 'individual', incomeCategory: 'sec_40_8' })).toBe('PND3')
+  })
+
+  it('ประเภทเงินได้บน 50 ทวิ ระบุมาตรา 40(1)', () => {
+    expect(incomeTypeOf('ค่าจ้างทำของ มาตรา 40(8)', 'sec_40_1')).toBe(INCOME_TYPE_TEXT_40_1)
+    expect(INCOME_TYPE_TEXT_40_1).toContain('40(1)')
+    expect(incomeTypeOf('ค่าจ้างทำของ มาตรา 40(8)', 'sec_40_2')).toBe(INCOME_TYPE_TEXT_40_2)
+  })
+
+  it('อัตรา 0% ออกใบภาษี 0 ได้เหมือน 40(2) · 40(8) ไม่ออก', () => {
+    const base = { issueZeroRate402Certificate: true, whtSatang: 0, grossSatang: 40_000 }
+    expect(shouldIssueZeroRate402Certificate({ ...base, incomeCategory: 'sec_40_1' })).toBe(true)
+    expect(shouldIssueZeroRate402Certificate({ ...base, incomeCategory: 'sec_40_8' })).toBe(false)
+    expect(shouldIssueZeroRate402Certificate({ ...base, issueZeroRate402Certificate: false, incomeCategory: 'sec_40_1' })).toBe(
+      false,
+    )
+    const groups = groupCertificateSources(
+      [{ id: 'z1', payeeId: 'p1', grossSatang: 40_000, whtSatang: 0, whtBaseIncluded: true, incomeCategory: 'sec_40_1' }],
+      'per_payee_batch',
+      { issueZeroRate402Certificate: true },
+    )
+    expect(groups).toHaveLength(1)
+  })
+
+  it('ป้ายแบบ: ภ.ง.ด.1 ครอบ 40(1)/40(2) · ชื่อสั้นท้ายใบตรงแบบจริง (ภ.ง.ด.1 ไม่กลายเป็น ภ.ง.ด.53)', () => {
+    expect(WHT_FILING_FORM_LABEL.PND1).toContain('40(1)')
+    expect(WHT_FILING_FORM_SHORT_LABEL).toEqual({ PND1: 'ภ.ง.ด.1', PND3: 'ภ.ง.ด.3', PND53: 'ภ.ง.ด.53' })
   })
 })

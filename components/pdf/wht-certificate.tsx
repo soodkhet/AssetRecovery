@@ -2,7 +2,7 @@ import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
 import { Text } from '@/components/pdf/text'
 import { MetaRow, OfficialFooter, OfficialHeader, PartyBox, officialStyles } from '@/components/pdf/official-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
-import type { WhtCertificateDoc } from '@/lib/wht/wht'
+import { WHT_FILING_FORM_SHORT_LABEL, type WhtCertificateDoc } from '@/lib/wht/wht'
 
 /**
  * **หนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ)** (`28` §6.3 · ไฟล์ 33 §6.3) — เลย์เอาต์เทียบ
@@ -87,7 +87,7 @@ export function WhtCertificatePDF({ doc }: { doc: WhtCertificateDoc }): React.JS
 
         <Text style={officialStyles.noteText}>
           ผู้จ่ายเงินขอรับรองว่าข้อความและตัวเลขข้างต้นถูกต้องตรงกับความจริง และได้นำส่งภาษีที่หักไว้ต่อกรมสรรพากร
-          ตามแบบ {doc.filingForm === 'PND3' ? 'ภ.ง.ด.3' : 'ภ.ง.ด.53'} ของเดือนที่จ่ายเงิน — เอกสารออกโดยระบบ
+          ตามแบบ {WHT_FILING_FORM_SHORT_LABEL[doc.filingForm]} ของเดือนที่จ่ายเงิน — เอกสารออกโดยระบบ
           AssetRecovery เลขที่หนังสือรับรองเดินอัตโนมัติเรียงต่อเนื่อง ใบที่ยกเลิกจะไม่ถูกนำเลขที่กลับมาใช้ซ้ำ
         </Text>
 
