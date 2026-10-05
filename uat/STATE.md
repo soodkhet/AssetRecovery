@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R12 Client Portal — ทดสอบรับงาน** (05/10/2569 เช้า) · 26 ขั้น ✅ 23 / ⚠️ 2 / ❓ 1 · **ข้ามบริษัท 39/39 = 403 ไม่รั่ว** · ตัวเลขตรงภายใน · GET-only 52/52 = 405 · บริษัท suspended ทดสอบจริงผ่านหน้า Superadmin แล้วคืนสถานะ · เกณฑ์รับงาน `97` §19 ผ่าน 6/6 (ข้อ 2/5 บางส่วนอิง DB/unit test) · BUG-148 (S4 needs-decision) / 149 · รายงาน `uat/report/R12-portal-v1.md` · ก่อนหน้า: R10 v3 + งานตามมติ U3–U10 ครบ |
 | snapshot ล่าสุด | `uat/snapshots/R10-end-v3.dump` (ปลาย UAT) · `R9-end-v3` · `R8-end-v3` · `R7-end-v3` · `R7c-partial-v3` · `R7b-end-v3` · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **งานตามมติ U3–U10 เสร็จครบ** (ค่าตั้งภาษี · cache DB · ✅ only 9 · Client Portal P1–P11) · รอผู้ใช้: (1) apply Storage policy BUG-143 (2) รีวิว `uat/report/final/OPEN-ITEMS.md` + มติ O43–O47 + BUG-146…149 (3) ตรวจรายงาน O4 ≥ 06/10/2569 14:02 (4) push staging (migration 12 ตัว + seed) · ยังไม่ push |
+| รอบปัจจุบัน | **มติ U3–U21 ทำครบทุกข้อ** (ค่าตั้งภาษี · cache DB · ✅ only 9 · Client Portal P1–P11 + ยอดตามเอกสาร · ใบลดหนี้/ใบเพิ่มหนี้ · Export 09 · BUG-143 ถอด policy แล้ว) · รอผู้ใช้: รีวิว OPEN-ITEMS + มติ O43–O47 · ตรวจ O4 ≥ 06/10/2569 14:02 · push staging (migration 15 ตัว + seed + `CRON_SECRET` + upload limit) · ยังไม่ push |
 | บั๊กเปิด | ดู BUGS.md (142 รายการ: fixed 114 · open 12 · needs-decision 11 · ปิดแบบยอมรับ 5) · ไม่มี S1 เปิด |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~16:30 merge fixer X4 `536966a` (U18 `TAX_INVOICE_HAS_ACTIVE_NOTES` · U19 ใบเพิ่มหนี้ `note_type` migration `20261005150000` · U21 Export `09_Credit_Notes.csv` (pack 9 ไฟล์) + เตือนยอดไม่ตรง Adjustment) · verify 305/3,970 · migration ใหม่รวม **15 ตัว** · **มติ U18–U21 ทำครบ**
 - 05/10/2569 ~15:30 merge fixer X3 `07606e2` (portal หักใบลดหนี้ active ในยอดค้าง/AR/dashboard/กราฟ · หน้าใบกำกับแสดงใบลดหนี้ · กระจายในกราฟ: ผูก Adjustment หักตรงเคส ส่วนเหลือกระจายตามสัดส่วน) · verify 304/3,946 · **มติ U11–U17 ทำครบ**
 - 05/10/2569 ~15:00 merge fixer X2 `47e9756` (บันทึกใบลดหนี้ · ตาราง `credit_notes` migration `20261005130000` · API `/api/accounting/credit-notes` · ป้าย "รอใบลดหนี้" · error `CREDIT_NOTE_*` 7 ตัว) + fixer Z `462aae5` (BUG-150 session cache S2 · BUG-151 · BUG-152) · eslint ยกเว้น `uat/bin/*/**` · verify 304 files / 3,936 tests · migration ใหม่รวม **14 ตัว** → fixer X3 ต่อใบลดหนี้เข้ายอด portal
 - 05/10/2569 ~14:20 มติ U11–U17 · **ถอด Storage policy บน Supabase แล้ว (U17)** → ทดสอบ 8/8 ผ่าน BUG-143 ปิดจริง · merge fixer Y `23b7801` (U15/U16 · migration `20261005140000`) + X1 `154792f` (U11/U13/U14 · portal 15 endpoint) · verify 301/3,887 (1 flaky BUG-152) · BUG-150 (S2 session cache) → fixer Z · migration ใหม่รวม **13 ตัว**
@@ -127,7 +128,7 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - R8 บริหาร (ปิดงวด/Adjustment) → R9 รายงาน (golden ใน DATASET v3 E10) → R10 สิทธิ์/ขอบเขต (API ขนาน 12 persona) → รวมเล่มรายงานคู่มือ (`UAT_PLAN.md` §11.3)
 
 ### 6. ก่อนผู้ใช้ push ขึ้น staging (แจ้งผู้ใช้ทุกครั้งที่ถาม) — **มติผู้ใช้ 04/10/2569: ยังไม่ push จนกว่า UAT จบทุกรอบ แล้วค่อย push ทีเดียว** (ห้ามเสนอ push ระหว่างทาง เว้นแต่พบช่องโหว่ร้ายแรงใหม่)
-- migration ใหม่จาก UAT **14 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005140000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
+- migration ใหม่จาก UAT **15 ตัว** (ตั้งแต่ `20261003113300` ถึง `20261005150000`) → ตรวจก่อนด้วย `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` · ก่อนนั้นตรวจรายได้ซ้ำ (BUG-089) ต้องว่าง · แล้ว seed staging (คำสั่งใน memory `staging-migrations-manual`) เพื่อเพิ่มสิทธิ์ใหม่ (การเงิน approve_advance, ธุรการคลัง 4 ตัว, บัญชี/บริหารดูรอบจ่าย)
 - Storage ของ staging ตั้งแล้ว (`qgshdg…` = localhost + staging) · cron: `vercel.json` ไม่ต้องแก้ — `/api/cron/jobs` ตั้งคิว `daily_field_allowance` เองหลังเที่ยงคืนไทย (`schedule: { kind: "daily" }`)
 
 ### รอมติ PO / นักบัญชี (ไม่บล็อก — ถามรวดเมื่อสะดวก)
