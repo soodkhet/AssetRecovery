@@ -242,8 +242,8 @@ suite('U44 — บรรทัดกระทบยอด F2 กับใบก�
       VALUES ('${ORG_ID}', '${periodId}', '${batchId}', '${COMPANY_ID}', 100000, 7000, 107000, '${USER_ID}') RETURNING id
     `)
     await db().$executeRawUnsafe(`
-      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, created_by)
-      VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}-B', '2026-08-25', '${USER_ID}')
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, created_by)
+      VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}-B', '2026-08-25', '00000', '${USER_ID}')
     `)
     // Adjustment ลด 10,000 ผูกรอบ (ไม่ผูกรายได้) ⇒ ส่วนของรายได้ ส.ค. = 10,000 × 60/100 = 6,000
     await db().$executeRawUnsafe(`
