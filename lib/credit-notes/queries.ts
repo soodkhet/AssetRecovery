@@ -229,19 +229,50 @@ export async function creditNotesForBillingBatch(
       taxInvoice: { salesRecord: { billingBatchId } },
       ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
     },
-    select: {
-      id: true,
-      taxInvoiceId: true,
-      creditNoteNumber: true,
-      issueDate: true,
-      amountBeforeVatSatang: true,
-      vatSatang: true,
-      totalSatang: true,
-      taxInvoice: { select: { invoiceNumber: true } },
-    },
+    select: CREDIT_NOTE_SUMMARY_SELECT,
     orderBy: [{ issueDate: 'asc' }, { createdAt: 'asc' }],
   })
-  return rows.map((row) => ({
+  return rows.map(toCreditNoteSummary)
+}
+
+/**
+ * ใบลดหนี้ **active** แบบย่อต่อใบกำกับ (หลายใบในคำสั่งเดียว — กัน N+1) · ใบที่ไม่มีใบลดหนี้ได้รายการว่าง
+ * เรียงตามวันที่ออก · ⚠️ ไม่ตรวจสิทธิ์ — ผู้เรียก (portal) ต้องกรองใบกำกับตาม scope ของตัวเองมาก่อน
+ */
+export async function creditNotesByInvoice(
+  taxInvoiceIds: readonly string[],
+  options: { organizationId?: string } = {},
+): Promise<Map<string, CreditNoteSummary[]>> {
+  const result = new Map<string, CreditNoteSummary[]>(taxInvoiceIds.map((id) => [id, []]))
+  if (taxInvoiceIds.length === 0) return result
+  const rows = await prisma.creditNote.findMany({
+    where: {
+      status: 'active',
+      taxInvoiceId: { in: [...taxInvoiceIds] },
+      ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
+    },
+    select: CREDIT_NOTE_SUMMARY_SELECT,
+    orderBy: [{ issueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+  })
+  for (const row of rows) result.get(row.taxInvoiceId)?.push(toCreditNoteSummary(row))
+  return result
+}
+
+const CREDIT_NOTE_SUMMARY_SELECT = {
+  id: true,
+  taxInvoiceId: true,
+  creditNoteNumber: true,
+  issueDate: true,
+  amountBeforeVatSatang: true,
+  vatSatang: true,
+  totalSatang: true,
+  taxInvoice: { select: { invoiceNumber: true } },
+} as const satisfies Prisma.CreditNoteSelect
+
+function toCreditNoteSummary(
+  row: Prisma.CreditNoteGetPayload<{ select: typeof CREDIT_NOTE_SUMMARY_SELECT }>,
+): CreditNoteSummary {
+  return {
     id: row.id,
     taxInvoiceId: row.taxInvoiceId,
     invoiceNumber: row.taxInvoice.invoiceNumber,
@@ -250,7 +281,7 @@ export async function creditNotesForBillingBatch(
     amountBeforeVatSatang: row.amountBeforeVatSatang,
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
-  }))
+  }
 }
 
 /**
