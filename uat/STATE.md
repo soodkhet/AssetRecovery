@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~15:30 merge fixer X3 `07606e2` (portal หักใบลดหนี้ active ในยอดค้าง/AR/dashboard/กราฟ · หน้าใบกำกับแสดงใบลดหนี้ · กระจายในกราฟ: ผูก Adjustment หักตรงเคส ส่วนเหลือกระจายตามสัดส่วน) · verify 304/3,946 · **มติ U11–U17 ทำครบ**
 - 05/10/2569 ~15:00 merge fixer X2 `47e9756` (บันทึกใบลดหนี้ · ตาราง `credit_notes` migration `20261005130000` · API `/api/accounting/credit-notes` · ป้าย "รอใบลดหนี้" · error `CREDIT_NOTE_*` 7 ตัว) + fixer Z `462aae5` (BUG-150 session cache S2 · BUG-151 · BUG-152) · eslint ยกเว้น `uat/bin/*/**` · verify 304 files / 3,936 tests · migration ใหม่รวม **14 ตัว** → fixer X3 ต่อใบลดหนี้เข้ายอด portal
 - 05/10/2569 ~14:20 มติ U11–U17 · **ถอด Storage policy บน Supabase แล้ว (U17)** → ทดสอบ 8/8 ผ่าน BUG-143 ปิดจริง · merge fixer Y `23b7801` (U15/U16 · migration `20261005140000`) + X1 `154792f` (U11/U13/U14 · portal 15 endpoint) · verify 301/3,887 (1 flaky BUG-152) · BUG-150 (S2 session cache) → fixer Z · migration ใหม่รวม **13 ตัว**
 - 05/10/2569 ~07:00 R12 Portal ทดสอบรับงานผ่าน (ตารางบน) · snapshot `R12-end-v1` · **งานคืนนี้ตามมติ U3–U10 ครบทุกข้อ** · ยังไม่ push
