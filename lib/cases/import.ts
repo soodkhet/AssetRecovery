@@ -306,7 +306,7 @@ const IMPORT_COLUMN_TEMPLATE: Record<ImportField, ImportColumnTemplateSpec> = {
   },
   assetImeiSerial: {
     requirement: 'required_before_review',
-    format: 'IMEI ตัวเลข 15 หลัก (หรือ Serial ของเครื่อง)',
+    format: 'IMEI ตัวเลข 15 หลัก เว้นวรรค ขีด หรือจุดคั่นได้ (หรือ Serial ของเครื่องที่มีตัวอักษร)',
     examples: ['350000000000001', '350000000000019'],
   },
   outstandingDebtBaht: {

@@ -993,6 +993,73 @@ suite('Phase 2.13 — scope ระดับแถว (`44` §13 · §17 T15)', (
     expect((await warehouse.listAssets(admin, assetListQuerySchema.parse({ teamId: OTHER_TEAM_ID }))).total).toBe(1)
   })
 
+  it('มติ PO U22 (BUG-076) — ผู้จัดการทีมอ่านคลังได้เฉพาะเครื่องของทีมตัวเอง · ทีมอื่นไม่ leak ทั้ง list/detail/ล็อต', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+    const outside = await seedInCustody(COMPANY_A)
+    await db().$executeRawUnsafe(
+      `UPDATE cases SET assigned_team_id = '${OTHER_TEAM_ID}' WHERE id = '${outside.caseId}'`,
+    )
+    // ล็อตเดียวมีเครื่องสองทีมปนกัน (1 ล็อต = 1 บริษัท ไม่ใช่ 1 ทีม)
+    const lot = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [mine.assetId, outside.assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+    await db().$executeRawUnsafe(
+      `UPDATE handover_lots SET signed_doc_url = 'handover-lots/${lot.id}/signed-doc/x.pdf' WHERE id = '${lot.id}'`,
+    )
+
+    // list ไม่มี filter = เห็นเฉพาะของทีมตัวเอง
+    const list = await warehouse.listAssets(manager, assetListQuerySchema.parse({}))
+    expect(list.items.map((item) => item.id)).toEqual([mine.assetId])
+    expect(list.total).toBe(1)
+
+    // detail ของทีมอื่น = ASSET_NOT_FOUND เหมือนไม่มีจริง (ไม่ leak)
+    await expectCode(() => warehouse.getAsset(manager, outside.assetId), 'ASSET_NOT_FOUND')
+    const own = await warehouse.getAsset(manager, mine.assetId)
+    expect(own.lot?.assetCount).toBe(1)
+
+    // ล็อต: เห็นได้ผ่านเครื่องของทีม แต่รายการ/จำนวนเครื่องเป็นของทีมตัวเองเท่านั้น และไม่เห็นไฟล์ทั้งล็อต
+    const lots = await warehouse.listLots(manager, lotListQuerySchema.parse({}))
+    expect(lots.items.map((item) => [item.id, item.assetCount])).toEqual([[lot.id, 1]])
+    const lotDetail = await warehouse.getLot(manager, lot.id)
+    expect(lotDetail.assets.map((item) => item.id)).toEqual([mine.assetId])
+    expect(lotDetail.assetCount).toBe(1)
+    expect(lotDetail.signedDocUrl).toBeNull()
+
+    // ธุรการ (global) ยังเห็นครบเหมือนเดิม
+    const adminLot = await warehouse.getLot(admin, lot.id)
+    expect(adminLot.assets).toHaveLength(2)
+    expect(adminLot.assetCount).toBe(2)
+    expect(adminLot.signedDocUrl).not.toBeNull()
+
+    // ผู้จัดการที่ไม่มีทีมเลย = ไม่เห็นอะไร
+    const noTeam = { ...manager, scope: { ...manager.scope, teamIds: [] } }
+    expect((await warehouse.listAssets(noTeam, assetListQuerySchema.parse({}))).total).toBe(0)
+    await expectCode(() => warehouse.getLot(noTeam, lot.id), 'LOT_NOT_FOUND')
+  })
+
+  it('มติ PO U24 — ค้นด้วย IMEI ที่มีตัวคั่นเจอเครื่องเดียวกัน (exact บนค่าที่ normalize แล้ว)', async () => {
+    const mine = await seedInCustody(COMPANY_A)
+    const asset = await db().asset.findUniqueOrThrow({ where: { id: mine.assetId }, select: { imeiContract: true } })
+    const imei = asset.imeiContract ?? ''
+    const dashed = `${imei.slice(0, 2)}-${imei.slice(2, 8)}-${imei.slice(8, 14)}-${imei.slice(14)}`
+
+    const found = await warehouse.listAssets(admin, assetListQuerySchema.parse({ search: dashed }))
+    expect(found.items.map((item) => item.id)).toEqual([mine.assetId])
+    // ยังไม่ fuzzy — ขาดหนึ่งหลักไม่เจอ
+    expect((await warehouse.listAssets(admin, assetListQuerySchema.parse({ search: dashed.slice(0, -1) }))).total).toBe(0)
+  })
+
   it('ธุรการเห็นทุกบริษัท และล็อตถูกกรองตาม scope เดียวกัน', async () => {
     const mine = await seedInCustody(COMPANY_A)
     await seedInCustody(COMPANY_B)

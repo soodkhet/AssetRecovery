@@ -549,7 +549,7 @@ export function CaseFormModal({
               id="asset-imei"
               label="IMEI / Serial Number"
               required
-              hint="ตัวเลข 15 หลัก = IMEI (ระบบเก็บแยกให้เอง) นอกนั้นถือเป็น Serial"
+              hint="IMEI = ตัวเลข 15 หลัก (เว้นวรรค ขีด หรือจุดคั่นได้) · ถ้ามีตัวอักษรถือเป็น Serial"
               error={fieldErrors.assetImeiSerial}
             >
               <Input

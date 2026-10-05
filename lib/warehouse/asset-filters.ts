@@ -1,6 +1,7 @@
 import { toInputDate } from '@/lib/format/datetime'
 import type { AssetCondition, AssetStatus } from '@/lib/generated/prisma/enums'
 import { statusesInAssetTab, type AssetTab } from '@/lib/warehouse/asset-status'
+import { imeiSearchKey } from '@/lib/warehouse/imei'
 import type { AssetListItemDto } from '@/lib/warehouse/types'
 
 /**
@@ -193,8 +194,8 @@ export function matchesAssetSearch(item: AssetListItemDto, keyword: string): boo
     item.caseRef.toLowerCase().includes(needle) ||
     item.debtorName.toLowerCase().includes(needle) ||
     item.deviceDesc.toLowerCase().includes(needle) ||
-    item.imeiContract === keyword.trim() ||
-    item.imeiActual === keyword.trim() ||
+    item.imeiContract === imeiSearchKey(keyword) ||
+    item.imeiActual === imeiSearchKey(keyword) ||
     item.serialContract === keyword.trim() ||
     item.serialActual === keyword.trim()
   )

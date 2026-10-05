@@ -8,7 +8,7 @@ import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { WarehouseError } from '@/lib/warehouse/errors'
 import type { AssetCondition } from '@/lib/generated/prisma/enums'
-import { compareAssetIdentity, IMEI_LENGTH, isValidImei } from '@/lib/warehouse/imei'
+import { compareAssetIdentity, IMEI_FORMAT_MESSAGE, IMEI_INPUT_MAX_LENGTH, parseImei } from '@/lib/warehouse/imei'
 import {
   INTAKE_PHOTO_ANGLES,
   INTAKE_PHOTO_ANGLE_LABELS,
@@ -66,17 +66,20 @@ export function IntakeModal({
   const groups: IntakePhotoGroups = groupIntakePhotos(photos)
   const photoWarning = intakePhotoWarning(groups.filledAngles)
 
+  /** ตัดช่องว่าง/ขีด/จุด แล้วต้องเหลือ 15 หลักพอดี (มติ PO U24) — ตัวเดียวกับ schema ฝั่ง API */
+  const imeiNormalized = parseImei(imeiActual)
+  const imeiForCompare = imeiActual.trim() === '' ? null : (imeiNormalized ?? imeiActual.trim())
   const comparison = compareAssetIdentity(
     { imeiContract: asset.imeiContract, serialContract: asset.serialContract },
     {
-      imeiActual: imeiActual.trim() === '' ? null : imeiActual.trim(),
+      imeiActual: imeiForCompare,
       serialActual: serialActual.trim() === '' ? null : serialActual.trim(),
     },
   )
   const imeiTouched = imeiActual.trim() !== '' || serialActual.trim() !== ''
   const mismatch = imeiTouched && !comparison.matched
-  /** พิมพ์ไม่ครบ 15 หลัก = พิมพ์ผิด (schema ปฏิเสธ) ไม่ใช่ "ไม่ตรงสัญญา" */
-  const imeiFormatInvalid = imeiActual.trim() !== '' && !isValidImei(imeiActual.trim())
+  /** รูปแบบผิด (ไม่ครบ/เกิน 15 หลัก หรือมีอักขระอื่น) = พิมพ์ผิด (schema ปฏิเสธ) ไม่ใช่ "ไม่ตรงสัญญา" */
+  const imeiFormatInvalid = imeiActual.trim() !== '' && imeiNormalized === null
 
   const isRetry = asset.assetStatus === 'intake_rejected'
 
@@ -119,7 +122,7 @@ export function IntakeModal({
     if (imeiFormatInvalid) {
       setError({
         title: 'รูปแบบ IMEI ไม่ถูกต้อง',
-        message: `IMEI ต้องเป็นตัวเลข ${IMEI_LENGTH} หลัก — ตรวจสอบที่กรอกอีกครั้ง`,
+        message: `${IMEI_FORMAT_MESSAGE} — ตรวจสอบที่กรอกอีกครั้ง`,
       })
       return
     }
@@ -135,7 +138,7 @@ export function IntakeModal({
       const response = await callApi<AssetDetailDto>(
         apiPath('asset.intake', { id: asset.id }),
         jsonRequest('POST', {
-          imeiActual: imeiActual.trim() === '' ? null : imeiActual.trim(),
+          imeiActual: imeiNormalized,
           serialActual: serialActual.trim() === '' ? null : serialActual.trim(),
           condition,
           conditionNote: conditionNote.trim() === '' ? null : conditionNote.trim(),
@@ -200,12 +203,12 @@ export function IntakeModal({
             </Field>
             <Field
               label="IMEI ที่ตรวจจริงบนเครื่อง"
-              error={imeiFormatInvalid ? `ต้องเป็นตัวเลข ${IMEI_LENGTH} หลัก` : null}
+              error={imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null}
             >
               <input
                 type="text"
                 inputMode="numeric"
-                maxLength={IMEI_LENGTH}
+                maxLength={IMEI_INPUT_MAX_LENGTH}
                 value={imeiActual}
                 placeholder="พิมพ์หรือสแกน IMEI"
                 onChange={(event) => {

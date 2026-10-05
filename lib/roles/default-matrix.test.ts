@@ -110,11 +110,32 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
 
   it('คลังสินค้า (`44` §5/§13 · มติ PO 03/10/2569 UAT Q1 · BUG-063): ธุรการ manage ครบ 4 capability', () => {
     for (const code of ['intake_asset', 'reject_asset_intake', 'create_handover_lot', 'confirm_handover_lot']) {
-      const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === code)
+      const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === code && each.level === 'manage')
       const byRole = rows.map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
 
       expect(byRole, code).toEqual(['system:ธุรการ=manage'])
     }
+  })
+
+  it('คลังสินค้า (มติ PO 05/10/2569 U22 · BUG-076): ผู้จัดการ/หัวหน้าทีมทั้งสองฝั่ง = intake_asset ระดับ view เท่านั้น', () => {
+    const viewers = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'intake_asset' && each.level === 'view')
+      .map((each) => `${each.role.roleGroup}:${each.role.name}`)
+      .sort()
+    expect(viewers).toEqual(
+      [
+        'inhouse:ผู้จัดการทีมติดตามทรัพย์',
+        'inhouse:หัวหน้าทีมติดตามทรัพย์',
+        'outsource:ผู้จัดการทีมติดตามทรัพย์',
+        'outsource:หัวหน้าทีมติดตามทรัพย์',
+      ].sort(),
+    )
+    // ไม่มีสิทธิ์ mutate อื่นของคลังเลย
+    const otherWarehouse = DEFAULT_ROLE_CAPABILITIES.filter(
+      (each) =>
+        ['reject_asset_intake', 'create_handover_lot', 'confirm_handover_lot'].includes(each.capabilityCode) &&
+        each.role.name !== 'ธุรการ',
+    )
+    expect(otherWarehouse).toEqual([])
   })
 
   it('แผนค่าตอบแทน (`11` §12): บริหาร/การเงิน = manage · บัญชี/ผู้จัดการทีม = view', () => {

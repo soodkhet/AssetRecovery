@@ -186,7 +186,16 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
   // รับเข้า/ตรวจ IMEI/ตีกลับ/สร้างล็อต/นัดวัน/แนบเอกสาร/ยืนยัน · ไม่มีแถว = Superadmin คนเดียวทำได้
   // ⇒ ปิดงานสำเร็จแล้วไม่มีใครรับแจ้งเตือน "รอรับเข้าคลัง" · สิทธิ์ดูของการเงิน/บัญชี/บริหารมาจาก
   // `view_master_data` อยู่แล้ว (`lib/warehouse/permissions.ts`)
-  intake_asset: [[adminOffice, 'manage']],
+  // ผู้จัดการ/หัวหน้าทีม = **อ่านอย่างเดียว** เฉพาะทรัพย์ของเคสในทีมที่ตนดูแล (มติ PO 05/10/2569 U22 · BUG-076 ·
+  // `06` §7.2 "✅ (read)") — ระดับ `view` เปิดเฉพาะ endpoint อ่านของคลัง (mutation ทุกตัวต้อง `manage`)
+  // ขอบเขตทีมบังคับที่ `assetScopeWhere()` · ไม่รับแจ้งเตือน "รอรับเข้าคลัง" (ผู้รับต้องถือ `manage`)
+  intake_asset: [
+    [adminOffice, 'manage'],
+    [managerIn, 'view'],
+    [supervisorIn, 'view'],
+    [managerOut, 'view'],
+    [supervisorOut, 'view'],
+  ],
   reject_asset_intake: [[adminOffice, 'manage']],
   create_handover_lot: [[adminOffice, 'manage']],
   confirm_handover_lot: [[adminOffice, 'manage']],
