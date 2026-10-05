@@ -10,6 +10,7 @@ import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
 import {
   assertIdentityFormats,
+  CASE_REQUIRED_ADDRESS_FIELDS,
   DEBTOR_NATIONALITIES,
   DEBTOR_NATIONALITY_LABEL,
   digitsOnly,
@@ -492,7 +493,7 @@ export function CaseFormModal({
             <AddressFields
               label="ที่อยู่ปัจจุบัน (ที่พักอาศัยจริง)"
               routing
-              required
+              requiredFields={CASE_REQUIRED_ADDRESS_FIELDS}
               value={form.addressCurrent}
               onChange={(next) => patch({ addressCurrent: next })}
               errors={{ postalCode: fieldErrors['addressCurrent.postalCode'] }}
@@ -505,7 +506,7 @@ export function CaseFormModal({
             />
             <AddressFields
               label="ที่อยู่ตามบัตรประชาชน"
-              required
+              requiredFields={CASE_REQUIRED_ADDRESS_FIELDS}
               value={form.addressIdCard}
               onChange={(next) => patch({ addressIdCard: next })}
               errors={{ postalCode: fieldErrors['addressIdCard.postalCode'] }}

@@ -270,3 +270,22 @@ export function closeExpenseToastDescription(
   const lead = revision ? 'รายการเบิกของรอบเดิมถูกแทนที่ด้วย' : 'ระบบสร้างรายการเบิกให้อัตโนมัติ'
   return `${lead}: ${items.join(' · ')}${pendingFuel}`
 }
+
+/** ไฟล์ใบเสร็จในรูปที่ตัวเปิดดูไฟล์กลาง (`FileViewerModal`) รับ */
+export interface ExpenseReceiptFile {
+  fileUrl: string
+  originalName: string
+  mimeType: string
+}
+
+/**
+ * ใบเสร็จที่แนบไว้ของรายการเบิก → ข้อมูลสำหรับตัวเปิดดูไฟล์ (UAT BUG-144 · มติ PO U64)
+ * ไม่มีใบเสร็จ = `null` (ไม่แสดงปุ่ม) · ใบเสร็จรับแค่ PDF/รูป ⇒ เดาชนิดจากนามสกุลพอ (รายการเบิกไม่เก็บ mime)
+ * ใช้ชุดเดียวทั้ง Mobile/Desktop (Field Tracker logic เดียวกัน)
+ */
+export function expenseReceiptFile(item: Pick<FieldExpenseDto, 'receiptFileUrl'>): ExpenseReceiptFile | null {
+  const fileUrl = item.receiptFileUrl?.trim() ?? ''
+  if (fileUrl === '') return null
+  const isPdf = /\.pdf$/i.test(fileUrl.split(/[?#]/)[0] ?? '')
+  return { fileUrl, originalName: 'ใบเสร็จที่แนบ', mimeType: isPdf ? 'application/pdf' : 'image/*' }
+}

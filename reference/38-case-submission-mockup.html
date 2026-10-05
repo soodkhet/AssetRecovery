@@ -210,7 +210,7 @@ function renderAddressBlock(prefix, label, options = {}) {
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div class="sm:col-span-2">${formInput(prefix + '_detail', 'บ้านเลขที่ / หมู่บ้าน / ถนน', '', 'text', 'รายละเอียดที่อยู่', required)}</div>
       <div>
-        <label class="block text-xs font-bold text-slate-700 mb-1">รหัสไปรษณีย์ ${required ? '<span class="text-red-500">*</span>' : ''}</label>
+        <label class="block text-xs font-bold text-slate-700 mb-1">รหัสไปรษณีย์</label>
         <div class="relative">
           <input type="text" id="${prefix}_postal" maxlength="5" inputmode="numeric" placeholder="5 หลัก" oninput="this.value=this.value.replace(/\\D/g,'')" onblur="handlePostalLookup('${prefix}', this.value)" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
           <span id="${prefix}_postal_status" class="absolute right-2 top-2 text-[10px]"></span>
@@ -219,8 +219,8 @@ function renderAddressBlock(prefix, label, options = {}) {
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
       <div id="${prefix}_province_wrap">${formSelect(prefix + '_province', 'จังหวัด', [{ val: '', text: '— เลือกจังหวัด —' }, ...ALL_PROVINCES.map(p => ({ val: p, text: p }))], '', required, `onchange="onProvinceChange('${prefix}', this.value)"`)}</div>
-      <div id="${prefix}_district_wrap">${formSelect(prefix + '_district', 'อำเภอ/เขต', [{ val: '', text: '— เลือกจังหวัดก่อน —' }], '', required, 'disabled')}</div>
-      <div id="${prefix}_subdistrict_wrap">${formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', [{ val: '', text: '— เลือกอำเภอก่อน —' }], '', required, 'disabled')}</div>
+      <div id="${prefix}_district_wrap">${formSelect(prefix + '_district', 'อำเภอ/เขต', [{ val: '', text: '— เลือกจังหวัดก่อน —' }], '', false, 'disabled')}</div>
+      <div id="${prefix}_subdistrict_wrap">${formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', [{ val: '', text: '— เลือกอำเภอก่อน —' }], '', false, 'disabled')}</div>
     </div>
     <p class="text-[11px] text-slate-400 mt-1.5">กรอกรหัสไปรษณีย์เพื่อให้ระบบเติมจังหวัด/อำเภอ/ตำบลอัตโนมัติ หรือเลือกเองทีละขั้นก็ได้ — ลองรหัส 10260, 11000, 50200, 83000</p>
   </div>`;
@@ -241,25 +241,25 @@ async function handlePostalLookup(prefix, code) {
     formSelect(prefix + '_province', 'จังหวัด', [{ val: '', text: '— เลือกจังหวัด —' }, ...ALL_PROVINCES.map(p => ({ val: p, text: p }))], result.province, true, `onchange="onProvinceChange('${prefix}', this.value)"`);
   const districts = getDistricts(result.province);
   document.getElementById(prefix + '_district_wrap').innerHTML =
-    formSelect(prefix + '_district', 'อำเภอ/เขต', districts.map(d => ({ val: d, text: d })), result.district, true, `onchange="onDistrictChange('${prefix}', '${result.province}', this.value)"`);
+    formSelect(prefix + '_district', 'อำเภอ/เขต', districts.map(d => ({ val: d, text: d })), result.district, false, `onchange="onDistrictChange('${prefix}', '${result.province}', this.value)"`);
   const subs = getSubDistricts(result.province, result.district);
   document.getElementById(prefix + '_subdistrict_wrap').innerHTML =
-    formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', subs.map(s => ({ val: s, text: s })), result.subdistrict, true);
+    formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', subs.map(s => ({ val: s, text: s })), result.subdistrict, false);
   if (prefix === 'current') updateTeamSuggestion(result.province);
 }
 
 function onProvinceChange(prefix, province) {
   const districts = getDistricts(province);
   document.getElementById(prefix + '_district_wrap').innerHTML =
-    formSelect(prefix + '_district', 'อำเภอ/เขต', [{ val: '', text: districts.length ? '— เลือกอำเภอ —' : '— ไม่มีข้อมูลตัวอย่าง —' }, ...districts.map(d => ({ val: d, text: d }))], '', true, districts.length ? `onchange="onDistrictChange('${prefix}', '${province}', this.value)"` : 'disabled');
+    formSelect(prefix + '_district', 'อำเภอ/เขต', [{ val: '', text: districts.length ? '— เลือกอำเภอ —' : '— ไม่มีข้อมูลตัวอย่าง —' }, ...districts.map(d => ({ val: d, text: d }))], '', false, districts.length ? `onchange="onDistrictChange('${prefix}', '${province}', this.value)"` : 'disabled');
   document.getElementById(prefix + '_subdistrict_wrap').innerHTML =
-    formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', [{ val: '', text: '— เลือกอำเภอก่อน —' }], '', true, 'disabled');
+    formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', [{ val: '', text: '— เลือกอำเภอก่อน —' }], '', false, 'disabled');
   if (prefix === 'current') updateTeamSuggestion(province);
 }
 function onDistrictChange(prefix, province, district) {
   const subs = getSubDistricts(province, district);
   document.getElementById(prefix + '_subdistrict_wrap').innerHTML =
-    formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', [{ val: '', text: subs.length ? '— เลือกตำบล —' : '— ไม่มีข้อมูลตัวอย่าง —' }, ...subs.map(s => ({ val: s, text: s }))], '', true, subs.length ? '' : 'disabled');
+    formSelect(prefix + '_subdistrict', 'ตำบล/แขวง', [{ val: '', text: subs.length ? '— เลือกตำบล —' : '— ไม่มีข้อมูลตัวอย่าง —' }, ...subs.map(s => ({ val: s, text: s }))], '', false, subs.length ? '' : 'disabled');
 }
 function updateTeamSuggestion(province) {
   const team = store.teams.find(t => t.provinces.includes(province));

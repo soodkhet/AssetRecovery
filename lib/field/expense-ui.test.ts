@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ACTIVE_EXPENSE_STATUSES } from '@/lib/field/expense-status'
 import {
   closeExpenseToastDescription,
+  expenseReceiptFile,
   FIELD_PENDING_EXPENSE_STATUSES,
   pendingExpenseSatang,
   CASE_BOUND_STATUS_FILTERS,
@@ -276,5 +277,23 @@ describe('ยอดรอดำเนินการ (มติ PO U27)', () => 
     expect(pendingExpenseSatang(separate)).toBe(60_000)
     expect(pendingExpenseSatang([...caseBound, ...separate])).toBe(195_000)
     expect(pendingExpenseSatang([])).toBe(0)
+  })
+})
+
+describe('ปุ่มเปิดดูใบเสร็จที่แนบ (UAT BUG-144 · มติ PO U64)', () => {
+  it('ไม่มีใบเสร็จ = ไม่แสดงปุ่ม', () => {
+    expect(expenseReceiptFile({ receiptFileUrl: null })).toBeNull()
+    expect(expenseReceiptFile({ receiptFileUrl: '  ' })).toBeNull()
+  })
+
+  it('PDF เปิดใน viewer PDF · นอกนั้นเปิดแบบรูป', () => {
+    const uid = '00000000-0000-4000-8000-0000000000a1'
+    expect(expenseReceiptFile({ receiptFileUrl: `expenses/${uid}/receipts/u-r.PDF` })).toEqual({
+      fileUrl: `expenses/${uid}/receipts/u-r.PDF`,
+      originalName: 'ใบเสร็จที่แนบ',
+      mimeType: 'application/pdf',
+    })
+    expect(expenseReceiptFile({ receiptFileUrl: `expenses/${uid}/receipts/u-r.jpg` })?.mimeType).toBe('image/*')
+    expect(expenseReceiptFile({ receiptFileUrl: 'https://example.test/r.pdf?x=1' })?.mimeType).toBe('application/pdf')
   })
 })

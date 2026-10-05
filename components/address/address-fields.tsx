@@ -52,7 +52,12 @@ export interface AddressFieldsProps {
   onChange: (next: AddressValue) => void
   /** ที่อยู่ปัจจุบันเป็นช่องเดียวที่ใช้ตัดสิน routing ทีม (`38` §6.1.2) — ไฮไลต์ + แจ้งผู้กรอก */
   routing?: boolean
-  required?: boolean
+  /**
+   * ช่องที่ต้องกรอกก่อนส่งตรวจ (แสดงดอกจัน) — **ต้องมาจากค่าคงที่ของ business logic ฝั่ง lib**
+   * (เช่น `CASE_REQUIRED_ADDRESS_FIELDS`) ห้ามกำหนดเองที่หน้าจอ เพื่อให้ FE/BE บังคับชุดเดียวกัน (UAT BUG-024)
+   * ไม่ส่ง = ไม่บังคับทุกช่อง
+   */
+  requiredFields?: readonly (keyof AddressValue)[]
   disabled?: boolean
   /** error รายฟิลด์จาก API/Zod — คีย์เป็นชื่อฟิลด์ของที่อยู่ (`province`, `postalCode`, …) */
   errors?: Partial<Record<keyof AddressValue, string>>
@@ -63,11 +68,12 @@ export function AddressFields({
   value,
   onChange,
   routing = false,
-  required = false,
+  requiredFields = [],
   disabled = false,
   errors,
 }: AddressFieldsProps) {
   const fieldId = useId()
+  const isRequired = (field: keyof AddressValue): boolean => requiredFields.includes(field)
   const [lookup, setLookup] = useState<LookupState>('idle')
   const [choices, setChoices] = useState<readonly PostalCodeArea[]>([])
   /** รหัสล่าสุดที่สั่งค้น — กันผลค้นเก่าทับของใหม่ และกัน blur ค้นซ้ำทับตำบลที่ผู้ใช้เลือกไว้แล้ว */
@@ -162,7 +168,7 @@ export function AddressFields({
           className="sm:col-span-2"
           id={`${fieldId}-detail`}
           label="บ้านเลขที่ / หมู่บ้าน / ถนน"
-          required={required}
+          required={isRequired('detail')}
           error={errors?.detail}
         >
           <Input
@@ -178,7 +184,7 @@ export function AddressFields({
         <Field
           id={`${fieldId}-postal`}
           label="รหัสไปรษณีย์"
-          required={required}
+          required={isRequired('postalCode')}
           error={errors?.postalCode}
         >
           <Input
@@ -216,7 +222,7 @@ export function AddressFields({
       )}
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field id={`${fieldId}-province`} label="จังหวัด" required={required} error={errors?.province}>
+        <Field id={`${fieldId}-province`} label="จังหวัด" required={isRequired('province')} error={errors?.province}>
           <Select
             id={`${fieldId}-province`}
             value={value.province}
@@ -237,7 +243,7 @@ export function AddressFields({
           </Select>
         </Field>
 
-        <Field id={`${fieldId}-district`} label="อำเภอ/เขต" required={required} error={errors?.district}>
+        <Field id={`${fieldId}-district`} label="อำเภอ/เขต" required={isRequired('district')} error={errors?.district}>
           <Input
             id={`${fieldId}-district`}
             list={districts.length > 0 ? `${fieldId}-district-options` : undefined}
@@ -259,7 +265,7 @@ export function AddressFields({
         <Field
           id={`${fieldId}-subdistrict`}
           label="ตำบล/แขวง"
-          required={required}
+          required={isRequired('subdistrict')}
           error={errors?.subdistrict}
         >
           <Input

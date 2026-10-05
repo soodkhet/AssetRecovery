@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { CaseError } from '@/lib/cases/errors'
+import { CASE_IMPORT_TEMPLATE_COLUMNS, IMPORT_COLUMNS } from '@/lib/cases/import'
 import {
+  CASE_REQUIRED_ADDRESS_FIELDS,
   readinessGapText,
   REQUIRED_FIELD_LABEL,
   assertBundleConfirmed,
@@ -366,6 +368,47 @@ describe('เอกสารแนบ v3.4 — ติ๊กรูปสินค
       expect(() => assertCaseDocumentDeletable(status)).toThrow(
         expect.objectContaining({ code: 'CASE_DOCUMENT_DELETE_NOT_ALLOWED' }),
       )
+    }
+  })
+})
+
+describe('ช่องที่อยู่บังคับ — FE/BE ชุดเดียว (UAT BUG-024 · มติ PO U64)', () => {
+  it('บังคับเฉพาะบ้านเลขที่ + จังหวัด ของที่อยู่ปัจจุบันและตามบัตร', () => {
+    expect([...CASE_REQUIRED_ADDRESS_FIELDS].sort()).toEqual(['detail', 'province'])
+    const missing = missingRequiredFields({
+      ...complete,
+      addrProvince: null,
+      addrDetail: ' ',
+      idCardAddrProvince: '',
+      idCardAddrDetail: null,
+    })
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        'addressCurrent.province',
+        'addressCurrent.detail',
+        'addressIdCard.province',
+        'addressIdCard.detail',
+      ]),
+    )
+    for (const key of missing.filter((field) => field.startsWith('address'))) {
+      expect(REQUIRED_FIELD_LABEL[key]).toBeDefined()
+    }
+  })
+
+  it('ไม่มีรหัสไปรษณีย์/อำเภอ/ตำบลก็ส่งตรวจได้ (ข้อมูลส่วนอื่นครบ)', () => {
+    expect(missingRequiredFields(complete)).toEqual([])
+  })
+
+  it('แม่แบบนำเข้าระบุระดับบังคับของช่องที่อยู่ตรงกับชุดเดียวกัน', () => {
+    for (const prefix of ['addressCurrent', 'addressIdCard'] as const) {
+      for (const field of ['detail', 'postalCode', 'province', 'district', 'subdistrict'] as const) {
+        const column = IMPORT_COLUMNS.find((item) => item.field === `${prefix}.${field}`)
+        const template = CASE_IMPORT_TEMPLATE_COLUMNS.find((item) => item.header === column?.label)
+        const expected = (CASE_REQUIRED_ADDRESS_FIELDS as readonly string[]).includes(field)
+          ? 'required_before_review'
+          : 'optional'
+        expect(template?.requirement).toBe(expected)
+      }
     }
   })
 })

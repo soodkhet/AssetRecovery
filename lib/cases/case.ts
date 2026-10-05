@@ -1,5 +1,6 @@
 import { CaseError } from '@/lib/cases/errors'
 import { isImeiLikeIdentifier, parseImei } from '@/lib/warehouse/imei'
+import type { AddressValue } from '@/lib/address/address-value'
 
 /**
  * กติกาข้อมูลของโมดูลรับเคส (ไฟล์ 38 §6, §11, §12) — **pure ล้วน ใช้ร่วม FE/BE**
@@ -297,6 +298,15 @@ export interface CaseCompletenessInput {
   debtAmountSatang?: number | null
 }
 
+/**
+ * ช่องของที่อยู่ที่ "ต้องกรอกก่อนส่งตรวจ" — ใช้กับที่อยู่ปัจจุบันและที่อยู่ตามบัตรประชาชน (`38` §6.1 object = yes)
+ * **ชุดเดียวที่ FE (ดอกจันบน `AddressFields`) และ BE (`missingRequiredFields()`) ใช้ร่วมกัน** (UAT BUG-024 · มติ PO U64)
+ * - `province` = หลักเดียวของ routing ทีม (`38` §6.1.2) · `detail` = บ้านเลขที่/ถนน สำหรับลงพื้นที่
+ * - รหัสไปรษณีย์/อำเภอ/ตำบล **ไม่บังคับ** — รหัสที่หาไม่พบต้องไม่ block การกรอก (`38` §12 `CASE_POSTAL_CODE_NOT_FOUND`)
+ *   และไฟล์นำเข้าจากไฟแนนซ์มักไม่มีครบทุกช่อง
+ */
+export const CASE_REQUIRED_ADDRESS_FIELDS = ['province', 'detail'] as const satisfies readonly (keyof AddressValue)[]
+
 function blank(value: string | null | undefined): boolean {
   return value === null || value === undefined || value.trim() === ''
 }
@@ -321,10 +331,15 @@ export function missingRequiredFields(values: CaseCompletenessInput): string[] {
   }
 
   if (blank(values.phoneMobile)) missing.push('debtorPhoneMobile')
-  if (blank(values.addrProvince)) missing.push('addressCurrent.province')
-  if (blank(values.addrDetail)) missing.push('addressCurrent.detail')
-  if (blank(values.idCardAddrProvince)) missing.push('addressIdCard.province')
-  if (blank(values.idCardAddrDetail)) missing.push('addressIdCard.detail')
+  const requiredAddresses = {
+    addressCurrent: { province: values.addrProvince, detail: values.addrDetail },
+    addressIdCard: { province: values.idCardAddrProvince, detail: values.idCardAddrDetail },
+  } as const
+  for (const [prefix, address] of Object.entries(requiredAddresses)) {
+    for (const field of CASE_REQUIRED_ADDRESS_FIELDS) {
+      if (blank(address[field])) missing.push(`${prefix}.${field}`)
+    }
+  }
   if (blank(values.assetKind)) missing.push('assetType')
   if (blank(values.assetBrandModel)) missing.push('assetBrandModel')
   if (blank(values.assetImeiSerial)) missing.push('assetImeiSerial')

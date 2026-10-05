@@ -12,6 +12,7 @@ import {
 } from '@/lib/auth/login-identifier'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { LoginInput } from '@/lib/auth/schemas'
+import { padLoginFailure, realLoginTimingClock, type LoginTimingClock } from '@/lib/auth/login-timing'
 import { invalidateSessionCache, setCachedSession } from '@/lib/auth/session-cache'
 import { getAuthenticatedUid, loadSessionUser } from '@/lib/auth/session'
 import type { SessionUser } from '@/lib/auth/types'
@@ -68,6 +69,8 @@ function auditableIdentifier(raw: string): string {
 
 /** ใช้ตอนไม่พบผู้ใช้ — ยังยิง Supabase หนึ่งครั้งให้เวลาตอบใกล้เคียงกรณีรหัสผิด (กันไล่หา username จากเวลา) */
 const LOGIN_TIMING_DUMMY_EMAIL = `nobody@${INTERNAL_AUTH_EMAIL_DOMAIN}`
+/** uid ที่ไม่มีทางมีจริงใน Auth — ใช้ถ่วงเวลาทางที่ไม่พบบัญชีให้เรียก Auth เท่าทางปกติ (BUG-140) */
+const LOGIN_TIMING_DUMMY_UID = '00000000-0000-0000-0000-000000000000'
 
 async function auditLoginFailed(
   identifier: string,
@@ -97,12 +100,31 @@ export interface LoginResult {
   redirectTo: string
 }
 
-export async function login(input: LoginInput, meta: RequestMeta): Promise<LoginResult> {
+/**
+ * login — ตอบ `INVALID_CREDENTIALS` ด้วยเวลาขั้นต่ำคงที่เสมอ (UAT BUG-140 · `lib/auth/login-timing.ts`)
+ * กันไล่เดาว่าบัญชีไหนมีจริงจากเวลาตอบ · `clock` ฉีดได้เพื่อเทสต์ (ค่าจริง = นาฬิการะบบ)
+ */
+export async function login(
+  input: LoginInput,
+  meta: RequestMeta,
+  clock: LoginTimingClock = realLoginTimingClock,
+): Promise<LoginResult> {
+  const startedAt = clock.now()
+  try {
+    return await authenticate(input, meta)
+  } catch (error) {
+    if (error instanceof AuthError && error.code === 'INVALID_CREDENTIALS') await padLoginFailure(startedAt, clock)
+    throw error
+  }
+}
+
+async function authenticate(input: LoginInput, meta: RequestMeta): Promise<LoginResult> {
   const identifier = parseLoginIdentifier(input.identifier)
   const account = await findLoginAccount(identifier)
   // ไม่พบผู้ใช้ / ยังไม่มีบัญชี Auth = ตอบเหมือนรหัสผิดทุกประการ (ห้าม leak ว่ามีตัวตนนี้ในระบบ — `05` §10)
-  const authEmail = account?.supabaseUid ? await getAuthEmail(account.supabaseUid) : null
-  if (authEmail === null) {
+  // ไม่พบบัญชี → ยังเรียกอ่านบัญชี Auth ด้วย uid หลอก 1 ครั้ง ให้จำนวนครั้งที่เรียก Auth เท่าทางที่มีบัญชีจริง (BUG-140)
+  const authEmail = await getAuthEmail(account?.supabaseUid ?? LOGIN_TIMING_DUMMY_UID)
+  if (authEmail === null || !account?.supabaseUid) {
     await verifyPassword(LOGIN_TIMING_DUMMY_EMAIL, input.password)
     await auditLoginFailed(input.identifier, account, 'INVALID_CREDENTIALS', meta)
     throw new AuthError('INVALID_CREDENTIALS', 'identifier not resolved')

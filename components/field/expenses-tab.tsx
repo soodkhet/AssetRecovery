@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
+import { FileViewerModal } from '@/components/cases/file-viewer-modal'
 import { HotelClaimModal } from '@/components/field/hotel-claim-modal'
-import { IconAlert, IconChevronRight, IconPlus } from '@/components/field/field-icons'
+import { IconAlert, IconChevronRight, IconFile, IconPlus } from '@/components/field/field-icons'
 import { ResubmitExpenseModal } from '@/components/field/resubmit-expense-modal'
 import { Button, EmptyState, ErrorState, InlineAlert, LoadingState, Select, StatusBadge } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
@@ -13,6 +14,7 @@ import {
   CASE_BOUND_STATUS_FILTERS,
   EXPENSE_STATUS_FILTER_LABEL,
   EXPENSE_TYPE_ICON,
+  expenseReceiptFile,
   SEPARATE_STATUS_FILTERS,
   expenseStatusBadgeGroup,
   expenseStatusLabel,
@@ -22,6 +24,7 @@ import {
   groupExpensesByCase,
   splitExpensesNeedingRevision,
   type ExpenseCaseGroup,
+  type ExpenseReceiptFile,
   type ExpenseStatusFilter,
 } from '@/lib/field/expense-ui'
 import { ALL_MONTHS, monthKeyOfDateOnly, monthOptions } from '@/lib/field/month-filter'
@@ -74,6 +77,21 @@ function StatusFilterSelect({
         </option>
       ))}
     </Select>
+  )
+}
+
+/** ปุ่มเปิดดูใบเสร็จที่แนบไว้ (UAT BUG-144) — ไม่มีใบเสร็จ = ไม่แสดง · เปิดผ่าน signed URL ของ API (สิทธิ์ตรวจที่ server) */
+function ReceiptButton({ item, onView }: { item: FieldExpenseDto; onView: (file: ExpenseReceiptFile) => void }) {
+  const receipt = expenseReceiptFile(item)
+  if (receipt === null) return null
+  return (
+    <button
+      type="button"
+      onClick={() => onView(receipt)}
+      className="focus-ring mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-600"
+    >
+      <IconFile className="h-3.5 w-3.5" /> ดูใบเสร็จ
+    </button>
   )
 }
 
@@ -144,9 +162,11 @@ function CaseGroupCard({ group }: { group: ExpenseCaseGroup }) {
 function NeedsRevisionBlock({
   items,
   onFix,
+  onViewReceipt,
 }: {
   items: readonly FieldExpenseDto[]
   onFix: (item: FieldExpenseDto) => void
+  onViewReceipt: (file: ExpenseReceiptFile) => void
 }) {
   if (items.length === 0) return null
 
@@ -171,6 +191,7 @@ function NeedsRevisionBlock({
               {item.resubmitNote !== null && (
                 <div className="mt-0.5 truncate text-xs text-slate-500">ชี้แจงครั้งก่อน: {item.resubmitNote}</div>
               )}
+              <ReceiptButton item={item} onView={onViewReceipt} />
             </div>
             <Button onClick={() => onFix(item)}>แก้ไขและส่งใหม่</Button>
           </div>
@@ -190,6 +211,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
   const [month, setMonth] = useState<string>(ALL_MONTHS)
   const [hotelFormOpen, setHotelFormOpen] = useState(false)
   const [fixing, setFixing] = useState<FieldExpenseDto | null>(null)
+  const [viewingReceipt, setViewingReceipt] = useState<ExpenseReceiptFile | null>(null)
 
   const load = useCallback(async (type: ExpenseViewType) => {
     const response = await callApi<FieldExpenseListDto>(apiPath('field.expenseList', undefined, { type }))
@@ -261,7 +283,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
         <ErrorState title={error.title} message={error.message} code={error.code} />
       ) : (
         <div className="space-y-3">
-          <NeedsRevisionBlock items={needsRevision} onFix={setFixing} />
+          <NeedsRevisionBlock items={needsRevision} onFix={setFixing} onViewReceipt={setViewingReceipt} />
 
           {view === 'caseBound' ? (
             <>
@@ -325,6 +347,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                         {item.resubmitNote !== null && (
                           <div className="truncate text-xs text-slate-500">ชี้แจงตอนส่งใหม่: {item.resubmitNote}</div>
                         )}
+                        <ReceiptButton item={item} onView={setViewingReceipt} />
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="text-base font-bold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</div>
@@ -350,6 +373,12 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
           }}
         />
       )}
+
+      <FileViewerModal
+        open={viewingReceipt !== null}
+        document={viewingReceipt}
+        onClose={() => setViewingReceipt(null)}
+      />
 
       {fixing !== null && session !== null && (
         <ResubmitExpenseModal
