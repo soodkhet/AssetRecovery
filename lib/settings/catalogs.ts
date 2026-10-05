@@ -144,4 +144,12 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     content: 'รับคืนเงินทดรอง — return_date, advance_ref, payee, amount, channel (payout_offset/cash/bank_transfer), payout_batch_ref, status',
     sourceFile: '15',
   },
+  // มติ PO 06/10/2569 U87 — รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด)
+  {
+    fileName: '14_Unbilled_Revenue.csv',
+    format: 'CSV UTF-8',
+    content:
+      'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล) — case_ref, company, company_tax_id, delivered_date, fee_model, before_vat, vat, total, vat_rate_pct, billing_batch_number (รอบร่าง)',
+    sourceFile: '19',
+  },
 ]

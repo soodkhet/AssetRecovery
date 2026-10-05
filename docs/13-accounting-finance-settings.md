@@ -24,6 +24,7 @@
 | v3.9 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U82 · ม.86/4)**: §6.12 เพิ่ม **สำนักงานใหญ่/สาขาของผู้ขาย** (`organizations.branch_code` — `02` v4.31 · ค่าเริ่มต้น `00000`) แสดง/แก้ในแท็บเลขที่ใบกำกับภาษี (การ์ด "ข้อมูลผู้ขายบนใบกำกับภาษี") · แก้ = `manage_invoice_numbering` (ล็อก Superadmin) + เหตุผลบังคับ + audit · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ (ใบที่ออกแล้วไม่เปลี่ยน) · §13 เพิ่ม `GET/PATCH /api/settings/seller-branch` |
 | v3.10 | 05/10/2569 | **มติ PO 05/10/2569 (U40/U41)**: §6.9 ชุดไฟล์ Export Pack 9 → 11 ไฟล์ — `10_Customer_WHT.csv` + `11_Suspense_Receipts.csv` (`37` v2.5) · ยังเป็นชุดตายตัว |
 | v3.11 | 05/10/2569 | **มติ PO 05/10/2569 (U21)**: §6.9 ชุดไฟล์ Export Pack 8 → 9 ไฟล์ — เพิ่ม `09_Credit_Notes.csv` (ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — `37` v2.3) · ยังเป็นชุดตายตัว ผู้ใช้เพิ่ม/ลบไม่ได้ |
+| v3.12 | 06/10/2569 | **มติ PO 06/10/2569 (U87)**: §6.9 ชุดไฟล์ Export Pack 13 → 14 ไฟล์ — `14_Unbilled_Revenue.csv` (รายได้ค้างรับ: ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) · รายละเอียดที่ `37` §6.1 v2.11 |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
 
@@ -222,6 +223,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | 11_Suspense_Receipts.csv | CSV UTF-8 | เงินรับรอตรวจสอบ — amount, reason, status, resolved_ref, refund_date (มติ PO 05/10/2569 U41) | 35 |
 | 12_Tax_Invoices.csv | CSV UTF-8 | ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — invoice_number, invoice_date, company, company_tax_id, before_vat, vat, total, vat_rate_pct, status, replaced_by (+ PDF ในโฟลเดอร์ tax_invoices/ ของ zip) (มติ PO 05/10/2569 U57) | 31 |
 | 13_Advance_Returns.csv | CSV UTF-8 | รับคืนเงินทดรอง — return_date, advance_ref, payee, amount, channel (payout_offset/cash/bank_transfer), payout_batch_ref, status (มติ PO 05/10/2569 U68) | 15 |
+| 14_Unbilled_Revenue.csv | CSV UTF-8 | รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล) — case_ref, company, company_tax_id, delivered_date, fee_model, before_vat, vat, total, vat_rate_pct, billing_batch_number (รอบร่าง) (มติ PO 06/10/2569 U87) | 19 |
 
 ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี)
 

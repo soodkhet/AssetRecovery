@@ -214,14 +214,37 @@ export interface ReadinessCheck {
   detail: string
 }
 
-/** ยอดที่ไม่ตรงกันระหว่างรอบวางบิลกับรายได้ (`19` — เงื่อนไขที่ 3) */
+/**
+ * ยอดที่ไม่ตรงกันจริงระหว่างรอบวางบิลกับรายได้ที่อยู่ในรอบ (`19` — เงื่อนไขที่ 3) · **บล็อก**
+ * มติ PO U87 (06/10/2569): รายได้ที่ยังไม่วางบิล**ไม่ใช่** mismatch อีกต่อไป — ย้ายไปเป็นคำเตือน
+ * "รายได้ค้างรับ" (`UnbilledRevenueSummary`) เพราะรายได้ทางบัญชีรับรู้ตามเกณฑ์คงค้างในเดือนส่งมอบ
+ */
 export interface BillingRevenueMismatch {
-  /** `null` = รายได้ที่ยังไม่ถูกวางบิลเลยในรอบนี้ */
-  billingBatchId: string | null
+  billingBatchId: string
+  batchNumber: string
   companyName: string
   batchTotalSatang: number
   revenueTotalSatang: number
-  reason: 'not_billed' | 'total_mismatch'
+  reason: 'total_mismatch'
+}
+
+/**
+ * มติ PO U87 — รายได้ที่ `revenue_date` อยู่ในงวด (หรือก่อน) แต่ยังไม่อยู่ในรอบวางบิลที่ส่งลูกค้าแล้ว
+ * (ยังไม่ผูกรอบ หรืออยู่ในรอบร่าง) · **เตือน ไม่บล็อก** — สำนักงานบัญชีบันทึกรายได้ค้างรับจาก `14_Unbilled_Revenue.csv`
+ */
+export interface UnbilledRevenueSummary {
+  count: number
+  totalSatang: number
+  /** ในจำนวนนี้ อยู่ในรอบวางบิลร่างกี่รายการ (ที่เหลือ = ยังไม่ผูกรอบ) */
+  inDraftCount: number
+  byCompany: readonly { companyName: string; count: number; totalSatang: number }[]
+}
+
+/** BUG-160 — รอบวางบิลร่างที่ยังไม่ส่งลูกค้า (มีรายได้ของงวดนี้หรือก่อนหน้า) · **เตือน ไม่บล็อก** */
+export interface DraftBillingBatchSummary {
+  count: number
+  totalSatang: number
+  batchNumbers: readonly string[]
 }
 
 export interface ReadinessInput {
@@ -244,6 +267,10 @@ export interface ReadinessInput {
   suspenseOutstanding?: { count: number; amountSatang: number }
   /** มติ PO U40 — 50 ทวิ จากลูกค้าที่ยังรอหนังสือ (รับเงินก่อนสิ้นงวด) · **เตือน ไม่บล็อก** */
   pendingCustomerWht?: { count: number; withheldSatang: number }
+  /** มติ PO U87 — รายได้ค้างรับ (ยังไม่วางบิล) · **เตือน ไม่บล็อก** */
+  unbilledRevenue?: UnbilledRevenueSummary
+  /** BUG-160 — รอบวางบิลร่างค้าง · **เตือน ไม่บล็อก** */
+  draftBillingBatches?: DraftBillingBatchSummary
 }
 
 export interface ReadinessResult {
@@ -254,6 +281,37 @@ export interface ReadinessResult {
   criticalOpen: readonly { id: string; title: string; sourceModule: string }[]
   unmatchedBankCount: number
   billingMismatches: readonly BillingRevenueMismatch[]
+  /** รายได้ค้างรับ (มติ U87) — ไม่มี = 0 รายการ */
+  unbilledRevenue: UnbilledRevenueSummary
+  /** รอบวางบิลร่างค้าง (BUG-160) — ไม่มี = 0 รอบ */
+  draftBillingBatches: DraftBillingBatchSummary
+}
+
+const NO_UNBILLED: UnbilledRevenueSummary = { count: 0, totalSatang: 0, inDraftCount: 0, byCompany: [] }
+const NO_DRAFT_BATCHES: DraftBillingBatchSummary = { count: 0, totalSatang: 0, batchNumbers: [] }
+/** แสดงเลขรอบร่างในคำเตือนไม่เกินเท่านี้ (ที่เหลือบอกเป็นจำนวน) */
+const DRAFT_BATCH_NUMBERS_SHOWN = 5
+
+/** ข้อความเตือนรายได้ค้างรับ (มติ PO U87) */
+export function unbilledRevenueWarning(summary: UnbilledRevenueSummary): string | null {
+  if (summary.count === 0) return null
+  const draftNote = summary.inDraftCount > 0 ? ` (อยู่ในรอบวางบิลร่าง ${fmtCount(summary.inDraftCount)} รายการ)` : ''
+  return (
+    `มีรายได้ค้างรับยังไม่วางบิล ${fmtCount(summary.count)} รายการ ${fmtSatangSymbol(summary.totalSatang)}${draftNote} — ` +
+    'ส่งให้สำนักงานบัญชีบันทึกรายได้ค้างรับ (รายละเอียดอยู่ใน 14_Unbilled_Revenue.csv ของชุดเอกสารบัญชี) · ปิดงวดได้'
+  )
+}
+
+/** ข้อความเตือนรอบวางบิลร่างค้าง (BUG-160) */
+export function draftBillingBatchWarning(summary: DraftBillingBatchSummary): string | null {
+  if (summary.count === 0) return null
+  const shown = summary.batchNumbers.slice(0, DRAFT_BATCH_NUMBERS_SHOWN)
+  const more = summary.batchNumbers.length - shown.length
+  const numbers = shown.length === 0 ? '' : ` (${shown.join(', ')}${more > 0 ? ` และอีก ${fmtCount(more)} รอบ` : ''})`
+  return (
+    `มีรอบวางบิลร่างที่ยังไม่ส่งลูกค้า ${fmtCount(summary.count)} รอบ${numbers} รวม ${fmtSatangSymbol(summary.totalSatang)} — ` +
+    'ปิดงวดได้ แต่ควรส่งลูกค้าหรือลบรอบร่างให้เรียบร้อยก่อน'
+  )
 }
 
 /**
@@ -281,8 +339,8 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
       label: 'ยอดวางบิลตรงกับรายได้ของรอบ',
       passed: billingPassed,
       detail: billingPassed
-        ? 'รอบวางบิลทุกใบมียอดตรงกับรายได้ที่รวมอยู่ และไม่มีรายได้ค้างวางบิล'
-        : `ยังไม่ตรง ${input.billingMismatches.length} รายการ`,
+        ? 'รอบวางบิลทุกใบของงวดมียอดตรงกับรายได้ที่รวมอยู่'
+        : `ยอดรอบวางบิลไม่ตรงกับรายได้ในรอบ ${fmtCount(input.billingMismatches.length)} รอบ`,
     },
     {
       key: 'bank_reconcile',
@@ -318,6 +376,12 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
         `(${fmtSatangSymbol(input.pendingCustomerWht.withheldSatang)}) — ปิดงวดได้ ติดตามหนังสือต่อได้ที่รายการ 50 ทวิ ลูกค้า`,
     )
   }
+  const unbilledRevenue = input.unbilledRevenue ?? NO_UNBILLED
+  const draftBillingBatches = input.draftBillingBatches ?? NO_DRAFT_BATCHES
+  const unbilledWarning = unbilledRevenueWarning(unbilledRevenue)
+  if (unbilledWarning !== null) warnings.push(unbilledWarning)
+  const draftWarning = draftBillingBatchWarning(draftBillingBatches)
+  if (draftWarning !== null) warnings.push(draftWarning)
 
   return {
     ready: checks.every((check) => check.passed),
@@ -326,6 +390,8 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     criticalOpen: input.criticalOpen,
     unmatchedBankCount: input.unmatchedBankCount,
     billingMismatches: input.billingMismatches,
+    unbilledRevenue,
+    draftBillingBatches,
   }
 }
 
@@ -352,7 +418,7 @@ export function assertReadyToSend(result: ReadinessResult): void {
   }
   if (result.billingMismatches.length > 0) {
     throw new AccountingError('NOT_READY_BILLING_REVENUE_MISMATCH', {
-      detail: `mismatch ${result.billingMismatches.length} รายการ`,
+      detail: `mismatch ${result.billingMismatches.length} รอบ`,
       context: { billingMismatches: result.billingMismatches },
     })
   }

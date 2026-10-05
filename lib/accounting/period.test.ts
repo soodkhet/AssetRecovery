@@ -160,6 +160,7 @@ describe('Readiness Check 3 เงื่อนไข (`30` §6.2 · §16)', () =
       billingMismatches: [
         {
           billingBatchId: 'bb-1',
+          batchNumber: 'BL-2569-001',
           companyName: 'ไฟแนนซ์ ก',
           batchTotalSatang: 10000,
           revenueTotalSatang: 12000,
@@ -184,15 +185,80 @@ describe('Readiness Check 3 เงื่อนไข (`30` §6.2 · §16)', () =
       unmatchedBankCount: 5,
       billingMismatches: [
         {
-          billingBatchId: null,
+          billingBatchId: 'bb-2',
+          batchNumber: 'BL-2569-002',
           companyName: 'ไฟแนนซ์ ข',
           batchTotalSatang: 0,
           revenueTotalSatang: 5000,
-          reason: 'not_billed',
+          reason: 'total_mismatch',
         },
       ],
     })
     expect(codeOf(() => assertReadyToSend(result))).toBe('NOT_READY_CRITICAL_OPEN')
+  })
+
+  it('มติ PO U87: รายได้ค้างรับยังไม่วางบิล = เตือน ไม่บล็อก (ปิดงวดได้)', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      unbilledRevenue: {
+        count: 3,
+        totalSatang: 321000,
+        inDraftCount: 1,
+        byCompany: [{ companyName: 'ไฟแนนซ์ ก', count: 3, totalSatang: 321000 }],
+      },
+    })
+    expect(result.ready).toBe(true)
+    expect(result.checks.find((check) => check.key === 'billing_revenue_sync')?.passed).toBe(true)
+    expect(codeOf(() => assertReadyToSend(result))).toBe('NO_ERROR')
+    expect(result.warnings).toEqual([
+      'มีรายได้ค้างรับยังไม่วางบิล 3 รายการ ฿3,210.00 (อยู่ในรอบวางบิลร่าง 1 รายการ) — ' +
+        'ส่งให้สำนักงานบัญชีบันทึกรายได้ค้างรับ (รายละเอียดอยู่ใน 14_Unbilled_Revenue.csv ของชุดเอกสารบัญชี) · ปิดงวดได้',
+    ])
+    expect(result.unbilledRevenue.count).toBe(3)
+  })
+
+  it('มติ PO U87: ยอดรอบวางบิลไม่ตรงจริง ยังบล็อกแม้มีรายได้ค้างรับร่วมด้วย', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      billingMismatches: [
+        {
+          billingBatchId: 'bb-3',
+          batchNumber: 'BL-2569-003',
+          companyName: 'ไฟแนนซ์ ค',
+          batchTotalSatang: 10700,
+          revenueTotalSatang: 21400,
+          reason: 'total_mismatch',
+        },
+      ],
+      unbilledRevenue: { count: 1, totalSatang: 10700, inDraftCount: 0, byCompany: [] },
+    })
+    expect(result.ready).toBe(false)
+    expect(codeOf(() => assertReadyToSend(result))).toBe('NOT_READY_BILLING_REVENUE_MISMATCH')
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).not.toContain('รอบวางบิลร่าง')
+  })
+
+  it('BUG-160: รอบวางบิลร่างค้าง = เตือน ไม่บล็อก + แสดงเลขรอบไม่เกิน 5 เลข', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      draftBillingBatches: {
+        count: 7,
+        totalSatang: 80250,
+        batchNumbers: ['BL-2569-001', 'BL-2569-002', 'BL-2569-003', 'BL-2569-004', 'BL-2569-005', 'BL-2569-006', 'BL-2569-007'],
+      },
+    })
+    expect(result.ready).toBe(true)
+    expect(result.warnings).toEqual([
+      'มีรอบวางบิลร่างที่ยังไม่ส่งลูกค้า 7 รอบ (BL-2569-001, BL-2569-002, BL-2569-003, BL-2569-004, BL-2569-005 และอีก 2 รอบ) ' +
+        'รวม ฿802.50 — ปิดงวดได้ แต่ควรส่งลูกค้าหรือลบรอบร่างให้เรียบร้อยก่อน',
+    ])
+  })
+
+  it('ไม่มีรายได้ค้างรับ/รอบร่าง ⇒ ไม่มีคำเตือนและสรุปเป็นศูนย์', () => {
+    const result = evaluateReadiness(readyInput)
+    expect(result.warnings).toEqual([])
+    expect(result.unbilledRevenue).toEqual({ count: 0, totalSatang: 0, inDraftCount: 0, byCompany: [] })
+    expect(result.draftBillingBatches).toEqual({ count: 0, totalSatang: 0, batchNumbers: [] })
   })
 })
 

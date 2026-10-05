@@ -40,6 +40,7 @@ import {
   WHT_POLICY_EXPENSE_TYPES,
   WHT_TEAM_SIDE_INCOME_CATEGORIES,
   ISSUE_ZERO_RATE_40_2_LABEL,
+  effectiveTeamSideCategories,
   normalizeBaseExpenseTypes,
   usesPerPayeeWhtRate,
   type WhtCertificateMode,
@@ -183,8 +184,9 @@ export function WhtPolicyTab() {
   }
 
   async function save(): Promise<void> {
-    if (form === null) return
-    const payload = { ...form, reason: form.reason.trim() }
+    if (form === null || overview === null) return
+    // BUG-157 — โหมดที่ไม่ใช่ "แยกตามประเภททีม" ไม่ส่งการจับคู่ที่ซ่อนอยู่ (คงค่าเดิมของชุดปัจจุบัน)
+    const payload = { ...effectiveTeamSideCategories(form, overview.current), reason: form.reason.trim() }
     const parsed = whtPolicyCreateSchema.safeParse(payload)
     if (!parsed.success) {
       setErrors(toFieldErrors(parsed.error))

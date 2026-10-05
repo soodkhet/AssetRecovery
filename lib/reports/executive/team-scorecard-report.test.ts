@@ -94,8 +94,8 @@ describe('buildTeamScorecardReport', () => {
     expect(report.totalRow).toMatchObject({
       memberCount: 7,
       caseCount: 20,
-      // สำเร็จ 2 จากเคสที่ปิดแล้ว 3 ⇒ 66.7 (ปัด 1 ตำแหน่งที่ `successRate()` ตัวกลาง)
-      successPct: 66.7,
+      // สำเร็จ 2 จากเคสที่ปิดแล้ว 3 ⇒ 66.67 (ปัด 2 ตำแหน่งที่ `successRate()` ตัวกลาง)
+      successPct: 66.67,
       avgTatDays: 4,
       directCostSatang: 1_000_00,
       grossProfitSatang: 2_000_00,

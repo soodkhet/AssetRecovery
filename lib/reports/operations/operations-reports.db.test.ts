@@ -316,8 +316,8 @@ suite('O1 — อัตราความสำเร็จ', () => {
 
     expect(payload.range.label).toBe('สิงหาคม 2569')
     const row = rowBy(payload, 'group', 'ทีม A 6.3')
-    expect(row).toMatchObject({ caseCount: 4, successCount: 2, failCount: 1, openCount: 1, successPct: 66.7 })
-    expect(kpiOf(payload, 'successPct')).toBe(66.7)
+    expect(row).toMatchObject({ caseCount: 4, successCount: 2, failCount: 1, openCount: 1, successPct: 66.67 })
+    expect(kpiOf(payload, 'successPct')).toBe(66.67)
   })
 
   it('มิติรายบริษัทไฟแนนซ์แยกแถวตามบริษัทจริง', async () => {

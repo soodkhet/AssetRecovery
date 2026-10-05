@@ -1,3 +1,4 @@
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -115,6 +116,30 @@ export function isExactMatchAmount(
 ): boolean {
   const absolute = Math.abs(transactionAmountSatang)
   return absolute === candidate.amountSatang || (candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang)
+}
+
+/**
+ * BUG-159 — ข้อความตัวเลือกในการจับคู่ Manual: ยอดที่แสดง**ต้องเป็นยอดที่ใช้เทียบจริง**
+ * - ตรงยอดเต็ม ⇒ `BL-… ฿802.50 (ยอดตรง)`
+ * - ตรงยอดหลังลูกค้าหัก ณ ที่จ่าย (A1) ⇒ `BL-… ฿780.00 (ยอดตรงหลังลูกค้าหัก ณ ที่จ่าย · ยอดเต็ม ฿802.50)`
+ * - ไม่ตรง ⇒ ยอดเต็ม + ยอดคาดรับหลังหัก (ถ้ามี) เป็นข้อความรอง
+ * เดิมแสดงยอดเต็มคู่กับป้าย "(ยอดตรง)" แม้ตรงเพราะยอดหลังหัก ⇒ ผู้ใช้เห็น ฿802.50 "ยอดตรง" กับเงินเข้า ฿780.00
+ */
+export function matchCandidateOptionText(
+  transactionAmountSatang: number,
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang'> & { label: string },
+): string {
+  const absolute = Math.abs(transactionAmountSatang)
+  const full = fmtSatangSymbol(candidate.amountSatang)
+  const alt = candidate.altAmountSatang
+  if (absolute === candidate.amountSatang) return `${candidate.label} · ${full} (ยอดตรง)`
+  if (alt !== null && absolute === alt) {
+    return `${candidate.label} · ${fmtSatangSymbol(alt)} (ยอดตรงหลังลูกค้าหัก ณ ที่จ่าย · ยอดเต็ม ${full})`
+  }
+  if (alt !== null && alt !== candidate.amountSatang) {
+    return `${candidate.label} · ${full} (คาดรับหลังลูกค้าหัก ณ ที่จ่าย ${fmtSatangSymbol(alt)})`
+  }
+  return `${candidate.label} · ${full}`
 }
 
 /**

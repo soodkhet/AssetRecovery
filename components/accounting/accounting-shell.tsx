@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSession } from '@/components/auth/permission-provider'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
 import { ClosingTab } from '@/components/accounting/closing-tab'
 import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
@@ -13,7 +14,7 @@ import { SalesTab } from '@/components/accounting/sales-tab'
 import { WhtTab } from '@/components/accounting/wht-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { ACCOUNTING_TABS } from '@/lib/accounting/accounting-tabs'
+import { visibleAccountingTabs } from '@/lib/accounting/accounting-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -25,7 +26,11 @@ import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
  */
 export function AccountingShell({ initialTab }: { initialTab: string }) {
   const [tab, setTab] = useState(initialTab)
-  const current = ACCOUNTING_TABS.find((item) => item.id === tab)
+  const session = useSession()
+  // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** (BUG-158 — เดิมบริหารเห็นแท็บกระทบยอด การ์ด ฿0.00 + ตาราง "ไม่มีสิทธิ์ใช้งาน")
+  // · API ตรวจสิทธิ์ซ้ำทุก endpoint (DEC-002)
+  const tabs = session === null ? [] : visibleAccountingTabs(session)
+  const current = tabs.find((item) => item.id === tab)
 
   return (
     <>
@@ -39,7 +44,7 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
           aria-label="แท็บงานบัญชี"
           className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
         >
-          {ACCOUNTING_TABS.map((item) => {
+          {tabs.map((item) => {
             if (!item.available) {
               return (
                 <span

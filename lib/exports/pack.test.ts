@@ -42,6 +42,8 @@ import {
   evidenceFileName,
   TAX_INVOICE_HEADERS,
   taxInvoiceCsv,
+  UNBILLED_REVENUE_HEADERS,
+  unbilledRevenueCsv,
   taxInvoiceNotAttachedText,
   taxInvoicePdfEntryName,
   vatRatesText,
@@ -67,8 +69,8 @@ function sampleHeader(fileName: string): string[] {
 }
 
 describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', () => {
-  it('ครบ 13 ไฟล์ เลข 01–13 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68)', () => {
-    expect(PACK_FILES).toHaveLength(13)
+  it('ครบ 14 ไฟล์ เลข 01–14 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87)', () => {
+    expect(PACK_FILES).toHaveLength(14)
     expect(PACK_FILES.map((file) => file.no)).toEqual([
       '01',
       '02',
@@ -83,6 +85,7 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '11',
       '12',
       '13',
+      '14',
     ])
     expect(PACK_FILES.map((file) => file.fileName)).toEqual([
       '01_Revenue.csv',
@@ -98,6 +101,7 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '11_Suspense_Receipts.csv',
       '12_Tax_Invoices.csv',
       '13_Advance_Returns.csv',
+      '14_Unbilled_Revenue.csv',
     ])
     expect(PACK_FILES.filter((file) => file.kind === 'xlsx').map((file) => file.no)).toEqual(['08'])
   })
@@ -179,6 +183,7 @@ describe('หัวคอลัมน์ตรงกับ reference/samples ท
     ['11_Suspense_Receipts.csv', SUSPENSE_HEADERS],
     ['12_Tax_Invoices.csv', TAX_INVOICE_HEADERS],
     ['13_Advance_Returns.csv', ADVANCE_RETURN_HEADERS],
+    ['14_Unbilled_Revenue.csv', UNBILLED_REVENUE_HEADERS],
   ])('%s', (fileName, headers) => {
     expect(sampleHeader(fileName)).toEqual([...headers])
   })
@@ -824,5 +829,69 @@ describe('13_Advance_Returns.csv (มติ PO 05/10/2569 U68)', () => {
     expect(evidenceFileName('a/b/c.jpg')).toBe('c.jpg')
     expect(evidenceFileName(null)).toBeNull()
     expect(evidenceFileName('a/')).toBeNull()
+  })
+})
+
+describe('14_Unbilled_Revenue.csv (มติ PO 06/10/2569 U87)', () => {
+  it('ประกอบได้ตรงไฟล์ตัวอย่างทั้งไฟล์ — ยังไม่ผูกรอบ / อยู่ในรอบร่าง / บริษัทไม่คิด VAT', () => {
+    const csv = unbilledRevenueCsv([
+      {
+        caseRef: 'SF-2569-0412',
+        companyName: 'บริษัท สยามไฟแนนซ์ จำกัด',
+        companyTaxId: '0105555000111',
+        revenueDate: new Date('2026-06-28T00:00:00Z'),
+        feeModel: 'SUCCESS_FEE',
+        grossSatang: 150_000,
+        vatSatang: 10_500,
+        totalSatang: 160_500,
+        vatRatePct: '7',
+        draftBillingBatchNumber: null,
+      },
+      {
+        caseRef: 'TL-2569-0088',
+        companyName: 'บริษัท ไทยลีสซิ่ง จำกัด',
+        companyTaxId: '0-1055-55000-22-2',
+        revenueDate: new Date('2026-06-30T00:00:00Z'),
+        feeModel: 'FLAT',
+        grossSatang: 75_000,
+        vatSatang: 5_250,
+        totalSatang: 80_250,
+        vatRatePct: '7.00',
+        draftBillingBatchNumber: 'BL-2569-003',
+      },
+      {
+        caseRef: 'SF-2569-0377',
+        companyName: 'บริษัท สยามไฟแนนซ์ จำกัด',
+        companyTaxId: '0105555000111',
+        revenueDate: new Date('2026-05-25T00:00:00Z'),
+        feeModel: 'HYBRID',
+        grossSatang: 200_000,
+        vatSatang: 0,
+        totalSatang: 200_000,
+        vatRatePct: '0',
+        draftBillingBatchNumber: null,
+      },
+    ])
+    const path = fileURLToPath(new URL('../../reference/samples/14_Unbilled_Revenue.csv', import.meta.url))
+    expect(csv).toBe(readFileSync(path, 'utf8'))
+  })
+
+  it('ไม่มีรายได้ค้างรับ ⇒ มีแต่หัวคอลัมน์ · เลขผู้เสียภาษีไม่ครบ 13 หลัก ⇒ `-`', () => {
+    expect(unbilledRevenueCsv([])).toBe(`${CSV_BOM}${UNBILLED_REVENUE_HEADERS.join(',')}\r\n`)
+    const csv = unbilledRevenueCsv([
+      {
+        caseRef: 'X-1',
+        companyName: 'ไฟแนนซ์ ก',
+        companyTaxId: '12345',
+        revenueDate: new Date('2026-06-01T00:00:00Z'),
+        feeModel: 'FLAT',
+        grossSatang: 1,
+        vatSatang: 0,
+        totalSatang: 1,
+        vatRatePct: '7',
+        draftBillingBatchNumber: null,
+      },
+    ])
+    expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe('X-1,ไฟแนนซ์ ก,-,01/06/2569,FLAT,0.01,0.00,0.01,7.00,-')
   })
 })

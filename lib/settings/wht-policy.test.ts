@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  effectiveTeamSideCategories,
   DEFAULT_WHT_POLICY,
   WHT_FILING_METHOD_SUFFIX,
   LEGACY_WHT_POLICY,
@@ -240,5 +241,29 @@ describe('U33 — การจับคู่ประเภทเงินไ�
       whtOutsourceIncomeCategory: 'sec_40_2',
     })
     expect([fresh.inhouseIncomeCategory, fresh.outsourceIncomeCategory]).toEqual(['sec_40_1', 'sec_40_2'])
+  })
+})
+
+describe('BUG-157 — ฟอร์มไม่ส่งการจับคู่ประเภทเงินได้ที่ซ่อนอยู่', () => {
+  const current = { inhouseIncomeCategory: 'sec_40_1', outsourceIncomeCategory: 'sec_40_8' } as const
+
+  it('โหมดอื่น ⇒ ใช้การจับคู่เดิมของชุดปัจจุบัน แม้ผู้ใช้แก้ค้างไว้ก่อนเปลี่ยนโหมด', () => {
+    const form = {
+      incomeTypeMode: 'all_40_8',
+      inhouseIncomeCategory: 'sec_40_8',
+      outsourceIncomeCategory: 'sec_40_2',
+      reason: 'x',
+    } as const
+    expect(effectiveTeamSideCategories(form, current)).toEqual({
+      incomeTypeMode: 'all_40_8',
+      inhouseIncomeCategory: 'sec_40_1',
+      outsourceIncomeCategory: 'sec_40_8',
+      reason: 'x',
+    })
+  })
+
+  it('โหมดแยกตามประเภททีม ⇒ ส่งค่าที่ผู้ใช้เลือกตามเดิม', () => {
+    const form = { incomeTypeMode: 'by_team_side', inhouseIncomeCategory: 'sec_40_2', outsourceIncomeCategory: 'sec_40_2' } as const
+    expect(effectiveTeamSideCategories(form, current)).toBe(form)
   })
 })

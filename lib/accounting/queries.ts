@@ -25,10 +25,11 @@ import {
   periodLabelOf,
   periodOrdinal,
   periodStatusLabel,
-  periodYearCe,
   MANAGE_ACCOUNTING_PERIOD,
   UNLOCK_PERIOD,
   type BillingRevenueMismatch,
+  type DraftBillingBatchSummary,
+  type UnbilledRevenueSummary,
   type PeriodKey,
   type ReadinessResult,
 } from '@/lib/accounting/period'
@@ -206,20 +207,31 @@ async function exceptionSummaryByPeriod(
   return map
 }
 
-/** วัน Export ล่าสุดของแต่ละรอบ (`30` §7.1 — derived จาก `export_records` ไฟล์ 37) */
+interface LastExport {
+  at: Date
+  /** เวอร์ชันล่าสุด (เลขลำดับ — ป้าย `v1.x` มาจาก `exportVersionLabel()`) */
+  version: number
+}
+
+/**
+ * วัน Export + เวอร์ชันล่าสุดของแต่ละรอบ (`30` §7.1 — derived จาก `export_records` ไฟล์ 37)
+ * เวอร์ชันเดินขึ้นอย่างเดียว ⇒ ค่าสูงสุดของ `generated_at`/`version` เป็นของชุดเดียวกันเสมอ
+ */
 async function lastExportByPeriod(
   organizationId: string,
   periodIds: readonly string[],
-): Promise<Map<string, Date>> {
+): Promise<Map<string, LastExport>> {
   const grouped = await prisma.exportRecord.groupBy({
     by: ['periodId'],
     where: { organizationId, periodId: { in: [...periodIds] } },
-    _max: { generatedAt: true },
+    _max: { generatedAt: true, version: true },
   })
-  const map = new Map<string, Date>()
+  const map = new Map<string, LastExport>()
   for (const row of grouped) {
-    if (row._max.generatedAt !== null && row._max.generatedAt !== undefined) {
-      map.set(row.periodId, row._max.generatedAt)
+    const at = row._max.generatedAt
+    const version = row._max.version
+    if (at !== null && at !== undefined && version !== null && version !== undefined) {
+      map.set(row.periodId, { at, version })
     }
   }
   return map
@@ -228,7 +240,7 @@ async function lastExportByPeriod(
 function toPeriodDto(
   row: PeriodRow,
   summary: ExceptionSummary,
-  exportedAt: Date | undefined,
+  lastExport: LastExport | undefined,
   now: Date,
 ): AccountingPeriodDto {
   const key: PeriodKey = { yearBe: row.yearBe, month: row.month }
@@ -247,7 +259,8 @@ function toPeriodDto(
     openWarningCount: summary.open.warning,
     exportReady: row.exportReady,
     lastReadinessCheckedAt: row.lastReadinessCheckedAt?.toISOString() ?? null,
-    exportedAt: exportedAt?.toISOString() ?? null,
+    exportedAt: lastExport?.at.toISOString() ?? null,
+    latestExportVersion: lastExport?.version ?? null,
     sentAt: row.sentAt?.toISOString() ?? null,
     sentByName: row.sentByUser?.fullName ?? null,
     lockedAt: row.lockedAt?.toISOString() ?? null,
@@ -298,25 +311,19 @@ export async function findPeriodById(user: SessionUser, periodId: string): Promi
 
 // ── Readiness Check (`30` §6.2) ─────────────────────────────────────────────
 
-/** ขอบเขตวันของงวดตามปฏิทินไทย (date-only UTC — เทียบคอลัมน์ `DATE` ได้ตรง) */
-function monthRangeOf(key: PeriodKey): { start: Date; end: Date } {
-  const year = periodYearCe(key)
-  return {
-    start: new Date(Date.UTC(year, key.month - 1, 1)),
-    end: new Date(Date.UTC(key.month === 12 ? year + 1 : year, key.month === 12 ? 0 : key.month, 1)),
-  }
-}
-
 /**
- * เงื่อนไขที่ 1 — ยอดรอบวางบิลตรงกับรายได้ที่อยู่ในรอบนั้น และไม่มีรายได้ค้างวางบิล
+ * เงื่อนไขที่ 1 — ยอดรอบวางบิลของงวดตรงกับรายได้ที่อยู่ในรอบนั้น (**บล็อก**)
  * (ยอดในรอบเทียบด้วย `summarizeBillingBatch()` ตัวเดียวกับที่ใช้ตอนสร้างรอบ — 3.6)
+ * รายได้ที่ยังไม่วางบิลไม่อยู่ในข้อนี้แล้ว (มติ PO U87) — ดู `unbilledRevenueSummary()`
  */
 async function billingRevenueMismatches(organizationId: string, key: PeriodKey): Promise<BillingRevenueMismatch[]> {
   const label = periodLabelOf(key)
   const batches = await prisma.billingBatch.findMany({
     where: { organizationId, period: label, deletedAt: null },
+    orderBy: [{ batchNumber: 'asc' }],
     select: {
       id: true,
+      batchNumber: true,
       totalSatang: true,
       company: { select: { name: true } },
       revenues: {
@@ -332,6 +339,7 @@ async function billingRevenueMismatches(organizationId: string, key: PeriodKey):
     if (totals.totalSatang !== batch.totalSatang) {
       mismatches.push({
         billingBatchId: batch.id,
+        batchNumber: batch.batchNumber,
         companyName: batch.company.name,
         batchTotalSatang: batch.totalSatang,
         revenueTotalSatang: totals.totalSatang,
@@ -339,35 +347,75 @@ async function billingRevenueMismatches(organizationId: string, key: PeriodKey):
       })
     }
   }
+  return mismatches
+}
 
-  const range = monthRangeOf(key)
-  const unbilled = await prisma.revenue.findMany({
+/**
+ * รายได้ "ค้างรับ" ของงวด (มติ PO U87) — `revenue_date` ก่อนสิ้นงวด (งวดนี้หรือยกมา) และ ณ ตอนนี้ยังไม่อยู่ใน
+ * รอบวางบิลที่ส่งลูกค้าแล้ว: ยังไม่ผูกรอบ · อยู่ในรอบร่าง · รอบที่ผูกถูกลบไปแล้ว
+ * ใช้ร่วมกันระหว่างคำเตือนของ Readiness กับ `14_Unbilled_Revenue.csv` — นิยามต้องตรงกันเสมอ
+ */
+export function unbilledRevenueWhere(organizationId: string, periodEnd: Date): Prisma.RevenueWhereInput {
+  return {
+    organizationId,
+    deletedAt: null,
+    revenueDate: { lt: periodEnd },
+    OR: [
+      { billingBatchId: null },
+      { billingBatch: { is: { status: 'draft' } } },
+      { billingBatch: { is: { deletedAt: { not: null } } } },
+    ],
+  }
+}
+
+async function unbilledRevenueSummary(organizationId: string, periodEnd: Date): Promise<UnbilledRevenueSummary> {
+  const rows = await prisma.revenue.findMany({
+    where: unbilledRevenueWhere(organizationId, periodEnd),
+    select: {
+      totalSatang: true,
+      companyId: true,
+      company: { select: { name: true } },
+      billingBatch: { select: { status: true, deletedAt: true } },
+    },
+  })
+  const byCompany = new Map<string, { companyName: string; count: number; totalSatang: number }>()
+  let totalSatang = 0
+  let inDraftCount = 0
+  for (const row of rows) {
+    totalSatang += row.totalSatang
+    if (row.billingBatch !== null && row.billingBatch.deletedAt === null && row.billingBatch.status === 'draft') {
+      inDraftCount += 1
+    }
+    const current = byCompany.get(row.companyId) ?? { companyName: row.company.name, count: 0, totalSatang: 0 }
+    current.count += 1
+    current.totalSatang += row.totalSatang
+    byCompany.set(row.companyId, current)
+  }
+  return {
+    count: rows.length,
+    totalSatang,
+    inDraftCount,
+    byCompany: [...byCompany.values()].sort((a, b) => a.companyName.localeCompare(b.companyName, 'th')),
+  }
+}
+
+/** BUG-160 — รอบวางบิลร่างที่มีรายได้ของงวดนี้ (หรือยกมา) และยังไม่ส่งลูกค้า */
+async function draftBillingBatchSummary(organizationId: string, periodEnd: Date): Promise<DraftBillingBatchSummary> {
+  const batches = await prisma.billingBatch.findMany({
     where: {
       organizationId,
       deletedAt: null,
-      billingBatchId: null,
-      revenueDate: { gte: range.start, lt: range.end },
+      status: 'draft',
+      revenues: { some: { deletedAt: null, revenueDate: { lt: periodEnd } } },
     },
-    select: { totalSatang: true, companyId: true, company: { select: { name: true } } },
+    orderBy: [{ batchNumber: 'asc' }],
+    select: { batchNumber: true, totalSatang: true },
   })
-
-  const byCompany = new Map<string, { name: string; total: number }>()
-  for (const revenue of unbilled) {
-    const current = byCompany.get(revenue.companyId) ?? { name: revenue.company.name, total: 0 }
-    current.total += revenue.totalSatang
-    byCompany.set(revenue.companyId, current)
+  return {
+    count: batches.length,
+    totalSatang: batches.reduce((sum, batch) => sum + batch.totalSatang, 0),
+    batchNumbers: batches.map((batch) => batch.batchNumber),
   }
-  for (const entry of byCompany.values()) {
-    mismatches.push({
-      billingBatchId: null,
-      companyName: entry.name,
-      batchTotalSatang: 0,
-      revenueTotalSatang: entry.total,
-      reason: 'not_billed',
-    })
-  }
-
-  return mismatches
 }
 
 /** ประกอบข้อมูลสด 3 เงื่อนไขแล้วส่งให้ตัวตัดสิน pure (`30` §6.2) */
@@ -376,7 +424,8 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
   // สิ้นงวด (date-only UTC) — ยอดเงินรับรอตรวจสอบ/50 ทวิ ค้าง นับรายการที่เกิดก่อนสิ้นงวด (ยกมาจากงวดก่อนด้วย)
   const yearCe = row.yearBe - 543
   const periodEnd = new Date(Date.UTC(row.month === 12 ? yearCe + 1 : yearCe, row.month === 12 ? 0 : row.month, 1))
-  const [openExceptions, unmatchedBankCount, billingMismatches, suspense, pendingWht] = await Promise.all([
+  const [openExceptions, unmatchedBankCount, billingMismatches, suspense, pendingWht, unbilledRevenue, draftBatches] =
+    await Promise.all([
     prisma.exception.findMany({
       where: { organizationId, periodId: row.id, status: 'open' },
       select: { id: true, level: true, title: true, sourceModule: true },
@@ -395,6 +444,9 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
       _count: { _all: true },
       _sum: { withheldSatang: true },
     }),
+    // มติ PO U87 / BUG-160 — เตือนอย่างเดียว ไม่บล็อก
+    unbilledRevenueSummary(organizationId, periodEnd),
+    draftBillingBatchSummary(organizationId, periodEnd),
   ])
 
   return evaluateReadiness({
@@ -407,6 +459,8 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     periodEnd: { key, now },
     suspenseOutstanding: { count: suspense._count._all, amountSatang: suspense._sum.amountSatang ?? 0 },
     pendingCustomerWht: { count: pendingWht._count._all, withheldSatang: pendingWht._sum.withheldSatang ?? 0 },
+    unbilledRevenue,
+    draftBillingBatches: draftBatches,
   })
 }
 

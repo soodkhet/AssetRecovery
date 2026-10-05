@@ -49,7 +49,7 @@ describe('buildTeamPerformanceReport', () => {
     })
     expect(rowOf(report.rows, 'team-a').withinSlaPct).toBe(50)
     expect(rowOf(report.rows, 'team-b').withinSlaPct).toBe(100)
-    expect(report.kpis?.find((kpi) => kpi.key === 'withinSlaPct')?.value).toBe(66.7)
+    expect(report.kpis?.find((kpi) => kpi.key === 'withinSlaPct')?.value).toBe(66.67)
     expect(report.kpis?.find((kpi) => kpi.key === 'overSla')?.value).toBe(1)
   })
 
