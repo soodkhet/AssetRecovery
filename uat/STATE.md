@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 ผู้ใช้ยอมรับ O54 · มติ U98: เล่น R14 รอบยืนยันหลัง U95 (หลัง merge BA/BB/BD/Export Pack U94)
 - 06/10/2569 merge fixer AW `3a9b17c` (U93 ปฏิทินวันหยุด `public_holidays` · `manage_holidays` · กำหนดยื่น ภ.ง.ด. เลื่อนเป็นวันทำการ) · migration `20261006130000_public_holidays` (มี backfill เลื่อนกำหนดยื่น pending ที่ตรงเสาร์-อาทิตย์ — dev ภ.ง.ด. ต.ค. 15/11 → 16/11/2569 ไม่มี audit แถว) · verify 332/4,467 · migration ใหม่รวม **30 ตัว** · ปรับ `docs/QUESTIONS-FOR-ACCOUNTANT.md` เป็น 3 ส่วน (U93) · ต่อ: ตรวจ flow การเงิน/บัญชีเทียบมาตรฐาน (อ่านอย่างเดียว)
 - 06/10/2569 ผู้ใช้ยอมรับมติ O48–O53 ทั้งหมด
 - 06/10/2569 ~02:10 merge fixer AV `7dabcee` (O50 `expenses.hotel_nights` 1–31 · เพดาน × จำนวนคืน · auto-mapping ช่วงวัน) · migration `20261006120000_expense_hotel_nights` · verify 329/4,435 · migration ใหม่รวม **29 ตัว** → งานเอกสาร (00_MAP/R13/NEXT-SESSION/OPEN-ITEMS)
