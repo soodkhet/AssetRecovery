@@ -15,6 +15,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Sales Record, Tax Invoice (auto-number), Cash Receipt |
 | v2 | 03/07/2569 | **แก้ไข §7.2 (Tax Invoice status)**: เดิมระบุ 3 สถานะ `draft`/`issued`/`cancelled` ซึ่ง**ไม่ตรงกับ** enum `tax_invoice_status` ใน `02-database-schema-design.md` ที่มีแค่ `active`/`cancelled` — ตรวจสอบ workflow §9.1 ในไฟล์นี้เองแล้วพบว่า **ไม่เคยมีขั้น draft จริงในทางปฏิบัติ** (กดปุ่ม "ออกใบกำกับภาษี" แล้วออกทันที ไม่มีขั้นร่างค้างไว้ก่อน) จึงแก้เป็น 2 สถานะ `active`/`cancelled` ให้ตรงกับ schema — ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.10 — Reformat header ตามมาตรฐานเอกสารชุดใหม่ |
 | v3 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก)** + มติบัญชี B1 (ม.86/10): เพิ่ม §3 / §6.5 / §7.4 Credit Note — ระบบบันทึกใบลดหนี้ที่สำนักงานบัญชีออก (ไม่ออกเอง) · §8 UI · §11 error code `CREDIT_NOTE_*` · §12 สิทธิ์ (ใช้ `manage_tax_invoice`) · §13 audit · §14 API 4 เส้น · §16 test 4 เคส · schema `02` v4.19 · สูตร `22` §6.8.1 |
+| v3.1 | 05/10/2569 | **มติ PO 05/10/2569 (U18–U21)**: §6.5 (1) **U18** ยกเลิกใบกำกับที่มีใบลดหนี้/ใบเพิ่มหนี้ active ⇒ ปฏิเสธ `TAX_INVOICE_HAS_ACTIVE_NOTES` (บอกเลขเอกสารที่ต้องยกเลิกก่อน) (2) **U19 ใบเพิ่มหนี้ (ม.86/9)** บันทึกในโครงเดียวกับใบลดหนี้ (`credit_notes.note_type = debit`) — VAT อัตราใบกำกับเดิม · ยอด > 0 ไม่มีเพดาน · ผูก Adjustment `increase` ได้ (ใบลดหนี้ผูกเฉพาะ `decrease`) · ป้าย "รอใบเพิ่มหนี้" · portal ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (3) **U20** งวดล็อก/งวด `sent_to_accountant` ปฏิเสธเหมือนเดิม (4) **U21** ยอดก่อน VAT ไม่ตรง Adjustment ที่อ้างถึง ⇒ เตือน ไม่บล็อก (+ audit) · หลายอัตรา VAT คงปฏิเสธพร้อมข้อความชัด · Export Pack เพิ่ม `09_Credit_Notes.csv` (`37`) · §8/§11/§14/§16 ตาม · schema `02` v4.21 |
 
 ขอบเขตเอกสารนี้: มุมมองฝั่งบัญชีของรายได้ (ต่อจากไฟล์ 19 ฝั่งการเงิน) — บันทึกรายการขาย/บริการตามมาตรฐานบัญชี ออกใบกำกับภาษี และบันทึกเงินรับจริงที่กระทบยอดกับธนาคารแล้ว
 
@@ -79,6 +80,9 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 - VAT ที่ลดคิดจากอัตราของใบกำกับเดิม (snapshot `vat_rate_pct_used` — สูตร `22` §6.8.1) · รับยอดตามเอกสารที่ต่างไม่เกิน 1 สตางค์ · ยอดรวมใบลดหนี้ที่ใช้งานของใบกำกับหนึ่งใบห้ามเกินยอดใบกำกับ
 - **ภาษีขายลดในเดือนที่ออกใบลดหนี้** ⇒ ใบลดหนี้เป็นเอกสารของงวดตาม `issue_date` — งวดนั้นต้องยังไม่ล็อก (`PERIOD_LOCKED_DIRECT_EDIT` · ใช้ยามกลางเดียวกับใบกำกับ จึงปฏิเสธงวด `sent_to_accountant` ด้วย)
 - ยอดที่ลูกค้าเห็น (portal — มติ U14) = ใบกำกับ − ใบลดหนี้ที่ `active` · Adjustment ภายในที่ยังไม่มีใบลดหนี้**ไม่สะท้อน**ใน portal และแสดงป้าย "รอใบลดหนี้" ในหน้า Adjustment/ใบกำกับ (นิยาม: `decrease` + `approved` + รอบวางบิลมีใบกำกับ active + ยังไม่มีใบลดหนี้ active อ้างถึง)
+- **ใบเพิ่มหนี้ (Debit Note — ม.86/9 · มติ PO 05/10/2569 U19)**: เพิ่มมูลค่าบริการหลังออกใบกำกับแล้ว (เช่น Adjustment เพิ่มยอด) — สำนักงานบัญชีออกนอกระบบ ระบบบันทึกในโครงเดียวกับใบลดหนี้ (`credit_notes.note_type = 'debit'`) · VAT จากอัตราใบกำกับเดิม (สูตร `22` §6.8.1) · ยอดก่อน VAT > 0 **ไม่มีเพดาน**ยอดใบกำกับ · ผูกได้เฉพาะ Adjustment `increase` + `approved` ของรอบเดียวกัน (ใบลดหนี้ผูกได้เฉพาะ `decrease`) · ป้าย **"รอใบเพิ่มหนี้"** บน Adjustment `increase` ที่อนุมัติแล้วของรอบที่มีใบกำกับ active และยังไม่มีใบเพิ่มหนี้ · portal ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (active) · งวดล็อก/งวด `sent_to_accountant` ปฏิเสธเหมือนใบลดหนี้ (U20 — ใบใหม่ลงวันที่ในงวดที่เปิดอยู่) · เลขที่ไม่ซ้ำต่อชนิด
+- **ยกเลิกใบกำกับที่มีเอกสารปรับปรุง (U18)**: ใบกำกับที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ `active` อ้างถึง ⇒ ปฏิเสธ `TAX_INVOICE_HAS_ACTIVE_NOTES` พร้อมเลขเอกสารที่ต้องยกเลิกก่อน (ตรวจซ้ำใน transaction หลังยึดแถวใบกำกับ)
+- **ตรวจยอดกับ Adjustment (U21)**: บันทึกเอกสารที่อ้าง Adjustment แล้วยอดก่อน VAT ไม่เท่ายอด Adjustment ⇒ **เตือน ไม่บล็อก** (คืน `warnings` ในผลบันทึก + audit `amount_matches_adjustment = false`) · รอบวางบิลมีหลายอัตรา VAT ⇒ คงปฏิเสธ `CREDIT_NOTE_VAT_MISMATCH` โดยข้อความบอกเหตุผลและให้ติดต่อผู้ดูแล
 - ยกเลิกได้ (`active → cancelled`) พร้อมเหตุผล — ห้ามลบ ห้าม reverse · ใบที่ยกเลิกไม่ลดยอด · เลขที่เดิมบันทึกใหม่ได้หลังยกเลิก (กรณีกรอกผิด)
 
 ## 7. Data Entities / Required Objects
@@ -126,8 +130,9 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 |---|---|---|---|
 | id | uuid | yes | — |
 | tax_invoice_id | uuid | yes | ใบกำกับที่อ้างถึง (ต้อง `active` ตอนบันทึก) |
-| adjustment_id | uuid | no | Adjustment ต้นเหตุ — `decrease` + `approved` ของรอบวางบิลเดียวกัน · 1 Adjustment มีใบลดหนี้ active ได้ใบเดียว |
-| credit_note_number | string(50) | yes | เลขที่ตามเอกสารของสำนักงานบัญชี — ไม่ซ้ำต่อองค์กร (เฉพาะใบ active) |
+| note_type | enum | yes | `credit` (ใบลดหนี้ — ค่าเริ่มต้น) / `debit` (ใบเพิ่มหนี้ — U19) · แก้ไม่ได้ |
+| adjustment_id | uuid | no | Adjustment ต้นเหตุ — `approved` ของรอบวางบิลเดียวกัน · ใบลดหนี้ ⇒ `decrease` · ใบเพิ่มหนี้ ⇒ `increase` · 1 Adjustment มีเอกสาร active ได้ใบเดียว |
+| credit_note_number | string(50) | yes | เลขที่ตามเอกสารของสำนักงานบัญชี — ไม่ซ้ำต่อองค์กร + ชนิด (เฉพาะใบ active) |
 | issue_date | date | yes | ไม่ก่อนวันที่ใบกำกับ · งวดต้องยังไม่ล็อก |
 | amount_before_vat_satang / vat_satang / total_satang | integer | yes | satang · total = ก่อน VAT + VAT (คิดที่ server) |
 | vat_rate_pct_used | numeric(5,2) | yes | snapshot อัตราของใบกำกับเดิม |
@@ -140,7 +145,7 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 อ้างอิงจาก `accounting.html`:
 
 - แท็บ "รายได้และขาย": table — บริษัท, Case Ref, วันที่รายได้, Model, Gross, VAT Flag, Billing Batch, สถานะ
-- แท็บ "รายได้และขาย" (ใบกำกับ active): ปุ่ม "บันทึกใบลดหนี้" (บัญชี) / "ใบลดหนี้" (ดูอย่างเดียว) → modal รายการใบลดหนี้ของใบนั้น + ยอดสุทธิหลังหักใบลดหนี้ + ฟอร์มบันทึก/แนบไฟล์สแกน + ยกเลิกพร้อมเหตุผล · ในตารางแสดง "ลดหนี้ N ใบ / สุทธิ" และป้าย "รอใบลดหนี้"
+- แท็บ "รายได้และขาย" (ใบกำกับ active): ปุ่ม "บันทึกใบลดหนี้" (บัญชี) / "ใบลดหนี้" (ดูอย่างเดียว) → modal รายการใบลดหนี้ของใบนั้น + ยอดสุทธิหลังหักใบลดหนี้ + ฟอร์มบันทึก/แนบไฟล์สแกน + ยกเลิกพร้อมเหตุผล · ในตารางแสดง "ลดหนี้ N ใบ / สุทธิ" และป้าย "รอใบลดหนี้" · U19: ฟอร์มเดียวกันเลือกชนิด "ใบลดหนี้ / ใบเพิ่มหนี้" · แสดง "เพิ่มหนี้ M ใบ" + ป้าย "รอใบเพิ่มหนี้" · ยอดไม่ตรง Adjustment แสดง toast เตือน (U21) · ยกเลิกใบกำกับที่มีเอกสารปรับปรุงแสดงข้อความพร้อมเลขเอกสาร (U18)
 - แท็บ "เงินรับ": table — วันที่, ผู้จ่าย, ยอด, Bank Ref, Billing Ref, WHT ลูกค้าหัก (ถ้ามี), สถานะจับคู่, ปุ่มจัดการ (จับคู่ Manual ถ้า unmatched / ดูรายละเอียดถ้า matched แล้ว)
 
 ## 9. Workflow / Lifecycle
@@ -172,7 +177,8 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 | CREDIT_NOTE_EXCEEDS_INVOICE | ยอดใบลดหนี้รวมเกินยอดใบกำกับ | reject |
 | CREDIT_NOTE_VAT_MISMATCH | VAT ต่างจากอัตราใบกำกับเดิมเกิน 1 สตางค์ / รอบมีหลายอัตรา | reject |
 | CREDIT_NOTE_DATE_BEFORE_INVOICE | วันที่ใบลดหนี้ก่อนวันที่ใบกำกับ | reject |
-| CREDIT_NOTE_ADJUSTMENT_MISMATCH | อ้าง Adjustment ที่ไม่ใช่ลดยอดที่อนุมัติแล้วของรอบเดียวกัน หรือมีใบลดหนี้แล้ว | reject |
+| CREDIT_NOTE_ADJUSTMENT_MISMATCH | อ้าง Adjustment ที่ไม่อนุมัติ/ชนิดไม่ตรงเอกสาร (ลดหนี้ = ลดยอด · เพิ่มหนี้ = เพิ่มยอด)/คนละรอบ หรือมีเอกสารแล้ว | reject |
+| TAX_INVOICE_HAS_ACTIVE_NOTES | ยกเลิกใบกำกับที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ active (U18) | reject |
 | CREDIT_NOTE_INVALID_STATUS / CREDIT_NOTE_NOT_FOUND | ยกเลิกใบที่ยกเลิกแล้ว / อ้างใบที่ไม่มี | reject |
 
 ## 12. Permission Requirements
@@ -198,9 +204,9 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 | PATCH | /api/accounting/tax-invoices/:id/cancel | ยกเลิก (ต้องมี reason) |
 | GET | /api/accounting/cash-receipts | list (sync จากไฟล์ 35) |
 | GET | /api/accounting/credit-notes | ทะเบียนใบลดหนี้ (`?taxInvoiceId=&status=`) — U14 |
-| POST | /api/accounting/credit-notes | บันทึกใบลดหนี้ที่สำนักงานบัญชีออก — U14 |
+| POST | /api/accounting/credit-notes | บันทึกใบลดหนี้/ใบเพิ่มหนี้ (`noteType` = `credit`/`debit` · ไม่ส่ง = ใบลดหนี้) ที่สำนักงานบัญชีออก — U14/U19 · ผลมี `warnings` เมื่อยอดไม่ตรง Adjustment (U21) |
 | PATCH | /api/accounting/credit-notes/:id/cancel | ยกเลิกใบลดหนี้ (ต้องมี reason) — U14 |
-| GET | /api/accounting/credit-notes/awaiting | Adjustment ลดยอดที่ยังรอใบลดหนี้ — U14 |
+| GET | /api/accounting/credit-notes/awaiting | Adjustment ที่ยังรอใบลดหนี้ (ลดยอด) / ใบเพิ่มหนี้ (เพิ่มยอด) — U14/U19 |
 
 ## 15. Acceptance Criteria
 
@@ -220,6 +226,10 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 | ใบลดหนี้เกินยอดใบกำกับ (U14) | ยอดใบลดหนี้รวมเกินยอดใบกำกับ | reject CREDIT_NOTE_EXCEEDS_INVOICE |
 | ใบลดหนี้ในงวดที่ล็อก (U14) | issue_date อยู่ในงวด locked | reject PERIOD_LOCKED_DIRECT_EDIT |
 | ป้ายรอใบลดหนี้ (U14) | Adjustment ลดยอดอนุมัติแล้ว ของรอบที่มีใบกำกับ → บันทึกใบลดหนี้อ้างถึง | ป้ายแสดงก่อน และหายหลังบันทึก |
+| ยกเลิกใบกำกับที่มีใบลดหนี้ (U18) | ใบกำกับมีใบลดหนี้ active → กดยกเลิกใบกำกับ | reject TAX_INVOICE_HAS_ACTIVE_NOTES ข้อความมีเลขใบลดหนี้ · ยกเลิกใบลดหนี้ก่อนแล้วยกเลิกใบกำกับได้ |
+| ใบเพิ่มหนี้ (U19) | Adjustment เพิ่มยอดอนุมัติแล้ว → บันทึกใบเพิ่มหนี้ผูก Adjustment นั้น (ยอดเกินใบกำกับได้) | บันทึกได้ · ป้าย "รอใบเพิ่มหนี้" หาย · portal ยอดตามเอกสารบวกเพิ่ม · ผูก Adjustment ลดยอด ⇒ reject CREDIT_NOTE_ADJUSTMENT_MISMATCH |
+| ยอดไม่ตรง Adjustment (U21) | บันทึกใบลดหนี้ยอดต่างจาก Adjustment ที่อ้างถึง | บันทึกได้ + `warnings` 1 ข้อ + audit `amount_matches_adjustment = false` |
+| หลายอัตรา VAT (U21) | รอบวางบิลมีรายได้ 2 อัตรา VAT → บันทึกใบลดหนี้ | reject CREDIT_NOTE_VAT_MISMATCH ข้อความบอกว่ามีหลายอัตราและให้ติดต่อผู้ดูแล |
 | ออกแบบ e-Tax Invoice | ออกใบกำกับภาษีเลือก delivery_format = e_tax_invoice | ระบบสร้างเอกสารพร้อมข้อมูลสำหรับส่งเข้าระบบกรมสรรพากร |
 
 ---

@@ -253,12 +253,16 @@ export interface PortalTaxInvoiceSource {
   vatSatang: number
   totalSatang: number
   deliveryFormat: InvoiceDeliveryFormat
-  /** ใบลดหนี้ **active** ที่อ้างถึงใบนี้ (มติ U14) — แถวภายในส่งมาได้ แต่ส่งออกเฉพาะฟิลด์ใน `PortalCreditNoteDto` */
+  /**
+   * ใบลดหนี้/ใบเพิ่มหนี้ **active** ที่อ้างถึงใบนี้ (มติ U14/U19) — แถวภายในส่งมาได้ แต่ส่งออกเฉพาะฟิลด์ใน
+   * `PortalCreditNoteDto` · แยกชนิดด้วย `noteType` (ไม่ส่ง = ใบลดหนี้)
+   */
   creditNotes: readonly PortalCreditNoteSource[]
 }
 
 export interface PortalCreditNoteSource {
   id: string
+  noteType?: 'credit' | 'debit'
   creditNoteNumber: string
   /** ISO (date-only หรือ timestamp) — ส่งออกเป็น `YYYY-MM-DD` */
   issueDate: string | Date
@@ -267,7 +271,7 @@ export interface PortalCreditNoteSource {
   totalSatang: number
 }
 
-/** ใบลดหนี้ที่ลูกค้าเห็น — ไม่มีเหตุผลภายใน/ผู้บันทึก/ไฟล์สแกน/Adjustment ต้นเหตุ */
+/** ใบลดหนี้/ใบเพิ่มหนี้ที่ลูกค้าเห็น — ไม่มีเหตุผลภายใน/ผู้บันทึก/ไฟล์สแกน/Adjustment ต้นเหตุ */
 export interface PortalCreditNoteDto {
   id: string
   creditNoteNumber: string
@@ -289,7 +293,9 @@ export interface PortalTaxInvoiceDto {
   statusDisplay: PortalStatusDisplay<TaxInvoiceStatus>
   /** ใบลดหนี้ active (เรียงตามวันที่ออก) — ยอดหน้าใบด้านบนไม่หัก (ใบลดหนี้เป็นเอกสารแยก) */
   creditNotes: PortalCreditNoteDto[]
-  /** ยอดสุทธิหลังหักใบลดหนี้ active = ยอดหน้าใบ − ใบลดหนี้ (ไม่มีใบลดหนี้ ⇒ เท่ายอดหน้าใบ) */
+  /** ใบเพิ่มหนี้ active (เรียงตามวันที่ออก — มติ U19) — ยอดหน้าใบด้านบนไม่บวก */
+  debitNotes: PortalCreditNoteDto[]
+  /** ยอดสุทธิตามเอกสาร = ยอดหน้าใบ − ใบลดหนี้ + ใบเพิ่มหนี้ (ไม่มีเอกสารปรับปรุง ⇒ เท่ายอดหน้าใบ) */
   netBeforeVatSatang: number
   netVatSatang: number
   netTotalSatang: number
@@ -298,8 +304,10 @@ export interface PortalTaxInvoiceDto {
 export function serializePortalTaxInvoice(row: PortalTaxInvoiceSource): PortalTaxInvoiceDto {
   const net = netInvoiceAmounts(
     { totalBeforeVatSatang: row.totalBeforeVatSatang, vatSatang: row.vatSatang, totalSatang: row.totalSatang },
-    row.creditNotes.map((note) => ({ ...amountsOf(note), status: 'active' as const })),
+    row.creditNotes.map((note) => ({ ...amountsOf(note), status: 'active' as const, noteType: note.noteType ?? 'credit' })),
   )
+  const credits = row.creditNotes.filter((note) => (note.noteType ?? 'credit') === 'credit')
+  const debits = row.creditNotes.filter((note) => note.noteType === 'debit')
   return {
     id: row.id,
     invoiceNumber: row.invoiceNumber,
@@ -310,7 +318,8 @@ export function serializePortalTaxInvoice(row: PortalTaxInvoiceSource): PortalTa
     deliveryFormat: row.deliveryFormat,
     deliveryFormatLabel: INVOICE_DELIVERY_FORMAT_LABEL[row.deliveryFormat],
     statusDisplay: portalTaxInvoiceStatusDisplay(row.status),
-    creditNotes: row.creditNotes.map(serializePortalCreditNote),
+    creditNotes: credits.map(serializePortalCreditNote),
+    debitNotes: debits.map(serializePortalCreditNote),
     netBeforeVatSatang: net.totalBeforeVatSatang,
     netVatSatang: net.vatSatang,
     netTotalSatang: net.totalSatang,

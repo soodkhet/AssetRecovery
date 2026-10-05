@@ -144,11 +144,14 @@ function input(seeded: Seeded, overrides: Record<string, unknown> = {}) {
   }
 }
 
-async function seedAdjustment(revenueId: string, options: { type?: 'increase' | 'decrease'; status?: string } = {}) {
+async function seedAdjustment(
+  revenueId: string,
+  options: { type?: 'increase' | 'decrease'; status?: string; amount?: number } = {},
+) {
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, revenue_id,
                              approved_by, approved_at, created_by)
-    VALUES ('${ORG_ID}', '${options.type ?? 'decrease'}', 10000, 'ลดค่าบริการ C1', '${options.status ?? 'approved'}',
+    VALUES ('${ORG_ID}', '${options.type ?? 'decrease'}', ${options.amount ?? 10000}, 'ปรับค่าบริการ C1', '${options.status ?? 'approved'}',
             '${revenueId}', '${ACCOUNTING_ID}', now(), '${ACCOUNTING_ID}')
     RETURNING id
   `)
@@ -381,7 +384,7 @@ suite('ใบลดหนี้ — Adjustment "รอใบลดหนี้" 
     )
   })
 
-  it('Adjustment เพิ่มยอด / ยังไม่อนุมัติ ⇒ CREDIT_NOTE_ADJUSTMENT_MISMATCH · ไม่ขึ้นป้ายรอ', async () => {
+  it('ใบลดหนี้อ้าง Adjustment เพิ่มยอด / ยังไม่อนุมัติ ⇒ CREDIT_NOTE_ADJUSTMENT_MISMATCH · เพิ่มยอดขึ้นป้าย "รอใบเพิ่มหนี้" (U19)', async () => {
     const seeded = await seedInvoice()
     const increase = await seedAdjustment(seeded.revenueId, { type: 'increase' })
     const pending = await seedAdjustment(seeded.revenueId, { status: 'pending_approval' })
@@ -394,7 +397,8 @@ suite('ใบลดหนี้ — Adjustment "รอใบลดหนี้" 
       'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
     )
     const awaiting = await credit.listAdjustmentsAwaitingCreditNote(accountant)
-    expect(awaiting.some((row) => row.adjustmentId === increase || row.adjustmentId === pending)).toBe(false)
+    expect(awaiting.some((row) => row.adjustmentId === pending)).toBe(false)
+    expect(awaiting.find((row) => row.adjustmentId === increase)).toMatchObject({ noteType: 'debit', label: 'รอใบเพิ่มหนี้' })
   })
 
   it('sumCreditNotesForInvoice / creditNotesForBillingBatch นับเฉพาะ active', async () => {
@@ -443,5 +447,161 @@ suite('ใบลดหนี้ — ไฟล์สแกน', () => {
         ),
       'UPLOAD_PATH_OUT_OF_SCOPE',
     )
+  })
+})
+
+suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็อกยกเลิกใบกำกับ · เตือนยอด · Export 09 (fixer X4)', () => {
+  it('U18: ยกเลิกใบกำกับที่มีใบลดหนี้/ใบเพิ่มหนี้ active ⇒ TAX_INVOICE_HAS_ACTIVE_NOTES บอกเลขเอกสาร · ยกเลิกเอกสารก่อนแล้วยกเลิกใบกำกับได้', async () => {
+    const seeded = await seedInvoice()
+    const cn = await credit.createCreditNote(ctx, input(seeded))
+    const dn = await credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', creditNoteNumber: `DN-${RUN}-u18` }))
+
+    const error = await sales.cancelTaxInvoice(ctx, seeded.invoiceId, { reason: 'ออกผิด' }).catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('TAX_INVOICE_HAS_ACTIVE_NOTES')
+    const message = (error as { userMessage?: string }).userMessage ?? ''
+    expect(message).toContain(`ใบลดหนี้ ${cn.creditNoteNumber}`)
+    expect(message).toContain(`ใบเพิ่มหนี้ ${dn.creditNoteNumber}`)
+    expect((await db().taxInvoice.findUniqueOrThrow({ where: { id: seeded.invoiceId } })).status).toBe('active')
+
+    await credit.cancelCreditNote(ctx, cn.id, { reason: 'ยกเลิกก่อนยกเลิกใบกำกับ' })
+    await expectCode(() => sales.cancelTaxInvoice(ctx, seeded.invoiceId, { reason: 'ออกผิด' }), 'TAX_INVOICE_HAS_ACTIVE_NOTES')
+    await credit.cancelCreditNote(ctx, dn.id, { reason: 'ยกเลิกก่อนยกเลิกใบกำกับ' })
+    const cancelled = await sales.cancelTaxInvoice(ctx, seeded.invoiceId, { reason: 'ออกผิด' })
+    expect(cancelled.status).toBe('cancelled')
+  })
+
+  it('U19: ใบเพิ่มหนี้ — VAT อัตราเดิม · ไม่มีเพดาน · ผูก Adjustment เพิ่มยอด · ป้ายรอหาย · เลขซ้ำต่อชนิด · ยกเลิกได้', async () => {
+    const seeded = await seedInvoice()
+    const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 2_000_000 })
+    const decrease = await seedAdjustment(seeded.revenueId, { type: 'decrease' })
+
+    // ใบเพิ่มหนี้อ้าง Adjustment ลดยอดไม่ได้
+    await expectCode(
+      () => credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', adjustmentId: decrease })),
+      'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
+    )
+
+    const number = `X-${RUN}-dn`
+    // ยอดเกินใบกำกับ (12,000) ได้ — ใบเพิ่มหนี้ไม่มีเพดาน
+    const dn = await credit.createCreditNote(
+      ctx,
+      input(seeded, { noteType: 'debit', creditNoteNumber: number, amountBeforeVatSatang: 2_000_000, adjustmentId: increase }),
+    )
+    expect(dn).toMatchObject({
+      noteType: 'debit',
+      noteTypeLabel: 'ใบเพิ่มหนี้',
+      vatSatang: 140_000,
+      totalSatang: 2_140_000,
+      vatRatePctUsed: '7',
+      warnings: [],
+    })
+    const awaiting = await credit.listAdjustmentsAwaitingCreditNote(accountant)
+    expect(awaiting.some((row) => row.adjustmentId === increase)).toBe(false)
+    expect(awaiting.find((row) => row.adjustmentId === decrease)).toMatchObject({ noteType: 'credit', label: 'รอใบลดหนี้' })
+
+    // เลขเดียวกันคนละชนิดได้ · ชนิดเดียวกันซ้ำ ⇒ 409
+    const cn = await credit.createCreditNote(ctx, input(seeded, { creditNoteNumber: number }))
+    expect(cn.noteType).toBe('credit')
+    await expectCode(
+      () => credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', creditNoteNumber: number })),
+      'CREDIT_NOTE_NUMBER_DUPLICATE',
+    )
+
+    expect(await credit.sumCreditNotesForInvoice(seeded.invoiceId, { noteType: 'debit' })).toMatchObject({
+      totalSatang: 2_140_000,
+      count: 1,
+    })
+    expect(await credit.sumCreditNotesForInvoice(seeded.invoiceId)).toMatchObject({ totalSatang: 10_700, count: 1 })
+
+    const cancelled = await credit.cancelCreditNote(ctx, dn.id, { reason: 'บันทึกผิด' })
+    expect(cancelled).toMatchObject({ status: 'cancelled', noteType: 'debit' })
+    const after = await credit.listAdjustmentsAwaitingCreditNote(accountant)
+    expect(after.find((row) => row.adjustmentId === increase)).toMatchObject({ noteType: 'debit' })
+
+    // note_type แก้ไม่ได้ (trigger)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE credit_notes SET note_type = 'debit' WHERE id = '${cn.id}'`),
+    ).rejects.toThrow(/CREDIT_NOTE_IMMUTABLE/)
+  })
+
+  it('U20: ใบเพิ่มหนี้ลงวันในงวดที่ล็อก ⇒ PERIOD_LOCKED_DIRECT_EDIT', async () => {
+    const seeded = await seedInvoice()
+    await expectCode(
+      () => credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', issueDate: day('2027-03-10') })),
+      'PERIOD_LOCKED_DIRECT_EDIT',
+    )
+  })
+
+  it('U19 portal: ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ · กราฟรายได้รวมเท่ายอดก่อน VAT ตามเอกสาร', async () => {
+    const seeded = await seedInvoice()
+    await credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 10_000 }))
+    const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 50_000 })
+    await credit.createCreditNote(
+      ctx,
+      input(seeded, { noteType: 'debit', amountBeforeVatSatang: 50_000, adjustmentId: increase }),
+    )
+    const documented = await import('@/lib/portal/documented-amounts')
+    const amounts = await documented.documentedBillingAmounts(ORG_ID, { billingBatchId: seeded.billingBatchId })
+    expect(amounts).toMatchObject({
+      invoiced: { beforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 },
+      creditNotes: { beforeVatSatang: 10_000, vatSatang: 700, totalSatang: 10_700 },
+      debitNotes: { beforeVatSatang: 50_000, vatSatang: 3_500, totalSatang: 53_500 },
+      documented: { beforeVatSatang: 1_240_000, vatSatang: 86_800, totalSatang: 1_326_800 },
+    })
+    const revenue = await documented.documentedRevenueAmounts(ORG_ID, [seeded.billingBatchId])
+    expect(revenue.get(seeded.revenueId)).toBe(1_240_000)
+  })
+
+  it('U21: ยอดก่อน VAT ไม่ตรง Adjustment ⇒ บันทึกได้ + warnings + audit amount_matches_adjustment=false · ตรง ⇒ ไม่มีคำเตือน', async () => {
+    const seeded = await seedInvoice()
+    const mismatch = await seedAdjustment(seeded.revenueId, { amount: 10_000 })
+    const note = await credit.createCreditNote(ctx, input(seeded, { adjustmentId: mismatch, amountBeforeVatSatang: 12_000 }))
+    expect(note.warnings).toHaveLength(1)
+    expect(note.warnings[0]).toContain('ไม่เท่ากับยอดรายการปรับปรุง')
+    const audit = await db().auditLog.findFirst({ where: { targetType: 'credit_notes', targetId: note.id, action: 'create' } })
+    expect(audit?.afterData).toMatchObject({ amount_matches_adjustment: false, adjustment_amount_satang: 10_000, note_type: 'credit' })
+
+    const exact = await seedAdjustment(seeded.revenueId, { amount: 10_000 })
+    const ok = await credit.createCreditNote(ctx, input(seeded, { adjustmentId: exact, amountBeforeVatSatang: 10_000 }))
+    expect(ok.warnings).toEqual([])
+    const okAudit = await db().auditLog.findFirst({ where: { targetType: 'credit_notes', targetId: ok.id, action: 'create' } })
+    expect(okAudit?.afterData).toMatchObject({ amount_matches_adjustment: true })
+  })
+
+  it('U21: รอบวางบิลมีหลายอัตรา VAT ⇒ CREDIT_NOTE_VAT_MISMATCH ข้อความบอกเหตุผลและให้ติดต่อผู้ดูแล', async () => {
+    const seeded = await seedInvoice()
+    await db().$executeRawUnsafe(`
+      INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, tracking_round, gross_satang, vat_satang,
+                            vat_rate_pct_used, total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
+      VALUES ('${ORG_ID}', '${caseId}', '${companyId}', '${seeded.billingBatchId}', ${900 + cursor}, 100000, 10000, 10.00,
+              110000, 'SUCCESS_FEE', 'exclude_vat', 'billed', '2026-06-26', '${ACCOUNTING_ID}')
+    `)
+    const error = await credit.createCreditNote(ctx, input(seeded)).catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('CREDIT_NOTE_VAT_MISMATCH')
+    const message = (error as { userMessage?: string }).userMessage ?? ''
+    expect(message).toContain('หลายอัตรา')
+    expect(message).toContain('ติดต่อผู้ดูแลระบบ')
+  })
+
+  it('U21 Export: 09_Credit_Notes.csv มีใบลดหนี้ (CN) + ใบเพิ่มหนี้ (DN) ของรอบ · adjustment_ref ชี้เลขในไฟล์ 07', async () => {
+    const seeded = await seedInvoice()
+    const decrease = await seedAdjustment(seeded.revenueId)
+    const cn = await credit.createCreditNote(ctx, input(seeded, { adjustmentId: decrease }))
+    const dn = await credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', amountBeforeVatSatang: 5_000 }))
+    await credit.cancelCreditNote(ctx, dn.id, { reason: 'บันทึกผิด' })
+
+    const { buildCreditNotePackFile } = await import('@/lib/exports/queries')
+    const csv = await buildCreditNotePackFile(ORG_ID, 2569, 10)
+    const lines = csv.slice(1).split('\r\n')
+    expect(csv.charCodeAt(0)).toBe(0xfeff)
+    expect(lines[0]).toBe(
+      'document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref',
+    )
+    const cnLine = lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`)) ?? ''
+    expect(cnLine).toMatch(
+      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3}$`),
+    )
+    const dnLine = lines.find((line) => line.startsWith(`DN,${dn.creditNoteNumber},`)) ?? ''
+    expect(dnLine).toMatch(/,50\.00,3\.50,53\.50,.+,cancelled,-$/)
   })
 })

@@ -29,6 +29,8 @@ export const SALES_ERROR_CODES = [
   'CREDIT_NOTE_VAT_MISMATCH',
   'CREDIT_NOTE_DATE_BEFORE_INVOICE',
   'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
+  // ยกเลิกใบกำกับที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ active (มติ PO 05/10/2569 U18 — `24` §6.8 v4.24)
+  'TAX_INVOICE_HAS_ACTIVE_NOTES',
 ] as const
 
 export type SalesErrorCode = (typeof SALES_ERROR_CODES)[number]
@@ -52,6 +54,7 @@ const HTTP_STATUS: Record<SalesErrorCode, number> = {
   CREDIT_NOTE_VAT_MISMATCH: 400,
   CREDIT_NOTE_DATE_BEFORE_INVOICE: 400,
   CREDIT_NOTE_ADJUSTMENT_MISMATCH: 400,
+  TAX_INVOICE_HAS_ACTIVE_NOTES: 400,
 }
 
 const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
@@ -96,25 +99,29 @@ const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
   },
   CREDIT_NOTE_NUMBER_DUPLICATE: {
     title: 'เลขที่ใบลดหนี้ซ้ำ',
-    message: 'มีใบลดหนี้เลขที่นี้ที่ใช้งานอยู่แล้ว — ตรวจเลขที่ตามเอกสารของสำนักงานบัญชีอีกครั้ง',
+    message: 'มีเอกสารชนิดเดียวกันเลขที่นี้ที่ใช้งานอยู่แล้ว — ตรวจเลขที่ตามเอกสารของสำนักงานบัญชีอีกครั้ง',
   },
   CREDIT_NOTE_EXCEEDS_INVOICE: {
     title: 'ยอดใบลดหนี้เกินยอดใบกำกับภาษี',
     message: 'ยอดใบลดหนี้รวมทุกใบของใบกำกับนี้ต้องไม่เกินยอดของใบกำกับภาษีที่อ้างถึง',
   },
   CREDIT_NOTE_VAT_MISMATCH: {
-    title: 'ภาษีมูลค่าเพิ่มของใบลดหนี้ไม่สอดคล้อง',
+    title: 'ภาษีมูลค่าเพิ่มของเอกสารไม่สอดคล้อง',
     message:
-      'ภาษีที่ลดต้องเท่ากับมูลค่าที่ลดคูณอัตราภาษีของใบกำกับเดิม (คลาดได้ไม่เกิน 1 สตางค์) — ตรวจยอดตามเอกสารอีกครั้ง',
+      'ภาษีต้องเท่ากับมูลค่าก่อนภาษีคูณอัตราภาษีของใบกำกับเดิม (คลาดได้ไม่เกิน 1 สตางค์) — ตรวจยอดตามเอกสารอีกครั้ง',
   },
   CREDIT_NOTE_DATE_BEFORE_INVOICE: {
-    title: 'วันที่ใบลดหนี้ก่อนวันที่ใบกำกับภาษี',
-    message: 'ใบลดหนี้ต้องออกในวันเดียวกันหรือหลังวันที่ของใบกำกับภาษีที่อ้างถึง',
+    title: 'วันที่เอกสารก่อนวันที่ใบกำกับภาษี',
+    message: 'ใบลดหนี้/ใบเพิ่มหนี้ต้องออกในวันเดียวกันหรือหลังวันที่ของใบกำกับภาษีที่อ้างถึง',
   },
   CREDIT_NOTE_ADJUSTMENT_MISMATCH: {
-    title: 'รายการปรับปรุงที่อ้างถึงใช้กับใบลดหนี้นี้ไม่ได้',
+    title: 'รายการปรับปรุงที่อ้างถึงใช้กับเอกสารนี้ไม่ได้',
     message:
-      'รายการปรับปรุงต้องเป็นการลดยอดที่อนุมัติแล้ว ของรอบวางบิลเดียวกับใบกำกับภาษี และยังไม่มีใบลดหนี้อื่นอ้างถึง',
+      'รายการปรับปรุงต้องอนุมัติแล้ว เป็นชนิดที่ตรงกับเอกสาร (ใบลดหนี้ = ลดยอด · ใบเพิ่มหนี้ = เพิ่มยอด) ของรอบวางบิลเดียวกับใบกำกับภาษี และยังไม่มีเอกสารอื่นอ้างถึง',
+  },
+  TAX_INVOICE_HAS_ACTIVE_NOTES: {
+    title: 'ยกเลิกใบกำกับภาษีไม่ได้',
+    message: 'ใบกำกับภาษีนี้ยังมีใบลดหนี้หรือใบเพิ่มหนี้ที่ใช้งานอยู่ — ต้องยกเลิกเอกสารเหล่านั้นก่อน',
   },
 }
 
@@ -127,8 +134,13 @@ export function salesErrorMessage(code: SalesErrorCode): ErrorMessage {
 }
 
 export class SalesError extends ModuleError<SalesErrorCode> {
-  constructor(code: SalesErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความไทยเฉพาะกรณี (เช่น บอกเลขเอกสารที่ต้องยกเลิกก่อน) แทนข้อความกลางของ code */
+  constructor(
+    code: SalesErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const base = MESSAGES[code]
+    super(code, options?.message === undefined ? base : { ...base, message: options.message }, HTTP_STATUS[code], options)
     this.name = 'SalesError'
   }
 }
