@@ -3,6 +3,7 @@ import {
   LOT_DOCUMENT_LABEL,
   checkLotDocumentCandidate,
   documentExtension,
+  lotDocumentFileName,
   lotDocumentMime,
   lotDocumentPath,
   lotDocumentPrefix,
@@ -80,5 +81,27 @@ describe('lotDocumentSlots — จำนวนช่องตามชนิด�
     const slots = lotDocumentSlots({ type: 'we_deliver', status: 'confirmed' })
     expect(slots.every((slot) => slot.attached)).toBe(true)
     expect(slots.every((slot) => slot.fileUrl === null)).toBe(true)
+  })
+})
+
+describe('lotDocumentFileName — แสดงชื่อไฟล์แทน storage path ดิบ (BUG-151)', () => {
+  const LOT = '11111111-2222-3333-4444-555555555555'
+  const KEY = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+
+  it('path ต่อเวอร์ชัน {uuid}.{ext} → ชื่อชนิดเอกสาร + นามสกุลจริง', () => {
+    expect(lotDocumentFileName('signed_doc', lotDocumentPath(LOT, 'signed_doc', 'scan.JPG', KEY))).toBe('signed-doc.jpg')
+    expect(lotDocumentFileName('delivery_proof', `handover-lots/${LOT}/delivery-proof/${KEY}.pdf`)).toBe(
+      'delivery-proof.pdf',
+    )
+  })
+
+  it('path แบบ {uuid}-ชื่อเดิม → ส่วนท้ายหลัง uuid-', () => {
+    expect(lotDocumentFileName('signed_doc', `handover-lots/${LOT}/${KEY}-ใบเซ็นรับ.pdf`)).toBe('ใบเซ็นรับ.pdf')
+  })
+
+  it('ไม่มี uuid นำหน้า → ส่วนท้ายของ path (ไม่มีโฟลเดอร์โผล่บนหน้าจอ)', () => {
+    const name = lotDocumentFileName('signed_doc', `handover-lots/${LOT}/signed-doc.pdf`)
+    expect(name).toBe('signed-doc.pdf')
+    expect(name).not.toContain('/')
   })
 })
