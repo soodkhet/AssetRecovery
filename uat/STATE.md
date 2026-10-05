@@ -4,7 +4,7 @@
 |---|---|
 | รอบล่าสุดที่จบ | **R13 regression หลังมติ U22–U84** (05–06/10/2569) · R13a ✅21/29 · R13b หยุดที่ BUG-155 → แก้ (U86) → R13c ✅14/16 · เงินตรง golden ทั้งหมด · งวด ต.ค. ล็อกคืนแล้ว · รายงาน `uat/report/R13a/R13b/R13c-regression-v1.md` · ก่อนหน้า: R12 Client Portal ผ่าน |
 | snapshot ล่าสุด | `uat/snapshots/R13-end.dump` (ปลาย R13 · งวด ต.ค. locked) · `R13-mid` · `R13-start` (ก่อนซ่อมงวด) · `uat/snapshots/R10-end-v3.dump` (ปลาย UAT) · `R9-end-v3` · `R8-end-v3` · `R7-end-v3` · `R7c-partial-v3` · `R7b-end-v3` · `R6-end-v3-fixed` (ต้น R7) · `R6-end-v3` · `R6a-end-v3` · `R5-end-v3` (ปลาย R5 v2 = ต้น R6) · `R4-end-v3` (ปลาย R4 หลังแก้ hotel) · `R4a-end-v3` · `R3-end-v3b` (ต้น R4 — **ห้ามใช้ `R3-end-v3`**, BUG-094) · `R4-end-v3-hotel-approved` (ก่อนแก้ — ไม่ใช้) · เก่า (กติกาเดิม): `R5-end-v2`, `R5-end`, `R4-v2-end`, `R4a-v2-end`, `R3-end-v2`, `R4a-end` · ใช้ได้: `R3-end`, `R2-end`, `R1-end`, `R0-clean` |
-| รอบปัจจุบัน | **มติ U3–U92 + O48–O53 ทำครบ** · migration ใหม่ **29 ตัว** (ยังไม่ push — U92) · รอ: ตรวจ O4 ≥ 06/10/2569 14:02 · ผู้ใช้รีวิว O48–O53 · นักบัญชียืนยัน (`docs/QUESTIONS-FOR-ACCOUNTANT.md`) · เช็คลิสต์ push ใน `uat/NEXT-SESSION.md` |
+| รอบปัจจุบัน | **มติ U3–U92 + O48–O53 ทำครบ** · migration ใหม่ **29 ตัว** (ยังไม่ push — U92) · รอ: ตรวจ O4 ≥ 06/10/2569 14:02 · นักบัญชียืนยัน (`docs/QUESTIONS-FOR-ACCOUNTANT.md`) · เช็คลิสต์ push ใน `uat/NEXT-SESSION.md` |
 | บั๊กเปิด | ดู BUGS.md — **open/needs-decision = 0** (ถึง BUG-160) · ไม่มี S1–S5 เปิด |
 | Supabase Storage | project `qgshdg…` = **localhost + Vercel staging ตัวเดียวกัน** · สร้าง bucket private 4 ตัว + policy `case-documents` แล้ว 03/10/2569 ด้วย `pnpm storage:setup --expect-ref qgshdgzzajmoytzymsqe --env .env.local --db-env .env.staging` (มติ PO) |
 | Supabase (cloud) | ✅ ผู้ใช้อนุญาต 03/10/2569: สร้างบัญชี Auth + อัปโหลด Storage ได้ · **เก็บทุกอย่างเป็นข้อมูลตัวอย่าง ห้ามลบ** (ผู้ใช้จะสั่งลบเองก่อนใช้งานจริง) · บัญชีกำพร้าจาก restore ให้จดรายชื่อไว้ท้ายไฟล์นี้ |
@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 ผู้ใช้ยอมรับมติ O48–O53 ทั้งหมด
 - 06/10/2569 ~02:10 merge fixer AV `7dabcee` (O50 `expenses.hotel_nights` 1–31 · เพดาน × จำนวนคืน · auto-mapping ช่วงวัน) · migration `20261006120000_expense_hotel_nights` · verify 329/4,435 · migration ใหม่รวม **29 ตัว** → งานเอกสาร (00_MAP/R13/NEXT-SESSION/OPEN-ITEMS)
 - 06/10/2569 ~01:50 merge fixer AU `d6c5e28` (U89 `HOTEL_CLAIM_EXCEEDS_CAP` + snapshot แผน · U90 audit `view` เปิดไฟล์ข้อมูลส่วนบุคคล) · migration `20261006110000_audit_action_view` · verify 329/4,422 · migration ใหม่รวม **28 ตัว** · มติ O50–O53 → fixer AV (จำนวนคืน O50)
 - 06/10/2569 ~01:30 merge fixer AT `0ca2c49` (U87 readiness แยก บล็อกยอดไม่ตรง/เตือนรายได้ค้างรับ · Export Pack **14 ไฟล์** `14_Unbilled_Revenue.csv` · BUG-156–160) · verify 328/4,386 · มติ O48/O49 (orchestrator ตัดสินแทนตาม U91) · **บั๊ก UAT open = 0** · fixer AU (U89/U90) กำลังทำ
