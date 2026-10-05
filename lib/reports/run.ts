@@ -98,6 +98,7 @@ export async function runReport(
     kpis: cached.value.kpis ?? [],
     totalRow: cached.value.totalRow ?? null,
     note: cached.value.note ?? null,
+    reconciliation: cached.value.reconciliation ?? null,
     cache: {
       mode: cached.mode,
       computedAt: cached.computedAt.toISOString(),

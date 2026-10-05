@@ -11,11 +11,13 @@ import {
   resolveWhtPolicyAt,
   toWhtPolicyAuditPayload,
   type WhtCertificateMode,
+  type WhtFilingMethod,
   type WhtIncomeCategory,
   type WhtIncomeTypeMode,
   type WhtPolicyEntry,
-  type WhtPolicyValues,
+  type WhtPolicySettings,
 } from '@/lib/settings/wht-policy'
+import { filingDueDateOf, filingMethodResolveDate } from '@/lib/wht/wht'
 
 /**
  * ค่าตั้งภาษีหัก ณ ที่จ่าย แบบ effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8/U16/U33 · `13` §6.4.2) — ชั้น DB
@@ -38,6 +40,7 @@ const policySelect = {
   issueZeroRate402Certificate: true,
   inhouseIncomeCategory: true,
   outsourceIncomeCategory: true,
+  filingMethod: true,
   reason: true,
   createdAt: true,
   createdByUser: { select: { fullName: true } },
@@ -52,6 +55,7 @@ interface PolicyRow {
   issueZeroRate402Certificate: boolean
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
+  filingMethod: WhtFilingMethod
   reason: string
   createdAt: Date
   createdByUser: { fullName: string }
@@ -68,6 +72,7 @@ function toEntry(row: PolicyRow): WhtPolicyEntry & { row: PolicyRow } {
     issueZeroRate402Certificate: row.issueZeroRate402Certificate,
     inhouseIncomeCategory: row.inhouseIncomeCategory,
     outsourceIncomeCategory: row.outsourceIncomeCategory,
+    filingMethod: row.filingMethod,
     row,
   }
 }
@@ -82,6 +87,7 @@ function toDto(entry: WhtPolicyEntry & { row: PolicyRow }, currentId: string | n
     issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
     inhouseIncomeCategory: entry.inhouseIncomeCategory,
     outsourceIncomeCategory: entry.outsourceIncomeCategory,
+    filingMethod: entry.filingMethod,
     reason: entry.row.reason,
     createdAt: toIso(entry.createdAt),
     createdByName: entry.row.createdByUser.fullName,
@@ -89,12 +95,15 @@ function toDto(entry: WhtPolicyEntry & { row: PolicyRow }, currentId: string | n
   }
 }
 
-async function loadEntries(organizationId: string) {
-  const rows = await prisma.whtPolicyHistory.findMany({ where: { organizationId }, select: policySelect })
+/** client ที่อ่านค่าตั้งได้ — `prisma` หรือ tx client (structural แบบ `PeriodQueryClient`) */
+type PolicyReadClient = Pick<typeof prisma, 'whtPolicyHistory'>
+
+async function loadEntries(organizationId: string, client: PolicyReadClient = prisma) {
+  const rows = await client.whtPolicyHistory.findMany({ where: { organizationId }, select: policySelect })
   return rows.map(toEntry)
 }
 
-function valuesOf(entry: WhtPolicyValues | null): WhtPolicyValues {
+function valuesOf(entry: WhtPolicySettings | null): WhtPolicySettings {
   if (entry === null) return DEFAULT_WHT_POLICY
   return {
     baseExpenseTypes: [...entry.baseExpenseTypes],
@@ -103,7 +112,20 @@ function valuesOf(entry: WhtPolicyValues | null): WhtPolicyValues {
     issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
     inhouseIncomeCategory: entry.inhouseIncomeCategory,
     outsourceIncomeCategory: entry.outsourceIncomeCategory,
+    filingMethod: entry.filingMethod,
   }
+}
+
+/**
+ * **วิธียื่น ภ.ง.ด. ที่มีผล ณ วันหนึ่ง** (มติ PO 05/10/2569 UAT U45) — ไม่มีแถว = ออนไลน์ (ค่าเริ่มต้น)
+ * สรุปรอบนำส่งเรียกด้วย `filingMethodResolveDate()` (วันที่ 1 ของเดือนที่ยื่น) ภายในทรานแซกชันเดียวกัน
+ */
+export async function resolveWhtFilingMethod(
+  client: PolicyReadClient,
+  organizationId: string,
+  at: Date,
+): Promise<WhtFilingMethod> {
+  return valuesOf(resolveWhtPolicyAt(await loadEntries(organizationId, client), at)).filingMethod
 }
 
 /** ค่าที่มีผลวันนี้ + ประวัติทั้งหมด (ใหม่ → เก่า) + ค่าเริ่มต้นตามมติ */
@@ -129,12 +151,38 @@ export async function getWhtPolicyOverview(organizationId: string, now: Date = n
 export async function resolveWhtPolicyForPayout(
   organizationId: string,
   at: Date,
-): Promise<{ policyId: string | null; values: WhtPolicyValues }> {
+): Promise<{ policyId: string | null; values: WhtPolicySettings }> {
   const entry = resolveWhtPolicyAt(await loadEntries(organizationId), at)
   return { policyId: entry?.id ?? null, values: valuesOf(entry) }
 }
 
-export interface WhtPolicyCreateValues extends WhtPolicyValues {
+/**
+ * คิดวันกำหนดยื่นของสรุปรอบนำส่งที่ยัง `pending` ใหม่ตามวิธียื่นที่มีผล (U45) — idempotent: แก้เฉพาะแถวที่เปลี่ยนจริง
+ * คืนรายการที่เปลี่ยน (ลง audit ของค่าตั้งตัวที่ทำให้เปลี่ยน) · รอบที่ยื่นแล้ว (`filed`) ไม่แตะ
+ */
+async function refreshPendingFilingDueDates(
+  tx: Pick<typeof prisma, 'whtPolicyHistory' | 'whtFilingSummary'>,
+  organizationId: string,
+): Promise<{ summary_id: string; filing_method: WhtFilingMethod; filing_due_date: string }[]> {
+  const pending = await tx.whtFilingSummary.findMany({
+    where: { organizationId, status: 'pending' },
+    select: { id: true, filingMethod: true, filingDueDate: true, period: { select: { yearBe: true, month: true } } },
+  })
+  if (pending.length === 0) return []
+  const entries = await loadEntries(organizationId, tx)
+  const changed: { summary_id: string; filing_method: WhtFilingMethod; filing_due_date: string }[] = []
+  for (const row of pending) {
+    const period = { yearBe: row.period.yearBe, month: row.period.month }
+    const filingMethod = valuesOf(resolveWhtPolicyAt(entries, filingMethodResolveDate(period))).filingMethod
+    const filingDueDate = filingDueDateOf(period, filingMethod)
+    if (filingMethod === row.filingMethod && filingDueDate.getTime() === row.filingDueDate.getTime()) continue
+    await tx.whtFilingSummary.update({ where: { id: row.id }, data: { filingMethod, filingDueDate } })
+    changed.push({ summary_id: row.id, filing_method: filingMethod, filing_due_date: toDateOnlyIso(filingDueDate) })
+  }
+  return changed
+}
+
+export interface WhtPolicyCreateValues extends WhtPolicySettings {
   effectiveFrom: Date
 }
 
@@ -164,11 +212,15 @@ export async function createWhtPolicy(
         issueZeroRate402Certificate: values.issueZeroRate402Certificate,
         inhouseIncomeCategory: values.inhouseIncomeCategory,
         outsourceIncomeCategory: values.outsourceIncomeCategory,
+        filingMethod: values.filingMethod,
         reason: context.reason,
         createdBy: context.actor.id,
       },
       select: policySelect,
     })
+
+    // U45 — วิธียื่นเปลี่ยน ⇒ คิดวันกำหนดยื่นของรอบนำส่งที่ยังไม่ยื่นใหม่ (ค่าตั้งที่มีผล ณ วันที่ 1 ของเดือนที่ยื่น)
+    const refreshedSummaries = await refreshPendingFilingDueDates(tx, organizationId)
 
     await emitAudit(
       {
@@ -179,15 +231,19 @@ export async function createWhtPolicy(
         targetType: TARGET,
         targetId: row.id,
         before: toWhtPolicyAuditPayload(valuesOf(before)),
-        after: toWhtPolicyAuditPayload({
+        after: {
+          ...toWhtPolicyAuditPayload({
           baseExpenseTypes,
           certificateMode: values.certificateMode,
           incomeTypeMode: values.incomeTypeMode,
           issueZeroRate402Certificate: values.issueZeroRate402Certificate,
           inhouseIncomeCategory: values.inhouseIncomeCategory,
           outsourceIncomeCategory: values.outsourceIncomeCategory,
+          filingMethod: values.filingMethod,
           effectiveFrom: toDateOnlyIso(values.effectiveFrom),
-        }),
+          }),
+          ...(refreshedSummaries.length === 0 ? {} : { refreshed_filing_summaries: refreshedSummaries }),
+        },
         reason: context.reason,
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,

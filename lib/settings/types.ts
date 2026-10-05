@@ -1,8 +1,9 @@
 import type {
   WhtCertificateMode,
+  WhtFilingMethod,
   WhtIncomeCategory,
   WhtIncomeTypeMode,
-  WhtPolicyValues,
+  WhtPolicySettings,
 } from '@/lib/settings/wht-policy'
 import type {
   ExpenseType,
@@ -141,6 +142,8 @@ export interface WhtPolicyDto {
   /** โหมดแยกตามประเภททีม: ประเภทเงินได้ของ inhouse / outsource (U33) */
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
+  /** วิธียื่น ภ.ง.ด. (U45) */
+  filingMethod: WhtFilingMethod
   reason: string
   createdAt: string
   createdByName: string
@@ -150,10 +153,10 @@ export interface WhtPolicyDto {
 
 export interface WhtPolicyOverviewDto {
   /** ค่าที่มีผลวันนี้ (ไม่มีแถวที่มีผล = ค่าเริ่มต้นตามมติ) */
-  current: WhtPolicyValues
+  current: WhtPolicySettings
   currentId: string | null
   isDefault: boolean
-  defaults: WhtPolicyValues
+  defaults: WhtPolicySettings
   /** ใหม่ → เก่า (รวมแถวที่วันที่มีผลยังไม่ถึง) */
   history: WhtPolicyDto[]
 }

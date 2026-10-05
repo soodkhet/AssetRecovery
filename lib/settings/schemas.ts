@@ -20,6 +20,7 @@ import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
 import {
   WHT_CERTIFICATE_MODES,
+  WHT_FILING_METHODS,
   WHT_INCOME_TYPE_MODES,
   WHT_POLICY_EXPENSE_TYPES,
   WHT_TEAM_SIDE_INCOME_CATEGORIES,
@@ -299,6 +300,8 @@ export const whtPolicyCreateSchema = z.object({
    */
   inhouseIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_2'),
   outsourceIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_8'),
+  /** วิธียื่น ภ.ง.ด. — ออนไลน์ (วันที่ 15) / กระดาษ (วันที่ 7) · ไม่ส่ง = ออนไลน์ (มติ PO 05/10/2569 UAT U45) */
+  filingMethod: z.enum(WHT_FILING_METHODS).default('online'),
   reason: reasonSchema,
 })
 

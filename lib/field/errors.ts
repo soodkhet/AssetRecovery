@@ -27,6 +27,7 @@ export const FIELD_ERROR_CODES = [
   'HOTEL_CLAIM_FIELD_REQUIRED',
   'HOTEL_CLAIM_INVALID_SHARED_AGENT',
   'REQUIRED_MISSING',
+  'FIELD_DAY_NOT_FOUND',
 ] as const
 
 export type FieldErrorCode = (typeof FIELD_ERROR_CODES)[number]
@@ -45,6 +46,7 @@ const HTTP_STATUS: Record<FieldErrorCode, number> = {
   HOTEL_CLAIM_FIELD_REQUIRED: 400,
   HOTEL_CLAIM_INVALID_SHARED_AGENT: 400,
   REQUIRED_MISSING: 400,
+  FIELD_DAY_NOT_FOUND: 404,
 }
 
 const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
@@ -103,6 +105,11 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
   REQUIRED_MISSING: {
     title: 'ข้อมูลไม่ครบ',
     message: 'ข้อมูลที่ส่งมาไม่ครบตามที่ระบบต้องการ',
+  },
+  // มติ PO 05/10/2569 U50 — สร้างรายการเบิกย้อนหลังของวันลงพื้นที่ที่ไม่มีเช็คอินจริง
+  FIELD_DAY_NOT_FOUND: {
+    title: 'ไม่พบวันลงพื้นที่',
+    message: 'ไม่พบการเช็คอินของพนักงานคนนี้ในวันที่เลือก หรือคุณไม่มีสิทธิ์เข้าถึงข้อมูลนี้',
   },
 }
 

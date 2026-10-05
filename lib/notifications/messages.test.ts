@@ -274,6 +274,16 @@ describe('รายละเอียดข้อความรายตัว'
     expect(whtFilingDueMessage({ ...base, daysLeft: 0 }).body).toContain('ครบกำหนดวันนี้')
     expect(whtFilingDueMessage({ ...base, daysLeft: -2 }).body).toContain('เลยกำหนดมาแล้ว 2 วัน')
   })
+
+  it('U45 — ข้อความระบุวิธียื่น (ไม่ส่ง = ออนไลน์)', () => {
+    const base = { summaryId: 's1', periodLabel: 'ตุลาคม 2569', daysLeft: 3 }
+    expect(whtFilingDueMessage({ ...base, filingDueDate: new Date('2026-11-15T00:00:00Z') }).body).toContain(
+      '15/11/2569 (ยื่นออนไลน์)',
+    )
+    expect(
+      whtFilingDueMessage({ ...base, filingDueDate: new Date('2026-11-07T00:00:00Z'), filingMethod: 'paper' }).body,
+    ).toContain('07/11/2569 (ยื่นแบบกระดาษ)')
+  })
 })
 
 describe('clip()', () => {
@@ -374,8 +384,8 @@ describe('แจ้งผู้อนุมัติเมื่อรายก�
   })
 })
 
-describe('job รายวันเจองวดปิดแล้ว (มติ PO U25)', () => {
-  it('บอกวันที่ พ.ศ. · พนักงาน · จำนวนเคส · ค่าน้ำมัน/เบี้ยเลี้ยง/รวม · ให้ทำรายการปรับปรุง · คีย์ต่อพนักงาน×วัน', () => {
+describe('job รายวันเจองวดปิดแล้ว (มติ PO U25 · U50)', () => {
+  it('บอกวันที่ พ.ศ. · พนักงาน · จำนวนเคส · ค่าน้ำมัน/เบี้ยเลี้ยง/รวม · ชี้ปุ่มเบิกย้อนหลัง · คีย์ต่อพนักงาน×วัน', () => {
     const message = fieldAllowancePeriodLockedMessage({
       agentId: 'u1',
       agentName: 'in1',
@@ -386,9 +396,25 @@ describe('job รายวันเจองวดปิดแล้ว (มต�
     })
     expect(message.eventCode).toBe('field_allowance.period_locked')
     expect(message.body).toBe(
-      'วันที่ 30/09/2569 คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — in1 2 เคส ค่าน้ำมัน ฿300.00 เบี้ยเลี้ยง ฿200.00 รวม ฿500.00 กรุณาทำรายการปรับปรุง',
+      'วันที่ 30/09/2569 คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — in1 2 เคส ค่าน้ำมัน ฿300.00 เบี้ยเลี้ยง ฿200.00 รวม ฿500.00' +
+        ' — กด "สร้างรายการเบิกย้อนหลัง" เพื่อลงรายการในงวดที่เปิดอยู่แล้วส่งเข้าสายอนุมัติ',
     )
     expect(message.linkPath).toBe('/finance?tab=adjustment')
     expect(message.dedupeKey).toBe('field-day-locked-u1-2026-09-30')
+  })
+
+  it('ฝั่งบัญชี: ข้อความรับทราบ + ลิงก์หน้าปิดงวด · คีย์เดียวกัน (กันซ้ำต่อผู้รับ)', () => {
+    const input = {
+      agentId: 'u1',
+      agentName: 'in1',
+      fieldDate: new Date('2026-09-30T00:00:00Z'),
+      caseCount: 2,
+      fuelSatang: 30_000,
+      allowanceSatang: 20_000,
+    }
+    const accounting = fieldAllowancePeriodLockedMessage(input, 'accounting')
+    expect(accounting.body).toContain('ฝ่ายการเงินจะสร้างรายการเบิกย้อนหลังลงในงวดที่เปิดอยู่')
+    expect(accounting.linkPath).toBe('/accounting?tab=closing')
+    expect(accounting.dedupeKey).toBe(fieldAllowancePeriodLockedMessage(input, 'finance').dedupeKey)
   })
 })

@@ -2,6 +2,7 @@ import type {
   WhtCertificateStatus,
   WhtDeliveryFormat,
   WhtFilingForm,
+  WhtFilingMethod,
   WhtFilingStatus,
 } from '@/lib/generated/prisma/enums'
 import type { FilingTotals, FilingWarning } from '@/lib/wht/wht'
@@ -56,6 +57,10 @@ export interface WhtFilingSummaryDto {
   periodId: string
   periodLabel: string
   filingDueDate: string
+  /** วิธียื่นที่ใช้คิดวันกำหนดยื่น (มติ PO U45) */
+  filingMethod: WhtFilingMethod
+  /** "(ยื่นออนไลน์)" / "(ยื่นแบบกระดาษ)" — ต่อท้ายวันกำหนดยื่นบนจอ */
+  filingMethodLabel: string
   pnd3Satang: number
   pnd53Satang: number
   /** ภ.ง.ด.1 — เงินได้ 40(2) */

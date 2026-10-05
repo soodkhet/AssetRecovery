@@ -73,7 +73,7 @@ export async function runWhtFilingReminderJob(
     },
     orderBy: { filingDueDate: 'asc' },
     take: options.limit ?? 100,
-    select: { id: true, organizationId: true, periodLabel: true, filingDueDate: true },
+    select: { id: true, organizationId: true, periodLabel: true, filingDueDate: true, filingMethod: true },
   })
 
   const result: WhtFilingReminderResult = { due: rows.length, notified: 0 }
@@ -93,6 +93,8 @@ export async function runWhtFilingReminderJob(
         summaryId: row.id,
         periodLabel: row.periodLabel,
         filingDueDate: row.filingDueDate,
+        // มติ PO U45 — วันกำหนดคิดตามวิธียื่นแล้ว (snapshot ในสรุปรอบนำส่ง) ข้อความระบุวิธี
+        filingMethod: row.filingMethod,
         daysLeft: daysUntilFilingDue(row.filingDueDate, now),
       }),
     )

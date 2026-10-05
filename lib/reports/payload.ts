@@ -68,6 +68,26 @@ export interface ReportKpi {
   readonly higherIsBetter?: boolean
 }
 
+/**
+ * บรรทัดกระทบยอดใต้รายงาน (มติ PO 05/10/2569 U44) — เงินเป็น satang · `sign` บอกว่าบรรทัดนี้
+ * บวก/ลบเข้ายอดคาดหมาย หรือเป็นบรรทัดผลลัพธ์ (`=`) / ผลต่าง (`diff`) · ชั้นแสดงผลแค่จัดรูป ห้ามคำนวณซ้ำ
+ */
+export interface ReportReconciliationLine {
+  readonly key: string
+  readonly label: string
+  readonly sign: '+' | '-' | '=' | 'diff'
+  readonly amountSatang: number
+}
+
+export interface ReportReconciliation {
+  readonly title: string
+  readonly lines: readonly ReportReconciliationLine[]
+  /** ผลต่าง = ยอดรายงาน − ยอดคาดหมายจากเอกสาร (0 = กระทบยอดลง) */
+  readonly differenceSatang: number
+  readonly balanced: boolean
+  readonly note?: string
+}
+
 /** สิ่งที่ provider ของแต่ละรายงาน (6.2–6.5) ต้องคืน */
 export interface ReportData {
   readonly columns: readonly ReportColumn[]
@@ -77,6 +97,8 @@ export interface ReportData {
   readonly totalRow?: ReportRow | null
   /** ข้อความกำกับใต้ตาราง เช่นเงื่อนไขการนับ */
   readonly note?: string
+  /** บรรทัดกระทบยอดกับเอกสารภาษี (U44 — F2) */
+  readonly reconciliation?: ReportReconciliation | null
 }
 
 export interface ReportCacheInfo {
@@ -112,6 +134,8 @@ export interface ReportPayload {
   readonly kpis: readonly ReportKpi[]
   readonly totalRow: ReportRow | null
   readonly note: string | null
+  /** บรรทัดกระทบยอด (เฉพาะรายงานที่มี — ไม่มี = `null`) */
+  readonly reconciliation: ReportReconciliation | null
   readonly cache: ReportCacheInfo
 }
 

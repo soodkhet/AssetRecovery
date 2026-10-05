@@ -5,6 +5,7 @@ import {
   initialFieldDayExpenseStatus,
   planFieldDayExpenses,
   type FieldDayCase,
+  type FieldDayExpensePlan,
 } from '@/lib/field/expense-calc'
 import {
   bangkokBusinessDate,
@@ -13,10 +14,12 @@ import {
   type ExpenseTxClient,
   type PlanSnapshot,
 } from '@/lib/field/expense-queries'
-import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
+import { endOfBangkokDay, fmtDate, startOfBangkokDay } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
+import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 import { parseSettleDate } from '@/lib/jobs/job-types'
 import { CREATE_ADJUSTMENT } from '@/lib/adjustments/adjustment'
+import { MANAGE_ACCOUNTING_PERIOD } from '@/lib/accounting/period'
 import { notifyExpensesAwaitingApprovalAwaited } from '@/lib/notifications/approval-queue'
 import { dispatchNotificationAwaited } from '@/lib/notifications/dispatch'
 import { fieldAllowancePeriodLockedMessage } from '@/lib/notifications/messages'
@@ -84,14 +87,14 @@ export interface DailyFieldAllowanceJobResult {
   revenueIdsCreated: string[]
 }
 
-interface PendingFieldDay {
+export interface PendingFieldDay {
   organizationId: string
   agentId: string
   fieldDate: Date
 }
 
 /** (องค์กร, พนักงาน, วันไทย) ที่มีเช็คอินแต่ยังไม่มีแถว settlement */
-async function findPendingFieldDays(params: {
+export async function findPendingFieldDays(params: {
   organizationId?: string
   date: Date | null
   today: Date
@@ -154,7 +157,7 @@ export async function runDailyFieldAllowanceJob(
   })
 
   for (const day of pending) {
-    const outcome = await settleFieldDay(day, { jobId, realJobId: options.jobId ?? null })
+    const outcome = await settleFieldDay(day, { kind: 'job', jobId, realJobId: options.jobId ?? null })
     if (outcome.kind === 'settled') {
       result.settled += 1
       result.expensesCreated += outcome.expenseIds.length
@@ -176,9 +179,11 @@ export async function runDailyFieldAllowanceJob(
 }
 
 /**
- * มติ PO 05/10/2569 U25 (BUG-093) — วันที่อยู่ในงวดที่ปิดแล้ว **ยังข้ามเหมือนเดิม** (ไม่ settle ข้ามงวด)
- * แต่แจ้งผู้ถือสิทธิ์สร้างรายการปรับปรุง (ระดับองค์กร) พร้อมยอดที่ `planFieldDayExpenses()` คำนวณไว้
- * · วันนั้นไม่มีแถว settlement ⇒ job คืนถัดไปเจอวันเดิมอีก — คีย์กันซ้ำ (พนักงาน × วัน) ทำให้ไม่แจ้งซ้ำ
+ * มติ PO 05/10/2569 U25 (BUG-093) + U50 — วันที่อยู่ในงวดที่ปิดแล้ว **job ยังข้ามเหมือนเดิม** (ไม่ settle ข้ามงวด)
+ * แต่แจ้ง **ทั้งการเงิน** (ผู้ถือ `create_adjustment` — กด "สร้างรายการเบิกย้อนหลัง" ได้) **และบัญชี**
+ * (ผู้ถือ `manage_accounting_period` — รับทราบว่ารายการจะลงงวดที่เปิดอยู่) พร้อมยอดจาก `planFieldDayExpenses()`
+ * · วันนั้นไม่มีแถว settlement ⇒ job คืนถัดไปเจอวันเดิมอีก — คีย์กันซ้ำ (พนักงาน × วัน ต่อผู้รับ) ทำให้ไม่แจ้งซ้ำ
+ * · คนที่ถือทั้งสองสิทธิ์ได้ข้อความฝั่งการเงินใบเดียว
  */
 async function notifyPeriodLockedFieldDay(
   day: PendingFieldDay,
@@ -188,29 +193,65 @@ async function notifyPeriodLockedFieldDay(
     where: { id: day.agentId, organizationId: day.organizationId },
     select: { fullName: true },
   })
-  const userIds = await usersWithCapability(day.organizationId, CREATE_ADJUSTMENT, ORGANIZATION_SCOPE)
-  return dispatchNotificationAwaited(
-    { organizationId: day.organizationId, userIds },
-    fieldAllowancePeriodLockedMessage({
-      agentId: day.agentId,
-      agentName: agent?.fullName ?? 'พนักงาน',
-      fieldDate: day.fieldDate,
-      caseCount: locked.caseCount,
-      fuelSatang: locked.fuelSatang,
-      allowanceSatang: locked.allowanceSatang,
-    }),
+  const financeIds = await usersWithCapability(day.organizationId, CREATE_ADJUSTMENT, ORGANIZATION_SCOPE)
+  const accountingIds = (
+    await usersWithCapability(day.organizationId, MANAGE_ACCOUNTING_PERIOD, ORGANIZATION_SCOPE)
+  ).filter((id) => !financeIds.includes(id))
+  const input = {
+    agentId: day.agentId,
+    agentName: agent?.fullName ?? 'พนักงาน',
+    fieldDate: day.fieldDate,
+    caseCount: locked.caseCount,
+    fuelSatang: locked.fuelSatang,
+    allowanceSatang: locked.allowanceSatang,
+  }
+  const toFinance = await dispatchNotificationAwaited(
+    { organizationId: day.organizationId, userIds: financeIds },
+    fieldAllowancePeriodLockedMessage(input, 'finance'),
   )
+  const toAccounting =
+    accountingIds.length === 0
+      ? 0
+      : await dispatchNotificationAwaited(
+          { organizationId: day.organizationId, userIds: accountingIds },
+          fieldAllowancePeriodLockedMessage(input, 'accounting'),
+        )
+  return toFinance + toAccounting
 }
 
 type SettleOutcome =
-  | { kind: 'settled'; expenseIds: string[]; revenueIds: readonly string[] }
+  | { kind: 'settled'; settlementId: string; expenseIds: string[]; revenueIds: readonly string[] }
   | { kind: 'already_settled' }
   | { kind: 'period_locked'; caseCount: number; fuelSatang: number; allowanceSatang: number }
 
-async function settleFieldDay(
-  day: PendingFieldDay,
-  trace: { jobId: string; realJobId: string | null },
-): Promise<SettleOutcome> {
+/**
+ * ทางที่สร้างแถวรายวัน — `job` = รอบเวลาปกติ (actor = ระบบ · expense date = วันลงพื้นที่) ·
+ * `backdated` = "สร้างรายการเบิกย้อนหลัง" ของวันที่อยู่ในงวดปิด (มติ PO 05/10/2569 U50 · actor = การเงิน ·
+ * expense date = วันในงวดที่เปิดอยู่ · อ้างวันลงพื้นที่เดิมผ่าน `field_day_settlements.field_date` + หมายเหตุ)
+ */
+export type FieldDaySettleMode =
+  | { kind: 'job'; jobId: string; realJobId: string | null }
+  | {
+      kind: 'backdated'
+      actorId: string
+      actorRole: string
+      reason: string
+      /** วันที่ลงรายการ (วันไทยในงวดที่เปิดอยู่ — ผู้เรียกตรวจงวดแล้ว) */
+      expenseDate: Date
+      ipAddress: string | null
+      userAgent: string | null
+    }
+
+/** ผลคำนวณของ (พนักงาน, วัน) — สูตรเดียวทั้ง job และเบิกย้อนหลัง (`planFieldDayExpenses()`) */
+export interface FieldDayComputation {
+  byCase: Map<string, FieldDayCase & { outcome: CaseOutcome | null }>
+  allCaseIds: string[]
+  plan: PlanSnapshot | null
+  planned: FieldDayExpensePlan
+}
+
+/** คำนวณยอดของวันนั้นโดยไม่เขียนอะไร — `null` = ไม่มีเช็คอิน (ไม่มีวันลงพื้นที่นี้) */
+export async function computeFieldDay(day: PendingFieldDay): Promise<FieldDayComputation | null> {
   const checkins = await prisma.checkIn.findMany({
     where: {
       organizationId: day.organizationId,
@@ -227,10 +268,10 @@ async function settleFieldDay(
     },
   })
   const first = checkins[0]
-  if (first === undefined) return { kind: 'already_settled' }
+  if (first === undefined) return null
 
   // เคสละ 1 ที่นั่ง — ใช้เช็คอินแรกของเคสในวันนั้น (เวลา + รอบติดตามที่เช็คอิน)
-  const byCase = new Map<string, FieldDayCase & { outcome: (typeof first)['case']['outcome'] }>()
+  const byCase = new Map<string, FieldDayCase & { outcome: CaseOutcome | null }>()
   for (const row of checkins) {
     if (!byCase.has(row.caseId)) {
       byCase.set(row.caseId, {
@@ -270,25 +311,48 @@ async function settleFieldDay(
           onDate: day.fieldDate,
         })
 
-  const planned =
+  const planned: FieldDayExpensePlan =
     plan === null
       ? { fuelTotalSatang: 0, allowanceTotalSatang: 0, orderedCaseIds: [], drafts: [] }
       : planFieldDayExpenses({ plan, cases: shareCases })
 
+  return { byCase, allCaseIds, plan, planned }
+}
+
+/** งวดของวันลงพื้นที่ปิดแล้ว (เขียนรายการเบิกตรงเข้างวดนั้นไม่ได้ — `13` §6.11) */
+export async function isFieldDayPeriodLocked(organizationId: string, fieldDate: Date): Promise<boolean> {
+  const status = await periodStatusAt(organizationId, periodKeyOf(fieldDate))
+  return status !== null && isDirectEditRejected(status, true)
+}
+
+async function settleFieldDay(day: PendingFieldDay, mode: FieldDaySettleMode): Promise<SettleOutcome> {
+  const computed = await computeFieldDay(day)
+  if (computed === null) return { kind: 'already_settled' }
+
   // Period Lock (`13` §6.11) — สร้างรายการเบิกย้อนเข้างวดที่ปิดแล้วไม่ได้ ⇒ เว้นวันนั้นไว้ให้คนตัดสิน
-  if (planned.drafts.length > 0) {
-    const status = await periodStatusAt(day.organizationId, periodKeyOf(day.fieldDate))
-    if (status !== null && isDirectEditRejected(status, true)) {
-      // ยอดเดียวกับที่จะ settle ถ้างวดยังเปิด (สูตร `22` §6.2/§6.3 ผ่าน `planFieldDayExpenses()`) — ส่งต่อให้การแจ้งเตือน
-      return {
-        kind: 'period_locked',
-        caseCount: planned.orderedCaseIds.length,
-        fuelSatang: planned.fuelTotalSatang,
-        allowanceSatang: planned.allowanceTotalSatang,
-      }
+  // (มติ PO U50: การเงินกด "สร้างรายการเบิกย้อนหลัง" ลงงวดที่เปิดอยู่ — `lib/field/backdated-field-day.ts`)
+  if (computed.planned.drafts.length > 0 && (await isFieldDayPeriodLocked(day.organizationId, day.fieldDate))) {
+    // ยอดเดียวกับที่จะ settle ถ้างวดยังเปิด (สูตร `22` §6.2/§6.3 ผ่าน `planFieldDayExpenses()`) — ส่งต่อให้การแจ้งเตือน
+    return {
+      kind: 'period_locked',
+      caseCount: computed.planned.orderedCaseIds.length,
+      fuelSatang: computed.planned.fuelTotalSatang,
+      allowanceSatang: computed.planned.allowanceTotalSatang,
     }
   }
+  return persistFieldDaySettlement(day, computed, mode)
+}
 
+/**
+ * เขียนแถว settlement + expenses + audit + ตรวจรายได้ ในทรานแซกชันเดียว — ใช้ร่วม job และเบิกย้อนหลัง (U50)
+ * UNIQUE (องค์กร, พนักงาน, วัน) ⇒ สองทางชนกัน/กดซ้ำ ตัวที่แพ้ได้ `already_settled` (ไม่สร้างซ้ำ)
+ */
+export async function persistFieldDaySettlement(
+  day: PendingFieldDay,
+  computed: FieldDayComputation,
+  mode: FieldDaySettleMode,
+): Promise<Exclude<SettleOutcome, { kind: 'period_locked' }>> {
+  const { byCase, allCaseIds, plan, planned } = computed
   const draftCaseIds = [...new Set(planned.drafts.map((row) => row.caseId))]
   const assets = await prisma.asset.findMany({
     where: { caseId: { in: draftCaseIds }, deletedAt: null },
@@ -300,7 +364,25 @@ async function settleFieldDay(
   }
 
   const fieldDateIso = day.fieldDate.toISOString().slice(0, 10)
-  const reasonPrefix = `[job:${trace.jobId}] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fieldDateIso}`
+  const backdated = mode.kind === 'backdated' ? mode : null
+  const expenseDate = backdated === null ? day.fieldDate : backdated.expenseDate
+  const expenseDateIso = expenseDate.toISOString().slice(0, 10)
+  const reasonPrefix =
+    backdated === null
+      ? `[job:${mode.kind === 'job' ? mode.jobId : ''}] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fieldDateIso}`
+      : `${backdated.reason} — สร้างรายการเบิกย้อนหลังของวันลงพื้นที่ ${fmtDate(day.fieldDate)} (งวดของวันนั้นปิดแล้ว) ลงวันที่ ${fmtDate(expenseDate)}`
+  const actor =
+    backdated === null
+      ? { actorId: null, actorRole: null }
+      : {
+          actorId: backdated.actorId,
+          actorRole: backdated.actorRole,
+          ipAddress: backdated.ipAddress,
+          userAgent: backdated.userAgent,
+        }
+  const revisionNote =
+    backdated === null ? null : `เบิกย้อนหลังของวันลงพื้นที่ ${fmtDate(day.fieldDate)} (งวดของวันนั้นปิดแล้ว)`
+  const ownerId = backdated === null ? day.agentId : backdated.actorId
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -314,8 +396,8 @@ async function settleFieldDay(
           fuelTotalSatang: planned.fuelTotalSatang,
           allowanceTotalSatang: planned.allowanceTotalSatang,
           caseCount: planned.orderedCaseIds.length,
-          jobId: trace.realJobId,
-          createdBy: null,
+          jobId: mode.kind === 'job' ? mode.realJobId : null,
+          createdBy: backdated === null ? null : backdated.actorId,
         },
         select: { id: true },
       })
@@ -325,7 +407,7 @@ async function settleFieldDay(
         const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
           organizationId: day.organizationId,
           userId: day.agentId,
-          actorId: day.agentId,
+          actorId: ownerId,
         })
         for (const draft of planned.drafts) {
           const status = initialFieldDayExpenseStatus(byCase.get(draft.caseId)?.outcome ?? null, lotConfirmed(draft.caseId))
@@ -337,14 +419,15 @@ async function settleFieldDay(
               payeeId,
               expenseType: draft.expenseType,
               grossSatang: draft.grossSatang,
-              expenseDate: day.fieldDate,
+              expenseDate,
               calculationSource: 'compensation_plan',
               compPlanId: plan.planId,
               compPlanVersion: plan.version,
               fieldDaySettlementId: settlement.id,
               status,
-              // `expenses.created_by` บังคับ NOT NULL — ใช้เจ้าของรายการแบบเดียวกับ `fuel_distance_retry`
-              createdBy: day.agentId,
+              revisionNote,
+              // `expenses.created_by` บังคับ NOT NULL — job ใช้เจ้าของรายการแบบเดียวกับ `fuel_distance_retry`
+              createdBy: ownerId,
             },
             select: { id: true },
           })
@@ -353,8 +436,7 @@ async function settleFieldDay(
           await emitAudit(
             {
               organizationId: day.organizationId,
-              actorId: null,
-              actorRole: null,
+              ...actor,
               action: 'create',
               targetType: 'expenses',
               targetId: created.id,
@@ -363,11 +445,12 @@ async function settleFieldDay(
                 assignmentId: draft.assignmentId,
                 expenseType: draft.expenseType,
                 grossSatang: draft.grossSatang,
-                expenseDate: fieldDateIso,
+                expenseDate: expenseDateIso,
                 status,
                 fieldDaySettlementId: settlement.id,
                 compPlanId: plan.planId,
                 compPlanVersion: plan.version,
+                ...(backdated === null ? {} : { backdated: true, fieldDate: fieldDateIso }),
                 events: ['expense.case_bound_created'],
               },
               reason: `${reasonPrefix} — ส่วนแบ่งของเคสนี้`,
@@ -381,14 +464,14 @@ async function settleFieldDay(
       await emitAudit(
         {
           organizationId: day.organizationId,
-          actorId: null,
-          actorRole: null,
+          ...actor,
           action: 'create',
           targetType: 'field_day_settlements',
           targetId: settlement.id,
           after: {
             agentId: day.agentId,
             fieldDate: fieldDateIso,
+            ...(backdated === null ? {} : { backdated: true, expenseDate: expenseDateIso }),
             compPlanId: plan?.planId ?? null,
             compPlanVersion: plan?.version ?? null,
             fuelTotalSatang: planned.fuelTotalSatang,
@@ -408,10 +491,15 @@ async function settleFieldDay(
       const revenue = await tryCreateRevenue(tx as WarehouseTxClient, {
         organizationId: day.organizationId,
         caseIds: allCaseIds,
-        actorId: day.agentId,
+        actorId: ownerId,
       })
 
-      return { kind: 'settled' as const, expenseIds, revenueIds: revenue.revenueIdsCreated }
+      return {
+        kind: 'settled' as const,
+        settlementId: settlement.id,
+        expenseIds,
+        revenueIds: revenue.revenueIdsCreated,
+      }
     })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

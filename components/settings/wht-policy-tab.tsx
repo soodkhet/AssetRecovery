@@ -32,6 +32,8 @@ import type { WhtPolicyOverviewDto } from '@/lib/settings/types'
 import {
   WHT_CERTIFICATE_MODES,
   WHT_CERTIFICATE_MODE_LABEL,
+  WHT_FILING_METHODS,
+  WHT_FILING_METHOD_LABEL,
   WHT_INCOME_CATEGORY_LABEL,
   WHT_INCOME_TYPE_MODES,
   WHT_INCOME_TYPE_MODE_LABEL,
@@ -41,8 +43,10 @@ import {
   normalizeBaseExpenseTypes,
   usesPerPayeeWhtRate,
   type WhtCertificateMode,
+  type WhtFilingMethod,
   type WhtIncomeCategory,
   type WhtIncomeTypeMode,
+  type WhtPolicySettings,
   type WhtPolicyValues,
 } from '@/lib/settings/wht-policy'
 
@@ -64,6 +68,7 @@ interface FormState {
   issueZeroRate402Certificate: boolean
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
+  filingMethod: WhtFilingMethod
   reason: string
 }
 
@@ -84,10 +89,10 @@ function incomeTypeText(
   return `แยกตามประเภททีม: Inhouse = ${WHT_INCOME_CATEGORY_LABEL[values.inhouseIncomeCategory]} · Outsource = ${WHT_INCOME_CATEGORY_LABEL[values.outsourceIncomeCategory]}`
 }
 
-function PolicySummary({ values }: { values: WhtPolicyValues }) {
+function PolicySummary({ values }: { values: WhtPolicySettings }) {
   const excluded = WHT_POLICY_EXPENSE_TYPES.filter((type) => !values.baseExpenseTypes.includes(type))
   return (
-    <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+    <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-5">
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">ฐาน WHT (รวม)</dt>
         <dd className="mt-1 text-slate-900">{baseTypesText(values.baseExpenseTypes)}</dd>
@@ -104,6 +109,10 @@ function PolicySummary({ values }: { values: WhtPolicyValues }) {
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">40(1)/40(2) อัตรา 0%</dt>
         <dd className="mt-1 text-slate-900">{zeroRateText(values.issueZeroRate402Certificate)}</dd>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <dt className="font-semibold text-slate-500">วิธียื่น ภ.ง.ด.</dt>
+        <dd className="mt-1 text-slate-900">{WHT_FILING_METHOD_LABEL[values.filingMethod]}</dd>
       </div>
     </dl>
   )
@@ -156,6 +165,7 @@ export function WhtPolicyTab() {
       issueZeroRate402Certificate: overview.current.issueZeroRate402Certificate,
       inhouseIncomeCategory: overview.current.inhouseIncomeCategory,
       outsourceIncomeCategory: overview.current.outsourceIncomeCategory,
+      filingMethod: overview.current.filingMethod,
       reason: '',
     })
     setErrors({})
@@ -209,7 +219,7 @@ export function WhtPolicyTab() {
           <h2 className="text-sm font-bold text-slate-900">ค่าตั้งภาษีหัก ณ ที่จ่าย (Effective-dated)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
             ฐาน WHT · การออกหนังสือรับรอง 50 ทวิ · ประเภทเงินได้ · 40(1)/40(2) อัตรา 0% — มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล
-            รอบที่สร้างแล้วใช้ค่าเดิมเสมอ
+            รอบที่สร้างแล้วใช้ค่าเดิมเสมอ · วิธียื่น ภ.ง.ด. มีผลกับกำหนดยื่นของเดือนที่ยื่นตั้งแต่วันที่มีผล
           </p>
         </div>
         <Can action="manage" resource={MANAGE_WHT_POLICY}>
@@ -243,17 +253,18 @@ export function WhtPolicyTab() {
               <Th>การออก 50 ทวิ</Th>
               <Th>ประเภทเงินได้</Th>
               <Th>40(1)/40(2) อัตรา 0%</Th>
+              <Th>วิธียื่น ภ.ง.ด.</Th>
               <Th>เหตุผล / ผู้บันทึก</Th>
               <Th className="text-right">สถานะ</Th>
             </Tr>
           </THead>
           <TableState
-            colSpan={7}
+            colSpan={8}
             loading={loading}
             error={error}
             isEmpty={history.length === 0}
             emptyTitle="ยังไม่เคยตั้งค่า — ใช้ค่าเริ่มต้น"
-            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(1)/40(2) อัตรา 0% ออก 50 ทวิ"
+            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(1)/40(2) อัตรา 0% ออก 50 ทวิ · ยื่น ภ.ง.ด. ออนไลน์"
             onRetry={
               <Button
                 variant="secondary"
@@ -285,6 +296,9 @@ export function WhtPolicyTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{zeroRateText(item.issueZeroRate402Certificate)}</span>
+                  </Td>
+                  <Td>
+                    <span className="text-xs text-slate-700">{WHT_FILING_METHOD_LABEL[item.filingMethod]}</span>
                   </Td>
                   <Td>
                     <div className="text-xs text-slate-700">{item.reason}</div>
@@ -466,6 +480,26 @@ export function WhtPolicyTab() {
                 กรอก &quot;อัตราหัก 40(1)/40(2)&quot; ในข้อมูลผู้รับเงินทุกคนที่เข้าข่าย — ถ้าขาด ระบบจะไม่ให้สร้างรอบจ่ายและแสดงรายชื่อ
               </InlineAlert>
             )}
+
+            <Field
+              id="wht-policy-filing"
+              label="วิธียื่น ภ.ง.ด."
+              required
+              error={errors.filingMethod}
+              hint="ใช้คิดวันกำหนดยื่นและการแจ้งเตือน (ไม่เลื่อนตามวันหยุดราชการ)"
+            >
+              <Select
+                id="wht-policy-filing"
+                value={form.filingMethod}
+                onChange={(event) => set('filingMethod', event.target.value as WhtFilingMethod)}
+              >
+                {WHT_FILING_METHODS.map((method) => (
+                  <option key={method} value={method}>
+                    {WHT_FILING_METHOD_LABEL[method]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
             <Field id="wht-policy-reason" label="เหตุผล" required error={errors.reason}>
               <Textarea

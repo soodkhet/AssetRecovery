@@ -1,6 +1,7 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { NotificationEventCode } from '@/lib/notifications/events'
+import { WHT_FILING_METHOD_SUFFIX, type WhtFilingMethod } from '@/lib/settings/wht-policy'
 
 /**
  * ข้อความของการแจ้งเตือนทุก event (`90` §6.3) — **pure ล้วน** ไม่มี Prisma/`next/*`
@@ -449,27 +450,36 @@ export function adjustmentApprovalRequestedMessage(input: {
 // ── job รายวัน — วันที่อยู่ในงวดปิดแล้ว (มติ PO 05/10/2569 U25 · BUG-093) ───────
 
 /**
- * job `daily_field_allowance` ข้ามวันที่อยู่ในงวดบัญชีที่ปิดแล้ว (ไม่ settle ข้ามงวด) ⇒ แจ้งฝ่ายการเงิน
- * ให้ทำรายการปรับปรุงพร้อมยอดที่คำนวณไว้ให้ (ยอดมาจาก `planFieldDayExpenses()` สูตรเดียวกับวันปกติ)
- * · 1 พนักงาน × 1 วัน = 1 การแจ้งเตือน — job รันซ้ำทุกคืนก็ไม่แจ้งซ้ำ (คีย์ไม่มีเวลาปัจจุบัน)
+ * job `daily_field_allowance` ข้ามวันที่อยู่ในงวดบัญชีที่ปิดแล้ว (ไม่ settle ข้ามงวด) ⇒ แจ้งการเงิน + บัญชี
+ * (มติ PO 05/10/2569 U25 · U50) พร้อมยอดที่คำนวณไว้ (`planFieldDayExpenses()` สูตรเดียวกับวันปกติ)
+ * · การเงิน: ลิงก์ไปแท็บปรับปรุง ที่มีปุ่ม "สร้างรายการเบิกย้อนหลัง" (ลงวันที่ในงวดที่เปิดอยู่ → สายอนุมัติปกติ)
+ * · บัญชี: รับทราบว่ารายการจะลงงวดที่เปิดอยู่ ไม่แก้งวดที่ปิด
+ * · 1 พนักงาน × 1 วัน = 1 การแจ้งเตือนต่อผู้รับ — job รันซ้ำทุกคืนก็ไม่แจ้งซ้ำ (คีย์ไม่มีเวลาปัจจุบัน)
  */
-export function fieldAllowancePeriodLockedMessage(input: {
-  agentId: string
-  agentName: string
-  fieldDate: Date
-  caseCount: number
-  fuelSatang: number
-  allowanceSatang: number
-}): NotificationMessage {
+export function fieldAllowancePeriodLockedMessage(
+  input: {
+    agentId: string
+    agentName: string
+    fieldDate: Date
+    caseCount: number
+    fuelSatang: number
+    allowanceSatang: number
+  },
+  audience: 'finance' | 'accounting' = 'finance',
+): NotificationMessage {
   const total = input.fuelSatang + input.allowanceSatang
+  const summary =
+    `วันที่ ${fmtDate(input.fieldDate)} คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — ${input.agentName} ${input.caseCount} เคส ` +
+    `ค่าน้ำมัน ${fmtSatangSymbol(input.fuelSatang)} เบี้ยเลี้ยง ${fmtSatangSymbol(input.allowanceSatang)} ` +
+    `รวม ${fmtSatangSymbol(total)}`
   return {
     eventCode: 'field_allowance.period_locked',
     title: 'ค่าน้ำมัน/เบี้ยเลี้ยงรายวันเข้างวดที่ปิดแล้วไม่ได้',
     body:
-      `วันที่ ${fmtDate(input.fieldDate)} คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — ${input.agentName} ${input.caseCount} เคส ` +
-      `ค่าน้ำมัน ${fmtSatangSymbol(input.fuelSatang)} เบี้ยเลี้ยง ${fmtSatangSymbol(input.allowanceSatang)} ` +
-      `รวม ${fmtSatangSymbol(total)} กรุณาทำรายการปรับปรุง`,
-    linkPath: '/finance?tab=adjustment',
+      audience === 'finance'
+        ? `${summary} — กด "สร้างรายการเบิกย้อนหลัง" เพื่อลงรายการในงวดที่เปิดอยู่แล้วส่งเข้าสายอนุมัติ`
+        : `${summary} — ฝ่ายการเงินจะสร้างรายการเบิกย้อนหลังลงในงวดที่เปิดอยู่ (งวดที่ปิดไม่ถูกแก้)`,
+    linkPath: audience === 'finance' ? '/finance?tab=adjustment' : '/accounting?tab=closing',
     dedupeKey: `field-day-locked-${input.agentId}-${input.fieldDate.toISOString().slice(0, 10)}`,
   }
 }
@@ -545,6 +555,8 @@ export function whtFilingDueMessage(input: {
   summaryId: string
   periodLabel: string
   filingDueDate: Date
+  /** วิธียื่นที่ใช้คิดกำหนด (มติ PO U45) — ไม่ส่ง = ออนไลน์ */
+  filingMethod?: WhtFilingMethod
   daysLeft: number
 }): NotificationMessage {
   const countdown =
@@ -556,7 +568,7 @@ export function whtFilingDueMessage(input: {
   return {
     eventCode: 'wht.filing_due_reminder',
     title: 'ใกล้ครบกำหนดยื่น ภ.ง.ด.3/53',
-    body: `งวด ${input.periodLabel} · กำหนดนำส่ง ${fmtDate(input.filingDueDate)} (${countdown})`,
+    body: `งวด ${input.periodLabel} · กำหนดนำส่ง ${fmtDate(input.filingDueDate)} ${WHT_FILING_METHOD_SUFFIX[input.filingMethod ?? 'online']} (${countdown})`,
     linkPath: '/accounting?tab=wht',
     // job รันทุกวัน ⇒ คีย์ = งวด + ขั้นของการเตือน (ดู `whtFilingReminderStage()`)
     // รันซ้ำวันเดียวกันได้แถวเดียว · วันถัดไปได้ใบใหม่จนกว่าจะยื่น (`33` §6.2/§8)

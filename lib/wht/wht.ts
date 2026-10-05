@@ -15,7 +15,9 @@ import {
   INCOME_TYPE_TEXT_40_1,
   INCOME_TYPE_TEXT_40_2,
   usesPerPayeeWhtRate,
+  WHT_FILING_METHOD_SUFFIX,
   type WhtCertificateMode,
+  type WhtFilingMethod,
   type WhtIncomeCategory,
 } from '@/lib/settings/wht-policy'
 import { WhtError } from '@/lib/wht/errors'
@@ -267,14 +269,32 @@ export function nextCertificateSequence(existingNumbers: readonly string[], pref
 // ── กำหนดเวลานำส่ง (`33` §6.2/§7.2) ─────────────────────────────────────────
 
 /**
- * **วันที่ 15 ของเดือนถัดไป** — default ของ `33` §17 (ยื่นทางอินเทอร์เน็ต ไม่ใช่วันที่ 7 ของกระดาษ)
- * คืนเป็น date-only UTC เหมือนคอลัมน์ `DATE` (Rule 01 — วันตามปฏิทินไทย)
+ * วันกำหนดยื่นตาม**วิธียื่น** (มติ PO 05/10/2569 UAT U45 · ประมวลรัษฎากร ม.59): ออนไลน์ (e-Filing) = วันที่ **15**
+ * ของเดือนถัดไป · แบบกระดาษ = วันที่ **7** · ค่าเริ่มต้น = ออนไลน์ (ค่าตั้งใน `wht_policy_history.filing_method`)
+ * **ไม่เลื่อนตามวันหยุดราชการ** (มติ U45 — ไม่คำนวณ) · คืนเป็น date-only UTC เหมือนคอลัมน์ `DATE` (Rule 01)
  */
-export const FILING_DUE_DAY_OF_NEXT_MONTH = 15
+export const FILING_DUE_DAY_BY_METHOD: Readonly<Record<WhtFilingMethod, number>> = { online: 15, paper: 7 }
 
-export function filingDueDateOf(period: PeriodKey): Date {
+/** @deprecated ใช้ `FILING_DUE_DAY_BY_METHOD.online` — คงไว้ให้ผู้เรียกเดิม */
+export const FILING_DUE_DAY_OF_NEXT_MONTH = FILING_DUE_DAY_BY_METHOD.online
+
+export function filingDueDateOf(period: PeriodKey, method: WhtFilingMethod = 'online'): Date {
   const next = nextPeriodKey(period)
-  return new Date(Date.UTC(periodYearCe(next), next.month - 1, FILING_DUE_DAY_OF_NEXT_MONTH))
+  return new Date(Date.UTC(periodYearCe(next), next.month - 1, FILING_DUE_DAY_BY_METHOD[method]))
+}
+
+/**
+ * วันที่ใช้ resolve ค่าตั้ง "วิธียื่น" ของงวด = **วันที่ 1 ของเดือนที่ยื่น** (เดือนถัดจากงวด) — ค่าตั้งที่มีผล
+ * ก่อนหรือในวันนั้นชนะ (ค่าตั้ง effective-dated ตั้งย้อนหลังไม่ได้ ⇒ งวดที่เดือนยื่นเริ่มไปแล้วไม่ถูกเปลี่ยนวิธีย้อนหลัง)
+ */
+export function filingMethodResolveDate(period: PeriodKey): Date {
+  const next = nextPeriodKey(period)
+  return new Date(Date.UTC(periodYearCe(next), next.month - 1, 1))
+}
+
+/** ป้ายวันกำหนดยื่นพร้อมวิธี — "15/11/2569 (ยื่นออนไลน์)" (วันที่ พ.ศ. ผ่าน `fmtDate`) */
+export function filingDueLabel(dueDate: Date | string, method: WhtFilingMethod): string {
+  return `${fmtDate(dueDate)} ${WHT_FILING_METHOD_SUFFIX[method]}`
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -302,7 +322,7 @@ export interface FilingWarning {
  * (ยื่นแล้ว หรือยังไม่เลยกำหนด)
  */
 export function filingOverdueWarning(
-  summary: { periodLabel: string; status: WhtFilingStatus; filingDueDate: Date },
+  summary: { periodLabel: string; status: WhtFilingStatus; filingDueDate: Date; filingMethod?: WhtFilingMethod },
   now: Date = new Date(),
 ): FilingWarning | null {
   if (!isFilingOverdue(summary.status, summary.filingDueDate, now)) return null
@@ -311,7 +331,7 @@ export function filingOverdueWarning(
     code: 'FILING_OVERDUE_WARNING',
     title: `เลยกำหนดนำส่ง ภ.ง.ด.3/53 ของรอบ ${summary.periodLabel} แล้ว`,
     message:
-      `กำหนดนำส่งคือ ${fmtDate(summary.filingDueDate)} (เลยมา ${overdueDays} วัน) — ` +
+      `กำหนดนำส่งคือ ${filingDueLabel(summary.filingDueDate, summary.filingMethod ?? 'online')} (เลยมา ${overdueDays} วัน) — ` +
       'ยื่นล่าช้ามีเบี้ยปรับ/เงินเพิ่มตามประมวลรัษฎากร ให้ประสานสำนักงานบัญชีทันที',
   }
 }

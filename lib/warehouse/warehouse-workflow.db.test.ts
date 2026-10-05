@@ -1335,6 +1335,8 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
     const { fmtDate } = await import('@/lib/format/datetime')
     const ROLE_FINANCE = '00000000-0000-4000-8000-0000000213b0'
     const FINANCE_ID = '00000000-0000-4000-8000-0000000213b1'
+    const ROLE_ACCOUNTING = '00000000-0000-4000-8000-0000000213b2'
+    const ACCOUNTING_ID = '00000000-0000-4000-8000-0000000213b3'
     const today = todayIso()
     const [year = '0', month = '0'] = today.split('-')
     const tx = db()
@@ -1355,6 +1357,23 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
       INSERT INTO role_capabilities (role_id, capability_id, access_level)
       SELECT '${ROLE_FINANCE}', id, 'manage' FROM capabilities WHERE code = 'create_adjustment' ON CONFLICT DO NOTHING
     `)
+    // มติ PO U50 — บัญชี (`manage_accounting_period`) ได้รับแจ้งด้วย
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE_ACCOUNTING}', '${ORG_ID}', 'บัญชี 2.13', 'system', false) ON CONFLICT (id) DO NOTHING
+    `)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+      VALUES ('${ACCOUNTING_ID}', '${ORG_ID}', '${ROLE_ACCOUNTING}', 'accounting213@test.local', 'บัญชี 2.13', 'active')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    await tx.$executeRawUnsafe(
+      `INSERT INTO capabilities (code, label, module) VALUES ('manage_accounting_period', 'จัดการรอบบัญชี', 'accounting') ON CONFLICT (code) DO NOTHING`,
+    )
+    await tx.$executeRawUnsafe(`
+      INSERT INTO role_capabilities (role_id, capability_id, access_level)
+      SELECT '${ROLE_ACCOUNTING}', id, 'manage' FROM capabilities WHERE code = 'manage_accounting_period' ON CONFLICT DO NOTHING
+    `)
     await tx.$executeRawUnsafe(`
       INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
       VALUES ('${ORG_ID}', 'งวดทดสอบ U25', ${Number(year) + 543}, ${Number(month)}, 'locked', '${FINANCE_ID}')
@@ -1364,31 +1383,208 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
       const c2 = await fieldWork()
 
       const first = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: today })
-      expect(first).toMatchObject({ settled: 0, periodLocked: 1, periodLockedNotified: 1, expensesCreated: 0 })
+      expect(first).toMatchObject({ settled: 0, periodLocked: 1, periodLockedNotified: 2, expensesCreated: 0 })
       expect(await db().fieldDaySettlement.count({ where: { organizationId: ORG_ID } })).toBe(0)
       expect(await dailyRows([c1, c2])).toEqual([])
 
       const notices = await db().notification.findMany({
         where: { organizationId: ORG_ID, eventCode: 'field_allowance.period_locked' },
       })
-      // ผู้รับ = ผู้ถือสิทธิ์สร้างรายการปรับปรุงเท่านั้น (พนักงาน/ผู้จัดการ/ธุรการคลังไม่ได้)
-      expect(notices.map((row) => row.userId)).toEqual([FINANCE_ID])
+      // ผู้รับ = การเงิน (สร้างรายการปรับปรุง) + บัญชี (มติ PO U50) — พนักงาน/ผู้จัดการ/ธุรการคลังไม่ได้
+      expect(notices.map((row) => row.userId).sort()).toEqual([FINANCE_ID, ACCOUNTING_ID].sort())
+      const toFinance = notices.find((row) => row.userId === FINANCE_ID)
+      const toAccounting = notices.find((row) => row.userId === ACCOUNTING_ID)
       // แผน DAILY_FLAT: น้ำมัน 300 + เบี้ยเลี้ยง 200 ต่อวัน (กระจาย 2 เคส แต่ยอดวันเดียวกัน)
-      expect(notices[0]?.body).toBe(
+      expect(toFinance?.body).toBe(
         `วันที่ ${fmtDate(new Date(`${today}T00:00:00.000Z`))} คำนวณเข้างวดไม่ได้เพราะงวดบัญชีปิดแล้ว — พนักงาน 2.13 2 เคส ` +
-          'ค่าน้ำมัน ฿300.00 เบี้ยเลี้ยง ฿200.00 รวม ฿500.00 กรุณาทำรายการปรับปรุง',
+          'ค่าน้ำมัน ฿300.00 เบี้ยเลี้ยง ฿200.00 รวม ฿500.00 — กด "สร้างรายการเบิกย้อนหลัง" เพื่อลงรายการในงวดที่เปิดอยู่แล้วส่งเข้าสายอนุมัติ',
       )
-      expect(notices[0]?.linkPath).toBe('/finance?tab=adjustment')
+      expect(toFinance?.linkPath).toBe('/finance?tab=adjustment')
+      expect(toAccounting?.linkPath).toBe('/accounting?tab=closing')
+
+      // งวดของวันนี้ก็ปิด ⇒ เบิกย้อนหลังลงวันนี้ไม่ได้ (PERIOD_LOCKED_DIRECT_EDIT)
+      const backdated = await import('@/lib/field/backdated-field-day')
+      const finance = sessionUser({
+        id: FINANCE_ID,
+        roleId: ROLE_FINANCE,
+        roleName: 'การเงิน',
+        roleGroup: 'system',
+        teamId: null,
+        capabilities: { create_adjustment: 'manage' },
+        scope: { kind: 'global', teamIds: [], companyId: null, userId: FINANCE_ID },
+      })
+      await expectCode(
+        () =>
+          backdated.createBackdatedFieldDayExpenses(
+            { actor: finance, meta },
+            { agentId: AGENT_ID, fieldDate: new Date(`${today}T00:00:00.000Z`), reason: 'ลงรายการย้อนหลัง' },
+          ),
+        'PERIOD_LOCKED_DIRECT_EDIT',
+      )
 
       // รันซ้ำ (cron คืนถัดไป) — ยังข้ามวันเดิม แต่ไม่แจ้งซ้ำ
       const again = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: today })
       expect(again).toMatchObject({ settled: 0, periodLocked: 1, periodLockedNotified: 0 })
       expect(
         await db().notification.count({ where: { organizationId: ORG_ID, eventCode: 'field_allowance.period_locked' } }),
-      ).toBe(1)
+      ).toBe(2)
     } finally {
       await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
       await tx.$executeRawUnsafe(`DELETE FROM role_capabilities WHERE role_id = '${ROLE_FINANCE}'`)
+      await tx.$executeRawUnsafe(`DELETE FROM role_capabilities WHERE role_id = '${ROLE_ACCOUNTING}'`)
+    }
+  })
+
+  /**
+   * มติ PO 05/10/2569 U50 — "สร้างรายการเบิกย้อนหลัง": วันลงพื้นที่อยู่งวดปิด (เดือนก่อน) · งวดปัจจุบันเปิด
+   * สร้างแถวรายวันลงวันที่วันนี้ (อ้างวันลงพื้นที่เดิม) + เหตุผล + audit → คิวอนุมัติ → ปลดเกตรายได้ ·
+   * กดซ้ำ/กดพร้อมกันไม่สร้างซ้ำ · job รอบถัดไปไม่ settle ซ้ำ · สิทธิ์/วันที่ไม่ถูกต้องถูกปฏิเสธ
+   */
+  it('U50 — สร้างรายการเบิกย้อนหลัง: ลงงวดที่เปิด · idempotent + race · ปลดเกตรายได้ · job ไม่ซ้ำ · สิทธิ์', async () => {
+    const job = await import('@/lib/field/daily-allowance-job')
+    const backdated = await import('@/lib/field/backdated-field-day')
+    const revenue = await import('@/lib/warehouse/revenue-service')
+    const { prisma } = await import('@/lib/prisma')
+    type RevenueTx = Parameters<typeof revenue.tryCreateRevenue>[0]
+    const { fmtDate } = await import('@/lib/format/datetime')
+    const fmtDateOf = (iso: string): string => fmtDate(new Date(`${iso}T00:00:00.000Z`))
+    const ROLE_FINANCE = '00000000-0000-4000-8000-0000000213c0'
+    const FINANCE_ID = '00000000-0000-4000-8000-0000000213c1'
+    const tx = db()
+    const today = todayIso()
+    // วันลงพื้นที่ = 40 วันก่อน (เดือนก่อนหน้าเสมอ) · งวดของเดือนนั้นปิด · งวดเดือนนี้ไม่มี (= เปิด)
+    const past = new Date(Date.now() + 7 * 3_600_000 - 40 * 86_400_000).toISOString().slice(0, 10)
+    const past2 = new Date(Date.now() + 7 * 3_600_000 - 41 * 86_400_000).toISOString().slice(0, 10)
+    const [pastYear = '0', pastMonth = '0'] = past.split('-')
+
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE_FINANCE}', '${ORG_ID}', 'การเงิน U50', 'system', false) ON CONFLICT (id) DO NOTHING
+    `)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+      VALUES ('${FINANCE_ID}', '${ORG_ID}', '${ROLE_FINANCE}', 'financeu50@test.local', 'การเงิน U50', 'active')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    const finance = sessionUser({
+      id: FINANCE_ID,
+      roleId: ROLE_FINANCE,
+      roleName: 'การเงิน',
+      roleGroup: 'system',
+      teamId: null,
+      capabilities: { create_adjustment: 'manage' },
+      scope: { kind: 'global', teamIds: [], companyId: null, userId: FINANCE_ID },
+    })
+    const fctx = { actor: finance, meta }
+
+    await tx.$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ U50', ${Number(pastYear) + 543}, ${Number(pastMonth)}, 'locked', '${FINANCE_ID}')
+    `)
+    try {
+      const c1 = await fieldWork(true)
+      await closeFail(c1)
+      await db().$executeRawUnsafe(
+        `UPDATE check_ins SET checked_in_at = '${past}T03:00:00Z' WHERE case_id = '${c1}'`,
+      )
+      const c2 = await fieldWork()
+      await db().$executeRawUnsafe(
+        `UPDATE check_ins SET checked_in_at = '${past2}T03:00:00Z' WHERE case_id = '${c2}'`,
+      )
+
+      // job ข้ามทั้งสองวัน (งวดปิด) · เกตรายได้ของ c1 ยังติด field_days_not_settled
+      const first = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID })
+      expect(first).toMatchObject({ settled: 0, periodLocked: 2 })
+      const blocked = await prisma.$transaction((t) =>
+        revenue.tryCreateRevenue(t as unknown as RevenueTx, { organizationId: ORG_ID, caseIds: [c1], actorId: FINANCE_ID }),
+      )
+      expect(blocked.skipped).toEqual([{ caseId: c1, reason: 'field_days_not_settled' }])
+
+      // รายการรอเบิกย้อนหลังพร้อมยอด (สูตรเดียวกับ job)
+      const locked = await backdated.listLockedFieldDays(finance)
+      expect(locked.map((row) => row.fieldDate).sort()).toEqual([past2, past].sort())
+      expect(locked.find((row) => row.fieldDate === past)).toMatchObject({
+        agentId: AGENT_ID,
+        caseCount: 1,
+        fuelSatang: 30_000,
+        allowanceSatang: 20_000,
+        totalSatang: 50_000,
+      })
+
+      // สิทธิ์: พนักงาน (ไม่มี create_adjustment) ⇒ PERMISSION_DENIED · ไม่มีอะไรถูกสร้าง
+      const input = { agentId: AGENT_ID, fieldDate: new Date(`${past}T00:00:00.000Z`), reason: 'งวดปิดก่อนคำนวณรายวัน' }
+      await expectCode(() => backdated.createBackdatedFieldDayExpenses({ actor: agent, meta }, input), 'PERMISSION_DENIED')
+      // วันที่ไม่มีเช็คอิน ⇒ FIELD_DAY_NOT_FOUND · งวดยังไม่ปิด (วันนี้) ⇒ PERIOD_INVALID_STATUS
+      await expectCode(
+        () =>
+          backdated.createBackdatedFieldDayExpenses(fctx, {
+            ...input,
+            fieldDate: new Date(`${new Date(Date.now() - 50 * 86_400_000).toISOString().slice(0, 10)}T00:00:00.000Z`),
+          }),
+        'FIELD_DAY_NOT_FOUND',
+      )
+      const c3 = await fieldWork()
+      await expectCode(
+        () => backdated.createBackdatedFieldDayExpenses(fctx, { ...input, fieldDate: new Date(`${today}T00:00:00.000Z`) }),
+        'PERIOD_INVALID_STATUS',
+      )
+      expect(await dailyRows([c1, c2, c3])).toEqual([])
+
+      // สร้าง: แถวรายวันลงวันที่วันนี้ · หมายเหตุอ้างวันเดิม · คิวอนุมัติ · audit มีผู้กด + เหตุผล
+      const created = await backdated.createBackdatedFieldDayExpenses(fctx, input)
+      expect(created.created).toBe(true)
+      expect(created.expenseDate).toBe(today)
+      const rows = await dailyRows([c1])
+      expect(rows.map((row) => [row.expenseType, row.grossSatang])).toEqual([
+        ['fuel', 30_000],
+        ['allowance', 20_000],
+      ])
+      expect(rows.every((row) => row.expenseDate.toISOString().slice(0, 10) === today)).toBe(true)
+      expect(rows.every((row) => row.status === 'pending_approval' && row.createdBy === FINANCE_ID)).toBe(true)
+      expect(rows[0]?.revisionNote).toContain(fmtDateOf(past))
+      const settlement = await db().fieldDaySettlement.findUniqueOrThrow({ where: { id: created.settlementId ?? '' } })
+      expect(settlement.fieldDate.toISOString().slice(0, 10)).toBe(past)
+      expect(settlement.createdBy).toBe(FINANCE_ID)
+      const audit = await db().auditLog.findFirst({
+        where: { targetType: 'field_day_settlements', targetId: settlement.id },
+      })
+      expect(audit?.actorId).toBe(FINANCE_ID)
+      expect(audit?.reason).toContain('งวดปิดก่อนคำนวณรายวัน')
+      expect(audit?.reason).toContain(fmtDateOf(past))
+
+      // กดซ้ำ ⇒ ไม่สร้างซ้ำ (ได้ชุดเดิม)
+      const again = await backdated.createBackdatedFieldDayExpenses(fctx, input)
+      expect(again).toMatchObject({ created: false, settlementId: created.settlementId })
+      expect(await dailyRows([c1])).toHaveLength(2)
+
+      // สองคนกดพร้อมกัน (วันที่สอง) ⇒ สร้างได้ชุดเดียว
+      const input2 = { ...input, fieldDate: new Date(`${past2}T00:00:00.000Z`) }
+      const race = await Promise.all([
+        backdated.createBackdatedFieldDayExpenses(fctx, input2),
+        backdated.createBackdatedFieldDayExpenses(fctx, input2),
+      ])
+      expect(race.filter((result) => result.created)).toHaveLength(1)
+      expect(new Set(race.map((result) => result.settlementId)).size).toBe(1)
+      expect(await dailyRows([c2])).toHaveLength(2)
+      expect(await db().fieldDaySettlement.count({ where: { organizationId: ORG_ID, agentId: AGENT_ID } })).toBe(2)
+
+      // job รอบถัดไป: ไม่ settle ซ้ำ ไม่แจ้งซ้ำ · รายการรอเบิกย้อนหลังว่าง
+      const next = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID })
+      expect(next).toMatchObject({ settled: 0, periodLocked: 0, expensesCreated: 0 })
+      expect(await backdated.listLockedFieldDays(finance)).toEqual([])
+
+      // เกตรายได้ปลดแล้ว — เหลือแค่รออนุมัติ · อนุมัติครบ ⇒ รายได้เกิด
+      const waiting = await prisma.$transaction((t) =>
+        revenue.tryCreateRevenue(t as unknown as RevenueTx, { organizationId: ORG_ID, caseIds: [c1], actorId: FINANCE_ID }),
+      )
+      expect(waiting.skipped).toEqual([{ caseId: c1, reason: 'expense_not_approved' }])
+      await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${c1}'`)
+      const earned = await prisma.$transaction((t) =>
+        revenue.tryCreateRevenue(t as unknown as RevenueTx, { organizationId: ORG_ID, caseIds: [c1], actorId: FINANCE_ID }),
+      )
+      expect(earned.revenueIdsCreated).toHaveLength(1)
+    } finally {
+      await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
     }
   })
 })

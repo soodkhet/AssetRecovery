@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   REPORT_EXPORT_SYNC_ROW_LIMIT,
+  reconciliationSheetRows,
+  reconciliationTextLines,
   reportExportFileName,
   reportSheetHeaderBlock,
   reportSheetName,
@@ -27,6 +29,7 @@ const PAYLOAD: ReportPayload = {
   kpis: [],
   totalRow: { company: 'รวม', revenue: 1_234_56, cases: 12, successRate: null, lastDueDate: null },
   note: null,
+  reconciliation: null,
   cache: {
     mode: 'daily',
     computedAt: '2026-08-15T03:00:00.000Z',
@@ -138,5 +141,35 @@ describe('การจัดรูปค่าในเซลล์ (Rule 01)', 
     expect(formatCellForSheet(0.4, 'days')).toBe(0.4)
     // จำนวนนับยังเป็นจำนวนเต็มเหมือนเดิม
     expect(formatCellText(12, 'number')).toBe('12')
+  })
+})
+
+describe('U44 — บรรทัดกระทบยอดใต้รายงาน (จอ/PDF/Excel ชุดเดียวกัน)', () => {
+  const reconciliation = {
+    title: 'กระทบยอดกับใบกำกับภาษี (ยอดก่อน VAT)',
+    lines: [
+      { key: 'invoiced', label: 'ยอดตามใบกำกับภาษี', sign: '+' as const, amountSatang: 373_000 },
+      { key: 'awaitingCredit', label: 'หัก Adjustment ลดยอดที่รอใบลดหนี้', sign: '-' as const, amountSatang: 10_000 },
+      { key: 'reportTotal', label: 'ยอดตามรายงาน', sign: '=' as const, amountSatang: 363_000 },
+    ],
+    differenceSatang: 0,
+    balanced: true,
+    note: 'หมายเหตุ',
+  }
+
+  it('ไม่มีบรรทัดกระทบยอด ⇒ ว่าง', () => {
+    expect(reconciliationTextLines({ reconciliation: null })).toEqual([])
+    expect(reconciliationSheetRows({ reconciliation: null })).toEqual([])
+  })
+
+  it('ข้อความเงินเป็นบาท · บรรทัดผลลัพธ์ขึ้นต้น "=" และเน้น · Excel เป็นตัวเลขบาท', () => {
+    const lines = reconciliationTextLines({ reconciliation })
+    expect(lines[0]).toEqual({ label: 'ยอดตามใบกำกับภาษี', amount: '3,730.00', emphasis: false })
+    expect(lines[2]).toEqual({ label: '= ยอดตามรายงาน', amount: '3,630.00', emphasis: true })
+    const rows = reconciliationSheetRows({ reconciliation })
+    expect(rows[0]).toEqual([])
+    expect(rows[1]).toEqual(['กระทบยอดกับใบกำกับภาษี (ยอดก่อน VAT)'])
+    expect(rows[2]).toEqual(['ยอดตามใบกำกับภาษี', 3730])
+    expect(rows.at(-1)).toEqual(['หมายเหตุ'])
   })
 })

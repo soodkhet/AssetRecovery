@@ -254,6 +254,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        filingMethod: 'online',
       },
       NOW,
     )
@@ -290,6 +291,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        filingMethod: 'online',
       },
       NOW,
     )
@@ -325,6 +327,7 @@ suite('ประเภทเงินได้ 40(2) (U5/U7)', () => {
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        filingMethod: 'online',
       },
       NOW,
     )
@@ -421,6 +424,7 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        filingMethod: 'online',
       },
       NOW,
     )
@@ -447,6 +451,7 @@ suite('40(2) อัตรา 0% ออก 50 ทวิ ยอดภาษี 0 (
         issueZeroRate402Certificate,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        filingMethod: 'online',
       },
       NOW,
     )
@@ -564,6 +569,7 @@ suite('U33 — ประเภทเงินได้ต่อประเภ�
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory,
         outsourceIncomeCategory,
+        filingMethod: 'online',
       },
       NOW,
     )

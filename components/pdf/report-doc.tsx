@@ -3,7 +3,7 @@ import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import { fmtDateTime } from '@/lib/format/datetime'
-import { reportTextRows } from '@/lib/reports/export'
+import { reconciliationTextLines, reportTextRows } from '@/lib/reports/export'
 import { NUMERIC_COLUMN_TYPES, formatCellText, type ReportPayload } from '@/lib/reports/payload'
 
 /**
@@ -97,6 +97,23 @@ export function ReportDocument({
 
         {rows.length === 0 && <Text style={docStyles.noteText}>ไม่มีข้อมูลในช่วงเวลาที่เลือก</Text>}
         {payload.note !== null && <Text style={docStyles.noteText}>{payload.note}</Text>}
+
+        {payload.reconciliation !== null && (
+          <View style={{ marginTop: 8 }} wrap={false}>
+            <Text style={docStyles.tdBold}>{payload.reconciliation.title}</Text>
+            {reconciliationTextLines(payload).map((line) => (
+              <View key={line.label} style={docStyles.tableRow}>
+                <Text style={[line.emphasis ? docStyles.tdBold : docStyles.td, { flex: 3 }]}>{line.label}</Text>
+                <Text style={[line.emphasis ? docStyles.tdBold : docStyles.td, { flex: 1 }, docStyles.amount]}>
+                  {line.amount}
+                </Text>
+              </View>
+            ))}
+            {payload.reconciliation.note !== undefined && (
+              <Text style={docStyles.noteText}>{payload.reconciliation.note}</Text>
+            )}
+          </View>
+        )}
 
         <DocFooter left={`${payload.report.code} · ${payload.range.label}`} />
       </Page>

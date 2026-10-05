@@ -8,6 +8,9 @@ import {
   DEFAULT_INCOME_TYPE,
   EMPTY_FIELD_TEXT,
   filingDueDateOf,
+  filingDueLabel,
+  filingMethodResolveDate,
+  FILING_DUE_DAY_BY_METHOD,
   filingFormOf,
   filingOverdueWarning,
   incomeTypeOf,
@@ -89,6 +92,28 @@ describe('กำหนดเวลานำส่ง (`33` §6.2/§7.2 · §16)'
   it('due date = วันที่ 15 ของเดือนถัดไป (ยื่นอินเทอร์เน็ต) — ข้ามปีถูกต้อง', () => {
     expect(filingDueDateOf({ yearBe: 2569, month: 6 }).toISOString()).toBe('2026-07-15T00:00:00.000Z')
     expect(filingDueDateOf({ yearBe: 2569, month: 12 }).toISOString()).toBe('2027-01-15T00:00:00.000Z')
+  })
+
+  it('U45 — ยื่นแบบกระดาษ = วันที่ 7 ของเดือนถัดไป · ป้ายระบุวิธี · resolve ค่าตั้ง ณ วันที่ 1 ของเดือนที่ยื่น', () => {
+    expect(filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper').toISOString()).toBe('2026-11-07T00:00:00.000Z')
+    expect(filingDueDateOf({ yearBe: 2569, month: 10 }, 'online').toISOString()).toBe('2026-11-15T00:00:00.000Z')
+    expect(filingDueDateOf({ yearBe: 2569, month: 12 }, 'paper').toISOString()).toBe('2027-01-07T00:00:00.000Z')
+    expect(FILING_DUE_DAY_BY_METHOD).toEqual({ online: 15, paper: 7 })
+    expect(filingMethodResolveDate({ yearBe: 2569, month: 10 }).toISOString()).toBe('2026-11-01T00:00:00.000Z')
+    expect(filingDueLabel(filingDueDateOf({ yearBe: 2569, month: 10 }), 'online')).toBe('15/11/2569 (ยื่นออนไลน์)')
+    expect(filingDueLabel(filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper'), 'paper')).toBe('07/11/2569 (ยื่นแบบกระดาษ)')
+    // วันกำหนดตกวันหยุดไม่เลื่อน (มติ U45 — ไม่คำนวณวันหยุดราชการ): 07/11/2569 เป็นวันเสาร์ ยังคง 7
+    expect(filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper').getUTCDay()).toBe(6)
+    const warning = filingOverdueWarning(
+      {
+        periodLabel: 'ตุลาคม 2569',
+        status: 'pending',
+        filingDueDate: filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper'),
+        filingMethod: 'paper',
+      },
+      new Date('2026-11-10T03:00:00Z'),
+    )
+    expect(warning?.message).toContain('07/11/2569 (ยื่นแบบกระดาษ)')
   })
 
   it('นับวันคงเหลือตามปฏิทินไทย — 13 วันก่อนกำหนด/เลยกำหนดติดลบ', () => {
