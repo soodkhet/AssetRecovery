@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { Button, Card, InlineAlert, PageHeader, Skeleton, useToast } from '@/components/ui'
 import { DateRangePicker, isReportRangeReady, reportRangeQuery, type ReportRangeValue } from '@/components/reports/date-range-picker'
 import { KpiCardRow } from '@/components/reports/kpi-card'
+import { ReconciliationLines } from '@/components/reports/reconciliation-lines'
 import { ReportTable } from '@/components/reports/report-table'
 import { useReportData } from '@/components/reports/use-report-data'
 import { readEnvelope } from '@/lib/api/envelope'
@@ -198,6 +199,9 @@ export function ReportView({
         }
       />
 
+      {payload?.reconciliation !== undefined && payload.reconciliation !== null && !loading && (
+        <ReconciliationLines reconciliation={payload.reconciliation} />
+      )}
       {payload?.note !== undefined && payload.note !== null && (
         <p className="text-xs text-slate-500">{payload.note}</p>
       )}

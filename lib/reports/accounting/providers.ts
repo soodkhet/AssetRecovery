@@ -73,6 +73,7 @@ const whtSummaryProvider: ReportProvider = async (ctx: ReportContext): Promise<R
       pnd53Satang: true,
       pnd1Satang: true,
       status: true,
+      filingMethod: true,
       period: { select: { yearBe: true, month: true } },
     },
   })
@@ -87,6 +88,7 @@ const whtSummaryProvider: ReportProvider = async (ctx: ReportContext): Promise<R
     pnd53Satang: row.pnd53Satang,
     pnd1Satang: row.pnd1Satang,
     status: row.status,
+    filingMethod: row.filingMethod,
   }))
 
   return buildWhtSummaryReport({ filings, asOf: ctx.now })

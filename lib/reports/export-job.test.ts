@@ -49,6 +49,7 @@ const payload: ReportPayload = {
   kpis: [],
   totalRow: null,
   note: null,
+  reconciliation: null,
   cache: {
     mode: 'realtime',
     computedAt: '2026-08-16T00:00:00.000Z',

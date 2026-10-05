@@ -1,5 +1,6 @@
 import { sumSatang } from '@/lib/finance/satang'
 import type { WhtFilingStatus } from '@/lib/generated/prisma/enums'
+import { WHT_FILING_METHOD_SUFFIX, type WhtFilingMethod } from '@/lib/settings/wht-policy'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { toIsoDateOnly } from '@/lib/reports/period'
 import { comparePeriodKeys } from '@/lib/reports/accounting/period-window'
@@ -30,6 +31,8 @@ export interface WhtFilingSummaryEntry {
   /** ภ.ง.ด.1 — เงินได้ 40(2) (มติ PO 05/10/2569 UAT U7) */
   pnd1Satang: number
   status: WhtFilingStatus
+  /** วิธียื่นที่ใช้คิดกำหนด (มติ PO U45) — ไม่ระบุ = ออนไลน์ */
+  filingMethod?: WhtFilingMethod
 }
 
 const COLUMNS: readonly ReportColumn[] = [
@@ -39,6 +42,7 @@ const COLUMNS: readonly ReportColumn[] = [
   { key: 'pnd1Satang', header: 'ภ.ง.ด.1', type: 'money' },
   { key: 'totalSatang', header: 'รวม WHT', type: 'money' },
   { key: 'filingDueDate', header: 'กำหนดยื่น', type: 'date' },
+  { key: 'filingMethodLabel', header: 'วิธียื่น', type: 'text', width: 16 },
   { key: 'statusLabel', header: 'สถานะ', type: 'text', width: 20 },
 ]
 
@@ -66,6 +70,7 @@ export function buildWhtSummaryReport(input: {
     pnd1Satang: entry.pnd1Satang,
     totalSatang: entry.pnd3Satang + entry.pnd53Satang + entry.pnd1Satang,
     filingDueDate: toIsoDateOnly(entry.filingDueDate),
+    filingMethodLabel: WHT_FILING_METHOD_SUFFIX[entry.filingMethod ?? 'online'],
     statusLabel: filingStatusLabel(entry, asOf),
   }))
 
@@ -109,6 +114,7 @@ export function buildWhtSummaryReport(input: {
             pnd1Satang: pnd1Total,
             totalSatang: grandTotal,
             filingDueDate: null,
+            filingMethodLabel: null,
             statusLabel: null,
           },
     note:

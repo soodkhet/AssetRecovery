@@ -31,7 +31,11 @@ export const WHT_INCOME_CATEGORIES = ['sec_40_8', 'sec_40_2', 'sec_40_1'] as con
 /** ตัวเลือกประเภทเงินได้ต่อประเภททีมในโหมด `by_team_side` (มติ PO 05/10/2569 UAT U33) — เรียงตามมาตรา */
 export const WHT_TEAM_SIDE_INCOME_CATEGORIES = ['sec_40_1', 'sec_40_2', 'sec_40_8'] as const
 
+/** ค่าตรง enum `wht_filing_method` (มติ PO 05/10/2569 UAT U45) */
+export const WHT_FILING_METHODS = ['online', 'paper'] as const
+
 export type WhtCertificateMode = (typeof WHT_CERTIFICATE_MODES)[number]
+export type WhtFilingMethod = (typeof WHT_FILING_METHODS)[number]
 export type WhtIncomeTypeMode = (typeof WHT_INCOME_TYPE_MODES)[number]
 export type WhtIncomeCategory = (typeof WHT_INCOME_CATEGORIES)[number]
 
@@ -59,14 +63,24 @@ export interface WhtPolicyValues {
   outsourceIncomeCategory: WhtIncomeCategory
 }
 
+/**
+ * ชุดค่าตั้งเต็มบนหน้าตั้งค่า = ค่าที่รอบจ่าย snapshot (`WhtPolicyValues`) + **วิธียื่น ภ.ง.ด.** (U45)
+ * วิธียื่นไม่ snapshot ลงรอบจ่าย — มีผลกับวันกำหนดยื่นของสรุปรอบนำส่ง (`wht_filing_summaries`) เท่านั้น
+ */
+export interface WhtPolicySettings extends WhtPolicyValues {
+  /** ออนไลน์ = กำหนดยื่นวันที่ 15 ของเดือนถัดไป · กระดาษ = วันที่ 7 (ม.59) — ค่าเริ่มต้นออนไลน์ */
+  filingMethod: WhtFilingMethod
+}
+
 /** ค่าเริ่มต้นตามมติ (ใช้เมื่อองค์กรยังไม่เคยตั้งค่า — ไม่มีแถวใน `wht_policy_history`) */
-export const DEFAULT_WHT_POLICY: WhtPolicyValues = {
+export const DEFAULT_WHT_POLICY: WhtPolicySettings = {
   baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
   certificateMode: 'per_payee_batch',
   incomeTypeMode: 'all_40_8',
   issueZeroRate402Certificate: true,
   inhouseIncomeCategory: 'sec_40_2',
   outsourceIncomeCategory: 'sec_40_8',
+  filingMethod: 'online',
 }
 
 /**
@@ -98,6 +112,18 @@ export const WHT_INCOME_CATEGORY_LABEL: Record<WhtIncomeCategory, string> = {
   sec_40_1: 'มาตรา 40(1)',
   sec_40_2: 'มาตรา 40(2)',
   sec_40_8: 'มาตรา 40(8)',
+}
+
+/** ป้ายตัวเลือกวิธียื่น ภ.ง.ด. บนหน้าตั้งค่า (U45) */
+export const WHT_FILING_METHOD_LABEL: Record<WhtFilingMethod, string> = {
+  online: 'ยื่นออนไลน์ (กำหนดยื่นวันที่ 15 ของเดือนถัดไป)',
+  paper: 'ยื่นแบบกระดาษ (กำหนดยื่นวันที่ 7 ของเดือนถัดไป)',
+}
+
+/** ป้ายต่อท้ายวันกำหนดยื่น (U45) — "15/11/2569 (ยื่นออนไลน์)" */
+export const WHT_FILING_METHOD_SUFFIX: Record<WhtFilingMethod, string> = {
+  online: '(ยื่นออนไลน์)',
+  paper: '(ยื่นแบบกระดาษ)',
 }
 
 /** ป้ายของค่าตั้ง U16 บนหน้าตั้งค่า/รายละเอียดรอบจ่าย */
@@ -140,7 +166,7 @@ export function resolveIncomeCategory(
 
 // ── effective-dated (U8 — แบบ `vat_rate_history`) ──────────────────────────
 
-export interface WhtPolicyEntry extends WhtPolicyValues {
+export interface WhtPolicyEntry extends WhtPolicySettings {
   id: string
   /** คอลัมน์ `DATE` (เที่ยงคืน UTC) */
   effectiveFrom: Date
@@ -171,7 +197,7 @@ export function resolveWhtPolicyAt<T extends WhtPolicyEntry>(entries: readonly T
 }
 
 /** ค่าที่มีผล — ไม่มีแถวที่มีผลเลย = ค่าเริ่มต้นตามมติ */
-export function effectiveWhtPolicy(entries: readonly WhtPolicyEntry[], at: Date): WhtPolicyValues {
+export function effectiveWhtPolicy(entries: readonly WhtPolicyEntry[], at: Date): WhtPolicySettings {
   return resolveWhtPolicyAt(entries, at) ?? DEFAULT_WHT_POLICY
 }
 
@@ -186,7 +212,9 @@ export function normalizeBaseExpenseTypes(types: readonly ExpenseType[]): Expens
 }
 
 /** payload ที่ลง audit (`90` §13 — ภาษี ⇒ reason บังคับ) · snake_case ตามคอลัมน์จริง */
-export function toWhtPolicyAuditPayload(values: WhtPolicyValues & { effectiveFrom?: string }): Record<string, unknown> {
+export function toWhtPolicyAuditPayload(
+  values: WhtPolicyValues & { effectiveFrom?: string; filingMethod?: WhtFilingMethod },
+): Record<string, unknown> {
   return {
     ...(values.effectiveFrom === undefined ? {} : { effective_from: values.effectiveFrom }),
     base_expense_types: normalizeBaseExpenseTypes(values.baseExpenseTypes),
@@ -195,6 +223,7 @@ export function toWhtPolicyAuditPayload(values: WhtPolicyValues & { effectiveFro
     issue_zero_rate_40_2_certificate: values.issueZeroRate402Certificate,
     inhouse_income_category: values.inhouseIncomeCategory,
     outsource_income_category: values.outsourceIncomeCategory,
+    ...(values.filingMethod === undefined ? {} : { filing_method: values.filingMethod }),
   }
 }
 

@@ -6,6 +6,8 @@ import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
+import { resolveWhtFilingMethod } from '@/lib/settings/queries/wht-policy'
+import { WHT_FILING_METHOD_SUFFIX } from '@/lib/settings/wht-policy'
 import { WhtError } from '@/lib/wht/errors'
 import type {
   WhtCancelInput,
@@ -25,6 +27,7 @@ import {
   daysUntilFilingDue,
   EMPTY_FIELD_TEXT,
   filingDueDateOf,
+  filingMethodResolveDate,
   filingFormOf,
   filingOverdueWarning,
   groupCertificateSources,
@@ -140,6 +143,7 @@ const FILING_SELECT = {
   pnd3Satang: true,
   pnd53Satang: true,
   pnd1Satang: true,
+  filingMethod: true,
   status: true,
   filedAt: true,
   filedByUser: { select: { fullName: true } },
@@ -153,6 +157,8 @@ function toFilingDto(row: FilingRow, now: Date): WhtFilingSummaryDto {
     periodId: row.periodId,
     periodLabel: row.periodLabel,
     filingDueDate: row.filingDueDate.toISOString(),
+    filingMethod: row.filingMethod,
+    filingMethodLabel: WHT_FILING_METHOD_SUFFIX[row.filingMethod],
     pnd3Satang: row.pnd3Satang,
     pnd53Satang: row.pnd53Satang,
     pnd1Satang: row.pnd1Satang,
@@ -189,7 +195,10 @@ export async function refreshFilingSummary(
     select: { status: true, filingForm: true, whtSatang: true, grossSatang: true },
   })
   const totals = summarizeFilingTotals(certificates)
-  const filingDueDate = filingDueDateOf({ yearBe: input.yearBe, month: input.month })
+  // มติ PO U45 — วันกำหนดยื่นตามวิธียื่นที่ตั้งไว้ (ค่าตั้งที่มีผล ณ วันที่ 1 ของเดือนที่ยื่น)
+  const period = { yearBe: input.yearBe, month: input.month }
+  const filingMethod = await resolveWhtFilingMethod(tx, input.organizationId, filingMethodResolveDate(period))
+  const filingDueDate = filingDueDateOf(period, filingMethod)
 
   const existing = await tx.whtFilingSummary.findUnique({
     where: { periodId: input.periodId },
@@ -203,6 +212,7 @@ export async function refreshFilingSummary(
         periodId: input.periodId,
         periodLabel: input.periodLabel,
         filingDueDate,
+        filingMethod,
         pnd3Satang: totals.pnd3Satang,
         pnd53Satang: totals.pnd53Satang,
         pnd1Satang: totals.pnd1Satang,
@@ -218,6 +228,7 @@ export async function refreshFilingSummary(
       pnd53Satang: totals.pnd53Satang,
       pnd1Satang: totals.pnd1Satang,
       filingDueDate,
+      filingMethod,
     },
     select: FILING_SELECT,
   })
@@ -632,7 +643,12 @@ export async function listWhtFilingSummaries(
       pending === null
         ? null
         : filingOverdueWarning(
-            { periodLabel: pending.periodLabel, status: pending.status, filingDueDate: new Date(pending.filingDueDate) },
+            {
+              periodLabel: pending.periodLabel,
+              status: pending.status,
+              filingDueDate: new Date(pending.filingDueDate),
+              filingMethod: pending.filingMethod,
+            },
             now,
           ),
   }
@@ -686,6 +702,7 @@ export async function markWhtFilingFiled(
           pnd3_satang: summary.pnd3Satang,
           pnd53_satang: summary.pnd53Satang,
           filing_due_date: summary.filingDueDate.toISOString(),
+          filing_method: summary.filingMethod,
         },
         reason: input.reason,
         ipAddress: ctx.meta.ipAddress,

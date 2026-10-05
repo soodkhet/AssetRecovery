@@ -102,3 +102,32 @@ export function reportTextRows(payload: ReportPayload): string[][] {
   }
   return rows
 }
+
+/**
+ * บรรทัดกระทบยอดใต้ตาราง (U44) เป็นข้อความพร้อมแสดง — จอ/PDF ใช้ชุดเดียวกัน · ไม่มี ⇒ `[]`
+ * เงินเป็นบาทจาก satang (`fmtSatang`) · เครื่องหมายมาจาก `sign` ของบรรทัด ไม่คำนวณซ้ำ
+ */
+export function reconciliationTextLines(payload: Pick<ReportPayload, 'reconciliation'>): { label: string; amount: string; emphasis: boolean }[] {
+  const reconciliation = payload.reconciliation
+  if (reconciliation === null) return []
+  return reconciliation.lines.map((line) => ({
+    label: line.sign === '=' ? `= ${line.label}` : line.label,
+    amount: formatCellText(line.amountSatang, 'money'),
+    emphasis: line.sign === '=' || line.sign === 'diff',
+  }))
+}
+
+/** บรรทัดกระทบยอดสำหรับ Excel — เว้น 1 แถวต่อจากตาราง · ช่องเงินเป็นตัวเลขบาท (`SUM` ได้) */
+export function reconciliationSheetRows(payload: Pick<ReportPayload, 'reconciliation'>): (string | number)[][] {
+  const reconciliation = payload.reconciliation
+  if (reconciliation === null) return []
+  return [
+    [],
+    [reconciliation.title],
+    ...reconciliation.lines.map((line) => [
+      line.sign === '=' ? `= ${line.label}` : line.label,
+      formatCellForSheet(line.amountSatang, 'money'),
+    ]),
+    ...(reconciliation.note === undefined ? [] : [[reconciliation.note]]),
+  ]
+}

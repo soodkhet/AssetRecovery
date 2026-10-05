@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_WHT_POLICY,
+  WHT_FILING_METHOD_SUFFIX,
   LEGACY_WHT_POLICY,
   effectiveWhtPolicy,
   isEffectiveFromAllowed,
@@ -136,7 +137,25 @@ describe('normalize/audit', () => {
       issue_zero_rate_40_2_certificate: true,
       inhouse_income_category: 'sec_40_2',
       outsource_income_category: 'sec_40_8',
+      filing_method: 'online',
     })
+  })
+})
+
+describe('U45 — วิธียื่น ภ.ง.ด. (มติ PO 05/10/2569)', () => {
+  it('ค่าเริ่มต้น = ออนไลน์ · ป้ายระบุวันกำหนดตามวิธี', () => {
+    expect(DEFAULT_WHT_POLICY.filingMethod).toBe('online')
+    expect(effectiveWhtPolicy([], new Date()).filingMethod).toBe('online')
+    expect(WHT_FILING_METHOD_SUFFIX).toEqual({ online: '(ยื่นออนไลน์)', paper: '(ยื่นแบบกระดาษ)' })
+  })
+
+  it('effective-dated: ชุดที่ตั้งเป็นกระดาษมีผลตั้งแต่วันที่มีผล', () => {
+    const entries = [
+      entry('a', '2026-01-01', '2026-01-01T00:00:00Z'),
+      entry('b', '2026-11-01', '2026-10-05T00:00:00Z', { filingMethod: 'paper' }),
+    ]
+    expect(effectiveWhtPolicy(entries, new Date('2026-10-31T10:00:00Z')).filingMethod).toBe('online')
+    expect(effectiveWhtPolicy(entries, new Date('2026-11-01T00:00:00Z')).filingMethod).toBe('paper')
   })
 })
 

@@ -82,7 +82,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // + wht_certificate_mode / wht_income_type_mode / wht_income_category (มติ PO 05/10/2569 UAT U4/U5)
     // + credit_note_status (มติ PO 05/10/2569 U14 — ใบลดหนี้)
     // + credit_note_type (มติ PO 05/10/2569 U19 — ใบเพิ่มหนี้)
-    expect(enums.length).toBe(66)
+    // + wht_filing_method (มติ PO 05/10/2569 U45 — วิธียื่น ภ.ง.ด.)
+    expect(enums.length).toBe(67)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

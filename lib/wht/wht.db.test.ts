@@ -188,6 +188,8 @@ async function resetOrgData(): Promise<void> {
       `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
+      // ค่าตั้งวิธียื่น (U45) ที่เทสต์เพิ่ม — ห้ามค้างข้ามรอบรัน (วันกำหนดของงวดถัดไปจะเพี้ยน)
+      `DELETE FROM wht_policy_history WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
     ]) {
       await tx.$executeRawUnsafe(statement)
@@ -296,6 +298,50 @@ suite('Phase 4.5 — ออกใบ 50 ทวิ อัตโนมัติจ
     expect(june?.status).toBe('pending')
     expect(june?.daysRemaining).toBe(13)
     expect(summaries.warning).toBeNull()
+  })
+
+  it('U45 — ตั้งวิธียื่นเป็นกระดาษ ⇒ รอบที่ยังไม่ยื่นเลื่อนกำหนดเป็นวันที่ 7 + ป้าย + audit · กลับเป็นออนไลน์ได้', async () => {
+    const settings = await import('@/lib/settings/queries/wht-policy')
+    const policyNow = new Date('2026-06-20T03:00:00Z')
+    const base = {
+      baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'] as const,
+      certificateMode: 'per_payee_batch' as const,
+      incomeTypeMode: 'all_40_8' as const,
+      issueZeroRate402Certificate: true,
+      inhouseIncomeCategory: 'sec_40_2' as const,
+      outsourceIncomeCategory: 'sec_40_8' as const,
+    }
+    const paper = await settings.createWhtPolicy(
+      { actor: accountant, meta, reason: 'สำนักงานบัญชียื่นแบบกระดาษ' },
+      { ...base, baseExpenseTypes: [...base.baseExpenseTypes], filingMethod: 'paper', effectiveFrom: new Date('2026-07-01T00:00:00Z') },
+      policyNow,
+    )
+    expect(paper.filingMethod).toBe('paper')
+    try {
+      const summaries = await wht.listWhtFilingSummaries(accountant, {}, new Date('2026-07-02T03:00:00Z'))
+      const june = summaries.items.find((item) => item.periodLabel === 'มิถุนายน 2569')
+      expect(june?.filingDueDate).toBe('2026-07-07T00:00:00.000Z')
+      expect(june?.filingMethod).toBe('paper')
+      expect(june?.filingMethodLabel).toBe('(ยื่นแบบกระดาษ)')
+      expect(june?.daysRemaining).toBe(5)
+
+      const audit = await db().auditLog.findFirst({
+        where: { organizationId: ORG_ID, targetType: 'wht_policy_history', targetId: paper.id },
+        select: { afterData: true, reason: true },
+      })
+      expect(audit?.reason).toBe('สำนักงานบัญชียื่นแบบกระดาษ')
+      expect(JSON.stringify(audit?.afterData)).toContain('"filing_method":"paper"')
+      expect(JSON.stringify(audit?.afterData)).toContain('refreshed_filing_summaries')
+    } finally {
+      // กลับเป็นออนไลน์ (insert-only — เพิ่มชุดใหม่) ⇒ วันกำหนดกลับเป็น 15 · เทสต์ถัดไปเห็นค่าเดิม
+      await settings.createWhtPolicy(
+        { actor: accountant, meta, reason: 'กลับไปยื่นออนไลน์' },
+        { ...base, baseExpenseTypes: [...base.baseExpenseTypes], filingMethod: 'online', effectiveFrom: new Date('2026-07-01T00:00:00Z') },
+        policyNow,
+      )
+    }
+    const back = await wht.listWhtFilingSummaries(accountant, {}, new Date('2026-07-02T03:00:00Z'))
+    expect(back.items.find((item) => item.periodLabel === 'มิถุนายน 2569')?.filingDueDate).toBe('2026-07-15T00:00:00.000Z')
   })
 
   it('เลยกำหนดแล้วยังไม่ยื่น ⇒ FILING_OVERDUE_WARNING (เตือน ไม่ block — ยังคืนรายการปกติ)', async () => {
