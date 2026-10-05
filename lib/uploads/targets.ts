@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { advanceReturnFilePath } from '@/lib/advances/return-file'
 import { DOCUMENT_SLOTS } from '@/lib/cases/case'
 import { creditNoteFilePath } from '@/lib/credit-notes/file'
+import { bankRefundFilePath, customerWhtFilePath } from '@/lib/customer-wht/file'
 import { storagePath } from '@/lib/cases/document-upload'
 import { expenseReceiptPath, FIELD_MEDIA_KINDS, fieldEvidencePath } from '@/lib/field/media-upload'
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
@@ -29,6 +30,10 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('credit_note'), taxInvoiceId: z.uuid() }),
   /** หลักฐานรับคืนเงินทดรองแยก (มติ PO U30) — ผูกกับเงินทดรองที่รับคืน */
   z.object({ kind: z.literal('advance_return'), advanceId: z.uuid() }),
+  /** สแกนหนังสือรับรอง 50 ทวิ ที่ลูกค้าหักเรา (มติ PO U40) — ผูกกับรายการ "รอ 50 ทวิ" */
+  z.object({ kind: z.literal('customer_wht'), certificateId: z.uuid() }),
+  /** หลักฐานคืนเงินผู้โอนของเงินรับรอตรวจสอบ (มติ PO U41) — ผูกกับรายการเดินบัญชี */
+  z.object({ kind: z.literal('bank_refund'), transactionId: z.uuid() }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>
@@ -80,6 +85,10 @@ export function uploadTargetPath(
       return creditNoteFilePath(target.taxInvoiceId, fileName, uniqueKey)
     case 'advance_return':
       return advanceReturnFilePath(target.advanceId, fileName, uniqueKey)
+    case 'customer_wht':
+      return customerWhtFilePath(target.certificateId, fileName, uniqueKey)
+    case 'bank_refund':
+      return bankRefundFilePath(target.transactionId, fileName, uniqueKey)
   }
 }
 
@@ -91,6 +100,8 @@ export type StoragePathOwner =
   | { kind: 'expense_receipt'; userId: string }
   | { kind: 'tax_invoice'; taxInvoiceId: string }
   | { kind: 'advance'; advanceId: string }
+  | { kind: 'customer_wht'; certificateId: string }
+  | { kind: 'bank_transaction'; transactionId: string }
 
 const HEX = '[0-9a-fA-F]'
 const UUID = `${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}`
@@ -109,6 +120,11 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^advances/(${UUID})/returns/[^/]`),
     owner: (id) => ({ kind: 'advance', advanceId: id }),
+  },
+  { pattern: new RegExp(`^customer-wht/(${UUID})/[^/]`), owner: (id) => ({ kind: 'customer_wht', certificateId: id }) },
+  {
+    pattern: new RegExp(`^bank-transactions/(${UUID})/refund/[^/]`),
+    owner: (id) => ({ kind: 'bank_transaction', transactionId: id }),
   },
 ]
 

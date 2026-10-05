@@ -3,6 +3,7 @@ import { periodKeyOf, type PeriodKey } from '@/lib/adjustments/adjustment'
 import { BUDDHIST_YEAR_OFFSET } from '@/lib/constants'
 import { MONTH_NAMES_TH } from '@/lib/field/calendar'
 import { fmtDate, startOfBangkokDay } from '@/lib/format/datetime'
+import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
 import { periodLockPolicyFor } from '@/lib/settings/period-lock'
 
@@ -236,6 +237,13 @@ export interface ReadinessInput {
    * service ส่งมาเสมอ ⇒ checklist บนหน้าจอมีข้อนี้เป็นข้อแรก
    */
   periodEnd?: { key: PeriodKey; now: Date }
+  /**
+   * มติ PO U41 — เงินรับรอตรวจสอบที่ยังคงค้าง (รายการก่อนสิ้นงวด) · **เตือน ไม่บล็อก**
+   * (`30`/`34` ไม่ได้กำหนดให้เป็น blocker — ตัดสินแล้วว่าเป็นหนี้สินรอตรวจสอบ ไม่ใช่รายการค้างจับคู่)
+   */
+  suspenseOutstanding?: { count: number; amountSatang: number }
+  /** มติ PO U40 — 50 ทวิ จากลูกค้าที่ยังรอหนังสือ (รับเงินก่อนสิ้นงวด) · **เตือน ไม่บล็อก** */
+  pendingCustomerWht?: { count: number; withheldSatang: number }
 }
 
 export interface ReadinessResult {
@@ -294,10 +302,22 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     },
   )
 
-  const warnings =
-    input.warningOpenCount > 0
-      ? [`มีข้อยกเว้นระดับคำเตือน ${input.warningOpenCount} รายการ — ปิดงวดได้แต่ควรตรวจก่อน`]
-      : []
+  const warnings: string[] = []
+  if (input.warningOpenCount > 0) {
+    warnings.push(`มีข้อยกเว้นระดับคำเตือน ${input.warningOpenCount} รายการ — ปิดงวดได้แต่ควรตรวจก่อน`)
+  }
+  if (input.suspenseOutstanding !== undefined && input.suspenseOutstanding.count > 0) {
+    warnings.push(
+      `มีเงินรับรอตรวจสอบคงค้าง ${fmtCount(input.suspenseOutstanding.count)} รายการ ` +
+        `(${fmtSatangSymbol(input.suspenseOutstanding.amountSatang)}) — ยังไม่รับรู้เป็นรายได้ ปิดงวดได้แต่ควรติดตามที่มา`,
+    )
+  }
+  if (input.pendingCustomerWht !== undefined && input.pendingCustomerWht.count > 0) {
+    warnings.push(
+      `ยังรอหนังสือรับรอง 50 ทวิ จากลูกค้า ${fmtCount(input.pendingCustomerWht.count)} รายการ ` +
+        `(${fmtSatangSymbol(input.pendingCustomerWht.withheldSatang)}) — ปิดงวดได้ ติดตามหนังสือต่อได้ที่รายการ 50 ทวิ ลูกค้า`,
+    )
+  }
 
   return {
     ready: checks.every((check) => check.passed),

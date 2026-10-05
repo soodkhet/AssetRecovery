@@ -84,7 +84,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // + credit_note_type (มติ PO 05/10/2569 U19 — ใบเพิ่มหนี้)
     // + wht_filing_method (มติ PO 05/10/2569 U45 — วิธียื่น ภ.ง.ด.)
     // + advance_return_method / advance_return_channel (มติ PO 05/10/2569 U30 — ปิดยอดคืนเงินทดรอง)
-    expect(enums.length).toBe(69)
+    // + customer_wht_status (มติ PO 05/10/2569 U40 — 50 ทวิ ที่ลูกค้าหักเรา)
+    expect(enums.length).toBe(70)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

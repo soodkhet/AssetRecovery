@@ -14,6 +14,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — รวม state machine 16 entity |
 | v2 | 03/07/2569 | **Sync กับการแก้ไขใน Batch 3**: §6.3 (Expense) เติม `pending_warehouse_confirm`/`pending_finance_approval`/`superseded` ที่ตกหล่น, §6.4 (Advance) แก้เป็น 5 สถานะใหม่ (`pending_approval`/`approved`/`overdue`/`cleared`/`rejected` — ตรงกับไฟล์ 15 v2), §6.6 (Payout Batch) เติม `draft` ที่ตกหล่น — **ส่วน state machine ฝั่ง Accounting (§6.10-6.16) ยังไม่ตรวจสอบกับ schema เพราะไฟล์ 30-37 ยังไม่ถึงคิว reformat (Batch 5)** ทำเครื่องหมายไว้ใน Open Items ชัดเจน ไม่เดาแก้เอง |
 | v2.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 หมายเหตุ: การปิดยอดคืนเงินทดรอง **ไม่เพิ่ม state** ใน `advance_status` (ยอดค้าง/ปิด อนุมานจากสมุดย่อย `advance_returns`) |
+| v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U40/U41)**: §6.14 Bank Transaction เพิ่ม `suspense` (เงินรับรอตรวจสอบ — เงินเข้าไม่ทราบที่มา) + `suspense_refunded` (คืนเงินผู้โอน — terminal) · §6.14.1 ใหม่: 50 ทวิ ที่ลูกค้าหักเรา (`customer_wht_status` `pending → received`) — enum ตาม `02` v4.23 |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -156,6 +157,19 @@ unmatched → auto_matched   (ระบบจับคู่อัตโนม�
 unmatched → manual_matched (บัญชีจับคู่มือ)
 unmatched → unmatched_resolved (ไม่มีทางจับคู่ได้จริง เช่น ค่าธรรมเนียมธนาคาร — ต้องมีเหตุผล)
 matched (auto/manual) → unmatched (re-match — ต้อง audit)
+unmatched → suspense (มติ PO U41 — เงินเข้าไม่ทราบที่มา "เงินรับรอตรวจสอบ" · เงินเข้าเท่านั้น · เหตุผลบังคับ · ไม่สร้างเงินรับ/ไม่ลด AR/ไม่รับรู้รายได้)
+suspense → manual_matched (ทราบที่มาภายหลัง — จับคู่กับรอบวางบิลตามสายปกติ · เหตุผลบังคับ · ไม่มี auto-match)
+suspense → suspense_refunded (คืนเงินผู้โอน — วันที่ + หลักฐาน + เหตุผล · terminal)
+```
+
+> มติ PO 05/10/2569 U41: `suspense` ไม่นับเป็นรายการค้างจับคู่ของ Readiness (ตัดสินแล้วว่าเป็นหนี้สินรอตรวจสอบ) แต่แสดงคำเตือนยอดคงค้าง · รายการที่ปิดเป็น `unmatched_resolved` ไปก่อนมติไม่ย้าย
+
+#### 6.14.1 50 ทวิ ที่ลูกค้าหักเรา (`customer_wht_certificates` — มติ PO 05/10/2569 U40)
+
+```
+(จับคู่เงินรับที่ลูกค้าหักภาษี) → pending (รอ 50 ทวิ จากลูกค้า — เกิดอัตโนมัติ ไม่มีการสร้างมือ)
+pending → received (กรอกเลขที่/วันที่/ยอดในหนังสือ + แนบไฟล์ · ยอดไม่ตรงยอดที่ถูกหัก = เตือน ไม่บล็อก) — terminal
+pending → (soft delete) เมื่อเงินรับต้นเหตุถูกถอน (เปลี่ยนการจับคู่) — audit พร้อมเหตุผล
 ```
 
 > ✅ **แก้ไขแล้ว**: เดิมมีแค่ `matched`/`unmatched` (2 states) และใช้ `matched_with_type`/`matched_with_id` (polymorphic) — แก้เป็น 4 states ตรงกับ enum `bank_match_status` ใน schema และเปลี่ยนเป็น Separate FK columns (`matched_billing_id`/`matched_payout_id`) ตาม DEC-004

@@ -33,6 +33,10 @@ import {
   CHECKLIST_HEADERS,
   CREDIT_NOTE_HEADERS,
   creditNoteCsv,
+  CUSTOMER_WHT_HEADERS,
+  customerWhtCsv,
+  SUSPENSE_HEADERS,
+  suspenseCsv,
   EXPENSE_HEADERS,
   PACK_COVER_FILE_NAME,
   PACK_FILES,
@@ -55,9 +59,21 @@ function sampleHeader(fileName: string): string[] {
 }
 
 describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', () => {
-  it('ครบ 9 ไฟล์ เลข 01–09 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21)', () => {
-    expect(PACK_FILES).toHaveLength(9)
-    expect(PACK_FILES.map((file) => file.no)).toEqual(['01', '02', '03', '04', '05', '06', '07', '08', '09'])
+  it('ครบ 11 ไฟล์ เลข 01–11 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41)', () => {
+    expect(PACK_FILES).toHaveLength(11)
+    expect(PACK_FILES.map((file) => file.no)).toEqual([
+      '01',
+      '02',
+      '03',
+      '04',
+      '05',
+      '06',
+      '07',
+      '08',
+      '09',
+      '10',
+      '11',
+    ])
     expect(PACK_FILES.map((file) => file.fileName)).toEqual([
       '01_Revenue.csv',
       '02_Cash_Receipts.csv',
@@ -68,6 +84,8 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '07_Adjustment_Log.csv',
       '08_Document_Checklist.xlsx',
       '09_Credit_Notes.csv',
+      '10_Customer_WHT.csv',
+      '11_Suspense_Receipts.csv',
     ])
     expect(PACK_FILES.filter((file) => file.kind === 'xlsx').map((file) => file.no)).toEqual(['08'])
   })
@@ -145,6 +163,8 @@ describe('หัวคอลัมน์ตรงกับ reference/samples ท
     ['06_Bank_Reconciliation.csv', BANK_RECON_HEADERS],
     ['07_Adjustment_Log.csv', ADJUSTMENT_HEADERS],
     ['09_Credit_Notes.csv', CREDIT_NOTE_HEADERS],
+    ['10_Customer_WHT.csv', CUSTOMER_WHT_HEADERS],
+    ['11_Suspense_Receipts.csv', SUSPENSE_HEADERS],
   ])('%s', (fileName, headers) => {
     expect(sampleHeader(fileName)).toEqual([...headers])
   })
@@ -534,5 +554,82 @@ describe('09_Credit_Notes.csv (มติ PO 05/10/2569 U21)', () => {
 
   it('ไม่มีเอกสารในรอบ ⇒ มีแต่หัวคอลัมน์', () => {
     expect(creditNoteCsv([])).toBe(`${CSV_BOM}${CREDIT_NOTE_HEADERS.join(',')}\r\n`)
+  })
+})
+
+describe('10_Customer_WHT.csv (มติ PO 05/10/2569 U40)', () => {
+  it('ได้รับแล้ว + ยังรอหนังสือ — เลขผู้เสียภาษี 13 หลักล้วน · ยังไม่ได้รับ ⇒ ช่องหนังสือเป็น "-" · status = enum ดิบ', () => {
+    const csv = customerWhtCsv([
+      {
+        withheldDate: new Date('2026-09-12T00:00:00Z'),
+        companyName: 'บริษัท สยามไฟแนนซ์ จำกัด',
+        companyTaxId: '0-1055-55000-11-1',
+        billingRef: '2569-08',
+        taxInvoiceNumbers: ['INV-2569-0014'],
+        withheldSatang: 11_190,
+        certificateNumber: 'สฟ-2569/0451',
+        certificateDate: new Date('2026-09-10T00:00:00Z'),
+        whtSatang: 11_190,
+        status: 'received',
+      },
+      {
+        withheldDate: new Date('2026-09-28T00:00:00Z'),
+        companyName: 'บริษัท ไทยลีสซิ่ง จำกัด',
+        companyTaxId: null,
+        billingRef: null,
+        taxInvoiceNumbers: [],
+        withheldSatang: 24_000,
+        certificateNumber: null,
+        certificateDate: null,
+        whtSatang: null,
+        status: 'pending',
+      },
+    ])
+    expect(csv.startsWith(CSV_BOM)).toBe(true)
+    const lines = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(lines[0]).toBe(CUSTOMER_WHT_HEADERS.join(','))
+    expect(lines[1]).toBe(
+      '12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received',
+    )
+    expect(lines[2]).toBe('28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,-,-,-,240.00,-,-,-,pending')
+  })
+
+  it('ไม่มีรายการ ⇒ มีแต่หัวคอลัมน์', () => {
+    expect(customerWhtCsv([])).toBe(`${CSV_BOM}${CUSTOMER_WHT_HEADERS.join(',')}\r\n`)
+  })
+})
+
+describe('11_Suspense_Receipts.csv (มติ PO 05/10/2569 U41)', () => {
+  it('ยังค้าง / จับคู่ภายหลัง / คืนผู้โอน — ยอดบวก · วันที่ พ.ศ. · status = enum ดิบ', () => {
+    const csv = suspenseCsv([
+      {
+        transactionDate: new Date('2026-09-20T00:00:00Z'),
+        description: 'TRF IN 0987',
+        amountSatang: 12_345,
+        suspendedAt: new Date('2026-09-21T03:00:00Z'),
+        suspenseNote: 'ไม่ระบุผู้โอน',
+        matchStatus: 'suspense',
+        matchedRef: null,
+        resolvedDate: null,
+        refundNote: null,
+      },
+      {
+        transactionDate: new Date('2026-09-25T00:00:00Z'),
+        description: 'TRF IN SCB',
+        amountSatang: 50_000,
+        suspendedAt: new Date('2026-09-25T03:00:00Z'),
+        suspenseNote: 'โอนผิดบัญชี',
+        matchStatus: 'suspense_refunded',
+        matchedRef: null,
+        resolvedDate: new Date('2026-09-27T00:00:00Z'),
+        refundNote: 'คืนตามคำขอ, มีสลิป',
+      },
+    ])
+    const lines = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(lines[0]).toBe(SUSPENSE_HEADERS.join(','))
+    expect(lines[1]).toBe('20/09/2569,TRF IN 0987,123.45,21/09/2569,ไม่ระบุผู้โอน,suspense,-,-,-')
+    expect(lines[2]).toBe(
+      '25/09/2569,TRF IN SCB,500.00,25/09/2569,โอนผิดบัญชี,suspense_refunded,-,27/09/2569,"คืนตามคำขอ, มีสลิป"',
+    )
   })
 })

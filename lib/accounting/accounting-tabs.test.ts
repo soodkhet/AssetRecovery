@@ -11,9 +11,9 @@ import {
  */
 
 describe('ทะเบียนแท็บหน้าบัญชี', () => {
-  it('มี 9 แท็บตามไฟล์ 30–37 และ id ไม่ซ้ำ', () => {
-    expect(ACCOUNTING_TABS).toHaveLength(9)
-    expect(new Set(ACCOUNTING_TABS.map((tab) => tab.id)).size).toBe(9)
+  it('มี 10 แท็บ (ไฟล์ 30–37 + 50 ทวิ ลูกค้า มติ PO U40) และ id ไม่ซ้ำ', () => {
+    expect(ACCOUNTING_TABS).toHaveLength(10)
+    expect(new Set(ACCOUNTING_TABS.map((tab) => tab.id)).size).toBe(10)
   })
 
   it('แท็บที่ยังไม่เปิดต้องบอก Phase ที่จะเกิด · แท็บที่เปิดแล้วไม่ต้องมี', () => {
@@ -34,6 +34,7 @@ describe('ทะเบียนแท็บหน้าบัญชี', () => {
       'documents',
       'qa',
       'export',
+      'customer-wht',
     ])
   })
 

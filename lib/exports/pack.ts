@@ -18,10 +18,13 @@ import type {
  * - **รายชื่อไฟล์ 01–09 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
  *   · หัวคอลัมน์ของทุกไฟล์ต้องตรง `reference/samples/01–09` เป๊ะ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ)
  *   · `09_Credit_Notes.csv` เพิ่มตามมติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ · ไฟล์ 01–08 ไม่เปลี่ยน
+ *   · `10_Customer_WHT.csv` (U40 — 50 ทวิ ที่ลูกค้าหักเรา) + `11_Suspense_Receipts.csv` (U41 — เงินรับรอตรวจสอบ)
+ *     เพิ่มตามมติ PO 05/10/2569 · ไฟล์ 01–09 ไม่เปลี่ยน
  * - `05_WHT_Data.csv` — `payee_tax_id` เป็น **ตัวเลข 13 หลักล้วน** (DEC-006/D10) ⇒ payee ที่ยังไม่กรอก
  *   เลขประจำตัวผู้เสียภาษีต้องหยุดตั้งแต่ต้น (`assertPayeeTaxIdsComplete()`) ไม่ใช่ปล่อยช่องว่างไปถึง
  *   สำนักงานบัญชี
- * - `06_Bank_Reconciliation.csv` — `status` ใช้ **enum เต็ม 4 ค่า** ตามสคีมา (DEC-006/D10) ไม่แปลไทย
+ * - `06_Bank_Reconciliation.csv` — `status` ใช้ **enum เต็มตามสคีมา** (DEC-006/D10) ไม่แปลไทย — 6 ค่าตั้งแต่ U41
+ *   (`suspense` = เงินรับรอตรวจสอบ · `suspense_refunded` = คืนเงินผู้โอนแล้ว)
  * - Version เดินขึ้นเรื่อย ๆ ไม่เขียนทับ (`37` §6.2) — ป้ายบนหน้าจอมาจาก `exportVersionLabel()` ที่เดียว
  *
  * ### สิ่งที่สคีมาไม่มีให้ (เลือกมาจากข้อมูลที่มีจริง — บันทึกไว้กันคนหลังงง)
@@ -99,6 +102,8 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '07', fileName: '07_Adjustment_Log.csv', kind: 'csv', description: 'รายการปรับปรุงยอดทั้งหมดของรอบนั้น', sourceDoc: '20' },
   { no: '08', fileName: '08_Document_Checklist.xlsx', kind: 'xlsx', description: 'source_ref, doc_status, exception summary', sourceDoc: '34' },
   { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat', sourceDoc: '31' },
+  { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
+  { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
 ]
 
 /** ชื่อไฟล์ตามเลขลำดับ — ผู้ประกอบชุดอ้างเลข ไม่ใช่ตำแหน่งใน array (`37` §6.1) */
@@ -400,7 +405,7 @@ export function bankReconCsv(rows: readonly BankReconExportRow[]): string {
       bankDirection(row.amountSatang),
       row.matchedType ?? CSV_EMPTY,
       csvText(row.matchedRef),
-      // enum เต็ม 4 ค่าตามสคีมา ห้ามแปลไทย (DEC-006/D10)
+      // enum เต็มตามสคีมา ห้ามแปลไทย (DEC-006/D10 · U41 เพิ่ม suspense/suspense_refunded)
       row.matchStatus,
     ]),
   )
@@ -502,6 +507,107 @@ export function creditNoteCsv(rows: readonly CreditNoteExportRow[]): string {
       row.reason,
       row.status,
       csvText(row.adjustmentRef),
+    ]),
+  )
+}
+
+// ── 10_Customer_WHT.csv (ไฟล์ 31 — มติ PO 05/10/2569 U40) ────────────────────
+
+/**
+ * ภาษีที่**ลูกค้าหักเรา** ณ ที่จ่าย (เครดิตภาษีของบริษัท) + สถานะหนังสือรับรอง 50 ทวิ
+ * แถว = รายการที่รับเงินในงวด + รายการที่ยังรอหนังสือซึ่งรับเงินก่อนงวด (ยกมา) · `status` = enum ดิบ
+ * (`pending` = ยังไม่ได้รับหนังสือ · `received` = ได้รับแล้ว) · ยังไม่ได้รับ ⇒ ช่องหนังสือเป็น `-`
+ */
+export const CUSTOMER_WHT_HEADERS = [
+  'received_date',
+  'company',
+  'company_tax_id',
+  'billing_ref',
+  'tax_invoice_ref',
+  'withheld_baht',
+  'cert_no',
+  'cert_date',
+  'cert_wht_baht',
+  'status',
+] as const
+
+export interface CustomerWhtExportRow {
+  withheldDate: Date
+  companyName: string
+  companyTaxId: string | null
+  billingRef: string | null
+  taxInvoiceNumbers: readonly string[]
+  withheldSatang: number
+  certificateNumber: string | null
+  certificateDate: Date | null
+  whtSatang: number | null
+  status: 'pending' | 'received'
+}
+
+export function customerWhtCsv(rows: readonly CustomerWhtExportRow[]): string {
+  return buildCsv(
+    CUSTOMER_WHT_HEADERS,
+    rows.map((row) => [
+      csvDate(row.withheldDate),
+      row.companyName,
+      normalizeTaxId(row.companyTaxId) ?? CSV_EMPTY,
+      csvText(row.billingRef),
+      row.taxInvoiceNumbers.length === 0 ? CSV_EMPTY : row.taxInvoiceNumbers.join(' '),
+      csvBaht(row.withheldSatang),
+      csvText(row.certificateNumber),
+      csvDate(row.certificateDate),
+      row.whtSatang === null ? CSV_EMPTY : csvBaht(row.whtSatang),
+      row.status,
+    ]),
+  )
+}
+
+// ── 11_Suspense_Receipts.csv (ไฟล์ 35 — มติ PO 05/10/2569 U41) ──────────────
+
+/**
+ * เงินรับรอตรวจสอบ (เงินเข้าไม่ทราบที่มา — หนี้สิน ไม่รับรู้รายได้) · แถว = รายการเดินบัญชีที่**เคย**ย้ายเข้า
+ * เงินรับรอตรวจสอบ และ (เกิดในงวด / ยังคงค้าง / จับคู่หรือคืนเงินในงวด) · `status` = enum ดิบของรายการ
+ * (`suspense` = ยังค้าง · `manual_matched` = ทราบที่มาแล้วจับคู่กับรอบวางบิล · `suspense_refunded` = คืนผู้โอนแล้ว)
+ */
+export const SUSPENSE_HEADERS = [
+  'bank_txn_date',
+  'bank_ref',
+  'amount_baht',
+  'suspended_date',
+  'suspense_reason',
+  'status',
+  'resolved_ref',
+  'resolved_date',
+  'refund_reason',
+] as const
+
+export interface SuspenseExportRow {
+  transactionDate: Date
+  description: string
+  amountSatang: number
+  suspendedAt: Date
+  suspenseNote: string
+  matchStatus: BankMatchStatus
+  /** รอบวางบิลที่จับคู่ภายหลัง (ถ้ามี) */
+  matchedRef: string | null
+  /** วันที่จับคู่ภายหลัง หรือวันที่คืนเงิน */
+  resolvedDate: Date | null
+  refundNote: string | null
+}
+
+export function suspenseCsv(rows: readonly SuspenseExportRow[]): string {
+  return buildCsv(
+    SUSPENSE_HEADERS,
+    rows.map((row) => [
+      csvDate(row.transactionDate),
+      csvText(row.description),
+      csvBaht(Math.abs(row.amountSatang)),
+      csvDate(row.suspendedAt),
+      row.suspenseNote,
+      row.matchStatus,
+      csvText(row.matchedRef),
+      csvDate(row.resolvedDate),
+      csvText(row.refundNote),
     ]),
   )
 }

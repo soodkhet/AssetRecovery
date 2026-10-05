@@ -150,14 +150,26 @@ export function hasNote(note: string | null | undefined): boolean {
 
 // ── State machine `23` §6.14 ────────────────────────────────────────────────
 
-export type BankMatchAction = 'auto_match' | 'manual_match' | 'resolve_unmatched'
+export type BankMatchAction =
+  | 'auto_match'
+  | 'manual_match'
+  | 'resolve_unmatched'
+  /** U41 — ย้ายเงินเข้าไม่ทราบที่มาไปเป็น "เงินรับรอตรวจสอบ" */
+  | 'move_to_suspense'
+  /** U41 — คืนเงินรับรอตรวจสอบให้ผู้โอน */
+  | 'refund_suspense'
 
 const TRANSITIONS: Readonly<Record<BankMatchAction, readonly BankMatchStatus[]>> = {
   // จับคู่ทับของเดิมได้ (matched → unmatched → matched ใหม่ ตาม `23` §6.14 "re-match ต้อง audit")
+  // auto-match ไม่แตะ `suspense` — รายการที่คนตัดสินแล้วว่า "ไม่ทราบที่มา" ต้องจับคู่โดยคนเท่านั้น (U41)
   auto_match: ['unmatched'],
-  manual_match: ['unmatched', 'auto_matched', 'manual_matched'],
+  // U41: ทราบที่มาภายหลัง ⇒ จับคู่กับรอบวางบิลตามสายปกติ (เหตุผลบังคับ — `suspenseMatchRequiresNote`)
+  manual_match: ['unmatched', 'auto_matched', 'manual_matched', 'suspense'],
   // `unmatched_resolved` เป็น terminal — ปิดรายการที่จับคู่ไปแล้วไม่ได้
   resolve_unmatched: ['unmatched'],
+  // เงินเข้าเท่านั้น (ตรวจที่ `canMoveToSuspense`) · `suspense_refunded` เป็น terminal
+  move_to_suspense: ['unmatched'],
+  refund_suspense: ['suspense'],
 }
 
 export function canTransition(current: BankMatchStatus, action: BankMatchAction): boolean {
@@ -173,7 +185,26 @@ export function nextBankMatchStatus(current: BankMatchStatus, action: BankMatchA
       return 'manual_matched'
     case 'resolve_unmatched':
       return 'unmatched_resolved'
+    case 'move_to_suspense':
+      return 'suspense'
+    case 'refund_suspense':
+      return 'suspense_refunded'
   }
+}
+
+/** U41 — "เงินรับรอตรวจสอบ" ใช้ได้กับเงินเข้าเท่านั้น (เงินออกไม่ทราบที่มา = ปิดรายการพร้อมเหตุผลตามเดิม) */
+export function canMoveToSuspense(status: BankMatchStatus, amountSatang: number): boolean {
+  return canTransition(status, 'move_to_suspense') && transactionSide(amountSatang) === 'in' && amountSatang > 0
+}
+
+/** U41 — ทุก transition ออกจาก `suspense` ต้องมีเหตุผล (จับคู่ภายหลังก็ต้องอธิบายว่าทราบที่มาจากอะไร) */
+export function suspenseMatchRequiresNote(status: BankMatchStatus): boolean {
+  return status === 'suspense'
+}
+
+/** สถานะสุดท้ายของรายการเดินบัญชี — ทำอะไรต่อไม่ได้อีก */
+export function isTerminalBankStatus(status: BankMatchStatus): boolean {
+  return status === 'unmatched_resolved' || status === 'suspense_refunded'
 }
 
 /** จับคู่ไปแล้วหรือยัง — ใช้เตือน `ALREADY_MATCHED` ก่อนเปลี่ยนการจับคู่เดิม (`35` §11) */
@@ -181,7 +212,10 @@ export function isMatched(status: BankMatchStatus): boolean {
   return status === 'auto_matched' || status === 'manual_matched'
 }
 
-/** นับเป็น "จัดการครบ" ของ Readiness Check ไหม (`35` §16 · `30`) — resolved ก็ถือว่าครบ */
+/**
+ * นับเป็น "จัดการครบ" ของ Readiness Check ไหม (`35` §16 · `30`) — resolved ก็ถือว่าครบ
+ * U41: `suspense` = ตัดสินแล้วว่าเป็นเงินรับรอตรวจสอบ (หนี้สิน) ⇒ ไม่บล็อกปิดงวด แต่แสดงเตือนยอดคงค้าง
+ */
 export function isReconciled(status: BankMatchStatus): boolean {
   return status !== 'unmatched'
 }
@@ -191,14 +225,21 @@ export const BANK_MATCH_STATUS_LABEL: Readonly<Record<BankMatchStatus, string>> 
   auto_matched: 'จับคู่อัตโนมัติ',
   manual_matched: 'จับคู่โดยเจ้าหน้าที่',
   unmatched_resolved: 'ปิดรายการแล้ว',
+  suspense: 'เงินรับรอตรวจสอบ',
+  suspense_refunded: 'คืนเงินผู้โอนแล้ว',
 }
 
-/** 4 สีตาม `35` §8 — ผ่าน mapper กลางของ `04` §8.1 เท่านั้น (แดง/เขียว/ฟ้า/เทา) */
+/**
+ * สีตาม `35` §8 — ผ่าน mapper กลางของ `04` §8.1 เท่านั้น (แดง/เขียว/ฟ้า/เทา)
+ * U41: เงินรับรอตรวจสอบ = เหลือง (รอดำเนินการ) · คืนเงินผู้โอนแล้ว = ม่วง (เคลียร์แล้ว)
+ */
 export const BANK_MATCH_STATUS_GROUP: Readonly<Record<BankMatchStatus, StatusBadgeGroup>> = {
   unmatched: 'critical',
   auto_matched: 'success',
   manual_matched: 'sent',
   unmatched_resolved: 'neutral',
+  suspense: 'pending',
+  suspense_refunded: 'cleared',
 }
 
 export const MATCH_TARGET_LABEL: Readonly<Record<MatchTargetKind, string>> = {

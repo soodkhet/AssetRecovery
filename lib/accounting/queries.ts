@@ -372,7 +372,10 @@ async function billingRevenueMismatches(organizationId: string, key: PeriodKey):
 /** ประกอบข้อมูลสด 3 เงื่อนไขแล้วส่งให้ตัวตัดสิน pure (`30` §6.2) */
 async function readinessOf(organizationId: string, row: PeriodRow, now: Date): Promise<ReadinessResult> {
   const key: PeriodKey = { yearBe: row.yearBe, month: row.month }
-  const [openExceptions, unmatchedBankCount, billingMismatches] = await Promise.all([
+  // สิ้นงวด (date-only UTC) — ยอดเงินรับรอตรวจสอบ/50 ทวิ ค้าง นับรายการที่เกิดก่อนสิ้นงวด (ยกมาจากงวดก่อนด้วย)
+  const yearCe = row.yearBe - 543
+  const periodEnd = new Date(Date.UTC(row.month === 12 ? yearCe + 1 : yearCe, row.month === 12 ? 0 : row.month, 1))
+  const [openExceptions, unmatchedBankCount, billingMismatches, suspense, pendingWht] = await Promise.all([
     prisma.exception.findMany({
       where: { organizationId, periodId: row.id, status: 'open' },
       select: { id: true, level: true, title: true, sourceModule: true },
@@ -380,6 +383,17 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     }),
     prisma.bankTransaction.count({ where: { organizationId, periodId: row.id, matchStatus: 'unmatched' } }),
     billingRevenueMismatches(organizationId, key),
+    // มติ PO U41/U40 — เตือนอย่างเดียว ไม่บล็อก
+    prisma.bankTransaction.aggregate({
+      where: { organizationId, matchStatus: 'suspense', transactionDate: { lt: periodEnd } },
+      _count: { _all: true },
+      _sum: { amountSatang: true },
+    }),
+    prisma.customerWhtCertificate.aggregate({
+      where: { organizationId, deletedAt: null, status: 'pending', withheldDate: { lt: periodEnd } },
+      _count: { _all: true },
+      _sum: { withheldSatang: true },
+    }),
   ])
 
   return evaluateReadiness({
@@ -390,6 +404,8 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     unmatchedBankCount,
     billingMismatches,
     periodEnd: { key, now },
+    suspenseOutstanding: { count: suspense._count._all, amountSatang: suspense._sum.amountSatang ?? 0 },
+    pendingCustomerWht: { count: pendingWht._count._all, withheldSatang: pendingWht._sum.withheldSatang ?? 0 },
   })
 }
 

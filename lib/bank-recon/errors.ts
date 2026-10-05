@@ -9,6 +9,9 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  * ที่เติมเข้า `24` พร้อม commit นี้ (v4.7): `BANK_TRANSACTION_NOT_FOUND`,
  * `BANK_TRANSACTION_INVALID_STATUS`, `STATEMENT_FILE_INVALID`
  *
+ * ที่เติมเข้า `24` §6.3 ตามมติ PO 05/10/2569 U40 (50 ทวิ ที่ลูกค้าหักเรา): `CUSTOMER_WHT_NOT_FOUND`,
+ * `CUSTOMER_WHT_INVALID_STATUS`, `CUSTOMER_WHT_NUMBER_DUPLICATE` · U41 (เงินรับรอตรวจสอบ) ใช้ code เดิมทั้งหมด
+ *
  * `PERIOD_LOCKED_DIRECT_EDIT` **ไม่อยู่ที่นี่** — เป็นของ `SettingsError` ที่ `assertPeriodOpenAt()`
  * โยนให้เอง · `BILLING_BATCH_*`/`PAYOUT_BATCH_*` เป็นของโมดูลต้นทาง (19/17) ใช้ซ้ำไม่ประกาศใหม่
  */
@@ -19,6 +22,9 @@ export const BANK_RECON_ERROR_CODES = [
   'STATEMENT_FILE_INVALID',
   'MATCH_NOTE_REQUIRED',
   'ALREADY_MATCHED',
+  'CUSTOMER_WHT_NOT_FOUND',
+  'CUSTOMER_WHT_INVALID_STATUS',
+  'CUSTOMER_WHT_NUMBER_DUPLICATE',
 ] as const
 
 export type BankReconErrorCode = (typeof BANK_RECON_ERROR_CODES)[number]
@@ -30,6 +36,9 @@ const HTTP_STATUS: Record<BankReconErrorCode, number> = {
   STATEMENT_FILE_INVALID: 400,
   MATCH_NOTE_REQUIRED: 400,
   ALREADY_MATCHED: 200,
+  CUSTOMER_WHT_NOT_FOUND: 404,
+  CUSTOMER_WHT_INVALID_STATUS: 400,
+  CUSTOMER_WHT_NUMBER_DUPLICATE: 409,
 }
 
 const MESSAGES: Record<BankReconErrorCode, ErrorMessage> = {
@@ -55,6 +64,18 @@ const MESSAGES: Record<BankReconErrorCode, ErrorMessage> = {
   ALREADY_MATCHED: {
     title: 'รายการนี้จับคู่ไปแล้ว',
     message: 'ยืนยันอีกครั้งเพื่อเปลี่ยนการจับคู่เดิม — ระบบจะบันทึกการเปลี่ยนแปลงลง audit log',
+  },
+  CUSTOMER_WHT_NOT_FOUND: {
+    title: 'ไม่พบรายการหนังสือรับรองภาษี',
+    message: 'ไม่พบรายการ 50 ทวิ จากลูกค้านี้ หรือคุณไม่มีสิทธิ์เข้าถึงรายการนี้',
+  },
+  CUSTOMER_WHT_INVALID_STATUS: {
+    title: 'สถานะรายการไม่รองรับ',
+    message: 'รายการนี้บันทึกว่าได้รับหนังสือแล้ว — แก้ไขหรือบันทึกซ้ำไม่ได้',
+  },
+  CUSTOMER_WHT_NUMBER_DUPLICATE: {
+    title: 'เลขที่หนังสือซ้ำ',
+    message: 'เลขที่หนังสือรับรองนี้ของลูกค้ารายนี้ถูกบันทึกไว้แล้ว — ตรวจเลขที่อีกครั้ง',
   },
 }
 

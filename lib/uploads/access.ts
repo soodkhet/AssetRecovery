@@ -8,6 +8,10 @@ import { ModuleError } from '@/lib/api/errors'
 import { CASE_READ_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { getCase } from '@/lib/cases/queries'
 import { assertTaxInvoiceInScope } from '@/lib/credit-notes/queries'
+import { MANAGE_BANK_RECONCILIATION } from '@/lib/bank-recon/matching'
+import { assertBankTransactionInScope } from '@/lib/bank-recon/queries'
+import { MANAGE_CUSTOMER_WHT } from '@/lib/customer-wht/customer-wht'
+import { assertCustomerWhtInScope } from '@/lib/customer-wht/queries'
 import { MANAGE_SALES_EXPENSES, MAP_COST_CENTER } from '@/lib/expenses/expense-record'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
 import { MANAGE_TAX_INVOICE, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
@@ -16,8 +20,10 @@ import { UploadError } from '@/lib/uploads/errors'
 import type { UploadRule } from '@/lib/uploads/inspect'
 import {
   advanceReturnFileRule,
+  bankRefundFileRule,
   caseDocumentRule,
   creditNoteFileRule,
+  customerWhtFileRule,
   expenseReceiptRule,
   fieldEvidenceRule,
   intakePhotoRule,
@@ -50,6 +56,8 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   WAREHOUSE_CONFIRM_LOT_CAPABILITY,
   MANAGE_TAX_INVOICE,
   APPROVE_ADVANCE,
+  MANAGE_CUSTOMER_WHT,
+  MANAGE_BANK_RECONCILIATION,
 ] as const
 
 /**
@@ -73,6 +81,8 @@ export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
     ...SALES_READ_CAPABILITIES,
     APPROVE_ADVANCE,
     REQUEST_ADVANCE,
+    MANAGE_CUSTOMER_WHT,
+    MANAGE_BANK_RECONCILIATION,
   ]),
 ]
 
@@ -100,6 +110,10 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return creditNoteFileRule(target.taxInvoiceId)
     case 'advance_return':
       return advanceReturnFileRule(target.advanceId)
+    case 'customer_wht':
+      return customerWhtFileRule(target.certificateId)
+    case 'bank_refund':
+      return bankRefundFileRule(target.transactionId)
   }
 }
 
@@ -138,6 +152,18 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       // แนบหลักฐานรับคืน = บันทึกรับคืนแยก ⇒ สิทธิ์เดียวกับ endpoint บันทึก (การเงิน `manage:approve_advance`)
       const user = await requirePermission('manage', APPROVE_ADVANCE)
       await assertAdvanceInScope(user, target.advanceId)
+      return user
+    }
+    case 'customer_wht': {
+      // แนบสแกน 50 ทวิ ของลูกค้า = บันทึกรับหนังสือ ⇒ สิทธิ์เดียวกับ endpoint รับหนังสือ (มติ PO U40)
+      const user = await requirePermission('manage', MANAGE_CUSTOMER_WHT)
+      await assertCustomerWhtInScope(user, target.certificateId, { requirePending: true })
+      return user
+    }
+    case 'bank_refund': {
+      // หลักฐานคืนเงินผู้โอน = บันทึกคืนเงิน ⇒ สิทธิ์กระทบยอดธนาคาร (มติ PO U41)
+      const user = await requirePermission('manage', MANAGE_BANK_RECONCILIATION)
+      await assertBankTransactionInScope(user, target.transactionId, { requireSuspense: true })
       return user
     }
   }
@@ -224,6 +250,18 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
         throw denied(user, `view:advance-return advance=${owner.advanceId}`)
       }
       await assertAdvanceInScope(user, owner.advanceId)
+      return
+    }
+    case 'customer_wht': {
+      if (!hasAny(user, 'view', [MANAGE_CUSTOMER_WHT])) throw denied(user, `view:customer-wht id=${owner.certificateId}`)
+      await assertCustomerWhtInScope(user, owner.certificateId)
+      return
+    }
+    case 'bank_transaction': {
+      if (!hasAny(user, 'view', [MANAGE_BANK_RECONCILIATION])) {
+        throw denied(user, `view:bank-refund tx=${owner.transactionId}`)
+      }
+      await assertBankTransactionInScope(user, owner.transactionId)
       return
     }
   }

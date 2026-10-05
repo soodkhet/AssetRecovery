@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { MATCH_TARGET_LABEL, allowedTargetKind } from '@/lib/bank-recon/matching'
+import { MATCH_TARGET_LABEL, allowedTargetKind, suspenseMatchRequiresNote } from '@/lib/bank-recon/matching'
 import type { BankTransactionDto, MatchCandidateDto, MatchResultDto } from '@/lib/bank-recon/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -51,7 +51,9 @@ export function ManualMatchModal({
   const kind = allowedTargetKind(transaction.amountSatang)
   const selected = candidates.find((candidate) => candidate.id === targetId)
   const isRematch = transaction.matchStatus === 'auto_matched' || transaction.matchStatus === 'manual_matched'
-  const noteRequired = isRematch || (selected !== undefined && !selected.exactAmount)
+  // เงินรับรอตรวจสอบ (มติ PO U41) ⇒ ต้องบอกเสมอว่าทราบที่มาจากอะไร
+  const fromSuspense = suspenseMatchRequiresNote(transaction.matchStatus)
+  const noteRequired = isRematch || fromSuspense || (selected !== undefined && !selected.exactAmount)
   const ready = targetId !== '' && (!noteRequired || note.trim() !== '')
 
   async function submit(): Promise<void> {
@@ -136,6 +138,12 @@ export function ManualMatchModal({
           <InlineAlert tone="warning" title="รายการนี้จับคู่ไปแล้ว">
             การยืนยันจะเปลี่ยนการจับคู่เดิม ({transaction.matchedRef ?? '—'}) — เงินรับที่สร้างจากการจับคู่เดิม
             จะถูกถอนออกและบันทึกลง audit พร้อมเหตุผลที่กรอก
+          </InlineAlert>
+        )}
+
+        {fromSuspense && (
+          <InlineAlert tone="info" title="จับคู่เงินรับรอตรวจสอบ">
+            เมื่อจับคู่แล้วระบบจะสร้างเงินรับและลดยอดค้างชำระของรอบวางบิลที่เลือก — ระบุว่าทราบที่มาของเงินจากอะไร
           </InlineAlert>
         )}
 

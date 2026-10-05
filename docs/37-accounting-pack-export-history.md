@@ -17,6 +17,7 @@
 | v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (U21) — แจ้งสำนักงานบัญชี: เพิ่มไฟล์ที่ 9**: รายชื่อไฟล์มาตรฐาน 8 → **9 ไฟล์** — `09_Credit_Notes.csv` (CSV UTF-8 + BOM แบบไฟล์อื่น) = ใบลดหนี้ (`CN`) + ใบเพิ่มหนี้ (`DN` — U19) ที่**ลงวันที่ในรอบ** รวมใบที่ยกเลิก · คอลัมน์ `document_type, number, issue_date, tax_invoice_ref, company, amount_before_vat_baht, vat_baht, total_baht, reason, status, adjustment_ref` (วันที่ พ.ศ. `DD/MM/YYYY` · ยอดเป็นบวกเสมอ ทิศทางดูจาก `document_type` · `status` = `active`/`cancelled` · `adjustment_ref` = เลขที่ใน `07_Adjustment_Log.csv` ของงวดเป้าหมายของ Adjustment, ไม่ผูก = `-`) · **ไฟล์ 01–08 ไม่เปลี่ยน** · หน้าปก/SHA-256 ของชุดครอบคลุม 01–09 · `file_count` = 9 · template `reference/samples/09_Credit_Notes.csv` |
 | v2.4 | 05/10/2569 | **มติ PO 05/10/2569 (U31 · BUG-129)**: `08_Document_Checklist.xlsx` — exception ที่ผู้บริหาร**อนุญาตให้ปิดงวด** (`authorized`) แสดง `doc_status` = **"อนุญาตปิดงวด — ยังรอเอกสาร"** (ไม่นับว่า "ครบถ้วน") พร้อมระดับ + หัวข้อเอกสารที่รอ (+ เหตุผลที่อนุญาต) และสรุปนับแยกบรรทัด · มีผลกับ export ใหม่เท่านั้น — version เดิมไม่ถูกสร้างใหม่/ทับ · (U33) `05_WHT_Data.csv` `filing_form = PND1` ครอบเงินได้ 40(1) ด้วย |
 | v2.5 | 05/10/2569 | **มติ PO 05/10/2569 (U30 · BUG-109) — แจ้งสำนักงานบัญชีว่ามีคอลัมน์ใหม่**: `04_Payments.csv` เพิ่ม `advance_offset_baht` + `transfer_baht` **ต่อท้ายสุด** (คอลัมน์เดิมไม่ย้าย) — รอบจ่ายที่หักคืนเงินทดรอง: เงินโอนจริง = `transfer_baht` · ส่วนหักคือการรับชำระลูกหนี้เงินทดรอง (`reference/samples/04_Payments.csv` อัปเดตแล้ว) |
+| v2.6 | 05/10/2569 | **มติ PO 05/10/2569 (U40/U41) — แจ้งสำนักงานบัญชี: เพิ่มไฟล์ที่ 10–11**: `10_Customer_WHT.csv` = ภาษีที่ลูกค้าหักเรา + สถานะหนังสือ 50 ทวิ (แถว = รับเงินในงวด + ยังรอหนังสือที่ยกมา) คอลัมน์ `received_date, company, company_tax_id, billing_ref, tax_invoice_ref, withheld_baht, cert_no, cert_date, cert_wht_baht, status` (`pending`/`received`) · `11_Suspense_Receipts.csv` = เงินรับรอตรวจสอบ (แถว = เกิดในงวด + ยังค้าง + จับคู่/คืนเงินในงวด) คอลัมน์ `bank_txn_date, bank_ref, amount_baht, suspended_date, suspense_reason, status, resolved_ref, resolved_date, refund_reason` · `06_Bank_Reconciliation.csv` `status` เป็น enum เต็ม **6 ค่า** (+`suspense`/`suspense_refunded`) · **ไฟล์ 01–09 ไม่เปลี่ยนคอลัมน์** · หน้าปก/SHA-256 ครอบคลุม 01–11 · `file_count` = 11 · template `reference/samples/10_Customer_WHT.csv` + `11_Suspense_Receipts.csv` |
 | v2.1 | 04/07/2569 | **กำหนดรูปแบบข้อมูลใน template (DEC-006/D10)**: `05_WHT_Data.csv` — `payee_tax_id` เป็นตัวเลข 13 หลักล้วนไม่มีขีดคั่น (ตรง validation `INVALID_TAX_ID_FORMAT`) / `06_Bank_Reconciliation.csv` — column `status` ใช้ค่า enum เต็ม 4 ค่า (`auto_matched`/`manual_matched`/`unmatched`/`unmatched_resolved`) ให้สำนักงานบัญชีเห็นที่มาการจับคู่ ไม่ simplify — template CSV ตัวอย่างแก้ให้ตรงแล้ว |
 
 ขอบเขตเอกสารนี้: สร้างและติดตามประวัติการ Export "Accounting Pack" — ชุดไฟล์ข้อมูลที่ส่งมอบให้สำนักงานบัญชีภายนอกทุกรอบเดือน
@@ -61,10 +62,12 @@
 | 03_Expenses.csv | CSV UTF-8 | รายการค่าใช้จ่าย | 32 |
 | 04_Payments.csv | CSV UTF-8 | รายการจ่ายเงินจริง — `amount_baht` = สุทธิหลังภาษี · **ต่อท้าย** `advance_offset_baht` (หักคืนเงินทดรองหลังภาษี) + `transfer_baht` (= amount − หัก = เงินที่โอนจริง) (มติ PO 05/10/2569 U30) | 17 |
 | 05_WHT_Data.csv | CSV UTF-8 | ข้อมูลหัก ณ ที่จ่าย — `payee_tax_id` เป็นตัวเลข 13 หลักล้วน (DEC-006/D10) · คอลัมน์สุดท้าย `filing_form` = `PND1`/`PND3`/`PND53` (มติ PO 05/10/2569 U15) | 33 |
-| 06_Bank_Reconciliation.csv | CSV UTF-8 | ผลกระทบยอดธนาคาร — `status` ใช้ enum เต็ม 4 ค่า (DEC-006/D10) | 35 |
+| 06_Bank_Reconciliation.csv | CSV UTF-8 | ผลกระทบยอดธนาคาร — `status` ใช้ enum เต็ม (DEC-006/D10 · 6 ค่าตั้งแต่มติ PO U41) | 35 |
 | 07_Adjustment_Log.csv | CSV UTF-8 | รายการปรับปรุงยอดทั้งหมดของรอบนั้น — target_type, target_id, adjustment_type, amount, reason, approved_by | 20 |
 | 08_Document_Checklist.xlsx | XLSX | สถานะ Exception/เอกสารไม่ครบ — `doc_status` 4 ค่า: ครบถ้วน (`resolved`) / อนุญาตปิดงวด — ยังรอเอกสาร (`authorized` · มติ PO U31) / ขาดเอกสาร (critical ที่ `open`) / รอตรวจสอบ (`open` อื่น) · สรุปนับแยกครบ 4 กลุ่ม | 34 |
 | 09_Credit_Notes.csv | CSV UTF-8 | ใบลดหนี้ (`CN`) / ใบเพิ่มหนี้ (`DN`) ที่ลงวันที่ในรอบ รวมใบที่ยกเลิก — document_type, number, issue_date, tax_invoice_ref, company, amount_before_vat_baht, vat_baht, total_baht, reason, status, adjustment_ref (มติ PO 05/10/2569 U21) | 31 |
+| 10_Customer_WHT.csv | CSV UTF-8 | ภาษีที่ลูกค้าหักเรา ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — received_date, company, company_tax_id, billing_ref, tax_invoice_ref, withheld_baht, cert_no, cert_date, cert_wht_baht, status (มติ PO 05/10/2569 U40) | 31 |
+| 11_Suspense_Receipts.csv | CSV UTF-8 | เงินรับรอตรวจสอบ (ไม่ทราบที่มา — ไม่ใช่รายได้) — bank_txn_date, bank_ref, amount_baht, suspended_date, suspense_reason, status, resolved_ref, resolved_date, refund_reason (มติ PO 05/10/2569 U41) | 35 |
 
 > **แก้ไขแล้ว**: เดิม UI ต้นแบบ (`accounting.html`) มีช่องว่างเลข 07 หายไป — เติม **Adjustment Log** เข้าไปแทน เพราะสำนักงานบัญชีจำเป็นต้องเห็นรายการปรับปรุงยอดทั้งหมดที่เกิดในรอบบัญชีนั้น — เรียงเลขต่อเนื่อง 01-08 ครบไม่มีช่องว่างแล้ว
 
@@ -151,6 +154,7 @@
 | Mark sent | Export Record สถานะ generated กด "mark ว่าส่งแล้ว" | status เปลี่ยนเป็น sent, sent_at บันทึกเวลา |
 | Checklist แยก authorized (U31) | Executive authorize exception critical แล้ว Export | แถวนั้นใน 08 = "อนุญาตปิดงวด — ยังรอเอกสาร" (ไม่ใช่ "ครบถ้วน") พร้อมหัวข้อ · สรุปนับแยก · export version เดิมไม่เปลี่ยน |
 | ชุดมีไฟล์ 09 (U21) | บันทึกใบลดหนี้ + ใบเพิ่มหนี้ในรอบ แล้ว Export | zip มี `09_Credit_Notes.csv` หัวคอลัมน์ตรง template · แถว `CN`/`DN` ครบ · file_count = 9 |
+| ชุดมีไฟล์ 10–11 (U40/U41) | มีรายการรอ 50 ทวิ + เงินรับรอตรวจสอบในรอบ แล้ว Export | zip มี `10_Customer_WHT.csv` / `11_Suspense_Receipts.csv` หัวคอลัมน์ตรง template · แถวครบ · file_count = 11 |
 
 ---
 

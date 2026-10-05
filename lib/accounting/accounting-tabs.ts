@@ -1,5 +1,5 @@
 /**
- * SSOT ของ **9 แท็บ** ในหน้า "บัญชี" (`06` §8 — ไฟล์ 30–37 · mockup `accounting.html`
+ * SSOT ของ **10 แท็บ** ในหน้า "บัญชี" (`06` §8 — ไฟล์ 30–37 · mockup `accounting.html`
  * `renderAccountingOperations`) — pure ล้วน ใช้ร่วม server component (ตรวจ `?tab=`) และ client
  *
  * เปิดแท็บใหม่ = แก้ `available` ที่นี่ที่เดียว แล้วเสียบ component ใน `<AccountingShell>`
@@ -26,6 +26,8 @@ export const ACCOUNTING_TABS: readonly AccountingTab[] = [
   { id: 'documents', label: 'เอกสารไม่ครบ', source: 'ไฟล์ 34', available: true },
   { id: 'qa', label: 'ข้อซักถาม', source: 'ไฟล์ 36', available: true },
   { id: 'export', label: 'ส่งมอบ', source: 'ไฟล์ 37', available: true },
+  // มติ PO 05/10/2569 U40 — ติดตาม/บันทึกรับหนังสือ 50 ทวิ ที่ลูกค้าหักเรา (ใช้ component เดียวกับหน้าการเงิน)
+  { id: 'customer-wht', label: '50 ทวิ ลูกค้า', source: 'ไฟล์ 31', available: true },
 ]
 
 /** แท็บเริ่มต้น — "รอบส่งบัญชี" คือหน้าแรกของโมดูล (`30` §8 — ปิดงวดคือแกนของงานบัญชี) */

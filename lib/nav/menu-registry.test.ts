@@ -305,6 +305,11 @@ describe('เมนูการเงินของผู้จัดการ�
     expect(canViewMenu(viewer(TEAM_MANAGER_ROLE_NAME, 'inhouse'), 'finance')).toBe(false)
   })
 
+  it('มติ PO U40 — ธุรการที่ถือ manage_customer_wht เห็นเมนูการเงิน · ไม่ถือ = ไม่เห็น', () => {
+    expect(canViewMenu({ ...VIEWERS.admin_office, capabilities: { manage_customer_wht: 'manage' } }, 'finance')).toBe(true)
+    expect(canViewMenu({ ...VIEWERS.admin_office, capabilities: { record_admin_data: 'manage' } }, 'finance')).toBe(false)
+  })
+
   it('ประตู capability ไม่กระทบ role อื่น — การเงิน/บริหารเห็นตามเดิมแม้ไม่ส่ง capability', () => {
     expect(canViewMenu(VIEWERS.finance, 'finance')).toBe(true)
     expect(canViewMenu(VIEWERS.executive, 'finance')).toBe(true)

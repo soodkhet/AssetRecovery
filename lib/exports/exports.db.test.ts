@@ -10,7 +10,7 @@ import { CSV_BOM } from '@/lib/exports/csv'
  *  - `37` §16: Export ขณะมี critical `open` ⇒ `EXPORT_BLOCKED_CRITICAL` · `authorized` แล้วผ่าน (`34` §11)
  *  - `37` §16: Export ซ้ำรอบเดิม ⇒ version ถัดไป (v1.0 → v1.1) **ไม่ทับของเดิม** และไฟล์เก่ายังอยู่ครบ
  *  - `37` §16: mark-sent ⇒ `sent` + `sent_at` · ข้ามขั้น `generated → accepted` ⇒ `EXPORT_INVALID_STATUS`
- *  - `37` §6.1: ชุดมีไฟล์ 01–09 ครบ (09 = มติ PO U21) + หน้าปก + `.zip` · `file_hash` = SHA-256 ของ `.zip` จริง
+ *  - `37` §6.1: ชุดมีไฟล์ 01–11 ครบ (09 = มติ PO U21 · 10/11 = U40/U41) + หน้าปก + `.zip` · `file_hash` = SHA-256 ของ `.zip` จริง
  *  - DEC-006/D10: payee ที่ไม่มีเลขผู้เสียภาษี 13 หลัก ⇒ `EXPORT_PAYEE_TAX_ID_MISSING` (ไม่ปล่อยช่องว่างออกไป)
  *  - `37` §10: ไม่มีทางลบระเบียนเก่า — export ครั้งใหม่เพิ่มแถว ไม่ใช่ update แถวเดิม
  *
@@ -315,7 +315,7 @@ afterAll(async () => {
 })
 
 suite('Phase 4.6 — สร้างชุดเอกสารส่งบัญชี (`37` §6.1 · §16)', () => {
-  it('ชุดมีไฟล์ 01–09 ครบ + หน้าปก + .zip · file_hash = SHA-256 ของ .zip จริง', async () => {
+  it('ชุดมีไฟล์ 01–11 ครบ + หน้าปก + .zip · file_hash = SHA-256 ของ .zip จริง', async () => {
     await resetOrgData()
     await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 850000, wht: 25500 }])
     await seedRevenue()
@@ -325,7 +325,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
 
     expect(record.versionLabel).toBe('v1.0')
     expect(record.status).toBe('generated')
-    expect(record.fileCount).toBe(9)
+    expect(record.fileCount).toBe(11)
     expect(record.files.map((file) => file.key).sort()).toEqual([
       '01',
       '02',
@@ -336,6 +336,8 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       '07',
       '08',
       '09',
+      '10',
+      '11',
       'cover',
       'pack',
     ])
@@ -356,7 +358,16 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       '07_Adjustment_Log.csv',
       '08_Document_Checklist.xlsx',
       '09_Credit_Notes.csv',
+      '10_Customer_WHT.csv',
+      '11_Suspense_Receipts.csv',
     ])
+    // มติ PO 05/10/2569 (U40/U41) — รอบนี้ไม่มีรายการ ⇒ มีแต่หัวคอลัมน์
+    expect(fileAt([...storage.keys()].find((path) => path.endsWith('10_Customer_WHT.csv')) ?? '')).toBe(
+      `${CSV_BOM}received_date,company,company_tax_id,billing_ref,tax_invoice_ref,withheld_baht,cert_no,cert_date,cert_wht_baht,status\r\n`,
+    )
+    expect(fileAt([...storage.keys()].find((path) => path.endsWith('11_Suspense_Receipts.csv')) ?? '')).toBe(
+      `${CSV_BOM}bank_txn_date,bank_ref,amount_baht,suspended_date,suspense_reason,status,resolved_ref,resolved_date,refund_reason\r\n`,
+    )
     // มติ PO 05/10/2569 (U21) — รอบนี้ไม่มีใบลดหนี้/ใบเพิ่มหนี้ ⇒ มีแต่หัวคอลัมน์
     const creditCsv = fileAt([...storage.keys()].find((path) => path.endsWith('09_Credit_Notes.csv')) ?? '')
     expect(creditCsv).toBe(
@@ -518,7 +529,7 @@ suite('Phase 4.6 — สถานะการส่งมอบ (`37` §9 · §1
     expect(exported).toBeDefined()
     const after = exported?.after_data as { version?: string; file_names?: string[]; file_hash?: string } | undefined
     expect(after?.version).toBe('v1.0')
-    expect(after?.file_names).toHaveLength(10)
+    expect(after?.file_names).toHaveLength(12)
     expect(after?.file_hash).toMatch(/^[0-9a-f]{64}$/)
   })
 })
@@ -561,7 +572,7 @@ suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บ�
     const record = await exportsApi.createExportPack(ctx, { periodId })
     const row = await db().exportRecord.findUniqueOrThrow({ where: { id: record.id }, select: { fileUrls: true } })
     const paths = Object.values(row.fileUrls as Record<string, string>)
-    expect(paths).toHaveLength(11)
+    expect(paths).toHaveLength(13)
     for (const path of paths) expect(path, path).toMatch(/^[A-Za-z0-9!\-_.*'()/]+$/)
     expect(paths.some((path) => path.endsWith('/AccountingPack_2569-06_v1.0.zip'))).toBe(true)
     // ชื่อที่ผู้ใช้เห็น/ได้ตอนดาวน์โหลดยังเป็นภาษาไทย
@@ -584,7 +595,7 @@ suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บ�
     }
 
     expect(storage.size).toBe(0)
-    expect(removed).toHaveLength(10)
+    expect(removed).toHaveLength(12)
     expect(await db().exportRecord.count({ where: { periodId } })).toBe(0)
 
     const retried = await exportsApi.createExportPack(ctx, { periodId })

@@ -488,6 +488,10 @@ enum BankMatchStatus {
   auto_matched
   manual_matched
   unmatched_resolved
+  /// มติ PO U41 (05/10/2569) — เงินเข้าไม่ทราบที่มา "เงินรับรอตรวจสอบ" (หนี้สิน · ไม่สร้างเงินรับ/ไม่ลด AR)
+  suspense
+  /// มติ PO U41 — เงินรับรอตรวจสอบที่คืนผู้โอนแล้ว (terminal)
+  suspense_refunded
 
   @@map("bank_match_status")
 }
@@ -555,6 +559,16 @@ enum WhtFilingMethod {
   paper
 
   @@map("wht_filing_method")
+}
+
+/// มติ PO U40 (05/10/2569) — สถานะหนังสือรับรอง 50 ทวิ ที่ลูกค้าหักเรา
+enum CustomerWhtStatus {
+  /// รอ 50 ทวิ จากลูกค้า (เกิดอัตโนมัติเมื่อจับคู่เงินรับที่ถูกหักภาษี)
+  pending
+  /// ได้รับหนังสือแล้ว (กรอกเลขที่/วันที่ + แนบไฟล์)
+  received
+
+  @@map("customer_wht_status")
 }
 
 enum WhtFilingStatus {
@@ -902,6 +916,9 @@ model User {
   allocationsCreated        BankTransactionAllocation[] @relation("allocations_created_by")
   customerWhtCreated        CustomerWhtCertificate[]    @relation("customer_wht_created_by")
   customerWhtUpdated        CustomerWhtCertificate[]    @relation("customer_wht_updated_by")
+  customerWhtReceived       CustomerWhtCertificate[]    @relation("customer_wht_received_by")
+  bankTxSuspended           BankTransaction[]           @relation("bank_tx_suspended_by")
+  bankTxRefunded            BankTransaction[]           @relation("bank_tx_refunded_by")
   questionsCreated          AccountantQuestion[]        @relation("questions_created_by")
   questionsAnswered         AccountantQuestion[]        @relation("questions_answered_by")
   exportsGenerated          ExportRecord[]              @relation("exports_generated_by")
@@ -2776,6 +2793,9 @@ model CashReceipt {
   bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id])
   createdByUser   User             @relation("cash_receipts_created_by", fields: [createdBy], references: [id])
 
+  /// U40 — รายการ "รอ 50 ทวิ จากลูกค้า" ที่เกิดจากเงินรับนี้ (ถูกหักภาษี)
+  customerWhtCertificates CustomerWhtCertificate[]
+
   @@index([periodId], map: "idx_cash_receipts_period")
   @@index([billingBatchId], map: "idx_cash_receipts_billing")
   @@map("cash_receipts")
@@ -2951,26 +2971,42 @@ model BankTransaction {
   matchedBy String?   @map("matched_by") @db.Uuid
   matchedAt DateTime? @map("matched_at") @db.Timestamptz(6)
 
+  /// U41 — ย้ายเข้า "เงินรับรอตรวจสอบ" (คงค่าไว้แม้จับคู่/คืนเงินภายหลัง = ประวัติว่าเคยรอตรวจสอบ)
+  suspenseNote String?   @map("suspense_note")
+  suspendedAt  DateTime? @map("suspended_at") @db.Timestamptz(6)
+  suspendedBy  String?   @map("suspended_by") @db.Uuid
+
+  /// U41 — คืนเงินผู้โอน (วันที่โอนคืน + หลักฐาน + เหตุผล)
+  refundDate       DateTime? @map("refund_date") @db.Date
+  refundNote       String?   @map("refund_note")
+  refundFilePath   String?   @map("refund_file_path")
+  refundFileSha256 String?   @map("refund_file_sha256")
+  refundedAt       DateTime? @map("refunded_at") @db.Timestamptz(6)
+  refundedBy       String?   @map("refunded_by") @db.Uuid
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
 
-  organization   Organization     @relation(fields: [organizationId], references: [id])
-  period         AccountingPeriod @relation(fields: [periodId], references: [id])
-  bankAccount    BankAccount      @relation("bank_tx_account", fields: [bankAccountId], references: [id])
-  matchedBilling BillingBatch?    @relation("bank_tx_matched_billing", fields: [matchedBillingId], references: [id])
-  matchedPayout  PayoutBatch?     @relation("bank_tx_matched_payout", fields: [matchedPayoutId], references: [id])
-  matchedAdvance Advance?         @relation("bank_tx_matched_advance", fields: [matchedAdvanceId], references: [id])
-  matchedByUser  User?            @relation("bank_tx_matched_by", fields: [matchedBy], references: [id])
-  createdByUser  User             @relation("bank_tx_created_by", fields: [createdBy], references: [id])
-  updatedByUser  User?            @relation("bank_tx_updated_by", fields: [updatedBy], references: [id])
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  period          AccountingPeriod @relation(fields: [periodId], references: [id])
+  bankAccount     BankAccount      @relation("bank_tx_account", fields: [bankAccountId], references: [id])
+  suspendedByUser User?            @relation("bank_tx_suspended_by", fields: [suspendedBy], references: [id])
+  refundedByUser  User?            @relation("bank_tx_refunded_by", fields: [refundedBy], references: [id])
+  matchedBilling  BillingBatch?    @relation("bank_tx_matched_billing", fields: [matchedBillingId], references: [id])
+  matchedPayout   PayoutBatch?     @relation("bank_tx_matched_payout", fields: [matchedPayoutId], references: [id])
+  matchedAdvance  Advance?         @relation("bank_tx_matched_advance", fields: [matchedAdvanceId], references: [id])
+  matchedByUser   User?            @relation("bank_tx_matched_by", fields: [matchedBy], references: [id])
+  createdByUser   User             @relation("bank_tx_created_by", fields: [createdBy], references: [id])
+  updatedByUser   User?            @relation("bank_tx_updated_by", fields: [updatedBy], references: [id])
 
   allocations  BankTransactionAllocation[]
   cashReceipts CashReceipt[]
 
   @@index([periodId, matchStatus], map: "idx_bank_tx_period")
   @@index([bankAccountId, transactionDate], map: "idx_bank_tx_account")
+  @@index([organizationId, matchStatus], map: "idx_bank_tx_org_status")
   /// กันนำเข้า statement ซ้ำที่ระดับ DB — `uniq_bank_tx_statement_row` เป็น **functional unique index**
   /// `(organization_id, bank_account_id, transaction_date, amount_satang, md5(lower(btrim(description))))`
   /// ซึ่ง Prisma เขียนไม่ได้ ⇒ อยู่ใน raw SQL (`20260816010000_bank_transaction_dedupe`) ตาม Rule 02
@@ -3065,20 +3101,35 @@ model BankTransactionAllocation {
 
 /// A1 — ใบ 50 ทวิ ที่**ลูกค้า (บริษัทไฟแนนซ์) ออกให้เรา** เมื่อหัก WHT จากค่าบริการ
 /// = เครดิตภาษีของบริษัท (เงินจริง) — คนละเรื่องกับ `WhtCertificate` ที่เราออกให้ผู้รับเงิน
+/// U40 (มติ PO 05/10/2569): เกิดเป็น `pending` ("รอ 50 ทวิ จากลูกค้า") อัตโนมัติเมื่อจับคู่เงินรับที่ถูกหัก →
+/// กรอกเลขที่/วันที่ในหนังสือ + แนบไฟล์ ⇒ `received` · ยอดในหนังสือไม่ตรงยอดที่ถูกหัก = เตือน ไม่บล็อก
+/// CHECK `customer_wht_received_shape` + partial unique `uniq_customer_wht_cash_receipt` อยู่ใน raw SQL migration
 model CustomerWhtCertificate {
-  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId    String   @map("organization_id") @db.Uuid
-  companyId         String   @map("company_id") @db.Uuid
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String            @map("organization_id") @db.Uuid
+  companyId         String            @map("company_id") @db.Uuid
   /// รอบบิลที่ใบนี้อ้างถึง (NULL = ยังจับคู่ไม่ได้)
-  billingBatchId    String?  @map("billing_batch_id") @db.Uuid
-  certificateNumber String   @map("certificate_number")
-  certificateDate   DateTime @map("certificate_date") @db.Date
-  /// ยอดก่อน VAT ที่ถูกหัก (ฐาน before_vat — `22` §6.9)
-  grossSatang       Int      @map("gross_satang")
-  whtSatang         Int      @map("wht_satang")
-  /// ไฟล์สแกนใบจริง (Supabase Storage)
-  fileUrl           String?  @map("file_url")
+  billingBatchId    String?           @map("billing_batch_id") @db.Uuid
+  /// U40 — เงินรับที่ถูกหักภาษี (ต้นเหตุของรายการ) · เงินรับถูกถอนตอนเปลี่ยนการจับคู่ ⇒ SET NULL
+  cashReceiptId     String?           @map("cash_receipt_id") @db.Uuid
+  status            CustomerWhtStatus @default(pending)
+  /// U40 — ยอดที่ลูกค้าหักไว้ตามเงินรับ (snapshot ตอนจับคู่ — `cash_receipts.wht_withheld_by_customer_satang`)
+  withheldSatang    Int               @map("withheld_satang")
+  /// U40 — วันที่รับเงิน (ใช้คิดอายุค้างรับ + งวดของไฟล์ส่งบัญชี)
+  withheldDate      DateTime          @map("withheld_date") @db.Date
+  /// เลขที่/วันที่ในหนังสือ — บังคับเมื่อ `received`
+  certificateNumber String?           @map("certificate_number")
+  certificateDate   DateTime?         @map("certificate_date") @db.Date
+  /// ยอดก่อน VAT ที่ถูกหักตามหนังสือ (ฐาน before_vat — `22` §6.9) — ไม่บังคับ
+  grossSatang       Int?              @map("gross_satang")
+  /// ยอดภาษีตามหนังสือ — บังคับเมื่อ `received` (ไม่ตรง `withheld_satang` = เตือน)
+  whtSatang         Int?              @map("wht_satang")
+  /// ไฟล์สแกนใบจริง (path ใน Storage — server ประกอบ path เอง DEC-014)
+  fileUrl           String?           @map("file_url")
+  fileSha256        String?           @map("file_sha256")
   note              String?
+  receivedAt        DateTime?         @map("received_at") @db.Timestamptz(6)
+  receivedBy        String?           @map("received_by") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -3086,14 +3137,17 @@ model CustomerWhtCertificate {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization  Organization   @relation(fields: [organizationId], references: [id])
-  company       FinanceCompany @relation("customer_wht_company", fields: [companyId], references: [id])
-  billingBatch  BillingBatch?  @relation(fields: [billingBatchId], references: [id])
-  createdByUser User           @relation("customer_wht_created_by", fields: [createdBy], references: [id])
-  updatedByUser User?          @relation("customer_wht_updated_by", fields: [updatedBy], references: [id])
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  company        FinanceCompany @relation("customer_wht_company", fields: [companyId], references: [id])
+  billingBatch   BillingBatch?  @relation(fields: [billingBatchId], references: [id])
+  cashReceipt    CashReceipt?   @relation(fields: [cashReceiptId], references: [id], onDelete: SetNull)
+  createdByUser  User           @relation("customer_wht_created_by", fields: [createdBy], references: [id])
+  updatedByUser  User?          @relation("customer_wht_updated_by", fields: [updatedBy], references: [id])
+  receivedByUser User?          @relation("customer_wht_received_by", fields: [receivedBy], references: [id])
 
   @@unique([organizationId, companyId, certificateNumber])
   @@index([organizationId, certificateDate], map: "idx_customer_wht_date")
+  @@index([organizationId, status, withheldDate], map: "idx_customer_wht_status")
   @@map("customer_wht_certificates")
 }
 

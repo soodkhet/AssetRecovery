@@ -1,0 +1,4 @@
+﻿bank_txn_date,bank_ref,amount_baht,suspended_date,suspense_reason,status,resolved_ref,resolved_date,refund_reason
+20/09/2569,TRF IN 0987 ไม่ระบุผู้โอน,123.45,21/09/2569,โอนเข้าไม่ระบุผู้โอน รอสอบถามธนาคาร,suspense,-,-,-
+22/09/2569,TRF IN KBANK 5521,5350.00,23/09/2569,ยอดไม่ตรงบิลใด รอลูกค้ายืนยัน,manual_matched,บริษัท สยามไฟแนนซ์ จำกัด 2569-08,30/09/2569,-
+25/09/2569,TRF IN SCB 1102,500.00,25/09/2569,ผู้โอนแจ้งโอนผิดบัญชี,suspense_refunded,-,27/09/2569,โอนคืนผู้โอนตามคำขอพร้อมสำเนาสลิป

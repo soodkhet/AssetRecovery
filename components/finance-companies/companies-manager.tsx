@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { CompanyFormModal } from '@/components/finance-companies/company-form-modal'
 import {
   Badge,
@@ -20,6 +20,9 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { MANAGE_CUSTOMER_WHT } from '@/lib/customer-wht/customer-wht'
+import type { CustomerWhtCompanySummary, CustomerWhtListDto } from '@/lib/customer-wht/types'
+import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { formatCustomerWhtPct, formatTaxId, vatModeLabel } from '@/lib/finance-companies/company'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
@@ -53,6 +56,10 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 
 export function CompaniesManager() {
   const { showToast } = useToast()
+  const { can } = usePermission()
+  // มติ PO U40 — 50 ทวิ ที่ลูกค้ารายนี้ยังค้างส่ง (แสดงเฉพาะผู้มีสิทธิ์ดูข้อมูลภาษีนี้)
+  const canViewCustomerWht = can('view', MANAGE_CUSTOMER_WHT)
+  const [pendingWht, setPendingWht] = useState<ReadonlyMap<string, CustomerWhtCompanySummary>>(new Map())
   const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
   const [templates, setTemplates] = useState<readonly ServiceFeeTemplateListDto[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,6 +74,19 @@ export function CompaniesManager() {
   const [statusTarget, setStatusTarget] = useState<FinanceCompanyDto | null>(null)
   const [statusReason, setStatusReason] = useState('')
   const [statusSaving, setStatusSaving] = useState(false)
+
+  useEffect(() => {
+    if (!canViewCustomerWht) return
+    let cancelled = false
+    void (async () => {
+      const result = await callApi<CustomerWhtListDto>('/api/accounting/customer-wht-certificates?status=pending&limit=1')
+      if (cancelled || result.data === undefined) return
+      setPendingWht(new Map(result.data.byCompany.map((row) => [row.companyId, row])))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [canViewCustomerWht])
 
   /** ตัวดึงข้อมูล **ไม่มี setState ในตัวเอง** (กฎ `react-hooks/set-state-in-effect`) */
   const fetchCompanies = useCallback(async () => {
@@ -261,6 +281,12 @@ export function CompaniesManager() {
                     <div className="text-xs text-slate-500">
                       ลูกค้าหักภาษี ณ ที่จ่าย: {formatCustomerWhtPct(company.whtWithheldByCustomerPct)}
                     </div>
+                    {pendingWht.has(company.id) && (
+                      <div className="text-xs font-semibold text-amber-700">
+                        รอ 50 ทวิ จากลูกค้า {fmtCount(pendingWht.get(company.id)?.pendingCount ?? 0)} รายการ ·{' '}
+                        {fmtSatangSymbol(pendingWht.get(company.id)?.pendingSatang ?? 0)}
+                      </div>
+                    )}
                   </Detail>
                   <Detail label="รูปแบบส่งใบแจ้งหนี้">
                     {company.defaultInvoiceDeliveryFormat === 'e_tax_invoice' ? '📧 e-Tax Invoice' : '📄 กระดาษ/PDF'}

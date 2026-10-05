@@ -5,12 +5,14 @@ import type { ApiWarning } from '@/lib/api/envelope'
 import { alreadyMatchedWarning, BankReconError } from '@/lib/bank-recon/errors'
 import {
   allowedTargetKind,
+  canMoveToSuspense,
   findAutoMatch,
   hasNote,
   isExactMatchAmount,
   isMatched,
   manualMatchRequiresNote,
   nextBankMatchStatus,
+  suspenseMatchRequiresNote,
   transactionSide,
   whtWithheldForReceipt,
   type MatchCandidate,
@@ -21,6 +23,8 @@ import type {
   BankMatchInput,
   BankTransactionListQuery,
   MatchCandidateQuery,
+  MoveToSuspenseInput,
+  RefundSuspenseInput,
   ResolveUnmatchedInput,
   StatementImportInput,
 } from '@/lib/bank-recon/schemas'
@@ -52,6 +56,9 @@ import { RevenueError } from '@/lib/revenue/errors'
 import { applyBillingReceipt } from '@/lib/revenue/queries'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
+import { createPendingCustomerWht, releaseCustomerWhtForReceipt } from '@/lib/customer-wht/queries'
+import { bankRefundFileRule } from '@/lib/uploads/rules'
+import { verifyUploadedFile } from '@/lib/uploads/verify'
 
 /**
  * กระทบยอดธนาคาร (ไฟล์ 35) — ชั้น DB (`27` §6.14)
@@ -68,6 +75,10 @@ import { assertOrgWideReadable } from '@/lib/auth/scope'
  *   CHECK `bank_tx_status_fk_shape` ที่ DB จะปฏิเสธซ้ำอีกชั้นถ้าโค้ดพลาด
  * - นำเข้าไฟล์เดิมซ้ำต้อง**ไม่นับเงินซ้ำ** — กันด้วย `statementRowKey()` (วัน+ยอด+รายละเอียด)
  * - ทุก mutation ลง audit — จับคู่/เปลี่ยนการจับคู่/ปิดรายการ ใช้ `match_note` เป็นเหตุผล (`35` §13)
+ * - **U40** (มติ PO 05/10/2569): เงินรับที่ลูกค้าหักภาษี ⇒ สร้างรายการ "รอ 50 ทวิ จากลูกค้า" ใน tx เดียวกับเงินรับ
+ *   · เปลี่ยนการจับคู่ ⇒ ถอนรายการรอ 50 ทวิ ของเงินรับเดิมก่อนลบเงินรับ (`lib/customer-wht/queries.ts`)
+ * - **U41**: `unmatched → suspense` ("เงินรับรอตรวจสอบ" — **ไม่สร้างเงินรับ ไม่แตะ AR ไม่รับรู้รายได้**) →
+ *   ภายหลังจับคู่กับรอบวางบิล (สายปกติ + เหตุผลบังคับ) หรือ `suspense → suspense_refunded` (คืนเงินผู้โอน)
  */
 
 export { MANAGE_BANK_RECONCILIATION } from '@/lib/bank-recon/matching'
@@ -98,6 +109,13 @@ const TX_SELECT = {
   matchedBilling: { select: { id: true, period: true, company: { select: { name: true } } } },
   matchedPayout: { select: { id: true, name: true } },
   matchedByUser: { select: { fullName: true } },
+  suspenseNote: true,
+  suspendedAt: true,
+  suspendedByUser: { select: { fullName: true } },
+  refundDate: true,
+  refundNote: true,
+  refundFilePath: true,
+  refundedByUser: { select: { fullName: true } },
 } satisfies Prisma.BankTransactionSelect
 
 type TxRow = Prisma.BankTransactionGetPayload<{ select: typeof TX_SELECT }>
@@ -137,8 +155,25 @@ function toDto(row: TxRow): BankTransactionDto {
           : null,
     matchedByName: row.matchedByUser?.fullName ?? null,
     matchedAt: row.matchedAt?.toISOString() ?? null,
+    suspenseNote: row.suspenseNote,
+    suspendedAt: row.suspendedAt?.toISOString() ?? null,
+    suspendedByName: row.suspendedByUser?.fullName ?? null,
+    refundDate: row.refundDate?.toISOString() ?? null,
+    refundNote: row.refundNote,
+    refundFilePath: row.refundFilePath,
+    refundedByName: row.refundedByUser?.fullName ?? null,
     createdAt: row.createdAt.toISOString(),
   }
+}
+
+/** U41 — เงินรับรอตรวจสอบที่ยังคงค้างทั้งองค์กร (หนี้สินที่ยังไม่ทราบที่มา) */
+async function suspenseOutstanding(organizationId: string): Promise<{ count: number; amountSatang: number }> {
+  const aggregate = await prisma.bankTransaction.aggregate({
+    where: { organizationId, matchStatus: 'suspense' },
+    _count: { _all: true },
+    _sum: { amountSatang: true },
+  })
+  return { count: aggregate._count._all, amountSatang: aggregate._sum.amountSatang ?? 0 }
 }
 
 // ── อ่านรายการ ──────────────────────────────────────────────────────────────
@@ -164,6 +199,7 @@ export async function listBankTransactions(
 
   const items = rows.map(toDto)
   const countBy = (status: BankMatchStatus): number => items.filter((item) => item.matchStatus === status).length
+  const outstanding = await suspenseOutstanding(user.organizationId)
 
   return {
     items,
@@ -173,6 +209,10 @@ export async function listBankTransactions(
       autoMatched: countBy('auto_matched'),
       manualMatched: countBy('manual_matched'),
       unmatchedResolved: countBy('unmatched_resolved'),
+      suspense: countBy('suspense'),
+      suspenseRefunded: countBy('suspense_refunded'),
+      suspenseOutstandingCount: outstanding.count,
+      suspenseOutstandingSatang: outstanding.amountSatang,
       totalInSatang: items.filter((item) => item.amountSatang > 0).reduce((sum, item) => sum + item.amountSatang, 0),
       totalOutSatang: items
         .filter((item) => item.amountSatang < 0)
@@ -641,6 +681,8 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
         select: { id: true, billingBatchId: true, amountSatang: true, receivedDate: true },
       })
       for (const receipt of stale) {
+        // U40 — รายการรอ 50 ทวิ ของเงินรับเดิมต้องถูกถอนก่อน (ไม่งั้นค้างตามหนังสือที่ไม่มีวันมา)
+        await releaseCustomerWhtForReceipt(tx, ctx, receipt.id, `เปลี่ยนการจับคู่รายการเดินบัญชี ${before.id}`)
         await tx.cashReceipt.delete({ where: { id: receipt.id } })
         await emitAudit(
           {
@@ -720,6 +762,14 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
         },
         tx,
       )
+      // U40 — ลูกค้าหักภาษีไว้ ⇒ เกิดรายการ "รอ 50 ทวิ จากลูกค้า" (tx เดียวกับเงินรับ — ไม่มีทางเกิดครึ่งเดียว)
+      await createPendingCustomerWht(tx, ctx, {
+        cashReceiptId: receipt.id,
+        billingBatchId: input.candidate.id,
+        withheldSatang: whtWithheldSatang,
+        withheldDate: before.transactionDate,
+        sourceRef: input.candidate.ref,
+      })
     }
 
     await emitAudit(
@@ -808,6 +858,12 @@ export async function matchBankTransaction(
       message: 'รายการนี้ถูกปิดโดยไม่จับคู่ไปแล้ว — จับคู่ต่อไม่ได้',
     })
   }
+  if (transaction.matchStatus === 'suspense_refunded') {
+    throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
+      detail: 'suspense_refunded เป็นสถานะสุดท้าย จับคู่ต่อไม่ได้',
+      message: 'รายการนี้คืนเงินผู้โอนไปแล้ว — จับคู่ต่อไม่ได้',
+    })
+  }
 
   const expectedKind = allowedTargetKind(transaction.amountSatang)
   if (input.targetKind !== expectedKind) {
@@ -838,6 +894,13 @@ export async function matchBankTransaction(
   }
 
   const exactAmount = isExactMatchAmount(transaction.amountSatang, candidate)
+  // U41 — จับคู่เงินรับรอตรวจสอบเมื่อทราบที่มา ⇒ ต้องอธิบายเสมอว่าทราบจากอะไร
+  if (suspenseMatchRequiresNote(transaction.matchStatus) && !hasNote(input.matchNote)) {
+    throw new BankReconError('MATCH_NOTE_REQUIRED', {
+      detail: 'จับคู่เงินรับรอตรวจสอบต้องมีเหตุผล',
+      message: 'จับคู่เงินรับรอตรวจสอบต้องระบุว่าทราบที่มาของเงินจากอะไร',
+    })
+  }
   if (manualMatchRequiresNote({ exactAmount, isRematch: rematch }) && !hasNote(input.matchNote)) {
     throw new BankReconError('MATCH_NOTE_REQUIRED', {
       detail: exactAmount ? 'เปลี่ยนการจับคู่เดิมต้องมีเหตุผล' : 'ยอดไม่ตรงเป๊ะ',
@@ -920,4 +983,167 @@ export async function resolveUnmatchedTransaction(
   })
 
   return toDto(await loadTransaction(ctx.actor.organizationId, before.id))
+}
+
+// ── U41: เงินรับรอตรวจสอบ ────────────────────────────────────────────────────
+
+/**
+ * `PATCH /api/bank-reconciliation/transactions/:id/suspense` (มติ PO U41)
+ *
+ * เงินเข้าที่ยังไม่ทราบที่มา ⇒ "เงินรับรอตรวจสอบ" (หนี้สิน) — **ไม่สร้างเงินรับ ไม่แตะยอดรับของรอบวางบิล/AR
+ * ไม่รับรู้รายได้** · เหตุผลบังคับ · ไม่นับเป็นค้างจับคู่ในการตรวจความพร้อมปิดงวด (แสดงเตือนยอดคงค้างแทน)
+ */
+export async function moveToSuspense(
+  ctx: AccountingMutationContext,
+  transactionId: string,
+  input: MoveToSuspenseInput,
+): Promise<BankTransactionDto> {
+  assertOrgWideReadable(ctx.actor, 'bank-transactions')
+  const before = await loadTransaction(ctx.actor.organizationId, transactionId)
+  if (!canMoveToSuspense(before.matchStatus, before.amountSatang)) {
+    throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
+      detail: `${before.matchStatus} (amount=${before.amountSatang}) → suspense`,
+      message:
+        before.amountSatang <= 0
+          ? 'เงินรับรอตรวจสอบใช้กับรายการเงินเข้าเท่านั้น'
+          : 'ย้ายเป็นเงินรับรอตรวจสอบได้เฉพาะรายการที่ยังไม่จับคู่',
+    })
+  }
+  if (!hasNote(input.reason)) throw new BankReconError('MATCH_NOTE_REQUIRED')
+
+  await assertPeriodOpenAt({
+    organizationId: ctx.actor.organizationId,
+    at: before.transactionDate,
+    targetType: TARGET,
+    targetId: before.id,
+  })
+
+  const reason = input.reason.trim()
+  const now = new Date()
+  await prisma.$transaction(async (tx) => {
+    // มีเงื่อนไขสถานะ — สองคำขอพร้อมกัน (ย้าย/จับคู่) ต้องสำเร็จได้ทางเดียว
+    const updated = await tx.bankTransaction.updateMany({
+      where: { id: before.id, organizationId: ctx.actor.organizationId, matchStatus: 'unmatched' },
+      data: {
+        matchStatus: 'suspense',
+        suspenseNote: reason,
+        suspendedAt: now,
+        suspendedBy: ctx.actor.id,
+        updatedBy: ctx.actor.id,
+      },
+    })
+    if (updated.count === 0) {
+      throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', { detail: 'สถานะเปลี่ยนไประหว่างทำรายการ' })
+    }
+    await emitAudit(
+      {
+        organizationId: ctx.actor.organizationId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        action: 'status_change',
+        targetType: TARGET,
+        targetId: before.id,
+        before: { match_status: before.matchStatus },
+        after: { match_status: 'suspense', suspense_note: reason, amount_satang: before.amountSatang },
+        reason,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+  })
+
+  return toDto(await loadTransaction(ctx.actor.organizationId, before.id))
+}
+
+/**
+ * `PATCH /api/bank-reconciliation/transactions/:id/refund` (มติ PO U41)
+ *
+ * คืนเงินรับรอตรวจสอบให้ผู้โอน — วันที่โอนคืน + หลักฐาน (ตรวจไฟล์ที่ server) + เหตุผล · terminal
+ * ยามงวดล็อกใช้ทั้งวันที่ของรายการเดิมและวันที่คืนเงิน (ห้ามแก้ข้อมูลของงวดที่ล็อกตรง ๆ)
+ */
+export async function refundSuspense(
+  ctx: AccountingMutationContext,
+  transactionId: string,
+  input: RefundSuspenseInput,
+): Promise<BankTransactionDto> {
+  assertOrgWideReadable(ctx.actor, 'bank-transactions')
+  const before = await loadTransaction(ctx.actor.organizationId, transactionId)
+  const status = nextBankMatchStatus(before.matchStatus, 'refund_suspense')
+  if (status === null) {
+    throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
+      detail: `${before.matchStatus} → suspense_refunded`,
+      message: 'คืนเงินผู้โอนได้เฉพาะรายการที่เป็นเงินรับรอตรวจสอบ',
+    })
+  }
+  if (!hasNote(input.reason)) throw new BankReconError('MATCH_NOTE_REQUIRED')
+
+  for (const at of [before.transactionDate, input.refundDate]) {
+    await assertPeriodOpenAt({ organizationId: ctx.actor.organizationId, at, targetType: TARGET, targetId: before.id })
+  }
+
+  const verified = await verifyUploadedFile(input.filePath, bankRefundFileRule(before.id))
+  const reason = input.reason.trim()
+  const now = new Date()
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.bankTransaction.updateMany({
+      where: { id: before.id, organizationId: ctx.actor.organizationId, matchStatus: 'suspense' },
+      data: {
+        matchStatus: status,
+        refundDate: input.refundDate,
+        refundNote: reason,
+        refundFilePath: input.filePath,
+        refundFileSha256: verified.sha256,
+        refundedAt: now,
+        refundedBy: ctx.actor.id,
+        updatedBy: ctx.actor.id,
+      },
+    })
+    if (updated.count === 0) {
+      throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', { detail: 'สถานะเปลี่ยนไประหว่างทำรายการ' })
+    }
+    await emitAudit(
+      {
+        organizationId: ctx.actor.organizationId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        action: 'status_change',
+        targetType: TARGET,
+        targetId: before.id,
+        before: { match_status: before.matchStatus, suspense_note: before.suspenseNote },
+        after: {
+          match_status: status,
+          refund_date: input.refundDate,
+          refund_note: reason,
+          refund_file_path: input.filePath,
+          refund_file_sha256: verified.sha256,
+          amount_satang: before.amountSatang,
+        },
+        reason: `คืนเงินผู้โอน — ${reason}`,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+  })
+
+  return toDto(await loadTransaction(ctx.actor.organizationId, before.id))
+}
+
+/** ยามของ upload/download หลักฐานคืนเงิน — รายการต้องอยู่ในองค์กรของผู้เรียก · อัปโหลดได้เฉพาะเงินรับรอตรวจสอบ */
+export async function assertBankTransactionInScope(
+  user: SessionUser,
+  transactionId: string,
+  options: { requireSuspense?: boolean } = {},
+): Promise<void> {
+  assertOrgWideReadable(user, 'bank-transactions')
+  const row = await loadTransaction(user.organizationId, transactionId)
+  if (options.requireSuspense === true && row.matchStatus !== 'suspense') {
+    throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {
+      detail: `upload refund evidence ขณะ status=${row.matchStatus}`,
+      message: 'แนบหลักฐานคืนเงินได้เฉพาะรายการที่เป็นเงินรับรอตรวจสอบ',
+    })
+  }
 }

@@ -213,6 +213,7 @@ const STATUS_BADGE = {
 const STATUS_LABEL = {
   collecting: 'กำลังเก็บข้อมูล', sent_to_accountant: 'ส่งสำนักงานบัญชีแล้ว', locked: '🔒 ล็อกแล้ว',
   draft: 'ร่าง', issued: 'ออกแล้ว', cancelled: 'ยกเลิก',
+  suspense: 'เงินรับรอตรวจสอบ', suspense_refunded: 'คืนเงินผู้โอนแล้ว', received: 'ได้รับแล้ว',
   matched: 'จับคู่แล้ว', auto_matched: 'จับคู่อัตโนมัติ', manual_matched: 'จับคู่ Manual', unmatched: 'ยังไม่จับคู่', unmatched_resolved: 'ปิดรายการ (ไม่มีคู่)', cancelled: 'ยกเลิกแล้ว',
   open: 'เปิดอยู่', in_progress: 'กำลังดำเนินการ', resolved: 'แก้ไขแล้ว',
   answered: 'ตอบแล้ว', not_exported: 'ยังไม่ Export', exported: 'Export แล้ว', accepted: 'ตอบรับแล้ว',
@@ -286,7 +287,8 @@ function renderAccountingOperations() {
     { id: 'wht',       label: 'เอกสาร & WHT' },
     { id: 'documents', label: 'เอกสารไม่ครบ' },
     { id: 'qa',        label: 'ข้อซักถาม' },
-    { id: 'export',    label: 'ส่งมอบ' }
+    { id: 'export',    label: 'ส่งมอบ' },
+    { id: 'customer-wht', label: '50 ทวิ ลูกค้า' }
   ];
 
   let content = '';
@@ -583,7 +585,13 @@ function renderAccountingOperations() {
               <div class="inline-flex items-center gap-1.5">
                 ${bt.status === 'unmatched'
                   ? btnAction('จับคู่ Manual', 'open-modal', 'manual-match', bt.id, 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100')
+                    + (bt.amountIn > 0 ? btnAction('เงินรอตรวจสอบ', 'open-modal', 'suspense', bt.id, 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100') : '')
                     + btnAction('ปิดรายการ', 'open-modal', 'resolve-unmatched', bt.id, 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100')
+                  : bt.status === 'suspense'
+                  ? btnAction('จับคู่ Manual', 'open-modal', 'manual-match', bt.id, 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100')
+                    + btnAction('คืนเงินผู้โอน', 'open-modal', 'suspense-refund', bt.id, 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100')
+                  : bt.status === 'suspense_refunded'
+                  ? `<span class="text-[10px] text-slate-400 italic">คืนเงินผู้โอนแล้ว</span>`
                   : bt.status === 'unmatched_resolved'
                   ? `<span class="text-[10px] text-slate-400 italic">ปิดรายการแล้ว — ดูเหตุผลที่ช่องหมายเหตุ</span>`
                   : `${btnAction(Icon.eye + ' ดูการจับคู่', 'open-modal', 'match-detail', bt.id)}`}
@@ -716,6 +724,27 @@ function renderAccountingOperations() {
     </div>`;
   }
 
+  // ============ TAB: 50 ทวิ ลูกค้า (มติ PO 05/10/2569 U40) ============
+  else if (state.accountingSubTab === 'customer-wht') {
+    content = `
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4"><div class="text-xs text-slate-500">รอ 50 ทวิ จากลูกค้า</div><div class="text-xl font-bold">฿ 351.90</div><div class="text-[10px] text-slate-400">2 รายการ</div></div>
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4"><div class="text-xs text-slate-500">ได้รับหนังสือแล้ว</div><div class="text-xl font-bold">฿ 111.90</div><div class="text-[10px] text-slate-400">1 รายการ</div></div>
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4"><div class="text-xs text-slate-500">ลูกค้าที่ยังค้างหนังสือ</div><div class="text-xl font-bold">2</div><div class="text-[10px] text-slate-400">นับทุกงวด</div></div>
+    </div>
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-bold text-slate-800">หนังสือรับรอง 50 ทวิ ที่ลูกค้าหักภาษี</h3>
+      <div class="flex gap-2 text-xs"><select class="border border-slate-200 rounded-lg px-2 py-1"><option>ลูกค้าทั้งหมด</option></select><select class="border border-slate-200 rounded-lg px-2 py-1"><option>ทุกอายุค้าง</option><option>เกิน 90 วัน</option></select></div>
+    </div>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse">
+      <thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3">วันที่รับเงิน</th><th class="px-4 py-3">ลูกค้า</th><th class="px-4 py-3">รอบวางบิล / ใบกำกับ</th><th class="px-4 py-3 text-right">ยอดที่ถูกหัก</th><th class="px-4 py-3">อายุค้าง</th><th class="px-4 py-3">หนังสือ</th><th class="px-4 py-3">สถานะ</th><th class="px-4 py-3 text-right">จัดการ</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">
+        <tr><td class="px-4 py-3 text-xs text-slate-500">28/09/2569</td><td class="px-4 py-3 font-semibold">บริษัท ไทยลีสซิ่ง จำกัด</td><td class="px-4 py-3 font-mono text-xs">2569-09 · INV-2569-0018</td><td class="px-4 py-3 text-right font-bold">฿ 240.00</td><td class="px-4 py-3 text-xs">7 วัน</td><td class="px-4 py-3 text-xs">—</td><td class="px-4 py-3">${statusBadge('pending')}</td><td class="px-4 py-3 text-right">${btnAction('บันทึกได้รับหนังสือ', 'open-modal', 'customer-wht-receive', 'cw1')}</td></tr>
+        <tr><td class="px-4 py-3 text-xs text-slate-500">12/09/2569</td><td class="px-4 py-3 font-semibold">บริษัท สยามไฟแนนซ์ จำกัด</td><td class="px-4 py-3 font-mono text-xs">2569-08 · INV-2569-0014</td><td class="px-4 py-3 text-right font-bold">฿ 111.90</td><td class="px-4 py-3 text-xs">—</td><td class="px-4 py-3 text-xs font-mono">สฟ-2569/0451<div class="text-[10px] text-slate-400">10/09/2569 · ฿ 111.90</div></td><td class="px-4 py-3">${statusBadge('received')}</td><td class="px-4 py-3 text-right">${btnAction('ดูไฟล์', 'open-modal', 'customer-wht-receive', 'cw2')}</td></tr>
+      </tbody></table></div>
+    <div class="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">รายการเกิดเองเมื่อจับคู่เงินรับที่ลูกค้าหักภาษี ณ ที่จ่าย · ยังไม่ได้รับหนังสือก็ปิดงวดได้ แต่ระบบแสดงเตือนยอดค้าง</div>`;
+  }
+
   // ============ TAB: ข้อซักถาม (ไฟล์ 36) ============
   else if (state.accountingSubTab === 'qa') {
     content = `
@@ -797,6 +826,8 @@ function renderAccountingOperations() {
         <div>📄 07_Adjustment_Log.csv</div>
         <div>📊 08_Document_Checklist.xlsx</div>
         <div>📄 09_Credit_Notes.csv</div>
+        <div>📄 10_Customer_WHT.csv</div>
+        <div>📄 11_Suspense_Receipts.csv</div>
       </div>
       <div class="text-xs text-blue-700 mt-2">Version Control: Export ซ้ำรอบเดียวกันได้ — ระบบ auto-increment version (v1.0 → v1.1 → v1.2) ไม่เขียนทับของเดิม</div>
     </div>`;
@@ -1281,6 +1312,43 @@ function renderModal() {
     </div>`;
   }
 
+  // ============ Bank: เงินรับรอตรวจสอบ / คืนเงินผู้โอน (มติ PO 05/10/2569 U41) ============
+  else if (type === 'suspense' || type === 'suspense-refund') {
+    const bt = store.bankTransactions.find(b => b.id === data.id) || store.bankTransactions[0];
+    const refund = type === 'suspense-refund';
+    title = refund ? `คืนเงินผู้โอน — ${bt.ref}` : `ย้ายเป็นเงินรับรอตรวจสอบ — ${bt.ref}`;
+    saveText = refund ? 'ยืนยันคืนเงินผู้โอน' : 'ยืนยันย้ายเป็นเงินรับรอตรวจสอบ';
+    body = `<div class="space-y-4 text-sm">
+      <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-2 bg-slate-50">
+        <div class="flex justify-between"><span class="text-slate-400">รายการ:</span><span class="font-semibold">${bt.description}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">ยอดเงินเข้า:</span><span class="font-bold text-emerald-600">+฿ ${money(bt.amountIn)}</span></div>
+      </div>
+      ${refund ? formInput('refund_date', 'วันที่โอนคืน', '', 'date', '', true) + formInput('refund_file', 'หลักฐานการโอนคืน (PDF/รูป)', '', 'file', '', true) : ''}
+      ${formInput('suspense_reason', 'เหตุผล (บังคับ)', '', 'text', refund ? 'เช่น ผู้โอนแจ้งว่าโอนผิดบัญชี' : 'เช่น โอนเข้าไม่ระบุผู้โอน รอสอบถามธนาคาร', true)}
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">${refund ? 'เป็นสถานะสุดท้าย — จับคู่กับรอบวางบิลไม่ได้อีก' : 'ไม่สร้างเงินรับ ไม่ลดยอดค้างชำระ และไม่รับรู้รายได้ จนกว่าจะจับคู่หรือคืนเงิน'}</div>
+    </div>`;
+  }
+
+  // ============ 50 ทวิ ลูกค้า: บันทึกได้รับหนังสือ (มติ PO 05/10/2569 U40) ============
+  else if (type === 'customer-wht-receive') {
+    title = 'บันทึกรับหนังสือรับรอง 50 ทวิ จากลูกค้า';
+    saveText = 'บันทึกได้รับหนังสือ';
+    body = `<div class="space-y-4 text-sm">
+      <div class="border border-slate-200 rounded-lg p-3 text-xs space-y-2 bg-slate-50">
+        <div class="flex justify-between"><span class="text-slate-400">ลูกค้า:</span><span class="font-semibold">บริษัท ไทยลีสซิ่ง จำกัด</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">ยอดที่ลูกค้าหักไว้:</span><span class="font-bold">฿ 240.00</span></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        ${formInput('cert_no', 'เลขที่หนังสือ', '', 'text', '', true)}
+        ${formInput('cert_date', 'วันที่ในหนังสือ', '', 'date', '', true)}
+        ${formInput('cert_wht', 'ยอดภาษีที่หักตามหนังสือ (บาท)', '240.00', 'text', '', true)}
+        ${formInput('cert_gross', 'ยอดเงินได้ตามหนังสือ (บาท)', '', 'text', 'ไม่บังคับ', false)}
+      </div>
+      ${formInput('cert_file', 'ไฟล์สแกนหนังสือรับรอง (PDF/รูป)', '', 'file', '', true)}
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">ยอดไม่ตรงยอดที่ลูกค้าหักไว้ตอนโอน — บันทึกได้ แต่ระบบจะแสดงเตือน</div>
+    </div>`;
+  }
+
   // ============ WHT: ยกเลิกหนังสือรับรอง — status model (ไฟล์ 33 v3, DEC-006/D4) ============
   else if (type === 'cancel-wht-cert') {
     const wc = store.whtCertificates.find(w => w.id === data.id) || store.whtCertificates[0];
@@ -1497,6 +1565,8 @@ function renderModal() {
           <div class="flex items-center gap-1.5">📄 07_Adjustment_Log.csv</div>
           <div class="flex items-center gap-1.5 text-emerald-600">📊 08_Document_Checklist.xlsx</div>
           <div class="flex items-center gap-1.5">📄 09_Credit_Notes.csv</div>
+          <div class="flex items-center gap-1.5">📄 10_Customer_WHT.csv</div>
+          <div class="flex items-center gap-1.5">📄 11_Suspense_Receipts.csv</div>
         </div>
         <div class="mt-3 text-[10px] text-slate-400 font-sans">+ เอกสารแนบ (ใบเสร็จ/หลักฐาน) จากทุกรายการ</div>
       </div>
