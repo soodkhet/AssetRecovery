@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 ~01:50 merge fixer AU `d6c5e28` (U89 `HOTEL_CLAIM_EXCEEDS_CAP` + snapshot แผน · U90 audit `view` เปิดไฟล์ข้อมูลส่วนบุคคล) · migration `20261006110000_audit_action_view` · verify 329/4,422 · migration ใหม่รวม **28 ตัว** · มติ O50–O53 → fixer AV (จำนวนคืน O50)
 - 06/10/2569 ~01:30 merge fixer AT `0ca2c49` (U87 readiness แยก บล็อกยอดไม่ตรง/เตือนรายได้ค้างรับ · Export Pack **14 ไฟล์** `14_Unbilled_Revenue.csv` · BUG-156–160) · verify 328/4,386 · มติ O48/O49 (orchestrator ตัดสินแทนตาม U91) · **บั๊ก UAT open = 0** · fixer AU (U89/U90) กำลังทำ
 - 06/10/2569 ~00:50 **R13 จบครบ** · R13c `0f6edd8` (16 ขั้น ✅14 🐞2 S5) · BUG-155 แก้จริง (BL-2569-003/004) · INV-0003/0004 สาขา snapshot ✅ · เงินรอตรวจ/50 ทวิ ลูกค้า/คืนเงิน ✅ · F2 1838000 กระทบยอดลงตัว · Export Pack v4 13 ไฟล์ + PDF ✅ · งวด ต.ค. ส่ง/ล็อกคืนด้วย dev asOf 01/11 → `locked` · snapshot `R13-end` · BUG-158–160 (S5) · มติ U87/U88 · Storage ขยะ +1 (ใบเสร็จจาก probe หลังล็อกงวด ~00:43 ใน `expenses/88cb577d…/receipts/`)
 - 06/10/2569 ~00:30 merge fixer AS `3483a47` (U86 หลายรอบวางบิล/เดือน · รอบใหม่ดึงรายได้ค้างทั้งหมด ≤ วันตัดรอบ · กันรอบร่างซ้อน) · migration `20261006100000_billing_batch_multi_per_month` · verify 328/4,366 · migration ใหม่รวม **27 ตัว** · แก้เลข changelog ซ้ำใน 13/24/25/94 → เล่น R13c ต่อ (R13.30–41, 44, 52–54)
