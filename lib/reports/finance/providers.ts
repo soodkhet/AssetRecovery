@@ -9,6 +9,7 @@ import type {
   BillingBatchStatus,
 } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { LEGACY_WHT_POLICY } from '@/lib/settings/wht-policy'
 import { ReportError } from '@/lib/reports/errors'
 import {
   buildAdvanceOverdueReport,
@@ -17,6 +18,7 @@ import {
 import { buildArAgingReport, type ArAgingCompanyEntry } from '@/lib/reports/finance/ar-aging-report'
 import {
   buildCompensationReport,
+  isReceiptExpense,
   COMPENSATION_GROUP_BYS,
   type CompensationGroupBy,
   type CompensationItemEntry,
@@ -416,6 +418,8 @@ const compensationProvider: ReportProvider = async (ctx: ReportContext): Promise
       grossSatang: true,
       whtSatang: true,
       netSatang: true,
+      // snapshot ค่าตั้งฐาน WHT ของรอบ (U3/U8) — ใช้จำแนก "ค่าใช้จ่ายตามใบเสร็จ" (มติ PO U53)
+      payoutBatch: { select: { whtBaseExpenseTypes: true, whtCertificateMode: true } },
       expense: { select: { expenseType: true, caseId: true } },
       payee: {
         select: {
@@ -439,6 +443,16 @@ const compensationProvider: ReportProvider = async (ctx: ReportContext): Promise
     teamSide: row.payee.user.team?.side ?? null,
     expenseType: row.expense?.expenseType ?? null,
     caseId: row.expense?.caseId ?? null,
+    // รอบที่สร้างก่อนมีค่าตั้ง (snapshot NULL) ⇒ ทุกชนิดอยู่ในฐาน = พฤติกรรมเดิม (Rule 08 ห้ามใช้ค่าตั้งปัจจุบันตีความ)
+    receiptExpense: isReceiptExpense(
+      {
+        baseExpenseTypes:
+          row.payoutBatch.whtCertificateMode === null
+            ? LEGACY_WHT_POLICY.baseExpenseTypes
+            : row.payoutBatch.whtBaseExpenseTypes,
+      },
+      row.expense?.expenseType ?? null,
+    ),
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
     netSatang: row.netSatang,

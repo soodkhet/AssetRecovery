@@ -13,11 +13,14 @@ import {
 } from '@/lib/accounting/exception'
 import {
   assertPeriodActionStatus,
+  assertPeriodEnded,
   assertPeriodTransition,
   assertReadyToSend,
   assertUnlockAllowed,
   evaluateReadiness,
+  isPeriodEnded,
   nextPeriodKey,
+  periodCloseAvailableFrom,
   periodKeyOf,
   periodLabelOf,
   periodOrdinal,
@@ -221,12 +224,20 @@ async function lastExportByPeriod(
   return map
 }
 
-function toPeriodDto(row: PeriodRow, summary: ExceptionSummary, exportedAt: Date | undefined): AccountingPeriodDto {
+function toPeriodDto(
+  row: PeriodRow,
+  summary: ExceptionSummary,
+  exportedAt: Date | undefined,
+  now: Date,
+): AccountingPeriodDto {
+  const key: PeriodKey = { yearBe: row.yearBe, month: row.month }
   return {
     id: row.id,
     periodLabel: row.periodLabel,
     yearBe: row.yearBe,
     month: row.month,
+    periodEnded: isPeriodEnded(key, now),
+    closeAvailableFrom: periodCloseAvailableFrom(key).toISOString(),
     status: row.status,
     statusLabel: periodStatusLabel(row.status),
     criticalCount: summary.criticalCount,
@@ -271,7 +282,7 @@ export async function listPeriods(
     exceptionSummaryByPeriod(ctx.actor.organizationId, ids),
     lastExportByPeriod(ctx.actor.organizationId, ids),
   ])
-  return rows.map((row) => toPeriodDto(row, counts.get(row.id) ?? summarizeExceptionCounts([]), exports.get(row.id)))
+  return rows.map((row) => toPeriodDto(row, counts.get(row.id) ?? summarizeExceptionCounts([]), exports.get(row.id), now))
 }
 
 /** อ่านรอบบัญชีตาม id ในองค์กรของผู้เรียก — 404 แบบไม่ leak ข้ามองค์กร (ใช้ร่วมกับไฟล์ 36) */
@@ -359,7 +370,7 @@ async function billingRevenueMismatches(organizationId: string, key: PeriodKey):
 }
 
 /** ประกอบข้อมูลสด 3 เงื่อนไขแล้วส่งให้ตัวตัดสิน pure (`30` §6.2) */
-async function readinessOf(organizationId: string, row: PeriodRow): Promise<ReadinessResult> {
+async function readinessOf(organizationId: string, row: PeriodRow, now: Date): Promise<ReadinessResult> {
   const key: PeriodKey = { yearBe: row.yearBe, month: row.month }
   const [openExceptions, unmatchedBankCount, billingMismatches] = await Promise.all([
     prisma.exception.findMany({
@@ -378,13 +389,18 @@ async function readinessOf(organizationId: string, row: PeriodRow): Promise<Read
     warningOpenCount: openExceptions.filter((exception) => exception.level === 'warning').length,
     unmatchedBankCount,
     billingMismatches,
+    periodEnd: { key, now },
   })
 }
 
-export async function getPeriodReadiness(user: SessionUser, periodId: string): Promise<PeriodReadinessDto> {
+export async function getPeriodReadiness(
+  user: SessionUser,
+  periodId: string,
+  now: Date = new Date(),
+): Promise<PeriodReadinessDto> {
   assertOrgWideReadable(user, 'accounting-periods')
   const row = await findPeriodById(user, periodId)
-  const result = await readinessOf(user.organizationId, row)
+  const result = await readinessOf(user.organizationId, row, now)
   return { ...result, periodId: row.id, periodLabel: row.periodLabel, status: row.status }
 }
 
@@ -396,11 +412,11 @@ async function transitionPeriod(
   to: AccountingPeriodStatus,
   input: PeriodReasonInput,
   extra: { readiness?: ReadinessResult; unlock?: boolean } = {},
+  now: Date = new Date(),
 ): Promise<AccountingPeriodDto> {
   const row = await findPeriodById(ctx.actor, periodId)
   assertPeriodTransition(row.status, to)
 
-  const now = new Date()
   const data: Prisma.AccountingPeriodUpdateInput = { status: to }
   if (to === 'sent_to_accountant' && extra.unlock !== true) {
     data.sentAt = now
@@ -449,33 +465,42 @@ async function transitionPeriod(
     )
   }
 
-  return toPeriodDto(updated, summarizeExceptionCounts([]), undefined)
+  return toPeriodDto(updated, summarizeExceptionCounts([]), undefined, now)
 }
 
-/** `collecting → sent_to_accountant` — ผ่าน Readiness Check เสมอ **ห้าม force ข้าม** (`30` §10) */
+/**
+ * `collecting → sent_to_accountant` — ผ่าน Readiness Check เสมอ **ห้าม force ข้าม** (`30` §10)
+ * + ต้องสิ้นเดือนของงวดแล้ว (มติ PO U51 — `PERIOD_NOT_ENDED`) · `now` เปิดไว้ให้เทสต์เส้นขอบเท่านั้น
+ * (route ไม่รับเวลาจากผู้เรียก — ไม่มีทางลัดจำลองวันที่ฝั่ง API)
+ */
 export async function sendPeriod(
   ctx: AccountingMutationContext,
   periodId: string,
   input: PeriodReasonInput,
+  now: Date = new Date(),
 ): Promise<AccountingPeriodDto> {
   assertOrgWideReadable(ctx.actor, 'accounting-periods')
   const row = await findPeriodById(ctx.actor, periodId)
   // เฉพาะ `collecting` — รอบที่ `locked` ต้องไปทาง `unlockPeriod()` ที่บังคับสิทธิ์ผู้บริหาร (`30` §10)
   assertPeriodActionStatus('send', row.status)
-  const readiness = await readinessOf(ctx.actor.organizationId, row)
+  assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, now)
+  const readiness = await readinessOf(ctx.actor.organizationId, row, now)
   assertReadyToSend(readiness)
-  return transitionPeriod(ctx, periodId, 'sent_to_accountant', input, { readiness })
+  return transitionPeriod(ctx, periodId, 'sent_to_accountant', input, { readiness }, now)
 }
 
-/** `sent_to_accountant → locked` — บัญชี/ผู้บริหารยืนยันปิดงวด (`30` §9) */
+/** `sent_to_accountant → locked` — บัญชี/ผู้บริหารยืนยันปิดงวด (`30` §9) · ต้องสิ้นเดือนแล้ว (U51) */
 export async function lockPeriod(
   ctx: AccountingMutationContext,
   periodId: string,
   input: PeriodReasonInput,
+  now: Date = new Date(),
 ): Promise<AccountingPeriodDto> {
   assertOrgWideReadable(ctx.actor, 'accounting-periods')
-  assertPeriodActionStatus('lock', (await findPeriodById(ctx.actor, periodId)).status)
-  return transitionPeriod(ctx, periodId, 'locked', input)
+  const row = await findPeriodById(ctx.actor, periodId)
+  assertPeriodActionStatus('lock', row.status)
+  assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, now)
+  return transitionPeriod(ctx, periodId, 'locked', input, {}, now)
 }
 
 /**

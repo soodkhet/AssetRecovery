@@ -48,6 +48,10 @@ export interface AccountingPeriodDto {
   periodLabel: string
   yearBe: number
   month: number
+  /** งวดสิ้นเดือนแล้ว ณ เวลาที่ server ตอบ — `false` ⇒ ปุ่มส่ง/ล็อก disable (มติ PO U51) */
+  periodEnded: boolean
+  /** instant แรกที่ส่ง/ล็อกได้ (00:00 น. วันที่ 1 ของเดือนถัดไป เวลาไทย) — ISO UTC */
+  closeAvailableFrom: string
   status: AccountingPeriodStatus
   statusLabel: string
   /** derived จากตาราง `exceptions` ทุกครั้ง (`30` §7.1 — ไม่มีคอลัมน์ใน DB) */

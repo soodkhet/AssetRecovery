@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildCompensationReport,
+  isReceiptExpense,
   type CompensationItemEntry,
 } from '@/lib/reports/finance/compensation-report'
 import { ROW_KEY } from '@/lib/reports/payload'
+import { DEFAULT_WHT_POLICY, LEGACY_WHT_POLICY } from '@/lib/settings/wht-policy'
 
 /** F4 (`96` §6-F4) — สรุปค่าตอบแทนจาก snapshot ของรายการในรอบจ่าย (`92` §7.1) */
 
@@ -15,6 +17,7 @@ function item(overrides: Partial<CompensationItemEntry> & { payeeId: string }): 
     teamSide: 'inhouse',
     expenseType: 'commission',
     caseId: 'case-1',
+    receiptExpense: false,
     grossSatang: 100_000,
     whtSatang: 3_000,
     netSatang: 97_000,
@@ -47,6 +50,8 @@ describe('F4 — ตารางรายทีม', () => {
       'ทีม',
       'ประเภท',
       'จำนวนคน',
+      'ค่าตอบแทน',
+      'ค่าใช้จ่ายตามใบเสร็จ',
       'Gross รวม',
       'WHT รวม',
       'Net รวม',
@@ -79,7 +84,8 @@ describe('F4 — ตารางรายทีม', () => {
   it('KPI 3 ตัวตรงกับผลรวมของรายการทั้งหมด', () => {
     const kpi = (key: string) => data.kpis?.find((item) => item.key === key)?.value
 
-    expect(kpi('gross')).toBe(590_000)
+    expect(kpi('compensation')).toBe(590_000)
+    expect(kpi('receipt')).toBe(0)
     expect(kpi('wht')).toBe(16_200)
     expect(kpi('net')).toBe(573_800)
     expect(data.totalRow).toMatchObject({ memberCount: 3, caseCount: 3, grossSatang: 590_000 })
@@ -126,5 +132,67 @@ describe('F4 — ตารางรายพนักงาน (drill-down)', ()
 
     expect(snapshot.rows[0]?.['netSatang']).toBe(96_500)
     expect(snapshot.kpis?.find((kpi) => kpi.key === 'net')?.value).toBe(96_500)
+  })
+})
+
+// ── มติ PO U53 — ค่าใช้จ่ายตามใบเสร็จแยกคอลัมน์จากค่าตอบแทน ────────────────────────
+
+describe('F4 — ค่าใช้จ่ายตามใบเสร็จ (U53)', () => {
+  it('ตัวจำแนก = ไม่อยู่ในฐาน WHT ตามค่าตั้งของรอบ (ตัวเดียวกับ U3) — ไม่ hardcode ชนิด', () => {
+    expect(isReceiptExpense(DEFAULT_WHT_POLICY, 'hotel')).toBe(true)
+    expect(isReceiptExpense(DEFAULT_WHT_POLICY, 'receipt')).toBe(true)
+    expect(isReceiptExpense(DEFAULT_WHT_POLICY, 'manual')).toBe(true)
+    expect(isReceiptExpense(DEFAULT_WHT_POLICY, 'commission')).toBe(false)
+    expect(isReceiptExpense(DEFAULT_WHT_POLICY, 'fuel')).toBe(false)
+    // ค่าตั้งที่องค์กรเลือกเอง: เอาน้ำมันออกจากฐาน ⇒ น้ำมันกลายเป็นค่าใช้จ่ายตามใบเสร็จ
+    expect(isReceiptExpense({ baseExpenseTypes: ['commission'] }, 'fuel')).toBe(true)
+    // รอบก่อนมีค่าตั้ง (ทุกชนิดในฐาน) ⇒ ไม่มีรายการไหนถูกย้ายช่อง
+    expect(isReceiptExpense(LEGACY_WHT_POLICY, 'hotel')).toBe(false)
+    // หาชนิดต้นทางไม่เจอ ⇒ คงเป็นค่าตอบแทน
+    expect(isReceiptExpense(DEFAULT_WHT_POLICY, null)).toBe(false)
+  })
+
+  const WITH_RECEIPTS: CompensationItemEntry[] = [
+    ...ITEMS,
+    item({ payeeId: 'p1', caseId: null, expenseType: 'hotel', receiptExpense: true, grossSatang: 80_000, whtSatang: 0, netSatang: 80_000 }),
+    item({ payeeId: 'p2', caseId: null, expenseType: 'receipt', receiptExpense: true, grossSatang: 30_000, whtSatang: 0, netSatang: 30_000 }),
+  ]
+
+  it('รายทีม: แยก "ค่าตอบแทน" กับ "ค่าใช้จ่ายตามใบเสร็จ" · Gross/WHT/Net รวมเท่าเดิม', () => {
+    const data = buildCompensationReport({ groupBy: 'team', items: WITH_RECEIPTS })
+    expect(data.rows[0]).toMatchObject({
+      group: 'ทีมเหนือ',
+      compensationSatang: 550_000,
+      receiptSatang: 110_000,
+      grossSatang: 660_000,
+      whtSatang: 15_000,
+      netSatang: 645_000,
+      caseCount: 2,
+    })
+    expect(data.totalRow).toMatchObject({ compensationSatang: 590_000, receiptSatang: 110_000, grossSatang: 700_000 })
+    const kpi = (key: string) => data.kpis?.find((entry) => entry.key === key)?.value
+    expect(kpi('compensation')).toBe(590_000)
+    expect(kpi('receipt')).toBe(110_000)
+    expect(Number(kpi('compensation')) + Number(kpi('receipt'))).toBe(700_000)
+    expect(kpi('net')).toBe(683_800)
+  })
+
+  it('รายพนักงาน: ค่าที่พักไม่ตกช่อง "อื่น ๆ" แต่ลงช่องค่าใช้จ่ายตามใบเสร็จ · ผลรวมช่องย่อย = Gross', () => {
+    const data = buildCompensationReport({ groupBy: 'employee', items: WITH_RECEIPTS })
+    expect(data.columns.map((column) => column.header)).toContain('ค่าใช้จ่ายตามใบเสร็จ')
+    expect(data.rows.find((row) => row[ROW_KEY] === 'p1')).toMatchObject({
+      commissionSatang: 500_000,
+      fuelSatang: 20_000,
+      otherSatang: 0,
+      receiptSatang: 80_000,
+      grossSatang: 600_000,
+    })
+    const total = data.totalRow
+    const parts = ['commissionSatang', 'fuelSatang', 'allowanceSatang', 'otherSatang', 'receiptSatang'].reduce(
+      (sum, key) => sum + Number(total?.[key]),
+      0,
+    )
+    expect(parts).toBe(Number(total?.['grossSatang']))
+    expect(total?.['receiptSatang']).toBe(110_000)
   })
 })

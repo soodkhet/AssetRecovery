@@ -127,6 +127,7 @@ export const ERROR_CATALOG = {
   ADJUSTMENT_TARGET_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.7' },
   PERIOD_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.7' },
   PERIOD_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.7' },
+  PERIOD_NOT_ENDED: { status: 400, severity: 'reject', source: '24 §6.7' },
   NOT_READY_CRITICAL_OPEN: { status: 400, severity: 'reject', source: '24 §6.7' },
   NOT_READY_RECONCILE_INCOMPLETE: { status: 400, severity: 'reject', source: '24 §6.7' },
   NOT_READY_BILLING_REVENUE_MISMATCH: { status: 400, severity: 'reject', source: '24 §6.7' },

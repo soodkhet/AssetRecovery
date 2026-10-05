@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { periodCloseAvailableFrom, periodKeyOf } from '@/lib/accounting/period'
 import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
@@ -266,6 +267,14 @@ async function billAll(cutoffDate: Date): Promise<string> {
   return batch.id
 }
 
+/**
+ * เวลาจำลอง "หลังสิ้นเดือน" ของงวดที่รายได้เกิด — ส่ง/ล็อกได้ตั้งแต่ 00:00 น. วันที่ 1 ของเดือนถัดไป (มติ PO U51)
+ * รายได้ในเทสต์เกิดวันนี้ ⇒ ใช้เวลาจริงจะติด `PERIOD_NOT_ENDED` ก่อนถึงเงื่อนไขที่ต้องการทดสอบ
+ */
+function afterMonthEnd(at: Date): Date {
+  return periodCloseAvailableFrom(periodKeyOf(at))
+}
+
 async function periodIdOf(at: Date): Promise<string> {
   const period = await accounting.ensurePeriodForDate(ctx(finance), at)
   return period.id
@@ -425,11 +434,11 @@ suite('Phase 8.1 — E2E `29` §6.5: ปิดงวดบัญชีสมบ�
     })
     expect(critical.status).toBe('open')
 
-    const blocked = await accounting.getPeriodReadiness(finance, periodId)
+    const blocked = await accounting.getPeriodReadiness(finance, periodId, afterMonthEnd(revenueDate))
     expect(blocked.ready).toBe(false)
     expect(blocked.checks.find((check) => check.key === 'no_critical_exception')?.passed).toBe(false)
     await expectCode(
-      () => accounting.sendPeriod(ctx(finance), periodId, { reason: 'ส่งงวดให้สำนักงานบัญชี' }),
+      () => accounting.sendPeriod(ctx(finance), periodId, { reason: 'ส่งงวดให้สำนักงานบัญชี' }, afterMonthEnd(revenueDate)),
       'NOT_READY_CRITICAL_OPEN',
     )
     // จุดเชื่อม `29` §7 — critical ที่ยังเปิดอยู่ต้องบล็อก Export ได้จริง (`34`/`37`)
@@ -440,12 +449,12 @@ suite('Phase 8.1 — E2E `29` §6.5: ปิดงวดบัญชีสมบ�
     await accounting.resolveException(ctx(finance), critical.id, {
       resolutionNote: 'ได้ใบเสร็จตัวจริงจากพนักงานแล้ว แนบเข้าระบบเรียบร้อย',
     })
-    const ready = await accounting.getPeriodReadiness(finance, periodId)
+    const ready = await accounting.getPeriodReadiness(finance, periodId, afterMonthEnd(revenueDate))
     expect(ready.ready).toBe(true)
     expect(ready.checks.every((check) => check.passed)).toBe(true)
 
     // ── ขั้น 4–5: Export Pack + ส่งสำนักงานบัญชี (ไฟล์ 37/30) ─────────────
-    const sent = await accounting.sendPeriod(ctx(finance), periodId, { reason: 'ส่งงวดให้สำนักงานบัญชี' })
+    const sent = await accounting.sendPeriod(ctx(finance), periodId, { reason: 'ส่งงวดให้สำนักงานบัญชี' }, afterMonthEnd(revenueDate))
     expect(sent.status).toBe('sent_to_accountant')
 
     const pack = await exports_.createExportPack(ctx(finance), { periodId })
@@ -472,7 +481,7 @@ suite('Phase 8.1 — E2E `29` §6.5: ปิดงวดบัญชีสมบ�
     expect(answered.status).toBe('answered')
 
     // ── ขั้น 7: ผู้บริหารยืนยันปิดงวด ⇒ locked ────────────────────────────
-    const locked = await accounting.lockPeriod(ctx(executive), periodId, { reason: 'ตรวจครบแล้ว ปิดงวด' })
+    const locked = await accounting.lockPeriod(ctx(executive), periodId, { reason: 'ตรวจครบแล้ว ปิดงวด' }, afterMonthEnd(revenueDate))
     expect(locked.status).toBe('locked')
     expect(locked.lockedAt).not.toBeNull()
   })
@@ -487,8 +496,8 @@ suite('Phase 8.1 — E2E `29` §6.4: งวด locked → แก้ย้อน�
     const periodId = await periodIdOf(revenueDate)
 
     // ── ขั้น 1: ปิดงวดจนถึง locked ────────────────────────────────────────
-    await accounting.sendPeriod(ctx(finance), periodId, { reason: 'ส่งงวดให้สำนักงานบัญชี' })
-    await accounting.lockPeriod(ctx(executive), periodId, { reason: 'ปิดงวดตามรอบ' })
+    await accounting.sendPeriod(ctx(finance), periodId, { reason: 'ส่งงวดให้สำนักงานบัญชี' }, afterMonthEnd(revenueDate))
+    await accounting.lockPeriod(ctx(executive), periodId, { reason: 'ปิดงวดตามรอบ' }, afterMonthEnd(revenueDate))
 
     // ── ขั้น 2: แก้ตรงไม่ได้ทุกช่องทาง (`30`/`20` · `13` §6.11) ────────────
     const secondCase = await seedApprovedCase()

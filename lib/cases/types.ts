@@ -153,6 +153,8 @@ export interface CaseImportRowResultDto {
   errorCode: string | null
   errorMessage: string | null
   fields: Record<string, string> | null
+  /** เตือนต่อช่อง (ไม่ทำให้แถวตก) เช่น Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54) — ไม่มี = `null` */
+  warnings: Record<string, string> | null
 }
 
 export interface CaseImportResultDto {
@@ -225,6 +227,11 @@ export interface CaseDetailDto extends CaseListItemDto {
   addressIdCard: CaseAddressDto
   assetType: string | null
   assetImeiSerial: string | null
+  /**
+   * เตือน (ไม่บล็อก) เมื่อค่าที่บันทึกเป็น Serial ดูเหมือน IMEI ที่มีตัวอักษรปน (มติ PO U54) — `null` = ไม่มี
+   * เป็นข้อมูลประกอบใน `data` ไม่ใช่ error code (ไม่ต้องเพิ่มรายการเตือนในแคตตาล็อก)
+   */
+  assetIdentifierWarning: string | null
   projectedRevenueSatang: number | null
   /** ค่าดิบ `calculation_source` (มี template id) — เก็บไว้ trace · หน้าจอใช้ `projectedRevenueSourceLabel` */
   projectedRevenueSource: string | null

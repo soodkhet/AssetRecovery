@@ -1,4 +1,6 @@
 import { sumSatang } from '@/lib/finance/satang'
+import type { ExpenseType } from '@/lib/generated/prisma/enums'
+import { isInWhtBase, type WhtPolicyValues } from '@/lib/settings/wht-policy'
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 
 /**
@@ -11,6 +13,9 @@ import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/l
  * - **รายการเงินทดรองจ่ายไม่ใช่ค่าตอบแทน** — รอบจ่ายมีแหล่งที่มา 2 แบบ (A4: expense / advance)
  *   ผู้เรียกต้องส่งเฉพาะรายการที่มาจาก `expenses` เข้ามา (ตัวสรุปนี้ไม่รู้จักที่มา)
  * - จำนวนคน/จำนวนเคส นับ **แบบไม่ซ้ำ** — พนักงานคนเดียวมีหลายรายการในรอบเดียวได้
+ * - **ค่าใช้จ่ายตามใบเสร็จ แยกคอลัมน์ออกจากค่าตอบแทน** (มติ PO U53) — ผู้เรียกจำแนกด้วยตัวเดียวกับ
+ *   ฐานภาษีหัก ณ ที่จ่าย (`isReceiptExpense()` ← `isInWhtBase()` ของค่าตั้งที่ snapshot ไว้ในรอบจ่าย U3)
+ *   ห้าม hardcode ชนิดรายการซ้ำที่นี่ · ยอดรวม Gross/WHT/Net เท่าเดิม (แค่แยกช่อง)
  */
 
 export const COMPENSATION_GROUP_BYS = ['team', 'employee'] as const
@@ -37,9 +42,26 @@ export interface CompensationItemEntry {
   expenseType: string | null
   /** เคสต้นทาง — `null` = รายการเบิกที่ไม่ผูกเคส (manual claim / ที่พัก) */
   caseId: string | null
+  /**
+   * ค่าใช้จ่ายตามใบเสร็จ (ค่าที่พัก/คำขอเบิกตามใบเสร็จ/ส่วนเกินเงินทดรอง) = ชนิดรายการที่ค่าตั้งของรอบจ่าย
+   * ไม่รวมในฐาน WHT — เงินคืนค่าใช้จ่าย ไม่ใช่ค่าตอบแทน (มติ PO U53 · ตัวจำแนก {@link isReceiptExpense})
+   */
+  receiptExpense: boolean
   grossSatang: number
   whtSatang: number
   netSatang: number
+}
+
+/**
+ * ตัวจำแนก "ค่าใช้จ่ายตามใบเสร็จ" ของ F4 = รายการเบิกที่**ไม่อยู่ในฐาน WHT** ตามค่าตั้งของรอบจ่าย (มติ PO U53)
+ * — ใช้ `isInWhtBase()` ตัวเดียวกับตอนคำนวณภาษี (U3) · `null` = หาชนิดต้นทางไม่เจอ ⇒ ถือเป็นค่าตอบแทน
+ *   (คงพฤติกรรมเดิม ไม่ย้ายยอดที่ไม่รู้ชนิดไปช่องค่าใช้จ่าย)
+ */
+export function isReceiptExpense(
+  policy: Pick<WhtPolicyValues, 'baseExpenseTypes'>,
+  expenseType: ExpenseType | null,
+): boolean {
+  return expenseType !== null && !isInWhtBase(policy, expenseType)
 }
 
 const UNASSIGNED_TEAM_KEY = '__no_team__'
@@ -69,6 +91,9 @@ interface Bucket {
   grossSatang: number
   whtSatang: number
   netSatang: number
+  /** ค่าตอบแทน (ไม่รวมค่าใช้จ่ายตามใบเสร็จ) = `byType` + `otherSatang` */
+  compensationSatang: number
+  receiptSatang: number
   byType: Record<BreakdownType, number>
   otherSatang: number
 }
@@ -84,6 +109,8 @@ function newBucket(key: string, label: string): Bucket {
     grossSatang: 0,
     whtSatang: 0,
     netSatang: 0,
+    compensationSatang: 0,
+    receiptSatang: 0,
     byType: { commission: 0, fuel: 0, allowance: 0 },
     otherSatang: 0,
   }
@@ -110,6 +137,11 @@ function groupItems(items: readonly CompensationItemEntry[], groupBy: Compensati
     bucket.grossSatang += item.grossSatang
     bucket.whtSatang += item.whtSatang
     bucket.netSatang += item.netSatang
+    if (item.receiptExpense) {
+      bucket.receiptSatang += item.grossSatang
+      continue
+    }
+    bucket.compensationSatang += item.grossSatang
     const breakdown = breakdownTypeOf(item.expenseType)
     if (breakdown !== null) bucket.byType[breakdown] += item.grossSatang
     else bucket.otherSatang += item.grossSatang
@@ -124,6 +156,8 @@ const TEAM_COLUMNS: readonly ReportColumn[] = [
   { key: 'group', header: 'ทีม', type: 'text', width: 26 },
   { key: 'teamSide', header: 'ประเภท', type: 'text', width: 12 },
   { key: 'memberCount', header: 'จำนวนคน', type: 'number' },
+  { key: 'compensationSatang', header: 'ค่าตอบแทน', type: 'money' },
+  { key: 'receiptSatang', header: 'ค่าใช้จ่ายตามใบเสร็จ', type: 'money' },
   { key: 'grossSatang', header: 'Gross รวม', type: 'money' },
   { key: 'whtSatang', header: 'WHT รวม', type: 'money' },
   { key: 'netSatang', header: 'Net รวม', type: 'money' },
@@ -138,6 +172,7 @@ const EMPLOYEE_COLUMNS: readonly ReportColumn[] = [
   { key: 'fuelSatang', header: 'ค่าน้ำมัน', type: 'money' },
   { key: 'allowanceSatang', header: 'เบี้ยเลี้ยง', type: 'money' },
   { key: 'otherSatang', header: 'อื่น ๆ', type: 'money' },
+  { key: 'receiptSatang', header: 'ค่าใช้จ่ายตามใบเสร็จ', type: 'money' },
   { key: 'grossSatang', header: 'รวม Gross', type: 'money' },
   { key: 'whtSatang', header: 'WHT', type: 'money' },
   { key: 'netSatang', header: 'Net', type: 'money' },
@@ -159,6 +194,8 @@ export function buildCompensationReport(input: {
     group: bucket.label,
     teamSide: teamSideLabel(bucket.teamSide),
     memberCount: bucket.payees.size,
+    compensationSatang: bucket.compensationSatang,
+    receiptSatang: bucket.receiptSatang,
     grossSatang: bucket.grossSatang,
     whtSatang: bucket.whtSatang,
     netSatang: bucket.netSatang,
@@ -174,6 +211,7 @@ export function buildCompensationReport(input: {
     fuelSatang: bucket.byType.fuel,
     allowanceSatang: bucket.byType.allowance,
     otherSatang: bucket.otherSatang,
+    receiptSatang: bucket.receiptSatang,
     grossSatang: bucket.grossSatang,
     whtSatang: bucket.whtSatang,
     netSatang: bucket.netSatang,
@@ -181,9 +219,17 @@ export function buildCompensationReport(input: {
 
   const rows: ReportRow[] = buckets.map((bucket) => (groupBy === 'team' ? teamRow(bucket) : employeeRow(bucket)))
 
-  const totalGross = sumSatang(items.map((item) => item.grossSatang), 'ค่าตอบแทนรวม')
+  const totalGross = sumSatang(items.map((item) => item.grossSatang), 'ยอด Gross รวม')
   const totalWht = sumSatang(items.map((item) => item.whtSatang), 'ภาษีหัก ณ ที่จ่ายรวม')
   const totalNet = sumSatang(items.map((item) => item.netSatang), 'ยอดจ่ายสุทธิรวม')
+  const totalReceipt = sumSatang(
+    items.filter((item) => item.receiptExpense).map((item) => item.grossSatang),
+    'ค่าใช้จ่ายตามใบเสร็จรวม',
+  )
+  const totalCompensation = sumSatang(
+    items.filter((item) => !item.receiptExpense).map((item) => item.grossSatang),
+    'ค่าตอบแทนรวม',
+  )
   const payeeCount = new Set(items.map((item) => item.payeeId)).size
   const caseCount = new Set(items.filter((item) => item.caseId !== null).map((item) => item.caseId)).size
 
@@ -192,11 +238,18 @@ export function buildCompensationReport(input: {
     rows,
     kpis: [
       {
-        key: 'gross',
+        key: 'compensation',
         label: 'ค่าตอบแทนรวม',
-        value: totalGross,
+        value: totalCompensation,
         type: 'money',
         hint: `${payeeCount.toLocaleString('th-TH')} คน · ${caseCount.toLocaleString('th-TH')} เคส`,
+      },
+      {
+        key: 'receipt',
+        label: 'ค่าใช้จ่ายตามใบเสร็จ',
+        value: totalReceipt,
+        type: 'money',
+        hint: 'เงินคืนค่าใช้จ่ายตามใบเสร็จ ไม่ใช่ค่าตอบแทน',
       },
       { key: 'wht', label: 'ภาษีหัก ณ ที่จ่ายรวม', value: totalWht, type: 'money', higherIsBetter: false },
       { key: 'net', label: 'Net จ่ายจริง', value: totalNet, type: 'money' },
@@ -207,6 +260,8 @@ export function buildCompensationReport(input: {
             group: 'รวมทั้งหมด',
             teamSide: null,
             memberCount: payeeCount,
+            compensationSatang: totalCompensation,
+            receiptSatang: totalReceipt,
             grossSatang: totalGross,
             whtSatang: totalWht,
             netSatang: totalNet,
@@ -220,12 +275,14 @@ export function buildCompensationReport(input: {
             fuelSatang: sumSatang(buckets.map((bucket) => bucket.byType.fuel), 'ค่าน้ำมันรวม'),
             allowanceSatang: sumSatang(buckets.map((bucket) => bucket.byType.allowance), 'เบี้ยเลี้ยงรวม'),
             otherSatang: sumSatang(buckets.map((bucket) => bucket.otherSatang), 'ค่าตอบแทนอื่นรวม'),
+            receiptSatang: totalReceipt,
             grossSatang: totalGross,
             whtSatang: totalWht,
             netSatang: totalNet,
           },
     note:
       'ยอดทุกช่องเป็นค่าที่บันทึกไว้ในรายการของรอบจ่าย (snapshot ตอนสร้างรอบ) — ไม่ได้คำนวณ WHT ใหม่ย้อนหลัง · ' +
+      'ค่าใช้จ่ายตามใบเสร็จ (เช่น ค่าที่พัก/เบิกตามใบเสร็จ) แยกช่องจากค่าตอบแทน — Gross รวม = ค่าตอบแทน + ค่าใช้จ่ายตามใบเสร็จ · ' +
       'ไม่รวมรายการเงินทดรองจ่ายที่จ่ายผ่านรอบเดียวกัน · รายการปรับปรุงระดับรอบจ่ายไม่ถูกกระจายลงรายทีม/รายคน',
   }
 }

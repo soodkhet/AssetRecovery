@@ -2,6 +2,7 @@ import { AccountingError } from '@/lib/accounting/errors'
 import { periodKeyOf, type PeriodKey } from '@/lib/adjustments/adjustment'
 import { BUDDHIST_YEAR_OFFSET } from '@/lib/constants'
 import { MONTH_NAMES_TH } from '@/lib/field/calendar'
+import { fmtDate, startOfBangkokDay } from '@/lib/format/datetime'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
 import { periodLockPolicyFor } from '@/lib/settings/period-lock'
 
@@ -105,6 +106,42 @@ export function assertPeriodActionStatus(action: PeriodAction, from: AccountingP
   }
 }
 
+// ── ส่ง/ล็อกได้เมื่องวดสิ้นเดือนแล้วเท่านั้น (มติ PO U51 · `30` §6.2a) ───────────────
+
+/**
+ * instant แรกที่งวดเดือน M ส่งสำนักงานบัญชี/ล็อกได้ = **00:00 น. วันที่ 1 ของเดือนถัดไป เวลาไทย**
+ * (งวด ต.ค. 2569 → 01/11/2569 00:00 น. = `2026-10-31T17:00:00Z`)
+ * ใช้ `startOfBangkokDay()` กลาง — ห้ามคำนวณ offset เองซ้ำ
+ */
+export function periodCloseAvailableFrom(key: PeriodKey): Date {
+  const next = nextPeriodKey(key)
+  return startOfBangkokDay(new Date(Date.UTC(periodYearCe(next), next.month - 1, 1)))
+}
+
+/** งวดนี้สิ้นเดือนแล้วหรือยัง ณ `now` (inclusive ที่ 00:00 น. วันที่ 1 ของเดือนถัดไป) */
+export function isPeriodEnded(key: PeriodKey, now: Date): boolean {
+  return now.getTime() >= periodCloseAvailableFrom(key).getTime()
+}
+
+/** ข้อความที่ผู้ใช้เห็นเมื่อยังส่ง/ล็อกไม่ได้ — วันที่ พ.ศ. ผ่าน `fmtDate()` กลาง */
+export function periodCloseAvailableHint(key: PeriodKey): string {
+  return `ส่ง/ล็อกได้ตั้งแต่ ${fmtDate(periodCloseAvailableFrom(key))}`
+}
+
+/**
+ * ยามก่อน `send`/`lock` — ยังไม่สิ้นเดือน ⇒ `PERIOD_NOT_ENDED` (มติ PO U51)
+ * ใช้กับทั้งสอง action เพราะรอบที่ถูกส่งก่อนมีมตินี้ (ข้อมูลเก่า) ก็ต้องล็อกไม่ได้จนกว่าจะสิ้นเดือนเช่นกัน
+ */
+export function assertPeriodEnded(key: PeriodKey, now: Date): void {
+  if (isPeriodEnded(key, now)) return
+  const availableFrom = periodCloseAvailableFrom(key)
+  throw new AccountingError('PERIOD_NOT_ENDED', {
+    detail: `period=${key.yearBe}-${key.month} now=${now.toISOString()} availableFrom=${availableFrom.toISOString()}`,
+    message: `งวด ${periodLabelOf(key)} ยังไม่สิ้นเดือน — ${periodCloseAvailableHint(key)}`,
+    context: { availableFrom: availableFrom.toISOString() },
+  })
+}
+
 /** ป้ายสถานะรอบ — ข้อความเดียวกับตารางนโยบาย `13` §6.11 (ห้ามตั้งชุดใหม่) */
 export function periodStatusLabel(status: AccountingPeriodStatus): string {
   return periodLockPolicyFor(status).statusLabel
@@ -127,6 +164,17 @@ export interface PeriodActions {
   canLock: boolean
   canUnlock: boolean
   canExport: boolean
+  /**
+   * ปุ่มส่ง/ล็อกยังแสดง แต่กดไม่ได้เพราะงวดยังไม่สิ้นเดือน (มติ PO U51) — `null` = กดได้
+   * ข้อความเช่น "ส่ง/ล็อกได้ตั้งแต่ 01/11/2569"
+   */
+  closeBlockedHint: string | null
+}
+
+/** เวลาของงวดที่ server คำนวณให้ (`AccountingPeriodDto.periodEnded`) */
+export interface PeriodTiming {
+  key: PeriodKey
+  periodEnded: boolean
 }
 
 /**
@@ -136,18 +184,26 @@ export interface PeriodActions {
  * - ล็อกงวด = "บัญชี/Executive ยืนยันปิดงวด" (`30` §9) ⇒ ผ่านได้ทั้งสองสาย เท่ากับ route `/lock`
  * - ปลดล็อก = **ผู้บริหารเท่านั้น** (`30` §10) — API ตรวจซ้ำแล้วโยน `UNLOCK_REQUIRES_EXECUTIVE`
  */
-export function periodActionsFor(status: AccountingPeriodStatus, caps: PeriodCapabilityFlags): PeriodActions {
+export function periodActionsFor(
+  status: AccountingPeriodStatus,
+  caps: PeriodCapabilityFlags,
+  timing?: PeriodTiming,
+): PeriodActions {
+  const canSend = caps.canManagePeriod && canTransitionPeriod(status, 'sent_to_accountant') && status === 'collecting'
+  const canLock = (caps.canManagePeriod || caps.canUnlockPeriod) && canTransitionPeriod(status, 'locked')
+  const blocked = timing !== undefined && !timing.periodEnded && (canSend || canLock)
   return {
-    canSend: caps.canManagePeriod && canTransitionPeriod(status, 'sent_to_accountant') && status === 'collecting',
-    canLock: (caps.canManagePeriod || caps.canUnlockPeriod) && canTransitionPeriod(status, 'locked'),
+    canSend,
+    canLock,
     canUnlock: caps.canUnlockPeriod && status === 'locked',
     canExport: caps.canExportPack,
+    closeBlockedHint: blocked ? periodCloseAvailableHint(timing.key) : null,
   }
 }
 
 // ── Readiness Check 3 เงื่อนไข (`30` §6.2) ───────────────────────────────────
 
-export type ReadinessCheckKey = 'billing_revenue_sync' | 'bank_reconcile' | 'no_critical_exception'
+export type ReadinessCheckKey = 'period_ended' | 'billing_revenue_sync' | 'bank_reconcile' | 'no_critical_exception'
 
 export interface ReadinessCheck {
   key: ReadinessCheckKey
@@ -175,6 +231,11 @@ export interface ReadinessInput {
   /** รายการเดินบัญชีที่ยัง `unmatched` ของรอบนี้ (`unmatched_resolved` ถือว่าเคลียร์แล้ว — `35`) */
   unmatchedBankCount: number
   billingMismatches: readonly BillingRevenueMismatch[]
+  /**
+   * งวดสิ้นเดือนแล้วหรือยัง (มติ PO U51) — ไม่ส่ง = ไม่ตรวจข้อนี้ (เทสต์ pure เดิม)
+   * service ส่งมาเสมอ ⇒ checklist บนหน้าจอมีข้อนี้เป็นข้อแรก
+   */
+  periodEnd?: { key: PeriodKey; now: Date }
 }
 
 export interface ReadinessResult {
@@ -196,7 +257,17 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   const reconcilePassed = input.unmatchedBankCount === 0
   const criticalPassed = input.criticalOpen.length === 0
 
-  const checks: ReadinessCheck[] = [
+  const checks: ReadinessCheck[] = []
+  if (input.periodEnd !== undefined) {
+    const ended = isPeriodEnded(input.periodEnd.key, input.periodEnd.now)
+    checks.push({
+      key: 'period_ended',
+      label: 'งวดสิ้นเดือนแล้ว',
+      passed: ended,
+      detail: ended ? 'ผ่านวันสิ้นเดือนของงวดนี้แล้ว' : periodCloseAvailableHint(input.periodEnd.key),
+    })
+  }
+  checks.push(
     {
       key: 'billing_revenue_sync',
       label: 'ยอดวางบิลตรงกับรายได้ของรอบ',
@@ -221,7 +292,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
         ? 'ไม่มีข้อยกเว้นระดับวิกฤตค้างในรอบนี้'
         : `ยังมี ${input.criticalOpen.length} รายการที่ต้องแก้หรือให้ผู้บริหารอนุมัติยกเว้น`,
     },
-  ]
+  )
 
   const warnings =
     input.warningOpenCount > 0
@@ -240,9 +311,13 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
 
 /**
  * ยามก่อน `collecting → sent_to_accountant` — **ห้าม force ข้าม** (`30` §10)
- * ลำดับการโยน: critical ก่อน (ร้ายแรงสุด) → กระทบยอดธนาคาร → ยอดบิล/รายได้
+ * ลำดับการโยน: ยังไม่สิ้นเดือน (U51) → critical ก่อน (ร้ายแรงสุด) → กระทบยอดธนาคาร → ยอดบิล/รายได้
  */
 export function assertReadyToSend(result: ReadinessResult): void {
+  const periodEnded = result.checks.find((check) => check.key === 'period_ended')
+  if (periodEnded !== undefined && !periodEnded.passed) {
+    throw new AccountingError('PERIOD_NOT_ENDED', { detail: periodEnded.detail, message: `ยังไม่สิ้นเดือน — ${periodEnded.detail}` })
+  }
   if (result.criticalOpen.length > 0) {
     throw new AccountingError('NOT_READY_CRITICAL_OPEN', {
       detail: `critical open ${result.criticalOpen.length} รายการ`,

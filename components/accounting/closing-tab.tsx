@@ -48,7 +48,7 @@ const ACTION_COPY: Readonly<
     title: 'ส่งมอบรอบบัญชีให้สำนักงานบัญชี',
     confirmLabel: 'ยืนยันส่งมอบ',
     description:
-      'ระบบตรวจความพร้อม 3 เงื่อนไขอีกครั้งก่อนเปลี่ยนสถานะ — ไม่ผ่านจะถูกปฏิเสธพร้อมบอกว่าติดข้อไหน',
+      'ระบบตรวจความพร้อมอีกครั้งก่อนเปลี่ยนสถานะ — ไม่ผ่านจะถูกปฏิเสธพร้อมบอกว่าติดข้อไหน',
     placeholder: 'เช่น ปิดยอดเดือนครบแล้ว ส่งชุดเอกสารให้สำนักงานบัญชีตามรอบ',
   },
   lock: {
@@ -119,7 +119,7 @@ export function ClosingTab() {
         <div>
           <h2 className="text-base font-semibold text-slate-900">รอบบัญชีรายเดือน (Accounting Periods)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            รอบของเดือนใหม่เปิดเองอัตโนมัติ — ปิดงวดได้เมื่อผ่านความพร้อมครบ 3 เงื่อนไขเท่านั้น
+            รอบของเดือนใหม่เปิดเองอัตโนมัติ — ปิดงวดได้เมื่อสิ้นเดือนแล้วและผ่านความพร้อมครบทุกข้อเท่านั้น
           </p>
         </div>
       </div>
@@ -157,7 +157,12 @@ export function ClosingTab() {
             {!loading &&
               error === null &&
               items.map((period) => {
-                const actions = periodActionsFor(period.status, caps)
+                const actions = periodActionsFor(period.status, caps, {
+                  key: { yearBe: period.yearBe, month: period.month },
+                  periodEnded: period.periodEnded,
+                })
+                // มติ PO U51 — ยังไม่สิ้นเดือน ⇒ ปุ่มส่ง/ล็อกแสดงแต่กดไม่ได้ พร้อมบอกวันที่กดได้
+                const closeBlocked = actions.closeBlockedHint !== null
                 return (
                   <Tr key={period.id}>
                     <Td>
@@ -203,12 +208,24 @@ export function ClosingTab() {
                           ตรวจความพร้อม
                         </Button>
                         {actions.canSend && (
-                          <Button size="sm" variant="ghost" onClick={() => openAction(period, 'send')}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={closeBlocked}
+                            title={actions.closeBlockedHint ?? undefined}
+                            onClick={() => openAction(period, 'send')}
+                          >
                             ส่งสำนักงานบัญชี
                           </Button>
                         )}
                         {actions.canLock && (
-                          <Button size="sm" variant="ghost" onClick={() => openAction(period, 'lock')}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={closeBlocked}
+                            title={actions.closeBlockedHint ?? undefined}
+                            onClick={() => openAction(period, 'lock')}
+                          >
                             ล็อกงวด
                           </Button>
                         )}
@@ -223,6 +240,9 @@ export function ClosingTab() {
                           </Button>
                         )}
                       </div>
+                      {closeBlocked && (
+                        <p className="mt-1 text-[10px] font-semibold text-amber-600">{actions.closeBlockedHint}</p>
+                      )}
                     </Td>
                   </Tr>
                 )
@@ -232,7 +252,8 @@ export function ClosingTab() {
       </div>
 
       <InlineAlert tone="info" title="วงจรปิดงวด">
-        กำลังรวบรวม → ส่งสำนักงานบัญชี (ผ่านความพร้อม 3 เงื่อนไข ข้ามไม่ได้) → ล็อกงวด ·
+        กำลังรวบรวม → ส่งสำนักงานบัญชี (ผ่านความพร้อม ข้ามไม่ได้) → ล็อกงวด ·
+        ส่งและล็อกได้ตั้งแต่ 00:00 น. วันที่ 1 ของเดือนถัดไป (หลังสิ้นเดือนของงวดนั้น) ·
         ปลดล็อกได้เฉพาะผู้บริหาร และกลับไปที่ “ส่งสำนักงานบัญชีแล้ว” เท่านั้น — แก้ยอดของงวดที่ล็อกต้องผ่านรายการปรับปรุง
       </InlineAlert>
 

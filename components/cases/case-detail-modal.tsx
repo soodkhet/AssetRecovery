@@ -435,7 +435,19 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
           label="ทรัพย์"
           value={`${assetTypeLabel(detail.assetType)} · ${detail.assetBrandModel ?? '—'}`}
         />
-        <Row label="IMEI / Serial" value={<span className="font-mono">{detail.assetImeiSerial ?? '—'}</span>} />
+        <Row
+          label="IMEI / Serial"
+          value={
+            <span>
+              <span className="font-mono">{detail.assetImeiSerial ?? '—'}</span>
+              {detail.assetIdentifierWarning !== null && (
+                <span className="mt-0.5 block text-[11px] font-semibold text-amber-600">
+                  {detail.assetIdentifierWarning}
+                </span>
+              )}
+            </span>
+          }
+        />
         <Row
           label="มูลหนี้คงเหลือ"
           value={<span className="font-mono font-semibold">{fmtSatangSymbol(detail.outstandingDebtSatang)}</span>}

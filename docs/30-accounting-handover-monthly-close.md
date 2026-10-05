@@ -14,6 +14,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Accounting Period state machine, Readiness Check 3 เงื่อนไข |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — ตรวจสอบ enum `accounting_period_status` เทียบกับ `02-database-schema-design.md` แล้ว **ตรงกันทุกตัว ไม่พบ conflict** (ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.13) — **เนื้อหา business logic เดิมคงไว้ครบ** |
 | v2.1 | 04/07/2569 | **เติม error code เงื่อนไขที่ 3 ของ Readiness Check**: §6.2 กำหนด 3 เงื่อนไข แต่ §11 เดิมมี error code แค่ 2 ตัว — เติม `NOT_READY_BILLING_REVENUE_MISMATCH` (ยอดบิลไม่ตรงกับรายได้) พร้อม test case §16 — sync กับไฟล์ 24 v3 แล้ว — หมายเหตุเพิ่มเติม: `critical_count`/`warning_count` ใน §7.1 เป็น **derived field** (นับ real-time จากตาราง `exceptions` ผ่าน index `idx_exceptions_period`) ไม่ใช่ column จริงในตาราง `accounting_periods` — ระบุให้ชัดกัน dev สร้าง column ซ้ำซ้อน |
+| v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (U51/O25)**: ห้าม "ส่งสำนักงานบัญชี" และ "ล็อกงวด" ก่อนงวดนั้นสิ้นเดือน — งวดเดือน M ทำได้ตั้งแต่ **00:00 น. วันที่ 1 ของเดือนถัดไป เวลาไทย** (งวด ต.ค. 2569 → 01/11/2569 00:00 น.) · เติม §6.2a + Readiness ข้อ "งวดสิ้นเดือนแล้ว" · §8 ปุ่มส่ง/ล็อก disable พร้อมข้อความ "ส่ง/ล็อกได้ตั้งแต่ DD/MM/YYYY" · §11/§16 `PERIOD_NOT_ENDED` (sync `24` v4.26) · ไม่มี dev override วันที่ (เทสต์ฉีดเวลาที่ service เท่านั้น) |
 
 ขอบเขตเอกสารนี้: จัดการ "รอบบัญชี" (Accounting Period) แต่ละเดือน — ติดตามสถานะตั้งแต่เก็บข้อมูล จนถึงส่งมอบและล็อกรอบ ครอบคลุม flow ของทั้งกลุ่ม Accounting (31-37) — เป็น**จุดควบคุมกลาง**ที่ Period Lock Policy บังคับใช้
 
@@ -66,6 +67,13 @@
 - Bank Reconcile จับคู่ครบ 100% (ไม่มี `unmatched` transaction ค้างในรอบนั้น — ไฟล์ 35)
 - ไม่มี Critical Exception เปิดอยู่ (ไฟล์ 34) — ถ้ามี Warning ผ่านได้แต่ต้องแสดงเตือน
 
+### 6.2a ส่ง/ล็อกได้เมื่องวดสิ้นเดือนแล้วเท่านั้น (มติ PO U51)
+
+- `send` (`collecting → sent_to_accountant`) และ `lock` (`sent_to_accountant → locked`) ของงวดเดือน M ทำได้ตั้งแต่ **00:00 น. วันที่ 1 ของเดือน M+1 ตามเวลาไทย** (Asia/Bangkok) — ตรวจที่ API ด้วยเวลา server (เก็บ/เทียบเป็น UTC: งวด ต.ค. 2569 = `2026-10-31T17:00:00Z`)
+- ก่อนเวลานั้น → reject `PERIOD_NOT_ENDED` พร้อมวันที่ที่ทำได้ (พ.ศ.) · Readiness Check แสดงข้อ "งวดสิ้นเดือนแล้ว" เป็นข้อแรก (ไม่ผ่าน = ยังไม่พร้อม)
+- ใช้กับ `lock` ด้วยแม้รอบจะถูกส่งไปแล้ว (รอบที่ถูกส่งก่อนมีมตินี้ต้องรอสิ้นเดือนจึงล็อกได้) · `unlock` ไม่ถูกจำกัด
+- UI: ปุ่ม "ส่งสำนักงานบัญชี"/"ล็อกงวด" แสดงแต่ disable พร้อมข้อความ "ส่ง/ล็อกได้ตั้งแต่ DD/MM/YYYY"
+
 ## 7. Data Entities / Required Objects
 
 ### 7.1 Accounting Period
@@ -86,6 +94,7 @@
 
 - Table: เดือน, สถานะ (badge), จำนวน Critical (แดง) + Warning (ส้ม), วันที่ Export ล่าสุด, ปุ่ม "ตรวจความพร้อม" + ปุ่ม "Export Pack"
 - Modal "ตรวจความพร้อม" (accounting-checklist): checklist แสดงสถานะแต่ละเงื่อนไข (ตาม §6.2) พร้อม icon ติ๊กเขียว/เตือนเหลือง
+- ปุ่ม "ส่งสำนักงานบัญชี"/"ล็อกงวด" ของงวดที่ยังไม่สิ้นเดือน: แสดงแต่ disable + ข้อความ "ส่ง/ล็อกได้ตั้งแต่ DD/MM/YYYY" (พ.ศ. — §6.2a มติ PO U51)
 
 ## 9. Workflow / Lifecycle
 
@@ -106,6 +115,7 @@
 | NOT_READY_RECONCILE_INCOMPLETE | Bank Reconcile ยังไม่ครบ 100% | reject พร้อมจำนวนรายการ unmatched ที่เหลือ |
 | NOT_READY_BILLING_REVENUE_MISMATCH | ยอด Billing Batch ยังไม่ sync ตรงกับ Revenue ของรอบนั้น (เงื่อนไขที่ 3 ตาม §6.2) | reject พร้อมรายการที่ไม่ตรง |
 | UNLOCK_REQUIRES_EXECUTIVE | พยายามปลดล็อกรอบ locked โดยไม่ใช่ Executive | reject |
+| PERIOD_NOT_ENDED | ส่ง/ล็อกงวดก่อน 00:00 น. วันที่ 1 ของเดือนถัดไป (เวลาไทย — §6.2a) | reject พร้อมวันที่ที่ทำได้ |
 
 ## 12. Permission Requirements
 
@@ -144,6 +154,7 @@
 | Bank Reconcile ไม่ครบ | พยายาม send ขณะมี unmatched transaction | reject NOT_READY_RECONCILE_INCOMPLETE |
 | ยอดบิลไม่ตรงรายได้ | พยายาม send ขณะ Billing/Revenue ของรอบยังไม่ sync กัน | reject NOT_READY_BILLING_REVENUE_MISMATCH |
 | ปลดล็อกโดยไม่ใช่ Executive | บัญชี (ไม่ใช่ Executive) พยายามปลดล็อกรอบ locked | reject UNLOCK_REQUIRES_EXECUTIVE |
+| ส่ง/ล็อกก่อนสิ้นเดือน | send/lock งวด ส.ค. ณ 31/08 23:59 น. (ไทย) แล้วอีกครั้ง ณ 01/09 00:00 น. | ครั้งแรก reject PERIOD_NOT_ENDED · ครั้งที่สองผ่าน |
 
 ---
 
