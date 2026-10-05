@@ -1,4 +1,4 @@
-import type { AdvanceReturnState } from '@/lib/advances/advance'
+import type { AdvancePayoutBatchRef, AdvanceReturnState } from '@/lib/advances/advance'
 import type { AdvanceReturnChannel, AdvanceReturnMethod, AdvanceStatus } from '@/lib/generated/prisma/enums'
 
 /**
@@ -45,6 +45,11 @@ export interface AdvanceDto {
   returnState: AdvanceReturnState
   /** ประวัติการคืนยอด (ใหม่สุดก่อน) */
   returns: AdvanceReturnDto[]
+  /**
+   * รอบจ่ายที่จ่ายเงินทดรองนี้ออก (มติ PO U74) — `null` = ยังไม่ถูกดึงเข้ารอบ (หรือรอบถูกยกเลิกแล้ว)
+   * รอบยังไม่ `completed` ⇒ ปุ่มเคลียร์ยอดปิดพร้อมเหตุผล (`pendingPayoutBlockingSettle()`)
+   */
+  payoutBatch: AdvancePayoutBatchRef | null
 }
 
 /** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */

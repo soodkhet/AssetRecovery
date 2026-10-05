@@ -16,6 +16,8 @@ export const ADVANCE_ERROR_CODES = [
   'REJECTION_REASON_REQUIRED',
   // มติ PO 05/10/2569 (UAT U30) — รับคืนแยกเกินยอดคืนค้าง
   'ADVANCE_RETURN_EXCEEDS_OUTSTANDING',
+  // มติ PO 05/10/2569 (UAT U74) — เคลียร์ยอดขณะเงินทดรองอยู่ในรอบจ่ายที่ยังไม่โอนจริง
+  'ADVANCE_IN_PENDING_PAYOUT',
 ] as const
 
 export type AdvanceErrorCode = (typeof ADVANCE_ERROR_CODES)[number]
@@ -28,6 +30,7 @@ const HTTP_STATUS: Record<AdvanceErrorCode, number> = {
   ADVANCE_INVALID_STATUS: 400,
   REJECTION_REASON_REQUIRED: 400,
   ADVANCE_RETURN_EXCEEDS_OUTSTANDING: 400,
+  ADVANCE_IN_PENDING_PAYOUT: 400,
 }
 
 const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
@@ -55,6 +58,10 @@ const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
     title: 'ยอดรับคืนเกินยอดค้าง',
     message: 'ยอดเงินที่รับคืนต้องไม่เกินยอดคืนเงินทดรองที่ยังค้างอยู่',
   },
+  ADVANCE_IN_PENDING_PAYOUT: {
+    title: 'เงินทดรองยังอยู่ในรอบจ่ายที่ยังไม่โอน',
+    message: 'เคลียร์ยอดได้หลังรอบจ่ายที่จ่ายเงินทดรองนี้ยืนยันโอนเงินสำเร็จแล้ว',
+  },
 }
 
 export function advanceErrorStatus(code: AdvanceErrorCode): number {
@@ -66,8 +73,13 @@ export function advanceErrorMessage(code: AdvanceErrorCode): ErrorMessage {
 }
 
 export class AdvanceError extends ModuleError<AdvanceErrorCode> {
-  constructor(code: AdvanceErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความไทยเฉพาะกรณี (เช่น บอกชื่อรอบจ่ายที่ต้องรอ) แทนข้อความกลางของ code */
+  constructor(
+    code: AdvanceErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const base = MESSAGES[code]
+    super(code, options?.message === undefined ? base : { ...base, message: options.message }, HTTP_STATUS[code], options)
     this.name = 'AdvanceError'
   }
 }

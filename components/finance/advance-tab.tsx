@@ -5,6 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
 import { ChangeReturnMethodModal, RecordSeparateReturnModal } from '@/components/finance/advance-return-modals'
+import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
 import { useAdvances } from '@/components/finance/use-advances'
 import {
@@ -35,7 +36,6 @@ import {
   advanceStatusBadgeGroup,
   advanceStatusLabel,
   canReviewAdvance,
-  canSettleAdvance,
   countAwaitingSettlement,
   countOverdue,
   outstandingAdvanceSatang,
@@ -266,11 +266,7 @@ export function AdvanceTab() {
                             </Button>
                           </>
                         )}
-                        {canSettleAdvance(advance.status) && (
-                          <Button size="sm" variant="secondary" onClick={() => setSettleTarget(advance)}>
-                            เคลียร์ยอด
-                          </Button>
-                        )}
+                        <SettleAdvanceButton advance={advance} onSettle={setSettleTarget} />
                         {canApproveAdvance && canRecordAdvanceSeparateReturn(advance) && (
                           <Button size="sm" variant="secondary" onClick={() => setReturnTarget(advance)}>
                             บันทึกรับคืน

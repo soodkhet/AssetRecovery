@@ -9,7 +9,9 @@ import {
   assertCanChangeReturnMethod,
   assertNoUnclearedAdvance,
   assertSeparateReturnAllowed,
+  assertSettleNotInPendingPayout,
   assertWithinAdvanceMax,
+  type AdvancePayoutBatchRef,
   isAdvanceOverdue,
   nextAdvanceStatus,
   resolveApprovedSatang,
@@ -79,6 +81,9 @@ const advanceSelect = {
   clearedAt: true,
   rejectionReason: true,
   returnMethod: true,
+  payoutBatchItemId: true,
+  // มติ PO U74 — รอบจ่ายที่จ่ายเงินทดรองนี้ (ชี้ด้วย `payout_batch_item_id` · แถวของรอบที่ยกเลิกแล้วไม่ถูกชี้)
+  payoutItems: { select: { id: true, payoutBatch: { select: { id: true, name: true, status: true } } } },
   createdAt: true,
   returns: {
     select: {
@@ -110,6 +115,13 @@ const advanceSelect = {
 
 type AdvanceRow = Prisma.AdvanceGetPayload<{ select: typeof advanceSelect }>
 type AdvanceReturnRow = AdvanceRow['returns'][number]
+
+/** รอบจ่ายปัจจุบันของเงินทดรอง (มติ PO U74) — แถวที่ `payout_batch_item_id` ชี้ · ไม่มี = `null` */
+function payoutBatchOf(row: Pick<AdvanceRow, 'payoutBatchItemId' | 'payoutItems'>): AdvancePayoutBatchRef | null {
+  if (row.payoutBatchItemId === null) return null
+  const item = row.payoutItems.find((entry) => entry.id === row.payoutBatchItemId)
+  return item === undefined ? null : { ...item.payoutBatch }
+}
 
 /** ยอดคืนค้าง (`22` §6.14) — นับเฉพาะแถวที่ยังไม่กลับรายการ */
 function returnOutstandingOf(row: Pick<AdvanceRow, 'returnSatang' | 'returns'>): {
@@ -176,6 +188,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
       method: row.returnMethod,
     }),
     returns: row.returns.map(toReturnDto),
+    payoutBatch: payoutBatchOf(row),
   }
 }
 
@@ -487,6 +500,11 @@ export async function settleAdvance(
   const returnMethod = resolveSettleReturnMethod(preview.returnSatang, input.returnMethod)
 
   const { row: updated, excessClaimId } = await prisma.$transaction(async (tx) => {
+    // มติ PO U74 — ล็อกแถวก่อนอ่านรอบจ่ายที่ชี้อยู่ ⇒ การสร้าง/ยกเลิกรอบจ่ายที่แตะแถวนี้ต้องรอ
+    // (สร้างรอบ: ยึด `payout_batch_item_id` ด้วย `updateMany` ที่ผูกสถานะ approved|overdue ⇒ หลังเคลียร์แล้วยึดไม่ได้)
+    const locked = await lockAdvanceForReturn(tx as ExpenseTxClient, user.organizationId, advanceId)
+    assertSettleNotInPendingPayout(advanceId, payoutBatchOf(locked))
+
     const claimed = await tx.advance.updateMany({
       where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
       // ⚠️ ห้ามส่ง `returnSatang` — เป็น generated column ของ DB (`02` §5)

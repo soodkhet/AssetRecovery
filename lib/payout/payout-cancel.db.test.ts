@@ -135,9 +135,9 @@ async function seedApprovedAdvance(id: string, approvedSatang: number): Promise<
 /** เงินทดรองที่ถูกจ่ายในรอบก่อนแล้ว (กันไม่ให้ถูกดึงเข้ารอบใหม่) แล้วเคลียร์ ใช้ ฿2,450 จาก ฿3,000 → คืน ฿550 */
 async function settledAdvanceWithOffset(): Promise<void> {
   await seedApprovedAdvance(ADV_ID, 300_000)
-  // ทำเหมือนจ่ายออกไปแล้วในรอบอื่น — ชี้ไปที่รายการของรอบที่จ่ายจริงในอดีต
+  // ทำเหมือนจ่ายออกไปแล้วในรอบอื่น — ชี้ไปที่รายการของรอบที่โอนจริงแล้วในอดีต (`completed` — มติ PO U74: รอบที่ยังไม่โอนเคลียร์ไม่ได้)
   const paidBatch = await db().payoutBatch.create({
-    data: { organizationId: ORG_ID, name: 'รอบเก่า U67', side: 'outsource', status: 'checking', createdBy: FINANCE_ID },
+    data: { organizationId: ORG_ID, name: 'รอบเก่า U67', side: 'outsource', status: 'completed', createdBy: FINANCE_ID },
   })
   const paidItem = await db().payoutBatchItem.create({
     data: {

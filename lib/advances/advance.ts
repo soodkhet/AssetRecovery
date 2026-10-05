@@ -1,7 +1,13 @@
 import { AdvanceError } from '@/lib/advances/errors'
 import { toInputDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import type { AdvanceReturnChannel, AdvanceReturnMethod, AdvanceStatus, ExpenseType } from '@/lib/generated/prisma/enums'
+import type {
+  AdvanceReturnChannel,
+  AdvanceReturnMethod,
+  AdvanceStatus,
+  ExpenseType,
+  PayoutBatchStatus,
+} from '@/lib/generated/prisma/enums'
 
 /**
  * เงินทดรองจ่าย — state machine + กติกาธุรกิจ (`15` · `23` §6.4) — **pure ล้วน ไม่มี I/O**
@@ -243,4 +249,41 @@ export const ADVANCE_RETURN_CHANNEL_LABEL: Readonly<Record<AdvanceReturnChannel,
 /** ป้ายบรรทัดหักบนไฟล์โอน/ใบสำคัญจ่าย/สลิป */
 export function advanceOffsetLineLabel(advanceId: string): string {
   return `หักคืนเงินทดรอง ${advanceRef(advanceId)}`
+}
+
+// ── มติ PO 05/10/2569 (UAT U74) — ห้ามเคลียร์ยอดขณะเงินทดรองอยู่ในรอบจ่ายที่ยังไม่โอนจริง ─────────
+
+/**
+ * สถานะรอบจ่ายที่ "เงินยังไม่ออกจริง" — เงินทดรองที่ถูกดึงเข้ารอบสถานะเหล่านี้ยังเคลียร์ยอดไม่ได้
+ * (`completed` = โอนแล้ว เคลียร์ได้ · `cancelled` = รอบถูกยกเลิก เงินทดรองถูกปล่อยออกจากรอบแล้ว — U67)
+ */
+export const PENDING_PAYOUT_BATCH_STATUSES: readonly PayoutBatchStatus[] = ['draft', 'checking', 'file_generated']
+
+/** รอบจ่ายที่เงินทดรองถูกดึงเข้า (ผ่าน `advances.payout_batch_item_id`) — `null` = ยังไม่อยู่ในรอบใด */
+export interface AdvancePayoutBatchRef {
+  id: string
+  name: string
+  status: PayoutBatchStatus
+}
+
+/** รอบจ่ายที่ยังไม่โอนซึ่งบล็อกการเคลียร์ยอด — `null` = ไม่บล็อก */
+export function pendingPayoutBlockingSettle(batch: AdvancePayoutBatchRef | null): AdvancePayoutBatchRef | null {
+  if (batch === null) return null
+  return PENDING_PAYOUT_BATCH_STATUSES.includes(batch.status) ? batch : null
+}
+
+/** ข้อความที่ผู้ใช้เห็น — บอกชื่อรอบจ่ายที่ต้องรอ (ใช้ร่วม error ฝั่ง API และเหตุผลปุ่มที่ปิดไว้) */
+export function pendingPayoutSettleMessage(batchName: string): string {
+  return `เงินทดรองนี้อยู่ในรอบจ่าย "${batchName}" ที่ยังไม่ยืนยันโอนเงิน — เคลียร์ยอดได้หลังรอบจ่ายนี้โอนเงินสำเร็จ`
+}
+
+/** ยามฝั่ง service — อยู่ในรอบจ่ายที่ยังไม่ `completed` ⇒ `ADVANCE_IN_PENDING_PAYOUT` */
+export function assertSettleNotInPendingPayout(advanceId: string, batch: AdvancePayoutBatchRef | null): void {
+  const blocking = pendingPayoutBlockingSettle(batch)
+  if (blocking === null) return
+  throw new AdvanceError('ADVANCE_IN_PENDING_PAYOUT', {
+    message: pendingPayoutSettleMessage(blocking.name),
+    context: { payoutBatchId: blocking.id, payoutBatchName: blocking.name, payoutBatchStatus: blocking.status },
+    detail: `advance=${advanceId} อยู่ในรอบจ่าย ${blocking.id} (${blocking.status})`,
+  })
 }
