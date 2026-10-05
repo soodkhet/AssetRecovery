@@ -5,13 +5,16 @@ import type { SessionUser } from '@/lib/auth/types'
 import { ModuleError } from '@/lib/api/errors'
 import { CASE_READ_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { getCase } from '@/lib/cases/queries'
+import { assertTaxInvoiceInScope } from '@/lib/credit-notes/queries'
 import { MANAGE_SALES_EXPENSES, MAP_COST_CENTER } from '@/lib/expenses/expense-record'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
+import { MANAGE_TAX_INVOICE, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
 import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
 import { UploadError } from '@/lib/uploads/errors'
 import type { UploadRule } from '@/lib/uploads/inspect'
 import {
   caseDocumentRule,
+  creditNoteFileRule,
   expenseReceiptRule,
   fieldEvidenceRule,
   intakePhotoRule,
@@ -41,6 +44,7 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   FIELD_CAPABILITY,
   WAREHOUSE_INTAKE_CAPABILITY,
   WAREHOUSE_CONFIRM_LOT_CAPABILITY,
+  MANAGE_TAX_INVOICE,
 ] as const
 
 /**
@@ -61,6 +65,7 @@ export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
     FIELD_CAPABILITY,
     ...WAREHOUSE_READ_CAPABILITIES,
     ...RECEIPT_REVIEW_CAPABILITIES,
+    ...SALES_READ_CAPABILITIES,
   ]),
 ]
 
@@ -84,6 +89,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return intakePhotoRule(target.assetId)
     case 'lot_document':
       return lotDocumentRule(target.lotId, target.document)
+    case 'credit_note':
+      return creditNoteFileRule(target.taxInvoiceId)
   }
 }
 
@@ -110,6 +117,12 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
     case 'lot_document': {
       const user = await requirePermission('manage', WAREHOUSE_CONFIRM_LOT_CAPABILITY)
       await getLot(user, target.lotId)
+      return user
+    }
+    case 'credit_note': {
+      // แนบไฟล์ใบลดหนี้ = บันทึกใบลดหนี้ ⇒ สิทธิ์เดียวกับ endpoint บันทึก (บัญชี `manage_tax_invoice`)
+      const user = await requirePermission('manage', MANAGE_TAX_INVOICE)
+      await assertTaxInvoiceInScope(user, target.taxInvoiceId)
       return user
     }
   }
@@ -182,6 +195,11 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
       if (owner.userId === user.id && hasAny(user, 'view', [FIELD_CAPABILITY])) return
       if (hasAny(user, 'view', RECEIPT_REVIEW_CAPABILITIES)) return
       throw denied(user, `view:receipt owner=${owner.userId}`)
+    }
+    case 'tax_invoice': {
+      if (!hasAny(user, 'view', SALES_READ_CAPABILITIES)) throw denied(user, `view:credit-note invoice=${owner.taxInvoiceId}`)
+      await assertTaxInvoiceInScope(user, owner.taxInvoiceId)
+      return
     }
   }
 }

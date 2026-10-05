@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | (เดิม) | Drafted from UI Reference — Sales Record, Tax Invoice (auto-number), Cash Receipt |
 | v2 | 03/07/2569 | **แก้ไข §7.2 (Tax Invoice status)**: เดิมระบุ 3 สถานะ `draft`/`issued`/`cancelled` ซึ่ง**ไม่ตรงกับ** enum `tax_invoice_status` ใน `02-database-schema-design.md` ที่มีแค่ `active`/`cancelled` — ตรวจสอบ workflow §9.1 ในไฟล์นี้เองแล้วพบว่า **ไม่เคยมีขั้น draft จริงในทางปฏิบัติ** (กดปุ่ม "ออกใบกำกับภาษี" แล้วออกทันที ไม่มีขั้นร่างค้างไว้ก่อน) จึงแก้เป็น 2 สถานะ `active`/`cancelled` ให้ตรงกับ schema — ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.10 — Reformat header ตามมาตรฐานเอกสารชุดใหม่ |
+| v3 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก)** + มติบัญชี B1 (ม.86/10): เพิ่ม §3 / §6.5 / §7.4 Credit Note — ระบบบันทึกใบลดหนี้ที่สำนักงานบัญชีออก (ไม่ออกเอง) · §8 UI · §11 error code `CREDIT_NOTE_*` · §12 สิทธิ์ (ใช้ `manage_tax_invoice`) · §13 audit · §14 API 4 เส้น · §16 test 4 เคส · schema `02` v4.19 · สูตร `22` §6.8.1 |
 
 ขอบเขตเอกสารนี้: มุมมองฝั่งบัญชีของรายได้ (ต่อจากไฟล์ 19 ฝั่งการเงิน) — บันทึกรายการขาย/บริการตามมาตรฐานบัญชี ออกใบกำกับภาษี และบันทึกเงินรับจริงที่กระทบยอดกับธนาคารแล้ว
 
@@ -35,6 +36,7 @@
 - การออกใบกำกับภาษี (Tax Invoice) ตามที่กฎหมายกำหนด
 - บันทึกเงินรับจริง (Cash Receipt) ที่กระทบยอดกับ Bank Statement แล้ว (ไฟล์ 35)
 - ใบเสร็จรับเงิน (Receipt)
+- **บันทึกใบลดหนี้ (Credit Note) ที่สำนักงานบัญชีออกนอกระบบ** (§6.5 — มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก))
 
 ## 4. Out of Scope
 
@@ -70,6 +72,14 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 ### 6.4 Receipt (ใบเสร็จรับเงิน)
 
 ออกคู่กับ Cash Receipt ทุกครั้งที่มีเงินรับจริงเข้ามา — เอกสารยืนยันการรับเงิน (ต่างจากใบกำกับภาษีที่ยืนยันการขาย/ให้บริการ)
+
+### 6.5 Credit Note (ใบลดหนี้ — มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก) + มติบัญชี B1)
+
+- ลดมูลค่าบริการหลังออกใบกำกับแล้ว (เช่น Adjustment ลดค่าบริการ) ต้องมี **ใบลดหนี้** ตาม ม.86/10 (มูลค่าที่ลด + VAT ที่ลด) — **สำนักงานบัญชีออกนอกระบบ** (Hybrid Accounting Boundary) ระบบ**บันทึก**ข้อมูลของเอกสารที่ออกแล้วเท่านั้น: เลขที่ (ตามเอกสาร ไม่ได้เดินเลขโดยระบบ) · วันที่ออก · ใบกำกับที่อ้างถึง · มูลค่าที่ลดก่อน VAT · VAT ที่ลด · เหตุผล · Adjustment ต้นเหตุ (ถ้ามี) · ไฟล์สแกน
+- VAT ที่ลดคิดจากอัตราของใบกำกับเดิม (snapshot `vat_rate_pct_used` — สูตร `22` §6.8.1) · รับยอดตามเอกสารที่ต่างไม่เกิน 1 สตางค์ · ยอดรวมใบลดหนี้ที่ใช้งานของใบกำกับหนึ่งใบห้ามเกินยอดใบกำกับ
+- **ภาษีขายลดในเดือนที่ออกใบลดหนี้** ⇒ ใบลดหนี้เป็นเอกสารของงวดตาม `issue_date` — งวดนั้นต้องยังไม่ล็อก (`PERIOD_LOCKED_DIRECT_EDIT` · ใช้ยามกลางเดียวกับใบกำกับ จึงปฏิเสธงวด `sent_to_accountant` ด้วย)
+- ยอดที่ลูกค้าเห็น (portal — มติ U14) = ใบกำกับ − ใบลดหนี้ที่ `active` · Adjustment ภายในที่ยังไม่มีใบลดหนี้**ไม่สะท้อน**ใน portal และแสดงป้าย "รอใบลดหนี้" ในหน้า Adjustment/ใบกำกับ (นิยาม: `decrease` + `approved` + รอบวางบิลมีใบกำกับ active + ยังไม่มีใบลดหนี้ active อ้างถึง)
+- ยกเลิกได้ (`active → cancelled`) พร้อมเหตุผล — ห้ามลบ ห้าม reverse · ใบที่ยกเลิกไม่ลดยอด · เลขที่เดิมบันทึกใหม่ได้หลังยกเลิก (กรณีกรอกผิด)
 
 ## 7. Data Entities / Required Objects
 
@@ -110,11 +120,27 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 | received_amount | decimal | yes | — |
 | receipt_number | string | yes | เลขที่ใบเสร็จ — running number |
 
+### 7.4 Credit Note (มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก))
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| id | uuid | yes | — |
+| tax_invoice_id | uuid | yes | ใบกำกับที่อ้างถึง (ต้อง `active` ตอนบันทึก) |
+| adjustment_id | uuid | no | Adjustment ต้นเหตุ — `decrease` + `approved` ของรอบวางบิลเดียวกัน · 1 Adjustment มีใบลดหนี้ active ได้ใบเดียว |
+| credit_note_number | string(50) | yes | เลขที่ตามเอกสารของสำนักงานบัญชี — ไม่ซ้ำต่อองค์กร (เฉพาะใบ active) |
+| issue_date | date | yes | ไม่ก่อนวันที่ใบกำกับ · งวดต้องยังไม่ล็อก |
+| amount_before_vat_satang / vat_satang / total_satang | integer | yes | satang · total = ก่อน VAT + VAT (คิดที่ server) |
+| vat_rate_pct_used | numeric(5,2) | yes | snapshot อัตราของใบกำกับเดิม |
+| reason | text | yes | — |
+| file_path / file_sha256 | text | no | ไฟล์สแกน (server ตรวจชนิด/ขนาด + เก็บ SHA-256) |
+| status | enum | yes | `active` / `cancelled` (terminal) + cancel_reason/by/at |
+
 ## 8. UI / UX Rules
 
 อ้างอิงจาก `accounting.html`:
 
 - แท็บ "รายได้และขาย": table — บริษัท, Case Ref, วันที่รายได้, Model, Gross, VAT Flag, Billing Batch, สถานะ
+- แท็บ "รายได้และขาย" (ใบกำกับ active): ปุ่ม "บันทึกใบลดหนี้" (บัญชี) / "ใบลดหนี้" (ดูอย่างเดียว) → modal รายการใบลดหนี้ของใบนั้น + ยอดสุทธิหลังหักใบลดหนี้ + ฟอร์มบันทึก/แนบไฟล์สแกน + ยกเลิกพร้อมเหตุผล · ในตารางแสดง "ลดหนี้ N ใบ / สุทธิ" และป้าย "รอใบลดหนี้"
 - แท็บ "เงินรับ": table — วันที่, ผู้จ่าย, ยอด, Bank Ref, Billing Ref, WHT ลูกค้าหัก (ถ้ามี), สถานะจับคู่, ปุ่มจัดการ (จับคู่ Manual ถ้า unmatched / ดูรายละเอียดถ้า matched แล้ว)
 
 ## 9. Workflow / Lifecycle
@@ -141,7 +167,13 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 |---|---|---|
 | TAX_INVOICE_FIELD_MISSING | ฟิลด์บังคับของใบกำกับภาษี (§7.2) ไม่ครบ | reject ก่อนออกเอกสารจริง |
 | INVOICE_NUMBER_GAP | พยายาม generate invoice_number ที่ไม่ต่อเนื่องจากเลขล่าสุด | reject — ระบบจัดการเลขให้เองเสมอ ไม่ควรเกิด error นี้ในทางปฏิบัติ ยกเว้น race condition |
-| CANCEL_REQUIRES_REASON | ยกเลิกใบกำกับภาษีโดยไม่ระบุเหตุผล | reject |
+| CANCEL_REQUIRES_REASON | ยกเลิกใบกำกับภาษี/ใบลดหนี้โดยไม่ระบุเหตุผล | reject |
+| CREDIT_NOTE_NUMBER_DUPLICATE | เลขที่ใบลดหนี้ซ้ำกับใบ active | reject (409) |
+| CREDIT_NOTE_EXCEEDS_INVOICE | ยอดใบลดหนี้รวมเกินยอดใบกำกับ | reject |
+| CREDIT_NOTE_VAT_MISMATCH | VAT ต่างจากอัตราใบกำกับเดิมเกิน 1 สตางค์ / รอบมีหลายอัตรา | reject |
+| CREDIT_NOTE_DATE_BEFORE_INVOICE | วันที่ใบลดหนี้ก่อนวันที่ใบกำกับ | reject |
+| CREDIT_NOTE_ADJUSTMENT_MISMATCH | อ้าง Adjustment ที่ไม่ใช่ลดยอดที่อนุมัติแล้วของรอบเดียวกัน หรือมีใบลดหนี้แล้ว | reject |
+| CREDIT_NOTE_INVALID_STATUS / CREDIT_NOTE_NOT_FOUND | ยกเลิกใบที่ยกเลิกแล้ว / อ้างใบที่ไม่มี | reject |
 
 ## 12. Permission Requirements
 
@@ -149,10 +181,12 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 |---|---|---|
 | ออก/ยกเลิกใบกำกับภาษี | บัญชี | full |
 | ดูรายการขาย/เงินรับ | การเงิน, ผู้บริหาร | read-only |
+| บันทึก/ยกเลิกใบลดหนี้ (U14) | บัญชี | ใช้ capability เดียวกับใบกำกับ (`manage_tax_invoice`) — การเงินดูทะเบียนได้ (ชุดสิทธิ์เดียวกับรายการขาย) |
 
 ## 13. Audit Log Requirements
 
 - ออก/ยกเลิกใบกำกับภาษีทุกครั้งต้อง audit พร้อมเหตุผล (ถ้ายกเลิก)
+- บันทึก/ยกเลิกใบลดหนี้ทุกครั้ง audit before/after + reason (หมวดภาษี — U14)
 - Cash Receipt ที่สร้างอัตโนมัติจากไฟล์ 35 ต้องเก็บ reference กลับไปที่ bank_transaction_id เสมอ เพื่อ trace ได้
 
 ## 14. API / Integration Draft
@@ -163,6 +197,10 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 | POST | /api/accounting/tax-invoices | ออกใบกำกับภาษีใหม่ |
 | PATCH | /api/accounting/tax-invoices/:id/cancel | ยกเลิก (ต้องมี reason) |
 | GET | /api/accounting/cash-receipts | list (sync จากไฟล์ 35) |
+| GET | /api/accounting/credit-notes | ทะเบียนใบลดหนี้ (`?taxInvoiceId=&status=`) — U14 |
+| POST | /api/accounting/credit-notes | บันทึกใบลดหนี้ที่สำนักงานบัญชีออก — U14 |
+| PATCH | /api/accounting/credit-notes/:id/cancel | ยกเลิกใบลดหนี้ (ต้องมี reason) — U14 |
+| GET | /api/accounting/credit-notes/awaiting | Adjustment ลดยอดที่ยังรอใบลดหนี้ — U14 |
 
 ## 15. Acceptance Criteria
 
@@ -178,6 +216,10 @@ sync มาจากไฟล์ 35 (Bank Reconciliation) เมื่อ statem
 | ยกเลิกไม่ระบุเหตุผล | ยกเลิกใบกำกับภาษีโดยไม่กรอก reason | reject CANCEL_REQUIRES_REASON |
 | เลขที่ต่อเนื่องหลังยกเลิก | ยกเลิกใบกำกับเลขที่ 005 แล้วออกใบใหม่ | ใบใหม่ได้เลขที่ 006 ไม่ใช่เลขที่ 005 ซ้ำ |
 | เลขที่ reset ข้ามปี (yearly_reset mode) | ออกใบกำกับภาษีใบแรกของปีใหม่ เมื่อตั้งค่า numbering_mode = yearly_reset | เลขที่กลับไปเริ่มที่ 0001 พร้อม prefix ปีใหม่ (เช่น INV-2570-0001) |
+| บันทึกใบลดหนี้ B1 (U14) | ใบกำกับ 12,000 + VAT 840 · บันทึกใบลดหนี้ลด 100 | VAT 7 จากอัตราเดิม · total 107 · ยอดสุทธิใบกำกับลดลง 107 |
+| ใบลดหนี้เกินยอดใบกำกับ (U14) | ยอดใบลดหนี้รวมเกินยอดใบกำกับ | reject CREDIT_NOTE_EXCEEDS_INVOICE |
+| ใบลดหนี้ในงวดที่ล็อก (U14) | issue_date อยู่ในงวด locked | reject PERIOD_LOCKED_DIRECT_EDIT |
+| ป้ายรอใบลดหนี้ (U14) | Adjustment ลดยอดอนุมัติแล้ว ของรอบที่มีใบกำกับ → บันทึกใบลดหนี้อ้างถึง | ป้ายแสดงก่อน และหายหลังบันทึก |
 | ออกแบบ e-Tax Invoice | ออกใบกำกับภาษีเลือก delivery_format = e_tax_invoice | ระบบสร้างเอกสารพร้อมข้อมูลสำหรับส่งเข้าระบบกรมสรรพากร |
 
 ---

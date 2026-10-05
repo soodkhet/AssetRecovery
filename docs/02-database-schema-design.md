@@ -40,6 +40,7 @@
 | v4.17 | 05/10/2569 | **มติ PO 05/10/2569 (U6/O43 D4 — Client Portal)**: enum `audit_action` เพิ่มค่า `access_denied` — พอร์ทัลบริษัทตอบ 403 `PERMISSION_DENIED` (id ข้ามบริษัท/id ไม่มีจริง/หมวดที่ไม่มีสิทธิ์) ต้องบันทึก audit (`97` §14) · migration `20261005120000_audit_action_access_denied` (`ALTER TYPE … ADD VALUE`) · capability พอร์ทัล 5 ตัว (`portal_*`, `functional_group = NULL`) เพิ่มทาง seed ไม่ต้องแก้ตาราง |
 | v4.19 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U16) — 40(2) อัตรา 0% ออก 50 ทวิ** (migration `20261005140000_wht_zero_rate_40_2_certificate`): `wht_policy_history` + `issue_zero_rate_40_2_certificate BOOLEAN NOT NULL DEFAULT true` (ค่าเริ่มต้น = ออก · แถวเดิมได้ true) · `payout_batches` + snapshot `wht_issue_zero_rate_40_2_certificate BOOLEAN` (NULL = รอบเก่า ⇒ ไม่ออก พฤติกรรมเดิม) · ไม่มี CHECK/enum ใหม่ |
 | v4.18 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8) — ค่าตั้งภาษีหัก ณ ที่จ่าย** (migration `20261005100000_wht_policy_settings`): enum ใหม่ `wht_certificate_mode` / `wht_income_type_mode` / `wht_income_category` + `wht_filing_form` เพิ่ม `PND1` · ตารางใหม่ `wht_policy_history` (insert-only แบบ `vat_rate_history` — ไม่มี updated_*/deleted_at) · `payout_batches` + snapshot `wht_policy_id`/`wht_base_expense_types`/`wht_certificate_mode`/`wht_income_type_mode` (NULL = รอบเก่า) · `payout_batch_items` + `wht_base_included`/`wht_income_category` · `payee_profiles` + `wht_40_2_pct` (CHECK 0–100) · `wht_certificates` + `issue_mode`/`payout_batch_id` (CHECK `wht_cert_batch_mode_has_batch`) · `wht_filing_summaries` + `pnd1_satang` · ข้อมูลเดิมไม่เปลี่ยน |
+| v4.19 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก) + มติบัญชี B1** (migration `20261005130000_credit_notes`): ตารางใหม่ **`credit_notes`** (Group F ต่อจาก `tax_invoices`) + enum `credit_note_status` (`active`/`cancelled`) — FK `tax_invoice_id` / `adjustment_id` (nullable) · เงิน satang · `vat_rate_pct_used NUMERIC(5,2)` snapshot อัตราของใบกำกับเดิม · CHECK ยอด > 0 / total = ก่อน VAT + VAT / ฟิลด์ยกเลิกครบ · partial unique เลขที่ต่อ org และ adjustment ต่อใบ (เฉพาะ active) · trigger กันยอดรวมเกินใบกำกับ + immutable (§13) · ไม่มี `deleted_at` (ยกเลิกแทนลบ เหมือน `tax_invoices`) |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -1656,6 +1657,41 @@ CREATE TABLE tax_invoices (
 );
 CREATE INDEX idx_tax_invoices_org ON tax_invoices(organization_id, status);
 
+-- ── credit_notes ─────────────────────────────────────────────
+-- ใบลดหนี้ที่สำนักงานบัญชีออกนอกระบบ (มติ PO 05/10/2569 U14 + มติบัญชี B1 · ม.86/10) — ระบบ "บันทึก" ไม่ได้ออกเอง
+-- migration `20261005130000_credit_notes` · ไม่มี deleted_at โดยเจตนา (ยกเลิกแทนลบ — แนวเดียวกับ tax_invoices)
+CREATE TYPE credit_note_status AS ENUM ('active', 'cancelled');
+CREATE TABLE credit_notes (
+  id                       UUID               PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id          UUID               NOT NULL REFERENCES organizations(id),
+  tax_invoice_id           UUID               NOT NULL REFERENCES tax_invoices(id),
+  adjustment_id            UUID               REFERENCES adjustments(id),  -- Adjustment ที่เป็นต้นเหตุ (decrease + approved)
+  credit_note_number       VARCHAR(50)        NOT NULL,                    -- เลขที่จากสำนักงานบัญชี
+  issue_date               DATE               NOT NULL,                    -- หางวดบัญชี (งวดล็อก ⇒ PERIOD_LOCKED_DIRECT_EDIT)
+  amount_before_vat_satang INTEGER            NOT NULL CHECK (amount_before_vat_satang > 0),
+  vat_satang               INTEGER            NOT NULL CHECK (vat_satang >= 0),
+  total_satang             INTEGER            NOT NULL,                    -- = before_vat + vat (CHECK)
+  vat_rate_pct_used        NUMERIC(5,2)       NOT NULL,                    -- snapshot อัตราของใบกำกับเดิม (`22` §6.8.1)
+  reason                   TEXT               NOT NULL,
+  file_path                TEXT,                                           -- ไฟล์สแกน `tax-invoices/<id>/credit-notes/…`
+  file_sha256              VARCHAR(64),
+  status                   credit_note_status NOT NULL DEFAULT 'active',
+  cancel_reason            TEXT,
+  cancelled_by             UUID               REFERENCES users(id),
+  cancelled_at             TIMESTAMPTZ,
+  created_at               TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+  created_by               UUID               NOT NULL REFERENCES users(id),
+  updated_at               TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+  updated_by               UUID               REFERENCES users(id),
+  CONSTRAINT chk_credit_notes_total CHECK (total_satang = amount_before_vat_satang + vat_satang)
+  -- + chk_credit_notes_cancel_fields (cancelled ⇔ cancel_reason/by/at ครบ) · เลขที่/เหตุผลห้ามว่าง
+);
+CREATE UNIQUE INDEX uniq_credit_notes_active_number ON credit_notes(organization_id, credit_note_number) WHERE status = 'active';
+CREATE UNIQUE INDEX uniq_credit_notes_active_adjustment ON credit_notes(adjustment_id) WHERE status = 'active' AND adjustment_id IS NOT NULL;
+CREATE INDEX idx_credit_notes_org_invoice ON credit_notes(organization_id, tax_invoice_id);
+-- trigger trg_credit_notes_balance: Σ ใบ active ของใบกำกับ ≤ ยอดใบกำกับ (ล็อกแถวใบกำกับ FOR UPDATE)
+-- trigger trg_credit_notes_no_update / no_delete: ห้ามลบ · แก้ได้ทางเดียวคือยกเลิก · cancelled ห้ามแก้
+
 -- ── cash_receipts ────────────────────────────────────────────
 -- บันทึกรับเงิน ตามไฟล์ 31
 CREATE TABLE cash_receipts (
@@ -2058,6 +2094,7 @@ CREATE TABLE files (
 33_accounting_periods.sql
 34_sales_records.sql
 35_tax_invoices.sql
+35b_credit_notes.sql
 36_cash_receipts.sql
 37_expense_records.sql
 38_wht_certificates.sql
@@ -2162,6 +2199,7 @@ VALUES ('...org_id...', NULL, false, '{30,60,90}');  -- NULL = ไม่จำ�
 | `case_evidences` | status = 'approved' | ห้าม UPDATE ทุก column |
 | `payout_batches` | status = 'completed' | ห้าม UPDATE gross/wht/net |
 | `tax_invoices` | status = 'cancelled' | ห้าม DELETE, ห้าม reverse cancel |
+| `credit_notes` | any | ห้าม DELETE ทุกกรณี · `active` แก้ได้ทางเดียวคือยกเลิก (พร้อมเหตุผล) · `cancelled` ห้ามแก้/ห้าม reverse (มติ PO U14) |
 | `wht_certificates` | status = 'cancelled' | ห้าม DELETE, ห้าม reverse cancel — ออกใบใหม่อ้าง `replaces_certificate_id` แทน (DEC-006/D4) |
 | `export_records` | any | ห้าม DELETE, ต้องสร้าง version ใหม่แทน |
 | `bank_transactions` | match_status != 'unmatched' | unmatch ต้องมี reason + audit |

@@ -3,6 +3,7 @@ import { DOCUMENT_SLOTS } from '@/lib/cases/case'
 import { FIELD_MEDIA_KINDS } from '@/lib/field/media-upload'
 import {
   caseDocumentRule,
+  creditNoteFileRule,
   expenseReceiptRule,
   fieldEvidenceRule,
   intakePhotoRule,
@@ -18,6 +19,7 @@ const CASE_ID = '00000000-0000-4000-8000-000000000011'
 const ASSET_ID = '00000000-0000-4000-8000-000000000101'
 const LOT_ID = '00000000-0000-4000-8000-000000000201'
 const USER_ID = '00000000-0000-4000-8000-0000000000a1'
+const INVOICE_ID = '00000000-0000-4000-8000-000000000301'
 const KEY = '11111111-1111-4111-8111-111111111111'
 
 describe('uploadTargetPath ↔ rules prefix ↔ parseStoragePath', () => {
@@ -47,6 +49,11 @@ describe('uploadTargetPath ↔ rules prefix ↔ parseStoragePath', () => {
       prefix: lotDocumentRule(LOT_ID, document).prefix,
       owner: { kind: 'lot', lotId: LOT_ID } as const,
     })),
+    {
+      target: { kind: 'credit_note', taxInvoiceId: INVOICE_ID },
+      prefix: creditNoteFileRule(INVOICE_ID).prefix,
+      owner: { kind: 'tax_invoice', taxInvoiceId: INVOICE_ID },
+    },
   ]
 
   it.each(cases)('$target.kind → path ใต้ $prefix', ({ target, prefix, owner }) => {
@@ -73,6 +80,7 @@ describe('parseStoragePath', () => {
     `assets/${ASSET_ID}/other/a.jpg`,
     `expenses/${USER_ID}/other/a.pdf`,
     `payment-files/a.csv`,
+    `tax-invoices/${INVOICE_ID}/other/a.pdf`,
     'x'.repeat(2000),
   ])('ปฏิเสธ %j', (path) => {
     expect(parseStoragePath(path)).toBeNull()

@@ -75,6 +75,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   exceptions: 'ข้อยกเว้น',
   accountant_questions: 'ข้อซักถามสำนักงานบัญชี',
   tax_invoices: 'ใบกำกับภาษี',
+  credit_notes: 'ใบลดหนี้',
   wht_certificates: 'หนังสือรับรองหัก ณ ที่จ่าย',
   wht_filing_summaries: 'สรุปยื่น ภ.ง.ด.',
   sales_records: 'รายการขาย',
