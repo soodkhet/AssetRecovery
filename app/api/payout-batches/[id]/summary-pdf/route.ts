@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { renderPayoutBatchSummary } from '@/components/pdf/payout-batch-summary'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { assertPayoutDocReady, buildPayoutSummaryDoc } from '@/lib/payout/payout-doc'
 import { getPayoutDocSource, MANAGE_PAYOUT_BATCH } from '@/lib/payout/queries'
@@ -20,17 +21,29 @@ export const GET = withApiPermission<RouteContext>(
   'view',
   MANAGE_PAYOUT_BATCH,
   toModuleErrorResponse,
-  async (_request: NextRequest, context, user) => {
+  async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const source = await getPayoutDocSource(user, id)
     assertPayoutDocReady(source.batch.status)
 
     const pdf = await renderPayoutBatchSummary(buildPayoutSummaryDoc(source.batch, source.issuer))
 
+    const fileName = `${source.batch.name}.pdf`
+    // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
+    await emitDocumentExportAudit({
+      actor: user,
+      request,
+      targetType: 'payout_batches',
+      targetId: id,
+      document: 'payout_summary_pdf',
+      fileName,
+      details: { batch_name: source.batch.name, batch_status: source.batch.status },
+    })
+
     return new Response(new Uint8Array(pdf), {
       headers: {
         'content-type': 'application/pdf',
-        'content-disposition': attachmentHeader(`${source.batch.name}.pdf`),
+        'content-disposition': attachmentHeader(fileName),
         // ยอด/สถานะของรอบเปลี่ยนได้จนกว่าจะจ่ายสำเร็จ — ห้าม cache
         'cache-control': 'no-store',
       },

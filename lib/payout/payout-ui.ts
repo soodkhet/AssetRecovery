@@ -1,3 +1,4 @@
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { canPayoutAction } from '@/lib/payout/payout'
 import type { PayoutBatchDto } from '@/lib/payout/types'
@@ -98,11 +99,32 @@ export function isPendingPayoutStatus(status: PayoutBatchStatus): boolean {
   return status !== 'completed' && status !== 'cancelled'
 }
 
-/** ยอดเงินที่ยังไม่ออกจากบัญชีบริษัท — KPI หัวแท็บ (`14` §6.1 นับรอบที่ยังไม่ `completed`) */
-export function pendingPayoutNetSatang(batches: readonly PayoutBatchDto[]): number {
+/**
+ * ยอดเงินที่ยังไม่ออกจากบัญชีบริษัท — KPI หัวแท็บ (`14` §6.1 นับรอบที่ยังไม่ `completed`)
+ * นับ **ยอดโอนจริง** (`transferSatang` จาก server) ไม่ใช่ net — ยอดหักคืนเงินทดรองไม่ได้ออกจากบัญชี (BUG-154 · มติ PO U30)
+ */
+export function pendingPayoutTransferSatang(batches: readonly PayoutBatchDto[]): number {
   return batches
     .filter((batch) => isPendingPayoutStatus(batch.status))
-    .reduce((total, batch) => total + batch.netSatang, 0)
+    .reduce((total, batch) => total + batch.transferSatang, 0)
+}
+
+type PayoutTransferSource = Pick<PayoutBatchDto, 'transferSatang' | 'advanceOffsetSatang'>
+
+/** รอบนี้มีหักคืนเงินทดรองหรือไม่ — มีแล้วหน้าจอต้องแสดงบรรทัด "หักคืนเงินทดรอง" แยก (มติ PO U30) */
+export function hasAdvanceOffset(batch: Pick<PayoutBatchDto, 'advanceOffsetSatang'>): boolean {
+  return batch.advanceOffsetSatang > 0
+}
+
+/**
+ * ข้อความยอดโอนจริงของรอบ (ใช้ใน toast/คำอธิบายสั้น) — ยอดทั้งหมดมาจาก server ไม่คำนวณที่หน้าจอ (Rule 01)
+ * มีหักคืนเงินทดรอง ⇒ ต่อท้ายยอดหักให้เห็นว่าทำไมยอดโอนต่ำกว่ายอดหลังภาษี (BUG-154)
+ */
+export function payoutTransferText(batch: PayoutTransferSource): string {
+  const transfer = `ยอดโอน ${fmtSatangSymbol(batch.transferSatang)}`
+  return hasAdvanceOffset(batch)
+    ? `${transfer} (หักคืนเงินทดรอง ${fmtSatangSymbol(batch.advanceOffsetSatang)})`
+    : transfer
 }
 
 export function countPendingPayoutBatches(batches: readonly PayoutBatchDto[]): number {

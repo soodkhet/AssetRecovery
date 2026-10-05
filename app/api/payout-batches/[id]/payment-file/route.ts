@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { GENERATE_PAYMENT_FILE, readPaymentFile } from '@/lib/payout/queries'
 
@@ -15,9 +16,20 @@ export const GET = withApiPermission<RouteContext>(
   'view',
   GENERATE_PAYMENT_FILE,
   toModuleErrorResponse,
-  async (_request: NextRequest, context, user) => {
+  async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const file = await readPaymentFile(user, id)
+    // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
+    await emitDocumentExportAudit({
+      actor: user,
+      request,
+      targetType: 'payout_batches',
+      targetId: id,
+      document: 'payment_file',
+      fileName: file.fileName,
+      details: { redownload: true },
+    })
+
     return new Response(file.bytes as unknown as BodyInit, {
       headers: {
         'Content-Type': file.contentType,

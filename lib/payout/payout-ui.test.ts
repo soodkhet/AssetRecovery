@@ -8,7 +8,9 @@ import {
   countPendingPayoutBatches,
   isDuplicatePaymentFile,
   payoutStatusBadgeGroup,
-  pendingPayoutNetSatang,
+  hasAdvanceOffset,
+  payoutTransferText,
+  pendingPayoutTransferSatang,
   PAYOUT_STATUS_FILTERS,
 } from '@/lib/payout/payout-ui'
 
@@ -77,8 +79,8 @@ describe('payout-ui — ปุ่มมาจาก state machine เดีย�
   })
 
   it('มติ PO U67 — KPI เงินรอจ่ายไม่นับรอบที่ยกเลิก', () => {
-    const batches = [batch(), batch({ id: 'b2', status: 'cancelled', netSatang: 700_000 })]
-    expect(pendingPayoutNetSatang(batches)).toBe(1_823_600)
+    const batches = [batch(), batch({ id: 'b2', status: 'cancelled', netSatang: 700_000, transferSatang: 700_000 })]
+    expect(pendingPayoutTransferSatang(batches)).toBe(1_823_600)
     expect(countPendingPayoutBatches(batches)).toBe(1)
   })
 
@@ -90,13 +92,37 @@ describe('payout-ui — ปุ่มมาจาก state machine เดีย�
   })
 
   it('KPI เงินรอจ่าย นับเฉพาะรอบที่ยังไม่ completed', () => {
-    const batches = [batch(), batch({ id: 'b2', status: 'file_generated', netSatang: 500_000 }), batch({ id: 'b3', status: 'completed', netSatang: 900_000 })]
-    expect(pendingPayoutNetSatang(batches)).toBe(2_323_600)
+    const batches = [
+      batch(),
+      batch({ id: 'b2', status: 'file_generated', netSatang: 500_000, transferSatang: 500_000 }),
+      batch({ id: 'b3', status: 'completed', netSatang: 900_000, transferSatang: 900_000 }),
+    ]
+    expect(pendingPayoutTransferSatang(batches)).toBe(2_323_600)
     expect(countPendingPayoutBatches(batches)).toBe(2)
   })
 
   it('ตัวกรองสถานะทุกค่าเป็นค่าที่ API รับจริง', () => {
     const accepted = new Set(['all', 'draft', 'checking', 'file_generated', 'completed', 'cancelled'])
     for (const filter of PAYOUT_STATUS_FILTERS) expect(accepted.has(filter.value)).toBe(true)
+  })
+
+  // BUG-154 — รอบที่หักคืนเงินทดรอง (มติ PO U30): หน้าจอต้องโชว์ยอดโอนจริง ไม่ใช่ยอดหลังภาษี
+  describe('ยอดโอนจริงเมื่อมีหักคืนเงินทดรอง (BUG-154)', () => {
+    const offsetBatch = batch({ netSatang: 260_950, advanceOffsetSatang: 55_000, transferSatang: 205_950 })
+
+    it('KPI เงินรอจ่ายนับยอดโอนจริง ไม่ใช่ net', () => {
+      expect(pendingPayoutTransferSatang([offsetBatch])).toBe(205_950)
+    })
+
+    it('ข้อความยอดโอนแสดงยอดโอนจริง + บรรทัดหักคืนเงินทดรอง', () => {
+      expect(hasAdvanceOffset(offsetBatch)).toBe(true)
+      expect(payoutTransferText(offsetBatch)).toBe('ยอดโอน ฿2,059.50 (หักคืนเงินทดรอง ฿550.00)')
+      expect(payoutTransferText(offsetBatch)).not.toContain('2,609.50')
+    })
+
+    it('ไม่มีหักคืน = แสดงยอดโอนอย่างเดียว', () => {
+      expect(hasAdvanceOffset(batch())).toBe(false)
+      expect(payoutTransferText(batch())).toBe('ยอดโอน ฿18,236.00')
+    })
   })
 })

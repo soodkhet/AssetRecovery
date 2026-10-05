@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { getExportPackDownload } from '@/lib/exports/queries'
 import { EXPORT_READ_CAPABILITIES } from '@/lib/exports/pack'
@@ -19,9 +20,20 @@ export const GET = withApiPermission<RouteContext>(
   'view',
   EXPORT_READ_CAPABILITIES,
   toModuleErrorResponse,
-  async (_request: NextRequest, context, user) => {
+  async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const pack = await getExportPackDownload(user, id)
+
+    // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
+    await emitDocumentExportAudit({
+      actor: user,
+      request,
+      targetType: 'export_records',
+      targetId: id,
+      document: 'accounting_pack_zip',
+      fileName: pack.fileName,
+      details: { file_sha256: pack.fileHash, redownload: true },
+    })
 
     return new Response(new Uint8Array(pack.bytes), {
       headers: {

@@ -20,6 +20,13 @@ const queriesMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/payout/queries', () => queriesMock)
 
+/** BUG-153 — ทุกการดาวน์โหลดเอกสารต้องลง audit `export` (spy แทน DB) */
+const exportAuditMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/audit/audit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/audit/audit')>()),
+  emitDocumentExportAudit: exportAuditMock,
+}))
+
 const { GET: getSummary } = await import('@/app/api/payout-batches/[id]/summary-pdf/route')
 const { GET: getVoucher } = await import('@/app/api/payout-batches/[id]/voucher-pdf/route')
 const { GET: getPayslip } = await import('@/app/api/payout-batches/[id]/payslip-pdf/route')
@@ -133,6 +140,7 @@ async function codeOf(response: Response): Promise<string | undefined> {
 
 beforeEach(() => {
   requireSessionMock.mockReset()
+  exportAuditMock.mockReset()
   queriesMock.getPayoutDocSource.mockReset()
 })
 
@@ -219,6 +227,17 @@ describe('ใบสำคัญจ่าย (`05_payment_voucher.pdf`)', () => {
       params(BATCH_ID),
     )
     expect(ok.status).toBe(200)
+    // BUG-153 — พิมพ์ใบสำคัญจ่ายต้องลง audit `export` พร้อมผู้รับเงินที่กรอง
+    expect(exportAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: FINANCE,
+        targetType: 'payout_batches',
+        targetId: BATCH_ID,
+        document: 'payment_voucher_pdf',
+        details: expect.objectContaining({ payee_id: PAYEE_ID }),
+      }),
+    )
+    exportAuditMock.mockClear()
 
     const empty = await getVoucher(
       request(`http://localhost/api/payout-batches/${BATCH_ID}/voucher-pdf?payeeId=${OTHER_PAYEE_ID}`),
@@ -226,6 +245,8 @@ describe('ใบสำคัญจ่าย (`05_payment_voucher.pdf`)', () => {
     )
     expect(empty.status).toBe(400)
     expect(await codeOf(empty)).toBe('NO_ITEMS_TO_PAY')
+    // ออกเอกสารไม่สำเร็จ = ไม่มีไฟล์ออกไป ⇒ ไม่ลง audit export
+    expect(exportAuditMock).not.toHaveBeenCalled()
   })
 
   it('payeeId ที่ไม่ใช่ UUID = 400 พร้อม field error (Zod ชุดเดียวกับ FE)', async () => {

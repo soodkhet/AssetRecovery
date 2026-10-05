@@ -28,6 +28,13 @@ const queriesMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/warehouse/queries', () => queriesMock)
 
+/** BUG-153 — ทุกการดาวน์โหลดเอกสารต้องลง audit `export` (spy แทน DB) */
+const exportAuditMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/audit/audit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/audit/audit')>()),
+  emitDocumentExportAudit: exportAuditMock,
+}))
+
 const { GET: getAssets } = await import('@/app/api/assets/route')
 const { POST: postIntake } = await import('@/app/api/assets/[id]/intake/route')
 const { POST: postRejectIntake } = await import('@/app/api/assets/[id]/reject-intake/route')
@@ -160,6 +167,7 @@ async function envelopeOf<T>(response: Response): Promise<Envelope<T>> {
 
 beforeEach(() => {
   requireSessionMock.mockReset()
+  exportAuditMock.mockReset()
   for (const fn of Object.values(queriesMock)) fn.mockReset()
 })
 
@@ -432,6 +440,18 @@ describe('เอกสารของล็อต (`44` §6.4)', () => {
     expect(body.subarray(0, 5).toString('latin1')).toBe('%PDF-')
     // ฟอนต์ไทยต้องถูกฝังจริง — ไม่ register แล้วตัวอักษรไทยหายทั้งใบ **โดยไม่มี error**
     expect(body.toString('latin1')).toContain('NotoSansThai')
+    // BUG-153 — ลง audit `export` ที่ตัวล็อต ระบุชนิดไฟล์ + ผู้สั่ง
+    expect(exportAuditMock).toHaveBeenCalledTimes(1)
+    expect(exportAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: WAREHOUSE_ADMIN,
+        targetType: 'handover_lots',
+        targetId: docSource.lot.id,
+        document: 'handover_note_pdf',
+        fileName: 'LOT-2569-001.pdf',
+        details: expect.objectContaining({ lot_number: 'LOT-2569-001' }),
+      }),
+    )
   }, 30_000)
 
   it('Excel: ตอบไฟล์ .xlsx จริง', async () => {
@@ -447,6 +467,14 @@ describe('เอกสารของล็อต (`44` §6.4)', () => {
     expect(response.headers.get('content-type')).toContain('spreadsheetml.sheet')
     expect(response.headers.get('content-disposition')).toContain('LOT-2569-001.xlsx')
     expect(body.subarray(0, 2).toString('latin1')).toBe('PK')
+    expect(exportAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetType: 'handover_lots',
+        targetId: docSource.lot.id,
+        document: 'handover_note_xlsx',
+        fileName: 'LOT-2569-001.xlsx',
+      }),
+    )
   })
 
   it('บริหาร (view_master_data=view) export PDF/Excel ได้ แต่สร้าง/ยืนยันล็อตไม่ได้ (U23)', async () => {
@@ -471,5 +499,6 @@ describe('เอกสารของล็อต (`44` §6.4)', () => {
     const response = await getPdf(request(`http://localhost/api/handover-lots/${LOT_ID}/pdf`), params(LOT_ID))
     expect(response.status).toBe(403)
     expect(queriesMock.getHandoverDocSource).not.toHaveBeenCalled()
+    expect(exportAuditMock).not.toHaveBeenCalled()
   })
 })
