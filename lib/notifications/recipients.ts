@@ -50,17 +50,32 @@ export function recipientScopeWhere(scope: RecipientScope): Prisma.UserWhereInpu
  * ⚠️ Superadmin ไม่มีแถวใน `role_capabilities` โดยนิยาม (enforce ที่ middleware) จึงไม่ถูกนับที่นี่ —
  * ตั้งใจ: การแจ้งเตือนควรไปหาคนที่ "ทำงานนั้นจริง" ไม่ใช่ทุกคนที่มีสิทธิ์สูงสุด
  */
+export interface RecipientFilter {
+  /**
+   * จำกัดเฉพาะ role ชื่อเหล่านี้ (ยังต้องถือ capability ด้วย) — ใช้กับสายอนุมัติที่นับ "บทบาทที่ยังขาด"
+   * ตามนโยบาย (Adjustment `20` §6.2) · ไม่ระบุ = ทุก role ที่ถือ capability
+   */
+  roleNames?: readonly string[]
+  /** ตัดผู้ใช้เหล่านี้ออก (เช่น ผู้ขอเอง/ผู้อนุมัติขั้นก่อนเมื่อบังคับแบ่งแยกหน้าที่) */
+  excludeUserIds?: readonly string[]
+}
+
 export async function usersWithCapability(
   organizationId: string,
   capabilityCode: string,
   scope: RecipientScope = ORGANIZATION_SCOPE,
+  filter: RecipientFilter = {},
 ): Promise<string[]> {
   const rows = await prisma.user.findMany({
     where: {
       organizationId,
       status: 'active',
       deletedAt: null,
+      ...(filter.excludeUserIds !== undefined && filter.excludeUserIds.length > 0
+        ? { id: { notIn: [...filter.excludeUserIds] } }
+        : {}),
       role: {
+        ...(filter.roleNames === undefined ? {} : { name: { in: [...filter.roleNames] } }),
         capabilities: {
           some: { accessLevel: 'manage', capability: { code: capabilityCode } },
         },

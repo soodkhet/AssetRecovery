@@ -27,8 +27,8 @@ import {
   caseClosedSuccessMessage,
   caseCloseResubmittedNotice,
   evidenceRejectedMessage,
-  expenseQueueMessage,
 } from '@/lib/notifications/messages'
+import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import {
   assertFieldAction,
   assertFieldStateAction,
@@ -1113,19 +1113,6 @@ function notifyCaseResubmitted(
   dispatchToCapability(organizationId, notice.capability, { teamId }, notice.message)
 }
 
-/** `41` §15 — รายการเบิกที่เข้า `pending_approval` แล้วต้องแจ้งฝ่ายบัญชี/การเงิน */
-function notifyExpenseQueue(
-  organizationId: string,
-  outcome: CaseOutcome,
-  count: number,
-  caseRef: string,
-  teamId: string | null,
-): void {
-  if (count === 0 || outcome !== 'closed_fail') return
-  // ผู้อนุมัติขั้นผู้จัดการ = ผู้จัดการของทีมเคสนี้เท่านั้น (UAT Q17 · BUG-064)
-  dispatchToCapability(organizationId, 'approve_expense_manager', { teamId }, expenseQueueMessage({ caseRef, count }))
-}
-
 /**
  * ยืนยันปิดงาน — หลักฐานที่ส่งมาใน body คือชุดสุดท้าย (ฟอร์มเป็นเจ้าของสถานะ ไม่ merge กับ draft
  * ไม่งั้นไฟล์ที่ผู้ใช้ลบทิ้งจะกลับมา) ส่วน **เช็คอินอ่านจาก DB เสมอ** เพราะเป็นหลักฐานที่ล็อกแล้ว
@@ -1301,7 +1288,9 @@ export async function closeFieldCase(
     return { assignment, expenses }
   })
 
-  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef, current.teamId)
+  // `41` §15 + มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ปิดงานไม่สำเร็จ) แจ้งผู้อนุมัติขั้น 1 ของทีมเคส
+  // (ปิดงานสำเร็จ = รอคลังก่อน ⇒ ตัวแจ้งข้ามเองเพราะสถานะยังไม่อยู่ในคิว — แจ้งตอนยืนยันล็อต)
+  notifyExpensesAwaitingApproval(user.organizationId, result.expenses.expenseIds)
   notifyCaseClosed(user.organizationId, outcome, current.case.caseRef, user.fullName, current.teamId)
 
   return {
@@ -1719,7 +1708,9 @@ export async function resubmitCloseCase(
     return { assignment, expenses, assetStatus }
   })
 
-  notifyExpenseQueue(user.organizationId, outcome, result.expenses.expenseIds.length, current.case.caseRef, current.teamId)
+  // `41` §15 + มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ปิดงานไม่สำเร็จ) แจ้งผู้อนุมัติขั้น 1 ของทีมเคส
+  // (ปิดงานสำเร็จ = รอคลังก่อน ⇒ ตัวแจ้งข้ามเองเพราะสถานะยังไม่อยู่ในคิว — แจ้งตอนยืนยันล็อต)
+  notifyExpensesAwaitingApproval(user.organizationId, result.expenses.expenseIds)
   notifyCaseResubmitted(
     user.organizationId,
     outcome,

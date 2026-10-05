@@ -1,6 +1,8 @@
 import {
+  ADJUSTMENT_TYPE_LABEL,
   adjustmentTargetColumns,
   adjustmentTargetOf,
+  approvalCapabilityFor,
   approverRolesOf,
   assertActorCanApproveAdjustment,
   assertAdjustmentActionable,
@@ -32,6 +34,7 @@ import {
 } from '@/lib/finance/adjustment-approval-policy'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus } from '@/lib/generated/prisma/enums'
+import { notifyAdjustmentAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
 import { isRevenueError } from '@/lib/revenue/errors'
@@ -512,7 +515,25 @@ export async function createAdjustment(
     return row.id
   })
 
-  return getAdjustment(user, created)
+  const dto = await getAdjustment(user, created)
+  // มติ PO U29 — เข้าคิวอนุมัติทันที ⇒ แจ้งบทบาทที่ต้องอนุมัติตามสถานะงวดที่ snapshot ไว้ (หลัง commit)
+  notifyAdjustmentQueued(user, dto)
+  return dto
+}
+
+/** แจ้ง "บทบาทที่ยังขาด" ของรายการนี้ — ผู้กดครั้งนี้ (ผู้สร้าง/ผู้อนุมัติบทบาทแรก) ไม่ต้องได้รับ */
+function notifyAdjustmentQueued(user: SessionUser, dto: AdjustmentDto): void {
+  notifyAdjustmentAwaitingApproval(user.organizationId, {
+    id: dto.id,
+    status: dto.status,
+    adjustmentTypeLabel: ADJUSTMENT_TYPE_LABEL[dto.adjustmentType],
+    amountSatang: dto.amountSatang,
+    targetLabel: `${dto.targetRef} · ${dto.targetLabel}`,
+    requesterName: dto.createdByName,
+    capability: approvalCapabilityFor(dto.periodStatusAtTarget),
+    missingRoles: dto.missingApproverRoles,
+    excludeUserIds: [user.id],
+  })
 }
 
 // ── PATCH /api/adjustments/:id/approve (`20` §14) ───────────────────────────
@@ -632,7 +653,10 @@ export async function approveAdjustment(
     })
   }
 
-  return getAdjustment(user, adjustmentId)
+  const dto = await getAdjustment(user, adjustmentId)
+  // มติ PO U29 — รอบที่ต้องสองบทบาท: บทบาทแรกอนุมัติแล้ว ⇒ แจ้งบทบาทที่เหลือทันที
+  if (!completed) notifyAdjustmentQueued(user, dto)
+  return dto
 }
 
 // ── PATCH /api/adjustments/:id/reject (`20` §14 v2.1) ───────────────────────

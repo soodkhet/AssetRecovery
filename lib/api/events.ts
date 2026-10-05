@@ -76,6 +76,28 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
     description: 'ตีกลับรายการเบิกให้ผู้เบิกแก้ (`needs_revision`) — ไม่แตะสถานะงานภาคสนาม (`41` §10.1)',
   },
 
+  // ── คิวอนุมัติ — มติ PO 05/10/2569 (U29 · BUG-106) ──────────────────────
+  'expense.approval_requested': {
+    module: 'finance',
+    source: '16 §9.1 · 90 §6.3 (U29)',
+    description: 'รายการเบิกเข้าคิวอนุมัติหรือขยับไปขั้นถัดไป — แจ้งผู้ถือ capability ของขั้นที่รออยู่ (เคารพ scope ทีม)',
+  },
+  'advance.approval_requested': {
+    module: 'finance',
+    source: '15 §9 · 90 §6.3 (U29)',
+    description: 'คำขอเงินทดรองใหม่รออนุมัติ — แจ้งผู้ถือ `approve_advance`',
+  },
+  'adjustment.approval_requested': {
+    module: 'finance',
+    source: '20 §6.2 · 90 §6.3 (U29)',
+    description: 'รายการปรับปรุงรออนุมัติ — แจ้งบทบาทที่ยังขาดตามสถานะงวดที่ snapshot ไว้',
+  },
+  'field_allowance.period_locked': {
+    module: 'finance',
+    source: '41 §6.6 · 91 §6.1 · 90 §6.3 (U25)',
+    description: 'job `daily_field_allowance` ข้ามวันที่อยู่ในงวดที่ปิดแล้ว — แจ้งฝ่ายการเงินให้ทำรายการปรับปรุงพร้อมยอดที่คำนวณไว้',
+  },
+
   // ── Payout (17) + Advance job (15) — เข้าทะเบียนที่ Phase 5.2 ──────────
   'payout_batch.completed': {
     module: 'finance',

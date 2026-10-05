@@ -18,6 +18,7 @@
 | v1.5 | 15/08/2569 | **ขึ้นทะเบียน event ของการแจ้งเตือน (Phase 5.1/5.2)**: §7 เติมกลุ่ม "Notification (`90` §6.3)" 7 ชื่อ — `expense.rejected`, `payout_batch.completed`, `advance.overdue`, `wht.filing_due_reminder`, `exception.created`, `question.asked`, `period.sent_to_accountant` · ทั้ง 7 ตัวถูกกำหนดไว้แล้วใน `90` §6.3 (คู่ event → การแจ้งเตือน) แต่ไฟล์ต้นทาง 15/16/17/30/33/34/36 ไม่มีตาราง event ของตัวเอง จึงไม่เคยถูกรวมมาที่ registry นี้ · Rule 04 บังคับว่า "เพิ่ม event ใหม่ต้องลง registry" ⇒ ขึ้นทะเบียนย้อนให้ตรงกับ `lib/api/event-names.ts` ที่ implement ไปแล้ว · **ไม่มี business logic ใหม่** |
 | v1.6 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · ปิดหนี้ #1)** — §6.5 เติม `POST /api/handover-lots/:id/documents`: เอกสารล็อตเดิมอัปโหลดตรงขึ้น Storage แบบ upsert ทับ path ตายตัวและไม่ผ่าน API ⇒ ไม่มีใครตรวจไฟล์/ล็อกหลัง confirmed · endpoint ใหม่ให้ server ตรวจไฟล์ (มีจริง · path ใต้ล็อต · ชนิดจากเนื้อไฟล์ · ขนาด) + เก็บ SHA-256 ของ server ก่อนผูกเข้าล็อต (`44` §6.4 v2.2) · รวมเป็น **49 endpoint** |
 | v1.7 | 04/10/2569 | **มติ PO 04/10/2569 (UAT — ลบเอกสารที่แนบผิด · `38` v3.4)** — §6.1 เติม `DELETE /api/cases/:id/documents/:documentId`: soft-delete (`deleted_at`) เฉพาะเคส `draft`/`need_info` (ก่อนส่งตรวจ — นอกนั้น `CASE_DOCUMENT_DELETE_NOT_ALLOWED`) · ไม่ลบไฟล์ใน Storage · สิทธิ์ + scope เดียวกับการแนบเอกสาร · audit before/after · รวมเป็น **50 endpoint** |
+| v1.8 | 05/10/2569 | **มติ PO 05/10/2569 (U25 · U29)** — §7 กลุ่ม Notification เติม 4 ชื่อ: `expense.approval_requested`, `advance.approval_requested`, `adjustment.approval_requested`, `field_allowance.period_locked` (คู่ event → การแจ้งเตือนกำหนดที่ `90` §6.3 v4.3) · ตรงกับ `lib/api/event-names.ts` |
 | v1.3 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.2**: §6.1 เติม `PATCH /api/cases/:id` (action `edit_case` ที่ `38` §8/§12 นิยามไว้พร้อม error `CASE_LOCKED_AFTER_APPROVAL` และ `edit_history` ใน §6.4 แต่ §17.1 ของไฟล์ 38 ไม่เคยประกาศ endpoint) — ไม่มี business logic ใหม่ รวมเป็น 40 endpoints |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
@@ -136,7 +137,11 @@ Warehouse (44):    asset.intake_confirmed / asset.intake_rejected / lot.created 
 
 Notification (90 §6.3): expense.rejected / payout_batch.completed / advance.overdue /
                    wht.filing_due_reminder / exception.created / question.asked /
-                   period.sent_to_accountant
+                   period.sent_to_accountant /
+                   expense.approval_requested / advance.approval_requested /
+                   adjustment.approval_requested / field_allowance.period_locked
+                   (4 ตัวท้าย มติ PO 05/10/2569 U29/U25 — แจ้งผู้อนุมัติขั้นที่รออยู่ ·
+                   job รายวันเจองวดปิดแล้ว)
                    (7 ตัวนี้ไฟล์ต้นทาง 15/16/17/30/33/34/36 ไม่มีตาราง event ของตัวเอง — SSOT ของชื่อ
                    คือ `90` §6.3 ซึ่งกำหนดคู่ event → การแจ้งเตือนไว้ · ขึ้นทะเบียนที่นี่ตาม Rule 04
                    "event ใหม่ต้องลง registry" — เพิ่มพร้อม Phase 5.1/5.2)

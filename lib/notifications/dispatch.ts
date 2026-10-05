@@ -1,6 +1,12 @@
 import type { NotificationMessage } from '@/lib/notifications/messages'
 import { notifyUsers, notifyUsersDetached } from '@/lib/notifications/notify'
-import { ORGANIZATION_SCOPE, teamLeadIds, usersWithCapability, type RecipientScope } from '@/lib/notifications/recipients'
+import {
+  ORGANIZATION_SCOPE,
+  teamLeadIds,
+  usersWithCapability,
+  type RecipientFilter,
+  type RecipientScope,
+} from '@/lib/notifications/recipients'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -49,8 +55,9 @@ export function dispatchToCapability(
   capabilityCode: string,
   scope: RecipientScope,
   message: NotificationMessage,
+  filter: RecipientFilter = {},
 ): void {
-  void usersWithCapability(organizationId, capabilityCode, scope)
+  void usersWithCapability(organizationId, capabilityCode, scope, filter)
     .then((userIds) => {
       dispatchNotification({ organizationId, userIds }, message)
     })
@@ -139,4 +146,4 @@ export async function payeeUserIds(organizationId: string, payeeIds: readonly st
   return [...new Set(rows.map((row) => row.userId))]
 }
 
-export { ORGANIZATION_SCOPE, teamLeadIds, usersWithCapability, type RecipientScope }
+export { ORGANIZATION_SCOPE, teamLeadIds, usersWithCapability, type RecipientFilter, type RecipientScope }

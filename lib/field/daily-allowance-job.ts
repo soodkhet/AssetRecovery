@@ -16,6 +16,11 @@ import {
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { parseSettleDate } from '@/lib/jobs/job-types'
+import { CREATE_ADJUSTMENT } from '@/lib/adjustments/adjustment'
+import { notifyExpensesAwaitingApprovalAwaited } from '@/lib/notifications/approval-queue'
+import { dispatchNotificationAwaited } from '@/lib/notifications/dispatch'
+import { fieldAllowancePeriodLockedMessage } from '@/lib/notifications/messages'
+import { ORGANIZATION_SCOPE, usersWithCapability } from '@/lib/notifications/recipients'
 import { prisma } from '@/lib/prisma'
 import { isDirectEditRejected } from '@/lib/settings/period-lock'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
@@ -69,6 +74,12 @@ export interface DailyFieldAllowanceJobResult {
   alreadySettled: number
   /** งวดบัญชีของวันนั้นปิดแล้ว — สร้างรายการเบิกย้อนเข้างวดไม่ได้ (ต้องไป Adjustment) */
   periodLocked: number
+  /**
+   * แถวแจ้งเตือนฝ่ายการเงินที่สร้างจริงจากวันที่งวดปิดแล้ว (มติ PO U25) — รันซ้ำวันเดิม = 0 (กันซ้ำด้วยคีย์ต่อพนักงาน×วัน)
+   */
+  periodLockedNotified: number
+  /** แถวแจ้งเตือนผู้อนุมัติของรายการที่เข้าคิวอนุมัติ (มติ PO U29) */
+  approvalNotified: number
   expensesCreated: number
   revenueIdsCreated: string[]
 }
@@ -129,6 +140,8 @@ export async function runDailyFieldAllowanceJob(
     settled: 0,
     alreadySettled: 0,
     periodLocked: 0,
+    periodLockedNotified: 0,
+    approvalNotified: 0,
     expensesCreated: 0,
     revenueIdsCreated: [],
   }
@@ -146,16 +159,53 @@ export async function runDailyFieldAllowanceJob(
       result.settled += 1
       result.expensesCreated += outcome.expenseIds.length
       result.revenueIdsCreated.push(...outcome.revenueIds)
+      // มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ไม่ต้องรอคลัง) แจ้งผู้อนุมัติขั้น 1 · ล้มห้ามทำให้รอบนี้ล้ม
+      result.approvalNotified += await notifyExpensesAwaitingApprovalAwaited(day.organizationId, outcome.expenseIds).catch(
+        (error: unknown) => {
+          console.error('[daily_field_allowance] แจ้งผู้อนุมัติไม่สำเร็จ', { day, error })
+          return 0
+        },
+      )
     } else if (outcome.kind === 'already_settled') result.alreadySettled += 1
-    else result.periodLocked += 1
+    else {
+      result.periodLocked += 1
+      result.periodLockedNotified += await notifyPeriodLockedFieldDay(day, outcome)
+    }
   }
   return result
+}
+
+/**
+ * มติ PO 05/10/2569 U25 (BUG-093) — วันที่อยู่ในงวดที่ปิดแล้ว **ยังข้ามเหมือนเดิม** (ไม่ settle ข้ามงวด)
+ * แต่แจ้งผู้ถือสิทธิ์สร้างรายการปรับปรุง (ระดับองค์กร) พร้อมยอดที่ `planFieldDayExpenses()` คำนวณไว้
+ * · วันนั้นไม่มีแถว settlement ⇒ job คืนถัดไปเจอวันเดิมอีก — คีย์กันซ้ำ (พนักงาน × วัน) ทำให้ไม่แจ้งซ้ำ
+ */
+async function notifyPeriodLockedFieldDay(
+  day: PendingFieldDay,
+  locked: Extract<SettleOutcome, { kind: 'period_locked' }>,
+): Promise<number> {
+  const agent = await prisma.user.findFirst({
+    where: { id: day.agentId, organizationId: day.organizationId },
+    select: { fullName: true },
+  })
+  const userIds = await usersWithCapability(day.organizationId, CREATE_ADJUSTMENT, ORGANIZATION_SCOPE)
+  return dispatchNotificationAwaited(
+    { organizationId: day.organizationId, userIds },
+    fieldAllowancePeriodLockedMessage({
+      agentId: day.agentId,
+      agentName: agent?.fullName ?? 'พนักงาน',
+      fieldDate: day.fieldDate,
+      caseCount: locked.caseCount,
+      fuelSatang: locked.fuelSatang,
+      allowanceSatang: locked.allowanceSatang,
+    }),
+  )
 }
 
 type SettleOutcome =
   | { kind: 'settled'; expenseIds: string[]; revenueIds: readonly string[] }
   | { kind: 'already_settled' }
-  | { kind: 'period_locked' }
+  | { kind: 'period_locked'; caseCount: number; fuelSatang: number; allowanceSatang: number }
 
 async function settleFieldDay(
   day: PendingFieldDay,
@@ -228,7 +278,15 @@ async function settleFieldDay(
   // Period Lock (`13` §6.11) — สร้างรายการเบิกย้อนเข้างวดที่ปิดแล้วไม่ได้ ⇒ เว้นวันนั้นไว้ให้คนตัดสิน
   if (planned.drafts.length > 0) {
     const status = await periodStatusAt(day.organizationId, periodKeyOf(day.fieldDate))
-    if (status !== null && isDirectEditRejected(status, true)) return { kind: 'period_locked' }
+    if (status !== null && isDirectEditRejected(status, true)) {
+      // ยอดเดียวกับที่จะ settle ถ้างวดยังเปิด (สูตร `22` §6.2/§6.3 ผ่าน `planFieldDayExpenses()`) — ส่งต่อให้การแจ้งเตือน
+      return {
+        kind: 'period_locked',
+        caseCount: planned.orderedCaseIds.length,
+        fuelSatang: planned.fuelTotalSatang,
+        allowanceSatang: planned.allowanceTotalSatang,
+      }
+    }
   }
 
   const draftCaseIds = [...new Set(planned.drafts.map((row) => row.caseId))]

@@ -36,6 +36,7 @@ import { sumSatang } from '@/lib/finance/satang'
 import { toBangkokParts } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseOutcome, ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
+import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
@@ -749,6 +750,8 @@ export async function submitHotelClaim(
     return row
   })
 
+  // มติ PO U29 — ค่าที่พักเข้าคิวอนุมัติทันที ⇒ แจ้งผู้อนุมัติขั้น 1 (ทีมของผู้เบิก — มติ R6-B)
+  notifyExpensesAwaitingApproval(user.organizationId, [created.id])
   return toExpenseDto(created)
 }
 
@@ -845,6 +848,8 @@ export async function resubmitFieldExpense(
     return row
   })
 
+  // มติ PO U29 — ส่งกลับหลังแก้ = เริ่มขั้น 1 ใหม่ (`16` §9) ⇒ แจ้งผู้อนุมัติขั้น 1 อีกรอบ (คีย์ใหม่ตาม history)
+  notifyExpensesAwaitingApproval(user.organizationId, [updated.id])
   return toExpenseDto(updated)
 }
 

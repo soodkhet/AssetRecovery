@@ -6,6 +6,7 @@ import { ModuleError } from '@/lib/api/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isCompanySideViewer } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
+import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/dispatch'
 import { assetIntakeRejectedMessage, lotConfirmedMessage } from '@/lib/notifications/messages'
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
@@ -971,6 +972,8 @@ export async function confirmLot(
       revenueCount: result.revenueIdsCreated.length,
     }),
   )
+  // มติ PO U29 — ค่าตอบแทนที่ปลดล็อกเข้าคิวอนุมัติ ⇒ แจ้งผู้อนุมัติขั้น 1 ของทีมแต่ละเคส (รวมต่อผู้ขอ)
+  notifyExpensesAwaitingApproval(user.organizationId, result.expenseIdsUnlocked)
 
   return {
     lot,
