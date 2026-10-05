@@ -261,6 +261,8 @@ export const ERROR_CATALOG = {
   REASSIGNMENT_DECLINE_REASON_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_FIELD_REQUIRED: { status: 400, severity: 'reject', source: '41 §12' },
   HOTEL_CLAIM_INVALID_SHARED_AGENT: { status: 400, severity: 'reject', source: '41 §12' },
+  // เติมเข้า `41` §12 ตามมติ PO 06/10/2569 (U89) — doc + code คอมมิตเดียวกัน
+  HOTEL_CLAIM_EXCEEDS_CAP: { status: 400, severity: 'reject', source: '41 §12' },
   CHECKIN_GPS_PERMISSION_DENIED: { status: 400, severity: 'reject', source: '41 §12' },
   // เติมเข้า `41` §12 พร้อม Phase 2.9 (Rule 04 — doc + code คอมมิตเดียวกัน)
   CLOSE_NO_EVIDENCE_REVISION: { status: 400, severity: 'reject', source: '41 §12' },

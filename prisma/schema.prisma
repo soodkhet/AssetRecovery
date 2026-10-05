@@ -621,6 +621,8 @@ enum AuditAction {
   access_denied
   /// มติ PO 05/10/2569 (U59) — ผู้ใช้ภายในเปิด "ดู portal ในฐานะลูกค้า" (ครั้งแรกต่อ session ต่อบริษัท)
   view_as
+  /// มติ PO 06/10/2569 (U90) — เปิดไฟล์ที่มีข้อมูลส่วนบุคคลผ่าน signed URL (เอกสารเคส / 50 ทวิ ลูกค้า)
+  view
 
   @@map("audit_action")
 }

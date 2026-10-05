@@ -1122,6 +1122,97 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     })
   })
 
+  describe('เพดานค่าที่พักต่อคืน (มติ PO U89 · `22` §6.15)', () => {
+    const PLAN_HOTEL_V2 = '00000000-0000-4000-8000-0000000029b0'
+    const hotel = (amountSatang: number, sharedWithUserId: string | null = null) => ({
+      expenseDate: new Date(`${DAY_1}T00:00:00.000Z`),
+      amountSatang,
+      sharedWithUserId,
+      receiptFileUrl: 'field/receipts/cap.jpg',
+      note: null,
+    })
+
+    beforeEach(async () => {
+      await db().$executeRawUnsafe(
+        `UPDATE compensation_plans SET hotel_max_per_night_satang = 80000 WHERE id = '${PLAN_PER_KM}'`,
+      )
+    })
+    afterEach(async () => {
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_PER_KM}' WHERE id = '${TEAM_PER_KM}'`)
+      await db().$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
+      await db().$executeRawUnsafe(`DELETE FROM compensation_plans WHERE id = '${PLAN_HOTEL_V2}'`)
+      await db().$executeRawUnsafe(
+        `UPDATE compensation_plans SET hotel_max_per_night_satang = NULL WHERE id = '${PLAN_PER_KM}'`,
+      )
+    })
+
+    it('เท่าเพดานพอดีผ่าน + snapshot แผนลงใบเบิก · เกิน 1 สตางค์ถูกบล็อกพร้อมข้อความเป็นบาท', async () => {
+      const ok = await expenses.submitHotelClaim(agentA, hotel(80_000), { actor: agentA, meta })
+      const row = await db().expense.findFirstOrThrow({ where: { id: ok.id } })
+      expect(row.compPlanId).toBe(PLAN_PER_KM)
+      expect(row.compPlanVersion).toBe(1)
+
+      const error = await expenses.submitHotelClaim(agentA, hotel(80_001), { actor: agentA, meta }).catch((e: unknown) => e)
+      expect(codeOf(error)).toBe('HOTEL_CLAIM_EXCEEDS_CAP')
+      expect((error as { userMessage: string }).userMessage).toContain('800.00 บาท/คืน')
+      expect(await db().expense.count({ where: { organizationId: ORG_ID, expenseType: 'hotel' } })).toBe(1)
+    })
+
+    it('พักร่วมคิดเพดานต่อห้อง — ไม่คูณจำนวนผู้พัก', async () => {
+      await expectCode(
+        () => expenses.submitHotelClaim(agentA, hotel(160_000, AGENT_B), { actor: agentA, meta }),
+        'HOTEL_CLAIM_EXCEEDS_CAP',
+      )
+      const ok = await expenses.submitHotelClaim(agentA, hotel(80_000, AGENT_B), { actor: agentA, meta })
+      expect(ok.status).toBe('pending_approval')
+    })
+
+    it('แผนไม่ตั้งเพดาน = ไม่จำกัด', async () => {
+      await db().$executeRawUnsafe(
+        `UPDATE compensation_plans SET hotel_max_per_night_satang = NULL WHERE id = '${PLAN_PER_KM}'`,
+      )
+      const ok = await expenses.submitHotelClaim(agentA, hotel(5_000_000), { actor: agentA, meta })
+      expect(ok.status).toBe('pending_approval')
+    })
+
+    it('ส่งใหม่หลังตีกลับ: ตรวจกับเพดานใน snapshot เดิม แม้ทีมเปลี่ยนไปใช้แผนเพดานสูงกว่า', async () => {
+      const claim = await expenses.submitHotelClaim(agentA, hotel(70_000), { actor: agentA, meta })
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+      await db().$executeRawUnsafe(`
+        INSERT INTO compensation_plans
+          (id, organization_id, name, side, fuel_mode, fuel_rate_per_km_satang, allowance_satang, commission_satang,
+           no_success_fee_satang, hotel_max_per_night_satang, version, effective_from, is_current, created_by)
+        VALUES ('${PLAN_HOTEL_V2}', '${ORG_ID}', 'แผนที่พักสูง 2.9', 'inhouse', 'PER_KM', ${RATE_PER_KM_SATANG},
+          ${ALLOWANCE_SATANG}, ${COMMISSION_SATANG}, ${NO_SUCCESS_FEE_SATANG}, 200000, 1, DATE '2026-01-01', true, '${MANAGER_ID}')
+      `)
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_HOTEL_V2}' WHERE id = '${TEAM_PER_KM}'`)
+
+      await expectCode(
+        () => expenses.resubmitFieldExpense(agentA, claim.id, { amountSatang: 80_001 }, { actor: agentA, meta }),
+        'HOTEL_CLAIM_EXCEEDS_CAP',
+      )
+      const resubmitted = await expenses.resubmitFieldExpense(agentA, claim.id, { amountSatang: 80_000 }, { actor: agentA, meta })
+      expect(resubmitted.status).toBe('pending_approval')
+      expect(resubmitted.grossSatang).toBe(80_000)
+    })
+
+    it('ใบเก่าที่ยังไม่มี snapshot: ส่งใหม่ตรวจกับแผน ณ วันที่เข้าพัก แล้วเก็บ snapshot', async () => {
+      const claim = await expenses.submitHotelClaim(agentA, hotel(50_000), { actor: agentA, meta })
+      await db().expense.update({
+        where: { id: claim.id },
+        data: { status: 'needs_revision', compPlanId: null, compPlanVersion: null },
+      })
+      await expectCode(
+        () => expenses.resubmitFieldExpense(agentA, claim.id, { amountSatang: 90_000 }, { actor: agentA, meta }),
+        'HOTEL_CLAIM_EXCEEDS_CAP',
+      )
+      await expenses.resubmitFieldExpense(agentA, claim.id, { amountSatang: 60_000 }, { actor: agentA, meta })
+      const row = await db().expense.findFirstOrThrow({ where: { id: claim.id } })
+      expect(row.compPlanId).toBe(PLAN_PER_KM)
+      expect(row.grossSatang).toBe(60_000)
+    })
+  })
+
   it('สรุปรายได้: สำเร็จได้คอมมิชชั่น · ไม่สำเร็จได้เบี้ยเสี่ยง (อ่านจากรายการเบิกจริง — UAT Q2/BUG-054)', async () => {
     stubDistanceMatrix(1_000)
     const successCase = await seedReadyToClose()

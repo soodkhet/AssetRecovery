@@ -41,3 +41,27 @@ describe('describeExpenseBasis — แถวรายวัน (BUG-095 / มต
     ).toBe('128.50 กม. × 3.50 บาท/กม.')
   })
 })
+
+describe('describeExpenseBasis — ค่าที่พัก (มติ PO U89)', () => {
+  const base = { fuelRatePerKmSatang: null, fuelDailyFlatSatang: null, allowanceSatang: null }
+  it('มีเพดาน snapshot → แสดงยอด + เพดานต่อคืน', () => {
+    expect(
+      describeExpenseBasis({
+        expenseType: 'hotel',
+        grossSatang: 60_000,
+        distanceKm: null,
+        compPlan: { ...base, hotelMaxPerNightSatang: 80_000 },
+      }),
+    ).toBe('600.00 บาท (เพดาน 800.00 บาท/คืน)')
+  })
+  it('ไม่ตั้งเพดาน → ยอดอย่างเดียว', () => {
+    expect(
+      describeExpenseBasis({
+        expenseType: 'hotel',
+        grossSatang: 60_000,
+        distanceKm: null,
+        compPlan: { ...base, hotelMaxPerNightSatang: null },
+      }),
+    ).toBe('600.00 บาท')
+  })
+})

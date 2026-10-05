@@ -23,8 +23,8 @@ import { STATUS_BADGE_CLASS } from '@/lib/ui/status-badge'
 describe('ป้ายของ audit log', () => {
   it('มี label ครบทุก action และสีอยู่ในกลุ่มสีมาตรฐาน', () => {
     const actions = Object.keys(AUDIT_ACTION_LABEL) as (keyof typeof AUDIT_ACTION_LABEL)[]
-    // 15 = 13 เดิม + `access_denied` (มติ PO 05/10/2569 O43 D4) + `view_as` (มติ U59)
-    expect(actions).toHaveLength(15)
+    // 16 = 13 เดิม + `access_denied` (มติ PO 05/10/2569 O43 D4) + `view_as` (มติ U59) + `view` (มติ U90)
+    expect(actions).toHaveLength(16)
     for (const action of actions) {
       expect(auditActionLabel(action).length).toBeGreaterThan(0)
       expect(Object.hasOwn(STATUS_BADGE_CLASS, AUDIT_ACTION_GROUP[action])).toBe(true)

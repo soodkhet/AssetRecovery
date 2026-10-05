@@ -18,7 +18,7 @@ import {
   isFieldDayExpenseHoldable,
   nextExpenseStatus,
 } from '@/lib/field/expense-status'
-import { assertHotelClaimFields, assertSharedAgentInTeam } from '@/lib/field/hotel-claim'
+import { assertHotelClaimFields, assertHotelClaimWithinCap, assertSharedAgentInTeam } from '@/lib/field/hotel-claim'
 import { FIELD_PENDING_EXPENSE_STATUSES, pendingExpenseSatang } from '@/lib/field/expense-ui'
 import { pairSupersededExpenses } from '@/lib/field/supersede-pairing'
 import type {
@@ -108,6 +108,15 @@ export async function resolvePlanSnapshot(
   client: ExpenseTxClient,
   params: { organizationId: string; planId: string; onDate: Date },
 ): Promise<PlanSnapshot | null> {
+  const picked = await resolvePlanVersionRow(client, params)
+  return picked === null ? null : toPlanSnapshot(picked)
+}
+
+/** แถวเวอร์ชันแผนที่มีผล ณ วันนั้น (ตัวเดียวกับที่ `resolvePlanSnapshot()` ใช้) — รวมฟิลด์ที่ไม่อยู่ใน `PlanSnapshot` เช่นเพดานที่พัก */
+async function resolvePlanVersionRow(
+  client: ExpenseTxClient,
+  params: { organizationId: string; planId: string; onDate: Date },
+) {
   const current = await client.compensationPlan.findFirst({
     where: { id: params.planId, organizationId: params.organizationId },
     select: { id: true, name: true },
@@ -148,10 +157,51 @@ export async function resolvePlanSnapshot(
     onDate,
   )
   // ไม่มีเวอร์ชันที่ครอบวันนั้น (แผนเพิ่งเริ่มมีผลวันหลัง) → ใช้แถวที่ทีมผูกอยู่ตามเดิม
-  const picked = resolved ?? versions.find((row) => row.id === params.planId) ?? null
-  if (picked === null) return null
-  return toPlanSnapshot(picked)
+  return resolved ?? versions.find((row) => row.id === params.planId) ?? null
 }
+
+/** เพดานค่าที่พักที่ snapshot ลงใบเบิก (มติ PO 06/10/2569 U89 · `92` §7.1) */
+export interface HotelCapSnapshot {
+  compPlanId: string
+  compPlanVersion: number
+  /** `null` = แผนไม่ตั้งเพดาน (ไม่จำกัด) */
+  hotelMaxPerNightSatang: number | null
+}
+
+/**
+ * แผนของทีมผู้เบิกที่มีผล ณ วันที่เข้าพัก — ไม่มีทีม/ทีมไม่ผูกแผน ⇒ `null` (ไม่มีเพดานให้บังคับ)
+ * ใช้ตอน `submit_hotel_claim` และตอนส่งใหม่ของใบเบิกเก่าที่ยังไม่มี snapshot
+ */
+export async function resolveHotelCapForUser(
+  client: ExpenseTxClient,
+  params: { organizationId: string; userId: string; onDate: Date },
+): Promise<HotelCapSnapshot | null> {
+  const user = await client.user.findFirst({
+    where: { id: params.userId, organizationId: params.organizationId },
+    select: { team: { select: { compensationPlanId: true } } },
+  })
+  const planId = user?.team?.compensationPlanId ?? null
+  if (planId === null) return null
+  const row = await resolvePlanVersionRow(client, { organizationId: params.organizationId, planId, onDate: params.onDate })
+  if (row === null) return null
+  return { compPlanId: row.id, compPlanVersion: row.version, hotelMaxPerNightSatang: row.hotelMaxPerNightSatang }
+}
+
+/** เพดานจาก snapshot ที่ใบเบิกผูกไว้ (`comp_plan_id` = แถวเวอร์ชันนั้นเอง ไม่ resolve ซ้ำ) */
+async function loadHotelCapSnapshot(
+  client: ExpenseTxClient,
+  params: { organizationId: string; compPlanId: string },
+): Promise<HotelCapSnapshot | null> {
+  const row = await client.compensationPlan.findFirst({
+    where: { id: params.compPlanId, organizationId: params.organizationId },
+    select: { id: true, version: true, hotelMaxPerNightSatang: true },
+  })
+  if (row === null) return null
+  return { compPlanId: row.id, compPlanVersion: row.version, hotelMaxPerNightSatang: row.hotelMaxPerNightSatang }
+}
+
+/** ใบเบิกค่าที่พักปัจจุบันเป็นรายคืนเดียว (ฟอร์มมีวันที่เข้าพักวันเดียว ไม่มีช่วงวันที่) ⇒ 1 คืน */
+const HOTEL_CLAIM_NIGHTS = 1
 
 const planSnapshotSelect = {
   id: true,
@@ -595,6 +645,7 @@ const expenseSelect = {
   receiptFileUrl: true,
   receiptFileHash: true,
   sharedWithUserId: true,
+  compPlanId: true,
   createdAt: true,
   case: { select: { caseRef: true, debtorName: true } },
   sharedWithUser: { select: { fullName: true } },
@@ -773,6 +824,18 @@ export async function submitHotelClaim(
   })
   assertSharedAgentInTeam(input.sharedWithUserId ?? null, teammates.map((row) => row.id))
 
+  // มติ PO 06/10/2569 U89 — เพดานต่อคืนของแผนทีม ณ วันที่เข้าพัก (snapshot ลงใบเบิก) · เกิน = บล็อก
+  const capSnapshot = await resolveHotelCapForUser(prisma as ExpenseTxClient, {
+    organizationId: user.organizationId,
+    userId: user.id,
+    onDate: input.expenseDate,
+  })
+  assertHotelClaimWithinCap({
+    amountSatang: input.amountSatang,
+    maxPerNightSatang: capSnapshot?.hotelMaxPerNightSatang ?? null,
+    nights: HOTEL_CLAIM_NIGHTS,
+  })
+
   // ขยายมติ PO Q13 ถึงใบเสร็จ (UAT BUG-072) — server ดาวน์โหลดมาตรวจเอง (prefix ของผู้เบิก · มีจริง ·
   // magic bytes รูป/PDF · ขนาด) แล้วเก็บ SHA-256 ที่คำนวณเอง · นอก `$transaction` (I/O เครือข่าย)
   const receipt = await verifyUploadedFile(input.receiptFileUrl, expenseReceiptRule(user.id))
@@ -792,6 +855,9 @@ export async function submitHotelClaim(
         grossSatang: input.amountSatang,
         expenseDate: input.expenseDate,
         calculationSource: 'receipt',
+        // snapshot แผนที่ใช้ตรวจเพดาน (`92` §7.1) — ส่งใหม่หลังตีกลับใช้เพดานชุดเดิม ไม่อ่านแผนปัจจุบัน
+        compPlanId: capSnapshot?.compPlanId ?? null,
+        compPlanVersion: capSnapshot?.compPlanVersion ?? null,
         // เบิกแยกไม่ผ่านขั้นคลัง — เข้าคิวอนุมัติทันที (`41` §6.6)
         status: 'pending_approval',
         sharedWithUserId: input.sharedWithUserId ?? null,
@@ -818,6 +884,9 @@ export async function submitHotelClaim(
           sharedWithUserId: input.sharedWithUserId ?? null,
           receiptFileUrl: input.receiptFileUrl,
           receiptFileHash: receipt.sha256,
+          compPlanId: capSnapshot?.compPlanId ?? null,
+          compPlanVersion: capSnapshot?.compPlanVersion ?? null,
+          hotelMaxPerNightSatang: capSnapshot?.hotelMaxPerNightSatang ?? null,
           status: 'pending_approval',
           events: ['expense.hotel_claim_submitted'],
         },
@@ -868,6 +937,27 @@ export async function resubmitFieldExpense(
 
   // รายการที่ระบบคำนวณให้ (fuel/allowance) แก้ยอดเองไม่ได้ — แก้ได้เฉพาะรายการที่มาจากใบเสร็จ
   const editable = current.assignmentId === null
+
+  // มติ PO 06/10/2569 U89 — ค่าที่พักที่ส่งใหม่ต้องไม่เกินเพดานของ snapshot เดิม (ใบเก่าที่ยังไม่มี snapshot → resolve ณ วันที่เข้าพัก)
+  let hotelCap: HotelCapSnapshot | null = null
+  if (current.expenseType === 'hotel') {
+    hotelCap =
+      current.compPlanId !== null
+        ? await loadHotelCapSnapshot(prisma as ExpenseTxClient, {
+            organizationId: user.organizationId,
+            compPlanId: current.compPlanId,
+          })
+        : await resolveHotelCapForUser(prisma as ExpenseTxClient, {
+            organizationId: user.organizationId,
+            userId: user.id,
+            onDate: current.expenseDate,
+          })
+    assertHotelClaimWithinCap({
+      amountSatang: editable && input.amountSatang !== undefined ? input.amountSatang : current.grossSatang,
+      maxPerNightSatang: hotelCap?.hotelMaxPerNightSatang ?? null,
+      nights: HOTEL_CLAIM_NIGHTS,
+    })
+  }
   // แนบใบเสร็จใหม่ → ตรวจฝั่ง server แบบเดียวกับตอนเบิก (UAT BUG-072) · path เดิมที่เคยตรวจแล้วไม่ดาวน์โหลดซ้ำ
   const newReceiptPath = editable && input.receiptFileUrl !== undefined ? input.receiptFileUrl : null
   const receiptHash =
@@ -885,6 +975,10 @@ export async function resubmitFieldExpense(
         ...(newReceiptPath !== null ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash } : {}),
         // ข้อความชี้แจงเก็บแยก — ห้ามเขียนทับ `revision_note` (หมายเหตุตอนเบิก · UAT BUG-098 · `02` v4.13)
         ...(input.note !== undefined ? { resubmitNote: input.note } : {}),
+        // ใบเก่าที่ยังไม่มี snapshot เพดาน → เก็บชุดที่ใช้ตรวจครั้งนี้ (ครั้งถัดไปใช้ชุดเดิม)
+        ...(current.compPlanId === null && hotelCap !== null
+          ? { compPlanId: hotelCap.compPlanId, compPlanVersion: hotelCap.compPlanVersion }
+          : {}),
         // เคลียร์เหตุผลเดิมทิ้งเมื่อส่งกลับเข้าคิวอนุมัติใหม่
         rejectionReason: null,
         updatedBy: context.actor.id,

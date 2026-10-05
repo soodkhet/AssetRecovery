@@ -26,6 +26,7 @@ export const FIELD_ERROR_CODES = [
   'EVIDENCE_REJECT_AFTER_FINAL',
   'HOTEL_CLAIM_FIELD_REQUIRED',
   'HOTEL_CLAIM_INVALID_SHARED_AGENT',
+  'HOTEL_CLAIM_EXCEEDS_CAP',
   'REQUIRED_MISSING',
   'FIELD_DAY_NOT_FOUND',
 ] as const
@@ -45,6 +46,7 @@ const HTTP_STATUS: Record<FieldErrorCode, number> = {
   EVIDENCE_REJECT_AFTER_FINAL: 400,
   HOTEL_CLAIM_FIELD_REQUIRED: 400,
   HOTEL_CLAIM_INVALID_SHARED_AGENT: 400,
+  HOTEL_CLAIM_EXCEEDS_CAP: 400,
   REQUIRED_MISSING: 400,
   FIELD_DAY_NOT_FOUND: 404,
 }
@@ -102,6 +104,11 @@ const MESSAGES: Record<FieldErrorCode, ErrorMessage> = {
     title: 'ผู้พักร่วมไม่ถูกต้อง',
     message: 'เลือกผู้พักร่วมได้เฉพาะพนักงานในทีมเดียวกันเท่านั้น',
   },
+  // มติ PO 06/10/2569 U89 — ข้อความจริงระบุเพดานเป็นบาท (`hotelCapExceededMessage()` ส่งทับตอน throw)
+  HOTEL_CLAIM_EXCEEDS_CAP: {
+    title: 'ยอดเบิกค่าที่พักเกินเพดาน',
+    message: 'ยอดเบิกค่าที่พักเกินเพดานที่แผนค่าตอบแทนของทีมกำหนด',
+  },
   REQUIRED_MISSING: {
     title: 'ข้อมูลไม่ครบ',
     message: 'ข้อมูลที่ส่งมาไม่ครบตามที่ระบบต้องการ',
@@ -122,8 +129,13 @@ export function fieldErrorMessage(code: FieldErrorCode): ErrorMessage {
 }
 
 export class FieldError extends ModuleError<FieldErrorCode> {
-  constructor(code: FieldErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความเฉพาะกรณี (เช่น บอกเพดานเป็นบาท) ทับข้อความมาตรฐานของ code — title คงเดิม */
+  constructor(
+    code: FieldErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const messages = options?.message === undefined ? MESSAGES[code] : { ...MESSAGES[code], message: options.message }
+    super(code, messages, HTTP_STATUS[code], { detail: options?.detail, context: options?.context })
     this.name = 'FieldError'
   }
 }
