@@ -4,17 +4,28 @@ import { emitAudit } from '@/lib/audit/audit'
 import { assertInvoiceHasNoActiveNotes } from '@/lib/credit-notes/credit-note'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
+import type {
+  InvoiceDeliveryFormat,
+  TaxInvoiceDocKind,
+  TaxInvoiceStatus,
+  VatMode,
+} from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
 import {
+  assertInvoiceDateValid,
+  assertVatApplicable,
+  receiptInvoiceAmounts,
+  receiptInvoiceDescriptionOf,
+  replacementNoteOf,
+  TAX_INVOICE_DOC_KIND_TITLE,
+} from '@/lib/sales/receipt-invoice'
+import {
   assertCancellable,
-  assertIssuable,
   assertNoNumberGap,
   assertTaxInvoiceFieldsComplete,
   defaultInvoiceDate,
-  invoiceDescriptionOf,
   requireCancelReason,
   summarizeSalesAmounts,
   TAX_INVOICE_STATUS_LABEL,
@@ -37,8 +48,9 @@ import type {
   TaxInvoiceListDto,
   TaxInvoiceSummaryDto,
 } from '@/lib/sales/types'
-import { nextSequence, type NumberingState } from '@/lib/settings/numbering'
+import { formatInvoiceNumber, nextSequence, type NumberingState } from '@/lib/settings/numbering'
 import { reserveNextInvoiceNumber } from '@/lib/settings/queries/numbering'
+import { resolveVatRate } from '@/lib/settings/queries/vat-rates'
 
 /**
  * บัญชีขาย / ใบกำกับภาษี / เงินรับ (ไฟล์ 31) — ชั้น DB (`31` §14)
@@ -86,14 +98,32 @@ function scopeWhere(user: SessionUser, companyId?: string): { companyId?: string
 const TAX_INVOICE_SELECT = {
   id: true,
   salesRecordId: true,
+  docKind: true,
+  cashReceiptId: true,
   invoiceNumber: true,
   invoiceDate: true,
   buyerBranchCode: true,
   sellerBranchCode: true,
+  amountBeforeVatSatang: true,
+  vatSatang: true,
+  totalSatang: true,
+  vatRatePctUsed: true,
+  sellerName: true,
+  sellerTaxId: true,
+  sellerAddress: true,
+  sellerPhone: true,
+  buyerName: true,
+  buyerTaxId: true,
+  buyerAddress: true,
+  buyerPhone: true,
+  deliveryFormat: true,
+  description: true,
   status: true,
   cancelReason: true,
   cancelledAt: true,
   createdAt: true,
+  replaces: { select: { invoiceNumber: true, invoiceDate: true, cancelReason: true } },
+  cashReceipt: { select: { receivedDate: true } },
   cancelledByUser: { select: { fullName: true } },
   createdByUser: { select: { fullName: true } },
 } satisfies Prisma.TaxInvoiceSelect
@@ -120,6 +150,14 @@ type SalesRow = Prisma.SalesRecordGetPayload<{ select: typeof SALES_SELECT }>
 function toInvoiceSummary(row: TaxInvoiceRow): TaxInvoiceSummaryDto {
   return {
     id: row.id,
+    docKind: row.docKind,
+    docTitle: TAX_INVOICE_DOC_KIND_TITLE[row.docKind],
+    cashReceiptId: row.cashReceiptId,
+    totalBeforeVatSatang: row.amountBeforeVatSatang,
+    vatSatang: row.vatSatang,
+    totalSatang: row.totalSatang,
+    vatRatePctUsed: row.vatRatePctUsed?.toString() ?? null,
+    replacesInvoiceNumber: row.replaces?.invoiceNumber ?? null,
     invoiceNumber: row.invoiceNumber,
     invoiceDate: row.invoiceDate.toISOString(),
     status: row.status,
@@ -153,6 +191,9 @@ function toSalesDto(row: SalesRow): SalesRecordDto {
     createdAt: row.createdAt.toISOString(),
     activeTaxInvoice: active === null ? null : toInvoiceSummary(active),
     taxInvoices: row.taxInvoices.map(toInvoiceSummary),
+    invoicedBeforeVatSatang: row.taxInvoices
+      .filter((invoice) => invoice.status === 'active')
+      .reduce((sum, invoice) => sum + invoice.amountBeforeVatSatang, 0),
   }
 }
 
@@ -269,27 +310,17 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
   }
 }
 
-async function findSalesRecord(user: SessionUser, salesRecordId: string): Promise<SalesRow> {
-  const row = await prisma.salesRecord.findFirst({
-    where: { id: salesRecordId, organizationId: user.organizationId, ...scopeWhere(user) },
-    select: SALES_SELECT,
-  })
-  if (row === null) throw new SalesError('SALES_RECORD_NOT_FOUND', { detail: `sales_record=${salesRecordId}` })
-  return row
-}
-
-// ── ใบกำกับภาษี ─────────────────────────────────────────────────────────────
+// ── ใบกำกับภาษี / ใบเสร็จรับเงิน/ใบกำกับภาษี ────────────────────────────────
 
 function toInvoiceDto(row: TaxInvoiceRow, sales: SalesRow): TaxInvoiceDto {
   return {
     ...toInvoiceSummary(row),
     salesRecordId: sales.id,
     companyId: sales.companyId,
-    companyName: sales.company.name,
+    // U96 #4 — ชื่อผู้ซื้อตาม snapshot บนใบ (ไม่ใช่ชื่อปัจจุบันของบริษัท)
+    companyName: row.buyerName,
     periodLabel: sales.period.periodLabel,
-    totalBeforeVatSatang: sales.totalBeforeVatSatang,
-    vatSatang: sales.vatSatang,
-    totalSatang: sales.totalSatang,
+    billingBatchNumber: sales.billingBatch.batchNumber,
     createdByName: row.createdByUser.fullName,
   }
 }
@@ -316,14 +347,13 @@ export async function listTaxInvoices(user: SessionUser, query: TaxInvoiceListQu
   return { items }
 }
 
-/** ผู้ขาย = องค์กรเจ้าของระบบ (`31` §7.2 "ดึงจากการตั้งค่าองค์กร") */
+/** ผู้ขาย = องค์กรเจ้าของระบบ (`31` §7.2 "ดึงจากการตั้งค่าองค์กร") — ใช้ตอน**ออกใบ**เท่านั้น (snapshot ลงใบ · U96 #4) */
 async function loadSeller(organizationId: string): Promise<{
   name: string
   taxId: string
   address: string
   phone: string | null
   vatRegistered: boolean
-  /** สำนักงานใหญ่/สาขาปัจจุบันขององค์กร — ใช้ตอน**ออกใบ**เท่านั้น (snapshot ลง `tax_invoices.seller_branch_code` · U82) */
   branchCode: string
 }> {
   const org = await prisma.organization.findUnique({
@@ -334,39 +364,21 @@ async function loadSeller(organizationId: string): Promise<{
   return org
 }
 
-/** ผู้ซื้อ = บริษัทไฟแนนซ์ (`31` §7.2 "ดึงจากไฟล์ 10") */
+/** ผู้ซื้อ = บริษัทไฟแนนซ์ (`31` §7.2 "ดึงจากไฟล์ 10") — ใช้ตอน**ออกใบ**เท่านั้น (snapshot ลงใบ · U96 #4) */
 async function loadBuyer(companyId: string): Promise<{
   name: string
   taxId: string
-  /** สำนักงานใหญ่/สาขาปัจจุบัน — ใช้ตอน**ออกใบ**เท่านั้น (snapshot ลง `tax_invoices.buyer_branch_code`) */
   branchCode: string
   address: string | null
   phone: string | null
-  defaultInvoiceDeliveryFormat: Prisma.FinanceCompanyGetPayload<{
-    select: { defaultInvoiceDeliveryFormat: true }
-  }>['defaultInvoiceDeliveryFormat']
+  defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
 }> {
   const company = await prisma.financeCompany.findUnique({
     where: { id: companyId },
-    select: {
-      name: true,
-      taxId: true,
-      branchCode: true,
-      address: true,
-      phone: true,
-      defaultInvoiceDeliveryFormat: true,
-    },
+    select: { name: true, taxId: true, branchCode: true, address: true, phone: true, defaultInvoiceDeliveryFormat: true },
   })
   if (company === null) throw new Error(`loadBuyer: ไม่พบบริษัทไฟแนนซ์ ${companyId}`)
   return company
-}
-
-function amountsOf(sales: SalesAmounts): SalesAmounts {
-  return {
-    totalBeforeVatSatang: sales.totalBeforeVatSatang,
-    vatSatang: sales.vatSatang,
-    totalSatang: sales.totalSatang,
-  }
 }
 
 interface NumberingLockRow {
@@ -377,11 +389,216 @@ interface NumberingLockRow {
   tax_invoice_last_reset_year: number | null
 }
 
+type Tx = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
+
+interface IssueAmounts {
+  amounts: SalesAmounts
+  vatRatePct: number | null
+  description: string
+}
+
+/** แผนการออกเอกสาร 1 ใบ — ตรวจทุกอย่างที่ตรวจได้นอก transaction ก่อน แล้วคิดยอดจริงหลังล็อกตัวเดินเลข */
+interface IssuePlan {
+  docKind: TaxInvoiceDocKind
+  sales: SalesRow
+  cashReceiptId: string | null
+  receivedDate: Date | null
+  defaultDate: Date
+  replaces: { id: string; invoiceNumber: string } | null
+  /** คิดยอดใน transaction (หลังล็อกแถวองค์กร ⇒ ใบของรอบเดียวกันที่ออกพร้อมกันต่อคิว ยอดไม่ซ้อน) */
+  amounts: (tx: Tx) => Promise<IssueAmounts>
+}
+
+const RECEIPT_SELECT = {
+  id: true,
+  receivedDate: true,
+  amountSatang: true,
+  whtWithheldByCustomerSatang: true,
+  billingBatchId: true,
+  billingBatch: { select: { companyId: true, period: true, batchNumber: true } },
+} satisfies Prisma.CashReceiptSelect
+
+async function loadSalesOfBatch(ctx: SalesMutationContext, billingBatchId: string): Promise<SalesRow> {
+  let sales = await prisma.salesRecord.findUnique({ where: { billingBatchId }, select: SALES_SELECT })
+  // sync ตอนส่งบิลล้มไว้ (เรียกซ้ำได้ — idempotent) ⇒ ลองสร้างก่อนออกใบ
+  if (sales === null) {
+    await syncSalesRecordFromBilling(ctx, billingBatchId)
+    sales = await prisma.salesRecord.findUnique({ where: { billingBatchId }, select: SALES_SELECT })
+  }
+  if (sales === null) throw new SalesError('SALES_RECORD_NOT_FOUND', { detail: `billing_batch=${billingBatchId}` })
+  return sales
+}
+
+async function batchVatSnapshot(billingBatchId: string): Promise<{ rates: number[]; modes: VatMode[] }> {
+  const revenues = await prisma.revenue.findMany({
+    where: { billingBatchId, deletedAt: null },
+    select: { vatRatePctUsed: true, vatModeSnapshot: true },
+  })
+  return {
+    rates: revenues.map((row) => row.vatRatePctUsed.toNumber()),
+    modes: [...new Set(revenues.map((row) => row.vatModeSnapshot))],
+  }
+}
+
+/** แผนใบเสร็จรับเงิน/ใบกำกับภาษีของเงินรับ (U95) */
+async function planReceiptInvoice(
+  ctx: SalesMutationContext,
+  cashReceiptId: string,
+  forcedReplaces: { id: string; invoiceNumber: string } | null,
+): Promise<IssuePlan> {
+  const organizationId = ctx.actor.organizationId
+  const scoped = scopeWhere(ctx.actor)
+  const billingWhere: Prisma.BillingBatchWhereInput = 'id' in scoped ? { id: { in: [] } } : scoped
+  const receipt = await prisma.cashReceipt.findFirst({
+    where: { id: cashReceiptId, organizationId, billingBatch: billingWhere },
+    select: RECEIPT_SELECT,
+  })
+  if (receipt === null) throw new SalesError('CASH_RECEIPT_NOT_FOUND', { detail: `cash_receipt=${cashReceiptId}` })
+
+  const active = await prisma.taxInvoice.findFirst({
+    where: { cashReceiptId, status: 'active' },
+    select: { invoiceNumber: true },
+  })
+  if (active !== null) {
+    throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
+      detail: `มี ${active.invoiceNumber} ใช้งานอยู่`,
+      context: { invoiceNumber: active.invoiceNumber },
+    })
+  }
+
+  const sales = await loadSalesOfBatch(ctx, receipt.billingBatchId)
+  const vat = await batchVatSnapshot(receipt.billingBatchId)
+  // U96 #3 — ตรวจก่อนหาอัตรา (บริษัท no_vat อาจไม่มีอัตราในระบบเลย)
+  if (vat.modes.includes('no_vat')) assertVatApplicable({ vatModes: vat.modes, vatRatePct: 0, vatSatang: 0 })
+  // U96 #9 — อัตรา ณ จุดความรับผิด = วันรับเงิน (ไม่ใช่อัตราใน snapshot รายได้ตอนวางบิล)
+  const vatRatePct = (await resolveVatRate(organizationId, receipt.receivedDate)).ratePct
+
+  const replaces =
+    forcedReplaces ??
+    (await prisma.taxInvoice.findFirst({
+      where: { cashReceiptId, status: 'cancelled', replacedBy: { none: {} } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, invoiceNumber: true },
+    }))
+
+  return {
+    docKind: 'receipt_tax_invoice',
+    sales,
+    cashReceiptId: receipt.id,
+    receivedDate: receipt.receivedDate,
+    defaultDate: receipt.receivedDate,
+    replaces,
+    amounts: async (tx) => {
+      // ตรวจซ้ำหลังล็อก — คำขอที่ต่อคิวมาหลังอีกคนออกใบของเงินรับนี้ไปแล้วต้องได้ code ที่ตรงความจริง
+      const raced = await tx.taxInvoice.findFirst({
+        where: { cashReceiptId, status: 'active' },
+        select: { invoiceNumber: true },
+      })
+      if (raced !== null) {
+        throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
+          detail: `มี ${raced.invoiceNumber} ใช้งานอยู่ (ออกโดยคำขออื่นพร้อมกัน)`,
+          context: { invoiceNumber: raced.invoiceNumber },
+        })
+      }
+      const prior = await tx.taxInvoice.findMany({
+        where: { salesRecordId: sales.id, status: 'active' },
+        select: { amountBeforeVatSatang: true, vatSatang: true, vatRatePctUsed: true },
+      })
+      const computed = receiptInvoiceAmounts({
+        basis: {
+          billedBeforeVatSatang: sales.totalBeforeVatSatang,
+          billedVatSatang: sales.vatSatang,
+          billedVatRatesPct: vat.rates,
+        },
+        prior: prior.map((row) => ({
+          amountBeforeVatSatang: row.amountBeforeVatSatang,
+          vatSatang: row.vatSatang,
+          vatRatePct: row.vatRatePctUsed === null ? null : row.vatRatePctUsed.toNumber(),
+        })),
+        // ภาษีที่ลูกค้าหัก ณ ที่จ่ายนับเป็นการรับชำระ (U95)
+        paidSatang: receipt.amountSatang + receipt.whtWithheldByCustomerSatang,
+        vatRatePct,
+      })
+      assertVatApplicable({ vatModes: vat.modes, vatRatePct, vatSatang: computed.vatSatang })
+      return {
+        amounts: {
+          totalBeforeVatSatang: computed.totalBeforeVatSatang,
+          vatSatang: computed.vatSatang,
+          totalSatang: computed.totalSatang,
+        },
+        vatRatePct,
+        description: receiptInvoiceDescriptionOf({
+          periodLabel: receipt.billingBatch.period,
+          billingBatchNumber: receipt.billingBatch.batchNumber,
+          coversRemainder: computed.coversRemainder,
+        }),
+      }
+    },
+  }
+}
+
+/** แผนออกแทนใบที่ยกเลิกแล้ว (U96 #8) — ใบเสร็จฯ ⇒ คิดจากเงินรับเดิม · ใบแบบเดิม ⇒ ยอด/อัตรา/รายการเดิม */
+async function planReplacement(ctx: SalesMutationContext, replacesInvoiceId: string, today: Date): Promise<IssuePlan> {
+  const { invoice, sales } = await findTaxInvoice(ctx.actor, replacesInvoiceId)
+  if (invoice.status !== 'cancelled') {
+    throw new SalesError('TAX_INVOICE_INVALID_STATUS', {
+      detail: `replace at ${invoice.status}`,
+      message: 'ออกใบแทนได้เฉพาะใบที่ยกเลิกแล้วเท่านั้น',
+    })
+  }
+  const already = await prisma.taxInvoice.findFirst({
+    where: { replacesTaxInvoiceId: invoice.id },
+    select: { invoiceNumber: true },
+  })
+  if (already !== null) {
+    throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
+      detail: `ออกแทนแล้วด้วย ${already.invoiceNumber}`,
+      message: `ใบนี้ถูกออกแทนแล้วด้วยเลขที่ ${already.invoiceNumber}`,
+    })
+  }
+  const replaces = { id: invoice.id, invoiceNumber: invoice.invoiceNumber }
+
+  if (invoice.docKind === 'receipt_tax_invoice') {
+    if (invoice.cashReceiptId === null) {
+      throw new SalesError('CASH_RECEIPT_NOT_FOUND', { detail: `tax_invoice=${invoice.id} เงินรับถูกถอนแล้ว` })
+    }
+    return planReceiptInvoice(ctx, invoice.cashReceiptId, replaces)
+  }
+
+  const vat = await batchVatSnapshot(sales.billingBatchId)
+  const vatRatePct = invoice.vatRatePctUsed === null ? null : invoice.vatRatePctUsed.toNumber()
+  return {
+    docKind: 'tax_invoice',
+    sales,
+    cashReceiptId: null,
+    receivedDate: null,
+    defaultDate: today,
+    replaces,
+    amounts: async () => {
+      assertVatApplicable({ vatModes: vat.modes, vatRatePct: vatRatePct ?? 1, vatSatang: invoice.vatSatang })
+      return {
+        amounts: {
+          totalBeforeVatSatang: invoice.amountBeforeVatSatang,
+          vatSatang: invoice.vatSatang,
+          totalSatang: invoice.totalSatang,
+        },
+        vatRatePct,
+        description: invoice.description,
+      }
+    },
+  }
+}
+
 /**
- * `POST /api/accounting/tax-invoices` (`31` §14) — ออกใบกำกับภาษี (สร้าง = ออกทันที)
+ * `POST /api/accounting/tax-invoices` (`31` §14 · มติ PO U95) — ออกเอกสารภาษี (สร้าง = ออกทันที)
  *
- * ลำดับสำคัญ: ตรวจสิทธิ์/สถานะ/ฟิลด์บังคับ **ก่อน** แตะตัวเดินเลข — เพราะเลขที่จองแล้วต้องถูกใช้
- * เสมอ (rollback ได้ แต่ไม่ควรพึ่ง) · ตัวเดินเลขถูกล็อกด้วย `FOR UPDATE` ในทรานแซกชันเดียวกับ insert
+ * - `cashReceiptId` ⇒ **ใบเสร็จรับเงิน/ใบกำกับภาษี** ของเงินรับ: ยอดตามเงินที่รับ (+ภาษีที่ลูกค้าหัก) ·
+ *   VAT อัตรา ณ วันรับเงิน · วันที่เอกสาร = วันรับเงิน (เลื่อนได้แต่ไม่ก่อนวันรับเงิน)
+ * - `replacesInvoiceId` ⇒ ออกแทนใบที่ยกเลิกแล้ว (พิมพ์ "ออกแทนฉบับเลขที่ …")
+ *
+ * ลำดับสำคัญ: ตรวจสิทธิ์/สถานะ/งวด **ก่อน** แตะตัวเดินเลข · ใน `$transaction`: ล็อกแถวองค์กร `FOR UPDATE` →
+ * ตรวจวันที่เทียบเลขก่อนหน้า (U96 #7) → คิดยอด (ใบของรอบเดียวกันต่อคิวกัน) → ฟิลด์บังคับ → เดินเลข → insert
+ * พร้อม snapshot คู่ค้า (U96 #4) → audit — rollback ทั้งก้อน เลขไม่ขาด
  */
 export async function issueTaxInvoice(
   ctx: SalesMutationContext,
@@ -389,106 +606,152 @@ export async function issueTaxInvoice(
   now: Date = new Date(),
 ): Promise<TaxInvoiceDto> {
   const organizationId = ctx.actor.organizationId
-  const sales = await findSalesRecord(ctx.actor, input.salesRecordId)
-  const active = activeInvoiceOf(sales)
-  assertIssuable(active === null ? null : active.invoiceNumber)
+  const today = defaultInvoiceDate(now)
+  const plan =
+    input.cashReceiptId !== undefined
+      ? await planReceiptInvoice(ctx, input.cashReceiptId, null)
+      : await planReplacement(ctx, input.replacesInvoiceId ?? '', today)
+  const { sales } = plan
+  const invoiceDate = input.invoiceDate ?? plan.defaultDate
 
-  const invoiceDate = input.invoiceDate ?? defaultInvoiceDate(now)
-  await assertPeriodOpenAt({
-    organizationId,
-    at: invoiceDate,
-    targetType: TAX_INVOICE_TARGET,
-    targetId: sales.id,
-  })
+  await assertPeriodOpenAt({ organizationId, at: invoiceDate, targetType: TAX_INVOICE_TARGET, targetId: sales.id })
 
   const [seller, buyer] = await Promise.all([loadSeller(organizationId), loadBuyer(sales.companyId)])
-  const description = invoiceDescriptionOf(sales.billingBatch.period)
-  assertTaxInvoiceFieldsComplete({
-    seller: { name: seller.name, taxId: seller.taxId, address: seller.address },
-    sellerVatRegistered: seller.vatRegistered,
-    buyer: { name: buyer.name, taxId: buyer.taxId, address: buyer.address },
-    description,
-    amounts: amountsOf(sales),
-  })
+  const title = TAX_INVOICE_DOC_KIND_TITLE[plan.docKind]
 
-  const created = await prisma.$transaction(async (tx) => {
-    // ล็อกแถวองค์กรก่อนอ่านตัวเดินเลข ⇒ คำขอที่เข้ามาพร้อมกันต่อคิวกันจริง (D11)
-    const rows = await tx.$queryRaw<NumberingLockRow[]>`
-      SELECT tax_invoice_seq, tax_invoice_numbering_mode, tax_invoice_prefix,
-             tax_invoice_digit_length, tax_invoice_last_reset_year
-        FROM organizations
-       WHERE id = ${organizationId}::uuid
-         FOR UPDATE
-    `
-    const state = rows[0]
-    if (state === undefined) throw new Error(`issueTaxInvoice: ไม่พบองค์กร ${organizationId}`)
+  const created = await prisma
+    .$transaction(async (tx) => {
+      // ล็อกแถวองค์กรก่อนอ่านตัวเดินเลข ⇒ คำขอที่เข้ามาพร้อมกันต่อคิวกันจริง (D11)
+      const rows = await tx.$queryRaw<NumberingLockRow[]>`
+        SELECT tax_invoice_seq, tax_invoice_numbering_mode, tax_invoice_prefix,
+               tax_invoice_digit_length, tax_invoice_last_reset_year
+          FROM organizations
+         WHERE id = ${organizationId}::uuid
+           FOR UPDATE
+      `
+      const state = rows[0]
+      if (state === undefined) throw new Error(`issueTaxInvoice: ไม่พบองค์กร ${organizationId}`)
 
-    const expected = nextSequence(
-      {
+      const numberingFormat = {
         mode: state.tax_invoice_numbering_mode,
         prefix: state.tax_invoice_prefix,
         digitLength: state.tax_invoice_digit_length,
-        lastNumber: state.tax_invoice_seq,
-        lastResetYear: state.tax_invoice_last_reset_year,
-      },
-      invoiceDate,
-    )
-
-    const reserved = await reserveNextInvoiceNumber(organizationId, invoiceDate, tx)
-    assertNoNumberGap(reserved.sequence, expected - 1)
-
-    const invoice = await tx.taxInvoice.create({
-      data: {
-        organizationId,
-        salesRecordId: sales.id,
-        invoiceNumber: reserved.number,
+      }
+      const expected = nextSequence(
+        { ...numberingFormat, lastNumber: state.tax_invoice_seq, lastResetYear: state.tax_invoice_last_reset_year },
         invoiceDate,
-        // มติ PO U77 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ซื้อ ณ ตอนออกใบ
-        buyerBranchCode: buyer.branchCode,
-        // มติ PO U82 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ขาย (องค์กรเรา) ณ ตอนออกใบ
-        sellerBranchCode: seller.branchCode,
-        createdBy: ctx.actor.id,
-      },
-      select: TAX_INVOICE_SELECT,
-    })
+      )
 
-    await emitAudit(
-      {
-        organizationId,
-        actorId: ctx.actor.id,
-        actorRole: ctx.actor.roleName,
-        action: 'create',
-        targetType: TAX_INVOICE_TARGET,
-        targetId: invoice.id,
-        after: {
-          invoice_number: invoice.invoiceNumber,
-          invoice_date: invoice.invoiceDate.toISOString(),
-          buyer_branch_code: invoice.buyerBranchCode,
-          seller_branch_code: invoice.sellerBranchCode,
-          status: invoice.status,
-          sales_record_id: sales.id,
-          total_satang: sales.totalSatang,
-        },
-        reason: `ออกใบกำกับภาษี ${invoice.invoiceNumber} ให้ ${buyer.name} รอบ ${sales.billingBatch.period}`,
-        ipAddress: ctx.meta.ipAddress,
-        userAgent: ctx.meta.userAgent,
-      },
-      tx,
-    )
-
-    return invoice
-  }).catch((error: unknown) => {
-    // แข่งกันออกใบพร้อมกัน — `assertIssuable()` อ่านสถานะ**นอก** transaction จึงผ่านได้ทั้งคู่
-    // ⇒ คนที่แพ้ `uniq_tax_invoice_active_per_sales` ต้องได้ code เดิมของ `24` ไม่ใช่ Prisma error ดิบ
-    // (เลขที่ไม่ขาดช่วงเพราะการจองเลขอยู่ในทรานแซกชันเดียวกับ insert จึง rollback ไปพร้อมกัน)
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
-        detail: `มีใบกำกับภาษีของรายการขาย ${sales.id} ถูกออกโดยคำขออื่นพร้อมกัน`,
-        context: { salesRecordId: sales.id },
+      // U96 #7 — วันที่ ≤ วันนี้ · ≥ วันที่ของเอกสาร**เลขก่อนหน้า**ในชุดเดียวกัน (รวมใบที่ยกเลิก) · ≥ วันรับเงิน
+      const previous =
+        expected <= 1
+          ? null
+          : await tx.taxInvoice.findFirst({
+              where: { organizationId, invoiceNumber: formatInvoiceNumber(numberingFormat, expected - 1, invoiceDate) },
+              select: { invoiceNumber: true, invoiceDate: true },
+            })
+      assertInvoiceDateValid({
+        invoiceDate,
+        today,
+        previousInvoiceDate: previous?.invoiceDate ?? null,
+        previousInvoiceNumber: previous?.invoiceNumber ?? null,
+        notBefore: plan.receivedDate,
       })
-    }
-    throw error
-  })
+
+      const issue = await plan.amounts(tx)
+      assertTaxInvoiceFieldsComplete({
+        seller: { name: seller.name, taxId: seller.taxId, address: seller.address },
+        sellerVatRegistered: seller.vatRegistered,
+        buyer: { name: buyer.name, taxId: buyer.taxId, address: buyer.address },
+        description: issue.description,
+        amounts: issue.amounts,
+      })
+
+      const reserved = await reserveNextInvoiceNumber(organizationId, invoiceDate, tx)
+      assertNoNumberGap(reserved.sequence, expected - 1)
+
+      const invoice = await tx.taxInvoice.create({
+        data: {
+          organizationId,
+          salesRecordId: sales.id,
+          docKind: plan.docKind,
+          cashReceiptId: plan.cashReceiptId,
+          replacesTaxInvoiceId: plan.replaces?.id ?? null,
+          invoiceNumber: reserved.number,
+          invoiceDate,
+          amountBeforeVatSatang: issue.amounts.totalBeforeVatSatang,
+          vatSatang: issue.amounts.vatSatang,
+          totalSatang: issue.amounts.totalSatang,
+          vatRatePctUsed: issue.vatRatePct === null ? null : new Prisma.Decimal(issue.vatRatePct),
+          // U96 #4 — snapshot คู่ค้า ณ ตอนออก (แก้บริษัท/องค์กรภายหลัง ใบเดิมไม่เปลี่ยน)
+          sellerName: seller.name,
+          sellerTaxId: seller.taxId,
+          sellerAddress: seller.address,
+          sellerPhone: seller.phone,
+          buyerName: buyer.name,
+          buyerTaxId: buyer.taxId,
+          buyerAddress: buyer.address ?? '',
+          buyerPhone: buyer.phone,
+          deliveryFormat: buyer.defaultInvoiceDeliveryFormat,
+          description: issue.description,
+          // มติ PO U77/U82 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ซื้อ/ผู้ขาย ณ ตอนออกใบ
+          buyerBranchCode: buyer.branchCode,
+          sellerBranchCode: seller.branchCode,
+          createdBy: ctx.actor.id,
+        },
+        select: TAX_INVOICE_SELECT,
+      })
+
+      await emitAudit(
+        {
+          organizationId,
+          actorId: ctx.actor.id,
+          actorRole: ctx.actor.roleName,
+          action: 'create',
+          targetType: TAX_INVOICE_TARGET,
+          targetId: invoice.id,
+          after: {
+            doc_kind: invoice.docKind,
+            invoice_number: invoice.invoiceNumber,
+            invoice_date: invoice.invoiceDate.toISOString(),
+            cash_receipt_id: invoice.cashReceiptId,
+            received_date: plan.receivedDate?.toISOString() ?? null,
+            replaces_tax_invoice_id: plan.replaces?.id ?? null,
+            replaces_invoice_number: plan.replaces?.invoiceNumber ?? null,
+            amount_before_vat_satang: invoice.amountBeforeVatSatang,
+            vat_satang: invoice.vatSatang,
+            total_satang: invoice.totalSatang,
+            vat_rate_pct_used: invoice.vatRatePctUsed?.toString() ?? null,
+            buyer_name: invoice.buyerName,
+            buyer_tax_id: invoice.buyerTaxId,
+            buyer_branch_code: invoice.buyerBranchCode,
+            seller_tax_id: invoice.sellerTaxId,
+            seller_branch_code: invoice.sellerBranchCode,
+            status: invoice.status,
+            sales_record_id: sales.id,
+          },
+          reason:
+            `ออก${title} ${invoice.invoiceNumber} ให้ ${buyer.name} รอบ ${sales.billingBatch.period}` +
+            (plan.replaces === null ? '' : ` (ออกแทน ${plan.replaces.invoiceNumber})`),
+          ipAddress: ctx.meta.ipAddress,
+          userAgent: ctx.meta.userAgent,
+        },
+        tx,
+      )
+
+      return invoice
+    })
+    .catch((error: unknown) => {
+      // แข่งกันออกใบพร้อมกัน (เงินรับเดียวกัน / ใบแทนใบเดียวกัน) — partial unique ที่ DB เป็นคนตัดสิน
+      // ⇒ คนที่แพ้ต้องได้ code ของ `24` ไม่ใช่ Prisma error ดิบ (เลขไม่ขาดเพราะจองเลขใน transaction เดียวกัน)
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
+          detail: `เอกสารของรายการขาย ${sales.id} ถูกออกโดยคำขออื่นพร้อมกัน`,
+          context: { salesRecordId: sales.id },
+        })
+      }
+      throw error
+    })
 
   return toInvoiceDto(created, sales)
 }
@@ -588,66 +851,52 @@ function activeNotesQuery(invoiceId: string) {
   } as const satisfies Prisma.CreditNoteFindManyArgs
 }
 
-/** ข้อมูลดิบของใบกำกับภาษีสำหรับ PDF (`28` §6.2) — ประกอบเป็นข้อความที่ `buildTaxInvoiceDoc()` */
+
+/** ข้อมูลดิบของเอกสารสำหรับ PDF (`28` §6.2) — ประกอบเป็นข้อความที่ `buildTaxInvoiceDoc()` */
 export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: string): Promise<TaxInvoiceDocSource> {
   const { invoice, sales } = await findTaxInvoice(user, invoiceId)
-  const [seller, buyer, revenues] = await Promise.all([
-    loadSeller(user.organizationId),
-    loadBuyer(sales.companyId),
-    prisma.revenue.findMany({
-      where: { billingBatchId: sales.billingBatchId, deletedAt: null },
-      select: { vatRatePctUsed: true },
-    }),
-  ])
-
-  return docSourceOf(
-    invoice,
-    sales,
-    seller,
-    buyer,
-    revenues.map((row) => row.vatRatePctUsed.toString()),
-  )
+  return docSourceOf(invoice, { periodLabel: sales.period.periodLabel, billingBatchNumber: sales.billingBatch.batchNumber })
 }
 
-/** ประกอบข้อมูลเอกสารจากแถวที่โหลดแล้ว — ตัวเดียวกันทั้งพิมพ์รายใบและแนบใน Export Pack (U57) */
+/**
+ * ประกอบข้อมูลเอกสารจากแถวที่โหลดแล้ว — ตัวเดียวกันทั้งพิมพ์รายใบ แนบใน Export Pack (U57) และ portal
+ * · **อ่าน snapshot บนใบทั้งหมด** (คู่ค้า/สาขา/รูปแบบการส่ง/ยอด/อัตรา — U96 #4) ไม่อ่านค่าปัจจุบันของบริษัท/องค์กร
+ */
 function docSourceOf(
-  invoice: Pick<
-    TaxInvoiceRow,
-    'invoiceNumber' | 'invoiceDate' | 'status' | 'cancelReason' | 'cancelledAt' | 'buyerBranchCode' | 'sellerBranchCode'
-  >,
-  sales: Pick<SalesRow, 'totalBeforeVatSatang' | 'vatSatang' | 'totalSatang'> & {
-    billingBatch: { period: string }
-    period: { periodLabel: string }
-  },
-  seller: Awaited<ReturnType<typeof loadSeller>>,
-  buyer: Awaited<ReturnType<typeof loadBuyer>>,
-  vatRatesPct: readonly string[],
+  invoice: TaxInvoiceRow,
+  context: { periodLabel: string; billingBatchNumber: string },
 ): TaxInvoiceDocSource {
   return {
+    docKind: invoice.docKind,
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.invoiceDate,
     status: invoice.status,
     cancelReason: invoice.cancelReason,
     cancelledAt: invoice.cancelledAt,
-    // `02` ไม่มีคอลัมน์ต่อใบ ⇒ อ่านค่าเริ่มต้นของบริษัท (`10` §7.1 · ดู `02_OPEN_DECISIONS` D13)
-    deliveryFormat: buyer.defaultInvoiceDeliveryFormat,
-    seller: { name: seller.name, taxId: seller.taxId, address: seller.address, phone: seller.phone },
-    buyer: { name: buyer.name, taxId: buyer.taxId, address: buyer.address ?? '', phone: buyer.phone },
-    // snapshot บนใบ (มติ PO U77) — ไม่ใช่ `buyer.branchCode` ปัจจุบันของบริษัท
+    deliveryFormat: invoice.deliveryFormat,
+    seller: { name: invoice.sellerName, taxId: invoice.sellerTaxId, address: invoice.sellerAddress, phone: invoice.sellerPhone },
+    buyer: { name: invoice.buyerName, taxId: invoice.buyerTaxId, address: invoice.buyerAddress, phone: invoice.buyerPhone },
     buyerBranchCode: invoice.buyerBranchCode,
-    // snapshot บนใบ (มติ PO U82) — ไม่ใช่ `organizations.branch_code` ปัจจุบัน
     sellerBranchCode: invoice.sellerBranchCode,
-    description: invoiceDescriptionOf(sales.billingBatch.period),
-    periodLabel: sales.period.periodLabel,
-    amounts: amountsOf(sales),
-    vatRatesPct,
+    description: invoice.description,
+    periodLabel: context.periodLabel,
+    amounts: {
+      totalBeforeVatSatang: invoice.amountBeforeVatSatang,
+      vatSatang: invoice.vatSatang,
+      totalSatang: invoice.totalSatang,
+    },
+    // ใบเดิมหลายอัตรา = null ⇒ ไม่ระบุ % บนหัวคอลัมน์
+    vatRatesPct: invoice.vatRatePctUsed === null ? [] : [invoice.vatRatePctUsed.toString()],
+    replacementNote: replacementNoteOf(invoice.replaces),
+    billingBatchNumber: context.billingBatchNumber,
+    receivedDate: invoice.cashReceipt?.receivedDate ?? null,
   }
 }
 
 /**
- * ใบกำกับภาษีของ Export Pack (มติ PO 05/10/2569 U57) — ใบที่**ลงวันที่ในช่วง** + ใบที่**ถูกยกเลิกในช่วง**
+ * เอกสารภาษีของ Export Pack (มติ PO 05/10/2569 U57 · U95) — ใบที่**ลงวันที่ในช่วง** + ใบที่**ถูกยกเลิกในช่วง**
  * พร้อมข้อมูลเอกสาร PDF (ตัวเดียวกับ `GET /tax-invoices/:id/pdf`) · ระดับองค์กร — ผู้เรียกตรวจสิทธิ์ระดับทั้งองค์กรแล้ว
- * · `replacedBy` = ใบ `active` ที่ออกภายหลังบนรายการขายเดียวกัน (ใบที่ออกแทนใบที่ยกเลิก)
+ * · `replacedBy` = ใบที่ออกแทน (ลิงก์ `replaces_tax_invoice_id` — U96 #8) · ใบเก่าก่อนมีลิงก์ ⇒ ใบ `active` แบบเดิมที่ออกทีหลังบนรายการขายเดียวกัน
  */
 export async function taxInvoicesForPack(
   organizationId: string,
@@ -672,26 +921,14 @@ export async function taxInvoicesForPack(
     },
     orderBy: [{ invoiceDate: 'asc' }, { invoiceNumber: 'asc' }],
     select: {
-      id: true,
-      invoiceNumber: true,
-      invoiceDate: true,
-      status: true,
-      cancelReason: true,
-      cancelledAt: true,
-      createdAt: true,
-      buyerBranchCode: true,
-      sellerBranchCode: true,
+      ...TAX_INVOICE_SELECT,
+      replacedBy: { select: { invoiceNumber: true }, take: 1 },
       salesRecord: {
         select: {
-          companyId: true,
-          billingBatchId: true,
-          totalBeforeVatSatang: true,
-          vatSatang: true,
-          totalSatang: true,
           period: { select: { periodLabel: true } },
           billingBatch: { select: { period: true, batchNumber: true } },
           taxInvoices: {
-            where: { status: 'active' },
+            where: { status: 'active', docKind: 'tax_invoice' },
             orderBy: { createdAt: 'asc' },
             select: { invoiceNumber: true, createdAt: true },
           },
@@ -699,42 +936,23 @@ export async function taxInvoicesForPack(
       },
     },
   })
-  if (rows.length === 0) return []
-
-  const companyIds = [...new Set(rows.map((row) => row.salesRecord.companyId))]
-  const billingIds = [...new Set(rows.map((row) => row.salesRecord.billingBatchId))]
-  const [seller, buyers, revenues] = await Promise.all([
-    loadSeller(organizationId),
-    Promise.all(companyIds.map(async (id) => [id, await loadBuyer(id)] as const)),
-    prisma.revenue.findMany({
-      where: { organizationId, billingBatchId: { in: billingIds }, deletedAt: null },
-      select: { billingBatchId: true, vatRatePctUsed: true },
-    }),
-  ])
-  const buyerOf = new Map(buyers)
-  const ratesOf = new Map<string, string[]>()
-  for (const revenue of revenues) {
-    if (revenue.billingBatchId === null) continue
-    const list = ratesOf.get(revenue.billingBatchId) ?? []
-    list.push(revenue.vatRatePctUsed.toString())
-    ratesOf.set(revenue.billingBatchId, list)
-  }
 
   return rows.map((row) => {
-    const sales = row.salesRecord
-    const buyer = buyerOf.get(sales.companyId)
-    if (buyer === undefined) throw new Error(`taxInvoicesForPack: ไม่พบบริษัทไฟแนนซ์ ${sales.companyId}`)
-    const replacement =
-      row.status === 'cancelled'
+    const { salesRecord: sales, replacedBy, ...invoice } = row
+    const legacyReplacement =
+      row.status === 'cancelled' && row.docKind === 'tax_invoice'
         ? sales.taxInvoices.find((other) => other.createdAt > row.createdAt && other.invoiceNumber !== row.invoiceNumber)
         : undefined
     return {
       id: row.id,
-      source: docSourceOf(row, sales, seller, buyer, ratesOf.get(sales.billingBatchId) ?? []),
-      companyName: buyer.name,
+      source: docSourceOf(invoice, {
+        periodLabel: sales.period.periodLabel,
+        billingBatchNumber: sales.billingBatch.batchNumber,
+      }),
+      companyName: row.buyerName,
       billingRef: sales.billingBatch.period,
       billingBatchNumber: sales.billingBatch.batchNumber,
-      replacedBy: replacement?.invoiceNumber ?? null,
+      replacedBy: replacedBy[0]?.invoiceNumber ?? legacyReplacement?.invoiceNumber ?? null,
     }
   })
 }
@@ -760,30 +978,48 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
       note: true,
       createdAt: true,
       billingBatchId: true,
-      billingBatch: { select: { period: true, batchNumber: true, status: true, company: { select: { name: true } } } },
+      billingBatch: {
+        select: {
+          period: true,
+          batchNumber: true,
+          status: true,
+          company: { select: { name: true } },
+          salesRecord: {
+            select: { taxInvoices: { where: { status: 'active', docKind: 'tax_invoice' }, select: { id: true } } },
+          },
+        },
+      },
       bankTransaction: { select: { description: true, matchStatus: true } },
+      taxInvoices: { select: TAX_INVOICE_SELECT, orderBy: { createdAt: 'desc' } },
     },
   })
 
-  const items: CashReceiptDto[] = rows.map((row) => ({
-    id: row.id,
-    receivedDate: row.receivedDate.toISOString(),
-    payerName: row.billingBatch.company.name,
-    amountSatang: row.amountSatang,
-    whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
-    bankRef: row.bankTransaction?.description ?? null,
-    bankMatchStatus: row.bankTransaction?.matchStatus ?? null,
-    billingBatchId: row.billingBatchId,
-    billingPeriod: row.billingBatch.period,
-    billingBatchNumber: row.billingBatch.batchNumber,
-    billingStatus: row.billingBatch.status,
-    note: row.note,
-    createdAt: row.createdAt.toISOString(),
-  }))
+  const items: CashReceiptDto[] = rows.map((row) => {
+    const active = row.taxInvoices.find((invoice) => invoice.status === 'active') ?? null
+    return {
+      id: row.id,
+      receivedDate: row.receivedDate.toISOString(),
+      payerName: row.billingBatch.company.name,
+      amountSatang: row.amountSatang,
+      whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+      bankRef: row.bankTransaction?.description ?? null,
+      bankMatchStatus: row.bankTransaction?.matchStatus ?? null,
+      billingBatchId: row.billingBatchId,
+      billingPeriod: row.billingBatch.period,
+      billingBatchNumber: row.billingBatch.batchNumber,
+      billingStatus: row.billingBatch.status,
+      note: row.note,
+      createdAt: row.createdAt.toISOString(),
+      taxInvoice: active === null ? null : toInvoiceSummary(active),
+      cancelledTaxInvoices: row.taxInvoices.filter((invoice) => invoice.status === 'cancelled').map(toInvoiceSummary),
+      coveredByLegacyInvoice: (row.billingBatch.salesRecord?.taxInvoices.length ?? 0) > 0,
+    }
+  })
 
   return {
     items,
     totalSatang: items.reduce((sum, item) => sum + item.amountSatang, 0),
     totalWhtWithheldByCustomerSatang: items.reduce((sum, item) => sum + item.whtWithheldByCustomerSatang, 0),
+    awaitingTaxInvoiceCount: items.filter((item) => item.taxInvoice === null && !item.coveredByLegacyInvoice).length,
   }
 }

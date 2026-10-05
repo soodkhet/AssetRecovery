@@ -152,6 +152,10 @@ describe('State machine ใบกำกับภาษี (`31` §9.1 · `23` §
 
 describe('แบบข้อมูลเอกสาร PDF (`28` §6.2)', () => {
   const source: TaxInvoiceDocSource = {
+    docKind: 'tax_invoice',
+    replacementNote: null,
+    billingBatchNumber: 'BL-2569-001',
+    receivedDate: null,
     invoiceNumber: 'INV-0006',
     // 25/06/2026 = 25/06/2569 พ.ศ. (เวลาไทย)
     invoiceDate: new Date('2026-06-25T03:00:00Z'),
@@ -168,6 +172,20 @@ describe('แบบข้อมูลเอกสาร PDF (`28` §6.2)', () =>
     amounts: { totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 },
     vatRatesPct: ['7.00'],
   }
+
+  it('มติ PO U95 — ใบเสร็จรับเงิน/ใบกำกับภาษี: หัวเอกสารตามชนิด + วันรับเงิน + ข้อความใบแทน (U96 #8)', () => {
+    const doc = buildTaxInvoiceDoc({
+      ...source,
+      docKind: 'receipt_tax_invoice',
+      receivedDate: new Date('2026-06-28T00:00:00Z'),
+      replacementNote: 'ออกแทนฉบับเลขที่ INV-0005 ลงวันที่ 25/06/2569 เนื่องจาก ที่อยู่ผิด',
+    })
+    expect(doc.title).toBe('ใบเสร็จรับเงิน/ใบกำกับภาษี')
+    expect(doc.titleEn).toBe('RECEIPT / TAX INVOICE')
+    expect(doc.receivedDateLabel).toBe('28/06/2569')
+    expect(doc.replacementNote).toContain('INV-0005')
+    expect(buildTaxInvoiceDoc(source).title).toBe('ใบกำกับภาษี')
+  })
 
   it('วันที่เป็น พ.ศ. · เงินคั่นหลักพัน · แยก VAT ออกจากมูลค่าบริการชัดเจน', () => {
     const doc = buildTaxInvoiceDoc(source)

@@ -27,6 +27,7 @@
 | v5.7 | 05/10/2569 | **มติ PO U19 (fixer X4) — ใบเพิ่มหนี้เข้ายอดตามเอกสาร**: (1) §6.2 — `documentedBillingAmounts()` **บวก**ใบเพิ่มหนี้ active (ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้) ทุกจุด: ยอดรอบวางบิล/ยอดค้าง/AR Aging/การ์ด AR ค้าง (2) กราฟรายได้ — ใบเพิ่มหนี้ที่ผูก Adjustment → รายได้ของเคส บวกตรงรายได้นั้น ส่วนที่ไม่ผูกกระจายตามสัดส่วนยอดคงเหลือ (largest remainder — วิธีเดียวกับใบลดหนี้) (3) §6.3 — แต่ละใบกำกับแสดงใบเพิ่มหนี้ active (เลขที่/วันที่/ก่อน VAT/VAT/รวม) คู่ใบลดหนี้ + ยอดสุทธิตามเอกสาร · DTO `debitNotes` ใช้ whitelist เดียวกับใบลดหนี้ (ไม่มีเหตุผลภายใน/ผู้บันทึก/ไฟล์สแกน/Adjustment) |
 | v5.8 | 05/10/2569 | **มติ PO 05/10/2569 U59/U60/U62**: (1) U59 — เพิ่ม §13.1 โหมด "ดู portal ในฐานะลูกค้า" ของผู้ใช้ภายใน (ดูอย่างเดียว): capability ใหม่ `view_client_portal_as` (ค่าเริ่มต้น ธุรการ 👁️ · Superadmin โดยนิยาม · role ภายในอื่นมอบได้ ไม่ใช่ "✅ only") · หน้า `/portal/view-as/<companyId>/...` + `/api/portal/*?as=<companyId>` — ผู้ใช้ภายในยังเป็นตัวเอง (ไม่สลับ session) เห็นเหมือนผู้จัดการของบริษัท (ทุกหมวด + ดาวน์โหลด) · ผู้ใช้บริษัทส่ง `as` = 403 · บริษัทข้าม org/id มั่ว = 403 · บริษัทถูกระงับยังเปิดดูได้ (ป้ายบอกสถานะ) · ป้ายบนสุดทุกหน้า + ลิงก์กลับระบบภายใน · §4 เพิ่มผู้ดูภายใน · §11/§17 ลำดับตรวจโหมดนี้ · §14 audit `view_as` (enum ใหม่ `02` v4.23 — ครั้งแรกต่อ session ต่อบริษัท) + audit ดาวน์โหลด/ปฏิเสธระบุ `mode = view_as` (2) U60 (O44) — §6.2 แก้ถ้อยคำ outstanding = ยอดรวม − ชำระแล้ว − ภาษีที่ลูกค้าหัก ณ ที่จ่าย (ตามสูตรกลางที่ใช้จริง) (3) U62 (O47) — §6.2 เพิ่มเลขที่รอบวางบิล (`BB-<ปี พ.ศ.>-<เดือน>` สร้างจากรอบเดือน) + จำนวนเคส ตาม mockup · §6.3 บันทึกคอลัมน์ ก่อน VAT / VAT / รวม (snapshot `sales_records`) ที่หน้าใบกำกับแสดงอยู่แล้ว |
 | v5.9 | 05/10/2569 | **มติ PO 05/10/2569 U76 — เลขรอบวางบิลจริง**: §6.2 `batch_number` ของพอร์ทัลอ่านจาก `billing_batches.batch_number` (`BL-<พ.ศ.>-NNN` ต่อองค์กร รีเซ็ตทุกปี — `02` v4.29) แทน `BB-<พ.ศ.>-<MM>` ที่ serializer สร้างจาก `period` (U62) · mockup `97-client-portal-mockup.html`/`-mobile-mockup.html` เปลี่ยนตัวอย่างเป็น `BL-` · ฟิลด์ยังอยู่ใน whitelist เดิม (ไม่ใช่ข้อมูลภายใน) |
+| v6.0 | 06/10/2569 | **มติ PO 06/10/2569 U95 + U96 #4/#11** — (1) §17 เพิ่ม `GET /api/portal/billing-batches/:id/invoice-pdf` (**ใบแจ้งหนี้/ใบวางบิล** PDF — ไม่ใช่เอกสารภาษี · `portal_finance` + `portal_download` · audit `export`) ⇒ §17 = **16 endpoint** (2) §6.3 รายการเอกสารภาษีแสดง **"ใบเสร็จรับเงิน/ใบกำกับภาษี"** (ออกตอนรับเงิน — ยอดตามเงินที่รับ) + ใบกำกับภาษีแบบเดิม · DTO เพิ่ม `documentTitle`, `billingBatchNumber` (whitelist) · ยอด/รูปแบบการส่ง/คู่ค้าอ่านจาก **snapshot บนใบ** (3) §6.2 ยอดตามเอกสาร = **ใบแจ้งหนี้** − ใบลดหนี้ + ใบเพิ่มหนี้ (ตัวตั้งคือยอดใบแจ้งหนี้ ณ วันวางบิล) · AR ภายในใช้ helper เดียวกันแล้ว (U96 #11) |
 
 ขอบเขตเอกสารนี้: พอร์ทัล **read-only** สำหรับ Company User ให้ดูสถานะเคส/เอกสารการเงิน-บัญชี/รายงานสรุปของบริษัทตัวเอง แทนการให้เจ้าหน้าที่ภายในส่งข้อมูลให้ทีละครั้ง — ไม่มีการสร้าง/แก้ไขข้อมูลใดๆ ผ่านพอร์ทัลนี้
 
@@ -273,7 +274,7 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 
 ## 17. API / Event Contract Draft
 
-> Namespace ใหม่ `/api/portal/*` แยกจาก internal API เดิม (27/45) โดยสิ้นเชิง เพื่อให้บังคับ `company_id` scope ที่ middleware ชั้นเดียวได้ง่าย — ทุก endpoint ด้านล่างเป็น **GET เท่านั้น** · **15 endpoint** (มติ O43 D6 เพิ่ม 2 ตัว · มติ U13 เพิ่มอีก 2 ตัวท้ายตาราง) · ทุกตัวตรวจตามลำดับ: role กลุ่ม `finance_company` (Superadmin/role ภายใน = 403 — D11/D2) → ผู้ใช้ active (`ACCOUNT_INACTIVE`) → บริษัท active (`COMPANY_SUSPENDED`) → capability ของหมวด (§3.3) → `company_id` ของแถว (id สุ่ม/ข้ามบริษัท = 403 `PERMISSION_DENIED` + audit `access_denied` — D3/D4)
+> Namespace ใหม่ `/api/portal/*` แยกจาก internal API เดิม (27/45) โดยสิ้นเชิง เพื่อให้บังคับ `company_id` scope ที่ middleware ชั้นเดียวได้ง่าย — ทุก endpoint ด้านล่างเป็น **GET เท่านั้น** · **16 endpoint** (มติ O43 D6 เพิ่ม 2 ตัว · มติ U13 เพิ่มอีก 2 ตัว · มติ U95 เพิ่มใบแจ้งหนี้ 1 ตัวท้ายตาราง) · ทุกตัวตรวจตามลำดับ: role กลุ่ม `finance_company` (Superadmin/role ภายใน = 403 — D11/D2) → ผู้ใช้ active (`ACCOUNT_INACTIVE`) → บริษัท active (`COMPANY_SUSPENDED`) → capability ของหมวด (§3.3) → `company_id` ของแถว (id สุ่ม/ข้ามบริษัท = 403 `PERMISSION_DENIED` + audit `access_denied` — D3/D4)
 >
 > **query `as=<companyId>`** (ทุก endpoint · มติ U59 §13.1): มีพารามิเตอร์นี้ ⇒ ลำดับตรวจเปลี่ยนเป็น ผู้เรียกไม่ใช่ role กลุ่ม `finance_company` (ผู้ใช้บริษัท = 403) → ผู้ใช้ active → ถือ `view_client_portal_as` → บริษัทมีจริงใน org (ไม่ตรวจ active) → สิทธิ์หมวด = ผู้จัดการบริษัท → `company_id` ของแถว = บริษัทนั้น · ไม่มีพารามิเตอร์ = ลำดับเดิมข้างบน
 
@@ -283,7 +284,7 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 | GET | /api/portal/cases | `portal_cases` | list เคสของบริษัทตัวเอง (filter: status_display, search) |
 | GET | /api/portal/cases/:id | `portal_cases` | รายละเอียดเคส (mapped fields ตาม §6.1) |
 | GET | /api/portal/billing-batches | `portal_finance` | list รอบวางบิล (กรอง `draft` ออกเสมอ) |
-| GET | /api/portal/tax-invoices | `portal_finance` | list ใบกำกับภาษี |
+| GET | /api/portal/tax-invoices | `portal_finance` | list ใบเสร็จรับเงิน/ใบกำกับภาษี (+ ใบกำกับภาษีแบบเดิม) — มติ U95 |
 | GET | /api/portal/tax-invoices/:id/download | `portal_finance` + `portal_download` | ดาวน์โหลด PDF (renderer เดียวกับภายใน — D7) |
 | GET | /api/portal/handover-lots | `portal_handover` | list Lot ของบริษัทตัวเอง |
 | GET | /api/portal/handover-lots/:id/download | `portal_handover` + `portal_download` | ดาวน์โหลดใบส่งมอบ/ใบเซ็นรับ (เฉพาะ `confirmed` — D8) |
@@ -294,6 +295,7 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 | GET | /api/portal/assets/:id/photos/:index | `portal_handover` + `portal_download` | รูปทรัพย์ลำดับที่ `index` ของทรัพย์ในล็อตของบริษัทตัวเอง (มติ O43 D6) |
 | GET | /api/portal/handover-lots/:id/delivery-note | `portal_handover` + `portal_download` | ใบส่งมอบ PDF จากระบบ (DLV-…) — renderer เดียวกับภายใน มี IMEI · ดาวน์โหลดได้ตั้งแต่สร้างล็อต (มติ U13) |
 | GET | /api/portal/handover-lots/:id/delivery-proof | `portal_handover` + `portal_download` | หลักฐานการจัดส่ง — เฉพาะล็อตแบบเราส่ง (`we_deliver`) ที่แนบแล้ว · stream ผ่าน server (มติ U13) |
+| GET | /api/portal/billing-batches/:id/invoice-pdf | `portal_finance` + `portal_download` | ใบแจ้งหนี้/ใบวางบิล PDF (เลข `BL-<พ.ศ.>-NNN` · ไม่ใช่เอกสารภาษี · VAT เป็นยอดประมาณการ ณ วันวางบิล) — renderer เดียวกับภายใน · รอบ `draft` = 403 (มติ U95) |
 
 **รายละเอียด endpoint ชุดที่ 1 (Portal-P4 · v5.2)** — ทุกตัวตอบ envelope กลาง `{ success, data, error }` · เงิน = satang · วันเวลา ISO UTC (UI แปลง พ.ศ.) · สถานะ = `statusDisplay { code, label, tone, outline }` (ไม่มี raw enum)
 

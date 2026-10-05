@@ -71,9 +71,20 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
       title={`รอบวางบิล ${batch.batchNumber} — ${batch.companyName} งวด ${batch.period}`}
       description="รายการรายได้ที่ถูกรวมเข้ารอบนี้ (snapshot ตอนสร้างรอบ)"
       footer={
-        <Button variant="ghost" onClick={onClose}>
-          ปิดหน้าต่าง
-        </Button>
+        <>
+          {/* มติ PO U95 — ใบแจ้งหนี้/ใบวางบิล PDF ของรอบที่ส่งแล้ว (ไม่ใช่เอกสารภาษี) */}
+          {batch.status !== 'draft' && (
+            <Button
+              variant="secondary"
+              onClick={() => window.open(`/api/billing-batches/${batch.id}/invoice-pdf`, '_blank', 'noreferrer')}
+            >
+              ใบแจ้งหนี้ PDF
+            </Button>
+          )}
+          <Button variant="ghost" onClick={onClose}>
+            ปิดหน้าต่าง
+          </Button>
+        </>
       }
     >
       <div className="space-y-4">

@@ -26,6 +26,7 @@ const EMPTY_RECEIPTS: CashReceiptListDto = {
   items: [],
   totalSatang: 0,
   totalWhtWithheldByCustomerSatang: 0,
+  awaitingTaxInvoiceCount: 0,
 }
 
 export interface ListError {

@@ -129,7 +129,13 @@ async function seedInvoice(invoiceDate = '2026-09-15'): Promise<Seeded> {
     RETURNING id
   `)
   const record = await sales.syncSalesRecordFromBilling(ctx, billingBatchId)
-  const invoice = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '', invoiceDate: day(invoiceDate) })
+  // มติ PO U95 — ใบกำกับออกตอนรับเงิน ⇒ เงินรับเต็มยอดของรอบ (ไฟล์ 35 เป็นผู้สร้างจริง — insert ตรงเพื่อแยกขอบเขต)
+  const receipt = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO cash_receipts (organization_id, period_id, billing_batch_id, amount_satang, received_date, created_by)
+    VALUES ('${ORG_ID}', '${record?.periodId ?? ''}', '${billingBatchId}', ${gross + vat}, '${invoiceDate}', '${ACCOUNTING_ID}')
+    RETURNING id
+  `)
+  const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receipt[0]?.id ?? '' })
   return { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, billingBatchId, revenueId: revenue[0]?.id ?? '' }
 }
 
@@ -183,6 +189,12 @@ beforeAll(async () => {
     INSERT INTO users (id, organization_id, role_id, email, full_name, status)
     VALUES ('${ACCOUNTING_ID}', '${ORG_ID}', '${ROLE_ID}', 'accounting-cn@test.local', 'บัญชี ใบลดหนี้', 'active')
     ON CONFLICT (id) DO NOTHING
+  `)
+  // อัตรา VAT ณ วันรับเงิน (มติ PO U96 #9 — ใบเสร็จรับเงิน/ใบกำกับภาษีอ่าน `vat_rate_history`) · idempotent ข้ามรัน
+  await tx.$executeRawUnsafe(`
+    INSERT INTO vat_rate_history (organization_id, rate_pct, effective_from, effective_to, created_by)
+    SELECT '${ORG_ID}', 7.00, '2020-01-01', NULL, '${ACCOUNTING_ID}'
+     WHERE NOT EXISTS (SELECT 1 FROM vat_rate_history WHERE organization_id = '${ORG_ID}')
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO teams (id, organization_id, name, side, provinces, status, created_by)
@@ -568,7 +580,7 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     expect(okAudit?.afterData).toMatchObject({ amount_matches_adjustment: true })
   })
 
-  it('U21: รอบวางบิลมีหลายอัตรา VAT ⇒ CREDIT_NOTE_VAT_MISMATCH ข้อความบอกเหตุผลและให้ติดต่อผู้ดูแล', async () => {
+  it('U21 + U96 #9: ใบเสร็จรับเงิน/ใบกำกับภาษีใช้อัตราบนใบ · ใบแบบเดิมหลายอัตรา (ไม่มีอัตราบนใบ) ⇒ CREDIT_NOTE_VAT_MISMATCH', async () => {
     const seeded = await seedInvoice()
     await db().$executeRawUnsafe(`
       INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, tracking_round, gross_satang, vat_satang,
@@ -576,7 +588,24 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
       VALUES ('${ORG_ID}', '${caseId}', '${companyId}', '${seeded.billingBatchId}', ${900 + cursor}, 100000, 10000, 10.00,
               110000, 'SUCCESS_FEE', 'exclude_vat', 'billed', '2026-06-26', '${ACCOUNTING_ID}')
     `)
-    const error = await credit.createCreditNote(ctx, input(seeded)).catch((caught: unknown) => caught)
+    // ใบเสร็จรับเงิน/ใบกำกับภาษีมีอัตราเดียวบนใบ (ณ วันรับเงิน) ⇒ ใบลดหนี้คิดจากอัตรานั้น ไม่ดูรายได้ของรอบ
+    const note = await credit.createCreditNote(ctx, input(seeded))
+    expect(note.vatRatePctUsed).toBe('7')
+
+    // ใบกำกับแบบเดิม (ก่อน U95) ที่รอบมีหลายอัตรา ⇒ ไม่มีอัตราบนใบ ⇒ ยังปฏิเสธพร้อมข้อความเดิม
+    const salesRecordId = (await db().salesRecord.findUniqueOrThrow({ where: { billingBatchId: seeded.billingBatchId } })).id
+    const legacy = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, doc_kind, invoice_number, invoice_date, buyer_branch_code,
+        seller_branch_code, amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, seller_name, seller_tax_id,
+        seller_address, buyer_name, buyer_tax_id, buyer_address, delivery_format, description, created_by)
+      VALUES ('${ORG_ID}', '${salesRecordId}', 'tax_invoice', '${PREFIX}-LEGACY-${cursor}', '2026-09-15', '00000', '00000',
+        1300000, 94000, 1394000, NULL, 'CreditNoteTest', '9999999994301', 'กรุงเทพฯ', 'ไฟแนนซ์', '1234567890123', 'กรุงเทพฯ',
+        'paper_pdf', 'ค่าบริการติดตามทรัพย์', '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const error = await credit
+      .createCreditNote(ctx, input({ ...seeded, invoiceId: legacy[0]?.id ?? '' }))
+      .catch((caught: unknown) => caught)
     expect(codeOf(error)).toBe('CREDIT_NOTE_VAT_MISMATCH')
     const message = (error as { userMessage?: string }).userMessage ?? ''
     expect(message).toContain('หลายอัตรา')

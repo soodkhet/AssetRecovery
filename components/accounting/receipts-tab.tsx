@@ -1,7 +1,11 @@
 'use client'
 
+import { useState } from 'react'
+import { IssueTaxInvoiceModal, type IssueTarget } from '@/components/accounting/issue-tax-invoice-modal'
 import { useCashReceipts } from '@/components/accounting/use-sales'
+import { usePermission } from '@/components/auth/permission-provider'
 import {
+  Button,
   InlineAlert,
   RefText,
   StatCard,
@@ -18,21 +22,25 @@ import { BANK_MATCH_STATUS_LABEL } from '@/lib/bank-recon/matching'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
+import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 
 /**
- * แท็บ "เงินรับ" (`31` §8 · mockup `accounting.html` แท็บ `receipts`) — **อ่านอย่างเดียวทั้งแท็บ**
+ * แท็บ "เงินรับ" (`31` §8 · mockup `accounting.html` แท็บ `receipts`)
  *
- * ⚠️ ไม่มีปุ่มสร้าง/แก้/ลบเลยโดยเจตนา — เงินรับเกิดจากการจับคู่รายการเดินบัญชีเท่านั้น (`31` §6.3/§10)
+ * ⚠️ เงินรับสร้าง/แก้/ลบที่นี่ไม่ได้ — เกิดจากการจับคู่รายการเดินบัญชีเท่านั้น (`31` §6.3/§10)
  *    จับคู่รายการที่ยังค้างให้ไปที่แท็บ “กระทบยอด” (ไฟล์ 35)
- * ⚠️ คอลัมน์ "เลขที่ใบเสร็จ" ของ mockup ยังไม่มีคอลัมน์ใน `02` (`cash_receipts` ไม่มี `receipt_number`)
- *    ⇒ ยังไม่แสดง — ยึด schema เป็นหลักตามลำดับเอกสาร (CLAUDE.md)
+ * มติ PO U95 — คอลัมน์ "ใบเสร็จรับเงิน/ใบกำกับภาษี": บัญชี (`manage_tax_invoice`) กดออกเอกสารของเงินรับแต่ละรายการ
+ * (ยอดตามเงินที่รับ · VAT ณ วันรับเงิน · ใบที่ยกเลิกแล้ว ⇒ ใบใหม่เป็นใบแทนอัตโนมัติ) · เลขที่ = ชุดเดียวกับใบกำกับภาษี
  */
 export function ReceiptsTab() {
-  const { data, loading, error } = useCashReceipts()
+  const { data, loading, error, reload } = useCashReceipts()
+  const { can } = usePermission()
+  const canManageInvoice = can('manage', MANAGE_TAX_INVOICE)
+  const [issuing, setIssuing] = useState<IssueTarget | null>(null)
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <StatCard label="เงินรับรวม" value={fmtSatangSymbol(data.totalSatang)} hint="ยอดที่เข้าบัญชีจริง" />
         <StatCard
           label="ลูกค้าหัก ณ ที่จ่าย"
@@ -40,12 +48,17 @@ export function ReceiptsTab() {
           hint="เครดิตภาษีของบริษัท — ต้องมีหนังสือรับรองจากลูกค้า"
         />
         <StatCard label="จำนวนรายการ" value={fmtCount(data.items.length)} hint="ตามรอบที่แสดงอยู่" />
+        <StatCard
+          label="ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี"
+          value={fmtCount(data.awaitingTaxInvoiceCount)}
+          hint="ภาษีขายเกิดในเดือนที่รับเงิน — ควรออกให้ครบก่อนปิดงวด"
+        />
       </div>
 
       <div>
         <h2 className="text-base font-semibold text-slate-900">เงินรับ (Cash Receipts)</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          เกิดอัตโนมัติเมื่อจับคู่รายการเดินบัญชีกับรอบวางบิลสำเร็จ — แก้ที่นี่ไม่ได้ทุกกรณี
+          เกิดอัตโนมัติเมื่อจับคู่รายการเดินบัญชีกับรอบวางบิลสำเร็จ — แก้ยอดที่นี่ไม่ได้ · ออกใบเสร็จรับเงิน/ใบกำกับภาษีได้ต่อรายการ
         </p>
       </div>
 
@@ -61,6 +74,7 @@ export function ReceiptsTab() {
               <Th>รอบวางบิล</Th>
               <Th>สถานะจับคู่</Th>
               <Th>บันทึกเมื่อ</Th>
+              <Th>ใบเสร็จรับเงิน/ใบกำกับภาษี</Th>
             </Tr>
           </THead>
           <TableState
@@ -69,7 +83,7 @@ export function ReceiptsTab() {
             isEmpty={data.items.length === 0}
             emptyTitle="ยังไม่มีเงินรับ"
             emptyDescription="รายการจะเกิดเองเมื่อจับคู่เงินเข้ากับรอบวางบิลในแท็บ “กระทบยอด”"
-            colSpan={8}
+            colSpan={9}
           />
           <TBody>
             {!loading &&
@@ -109,16 +123,60 @@ export function ReceiptsTab() {
                     )}
                   </Td>
                   <Td className="text-xs text-slate-500">{fmtDateTime(row.createdAt)}</Td>
+                  <Td className="whitespace-nowrap">
+                    {row.taxInvoice !== null ? (
+                      <div>
+                        <RefText className="text-blue-700">{row.taxInvoice.invoiceNumber}</RefText>
+                        <div className="mt-0.5 text-[10px] text-slate-400">
+                          {fmtDate(row.taxInvoice.invoiceDate)} · {fmtSatangSymbol(row.taxInvoice.totalSatang)}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            window.open(`/api/accounting/tax-invoices/${row.taxInvoice?.id ?? ''}/pdf`, '_blank', 'noreferrer')
+                          }
+                        >
+                          PDF
+                        </Button>
+                      </div>
+                    ) : row.coveredByLegacyInvoice ? (
+                      <span className="text-xs text-slate-500">ออกใบกำกับภาษีตอนวางบิลแล้ว (แบบเดิม)</span>
+                    ) : (
+                      <div className="space-y-1">
+                        <StatusBadge group="pending" label="ยังไม่ออก" />
+                        {row.cancelledTaxInvoices.length > 0 && (
+                          <div className="text-[10px] text-red-500 line-through">
+                            {row.cancelledTaxInvoices.map((invoice) => invoice.invoiceNumber).join(', ')}
+                          </div>
+                        )}
+                        {canManageInvoice && (
+                          <div>
+                            <Button size="sm" variant="ghost" onClick={() => setIssuing({ kind: 'receipt', receipt: row })}>
+                              {row.cancelledTaxInvoices.length > 0 ? 'ออกใบแทน' : 'ออกใบเสร็จรับเงิน/ใบกำกับภาษี'}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Td>
                 </Tr>
               ))}
           </TBody>
         </Table>
       </div>
 
-      <InlineAlert tone="info" title="ทำไมแก้ที่นี่ไม่ได้">
+      <InlineAlert tone="info" title="ทำไมแก้ยอดที่นี่ไม่ได้">
         เงินรับต้องตรงกับเงินที่เข้าบัญชีจริงเสมอ — สร้างมือได้เมื่อไหร่ ยอดในระบบกับ statement จะเริ่มไม่ตรงกัน ·
-        ถ้าจับคู่ผิด ให้แก้ที่แท็บ “กระทบยอด” และยอดที่อยู่ในงวดที่ล็อกแล้วต้องผ่านรายการปรับปรุง
+        ถ้าจับคู่ผิด ให้แก้ที่แท็บ “กระทบยอด” (เงินรับที่ออกใบเสร็จรับเงิน/ใบกำกับภาษีแล้วต้องยกเลิกเอกสารก่อน) และยอดที่อยู่ในงวดที่ล็อกแล้วต้องผ่านรายการปรับปรุง
       </InlineAlert>
+
+      <IssueTaxInvoiceModal
+        key={`issue-${issuing?.kind === 'receipt' ? issuing.receipt.id : 'none'}`}
+        target={issuing}
+        onClose={() => setIssuing(null)}
+        onIssued={() => void reload()}
+      />
     </div>
   )
 }

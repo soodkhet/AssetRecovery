@@ -436,7 +436,7 @@ function renderBilling(){
 // ═══════════════════════════════════════════════════════
 function renderInvoices(){
   return `
-  ${pageHeader('ใบกำกับภาษี', 'เอกสารใบกำกับภาษีที่ออกให้ ' + store.currentCompany.name)}
+  ${pageHeader('ใบเสร็จรับเงิน/ใบกำกับภาษี', 'ออกให้เมื่อได้รับชำระเงิน — ' + store.currentCompany.name + ' (ใบแจ้งหนี้/ใบวางบิลดาวน์โหลดได้ที่หน้ารอบวางบิล)')}
   <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
     <div class="border border-slate-200 rounded-lg overflow-hidden">
       <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>

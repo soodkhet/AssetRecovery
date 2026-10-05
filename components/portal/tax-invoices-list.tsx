@@ -109,8 +109,8 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
   return (
     <div>
       <PageHeader
-        title="ใบกำกับภาษี"
-        description="ใบกำกับภาษีที่ออกให้บริษัทของท่าน"
+        title="ใบเสร็จรับเงิน/ใบกำกับภาษี"
+        description="ออกให้เมื่อได้รับชำระเงิน (ใบแจ้งหนี้/ใบวางบิลดาวน์โหลดได้ที่หน้ารอบวางบิล)"
       />
 
       {downloadError !== null && (
@@ -153,8 +153,8 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
           />
         ) : rows.length === 0 ? (
           <EmptyState
-            title="ยังไม่มีใบกำกับภาษี"
-            description="เมื่อมีการออกใบกำกับภาษีให้บริษัทของท่าน รายการจะแสดงที่นี่"
+            title="ยังไม่มีใบเสร็จรับเงิน/ใบกำกับภาษี"
+            description="เมื่อบริษัทของท่านชำระเงินและมีการออกเอกสาร รายการจะแสดงที่นี่"
           />
         ) : (
           <>
@@ -228,7 +228,7 @@ function DownloadButton({
       loading={downloadingId === invoice.id}
       disabled={downloadingId !== null && downloadingId !== invoice.id}
       onClick={() => void onDownload(invoice)}
-      aria-label={`ดาวน์โหลด PDF ใบกำกับภาษี ${invoice.invoiceNumber}`}
+      aria-label={`ดาวน์โหลด PDF ${invoice.documentTitle} ${invoice.invoiceNumber}`}
     >
       {downloadingId !== invoice.id && <DownloadIcon />}
       ดาวน์โหลด PDF
@@ -345,6 +345,10 @@ function InvoiceTable({
                   >
                     {invoice.invoiceNumber}
                   </RefText>
+                  <p className="mt-0.5 text-[10px] text-slate-500">
+                    {invoice.documentTitle}
+                    {invoice.billingBatchNumber === null ? "" : ` · ใบแจ้งหนี้ ${invoice.billingBatchNumber}`}
+                  </p>
                 </Td>
                 <Td className="text-xs whitespace-nowrap text-slate-500">
                   {fmtDate(invoice.issueDate)}
@@ -434,6 +438,7 @@ function InvoiceCards({
               >
                 {invoice.invoiceNumber}
               </RefText>
+              <span className="text-[10px] text-slate-500">{invoice.documentTitle}</span>
               <StatusBadge
                 group={invoice.statusDisplay.tone}
                 label={invoice.statusDisplay.label}

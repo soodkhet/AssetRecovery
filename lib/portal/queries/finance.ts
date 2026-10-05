@@ -103,29 +103,27 @@ export async function loadPortalDocumentedBatches(
 // ── GET /api/portal/tax-invoices ────────────────────────────────────────────
 
 export async function listPortalTaxInvoices(ctx: PortalContext): Promise<PortalTaxInvoiceDto[]> {
-  const [rows, company] = await Promise.all([
-    prisma.taxInvoice.findMany({
-      where: {
-        organizationId: ctx.user.organizationId,
-        salesRecord: { companyId: ctx.companyId, billingBatch: visibleBatchWhere(ctx) },
-      },
-      select: {
-        id: true,
-        invoiceNumber: true,
-        invoiceDate: true,
-        status: true,
-        salesRecord: { select: { totalBeforeVatSatang: true, vatSatang: true, totalSatang: true } },
-      },
-      orderBy: [{ invoiceDate: 'desc' }, { invoiceNumber: 'desc' }],
-      take: LIST_LIMIT,
-    }),
-    // `02` ไม่มีรูปแบบการส่งต่อใบ ⇒ ค่าเริ่มต้นของบริษัท (ตัวเดียวกับ PDF ภายใน — `getTaxInvoiceDocSource`)
-    prisma.financeCompany.findFirst({
-      where: { id: ctx.companyId, organizationId: ctx.user.organizationId },
-      select: { defaultInvoiceDeliveryFormat: true },
-    }),
-  ])
-  if (company === null) return []
+  const rows = await prisma.taxInvoice.findMany({
+    where: {
+      organizationId: ctx.user.organizationId,
+      salesRecord: { companyId: ctx.companyId, billingBatch: visibleBatchWhere(ctx) },
+    },
+    // ยอด/รูปแบบการส่ง/ชนิดเอกสารอ่านจาก snapshot บนใบ (มติ PO U95 · U96 #4) — ตัวเดียวกับ PDF
+    select: {
+      id: true,
+      docKind: true,
+      invoiceNumber: true,
+      invoiceDate: true,
+      status: true,
+      amountBeforeVatSatang: true,
+      vatSatang: true,
+      totalSatang: true,
+      deliveryFormat: true,
+      salesRecord: { select: { billingBatch: { select: { batchNumber: true } } } },
+    },
+    orderBy: [{ invoiceDate: 'desc' }, { invoiceNumber: 'desc' }],
+    take: LIST_LIMIT,
+  })
   // ใบลดหนี้ active ของใบที่ผ่าน scope บริษัทแล้วเท่านั้น (คำสั่งเดียว — มติ U14)
   const creditNotes = await creditNotesByInvoice(
     rows.map((row) => row.id),
@@ -134,13 +132,15 @@ export async function listPortalTaxInvoices(ctx: PortalContext): Promise<PortalT
   return rows.map((row) =>
     serializePortalTaxInvoice({
       id: row.id,
+      docKind: row.docKind,
       invoiceNumber: row.invoiceNumber,
       invoiceDate: row.invoiceDate,
       status: row.status,
-      totalBeforeVatSatang: row.salesRecord.totalBeforeVatSatang,
-      vatSatang: row.salesRecord.vatSatang,
-      totalSatang: row.salesRecord.totalSatang,
-      deliveryFormat: company.defaultInvoiceDeliveryFormat,
+      totalBeforeVatSatang: row.amountBeforeVatSatang,
+      vatSatang: row.vatSatang,
+      totalSatang: row.totalSatang,
+      deliveryFormat: row.deliveryFormat,
+      billingBatchNumber: row.salesRecord.billingBatch.batchNumber,
       creditNotes: creditNotes.get(row.id) ?? [],
     }),
   )
@@ -167,6 +167,23 @@ export async function findPortalTaxInvoiceRow(
   const batch = row.salesRecord.billingBatch
   if (batch.deletedAt !== null || !PORTAL_VISIBLE_BILLING_STATUSES.includes(batch.status)) return null
   return { id: row.id, invoiceNumber: row.invoiceNumber, companyId: row.salesRecord.companyId }
+}
+
+/**
+ * แถวสำหรับยาม `requirePortalRow()` ของการดาวน์โหลด**ใบแจ้งหนี้/ใบวางบิล** (มติ PO U95) — **ไม่กรองบริษัท**
+ * (ยามเป็นคนตัดสิน + audit) · id ไม่ใช่ uuid / ไม่พบ / ถูกลบ / ยัง `draft` ⇒ `null` (403 แบบเดียวกับ id สุ่ม)
+ */
+export async function findPortalBillingBatchRow(
+  ctx: PortalContext,
+  billingBatchId: string,
+): Promise<{ id: string; batchNumber: string; companyId: string } | null> {
+  if (!UUID_PATTERN.test(billingBatchId)) return null
+  const row = await prisma.billingBatch.findFirst({
+    where: { id: billingBatchId, organizationId: ctx.user.organizationId, deletedAt: null },
+    select: { id: true, batchNumber: true, companyId: true, status: true },
+  })
+  if (row === null || !PORTAL_VISIBLE_BILLING_STATUSES.includes(row.status)) return null
+  return { id: row.id, batchNumber: row.batchNumber, companyId: row.companyId }
 }
 
 // ── GET /api/portal/reports/revenue-summary ─────────────────────────────────

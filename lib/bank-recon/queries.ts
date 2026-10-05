@@ -44,6 +44,7 @@ import type {
   StatementImportTemplateDto,
 } from '@/lib/bank-recon/types'
 import { emitAudit } from '@/lib/audit/audit'
+import { SalesError } from '@/lib/sales/errors'
 import type { SessionUser } from '@/lib/auth/types'
 import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { calculateCustomerWithheldWht } from '@/lib/finance/wht-calc'
@@ -698,6 +699,18 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
         where: { organizationId: ctx.actor.organizationId, bankTransactionId: before.id },
         select: { id: true, billingBatchId: true, amountSatang: true, receivedDate: true },
       })
+      // มติ PO U95 — เงินรับที่ออกใบเสร็จรับเงิน/ใบกำกับภาษี (active) แล้วถอนไม่ได้ ต้องยกเลิกเอกสารพร้อมเหตุผลก่อน
+      // (ใบที่ยกเลิกแล้วคงอยู่ — ลิงก์เงินรับเป็น NULL ผ่าน FK `ON DELETE SET NULL`)
+      const invoiced = await tx.taxInvoice.findFirst({
+        where: { cashReceiptId: { in: stale.map((receipt) => receipt.id) }, status: 'active' },
+        select: { invoiceNumber: true },
+      })
+      if (invoiced !== null) {
+        throw new SalesError('CASH_RECEIPT_HAS_TAX_INVOICE', {
+          detail: `bank_transaction=${before.id} invoice=${invoiced.invoiceNumber}`,
+          message: `เปลี่ยนการจับคู่ไม่ได้ — เงินรับเดิมออกใบเสร็จรับเงิน/ใบกำกับภาษี ${invoiced.invoiceNumber} แล้ว ต้องยกเลิกเอกสารนั้นพร้อมเหตุผลก่อน`,
+        })
+      }
       for (const receipt of stale) {
         // U40 — รายการรอ 50 ทวิ ของเงินรับเดิมต้องถูกถอนก่อน (ไม่งั้นค้างตามหนังสือที่ไม่มีวันมา)
         await releaseCustomerWhtForReceipt(tx, ctx, receipt.id, `เปลี่ยนการจับคู่รายการเดินบัญชี ${before.id}`)

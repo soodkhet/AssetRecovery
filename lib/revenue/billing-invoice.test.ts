@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest'
+import { BILLING_INVOICE_NOT_TAX_NOTE, buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
+
+/** ใบแจ้งหนี้/ใบวางบิล (มติ PO U95 · U96 #12) — ไม่ใช่เอกสารภาษี · VAT เป็นยอดประมาณการ */
+describe('buildBillingInvoiceDoc', () => {
+  const party = { name: 'บริษัท ก', taxId: '1234567890123', address: 'กรุงเทพฯ', phone: null, branchCode: '00000' }
+  const doc = buildBillingInvoiceDoc({
+    batchNumber: 'BL-2569-007',
+    period: 'กันยายน 2569',
+    sentAt: new Date('2026-10-01T03:00:00Z'),
+    dueDate: new Date('2026-10-31T00:00:00Z'),
+    seller: party,
+    buyer: { ...party, name: 'ไฟแนนซ์ ข', branchCode: '00002' },
+    lines: [
+      { caseRef: 'C-1', revenueDate: new Date('2026-09-10T00:00:00Z'), grossSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000, vatRatePct: '7.00' },
+      { caseRef: 'C-2', revenueDate: new Date('2026-09-20T00:00:00Z'), grossSatang: 50_000, vatSatang: 3_500, totalSatang: 53_500, vatRatePct: '7.00' },
+    ],
+  })
+
+  it('เลขเอกสาร = เลขรอบวางบิล · ยอดรวมจาก snapshot รายได้ · ข้อความ "ไม่ใช่ใบกำกับภาษี"', () => {
+    expect(doc.title).toBe('ใบแจ้งหนี้/ใบวางบิล')
+    expect(doc.documentNumber).toBe('BL-2569-007')
+    expect(doc.amounts).toEqual({ totalBeforeVatSatang: 150_000, vatSatang: 10_500, totalSatang: 160_500 })
+    expect(doc.totalText).toBe('1,605.00')
+    expect(doc.notTaxInvoiceNote).toBe(BILLING_INVOICE_NOT_TAX_NOTE)
+    expect(doc.notTaxInvoiceNote).toContain('เอกสารนี้ไม่ใช่ใบกำกับภาษี')
+    expect(doc.vatLabel).toBe('ภาษีมูลค่าเพิ่ม 7% (ประมาณการ ณ วันวางบิล)')
+  })
+
+  it('วันที่เป็น พ.ศ. · รายการเคสเรียงตามลำดับ · สาขาผู้ซื้อ', () => {
+    expect(doc.issueDateLabel).toBe('01/10/2569')
+    expect(doc.dueDateLabel).toBe('31/10/2569')
+    expect(doc.lines.map((line) => [line.no, line.caseRef, line.beforeVatText])).toEqual([
+      ['1', 'C-1', '1,000.00'],
+      ['2', 'C-2', '500.00'],
+    ])
+    expect(doc.buyer.branchLabel).toBe('สาขาที่ 00002')
+    expect(doc.fileName).toBe('BL-2569-007.pdf')
+  })
+})

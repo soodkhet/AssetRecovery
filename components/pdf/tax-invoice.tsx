@@ -11,7 +11,9 @@ import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { TaxInvoiceDoc } from '@/lib/sales/sales'
 
 /**
- * **ใบกำกับภาษีแบบเต็มรูป** (`28` §6.2 · ไฟล์ 31 §6.2) — เลย์เอาต์เทียบ
+ * **ใบเสร็จรับเงิน/ใบกำกับภาษี** (ออกตอนรับเงิน — มติ PO U95) และ **ใบกำกับภาษีแบบเดิม** (ข้อมูลก่อน U95)
+ * แบบเต็มรูป (`28` §6.2 · ไฟล์ 31 §6.2) — หัวเอกสารตามชนิด (`doc.title`) · ใบแทนพิมพ์ "ออกแทนฉบับเลขที่ …" (U96 #8)
+ * · คู่ค้าพิมพ์จาก snapshot บนใบ (U96 #4) — เลย์เอาต์เทียบ
  * `reference/samples/01_tax_invoice.pdf`
  *
  * ฟิลด์บังคับตามกฎหมายครบ 7 ข้อบนหน้ากระดาษนี้:
@@ -40,14 +42,22 @@ export function TaxInvoicePDF({ doc }: { doc: TaxInvoiceDoc }): React.JSX.Elemen
           </View>
         )}
 
+        {doc.replacementNote === null ? null : (
+          <View style={officialStyles.metaBox}>
+            <Text style={officialStyles.metaValue}>{doc.replacementNote}</Text>
+          </View>
+        )}
+
         <View style={officialStyles.partyRow}>
           <PartyBox role="ผู้ขาย / SELLER" party={doc.seller} />
           <PartyBox role="ผู้ซื้อ / BUYER" party={doc.buyer} />
         </View>
 
         <View style={officialStyles.metaBox}>
-          <MetaRow label="เลขที่ใบกำกับภาษี" value={doc.invoiceNumber} />
+          <MetaRow label="เลขที่" value={doc.invoiceNumber} />
           <MetaRow label="วันที่ออกเอกสาร" value={doc.invoiceDateLabel} />
+          {doc.receivedDateLabel === null ? null : <MetaRow label="วันที่รับชำระ" value={doc.receivedDateLabel} />}
+          {doc.billingBatchNumber === null ? null : <MetaRow label="อ้างอิงใบแจ้งหนี้" value={doc.billingBatchNumber} />}
           <MetaRow label="รอบบัญชี" value={doc.periodLabel} />
           <MetaRow label="รูปแบบการส่งเอกสาร" value={doc.deliveryFormatLabel} />
         </View>
@@ -88,8 +98,9 @@ export function TaxInvoicePDF({ doc }: { doc: TaxInvoiceDoc }): React.JSX.Elemen
         </View>
 
         <Text style={officialStyles.noteText}>
-          เอกสารออกโดยระบบ AssetRecovery — เลขที่ใบกำกับภาษีเดินอัตโนมัติเรียงต่อเนื่องตามข้อกำหนดของกรมสรรพากร
+          เอกสารออกโดยระบบ AssetRecovery — เลขที่เอกสารเดินอัตโนมัติเรียงต่อเนื่องตามข้อกำหนดของกรมสรรพากร
           ใบที่ยกเลิกจะไม่ถูกนำเลขที่กลับมาใช้ซ้ำ
+          {doc.receivedDateLabel === null ? '' : ' · ได้รับชำระเงินตามจำนวนข้างต้นแล้ว (รวมภาษีที่ถูกหัก ณ ที่จ่าย)'}
         </Text>
 
         <View style={officialStyles.signRow}>

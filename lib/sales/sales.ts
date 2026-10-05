@@ -1,10 +1,11 @@
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
-import type { InvoiceDeliveryFormat, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
+import type { InvoiceDeliveryFormat, TaxInvoiceDocKind, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
+import { TAX_INVOICE_DOC_KIND_TITLE, TAX_INVOICE_DOC_KIND_TITLE_EN } from '@/lib/sales/receipt-invoice'
 
 /**
  * กติกาของบัญชีขาย/ใบกำกับภาษี (ไฟล์ 31) — **pure ล้วน ไม่มี I/O** ใช้ร่วม FE/BE
@@ -211,6 +212,8 @@ export interface TaxInvoiceParty {
 }
 
 export interface TaxInvoiceDocSource {
+  /** ชนิดเอกสาร (U95) — กำหนดชื่อหัวเอกสาร */
+  docKind: TaxInvoiceDocKind
   invoiceNumber: string
   invoiceDate: Date
   status: TaxInvoiceStatus
@@ -229,8 +232,14 @@ export interface TaxInvoiceDocSource {
   description: string
   periodLabel: string
   amounts: SalesAmounts
-  /** อัตรา VAT ที่ snapshot ไว้ในรายได้ของรอบนี้ (`19` §6.3) — หลายอัตรา = ไม่ระบุ % บนหัวคอลัมน์ */
+  /** อัตรา VAT ที่ snapshot ไว้บนใบ (U96 #9 — ณ วันรับเงิน) · ใบเดิมหลายอัตรา = หลายค่า ⇒ ไม่ระบุ % บนหัวคอลัมน์ */
   vatRatesPct: readonly string[]
+  /** U96 #8 — "ออกแทนฉบับเลขที่ … ลงวันที่ … เนื่องจาก …" (ไม่ใช่ใบแทน = `null`) */
+  replacementNote: string | null
+  /** เลขใบแจ้งหนี้/รอบวางบิลที่อ้างถึง (`BL-<พ.ศ.>-NNN`) */
+  billingBatchNumber: string | null
+  /** วันที่รับเงิน (ใบเสร็จรับเงิน/ใบกำกับภาษี) — ใบแบบเดิม = `null` */
+  receivedDate: Date | null
 }
 
 /** เอกสารที่ประกอบเป็นข้อความครบแล้ว — component PDF ห้าม format/คำนวณซ้ำ (Rule 01) */
@@ -257,6 +266,10 @@ export interface TaxInvoiceDoc {
   totalText: string
   totalInWordsText: string
   fileName: string
+  /** U96 #8 — ข้อความใบแทน (ไม่ใช่ใบแทน = `null`) */
+  replacementNote: string | null
+  billingBatchNumber: string | null
+  receivedDateLabel: string | null
 }
 
 /** หัวคอลัมน์ VAT — อัตราเดียวกันทั้งรอบจึงระบุ % ได้ (`19` §6.3 snapshot ต่อใบรายได้) */
@@ -273,8 +286,8 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
   const beforeVat = source.amounts.totalBeforeVatSatang
 
   return {
-    title: TAX_INVOICE_TITLE,
-    titleEn: TAX_INVOICE_TITLE_EN,
+    title: TAX_INVOICE_DOC_KIND_TITLE[source.docKind],
+    titleEn: TAX_INVOICE_DOC_KIND_TITLE_EN[source.docKind],
     invoiceNumber: source.invoiceNumber,
     invoiceDateLabel: fmtDate(source.invoiceDate),
     statusLabel: TAX_INVOICE_STATUS_LABEL[source.status],
@@ -295,5 +308,8 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
     totalText: fmtSatang(source.amounts.totalSatang),
     totalInWordsText: bahtInWords(source.amounts.totalSatang),
     fileName: `${source.invoiceNumber}.pdf`,
+    replacementNote: source.replacementNote,
+    billingBatchNumber: source.billingBatchNumber,
+    receivedDateLabel: source.receivedDate === null ? null : fmtDate(source.receivedDate),
   }
 }

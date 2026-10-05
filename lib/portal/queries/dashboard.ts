@@ -1,7 +1,6 @@
 import { arOutstandingSatang } from '@/lib/finance/ar-calc'
 import type { HandoverLotStatus } from '@/lib/generated/prisma/enums'
 import { canAccess } from '@/lib/portal/access'
-import { documentedBillingAmounts } from '@/lib/portal/documented-amounts'
 import type { PortalContext } from '@/lib/portal/guard'
 import { countPortalCasesInProgress } from '@/lib/portal/queries/cases'
 import { loadPortalDocumentedBatches, PORTAL_VISIBLE_BILLING_STATUSES } from '@/lib/portal/queries/finance'
@@ -37,15 +36,14 @@ async function latestTaxInvoiceOf(ctx: PortalContext): Promise<PortalDashboardSo
       },
     },
     orderBy: [{ invoiceDate: 'desc' }, { createdAt: 'desc' }],
-    select: { id: true, invoiceNumber: true, invoiceDate: true },
+    select: { id: true, invoiceNumber: true, invoiceDate: true, totalSatang: true },
   })
   if (invoice === null) return null
-  const amounts = await documentedBillingAmounts(ctx.user.organizationId, { taxInvoiceId: invoice.id })
   return {
     invoiceNumber: invoice.invoiceNumber,
     invoiceDate: invoice.invoiceDate,
-    // ยอดหน้าใบกำกับ (ใบลดหนี้เป็นเอกสารแยก — ไม่หักจากยอดของใบนี้)
-    totalSatang: amounts?.invoiced.totalSatang ?? 0,
+    // ยอดหน้าใบ (snapshot บนใบ — มติ PO U95: ใบเสร็จรับเงิน/ใบกำกับภาษีตามยอดที่รับ · ใบลดหนี้เป็นเอกสารแยก ไม่หัก)
+    totalSatang: invoice.totalSatang,
   }
 }
 

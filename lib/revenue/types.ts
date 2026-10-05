@@ -75,6 +75,11 @@ export interface ArAgingCompanyDto {
   companyName: string
   buckets: ArAgingBucketDto[]
   outstandingSatang: number
+  /**
+   * U96 #11 — Adjustment ที่อนุมัติแล้วแต่ยังไม่มีใบลดหนี้/ใบเพิ่มหนี้ (ยอดค้างตามเอกสารยังไม่สะท้อน)
+   * ⇒ หน้าจอแสดงป้าย "รอใบลดหนี้/ใบเพิ่มหนี้"
+   */
+  awaitingNoteAdjustmentCount: number
 }
 
 export interface ArAgingReportDto {

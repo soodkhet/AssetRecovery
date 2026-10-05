@@ -134,6 +134,15 @@ describe('U40/U41 — ความพร้อมปิดงวด: เตื�
     expect(result.warnings[1]).toContain('50 ทวิ จากลูกค้า 2 รายการ')
   })
 
+  it('มติ PO U95 #6 — รับเงินแล้วแต่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี ⇒ เตือน ไม่บล็อก', () => {
+    const result = evaluateReadiness({ ...base, receiptsAwaitingTaxInvoice: { count: 3, amountSatang: 1_284_000 } })
+    expect(result.ready).toBe(true)
+    expect(result.warnings).toHaveLength(1)
+    expect(result.warnings[0]).toContain('รับเงินแล้วแต่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี 3 รายการ')
+    expect(result.warnings[0]).toContain('12,840.00')
+    expect(evaluateReadiness({ ...base, receiptsAwaitingTaxInvoice: { count: 0, amountSatang: 0 } }).warnings).toEqual([])
+  })
+
   it('ไม่มียอดค้าง ⇒ ไม่มีคำเตือน', () => {
     const result = evaluateReadiness({
       ...base,

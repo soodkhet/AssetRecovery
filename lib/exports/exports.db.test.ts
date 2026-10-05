@@ -1,4 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
+import { TAX_INVOICE_FIXTURE_COLUMNS, taxInvoiceFixtureValues } from '@/tests/helpers/tax-invoice-fixture'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
@@ -387,7 +388,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     )
     // มติ PO 05/10/2569 (U57/U68) — รอบนี้ไม่มีใบกำกับ/รับคืนเงินทดรอง ⇒ มีแต่หัวคอลัมน์ และไม่มีโฟลเดอร์ PDF
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('12_Tax_Invoices.csv')) ?? '')).toBe(
-      `${CSV_BOM}invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file,company_branch,billing_batch_number\r\n`,
+      `${CSV_BOM}invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file,company_branch,billing_batch_number,document_type,received_date\r\n`,
     )
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('13_Advance_Returns.csv')) ?? '')).toBe(
       `${CSV_BOM}return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason\r\n`,
@@ -693,11 +694,11 @@ async function seedInvoice(input: {
   const cancelled = input.cancelledAt !== undefined
   await db().$executeRawUnsafe(`
     INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, status,
-                              cancel_reason, cancelled_by, cancelled_at, created_at, created_by)
+                              cancel_reason, cancelled_by, cancelled_at, created_at, created_by, ${TAX_INVOICE_FIXTURE_COLUMNS})
     VALUES ('${ORG_ID}', '${input.salesId}', '${input.number}', '${input.date}', '00000', '00000',
             '${cancelled ? 'cancelled' : 'active'}', ${cancelled ? `'${input.reason ?? ''}'` : 'NULL'},
             ${cancelled ? `'${USER_ID}'` : 'NULL'}, ${cancelled ? `'${input.cancelledAt}'` : 'NULL'},
-            '${input.createdAt}', '${USER_ID}')
+            '${input.createdAt}', '${USER_ID}', ${taxInvoiceFixtureValues(input.salesId)})
   `)
 }
 
@@ -763,8 +764,8 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
 
     const csv = fileAt([...storage.keys()].find((path) => path.endsWith('12_Tax_Invoices.csv')) ?? '')
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
-    // มติ U79 — เลขรอบวางบิล (DB trigger เดินเลข) อยู่คอลัมน์ต่อท้ายทุกแถว
-    const BATCH_NUMBER_TAIL = /,BL-25\d{2}-\d{3,}$/
+    // มติ U79 — เลขรอบวางบิล (DB trigger เดินเลข) + มติ U95 ชนิดเอกสาร/วันรับเงิน (ใบแบบเดิม ⇒ ไม่มีวันรับเงิน) ต่อท้ายทุกแถว
+    const BATCH_NUMBER_TAIL = /,BL-25\d{2}-\d{3,},ใบกำกับภาษี,-$/
     expect(lines.slice(1, -1).every((line) => BATCH_NUMBER_TAIL.test(line))).toBe(true)
     expect(lines.slice(1, -1).map((line) => line.replace(BATCH_NUMBER_TAIL, ''))).toEqual([
       'INV-T46-0000,31/05/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,1000.00,70.00,1070.00,7.00,2569-06-3,cancelled,02/06/2569,ออกซ้ำ,-,tax_invoices/INV-T46-0000.pdf,สำนักงานใหญ่',
@@ -818,7 +819,7 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     ])
     const lines = result.csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines).toHaveLength(5)
-    expect(lines[2]).toMatch(/,INV-T46-0003,-,สำนักงานใหญ่,BL-25\d{2}-\d{3,}$/)
+    expect(lines[2]).toMatch(/,INV-T46-0003,-,สำนักงานใหญ่,BL-25\d{2}-\d{3,},ใบกำกับภาษี,-$/)
 
     // เพดานเวลา — นาฬิกาเดินเกินงบตั้งแต่ใบแรก ⇒ ไม่แนบเลยแต่ CSV ครบ
     let tick = 0

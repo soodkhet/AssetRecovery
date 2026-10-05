@@ -1,4 +1,9 @@
-import type { BankMatchStatus, BillingBatchStatus, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
+import type {
+  BankMatchStatus,
+  BillingBatchStatus,
+  TaxInvoiceDocKind,
+  TaxInvoiceStatus,
+} from '@/lib/generated/prisma/enums'
 
 /**
  * DTO ของบัญชีขายและเงินรับ (ไฟล์ 31 §8) — เงินเป็น satang เสมอ, วันที่เป็น ISO UTC
@@ -8,6 +13,20 @@ import type { BankMatchStatus, BillingBatchStatus, TaxInvoiceStatus } from '@/li
 /** ใบกำกับภาษีแบบย่อ ติดไปกับแถวรายการขาย */
 export interface TaxInvoiceSummaryDto {
   id: string
+  /** U95 — `tax_invoice` (ใบเดิมตอนวางบิล) / `receipt_tax_invoice` (ใบเสร็จรับเงิน/ใบกำกับภาษี ตอนรับเงิน) */
+  docKind: TaxInvoiceDocKind
+  /** ชื่อเอกสารที่พิมพ์บนหัวใบ */
+  docTitle: string
+  /** เงินรับต้นเหตุ (ใบเสร็จรับเงิน/ใบกำกับภาษี) */
+  cashReceiptId: string | null
+  /** ยอดบนใบ (snapshot) */
+  totalBeforeVatSatang: number
+  vatSatang: number
+  totalSatang: number
+  /** อัตรา VAT ที่ใช้บนใบ (ข้อความ NUMERIC) — ใบเดิมหลายอัตรา = `null` */
+  vatRatePctUsed: string | null
+  /** U96 #8 — เลขที่ของใบที่ใบนี้ออกแทน */
+  replacesInvoiceNumber: string | null
   invoiceNumber: string
   invoiceDate: string
   status: TaxInvoiceStatus
@@ -33,10 +52,12 @@ export interface SalesRecordDto {
   vatSatang: number
   totalSatang: number
   createdAt: string
-  /** ใบกำกับภาษีที่ใช้งานอยู่ (`31` §7.1 — `null` = ยังไม่ออก) */
+  /** ใบกำกับภาษี/ใบเสร็จรับเงินฯ ที่ใช้งานอยู่ใบล่าสุด (`null` = ยังไม่ออก) */
   activeTaxInvoice: TaxInvoiceSummaryDto | null
-  /** ใบที่เคยออกทั้งหมดรวมใบที่ยกเลิก — เรียงใหม่ → เก่า */
+  /** ใบที่เคยออกทั้งหมดรวมใบที่ยกเลิก — เรียงใหม่ → เก่า (รับเงินบางส่วน ⇒ หลายใบ active ได้ — U95) */
   taxInvoices: TaxInvoiceSummaryDto[]
+  /** ยอดก่อน VAT ที่ออกเอกสารภาษีแล้ว (ใบ active) — ส่วนที่เหลือยังไม่ถึงจุดความรับผิด VAT */
+  invoicedBeforeVatSatang: number
 }
 
 export interface SalesListDto {
@@ -44,18 +65,17 @@ export interface SalesListDto {
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
-  /** จำนวนรายการขายที่ยังไม่ออกใบกำกับภาษี — ใช้เตือนก่อนปิดงวด (`30` §6.2) */
+  /** จำนวนรายการขายที่ยังไม่มีเอกสารภาษี (ยังไม่รับเงิน หรือรับแล้วยังไม่ออกใบ) */
   awaitingInvoiceCount: number
 }
 
 export interface TaxInvoiceDto extends TaxInvoiceSummaryDto {
   salesRecordId: string
   companyId: string
+  /** ชื่อผู้ซื้อตาม snapshot บนใบ (U96 #4) */
   companyName: string
   periodLabel: string
-  totalBeforeVatSatang: number
-  vatSatang: number
-  totalSatang: number
+  billingBatchNumber: string
   createdByName: string
 }
 
@@ -79,10 +99,18 @@ export interface CashReceiptDto {
   billingStatus: BillingBatchStatus
   note: string | null
   createdAt: string
+  /** U95 — ใบเสร็จรับเงิน/ใบกำกับภาษีที่ใช้งานอยู่ของเงินรับนี้ (`null` = ยังไม่ออก) */
+  taxInvoice: TaxInvoiceSummaryDto | null
+  /** ใบที่ยกเลิกแล้วของเงินรับนี้ (ใบใหม่จะพิมพ์ "ออกแทนฉบับเลขที่ …") */
+  cancelledTaxInvoices: TaxInvoiceSummaryDto[]
+  /** รอบนี้ออกใบกำกับภาษีแบบเดิม (ตอนวางบิล) ไว้แล้ว ⇒ ไม่ต้องออกใบเสร็จรับเงิน/ใบกำกับภาษีอีก */
+  coveredByLegacyInvoice: boolean
 }
 
 export interface CashReceiptListDto {
   items: CashReceiptDto[]
   totalSatang: number
   totalWhtWithheldByCustomerSatang: number
+  /** เงินรับที่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี (U95 · ใช้เตือนก่อนปิดงวด) */
+  awaitingTaxInvoiceCount: number
 }
