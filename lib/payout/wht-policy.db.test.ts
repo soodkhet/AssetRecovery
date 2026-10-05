@@ -222,6 +222,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
       baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
       certificateMode: 'per_payee_batch',
       incomeTypeMode: 'all_40_8',
+      issueZeroRate402Certificate: true,
     })
     const hotel = batch.items.find((item) => item.grossSatang === 60_000)!
     expect(hotel.whtBaseIncluded).toBe(false)
@@ -246,6 +247,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance', 'hotel'],
         certificateMode: 'per_item',
         incomeTypeMode: 'all_40_8',
+        issueZeroRate402Certificate: true,
       },
       NOW,
     )
@@ -279,6 +281,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance', 'hotel'],
         certificateMode: 'per_item',
         incomeTypeMode: 'all_40_8',
+        issueZeroRate402Certificate: true,
       },
       NOW,
     )
@@ -311,6 +314,7 @@ suite('ประเภทเงินได้ 40(2) (U5/U7)', () => {
         baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
         certificateMode: 'per_payee_batch',
         incomeTypeMode: 'by_team_side',
+        issueZeroRate402Certificate: true,
       },
       NOW,
     )
@@ -404,6 +408,7 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
         baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
         certificateMode: 'per_item',
         incomeTypeMode: 'all_40_8',
+        issueZeroRate402Certificate: true,
       },
       NOW,
     )
@@ -415,5 +420,116 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
     expect(certificates.items).toHaveLength(3)
     expect(certificates.items.every((row) => row.issueMode === 'per_item')).toBe(true)
     expect(certificates.items.reduce((sum, row) => sum + row.whtSatang, 0)).toBe(4050)
+  })
+})
+
+suite('40(2) อัตรา 0% ออก 50 ทวิ ยอดภาษี 0 (มติ PO 05/10/2569 U16)', () => {
+  async function use402(issueZeroRate402Certificate: boolean, reason: string): Promise<void> {
+    await policy.createWhtPolicy(
+      policyCtx(reason),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+        certificateMode: 'per_payee_batch',
+        incomeTypeMode: 'by_team_side',
+        issueZeroRate402Certificate,
+      },
+      NOW,
+    )
+  }
+
+  /** in1 เป็น 40(2) อัตรา 0% — คอมมิชชัน 300 + น้ำมัน 200 (ในฐาน) + ค่าที่พัก 600 (นอกฐาน) */
+  async function seedZeroRateIn1(): Promise<void> {
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_40_2_pct = 0 WHERE id = '${PAYEE_IN_ID}'`)
+    await seedExpense(PAYEE_IN_ID, 'commission', 30_000)
+    await seedExpense(PAYEE_IN_ID, 'fuel', 20_000)
+    await seedExpense(PAYEE_IN_ID, 'hotel', 60_000)
+  }
+
+  it('เปิด (ค่าเริ่มต้น) ⇒ 50 ทวิ 1 ใบ ภาษี 0 เงินได้ = ฐาน · ภ.ง.ด.1 นับราย · 40(8) ต่ำกว่าเกณฑ์ยังไม่ออก · snapshot ลงรอบ', async () => {
+    const overview = await policy.getWhtPolicyOverview(ORG_ID, NOW)
+    expect(overview.defaults.issueZeroRate402Certificate).toBe(true)
+    await use402(true, 'inhouse เป็น 40(2) อัตรา 0% ตามที่สำนักงานบัญชีคำนวณ')
+    await seedZeroRateIn1()
+    // out1 = 40(8) ฐาน ฿500 ต่ำกว่าเกณฑ์ ฿1,000 — ค่าตั้งนี้ไม่เกี่ยว
+    await seedExpense(PAYEE_OUT_ID, 'commission', 50_000)
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtSatang).toBe(0)
+    expect(batch.whtPolicy?.issueZeroRate402Certificate).toBe(true)
+    const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })
+    expect(row.whtIssueZeroRate402Certificate).toBe(true)
+
+    const outsource = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    expect(outsource.batch.whtSatang).toBe(0)
+
+    await completeAndSync(batch.id)
+    await completeAndSync(outsource.batch.id)
+
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({
+      filingForm: 'PND1',
+      incomeType: 'ค่าธรรมเนียม ค่านายหน้า มาตรา 40(2)',
+      grossSatang: 50_000,
+      whtSatang: 0,
+      issueMode: 'per_payee_batch',
+    })
+    expect(certificates.summary).toMatchObject({ pnd1Count: 1, pnd1GrossSatang: 50_000, pnd1Satang: 0, pnd3Satang: 0 })
+    const filing = await db().whtFilingSummary.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(filing.pnd1Satang).toBe(0)
+
+    // sync ซ้ำไม่ออกซ้ำ
+    await wht.syncWhtCertificatesFromPayout({ actor: finance, meta }, batch.id)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+
+  it('ยกเลิกใบภาษี 0 ⇒ ออกใบแทนได้ยอดเท่าเดิม', async () => {
+    await use402(true, 'inhouse เป็น 40(2) อัตรา 0%')
+    await seedZeroRateIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await completeAndSync(batch.id)
+    const [certificate] = (await wht.listWhtCertificates(finance, {})).items
+    const { replacement } = await wht.cancelWhtCertificate({ actor: finance, meta }, certificate!.id, {
+      reason: 'สะกดชื่อผิด',
+      reissue: true,
+    })
+    expect(replacement).toMatchObject({ grossSatang: 50_000, whtSatang: 0, filingForm: 'PND1' })
+  })
+
+  it('ปิด ⇒ ไม่ออกใบ (พฤติกรรมเดิม) · snapshot false · audit บันทึกค่าตั้ง', async () => {
+    await use402(false, 'สำนักงานบัญชีไม่ต้องการใบภาษี 0')
+    await seedZeroRateIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtPolicy?.issueZeroRate402Certificate).toBe(false)
+    await completeAndSync(batch.id)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(0)
+
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'wht_policy_history' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({ issue_zero_rate_40_2_certificate: false })
+    expect(audit.beforeData).toMatchObject({ issue_zero_rate_40_2_certificate: true })
+  })
+
+  it('snapshot — ปิดค่าตั้งหลังสร้างรอบแล้ว รอบเดิมยังออกตาม snapshot', async () => {
+    await use402(true, 'inhouse เป็น 40(2) อัตรา 0%')
+    await seedZeroRateIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await use402(false, 'เปลี่ยนใจ ไม่ออกใบภาษี 0')
+    await completeAndSync(batch.id)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+
+  it('รอบที่สร้างก่อนมีค่าตั้งนี้ (snapshot NULL) ⇒ ไม่ออก', async () => {
+    await use402(true, 'inhouse เป็น 40(2) อัตรา 0%')
+    await seedZeroRateIn1()
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await db().$executeRawUnsafe(
+      `UPDATE payout_batches SET wht_issue_zero_rate_40_2_certificate = NULL WHERE id = '${batch.id}'`,
+    )
+    await completeAndSync(batch.id)
+    expect(await db().whtCertificate.count({ where: { organizationId: ORG_ID } })).toBe(0)
   })
 })

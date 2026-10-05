@@ -4,6 +4,7 @@ import {
   filingFormOf,
   groupCertificateSources,
   incomeTypeOf,
+  shouldIssueZeroRate402Certificate,
   summarizeFilingTotals,
   type CertificateSourceItem,
   type WhtCertificateDocSource,
@@ -74,6 +75,62 @@ describe('40(2) → ภ.ง.ด.1 (U7)', () => {
     expect(totals.pnd3Satang).toBe(4050)
     expect(totals.pnd53Satang).toBe(0)
     expect(totals.activeCount).toBe(2)
+  })
+})
+
+describe('U16 — 40(2) อัตรา 0% ออก 50 ทวิ ยอดภาษี 0 (มติ PO 05/10/2569)', () => {
+  const zero402: CertificateSourceItem[] = [
+    // in3: 40(2) อัตรา 0% — คอมมิชชัน+น้ำมันในฐาน · ค่าที่พักนอกฐาน
+    { id: 'z1', payeeId: 'in3', grossSatang: 300_000, whtSatang: 0, whtBaseIncluded: true, incomeCategory: 'sec_40_2' },
+    { id: 'z2', payeeId: 'in3', grossSatang: 50_000, whtSatang: 0, whtBaseIncluded: true, incomeCategory: 'sec_40_2' },
+    { id: 'z3', payeeId: 'in3', grossSatang: 80_000, whtSatang: 0, whtBaseIncluded: false, incomeCategory: 'sec_40_2' },
+    // out2: 40(8) ต่ำกว่าเกณฑ์ ฿1,000 — ไม่เกี่ยวกับค่าตั้งนี้ ยังไม่ออกใบ
+    { id: 'z4', payeeId: 'out2', grossSatang: 50_000, whtSatang: 0, whtBaseIncluded: true, incomeCategory: 'sec_40_8' },
+    // in4: 40(2) แต่มีเฉพาะรายการนอกฐาน — ไม่มีเงินได้ให้รับรอง
+    { id: 'z5', payeeId: 'in4', grossSatang: 70_000, whtSatang: 0, whtBaseIncluded: false, incomeCategory: 'sec_40_2' },
+  ]
+
+  it('เปิด → ผู้รับ 40(2) อัตรา 0% ได้ 1 ใบต่อรอบ ภาษี 0 · เงินได้ = ฐานที่จ่าย (ไม่รวมนอกฐาน)', () => {
+    const groups = groupCertificateSources(zero402, 'per_payee_batch', { issueZeroRate402Certificate: true })
+    expect(groups).toHaveLength(1)
+    expect(groups[0]!.anchor.id).toBe('z1')
+    expect(groups[0]!.whtSatang).toBe(0)
+    expect(groups[0]!.grossSatang).toBe(350_000)
+  })
+
+  it('เปิด + ต่อรายการ → 1 ใบต่อรายการในฐานของ 40(2) · รายการนอกฐานไม่ออก', () => {
+    const groups = groupCertificateSources(zero402, 'per_item', { issueZeroRate402Certificate: true })
+    expect(groups.map((group) => group.anchor.id)).toEqual(['z1', 'z2'])
+    expect(groups.map((group) => group.grossSatang)).toEqual([300_000, 50_000])
+  })
+
+  it('ปิด / ไม่ระบุ (รอบเก่า) → ไม่ออกใบ (พฤติกรรมเดิม)', () => {
+    expect(groupCertificateSources(zero402, 'per_payee_batch', { issueZeroRate402Certificate: false })).toEqual([])
+    expect(groupCertificateSources(zero402, 'per_payee_batch')).toEqual([])
+  })
+
+  it('40(8) ต่ำกว่าเกณฑ์ไม่ออกเสมอ · 40(2) ที่มีภาษีออกตามปกติไม่ว่าค่าตั้ง', () => {
+    expect(
+      shouldIssueZeroRate402Certificate({ issueZeroRate402Certificate: true, incomeCategory: 'sec_40_8', whtSatang: 0, grossSatang: 50_000 }),
+    ).toBe(false)
+    expect(
+      shouldIssueZeroRate402Certificate({ issueZeroRate402Certificate: true, incomeCategory: null, whtSatang: 0, grossSatang: 50_000 }),
+    ).toBe(false)
+    const taxed: CertificateSourceItem[] = [
+      { id: 't1', payeeId: 'in5', grossSatang: 100_000, whtSatang: 1000, whtBaseIncluded: true, incomeCategory: 'sec_40_2' },
+    ]
+    expect(groupCertificateSources(taxed, 'per_payee_batch', { issueZeroRate402Certificate: false })).toHaveLength(1)
+  })
+
+  it('สรุป ภ.ง.ด.1 นับใบภาษี 0 ในจำนวนราย/เงินได้ แต่ยอดภาษีไม่เพิ่ม', () => {
+    const totals = summarizeFilingTotals([
+      { status: 'active', filingForm: 'PND1', whtSatang: 0, grossSatang: 350_000 },
+      { status: 'active', filingForm: 'PND1', whtSatang: 1250, grossSatang: 50_000 },
+      { status: 'cancelled', filingForm: 'PND1', whtSatang: 0, grossSatang: 99_000 },
+    ])
+    expect(totals.pnd1Count).toBe(2)
+    expect(totals.pnd1GrossSatang).toBe(400_000)
+    expect(totals.pnd1Satang).toBe(1250)
   })
 })
 
