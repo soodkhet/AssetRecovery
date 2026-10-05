@@ -16,7 +16,12 @@ import { isTeamScopedViewer } from '@/lib/warehouse/permissions'
 import type { HandoverParty } from '@/lib/warehouse/handover-doc'
 import { compareAssetIdentity, imeiSearchKey } from '@/lib/warehouse/imei'
 import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
-import { assertIntakeCondition, assertRejectReason, imeiMismatchWarning } from '@/lib/warehouse/intake'
+import {
+  assertIntakeCondition,
+  assertIntakeIdentity,
+  assertRejectReason,
+  imeiMismatchWarning,
+} from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
 import { DELIVERY_DOC_PREFIX, LOT_PREFIX, handoverNumberYear } from '@/lib/warehouse/numbering'
@@ -24,6 +29,7 @@ import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-
 import type {
   AssetIntakeInput,
   AssetListQuery,
+  AssetRejectIntakeInput,
   LotConfirmInput,
   LotCreateInput,
   LotDocumentAttachInput,
@@ -381,11 +387,12 @@ export async function intakeAsset(
   const current = await loadAsset(user, assetId)
   const nextStatus = nextAssetStatus(current.assetStatus, 'intake')
   assertIntakeCondition({ condition: input.condition, conditionNote: input.conditionNote })
+  const contractIdentity = { imeiContract: current.imeiContract, serialContract: current.serialContract }
+  const actualIdentity = { imeiActual: input.imeiActual, serialActual: input.serialActual }
+  // ไม่กรอกค่าที่ตรวจจริง = ยังไม่ได้ตรวจ ⇒ ปฏิเสธ (UAT BUG-074) — ต่างจาก "ไม่ตรงสัญญา" ที่แค่เตือน
+  assertIntakeIdentity(contractIdentity, actualIdentity)
 
-  const comparison = compareAssetIdentity(
-    { imeiContract: current.imeiContract, serialContract: current.serialContract },
-    { imeiActual: input.imeiActual, serialActual: input.serialActual },
-  )
+  const comparison = compareAssetIdentity(contractIdentity, actualIdentity)
   const retry = isIntakeRetry(current.assetStatus)
   const receivedAt = new Date()
 
@@ -470,19 +477,24 @@ export async function intakeAsset(
 export async function rejectAssetIntake(
   user: SessionUser,
   assetId: string,
-  input: { rejectReason: string },
+  input: AssetRejectIntakeInput,
   context: WarehouseMutationContext,
 ): Promise<AssetDetailDto> {
   const current = await loadAsset(user, assetId)
   const nextStatus = nextAssetStatus(current.assetStatus, 'reject_intake')
   const reason = assertRejectReason(input.rejectReason)
   const rejectedAt = new Date()
+  // ค่าที่ตรวจจริงตอนตีกลับ (UAT BUG-075) — ไม่ส่งมา = คงค่าเดิมของเครื่อง · ส่งมา = บันทึกลงเครื่อง + audit
+  const imeiActual = input.imeiActual === undefined ? current.imeiActual : input.imeiActual
+  const serialActual = input.serialActual === undefined ? current.serialActual : input.serialActual
 
   const detail = await prisma.$transaction(async (tx) => {
     const claimed = await tx.asset.updateMany({
       where: { id: assetId, assetStatus: current.assetStatus },
       data: {
         assetStatus: nextStatus,
+        imeiActual,
+        serialActual,
         rejectReason: reason,
         rejectedAt,
         rejectedBy: context.actor.id,
@@ -500,11 +512,21 @@ export async function rejectAssetIntake(
         action: 'reject',
         targetType: 'assets',
         targetId: assetId,
-        before: { assetStatus: current.assetStatus },
+        before: {
+          assetStatus: current.assetStatus,
+          imeiActual: current.imeiActual,
+          serialActual: current.serialActual,
+        },
         after: {
           assetStatus: nextStatus,
           imeiContract: current.imeiContract,
-          imeiActual: current.imeiActual,
+          imeiActual,
+          serialContract: current.serialContract,
+          serialActual,
+          imeiMatch: compareAssetIdentity(
+            { imeiContract: current.imeiContract, serialContract: current.serialContract },
+            { imeiActual, serialActual },
+          ).matched,
           rejectedAt,
           events: ['asset.intake_rejected'],
         },

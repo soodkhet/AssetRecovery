@@ -256,6 +256,57 @@ suite('Phase 2.6 — assign / accept (`40` §8 · §20)', () => {
     )
   })
 
+  it('มอบหมาย 2 คำขอพร้อมกัน = ได้ assignment ที่ใช้งาน 1 แถว อีกคำขอ ASSIGNMENT_ALREADY_EXISTS (UAT BUG-038)', async () => {
+    const caseId = await seedApprovedCase()
+    const results = await Promise.allSettled([
+      queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta }),
+      queries.assignCase(manager, caseId, { agentId: AGENT_B }, { actor: manager, meta }),
+    ])
+    expect(results.filter((each) => each.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.find((each) => each.status === 'rejected')
+    expect(codeOf(rejected?.status === 'rejected' ? rejected.reason : null)).toBe('ASSIGNMENT_ALREADY_EXISTS')
+
+    const active = await db().caseAssignment.count({
+      where: { caseId, status: { in: ['pending_accept', 'accepted_unscheduled', 'scheduled', 'needs_revision'] } },
+    })
+    expect(active).toBe(1)
+  })
+
+  it('DB บังคับ 1 เคส : 1 assignment ที่ใช้งาน แม้เขียนข้ามชั้น service (uniq_case_assignment_active)', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    await expect(
+      db().caseAssignment.create({
+        data: {
+          organizationId: ORG_ID,
+          caseId,
+          agentId: AGENT_B,
+          teamId: TEAM_A,
+          status: 'scheduled',
+          createdBy: MANAGER_ID,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' })
+    // แถวที่ปิดแล้วไม่นับ — เพิ่มได้ตามปกติ (ประวัติรอบเก่า/ถูกโอนออก)
+    await db().caseAssignment.create({
+      data: { organizationId: ORG_ID, caseId, agentId: AGENT_B, teamId: TEAM_A, status: 'reassigned_away', createdBy: MANAGER_ID },
+    })
+  })
+
+  it('เปลี่ยนผู้รับผิดชอบ 2 คำขอพร้อมกัน (ยังไม่กดรับ) = เปิดแถวใหม่แค่ 1 แถว (UAT BUG-038)', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    const results = await Promise.allSettled([
+      queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: 'ย้ายพื้นที่รับผิดชอบ' }, { actor: manager, meta }),
+      queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: 'ย้ายพื้นที่รับผิดชอบ' }, { actor: manager, meta }),
+    ])
+    expect(results.filter((each) => each.status === 'fulfilled')).toHaveLength(1)
+    const active = await db().caseAssignment.count({
+      where: { caseId, status: { in: ['pending_accept', 'accepted_unscheduled', 'scheduled', 'needs_revision'] } },
+    })
+    expect(active).toBe(1)
+  })
+
   it('พนักงานกดรับงานได้เฉพาะเคสของตัวเอง แล้วสถานะเป็น accepted', async () => {
     const caseId = await seedApprovedCase()
     await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })

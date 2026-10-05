@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { WarehouseError } from '@/lib/warehouse/errors'
+import { IMEI_FORMAT_MESSAGE, IMEI_INPUT_MAX_LENGTH, parseImei } from '@/lib/warehouse/imei'
 import { assertRejectReason } from '@/lib/warehouse/intake'
 import type { AssetDetailDto, AssetListItemDto } from '@/lib/warehouse/types'
 
@@ -15,6 +17,9 @@ import type { AssetDetailDto, AssetListItemDto } from '@/lib/warehouse/types'
  *
  * `rejectReason` เป็นทั้งข้อมูลของเครื่องและ **`reason` ของ audit** (`90` §13 — การตีกลับกระทบเงิน
  * ของฝ่ายสนามเพราะ expense ยังปลดล็อกไม่ได้) จึงบังคับกรอกด้วย `assertRejectReason()` ตัวเดียวกับ API
+ *
+ * IMEI/Serial ที่ตรวจพบจริงบนเครื่องส่งไปพร้อมการตีกลับ แล้วลงทั้งเครื่องและ audit (UAT BUG-075) — ไม่บังคับ
+ * (ตีกลับได้แม้อ่าน IMEI ไม่ได้) แต่ถ้ากรอกต้องผ่าน `parseImei()` ตัวเดียวกับ API
  *
  * ⚠️ ผู้เรียกต้องส่ง `key={asset.id}` — ฟอร์มรีเซ็ตด้วยการ remount
  */
@@ -31,6 +36,11 @@ export function RejectIntakeModal({
 }) {
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
+  const [imeiActual, setImeiActual] = useState(asset.imeiActual ?? '')
+  const [serialActual, setSerialActual] = useState(asset.serialActual ?? '')
+  const imeiNormalized = parseImei(imeiActual)
+  const imeiFormatInvalid = imeiActual.trim() !== '' && imeiNormalized === null
+  const showSerialInput = asset.serialContract !== null || asset.imeiContract === null
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
 
@@ -45,12 +55,20 @@ export function RejectIntakeModal({
       }
       throw assertError
     }
+    if (imeiFormatInvalid) {
+      setError({ title: 'รูปแบบ IMEI ไม่ถูกต้อง', message: `${IMEI_FORMAT_MESSAGE} — ตรวจสอบที่กรอกอีกครั้ง` })
+      return
+    }
 
     setSubmitting(true)
     try {
       const response = await callApi<AssetDetailDto>(
         apiPath('asset.rejectIntake', { id: asset.id }),
-        jsonRequest('POST', { rejectReason: reason.trim() }),
+        jsonRequest('POST', {
+          rejectReason: reason.trim(),
+          imeiActual: imeiNormalized,
+          serialActual: serialActual.trim() === '' ? null : serialActual.trim(),
+        }),
       )
       if (response.error !== undefined) {
         setError(response.error)
@@ -88,10 +106,33 @@ export function RejectIntakeModal({
 
         <div className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
           <IdentityRow label="IMEI ในสัญญา" value={asset.imeiContract} />
-          <IdentityRow label="IMEI ที่บันทึกไว้" value={asset.imeiActual} tone="danger" />
-          {asset.serialContract !== null && <IdentityRow label="Serial ในสัญญา" value={asset.serialContract} />}
-          {asset.serialActual !== null && (
-            <IdentityRow label="Serial ที่บันทึกไว้" value={asset.serialActual} tone="danger" />
+          <Field label="IMEI ที่พบบนเครื่อง" error={imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null}>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={IMEI_INPUT_MAX_LENGTH}
+              value={imeiActual}
+              placeholder="พิมพ์หรือสแกน IMEI (ถ้าอ่านได้)"
+              onChange={(event) => setImeiActual(event.target.value)}
+              className={cn(
+                'focus-ring w-full rounded-lg border px-3 py-2 font-mono text-sm',
+                imeiFormatInvalid ? 'border-red-400 bg-red-50 text-red-700' : 'border-slate-300 bg-white',
+              )}
+            />
+          </Field>
+          {showSerialInput && (
+            <>
+              <IdentityRow label="Serial ในสัญญา" value={asset.serialContract} />
+              <Field label="Serial ที่พบบนเครื่อง">
+                <input
+                  type="text"
+                  maxLength={100}
+                  value={serialActual}
+                  onChange={(event) => setSerialActual(event.target.value)}
+                  className="focus-ring w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm"
+                />
+              </Field>
+            </>
           )}
         </div>
 

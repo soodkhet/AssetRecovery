@@ -1,7 +1,7 @@
 import type { ApiWarning } from '@/lib/api/envelope'
 import type { AssetCondition } from '@/lib/generated/prisma/enums'
 import { WarehouseError } from '@/lib/warehouse/errors'
-import type { AssetIdentityComparison } from '@/lib/warehouse/imei'
+import type { AssetIdentityActual, AssetIdentityComparison, AssetIdentityContract } from '@/lib/warehouse/imei'
 
 /**
  * กติกาการรับเครื่องเข้าคลัง/ตีกลับ (`44` §8.2 · §10 · §12) — **pure ล้วน**
@@ -51,6 +51,40 @@ export function assertIntakeCondition(input: IntakeConditionInput): void {
   }
 }
 
+/** ช่องตัวตนเครื่องที่ต้องกรอกค่าที่ตรวจจริงตอนรับเข้าคลัง — `either` = สัญญาไม่มีทั้งคู่ กรอกช่องใดก็ได้ */
+export type RequiredIntakeIdentity = 'imei' | 'serial' | 'either'
+
+/**
+ * ช่องที่ต้องกรอกค่าที่ตรวจจริงก่อนรับเข้าคลัง (UAT BUG-074 · `44` §8.2 ขั้น 1/3 "กรอก IMEI จริงบนเครื่อง")
+ * - สัญญามี IMEI ⇒ ต้องกรอก IMEI (serial เป็นข้อมูลเสริม)
+ * - เครื่องที่ไม่มี IMEI (มีแค่ serial — A6) ⇒ ต้องกรอก serial แทน
+ * - ข้อมูลผิดปกติที่สัญญาไม่มีทั้งคู่ ⇒ กรอกช่องใดช่องหนึ่งก็ได้ (ตามที่เห็นบนเครื่องจริง)
+ */
+export function requiredIntakeIdentity(contract: AssetIdentityContract): RequiredIntakeIdentity {
+  if (contract.imeiContract !== null) return 'imei'
+  if (contract.serialContract !== null) return 'serial'
+  return 'either'
+}
+
+/**
+ * ยืนยันรับเข้าคลังโดยไม่กรอกค่าที่ตรวจจริง = `REQUIRED_MISSING` — ค่าว่างแปลว่า "ไม่ได้ตรวจ" ซึ่งไม่ใช่
+ * "ไม่ตรงสัญญา" (`IMEI_MISMATCH` ที่ยอมให้ไปต่อได้) · ค่า IMEI ที่ส่งเข้ามาต้องผ่าน `parseImei()` มาแล้ว
+ */
+export function assertIntakeIdentity(contract: AssetIdentityContract, actual: AssetIdentityActual): void {
+  const required = requiredIntakeIdentity(contract)
+  const hasImei = (actual.imeiActual ?? '').trim() !== ''
+  const hasSerial = (actual.serialActual ?? '').trim() !== ''
+  const missing =
+    (required === 'imei' && !hasImei) ||
+    (required === 'serial' && !hasSerial) ||
+    (required === 'either' && !hasImei && !hasSerial)
+  if (missing) {
+    throw new WarehouseError('REQUIRED_MISSING', {
+      context: { field: required === 'serial' ? 'serialActual' : 'imeiActual' },
+    })
+  }
+}
+
 /** `44` §10 "Reject Requires Reason" — คืนค่าที่ trim แล้วเพื่อให้ผู้เรียกเก็บลง DB ได้เลย */
 export function assertRejectReason(reason: string | null | undefined): string {
   const trimmed = (reason ?? '').trim()
@@ -84,6 +118,15 @@ export function imeiMismatchWarning(comparison: AssetIdentityComparison): ApiWar
 export const IMEI_MISMATCH_WARNING = {
   title: 'IMEI ที่ตรวจจริงไม่ตรงกับสัญญา',
   message: 'ระบบบันทึกค่าที่ตรวจจริงไว้แล้วและรับเข้าคลังต่อได้ — แนะนำให้ตีกลับถ้าไม่มั่นใจ',
+} as const
+
+/**
+ * ข้อความเตือนบนฟอร์ม **ก่อนบันทึก** (UAT BUG-083) — ยังไม่มีอะไรถูกบันทึก จึงห้ามใช้ข้อความ "บันทึกไว้แล้ว"
+ * ของ {@link IMEI_MISMATCH_WARNING} (ใช้หลังบันทึกสำเร็จเท่านั้น) · แสดงเฉพาะเมื่อรูปแบบ IMEI ถูกต้องแล้ว
+ */
+export const IMEI_MISMATCH_FORM_WARNING = {
+  title: IMEI_MISMATCH_WARNING.title,
+  message: 'ยังรับเข้าคลังต่อได้ (ระบบจะบันทึกค่าที่ตรวจจริงไว้) — แนะนำให้ตีกลับถ้าไม่มั่นใจ',
 } as const
 
 function fieldLabel(field: AssetIdentityComparison['mismatchedFields'][number]): string {

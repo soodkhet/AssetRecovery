@@ -96,9 +96,15 @@ export const assetIntakeSchema = z.object({
 
 export type AssetIntakeInput = z.infer<typeof assetIntakeSchema>
 
-/** `POST /api/assets/:id/reject-intake` — ความว่างเปล่าถูกจับที่ `assertRejectReason()` */
+/**
+ * `POST /api/assets/:id/reject-intake` — ความว่างเปล่าถูกจับที่ `assertRejectReason()`
+ * `imeiActual`/`serialActual` = ค่าที่ตรวจพบจริงบนเครื่องตอนตีกลับ (UAT BUG-075 — `44` §14 ต้องลง audit)
+ * ไม่บังคับ (ตีกลับได้แม้อ่าน IMEI บนเครื่องไม่ได้) · ไม่ส่ง = คงค่าเดิมของเครื่อง · รูปแบบ IMEI ผ่าน `parseImei()`
+ */
 export const assetRejectIntakeSchema = z.object({
   rejectReason: z.string().max(1000).default(''),
+  imeiActual: imeiInputSchema.optional(),
+  serialActual: nullableText(100).optional(),
 })
 
 export type AssetRejectIntakeInput = z.infer<typeof assetRejectIntakeSchema>

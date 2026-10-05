@@ -26,7 +26,7 @@ import { AttachDocModal } from '@/components/warehouse/attach-doc-modal'
 import { ViewAttachedDocModal } from '@/components/warehouse/view-attached-doc-modal'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
-import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
+import { fmtDateTime } from '@/lib/format/datetime'
 import { matchesAssetSearch, type FilterOption } from '@/lib/warehouse/asset-filters'
 import { lotDocumentSlots } from '@/lib/warehouse/lot-documents'
 import {
@@ -325,7 +325,7 @@ export function LotTab({
                     </div>
                   </Td>
                   <Td>
-                    <span className="text-xs text-slate-600">{fmtDate(asset.receivedAt)}</span>
+                    <span className="text-xs text-slate-600">{fmtDateTime(asset.receivedAt)}</span>
                   </Td>
                   <Td>
                     <StatusBadge

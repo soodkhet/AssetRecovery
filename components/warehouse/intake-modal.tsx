@@ -12,7 +12,9 @@ import { compareAssetIdentity, IMEI_FORMAT_MESSAGE, IMEI_INPUT_MAX_LENGTH, parse
 import {
   INTAKE_PHOTO_ANGLES,
   INTAKE_PHOTO_ANGLE_LABELS,
-  IMEI_MISMATCH_WARNING,
+  IMEI_MISMATCH_FORM_WARNING,
+  assertIntakeIdentity,
+  requiredIntakeIdentity,
   assertIntakeCondition,
   requiresConditionNote,
   type IntakePhotoAngle,
@@ -76,10 +78,17 @@ export function IntakeModal({
       serialActual: serialActual.trim() === '' ? null : serialActual.trim(),
     },
   )
-  const imeiTouched = imeiActual.trim() !== '' || serialActual.trim() !== ''
-  const mismatch = imeiTouched && !comparison.matched
   /** รูปแบบผิด (ไม่ครบ/เกิน 15 หลัก หรือมีอักขระอื่น) = พิมพ์ผิด (schema ปฏิเสธ) ไม่ใช่ "ไม่ตรงสัญญา" */
   const imeiFormatInvalid = imeiActual.trim() !== '' && imeiNormalized === null
+  const imeiTouched = imeiActual.trim() !== '' || serialActual.trim() !== ''
+  // รูปแบบผิดแสดงแค่ข้อความรูปแบบ — ไม่ขึ้นคำเตือน "ไม่ตรงสัญญา" ซ้อน (UAT BUG-083)
+  const mismatch = imeiTouched && !imeiFormatInvalid && !comparison.matched
+  /** ช่องที่ต้องกรอกค่าที่ตรวจจริง (UAT BUG-074) — ตัวเดียวกับที่ API บังคับ */
+  const requiredIdentity = requiredIntakeIdentity({
+    imeiContract: asset.imeiContract,
+    serialContract: asset.serialContract,
+  })
+  const showSerialInput = asset.serialContract !== null || asset.imeiContract === null
 
   const isRetry = asset.assetStatus === 'intake_rejected'
 
@@ -125,6 +134,19 @@ export function IntakeModal({
         message: `${IMEI_FORMAT_MESSAGE} — ตรวจสอบที่กรอกอีกครั้ง`,
       })
       return
+    }
+
+    try {
+      assertIntakeIdentity(
+        { imeiContract: asset.imeiContract, serialContract: asset.serialContract },
+        { imeiActual: imeiNormalized, serialActual: serialActual.trim() === '' ? null : serialActual.trim() },
+      )
+    } catch (assertError) {
+      if (assertError instanceof WarehouseError) {
+        setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
+        return
+      }
+      throw assertError
     }
 
     // ไม่ตรงกับสัญญา = เตือนก่อน 1 ครั้ง แล้วจึงยอมให้ยืนยันทับ (`44` §8.2 force proceed)
@@ -203,6 +225,7 @@ export function IntakeModal({
             </Field>
             <Field
               label="IMEI ที่ตรวจจริงบนเครื่อง"
+              required={requiredIdentity === 'imei'}
               error={imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null}
             >
               <input
@@ -226,14 +249,14 @@ export function IntakeModal({
               />
             </Field>
 
-            {asset.serialContract !== null && (
+            {showSerialInput && (
               <>
                 <Field label="Serial ในสัญญา">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700">
-                    {asset.serialContract}
+                    {asset.serialContract ?? '—'}
                   </div>
                 </Field>
-                <Field label="Serial ที่ตรวจจริงบนเครื่อง">
+                <Field label="Serial ที่ตรวจจริงบนเครื่อง" required={requiredIdentity === 'serial'}>
                   <input
                     type="text"
                     maxLength={100}
@@ -258,8 +281,8 @@ export function IntakeModal({
             </InlineAlert>
           )}
           {mismatch && (
-            <InlineAlert className="mt-3" tone="error" title={IMEI_MISMATCH_WARNING.title}>
-              {IMEI_MISMATCH_WARNING.message}
+            <InlineAlert className="mt-3" tone="error" title={IMEI_MISMATCH_FORM_WARNING.title}>
+              {IMEI_MISMATCH_FORM_WARNING.message}
               {forceProceed && (
                 <div className="mt-1 font-semibold">
                   กด “ยืนยันรับทั้งที่ IMEI ไม่ตรง” อีกครั้งเพื่อรับเข้าคลัง — ระบบจะบันทึกค่าที่ตรวจจริงไว้

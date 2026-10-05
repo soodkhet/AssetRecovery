@@ -524,6 +524,40 @@ suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`4
     expect(stored.rejectedAt).toBeNull()
   })
 
+  it('UAT BUG-074 — ยืนยันรับเข้าโดยไม่กรอก IMEI ที่ตรวจจริง = REQUIRED_MISSING (ไม่มีอะไรถูกเขียน)', async () => {
+    const { assetId, imei } = await seedClosedSuccessCase()
+    await expectCode(
+      () => warehouse.intakeAsset(admin, assetId, { ...intakeInput(imei), imeiActual: null }, ctx(admin)),
+      'REQUIRED_MISSING',
+    )
+    const stored = await db().asset.findUniqueOrThrow({ where: { id: assetId } })
+    expect(stored.assetStatus).toBe('pending_intake')
+    expect(stored.imeiActual).toBeNull()
+  })
+
+  it('UAT BUG-075 — ตีกลับบันทึก IMEI ที่พบจริงลงเครื่องและ audit (before/after)', async () => {
+    const { assetId, imei } = await seedClosedSuccessCase()
+    const rejected = await warehouse.rejectAssetIntake(
+      admin,
+      assetId,
+      { rejectReason: 'IMEI บนเครื่องไม่ตรงกับสัญญา', imeiActual: '355000000000999' },
+      ctx(admin),
+    )
+    expect(rejected.imeiActual).toBe('355000000000999')
+
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'assets', targetId: assetId, action: 'reject' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.beforeData).toMatchObject({ assetStatus: 'pending_intake', imeiActual: null })
+    expect(audit.afterData).toMatchObject({
+      assetStatus: 'intake_rejected',
+      imeiContract: imei,
+      imeiActual: '355000000000999',
+      imeiMatch: false,
+    })
+  })
+
   it('รับเข้าคลังซ้ำสองรอบไม่ได้ = ASSET_INVALID_STATUS', async () => {
     const { assetId, imei } = await seedClosedSuccessCase()
     await warehouse.intakeAsset(admin, assetId, intakeInput(imei), ctx(admin))

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { extractPdfText } from '@/components/pdf/extract-text'
+import { renderHandoverNote } from '@/components/pdf/handover-note'
 import { attachmentHeader } from '@/lib/format/attachment'
 import {
   buildHandoverDoc,
@@ -130,6 +132,7 @@ describe('buildHandoverDoc', () => {
     const doc = buildHandoverDoc(lot(), ISSUER, RECIPIENT)
     expect(doc.issuedAtLabel).toBe('10/07/2569')
     expect(doc.scheduledAtLabel).toBe('10/07/2569 10:00')
+    expect(doc.scheduledAtCaption).toBe('วันนัดรับ')
   })
 
   it('วันที่หัวเอกสาร: วันส่งมอบจริง → วันนัด → วันที่สร้างล็อต', () => {
@@ -198,11 +201,32 @@ describe('Export Excel', () => {
     const header = handoverSheetHeaderBlock(buildHandoverDoc(lot(), ISSUER, RECIPIENT))
     expect(header[1]).toEqual(['เลขที่ใบส่งมอบ', 'DLV-2569-001', 'เลขล็อต', 'LOT-2569-001'])
     expect(header[2]?.[1]).toBe(ISSUER.name)
+    expect(header[4]).toEqual(['วันนัดรับ', '10/07/2569 10:00'])
   })
 
   it('เขียนไฟล์ .xlsx ได้จริง (ZIP signature ของ OOXML)', () => {
     const buffer = buildHandoverWorkbook(buildHandoverDoc(lot(), ISSUER, RECIPIENT))
     expect(buffer.length).toBeGreaterThan(0)
     expect(buffer.subarray(0, 2).toString('latin1')).toBe('PK')
+  })
+})
+
+describe('PDF ใบส่งมอบ (UAT BUG-079 · BUG-080)', () => {
+  async function pdfText(doc: ReturnType<typeof buildHandoverDoc>): Promise<string> {
+    const pdf = await renderHandoverNote(doc)
+    return extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
+  }
+
+  it('ชื่อบริษัทตัวหนาพิมพ์ครบถึงตัวท้าย ("…จำกัด" ไม่ขาด "ด")', async () => {
+    const text = await pdfText(buildHandoverDoc(lot(), ISSUER, RECIPIENT))
+    expect(text).toContain('บริษัท เอสเอฟ ลีสซิ่ง จำกัด')
+    expect(text).toContain('บริษัท ใจดี โมบาย จำกัด')
+  })
+
+  it('แสดงวันนัดรับ / กำหนดจัดส่งตามรูปแบบการส่งมอบ (พ.ศ. + เวลา)', async () => {
+    expect(await pdfText(buildHandoverDoc(lot(), ISSUER, RECIPIENT))).toContain('วันนัดรับ: 10/07/2569 10:00')
+    expect(await pdfText(buildHandoverDoc(lot({ type: 'we_deliver' }), ISSUER, RECIPIENT))).toContain(
+      'กำหนดจัดส่ง: 10/07/2569 10:00',
+    )
   })
 })

@@ -20,6 +20,7 @@
 | v1.7 | 04/10/2569 | **มติ PO 04/10/2569 (UAT — ลบเอกสารที่แนบผิด · `38` v3.4)** — §6.1 เติม `DELETE /api/cases/:id/documents/:documentId`: soft-delete (`deleted_at`) เฉพาะเคส `draft`/`need_info` (ก่อนส่งตรวจ — นอกนั้น `CASE_DOCUMENT_DELETE_NOT_ALLOWED`) · ไม่ลบไฟล์ใน Storage · สิทธิ์ + scope เดียวกับการแนบเอกสาร · audit before/after · รวมเป็น **50 endpoint** |
 | v1.8 | 05/10/2569 | **มติ PO 05/10/2569 (U25 · U29)** — §7 กลุ่ม Notification เติม 4 ชื่อ: `expense.approval_requested`, `advance.approval_requested`, `adjustment.approval_requested`, `field_allowance.period_locked` (คู่ event → การแจ้งเตือนกำหนดที่ `90` §6.3 v4.3) · ตรงกับ `lib/api/event-names.ts` |
 | v1.3 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.2**: §6.1 เติม `PATCH /api/cases/:id` (action `edit_case` ที่ `38` §8/§12 นิยามไว้พร้อม error `CASE_LOCKED_AFTER_APPROVAL` และ `edit_history` ใน §6.4 แต่ §17.1 ของไฟล์ 38 ไม่เคยประกาศ endpoint) — ไม่มี business logic ใหม่ รวมเป็น 40 endpoints |
+| v1.4 | 05/10/2569 | sync `44` v2.4 (มติ PO U64 · UAT BUG-075): body ของ `reject-intake` รับ `imeiActual?`/`serialActual?` ที่ตรวจพบ (ไม่บังคับ) — ไม่มีการเปลี่ยน endpoint/สิทธิ์ |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -101,7 +102,7 @@ GET    /api/field/income-summary?month={YYYY-MM}      ดึงสรุปร�
 GET    /api/assets                    List assets พร้อม filter (status, companyId, teamId, agentId, condition, search, dateFrom/dateTo, page/limit)
 GET    /api/assets/:id                รายละเอียด asset + lot info
 POST   /api/assets/:id/intake         รับเข้าคลัง (body: imeiActual, condition, conditionNote, photos[]) — auth: ธุรการ+
-POST   /api/assets/:id/reject-intake  ตีกลับ IMEI ไม่ตรง (body: rejectReason) — auth: ธุรการ+
+POST   /api/assets/:id/reject-intake  ตีกลับ IMEI ไม่ตรง (body: rejectReason, imeiActual?, serialActual?) — auth: ธุรการ+
 ```
 
 ### 6.5 Warehouse — Handover Lots (ไฟล์ 44)

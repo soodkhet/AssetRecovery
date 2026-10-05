@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { usePermission } from '@/components/auth/permission-provider'
 import { PageHeader } from '@/components/ui'
 import { CustodyTab } from '@/components/warehouse/custody-tab'
 import { HandoverLotModal } from '@/components/warehouse/handover-lot-modal'
@@ -25,13 +26,19 @@ import type { AssetListDto, AssetListItemDto, LotListDto } from '@/lib/warehouse
  *   (`tab` ของ DTO ตาม §9.3 — `we_deliver` ไป "ส่งมอบแล้ว" ทันที) → แนบเอกสาร → ยืนยัน
  * - badge นับตามตาราง §8.1: 2 แท็บแรกนับ **เครื่อง** (`asset.list`) · 2 แท็บหลังนับ **ล็อต** (`lot.list`)
  *   ทั้งคู่ยิงด้วย `limit=1` แล้วอ่าน `total` — ไม่ต้องมี endpoint นับใหม่ (แนวเดียวกับ KPI ของหน้ารับเคส)
- * - ตัวเลือก dropdown ทีม/พนักงาน/บริษัทมาจาก endpoint master data ซึ่ง **ธุรการคลังอาจไม่มีสิทธิ์เรียก**
- *   (`44` §13 ให้แค่ capability ของงานคลัง) ⇒ เรียกไม่ได้ก็ปล่อยว่างแล้วให้หน้าจอถอยไปใช้ค่าที่พบในแถว
+ * - ตัวเลือก dropdown ทีม/พนักงาน/บริษัทมาจาก endpoint master data ซึ่ง **หลาย role ที่เข้าหน้าคลังได้ไม่มีสิทธิ์เรียก**
+ *   (`44` §13 ให้แค่ capability ของงานคลัง) ⇒ **เรียกเฉพาะ endpoint ที่ผู้ใช้มีสิทธิ์** (ไม่ยิงแล้วโดน 403 —
+ *   UAT BUG-081) · ผู้ใช้ฝั่งบริษัทไม่เรียกเลย (เห็นแค่บริษัทตัวเอง) · ที่ไม่ได้โหลดให้หน้าจอถอยไปใช้ค่าที่พบในแถว
  *   (`filterOptionsOrFallback()`)
  * - Company User เห็นทุกอย่างแบบอ่านอย่างเดียวโดยอัตโนมัติ: ปุ่ม action ผูกกับ capability และ scope
  *   ระดับแถวถูกบังคับที่ API (`assetScopeWhere()` — DEC-002)
  */
 export function WarehouseManager() {
+  const { session, can } = usePermission()
+  const isCompanyViewer = session?.scope.kind === 'company'
+  // endpoint ↔ capability: `/api/finance-companies` + `/api/teams` = view_master_data · `/api/users` = manage_users (view)
+  const canLoadMasterData = !isCompanyViewer && can('view', 'view_master_data')
+  const canLoadUsers = !isCompanyViewer && can('view', 'manage_users')
   const [tab, setTab] = useState<AssetTab>('intake')
   const [counts, setCounts] = useState<WarehouseTabCounts>(EMPTY_TAB_COUNTS)
   const [countsVersion, setCountsVersion] = useState(0)
@@ -74,9 +81,13 @@ export function WarehouseManager() {
     let cancelled = false
     void (async () => {
       const [companyResult, teamResult, agentResult] = await Promise.all([
-        callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active'),
-        callApi<TeamDto[]>('/api/teams?status=active'),
-        callApi<UserDto[]>('/api/users?roleGroup=inhouse,outsource&status=active'),
+        canLoadMasterData
+          ? callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active')
+          : Promise.resolve({ data: undefined }),
+        canLoadMasterData ? callApi<TeamDto[]>('/api/teams?status=active') : Promise.resolve({ data: undefined }),
+        canLoadUsers
+          ? callApi<UserDto[]>('/api/users?roleGroup=inhouse,outsource&status=active')
+          : Promise.resolve({ data: undefined }),
       ])
       if (cancelled) return
       setCompanies((companyResult.data ?? []).map((company) => ({ id: company.id, name: company.name })))
@@ -89,7 +100,7 @@ export function WarehouseManager() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [canLoadMasterData, canLoadUsers])
 
   const refreshCounts = useCallback(() => setCountsVersion((current) => current + 1), [])
 

@@ -162,12 +162,27 @@ async function loadCaseInScope(user: SessionUser, caseId: string): Promise<CaseR
 }
 
 /** assignment ที่ยังใช้งานอยู่ของรอบติดตามปัจจุบัน (`40` §11 — 1 เคส : 1 พนักงาน) */
-async function loadActiveAssignment(caseId: string, trackingRound: number): Promise<AssignmentRow | null> {
-  return await prisma.caseAssignment.findFirst({
+async function loadActiveAssignment(
+  caseId: string,
+  trackingRound: number,
+  client: AssignmentTxClient = prisma,
+): Promise<AssignmentRow | null> {
+  return await client.caseAssignment.findFirst({
     where: { caseId, trackingRound, status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] } },
     orderBy: { createdAt: 'desc' },
     select: assignmentSelect,
   })
+}
+
+/**
+ * ชนกับ partial unique `uniq_case_assignment_active` (มีผู้ถือเคสอยู่แล้ว — แข่งกันมอบหมาย) = `ASSIGNMENT_ALREADY_EXISTS`
+ * (UAT BUG-038) · error อื่นโยนต่อเดิม
+ */
+function rethrowActiveAssignmentConflict(error: unknown): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    throw new AssignmentError('ASSIGNMENT_ALREADY_EXISTS', { detail: 'มีผู้ถือเคสนี้อยู่แล้ว' })
+  }
+  throw error
 }
 
 async function loadLatestPending(caseId: string): Promise<PendingRow | null> {
@@ -354,13 +369,17 @@ export async function assignCase(
   const row = await loadCaseInScope(user, caseId)
   assertCaseAssignable(row)
 
-  const current = await loadActiveAssignment(row.id, row.trackingRound)
-  assertAssignable(assignmentStateOf(current))
-
   const agent = await loadAgentInCaseTeam(user.organizationId, input.agentId, row.assignedTeamId)
   const teamId = row.assignedTeamId as string
 
+  // UAT BUG-038 — เช็ค "ยังไม่มีผู้ถือเคส" อยู่ใน transaction เดียวกับการสร้าง:
+  // (1) ล็อกแถวเคส (`FOR UPDATE`) ให้คำขอที่มาพร้อมกันเข้าคิว แล้วจึงอ่าน assignment ที่ยังใช้งาน
+  // (2) partial unique `uniq_case_assignment_active` คือตัวบังคับจริงที่ DB — ชนแล้ว map เป็น code เดิม
   const created = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM cases WHERE id = ${row.id}::uuid FOR UPDATE`
+    const current = await loadActiveAssignment(row.id, row.trackingRound, tx as AssignmentTxClient)
+    assertAssignable(assignmentStateOf(current))
+
     const assignment = await tx.caseAssignment.create({
       data: {
         organizationId: user.organizationId,
@@ -399,7 +418,7 @@ export async function assignCase(
     )
 
     return assignment
-  })
+  }).catch(rethrowActiveAssignmentConflict)
 
   // `40` §15 — พนักงานได้งานใหม่ (มติ PO 03/10/2569 UAT Q17 · BUG-040)
   dispatchNotification(
@@ -436,12 +455,16 @@ export async function reassignCase(
     const now = new Date()
     const next = await prisma.$transaction(async (tx) => {
       const outcome = reassignOutcome()
-      await tx.caseAssignment.update({
-        where: { id: assignment.id },
+      // conditional update (UAT BUG-038) — คำขอที่มาพร้อมกันตัวที่สองเห็นแถวเดิมถูกโอนออกไปแล้ว ⇒ ไม่เปิดแถวใหม่ซ้อน
+      const closed = await tx.caseAssignment.updateMany({
+        where: { id: assignment.id, status: assignment.status },
         // ⚠️ ไม่แตะ `reassign_reason` ของแถวเดิม (UAT BUG-061) — ช่องนี้คือ "เหตุผลที่แถวนี้เกิด"
         //    เหตุผลที่ถูกโอนออกอยู่ที่ `reassignment_history` + แถวใหม่ (`reassigned_from`) แล้ว
         data: { status: outcome.previousStatus, updatedBy: context.actor.id },
       })
+      if (closed.count === 0) {
+        throw new AssignmentError('ASSIGNMENT_INVALID_STATUS', { detail: 'การมอบหมายเดิมถูกเปลี่ยนไปแล้ว' })
+      }
       const replacement = await tx.caseAssignment.create({
         data: {
           organizationId: user.organizationId,
