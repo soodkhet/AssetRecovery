@@ -2,6 +2,7 @@ import { hasCapability } from '@/lib/auth/permission'
 import type { SessionUser } from '@/lib/auth/types'
 import type { CaseFieldEvidenceDto } from '@/lib/cases/types'
 import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
+import { loadEvidenceTimelines, resubmittedAtIso } from '@/lib/field/resubmission'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -22,7 +23,7 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
   })
   if (assignment === null) return null
 
-  const [evidence, checkins] = await Promise.all([
+  const [evidence, checkins, timelines] = await Promise.all([
     prisma.caseEvidence.findFirst({
       where: { assignmentId: assignment.id, organizationId: user.organizationId },
       orderBy: { submittedAt: 'desc' },
@@ -55,8 +56,10 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
         checkedInAt: true,
       },
     }),
+    loadEvidenceTimelines(user.organizationId, [assignment.id]),
   ])
   if (evidence === null) return null
+  const timeline = timelines.get(assignment.id)
 
   return {
     assignmentId: assignment.id,
@@ -72,6 +75,8 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
     failReason: evidence.failReason,
     failReasonDetail: evidence.failReasonDetail,
     submittedAt: evidence.submittedAt.toISOString(),
+    firstSubmittedAt: (timeline?.firstSubmittedAt ?? evidence.submittedAt).toISOString(),
+    resubmittedAt: resubmittedAtIso(timeline),
     rejectReason: evidence.rejectReason,
     reviewedAt: evidence.reviewedAt?.toISOString() ?? null,
     reviewedByName: evidence.reviewedByUser?.fullName ?? null,

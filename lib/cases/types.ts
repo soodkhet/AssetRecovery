@@ -198,7 +198,12 @@ export interface CaseFieldEvidenceDto {
   /** เหตุผลปิดงานไม่สำเร็จ (UAT Q16) — รหัสจาก `CLOSE_FAIL_REASONS` (ป้ายผ่าน `closeFailReasonText()`) */
   failReason: string | null
   failReasonDetail: string | null
+  /** เวลาส่งหลักฐานชุดที่แสดง (ชุดล่าสุด) */
   submittedAt: string
+  /** เวลาปิดงานครั้งแรกของรอบ = หลักฐานชุดแรก (มติ PO U26) */
+  firstSubmittedAt: string
+  /** เวลาส่งหลักฐานใหม่ล่าสุด · ไม่เคยส่งใหม่ = `null` */
+  resubmittedAt: string | null
   rejectReason: string | null
   reviewedAt: string | null
   reviewedByName: string | null
@@ -240,7 +245,10 @@ export interface CaseDetailDto extends CaseListItemDto {
   allowedActions: string[]
   reviewNote: string | null
   outcome: string | null
+  /** เวลาปิดงาน**ครั้งแรก** — ส่งหลักฐานใหม่ไม่เขียนทับ (มติ PO U26) */
   closedAt: string | null
+  /** เวลาส่งหลักฐานใหม่ล่าสุดของรอบล่าสุด · ไม่เคยส่งใหม่/ผู้ใช้ฝั่งบริษัทไฟแนนซ์ = `null` (มติ PO U26) */
+  resubmittedAt: string | null
   updatedAt: string
   contacts: CaseContactDto[]
   documents: CaseDocumentDto[]

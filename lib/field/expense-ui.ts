@@ -73,6 +73,26 @@ export function isActiveExpense(status: ExpenseStatus): boolean {
 }
 
 /**
+ * สถานะที่นับเป็นยอด "รอดำเนินการ" บนหัวหน้าเบิกของพนักงานภาคสนาม — superseded/rejected/approved/paid ไม่นับ
+ * ชุดเดียวใช้ทั้งยอดต่อแท็บและยอดรวมทุกแท็บ (มติ PO 05/10/2569 U27)
+ */
+export const FIELD_PENDING_EXPENSE_STATUSES: readonly ExpenseStatus[] = [
+  'pending_warehouse_confirm',
+  'pending_approval',
+  'pending_finance_approval',
+  'needs_revision',
+]
+
+export function isPendingFieldExpense(status: ExpenseStatus): boolean {
+  return FIELD_PENDING_EXPENSE_STATUSES.includes(status)
+}
+
+/** ผลรวม satang ของรายการที่ยังรอดำเนินการ (บวกจำนวนเต็มเท่านั้น — Rule 01) */
+export function pendingExpenseSatang(items: ReadonlyArray<{ status: ExpenseStatus; grossSatang: number }>): number {
+  return items.filter((item) => isPendingFieldExpense(item.status)).reduce((sum, item) => sum + item.grossSatang, 0)
+}
+
+/**
  * รายการที่ **เจ้าของรายการเท่านั้น** แก้แล้วส่งใหม่ได้ (`41` §6.6 · §8 `resubmit_expense`)
  * ยอด/ใบเสร็จแก้ได้เฉพาะรายการกลุ่ม "เบิกแยก" — รายการที่ระบบคำนวณให้แก้ได้แค่หมายเหตุ (BE บังคับซ้ำ)
  */

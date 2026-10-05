@@ -114,7 +114,10 @@ export interface FieldCaseListItemDto {
   acceptedAt: string | null
   scheduleDate: string | null
   scheduleOrder: number | null
+  /** เวลาปิดงาน**ครั้งแรก**ของรอบ — ส่งหลักฐานใหม่ไม่เขียนทับ (มติ PO U26) */
   closedAt: string | null
+  /** เวลาส่งหลักฐานใหม่ล่าสุดหลังถูกตีกลับ · ไม่เคยส่งใหม่ = `null` (มติ PO U26) */
+  resubmittedAt: string | null
   outcome: CaseOutcome | null
   /** มี draft ค้าง = ปุ่มบนการ์ดเป็น "จบงาน" + badge Draft (`41` §7.5) */
   hasDraft: boolean
@@ -262,6 +265,11 @@ export interface FieldExpenseListDto {
   /** สรุปยอดหัวหน้าจอ (`41` §7.9) — superseded/rejected ไม่นับ */
   pendingSatang: number
   approvedSatang: number
+  /**
+   * ยอดรอดำเนินการรวม**ทุกแท็บ** (ผูกกับเคส + เบิกแยก + เบิกส่วนเกินเงินทดรองของตัวเอง) — มติ PO U27
+   * ค่าเดียวกันไม่ว่าเปิดแท็บไหน · คำนวณฝั่ง server
+   */
+  pendingAllTabsSatang: number
   /**
    * วันลงพื้นที่ (`YYYY-MM-DD` วันไทย) ที่ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงยังไม่ถูกคำนวณ — มติ PO UAT Q21
    * (job รายวันคิดหลังจบวัน) · หน้าจอแสดง "รอคำนวณหลังจบวัน" แทนการเดายอด · แท็บ "เบิกแยก" = ว่างเสมอ

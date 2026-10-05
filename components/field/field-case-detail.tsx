@@ -423,6 +423,12 @@ export function FieldCaseDetailModal({
           {actionError !== null && <ErrorState title={actionError.title} message={actionError.message} />}
           <FieldCaseDetailBody detail={detail} onRespondReassignment={onRespondReassignment} />
           <div className="mt-3 text-xs text-slate-400">มอบหมายเมื่อ {fmtDateTime(detail.assignedAt)}</div>
+          {detail.closedAt !== null && (
+            <div className="mt-0.5 text-xs text-slate-400">ปิดงานเมื่อ {fmtDateTime(detail.closedAt)}</div>
+          )}
+          {detail.resubmittedAt !== null && (
+            <div className="mt-0.5 text-xs text-slate-400">ส่งหลักฐานใหม่เมื่อ {fmtDateTime(detail.resubmittedAt)}</div>
+          )}
         </>
       )}
     </Modal>

@@ -65,6 +65,7 @@ import type {
   FieldTravelOriginDto,
 } from '@/lib/field/types'
 import { FieldError } from '@/lib/field/errors'
+import { loadEvidenceTimelines, resubmittedAtIso } from '@/lib/field/resubmission'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AssignmentStatus, CaseOutcome, ExpenseStatus, FuelMode } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
@@ -142,9 +143,11 @@ function toDateOnly(value: Date | null): string | null {
 interface ClosedCardExtras {
   reassignedAway: FieldReassignedAwayDto | null
   expenseStatuses: ExpenseStatus[]
+  /** เวลาส่งหลักฐานใหม่ล่าสุด (มติ PO U26) */
+  resubmittedAt: string | null
 }
 
-const NO_CLOSED_EXTRAS: ClosedCardExtras = { reassignedAway: null, expenseStatuses: [] }
+const NO_CLOSED_EXTRAS: ClosedCardExtras = { reassignedAway: null, expenseStatuses: [], resubmittedAt: null }
 
 function toListItem(
   row: AssignmentRow,
@@ -171,6 +174,7 @@ function toListItem(
     scheduleDate: toDateOnly(row.scheduledDate),
     scheduleOrder: row.scheduleOrder,
     closedAt: row.completedAt?.toISOString() ?? null,
+    resubmittedAt: extras.resubmittedAt,
     outcome: row.case.outcome,
     hasDraft: row.closeCaseDraft !== null,
     hasPendingReassignment,
@@ -310,12 +314,15 @@ async function pendingReassignmentCaseIds(caseIds: readonly string[]): Promise<S
  * - `reassigned_away` → แถวประวัติของ **รอบที่ผู้เรียกเป็นคนเดิม** เท่านั้น (`from_agent_id`)
  * - สถานะค่าใช้จ่าย → ของ `assignment` รอบนั้นตรง ๆ ⇒ รอบติดตามเก่าไม่ปนกัน
  */
-async function loadClosedCardExtras(rows: readonly AssignmentRow[]): Promise<Map<string, ClosedCardExtras>> {
+async function loadClosedCardExtras(
+  organizationId: string,
+  rows: readonly AssignmentRow[],
+): Promise<Map<string, ClosedCardExtras>> {
   const closedRows = rows.filter((row) => fieldGroupOf(row.status) === 'closed')
   if (closedRows.length === 0) return new Map()
 
   const reassignedRows = closedRows.filter((row) => row.status === 'reassigned_away')
-  const [histories, expenses] = await Promise.all([
+  const [histories, expenses, timelines] = await Promise.all([
     reassignedRows.length === 0
       ? Promise.resolve([])
       : prisma.reassignmentHistory.findMany({
@@ -337,6 +344,10 @@ async function loadClosedCardExtras(rows: readonly AssignmentRow[]): Promise<Map
       where: { assignmentId: { in: closedRows.map((row) => row.id) }, deletedAt: null },
       select: { assignmentId: true, status: true },
     }),
+    loadEvidenceTimelines(
+      organizationId,
+      closedRows.map((row) => row.id),
+    ),
   ])
 
   // เรียง `resolvedAt` ใหม่→เก่าแล้วเก็บแถวแรกของแต่ละคู่ = ครั้งล่าสุดที่เคสถูกโอนออกจากคนนั้น
@@ -367,6 +378,7 @@ async function loadClosedCardExtras(rows: readonly AssignmentRow[]): Promise<Map
       {
         reassignedAway: historyByKey.get(`${row.caseId}:${row.agentId}`) ?? null,
         expenseStatuses: statusesByAssignment.get(row.id) ?? [],
+        resubmittedAt: resubmittedAtIso(timelines.get(row.id)),
       },
     ]),
   )
@@ -396,7 +408,7 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
 
   const [pending, closedExtras] = await Promise.all([
     pendingReassignmentCaseIds(rows.map((row) => row.caseId)),
-    loadClosedCardExtras(rows),
+    loadClosedCardExtras(user.organizationId, rows),
   ])
 
   return {
@@ -450,7 +462,7 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
   })
   if (assignment === null) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
 
-  const [caseRow, checkins, travelOrigin, draft, pending, evidence] = await Promise.all([
+  const [caseRow, checkins, travelOrigin, draft, pending, evidence, timelines] = await Promise.all([
     prisma.case.findUniqueOrThrow({
       where: { id: caseId },
       select: {
@@ -549,13 +561,17 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
         submittedAt: true,
       },
     }),
+    loadEvidenceTimelines(user.organizationId, [assignment.id]),
   ])
 
   const documents = caseRow.documents.filter((doc) => doc.documentType !== 'product_photo')
   const productPhotos = caseRow.documents.filter((doc) => doc.documentType === 'product_photo')
 
   return {
-    ...toListItem(assignment, pending !== null),
+    ...toListItem(assignment, pending !== null, {
+      ...NO_CLOSED_EXTRAS,
+      resubmittedAt: resubmittedAtIso(timelines.get(assignment.id)),
+    }),
     companyName: caseRow.company.name,
     teamId: assignment.team.id,
     teamName: assignment.team.name,
@@ -1546,7 +1562,8 @@ export async function resubmitCloseCase(
     toVerifiedUploadMap(previous.fileHashes),
   )
 
-  const closedAt = new Date()
+  // เวลาส่งหลักฐานชุดนี้จริง — เก็บที่ `case_evidences.submitted_at` เท่านั้น (มติ PO U26)
+  const resubmittedAt = new Date()
   const fuelMode = current.team.compensationPlan?.fuelMode ?? null
   // มติ PO 03/10/2569 (UAT Q7 · BUG-052 · `41` §10.1): ชุดใหม่คิดด้วย **แผน (เวอร์ชัน) + วันที่ของการปิดงาน
   // ครั้งแรก** — ไม่ใช่แผน/วันที่ ณ ตอน resubmit ⇒ แก้แผนระหว่างนั้นยอดต้องเท่าเดิม (`92` §7.1)
@@ -1559,10 +1576,15 @@ export async function resubmitCloseCase(
     }),
   ])
 
+  // มติ PO 05/10/2569 U26 (UAT BUG-100): เวลาปิดงาน**ครั้งแรก**ไม่ถูกเขียนทับ — `cases.closed_at` /
+  // `case_assignments.completed_at` / `assets.closed_at` อิงเดือน รายงาน และค่าตอบแทน ⇒ ส่งใหม่ข้ามเที่ยงคืน
+  // สิ้นเดือนต้องไม่ทำให้เคสย้ายเดือน · ชุดแรกของรอบ = `pricing.pricedAt` (ใช้เติมค่าเดิมที่ถูกเขียนทับไปแล้วด้วย)
+  const firstClosedAt = pricing.pricedAt ?? current.completedAt ?? resubmittedAt
+
   const result = await prisma.$transaction(async (tx) => {
     const claimed = await tx.caseAssignment.updateMany({
       where: { id: current.id, status: 'needs_revision' },
-      data: { status: closedStatus, completedAt: closedAt, updatedBy: context.actor.id },
+      data: { status: closedStatus, completedAt: firstClosedAt, updatedBy: context.actor.id },
     })
     if (claimed.count === 0) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS')
 
@@ -1584,7 +1606,7 @@ export async function resubmitCloseCase(
         travelOriginLat: travelOrigin?.latitude ?? null,
         travelOriginLng: travelOrigin?.longitude ?? null,
         travelOriginSource: travelOrigin?.source ?? null,
-        submittedAt: closedAt,
+        submittedAt: resubmittedAt,
         createdBy: context.actor.id,
       },
       select: { id: true },
@@ -1595,7 +1617,7 @@ export async function resubmitCloseCase(
       data: {
         status: outcome === 'closed_success' ? 'closed_success' : 'closed_fail',
         outcome,
-        closedAt,
+        closedAt: firstClosedAt,
         updatedBy: context.actor.id,
       },
     })
@@ -1608,7 +1630,7 @@ export async function resubmitCloseCase(
         ? await ensureAssetForClosedCase(tx as WarehouseTxClient, {
             organizationId: user.organizationId,
             caseId,
-            closedAt,
+            closedAt: firstClosedAt,
             actorId: context.actor.id,
           })
         : null
@@ -1629,8 +1651,8 @@ export async function resubmitCloseCase(
       outcome,
       plan: pricing.plan,
       distanceKmHundredths,
-      // วันที่รายการ = วันปิดงานครั้งแรก (UAT Q7) — สถานะเคส/assignment ยังใช้เวลาส่งใหม่จริง
-      closedAt: pricing.pricedAt ?? closedAt,
+      // วันที่รายการ = วันปิดงานครั้งแรก (UAT Q7 · มติ PO U26)
+      closedAt: firstClosedAt,
       actor: context.actor,
       meta: context.meta,
     })
@@ -1662,6 +1684,8 @@ export async function resubmitCloseCase(
           supersededExpenseIds: supersededIds,
           expenseIds: expenses.expenseIds,
           assetId: asset?.assetId ?? null,
+          closedAt: firstClosedAt.toISOString(),
+          resubmittedAt: resubmittedAt.toISOString(),
           events: ['case.close_resubmitted'],
         },
         reason: 'ส่งหลักฐานปิดงานใหม่หลังถูกตีกลับ',

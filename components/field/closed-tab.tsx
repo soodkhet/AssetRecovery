@@ -72,6 +72,11 @@ function ClosedCard({ item, onOpen }: { item: FieldCaseListItemDto; onOpen: (cas
         <IconMap className="h-4 w-4 shrink-0" />
         {place} · ปิดงานเมื่อ {fmtDateTime(item.closedAt)} · รอบที่ {item.trackingRound}
       </div>
+      {item.resubmittedAt !== null && (
+        <div className="mt-0.5 pl-5 text-[12px] text-slate-500" data-testid="closed-card-resubmitted">
+          ส่งหลักฐานใหม่เมื่อ {fmtDateTime(item.resubmittedAt)}
+        </div>
+      )}
       {expenseStatus !== null && (
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
           <IconWallet className="h-4 w-4 shrink-0" /> ค่าใช้จ่าย:{' '}

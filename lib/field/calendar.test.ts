@@ -33,6 +33,7 @@ function scheduled(caseId: string, scheduleDate: string | null): FieldCaseListIt
     scheduleDate,
     scheduleOrder: 1,
     closedAt: null,
+    resubmittedAt: null,
     outcome: null,
     hasDraft: false,
     hasPendingReassignment: false,

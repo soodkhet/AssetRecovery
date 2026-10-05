@@ -25,6 +25,7 @@ import { CaseError } from '@/lib/cases/errors'
 import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
+import { loadCaseResubmittedAt } from '@/lib/field/resubmission'
 import { caseDocumentRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import type {
@@ -358,6 +359,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     reviewNote: row.reviewNote,
     outcome: row.outcome,
     closedAt: row.closedAt?.toISOString() ?? null,
+    // เติมเฉพาะ `getCase()` ของผู้ใช้ภายใน (มติ PO U26) — เส้นเขียน/ฝั่งบริษัทไฟแนนซ์คืน null
+    resubmittedAt: null,
     updatedAt: row.updatedAt.toISOString(),
     contacts: row.contacts.map((contact) => ({
       id: contact.id,
@@ -520,8 +523,11 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   }
   // บริษัทไฟแนนซ์เห็นเหตุผลปิดงานไม่สำเร็จของเคสตัวเองได้ (มติ PO 03/10/2569 — UAT Q16)
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
-  const fieldEvidence = await loadCaseFieldEvidence(user, row.id)
-  return await withProjectedSourceTemplateName(user.organizationId, { ...detail, fieldEvidence })
+  const [fieldEvidence, resubmittedAt] = await Promise.all([
+    loadCaseFieldEvidence(user, row.id),
+    loadCaseResubmittedAt(user.organizationId, row.id),
+  ])
+  return await withProjectedSourceTemplateName(user.organizationId, { ...detail, fieldEvidence, resubmittedAt })
 }
 
 /**

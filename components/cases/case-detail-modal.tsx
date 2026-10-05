@@ -441,6 +441,21 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
           value={<span className="font-mono font-semibold">{fmtSatangSymbol(detail.outstandingDebtSatang)}</span>}
         />
         <Row label="สร้างเมื่อ" value={`${fmtDateTime(detail.createdAt)} · ${detail.createdByName}`} />
+        {detail.closedAt !== null && (
+          <Row
+            label="ปิดงานเมื่อ"
+            value={
+              <>
+                {fmtDateTime(detail.closedAt)}
+                {detail.resubmittedAt !== null && (
+                  <span className="block text-xs text-slate-500">
+                    ส่งหลักฐานใหม่เมื่อ {fmtDateTime(detail.resubmittedAt)}
+                  </span>
+                )}
+              </>
+            }
+          />
+        )}
       </dl>
     </section>
   )
