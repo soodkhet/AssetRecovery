@@ -77,7 +77,7 @@ export function CreateBillingModal({
     }
     showToast({
       tone: 'success',
-      title: 'สร้างรอบวางบิลแล้ว',
+      title: `สร้างรอบวางบิล ${result.data?.batchNumber ?? ''} แล้ว`,
       description: `${result.data?.companyName ?? ''} งวด ${result.data?.period ?? ''} — ตรวจยอดก่อนกดส่งบิล`,
     })
     setCompanyId('')

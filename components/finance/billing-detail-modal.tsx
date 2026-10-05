@@ -68,7 +68,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
       open
       onClose={onClose}
       size="lg"
-      title={`รอบวางบิล — ${batch.companyName} งวด ${batch.period}`}
+      title={`รอบวางบิล ${batch.batchNumber} — ${batch.companyName} งวด ${batch.period}`}
       description="รายการรายได้ที่ถูกรวมเข้ารอบนี้ (snapshot ตอนสร้างรอบ)"
       footer={
         <Button variant="ghost" onClick={onClose}>

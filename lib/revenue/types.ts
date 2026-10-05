@@ -28,6 +28,8 @@ export interface RevenueDto {
   billingBatchId: string | null
   /** ชื่อรอบที่ถูกรวมเข้า — `null` = ยังไม่ถูกรวม (แสดง "-" ตาม `19` §8) */
   billingBatchPeriod: string | null
+  /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U76) — `null` = ยังไม่ถูกรวม */
+  billingBatchNumber: string | null
   createdAt: string
 }
 
@@ -37,6 +39,8 @@ export interface BillingBatchDto {
   companyName: string
   /** โหมด VAT ที่ snapshot ไว้กับรายได้ในรอบ (UAT Q6) — ปกติมีค่าเดียว · หลายค่า = บริษัทเปลี่ยนโหมดระหว่างงวด */
   vatModes: VatMode[]
+  /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` ต่อองค์กร รีเซ็ตทุกปี พ.ศ. (มติ U76) */
+  batchNumber: string
   /** เช่น "มิถุนายน 2569" (พ.ศ.) */
   period: string
   status: BillingBatchStatus

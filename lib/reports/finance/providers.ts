@@ -19,6 +19,12 @@ import {
 } from '@/lib/reports/finance/advance-overdue-report'
 import { buildArAgingReport, type ArAgingCompanyEntry } from '@/lib/reports/finance/ar-aging-report'
 import {
+  batchAdjustmentShareInRange,
+  batchAdjustmentSharesByRevenue,
+  type BatchLevelAdjustment,
+  type BatchRevenueMember,
+} from '@/lib/reports/finance/batch-adjustments'
+import {
   buildCompensationReport,
   isReceiptExpense,
   COMPENSATION_GROUP_BYS,
@@ -288,18 +294,23 @@ export async function loadRevenueEntries(
     }))
   }
 
-  const adjustments =
+  const batchIds = [...new Set(rows.map((row) => row.billingBatchId).filter((id): id is string => id !== null))]
+  const [adjustments, batchLevel] = await Promise.all([
     rows.length === 0
       ? []
-      : await prisma.adjustment.findMany({
+      : prisma.adjustment.findMany({
           where: {
             organizationId,
             status: 'approved',
             revenueId: { in: rows.map((row) => row.id) },
           },
           select: { revenueId: true, adjustmentType: true, amountSatang: true },
-        })
+        }),
+    loadBatchLevelAdjustments(organizationId, batchIds),
+  ])
   const index = indexBy(adjustments.map((row) => ({ ...row, targetId: row.revenueId })))
+  // U69 — Adjustment ระดับรอบวางบิลกระจายลงรายได้ในรอบตามสัดส่วนยอดเคส
+  const batchShares = batchAdjustmentSharesByRevenue(batchLevel.members, batchLevel.adjustments)
 
   return rows.map((row) => ({
     ...revenueGroupOf(groupBy, {
@@ -309,9 +320,56 @@ export async function loadRevenueEntries(
     }),
     caseId: row.caseId,
     caseStatus: row.case.status,
-    // `22` §6.12 — ยอดก่อน VAT หลังรายการปรับปรุงที่อนุมัติแล้ว
-    revenueSatang: netOf(row.grossSatang, index, row.id),
+    // `22` §6.12 — ยอดก่อน VAT หลังรายการปรับปรุงที่อนุมัติแล้ว (ระดับรายได้ + ส่วนแบ่งระดับรอบวางบิล — U69)
+    revenueSatang: netOf(row.grossSatang, index, row.id) + (batchShares.get(row.id) ?? 0),
   }))
+}
+
+/**
+ * Adjustment ที่อนุมัติแล้วซึ่งผูก**รอบวางบิล** (ไม่ผูกรายได้ใบใด) ของรอบที่ระบุ + รายได้ทุกใบของรอบเหล่านั้น
+ * (ฐานการกระจายตามสัดส่วน — มติ PO U69) · ใช้ร่วมกันระหว่าง F2 กับบรรทัดกระทบยอด U44 ⇒ ยอดชุดเดียวกัน
+ * · รายได้โหลดเฉพาะรอบที่มี Adjustment ระดับรอบจริง (ส่วนใหญ่ไม่มี ⇒ query เดียวจบ)
+ */
+async function loadBatchLevelAdjustments(
+  organizationId: string,
+  batchIds: readonly string[],
+): Promise<{
+  adjustments: (BatchLevelAdjustment & { hasActiveNote: boolean })[]
+  members: BatchRevenueMember[]
+}> {
+  if (batchIds.length === 0) return { adjustments: [], members: [] }
+  const rows = await prisma.adjustment.findMany({
+    where: { organizationId, status: 'approved', revenueId: null, billingBatchId: { in: [...batchIds] } },
+    select: {
+      billingBatchId: true,
+      adjustmentType: true,
+      amountSatang: true,
+      creditNotes: { where: { status: 'active' }, select: { id: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  })
+  const adjustments = rows.flatMap((row) =>
+    row.billingBatchId === null
+      ? []
+      : [
+          {
+            billingBatchId: row.billingBatchId,
+            adjustmentType: row.adjustmentType,
+            amountSatang: row.amountSatang,
+            hasActiveNote: row.creditNotes.length > 0,
+          },
+        ],
+  )
+  if (adjustments.length === 0) return { adjustments, members: [] }
+  const members = await prisma.revenue.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      billingBatchId: { in: [...new Set(adjustments.map((row) => row.billingBatchId))] },
+    },
+    select: { id: true, billingBatchId: true, grossSatang: true },
+  })
+  return { adjustments, members }
 }
 
 /**
@@ -389,18 +447,11 @@ export async function loadRevenueReconciliationInput(
   const isInvoiced = (batchId: string | null): boolean => batchId !== null && invoicedBatches.has(batchId)
   const revenueBatch = new Map(revenues.map((row) => [row.id, row.billingBatchId]))
 
-  const adjustments =
+  const [adjustments, batchLevel] = await Promise.all([
     revenues.length === 0
       ? []
-      : await prisma.adjustment.findMany({
-          where: {
-            organizationId,
-            status: 'approved',
-            OR: [
-              { revenueId: { in: revenues.map((row) => row.id) } },
-              ...(batchIds.length === 0 ? [] : [{ revenueId: null, billingBatchId: { in: batchIds } }]),
-            ],
-          },
+      : prisma.adjustment.findMany({
+          where: { organizationId, status: 'approved', revenueId: { in: revenues.map((row) => row.id) } },
           select: {
             adjustmentType: true,
             amountSatang: true,
@@ -408,18 +459,36 @@ export async function loadRevenueReconciliationInput(
             billingBatchId: true,
             creditNotes: { where: { status: 'active' }, select: { id: true } },
           },
-        })
+        }),
+    loadBatchLevelAdjustments(organizationId, batchIds),
+  ])
+  // U69 — Adjustment ระดับรอบนับเฉพาะส่วนที่กระจายลงรายได้ในช่วงรายงาน (ตัวเดียวกับที่ F2 นับ) ⇒ กระทบยอดลงตัว
+  const inRange = new Set(revenues.map((row) => row.id))
+  const batchLevelInRange = batchLevel.adjustments.flatMap((row) => {
+    const share = batchAdjustmentShareInRange(row, batchLevel.members, inRange)
+    return share === 0
+      ? []
+      : [
+          {
+            adjustmentType: row.adjustmentType,
+            amountSatang: share,
+            invoiced: isInvoiced(row.billingBatchId),
+            hasActiveNote: row.hasActiveNote,
+          },
+        ]
+  })
 
   return {
     revenues: revenues.map((row) => ({ grossSatang: row.grossSatang, invoiced: isInvoiced(row.billingBatchId) })),
-    adjustments: adjustments.map((row) => ({
-      adjustmentType: row.adjustmentType,
-      amountSatang: row.amountSatang,
-      invoiced: isInvoiced(
-        row.revenueId === null ? row.billingBatchId : (revenueBatch.get(row.revenueId) ?? row.billingBatchId),
-      ),
-      hasActiveNote: row.creditNotes.length > 0,
-    })),
+    adjustments: [
+      ...adjustments.map((row) => ({
+        adjustmentType: row.adjustmentType,
+        amountSatang: row.amountSatang,
+        invoiced: isInvoiced(row.revenueId === null ? row.billingBatchId : (revenueBatch.get(row.revenueId) ?? null)),
+        hasActiveNote: row.creditNotes.length > 0,
+      })),
+      ...batchLevelInRange,
+    ],
     notes: invoices.flatMap((row) => row.creditNotes),
   }
 }

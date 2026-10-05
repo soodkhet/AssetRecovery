@@ -105,6 +105,20 @@ export function portalAlertTextClass(value: number): string {
   return ALERT_TEXT_CLASS[portalAlertTone(value)]
 }
 
+const AGING_BUCKET_TONE: Readonly<Record<'default' | 'warning' | 'danger', PortalKpiTone>> = {
+  default: 'emerald',
+  warning: 'amber',
+  danger: 'red',
+}
+
+/**
+ * สีช่องอายุหนี้ในหน้าภาพรวม (BUG-149 ส่วนที่เหลือ) — ช่องที่**ไม่มียอดค้าง (฿0)** ใช้สีปกติ (slate) เสมอ
+ * ไม่ว่าจะเป็นช่วงวันที่เตือน/อันตราย · มียอดจึงใช้สีตามช่วง (ปกติ/เตือน/อันตราย)
+ */
+export function portalAgingBucketTone(tone: 'default' | 'warning' | 'danger', outstandingSatang: number): PortalKpiTone {
+  return outstandingSatang > 0 ? AGING_BUCKET_TONE[tone] : 'slate'
+}
+
 // ── ภาษีหัก ณ ที่จ่ายที่ลูกค้าหัก (มติ U11) ──────────────────────────────────
 
 /** หมายเหตุเตือนเมื่อมียอดที่ลูกค้าหักภาษี ณ ที่จ่ายไว้ (ต้องได้หนังสือรับรองต้นฉบับเพื่อใช้เครดิตภาษี) */

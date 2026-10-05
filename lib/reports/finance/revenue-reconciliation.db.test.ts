@@ -69,7 +69,7 @@ async function run(): Promise<ReportPayload> {
 }
 
 let seq = 0
-async function seedRevenue(grossSatang: number, billingBatchId: string | null): Promise<string> {
+async function seedRevenue(grossSatang: number, billingBatchId: string | null, revenueDate = '2026-08-10'): Promise<string> {
   seq += 1
   const caseRef = `RCN-${TAG}-${seq}`
   const cases = await db().$queryRawUnsafe<{ id: string }[]>(`
@@ -88,7 +88,7 @@ async function seedRevenue(grossSatang: number, billingBatchId: string | null): 
                           total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
     VALUES ('${ORG_ID}', '${cases[0]?.id ?? ''}', '${COMPANY_ID}', ${billingBatchId === null ? 'NULL' : `'${billingBatchId}'`},
             ${grossSatang}, ${vat}, 7.00, ${grossSatang + vat}, 'SUCCESS_FEE', 'exclude_vat',
-            '${billingBatchId === null ? 'ready_for_billing' : 'billed'}', '2026-08-10', '${USER_ID}')
+            '${billingBatchId === null ? 'ready_for_billing' : 'billed'}', '${revenueDate}', '${USER_ID}')
     RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -117,6 +117,7 @@ async function seedNote(invoiceId: string, type: 'credit' | 'debit', amount: num
 
 let invoiceId = ''
 let billingBatchId = ''
+let periodId = ''
 const revenueIds: string[] = []
 
 beforeAll(async () => {
@@ -149,6 +150,7 @@ beforeAll(async () => {
     VALUES ('${ORG_ID}', '${COMPANY_ID}', 'สิงหาคม 2569', 'sent', 399110, '2026-09-30', '${USER_ID}') RETURNING id
   `)
   billingBatchId = batch[0]?.id ?? ''
+  periodId = period[0]?.id ?? ''
   // เคส UAT C1/C2/C4 รวม 373000 ในใบกำกับเดียว
   for (const gross of [124_000, 124_000, 125_000]) revenueIds.push(await seedRevenue(gross, billingBatchId))
   const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
@@ -219,5 +221,42 @@ suite('U44 — บรรทัดกระทบยอด F2 กับใบก�
     })
     expect(payload.rows.length).toBeGreaterThan(0)
     expect(payload.reconciliation).toBeNull()
+  })
+
+  it('U69 — Adjustment ระดับรอบวางบิลกระจายตามสัดส่วนยอดเคส · นับเฉพาะส่วนของรายได้ในช่วงรายงาน · กระทบยอดยังลงเท่าเดิม', async () => {
+    const before = await run()
+    const beforeTotal = Number(before.totalRow?.['revenueSatang'])
+    const beforeAwaiting = line(before, 'awaitingCredit') ?? 0
+    const beforeInvoiced = line(before, 'invoiced') ?? 0
+
+    // รอบใหม่: รายได้ ส.ค. 60,000 (ในช่วง) + ก.ค. 40,000 (นอกช่วง) ออกใบกำกับแล้ว
+    const batch = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, due_date, created_by)
+      VALUES ('${ORG_ID}', '${COMPANY_ID}', 'กันยายน 2569', 'sent', 107000, '2026-10-31', '${USER_ID}') RETURNING id
+    `)
+    const batchId = batch[0]?.id ?? ''
+    await seedRevenue(60_000, batchId)
+    await seedRevenue(40_000, batchId, '2026-07-20')
+    const sales = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang, total_satang, created_by)
+      VALUES ('${ORG_ID}', '${periodId}', '${batchId}', '${COMPANY_ID}', 100000, 7000, 107000, '${USER_ID}') RETURNING id
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, created_by)
+      VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}-B', '2026-08-25', '${USER_ID}')
+    `)
+    // Adjustment ลด 10,000 ผูกรอบ (ไม่ผูกรายได้) ⇒ ส่วนของรายได้ ส.ค. = 10,000 × 60/100 = 6,000
+    await db().$executeRawUnsafe(`
+      INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id,
+                               approved_by, approved_at, created_by)
+      VALUES ('${ORG_ID}', 'decrease', 10000, 'ส่วนลดทั้งรอบ', 'approved', '${batchId}', '${USER_ID}', now(), '${USER_ID}')
+    `)
+
+    const after = await run()
+    expect(Number(after.totalRow?.['revenueSatang'])).toBe(beforeTotal + 60_000 - 6_000)
+    expect(line(after, 'invoiced')).toBe(beforeInvoiced + 60_000)
+    expect(line(after, 'awaitingCredit')).toBe(beforeAwaiting + 6_000)
+    // ผลต่างไม่เปลี่ยน (Adjustment ระดับรอบไม่ทำให้กระทบยอดไม่ลงอีกต่อไป)
+    expect(after.reconciliation?.differenceSatang).toBe(before.reconciliation?.differenceSatang)
   })
 })

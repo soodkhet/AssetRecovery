@@ -152,7 +152,7 @@ async function expenseTarget(user: SessionUser, targetId: string): Promise<RawTa
 async function billingBatchTarget(user: SessionUser, targetId: string): Promise<RawTarget> {
   const row = await prisma.billingBatch.findFirst({
     where: { id: targetId, organizationId: user.organizationId, deletedAt: null },
-    select: { period: true, totalSatang: true, dueDate: true, company: { select: { name: true } } },
+    select: { period: true, batchNumber: true, totalSatang: true, dueDate: true, company: { select: { name: true } } },
   })
   if (row === null) throw new AdjustmentError('ADJUSTMENT_TARGET_NOT_FOUND', { detail: `billing_batch=${targetId}` })
 
@@ -162,7 +162,8 @@ async function billingBatchTarget(user: SessionUser, targetId: string): Promise<
     key === null ? row.dueDate : new Date(Date.UTC(key.yearBe - 543, key.month - 1, 1))
 
   return {
-    targetRef: row.period,
+    // มติ U76 — อ้างรอบด้วยเลขรอบจริง BL-<พ.ศ.>-NNN
+    targetRef: row.batchNumber,
     targetLabel: `${row.company.name} · รอบวางบิล ${row.period}`,
     currentSatang: row.totalSatang,
     targetDate,
@@ -284,7 +285,7 @@ async function searchTargetIds(user: SessionUser, targetType: AdjustmentTargetTy
 
   if (targetType === 'billing_batch') {
     const rows = await prisma.billingBatch.findMany({
-      where: { organizationId, deletedAt: null, ...(q === '' ? {} : { period: { contains: q } }) },
+      where: { organizationId, deletedAt: null, ...(q === '' ? {} : { OR: [{ period: { contains: q } }, { batchNumber: { contains: q } }] }) },
       select: { id: true },
       orderBy: [{ createdAt: 'desc' }],
       take,
@@ -330,7 +331,7 @@ const adjustmentSelect = {
       payee: { select: { user: { select: { fullName: true } } } },
     },
   },
-  billingBatch: { select: { period: true, company: { select: { name: true } } } },
+  billingBatch: { select: { period: true, batchNumber: true, company: { select: { name: true } } } },
   payoutBatch: { select: { name: true, side: true } },
   approvedByUser: { select: { fullName: true } },
   createdByUser: { select: { fullName: true } },
@@ -349,7 +350,10 @@ function targetTextOf(row: AdjustmentRow, targetType: AdjustmentTargetType): { r
     }
   }
   if (targetType === 'billing_batch' && row.billingBatch !== null) {
-    return { ref: row.billingBatch.period, label: `${row.billingBatch.company.name} · รอบวางบิล` }
+    return {
+      ref: row.billingBatch.batchNumber,
+      label: `${row.billingBatch.company.name} · รอบวางบิล ${row.billingBatch.period}`,
+    }
   }
   if (targetType === 'payout_batch' && row.payoutBatch !== null) {
     return { ref: row.payoutBatch.name, label: `รอบจ่าย ${PAYOUT_SIDE_LABEL[row.payoutBatch.side]}` }

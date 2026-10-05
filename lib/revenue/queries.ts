@@ -142,7 +142,7 @@ const revenueSelect = {
   createdAt: true,
   case: { select: { caseRef: true, debtorName: true } },
   company: { select: { name: true } },
-  billingBatch: { select: { period: true } },
+  billingBatch: { select: { period: true, batchNumber: true } },
 } as const
 
 type RevenueRow = Prisma.RevenueGetPayload<{ select: typeof revenueSelect }>
@@ -166,6 +166,7 @@ function toRevenueDto(row: RevenueRow): RevenueDto {
     status: row.status,
     billingBatchId: row.billingBatchId,
     billingBatchPeriod: row.billingBatch?.period ?? null,
+    billingBatchNumber: row.billingBatch?.batchNumber ?? null,
     createdAt: toIso(row.createdAt),
   }
 }
@@ -173,6 +174,7 @@ function toRevenueDto(row: RevenueRow): RevenueDto {
 const batchSelect = {
   id: true,
   companyId: true,
+  batchNumber: true,
   period: true,
   status: true,
   totalSatang: true,
@@ -196,6 +198,7 @@ function toBatchDto(row: BatchRow, asOf: Date): BillingBatchDto {
     companyId: row.companyId,
     companyName: row.company.name,
     vatModes: row.revenues.map((revenue) => revenue.vatModeSnapshot),
+    batchNumber: row.batchNumber,
     period: row.period,
     status: row.status,
     totalSatang: row.totalSatang,
@@ -405,8 +408,9 @@ export async function createBillingBatch(
         totalSatang: totals.totalSatang,
         dueDate,
         createdBy: user.id,
+        // ไม่ส่ง `batchNumber` — DB trigger เดินเลข `BL-<พ.ศ.>-NNN` ให้ภายใต้ล็อกแถวองค์กร (มติ U76)
       },
-      select: { id: true },
+      select: { id: true, batchNumber: true },
     })
 
     const claimed = await tx.revenue.updateMany({
@@ -429,6 +433,7 @@ export async function createBillingBatch(
         targetId: batch.id,
         after: {
           company_id: company.id,
+          batch_number: batch.batchNumber,
           period,
           status: 'draft',
           // `02` §8 ไม่มีคอลัมน์ `cutoff_date`/`due_rule` ⇒ เก็บที่มาของวันครบกำหนดไว้ใน audit

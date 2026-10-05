@@ -10,12 +10,13 @@ import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
   PORTAL_REVENUE_BASIS_LABEL,
+  portalAgingBucketTone,
   portalAlertTextClass,
   portalRevenueChartAxis,
   portalShortMonthLabel,
 } from '@/lib/portal/finance-ui'
-import { revenueSummaryIsEmpty, type PortalKpiTone } from '@/lib/portal/nav'
-import type { PortalArAgingBucketDto, PortalArAgingDto, PortalRevenueSummaryDto } from '@/lib/portal/serializers'
+import { revenueSummaryIsEmpty } from '@/lib/portal/nav'
+import type { PortalArAgingDto, PortalRevenueSummaryDto } from '@/lib/portal/serializers'
 
 type LoadState<T> = PortalDataState<T>
 
@@ -111,12 +112,6 @@ export function PortalRevenueSummaryCard({ state }: { state: LoadState<PortalRev
   )
 }
 
-const BUCKET_TONE: Readonly<Record<PortalArAgingBucketDto['tone'], PortalKpiTone>> = {
-  default: 'emerald',
-  warning: 'amber',
-  danger: 'red',
-}
-
 /** อายุหนี้ของบริษัทตัวเอง (`97` §6.5 AR Aging · mockup `renderDashboard()` การ์ดสุดท้าย) — ช่วงวันจากค่าตั้งองค์กร */
 export function PortalArAgingCard({ state }: { state: LoadState<PortalArAgingDto> }) {
   return (
@@ -139,7 +134,7 @@ export function PortalArAgingCard({ state }: { state: LoadState<PortalArAgingDto
                     key={bucket.label}
                     label={bucket.label}
                     value={fmtSatangSymbol(bucket.outstandingSatang)}
-                    tone={BUCKET_TONE[bucket.tone]}
+                    tone={portalAgingBucketTone(bucket.tone, bucket.outstandingSatang)}
                   />
                 ))}
               </div>

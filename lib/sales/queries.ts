@@ -109,7 +109,7 @@ const SALES_SELECT = {
   createdAt: true,
   period: { select: { periodLabel: true } },
   company: { select: { name: true } },
-  billingBatch: { select: { period: true, status: true } },
+  billingBatch: { select: { period: true, batchNumber: true, status: true } },
   taxInvoices: { select: TAX_INVOICE_SELECT, orderBy: { createdAt: 'desc' } },
 } satisfies Prisma.SalesRecordSelect
 
@@ -143,6 +143,7 @@ function toSalesDto(row: SalesRow): SalesRecordDto {
     companyName: row.company.name,
     billingBatchId: row.billingBatchId,
     billingPeriod: row.billingBatch.period,
+    billingBatchNumber: row.billingBatch.batchNumber,
     billingStatus: row.billingBatch.status,
     totalBeforeVatSatang: row.totalBeforeVatSatang,
     vatSatang: row.vatSatang,
@@ -735,7 +736,7 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
       note: true,
       createdAt: true,
       billingBatchId: true,
-      billingBatch: { select: { period: true, status: true, company: { select: { name: true } } } },
+      billingBatch: { select: { period: true, batchNumber: true, status: true, company: { select: { name: true } } } },
       bankTransaction: { select: { description: true, matchStatus: true } },
     },
   })
@@ -750,6 +751,7 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
     bankMatchStatus: row.bankTransaction?.matchStatus ?? null,
     billingBatchId: row.billingBatchId,
     billingPeriod: row.billingBatch.period,
+    billingBatchNumber: row.billingBatch.batchNumber,
     billingStatus: row.billingBatch.status,
     note: row.note,
     createdAt: row.createdAt.toISOString(),

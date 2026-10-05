@@ -59,6 +59,7 @@ export async function listPortalBillingBatches(ctx: PortalContext): Promise<Port
     where: visibleBatchWhere(ctx),
     select: {
       id: true,
+      batchNumber: true,
       period: true,
       status: true,
       totalSatang: true,

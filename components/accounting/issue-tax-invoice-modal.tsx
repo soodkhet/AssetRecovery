@@ -59,7 +59,7 @@ export function IssueTaxInvoiceModal({
       open
       onClose={onClose}
       title={`ออกใบกำกับภาษี — ${record.companyName}`}
-      description={`${record.periodLabel} · รอบวางบิล ${record.billingPeriod}`}
+      description={`${record.periodLabel} · รอบวางบิล ${record.billingBatchNumber} (${record.billingPeriod})`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>

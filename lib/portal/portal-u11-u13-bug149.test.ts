@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PORTAL_CUSTOMER_WHT_NOTICE,
   PORTAL_REVENUE_BASIS_LABEL,
+  portalAgingBucketTone,
   portalAlertTextClass,
   portalAlertTone,
   portalHasCustomerWht,
@@ -13,6 +14,15 @@ import { portalKpiCards } from '@/lib/portal/nav'
 /** มติ PO 05/10/2569 U11/U13/U14 + BUG-146/BUG-149 — ตัวช่วยฝั่ง UI ของพอร์ทัล (pure) */
 
 describe('BUG-149 — สีตามค่า (ทุกหน้าใช้ helper เดียว)', () => {
+  it('ช่องอายุหนี้ ฿0 = สีปกติ แม้เป็นช่วงเตือน/อันตราย · มียอดใช้สีตามช่วง', () => {
+    expect(portalAgingBucketTone('danger', 0)).toBe('slate')
+    expect(portalAgingBucketTone('warning', 0)).toBe('slate')
+    expect(portalAgingBucketTone('default', 0)).toBe('slate')
+    expect(portalAgingBucketTone('danger', 1)).toBe('red')
+    expect(portalAgingBucketTone('warning', 500)).toBe('amber')
+    expect(portalAgingBucketTone('default', 500)).toBe('emerald')
+  })
+
   it('0/ติดลบ = เขียว · มากกว่า 0 = แดง', () => {
     expect(portalAlertTone(0)).toBe('emerald')
     expect(portalAlertTone(-500)).toBe('emerald')

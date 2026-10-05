@@ -624,7 +624,8 @@ suite('มติ PO U40/U41 — Export Pack 10_Customer_WHT.csv + 11_Suspense_Re
       decoder.decode(packStorage.get([...packStorage.keys()].find((path) => path.endsWith(suffix)) ?? '') ?? new Uint8Array())
 
     const customer = fileText('10_Customer_WHT.csv').slice(CSV_BOM.length).split('\r\n')
-    expect(customer[1]).toBe('05/08/2569,ไฟแนนซ์ CO1 U40,0105540400001,2569-05,-,111.90,-,-,-,pending')
+    // อ้างรอบ = เลขรอบจริง BL-<พ.ศ.>-NNN · รอบเดือน (มติ U76)
+    expect(customer[1]).toMatch(/^05\/08\/2569,ไฟแนนซ์ CO1 U40,0105540400001,BL-25\d{2}-\d{3,} · 2569-05,-,111\.90,-,-,-,pending$/)
 
     const suspense = fileText('11_Suspense_Receipts.csv').slice(CSV_BOM.length).split('\r\n')
     expect(suspense).toHaveLength(3)

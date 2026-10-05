@@ -681,7 +681,8 @@ suite('มติ U14/U11 — ยอดตามเอกสารที่ออ
     expect(dto.months.at(-1)?.revenueSatang).toBe(38_300_000)
     expect(dto.total.revenueSatang).toBe(38_300_000)
 
-    // ภายในไม่เปลี่ยน: loader เดิมยังหัก Adjustment ที่อนุมัติแล้ว
+    // ภายในไม่เปลี่ยน: loader เดิมยังหัก Adjustment ที่อนุมัติแล้ว — รวม Adjustment ระดับรอบวางบิล 1,070,000
+    // ที่กระจายลงรายได้ในรอบ (มติ U69) ⇒ 1,000,000 + 37,300,000 − 1,000,000 − 1,070,000
     const now = new Date()
     const internal = await routes.providers.loadRevenueEntries(
       ORG_ID,
@@ -690,7 +691,7 @@ suite('มติ U14/U11 — ยอดตามเอกสารที่ออ
       null,
       { companyId: CO1, billingStatuses: ['sent', 'partially_paid', 'paid'] },
     )
-    expect(internal.reduce((sum, entry) => sum + entry.revenueSatang, 0)).toBe(37_300_000)
+    expect(internal.reduce((sum, entry) => sum + entry.revenueSatang, 0)).toBe(36_230_000)
   })
 
   it('วางบิล: รวม 399,110 = ชำระ 387,920 + ลูกค้าหัก 11,190 + ค้าง 0 · AR aging/dashboard = 0 สำหรับรอบนี้', async () => {
@@ -866,10 +867,10 @@ suite('โหมดดู portal ในฐานะลูกค้า (มติ
     )
     expect(viewed).toEqual(own)
     expect(viewed.map((item) => item.id)).not.toContain(fx.co1Draft)
-    // จำนวนเคส = รายได้ที่ผูกรอบ · รอบเดือนรูปแบบทดสอบ ("รอบ P5 n") อ่านไม่ได้ ⇒ ไม่เดาเลขรอบ
+    // จำนวนเคส = รายได้ที่ผูกรอบ · เลขรอบ = เลขจริง BL-<พ.ศ.>-NNN จาก DB (มติ U76 — ไม่ขึ้นกับรูปแบบรอบเดือน)
     expect(viewed.find((item) => item.id === fx.co1Sent)?.caseCount).toBe(1)
     expect(viewed.find((item) => item.id === fx.co1Partial)?.caseCount).toBe(0)
-    expect(viewed.every((item) => item.batchNumber === null)).toBe(true)
+    expect(viewed.every((item) => /^BL-25\d{2}-\d{3,}$/.test(item.batchNumber))).toBe(true)
 
     const invoices = await dataOf<PortalTaxInvoiceDto[]>(
       await routes.invoices.GET(request(asQuery('/api/portal/tax-invoices', CO1)), undefined),

@@ -66,6 +66,7 @@ const ROW_SELECT = {
   company: { select: { name: true } },
   billingBatch: {
     select: {
+      batchNumber: true,
       period: true,
       salesRecord: { select: { taxInvoices: { where: { status: 'active' }, select: { invoiceNumber: true } } } },
     },
@@ -77,7 +78,7 @@ const ROW_SELECT = {
 type Row = Prisma.CustomerWhtCertificateGetPayload<{ select: typeof ROW_SELECT }>
 
 function billingRefOf(row: Row): string | null {
-  return row.billingBatch === null ? null : `รอบวางบิล ${row.billingBatch.period} · ${row.company.name}`
+  return row.billingBatch === null ? null : `รอบวางบิล ${row.billingBatch.batchNumber} (${row.billingBatch.period}) · ${row.company.name}`
 }
 
 function toDto(row: Row, now: Date): CustomerWhtDto {
@@ -503,6 +504,7 @@ export async function customerWhtExportSources(
       company: { select: { name: true, taxId: true } },
       billingBatch: {
         select: {
+          batchNumber: true,
           period: true,
           salesRecord: { select: { taxInvoices: { where: { status: 'active' }, select: { invoiceNumber: true } } } },
         },
@@ -513,7 +515,7 @@ export async function customerWhtExportSources(
     withheldDate: row.withheldDate,
     companyName: row.company.name,
     companyTaxId: row.company.taxId,
-    billingRef: row.billingBatch?.period ?? null,
+    billingRef: row.billingBatch === null ? null : `${row.billingBatch.batchNumber} · ${row.billingBatch.period}`,
     taxInvoiceNumbers: row.billingBatch?.salesRecord?.taxInvoices.map((invoice) => invoice.invoiceNumber) ?? [],
     withheldSatang: row.withheldSatang,
     certificateNumber: row.certificateNumber,
