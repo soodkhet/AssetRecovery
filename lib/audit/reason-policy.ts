@@ -82,6 +82,7 @@ export const TRANSACTIONAL_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensi
   cash_receipts: 'money',
   expense_records: 'money',
   tax_invoices: 'tax',
+  credit_notes: 'tax',
   wht_certificates: 'tax',
   customer_wht_certificates: 'tax',
   wht_filing_summaries: 'tax',
