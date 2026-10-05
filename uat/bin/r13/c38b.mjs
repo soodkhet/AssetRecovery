@@ -1,0 +1,40 @@
+// R13c R13.38 (ส่วนหลัง) จับคู่เงินรอตรวจสอบ 780.00 → BL-2569-003 · probe หมายเหตุว่าง · R13.39 readiness
+import { openAs, shot, BASE, settle, sleep, toasts, log, R, q, mainText } from './_h.mjs'
+const TX780 = 'e51ef0aa-87a0-496b-95ab-c463fea02f6f', BL3 = 'f22c5f6c-9633-4115-9c41-e4a7749e7db6'
+log('=== c38b', new Date().toISOString())
+const a = await openAs('uat.account'); const p = a.page
+const res = []; p.on('response', async r => { if (r.url().includes('/api/') && r.request().method() !== 'GET') res.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname} ${(await r.text().catch(() => '')).slice(0, 500)}`) })
+const dlg = () => p.locator('[role="dialog"]').last()
+await p.goto(`${BASE}/accounting?tab=bank`); await settle(p); await sleep(1000)
+const row = p.locator('tbody tr').filter({ hasText: '780.00' }).first()
+await row.getByRole('button', { name: 'จับคู่ Manual' }).click(); await sleep(1500)
+const opts = await dlg().locator('select option').allInnerTexts(); log('candidates', opts)
+const vals = await dlg().locator('select option').evaluateAll(os => os.map(o => o.value))
+const pick = opts.findIndex(o => o.includes('BL-2569-003'))
+await dlg().locator('select').first().selectOption(vals[pick]); await sleep(400)
+const btn = dlg().getByRole('button', { name: 'ยืนยันการจับคู่' })
+log('note empty → confirm disabled?', await btn.isDisabled())
+log('modal', (await dlg().innerText()).replace(/\s+/g, ' ').slice(0, 900))
+await shot(p, R, 'c38-match-suspense-modal-empty-note')
+// probe API หมายเหตุว่าง
+const pr = await p.request.patch(`${BASE}/api/bank-reconciliation/transactions/${TX780}/match`, { data: { targetKind: 'billing', targetId: vals[pick], matchNote: null, confirmRematch: false }, failOnStatusCode: false })
+log('probe empty note', pr.status(), (await pr.text()).slice(0, 300))
+log(q(`select match_status from bank_transactions where id='${TX780}'`))
+await dlg().locator('textarea').first().fill('ทราบภายหลังว่าเป็นค่าบริการ CO1 รอบ BL-2569-003')
+res.length = 0
+await btn.click(); await sleep(2500)
+log('toast match', await toasts(p, 500)); log('res', res)
+await settle(p); await sleep(800)
+log('main', await mainText(p, 900))
+await shot(p, R, 'c38-bank-after-match', { fullPage: true })
+log(q(`select match_status, match_note from bank_transactions where id='${TX780}'`))
+log(q(`select batch_number,status,total_satang,received_satang,wht_withheld_by_customer_satang from billing_batches where id='${BL3}'`))
+log(q(`select amount_satang, wht_withheld_by_customer_satang, received_date from cash_receipts order by created_at desc limit 1`))
+log(q(`select * from customer_wht_certificates`))
+// R13.39 readiness
+await p.goto(`${BASE}/accounting?tab=closing`); await settle(p); await sleep(1500)
+await p.getByRole('button', { name: 'ตรวจความพร้อม' }).first().click(); await sleep(2500)
+log('R13.39 readiness:', (await dlg().innerText()).replace(/\s*\n+\s*/g, ' | ').slice(0, 2200))
+await shot(p, R, 'c39-readiness')
+log('5xx', a.serverErrors, a.consoleErrors.slice(0, 3))
+await a.browser.close()

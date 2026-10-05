@@ -1,0 +1,26 @@
+// R13c R13.41 คืนเงินรอตรวจสอบ 250.00 · probe จับคู่แถวที่คืนแล้ว
+import { openAs, shot, BASE, settle, sleep, toasts, log, R, q, mainText } from './_h.mjs'
+const TX250 = '3b5d5cb6-504a-418e-bddc-6fdb69fa409b', BL3 = 'f22c5f6c-9633-4115-9c41-e4a7749e7db6'
+log('=== c41', new Date().toISOString())
+const a = await openAs('uat.account'); const p = a.page
+const res = []; p.on('response', async r => { if (r.url().includes('/api/') && r.request().method() !== 'GET') res.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname} ${(await r.text().catch(() => '')).slice(0, 400)}`) })
+await p.goto(`${BASE}/accounting?tab=bank`); await settle(p); await sleep(1000)
+const row = p.locator('tbody tr').filter({ hasText: '250.00' }).first()
+await row.getByRole('button', { name: 'คืนเงินผู้โอน' }).click(); await sleep(800)
+const d = p.locator('[role="dialog"]').last()
+await d.locator('input[type=date]').fill('2026-10-06')
+await d.locator('input[type=file]').setInputFiles('uat/fixtures/files/C2-contract.pdf'); await sleep(300)
+await d.locator('input:not([type=date]):not([type=file])').last().fill('ผู้โอนแจ้งโอนผิดบัญชี')
+log('modal', (await d.innerText()).replace(/\s+/g, ' ').slice(0, 800))
+await shot(p, R, 'c41-refund-modal')
+await d.getByRole('button', { name: 'ยืนยันคืนเงินผู้โอน' }).click(); await sleep(3500)
+log('toast', await toasts(p, 500)); log('res', res)
+await settle(p); await sleep(800)
+log('main', await mainText(p, 700))
+log('row buttons', await p.locator('tbody tr').filter({ hasText: '250.00' }).first().innerText())
+await shot(p, R, 'c41-bank-after-refund', { fullPage: true })
+const pr = await p.request.patch(`${BASE}/api/bank-reconciliation/transactions/${TX250}/match`, { data: { targetKind: 'billing', targetId: BL3, matchNote: 'probe', confirmRematch: true }, failOnStatusCode: false })
+log('probe match refunded', pr.status(), (await pr.text()).slice(0, 300))
+log(q(`select match_status, refund_date, refund_note, refund_file_path from bank_transactions where id='${TX250}'`))
+log('5xx', a.serverErrors, a.consoleErrors.slice(0, 3))
+await a.browser.close()
