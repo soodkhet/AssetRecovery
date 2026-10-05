@@ -304,6 +304,7 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
           id: true,
           payeeId: true,
           netSatang: true,
+          advanceOffsetSatang: true,
           payee: { select: { user: { select: { fullName: true } } } },
         },
       },
@@ -320,17 +321,22 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
     const beYear = buddhistYear(paymentDate) ?? 0
 
     // จัดกลุ่มตามผู้รับเงินโดยคง**ลำดับรายการในรอบ** ให้ตรงกับตอนพิมพ์ใบสำคัญจ่าย (3.5)
-    const groups = new Map<string, { payeeName: string; netSatang: number; inPeriod: boolean }>()
+    const groups = new Map<
+      string,
+      { payeeName: string; netSatang: number; advanceOffsetSatang: number; inPeriod: boolean }
+    >()
     for (const item of batch.items) {
       const existing = groups.get(item.payeeId)
       if (existing === undefined) {
         groups.set(item.payeeId, {
           payeeName: item.payee.user.fullName,
           netSatang: item.netSatang,
+          advanceOffsetSatang: item.advanceOffsetSatang,
           inPeriod: paidItemIds.has(item.id),
         })
       } else {
         existing.netSatang += item.netSatang
+        existing.advanceOffsetSatang += item.advanceOffsetSatang
         existing.inPeriod = existing.inPeriod || paidItemIds.has(item.id)
       }
     }
@@ -347,6 +353,7 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
         paymentDate,
         payeeName: group.payeeName,
         netSatang: group.netSatang,
+        advanceOffsetSatang: group.advanceOffsetSatang,
         voucherRef: voucherNumber({ batchRef, beYear, index: voucherIndex }),
       })
     }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
+import { ChangeReturnMethodModal, RecordSeparateReturnModal } from '@/components/finance/advance-return-modals'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
 import { useAdvances } from '@/components/finance/use-advances'
 import {
@@ -23,9 +24,14 @@ import {
   Tr,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
+import { ADVANCE_RETURN_CHANNEL_LABEL, ADVANCE_RETURN_METHOD_LABEL, APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
 import {
+  ADVANCE_RETURN_STATE_LABEL,
   ADVANCE_STATUS_FILTERS,
+  advanceReturnStateBadgeGroup,
+  canChangeAdvanceReturnMethod,
+  canRecordAdvanceSeparateReturn,
+  totalReturnOutstandingSatang,
   advanceStatusBadgeGroup,
   advanceStatusLabel,
   canReviewAdvance,
@@ -61,6 +67,8 @@ export function AdvanceTab() {
   const [settleTarget, setSettleTarget] = useState<AdvanceDto | null>(null)
   const [reviewTarget, setReviewTarget] = useState<AdvanceDto | null>(null)
   const [reviewMode, setReviewMode] = useState<'approve' | 'reject'>('approve')
+  const [methodTarget, setMethodTarget] = useState<AdvanceDto | null>(null)
+  const [returnTarget, setReturnTarget] = useState<AdvanceDto | null>(null)
 
   const awaiting = countAwaitingSettlement(items)
   const overdue = countOverdue(items)
@@ -69,7 +77,7 @@ export function AdvanceTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="ยอดเงินทดรองที่ยังอยู่กับผู้เบิก"
           value={failed ? '—' : fmtSatangSymbol(outstandingAdvanceSatang(items))}
@@ -85,6 +93,11 @@ export function AdvanceTab() {
           value={failed ? '—' : fmtCount(overdue)}
           hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'ระบบเปลี่ยนสถานะให้อัตโนมัติทุกวัน'}
           className={overdue > 0 ? 'border-red-300 bg-red-50' : undefined}
+        />
+        <StatCard
+          label="ยอดคืนเงินทดรองค้าง"
+          value={failed ? '—' : fmtSatangSymbol(totalReturnOutstandingSatang(items))}
+          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'เคลียร์แล้วแต่ยังไม่ได้รับคืน/ยังไม่ถูกหักในรอบจ่าย'}
         />
       </div>
 
@@ -143,7 +156,7 @@ export function AdvanceTab() {
                 items.map((advance) => (
                   <Tr key={advance.id} className={advance.status === 'overdue' ? 'bg-red-50/40' : undefined}>
                     <Td>
-                      <RefText>{advance.id.slice(0, 8).toUpperCase()}</RefText>
+                      <RefText>{advance.ref}</RefText>
                       <p className="text-[10px] text-slate-400">ขอเมื่อ {fmtDate(advance.createdAt)}</p>
                     </Td>
                     <Td>
@@ -163,6 +176,37 @@ export function AdvanceTab() {
                       className={advance.returnSatang > 0 ? 'font-semibold text-emerald-700' : undefined}
                     >
                       {fmtSatangSymbol(advance.returnSatang)}
+                      {advance.returnState !== 'none' && (
+                        <div className="mt-1 space-y-0.5 text-right">
+                          <StatusBadge
+                            status={advance.returnState}
+                            group={advanceReturnStateBadgeGroup(advance.returnState)}
+                            label={ADVANCE_RETURN_STATE_LABEL[advance.returnState]}
+                          />
+                          {advance.returnOutstandingSatang > 0 && (
+                            <p className="text-[11px] font-semibold text-amber-700">
+                              ค้าง {fmtSatangSymbol(advance.returnOutstandingSatang)}
+                            </p>
+                          )}
+                          {advance.returnMethod !== null && (
+                            <p className="text-[10px] font-normal text-slate-500">
+                              {ADVANCE_RETURN_METHOD_LABEL[advance.returnMethod]}
+                            </p>
+                          )}
+                          {advance.returns
+                            .filter((entry) => entry.reversedAt === null)
+                            .map((entry) => (
+                              <p key={entry.id} className="text-[10px] font-normal text-slate-500">
+                                {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]} {fmtSatangSymbol(entry.amountSatang)}
+                                {entry.payoutBatchName !== null
+                                  ? ` · ${entry.payoutBatchName}`
+                                  : entry.receivedDate !== null
+                                    ? ` · ${fmtDate(entry.receivedDate)}`
+                                    : ''}
+                              </p>
+                            ))}
+                        </div>
+                      )}
                       {advance.excessSatang > 0 && (
                         <p className="text-[11px] font-semibold text-orange-700">
                           ใช้เกิน {fmtSatangSymbol(advance.excessSatang)}
@@ -227,6 +271,16 @@ export function AdvanceTab() {
                             เคลียร์ยอด
                           </Button>
                         )}
+                        {canApproveAdvance && canRecordAdvanceSeparateReturn(advance) && (
+                          <Button size="sm" variant="secondary" onClick={() => setReturnTarget(advance)}>
+                            บันทึกรับคืน
+                          </Button>
+                        )}
+                        {canApproveAdvance && canChangeAdvanceReturnMethod(advance) && (
+                          <Button size="sm" variant="ghost" onClick={() => setMethodTarget(advance)}>
+                            เปลี่ยนวิธีคืน
+                          </Button>
+                        )}
                       </div>
                     </Td>
                   </Tr>
@@ -242,6 +296,18 @@ export function AdvanceTab() {
         advance={reviewTarget}
         mode={reviewMode}
         onClose={() => setReviewTarget(null)}
+        onDone={() => void reload()}
+      />
+
+      <ChangeReturnMethodModal
+        advance={methodTarget}
+        onClose={() => setMethodTarget(null)}
+        onDone={() => void reload()}
+      />
+
+      <RecordSeparateReturnModal
+        advance={returnTarget}
+        onClose={() => setReturnTarget(null)}
         onDone={() => void reload()}
       />
 

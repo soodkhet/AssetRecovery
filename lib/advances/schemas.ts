@@ -56,21 +56,51 @@ export const advanceRejectSchema = z.object({
   rejectionReason: z.string().trim().min(5, 'ระบุเหตุผลอย่างน้อย 5 ตัวอักษร').max(500, 'เหตุผลยาวเกินไป'),
 })
 
+/** วิธีคืนยอด (มติ PO 05/10/2569 UAT U30) */
+export const advanceReturnMethodSchema = z.enum(['payout_offset', 'separate'])
+
 /** เคลียร์ยอด (`15` §9.1) — ยอดคืนคำนวณโดย DB (generated column) ห้ามส่งมาจากหน้าจอ */
 export const advanceSettleSchema = z.object({
   usedSatang: satangSchema('ยอดที่ใช้จริง'),
+  /** มติ U30 — มียอดคืนเท่านั้นที่มีผล · เว้นว่าง = หักกลบในรอบจ่ายถัดไป (ค่าเริ่มต้น) */
+  returnMethod: advanceReturnMethodSchema.default('payout_offset'),
   /** `15` §13 — ไฟล์ใบเสร็จอ้างอิงถูกบันทึกลง audit (ตาราง `advances` ไม่มีคอลัมน์เก็บ) */
   receiptFileUrl: optionalText(500, 'ลิงก์ใบเสร็จ'),
   note: optionalText(500, 'หมายเหตุ'),
 })
 
+/** เปลี่ยนวิธีคืน (การเงิน · มติ U30) — ต้องมีเหตุผลเสมอ (กระทบเงิน) */
+export const advanceReturnMethodChangeSchema = z.object({
+  returnMethod: advanceReturnMethodSchema,
+  reason: z.string().trim().min(5, 'ระบุเหตุผลอย่างน้อย 5 ตัวอักษร').max(500, 'เหตุผลยาวเกินไป'),
+})
+
+/**
+ * รับคืนแยก (การเงิน · มติ U30) — ช่องทาง + วันที่ + ยอด + หลักฐาน (path จากกลไกอัปโหลดผ่าน server)
+ * `receivedDate` เป็นคอลัมน์ `DATE` ⇒ `dateOnlySchema()` (เที่ยงคืน UTC)
+ */
+export const advanceSeparateReturnSchema = z.object({
+  channel: z.enum(['cash', 'bank_transfer']),
+  amountSatang: satangSchema('ยอดที่รับคืน').refine((value) => value > 0, 'ยอดที่รับคืนต้องมากกว่า 0'),
+  receivedDate: dateOnlySchema('วันที่รับคืน'),
+  evidenceFilePath: z.string().trim().min(1, 'แนบหลักฐานการรับคืน').max(1024, 'path ของไฟล์ยาวเกินไป'),
+  note: optionalText(500, 'หมายเหตุ'),
+})
+
 export const advanceListQuerySchema = z.object({
-  status: z.enum(['all', 'pending_approval', 'approved', 'overdue', 'cleared', 'rejected', 'uncleared']).default('all'),
+  status: z
+    .enum(['all', 'pending_approval', 'approved', 'overdue', 'cleared', 'rejected', 'uncleared', 'return_outstanding'])
+    .default('all'),
   payeeId: uuidSchema.optional(),
 })
 
 export type AdvanceCreateInput = z.infer<typeof advanceCreateSchema>
 export type AdvanceApproveInput = z.infer<typeof advanceApproveSchema>
 export type AdvanceRejectInput = z.infer<typeof advanceRejectSchema>
-export type AdvanceSettleInput = z.infer<typeof advanceSettleSchema>
+/** `returnMethod` ไม่ระบุ = ค่าเริ่มต้นหักกลบ (ผู้เรียกฝั่ง server/เทสต์ที่ไม่ได้ผ่าน schema) */
+export type AdvanceSettleInput = Omit<z.infer<typeof advanceSettleSchema>, 'returnMethod'> & {
+  returnMethod?: z.infer<typeof advanceReturnMethodSchema>
+}
 export type AdvanceListQuery = z.infer<typeof advanceListQuerySchema>
+export type AdvanceReturnMethodChangeInput = z.infer<typeof advanceReturnMethodChangeSchema>
+export type AdvanceSeparateReturnInput = z.infer<typeof advanceSeparateReturnSchema>

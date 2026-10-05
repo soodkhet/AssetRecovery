@@ -1,3 +1,5 @@
+import { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
+import { assertAdvanceInScope } from '@/lib/advances/queries'
 import { AuthError } from '@/lib/auth/errors'
 import { checkPermission } from '@/lib/auth/permission'
 import { requirePermission } from '@/lib/auth/require-permission'
@@ -13,6 +15,7 @@ import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
 import { UploadError } from '@/lib/uploads/errors'
 import type { UploadRule } from '@/lib/uploads/inspect'
 import {
+  advanceReturnFileRule,
   caseDocumentRule,
   creditNoteFileRule,
   expenseReceiptRule,
@@ -46,6 +49,7 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   WAREHOUSE_INTAKE_CAPABILITY,
   WAREHOUSE_CONFIRM_LOT_CAPABILITY,
   MANAGE_TAX_INVOICE,
+  APPROVE_ADVANCE,
 ] as const
 
 /**
@@ -67,6 +71,8 @@ export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
     ...WAREHOUSE_READ_CAPABILITIES,
     ...RECEIPT_REVIEW_CAPABILITIES,
     ...SALES_READ_CAPABILITIES,
+    APPROVE_ADVANCE,
+    REQUEST_ADVANCE,
   ]),
 ]
 
@@ -92,6 +98,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return lotDocumentRule(target.lotId, target.document)
     case 'credit_note':
       return creditNoteFileRule(target.taxInvoiceId)
+    case 'advance_return':
+      return advanceReturnFileRule(target.advanceId)
   }
 }
 
@@ -124,6 +132,12 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       // แนบไฟล์ใบลดหนี้ = บันทึกใบลดหนี้ ⇒ สิทธิ์เดียวกับ endpoint บันทึก (บัญชี `manage_tax_invoice`)
       const user = await requirePermission('manage', MANAGE_TAX_INVOICE)
       await assertTaxInvoiceInScope(user, target.taxInvoiceId)
+      return user
+    }
+    case 'advance_return': {
+      // แนบหลักฐานรับคืน = บันทึกรับคืนแยก ⇒ สิทธิ์เดียวกับ endpoint บันทึก (การเงิน `manage:approve_advance`)
+      const user = await requirePermission('manage', APPROVE_ADVANCE)
+      await assertAdvanceInScope(user, target.advanceId)
       return user
     }
   }
@@ -202,6 +216,14 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
     case 'tax_invoice': {
       if (!hasAny(user, 'view', SALES_READ_CAPABILITIES)) throw denied(user, `view:credit-note invoice=${owner.taxInvoiceId}`)
       await assertTaxInvoiceInScope(user, owner.taxInvoiceId)
+      return
+    }
+    case 'advance': {
+      // การเงินเห็นทุกราย · เจ้าของเงินทดรองเห็นของตัวเอง (scope เดียวกับหน้าเงินทดรอง)
+      if (!hasAny(user, 'view', [APPROVE_ADVANCE, REQUEST_ADVANCE])) {
+        throw denied(user, `view:advance-return advance=${owner.advanceId}`)
+      }
+      await assertAdvanceInScope(user, owner.advanceId)
       return
     }
   }

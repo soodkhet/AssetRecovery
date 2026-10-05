@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { advanceListQuerySchema } from '@/lib/advances/schemas'
 import {
   advanceRequestErrorText,
   ADVANCE_STATUS_LABEL,
@@ -50,6 +51,12 @@ function advance(overrides: Partial<AdvanceDto> = {}): AdvanceDto {
     rejectionReason: null,
     createdAt: '2026-06-18T03:00:00.000Z',
     requesterName: 'วิชัย ขยันดี',
+    ref: 'ADV-ADV1',
+    returnMethod: null,
+    returnCollectedSatang: 0,
+    returnOutstandingSatang: 0,
+    returnState: 'none',
+    returns: [],
     ...overrides,
   }
 }
@@ -153,7 +160,12 @@ describe('ยอดค้าง + ตัวกรองของแท็บเ�
       'overdue',
       'cleared',
       'rejected',
+      'return_outstanding',
     ])
+    // ค่าทุกตัวต้องผ่าน schema ของ API จริง (มติ PO U30 — ตัวกรองยอดคืนค้าง)
+    for (const option of ADVANCE_STATUS_FILTERS) {
+      expect(advanceListQuerySchema.safeParse({ status: option.value }).success).toBe(true)
+    }
   })
 })
 

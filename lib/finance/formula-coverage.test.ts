@@ -29,6 +29,7 @@ const FORMULA_HOME: Record<string, string> = {
   '6.11': 'lib/finance/ar-calc.ts', // AR คงค้าง
   '6.12': 'lib/finance/gross-profit.ts', // กำไรขั้นต้น
   '6.13': 'lib/finance/advance-calc.ts', // ยอดคืนเงินทดรอง
+  '6.14': 'lib/finance/advance-offset-calc.ts', // ยอดคืนค้าง + หักกลบในรอบจ่าย (มติ PO U30)
 }
 
 function sectionNumbersInSpec(): string[] {
@@ -36,9 +37,9 @@ function sectionNumbersInSpec(): string[] {
   return matches.map((line) => line.replace('### ', ''))
 }
 
-describe('`22` §6 — สูตรครบ 13 ตัว มีบ้านทุกตัว', () => {
-  it('เอกสารมีสูตร 13 ตัวตามที่ Changelog v1 ระบุ', () => {
-    expect(sectionNumbersInSpec()).toHaveLength(13)
+describe('`22` §6 — สูตรครบ 14 ตัว มีบ้านทุกตัว', () => {
+  it('เอกสารมีสูตร 14 ตัว (13 ตาม Changelog v1 + §6.14 มติ PO U30)', () => {
+    expect(sectionNumbersInSpec()).toHaveLength(14)
   })
 
   it('ทุก §6.x ในเอกสารมีไฟล์ที่ implement ลงทะเบียนไว้', () => {

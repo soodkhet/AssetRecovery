@@ -1,4 +1,5 @@
 import type { ReadinessCheck } from '@/lib/accounting/period'
+import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY } from '@/lib/exports/csv'
 import { fmtDate } from '@/lib/format/datetime'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
@@ -252,6 +253,9 @@ export const PAYMENT_HEADERS = [
   'amount_baht',
   'method',
   'voucher_ref',
+  // มติ PO 05/10/2569 (UAT U30) — ต่อท้ายไฟล์: ยอดหักคืนเงินทดรอง (หลังภาษี) + ยอดโอนจริง = amount − หัก
+  'advance_offset_baht',
+  'transfer_baht',
 ] as const
 
 /** ช่องทางจ่ายของระบบมีทางเดียว — โอนผ่านไฟล์ธนาคาร (`17` §6.3) */
@@ -263,6 +267,8 @@ export interface PaymentExportRow {
   payeeName: string
   netSatang: number
   voucherRef: string
+  /** มติ U30 — ยอดหักคืนเงินทดรองของผู้รับในรอบ (0 = ไม่มี) */
+  advanceOffsetSatang: number
 }
 
 export function paymentCsv(rows: readonly PaymentExportRow[]): string {
@@ -275,6 +281,8 @@ export function paymentCsv(rows: readonly PaymentExportRow[]): string {
       csvBaht(row.netSatang),
       PAYMENT_METHOD_LABEL,
       row.voucherRef,
+      csvBaht(row.advanceOffsetSatang),
+      csvBaht(payoutTransferSatang(row.netSatang, row.advanceOffsetSatang)),
     ]),
   )
 }

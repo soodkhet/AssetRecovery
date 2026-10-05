@@ -38,6 +38,9 @@ function item(overrides: Partial<PayoutBatchItemDto> = {}): PayoutBatchItemDto {
     whtPctSnapshot: 3,
     whtBaseIncluded: true,
     whtIncomeCategory: 'sec_40_8',
+    advanceOffsetSatang: 0,
+    transferSatang: 824_500,
+    advanceOffsets: [],
     bankName: 'ธนาคารกสิกรไทย',
     accountNumberMasked: 'xxx-x-x1234-x',
     ...overrides,
@@ -55,6 +58,8 @@ function batch(items: readonly PayoutBatchItemDto[], overrides: Partial<PayoutBa
     grossSatang: gross,
     whtSatang: wht,
     netSatang: gross - wht,
+    advanceOffsetSatang: 0,
+    transferSatang: gross - wht,
     itemCount: items.length,
     bankAccountId: 'acc-1',
     bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x9876-x',
@@ -215,5 +220,45 @@ describe('buildPayslipDocs (`06_payslip.pdf`)', () => {
     expect(slip.rows[0]!.description).toBe('ค่าเดินทางล่วงหน้า (เงินทดรองจ่าย — ไม่หักภาษี ณ ที่จ่าย)')
     expect(slip.whtLabel).toBe('หักภาษี ณ ที่จ่าย')
     expect(slip.whtText).toBe('0.00')
+  })
+})
+
+describe('มติ PO U30 — บรรทัด "หักคืนเงินทดรอง ADV-xxx" บนเอกสาร (หักหลังภาษี)', () => {
+  const ADV = '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+  const offsetItem = item({
+    advanceOffsetSatang: 55_000,
+    transferSatang: 769_500,
+    advanceOffsets: [{ advanceId: ADV, advanceRef: 'ADV-3FA85F64', amountSatang: 55_000 }],
+  })
+
+  it('สรุปรอบ: ยอดโอน = สุทธิ − หัก · ยอดก่อนหัก/WHT/สุทธิไม่เปลี่ยน', () => {
+    const doc = buildPayoutSummaryDoc(batch([offsetItem]), ISSUER)
+    expect(doc.rows[0]?.netText).toBe('8,245.00')
+    expect(doc.rows[0]?.offsetText).toBe('550.00')
+    expect(doc.rows[0]?.transferText).toBe('7,695.00')
+    expect(doc.totalWhtText).toBe('255.00')
+    expect(doc.totalTransferText).toBe('7,695.00')
+    expect(doc.totalOffsetText).toBe('550.00')
+  })
+
+  it('ใบสำคัญจ่าย: มีบรรทัดหักคืน + จ่ายจริง = ยอดโอน', () => {
+    const [voucher] = buildPaymentVoucherDocs(batch([offsetItem]), ISSUER)
+    expect(voucher?.netAfterWhtText).toBe('8,245.00')
+    expect(voucher?.offsetLines).toEqual([{ label: 'หักคืนเงินทดรอง ADV-3FA85F64', amountText: '(550.00)' }])
+    expect(voucher?.netText).toBe('7,695.00')
+    expect(voucher?.whtText).toBe('255.00')
+  })
+
+  it('สลิป: บรรทัดหักคืนหลังบรรทัดภาษี · ยอดโอนสุทธิลดลง', () => {
+    const [slip] = buildPayslipDocs(batch([offsetItem]), ISSUER)
+    expect(slip?.offsetLines).toEqual([{ label: 'หักคืนเงินทดรอง ADV-3FA85F64', amountText: '(550.00)' }])
+    expect(slip?.netText).toBe('7,695.00')
+  })
+
+  it('ไม่มีการหัก ⇒ ไม่มีบรรทัดหัก และยอดโอน = สุทธิ', () => {
+    const doc = buildPayoutSummaryDoc(batch([item()]), ISSUER)
+    expect(doc.totalOffsetText).toBeNull()
+    expect(doc.totalTransferText).toBe(doc.totalNetText)
+    expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.offsetLines).toEqual([])
   })
 })

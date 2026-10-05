@@ -20,6 +20,8 @@ function batch(overrides: Partial<PayoutBatchDto> = {}): PayoutBatchDto {
     grossSatang: 1_880_000,
     whtSatang: 56_400,
     netSatang: 1_823_600,
+    advanceOffsetSatang: 0,
+    transferSatang: 1_823_600,
     itemCount: 3,
     bankAccountId: null,
     bankAccountLabel: null,

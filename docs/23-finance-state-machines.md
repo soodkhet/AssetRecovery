@@ -13,6 +13,7 @@
 |---|---|---|
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — รวม state machine 16 entity |
 | v2 | 03/07/2569 | **Sync กับการแก้ไขใน Batch 3**: §6.3 (Expense) เติม `pending_warehouse_confirm`/`pending_finance_approval`/`superseded` ที่ตกหล่น, §6.4 (Advance) แก้เป็น 5 สถานะใหม่ (`pending_approval`/`approved`/`overdue`/`cleared`/`rejected` — ตรงกับไฟล์ 15 v2), §6.6 (Payout Batch) เติม `draft` ที่ตกหล่น — **ส่วน state machine ฝั่ง Accounting (§6.10-6.16) ยังไม่ตรวจสอบกับ schema เพราะไฟล์ 30-37 ยังไม่ถึงคิว reformat (Batch 5)** ทำเครื่องหมายไว้ใน Open Items ชัดเจน ไม่เดาแก้เอง |
+| v2.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 หมายเหตุ: การปิดยอดคืนเงินทดรอง **ไม่เพิ่ม state** ใน `advance_status` (ยอดค้าง/ปิด อนุมานจากสมุดย่อย `advance_returns`) |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -78,6 +79,8 @@ pending_approval → rejected (terminal, การเงินไม่อนุ
 pending_approval (step=1) → approve step 1 → step=2 → ... → approve step สุดท้าย → approved
 ขั้นใดขั้นหนึ่ง reject → needs_revision → resubmit → กลับไป step=1 ใหม่ทั้งหมด
 ```
+
+> **ยอดคืนเงินทดรอง (มติ PO 05/10/2569 U30)** — ไม่มี state ใหม่: หลัง `cleared` ยอดคืนค้าง/ปิด อนุมานจากสมุดย่อย `advance_returns` (`15` §9.3 · `22` §6.14) · วิธีคืน (`advance_return_method`) เปลี่ยนได้โดยการเงินเมื่อยังมียอดค้าง
 
 ### 6.6 Payout Batch (ไฟล์ 17) — เติม `draft` แล้ว
 

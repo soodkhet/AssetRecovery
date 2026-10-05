@@ -1,4 +1,5 @@
-import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
+import type { AdvanceReturnState } from '@/lib/advances/advance'
+import type { AdvanceReturnChannel, AdvanceReturnMethod, AdvanceStatus } from '@/lib/generated/prisma/enums'
 
 /**
  * DTO ของเงินทดรองจ่าย (ไฟล์ 15 §7.2) — **type-only** เพื่อให้ไฟล์ฝั่ง client import ได้
@@ -33,6 +34,35 @@ export interface AdvanceDto {
   createdAt: string
   /** ผู้ขอเบิก (`15` §7.2 requester) */
   requesterName: string
+  /** เลขอ้างอิงที่ผู้ใช้เห็น (`ADV-xxxxxxxx`) */
+  ref: string
+  /** วิธีคืนยอดที่เหลือ (มติ PO U30) — `null` = ไม่มียอดคืน */
+  returnMethod: AdvanceReturnMethod | null
+  /** ยอดที่ได้คืนแล้ว (หักกลบในรอบจ่ายที่สร้างแล้ว + รับคืนแยก — ไม่นับแถวที่กลับรายการ) */
+  returnCollectedSatang: number
+  /** ยอดคืนค้าง = `returnSatang − returnCollectedSatang` (`22` §6.14) */
+  returnOutstandingSatang: number
+  returnState: AdvanceReturnState
+  /** ประวัติการคืนยอด (ใหม่สุดก่อน) */
+  returns: AdvanceReturnDto[]
+}
+
+/** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */
+export interface AdvanceReturnDto {
+  id: string
+  channel: AdvanceReturnChannel
+  amountSatang: number
+  payoutBatchId: string | null
+  payoutBatchName: string | null
+  /** `YYYY-MM-DD` (คอลัมน์ `DATE`) — เฉพาะรับคืนแยก */
+  receivedDate: string | null
+  evidenceFilePath: string | null
+  note: string | null
+  /** กลับรายการแล้ว (รอบจ่ายถูกยกเลิก/รายการถูกตัดออก) — ไม่นับเป็นยอดที่ได้คืน */
+  reversedAt: string | null
+  reversalReason: string | null
+  createdAt: string
+  createdByName: string
 }
 
 /** ผลของการเคลียร์ยอด — `excessClaimId` = คำขอเบิกส่วนเกินที่ระบบสร้างให้ (มติ PO 03/10/2569 UAT Q3) · `null` = ไม่ได้ใช้เกิน */

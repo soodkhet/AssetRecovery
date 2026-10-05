@@ -1,6 +1,8 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtPercent, fmtSatang } from '@/lib/format/money'
 import { summarizePayoutBatch, type PayoutBatchTotals } from '@/lib/finance/payout-calc'
+import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
+import { advanceOffsetLineLabel } from '@/lib/advances/advance'
 import type { PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { PayoutError } from '@/lib/payout/errors'
@@ -110,6 +112,22 @@ export interface PayoutPayeeGroup {
   whtPctSnapshot: number | null
   items: readonly PayoutBatchItemDto[]
   totals: PayoutBatchTotals
+  /** มติ PO U30 — ยอดหักคืนเงินทดรองรวมของคนนี้ (snapshot) และยอดโอนจริง = net − ยอดหัก */
+  advanceOffsetSatang: number
+  transferSatang: number
+  /** บรรทัด "หักคืนเงินทดรอง ADV-xxx" ต่อเงินทดรอง (รวมยอดข้ามหลายบรรทัดในรอบ) */
+  offsetLines: ReadonlyArray<{ label: string; amountSatang: number }>
+}
+
+/** รวมบรรทัดหักคืนเงินทดรองของรายการกลุ่มหนึ่ง — ต่อเงินทดรอง ลำดับตามที่พบ */
+function collectOffsetLines(items: readonly PayoutBatchItemDto[]): Array<{ label: string; amountSatang: number }> {
+  const byAdvance = new Map<string, number>()
+  for (const item of items) {
+    for (const offset of item.advanceOffsets) {
+      byAdvance.set(offset.advanceId, (byAdvance.get(offset.advanceId) ?? 0) + offset.amountSatang)
+    }
+  }
+  return [...byAdvance].map(([advanceId, amountSatang]) => ({ label: advanceOffsetLineLabel(advanceId), amountSatang }))
 }
 
 /**
@@ -129,6 +147,8 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
     const first = bucket[0]
     if (first === undefined) throw new RangeError('กลุ่มผู้รับเงินต้องมีอย่างน้อย 1 รายการ')
     const rates = new Set(bucket.map((item) => item.whtPctSnapshot))
+    const totals = summarizePayoutBatch(bucket)
+    const advanceOffsetSatang = bucket.reduce((sum, item) => sum + item.advanceOffsetSatang, 0)
     return {
       payeeId: first.payeeId,
       payeeName: first.payeeName,
@@ -137,7 +157,10 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
       accountNumberMasked: first.accountNumberMasked,
       whtPctSnapshot: rates.size === 1 ? (first.whtPctSnapshot ?? null) : null,
       items: bucket,
-      totals: summarizePayoutBatch(bucket),
+      totals,
+      advanceOffsetSatang,
+      transferSatang: payoutTransferSatang(totals.netSatang, advanceOffsetSatang),
+      offsetLines: collectOffsetLines(bucket),
     }
   })
 }
@@ -152,6 +175,9 @@ export interface PayoutSummaryDocRow {
   grossText: string
   whtText: string
   netText: string
+  /** มติ PO U30 — ยอดโอนจริง (= net เมื่อไม่มีการหัก) + ยอดหักคืนเงินทดรอง (`null` = ไม่มี) */
+  transferText: string
+  offsetText: string | null
 }
 
 export interface PayoutSummaryDoc {
@@ -173,6 +199,9 @@ export interface PayoutSummaryDoc {
   totalGrossText: string
   totalWhtText: string
   totalNetText: string
+  totalTransferText: string
+  /** `null` = ทั้งรอบไม่มีการหักคืนเงินทดรอง */
+  totalOffsetText: string | null
   note: string
 }
 
@@ -184,6 +213,7 @@ export function buildPayoutSummaryDoc(
   // ยอดรวมของทั้งรอบคิดจาก "รายการทั้งหมด" ไม่ใช่ผลบวกของยอดกลุ่ม — ยามของ `22` §6.10
   // จะจับได้ทันทีถ้ามีรายการใดที่ net ≠ gross − wht
   const totals = summarizePayoutBatch(batch.items)
+  const totalOffset = groups.reduce((sum, group) => sum + group.advanceOffsetSatang, 0)
 
   return {
     title: PAYOUT_SUMMARY_TITLE,
@@ -209,11 +239,15 @@ export function buildPayoutSummaryDoc(
       grossText: fmtSatang(group.totals.grossSatang),
       whtText: fmtSatang(group.totals.whtSatang),
       netText: fmtSatang(group.totals.netSatang),
+      transferText: fmtSatang(group.transferSatang),
+      offsetText: group.advanceOffsetSatang === 0 ? null : fmtSatang(group.advanceOffsetSatang),
     })),
     itemCountText: `${fmtCount(totals.itemCount)} รายการ`,
     totalGrossText: fmtSatang(totals.grossSatang),
     totalWhtText: fmtSatang(totals.whtSatang),
     totalNetText: fmtSatang(totals.netSatang),
+    totalTransferText: fmtSatang(payoutTransferSatang(totals.netSatang, totalOffset)),
+    totalOffsetText: totalOffset === 0 ? null : fmtSatang(totalOffset),
     note: 'ใช้รูปแบบไฟล์ธนาคารที่ผ่านการทดสอบแล้วเท่านั้นในการตัดโอนจริง',
   }
 }
@@ -242,6 +276,11 @@ export interface PaymentVoucherDoc {
   payDateLabel: string
   grossText: string
   whtText: string
+  /** สุทธิหลังหักภาษี (ก่อนหักคืนเงินทดรอง) */
+  netAfterWhtText: string
+  /** มติ PO U30 — บรรทัด "หักคืนเงินทดรอง ADV-xxx" (ว่าง = ไม่มีการหัก) */
+  offsetLines: ReadonlyArray<{ label: string; amountText: string }>
+  /** จำนวนเงินที่จ่ายจริง = ยอดโอน (หลังหักคืนเงินทดรอง) */
   netText: string
   netInWords: string
   /** ข้อความเตือนเมื่อยังไม่ยืนยันว่าเงินออกจริง (`17` §9 — ยืนยันจากไฟล์ 35 หรือ manual) */
@@ -283,8 +322,10 @@ export function buildPaymentVoucherDocs(
     payDateLabel: fmtDate(payDate),
     grossText: fmtSatang(group.totals.grossSatang),
     whtText: fmtSatang(group.totals.whtSatang),
-    netText: fmtSatang(group.totals.netSatang),
-    netInWords: bahtInWords(group.totals.netSatang),
+    netAfterWhtText: fmtSatang(group.totals.netSatang),
+    offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
+    netText: fmtSatang(group.transferSatang),
+    netInWords: bahtInWords(group.transferSatang),
     pendingNote:
       batch.status === 'completed'
         ? null
@@ -320,6 +361,9 @@ export interface PayslipDoc {
   whtLabel: string
   /** ยอดหักแสดงในวงเล็บตามตัวอย่าง 06 — `(255.90)` */
   whtText: string
+  /** มติ PO U30 — บรรทัด "หักคืนเงินทดรอง ADV-xxx" หลังหักภาษี (ว่าง = ไม่มีการหัก) */
+  offsetLines: ReadonlyArray<{ label: string; amountText: string }>
+  /** ยอดโอนสุทธิ (หลังหักภาษีและหักคืนเงินทดรอง) */
   netText: string
   note: string
 }
@@ -347,7 +391,8 @@ export function buildPayslipDocs(batch: PayoutBatchDetailDto, issuer: PayoutDocI
         ? 'หักภาษี ณ ที่จ่าย'
         : `หักภาษี ณ ที่จ่าย (${fmtPercent(group.whtPctSnapshot)})`,
     whtText: group.totals.whtSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.totals.whtSatang)})`,
-    netText: fmtSatang(group.totals.netSatang),
+    offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
+    netText: fmtSatang(group.transferSatang),
     note: 'หนังสือรับรองหัก ณ ที่จ่ายฉบับทางการ (50 ทวิ) ออกแยกต่างหาก',
   }))
 }

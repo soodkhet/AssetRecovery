@@ -25,7 +25,7 @@ import {
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtPercent } from '@/lib/format/money'
+import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
 import type { TaxProfileDto } from '@/lib/settings/types'
@@ -342,6 +342,11 @@ export function PayeeTab() {
                 <Td>
                   <span className="font-semibold text-slate-800">{item.name}</span>
                   <div className="text-[10px] text-slate-500">{item.teamName ?? item.roleName}</div>
+                  {item.advanceReturnOutstandingSatang > 0 && (
+                    <div className="text-[10px] font-semibold text-amber-700">
+                      ยอดคืนเงินทดรองค้าง {fmtSatangSymbol(item.advanceReturnOutstandingSatang)}
+                    </div>
+                  )}
                 </Td>
                 <Td>
                   <span className="text-xs text-slate-600">{PAYEE_TYPE_LABEL[item.payeeType]}</span>

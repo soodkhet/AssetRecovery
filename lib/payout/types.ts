@@ -15,6 +15,10 @@ export interface PayoutBatchDto {
   grossSatang: number
   whtSatang: number
   netSatang: number
+  /** snapshot ยอดหักคืนเงินทดรองรวมของรอบ (มติ PO U30) — หักหลัง WHT */
+  advanceOffsetSatang: number
+  /** ยอดโอนจริงของรอบ = net − ยอดหักคืนเงินทดรอง (`22` §6.14) */
+  transferSatang: number
   itemCount: number
   bankAccountId: string | null
   bankAccountLabel: string | null
@@ -54,8 +58,21 @@ export interface PayoutBatchItemDto {
   whtBaseIncluded: boolean
   /** snapshot ประเภทเงินได้ — `null` = รอบเก่า/เงินทดรองจ่าย */
   whtIncomeCategory: WhtIncomeCategory | null
+  /** snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (มติ PO U30) */
+  advanceOffsetSatang: number
+  /** ยอดโอนจริงของบรรทัด = net − ยอดหัก */
+  transferSatang: number
+  /** เงินทดรองที่หักจากบรรทัดนี้ (แถว `advance_returns` ที่ยังไม่กลับรายการ) */
+  advanceOffsets: readonly PayoutAdvanceOffsetDto[]
   bankName: string | null
   accountNumberMasked: string | null
+}
+
+/** 1 บรรทัด "หักคืนเงินทดรอง ADV-xxx" ของรายการในรอบ */
+export interface PayoutAdvanceOffsetDto {
+  advanceId: string
+  advanceRef: string
+  amountSatang: number
 }
 
 export interface PayoutBatchDetailDto extends PayoutBatchDto {

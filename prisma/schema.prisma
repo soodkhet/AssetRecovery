@@ -392,6 +392,25 @@ enum AdvanceStatus {
   @@map("advance_status")
 }
 
+/// วิธีคืนยอดเงินทดรองที่เหลือ (มติ PO 05/10/2569 UAT U30) — ผู้เคลียร์เลือกตอนเคลียร์ยอด
+enum AdvanceReturnMethod {
+  /// หักกลบในรอบจ่ายถัดไปของผู้รับ (ค่าเริ่มต้น — หักหลัง WHT)
+  payout_offset
+  /// รับคืนแยก (เงินสด/โอน + หลักฐาน)
+  separate
+
+  @@map("advance_return_method")
+}
+
+/// ช่องทางที่ได้เงินคืนจริงของแต่ละแถวใน `advance_returns` (มติ PO U30)
+enum AdvanceReturnChannel {
+  payout_offset
+  cash
+  bank_transfer
+
+  @@map("advance_return_channel")
+}
+
 enum PayoutBatchSide {
   inhouse
   outsource
@@ -654,6 +673,7 @@ model Organization {
   payeeProfiles              PayeeProfile[]
   expenses                   Expense[]
   advances                   Advance[]
+  advanceReturns             AdvanceReturn[]
   payoutBatches              PayoutBatch[]
   payoutBatchItems           PayoutBatchItem[]
   revenues                   Revenue[]
@@ -834,6 +854,9 @@ model User {
   pushSubscriptionsCreated  PushSubscription[]          @relation("push_subscriptions_created_by")
   pushSubscriptionsUpdated  PushSubscription[]          @relation("push_subscriptions_updated_by")
   advancesCreated           Advance[]                   @relation("advances_created_by")
+  advanceReturnsCreated     AdvanceReturn[]             @relation("advance_returns_created_by")
+  advanceReturnsUpdated     AdvanceReturn[]             @relation("advance_returns_updated_by")
+  advanceReturnsReversed    AdvanceReturn[]             @relation("advance_returns_reversed_by")
   advancesUpdated           Advance[]                   @relation("advances_updated_by")
   advancesApproved          Advance[]                   @relation("advances_approved_by")
   payoutBatchesCreated      PayoutBatch[]               @relation("payout_batches_created_by")
@@ -2091,6 +2114,7 @@ model PayeeProfile {
 
   expenses        Expense[]
   advances        Advance[]
+  advanceReturns  AdvanceReturn[]
   payoutItems     PayoutBatchItem[]
   whtCertificates WhtCertificate[]
 
@@ -2235,24 +2259,27 @@ model FieldDaySettlement {
 /// ⚠️ ห้ามเบิกซ้อน — partial unique `uniq_active_advance_per_payee` (approved|overdue) อยู่ใน raw SQL migration
 /// ⚠️ `returnSatang` = **generated column** (`GREATEST(0, approved - used)`) — DB คำนวณเอง **ห้ามเขียนค่าลงไป**
 model Advance {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId  String        @map("organization_id") @db.Uuid
-  payeeId         String        @map("payee_id") @db.Uuid
-  requestedSatang Int           @map("requested_satang")
-  approvedSatang  Int?          @map("approved_satang")
-  usedSatang      Int           @default(0) @map("used_satang")
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String               @map("organization_id") @db.Uuid
+  payeeId         String               @map("payee_id") @db.Uuid
+  requestedSatang Int                  @map("requested_satang")
+  approvedSatang  Int?                 @map("approved_satang")
+  usedSatang      Int                  @default(0) @map("used_satang")
   /// read-only (generated) — `used > approved` → 0 เสมอ ห้ามติดลบ (Rule 01)
   /// `@default(dbgenerated())` = บอก Prisma ว่า "ค่าเกิดที่ DB" ⇒ ตัดออกจาก create input ได้
   /// (คอลัมน์จริงเป็น `GENERATED ALWAYS ... STORED` ตั้งแต่ migration `20260813231247` — **ไม่มี SQL เปลี่ยน**
   /// จากบรรทัดนี้ ยืนยันด้วย `prisma migrate diff` แล้วว่าไม่เกิด `SET DEFAULT` · Phase 3.3)
-  returnSatang    Int           @default(dbgenerated()) @map("return_satang")
-  status          AdvanceStatus @default(pending_approval)
+  returnSatang    Int                  @default(dbgenerated()) @map("return_satang")
+  status          AdvanceStatus        @default(pending_approval)
   purpose         String
-  dueClearDate    DateTime      @map("due_clear_date") @db.Date
-  approvedBy      String?       @map("approved_by") @db.Uuid
-  approvedAt      DateTime?     @map("approved_at") @db.Timestamptz(6)
-  clearedAt       DateTime?     @map("cleared_at") @db.Timestamptz(6)
-  rejectionReason String?       @map("rejection_reason")
+  dueClearDate    DateTime             @map("due_clear_date") @db.Date
+  approvedBy      String?              @map("approved_by") @db.Uuid
+  approvedAt      DateTime?            @map("approved_at") @db.Timestamptz(6)
+  clearedAt       DateTime?            @map("cleared_at") @db.Timestamptz(6)
+  rejectionReason String?              @map("rejection_reason")
+  /// วิธีคืนยอดที่เหลือ (มติ PO 05/10/2569 UAT U30) — NULL = ไม่มียอดคืน · CHECK `chk_advances_return_method_shape`
+  /// (มีค่าได้เฉพาะ `cleared` ที่ `return_satang > 0`) อยู่ใน raw SQL `20261005180000_advance_returns`
+  returnMethod    AdvanceReturnMethod? @map("return_method")
 
   /// A4 (มติ PO 2026-08-12) — ขาจ่ายเงินทดรองผ่านรอบจ่าย (คู่กับ `payout_batch_items.advance_id`)
   payoutBatchItemId String? @map("payout_batch_item_id") @db.Uuid
@@ -2271,8 +2298,10 @@ model Advance {
 
   payoutItems      PayoutBatchItem[]
   bankTransactions BankTransaction[] @relation("bank_tx_matched_advance")
+  returns          AdvanceReturn[]
 
   @@index([payeeId, status], map: "idx_advances_payee")
+  @@index([organizationId, returnMethod, status], map: "idx_advances_org_return_method")
   @@index([organizationId, dueClearDate, status], map: "idx_advances_due")
   @@map("advances")
 }
@@ -2286,9 +2315,12 @@ model PayoutBatch {
   side           PayoutBatchSide
   status         PayoutBatchStatus @default(draft)
 
-  grossSatang Int @default(0) @map("gross_satang")
-  whtSatang   Int @default(0) @map("wht_satang")
-  netSatang   Int @default(0) @map("net_satang")
+  grossSatang         Int @default(0) @map("gross_satang")
+  whtSatang           Int @default(0) @map("wht_satang")
+  netSatang           Int @default(0) @map("net_satang")
+  /// snapshot ยอดหักคืนเงินทดรองรวมของรอบ (มติ PO U30) — หักหลัง WHT ⇒ ยอดโอนจริง = net − ค่านี้
+  /// CHECK 0..net_satang อยู่ใน raw SQL `20261005180000_advance_returns`
+  advanceOffsetSatang Int @default(0) @map("advance_offset_satang")
 
   bankAccountId          String?   @map("bank_account_id") @db.Uuid
   paymentFileUrl         String?   @map("payment_file_url")
@@ -2321,6 +2353,7 @@ model PayoutBatch {
   updatedByUser User?             @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
 
   items            PayoutBatchItem[]
+  advanceReturns   AdvanceReturn[]
   adjustments      Adjustment[]
   bankTransactions BankTransaction[] @relation("bank_tx_matched_payout")
   whtCertificates  WhtCertificate[]  @relation("wht_cert_payout_batch")
@@ -2344,9 +2377,11 @@ model PayoutBatchItem {
   /// B3 (มติ PO 2026-08-12) — รอบติดตามของเคสต้นทาง (recycle จ่ายซ้ำได้แต่ต้องแยกรอบ)
   trackingRound  Int     @default(1) @map("tracking_round")
 
-  grossSatang Int @map("gross_satang")
-  whtSatang   Int @default(0) @map("wht_satang")
-  netSatang   Int @map("net_satang")
+  grossSatang         Int @map("gross_satang")
+  whtSatang           Int @default(0) @map("wht_satang")
+  netSatang           Int @map("net_satang")
+  /// snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (มติ PO U30) — หลัง WHT · ยอดโอน = net − ค่านี้ (CHECK 0..net)
+  advanceOffsetSatang Int @default(0) @map("advance_offset_satang")
 
   /// snapshot ณ เวลาสร้าง — Payee level ชนะ Plan level (`18` §6.3)
   taxProfileId      String?            @map("tax_profile_id") @db.Uuid
@@ -2367,13 +2402,59 @@ model PayoutBatchItem {
   taxProfile    TaxProfile?  @relation("payout_items_tax_profile", fields: [taxProfileId], references: [id])
   createdByUser User         @relation("payout_items_created_by", fields: [createdBy], references: [id])
 
-  expenseRecord ExpenseRecord?
+  expenseRecord  ExpenseRecord?
+  advanceReturns AdvanceReturn[]
 
   @@unique([payoutBatchId, expenseId])
   @@unique([payoutBatchId, advanceId])
   @@index([organizationId, expenseId], map: "idx_pbi_org_expense")
   @@index([expenseId], map: "idx_pbi_expense")
   @@map("payout_batch_items")
+}
+
+/// สมุดย่อยการคืนยอดเงินทดรอง (มติ PO 05/10/2569 UAT U30 · BUG-109) — 1 แถว = ได้เงินคืน 1 ครั้ง
+/// ยอดค้าง = `advances.return_satang` − SUM(`amount_satang` ที่ `reversed_at IS NULL`)
+/// ⚠️ ไม่มี `deleted_at` โดยเจตนา — แก้ได้ทางเดียวคือ "กลับรายการ" (รอบจ่ายถูกยกเลิก/รายการถูกตัดออก)
+/// CHECK รูปร่างต่อช่องทาง/การกลับรายการ + partial unique `(advance_id, payout_batch_item_id)` WHERE active
+/// + trigger กันยอดสะสมเกินยอดคืน / กันแก้ช่องอื่น อยู่ใน raw SQL `20261005180000_advance_returns` (Rule 02)
+model AdvanceReturn {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String               @map("organization_id") @db.Uuid
+  advanceId          String               @map("advance_id") @db.Uuid
+  payeeId            String               @map("payee_id") @db.Uuid
+  channel            AdvanceReturnChannel
+  amountSatang       Int                  @map("amount_satang")
+  /// ช่องทาง `payout_offset` เท่านั้น — รอบจ่าย/บรรทัดที่หัก
+  payoutBatchId      String?              @map("payout_batch_id") @db.Uuid
+  payoutBatchItemId  String?              @map("payout_batch_item_id") @db.Uuid
+  /// ช่องทางรับแยก (`cash`/`bank_transfer`) เท่านั้น — วันที่รับเงิน + หลักฐาน (ตรวจไฟล์ฝั่ง server แล้ว)
+  receivedDate       DateTime?            @map("received_date") @db.Date
+  evidenceFilePath   String?              @map("evidence_file_path")
+  evidenceFileSha256 String?              @map("evidence_file_sha256") @db.VarChar(64)
+  note               String?
+  /// กลับรายการ (ยอดกลับเป็นค้าง) — ต้องมีเหตุผล + ผู้ทำ + เวลาเสมอ
+  reversedAt         DateTime?            @map("reversed_at") @db.Timestamptz(6)
+  reversedBy         String?              @map("reversed_by") @db.Uuid
+  reversalReason     String?              @map("reversal_reason")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  advance         Advance          @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  payee           PayeeProfile     @relation(fields: [payeeId], references: [id])
+  payoutBatch     PayoutBatch?     @relation(fields: [payoutBatchId], references: [id], onDelete: Cascade)
+  payoutBatchItem PayoutBatchItem? @relation(fields: [payoutBatchItemId], references: [id], onDelete: Cascade)
+  createdByUser   User             @relation("advance_returns_created_by", fields: [createdBy], references: [id])
+  updatedByUser   User?            @relation("advance_returns_updated_by", fields: [updatedBy], references: [id])
+  reversedByUser  User?            @relation("advance_returns_reversed_by", fields: [reversedBy], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, advanceId], map: "idx_advance_returns_org_advance")
+  @@index([organizationId, payeeId], map: "idx_advance_returns_org_payee")
+  @@index([organizationId, payoutBatchId], map: "idx_advance_returns_org_batch")
+  @@map("advance_returns")
 }
 
 /// รายได้ (ไฟล์ 19) — เกิดเมื่อ `expense.approved` **AND** `HandoverLot.confirmed` (DEC-006/D6)

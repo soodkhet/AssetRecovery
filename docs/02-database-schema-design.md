@@ -43,6 +43,7 @@
 | v4.20 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก) + มติบัญชี B1** (migration `20261005130000_credit_notes`): ตารางใหม่ **`credit_notes`** (Group F ต่อจาก `tax_invoices`) + enum `credit_note_status` (`active`/`cancelled`) — FK `tax_invoice_id` / `adjustment_id` (nullable) · เงิน satang · `vat_rate_pct_used NUMERIC(5,2)` snapshot อัตราของใบกำกับเดิม · CHECK ยอด > 0 / total = ก่อน VAT + VAT / ฟิลด์ยกเลิกครบ · partial unique เลขที่ต่อ org และ adjustment ต่อใบ (เฉพาะ active) · trigger กันยอดรวมเกินใบกำกับ + immutable (§13) · ไม่มี `deleted_at` (ยกเลิกแทนลบ เหมือน `tax_invoices`) |
 | v4.21 | 05/10/2569 | **มติ PO 05/10/2569 (U19 — ใบเพิ่มหนี้ ม.86/9)** (migration `20261005150000_debit_notes`): enum ใหม่ `credit_note_type` (`credit`/`debit`) + `credit_notes.note_type NOT NULL DEFAULT 'credit'` (แถวเดิมทั้งหมด = ใบลดหนี้ · ไม่ย้ายข้อมูล — เลือกเพิ่มคอลัมน์แทนเปลี่ยนชื่อตารางเพื่อความปลอดภัยของข้อมูลเดิม) · partial unique เลขที่เปลี่ยนเป็น `(organization_id, note_type, credit_note_number)` · trigger ยอดเกินใบกำกับตรวจ/นับเฉพาะ `credit` (ใบเพิ่มหนี้ไม่มีเพดาน) · immutable trigger เพิ่ม `note_type` |
 | v4.22 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U33) — ประเภทเงินได้ต่อประเภททีมเป็นค่าตั้ง + เงินได้ 40(1)** (migration `20261005163300_wht_income_category_40_1`): enum `wht_income_category` เพิ่ม `sec_40_1` · `wht_policy_history` + `inhouse_income_category` (DEFAULT `sec_40_2`) / `outsource_income_category` (DEFAULT `sec_40_8`) — ใช้เมื่อ `income_type_mode = by_team_side` (ค่าเริ่มต้น = การจับคู่เดิม แถวเดิมไม่เปลี่ยนความหมาย) · `payout_batches` + snapshot `wht_inhouse_income_category` / `wht_outsource_income_category` (NULL = รอบเก่า ⇒ inhouse 40(2) · outsource 40(8)) · 40(1) ใช้ `payee_profiles.wht_40_2_pct` ช่องเดียวกับ 40(2) + ยื่น `PND1` |
+| v4.23 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109 · A6) — ปิดยอดคืนเงินทดรอง** (migration `20261005180000_advance_returns`): enum ใหม่ `advance_return_method` (`payout_offset`/`separate`) + `advance_return_channel` (`payout_offset`/`cash`/`bank_transfer`) · `advances.return_method` (NULL = ไม่มียอดคืน · CHECK มีค่าได้เฉพาะ `cleared` ที่ `return_satang > 0`) · `payout_batches.advance_offset_satang` + `payout_batch_items.advance_offset_satang` (snapshot ยอดหักหลัง WHT · CHECK 0..net_satang — **gross/wht/net เดิมไม่เปลี่ยนความหมาย** ยอดโอน = net − ค่านี้) · ตารางใหม่ **`advance_returns`** (สมุดย่อยการคืนยอด 1 แถวต่อการได้เงินคืน 1 ครั้ง — หักในรอบจ่าย หรือรับแยกพร้อมวันที่+หลักฐาน · กลับรายการด้วย `reversed_at/by/reason` แทนการลบ) + trigger กันยอดสะสมเกิน `return_satang` (ล็อกแถวเงินทดรอง) / กันแก้ช่องอื่นนอกจากกลับรายการ + partial unique `(advance_id, payout_batch_item_id)` เฉพาะแถวที่ยังไม่กลับรายการ · backfill: เงินทดรองที่เคลียร์แล้วมียอดคืน → `return_method = payout_offset` (ค่าเริ่มต้นของมติ) · **เหตุผลที่เลือกตารางแทนคอลัมน์**: ยอดคืนหนึ่งก้อนปิดได้หลายครั้ง (หักบางส่วนแล้วยกยอด/รับแยก) และต้องคืนสถานะได้เมื่อรอบจ่ายถูกยกเลิก — ต้องตรวจย้อนหลังได้ทีละครั้ง · ไม่มี state ใหม่ใน `advance_status` (ยอดค้าง/ปิด อนุมานจากสมุดย่อย) |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -1444,6 +1445,14 @@ CREATE INDEX idx_advances_due    ON advances(organization_id, due_clear_date, st
 CREATE UNIQUE INDEX uniq_active_advance_per_payee
   ON advances(payee_id) WHERE status IN ('approved','overdue') AND deleted_at IS NULL;
 
+-- v4.23 มติ PO 05/10/2569 (UAT U30 · BUG-109) — ปิดยอดคืนเงินทดรอง (migration `20261005180000_advance_returns`)
+CREATE TYPE advance_return_method  AS ENUM ('payout_offset', 'separate');           -- เลือกตอนเคลียร์ยอด (ค่าเริ่มต้น payout_offset)
+CREATE TYPE advance_return_channel AS ENUM ('payout_offset', 'cash', 'bank_transfer');
+ALTER TABLE advances ADD COLUMN return_method advance_return_method;               -- NULL = ไม่มียอดคืน
+ALTER TABLE advances ADD CONSTRAINT chk_advances_return_method_shape
+  CHECK (return_method IS NULL OR (status = 'cleared' AND return_satang > 0));
+CREATE INDEX idx_advances_org_return_method ON advances(organization_id, return_method, status);
+
 -- ── payout_batches ───────────────────────────────────────────
 -- รอบจ่ายเงิน ตามไฟล์ 17
 CREATE TABLE payout_batches (
@@ -1461,6 +1470,8 @@ CREATE TABLE payout_batches (
   payment_file_url      TEXT,
   payment_file_generated_at TIMESTAMPTZ,
   idempotency_key       TEXT                 UNIQUE,  -- ป้องกันโอนซ้ำ (ไฟล์ 17 §6.3)
+  -- v4.23 (มติ PO U30) snapshot ยอดหักคืนเงินทดรองรวม (หลัง WHT) — ยอดโอนจริง = net_satang − ค่านี้
+  advance_offset_satang INTEGER              NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
   -- snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — NULL ทั้งชุด = รอบเก่า (พฤติกรรมเดิม)
   wht_policy_id          UUID                 REFERENCES wht_policy_history(id) ON DELETE SET NULL,  -- NULL = ค่าเริ่มต้น
   wht_base_expense_types expense_type[],
@@ -1495,6 +1506,8 @@ CREATE TABLE payout_batch_items (
   wht_pct_snapshot  NUMERIC(5,2),
   wht_base_included   BOOLEAN NOT NULL DEFAULT true,  -- snapshot: อยู่ในฐาน WHT (มติ PO 05/10/2569 UAT U3)
   wht_income_category wht_income_category,            -- snapshot ประเภทเงินได้ (NULL = รอบเก่า/เงินทดรอง)
+  -- v4.23 (มติ PO U30) snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (หลัง WHT · ไม่กระทบฐาน WHT/50 ทวิ)
+  advance_offset_satang INTEGER NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by        UUID    NOT NULL REFERENCES users(id),
   UNIQUE(payout_batch_id, expense_id),
@@ -1506,6 +1519,41 @@ CREATE TABLE payout_batch_items (
 );
 CREATE INDEX idx_pbi_batch   ON payout_batch_items(payout_batch_id);
 CREATE INDEX idx_pbi_expense  ON payout_batch_items(expense_id);
+
+-- ── advance_returns ──────────────────────────────────────────
+-- v4.23 มติ PO 05/10/2569 (UAT U30 · BUG-109) — สมุดย่อยการคืนยอดเงินทดรอง (1 แถว = ได้เงินคืน 1 ครั้ง)
+-- ยอดค้าง = advances.return_satang − SUM(amount_satang WHERE reversed_at IS NULL) (`22` §6.14)
+-- ไม่มี deleted_at โดยเจตนา — แก้ได้ทางเดียวคือกลับรายการ (รอบจ่ายถูกยกเลิก/รายการถูกตัดออก)
+CREATE TABLE advance_returns (
+  id                    UUID                   PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID                   NOT NULL REFERENCES organizations(id),
+  advance_id            UUID                   NOT NULL REFERENCES advances(id) ON DELETE CASCADE,
+  payee_id              UUID                   NOT NULL REFERENCES payee_profiles(id),
+  channel               advance_return_channel NOT NULL,
+  amount_satang         INTEGER                NOT NULL CHECK (amount_satang > 0),
+  payout_batch_id       UUID                   REFERENCES payout_batches(id) ON DELETE CASCADE,      -- channel = payout_offset
+  payout_batch_item_id  UUID                   REFERENCES payout_batch_items(id) ON DELETE CASCADE,  -- channel = payout_offset
+  received_date         DATE,                  -- รับคืนแยก (cash/bank_transfer)
+  evidence_file_path    TEXT,                  -- รับคืนแยก — ไฟล์ที่ตรวจฝั่ง server แล้ว
+  evidence_file_sha256  VARCHAR(64),
+  note                  TEXT,
+  reversed_at           TIMESTAMPTZ,
+  reversed_by           UUID                   REFERENCES users(id),
+  reversal_reason       TEXT,
+  created_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
+  created_by            UUID                   NOT NULL REFERENCES users(id),
+  updated_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
+  updated_by            UUID                   REFERENCES users(id)
+  -- + chk_advance_returns_channel_shape (payout_offset ⇔ batch+item · cash/bank_transfer ⇔ received_date+evidence)
+  -- + chk_advance_returns_reversal_fields (reversed ⇔ reversed_by + reason ครบ)
+  -- + trigger: ยอดสะสม (ไม่นับแถวกลับรายการ) ≤ advances.return_satang และเงินทดรองต้อง cleared (ล็อกแถว FOR UPDATE)
+  -- + trigger: แก้ได้เฉพาะการกลับรายการครั้งเดียว
+);
+CREATE INDEX idx_advance_returns_org_advance ON advance_returns(organization_id, advance_id);
+CREATE INDEX idx_advance_returns_org_payee   ON advance_returns(organization_id, payee_id);
+CREATE INDEX idx_advance_returns_org_batch   ON advance_returns(organization_id, payout_batch_id);
+CREATE UNIQUE INDEX uniq_advance_returns_active_item
+  ON advance_returns(advance_id, payout_batch_item_id) WHERE reversed_at IS NULL AND payout_batch_item_id IS NOT NULL;
 
 -- ── revenues ─────────────────────────────────────────────────
 -- รายได้ ตามไฟล์ 19
@@ -2096,6 +2144,7 @@ CREATE TABLE files (
 27_advances.sql
 28_payout_batches.sql
 29_payout_batch_items.sql
+29a_advance_returns.sql       ← เพิ่ม 05/10/2569 (มติ PO U30) ต้องหลัง advances + payout_batch_items
 30_revenues.sql
 31_billing_batches.sql
 32_adjustments.sql
@@ -2213,6 +2262,7 @@ VALUES ('...org_id...', NULL, false, '{30,60,90}');  -- NULL = ไม่จำ�
 | `bank_transactions` | match_status != 'unmatched' | unmatch ต้องมี reason + audit |
 | `handover_lots` | status = 'confirmed' | ห้าม UPDATE, ห้าม DELETE |
 | `audit_logs` | any | ห้าม UPDATE/DELETE เด็ดขาด |
+| `advance_returns` | any | แก้ได้ทางเดียวคือกลับรายการครั้งเดียว (มีเหตุผล) — ช่องอื่นห้ามแก้ (trigger) · ไม่มีเส้นทางลบในระบบ (มติ PO U30) |
 | `case_edit_history` | any | append-only ที่ชั้น service — มีแต่ INSERT ไม่มี endpoint/โค้ดที่ UPDATE/DELETE (เพิ่ม 14/08/2569 · ไฟล์ 38 §6.4 "ไม่เขียนทับประวัติเดิม") · **ไม่ใส่ trigger ระดับ DB** เพราะตารางนี้ผูก `ON DELETE CASCADE` กับ `cases` — trigger จะไปบล็อก cascade ด้วย (audit ตัวจริงที่ห้ามแตะเด็ดขาดคือ `audit_logs`) |
 | `roles` | is_seed = true | ห้าม DELETE, ห้าม UPDATE name/role_group |
 | `accounting_periods` | status = 'locked' | แก้ตรงไม่ได้ — ต้องผ่าน Adjustment + Executive |

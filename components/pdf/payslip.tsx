@@ -67,6 +67,12 @@ export function PayslipPage({ doc }: { doc: PayslipDoc }): React.JSX.Element {
           <Text style={styles.sumLabel}>{doc.whtLabel}</Text>
           <Text style={styles.sumValue}>{doc.whtText}</Text>
         </View>
+        {doc.offsetLines.map((line) => (
+          <View key={line.label} style={styles.sumRow}>
+            <Text style={styles.sumLabel}>{line.label}</Text>
+            <Text style={styles.sumValue}>{line.amountText}</Text>
+          </View>
+        ))}
         <View style={styles.sumTotalRow}>
           <Text style={styles.sumLabelBold}>ยอดโอนสุทธิ</Text>
           <Text style={styles.sumValueBold}>{doc.netText}</Text>

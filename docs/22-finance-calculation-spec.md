@@ -23,6 +23,7 @@
 | v3.7 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก)**: เพิ่ม §6.8.1 VAT ของใบลดหนี้ = มูลค่าที่ลด × `credit_notes.vat_rate_pct_used` (snapshot อัตราของใบกำกับเดิม) (ปัดครึ่งขึ้นครั้งเดียว) · รับยอดตามเอกสารที่ต่างไม่เกิน 1 สตางค์ · ยอดรวมคิดที่ server · ห้ามเกินยอดคงเหลือของใบกำกับ |
 | v3.8 | 05/10/2569 | **มติ PO 05/10/2569 (U19/U21)**: §6.8.1 ครอบคลุม**ใบเพิ่มหนี้** — VAT สูตรเดียวกัน (อัตราใบกำกับเดิม ± 1 สตางค์) · ใบเพิ่มหนี้ไม่มีเพดาน · ยอดคงเหลือที่ลดหนี้ได้ = ใบกำกับ − ใบลดหนี้ active (ไม่นับใบเพิ่มหนี้) · ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ · หลายอัตรา VAT คงปฏิเสธ (ข้อความชัด) |
 | v3.9 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U33)** — §6.9.1 โหมด `by_team_side` ใช้การจับคู่ที่ตั้งได้ต่อประเภททีม (40(1)/40(2)/40(8)) แทนค่า fix · เพิ่มเงินได้ 40(1) ใช้สูตรเดียวกับ 40(2) (อัตราต่อคน · ไม่มีเกณฑ์ · ภ.ง.ด.1 · ใบอัตรา 0%) |
+| v3.10 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — เพิ่ม §6.14 ยอดคืนค้าง + หักกลบเงินทดรองในรอบจ่าย (หลัง WHT · ไม่ติดลบ · ยกยอด · FIFO) · §6.10 เพิ่มยอดโอน · pure module `lib/finance/advance-offset-calc.ts` |
 | v3.4 | 03/10/2569 | **แก้ §6.2/§6.3 ตามมติ PO 03/10/2569 (UAT Q21 · DEC-012)** — แทนการคิดต่อเคสของ v3.1/Q4: ค่าน้ำมัน `DAILY_FLAT` และเบี้ยเลี้ยง (ทุกโหมดน้ำมัน) = **วันละ 1 ครั้งต่อพนักงานต่อวันปฏิทินไทย** ที่มีเช็คอินอย่างน้อย 1 เคส (ไปกี่เคสก็ได้ก้อนเดียว) · อัตราจากแผน (เวอร์ชัน) ของทีม ณ วันนั้น · **กระจายเท่ากันทุกเคสที่เช็คอินวันนั้น** `floor(D/N)` เศษสตางค์ลงเคสที่เช็คอินแรกสุดของวัน (ผลรวมต่อวัน = D เป๊ะ) · สร้างหลังจบวันโดย job `daily_field_allowance` (`91` §6.1) · `PER_KM` ยังคิดต่อเคสตามระยะทาง (§6.1) |
 
 ขอบเขตเอกสารนี้: รวมสูตรคำนวณทางการเงิน/บัญชีทั้งหมดของระบบไว้ในที่เดียว เป็น single source of truth สำหรับทีมพัฒนา — ป้องกันสูตรไม่ตรงกันระหว่างโมดูล
@@ -253,6 +254,8 @@ net_amount = gross_amount - wht_amount   (ทุกแถว)
 batch.gross_amount = SUM(item.gross_amount) ของทุกรายการใน batch
 batch.wht_amount   = SUM(item.wht_amount)
 batch.net_amount   = batch.gross_amount - batch.wht_amount   (= SUM(item.net_amount))
+batch.advance_offset_amount = SUM(item.advance_offset_amount)          (มติ PO U30 — §6.14)
+batch.transfer_amount       = batch.net_amount - batch.advance_offset_amount   (ยอดเงินออกจริง)
 ```
 
 ### 6.11 AR คงค้าง (อ้างอิงไฟล์ 19 §6.4)
@@ -290,6 +293,26 @@ excess_amount = max(0, used_amount - approved_amount)
 
 > ตัวอย่าง: อนุมัติ ฿3,000 ใช้ ฿2,450 → คืน ฿550 · ใช้ ฿3,000 → คืน 0 · ใช้ ฿3,100 → คืน 0 + คำขอเบิกส่วนเกิน ฿100
 > pure module: `lib/finance/advance-calc.ts` (`advanceSettlement()`)
+
+### 6.14 เงินทดรองจ่าย — ยอดคืนค้าง + หักกลบในรอบจ่าย (อ้างอิงไฟล์ 15 §9.3, 17 §6.4) — มติ PO 05/10/2569 (UAT U30)
+
+```
+return_outstanding = return_amount - SUM(advance_returns.amount WHERE reversed_at IS NULL)
+                     (ห้ามติดลบ — ได้คืนเกิน return_amount = ข้อมูลเพี้ยน ต้อง error)
+
+ตอนสร้างรอบจ่าย ต่อผู้รับ 1 คน (เฉพาะเงินทดรองที่ return_method = payout_offset):
+  lines   = net_amount ของแต่ละบรรทัดของผู้รับในรอบ (หลัง WHT แล้ว — §6.9) ตามลำดับในรอบ
+  returns = return_outstanding ของแต่ละเงินทดรอง เรียงเคลียร์ก่อน-หลัง (FIFO)
+  หักทีละเงินทดรอง × ทีละบรรทัด: take = min(คงเหลือของบรรทัด, คงเหลือของเงินทดรอง)
+  item.advance_offset_amount = ยอดที่หักจากบรรทัดนั้น (0 ≤ ค่านี้ ≤ item.net_amount)
+  item.transfer_amount       = item.net_amount - item.advance_offset_amount   (ไม่ติดลบ)
+  ส่วนที่หักไม่หมด = ยกไปรอบถัดไป (ยังเป็น return_outstanding)
+
+gross / wht / net ของรายการและของรอบ **ไม่เปลี่ยน** ⇒ ฐาน WHT และ 50 ทวิ ไม่กระทบ
+```
+
+> ตัวอย่าง: ค้าง ฿550 · รอบได้สุทธิ ฿4,850 (gross ฿5,000 WHT ฿150) → หัก ฿550 โอน ฿4,300 · รอบได้สุทธิ ฿300 → หัก ฿300 โอน ฿0 ยก ฿250
+> pure module: `lib/finance/advance-offset-calc.ts` (`advanceReturnOutstandingSatang()` · `allocatePayeeAdvanceOffset()` · `payoutTransferSatang()`)
 
 ## 7. Data Entities / Required Objects
 
