@@ -8,13 +8,31 @@ DOCS = os.path.join(ROOT, 'docs')
 REF = os.path.join(ROOT, 'reference')
 OUT = os.path.join(DOCS, '00_MAP.md')
 
+def latest_version(lines):
+    # เวอร์ชันล่าสุดจากตาราง/รายการใต้หัวข้อ Changelog (เลือกเลขสูงสุด — บางไฟล์ไม่เรียงแถว)
+    vs, in_c = [], False
+    for ln in lines:
+        if re.match(r'^#{2,3}\s+Changelog', ln, re.I):
+            in_c = True
+            continue
+        if in_c and re.match(r'^#{1,3}\s', ln):
+            break
+        if in_c:
+            m = re.match(r'^\|\s*\**(v\d+(?:\.\d+)*)', ln)
+            if m:
+                vs.append(m.group(1))
+    if not vs:
+        return ''
+    return max(vs, key=lambda v: tuple(int(x) for x in v[1:].split('.')))
+
+small = []
 out = []
 out.append("""# 00_MAP.md — แผนที่ช่วงบรรทัดของไฟล์ใหญ่ (สำหรับ Read(offset, limit))
 
 > **วิธีใช้**: ก่อนอ่านไฟล์ใหญ่ ให้เปิดไฟล์นี้หาบรรทัดเริ่มของ section ที่ต้องการ แล้ว `Read(file, offset=<บรรทัดเริ่ม>, limit=<ช่วงที่ต้องการ>)` — **ห้ามอ่านไฟล์ใหญ่ทั้งไฟล์**
 > ช่วงจบของแต่ละ section = บรรทัดเริ่มของ section ถัดไป − 1
 > ⚠️ **ถ้ามีการแก้ไฟล์ spec/mockup จนบรรทัดเลื่อน ต้อง regenerate MAP นี้ใหม่** (สคริปต์อยู่ท้ายไฟล์)
-> ครอบคลุม: ไฟล์ `.md` ใน docs/ ที่ ≥ 15KB ทุกไฟล์ + mockup `.html` ใน reference/ ทุกไฟล์
+> ครอบคลุม: ไฟล์ `.md` ใน docs/ ที่ ≥ 15KB ทุกไฟล์ (ตาราง heading) + ไฟล์ < 15KB (ตารางสรุปท้ายส่วนที่ 1) + mockup `.html` ใน reference/ ทุกไฟล์ · เวอร์ชัน = เลขสูงสุดใน Changelog ของไฟล์
 
 ---
 
@@ -26,10 +44,13 @@ for f in sorted(glob.glob(os.path.join(DOCS, '*.md'))):
     if name in ('00_MAP.md',):
         continue
     size = os.path.getsize(f)
-    if size < 15000:
-        continue
     lines = open(f, encoding='utf-8').read().split('\n')
-    out.append(f"\n### `docs/{name}` ({size//1024} KB, {len(lines)} บรรทัด)\n")
+    ver = latest_version(lines)
+    ver_s = f" — {ver}" if ver else ""
+    if size < 15000:
+        small.append((name, size, len(lines), ver))
+        continue
+    out.append(f"\n### `docs/{name}` ({size//1024} KB, {len(lines)} บรรทัด{ver_s})\n")
     out.append("| บรรทัด | หัวข้อ |")
     out.append("|---|---|")
     n = 0
@@ -41,6 +62,15 @@ for f in sorted(glob.glob(os.path.join(DOCS, '*.md'))):
             n += 1
     if n == 0:
         out.append("| - | (ไม่มี heading) |")
+
+out.append("""
+
+### ไฟล์เล็กใน docs/ (< 15KB — อ่านทั้งไฟล์ได้ ไม่ทำตาราง heading)
+
+| ไฟล์ | ขนาด | บรรทัด | เวอร์ชัน |
+|---|---|---|---|""")
+for name, size, n, ver in small:
+    out.append(f"| `docs/{name}` | {size//1024} KB | {n} | {ver or '-'} |")
 
 out.append("""
 
