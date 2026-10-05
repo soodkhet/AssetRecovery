@@ -210,14 +210,20 @@ async function seedPayoutBatchWithItems(
     whtSatang?: number
     netSatang: number
   }[],
+  /** snapshot ค่าตั้งฐาน WHT ของรอบ (U3/U8) — ไม่ส่ง = รอบก่อนมีค่าตั้ง (NULL) */
+  whtBaseExpenseTypes?: readonly string[],
 ): Promise<void> {
   seq += 1
   const gross = items.reduce((sum, item) => sum + item.grossSatang, 0)
   const wht = items.reduce((sum, item) => sum + (item.whtSatang ?? 0), 0)
   const net = items.reduce((sum, item) => sum + item.netSatang, 0)
   const batch = await db().$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, wht_satang, net_satang, created_by)
-    VALUES ('${ORG_ID}', 'รอบจ่ายทดสอบ ${seq}', 'inhouse', 'completed', ${gross}, ${wht}, ${net}, '${FINANCE_ID}')
+    INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, wht_satang, net_satang, created_by,
+                                wht_base_expense_types, wht_certificate_mode, wht_income_type_mode)
+    VALUES ('${ORG_ID}', 'รอบจ่ายทดสอบ ${seq}', 'inhouse', 'completed', ${gross}, ${wht}, ${net}, '${FINANCE_ID}',
+            ${whtBaseExpenseTypes === undefined ? 'NULL' : `ARRAY[${whtBaseExpenseTypes.map((type) => `'${type}'`).join(',')}]::expense_type[]`},
+            ${whtBaseExpenseTypes === undefined ? 'NULL' : `'per_payee_batch'`},
+            ${whtBaseExpenseTypes === undefined ? 'NULL' : `'all_40_8'`})
     RETURNING id
   `)
   const batchId = batch[0]?.id ?? ''
@@ -479,7 +485,7 @@ suite('F4 — สรุปค่าตอบแทน', () => {
       whtSatang: 1_500_00,
       netSatang: 50_500_00,
     })
-    expect(kpiOf(payload, 'gross')).toBe(52_000_00)
+    expect(kpiOf(payload, 'compensation')).toBe(52_000_00)
   })
 
   it('รายพนักงาน: แยกช่องตามชนิดรายการเบิก และใช้ Net ที่ snapshot ไว้', async () => {
@@ -512,6 +518,44 @@ suite('F4 — สรุปค่าตอบแทน', () => {
       grossSatang: 31_000_00,
       netSatang: 30_100_00,
     })
+  })
+})
+
+suite('F4 — ค่าใช้จ่ายตามใบเสร็จแยกคอลัมน์ (มติ PO U53)', () => {
+  it('รอบที่ snapshot ค่าตั้งไว้: ค่าที่พัก/เบิกตามใบเสร็จลงช่องค่าใช้จ่าย ไม่ใช่ค่าตอบแทน · Gross รวมเท่าเดิม', async () => {
+    const caseA = await seedCase({ teamId: TEAM_A })
+    const commission = await seedExpense({ caseId: caseA, grossSatang: 20_000_00, expenseType: 'commission', payeeId: PAYEE_A })
+    const hotel = await seedExpense({ caseId: null, grossSatang: 800_00, expenseType: 'hotel', payeeId: PAYEE_A })
+    const receipt = await seedExpense({ caseId: null, grossSatang: 300_00, expenseType: 'receipt', payeeId: PAYEE_A })
+    await seedPayoutBatchWithItems(
+      [
+        { payeeId: PAYEE_A, expenseId: commission, grossSatang: 20_000_00, whtSatang: 600_00, netSatang: 19_400_00 },
+        { payeeId: PAYEE_A, expenseId: hotel, grossSatang: 800_00, netSatang: 800_00 },
+        { payeeId: PAYEE_A, expenseId: receipt, grossSatang: 300_00, netSatang: 300_00 },
+      ],
+      ['commission', 'no_success_fee', 'fuel', 'allowance'],
+    )
+
+    const team = await run('compensation', { groupBy: 'team' })
+    expect(team.rows[0]).toMatchObject({
+      compensationSatang: 20_000_00,
+      receiptSatang: 1_100_00,
+      grossSatang: 21_100_00,
+      netSatang: 20_500_00,
+    })
+    expect(kpiOf(team, 'compensation')).toBe(20_000_00)
+    expect(kpiOf(team, 'receipt')).toBe(1_100_00)
+
+    const employee = await run('compensation', { groupBy: 'employee' })
+    expect(employee.rows[0]).toMatchObject({ commissionSatang: 20_000_00, otherSatang: 0, receiptSatang: 1_100_00 })
+  })
+
+  it('รอบก่อนมีค่าตั้ง (snapshot NULL) ⇒ ทุกชนิดอยู่ในฐานตามพฤติกรรมเดิม — ไม่ใช้ค่าตั้งปัจจุบันตีความย้อนหลัง', async () => {
+    const hotel = await seedExpense({ caseId: null, grossSatang: 800_00, expenseType: 'hotel', payeeId: PAYEE_A })
+    await seedPayoutBatchWithItems([{ payeeId: PAYEE_A, expenseId: hotel, grossSatang: 800_00, netSatang: 800_00 }])
+
+    const team = await run('compensation', { groupBy: 'team' })
+    expect(team.rows[0]).toMatchObject({ compensationSatang: 800_00, receiptSatang: 0, grossSatang: 800_00 })
   })
 })
 

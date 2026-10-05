@@ -429,6 +429,28 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     expect(sent.sentByName).toBe('บัญชี 4.1')
   })
 
+  it('มติ PO U51: ส่ง/ล็อกก่อนสิ้นเดือน (31/08 23:59 น. ไทย) ⇒ PERIOD_NOT_ENDED · 01/09 00:00 น. ทำได้', async () => {
+    const beforeMidnight = new Date('2026-08-31T16:59:00Z') // 31/08/2569 23:59 น.
+    const midnight = new Date('2026-08-31T17:00:00Z') // 01/09/2569 00:00 น.
+
+    const periodId = await seedPeriod()
+    const early = await accounting.getPeriodReadiness(accountant, periodId, beforeMidnight)
+    expect(early.ready).toBe(false)
+    expect(early.checks[0]).toMatchObject({ key: 'period_ended', passed: false })
+    await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason, beforeMidnight), 'PERIOD_NOT_ENDED')
+    const still = await db().accountingPeriod.findUniqueOrThrow({ where: { id: periodId }, select: { status: true } })
+    expect(still.status).toBe('collecting')
+
+    const sent = await accounting.sendPeriod(ctx(), periodId, reason, midnight)
+    expect(sent.status).toBe('sent_to_accountant')
+    expect(sent.periodEnded).toBe(true)
+    expect(sent.closeAvailableFrom).toBe('2026-08-31T17:00:00.000Z')
+
+    await expectCode(() => accounting.lockPeriod(ctx(), periodId, reason, beforeMidnight), 'PERIOD_NOT_ENDED')
+    const locked = await accounting.lockPeriod(ctx(), periodId, reason, midnight)
+    expect(locked.status).toBe('locked')
+  })
+
   it('ปลดล็อกโดยบัญชี ⇒ UNLOCK_REQUIRES_EXECUTIVE · ผู้บริหารทำได้และกลับไป sent_to_accountant', async () => {
     const periodId = await seedPeriod('sent_to_accountant')
     const locked = await accounting.lockPeriod(ctx(), periodId, reason)

@@ -77,6 +77,36 @@ export function isImeiLikeIdentifier(value: string): boolean {
   return value.trim() !== '' && !HAS_LETTER.test(value)
 }
 
+/** ตัวอักษรที่มักถูกพิมพ์แทนตัวเลข: O/o→0 · I/l→1 · S→5 · B→8 · Z→2 (มติ PO U54) */
+const IMEI_LOOKALIKE_LETTER = /^[OoIlSBZ]$/
+const DIGIT = /^\d$/
+
+/** ข้อความเตือน (ไม่บล็อก) เมื่อค่าที่ถูกจัดเป็น Serial ดูเหมือน IMEI ที่พิมพ์ผิด (มติ PO U54) */
+export const IMEI_TYPO_WARNING_MESSAGE = 'ดูเหมือน IMEI ที่มีตัวอักษรปน — ตรวจอีกครั้ง'
+
+/**
+ * ค่าในช่อง "IMEI หรือ Serial" ที่ถูกจัดเป็น **Serial** แต่ดูเหมือน IMEI พิมพ์ผิดหรือไม่ (มติ PO U54) — **เตือน ไม่บล็อก**
+ * เกณฑ์: มีตัวอักษร (จึงเป็น Serial) · ตัดตัวคั่นชุดเดียวกับ `parseImei()` แล้วเหลือ 15 ตัวพอดี ·
+ * เป็นตัวเลข 13–14 ตัว + ตัวอักษรที่สับสนกับตัวเลข (O/o/I/l/S/B/Z) 1–2 ตัว — ไม่ fuzzy แก้ค่าให้ (ยังบันทึกเป็น Serial ตามที่กรอก)
+ */
+export function looksLikeMistypedImei(value: string | null | undefined): boolean {
+  const trimmed = value?.trim() ?? ''
+  if (trimmed === '' || isImeiLikeIdentifier(trimmed)) return false
+  const chars = [...trimmed.replace(IMEI_SEPARATORS, '')]
+  if (chars.length !== IMEI_LENGTH) return false
+  let digits = 0
+  for (const char of chars) {
+    if (DIGIT.test(char)) digits += 1
+    else if (!IMEI_LOOKALIKE_LETTER.test(char)) return false
+  }
+  return digits >= IMEI_LENGTH - 2 && digits <= IMEI_LENGTH - 1
+}
+
+/** ข้อความเตือนของช่อง "IMEI หรือ Serial" — `null` = ไม่มีอะไรต้องเตือน (ใช้ร่วมฟอร์ม/นำเข้าไฟล์/API) */
+export function assetIdentifierWarning(value: string | null | undefined): string | null {
+  return looksLikeMistypedImei(value) ? IMEI_TYPO_WARNING_MESSAGE : null
+}
+
 export type AssetIdentityField = 'imei' | 'serial'
 
 export interface AssetIdentityContract {

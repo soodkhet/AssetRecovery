@@ -844,6 +844,45 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(await countNotifications()).toBe(1)
   })
 
+  it('มติ PO U54: Serial ที่ดูเหมือน IMEI พิมพ์ผิด ⇒ เตือน ไม่บล็อก (สร้างเคส + นำเข้าไฟล์ต่อแถว)', async () => {
+    const { createCase } = await import('@/lib/cases/queries')
+    const { caseCreateSchema } = await import('@/lib/cases/schemas')
+    const { importCases } = await import('@/lib/cases/import-queries')
+    const { IMEI_TYPO_WARNING_MESSAGE } = await import('@/lib/warehouse/imei')
+
+    const created = await createCase(
+      caseCreateSchema.parse({ caseRef: 'SF-2026-2398', financeCompanyId: COMPANY_ID, assetImeiSerial: '35693803564380O' }),
+      { actor, meta },
+    )
+    expect(created.assetImeiSerial).toBe('35693803564380O')
+    expect(created.assetIdentifierWarning).toBe(IMEI_TYPO_WARNING_MESSAGE)
+    const [stored] = await db().$queryRawUnsafe<Array<{ imei: string | null; serial_no: string | null }>>(
+      `SELECT imei, serial_no FROM cases WHERE id = '${created.id}'`,
+    )
+    expect(stored).toEqual({ imei: null, serial_no: '35693803564380O' })
+
+    const plain = await createCase(
+      caseCreateSchema.parse({ caseRef: 'SF-2026-2397', financeCompanyId: COMPANY_ID, assetImeiSerial: 'F2LXK1ABHG7F' }),
+      { actor, meta },
+    )
+    expect(plain.assetIdentifierWarning).toBeNull()
+
+    const preview = await importCases(
+      {
+        financeCompanyId: COMPANY_ID,
+        dryRun: true,
+        rows: [
+          { 'เลขที่สัญญา': 'SF-2026-2396', 'IMEI / Serial': '35-69380O-564380-l' },
+          { 'เลขที่สัญญา': 'SF-2026-2395', 'IMEI / Serial': '356938035643809' },
+        ],
+      },
+      { actor, meta },
+    )
+    expect(preview.createdCount).toBe(2)
+    expect(preview.rows[0]?.warnings).toEqual({ assetImeiSerial: IMEI_TYPO_WARNING_MESSAGE })
+    expect(preview.rows[1]?.warnings).toBeNull()
+  })
+
   it('Import dryRun ไม่เขียนอะไรลง DB (preview ก่อนยืนยัน)', async () => {
     const { importCases } = await import('@/lib/cases/import-queries')
     const result = await importCases(

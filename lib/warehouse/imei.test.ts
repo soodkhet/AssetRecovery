@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   IMEI_FORMAT_MESSAGE,
+  IMEI_TYPO_WARNING_MESSAGE,
+  assetIdentifierWarning,
   compareAssetIdentity,
+  looksLikeMistypedImei,
   identityMatches,
   imeiInputSchema,
   imeiSearchKey,
@@ -170,5 +173,46 @@ describe('compareAssetIdentity', () => {
       { imeiActual: IMEI, serialActual: null },
     )
     expect(result).toMatchObject({ matched: false, comparable: false, fields: [] })
+  })
+})
+
+// ── มติ PO U54 — Serial ที่ดูเหมือน IMEI พิมพ์ผิด: เตือน ไม่บล็อก ───────────────────────
+
+describe('looksLikeMistypedImei / assetIdentifierWarning (U54)', () => {
+  it('ตัวเลข 14 ตัว + O/o/I/l/S/B/Z 1 ตัว (ยาว 15) ⇒ เตือน', () => {
+    for (const value of [
+      '35693803564380O',
+      '3569380356438o9',
+      '35693803564I809',
+      '356938035643l09',
+      'S56938035643809',
+      '3569380356438B9',
+      '35693803564380Z',
+    ]) {
+      expect(looksLikeMistypedImei(value)).toBe(true)
+    }
+  })
+
+  it('ตัวเลข 13 ตัว + ตัวอักษรสับสน 2 ตัว และมีตัวคั่นชุดเดียวกับ IMEI ⇒ เตือน', () => {
+    expect(looksLikeMistypedImei('35-69380O-564380-l')).toBe(true)
+    expect(looksLikeMistypedImei('35 693803 5643O0 9')).toBe(true)
+    expect(assetIdentifierWarning('35.693803.56438O.9')).toBe(IMEI_TYPO_WARNING_MESSAGE)
+  })
+
+  it('ไม่เตือน: IMEI ถูกต้อง · Serial ทั่วไป · ตัวอักษรอื่น · ความยาวไม่ใช่ 15 · ตัวอักษรเกิน 2 ตัว · ว่าง', () => {
+    expect(looksLikeMistypedImei('356938035643809')).toBe(false)
+    expect(looksLikeMistypedImei('F2LXK1ABHG7F')).toBe(false)
+    expect(looksLikeMistypedImei('35693803564380X')).toBe(false)
+    expect(looksLikeMistypedImei('3569380356438O')).toBe(false)
+    expect(looksLikeMistypedImei('3569380356438O09')).toBe(false)
+    expect(looksLikeMistypedImei('356938035643OOO')).toBe(false)
+    expect(looksLikeMistypedImei('35693803564380/O')).toBe(false)
+    expect(looksLikeMistypedImei('')).toBe(false)
+    expect(looksLikeMistypedImei(null)).toBe(false)
+    expect(assetIdentifierWarning('F2LXK1ABHG7F')).toBeNull()
+  })
+
+  it('ข้อความเตือนตรงมติ และไม่มีเลขอ้างอิงสเปค', () => {
+    expect(IMEI_TYPO_WARNING_MESSAGE).toBe('ดูเหมือน IMEI ที่มีตัวอักษรปน — ตรวจอีกครั้ง')
   })
 })

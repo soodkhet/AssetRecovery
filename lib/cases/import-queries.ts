@@ -7,6 +7,7 @@ import type { CaseImportInput } from '@/lib/cases/schemas'
 import type { CaseImportResultDto, CaseImportRowResultDto } from '@/lib/cases/types'
 import { ModuleError } from '@/lib/api/errors'
 import { prisma } from '@/lib/prisma'
+import { assetIdentifierWarning } from '@/lib/warehouse/imei'
 
 /**
  * `POST /api/cases/import` (ไฟล์ 38 §8 `import_cases` · §17.1) — ชั้น DB
@@ -22,6 +23,12 @@ function headersOf(rows: readonly Record<string, unknown>[]): string[] {
   const headers = new Set<string>()
   for (const row of rows) for (const key of Object.keys(row)) headers.add(key)
   return [...headers]
+}
+
+/** เตือนต่อช่องของแถว (ไม่ทำให้แถวตก) — Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54) */
+function rowWarnings(assetImeiSerial: string | null | undefined): Record<string, string> | null {
+  const warning = assetIdentifierWarning(assetImeiSerial)
+  return warning === null ? null : { assetImeiSerial: warning }
 }
 
 export async function importCases(
@@ -43,6 +50,7 @@ export async function importCases(
     errorCode: error.code,
     errorMessage: 'ข้อมูลในแถวนี้ไม่ผ่านการตรวจสอบ',
     fields: error.fields,
+    warnings: null,
   }))
 
   for (const row of plan.rows) {
@@ -56,6 +64,7 @@ export async function importCases(
         errorCode: duplicate.code,
         errorMessage: 'เลขที่สัญญาซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน',
         fields: null,
+        warnings: rowWarnings(row.input.assetImeiSerial),
       })
       continue
     }
@@ -69,6 +78,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
+        warnings: rowWarnings(row.input.assetImeiSerial),
       })
       continue
     }
@@ -83,6 +93,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
+        warnings: rowWarnings(row.input.assetImeiSerial),
       })
     } catch (error) {
       // error ของโมดูล (ref ซ้ำ/บริษัทถูกระงับ/เลขบัตรผิด) = แถวนั้นตก · error อื่นถือเป็นความผิดพลาดจริง
@@ -95,6 +106,7 @@ export async function importCases(
         errorCode: error.code,
         errorMessage: error.userMessage,
         fields: null,
+        warnings: rowWarnings(row.input.assetImeiSerial),
       })
     }
   }

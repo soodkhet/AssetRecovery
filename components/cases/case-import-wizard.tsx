@@ -380,6 +380,14 @@ export function CaseImportWizard({
                             .join(' · ')}
                         </div>
                       )}
+                      {/* เตือน ไม่ทำให้แถวตก — เช่น Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54) */}
+                      {row.warnings !== null && (
+                        <div className="text-[11px] font-semibold text-amber-600">
+                          {Object.entries(row.warnings)
+                            .map(([field, message]) => `${importErrorFieldLabel(field)}: ${message}`)
+                            .join(' · ')}
+                        </div>
+                      )}
                     </Td>
                   </Tr>
                 ))}

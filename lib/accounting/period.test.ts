@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { isAccountingError } from '@/lib/accounting/errors'
 import {
   assertPeriodActionStatus,
+  assertPeriodEnded,
   assertPeriodTransition,
   assertReadyToSend,
   assertUnlockAllowed,
   canTransitionPeriod,
   evaluateReadiness,
+  isPeriodEnded,
   nextPeriodKey,
+  periodCloseAvailableFrom,
+  periodCloseAvailableHint,
   periodActionsFor,
   periodKeyOf,
   periodLabelOf,
@@ -217,6 +221,7 @@ describe('ปุ่มบนแถวรอบบัญชี (`30` §8)', () =>
         canLock: false,
         canUnlock: false,
         canExport: false,
+        closeBlockedHint: null,
       })
     }
   })
@@ -224,5 +229,82 @@ describe('ปุ่มบนแถวรอบบัญชี (`30` §8)', () =>
   it('ปุ่มยึด state machine เดียวกับ API — ไม่มีทางลัดข้ามขั้น', () => {
     expect(periodActionsFor('locked', accountant).canLock).toBe(false)
     expect(periodActionsFor('collecting', executive).canUnlock).toBe(false)
+  })
+})
+
+// ── มติ PO U51 — ส่ง/ล็อกได้ตั้งแต่ 00:00 น. วันที่ 1 ของเดือนถัดไป (เวลาไทย) ─────────────
+
+describe('งวดสิ้นเดือนแล้วจึงส่ง/ล็อกได้ (U51)', () => {
+  const october = { yearBe: 2569, month: 10 }
+  const december = { yearBe: 2569, month: 12 }
+
+  it('งวด ต.ค. 2569 เปิดให้ส่ง/ล็อกที่ 01/11/2569 00:00 น. ไทย = 2026-10-31T17:00Z', () => {
+    expect(periodCloseAvailableFrom(october).toISOString()).toBe('2026-10-31T17:00:00.000Z')
+    expect(periodCloseAvailableHint(october)).toBe('ส่ง/ล็อกได้ตั้งแต่ 01/11/2569')
+  })
+
+  it('งวด ธ.ค. ข้ามปี → 01/01 ของปีถัดไป', () => {
+    expect(periodCloseAvailableFrom(december).toISOString()).toBe('2026-12-31T17:00:00.000Z')
+    expect(periodCloseAvailableHint(december)).toBe('ส่ง/ล็อกได้ตั้งแต่ 01/01/2570')
+  })
+
+  it('เส้นขอบ: 31/10 23:59 น. ไทย ห้าม · 01/11 00:00 น. ได้', () => {
+    const lastMinute = new Date('2026-10-31T16:59:00Z') // 31/10/2569 23:59 น.
+    const lastMs = new Date('2026-10-31T16:59:59.999Z')
+    const midnight = new Date('2026-10-31T17:00:00Z') // 01/11/2569 00:00 น.
+    expect(isPeriodEnded(october, lastMinute)).toBe(false)
+    expect(isPeriodEnded(october, lastMs)).toBe(false)
+    expect(isPeriodEnded(october, midnight)).toBe(true)
+    expect(() => assertPeriodEnded(october, midnight)).not.toThrow()
+  })
+
+  it('ยังไม่สิ้นเดือน ⇒ PERIOD_NOT_ENDED พร้อมวันที่ พ.ศ. ในข้อความ', () => {
+    try {
+      assertPeriodEnded(october, new Date('2026-10-31T16:59:00Z'))
+      expect.unreachable()
+    } catch (error) {
+      expect(isAccountingError(error) && error.code).toBe('PERIOD_NOT_ENDED')
+      if (!isAccountingError(error)) return
+      expect(error.status).toBe(400)
+      expect(error.userMessage).toContain('01/11/2569')
+      expect(error.userMessage).not.toMatch(/§|`\d{2}`/)
+      expect(error.context).toEqual({ availableFrom: '2026-10-31T17:00:00.000Z' })
+    }
+  })
+
+  it('ปุ่มส่ง/ล็อกยังแสดงแต่มีข้อความบล็อกเมื่อยังไม่สิ้นเดือน · สิ้นเดือนแล้ว = null', () => {
+    const accountant = { canManagePeriod: true, canUnlockPeriod: false, canExportPack: true }
+    const notEnded = { key: october, periodEnded: false }
+    expect(periodActionsFor('collecting', accountant, notEnded)).toMatchObject({
+      canSend: true,
+      closeBlockedHint: 'ส่ง/ล็อกได้ตั้งแต่ 01/11/2569',
+    })
+    expect(periodActionsFor('sent_to_accountant', accountant, notEnded).closeBlockedHint).not.toBeNull()
+    expect(periodActionsFor('collecting', accountant, { key: october, periodEnded: true }).closeBlockedHint).toBeNull()
+    // ไม่มีปุ่มให้กดอยู่แล้ว (locked) ⇒ ไม่ต้องแสดงข้อความ
+    expect(periodActionsFor('locked', accountant, notEnded).closeBlockedHint).toBeNull()
+  })
+
+  it('Readiness มีข้อ "งวดสิ้นเดือนแล้ว" เป็นข้อแรก · ไม่ผ่าน ⇒ ไม่พร้อม + assertReadyToSend โยน PERIOD_NOT_ENDED', () => {
+    const clean: ReadinessInput = {
+      criticalOpen: [],
+      warningOpenCount: 0,
+      unmatchedBankCount: 0,
+      billingMismatches: [],
+    }
+    const early = evaluateReadiness({ ...clean, periodEnd: { key: october, now: new Date('2026-10-31T16:59:00Z') } })
+    expect(early.checks[0]).toMatchObject({ key: 'period_ended', passed: false, detail: 'ส่ง/ล็อกได้ตั้งแต่ 01/11/2569' })
+    expect(early.ready).toBe(false)
+    expect(() => assertReadyToSend(early)).toThrow(/PERIOD_NOT_ENDED/)
+
+    const onTime = evaluateReadiness({ ...clean, periodEnd: { key: october, now: new Date('2026-10-31T17:00:00Z') } })
+    expect(onTime.checks.map((check) => check.key)).toEqual([
+      'period_ended',
+      'billing_revenue_sync',
+      'bank_reconcile',
+      'no_critical_exception',
+    ])
+    expect(onTime.ready).toBe(true)
+    expect(() => assertReadyToSend(onTime)).not.toThrow()
   })
 })

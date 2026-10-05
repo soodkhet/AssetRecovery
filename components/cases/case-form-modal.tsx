@@ -33,6 +33,7 @@ import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
 import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
 import { parseBahtInput } from '@/lib/format/money'
+import { assetIdentifierWarning } from '@/lib/warehouse/imei'
 
 /**
  * ฟอร์มรับเคสแบบกรอกมือ + แก้ไขเคส (`38` §7.3 · §8 `create_case_manual`/`edit_case`)
@@ -559,6 +560,12 @@ export function CaseFormModal({
                 invalid={fieldErrors.assetImeiSerial !== undefined}
                 onChange={(event) => patch({ assetImeiSerial: event.target.value })}
               />
+              {/* เตือนก่อนบันทึก ไม่บล็อก — ยังบันทึกเป็น Serial ได้ (มติ PO U54) */}
+              {fieldErrors.assetImeiSerial === undefined && assetIdentifierWarning(form.assetImeiSerial) !== null && (
+                <p className="mt-1 text-[11px] font-semibold text-amber-600">
+                  {assetIdentifierWarning(form.assetImeiSerial)}
+                </p>
+              )}
             </Field>
             <Field
               id="asset-debt"

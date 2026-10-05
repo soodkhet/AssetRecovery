@@ -28,6 +28,7 @@ import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evid
 import { loadCaseResubmittedAt } from '@/lib/field/resubmission'
 import { caseDocumentRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
+import { assetIdentifierWarning } from '@/lib/warehouse/imei'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -342,6 +343,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     ),
     assetType: row.assetKind,
     assetImeiSerial,
+    assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
     projectedRevenueSatang: row.projectedRevenueSatang,
     projectedRevenueSource: row.projectedRevenueSource,
     projectedRevenueSourceLabel:
