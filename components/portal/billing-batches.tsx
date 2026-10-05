@@ -133,8 +133,8 @@ function OutstandingText({ satang, className }: { satang: number; className?: st
   )
 }
 
-function BatchNumber({ value }: { value: string | null }) {
-  return value === null ? <span className="text-slate-300">—</span> : <RefText className="text-xs font-semibold">{value}</RefText>
+function BatchNumber({ value }: { value: string }) {
+  return <RefText className="text-xs font-semibold">{value}</RefText>
 }
 
 function CustomerWhtText({ satang, className }: { satang: number; className?: string }) {

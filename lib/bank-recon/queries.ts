@@ -106,7 +106,7 @@ const TX_SELECT = {
   createdAt: true,
   period: { select: { periodLabel: true } },
   bankAccount: { select: { bankName: true, accountNumber: true } },
-  matchedBilling: { select: { id: true, period: true, company: { select: { name: true } } } },
+  matchedBilling: { select: { id: true, batchNumber: true, period: true, company: { select: { name: true } } } },
   matchedPayout: { select: { id: true, name: true } },
   matchedByUser: { select: { fullName: true } },
   suspenseNote: true,
@@ -125,8 +125,9 @@ function bankAccountLabel(account: { bankName: string; accountNumber: string }):
   return `${account.bankName} (***${tail})`
 }
 
-function billingRef(batch: { period: string; company: { name: string } }): string {
-  return `รอบวางบิล ${batch.period} · ${batch.company.name}`
+function billingRef(batch: { batchNumber: string; period: string; company: { name: string } }): string {
+  // มติ U76 — นำด้วยเลขรอบจริง BL-<พ.ศ.>-NNN
+  return `รอบวางบิล ${batch.batchNumber} (${batch.period}) · ${batch.company.name}`
 }
 
 function toDto(row: TxRow): BankTransactionDto {
@@ -273,12 +274,14 @@ async function loadCandidates(
           : {
               OR: [
                 { period: { contains: search, mode: 'insensitive' } },
+                { batchNumber: { contains: search, mode: 'insensitive' } },
                 { company: { name: { contains: search, mode: 'insensitive' } } },
               ],
             }),
       },
       select: {
         id: true,
+        batchNumber: true,
         period: true,
         totalSatang: true,
         receivedSatang: true,

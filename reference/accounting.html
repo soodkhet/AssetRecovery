@@ -53,10 +53,10 @@ const store = {
 
   // --- Sales Records (ไฟล์ 31) ---
   salesRecords: [
-    { id: 'SR-001', billingBatchId: 'BB-2569-05-001', batchNumber: 'BB-2569-05-001', company: 'บริษัท สยามไฟแนนซ์ จำกัด',    caseRef: 'CASE-26-0012', accountingDate: '16/05/2569', model: 'SUCCESS_FEE', gross: 7500,  vat: 525,  total: 8025,  vatFlag: 'include_vat', taxInvoiceId: 'INV-2569-0012', taxInvoiceStatus: 'issued',   status: 'billed' },
-    { id: 'SR-002', billingBatchId: 'BB-2569-05-001', batchNumber: 'BB-2569-05-001', company: 'บริษัท สยามไฟแนนซ์ จำกัด',    caseRef: 'CASE-26-0034', accountingDate: '16/05/2569', model: 'SUCCESS_FEE', gross: 5400,  vat: 378,  total: 5778,  vatFlag: 'include_vat', taxInvoiceId: 'INV-2569-0013', taxInvoiceStatus: 'issued',   status: 'billed' },
-    { id: 'SR-003', billingBatchId: 'BB-2569-06-001', batchNumber: 'BB-2569-06-001', company: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', caseRef: 'CASE-26-0028', accountingDate: '18/06/2569', model: 'FLAT',        gross: 3000,  vat: 210,  total: 3210,  vatFlag: 'include_vat', taxInvoiceId: null,            taxInvoiceStatus: 'draft',    status: 'ready_for_billing' },
-    { id: 'SR-004', billingBatchId: 'BB-2569-06-001', batchNumber: 'BB-2569-06-001', company: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', caseRef: 'CASE-26-0041', accountingDate: '20/06/2569', model: 'HYBRID',      gross: 4500,  vat: 315,  total: 4815,  vatFlag: 'include_vat', taxInvoiceId: null,            taxInvoiceStatus: 'draft',    status: 'ready_for_billing' }
+    { id: 'SR-001', billingBatchId: 'BL-2569-007', batchNumber: 'BL-2569-007', company: 'บริษัท สยามไฟแนนซ์ จำกัด',    caseRef: 'CASE-26-0012', accountingDate: '16/05/2569', model: 'SUCCESS_FEE', gross: 7500,  vat: 525,  total: 8025,  vatFlag: 'include_vat', taxInvoiceId: 'INV-2569-0012', taxInvoiceStatus: 'issued',   status: 'billed' },
+    { id: 'SR-002', billingBatchId: 'BL-2569-007', batchNumber: 'BL-2569-007', company: 'บริษัท สยามไฟแนนซ์ จำกัด',    caseRef: 'CASE-26-0034', accountingDate: '16/05/2569', model: 'SUCCESS_FEE', gross: 5400,  vat: 378,  total: 5778,  vatFlag: 'include_vat', taxInvoiceId: 'INV-2569-0013', taxInvoiceStatus: 'issued',   status: 'billed' },
+    { id: 'SR-003', billingBatchId: 'BL-2569-012', batchNumber: 'BL-2569-012', company: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', caseRef: 'CASE-26-0028', accountingDate: '18/06/2569', model: 'FLAT',        gross: 3000,  vat: 210,  total: 3210,  vatFlag: 'include_vat', taxInvoiceId: null,            taxInvoiceStatus: 'draft',    status: 'ready_for_billing' },
+    { id: 'SR-004', billingBatchId: 'BL-2569-012', batchNumber: 'BL-2569-012', company: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', caseRef: 'CASE-26-0041', accountingDate: '20/06/2569', model: 'HYBRID',      gross: 4500,  vat: 315,  total: 4815,  vatFlag: 'include_vat', taxInvoiceId: null,            taxInvoiceStatus: 'draft',    status: 'ready_for_billing' }
   ],
 
   // --- Tax Invoices (ไฟล์ 31) ---
@@ -67,8 +67,8 @@ const store = {
 
   // --- Cash Receipts (ไฟล์ 31) ---
   cashReceipts: [
-    { id: 'CR-001', billingBatchId: 'BB-2569-05-001', bankTransactionId: 'bt1', receivedDate: '10/06/2569', receivedAmount: 75000, receiptNumber: 'RCP-2569-001', payer: 'บริษัท สยามไฟแนนซ์ จำกัด',    bankRef: 'KBANK-TRX-001', whtDeducted: 0,    status: 'matched' },
-    { id: 'CR-002', billingBatchId: 'BB-2569-05-002', bankTransactionId: 'bt2', receivedDate: '15/06/2569', receivedAmount: 54000, receiptNumber: 'RCP-2569-002', payer: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', bankRef: 'KBANK-TRX-003', whtDeducted: 1620, status: 'matched' }
+    { id: 'CR-001', billingBatchId: 'BL-2569-007', bankTransactionId: 'bt1', receivedDate: '10/06/2569', receivedAmount: 75000, receiptNumber: 'RCP-2569-001', payer: 'บริษัท สยามไฟแนนซ์ จำกัด',    bankRef: 'KBANK-TRX-001', whtDeducted: 0,    status: 'matched' },
+    { id: 'CR-002', billingBatchId: 'BL-2569-008', bankTransactionId: 'bt2', receivedDate: '15/06/2569', receivedAmount: 54000, receiptNumber: 'RCP-2569-002', payer: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', bankRef: 'KBANK-TRX-003', whtDeducted: 1620, status: 'matched' }
   ],
 
   // --- Expense Records (ไฟล์ 32) ---
@@ -81,8 +81,8 @@ const store = {
 
   // --- Bank Transactions (ไฟล์ 35) ---
   bankTransactions: [
-    { id: 'bt1', date: '10/06/2569', ref: 'KBANK-TRX-001', description: 'รับโอนจาก บ.สยามไฟแนนซ์',    amountIn: 75000, amountOut: 0, matchedWithType: 'billing_batch', matchedWithId: 'BB-2569-05-001', matchNote: null, status: 'auto_matched' },
-    { id: 'bt2', date: '15/06/2569', ref: 'KBANK-TRX-002', description: 'รับโอนจาก บ.กรุงไทยลีสซิ่ง',  amountIn: 52380, amountOut: 0, matchedWithType: 'billing_batch', matchedWithId: 'BB-2569-05-002', matchNote: 'ลูกค้าหัก WHT 1,620 บาทก่อนโอน', status: 'manual_matched' },
+    { id: 'bt1', date: '10/06/2569', ref: 'KBANK-TRX-001', description: 'รับโอนจาก บ.สยามไฟแนนซ์',    amountIn: 75000, amountOut: 0, matchedWithType: 'billing_batch', matchedWithId: 'BL-2569-007', matchNote: null, status: 'auto_matched' },
+    { id: 'bt2', date: '15/06/2569', ref: 'KBANK-TRX-002', description: 'รับโอนจาก บ.กรุงไทยลีสซิ่ง',  amountIn: 52380, amountOut: 0, matchedWithType: 'billing_batch', matchedWithId: 'BL-2569-008', matchNote: 'ลูกค้าหัก WHT 1,620 บาทก่อนโอน', status: 'manual_matched' },
     { id: 'bt3', date: '22/06/2569', ref: 'KBANK-TRX-003', description: 'รับโอน ไม่ทราบที่มา',           amountIn: 12500, amountOut: 0, matchedWithType: null,             matchedWithId: null,             matchNote: null, status: 'unmatched' },
     { id: 'bt4', date: '22/06/2569', ref: 'KBANK-TRX-004', description: 'โอนจ่าย Payout Outsource',     amountIn: 0, amountOut: 43650, matchedWithType: 'payout_batch',  matchedWithId: 'PB-2569-05-OUT', matchNote: null, status: 'auto_matched' },
     { id: 'bt5', date: '25/06/2569', ref: 'KBANK-TRX-005', description: 'ค่าธรรมเนียมธนาคารรายเดือน', amountIn: 0, amountOut: 250, matchedWithType: null, matchedWithId: null, matchNote: 'ปิดรายการโดยไม่จับคู่ — ค่าธรรมเนียมธนาคาร ไม่ใช่รายรับ/จ่ายของระบบ (โดย: สมหญิง ดูแลดี)', status: 'unmatched_resolved' }
@@ -1178,8 +1178,8 @@ function renderModal() {
       ], 'billing_batch')}
       ${formSelect('mm_target', 'เลือกรายการที่ต้องการจับคู่', [
         { val: '', text: '-- ค้นหาหรือเลือกรหัส Billing Batch --' },
-        { val: 'BB-2569-06-001', text: 'BB-2569-06-001 · บ.กรุงไทยลีสซิ่ง (฿ 8,025)' },
-        { val: 'BB-2569-06-002', text: 'BB-2569-06-002 · บ.สยามไฟแนนซ์ (฿ 13,803)' }
+        { val: 'BL-2569-012', text: 'BL-2569-012 · บ.กรุงไทยลีสซิ่ง (฿ 8,025)' },
+        { val: 'BL-2569-013', text: 'BL-2569-013 · บ.สยามไฟแนนซ์ (฿ 13,803)' }
       ], '')}
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
         ⚠️ หากยอดไม่ตรงกันเป๊ะ <b>ต้องกรอกหมายเหตุชี้แจง</b> (MATCH_NOTE_REQUIRED) — เช่น ลูกค้าหัก WHT ก่อนโอน

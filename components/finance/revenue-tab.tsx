@@ -191,7 +191,7 @@ export function RevenueTab() {
               <THead>
                 <Tr>
                   <Th>บริษัทไฟแนนซ์</Th>
-                  <Th>รอบเดือน</Th>
+                  <Th>เลขที่รอบ / รอบเดือน</Th>
                   <Th numeric>ยอดเรียกเก็บ</Th>
                   <Th numeric>รับชำระแล้ว</Th>
                   <Th numeric>ยอดคงค้าง (AR)</Th>
@@ -219,7 +219,9 @@ export function RevenueTab() {
                         </p>
                       </Td>
                       <Td>
-                        <p className="text-xs font-semibold text-slate-700">{batch.period}</p>
+                        {/* มติ U76 — เลขรอบวางบิลจริง BL-<พ.ศ.>-NNN */}
+                        <RefText>{batch.batchNumber}</RefText>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-700">{batch.period}</p>
                         <p className="mt-0.5 text-[10px] text-slate-400">
                           ครบกำหนด {fmtDate(batch.dueDate)}
                           {isArOverdue(batch) && (
@@ -352,7 +354,10 @@ export function RevenueTab() {
                       {revenue.billingBatchPeriod === null ? (
                         <span className="text-slate-400">-</span>
                       ) : (
-                        revenue.billingBatchPeriod
+                        <>
+                          {revenue.billingBatchNumber !== null && <RefText>{revenue.billingBatchNumber}</RefText>}
+                          <p className="mt-0.5">{revenue.billingBatchPeriod}</p>
+                        </>
                       )}
                     </Td>
                     <Td>

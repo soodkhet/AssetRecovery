@@ -159,7 +159,8 @@ export function SalesTab() {
               data.items.map((row) => (
                 <Tr key={row.id}>
                   <Td>
-                    <RefText>{row.billingPeriod}</RefText>
+                    <RefText>{row.billingBatchNumber}</RefText>
+                    <p className="mt-0.5 text-[10px] text-slate-500">{row.billingPeriod}</p>
                     <div className="mt-0.5">
                       <StatusBadge status={row.billingStatus} label={BILLING_STATUS_LABEL[row.billingStatus]} />
                     </div>

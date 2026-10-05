@@ -26,7 +26,6 @@ import {
   type PortalStatusDisplay,
 } from '@/lib/portal/status-map'
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
-import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import { ASSET_CONDITION_LABEL, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -189,6 +188,8 @@ export function serializePortalCaseDetail(row: PortalCaseDetailSource): PortalCa
 
 export interface PortalBillingBatchSource {
   id: string
+  /** เลขรอบวางบิลจริง `BL-<พ.ศ.>-NNN` (มติ U76) */
+  batchNumber: string
   period: string
   status: BillingBatchStatus
   /** ยอดตามเอกสาร (ใบกำกับ − ใบลดหนี้ — `documentedBillingAmounts()` · มติ U14) ไม่ใช่ยอดหลัง Adjustment ภายใน */
@@ -203,8 +204,8 @@ export interface PortalBillingBatchSource {
 
 export interface PortalBillingBatchDto {
   id: string
-  /** เลขรอบวางบิล `BB-<ปี พ.ศ.>-<เดือน 2 หลัก>` จากรอบเดือน (มติ U62) · อ่านรอบเดือนไม่ได้ = `null` */
-  batchNumber: string | null
+  /** เลขรอบวางบิลจริง `BL-<พ.ศ.>-NNN` ต่อองค์กร รีเซ็ตทุกปี พ.ศ. (มติ U76 — แทน `BB-<พ.ศ.>-<MM>` ของ U62) */
+  batchNumber: string
   period: string
   /** จำนวนเคสในรอบ (มติ U62) */
   caseCount: number
@@ -218,24 +219,14 @@ export interface PortalBillingBatchDto {
   statusDisplay: PortalStatusDisplay<PortalBillingStatusCode>
 }
 
-/**
- * เลขรอบวางบิลที่แสดงในพอร์ทัล (มติ PO U62 · mockup "เลขที่รอบวางบิล") — ระบบไม่มีเลขเอกสารของรอบเก็บแยก
- * จึงสร้างจาก `period` ซึ่ง unique ต่อบริษัทอยู่แล้ว (1 บริษัท 1 เดือน = 1 รอบ) ⇒ ค่าคงที่ ไม่เปลี่ยนตามเวลา
- * · "มิถุนายน 2569" → `BB-2569-06` · รูปแบบอื่น → `null` (หน้าแสดงรอบเดือนอย่างเดียว)
- */
-export function portalBillingBatchNumber(period: string): string | null {
-  const parsed = parseBillingPeriodLabel(period)
-  if (parsed === null) return null
-  return `BB-${parsed.yearBe}-${String(parsed.month).padStart(2, '0')}`
-}
-
 /** `draft` → `null` (ห้ามแสดงในพอร์ทัล — `97` §6.2) */
 export function serializePortalBillingBatch(row: PortalBillingBatchSource): PortalBillingBatchDto | null {
   const statusDisplay = portalBillingStatusDisplay(row.status)
   if (statusDisplay === null) return null
   return {
     id: row.id,
-    batchNumber: portalBillingBatchNumber(row.period),
+    // มติ U76 — เลขจริงที่เก็บใน DB (เดิม U62 สร้าง `BB-<พ.ศ.>-<MM>` จาก period)
+    batchNumber: row.batchNumber,
     period: row.period,
     caseCount: row.caseCount,
     totalSatang: row.totalSatang,

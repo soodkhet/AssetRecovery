@@ -441,7 +441,7 @@ async function bankReconFile(organizationId: string, scope: PeriodScope): Promis
       amountSatang: true,
       matchStatus: true,
       isSplitAllocation: true,
-      matchedBilling: { select: { period: true, company: { select: { name: true } } } },
+      matchedBilling: { select: { batchNumber: true, period: true, company: { select: { name: true } } } },
       matchedPayout: { select: { name: true } },
       matchedAdvance: { select: { id: true, payee: { select: { user: { select: { fullName: true } } } } } },
     },
@@ -453,7 +453,7 @@ async function bankReconFile(organizationId: string, scope: PeriodScope): Promis
       let matchedRef: string | null = null
       if (row.matchedBilling !== null) {
         matchedType = 'billing_batch'
-        matchedRef = `${row.matchedBilling.company.name} ${row.matchedBilling.period}`
+        matchedRef = `${row.matchedBilling.company.name} ${row.matchedBilling.batchNumber} ${row.matchedBilling.period}`
       } else if (row.matchedPayout !== null) {
         matchedType = 'payout_batch'
         matchedRef = row.matchedPayout.name
@@ -538,7 +538,7 @@ async function adjustmentLogOf(
       approvedByUser: { select: { fullName: true } },
       revenue: { select: { revenueDate: true, case: { select: { caseRef: true } } } },
       expense: { select: { expenseDate: true, case: { select: { caseRef: true } } } },
-      billingBatch: { select: { period: true, dueDate: true } },
+      billingBatch: { select: { batchNumber: true, period: true, dueDate: true } },
       payoutBatch: { select: { createdAt: true, name: true } },
     },
   })
@@ -554,7 +554,7 @@ async function adjustmentLogOf(
         : row.expense !== null
           ? { type: 'expense', ref: row.expense.case?.caseRef ?? null }
           : row.billingBatch !== null
-            ? { type: 'billing_batch', ref: row.billingBatch.period }
+            ? { type: 'billing_batch', ref: `${row.billingBatch.batchNumber} ${row.billingBatch.period}` }
             : { type: 'payout_batch', ref: row.payoutBatch?.name ?? null }
 
     entries.push({
@@ -608,7 +608,7 @@ async function suspenseFile(organizationId: string, scope: PeriodScope): Promise
       matchedAt: true,
       refundDate: true,
       refundNote: true,
-      matchedBilling: { select: { period: true, company: { select: { name: true } } } },
+      matchedBilling: { select: { batchNumber: true, period: true, company: { select: { name: true } } } },
     },
   })
   return suspenseCsv(
@@ -620,7 +620,9 @@ async function suspenseFile(organizationId: string, scope: PeriodScope): Promise
       suspenseNote: row.suspenseNote ?? '',
       matchStatus: row.matchStatus,
       matchedRef:
-        row.matchedBilling === null ? null : `${row.matchedBilling.company.name} ${row.matchedBilling.period}`,
+        row.matchedBilling === null
+          ? null
+          : `${row.matchedBilling.company.name} ${row.matchedBilling.batchNumber} ${row.matchedBilling.period}`,
       resolvedDate:
         row.matchStatus === 'suspense_refunded'
           ? row.refundDate

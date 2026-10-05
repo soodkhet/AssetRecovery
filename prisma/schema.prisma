@@ -659,6 +659,11 @@ model Organization {
   /// ปี พ.ศ. — ใช้เฉพาะโหมด yearly_reset
   taxInvoiceLastResetYear Int?                 @map("tax_invoice_last_reset_year")
 
+  // เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ PO U76) — เดินโดย trigger `trg_billing_batches_number` เท่านั้น ห้ามแก้จากแอป
+  billingBatchSeq     Int  @default(0) @map("billing_batch_seq")
+  /// ปี พ.ศ. ของ `billingBatchSeq` ปัจจุบัน (รีเซ็ตเมื่อขึ้นปีใหม่)
+  billingBatchSeqYear Int? @map("billing_batch_seq_year")
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -2551,6 +2556,9 @@ model BillingBatch {
   companyId                   String             @map("company_id") @db.Uuid
   /// เช่น "มิถุนายน 2569" (พ.ศ.)
   period                      String
+  /// เลขรอบวางบิล `BL-<พ.ศ.>-NNN` ต่อองค์กร รีเซ็ตทุกปี พ.ศ. (มติ PO U76) — DB trigger เดินเลขตอน INSERT
+  /// (`next_billing_batch_number()` migration `20261005200000`) · `dbgenerated()` = ตัดออกจาก create input · แก้ไม่ได้
+  batchNumber                 String             @default(dbgenerated()) @map("batch_number")
   status                      BillingBatchStatus @default(draft)
   totalSatang                 Int                @default(0) @map("total_satang")
   receivedSatang              Int                @default(0) @map("received_satang")
@@ -2581,6 +2589,7 @@ model BillingBatch {
   customerWhtCertificates CustomerWhtCertificate[]
 
   @@unique([organizationId, companyId, period])
+  @@unique([organizationId, batchNumber], map: "uniq_billing_batch_number")
   @@index([organizationId, status], map: "idx_billing_org_status")
   @@index([companyId, status], map: "idx_billing_company")
   @@map("billing_batches")

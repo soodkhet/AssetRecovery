@@ -26,6 +26,8 @@ export interface SalesRecordDto {
   companyName: string
   billingBatchId: string
   billingPeriod: string
+  /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U76) */
+  billingBatchNumber: string
   billingStatus: BillingBatchStatus
   totalBeforeVatSatang: number
   vatSatang: number
@@ -72,6 +74,8 @@ export interface CashReceiptDto {
   bankMatchStatus: BankMatchStatus | null
   billingBatchId: string
   billingPeriod: string
+  /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U76) */
+  billingBatchNumber: string
   billingStatus: BillingBatchStatus
   note: string | null
   createdAt: string
