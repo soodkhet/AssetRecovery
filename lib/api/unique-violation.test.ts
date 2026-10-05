@@ -138,6 +138,7 @@ describe('P2002 จากคำขอพร้อมกัน → error code ข
         name: 'บริษัท ทดสอบ จำกัด',
         shortName: 'T',
         taxId: '0105512345678',
+        branchCode: '00000',
         address: null,
         phone: null,
         email: null,

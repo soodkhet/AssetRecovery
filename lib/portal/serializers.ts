@@ -12,6 +12,7 @@ import type {
   ServiceFeeModel,
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
+import { formatBranch } from '@/lib/finance-companies/company'
 import { canAccess, type PortalCapabilities } from '@/lib/portal/access'
 import {
   portalBillingStatusDisplay,
@@ -480,6 +481,8 @@ export function portalAssetPhotoMeta(
 export interface PortalCompanyProfileSource {
   name: string
   taxId: string
+  /** สำนักงานใหญ่/สาขา (มติ PO U77) — `00000` = สำนักงานใหญ่ */
+  branchCode: string
   address: string | null
   contactName: string | null
   contactPhone: string | null
@@ -490,6 +493,8 @@ export interface PortalCompanyProfileSource {
 export interface PortalCompanyProfileDto {
   name: string
   taxId: string
+  /** "สำนักงานใหญ่" / "สาขาที่ 00001" — แสดงต่อจากเลขประจำตัวผู้เสียภาษี (มติ PO U77) */
+  branchLabel: string
   address: string | null
   contactName: string | null
   contactPhone: string | null
@@ -503,6 +508,7 @@ export function serializePortalCompanyProfile(row: PortalCompanyProfileSource): 
   return {
     name: row.name,
     taxId: row.taxId,
+    branchLabel: formatBranch(row.branchCode),
     address: row.address,
     contactName: row.contactName,
     contactPhone: row.contactPhone,

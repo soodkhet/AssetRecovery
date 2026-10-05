@@ -176,9 +176,9 @@ async function seedTaxInvoice(options: {
   `)
   const cancelled = options.cancelled === true
   await tx.$executeRawUnsafe(`
-    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, status,
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, status,
                               cancel_reason, cancelled_by, cancelled_at, created_by)
-    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INV64-${RUN}-${seq}', '${options.invoiceDate}',
+    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INV64-${RUN}-${seq}', '${options.invoiceDate}', '00000',
             '${cancelled ? 'cancelled' : 'active'}',
             ${cancelled ? `$$ยกเลิกในเทสต์$$, '${ACCOUNTING_ID}', '${options.invoiceDate}T03:00:00Z'` : 'NULL, NULL, NULL'},
             '${ACCOUNTING_ID}')

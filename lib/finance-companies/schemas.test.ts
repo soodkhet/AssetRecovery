@@ -114,3 +114,16 @@ describe('financeCompanyListQuerySchema', () => {
     expect(financeCompanyListQuerySchema.parse({ status: 'suspended', search: 'สยาม' }).search).toBe('สยาม')
   })
 })
+
+describe('มติ PO U77 — branchCode (สำนักงานใหญ่/สาขา)', () => {
+  it('ไม่ส่งมา = สำนักงานใหญ่ 00000', () => {
+    expect(financeCompanyCreateSchema.parse(validInput).branchCode).toBe('00000')
+  })
+
+  it('สาขา 5 หลักผ่าน · ไม่ครบ/มีตัวอักษร → field error ที่ branchCode', () => {
+    expect(financeCompanyCreateSchema.parse({ ...validInput, branchCode: '00001' }).branchCode).toBe('00001')
+    expect(fieldsOf({ ...validInput, branchCode: '1' })).toEqual(['branchCode'])
+    expect(fieldsOf({ ...validInput, branchCode: '0000A' })).toEqual(['branchCode'])
+    expect(fieldsOf({ ...validInput, branchCode: '000001' })).toEqual(['branchCode'])
+  })
+})

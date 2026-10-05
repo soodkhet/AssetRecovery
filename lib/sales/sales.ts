@@ -1,3 +1,4 @@
+import { formatBranch } from '@/lib/finance-companies/company'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
 import type { InvoiceDeliveryFormat, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
@@ -218,6 +219,11 @@ export interface TaxInvoiceDocSource {
   deliveryFormat: InvoiceDeliveryFormat
   seller: TaxInvoiceParty
   buyer: TaxInvoiceParty
+  /**
+   * สาขาผู้ซื้อที่ **snapshot ไว้บนใบตอนออก** (มติ PO U77 · ม.86/4) — `00000` = สำนักงานใหญ่
+   * ห้ามอ่านค่าปัจจุบันของบริษัทมาแทน (บริษัทเปลี่ยนสาขาภายหลังต้องไม่ทำให้ใบเดิมเปลี่ยน)
+   */
+  buyerBranchCode: string
   description: string
   periodLabel: string
   amounts: SalesAmounts
@@ -236,7 +242,8 @@ export interface TaxInvoiceDoc {
   cancelNote: string | null
   deliveryFormatLabel: string
   seller: TaxInvoiceParty
-  buyer: TaxInvoiceParty
+  /** ผู้ซื้อ + ข้อความสำนักงานใหญ่/สาขา (พิมพ์ต่อจากเลขประจำตัวผู้เสียภาษี — มติ PO U77) */
+  buyer: TaxInvoiceParty & { branchLabel: string }
   description: string
   periodLabel: string
   quantityText: string
@@ -274,7 +281,7 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
       : null,
     deliveryFormatLabel: INVOICE_DELIVERY_FORMAT_LABEL[source.deliveryFormat],
     seller: source.seller,
-    buyer: source.buyer,
+    buyer: { ...source.buyer, branchLabel: formatBranch(source.buyerBranchCode) },
     description: source.description,
     periodLabel: source.periodLabel,
     quantityText: '1',

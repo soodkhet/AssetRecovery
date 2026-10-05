@@ -1081,6 +1081,9 @@ model FinanceCompany {
   /// ชื่อย่อ เช่น "SF", "KTL"
   shortName      String @map("short_name")
   taxId          String @map("tax_id") @db.VarChar(13)
+  /// สำนักงานใหญ่/สาขา (มติ PO U77 · ม.86/4) — รหัส 5 หลักแบบกรมสรรพากร `00000` = สำนักงานใหญ่
+  /// CHECK `chk_finance_companies_branch_code` อยู่ใน raw SQL `20261005201000_finance_company_branch_code`
+  branchCode     String @default("00000") @map("branch_code") @db.VarChar(5)
 
   address      String?
   phone        String? @db.VarChar(20)
@@ -2706,15 +2709,18 @@ model SalesRecord {
 /// ใบกำกับภาษี (`31` §8) — เลขที่ auto-gen **ห้าม gap ห้ามแก้**
 /// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE ห้าม reverse cancel
 model TaxInvoice {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String           @map("organization_id") @db.Uuid
-  salesRecordId  String           @map("sales_record_id") @db.Uuid
-  invoiceNumber  String           @unique @map("invoice_number")
-  invoiceDate    DateTime         @map("invoice_date") @db.Date
-  status         TaxInvoiceStatus @default(active)
-  cancelReason   String?          @map("cancel_reason")
-  cancelledBy    String?          @map("cancelled_by") @db.Uuid
-  cancelledAt    DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+  id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String           @map("organization_id") @db.Uuid
+  salesRecordId   String           @map("sales_record_id") @db.Uuid
+  invoiceNumber   String           @unique @map("invoice_number")
+  invoiceDate     DateTime         @map("invoice_date") @db.Date
+  /// snapshot สาขาผู้ซื้อ ณ ตอนออกใบ (มติ PO U77 · ม.86/4) — `00000` = สำนักงานใหญ่ · ไม่มี default (ต้องส่งทุกครั้ง)
+  /// CHECK + ยาม immutable อยู่ใน raw SQL `20261005201000_finance_company_branch_code`
+  buyerBranchCode String           @map("buyer_branch_code") @db.VarChar(5)
+  status          TaxInvoiceStatus @default(active)
+  cancelReason    String?          @map("cancel_reason")
+  cancelledBy     String?          @map("cancelled_by") @db.Uuid
+  cancelledAt     DateTime?        @map("cancelled_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid

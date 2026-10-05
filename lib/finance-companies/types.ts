@@ -10,6 +10,8 @@ export interface FinanceCompanyDto {
   name: string
   shortName: string
   taxId: string
+  /** สำนักงานใหญ่/สาขา — `00000` = สำนักงานใหญ่ (มติ PO U77) */
+  branchCode: string
   address: string | null
   phone: string | null
   email: string | null

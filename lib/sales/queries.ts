@@ -88,6 +88,7 @@ const TAX_INVOICE_SELECT = {
   salesRecordId: true,
   invoiceNumber: true,
   invoiceDate: true,
+  buyerBranchCode: true,
   status: true,
   cancelReason: true,
   cancelledAt: true,
@@ -333,6 +334,8 @@ async function loadSeller(organizationId: string): Promise<{
 async function loadBuyer(companyId: string): Promise<{
   name: string
   taxId: string
+  /** สำนักงานใหญ่/สาขาปัจจุบัน — ใช้ตอน**ออกใบ**เท่านั้น (snapshot ลง `tax_invoices.buyer_branch_code`) */
+  branchCode: string
   address: string | null
   phone: string | null
   defaultInvoiceDeliveryFormat: Prisma.FinanceCompanyGetPayload<{
@@ -344,6 +347,7 @@ async function loadBuyer(companyId: string): Promise<{
     select: {
       name: true,
       taxId: true,
+      branchCode: true,
       address: true,
       phone: true,
       defaultInvoiceDeliveryFormat: true,
@@ -435,6 +439,8 @@ export async function issueTaxInvoice(
         salesRecordId: sales.id,
         invoiceNumber: reserved.number,
         invoiceDate,
+        // มติ PO U77 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ซื้อ ณ ตอนออกใบ
+        buyerBranchCode: buyer.branchCode,
         createdBy: ctx.actor.id,
       },
       select: TAX_INVOICE_SELECT,
@@ -451,6 +457,7 @@ export async function issueTaxInvoice(
         after: {
           invoice_number: invoice.invoiceNumber,
           invoice_date: invoice.invoiceDate.toISOString(),
+          buyer_branch_code: invoice.buyerBranchCode,
           status: invoice.status,
           sales_record_id: sales.id,
           total_satang: sales.totalSatang,
@@ -597,7 +604,10 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
 
 /** ประกอบข้อมูลเอกสารจากแถวที่โหลดแล้ว — ตัวเดียวกันทั้งพิมพ์รายใบและแนบใน Export Pack (U57) */
 function docSourceOf(
-  invoice: Pick<TaxInvoiceRow, 'invoiceNumber' | 'invoiceDate' | 'status' | 'cancelReason' | 'cancelledAt'>,
+  invoice: Pick<
+    TaxInvoiceRow,
+    'invoiceNumber' | 'invoiceDate' | 'status' | 'cancelReason' | 'cancelledAt' | 'buyerBranchCode'
+  >,
   sales: Pick<SalesRow, 'totalBeforeVatSatang' | 'vatSatang' | 'totalSatang'> & {
     billingBatch: { period: string }
     period: { periodLabel: string }
@@ -616,6 +626,8 @@ function docSourceOf(
     deliveryFormat: buyer.defaultInvoiceDeliveryFormat,
     seller: { name: seller.name, taxId: seller.taxId, address: seller.address, phone: seller.phone },
     buyer: { name: buyer.name, taxId: buyer.taxId, address: buyer.address ?? '', phone: buyer.phone },
+    // snapshot บนใบ (มติ PO U77) — ไม่ใช่ `buyer.branchCode` ปัจจุบันของบริษัท
+    buyerBranchCode: invoice.buyerBranchCode,
     description: invoiceDescriptionOf(sales.billingBatch.period),
     periodLabel: sales.period.periodLabel,
     amounts: amountsOf(sales),
@@ -657,6 +669,7 @@ export async function taxInvoicesForPack(
       cancelReason: true,
       cancelledAt: true,
       createdAt: true,
+      buyerBranchCode: true,
       salesRecord: {
         select: {
           companyId: true,

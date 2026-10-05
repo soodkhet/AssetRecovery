@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertValidTaxId,
+  branchCodeFromForm,
+  branchKindOf,
+  formatBranch,
+  HEAD_OFFICE_BRANCH_CODE,
   DEFAULT_CUSTOMER_WHT_PCT,
   DEFAULT_VAT_MODE,
   formatCustomerWhtPct,
@@ -22,6 +26,7 @@ const baseValues: FinanceCompanyValues = {
   name: '  บริษัท สยามไฟแนนซ์ จำกัด  ',
   shortName: ' SF ',
   taxId: '0-1055-12345-67-8',
+  branchCode: '00000',
   address: ' 123 ถนนสีลม ',
   phone: '021234567',
   email: '  ar@siamfinance.co.th ',
@@ -138,5 +143,27 @@ describe('ค่า default ของรูปแบบ VAT / WHT ที่ล�
     expect(formatCustomerWhtPct(null)).toBe('ไม่หัก')
     expect(formatCustomerWhtPct(3)).toBe('3.00%')
     expect(formatCustomerWhtPct(1.5)).toBe('1.50%')
+  })
+})
+
+describe('มติ PO U77 (ม.86/4) — สำนักงานใหญ่/สาขา', () => {
+  it('00000 = สำนักงานใหญ่ · อื่น ๆ = สาขาที่ xxxxx', () => {
+    expect(HEAD_OFFICE_BRANCH_CODE).toBe('00000')
+    expect(formatBranch('00000')).toBe('สำนักงานใหญ่')
+    expect(formatBranch('00001')).toBe('สาขาที่ 00001')
+    expect(branchKindOf('00000')).toBe('head_office')
+    expect(branchKindOf('00012')).toBe('branch')
+  })
+
+  it('ค่าฟอร์ม → รหัสสาขา (สำนักงานใหญ่ไม่สนช่องเลขสาขา · ตัดช่องว่าง · ไม่เติม 0 ให้เอง)', () => {
+    expect(branchCodeFromForm('head_office', '00009')).toBe('00000')
+    expect(branchCodeFromForm('branch', ' 000 01 ')).toBe('00001')
+    expect(branchCodeFromForm('branch', '1')).toBe('1')
+  })
+
+  it('audit payload มี branch_code', () => {
+    expect(toCompanyAuditPayload({ ...baseValues, branchCode: '00002' }, { status: 'active', suspendedReason: null })).toMatchObject({
+      branch_code: '00002',
+    })
   })
 })

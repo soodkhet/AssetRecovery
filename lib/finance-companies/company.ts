@@ -40,11 +40,47 @@ export function formatCustomerWhtPct(pct: number | null): string {
   return pct === null ? 'ไม่หัก' : `${pct.toFixed(2)}%`
 }
 
+// ── สำนักงานใหญ่ / สาขา (มติ PO 05/10/2569 UAT U77 · ประมวลรัษฎากร ม.86/4) ─────────────────
+
+/** รหัสสาขา 5 หลักแบบกรมสรรพากร — `00000` = สำนักงานใหญ่ (ค่าเริ่มต้นของบริษัทเดิมทั้งหมด) */
+export const HEAD_OFFICE_BRANCH_CODE = '00000'
+export const BRANCH_CODE_PATTERN = /^\d{5}$/
+
+export function isHeadOfficeBranch(code: string): boolean {
+  return code === HEAD_OFFICE_BRANCH_CODE
+}
+
+/**
+ * ข้อความบนใบกำกับภาษี/หน้าจอ — "สำนักงานใหญ่" หรือ "สาขาที่ 00001" (display เท่านั้น)
+ * รหัสผิดรูปแบบ (ไม่ควรเกิด — มี CHECK ที่ DB) แสดงตามจริงแทนการเดา
+ */
+export function formatBranch(code: string): string {
+  if (isHeadOfficeBranch(code)) return 'สำนักงานใหญ่'
+  return `สาขาที่ ${code}`
+}
+
+/** ตัวเลือกบนฟอร์มบริษัท — "สำนักงานใหญ่" หรือ "สาขาที่ …" (กรอกเลข 5 หลัก) */
+export type BranchKind = 'head_office' | 'branch'
+
+export function branchKindOf(code: string): BranchKind {
+  return isHeadOfficeBranch(code) ? 'head_office' : 'branch'
+}
+
+/**
+ * ค่าฟอร์ม → รหัสสาขาที่ส่งให้ API — สำนักงานใหญ่ = `00000` · สาขา = ตัวเลขที่กรอก (ตัดช่องว่าง)
+ * ไม่เติม 0 นำหน้าให้เอง — ผู้ใช้ต้องกรอกครบ 5 หลักตามใบทะเบียน (Zod ตรวจรูปแบบอีกชั้น)
+ */
+export function branchCodeFromForm(kind: BranchKind, branchNumber: string): string {
+  return kind === 'head_office' ? HEAD_OFFICE_BRANCH_CODE : branchNumber.replace(/\s/g, '')
+}
+
 /** ค่าที่ผู้ใช้ตั้งได้ต่อบริษัท — ตรงกับคอลัมน์ `finance_companies` (`02` §5) */
 export interface FinanceCompanyValues {
   name: string
   shortName: string
   taxId: string
+  /** สำนักงานใหญ่/สาขา — `00000` = สำนักงานใหญ่ (มติ PO U77) */
+  branchCode: string
   address: string | null
   phone: string | null
   email: string | null
@@ -154,6 +190,7 @@ export function toCompanyAuditPayload(
     name: normalized.name,
     short_name: normalized.shortName,
     tax_id: normalized.taxId,
+    branch_code: normalized.branchCode,
     address: normalized.address,
     phone: normalized.phone,
     email: normalized.email,
