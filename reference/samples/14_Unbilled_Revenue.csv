@@ -1,0 +1,4 @@
+﻿case_ref,company,company_tax_id,delivered_date,fee_model,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_batch_number
+SF-2569-0412,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,28/06/2569,SUCCESS_FEE,1500.00,105.00,1605.00,7.00,-
+TL-2569-0088,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,30/06/2569,FLAT,750.00,52.50,802.50,7.00,BL-2569-003
+SF-2569-0377,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,25/05/2569,HYBRID,2000.00,0.00,2000.00,0.00,-

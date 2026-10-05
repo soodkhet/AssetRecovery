@@ -19,11 +19,11 @@ describe('INTERNAL_DOCUMENT_TEMPLATES', () => {
 })
 
 describe('EXPORT_FORMATS', () => {
-  it('ครบ 13 ไฟล์ตาม `13` §6.9 / `37` §6.1', () => {
-    expect(EXPORT_FORMATS).toHaveLength(13)
+  it('ครบ 14 ไฟล์ตาม `13` §6.9 / `37` §6.1', () => {
+    expect(EXPORT_FORMATS).toHaveLength(14)
   })
 
-  it('เลขนำหน้าไฟล์ต่อเนื่อง 01–13 ไม่ขาด', () => {
+  it('เลขนำหน้าไฟล์ต่อเนื่อง 01–14 ไม่ขาด', () => {
     expect(EXPORT_FORMATS.map((spec) => spec.fileName.slice(0, 2))).toEqual([
       '01',
       '02',
@@ -38,6 +38,7 @@ describe('EXPORT_FORMATS', () => {
       '11',
       '12',
       '13',
+      '14',
     ])
   })
 
@@ -49,6 +50,7 @@ describe('EXPORT_FORMATS', () => {
     expect(EXPORT_FORMATS[10]).toMatchObject({ format: 'CSV UTF-8', fileName: '11_Suspense_Receipts.csv' })
     expect(EXPORT_FORMATS[11]).toMatchObject({ format: 'CSV UTF-8', fileName: '12_Tax_Invoices.csv' })
     expect(EXPORT_FORMATS[12]).toMatchObject({ format: 'CSV UTF-8', fileName: '13_Advance_Returns.csv' })
+    expect(EXPORT_FORMATS[13]).toMatchObject({ format: 'CSV UTF-8', fileName: '14_Unbilled_Revenue.csv' })
   })
 
   it('รายชื่อไฟล์ตรงกับชุดที่ Export Pack สร้างจริง', async () => {

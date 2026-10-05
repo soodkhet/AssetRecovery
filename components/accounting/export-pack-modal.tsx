@@ -36,6 +36,7 @@ export function ExportPackModal({
   const selected = periods.find((period) => period.id === periodId) ?? periods[0]
   const targetId = selected?.id ?? ''
   const criticalCount = selected?.blockingCritical ?? 0
+  const latestVersion = selected?.latestExportVersion ?? null
 
   async function submit(): Promise<void> {
     if (targetId === '') return
@@ -107,10 +108,17 @@ export function ExportPackModal({
           </InlineAlert>
         )}
 
-        <InlineAlert tone="warning" title="Export ซ้ำจะเพิ่มเวอร์ชัน ไม่เขียนทับของเดิม">
-          ชุดถัดไปของรอบนี้จะเป็นเวอร์ชันหลังจาก {exportVersionLabel(1)} เรียงขึ้นเรื่อย ๆ —
-          ทุกเวอร์ชันเก็บไว้เป็นหลักฐานว่าเคยส่งอะไรไปบ้าง
-        </InlineAlert>
+        {/* BUG-160 — บอกเวอร์ชันจริงของรอบที่เลือก (ล่าสุด → ชุดที่จะสร้าง) ไม่ใช่ v1.0 ตายตัว */}
+        {latestVersion === null ? (
+          <InlineAlert tone="info" title={`ชุดแรกของรอบนี้ — จะได้เวอร์ชัน ${exportVersionLabel(1)}`}>
+            Export ซ้ำภายหลังจะเพิ่มเวอร์ชันใหม่ ไม่เขียนทับของเดิม — ทุกเวอร์ชันเก็บไว้เป็นหลักฐานว่าเคยส่งอะไรไปบ้าง
+          </InlineAlert>
+        ) : (
+          <InlineAlert tone="warning" title="Export ซ้ำจะเพิ่มเวอร์ชัน ไม่เขียนทับของเดิม">
+            รอบนี้ Export ล่าสุดเป็น {exportVersionLabel(latestVersion)} — ชุดที่จะสร้างคือ{' '}
+            {exportVersionLabel(latestVersion + 1)} · ทุกเวอร์ชันเก็บไว้เป็นหลักฐานว่าเคยส่งอะไรไปบ้าง
+          </InlineAlert>
+        )}
 
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">ไฟล์ที่จะอยู่ใน .zip</div>

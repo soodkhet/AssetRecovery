@@ -8,7 +8,8 @@ import { requireMenuPage } from '@/lib/nav/menu-guard'
  * `requireMenuPage()` = ยามระดับเมนู (UX) — สิทธิ์จริงถูกตรวจซ้ำที่ทุก endpoint (DEC-002)
  */
 export default async function AccountingPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  await requireMenuPage('accounting')
+  const user = await requireMenuPage('accounting')
   const { tab } = await searchParams
-  return <AccountingShell initialTab={resolveAccountingTab(tab)} />
+  // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่านถูกซ่อน (BUG-158) — `?tab=` ที่ชี้แท็บนั้นตกกลับแท็บที่เห็น
+  return <AccountingShell initialTab={resolveAccountingTab(tab, user)} />
 }

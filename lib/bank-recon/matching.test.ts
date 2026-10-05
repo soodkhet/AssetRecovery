@@ -6,6 +6,7 @@ import {
   findAutoMatch,
   hasNote,
   isExactMatchAmount,
+  matchCandidateOptionText,
   isMatched,
   isReconciled,
   manualMatchRequiresNote,
@@ -180,5 +181,26 @@ describe('state machine `23` §6.14', () => {
     expect(isReconciled('auto_matched')).toBe(true)
     expect(isReconciled('unmatched')).toBe(false)
     expect(isMatched('unmatched_resolved')).toBe(false)
+  })
+})
+
+describe('BUG-159 — ข้อความตัวเลือกจับคู่ Manual แสดงยอดที่ใช้เทียบจริง', () => {
+  const batch = { label: 'BL-2569-003', amountSatang: 80250, altAmountSatang: 78000 }
+
+  it('เงินเข้า ฿780.00 ตรงยอดหลังลูกค้าหัก ⇒ แสดง ฿780.00 นำ + ยอดเต็มเป็นข้อความรอง', () => {
+    expect(matchCandidateOptionText(78000, batch)).toBe(
+      'BL-2569-003 · ฿780.00 (ยอดตรงหลังลูกค้าหัก ณ ที่จ่าย · ยอดเต็ม ฿802.50)',
+    )
+  })
+
+  it('ตรงยอดเต็ม ⇒ ยอดเต็ม (ยอดตรง)', () => {
+    expect(matchCandidateOptionText(80250, batch)).toBe('BL-2569-003 · ฿802.50 (ยอดตรง)')
+  })
+
+  it('ไม่ตรงทั้งสองยอด ⇒ ยอดเต็ม + ยอดคาดรับหลังหัก · ไม่มียอดหลังหัก ⇒ ยอดเต็มอย่างเดียว', () => {
+    expect(matchCandidateOptionText(50000, batch)).toBe('BL-2569-003 · ฿802.50 (คาดรับหลังลูกค้าหัก ณ ที่จ่าย ฿780.00)')
+    expect(matchCandidateOptionText(-50000, { label: 'PB-1', amountSatang: 60000, altAmountSatang: null })).toBe(
+      'PB-1 · ฿600.00',
+    )
   })
 })

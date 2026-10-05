@@ -23,6 +23,8 @@ import type {
  *     เพิ่มตามมติ PO 05/10/2569 · ไฟล์ 01–09 ไม่เปลี่ยน
  *   · `12_Tax_Invoices.csv` (U57 — ใบกำกับภาษีที่ออก/ยกเลิกในรอบ + PDF ในโฟลเดอร์ `tax_invoices/` ของ zip)
  *     + `13_Advance_Returns.csv` (U68 — รับคืนเงินทดรอง หักกลบ/รับแยก) เพิ่มตามมติ PO 05/10/2569 · ไฟล์ 01–11 ไม่เปลี่ยน
+ *   · `14_Unbilled_Revenue.csv` (U87 — รายได้ที่รับรู้แล้วแต่ยังไม่ได้วางบิล ณ เวลาสร้างชุด ให้สำนักงานบัญชีบันทึก
+ *     รายได้ค้างรับ) เพิ่มตามมติ PO 06/10/2569 · ไฟล์ 01–13 ไม่เปลี่ยน
  * - `05_WHT_Data.csv` — `payee_tax_id` เป็น **ตัวเลข 13 หลักล้วน** (DEC-006/D10) ⇒ payee ที่ยังไม่กรอก
  *   เลขประจำตัวผู้เสียภาษีต้องหยุดตั้งแต่ต้น (`assertPayeeTaxIdsComplete()`) ไม่ใช่ปล่อยช่องว่างไปถึง
  *   สำนักงานบัญชี
@@ -109,6 +111,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
   { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
   { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status', sourceDoc: '15' },
+  { no: '14', fileName: '14_Unbilled_Revenue.csv', kind: 'csv', description: 'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) — case_ref, company, delivered_date, before_vat, vat, total', sourceDoc: '19' },
 ]
 
 /** ชื่อไฟล์ตามเลขลำดับ — ผู้ประกอบชุดอ้างเลข ไม่ใช่ตำแหน่งใน array (`37` §6.1) */
@@ -822,6 +825,63 @@ export function advanceReturnCsv(rows: readonly AdvanceReturnExportRow[]): strin
   )
 }
 
+// ── 14_Unbilled_Revenue.csv (ไฟล์ 19 — มติ PO 06/10/2569 U87) ──────────────
+
+/**
+ * รายได้ค้างรับ — รายได้ที่ `revenue_date` อยู่ในงวดหรือก่อนงวด และ **ณ เวลาสร้างชุด** ยังไม่อยู่ในรอบวางบิล
+ * ที่ส่งลูกค้าแล้ว (ไม่ผูกรอบเลย หรืออยู่ในรอบที่ยังเป็นร่าง) · สำนักงานบัญชีใช้บันทึกรายได้ค้างรับตามเกณฑ์คงค้าง
+ * (ภาษีขายยังไม่เกิดจนกว่าจะออกใบกำกับ — ยอด VAT ในไฟล์นี้เป็นยอดที่จะเรียกเก็บ ไม่ใช่ภาษีขายของงวด)
+ * - `delivered_date` = `revenue_date` (วันยืนยันล็อตส่งมอบ — วันที่รายได้เกิด)
+ * - `fee_model` = enum ดิบตามสคีมา (`SUCCESS_FEE`/`FLAT`/`HYBRID`) · `vat_rate_pct` = snapshot `vat_rate_pct_used`
+ * - `billing_batch_number` = เลขรอบวางบิล**ร่าง**ที่รายการนี้อยู่ (ยังไม่ผูกรอบ ⇒ `-`)
+ * - ยอดมาจาก snapshot ของรายได้ ไม่คำนวณใหม่
+ */
+export const UNBILLED_REVENUE_HEADERS = [
+  'case_ref',
+  'company',
+  'company_tax_id',
+  'delivered_date',
+  'fee_model',
+  'amount_before_vat_baht',
+  'vat_baht',
+  'total_baht',
+  'vat_rate_pct',
+  'billing_batch_number',
+] as const
+
+export interface UnbilledRevenueExportRow {
+  caseRef: string
+  companyName: string
+  companyTaxId: string | null
+  revenueDate: Date
+  feeModel: string
+  grossSatang: number
+  vatSatang: number
+  totalSatang: number
+  /** snapshot `revenues.vat_rate_pct_used` (NUMERIC เป็นข้อความ) */
+  vatRatePct: string
+  /** เลขรอบวางบิลร่าง — `null` = ยังไม่ผูกรอบ */
+  draftBillingBatchNumber: string | null
+}
+
+export function unbilledRevenueCsv(rows: readonly UnbilledRevenueExportRow[]): string {
+  return buildCsv(
+    UNBILLED_REVENUE_HEADERS,
+    rows.map((row) => [
+      row.caseRef,
+      row.companyName,
+      normalizeTaxId(row.companyTaxId) ?? CSV_EMPTY,
+      csvDate(row.revenueDate),
+      row.feeModel,
+      csvBaht(row.grossSatang),
+      csvBaht(row.vatSatang),
+      csvBaht(row.totalSatang),
+      vatRatesText([row.vatRatePct]),
+      csvText(row.draftBillingBatchNumber),
+    ]),
+  )
+}
+
 // ── 08_Document_Checklist.xlsx (ไฟล์ 34) ────────────────────────────────────
 
 export const CHECKLIST_HEADERS = [
@@ -960,7 +1020,7 @@ export interface PackCoverDoc {
   versionLabel: string
   generatedByName: string
   generatedAtLabel: string
-  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–13** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
+  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–14** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
   contentDigest: string
   checks: readonly { label: string; passed: boolean }[]
   files: readonly PackCoverFileRow[]

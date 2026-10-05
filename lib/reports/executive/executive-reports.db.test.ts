@@ -333,7 +333,7 @@ suite('E1 — KPI ภาพรวม', () => {
     expect(kpiOf(payload, 'marginPct')).toBeCloseTo(66.67, 1)
     expect(kpiOf(payload, 'caseCount')).toBe(3)
     // สำเร็จ 2 จากเคสที่ปิดแล้ว 3 (เคสของเดือนก่อนไม่เข้าช่วงนี้)
-    expect(kpiOf(payload, 'successPct')).toBe(66.7)
+    expect(kpiOf(payload, 'successPct')).toBe(66.67)
     // AR = บิลที่ส่งแล้วและยังค้าง (5,000 − 1,000) · บิล draft และบิลที่ปิดยอดครบไม่นับ
     expect(kpiOf(payload, 'arOutstanding')).toBe(4_000_00)
   })

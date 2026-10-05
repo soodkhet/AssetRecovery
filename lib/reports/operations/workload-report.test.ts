@@ -31,8 +31,8 @@ describe('buildWorkloadReport', () => {
     expect(row.successCount).toBe(2)
     expect(row.failCount).toBe(1)
     expect(row.openCount).toBe(1)
-    // 2/3 = 66.7% — งานที่ยังค้างไม่เข้าตัวหาร (นิยามเดียวกับ O1)
-    expect(row.successPct).toBe(66.7)
+    // 2/3 = 66.67% — งานที่ยังค้างไม่เข้าตัวหาร (นิยามเดียวกับ O1)
+    expect(row.successPct).toBe(66.67)
   })
 
   it('รับงานแล้วแต่ยังไม่ปิดสักเคส ⇒ % ความสำเร็จ = null (แสดง N/A) ไม่ใช่ 0% (BUG-060)', () => {

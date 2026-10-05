@@ -7,8 +7,9 @@ describe('successRate (`40` §6.2 · มติ PO 03/10/2569 UAT Q20 — สำ�
     expect(successRate({ successCount: 7, closedCount: 10 })).toBe(70)
   })
 
-  it('ปัดทศนิยม 1 ตำแหน่ง', () => {
-    expect(successRate({ successCount: 2, closedCount: 3 })).toBe(66.7)
+  it('ปัดทศนิยม 2 ตำแหน่ง (BUG-156 — 66.67 ไม่ใช่ 66.70)', () => {
+    expect(successRate({ successCount: 2, closedCount: 3 })).toBe(66.67)
+    expect(successRate({ successCount: 6, closedCount: 7 })).toBe(85.71)
   })
 
   it('ยังไม่มีเคสปิด = null (ห้ามหารศูนย์) แล้วหน้าจอแสดง N/A — ไม่ใช่ 0.00% (BUG-060)', () => {

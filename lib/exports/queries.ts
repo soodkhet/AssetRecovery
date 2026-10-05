@@ -3,7 +3,12 @@ import { renderPackCover } from '@/components/pdf/pack-cover'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { advanceRef } from '@/lib/advances/advance'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
-import { findPeriodById, getPeriodReadiness, type AccountingMutationContext } from '@/lib/accounting/queries'
+import {
+  findPeriodById,
+  getPeriodReadiness,
+  unbilledRevenueWhere,
+  type AccountingMutationContext,
+} from '@/lib/accounting/queries'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { buildChecklistWorkbook } from '@/lib/exports/checklist-excel'
@@ -12,6 +17,7 @@ import {
   adjustmentCsv,
   adjustmentRef,
   advanceReturnCsv,
+  unbilledRevenueCsv,
   taxInvoiceCsv,
   taxInvoiceNotAttachedText,
   taxInvoicePdfEntryName,
@@ -19,6 +25,7 @@ import {
   PACK_TAX_INVOICE_PDF_LIMIT,
   PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS,
   type AdvanceReturnExportRow,
+  type UnbilledRevenueExportRow,
   type TaxInvoiceExportRow,
   creditNoteCsv,
   customerWhtCsv,
@@ -139,7 +146,7 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     status: row.status,
     statusLabel: EXPORT_STATUS_LABEL[row.status],
     statusGroup: EXPORT_STATUS_GROUP[row.status],
-    // นับเฉพาะไฟล์หลัก 01–13 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
+    // นับเฉพาะไฟล์หลัก 01–14 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
     // เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมในชุด — ดูหมายเหตุที่ `37` §7.1 ใน PROGRESS_ARCHIVE 4.6
     attachmentCount: 0,
@@ -875,6 +882,50 @@ async function advanceReturnFile(organizationId: string, scope: PeriodScope): Pr
   return advanceReturnCsv(exportRows)
 }
 
+/**
+ * `14_Unbilled_Revenue.csv` (มติ PO 06/10/2569 U87) — รายได้ที่ `revenue_date` อยู่ในงวดหรือก่อนงวด
+ * และ ณ เวลาสร้างชุดยังไม่อยู่ในรอบวางบิลที่ส่งลูกค้าแล้ว (ไม่ผูกรอบ / อยู่ในรอบร่าง / รอบถูกลบ)
+ * — นิยามเดียวกับคำเตือน "รายได้ค้างรับ" ของ Readiness (`unbilledRevenueWhere()`)
+ */
+async function unbilledRevenueFile(organizationId: string, scope: Pick<PeriodScope, 'end'>): Promise<string> {
+  const rows = await prisma.revenue.findMany({
+    where: unbilledRevenueWhere(organizationId, scope.end),
+    orderBy: [{ revenueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      revenueDate: true,
+      grossSatang: true,
+      vatSatang: true,
+      totalSatang: true,
+      vatRatePctUsed: true,
+      feeModelSnapshot: true,
+      case: { select: { caseRef: true } },
+      company: { select: { name: true, taxId: true } },
+      billingBatch: { select: { batchNumber: true, status: true, deletedAt: true } },
+    },
+  })
+  const exportRows: UnbilledRevenueExportRow[] = rows.map((row) => ({
+    caseRef: row.case.caseRef,
+    companyName: row.company.name,
+    companyTaxId: row.company.taxId,
+    revenueDate: row.revenueDate,
+    feeModel: row.feeModelSnapshot,
+    grossSatang: row.grossSatang,
+    vatSatang: row.vatSatang,
+    totalSatang: row.totalSatang,
+    vatRatePct: row.vatRatePctUsed.toString(),
+    draftBillingBatchNumber:
+      row.billingBatch !== null && row.billingBatch.deletedAt === null && row.billingBatch.status === 'draft'
+        ? row.billingBatch.batchNumber
+        : null,
+  }))
+  return unbilledRevenueCsv(exportRows)
+}
+
+/** เนื้อไฟล์ `14_Unbilled_Revenue.csv` ของงวด (ปี พ.ศ./เดือน) — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
+export async function buildUnbilledRevenuePackFile(organizationId: string, yearBe: number, month: number): Promise<string> {
+  return unbilledRevenueFile(organizationId, periodRange(yearBe, month))
+}
+
 async function checklistRowsOf(organizationId: string, scope: PeriodScope): Promise<ChecklistExportRow[]> {
   const rows = await prisma.exception.findMany({
     where: { organizationId, periodId: scope.id },
@@ -932,7 +983,7 @@ export async function createExportPack(
   })
   assertExportNotBlocked(exceptions)
 
-  // ② ประกอบเนื้อไฟล์ทั้ง 13 (อ่านอย่างเดียว — ยิงขนานได้)
+  // ② ประกอบเนื้อไฟล์ทั้ง 14 (อ่านอย่างเดียว — ยิงขนานได้)
   const expenseRecords = await expenseRecordsOf(actor.organizationId, scope)
   const [
     revenue,
@@ -949,6 +1000,7 @@ export async function createExportPack(
     suspense,
     taxInvoices,
     advanceReturns,
+    unbilledRevenue,
   ] = await Promise.all([
       revenueFile(actor.organizationId, scope),
       cashReceiptFile(actor.organizationId, scope),
@@ -964,6 +1016,7 @@ export async function createExportPack(
       suspenseFile(actor.organizationId, scope),
       taxInvoiceFile(actor.organizationId, scope),
       advanceReturnFile(actor.organizationId, scope),
+      unbilledRevenueFile(actor.organizationId, scope),
     ])
 
   const generatedAt = new Date()
@@ -994,6 +1047,8 @@ export async function createExportPack(
     // มติ PO 05/10/2569 (U57/U68) — ใบกำกับภาษีที่ออก/ยกเลิกในรอบ · รับคืนเงินทดรอง
     { key: '12', fileName: packFileName('12'), bytes: encoder.encode(taxInvoices.csv), kind: 'csv' },
     { key: '13', fileName: packFileName('13'), bytes: encoder.encode(advanceReturns), kind: 'csv' },
+    // มติ PO 06/10/2569 (U87) — รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ เวลาสร้างชุด)
+    { key: '14', fileName: packFileName('14'), bytes: encoder.encode(unbilledRevenue), kind: 'csv' },
   ]
 
   // ③ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
@@ -1004,7 +1059,7 @@ export async function createExportPack(
   })
   const version = (last?.version ?? 0) + 1
 
-  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–13" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
+  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–14" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
   const contentDigest = packContentDigest(dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })))
   const cover = await renderPackCover(
     buildPackCoverDoc({

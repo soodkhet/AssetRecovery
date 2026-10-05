@@ -3,7 +3,12 @@
 import { useEffect, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { MATCH_TARGET_LABEL, allowedTargetKind, suspenseMatchRequiresNote } from '@/lib/bank-recon/matching'
+import {
+  MATCH_TARGET_LABEL,
+  allowedTargetKind,
+  matchCandidateOptionText,
+  suspenseMatchRequiresNote,
+} from '@/lib/bank-recon/matching'
 import type { BankTransactionDto, MatchCandidateDto, MatchResultDto } from '@/lib/bank-recon/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -152,8 +157,7 @@ export function ManualMatchModal({
             <option value="">— เลือกรายการ —</option>
             {candidates.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
-                {candidate.label} · {fmtSatangSymbol(candidate.amountSatang)}
-                {candidate.exactAmount ? ' (ยอดตรง)' : ''}
+                {matchCandidateOptionText(transaction.amountSatang, candidate)}
               </option>
             ))}
           </Select>

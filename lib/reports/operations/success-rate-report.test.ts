@@ -43,8 +43,8 @@ describe('buildSuccessRateReport', () => {
     expect(row.successCount).toBe(2)
     expect(row.failCount).toBe(1)
     expect(row.openCount).toBe(2)
-    // 2 / (2+1) = 66.7% — ไม่ใช่ 2/5 = 40%
-    expect(row.successPct).toBe(66.7)
+    // 2 / (2+1) = 66.67% — ไม่ใช่ 2/5 = 40%
+    expect(row.successPct).toBe(66.67)
   })
 
   it('ยังไม่มีเคสปิดเลย ⇒ % สำเร็จเป็น null (แสดง N/A) ห้ามหารศูนย์', () => {

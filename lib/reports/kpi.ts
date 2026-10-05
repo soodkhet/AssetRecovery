@@ -51,8 +51,11 @@ export function momToneClass(comparison: MoMComparison, higherIsBetter: boolean)
   return good ? 'text-emerald-600' : 'text-red-600'
 }
 
-/** อัตราส่วนเป็นเปอร์เซ็นต์ (ทศนิยม 1 ตำแหน่ง) — ตัวหารเป็น 0 คืน `null` ไม่ใช่ 0 */
+/**
+ * อัตราส่วนเป็นเปอร์เซ็นต์ (ทศนิยม **2 ตำแหน่ง** ตรงกับที่ตารางรายงานพิมพ์ — BUG-156) — ตัวหารเป็น 0 คืน `null` ไม่ใช่ 0
+ * (MoM `changePct` ยังเป็น 1 ตำแหน่งตาม badge `momLabel()`)
+ */
 export function ratioPct(numerator: number, denominator: number): number | null {
   if (denominator === 0) return null
-  return roundPct((numerator / denominator) * 100)
+  return Math.round((numerator * 10000) / denominator) / 100
 }

@@ -211,6 +211,22 @@ export function normalizeBaseExpenseTypes(types: readonly ExpenseType[]): Expens
   return WHT_POLICY_EXPENSE_TYPES.filter((type) => types.includes(type))
 }
 
+/**
+ * BUG-157 — ค่าที่ฟอร์มส่งจริง: การจับคู่ประเภทเงินได้ inhouse/outsource **มีผลเฉพาะโหมดแยกตามประเภททีม**
+ * โหมดอื่นช่องนี้ถูกซ่อน ⇒ ส่งค่าเดิมของชุดปัจจุบันไปแทนค่าที่ผู้ใช้อาจแก้ค้างไว้ก่อนเปลี่ยนโหมด
+ * (กันการจับคู่เดิมหายแล้วต้องบันทึกชุดใหม่ซ้ำเพื่อคืนค่า — ประวัติเกินจำเป็น)
+ */
+export function effectiveTeamSideCategories<
+  T extends Pick<WhtPolicyValues, 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
+>(form: T, current: Pick<WhtPolicyValues, 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>): T {
+  if (form.incomeTypeMode === 'by_team_side') return form
+  return {
+    ...form,
+    inhouseIncomeCategory: current.inhouseIncomeCategory,
+    outsourceIncomeCategory: current.outsourceIncomeCategory,
+  }
+}
+
 /** payload ที่ลง audit (`90` §13 — ภาษี ⇒ reason บังคับ) · snake_case ตามคอลัมน์จริง */
 export function toWhtPolicyAuditPayload(
   values: WhtPolicyValues & { effectiveFrom?: string; filingMethod?: WhtFilingMethod },

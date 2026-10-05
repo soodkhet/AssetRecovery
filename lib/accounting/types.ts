@@ -69,6 +69,8 @@ export interface AccountingPeriodDto {
   lastReadinessCheckedAt: string | null
   /** วัน Export ล่าสุด (`30` §7.1 `exported_at`) — มาจาก `export_records` ไฟล์ 37 */
   exportedAt: string | null
+  /** เวอร์ชัน Export ล่าสุดของรอบ (เลขลำดับ · `null` = ยังไม่เคย Export) — BUG-160 modal บอกเวอร์ชันจริง */
+  latestExportVersion: number | null
   sentAt: string | null
   sentByName: string | null
   lockedAt: string | null

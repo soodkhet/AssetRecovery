@@ -986,18 +986,21 @@ suite('U86 — หลายรอบวางบิลต่อเดือน (
     expect(recreated.revenueCount).toBe(2)
   })
 
-  it('Readiness ปิดงวด — มีรายได้ค้างวางบิลไม่ผ่าน · วางบิลรอบเพิ่มครบแล้วผ่าน (2 รอบ/เดือน ยอดตรง)', async () => {
+  it('Readiness ปิดงวด — มีรายได้ค้างวางบิลเตือนรายได้ค้างรับ (มติ U87) · วางบิลรอบเพิ่มครบแล้วไม่เหลือคำเตือน (2 รอบ/เดือน ยอดตรง)', async () => {
     await seedBillableRevenue(COMPANY_A, '2026-08-10T03:00:00Z')
     await createAndSend(MID_AUGUST, 'วางบิลรอบแรก')
     await seedBillableRevenue(COMPANY_A, '2026-08-20T03:00:00Z')
 
     const period = await accounting.ensurePeriod({ actor: finance, meta }, { yearBe: 2569, month: 8 })
     const before = await accounting.getPeriodReadiness(finance, period.id)
-    expect(before.billingMismatches.map((row) => row.reason)).toEqual(['not_billed'])
+    expect(before.billingMismatches).toEqual([])
+    expect(before.unbilledRevenue.count).toBe(1)
 
     await createAndSend(CUTOFF, 'วางบิลรอบเพิ่ม')
     const after = await accounting.getPeriodReadiness(finance, period.id)
     expect(after.billingMismatches).toEqual([])
+    expect(after.unbilledRevenue.count).toBe(0)
+    expect(after.draftBillingBatches.count).toBe(0)
   })
 
   it('AR aging + พอร์ทัล — เห็นครบทั้ง 2 รอบของเดือนเดียวกัน ยอดค้างรวมถูกต้อง', async () => {

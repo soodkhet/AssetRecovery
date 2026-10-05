@@ -22,12 +22,15 @@ export interface SuccessRateInput {
 /** ที่มาของตัวเลข — เก็บคู่กับค่าตาม `40` §6.3 (`calculation_source`) */
 export const SUCCESS_RATE_SOURCE = '40 §6.2 lifetime (success_cases / closed_cases) — มติ PO 03/10/2569 UAT Q20'
 
-/** ปัดเป็นทศนิยม 1 ตำแหน่ง — 7/10 = 70 · 2/3 = 66.7 · ยังไม่มีเคสปิด = `null` */
+/**
+ * ปัดเป็นทศนิยม **2 ตำแหน่ง** ตรงกับที่แสดงผล (`fmtRatioPct()` พิมพ์ 2 ตำแหน่ง) — 7/10 = 70 · 2/3 = 66.67 · 6/7 = 85.71
+ * · ยังไม่มีเคสปิด = `null` (BUG-156: เดิมปัด 1 ตำแหน่งแล้วไปเติม 0 ตอนแสดง ⇒ 66.70%)
+ */
 export function successRate(input: SuccessRateInput): number | null {
   const { successCount, closedCount } = input
   if (!Number.isFinite(closedCount) || closedCount <= 0) return null
   const capped = Math.min(Math.max(successCount, 0), closedCount)
-  return Math.round((capped / closedCount) * 1000) / 10
+  return Math.round((capped * 10000) / closedCount) / 100
 }
 
 /** รูปที่ใช้บ่อย — สำเร็จ/ไม่สำเร็จแยกกัน (ตัวหาร = ผลรวม) */

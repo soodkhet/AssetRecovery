@@ -153,6 +153,28 @@ async function seedUnbilledRevenue(revenueDate = '2026-08-20'): Promise<void> {
   `)
 }
 
+/**
+ * รอบวางบิลของงวด ส.ค. 2569 แล้วผูกรายได้ที่ยังไม่ผูกรอบทั้งหมดเข้ารอบนี้ (เลขรอบเดินด้วย trigger ของ DB)
+ * `totalSatang` ใส่ต่างจากผลรวมรายได้ได้ เพื่อจำลองยอดไม่ตรงจริง
+ */
+async function seedBillingBatch(status: 'draft' | 'sent', totalSatang: number): Promise<string> {
+  const rows = await db().$queryRawUnsafe<{ batch_number: string }[]>(`
+    WITH batch AS (
+      INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, due_date, created_by)
+      VALUES ('${ORG_ID}', '${COMPANY_A}', 'สิงหาคม 2569', '${status}', ${totalSatang}, '2026-09-30', '${ACCOUNTING_ID}')
+      RETURNING id, batch_number
+    ), linked AS (
+      UPDATE revenues SET billing_batch_id = (SELECT id FROM batch), status = 'billed'
+      WHERE organization_id = '${ORG_ID}' AND billing_batch_id IS NULL
+      RETURNING id
+    )
+    SELECT batch_number FROM batch
+  `)
+  const number = rows[0]?.batch_number
+  if (number === undefined) throw new Error('สร้างรอบวางบิลทดสอบไม่สำเร็จ')
+  return number
+}
+
 /** รายการเดินบัญชีที่ยังไม่จับคู่ — ทำให้เงื่อนไขที่ 2 ไม่ผ่าน */
 async function seedUnmatchedBankTransaction(periodId: string): Promise<void> {
   await db().$executeRawUnsafe(`
@@ -353,6 +375,7 @@ suite('Phase 4.1 — Exception (`34` §16)', () => {
     expect(period?.criticalCount).toBe(1)
     expect(period?.blockingCritical).toBe(0)
     expect(period?.openWarningCount).toBe(0)
+    expect(period?.latestExportVersion).toBeNull()
   })
 })
 
@@ -394,14 +417,49 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason), 'NOT_READY_RECONCILE_INCOMPLETE')
   })
 
-  it('มีรายได้ที่ยังไม่วางบิลในงวด ⇒ NOT_READY_BILLING_REVENUE_MISMATCH', async () => {
+  it('มติ PO U87: มีรายได้ที่ยังไม่วางบิลในงวด ⇒ เตือนรายได้ค้างรับ แต่ส่งงวดได้', async () => {
     const periodId = await seedPeriod()
     await seedUnbilledRevenue()
+    await seedUnbilledRevenue('2026-07-15') // ยกมาจากงวดก่อน — ยังค้างรับอยู่ก็ต้องนับ
+    await seedUnbilledRevenue('2026-09-02') // งวดถัดไป — ไม่นับ
 
     const readiness = await accounting.getPeriodReadiness(accountant, periodId)
-    expect(readiness.billingMismatches).toHaveLength(1)
-    expect(readiness.billingMismatches[0]?.reason).toBe('not_billed')
+    expect(readiness.billingMismatches).toEqual([])
+    expect(readiness.ready).toBe(true)
+    expect(readiness.unbilledRevenue).toMatchObject({ count: 2, totalSatang: 214000, inDraftCount: 0 })
+    expect(readiness.warnings.some((warning) => warning.startsWith('มีรายได้ค้างรับยังไม่วางบิล 2 รายการ ฿2,140.00'))).toBe(
+      true,
+    )
+
+    const sent = await accounting.sendPeriod(ctx(), periodId, reason)
+    expect(sent.status).toBe('sent_to_accountant')
+  })
+
+  it('มติ PO U87: ยอดรอบวางบิลไม่ตรงกับรายได้ในรอบจริง ⇒ ยังบล็อก NOT_READY_BILLING_REVENUE_MISMATCH', async () => {
+    const periodId = await seedPeriod()
+    await seedUnbilledRevenue()
+    const batchNumber = await seedBillingBatch('sent', 99999)
+
+    const readiness = await accounting.getPeriodReadiness(accountant, periodId)
+    expect(readiness.billingMismatches).toEqual([
+      expect.objectContaining({ batchNumber, reason: 'total_mismatch', batchTotalSatang: 99999, revenueTotalSatang: 107000 }),
+    ])
+    expect(readiness.unbilledRevenue.count).toBe(0)
     await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason), 'NOT_READY_BILLING_REVENUE_MISMATCH')
+  })
+
+  it('BUG-160: รอบวางบิลร่างค้าง ⇒ เตือน (ไม่บล็อก) + รายได้ในรอบร่างนับเป็นรายได้ค้างรับ', async () => {
+    const periodId = await seedPeriod()
+    await seedUnbilledRevenue()
+    const batchNumber = await seedBillingBatch('draft', 107000)
+
+    const readiness = await accounting.getPeriodReadiness(accountant, periodId)
+    expect(readiness.ready).toBe(true)
+    expect(readiness.draftBillingBatches).toEqual({ count: 1, totalSatang: 107000, batchNumbers: [batchNumber] })
+    expect(readiness.unbilledRevenue).toMatchObject({ count: 1, inDraftCount: 1 })
+    expect(readiness.warnings.some((warning) => warning.includes(`รอบวางบิลร่างที่ยังไม่ส่งลูกค้า 1 รอบ (${batchNumber})`))).toBe(
+      true,
+    )
   })
 
   it('warning ค้างอยู่ก็ปิดงวดได้ แต่ต้องมีข้อความเตือน (`30` §6.2)', async () => {

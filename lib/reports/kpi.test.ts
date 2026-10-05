@@ -38,9 +38,9 @@ describe('momComparison (`96` §11)', () => {
 })
 
 describe('ratioPct', () => {
-  it('คิดเป็น % ทศนิยม 1 ตำแหน่ง · ตัวหาร 0 คืน null (ไม่ใช่ 0)', () => {
+  it('คิดเป็น % ทศนิยม 2 ตำแหน่ง · ตัวหาร 0 คืน null (ไม่ใช่ 0)', () => {
     expect(ratioPct(3, 4)).toBe(75)
-    expect(ratioPct(1, 3)).toBe(33.3)
+    expect(ratioPct(1, 3)).toBe(33.33)
     expect(ratioPct(0, 5)).toBe(0)
     expect(ratioPct(5, 0)).toBeNull()
   })
