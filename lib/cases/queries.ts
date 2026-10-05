@@ -169,6 +169,7 @@ export const detailSelect = {
   updatedAt: true,
   documentMode: true,
   productPhotoInContract: true,
+  debtorDocumentsPurgedAt: true,
   contacts: {
     orderBy: { createdAt: 'asc' },
     select: { id: true, contactName: true, relation: true, phone: true },
@@ -388,6 +389,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
       })),
     documentMode: effectiveDocumentMode(documentCounts(row.documents), row.documentMode),
     productPhotoInContract: row.productPhotoInContract,
+    debtorDocumentsPurgedAt: row.debtorDocumentsPurgedAt?.toISOString() ?? null,
     editHistory: row.editHistory.map((entry) => ({
       id: entry.id,
       note: entry.note,

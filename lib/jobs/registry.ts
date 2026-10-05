@@ -1,5 +1,6 @@
 import { resolveExpiredReassignments } from '@/lib/assignments/timeout-job'
 import { runAdvanceOverdueJob } from '@/lib/advances/overdue-job'
+import { runPurgeDebtorDocumentsJob } from '@/lib/cases/debtor-document-purge-job'
 import type { SessionUser } from '@/lib/auth/types'
 import { loadSessionUser } from '@/lib/auth/session'
 import { createExportPack } from '@/lib/exports/queries'
@@ -29,6 +30,7 @@ import { runWhtSummaryJob } from '@/lib/wht/summary-job'
  * | `bank_file` | `generatePaymentFile()` | Phase 3.4 (`17` §6.3) |
  * | `report_export` | `runReportExportJob()` | Phase 6.1 (E13 · `96` §11) |
  * | `daily_field_allowance` | `runDailyFieldAllowanceJob()` | มติ PO 03/10/2569 UAT Q21 (DEC-012) |
+ * | `purge_debtor_documents` | `runPurgeDebtorDocumentsJob()` | มติ PO 06/10/2569 U97 (PDPA) |
  *
  * `fuel_distance_retry` **ไม่อยู่ในทะเบียนนี้** — handler เดิม (`runFuelDistanceRetryJob()`) เป็น
  * ตัวกวาดคิว: มันไปหยิบ job ของตัวเองจากตาราง `jobs` แล้วจัดการสถานะ/retry เองครบตั้งแต่ Phase 2.9
@@ -157,6 +159,15 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
       jobId: job.id,
       ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
       ...devSettleDateOf(job),
+    })
+    return { ...result }
+  },
+
+  purge_debtor_documents: async ({ job, now }) => {
+    const result = await runPurgeDebtorDocumentsJob({
+      now,
+      jobId: job.id,
+      ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
     })
     return { ...result }
   },

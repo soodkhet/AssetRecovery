@@ -13,6 +13,7 @@ import {
   isValidHotelNights,
   missingHotelClaimFields,
   parseHotelNightsInput,
+  receiptInCompanyNameText,
 } from '@/lib/field/hotel-claim'
 import { hotelClaimSchema, resubmitExpenseSchema } from '@/lib/field/schemas'
 
@@ -198,5 +199,25 @@ describe('จำนวนคืนของใบเบิกค่าที่�
     expect(hotelNightsCapText(2, 80_000)).toBe('2 คืน · เพดาน ฿1,600.00')
     expect(hotelNightsCapText(1, 80_000)).toBe('1 คืน · เพดาน ฿800.00')
     expect(hotelNightsCapText(2, null)).toBe('2 คืน')
+  })
+})
+
+describe('ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14)', () => {
+  it('ไม่ส่ง = ไม่ติ๊ก (ค่าเริ่มต้น) · ส่ง true ได้ · ไม่ใช่ boolean ถูกปฏิเสธ', () => {
+    const body = {
+      expenseDate: '2026-08-10',
+      amountSatang: 80_000,
+      receiptFileUrl: 'expenses/u/receipts/a.jpg',
+    }
+    expect(hotelClaimSchema.parse(body).receiptInCompanyName).toBe(false)
+    expect(hotelClaimSchema.parse({ ...body, receiptInCompanyName: true }).receiptInCompanyName).toBe(true)
+    expect(hotelClaimSchema.safeParse({ ...body, receiptInCompanyName: 'yes' }).success).toBe(false)
+    expect(resubmitExpenseSchema.parse({}).receiptInCompanyName).toBeUndefined()
+    expect(resubmitExpenseSchema.parse({ receiptInCompanyName: false }).receiptInCompanyName).toBe(false)
+  })
+
+  it('ป้ายแสดงผล', () => {
+    expect(receiptInCompanyNameText(true)).toBe('ใบเสร็จในนามบริษัท')
+    expect(receiptInCompanyNameText(false)).toBe('ใบเสร็จไม่ได้ออกในนามบริษัท')
   })
 })

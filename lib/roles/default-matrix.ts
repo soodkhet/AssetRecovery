@@ -169,6 +169,8 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
   // ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8): Superadmin (ไม่มี record) + บริหาร แก้ได้ ·
   // การอ่านค่าตั้งใช้ `view_master_data` เหมือนอัตรา VAT
   manage_wht_policy: [[executive, 'manage']],
+  // ระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97): บริหาร จัดการ · Superadmin ไม่มี record โดยนิยาม
+  manage_data_retention: [[executive, 'manage']],
   // 50 ทวิ ที่ลูกค้าหักเรา (มติ PO 05/10/2569 U40 — ผู้ใช้: "ธุรการจะได้ช่วยตาม 50 ทวิ ได้ด้วย")
   // จัดการ = ธุรการ/การเงิน/บัญชี · บริหาร ดูอย่างเดียว · Superadmin ไม่มี record โดยนิยาม
   manage_customer_wht: [
@@ -288,6 +290,8 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_customer_wht',
   // ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93)
   'manage_holidays',
+  // ระยะเก็บเอกสารลูกหนี้ (มติ PO 06/10/2569 U97)
+  'manage_data_retention',
   // พอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U6/O43 D1)
   'portal_cases',
   'portal_finance',

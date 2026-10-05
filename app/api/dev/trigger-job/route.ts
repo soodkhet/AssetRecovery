@@ -28,7 +28,7 @@ export const runtime = 'nodejs'
  * นอกนั้นเดินทางเดียวกับ `POST /api/jobs` ทุกประการ (คีย์กันซ้ำ + audit + สิทธิ์เดียวกัน) —
  * ต่างแค่ "ไม่ต้องรอรอบเวลา" คือรัน handler ให้เลยหลังสร้าง job
  *
- * job_type รับได้ **6 ตัวของ `91` §6.1 เท่านั้น** (C8 — รวม `advance_overdue` · UAT Q21 `daily_field_allowance`) · นอกรายการ
+ * job_type รับได้ **7 ตัวของ `91` §6.1 เท่านั้น** (C8 — รวม `advance_overdue` · UAT Q21 `daily_field_allowance` · U97 `purge_debtor_documents`) · นอกรายการ
  * ถูกปฏิเสธด้วย `JOB_INVALID_STATUS` ซึ่งคือรูป prefix ตาม `24` §7 ของ `INVALID_STATUS` ใน §14.1
  *
  * payload พิเศษที่รับได้เฉพาะทางนี้ (ตัวรันงานอ่านเฉพาะงานที่มีธง `DEV_TRIGGER_PAYLOAD_FLAG` นอก production):

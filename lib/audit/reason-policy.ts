@@ -48,6 +48,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   // สิทธิ์
   /// `40` §6.4 — `supervisor_can_assign_*` คุมว่าหัวหน้าทีม assign/reassign ได้หรือไม่ (Superadmin เท่านั้นที่ตั้งได้)
   assignment_policy_settings: 'permission',
+  // ระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO U97) — กำหนดว่าระบบลบข้อมูลส่วนบุคคลเมื่อไร
+  data_retention_settings: 'permission',
   roles: 'permission',
   capabilities: 'permission',
   role_capabilities: 'permission',

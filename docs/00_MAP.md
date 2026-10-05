@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (215 KB, 2429 บรรทัด — v4.36)
+### `docs/02-database-schema-design.md` (218 KB, 2445 บรรทัด — v4.38)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -127,26 +127,26 @@
 | 3 | # 02 — Database Schema Design (Full Production Schema) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 71 | ## 1. Summary |
-| 74 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
-| 76 | ### 2.1 Naming |
-| 86 | ### 2.2 Money |
-| 93 | ### 2.3 Timestamps |
-| 98 | ### 2.4 Common Columns (ทุก table มีครบ) |
-| 109 | ### 2.5 Permission Architecture |
-| 116 | ## 3. Enum Types (ทั้งหมด) |
-| 464 | ## 4. Schema Group A — Identity & Access |
-| 566 | ## 5. Schema Group B — Master Data |
-| 906 | ## 6. Schema Group C — Case Workflow |
-| 1269 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1357 | ## 8. Schema Group E — Finance Operation |
-| 1733 | ## 9. Schema Group F — Accounting Handover |
-| 2124 | ## 10. Schema Group G — Platform |
-| 2244 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 2319 | ## 12. Seed Data |
-| 2387 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 2408 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 2418 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 73 | ## 1. Summary |
+| 76 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
+| 78 | ### 2.1 Naming |
+| 88 | ### 2.2 Money |
+| 95 | ### 2.3 Timestamps |
+| 100 | ### 2.4 Common Columns (ทุก table มีครบ) |
+| 111 | ### 2.5 Permission Architecture |
+| 118 | ## 3. Enum Types (ทั้งหมด) |
+| 466 | ## 4. Schema Group A — Identity & Access |
+| 568 | ## 5. Schema Group B — Master Data |
+| 908 | ## 6. Schema Group C — Case Workflow |
+| 1284 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
+| 1372 | ## 8. Schema Group E — Finance Operation |
+| 1749 | ## 9. Schema Group F — Accounting Handover |
+| 2140 | ## 10. Schema Group G — Platform |
+| 2260 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 2335 | ## 12. Seed Data |
+| 2403 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 2424 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 2434 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/02_OPEN_DECISIONS.md` (69 KB, 300 บรรทัด)
 
@@ -316,7 +316,7 @@
 | 210 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 220 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/07-roles-permissions.md` (26 KB, 210 บรรทัด — v2.6)
+### `docs/07-roles-permissions.md` (27 KB, 211 บรรทัด — v2.7)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -324,30 +324,30 @@
 | 3 | # 07 — Roles and Permissions (Master Role List) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 29 | ## 1. Summary |
-| 33 | ## 2. Purpose |
-| 37 | ## 3. In Scope |
-| 43 | ## 4. Out of Scope |
-| 48 | ## 5. Actors & Responsibilities — Role ทั้งหมด 15 ตัว แบ่งตาม Role Group (system 6 + in... |
-| 50 | ### 5.1 กลุ่ม System (ดูแลภาพรวมทั้งระบบ — ไม่ผูกทีม) |
-| 61 | ### 5.2 กลุ่ม Inhouse / Outsource (ทีมติดตามทรัพย์ — แยก role ต่อ Role Group) |
-| 71 | ### 5.3 กลุ่ม Finance Company (ภายนอก — ผูกกับบริษัทไฟแนนซ์โดยตรง ไม่มี sub-team) |
-| 83 | ## 6. Core Concepts |
-| 91 | ## 7. Data Entities / Required Objects |
-| 93 | ### 7.1 Role |
-| 103 | ### 7.2 Permission |
-| 111 | ### 7.3 Role Group |
-| 120 | ## 8. UI / UX Rules |
-| 126 | ## 9. Workflow / Lifecycle |
-| 132 | ## 10. Security / Control Rules |
-| 139 | ## 11. Validation & Error Handling |
-| 149 | ## 12. Permission Requirements (สรุปภาพรวม — รายละเอียดเชิงลึกดูไฟล์ต้นทาง) |
-| 161 | ## 13. Audit Log Requirements |
-| 167 | ## 14. API / Integration Draft |
-| 176 | ## 15. Acceptance Criteria |
-| 183 | ## 16. Test Cases |
-| 194 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 203 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 30 | ## 1. Summary |
+| 34 | ## 2. Purpose |
+| 38 | ## 3. In Scope |
+| 44 | ## 4. Out of Scope |
+| 49 | ## 5. Actors & Responsibilities — Role ทั้งหมด 15 ตัว แบ่งตาม Role Group (system 6 + in... |
+| 51 | ### 5.1 กลุ่ม System (ดูแลภาพรวมทั้งระบบ — ไม่ผูกทีม) |
+| 62 | ### 5.2 กลุ่ม Inhouse / Outsource (ทีมติดตามทรัพย์ — แยก role ต่อ Role Group) |
+| 72 | ### 5.3 กลุ่ม Finance Company (ภายนอก — ผูกกับบริษัทไฟแนนซ์โดยตรง ไม่มี sub-team) |
+| 84 | ## 6. Core Concepts |
+| 92 | ## 7. Data Entities / Required Objects |
+| 94 | ### 7.1 Role |
+| 104 | ### 7.2 Permission |
+| 112 | ### 7.3 Role Group |
+| 121 | ## 8. UI / UX Rules |
+| 127 | ## 9. Workflow / Lifecycle |
+| 133 | ## 10. Security / Control Rules |
+| 140 | ## 11. Validation & Error Handling |
+| 150 | ## 12. Permission Requirements (สรุปภาพรวม — รายละเอียดเชิงลึกดูไฟล์ต้นทาง) |
+| 162 | ## 13. Audit Log Requirements |
+| 168 | ## 14. API / Integration Draft |
+| 177 | ## 15. Acceptance Criteria |
+| 184 | ## 16. Test Cases |
+| 195 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 204 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/08-users.md` (16 KB, 192 บรรทัด — v2.1)
 
@@ -498,7 +498,7 @@
 | 154 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 162 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/13-accounting-finance-settings.md` (67 KB, 433 บรรทัด — v3.13)
+### `docs/13-accounting-finance-settings.md` (71 KB, 451 บรรทัด — v3.14)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -506,38 +506,39 @@
 | 3 | # 13 — Accounting & Finance Settings (ตั้งค่าระบบบัญชี/การเงิน) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 39 | ## 1. Summary |
-| 43 | ## 2. Purpose |
-| 47 | ## 3. In Scope |
-| 51 | ## 4. Out of Scope |
-| 56 | ## 5. Actors & Responsibilities |
-| 64 | ## 6. Core Concepts & Data Entities |
-| 66 | ### 6.1 Billing/Payout Cycles (รอบบิลและรอบจ่าย) |
-| 81 | ### 6.2 Approval Matrix (สายการอนุมัติ) |
-| 106 | ### 6.3 Corporate Bank Accounts (บัญชีธนาคารบริษัท) |
-| 121 | ### 6.4 Tax Profile (กติกาภาษี) 🔶 สำคัญมาก — ต้องนักบัญชียืนยันก่อนใช้จริง |
-| 160 | ### 6.5 VAT Rate Setting (อัตราภาษีมูลค่าเพิ่ม) 🔶 สำคัญมาก — ติดตามใกล้ชิด |
-| 177 | ### 6.6 Cost Center |
-| 186 | ### 6.7 Internal Document Templates (รูปแบบเอกสารภายใน) |
-| 200 | ### 6.8 Bank File Format (รูปแบบไฟล์ธนาคาร) |
-| 210 | ### 6.9 Export Format (รูปแบบไฟล์ Export ส่งสำนักงานบัญชี) |
-| 231 | ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี) |
-| 250 | ### 6.11 Period Lock Policy (นโยบายล็อกรอบบัญชี) |
-| 260 | ### 6.12 Tax Invoice Numbering Format (รูปแบบเลขที่ใบกำกับภาษี) |
-| 280 | ### 6.13 Tax Document Template Settings (รูปแบบเอกสารภาษีทางการ) |
-| 295 | ### 6.14 SLA Alert Threshold (เกณฑ์ SLA งานติดตาม) — มติ PO 15/08/2569 (D18) |
-| 307 | ### 6.15 ปฏิทินวันหยุด (Public Holidays) — มติ PO 06/10/2569 (UAT U93) |
-| 324 | ## 7. UI / UX Rules |
-| 330 | ## 8. Workflow / Lifecycle |
-| 336 | ## 9. Security / Control Rules |
-| 343 | ## 10. Validation & Error Handling |
-| 353 | ## 11. Permission Requirements |
-| 367 | ## 12. Audit Log Requirements |
-| 372 | ## 13. API / Integration Draft |
-| 395 | ## 14. Acceptance Criteria |
-| 402 | ## 15. Test Cases |
-| 414 | ## 16. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 425 | ## 17. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 40 | ## 1. Summary |
+| 44 | ## 2. Purpose |
+| 48 | ## 3. In Scope |
+| 52 | ## 4. Out of Scope |
+| 57 | ## 5. Actors & Responsibilities |
+| 65 | ## 6. Core Concepts & Data Entities |
+| 67 | ### 6.1 Billing/Payout Cycles (รอบบิลและรอบจ่าย) |
+| 82 | ### 6.2 Approval Matrix (สายการอนุมัติ) |
+| 107 | ### 6.3 Corporate Bank Accounts (บัญชีธนาคารบริษัท) |
+| 122 | ### 6.4 Tax Profile (กติกาภาษี) 🔶 สำคัญมาก — ต้องนักบัญชียืนยันก่อนใช้จริง |
+| 161 | ### 6.5 VAT Rate Setting (อัตราภาษีมูลค่าเพิ่ม) 🔶 สำคัญมาก — ติดตามใกล้ชิด |
+| 178 | ### 6.6 Cost Center |
+| 187 | ### 6.7 Internal Document Templates (รูปแบบเอกสารภายใน) |
+| 201 | ### 6.8 Bank File Format (รูปแบบไฟล์ธนาคาร) |
+| 211 | ### 6.9 Export Format (รูปแบบไฟล์ Export ส่งสำนักงานบัญชี) |
+| 232 | ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี) |
+| 251 | ### 6.11 Period Lock Policy (นโยบายล็อกรอบบัญชี) |
+| 261 | ### 6.12 Tax Invoice Numbering Format (รูปแบบเลขที่ใบกำกับภาษี) |
+| 281 | ### 6.13 Tax Document Template Settings (รูปแบบเอกสารภาษีทางการ) |
+| 296 | ### 6.14 SLA Alert Threshold (เกณฑ์ SLA งานติดตาม) — มติ PO 15/08/2569 (D18) |
+| 308 | ### 6.15 ปฏิทินวันหยุด (Public Holidays) — มติ PO 06/10/2569 (UAT U93) |
+| 325 | ### 6.16 ระยะเก็บเอกสารลูกหนี้ (Debtor Document Retention — PDPA) — มติ PO 06/10/2569 (... |
+| 340 | ## 7. UI / UX Rules |
+| 346 | ## 8. Workflow / Lifecycle |
+| 352 | ## 9. Security / Control Rules |
+| 359 | ## 10. Validation & Error Handling |
+| 369 | ## 11. Permission Requirements |
+| 384 | ## 12. Audit Log Requirements |
+| 389 | ## 13. API / Integration Draft |
+| 413 | ## 14. Acceptance Criteria |
+| 420 | ## 15. Test Cases |
+| 432 | ## 16. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 443 | ## 17. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/15-claims-and-advances.md` (37 KB, 240 บรรทัด — v2.6)
 
@@ -829,7 +830,7 @@
 | 320 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 325 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/25-finance-permission-matrix.md` (29 KB, 217 บรรทัด — v2.11)
+### `docs/25-finance-permission-matrix.md` (30 KB, 219 บรรทัด — v2.12)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -837,25 +838,25 @@
 | 3 | # 25 — Finance Permission Matrix (เมทริกซ์สิทธิ์รวมทั้งระบบ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 35 | ## 1. Summary |
-| 39 | ## 2. Purpose |
-| 43 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 47 | ## 6. Roles ที่ใช้ในโมดูล Finance/Accounting (อ้างอิงจาก Master Role List ไฟล์ 07 §5) |
-| 62 | ## 7. Permission Matrix รวม (จัดกลุ่มตามไฟล์ต้นทาง) |
-| 64 | ### 7.1 Master Data (ไฟล์ 10, 12, 13) |
-| 77 | ### 7.2 ฝั่งรายจ่าย (ไฟล์ 15, 16, 17, 18) |
-| 90 | ### 7.3 ฝั่งรายรับ (ไฟล์ 19, 31) |
-| 111 | ### 7.4 Adjustment & Period Lock (ไฟล์ 20, 30) |
-| 121 | ### 7.5 ฝั่งบัญชี (ไฟล์ 32, 33, 34, 35, 36, 37) |
-| 135 | ### 7.6 รายงาน (ไฟล์ 14, 21) |
-| 143 | ## 8. ข้อสังเกตเรื่องความสอดคล้อง |
-| 152 | ### 8.1 ข้อยกเว้น: endpoint ที่ผูกกับตัวผู้ใช้เอง (self-scoped) — เพิ่ม 15/08/2569 |
-| 164 | ### 8.2 สิทธิ์คลังสินค้า (นอก Matrix — เจ้าของ `44` §13) — เพิ่ม 05/10/2569 (มติ PO U22... |
-| 173 | ## 9. Workflow / Lifecycle |
-| 177 | ## 10-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 183 | ### 16.1 Mapping สัญลักษณ์ในไฟล์นี้ → ระดับสิทธิ์ในระบบ (DEC-009, 05/07/2569) |
-| 203 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 210 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 36 | ## 1. Summary |
+| 40 | ## 2. Purpose |
+| 44 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 48 | ## 6. Roles ที่ใช้ในโมดูล Finance/Accounting (อ้างอิงจาก Master Role List ไฟล์ 07 §5) |
+| 63 | ## 7. Permission Matrix รวม (จัดกลุ่มตามไฟล์ต้นทาง) |
+| 65 | ### 7.1 Master Data (ไฟล์ 10, 12, 13) |
+| 79 | ### 7.2 ฝั่งรายจ่าย (ไฟล์ 15, 16, 17, 18) |
+| 92 | ### 7.3 ฝั่งรายรับ (ไฟล์ 19, 31) |
+| 113 | ### 7.4 Adjustment & Period Lock (ไฟล์ 20, 30) |
+| 123 | ### 7.5 ฝั่งบัญชี (ไฟล์ 32, 33, 34, 35, 36, 37) |
+| 137 | ### 7.6 รายงาน (ไฟล์ 14, 21) |
+| 145 | ## 8. ข้อสังเกตเรื่องความสอดคล้อง |
+| 154 | ### 8.1 ข้อยกเว้น: endpoint ที่ผูกกับตัวผู้ใช้เอง (self-scoped) — เพิ่ม 15/08/2569 |
+| 166 | ### 8.2 สิทธิ์คลังสินค้า (นอก Matrix — เจ้าของ `44` §13) — เพิ่ม 05/10/2569 (มติ PO U22... |
+| 175 | ## 9. Workflow / Lifecycle |
+| 179 | ## 10-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 185 | ### 16.1 Mapping สัญลักษณ์ในไฟล์นี้ → ระดับสิทธิ์ในระบบ (DEC-009, 05/07/2569) |
+| 205 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 212 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/27-finance-api-contracts.md` (17 KB, 258 บรรทัด — v3.10)
 
@@ -1078,7 +1079,7 @@
 | 172 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 179 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/37-accounting-pack-export-history.md` (33 KB, 186 บรรทัด — v2.12)
+### `docs/37-accounting-pack-export-history.md` (34 KB, 187 บรรทัด — v2.13)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1086,27 +1087,27 @@
 | 3 | # 37 — Accounting Pack Export History (ประวัติส่งมอบบัญชี) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 35 | ## 1. Summary |
-| 39 | ## 2. Purpose |
-| 43 | ## 3. In Scope |
-| 49 | ## 4. Out of Scope |
-| 54 | ## 5. Actors & Responsibilities |
-| 60 | ## 6. Core Concepts |
-| 62 | ### 6.1 รายชื่อไฟล์มาตรฐานใน Accounting Pack (เรียงเลขต่อเนื่อง พร้อม Adjustment Log) |
-| 83 | ### 6.2 Version Control |
-| 87 | ## 7. Data Entities / Required Objects |
-| 89 | ### 7.1 Export Record (แก้ไข status แล้ว — ดู Changelog v2) |
-| 103 | ## 8. UI / UX Rules |
-| 112 | ## 9. Workflow / Lifecycle |
-| 118 | ## 10. Security / Control Rules |
-| 123 | ## 11. Validation & Error Handling |
-| 129 | ## 12. Permission Requirements |
-| 136 | ## 13. Audit Log Requirements |
-| 141 | ## 14. API / Integration Draft |
-| 150 | ## 15. Acceptance Criteria |
-| 157 | ## 16. Test Cases |
-| 172 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 179 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 36 | ## 1. Summary |
+| 40 | ## 2. Purpose |
+| 44 | ## 3. In Scope |
+| 50 | ## 4. Out of Scope |
+| 55 | ## 5. Actors & Responsibilities |
+| 61 | ## 6. Core Concepts |
+| 63 | ### 6.1 รายชื่อไฟล์มาตรฐานใน Accounting Pack (เรียงเลขต่อเนื่อง พร้อม Adjustment Log) |
+| 84 | ### 6.2 Version Control |
+| 88 | ## 7. Data Entities / Required Objects |
+| 90 | ### 7.1 Export Record (แก้ไข status แล้ว — ดู Changelog v2) |
+| 104 | ## 8. UI / UX Rules |
+| 113 | ## 9. Workflow / Lifecycle |
+| 119 | ## 10. Security / Control Rules |
+| 124 | ## 11. Validation & Error Handling |
+| 130 | ## 12. Permission Requirements |
+| 137 | ## 13. Audit Log Requirements |
+| 142 | ## 14. API / Integration Draft |
+| 151 | ## 15. Acceptance Criteria |
+| 158 | ## 16. Test Cases |
+| 173 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 180 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/38-case-submission.md` (115 KB, 530 บรรทัด — v3.7)
 
@@ -1205,7 +1206,7 @@
 | 348 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 360 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/41-field-tracker-mobile.md` (157 KB, 604 บรรทัด — v2.22)
+### `docs/41-field-tracker-mobile.md` (159 KB, 606 บรรทัด — v2.23)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1213,56 +1214,56 @@
 | 3 | # 41 — Field Tracker Mobile (ติดตามภาคสนาม) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 12 | ## Changelog |
-| 47 | ## 1. Summary |
-| 50 | ## 2. Purpose |
-| 53 | ## 3. Scope |
-| 55 | ### 3.1 In Scope |
-| 64 | ### 3.2 Out of Scope (ยกไปเฟส/เอกสารอื่น) |
-| 71 | ## 4. Actors & Responsibilities |
-| 82 | ## 5. Menu & Navigation |
-| 84 | ### 5.1 Mobile — Bottom Nav (4 รายการ) + Top Bar |
-| 93 | ### 5.2 Desktop — Sidebar ถาวร (Fixed) |
-| 100 | ## 6. Data Requirements |
-| 102 | ### 6.1 Case Assignment Status (รับช่วงจากไฟล์ 40) |
-| 115 | ### 6.2 Address Structure (3 ที่อยู่ — รับมาจากไฟล์ 38 §6.1.2) |
-| 125 | ### 6.3 Contact Methods (คลิกเพื่อติดต่อได้จริง) |
-| 133 | ### 6.4 Evidence (หลักฐานการปิดงาน) |
-| 147 | ### 6.4.1 Travel Origin (จุดเริ่มเดินทาง — สำหรับคำนวณค่าน้ำมัน PER_KM) |
-| 160 | ### 6.4.2 Distance Calculation (คำนวณระยะทางสำหรับค่าน้ำมัน PER_KM) |
-| 167 | ### 6.5 Close-Case Draft (บันทึกฟอร์มปิดงานแบบไม่ครบ) |
-| 177 | ### 6.6 Expense (ค่าใช้จ่าย) |
-| 210 | ### 6.7 Pending Reassignment (รับมาจากไฟล์ 40) |
-| 220 | ### 6.8 Derived / Computed Fields |
-| 225 | ## 7. UI Requirements |
-| 227 | ### 7.1 Dashboard (หน้าแรก) |
-| 237 | ### 7.2 แท็บ "รอรับงาน" |
-| 243 | ### 7.3 แท็บ "รับงานแล้ว" (จัดวันที่) |
-| 249 | ### 7.4 Calendar Picker (เลือกวันที่ติดตาม) |
-| 259 | ### 7.5 แท็บ "กำลังติดตาม" |
-| 270 | ### 7.6 ฟอร์มปิดงาน (Close Case) |
-| 291 | ### 7.7 Case Detail (รายละเอียดเคสแบบเต็ม) |
-| 304 | ### 7.8 Pending Reassignment Flow (ตอบรับ/ปฏิเสธคำขอเปลี่ยนผู้รับผิดชอบ) |
-| 313 | ### 7.9 เบิกค่าใช้จ่าย |
-| 321 | ### 7.10 สรุปรายได้ |
-| 327 | ### 7.11 แท็บ "จบงาน" |
-| 332 | ## 8. Actions & Buttons |
-| 351 | ## 9. Workflow |
-| 377 | ## 10. Status / State Machine |
-| 391 | ### 10.1 QC Outcome — สรุปกฎการตีกลับ (ปิด Open Item #9) |
-| 408 | ## 11. Business Rules |
-| 421 | ## 12. Validation & Error Handling |
-| 444 | ## 13. Permissions |
-| 453 | ## 14. Audit Log |
-| 461 | ## 15. Notifications |
-| 473 | ## 16. Integration Points |
-| 480 | ## 17. API / Event Contract Draft |
-| 482 | ### 17.1 API Endpoints |
-| 500 | ### 17.2 Events |
-| 516 | ## 18. Export / Document Requirements |
-| 519 | ## 19. Acceptance Criteria |
-| 526 | ## 20. Test Cases |
-| 575 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 590 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 48 | ## 1. Summary |
+| 51 | ## 2. Purpose |
+| 54 | ## 3. Scope |
+| 56 | ### 3.1 In Scope |
+| 65 | ### 3.2 Out of Scope (ยกไปเฟส/เอกสารอื่น) |
+| 72 | ## 4. Actors & Responsibilities |
+| 83 | ## 5. Menu & Navigation |
+| 85 | ### 5.1 Mobile — Bottom Nav (4 รายการ) + Top Bar |
+| 94 | ### 5.2 Desktop — Sidebar ถาวร (Fixed) |
+| 101 | ## 6. Data Requirements |
+| 103 | ### 6.1 Case Assignment Status (รับช่วงจากไฟล์ 40) |
+| 116 | ### 6.2 Address Structure (3 ที่อยู่ — รับมาจากไฟล์ 38 §6.1.2) |
+| 126 | ### 6.3 Contact Methods (คลิกเพื่อติดต่อได้จริง) |
+| 134 | ### 6.4 Evidence (หลักฐานการปิดงาน) |
+| 148 | ### 6.4.1 Travel Origin (จุดเริ่มเดินทาง — สำหรับคำนวณค่าน้ำมัน PER_KM) |
+| 161 | ### 6.4.2 Distance Calculation (คำนวณระยะทางสำหรับค่าน้ำมัน PER_KM) |
+| 168 | ### 6.5 Close-Case Draft (บันทึกฟอร์มปิดงานแบบไม่ครบ) |
+| 178 | ### 6.6 Expense (ค่าใช้จ่าย) |
+| 212 | ### 6.7 Pending Reassignment (รับมาจากไฟล์ 40) |
+| 222 | ### 6.8 Derived / Computed Fields |
+| 227 | ## 7. UI Requirements |
+| 229 | ### 7.1 Dashboard (หน้าแรก) |
+| 239 | ### 7.2 แท็บ "รอรับงาน" |
+| 245 | ### 7.3 แท็บ "รับงานแล้ว" (จัดวันที่) |
+| 251 | ### 7.4 Calendar Picker (เลือกวันที่ติดตาม) |
+| 261 | ### 7.5 แท็บ "กำลังติดตาม" |
+| 272 | ### 7.6 ฟอร์มปิดงาน (Close Case) |
+| 293 | ### 7.7 Case Detail (รายละเอียดเคสแบบเต็ม) |
+| 306 | ### 7.8 Pending Reassignment Flow (ตอบรับ/ปฏิเสธคำขอเปลี่ยนผู้รับผิดชอบ) |
+| 315 | ### 7.9 เบิกค่าใช้จ่าย |
+| 323 | ### 7.10 สรุปรายได้ |
+| 329 | ### 7.11 แท็บ "จบงาน" |
+| 334 | ## 8. Actions & Buttons |
+| 353 | ## 9. Workflow |
+| 379 | ## 10. Status / State Machine |
+| 393 | ### 10.1 QC Outcome — สรุปกฎการตีกลับ (ปิด Open Item #9) |
+| 410 | ## 11. Business Rules |
+| 423 | ## 12. Validation & Error Handling |
+| 446 | ## 13. Permissions |
+| 455 | ## 14. Audit Log |
+| 463 | ## 15. Notifications |
+| 475 | ## 16. Integration Points |
+| 482 | ## 17. API / Event Contract Draft |
+| 484 | ### 17.1 API Endpoints |
+| 502 | ### 17.2 Events |
+| 518 | ## 18. Export / Document Requirements |
+| 521 | ## 19. Acceptance Criteria |
+| 528 | ## 20. Test Cases |
+| 577 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 592 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/44-asset-custody-handover.md` (49 KB, 661 บรรทัด — v2.5)
 
@@ -1332,42 +1333,12 @@
 | 167 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 173 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/90-platform-audit-notification-reporting.md` (30 KB, 247 บรรทัด — v4.4)
+### `docs/90-platform-audit-notification-reporting.md` (33 KB, 249 บรรทัด — v4.5)
 
 | บรรทัด | หัวข้อ |
 |---|---|
 | 1 | # 90-platform-audit-notification-reporting.md |
 | 3 | # 90 — Platform Audit, Notification & Reporting |
-| 4 | ## AssetRecovery — Asset Recovery Operations Platform |
-| 11 | ## Changelog |
-| 31 | ## 1. Summary |
-| 35 | ## 2. Purpose |
-| 39 | ## 3. In Scope |
-| 45 | ## 4. Out of Scope |
-| 50 | ## 5. Actors & Responsibilities |
-| 65 | ## 6. Core Concepts |
-| 73 | ### 6.1 Event Flow (Audit → Notification) |
-| 92 | ### 6.2 PDPA / Privacy Scope (Draft — 03/07/2569) |
-| 121 | ### 6.3 Notification Channel & Event Trigger (Decided — 03/07/2569) |
-| 149 | ## 7. Data Entities / Required Objects |
-| 159 | ## 8. UI / UX Rules |
-| 165 | ## 9. Workflow / Lifecycle |
-| 169 | ## 10. Security / Control Rules |
-| 175 | ## 11. Validation & Error Handling |
-| 184 | ## 12. Permission Requirements |
-| 191 | ## 13. Audit Log Requirements |
-| 199 | ## 14. API / Integration Draft |
-| 210 | ## 15. Acceptance Criteria |
-| 217 | ## 16. Test Cases |
-| 229 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 238 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
-
-### `docs/91-platform-api-integration-jobs.md` (25 KB, 227 บรรทัด — v2.8)
-
-| บรรทัด | หัวข้อ |
-|---|---|
-| 1 | # 91-platform-api-integration-jobs.md |
-| 3 | # 91 — Platform API Integration & Background Jobs |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
 | 32 | ## 1. Summary |
@@ -1376,22 +1347,52 @@
 | 46 | ## 4. Out of Scope |
 | 51 | ## 5. Actors & Responsibilities |
 | 66 | ## 6. Core Concepts |
-| 74 | ### 6.1 Job Type ที่ระบบรู้จัก (จาก `02-database-schema-design.md` §10) |
-| 87 | ### 6.2 Job Lifecycle (State Diagram) |
-| 103 | ## 7. Data Entities / Required Objects |
-| 111 | ## 8. UI / UX Rules |
-| 118 | ## 9. Workflow / Lifecycle |
-| 122 | ## 10. Security / Control Rules |
-| 128 | ## 11. Validation & Error Handling |
-| 138 | ## 12. Permission Requirements |
-| 145 | ## 13. Audit Log Requirements |
-| 152 | ## 14. API / Integration Draft |
-| 163 | ### 14.1 Dev Trigger Endpoint (`/api/dev/trigger-job`) |
-| 174 | ### 14.2 Dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`/api/dev/accounting-periods/{id}/send\|lock` ... |
-| 190 | ## 15. Acceptance Criteria |
-| 197 | ## 16. Test Cases |
-| 209 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 218 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 74 | ### 6.1 Event Flow (Audit → Notification) |
+| 93 | ### 6.2 PDPA / Privacy Scope (Draft — 03/07/2569) |
+| 123 | ### 6.3 Notification Channel & Event Trigger (Decided — 03/07/2569) |
+| 151 | ## 7. Data Entities / Required Objects |
+| 161 | ## 8. UI / UX Rules |
+| 167 | ## 9. Workflow / Lifecycle |
+| 171 | ## 10. Security / Control Rules |
+| 177 | ## 11. Validation & Error Handling |
+| 186 | ## 12. Permission Requirements |
+| 193 | ## 13. Audit Log Requirements |
+| 201 | ## 14. API / Integration Draft |
+| 212 | ## 15. Acceptance Criteria |
+| 219 | ## 16. Test Cases |
+| 231 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 240 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+
+### `docs/91-platform-api-integration-jobs.md` (27 KB, 229 บรรทัด — v2.9)
+
+| บรรทัด | หัวข้อ |
+|---|---|
+| 1 | # 91-platform-api-integration-jobs.md |
+| 3 | # 91 — Platform API Integration & Background Jobs |
+| 4 | ## AssetRecovery — Asset Recovery Operations Platform |
+| 11 | ## Changelog |
+| 33 | ## 1. Summary |
+| 37 | ## 2. Purpose |
+| 41 | ## 3. In Scope |
+| 47 | ## 4. Out of Scope |
+| 52 | ## 5. Actors & Responsibilities |
+| 67 | ## 6. Core Concepts |
+| 75 | ### 6.1 Job Type ที่ระบบรู้จัก (จาก `02-database-schema-design.md` §10) |
+| 89 | ### 6.2 Job Lifecycle (State Diagram) |
+| 105 | ## 7. Data Entities / Required Objects |
+| 113 | ## 8. UI / UX Rules |
+| 120 | ## 9. Workflow / Lifecycle |
+| 124 | ## 10. Security / Control Rules |
+| 130 | ## 11. Validation & Error Handling |
+| 140 | ## 12. Permission Requirements |
+| 147 | ## 13. Audit Log Requirements |
+| 154 | ## 14. API / Integration Draft |
+| 165 | ### 14.1 Dev Trigger Endpoint (`/api/dev/trigger-job`) |
+| 176 | ### 14.2 Dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`/api/dev/accounting-periods/{id}/send\|lock` ... |
+| 192 | ## 15. Acceptance Criteria |
+| 199 | ## 16. Test Cases |
+| 211 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 220 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/93-roadmap-open-items.md` (23 KB, 239 บรรทัด — v3.2)
 
@@ -1482,7 +1483,7 @@
 | 444 | ## 5. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 451 | ## 6. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/96-reports.md` (34 KB, 461 บรรทัด — v2.8)
+### `docs/96-reports.md` (40 KB, 490 บรรทัด — v2.9)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1490,26 +1491,26 @@
 | 3 | # 96 — Reports (รายงานภาพรวมระบบ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 32 | ## 1. Summary |
-| 36 | ## 2. Purpose |
-| 39 | ## 3. In Scope |
-| 45 | ## 4. Out of Scope |
-| 50 | ## 5. Actors & Responsibilities |
-| 62 | ## 6. รายงานทั้งหมด |
-| 64 | ### หมวด F — รายงานการเงิน |
-| 167 | ### หมวด O — รายงานงานติดตามทรัพย์ |
-| 247 | ### หมวด A — รายงานบัญชี |
-| 296 | ### หมวด E — Executive Dashboard |
-| 330 | ## 7. Data Sources (ดึงข้อมูลจากไหน) |
-| 352 | ## 8. Caching Strategy |
-| 365 | ## 9. API Endpoints |
-| 392 | ## 10. Permission Matrix |
-| 403 | ## 11. UI / UX Rules |
-| 414 | ## 12. Validation & Error Handling |
-| 425 | ## 13. Acceptance Criteria |
-| 437 | ## 14. Test Cases |
-| 452 | ## 15. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 459 | ## 16. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 33 | ## 1. Summary |
+| 37 | ## 2. Purpose |
+| 40 | ## 3. In Scope |
+| 46 | ## 4. Out of Scope |
+| 51 | ## 5. Actors & Responsibilities |
+| 63 | ## 6. รายงานทั้งหมด |
+| 65 | ### หมวด F — รายงานการเงิน |
+| 194 | ### หมวด O — รายงานงานติดตามทรัพย์ |
+| 274 | ### หมวด A — รายงานบัญชี |
+| 323 | ### หมวด E — Executive Dashboard |
+| 357 | ## 7. Data Sources (ดึงข้อมูลจากไหน) |
+| 379 | ## 8. Caching Strategy |
+| 392 | ## 9. API Endpoints |
+| 419 | ## 10. Permission Matrix |
+| 430 | ## 11. UI / UX Rules |
+| 441 | ## 12. Validation & Error Handling |
+| 452 | ## 13. Acceptance Criteria |
+| 464 | ## 14. Test Cases |
+| 481 | ## 15. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 488 | ## 16. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/97-client-portal.md` (75 KB, 356 บรรทัด — v5.9)
 
@@ -1844,6 +1845,19 @@
 | 2079 | ### verify ที่รันจริง |
 | 2082 | ### จุดที่คนถัดไปควรรู้ |
 
+### `docs/QUESTIONS-FOR-ACCOUNTANT.md` (16 KB, 107 บรรทัด)
+
+| บรรทัด | หัวข้อ |
+|---|---|
+| 1 | # คำถามสำหรับนักบัญชี / สำนักงานบัญชี |
+| 9 | ## ส่วนที่ 1 — 🟡 ต้องตอบ / ยืนยัน |
+| 11 | ### ภาษีหัก ณ ที่จ่าย (ที่เราหักผู้รับเงิน — พนักงานภาคสนาม/ทีม outsource) |
+| 28 | ### รายได้ / ใบกำกับภาษี (ที่เราเก็บเงินบริษัทไฟแนนซ์) |
+| 47 | ### การส่งมอบข้อมูลให้สำนักงานบัญชี |
+| 80 | ## ส่วนที่ 2 — ⚙️ ตั้งค่าได้ในระบบแล้ว (ขอแค่ค่าที่ต้องกรอกตอนเริ่มใช้) |
+| 95 | ## ส่วนที่ 3 — 🔵 ฟีเจอร์เพิ่ม (ทำเมื่อยืนยันว่าต้องการ) |
+| 102 | ## หมายเหตุ — ข้อที่ไม่ต้องถามแล้ว |
+
 ### `docs/README.md` (18 KB, 259 บรรทัด)
 
 | บรรทัด | หัวข้อ |
@@ -1872,14 +1886,14 @@
 | 249 | ### 🟡 รอ Product Owner (ดู `DECISIONS-NEEDED.md`) |
 | 254 | ### 🟢 เฟส 2 (ออกแบบแล้ว ยังไม่ implement) |
 
-### `docs/REUSE_INDEX.md` (391 KB, 617 บรรทัด)
+### `docs/REUSE_INDEX.md` (393 KB, 620 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
 | 1 | # REUSE_INDEX.md — ของที่มีแล้ว / แม่แบบ / กับดัก (เช็คก่อนเขียนโค้ดใหม่ทุกครั้ง) |
 | 5 | ## Shared Components (Frontend) |
 | 82 | ## Shared Services / Utils (Backend) |
-| 531 | ## กับดัก (Lessons Learned) |
+| 534 | ## กับดัก (Lessons Learned) |
 
 ### `docs/implementation-todo.md` (16 KB, 184 บรรทัด)
 
@@ -1924,7 +1938,6 @@
 | `docs/36-accountant-questions.md` | 7 KB | 125 | v2 |
 | `docs/92-platform-data-model.md` | 14 KB | 191 | v2 |
 | `docs/DECISIONS-NEEDED.md` | 11 KB | 126 | - |
-| `docs/QUESTIONS-FOR-ACCOUNTANT.md` | 12 KB | 85 | - |
 | `docs/tool-register.md` | 8 KB | 73 | - |
 
 
@@ -2036,7 +2049,7 @@
 | 1031 | `render` |
 | 1055 | `switchRole` |
 
-### `reference/41-field-tracker-desktop-mockup.html` (133 KB, 1812 บรรทัด)
+### `reference/41-field-tracker-desktop-mockup.html` (134 KB, 1820 บรรทัด)
 
 | บรรทัด | function |
 |---|---|
@@ -2113,20 +2126,20 @@
 | 1469 | `renderIncomeSummaryPage` |
 | 1483 | `monthLabel` |
 | 1535 | `renderHotelClaimModal` |
-| 1571 | `submitHotelClaim` |
-| 1584 | `renderModal` |
-| 1618 | `renderToast` |
-| 1625 | `renderReassignmentAutoPopup` |
-| 1654 | `dismissReassignmentPopup` |
-| 1661 | `renderReassignmentResponseModal` |
-| 1699 | `submitConsentReassignment` |
-| 1716 | `submitDeclineReassignment` |
-| 1732 | `checkAndAutoResolveReassignments` |
-| 1756 | `parseThaiDateTimeToDate` |
-| 1765 | `checkAndApplyQcActions` |
-| 1784 | `render` |
+| 1579 | `submitHotelClaim` |
+| 1592 | `renderModal` |
+| 1626 | `renderToast` |
+| 1633 | `renderReassignmentAutoPopup` |
+| 1662 | `dismissReassignmentPopup` |
+| 1669 | `renderReassignmentResponseModal` |
+| 1707 | `submitConsentReassignment` |
+| 1724 | `submitDeclineReassignment` |
+| 1740 | `checkAndAutoResolveReassignments` |
+| 1764 | `parseThaiDateTimeToDate` |
+| 1773 | `checkAndApplyQcActions` |
+| 1792 | `render` |
 
-### `reference/41-field-tracker-mobile-mockup.html` (137 KB, 1872 บรรทัด)
+### `reference/41-field-tracker-mobile-mockup.html` (138 KB, 1880 บรรทัด)
 
 | บรรทัด | function |
 |---|---|
@@ -2204,18 +2217,18 @@
 | 1525 | `renderIncomeSummaryModal` |
 | 1540 | `monthLabel` |
 | 1591 | `renderHotelClaimModal` |
-| 1627 | `submitHotelClaim` |
-| 1640 | `renderModal` |
-| 1680 | `renderToast` |
-| 1688 | `renderReassignmentAutoPopup` |
-| 1718 | `dismissReassignmentPopup` |
-| 1725 | `renderReassignmentResponseModal` |
-| 1763 | `submitConsentReassignment` |
-| 1780 | `submitDeclineReassignment` |
-| 1796 | `checkAndAutoResolveReassignments` |
-| 1820 | `parseThaiDateTimeToDate` |
-| 1829 | `checkAndApplyQcActions` |
-| 1847 | `render` |
+| 1635 | `submitHotelClaim` |
+| 1648 | `renderModal` |
+| 1688 | `renderToast` |
+| 1696 | `renderReassignmentAutoPopup` |
+| 1726 | `dismissReassignmentPopup` |
+| 1733 | `renderReassignmentResponseModal` |
+| 1771 | `submitConsentReassignment` |
+| 1788 | `submitDeclineReassignment` |
+| 1804 | `checkAndAutoResolveReassignments` |
+| 1828 | `parseThaiDateTimeToDate` |
+| 1837 | `checkAndApplyQcActions` |
+| 1855 | `render` |
 
 ### `reference/97-client-portal-mobile-mockup.html` (58 KB, 683 บรรทัด)
 
@@ -2422,7 +2435,7 @@
 | 47 | `unread` |
 | 49 | `render` |
 
-### `reference/reports.html` (62 KB, 951 บรรทัด)
+### `reference/reports.html` (64 KB, 967 บรรทัด)
 
 | บรรทัด | function |
 |---|---|
@@ -2450,24 +2463,24 @@
 | 393 | `renderF3` |
 | 426 | `renderF4` |
 | 455 | `renderF5` |
-| 489 | `renderO1` |
-| 492 | `avgRate` |
-| 521 | `renderO2` |
-| 548 | `renderO3` |
-| 575 | `renderO4` |
-| 606 | `renderO5` |
-| 636 | `renderA1` |
-| 670 | `renderA2` |
-| 697 | `renderA3` |
-| 722 | `renderA4` |
-| 750 | `renderE1` |
-| 781 | `renderE2` |
-| 802 | `renderE3` |
-| 830 | `renderModal` |
-| 898 | `renderToast` |
-| 918 | `render` |
+| 505 | `renderO1` |
+| 508 | `avgRate` |
+| 537 | `renderO2` |
+| 564 | `renderO3` |
+| 591 | `renderO4` |
+| 622 | `renderO5` |
+| 652 | `renderA1` |
+| 686 | `renderA2` |
+| 713 | `renderA3` |
+| 738 | `renderA4` |
+| 766 | `renderE1` |
+| 797 | `renderE2` |
+| 818 | `renderE3` |
+| 846 | `renderModal` |
+| 914 | `renderToast` |
+| 934 | `render` |
 
-### `reference/settings.html` (241 KB, 1979 บรรทัด)
+### `reference/settings.html` (244 KB, 2012 บรรทัด)
 
 | บรรทัด | function |
 |---|---|
@@ -2501,38 +2514,39 @@
 | 400 | `renderFinanceOperations` |
 | 499 | `renderAccountingOperations` |
 | 584 | `renderSettingsLayout` |
-| 682 | `renderRolesContent` |
-| 742 | `renderTeamsContent` |
-| 814 | `renderCompaniesContent` |
-| 866 | `renderUsersContent` |
-| 922 | `renderOrganizationContent` |
-| 981 | `renderCompensationContent` |
-| 1001 | `renderServiceFeeContent` |
-| 1040 | `renderSystemSettingsContent` |
-| 1068 | `renderAuditLogContent` |
-| 1075 | `renderSettingsCycles` |
-| 1089 | `renderSettingsApprovals` |
-| 1096 | `renderSettingsBanks` |
-| 1103 | `renderSettingsTax` |
-| 1112 | `renderSettingsWhtPolicy` |
-| 1113 | `box` |
-| 1129 | `renderSettingsHolidays` |
-| 1151 | `renderSettingsVat` |
-| 1157 | `now` |
-| 1164 | `renderSettingsCost` |
-| 1173 | `renderSettingsTaxDoc` |
-| 1216 | `renderSettingsNumbering` |
-| 1243 | `renderSettingsPayee` |
-| 1247 | `renderSettingsDocs` |
-| 1251 | `renderSettingsBankFile` |
-| 1259 | `renderSettingsExport` |
-| 1263 | `renderSettingsPermission` |
-| 1273 | `levelChip` |
-| 1325 | `renderSettingsLock` |
-| 1339 | `renderModal` |
-| 1801 | `lv` |
-| 1840 | `renderToast` |
-| 1851 | `render` |
+| 685 | `renderRolesContent` |
+| 745 | `renderTeamsContent` |
+| 817 | `renderCompaniesContent` |
+| 869 | `renderUsersContent` |
+| 925 | `renderOrganizationContent` |
+| 984 | `renderCompensationContent` |
+| 1004 | `renderServiceFeeContent` |
+| 1043 | `renderSystemSettingsContent` |
+| 1071 | `renderAuditLogContent` |
+| 1078 | `renderSettingsCycles` |
+| 1092 | `renderSettingsApprovals` |
+| 1099 | `renderSettingsBanks` |
+| 1106 | `renderSettingsTax` |
+| 1115 | `renderSettingsWhtPolicy` |
+| 1116 | `box` |
+| 1134 | `renderSettingsRetention` |
+| 1162 | `renderSettingsHolidays` |
+| 1184 | `renderSettingsVat` |
+| 1190 | `now` |
+| 1197 | `renderSettingsCost` |
+| 1206 | `renderSettingsTaxDoc` |
+| 1249 | `renderSettingsNumbering` |
+| 1276 | `renderSettingsPayee` |
+| 1280 | `renderSettingsDocs` |
+| 1284 | `renderSettingsBankFile` |
+| 1292 | `renderSettingsExport` |
+| 1296 | `renderSettingsPermission` |
+| 1306 | `levelChip` |
+| 1358 | `renderSettingsLock` |
+| 1372 | `renderModal` |
+| 1834 | `lv` |
+| 1873 | `renderToast` |
+| 1884 | `render` |
 
 ### `reference/warehouse.html` (104 KB, 1317 บรรทัด)
 

@@ -24,12 +24,13 @@ function doc(file: string): string {
 }
 
 describe('ทะเบียน job_type (`91` §6.1)', () => {
-  it('job_type 6 ตัวของ §6.1 มีครบและเป็นชุดเดียวกับที่ dev trigger รับได้ (§14.1 · C8 · UAT Q21)', () => {
+  it('job_type 7 ตัวของ §6.1 มีครบและเป็นชุดเดียวกับที่ dev trigger รับได้ (§14.1 · C8 · UAT Q21 · U97)', () => {
     expect([...DEV_TRIGGER_JOB_TYPES].sort()).toEqual([
       'advance_overdue',
       'bank_file',
       'daily_field_allowance',
       'export_pack',
+      'purge_debtor_documents',
       'reassign_timeout',
       'wht_summary',
     ])

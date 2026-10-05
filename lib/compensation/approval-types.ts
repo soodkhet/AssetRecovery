@@ -31,6 +31,8 @@ export interface CompensationApprovalDto {
    * ประกอบฝั่ง server จาก **snapshot ของรายการ** เท่านั้น (`92` §7.1) หน้าจอห้ามคิดสูตรเอง
    */
   basisText: string
+  /** ค่าที่พัก: ใบเสร็จออกในนามบริษัทหรือไม่ (มติ PO U96 #14) — รายการชนิดอื่น = `null` */
+  receiptInCompanyName: boolean | null
   grossSatang: number
   whtSatang: number
   netSatang: number

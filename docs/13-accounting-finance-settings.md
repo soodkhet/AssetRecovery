@@ -27,6 +27,7 @@
 | v3.11 | 05/10/2569 | **มติ PO 05/10/2569 (U21)**: §6.9 ชุดไฟล์ Export Pack 8 → 9 ไฟล์ — เพิ่ม `09_Credit_Notes.csv` (ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — `37` v2.3) · ยังเป็นชุดตายตัว ผู้ใช้เพิ่ม/ลบไม่ได้ |
 | v3.12 | 06/10/2569 | **มติ PO 06/10/2569 (U87)**: §6.9 ชุดไฟล์ Export Pack 13 → 14 ไฟล์ — `14_Unbilled_Revenue.csv` (รายได้ค้างรับ: ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) · รายละเอียดที่ `37` §6.1 v2.11 |
 | v3.13 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93)**: เพิ่ม **§6.15 ปฏิทินวันหยุด** (แท็บที่ 18 ของหน้า — `public_holidays` `02` v4.35) · เพิ่ม/ลบ (soft delete)/นำเข้าหลายวัน (`YYYY-MM-DD,ชื่อ`) · capability ใหม่ `manage_holidays` (ธุรการ/บัญชี/การเงิน manage · บริหาร view · ไม่ล็อก — `25`/`07`) · กลุ่มปฏิบัติการเห็นหน้านี้เฉพาะแท็บนี้ (`06` §7.2) · ใช้เลื่อนกำหนดยื่น ภ.ง.ด. ที่ตรงวันหยุด/เสาร์-อาทิตย์เป็นวันทำการถัดไป (`33` §7.2) · §11/§13 เติมสิทธิ์/endpoint |
+| v3.14 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)**: เพิ่ม **§6.16 ระยะเก็บเอกสารลูกหนี้** (แท็บที่ 19 — `data_retention_settings` `02` v4.37 · 1 record/องค์กร) จำนวนปีหลังปิดเคส ค่าเริ่มต้น **5 ปี** (1–20) · สิทธิ์ `manage_data_retention` (บริหาร manage · Superadmin โดยนิยาม · ไม่ล็อก) + เหตุผล + audit · ใช้โดย job `purge_debtor_documents` (`91` §6.1) · §11 · §13 เพิ่มแถว |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
 
@@ -321,6 +322,21 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 - สิทธิ์: `manage_holidays` — ธุรการ/บัญชี/การเงิน = manage · บริหาร = view · Superadmin โดยนิยาม · **ไม่ใช่ "✅ only"** (มอบ role อื่นได้) · ผู้ใช้กลุ่มปฏิบัติการเข้าหน้าตั้งค่าบัญชี/การเงินได้ผ่านสิทธิ์นี้และเห็นเฉพาะแท็บนี้
 - ทุกการเพิ่ม/ลบต้องมี `reason` (กระทบกำหนดยื่นภาษี — หมวด tax ของนโยบาย audit)
 
+### 6.16 ระยะเก็บเอกสารลูกหนี้ (Debtor Document Retention — PDPA) — มติ PO 06/10/2569 (U97)
+
+จำนวนปีหลังปิดเคสที่ระบบเก็บ**ไฟล์**เอกสารลูกหนี้ไว้ — ครบแล้วงานรายวัน `purge_debtor_documents` (`91` §6.1) ลบไฟล์ให้อัตโนมัติ
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| debtor_document_retention_years | integer | yes | จำนวนปีหลังปิดเคส — ค่าเริ่มต้น **5** · จำนวนเต็ม **1–20** (CHECK ระดับ DB) |
+
+- **1 record ต่อองค์กร** — ตาราง `data_retention_settings` (`02` v4.37) · ยังไม่มีแถว = ค่าเริ่มต้น 5 ปี (GET ไม่เขียน DB · แถวเกิดตอนบันทึกครั้งแรก)
+- **เคสที่จบ** = `closed_success`/`closed_fail` (นับจาก `closed_at` — เวลาปิดงานครั้งแรก) และ `rejected` (ไม่รับเคส — นับจาก `reviewed_at`) · ระบบไม่มีสถานะ `cancelled` ของเคส (`02` §3) · จบวันที่ D ⇒ ลบตั้งแต่วันถัดจากวันครบรอบ D + N ปี (ปฏิทินไทย)
+- **ลบเฉพาะไฟล์** ในช่องเอกสารลูกหนี้ที่เป็นข้อมูลส่วนบุคคล (สัญญา/บัตรประชาชน/เอกสารชุด/เอกสารอื่นจากไฟแนนซ์ — ตัวจำแนกเดียวกับ audit การเปิดไฟล์ U90) · **ไม่ลบ** แถวเคส/ข้อมูลที่ไม่ใช่ไฟล์ · รูปสินค้า · หลักฐานปิดงาน · เอกสารบัญชี (ใบกำกับ/50 ทวิ/Export Pack/ใบเสร็จ)
+- เก็บ metadata: `case_documents.purged_at` (+ `deleted_at`) ต่อไฟล์ · `cases.debtor_documents_purged_at` ⇒ หน้าเคสแสดง "เอกสารถูกลบตามนโยบายเก็บข้อมูลเมื่อ DD/MM/YYYY"
+- ลดจำนวนปีแล้ว เคสที่ครบตามค่าใหม่ถูกลบในรอบถัดไปของงานรายวัน (กู้คืนไม่ได้ — หน้าจอเตือน)
+- สิทธิ์: `manage_data_retention` — บริหาร = manage · Superadmin โดยนิยาม · ไม่ใช่ "✅ only" · ทุกการแก้ต้องมี `reason` (หมวด permission ของนโยบาย audit)
+
 ## 7. UI / UX Rules
 
 - เมนูซ้าย/แท็บแบ่งตาม sub-section ใน §6 (**14 แท็บ** — 13 แท็บเดิม + §6.14 เกณฑ์ SLA ตามมติ PO 15/08/2569) + §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย + §6.15 ปฏิทินวันหยุด (U93)
@@ -362,6 +378,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | แก้ไข Period Lock Policy | Superadmin only | — |
 | ดู settings ทั้งหมด | การเงิน, บัญชี | read-only |
 | อนุมัติปลดล็อกรอบ locked | Executive | ดู §6.11 |
+| ตั้งระยะเก็บเอกสารลูกหนี้ (§6.16) | บริหาร (`manage_data_retention` manage) · Superadmin | มติ PO U97 — ต้องมีเหตุผล |
 | เพิ่ม/ลบ/นำเข้าปฏิทินวันหยุด (§6.15) | ธุรการ, บัญชี, การเงิน (`manage_holidays` manage) · บริหาร ดูอย่างเดียว | มติ PO U93 · ไม่ล็อก · reason บังคับ |
 
 ## 12. Audit Log Requirements
@@ -385,6 +402,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | GET / POST | /api/settings/holidays | ปฏิทินวันหยุด (§6.15) — GET `?yearBe=` · อ่าน `manage_holidays` view · เพิ่ม manage + reason |
 | POST | /api/settings/holidays/import | นำเข้าหลายวัน (วันที่ซ้ำถูกข้าม) |
 | DELETE | /api/settings/holidays/:id | ลบวันหยุด (soft delete + reason) |
+| GET / PATCH | /api/settings/data-retention | ระยะเก็บเอกสารลูกหนี้ (§6.16) — `manage_data_retention` · PATCH ต้องมี reason |
 | GET | /api/settings/document-templates | Internal Doc Templates (read-only, ดูไฟล์ 28 สำหรับแก้ไข) |
 | GET / POST / PATCH | /api/settings/bank-file-formats | Bank File Format |
 | POST | /api/settings/bank-file-formats/:id/test | รันทดสอบไฟล์ตัวอย่าง |

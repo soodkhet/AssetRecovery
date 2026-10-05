@@ -61,6 +61,14 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: true },
   { id: 'sla', label: 'เกณฑ์ SLA งานติดตาม', section: '§6.14', available: true },
   { id: 'assignment', label: 'นโยบายการมอบหมายงาน', section: 'ไฟล์ 40 §6.4', available: true },
+  // มติ PO 06/10/2569 (U97 — PDPA) — ระยะเก็บเอกสารลูกหนี้: Superadmin/บริหาร
+  {
+    id: 'retention',
+    label: 'ระยะเก็บเอกสารลูกหนี้',
+    section: '§6.16',
+    available: true,
+    capabilities: ['manage_data_retention'],
+  },
   // มติ PO 06/10/2569 (UAT U93) — ปฏิทินวันหยุด: ธุรการ/บัญชี/การเงินกรอกปีละครั้ง ⇒ เปิดให้กลุ่มปฏิบัติการ
   {
     id: 'holidays',

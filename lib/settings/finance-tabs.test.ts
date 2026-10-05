@@ -14,9 +14,9 @@ const SUPER = { isSuperadmin: true, capabilities: {} }
  */
 describe('FINANCE_SETTINGS_TABS', () => {
   it('มีครบ 14 แท็บของไฟล์ 13 (13 + §6.14 SLA) + แท็บผู้รับเงินของไฟล์ 18 + นโยบายการมอบหมายงานของไฟล์ 40', () => {
-    // + แท็บค่าตั้งภาษีหัก ณ ที่จ่าย §6.4.2 (มติ PO 05/10/2569 UAT U8) + ปฏิทินวันหยุด §6.15 (มติ PO U93)
-    expect(FINANCE_SETTINGS_TABS).toHaveLength(18)
-    expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(16)
+    // + แท็บค่าตั้งภาษีหัก ณ ที่จ่าย §6.4.2 (มติ PO 05/10/2569 UAT U8) + ปฏิทินวันหยุด §6.15 (มติ PO U93) + ระยะเก็บเอกสารลูกหนี้ §6.16 (มติ PO U97)
+    expect(FINANCE_SETTINGS_TABS).toHaveLength(19)
+    expect(FINANCE_SETTINGS_TABS.filter((tab) => tab.section.startsWith('§'))).toHaveLength(17)
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'whtpolicy')?.section).toBe('§6.4.2')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'payee')?.section).toBe('ไฟล์ 18')
     expect(FINANCE_SETTINGS_TABS.find((tab) => tab.id === 'sla')?.section).toBe('§6.14')
@@ -55,6 +55,7 @@ describe('FINANCE_SETTINGS_TABS', () => {
       'taxdoc',
       'sla',
       'assignment',
+      'retention',
       'holidays',
     ])
   })
@@ -125,5 +126,27 @@ describe('ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U
     const without = staff('บริหาร', { view_master_data: 'view' })
     expect(visibleFinanceSettingsTabs(without).map((tab) => tab.id)).not.toContain('holidays')
     expect(resolveFinanceSettingsTab('holidays', SUPER)).toBe('holidays')
+  })
+})
+
+describe('ระยะเก็บเอกสารลูกหนี้ (มติ PO 06/10/2569 U97)', () => {
+  const viewer = (roleName: string, capabilities: Record<string, 'view' | 'manage'>) => ({
+    isSuperadmin: false,
+    roleGroup: 'system' as const,
+    roleName,
+    capabilities,
+  })
+
+  it('บริหารที่ถือ manage_data_retention เห็นแท็บ · ไม่ถือ = ไม่เห็น · กลุ่มปฏิบัติการไม่เห็น', () => {
+    const tab = FINANCE_SETTINGS_TABS.find((each) => each.id === 'retention')
+    expect(tab?.capabilities).toEqual(['manage_data_retention'])
+    expect(tab?.staffAccess).toBeUndefined()
+    const executive = viewer('บริหาร', { view_master_data: 'view', manage_data_retention: 'manage' })
+    expect(visibleFinanceSettingsTabs(executive).map((each) => each.id)).toContain('retention')
+    const without = viewer('บริหาร', { view_master_data: 'view' })
+    expect(visibleFinanceSettingsTabs(without).map((each) => each.id)).not.toContain('retention')
+    const finance = viewer('การเงิน', { manage_holidays: 'manage', manage_data_retention: 'manage' })
+    expect(visibleFinanceSettingsTabs(finance).map((each) => each.id)).not.toContain('retention')
+    expect(resolveFinanceSettingsTab('retention', SUPER)).toBe('retention')
   })
 })

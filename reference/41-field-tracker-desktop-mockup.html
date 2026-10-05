@@ -1563,6 +1563,14 @@ function renderHotelClaimModal() {
         <span class="text-xs font-semibold">แตะเพื่อแนบใบเสร็จ</span>
       </button>
     </div>
+    <!-- มติ PO U96 #14: ใบเสร็จออกในนามบริษัท — ค่าเริ่มต้นไม่ติ๊ก ให้ผู้เบิกเลือกเอง (ใช้ประกอบการพิจารณาภาษี ไม่เปลี่ยนยอด) -->
+    <label class="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
+      <input type="checkbox" id="hotelReceiptInCompanyName" class="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300">
+      <span>
+        <span class="font-semibold">ใบเสร็จออกในนามบริษัท</span>
+        <span class="mt-0.5 block text-xs text-slate-500">ติ๊กเมื่อใบเสร็จระบุชื่อบริษัทเป็นผู้ซื้อ — ถ้าออกในชื่อตัวเองหรือไม่ระบุชื่อ ไม่ต้องติ๊ก</span>
+      </span>
+    </label>
     <p class="text-[13px] text-slate-500">ระบบจะจับคู่กับเคสที่มีกำหนดวันอยู่ในช่วงวันที่พักนี้โดยอัตโนมัติ เพื่อใช้ตรวจสอบเท่านั้น</p>
     <button onclick="submitHotelClaim()" class="w-full py-4 rounded-xl bg-slate-900 text-white font-extrabold text-[16px] active-scale">ส่งคำขอเบิก</button>
   </div>`;

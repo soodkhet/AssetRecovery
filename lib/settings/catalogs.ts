@@ -75,7 +75,7 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
   {
     fileName: '03_Expenses.csv',
     format: 'CSV UTF-8',
-    content: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net',
+    content: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท',
     sourceFile: '32',
   },
   {

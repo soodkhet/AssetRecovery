@@ -76,6 +76,13 @@ export interface SlaPolicyDto {
   updatedAt: string | null
 }
 
+/** ระยะเก็บเอกสารลูกหนี้ (PDPA — `13` §6.16 · มติ PO U97) — 1 record ต่อองค์กร */
+export interface DataRetentionPolicyDto {
+  debtorDocumentRetentionYears: number
+  /** `null` = ยังไม่เคยตั้งค่า (ค่าที่เห็นคือค่าเริ่มต้นของระบบ ยังไม่มีแถวใน DB) */
+  updatedAt: string | null
+}
+
 /** นโยบายการมอบหมายงาน (`40` §6.4/§11) — เก็บที่ `assignment_policy_settings` แถวเดียวกับเกณฑ์ SLA */
 export interface AssignmentPolicyDto {
   reassignTimeoutHours: number

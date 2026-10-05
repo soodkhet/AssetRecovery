@@ -37,6 +37,8 @@ export function HotelClaimModal({
   const [sharedWithUserId, setSharedWithUserId] = useState('')
   const [note, setNote] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
+  // มติ PO U96 #14 — ค่าเริ่มต้นไม่ติ๊ก ให้ผู้เบิกเลือกเองตามใบเสร็จจริง
+  const [receiptInCompanyName, setReceiptInCompanyName] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -71,6 +73,7 @@ export function HotelClaimModal({
           expenseDate,
           amountSatang,
           hotelNights,
+          receiptInCompanyName,
           sharedWithUserId: sharedWithUserId === '' ? null : sharedWithUserId,
           receiptFileUrl,
           note: note.trim() === '' ? null : note.trim(),
@@ -166,6 +169,8 @@ export function HotelClaimModal({
           />
         </Field>
 
+        <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />
+
         <Field label="หมายเหตุ (ถ้ามี)">
           <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
@@ -177,5 +182,34 @@ export function HotelClaimModal({
         {error !== null && <p className="text-xs font-semibold text-red-600">{error}</p>}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * ช่องติ๊ก "ใบเสร็จออกในนามบริษัท" (มติ PO U96 #14) — ใช้ทั้งฟอร์มเบิกและฟอร์มส่งใหม่ (Mobile/Desktop ชุดเดียว)
+ * ค่านี้ใช้ส่งรายการให้สำนักงานบัญชีพิจารณาภาษีเท่านั้น ไม่เปลี่ยนยอดเบิก/ยอดหัก ณ ที่จ่ายในระบบ
+ */
+export function ReceiptInCompanyNameCheckbox({
+  checked,
+  onChange,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
+      <input
+        type="checkbox"
+        className="focus-ring mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>
+        <span className="font-semibold">ใบเสร็จออกในนามบริษัท</span>
+        <span className="mt-0.5 block text-xs text-slate-500">
+          ติ๊กเมื่อใบเสร็จระบุชื่อบริษัทเป็นผู้ซื้อ — ถ้าออกในชื่อตัวเองหรือไม่ระบุชื่อ ไม่ต้องติ๊ก
+        </span>
+      </span>
+    </label>
   )
 }

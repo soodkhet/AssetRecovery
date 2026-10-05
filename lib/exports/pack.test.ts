@@ -15,6 +15,7 @@ import {
   checklistSheet,
   checklistSummary,
   expenseCsv,
+  receiptInCompanyNameCell,
   exportVersionLabel,
   normalizeTaxId,
   packAttemptId,
@@ -253,11 +254,27 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
         grossSatang: 850000,
         whtSatang: 25500,
         netSatang: 824500,
+        receiptInCompanyName: null,
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'ประยุทธ์ บุญมี,ค่าตอบแทนติดตามทรัพย์ (commission),8500.00,255.00,8245.00',
+      'ประยุทธ์ บุญมี,ค่าตอบแทนติดตามทรัพย์ (commission),8500.00,255.00,8245.00,',
     )
+  })
+
+  it('ค่าใช้จ่าย (มติ U96 #14): receipt_in_company_name ต่อท้ายสุด — ค่าที่พัก Y/N · ชนิดอื่นว่าง', () => {
+    expect(EXPENSE_HEADERS.at(-1)).toBe('receipt_in_company_name')
+    expect(EXPENSE_HEADERS.slice(0, 5)).toEqual(['payee', 'category', 'gross_baht', 'wht_baht', 'net_baht'])
+    const base = { payeeName: 'ก', category: 'ค่าที่พัก', grossSatang: 80000, whtSatang: 0, netSatang: 80000 }
+    const lines = expenseCsv([
+      { ...base, receiptInCompanyName: true },
+      { ...base, receiptInCompanyName: false },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(lines[1]?.endsWith(',800.00,0.00,800.00,Y')).toBe(true)
+    expect(lines[2]?.endsWith(',800.00,0.00,800.00,N')).toBe(true)
+    expect(receiptInCompanyNameCell(null)).toBe('')
   })
 
   it('จ่ายจริง: method คงที่ Bank Transfer + voucher_ref ของใบสำคัญจ่ายจริง', () => {

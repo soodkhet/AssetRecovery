@@ -27,6 +27,8 @@ export const VIEW_MASTER_DATA = 'view_master_data'
  * ไม่งั้นปุ่มโผล่ให้กดแล้วโดน 403 (UI hide เป็นแค่ UX — API ปฏิเสธซ้ำเสมอ ตาม DEC-002)
  */
 export const MANAGE_TAX_PROFILES = 'manage_tax_profiles'
+/** ระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97) — Superadmin/บริหาร */
+export const MANAGE_DATA_RETENTION = 'manage_data_retention'
 /** ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8) — Superadmin/บริหาร */
 export const MANAGE_WHT_POLICY = 'manage_wht_policy'
 export const MANAGE_INVOICE_NUMBERING = 'manage_invoice_numbering'

@@ -85,6 +85,14 @@ export function hotelStayDateKeys(checkInDate: string, nights: number): string[]
   )
 }
 
+/**
+ * ป้ายสั้นของช่อง "ใบเสร็จออกในนามบริษัท" (มติ PO U96 #14) — รายการเบิก/คิวอนุมัติใช้ข้อความเดียวกัน
+ * ใช้ให้ผู้อนุมัติ/สำนักงานบัญชีเห็นประกอบการพิจารณาภาษีเท่านั้น — ไม่มีผลต่อยอดเงินหรือยอดหัก ณ ที่จ่ายในระบบ
+ */
+export function receiptInCompanyNameText(receiptInCompanyName: boolean): string {
+  return receiptInCompanyName ? 'ใบเสร็จในนามบริษัท' : 'ใบเสร็จไม่ได้ออกในนามบริษัท'
+}
+
 /** ข้อความสั้น "2 คืน · เพดาน ฿1,600.00" (ไม่ตั้งเพดาน → "2 คืน") — ใช้ทั้งรายการเบิกและคิวอนุมัติ */
 export function hotelNightsCapText(nights: number, maxPerNightSatang: number | null): string {
   const cap = hotelClaimCapSatang(maxPerNightSatang, nights)

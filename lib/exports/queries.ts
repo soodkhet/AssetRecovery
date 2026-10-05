@@ -274,7 +274,7 @@ const EXPENSE_RECORD_SELECT = {
       id: true,
       payoutBatchId: true,
       payeeId: true,
-      expense: { select: { expenseType: true } },
+      expense: { select: { expenseType: true, receiptInCompanyName: true } },
       payee: { select: { user: { select: { fullName: true } } } },
       payoutBatch: { select: { name: true, idempotencyKey: true, paymentFileGeneratedAt: true, updatedAt: true } },
     },
@@ -300,6 +300,9 @@ function expenseFile(rows: readonly ExpenseRecordRow[]): string {
       grossSatang: row.grossSatang,
       whtSatang: row.whtSatang,
       netSatang: row.netSatang,
+      // มติ PO U96 #14 — เฉพาะค่าที่พัก (ชนิดอื่น/เงินทดรอง = ว่าง)
+      receiptInCompanyName:
+        row.payoutBatchItem.expense?.expenseType === 'hotel' ? row.payoutBatchItem.expense.receiptInCompanyName : null,
     })),
   )
 }

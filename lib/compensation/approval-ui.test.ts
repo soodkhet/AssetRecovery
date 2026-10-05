@@ -28,6 +28,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     distanceKm: '128.50',
     calculationSource: 'compensation_plan',
     basisText: '128.50 กม. × 3.50 บาท/กม.',
+    receiptInCompanyName: null,
     grossSatang: 45_000,
     whtSatang: 0,
     netSatang: 45_000,

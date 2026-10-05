@@ -77,6 +77,8 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'manage_wht_policy', label: 'แก้ไขค่าตั้งภาษีหัก ณ ที่จ่าย (ฐาน/50 ทวิ/ประเภทเงินได้)', module: 'settings', functionalGroup: null, description: 'Superadmin/บริหาร · ต้องมีเหตุผล · มีผลกับรอบจ่ายถัดไป' },
   // ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93 · `13` §6.15) — ธุรการ/บัญชี/การเงิน กรอกปีละครั้ง · บริหาร ดู · ไม่ล็อก
   { code: 'manage_holidays', label: 'จัดการปฏิทินวันหยุด', module: 'settings', functionalGroup: null, description: 'เพิ่ม/ลบ/นำเข้าวันหยุดขององค์กร ใช้เลื่อนกำหนดยื่นภาษีที่ตรงวันหยุดเป็นวันทำการถัดไป · ต้องมีเหตุผล' },
+  // ระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97 · `13` §6.16) — Superadmin/บริหาร · ไม่ล็อก
+  { code: 'manage_data_retention', label: 'ตั้งระยะเก็บเอกสารลูกหนี้ (PDPA)', module: 'settings', functionalGroup: null, description: 'จำนวนปีหลังปิดเคสก่อนระบบลบไฟล์บัตร/สัญญา/เอกสารลูกหนี้ · ต้องมีเหตุผล' },
   { code: 'manage_settings', label: 'จัดการการตั้งค่าระบบ', module: 'settings', functionalGroup: null },
   { code: 'intake_asset', label: 'รับทรัพย์เข้าคลัง', module: 'warehouse', functionalGroup: null },
   { code: 'reject_asset_intake', label: 'ปฏิเสธการรับเข้าคลัง', module: 'warehouse', functionalGroup: null },

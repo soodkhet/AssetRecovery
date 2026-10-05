@@ -106,6 +106,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   case_edit_history: 'ประวัติแก้ไขเคส',
   reassignment_history: 'ประวัติเปลี่ยนผู้รับผิดชอบ',
   assignment_policy_settings: 'นโยบายการมอบหมายงาน',
+  data_retention_settings: 'ระยะเก็บเอกสารลูกหนี้',
   travel_origins: 'จุดเริ่มเดินทาง',
   close_case_drafts: 'ร่างปิดงาน',
   payout_batch_items: 'รายการในรอบจ่าย',

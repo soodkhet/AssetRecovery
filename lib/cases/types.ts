@@ -263,6 +263,8 @@ export interface CaseDetailDto extends CaseListItemDto {
   documentMode: DocumentMode
   /** ติ๊ก "รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว" (มีผลเฉพาะโหมดแยกประเภท) */
   productPhotoInContract: boolean
+  /** ไฟล์เอกสารลูกหนี้ถูกลบตามนโยบายระยะเก็บข้อมูลเมื่อไร (PDPA — มติ PO U97) · ยังไม่ถูกลบ = `null` */
+  debtorDocumentsPurgedAt: string | null
   editHistory: CaseEditHistoryDto[]
   recycleHistory: CaseRecycleHistoryDto[]
   readiness: CaseReadinessDto

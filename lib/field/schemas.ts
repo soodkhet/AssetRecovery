@@ -160,6 +160,8 @@ export const hotelClaimSchema = z.object({
   amountSatang: z.int().positive('จำนวนเงินต้องมากกว่า 0'),
   /** ไม่บังคับ — ไม่ส่ง = 1 คืน (มติ PO O50) */
   hotelNights: hotelNightsSchema.default(HOTEL_NIGHTS_DEFAULT),
+  /** ใบเสร็จออกในนามบริษัท (มติ PO U96 #14) — ผู้เบิกติ๊กเอง · ไม่ส่ง = ไม่ติ๊ก */
+  receiptInCompanyName: z.boolean().default(false),
   sharedWithUserId: z.uuid('ผู้พักร่วมไม่ถูกต้อง').nullish(),
   receiptFileUrl: fileUrl,
   note: trimmedText.max(1000).nullish(),
@@ -172,6 +174,8 @@ export const resubmitExpenseSchema = z.object({
   amountSatang: z.int().positive().optional(),
   /** แก้จำนวนคืนได้เฉพาะใบเบิกค่าที่พัก (ชนิดอื่นไม่สนใจค่านี้) — ไม่ส่ง = คงเดิม (มติ PO O50) */
   hotelNights: hotelNightsSchema.optional(),
+  /** แก้ได้เฉพาะใบเบิกค่าที่พัก (ชนิดอื่นไม่สนใจค่านี้) — ไม่ส่ง = คงเดิม (มติ PO U96 #14) */
+  receiptInCompanyName: z.boolean().optional(),
   receiptFileUrl: fileUrl.optional(),
   note: trimmedText.max(1000).nullish(),
 })
