@@ -27,6 +27,7 @@
 | v3.11 | 05/10/2569 | **มติ PO 05/10/2569 (U21)**: §6.9 ชุดไฟล์ Export Pack 8 → 9 ไฟล์ — เพิ่ม `09_Credit_Notes.csv` (ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — `37` v2.3) · ยังเป็นชุดตายตัว ผู้ใช้เพิ่ม/ลบไม่ได้ |
 | v3.12 | 06/10/2569 | **มติ PO 06/10/2569 (U87)**: §6.9 ชุดไฟล์ Export Pack 13 → 14 ไฟล์ — `14_Unbilled_Revenue.csv` (รายได้ค้างรับ: ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) · รายละเอียดที่ `37` §6.1 v2.11 |
 | v3.13 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93)**: เพิ่ม **§6.15 ปฏิทินวันหยุด** (แท็บที่ 18 ของหน้า — `public_holidays` `02` v4.35) · เพิ่ม/ลบ (soft delete)/นำเข้าหลายวัน (`YYYY-MM-DD,ชื่อ`) · capability ใหม่ `manage_holidays` (ธุรการ/บัญชี/การเงิน manage · บริหาร view · ไม่ล็อก — `25`/`07`) · กลุ่มปฏิบัติการเห็นหน้านี้เฉพาะแท็บนี้ (`06` §7.2) · ใช้เลื่อนกำหนดยื่น ภ.ง.ด. ที่ตรงวันหยุด/เสาร์-อาทิตย์เป็นวันทำการถัดไป (`33` §7.2) · §11/§13 เติมสิทธิ์/endpoint |
+| v3.15 | 06/10/2569 | **มติ PO 06/10/2569 (U94 ข้อ 2–4)**: §6.9 ชุดไฟล์ Export Pack 14 → **17 ไฟล์ (00–16)** — `00_Control_Totals.csv` (ยอดรวมควบคุม) · `15_Accrued_Expenses.csv` (ค่าใช้จ่ายค้างจ่าย) · `16_Advance_Balance.csv` (เงินทดรองยกมา/คงเหลือ) · รายละเอียดที่ `37` §6.1 v2.15 · ยังเป็นชุดตายตัว |
 | v3.14 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)**: เพิ่ม **§6.16 ระยะเก็บเอกสารลูกหนี้** (แท็บที่ 19 — `data_retention_settings` `02` v4.37 · 1 record/องค์กร) จำนวนปีหลังปิดเคส ค่าเริ่มต้น **5 ปี** (1–20) · สิทธิ์ `manage_data_retention` (บริหาร manage · Superadmin โดยนิยาม · ไม่ล็อก) + เหตุผล + audit · ใช้โดย job `purge_debtor_documents` (`91` §6.1) · §11 · §13 เพิ่มแถว |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
@@ -214,6 +215,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 
 | ไฟล์ | Format | เนื้อหา | มาจากไฟล์ |
 |---|---|---|---|
+| 00_Control_Totals.csv | CSV UTF-8 | ยอดรวมควบคุม — จำนวนแถว + ผลรวมคอลัมน์เงินหลักของทุกไฟล์ + ยอดสรุปของงวด (มติ PO 06/10/2569 U94) | 37 |
 | 01_Revenue.csv | CSV UTF-8 | รายการรายได้ — company, case_ref, revenue_date, gross, vat_flag | 19 |
 | 02_Cash_Receipts.csv | CSV UTF-8 | รายการเงินรับ — receipt_date, payer, amount, bank_ref | 31 |
 | 03_Expenses.csv | CSV UTF-8 | รายการค่าใช้จ่าย — payee, category, gross, wht, net | 32 |
@@ -228,6 +230,8 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | 12_Tax_Invoices.csv | CSV UTF-8 | ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — invoice_number, invoice_date, company, company_tax_id, before_vat, vat, total, vat_rate_pct, status, replaced_by (+ PDF ในโฟลเดอร์ tax_invoices/ ของ zip) (มติ PO 05/10/2569 U57) | 31 |
 | 13_Advance_Returns.csv | CSV UTF-8 | รับคืนเงินทดรอง — return_date, advance_ref, payee, amount, channel (payout_offset/cash/bank_transfer), payout_batch_ref, status (มติ PO 05/10/2569 U68) | 15 |
 | 14_Unbilled_Revenue.csv | CSV UTF-8 | รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล) — case_ref, company, company_tax_id, delivered_date, fee_model, before_vat, vat, total, vat_rate_pct, billing_batch_number (รอบร่าง) (มติ PO 06/10/2569 U87) | 19 |
+| 15_Accrued_Expenses.csv | CSV UTF-8 | ค่าตอบแทน/ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด — expense_id, payee, payee_tax_id, category, case_ref, work_date, status, gross, estimated_wht, payout_batch_ref (มติ PO 06/10/2569 U94) | 17 |
+| 16_Advance_Balance.csv | CSV UTF-8 | เงินทดรองต่อคน — ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs (มติ PO 06/10/2569 U94) | 15 |
 
 ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี)
 

@@ -57,6 +57,7 @@ import { summarizeBillingBatch } from '@/lib/revenue/revenue'
 import { periodLockPolicyFor } from '@/lib/settings/period-lock'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { fmtDate } from '@/lib/format/datetime'
+import { ACCRUED_EXPENSE_STATUSES } from '@/lib/exports/pack'
 
 /**
  * รอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — ชั้น DB (`27` §6.13 · §6.16)
@@ -365,6 +366,21 @@ export function unbilledRevenueWhere(organizationId: string, periodEnd: Date): P
       { billingBatch: { is: { status: 'draft' } } },
       { billingBatch: { is: { deletedAt: { not: null } } } },
     ],
+  }
+}
+
+/**
+ * ค่าใช้จ่าย "ค้างจ่าย" ณ สิ้นงวด (มติ PO U94 ข้อ 2) — รายการเบิกสถานะ `ACCRUED_EXPENSE_STATUSES` ที่วันที่ทำงาน
+ * ก่อนสิ้นงวด และ ณ ตอนนี้ยังไม่อยู่ในรอบจ่ายที่โอนแล้ว (`completed`) · รอบที่ยกเลิก/ถูกลบไม่นับว่าจ่าย
+ * ใช้กับ `15_Accrued_Expenses.csv` — นิยามจุดเดียวแบบ `unbilledRevenueWhere()`
+ */
+export function accruedExpenseWhere(organizationId: string, periodEnd: Date): Prisma.ExpenseWhereInput {
+  return {
+    organizationId,
+    deletedAt: null,
+    status: { in: [...ACCRUED_EXPENSE_STATUSES] },
+    expenseDate: { lt: periodEnd },
+    payoutItems: { none: { payoutBatch: { is: { status: 'completed', deletedAt: null } } } },
   }
 }
 

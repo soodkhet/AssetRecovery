@@ -1,0 +1,47 @@
+﻿section,file,item,description,row_count,amount_baht
+meta,-,generated_at,ภาพข้อมูล ณ เวลาสร้างชุด 03/07/2569 10:30 น.,-,-
+file,01_Revenue.csv,gross_baht,ผลรวมคอลัมน์ gross_baht,2,12750.00
+file,02_Cash_Receipts.csv,amount_baht,ผลรวมคอลัมน์ amount_baht,1,12480.00
+file,03_Expenses.csv,gross_baht,ผลรวมคอลัมน์ gross_baht,2,9300.00
+file,03_Expenses.csv,wht_baht,ผลรวมคอลัมน์ wht_baht,2,255.00
+file,03_Expenses.csv,net_baht,ผลรวมคอลัมน์ net_baht,2,9045.00
+file,04_Payments.csv,amount_baht,ผลรวมคอลัมน์ amount_baht,1,9045.00
+file,04_Payments.csv,advance_offset_baht,ผลรวมคอลัมน์ advance_offset_baht,1,550.00
+file,04_Payments.csv,transfer_baht,ผลรวมคอลัมน์ transfer_baht,1,8495.00
+file,05_WHT_Data.csv,gross_baht,ผลรวมคอลัมน์ gross_baht,1,8500.00
+file,05_WHT_Data.csv,wht_baht,ผลรวมคอลัมน์ wht_baht,1,255.00
+file,06_Bank_Reconciliation.csv,amount_baht[credit],ผลรวมคอลัมน์ amount_baht[credit],2,12480.00
+file,06_Bank_Reconciliation.csv,amount_baht[debit],ผลรวมคอลัมน์ amount_baht[debit],2,8495.00
+file,07_Adjustment_Log.csv,amount_baht,ผลรวมคอลัมน์ amount_baht,1,-100.00
+file,08_Document_Checklist.xlsx,-,จำนวนแถว,1,-
+file,09_Credit_Notes.csv,amount_before_vat_baht,ผลรวมคอลัมน์ amount_before_vat_baht,2,150.00
+file,09_Credit_Notes.csv,vat_baht,ผลรวมคอลัมน์ vat_baht,2,10.50
+file,09_Credit_Notes.csv,total_baht,ผลรวมคอลัมน์ total_baht,2,160.50
+file,10_Customer_WHT.csv,withheld_baht,ผลรวมคอลัมน์ withheld_baht,2,450.00
+file,11_Suspense_Receipts.csv,amount_baht,ผลรวมคอลัมน์ amount_baht,2,700.00
+file,12_Tax_Invoices.csv,amount_before_vat_baht,ผลรวมคอลัมน์ amount_before_vat_baht,2,13000.00
+file,12_Tax_Invoices.csv,vat_baht,ผลรวมคอลัมน์ vat_baht,2,910.00
+file,12_Tax_Invoices.csv,total_baht,ผลรวมคอลัมน์ total_baht,2,13910.00
+file,13_Advance_Returns.csv,amount_baht,ผลรวมคอลัมน์ amount_baht,1,550.00
+file,14_Unbilled_Revenue.csv,amount_before_vat_baht,ผลรวมคอลัมน์ amount_before_vat_baht,1,750.00
+file,14_Unbilled_Revenue.csv,vat_baht,ผลรวมคอลัมน์ vat_baht,1,52.50
+file,14_Unbilled_Revenue.csv,total_baht,ผลรวมคอลัมน์ total_baht,1,802.50
+file,15_Accrued_Expenses.csv,gross_baht,ผลรวมคอลัมน์ gross_baht,2,4850.00
+file,15_Accrued_Expenses.csv,estimated_wht_baht,ผลรวมคอลัมน์ estimated_wht_baht,2,135.00
+file,16_Advance_Balance.csv,opening_baht,ผลรวมคอลัมน์ opening_baht,1,550.00
+file,16_Advance_Balance.csv,paid_baht,ผลรวมคอลัมน์ paid_baht,1,3000.00
+file,16_Advance_Balance.csv,cleared_baht,ผลรวมคอลัมน์ cleared_baht,1,2450.00
+file,16_Advance_Balance.csv,returned_offset_baht,ผลรวมคอลัมน์ returned_offset_baht,1,550.00
+file,16_Advance_Balance.csv,returned_direct_baht,ผลรวมคอลัมน์ returned_direct_baht,1,0.00
+file,16_Advance_Balance.csv,closing_baht,ผลรวมคอลัมน์ closing_baht,1,550.00
+summary,01_Revenue.csv,revenue_before_vat,รายได้ก่อน VAT (รายได้ที่รับรู้ในงวด),2,12750.00
+summary,12_Tax_Invoices.csv,output_vat_documents,VAT ขาย ตามใบเสร็จรับเงิน/ใบกำกับภาษีที่ลงวันที่ในงวด (ไม่รวมใบที่ยกเลิก),1,840.00
+summary,09_Credit_Notes.csv,output_vat_credit_debit_notes,ปรับ VAT ขาย ตามใบเพิ่มหนี้ − ใบลดหนี้ที่ลงวันที่ในงวด (ไม่รวมใบที่ยกเลิก),1,-7.00
+summary,02_Cash_Receipts.csv,cash_received,รับเงินจากลูกค้า,1,12480.00
+summary,10_Customer_WHT.csv,customer_wht,ภาษีที่ลูกค้าหัก ณ ที่จ่าย (รับเงินในงวด),1,360.00
+summary,04_Payments.csv,payout_transfer,จ่ายออก (ยอดโอนจริง หลังหักคืนเงินทดรอง),1,8495.00
+summary,05_WHT_Data.csv,wht_withheld,ภาษีหัก ณ ที่จ่ายที่หักผู้รับ (ใบ 50 ทวิ ที่มีผล),1,255.00
+summary,15_Accrued_Expenses.csv,accrued_expenses,ค่าใช้จ่ายค้างจ่าย (ยอดก่อนหักภาษี — ภาพ ณ เวลาสร้างชุด),2,4850.00
+summary,14_Unbilled_Revenue.csv,unbilled_revenue,รายได้ค้างรับ (ยอดก่อน VAT — ภาพ ณ เวลาสร้างชุด),1,750.00
+summary,11_Suspense_Receipts.csv,suspense_outstanding,เงินรับรอตรวจสอบคงค้าง (ภาพ ณ เวลาสร้างชุด),1,500.00
+summary,16_Advance_Balance.csv,advance_balance,เงินทดรองคงเหลือสิ้นงวด,1,550.00

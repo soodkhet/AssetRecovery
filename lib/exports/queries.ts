@@ -4,6 +4,7 @@ import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { advanceRef } from '@/lib/advances/advance'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
 import {
+  accruedExpenseWhere,
   findPeriodById,
   getPeriodReadiness,
   unbilledRevenueWhere,
@@ -14,48 +15,80 @@ import type { SessionUser } from '@/lib/auth/types'
 import { buildChecklistWorkbook } from '@/lib/exports/checklist-excel'
 import { ExportError } from '@/lib/exports/errors'
 import {
+  accruedExpenseCsv,
   adjustmentCsv,
   adjustmentRef,
+  advanceBalanceCsv,
   advanceReturnCsv,
-  unbilledRevenueCsv,
-  taxInvoiceCsv,
-  taxInvoiceNotAttachedText,
-  taxInvoicePdfEntryName,
-  PACK_TAX_INVOICE_NOT_ATTACHED_FILE,
-  PACK_TAX_INVOICE_PDF_LIMIT,
-  PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS,
-  type AdvanceReturnExportRow,
-  type UnbilledRevenueExportRow,
-  type TaxInvoiceExportRow,
-  creditNoteCsv,
-  customerWhtCsv,
-  suspenseCsv,
-  type CreditNoteExportRow,
   bankReconCsv,
   buildPackCoverDoc,
   canTransitionExport,
   cashReceiptCsv,
+  createPackPdfBudget,
+  creditNoteCsv,
+  customerWhtCsv,
   expenseCsv,
   exportVersionLabel,
   packAttemptId,
   packFileName,
+  packNotAttachedFile,
+  packNotAttachedText,
+  packPdfEntryName,
   packStoragePath,
-  packZipFileName,
   packZipDownloadName,
+  packZipFileName,
   paymentCsv,
   payeesMissingTaxId,
   revenueCsv,
+  suspenseCsv,
+  taxInvoiceCsv,
+  taxInvoiceNotAttachedText,
+  taxInvoicePdfEntryName,
+  unbilledRevenueCsv,
   whtCsv,
   EXPORT_STATUS_GROUP,
   EXPORT_STATUS_LABEL,
+  PACK_BILLING_INVOICE_PDF_DIR,
   PACK_COVER_FILE_NAME,
   PACK_COVER_KEY,
+  PACK_TAX_INVOICE_NOT_ATTACHED_FILE,
+  PACK_VOUCHER_PDF_DIR,
+  PACK_WHT_CERTIFICATE_PDF_DIR,
   PACK_ZIP_KEY,
+  type AccruedExpenseExportRow,
   type AdjustmentExportRow,
+  type AdvanceBalanceExportRow,
+  type AdvanceReturnExportRow,
+  type BankReconExportRow,
+  type CashReceiptExportRow,
   type ChecklistExportRow,
+  type CreditNoteExportRow,
+  type CustomerWhtExportRow,
+  type ExpenseExportRow,
   type MatchedType,
+  type PackPdfBudget,
+  type PaymentExportRow,
+  type RevenueExportRow,
+  type SuspenseExportRow,
+  type TaxInvoiceExportRow,
+  type UnbilledRevenueExportRow,
   type WhtExportRow,
 } from '@/lib/exports/pack'
+import { estimateAccruedWhtSatang } from '@/lib/exports/accrued-expenses'
+import { advanceBalanceRows, type AdvanceBalanceEntry } from '@/lib/exports/advance-balance'
+import { buildControlTotals, controlTotalsCsv, controlTotalsForCover } from '@/lib/exports/control-totals'
+import { renderBillingInvoice } from '@/components/pdf/billing-invoice'
+import { renderPaymentVouchers } from '@/components/pdf/payment-voucher'
+import { renderPayslips } from '@/components/pdf/payslip'
+import { renderWhtCertificate } from '@/components/pdf/wht-certificate'
+import { buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
+import { getBillingInvoiceSource } from '@/lib/revenue/billing-invoice-queries'
+import { buildPaymentVoucherDocs, buildPayslipDocs } from '@/lib/payout/payout-doc'
+import { resolvePayoutSide } from '@/lib/payout/payout'
+import { getPayoutDocSource } from '@/lib/payout/queries'
+import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
+import { getWhtCertificateDocSource } from '@/lib/wht/queries'
+import { buildWhtCertificateDoc } from '@/lib/wht/wht'
 import {
   downloadPackFile,
   packContentDigest,
@@ -147,7 +180,7 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     status: row.status,
     statusLabel: EXPORT_STATUS_LABEL[row.status],
     statusGroup: EXPORT_STATUS_GROUP[row.status],
-    // นับเฉพาะไฟล์หลัก 01–14 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
+    // นับเฉพาะไฟล์ข้อมูล 00–16 (`37` §7.1 · 00 = ยอดรวมควบคุม มติ U94) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
     // เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมในชุด — ดูหมายเหตุที่ `37` §7.1 ใน PROGRESS_ARCHIVE 4.6
     attachmentCount: 0,
@@ -215,7 +248,7 @@ function scopeOf(row: { id: string; yearBe: number; month: number; periodLabel: 
   }
 }
 
-async function revenueFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function revenueRows(organizationId: string, scope: PeriodScope): Promise<RevenueExportRow[]> {
   const rows = await prisma.revenue.findMany({
     where: {
       organizationId,
@@ -232,18 +265,16 @@ async function revenueFile(organizationId: string, scope: PeriodScope): Promise<
     },
   })
 
-  return revenueCsv(
-    rows.map((row) => ({
-      companyName: row.company.name,
-      caseRef: row.case.caseRef,
-      revenueDate: row.revenueDate,
-      grossSatang: row.grossSatang,
-      vatSatang: row.vatSatang,
-    })),
-  )
+  return rows.map((row) => ({
+    companyName: row.company.name,
+    caseRef: row.case.caseRef,
+    revenueDate: row.revenueDate,
+    grossSatang: row.grossSatang,
+    vatSatang: row.vatSatang,
+  }))
 }
 
-async function cashReceiptFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function cashReceiptRows(organizationId: string, scope: PeriodScope): Promise<CashReceiptExportRow[]> {
   const rows = await prisma.cashReceipt.findMany({
     where: { organizationId, periodId: scope.id },
     orderBy: [{ receivedDate: 'asc' }, { createdAt: 'asc' }],
@@ -255,29 +286,40 @@ async function cashReceiptFile(organizationId: string, scope: PeriodScope): Prom
     },
   })
 
-  return cashReceiptCsv(
-    rows.map((row) => ({
-      receivedDate: row.receivedDate,
-      payerName: row.billingBatch.company.name,
-      amountSatang: row.amountSatang,
-      // สคีมาไม่มีคอลัมน์เลขอ้างอิงธนาคารแยก — ตัวนำเข้า statement รวมไว้ใน `description` (ดูหัวไฟล์ pack.ts)
-      bankRef: row.bankTransaction?.description ?? null,
-    })),
-  )
+  return rows.map((row) => ({
+    receivedDate: row.receivedDate,
+    payerName: row.billingBatch.company.name,
+    amountSatang: row.amountSatang,
+    // สคีมาไม่มีคอลัมน์เลขอ้างอิงธนาคารแยก — ตัวนำเข้า statement รวมไว้ใน `description` (ดูหัวไฟล์ pack.ts)
+    bankRef: row.bankTransaction?.description ?? null,
+  }))
 }
 
 const EXPENSE_RECORD_SELECT = {
   grossSatang: true,
   whtSatang: true,
   netSatang: true,
+  costCenter: { select: { code: true } },
   payoutBatchItem: {
     select: {
       id: true,
       payoutBatchId: true,
       payeeId: true,
-      expense: { select: { expenseType: true, receiptInCompanyName: true } },
+      advanceId: true,
+      expense: {
+        select: {
+          id: true,
+          expenseType: true,
+          receiptInCompanyName: true,
+          expenseDate: true,
+          receiptFileUrl: true,
+          case: { select: { caseRef: true } },
+        },
+      },
       payee: { select: { user: { select: { fullName: true } } } },
-      payoutBatch: { select: { name: true, idempotencyKey: true, paymentFileGeneratedAt: true, updatedAt: true } },
+      payoutBatch: {
+        select: { id: true, name: true, idempotencyKey: true, paymentFileGeneratedAt: true, updatedAt: true },
+      },
     },
   },
 } satisfies Prisma.ExpenseRecordSelect
@@ -292,20 +334,34 @@ async function expenseRecordsOf(organizationId: string, scope: PeriodScope): Pro
   })
 }
 
-function expenseFile(rows: readonly ExpenseRecordRow[]): string {
-  return expenseCsv(
-    rows.map((row) => ({
-      payeeName: row.payoutBatchItem.payee.user.fullName,
+/**
+ * `03_Expenses.csv` — แถวต่อบัญชีค่าใช้จ่าย · มติ PO U96 #15: หลักฐานรายจ่ายต่อท้าย — `payment_date` /
+ * `payout_batch_ref` / `voucher_ref` ตัวเดียวกับไฟล์ 04 (`PayoutVouchers`) ⇒ โยงแถวข้ามไฟล์ได้ตรงตัว
+ */
+function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers): ExpenseExportRow[] {
+  return rows.map((row) => {
+    const item = row.payoutBatchItem
+    const expense = item.expense
+    return {
+      payeeName: item.payee.user.fullName,
       // รายการที่มาจากเงินทดรอง (A4) ไม่มี `expense_type` ของตัวเอง — ตัวแปลงเดียวกับไฟล์ 32
-      category: expenseCategoryOf({ expenseType: row.payoutBatchItem.expense?.expenseType ?? null }),
+      category: expenseCategoryOf({ expenseType: expense?.expenseType ?? null }),
       grossSatang: row.grossSatang,
       whtSatang: row.whtSatang,
       netSatang: row.netSatang,
       // มติ PO U96 #14 — เฉพาะค่าที่พัก (ชนิดอื่น/เงินทดรอง = ว่าง)
-      receiptInCompanyName:
-        row.payoutBatchItem.expense?.expenseType === 'hotel' ? row.payoutBatchItem.expense.receiptInCompanyName : null,
-    })),
-  )
+      receiptInCompanyName: expense?.expenseType === 'hotel' ? expense.receiptInCompanyName : null,
+      // มติ PO U96 #15 — เงินทดรองจ่ายไม่มีใบเบิก ⇒ ใช้เลขอ้างอิงเงินทดรอง
+      expenseId: expense?.id ?? (item.advanceId === null ? null : advanceRef(item.advanceId)),
+      workDate: expense?.expenseDate ?? null,
+      paymentDate: payoutPaymentDateOf(item.payoutBatch),
+      payoutBatchRef: payoutBatchRefOf(item.payoutBatch),
+      voucherRef: vouchers.voucherRefOf.get(voucherKey(item.payoutBatchId, item.payeeId)) ?? null,
+      caseRef: expense?.case?.caseRef ?? null,
+      costCenter: row.costCenter?.code ?? null,
+      receiptFilePath: expense?.receiptFileUrl ?? null,
+    }
+  })
 }
 
 /** ตัวอ้างอิงรอบเดียวกับที่พิมพ์บนเอกสาร (3.5): idempotency key ถ้ามี ไม่งั้น 8 ตัวแรกของ id — ไฟล์ 04/13 ใช้ร่วมกัน */
@@ -318,13 +374,27 @@ function payoutPaymentDateOf(batch: { paymentFileGeneratedAt: Date | null; updat
   return batch.paymentFileGeneratedAt ?? batch.updatedAt
 }
 
+function voucherKey(batchId: string, payeeId: string): string {
+  return `${batchId}|${payeeId}`
+}
+
+interface PayoutVouchers {
+  /** แถวของ `04_Payments.csv` */
+  payments: PaymentExportRow[]
+  /** เลขใบสำคัญจ่ายต่อ (รอบ, ผู้รับ) — ไฟล์ 03 อ้างตัวเดียวกัน */
+  voucherRefOf: Map<string, string>
+  /** รอบจ่ายที่มีรายการในงวด (เรียงตามเวลาสร้าง) — แนบใบสำคัญจ่าย/สลิปใน `vouchers/` */
+  batches: { id: string; ref: string }[]
+}
+
 /**
  * `04_Payments.csv` — 1 แถว = 1 ใบสำคัญจ่าย (ผู้รับเงิน 1 คนต่อรอบจ่าย) เพื่อให้เลขอ้างอิงตรงกับ
  * ใบสำคัญจ่ายที่พิมพ์จริงจาก 3.5 (`voucherNumber()` — ลำดับผู้รับเงินภายในรอบจ่ายนั้น)
  */
-async function paymentFile(organizationId: string, rows: readonly ExpenseRecordRow[]): Promise<string> {
+async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRecordRow[]): Promise<PayoutVouchers> {
   const batchIds = [...new Set(rows.map((row) => row.payoutBatchItem.payoutBatchId))]
-  if (batchIds.length === 0) return paymentCsv([])
+  const voucherRefOf = new Map<string, string>()
+  if (batchIds.length === 0) return { payments: [], voucherRefOf, batches: [] }
 
   const batches = await prisma.payoutBatch.findMany({
     where: { organizationId, id: { in: batchIds } },
@@ -349,7 +419,7 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
   })
 
   const paidItemIds = new Set(rows.map((row) => row.payoutBatchItem.id))
-  const out = []
+  const out: PaymentExportRow[] = []
   for (const batch of batches) {
     const batchRef = payoutBatchRefOf(batch)
     const paymentDate = payoutPaymentDateOf(batch)
@@ -358,12 +428,13 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
     // จัดกลุ่มตามผู้รับเงินโดยคง**ลำดับรายการในรอบ** ให้ตรงกับตอนพิมพ์ใบสำคัญจ่าย (3.5)
     const groups = new Map<
       string,
-      { payeeName: string; netSatang: number; advanceOffsetSatang: number; inPeriod: boolean }
+      { payeeId: string; payeeName: string; netSatang: number; advanceOffsetSatang: number; inPeriod: boolean }
     >()
     for (const item of batch.items) {
       const existing = groups.get(item.payeeId)
       if (existing === undefined) {
         groups.set(item.payeeId, {
+          payeeId: item.payeeId,
           payeeName: item.payee.user.fullName,
           netSatang: item.netSatang,
           advanceOffsetSatang: item.advanceOffsetSatang,
@@ -379,6 +450,8 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
     let voucherIndex = 0
     for (const group of groups.values()) {
       voucherIndex += 1
+      const voucherRef = voucherNumber({ batchRef, beYear, index: voucherIndex })
+      voucherRefOf.set(voucherKey(batch.id, group.payeeId), voucherRef)
       // ผู้รับเงินที่รายการยังไม่ถูก sync เข้างวดนี้ (รอบคาบเกี่ยว) ไม่ต้องอยู่ในไฟล์ของงวด
       // — แต่ลำดับใบสำคัญจ่ายยังนับต่อเนื่องทั้งรอบ เพื่อให้เลขตรงกับใบที่พิมพ์จริง
       if (!group.inPeriod) continue
@@ -389,15 +462,22 @@ async function paymentFile(organizationId: string, rows: readonly ExpenseRecordR
         payeeName: group.payeeName,
         netSatang: group.netSatang,
         advanceOffsetSatang: group.advanceOffsetSatang,
-        voucherRef: voucherNumber({ batchRef, beYear, index: voucherIndex }),
+        voucherRef,
       })
     }
   }
 
-  return paymentCsv(out)
+  return {
+    payments: out,
+    voucherRefOf,
+    batches: batches.map((batch) => ({ id: batch.id, ref: payoutBatchRefOf(batch) })),
+  }
 }
 
-async function whtFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function whtRows(
+  organizationId: string,
+  scope: PeriodScope,
+): Promise<{ rows: WhtExportRow[]; certificates: { id: string; number: string }[] }> {
   const rows = await prisma.whtCertificate.findMany({
     where: {
       organizationId,
@@ -407,6 +487,7 @@ async function whtFile(organizationId: string, scope: PeriodScope): Promise<stri
     },
     orderBy: [{ certificateNumber: 'asc' }],
     select: {
+      id: true,
       certificateNumber: true,
       incomeType: true,
       paymentDate: true,
@@ -449,10 +530,13 @@ async function whtFile(organizationId: string, scope: PeriodScope): Promise<stri
     })
   }
 
-  return whtCsv(exportRows)
+  return {
+    rows: exportRows,
+    certificates: rows.map((row) => ({ id: row.id, number: row.certificateNumber })),
+  }
 }
 
-async function bankReconFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function bankReconRows(organizationId: string, scope: PeriodScope): Promise<BankReconExportRow[]> {
   const rows = await prisma.bankTransaction.findMany({
     where: { organizationId, periodId: scope.id },
     orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
@@ -468,8 +552,7 @@ async function bankReconFile(organizationId: string, scope: PeriodScope): Promis
     },
   })
 
-  return bankReconCsv(
-    rows.map((row) => {
+  return rows.map((row): BankReconExportRow => {
       let matchedType: MatchedType | null = null
       let matchedRef: string | null = null
       if (row.matchedBilling !== null) {
@@ -496,8 +579,7 @@ async function bankReconFile(organizationId: string, scope: PeriodScope): Promis
         matchedRef,
         billingBatchNumber: row.matchedBilling?.batchNumber ?? null,
       }
-    }),
-  )
+    })
 }
 
 /**
@@ -598,8 +680,8 @@ async function adjustmentLogOf(
 }
 
 /** `10_Customer_WHT.csv` (มติ PO 05/10/2569 U40) — รับเงินในงวด + ยังรอหนังสือที่ยกมา */
-async function customerWhtFile(organizationId: string, scope: PeriodScope): Promise<string> {
-  return customerWhtCsv(await customerWhtExportSources(organizationId, scope))
+async function customerWhtRows(organizationId: string, scope: PeriodScope): Promise<CustomerWhtExportRow[]> {
+  return customerWhtExportSources(organizationId, scope)
 }
 
 /**
@@ -607,7 +689,7 @@ async function customerWhtFile(organizationId: string, scope: PeriodScope): Prom
  * เกิดในงวด / ยังค้างอยู่ (เกิดก่อนสิ้นงวด) / จับคู่หรือคืนเงินภายในงวด ⇒ สำนักงานบัญชีเห็นทั้งยอดยกมา ยอดเกิด
  * และยอดที่เคลียร์ในงวด (หนี้สินรอตรวจสอบ — ไม่ใช่รายได้)
  */
-async function suspenseFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function suspenseRows(organizationId: string, scope: PeriodScope): Promise<SuspenseExportRow[]> {
   // วันที่จับคู่เป็น timestamp ⇒ ใช้ขอบวันตามเวลาไทยของงวด
   const startAt = startOfBangkokDay(scope.start)
   const endAt = startOfBangkokDay(scope.end)
@@ -636,8 +718,7 @@ async function suspenseFile(organizationId: string, scope: PeriodScope): Promise
       matchedBilling: { select: { batchNumber: true, period: true, company: { select: { name: true } } } },
     },
   })
-  return suspenseCsv(
-    rows.map((row) => ({
+  return rows.map((row) => ({
       transactionDate: row.transactionDate,
       description: row.description,
       amountSatang: row.amountSatang,
@@ -654,16 +735,12 @@ async function suspenseFile(organizationId: string, scope: PeriodScope): Promise
             : row.matchedAt,
       refundNote: row.refundNote,
       billingBatchNumber: row.matchedBilling?.batchNumber ?? null,
-    })),
-  )
+    }))
 }
 
-async function adjustmentFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function adjustmentRows(organizationId: string, scope: PeriodScope): Promise<AdjustmentExportRow[]> {
   const entries = await adjustmentLogOf(organizationId, scope)
-  return adjustmentCsv(
-    entries.map((entry) => entry.row),
-    { yearBe: scope.yearBe, month: scope.month },
-  )
+  return entries.map((entry) => entry.row)
 }
 
 /**
@@ -671,7 +748,10 @@ async function adjustmentFile(organizationId: string, scope: PeriodScope): Promi
  * · `adjustment_ref` = เลขที่ของ Adjustment ที่อ้างถึงในไฟล์ 07 **ของงวดเป้าหมายของ Adjustment นั้น** (ใบลดหนี้มักออก
  *   เดือนถัดจากรายได้ที่ปรับ ⇒ หาเลขจาก log ของงวดนั้น · memo ต่องวด) · หาไม่เจอ/ไม่ผูก ⇒ `-`
  */
-async function creditNoteFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function creditNoteRows(
+  organizationId: string,
+  scope: Pick<PeriodScope, 'start' | 'end'>,
+): Promise<CreditNoteExportRow[]> {
   const rows = await prisma.creditNote.findMany({
     where: { organizationId, issueDate: { gte: scope.start, lt: scope.end } },
     orderBy: [{ issueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -685,7 +765,13 @@ async function creditNoteFile(organizationId: string, scope: PeriodScope): Promi
       reason: true,
       status: true,
       buyerBranchCode: true,
-      taxInvoice: { select: { invoiceNumber: true, salesRecord: { select: { company: { select: { name: true } } } } } },
+      taxInvoice: {
+        select: {
+          invoiceNumber: true,
+          buyerTaxId: true,
+          salesRecord: { select: { company: { select: { name: true } } } },
+        },
+      },
       adjustment: {
         select: {
           id: true,
@@ -731,15 +817,16 @@ async function creditNoteFile(organizationId: string, scope: PeriodScope): Promi
       adjustmentRef: await refOf(row.adjustment),
       // มติ PO U82 — snapshot สาขาผู้ซื้อตามใบกำกับเดิม (คอลัมน์ต่อท้าย)
       companyBranchCode: row.buyerBranchCode,
+      // มติ PO U94 ข้อ 5 — เลขผู้เสียภาษีผู้ซื้อตาม snapshot บนใบกำกับเดิม (คอลัมน์ต่อท้าย)
+      companyTaxId: row.taxInvoice.buyerTaxId,
     })
   }
-  return creditNoteCsv(exportRows)
+  return exportRows
 }
 
 /** เนื้อไฟล์ `09_Credit_Notes.csv` ของงวด (ปี พ.ศ./เดือน) — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
 export async function buildCreditNotePackFile(organizationId: string, yearBe: number, month: number): Promise<string> {
-  const range = periodRange(yearBe, month)
-  return creditNoteFile(organizationId, { ...range, id: '', periodLabel: '' })
+  return creditNoteCsv(await creditNoteRows(organizationId, periodRange(yearBe, month)))
 }
 
 /** ปี พ.ศ./เดือน ของวันที่ (date-only UTC — คอลัมน์ DATE ของงวดเป้าหมาย) */
@@ -754,6 +841,7 @@ interface PackPdfEntry {
 
 export interface TaxInvoicePackResult {
   csv: string
+  rows: TaxInvoiceExportRow[]
   /** PDF ใน `tax_invoices/` (+ `NOT_ATTACHED.txt` เมื่อมีใบที่ไม่ได้แนบ) */
   entries: PackPdfEntry[]
   attached: number
@@ -769,11 +857,8 @@ export interface TaxInvoicePackResult {
 async function taxInvoiceFile(
   organizationId: string,
   scope: Pick<PeriodScope, 'start' | 'end'>,
-  options: { limit?: number; timeBudgetMs?: number; now?: () => number } = {},
+  budget: PackPdfBudget,
 ): Promise<TaxInvoicePackResult> {
-  const limit = options.limit ?? PACK_TAX_INVOICE_PDF_LIMIT
-  const budget = options.timeBudgetMs ?? PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS
-  const now = options.now ?? Date.now
   const invoices = await taxInvoicesForPack(organizationId, {
     start: scope.start,
     end: scope.end,
@@ -786,9 +871,8 @@ async function taxInvoiceFile(
   const pdfFileOf = new Map<string, string>()
   const notAttached: string[] = []
   const usedNames = new Set<string>()
-  const startedAt = now()
   for (const invoice of invoices) {
-    if (entries.length >= limit || now() - startedAt > budget) {
+    if (!budget.tryTake()) {
       notAttached.push(invoice.source.invoiceNumber)
       continue
     }
@@ -824,7 +908,7 @@ async function taxInvoiceFile(
     documentType: TAX_INVOICE_DOC_KIND_TITLE[invoice.source.docKind],
     receivedDate: invoice.source.receivedDate,
   }))
-  return { csv: taxInvoiceCsv(rows), entries, attached: pdfFileOf.size, notAttached }
+  return { csv: taxInvoiceCsv(rows), rows, entries, attached: pdfFileOf.size, notAttached }
 }
 
 /** เนื้อไฟล์ `12_Tax_Invoices.csv` + PDF ของงวด (ปี พ.ศ./เดือน) — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
@@ -834,7 +918,7 @@ export async function buildTaxInvoicePackFiles(
   month: number,
   options: { limit?: number; timeBudgetMs?: number; now?: () => number } = {},
 ): Promise<TaxInvoicePackResult> {
-  return taxInvoiceFile(organizationId, periodRange(yearBe, month), options)
+  return taxInvoiceFile(organizationId, periodRange(yearBe, month), createPackPdfBudget(options))
 }
 
 /**
@@ -843,7 +927,7 @@ export async function buildTaxInvoicePackFiles(
  * - รับคืนแยก (เงินสด/โอน): วันที่รับเงินอยู่ในงวด
  * - กลับรายการในงวด: แสดงซ้ำพร้อมสถานะ `reversed` (เฉพาะแถวที่เคยมีผลจริง — หักกลบที่ยังไม่จ่ายไม่นับ)
  */
-async function advanceReturnFile(organizationId: string, scope: PeriodScope): Promise<string> {
+async function advanceReturnRows(organizationId: string, scope: PeriodScope): Promise<AdvanceReturnExportRow[]> {
   const startAt = startOfBangkokDay(scope.start)
   const endAt = startOfBangkokDay(scope.end)
   const paidInPeriod = { is: { expenseRecord: { is: { periodId: scope.id } } } }
@@ -895,7 +979,7 @@ async function advanceReturnFile(organizationId: string, scope: PeriodScope): Pr
   exportRows.sort(
     (a, b) => a.returnDate.getTime() - b.returnDate.getTime() || a.createdAt.getTime() - b.createdAt.getTime(),
   )
-  return advanceReturnCsv(exportRows)
+  return exportRows
 }
 
 /**
@@ -903,7 +987,10 @@ async function advanceReturnFile(organizationId: string, scope: PeriodScope): Pr
  * และ ณ เวลาสร้างชุดยังไม่อยู่ในรอบวางบิลที่ส่งลูกค้าแล้ว (ไม่ผูกรอบ / อยู่ในรอบร่าง / รอบถูกลบ)
  * — นิยามเดียวกับคำเตือน "รายได้ค้างรับ" ของ Readiness (`unbilledRevenueWhere()`)
  */
-async function unbilledRevenueFile(organizationId: string, scope: Pick<PeriodScope, 'end'>): Promise<string> {
+async function unbilledRevenueRows(
+  organizationId: string,
+  scope: Pick<PeriodScope, 'end'>,
+): Promise<UnbilledRevenueExportRow[]> {
   const rows = await prisma.revenue.findMany({
     where: unbilledRevenueWhere(organizationId, scope.end),
     orderBy: [{ revenueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -934,12 +1021,304 @@ async function unbilledRevenueFile(organizationId: string, scope: Pick<PeriodSco
         ? row.billingBatch.batchNumber
         : null,
   }))
-  return unbilledRevenueCsv(exportRows)
+  return exportRows
 }
 
 /** เนื้อไฟล์ `14_Unbilled_Revenue.csv` ของงวด (ปี พ.ศ./เดือน) — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
 export async function buildUnbilledRevenuePackFile(organizationId: string, yearBe: number, month: number): Promise<string> {
-  return unbilledRevenueFile(organizationId, periodRange(yearBe, month))
+  return unbilledRevenueCsv(await unbilledRevenueRows(organizationId, periodRange(yearBe, month)))
+}
+
+/**
+ * `15_Accrued_Expenses.csv` (มติ PO 06/10/2569 U94 ข้อ 2) — รายการเบิกที่ `accruedExpenseWhere()` คัด (นิยามจุดเดียว)
+ * · WHT ที่คาดว่าจะหัก: อยู่ในรอบจ่ายที่ยังไม่โอน = ยอดของรอบ · ยังไม่เข้ารอบ = `estimateAccruedWhtSatang()` ด้วย
+ *   ค่าตั้ง WHT ที่มีผล ณ เวลาสร้างชุด (สูตรเดียวกับรอบจ่าย) · `payout_batch_ref` = รอบที่ยังไม่โอน/ไม่ยกเลิก
+ */
+async function accruedExpenseRows(
+  organizationId: string,
+  scope: Pick<PeriodScope, 'end'>,
+  generatedAt: Date,
+): Promise<AccruedExpenseExportRow[]> {
+  const [rows, policy] = await Promise.all([
+    prisma.expense.findMany({
+      where: accruedExpenseWhere(organizationId, scope.end),
+      orderBy: [{ expenseDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        expenseType: true,
+        grossSatang: true,
+        expenseDate: true,
+        status: true,
+        case: { select: { caseRef: true } },
+        compPlan: { select: { whtPct: true } },
+        payoutItems: {
+          where: { payoutBatch: { is: { deletedAt: null, status: { notIn: ['completed', 'cancelled'] } } } },
+          orderBy: [{ createdAt: 'desc' }],
+          take: 1,
+          select: { whtSatang: true, payoutBatch: { select: { id: true, idempotencyKey: true } } },
+        },
+        payee: {
+          select: {
+            id: true,
+            payeeType: true,
+            nationalId: true,
+            wht402Pct: true,
+            taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
+            user: {
+              select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
+            },
+          },
+        },
+      },
+    }),
+    resolveWhtPolicyForPayout(organizationId, generatedAt),
+  ])
+
+  const estimates = estimateAccruedWhtSatang(
+    rows.map((row) => ({
+      payeeId: row.payee.id,
+      grossSatang: row.grossSatang,
+      expenseType: row.expenseType,
+      batchWhtSatang: row.payoutItems[0]?.whtSatang ?? null,
+      payeeType: row.payee.payeeType,
+      side: resolvePayoutSide({
+        teamSide: row.payee.user.team?.side ?? null,
+        roleGroup: row.payee.user.role.roleGroup,
+      }),
+      payeeTaxProfile:
+        row.payee.taxProfile === null
+          ? null
+          : {
+              whtPct: Number(row.payee.taxProfile.whtPct),
+              whtBasis: row.payee.taxProfile.whtBasis === 'gross_amount' ? 'gross_amount' : 'before_vat',
+              whtMinThresholdSatang: row.payee.taxProfile.whtMinThresholdSatang,
+            },
+      planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
+      section402Pct: row.payee.wht402Pct === null ? null : Number(row.payee.wht402Pct),
+    })),
+    policy.values,
+  )
+
+  return rows.map((row, index) => {
+    const batch = row.payoutItems[0]?.payoutBatch ?? null
+    return {
+      expenseId: row.id,
+      payeeName: row.payee.user.fullName,
+      payeeTaxId: row.payee.nationalId,
+      category: expenseCategoryOf({ expenseType: row.expenseType }),
+      caseRef: row.case?.caseRef ?? null,
+      workDate: row.expenseDate,
+      status: row.status,
+      grossSatang: row.grossSatang,
+      estimatedWhtSatang: estimates[index] ?? null,
+      payoutBatchRef: batch === null ? null : payoutBatchRefOf(batch),
+    }
+  })
+}
+
+/** เนื้อไฟล์ `15_Accrued_Expenses.csv` ของงวด — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
+export async function buildAccruedExpensePackFile(
+  organizationId: string,
+  yearBe: number,
+  month: number,
+  generatedAt: Date = new Date(),
+): Promise<string> {
+  return accruedExpenseCsv(await accruedExpenseRows(organizationId, periodRange(yearBe, month), generatedAt))
+}
+
+const ADVANCE_BATCH_SELECT = { status: true, paymentFileGeneratedAt: true, updatedAt: true } as const
+
+/**
+ * `16_Advance_Balance.csv` (มติ PO 06/10/2569 U94 ข้อ 3) — โหลดเงินทดรองที่เคยจ่ายออกได้ แล้วให้ pure module
+ * `advanceBalanceRows()` คิดยกมา/เคลื่อนไหว/คงเหลือ (สูตร `22` §6.13–6.14 + วันจ่ายของรายงานอายุเงินทดรอง)
+ */
+async function advanceBalanceExportRows(
+  organizationId: string,
+  scope: Pick<PeriodScope, 'start' | 'end'>,
+): Promise<AdvanceBalanceExportRow[]> {
+  const rows = await prisma.advance.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      status: { in: ['approved', 'overdue', 'cleared'] },
+      // จ่ายออกได้แค่หลังอนุมัติ ⇒ อนุมัติหลังสิ้นงวดไม่มีทางมียอดในงวดนี้ (ไม่มีเวลาอนุมัติ = ข้อมูลเก่า ให้ pure ตัดสินจากวันจ่าย)
+      OR: [{ approvedAt: null }, { approvedAt: { lt: startOfBangkokDay(scope.end) } }],
+    },
+    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      status: true,
+      approvedSatang: true,
+      returnSatang: true,
+      clearedAt: true,
+      payee: { select: { id: true, nationalId: true, user: { select: { fullName: true } } } },
+      payoutItems: { select: { payoutBatch: { select: ADVANCE_BATCH_SELECT } } },
+      returns: {
+        select: {
+          channel: true,
+          amountSatang: true,
+          receivedDate: true,
+          reversedAt: true,
+          payoutBatch: { select: ADVANCE_BATCH_SELECT },
+        },
+      },
+    },
+  })
+  const entries: AdvanceBalanceEntry[] = rows.map((row) => ({
+    advanceId: row.id,
+    payeeId: row.payee.id,
+    payeeName: row.payee.user.fullName,
+    payeeTaxId: row.payee.nationalId,
+    status: row.status,
+    approvedSatang: row.approvedSatang,
+    returnSatang: row.returnSatang,
+    clearedAt: row.clearedAt,
+    payoutBatches: row.payoutItems.map((item) => item.payoutBatch),
+    returns: row.returns,
+  }))
+  return advanceBalanceRows(entries, scope)
+}
+
+/** เนื้อไฟล์ `16_Advance_Balance.csv` ของงวด — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
+export async function buildAdvanceBalancePackFile(organizationId: string, yearBe: number, month: number): Promise<string> {
+  return advanceBalanceCsv(await advanceBalanceExportRows(organizationId, periodRange(yearBe, month)))
+}
+
+// ── PDF ใน zip นอกจากใบกำกับภาษี (มติ PO U94 ข้อ 5) ────────────────────────────
+
+interface PackPdfFolderResult {
+  entries: PackPdfEntry[]
+  attached: number
+  notAttached: string[]
+}
+
+/**
+ * ประกอบ PDF ของโฟลเดอร์หนึ่งภายใต้เพดานร่วม (`PackPdfBudget`) — ชื่อซ้ำหลังตัดอักขระต่อท้ายด้วย id ·
+ * เกินเพดาน ⇒ ลงรายชื่อใน `<dir>/NOT_ATTACHED.txt` (ข้อมูลยังอยู่ใน CSV ครบ)
+ */
+async function packPdfFolder<T extends { id: string; ref: string }>(input: {
+  dir: string
+  items: readonly T[]
+  budget: PackPdfBudget
+  /** 1 รายการอาจได้หลายไฟล์ (เช่น ใบสำคัญจ่าย + สลิป) — แต่ละไฟล์กินเพดาน 1 ฉบับ */
+  render: (item: T) => { suffix: string; render: () => Promise<Uint8Array> }[]
+  notAttached: { documentLabel: string; unit: string; csvFileName: string | null }
+}): Promise<PackPdfFolderResult> {
+  const entries: PackPdfEntry[] = []
+  const notAttached: string[] = []
+  const usedNames = new Set<string>()
+  let attached = 0
+  for (const item of input.items) {
+    const parts = input.render(item)
+    for (const part of parts) {
+      const label = `${part.suffix}${item.ref}`
+      if (!input.budget.tryTake()) {
+        notAttached.push(label)
+        continue
+      }
+      let name = packPdfEntryName(input.dir, label)
+      if (usedNames.has(name)) name = name.replace(/\.pdf$/, `_${item.id.slice(0, 8)}.pdf`)
+      usedNames.add(name)
+      entries.push({ name, data: await part.render() })
+      attached += 1
+    }
+  }
+  if (notAttached.length > 0) {
+    entries.push({
+      name: packNotAttachedFile(input.dir),
+      data: encoder.encode(packNotAttachedText({ ...input.notAttached, refs: notAttached })),
+    })
+  }
+  return { entries, attached, notAttached }
+}
+
+/** `wht_certificates/` — ใบ 50 ทวิ ชุดเดียวกับ `05_WHT_Data.csv` · renderer เดียวกับพิมพ์รายใบ (2 ฉบับในไฟล์) */
+async function whtCertificatePdfs(
+  actor: SessionUser,
+  certificates: readonly { id: string; number: string }[],
+  budget: PackPdfBudget,
+): Promise<PackPdfFolderResult> {
+  return packPdfFolder({
+    dir: PACK_WHT_CERTIFICATE_PDF_DIR,
+    items: certificates.map((cert) => ({ id: cert.id, ref: cert.number })),
+    budget,
+    render: (item) => [
+      {
+        suffix: '',
+        render: async () =>
+          new Uint8Array(await renderWhtCertificate(buildWhtCertificateDoc(await getWhtCertificateDocSource(actor, item.id)))),
+      },
+    ],
+    notAttached: { documentLabel: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย', unit: 'ใบ', csvFileName: packFileName('05') },
+  })
+}
+
+/** `vouchers/` — ใบสำคัญจ่าย (`PV-…`) + สลิปค่าตอบแทน (`SLIP-…`) ต่อรอบจ่ายที่โอนแล้วในงวด (ชุดเดียวกับไฟล์ 04) */
+async function voucherPdfs(
+  actor: SessionUser,
+  batches: readonly { id: string; ref: string }[],
+  budget: PackPdfBudget,
+): Promise<PackPdfFolderResult> {
+  return packPdfFolder({
+    dir: PACK_VOUCHER_PDF_DIR,
+    items: batches,
+    budget,
+    render: (item) => {
+      let source: Promise<Awaited<ReturnType<typeof getPayoutDocSource>>> | null = null
+      const load = () => (source ??= getPayoutDocSource(actor, item.id))
+      return [
+        {
+          suffix: 'PV-',
+          render: async () => {
+            const { batch, issuer } = await load()
+            return new Uint8Array(await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer)))
+          },
+        },
+        {
+          suffix: 'SLIP-',
+          render: async () => {
+            const { batch, issuer } = await load()
+            return new Uint8Array(await renderPayslips(buildPayslipDocs(batch, issuer)))
+          },
+        },
+      ]
+    },
+    notAttached: { documentLabel: 'ใบสำคัญจ่าย/สลิปค่าตอบแทน', unit: 'ไฟล์', csvFileName: packFileName('04') },
+  })
+}
+
+/**
+ * `billing_invoices/` — ใบแจ้งหนี้/ใบวางบิลของรอบที่**ส่งลูกค้าในงวด** (`sent_at` ตามวันไทย) · ไม่ใช่เอกสารภาษี
+ * (มติ PO U95) จึงแยกจาก `tax_invoices/` และมาท้ายสุดในลำดับเพดาน
+ */
+async function billingInvoicePdfs(
+  actor: SessionUser,
+  scope: Pick<PeriodScope, 'start' | 'end'>,
+  budget: PackPdfBudget,
+): Promise<PackPdfFolderResult> {
+  const batches = await prisma.billingBatch.findMany({
+    where: {
+      organizationId: actor.organizationId,
+      deletedAt: null,
+      status: { not: 'draft' },
+      sentAt: { gte: startOfBangkokDay(scope.start), lt: startOfBangkokDay(scope.end) },
+    },
+    orderBy: [{ sentAt: 'asc' }, { batchNumber: 'asc' }],
+    select: { id: true, batchNumber: true },
+  })
+  return packPdfFolder({
+    dir: PACK_BILLING_INVOICE_PDF_DIR,
+    items: batches.map((batch) => ({ id: batch.id, ref: batch.batchNumber })),
+    budget,
+    render: (item) => [
+      {
+        suffix: '',
+        render: async () =>
+          new Uint8Array(await renderBillingInvoice(buildBillingInvoiceDoc(await getBillingInvoiceSource(actor, item.id)))),
+      },
+    ],
+    notAttached: { documentLabel: 'ใบแจ้งหนี้/ใบวางบิล', unit: 'ใบ', csvFileName: null },
+  })
 }
 
 async function checklistRowsOf(organizationId: string, scope: PeriodScope): Promise<ChecklistExportRow[]> {
@@ -986,6 +1365,8 @@ const CONTENT_TYPE: Readonly<Record<PackAssetKind, string>> = {
 export async function createExportPack(
   ctx: AccountingMutationContext,
   input: ExportPackInput,
+  /** เพดาน PDF ของชุด — ค่าเริ่มต้นตาม `PACK_TAX_INVOICE_PDF_LIMIT`/`…_TIME_BUDGET_MS` (เทสต์ส่งค่าเล็กได้) */
+  options: { pdfBudget?: { limit?: number; timeBudgetMs?: number; now?: () => number } } = {},
 ): Promise<ExportRecordDto> {
   const { actor } = ctx
   assertOrgWideReadable(actor, 'export-records')
@@ -999,12 +1380,13 @@ export async function createExportPack(
   })
   assertExportNotBlocked(exceptions)
 
-  // ② ประกอบเนื้อไฟล์ทั้ง 14 (อ่านอย่างเดียว — ยิงขนานได้)
+  // ② ประกอบแถวข้อมูลของไฟล์ 01–16 (อ่านอย่างเดียว — ยิงขนานได้) · ยอดรวมควบคุม (00) คิดจากแถวชุดเดียวกันนี้
+  const generatedAt = new Date()
   const expenseRecords = await expenseRecordsOf(actor.organizationId, scope)
   const [
     revenue,
     receipts,
-    payments,
+    vouchers,
     wht,
     bank,
     adjustments,
@@ -1014,36 +1396,74 @@ export async function createExportPack(
     creditNotes,
     customerWht,
     suspense,
-    taxInvoices,
     advanceReturns,
     unbilledRevenue,
+    accruedExpenses,
+    advanceBalances,
   ] = await Promise.all([
-      revenueFile(actor.organizationId, scope),
-      cashReceiptFile(actor.organizationId, scope),
-      paymentFile(actor.organizationId, expenseRecords),
-      whtFile(actor.organizationId, scope),
-      bankReconFile(actor.organizationId, scope),
-      adjustmentFile(actor.organizationId, scope),
-      checklistRowsOf(actor.organizationId, scope),
-      getPeriodReadiness(actor, scope.id),
-      prisma.organization.findUniqueOrThrow({ where: { id: actor.organizationId }, select: { name: true } }),
-      creditNoteFile(actor.organizationId, scope),
-      customerWhtFile(actor.organizationId, scope),
-      suspenseFile(actor.organizationId, scope),
-      taxInvoiceFile(actor.organizationId, scope),
-      advanceReturnFile(actor.organizationId, scope),
-      unbilledRevenueFile(actor.organizationId, scope),
-    ])
+    revenueRows(actor.organizationId, scope),
+    cashReceiptRows(actor.organizationId, scope),
+    payoutVouchersOf(actor.organizationId, expenseRecords),
+    whtRows(actor.organizationId, scope),
+    bankReconRows(actor.organizationId, scope),
+    adjustmentRows(actor.organizationId, scope),
+    checklistRowsOf(actor.organizationId, scope),
+    getPeriodReadiness(actor, scope.id),
+    prisma.organization.findUniqueOrThrow({ where: { id: actor.organizationId }, select: { name: true } }),
+    creditNoteRows(actor.organizationId, scope),
+    customerWhtRows(actor.organizationId, scope),
+    suspenseRows(actor.organizationId, scope),
+    advanceReturnRows(actor.organizationId, scope),
+    unbilledRevenueRows(actor.organizationId, scope),
+    accruedExpenseRows(actor.organizationId, scope, generatedAt),
+    advanceBalanceExportRows(actor.organizationId, scope),
+  ])
+  const expenses = expenseRows(expenseRecords, vouchers)
 
-  const generatedAt = new Date()
+  // ③ PDF ใน zip — เพดานเดียวทั้งชุด (จำนวน/เวลา) เรียงตามความสำคัญ: เอกสารภาษีก่อน (มติ U57 · U94 ข้อ 5)
+  const pdfBudget = createPackPdfBudget(options.pdfBudget)
+  const taxInvoices = await taxInvoiceFile(actor.organizationId, scope, pdfBudget)
+  const whtPdfs = await whtCertificatePdfs(actor, wht.certificates, pdfBudget)
+  const voucherFiles = await voucherPdfs(actor, vouchers.batches, pdfBudget)
+  const billingInvoices = await billingInvoicePdfs(actor, scope, pdfBudget)
+
+  // ④ ยอดรวมควบคุม (มติ U94 ข้อ 4) — จากแถวชุดเดียวกับที่เขียนไฟล์ ไม่ query แยก
+  const controlLines = buildControlTotals({
+    period: scope,
+    generatedAt,
+    revenue,
+    cashReceipts: receipts,
+    expenses,
+    payments: vouchers.payments,
+    wht: wht.rows,
+    bank,
+    adjustments,
+    checklist,
+    creditNotes,
+    customerWht,
+    suspense,
+    taxInvoices: taxInvoices.rows,
+    advanceReturns,
+    unbilledRevenue,
+    accruedExpenses,
+    advanceBalances,
+  })
+
   const dataFiles: readonly { key: string; fileName: string; bytes: Uint8Array; kind: PackAssetKind }[] = [
-    { key: '01', fileName: packFileName('01'), bytes: encoder.encode(revenue), kind: 'csv' },
-    { key: '02', fileName: packFileName('02'), bytes: encoder.encode(receipts), kind: 'csv' },
-    { key: '03', fileName: packFileName('03'), bytes: encoder.encode(expenseFile(expenseRecords)), kind: 'csv' },
-    { key: '04', fileName: packFileName('04'), bytes: encoder.encode(payments), kind: 'csv' },
-    { key: '05', fileName: packFileName('05'), bytes: encoder.encode(wht), kind: 'csv' },
-    { key: '06', fileName: packFileName('06'), bytes: encoder.encode(bank), kind: 'csv' },
-    { key: '07', fileName: packFileName('07'), bytes: encoder.encode(adjustments), kind: 'csv' },
+    // มติ PO 06/10/2569 (U94 ข้อ 4) — ยอดรวมควบคุม
+    { key: '00', fileName: packFileName('00'), bytes: encoder.encode(controlTotalsCsv(controlLines)), kind: 'csv' },
+    { key: '01', fileName: packFileName('01'), bytes: encoder.encode(revenueCsv(revenue)), kind: 'csv' },
+    { key: '02', fileName: packFileName('02'), bytes: encoder.encode(cashReceiptCsv(receipts)), kind: 'csv' },
+    { key: '03', fileName: packFileName('03'), bytes: encoder.encode(expenseCsv(expenses)), kind: 'csv' },
+    { key: '04', fileName: packFileName('04'), bytes: encoder.encode(paymentCsv(vouchers.payments)), kind: 'csv' },
+    { key: '05', fileName: packFileName('05'), bytes: encoder.encode(whtCsv(wht.rows)), kind: 'csv' },
+    { key: '06', fileName: packFileName('06'), bytes: encoder.encode(bankReconCsv(bank)), kind: 'csv' },
+    {
+      key: '07',
+      fileName: packFileName('07'),
+      bytes: encoder.encode(adjustmentCsv(adjustments, { yearBe: scope.yearBe, month: scope.month })),
+      kind: 'csv',
+    },
     {
       key: '08',
       fileName: packFileName('08'),
@@ -1056,18 +1476,21 @@ export async function createExportPack(
       kind: 'xlsx',
     },
     // มติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ
-    { key: '09', fileName: packFileName('09'), bytes: encoder.encode(creditNotes), kind: 'csv' },
+    { key: '09', fileName: packFileName('09'), bytes: encoder.encode(creditNoteCsv(creditNotes)), kind: 'csv' },
     // มติ PO 05/10/2569 (U40/U41) — 50 ทวิ ที่ลูกค้าหักเรา · เงินรับรอตรวจสอบ
-    { key: '10', fileName: packFileName('10'), bytes: encoder.encode(customerWht), kind: 'csv' },
-    { key: '11', fileName: packFileName('11'), bytes: encoder.encode(suspense), kind: 'csv' },
+    { key: '10', fileName: packFileName('10'), bytes: encoder.encode(customerWhtCsv(customerWht)), kind: 'csv' },
+    { key: '11', fileName: packFileName('11'), bytes: encoder.encode(suspenseCsv(suspense)), kind: 'csv' },
     // มติ PO 05/10/2569 (U57/U68) — ใบกำกับภาษีที่ออก/ยกเลิกในรอบ · รับคืนเงินทดรอง
     { key: '12', fileName: packFileName('12'), bytes: encoder.encode(taxInvoices.csv), kind: 'csv' },
-    { key: '13', fileName: packFileName('13'), bytes: encoder.encode(advanceReturns), kind: 'csv' },
+    { key: '13', fileName: packFileName('13'), bytes: encoder.encode(advanceReturnCsv(advanceReturns)), kind: 'csv' },
     // มติ PO 06/10/2569 (U87) — รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ เวลาสร้างชุด)
-    { key: '14', fileName: packFileName('14'), bytes: encoder.encode(unbilledRevenue), kind: 'csv' },
+    { key: '14', fileName: packFileName('14'), bytes: encoder.encode(unbilledRevenueCsv(unbilledRevenue)), kind: 'csv' },
+    // มติ PO 06/10/2569 (U94 ข้อ 2/3) — ค่าใช้จ่ายค้างจ่าย · เงินทดรองยกมา/คงเหลือ
+    { key: '15', fileName: packFileName('15'), bytes: encoder.encode(accruedExpenseCsv(accruedExpenses)), kind: 'csv' },
+    { key: '16', fileName: packFileName('16'), bytes: encoder.encode(advanceBalanceCsv(advanceBalances)), kind: 'csv' },
   ]
 
-  // ③ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
+  // ⑤ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
   const last = await prisma.exportRecord.findFirst({
     where: { organizationId: actor.organizationId, periodId: scope.id },
     orderBy: [{ version: 'desc' }],
@@ -1075,7 +1498,7 @@ export async function createExportPack(
   })
   const version = (last?.version ?? 0) + 1
 
-  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–14" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
+  // ⑥ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 00–16" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
   const contentDigest = packContentDigest(dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })))
   const cover = await renderPackCover(
     buildPackCoverDoc({
@@ -1086,14 +1509,24 @@ export async function createExportPack(
       generatedAt,
       contentDigest,
       checks: readiness.checks,
+      controlTotals: controlTotalsForCover(controlLines),
     }),
   )
 
+  const attachments = {
+    tax_invoices: { attached: taxInvoices.attached, not_attached: taxInvoices.notAttached },
+    wht_certificates: { attached: whtPdfs.attached, not_attached: whtPdfs.notAttached },
+    vouchers: { attached: voucherFiles.attached, not_attached: voucherFiles.notAttached },
+    billing_invoices: { attached: billingInvoices.attached, not_attached: billingInvoices.notAttached },
+  }
   const entries: ZipEntry[] = [
     { name: PACK_COVER_FILE_NAME, data: new Uint8Array(cover) },
     ...dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })),
-    // U57 — สำเนา PDF ใบกำกับภาษีของงวด อยู่ใน zip เท่านั้น (ไม่อัปโหลดแยกทีละใบ — ดาวน์โหลดรายใบได้จากหน้ารายการขาย)
+    // PDF อยู่ใน zip เท่านั้น (ไม่อัปโหลดแยกทีละใบ — ดาวน์โหลดรายใบได้จากหน้าของเอกสารนั้น)
     ...taxInvoices.entries,
+    ...whtPdfs.entries,
+    ...voucherFiles.entries,
+    ...billingInvoices.entries,
   ]
   const zipBytes = buildZip(entries, generatedAt)
   // key ใน Storage = ASCII ล้วน · ชื่อไทยใช้ตอนดาวน์โหลดเท่านั้น (UAT R7cv3-B01)
@@ -1166,7 +1599,7 @@ export async function createExportPack(
           version: exportVersionLabel(version),
           file_names: entries.map((entry) => entry.name),
           zip_file: zipFileName,
-          tax_invoice_pdfs: { attached: taxInvoices.attached, not_attached: taxInvoices.notAttached },
+          attachments,
           file_hash: row.fileHash,
           content_digest: contentDigest,
         },

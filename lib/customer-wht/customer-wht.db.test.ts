@@ -617,7 +617,7 @@ suite('มติ PO U40/U41 — Export Pack 10_Customer_WHT.csv + 11_Suspense_Re
     await recon.moveToSuspense(ctx, txId, { reason: 'ไม่ทราบที่มา' })
 
     const record = await exportsApi.createExportPack(ctx, { periodId: await augustPeriodId() })
-    expect(record.fileCount).toBe(14)
+    expect(record.fileCount).toBe(17)
 
     const decoder = new TextDecoder()
     const fileText = (suffix: string): string =>

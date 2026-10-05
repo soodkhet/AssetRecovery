@@ -128,8 +128,11 @@ export function shouldIssueZeroRate402Certificate(input: {
 }
 
 /**
- * แบบที่ต้องยื่น — **นิติบุคคล ⇒ ภ.ง.ด.53 เสมอ** (มติ PO 06/10/2569 UAT U96 #2) · บุคคลธรรมดาเงินได้ 40(1)/40(2)
- * ⇒ **ภ.ง.ด.1** (มติ PO 05/10/2569 UAT U7 · U33) · 40(8) ใช้ Tax Profile ที่ snapshot ไว้ (`18` §6.3) · ไม่มี = ภ.ง.ด.3
+ * แบบที่ต้องยื่น — ตัดสินจาก**ชนิดผู้รับ**เป็นหลัก ไม่ใช่ค่าที่ตั้งใน Tax Profile:
+ * - **นิติบุคคล ⇒ ภ.ง.ด.53 เสมอ** (มติ PO 06/10/2569 UAT U96 #2 · ม.69 ทวิ)
+ * - บุคคลธรรมดาเงินได้ 40(1)/40(2) ⇒ **ภ.ง.ด.1** (มติ PO 05/10/2569 UAT U7 · U33)
+ * - **บุคคลธรรมดาอื่น ๆ ⇒ ภ.ง.ด.3 เสมอ** แม้ Tax Profile ตั้งเป็น ภ.ง.ด.53 (มติ O57 — ภ.ง.ด.53 ใช้กับนิติบุคคลเท่านั้น)
+ *   ⇒ `taxProfileFilingForm` ไม่มีผลต่อผลลัพธ์แล้ว (คงพารามิเตอร์ไว้ให้ผู้เรียกเดิม + เทสต์ยืนยันว่าไม่ชนะชนิดผู้รับ)
  */
 export function filingFormOf(input: {
   taxProfileFilingForm: WhtFilingForm | null
@@ -140,7 +143,7 @@ export function filingFormOf(input: {
   // นิติบุคคล ⇒ ภ.ง.ด.53 เสมอ ไม่ว่าโหมดค่าตั้ง/Tax Profile จะเป็นอะไร (มติ PO 06/10/2569 UAT U96 #2 · ม.69 ทวิ)
   if (input.payeeType === 'corporate') return 'PND53'
   if (usesPerPayeeWhtRate(input.incomeCategory)) return 'PND1'
-  if (input.taxProfileFilingForm !== null && input.taxProfileFilingForm !== 'PND1') return input.taxProfileFilingForm
+  // มติ O57 — บุคคลธรรมดายื่น ภ.ง.ด.3 เสมอ (Tax Profile ที่ตั้ง ภ.ง.ด.53/ภ.ง.ด.1 ไม่ชนะชนิดผู้รับ)
   return 'PND3'
 }
 

@@ -624,14 +624,15 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     const lines = csv.slice(1).split('\r\n')
     expect(csv.charCodeAt(0)).toBe(0xfeff)
     expect(lines[0]).toBe(
-      'document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref,company_branch',
+      'document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref,company_branch,company_tax_id',
     )
     const cnLine = lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`)) ?? ''
     expect(cnLine).toMatch(
-      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3},สำนักงานใหญ่$`),
+      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3},สำนักงานใหญ่,(\\d{13}|-)$`),
     )
     const dnLine = lines.find((line) => line.startsWith(`DN,${dn.creditNoteNumber},`)) ?? ''
-    expect(dnLine).toMatch(/,50\.00,3\.50,53\.50,.+,cancelled,-,สำนักงานใหญ่$/)
+    // มติ U94 ข้อ 5 — company_tax_id ต่อท้ายสุด (snapshot บนใบกำกับเดิม)
+    expect(dnLine).toMatch(/,50\.00,3\.50,53\.50,.+,cancelled,-,สำนักงานใหญ่,(\d{13}|-)$/)
   })
 })
 
@@ -669,6 +670,6 @@ suite('มติ PO U82 (ม.86/4) — ใบลดหนี้/ใบเพิ�
 
     const { buildCreditNotePackFile } = await import('@/lib/exports/queries')
     const lines = (await buildCreditNotePackFile(ORG_ID, 2569, 10)).slice(1).split('\r\n')
-    expect(lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`))).toMatch(/,สาขาที่ 00004$/)
+    expect(lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`))).toMatch(/,สาขาที่ 00004,(\d{13}|-)$/)
   })
 })

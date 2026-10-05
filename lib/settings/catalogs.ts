@@ -2,7 +2,7 @@
  * รายการ read-only ของไฟล์ 13 — **pure ล้วน (ค่าคงที่ถอดจาก spec ตรงตัว)**
  *
  *  · §6.7 Internal Document Templates — เอกสารภายในที่ระบบสร้างอัตโนมัติ (แก้รูปแบบจริงที่ไฟล์ 28)
- *  · §6.9 Export Format — ไฟล์มาตรฐานของ Accounting Pack 01–08 (รายละเอียดเต็มที่ `37` §6.1)
+ *  · §6.9 Export Format — ไฟล์มาตรฐานของ Accounting Pack 00–16 (รายละเอียดเต็มที่ `37` §6.1 · 00/15/16 = มติ PO U94)
  *
  * ทั้งสองหมวดไม่มีตารางใน `02` เพราะเป็น "รายการที่ระบบรู้จัก" ไม่ใช่ข้อมูลที่ผู้ใช้เพิ่มได้ —
  * endpoint จึงเป็น **GET อย่างเดียว** ตรงตาม `13` §13 / `27` §6.1
@@ -51,7 +51,10 @@ export const INTERNAL_DOCUMENT_TEMPLATES: readonly InternalDocumentTemplate[] = 
 ]
 
 export interface ExportFormatSpec {
-  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–13 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68) */
+  /**
+   * ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 00–16 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41 ·
+   * 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94)
+   */
   fileName: string
   format: 'CSV UTF-8' | 'XLSX'
   content: string
@@ -60,6 +63,14 @@ export interface ExportFormatSpec {
 }
 
 export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
+  // มติ PO 06/10/2569 U94 ข้อ 4 — ยอดรวมควบคุมของทั้งชุด
+  {
+    fileName: '00_Control_Totals.csv',
+    format: 'CSV UTF-8',
+    content:
+      'ยอดรวมควบคุม — จำนวนแถว + ผลรวมคอลัมน์เงินหลักของทุกไฟล์ และยอดสรุปของงวด (รายได้ก่อน VAT, VAT ขาย, รับเงิน, ภาษีลูกค้าหัก, จ่ายออก, WHT, ค้างจ่าย, ค้างรับ, เงินรอตรวจสอบ, เงินทดรองคงเหลือ)',
+    sourceFile: '37',
+  },
   {
     fileName: '01_Revenue.csv',
     format: 'CSV UTF-8',
@@ -75,19 +86,21 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
   {
     fileName: '03_Expenses.csv',
     format: 'CSV UTF-8',
-    content: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท',
+    content:
+      'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท + expense_id, work_date, payment_date, payout_batch_ref, voucher_ref, case_ref, cost_center, receipt_file',
     sourceFile: '32',
   },
   {
     fileName: '04_Payments.csv',
     format: 'CSV UTF-8',
-    content: 'รายการจ่ายเงินจริง',
+    content: 'รายการจ่ายเงินจริง (+ PDF ใบสำคัญจ่าย/สลิปค่าตอบแทนในโฟลเดอร์ vouchers/)',
     sourceFile: '17',
   },
   {
     fileName: '05_WHT_Data.csv',
     format: 'CSV UTF-8',
-    content: 'ข้อมูลหัก ณ ที่จ่าย — `payee_tax_id` เป็นตัวเลข 13 หลักล้วนไม่มีขีดคั่น' /* DEC-006/D10 */,
+    content:
+      'ข้อมูลหัก ณ ที่จ่าย — `payee_tax_id` เป็นตัวเลข 13 หลักล้วนไม่มีขีดคั่น (+ PDF 50 ทวิ ในโฟลเดอร์ wht_certificates/)' /* DEC-006/D10 */,
     sourceFile: '33',
   },
   {
@@ -112,7 +125,7 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
   {
     fileName: '09_Credit_Notes.csv',
     format: 'CSV UTF-8',
-    content: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat',
+    content: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat, company_tax_id',
     sourceFile: '31',
   },
   // มติ PO 05/10/2569 U40 — ภาษีที่ลูกค้าหักเรา + สถานะหนังสือ 50 ทวิ
@@ -134,7 +147,7 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     fileName: '12_Tax_Invoices.csv',
     format: 'CSV UTF-8',
     content:
-      'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — invoice_number, invoice_date, company, company_tax_id, before_vat, vat, total, vat_rate_pct, status, replaced_by (+ PDF ในโฟลเดอร์ tax_invoices/)',
+      'ใบเสร็จรับเงิน/ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — invoice_number, invoice_date, company, company_tax_id, before_vat, vat, total, vat_rate_pct, status, replaced_by (+ PDF ในโฟลเดอร์ tax_invoices/ · ใบแจ้งหนี้ใน billing_invoices/)',
     sourceFile: '31',
   },
   // มติ PO 05/10/2569 U68 — รับคืนเงินทดรอง (หักกลบในรอบจ่าย / รับคืนแยก)
@@ -151,5 +164,21 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     content:
       'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล) — case_ref, company, company_tax_id, delivered_date, fee_model, before_vat, vat, total, vat_rate_pct, billing_batch_number (รอบร่าง)',
     sourceFile: '19',
+  },
+  // มติ PO 06/10/2569 U94 ข้อ 2 — ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด (ภาพ ณ เวลาสร้างชุด)
+  {
+    fileName: '15_Accrued_Expenses.csv',
+    format: 'CSV UTF-8',
+    content:
+      'ค่าตอบแทน/ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด — expense_id, payee, payee_tax_id, category, case_ref, work_date, status, gross, estimated_wht, payout_batch_ref',
+    sourceFile: '17',
+  },
+  // มติ PO 06/10/2569 U94 ข้อ 3 — เงินทดรองต่อคน
+  {
+    fileName: '16_Advance_Balance.csv',
+    format: 'CSV UTF-8',
+    content:
+      'เงินทดรองต่อคน — payee, payee_tax_id, ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs',
+    sourceFile: '15',
   },
 ]

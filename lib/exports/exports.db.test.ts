@@ -11,7 +11,8 @@ import { CSV_BOM } from '@/lib/exports/csv'
  *  - `37` §16: Export ขณะมี critical `open` ⇒ `EXPORT_BLOCKED_CRITICAL` · `authorized` แล้วผ่าน (`34` §11)
  *  - `37` §16: Export ซ้ำรอบเดิม ⇒ version ถัดไป (v1.0 → v1.1) **ไม่ทับของเดิม** และไฟล์เก่ายังอยู่ครบ
  *  - `37` §16: mark-sent ⇒ `sent` + `sent_at` · ข้ามขั้น `generated → accepted` ⇒ `EXPORT_INVALID_STATUS`
- *  - `37` §6.1: ชุดมีไฟล์ 01–14 ครบ (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87) + หน้าปก + `.zip` · `file_hash` = SHA-256 ของ `.zip` จริง
+ *  - `37` §6.1: ชุดมีไฟล์ 00–16 ครบ (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94) + หน้าปก + `.zip` · `file_hash` = SHA-256 ของ `.zip` จริง
+ *  - มติ PO U94: ค่าใช้จ่ายค้างจ่าย · เงินทดรองยกมา/คงเหลือ · ยอดรวมควบคุมตรงกับผลรวมไฟล์ · PDF 50 ทวิ/ใบสำคัญจ่าย/สลิปใน zip · เพดาน
  *  - DEC-006/D10: payee ที่ไม่มีเลขผู้เสียภาษี 13 หลัก ⇒ `EXPORT_PAYEE_TAX_ID_MISSING` (ไม่ปล่อยช่องว่างออกไป)
  *  - `37` §10: ไม่มีทางลบระเบียนเก่า — export ครั้งใหม่เพิ่มแถว ไม่ใช่ update แถวเดิม
  *
@@ -246,10 +247,11 @@ async function resetOrgData(): Promise<void> {
       `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-      `DELETE FROM advances WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+      // หลังรายการรอบจ่าย — แถวของเงินทดรองในรอบจ่าย (มติ U94 ข้อ 3) ต้องหายก่อน ไม่งั้น FK ตั้งเป็น NULL แล้วชน CHECK
+      `DELETE FROM advances WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`,
@@ -329,7 +331,7 @@ afterAll(async () => {
 })
 
 suite('Phase 4.6 — สร้างชุดเอกสารส่งบัญชี (`37` §6.1 · §16)', () => {
-  it('ชุดมีไฟล์ 01–14 ครบ + หน้าปก + .zip · file_hash = SHA-256 ของ .zip จริง', async () => {
+  it('ชุดมีไฟล์ 00–16 ครบ + หน้าปก + .zip + PDF 50 ทวิ/ใบสำคัญจ่าย/สลิป · file_hash = SHA-256 ของ .zip จริง', async () => {
     await resetOrgData()
     await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 850000, wht: 25500 }])
     await seedRevenue()
@@ -339,8 +341,9 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
 
     expect(record.versionLabel).toBe('v1.0')
     expect(record.status).toBe('generated')
-    expect(record.fileCount).toBe(14)
+    expect(record.fileCount).toBe(17)
     expect(record.files.map((file) => file.key).sort()).toEqual([
+      '00',
       '01',
       '02',
       '03',
@@ -355,6 +358,8 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       '12',
       '13',
       '14',
+      '15',
+      '16',
       'cover',
       'pack',
     ])
@@ -364,8 +369,12 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     const zipBytes = storage.get(zipPath)
     expect(zipBytes).toBeDefined()
     expect(record.fileHash).toBe(sha256Hex(zipBytes ?? new Uint8Array()))
-    expect(zipEntryNames(zipBytes ?? new Uint8Array())).toEqual([
+    // เลขที่ 50 ทวิ เดินต่อเนื่องทั้งองค์กร (ไม่ถูกลบ) ⇒ แทนด้วยตัวยึดก่อนเทียบ
+    const zipNames = zipEntryNames(zipBytes ?? new Uint8Array())
+    const certEntry = zipNames.find((name) => /^wht_certificates\/WHT-2569-\d{3,}\.pdf$/.test(name)) ?? ''
+    expect(zipNames.map((name) => (name === certEntry ? 'wht_certificates/<cert>.pdf' : name))).toEqual([
       '00_Cover_Sheet.pdf',
+      '00_Control_Totals.csv',
       '01_Revenue.csv',
       '02_Cash_Receipts.csv',
       '03_Expenses.csv',
@@ -380,7 +389,17 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       '12_Tax_Invoices.csv',
       '13_Advance_Returns.csv',
       '14_Unbilled_Revenue.csv',
+      '15_Accrued_Expenses.csv',
+      '16_Advance_Balance.csv',
+      // มติ PO U94 ข้อ 5 — 50 ทวิ ของงวด (ชุดเดียวกับไฟล์ 05) + ใบสำคัญจ่าย/สลิปของรอบที่โอนแล้ว (ชุดเดียวกับไฟล์ 04)
+      'wht_certificates/<cert>.pdf',
+      'vouchers/PV-PB-4.6-1-KEY.pdf',
+      'vouchers/SLIP-PB-4.6-1-KEY.pdf',
     ])
+    for (const name of [certEntry, 'vouchers/PV-PB-4.6-1-KEY.pdf', 'vouchers/SLIP-PB-4.6-1-KEY.pdf']) {
+      const pdf = zipEntryBytes(zipBytes ?? new Uint8Array(), name)
+      expect(decoder.decode(pdf?.subarray(0, 5)), name).toBe('%PDF-')
+    }
     // มติ PO 06/10/2569 (U87) — รายได้ของงวดที่ยังไม่ผูกรอบวางบิล ⇒ อยู่ในไฟล์รายได้ค้างรับ
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('14_Unbilled_Revenue.csv')) ?? '')).toBe(
       `${CSV_BOM}case_ref,company,company_tax_id,delivered_date,fee_model,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_batch_number\r\n` +
@@ -403,7 +422,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     // มติ PO 05/10/2569 (U21) — รอบนี้ไม่มีใบลดหนี้/ใบเพิ่มหนี้ ⇒ มีแต่หัวคอลัมน์
     const creditCsv = fileAt([...storage.keys()].find((path) => path.endsWith('09_Credit_Notes.csv')) ?? '')
     expect(creditCsv).toBe(
-      `${CSV_BOM}document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref,company_branch\r\n`,
+      `${CSV_BOM}document_type,number,issue_date,tax_invoice_ref,company,amount_before_vat_baht,vat_baht,total_baht,reason,status,adjustment_ref,company_branch,company_tax_id\r\n`,
     )
   })
 
@@ -563,7 +582,8 @@ suite('Phase 4.6 — สถานะการส่งมอบ (`37` §9 · §1
     expect(exported).toBeDefined()
     const after = exported?.after_data as { version?: string; file_names?: string[]; file_hash?: string } | undefined
     expect(after?.version).toBe('v1.0')
-    expect(after?.file_names).toHaveLength(15)
+    // หน้าปก + 17 ไฟล์ข้อมูล + PDF 50 ทวิ 1 + ใบสำคัญจ่าย/สลิป 2
+    expect(after?.file_names).toHaveLength(21)
     expect(after?.file_hash).toMatch(/^[0-9a-f]{64}$/)
   })
 })
@@ -606,7 +626,8 @@ suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บ�
     const record = await exportsApi.createExportPack(ctx, { periodId })
     const row = await db().exportRecord.findUniqueOrThrow({ where: { id: record.id }, select: { fileUrls: true } })
     const paths = Object.values(row.fileUrls as Record<string, string>)
-    expect(paths).toHaveLength(16)
+    // 17 ไฟล์ข้อมูล + หน้าปก + zip (PDF อยู่ใน zip เท่านั้น)
+    expect(paths).toHaveLength(19)
     for (const path of paths) expect(path, path).toMatch(/^[A-Za-z0-9!\-_.*'()/]+$/)
     expect(paths.some((path) => path.endsWith('/AccountingPack_2569-06_v1.0.zip'))).toBe(true)
     // ชื่อที่ผู้ใช้เห็น/ได้ตอนดาวน์โหลดยังเป็นภาษาไทย
@@ -629,7 +650,7 @@ suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บ�
     }
 
     expect(storage.size).toBe(0)
-    expect(removed).toHaveLength(15)
+    expect(removed).toHaveLength(18)
     expect(await db().exportRecord.count({ where: { periodId } })).toBe(0)
 
     const retried = await exportsApi.createExportPack(ctx, { periodId })
@@ -769,7 +790,7 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     const periodId = await junePeriodId()
 
     const record = await exportsApi.createExportPack(ctx, { periodId })
-    expect(record.fileCount).toBe(14)
+    expect(record.fileCount).toBe(17)
 
     const csv = fileAt([...storage.keys()].find((path) => path.endsWith('12_Tax_Invoices.csv')) ?? '')
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
@@ -792,14 +813,16 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     ])
     const pdf = zipEntryBytes(zipBytes, 'tax_invoices/INV-T46-0002.pdf')
     expect(decoder.decode((pdf ?? new Uint8Array()).subarray(0, 5))).toBe('%PDF-')
-    // PDF อยู่ใน zip เท่านั้น — ไม่อัปโหลดแยก (14 ไฟล์ข้อมูล + หน้าปก + zip)
-    expect([...storage.keys()].filter((path) => path.includes(`/v${record.version}/`))).toHaveLength(16)
+    // PDF อยู่ใน zip เท่านั้น — ไม่อัปโหลดแยก (17 ไฟล์ข้อมูล + หน้าปก + zip)
+    expect([...storage.keys()].filter((path) => path.includes(`/v${record.version}/`))).toHaveLength(19)
 
     // audit บอกจำนวน PDF ที่แนบ
-    const audit = await db().$queryRawUnsafe<{ after_data: { tax_invoice_pdfs?: { attached: number } } }[]>(`
+    const audit = await db().$queryRawUnsafe<
+      { after_data: { attachments?: { tax_invoices?: { attached: number } } } }[]
+    >(`
       SELECT after_data FROM audit_logs WHERE target_type = 'export_records' AND target_id = '${record.id}'
     `)
-    expect(audit[0]?.after_data.tax_invoice_pdfs?.attached).toBe(3)
+    expect(audit[0]?.after_data.attachments?.tax_invoices?.attached).toBe(3)
   })
 
   it('Export ซ้ำ ⇒ v1.1 ไฟล์ใบกำกับของ v1.0 ยังอยู่ ไม่ถูกทับ', async () => {
@@ -955,5 +978,280 @@ suite('มติ PO U87 — 14_Unbilled_Revenue.csv (รายได้ค้า
       'SF-2026-04600,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,15/06/2569,HYBRID,600.00,42.00,642.00,7.00,-',
       'SF-2026-04600,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,25/06/2569,HYBRID,100.00,7.00,107.00,7.00,-',
     ])
+  })
+})
+
+// ── มติ PO 06/10/2569 U94 ข้อ 2–5 — 15/16/00 + PDF 50 ทวิ/ใบสำคัญจ่ายใน zip ──────────────────
+
+const U94_USER = '00000000-0000-4000-8000-0000000094a1'
+const U94_PAYEE = '00000000-0000-4000-8000-0000000094a2'
+const U94_TAX_PROFILE = '00000000-0000-4000-8000-0000000094a3'
+
+async function seedU94Payee(): Promise<void> {
+  await db().$executeRawUnsafe(`
+    INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+    VALUES ('${U94_USER}', '${ORG_ID}', '${ROLE_ID}', 'u94@test.local', 'อนุชา ค้างจ่าย', 'active')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await db().$executeRawUnsafe(`
+    INSERT INTO tax_profiles (id, organization_id, name, wht_pct, income_type, filing_form, created_by)
+    VALUES ('${U94_TAX_PROFILE}', '${ORG_ID}', 'บุคคล 3% U94', 3.00, 'ค่าจ้างทำของ มาตรา 40(8)', 'PND3', '${USER_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  await db().$executeRawUnsafe(`
+    INSERT INTO payee_profiles (id, organization_id, user_id, payee_type, national_id, is_verified, tax_profile_id, created_by)
+    VALUES ('${U94_PAYEE}', '${ORG_ID}', '${U94_USER}', 'individual', '3100000009400', true, '${U94_TAX_PROFILE}', '${USER_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+}
+
+async function seedExpense(input: { gross: number; date: string; status: string; type?: string }): Promise<string> {
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO expenses (organization_id, case_id, payee_id, expense_type, gross_satang, expense_date, status, created_by)
+    VALUES ('${ORG_ID}', '${CASE_ID}', '${U94_PAYEE}', '${input.type ?? 'commission'}', ${input.gross}, '${input.date}',
+            '${input.status}', '${USER_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function seedBatch(input: { name: string; status: string; paidAt?: string }): Promise<string> {
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, wht_satang, net_satang,
+                                payment_file_generated_at, idempotency_key, cancelled_at, cancelled_by, cancel_reason,
+                                created_by)
+    VALUES ('${ORG_ID}', '${input.name}', 'outsource', '${input.status}', 0, 0, 0,
+            ${input.paidAt === undefined ? 'NULL' : `'${input.paidAt}'`}, '${input.name}-KEY',
+            ${input.status === 'cancelled' ? `now(), '${USER_ID}', 'ยกเลิกทดสอบ U94'` : 'NULL, NULL, NULL'}, '${USER_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function seedItem(input: { batchId: string; expenseId?: string; advanceId?: string; gross: number; wht?: number }): Promise<string> {
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO payout_batch_items (organization_id, payout_batch_id, expense_id, advance_id, payee_id,
+                                    gross_satang, wht_satang, net_satang, created_by)
+    VALUES ('${ORG_ID}', '${input.batchId}', ${input.expenseId === undefined ? 'NULL' : `'${input.expenseId}'`},
+            ${input.advanceId === undefined ? 'NULL' : `'${input.advanceId}'`}, '${U94_PAYEE}',
+            ${input.gross}, ${input.wht ?? 0}, ${input.gross - (input.wht ?? 0)}, '${USER_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+async function seedAdvance(input: { approved: number; used: number; status: string; clearedAt?: string }): Promise<string> {
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO advances (organization_id, payee_id, requested_satang, approved_satang, used_satang, status, purpose,
+                          due_clear_date, approved_at, cleared_at, return_method, created_by)
+    VALUES ('${ORG_ID}', '${U94_PAYEE}', ${input.approved}, ${input.approved}, ${input.used}, '${input.status}', 'ทดสอบ U94',
+            '2026-07-31', '2026-05-01T03:00:00Z', ${input.clearedAt === undefined ? 'NULL' : `'${input.clearedAt}'`},
+            ${input.status === 'cleared' && input.approved > input.used ? `'payout_offset'` : 'NULL'}, '${USER_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+function csvRows(csv: string): string[] {
+  return csv
+    .slice(CSV_BOM.length)
+    .split('\r\n')
+    .filter((line) => line !== '')
+}
+
+suite('มติ PO U94 ข้อ 2 — 15_Accrued_Expenses.csv', () => {
+  it('ค้างจ่าย = ทำ/อนุมัติแล้ว วันที่ ≤ สิ้นงวด ยังไม่อยู่ในรอบที่โอนแล้ว · WHT ประมาณด้วยสูตรรอบจ่าย · รอบที่ยังไม่โอนมีเลขรอบ', async () => {
+    await resetOrgData()
+    await seedU94Payee()
+    await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 500000, wht: 15000 }]) // จ่ายแล้ว ⇒ ไม่อยู่ในไฟล์
+
+    const approved = await seedExpense({ gross: 60_000, date: '2026-06-28', status: 'approved' })
+    const pending = await seedExpense({ gross: 50_000, date: '2026-06-30', status: 'pending_approval' })
+    const inDraft = await seedExpense({ gross: 200_000, date: '2026-06-15', status: 'approved' })
+    const draftBatch = await seedBatch({ name: 'PB-U94-DRAFT', status: 'file_generated' })
+    await seedItem({ batchId: draftBatch, expenseId: inDraft, gross: 200_000, wht: 6_000 })
+    // รอบที่ยกเลิก ⇒ รายการกลับไปรอจ่าย (ยังค้าง ไม่มีเลขรอบ)
+    const cancelledExpense = await seedExpense({ gross: 10_000, date: '2026-06-10', status: 'approved', type: 'hotel' })
+    const cancelledBatch = await seedBatch({ name: 'PB-U94-CANCEL', status: 'cancelled' })
+    await seedItem({ batchId: cancelledBatch, expenseId: cancelledExpense, gross: 10_000 })
+    // ไม่นับ: จ่ายแล้ว (รอบ completed หลังสิ้นงวด — ภาพ ณ เวลาสร้าง) · ปฏิเสธ · งวดถัดไป
+    const paidLater = await seedExpense({ gross: 70_000, date: '2026-06-29', status: 'approved' })
+    const laterBatch = await seedBatch({ name: 'PB-U94-JULY', status: 'completed', paidAt: '2026-07-05T03:00:00Z' })
+    await seedItem({ batchId: laterBatch, expenseId: paidLater, gross: 70_000, wht: 2_100 })
+    await seedExpense({ gross: 99_000, date: '2026-06-20', status: 'rejected' })
+    await seedExpense({ gross: 88_000, date: '2026-07-01', status: 'approved' })
+
+    const csv = await exportsApi.buildAccruedExpensePackFile(ORG_ID, 2569, 6)
+    const rows = csvRows(csv)
+    expect(rows[0]).toBe(
+      'expense_id,payee,payee_tax_id,category,case_ref,work_date,status,gross_baht,estimated_wht_baht,payout_batch_ref',
+    )
+    expect(rows.slice(1).map((row) => row.split(',')[0])).toEqual([cancelledExpense, inDraft, approved, pending])
+    const byId = new Map(rows.slice(1).map((row) => [row.split(',')[0], row.split(',')] as const))
+    // ฐานรวมของผู้รับ (60,000 + 50,000 สตางค์ = ฿1,100 ≥ ฿1,000) ⇒ หัก 3% = ฿33 กระจายตามสัดส่วน · ค่าที่พักไม่อยู่ในฐาน
+    expect(byId.get(approved)?.slice(1)).toEqual([
+      'อนุชา ค้างจ่าย',
+      '3100000009400',
+      'คอมมิชชั่น',
+      'SF-2026-04600',
+      '28/06/2569',
+      'approved',
+      '600.00',
+      '18.00',
+      '-',
+    ])
+    expect(byId.get(pending)?.slice(6)).toEqual(['pending_approval', '500.00', '15.00', '-'])
+    expect(byId.get(inDraft)?.slice(6)).toEqual(['approved', '2000.00', '60.00', 'PB-U94-DRAFT-KEY'])
+    expect(byId.get(cancelledExpense)?.slice(7)).toEqual(['100.00', '0.00', '-'])
+  })
+})
+
+suite('มติ PO U94 ข้อ 3 — 16_Advance_Balance.csv', () => {
+  it('ยอดยกมา + จ่าย − ใช้/เคลียร์ − คืน (หักกลบ/รับแยก) = คงเหลือ · ใบในงวดถัดไปไม่นับ', async () => {
+    await resetOrgData()
+    await seedU94Payee()
+    // ใบ 1: จ่ายเดือนพฤษภาคม ยังไม่เคลียร์ ⇒ ยกมา 3,000 คงเหลือ 3,000
+    const adv1 = await seedAdvance({ approved: 300_000, used: 0, status: 'approved' })
+    const may = await seedBatch({ name: 'PB-U94-MAY', status: 'completed', paidAt: '2026-05-20T03:00:00Z' })
+    await seedItem({ batchId: may, advanceId: adv1, gross: 300_000 })
+    // ใบ 2: จ่าย 10/06 เคลียร์ 15/06 (ใช้ 1,500 คืน 500) · รับเงินสด 200 (20/06) + หักกลบ 300 ในรอบที่โอน 25/06 ⇒ คงเหลือ 0
+    const adv2 = await seedAdvance({ approved: 200_000, used: 150_000, status: 'cleared', clearedAt: '2026-06-15T03:00:00Z' })
+    const june = await seedBatch({ name: 'PB-U94-JUN', status: 'completed', paidAt: '2026-06-10T03:00:00Z' })
+    await seedItem({ batchId: june, advanceId: adv2, gross: 200_000 })
+    const offsetBatch = await seedBatch({ name: 'PB-U94-OFF', status: 'completed', paidAt: '2026-06-25T03:00:00Z' })
+    const offsetExpense = await seedExpense({ gross: 100_000, date: '2026-06-20', status: 'approved' })
+    const offsetItem = await seedItem({ batchId: offsetBatch, expenseId: offsetExpense, gross: 100_000 })
+    await db().$executeRawUnsafe(`
+      INSERT INTO advance_returns (organization_id, advance_id, payee_id, channel, amount_satang, received_date,
+                                   evidence_file_path, created_by)
+      VALUES ('${ORG_ID}', '${adv2}', '${U94_PAYEE}', 'cash', 20000, '2026-06-20', 'advances/x/cash.jpg', '${USER_ID}')
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO advance_returns (organization_id, advance_id, payee_id, channel, amount_satang, payout_batch_id,
+                                   payout_batch_item_id, created_by)
+      VALUES ('${ORG_ID}', '${adv2}', '${U94_PAYEE}', 'payout_offset', 30000, '${offsetBatch}', '${offsetItem}', '${USER_ID}')
+    `)
+    // ใบ 3: จ่ายและเคลียร์ (ใช้ครบ) เดือนกรกฎาคม ⇒ ไม่มีผลกับงวดมิถุนายน
+    // (เงินทดรองที่ยังเปิดอยู่ได้คนละ 1 ใบ — ใบนี้จึงเป็น `cleared`)
+    const adv3 = await seedAdvance({ approved: 50_000, used: 50_000, status: 'cleared', clearedAt: '2026-07-10T03:00:00Z' })
+    const july = await seedBatch({ name: 'PB-U94-JUL', status: 'completed', paidAt: '2026-07-02T03:00:00Z' })
+    await seedItem({ batchId: july, advanceId: adv3, gross: 50_000 })
+
+    const { advanceRef } = await import('@/lib/advances/advance')
+    const june2569 = csvRows(await exportsApi.buildAdvanceBalancePackFile(ORG_ID, 2569, 6))
+    expect(june2569).toEqual([
+      'payee,payee_tax_id,opening_baht,paid_baht,cleared_baht,returned_offset_baht,returned_direct_baht,closing_baht,advance_refs',
+      `อนุชา ค้างจ่าย,3100000009400,3000.00,2000.00,1500.00,300.00,200.00,3000.00,${[advanceRef(adv1), advanceRef(adv2)].sort().join(' ')}`,
+    ])
+    // งวดถัดไป: ยกมา = คงเหลือของงวดก่อน (ต่อเนื่อง) + จ่ายใบ 3
+    const july2569 = csvRows(await exportsApi.buildAdvanceBalancePackFile(ORG_ID, 2569, 7))
+    expect(july2569[1]).toBe(
+      `อนุชา ค้างจ่าย,3100000009400,3000.00,500.00,500.00,0.00,0.00,3000.00,${[advanceRef(adv1), advanceRef(adv3)].sort().join(' ')}`,
+    )
+  })
+})
+
+suite('มติ PO U94 ข้อ 4/5 · U96 #15 — ยอดรวมควบคุม · หลักฐานรายจ่าย · PDF ใน zip · เพดาน', () => {
+  function packFile(version: number, suffix: string): string {
+    const path = [...storage.keys()].find((key) => key.includes(`/v${version}/`) && key.endsWith(suffix)) ?? ''
+    return fileAt(path)
+  }
+
+  function columnTotal(csv: string, column: string): { rows: number; satang: number } {
+    const [header, ...rows] = csvRows(csv)
+    const index = (header ?? '').split(',').indexOf(column)
+    expect(index, column).toBeGreaterThanOrEqual(0)
+    const satang = rows
+      .map((row) => row.split(',')[index] ?? '-')
+      .map((cell) => (cell === '-' ? 0 : Math.round(Number(cell) * 100)))
+      .reduce((sum, value) => sum + value, 0)
+    return { rows: rows.length, satang }
+  }
+
+  it('00_Control_Totals.csv ตรงกับจำนวนแถว/ผลรวมคอลัมน์ของไฟล์ในชุดเดียวกันทุกบรรทัด · 03 มีหลักฐานรายจ่าย', async () => {
+    await resetOrgData()
+    await seedU94Payee()
+    await seedCompletedBatch([
+      { payeeId: PAYEE_ID, gross: 850000, wht: 25500 },
+      { payeeId: PAYEE_ID, gross: 120000, wht: 3600 },
+    ])
+    await seedRevenue()
+    await seedExpense({ gross: 60_000, date: '2026-06-28', status: 'approved' })
+    const periodId = await junePeriodId()
+    const record = await exportsApi.createExportPack(ctx, { periodId })
+
+    const control = csvRows(packFile(record.version, '00_Control_Totals.csv'))
+    expect(control[0]).toBe('section,file,item,description,row_count,amount_baht')
+    const fileLines = control.slice(1).map((line) => line.split(',')).filter((cells) => cells[0] === 'file')
+    // ทุกไฟล์ 01–16 มีบรรทัดควบคุม
+    expect(new Set(fileLines.map((cells) => cells[1])).size).toBe(16)
+    let checked = 0
+    for (const [, fileName, item, , rowCount, amount] of fileLines) {
+      if (fileName === undefined || fileName.endsWith('.xlsx') || item === undefined || item.includes('[')) continue
+      const total = columnTotal(packFile(record.version, fileName), item)
+      expect(total.rows, `${fileName} rows`).toBe(Number(rowCount))
+      expect(total.satang, `${fileName}:${item}`).toBe(Math.round(Number(amount) * 100))
+      checked += 1
+    }
+    expect(checked).toBeGreaterThan(25)
+    const summary = new Map(
+      control
+        .slice(1)
+        .map((line) => line.split(','))
+        .filter((cells) => cells[0] === 'summary')
+        .map((cells) => [cells[2], cells[5]] as const),
+    )
+    expect(summary.get('revenue_before_vat')).toBe('12000.00')
+    expect(summary.get('wht_withheld')).toBe('291.00')
+    expect(summary.get('payout_transfer')).toBe('9409.00')
+    expect(summary.get('accrued_expenses')).toBe('600.00')
+    expect(summary.get('unbilled_revenue')).toBe('12000.00')
+
+    // U96 #15 — หลักฐานรายจ่ายต่อท้าย: expense_id/วันทำงาน/วันจ่าย/รอบ/ใบสำคัญจ่าย (เลขเดียวกับไฟล์ 04)/เคส/ใบเสร็จ
+    const expenses = csvRows(packFile(record.version, '03_Expenses.csv'))
+    expect(expenses[0]).toBe(
+      'payee,category,gross_baht,wht_baht,net_baht,receipt_in_company_name,expense_id,work_date,payment_date,payout_batch_ref,voucher_ref,case_ref,cost_center,receipt_file',
+    )
+    const payments = csvRows(packFile(record.version, '04_Payments.csv'))
+    const voucherRef = payments[1]?.split(',')[5]
+    for (const row of expenses.slice(1)) {
+      const cells = row.split(',')
+      expect(cells[6]).toMatch(/^[0-9a-f-]{36}$/)
+      expect(cells.slice(7)).toEqual(['20/06/2569', '25/06/2569', cells[9], voucherRef, 'SF-2026-04600', '-', 'ok.jpg'])
+    }
+
+    // หน้าปกเป็น PDF ที่ประกอบได้ (มีตารางยอดรวมควบคุม — ตรวจเนื้อหาที่ pure test)
+    expect(decoder.decode(storage.get([...storage.keys()].find((key) => key.endsWith('00_Cover_Sheet.pdf')) ?? '')?.subarray(0, 5))).toBe('%PDF-')
+  })
+
+  it('เพดานร่วมทุกโฟลเดอร์ ⇒ แนบเท่าที่ได้ตามลำดับ (เอกสารภาษีก่อน) · ที่เหลืออยู่ใน NOT_ATTACHED.txt ของโฟลเดอร์ · CSV ครบ', async () => {
+    const periodId = await junePeriodId()
+    const limited = await exportsApi.createExportPack(ctx, { periodId }, { pdfBudget: { limit: 3 } })
+    expect(limited.versionLabel).toBe('v1.1')
+    const zip = storage.get([...storage.keys()].find((key) => key.includes('/v2/') && key.endsWith('.zip')) ?? '') ?? new Uint8Array()
+    const names = zipEntryNames(zip)
+    // 50 ทวิ 2 ใบ (ต่อรายการ) + ใบสำคัญจ่าย 1 ไฟล์ = 3 · สลิปไม่ได้แนบ
+    expect(names.filter((name) => name.startsWith('wht_certificates/') && name.endsWith('.pdf'))).toHaveLength(2)
+    expect(names).not.toContain('wht_certificates/NOT_ATTACHED.txt')
+    const batchRef = (names.find((name) => name.startsWith('vouchers/PV-')) ?? '').replace(/^vouchers\/PV-|\.pdf$/g, '')
+    expect(batchRef).toMatch(/^PB-4\.6-\d+-KEY$/)
+    expect(names.filter((name) => name.startsWith('vouchers/'))).toEqual([
+      `vouchers/PV-${batchRef}.pdf`,
+      'vouchers/NOT_ATTACHED.txt',
+    ])
+    const note = decoder.decode(zipEntryBytes(zip, 'vouchers/NOT_ATTACHED.txt') ?? new Uint8Array())
+    expect(note).toContain(`SLIP-${batchRef}`)
+    expect(note).toContain('04_Payments.csv')
+    // CSV ของงวดยังครบเหมือนชุดก่อน (เพดานไม่ตัดข้อมูล)
+    expect(packFile(2, '04_Payments.csv')).toBe(packFile(1, '04_Payments.csv'))
+
+    // version ใหม่ไม่ทับของเดิม — ไฟล์ของ v1 ยังอยู่ครบและไม่เปลี่ยน
+    const v1Zip = [...storage.keys()].find((key) => key.includes('/v1/') && key.endsWith('.zip')) ?? ''
+    expect(zipEntryNames(storage.get(v1Zip) ?? new Uint8Array())).toContain(`vouchers/SLIP-${batchRef}.pdf`)
+
+    const audit = await db().$queryRawUnsafe<
+      { after_data: { attachments?: { vouchers?: { attached: number; not_attached: string[] } } } }[]
+    >(`SELECT after_data FROM audit_logs WHERE target_type = 'export_records' AND target_id = '${limited.id}'`)
+    expect(audit[0]?.after_data.attachments?.vouchers).toEqual({ attached: 1, not_attached: [`SLIP-${batchRef}`] })
   })
 })
