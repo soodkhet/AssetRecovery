@@ -17,6 +17,7 @@
 | v3.1 | 04/07/2569 | **เติม §6.8**: `WHT_CANCEL_REQUIRES_REASON` ตามไฟล์ 33 v3 (DEC-006/D4 — กลไกยกเลิก WHT Certificate) |
 | v4.21 | 05/10/2569 | **เติม §6.9 ตามมติ PO 05/10/2569 (U6/O43 D5 — Client Portal)**: `COMPANY_SUSPENDED` (403) — ผู้ใช้บริษัทไฟแนนซ์ที่บริษัทถูกระงับ (`finance_companies.status ≠ active`) เรียกพอร์ทัล ⇒ ปฏิเสธทุก request (เช็คทุกครั้ง ไม่ใช่เฉพาะตอน login) · ผู้ใช้ที่ถูกปิดใช้งานเองยังใช้ `ACCOUNT_INACTIVE` เดิม · id สุ่ม/ข้ามบริษัทใช้ `PERMISSION_DENIED` เดิม (D3 — ไม่ leak) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) |
 | v4.22 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8 — ค่าตั้งภาษีหัก ณ ที่จ่าย)**: เติม §6.2 `WHT_POLICY_EFFECTIVE_DATE_PAST` (วันที่มีผลของค่าตั้งย้อนหลังไม่ได้) · เติม §6.5 `WHT_40_2_RATE_MISSING` (ผู้รับ 40(2) ไม่มีอัตราหักต่อคน ⇒ ปัดการสร้างรอบพร้อมรายชื่อ) · ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) |
+| v4.23 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก)**: เติม §6.8 `CREDIT_NOTE_NOT_FOUND` (404), `CREDIT_NOTE_INVALID_STATUS`, `CREDIT_NOTE_NUMBER_DUPLICATE` (409), `CREDIT_NOTE_EXCEEDS_INVOICE`, `CREDIT_NOTE_VAT_MISMATCH`, `CREDIT_NOTE_DATE_BEFORE_INVOICE`, `CREDIT_NOTE_ADJUSTMENT_MISMATCH` · ใช้ซ้ำ `CANCEL_REQUIRES_REASON` (ยกเลิกใบลดหนี้) / `TAX_INVOICE_INVALID_STATUS` (อ้างใบกำกับที่ยกเลิกแล้ว) / `PERIOD_LOCKED_DIRECT_EDIT` (วันที่ใบลดหนี้อยู่ในงวดที่ล็อก) · ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) |
 | v4.20 | 04/10/2569 | **เติม §6.8 (UAT R7cv3-B01)**: `EXPORT_STORAGE_FAILED` (502) — อัปโหลดไฟล์ Accounting Pack เข้า Storage ไม่สำเร็จ ⇒ ลบไฟล์ที่อัปขึ้นไปแล้วของครั้งนั้น (best-effort) ไม่สร้าง `export_records` แล้วตอบ code นี้แทน 500 body ว่าง · `37` §11 ไม่มี code สำหรับกรณีที่เก็บไฟล์ล้ม |
 | v4.19 | 03/10/2569 | **เติม §6.3 ตามมติ PO 03/10/2569 (UAT Q13 · BUG-037/050 · หนี้ #1)**: `UPLOAD_PATH_OUT_OF_SCOPE`, `UPLOAD_FILE_NOT_FOUND`, `UPLOAD_HASH_MISMATCH`, `UPLOAD_FILE_TYPE_INVALID`, `UPLOAD_FILE_TOO_LARGE` — server ตรวจไฟล์ที่ browser อัปโหลดขึ้น Storage เองก่อนผูกกับข้อมูล (เอกสารเคส `38` · หลักฐานปิดงาน `41` · รูปรับเข้าคลัง + เอกสารล็อต `44`) · เดิมไม่มี code กลุ่มนี้เพราะ server เชื่อ path/hash จาก browser · ใช้ร่วมหลายโมดูลจึงวางในหมวดไฟล์ · ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) · reject ทั้งหมด (รายชื่อ "เตือนไม่บล็อก" ไม่เปลี่ยน) |
 | v4.18 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q12 · BUG-009)** — ขยายความหมาย `INVALID_TEAM_MEMBER` (§6.1) ให้ครอบคลุมหัวหน้า/ผู้จัดการที่ไม่ใช่ role ของฝั่งเดียวกับทีม · แผนค่าตอบแทนคนละฝั่งกับทีมใช้ `REQUIRED_MISSING` + field error (ไม่ตั้ง code ใหม่) |
@@ -204,7 +205,14 @@
 | TAX_INVOICE_INVALID_STATUS | ยกเลิกใบที่ `cancelled` ไปแล้ว หรือพยายามย้อนสถานะ (`31` §9.1 — `cancelled` เป็น terminal) | 31 |
 | TAX_INVOICE_ALREADY_ISSUED | ออกใบกำกับภาษีให้รายการขายที่มีใบ `active` อยู่แล้ว (ต้องยกเลิกใบเดิมก่อน) | 31 |
 | INVOICE_NUMBER_GAP | generate invoice_number ไม่ต่อเนื่อง (ไม่ควรเกิดในทางปฏิบัติ) | 31 |
-| CANCEL_REQUIRES_REASON | ยกเลิกใบกำกับภาษีโดยไม่ระบุเหตุผล | 31 |
+| CANCEL_REQUIRES_REASON | ยกเลิกใบกำกับภาษี (หรือใบลดหนี้) โดยไม่ระบุเหตุผล | 31 |
+| CREDIT_NOTE_NOT_FOUND | อ้างใบลดหนี้ที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 31 |
+| CREDIT_NOTE_INVALID_STATUS | ยกเลิกใบลดหนี้ที่ `cancelled` ไปแล้ว (terminal — ห้ามลบ/ห้าม reverse) | 31 |
+| CREDIT_NOTE_NUMBER_DUPLICATE | บันทึกใบลดหนี้เลขที่ซ้ำกับใบ `active` ในองค์กรเดียวกัน (409) | 31 |
+| CREDIT_NOTE_EXCEEDS_INVOICE | ยอดใบลดหนี้ `active` รวมของใบกำกับหนึ่งใบเกินยอดใบกำกับ (ก่อน VAT หรือยอดรวม) | 31 |
+| CREDIT_NOTE_VAT_MISMATCH | VAT ที่กรอกต่างจาก มูลค่าที่ลด × `vat_rate_used` ของใบกำกับเดิม เกิน 1 สตางค์ หรือรอบวางบิลมีหลายอัตรา VAT | 31, 22 |
+| CREDIT_NOTE_DATE_BEFORE_INVOICE | วันที่ใบลดหนี้ก่อนวันที่ใบกำกับภาษีที่อ้างถึง | 31 |
+| CREDIT_NOTE_ADJUSTMENT_MISMATCH | อ้าง Adjustment ที่ไม่ใช่ `decrease` + `approved` ของรอบวางบิลเดียวกัน หรือมีใบลดหนี้ `active` อ้างถึงแล้ว | 31, 20 |
 | EDIT_AMOUNT_DIRECTLY | แก้ยอดเงินตรงในไฟล์ 32 (ต้องผ่าน Adjustment) | 32 |
 | COST_CENTER_AUTO_EDIT | แก้ cost_center ของรายการที่ mapping_rule = auto | 32 |
 | EXPENSE_RECORD_NOT_FOUND | อ้างรายการค่าใช้จ่ายที่ไม่มีในองค์กรของผู้เรียก (404 — ไม่ leak ข้ามองค์กร) | 32 |

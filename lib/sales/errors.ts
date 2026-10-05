@@ -21,6 +21,14 @@ export const SALES_ERROR_CODES = [
   'TAX_INVOICE_FIELD_MISSING',
   'INVOICE_NUMBER_GAP',
   'CANCEL_REQUIRES_REASON',
+  // ใบลดหนี้ที่สำนักงานบัญชีออก (มติ PO 05/10/2569 U14 — `24` §6.8 v4.23)
+  'CREDIT_NOTE_NOT_FOUND',
+  'CREDIT_NOTE_INVALID_STATUS',
+  'CREDIT_NOTE_NUMBER_DUPLICATE',
+  'CREDIT_NOTE_EXCEEDS_INVOICE',
+  'CREDIT_NOTE_VAT_MISMATCH',
+  'CREDIT_NOTE_DATE_BEFORE_INVOICE',
+  'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
 ] as const
 
 export type SalesErrorCode = (typeof SALES_ERROR_CODES)[number]
@@ -37,6 +45,13 @@ const HTTP_STATUS: Record<SalesErrorCode, number> = {
   TAX_INVOICE_FIELD_MISSING: 400,
   INVOICE_NUMBER_GAP: 500,
   CANCEL_REQUIRES_REASON: 400,
+  CREDIT_NOTE_NOT_FOUND: 404,
+  CREDIT_NOTE_INVALID_STATUS: 400,
+  CREDIT_NOTE_NUMBER_DUPLICATE: 409,
+  CREDIT_NOTE_EXCEEDS_INVOICE: 400,
+  CREDIT_NOTE_VAT_MISMATCH: 400,
+  CREDIT_NOTE_DATE_BEFORE_INVOICE: 400,
+  CREDIT_NOTE_ADJUSTMENT_MISMATCH: 400,
 }
 
 const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
@@ -69,7 +84,37 @@ const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
   },
   CANCEL_REQUIRES_REASON: {
     title: 'ต้องระบุเหตุผลที่ยกเลิก',
-    message: 'การยกเลิกใบกำกับภาษีต้องระบุเหตุผลเสมอ เพื่อเก็บไว้ในหลักฐานทางบัญชี',
+    message: 'การยกเลิกใบกำกับภาษีหรือใบลดหนี้ต้องระบุเหตุผลเสมอ เพื่อเก็บไว้ในหลักฐานทางบัญชี',
+  },
+  CREDIT_NOTE_NOT_FOUND: {
+    title: 'ไม่พบใบลดหนี้',
+    message: 'ไม่พบใบลดหนี้นี้ หรือคุณไม่มีสิทธิ์เข้าถึงเอกสารนี้',
+  },
+  CREDIT_NOTE_INVALID_STATUS: {
+    title: 'สถานะใบลดหนี้ไม่รองรับ',
+    message: 'ใบลดหนี้ที่ยกเลิกไปแล้วยกเลิกซ้ำไม่ได้ และย้อนกลับเป็นใช้งานไม่ได้',
+  },
+  CREDIT_NOTE_NUMBER_DUPLICATE: {
+    title: 'เลขที่ใบลดหนี้ซ้ำ',
+    message: 'มีใบลดหนี้เลขที่นี้ที่ใช้งานอยู่แล้ว — ตรวจเลขที่ตามเอกสารของสำนักงานบัญชีอีกครั้ง',
+  },
+  CREDIT_NOTE_EXCEEDS_INVOICE: {
+    title: 'ยอดใบลดหนี้เกินยอดใบกำกับภาษี',
+    message: 'ยอดใบลดหนี้รวมทุกใบของใบกำกับนี้ต้องไม่เกินยอดของใบกำกับภาษีที่อ้างถึง',
+  },
+  CREDIT_NOTE_VAT_MISMATCH: {
+    title: 'ภาษีมูลค่าเพิ่มของใบลดหนี้ไม่สอดคล้อง',
+    message:
+      'ภาษีที่ลดต้องเท่ากับมูลค่าที่ลดคูณอัตราภาษีของใบกำกับเดิม (คลาดได้ไม่เกิน 1 สตางค์) — ตรวจยอดตามเอกสารอีกครั้ง',
+  },
+  CREDIT_NOTE_DATE_BEFORE_INVOICE: {
+    title: 'วันที่ใบลดหนี้ก่อนวันที่ใบกำกับภาษี',
+    message: 'ใบลดหนี้ต้องออกในวันเดียวกันหรือหลังวันที่ของใบกำกับภาษีที่อ้างถึง',
+  },
+  CREDIT_NOTE_ADJUSTMENT_MISMATCH: {
+    title: 'รายการปรับปรุงที่อ้างถึงใช้กับใบลดหนี้นี้ไม่ได้',
+    message:
+      'รายการปรับปรุงต้องเป็นการลดยอดที่อนุมัติแล้ว ของรอบวางบิลเดียวกับใบกำกับภาษี และยังไม่มีใบลดหนี้อื่นอ้างถึง',
   },
 }
 
