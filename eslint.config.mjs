@@ -18,6 +18,7 @@ const eslintConfig = [
       'lib/generated/**',
       // สคริปต์ชั่วคราวที่ role agent ของ UAT เขียนต่อรอบ (uat/bin/r1/, r2/ …) — เครื่องมือกลาง uat/bin/*.mjs ยังถูก lint
       'uat/bin/r*/**',
+      'uat/bin/*/**', // สคริปต์ต่อรอบอื่น ๆ (storage-after/ ฯลฯ) — เครื่องมือกลางที่ uat/bin/*.mjs ระดับบนยังถูก lint
     ],
   },
   ...nextCoreWebVitals,
