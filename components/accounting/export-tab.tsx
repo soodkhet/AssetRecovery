@@ -173,7 +173,7 @@ export function ExportTab() {
         </div>
         <div className="mt-2 text-xs">
           Version Control: Export ซ้ำรอบเดียวกันได้ — ระบบเดินเวอร์ชันให้เอง (v1.0 → v1.1 → v1.2) ไม่เขียนทับของเดิม ·
-          ระบบสร้างไฟล์ CSV/XLSX ตามรูปแบบที่กำหนด
+          ระบบสร้างไฟล์ CSV/XLSX ตามรูปแบบที่กำหนด · สำเนา PDF ใบกำกับภาษีของรอบอยู่ในโฟลเดอร์ tax_invoices/ ของไฟล์ .zip
         </div>
       </InlineAlert>
 

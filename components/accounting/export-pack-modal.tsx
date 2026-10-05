@@ -121,7 +121,9 @@ export function ExportPackModal({
               </div>
             ))}
           </div>
-          <div className="mt-3 text-[10px] text-slate-400">+ หน้าปกชุดเอกสาร (00_Cover_Sheet.pdf) พร้อมค่า SHA-256</div>
+          <div className="mt-3 text-[10px] text-slate-400">
+            + หน้าปกชุดเอกสาร (00_Cover_Sheet.pdf) พร้อมค่า SHA-256 · สำเนา PDF ใบกำกับภาษีของรอบในโฟลเดอร์ tax_invoices/
+          </div>
         </div>
 
         <Field label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บลง audit log คู่กับรายชื่อไฟล์และเวอร์ชัน">

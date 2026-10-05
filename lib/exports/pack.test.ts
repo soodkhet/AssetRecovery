@@ -37,6 +37,14 @@ import {
   customerWhtCsv,
   SUSPENSE_HEADERS,
   suspenseCsv,
+  ADVANCE_RETURN_HEADERS,
+  advanceReturnCsv,
+  evidenceFileName,
+  TAX_INVOICE_HEADERS,
+  taxInvoiceCsv,
+  taxInvoiceNotAttachedText,
+  taxInvoicePdfEntryName,
+  vatRatesText,
   EXPENSE_HEADERS,
   PACK_COVER_FILE_NAME,
   PACK_FILES,
@@ -59,8 +67,8 @@ function sampleHeader(fileName: string): string[] {
 }
 
 describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', () => {
-  it('ครบ 11 ไฟล์ เลข 01–11 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41)', () => {
-    expect(PACK_FILES).toHaveLength(11)
+  it('ครบ 13 ไฟล์ เลข 01–13 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68)', () => {
+    expect(PACK_FILES).toHaveLength(13)
     expect(PACK_FILES.map((file) => file.no)).toEqual([
       '01',
       '02',
@@ -73,6 +81,8 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '09',
       '10',
       '11',
+      '12',
+      '13',
     ])
     expect(PACK_FILES.map((file) => file.fileName)).toEqual([
       '01_Revenue.csv',
@@ -86,6 +96,8 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '09_Credit_Notes.csv',
       '10_Customer_WHT.csv',
       '11_Suspense_Receipts.csv',
+      '12_Tax_Invoices.csv',
+      '13_Advance_Returns.csv',
     ])
     expect(PACK_FILES.filter((file) => file.kind === 'xlsx').map((file) => file.no)).toEqual(['08'])
   })
@@ -165,6 +177,8 @@ describe('หัวคอลัมน์ตรงกับ reference/samples ท
     ['09_Credit_Notes.csv', CREDIT_NOTE_HEADERS],
     ['10_Customer_WHT.csv', CUSTOMER_WHT_HEADERS],
     ['11_Suspense_Receipts.csv', SUSPENSE_HEADERS],
+    ['12_Tax_Invoices.csv', TAX_INVOICE_HEADERS],
+    ['13_Advance_Returns.csv', ADVANCE_RETURN_HEADERS],
   ])('%s', (fileName, headers) => {
     expect(sampleHeader(fileName)).toEqual([...headers])
   })
@@ -631,5 +645,121 @@ describe('11_Suspense_Receipts.csv (มติ PO 05/10/2569 U41)', () => {
     expect(lines[2]).toBe(
       '25/09/2569,TRF IN SCB,500.00,25/09/2569,โอนผิดบัญชี,suspense_refunded,-,27/09/2569,"คืนตามคำขอ, มีสลิป"',
     )
+  })
+})
+
+describe('12_Tax_Invoices.csv (มติ PO 05/10/2569 U57)', () => {
+  const base = {
+    companyName: 'บริษัท สยามไฟแนนซ์ จำกัด',
+    companyTaxId: '0105555000111',
+    amountBeforeVatSatang: 373_000,
+    vatSatang: 26_110,
+    totalSatang: 399_110,
+    vatRatesPct: ['7', '7.00'],
+    billingRef: '2569-06',
+  }
+
+  it('ใบปกติ / ใบยกเลิก (+ วันที่ เหตุผล ใบแทน) — ยอดจาก snapshot · วันที่ พ.ศ. · status = enum ดิบ', () => {
+    const csv = taxInvoiceCsv([
+      {
+        ...base,
+        invoiceNumber: 'INV-2569-0014',
+        invoiceDate: new Date('2026-06-30T00:00:00Z'),
+        status: 'active',
+        cancelledAt: null,
+        cancelReason: null,
+        replacedBy: null,
+        pdfFile: 'tax_invoices/INV-2569-0014.pdf',
+      },
+      {
+        ...base,
+        companyTaxId: '0-1055-55000-11-1',
+        invoiceNumber: 'INV-2569-0015',
+        invoiceDate: new Date('2026-06-30T00:00:00Z'),
+        status: 'cancelled',
+        // 03/07/2569 01:00 เวลาไทย
+        cancelledAt: new Date('2026-07-02T18:00:00Z'),
+        cancelReason: 'ที่อยู่ผิด, ออกใหม่',
+        replacedBy: 'INV-2569-0016',
+        pdfFile: null,
+      },
+    ])
+    const lines = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(lines[0]).toBe(TAX_INVOICE_HEADERS.join(','))
+    expect(lines[1]).toBe(
+      'INV-2569-0014,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0014.pdf',
+    )
+    expect(lines[2]).toBe(
+      'INV-2569-0015,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,cancelled,03/07/2569,"ที่อยู่ผิด, ออกใหม่",INV-2569-0016,-',
+    )
+  })
+
+  it('อัตรา VAT — ไม่ซ้ำ เรียงน้อยไปมาก · ไม่มีรายได้ผูก ⇒ -', () => {
+    expect(vatRatesText(['7.00', '10', '7'])).toBe('7.00 10.00')
+    expect(vatRatesText([])).toBe('-')
+  })
+
+  it('ชื่อ PDF ใน zip อยู่ใต้ tax_invoices/ และตัดอักขระที่ใช้ตั้งชื่อไฟล์ไม่ได้', () => {
+    expect(taxInvoicePdfEntryName('INV-2569-0014')).toBe('tax_invoices/INV-2569-0014.pdf')
+    expect(taxInvoicePdfEntryName('INV/2569 0014')).toBe('tax_invoices/INV_2569_0014.pdf')
+  })
+
+  it('รายชื่อใบที่ไม่ได้แนบ PDF ระบุจำนวนและเลขที่ครบ', () => {
+    const text = taxInvoiceNotAttachedText(['INV-1', 'INV-2'])
+    expect(text).toContain('2 ใบ')
+    expect(text).toContain('INV-1\r\nINV-2')
+  })
+})
+
+describe('13_Advance_Returns.csv (มติ PO 05/10/2569 U68)', () => {
+  it('หักกลบในรอบจ่าย / รับเงินสด / โอนแล้วกลับรายการ', () => {
+    const csv = advanceReturnCsv([
+      {
+        returnDate: new Date('2026-07-10T03:00:00Z'),
+        advanceRef: 'ADV-3F2A9C1B',
+        payeeName: 'สมชาย ใจดี',
+        amountSatang: 55_000,
+        channel: 'payout_offset',
+        payoutBatchRef: 'PB-2569-07-01',
+        evidenceFilePath: null,
+        reversedAt: null,
+        reversalReason: null,
+      },
+      {
+        returnDate: new Date('2026-07-15T00:00:00Z'),
+        advanceRef: 'ADV-7D41E0AA',
+        payeeName: 'ประยุทธ์ บุญมี',
+        amountSatang: 120_000,
+        channel: 'cash',
+        payoutBatchRef: null,
+        evidenceFilePath: 'advances/abc/returns/receipt-cash-0715.jpg',
+        reversedAt: null,
+        reversalReason: null,
+      },
+      {
+        returnDate: new Date('2026-07-20T00:00:00Z'),
+        advanceRef: 'ADV-91BC22F0',
+        payeeName: 'สมหญิง รักงาน',
+        amountSatang: 30_000,
+        channel: 'bank_transfer',
+        payoutBatchRef: 'ไม่ควรออก',
+        evidenceFilePath: 'advances/def/returns/slip-0720.pdf',
+        reversedAt: new Date('2026-07-22T04:00:00Z'),
+        reversalReason: 'บันทึกยอดซ้ำกับรายการเดิม',
+      },
+    ])
+    const lines = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(lines[0]).toBe(ADVANCE_RETURN_HEADERS.join(','))
+    expect(lines[1]).toBe('10/07/2569,ADV-3F2A9C1B,สมชาย ใจดี,550.00,payout_offset,PB-2569-07-01,-,active,-,-')
+    expect(lines[2]).toBe('15/07/2569,ADV-7D41E0AA,ประยุทธ์ บุญมี,1200.00,cash,-,receipt-cash-0715.jpg,active,-,-')
+    expect(lines[3]).toBe(
+      '20/07/2569,ADV-91BC22F0,สมหญิง รักงาน,300.00,bank_transfer,-,slip-0720.pdf,reversed,22/07/2569,บันทึกยอดซ้ำกับรายการเดิม',
+    )
+  })
+
+  it('ชื่อไฟล์หลักฐาน = ชื่อไฟล์เท่านั้น ไม่เปิดเผย path ใน bucket', () => {
+    expect(evidenceFileName('a/b/c.jpg')).toBe('c.jpg')
+    expect(evidenceFileName(null)).toBeNull()
+    expect(evidenceFileName('a/')).toBeNull()
   })
 })
