@@ -258,6 +258,8 @@ export interface FieldExpenseDto {
   hotelNights: number
   /** เพดานต่อคืนจาก snapshot แผนของใบเบิกค่าที่พัก — `null` = ไม่ตั้งเพดาน/ไม่ใช่ค่าที่พัก */
   hotelMaxPerNightSatang: number | null
+  /** ใบเสร็จค่าที่พักออกในนามบริษัท (มติ PO U96 #14) — รายการชนิดอื่น = false เสมอ */
+  receiptInCompanyName: boolean
   /** auto-mapping เคสที่ลงพื้นที่ในช่วงวันที่พัก (วันเข้าพัก … + จำนวนคืน − 1) — **ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด** (`41` §6.6) */
   matchedCaseIds: string[]
   createdAt: string

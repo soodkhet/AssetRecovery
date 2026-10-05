@@ -74,7 +74,7 @@ export const REPORT_DEFINITIONS: readonly ReportDefinition[] = [
   {
     code: 'F5',
     id: 'advance-overdue',
-    title: 'เงินทดรองค้างเคลียร์',
+    title: 'อายุเงินทดรองคงค้าง',
     category: 'F',
     cacheMode: 'realtime',
     path: '/api/reports/finance/advance-overdue',

@@ -56,6 +56,8 @@
 | v4.33 | 06/10/2569 | **มติ PO 06/10/2569 (U90 — audit การเปิดไฟล์ข้อมูลส่วนบุคคล)**: enum `audit_action` เพิ่มค่า `view` — เปิดเอกสารเคสของลูกหนี้/50 ทวิ ลูกค้า ผ่าน signed URL (`90` §6.2/§13) · migration `20261006110000_audit_action_view` (`ALTER TYPE … ADD VALUE`) · **มติ PO U89 (เพดานค่าที่พัก)** ไม่เพิ่มคอลัมน์ — snapshot ใช้ `expenses.comp_plan_id` + `comp_plan_version` ที่มีอยู่ (ใบเบิกค่าที่พักผูกแผนเวอร์ชันที่ใช้ตรวจเพดาน) |
 | v4.34 | 06/10/2569 | **มติ PO O50 (ต่อจาก U89) — จำนวนคืนของใบเบิกค่าที่พัก**: `expenses.hotel_nights INTEGER NOT NULL DEFAULT 1` (migration `20261006120000_expense_hotel_nights`) + CHECK `chk_expenses_hotel_nights_range` (1–31) และ `chk_expenses_hotel_nights_hotel_only` (`expense_type = 'hotel'` หรือ = 1) · เพดานค่าที่พัก = `hotel_max_per_night_satang` × `hotel_nights` (`22` §6.15 · `41` §6.6) · แก้ได้ตอน `resubmit_expense` · auto-mapping `matched_case_ids` ครอบช่วง `expense_date` … `expense_date + hotel_nights − 1` |
 | v4.35 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93) — ปฏิทินวันหยุด** (migration `20261006130000_public_holidays`): ตารางใหม่ `public_holidays` (`organization_id`, `holiday_date DATE`, `name` + common columns ครบ · soft delete) · partial unique `uniq_public_holidays_active_date (organization_id, holiday_date) WHERE deleted_at IS NULL` + CHECK `chk_public_holidays_name` (raw SQL) · index `idx_public_holidays_org_date` · ใช้เลื่อน `wht_filing_summaries.filing_due_date` ที่ตรงวันหยุด/เสาร์-อาทิตย์เป็นวันทำการถัดไป (`33` §7.2 — แทน "ไม่เลื่อนตามวันหยุด" ของ v4.23) · backfill รอบ `pending` ที่ตรงเสาร์/อาทิตย์ในไฟล์ migration เดียวกัน · capability ใหม่ `manage_holidays` (seed — §12) · ไม่มี enum ใหม่ |
+| v4.36 | 06/10/2569 | **มติ PO 06/10/2569 (U96 #14) — ใบเสร็จค่าที่พักในนามบริษัท** (migration `20261006140000_expense_receipt_in_company_name`): `expenses.receipt_in_company_name BOOLEAN NOT NULL DEFAULT false` + CHECK `chk_expenses_receipt_in_company_name_hotel_only` (`expense_type = 'hotel'` หรือ false) · ผู้เบิกติ๊กเอง (`41` §6.6) · ส่งออกใน `03_Expenses.csv` (`37` v2.12) ให้สำนักงานบัญชีพิจารณาฐาน WHT — **ไม่เปลี่ยนสูตร WHT** · ไม่มีตาราง/enum ใหม่ |
+| v4.37 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA) — ระยะเก็บเอกสารลูกหนี้** (migration `20261006150000_debtor_document_retention`): ตารางใหม่ `data_retention_settings` (1 record/org — PK `organization_id` · `debtor_document_retention_years INTEGER NOT NULL DEFAULT 5` CHECK `chk_data_retention_years_range` 1–20 · `updated_at`/`updated_by` แบบเดียวกับ `assignment_policy_settings`) · `cases.debtor_documents_purged_at TIMESTAMPTZ` · `case_documents.purged_at TIMESTAMPTZ` + CHECK `chk_case_documents_purged_deleted` (purged ⇒ `deleted_at` ไม่ว่าง) · ใช้โดย job `purge_debtor_documents` (`91` §6.1) ลบไฟล์บน Storage แล้วเก็บแถวไว้เป็นหลักฐาน · capability ใหม่ `manage_data_retention` (seed — §12) · ไม่มี enum ใหม่ |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -973,6 +975,7 @@ CREATE TABLE cases (
   -- Close
   outcome             case_outcome,
   closed_at           TIMESTAMPTZ,
+  debtor_documents_purged_at TIMESTAMPTZ,  -- v4.37 ไฟล์เอกสารลูกหนี้ถูกลบตามระยะเก็บ (PDPA มติ PO U97) — NULL = ยังไม่ลบ
   -- Audit
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by          UUID        NOT NULL REFERENCES users(id),
@@ -1003,7 +1006,9 @@ CREATE TABLE case_documents (
   size_bytes      INTEGER NOT NULL,
   uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   uploaded_by     UUID    NOT NULL REFERENCES users(id),
-  deleted_at      TIMESTAMPTZ
+  deleted_at      TIMESTAMPTZ,
+  purged_at       TIMESTAMPTZ,  -- v4.37 ไฟล์บน Storage ถูกลบตามระยะเก็บ (PDPA มติ PO U97) · แถวคงไว้เป็นหลักฐาน
+  CONSTRAINT chk_case_documents_purged_deleted CHECK (purged_at IS NULL OR deleted_at IS NOT NULL)
 );
 CREATE INDEX idx_case_docs_case ON case_documents(case_id, document_type);
 
@@ -1149,6 +1154,16 @@ CREATE TABLE assignment_policy_settings (
   sla_alert_hours                 INTEGER     NOT NULL DEFAULT 72 CHECK (sla_alert_hours > 0),
   updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by                      UUID        REFERENCES users(id)
+);
+
+-- ── data_retention_settings (v4.37) ─────────────────────────────
+-- ระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97 · ไฟล์ 13 §6.16) — 1 record ต่อ org · ไม่มีแถว = 5 ปี
+CREATE TABLE data_retention_settings (
+  organization_id                 UUID        PRIMARY KEY REFERENCES organizations(id),
+  debtor_document_retention_years INTEGER     NOT NULL DEFAULT 5,
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by                      UUID        REFERENCES users(id),
+  CONSTRAINT chk_data_retention_years_range CHECK (debtor_document_retention_years BETWEEN 1 AND 20)
 );
 
 -- ── check_ins ────────────────────────────────────────────────
@@ -1410,6 +1425,7 @@ CREATE TABLE expenses (
   distance_km           NUMERIC(10,2),      -- fuel โหมด PER_KM เท่านั้น (ไฟล์ 41 §6.4.2) — NULL สำหรับ DAILY_FLAT/allowance/เบิกแยก · ไม่ใช่เงิน
   shared_with_user_id   UUID    REFERENCES users(id),  -- ผู้พักร่วมห้อง (เบิกที่พัก) — ต้องเป็นคนในทีมเดียวกัน validate ฝั่ง service
   hotel_nights          INTEGER NOT NULL DEFAULT 1,     -- v4.34 จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50) — CHECK 1–31 · ชนิดอื่น = 1 เสมอ · เพดาน = อัตรา/คืน × จำนวนคืน
+  receipt_in_company_name BOOLEAN NOT NULL DEFAULT false,  -- v4.36 ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14) — CHECK ชนิดอื่น = false · ไม่เปลี่ยนสูตร WHT
   receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
   receipt_file_hash     VARCHAR(64),        -- v4.10 SHA-256 ของใบเสร็จที่ server ตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — BUG-072)
   superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)

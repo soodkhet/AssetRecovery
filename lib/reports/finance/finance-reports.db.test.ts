@@ -580,9 +580,9 @@ suite('F4 — ค่าใช้จ่ายตามใบเสร็จแย
   })
 })
 
-suite('F5 — เงินทดรองค้างเคลียร์', () => {
-  it('`96` §14 — ครบกำหนดวันนี้ยังไม่ขึ้นเกินกำหนด · ของวันก่อนหน้าขึ้นครบ ไม่ซ้ำ', async () => {
-    await seedAdvance({ payeeId: PAYEE_A, approvedSatang: 5_000_00, dueClearDate: '2026-08-15' })
+suite('F5 — อายุเงินทดรองคงค้าง (มติ U96 #18)', () => {
+  it('ยังไม่เคลียร์: ครบกำหนดวันนี้ยังไม่เกินกำหนด · ของวันก่อนหน้าเกิน — ทั้งสองใบอยู่ในรายงาน ไม่หาย ไม่ซ้ำ', async () => {
+    await seedAdvance({ payeeId: PAYEE_A, approvedSatang: 5_000_00, dueClearDate: '2026-08-15', status: 'approved' })
     await seedAdvance({
       payeeId: PAYEE_B,
       approvedSatang: 8_000_00,
@@ -592,16 +592,53 @@ suite('F5 — เงินทดรองค้างเคลียร์', () 
 
     const payload = await run('advance-overdue')
 
+    expect(payload.rows).toHaveLength(2)
+    const byPayee = new Map(payload.rows.map((row) => [row['payeeName'], row]))
+    expect(byPayee.get('สมหญิง 6.2')).toMatchObject({
+      teamName: 'ทีม B 6.2',
+      approvedSatang: 8_000_00,
+      outstandingSatang: 8_000_00,
+      // job ยังไม่พลิกสถานะ แต่รายงานต้องเห็น (ตัดสินจากวันครบกำหนดจริง)
+      statusLabel: 'เกินกำหนดเคลียร์ 5 วัน',
+    })
+    expect(byPayee.get('สมชาย 6.2')?.['statusLabel']).toBe('อนุมัติแล้ว — รอเคลียร์ยอด')
+    expect(kpiOf(payload, 'amount')).toBe(13_000_00)
+    expect(kpiOf(payload, 'overdueAmount')).toBe(8_000_00)
+    expect(kpiOf(payload, 'count')).toBe(2)
+  })
+
+  it('เคลียร์แล้วคืนบางส่วน: คงค้าง = ยอดคืน − ที่ได้คืน (ไม่นับแถวที่กลับรายการ) · อายุจากวันจ่ายของรอบที่โอนแล้ว · รายพนักงาน', async () => {
+    const advanceId = await seedAdvance({ payeeId: PAYEE_A, approvedSatang: 5_000_00, dueClearDate: '2026-07-20' })
+    await seedPayoutBatchWithItems([{ payeeId: PAYEE_A, advanceId, grossSatang: 5_000_00, netSatang: 5_000_00 }])
+    await db().$executeRawUnsafe(
+      `UPDATE payout_batches SET payment_file_generated_at = '2026-05-10T03:00:00Z' WHERE organization_id = '${ORG_ID}'`,
+    )
+    await db().$executeRawUnsafe(
+      `UPDATE advances SET status = 'cleared', used_satang = 300000, return_method = 'separate', cleared_at = now() WHERE id = '${advanceId}'`,
+    )
+    for (const [amount, reversed] of [[50_000, false], [70_000, true]] as const) {
+      await db().$executeRawUnsafe(`
+        INSERT INTO advance_returns (organization_id, advance_id, payee_id, channel, amount_satang, received_date,
+                                     evidence_file_path, reversed_at, reversed_by, reversal_reason, created_by)
+        VALUES ('${ORG_ID}', '${advanceId}', '${PAYEE_A}', 'cash', ${amount}, '2026-08-01', 'advance-returns/x.pdf',
+                ${reversed ? `now(), '${FINANCE_ID}', 'บันทึกผิด'` : 'NULL, NULL, NULL'}, '${FINANCE_ID}')
+      `)
+    }
+
+    const payload = await run('advance-overdue')
     expect(payload.rows).toHaveLength(1)
     expect(payload.rows[0]).toMatchObject({
-      payeeName: 'สมหญิง 6.2',
-      teamName: 'ทีม B 6.2',
-      amountSatang: 8_000_00,
-      overdueDays: 5,
-      // job ยังไม่พลิกสถานะ แต่รายงานต้องเห็น (ตัดสินจากวันครบกำหนดจริง)
-      statusLabel: 'อนุมัติแล้ว — รอเคลียร์ยอด',
+      paidAt: '2026-05-10T03:00:00.000Z',
+      approvedSatang: 5_000_00,
+      usedSatang: 3_000_00,
+      returnedSatang: 500_00,
+      outstandingSatang: 1_500_00,
+      ageDays: 97,
+      bucketLabel: '90+ วัน',
+      statusLabel: 'เคลียร์ยอดแล้ว — รอรับคืนยอดคงเหลือ',
     })
-    expect(kpiOf(payload, 'amount')).toBe(8_000_00)
-    expect(kpiOf(payload, 'count')).toBe(1)
+
+    const byPayee = await run('advance-overdue', { groupBy: 'payee' })
+    expect(byPayee.rows[0]).toMatchObject({ advanceCount: 1, outstandingSatang: 1_500_00, bucket3: 1_500_00 })
   })
 })

@@ -7,6 +7,7 @@ import { BankAccountsTab } from '@/components/settings/bank-accounts-tab'
 import { BankFileFormatsTab } from '@/components/settings/bank-file-formats-tab'
 import { CostCentersTab } from '@/components/settings/cost-centers-tab'
 import { CyclesTab } from '@/components/settings/cycles-tab'
+import { DataRetentionTab } from '@/components/settings/data-retention-tab'
 import { ExportFormatsTab } from '@/components/settings/export-formats-tab'
 import { FunctionalPermissionsTab } from '@/components/settings/functional-permissions-tab'
 import { HolidaysTab } from '@/components/settings/holidays-tab'
@@ -115,6 +116,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'sla' && <SlaPolicyTab />}
           {current?.id === 'assignment' && <AssignmentPolicyTab />}
           {current?.id === 'holidays' && <HolidaysTab />}
+          {current?.id === 'retention' && <DataRetentionTab />}
           {current !== undefined && !current.available && (
             <EmptyState
               title={current.label}

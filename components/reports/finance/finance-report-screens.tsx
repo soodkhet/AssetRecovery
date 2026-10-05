@@ -6,6 +6,11 @@ import { ReportBarChart } from '@/components/reports/report-bar-chart'
 import { ReportView, type ReportSlotContext } from '@/components/reports/report-view'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import {
+  ADVANCE_AGING_GROUP_BYS,
+  ADVANCE_AGING_GROUP_BY_LABEL,
+  type AdvanceAgingGroupBy,
+} from '@/lib/reports/finance/advance-aging-report'
+import {
   COMPENSATION_GROUP_BYS,
   COMPENSATION_GROUP_BY_LABEL,
   type CompensationGroupBy,
@@ -26,7 +31,8 @@ import { PROFIT_DIMENSIONS, PROFIT_DIMENSION_LABEL, type ProfitDimension } from 
  * - F1 `?dimension=company|team` + drill-down รายเคส (`?dimensionId=`)
  * - F2 `?groupBy=month|quarter|company` + กราฟแท่งรายเดือน
  * - F4 `?groupBy=team|employee`
- * - F3/F5 ไม่มีพารามิเตอร์ (เป็นรายงาน ณ วันที่) ⇒ ใช้ `<ReportView>` ตรง ๆ
+ * - F5 `?groupBy=advance|payee` (รายใบ / รายพนักงาน — มติ PO U96 #18)
+ * - F3 ไม่มีพารามิเตอร์ (เป็นรายงาน ณ วันที่) ⇒ ใช้ `<ReportView>` ตรง ๆ
  */
 
 type ScreenProps = { report: Pick<ReportDefinition, 'id' | 'code' | 'title'> }
@@ -44,6 +50,11 @@ const REVENUE_GROUP_OPTIONS = REVENUE_GROUP_BYS.map((value) => ({
 const COMPENSATION_GROUP_OPTIONS = COMPENSATION_GROUP_BYS.map((value) => ({
   value,
   label: COMPENSATION_GROUP_BY_LABEL[value],
+}))
+
+const ADVANCE_AGING_GROUP_OPTIONS = ADVANCE_AGING_GROUP_BYS.map((value) => ({
+  value,
+  label: ADVANCE_AGING_GROUP_BY_LABEL[value],
 }))
 
 interface DrilldownOption {
@@ -215,6 +226,21 @@ export function CompensationScreen({ report }: ScreenProps) {
       report={report}
       params={params}
       filters={<FilterGroup options={COMPENSATION_GROUP_OPTIONS} value={groupBy} onChange={setGroupBy} />}
+    />
+  )
+}
+
+// ── F5 — อายุเงินทดรองคงค้าง (มติ PO U96 #18) ───────────────────────────────
+
+export function AdvanceAgingScreen({ report }: ScreenProps) {
+  const [groupBy, setGroupBy] = useState<AdvanceAgingGroupBy>('advance')
+  const params = useMemo(() => ({ groupBy }), [groupBy])
+
+  return (
+    <ReportView
+      report={report}
+      params={params}
+      filters={<FilterGroup options={ADVANCE_AGING_GROUP_OPTIONS} value={groupBy} onChange={setGroupBy} />}
     />
   )
 }

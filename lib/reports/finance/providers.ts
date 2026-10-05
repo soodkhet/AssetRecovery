@@ -7,16 +7,18 @@ import type { ArAgingRow } from '@/lib/finance/ar-calc'
 import type {
   AdjustmentStatus,
   AdjustmentType,
-  AdvanceStatus,
   BillingBatchStatus,
 } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { LEGACY_WHT_POLICY } from '@/lib/settings/wht-policy'
 import { ReportError } from '@/lib/reports/errors'
 import {
-  buildAdvanceOverdueReport,
-  type AdvanceOverdueEntry,
-} from '@/lib/reports/finance/advance-overdue-report'
+  ADVANCE_AGING_GROUP_BYS,
+  ADVANCE_AGING_STATUSES,
+  buildAdvanceAgingReport,
+  type AdvanceAgingEntry,
+  type AdvanceAgingGroupBy,
+} from '@/lib/reports/finance/advance-aging-report'
 import { buildArAgingReport, type ArAgingCompanyEntry } from '@/lib/reports/finance/ar-aging-report'
 import {
   batchAdjustmentShareInRange,
@@ -657,47 +659,56 @@ const compensationProvider: ReportProvider = async (ctx: ReportContext): Promise
   return buildCompensationReport({ groupBy, items })
 }
 
-// ── F5 — เงินทดรองค้างเคลียร์ (`96` §6-F5) ──────────────────────────────────
+// ── F5 — อายุเงินทดรองคงค้าง (`96` §6-F5 · มติ PO U96 #18) ──────────────────
 
-/** สถานะที่ยังถือเงินบริษัทอยู่ — `overdue` เกิดจาก job เท่านั้น (`15` §10) จึงต้องรวม `approved` ด้วย */
-const UNCLEARED_ADVANCE_STATUSES: readonly AdvanceStatus[] = ['approved', 'overdue']
-
-const advanceOverdueProvider: ReportProvider = async (ctx: ReportContext): Promise<ReportData> => {
+const advanceAgingProvider: ReportProvider = async (ctx: ReportContext): Promise<ReportData> => {
   const asOf = reportAsOfDate(ctx.range, ctx.now)
   const teamIds = ctx.teamIds
+  const groupBy = pickParam<AdvanceAgingGroupBy>(ctx.params['groupBy'], ADVANCE_AGING_GROUP_BYS, 'advance')
 
+  // ดึงกว้าง (ยังไม่เคลียร์ทุกใบ + เคลียร์แล้วที่ยอดคืนอาจยังไม่ปิด) — ตัวตัดสินว่ามียอดคงค้างจริงคือ
+  // `buildAdvanceAgingReport()` (ยอดคืนค้าง `22` §6.14) · จ่าย/อนุมัติหลังวันดูรายงานไม่นับ
   const rows = await prisma.advance.findMany({
     where: {
       organizationId: ctx.user.organizationId,
       deletedAt: null,
-      status: { in: [...UNCLEARED_ADVANCE_STATUSES] },
-      // ครบกำหนดวันนี้ยังไม่เกินกำหนด (`96` §14) — ตัวกรองสุดท้ายอยู่ที่ `buildAdvanceOverdueReport()`
-      dueClearDate: { lt: asOf },
+      status: { in: [...ADVANCE_AGING_STATUSES] },
+      returnSatang: { gt: 0 },
       ...(teamIds === null ? {} : { payee: { user: { teamId: { in: [...teamIds] } } } }),
     },
     select: {
       id: true,
+      payeeId: true,
       status: true,
       approvedAt: true,
       dueClearDate: true,
       approvedSatang: true,
-      purpose: true,
+      usedSatang: true,
+      returnSatang: true,
+      returns: { where: { reversedAt: null }, select: { amountSatang: true } },
+      payoutItems: {
+        select: { payoutBatch: { select: { status: true, paymentFileGeneratedAt: true, updatedAt: true } } },
+      },
       payee: { select: { user: { select: { fullName: true, team: { select: { name: true } } } } } },
     },
   })
 
-  const advances: AdvanceOverdueEntry[] = rows.map((row) => ({
+  const advances: AdvanceAgingEntry[] = rows.map((row) => ({
     advanceId: row.id,
+    payeeId: row.payeeId,
     payeeName: row.payee.user.fullName,
     teamName: row.payee.user.team?.name ?? null,
     status: row.status,
     approvedAt: row.approvedAt,
     dueClearDate: row.dueClearDate,
     approvedSatang: row.approvedSatang,
-    purpose: row.purpose,
+    usedSatang: row.usedSatang,
+    returnSatang: row.returnSatang,
+    collectedSatang: row.returns.map((entry) => entry.amountSatang),
+    payoutBatches: row.payoutItems.map((item) => item.payoutBatch),
   }))
 
-  return buildAdvanceOverdueReport({ advances, asOf })
+  return buildAdvanceAgingReport({ advances, asOf, groupBy })
 }
 
 /** ทะเบียนของหมวด F — `lib/reports/providers.ts` เอาไปต่อเข้า `REPORT_PROVIDERS` */
@@ -706,5 +717,5 @@ export const FINANCE_REPORT_PROVIDERS: Readonly<Record<string, ReportProvider>> 
   'revenue-summary': revenueSummaryProvider,
   'ar-aging': arAgingProvider,
   compensation: compensationProvider,
-  'advance-overdue': advanceOverdueProvider,
+  'advance-overdue': advanceAgingProvider,
 }

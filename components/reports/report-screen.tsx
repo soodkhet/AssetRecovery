@@ -7,6 +7,7 @@ import {
 } from '@/components/reports/accounting/accounting-report-screens'
 import { KpiSummaryScreen } from '@/components/reports/executive/executive-report-screens'
 import {
+  AdvanceAgingScreen,
   CompensationScreen,
   GrossProfitScreen,
   RevenueSummaryScreen,
@@ -35,6 +36,7 @@ const SCREENS: Readonly<Record<string, (props: ScreenProps) => React.ReactElemen
   'gross-profit': GrossProfitScreen,
   'revenue-summary': RevenueSummaryScreen,
   compensation: CompensationScreen,
+  'advance-overdue': AdvanceAgingScreen,
   'success-rate': SuccessRateScreen,
   'team-performance': TeamPerformanceScreen,
   'warehouse-summary': WarehouseSummaryScreen,

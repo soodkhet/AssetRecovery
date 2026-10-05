@@ -997,6 +997,54 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     expect(byId.get(twoNights.id)?.matchedCaseIds).toContain(caseId)
   })
 
+  it('ช่อง "ใบเสร็จออกในนามบริษัท": ค่าเริ่มต้นไม่ติ๊ก · ติ๊กแล้วเก็บ + audit · แก้ได้ตอนส่งใหม่ · ยอดเงินไม่เปลี่ยน (มติ U96 #14)', async () => {
+    const base = {
+      expenseDate: new Date(`${DAY_1}T00:00:00.000Z`),
+      amountSatang: 80_000,
+      sharedWithUserId: null,
+      receiptFileUrl: 'field/receipts/company.jpg',
+      note: null,
+    }
+    const unticked = await expenses.submitHotelClaim(agentA, base, { actor: agentA, meta })
+    const ticked = await expenses.submitHotelClaim(agentA, { ...base, receiptInCompanyName: true }, { actor: agentA, meta })
+    expect(unticked.receiptInCompanyName).toBe(false)
+    expect(ticked.receiptInCompanyName).toBe(true)
+    expect(ticked.grossSatang).toBe(unticked.grossSatang)
+
+    const createAudit = await db().auditLog.findFirst({ where: { targetId: ticked.id, action: 'create' } })
+    expect(createAudit?.afterData).toMatchObject({ receiptInCompanyName: true })
+
+    await db().expense.update({ where: { id: unticked.id }, data: { status: 'needs_revision' } })
+    const resubmitted = await expenses.resubmitFieldExpense(
+      agentA,
+      unticked.id,
+      { receiptInCompanyName: true, note: 'ใบเสร็จออกในนามบริษัท' },
+      { actor: agentA, meta },
+    )
+    expect(resubmitted.receiptInCompanyName).toBe(true)
+    const resubmitAudit = await db().auditLog.findFirst({ where: { targetId: unticked.id, action: 'status_change' } })
+    expect(resubmitAudit?.beforeData).toMatchObject({ receiptInCompanyName: false })
+    expect(resubmitAudit?.afterData).toMatchObject({ receiptInCompanyName: true })
+  })
+
+  it('DB CHECK: รายการที่ไม่ใช่ค่าที่พักติ๊ก "ใบเสร็จในนามบริษัท" ไม่ได้ (มติ U96 #14)', async () => {
+    const claim = await expenses.submitHotelClaim(
+      agentA,
+      {
+        expenseDate: new Date(`${DAY_1}T00:00:00.000Z`),
+        amountSatang: 50_000,
+        sharedWithUserId: null,
+        receiptFileUrl: 'field/receipts/check.jpg',
+        note: null,
+        receiptInCompanyName: true,
+      },
+      { actor: agentA, meta },
+    )
+    await expect(
+      db().expense.update({ where: { id: claim.id }, data: { expenseType: 'receipt' } }),
+    ).rejects.toThrow(/chk_expenses_receipt_in_company_name_hotel_only/)
+  })
+
   it('ผู้พักร่วมนอกทีมถูกปฏิเสธฝั่ง BE แม้ dropdown จะกรองแล้ว (`41` §20)', async () => {
     await expectCode(
       () =>

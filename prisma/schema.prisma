@@ -700,6 +700,7 @@ model Organization {
   pendingReassignments       PendingReassignment[]
   reassignmentHistory        ReassignmentHistory[]
   assignmentPolicySettings   AssignmentPolicySettings?
+  dataRetentionSettings      DataRetentionSettings?
   checkIns                   CheckIn[]
   fieldDaySettlements        FieldDaySettlement[]
   caseEvidences              CaseEvidence[]
@@ -866,6 +867,7 @@ model User {
   reassignmentHistoryTo     ReassignmentHistory[]       @relation("reassignment_history_to_agent")
   reassignmentHistoryActor  ReassignmentHistory[]       @relation("reassignment_history_reassigned_by")
   assignmentPolicyUpdated   AssignmentPolicySettings[]  @relation("assignment_policy_settings_updated_by")
+  dataRetentionUpdated      DataRetentionSettings[]     @relation("data_retention_settings_updated_by")
   checkInsCreated           CheckIn[]                   @relation("checkins_created_by")
   fieldDaySettlements       FieldDaySettlement[]        @relation("field_day_settlements_agent")
   evidencesCreated          CaseEvidence[]              @relation("evidences_created_by")
@@ -1589,6 +1591,10 @@ model Case {
   outcome  CaseOutcome?
   closedAt DateTime?    @map("closed_at") @db.Timestamptz(6)
 
+  /// เวลาที่ job `purge_debtor_documents` ลบไฟล์เอกสารลูกหนี้ตามนโยบายระยะเก็บข้อมูล (มติ PO U97 · `02` v4.37)
+  /// NULL = ยังไม่ถูกลบ · ข้อมูลเคสที่ไม่ใช่ไฟล์คงอยู่ครบ
+  debtorDocumentsPurgedAt DateTime? @map("debtor_documents_purged_at") @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -1647,6 +1653,9 @@ model CaseDocument {
   uploadedAt DateTime  @default(now()) @map("uploaded_at") @db.Timestamptz(6)
   uploadedBy String    @map("uploaded_by") @db.Uuid
   deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+  /// ไฟล์ใน Storage ถูกลบตามนโยบายระยะเก็บเอกสารลูกหนี้ (มติ PO U97) — แถวคงไว้เป็นหลักฐาน (path/hash/ชื่อไฟล์)
+  /// CHECK: purged ⇒ deleted_at ต้องไม่ว่าง (raw SQL)
+  purgedAt   DateTime? @map("purged_at") @db.Timestamptz(6)
 
   organization   Organization @relation(fields: [organizationId], references: [id])
   case           Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -1873,6 +1882,22 @@ model AssignmentPolicySettings {
   updatedByUser User?        @relation("assignment_policy_settings_updated_by", fields: [updatedBy], references: [id])
 
   @@map("assignment_policy_settings")
+}
+
+/// นโยบายระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97 · `13` §6.16 · `90` §6.2) — 1 record ต่อองค์กร
+/// ยังไม่มีแถว = ค่าเริ่มต้น 5 ปี · แถวเกิดตอนบันทึกครั้งแรก (มีเหตุผล + audit)
+model DataRetentionSettings {
+  organizationId               String @id @map("organization_id") @db.Uuid
+  /// จำนวนปีหลังปิดเคสที่เก็บไฟล์เอกสารลูกหนี้ไว้ — CHECK 1–20 (raw SQL)
+  debtorDocumentRetentionYears Int    @default(5) @map("debtor_document_retention_years")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  updatedByUser User?        @relation("data_retention_settings_updated_by", fields: [updatedBy], references: [id])
+
+  @@map("data_retention_settings")
 }
 
 /// เช็คอินระหว่างลงพื้นที่ (`41` §6.2) — GPS จริงเท่านั้น · insert-only
@@ -2220,6 +2245,9 @@ model Expense {
   /// จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50 · `02` v4.34) — เพดาน = อัตรา/คืน × จำนวนคืน (`22` §6.15)
   /// รายการชนิดอื่น = 1 เสมอ · CHECK 1–31 และ ≠ 1 ได้เฉพาะ `hotel` อยู่ใน raw SQL migration
   hotelNights           Int     @default(1) @map("hotel_nights")
+  /// ใบเสร็จค่าที่พักออกในนามบริษัทหรือไม่ (มติ PO U96 #14 · `02` v4.36) — ผู้เบิกติ๊กเอง ค่าเริ่มต้น false
+  /// ใช้ส่งรายการให้สำนักงานบัญชีพิจารณาฐาน WHT (Export 03_Expenses) — **ไม่เปลี่ยนสูตร WHT** · CHECK ชนิดอื่น = false (raw SQL)
+  receiptInCompanyName  Boolean @default(false) @map("receipt_in_company_name")
   /// ใบเสร็จของรายการเบิกแยก (`41` §6.6 — บังคับสำหรับที่พัก)
   receiptFileUrl        String? @map("receipt_file_url")
   /// SHA-256 ของใบเสร็จที่ server ดาวน์โหลดมาตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — UAT BUG-072 · `02` v4.10)

@@ -46,3 +46,25 @@ export async function createSignedDownloadUrl(path: string): Promise<string | nu
   if (error !== null || data === null) return null
   return data.signedUrl
 }
+
+/** จำนวน path สูงสุดต่อคำสั่งลบหนึ่งครั้ง — กัน request ใหญ่เกินของ Storage API */
+const REMOVE_BATCH_SIZE = 100
+
+/**
+ * ลบไฟล์ออกจาก bucket ถาวร — ใช้กับงานลบเอกสารลูกหนี้ตามนโยบายระยะเก็บ (PDPA — มติ PO U97) เท่านั้น
+ *
+ * - path ที่ไม่มีไฟล์อยู่แล้ว **ไม่ถือว่าผิด** (Storage ไม่คืน error) ⇒ รันซ้ำได้ (idempotent)
+ * - คำสั่งชุดใดล้มเหลว ⇒ path ชุดนั้นอยู่ใน `failed` ให้ผู้เรียกข้าม/ลองใหม่รอบหน้า ไม่ throw
+ */
+export async function removeStoredFiles(paths: readonly string[]): Promise<{ removed: string[]; failed: string[] }> {
+  const result: { removed: string[]; failed: string[] } = { removed: [], failed: [] }
+  if (paths.length === 0) return result
+  const supabase = createSupabaseAdminClient()
+  for (let index = 0; index < paths.length; index += REMOVE_BATCH_SIZE) {
+    const chunk = paths.slice(index, index + REMOVE_BATCH_SIZE)
+    const { error } = await supabase.storage.from(CASE_DOCUMENT_BUCKET).remove(chunk)
+    if (error === null) result.removed.push(...chunk)
+    else result.failed.push(...chunk)
+  }
+  return result
+}

@@ -649,6 +649,7 @@ const expenseSelect = {
   receiptFileHash: true,
   sharedWithUserId: true,
   hotelNights: true,
+  receiptInCompanyName: true,
   compPlanId: true,
   createdAt: true,
   /** เพดานต่อคืนจาก snapshot แผนของใบเบิก — แสดง "2 คืน · เพดาน ฿1,600.00" (มติ PO O50) */
@@ -677,6 +678,7 @@ function toExpenseDto(row: ExpenseRow, matchedCaseIds: string[] = []): FieldExpe
     sharedWithUserId: row.sharedWithUserId,
     sharedWithName: row.sharedWithUser?.fullName ?? null,
     hotelNights: row.hotelNights,
+    receiptInCompanyName: row.receiptInCompanyName,
     hotelMaxPerNightSatang: row.expenseType === 'hotel' ? (row.compPlan?.hotelMaxPerNightSatang ?? null) : null,
     matchedCaseIds,
     createdAt: row.createdAt.toISOString(),
@@ -810,11 +812,19 @@ async function pendingFieldDatesOf(user: SessionUser): Promise<string[]> {
 
 export async function submitHotelClaim(
   user: SessionUser,
-  claim: Omit<HotelClaimInput, 'hotelNights'> & { hotelNights?: number },
+  claim: Omit<HotelClaimInput, 'hotelNights' | 'receiptInCompanyName'> & {
+    hotelNights?: number
+    receiptInCompanyName?: boolean
+  },
   context: ExpenseMutationContext,
 ): Promise<FieldExpenseDto> {
   // จำนวนคืนไม่บังคับ — ไม่ส่ง = 1 (มติ PO O50 · ค่าเริ่มต้นเดียวกับ Zod)
-  const input: HotelClaimInput = { ...claim, hotelNights: claim.hotelNights ?? HOTEL_NIGHTS_DEFAULT }
+  // ใบเสร็จในนามบริษัทไม่บังคับ — ไม่ส่ง = ไม่ติ๊ก (มติ PO U96 #14)
+  const input: HotelClaimInput = {
+    ...claim,
+    hotelNights: claim.hotelNights ?? HOTEL_NIGHTS_DEFAULT,
+    receiptInCompanyName: claim.receiptInCompanyName ?? false,
+  }
   assertHotelClaimFields({
     expenseDate: input.expenseDate,
     amountSatang: input.amountSatang,
@@ -872,6 +882,7 @@ export async function submitHotelClaim(
         grossSatang: input.amountSatang,
         expenseDate: input.expenseDate,
         hotelNights: input.hotelNights,
+        receiptInCompanyName: input.receiptInCompanyName,
         calculationSource: 'receipt',
         // snapshot แผนที่ใช้ตรวจเพดาน (`92` §7.1) — ส่งใหม่หลังตีกลับใช้เพดานชุดเดิม ไม่อ่านแผนปัจจุบัน
         compPlanId: capSnapshot?.compPlanId ?? null,
@@ -900,6 +911,7 @@ export async function submitHotelClaim(
           grossSatang: input.amountSatang,
           expenseDate: input.expenseDate,
           hotelNights: input.hotelNights,
+          receiptInCompanyName: input.receiptInCompanyName,
           sharedWithUserId: input.sharedWithUserId ?? null,
           receiptFileUrl: input.receiptFileUrl,
           receiptFileHash: receipt.sha256,
@@ -995,6 +1007,10 @@ export async function resubmitFieldExpense(
         status: nextStatus,
         ...(editable && input.amountSatang !== undefined ? { grossSatang: input.amountSatang } : {}),
         ...(isHotel && input.hotelNights !== undefined ? { hotelNights: input.hotelNights } : {}),
+        // มติ PO U96 #14 — แก้ช่อง "ใบเสร็จในนามบริษัท" ได้ตอนส่งใหม่ (เฉพาะค่าที่พัก)
+        ...(isHotel && input.receiptInCompanyName !== undefined
+          ? { receiptInCompanyName: input.receiptInCompanyName }
+          : {}),
         ...(newReceiptPath !== null ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash } : {}),
         // ข้อความชี้แจงเก็บแยก — ห้ามเขียนทับ `revision_note` (หมายเหตุตอนเบิก · UAT BUG-098 · `02` v4.13)
         ...(input.note !== undefined ? { resubmitNote: input.note } : {}),
@@ -1021,7 +1037,7 @@ export async function resubmitFieldExpense(
         before: {
           status: current.status,
           grossSatang: current.grossSatang,
-          ...(isHotel ? { hotelNights: current.hotelNights } : {}),
+          ...(isHotel ? { hotelNights: current.hotelNights, receiptInCompanyName: current.receiptInCompanyName } : {}),
           receiptFileUrl: current.receiptFileUrl,
           rejectionReason: current.rejectionReason,
           note: current.revisionNote,
@@ -1030,7 +1046,7 @@ export async function resubmitFieldExpense(
         after: {
           status: nextStatus,
           grossSatang: row.grossSatang,
-          ...(isHotel ? { hotelNights: row.hotelNights } : {}),
+          ...(isHotel ? { hotelNights: row.hotelNights, receiptInCompanyName: row.receiptInCompanyName } : {}),
           receiptFileUrl: row.receiptFileUrl,
           receiptFileHash: row.receiptFileHash,
           note: row.revisionNote,

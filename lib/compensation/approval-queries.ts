@@ -4,7 +4,7 @@ import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { fmtSatang } from '@/lib/format/money'
 import { fmtDate } from '@/lib/format/datetime'
-import { hotelNightsCapText } from '@/lib/field/hotel-claim'
+import { hotelNightsCapText, receiptInCompanyNameText } from '@/lib/field/hotel-claim'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   appendApprovalHistory,
@@ -82,6 +82,7 @@ const expenseSelect = {
   expenseDate: true,
   distanceKm: true,
   hotelNights: true,
+  receiptInCompanyName: true,
   status: true,
   approvalStepCurrent: true,
   approvalStepTotal: true,
@@ -224,6 +225,8 @@ export function describeExpenseBasis(row: {
   distanceKm: Prisma.Decimal | null
   /** จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50) — ไม่ส่ง = 1 */
   hotelNights?: number
+  /** ใบเสร็จค่าที่พักออกในนามบริษัท (มติ PO U96 #14) — ไม่ส่ง = ไม่แสดงป้าย */
+  receiptInCompanyName?: boolean
   compPlan: {
     fuelRatePerKmSatang: number | null
     fuelDailyFlatSatang: number | null
@@ -261,9 +264,13 @@ export function describeExpenseBasis(row: {
     // มติ PO O50 — "2 คืน · เพดาน ฿1,600.00" (เพดาน = อัตรา/คืน × จำนวนคืนจาก snapshot แผนของใบเบิก)
     const nights = row.hotelNights ?? 1
     const maxPerNight = row.compPlan?.hotelMaxPerNightSatang ?? null
+    // มติ PO U96 #14 — ผู้อนุมัติเห็นว่าใบเสร็จออกในนามบริษัทหรือไม่ (ประกอบการพิจารณาเท่านั้น)
+    const receiptLabel =
+      row.receiptInCompanyName === undefined ? '' : ` · ${receiptInCompanyNameText(row.receiptInCompanyName)}`
     if (maxPerNight !== null || nights > 1) {
-      return `${satangToBaht(row.grossSatang)} บาท (${hotelNightsCapText(nights, maxPerNight)})`
+      return `${satangToBaht(row.grossSatang)} บาท (${hotelNightsCapText(nights, maxPerNight)})${receiptLabel}`
     }
+    return `${satangToBaht(row.grossSatang)} บาท${receiptLabel}`
   }
   return `${satangToBaht(row.grossSatang)} บาท`
 }
@@ -304,6 +311,7 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow, viewer: CapabilityHolder): C
     distanceKm: row.distanceKm?.toFixed(2) ?? null,
     calculationSource: row.calculationSource,
     basisText: describeExpenseBasis(row),
+    receiptInCompanyName: row.expenseType === 'hotel' ? row.receiptInCompanyName : null,
     grossSatang: row.grossSatang,
     whtSatang: wht.whtSatang,
     netSatang: wht.netSatang,

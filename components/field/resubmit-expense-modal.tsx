@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
+import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -41,6 +42,7 @@ export function ResubmitExpenseModal({
   const editable = isSeparateExpense(expense)
   const isHotel = expense.expenseType === 'hotel'
   const [nightsText, setNightsText] = useState(() => String(expense.hotelNights))
+  const [receiptInCompanyName, setReceiptInCompanyName] = useState(() => expense.receiptInCompanyName)
   const [amountBaht, setAmountBaht] = useState(() => toBahtInput(expense.grossSatang))
   const [note, setNote] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
@@ -82,6 +84,7 @@ export function ResubmitExpenseModal({
         jsonRequest('POST', {
           ...(amountSatang === undefined ? {} : { amountSatang }),
           ...(hotelNights === undefined ? {} : { hotelNights }),
+          ...(isHotel ? { receiptInCompanyName } : {}),
           ...(receiptFileUrl === undefined ? {} : { receiptFileUrl }),
           note: note.trim(),
         }),
@@ -167,6 +170,10 @@ export function ResubmitExpenseModal({
                 onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
               />
             </Field>
+
+            {isHotel && (
+              <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />
+            )}
           </>
         ) : (
           <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">

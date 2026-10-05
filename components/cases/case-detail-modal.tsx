@@ -43,7 +43,8 @@ import type {
   CaseTeamOptionDto,
   CaseTeamOptionsDto,
 } from '@/lib/cases/types'
-import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
+import { debtorDocumentsPurgedText } from '@/lib/settings/data-retention'
 import { fmtSatangSymbol } from '@/lib/format/money'
 
 /**
@@ -568,6 +569,14 @@ function DocumentSection({
         {isBundle && <Badge className="bg-sky-50 text-sky-700">เอกสารชุด</Badge>}
         {photoInContract && <Badge className="bg-sky-50 text-sky-700">รูปสินค้ารวมอยู่ในไฟล์สัญญาแล้ว</Badge>}
       </h3>
+      {/* PDPA (มติ PO U97) — ไฟล์เอกสารลูกหนี้ถูกลบโดยงานรายวันเมื่อครบระยะเก็บ · ข้อมูลเคสยังอยู่ครบ */}
+      {detail.debtorDocumentsPurgedAt !== null && (
+        <div className="mb-3">
+          <InlineAlert tone="info" title={debtorDocumentsPurgedText(fmtDate(detail.debtorDocumentsPurgedAt))}>
+            ไฟล์สัญญา บัตรประชาชน และเอกสารลูกหนี้ของเคสนี้ถูกลบเมื่อครบระยะเก็บหลังปิดเคส — ข้อมูลเคสและประวัติยังอยู่ครบ
+          </InlineAlert>
+        </div>
+      )}
       {isBundle && bundleConfirm !== undefined && (
         <div ref={bundleConfirmRef} className="mb-3">
           <label

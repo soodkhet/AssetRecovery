@@ -100,7 +100,7 @@ export interface PackFile {
 export const PACK_FILES: readonly PackFile[] = [
   { no: '01', fileName: '01_Revenue.csv', kind: 'csv', description: 'รายการรายได้ — company, case_ref, revenue_date, gross, vat_flag', sourceDoc: '19' },
   { no: '02', fileName: '02_Cash_Receipts.csv', kind: 'csv', description: 'รายการเงินรับ — receipt_date, payer, amount, bank_ref', sourceDoc: '31' },
-  { no: '03', fileName: '03_Expenses.csv', kind: 'csv', description: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net', sourceDoc: '32' },
+  { no: '03', fileName: '03_Expenses.csv', kind: 'csv', description: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท', sourceDoc: '32' },
   { no: '04', fileName: '04_Payments.csv', kind: 'csv', description: 'รายการจ่ายเงินจริง', sourceDoc: '17' },
   { no: '05', fileName: '05_WHT_Data.csv', kind: 'csv', description: 'ข้อมูลหัก ณ ที่จ่าย', sourceDoc: '33' },
   { no: '06', fileName: '06_Bank_Reconciliation.csv', kind: 'csv', description: 'ผลกระทบยอดธนาคาร', sourceDoc: '35' },
@@ -234,7 +234,16 @@ export function cashReceiptCsv(rows: readonly CashReceiptExportRow[]): string {
 
 // ── 03_Expenses.csv (ไฟล์ 32) ───────────────────────────────────────────────
 
-export const EXPENSE_HEADERS = ['payee', 'category', 'gross_baht', 'wht_baht', 'net_baht'] as const
+export const EXPENSE_HEADERS = [
+  'payee',
+  'category',
+  'gross_baht',
+  'wht_baht',
+  'net_baht',
+  // มติ PO 06/10/2569 (U96 #14) — ต่อท้ายสุด: ค่าที่พักใบเสร็จในนามบริษัท `Y`/`N` (ชนิดอื่นเว้นว่าง)
+  // ให้สำนักงานบัญชีพิจารณาฐานหัก ณ ที่จ่ายของค่าที่พักที่ไม่ได้ออกในนามบริษัท — ระบบไม่เปลี่ยนสูตร WHT เอง
+  'receipt_in_company_name',
+] as const
 
 export interface ExpenseExportRow {
   payeeName: string
@@ -242,6 +251,14 @@ export interface ExpenseExportRow {
   grossSatang: number
   whtSatang: number
   netSatang: number
+  /** ค่าที่พัก: ใบเสร็จออกในนามบริษัท · รายการชนิดอื่น = `null` (คอลัมน์ว่าง) */
+  receiptInCompanyName: boolean | null
+}
+
+/** `Y`/`N` สำหรับค่าที่พัก · ชนิดอื่นเว้นว่าง (ไม่เกี่ยว) — รูปแบบเดียวกับธง `Y`/`N` ในไฟล์ 01 */
+export function receiptInCompanyNameCell(value: boolean | null): string {
+  if (value === null) return ''
+  return value ? 'Y' : 'N'
 }
 
 export function expenseCsv(rows: readonly ExpenseExportRow[]): string {
@@ -253,6 +270,7 @@ export function expenseCsv(rows: readonly ExpenseExportRow[]): string {
       csvBaht(row.grossSatang),
       csvBaht(row.whtSatang),
       csvBaht(row.netSatang),
+      receiptInCompanyNameCell(row.receiptInCompanyName),
     ]),
   )
 }

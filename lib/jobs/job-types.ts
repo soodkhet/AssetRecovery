@@ -25,6 +25,7 @@ export const JOB_TYPES = [
   'fuel_distance_retry',
   'report_export',
   'daily_field_allowance',
+  'purge_debtor_documents',
 ] as const
 
 export type JobTypeCode = (typeof JOB_TYPES)[number]
@@ -114,6 +115,17 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
     source: 'มติ PO 03/10/2569 (UAT Q21) · DEC-012 · `91` §6.1 · `22` §6.2/§6.3',
     inSpecCatalog: true,
     // คีย์กันซ้ำรายวันตามวันไทย ⇒ cron รอบแรกหลังเที่ยงคืนไทยตั้งงานให้ · handler settle วันที่ < วันนี้
+    schedule: { kind: 'daily' },
+  },
+
+  purge_debtor_documents: {
+    code: 'purge_debtor_documents',
+    label: 'ลบไฟล์เอกสารลูกหนี้ที่ครบระยะเก็บ',
+    description:
+      'ลบไฟล์สัญญา/บัตรประชาชน/เอกสารชุด/เอกสารอื่นจากไฟแนนซ์ ของเคสที่ปิดนานกว่าระยะเก็บที่ตั้งไว้ — เก็บข้อมูลเคสและบันทึกวันที่ลบ',
+    source: 'มติ PO 06/10/2569 (U97 — PDPA) · `91` §6.1 · `90` §6.2 · `13` §6.16',
+    inSpecCatalog: true,
+    // วันละครั้งตามวันไทย — คีย์กันซ้ำรายวัน · handler เองก็ idempotent (มาร์คเฉพาะแถวที่ยังไม่ถูกลบ)
     schedule: { kind: 'daily' },
   },
 

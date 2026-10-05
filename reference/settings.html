@@ -632,6 +632,8 @@ function renderSettingsLayout() {
       { id: 'export',     label: 'Export Format' },
       { id: 'lock',       label: 'การล็อกรอบและ Adjustment' },
       { id: 'permission', label: 'สิทธิ์บัญชี/การเงิน' },
+      // มติ PO 06/10/2569 (U97 — PDPA) — ระยะเก็บเอกสารลูกหนี้ (Superadmin/บริหาร)
+      { id: 'retention',  label: 'ระยะเก็บเอกสารลูกหนี้' },
       // มติ PO 06/10/2569 (UAT U93) — ปฏิทินวันหยุด (ธุรการ/บัญชี/การเงินเห็นเฉพาะแท็บนี้)
       { id: 'holidays',   label: 'ปฏิทินวันหยุด' }
     ];
@@ -653,6 +655,7 @@ function renderSettingsLayout() {
     else if(state.settingsFinanceTab==='export') content = renderSettingsExport();
     else if(state.settingsFinanceTab==='lock') content = renderSettingsLock();
     else if(state.settingsFinanceTab==='permission') content = renderSettingsPermission();
+    else if(state.settingsFinanceTab==='retention') content = renderSettingsRetention();
     else if(state.settingsFinanceTab==='holidays') content = renderSettingsHolidays();
   }
  
@@ -1126,6 +1129,36 @@ function renderSettingsWhtPolicy() {
 
 // มติ PO 06/10/2569 (UAT U93) — ปฏิทินวันหยุด: เพิ่ม/ลบ/นำเข้าหลายวัน · กรองตามปี พ.ศ. · ใช้เลื่อนกำหนดยื่นภาษีเป็นวันทำการถัดไป
 // changelog mockup 06/10/2569: เพิ่มแท็บ "ปฏิทินวันหยุด" + โมดัลนำเข้า (วางข้อความ/ไฟล์ CSV "YYYY-MM-DD,ชื่อ")
+// มติ PO 06/10/2569 (U97 — PDPA) — ระยะเก็บเอกสารลูกหนี้: จำนวนปีหลังปิดเคส (ค่าเริ่มต้น 5 · 1–20) + เหตุผล
+// changelog mockup 06/10/2569: เพิ่มแท็บ "ระยะเก็บเอกสารลูกหนี้" (การ์ดค่าตั้งเดียว แบบแท็บเกณฑ์ SLA)
+function renderSettingsRetention() {
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="mb-4 flex items-start justify-between">
+      <div>
+        <h2 class="text-sm font-bold text-slate-900">ระยะเก็บเอกสารลูกหนี้</h2>
+        <p class="mt-0.5 text-xs text-slate-500">จำนวนปีหลังปิดเคสที่เก็บไฟล์สัญญา บัตรประชาชน เอกสารชุด และเอกสารอื่นจากไฟแนนซ์ไว้ — ครบแล้วระบบลบไฟล์ให้อัตโนมัติ</p>
+      </div>
+      <div class="text-[10px] text-slate-400">แก้ไขล่าสุด 06/10/2569</div>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-semibold text-slate-700">ระยะเก็บหลังปิดเคส (ปี) <span class="text-red-500">*</span></label>
+        <input type="text" inputmode="numeric" value="5" class="mt-1 w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm text-right focus-ring">
+        <p class="mt-1 text-[11px] text-slate-400">ค่าเริ่มต้น 5 ปี · ตั้งได้ 1–20 ปี</p>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-700">เหตุผล <span class="text-red-500">*</span></label>
+        <textarea rows="2" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring" placeholder="เช่น ปรับตามนโยบายคุ้มครองข้อมูลส่วนบุคคลขององค์กร"></textarea>
+      </div>
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+        <div class="font-semibold">ลบเฉพาะไฟล์เอกสารลูกหนี้ — กู้คืนไม่ได้</div>
+        ระบบลบเฉพาะไฟล์ ข้อมูลเคสและประวัติยังอยู่ครบ หน้าเคสจะแสดงวันที่ที่ลบ · ไม่ลบรูปสินค้า หลักฐานปิดงาน และเอกสารบัญชี (ใบกำกับภาษี หนังสือรับรองหัก ณ ที่จ่าย ชุดข้อมูลส่งบัญชี ใบเสร็จ)
+      </div>
+      <div class="flex justify-end"><button class="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-semibold">บันทึกระยะเก็บเอกสาร</button></div>
+    </div>
+  </div>`;
+}
+
 function renderSettingsHolidays() {
   const rows = [
     { date: '23/10/2569', weekday: 'ศุกร์', name: 'วันปิยมหาราช', by: 'ธุรการ · 06/10/2569' },

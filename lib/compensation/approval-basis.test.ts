@@ -87,3 +87,28 @@ describe('describeExpenseBasis — ค่าที่พัก (มติ PO U89
     ).toBe('600.00 บาท')
   })
 })
+
+describe('describeExpenseBasis — ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14)', () => {
+  const base = { fuelRatePerKmSatang: null, fuelDailyFlatSatang: null, allowanceSatang: null }
+  it('ติ๊ก/ไม่ติ๊ก → ผู้อนุมัติเห็นป้ายต่อท้าย · ยอดไม่เปลี่ยน', () => {
+    const row = {
+      expenseType: 'hotel' as const,
+      grossSatang: 60_000,
+      distanceKm: null,
+      compPlan: { ...base, hotelMaxPerNightSatang: 80_000 },
+    }
+    expect(describeExpenseBasis({ ...row, receiptInCompanyName: true })).toBe(
+      '600.00 บาท (1 คืน · เพดาน ฿800.00) · ใบเสร็จในนามบริษัท',
+    )
+    expect(describeExpenseBasis({ ...row, receiptInCompanyName: false })).toBe(
+      '600.00 บาท (1 คืน · เพดาน ฿800.00) · ใบเสร็จไม่ได้ออกในนามบริษัท',
+    )
+    expect(
+      describeExpenseBasis({
+        ...row,
+        compPlan: { ...base, hotelMaxPerNightSatang: null },
+        receiptInCompanyName: false,
+      }),
+    ).toBe('600.00 บาท · ใบเสร็จไม่ได้ออกในนามบริษัท')
+  })
+})

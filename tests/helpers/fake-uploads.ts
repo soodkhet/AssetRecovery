@@ -16,14 +16,25 @@ import type * as VerifyModule from '@/lib/uploads/verify'
  * - ตั้ง `realVerify = true` เพื่อใช้ตัวตรวจจริง (prefix · ต้องมีไฟล์ · magic bytes · ขนาด · hash) กับไฟล์ใน
  *   `uploadTestState.files` (ใส่ผ่าน {@link putFakeUpload})
  */
-export const uploadTestState: { realVerify: boolean; files: Map<string, Uint8Array> } = {
+export const uploadTestState: {
+  realVerify: boolean
+  files: Map<string, Uint8Array>
+  /** path ที่ `removeStoredFiles()` ถูกสั่งลบ (ตามลำดับ) — ใช้ตรวจว่าไม่ลบไฟล์นอกขอบเขต */
+  removed: string[]
+  /** path ที่จำลองให้การลบล้มเหลว (มติ PO U97 — ไฟล์ที่ลบไม่สำเร็จต้องลองใหม่รอบหน้า) */
+  failRemove: Set<string>
+} = {
   realVerify: false,
   files: new Map(),
+  removed: [],
+  failRemove: new Set(),
 }
 
 export function resetFakeUploads(): void {
   uploadTestState.realVerify = false
   uploadTestState.files.clear()
+  uploadTestState.removed.length = 0
+  uploadTestState.failRemove.clear()
 }
 
 export function putFakeUpload(path: string, bytes: Uint8Array): void {
@@ -53,6 +64,15 @@ export async function fakeStorageModule(): Promise<typeof StorageModule> {
     createSignedUpload: async (path: string) => ({ path, token: `token:${path}` }),
     createSignedDownloadUrl: async (path: string) =>
       uploadTestState.files.has(path) ? `https://storage.test/signed/${path}` : null,
+    removeStoredFiles: async (paths: readonly string[]) => {
+      const failed = paths.filter((path) => uploadTestState.failRemove.has(path))
+      const removed = paths.filter((path) => !uploadTestState.failRemove.has(path))
+      for (const path of removed) {
+        uploadTestState.files.delete(path)
+        uploadTestState.removed.push(path)
+      }
+      return { removed, failed }
+    },
   }
 }
 

@@ -17,6 +17,11 @@ import {
   MIN_REASSIGN_TIMEOUT_HOURS,
 } from '@/lib/settings/assignment-policy'
 import { MAX_SLA_ALERT_HOURS, MIN_SLA_ALERT_HOURS } from '@/lib/settings/sla-policy'
+import {
+  MAX_DEBTOR_DOCUMENT_RETENTION_YEARS,
+  MIN_DEBTOR_DOCUMENT_RETENTION_YEARS,
+  retentionYearsRangeMessage,
+} from '@/lib/settings/data-retention'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { MAX_HOLIDAY_IMPORT_ROWS, MAX_HOLIDAY_NAME_LENGTH } from '@/lib/settings/holidays'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
@@ -179,6 +184,17 @@ const slaPolicyFields = z.object({
 
 export const slaPolicyFieldsSchema = slaPolicyFields
 export const slaPolicyUpdateSchema = slaPolicyFields.extend({ reason: reasonSchema })
+
+// ── §6.16 ระยะเก็บเอกสารลูกหนี้ (PDPA · 1 record/องค์กร · มติ PO U97) ──────
+const dataRetentionFields = z.object({
+  debtorDocumentRetentionYears: z
+    .number(retentionYearsRangeMessage())
+    .int(retentionYearsRangeMessage())
+    .min(MIN_DEBTOR_DOCUMENT_RETENTION_YEARS, retentionYearsRangeMessage())
+    .max(MAX_DEBTOR_DOCUMENT_RETENTION_YEARS, retentionYearsRangeMessage()),
+})
+
+export const dataRetentionUpdateSchema = dataRetentionFields.extend({ reason: reasonSchema })
 
 // ── นโยบายการมอบหมายงาน (`40` §6.4/§11 · 1 record/องค์กร · UAT BUG-002) ──────
 const assignmentPolicyFields = z.object({
