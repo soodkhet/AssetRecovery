@@ -37,6 +37,9 @@ export const SETTINGS_ERROR_CODES = [
   'NUMBERING_SEQ_NOT_EDITABLE',
   // §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8)
   'WHT_POLICY_EFFECTIVE_DATE_PAST',
+  // §6.15 ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93)
+  'HOLIDAY_NOT_FOUND',
+  'DUPLICATE_HOLIDAY_DATE',
   // §6.11 ล็อกรอบบัญชี (โครง — บังคับเต็มรูปแบบ Phase 4.1)
   'PERIOD_LOCKED_DIRECT_EDIT',
 ] as const
@@ -63,6 +66,8 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   BANK_FILE_NOT_TESTED: 400,
   NUMBERING_SEQ_NOT_EDITABLE: 400,
   WHT_POLICY_EFFECTIVE_DATE_PAST: 400,
+  HOLIDAY_NOT_FOUND: 404,
+  DUPLICATE_HOLIDAY_DATE: 400,
   PERIOD_LOCKED_DIRECT_EDIT: 400,
 }
 
@@ -140,6 +145,14 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
     title: 'วันที่มีผลย้อนหลังไม่ได้',
     message:
       'ค่าตั้งภาษีหัก ณ ที่จ่ายมีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผลเป็นต้นไป — เลือกวันนี้หรือวันในอนาคต (รอบจ่ายที่สร้างแล้วใช้ค่าเดิมเสมอ)',
+  },
+  HOLIDAY_NOT_FOUND: {
+    title: 'ไม่พบวันหยุด',
+    message: 'ไม่พบวันหยุดที่ระบุ หรือถูกลบไปแล้ว',
+  },
+  DUPLICATE_HOLIDAY_DATE: {
+    title: 'วันหยุดซ้ำ',
+    message: 'มีวันหยุดวันที่นี้อยู่แล้วในปฏิทิน — ลบรายการเดิมก่อนถ้าต้องการเปลี่ยนชื่อ',
   },
   PERIOD_LOCKED_DIRECT_EDIT: {
     title: 'รอบบัญชีถูกล็อกแล้ว',

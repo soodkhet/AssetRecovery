@@ -17,6 +17,7 @@ import {
   type WhtPolicyEntry,
   type WhtPolicySettings,
 } from '@/lib/settings/wht-policy'
+import { loadHolidayKeys } from '@/lib/settings/queries/holiday-keys'
 import { filingDueDateOf, filingMethodResolveDate } from '@/lib/wht/wht'
 
 /**
@@ -156,28 +157,54 @@ export async function resolveWhtPolicyForPayout(
   return { policyId: entry?.id ?? null, values: valuesOf(entry) }
 }
 
+/** แถวสรุปรอบนำส่งที่วันกำหนดยื่น/วิธียื่นเปลี่ยนจากการคิดใหม่ (ลง audit ของการเปลี่ยนที่เป็นต้นเหตุ) */
+export interface RefreshedFilingSummary {
+  summary_id: string
+  period_label: string
+  filing_method: WhtFilingMethod
+  filing_due_date: string
+  before_filing_method: WhtFilingMethod
+  before_filing_due_date: string
+}
+
 /**
- * คิดวันกำหนดยื่นของสรุปรอบนำส่งที่ยัง `pending` ใหม่ตามวิธียื่นที่มีผล (U45) — idempotent: แก้เฉพาะแถวที่เปลี่ยนจริง
- * คืนรายการที่เปลี่ยน (ลง audit ของค่าตั้งตัวที่ทำให้เปลี่ยน) · รอบที่ยื่นแล้ว (`filed`) ไม่แตะ
+ * คิดวันกำหนดยื่นของสรุปรอบนำส่งที่ยัง `pending` ใหม่ตามวิธียื่นที่มีผล (U45) + ปฏิทินวันหยุด (U93 — ตรงวันหยุด/
+ * เสาร์-อาทิตย์เลื่อนเป็นวันทำการถัดไป) — idempotent: แก้เฉพาะแถวที่เปลี่ยนจริง · รอบที่ยื่นแล้ว (`filed`) ไม่แตะ
+ * เรียกจากการเพิ่มค่าตั้งภาษีหัก ณ ที่จ่าย และการเพิ่ม/ลบ/นำเข้าวันหยุด (`holidays.ts`) ในทรานแซกชันเดียวกัน
  */
-async function refreshPendingFilingDueDates(
-  tx: Pick<typeof prisma, 'whtPolicyHistory' | 'whtFilingSummary'>,
+export async function refreshPendingFilingDueDates(
+  tx: Pick<typeof prisma, 'whtPolicyHistory' | 'whtFilingSummary' | 'publicHoliday'>,
   organizationId: string,
-): Promise<{ summary_id: string; filing_method: WhtFilingMethod; filing_due_date: string }[]> {
+): Promise<RefreshedFilingSummary[]> {
   const pending = await tx.whtFilingSummary.findMany({
     where: { organizationId, status: 'pending' },
-    select: { id: true, filingMethod: true, filingDueDate: true, period: { select: { yearBe: true, month: true } } },
+    select: {
+      id: true,
+      periodLabel: true,
+      filingMethod: true,
+      filingDueDate: true,
+      period: { select: { yearBe: true, month: true } },
+    },
+    orderBy: { filingDueDate: 'asc' },
   })
   if (pending.length === 0) return []
   const entries = await loadEntries(organizationId, tx)
-  const changed: { summary_id: string; filing_method: WhtFilingMethod; filing_due_date: string }[] = []
+  const holidays = await loadHolidayKeys(tx, organizationId)
+  const changed: RefreshedFilingSummary[] = []
   for (const row of pending) {
     const period = { yearBe: row.period.yearBe, month: row.period.month }
     const filingMethod = valuesOf(resolveWhtPolicyAt(entries, filingMethodResolveDate(period))).filingMethod
-    const filingDueDate = filingDueDateOf(period, filingMethod)
+    const filingDueDate = filingDueDateOf(period, filingMethod, holidays)
     if (filingMethod === row.filingMethod && filingDueDate.getTime() === row.filingDueDate.getTime()) continue
     await tx.whtFilingSummary.update({ where: { id: row.id }, data: { filingMethod, filingDueDate } })
-    changed.push({ summary_id: row.id, filing_method: filingMethod, filing_due_date: toDateOnlyIso(filingDueDate) })
+    changed.push({
+      summary_id: row.id,
+      period_label: row.periodLabel,
+      filing_method: filingMethod,
+      filing_due_date: toDateOnlyIso(filingDueDate),
+      before_filing_method: row.filingMethod,
+      before_filing_due_date: toDateOnlyIso(row.filingDueDate),
+    })
   }
   return changed
 }

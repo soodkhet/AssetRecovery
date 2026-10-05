@@ -1,4 +1,6 @@
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
+import type { RoleGroup } from '@/lib/generated/prisma/enums'
+import { resolveMenuAudience, type MenuAudience } from '@/lib/nav/menu-registry'
 
 /**
  * SSOT ของ **13 แท็บ** ในหน้า "ตั้งค่าบัญชี/การเงิน" (ไฟล์ `13` §6.1–6.13 · §16)
@@ -32,6 +34,12 @@ export interface FinanceSettingsTab {
    * — `18` §12 ให้สิทธิ์ดู payee เฉพาะการเงิน/บัญชี/เจ้าของ)
    */
   capabilities?: readonly string[]
+  /**
+   * แท็บที่ผู้ใช้กลุ่ม**ปฏิบัติการ** (การเงิน/บัญชี/ธุรการ) เห็นได้ — กลุ่มนี้เข้าหน้าตั้งค่าบัญชี/การเงินได้ผ่าน
+   * `capabilityGate` ของเมนูเพื่อใช้แท็บเหล่านี้เท่านั้น (มติ PO 06/10/2569 UAT U93 — ปฏิทินวันหยุด) · ไม่ระบุ =
+   * เห็นเฉพาะ Superadmin/บริหาร (ผู้ดูแลค่าตั้ง) ตามเดิม
+   */
+  staffAccess?: boolean
 }
 
 export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
@@ -53,21 +61,60 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: true },
   { id: 'sla', label: 'เกณฑ์ SLA งานติดตาม', section: '§6.14', available: true },
   { id: 'assignment', label: 'นโยบายการมอบหมายงาน', section: 'ไฟล์ 40 §6.4', available: true },
+  // มติ PO 06/10/2569 (UAT U93) — ปฏิทินวันหยุด: ธุรการ/บัญชี/การเงินกรอกปีละครั้ง ⇒ เปิดให้กลุ่มปฏิบัติการ
+  {
+    id: 'holidays',
+    label: 'ปฏิทินวันหยุด',
+    section: '§6.15',
+    available: true,
+    capabilities: ['manage_holidays'],
+    staffAccess: true,
+  },
 ]
 
 export const DEFAULT_FINANCE_SETTINGS_TAB = 'cycles'
 
-/** แท็บที่ผู้ใช้คนนี้เห็น — แท็บที่ระบุ `capabilities` ต้องถือสักตัว (Superadmin เห็นทุกแท็บ) */
-export function visibleFinanceSettingsTabs(viewer: CapabilityHolder): FinanceSettingsTab[] {
+/** ผู้ดูแลค่าตั้ง = audience ที่เห็นเมนู "ตั้งค่าบัญชี/การเงิน" โดยไม่ผ่าน `capabilityGate` (`06` §7.2) */
+const SETTINGS_ADMIN_AUDIENCES: readonly MenuAudience[] = ['superadmin', 'executive']
+
+/**
+ * ข้อมูลผู้ใช้ที่ใช้กรองแท็บ — `roleGroup`/`roleName` ใช้แยกผู้ดูแลค่าตั้งกับกลุ่มปฏิบัติการ
+ * (ไม่ส่ง = ถือเป็นผู้ดูแลค่าตั้ง — เทียบเท่าพฤติกรรมเดิมก่อน U93)
+ */
+export interface FinanceTabViewer extends CapabilityHolder {
+  roleGroup?: RoleGroup
+  roleName?: string
+}
+
+function isSettingsAdmin(viewer: FinanceTabViewer): boolean {
+  if (viewer.isSuperadmin || viewer.roleGroup === undefined || viewer.roleName === undefined) return true
+  const audience = resolveMenuAudience({ isSuperadmin: false, roleGroup: viewer.roleGroup, roleName: viewer.roleName })
+  return audience !== null && SETTINGS_ADMIN_AUDIENCES.includes(audience)
+}
+
+/**
+ * แท็บที่ผู้ใช้คนนี้เห็น — แท็บที่ระบุ `capabilities` ต้องถือสักตัว (Superadmin เห็นทุกแท็บ) · ผู้ใช้กลุ่มปฏิบัติการ
+ * (การเงิน/บัญชี/ธุรการ) เห็นเฉพาะแท็บ `staffAccess` (U93)
+ */
+export function visibleFinanceSettingsTabs(viewer: FinanceTabViewer): FinanceSettingsTab[] {
+  const admin = isSettingsAdmin(viewer)
   return FINANCE_SETTINGS_TABS.filter(
     (tab) =>
-      tab.capabilities === undefined ||
-      tab.capabilities.some((capability) => hasCapability(viewer, 'view', capability)),
+      (admin || tab.staffAccess === true) &&
+      (tab.capabilities === undefined ||
+        tab.capabilities.some((capability) => hasCapability(viewer, 'view', capability))),
   )
 }
 
-/** แท็บแรกที่ใช้งานได้จริงและผู้ใช้เห็น — ใช้เป็นปลายทางเมื่อ `?tab=` ชี้ไปแท็บที่ยังไม่เกิด/ไม่มีสิทธิ์ */
-export function resolveFinanceSettingsTab(tab: string | undefined, viewer: CapabilityHolder): string {
-  const found = visibleFinanceSettingsTabs(viewer).find((item) => item.id === tab)
-  return found !== undefined && found.available ? found.id : DEFAULT_FINANCE_SETTINGS_TAB
+/**
+ * แท็บแรกที่ใช้งานได้จริงและผู้ใช้เห็น — ใช้เป็นปลายทางเมื่อ `?tab=` ชี้ไปแท็บที่ยังไม่เกิด/ไม่มีสิทธิ์
+ * (แท็บเริ่มต้นไม่อยู่ในชุดที่เห็น เช่น ผู้ใช้กลุ่มปฏิบัติการ ⇒ แท็บแรกที่เห็น)
+ */
+export function resolveFinanceSettingsTab(tab: string | undefined, viewer: FinanceTabViewer): string {
+  const visible = visibleFinanceSettingsTabs(viewer).filter((item) => item.available)
+  const found = visible.find((item) => item.id === tab)
+  if (found !== undefined) return found.id
+  return visible.some((item) => item.id === DEFAULT_FINANCE_SETTINGS_TAB)
+    ? DEFAULT_FINANCE_SETTINGS_TAB
+    : (visible[0]?.id ?? DEFAULT_FINANCE_SETTINGS_TAB)
 }

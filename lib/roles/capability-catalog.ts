@@ -75,6 +75,8 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   // 50 ทวิ ที่ลูกค้าหักเรา (มติ PO 05/10/2569 U40) — ธุรการ/การเงิน/บัญชี ตามหนังสือ + บันทึกรับ · บริหาร ดู
   { code: 'manage_customer_wht', label: 'ติดตาม/บันทึกรับหนังสือ 50 ทวิ ที่ลูกค้าหัก', module: 'accounting', functionalGroup: null, description: 'ธุรการ/การเงิน/บัญชี · แนบไฟล์สแกนบังคับ' },
   { code: 'manage_wht_policy', label: 'แก้ไขค่าตั้งภาษีหัก ณ ที่จ่าย (ฐาน/50 ทวิ/ประเภทเงินได้)', module: 'settings', functionalGroup: null, description: 'Superadmin/บริหาร · ต้องมีเหตุผล · มีผลกับรอบจ่ายถัดไป' },
+  // ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93 · `13` §6.15) — ธุรการ/บัญชี/การเงิน กรอกปีละครั้ง · บริหาร ดู · ไม่ล็อก
+  { code: 'manage_holidays', label: 'จัดการปฏิทินวันหยุด', module: 'settings', functionalGroup: null, description: 'เพิ่ม/ลบ/นำเข้าวันหยุดขององค์กร ใช้เลื่อนกำหนดยื่นภาษีที่ตรงวันหยุดเป็นวันทำการถัดไป · ต้องมีเหตุผล' },
   { code: 'manage_settings', label: 'จัดการการตั้งค่าระบบ', module: 'settings', functionalGroup: null },
   { code: 'intake_asset', label: 'รับทรัพย์เข้าคลัง', module: 'warehouse', functionalGroup: null },
   { code: 'reject_asset_intake', label: 'ปฏิเสธการรับเข้าคลัง', module: 'warehouse', functionalGroup: null },

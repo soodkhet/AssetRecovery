@@ -269,7 +269,10 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         id: 'settings.finance',
         label: 'ตั้งค่าบัญชี/การเงิน',
         path: '/settings/finance',
-        audiences: ['superadmin', 'executive'],
+        // มติ PO 06/10/2569 (UAT U93) — การเงิน/บัญชี/ธุรการเห็นแท็บนี้**เฉพาะเมื่อถือ `manage_holidays`** และข้างใน
+        // เห็นเฉพาะแท็บที่เปิดให้กลุ่มปฏิบัติการ (`staffAccess` ใน `lib/settings/finance-tabs.ts` — ปฏิทินวันหยุด)
+        audiences: ['superadmin', 'executive', 'finance', 'accounting', 'admin_office'],
+        capabilityGate: { audiences: ['finance', 'accounting', 'admin_office'], anyOf: ['manage_holidays'] },
         available: true,
       },
       // `06` §9 — "ตั้งค่าทั่วไป" รวม `auditlog` (mockup `settings.html` แท็บสุดท้าย) · Phase 5.2

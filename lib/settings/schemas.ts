@@ -18,6 +18,7 @@ import {
 } from '@/lib/settings/assignment-policy'
 import { MAX_SLA_ALERT_HOURS, MIN_SLA_ALERT_HOURS } from '@/lib/settings/sla-policy'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
+import { MAX_HOLIDAY_IMPORT_ROWS, MAX_HOLIDAY_NAME_LENGTH } from '@/lib/settings/holidays'
 import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
 import {
   WHT_CERTIFICATE_MODES,
@@ -317,6 +318,34 @@ export const costCenterFieldsSchema = costCenterFields
 export const costCenterCreateSchema = costCenterFields.extend({ reason: reasonSchema })
 export const costCenterUpdateSchema = costCenterCreateSchema
 export const costCenterDeleteSchema = z.object({ reason: reasonSchema })
+
+// ── §6.15 ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93) ─────────────────────
+const holidayNameSchema = z
+  .string()
+  .trim()
+  .min(1, 'กรุณาระบุชื่อวันหยุด')
+  .max(MAX_HOLIDAY_NAME_LENGTH, `ชื่อวันหยุดยาวเกิน ${MAX_HOLIDAY_NAME_LENGTH} ตัวอักษร`)
+
+const holidayItemSchema = z.object({
+  /** `YYYY-MM-DD` ค.ศ. (ค่าของ `<input type="date">`) → เที่ยงคืน UTC (คอลัมน์ `DATE`) */
+  holidayDate: dateOnlySchema('วันหยุด'),
+  name: holidayNameSchema,
+})
+
+export const holidayCreateSchema = holidayItemSchema.extend({ reason: reasonSchema })
+/** นำเข้าหลายวัน — client แยกข้อความด้วย `parseHolidayImport()` แล้วส่งรายการ (วันที่ซ้ำกับที่มีอยู่ถูกข้าม) */
+export const holidayImportSchema = z.object({
+  items: z
+    .array(holidayItemSchema)
+    .min(1, 'ไม่มีรายการวันหยุดให้นำเข้า')
+    .max(MAX_HOLIDAY_IMPORT_ROWS, `นำเข้าได้ครั้งละไม่เกิน ${MAX_HOLIDAY_IMPORT_ROWS} วัน`),
+  reason: reasonSchema,
+})
+export const holidayDeleteSchema = z.object({ reason: reasonSchema })
+export const holidayListQuerySchema = z.object({
+  /** ปี พ.ศ. — ไม่ส่ง = ทุกปี */
+  yearBe: z.coerce.number().int().min(2500).max(2700).optional(),
+})
 
 // ── §6.8 รูปแบบไฟล์ธนาคาร ──────────────────────────────────────────────
 export const bankFileTypeSchema = z.enum(['CSV', 'TXT'])

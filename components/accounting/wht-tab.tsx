@@ -66,7 +66,7 @@ export function WhtTab() {
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>
-              กำหนดนำส่งวันที่ {fmtDate(pending.filingDueDate)} {pending.filingMethodLabel} — ยื่นล่าช้ามีเบี้ยปรับ/เงินเพิ่ม
+              กำหนดนำส่งวันที่ {pending.filingDueLabel} — ยื่นล่าช้ามีเบี้ยปรับ/เงินเพิ่ม
               {warning === null ? '' : ` · ${warning.message}`}
             </span>
             {canManage && (
@@ -127,7 +127,7 @@ export function WhtTab() {
                   <Tr key={row.id}>
                     <Td className="font-semibold">{row.periodLabel}</Td>
                     <Td className={row.isOverdue ? 'text-xs font-bold text-red-600' : 'text-xs text-slate-500'}>
-                      {fmtDate(row.filingDueDate)}
+                      {row.filingDueDateText}
                       <div className="text-[11px] font-normal text-slate-400">{row.filingMethodLabel}</div>
                     </Td>
                     <Td numeric className="font-semibold">

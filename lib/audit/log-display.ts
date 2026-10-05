@@ -95,6 +95,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   finance_policy_settings: 'นโยบายการเงิน',
   billing_payout_cycles: 'รอบวางบิล/รอบจ่าย',
   cost_centers: 'ศูนย์ต้นทุน',
+  public_holidays: 'ปฏิทินวันหยุด',
   bank_file_formats: 'รูปแบบไฟล์โอนเงิน',
   organizations: 'องค์กร',
   sessions: 'การเข้าใช้งาน',

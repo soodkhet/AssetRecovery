@@ -257,6 +257,14 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [companyAdmin, 'view'],
   ],
 
+  // ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93): ธุรการ/บัญชี/การเงิน จัดการ · บริหาร ดู · Superadmin ไม่มี record
+  manage_holidays: [
+    [adminOffice, 'manage'],
+    [accounting, 'manage'],
+    [finance, 'manage'],
+    [executive, 'view'],
+  ],
+
   // ── นอก matrix: ผู้ใช้ภายในดูพอร์ทัลในฐานะลูกค้า (มติ PO 05/10/2569 U59 · `97` §13.1) ──
   // ค่าเริ่มต้น = ธุรการ (ช่วยลูกค้า) · Superadmin โดยนิยาม (ไม่มี record) · role ภายในอื่นมอบได้ที่หน้าจัดการ Role
   view_client_portal_as: [[adminOffice, 'view']],
@@ -278,6 +286,8 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_jobs',
   'manage_wht_policy',
   'manage_customer_wht',
+  // ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93)
+  'manage_holidays',
   // พอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U6/O43 D1)
   'portal_cases',
   'portal_finance',

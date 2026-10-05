@@ -9,6 +9,7 @@ import { CostCentersTab } from '@/components/settings/cost-centers-tab'
 import { CyclesTab } from '@/components/settings/cycles-tab'
 import { ExportFormatsTab } from '@/components/settings/export-formats-tab'
 import { FunctionalPermissionsTab } from '@/components/settings/functional-permissions-tab'
+import { HolidaysTab } from '@/components/settings/holidays-tab'
 import { InternalDocumentsTab } from '@/components/settings/internal-documents-tab'
 import { InvoiceNumberingTab } from '@/components/settings/invoice-numbering-tab'
 import { SellerBranchCard } from '@/components/settings/seller-branch-card'
@@ -113,6 +114,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'taxdoc' && <TaxDocTemplatesTab />}
           {current?.id === 'sla' && <SlaPolicyTab />}
           {current?.id === 'assignment' && <AssignmentPolicyTab />}
+          {current?.id === 'holidays' && <HolidaysTab />}
           {current !== undefined && !current.available && (
             <EmptyState
               title={current.label}

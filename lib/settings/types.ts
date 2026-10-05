@@ -170,6 +170,32 @@ export interface CostCenterDto {
   updatedAt: string
 }
 
+/** วันหยุดในปฏิทินองค์กร (มติ PO U93) — `holidayDate` = `YYYY-MM-DD` ค.ศ. (แสดงผลเป็น พ.ศ. ด้วย `fmtDate`) */
+export interface PublicHolidayDto {
+  id: string
+  holidayDate: string
+  name: string
+  yearBe: number
+  weekdayLabel: string
+  createdByName: string | null
+  createdAt: string
+}
+
+export interface PublicHolidayListDto {
+  items: PublicHolidayDto[]
+  /** ปี พ.ศ. ที่มีวันหยุดอยู่ (ใหม่ → เก่า) — ตัวเลือกของตัวกรองปี */
+  years: number[]
+}
+
+/** ผลของการเพิ่ม/ลบ/นำเข้าวันหยุด — พร้อมรอบนำส่ง ภ.ง.ด. ที่กำหนดยื่นถูกคิดใหม่ */
+export interface HolidayMutationResultDto {
+  created: PublicHolidayDto[]
+  /** วันที่ (`YYYY-MM-DD`) ที่ข้ามเพราะมีอยู่แล้ว (นำเข้าเท่านั้น) */
+  skippedDates: string[]
+  deleted: PublicHolidayDto | null
+  refreshedFilings: { periodLabel: string; fromDate: string; toDate: string }[]
+}
+
 export interface BankFileFormatDto {
   id: string
   bankName: string

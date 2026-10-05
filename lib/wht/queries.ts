@@ -6,6 +6,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
+import { loadHolidayKeys } from '@/lib/settings/queries/holiday-keys'
 import { resolveWhtFilingMethod } from '@/lib/settings/queries/wht-policy'
 import { WHT_FILING_METHOD_SUFFIX } from '@/lib/settings/wht-policy'
 import { WhtError } from '@/lib/wht/errors'
@@ -27,7 +28,10 @@ import {
   daysUntilFilingDue,
   EMPTY_FIELD_TEXT,
   filingDueDateOf,
+  filingDueDateText,
+  filingDueLabel,
   filingMethodResolveDate,
+  filingNominalDueDateOf,
   filingFormOf,
   filingOverdueWarning,
   groupCertificateSources,
@@ -147,16 +151,23 @@ const FILING_SELECT = {
   status: true,
   filedAt: true,
   filedByUser: { select: { fullName: true } },
+  period: { select: { yearBe: true, month: true } },
 } satisfies Prisma.WhtFilingSummarySelect
 
 type FilingRow = Prisma.WhtFilingSummaryGetPayload<{ select: typeof FILING_SELECT }>
 
 function toFilingDto(row: FilingRow, now: Date): WhtFilingSummaryDto {
+  // วันตามปฏิทินก่อนเลื่อนวันหยุด (U93) — คิดจากงวด + วิธียื่นที่ snapshot ไว้ (ไม่ต้องเก็บคอลัมน์เพิ่ม)
+  const nominal = filingNominalDueDateOf({ yearBe: row.period.yearBe, month: row.period.month }, row.filingMethod)
+  const shifted = nominal.getTime() !== row.filingDueDate.getTime()
   return {
     id: row.id,
     periodId: row.periodId,
     periodLabel: row.periodLabel,
     filingDueDate: row.filingDueDate.toISOString(),
+    filingNominalDueDate: shifted ? nominal.toISOString() : null,
+    filingDueLabel: filingDueLabel(row.filingDueDate, row.filingMethod, nominal),
+    filingDueDateText: filingDueDateText(row.filingDueDate, nominal),
     filingMethod: row.filingMethod,
     filingMethodLabel: WHT_FILING_METHOD_SUFFIX[row.filingMethod],
     pnd3Satang: row.pnd3Satang,
@@ -198,7 +209,8 @@ export async function refreshFilingSummary(
   // มติ PO U45 — วันกำหนดยื่นตามวิธียื่นที่ตั้งไว้ (ค่าตั้งที่มีผล ณ วันที่ 1 ของเดือนที่ยื่น)
   const period = { yearBe: input.yearBe, month: input.month }
   const filingMethod = await resolveWhtFilingMethod(tx, input.organizationId, filingMethodResolveDate(period))
-  const filingDueDate = filingDueDateOf(period, filingMethod)
+  // มติ PO U93 — ตรงเสาร์/อาทิตย์/วันหยุดในปฏิทินองค์กร ⇒ เลื่อนเป็นวันทำการถัดไป
+  const filingDueDate = filingDueDateOf(period, filingMethod, await loadHolidayKeys(tx, input.organizationId))
 
   const existing = await tx.whtFilingSummary.findUnique({
     where: { periodId: input.periodId },
@@ -648,6 +660,8 @@ export async function listWhtFilingSummaries(
               status: pending.status,
               filingDueDate: new Date(pending.filingDueDate),
               filingMethod: pending.filingMethod,
+              filingNominalDueDate:
+                pending.filingNominalDueDate === null ? null : new Date(pending.filingNominalDueDate),
             },
             now,
           ),

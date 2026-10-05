@@ -8,7 +8,10 @@ import {
   DEFAULT_INCOME_TYPE,
   EMPTY_FIELD_TEXT,
   filingDueDateOf,
+  filingDueDateText,
   filingDueLabel,
+  filingNominalDueDateOf,
+  FILING_DUE_SHIFTED_SUFFIX,
   filingMethodResolveDate,
   FILING_DUE_DAY_BY_METHOD,
   filingFormOf,
@@ -95,25 +98,44 @@ describe('กำหนดเวลานำส่ง (`33` §6.2/§7.2 · §16)'
   })
 
   it('U45 — ยื่นแบบกระดาษ = วันที่ 7 ของเดือนถัดไป · ป้ายระบุวิธี · resolve ค่าตั้ง ณ วันที่ 1 ของเดือนที่ยื่น', () => {
-    expect(filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper').toISOString()).toBe('2026-11-07T00:00:00.000Z')
-    expect(filingDueDateOf({ yearBe: 2569, month: 10 }, 'online').toISOString()).toBe('2026-11-15T00:00:00.000Z')
+    expect(filingNominalDueDateOf({ yearBe: 2569, month: 10 }, 'paper').toISOString()).toBe('2026-11-07T00:00:00.000Z')
+    expect(filingNominalDueDateOf({ yearBe: 2569, month: 10 }, 'online').toISOString()).toBe('2026-11-15T00:00:00.000Z')
     expect(filingDueDateOf({ yearBe: 2569, month: 12 }, 'paper').toISOString()).toBe('2027-01-07T00:00:00.000Z')
     expect(FILING_DUE_DAY_BY_METHOD).toEqual({ online: 15, paper: 7 })
     expect(filingMethodResolveDate({ yearBe: 2569, month: 10 }).toISOString()).toBe('2026-11-01T00:00:00.000Z')
-    expect(filingDueLabel(filingDueDateOf({ yearBe: 2569, month: 10 }), 'online')).toBe('15/11/2569 (ยื่นออนไลน์)')
-    expect(filingDueLabel(filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper'), 'paper')).toBe('07/11/2569 (ยื่นแบบกระดาษ)')
-    // วันกำหนดตกวันหยุดไม่เลื่อน (มติ U45 — ไม่คำนวณวันหยุดราชการ): 07/11/2569 เป็นวันเสาร์ ยังคง 7
-    expect(filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper').getUTCDay()).toBe(6)
+    expect(filingDueLabel(filingDueDateOf({ yearBe: 2569, month: 6 }), 'online')).toBe('15/07/2569 (ยื่นออนไลน์)')
+    expect(filingDueLabel(filingDueDateOf({ yearBe: 2569, month: 12 }, 'paper'), 'paper')).toBe('07/01/2570 (ยื่นแบบกระดาษ)')
+  })
+
+  it('U93 — กำหนดยื่นตรงเสาร์/อาทิตย์เลื่อนเป็นวันทำการถัดไป · ป้ายแสดงวันเดิม → วันใหม่', () => {
+    // 07/11/2569 = วันเสาร์ ⇒ จันทร์ 09/11/2569 · 15/11/2569 = วันอาทิตย์ ⇒ จันทร์ 16/11/2569
+    const paper = filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper')
+    const online = filingDueDateOf({ yearBe: 2569, month: 10 }, 'online')
+    expect(paper.toISOString()).toBe('2026-11-09T00:00:00.000Z')
+    expect(online.toISOString()).toBe('2026-11-16T00:00:00.000Z')
+    const nominal = filingNominalDueDateOf({ yearBe: 2569, month: 10 }, 'online')
+    expect(filingDueDateText(online, nominal)).toBe(`15/11/2569 → 16/11/2569 ${FILING_DUE_SHIFTED_SUFFIX}`)
+    expect(filingDueLabel(online, 'online', nominal)).toBe('15/11/2569 → 16/11/2569 (เลื่อนจากวันหยุด) (ยื่นออนไลน์)')
+    // ไม่ถูกเลื่อน ⇒ แสดงวันเดียว
+    const july = filingDueDateOf({ yearBe: 2569, month: 6 })
+    expect(filingDueDateText(july, filingNominalDueDateOf({ yearBe: 2569, month: 6 }))).toBe('15/07/2569')
+    expect(filingDueDateText(july, null)).toBe('15/07/2569')
     const warning = filingOverdueWarning(
-      {
-        periodLabel: 'ตุลาคม 2569',
-        status: 'pending',
-        filingDueDate: filingDueDateOf({ yearBe: 2569, month: 10 }, 'paper'),
-        filingMethod: 'paper',
-      },
-      new Date('2026-11-10T03:00:00Z'),
+      { periodLabel: 'ตุลาคม 2569', status: 'pending', filingDueDate: paper, filingMethod: 'paper', filingNominalDueDate: filingNominalDueDateOf({ yearBe: 2569, month: 10 }, 'paper') },
+      new Date('2026-11-12T03:00:00Z'),
     )
-    expect(warning?.message).toContain('07/11/2569 (ยื่นแบบกระดาษ)')
+    expect(warning?.message).toContain('07/11/2569 → 09/11/2569 (เลื่อนจากวันหยุด) (ยื่นแบบกระดาษ)')
+    expect(warning?.message).toContain('เลยมา 3 วัน')
+  })
+
+  it('U93 — วันหยุดในปฏิทินองค์กร (ต่อเนื่องหลายวัน) เลื่อนต่อจนถึงวันทำการ', () => {
+    // 15/07/2569 (พุธ) + 16 (พฤหัส) เป็นวันหยุด ⇒ ศุกร์ 17/07/2569
+    const due = filingDueDateOf({ yearBe: 2569, month: 6 }, 'online', new Set(['2026-07-15', '2026-07-16']))
+    expect(due.toISOString()).toBe('2026-07-17T00:00:00.000Z')
+    // 07/01/2570 (พฤหัส) หยุด + ศุกร์ 08 หยุด ⇒ ข้ามเสาร์อาทิตย์ไปจันทร์ 11/01/2570
+    expect(filingDueDateOf({ yearBe: 2569, month: 12 }, 'paper', ['2027-01-07', '2027-01-08']).toISOString()).toBe(
+      '2027-01-11T00:00:00.000Z',
+    )
   })
 
   it('นับวันคงเหลือตามปฏิทินไทย — 13 วันก่อนกำหนด/เลยกำหนดติดลบ', () => {

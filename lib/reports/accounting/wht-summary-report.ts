@@ -4,7 +4,8 @@ import { WHT_FILING_METHOD_SUFFIX, type WhtFilingMethod } from '@/lib/settings/w
 import { ROW_KEY, type ReportColumn, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { toIsoDateOnly } from '@/lib/reports/period'
 import { comparePeriodKeys } from '@/lib/reports/accounting/period-window'
-import { isFilingOverdue, WHT_FILING_STATUS_LABEL } from '@/lib/wht/wht'
+import { fmtDate } from '@/lib/format/datetime'
+import { filingNominalDueDateOf, isFilingOverdue, WHT_FILING_STATUS_LABEL } from '@/lib/wht/wht'
 
 /**
  * **A1 — สรุป WHT รายเดือน** (`96` §6-A1) — ชั้น **pure ล้วน ไม่มี I/O**
@@ -42,9 +43,20 @@ const COLUMNS: readonly ReportColumn[] = [
   { key: 'pnd1Satang', header: 'ภ.ง.ด.1', type: 'money' },
   { key: 'totalSatang', header: 'รวม WHT', type: 'money' },
   { key: 'filingDueDate', header: 'กำหนดยื่น', type: 'date' },
-  { key: 'filingMethodLabel', header: 'วิธียื่น', type: 'text', width: 16 },
+  { key: 'filingMethodLabel', header: 'วิธียื่น', type: 'text', width: 30 },
   { key: 'statusLabel', header: 'สถานะ', type: 'text', width: 20 },
 ]
+
+/**
+ * ป้ายวิธียื่นบนรายงาน — กำหนดยื่นที่ถูกเลื่อนเพราะตรงวันหยุด/เสาร์-อาทิตย์ (มติ PO U93) ต่อท้ายวันเดิมตามปฏิทิน
+ * ให้เห็นว่าคอลัมน์ "กำหนดยื่น" เป็นวันที่เลื่อนแล้ว เช่น "(ยื่นออนไลน์) เลื่อนจากวันหยุด 15/11/2569"
+ */
+export function filingMethodText(entry: WhtFilingSummaryEntry): string {
+  const method = entry.filingMethod ?? 'online'
+  const base = WHT_FILING_METHOD_SUFFIX[method]
+  const nominal = filingNominalDueDateOf({ yearBe: entry.yearBe, month: entry.month }, method)
+  return nominal.getTime() === entry.filingDueDate.getTime() ? base : `${base} เลื่อนจากวันหยุด ${fmtDate(nominal)}`
+}
 
 /** ป้ายสถานะบนรายงาน — ยื่นแล้ว / รอยื่น / รอยื่น (เลยกำหนด) */
 export function filingStatusLabel(entry: WhtFilingSummaryEntry, asOf: Date): string {
@@ -70,7 +82,7 @@ export function buildWhtSummaryReport(input: {
     pnd1Satang: entry.pnd1Satang,
     totalSatang: entry.pnd3Satang + entry.pnd53Satang + entry.pnd1Satang,
     filingDueDate: toIsoDateOnly(entry.filingDueDate),
-    filingMethodLabel: WHT_FILING_METHOD_SUFFIX[entry.filingMethod ?? 'online'],
+    filingMethodLabel: filingMethodText(entry),
     statusLabel: filingStatusLabel(entry, asOf),
   }))
 

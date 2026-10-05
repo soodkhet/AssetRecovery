@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildWhtSummaryReport,
+  filingMethodText,
   filingStatusLabel,
   type WhtFilingSummaryEntry,
 } from '@/lib/reports/accounting/wht-summary-report'
@@ -93,5 +94,16 @@ describe('buildWhtSummaryReport', () => {
     expect(report.note).toContain('ยกเลิก')
     // BUG-135 — หมายเหตุที่ผู้ใช้เห็นต้องไม่มีรหัส error ดิบ (เช่น FILING_OVERDUE_WARNING)
     expect(report.note).not.toMatch(/[A-Z]+_[A-Z_]+/)
+  })
+})
+
+describe('A1 — กำหนดยื่นที่เลื่อนวันหยุด (มติ PO 06/10/2569 UAT U93)', () => {
+  it('ไม่ถูกเลื่อน ⇒ ป้ายวิธียื่นอย่างเดียว · ถูกเลื่อน ⇒ ต่อท้ายวันเดิมตามปฏิทิน (พ.ศ.)', () => {
+    expect(filingMethodText(filing(6))).toBe('(ยื่นออนไลน์)')
+    // ตุลาคม 2569 ออนไลน์: 15/11/2569 (อาทิตย์) ⇒ 16/11/2569
+    const shifted = filing(10, { filingDueDate: new Date('2026-11-16T00:00:00Z'), status: 'pending' })
+    expect(filingMethodText(shifted)).toBe('(ยื่นออนไลน์) เลื่อนจากวันหยุด 15/11/2569')
+    const report = buildWhtSummaryReport({ filings: [shifted], asOf: ASOF })
+    expect(report.rows[0]).toMatchObject({ filingDueDate: '2026-11-16', filingMethodLabel: '(ยื่นออนไลน์) เลื่อนจากวันหยุด 15/11/2569' })
   })
 })

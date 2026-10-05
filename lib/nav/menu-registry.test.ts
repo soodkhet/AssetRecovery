@@ -168,6 +168,19 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
     expect(canViewMenu(VIEWERS.executive, 'settings.companies')).toBe(true)
   })
 
+  /** มติ PO 06/10/2569 U93 — ปฏิทินวันหยุด: การเงิน/บัญชี/ธุรการที่ถือ `manage_holidays` เข้า "ตั้งค่าบัญชี/การเงิน" ได้ */
+  it('การเงิน/บัญชี/ธุรการที่ถือสิทธิ์ปฏิทินวันหยุดเห็นแท็บตั้งค่าบัญชี/การเงิน — ไม่ถือก็ไม่เห็น', () => {
+    for (const audience of ['finance', 'accounting', 'admin_office'] as const) {
+      expect(canViewMenu(VIEWERS[audience], 'settings.finance'), audience).toBe(false)
+      const holder: MenuViewer = { ...VIEWERS[audience], capabilities: { manage_holidays: 'manage' } }
+      expect(canViewMenu(holder, 'settings.finance'), audience).toBe(true)
+    }
+    expect(canViewMenu({ ...VIEWERS.case_approver, capabilities: { manage_holidays: 'manage' } }, 'settings.finance')).toBe(
+      false,
+    )
+    expect(canViewMenu(VIEWERS.executive, 'settings.finance')).toBe(true)
+  })
+
   /** `/settings` ไม่มีเนื้อหาของตัวเอง — ต้องพาไปแท็บแรก**ที่ผู้ใช้เห็น** ไม่ใช่ `/settings/roles` ตายตัว */
   it('แท็บแรกของ "การตั้งค่า" ต่างกันตาม role', () => {
     expect(firstVisibleChildPath(VIEWERS.superadmin, 'settings')).toBe('/settings/roles')
