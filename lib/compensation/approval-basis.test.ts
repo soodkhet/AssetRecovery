@@ -44,7 +44,7 @@ describe('describeExpenseBasis — แถวรายวัน (BUG-095 / มต
 
 describe('describeExpenseBasis — ค่าที่พัก (มติ PO U89)', () => {
   const base = { fuelRatePerKmSatang: null, fuelDailyFlatSatang: null, allowanceSatang: null }
-  it('มีเพดาน snapshot → แสดงยอด + เพดานต่อคืน', () => {
+  it('มีเพดาน snapshot → แสดงยอด + จำนวนคืน + เพดานรวม', () => {
     expect(
       describeExpenseBasis({
         expenseType: 'hotel',
@@ -52,7 +52,29 @@ describe('describeExpenseBasis — ค่าที่พัก (มติ PO U89
         distanceKm: null,
         compPlan: { ...base, hotelMaxPerNightSatang: 80_000 },
       }),
-    ).toBe('600.00 บาท (เพดาน 800.00 บาท/คืน)')
+    ).toBe('600.00 บาท (1 คืน · เพดาน ฿800.00)')
+  })
+  it('หลายคืน (มติ PO O50) → "2 คืน · เพดาน ฿1,600.00"', () => {
+    expect(
+      describeExpenseBasis({
+        expenseType: 'hotel',
+        grossSatang: 160_000,
+        distanceKm: null,
+        hotelNights: 2,
+        compPlan: { ...base, hotelMaxPerNightSatang: 80_000 },
+      }),
+    ).toBe('1,600.00 บาท (2 คืน · เพดาน ฿1,600.00)')
+  })
+  it('หลายคืนแต่ไม่ตั้งเพดาน → บอกจำนวนคืน', () => {
+    expect(
+      describeExpenseBasis({
+        expenseType: 'hotel',
+        grossSatang: 160_000,
+        distanceKm: null,
+        hotelNights: 3,
+        compPlan: { ...base, hotelMaxPerNightSatang: null },
+      }),
+    ).toBe('1,600.00 บาท (3 คืน)')
   })
   it('ไม่ตั้งเพดาน → ยอดอย่างเดียว', () => {
     expect(

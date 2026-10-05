@@ -2,6 +2,12 @@ import { z } from 'zod'
 import { dateOnlySchema } from '@/lib/api/validation'
 import { CLOSE_FAIL_REASONS } from '@/lib/field/fail-reasons'
 import { FIELD_GROUPS } from '@/lib/field/field-status'
+import {
+  HOTEL_NIGHTS_DEFAULT,
+  HOTEL_NIGHTS_MAX,
+  HOTEL_NIGHTS_MIN,
+  HOTEL_NIGHTS_RANGE_MESSAGE,
+} from '@/lib/field/hotel-claim'
 
 /**
  * Zod ชุดเดียวใช้ร่วม FE/BE ของ Field Tracker (`41` §17.1 · `45` §6.3)
@@ -142,10 +148,18 @@ export const fieldExpenseListQuerySchema = z.object({
 
 export type FieldExpenseListQuery = z.infer<typeof fieldExpenseListQuerySchema>
 
+/** จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50) — จำนวนเต็ม 1–31 · DB CHECK ช่วงเดียวกัน */
+export const hotelNightsSchema = z
+  .int(HOTEL_NIGHTS_RANGE_MESSAGE)
+  .min(HOTEL_NIGHTS_MIN, HOTEL_NIGHTS_RANGE_MESSAGE)
+  .max(HOTEL_NIGHTS_MAX, HOTEL_NIGHTS_RANGE_MESSAGE)
+
 /** `POST /api/field/expenses/hotel` (`41` §6.6 กลุ่มเบิกแยก) — ยอดเป็น satang จำนวนเต็มเสมอ (Rule 01) */
 export const hotelClaimSchema = z.object({
   expenseDate: dateOnlySchema('วันที่เข้าพัก'),
   amountSatang: z.int().positive('จำนวนเงินต้องมากกว่า 0'),
+  /** ไม่บังคับ — ไม่ส่ง = 1 คืน (มติ PO O50) */
+  hotelNights: hotelNightsSchema.default(HOTEL_NIGHTS_DEFAULT),
   sharedWithUserId: z.uuid('ผู้พักร่วมไม่ถูกต้อง').nullish(),
   receiptFileUrl: fileUrl,
   note: trimmedText.max(1000).nullish(),
@@ -156,6 +170,8 @@ export type HotelClaimInput = z.infer<typeof hotelClaimSchema>
 /** `POST /api/field/expenses/:id/resubmit` (`41` §8 `resubmit_expense`) — แก้เอกสาร/ยอดแล้วส่งใหม่ */
 export const resubmitExpenseSchema = z.object({
   amountSatang: z.int().positive().optional(),
+  /** แก้จำนวนคืนได้เฉพาะใบเบิกค่าที่พัก (ชนิดอื่นไม่สนใจค่านี้) — ไม่ส่ง = คงเดิม (มติ PO O50) */
+  hotelNights: hotelNightsSchema.optional(),
   receiptFileUrl: fileUrl.optional(),
   note: trimmedText.max(1000).nullish(),
 })

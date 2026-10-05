@@ -5,7 +5,7 @@ import { IconFile } from '@/components/field/field-icons'
 import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { hotelClaimFormError } from '@/lib/field/hotel-claim'
+import { HOTEL_NIGHTS_MAX, HOTEL_NIGHTS_MIN, hotelClaimFormError, parseHotelNightsInput } from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
@@ -15,6 +15,7 @@ import { parseBahtInput } from '@/lib/format/money'
  * ฟอร์มเบิกค่าที่พัก (`41` §6.6 กลุ่ม "เบิกแยก" · §7.9)
  *
  * - 3 ฟิลด์บังคับ: วันที่เข้าพัก / จำนวนเงิน / ใบเสร็จ — **ผู้พักร่วมไม่บังคับ** และเลือกได้เฉพาะคนในทีม
+ * - "จำนวนคืน" ไม่บังคับ (ว่าง = 1 · จำนวนเต็ม 1–31 — มติ PO O50) ใบเสร็จ 1 ใบครอบหลายคืนได้ ⇒ เพดาน = อัตรา/คืน × จำนวนคืน
  *   (ตัวเลือกมาจาก `GET /api/field/teammates` ซึ่งใช้เงื่อนไขเดียวกับยามฝั่ง BE)
  * - เบิกย้อนหลังได้เสมอ ⇒ ไม่ล็อกวันที่สูงสุด/ต่ำสุด
  * - เงินกรอกเป็น "บาท" แต่ส่งขึ้น API เป็น **satang จำนวนเต็ม** เสมอ (Rule 01)
@@ -32,6 +33,7 @@ export function HotelClaimModal({
   const [teammates, setTeammates] = useState<FieldTeammateDto[]>([])
   const [expenseDate, setExpenseDate] = useState('')
   const [amountBaht, setAmountBaht] = useState('')
+  const [nightsText, setNightsText] = useState('1')
   const [sharedWithUserId, setSharedWithUserId] = useState('')
   const [note, setNote] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
@@ -51,9 +53,10 @@ export function HotelClaimModal({
   }, [])
 
   async function submit(): Promise<void> {
-    const formError = hotelClaimFormError({ expenseDate, amountBaht, hasReceipt: receipt !== null })
+    const formError = hotelClaimFormError({ expenseDate, amountBaht, hasReceipt: receipt !== null, nightsText })
     const amountSatang = parseBahtInput(amountBaht)
-    if (formError !== null || receipt === null || amountSatang === null) {
+    const hotelNights = parseHotelNightsInput(nightsText)
+    if (formError !== null || receipt === null || amountSatang === null || hotelNights === null) {
       setError(formError ?? 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
       return
     }
@@ -67,6 +70,7 @@ export function HotelClaimModal({
         jsonRequest('POST', {
           expenseDate,
           amountSatang,
+          hotelNights,
           sharedWithUserId: sharedWithUserId === '' ? null : sharedWithUserId,
           receiptFileUrl,
           note: note.trim() === '' ? null : note.trim(),
@@ -104,6 +108,18 @@ export function HotelClaimModal({
       <div className="space-y-3">
         <Field label="วันที่เข้าพัก" required>
           <Input type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+        </Field>
+
+        <Field label="จำนวนคืน" hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={HOTEL_NIGHTS_MIN}
+            max={HOTEL_NIGHTS_MAX}
+            step={1}
+            value={nightsText}
+            onChange={(event) => setNightsText(event.target.value)}
+          />
         </Field>
 
         <Field label="จำนวนเงิน (บาท)" required>
@@ -155,7 +171,7 @@ export function HotelClaimModal({
         </Field>
 
         <p className="text-[13px] text-slate-500">
-          ระบบจะจับคู่กับเคสที่มีกำหนดวันตรงกับวันที่พักนี้โดยอัตโนมัติ เพื่อใช้ตรวจสอบเท่านั้น
+          ระบบจะจับคู่กับเคสที่มีกำหนดวันอยู่ในช่วงวันที่พักนี้โดยอัตโนมัติ เพื่อใช้ตรวจสอบเท่านั้น
         </p>
 
         {error !== null && <p className="text-xs font-semibold text-red-600">{error}</p>}

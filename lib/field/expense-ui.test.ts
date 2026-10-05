@@ -45,6 +45,8 @@ function expense(overrides: Partial<FieldExpenseDto> = {}): FieldExpenseDto {
     receiptFileUrl: null,
     sharedWithUserId: null,
     sharedWithName: null,
+    hotelNights: 1,
+    hotelMaxPerNightSatang: null,
     matchedCaseIds: [],
     createdAt: '2026-08-10T10:00:00.000Z',
     ...overrides,

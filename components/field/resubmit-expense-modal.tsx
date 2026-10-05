@@ -6,6 +6,13 @@ import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { EXPENSE_TYPE_ICON, expenseTypeLabel, isSeparateExpense } from '@/lib/field/expense-ui'
+import {
+  HOTEL_NIGHTS_MAX,
+  HOTEL_NIGHTS_MIN,
+  HOTEL_NIGHTS_RANGE_MESSAGE,
+  hotelNightsCapText,
+  parseHotelNightsInput,
+} from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
@@ -17,6 +24,7 @@ import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/
  *
  * - **เจ้าของรายการเท่านั้น** ที่ทำได้ (BE ตรวจซ้ำจาก payee ของผู้เรียก — หัวหน้าทีมแก้แทนไม่ได้)
  * - รายการกลุ่ม "ผูกกับเคส" ระบบคำนวณยอดให้ ⇒ แก้ได้แค่หมายเหตุ (ช่องยอด/ใบเสร็จซ่อนไว้)
+ * - ค่าที่พักแก้ "จำนวนคืน" ได้ด้วย (มติ PO O50) — BE ตรวจเพดานด้วยจำนวนคืนหลังแก้
  * - ส่งใหม่แล้วกลับเข้า `pending_approval` — **ไม่ผ่านขั้นรอคลังซ้ำ** (`41` §6.6)
  */
 export function ResubmitExpenseModal({
@@ -31,6 +39,8 @@ export function ResubmitExpenseModal({
   const { showToast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const editable = isSeparateExpense(expense)
+  const isHotel = expense.expenseType === 'hotel'
+  const [nightsText, setNightsText] = useState(() => String(expense.hotelNights))
   const [amountBaht, setAmountBaht] = useState(() => toBahtInput(expense.grossSatang))
   const [note, setNote] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
@@ -53,6 +63,16 @@ export function ResubmitExpenseModal({
       amountSatang = parsed
     }
 
+    let hotelNights: number | undefined
+    if (isHotel) {
+      const parsedNights = parseHotelNightsInput(nightsText)
+      if (parsedNights === null) {
+        setError(HOTEL_NIGHTS_RANGE_MESSAGE)
+        return
+      }
+      hotelNights = parsedNights
+    }
+
     setSubmitting(true)
     setError(null)
     try {
@@ -61,6 +81,7 @@ export function ResubmitExpenseModal({
         apiPath('field.resubmitExpense', { id: expense.id }),
         jsonRequest('POST', {
           ...(amountSatang === undefined ? {} : { amountSatang }),
+          ...(hotelNights === undefined ? {} : { hotelNights }),
           ...(receiptFileUrl === undefined ? {} : { receiptFileUrl }),
           note: note.trim(),
         }),
@@ -109,6 +130,23 @@ export function ResubmitExpenseModal({
                 onChange={(event) => setAmountBaht(event.target.value)}
               />
             </Field>
+
+            {isHotel && (
+              <Field
+                label="จำนวนคืน"
+                hint={`เดิม ${hotelNightsCapText(expense.hotelNights, expense.hotelMaxPerNightSatang)} — ไม่กรอก = 1 คืน`}
+              >
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={HOTEL_NIGHTS_MIN}
+                  max={HOTEL_NIGHTS_MAX}
+                  step={1}
+                  value={nightsText}
+                  onChange={(event) => setNightsText(event.target.value)}
+                />
+              </Field>
+            )}
 
             <Field label="แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)">
               <button

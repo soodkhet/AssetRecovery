@@ -18,7 +18,13 @@ import {
   isFieldDayExpenseHoldable,
   nextExpenseStatus,
 } from '@/lib/field/expense-status'
-import { assertHotelClaimFields, assertHotelClaimWithinCap, assertSharedAgentInTeam } from '@/lib/field/hotel-claim'
+import {
+  assertHotelClaimFields,
+  assertHotelClaimWithinCap,
+  assertSharedAgentInTeam,
+  HOTEL_NIGHTS_DEFAULT,
+  hotelStayDateKeys,
+} from '@/lib/field/hotel-claim'
 import { FIELD_PENDING_EXPENSE_STATUSES, pendingExpenseSatang } from '@/lib/field/expense-ui'
 import { pairSupersededExpenses } from '@/lib/field/supersede-pairing'
 import type {
@@ -199,9 +205,6 @@ async function loadHotelCapSnapshot(
   if (row === null) return null
   return { compPlanId: row.id, compPlanVersion: row.version, hotelMaxPerNightSatang: row.hotelMaxPerNightSatang }
 }
-
-/** ใบเบิกค่าที่พักปัจจุบันเป็นรายคืนเดียว (ฟอร์มมีวันที่เข้าพักวันเดียว ไม่มีช่วงวันที่) ⇒ 1 คืน */
-const HOTEL_CLAIM_NIGHTS = 1
 
 const planSnapshotSelect = {
   id: true,
@@ -645,8 +648,11 @@ const expenseSelect = {
   receiptFileUrl: true,
   receiptFileHash: true,
   sharedWithUserId: true,
+  hotelNights: true,
   compPlanId: true,
   createdAt: true,
+  /** เพดานต่อคืนจาก snapshot แผนของใบเบิก — แสดง "2 คืน · เพดาน ฿1,600.00" (มติ PO O50) */
+  compPlan: { select: { hotelMaxPerNightSatang: true } },
   case: { select: { caseRef: true, debtorName: true } },
   sharedWithUser: { select: { fullName: true } },
 } as const
@@ -670,6 +676,8 @@ function toExpenseDto(row: ExpenseRow, matchedCaseIds: string[] = []): FieldExpe
     receiptFileUrl: row.receiptFileUrl,
     sharedWithUserId: row.sharedWithUserId,
     sharedWithName: row.sharedWithUser?.fullName ?? null,
+    hotelNights: row.hotelNights,
+    hotelMaxPerNightSatang: row.expenseType === 'hotel' ? (row.compPlan?.hotelMaxPerNightSatang ?? null) : null,
     matchedCaseIds,
     createdAt: row.createdAt.toISOString(),
   }
@@ -713,10 +721,16 @@ export async function listFieldExpenses(
     select: expenseSelect,
   })
 
-  // auto-mapping ของรายการเบิกแยก (`41` §6.6) — เคสที่ลงพื้นที่วันเดียวกับวันที่เบิก ใช้ "ตรวจสอบ" เท่านั้น
-  const matchedByDate = new Map<string, string[]>()
+  // auto-mapping ของรายการเบิกแยก (`41` §6.6) — เคสที่ลงพื้นที่ในช่วงวันที่พัก (วันเข้าพัก … + จำนวนคืน − 1
+  // ตามมติ PO O50) ใช้ "ตรวจสอบ" เท่านั้น ไม่มีผลต่อยอด
+  const stayDatesById = new Map<string, string[]>(
+    query.type === 'separate'
+      ? rows.map((row) => [row.id, hotelStayDateKeys(row.expenseDate.toISOString().slice(0, 10), row.hotelNights)])
+      : [],
+  )
+  const casesByDate = new Map<string, string[]>()
   if (query.type === 'separate' && rows.length > 0) {
-    const dates = [...new Set(rows.map((row) => row.expenseDate.toISOString().slice(0, 10)))]
+    const dates = [...new Set([...stayDatesById.values()].flat())]
     const assignments = await prisma.caseAssignment.findMany({
       where: {
         organizationId: user.organizationId,
@@ -728,13 +742,14 @@ export async function listFieldExpenses(
     for (const row of assignments) {
       if (row.scheduledDate === null) continue
       const key = row.scheduledDate.toISOString().slice(0, 10)
-      matchedByDate.set(key, [...(matchedByDate.get(key) ?? []), row.caseId])
+      casesByDate.set(key, [...(casesByDate.get(key) ?? []), row.caseId])
     }
   }
 
-  const items = rows.map((row) =>
-    toExpenseDto(row, matchedByDate.get(row.expenseDate.toISOString().slice(0, 10)) ?? []),
-  )
+  const items = rows.map((row) => {
+    const matched = (stayDatesById.get(row.id) ?? []).flatMap((date) => casesByDate.get(date) ?? [])
+    return toExpenseDto(row, [...new Set(matched)])
+  })
 
   // สรุปยอดบนหัวหน้าจอ (`41` §7.9) — superseded/rejected ไม่นับทั้งสองช่อง
   const pendingSatang = pendingExpenseSatang(items)
@@ -795,9 +810,11 @@ async function pendingFieldDatesOf(user: SessionUser): Promise<string[]> {
 
 export async function submitHotelClaim(
   user: SessionUser,
-  input: HotelClaimInput,
+  claim: Omit<HotelClaimInput, 'hotelNights'> & { hotelNights?: number },
   context: ExpenseMutationContext,
 ): Promise<FieldExpenseDto> {
+  // จำนวนคืนไม่บังคับ — ไม่ส่ง = 1 (มติ PO O50 · ค่าเริ่มต้นเดียวกับ Zod)
+  const input: HotelClaimInput = { ...claim, hotelNights: claim.hotelNights ?? HOTEL_NIGHTS_DEFAULT }
   assertHotelClaimFields({
     expenseDate: input.expenseDate,
     amountSatang: input.amountSatang,
@@ -833,7 +850,7 @@ export async function submitHotelClaim(
   assertHotelClaimWithinCap({
     amountSatang: input.amountSatang,
     maxPerNightSatang: capSnapshot?.hotelMaxPerNightSatang ?? null,
-    nights: HOTEL_CLAIM_NIGHTS,
+    nights: input.hotelNights,
   })
 
   // ขยายมติ PO Q13 ถึงใบเสร็จ (UAT BUG-072) — server ดาวน์โหลดมาตรวจเอง (prefix ของผู้เบิก · มีจริง ·
@@ -854,6 +871,7 @@ export async function submitHotelClaim(
         expenseType: 'hotel',
         grossSatang: input.amountSatang,
         expenseDate: input.expenseDate,
+        hotelNights: input.hotelNights,
         calculationSource: 'receipt',
         // snapshot แผนที่ใช้ตรวจเพดาน (`92` §7.1) — ส่งใหม่หลังตีกลับใช้เพดานชุดเดิม ไม่อ่านแผนปัจจุบัน
         compPlanId: capSnapshot?.compPlanId ?? null,
@@ -881,6 +899,7 @@ export async function submitHotelClaim(
           expenseType: 'hotel',
           grossSatang: input.amountSatang,
           expenseDate: input.expenseDate,
+          hotelNights: input.hotelNights,
           sharedWithUserId: input.sharedWithUserId ?? null,
           receiptFileUrl: input.receiptFileUrl,
           receiptFileHash: receipt.sha256,
@@ -939,8 +958,11 @@ export async function resubmitFieldExpense(
   const editable = current.assignmentId === null
 
   // มติ PO 06/10/2569 U89 — ค่าที่พักที่ส่งใหม่ต้องไม่เกินเพดานของ snapshot เดิม (ใบเก่าที่ยังไม่มี snapshot → resolve ณ วันที่เข้าพัก)
+  // มติ PO O50 — แก้จำนวนคืนได้ตอนส่งใหม่ (เฉพาะค่าที่พัก) · ตรวจเพดานด้วยจำนวนคืนหลังแก้
+  const isHotel = current.expenseType === 'hotel'
+  const nextHotelNights = isHotel && input.hotelNights !== undefined ? input.hotelNights : current.hotelNights
   let hotelCap: HotelCapSnapshot | null = null
-  if (current.expenseType === 'hotel') {
+  if (isHotel) {
     hotelCap =
       current.compPlanId !== null
         ? await loadHotelCapSnapshot(prisma as ExpenseTxClient, {
@@ -955,7 +977,7 @@ export async function resubmitFieldExpense(
     assertHotelClaimWithinCap({
       amountSatang: editable && input.amountSatang !== undefined ? input.amountSatang : current.grossSatang,
       maxPerNightSatang: hotelCap?.hotelMaxPerNightSatang ?? null,
-      nights: HOTEL_CLAIM_NIGHTS,
+      nights: nextHotelNights,
     })
   }
   // แนบใบเสร็จใหม่ → ตรวจฝั่ง server แบบเดียวกับตอนเบิก (UAT BUG-072) · path เดิมที่เคยตรวจแล้วไม่ดาวน์โหลดซ้ำ
@@ -972,6 +994,7 @@ export async function resubmitFieldExpense(
       data: {
         status: nextStatus,
         ...(editable && input.amountSatang !== undefined ? { grossSatang: input.amountSatang } : {}),
+        ...(isHotel && input.hotelNights !== undefined ? { hotelNights: input.hotelNights } : {}),
         ...(newReceiptPath !== null ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash } : {}),
         // ข้อความชี้แจงเก็บแยก — ห้ามเขียนทับ `revision_note` (หมายเหตุตอนเบิก · UAT BUG-098 · `02` v4.13)
         ...(input.note !== undefined ? { resubmitNote: input.note } : {}),
@@ -998,6 +1021,7 @@ export async function resubmitFieldExpense(
         before: {
           status: current.status,
           grossSatang: current.grossSatang,
+          ...(isHotel ? { hotelNights: current.hotelNights } : {}),
           receiptFileUrl: current.receiptFileUrl,
           rejectionReason: current.rejectionReason,
           note: current.revisionNote,
@@ -1006,6 +1030,7 @@ export async function resubmitFieldExpense(
         after: {
           status: nextStatus,
           grossSatang: row.grossSatang,
+          ...(isHotel ? { hotelNights: row.hotelNights } : {}),
           receiptFileUrl: row.receiptFileUrl,
           receiptFileHash: row.receiptFileHash,
           note: row.revisionNote,
