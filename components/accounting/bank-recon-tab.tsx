@@ -5,6 +5,7 @@ import { ImportStatementModal } from '@/components/accounting/import-statement-m
 import { ManualMatchModal } from '@/components/accounting/manual-match-modal'
 import { MatchDetailModal } from '@/components/accounting/match-detail-modal'
 import { ResolveUnmatchedModal } from '@/components/accounting/resolve-unmatched-modal'
+import { SuspenseModal } from '@/components/accounting/suspense-modal'
 import { useBankTransactions, type BankStatusFilter } from '@/components/accounting/use-bank-transactions'
 import { usePermission } from '@/components/auth/permission-provider'
 import {
@@ -25,6 +26,7 @@ import {
   BANK_MATCH_STATUS_GROUP,
   BANK_MATCH_STATUS_LABEL,
   MANAGE_BANK_RECONCILIATION,
+  canMoveToSuspense,
   isMatched,
 } from '@/lib/bank-recon/matching'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
@@ -37,6 +39,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  * ⚠️ ปุ่มขึ้นกับสถานะตาม state machine เดียวกับ API (`23` §6.14) — `unmatched` เท่านั้นที่จับคู่/
  *    ปิดรายการได้ · `unmatched_resolved` เป็น terminal แสดงเป็นข้อความอย่างเดียว
  * ⚠️ สีของ badge มาจาก mapper กลาง (`04` §8.1) ไม่ใช่คลาสสีตรง ๆ
+ * มติ PO U41: เงินเข้าไม่ทราบที่มา ⇒ "เงินรับรอตรวจสอบ" (ไม่สร้างเงินรับ/ไม่ลดยอดค้าง) → จับคู่ภายหลัง หรือคืนเงินผู้โอน
  */
 
 const STATUS_FILTERS = [
@@ -45,6 +48,8 @@ const STATUS_FILTERS = [
   { value: 'auto_matched', label: BANK_MATCH_STATUS_LABEL.auto_matched },
   { value: 'manual_matched', label: BANK_MATCH_STATUS_LABEL.manual_matched },
   { value: 'unmatched_resolved', label: BANK_MATCH_STATUS_LABEL.unmatched_resolved },
+  { value: 'suspense', label: BANK_MATCH_STATUS_LABEL.suspense },
+  { value: 'suspense_refunded', label: BANK_MATCH_STATUS_LABEL.suspense_refunded },
 ]
 
 export function BankReconTab() {
@@ -58,12 +63,19 @@ export function BankReconTab() {
   const [matching, setMatching] = useState<BankTransactionDto | null>(null)
   const [resolving, setResolving] = useState<BankTransactionDto | null>(null)
   const [viewing, setViewing] = useState<BankTransactionDto | null>(null)
+  const [suspending, setSuspending] = useState<BankTransactionDto | null>(null)
+  const [refunding, setRefunding] = useState<BankTransactionDto | null>(null)
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
         <StatCard label="รายการทั้งหมด" value={fmtCount(data.summary.total)} hint="ตามตัวกรองปัจจุบัน" />
         <StatCard label="ยังไม่จับคู่" value={fmtCount(data.summary.unmatched)} hint="ต้องเป็น 0 ก่อนส่งงวด" />
+        <StatCard
+          label="เงินรับรอตรวจสอบคงค้าง"
+          value={fmtSatangSymbol(data.summary.suspenseOutstandingSatang)}
+          hint={`${fmtCount(data.summary.suspenseOutstandingCount)} รายการ · ทุกงวด`}
+        />
         <StatCard label="เงินเข้ารวม" value={fmtSatangSymbol(data.summary.totalInSatang)} hint="ตามตัวกรอง" />
         <StatCard label="เงินออกรวม" value={fmtSatangSymbol(data.summary.totalOutSatang)} hint="ตามตัวกรอง" />
       </div>
@@ -93,6 +105,16 @@ export function BankReconTab() {
         <InlineAlert tone="warning" title={`มี ${fmtCount(data.summary.unmatched)} รายการยังไม่ได้จับคู่`}>
           ต้องจัดการให้ครบ 100% ก่อนส่งงวดบัญชีได้ — จับคู่กับรอบวางบิล/รอบจ่าย หรือปิดรายการพร้อมเหตุผล
           ถ้าไม่ใช่รายรับ-จ่ายของระบบ
+        </InlineAlert>
+      )}
+
+      {data.summary.suspenseOutstandingCount > 0 && (
+        <InlineAlert
+          tone="info"
+          title={`มีเงินรับรอตรวจสอบคงค้าง ${fmtCount(data.summary.suspenseOutstandingCount)} รายการ (${fmtSatangSymbol(data.summary.suspenseOutstandingSatang)})`}
+        >
+          ยังไม่รับรู้เป็นรายได้และไม่ลดยอดค้างชำระ — ทราบที่มาแล้วให้จับคู่กับรอบวางบิล หรือบันทึกคืนเงินผู้โอน ·
+          ปิดงวดได้ แต่ระบบจะแสดงเตือนยอดคงค้างนี้
         </InlineAlert>
       )}
 
@@ -135,8 +157,13 @@ export function BankReconTab() {
                     {row.amountSatang < 0 ? `-${fmtSatangSymbol(Math.abs(row.amountSatang))}` : '—'}
                   </Td>
                   <Td className="font-mono text-xs text-slate-600">{row.matchedRef ?? '—'}</Td>
-                  <Td className="max-w-[160px] truncate text-xs text-slate-500" title={row.matchNote ?? ''}>
-                    {row.matchNote ?? '—'}
+                  <Td
+                    className="max-w-[160px] truncate text-xs text-slate-500"
+                    title={row.matchNote ?? row.refundNote ?? row.suspenseNote ?? ''}
+                  >
+                    {row.matchStatus === 'suspense_refunded'
+                      ? `คืนเงิน ${fmtDate(row.refundDate)} — ${row.refundNote ?? ''}`
+                      : (row.matchNote ?? row.suspenseNote ?? '—')}
                   </Td>
                   <Td>
                     <StatusBadge
@@ -147,6 +174,12 @@ export function BankReconTab() {
                     {row.matchedByName !== null && (
                       <p className="mt-1 text-[10px] text-slate-400">โดย: {row.matchedByName}</p>
                     )}
+                    {row.matchStatus === 'suspense' && row.suspendedAt !== null && (
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        รอตรวจสอบตั้งแต่ {fmtDate(row.suspendedAt)}
+                        {row.suspendedByName !== null ? ` · ${row.suspendedByName}` : ''}
+                      </p>
+                    )}
                   </Td>
                   <Td className="text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
@@ -155,10 +188,28 @@ export function BankReconTab() {
                           <Button size="sm" variant="ghost" onClick={() => setMatching(row)}>
                             จับคู่ Manual
                           </Button>
+                          {canMoveToSuspense(row.matchStatus, row.amountSatang) && (
+                            <Button size="sm" variant="ghost" onClick={() => setSuspending(row)}>
+                              เงินรอตรวจสอบ
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" onClick={() => setResolving(row)}>
                             ปิดรายการ
                           </Button>
                         </>
+                      )}
+                      {row.matchStatus === 'suspense' && canManage && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => setMatching(row)}>
+                            จับคู่ Manual
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setRefunding(row)}>
+                            คืนเงินผู้โอน
+                          </Button>
+                        </>
+                      )}
+                      {row.matchStatus === 'suspense_refunded' && (
+                        <span className="text-[10px] text-slate-400 italic">คืนเงินผู้โอนแล้ว</span>
                       )}
                       {isMatched(row.matchStatus) && (
                         <Button size="sm" variant="ghost" onClick={() => setViewing(row)}>
@@ -199,6 +250,22 @@ export function BankReconTab() {
       />
 
       <MatchDetailModal transaction={viewing} onClose={() => setViewing(null)} />
+
+      <SuspenseModal
+        key={`suspend-${suspending?.id ?? 'none'}`}
+        transaction={suspending}
+        mode="suspend"
+        onClose={() => setSuspending(null)}
+        onDone={() => void reload()}
+      />
+
+      <SuspenseModal
+        key={`refund-${refunding?.id ?? 'none'}`}
+        transaction={refunding}
+        mode="refund"
+        onClose={() => setRefunding(null)}
+        onDone={() => void reload()}
+      />
     </div>
   )
 }

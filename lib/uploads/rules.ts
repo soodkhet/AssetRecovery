@@ -1,6 +1,7 @@
 import type { DocumentSlot } from '@/lib/cases/case'
 import { MAX_UPLOAD_BYTES, maxUploadBytes } from '@/lib/cases/document-upload'
 import { creditNoteFilePrefix } from '@/lib/credit-notes/file'
+import { bankRefundFilePrefix, customerWhtFilePrefix } from '@/lib/customer-wht/file'
 import { EXPENSE_RECEIPT_MAX_BYTES, FIELD_MEDIA_MAX_BYTES, type FieldMediaKind } from '@/lib/field/media-upload'
 import { AUDIO_KINDS, DOCUMENT_KINDS, IMAGE_KINDS, VIDEO_KINDS, type FileKind, type UploadRule } from '@/lib/uploads/inspect'
 import { lotDocumentPrefix } from '@/lib/warehouse/lot-documents'
@@ -79,4 +80,14 @@ export function expenseReceiptRule(userId: string): UploadRule {
 /** ไฟล์สแกนใบลดหนี้ (มติ PO U14) — `tax-invoices/<taxInvoiceId>/credit-notes/…` รับ PDF/รูป เพดานเท่าเอกสารล็อต */
 export function creditNoteFileRule(taxInvoiceId: string): UploadRule {
   return { prefix: creditNoteFilePrefix(taxInvoiceId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
+}
+
+/** สแกนหนังสือรับรอง 50 ทวิ ที่ลูกค้าหักเรา (มติ PO U40) — รับ PDF/รูป เพดานเท่าเอกสารล็อต */
+export function customerWhtFileRule(certificateId: string): UploadRule {
+  return { prefix: customerWhtFilePrefix(certificateId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
+}
+
+/** หลักฐานคืนเงินผู้โอน (สลิปโอนคืน — มติ PO U41) — รับ PDF/รูป เพดานเท่าเอกสารล็อต */
+export function bankRefundFileRule(transactionId: string): UploadRule {
+  return { prefix: bankRefundFilePrefix(transactionId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
 }

@@ -164,8 +164,9 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     path: '/finance',
     // ผู้จัดการ/หัวหน้าทีม = เห็น **เฉพาะแท็บคิวอนุมัติค่าตอบแทน** และเฉพาะคนที่เป็นผู้อนุมัติตาม matrix
     // (`06` §7.2 v2.5 — มติ PO 03/10/2569 UAT R6-A) · แท็บอื่นซ่อนด้วย capability ใน `lib/finance/operation-tabs.ts`
-    audiences: ['superadmin', 'executive', 'finance', 'team_lead'],
-    capabilityGate: { audiences: ['team_lead'], anyOf: FINANCE_TAB_CAPABILITIES },
+    // ธุรการ = เห็นเมนูนี้เฉพาะเมื่อถือ `manage_customer_wht` (แท็บ "50 ทวิ ลูกค้า" แท็บเดียว — มติ PO 05/10/2569 U40)
+    audiences: ['superadmin', 'executive', 'finance', 'team_lead', 'admin_office'],
+    capabilityGate: { audiences: ['team_lead', 'admin_office'], anyOf: FINANCE_TAB_CAPABILITIES },
     available: true,
     plannedPhase: '3.3',
   },

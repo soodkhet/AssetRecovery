@@ -15,6 +15,7 @@
 | v2 | 03/07/2569 | **แก้ไขสำคัญ**: (1) `matched_with_type`/`matched_with_id` (polymorphic) → **Separate FK columns** (`matched_billing_id`/`matched_payout_id`) ตาม DEC-004 ที่ตัดสินใจไว้แล้ว (2) **เติมสถานะที่ขาดจาก schema**: เดิมมีแค่ `matched`/`unmatched` (2 สถานะ) แต่ schema จริงมี 4 สถานะ (`unmatched`/`auto_matched`/`manual_matched`/`unmatched_resolved`) — เพิ่ม `unmatched_resolved` เป็น concept ใหม่สำหรับรายการที่ไม่มีทางจับคู่ได้จริง (เช่น ค่าธรรมเนียมธนาคาร ดอกเบี้ย) แต่ต้องบันทึกอธิบายไว้ ไม่ปล่อยเป็น unmatched ค้างตลอดไป — ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.14 |
 | v2.1 | 04/10/2569 | **มติ PO 04/10/2569 (UAT — แม่แบบนำเข้าภาษาไทย)** — §8 Modal "Import Statement" มีปุ่ม "ดาวน์โหลดไฟล์ตัวอย่าง" (`bank-statement-template.csv` · CSV UTF-8 + BOM) ผ่าน `GET /api/bank-reconciliation/import/template?bank_account_id=` (สิทธิ์ `manage` เดียวกับตัวนำเข้า): บัญชีที่ตั้งรูปแบบ statement (`13` §6.8) ⇒ เรียงคอลัมน์ตาม `column_mapping` เป๊ะ · ยังไม่ตั้ง ⇒ รูปแบบมาตรฐาน วันที่/รายละเอียด/เลขที่อ้างอิง/เงินเข้า/เงินออก · หัวคอลัมน์ภาษาไทยที่ parser รู้จัก วันที่ตัวอย่างเป็น พ.ศ. · มีเทสต์ แม่แบบ → parser ผ่าน 100% |
 | v2.2 | 04/10/2569 | **มติผู้ใช้ 04/10/2569 (แม่แบบ .xlsx)** — §8 ไฟล์ตัวอย่างหลักเป็น **`bank-statement-template.xlsx`** (คอลัมน์ชุดเดียวกับ CSV จาก endpoint เดิม — DTO เพิ่ม `xlsxFileName` + `templateColumns` · ทุกเซลล์ข้อความ `@` · แผ่น "คำอธิบาย") + ลิงก์รอง "หรือ CSV" · Modal รับไฟล์ **.xlsx และ .csv** — .xlsx อ่านแผ่นแรกที่ client (ไม่ประมวลผลสูตร/มาโคร · เซลล์วันที่จริงของ Excel → `YYYY-MM-DD`) แล้วแปลงเป็น CSV ส่ง API เดิม ⇒ parser statement ทางเดิม 100% · เพดาน 2 MB เดิม · SheetJS จาก cdn.sheetjs.com (DEC-013) |
+| v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U41 — เงินเข้าไม่ทราบที่มา "แบบเต็ม")**: §6.5 ใหม่ สถานะ `suspense` (เงินรับรอตรวจสอบ) + `suspense_refunded` (คืนเงินผู้โอน) · §7.1/§14/§16 เพิ่มฟิลด์/endpoint/test · U40: จับคู่เงินรับที่ลูกค้าหักภาษี ⇒ เกิดรายการ "รอ 50 ทวิ จากลูกค้า" (ไฟล์ 31 §6.6) · รายการเดิมที่ปิดเป็น `unmatched_resolved` แล้ว (เช่น ฿123.45 ใน UAT) ไม่ย้าย |
 
 ขอบเขตเอกสารนี้: นำเข้า Bank Statement แล้วจับคู่ (reconcile) กับรายการในระบบ — เงินเข้าจับคู่กับ Billing Batch (ไฟล์ 19) สร้าง Cash Receipt อัตโนมัติ (ไฟล์ 31), เงินออกจับคู่กับ Payout Batch (ไฟล์ 17) ยืนยันการจ่ายสำเร็จ
 
@@ -71,6 +72,14 @@
 
 รายการที่**ไม่มีทางจับคู่กับ Billing/Payout Batch ได้จริง** (เช่น ค่าธรรมเนียมธนาคารรายเดือน, ดอกเบี้ยรับ, เงินโอนผิดที่ธนาคารเรียกคืนแล้ว) — บัญชีทำเครื่องหมาย `unmatched_resolved` พร้อมหมายเหตุอธิบาย แทนที่จะปล่อยเป็น `unmatched` ค้างตลอดไปโดยไม่มีทางแก้ — **ไม่ผูก FK กับ Billing/Payout Batch ใดๆ** (ต่างจาก `matched` ที่ต้องมี FK)
 
+### 6.5 เงินรับรอตรวจสอบ (มติ PO 05/10/2569 U41)
+
+เงิน**เข้า**ที่ยังไม่ทราบที่มา (ไม่รู้ผู้โอน/ไม่ตรงบิลใด) — บัญชีย้าย `unmatched → suspense` พร้อม**เหตุผลบังคับ** แทนการปิดรายการ · ถือเป็น**หนี้สินรอตรวจสอบ**: **ไม่สร้าง Cash Receipt ไม่ลดยอดค้างชำระ (AR) ไม่รับรู้รายได้** · ภายหลัง:
+- ทราบที่มา ⇒ "จับคู่ Manual" กับรอบวางบิลตามสายปกติ (`suspense → manual_matched` · เหตุผลบังคับเสมอ · ไม่มี auto-match) ⇒ เกิด Cash Receipt + AR ลดตามปกติ
+- คืนเงินผู้โอน ⇒ `suspense → suspense_refunded` (วันที่โอนคืน + หลักฐาน (ไฟล์ผ่าน server) + เหตุผล · terminal) — รายการเงินออกตอนโอนคืนใน statement ปิดด้วย `unmatched_resolved` ตามปกติ
+- ทุก transition มีเหตุผล + audit · ยามงวดล็อกใช้วันที่ของรายการ (และวันที่คืนเงิน)
+- หน้ากระทบยอดแสดง**ยอดเงินรับรอตรวจสอบคงค้างทั้งองค์กร** · Readiness (ไฟล์ 30) **ไม่นับเป็นค้างจับคู่ แต่แสดงเตือน** · ส่งออก `11_Suspense_Receipts.csv` (ไฟล์ 37) และ `status` ในไฟล์ 06 เป็น enum เต็ม 6 ค่า
+
 ## 7. Data Entities / Required Objects
 
 ### 7.1 Bank Transaction (แก้ไข matching structure แล้ว — ดู Changelog v2)
@@ -86,7 +95,9 @@
 | matched_billing_id | uuid \| null | — | **Separate FK column** (ตาม DEC-004) — ผูกกับ Billing Batch ถ้าจับคู่แล้ว |
 | matched_payout_id | uuid \| null | — | **Separate FK column** (ตาม DEC-004) — ผูกกับ Payout Batch ถ้าจับคู่แล้ว (มีได้แค่ 1 ใน 2 column นี้เท่านั้นที่ไม่ null) |
 | match_note | text \| null | — | บังคับกรอกถ้ายอดจับคู่ไม่ตรงเป๊ะ หรือถ้า status = unmatched_resolved |
-| status | enum | yes | **`unmatched` / `auto_matched` / `manual_matched` / `unmatched_resolved`** (แก้จาก 2 สถานะเดิม — ดู §6.2-6.4) |
+| status | enum | yes | **`unmatched` / `auto_matched` / `manual_matched` / `unmatched_resolved`** (แก้จาก 2 สถานะเดิม — ดู §6.2-6.4) + `suspense` / `suspense_refunded` (มติ PO U41 — §6.5) |
+| suspense_note, suspended_at, suspended_by | text/timestamptz/uuid | เมื่อ suspense | เหตุผล/เวลา/ผู้ย้ายเข้าเงินรับรอตรวจสอบ (คงไว้เป็นประวัติแม้จับคู่ภายหลัง) |
+| refund_date, refund_note, refund_file_path, refunded_at, refunded_by | date/text/text/timestamptz/uuid | เมื่อ suspense_refunded | คืนเงินผู้โอน |
 
 ## 8. UI / UX Rules
 
@@ -133,6 +144,8 @@
 | GET | /api/bank-reconciliation/transactions | list |
 | PATCH | /api/bank-reconciliation/transactions/:id/match | จับคู่ manual |
 | PATCH | /api/bank-reconciliation/transactions/:id/resolve-unmatched | ทำเครื่องหมายว่าไม่ต้องจับคู่ (ต้องมี match_note) |
+| PATCH | /api/bank-reconciliation/transactions/:id/suspense | ย้ายเป็นเงินรับรอตรวจสอบ (`reason` บังคับ — มติ PO U41) |
+| PATCH | /api/bank-reconciliation/transactions/:id/refund | คืนเงินผู้โอน (`refundDate` + `filePath` + `reason` — มติ PO U41) |
 
 ## 15. Acceptance Criteria
 
@@ -148,6 +161,10 @@
 | Auto-match สำเร็จ | Import statement ที่มียอดตรงกับ Billing Batch เป๊ะ | status = auto_matched อัตโนมัติ, matched_billing_id ถูกตั้งค่า |
 | Manual match ยอดไม่ตรง ไม่กรอกหมายเหตุ | จับคู่ manual ยอดไม่ตรงเป๊ะโดยไม่กรอก note | reject MATCH_NOTE_REQUIRED |
 | ทำเครื่องหมาย unmatched_resolved | ทำเครื่องหมายรายการค่าธรรมเนียมธนาคารว่าไม่ต้องจับคู่ พร้อมกรอกเหตุผล | status = unmatched_resolved, matched_billing_id/matched_payout_id ยังเป็น null ทั้งคู่ |
+| เงินรับรอตรวจสอบ (U41) | ย้ายเงินเข้าไม่ทราบที่มาเป็น suspense พร้อมเหตุผล | ไม่มี Cash Receipt · ยอดรับ/ยอดค้างของรอบวางบิลไม่เปลี่ยน · audit มีเหตุผล |
+| จับคู่เงินรอตรวจสอบภายหลัง (U41) | จับคู่ suspense กับรอบวางบิล ไม่กรอกเหตุผล / กรอกเหตุผล | reject MATCH_NOTE_REQUIRED / manual_matched + Cash Receipt + AR ลด |
+| คืนเงินผู้โอน (U41) | suspense → refund พร้อมวันที่/หลักฐาน/เหตุผล แล้วลองจับคู่ต่อ | suspense_refunded · จับคู่ต่อ = BANK_TRANSACTION_INVALID_STATUS |
+| เงินรับที่ลูกค้าหักภาษี (U40) | จับคู่ยอด total − wht | เกิดรายการ "รอ 50 ทวิ จากลูกค้า" ยอดเท่าที่ถูกหัก |
 | Readiness Check นับ unmatched_resolved เป็นครบ | ตรวจความพร้อมปิดงวด (ไฟล์ 30) มีรายการ unmatched_resolved อยู่ | ถือว่า Bank Reconcile ครบ 100% (ไม่ใช่แค่ auto/manual_matched เท่านั้น) |
 
 ---

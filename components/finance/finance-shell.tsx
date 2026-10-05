@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
 import { AdjustmentTab } from '@/components/finance/adjustment-tab'
 import { AdvanceTab } from '@/components/finance/advance-tab'
 import { ApprovalTab } from '@/components/finance/approval-tab'
@@ -100,6 +101,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         {current?.id === 'payee' && <PayeeTab />}
         {current?.id === 'adjustment' && <AdjustmentTab />}
         {current?.id === 'profit' && <ProfitTab />}
+        {current?.id === 'customer-wht' && <CustomerWhtTab />}
         {current === undefined && (
           <EmptyState title="ยังไม่มีหน้าจอของแท็บนี้" description="เลือกแท็บที่พร้อมใช้งานจากแถบด้านบน" />
         )}

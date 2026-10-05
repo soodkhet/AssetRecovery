@@ -29,7 +29,7 @@ export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
           <MetaCell label="วันที่จัดทำ" value={doc.generatedAtLabel} />
         </View>
         <Text style={[docStyles.metaText, { marginBottom: 14 }]}>
-          <Text style={docStyles.metaLabel}>SHA-256 (ไฟล์ข้อมูล 01–09): </Text>
+          <Text style={docStyles.metaLabel}>SHA-256 (ไฟล์ข้อมูล 01–11): </Text>
           {doc.contentDigest}
         </Text>
 
@@ -64,7 +64,7 @@ export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
         </View>
 
         <Text style={docStyles.noteText}>
-          หมายเหตุ: ตรวจความถูกต้องของชุดเอกสารได้จากค่า SHA-256 ด้านบน (คำนวณจากเนื้อไฟล์ 01–09 ในชุดนี้) ·
+          หมายเหตุ: ตรวจความถูกต้องของชุดเอกสารได้จากค่า SHA-256 ด้านบน (คำนวณจากเนื้อไฟล์ 01–11 ในชุดนี้) ·
           ค่า SHA-256 ของไฟล์ .zip ทั้งชุดดูได้ที่หน้าประวัติการส่งมอบในระบบ
         </Text>
 

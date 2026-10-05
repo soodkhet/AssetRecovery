@@ -302,6 +302,7 @@ async function cleanup(): Promise<void> {
     // ⚠️ ต้องล้างรายการเดินบัญชี **ก่อน** รอบจ่ายเงิน — FK `matched_payout_id` เป็น ON DELETE SET NULL
     //    การลบรอบจ่ายทิ้งก่อนจึงทำให้แถวที่ `auto_matched` ชน CHECK `bank_tx_status_fk_shape`
     await tx.$executeRawUnsafe(`DELETE FROM bank_transaction_allocations WHERE organization_id = '${ORG_ID}'`)
+    await tx.$executeRawUnsafe(`DELETE FROM customer_wht_certificates WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM cash_receipts WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM bank_transactions WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM wht_certificates WHERE organization_id = '${ORG_ID}'`)

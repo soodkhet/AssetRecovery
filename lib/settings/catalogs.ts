@@ -51,7 +51,7 @@ export const INTERNAL_DOCUMENT_TEMPLATES: readonly InternalDocumentTemplate[] = 
 ]
 
 export interface ExportFormatSpec {
-  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–09 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21) */
+  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–11 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41) */
   fileName: string
   format: 'CSV UTF-8' | 'XLSX'
   content: string
@@ -94,7 +94,7 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     fileName: '06_Bank_Reconciliation.csv',
     format: 'CSV UTF-8',
     content:
-      'ผลกระทบยอดธนาคาร — column `status` ใช้ค่า enum เต็ม 4 ค่า (auto_matched/manual_matched/unmatched/unmatched_resolved)',
+      'ผลกระทบยอดธนาคาร — column `status` ใช้ค่า enum เต็ม 6 ค่า (auto_matched/manual_matched/unmatched/unmatched_resolved/suspense/suspense_refunded)',
     sourceFile: '35',
   },
   {
@@ -114,5 +114,19 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     format: 'CSV UTF-8',
     content: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat',
     sourceFile: '31',
+  },
+  // มติ PO 05/10/2569 U40 — ภาษีที่ลูกค้าหักเรา + สถานะหนังสือ 50 ทวิ
+  {
+    fileName: '10_Customer_WHT.csv',
+    format: 'CSV UTF-8',
+    content: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status',
+    sourceFile: '31',
+  },
+  // มติ PO 05/10/2569 U41 — เงินรับรอตรวจสอบ (ไม่ทราบที่มา)
+  {
+    fileName: '11_Suspense_Receipts.csv',
+    format: 'CSV UTF-8',
+    content: 'เงินรับรอตรวจสอบ — amount, reason, status, resolved_ref, refund_date',
+    sourceFile: '35',
   },
 ]

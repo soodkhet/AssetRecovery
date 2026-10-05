@@ -76,6 +76,14 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
     capabilities: ['create_adjustment', 'approve_adjustment', 'approve_adjustment_locked'],
   },
   { id: 'profit', label: 'กำไรและต้นทุน', source: 'ไฟล์ 21', available: true, capabilities: ['view_finance_dashboard'] },
+  // มติ PO 05/10/2569 U40 — 50 ทวิ ที่ลูกค้าหักเรา: การเงินช่วยตาม + ธุรการเข้าหน้านี้ได้ทางเดียว (เห็นแท็บนี้แท็บเดียว)
+  {
+    id: 'customer-wht',
+    label: '50 ทวิ ลูกค้า',
+    source: 'ไฟล์ 31',
+    available: true,
+    capabilities: ['manage_customer_wht'],
+  },
 ]
 
 /**

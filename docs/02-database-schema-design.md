@@ -43,6 +43,7 @@
 | v4.20 | 05/10/2569 | **มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก) + มติบัญชี B1** (migration `20261005130000_credit_notes`): ตารางใหม่ **`credit_notes`** (Group F ต่อจาก `tax_invoices`) + enum `credit_note_status` (`active`/`cancelled`) — FK `tax_invoice_id` / `adjustment_id` (nullable) · เงิน satang · `vat_rate_pct_used NUMERIC(5,2)` snapshot อัตราของใบกำกับเดิม · CHECK ยอด > 0 / total = ก่อน VAT + VAT / ฟิลด์ยกเลิกครบ · partial unique เลขที่ต่อ org และ adjustment ต่อใบ (เฉพาะ active) · trigger กันยอดรวมเกินใบกำกับ + immutable (§13) · ไม่มี `deleted_at` (ยกเลิกแทนลบ เหมือน `tax_invoices`) |
 | v4.21 | 05/10/2569 | **มติ PO 05/10/2569 (U19 — ใบเพิ่มหนี้ ม.86/9)** (migration `20261005150000_debit_notes`): enum ใหม่ `credit_note_type` (`credit`/`debit`) + `credit_notes.note_type NOT NULL DEFAULT 'credit'` (แถวเดิมทั้งหมด = ใบลดหนี้ · ไม่ย้ายข้อมูล — เลือกเพิ่มคอลัมน์แทนเปลี่ยนชื่อตารางเพื่อความปลอดภัยของข้อมูลเดิม) · partial unique เลขที่เปลี่ยนเป็น `(organization_id, note_type, credit_note_number)` · trigger ยอดเกินใบกำกับตรวจ/นับเฉพาะ `credit` (ใบเพิ่มหนี้ไม่มีเพดาน) · immutable trigger เพิ่ม `note_type` |
 | v4.22 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U33) — ประเภทเงินได้ต่อประเภททีมเป็นค่าตั้ง + เงินได้ 40(1)** (migration `20261005163300_wht_income_category_40_1`): enum `wht_income_category` เพิ่ม `sec_40_1` · `wht_policy_history` + `inhouse_income_category` (DEFAULT `sec_40_2`) / `outsource_income_category` (DEFAULT `sec_40_8`) — ใช้เมื่อ `income_type_mode = by_team_side` (ค่าเริ่มต้น = การจับคู่เดิม แถวเดิมไม่เปลี่ยนความหมาย) · `payout_batches` + snapshot `wht_inhouse_income_category` / `wht_outsource_income_category` (NULL = รอบเก่า ⇒ inhouse 40(2) · outsource 40(8)) · 40(1) ใช้ `payee_profiles.wht_40_2_pct` ช่องเดียวกับ 40(2) + ยื่น `PND1` |
+| v4.23 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U40/U41)** (migration `20261005190000_customer_wht_and_suspense_receipts`): **U40** — enum ใหม่ `customer_wht_status` (`pending`/`received`) · `customer_wht_certificates` + `cash_receipt_id` (FK `cash_receipts` ON DELETE SET NULL · partial unique `uniq_customer_wht_cash_receipt` ต่อเงินรับที่ยังไม่ลบ) + `status` + `withheld_satang` (snapshot ยอดที่ลูกค้าหักตอนจับคู่) + `withheld_date` + `file_sha256` + `received_at`/`received_by` · `certificate_number`/`certificate_date`/`gross_satang`/`wht_satang` เป็น nullable (กรอกตอนได้รับหนังสือ — CHECK `customer_wht_received_shape` บังคับเมื่อ `received`) · แถวเดิม (ไม่มี API เขียน) ย้ายเป็น `received` · **U41** — `bank_match_status` เพิ่ม `suspense` (เงินรับรอตรวจสอบ — หนี้สิน ไม่สร้างเงินรับ/ไม่ลด AR) และ `suspense_refunded` (คืนเงินผู้โอน — terminal) · `bank_transactions` + `suspense_note`/`suspended_at`/`suspended_by` + `refund_date`/`refund_note`/`refund_file_path`/`refund_file_sha256`/`refunded_at`/`refunded_by` · ขยาย CHECK `bank_tx_status_fk_shape` (สองสถานะใหม่ห้ามผูก FK) + CHECK ใหม่ `bank_tx_suspense_shape` (เงินเข้าเท่านั้น + เหตุผล) / `bank_tx_refund_shape` (วันที่ + เหตุผล + หลักฐาน) · index `idx_bank_tx_org_status` / `idx_customer_wht_status` · รายการเดิมที่ปิดเป็น `unmatched_resolved` ไม่ย้าย · enum รวม **67 ตัว** |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -379,7 +380,14 @@ CREATE TYPE bank_match_status AS ENUM (
   'unmatched',        -- ยังไม่จับคู่
   'auto_matched',     -- จับคู่อัตโนมัติ
   'manual_matched',   -- จับคู่มือ
-  'unmatched_resolved' -- ตัดจำหน่าย/อธิบายแล้ว
+  'unmatched_resolved', -- ตัดจำหน่าย/อธิบายแล้ว
+  'suspense',          -- v4.23 U41: เงินรับรอตรวจสอบ (ไม่ทราบที่มา — หนี้สิน ไม่สร้างเงินรับ/ไม่ลด AR)
+  'suspense_refunded'  -- v4.23 U41: คืนเงินผู้โอนแล้ว (terminal)
+);
+
+CREATE TYPE customer_wht_status AS ENUM (  -- v4.23 U40: 50 ทวิ ที่ลูกค้าหักเรา
+  'pending',  -- รอ 50 ทวิ จากลูกค้า (เกิดอัตโนมัติตอนจับคู่เงินรับที่ถูกหัก)
+  'received'  -- ได้รับหนังสือแล้ว (เลขที่/วันที่/ยอด + ไฟล์สแกน)
 );
 
 CREATE TYPE tax_invoice_status AS ENUM (
@@ -1829,6 +1837,17 @@ CREATE TABLE bank_transactions (
   is_split_allocation BOOLEAN           NOT NULL DEFAULT false,
   matched_by        UUID                REFERENCES users(id),
   matched_at        TIMESTAMPTZ,
+  -- v4.23 U41: เงินรับรอตรวจสอบ (คงค่าไว้แม้จับคู่/คืนเงินภายหลัง = ประวัติ)
+  suspense_note     TEXT,
+  suspended_at      TIMESTAMPTZ,
+  suspended_by      UUID                REFERENCES users(id),
+  -- v4.23 U41: คืนเงินผู้โอน
+  refund_date       DATE,
+  refund_note       TEXT,
+  refund_file_path  TEXT,
+  refund_file_sha256 TEXT,
+  refunded_at       TIMESTAMPTZ,
+  refunded_by       UUID                REFERENCES users(id),
   created_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
   created_by        UUID                NOT NULL REFERENCES users(id),
   updated_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
@@ -1846,12 +1865,22 @@ CREATE TABLE bank_transactions (
          OR (is_split_allocation = true
             AND matched_billing_id IS NULL AND matched_payout_id IS NULL AND matched_advance_id IS NULL)
        ))
-    OR (match_status IN ('unmatched','unmatched_resolved')
+    OR (match_status IN ('unmatched','unmatched_resolved','suspense','suspense_refunded')  -- v4.23 U41
        AND is_split_allocation = false
        AND matched_billing_id IS NULL AND matched_payout_id IS NULL AND matched_advance_id IS NULL)
+  ),
+  CONSTRAINT bank_tx_suspense_shape CHECK (  -- v4.23 U41: เงินเข้าเท่านั้น + ต้องมีเหตุผล
+    match_status NOT IN ('suspense','suspense_refunded')
+    OR (amount_satang > 0 AND suspended_at IS NOT NULL AND suspense_note IS NOT NULL)
+  ),
+  CONSTRAINT bank_tx_refund_shape CHECK (  -- v4.23 U41: คืนเงิน = วันที่ + เหตุผล + หลักฐาน
+    (match_status = 'suspense_refunded' AND refund_date IS NOT NULL AND refund_note IS NOT NULL
+       AND refund_file_path IS NOT NULL AND refunded_at IS NOT NULL)
+    OR (match_status <> 'suspense_refunded' AND refund_date IS NULL AND refunded_at IS NULL)
   )
 );
 CREATE INDEX idx_bank_tx_period  ON bank_transactions(period_id, match_status);
+CREATE INDEX idx_bank_tx_org_status ON bank_transactions(organization_id, match_status);  -- v4.23 U41 ยอดคงค้าง
 CREATE INDEX idx_bank_tx_account ON bank_transactions(bank_account_id, transaction_date);
 
 -- ── bank_transaction_allocations ─────────────────────────────
@@ -1885,12 +1914,20 @@ CREATE TABLE customer_wht_certificates (
   organization_id    UUID    NOT NULL REFERENCES organizations(id),
   company_id         UUID    NOT NULL REFERENCES finance_companies(id),
   billing_batch_id   UUID    REFERENCES billing_batches(id),  -- NULL = ยังจับคู่รอบบิลไม่ได้
-  certificate_number TEXT    NOT NULL,
-  certificate_date   DATE    NOT NULL,
-  gross_satang       INTEGER NOT NULL,   -- ฐาน before_vat (`22` §6.9)
-  wht_satang         INTEGER NOT NULL,
-  file_url           TEXT,               -- ไฟล์สแกนใบจริง
+  -- v4.23 U40: เกิด pending อัตโนมัติตอนจับคู่เงินรับที่ถูกหัก → received เมื่อได้หนังสือ
+  cash_receipt_id    UUID    REFERENCES cash_receipts(id) ON DELETE SET NULL,
+  status             customer_wht_status NOT NULL DEFAULT 'pending',
+  withheld_satang    INTEGER NOT NULL,   -- ยอดที่ลูกค้าหักไว้ตามเงินรับ (snapshot)
+  withheld_date      DATE    NOT NULL,   -- วันที่รับเงิน (อายุค้าง/งวดของไฟล์ส่งบัญชี)
+  certificate_number TEXT,               -- บังคับเมื่อ received
+  certificate_date   DATE,               -- บังคับเมื่อ received
+  gross_satang       INTEGER,            -- ฐาน before_vat (`22` §6.9) ตามหนังสือ — ไม่บังคับ
+  wht_satang         INTEGER,            -- ยอดตามหนังสือ — บังคับเมื่อ received (ไม่ตรง withheld = เตือน)
+  file_url           TEXT,               -- path ไฟล์สแกนใน Storage (server ประกอบ path — DEC-014)
+  file_sha256        TEXT,
   note               TEXT,
+  received_at        TIMESTAMPTZ,
+  received_by        UUID    REFERENCES users(id),
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by         UUID    NOT NULL REFERENCES users(id),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1899,6 +1936,15 @@ CREATE TABLE customer_wht_certificates (
   UNIQUE(organization_id, company_id, certificate_number)
 );
 CREATE INDEX idx_customer_wht_date ON customer_wht_certificates(organization_id, certificate_date);
+CREATE INDEX idx_customer_wht_status ON customer_wht_certificates(organization_id, status, withheld_date);
+CREATE UNIQUE INDEX uniq_customer_wht_cash_receipt ON customer_wht_certificates(cash_receipt_id)
+  WHERE cash_receipt_id IS NOT NULL AND deleted_at IS NULL;  -- v4.23 U40: 1 เงินรับ = 1 รายการรอ 50 ทวิ
+ALTER TABLE customer_wht_certificates ADD CONSTRAINT customer_wht_withheld_positive CHECK (withheld_satang > 0);
+ALTER TABLE customer_wht_certificates ADD CONSTRAINT customer_wht_received_shape CHECK (
+  (status = 'pending' AND received_at IS NULL)
+  OR (status = 'received' AND certificate_number IS NOT NULL AND certificate_date IS NOT NULL
+      AND wht_satang IS NOT NULL AND wht_satang > 0 AND received_at IS NOT NULL)
+);
 
 -- ── accountant_questions ─────────────────────────────────────
 -- คำถามจากสำนักงานบัญชี ตามไฟล์ 36

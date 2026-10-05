@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { dateOnlySchema } from '@/lib/api/validation'
+import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของกระทบยอดธนาคาร (ไฟล์ 35 §14) — Rule 13
@@ -10,7 +12,15 @@ import { z } from 'zod'
 
 const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
 
-export const bankMatchStatusSchema = z.enum(['unmatched', 'auto_matched', 'manual_matched', 'unmatched_resolved'])
+export const bankMatchStatusSchema = z.enum([
+  'unmatched',
+  'auto_matched',
+  'manual_matched',
+  'unmatched_resolved',
+  // มติ PO U41 — เงินรับรอตรวจสอบ / คืนเงินผู้โอนแล้ว
+  'suspense',
+  'suspense_refunded',
+])
 
 export const bankTransactionListQuerySchema = z.object({
   periodId: uuidSchema.optional(),
@@ -49,6 +59,18 @@ export const resolveUnmatchedSchema = z.object({
   matchNote: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ปิดรายการโดยไม่จับคู่').max(1000),
 })
 
+/** U41 — ย้ายเงินเข้าไม่ทราบที่มาเป็น "เงินรับรอตรวจสอบ" · เหตุผลบังคับ (ขาด ⇒ `MATCH_NOTE_REQUIRED`) */
+export const moveToSuspenseSchema = z.object({
+  reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ย้ายเป็นเงินรับรอตรวจสอบ').max(1000),
+})
+
+/** U41 — คืนเงินรับรอตรวจสอบให้ผู้โอน: วันที่ + หลักฐาน + เหตุผล (บังคับทั้งหมด) */
+export const refundSuspenseSchema = z.object({
+  refundDate: dateOnlySchema('วันที่คืนเงิน'),
+  reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่คืนเงิน').max(1000),
+  filePath: z.string().min(1, 'แนบหลักฐานการคืนเงิน').max(MAX_STORAGE_PATH_LENGTH),
+})
+
 export const matchCandidateQuerySchema = z.object({
   transactionId: uuidSchema,
   /** คำค้นจาก dropdown (`35` §8) — เลขที่รอบ/ชื่อบริษัท */
@@ -60,3 +82,6 @@ export type StatementImportInput = z.infer<typeof statementImportSchema>
 export type BankMatchInput = z.infer<typeof bankMatchSchema>
 export type ResolveUnmatchedInput = z.infer<typeof resolveUnmatchedSchema>
 export type MatchCandidateQuery = z.infer<typeof matchCandidateQuerySchema>
+export type MoveToSuspenseInput = z.infer<typeof moveToSuspenseSchema>
+export type RefundSuspenseInput = z.infer<typeof refundSuspenseSchema>
+export type RefundSuspenseRequest = z.input<typeof refundSuspenseSchema>

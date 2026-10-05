@@ -167,6 +167,7 @@ async function transactionsOf(): Promise<
 
 async function cleanup(): Promise<void> {
   const tx = db()
+  await tx.$executeRawUnsafe(`DELETE FROM customer_wht_certificates WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cash_receipts WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM bank_transactions WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)

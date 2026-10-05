@@ -29,6 +29,15 @@ export interface BankTransactionDto {
   matchedRef: string | null
   matchedByName: string | null
   matchedAt: string | null
+  /** U41 — เหตุผลที่ย้ายเข้า "เงินรับรอตรวจสอบ" (คงไว้แม้จับคู่/คืนเงินภายหลัง) */
+  suspenseNote: string | null
+  suspendedAt: string | null
+  suspendedByName: string | null
+  /** U41 — คืนเงินผู้โอน */
+  refundDate: string | null
+  refundNote: string | null
+  refundFilePath: string | null
+  refundedByName: string | null
   createdAt: string
 }
 
@@ -40,9 +49,15 @@ export interface BankTransactionListDto {
     autoMatched: number
     manualMatched: number
     unmatchedResolved: number
+    /** U41 — รายการสถานะ "เงินรับรอตรวจสอบ"/"คืนเงินผู้โอนแล้ว" ตามตัวกรองปัจจุบัน */
+    suspense: number
+    suspenseRefunded: number
     /** ยอดรวมเงินเข้า/ออกตามตัวกรองปัจจุบัน (satang) */
     totalInSatang: number
     totalOutSatang: number
+    /** U41 — เงินรับรอตรวจสอบที่ยังคงค้าง **ทั้งองค์กร** (ไม่ขึ้นกับตัวกรอง) = หนี้สินที่ยังไม่ทราบที่มา */
+    suspenseOutstandingCount: number
+    suspenseOutstandingSatang: number
   }
 }
 

@@ -10,6 +10,8 @@ import {
   adjustmentCsv,
   adjustmentRef,
   creditNoteCsv,
+  customerWhtCsv,
+  suspenseCsv,
   type CreditNoteExportRow,
   bankReconCsv,
   buildPackCoverDoc,
@@ -53,8 +55,9 @@ import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { voucherNumber } from '@/lib/payout/payout-doc'
 import { prisma } from '@/lib/prisma'
-import { buddhistYear } from '@/lib/format/datetime'
+import { buddhistYear, startOfBangkokDay } from '@/lib/format/datetime'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
+import { customerWhtExportSources } from '@/lib/customer-wht/queries'
 
 /**
  * Accounting Pack Export (ไฟล์ 37) — ชั้น DB + ตัวประกอบชุดเอกสาร (`37` §14)
@@ -123,7 +126,7 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     status: row.status,
     statusLabel: EXPORT_STATUS_LABEL[row.status],
     statusGroup: EXPORT_STATUS_GROUP[row.status],
-    // นับเฉพาะไฟล์หลัก 01–09 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
+    // นับเฉพาะไฟล์หลัก 01–11 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
     // เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมในชุด — ดูหมายเหตุที่ `37` §7.1 ใน PROGRESS_ARCHIVE 4.6
     attachmentCount: 0,
@@ -541,6 +544,66 @@ async function adjustmentLogOf(
   return entries
 }
 
+/** `10_Customer_WHT.csv` (มติ PO 05/10/2569 U40) — รับเงินในงวด + ยังรอหนังสือที่ยกมา */
+async function customerWhtFile(organizationId: string, scope: PeriodScope): Promise<string> {
+  return customerWhtCsv(await customerWhtExportSources(organizationId, scope))
+}
+
+/**
+ * `11_Suspense_Receipts.csv` (มติ PO 05/10/2569 U41) — รายการที่เคยเป็นเงินรับรอตรวจสอบ และ
+ * เกิดในงวด / ยังค้างอยู่ (เกิดก่อนสิ้นงวด) / จับคู่หรือคืนเงินภายในงวด ⇒ สำนักงานบัญชีเห็นทั้งยอดยกมา ยอดเกิด
+ * และยอดที่เคลียร์ในงวด (หนี้สินรอตรวจสอบ — ไม่ใช่รายได้)
+ */
+async function suspenseFile(organizationId: string, scope: PeriodScope): Promise<string> {
+  // วันที่จับคู่เป็น timestamp ⇒ ใช้ขอบวันตามเวลาไทยของงวด
+  const startAt = startOfBangkokDay(scope.start)
+  const endAt = startOfBangkokDay(scope.end)
+  const rows = await prisma.bankTransaction.findMany({
+    where: {
+      organizationId,
+      suspendedAt: { not: null },
+      OR: [
+        { periodId: scope.id },
+        { matchStatus: 'suspense', transactionDate: { lt: scope.end } },
+        { matchStatus: 'suspense_refunded', refundDate: { gte: scope.start, lt: scope.end } },
+        { matchStatus: { in: ['auto_matched', 'manual_matched'] }, matchedAt: { gte: startAt, lt: endAt } },
+      ],
+    },
+    orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      transactionDate: true,
+      description: true,
+      amountSatang: true,
+      suspendedAt: true,
+      suspenseNote: true,
+      matchStatus: true,
+      matchedAt: true,
+      refundDate: true,
+      refundNote: true,
+      matchedBilling: { select: { period: true, company: { select: { name: true } } } },
+    },
+  })
+  return suspenseCsv(
+    rows.map((row) => ({
+      transactionDate: row.transactionDate,
+      description: row.description,
+      amountSatang: row.amountSatang,
+      suspendedAt: row.suspendedAt ?? row.transactionDate,
+      suspenseNote: row.suspenseNote ?? '',
+      matchStatus: row.matchStatus,
+      matchedRef:
+        row.matchedBilling === null ? null : `${row.matchedBilling.company.name} ${row.matchedBilling.period}`,
+      resolvedDate:
+        row.matchStatus === 'suspense_refunded'
+          ? row.refundDate
+          : row.matchStatus === 'suspense'
+            ? null
+            : row.matchedAt,
+      refundNote: row.refundNote,
+    })),
+  )
+}
+
 async function adjustmentFile(organizationId: string, scope: PeriodScope): Promise<string> {
   const entries = await adjustmentLogOf(organizationId, scope)
   return adjustmentCsv(
@@ -684,10 +747,22 @@ export async function createExportPack(
   })
   assertExportNotBlocked(exceptions)
 
-  // ② ประกอบเนื้อไฟล์ทั้ง 9 (อ่านอย่างเดียว — ยิงขนานได้)
+  // ② ประกอบเนื้อไฟล์ทั้ง 11 (อ่านอย่างเดียว — ยิงขนานได้)
   const expenseRecords = await expenseRecordsOf(actor.organizationId, scope)
-  const [revenue, receipts, payments, wht, bank, adjustments, checklist, readiness, organization, creditNotes] =
-    await Promise.all([
+  const [
+    revenue,
+    receipts,
+    payments,
+    wht,
+    bank,
+    adjustments,
+    checklist,
+    readiness,
+    organization,
+    creditNotes,
+    customerWht,
+    suspense,
+  ] = await Promise.all([
       revenueFile(actor.organizationId, scope),
       cashReceiptFile(actor.organizationId, scope),
       paymentFile(actor.organizationId, expenseRecords),
@@ -698,6 +773,8 @@ export async function createExportPack(
       getPeriodReadiness(actor, scope.id),
       prisma.organization.findUniqueOrThrow({ where: { id: actor.organizationId }, select: { name: true } }),
       creditNoteFile(actor.organizationId, scope),
+      customerWhtFile(actor.organizationId, scope),
+      suspenseFile(actor.organizationId, scope),
     ])
 
   const generatedAt = new Date()
@@ -722,6 +799,9 @@ export async function createExportPack(
     },
     // มติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ
     { key: '09', fileName: packFileName('09'), bytes: encoder.encode(creditNotes), kind: 'csv' },
+    // มติ PO 05/10/2569 (U40/U41) — 50 ทวิ ที่ลูกค้าหักเรา · เงินรับรอตรวจสอบ
+    { key: '10', fileName: packFileName('10'), bytes: encoder.encode(customerWht), kind: 'csv' },
+    { key: '11', fileName: packFileName('11'), bytes: encoder.encode(suspense), kind: 'csv' },
   ]
 
   // ③ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
@@ -732,7 +812,7 @@ export async function createExportPack(
   })
   const version = (last?.version ?? 0) + 1
 
-  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–09" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
+  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–11" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
   const contentDigest = packContentDigest(dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })))
   const cover = await renderPackCover(
     buildPackCoverDoc({

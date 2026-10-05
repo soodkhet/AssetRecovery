@@ -14,6 +14,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Accounting Period state machine, Readiness Check 3 เงื่อนไข |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — ตรวจสอบ enum `accounting_period_status` เทียบกับ `02-database-schema-design.md` แล้ว **ตรงกันทุกตัว ไม่พบ conflict** (ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.13) — **เนื้อหา business logic เดิมคงไว้ครบ** |
 | v2.1 | 04/07/2569 | **เติม error code เงื่อนไขที่ 3 ของ Readiness Check**: §6.2 กำหนด 3 เงื่อนไข แต่ §11 เดิมมี error code แค่ 2 ตัว — เติม `NOT_READY_BILLING_REVENUE_MISMATCH` (ยอดบิลไม่ตรงกับรายได้) พร้อม test case §16 — sync กับไฟล์ 24 v3 แล้ว — หมายเหตุเพิ่มเติม: `critical_count`/`warning_count` ใน §7.1 เป็น **derived field** (นับ real-time จากตาราง `exceptions` ผ่าน index `idx_exceptions_period`) ไม่ใช่ column จริงในตาราง `accounting_periods` — ระบุให้ชัดกัน dev สร้าง column ซ้ำซ้อน |
+| v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (U40/U41)**: §6.2 Readiness เพิ่ม**คำเตือน (ไม่บล็อก)** — เงินรับรอตรวจสอบคงค้าง (ไฟล์ 35 §6.5) และหนังสือ 50 ทวิ จากลูกค้าที่ยังไม่ได้รับ (ไฟล์ 31 §6.6) ที่เกิดก่อนสิ้นงวด · `suspense` ไม่นับเป็นค้างจับคู่ของเงื่อนไขกระทบยอด 100% |
 
 ขอบเขตเอกสารนี้: จัดการ "รอบบัญชี" (Accounting Period) แต่ละเดือน — ติดตามสถานะตั้งแต่เก็บข้อมูล จนถึงส่งมอบและล็อกรอบ ครอบคลุม flow ของทั้งกลุ่ม Accounting (31-37) — เป็น**จุดควบคุมกลาง**ที่ Period Lock Policy บังคับใช้
 
@@ -65,6 +66,7 @@
 - ยอดบิลตรงกับรายได้ (Billing Batch กับ Revenue ไฟล์ 19 sync กันครบ)
 - Bank Reconcile จับคู่ครบ 100% (ไม่มี `unmatched` transaction ค้างในรอบนั้น — ไฟล์ 35)
 - ไม่มี Critical Exception เปิดอยู่ (ไฟล์ 34) — ถ้ามี Warning ผ่านได้แต่ต้องแสดงเตือน
+- **เตือนอย่างเดียว ไม่บล็อก (มติ PO 05/10/2569 U40/U41)**: เงินรับรอตรวจสอบคงค้าง (`suspense` — ไม่นับเป็นรายการค้างจับคู่) และหนังสือ 50 ทวิ จากลูกค้าที่ยังรอ — นับรายการที่เกิดก่อนสิ้นงวด (รวมยกมาจากงวดก่อน)
 
 ## 7. Data Entities / Required Objects
 

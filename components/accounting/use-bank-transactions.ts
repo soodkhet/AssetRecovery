@@ -22,8 +22,12 @@ const EMPTY: BankTransactionListDto = {
     autoMatched: 0,
     manualMatched: 0,
     unmatchedResolved: 0,
+    suspense: 0,
+    suspenseRefunded: 0,
     totalInSatang: 0,
     totalOutSatang: 0,
+    suspenseOutstandingCount: 0,
+    suspenseOutstandingSatang: 0,
   },
 }
 

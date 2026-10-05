@@ -10,9 +10,10 @@ import { BOUND_NON_MATRIX_CAPABILITIES, DEFAULT_ROLE_CAPABILITIES } from '@/lib/
  */
 describe('capability catalog (`02` §12 · `13` §6.10)', () => {
   // 55 = 47 ของ Phase 1.2/1.6 + `view_audit_log` (Phase 5.2 · `90` §12) + `manage_jobs` (Phase 5.3 · `91` §12)
-  // + `manage_wht_policy` (มติ PO 05/10/2569 UAT U8) + พอร์ทัลบริษัท 5 หมวด (มติ PO 05/10/2569 U6/O43 D1) — ทั้งหมดอยู่นอก Functional Matrix 37 รายการ
-  it('มี 55 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
-    expect(CAPABILITIES).toHaveLength(55)
+  // + `manage_wht_policy` (มติ PO 05/10/2569 UAT U8) + พอร์ทัลบริษัท 5 หมวด (มติ PO 05/10/2569 U6/O43 D1)
+  // + `manage_customer_wht` (มติ PO 05/10/2569 U40) — ทั้งหมดอยู่นอก Functional Matrix 37 รายการ
+  it('มี 56 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
+    expect(CAPABILITIES).toHaveLength(56)
     expect(MATRIX_CAPABILITIES).toHaveLength(37)
     expect(new Set(MATRIX_CAPABILITIES.map((capability) => capability.functionalGroup)).size).toBe(4)
   })

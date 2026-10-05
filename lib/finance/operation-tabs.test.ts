@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ADMIN_OFFICE_ROLE_NAME,
   EXECUTIVE_ROLE_NAME,
   FINANCE_ROLE_NAME,
   TEAM_MANAGER_ROLE_NAME,
@@ -31,8 +32,8 @@ const tabIds = (holder: CapabilityHolder) => visibleFinanceOperationTabs(holder)
 /** ยามของโครงหน้าการเงิน (`06` §8 · mockup `finance.html`) — เพิ่ม/ลบแท็บต้องตั้งใจเสมอ */
 
 describe('แท็บหน้าการเงิน', () => {
-  it('มี 9 แท็บตามไฟล์ 14–21', () => {
-    expect(FINANCE_OPERATION_TABS).toHaveLength(9)
+  it('มี 10 แท็บตามไฟล์ 14–21 + 50 ทวิ ลูกค้า (มติ PO U40)', () => {
+    expect(FINANCE_OPERATION_TABS).toHaveLength(10)
   })
 
   it('id ไม่ซ้ำกัน', () => {
@@ -87,6 +88,13 @@ describe('แท็บหน้าการเงิน', () => {
       expect(resolveFinanceOperationTab(undefined, manager)).toBe('comp')
       expect(resolveFinanceOperationTab('payout', manager)).toBe('comp')
     }
+  })
+
+  it('มติ PO U40 — ธุรการเห็นเฉพาะแท็บ "50 ทวิ ลูกค้า" (ช่วยตามหนังสือ)', () => {
+    const adminOffice = roleHolder(ADMIN_OFFICE_ROLE_NAME, 'system')
+    expect(tabIds(adminOffice)).toEqual(['customer-wht'])
+    expect(resolveFinanceOperationTab(undefined, adminOffice)).toBe('customer-wht')
+    expect(resolveFinanceOperationTab('payout', adminOffice)).toBe('customer-wht')
   })
 
   it('หัวหน้าทีมที่ไม่ได้เป็นผู้อนุมัติตาม matrix ไม่เห็นแท็บใดเลย', () => {

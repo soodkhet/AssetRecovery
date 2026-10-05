@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
 import { ClosingTab } from '@/components/accounting/closing-tab'
+import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
 import { ExceptionsTab } from '@/components/accounting/exceptions-tab'
 import { ExpensesTab } from '@/components/accounting/expenses-tab'
 import { ExportTab } from '@/components/accounting/export-tab'
@@ -80,6 +81,7 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
         {current?.id === 'documents' && <ExceptionsTab />}
         {current?.id === 'qa' && <QuestionsTab />}
         {current?.id === 'export' && <ExportTab />}
+        {current?.id === 'customer-wht' && <CustomerWhtTab />}
         {current === undefined && (
           <EmptyState title="ยังไม่มีหน้าจอของแท็บนี้" description="เลือกแท็บที่พร้อมใช้งานจากแถบด้านบน" />
         )}

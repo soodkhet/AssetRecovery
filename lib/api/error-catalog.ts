@@ -82,6 +82,10 @@ export const ERROR_CATALOG = {
   BANK_TRANSACTION_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.3' },
   BANK_TRANSACTION_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.3' },
   STATEMENT_FILE_INVALID: { status: 400, severity: 'reject', source: '24 §6.3' },
+  // มติ PO 05/10/2569 U40 — 50 ทวิ ที่ลูกค้าหักเรา
+  CUSTOMER_WHT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.3' },
+  CUSTOMER_WHT_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.3' },
+  CUSTOMER_WHT_NUMBER_DUPLICATE: { status: 409, severity: 'reject', source: '24 §6.3' },
   // เติม `24` §6.3 v4.19 ตามมติ PO 03/10/2569 (UAT Q13) — server ตรวจไฟล์ที่อัปโหลดเอง
   UPLOAD_PATH_OUT_OF_SCOPE: { status: 400, severity: 'reject', source: '24 §6.3' },
   UPLOAD_FILE_NOT_FOUND: { status: 400, severity: 'reject', source: '24 §6.3' },
