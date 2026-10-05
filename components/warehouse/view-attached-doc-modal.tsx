@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button, Modal } from '@/components/ui'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { fmtDateTime } from '@/lib/format/datetime'
-import { lotDocumentMime, lotDocumentSlots } from '@/lib/warehouse/lot-documents'
+import { lotDocumentFileName, lotDocumentMime, lotDocumentSlots } from '@/lib/warehouse/lot-documents'
 import type { LotDetailDto } from '@/lib/warehouse/types'
 import { HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
 
@@ -69,7 +69,7 @@ export function ViewAttachedDocModal({
                   {slot.ordinal} {slot.label}
                 </div>
                 <div className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
-                  {slot.fileUrl ?? 'ไม่พบไฟล์ที่แนบไว้'}
+                  {slot.fileUrl === null ? 'ไม่พบไฟล์ที่แนบไว้' : lotDocumentFileName(slot.document, slot.fileUrl)}
                 </div>
               </div>
               <Button
@@ -81,7 +81,7 @@ export function ViewAttachedDocModal({
                     ? undefined
                     : setViewing({
                         fileUrl: slot.fileUrl,
-                        originalName: slot.label,
+                        originalName: lotDocumentFileName(slot.document, slot.fileUrl),
                         mimeType: lotDocumentMime(slot.fileUrl),
                       })
                 }

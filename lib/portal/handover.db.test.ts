@@ -144,6 +144,21 @@ async function deniedAudits(actorId: string): Promise<Array<{ targetType: string
   })
 }
 
+/**
+ * cause ของ audit `access_denied` ต่อ (ล็อต, endpoint) — ห้ามอาศัยลำดับ `created_at` (BUG-152):
+ * Prisma เติม `now()` ระดับมิลลิวินาที ⇒ รันทั้งชุดตอนเครื่องหนัก audit 2 แถวติดกันได้เวลาเท่ากัน ลำดับ asc ไม่แน่นอน
+ */
+async function deniedCause(actorId: string, since: Date, targetId: string, endpoint: string): Promise<string[]> {
+  const rows = await db().auditLog.findMany({
+    where: { organizationId: ORG_ID, actorId, action: 'access_denied', targetId, createdAt: { gte: since } },
+    select: { afterData: true },
+  })
+  return rows
+    .map((row) => row.afterData as { cause: string; endpoint: string | null })
+    .filter((after) => after.endpoint === `GET ${endpoint}`)
+    .map((after) => after.cause)
+}
+
 async function cleanup(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`ALTER TABLE handover_lots DISABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
@@ -392,13 +407,15 @@ suite('GET /api/portal/handover-lots/:id/download — ใบเซ็นรั�
 
   it('§20 ล็อตยังไม่ confirmed (pending_attach / pending_delivery_proof) → 403 + audit lot_not_confirmed', async () => {
     getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const since = new Date()
     for (const id of [lots.co1Pending, lots.co1Dispatched]) {
       const response = await downloadRoute.GET(req(`/api/portal/handover-lots/${id}/download`), params(id))
       expect(response.status).toBe(403)
       expect(await errorCode(response)).toBe('PERMISSION_DENIED')
     }
-    const causes = (await deniedAudits(CO1_MANAGER_ID)).slice(-2).map((audit) => (audit.afterData as { cause: string }).cause)
-    expect(causes).toEqual(['lot_not_confirmed:pending_attach', 'lot_not_confirmed:pending_delivery_proof'])
+    const causeFor = (id: string) => deniedCause(CO1_MANAGER_ID, since, id, `/api/portal/handover-lots/${id}/download`)
+    expect(await causeFor(lots.co1Pending)).toEqual(['lot_not_confirmed:pending_attach'])
+    expect(await causeFor(lots.co1Dispatched)).toEqual(['lot_not_confirmed:pending_delivery_proof'])
   })
 
   it('ล็อต confirmed ของ CO2 → 403 (ไม่ได้ไฟล์)', async () => {
@@ -493,12 +510,19 @@ suite('มติ U13 — ใบส่งมอบ PDF จากระบบ + �
 
   it('id ล็อต CO2 / id สุ่ม → 403 + audit (ทั้งสอง endpoint) · ไม่มี portal_download → 403', async () => {
     getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const since = new Date()
     for (const id of [lots.co2Confirmed, RANDOM_ID]) {
       expect((await noteRoute.GET(req(`/api/portal/handover-lots/${id}/delivery-note`), params(id))).status).toBe(403)
       expect((await proofRoute.GET(req(`/api/portal/handover-lots/${id}/delivery-proof`), params(id))).status).toBe(403)
     }
-    const causes = (await deniedAudits(CO1_MANAGER_ID)).slice(-4).map((audit) => (audit.afterData as { cause: string }).cause)
-    expect(causes).toEqual(['cross_company', 'cross_company', 'row_not_found', 'row_not_found'])
+    for (const [id, cause] of [
+      [lots.co2Confirmed, 'cross_company'],
+      [RANDOM_ID, 'row_not_found'],
+    ] as const) {
+      for (const document of ['delivery-note', 'delivery-proof']) {
+        expect(await deniedCause(CO1_MANAGER_ID, since, id, `/api/portal/handover-lots/${id}/${document}`)).toEqual([cause])
+      }
+    }
 
     getRawSessionUserMock.mockResolvedValue({ ...co1Manager, capabilities: { portal_handover: 'view' } })
     expect((await noteRoute.GET(req(`/api/portal/handover-lots/${lots.co1Confirmed}/delivery-note`), params(lots.co1Confirmed))).status).toBe(403)
@@ -516,10 +540,12 @@ suite('มติ U13 — ใบส่งมอบ PDF จากระบบ + �
 
   it('หลักฐานการจัดส่ง: ล็อตที่บริษัทมารับเอง → 403 + audit not_we_deliver · เราส่งแต่ยังไม่แนบ → LOT_MISSING_DELIVERY_PROOF', async () => {
     getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const since = new Date()
     const pickup = await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Pickup}/delivery-proof`), params(lots.co1Pickup))
     expect(pickup.status).toBe(403)
-    const last = (await deniedAudits(CO1_MANAGER_ID)).at(-1)
-    expect((last?.afterData as { cause: string }).cause).toBe('not_we_deliver:finance_pickup')
+    expect(
+      await deniedCause(CO1_MANAGER_ID, since, lots.co1Pickup, `/api/portal/handover-lots/${lots.co1Pickup}/delivery-proof`),
+    ).toEqual(['not_we_deliver:finance_pickup'])
 
     const missing = await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Dispatched}/delivery-proof`), params(lots.co1Dispatched))
     expect(missing.status).toBe(400)

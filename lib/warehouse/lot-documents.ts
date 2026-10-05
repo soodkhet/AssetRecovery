@@ -61,6 +61,22 @@ export function lotDocumentPath(lotId: string, document: LotDocument, fileName: 
   return `${lotDocumentPrefix(lotId, document)}${uniqueKey}.${documentExtension(fileName)}`
 }
 
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=[-.]|$)/i
+
+/**
+ * ชื่อไฟล์ที่แสดงบนหน้าจอแทน storage path ดิบ (BUG-151)
+ * — ส่วนท้ายของ path หลังตัด `{uuid}-` ออก · path แบบต่อเวอร์ชัน (`{uuid}.{ext}`) ไม่มีชื่อเดิมเก็บไว้
+ *   ⇒ ใช้ชื่อตายตัวของชนิดเอกสาร + นามสกุลจริง เช่น `signed-doc.pdf`
+ */
+export function lotDocumentFileName(document: LotDocument, path: string): string {
+  const last = path.split('/').filter((part) => part !== '').pop() ?? ''
+  const matched = UUID_PREFIX.exec(last)
+  if (matched === null) return last === '' ? `${LOT_DOCUMENT_BASENAME[document]}.${DEFAULT_EXTENSION}` : last
+  const remainder = last.slice(matched[0].length)
+  if (remainder.startsWith('-') && remainder.length > 1) return remainder.slice(1)
+  return `${LOT_DOCUMENT_BASENAME[document]}.${documentExtension(last)}`
+}
+
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'] as const
 
 /**

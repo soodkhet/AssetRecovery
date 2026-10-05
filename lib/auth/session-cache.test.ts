@@ -7,7 +7,7 @@ import {
   sessionCacheSize,
   setCachedSession,
 } from '@/lib/auth/session-cache'
-import { SESSION_CACHE_TTL_MS } from '@/lib/auth/constants'
+import { SESSION_CACHE_TTL_MS, SESSION_MAX_AGE_MS } from '@/lib/auth/constants'
 import { resolveScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 
@@ -79,6 +79,49 @@ describe('session ที่ต้องเปลี่ยนรหัสผ่�
   it('เปลี่ยนรหัสแล้ว (false) หรือไม่ระบุ → ใช้ cache ได้ตามปกติ', () => {
     setCachedSession(UID, { ...user, mustChangePassword: false }, T0)
     expect(getCachedSession(UID, T0 + 1000)?.id).toBe('user-1')
-    expect(isCacheableSession(user)).toBe(true)
+    expect(isCacheableSession(user, T0)).toBe(true)
+  })
+})
+
+describe('BUG-150 — ไม่เสิร์ฟผล "session หมดอายุ" จาก cache (login ใหม่ต้องผ่านทันที ไม่ต้องรอ TTL)', () => {
+  beforeEach(() => clearSessionCache())
+
+  /** จำลอง getRawSessionUser: cache hit ใช้เลย · miss = โหลด DB แล้ว set cache */
+  function resolve(now: number, db: SessionUser): SessionUser {
+    const cached = getCachedSession(UID, now)
+    const value = cached ?? db
+    if (!cached) setCachedSession(UID, value, now)
+    return value
+  }
+
+  it('instance นี้ cache loginAt เก่าไว้ → เลย 24 ชม. แล้ว login ใหม่ที่ instance อื่น → request ถัดไปได้ loginAt ใหม่จาก DB ทันที', () => {
+    const expiry = T0 + SESSION_MAX_AGE_MS
+    // cache ไว้ 1 นาทีก่อนหมดอายุ (entry ยังอยู่ใน TTL 5 นาที)
+    setCachedSession(UID, user, expiry - 60_000)
+    const relogin = expiry + 30_000
+    const fresh: SessionUser = { ...user, loginAt: new Date(relogin).toISOString() }
+    const next = relogin + 1_000 // ยังไม่ถึง TTL ของ entry เดิม
+    expect(getCachedSession(UID, next)).toBeNull()
+    expect(resolve(next, fresh).loginAt).toBe(fresh.loginAt)
+    // และ cache ค่าใหม่ไว้ใช้ต่อได้ตามปกติ
+    expect(getCachedSession(UID, next + 1_000)?.loginAt).toBe(fresh.loginAt)
+  })
+
+  it('session หมดอายุแล้ว → ไม่ถูกเก็บลง cache (ไม่มี negative cache)', () => {
+    setCachedSession(UID, user, T0 + SESSION_MAX_AGE_MS)
+    expect(sessionCacheSize()).toBe(0)
+    expect(isCacheableSession(user, T0 + SESSION_MAX_AGE_MS)).toBe(false)
+    expect(isCacheableSession({ ...user, loginAt: null }, T0)).toBe(false)
+  })
+
+  it('ก่อนหมดอายุยังใช้ cache ได้ตามปกติ (ไม่เพิ่ม query)', () => {
+    setCachedSession(UID, user, T0 + SESSION_MAX_AGE_MS - 120_000)
+    expect(getCachedSession(UID, T0 + SESSION_MAX_AGE_MS - 1)?.id).toBe('user-1')
+  })
+
+  it('logout/login → invalidate ทำให้ entry เดิมหายทันที (คงพฤติกรรมเดิม)', () => {
+    setCachedSession(UID, user, T0)
+    invalidateSessionCache(UID)
+    expect(getCachedSession(UID, T0 + 1)).toBeNull()
   })
 })
