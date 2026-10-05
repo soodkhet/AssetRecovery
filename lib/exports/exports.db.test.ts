@@ -380,7 +380,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     )
     // มติ PO 05/10/2569 (U57/U68) — รอบนี้ไม่มีใบกำกับ/รับคืนเงินทดรอง ⇒ มีแต่หัวคอลัมน์ และไม่มีโฟลเดอร์ PDF
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('12_Tax_Invoices.csv')) ?? '')).toBe(
-      `${CSV_BOM}invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file\r\n`,
+      `${CSV_BOM}invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file,company_branch\r\n`,
     )
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('13_Advance_Returns.csv')) ?? '')).toBe(
       `${CSV_BOM}return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason\r\n`,
@@ -685,9 +685,9 @@ async function seedInvoice(input: {
 }): Promise<void> {
   const cancelled = input.cancelledAt !== undefined
   await db().$executeRawUnsafe(`
-    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, status,
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, status,
                               cancel_reason, cancelled_by, cancelled_at, created_at, created_by)
-    VALUES ('${ORG_ID}', '${input.salesId}', '${input.number}', '${input.date}',
+    VALUES ('${ORG_ID}', '${input.salesId}', '${input.number}', '${input.date}', '00000',
             '${cancelled ? 'cancelled' : 'active'}', ${cancelled ? `'${input.reason ?? ''}'` : 'NULL'},
             ${cancelled ? `'${USER_ID}'` : 'NULL'}, ${cancelled ? `'${input.cancelledAt}'` : 'NULL'},
             '${input.createdAt}', '${USER_ID}')
@@ -757,9 +757,9 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     const csv = fileAt([...storage.keys()].find((path) => path.endsWith('12_Tax_Invoices.csv')) ?? '')
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines.slice(1, -1)).toEqual([
-      'INV-T46-0000,31/05/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,1000.00,70.00,1070.00,7.00,2569-06-3,cancelled,02/06/2569,ออกซ้ำ,-,tax_invoices/INV-T46-0000.pdf',
-      'INV-T46-0001,28/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,8000.00,560.00,8560.00,7.00,2569-06-2,cancelled,29/06/2569,ที่อยู่ผู้ซื้อไม่ถูกต้อง,INV-T46-0003,tax_invoices/INV-T46-0001.pdf',
-      'INV-T46-0002,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,3730.00,261.10,3991.10,7.00,2569-06-1,active,-,-,-,tax_invoices/INV-T46-0002.pdf',
+      'INV-T46-0000,31/05/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,1000.00,70.00,1070.00,7.00,2569-06-3,cancelled,02/06/2569,ออกซ้ำ,-,tax_invoices/INV-T46-0000.pdf,สำนักงานใหญ่',
+      'INV-T46-0001,28/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,8000.00,560.00,8560.00,7.00,2569-06-2,cancelled,29/06/2569,ที่อยู่ผู้ซื้อไม่ถูกต้อง,INV-T46-0003,tax_invoices/INV-T46-0001.pdf,สำนักงานใหญ่',
+      'INV-T46-0002,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,3730.00,261.10,3991.10,7.00,2569-06-1,active,-,-,-,tax_invoices/INV-T46-0002.pdf,สำนักงานใหญ่',
     ])
 
     const zipPath = [...storage.keys()].find((path) => path.endsWith('.zip')) ?? ''
@@ -804,7 +804,7 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     ])
     const lines = result.csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines).toHaveLength(5)
-    expect(lines[2]?.endsWith(',INV-T46-0003,-')).toBe(true)
+    expect(lines[2]?.endsWith(',INV-T46-0003,-,สำนักงานใหญ่')).toBe(true)
 
     // เพดานเวลา — นาฬิกาเดินเกินงบตั้งแต่ใบแรก ⇒ ไม่แนบเลยแต่ CSV ครบ
     let tick = 0

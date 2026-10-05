@@ -306,9 +306,9 @@ async function seedInvoice(options: {
   `)
   const cancelled = options.cancelled === true
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, status,
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, status,
                               cancel_reason, cancelled_by, cancelled_at, created_by)
-    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INVP5-${RUN}-${seq}', '${dayOffset(0)}',
+    VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INVP5-${RUN}-${seq}', '${dayOffset(0)}', '00000',
             '${cancelled ? 'cancelled' : 'active'}',
             ${cancelled ? `$$ยกเลิกในเทสต์$$, '${FINANCE_ID}', NOW()` : 'NULL, NULL, NULL'}, '${FINANCE_ID}')
     RETURNING id

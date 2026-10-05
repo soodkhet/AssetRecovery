@@ -13,6 +13,11 @@ import {
   isDueClearDateInPast,
   minDueClearInputDate,
 } from '@/lib/advances/advance'
+import {
+  assertSettleNotInPendingPayout,
+  PENDING_PAYOUT_BATCH_STATUSES,
+  pendingPayoutBlockingSettle,
+} from '@/lib/advances/advance'
 import { AdvanceError } from '@/lib/advances/errors'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
@@ -199,5 +204,37 @@ describe('มติ PO 03/10/2569 (UAT Q8, BUG-058) — กำหนดเคล
       expect(advanceCreateSchema.safeParse(payload('2026-10-03')).success).toBe(true)
       expect(advanceCreateSchema.safeParse(payload('2026-10-10')).success).toBe(true)
     })
+  })
+})
+
+describe('มติ PO U74 — เคลียร์ยอดขณะอยู่ในรอบจ่ายที่ยังไม่โอน', () => {
+  const batch = (status: (typeof PENDING_PAYOUT_BATCH_STATUSES)[number] | 'completed' | 'cancelled') => ({
+    id: 'pb-1',
+    name: 'รอบจ่าย ต.ค. 69 #1',
+    status,
+  })
+
+  it('ไม่อยู่ในรอบจ่าย → ผ่าน', () => {
+    expect(pendingPayoutBlockingSettle(null)).toBeNull()
+    expect(() => assertSettleNotInPendingPayout('adv-1', null)).not.toThrow()
+  })
+
+  it.each(['draft', 'checking', 'file_generated'] as const)('รอบ %s → ADVANCE_IN_PENDING_PAYOUT + ชื่อรอบ', (status) => {
+    let caught: unknown = null
+    try {
+      assertSettleNotInPendingPayout('adv-1', batch(status))
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(AdvanceError)
+    const error = caught as AdvanceError
+    expect(error.code).toBe('ADVANCE_IN_PENDING_PAYOUT')
+    expect(error.status).toBe(400)
+    expect(error.userMessage).toContain('รอบจ่าย ต.ค. 69 #1')
+    expect(error.context).toMatchObject({ payoutBatchId: 'pb-1', payoutBatchStatus: status })
+  })
+
+  it.each(['completed', 'cancelled'] as const)('รอบ %s → ผ่าน', (status) => {
+    expect(() => assertSettleNotInPendingPayout('adv-1', batch(status))).not.toThrow()
   })
 })

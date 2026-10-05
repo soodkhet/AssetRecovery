@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
+import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
 import { useAdvances } from '@/components/finance/use-advances'
 import { IconPlus } from '@/components/field/field-icons'
@@ -122,9 +123,7 @@ export function AdvancesTab() {
 
               {canRequest && canSettleAdvance(advance.status) && (
                 <div className="mt-3 flex justify-end">
-                  <Button variant="secondary" size="sm" onClick={() => setSettleTarget(advance)}>
-                    เคลียร์ยอด
-                  </Button>
+                  <SettleAdvanceButton advance={advance} onSettle={setSettleTarget} />
                 </div>
               )}
             </li>

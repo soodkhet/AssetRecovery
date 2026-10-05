@@ -104,6 +104,8 @@ export interface OfficialParty {
   taxId: string
   address: string
   phone: string | null
+  /** "สำนักงานใหญ่" / "สาขาที่ 00001" — พิมพ์ต่อจากเลขประจำตัวผู้เสียภาษี (ม.86/4 · มติ PO U77) · ไม่มี = ไม่พิมพ์ */
+  branchLabel?: string | null
 }
 
 /** กล่องคู่สัญญา (ผู้ขาย/ผู้ซื้อ · ผู้จ่าย/ผู้ถูกหัก) — เลขผู้เสียภาษีใช้ font ปกติแต่ระบุชัดเจน */
@@ -113,7 +115,10 @@ export function PartyBox({ role, party }: { role: string; party: OfficialParty }
       <Text style={officialStyles.partyRole}>{role}</Text>
       <Text style={officialStyles.partyName}>{party.name}</Text>
       <Text style={officialStyles.partyLine}>{party.address}</Text>
-      <Text style={officialStyles.partyLine}>เลขประจำตัวผู้เสียภาษี {party.taxId}</Text>
+      <Text style={officialStyles.partyLine}>
+        เลขประจำตัวผู้เสียภาษี {party.taxId}
+        {party.branchLabel === undefined || party.branchLabel === null ? '' : ` · ${party.branchLabel}`}
+      </Text>
       {party.phone === null ? null : <Text style={officialStyles.partyLine}>โทร. {party.phone}</Text>}
     </View>
   )

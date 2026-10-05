@@ -1,4 +1,9 @@
-import { canAdvanceAction, type AdvanceReturnState } from '@/lib/advances/advance'
+import {
+  canAdvanceAction,
+  pendingPayoutBlockingSettle,
+  pendingPayoutSettleMessage,
+  type AdvanceReturnState,
+} from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
@@ -44,6 +49,16 @@ export function canReviewAdvance(status: AdvanceStatus): boolean {
 /** ปุ่ม "เคลียร์ยอด" — ทำได้ทั้ง `approved` และ `overdue` (`15` §9.1) */
 export function canSettleAdvance(status: AdvanceStatus): boolean {
   return canAdvanceAction(status, 'settle')
+}
+
+/**
+ * มติ PO U74 — เหตุผลที่ปุ่ม "เคลียร์ยอด" ถูกปิด (`null` = กดได้) · ใช้คู่กับ `canSettleAdvance()`
+ * เงินทดรองอยู่ในรอบจ่ายที่ยังไม่ยืนยันโอน ⇒ ปิดปุ่ม + บอกชื่อรอบ (API ปฏิเสธ `ADVANCE_IN_PENDING_PAYOUT` อยู่แล้ว)
+ */
+export function settleBlockedReason(advance: Pick<AdvanceDto, 'status' | 'payoutBatch'>): string | null {
+  if (!canSettleAdvance(advance.status)) return null
+  const blocking = pendingPayoutBlockingSettle(advance.payoutBatch)
+  return blocking === null ? null : pendingPayoutSettleMessage(blocking.name)
 }
 
 /** แถวที่ยังถือเงินทดรองอยู่ — ใช้ขึ้นแถบเตือนหัวตาราง (`15` §8 · mockup `finance.html`) */

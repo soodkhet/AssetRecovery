@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
 
 /**
  * เทสต์ระดับ DB ของ Phase 4.3 — DoD ของไฟล์ 31
@@ -429,6 +430,47 @@ suite('Phase 4.3 — ออก/ยกเลิกใบกำกับภาษ�
     })
     expect(invoice.invoiceNumber).toBe(`${PREFIX}-2570-0001`)
     await setNumbering({ seq: 0 })
+  })
+})
+
+suite('มติ PO U77 (ม.86/4) — สำนักงานใหญ่/สาขาผู้ซื้อ snapshot ตอนออกใบ', () => {
+  it('ใบพิมพ์สาขาตอนออก · บริษัทเปลี่ยนสาขาภายหลังใบเดิมไม่เปลี่ยน · ใบใหม่ใช้ค่าใหม่ · แก้ snapshot ไม่ได้', async () => {
+    await setNumbering({ seq: 500 })
+    const branchCompany = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO finance_companies (organization_id, name, short_name, tax_id, branch_code, address, vat_mode,
+                                     payment_due_days, created_by)
+      VALUES ('${ORG_ID}', 'ไฟแนนซ์สาขา (${RUN})', 'BR', '${RUN_TAX_ID.slice(0, 12)}${RUN_TAX_ID.endsWith('7') ? '8' : '7'}', '00003', '7 ถนนสาทร',
+              'exclude_vat', 30, '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const company = branchCompany[0]?.id ?? ''
+
+    const firstBatch = await seedBilling({ status: 'sent', company })
+    const firstRecord = await sales.syncSalesRecordFromBilling(ctx, firstBatch.id)
+    const first = await sales.issueTaxInvoice(ctx, { salesRecordId: firstRecord?.id ?? '' })
+    const firstSource = await sales.getTaxInvoiceDocSource(accountant, first.id)
+    expect(firstSource.buyerBranchCode).toBe('00003')
+    expect(buildTaxInvoiceDoc(firstSource).buyer.branchLabel).toBe('สาขาที่ 00003')
+
+    // บริษัทย้ายเป็นสำนักงานใหญ่ — ใบเดิมยังพิมพ์สาขาเดิม (ไม่อ่านค่า live ย้อนหลัง)
+    await db().$executeRawUnsafe(`UPDATE finance_companies SET branch_code = '00000' WHERE id = '${company}'`)
+    expect((await sales.getTaxInvoiceDocSource(accountant, first.id)).buyerBranchCode).toBe('00003')
+
+    const secondBatch = await seedBilling({ status: 'sent', company })
+    const secondRecord = await sales.syncSalesRecordFromBilling(ctx, secondBatch.id)
+    const second = await sales.issueTaxInvoice(ctx, { salesRecordId: secondRecord?.id ?? '' })
+    const secondSource = await sales.getTaxInvoiceDocSource(accountant, second.id)
+    expect(secondSource.buyerBranchCode).toBe('00000')
+    expect(buildTaxInvoiceDoc(secondSource).buyer.branchLabel).toBe('สำนักงานใหญ่')
+
+    await expect(
+      db().$executeRawUnsafe(`UPDATE tax_invoices SET buyer_branch_code = '00009' WHERE id = '${first.id}'`),
+      'snapshot สาขาบนใบแก้ไม่ได้ (ยาม immutable ระดับ DB)',
+    ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE finance_companies SET branch_code = '1' WHERE id = '${company}'`),
+      'รหัสสาขาต้องเป็นตัวเลข 5 หลัก',
+    ).rejects.toThrow(/chk_finance_companies_branch_code/)
   })
 })
 

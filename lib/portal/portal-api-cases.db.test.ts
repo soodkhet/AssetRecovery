@@ -510,6 +510,8 @@ suite('Portal-P4 — GET /api/portal/company-profile (`97` §6.6 · O44)', () =>
     expect(dto).toMatchObject({
       name: `ไฟแนนซ์ P4-1 (${RUN})`,
       taxId: taxIdOf(1),
+      // มติ PO U77 — บริษัทเดิม (ไม่ได้ตั้งสาขา) = สำนักงานใหญ่
+      branchLabel: 'สำนักงานใหญ่',
       signerName: 'คุณผู้ลงนาม',
       serviceFeeTemplate: { name: `เทมเพลต P4 ${RUN}`, model: 'HYBRID' },
     })

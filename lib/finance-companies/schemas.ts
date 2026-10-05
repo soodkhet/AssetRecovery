@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
-import { DEFAULT_CUSTOMER_WHT_PCT, DEFAULT_VAT_MODE, normalizeTaxId } from '@/lib/finance-companies/company'
+import {
+  BRANCH_CODE_PATTERN,
+  DEFAULT_CUSTOMER_WHT_PCT,
+  DEFAULT_VAT_MODE,
+  HEAD_OFFICE_BRANCH_CODE,
+  normalizeTaxId,
+} from '@/lib/finance-companies/company'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลบริษัทไฟแนนซ์ (ไฟล์ 10 · Rule 04 · Rule 13)
@@ -31,6 +37,16 @@ export const taxIdSchema = z
   .transform(normalizeTaxId)
   .refine((value) => /^\d{13}$/.test(value), 'เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก')
 
+/**
+ * สำนักงานใหญ่/สาขา (มติ PO U77 · ม.86/4) — ตัวเลข 5 หลัก · `00000` = สำนักงานใหญ่ ·
+ * ไม่ส่งมาเลย = สำนักงานใหญ่ (ไม่เปลี่ยนพฤติกรรมของผู้เรียกเดิม)
+ */
+export const branchCodeSchema = z
+  .string()
+  .trim()
+  .refine((value) => BRANCH_CODE_PATTERN.test(value), 'รหัสสาขาต้องเป็นตัวเลข 5 หลัก (สำนักงานใหญ่ = 00000)')
+  .default(HEAD_OFFICE_BRANCH_CODE)
+
 const optionalText = (max: number) =>
   z
     .string()
@@ -43,6 +59,7 @@ const companyFields = z.object({
   name: z.string().trim().min(2, 'ชื่อบริษัทสั้นเกินไป').max(200, 'ชื่อบริษัทยาวเกินไป'),
   shortName: z.string().trim().min(1, 'ต้องระบุชื่อย่อ').max(20, 'ชื่อย่อยาวเกินไป'),
   taxId: taxIdSchema,
+  branchCode: branchCodeSchema,
   address: optionalText(500),
   phone: optionalText(20),
   // ฟอร์มส่ง '' มาเมื่อไม่กรอก — แปลงเป็น null **ก่อน** ตรวจรูปแบบ ไม่งั้นค่าว่างจะติด error อีเมล

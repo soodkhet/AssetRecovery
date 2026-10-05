@@ -806,7 +806,9 @@ export async function createPayoutBatch(
               data: { payoutBatchItemId: item.id, updatedBy: user.id },
             })
           : await tx.advance.updateMany({
-              where: { id: candidate.sourceId, payoutBatchItemId: null },
+              // มติ PO U74 — ผูกสถานะ "ยังไม่เคลียร์" ด้วย: แข่งกับการเคลียร์ยอดที่ล็อกแถวไว้ ⇒ รอแล้วประเมิน
+              // เงื่อนไขใหม่ (READ COMMITTED) — เคลียร์แล้วต้องไม่ถูกดึงเข้ารอบไปจ่ายออกอีก
+              where: { id: candidate.sourceId, payoutBatchItemId: null, status: { in: ['approved', 'overdue'] } },
               data: { payoutBatchItemId: item.id, updatedBy: user.id },
             })
       if (claimed.count !== 1) {

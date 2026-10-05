@@ -185,6 +185,7 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
         ...FORBIDDEN,
         name: 'บริษัท ก',
         taxId: '0105551234567',
+        branchCode: '00000',
         address: 'กรุงเทพ',
         contactName: 'คุณติดต่อ',
         contactPhone: '021234567',

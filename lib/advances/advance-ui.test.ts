@@ -11,6 +11,7 @@ import {
   countOverdue,
   ADVANCE_STATUS_FILTERS,
   outstandingAdvanceSatang,
+  settleBlockedReason,
   settleUsedField,
 } from '@/lib/advances/advance-ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -57,6 +58,7 @@ function advance(overrides: Partial<AdvanceDto> = {}): AdvanceDto {
     returnOutstandingSatang: 0,
     returnState: 'none',
     returns: [],
+    payoutBatch: null,
     ...overrides,
   }
 }
@@ -214,5 +216,27 @@ describe('settleUsedField — ช่องยอดที่ใช้จริ�
     expect(settleUsedField('')).toEqual({ usedSatang: null, error: null })
     expect(settleUsedField('1,450.50')).toEqual({ usedSatang: 145050, error: null })
     expect(settleUsedField('0')).toEqual({ usedSatang: 0, error: null })
+  })
+})
+
+describe('มติ PO U74 — ปุ่มเคลียร์ยอดปิดเมื่ออยู่ในรอบจ่ายที่ยังไม่โอน', () => {
+  it('ยังไม่อยู่ในรอบจ่าย → เคลียร์ได้', () => {
+    expect(settleBlockedReason(advance())).toBeNull()
+  })
+
+  it.each(['draft', 'checking', 'file_generated'] as const)('รอบสถานะ %s → ปิดพร้อมเหตุผลที่บอกชื่อรอบ', (status) => {
+    const reason = settleBlockedReason(advance({ payoutBatch: { id: 'pb-1', name: 'รอบจ่าย ต.ค. 1', status } }))
+    expect(reason).toContain('รอบจ่าย ต.ค. 1')
+    expect(reason).not.toMatch(/§|ไฟล์ \d/)
+  })
+
+  it('รอบ completed → เคลียร์ได้', () => {
+    expect(settleBlockedReason(advance({ payoutBatch: { id: 'pb-1', name: 'รอบ 1', status: 'completed' } }))).toBeNull()
+  })
+
+  it('สถานะที่เคลียร์ไม่ได้อยู่แล้ว → ไม่ต้องมีเหตุผลเรื่องรอบจ่าย', () => {
+    expect(
+      settleBlockedReason(advance({ status: 'cleared', payoutBatch: { id: 'pb-1', name: 'รอบ 1', status: 'draft' } })),
+    ).toBeNull()
   })
 })

@@ -1,6 +1,7 @@
 import type { ReadinessCheck } from '@/lib/accounting/period'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
+import { formatBranch } from '@/lib/finance-companies/company'
 import { fmtDate } from '@/lib/format/datetime'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import type {
@@ -106,7 +107,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat', sourceDoc: '31' },
   { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
-  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — number, date, company, tax_id, before_vat, vat, total, status (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
+  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
   { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status', sourceDoc: '15' },
 ]
 
@@ -624,6 +625,8 @@ export function suspenseCsv(rows: readonly SuspenseExportRow[]): string {
  * `vat_rate_pct` = `vat_rate_pct_used` ของรายได้ในรอบวางบิล (หลายอัตรา ⇒ คั่นด้วยช่องว่าง) ·
  * `status` = enum ดิบ (`active`/`cancelled`) · `replaced_by` = ใบที่ออกแทนใบที่ยกเลิก (รายการขายเดียวกัน)
  * · `pdf_file` = path ของสำเนา PDF ใน zip (ไม่ได้แนบ ⇒ `-` + รายชื่อใน `tax_invoices/NOT_ATTACHED.txt`)
+ * · `company_branch` (มติ PO U77 · ม.86/4 — คอลัมน์ต่อท้าย) = "สำนักงานใหญ่" / "สาขาที่ 00001" จาก **snapshot บนใบ**
+ *   (เป็นข้อความ ไม่ใช่รหัสล้วน — เปิดใน Excel แล้วเลข 0 นำหน้าไม่หาย)
  */
 export const TAX_INVOICE_HEADERS = [
   'invoice_number',
@@ -640,6 +643,7 @@ export const TAX_INVOICE_HEADERS = [
   'cancel_reason',
   'replaced_by',
   'pdf_file',
+  'company_branch',
 ] as const
 
 export interface TaxInvoiceExportRow {
@@ -647,6 +651,8 @@ export interface TaxInvoiceExportRow {
   invoiceDate: Date
   companyName: string
   companyTaxId: string | null
+  /** snapshot สำนักงานใหญ่/สาขาของผู้ซื้อบนใบ (`tax_invoices.buyer_branch_code` · `00000` = สำนักงานใหญ่) */
+  companyBranchCode: string
   amountBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
@@ -692,6 +698,7 @@ export function taxInvoiceCsv(rows: readonly TaxInvoiceExportRow[]): string {
       row.status === 'cancelled' ? csvText(row.cancelReason) : CSV_EMPTY,
       csvText(row.replacedBy),
       csvText(row.pdfFile),
+      formatBranch(row.companyBranchCode),
     ]),
   )
 }

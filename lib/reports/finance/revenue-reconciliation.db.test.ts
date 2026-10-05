@@ -158,8 +158,8 @@ beforeAll(async () => {
     VALUES ('${ORG_ID}', '${period[0]?.id ?? ''}', '${billingBatchId}', '${COMPANY_ID}', 373000, 26110, 399110, '${USER_ID}') RETURNING id
   `)
   const invoice = await tx.$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, created_by)
-    VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}', '2026-08-12', '${USER_ID}') RETURNING id
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, created_by)
+    VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}', '2026-08-12', '00000', '${USER_ID}') RETURNING id
   `)
   invoiceId = invoice[0]?.id ?? ''
 })

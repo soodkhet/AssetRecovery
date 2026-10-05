@@ -72,6 +72,7 @@ function ProfileRows({ profile }: { profile: PortalCompanyProfileDto }) {
       <Row label="ชื่อบริษัท">{profile.name}</Row>
       <Row label="เลขประจำตัวผู้เสียภาษี">
         <RefText className="text-sm font-semibold text-slate-800">{profile.taxId}</RefText>
+        <span className="ml-2 text-sm text-slate-600">{profile.branchLabel}</span>
       </Row>
       <Row label="ที่อยู่จดทะเบียน">{orDash(profile.address)}</Row>
       <Row label="ผู้ติดต่อประจำวัน">{contact}</Row>

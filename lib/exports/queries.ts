@@ -782,6 +782,7 @@ async function taxInvoiceFile(
     invoiceDate: invoice.source.invoiceDate,
     companyName: invoice.companyName,
     companyTaxId: invoice.source.buyer.taxId,
+    companyBranchCode: invoice.source.buyerBranchCode,
     amountBeforeVatSatang: invoice.source.amounts.totalBeforeVatSatang,
     vatSatang: invoice.source.amounts.vatSatang,
     totalSatang: invoice.source.amounts.totalSatang,

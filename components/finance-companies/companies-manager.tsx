@@ -24,7 +24,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { MANAGE_CUSTOMER_WHT } from '@/lib/customer-wht/customer-wht'
 import type { CustomerWhtCompanySummary, CustomerWhtListDto } from '@/lib/customer-wht/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
-import { formatCustomerWhtPct, formatTaxId, vatModeLabel } from '@/lib/finance-companies/company'
+import { formatBranch, formatCustomerWhtPct, formatTaxId, vatModeLabel } from '@/lib/finance-companies/company'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { portalViewAsHomePath, VIEW_CLIENT_PORTAL_AS_CAPABILITY } from '@/lib/portal/view-as'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
@@ -252,7 +252,7 @@ export function CompaniesManager() {
 
                 <div className="mb-1 text-lg font-bold text-slate-900">{company.name}</div>
                 <div className="mb-4 font-mono text-xs text-slate-500">
-                  Tax ID: {formatTaxId(company.taxId)} ·{' '}
+                  Tax ID: {formatTaxId(company.taxId)} · {formatBranch(company.branchCode)} ·{' '}
                   {company.vatRegistered ? (
                     <span className="font-semibold text-emerald-600">จด VAT แล้ว</span>
                   ) : (

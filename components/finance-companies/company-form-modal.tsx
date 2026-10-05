@@ -5,9 +5,13 @@ import { toFieldErrors } from '@/lib/api/validation'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
+  branchCodeFromForm,
+  branchKindOf,
   DEFAULT_CUSTOMER_WHT_PCT,
   DEFAULT_VAT_MODE,
+  isHeadOfficeBranch,
   VAT_MODE_OPTIONS,
+  type BranchKind,
   type InvoiceDeliveryFormat,
   type VatMode,
 } from '@/lib/finance-companies/company'
@@ -24,12 +28,18 @@ import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
  * UAT BUG-001 (มติ PO 03/10/2569): เพิ่มช่อง “รูปแบบราคา/VAT” (`vat_mode`) และ
  * “ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน (%)” (`wht_withheld_by_customer_pct` — เว้นว่าง = ไม่หัก) ·
  * ค่าเริ่มต้นของฟอร์มสร้างใหม่ = default ของ DB (`exclude_vat` · 3.00) ไม่เปลี่ยนพฤติกรรมเดิม
+ *
+ * มติ PO U77 (ม.86/4): ช่อง “สำนักงานใหญ่ / สาขาที่” — ค่าเริ่มต้นสำนักงานใหญ่ (`00000`) ·
+ * เลือกสาขาแล้วกรอกเลข 5 หลัก · พิมพ์บนใบกำกับภาษีต่อจากเลขผู้เสียภาษี (snapshot ตอนออกใบ)
  */
 
 interface FormState {
   name: string
   shortName: string
   taxId: string
+  branchKind: BranchKind
+  /** เลขสาขา 5 หลัก — ใช้เมื่อ `branchKind = 'branch'` เท่านั้น */
+  branchNumber: string
   address: string
   phone: string
   email: string
@@ -52,6 +62,8 @@ function emptyForm(defaultTemplateId: string): FormState {
     name: '',
     shortName: '',
     taxId: '',
+    branchKind: 'head_office',
+    branchNumber: '',
     address: '',
     phone: '',
     email: '',
@@ -74,6 +86,8 @@ function formOf(company: FinanceCompanyDto): FormState {
     name: company.name,
     shortName: company.shortName,
     taxId: company.taxId,
+    branchKind: branchKindOf(company.branchCode),
+    branchNumber: isHeadOfficeBranch(company.branchCode) ? '' : company.branchCode,
     address: company.address ?? '',
     phone: company.phone ?? '',
     email: company.email ?? '',
@@ -102,6 +116,7 @@ function payloadOf(form: FormState): Record<string, unknown> {
     name: form.name.trim(),
     shortName: form.shortName.trim(),
     taxId: form.taxId,
+    branchCode: branchCodeFromForm(form.branchKind, form.branchNumber),
     address: form.address,
     phone: form.phone,
     email: form.email,
@@ -239,6 +254,37 @@ export function CompanyFormModal({
           <Field id="co-phone" label="เบอร์โทรสำนักงาน" error={errors.phone}>
             <Input id="co-phone" value={form.phone} onChange={(event) => set('phone', event.target.value)} placeholder="021234567" />
           </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            id="co-branch-kind"
+            label="สำนักงานใหญ่ / สาขา"
+            required
+            hint="พิมพ์บนใบกำกับภาษีต่อจากเลขประจำตัวผู้เสียภาษี"
+          >
+            <Select
+              id="co-branch-kind"
+              value={form.branchKind}
+              onChange={(event) => set('branchKind', event.target.value as BranchKind)}
+            >
+              <option value="head_office">สำนักงานใหญ่</option>
+              <option value="branch">สาขาที่</option>
+            </Select>
+          </Field>
+          {form.branchKind === 'branch' && (
+            <Field id="co-branch-no" label="เลขที่สาขา (5 หลัก)" required error={errors.branchCode}>
+              <Input
+                id="co-branch-no"
+                numeric
+                inputMode="numeric"
+                maxLength={5}
+                value={form.branchNumber}
+                onChange={(event) => set('branchNumber', event.target.value)}
+                placeholder="00001"
+              />
+            </Field>
+          )}
         </div>
 
         <Field id="co-address" label="ที่อยู่ตามที่จดทะเบียน (ใช้ออกเอกสารทางการ)" error={errors.address}>

@@ -16,6 +16,7 @@ export async function findPortalCompanyProfile(
       id: true,
       name: true,
       taxId: true,
+      branchCode: true,
       address: true,
       contactName: true,
       contactPhone: true,
