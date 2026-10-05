@@ -1,7 +1,7 @@
 import type { PortalSection } from '@/lib/portal/access'
 
 /**
- * Registry ของ `/api/portal/*` — **SoT ฝั่งโค้ด** ของตาราง `97` §17 (15 endpoint · GET เท่านั้น ·
+ * Registry ของ `/api/portal/*` — **SoT ฝั่งโค้ด** ของตาราง `97` §17 (16 endpoint · GET เท่านั้น ·
  * มติ PO 05/10/2569 O43 D6 · U13 +2) · test เทียบกับตารางใน spec ทุกแถว
  *
  * `capabilities` = ชุด capability ที่ต้องมีครบ (ตรงคอลัมน์ Capability ของ spec) ·
@@ -49,6 +49,8 @@ export const PORTAL_ENDPOINTS: readonly PortalEndpoint[] = [
   // มติ PO 05/10/2569 U13 — ใบส่งมอบ PDF จากระบบ + หลักฐานการจัดส่ง
   { method: 'GET', path: '/api/portal/handover-lots/:id/delivery-note', section: 'handover', capabilities: ['portal_handover', 'portal_download'], download: true, dto: 'file:pdf' },
   { method: 'GET', path: '/api/portal/handover-lots/:id/delivery-proof', section: 'handover', capabilities: ['portal_handover', 'portal_download'], download: true, dto: 'file:file' },
+  // มติ PO 06/10/2569 U95 — ใบแจ้งหนี้/ใบวางบิล PDF (ไม่ใช่เอกสารภาษี)
+  { method: 'GET', path: '/api/portal/billing-batches/:id/invoice-pdf', section: 'finance', capabilities: ['portal_finance', 'portal_download'], download: true, dto: 'file:pdf' },
 ]
 
 /** หา endpoint จาก path pattern (เช่น `/api/portal/cases/:id`) */

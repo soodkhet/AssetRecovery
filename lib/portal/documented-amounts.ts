@@ -341,3 +341,50 @@ export async function documentedRevenueAmounts(
   }
   return result
 }
+
+// ── ลูกหนี้ภายใน (มติ PO 06/10/2569 U96 #11) ────────────────────────────────
+
+/**
+ * **ยอดลูกหนี้ตามเอกสาร** ของรอบวางบิล — นิยามเดียวกับพอร์ทัล (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้) ใช้ร่วม
+ * AR ภายใน (`getArAging` / F3 / แดชบอร์ดผู้บริหาร) และพอร์ทัล ⇒ ตัวเลขสองฝั่งตรงกันเสมอ ·
+ * การหักรับแล้ว/ภาษีที่ลูกค้าหักอยู่ใน `arOutstandingSatang()` ของผู้เรียก · รอบที่หาเอกสารไม่เจอคงยอดของรอบ
+ */
+export async function withDocumentedArTotals<T extends { id: string; totalSatang: number }>(
+  organizationId: string,
+  rows: readonly T[],
+): Promise<T[]> {
+  const documented = await documentedAmountsForBatches(
+    organizationId,
+    rows.map((row) => row.id),
+  )
+  return rows.map((row) => ({ ...row, totalSatang: documented.get(row.id)?.documented.totalSatang ?? row.totalSatang }))
+}
+
+/**
+ * Adjustment ภายในที่อนุมัติแล้วแต่ยังไม่มีใบลดหนี้/ใบเพิ่มหนี้ active อ้างถึง ต่อรอบวางบิล (U96 #11) —
+ * ยอดลูกหนี้ตามเอกสาร**ยังไม่สะท้อน**รายการเหล่านี้ ⇒ หน้าลูกหนี้แสดงเป็นป้าย "รอใบลดหนี้/ใบเพิ่มหนี้"
+ */
+export async function adjustmentsAwaitingNotesByBatch(
+  organizationId: string,
+  billingBatchIds: readonly string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>()
+  const ids = [...new Set(billingBatchIds)]
+  if (ids.length === 0) return result
+  const rows = await prisma.adjustment.findMany({
+    where: {
+      organizationId,
+      status: 'approved',
+      adjustmentType: { in: ['decrease', 'increase'] },
+      creditNotes: { none: { status: 'active' } },
+      OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
+    },
+    select: { billingBatchId: true, revenue: { select: { billingBatchId: true } } },
+  })
+  for (const row of rows) {
+    const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
+    if (batchId === null || !ids.includes(batchId)) continue
+    result.set(batchId, (result.get(batchId) ?? 0) + 1)
+  }
+  return result
+}

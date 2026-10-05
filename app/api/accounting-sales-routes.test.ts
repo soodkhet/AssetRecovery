@@ -84,6 +84,10 @@ async function codeOf(response: Response): Promise<string | undefined> {
 
 function docSource(overrides: Partial<TaxInvoiceDocSource> = {}): TaxInvoiceDocSource {
   return {
+    docKind: 'receipt_tax_invoice',
+    replacementNote: null,
+    billingBatchNumber: 'BL-2569-001',
+    receivedDate: new Date('2026-06-25T00:00:00Z'),
     invoiceNumber: 'INV-0006',
     invoiceDate: new Date('2026-06-25T00:00:00Z'),
     status: 'active',
@@ -182,21 +186,31 @@ describe('ออก/ยกเลิกใบกำกับภาษี (`31` §
     const response = await postInvoice(
       request('http://localhost/api/accounting/tax-invoices', {
         method: 'POST',
-        body: JSON.stringify({ salesRecordId: SALES_ID, invoiceNumber: 'INV-9999' }),
+        body: JSON.stringify({ cashReceiptId: SALES_ID, invoiceNumber: 'INV-9999', totalSatang: 1 }),
         headers: { 'content-type': 'application/json' },
       }),
       undefined,
     )
 
     expect(response.status).toBe(200)
-    expect(queriesMock.issueTaxInvoice).toHaveBeenCalledWith(expect.anything(), { salesRecordId: SALES_ID })
+    // เลขที่/ยอดเงินจาก body ถูกทิ้ง — ระบบเดินเลขเองและคิดยอดจากเงินรับ (มติ PO U95)
+    expect(queriesMock.issueTaxInvoice).toHaveBeenCalledWith(expect.anything(), { cashReceiptId: SALES_ID })
   })
 
-  it('salesRecordId ไม่ใช่ uuid ⇒ 400 VALIDATION_ERROR ไม่ถึงชั้น service', async () => {
+  it('cashReceiptId ไม่ใช่ uuid / ไม่ส่งทั้งเงินรับและใบที่ออกแทน ⇒ 400 VALIDATION_ERROR ไม่ถึงชั้น service', async () => {
+    const empty = await postInvoice(
+      request('http://localhost/api/accounting/tax-invoices', {
+        method: 'POST',
+        body: JSON.stringify({ salesRecordId: SALES_ID }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      undefined,
+    )
+    expect(empty.status).toBe(400)
     const response = await postInvoice(
       request('http://localhost/api/accounting/tax-invoices', {
         method: 'POST',
-        body: JSON.stringify({ salesRecordId: 'ไม่ใช่ uuid' }),
+        body: JSON.stringify({ cashReceiptId: 'ไม่ใช่ uuid' }),
         headers: { 'content-type': 'application/json' },
       }),
       undefined,

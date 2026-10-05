@@ -145,14 +145,16 @@ const INVOICE_SELECT = {
   invoiceNumber: true,
   invoiceDate: true,
   buyerBranchCode: true,
+  // มติ PO U95 — ยอด/อัตราของ**ใบที่อ้างถึง** (ใบเสร็จรับเงิน/ใบกำกับภาษีหลายใบต่อรอบได้ ⇒ ไม่ใช้ยอดทั้งรอบ)
+  amountBeforeVatSatang: true,
+  vatSatang: true,
+  totalSatang: true,
+  vatRatePctUsed: true,
   salesRecord: {
     select: {
       id: true,
       billingBatchId: true,
       companyId: true,
-      totalBeforeVatSatang: true,
-      vatSatang: true,
-      totalSatang: true,
     },
   },
 } satisfies Prisma.TaxInvoiceSelect
@@ -459,7 +461,11 @@ export async function createCreditNote(
   const adjustmentId = input.adjustmentId ?? null
   const adjustment = adjustmentId === null ? null : await assertAdjustment(ctx.actor, adjustmentId, invoice, noteType)
 
-  const vatRatePct = await vatRateOfInvoice(invoice.salesRecord.billingBatchId)
+  // อัตราตาม snapshot บนใบ (U96 #9) · ใบเดิมหลายอัตรา (null) ⇒ อ่านจากรายได้ของรอบ (ปฏิเสธหลายอัตราตาม U21)
+  const vatRatePct =
+    invoice.vatRatePctUsed === null
+      ? await vatRateOfInvoice(invoice.salesRecord.billingBatchId)
+      : invoice.vatRatePctUsed.toNumber()
   const amounts = resolveCreditNoteAmounts({
     amountBeforeVatSatang: input.amountBeforeVatSatang,
     vatSatang: input.vatSatang ?? null,
@@ -472,7 +478,11 @@ export async function createCreditNote(
       where: { taxInvoiceId: invoice.id },
       select: { amountBeforeVatSatang: true, vatSatang: true, totalSatang: true, status: true, noteType: true },
     })
-    assertWithinInvoiceBalance(invoice.salesRecord, existing, amounts)
+    assertWithinInvoiceBalance(
+      { totalBeforeVatSatang: invoice.amountBeforeVatSatang, vatSatang: invoice.vatSatang, totalSatang: invoice.totalSatang },
+      existing,
+      amounts,
+    )
   }
 
   const mismatchWarning =

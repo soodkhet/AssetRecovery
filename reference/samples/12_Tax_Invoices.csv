@@ -1,4 +1,4 @@
-﻿invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file,company_branch,billing_batch_number
-INV-2569-0014,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0014.pdf,สำนักงานใหญ่,BL-2569-001
-INV-2569-0015,30/06/2569,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,8000.00,560.00,8560.00,7.00,2569-06,cancelled,03/07/2569,ที่อยู่ผู้ซื้อไม่ถูกต้อง,INV-2569-0016,tax_invoices/INV-2569-0015.pdf,สาขาที่ 00001,BL-2569-002
-INV-2569-0016,03/07/2569,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,8000.00,560.00,8560.00,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0016.pdf,สาขาที่ 00001,BL-2569-002
+﻿invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file,company_branch,billing_batch_number,document_type,received_date
+INV-2569-0014,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0014.pdf,สำนักงานใหญ่,BL-2569-001,ใบเสร็จรับเงิน/ใบกำกับภาษี,30/06/2569
+INV-2569-0015,30/06/2569,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,8000.00,560.00,8560.00,7.00,2569-06,cancelled,03/07/2569,ที่อยู่ผู้ซื้อไม่ถูกต้อง,INV-2569-0016,tax_invoices/INV-2569-0015.pdf,สาขาที่ 00001,BL-2569-002,ใบกำกับภาษี,-
+INV-2569-0016,03/07/2569,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,8000.00,560.00,8560.00,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0016.pdf,สาขาที่ 00001,BL-2569-002,ใบเสร็จรับเงิน/ใบกำกับภาษี,30/06/2569

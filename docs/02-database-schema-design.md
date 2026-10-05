@@ -59,6 +59,7 @@
 | v4.36 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U94 ข้อ 1 · U96 #4 — ปิด D15)** (migration `20261006141000_payee_tax_address_wht_snapshot`): enum ใหม่ `wht_condition` (`withhold`/`pay_always`/`pay_once` — รวม 71 enum) · `payee_profiles` + `name_title VARCHAR(50)` · ที่อยู่ 5 คอลัมน์ `address_detail`/`address_subdistrict`/`address_district`/`address_province`/`address_postal_code VARCHAR(5)` (CHECK 5 หลัก) · `branch_code VARCHAR(5) NOT NULL DEFAULT '00000'` (CHECK) · `wht_condition NOT NULL DEFAULT 'withhold'` · `wht_certificates` + snapshot ผู้ถูกหัก `payee_name`/`payee_name_title`/`payee_type`/`payee_tax_id`/`payee_address`/`payee_branch_code`/`wht_condition` + ผู้หัก `payer_name`/`payer_tax_id`/`payer_address`/`payer_branch_code` — ใบเดิม backfill จากค่าปัจจุบัน (ปิด trigger เฉพาะคำสั่งนั้น) · trigger `wht_certificates_immutable` ครอบ snapshot ทั้งหมด (ข้อมูลเดิมไม่เปลี่ยนค่าใดนอกจากเติม snapshot) |
 | v4.37 | 06/10/2569 | **มติ PO 06/10/2569 (U96 #14) — ใบเสร็จค่าที่พักในนามบริษัท** (migration `20261006140000_expense_receipt_in_company_name`): `expenses.receipt_in_company_name BOOLEAN NOT NULL DEFAULT false` + CHECK `chk_expenses_receipt_in_company_name_hotel_only` (`expense_type = 'hotel'` หรือ false) · ผู้เบิกติ๊กเอง (`41` §6.6) · ส่งออกใน `03_Expenses.csv` (`37` v2.12) ให้สำนักงานบัญชีพิจารณาฐาน WHT — **ไม่เปลี่ยนสูตร WHT** · ไม่มีตาราง/enum ใหม่ |
 | v4.38 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA) — ระยะเก็บเอกสารลูกหนี้** (migration `20261006150000_debtor_document_retention`): ตารางใหม่ `data_retention_settings` (1 record/org — PK `organization_id` · `debtor_document_retention_years INTEGER NOT NULL DEFAULT 5` CHECK `chk_data_retention_years_range` 1–20 · `updated_at`/`updated_by` แบบเดียวกับ `assignment_policy_settings`) · `cases.debtor_documents_purged_at TIMESTAMPTZ` · `case_documents.purged_at TIMESTAMPTZ` + CHECK `chk_case_documents_purged_deleted` (purged ⇒ `deleted_at` ไม่ว่าง) · ใช้โดย job `purge_debtor_documents` (`91` §6.1) ลบไฟล์บน Storage แล้วเก็บแถวไว้เป็นหลักฐาน · capability ใหม่ `manage_data_retention` (seed — §12) · ไม่มี enum ใหม่ |
+| v4.39 | 06/10/2569 | **มติ PO 06/10/2569 U95 + U96 #3/#4/#7/#8/#9 — ใบเสร็จรับเงิน/ใบกำกับภาษี ตอนรับเงิน** (migration `20261006160000_receipt_tax_invoice`): enum ใหม่ **`tax_invoice_doc_kind`** (`tax_invoice` = ใบเดิมตอนวางบิล · `receipt_tax_invoice` = ตอนรับเงิน) · `tax_invoices` เพิ่ม `doc_kind` · `cash_receipt_id` (FK → `cash_receipts` **ON DELETE SET NULL**) · `replaces_tax_invoice_id` (self-FK · ใบแทน) · ยอดบนใบ `amount_before_vat_satang`/`vat_satang`/`total_satang` (CHECK total = ก่อน VAT + VAT ≥ 0) · `vat_rate_pct_used NUMERIC(5,2)` (อัตรา ณ วันรับเงิน · ใบเดิมหลายอัตรา = NULL) · snapshot คู่ค้า `seller_name/tax_id/address/phone` + `buyer_name/tax_id/address/phone` · `delivery_format` (snapshot — ปิด D13) · `description` — ใบเดิม backfill จาก `sales_records`/ค่าปัจจุบันขององค์กร/บริษัทใน migration เดียวกัน · CHECK `chk_tax_invoices_receipt_kind` · partial unique `uniq_tax_invoice_active_per_sales` จำกัดเฉพาะ `doc_kind = 'tax_invoice'` + ใหม่ `uniq_tax_invoice_active_per_receipt (cash_receipt_id) WHERE active` + `uniq_tax_invoice_replaces` · `tax_invoices_immutable()` เทียบทุกคอลัมน์ (แก้ได้ทางเดียวคือยกเลิก · ข้อยกเว้น: FK SET NULL ของใบที่ยกเลิกแล้ว) · `credit_notes_guard_balance()` อ่านยอดจากใบที่อ้างถึง (ไม่ใช่ `sales_records`) |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -417,6 +418,12 @@ CREATE TYPE wht_condition AS ENUM (
   'withhold',   -- (1) หัก ณ ที่จ่าย (ค่าเริ่มต้น)
   'pay_always', -- (2) ออกให้ตลอดไป
   'pay_once'    -- (3) ออกให้ครั้งเดียว
+);
+
+-- v4.36 มติ PO U95 — ชนิดเอกสารในทะเบียนใบกำกับ (เลขชุดเดียวกัน)
+CREATE TYPE tax_invoice_doc_kind AS ENUM (
+  'tax_invoice',          -- ใบกำกับภาษีแบบเดิม (ออกตอนวางบิล — ข้อมูลก่อน U95)
+  'receipt_tax_invoice'   -- ใบเสร็จรับเงิน/ใบกำกับภาษี (ออกตอนรับเงิน · ม.78/1(2))
 );
 
 CREATE TYPE wht_filing_form AS ENUM (
@@ -1801,6 +1808,24 @@ CREATE TABLE tax_invoices (
   invoice_date      DATE                NOT NULL,
   buyer_branch_code VARCHAR(5)          NOT NULL,  -- snapshot finance_companies.branch_code ตอนออกใบ (U77 · ม.86/4) ห้ามแก้
   seller_branch_code VARCHAR(5)         NOT NULL,  -- snapshot organizations.branch_code ตอนออกใบ (U82 · ม.86/4) ห้ามแก้
+  -- v4.36 มติ PO U95/U96 — ใบเสร็จรับเงิน/ใบกำกับภาษี ตอนรับเงิน
+  doc_kind          tax_invoice_doc_kind NOT NULL,
+  cash_receipt_id   UUID                REFERENCES cash_receipts(id) ON DELETE SET NULL,  -- 1 เงินรับ = 1 ใบ active
+  replaces_tax_invoice_id UUID          REFERENCES tax_invoices(id),  -- ใบแทน (U96 #8)
+  amount_before_vat_satang INTEGER      NOT NULL,  -- ยอดบนใบ (ตามเงินที่รับ — `22` §6.8.2)
+  vat_satang        INTEGER             NOT NULL,
+  total_satang      INTEGER             NOT NULL,  -- CHECK = ก่อน VAT + VAT
+  vat_rate_pct_used NUMERIC(5,2),                  -- อัตรา ณ วันรับเงิน (U96 #9) · ใบเดิมหลายอัตรา = NULL
+  seller_name       TEXT                NOT NULL,  -- snapshot คู่ค้า (U96 #4) — ห้ามแก้
+  seller_tax_id     VARCHAR(13)         NOT NULL,
+  seller_address    TEXT                NOT NULL,
+  seller_phone      VARCHAR(20),
+  buyer_name        TEXT                NOT NULL,
+  buyer_tax_id      VARCHAR(13)         NOT NULL,
+  buyer_address     TEXT                NOT NULL,
+  buyer_phone       VARCHAR(20),
+  delivery_format   invoice_delivery_format NOT NULL,  -- snapshot ค่าเริ่มต้นของบริษัท (ปิด D13)
+  description       TEXT                NOT NULL,
   status            tax_invoice_status  NOT NULL DEFAULT 'active',
   cancel_reason     TEXT,
   cancelled_by      UUID                REFERENCES users(id),
@@ -1809,6 +1834,10 @@ CREATE TABLE tax_invoices (
   created_by        UUID                NOT NULL REFERENCES users(id)
 );
 CREATE INDEX idx_tax_invoices_org ON tax_invoices(organization_id, status);
+CREATE INDEX idx_tax_invoices_cash_receipt ON tax_invoices(cash_receipt_id);
+-- raw SQL (v4.36): uniq_tax_invoice_active_per_sales (org, sales_record_id) WHERE active AND doc_kind='tax_invoice'
+--                  uniq_tax_invoice_active_per_receipt (cash_receipt_id) WHERE active AND cash_receipt_id IS NOT NULL
+--                  uniq_tax_invoice_replaces (replaces_tax_invoice_id) · chk_tax_invoices_amounts · chk_tax_invoices_receipt_kind
 
 -- ── credit_notes ─────────────────────────────────────────────
 -- ใบลดหนี้ที่สำนักงานบัญชีออกนอกระบบ (มติ PO 05/10/2569 U14 + มติบัญชี B1 · ม.86/10) — ระบบ "บันทึก" ไม่ได้ออกเอง

@@ -424,8 +424,16 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
   // สิ้นงวด (date-only UTC) — ยอดเงินรับรอตรวจสอบ/50 ทวิ ค้าง นับรายการที่เกิดก่อนสิ้นงวด (ยกมาจากงวดก่อนด้วย)
   const yearCe = row.yearBe - 543
   const periodEnd = new Date(Date.UTC(row.month === 12 ? yearCe + 1 : yearCe, row.month === 12 ? 0 : row.month, 1))
-  const [openExceptions, unmatchedBankCount, billingMismatches, suspense, pendingWht, unbilledRevenue, draftBatches] =
-    await Promise.all([
+  const [
+    openExceptions,
+    unmatchedBankCount,
+    billingMismatches,
+    suspense,
+    pendingWht,
+    unbilledRevenue,
+    draftBatches,
+    awaitingReceiptInvoice,
+  ] = await Promise.all([
     prisma.exception.findMany({
       where: { organizationId, periodId: row.id, status: 'open' },
       select: { id: true, level: true, title: true, sourceModule: true },
@@ -447,6 +455,22 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     // มติ PO U87 / BUG-160 — เตือนอย่างเดียว ไม่บล็อก
     unbilledRevenueSummary(organizationId, periodEnd),
     draftBillingBatchSummary(organizationId, periodEnd),
+    // มติ PO U95 #6 — เงินรับที่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี (รอบที่ออกใบกำกับแบบเดิมแล้วไม่นับ)
+    prisma.cashReceipt.aggregate({
+      where: {
+        organizationId,
+        receivedDate: { lt: periodEnd },
+        taxInvoices: { none: { status: 'active' } },
+        billingBatch: {
+          OR: [
+            { salesRecord: null },
+            { salesRecord: { taxInvoices: { none: { status: 'active', docKind: 'tax_invoice' } } } },
+          ],
+        },
+      },
+      _count: { _all: true },
+      _sum: { amountSatang: true, whtWithheldByCustomerSatang: true },
+    }),
   ])
 
   return evaluateReadiness({
@@ -461,6 +485,11 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     pendingCustomerWht: { count: pendingWht._count._all, withheldSatang: pendingWht._sum.withheldSatang ?? 0 },
     unbilledRevenue,
     draftBillingBatches: draftBatches,
+    receiptsAwaitingTaxInvoice: {
+      count: awaitingReceiptInvoice._count._all,
+      amountSatang:
+        (awaitingReceiptInvoice._sum.amountSatang ?? 0) + (awaitingReceiptInvoice._sum.whtWithheldByCustomerSatang ?? 0),
+    },
   })
 }
 

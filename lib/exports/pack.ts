@@ -110,7 +110,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat', sourceDoc: '31' },
   { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
-  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบกำกับภาษีที่ออก/ยกเลิกในรอบ — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
+  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบเสร็จรับเงิน/ใบกำกับภาษี (ออกตอนรับเงิน) และใบกำกับภาษีแบบเดิมที่ออก/ยกเลิกในรอบ ตามวันที่เอกสาร — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ, ชนิดเอกสาร, วันรับเงิน (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
   { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status', sourceDoc: '15' },
   { no: '14', fileName: '14_Unbilled_Revenue.csv', kind: 'csv', description: 'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) — case_ref, company, delivered_date, before_vat, vat, total', sourceDoc: '19' },
 ]
@@ -706,6 +706,8 @@ export const TAX_INVOICE_HEADERS = [
   'pdf_file',
   'company_branch',
   'billing_batch_number',
+  'document_type',
+  'received_date',
 ] as const
 
 export interface TaxInvoiceExportRow {
@@ -729,6 +731,10 @@ export interface TaxInvoiceExportRow {
   pdfFile: string | null
   /** เลขรอบวางบิล (มติ U79 — คอลัมน์ต่อท้าย · `billing_ref` คงเป็นรอบเดือน) */
   billingBatchNumber: string | null
+  /** มติ PO U95 — ชื่อเอกสาร ("ใบเสร็จรับเงิน/ใบกำกับภาษี" / "ใบกำกับภาษี" แบบเดิม) · คอลัมน์ต่อท้าย */
+  documentType: string
+  /** วันรับเงินที่เป็นจุดความรับผิด VAT (ใบเสร็จรับเงิน/ใบกำกับภาษี) — ใบแบบเดิม ⇒ `-` */
+  receivedDate: Date | null
 }
 
 /** อัตรา VAT แบบทศนิยม 2 ตำแหน่ง ไม่ซ้ำ เรียงน้อยไปมาก — ไม่มีรายได้ผูก ⇒ `-` */
@@ -764,6 +770,8 @@ export function taxInvoiceCsv(rows: readonly TaxInvoiceExportRow[]): string {
       csvText(row.pdfFile),
       formatBranch(row.companyBranchCode),
       csvText(row.billingBatchNumber),
+      row.documentType,
+      row.receivedDate === null ? CSV_EMPTY : csvDate(row.receivedDate),
     ]),
   )
 }

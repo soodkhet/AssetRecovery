@@ -9,10 +9,8 @@ import {
   type ArAgingRow,
 } from '@/lib/finance/ar-calc'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
+import { adjustmentsAwaitingNotesByBatch, withDocumentedArTotals } from '@/lib/portal/documented-amounts'
 import type {
-  AdjustmentStatus,
-  AdjustmentType,
   BillingBatchStatus,
   RevenueStatus,
 } from '@/lib/generated/prisma/enums'
@@ -585,7 +583,7 @@ export async function getArAging(
   now: Date = new Date(),
 ): Promise<ArAgingReportDto> {
   const asOf = query.asOf ?? toBangkokDateOnly(now)
-  const [policy, rows] = await Promise.all([
+  const [policy, rawRows] = await Promise.all([
     getFinancePolicy(user.organizationId),
     prisma.billingBatch.findMany({
       where: {
@@ -607,44 +605,34 @@ export async function getArAging(
     }),
   ])
 
-  // Adjustment ที่อนุมัติแล้วของรอบวางบิลเหล่านี้ (`20` §9) — ดึงหลังรู้ id เพื่อไม่ให้ scan ทั้งตาราง
-  const adjustmentRows =
-    rows.length === 0
-      ? []
-      : await prisma.adjustment.findMany({
-          where: {
-            organizationId: user.organizationId,
-            status: 'approved',
-            billingBatchId: { in: rows.map((row) => row.id) },
-          },
-          select: { billingBatchId: true, adjustmentType: true, amountSatang: true, status: true },
-        })
-
-  const adjustmentsOf = new Map<string, { adjustmentType: AdjustmentType; amountSatang: number; status: AdjustmentStatus }[]>()
-  for (const row of adjustmentRows) {
-    if (row.billingBatchId === null) continue
-    const list = adjustmentsOf.get(row.billingBatchId)
-    if (list === undefined) adjustmentsOf.set(row.billingBatchId, [row])
-    else list.push(row)
-  }
-
-  // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว (`settledSatang()`) — ไม่งั้นทุกบิลจะค้าง 3% ตลอดกาล
-  // ยอดบิลต้องเป็น **ยอดสุทธิหลัง Adjustment** เหมือน KPI ของแดชบอร์ด (`20` §7.1) ไม่งั้นสองตัวเลข
-  // บนหน้าเดียวกันไม่ตรงกัน
+  // มติ PO U96 #11 — ยอดลูกหนี้ภายใน = **ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้) นิยามเดียวกับพอร์ทัล
+  // (helper ตัวเดียวกัน) · Adjustment ที่ยังไม่มีเอกสารไม่สะท้อนยอด แต่นับเป็นป้าย "รอใบลดหนี้/ใบเพิ่มหนี้"
+  // · WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว (`arOutstandingSatang()`)
+  const [rows, awaitingNotes] = await Promise.all([
+    withDocumentedArTotals(user.organizationId, rawRows),
+    adjustmentsAwaitingNotesByBatch(
+      user.organizationId,
+      rawRows.map((row) => row.id),
+    ),
+  ])
   const agingRow = (row: (typeof rows)[number]): ArAgingRow => ({
     dueDate: row.dueDate,
-    totalSatang: netAfterAdjustments(row.totalSatang, adjustmentsOf.get(row.id) ?? []),
+    totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
     whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
   })
 
   const buckets = summarizeArAging(rows.map(agingRow), policy.arAgingBuckets, asOf)
 
-  const byCompany = new Map<string, { name: string; rows: ArAgingRow[] }>()
+  const byCompany = new Map<string, { name: string; rows: ArAgingRow[]; awaiting: number }>()
   for (const row of rows) {
+    const awaiting = awaitingNotes.get(row.id) ?? 0
     const bucket = byCompany.get(row.companyId)
-    if (bucket === undefined) byCompany.set(row.companyId, { name: row.company.name, rows: [agingRow(row)] })
-    else bucket.rows.push(agingRow(row))
+    if (bucket === undefined) byCompany.set(row.companyId, { name: row.company.name, rows: [agingRow(row)], awaiting })
+    else {
+      bucket.rows.push(agingRow(row))
+      bucket.awaiting += awaiting
+    }
   }
 
   const companies: ArAgingCompanyDto[] = [...byCompany.entries()]
@@ -655,9 +643,10 @@ export async function getArAging(
         companyName: entry.name,
         buckets: companyBuckets,
         outstandingSatang: companyBuckets.reduce((sum, item) => sum + item.outstandingSatang, 0),
+        awaitingNoteAdjustmentCount: entry.awaiting,
       }
     })
-    .filter((company) => company.outstandingSatang > 0)
+    .filter((company) => company.outstandingSatang > 0 || company.awaitingNoteAdjustmentCount > 0)
     .sort((a, b) => b.outstandingSatang - a.outstandingSatang)
 
   return {

@@ -76,6 +76,7 @@ import { prisma } from '@/lib/prisma'
 import { buddhistYear, startOfBangkokDay } from '@/lib/format/datetime'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { customerWhtExportSources } from '@/lib/customer-wht/queries'
+import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
 import { taxInvoicesForPack } from '@/lib/sales/queries'
 
@@ -820,6 +821,8 @@ async function taxInvoiceFile(
     cancelReason: invoice.source.cancelReason,
     replacedBy: invoice.replacedBy,
     pdfFile: pdfFileOf.get(invoice.id) ?? null,
+    documentType: TAX_INVOICE_DOC_KIND_TITLE[invoice.source.docKind],
+    receivedDate: invoice.source.receivedDate,
   }))
   return { csv: taxInvoiceCsv(rows), entries, attached: pdfFileOf.size, notAttached }
 }

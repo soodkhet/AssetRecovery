@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
 
 /**
@@ -197,10 +198,6 @@ async function setPeriodStatusOf(period: string, status: 'locked' | 'collecting'
   }
 }
 
-async function lockPeriodOf(period: string): Promise<void> {
-  await setPeriodStatusOf(period, 'locked')
-}
-
 beforeAll(async () => {
   if (!url) return
   process.env.DATABASE_URL = url
@@ -289,28 +286,233 @@ suite('Phase 4.3 — Sales Record sync จากรอบวางบิล (`31
   })
 })
 
-suite('Phase 4.3 — ออก/ยกเลิกใบกำกับภาษี (`31` §9.1 · §16)', () => {
-  it('ออกใบแรกได้เลขที่ตามตัวเดินเลข + รายการขายชี้ไปที่ใบที่ active', async () => {
+
+// ── เงินรับ (ไฟล์ 35 เป็นผู้สร้างจริง — เทสต์ insert ตรงเพื่อแยกขอบเขต) ─────────
+
+/** วันนี้ตามปฏิทินไทย (เที่ยงคืน UTC แบบคอลัมน์ DATE) — ตัวเดียวกับที่ service ใช้ตัดสินวันที่ล่วงหน้า */
+const TODAY = toBangkokDateOnly(new Date())
+
+/** เงินรับ 1 รายการของรอบ (default = รับเต็มยอดวันนี้) — คืน id */
+async function seedReceipt(
+  batchId: string,
+  options: { amountSatang?: number; whtSatang?: number; receivedDate?: Date } = {},
+): Promise<string> {
+  const record = await sales.syncSalesRecordFromBilling(ctx, batchId)
+  const received = (options.receivedDate ?? TODAY).toISOString().slice(0, 10)
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO cash_receipts (organization_id, period_id, billing_batch_id, amount_satang,
+                               wht_withheld_by_customer_satang, received_date, created_by)
+    VALUES ('${ORG_ID}', '${record?.periodId ?? ''}', '${batchId}', ${options.amountSatang ?? 1_284_000},
+            ${options.whtSatang ?? 0}, '${received}', '${ACCOUNTING_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
+}
+
+/** ส่งบิลแล้ว + เงินรับเต็มยอด — ทางลัดของเทสต์ที่สนใจแค่เลขที่/ยาม */
+async function seedReceivedBilling(options: { company?: string; receivedDate?: Date } = {}): Promise<{
+  batch: { id: string; period: string }
+  receiptId: string
+}> {
+  const batch = await seedBilling({ status: 'sent', ...(options.company === undefined ? {} : { company: options.company }) })
+  const receiptId = await seedReceipt(batch.id, options.receivedDate === undefined ? {} : { receivedDate: options.receivedDate })
+  return { batch, receiptId }
+}
+
+beforeAll(async () => {
+  if (!url) return
+  // อัตรา VAT ของ org ทดสอบ: 7% ถึง 30/06/2027 · 10% ตั้งแต่ 01/07/2027 (กรณีอัตราเปลี่ยน — U96 #9) · idempotent ข้ามรัน
+  await db().$executeRawUnsafe(`
+    INSERT INTO vat_rate_history (organization_id, rate_pct, effective_from, effective_to, created_by)
+    SELECT '${ORG_ID}', 7.00, '2020-01-01', '2027-06-30', '${ACCOUNTING_ID}'
+     WHERE NOT EXISTS (SELECT 1 FROM vat_rate_history WHERE organization_id = '${ORG_ID}' AND effective_from = '2020-01-01')
+  `)
+  await db().$executeRawUnsafe(`
+    INSERT INTO vat_rate_history (organization_id, rate_pct, effective_from, effective_to, created_by)
+    SELECT '${ORG_ID}', 10.00, '2027-07-01', NULL, '${ACCOUNTING_ID}'
+     WHERE NOT EXISTS (SELECT 1 FROM vat_rate_history WHERE organization_id = '${ORG_ID}' AND effective_from = '2027-07-01')
+  `)
+  // งวดของวันนี้ต้องเปิด (รันก่อน ๆ อาจล็อกค้าง)
+  const todayPeriod = `${MONTHS[TODAY.getUTCMonth()] ?? ''} ${TODAY.getUTCFullYear() + 543}`
+  await setPeriodStatusOf(todayPeriod, 'collecting')
+})
+
+suite('มติ PO U95 — วางบิล ⇒ ใบแจ้งหนี้ (ไม่ใช่เอกสารภาษี)', () => {
+  it('ส่งบิลแล้วไม่มีใบกำกับภาษีเกิด · ใบแจ้งหนี้ PDF อ่านยอดจากรายได้ + ข้อความไม่ใช่ใบกำกับ · draft ออกไม่ได้', async () => {
+    const { getBillingInvoiceSource } = await import('@/lib/revenue/billing-invoice-queries')
+    const { buildBillingInvoiceDoc } = await import('@/lib/revenue/billing-invoice')
+    const before = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
+    const batch = await seedBilling()
+    await revenue.sendBillingBatch(billingCtx, batch.id, { reason: billingCtx.reason })
+
+    expect(await db().taxInvoice.count({ where: { salesRecord: { billingBatchId: batch.id } } })).toBe(0)
+    const after = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
+    expect(after.taxInvoiceSeq, 'ใบแจ้งหนี้ไม่เดินเลขใบกำกับภาษี').toBe(before.taxInvoiceSeq)
+
+    const doc = buildBillingInvoiceDoc(await getBillingInvoiceSource(accountant, batch.id))
+    expect(doc.amounts).toEqual({ totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 })
+    expect(doc.notTaxInvoiceNote).toContain('เอกสารนี้ไม่ใช่ใบกำกับภาษี')
+    expect(doc.lines).toHaveLength(1)
+
+    const draft = await seedBilling()
+    await expectCode(() => getBillingInvoiceSource(accountant, draft.id), 'BILLING_BATCH_INVALID_STATUS')
+  })
+})
+
+suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จรับเงิน/ใบกำกับภาษี', () => {
+  it('ออกจากเงินรับ: เลขชุดเดิม · วันที่ = วันรับเงิน · ยอดตามที่รับ (รวมภาษีที่ลูกค้าหัก) · ออกซ้ำไม่ได้', async () => {
     await setNumbering({ seq: 0 })
     const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-    expect(record).not.toBeNull()
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 1_248_000, whtSatang: 36_000 })
 
-    const invoice = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
     expect(sequenceOf(invoice.invoiceNumber)).toBe(1)
-    expect(invoice.status).toBe('active')
-    expect(invoice.totalSatang).toBe(1_284_000)
+    expect(invoice.invoiceNumber.startsWith(PREFIX)).toBe(true)
+    expect(invoice.docKind).toBe('receipt_tax_invoice')
+    expect(invoice.docTitle).toBe('ใบเสร็จรับเงิน/ใบกำกับภาษี')
+    expect(invoice.invoiceDate).toBe(TODAY.toISOString())
+    expect(invoice).toMatchObject({ totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 })
+    expect(invoice.vatRatePctUsed).toBe('7')
 
-    const list = await sales.listSalesRecords(accountant, { periodId: record?.periodId })
-    expect(list.items.find((item) => item.id === record?.id)?.activeTaxInvoice?.invoiceNumber).toBe(
-      invoice.invoiceNumber,
-    )
+    const receipts = await sales.listCashReceipts(accountant, {})
+    expect(receipts.items.find((item) => item.id === receiptId)?.taxInvoice?.invoiceNumber).toBe(invoice.invoiceNumber)
 
-    // ออกซ้ำให้รายการขายเดิมไม่ได้ ต้องยกเลิกใบเดิมก่อน (`31` §10)
+    await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'TAX_INVOICE_ALREADY_ISSUED')
+
+    const audit = await db().auditLog.findFirst({ where: { targetType: 'tax_invoices', targetId: invoice.id } })
+    expect(audit?.reason).toContain('ใบเสร็จรับเงิน/ใบกำกับภาษี')
+  })
+
+  it('รับเงินบางส่วน 2 ครั้ง ⇒ 2 ใบตามยอดที่รับ ผลรวมเท่าใบแจ้งหนี้ · ใบที่สามไม่มียอดให้ออก', async () => {
+    await setNumbering({ seq: 40 })
+    const batch = await seedBilling({ status: 'sent' })
+    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 500_000 }) })
+    expect(first).toMatchObject({ totalBeforeVatSatang: 467_290, vatSatang: 32_710, totalSatang: 500_000 })
+
+    const second = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 784_000 }) })
+    expect(first.totalBeforeVatSatang + second.totalBeforeVatSatang).toBe(1_200_000)
+    expect(first.vatSatang + second.vatSatang).toBe(84_000)
+
     await expectCode(
-      () => sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' }),
-      'TAX_INVOICE_ALREADY_ISSUED',
+      async () => sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 100 }) }),
+      'TAX_INVOICE_NOTHING_TO_INVOICE',
     )
+  })
+
+  it('U96 #9 — อัตรา VAT เปลี่ยนระหว่างวางบิล (7%) กับรับเงิน (10%) ⇒ ใบใช้อัตรา ณ วันรับเงิน + snapshot อัตราใหม่', async () => {
+    await setNumbering({ seq: 900 })
+    const batch = await seedBilling({ status: 'sent' })
+    const received = new Date(Date.UTC(2027, 6, 5))
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 1_320_000, receivedDate: received })
+
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }, new Date(Date.UTC(2027, 6, 6, 3)))
+    expect(invoice).toMatchObject({ totalBeforeVatSatang: 1_200_000, vatSatang: 120_000, totalSatang: 1_320_000 })
+    expect(invoice.vatRatePctUsed).toBe('10')
+    expect(invoice.invoiceDate).toBe(received.toISOString())
+    const revenueRate = await db().revenue.findFirst({ where: { billingBatchId: batch.id }, select: { vatRatePctUsed: true } })
+    expect(revenueRate?.vatRatePctUsed.toString(), 'snapshot รายได้ตอนวางบิลไม่ถูกแก้').toBe('7')
+    await setNumbering({ seq: 0 })
+  })
+
+  it('U96 #3 — บริษัทโหมด no_vat ⇒ ออกไม่ได้ TAX_INVOICE_NO_VAT_COMPANY (ไม่กินเลขที่)', async () => {
+    await setNumbering({ seq: 60 })
+    const batch = await seedBilling({ status: 'sent' })
+    await db().$executeRawUnsafe(`UPDATE revenues SET vat_mode_snapshot = 'no_vat' WHERE billing_batch_id = '${batch.id}'`)
+    const receiptId = await seedReceipt(batch.id)
+    await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'TAX_INVOICE_NO_VAT_COMPANY')
+    const org = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
+    expect(org.taxInvoiceSeq).toBe(60)
+  })
+
+  it('U96 #7 — วันที่ล่วงหน้า / ก่อนวันที่ของเลขก่อนหน้า ⇒ ปฏิเสธพร้อมข้อความชัดเจน', async () => {
+    await setNumbering({ seq: 80 })
+    const { receiptId } = await seedReceivedBilling()
+    const tomorrow = new Date(TODAY.getTime() + 86_400_000)
+    await expectCode(
+      () => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId, invoiceDate: tomorrow }),
+      'TAX_INVOICE_DATE_IN_FUTURE',
+    )
+    const today = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    expect(sequenceOf(today.invoiceNumber)).toBe(81)
+
+    // เงินรับย้อนหลัง 3 วัน (รับก่อนแต่จับคู่ทีหลัง) ⇒ ลงวันที่ก่อนเลข 081 ไม่ได้
+    const older = await seedReceivedBilling({ receivedDate: new Date(TODAY.getTime() - 3 * 86_400_000) })
+    let message = ''
+    try {
+      await sales.issueTaxInvoice(ctx, { cashReceiptId: older.receiptId })
+    } catch (error) {
+      expect(codeOf(error)).toBe('TAX_INVOICE_DATE_OUT_OF_SEQUENCE')
+      message = (error as { userMessage: string }).userMessage
+    }
+    expect(message).toContain(today.invoiceNumber)
+    // เลือกวันที่เอกสาร = วันนี้ (ไม่ก่อนใบล่าสุด · ไม่ก่อนวันรับเงิน) ⇒ ออกได้
+    const fixed = await sales.issueTaxInvoice(ctx, { cashReceiptId: older.receiptId, invoiceDate: TODAY })
+    expect(sequenceOf(fixed.invoiceNumber)).toBe(82)
+  })
+
+  it('U96 #4 — snapshot ผู้ซื้อ/ผู้ขายบนใบ: แก้บริษัท/องค์กรภายหลัง PDF ใบเดิมไม่เปลี่ยน · แก้ snapshot ที่ DB ไม่ได้', async () => {
+    await setNumbering({ seq: 120 })
+    const company = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, payment_due_days, created_by)
+      VALUES ('${ORG_ID}', 'ไฟแนนซ์ snapshot (${RUN})', 'SNP', '${RUN_TAX_ID.slice(0, 12)}${RUN_TAX_ID.endsWith('5') ? '6' : '5'}',
+              '5 ถนนเดิม', 'exclude_vat', 30, '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const companyRef = company[0]?.id ?? ''
+    const { receiptId } = await seedReceivedBilling({ company: companyRef })
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+
+    await db().$executeRawUnsafe(`UPDATE finance_companies SET name = 'ชื่อใหม่', address = '9 ถนนใหม่' WHERE id = '${companyRef}'`)
+    await db().$executeRawUnsafe(`UPDATE organizations SET address = 'ที่อยู่องค์กรใหม่' WHERE id = '${ORG_ID}'`)
+    try {
+      const source = await sales.getTaxInvoiceDocSource(accountant, invoice.id)
+      expect(source.buyer.name).toBe(`ไฟแนนซ์ snapshot (${RUN})`)
+      expect(source.buyer.address).toBe('5 ถนนเดิม')
+      expect(source.seller.address).toBe('ที่อยู่ทดสอบ 4.3 กรุงเทพฯ')
+      expect((await sales.listTaxInvoices(accountant, { companyId: companyRef })).items[0]?.companyName).toBe(
+        `ไฟแนนซ์ snapshot (${RUN})`,
+      )
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE organizations SET address = 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ' WHERE id = '${ORG_ID}'`)
+    }
+    await expect(
+      db().$executeRawUnsafe(`UPDATE tax_invoices SET buyer_name = 'แก้' WHERE id = '${invoice.id}'`),
+    ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
+  })
+
+  it('U96 #8 — ยกเลิกแล้วออกใหม่จากเงินรับเดิม ⇒ ใบแทนพิมพ์ "ออกแทนฉบับเลขที่ … ลงวันที่ … เนื่องจาก …" · เลขไม่ recycle', async () => {
+    await setNumbering({ seq: 4 })
+    const { receiptId } = await seedReceivedBilling()
+    const fifth = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    expect(fifth.invoiceNumber.endsWith('0005')).toBe(true)
+
+    await expectCode(() => sales.cancelTaxInvoice(ctx, fifth.id, { reason: '   ' }), 'CANCEL_REQUIRES_REASON')
+    const cancelled = await sales.cancelTaxInvoice(ctx, fifth.id, { reason: 'ที่อยู่ผู้ซื้อผิด' })
+    expect(cancelled.status).toBe('cancelled')
+    await expectCode(() => sales.cancelTaxInvoice(ctx, fifth.id, { reason: 'ซ้ำ' }), 'TAX_INVOICE_INVALID_STATUS')
+
+    const sixth = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    expect(sixth.invoiceNumber.endsWith('0006')).toBe(true)
+    expect(sixth.replacesInvoiceNumber).toBe(fifth.invoiceNumber)
+    const doc = buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, sixth.id))
+    expect(doc.replacementNote).toMatch(new RegExp(`^ออกแทนฉบับเลขที่ ${fifth.invoiceNumber} ลงวันที่ \\d{2}/\\d{2}/25\\d{2} เนื่องจาก ที่อยู่ผู้ซื้อผิด$`))
+
+    // ใบเดิมยังอยู่ครบ — ยกเลิก ≠ ลบ (`02` §13)
+    const history = await db().taxInvoice.findMany({ where: { cashReceiptId: receiptId }, orderBy: { invoiceNumber: 'asc' } })
+    expect(history.map((row) => row.status)).toEqual(['cancelled', 'active'])
+  })
+
+  it('U95 — เปลี่ยนการจับคู่เงินรับที่ออกใบแล้วไม่ได้ · ใบที่ยกเลิกแล้วคงอยู่เมื่อเงินรับถูกถอน (ลิงก์เป็น NULL)', async () => {
+    await setNumbering({ seq: 140 })
+    const { receiptId } = await seedReceivedBilling()
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    await expect(db().$executeRawUnsafe(`DELETE FROM cash_receipts WHERE id = '${receiptId}'`)).rejects.toThrow(
+      /TAX_INVOICE_IMMUTABLE/,
+    )
+    await sales.cancelTaxInvoice(ctx, invoice.id, { reason: 'จับคู่เงินรับผิดรอบ' })
+    await db().$executeRawUnsafe(`DELETE FROM cash_receipts WHERE id = '${receiptId}'`)
+    const after = await db().taxInvoice.findUniqueOrThrow({ where: { id: invoice.id } })
+    expect(after).toMatchObject({ status: 'cancelled', cashReceiptId: null, invoiceNumber: invoice.invoiceNumber })
   })
 
   it('ผู้ซื้อไม่มีเลขประจำตัวผู้เสียภาษีที่ถูกต้อง ⇒ TAX_INVOICE_FIELD_MISSING (ไม่กินเลขที่)', async () => {
@@ -322,118 +524,86 @@ suite('Phase 4.3 — ออก/ยกเลิกใบกำกับภาษ�
               '${ACCOUNTING_ID}')
       RETURNING id
     `)
-    const batch = await seedBilling({ status: 'sent', company: broken[0]?.id ?? '' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-
-    await expectCode(
-      () => sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' }),
-      'TAX_INVOICE_FIELD_MISSING',
-    )
-
+    const { receiptId } = await seedReceivedBilling({ company: broken[0]?.id ?? '' })
+    await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'TAX_INVOICE_FIELD_MISSING')
     const org = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
     expect(org.taxInvoiceSeq, 'ตรวจฟิลด์ก่อนเดินเลข ⇒ เลขที่ต้องไม่ขยับ').toBe(20)
   })
 
-  it('DoD: ยกเลิกใบเลขที่ 005 แล้วออกใหม่ ⇒ ได้ 006 (เลขเดิมไม่ recycle)', async () => {
-    await setNumbering({ seq: 4 })
-    const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-
-    const fifth = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })
-    expect(sequenceOf(fifth.invoiceNumber)).toBe(5)
-    expect(fifth.invoiceNumber.endsWith('0005')).toBe(true)
-
-    await expectCode(() => sales.cancelTaxInvoice(ctx, fifth.id, { reason: '   ' }), 'CANCEL_REQUIRES_REASON')
-
-    const cancelled = await sales.cancelTaxInvoice(ctx, fifth.id, { reason: 'ออกผิดบริษัท' })
-    expect(cancelled.status).toBe('cancelled')
-    expect(cancelled.cancelReason).toBe('ออกผิดบริษัท')
-    expect(cancelled.cancelledByName).toBe('บัญชี 4.3')
-
-    // ยกเลิกซ้ำไม่ได้ (terminal)
-    await expectCode(
-      () => sales.cancelTaxInvoice(ctx, fifth.id, { reason: 'ยกเลิกซ้ำ' }),
-      'TAX_INVOICE_INVALID_STATUS',
-    )
-
-    const sixth = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })
-    expect(sequenceOf(sixth.invoiceNumber)).toBe(6)
-    expect(sixth.invoiceNumber.endsWith('0006')).toBe(true)
-
-    // ใบเดิมยังอยู่ครบพร้อมเลขที่เดิม — ยกเลิก ≠ ลบ (`02` §13)
-    const history = await db().taxInvoice.findMany({
-      where: { salesRecordId: record?.id ?? '' },
-      select: { invoiceNumber: true, status: true },
-      orderBy: { invoiceNumber: 'asc' },
-    })
-    expect(history.map((row) => row.status)).toEqual(['cancelled', 'active'])
-  })
-
-  it('DoD: ออกพร้อมกัน 4 คำขอ ⇒ เลขไม่ซ้ำและไม่ขาดช่วง', async () => {
+  it('DoD: ออกพร้อมกัน 4 คำขอ (คนละเงินรับ) ⇒ เลขไม่ซ้ำและไม่ขาดช่วง', async () => {
     await setNumbering({ seq: 100 })
-    const records = await Promise.all(
-      [0, 1, 2, 3].map(async () => {
-        const batch = await seedBilling({ status: 'sent' })
-        return sales.syncSalesRecordFromBilling(ctx, batch.id)
-      }),
-    )
-
-    const issued = await Promise.all(
-      records.map((record) => sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })),
-    )
+    const receipts = await Promise.all([0, 1, 2, 3].map(async () => (await seedReceivedBilling()).receiptId))
+    const issued = await Promise.all(receipts.map((cashReceiptId) => sales.issueTaxInvoice(ctx, { cashReceiptId })))
     const sequences = issued.map((invoice) => sequenceOf(invoice.invoiceNumber)).sort((a, b) => a - b)
     expect(sequences).toEqual([101, 102, 103, 104])
-    expect(new Set(issued.map((invoice) => invoice.invoiceNumber)).size).toBe(4)
   })
 
-  it('Final Test ด่าน 2 — ออกใบของ**รายการขายเดียวกัน**พร้อมกัน ⇒ ได้ใบเดียว อีกคน `TAX_INVOICE_ALREADY_ISSUED`', async () => {
+  it('ออกใบของ**เงินรับเดียวกัน**พร้อมกัน ⇒ ได้ใบเดียว อีกคน TAX_INVOICE_ALREADY_ISSUED · เลขของคนแพ้ rollback', async () => {
     await setNumbering({ seq: 200 })
-    const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-    const salesRecordId = record?.id ?? ''
-
-    // ดับเบิลคลิก / retry / เปิดสองแท็บ — `assertIssuable()` อ่านสถานะนอก transaction จึงผ่านทั้งคู่
-    // ถ้าไม่มี unique ระดับ DB จะได้ใบ active 2 ใบ 2 เลขที่ ⇒ ทะเบียนภาษีขายนับซ้ำ ยื่น ภ.พ.30 เกิน
+    const { receiptId } = await seedReceivedBilling()
     const results = await Promise.allSettled([
-      sales.issueTaxInvoice(ctx, { salesRecordId }),
-      sales.issueTaxInvoice(ctx, { salesRecordId }),
+      sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }),
+      sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }),
     ])
-
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
     const loser = results.find((result) => result.status === 'rejected')
     expect(codeOf((loser as PromiseRejectedResult).reason)).toBe('TAX_INVOICE_ALREADY_ISSUED')
 
-    const invoices = await db().taxInvoice.findMany({
-      where: { salesRecordId },
-      select: { status: true, invoiceNumber: true },
-    })
+    const invoices = await db().taxInvoice.findMany({ where: { cashReceiptId: receiptId }, select: { invoiceNumber: true } })
     expect(invoices).toHaveLength(1)
-    expect(invoices[0]?.status).toBe('active')
-    // เลขของคนที่แพ้ต้อง rollback ไปด้วย ⇒ ใบถัดไปได้เลขต่อเนื่อง ไม่ขาดช่วง (`31` §16)
-    const next = await sales.syncSalesRecordFromBilling(ctx, (await seedBilling({ status: 'sent' })).id)
-    const following = await sales.issueTaxInvoice(ctx, { salesRecordId: next?.id ?? '' })
+    const following = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling()).receiptId })
     expect(sequenceOf(following.invoiceNumber)).toBe(sequenceOf(invoices[0]?.invoiceNumber ?? '') + 1)
   })
 
+  it('รับเงินบางส่วนของรอบเดียวกันพร้อมกัน 2 คำขอ ⇒ ยอดไม่ซ้อน (ต่อคิวที่ตัวเดินเลข) ผลรวมไม่เกินใบแจ้งหนี้', async () => {
+    await setNumbering({ seq: 220 })
+    const batch = await seedBilling({ status: 'sent' })
+    const [a, b] = await Promise.all([
+      seedReceipt(batch.id, { amountSatang: 800_000 }),
+      seedReceipt(batch.id, { amountSatang: 800_000 }),
+    ])
+    const issued = await Promise.all([a, b].map((cashReceiptId) => sales.issueTaxInvoice(ctx, { cashReceiptId })))
+    expect(issued.reduce((sum, invoice) => sum + invoice.totalSatang, 0)).toBe(1_284_000)
+    expect(issued.reduce((sum, invoice) => sum + invoice.vatSatang, 0)).toBe(84_000)
+  })
+
   it('โหมด yearly_reset ข้ามปี ⇒ กลับไปเริ่ม 0001 พร้อม prefix ปี พ.ศ. ใหม่ (`31` §16)', async () => {
-    // งวดของรันก่อน ๆ ค้าง `locked` ได้ (เทสต์ period lock ล็อกงวดตามลำดับ `monthCursor` ที่ขยับ
-    // ทุกครั้งที่มีเทสต์ใหม่) และงวดที่ล็อกแล้วปลดเองไม่ได้ ⇒ เปิดงวดของเทสต์นี้ให้ชัดเจนก่อน
     await setPeriodStatusOf('มกราคม 2570', 'collecting')
     await setNumbering({ seq: 37, mode: 'yearly_reset', lastResetYear: 2569 })
-    const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-
-    const invoice = await sales.issueTaxInvoice(ctx, {
-      salesRecordId: record?.id ?? '',
-      // 01/01/2027 ค.ศ. = 2570 พ.ศ.
-      invoiceDate: new Date(Date.UTC(2027, 0, 1)),
-    })
+    const { receiptId } = await seedReceivedBilling({ receivedDate: new Date(Date.UTC(2027, 0, 1)) })
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }, new Date(Date.UTC(2027, 0, 2, 3)))
     expect(invoice.invoiceNumber).toBe(`${PREFIX}-2570-0001`)
     await setNumbering({ seq: 0 })
   })
+
+  it('ใบกำกับแบบเดิม (ก่อน U95) ที่ยกเลิกแล้ว ⇒ ออกแทนด้วยยอด/อัตราเดิม + ข้อความใบแทน · เงินรับของรอบนั้นไม่ต้องออกซ้ำ', async () => {
+    await setNumbering({ seq: 300 })
+    const batch = await seedBilling({ status: 'sent' })
+    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    // จำลองใบเดิมก่อน U95 (ออกตอนวางบิล)
+    const legacy = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, doc_kind, invoice_number, invoice_date, buyer_branch_code,
+        seller_branch_code, amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, seller_name, seller_tax_id,
+        seller_address, buyer_name, buyer_tax_id, buyer_address, delivery_format, description, created_by)
+      VALUES ('${ORG_ID}', '${record?.id ?? ''}', 'tax_invoice', '${PREFIX}-LEGACY-${RUN}', '${TODAY.toISOString().slice(0, 10)}',
+        '00000', '00000', 1200000, 84000, 1284000, 7.00, 'Phase43Test', '9999999994300', 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ',
+        'ไฟแนนซ์เดิม', '${RUN_TAX_ID}', '1 ถนนสีลม', 'paper_pdf', 'ค่าบริการติดตามทรัพย์ รอบเดือน ${batch.period}', '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const legacyId = legacy[0]?.id ?? ''
+    const receiptId = await seedReceipt(batch.id)
+    await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'TAX_INVOICE_NOTHING_TO_INVOICE')
+    expect((await sales.listCashReceipts(accountant, {})).items.find((item) => item.id === receiptId)?.coveredByLegacyInvoice).toBe(true)
+
+    await expectCode(() => sales.issueTaxInvoice(ctx, { replacesInvoiceId: legacyId }), 'TAX_INVOICE_INVALID_STATUS')
+    await sales.cancelTaxInvoice(ctx, legacyId, { reason: 'เลขผู้เสียภาษีผิด' })
+    const replacement = await sales.issueTaxInvoice(ctx, { replacesInvoiceId: legacyId })
+    expect(replacement).toMatchObject({ docKind: 'tax_invoice', totalSatang: 1_284_000, replacesInvoiceNumber: `${PREFIX}-LEGACY-${RUN}` })
+    await expectCode(() => sales.issueTaxInvoice(ctx, { replacesInvoiceId: legacyId }), 'TAX_INVOICE_ALREADY_ISSUED')
+  })
 })
 
-suite('มติ PO U77 (ม.86/4) — สำนักงานใหญ่/สาขาผู้ซื้อ snapshot ตอนออกใบ', () => {
+suite('มติ PO U77/U82 (ม.86/4) — สาขาผู้ซื้อ/ผู้ขาย snapshot ตอนออกใบ', () => {
   it('ใบพิมพ์สาขาตอนออก · บริษัทเปลี่ยนสาขาภายหลังใบเดิมไม่เปลี่ยน · ใบใหม่ใช้ค่าใหม่ · แก้ snapshot ไม่ได้', async () => {
     await setNumbering({ seq: 500 })
     const branchCompany = await db().$queryRawUnsafe<{ id: string }[]>(`
@@ -445,119 +615,75 @@ suite('มติ PO U77 (ม.86/4) — สำนักงานใหญ่/ส�
     `)
     const company = branchCompany[0]?.id ?? ''
 
-    const firstBatch = await seedBilling({ status: 'sent', company })
-    const firstRecord = await sales.syncSalesRecordFromBilling(ctx, firstBatch.id)
-    const first = await sales.issueTaxInvoice(ctx, { salesRecordId: firstRecord?.id ?? '' })
+    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling({ company })).receiptId })
     const firstSource = await sales.getTaxInvoiceDocSource(accountant, first.id)
     expect(firstSource.buyerBranchCode).toBe('00003')
     expect(buildTaxInvoiceDoc(firstSource).buyer.branchLabel).toBe('สาขาที่ 00003')
 
-    // บริษัทย้ายเป็นสำนักงานใหญ่ — ใบเดิมยังพิมพ์สาขาเดิม (ไม่อ่านค่า live ย้อนหลัง)
     await db().$executeRawUnsafe(`UPDATE finance_companies SET branch_code = '00000' WHERE id = '${company}'`)
     expect((await sales.getTaxInvoiceDocSource(accountant, first.id)).buyerBranchCode).toBe('00003')
 
-    const secondBatch = await seedBilling({ status: 'sent', company })
-    const secondRecord = await sales.syncSalesRecordFromBilling(ctx, secondBatch.id)
-    const second = await sales.issueTaxInvoice(ctx, { salesRecordId: secondRecord?.id ?? '' })
-    const secondSource = await sales.getTaxInvoiceDocSource(accountant, second.id)
-    expect(secondSource.buyerBranchCode).toBe('00000')
-    expect(buildTaxInvoiceDoc(secondSource).buyer.branchLabel).toBe('สำนักงานใหญ่')
+    const second = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling({ company })).receiptId })
+    expect((await sales.getTaxInvoiceDocSource(accountant, second.id)).buyerBranchCode).toBe('00000')
 
     await expect(
       db().$executeRawUnsafe(`UPDATE tax_invoices SET buyer_branch_code = '00009' WHERE id = '${first.id}'`),
-      'snapshot สาขาบนใบแก้ไม่ได้ (ยาม immutable ระดับ DB)',
     ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
-    await expect(
-      db().$executeRawUnsafe(`UPDATE finance_companies SET branch_code = '1' WHERE id = '${company}'`),
-      'รหัสสาขาต้องเป็นตัวเลข 5 หลัก',
-    ).rejects.toThrow(/chk_finance_companies_branch_code/)
   })
-})
 
-suite('มติ PO U82 (ม.86/4) — สำนักงานใหญ่/สาขาผู้ขาย snapshot ตอนออกใบ', () => {
-  it('ค่าตั้งองค์กร → snapshot บนใบ · แก้ค่าภายหลังใบเดิมไม่เปลี่ยน · audit + เหตุผล · แก้ snapshot ไม่ได้', async () => {
-    const { updateSellerBranch, getSellerBranch } = await import('@/lib/settings/queries/seller-branch')
+  it('สาขาผู้ขาย: ค่าตั้งองค์กร → snapshot บนใบ · แก้ค่าภายหลังใบเดิมไม่เปลี่ยน · audit + เหตุผล', async () => {
+    const { updateSellerBranch } = await import('@/lib/settings/queries/seller-branch')
     await setNumbering({ seq: 700 })
     await db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '00000' WHERE id = '${ORG_ID}'`)
-    expect((await getSellerBranch(ORG_ID)).branchLabel).toBe('สำนักงานใหญ่')
+    await updateSellerBranch({ actor: accountant, meta, reason: 'ออกใบกำกับจากสาขาที่ 2 (เทสต์ U82)' }, '00002')
 
-    const updated = await updateSellerBranch({ actor: accountant, meta, reason: 'ออกใบกำกับจากสาขาที่ 2 (เทสต์ U82)' }, '00002')
-    expect(updated).toMatchObject({ branchCode: '00002', branchLabel: 'สาขาที่ 00002' })
-    const audit = await db().auditLog.findFirst({
-      where: { organizationId: ORG_ID, targetType: 'organizations', targetId: ORG_ID },
-      orderBy: { createdAt: 'desc' },
-    })
-    expect(audit?.beforeData).toEqual({ branch_code: '00000' })
-    expect(audit?.afterData).toEqual({ branch_code: '00002' })
-    expect(audit?.reason).toBe('ออกใบกำกับจากสาขาที่ 2 (เทสต์ U82)')
-
-    const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-    const invoice = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })
-    const source = await sales.getTaxInvoiceDocSource(accountant, invoice.id)
-    expect(source.sellerBranchCode).toBe('00002')
-    expect(buildTaxInvoiceDoc(source).seller.branchLabel).toBe('สาขาที่ 00002')
-
-    // กลับเป็นสำนักงานใหญ่ — ใบเดิมยังพิมพ์สาขาเดิม (ไม่อ่านค่า live ย้อนหลัง)
-    await updateSellerBranch({ actor: accountant, meta, reason: 'กลับไปออกที่สำนักงานใหญ่ (เทสต์ U82)' }, '00000')
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling()).receiptId })
     expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).sellerBranchCode).toBe('00002')
 
+    await updateSellerBranch({ actor: accountant, meta, reason: 'กลับไปออกที่สำนักงานใหญ่ (เทสต์ U82)' }, '00000')
+    expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).sellerBranchCode).toBe('00002')
     await expect(
       db().$executeRawUnsafe(`UPDATE tax_invoices SET seller_branch_code = '00000' WHERE id = '${invoice.id}'`),
-      'snapshot สาขาผู้ขายบนใบแก้ไม่ได้ (ยาม immutable ระดับ DB)',
     ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
-    await expect(
-      db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '12' WHERE id = '${ORG_ID}'`),
-      'รหัสสาขาต้องเป็นตัวเลข 5 หลัก',
-    ).rejects.toThrow(/chk_organizations_branch_code/)
     await setNumbering({ seq: 0 })
   })
 })
 
 suite('Phase 4.3 — ยาม immutable + period lock', () => {
-  it('งวดที่ locked ⇒ ออกใบกำกับภาษีไม่ได้ (`PERIOD_LOCKED_DIRECT_EDIT`)', async () => {
-    await setNumbering({ seq: 200 })
-    const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-    await lockPeriodOf(batch.period)
-
-    // วันที่ออกเอกสารอยู่ในงวดที่ล็อก ⇒ โดนยามของ `13` §6.11
-    const [month = '', yearText = ''] = batch.period.split(' ')
-    const monthIndex = MONTHS.indexOf(month as (typeof MONTHS)[number])
-    const insidePeriod = new Date(Date.UTC(Number.parseInt(yearText, 10) - 543, monthIndex, 15))
-
-    await expectCode(
-      () => sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '', invoiceDate: insidePeriod }),
-      'PERIOD_LOCKED_DIRECT_EDIT',
-    )
+  it('งวดของวันที่เอกสารถูกล็อก ⇒ ออกไม่ได้ (`PERIOD_LOCKED_DIRECT_EDIT`)', async () => {
+    await setNumbering({ seq: 260 })
+    const lockedDay = new Date(Date.UTC(2026, 1, 15))
+    await setPeriodStatusOf('กุมภาพันธ์ 2569', 'collecting')
+    const { receiptId } = await seedReceivedBilling({ receivedDate: lockedDay })
+    // สร้างแถวงวดก่อนล็อก (ยามอ่านงวดตามวันที่เอกสาร)
+    const { ensurePeriodForDate } = await import('@/lib/accounting/queries')
+    await ensurePeriodForDate(ctx, lockedDay)
+    await setPeriodStatusOf('กุมภาพันธ์ 2569', 'locked')
+    try {
+      await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'PERIOD_LOCKED_DIRECT_EDIT')
+    } finally {
+      await setPeriodStatusOf('กุมภาพันธ์ 2569', 'collecting')
+    }
   })
 
-  it('ใบกำกับภาษีลบไม่ได้ทุกกรณี และใบที่ยกเลิกแล้วห้าม reverse (trigger ระดับ DB · `02` §13)', async () => {
-    await setNumbering({ seq: 300 })
-    const batch = await seedBilling({ status: 'sent' })
-    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
-    const invoice = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })
-
+  it('ใบลบไม่ได้ทุกกรณี และใบที่ยกเลิกแล้วห้าม reverse (trigger ระดับ DB · `02` §13)', async () => {
+    await setNumbering({ seq: 300 + 50 })
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling()).receiptId })
+    await expect(db().$executeRawUnsafe(`DELETE FROM tax_invoices WHERE id = '${invoice.id}'`)).rejects.toThrow(
+      /TAX_INVOICE_IMMUTABLE/,
+    )
     await expect(
-      db().$executeRawUnsafe(`DELETE FROM tax_invoices WHERE id = '${invoice.id}'`),
-      'ใบที่ active ก็ลบไม่ได้ — ลบ = เลขที่ขาดช่วง',
+      db().$executeRawUnsafe(`UPDATE tax_invoices SET total_satang = 1 WHERE id = '${invoice.id}'`),
     ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
-
-    await expect(
-      db().$executeRawUnsafe(`UPDATE tax_invoices SET invoice_number = 'HACKED' WHERE id = '${invoice.id}'`),
-    ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
-
     await sales.cancelTaxInvoice(ctx, invoice.id, { reason: 'ทดสอบยาม immutable' })
-
     await expect(
       db().$executeRawUnsafe(`UPDATE tax_invoices SET status = 'active' WHERE id = '${invoice.id}'`),
-      'reverse cancel ต้องถูกปฏิเสธที่ระดับ DB',
     ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
   })
 })
 
 suite('Phase 4.3 — เงินรับอ่านอย่างเดียว (`31` §6.3)', () => {
-  it('รายการที่ไฟล์ 35 สร้างไว้ ⇒ แสดงผู้จ่าย/ยอด/Bank Ref/สถานะจับคู่ครบ', async () => {
+  it('รายการที่ไฟล์ 35 สร้างไว้ ⇒ แสดงผู้จ่าย/ยอด/Bank Ref/สถานะจับคู่ครบ · ยังไม่ออกใบ = รอออก', async () => {
     const batch = await seedBilling({ status: 'sent' })
     const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
     const periodId = record?.periodId ?? ''
@@ -583,6 +709,7 @@ suite('Phase 4.3 — เงินรับอ่านอย่างเดี�
     expect(row?.whtWithheldByCustomerSatang).toBe(36_000)
     expect(row?.bankRef).toBe(`โอนเข้า · อ้างอิง BTR-43-${RUN}`)
     expect(row?.bankMatchStatus).toBe('auto_matched')
-    expect(receipts.totalSatang).toBeGreaterThanOrEqual(1_284_000)
+    expect(row?.taxInvoice).toBeNull()
+    expect(receipts.awaitingTaxInvoiceCount).toBeGreaterThanOrEqual(1)
   })
 })

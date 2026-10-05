@@ -428,9 +428,10 @@ function renderAccountingOperations() {
             <td class="px-4 py-3">${statusBadge(sr.status)}</td>
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <div class="inline-flex items-center gap-1.5">
-                ${sr.taxInvoiceStatus === 'draft' || !sr.taxInvoiceId
-                  ? btnAction(Icon.file + ' ออกใบกำกับภาษี', 'open-modal', 'issue-tax-invoice', sr.id, 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100')
-                  : btnAction(Icon.eye + ' ดูใบกำกับ', 'open-modal', 'view-tax-invoice', sr.taxInvoiceId)}
+                ${btnAction(Icon.download + ' ใบแจ้งหนี้ PDF', 'open-modal', 'download-receipt', sr.id)}
+                ${sr.taxInvoiceId
+                  ? btnAction(Icon.eye + ' ดูใบเสร็จรับเงิน/ใบกำกับภาษี', 'open-modal', 'view-tax-invoice', sr.taxInvoiceId)
+                  : `<span class="text-slate-400 text-xs">ออกเมื่อรับเงิน</span>`}
               </div>
             </td>
           </tr>`).join('')}
@@ -458,7 +459,7 @@ function renderAccountingOperations() {
             <th class="px-4 py-3">Bank Ref</th>
             <th class="px-4 py-3">Billing Ref</th>
             <th class="px-4 py-3">WHT ลูกค้าหัก</th>
-            <th class="px-4 py-3">ใบเสร็จ</th>
+            <th class="px-4 py-3">ใบเสร็จรับเงิน/ใบกำกับภาษี</th>
             <th class="px-4 py-3">สถานะ</th>
             <th class="px-4 py-3 text-right">จัดการ</th>
           </tr>
@@ -477,7 +478,9 @@ function renderAccountingOperations() {
             <td class="px-4 py-3 text-right whitespace-nowrap">
               <div class="inline-flex items-center gap-1.5">
                 ${btnAction(Icon.eye + ' ดูรายละเอียด', 'open-modal', 'receipt-detail', cr.id)}
-                ${btnAction(Icon.download + ' ใบเสร็จ', 'open-modal', 'download-receipt', cr.id)}
+                ${cr.receiptNumber
+                  ? btnAction(Icon.download + ' ใบเสร็จรับเงิน/ใบกำกับภาษี', 'open-modal', 'download-receipt', cr.id)
+                  : btnAction(Icon.file + ' ออกใบเสร็จรับเงิน/ใบกำกับภาษี', 'open-modal', 'issue-tax-invoice', cr.id, 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100')}
               </div>
             </td>
           </tr>`).join('')}
@@ -966,8 +969,8 @@ function renderModal() {
   // ============ SALES: ออกใบกำกับภาษี ============
   else if (type === 'issue-tax-invoice') {
     const sr = store.salesRecords.find(s => s.id === data.id) || store.salesRecords[2];
-    title = 'ออกใบกำกับภาษี (Tax Invoice)';
-    saveText = 'ออกใบกำกับภาษี';
+    title = 'ออกใบเสร็จรับเงิน/ใบกำกับภาษี (ตอนรับเงิน)';
+    saveText = 'ยืนยันออกเอกสาร';
     body = `<div class="space-y-4 text-sm">
       <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900">
         <b>Sales Record:</b> ${sr.id} · ${sr.company} · ${sr.caseRef}<br>

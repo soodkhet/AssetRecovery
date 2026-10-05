@@ -267,6 +267,8 @@ export interface ReadinessInput {
   suspenseOutstanding?: { count: number; amountSatang: number }
   /** มติ PO U40 — 50 ทวิ จากลูกค้าที่ยังรอหนังสือ (รับเงินก่อนสิ้นงวด) · **เตือน ไม่บล็อก** */
   pendingCustomerWht?: { count: number; withheldSatang: number }
+  /** มติ PO U95 #6 — รับเงินแล้วแต่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี (รับก่อนสิ้นงวด) · **เตือน ไม่บล็อก** */
+  receiptsAwaitingTaxInvoice?: { count: number; amountSatang: number }
   /** มติ PO U87 — รายได้ค้างรับ (ยังไม่วางบิล) · **เตือน ไม่บล็อก** */
   unbilledRevenue?: UnbilledRevenueSummary
   /** BUG-160 — รอบวางบิลร่างค้าง · **เตือน ไม่บล็อก** */
@@ -374,6 +376,13 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     warnings.push(
       `ยังรอหนังสือรับรอง 50 ทวิ จากลูกค้า ${fmtCount(input.pendingCustomerWht.count)} รายการ ` +
         `(${fmtSatangSymbol(input.pendingCustomerWht.withheldSatang)}) — ปิดงวดได้ ติดตามหนังสือต่อได้ที่รายการ 50 ทวิ ลูกค้า`,
+    )
+  }
+  if (input.receiptsAwaitingTaxInvoice !== undefined && input.receiptsAwaitingTaxInvoice.count > 0) {
+    warnings.push(
+      `รับเงินแล้วแต่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี ${fmtCount(input.receiptsAwaitingTaxInvoice.count)} รายการ ` +
+        `(${fmtSatangSymbol(input.receiptsAwaitingTaxInvoice.amountSatang)}) — ภาษีขายเกิดในเดือนที่รับเงิน ` +
+        'ออกเอกสารได้ที่แท็บเงินรับ · ปิดงวดได้',
     )
   }
   const unbilledRevenue = input.unbilledRevenue ?? NO_UNBILLED

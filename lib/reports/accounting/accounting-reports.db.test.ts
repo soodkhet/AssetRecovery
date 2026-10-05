@@ -1,4 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
+import { TAX_INVOICE_FIXTURE_COLUMNS, taxInvoiceFixtureValues } from '@/tests/helpers/tax-invoice-fixture'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
@@ -177,11 +178,11 @@ async function seedTaxInvoice(options: {
   const cancelled = options.cancelled === true
   await tx.$executeRawUnsafe(`
     INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, status,
-                              cancel_reason, cancelled_by, cancelled_at, created_by)
+                              cancel_reason, cancelled_by, cancelled_at, created_by, ${TAX_INVOICE_FIXTURE_COLUMNS})
     VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INV64-${RUN}-${seq}', '${options.invoiceDate}', '00000', '00000',
             '${cancelled ? 'cancelled' : 'active'}',
             ${cancelled ? `$$ยกเลิกในเทสต์$$, '${ACCOUNTING_ID}', '${options.invoiceDate}T03:00:00Z'` : 'NULL, NULL, NULL'},
-            '${ACCOUNTING_ID}')
+            '${ACCOUNTING_ID}', ${taxInvoiceFixtureValues(sales[0]?.id ?? '')})
   `)
 }
 

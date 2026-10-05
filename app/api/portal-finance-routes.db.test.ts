@@ -1,4 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
+import { TAX_INVOICE_FIXTURE_COLUMNS, taxInvoiceFixtureValues } from '@/tests/helpers/tax-invoice-fixture'
 import type { NextRequest } from 'next/server'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -307,10 +308,11 @@ async function seedInvoice(options: {
   const cancelled = options.cancelled === true
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, status,
-                              cancel_reason, cancelled_by, cancelled_at, created_by)
+                              cancel_reason, cancelled_by, cancelled_at, created_by, ${TAX_INVOICE_FIXTURE_COLUMNS})
     VALUES ('${ORG_ID}', '${sales[0]?.id}', 'INVP5-${RUN}-${seq}', '${dayOffset(0)}', '00000', '00000',
             '${cancelled ? 'cancelled' : 'active'}',
-            ${cancelled ? `$$ยกเลิกในเทสต์$$, '${FINANCE_ID}', NOW()` : 'NULL, NULL, NULL'}, '${FINANCE_ID}')
+            ${cancelled ? `$$ยกเลิกในเทสต์$$, '${FINANCE_ID}', NOW()` : 'NULL, NULL, NULL'}, '${FINANCE_ID}',
+            ${taxInvoiceFixtureValues(sales[0]?.id ?? '')})
     RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -711,9 +713,14 @@ suite('มติ U14/U11 — ยอดตามเอกสารที่ออ
     // AR aging ของพอร์ทัลไม่ติดลบจาก Adjustment ภายใน — ยอดเดิม 2,150,000 ไม่เปลี่ยน
     const aging = await dataOf<PortalArAgingDto>(await routes.aging.GET(request('/api/portal/reports/ar-aging'), undefined))
     expect(aging.totalOutstandingSatang).toBe(2_150_000)
-    // ภายในยังหลัง Adjustment (รอบนี้ค้าง −10,700 ⇒ ไม่นับในยอดค้าง)
+    // มติ PO U96 #11 — AR ภายในใช้นิยามเดียวกับพอร์ทัล (ยอดตามเอกสาร) ⇒ Adjustment ที่ยังไม่มีใบลดหนี้ไม่หักยอด
     const internalCompanies = await routes.providers.loadArAgingCompanies(ORG_ID, { companyId: CO1 })
-    expect(internalCompanies[0]?.batches.some((batch) => batch.totalSatang === 39_911_000 - 1_070_000)).toBe(true)
+    expect(internalCompanies[0]?.batches.some((batch) => batch.totalSatang === 39_911_000)).toBe(true)
+    expect(internalCompanies[0]?.batches.some((batch) => batch.totalSatang === 39_911_000 - 1_070_000)).toBe(false)
+    // หน้าลูกหนี้ภายในแสดงป้าย "รอใบลดหนี้/ใบเพิ่มหนี้" แทนการหักยอด · ยอดค้างเท่าพอร์ทัล
+    const internalAging = await routes.revenueQueries.getArAging(INTERNAL_FINANCE, { companyId: CO1 })
+    expect(internalAging.totalOutstandingSatang).toBe(aging.totalOutstandingSatang)
+    expect(internalAging.companies.find((company) => company.companyId === CO1)?.awaitingNoteAdjustmentCount ?? 0).toBeGreaterThan(0)
 
     const dashboard = await dataOf<{ arOutstanding?: { outstandingSatang: number } }>(
       await routes.dashboard.GET(request('/api/portal/dashboard'), undefined),

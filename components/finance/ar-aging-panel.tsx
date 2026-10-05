@@ -1,13 +1,14 @@
 'use client'
 
 import { useArAging } from '@/components/finance/use-billing'
-import { Card, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
+import { Card, StatusBadge, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 
 /**
  * มุมมองอายุหนี้ (AR Aging) ของ `19` §6.4 — ช่วงอายุมาจาก `finance_policy_settings.ar_aging_buckets`
  * (`13` §6.2.1) ที่ backend คำนวณให้แล้ว (`22` §6.11) — **หน้าจอห้ามคิดช่วง/ยอดเอง** (Rule 01)
+ * · มติ PO U96 #11 — ยอดตามเอกสารนิยามเดียวกับพอร์ทัล + ป้าย "รอใบลดหนี้/ใบเพิ่มหนี้"
  */
 export function ArAgingPanel({ companyId }: { companyId: string }) {
   const { data, loading, error } = useArAging(companyId)
@@ -18,7 +19,8 @@ export function ArAgingPanel({ companyId }: { companyId: string }) {
       <div className="mb-4">
         <h2 className="text-base font-semibold text-slate-900">อายุหนี้คงค้าง (AR Aging)</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          นับจากวันครบกำหนดชำระถึงวันที่ {data.asOf === '' ? '—' : fmtDate(data.asOf)} · รวมเฉพาะรอบที่ส่งบิลแล้ว
+          นับจากวันครบกำหนดชำระถึงวันที่ {data.asOf === '' ? '—' : fmtDate(data.asOf)} · รวมเฉพาะรอบที่ส่งบิลแล้ว ·
+          ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้) ชุดเดียวกับที่บริษัทไฟแนนซ์เห็น — รายการปรับปรุงที่ยังไม่มีเอกสารแสดงเป็นป้ายรอ
         </p>
       </div>
 
@@ -48,7 +50,17 @@ export function ArAgingPanel({ companyId }: { companyId: string }) {
               error === null &&
               data.companies.map((company) => (
                 <Tr key={company.companyId}>
-                  <Td className="font-semibold text-slate-900">{company.companyName}</Td>
+                  <Td className="font-semibold text-slate-900">
+                    {company.companyName}
+                    {company.awaitingNoteAdjustmentCount > 0 && (
+                      <div className="mt-0.5">
+                        <StatusBadge
+                          group="pending"
+                          label={`รอใบลดหนี้/ใบเพิ่มหนี้ ${fmtCount(company.awaitingNoteAdjustmentCount)} รายการ`}
+                        />
+                      </div>
+                    )}
+                  </Td>
                   {company.buckets.map((bucket) => (
                     <Td key={bucket.label} numeric className={bucket.outstandingSatang > 0 ? 'text-red-600' : undefined}>
                       {fmtSatangSymbol(bucket.outstandingSatang)}

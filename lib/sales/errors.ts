@@ -31,6 +31,13 @@ export const SALES_ERROR_CODES = [
   'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
   // ยกเลิกใบกำกับที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ active (มติ PO 05/10/2569 U18 — `24` §6.8 v4.24)
   'TAX_INVOICE_HAS_ACTIVE_NOTES',
+  // ใบเสร็จรับเงิน/ใบกำกับภาษีตอนรับเงิน (มติ PO 06/10/2569 U95 + U96 #3/#7 — `24` §6.8 v4.31)
+  'TAX_INVOICE_NO_VAT_COMPANY',
+  'TAX_INVOICE_DATE_IN_FUTURE',
+  'TAX_INVOICE_DATE_OUT_OF_SEQUENCE',
+  'TAX_INVOICE_NOTHING_TO_INVOICE',
+  'CASH_RECEIPT_NOT_FOUND',
+  'CASH_RECEIPT_HAS_TAX_INVOICE',
 ] as const
 
 export type SalesErrorCode = (typeof SALES_ERROR_CODES)[number]
@@ -55,6 +62,12 @@ const HTTP_STATUS: Record<SalesErrorCode, number> = {
   CREDIT_NOTE_DATE_BEFORE_INVOICE: 400,
   CREDIT_NOTE_ADJUSTMENT_MISMATCH: 400,
   TAX_INVOICE_HAS_ACTIVE_NOTES: 400,
+  TAX_INVOICE_NO_VAT_COMPANY: 400,
+  TAX_INVOICE_DATE_IN_FUTURE: 400,
+  TAX_INVOICE_DATE_OUT_OF_SEQUENCE: 400,
+  TAX_INVOICE_NOTHING_TO_INVOICE: 400,
+  CASH_RECEIPT_NOT_FOUND: 404,
+  CASH_RECEIPT_HAS_TAX_INVOICE: 409,
 }
 
 const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
@@ -72,9 +85,9 @@ const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
       'ใบกำกับภาษีที่ยกเลิกไปแล้วยกเลิกซ้ำไม่ได้ และย้อนกลับเป็นใช้งานไม่ได้ (ยกเลิกแล้วเป็นสถานะสุดท้าย)',
   },
   TAX_INVOICE_ALREADY_ISSUED: {
-    title: 'รายการขายนี้ออกใบกำกับภาษีแล้ว',
+    title: 'ออกเอกสารนี้ไปแล้ว',
     message:
-      'รายการขายนี้มีใบกำกับภาษีที่ใช้งานอยู่แล้ว — ต้องยกเลิกใบเดิมพร้อมเหตุผลก่อนจึงออกใบใหม่ได้',
+      'เงินรับ/รายการขายนี้มีใบเสร็จรับเงิน/ใบกำกับภาษีที่ใช้งานอยู่แล้ว — ต้องยกเลิกใบเดิมพร้อมเหตุผลก่อนจึงออกใบใหม่ได้',
   },
   TAX_INVOICE_FIELD_MISSING: {
     title: 'ข้อมูลบนใบกำกับภาษีไม่ครบตามกฎหมาย',
@@ -122,6 +135,32 @@ const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
   TAX_INVOICE_HAS_ACTIVE_NOTES: {
     title: 'ยกเลิกใบกำกับภาษีไม่ได้',
     message: 'ใบกำกับภาษีนี้ยังมีใบลดหนี้หรือใบเพิ่มหนี้ที่ใช้งานอยู่ — ต้องยกเลิกเอกสารเหล่านั้นก่อน',
+  },
+  TAX_INVOICE_NO_VAT_COMPANY: {
+    title: 'ออกใบเสร็จรับเงิน/ใบกำกับภาษีไม่ได้',
+    message: 'บริษัทนี้ตั้งเป็นไม่มี VAT — ต้องยืนยันกับนักบัญชีก่อน',
+  },
+  TAX_INVOICE_DATE_IN_FUTURE: {
+    title: 'วันที่เอกสารล่วงหน้า',
+    message: 'วันที่ของใบเสร็จรับเงิน/ใบกำกับภาษีต้องไม่เกินวันนี้',
+  },
+  TAX_INVOICE_DATE_OUT_OF_SEQUENCE: {
+    title: 'วันที่เอกสารไม่เรียงตามเลขที่',
+    message:
+      'วันที่ของเอกสารต้องไม่ก่อนวันที่ของเอกสารเลขที่ก่อนหน้า — ออกเอกสารตามลำดับวันที่รับเงิน หรือเลือกวันที่เอกสารให้ไม่ก่อนใบล่าสุด',
+  },
+  TAX_INVOICE_NOTHING_TO_INVOICE: {
+    title: 'ไม่มียอดให้ออกเอกสาร',
+    message: 'รอบวางบิลนี้ออกใบกำกับภาษีครบยอดแล้ว หรือเงินรับนี้ไม่มียอด — ไม่ต้องออกใบเสร็จรับเงิน/ใบกำกับภาษีเพิ่ม',
+  },
+  CASH_RECEIPT_NOT_FOUND: {
+    title: 'ไม่พบเงินรับ',
+    message: 'ไม่พบเงินรับนี้ หรือคุณไม่มีสิทธิ์เข้าถึงรายการนี้',
+  },
+  CASH_RECEIPT_HAS_TAX_INVOICE: {
+    title: 'เงินรับนี้ออกใบเสร็จรับเงิน/ใบกำกับภาษีแล้ว',
+    message:
+      'เปลี่ยนการจับคู่ไม่ได้เพราะเงินรับเดิมมีใบเสร็จรับเงิน/ใบกำกับภาษีที่ใช้งานอยู่ — ยกเลิกเอกสารนั้นพร้อมเหตุผลก่อน',
   },
 }
 

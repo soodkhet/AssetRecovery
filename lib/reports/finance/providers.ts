@@ -1,4 +1,5 @@
 import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
+import { withDocumentedArTotals } from '@/lib/portal/documented-amounts'
 import { sumSatang } from '@/lib/finance/satang'
 import { caseStatusLabel } from '@/lib/cases/status-display'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
@@ -520,8 +521,8 @@ const revenueSummaryProvider: ReportProvider = async (ctx: ReportContext): Promi
  * (`96` §6-E1 การ์ด "AR ค้างรับ" · §6-E2 คอลัมน์ "AR ค้าง") ⇒ ยอดลูกหนี้ของทุกเมนูมาจาก query
  * ชุดเดียวกัน ตัวเลขขัดกันไม่ได้
  *
- * ยอดที่คืนเป็นยอดบิล**หลังรายการปรับปรุงที่อนุมัติแล้ว** (`20` §9) ส่วนการหักเงินรับ/WHT ที่ลูกค้า
- * หักไว้อยู่ในสูตร `arOutstandingSatang()` (`22` §6.11) ซึ่งผู้เรียกเป็นคนเรียกเอง
+ * ยอดที่คืนเป็น**ยอดตามเอกสาร** (มติ PO U96 #11 — ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · helper เดียวกับพอร์ทัล)
+ * ส่วนการหักเงินรับ/WHT ที่ลูกค้าหักไว้อยู่ในสูตร `arOutstandingSatang()` (`22` §6.11) ซึ่งผู้เรียกเป็นคนเรียกเอง
  */
 export async function loadArAgingCompanies(
   organizationId: string,
@@ -546,21 +547,11 @@ export async function loadArAgingCompanies(
     },
   })
 
-  const adjustments =
-    rows.length === 0
-      ? []
-      : await prisma.adjustment.findMany({
-          where: {
-            organizationId,
-            status: 'approved',
-            billingBatchId: { in: rows.map((row) => row.id) },
-          },
-          select: { billingBatchId: true, adjustmentType: true, amountSatang: true },
-        })
-  const index = indexBy(adjustments.map((row) => ({ ...row, targetId: row.billingBatchId })))
+  // มติ PO U96 #11 — ยอดบิลของลูกหนี้ = **ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้) นิยามเดียวกับพอร์ทัล
+  const documented = await withDocumentedArTotals(organizationId, rows)
 
   const byCompany = new Map<string, { companyId: string; companyName: string; batches: ArAgingRow[] }>()
-  for (const row of rows) {
+  for (const row of documented) {
     let entry = byCompany.get(row.companyId)
     if (entry === undefined) {
       entry = { companyId: row.companyId, companyName: row.company.name, batches: [] }
@@ -568,7 +559,7 @@ export async function loadArAgingCompanies(
     }
     entry.batches.push({
       dueDate: row.dueDate,
-      totalSatang: netOf(row.totalSatang, index, row.id),
+      totalSatang: row.totalSatang,
       receivedSatang: row.receivedSatang,
       whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
     })

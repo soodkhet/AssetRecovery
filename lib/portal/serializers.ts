@@ -10,6 +10,7 @@ import type {
   InvoiceDeliveryFormat,
   ServiceFeeBasis,
   ServiceFeeModel,
+  TaxInvoiceDocKind,
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
 import { formatBranch } from '@/lib/format/branch'
@@ -27,6 +28,7 @@ import {
   type PortalStatusDisplay,
 } from '@/lib/portal/status-map'
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
+import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import { ASSET_CONDITION_LABEL, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -257,10 +259,14 @@ export function serializePortalBillingBatches(rows: readonly PortalBillingBatchS
 
 export interface PortalTaxInvoiceSource {
   id: string
+  /** ชนิดเอกสาร (มติ PO U95) — ไม่ส่ง = ใบกำกับภาษีแบบเดิม */
+  docKind?: TaxInvoiceDocKind
+  /** เลขใบแจ้งหนี้/รอบวางบิลที่อ้างถึง */
+  billingBatchNumber?: string | null
   invoiceNumber: string
   invoiceDate: Date
   status: TaxInvoiceStatus
-  /** ยอด snapshot จาก `sales_records` (ไม่คำนวณใหม่ — ตัวเดียวกับที่พิมพ์ลง PDF) */
+  /** ยอด snapshot บนใบ (ไม่คำนวณใหม่ — ตัวเดียวกับที่พิมพ์ลง PDF) */
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
@@ -299,6 +305,10 @@ export interface PortalCreditNoteDto {
 
 export interface PortalTaxInvoiceDto {
   id: string
+  /** ชื่อเอกสาร — "ใบเสร็จรับเงิน/ใบกำกับภาษี" (ออกตอนรับเงิน · U95) หรือ "ใบกำกับภาษี" (แบบเดิม) */
+  documentTitle: string
+  /** เลขใบแจ้งหนี้/รอบวางบิลที่อ้างถึง (`BL-<พ.ศ.>-NNN`) */
+  billingBatchNumber: string | null
   invoiceNumber: string
   issueDate: string
   totalBeforeVatSatang: number
@@ -326,6 +336,8 @@ export function serializePortalTaxInvoice(row: PortalTaxInvoiceSource): PortalTa
   const debits = row.creditNotes.filter((note) => note.noteType === 'debit')
   return {
     id: row.id,
+    documentTitle: TAX_INVOICE_DOC_KIND_TITLE[row.docKind ?? 'tax_invoice'],
+    billingBatchNumber: row.billingBatchNumber ?? null,
     invoiceNumber: row.invoiceNumber,
     issueDate: dateOnly(row.invoiceDate),
     totalBeforeVatSatang: row.totalBeforeVatSatang,

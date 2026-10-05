@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { CreditNoteModal, type CreditNoteInvoice } from '@/components/accounting/credit-note-modal'
-import { IssueTaxInvoiceModal } from '@/components/accounting/issue-tax-invoice-modal'
+import { IssueTaxInvoiceModal, type IssueTarget } from '@/components/accounting/issue-tax-invoice-modal'
 import { useAwaitingCreditNotes, useCreditNotes } from '@/components/accounting/use-credit-notes'
 import { useSalesRecords, type SalesInvoiceFilter } from '@/components/accounting/use-sales'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -31,21 +31,23 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 import type { CreditNoteDto } from '@/lib/credit-notes/types'
-import type { SalesRecordDto, TaxInvoiceDto } from '@/lib/sales/types'
+import type { SalesRecordDto, TaxInvoiceDto, TaxInvoiceSummaryDto } from '@/lib/sales/types'
 
 /**
  * แท็บ "รายได้และขาย" (`31` §8 · mockup `accounting.html` แท็บ `sales`)
  *
  * ⚠️ **ไม่มีปุ่มสร้าง/แก้/ลบรายการขาย** โดยเจตนา — รายการเกิดอัตโนมัติเมื่อรอบวางบิลถูกส่ง (`31` §6.1)
- * ⚠️ ออก/ยกเลิกใบกำกับภาษี = สิทธิ์บัญชี (`manage_tax_invoice`) เท่านั้น · การเงินดูได้อย่างเดียว
+ * ⚠️ มติ PO U95 — ตอนวางบิลมีแค่ **ใบแจ้งหนี้/ใบวางบิล** (ปุ่ม PDF) · **ใบเสร็จรับเงิน/ใบกำกับภาษี** ออกจากแท็บเงินรับ
+ *    (1 เงินรับ = 1 ใบ · รับบางส่วนได้หลายใบต่อรอบ) · หน้านี้ยกเลิกใบ/ออกใบแทนใบกำกับแบบเดิมได้
+ * ⚠️ ยกเลิก/ออกใบแทน = สิทธิ์บัญชี (`manage_tax_invoice`) เท่านั้น · การเงินดูได้อย่างเดียว
  * ⚠️ ใบที่ยกเลิกยัง**แสดงในทะเบียน** เพื่อพิสูจน์ความต่อเนื่องของเลขที่ (`31` §9.1 — ห้ามลบ)
  * ใบลดหนี้ (มติ PO U14): ปุ่ม "ใบลดหนี้" ต่อใบกำกับ · ยอดสุทธิหลังหักใบลดหนี้ · ป้าย "รอใบลดหนี้"
  */
 
 const INVOICE_FILTERS: readonly { value: SalesInvoiceFilter; label: string }[] = [
   { value: 'all', label: 'ทั้งหมด' },
-  { value: 'awaiting', label: 'ยังไม่ออกใบกำกับ' },
-  { value: 'issued', label: 'ออกใบกำกับแล้ว' },
+  { value: 'awaiting', label: 'ยังไม่มีเอกสารภาษี' },
+  { value: 'issued', label: 'มีเอกสารภาษีแล้ว' },
 ]
 
 export function SalesTab() {
@@ -56,29 +58,32 @@ export function SalesTab() {
   const [invoiceState, setInvoiceState] = useState<SalesInvoiceFilter>('all')
   const { data, loading, error, reload } = useSalesRecords(invoiceState)
 
-  const [issuing, setIssuing] = useState<SalesRecordDto | null>(null)
-  const [cancelling, setCancelling] = useState<SalesRecordDto | null>(null)
+  const [issuing, setIssuing] = useState<IssueTarget | null>(null)
+  const [cancelling, setCancelling] = useState<TaxInvoiceSummaryDto | null>(null)
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const activeInvoice = cancelling?.activeTaxInvoice ?? null
+  const activeInvoice = cancelling
 
   const creditNotes = useCreditNotes()
   const awaitingCreditNotes = useAwaitingCreditNotes()
   const [creditInvoice, setCreditInvoice] = useState<CreditNoteInvoice | null>(null)
 
-  function openCreditNotes(row: SalesRecordDto): void {
-    const invoice = row.activeTaxInvoice
-    if (invoice === null) return
+  function openCreditNotes(row: SalesRecordDto, invoice: TaxInvoiceSummaryDto): void {
+    // ยอดของ**ใบที่อ้างถึง** (ใบเสร็จรับเงิน/ใบกำกับภาษีหลายใบต่อรอบได้ — U95)
     setCreditInvoice({
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.invoiceDate,
       companyName: row.companyName,
-      totalBeforeVatSatang: row.totalBeforeVatSatang,
-      vatSatang: row.vatSatang,
-      totalSatang: row.totalSatang,
+      totalBeforeVatSatang: invoice.totalBeforeVatSatang,
+      vatSatang: invoice.vatSatang,
+      totalSatang: invoice.totalSatang,
     })
+  }
+
+  function isReplaced(row: SalesRecordDto, invoice: TaxInvoiceSummaryDto): boolean {
+    return row.taxInvoices.some((other) => other.replacesInvoiceNumber === invoice.invoiceNumber)
   }
 
   async function reloadCreditNotes(): Promise<void> {
@@ -100,8 +105,11 @@ export function SalesTab() {
     }
     showToast({
       tone: 'success',
-      title: `ยกเลิกใบกำกับภาษีเลขที่ ${activeInvoice.invoiceNumber} แล้ว`,
-      description: 'เลขที่เดิมยังอยู่ในทะเบียน — ออกใบใหม่จะได้เลขถัดไป',
+      title: `ยกเลิก${activeInvoice.docTitle}เลขที่ ${activeInvoice.invoiceNumber} แล้ว`,
+      description:
+        activeInvoice.docKind === 'receipt_tax_invoice'
+          ? 'เลขที่เดิมยังอยู่ในทะเบียน — ออกใบแทนได้ที่แท็บเงินรับ (ใบใหม่ได้เลขถัดไป)'
+          : 'เลขที่เดิมยังอยู่ในทะเบียน — กด "ออกใบแทน" ได้ (ใบใหม่ได้เลขถัดไป)',
     })
     setCancelling(null)
     setReason('')
@@ -112,12 +120,12 @@ export function SalesTab() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <StatCard label="มูลค่าก่อนภาษี" value={fmtSatangSymbol(data.totalBeforeVatSatang)} hint="ตามตัวกรองปัจจุบัน" />
-        <StatCard label="ภาษีมูลค่าเพิ่ม" value={fmtSatangSymbol(data.vatSatang)} hint="อัตราจากวันที่รับรู้รายได้" />
-        <StatCard label="รวมทั้งสิ้น" value={fmtSatangSymbol(data.totalSatang)} hint="ยอดที่ต้องเรียกเก็บ" />
+        <StatCard label="ภาษีมูลค่าเพิ่ม" value={fmtSatangSymbol(data.vatSatang)} hint="ประมาณการ ณ วันวางบิล" />
+        <StatCard label="รวมทั้งสิ้น" value={fmtSatangSymbol(data.totalSatang)} hint="ยอดตามใบแจ้งหนี้" />
         <StatCard
-          label="ยังไม่ออกใบกำกับ"
+          label="ยังไม่มีเอกสารภาษี"
           value={fmtCount(data.awaitingInvoiceCount)}
-          hint="ควรออกให้ครบก่อนปิดงวด"
+          hint="ออกใบเสร็จรับเงิน/ใบกำกับภาษีเมื่อรับเงิน"
         />
       </div>
 
@@ -125,7 +133,7 @@ export function SalesTab() {
         <div>
           <h2 className="text-base font-semibold text-slate-900">รายการขาย / รายได้ (Sales Records)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            เกิดอัตโนมัติเมื่อรอบวางบิลถูกส่งให้ลูกค้า — หน้านี้ทำได้แค่ออก/ยกเลิกใบกำกับภาษี
+            เกิดอัตโนมัติเมื่อรอบวางบิลถูกส่งให้ลูกค้า (ใบแจ้งหนี้/ใบวางบิล) — ใบเสร็จรับเงิน/ใบกำกับภาษีออกเมื่อรับเงิน
           </p>
         </div>
         <FilterGroup options={INVOICE_FILTERS} value={invoiceState} onChange={setInvoiceState} />
@@ -141,7 +149,7 @@ export function SalesTab() {
               <Th numeric>ก่อนภาษี</Th>
               <Th numeric>VAT</Th>
               <Th numeric>รวม</Th>
-              <Th>ใบกำกับภาษี</Th>
+              <Th>เอกสารภาษี</Th>
               <Th className="text-right">จัดการ</Th>
             </Tr>
           </THead>
@@ -175,75 +183,78 @@ export function SalesTab() {
                     {fmtSatangSymbol(row.totalSatang)}
                   </Td>
                   <Td>
-                    {row.activeTaxInvoice === null ? (
-                      <span className="text-xs text-slate-400">ยังไม่ออก</span>
-                    ) : (
-                      <>
-                        <RefText className="text-blue-700">{row.activeTaxInvoice.invoiceNumber}</RefText>
-                        <div className="mt-0.5 text-[10px] text-slate-400">
-                          {fmtDate(row.activeTaxInvoice.invoiceDate)}
-                        </div>
-                        <CreditNoteSummaryCell
-                          notes={creditNotes.byInvoice.get(row.activeTaxInvoice.id) ?? []}
-                          invoice={row}
-                          awaiting={[
-                            ...new Set(
-                              awaitingCreditNotes.items
-                                .filter((item) => item.taxInvoiceId === row.activeTaxInvoice?.id)
-                                .map((item) => item.noteType),
-                            ),
-                          ]}
-                        />
-                      </>
+                    {row.taxInvoices.filter((invoice) => invoice.status === 'active').length === 0 && (
+                      <span className="text-xs text-slate-400">ยังไม่มี (ออกเมื่อรับเงิน)</span>
                     )}
+                    {row.taxInvoices
+                      .filter((invoice) => invoice.status === 'active')
+                      .map((invoice) => (
+                        <div key={invoice.id} className="mb-1.5">
+                          <RefText className="text-blue-700">{invoice.invoiceNumber}</RefText>
+                          <div className="mt-0.5 text-[10px] text-slate-400">
+                            {invoice.docTitle} · {fmtDate(invoice.invoiceDate)} · {fmtSatangSymbol(invoice.totalSatang)}
+                          </div>
+                          {invoice.replacesInvoiceNumber !== null && (
+                            <div className="text-[10px] text-slate-500">ออกแทน {invoice.replacesInvoiceNumber}</div>
+                          )}
+                          <CreditNoteSummaryCell
+                            notes={creditNotes.byInvoice.get(invoice.id) ?? []}
+                            invoice={invoice}
+                            awaiting={[
+                              ...new Set(
+                                awaitingCreditNotes.items
+                                  .filter((item) => item.taxInvoiceId === invoice.id)
+                                  .map((item) => item.noteType),
+                              ),
+                            ]}
+                          />
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => window.open(`/api/accounting/tax-invoices/${invoice.id}/pdf`, '_blank', 'noreferrer')}
+                            >
+                              PDF
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => openCreditNotes(row, invoice)}>
+                              {canManageInvoice ? 'บันทึกใบลด/เพิ่มหนี้' : 'ใบลด/เพิ่มหนี้'}
+                            </Button>
+                            {canManageInvoice && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setReason('')
+                                  setCancelling(invoice)
+                                }}
+                              >
+                                ยกเลิก
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     {row.taxInvoices
                       .filter((invoice) => invoice.status === 'cancelled')
                       .map((invoice) => (
-                        <div key={invoice.id} className="mt-1 text-[10px] text-red-500 line-through">
-                          {invoice.invoiceNumber}
+                        <div key={invoice.id} className="mt-1 flex items-center gap-1.5 text-[10px] text-red-500">
+                          <span className="line-through">{invoice.invoiceNumber}</span>
+                          {canManageInvoice && invoice.docKind === 'tax_invoice' && !isReplaced(row, invoice) && (
+                            <Button size="sm" variant="ghost" onClick={() => setIssuing({ kind: 'replace', invoice, record: row })}>
+                              ออกใบแทน
+                            </Button>
+                          )}
                         </div>
                       ))}
                   </Td>
                   <Td className="text-right whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
-                      {row.activeTaxInvoice !== null && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            window.open(
-                              `/api/accounting/tax-invoices/${row.activeTaxInvoice?.id}/pdf`,
-                              '_blank',
-                              'noreferrer',
-                            )
-                          }
-                        >
-                          พิมพ์ PDF
-                        </Button>
-                      )}
-                      {row.activeTaxInvoice !== null && (
-                        <Button size="sm" variant="ghost" onClick={() => openCreditNotes(row)}>
-                          {canManageInvoice ? 'บันทึกใบลด/เพิ่มหนี้' : 'ใบลด/เพิ่มหนี้'}
-                        </Button>
-                      )}
-                      {canManageInvoice && row.activeTaxInvoice === null && (
-                        <Button size="sm" variant="ghost" onClick={() => setIssuing(row)}>
-                          ออกใบกำกับภาษี
-                        </Button>
-                      )}
-                      {canManageInvoice && row.activeTaxInvoice !== null && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setReason('')
-                            setCancelling(row)
-                          }}
-                        >
-                          ยกเลิกใบกำกับ
-                        </Button>
-                      )}
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => window.open(`/api/billing-batches/${row.billingBatchId}/invoice-pdf`, '_blank', 'noreferrer')}
+                    >
+                      ใบแจ้งหนี้ PDF
+                    </Button>
                   </Td>
                 </Tr>
               ))}
@@ -252,13 +263,13 @@ export function SalesTab() {
       </div>
 
       <InlineAlert tone="info" title="หลักการ">
-        รายการขาย sync 1:1 จากรอบวางบิลที่ส่งแล้ว · เลขที่ใบกำกับภาษีเดินต่อเนื่องห้ามขาดช่วง ·
-        ยกเลิกต้องมีเหตุผลและออกใบใหม่เสมอ — ใบที่ยกเลิกยังอยู่ในทะเบียนตลอดไป
+        รายการขาย sync 1:1 จากรอบวางบิลที่ส่งแล้ว (ใบแจ้งหนี้ — ไม่ใช่เอกสารภาษี) · ใบเสร็จรับเงิน/ใบกำกับภาษีออกเมื่อรับเงิน
+        ตามยอดที่รับ · เลขที่เดินต่อเนื่องห้ามขาดช่วง · ยกเลิกต้องมีเหตุผลและออกใบแทนเสมอ — ใบที่ยกเลิกยังอยู่ในทะเบียนตลอดไป
       </InlineAlert>
 
       <IssueTaxInvoiceModal
-        key={`issue-${issuing?.id ?? 'none'}`}
-        record={issuing}
+        key={`issue-${issuing?.kind === 'replace' ? issuing.invoice.id : 'none'}`}
+        target={issuing}
         onClose={() => setIssuing(null)}
         onIssued={() => void reload()}
       />
@@ -275,9 +286,9 @@ export function SalesTab() {
 
       <ReasonConfirmModal
         open={cancelling !== null && activeInvoice !== null}
-        title={`ยกเลิกใบกำกับภาษีเลขที่ ${activeInvoice?.invoiceNumber ?? ''}`}
-        description="ใช้เฉพาะกรณีออกผิดพลาดจริง — เลขที่เดิมจะไม่ถูกนำกลับมาใช้ และต้องออกใบใหม่แทน"
-        confirmLabel="ยืนยันยกเลิกใบกำกับ"
+        title={`ยกเลิก${activeInvoice?.docTitle ?? ''}เลขที่ ${activeInvoice?.invoiceNumber ?? ''}`}
+        description="ใช้เฉพาะกรณีออกผิดพลาดจริง — เลขที่เดิมจะไม่ถูกนำกลับมาใช้ และต้องออกใบแทน (ใบใหม่พิมพ์เลขเดิมและเหตุผล)"
+        confirmLabel="ยืนยันยกเลิกเอกสาร"
         loading={saving}
         reason={reason}
         onReasonChange={setReason}
@@ -296,7 +307,8 @@ function CreditNoteSummaryCell({
   awaiting,
 }: {
   notes: readonly CreditNoteDto[]
-  invoice: SalesRecordDto
+  /** ยอดของใบที่อ้างถึง (ไม่ใช่ยอดทั้งรอบ — U95) */
+  invoice: TaxInvoiceSummaryDto
   /** ชนิดเอกสารที่ยังรอ (ป้าย "รอใบลดหนี้" / "รอใบเพิ่มหนี้") */
   awaiting: readonly CreditNoteType[]
 }) {

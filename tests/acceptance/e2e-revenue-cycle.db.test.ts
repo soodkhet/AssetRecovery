@@ -473,21 +473,8 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
     expect(salesRecords[0]?.vatSatang).toBe(VAT_SATANG)
     expect(salesRecords[0]?.totalSatang).toBe(TOTAL_SATANG)
 
-    const invoice = await sales.issueTaxInvoice(ctx(finance), { salesRecordId: salesRecords[0]?.id ?? '' })
-    expect(invoice.status).toBe('active')
-    expect(invoice.invoiceNumber).toBe(`${INVOICE_PREFIX}-0001`)
-    expect(invoice.totalSatang).toBe(TOTAL_SATANG)
-
-    // จุดเชื่อม `29` §7 (Billing → Accounting): เลขที่ **เดินหน้าอย่างเดียว ห้าม recycle**
-    // ยกเลิกใบ 0001 แล้วออกใหม่ ⇒ ต้องได้ 0002 (`31` §9.1 · ใบที่ยกเลิกยังอยู่ในสารบบ)
-    const cancelled = await sales.cancelTaxInvoice(ctx(finance), invoice.id, {
-      reason: 'พิมพ์ที่อยู่ผู้ซื้อผิด ต้องออกใบใหม่',
-    })
-    expect(cancelled.status).toBe('cancelled')
-    const reissued = await sales.issueTaxInvoice(ctx(finance), { salesRecordId: salesRecords[0]?.id ?? '' })
-    expect(reissued.invoiceNumber).toBe(`${INVOICE_PREFIX}-0002`)
-    expect(reissued.status).toBe('active')
-    expect(reissued.totalSatang).toBe(TOTAL_SATANG)
+    // มติ PO U95 — ส่งบิลออก "ใบแจ้งหนี้/ใบวางบิล" เท่านั้น (ไม่ใช่เอกสารภาษี) ⇒ ยังไม่มีใบกำกับภาษี
+    expect(await db().taxInvoice.count({ where: { salesRecordId: salesRecords[0]?.id ?? '' } })).toBe(0)
 
     // ── ขั้น 4: เงินเข้า ⇒ auto-match ⇒ ใบเงินรับ ⇒ บิล paid (ไฟล์ 35/31) ──
     const statementDate = beDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
@@ -517,5 +504,27 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
     expect(paid.status).toBe('paid')
     expect(paid.receivedSatang).toBe(TOTAL_SATANG)
     expect((await revenue.getArAging(finance, {})).totalOutstandingSatang).toBe(0)
+
+    // ── ขั้น 5: รับเงินแล้ว ⇒ ใบเสร็จรับเงิน/ใบกำกับภาษี (มติ PO U95 · ไฟล์ 31) ─────────────
+    // statement ลงวันพรุ่งนี้ ⇒ ส่ง `now` ให้วันที่เอกสาร (= วันรับเงิน) ไม่เป็นวันล่วงหน้า
+    const issuedAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000)
+    const invoice = await sales.issueTaxInvoice(ctx(finance), { cashReceiptId: receipts[0]?.id ?? '' }, issuedAt)
+    expect(invoice.status).toBe('active')
+    expect(invoice.docKind).toBe('receipt_tax_invoice')
+    expect(invoice.invoiceNumber).toBe(`${INVOICE_PREFIX}-0001`)
+    expect(invoice.totalSatang).toBe(TOTAL_SATANG)
+    expect(invoice.invoiceDate).toBe(receipts[0]?.receivedDate.toISOString())
+
+    // จุดเชื่อม `29` §7 (Billing → Accounting): เลขที่ **เดินหน้าอย่างเดียว ห้าม recycle**
+    // ยกเลิกใบ 0001 แล้วออกใหม่ ⇒ ต้องได้ 0002 และพิมพ์ว่าออกแทนใบเดิม (`31` §9.1 · U96 #8)
+    const cancelled = await sales.cancelTaxInvoice(ctx(finance), invoice.id, {
+      reason: 'พิมพ์ที่อยู่ผู้ซื้อผิด ต้องออกใบใหม่',
+    })
+    expect(cancelled.status).toBe('cancelled')
+    const reissued = await sales.issueTaxInvoice(ctx(finance), { cashReceiptId: receipts[0]?.id ?? '' }, issuedAt)
+    expect(reissued.invoiceNumber).toBe(`${INVOICE_PREFIX}-0002`)
+    expect(reissued.status).toBe('active')
+    expect(reissued.totalSatang).toBe(TOTAL_SATANG)
+    expect(reissued.replacesInvoiceNumber).toBe(invoice.invoiceNumber)
   })
 })

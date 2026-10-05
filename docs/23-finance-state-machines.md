@@ -19,6 +19,7 @@
 | v2.4 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U67)** — §6.6 เพิ่มสถานะ terminal `cancelled` (ยกเลิกรอบจ่ายก่อนโอนจริง จาก `draft`/`checking`/`file_generated` · `completed` ยกเลิกไม่ได้) — enum `payout_batch_status` ใน `02` §3 v4.25 |
 | v2.5 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U74)** — §6.4 เงื่อนไขเพิ่มของ `settle` (approved/overdue → cleared): เงินทดรองต้องไม่อยู่ในรอบจ่าย (§6.6) ที่ยังไม่ `completed` — ไม่เช่นนั้น `ADVANCE_IN_PENDING_PAYOUT` · ไม่เพิ่ม state |
 | v2.6 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U83)** — §6.4 guard ของ `settle` เพิ่ม: ต้อง**เคยอยู่ในรอบจ่าย (§6.6) ที่ `completed`** อย่างน้อยหนึ่งรอบ (จ่ายจริงแล้ว) — ไม่เช่นนั้น `ADVANCE_IN_PENDING_PAYOUT` · ไม่เพิ่ม state |
+| v2.7 | 06/10/2569 | **มติ PO 06/10/2569 U95 + U96 #8** — §6.10 ใบกำกับภาษีมี 2 ชนิด (`tax_invoice_doc_kind`: `tax_invoice` เดิม / `receipt_tax_invoice` ออกตอนรับเงิน) — **state machine เดิม** `active → cancelled` ไม่เพิ่ม state · guard การออก: เงินรับ 1 รายการมีใบ active ได้ 1 ใบ · ใบที่ยกเลิกถูกออกแทนได้ครั้งเดียว (`replaces_tax_invoice_id`) · §7 flow รายได้: วางบิล ⇒ ใบแจ้งหนี้ (ไม่ใช่เอกสารภาษี) · รับเงิน ⇒ ใบเสร็จรับเงิน/ใบกำกับภาษี |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -131,6 +132,8 @@ pending_approval → rejected (terminal)
 active → cancelled   (ต้องระบุเหตุผล — ออกใบใหม่แทน ไม่ใช้เลขเดิมซ้ำ)
 ```
 
+> **มติ PO U95/U96 #8 (06/10/2569)**: ทะเบียนนี้มี 2 ชนิด (`doc_kind`) — `receipt_tax_invoice` = **ใบเสร็จรับเงิน/ใบกำกับภาษี** ออกตอนรับเงิน (1 เงินรับมีใบ `active` ได้ 1 ใบ) · `tax_invoice` = ใบเดิมตอนวางบิล (ข้อมูลก่อน U95) — **ไม่มี state ใหม่** · ออกใหม่หลังยกเลิก = ใบใหม่ `active` ที่ผูก `replaces_tax_invoice_id` (ใบเดิมถูกออกแทนได้ครั้งเดียว) · เงินรับที่มีใบ `active` เปลี่ยนการจับคู่ไม่ได้ (`CASH_RECEIPT_HAS_TAX_INVOICE`)
+
 > ✅ **แก้ไขแล้ว**: เดิมเขียนเป็น `draft`/`issued`/`cancelled` (3 states) ไม่ตรงกับ schema — ตรวจสอบไฟล์ 31 §9.1 แล้วพบว่า workflow จริงไม่มีขั้น draft (สร้าง=ออกทันที) จึงแก้เป็น `active`/`cancelled` (2 states) ตรงกับ enum `tax_invoice_status` ใน `02-database-schema-design.md` แล้ว
 
 ### 6.11 WHT Filing Period Summary (ไฟล์ 33)
@@ -218,8 +221,9 @@ Expense (§6.3) approved → Payout Batch (§6.6) รวมรายการ �
   → สร้าง WHT Certificate (ไฟล์ 33) อัตโนมัติ
 
 Revenue (§6.7) ready_for_billing → รวมเข้า Billing Batch (§6.8) → sent
-  → sync เป็น Sales Record (ไฟล์ 31) → ออก Tax Invoice (§6.10)
+  → sync เป็น Sales Record (ไฟล์ 31) + ใบแจ้งหนี้/ใบวางบิล (ไม่ใช่เอกสารภาษี — U95)
   → Bank Transaction (§6.14) matched → สร้าง Cash Receipt (ไฟล์ 31) → อัปเดต received_amount ของ Billing Batch
+  → ออกใบเสร็จรับเงิน/ใบกำกับภาษี (§6.10 · ต่อเงินรับ · ภาษีขายเดือนตามวันที่เอกสาร)
 
 ทุก state ข้างต้น ถูกครอบด้วย Accounting Period (§6.13) — ถ้า locked ต้องผ่าน Adjustment (§6.9) เท่านั้น
 ```

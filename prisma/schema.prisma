@@ -505,6 +505,16 @@ enum TaxInvoiceStatus {
   @@map("tax_invoice_status")
 }
 
+/// ชนิดเอกสารในทะเบียนใบกำกับภาษี (มติ PO 06/10/2569 U95 · ม.78/1(2)) — เลขชุดเดียวกัน (`tax_invoice_numbering`)
+enum TaxInvoiceDocKind {
+  /// ใบกำกับภาษีแบบเดิม ออกตอนวางบิล (ข้อมูลก่อน U95 — ยกเลิก/ออกแทนได้)
+  tax_invoice
+  /// "ใบเสร็จรับเงิน/ใบกำกับภาษี" ออกตอนรับเงิน — 1 เงินรับ = 1 ใบ active · ยอดตามเงินที่รับ
+  receipt_tax_invoice
+
+  @@map("tax_invoice_doc_kind")
+}
+
 /// ใบลดหนี้ที่สำนักงานบัญชีออกนอกระบบ (มติ PO 05/10/2569 U14 · ม.86/10) — ยกเลิกเป็น terminal เหมือนใบกำกับ
 enum CreditNoteStatus {
   active
@@ -2810,32 +2820,61 @@ model SalesRecord {
 /// ใบกำกับภาษี (`31` §8) — เลขที่ auto-gen **ห้าม gap ห้ามแก้**
 /// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE ห้าม reverse cancel
 model TaxInvoice {
-  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId   String           @map("organization_id") @db.Uuid
-  salesRecordId    String           @map("sales_record_id") @db.Uuid
-  invoiceNumber    String           @unique @map("invoice_number")
-  invoiceDate      DateTime         @map("invoice_date") @db.Date
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String                @map("organization_id") @db.Uuid
+  salesRecordId         String                @map("sales_record_id") @db.Uuid
+  invoiceNumber         String                @unique @map("invoice_number")
+  invoiceDate           DateTime              @map("invoice_date") @db.Date
   /// snapshot สาขาผู้ซื้อ ณ ตอนออกใบ (มติ PO U77 · ม.86/4) — `00000` = สำนักงานใหญ่ · ไม่มี default (ต้องส่งทุกครั้ง)
   /// CHECK + ยาม immutable อยู่ใน raw SQL `20261005201000_finance_company_branch_code`
-  buyerBranchCode  String           @map("buyer_branch_code") @db.VarChar(5)
+  buyerBranchCode       String                @map("buyer_branch_code") @db.VarChar(5)
   /// snapshot สาขาผู้ขาย (องค์กรเรา) ณ ตอนออกใบ (มติ PO U82) — ไม่มี default · CHECK + ยาม immutable อยู่ใน raw SQL
   /// `20261005202000_seller_branch_credit_note_buyer_branch`
-  sellerBranchCode String           @map("seller_branch_code") @db.VarChar(5)
-  status           TaxInvoiceStatus @default(active)
-  cancelReason     String?          @map("cancel_reason")
-  cancelledBy      String?          @map("cancelled_by") @db.Uuid
-  cancelledAt      DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+  sellerBranchCode      String                @map("seller_branch_code") @db.VarChar(5)
+  /// มติ PO U95 — ชนิดเอกสาร (ไม่มี default: ส่งทุกครั้ง) · ใบเดิมก่อน U95 = `tax_invoice`
+  docKind               TaxInvoiceDocKind     @map("doc_kind")
+  /// เงินรับต้นเหตุของใบเสร็จรับเงิน/ใบกำกับภาษี (U95) — ใบแบบเดิม = null · เงินรับถูกถอน ⇒ ใบที่ยกเลิกแล้วเหลือ null
+  /// (FK ON DELETE SET NULL · partial unique `uniq_tax_invoice_active_per_receipt` อยู่ใน raw SQL `20261006160000_receipt_tax_invoice`)
+  cashReceiptId         String?               @map("cash_receipt_id") @db.Uuid
+  /// ใบที่ใบนี้ออกแทน (มติ PO U96 #8 — พิมพ์ "ออกแทนฉบับเลขที่ … ลงวันที่ … เนื่องจาก …")
+  replacesTaxInvoiceId  String?               @map("replaces_tax_invoice_id") @db.Uuid
+  /// ยอดบนใบ (snapshot ตอนออก — U95: รับเงินบางส่วนได้หลายใบต่อรอบวางบิล) · CHECK total = ก่อน VAT + VAT
+  amountBeforeVatSatang Int                   @map("amount_before_vat_satang")
+  vatSatang             Int                   @map("vat_satang")
+  totalSatang           Int                   @map("total_satang")
+  /// อัตรา VAT ณ จุดความรับผิด (วันรับเงิน — U96 #9) · ใบเดิมหลายอัตรา = null
+  vatRatePctUsed        Decimal?              @map("vat_rate_pct_used") @db.Decimal(5, 2)
+  /// snapshot ผู้ขาย/ผู้ซื้อ ณ ตอนออก (มติ PO U96 #4) — PDF/Export/portal อ่านจากนี่เสมอ · immutable
+  sellerName            String                @map("seller_name")
+  sellerTaxId           String                @map("seller_tax_id") @db.VarChar(13)
+  sellerAddress         String                @map("seller_address")
+  sellerPhone           String?               @map("seller_phone") @db.VarChar(20)
+  buyerName             String                @map("buyer_name")
+  buyerTaxId            String                @map("buyer_tax_id") @db.VarChar(13)
+  buyerAddress          String                @map("buyer_address")
+  buyerPhone            String?               @map("buyer_phone") @db.VarChar(20)
+  /// snapshot รูปแบบการส่งเอกสาร (ปิด D13 ส่วน delivery_format) — ค่าเริ่มต้นของบริษัท ณ ตอนออก
+  deliveryFormat        InvoiceDeliveryFormat @map("delivery_format")
+  description           String
+  status                TaxInvoiceStatus      @default(active)
+  cancelReason          String?               @map("cancel_reason")
+  cancelledBy           String?               @map("cancelled_by") @db.Uuid
+  cancelledAt           DateTime?             @map("cancelled_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
 
   organization    Organization @relation(fields: [organizationId], references: [id])
   salesRecord     SalesRecord  @relation(fields: [salesRecordId], references: [id])
+  cashReceipt     CashReceipt? @relation(fields: [cashReceiptId], references: [id], onDelete: SetNull)
+  replaces        TaxInvoice?  @relation("tax_invoice_replacement", fields: [replacesTaxInvoiceId], references: [id], onDelete: Restrict)
+  replacedBy      TaxInvoice[] @relation("tax_invoice_replacement")
   cancelledByUser User?        @relation("tax_invoices_cancelled_by", fields: [cancelledBy], references: [id])
   createdByUser   User         @relation("tax_invoices_created_by", fields: [createdBy], references: [id])
 
   creditNotes CreditNote[]
 
+  @@index([cashReceiptId], map: "idx_tax_invoices_cash_receipt")
   @@index([organizationId, status], map: "idx_tax_invoices_org")
   @@index([organizationId, invoiceDate], map: "idx_tax_invoices_org_invoice_date")
   /// กันออกใบซ้ำที่ระดับ DB — `uniq_tax_invoice_active_per_sales` เป็น **partial unique index**
@@ -2920,6 +2959,8 @@ model CashReceipt {
 
   /// U40 — รายการ "รอ 50 ทวิ จากลูกค้า" ที่เกิดจากเงินรับนี้ (ถูกหักภาษี)
   customerWhtCertificates CustomerWhtCertificate[]
+  /// U95 — ใบเสร็จรับเงิน/ใบกำกับภาษีของเงินรับนี้ (active ได้ 1 ใบ)
+  taxInvoices             TaxInvoice[]
 
   @@index([periodId], map: "idx_cash_receipts_period")
   @@index([billingBatchId], map: "idx_cash_receipts_billing")

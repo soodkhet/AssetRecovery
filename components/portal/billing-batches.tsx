@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { PortalKpiTile } from '@/components/portal/portal-kpi-card'
+import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import {
   Button,
@@ -47,7 +48,11 @@ const FILTER_OPTIONS = portalBillingFilterOptions()
  * · ยอดรวม = ยอดตามใบกำกับที่ออกจริง (มติ U14) · รวม = ชำระแล้ว + ภาษีที่ลูกค้าหัก + ค้างชำระ (มติ U11)
  * · เลขที่รอบวางบิล + จำนวนเคส ตาม mockup (มติ U62)
  */
-export function PortalBillingBatches() {
+/**
+ * มติ PO U95 — `canDownload` = มี `portal_download` ⇒ แสดงลิงก์ "ใบแจ้งหนี้ PDF" ต่อรอบ (ไม่ใช่เอกสารภาษี)
+ * ชั้น UX เท่านั้น — API ตรวจสิทธิ์/บริษัทซ้ำเสมอ (DEC-002)
+ */
+export function PortalBillingBatches({ canDownload = false }: { canDownload?: boolean }) {
   const state = usePortalData<PortalBillingBatchDto[]>('/api/portal/billing-batches')
   const [filter, setFilter] = useState<PortalBillingFilter>('all')
   const today = bangkokToday()
@@ -109,8 +114,8 @@ export function PortalBillingBatches() {
               <EmptyState title="ไม่พบรอบวางบิลที่ตรงกับเงื่อนไข" />
             ) : (
               <>
-                <BillingTable rows={filtered} today={today} />
-                <BillingCards rows={filtered} today={today} />
+                <BillingTable rows={filtered} today={today} canDownload={canDownload} />
+                <BillingCards rows={filtered} today={today} canDownload={canDownload} />
                 {portalHasCustomerWht(filtered) && (
                   <InlineAlert tone="info" className="mt-4" title="ภาษีหัก ณ ที่จ่ายที่บริษัทของท่านหักไว้">
                     {PORTAL_CUSTOMER_WHT_NOTICE} · ยอดรวม = ชำระแล้ว + ภาษีหัก ณ ที่จ่าย + ค้างชำระ
@@ -137,6 +142,21 @@ function BatchNumber({ value }: { value: string }) {
   return <RefText className="text-xs font-semibold">{value}</RefText>
 }
 
+/** ลิงก์ใบแจ้งหนี้/ใบวางบิล PDF (มติ U95 — ไม่ใช่ใบกำกับภาษี) · โหมดดูแทนแนบ `as` ผ่าน `usePortalApiUrl` */
+function BillingInvoiceLink({ row }: { row: PortalBillingBatchDto }) {
+  const apiUrl = usePortalApiUrl()
+  return (
+    <a
+      className="text-[11px] font-semibold text-blue-700 hover:underline"
+      href={apiUrl(`/api/portal/billing-batches/${encodeURIComponent(row.id)}/invoice-pdf`)}
+      target="_blank"
+      rel="noreferrer"
+    >
+      ใบแจ้งหนี้ PDF
+    </a>
+  )
+}
+
 function CustomerWhtText({ satang, className }: { satang: number; className?: string }) {
   return satang > 0 ? (
     <span className={cn('font-semibold text-slate-700', className)}>{fmtSatangSymbol(satang)}</span>
@@ -156,7 +176,15 @@ function DueDate({ row, today }: { row: PortalBillingBatchDto; today: string }) 
 }
 
 /** desktop — ตาราง (md+) */
-function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[]; today: string }) {
+function BillingTable({
+  rows,
+  today,
+  canDownload,
+}: {
+  rows: readonly PortalBillingBatchDto[]
+  today: string
+  canDownload: boolean
+}) {
   return (
     <Table className="hidden md:block">
       <THead>
@@ -178,6 +206,11 @@ function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[];
           <Tr key={row.id} className={row.outstandingSatang > 0 ? 'bg-red-50/20' : undefined}>
             <Td className="whitespace-nowrap">
               <BatchNumber value={row.batchNumber} />
+              {canDownload && (
+                <div>
+                  <BillingInvoiceLink row={row} />
+                </div>
+              )}
             </Td>
             <Td className="font-semibold whitespace-nowrap">{row.period}</Td>
             <Td numeric>{fmtCount(row.caseCount)}</Td>
@@ -208,7 +241,15 @@ function BillingTable({ rows, today }: { rows: readonly PortalBillingBatchDto[];
 }
 
 /** มือถือ — การ์ดต่อรอบ (mockup มือถือ `renderFinance()`) */
-function BillingCards({ rows, today }: { rows: readonly PortalBillingBatchDto[]; today: string }) {
+function BillingCards({
+  rows,
+  today,
+  canDownload,
+}: {
+  rows: readonly PortalBillingBatchDto[]
+  today: string
+  canDownload: boolean
+}) {
   return (
     <ul className="space-y-2 md:hidden">
       {rows.map((row) => (
@@ -245,6 +286,7 @@ function BillingCards({ rows, today }: { rows: readonly PortalBillingBatchDto[];
               ครบกำหนด <DueDate row={row} today={today} />
             </span>
             <span>ส่งเมื่อ {fmtDateTime(row.sentAt)}</span>
+            {canDownload && <BillingInvoiceLink row={row} />}
           </div>
         </li>
       ))}

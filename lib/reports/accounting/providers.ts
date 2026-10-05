@@ -109,15 +109,11 @@ const taxInvoiceProvider: ReportProvider = async (ctx: ReportContext): Promise<R
       id: true,
       invoiceDate: true,
       status: true,
-      salesRecord: {
-        select: {
-          totalBeforeVatSatang: true,
-          vatSatang: true,
-          totalSatang: true,
-          companyId: true,
-          company: { select: { name: true } },
-        },
-      },
+      // มติ PO U95 — ยอดของเอกสารเอง (ใบเสร็จรับเงิน/ใบกำกับภาษีตามยอดที่รับ · เดือนตามวันที่เอกสาร)
+      amountBeforeVatSatang: true,
+      vatSatang: true,
+      totalSatang: true,
+      salesRecord: { select: { companyId: true, company: { select: { name: true } } } },
     },
   })
 
@@ -135,9 +131,9 @@ const taxInvoiceProvider: ReportProvider = async (ctx: ReportContext): Promise<R
       ...group,
       invoiceId: row.id,
       cancelled: row.status === 'cancelled',
-      totalBeforeVatSatang: row.salesRecord.totalBeforeVatSatang,
-      vatSatang: row.salesRecord.vatSatang,
-      totalSatang: row.salesRecord.totalSatang,
+      totalBeforeVatSatang: row.amountBeforeVatSatang,
+      vatSatang: row.vatSatang,
+      totalSatang: row.totalSatang,
     }
   })
 

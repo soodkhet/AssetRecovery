@@ -4,7 +4,7 @@ import { dateOnlySchema } from '@/lib/api/validation'
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของบัญชีขาย/ใบกำกับภาษี/เงินรับ (ไฟล์ 31) — Rule 13
  *
- * ⚠️ **ไม่มี field `invoiceNumber`** ในฟอร์มออกใบกำกับภาษี — เลขที่เดินโดยระบบเท่านั้น (`31` §10)
+ * ⚠️ **ไม่มี field `invoiceNumber`/ยอดเงิน** ในฟอร์มออกเอกสารภาษี — เลขที่เดินโดยระบบ ยอดคิดจากเงินรับ (`31` §10)
  * ⚠️ **ไม่มี schema สร้าง Cash Receipt** — เงินรับเกิดจากการกระทบยอด (ไฟล์ 35) เท่านั้น (`31` §6.3)
  * ⚠️ `cancelReason` ที่นี่ตรวจแค่ "เป็นสตริง" — บังคับ min ด้วย `requireCancelReason()` (pure)
  *    เพื่อให้ผู้ใช้ได้ code `CANCEL_REQUIRES_REASON` ตรงตาม `31` §11 ไม่ใช่ field error ทั่วไป
@@ -30,13 +30,23 @@ export const taxInvoiceListQuerySchema = z.object({
 export type TaxInvoiceListQuery = z.infer<typeof taxInvoiceListQuerySchema>
 
 /**
- * ออกใบกำกับภาษี (`31` §14 `POST /api/accounting/tax-invoices`) — สร้าง = ออกทันที ไม่มีขั้นร่าง
- * `invoiceDate` ไม่ส่งมา = วันนี้ (เวลาไทย) · คอลัมน์ `DATE` ⇒ ใช้ `dateOnlySchema()` (เที่ยงคืน UTC)
+ * ออกเอกสารภาษี (`31` §14 `POST /api/accounting/tax-invoices` — มติ PO U95) — สร้าง = ออกทันที ไม่มีขั้นร่าง
+ * - `cashReceiptId` = ออก **ใบเสร็จรับเงิน/ใบกำกับภาษี** ของเงินรับนั้น (ยอดตามเงินที่รับ · VAT อัตรา ณ วันรับเงิน)
+ *   — มีใบที่ยกเลิกแล้วของเงินรับเดียวกัน ⇒ ใบใหม่เป็น "ใบแทน" อัตโนมัติ (U96 #8)
+ * - `replacesInvoiceId` = ออกแทนใบที่ยกเลิกแล้ว (ใช้กับใบกำกับแบบเดิมก่อน U95 — ยอด/อัตราเดิม)
+ * ต้องส่งอย่างใดอย่างหนึ่ง · `invoiceDate` ไม่ส่ง = วันรับเงิน (ใบเสร็จฯ) / วันนี้ (ใบแทนแบบเดิม)
+ * · คอลัมน์ `DATE` ⇒ `dateOnlySchema()` (เที่ยงคืน UTC)
  */
-export const taxInvoiceCreateSchema = z.object({
-  salesRecordId: uuidSchema,
-  invoiceDate: dateOnlySchema('วันที่ออกใบกำกับภาษี').optional(),
-})
+export const taxInvoiceCreateSchema = z
+  .object({
+    cashReceiptId: uuidSchema.optional(),
+    replacesInvoiceId: uuidSchema.optional(),
+    invoiceDate: dateOnlySchema('วันที่เอกสาร').optional(),
+  })
+  .refine((value) => (value.cashReceiptId === undefined) !== (value.replacesInvoiceId === undefined), {
+    message: 'เลือกเงินรับ หรือใบที่ต้องการออกแทน อย่างใดอย่างหนึ่ง',
+    path: ['cashReceiptId'],
+  })
 
 export type TaxInvoiceCreateInput = z.infer<typeof taxInvoiceCreateSchema>
 
