@@ -114,7 +114,7 @@
 | BUG-106 | R6a-v3 R6.01 | S5 | spec-gap | ไม่มีแจ้งเตือนถึงผู้อนุมัติเมื่อมีรายการเข้าคิว (ค่าที่พัก/แถวรายวัน/หลังล็อตปลดล็อก/C5 ถึงขั้น 3 ของบริหาร) — มีแค่แจ้งเตือนปิดงาน C3 · `90` ไม่ได้กำหนด (R6-N1) | fixed `0356329` (มติ U29) |
 | BUG-107 | R6b-v3 R6.39 | S3 | code | modal เคลียร์เงินทดรอง: พิมพ์ `abc` ในช่อง "ยอดที่ใช้จริง (บาท)" → ทั้งหน้าล่ม "ระบบขัดข้อง" (`MoneyFormatError NaN`) — `components/finance/settle-advance-modal.tsx:92` ส่ง NaN เข้า `fmtSatangSymbol` (เช็คแค่ `!== null`) · ใช้ร่วมหน้ามือถือ + หน้าการเงิน · ข้อมูลไม่เสีย | fixed `2ac5fb9` (merge `2faed64` 04/10/2569) |
 | BUG-108 | R6b-v3 | S4 | code | คำอธิบายตารางรายได้แสดง markdown ดิบ `**และ**` (`components/finance/revenue-tab.tsx:290`) | fixed `c02cc2e` (merge `2faed64` 04/10/2569) |
-| BUG-109 | R6b-v3 R6.39 | S5 | spec-gap | เงินคืนจากเงินทดรอง (ADV1 ฿550) ระบบบันทึกยอดคืนแต่ไม่มีการรับเงินคืน/หักกลบ | needs-decision → มติ U30 (รอ fixer) |
+| BUG-109 | R6b-v3 R6.39 | S5 | spec-gap | เงินคืนจากเงินทดรอง (ADV1 ฿550) ระบบบันทึกยอดคืนแต่ไม่มีการรับเงินคืน/หักกลบ | fixed `dea1f6e` (มติ U30) |
 | BUG-110 | R6b-v3 R6.35 | S5 | code | toast `UNVERIFIED_PAYEE_IN_PAYOUT` ไม่บอกว่าผู้รับคนไหนยังไม่ยืนยัน | fixed `11fff87` (merge `2faed64` 04/10/2569) |
 | BUG-111 | R7-v3 R7.12 | S4 | code | `PATCH /api/bank-reconciliation/transactions/<id>/match` และ `/resolve-unmatched` ด้วย id ที่ไม่ใช่ UUID → 500 (ควร 400/404) · ข้อมูลไม่เสีย · หน้าจอกดไม่เจอ | fixed (fixer O · merge `7f11527` 04/10/2569) |
 | BUG-112 | R7-v3 R7.12 | S5 | code | `BANK_TRANSACTION_INVALID_STATUS` ข้อความเดียว "รายการที่ปิดไปแล้ว…" ใช้ทั้งกรณีจับคู่ผิดฝั่ง และปิดแถวที่จับคู่แล้ว → ผู้ใช้เข้าใจผิด | fixed (fixer O · merge `7f11527` 04/10/2569) |
