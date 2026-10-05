@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~23:40 R13a จบ `2d6628b` (A–E · 29 ขั้น ✅21 ⚠️7 ❌1 · เงินตรง golden ทั้งหมด: รอบจ่าย in1 265000/4050/260950 หัก ADV1 55000 โอน 205950 · WHT-2569-017 · ภ.ง.ด.3 ต.ค. 32550 · U74/U83 บล็อกเคลียร์ทำงาน) · BUG-153 (S4) / BUG-154 (S3) · snapshot `R13-mid` · Storage +~23 ไฟล์ (รายการในรายงาน R13a)
 - 05/10/2569 ~23:30 เริ่ม R13 (U81): snapshot `R13-start` · **ซ่อมฐาน dev นอกระบบ (U85)**: งวด ต.ค. 2569 locked → collecting (trigger กันไว้ → ผู้ใช้รัน SQL เองในฐานะ superuser · ล้าง sent/locked) · ท้าย R13 ต้องส่ง/ล็อกคืนด้วย dev asOf
 - 05/10/2569 ~23:10 merge fixer AQ `b790f0e` (U79 คอลัมน์ `billing_batch_number` ต่อท้ายไฟล์ 06/07/10/11/12 · U82 `organizations.branch_code` + `tax_invoices.seller_branch_code` + `credit_notes.buyer_branch_code` · U83 เคลียร์เงินทดรองได้เมื่ออยู่ในรอบจ่าย completed เท่านั้น) · migration `20261005202000_seller_branch_credit_note_buyer_branch` · verify 328/4,350 · migration ใหม่รวม **26 ตัว** · ⚠️ สคริปต์ UAT เดิม (r6v3 s29–31 เคลียร์ ADV ก่อนรอบจ่าย) เล่นซ้ำไม่ได้แล้วตาม U83 — R13 เล่นบนข้อมูลปัจจุบันไม่กระทบ
 - 05/10/2569 ~22:40 merge fixer AP `abcca42`+`4ac78fc` (U74 `ADVANCE_IN_PENDING_PAYOUT` · U77 `finance_companies.branch_code` + snapshot `tax_invoices.buyer_branch_code`) · migration `20261005201000_finance_company_branch_code` · แก้ fixture U69 (buyer_branch_code) · verify 327/4,333 · migration ใหม่รวม **25 ตัว** · มติ U79–U81 → ต่อ: เล่น UAT รอบยืนยัน (U81)

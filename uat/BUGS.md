@@ -158,6 +158,8 @@
 | BUG-150 | STORAGE-AFTER | **S2** | code | session หมดอายุ (24 ชม.) แล้ว login ใหม่สำเร็จ แต่ถูกเด้งกลับ `/login?reason=SESSION_EXPIRED` นานสูงสุด ~5 นาที (ยืนยัน `uat.admin` 13:51–13:59) — น่าจะเพราะ `lib/auth/session-cache.ts` cache session ที่หมดอายุ 5 นาที · เกิดทุกครั้งที่ผู้ใช้กลับมาวันถัดไป | fixed (fixer Z · merge `462aae5` 05/10/2569) |
 | BUG-151 | STORAGE-AFTER | S5 | code | dialog เอกสารล็อตในหน้าคลังแสดง storage path ดิบแทนชื่อไฟล์ | fixed (fixer Z · merge `462aae5` 05/10/2569) |
 | BUG-152 | merge X1+Y | S5 | test | `lib/portal/handover.db.test.ts` (U13 ใบส่งมอบ/หลักฐานจัดส่ง 403+audit) ล้มเป็นครั้งคราวตอนรันทั้งชุดพร้อมกัน (ผ่านเมื่อรันแยก + ทั้งชุดอีก 2 รอบ) — flaky | fixed (fixer Z · merge `462aae5` 05/10/2569) |
+| BUG-153 | R13a R13.27 | S4 | code | ดาวน์โหลดใบส่งมอบ PDF/Excel (`/api/handover-lots/:id/pdf`, `/export-excel`) ไม่ลง audit `export` (export ต้อง trace ผู้สั่งได้ — Rule 03) | open |
+| BUG-154 | R13a R13.23–R13.26 | S3 | code | รอบจ่ายที่มีหักคืนเงินทดรอง (U30): หน้าจอ 4 จุด (modal สร้างไฟล์ธนาคาร "ยอดโอนสุทธิ", toast หลังสร้างไฟล์, modal ยืนยันโอน "ยอดสุทธิที่โอน", toast หลังยืนยัน) แสดงยอดหลัง WHT ฿2,609.50 แทนยอดโอนจริง ฿2,059.50 — ไฟล์ธนาคาร/ใบสำคัญจ่ายถูกต้อง | open |
 
 ## รายละเอียด
 <!-- ### BUG-001 …  reproduce / คาดหวัง (อ้าง §spec) / เกิดจริง / snapshot / ภาพ -->
