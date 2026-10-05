@@ -281,6 +281,18 @@ describe('POST /api/storage/download-url', () => {
     expect(warehouseQueries.getAsset).toHaveBeenCalledWith(WAREHOUSE, ASSET_ID)
   })
 
+  it('มติ PO U22 — ผู้จัดการทีม (intake_asset=view · scope ทีม) เปิดรูปเครื่องของทีมได้ แต่เอกสารทั้งล็อตไม่ได้', async () => {
+    const teamLead: SessionUser = {
+      ...sessionUser('00000000-0000-4000-8000-0000000000a9', { intake_asset: 'view' }),
+      scope: { kind: 'team', teamIds: ['team-1'], companyId: null, userId: '00000000-0000-4000-8000-0000000000a9' },
+    }
+    requireSessionMock.mockResolvedValue(teamLead)
+    expect((await postDownloadUrl(downloadReq(`assets/${ASSET_ID}/intake/front/u.jpg`))).status).toBe(200)
+    expect(warehouseQueries.getAsset).toHaveBeenCalledWith(teamLead, ASSET_ID)
+    expect((await postDownloadUrl(downloadReq(`handover-lots/${LOT_ID}/signed_doc/u.pdf`))).status).toBe(403)
+    expect(warehouseQueries.getLot).not.toHaveBeenCalled()
+  })
+
   it.each([
     '../cases/x',
     `cases/${CASE_ID}/../../expenses/${AGENT_ID}/receipts/r.pdf`,

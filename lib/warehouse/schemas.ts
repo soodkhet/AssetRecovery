@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ASSET_STATUSES } from '@/lib/warehouse/asset-status'
-import { IMEI_LENGTH } from '@/lib/warehouse/imei'
+import { imeiInputSchema } from '@/lib/warehouse/imei'
 import { LOT_DOCUMENTS, LOT_STATUSES } from '@/lib/warehouse/lot-status'
 
 /**
@@ -82,14 +82,12 @@ export type AssetListQuery = z.infer<typeof assetListQuerySchema>
 
 /**
  * `POST /api/assets/:id/intake` (`44` §8.2 modal 3 ขั้น)
- * — IMEI ที่กรอกต้องเป็น 15 หลักจริง (พิมพ์ไม่ครบ = พิมพ์ผิด ไม่ใช่ "ไม่ตรงสัญญา")
- *   ส่วน "ไม่ตรงกับสัญญา" เป็นแค่ **คำเตือน** ผ่านต่อได้ (`44` §12 `IMEI_MISMATCH`)
+ * — IMEI ที่กรอกตัดได้เฉพาะช่องว่าง/ขีด/จุด แล้วต้องเป็นตัวเลข 15 หลักพอดี (มติ PO U24 · `parseImei()`)
+ *   รูปแบบผิด = ปฏิเสธ (พิมพ์ผิด ไม่ใช่ "ไม่ตรงสัญญา") · ส่วน "ไม่ตรงกับสัญญา" เป็นแค่ **คำเตือน**
+ *   ผ่านต่อได้ (`44` §12 `IMEI_MISMATCH`) · ค่าที่บันทึกเป็นตัวเลข 15 หลักล้วนเสมอ
  */
 export const assetIntakeSchema = z.object({
-  imeiActual: trimmedText
-    .regex(new RegExp(`^\\d{${IMEI_LENGTH}}$`), `IMEI ต้องเป็นตัวเลข ${IMEI_LENGTH} หลัก`)
-    .nullish()
-    .transform((value) => value ?? null),
+  imeiActual: imeiInputSchema,
   serialActual: nullableText(100),
   condition: z.enum(ASSET_CONDITIONS).nullish().transform((value) => value ?? null),
   conditionNote: nullableText(1000),

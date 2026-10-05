@@ -25,6 +25,7 @@ import {
   WAREHOUSE_CONFIRM_LOT_CAPABILITY,
   WAREHOUSE_INTAKE_CAPABILITY,
   WAREHOUSE_READ_CAPABILITIES,
+  isTeamScopedViewer,
 } from '@/lib/warehouse/permissions'
 import { getAsset, getLot } from '@/lib/warehouse/queries'
 
@@ -188,6 +189,8 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
     }
     case 'lot': {
       if (!hasAny(user, 'view', WAREHOUSE_READ_CAPABILITIES)) throw denied(user, `view:lot-file lot=${owner.lotId}`)
+      // เอกสารทั้งล็อตมีเครื่องของทีมอื่นปน — ผู้จัดการ/หัวหน้าทีม (scope ทีม) อ่านได้แค่รายการเครื่องของทีม (มติ PO U22)
+      if (isTeamScopedViewer(user)) throw denied(user, `view:lot-file team-scope lot=${owner.lotId}`)
       await getLot(user, owner.lotId)
       return
     }

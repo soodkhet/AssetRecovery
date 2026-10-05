@@ -35,6 +35,10 @@ const { POST: postLot } = await import('@/app/api/handover-lots/route')
 const { PATCH: patchConfirm } = await import('@/app/api/handover-lots/[id]/confirm/route')
 const { GET: getPdf } = await import('@/app/api/handover-lots/[id]/pdf/route')
 const { GET: getExcel } = await import('@/app/api/handover-lots/[id]/export-excel/route')
+const { GET: getAssetDetail } = await import('@/app/api/assets/[id]/route')
+const { GET: getLots } = await import('@/app/api/handover-lots/route')
+const { GET: getLotDetail } = await import('@/app/api/handover-lots/[id]/route')
+const { POST: postLotDocument } = await import('@/app/api/handover-lots/[id]/documents/route')
 
 const ASSET_ID = '00000000-0000-4000-8000-000000000101'
 const LOT_ID = '00000000-0000-4000-8000-000000000201'
@@ -70,6 +74,15 @@ const WAREHOUSE_ADMIN = sessionUser({
 const FIELD_AGENT = sessionUser({ perform_field_work: 'manage' })
 /** การเงิน/บัญชี = ดูอย่างเดียว */
 const FINANCE_VIEWER = sessionUser({ view_master_data: 'view' })
+/** บริหาร = ดูอย่างเดียว + export ใบส่งมอบได้ (มติ PO 05/10/2569 U23 · BUG-084) */
+const EXECUTIVE_VIEWER = { ...sessionUser({ view_master_data: 'view' }), roleName: 'บริหาร' }
+/** ผู้จัดการ/หัวหน้าทีม = อ่านคลังของทีมตัวเองอย่างเดียว (มติ PO 05/10/2569 U22 · BUG-076) */
+const TEAM_LEAD: SessionUser = {
+  ...sessionUser({ intake_asset: 'view', assign_case: 'manage', approve_expense_manager: 'manage' }),
+  roleName: 'ผู้จัดการทีมติดตามทรัพย์',
+  roleGroup: 'inhouse',
+  scope: { kind: 'team', teamIds: ['team-a'], companyId: null, userId: 'user-1' },
+}
 
 function request(url = 'http://localhost/api/assets', init?: RequestInit): NextRequest {
   const base = new Request(url, init) as unknown as NextRequest
@@ -179,6 +192,43 @@ describe('สิทธิ์ของแต่ละ endpoint (DEC-002 · `44` �
     ).toBe(403)
   })
 
+  it('ผู้จัดการ/หัวหน้าทีม (intake_asset=view): อ่านรายการ/รายละเอียดได้ แต่ mutate และ export ไม่ได้ (U22)', async () => {
+    requireSessionMock.mockResolvedValue(TEAM_LEAD)
+    queriesMock.listAssets.mockResolvedValue({ items: [], total: 0, page: 1, limit: 50 })
+    queriesMock.getAsset.mockResolvedValue(assetDetail)
+    queriesMock.listLots.mockResolvedValue({ items: [], total: 0, page: 1, limit: 50 })
+    queriesMock.getLot.mockResolvedValue(lotDetail)
+
+    expect((await getAssets(request(), undefined)).status).toBe(200)
+    expect((await getAssetDetail(request(`http://localhost/api/assets/${ASSET_ID}`), params(ASSET_ID))).status).toBe(200)
+    expect((await getLots(request('http://localhost/api/handover-lots'), undefined)).status).toBe(200)
+    expect((await getLotDetail(request(`http://localhost/api/handover-lots/${LOT_ID}`), params(LOT_ID))).status).toBe(200)
+    // query ถูกเรียกด้วยผู้ใช้ scope ทีม — ขอบเขตแถวบังคับที่ `assetScopeWhere()` (เทสต์ฝั่ง DB)
+    expect(queriesMock.listAssets.mock.calls[0]?.[0]).toBe(TEAM_LEAD)
+
+    const denied = await Promise.all([
+      postIntake(
+        jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', { imeiActual: '355000000000001', condition: 'normal' }),
+        params(ASSET_ID),
+      ),
+      postRejectIntake(
+        jsonRequest(`http://localhost/api/assets/${ASSET_ID}/reject-intake`, 'POST', { rejectReason: 'IMEI ไม่ตรง' }),
+        params(ASSET_ID),
+      ),
+      postLot(jsonRequest('http://localhost/api/handover-lots', 'POST', {}), undefined),
+      patchConfirm(jsonRequest(`http://localhost/api/handover-lots/${LOT_ID}/confirm`, 'PATCH', {}), params(LOT_ID)),
+      postLotDocument(jsonRequest(`http://localhost/api/handover-lots/${LOT_ID}/documents`, 'POST', {}), params(LOT_ID)),
+      getPdf(request(`http://localhost/api/handover-lots/${LOT_ID}/pdf`), params(LOT_ID)),
+      getExcel(request(`http://localhost/api/handover-lots/${LOT_ID}/export-excel`), params(LOT_ID)),
+    ])
+    for (const response of denied) expect(response.status).toBe(403)
+    expect(queriesMock.intakeAsset).not.toHaveBeenCalled()
+    expect(queriesMock.rejectAssetIntake).not.toHaveBeenCalled()
+    expect(queriesMock.createLot).not.toHaveBeenCalled()
+    expect(queriesMock.confirmLot).not.toHaveBeenCalled()
+    expect(queriesMock.getHandoverDocSource).not.toHaveBeenCalled()
+  })
+
   it('ธุรการที่ถือ capability ครบเรียกได้ทั้งรับเข้าและยืนยันส่งมอบ', async () => {
     requireSessionMock.mockResolvedValue(WAREHOUSE_ADMIN)
     queriesMock.intakeAsset.mockResolvedValue({ asset: assetDetail, events: ['asset.intake_confirmed'] })
@@ -238,6 +288,34 @@ describe('POST /api/assets/:id/intake', () => {
 
     expect(response.status).toBe(400)
     expect((await envelopeOf(response)).error?.code).toBe('REQUIRED_MISSING')
+    expect(queriesMock.intakeAsset).not.toHaveBeenCalled()
+  })
+
+  it('IMEI มีตัวคั่น ช่องว่าง/ขีด/จุด → service ได้ตัวเลข 15 หลักล้วน (มติ PO U24)', async () => {
+    queriesMock.intakeAsset.mockResolvedValue({ asset: assetDetail, events: [] })
+
+    const response = await postIntake(
+      jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
+        imeiActual: ' 35-500000.000000 1 ',
+        condition: 'normal',
+      }),
+      params(ASSET_ID),
+    )
+
+    expect(response.status).toBe(200)
+    expect(queriesMock.intakeAsset.mock.calls[0]?.[2]).toMatchObject({ imeiActual: '355000000000001' })
+  })
+
+  it('IMEI มีอักขระอื่น (`/01`) = 400 ไม่ตัดทิ้งเงียบ ๆ (มติ PO U24)', async () => {
+    const response = await postIntake(
+      jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
+        imeiActual: '355000000000001/01',
+        condition: 'normal',
+      }),
+      params(ASSET_ID),
+    )
+
+    expect(response.status).toBe(400)
     expect(queriesMock.intakeAsset).not.toHaveBeenCalled()
   })
 
@@ -369,6 +447,22 @@ describe('เอกสารของล็อต (`44` §6.4)', () => {
     expect(response.headers.get('content-type')).toContain('spreadsheetml.sheet')
     expect(response.headers.get('content-disposition')).toContain('LOT-2569-001.xlsx')
     expect(body.subarray(0, 2).toString('latin1')).toBe('PK')
+  })
+
+  it('บริหาร (view_master_data=view) export PDF/Excel ได้ แต่สร้าง/ยืนยันล็อตไม่ได้ (U23)', async () => {
+    requireSessionMock.mockResolvedValue(EXECUTIVE_VIEWER)
+
+    const excel = await getExcel(request(`http://localhost/api/handover-lots/${LOT_ID}/export-excel`), params(LOT_ID))
+    expect(excel.status).toBe(200)
+    expect(
+      (await postLot(jsonRequest('http://localhost/api/handover-lots', 'POST', {}), undefined)).status,
+    ).toBe(403)
+    expect(
+      (await patchConfirm(jsonRequest(`http://localhost/api/handover-lots/${LOT_ID}/confirm`, 'PATCH', {}), params(LOT_ID)))
+        .status,
+    ).toBe(403)
+    expect(queriesMock.createLot).not.toHaveBeenCalled()
+    expect(queriesMock.confirmLot).not.toHaveBeenCalled()
   })
 
   it('บริษัทไฟแนนซ์โหลดเอกสารส่งมอบไม่ได้ (`44` §13 — ช่องทางคือ Client Portal)', async () => {

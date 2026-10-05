@@ -1,12 +1,87 @@
 import { describe, expect, it } from 'vitest'
-import { compareAssetIdentity, identityMatches, isValidImei } from '@/lib/warehouse/imei'
+import {
+  IMEI_FORMAT_MESSAGE,
+  compareAssetIdentity,
+  identityMatches,
+  imeiInputSchema,
+  imeiSearchKey,
+  isImeiLikeIdentifier,
+  isValidImei,
+  parseImei,
+} from '@/lib/warehouse/imei'
 
 /**
- * `44` §6.5 · §10 — **exact match 15 หลัก** ห้าม fuzzy/trim/ignore dash
+ * `44` §6.5 · §10 — รับเข้า: ตัดเฉพาะช่องว่าง/ขีด/จุด → ต้องเหลือตัวเลข 15 หลักพอดี (มติ PO U24 · BUG-078)
+ * เทียบ: **exact match ทุกหลัก** บนค่าที่ normalize แล้ว ห้าม fuzzy
  * (T03 ของ §17: ไม่ตรงก็ยังรับเข้าได้ แต่ผลการเทียบต้องเป็น "ไม่ตรง" เสมอ)
  */
 
 const IMEI = '355000000000001'
+
+describe('parseImei — ตัดเฉพาะตัวคั่น ช่องว่าง/ขีด/จุด (มติ PO U24)', () => {
+  it.each([
+    [' 356938035643809 ', '356938035643809'],
+    ['35-693803-564380-9', '356938035643809'],
+    ['356938.035643809', '356938035643809'],
+    ['35 693803 564380 9', '356938035643809'],
+    ['\t356938035643809\u00a0', '356938035643809'],
+    ['35.6938-03 5643809', '356938035643809'],
+    ['356938035643809', '356938035643809'],
+  ])('%j → %s', (input, expected) => {
+    expect(parseImei(input)).toBe(expected)
+  })
+
+  it.each([
+    ['35693803564380O', 'มีตัวอักษร O แทนเลข 0'],
+    ['356938035643809/01', 'มีอักขระอื่น (/) — ห้ามตัดทิ้งเงียบ ๆ'],
+    ['35693803564380', '14 หลัก'],
+    ['3569380356438090', '16 หลัก'],
+    ['35_693803_564380_9', 'ขีดล่างไม่ใช่ตัวคั่นที่ยอมรับ'],
+    ['35,693803,564380,9', 'จุลภาคไม่ใช่ตัวคั่นที่ยอมรับ'],
+    ['๓๕๖๙๓๘๐๓๕๖๔๓๘๐๙', 'เลขไทยไม่ใช่ตัวเลข IMEI'],
+    ['', 'ว่าง'],
+    ['- . -', 'มีแต่ตัวคั่น'],
+  ])('%j → null (%s)', (input) => {
+    expect(parseImei(input)).toBeNull()
+  })
+
+  it('ไม่ใช่ string = null · ไม่ตรวจ Luhn (เลขที่ check digit ผิดยังผ่านรูปแบบ)', () => {
+    expect(parseImei(null)).toBeNull()
+    expect(parseImei(undefined)).toBeNull()
+    expect(parseImei('356938035643800')).toBe('356938035643800')
+  })
+})
+
+describe('imeiInputSchema (Zod ร่วม FE/BE)', () => {
+  it('normalize เป็น 15 หลักล้วน · ว่าง = null', () => {
+    expect(imeiInputSchema.parse('35-693803-564380-9')).toBe('356938035643809')
+    expect(imeiInputSchema.parse('   ')).toBeNull()
+    expect(imeiInputSchema.parse(null)).toBeNull()
+    expect(imeiInputSchema.parse(undefined)).toBeNull()
+  })
+
+  it('รูปแบบผิด = issue พร้อมข้อความรูปแบบ (ไม่ตัดทิ้ง)', () => {
+    const result = imeiInputSchema.safeParse('356938035643809/01')
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.message).toBe(IMEI_FORMAT_MESSAGE)
+    expect(imeiInputSchema.safeParse('35693803564380').success).toBe(false)
+  })
+})
+
+describe('isImeiLikeIdentifier / imeiSearchKey', () => {
+  it('ไม่มีตัวอักษร = ความพยายามกรอก IMEI · มีตัวอักษร = serial', () => {
+    expect(isImeiLikeIdentifier('35-693803-564380-9')).toBe(true)
+    expect(isImeiLikeIdentifier('356938035643809/01')).toBe(true)
+    expect(isImeiLikeIdentifier('DMPX1234ABCD')).toBe(false)
+    expect(isImeiLikeIdentifier('  ')).toBe(false)
+  })
+
+  it('คำค้น IMEI มีตัวคั่น → ค่า normalize · อย่างอื่นคงเดิม (trim)', () => {
+    expect(imeiSearchKey(' 35-693803-564380-9 ')).toBe('356938035643809')
+    expect(imeiSearchKey(' HC-001 ')).toBe('HC-001')
+    expect(imeiSearchKey('35693803564380')).toBe('35693803564380')
+  })
+})
 
 describe('isValidImei', () => {
   it('ผ่านเฉพาะตัวเลข 15 หลักพอดี', () => {
@@ -18,7 +93,7 @@ describe('isValidImei', () => {
   })
 })
 
-describe('identityMatches — ห้าม normalize ก่อนเทียบ', () => {
+describe('identityMatches — exact บนค่าที่ normalize แล้ว (ไม่ normalize ซ้ำที่จุดเทียบ)', () => {
   it('ค่าเท่ากันเป๊ะเท่านั้นถือว่าตรง', () => {
     expect(identityMatches(IMEI, IMEI)).toBe(true)
   })
@@ -27,7 +102,7 @@ describe('identityMatches — ห้าม normalize ก่อนเทียบ
     expect(identityMatches(IMEI, '355000000000002')).toBe(false)
   })
 
-  it('เว้นวรรค/ขีดคั่น/ตัวพิมพ์ ไม่ถูกมองข้าม', () => {
+  it('จุดเทียบไม่ normalize เอง — ค่าดิบที่ยังไม่ผ่าน parseImei() ไม่ถือว่าตรง', () => {
     expect(identityMatches(IMEI, ` ${IMEI} `)).toBe(false)
     expect(identityMatches(IMEI, '35500-0000000001')).toBe(false)
     expect(identityMatches('SN-ab12', 'SN-AB12')).toBe(false)

@@ -40,7 +40,7 @@
 7. **WHT**: Payee-level ชนะ Plan-level เสมอ + fallback มี warning, ฐาน before_vat, threshold 1,000 บาท (`18` §6.3, `22` §6.9) · **VAT ห้าม hardcode** — ใช้ `vat_rate_history` effective-dated + snapshot `vat_rate_used` (`19` §6.3)
 8. **Snapshot pattern ทุก entity การเงิน** — snapshot เมื่อเกิด ห้ามใช้ live template คำนวณย้อนหลัง; case snapshot service fee ตอน `approved` ไม่ใช่ตอนสร้าง (`92` §7.1, `10` §9.2)
 9. **Idempotency**: Payout `idempotency_key` กันโอนซ้ำ (`17` §6.3), background job ทุกตัว idempotent (`91`), Export/Evidence versioned + SHA-256 **ห้าม overwrite** (`37`, `01`)
-10. **IMEI = exact match 15 หลัก** ห้าม fuzzy/trim/ignore dash · 1 HandoverLot = 1 บริษัทไฟแนนซ์ (`44` §6.5, §6.2)
+10. **IMEI = exact match 15 หลัก** — รับค่าตัดได้**เฉพาะ** ช่องว่าง/ขีด/จุด แล้วต้องเหลือตัวเลข 15 หลักพอดี (อักขระอื่น/ไม่ครบ/เกิน = ปฏิเสธ ห้ามตัดเงียบ) ผ่าน `parseImei()` จุดเดียว · ห้าม fuzzy ไม่ตรวจ Luhn (มติ PO U24) · 1 HandoverLot = 1 บริษัทไฟแนนซ์ (`44` §6.5, §6.2)
 11. **State machine + enum ต้องตรง `23` + `02` §3 เป๊ะ** ห้ามสร้าง state/enum ใหม่เอง · **Error code ใช้จาก `24` เท่านั้น** ห้ามตั้งชื่อใหม่โดยไม่เช็คก่อน
 12. **Period locked** แก้ตรงไม่ได้ทุกกรณี → ต้องผ่าน Adjustment + Executive (`30`, `20`, `13` §6.11)
 13. **TypeScript strict ห้าม `any`** · DB snake_case / โค้ด camelCase · validation ด้วย Zod schema เดียวใช้ร่วม FE/BE

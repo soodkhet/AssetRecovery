@@ -30,8 +30,12 @@ import {
   PRODUCT_PHOTO_MAX,
   REQUIRED_DOCUMENT_SLOTS,
   splitAssetIdentifier,
+  isAcceptableAssetIdentifier,
   type CaseCompletenessInput,
 } from '@/lib/cases/case'
+import { caseCreateSchema } from '@/lib/cases/schemas'
+
+const COMPANY_UUID = '11111111-1111-4111-8111-111111111111'
 
 /** เทียบกับ Test Cases ของ `38` §20 (แถวที่เป็น pure logic) */
 
@@ -171,11 +175,29 @@ describe('ความพร้อมขึ้น pending_review (`38` §9)', ()
 })
 
 describe('ตัวระบุเครื่อง (A6 · `44` §6.5)', () => {
-  it('ตัวเลข 15 หลักพอดี = IMEI · นอกนั้นเป็น serial', () => {
+  it('ไม่มีตัวอักษร = IMEI (ตัดช่องว่าง/ขีด/จุด → 15 หลักล้วน) · มีตัวอักษร = serial (มติ PO U24)', () => {
     expect(splitAssetIdentifier('356938035643809')).toEqual({ imei: '356938035643809', serialNo: null })
-    expect(splitAssetIdentifier('35693803564380')).toEqual({ imei: null, serialNo: '35693803564380' })
+    expect(splitAssetIdentifier(' 356938035643809 ')).toEqual({ imei: '356938035643809', serialNo: null })
+    expect(splitAssetIdentifier('35-693803-564380-9')).toEqual({ imei: '356938035643809', serialNo: null })
+    expect(splitAssetIdentifier('356938.035643809')).toEqual({ imei: '356938035643809', serialNo: null })
     expect(splitAssetIdentifier('DMPX1234ABCD')).toEqual({ imei: null, serialNo: 'DMPX1234ABCD' })
+    expect(splitAssetIdentifier('SN-AB 12')).toEqual({ imei: null, serialNo: 'SN-AB 12' })
     expect(splitAssetIdentifier('  ')).toEqual({ imei: null, serialNo: null })
+  })
+
+  it('ค่าที่ดูเป็น IMEI แต่รูปแบบผิด = ไม่ยอมรับ (schema ปฏิเสธ ไม่ตัดทิ้งเงียบ ๆ)', () => {
+    expect(isAcceptableAssetIdentifier('35693803564380')).toBe(false)
+    expect(isAcceptableAssetIdentifier('3569380356438090')).toBe(false)
+    expect(isAcceptableAssetIdentifier('356938035643809/01')).toBe(false)
+    expect(isAcceptableAssetIdentifier('35-693803-564380-9')).toBe(true)
+    expect(isAcceptableAssetIdentifier('DMPX1234ABCD')).toBe(true)
+    expect(isAcceptableAssetIdentifier(null)).toBe(true)
+    expect(isAcceptableAssetIdentifier('')).toBe(true)
+    const rejected = caseCreateSchema.safeParse({ caseRef: 'HC-1', financeCompanyId: COMPANY_UUID, assetImeiSerial: '35693803564380' })
+    expect(rejected.success).toBe(false)
+    expect(rejected.error?.issues[0]?.path).toEqual(['assetImeiSerial'])
+    const accepted = caseCreateSchema.safeParse({ caseRef: 'HC-1', financeCompanyId: COMPANY_UUID, assetImeiSerial: '35 693803 564380 9' })
+    expect(accepted.success).toBe(true)
   })
 
   it('join คืนค่าเดิมที่ผู้ใช้กรอก', () => {

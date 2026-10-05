@@ -11,8 +11,9 @@ import { assetIntakeRejectedMessage, lotConfirmedMessage } from '@/lib/notificat
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import { WarehouseError } from '@/lib/warehouse/errors'
+import { isTeamScopedViewer } from '@/lib/warehouse/permissions'
 import type { HandoverParty } from '@/lib/warehouse/handover-doc'
-import { compareAssetIdentity } from '@/lib/warehouse/imei'
+import { compareAssetIdentity, imeiSearchKey } from '@/lib/warehouse/imei'
 import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
 import { assertIntakeCondition, assertRejectReason, imeiMismatchWarning } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
@@ -228,6 +229,14 @@ const lotSelect = {
 
 type LotRow = Prisma.HandoverLotGetPayload<{ select: typeof lotSelect }>
 
+/** `lotSelect` ที่นับจำนวนเครื่องเฉพาะที่ผู้ใช้มองเห็น — global ได้ตัวเลขเท่าเดิม · ทีมไม่เห็นยอดของทีมอื่น */
+function lotSelectFor(user: SessionUser) {
+  return {
+    ...lotSelect,
+    _count: { select: { assets: { where: { deletedAt: null, ...assetScopeWhere(user) } } } },
+  } satisfies Prisma.HandoverLotSelect
+}
+
 function toLotSummary(row: LotRow): LotSummaryDto {
   return {
     id: row.id,
@@ -298,9 +307,9 @@ export async function listAssets(user: SessionUser, query: AssetListQuery): Prom
               OR: [
                 { caseRef: { contains: query.search, mode: 'insensitive' } },
                 { debtorName: { contains: query.search, mode: 'insensitive' } },
-                // IMEI ค้นแบบ exact เท่านั้น (`44` §6.5 — ห้าม fuzzy)
-                { imeiContract: query.search },
-                { imeiActual: query.search },
+                // IMEI ค้นแบบ exact เท่านั้น (`44` §6.5 — ห้าม fuzzy) · คำค้นมีตัวคั่นได้ (มติ PO U24)
+                { imeiContract: imeiSearchKey(query.search) },
+                { imeiActual: imeiSearchKey(query.search) },
               ],
             }),
       },
@@ -339,7 +348,8 @@ async function loadAsset(user: SessionUser, assetId: string): Promise<AssetRow> 
 
 export async function getAsset(user: SessionUser, assetId: string): Promise<AssetDetailDto> {
   const row = await loadAsset(user, assetId)
-  const lotRow = row.lotId === null ? null : await prisma.handoverLot.findUnique({ where: { id: row.lotId }, select: lotSelect })
+  const lotRow =
+    row.lotId === null ? null : await prisma.handoverLot.findUnique({ where: { id: row.lotId }, select: lotSelectFor(user) })
   const detail = toAssetDetail(row, lotRow === null ? null : toLotSummary(lotRow))
   if (!isCompanySideViewer(user)) return detail
   // `97` §6.1 — ฝั่งบริษัทไม่เห็นชื่อคนตีกลับ/เหตุผลภายในเช่นกัน
@@ -556,8 +566,8 @@ export async function listLots(user: SessionUser, query: LotListQuery): Promise<
                       OR: [
                         { caseRef: { contains: query.search, mode: 'insensitive' } },
                         { debtorName: { contains: query.search, mode: 'insensitive' } },
-                        { imeiContract: query.search },
-                        { imeiActual: query.search },
+                        { imeiContract: imeiSearchKey(query.search) },
+                        { imeiActual: imeiSearchKey(query.search) },
                         { serialContract: query.search },
                         { serialActual: query.search },
                       ],
@@ -573,7 +583,7 @@ export async function listLots(user: SessionUser, query: LotListQuery): Promise<
   const [rows, total] = await Promise.all([
     prisma.handoverLot.findMany({
       where,
-      select: lotSelect,
+      select: lotSelectFor(user),
       orderBy: [{ createdAt: 'desc' }],
       skip: (query.page - 1) * query.limit,
       take: query.limit,
@@ -587,7 +597,7 @@ export async function listLots(user: SessionUser, query: LotListQuery): Promise<
 async function loadLot(user: SessionUser, lotId: string): Promise<LotRow> {
   const row = await prisma.handoverLot.findFirst({
     where: { id: lotId, organizationId: user.organizationId, deletedAt: null, ...lotScopeWhere(user) },
-    select: lotSelect,
+    select: lotSelectFor(user),
   })
   if (row === null) throw new WarehouseError('LOT_NOT_FOUND')
   return row
@@ -595,12 +605,15 @@ async function loadLot(user: SessionUser, lotId: string): Promise<LotRow> {
 
 export async function getLot(user: SessionUser, lotId: string): Promise<LotDetailDto> {
   const row = await loadLot(user, lotId)
+  // เครื่องในล็อตกรองด้วย scope ซ้ำ — ผู้จัดการ/หัวหน้าทีมเห็นเฉพาะเครื่องของทีมตัวเอง (มติ PO U22)
   const assets = await prisma.asset.findMany({
-    where: { lotId, organizationId: user.organizationId, deletedAt: null },
+    where: { lotId, organizationId: user.organizationId, deletedAt: null, ...assetScopeWhere(user) },
     select: assetSelect,
     orderBy: [{ caseRef: 'asc' }],
   })
-  return toLotDetail(row, assets.map((asset) => assetItemFor(user, asset)))
+  const detail = toLotDetail(row, assets.map((asset) => assetItemFor(user, asset)))
+  // ใบเซ็นรับ/หลักฐานจัดส่งเป็นเอกสารทั้งล็อต (มีเครื่องทีมอื่นปน) ⇒ scope ทีมไม่เห็นไฟล์ (ตรงกับ `authorizeDownload()`)
+  return isTeamScopedViewer(user) ? { ...detail, signedDocUrl: null, deliveryProofUrl: null } : detail
 }
 
 // ── POST /api/handover-lots (`44` §6.2 · §9.2) ──────────────────────────────

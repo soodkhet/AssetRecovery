@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { satangSchema } from '@/lib/api/validation'
-import { DEBTOR_NATIONALITIES, DOCUMENT_MODES, DOCUMENT_SLOTS } from '@/lib/cases/case'
+import { DEBTOR_NATIONALITIES, DOCUMENT_MODES, DOCUMENT_SLOTS, isAcceptableAssetIdentifier } from '@/lib/cases/case'
+import { IMEI_FORMAT_MESSAGE } from '@/lib/warehouse/imei'
 import { CASE_STATUS_ACTIONS, CASE_STATUSES } from '@/lib/cases/state-machine'
 
 /**
@@ -69,8 +70,13 @@ export const caseCreateSchema = z.object({
 
   assetType: z.enum(['smartphone', 'tablet']).nullable().optional(),
   assetBrandModel: optionalText(255),
-  /** ช่องเดียวบนฟอร์ม — 15 หลักตัวเลข = IMEI นอกนั้นเป็น serial (`splitAssetIdentifier()`) */
-  assetImeiSerial: optionalText(100),
+  /**
+   * ช่องเดียวบนฟอร์ม — ไม่มีตัวอักษร = IMEI (ตัดช่องว่าง/ขีด/จุดได้ ต้องเหลือ 15 หลักพอดี · มติ PO U24)
+   * มีตัวอักษร = serial · แยกคอลัมน์ที่ `splitAssetIdentifier()`
+   */
+  assetImeiSerial: optionalText(100).refine((value) => isAcceptableAssetIdentifier(value), {
+    message: IMEI_FORMAT_MESSAGE,
+  }),
   /** มูลหนี้คงเหลือ — **สตางค์** (Rule 01) FE แปลงจากบาทด้วย `parseBahtInput()` ก่อนส่ง */
   outstandingDebtSatang: satangSchema('มูลค่าหนี้คงเหลือ').nullable().optional(),
 

@@ -16,6 +16,7 @@
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ (header/Changelog + แยก Decisions/Open Items ชัดเจน) — **เนื้อหา business logic เดิมคงไว้ครบ 100% ไม่มีการเปลี่ยนแปลง** |
 | v2.1 | 14/08/2569 | §12 เพิ่ม 3 code ที่ตารางเดิมตกหล่น (`ASSET_NOT_FOUND`, `ASSET_INVALID_STATUS`, `LOT_NOT_FOUND`) — code ระดับ "ไม่พบ/สถานะไม่ตรง" ที่ทุก endpoint ของ §15 ต้องใช้ ลงพร้อม implementation Phase 2.13 ตาม Rule 04 (doc + code คอมมิตเดียวกัน) · **business logic เดิมไม่เปลี่ยน** |
 | v2.2 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · หนี้ #1) — แทนที่ "แนบใหม่ = ทับ" ของ §6.4 เดิม**: เอกสารล็อตใช้ path **ต่อเวอร์ชัน** `handover-lots/{lotId}/signed-doc/{uuid}.{ext}` / `handover-lots/{lotId}/delivery-proof/{uuid}.{ext}` (อัปโหลดแบบไม่ทับ — ไฟล์เดิมคงอยู่ให้ตามรอย) + ผูกเข้าล็อตผ่าน `POST /api/handover-lots/:id/documents` (§15) ที่ตรวจว่าล็อตยังไม่ `confirmed` แล้ว server ตรวจไฟล์เอง (มีจริง · path ใต้ล็อต/ชนิดนั้น · PDF/รูปจาก magic bytes · ≤ 10 MB) และเก็บ `signed_doc_hash`/`delivery_proof_hash` · `PATCH …/confirm` ที่ส่ง url ที่ยังไม่ผ่านการตรวจ (หรือไฟล์ที่แนบก่อนมติ) ถูกตรวจแบบเดียวกันก่อนยืนยัน · รูปรับเข้าคลัง (§8.2) ตรวจแบบเดียวกันใต้ `assets/{assetId}/intake/` แล้วเก็บ `assets.photo_hashes` · error `UPLOAD_*` อยู่ `24` §6.3 |
+| v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U22–U24)**: (U22 · BUG-076) §5/§13 ผู้จัดการทีม/หัวหน้าทีม **อ่านคลังอย่างเดียว** เฉพาะทรัพย์ของเคสในทีมที่ตนดูแล (`team_managers` / ทีมของหัวหน้า — `06` §7.2 "✅ (read)") ผ่าน `intake_asset` ระดับ `view` · ทีมอื่นไม่เห็น (list กรอง · detail ตอบ `ASSET_NOT_FOUND`/`LOT_NOT_FOUND`) · ล็อตเห็นเฉพาะเครื่องของทีมตัวเอง ไม่เห็นไฟล์ทั้งล็อตและ export ไม่ได้ · ค่าเริ่มต้นไม่ให้สิทธิ์รับเข้า/ตีกลับกับผู้จัดการทีม (มอบเพิ่มได้ที่ตั้งค่าสิทธิ์) · (U23 · BUG-084) §13 Export Excel/PDF เพิ่ม **บริหาร** (อ่านอย่างเดียว ไม่แก้ล็อต) · (U24 · BUG-078) §6.5/§10/§18 IMEI รับเข้า = ตัดเฉพาะตัวคั่น ช่องว่าง/ขีด/จุด ทุกตำแหน่ง แล้วต้องเหลือตัวเลขล้วน 15 หลักพอดี — มีอักขระอื่นหรือไม่ครบ/เกิน = ปฏิเสธว่ารูปแบบผิด (ไม่ตัดทิ้งเงียบ ๆ) · เก็บเป็นตัวเลข 15 หลักล้วน · เทียบ exact ทุกหลัก ไม่ fuzzy ไม่ตรวจ Luhn (แทนข้อความเดิม "ห้าม trim, ห้าม ignore dash") |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -53,7 +54,7 @@
 | Actor / Role | Responsibility | Scope |
 |---|---|---|
 | ธุรการ / Admin | รับเครื่องเข้าคลัง, ตรวจ IMEI, ถ่ายรูป, ตีกลับ, สร้าง Lot, นัดวัน, แนบเอกสาร, ยืนยัน | Warehouse scope |
-| ผู้จัดการทีม / Supervisor | ตรวจสอบกรณี IMEI ไม่ตรง | Team scope |
+| ผู้จัดการทีม / Supervisor | ตรวจสอบกรณี IMEI ไม่ตรง · ดูคลังอย่างเดียวเฉพาะทรัพย์ของเคสในทีมตัวเอง (มติ PO U22) | Team scope — Read-only |
 | การเงิน / Finance | ดู asset status ประกอบการอนุมัติ expense | Read-only |
 | บัญชี / Accounting | ดู Lot confirmed ประกอบการลงบัญชี | Read-only |
 | Executive | ดูภาพรวม Warehouse Summary | Read-only |
@@ -94,7 +95,8 @@ Asset เกิดขึ้นอัตโนมัติเมื่อ Case �
 - **ผูกเข้าล็อตผ่าน API เท่านั้น** (`POST /api/handover-lots/:id/documents`): ตรวจว่าล็อตยังไม่ `confirmed` · server ดาวน์โหลดไฟล์มาตรวจเอง (มีจริง · path ใต้ล็อต/ชนิด · PDF หรือรูปจาก magic bytes · ≤ 10 MB) · เก็บ SHA-256 ที่ server คำนวณ (`signed_doc_hash` / `delivery_proof_hash`) — hash ที่ browser ส่งมาใช้เทียบเท่านั้น ไม่ตรง = ปฏิเสธ
 
 ### 6.5 IMEI Validation
-- เปรียบเทียบ `imei_actual` กับ `imei_contract` แบบ **exact match 15 หลัก**
+- **รูปแบบตอนรับค่า (มติ PO 05/10/2569 U24)**: ทุกช่องทางที่รับ IMEI (ส่งเคส/นำเข้าไฟล์/API/รับเข้าคลัง) ตัด**เฉพาะตัวคั่น** ช่องว่าง / ขีด (`-`) / จุด (`.`) ทุกตำแหน่ง แล้วต้องเหลือ **ตัวเลขล้วน 15 หลักพอดี** — มีตัวอักษรหรืออักขระอื่น หรือไม่ครบ/เกิน 15 หลัก = **ปฏิเสธ** ว่ารูปแบบไม่ถูกต้อง (ห้ามตัดทิ้งเงียบ ๆ) · ไม่ตรวจ Luhn · DB เก็บเป็นตัวเลข 15 หลักล้วนเสมอ
+- เปรียบเทียบ `imei_actual` กับ `imei_contract` (ค่าที่ผ่านรูปแบบข้างบนแล้ว) แบบ **exact match ทุกหลัก**
 - ห้าม fuzzy match เด็ดขาด — IMEI ที่ต่างกัน 1 หลักถือว่าไม่ตรง
 - ถ้าไม่ตรง: แสดงค่าทั้งสองเคียงกันให้ธุรการเปรียบเทียบ และแนะนำให้ตีกลับ
 
@@ -375,7 +377,7 @@ stateDiagram-v2
 
 | Rule | Detail |
 |---|---|
-| IMEI Exact Match | เปรียบเทียบ 15 หลักตรงกันเป๊ะ — ห้าม trim, ห้าม ignore dash |
+| IMEI Exact Match | ตัดเฉพาะช่องว่าง/ขีด/จุด แล้วต้องเหลือตัวเลข 15 หลักพอดี (ไม่งั้นปฏิเสธว่ารูปแบบผิด — มติ PO U24) · เปรียบเทียบ 15 หลักตรงกันเป๊ะ ห้าม fuzzy |
 | Reject Requires Reason | reject_reason บังคับ ห้าม null/empty string |
 | Condition Note | บังคับถ้า condition = damaged หรือ partial_loss |
 | Lot Must Have Assets | ห้ามสร้าง Lot ที่ asset_ids ว่าง (EMPTY_LOT) |
@@ -453,12 +455,15 @@ WHEN HandoverLot.status → confirmed:
 | Capability | Roles ที่ทำได้ | Notes |
 |---|---|---|
 | ดูทุกรายการ | Superadmin, Executive, การเงิน, บัญชี | Read-only |
-| รับเครื่องเข้าคลัง | ธุรการ, ผู้จัดการทีม | — |
-| ตีกลับ IMEI ไม่ตรง | ธุรการ, ผู้จัดการทีม | บังคับกรอก reason |
+| ดูทรัพย์ของเคสในทีมตัวเอง | ผู้จัดการทีม, หัวหน้าทีม (ทั้ง in-house/outsource) | Read-only · team scope (`team_managers` / ทีมของหัวหน้า) — ทีมอื่นไม่เห็น · ล็อตเห็นเฉพาะเครื่องของทีม ไม่เห็นไฟล์ทั้งล็อต · ไม่มีปุ่มแก้ไข (มติ PO U22) |
+| รับเครื่องเข้าคลัง | ธุรการ, ผู้จัดการทีม¹ | — |
+| ตีกลับ IMEI ไม่ตรง | ธุรการ, ผู้จัดการทีม¹ | บังคับกรอก reason |
 | สร้าง Lot / นัดวัน | ธุรการ | — |
 | แนบเอกสาร / ยืนยัน Lot | ธุรการ | — |
 | ดูสถานะ Asset บริษัทตัวเอง | Company User (ไฟล์ 10) | company_id scope เท่านั้น |
-| Export Excel / PDF | ธุรการ, การเงิน, บัญชี | — |
+| Export Excel / PDF | ธุรการ, การเงิน, บัญชี, บริหาร | บริหาร = อ่านอย่างเดียว ไม่แก้ล็อต (มติ PO U23) · ผู้จัดการ/หัวหน้าทีมไม่มีสิทธิ์ (ใบส่งมอบมีเครื่องของทีมอื่นปน) |
+
+> ¹ ค่าเริ่มต้นของระบบ**ไม่ให้**สิทธิ์รับเข้า/ตีกลับกับผู้จัดการทีม (ธุรการเป็นผู้ทำงานคลัง — มติ PO 03/10/2569 UAT Q1 · และ U22 ให้ผู้จัดการ/หัวหน้าทีม "อ่านอย่างเดียว") — Superadmin มอบเพิ่มได้ที่หน้าตั้งค่าสิทธิ์
 
 ---
 
@@ -634,7 +639,7 @@ limit?:     number
 
 - **Module นี้แทนที่ flag หยาบ `pending_warehouse_confirm`** (ไฟล์ 41 §6.6) ด้วย state machine เต็มรูปแบบ เชื่อม 3 module: expense (ไฟล์ 15), Revenue (ไฟล์ 19), Case (ไฟล์ 38) (§2)
 - **1 Lot = 1 Company เท่านั้น** ทุก Asset ใน Lot ต้องมี `company_id` เดียวกัน — ห้ามสร้าง Lot ที่ asset_ids ว่าง (§10)
-- **IMEI ต้อง exact match 15 หลัก** ห้าม trim หรือ ignore dash (§10)
+- **IMEI ต้อง exact match 15 หลัก** — ตอนรับค่าตัดได้เฉพาะช่องว่าง/ขีด/จุด แล้วต้องเหลือตัวเลข 15 หลักพอดี ไม่งั้นปฏิเสธ · ห้าม fuzzy (§6.5 · §10 · มติ PO U24)
 - **Lot ที่ confirmed แล้วเป็น terminal state** ห้ามแก้ไข/เพิ่ม/ลด Asset ใน Lot อีก — `lot_number`/`doc_ref` ออกครั้งเดียว ไม่ recycle (§10)
 - **การ confirm Lot ต้องมีเอกสารครบ**: `signed_doc_url` บังคับทุกประเภท, `delivery_proof_url` บังคับเฉพาะ `we_deliver` (§10)
 - **เมื่อ Lot confirmed ทั้งหมดเกิดใน Prisma `$transaction` เดียว** — ถ้า step ใด fail ต้อง rollback ทั้งหมด: (1) asset → `handed_over` (2) expense → `pending_approval` (3) audit log (4) trigger `RevenueService.tryCreateRevenue()` (§11)

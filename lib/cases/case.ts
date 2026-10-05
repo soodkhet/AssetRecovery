@@ -1,4 +1,5 @@
 import { CaseError } from '@/lib/cases/errors'
+import { isImeiLikeIdentifier, parseImei } from '@/lib/warehouse/imei'
 
 /**
  * กติกาข้อมูลของโมดูลรับเคส (ไฟล์ 38 §6, §11, §12) — **pure ล้วน ใช้ร่วม FE/BE**
@@ -390,13 +391,29 @@ export function readinessGapText(payload: Readonly<Record<string, unknown>> | un
 
 /**
  * ฟอร์มมีช่องเดียว ("IMEI หรือ Serial Number") แต่ DB แยก 2 คอลัมน์ตามมติ A6:
- * ตัวเลข **15 หลักพอดี** = IMEI (exact match ห้าม fuzzy — `44` §6.5) นอกนั้นถือเป็น serial
+ * - **ไม่มีตัวอักษรเลย** = IMEI ⇒ normalize ด้วย `parseImei()` (ตัดช่องว่าง/ขีด/จุด → ตัวเลข 15 หลักพอดี ·
+ *   มติ PO U24) แล้วเก็บเป็นตัวเลขล้วน · รูปแบบผิดถูก schema (`caseCreateSchema`) ปฏิเสธไปก่อนแล้ว
+ * - มีตัวอักษร = serial (เก็บตามที่กรอก ตัดแค่ช่องว่างหัวท้าย)
  */
 export function splitAssetIdentifier(value: string | null | undefined): { imei: string | null; serialNo: string | null } {
   const trimmed = value?.trim() ?? ''
   if (trimmed === '') return { imei: null, serialNo: null }
-  if (trimmed.length === 15 && DIGITS_ONLY.test(trimmed)) return { imei: trimmed, serialNo: null }
+  if (isImeiLikeIdentifier(trimmed)) {
+    const imei = parseImei(trimmed)
+    // ไม่ควรเกิด (schema กันไว้แล้ว) — ถ้าหลุดมาก็ห้ามตัดทิ้งเงียบ ๆ: เก็บค่าดิบเป็น serial ให้ตามสอบได้
+    return imei === null ? { imei: null, serialNo: trimmed } : { imei, serialNo: null }
+  }
   return { imei: null, serialNo: trimmed }
+}
+
+/**
+ * ค่าในช่อง "IMEI หรือ Serial" ใช้ได้ไหม — ว่าง/มีตัวอักษร (serial) ผ่าน · ไม่มีตัวอักษร = ต้องเป็น IMEI
+ * ที่ถูกรูปแบบ (`parseImei()`) — ใช้ใน Zod ร่วม FE/BE (ฟอร์ม + นำเข้าไฟล์ + API)
+ */
+export function isAcceptableAssetIdentifier(value: string | null | undefined): boolean {
+  const trimmed = value?.trim() ?? ''
+  if (trimmed === '' || !isImeiLikeIdentifier(trimmed)) return true
+  return parseImei(trimmed) !== null
 }
 
 /** ค่ากลับทางของ `splitAssetIdentifier()` — ใช้ตอนส่ง DTO กลับให้ฟอร์ม */

@@ -800,7 +800,7 @@
 | 519 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 534 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/44-asset-custody-handover.md` (37 KB, 641 บรรทัด)
+### `docs/44-asset-custody-handover.md` (46 KB, 653 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -808,42 +808,42 @@
 | 3 | # 44 — Asset Custody & Handover (คลังสินค้าและการส่งมอบทรัพย์คืน) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 24 | ## 1. Summary |
-| 27 | ## 2. Purpose |
-| 33 | ## 3. In Scope |
-| 41 | ## 4. Out of Scope |
-| 49 | ## 5. Actors & Responsibilities |
-| 62 | ## 6. Core Concepts |
-| 64 | ### 6.1 Asset (ทรัพย์ที่ยึดคืน) |
-| 69 | ### 6.2 HandoverLot (ล็อตส่งมอบ) |
-| 78 | ### 6.3 รูปแบบการส่งมอบ (HandoverType) |
-| 87 | ### 6.4 เอกสาร |
-| 93 | ### 6.5 IMEI Validation |
-| 100 | ## 7. Data Entities / Required Objects |
-| 102 | ### 7.1 Asset |
-| 136 | ### 7.2 HandoverLot |
-| 170 | ## 8. UI / UX Rules (อ้างอิง warehouse.html) |
-| 172 | ### 8.1 โครงสร้างหน้า |
-| 183 | ### 8.2 แท็บ "รับเข้าคลัง" |
-| 226 | ### 8.3 แท็บ "ในคลัง" |
-| 265 | ### 8.4 แท็บ "รอส่งมอบ" |
-| 290 | ### 8.5 แท็บ "ส่งมอบแล้ว" |
-| 309 | ## 9. Workflow / State Machines |
-| 311 | ### 9.1 Asset Status Flow |
-| 333 | ### 9.2 HandoverLot Status Flow |
-| 360 | ### 9.3 สรุป Draft / Confirmed ใน UI |
-| 370 | ## 10. Security / Control Rules |
-| 387 | ## 11. ผลกระทบต่อ Module อื่นเมื่อ Lot.status = confirmed |
-| 425 | ## 12. Validation & Error Handling |
-| 444 | ## 13. Permission Requirements |
-| 458 | ## 14. Audit Log Requirements |
-| 475 | ## 15. API Endpoints |
-| 477 | ### Assets |
-| 517 | ### HandoverLots |
-| 587 | ## 16. Acceptance Criteria |
-| 603 | ## 17. Test Cases |
-| 625 | ## 18. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 636 | ## 19. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 27 | ## 1. Summary |
+| 30 | ## 2. Purpose |
+| 36 | ## 3. In Scope |
+| 44 | ## 4. Out of Scope |
+| 52 | ## 5. Actors & Responsibilities |
+| 65 | ## 6. Core Concepts |
+| 67 | ### 6.1 Asset (ทรัพย์ที่ยึดคืน) |
+| 72 | ### 6.2 HandoverLot (ล็อตส่งมอบ) |
+| 81 | ### 6.3 รูปแบบการส่งมอบ (HandoverType) |
+| 90 | ### 6.4 เอกสาร |
+| 97 | ### 6.5 IMEI Validation |
+| 105 | ## 7. Data Entities / Required Objects |
+| 107 | ### 7.1 Asset |
+| 141 | ### 7.2 HandoverLot |
+| 176 | ## 8. UI / UX Rules (อ้างอิง warehouse.html) |
+| 178 | ### 8.1 โครงสร้างหน้า |
+| 189 | ### 8.2 แท็บ "รับเข้าคลัง" |
+| 232 | ### 8.3 แท็บ "ในคลัง" |
+| 271 | ### 8.4 แท็บ "รอส่งมอบ" |
+| 296 | ### 8.5 แท็บ "ส่งมอบแล้ว" |
+| 315 | ## 9. Workflow / State Machines |
+| 317 | ### 9.1 Asset Status Flow |
+| 339 | ### 9.2 HandoverLot Status Flow |
+| 366 | ### 9.3 สรุป Draft / Confirmed ใน UI |
+| 376 | ## 10. Security / Control Rules |
+| 393 | ## 11. ผลกระทบต่อ Module อื่นเมื่อ Lot.status = confirmed |
+| 431 | ## 12. Validation & Error Handling |
+| 453 | ## 13. Permission Requirements |
+| 470 | ## 14. Audit Log Requirements |
+| 487 | ## 15. API Endpoints |
+| 489 | ### Assets |
+| 529 | ### HandoverLots |
+| 600 | ## 16. Acceptance Criteria |
+| 616 | ## 17. Test Cases |
+| 638 | ## 18. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 649 | ## 19. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/45-case-warehouse-api-contracts.md` (15 KB, 151 บรรทัด)
 
