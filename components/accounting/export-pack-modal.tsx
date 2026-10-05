@@ -130,7 +130,9 @@ export function ExportPackModal({
             ))}
           </div>
           <div className="mt-3 text-[10px] text-slate-400">
-            + หน้าปกชุดเอกสาร (00_Cover_Sheet.pdf) พร้อมค่า SHA-256 · สำเนา PDF ใบกำกับภาษีของรอบในโฟลเดอร์ tax_invoices/
+            + หน้าปกชุดเอกสาร (00_Cover_Sheet.pdf) พร้อมค่า SHA-256 และยอดรวมควบคุม · สำเนา PDF ของรอบในโฟลเดอร์
+            tax_invoices/ (ใบเสร็จรับเงิน/ใบกำกับภาษี) · wht_certificates/ (50 ทวิ) · vouchers/ (ใบสำคัญจ่าย/สลิป) ·
+            billing_invoices/ (ใบแจ้งหนี้)
           </div>
         </div>
 

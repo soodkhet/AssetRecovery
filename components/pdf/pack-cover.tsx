@@ -7,14 +7,15 @@ import type { PackCoverDoc } from '@/lib/exports/pack'
 /**
  * **หน้าปกชุดเอกสารบัญชี (Accounting Pack Cover Sheet)** — ไฟล์แรกใน `.zip` ของไฟล์ 37
  * เลย์เอาต์เทียบ `reference/samples/07_accounting_pack_cover.pdf`: หัวกระดาษ → ข้อมูลรอบ/เวอร์ชัน/
- * ผู้จัดทำ/SHA-256 → ตาราง Readiness Check → ตารางรายชื่อไฟล์ในชุด → ช่องลายมือชื่อ 2 ช่อง
+ * ผู้จัดทำ/SHA-256 → ตาราง Readiness Check → ตารางรายชื่อไฟล์ในชุด (+ จำนวนแถว) → ยอดรวมควบคุม (มติ U94 ข้อ 4) → ช่องลายมือชื่อ 2 ช่อง
  *
  * ⚠️ เป็น **เอกสารภายใน** (`28` §6.1) — ไม่ใช่เอกสารทางภาษี
  * ⚠️ ข้อความทุกช่องประกอบมาแล้วจาก `buildPackCoverDoc()` (pure) — component นี้ห้าม format เอง (Rule 01)
  */
 
 const CHECK_COLUMNS = ['76%', '24%'] as const
-const FILE_COLUMNS = ['34%', '66%'] as const
+const FILE_COLUMNS = ['30%', '58%', '12%'] as const
+const TOTAL_COLUMNS = ['70%', '30%'] as const
 
 export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
   return (
@@ -29,7 +30,7 @@ export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
           <MetaCell label="วันที่จัดทำ" value={doc.generatedAtLabel} />
         </View>
         <Text style={[docStyles.metaText, { marginBottom: 14 }]}>
-          <Text style={docStyles.metaLabel}>SHA-256 (ไฟล์ข้อมูล 01–14): </Text>
+          <Text style={docStyles.metaLabel}>SHA-256 (ไฟล์ข้อมูล {doc.fileRangeLabel}): </Text>
           {doc.contentDigest}
         </Text>
 
@@ -54,17 +55,40 @@ export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
           <View style={docStyles.tableHeader}>
             <Text style={[docStyles.th, { width: FILE_COLUMNS[0] }]}>ไฟล์</Text>
             <Text style={[docStyles.th, { width: FILE_COLUMNS[1] }]}>เนื้อหา</Text>
+            <Text style={[docStyles.th, { width: FILE_COLUMNS[2], textAlign: 'right' }]}>จำนวนแถว</Text>
           </View>
           {doc.files.map((file) => (
             <View key={file.fileName} style={docStyles.tableRow} wrap={false}>
               <Text style={[docStyles.td, { width: FILE_COLUMNS[0] }]}>{file.fileName}</Text>
               <Text style={[docStyles.td, { width: FILE_COLUMNS[1] }]}>{file.description}</Text>
+              <Text style={[docStyles.td, { width: FILE_COLUMNS[2], textAlign: 'right' }]}>{file.rowCountText}</Text>
             </View>
           ))}
         </View>
+        <Text style={[docStyles.noteText, { marginBottom: 10 }]}>{doc.attachmentNote}</Text>
+
+        {doc.totals.length > 0 ? (
+          <>
+            <Text style={[docStyles.metaText, { fontWeight: 700, marginBottom: 4 }]}>
+              ยอดรวมควบคุม (รายละเอียดต่อไฟล์ใน 00_Control_Totals.csv)
+            </Text>
+            <View style={docStyles.table}>
+              <View style={docStyles.tableHeader}>
+                <Text style={[docStyles.th, { width: TOTAL_COLUMNS[0] }]}>รายการ</Text>
+                <Text style={[docStyles.th, { width: TOTAL_COLUMNS[1], textAlign: 'right' }]}>จำนวนเงิน (บาท)</Text>
+              </View>
+              {doc.totals.map((line) => (
+                <View key={line.label} style={docStyles.tableRow} wrap={false}>
+                  <Text style={[docStyles.td, { width: TOTAL_COLUMNS[0] }]}>{line.label}</Text>
+                  <Text style={[docStyles.td, { width: TOTAL_COLUMNS[1], textAlign: 'right' }]}>{line.amountText}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <Text style={docStyles.noteText}>
-          หมายเหตุ: ตรวจความถูกต้องของชุดเอกสารได้จากค่า SHA-256 ด้านบน (คำนวณจากเนื้อไฟล์ 01–14 ในชุดนี้) ·
+          หมายเหตุ: ตรวจความถูกต้องของชุดเอกสารได้จากค่า SHA-256 ด้านบน (คำนวณจากเนื้อไฟล์ {doc.fileRangeLabel} ในชุดนี้) ·
           ค่า SHA-256 ของไฟล์ .zip ทั้งชุดดูได้ที่หน้าประวัติการส่งมอบในระบบ
         </Text>
 

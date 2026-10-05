@@ -3,11 +3,13 @@ import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
+import { fmtSatang } from '@/lib/format/money'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import type {
   BankMatchStatus,
   ExceptionLevel,
   ExceptionStatus,
+  ExpenseStatus,
   ExportRecordStatus,
   WhtCondition,
   WhtFilingForm,
@@ -17,7 +19,7 @@ import type {
  * Accounting Pack (ไฟล์ 37) — **ตัวประกอบไฟล์ทั้งชุด แบบ pure ล้วน**
  *
  * ### กติกาที่ห้ามหลุด
- * - **รายชื่อไฟล์ 01–09 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
+ * - **รายชื่อไฟล์ 00–16 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
  *   · หัวคอลัมน์ของทุกไฟล์ต้องตรง `reference/samples/01–09` เป๊ะ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ)
  *   · `09_Credit_Notes.csv` เพิ่มตามมติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ · ไฟล์ 01–08 ไม่เปลี่ยน
  *   · `10_Customer_WHT.csv` (U40 — 50 ทวิ ที่ลูกค้าหักเรา) + `11_Suspense_Receipts.csv` (U41 — เงินรับรอตรวจสอบ)
@@ -26,6 +28,10 @@ import type {
  *     + `13_Advance_Returns.csv` (U68 — รับคืนเงินทดรอง หักกลบ/รับแยก) เพิ่มตามมติ PO 05/10/2569 · ไฟล์ 01–11 ไม่เปลี่ยน
  *   · `14_Unbilled_Revenue.csv` (U87 — รายได้ที่รับรู้แล้วแต่ยังไม่ได้วางบิล ณ เวลาสร้างชุด ให้สำนักงานบัญชีบันทึก
  *     รายได้ค้างรับ) เพิ่มตามมติ PO 06/10/2569 · ไฟล์ 01–13 ไม่เปลี่ยน
+ *   · มติ PO 06/10/2569 (U94 ข้อ 2–5 · U96 #15): `00_Control_Totals.csv` (ยอดรวมควบคุม — ไฟล์แรกของชุด) +
+ *     `15_Accrued_Expenses.csv` (ค่าใช้จ่ายค้างจ่าย) + `16_Advance_Balance.csv` (เงินทดรองยกมา/เคลื่อนไหว/คงเหลือ)
+ *     ⇒ ชุดเป็น 00–16 (17 ไฟล์) · `03` ต่อท้ายคอลัมน์หลักฐานรายจ่าย · `09` ต่อท้าย `company_tax_id`
+ *     · zip มีโฟลเดอร์ PDF `tax_invoices/` `wht_certificates/` `vouchers/` `billing_invoices/` ใช้เพดานร่วมกัน
  * - `05_WHT_Data.csv` — `payee_tax_id` เป็น **ตัวเลข 13 หลักล้วน** (DEC-006/D10) ⇒ payee ที่ยังไม่กรอก
  *   เลขประจำตัวผู้เสียภาษีต้องหยุดตั้งแต่ต้น (`assertPayeeTaxIdsComplete()`) ไม่ใช่ปล่อยช่องว่างไปถึง
  *   สำนักงานบัญชี
@@ -99,20 +105,23 @@ export interface PackFile {
 }
 
 export const PACK_FILES: readonly PackFile[] = [
+  { no: '00', fileName: '00_Control_Totals.csv', kind: 'csv', description: 'ยอดรวมควบคุม — จำนวนแถว + ยอดรวมคอลัมน์เงินหลักของทุกไฟล์ และยอดสรุปของงวด (ภาพ ณ เวลาสร้างชุด)', sourceDoc: '37' },
   { no: '01', fileName: '01_Revenue.csv', kind: 'csv', description: 'รายการรายได้ — company, case_ref, revenue_date, gross, vat_flag', sourceDoc: '19' },
   { no: '02', fileName: '02_Cash_Receipts.csv', kind: 'csv', description: 'รายการเงินรับ — receipt_date, payer, amount, bank_ref', sourceDoc: '31' },
-  { no: '03', fileName: '03_Expenses.csv', kind: 'csv', description: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท', sourceDoc: '32' },
-  { no: '04', fileName: '04_Payments.csv', kind: 'csv', description: 'รายการจ่ายเงินจริง', sourceDoc: '17' },
-  { no: '05', fileName: '05_WHT_Data.csv', kind: 'csv', description: 'ข้อมูลหัก ณ ที่จ่าย', sourceDoc: '33' },
+  { no: '03', fileName: '03_Expenses.csv', kind: 'csv', description: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท + หลักฐาน (expense_id, วันทำงาน, วันจ่าย, รอบจ่าย, ใบสำคัญจ่าย, เคส, ศูนย์ต้นทุน, ไฟล์ใบเสร็จ)', sourceDoc: '32' },
+  { no: '04', fileName: '04_Payments.csv', kind: 'csv', description: 'รายการจ่ายเงินจริง (+ ใบสำคัญจ่าย/สลิปค่าตอบแทน PDF ในโฟลเดอร์ vouchers/)', sourceDoc: '17' },
+  { no: '05', fileName: '05_WHT_Data.csv', kind: 'csv', description: 'ข้อมูลหัก ณ ที่จ่าย (+ PDF หนังสือรับรอง 50 ทวิ ในโฟลเดอร์ wht_certificates/)', sourceDoc: '33' },
   { no: '06', fileName: '06_Bank_Reconciliation.csv', kind: 'csv', description: 'ผลกระทบยอดธนาคาร', sourceDoc: '35' },
   { no: '07', fileName: '07_Adjustment_Log.csv', kind: 'csv', description: 'รายการปรับปรุงยอดทั้งหมดของรอบนั้น', sourceDoc: '20' },
   { no: '08', fileName: '08_Document_Checklist.xlsx', kind: 'xlsx', description: 'source_ref, doc_status, exception summary', sourceDoc: '34' },
-  { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat', sourceDoc: '31' },
+  { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat, company_tax_id', sourceDoc: '31' },
   { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
-  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบเสร็จรับเงิน/ใบกำกับภาษี (ออกตอนรับเงิน) และใบกำกับภาษีแบบเดิมที่ออก/ยกเลิกในรอบ ตามวันที่เอกสาร — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ, ชนิดเอกสาร, วันรับเงิน (+ PDF ในโฟลเดอร์ tax_invoices/)', sourceDoc: '31' },
+  { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบเสร็จรับเงิน/ใบกำกับภาษี (ออกตอนรับเงิน) และใบกำกับภาษีแบบเดิมที่ออก/ยกเลิกในรอบ ตามวันที่เอกสาร — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ, ชนิดเอกสาร, วันรับเงิน (+ PDF ในโฟลเดอร์ tax_invoices/ · ใบแจ้งหนี้ที่ส่งในรอบอยู่ใน billing_invoices/)', sourceDoc: '31' },
   { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status', sourceDoc: '15' },
   { no: '14', fileName: '14_Unbilled_Revenue.csv', kind: 'csv', description: 'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) — case_ref, company, delivered_date, before_vat, vat, total', sourceDoc: '19' },
+  { no: '15', fileName: '15_Accrued_Expenses.csv', kind: 'csv', description: 'ค่าตอบแทน/ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด (ภาพ ณ เวลาสร้างชุด) — expense_id, payee, status, gross, estimated_wht, payout_batch_ref', sourceDoc: '17' },
+  { no: '16', fileName: '16_Advance_Balance.csv', kind: 'csv', description: 'เงินทดรองต่อคน — ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs', sourceDoc: '15' },
 ]
 
 /** ชื่อไฟล์ตามเลขลำดับ — ผู้ประกอบชุดอ้างเลข ไม่ใช่ตำแหน่งใน array (`37` §6.1) */
@@ -123,8 +132,8 @@ export function packFileName(no: string): string {
 }
 
 /**
- * หน้าปกไม่อยู่ในรายชื่อ 9 ไฟล์ของ §6.1 — ตั้งเลข `00` เพื่อให้เรียงมาก่อนและไม่ไปแทรกเลข 01–09
- * (คีย์ `cover` ใน `file_urls` · ไม่ถูกนับใน `file_count`)
+ * หน้าปกไม่อยู่ในรายชื่อไฟล์ของ §6.1 — ตั้งชื่อ `00_Cover_Sheet.pdf` ให้เรียงมาก่อน (คีย์ `cover` ใน `file_urls` ·
+ * ไม่ถูกนับใน `file_count`) · ไฟล์ข้อมูลเลข `00` คือ `00_Control_Totals.csv` (มติ U94 ข้อ 4 — นับใน `file_count`)
  */
 export const PACK_COVER_KEY = 'cover'
 export const PACK_COVER_FILE_NAME = '00_Cover_Sheet.pdf'
@@ -244,6 +253,15 @@ export const EXPENSE_HEADERS = [
   // มติ PO 06/10/2569 (U96 #14) — ต่อท้ายสุด: ค่าที่พักใบเสร็จในนามบริษัท `Y`/`N` (ชนิดอื่นเว้นว่าง)
   // ให้สำนักงานบัญชีพิจารณาฐานหัก ณ ที่จ่ายของค่าที่พักที่ไม่ได้ออกในนามบริษัท — ระบบไม่เปลี่ยนสูตร WHT เอง
   'receipt_in_company_name',
+  // มติ PO 06/10/2569 (U96 #15) — หลักฐานรายจ่ายต่อท้าย **หลัง** `receipt_in_company_name` (คอลัมน์เดิม 6 ตัวไม่ย้าย)
+  'expense_id',
+  'work_date',
+  'payment_date',
+  'payout_batch_ref',
+  'voucher_ref',
+  'case_ref',
+  'cost_center',
+  'receipt_file',
 ] as const
 
 export interface ExpenseExportRow {
@@ -254,6 +272,23 @@ export interface ExpenseExportRow {
   netSatang: number
   /** ค่าที่พัก: ใบเสร็จออกในนามบริษัท · รายการชนิดอื่น = `null` (คอลัมน์ว่าง) */
   receiptInCompanyName: boolean | null
+  /**
+   * U96 #15 — `expenses.id` ของรายการเบิก · รายการเงินทดรองจ่าย (ไม่มีใบเบิก) = เลขอ้างอิง `ADV-…` ·
+   * ไม่ระบุ (ข้อมูลเก่าในเทสต์) = `-`
+   */
+  expenseId?: string | null
+  /** วันที่ทำงาน/วันที่รายการ (`expenses.expense_date`) — เงินทดรอง = `null` */
+  workDate?: Date | null
+  /** วันจ่ายจริงของรอบ (ตัวเดียวกับไฟล์ 04) */
+  paymentDate?: Date | null
+  payoutBatchRef?: string | null
+  /** เลขใบสำคัญจ่ายของผู้รับในรอบ (ตัวเดียวกับไฟล์ 04) */
+  voucherRef?: string | null
+  caseRef?: string | null
+  /** `cost_centers.code` ของบัญชีค่าใช้จ่าย */
+  costCenter?: string | null
+  /** path ใบเสร็จใน bucket — ไฟล์ใส่แค่ชื่อไฟล์ (`evidenceFileName()`) */
+  receiptFilePath?: string | null
 }
 
 /** `Y`/`N` สำหรับค่าที่พัก · ชนิดอื่นเว้นว่าง (ไม่เกี่ยว) — รูปแบบเดียวกับธง `Y`/`N` ในไฟล์ 01 */
@@ -272,6 +307,14 @@ export function expenseCsv(rows: readonly ExpenseExportRow[]): string {
       csvBaht(row.whtSatang),
       csvBaht(row.netSatang),
       receiptInCompanyNameCell(row.receiptInCompanyName),
+      csvText(row.expenseId),
+      csvDate(row.workDate),
+      csvDate(row.paymentDate),
+      csvText(row.payoutBatchRef),
+      csvText(row.voucherRef),
+      csvText(row.caseRef),
+      csvText(row.costCenter),
+      csvText(evidenceFileName(row.receiptFilePath ?? null)),
     ]),
   )
 }
@@ -531,6 +574,8 @@ export const CREDIT_NOTE_HEADERS = [
   'status',
   'adjustment_ref',
   'company_branch',
+  // มติ PO 06/10/2569 (U94 ข้อ 5) — ต่อท้ายสุด: เลขผู้เสียภาษีผู้ซื้อ 13 หลักตาม snapshot บนใบกำกับเดิม
+  'company_tax_id',
 ] as const
 
 export interface CreditNoteExportRow {
@@ -547,6 +592,8 @@ export interface CreditNoteExportRow {
   adjustmentRef: string | null
   /** snapshot สาขาผู้ซื้อตามใบกำกับเดิม (`credit_notes.buyer_branch_code` · `00000` = สำนักงานใหญ่) */
   companyBranchCode: string
+  /** U94 ข้อ 5 — snapshot `tax_invoices.buyer_tax_id` ของใบกำกับเดิม · ไม่ระบุ/ไม่ครบ 13 หลัก = `-` */
+  companyTaxId?: string | null
 }
 
 export function creditNoteCsv(rows: readonly CreditNoteExportRow[]): string {
@@ -565,6 +612,7 @@ export function creditNoteCsv(rows: readonly CreditNoteExportRow[]): string {
       row.status,
       csvText(row.adjustmentRef),
       formatBranch(row.companyBranchCode),
+      normalizeTaxId(row.companyTaxId) ?? CSV_EMPTY,
     ]),
   )
 }
@@ -805,6 +853,78 @@ export function taxInvoiceNotAttachedText(invoiceNumbers: readonly string[]): st
   ].join(CSV_NEWLINE)
 }
 
+// ── เอกสาร PDF ใน zip (มติ PO U57 · U94 ข้อ 5) ────────────────────────────────
+
+/** โฟลเดอร์ PDF หนังสือรับรอง 50 ทวิ ที่ออกในงวด (ชุดเดียวกับ `05_WHT_Data.csv`) */
+export const PACK_WHT_CERTIFICATE_PDF_DIR = 'wht_certificates'
+/** โฟลเดอร์ PDF ใบสำคัญจ่าย + สลิปค่าตอบแทนของรอบจ่ายที่โอนแล้วในงวด (ชุดเดียวกับ `04_Payments.csv`) */
+export const PACK_VOUCHER_PDF_DIR = 'vouchers'
+/** โฟลเดอร์ PDF ใบแจ้งหนี้/ใบวางบิลที่ส่งลูกค้าในงวด — **ไม่ใช่เอกสารภาษี** จึงไม่อยู่ใน `tax_invoices/` (U95) */
+export const PACK_BILLING_INVOICE_PDF_DIR = 'billing_invoices'
+
+/** ชื่อไฟล์ `NOT_ATTACHED.txt` ของโฟลเดอร์ — มีเฉพาะเมื่อมีเอกสารที่ไม่ได้แนบ */
+export function packNotAttachedFile(dir: string): string {
+  return `${dir}/NOT_ATTACHED.txt`
+}
+
+/** ชื่อไฟล์ PDF ใต้โฟลเดอร์ — ตัดอักขระที่ใช้เป็นชื่อไฟล์ไม่ได้ (แบบเดียวกับ `taxInvoicePdfEntryName()`) */
+export function packPdfEntryName(dir: string, ref: string, fallback = 'document'): string {
+  const safe = ref.trim().replace(/[\\/:*?"<>|\s]+/g, '_')
+  return `${dir}/${safe === '' ? fallback : safe}.pdf`
+}
+
+/** เนื้อ `NOT_ATTACHED.txt` ของโฟลเดอร์ใดก็ได้ — บอกจำนวน/เลขที่ และไฟล์ CSV ที่ข้อมูลยังอยู่ครบ */
+export function packNotAttachedText(input: {
+  documentLabel: string
+  unit: string
+  /** ไฟล์ CSV ที่ข้อมูลของทุกรายการยังอยู่ครบ — `null` = ไม่มีไฟล์ CSV ของเอกสารชนิดนี้ (เช่น ใบแจ้งหนี้) */
+  csvFileName: string | null
+  refs: readonly string[]
+}): string {
+  return [
+    `${input.documentLabel}ที่ไม่ได้แนบ PDF ในชุดนี้ ${input.refs.length} ${input.unit} (เกินจำนวน/เวลาที่ประกอบได้ต่อครั้ง)`,
+    input.csvFileName === null
+      ? 'ขอสำเนา PDF รายฉบับได้จากผู้ดูแลระบบ'
+      : `ข้อมูลของทุกรายการยังอยู่ครบใน ${input.csvFileName} — ขอสำเนา PDF รายฉบับได้จากผู้ดูแลระบบ`,
+    '',
+    ...input.refs,
+    '',
+  ].join(CSV_NEWLINE)
+}
+
+/**
+ * เพดานแนบ PDF **ร่วมกันทุกโฟลเดอร์** ของชุด (จำนวน `PACK_TAX_INVOICE_PDF_LIMIT` + เวลา
+ * `PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS`) — ใช้เพดานเดียวทั้งชุดเพราะสิ่งที่ต้องคุมคือเวลาทั้งคำขอ Export บน
+ * Vercel ไม่ใช่เวลาต่อโฟลเดอร์ (แยกเพดานต่อโฟลเดอร์ = 4 เท่าของเวลาเดิม) · ลำดับความสำคัญ: เอกสารภาษี
+ * (`tax_invoices/` → `wht_certificates/`) ก่อน แล้ว `vouchers/` → `billing_invoices/`
+ * · `now` ฉีดเข้ามาได้ ⇒ เทสต์ได้แบบ pure
+ */
+export interface PackPdfBudget {
+  /** ขอแนบอีก 1 ฉบับ — `false` = เต็มเพดานแล้ว (ผู้เรียกต้องลงรายชื่อไม่ได้แนบ) */
+  tryTake(): boolean
+  readonly used: number
+}
+
+export function createPackPdfBudget(
+  options: { limit?: number; timeBudgetMs?: number; now?: () => number } = {},
+): PackPdfBudget {
+  const limit = options.limit ?? PACK_TAX_INVOICE_PDF_LIMIT
+  const budget = options.timeBudgetMs ?? PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS
+  const now = options.now ?? Date.now
+  const startedAt = now()
+  let used = 0
+  return {
+    tryTake(): boolean {
+      if (used >= limit || now() - startedAt > budget) return false
+      used += 1
+      return true
+    },
+    get used(): number {
+      return used
+    },
+  }
+}
+
 // ── 13_Advance_Returns.csv (ไฟล์ 15 — มติ PO 05/10/2569 U68 · จาก U30) ──────
 
 /**
@@ -922,6 +1042,119 @@ export function unbilledRevenueCsv(rows: readonly UnbilledRevenueExportRow[]): s
       csvBaht(row.totalSatang),
       vatRatesText([row.vatRatePct]),
       csvText(row.draftBillingBatchNumber),
+    ]),
+  )
+}
+
+// ── 15_Accrued_Expenses.csv (มติ PO 06/10/2569 U94 ข้อ 2) ────────────────────
+
+/**
+ * สถานะรายการเบิกที่นับเป็น "ค่าใช้จ่ายค้างจ่าย" — งานเกิดแล้ว รออนุมัติ/อนุมัติแล้ว แต่ยังไม่ได้จ่าย
+ * (รอคลังยืนยัน · รออนุมัติ · รอการเงินอนุมัติ · อนุมัติแล้ว) · ไม่นับ `rejected`/`needs_revision`/`superseded`
+ * (ยังไม่เป็นภาระที่แน่นอน/ถูกแทนแล้ว) — นิยามจุดเดียวคู่กับ `accruedExpenseWhere()`
+ */
+export const ACCRUED_EXPENSE_STATUSES = [
+  'pending_warehouse_confirm',
+  'pending_approval',
+  'pending_finance_approval',
+  'approved',
+] as const satisfies readonly ExpenseStatus[]
+
+/**
+ * ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด — **ภาพ ณ เวลาสร้างชุด**: รายการที่วันที่ทำงาน ≤ สิ้นงวด และ ณ ตอนสร้างชุดยังไม่อยู่ใน
+ * รอบจ่ายที่โอนแล้ว (`completed`) · `status` = enum ดิบ · `estimated_wht_baht` = ภาษีที่คาดว่าจะหัก (อยู่ในรอบจ่ายแล้ว =
+ * ยอดของรอบ · ยังไม่เข้ารอบ = ประมาณด้วยสูตรเดียวกับรอบจ่าย ต่อผู้รับรวมทุกรายการค้าง · ประมาณไม่ได้ = `-`) ·
+ * `payout_batch_ref` = รอบจ่ายที่ยังไม่โอน (ร่าง/ตรวจ/สร้างไฟล์แล้ว) ที่รายการนี้อยู่ · ไม่อยู่รอบใด = `-`
+ */
+export const ACCRUED_EXPENSE_HEADERS = [
+  'expense_id',
+  'payee',
+  'payee_tax_id',
+  'category',
+  'case_ref',
+  'work_date',
+  'status',
+  'gross_baht',
+  'estimated_wht_baht',
+  'payout_batch_ref',
+] as const
+
+export interface AccruedExpenseExportRow {
+  expenseId: string
+  payeeName: string
+  payeeTaxId: string | null
+  category: string
+  caseRef: string | null
+  workDate: Date
+  status: ExpenseStatus
+  grossSatang: number
+  /** `null` = ประมาณไม่ได้ (เช่น ผู้รับ 40(1)/40(2) ที่ยังไม่มีอัตรา) */
+  estimatedWhtSatang: number | null
+  payoutBatchRef: string | null
+}
+
+export function accruedExpenseCsv(rows: readonly AccruedExpenseExportRow[]): string {
+  return buildCsv(
+    ACCRUED_EXPENSE_HEADERS,
+    rows.map((row) => [
+      row.expenseId,
+      row.payeeName,
+      normalizeTaxId(row.payeeTaxId) ?? CSV_EMPTY,
+      row.category,
+      csvText(row.caseRef),
+      csvDate(row.workDate),
+      row.status,
+      csvBaht(row.grossSatang),
+      row.estimatedWhtSatang === null ? CSV_EMPTY : csvBaht(row.estimatedWhtSatang),
+      csvText(row.payoutBatchRef),
+    ]),
+  )
+}
+
+// ── 16_Advance_Balance.csv (มติ PO 06/10/2569 U94 ข้อ 3) ────────────────────
+
+/**
+ * เงินทดรองต่อคน (ลูกหนี้เงินทดรอง) · `opening + paid − cleared − returned_offset − returned_direct = closing`
+ * ทุกแถว (คำนวณที่ `lib/exports/advance-balance.ts`) · `advance_refs` = เลขที่ใบ (`ADV-…`) ที่มียอดหรือเคลื่อนไหว
+ * คั่นด้วยช่องว่าง
+ */
+export const ADVANCE_BALANCE_HEADERS = [
+  'payee',
+  'payee_tax_id',
+  'opening_baht',
+  'paid_baht',
+  'cleared_baht',
+  'returned_offset_baht',
+  'returned_direct_baht',
+  'closing_baht',
+  'advance_refs',
+] as const
+
+export interface AdvanceBalanceExportRow {
+  payeeName: string
+  payeeTaxId: string | null
+  openingSatang: number
+  paidSatang: number
+  clearedSatang: number
+  returnedOffsetSatang: number
+  returnedDirectSatang: number
+  closingSatang: number
+  advanceRefs: readonly string[]
+}
+
+export function advanceBalanceCsv(rows: readonly AdvanceBalanceExportRow[]): string {
+  return buildCsv(
+    ADVANCE_BALANCE_HEADERS,
+    rows.map((row) => [
+      row.payeeName,
+      normalizeTaxId(row.payeeTaxId) ?? CSV_EMPTY,
+      csvBaht(row.openingSatang),
+      csvBaht(row.paidSatang),
+      csvBaht(row.clearedSatang),
+      csvBaht(row.returnedOffsetSatang),
+      csvBaht(row.returnedDirectSatang),
+      csvBaht(row.closingSatang),
+      row.advanceRefs.length === 0 ? CSV_EMPTY : row.advanceRefs.join(' '),
     ]),
   )
 }
@@ -1053,6 +1286,21 @@ export function checklistSheet(input: {
 export interface PackCoverFileRow {
   fileName: string
   description: string
+  /** จำนวนแถวข้อมูลของไฟล์ (ตัวเดียวกับ `00_Control_Totals.csv`) — ข้อความพร้อมพิมพ์ · ไม่ทราบ = `-` */
+  rowCountText: string
+}
+
+/** ยอดสรุปบนหน้าปก (มติ U94 ข้อ 4) — ค่าเดียวกับแถว `summary` ของ `00_Control_Totals.csv` */
+export interface PackCoverTotalRow {
+  label: string
+  amountText: string
+}
+
+/** ข้อมูลยอดรวมควบคุมที่หน้าปกต้องใช้ — ประกอบจากชุดข้อมูลเดียวกับที่เขียนไฟล์ (`lib/exports/control-totals.ts`) */
+export interface PackCoverControlTotals {
+  /** จำนวนแถวต่อชื่อไฟล์ */
+  rowCounts: Readonly<Record<string, number>>
+  summary: readonly { label: string; amountSatang: number }[]
 }
 
 export interface PackCoverDoc {
@@ -1064,12 +1312,30 @@ export interface PackCoverDoc {
   versionLabel: string
   generatedByName: string
   generatedAtLabel: string
-  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–14** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
+  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 00–16** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
   contentDigest: string
+  /** ป้ายช่วงไฟล์ที่ digest ครอบคลุม เช่น `00–16` — มาจาก `PACK_FILES` ไม่พิมพ์ตายตัวใน component */
+  fileRangeLabel: string
   checks: readonly { label: string; passed: boolean }[]
   files: readonly PackCoverFileRow[]
+  /** ยอดสรุปของงวด (U94 ข้อ 4) — ว่าง = ไม่แสดงตาราง */
+  totals: readonly PackCoverTotalRow[]
+  /** หมายเหตุโฟลเดอร์ PDF ใน zip */
+  attachmentNote: string
   fileName: string
 }
+
+/** ช่วงเลขไฟล์ข้อมูลในชุด เช่น `00–16` */
+export function packFileRangeLabel(): string {
+  const first = PACK_FILES[0]?.no ?? ''
+  const last = PACK_FILES.at(-1)?.no ?? ''
+  return `${first}–${last}`
+}
+
+export const PACK_ATTACHMENT_NOTE =
+  `สำเนา PDF ใน zip: ${PACK_TAX_INVOICE_PDF_DIR}/ (ใบเสร็จรับเงิน/ใบกำกับภาษี) · ${PACK_WHT_CERTIFICATE_PDF_DIR}/ (50 ทวิ) · ` +
+  `${PACK_VOUCHER_PDF_DIR}/ (ใบสำคัญจ่าย/สลิปค่าตอบแทน) · ${PACK_BILLING_INVOICE_PDF_DIR}/ (ใบแจ้งหนี้ — ไม่ใช่เอกสารภาษี) · ` +
+  `เกินเพดานต่อชุด ⇒ รายชื่อใน NOT_ATTACHED.txt ของแต่ละโฟลเดอร์`
 
 export const PACK_COVER_TITLE = 'หน้าปกชุดเอกสารบัญชี'
 export const PACK_COVER_HEADER_NOTE = 'ส่งสำนักงานบัญชี — ประจำรอบเดือน'
@@ -1082,6 +1348,8 @@ export function buildPackCoverDoc(input: {
   generatedAt: Date
   contentDigest: string
   checks: readonly ReadinessCheck[]
+  /** มติ U94 ข้อ 4 — ไม่ส่ง = ไม่มีจำนวนแถว/ตารางยอดสรุป (เทสต์เก่า) */
+  controlTotals?: PackCoverControlTotals
 }): PackCoverDoc {
   return {
     organizationName: input.organizationName,
@@ -1093,8 +1361,21 @@ export function buildPackCoverDoc(input: {
     generatedByName: input.generatedByName,
     generatedAtLabel: fmtDate(input.generatedAt),
     contentDigest: input.contentDigest,
+    fileRangeLabel: packFileRangeLabel(),
     checks: input.checks.map((check) => ({ label: check.label, passed: check.passed })),
-    files: PACK_FILES.map((file) => ({ fileName: file.fileName, description: file.description })),
+    files: PACK_FILES.map((file) => {
+      const count = input.controlTotals?.rowCounts[file.fileName]
+      return {
+        fileName: file.fileName,
+        description: file.description,
+        rowCountText: count === undefined ? CSV_EMPTY : count.toLocaleString('en-US'),
+      }
+    }),
+    totals: (input.controlTotals?.summary ?? []).map((line) => ({
+      label: line.label,
+      amountText: fmtSatang(line.amountSatang),
+    })),
+    attachmentNote: PACK_ATTACHMENT_NOTE,
     fileName: PACK_COVER_FILE_NAME,
   }
 }

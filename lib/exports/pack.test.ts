@@ -34,6 +34,18 @@ import {
   CHECKLIST_HEADERS,
   CREDIT_NOTE_HEADERS,
   creditNoteCsv,
+  ACCRUED_EXPENSE_HEADERS,
+  ACCRUED_EXPENSE_STATUSES,
+  accruedExpenseCsv,
+  ADVANCE_BALANCE_HEADERS,
+  advanceBalanceCsv,
+  buildPackCoverDoc,
+  createPackPdfBudget,
+  packFileRangeLabel,
+  packNotAttachedFile,
+  packNotAttachedText,
+  packPdfEntryName,
+  PACK_ATTACHMENT_NOTE,
   CUSTOMER_WHT_HEADERS,
   customerWhtCsv,
   SUSPENSE_HEADERS,
@@ -57,6 +69,13 @@ import {
   type ChecklistExportRow,
   type WhtExportRow,
 } from '@/lib/exports/pack'
+import {
+  buildControlTotals,
+  controlTotalsCsv,
+  controlTotalsForCover,
+  CONTROL_TOTALS_HEADERS,
+} from '@/lib/exports/control-totals'
+import { CONTROL_TOTALS_FIXTURE } from '@/tests/helpers/control-totals-fixture'
 
 /**
  * "format ต้องตรง `reference/samples/`" — เทสต์อ่านไฟล์ตัวอย่างจริงมาเทียบหัวคอลัมน์
@@ -70,9 +89,10 @@ function sampleHeader(fileName: string): string[] {
 }
 
 describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', () => {
-  it('ครบ 14 ไฟล์ เลข 01–14 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87)', () => {
-    expect(PACK_FILES).toHaveLength(14)
+  it('ครบ 17 ไฟล์ เลข 00–16 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94)', () => {
+    expect(PACK_FILES).toHaveLength(17)
     expect(PACK_FILES.map((file) => file.no)).toEqual([
+      '00',
       '01',
       '02',
       '03',
@@ -87,8 +107,11 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '12',
       '13',
       '14',
+      '15',
+      '16',
     ])
     expect(PACK_FILES.map((file) => file.fileName)).toEqual([
+      '00_Control_Totals.csv',
       '01_Revenue.csv',
       '02_Cash_Receipts.csv',
       '03_Expenses.csv',
@@ -103,7 +126,10 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '12_Tax_Invoices.csv',
       '13_Advance_Returns.csv',
       '14_Unbilled_Revenue.csv',
+      '15_Accrued_Expenses.csv',
+      '16_Advance_Balance.csv',
     ])
+    expect(packFileRangeLabel()).toBe('00–16')
     expect(PACK_FILES.filter((file) => file.kind === 'xlsx').map((file) => file.no)).toEqual(['08'])
   })
 
@@ -185,6 +211,9 @@ describe('หัวคอลัมน์ตรงกับ reference/samples ท
     ['12_Tax_Invoices.csv', TAX_INVOICE_HEADERS],
     ['13_Advance_Returns.csv', ADVANCE_RETURN_HEADERS],
     ['14_Unbilled_Revenue.csv', UNBILLED_REVENUE_HEADERS],
+    ['00_Control_Totals.csv', CONTROL_TOTALS_HEADERS],
+    ['15_Accrued_Expenses.csv', ACCRUED_EXPENSE_HEADERS],
+    ['16_Advance_Balance.csv', ADVANCE_BALANCE_HEADERS],
   ])('%s', (fileName, headers) => {
     expect(sampleHeader(fileName)).toEqual([...headers])
   })
@@ -258,12 +287,13 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'ประยุทธ์ บุญมี,ค่าตอบแทนติดตามทรัพย์ (commission),8500.00,255.00,8245.00,',
+      'ประยุทธ์ บุญมี,ค่าตอบแทนติดตามทรัพย์ (commission),8500.00,255.00,8245.00,,-,-,-,-,-,-,-,-',
     )
   })
 
   it('ค่าใช้จ่าย (มติ U96 #14): receipt_in_company_name ต่อท้ายสุด — ค่าที่พัก Y/N · ชนิดอื่นว่าง', () => {
-    expect(EXPENSE_HEADERS.at(-1)).toBe('receipt_in_company_name')
+    // U96 #15 ต่อท้ายหลังคอลัมน์นี้ — ตำแหน่งที่ 6 ไม่ย้าย
+    expect(EXPENSE_HEADERS[5]).toBe('receipt_in_company_name')
     expect(EXPENSE_HEADERS.slice(0, 5)).toEqual(['payee', 'category', 'gross_baht', 'wht_baht', 'net_baht'])
     const base = { payeeName: 'ก', category: 'ค่าที่พัก', grossSatang: 80000, whtSatang: 0, netSatang: 80000 }
     const lines = expenseCsv([
@@ -272,9 +302,45 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
     ])
       .slice(CSV_BOM.length)
       .split('\r\n')
-    expect(lines[1]?.endsWith(',800.00,0.00,800.00,Y')).toBe(true)
-    expect(lines[2]?.endsWith(',800.00,0.00,800.00,N')).toBe(true)
+    expect(lines[1]?.split(',').slice(2, 6)).toEqual(['800.00', '0.00', '800.00', 'Y'])
+    expect(lines[2]?.split(',').slice(2, 6)).toEqual(['800.00', '0.00', '800.00', 'N'])
     expect(receiptInCompanyNameCell(null)).toBe('')
+  })
+
+  it('มติ U96 #15: หลักฐานรายจ่ายต่อท้าย 8 คอลัมน์ — ใบเสร็จเป็นชื่อไฟล์ ไม่เปิดเผย path', () => {
+    expect(EXPENSE_HEADERS.slice(6)).toEqual([
+      'expense_id',
+      'work_date',
+      'payment_date',
+      'payout_batch_ref',
+      'voucher_ref',
+      'case_ref',
+      'cost_center',
+      'receipt_file',
+    ])
+    const line = expenseCsv([
+      {
+        payeeName: 'ประยุทธ์ บุญมี',
+        category: 'ค่าที่พัก',
+        grossSatang: 80_000,
+        whtSatang: 0,
+        netSatang: 80_000,
+        receiptInCompanyName: true,
+        expenseId: 'e-1',
+        workDate: new Date('2026-06-20T00:00:00Z'),
+        paymentDate: new Date('2026-06-25T03:00:00Z'),
+        payoutBatchRef: 'PB-1',
+        voucherRef: 'PV-2569-PB-1-001',
+        caseRef: 'SF-2569-0412',
+        costCenter: 'FIELD-N',
+        receiptFilePath: 'field/receipts/abc/hotel-0620.jpg',
+      },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')[1]
+    expect(line).toBe(
+      'ประยุทธ์ บุญมี,ค่าที่พัก,800.00,0.00,800.00,Y,e-1,20/06/2569,25/06/2569,PB-1,PV-2569-PB-1-001,SF-2569-0412,FIELD-N,hotel-0620.jpg',
+    )
   })
 
   it('จ่ายจริง: method คงที่ Bank Transfer + voucher_ref ของใบสำคัญจ่ายจริง', () => {
@@ -625,6 +691,7 @@ describe('09_Credit_Notes.csv (มติ PO 05/10/2569 U21)', () => {
         status: 'active',
         adjustmentRef: 'ADJ-2569-06-001',
         companyBranchCode: '00000',
+        companyTaxId: '0105-55500-0111',
       },
       {
         documentType: 'DN',
@@ -646,11 +713,13 @@ describe('09_Credit_Notes.csv (มติ PO 05/10/2569 U21)', () => {
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(CREDIT_NOTE_HEADERS.join(','))
     expect(lines[1]).toBe(
-      'CN,CN-2569-001,05/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,100.00,7.00,107.00,"ลดค่าบริการ, ตามที่ตกลง",active,ADJ-2569-06-001,สำนักงานใหญ่',
+      'CN,CN-2569-001,05/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,100.00,7.00,107.00,"ลดค่าบริการ, ตามที่ตกลง",active,ADJ-2569-06-001,สำนักงานใหญ่,0105555000111',
     )
+    // มติ U94 ข้อ 5 — company_tax_id ต่อท้ายสุด · ไม่มี/ไม่ครบ 13 หลัก = "-"
     expect(lines[2]).toBe(
-      'DN,DN-2569-001,06/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,50.00,3.50,53.50,เพิ่มค่าบริการ,cancelled,-,สาขาที่ 00001',
+      'DN,DN-2569-001,06/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,50.00,3.50,53.50,เพิ่มค่าบริการ,cancelled,-,สาขาที่ 00001,-',
     )
+    expect(CREDIT_NOTE_HEADERS.at(-1)).toBe('company_tax_id')
     expect(lines[3]).toBe('')
   })
 
@@ -942,5 +1011,265 @@ describe('14_Unbilled_Revenue.csv (มติ PO 06/10/2569 U87)', () => {
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe('X-1,ไฟแนนซ์ ก,-,01/06/2569,FLAT,0.01,0.00,0.01,7.00,-')
+  })
+})
+
+function csvLines(csv: string): string[] {
+  return csv.slice(CSV_BOM.length).split('\r\n')
+}
+
+function sampleText(fileName: string): string {
+  return readFileSync(fileURLToPath(new URL(`../../reference/samples/${fileName}`, import.meta.url)), 'utf8')
+}
+
+describe('15_Accrued_Expenses.csv (มติ PO 06/10/2569 U94 ข้อ 2)', () => {
+  it('สถานะที่นับเป็นค้างจ่าย = รอคลังยืนยัน/รออนุมัติ/รอการเงิน/อนุมัติแล้ว (ไม่รวมตีกลับ/ปฏิเสธ/ถูกแทน)', () => {
+    expect([...ACCRUED_EXPENSE_STATUSES]).toEqual([
+      'pending_warehouse_confirm',
+      'pending_approval',
+      'pending_finance_approval',
+      'approved',
+    ])
+  })
+
+  it('status = enum ดิบ · ประมาณ WHT ไม่ได้ ⇒ "-" · ไม่อยู่ในรอบจ่าย ⇒ "-" · ตรงไฟล์ตัวอย่างทั้งไฟล์', () => {
+    const D = (iso: string): Date => new Date(`${iso}T00:00:00Z`)
+    const csv = accruedExpenseCsv([
+      {
+        expenseId: '7c1d2e3f-0a1b-4c2d-8e9f-0a1b2c3d4e01',
+        payeeName: 'ประยุทธ์ บุญมี',
+        payeeTaxId: '3100000004600',
+        category: 'ค่าตอบแทนติดตามทรัพย์ (commission)',
+        caseRef: 'SF-2569-0420',
+        workDate: D('2026-06-28'),
+        status: 'approved',
+        grossSatang: 450_000,
+        estimatedWhtSatang: 13_500,
+        payoutBatchRef: 'PB-2569-07-001',
+      },
+      {
+        expenseId: '7c1d2e3f-0a1b-4c2d-8e9f-0a1b2c3d4e02',
+        payeeName: 'ประวิทธิ์ มากมี',
+        payeeTaxId: '3100000004601',
+        category: 'ค่าน้ำมัน',
+        caseRef: 'SF-2569-0421',
+        workDate: D('2026-06-29'),
+        status: 'pending_approval',
+        grossSatang: 35_000,
+        estimatedWhtSatang: 0,
+        payoutBatchRef: null,
+      },
+      {
+        expenseId: '7c1d2e3f-0a1b-4c2d-8e9f-0a1b2c3d4e03',
+        payeeName: 'สมหญิง ใจดี',
+        payeeTaxId: '3100000004602',
+        category: 'ค่าตอบแทนติดตามทรัพย์ (commission)',
+        caseRef: 'TL-2569-0090',
+        workDate: D('2026-06-30'),
+        status: 'pending_warehouse_confirm',
+        grossSatang: 620_000,
+        estimatedWhtSatang: 18_600,
+        payoutBatchRef: null,
+      },
+    ])
+    expect(csv).toBe(sampleText('15_Accrued_Expenses.csv'))
+
+    const unknown = accruedExpenseCsv([
+      {
+        expenseId: 'x',
+        payeeName: 'ก',
+        payeeTaxId: null,
+        category: 'ค่าตอบแทน',
+        caseRef: null,
+        workDate: D('2026-06-01'),
+        status: 'approved',
+        grossSatang: 1,
+        estimatedWhtSatang: null,
+        payoutBatchRef: null,
+      },
+    ])
+    expect(csvLines(unknown)[1]).toBe('x,ก,-,ค่าตอบแทน,-,01/06/2569,approved,0.01,-,-')
+  })
+})
+
+describe('16_Advance_Balance.csv (มติ PO 06/10/2569 U94 ข้อ 3)', () => {
+  it('ตรงไฟล์ตัวอย่าง · ยกมา + จ่าย − เคลียร์ − คืนหักกลบ − คืนรับแยก = คงเหลือ ทุกแถวของตัวอย่าง', () => {
+    const csv = advanceBalanceCsv([
+      {
+        payeeName: 'ประยุทธ์ บุญมี',
+        payeeTaxId: '3100000004600',
+        openingSatang: 55_000,
+        paidSatang: 300_000,
+        clearedSatang: 245_000,
+        returnedOffsetSatang: 55_000,
+        returnedDirectSatang: 0,
+        closingSatang: 55_000,
+        advanceRefs: ['ADV-3F2A9C1B', 'ADV-7D41E0AA'],
+      },
+      {
+        payeeName: 'สมชาย ใจดี',
+        payeeTaxId: '3100000004603',
+        openingSatang: 0,
+        paidSatang: 500_000,
+        clearedSatang: 380_000,
+        returnedOffsetSatang: 0,
+        returnedDirectSatang: 120_000,
+        closingSatang: 0,
+        advanceRefs: ['ADV-91BC22F0'],
+      },
+    ])
+    expect(csv).toBe(sampleText('16_Advance_Balance.csv'))
+    for (const line of csvLines(sampleText('16_Advance_Balance.csv')).slice(1, -1)) {
+      const cells = line.split(',').slice(2, 8).map((cell) => Math.round(Number(cell) * 100))
+      const [opening, paid, cleared, offset, direct, closing] = cells
+      expect((opening ?? 0) + (paid ?? 0) - (cleared ?? 0) - (offset ?? 0) - (direct ?? 0)).toBe(closing)
+    }
+  })
+
+  it('ไม่มีใบ ⇒ advance_refs = "-"', () => {
+    const line = csvLines(
+      advanceBalanceCsv([
+        {
+          payeeName: 'ก',
+          payeeTaxId: null,
+          openingSatang: 0,
+          paidSatang: 0,
+          clearedSatang: 0,
+          returnedOffsetSatang: 0,
+          returnedDirectSatang: 0,
+          closingSatang: 0,
+          advanceRefs: [],
+        },
+      ]),
+    )[1]
+    expect(line).toBe('ก,-,0.00,0.00,0.00,0.00,0.00,0.00,-')
+  })
+})
+
+describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U94 ข้อ 4)', () => {
+  const lines = buildControlTotals(CONTROL_TOTALS_FIXTURE)
+
+  it('ประกอบได้ตรงไฟล์ตัวอย่างทั้งไฟล์', () => {
+    expect(controlTotalsCsv(lines)).toBe(sampleText('00_Control_Totals.csv'))
+  })
+
+  it('ทุกไฟล์ 01–16 มีบรรทัดควบคุม · จำนวนแถวเท่ากับแถวที่เขียนไฟล์จริง · ยอดเท่าผลรวมคอลัมน์ในไฟล์', () => {
+    const fileNames = new Set(lines.filter((line) => line.section === 'file').map((line) => line.file))
+    expect([...fileNames]).toEqual(PACK_FILES.filter((file) => file.no !== '00').map((file) => file.fileName))
+
+    // เทียบกับไฟล์ที่ builder ของแต่ละไฟล์เขียนจริง — ผลรวมคอลัมน์จาก CSV ต้องเท่ากับยอดควบคุม
+    const files: Record<string, string> = {
+      '03_Expenses.csv': expenseCsv(CONTROL_TOTALS_FIXTURE.expenses),
+      '04_Payments.csv': paymentCsv(CONTROL_TOTALS_FIXTURE.payments),
+      '12_Tax_Invoices.csv': taxInvoiceCsv(CONTROL_TOTALS_FIXTURE.taxInvoices),
+      '15_Accrued_Expenses.csv': accruedExpenseCsv(CONTROL_TOTALS_FIXTURE.accruedExpenses),
+      '16_Advance_Balance.csv': advanceBalanceCsv(CONTROL_TOTALS_FIXTURE.advanceBalances),
+    }
+    for (const [fileName, csv] of Object.entries(files)) {
+      const [header, ...rows] = csvLines(csv).filter((line) => line !== '')
+      const columns = (header ?? '').split(',')
+      for (const line of lines.filter((entry) => entry.section === 'file' && entry.file === fileName)) {
+        expect(line.rowCount, fileName).toBe(rows.length)
+        const index = columns.indexOf(line.item)
+        const total = rows
+          .map((row) => row.split(',')[index] ?? '')
+          .map((cell) => (cell === '-' ? 0 : Math.round(Number(cell) * 100)))
+          .reduce((sum, value) => sum + value, 0)
+        expect(total, `${fileName}:${line.item}`).toBe(line.amountSatang)
+      }
+    }
+  })
+
+  it('ยอดสรุปกรองตามความหมาย: VAT ขายไม่รวมใบยกเลิก · ใบลดหนี้ติดลบ ใบเพิ่มหนี้ที่ยกเลิกไม่นับ · ภาษีลูกค้าหักเฉพาะในงวด · เงินรอตรวจสอบเฉพาะที่ค้าง', () => {
+    const amount = (item: string): number | null =>
+      lines.find((line) => line.section === 'summary' && line.item === item)?.amountSatang ?? null
+    expect(lines.filter((line) => line.section === 'summary').map((line) => line.item)).toEqual([
+      'revenue_before_vat',
+      'output_vat_documents',
+      'output_vat_credit_debit_notes',
+      'cash_received',
+      'customer_wht',
+      'payout_transfer',
+      'wht_withheld',
+      'accrued_expenses',
+      'unbilled_revenue',
+      'suspense_outstanding',
+      'advance_balance',
+    ])
+    expect(amount('output_vat_documents')).toBe(84_000)
+    expect(amount('output_vat_credit_debit_notes')).toBe(-700)
+    expect(amount('customer_wht')).toBe(36_000)
+    expect(amount('payout_transfer')).toBe(849_500)
+    expect(amount('suspense_outstanding')).toBe(50_000)
+    expect(amount('advance_balance')).toBe(55_000)
+  })
+
+  it('หน้าปก: จำนวนแถวต่อไฟล์ + ตารางยอดสรุปค่าเดียวกับไฟล์ 00 · ช่วงไฟล์ 00–16 · หมายเหตุโฟลเดอร์ PDF', () => {
+    const doc = buildPackCoverDoc({
+      organizationName: 'บริษัททดสอบ',
+      periodLabel: 'มิถุนายน 2569',
+      version: 1,
+      generatedByName: 'บัญชี',
+      generatedAt: new Date('2026-07-03T03:30:00Z'),
+      contentDigest: 'abc',
+      checks: [],
+      controlTotals: controlTotalsForCover(lines),
+    })
+    expect(doc.fileRangeLabel).toBe('00–16')
+    expect(doc.files).toHaveLength(17)
+    expect(doc.files.find((file) => file.fileName === '00_Control_Totals.csv')?.rowCountText).toBe(String(lines.length))
+    expect(doc.files.find((file) => file.fileName === '01_Revenue.csv')?.rowCountText).toBe('2')
+    expect(doc.totals).toHaveLength(11)
+    expect(doc.totals[0]).toEqual({ label: 'รายได้ก่อน VAT (รายได้ที่รับรู้ในงวด)', amountText: '12,750.00' })
+    expect(doc.attachmentNote).toBe(PACK_ATTACHMENT_NOTE)
+    for (const dir of ['tax_invoices/', 'wht_certificates/', 'vouchers/', 'billing_invoices/']) {
+      expect(doc.attachmentNote).toContain(dir)
+    }
+    // ไม่ส่งยอดควบคุม ⇒ จำนวนแถวเป็น "-" และไม่มีตาราง
+    const bare = buildPackCoverDoc({
+      organizationName: 'x',
+      periodLabel: 'x',
+      version: 1,
+      generatedByName: 'x',
+      generatedAt: new Date(),
+      contentDigest: 'x',
+      checks: [],
+    })
+    expect(bare.totals).toEqual([])
+    expect(bare.files.every((file) => file.rowCountText === '-')).toBe(true)
+  })
+})
+
+describe('PDF ใน zip — เพดานร่วมทุกโฟลเดอร์ (มติ PO U57 · U94 ข้อ 5)', () => {
+  it('เพดานจำนวน: ได้ครบเท่าที่กำหนด แล้วปฏิเสธตลอดไป', () => {
+    const budget = createPackPdfBudget({ limit: 2, timeBudgetMs: 1_000, now: () => 0 })
+    expect([budget.tryTake(), budget.tryTake(), budget.tryTake(), budget.tryTake()]).toEqual([true, true, false, false])
+    expect(budget.used).toBe(2)
+  })
+
+  it('เพดานเวลา: นับจากตอนสร้าง (ทั้งชุด ไม่ใช่ต่อโฟลเดอร์)', () => {
+    let clock = 0
+    const budget = createPackPdfBudget({ limit: 100, timeBudgetMs: 50, now: () => clock })
+    expect(budget.tryTake()).toBe(true)
+    clock = 51
+    expect(budget.tryTake()).toBe(false)
+  })
+
+  it('ชื่อไฟล์/รายชื่อไม่ได้แนบของแต่ละโฟลเดอร์', () => {
+    expect(packPdfEntryName('wht_certificates', 'WHT-2569-001')).toBe('wht_certificates/WHT-2569-001.pdf')
+    expect(packPdfEntryName('vouchers', 'PV-A/B 1')).toBe('vouchers/PV-A_B_1.pdf')
+    expect(packNotAttachedFile('vouchers')).toBe('vouchers/NOT_ATTACHED.txt')
+    const text = packNotAttachedText({
+      documentLabel: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย',
+      unit: 'ใบ',
+      csvFileName: '05_WHT_Data.csv',
+      refs: ['WHT-1', 'WHT-2'],
+    })
+    expect(text).toContain('2 ใบ')
+    expect(text).toContain('05_WHT_Data.csv')
+    expect(text).toContain('WHT-1\r\nWHT-2')
+    expect(
+      packNotAttachedText({ documentLabel: 'ใบแจ้งหนี้', unit: 'ใบ', csvFileName: null, refs: ['BL-1'] }),
+    ).not.toContain('.csv')
   })
 })

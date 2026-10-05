@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EXPORT_FORMATS, INTERNAL_DOCUMENT_TEMPLATES } from '@/lib/settings/catalogs'
 
-/** `13` §6.7 (5 เอกสารภายใน) · §6.9 (Export Pack 01–13 ห้ามขาดไฟล์ — 09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68) */
+/** `13` §6.7 (5 เอกสารภายใน) · §6.9 (Export Pack 00–16 ห้ามขาดไฟล์ — 09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94) */
 
 describe('INTERNAL_DOCUMENT_TEMPLATES', () => {
   it('ครบ 5 รายการตาม `13` §6.7', () => {
@@ -19,12 +19,13 @@ describe('INTERNAL_DOCUMENT_TEMPLATES', () => {
 })
 
 describe('EXPORT_FORMATS', () => {
-  it('ครบ 14 ไฟล์ตาม `13` §6.9 / `37` §6.1', () => {
-    expect(EXPORT_FORMATS).toHaveLength(14)
+  it('ครบ 17 ไฟล์ตาม `13` §6.9 / `37` §6.1', () => {
+    expect(EXPORT_FORMATS).toHaveLength(17)
   })
 
-  it('เลขนำหน้าไฟล์ต่อเนื่อง 01–14 ไม่ขาด', () => {
+  it('เลขนำหน้าไฟล์ต่อเนื่อง 00–16 ไม่ขาด', () => {
     expect(EXPORT_FORMATS.map((spec) => spec.fileName.slice(0, 2))).toEqual([
+      '00',
       '01',
       '02',
       '03',
@@ -39,18 +40,18 @@ describe('EXPORT_FORMATS', () => {
       '12',
       '13',
       '14',
+      '15',
+      '16',
     ])
   })
 
-  it('ไฟล์ 01–07 และ 09 เป็น CSV UTF-8 · ไฟล์ 08 เป็น XLSX', () => {
-    expect(EXPORT_FORMATS.slice(0, 7).every((spec) => spec.format === 'CSV UTF-8')).toBe(true)
-    expect(EXPORT_FORMATS[7]).toMatchObject({ format: 'XLSX', fileName: '08_Document_Checklist.xlsx' })
-    expect(EXPORT_FORMATS[8]).toMatchObject({ format: 'CSV UTF-8', fileName: '09_Credit_Notes.csv' })
-    expect(EXPORT_FORMATS[9]).toMatchObject({ format: 'CSV UTF-8', fileName: '10_Customer_WHT.csv' })
-    expect(EXPORT_FORMATS[10]).toMatchObject({ format: 'CSV UTF-8', fileName: '11_Suspense_Receipts.csv' })
-    expect(EXPORT_FORMATS[11]).toMatchObject({ format: 'CSV UTF-8', fileName: '12_Tax_Invoices.csv' })
-    expect(EXPORT_FORMATS[12]).toMatchObject({ format: 'CSV UTF-8', fileName: '13_Advance_Returns.csv' })
-    expect(EXPORT_FORMATS[13]).toMatchObject({ format: 'CSV UTF-8', fileName: '14_Unbilled_Revenue.csv' })
+  it('ทุกไฟล์เป็น CSV UTF-8 ยกเว้นไฟล์ 08 เป็น XLSX', () => {
+    expect(EXPORT_FORMATS.filter((spec) => spec.format === 'XLSX').map((spec) => spec.fileName)).toEqual([
+      '08_Document_Checklist.xlsx',
+    ])
+    expect(EXPORT_FORMATS[0]).toMatchObject({ format: 'CSV UTF-8', fileName: '00_Control_Totals.csv' })
+    expect(EXPORT_FORMATS[15]).toMatchObject({ format: 'CSV UTF-8', fileName: '15_Accrued_Expenses.csv' })
+    expect(EXPORT_FORMATS[16]).toMatchObject({ format: 'CSV UTF-8', fileName: '16_Advance_Balance.csv' })
   })
 
   it('รายชื่อไฟล์ตรงกับชุดที่ Export Pack สร้างจริง', async () => {

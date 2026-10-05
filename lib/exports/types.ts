@@ -21,7 +21,7 @@ export interface ExportRecordDto {
   status: ExportRecordStatus
   statusLabel: string
   statusGroup: StatusBadgeGroup
-  /** จำนวนไฟล์หลักในชุด (`37` §7.1 — นับเฉพาะ 01–14 ไม่รวมหน้าปก/ไฟล์ zip) */
+  /** จำนวนไฟล์หลักในชุด (`37` §7.1 — นับเฉพาะ 00–16 ไม่รวมหน้าปก/ไฟล์ zip) */
   fileCount: number
   /** เอกสารแนบ (ใบเสร็จ/หลักฐาน) — ยังไม่รวมในชุดรอบนี้ ดู `37` §7.1 */
   attachmentCount: number

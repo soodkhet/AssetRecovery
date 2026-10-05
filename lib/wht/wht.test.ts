@@ -51,11 +51,23 @@ describe('เงื่อนไขการออกใบ (`33` §9)', () => {
     expect(shouldIssueCertificate({ whtSatang: 0 })).toBe(false)
   })
 
-  it('แบบที่ยื่นมาจาก Tax Profile ที่ snapshot ไว้ก่อนเสมอ (`18` §6.3)', () => {
-    // Payee เป็นบุคคลธรรมดา แต่ profile ระบุ PND53 ⇒ profile ชนะ
-    expect(filingFormOf({ taxProfileFilingForm: 'PND53', payeeType: 'individual' })).toBe('PND53')
-    expect(filingFormOf({ taxProfileFilingForm: null, payeeType: 'individual' })).toBe('PND3')
-    expect(filingFormOf({ taxProfileFilingForm: null, payeeType: 'corporate' })).toBe('PND53')
+  it('มติ O57 — บุคคลธรรมดายื่น ภ.ง.ด.3 เสมอ แม้ Tax Profile ตั้ง ภ.ง.ด.53 · ภ.ง.ด.53 เฉพาะนิติบุคคล', () => {
+    // ทุกค่าของ Tax Profile × ทุกโหมดประเภทเงินได้ (รอบเก่า null / 40(8) / 40(1) / 40(2))
+    const profileForms = [null, 'PND1', 'PND3', 'PND53'] as const
+    const categories = [undefined, null, 'sec_40_8', 'sec_40_1', 'sec_40_2'] as const
+    for (const taxProfileFilingForm of profileForms) {
+      for (const incomeCategory of categories) {
+        const perPayee = incomeCategory === 'sec_40_1' || incomeCategory === 'sec_40_2'
+        expect(
+          filingFormOf({ taxProfileFilingForm, payeeType: 'individual', incomeCategory }),
+          `บุคคลธรรมดา profile=${String(taxProfileFilingForm)} category=${String(incomeCategory)}`,
+        ).toBe(perPayee ? 'PND1' : 'PND3')
+        expect(
+          filingFormOf({ taxProfileFilingForm, payeeType: 'corporate', incomeCategory }),
+          `นิติบุคคล profile=${String(taxProfileFilingForm)} category=${String(incomeCategory)}`,
+        ).toBe('PND53')
+      }
+    }
   })
 
   it('ประเภทเงินได้ว่าง ⇒ ใช้ค่ามาตรฐาน มาตรา 40(8) (ฟิลด์บังคับตาม `28` §6.3 ห้ามว่าง)', () => {
