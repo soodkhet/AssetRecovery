@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { FieldError } from '@/lib/field/errors'
 import {
+  assertHotelClaimWithinCap,
+  hotelCapExceededMessage,
+  hotelClaimCapSatang,
+  isHotelClaimOverCap,
   assertHotelClaimFields,
   assertSharedAgentInTeam,
   hotelClaimFormError,
@@ -80,5 +84,55 @@ describe('ข้อความของฟอร์มเบิกที่พ�
     expect(hotelClaimFormError({ ...ok, amountBaht: 'abc' })).toBe('จำนวนเงินต้องเป็นตัวเลข')
     expect(hotelClaimFormError({ ...ok, hasReceipt: false })).toBe('ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
     expect(hotelClaimFormError(ok)).toBeNull()
+  })
+})
+
+describe('เพดานค่าที่พักต่อคืน (มติ PO U89 · `22` §6.15)', () => {
+  const cap = { maxPerNightSatang: 80_000, nights: 1 }
+
+  it('เท่าเพดานพอดี = ผ่าน', () => {
+    expect(isHotelClaimOverCap({ ...cap, amountSatang: 80_000 })).toBe(false)
+    expect(() => assertHotelClaimWithinCap({ ...cap, amountSatang: 80_000 })).not.toThrow()
+  })
+
+  it('เกินเพดาน 1 สตางค์ = บล็อก พร้อมข้อความบอกเพดานเป็นบาท', () => {
+    expect(isHotelClaimOverCap({ ...cap, amountSatang: 80_001 })).toBe(true)
+    try {
+      assertHotelClaimWithinCap({ ...cap, amountSatang: 80_001 })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toBeInstanceOf(FieldError)
+      const fieldError = error as FieldError
+      expect(fieldError.code).toBe('HOTEL_CLAIM_EXCEEDS_CAP')
+      expect(fieldError.status).toBe(400)
+      expect(fieldError.userMessage).toContain('800.00 บาท/คืน')
+      expect(fieldError.userMessage).toContain('800.01 บาท')
+      expect(fieldError.userMessage).not.toMatch(/§|ไฟล์ \d/)
+      expect(fieldError.context).toMatchObject({ capSatang: 80_000, nights: 1 })
+    }
+  })
+
+  it('หลายคืน = เพดานต่อคืน × จำนวนคืน', () => {
+    expect(hotelClaimCapSatang(80_000, 3)).toBe(240_000)
+    expect(isHotelClaimOverCap({ maxPerNightSatang: 80_000, nights: 3, amountSatang: 240_000 })).toBe(false)
+    expect(isHotelClaimOverCap({ maxPerNightSatang: 80_000, nights: 3, amountSatang: 240_001 })).toBe(true)
+    expect(hotelCapExceededMessage({ maxPerNightSatang: 80_000, nights: 3, amountSatang: 240_001 })).toContain(
+      '800.00 บาท/คืน × 3 คืน = 2,400.00 บาท',
+    )
+  })
+
+  it('แผนไม่ตั้งเพดาน = ไม่จำกัด', () => {
+    expect(hotelClaimCapSatang(null, 1)).toBeNull()
+    expect(isHotelClaimOverCap({ maxPerNightSatang: null, nights: 1, amountSatang: 99_999_999 })).toBe(false)
+  })
+
+  it('เพดาน 0 = เบิกไม่ได้ทุกยอด', () => {
+    expect(isHotelClaimOverCap({ maxPerNightSatang: 0, nights: 1, amountSatang: 1 })).toBe(true)
+  })
+
+  it('จำนวนคืน/เพดานไม่ถูกต้อง = RangeError', () => {
+    expect(() => hotelClaimCapSatang(80_000, 0)).toThrow(RangeError)
+    expect(() => hotelClaimCapSatang(80_000, 1.5)).toThrow(RangeError)
+    expect(() => hotelClaimCapSatang(-1, 1)).toThrow(RangeError)
   })
 })

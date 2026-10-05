@@ -97,6 +97,7 @@ const expenseSelect = {
       fuelRatePerKmSatang: true,
       fuelDailyFlatSatang: true,
       allowanceSatang: true,
+      hotelMaxPerNightSatang: true,
     },
   },
   approvalMatrix: {
@@ -223,6 +224,8 @@ export function describeExpenseBasis(row: {
     fuelRatePerKmSatang: number | null
     fuelDailyFlatSatang: number | null
     allowanceSatang: number | null
+    /** เพดานค่าที่พักต่อคืนที่ snapshot ตอนเบิก (มติ PO U89) — ไม่ส่ง/`null` = ไม่จำกัด */
+    hotelMaxPerNightSatang?: number | null
   } | null
   /** แถวรายวัน (ผูก `field_day_settlement_id`) — ใช้ snapshot ของวันนั้น ไม่ใช่แผนปัจจุบัน */
   fieldDaySettlement?: {
@@ -249,6 +252,9 @@ export function describeExpenseBasis(row: {
   if (row.expenseType === 'allowance' && row.compPlan?.allowanceSatang) {
     const days = Math.round(row.grossSatang / row.compPlan.allowanceSatang)
     return `${days} วัน × ${satangToBaht(row.compPlan.allowanceSatang)} บาท/วัน`
+  }
+  if (row.expenseType === 'hotel' && row.compPlan?.hotelMaxPerNightSatang != null) {
+    return `${satangToBaht(row.grossSatang)} บาท (เพดาน ${satangToBaht(row.compPlan.hotelMaxPerNightSatang)} บาท/คืน)`
   }
   return `${satangToBaht(row.grossSatang)} บาท`
 }

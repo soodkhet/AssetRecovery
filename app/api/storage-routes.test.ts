@@ -33,6 +33,13 @@ const storageMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/uploads/storage', () => storageMock)
 
+// มติ PO U90 — audit การเปิดไฟล์ข้อมูลส่วนบุคคล
+const auditMock = vi.hoisted(() => ({ emitAudit: vi.fn(async () => undefined) }))
+vi.mock('@/lib/audit/audit', () => auditMock)
+
+const customerWhtQueries = vi.hoisted(() => ({ assertCustomerWhtInScope: vi.fn(async () => undefined) }))
+vi.mock('@/lib/customer-wht/queries', () => customerWhtQueries)
+
 const { POST: postUploadUrl } = await import('@/app/api/storage/upload-url/route')
 const { POST: postDownloadUrl } = await import('@/app/api/storage/download-url/route')
 
@@ -336,6 +343,75 @@ describe('POST /api/storage/download-url', () => {
     requireSessionMock.mockResolvedValue(NO_CAPS)
     const response = await postDownloadUrl(downloadReq(`cases/${CASE_ID}/contract_doc/u-a.pdf`))
     expect(response.status).toBe(403)
+  })
+
+  describe('มติ PO U90 — audit การเปิดไฟล์ข้อมูลส่วนบุคคล', () => {
+    const WHT_ID = '00000000-0000-4000-8000-000000000301'
+    const ACCOUNTANT = sessionUser('00000000-0000-4000-8000-0000000000e2', { manage_customer_wht: 'manage' })
+
+    it.each(['contract_doc', 'national_id_doc', 'bundle_doc', 'other_doc'])(
+      'เอกสารเคส %s → audit view หลังออก URL (เก็บ path ไม่เก็บ signed URL)',
+      async (slot) => {
+        requireSessionMock.mockResolvedValue(ADMIN)
+        const path = `cases/${CASE_ID}/${slot}/u-a.pdf`
+        const response = await postDownloadUrl(downloadReq(path))
+        expect(response.status).toBe(200)
+        expect(auditMock.emitAudit).toHaveBeenCalledTimes(1)
+        const [entry] = auditMock.emitAudit.mock.calls[0] as unknown as [Record<string, unknown>]
+        expect(entry).toMatchObject({
+          actorId: ADMIN.id,
+          action: 'view',
+          targetType: 'cases',
+          targetId: CASE_ID,
+          after: { kind: 'case_document', slot, path, fileName: 'u-a.pdf' },
+          reason: 'เปิดดูเอกสารข้อมูลส่วนบุคคล',
+        })
+        expect(JSON.stringify(entry)).not.toContain('https://storage.test')
+      },
+    )
+
+    it('50 ทวิ ลูกค้า → audit view ที่ใบ 50 ทวิ', async () => {
+      requireSessionMock.mockResolvedValue(ACCOUNTANT)
+      const path = `customer-wht/${WHT_ID}/u-w.pdf`
+      expect((await postDownloadUrl(downloadReq(path))).status).toBe(200)
+      expect(auditMock.emitAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'view',
+          targetType: 'customer_wht_certificates',
+          targetId: WHT_ID,
+          after: { kind: 'customer_wht', path, fileName: 'u-w.pdf' },
+        }),
+      )
+    })
+
+    it('รูปสินค้า / หลักฐานปิดงาน / ใบเสร็จ / รูปรับเข้าคลัง ไม่บันทึก', async () => {
+      requireSessionMock.mockResolvedValue(ADMIN)
+      expect((await postDownloadUrl(downloadReq(`cases/${CASE_ID}/product_photo/u.jpg`))).status).toBe(200)
+      requireSessionMock.mockResolvedValue(AGENT)
+      expect((await postDownloadUrl(downloadReq(`cases/${CASE_ID}/field_evidence/photo/u.jpg`))).status).toBe(200)
+      expect((await postDownloadUrl(downloadReq(`expenses/${AGENT_ID}/receipts/u.pdf`))).status).toBe(200)
+      requireSessionMock.mockResolvedValue(WAREHOUSE)
+      expect((await postDownloadUrl(downloadReq(`assets/${ASSET_ID}/intake/front/u.jpg`))).status).toBe(200)
+      expect(auditMock.emitAudit).not.toHaveBeenCalled()
+    })
+
+    it('ออก URL ไม่สำเร็จ / ถูกปฏิเสธ → ไม่บันทึก', async () => {
+      requireSessionMock.mockResolvedValue(ADMIN)
+      storageMock.createSignedDownloadUrl.mockResolvedValueOnce(null as unknown as string)
+      expect(await errorCode(await postDownloadUrl(downloadReq(`cases/${CASE_ID}/national_id_doc/u.jpg`)))).toBe(
+        'UPLOAD_FILE_NOT_FOUND',
+      )
+      caseQueries.getCase.mockRejectedValueOnce(new CaseError('CASE_NOT_FOUND'))
+      expect((await postDownloadUrl(downloadReq(`cases/${CASE_ID}/national_id_doc/u.jpg`))).status).toBe(404)
+      expect(auditMock.emitAudit).not.toHaveBeenCalled()
+    })
+
+    it('เขียน audit ไม่สำเร็จ → ไม่คืน URL', async () => {
+      requireSessionMock.mockResolvedValue(ADMIN)
+      auditMock.emitAudit.mockRejectedValueOnce(new Error('db down'))
+      // error ที่ไม่ใช่ของโมดูลถูกโยนต่อให้ framework ตอบ 500 — ไม่มี URL หลุดออกไป
+      await expect(postDownloadUrl(downloadReq(`cases/${CASE_ID}/national_id_doc/u.jpg`))).rejects.toThrow('db down')
+    })
   })
 
   it('ไม่พบไฟล์ใน Storage = UPLOAD_FILE_NOT_FOUND', async () => {
