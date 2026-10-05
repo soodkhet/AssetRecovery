@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { getTaxInvoiceDocSource } from '@/lib/sales/queries'
 import { buildTaxInvoiceDoc, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
@@ -20,11 +21,22 @@ export const GET = withApiPermission<RouteContext>(
   'view',
   SALES_READ_CAPABILITIES,
   toModuleErrorResponse,
-  async (_request: NextRequest, context, user) => {
+  async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const source = await getTaxInvoiceDocSource(user, id)
     const doc = buildTaxInvoiceDoc(source)
     const pdf = await renderTaxInvoice(doc)
+
+    // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
+    await emitDocumentExportAudit({
+      actor: user,
+      request,
+      targetType: 'tax_invoices',
+      targetId: id,
+      document: 'tax_invoice_pdf',
+      fileName: doc.fileName,
+      details: { invoice_number: source.invoiceNumber, invoice_status: source.status },
+    })
 
     return new Response(new Uint8Array(pdf), {
       headers: {

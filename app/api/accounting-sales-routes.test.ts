@@ -25,6 +25,13 @@ const queriesMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/sales/queries', () => queriesMock)
 
+/** BUG-153 — ทุกการดาวน์โหลดเอกสารต้องลง audit `export` (spy แทน DB) */
+const exportAuditMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/audit/audit', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/audit/audit')>()),
+  emitDocumentExportAudit: exportAuditMock,
+}))
+
 const { GET: getSales } = await import('@/app/api/accounting/sales/route')
 const { GET: getInvoices, POST: postInvoice } = await import('@/app/api/accounting/tax-invoices/route')
 const { PATCH: cancelInvoice } = await import('@/app/api/accounting/tax-invoices/[id]/cancel/route')
@@ -107,6 +114,7 @@ function docSource(overrides: Partial<TaxInvoiceDocSource> = {}): TaxInvoiceDocS
 
 beforeEach(() => {
   requireSessionMock.mockReset()
+  exportAuditMock.mockReset()
   for (const fn of Object.values(queriesMock)) fn.mockReset()
 })
 
@@ -232,6 +240,15 @@ describe('ใบกำกับภาษี PDF (`28` §6.2)', () => {
     expect(body.subarray(0, 5).toString('latin1')).toBe('%PDF-')
     // ไม่ register ฟอนต์ = ตัวอักษรไทยหายทั้งใบ **โดยไม่มี error** (`28` §7)
     expect(body.toString('latin1')).toContain('NotoSansThai')
+    // BUG-153 — พิมพ์ใบกำกับภาษีต้องลง audit `export`
+    expect(exportAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetType: 'tax_invoices',
+        targetId: INVOICE_ID,
+        document: 'tax_invoice_pdf',
+        details: expect.objectContaining({ invoice_number: 'INV-0006' }),
+      }),
+    )
   })
 
   it('การเงิน (view) พิมพ์สำเนาได้ · ใบที่ยกเลิกแล้วยังพิมพ์ได้เพื่อเก็บเป็นหลักฐาน', async () => {

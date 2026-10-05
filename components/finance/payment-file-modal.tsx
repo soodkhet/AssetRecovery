@@ -5,7 +5,7 @@ import { Button, Field, InlineAlert, Modal, RefText, Select, Textarea, useToast 
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { callApi, jsonRequest, type ApiWarning } from '@/lib/api/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
-import { isDuplicatePaymentFile } from '@/lib/payout/payout-ui'
+import { hasAdvanceOffset, isDuplicatePaymentFile, payoutTransferText } from '@/lib/payout/payout-ui'
 import type { PaymentFileResultDto, PayoutBatchDto } from '@/lib/payout/types'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
 
@@ -112,7 +112,8 @@ export function PaymentFileModal({
     showToast({
       tone: 'success',
       title: 'สร้างไฟล์โอนแล้ว',
-      description: `${outcome.fileName ?? ''} · ${fmtCount(outcome.rowCount)} รายการ`,
+      // ยอดโอนจริงจาก server (หักคืนเงินทดรองแล้ว — BUG-154)
+      description: `${outcome.fileName ?? ''} · ${fmtCount(outcome.rowCount)} รายการ · ${payoutTransferText(outcome.batch)}`,
     })
     onDone()
   }
@@ -181,7 +182,13 @@ export function PaymentFileModal({
           <div className="space-y-3">
             <InlineAlert tone="success" title="สร้างไฟล์โอนสำเร็จ">
               ไฟล์ <RefText>{generated.fileName}</RefText> · {fmtCount(generated.rowCount)} รายการ ·
-              ยอดโอนสุทธิ {fmtSatangSymbol(generated.batch.netSatang)}
+              ยอดโอนสุทธิ {fmtSatangSymbol(generated.batch.transferSatang)}
+              {hasAdvanceOffset(generated.batch) && (
+                <span className="block">
+                  หักคืนเงินทดรอง {fmtSatangSymbol(generated.batch.advanceOffsetSatang)} (ยอดหลังหักภาษี{' '}
+                  {fmtSatangSymbol(generated.batch.netSatang)})
+                </span>
+              )}
             </InlineAlert>
             <div className="rounded-lg border border-slate-200 p-3 text-xs text-slate-600">
               <p>
@@ -228,10 +235,22 @@ export function PaymentFileModal({
               </InlineAlert>
             )}
 
-            <div className="grid grid-cols-3 gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div
+              className={`grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 ${
+                hasAdvanceOffset(batch) ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+              }`}
+            >
               <Summary label="จำนวนรายการ" value={`${fmtCount(batch.itemCount)} รายการ`} />
               <Summary label="WHT รวม" value={fmtSatangSymbol(batch.whtSatang)} tone="deduction" />
-              <Summary label="ยอดโอนสุทธิ" value={fmtSatangSymbol(batch.netSatang)} tone="emerald" />
+              {/* มติ PO U30 — หักคืนเงินทดรองหลังภาษี ⇒ ยอดในไฟล์ธนาคาร = ยอดโอนจริง ไม่ใช่ net (BUG-154) */}
+              {hasAdvanceOffset(batch) && (
+                <Summary
+                  label="หักคืนเงินทดรอง"
+                  value={fmtSatangSymbol(batch.advanceOffsetSatang)}
+                  tone="deduction"
+                />
+              )}
+              <Summary label="ยอดโอนสุทธิ" value={fmtSatangSymbol(batch.transferSatang)} tone="emerald" />
             </div>
 
             <Field label="เหตุผล / อ้างอิงการอนุมัติจ่าย" required>

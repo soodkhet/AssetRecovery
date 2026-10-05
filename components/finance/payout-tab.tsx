@@ -35,9 +35,11 @@ import {
   canDownloadPaymentFile,
   canGeneratePaymentFile,
   countPendingPayoutBatches,
+  hasAdvanceOffset,
   isDuplicatePaymentFile,
   payoutStatusBadgeGroup,
-  pendingPayoutNetSatang,
+  payoutTransferText,
+  pendingPayoutTransferSatang,
   PAYOUT_SIDE_BADGE_CLASS,
   PAYOUT_SIDE_FILTERS,
   PAYOUT_STATUS_FILTERS,
@@ -90,7 +92,8 @@ export function PayoutTab() {
     showToast({
       tone: 'success',
       title: 'ยืนยันการจ่ายเงินแล้ว',
-      description: `${completeTarget.name} — ${fmtSatangSymbol(completeTarget.netSatang)}`,
+      // ยอดโอนจริงจาก server (หักคืนเงินทดรองแล้ว — BUG-154)
+      description: `${completeTarget.name} — ${payoutTransferText(completeTarget)}`,
     })
     setCompleteTarget(null)
     setCompleteReason('')
@@ -105,7 +108,7 @@ export function PayoutTab() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="เงินรอจ่าย (Payout)"
-          value={failed ? '—' : fmtSatangSymbol(pendingPayoutNetSatang(items))}
+          value={failed ? '—' : fmtSatangSymbol(pendingPayoutTransferSatang(items))}
           hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : `${fmtCount(countPendingPayoutBatches(items))} รอบที่ยังไม่จ่ายสำเร็จ`}
         />
         <StatCard
@@ -207,7 +210,12 @@ export function PayoutTab() {
                       {fmtSatangSymbol(batch.whtSatang)}
                     </Td>
                     <Td numeric className="text-base font-bold text-emerald-700">
-                      {fmtSatangSymbol(batch.netSatang)}
+                      {fmtSatangSymbol(batch.transferSatang)}
+                      {hasAdvanceOffset(batch) && (
+                        <p className="text-[10px] font-normal text-amber-700">
+                          หักคืนเงินทดรอง {fmtSatangSymbol(batch.advanceOffsetSatang)}
+                        </p>
+                      )}
                     </Td>
                     <Td>
                       <StatusBadge
@@ -302,7 +310,13 @@ export function PayoutTab() {
       >
         <div className="mb-3 space-y-2">
           <InlineAlert tone="success" title="ยอดสุทธิที่โอน">
-            {completeTarget === null ? '' : fmtSatangSymbol(completeTarget.netSatang)}
+            {completeTarget === null ? '' : fmtSatangSymbol(completeTarget.transferSatang)}
+            {completeTarget !== null && hasAdvanceOffset(completeTarget) && (
+              <span className="block text-xs font-normal">
+                หักคืนเงินทดรอง {fmtSatangSymbol(completeTarget.advanceOffsetSatang)} (ยอดหลังหักภาษี{' '}
+                {fmtSatangSymbol(completeTarget.netSatang)})
+              </span>
+            )}
           </InlineAlert>
           <InlineAlert tone="info">
             ปกติระบบ sync สถานะนี้อัตโนมัติจากรายการเดินบัญชีที่จับคู่สำเร็จ —

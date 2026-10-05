@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { type AuditClient, buildAuditRecord, emitAudit } from '@/lib/audit/audit'
+import {
+  type AuditClient,
+  buildAuditRecord,
+  buildDocumentExportEntry,
+  emitAudit,
+  emitDocumentExportAudit,
+} from '@/lib/audit/audit'
 import { isAuditError } from '@/lib/audit/errors'
 import type { AuditEntry, AuditRecordData } from '@/lib/audit/types'
 
@@ -132,5 +138,61 @@ describe('buildAuditRecord — before/after', () => {
   it('reason ถูก trim และค่าว่างกลายเป็น null', () => {
     expect(record({ ...base, reason: '   ' }).reason).toBeNull()
     expect(record({ ...base, action: 'delete', reason: ' ลบทิ้ง ' }).reason).toBe('ลบทิ้ง')
+  })
+})
+
+describe('emitDocumentExportAudit — การนำเอกสารออก (BUG-153)', () => {
+  const actor = { id: 'user-9', organizationId: 'org-1', roleName: 'คลังสินค้า' }
+
+  it('ลง action export ครบ 9 fields: ผู้สั่ง + เป้าหมาย + ชนิดไฟล์ + ip/user-agent', async () => {
+    const { client, rows } = fakeClient()
+    const request = new Request('http://localhost/api/handover-lots/lot-1/pdf', {
+      headers: { 'x-forwarded-for': '10.0.0.7', 'user-agent': 'vitest' },
+    })
+
+    await emitDocumentExportAudit(
+      {
+        actor,
+        request,
+        targetType: 'handover_lots',
+        targetId: 'lot-1',
+        document: 'handover_note_pdf',
+        fileName: 'LOT-2569-001.pdf',
+        details: { lot_number: 'LOT-2569-001' },
+      },
+      client,
+    )
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      organizationId: 'org-1',
+      actorId: 'user-9',
+      actorRole: 'คลังสินค้า',
+      action: 'export',
+      targetType: 'handover_lots',
+      targetId: 'lot-1',
+      afterData: {
+        channel: 'internal',
+        document: 'handover_note_pdf',
+        file_name: 'LOT-2569-001.pdf',
+        lot_number: 'LOT-2569-001',
+      },
+      reason: null,
+      ipAddress: '10.0.0.7',
+      userAgent: 'vitest',
+    })
+  })
+
+  it('ไม่มี request = ip/user-agent เป็น null · ไม่บังคับ reason แม้เป้าหมายเป็นเอกสารภาษี', () => {
+    const entry = buildDocumentExportEntry({
+      actor,
+      targetType: 'tax_invoices',
+      targetId: 'inv-1',
+      document: 'tax_invoice_pdf',
+      fileName: 'INV-0001.pdf',
+    })
+    expect(entry.ipAddress).toBeNull()
+    expect(entry.userAgent).toBeNull()
+    expect(buildAuditRecord(entry).reason).toBeNull()
   })
 })

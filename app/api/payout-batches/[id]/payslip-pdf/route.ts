@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { renderPayslips } from '@/components/pdf/payslip'
 import { toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { assertPayoutDocReady, buildPayslipDocs, selectPayoutDocItems } from '@/lib/payout/payout-doc'
 import { getPayoutDocSource, MANAGE_PAYOUT_BATCH } from '@/lib/payout/queries'
@@ -31,10 +32,22 @@ export const GET = withApiPermission<RouteContext>(
     const scoped = selectPayoutDocItems(source.batch, parsed.data.payeeId)
     const pdf = await renderPayslips(buildPayslipDocs(scoped, source.issuer))
 
+    const fileName = `สลิปค่าตอบแทน ${scoped.name}.pdf`
+    // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
+    await emitDocumentExportAudit({
+      actor: user,
+      request,
+      targetType: 'payout_batches',
+      targetId: id,
+      document: 'payslip_pdf',
+      fileName,
+      details: { batch_name: source.batch.name, payee_id: parsed.data.payeeId ?? null },
+    })
+
     return new Response(new Uint8Array(pdf), {
       headers: {
         'content-type': 'application/pdf',
-        'content-disposition': attachmentHeader(`สลิปค่าตอบแทน ${scoped.name}.pdf`),
+        'content-disposition': attachmentHeader(fileName),
         'cache-control': 'no-store',
       },
     })

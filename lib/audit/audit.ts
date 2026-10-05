@@ -3,6 +3,7 @@ import { diffRecords, toAuditJson } from '@/lib/audit/diff'
 import type { AuditJsonValue } from '@/lib/audit/diff'
 import type { AuditEntry, AuditRecordData } from '@/lib/audit/types'
 import { validateAuditEntry } from '@/lib/audit/validate'
+import { getRequestMeta } from '@/lib/auth/request-meta'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -72,6 +73,55 @@ export async function emitAudit(entry: AuditEntry, client: AuditClient = prisma)
       afterData: data.afterData ?? undefined,
     },
   })
+}
+
+/** ผู้สั่ง export — รูปแบบย่อของ `SessionUser` (เอาเฉพาะฟิลด์ที่ audit ต้องใช้) */
+export interface ExportAuditActor {
+  readonly id: string
+  readonly organizationId: string
+  readonly roleName: string
+}
+
+export interface DocumentExportAudit {
+  readonly actor: ExportAuditActor
+  /** request ของ endpoint ดาวน์โหลด — ใช้เก็บ ip/user-agent (ไม่ส่ง = null) */
+  readonly request?: Request
+  readonly targetType: string
+  readonly targetId: string | null
+  /** ชนิดเอกสาร/ไฟล์ เช่น `handover_note_pdf` — แยกได้ว่านำไฟล์อะไรออกไป */
+  readonly document: string
+  readonly fileName: string
+  /** รายละเอียดเพิ่ม (เลขเอกสาร, version, ผู้รับเงิน ฯลฯ) */
+  readonly details?: Readonly<Record<string, unknown>>
+}
+
+/** ประกอบ entry ของการนำเอกสารออก (pure — แยกให้เทสต์เรียกตรงได้) */
+export function buildDocumentExportEntry(input: DocumentExportAudit): AuditEntry {
+  const meta = input.request ? getRequestMeta(input.request) : { ipAddress: null, userAgent: null }
+  return {
+    organizationId: input.actor.organizationId,
+    actorId: input.actor.id,
+    actorRole: input.actor.roleName,
+    action: 'export',
+    targetType: input.targetType,
+    targetId: input.targetId,
+    before: null,
+    after: { channel: 'internal', document: input.document, file_name: input.fileName, ...(input.details ?? {}) },
+    reason: null,
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
+  }
+}
+
+/**
+ * audit การนำเอกสาร/ไฟล์ออกจากระบบ (ดาวน์โหลด PDF/Excel/ไฟล์ธนาคาร/แพ็กซ้ำ) — action `export`
+ * ทุก export ต้อง trace กลับผู้สั่งได้ (Rule 03 · `90` §13) · อ่านอย่างเดียวจึงไม่มี before/reason
+ */
+export async function emitDocumentExportAudit(
+  input: DocumentExportAudit,
+  client: AuditClient = prisma,
+): Promise<void> {
+  await emitAudit(buildDocumentExportEntry(input), client)
 }
 
 export type { AuditEntry } from '@/lib/audit/types'

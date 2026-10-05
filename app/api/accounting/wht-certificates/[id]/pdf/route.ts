@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { renderWhtCertificate } from '@/components/pdf/wht-certificate'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { getWhtCertificateDocSource } from '@/lib/wht/queries'
 import { buildWhtCertificateDoc, WHT_READ_CAPABILITIES } from '@/lib/wht/wht'
@@ -20,11 +21,22 @@ export const GET = withApiPermission<RouteContext>(
   'view',
   WHT_READ_CAPABILITIES,
   toModuleErrorResponse,
-  async (_request: NextRequest, context, user) => {
+  async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const source = await getWhtCertificateDocSource(user, id)
     const doc = buildWhtCertificateDoc(source)
     const pdf = await renderWhtCertificate(doc)
+
+    // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
+    await emitDocumentExportAudit({
+      actor: user,
+      request,
+      targetType: 'wht_certificates',
+      targetId: id,
+      document: 'wht_certificate_pdf',
+      fileName: doc.fileName,
+      details: { certificate_number: source.certificateNumber, certificate_status: source.status },
+    })
 
     return new Response(new Uint8Array(pdf), {
       headers: {
