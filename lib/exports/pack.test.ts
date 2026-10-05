@@ -30,6 +30,8 @@ import {
   BANK_RECON_HEADERS,
   CASH_RECEIPT_HEADERS,
   CHECKLIST_HEADERS,
+  CREDIT_NOTE_HEADERS,
+  creditNoteCsv,
   EXPENSE_HEADERS,
   PACK_COVER_FILE_NAME,
   PACK_FILES,
@@ -52,9 +54,20 @@ function sampleHeader(fileName: string): string[] {
 }
 
 describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', () => {
-  it('ครบ 8 ไฟล์ เลข 01–08 ต่อเนื่องไม่มีช่องว่าง', () => {
-    expect(PACK_FILES).toHaveLength(8)
-    expect(PACK_FILES.map((file) => file.no)).toEqual(['01', '02', '03', '04', '05', '06', '07', '08'])
+  it('ครบ 9 ไฟล์ เลข 01–09 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21)', () => {
+    expect(PACK_FILES).toHaveLength(9)
+    expect(PACK_FILES.map((file) => file.no)).toEqual(['01', '02', '03', '04', '05', '06', '07', '08', '09'])
+    expect(PACK_FILES.map((file) => file.fileName)).toEqual([
+      '01_Revenue.csv',
+      '02_Cash_Receipts.csv',
+      '03_Expenses.csv',
+      '04_Payments.csv',
+      '05_WHT_Data.csv',
+      '06_Bank_Reconciliation.csv',
+      '07_Adjustment_Log.csv',
+      '08_Document_Checklist.xlsx',
+      '09_Credit_Notes.csv',
+    ])
     expect(PACK_FILES.filter((file) => file.kind === 'xlsx').map((file) => file.no)).toEqual(['08'])
   })
 
@@ -130,6 +143,7 @@ describe('หัวคอลัมน์ตรงกับ reference/samples ท
     ['05_WHT_Data.csv', WHT_HEADERS],
     ['06_Bank_Reconciliation.csv', BANK_RECON_HEADERS],
     ['07_Adjustment_Log.csv', ADJUSTMENT_HEADERS],
+    ['09_Credit_Notes.csv', CREDIT_NOTE_HEADERS],
   ])('%s', (fileName, headers) => {
     expect(sampleHeader(fileName)).toEqual([...headers])
   })
@@ -409,5 +423,52 @@ describe('08_Document_Checklist.xlsx', () => {
     expect(sheet[3]).toEqual([...CHECKLIST_HEADERS])
     expect(sheet).toContainEqual(['ขาดเอกสาร (Critical)', '1'])
     expect(sheet.at(-1)?.[0]).toContain('ห้าม Export Accounting Pack')
+  })
+})
+
+describe('09_Credit_Notes.csv (มติ PO 05/10/2569 U21)', () => {
+  it('ใบลดหนี้ + ใบเพิ่มหนี้ — ยอดบวกเสมอ · วันที่ พ.ศ. · ไม่ผูก Adjustment = "-" · UTF-8 BOM + CRLF', () => {
+    const csv = creditNoteCsv([
+      {
+        documentType: 'CN',
+        number: 'CN-2569-001',
+        issueDate: new Date('2026-07-05T00:00:00Z'),
+        taxInvoiceRef: 'INV-2569-0014',
+        companyName: 'บริษัท สยามไฟแนนซ์ จำกัด',
+        amountBeforeVatSatang: 10_000,
+        vatSatang: 700,
+        totalSatang: 10_700,
+        reason: 'ลดค่าบริการ, ตามที่ตกลง',
+        status: 'active',
+        adjustmentRef: 'ADJ-2569-06-001',
+      },
+      {
+        documentType: 'DN',
+        number: 'DN-2569-001',
+        issueDate: new Date('2026-07-06T00:00:00Z'),
+        taxInvoiceRef: 'INV-2569-0014',
+        companyName: 'บริษัท สยามไฟแนนซ์ จำกัด',
+        amountBeforeVatSatang: 5_000,
+        vatSatang: 350,
+        totalSatang: 5_350,
+        reason: 'เพิ่มค่าบริการ',
+        status: 'cancelled',
+        adjustmentRef: null,
+      },
+    ])
+    expect(csv.startsWith(CSV_BOM)).toBe(true)
+    const lines = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(lines[0]).toBe(CREDIT_NOTE_HEADERS.join(','))
+    expect(lines[1]).toBe(
+      'CN,CN-2569-001,05/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,100.00,7.00,107.00,"ลดค่าบริการ, ตามที่ตกลง",active,ADJ-2569-06-001',
+    )
+    expect(lines[2]).toBe(
+      'DN,DN-2569-001,06/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,50.00,3.50,53.50,เพิ่มค่าบริการ,cancelled,-',
+    )
+    expect(lines[3]).toBe('')
+  })
+
+  it('ไม่มีเอกสารในรอบ ⇒ มีแต่หัวคอลัมน์', () => {
+    expect(creditNoteCsv([])).toBe(`${CSV_BOM}${CREDIT_NOTE_HEADERS.join(',')}\r\n`)
   })
 })

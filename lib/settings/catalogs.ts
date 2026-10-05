@@ -51,7 +51,7 @@ export const INTERNAL_DOCUMENT_TEMPLATES: readonly InternalDocumentTemplate[] = 
 ]
 
 export interface ExportFormatSpec {
-  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–08 ห้ามขาด (`37` §6.1) */
+  /** ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 01–09 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21) */
   fileName: string
   format: 'CSV UTF-8' | 'XLSX'
   content: string
@@ -108,5 +108,11 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     format: 'XLSX',
     content: 'source_ref, doc_status, issue',
     sourceFile: '34',
+  },
+  {
+    fileName: '09_Credit_Notes.csv',
+    format: 'CSV UTF-8',
+    content: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat',
+    sourceFile: '31',
   },
 ]

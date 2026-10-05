@@ -14,6 +14,7 @@
 | v1 | (เดิม) | Drafted from UI Reference — Export Record, versioning, รายชื่อไฟล์มาตรฐาน 01-08 |
 | v2 | 03/07/2569 | **แก้ไข §7.1 (Export Record status)**: เดิมมี 4 สถานะ `not_exported`/`draft`/`exported`/`accepted` — ตรวจสอบ workflow §9 แล้วพบว่า `not_exported`/`draft` เป็น state ที่ไม่เคยใช้จริง (record สร้างพร้อม status=exported ทันที) และคำว่า "exported" ไม่ตรงกับ schema ที่ใช้ `generated`/`sent`/`accepted` (3 states) — แก้เป็น 3 states ตรงกับ schema พร้อม**เพิ่มขั้น "mark ว่าส่งแล้ว" (`sent`)** ที่ขาดหายไป เพื่อแยกความต่างระหว่าง "สร้างไฟล์เสร็จ" กับ "ส่งให้สำนักงานบัญชีจริงแล้ว" (ปัจจุบันส่งนอกระบบ ต้องมีจุดให้บัญชี mark เอง) — ปิด flag ที่ตั้งไว้ใน `23-finance-state-machines.md` §6.16 |
 | v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (U15) — แจ้งสำนักงานบัญชีว่ามีคอลัมน์ใหม่**: `05_WHT_Data.csv` เพิ่มคอลัมน์ `filing_form` **ต่อท้ายสุด** (ค่ารหัสตรง enum `wht_filing_form`: `PND1` = ภ.ง.ด.1 เงินได้ 40(2) / `PND3` = ภ.ง.ด.3 / `PND53` = ภ.ง.ด.53 — มาจาก `wht_certificates.filing_form`) · คอลัมน์เดิม 8 ตัวไม่เปลี่ยนชื่อ/ลำดับ · ใบ 40(2) อัตรา 0% (U16) อยู่ในไฟล์เป็นแถว `wht_baht = 0.00` · template `reference/samples/05_WHT_Data.csv` แก้ตามแล้ว |
+| v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (U21) — แจ้งสำนักงานบัญชี: เพิ่มไฟล์ที่ 9**: รายชื่อไฟล์มาตรฐาน 8 → **9 ไฟล์** — `09_Credit_Notes.csv` (CSV UTF-8 + BOM แบบไฟล์อื่น) = ใบลดหนี้ (`CN`) + ใบเพิ่มหนี้ (`DN` — U19) ที่**ลงวันที่ในรอบ** รวมใบที่ยกเลิก · คอลัมน์ `document_type, number, issue_date, tax_invoice_ref, company, amount_before_vat_baht, vat_baht, total_baht, reason, status, adjustment_ref` (วันที่ พ.ศ. `DD/MM/YYYY` · ยอดเป็นบวกเสมอ ทิศทางดูจาก `document_type` · `status` = `active`/`cancelled` · `adjustment_ref` = เลขที่ใน `07_Adjustment_Log.csv` ของงวดเป้าหมายของ Adjustment, ไม่ผูก = `-`) · **ไฟล์ 01–08 ไม่เปลี่ยน** · หน้าปก/SHA-256 ของชุดครอบคลุม 01–09 · `file_count` = 9 · template `reference/samples/09_Credit_Notes.csv` |
 | v2.1 | 04/07/2569 | **กำหนดรูปแบบข้อมูลใน template (DEC-006/D10)**: `05_WHT_Data.csv` — `payee_tax_id` เป็นตัวเลข 13 หลักล้วนไม่มีขีดคั่น (ตรง validation `INVALID_TAX_ID_FORMAT`) / `06_Bank_Reconciliation.csv` — column `status` ใช้ค่า enum เต็ม 4 ค่า (`auto_matched`/`manual_matched`/`unmatched`/`unmatched_resolved`) ให้สำนักงานบัญชีเห็นที่มาการจับคู่ ไม่ simplify — template CSV ตัวอย่างแก้ให้ตรงแล้ว |
 
 ขอบเขตเอกสารนี้: สร้างและติดตามประวัติการ Export "Accounting Pack" — ชุดไฟล์ข้อมูลที่ส่งมอบให้สำนักงานบัญชีภายนอกทุกรอบเดือน
@@ -61,6 +62,7 @@
 | 06_Bank_Reconciliation.csv | CSV UTF-8 | ผลกระทบยอดธนาคาร — `status` ใช้ enum เต็ม 4 ค่า (DEC-006/D10) | 35 |
 | 07_Adjustment_Log.csv | CSV UTF-8 | รายการปรับปรุงยอดทั้งหมดของรอบนั้น — target_type, target_id, adjustment_type, amount, reason, approved_by | 20 |
 | 08_Document_Checklist.xlsx | XLSX | สถานะ Exception/เอกสารไม่ครบ | 34 |
+| 09_Credit_Notes.csv | CSV UTF-8 | ใบลดหนี้ (`CN`) / ใบเพิ่มหนี้ (`DN`) ที่ลงวันที่ในรอบ รวมใบที่ยกเลิก — document_type, number, issue_date, tax_invoice_ref, company, amount_before_vat_baht, vat_baht, total_baht, reason, status, adjustment_ref (มติ PO 05/10/2569 U21) | 31 |
 
 > **แก้ไขแล้ว**: เดิม UI ต้นแบบ (`accounting.html`) มีช่องว่างเลข 07 หายไป — เติม **Adjustment Log** เข้าไปแทน เพราะสำนักงานบัญชีจำเป็นต้องเห็นรายการปรับปรุงยอดทั้งหมดที่เกิดในรอบบัญชีนั้น — เรียงเลขต่อเนื่อง 01-08 ครบไม่มีช่องว่างแล้ว
 
@@ -145,6 +147,7 @@
 | Export มี Critical | พยายาม Export ขณะมี critical open | reject EXPORT_BLOCKED_CRITICAL |
 | Export ซ้ำสร้าง version ใหม่ | Export รอบเดียวกันครั้งที่ 2 | version เพิ่มเป็น v1.1 ไม่ทับของเดิม |
 | Mark sent | Export Record สถานะ generated กด "mark ว่าส่งแล้ว" | status เปลี่ยนเป็น sent, sent_at บันทึกเวลา |
+| ชุดมีไฟล์ 09 (U21) | บันทึกใบลดหนี้ + ใบเพิ่มหนี้ในรอบ แล้ว Export | zip มี `09_Credit_Notes.csv` หัวคอลัมน์ตรง template · แถว `CN`/`DN` ครบ · file_count = 9 |
 
 ---
 

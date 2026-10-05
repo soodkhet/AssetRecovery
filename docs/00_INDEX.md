@@ -122,5 +122,5 @@
 | `notifications.html` | ไฟล์ 90 §6.3 |
 | `dashboard.html` | 🔶 DRAFT — ยังไม่มี spec .md (รอ PO) ห้ามใช้ implement |
 | `97-client-portal-mockup.html` / `97-client-portal-mobile-mockup.html` | ไฟล์ 97 |
-| `samples/01_tax_invoice.pdf` … `08_Document_Checklist.xlsx` | template ตัวอย่างของ Export Pack + เอกสารทางการ (ไฟล์ 28, 31, 33, 37) |
+| `samples/01_tax_invoice.pdf` … `09_Credit_Notes.csv` | template ตัวอย่างของ Export Pack + เอกสารทางการ (ไฟล์ 28, 31, 33, 37) |
 | `samples/01_Revenue.csv` … `07_Adjustment_Log.csv` | ตัวอย่าง format CSV ของ Export Pack (ไฟล์ 37 §6.1) |

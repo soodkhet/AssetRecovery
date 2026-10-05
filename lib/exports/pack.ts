@@ -14,8 +14,9 @@ import type {
  * Accounting Pack (ไฟล์ 37) — **ตัวประกอบไฟล์ทั้งชุด แบบ pure ล้วน**
  *
  * ### กติกาที่ห้ามหลุด
- * - **รายชื่อไฟล์ 01–08 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
- *   · หัวคอลัมน์ของทุกไฟล์ต้องตรง `reference/samples/01–08` เป๊ะ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ)
+ * - **รายชื่อไฟล์ 01–09 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
+ *   · หัวคอลัมน์ของทุกไฟล์ต้องตรง `reference/samples/01–09` เป๊ะ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ)
+ *   · `09_Credit_Notes.csv` เพิ่มตามมติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ · ไฟล์ 01–08 ไม่เปลี่ยน
  * - `05_WHT_Data.csv` — `payee_tax_id` เป็น **ตัวเลข 13 หลักล้วน** (DEC-006/D10) ⇒ payee ที่ยังไม่กรอก
  *   เลขประจำตัวผู้เสียภาษีต้องหยุดตั้งแต่ต้น (`assertPayeeTaxIdsComplete()`) ไม่ใช่ปล่อยช่องว่างไปถึง
  *   สำนักงานบัญชี
@@ -96,6 +97,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '06', fileName: '06_Bank_Reconciliation.csv', kind: 'csv', description: 'ผลกระทบยอดธนาคาร', sourceDoc: '35' },
   { no: '07', fileName: '07_Adjustment_Log.csv', kind: 'csv', description: 'รายการปรับปรุงยอดทั้งหมดของรอบนั้น', sourceDoc: '20' },
   { no: '08', fileName: '08_Document_Checklist.xlsx', kind: 'xlsx', description: 'source_ref, doc_status, exception summary', sourceDoc: '34' },
+  { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat', sourceDoc: '31' },
 ]
 
 /** ชื่อไฟล์ตามเลขลำดับ — ผู้ประกอบชุดอ้างเลข ไม่ใช่ตำแหน่งใน array (`37` §6.1) */
@@ -106,7 +108,7 @@ export function packFileName(no: string): string {
 }
 
 /**
- * หน้าปกไม่อยู่ในรายชื่อ 8 ไฟล์ของ §6.1 — ตั้งเลข `00` เพื่อให้เรียงมาก่อนและไม่ไปแทรกเลข 01–08
+ * หน้าปกไม่อยู่ในรายชื่อ 9 ไฟล์ของ §6.1 — ตั้งเลข `00` เพื่อให้เรียงมาก่อนและไม่ไปแทรกเลข 01–09
  * (คีย์ `cover` ใน `file_urls` · ไม่ถูกนับใน `file_count`)
  */
 export const PACK_COVER_KEY = 'cover'
@@ -442,6 +444,60 @@ export function adjustmentCsv(
   )
 }
 
+// ── 09_Credit_Notes.csv (ไฟล์ 31 — มติ PO 05/10/2569 U21) ────────────────────
+
+/**
+ * ใบลดหนี้ (`CN`) + ใบเพิ่มหนี้ (`DN`) ที่**ลงวันที่ในรอบ** (ภาษีขายปรับในเดือนที่ออกเอกสาร) รวมใบที่ยกเลิก
+ * (`status` = enum เต็มแบบไฟล์ 06) · ยอดเป็นบวกเสมอ — ทิศทางดูจาก `document_type`
+ * · `adjustment_ref` = เลขที่รายการปรับปรุงในไฟล์ 07 ของงวดเป้าหมายของ Adjustment (`adjustmentRef()`) · ไม่ผูก ⇒ `-`
+ */
+export const CREDIT_NOTE_HEADERS = [
+  'document_type',
+  'number',
+  'issue_date',
+  'tax_invoice_ref',
+  'company',
+  'amount_before_vat_baht',
+  'vat_baht',
+  'total_baht',
+  'reason',
+  'status',
+  'adjustment_ref',
+] as const
+
+export interface CreditNoteExportRow {
+  documentType: 'CN' | 'DN'
+  number: string
+  issueDate: Date
+  taxInvoiceRef: string
+  companyName: string
+  amountBeforeVatSatang: number
+  vatSatang: number
+  totalSatang: number
+  reason: string
+  status: string
+  adjustmentRef: string | null
+}
+
+export function creditNoteCsv(rows: readonly CreditNoteExportRow[]): string {
+  return buildCsv(
+    CREDIT_NOTE_HEADERS,
+    rows.map((row) => [
+      row.documentType,
+      row.number,
+      csvDate(row.issueDate),
+      row.taxInvoiceRef,
+      row.companyName,
+      csvBaht(row.amountBeforeVatSatang),
+      csvBaht(row.vatSatang),
+      csvBaht(row.totalSatang),
+      row.reason,
+      row.status,
+      csvText(row.adjustmentRef),
+    ]),
+  )
+}
+
 // ── 08_Document_Checklist.xlsx (ไฟล์ 34) ────────────────────────────────────
 
 export const CHECKLIST_HEADERS = [
@@ -558,7 +614,7 @@ export interface PackCoverDoc {
   versionLabel: string
   generatedByName: string
   generatedAtLabel: string
-  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–08** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
+  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 01–09** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
   contentDigest: string
   checks: readonly { label: string; passed: boolean }[]
   files: readonly PackCoverFileRow[]
