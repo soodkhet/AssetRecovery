@@ -480,6 +480,14 @@ enum TaxInvoiceStatus {
   @@map("tax_invoice_status")
 }
 
+/// ใบลดหนี้ที่สำนักงานบัญชีออกนอกระบบ (มติ PO 05/10/2569 U14 · ม.86/10) — ยกเลิกเป็น terminal เหมือนใบกำกับ
+enum CreditNoteStatus {
+  active
+  cancelled
+
+  @@map("credit_note_status")
+}
+
 enum WhtFilingForm {
   PND3 // บุคคลธรรมดา (ภ.ง.ด.3)
   PND53 // นิติบุคคล (ภ.ง.ด.53)
@@ -645,6 +653,7 @@ model Organization {
   accountingPeriods          AccountingPeriod[]
   salesRecords               SalesRecord[]
   taxInvoices                TaxInvoice[]
+  creditNotes                CreditNote[]
   cashReceipts               CashReceipt[]
   expenseRecords             ExpenseRecord[]
   whtCertificates            WhtCertificate[]
@@ -835,6 +844,9 @@ model User {
   salesRecordsCreated       SalesRecord[]               @relation("sales_created_by")
   taxInvoicesCreated        TaxInvoice[]                @relation("tax_invoices_created_by")
   taxInvoicesCancelled      TaxInvoice[]                @relation("tax_invoices_cancelled_by")
+  creditNotesCreated        CreditNote[]                @relation("credit_notes_created_by")
+  creditNotesUpdated        CreditNote[]                @relation("credit_notes_updated_by")
+  creditNotesCancelled      CreditNote[]                @relation("credit_notes_cancelled_by")
   cashReceiptsCreated       CashReceipt[]               @relation("cash_receipts_created_by")
   expenseRecordsCreated     ExpenseRecord[]             @relation("expense_records_created_by")
   whtCertsCreated           WhtCertificate[]            @relation("wht_certs_created_by")
@@ -2468,6 +2480,8 @@ model Adjustment {
   createdByUser  User          @relation("adjustments_created_by", fields: [createdBy], references: [id])
   updatedByUser  User?         @relation("adjustments_updated_by", fields: [updatedBy], references: [id])
 
+  creditNotes CreditNote[]
+
   @@index([organizationId, status], map: "idx_adjustments_org_status")
   @@map("adjustments")
 }
@@ -2569,12 +2583,61 @@ model TaxInvoice {
   cancelledByUser User?        @relation("tax_invoices_cancelled_by", fields: [cancelledBy], references: [id])
   createdByUser   User         @relation("tax_invoices_created_by", fields: [createdBy], references: [id])
 
+  creditNotes CreditNote[]
+
   @@index([organizationId, status], map: "idx_tax_invoices_org")
   @@index([organizationId, invoiceDate], map: "idx_tax_invoices_org_invoice_date")
   /// กันออกใบซ้ำที่ระดับ DB — `uniq_tax_invoice_active_per_sales` เป็น **partial unique index**
   /// `(organization_id, sales_record_id) WHERE status = 'active'` ซึ่ง Prisma เขียนไม่ได้
   /// ⇒ อยู่ใน raw SQL (`20260816040000_tax_invoice_active_unique`) ตาม Rule 02
   @@map("tax_invoices")
+}
+
+/// ใบลดหนี้ (มติ PO 05/10/2569 U14 + มติบัญชี B1 · ม.86/10) — **บันทึก**เอกสารที่สำนักงานบัญชีออกนอกระบบ
+/// (Hybrid Accounting Boundary: ระบบไม่ออกเอกสารภาษี final เอง) · เลขที่มาจากสำนักงานบัญชี
+/// ⚠️ Immutable: ห้าม DELETE · แก้ได้ทางเดียวคือยกเลิก (พร้อมเหตุผล) · `cancelled` ห้ามแก้/ห้าม reverse
+/// ⚠️ ไม่มี `deleted_at` โดยเจตนา (แนวเดียวกับ `tax_invoices`) — ยกเลิกแทนลบ
+/// CHECK ยอด/สถานะ + partial unique `(organization_id, credit_note_number)` / `(adjustment_id)` WHERE active
+/// + trigger กันยอดเกินใบกำกับ อยู่ใน raw SQL (`20261005130000_credit_notes`) ตาม Rule 02
+model CreditNote {
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String           @map("organization_id") @db.Uuid
+  taxInvoiceId          String           @map("tax_invoice_id") @db.Uuid
+  /// Adjustment ที่เป็นต้นเหตุ (ถ้ามี) — ต้องเป็น `decrease` ที่ `approved` ของรอบวางบิลเดียวกัน
+  adjustmentId          String?          @map("adjustment_id") @db.Uuid
+  /// เลขที่ตามเอกสารที่สำนักงานบัญชีออก (ไม่ได้เดินเลขโดยระบบ)
+  creditNoteNumber      String           @map("credit_note_number") @db.VarChar(50)
+  issueDate             DateTime         @map("issue_date") @db.Date
+  amountBeforeVatSatang Int              @map("amount_before_vat_satang")
+  vatSatang             Int              @map("vat_satang")
+  totalSatang           Int              @map("total_satang")
+  /// snapshot อัตรา VAT ของใบกำกับเดิม (จาก `revenues.vat_rate_pct_used` ของรอบวางบิล)
+  vatRateUsed           Decimal          @map("vat_rate_used") @db.Decimal(5, 2)
+  reason                String
+  /// path ไฟล์สแกนใน bucket `case-documents` (`tax-invoices/<id>/credit-notes/…`)
+  filePath              String?          @map("file_path")
+  fileSha256            String?          @map("file_sha256") @db.VarChar(64)
+  status                CreditNoteStatus @default(active)
+  cancelReason          String?          @map("cancel_reason")
+  cancelledBy           String?          @map("cancelled_by") @db.Uuid
+  cancelledAt           DateTime?        @map("cancelled_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  taxInvoice      TaxInvoice   @relation(fields: [taxInvoiceId], references: [id])
+  adjustment      Adjustment?  @relation(fields: [adjustmentId], references: [id])
+  createdByUser   User         @relation("credit_notes_created_by", fields: [createdBy], references: [id])
+  updatedByUser   User?        @relation("credit_notes_updated_by", fields: [updatedBy], references: [id])
+  cancelledByUser User?        @relation("credit_notes_cancelled_by", fields: [cancelledBy], references: [id])
+
+  @@index([organizationId, taxInvoiceId], map: "idx_credit_notes_org_invoice")
+  @@index([organizationId, issueDate], map: "idx_credit_notes_org_issue_date")
+  @@index([organizationId, adjustmentId], map: "idx_credit_notes_org_adjustment")
+  @@map("credit_notes")
 }
 
 /// บันทึกรับเงิน (ไฟล์ 31) — insert-only
