@@ -73,6 +73,20 @@ export function PaymentVoucherPage({ doc }: { doc: PaymentVoucherDoc }): React.J
         <Text style={styles.amountLabel}>หักภาษี ณ ที่จ่าย</Text>
         <Text style={styles.amountValue}>{doc.whtText}</Text>
       </View>
+      {doc.offsetLines.length === 0 ? null : (
+        <>
+          <View style={styles.amountRow}>
+            <Text style={styles.amountLabel}>สุทธิหลังหักภาษี</Text>
+            <Text style={styles.amountValue}>{doc.netAfterWhtText}</Text>
+          </View>
+          {doc.offsetLines.map((line) => (
+            <View key={line.label} style={styles.amountRow}>
+              <Text style={styles.amountLabel}>{line.label}</Text>
+              <Text style={styles.amountValue}>{line.amountText}</Text>
+            </View>
+          ))}
+        </>
+      )}
       <View style={styles.amountTotalRow}>
         <Text style={styles.amountLabelBold}>จำนวนเงินสุทธิที่จ่ายจริง</Text>
         <Text style={styles.amountValueBold}>{doc.netText}</Text>

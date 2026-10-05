@@ -66,6 +66,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   expenses: 'รายการเบิก',
   field_day_settlements: 'ค่าน้ำมันเหมา/เบี้ยเลี้ยงรายวัน',
   advances: 'เงินทดรองจ่าย',
+  advance_returns: 'การคืนยอดเงินทดรอง',
   payout_batches: 'รอบจ่ายเงิน',
   payee_profiles: 'ข้อมูลผู้รับเงิน',
   revenues: 'รายได้',

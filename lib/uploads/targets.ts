@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { advanceReturnFilePath } from '@/lib/advances/return-file'
 import { DOCUMENT_SLOTS } from '@/lib/cases/case'
 import { creditNoteFilePath } from '@/lib/credit-notes/file'
 import { storagePath } from '@/lib/cases/document-upload'
@@ -26,6 +27,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('lot_document'), lotId: z.uuid(), document: z.enum(LOT_DOCUMENTS) }),
   /** ไฟล์สแกนใบลดหนี้ที่สำนักงานบัญชีออก (มติ PO U14) — ผูกกับใบกำกับที่อ้างถึง */
   z.object({ kind: z.literal('credit_note'), taxInvoiceId: z.uuid() }),
+  /** หลักฐานรับคืนเงินทดรองแยก (มติ PO U30) — ผูกกับเงินทดรองที่รับคืน */
+  z.object({ kind: z.literal('advance_return'), advanceId: z.uuid() }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>
@@ -75,6 +78,8 @@ export function uploadTargetPath(
       return lotDocumentPath(target.lotId, target.document, fileName, uniqueKey)
     case 'credit_note':
       return creditNoteFilePath(target.taxInvoiceId, fileName, uniqueKey)
+    case 'advance_return':
+      return advanceReturnFilePath(target.advanceId, fileName, uniqueKey)
   }
 }
 
@@ -85,6 +90,7 @@ export type StoragePathOwner =
   | { kind: 'lot'; lotId: string }
   | { kind: 'expense_receipt'; userId: string }
   | { kind: 'tax_invoice'; taxInvoiceId: string }
+  | { kind: 'advance'; advanceId: string }
 
 const HEX = '[0-9a-fA-F]'
 const UUID = `${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}`
@@ -99,6 +105,10 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^tax-invoices/(${UUID})/credit-notes/[^/]`),
     owner: (id) => ({ kind: 'tax_invoice', taxInvoiceId: id }),
+  },
+  {
+    pattern: new RegExp(`^advances/(${UUID})/returns/[^/]`),
+    owner: (id) => ({ kind: 'advance', advanceId: id }),
   },
 ]
 

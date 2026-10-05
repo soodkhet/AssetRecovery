@@ -3,6 +3,7 @@ import { DOCUMENT_SLOTS } from '@/lib/cases/case'
 import { FIELD_MEDIA_KINDS } from '@/lib/field/media-upload'
 import {
   caseDocumentRule,
+  advanceReturnFileRule,
   creditNoteFileRule,
   expenseReceiptRule,
   fieldEvidenceRule,
@@ -20,6 +21,7 @@ const ASSET_ID = '00000000-0000-4000-8000-000000000101'
 const LOT_ID = '00000000-0000-4000-8000-000000000201'
 const USER_ID = '00000000-0000-4000-8000-0000000000a1'
 const INVOICE_ID = '00000000-0000-4000-8000-000000000301'
+const ADVANCE_ID = '00000000-0000-4000-8000-000000000401'
 const KEY = '11111111-1111-4111-8111-111111111111'
 
 describe('uploadTargetPath ↔ rules prefix ↔ parseStoragePath', () => {
@@ -53,6 +55,11 @@ describe('uploadTargetPath ↔ rules prefix ↔ parseStoragePath', () => {
       target: { kind: 'credit_note', taxInvoiceId: INVOICE_ID },
       prefix: creditNoteFileRule(INVOICE_ID).prefix,
       owner: { kind: 'tax_invoice', taxInvoiceId: INVOICE_ID },
+    },
+    {
+      target: { kind: 'advance_return', advanceId: ADVANCE_ID },
+      prefix: advanceReturnFileRule(ADVANCE_ID).prefix,
+      owner: { kind: 'advance', advanceId: ADVANCE_ID },
     },
   ]
 

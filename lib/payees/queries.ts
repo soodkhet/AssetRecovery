@@ -1,4 +1,5 @@
 import { onUniqueViolation } from '@/lib/api/unique-violation'
+import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
@@ -63,6 +64,11 @@ const payeeSelect = {
   user: { select: { fullName: true, role: { select: { name: true } }, team: { select: { name: true } } } },
   taxProfile: { select: { id: true, name: true, whtPct: true } },
   verifiedByUser: { select: { fullName: true } },
+  // มติ PO U30 — ยอดคืนเงินทดรองค้าง (เฉพาะรายการที่เคลียร์แล้วและมีวิธีคืน)
+  advances: {
+    where: { status: 'cleared', returnMethod: { not: null }, deletedAt: null },
+    select: { returnSatang: true, returns: { where: { reversedAt: null }, select: { amountSatang: true } } },
+  },
 } as const
 
 type PayeeRow = Prisma.PayeeProfileGetPayload<{ select: typeof payeeSelect }>
@@ -105,6 +111,15 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean): PayeeDto {
     verifiedByName: row.verifiedByUser?.fullName ?? null,
     bankAccountNameMatches: checkBankAccountName(row.user.fullName, row.accountName).matches,
     missingForVerification: missingFieldsForVerification(values),
+    advanceReturnOutstandingSatang: row.advances.reduce(
+      (total, advance) =>
+        total +
+        advanceReturnOutstandingSatang({
+          returnSatang: advance.returnSatang,
+          collectedSatang: advance.returns.map((entry) => entry.amountSatang),
+        }),
+      0,
+    ),
     updatedAt: row.updatedAt.toISOString(),
   }
 }

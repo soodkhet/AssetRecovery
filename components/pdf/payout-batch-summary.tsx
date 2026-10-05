@@ -52,7 +52,14 @@ export function PayoutBatchSummary({ doc }: { doc: PayoutSummaryDoc }): React.JS
               </View>
               <Text style={[docStyles.td, docStyles.amount, { width: COLUMNS[2] }]}>{row.grossText}</Text>
               <Text style={[docStyles.td, docStyles.amount, { width: COLUMNS[3] }]}>{row.whtText}</Text>
-              <Text style={[docStyles.td, docStyles.amount, { width: COLUMNS[4] }]}>{row.netText}</Text>
+              <View style={[docStyles.td, { width: COLUMNS[4] }]}>
+                <Text style={docStyles.amount}>{row.transferText}</Text>
+                {row.offsetText === null ? null : (
+                  <Text style={[docStyles.tdMuted, docStyles.amount]}>
+                    สุทธิ {row.netText} หักคืนเงินทดรอง {row.offsetText}
+                  </Text>
+                )}
+              </View>
             </View>
           ))}
 
@@ -61,8 +68,17 @@ export function PayoutBatchSummary({ doc }: { doc: PayoutSummaryDoc }): React.JS
             <Text style={[docStyles.tdBold, { width: COLUMNS[1] }]}>รวม</Text>
             <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[2] }]}>{doc.totalGrossText}</Text>
             <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[3] }]}>{doc.totalWhtText}</Text>
-            <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[4] }]}>{doc.totalNetText}</Text>
+            <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[4] }]}>{doc.totalTransferText}</Text>
           </View>
+          {doc.totalOffsetText === null ? null : (
+            <View style={docStyles.tableRow}>
+              <Text style={[docStyles.td, { width: COLUMNS[0] }]} />
+              <Text style={[docStyles.tdMuted, { width: '73%' }]}>
+                สุทธิหลังหักภาษี {doc.totalNetText} หักคืนเงินทดรองรวม {doc.totalOffsetText} (หักหลังภาษี ไม่กระทบฐานภาษีหัก ณ ที่จ่าย)
+              </Text>
+              <Text style={[docStyles.td, { width: '20%' }]} />
+            </View>
+          )}
         </View>
 
         <Text style={docStyles.noteText}>หมายเหตุ: {doc.note}</Text>

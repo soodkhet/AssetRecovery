@@ -34,5 +34,7 @@ export interface PayeeDto {
   bankAccountNameMatches: boolean
   /** ฟิลด์ที่ยังขาดก่อนกดยืนยันได้ (`18` §9) — ว่าง = พร้อมยืนยัน */
   missingForVerification: readonly string[]
+  /** ยอดคืนเงินทดรองค้างของผู้รับ (มติ PO U30 — เคลียร์แล้วแต่ยังไม่หัก/รับคืน · `22` §6.14) */
+  advanceReturnOutstandingSatang: number
   updatedAt: string
 }

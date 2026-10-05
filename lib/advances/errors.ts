@@ -14,6 +14,8 @@ export const ADVANCE_ERROR_CODES = [
   'ADVANCE_NOT_FOUND',
   'ADVANCE_INVALID_STATUS',
   'REJECTION_REASON_REQUIRED',
+  // มติ PO 05/10/2569 (UAT U30) — รับคืนแยกเกินยอดคืนค้าง
+  'ADVANCE_RETURN_EXCEEDS_OUTSTANDING',
 ] as const
 
 export type AdvanceErrorCode = (typeof ADVANCE_ERROR_CODES)[number]
@@ -25,6 +27,7 @@ const HTTP_STATUS: Record<AdvanceErrorCode, number> = {
   ADVANCE_NOT_FOUND: 404,
   ADVANCE_INVALID_STATUS: 400,
   REJECTION_REASON_REQUIRED: 400,
+  ADVANCE_RETURN_EXCEEDS_OUTSTANDING: 400,
 }
 
 const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
@@ -47,6 +50,10 @@ const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
   REJECTION_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผล',
     message: 'การปฏิเสธคำขอเงินทดรองต้องระบุเหตุผลให้ผู้ขอเสมอ',
+  },
+  ADVANCE_RETURN_EXCEEDS_OUTSTANDING: {
+    title: 'ยอดรับคืนเกินยอดค้าง',
+    message: 'ยอดเงินที่รับคืนต้องไม่เกินยอดคืนเงินทดรองที่ยังค้างอยู่',
   },
 }
 

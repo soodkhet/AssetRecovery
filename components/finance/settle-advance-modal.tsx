@@ -6,6 +6,8 @@ import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { settleUsedField } from '@/lib/advances/advance-ui'
+import { ADVANCE_RETURN_METHOD_LABEL, DEFAULT_ADVANCE_RETURN_METHOD } from '@/lib/advances/advance'
+import type { AdvanceReturnMethod } from '@/lib/generated/prisma/enums'
 import { fmtSatangSymbol } from '@/lib/format/money'
 
 /**
@@ -26,6 +28,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   const [used, setUsed] = useState('')
   const [receiptUrl, setReceiptUrl] = useState('')
   const [note, setNote] = useState('')
+  const [returnMethod, setReturnMethod] = useState<AdvanceReturnMethod>(DEFAULT_ADVANCE_RETURN_METHOD)
   const [saving, setSaving] = useState(false)
 
   if (advance === null) return null
@@ -47,7 +50,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     setSaving(true)
     const result = await callApi<AdvanceSettleResult>(
       `/api/advances/${advance.id}/settle`,
-      jsonRequest('PATCH', { usedSatang, receiptFileUrl: receiptUrl.trim(), note: note.trim() }),
+      jsonRequest('PATCH', { usedSatang, returnMethod, receiptFileUrl: receiptUrl.trim(), note: note.trim() }),
     )
     setSaving(false)
     if (result.error !== undefined) {
@@ -61,9 +64,12 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       title: 'เคลียร์ยอดเงินทดรองสำเร็จ',
       description: excessClaimCreated
         ? `สร้างคำขอเบิกส่วนเกิน ${fmtSatangSymbol(settled?.excessSatang)} ให้อัตโนมัติแล้ว (รออนุมัติ) — ขอเบิกรอบใหม่ได้`
-        : 'รายการนี้ปิดแล้ว ขอเบิกรอบใหม่ได้',
+        : settled !== undefined && settled.returnSatang > 0
+          ? `ยอดคืน ${fmtSatangSymbol(settled.returnSatang)} — ${ADVANCE_RETURN_METHOD_LABEL[returnMethod]} · ขอเบิกรอบใหม่ได้`
+          : 'รายการนี้ปิดแล้ว ขอเบิกรอบใหม่ได้',
     })
     setUsed('')
+    setReturnMethod(DEFAULT_ADVANCE_RETURN_METHOD)
     setReceiptUrl('')
     setNote('')
     onSettled()
@@ -118,6 +124,33 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           <InlineAlert tone="warning">
             ถ้าใช้จริงมากกว่ายอดที่ยืม → ระบบสร้างคำขอเบิกส่วนเกินให้อัตโนมัติ (ยอดคืนไม่ติดลบ)
           </InlineAlert>
+        )}
+
+        {/* มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) */}
+        {preview !== null && preview.returnSatang > 0 && (
+          <Field label={`วิธีคืนยอด ${fmtSatangSymbol(preview.returnSatang)}`} required>
+            <div className="space-y-2">
+              {(['payout_offset', 'separate'] as const).map((method) => (
+                <label key={method} className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name="advance-return-method"
+                    className="mt-1"
+                    checked={returnMethod === method}
+                    onChange={() => setReturnMethod(method)}
+                  />
+                  <span>
+                    {ADVANCE_RETURN_METHOD_LABEL[method]}
+                    <span className="block text-[11px] text-slate-500">
+                      {method === 'payout_offset'
+                        ? 'หักจากยอดโอนสุทธิของรอบจ่ายถัดไปหลังหักภาษี — ยอดไม่พอหักเท่าที่มี ส่วนที่เหลือยกไปรอบถัดไป'
+                        : 'การเงินบันทึกรับเงินสดหรือเงินโอนพร้อมแนบหลักฐาน'}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </Field>
         )}
 
         <Field label="ลิงก์ใบเสร็จ / หลักฐาน (ถ้ามี)">

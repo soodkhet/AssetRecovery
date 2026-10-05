@@ -229,11 +229,28 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
         payeeName: 'ประยุทธ์ บุญมี',
         netSatang: 824500,
         voucherRef: 'PV-2569-PB-2569-06-002-001',
+        advanceOffsetSatang: 0,
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001',
+      'PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,0.00,8245.00',
     )
+  })
+
+  it('มติ PO U30: หักคืนเงินทดรองต่อท้ายไฟล์ — advance_offset_baht + transfer_baht (amount − หัก)', () => {
+    const csv = paymentCsv([
+      {
+        batchRef: 'PB-2569-06-002',
+        paymentDate: new Date('2026-07-05T00:00:00Z'),
+        payeeName: 'ประยุทธ์ บุญมี',
+        netSatang: 824500,
+        voucherRef: 'PV-2569-PB-2569-06-002-001',
+        advanceOffsetSatang: 55000,
+      },
+    ])
+    const [header, row] = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(header).toBe('payout_batch_ref,payment_date,payee,amount_baht,method,voucher_ref,advance_offset_baht,transfer_baht')
+    expect(row).toBe('PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,550.00,7695.00')
   })
 })
 

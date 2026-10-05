@@ -8,6 +8,13 @@ import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
 import { calculatePayeeBatchWht, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
+import {
+  advanceReturnOutstandingSatang,
+  allocatePayeeAdvanceOffset,
+  payoutTransferSatang,
+  type OutstandingAdvanceReturn,
+} from '@/lib/finance/advance-offset-calc'
+import { advanceOffsetLineLabel, advanceRef } from '@/lib/advances/advance'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
@@ -87,6 +94,9 @@ export { GENERATE_PAYMENT_FILE, MANAGE_PAYOUT_BATCH } from '@/lib/payout/payout'
 
 const TARGET = 'payout_batches'
 
+/** client ในทรานแซกชันของ `prisma.$transaction(async (tx) => …)` */
+export type PayoutTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
+
 export interface PayoutMutationContext {
   actor: SessionUser
   meta: RequestMeta
@@ -102,6 +112,7 @@ const batchSelect = {
   grossSatang: true,
   whtSatang: true,
   netSatang: true,
+  advanceOffsetSatang: true,
   bankAccountId: true,
   idempotencyKey: true,
   paymentFileUrl: true,
@@ -134,6 +145,12 @@ const itemSelect = {
   whtPctSnapshot: true,
   whtBaseIncluded: true,
   whtIncomeCategory: true,
+  advanceOffsetSatang: true,
+  advanceReturns: {
+    where: { reversedAt: null },
+    select: { advanceId: true, amountSatang: true },
+    orderBy: { createdAt: 'asc' },
+  },
   taxProfile: { select: { name: true } },
   payee: {
     select: {
@@ -159,6 +176,8 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
     netSatang: row.netSatang,
+    advanceOffsetSatang: row.advanceOffsetSatang,
+    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
     itemCount: row._count.items,
     bankAccountId: row.bankAccountId,
     bankAccountLabel:
@@ -211,6 +230,13 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     whtPctSnapshot: row.whtPctSnapshot === null ? null : Number(row.whtPctSnapshot),
     whtBaseIncluded: row.whtBaseIncluded,
     whtIncomeCategory: row.whtIncomeCategory,
+    advanceOffsetSatang: row.advanceOffsetSatang,
+    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    advanceOffsets: row.advanceReturns.map((entry) => ({
+      advanceId: entry.advanceId,
+      advanceRef: advanceRef(entry.advanceId),
+      amountSatang: entry.amountSatang,
+    })),
     bankName: row.payee.bankName,
     accountNumberMasked: maskAccountNumber(row.payee.accountNumber),
   }
@@ -519,6 +545,157 @@ async function collectAdvanceCandidates(
   })
 }
 
+/**
+ * มติ PO 05/10/2569 (UAT U30) — ยอดคืนค้างแบบ "หักกลบในรอบจ่าย" ของผู้รับในรอบนี้
+ * **ล็อกแถวเงินทดรอง (`FOR UPDATE`) ก่อนอ่านยอดค้าง** ⇒ การรับคืนแยก/เปลี่ยนวิธีคืน/รอบจ่ายอีกรอบที่เกิด
+ * พร้อมกันต้องรอ แล้วเห็นยอดค้างที่ถูกหักไปแล้ว (trigger ของ DB เป็นด่านสุดท้ายอีกชั้น)
+ * ลำดับ: เคลียร์ก่อนหักก่อน (FIFO — `22` §6.14)
+ */
+async function lockOutstandingOffsetReturns(
+  tx: PayoutTxClient,
+  organizationId: string,
+  payeeIds: readonly string[],
+): Promise<Map<string, OutstandingAdvanceReturn[]>> {
+  const byPayee = new Map<string, OutstandingAdvanceReturn[]>()
+  if (payeeIds.length === 0) return byPayee
+
+  const locked = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM advances
+     WHERE organization_id = ${organizationId}::uuid
+       AND payee_id IN (${Prisma.join(payeeIds.map((id) => Prisma.sql`${id}::uuid`))})
+       AND status = 'cleared' AND return_method = 'payout_offset' AND deleted_at IS NULL
+     ORDER BY cleared_at ASC, id ASC
+     FOR UPDATE`
+  if (locked.length === 0) return byPayee
+
+  const rows = await tx.advance.findMany({
+    where: { id: { in: locked.map((row) => row.id) } },
+    select: {
+      id: true,
+      payeeId: true,
+      returnSatang: true,
+      returns: { where: { reversedAt: null }, select: { amountSatang: true } },
+    },
+    orderBy: [{ clearedAt: 'asc' }, { id: 'asc' }],
+  })
+  for (const row of rows) {
+    const outstandingSatang = advanceReturnOutstandingSatang({
+      returnSatang: row.returnSatang,
+      collectedSatang: row.returns.map((entry) => entry.amountSatang),
+    })
+    if (outstandingSatang === 0) continue
+    const bucket = byPayee.get(row.payeeId) ?? []
+    bucket.push({ advanceId: row.id, outstandingSatang })
+    byPayee.set(row.payeeId, bucket)
+  }
+  return byPayee
+}
+
+interface PlannedOffset {
+  candidateIndex: number
+  advanceId: string
+  amountSatang: number
+}
+
+/** แผนหักกลบของทั้งรอบ — หลัง WHT ต่อผู้รับ (`allocatePayeeAdvanceOffset()` · `22` §6.14) */
+function planAdvanceOffsets(
+  candidates: readonly Candidate[],
+  outstanding: ReadonlyMap<string, readonly OutstandingAdvanceReturn[]>,
+): { lineOffsets: number[]; planned: PlannedOffset[] } {
+  const lineOffsets = candidates.map(() => 0)
+  const planned: PlannedOffset[] = []
+  const indicesByPayee = new Map<string, number[]>()
+  candidates.forEach((candidate, index) => {
+    const bucket = indicesByPayee.get(candidate.payeeId) ?? []
+    bucket.push(index)
+    indicesByPayee.set(candidate.payeeId, bucket)
+  })
+  for (const [payeeId, indices] of indicesByPayee) {
+    const returns = outstanding.get(payeeId)
+    if (returns === undefined || returns.length === 0) continue
+    const result = allocatePayeeAdvanceOffset(
+      indices.map((index) => candidates[index]!.netSatang),
+      returns,
+    )
+    result.lineOffsetSatang.forEach((offset, position) => {
+      lineOffsets[indices[position]!] = offset
+    })
+    for (const allocation of result.allocations) {
+      planned.push({
+        candidateIndex: indices[allocation.lineIndex]!,
+        advanceId: allocation.advanceId,
+        amountSatang: allocation.amountSatang,
+      })
+    }
+  }
+  return { lineOffsets, planned }
+}
+
+/**
+ * คืนยอดหักกลบของรายการในรอบจ่ายให้กลับเป็น "ค้าง" (มติ PO U30) — ใช้เมื่อรอบจ่ายถูกยกเลิก
+ * หรือรายการถูกตัดออกจากรอบ: **กลับรายการ** แถว `advance_returns` (ไม่ลบ — ตรวจย้อนหลังได้) ⇒ ยอดค้าง
+ * กลับมาเท่าเดิม ไม่หาย และรอบจ่ายถัดไปหักได้ใหม่ครั้งเดียว (partial unique ผูกเฉพาะแถวที่ยังไม่กลับรายการ)
+ *
+ * ⚠️ เรียกในทรานแซกชันเดียวกับการยกเลิก/ตัดรายการเสมอ · ต้องมีเหตุผล (กระทบเงิน)
+ * idempotent: แถวที่กลับรายการแล้วไม่ถูกแตะซ้ำ
+ */
+export async function releasePayoutAdvanceOffsets(
+  tx: PayoutTxClient,
+  input: {
+    organizationId: string
+    payoutBatchItemIds: readonly string[]
+    actorId: string
+    actorRole: string
+    reason: string
+    meta: RequestMeta
+    now?: Date
+  },
+): Promise<number> {
+  const reason = input.reason.trim()
+  if (reason === '') throw new Error('releasePayoutAdvanceOffsets: ต้องมีเหตุผล')
+  if (input.payoutBatchItemIds.length === 0) return 0
+  const at = input.now ?? new Date()
+
+  const rows = await tx.advanceReturn.findMany({
+    where: {
+      organizationId: input.organizationId,
+      payoutBatchItemId: { in: [...input.payoutBatchItemIds] },
+      reversedAt: null,
+    },
+    select: { id: true, advanceId: true, amountSatang: true, payoutBatchId: true, payoutBatchItemId: true },
+  })
+  for (const row of rows) {
+    await tx.advanceReturn.update({
+      where: { id: row.id },
+      data: { reversedAt: at, reversedBy: input.actorId, reversalReason: reason, updatedBy: input.actorId },
+    })
+    await emitAudit(
+      {
+        organizationId: input.organizationId,
+        actorId: input.actorId,
+        actorRole: input.actorRole,
+        action: 'status_change',
+        targetType: 'advance_returns',
+        targetId: row.id,
+        before: { reversed: false, advance_id: row.advanceId, amount_satang: row.amountSatang },
+        after: {
+          reversed: true,
+          advance_id: row.advanceId,
+          amount_satang: row.amountSatang,
+          payout_batch_id: row.payoutBatchId,
+          payout_batch_item_id: row.payoutBatchItemId,
+        },
+        reason,
+        ipAddress: input.meta.ipAddress,
+        userAgent: input.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+  }
+  return rows.length
+}
+
 export interface PayoutBatchCreateOutcome {
   batch: PayoutBatchDetailDto
   /** `WHT_RATE_FALLBACK_TO_PLAN` — เตือนไม่บล็อก (`18` §6.3 · `24` §6.5) */
@@ -559,6 +736,16 @@ export async function createPayoutBatch(
   const status = nextPayoutBatchStatus('draft', 'collect')
 
   const batchId = await prisma.$transaction(async (tx) => {
+    // มติ PO U30 — หักยอดคืนเงินทดรองค้าง **หลัง WHT** (ฐาน WHT / 50 ทวิ / gross·wht·net ไม่เปลี่ยน)
+    const outstanding = await lockOutstandingOffsetReturns(
+      tx,
+      user.organizationId,
+      [...new Set(candidates.map((candidate) => candidate.payeeId))],
+    )
+    const { lineOffsets, planned } = planAdvanceOffsets(candidates, outstanding)
+    const totalOffsetSatang = lineOffsets.reduce((sum, value) => sum + value, 0)
+    const itemIds: string[] = []
+
     const batch = await tx.payoutBatch.create({
       data: {
         organizationId: user.organizationId,
@@ -593,10 +780,12 @@ export async function createPayoutBatch(
           whtPctSnapshot: new Prisma.Decimal(candidate.whtPctSnapshot.toFixed(2)),
           whtBaseIncluded: candidate.whtBaseIncluded,
           whtIncomeCategory: candidate.whtIncomeCategory,
+          advanceOffsetSatang: lineOffsets[itemIds.length] ?? 0,
           createdBy: user.id,
         },
         select: { id: true },
       })
+      itemIds.push(item.id)
 
       // ยึดสิทธิ์รายการต้นทาง — ยังว่างอยู่เท่านั้นถึงจะดึงเข้ารอบนี้ได้ (กันสองรอบแย่งรายการเดียวกัน)
       const claimed =
@@ -616,6 +805,22 @@ export async function createPayoutBatch(
       }
     }
 
+    // สมุดย่อยการคืนยอด — 1 แถวต่อ (เงินทดรอง × บรรทัดที่หัก) · trigger กันยอดสะสมเกินยอดคืน
+    for (const offset of planned) {
+      await tx.advanceReturn.create({
+        data: {
+          organizationId: user.organizationId,
+          advanceId: offset.advanceId,
+          payeeId: candidates[offset.candidateIndex]!.payeeId,
+          channel: 'payout_offset',
+          amountSatang: offset.amountSatang,
+          payoutBatchId: batch.id,
+          payoutBatchItemId: itemIds[offset.candidateIndex]!,
+          createdBy: user.id,
+        },
+      })
+    }
+
     await tx.payoutBatch.update({
       where: { id: batch.id },
       data: {
@@ -623,6 +828,7 @@ export async function createPayoutBatch(
         grossSatang: totals.grossSatang,
         whtSatang: totals.whtSatang,
         netSatang: totals.netSatang,
+        advanceOffsetSatang: totalOffsetSatang,
         updatedBy: user.id,
       },
     })
@@ -644,6 +850,14 @@ export async function createPayoutBatch(
           gross_satang: totals.grossSatang,
           wht_satang: totals.whtSatang,
           net_satang: totals.netSatang,
+          // มติ PO U30 — ยอดหักคืนเงินทดรอง (หลัง WHT) + ยอดโอนจริง
+          advance_offset_satang: totalOffsetSatang,
+          transfer_satang: totals.netSatang - totalOffsetSatang,
+          advance_offsets: planned.map((offset) => ({
+            advance_id: offset.advanceId,
+            payout_batch_item_id: itemIds[offset.candidateIndex] ?? null,
+            amount_satang: offset.amountSatang,
+          })),
           item_count: totals.itemCount,
           wht_policy_id: whtPolicy.policyId,
           wht_base_expense_types: normalizeBaseExpenseTypes(whtPolicy.values.baseExpenseTypes),
@@ -779,7 +993,13 @@ export async function generatePaymentFile(
     now,
   )
 
-  const rows = items.map((item, index): PaymentFileRowInput => {
+  // มติ PO U30 — ยอดโอน = net − หักคืนเงินทดรอง · บรรทัดที่ถูกหักจนเหลือ 0 ไม่ต้องโอน (ไม่ใส่แถวยอด 0
+  // ให้ธนาคาร) · เลขอ้างอิงต่อแถวยึดลำดับรายการเดิมเพื่อให้คงที่ทุกครั้งที่สร้างไฟล์ซ้ำ
+  const transferable = items
+    .map((item, index) => ({ item, index, transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang) }))
+    .filter((entry) => entry.transferSatang > 0)
+
+  const rows = transferable.map(({ item, index, transferSatang }): PaymentFileRowInput => {
     const bankCode = resolveBankCode(item.payee.bankName)
     if (bankCode === null || item.payee.accountNumber === null) {
       throw new PayeeError('REQUIRED_MISSING', {
@@ -794,11 +1014,14 @@ export async function generatePaymentFile(
       receivingBankCode: bankCode,
       receivingAccountNo: item.payee.accountNumber,
       receivingAccountName: item.payee.accountName ?? item.payee.user.fullName,
-      netSatang: item.netSatang,
+      netSatang: transferSatang,
       citizenId: item.payee.nationalId,
       email: item.payee.user.email,
       mobileNo: item.payee.user.phone,
-      remark: batch.name,
+      remark:
+        item.advanceReturns.length === 0
+          ? batch.name
+          : `${batch.name} ${item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advanceId)).join(' ')}`,
       referenceNo: `${idempotencyKey}-${index + 1}`,
     }
   })

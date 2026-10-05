@@ -1,7 +1,7 @@
 import { AdvanceError } from '@/lib/advances/errors'
 import { toInputDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import type { AdvanceStatus, ExpenseType } from '@/lib/generated/prisma/enums'
+import type { AdvanceReturnChannel, AdvanceReturnMethod, AdvanceStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 
 /**
  * เงินทดรองจ่าย — state machine + กติกาธุรกิจ (`15` · `23` §6.4) — **pure ล้วน ไม่มี I/O**
@@ -144,4 +144,103 @@ export const ADVANCE_EXCESS_CLAIM_TYPE: ExpenseType = 'manual'
 export function advanceExcessClaimNote(input: { purpose: string; approvedSatang: number; usedSatang: number }): string {
   const note = `เบิกส่วนเกินเงินทดรองอัตโนมัติ (ใช้จริง ${fmtSatangSymbol(input.usedSatang)} เกินยอดอนุมัติ ${fmtSatangSymbol(input.approvedSatang)}) — ${input.purpose}`
   return note.length > 500 ? `${note.slice(0, 499)}…` : note
+}
+
+// ── ยอดคืนเงินทดรอง (มติ PO 05/10/2569 UAT U30 · BUG-109 · `15` §9.3) ─────────────
+
+/** เลขอ้างอิงที่ผู้ใช้เห็น (บรรทัด "หักคืนเงินทดรอง ADV-xxxx" บนไฟล์โอน/ใบสำคัญจ่าย/สลิป) */
+export function advanceRef(advanceId: string): string {
+  return `ADV-${advanceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`
+}
+
+/** วิธีคืนค่าเริ่มต้นตามมติ U30 — หักกลบในรอบจ่ายถัดไปของผู้รับ */
+export const DEFAULT_ADVANCE_RETURN_METHOD: AdvanceReturnMethod = 'payout_offset'
+
+/**
+ * วิธีคืนที่บันทึกตอนเคลียร์ยอด — ไม่มียอดคืน ⇒ `null` (ไม่มีอะไรต้องปิด · CHECK
+ * `chk_advances_return_method_shape`) · มียอดคืนแต่ไม่ระบุ ⇒ ค่าเริ่มต้น "หักกลบ"
+ */
+export function resolveSettleReturnMethod(
+  returnSatang: number,
+  requested: AdvanceReturnMethod | null | undefined,
+): AdvanceReturnMethod | null {
+  if (returnSatang <= 0) return null
+  return requested ?? DEFAULT_ADVANCE_RETURN_METHOD
+}
+
+/**
+ * เปลี่ยนวิธีคืน (การเงิน · เหตุผล + audit) — ทำได้เฉพาะเงินทดรองที่เคลียร์แล้วและ **ยังมียอดค้าง**
+ * (ยอดที่ถูกหักในรอบจ่ายที่สร้างแล้วไม่นับเป็นค้าง ⇒ "เปลี่ยนก่อนรอบจ่ายที่จะหักถูกสร้าง" โดยปริยาย)
+ */
+export function assertCanChangeReturnMethod(input: {
+  status: AdvanceStatus
+  current: AdvanceReturnMethod | null
+  target: AdvanceReturnMethod
+  outstandingSatang: number
+}): void {
+  if (input.status !== 'cleared' || input.current === null || input.outstandingSatang <= 0) {
+    throw new AdvanceError('ADVANCE_INVALID_STATUS', {
+      detail: `เปลี่ยนวิธีคืนไม่ได้: status=${input.status} method=${input.current ?? 'none'} outstanding=${input.outstandingSatang}`,
+      context: { status: input.status, returnMethod: input.current, outstandingSatang: input.outstandingSatang },
+    })
+  }
+  if (input.current === input.target) {
+    throw new AdvanceError('ADVANCE_INVALID_STATUS', {
+      detail: `วิธีคืนเป็น ${input.target} อยู่แล้ว`,
+      context: { returnMethod: input.current },
+    })
+  }
+}
+
+/**
+ * รับคืนแยก — ต้องเลือกวิธี "รับคืนแยก" ไว้ก่อน (เปลี่ยนวิธีต้องมีเหตุผล) · ยอดไม่เกินยอดค้าง
+ * (ยอดค้าง 0 ⇒ ปิดยอดแล้ว — รับซ้ำไม่ได้)
+ */
+export function assertSeparateReturnAllowed(input: {
+  status: AdvanceStatus
+  method: AdvanceReturnMethod | null
+  outstandingSatang: number
+  amountSatang: number
+}): void {
+  if (input.status !== 'cleared' || input.method !== 'separate' || input.outstandingSatang <= 0) {
+    throw new AdvanceError('ADVANCE_INVALID_STATUS', {
+      detail: `รับคืนแยกไม่ได้: status=${input.status} method=${input.method ?? 'none'} outstanding=${input.outstandingSatang}`,
+      context: { status: input.status, returnMethod: input.method, outstandingSatang: input.outstandingSatang },
+    })
+  }
+  if (input.amountSatang > input.outstandingSatang) {
+    throw new AdvanceError('ADVANCE_RETURN_EXCEEDS_OUTSTANDING', {
+      detail: `amount=${input.amountSatang} outstanding=${input.outstandingSatang}`,
+      context: { amountSatang: input.amountSatang, outstandingSatang: input.outstandingSatang },
+    })
+  }
+}
+
+/** สถานะการคืนยอด (ค่าที่อนุมานได้ — **ไม่ใช่ state ใหม่ของ `advance_status`**) */
+export type AdvanceReturnState = 'none' | 'pending_offset' | 'pending_separate' | 'closed'
+
+export function advanceReturnState(input: {
+  returnSatang: number
+  outstandingSatang: number
+  method: AdvanceReturnMethod | null
+}): AdvanceReturnState {
+  if (input.returnSatang <= 0 || input.method === null) return 'none'
+  if (input.outstandingSatang <= 0) return 'closed'
+  return input.method === 'payout_offset' ? 'pending_offset' : 'pending_separate'
+}
+
+export const ADVANCE_RETURN_METHOD_LABEL: Readonly<Record<AdvanceReturnMethod, string>> = {
+  payout_offset: 'หักกลบในรอบจ่ายถัดไป',
+  separate: 'รับคืนแยก (เงินสด/โอน)',
+}
+
+export const ADVANCE_RETURN_CHANNEL_LABEL: Readonly<Record<AdvanceReturnChannel, string>> = {
+  payout_offset: 'หักกลบในรอบจ่าย',
+  cash: 'เงินสด',
+  bank_transfer: 'โอนเข้าบัญชีบริษัท',
+}
+
+/** ป้ายบรรทัดหักบนไฟล์โอน/ใบสำคัญจ่าย/สลิป */
+export function advanceOffsetLineLabel(advanceId: string): string {
+  return `หักคืนเงินทดรอง ${advanceRef(advanceId)}`
 }

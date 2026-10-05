@@ -1,4 +1,4 @@
-import { canAdvanceAction } from '@/lib/advances/advance'
+import { canAdvanceAction, type AdvanceReturnState } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
@@ -76,6 +76,8 @@ export const ADVANCE_STATUS_FILTERS = [
   { value: 'overdue', label: 'เลยกำหนด' },
   { value: 'cleared', label: 'เคลียร์แล้ว' },
   { value: 'rejected', label: 'ไม่อนุมัติ' },
+  // มติ PO U30 — เคลียร์แล้วแต่ยอดคืนยังไม่ปิด
+  { value: 'return_outstanding', label: 'ยอดคืนค้าง' },
 ] as const satisfies readonly { value: string; label: string }[]
 
 export type AdvanceStatusFilter = (typeof ADVANCE_STATUS_FILTERS)[number]['value']
@@ -126,4 +128,39 @@ export function settleUsedField(value: string): { usedSatang: number | null; err
   }
   if (parsed < 0) return { usedSatang: null, error: 'ยอดที่ใช้จริงต้องไม่ติดลบ' }
   return { usedSatang: parsed, error: null }
+}
+
+// ── ยอดคืนเงินทดรอง (มติ PO 05/10/2569 UAT U30) ────────────────────────────────
+
+export const ADVANCE_RETURN_STATE_LABEL: Readonly<Record<AdvanceReturnState, string>> = {
+  none: 'ไม่มียอดคืน',
+  pending_offset: 'รอหักในรอบจ่ายถัดไป',
+  pending_separate: 'รอรับคืนแยก',
+  closed: 'คืนครบแล้ว',
+}
+
+const ADVANCE_RETURN_STATE_GROUP: Readonly<Record<AdvanceReturnState, StatusBadgeGroup>> = {
+  none: 'neutral',
+  pending_offset: 'pending',
+  pending_separate: 'pending',
+  closed: 'success',
+}
+
+export function advanceReturnStateBadgeGroup(state: AdvanceReturnState): StatusBadgeGroup {
+  return ADVANCE_RETURN_STATE_GROUP[state]
+}
+
+/** ปุ่ม "เปลี่ยนวิธีคืน" (การเงิน) — เฉพาะรายการที่ยังมียอดค้าง */
+export function canChangeAdvanceReturnMethod(advance: Pick<AdvanceDto, 'returnState'>): boolean {
+  return advance.returnState === 'pending_offset' || advance.returnState === 'pending_separate'
+}
+
+/** ปุ่ม "บันทึกรับคืน" (การเงิน) — เฉพาะวิธีรับคืนแยกที่ยังค้าง */
+export function canRecordAdvanceSeparateReturn(advance: Pick<AdvanceDto, 'returnState'>): boolean {
+  return advance.returnState === 'pending_separate'
+}
+
+/** ยอดคืนค้างรวม (หน้าเงินทดรอง/หน้าผู้รับเงิน) — ยอดจาก server รวมเท่านั้น */
+export function totalReturnOutstandingSatang(items: readonly Pick<AdvanceDto, 'returnOutstandingSatang'>[]): number {
+  return items.reduce((total, item) => total + item.returnOutstandingSatang, 0)
 }

@@ -1,5 +1,6 @@
 import type { DocumentSlot } from '@/lib/cases/case'
 import { MAX_UPLOAD_BYTES, maxUploadBytes } from '@/lib/cases/document-upload'
+import { advanceReturnFilePrefix } from '@/lib/advances/return-file'
 import { creditNoteFilePrefix } from '@/lib/credit-notes/file'
 import { EXPENSE_RECEIPT_MAX_BYTES, FIELD_MEDIA_MAX_BYTES, type FieldMediaKind } from '@/lib/field/media-upload'
 import { AUDIO_KINDS, DOCUMENT_KINDS, IMAGE_KINDS, VIDEO_KINDS, type FileKind, type UploadRule } from '@/lib/uploads/inspect'
@@ -79,4 +80,9 @@ export function expenseReceiptRule(userId: string): UploadRule {
 /** ไฟล์สแกนใบลดหนี้ (มติ PO U14) — `tax-invoices/<taxInvoiceId>/credit-notes/…` รับ PDF/รูป เพดานเท่าเอกสารล็อต */
 export function creditNoteFileRule(taxInvoiceId: string): UploadRule {
   return { prefix: creditNoteFilePrefix(taxInvoiceId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
+}
+
+/** หลักฐานรับคืนเงินทดรองแยก (มติ PO U30) — `advances/<advanceId>/returns/…` รับ PDF/รูป */
+export function advanceReturnFileRule(advanceId: string): UploadRule {
+  return { prefix: advanceReturnFilePrefix(advanceId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
 }

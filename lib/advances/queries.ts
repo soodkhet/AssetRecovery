@@ -3,17 +3,30 @@ import {
   ADVANCE_EXCESS_CLAIM_TYPE,
   advanceExcessClaimNote,
   APPROVE_ADVANCE,
+  advanceRef,
+  advanceReturnState,
   assertAdvanceRejectionReason,
+  assertCanChangeReturnMethod,
   assertNoUnclearedAdvance,
+  assertSeparateReturnAllowed,
   assertWithinAdvanceMax,
   isAdvanceOverdue,
   nextAdvanceStatus,
   resolveApprovedSatang,
+  resolveSettleReturnMethod,
   UNCLEARED_ADVANCE_STATUSES,
 } from '@/lib/advances/advance'
 import { AdvanceError } from '@/lib/advances/errors'
-import type { AdvanceCreateInput, AdvanceApproveInput, AdvanceListQuery, AdvanceRejectInput, AdvanceSettleInput } from '@/lib/advances/schemas'
-import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
+import type {
+  AdvanceCreateInput,
+  AdvanceApproveInput,
+  AdvanceListQuery,
+  AdvanceRejectInput,
+  AdvanceReturnMethodChangeInput,
+  AdvanceSeparateReturnInput,
+  AdvanceSettleInput,
+} from '@/lib/advances/schemas'
+import type { AdvanceDto, AdvanceReturnDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -21,11 +34,14 @@ import type { SessionUser } from '@/lib/auth/types'
 import { bangkokBusinessDate, ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
 import { insertManualClaim } from '@/lib/claims/queries'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
+import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdvanceAwaitingApproval, notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
+import { advanceReturnFileRule } from '@/lib/uploads/rules'
+import { verifyUploadedFile } from '@/lib/uploads/verify'
 
 /**
  * เงินทดรองจ่าย — ชั้น DB (ไฟล์ 15 · `27` §6.4)
@@ -62,7 +78,25 @@ const advanceSelect = {
   approvedAt: true,
   clearedAt: true,
   rejectionReason: true,
+  returnMethod: true,
   createdAt: true,
+  returns: {
+    select: {
+      id: true,
+      channel: true,
+      amountSatang: true,
+      payoutBatchId: true,
+      receivedDate: true,
+      evidenceFilePath: true,
+      note: true,
+      reversedAt: true,
+      reversalReason: true,
+      createdAt: true,
+      payoutBatch: { select: { name: true } },
+      createdByUser: { select: { fullName: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  },
   payee: {
     select: {
       id: true,
@@ -75,6 +109,34 @@ const advanceSelect = {
 } as const
 
 type AdvanceRow = Prisma.AdvanceGetPayload<{ select: typeof advanceSelect }>
+type AdvanceReturnRow = AdvanceRow['returns'][number]
+
+/** ยอดคืนค้าง (`22` §6.14) — นับเฉพาะแถวที่ยังไม่กลับรายการ */
+function returnOutstandingOf(row: Pick<AdvanceRow, 'returnSatang' | 'returns'>): {
+  collected: number
+  outstanding: number
+} {
+  const active = row.returns.filter((entry) => entry.reversedAt === null).map((entry) => entry.amountSatang)
+  const outstanding = advanceReturnOutstandingSatang({ returnSatang: row.returnSatang, collectedSatang: active })
+  return { collected: row.returnSatang - outstanding, outstanding }
+}
+
+function toReturnDto(row: AdvanceReturnRow): AdvanceReturnDto {
+  return {
+    id: row.id,
+    channel: row.channel,
+    amountSatang: row.amountSatang,
+    payoutBatchId: row.payoutBatchId,
+    payoutBatchName: row.payoutBatch?.name ?? null,
+    receivedDate: row.receivedDate?.toISOString().slice(0, 10) ?? null,
+    evidenceFilePath: row.evidenceFilePath,
+    note: row.note,
+    reversedAt: row.reversedAt?.toISOString() ?? null,
+    reversalReason: row.reversalReason,
+    createdAt: row.createdAt.toISOString(),
+    createdByName: row.createdByUser.fullName,
+  }
+}
 
 function toDto(row: AdvanceRow, now: Date): AdvanceDto {
   const settlement = advanceSettlement({
@@ -82,6 +144,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     approvedSatang: row.approvedSatang,
     usedSatang: row.usedSatang,
   })
+  const returned = returnOutstandingOf(row)
   return {
     id: row.id,
     payeeId: row.payeeId,
@@ -103,6 +166,16 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     rejectionReason: row.rejectionReason,
     createdAt: row.createdAt.toISOString(),
     requesterName: row.createdByUser.fullName,
+    ref: advanceRef(row.id),
+    returnMethod: row.returnMethod,
+    returnCollectedSatang: returned.collected,
+    returnOutstandingSatang: returned.outstanding,
+    returnState: advanceReturnState({
+      returnSatang: row.returnSatang,
+      outstandingSatang: returned.outstanding,
+      method: row.returnMethod,
+    }),
+    returns: row.returns.map(toReturnDto),
   }
 }
 
@@ -124,6 +197,8 @@ const STATUS_FILTER: Readonly<Record<AdvanceListQuery['status'], readonly Advanc
   cleared: ['cleared'],
   rejected: ['rejected'],
   uncleared: UNCLEARED_ADVANCE_STATUSES,
+  // มติ U30 — คัดยอดค้างจริงต่อหลังคำนวณ (ยอดค้างอนุมานจากสมุดย่อย `advance_returns`)
+  return_outstanding: ['cleared'],
 }
 
 export async function listAdvances(
@@ -139,13 +214,20 @@ export async function listAdvances(
         scopeFilter(user),
         statuses === null ? {} : { status: { in: [...statuses] } },
         query.payeeId === undefined ? {} : { payeeId: query.payeeId },
+        query.status === 'return_outstanding' ? { returnMethod: { not: null } } : {},
       ],
     },
     select: advanceSelect,
     orderBy: [{ createdAt: 'desc' }],
     take: 300,
   })
-  return rows.map((row) => toDto(row, now))
+  const dtos = rows.map((row) => toDto(row, now))
+  return query.status === 'return_outstanding' ? dtos.filter((dto) => dto.returnOutstandingSatang > 0) : dtos
+}
+
+/** ยามของ upload/download หลักฐานรับคืน — เงินทดรองต้องอยู่ใน org + scope ของผู้เรียก (ไม่ leak) */
+export async function assertAdvanceInScope(user: SessionUser, advanceId: string): Promise<void> {
+  await findAdvance(user, advanceId)
 }
 
 async function findAdvance(user: SessionUser, advanceId: string): Promise<AdvanceRow> {
@@ -401,12 +483,14 @@ export async function settleAdvance(
     usedSatang: input.usedSatang,
   })
   const at = new Date()
+  // มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) · ไม่มียอดคืน ⇒ NULL
+  const returnMethod = resolveSettleReturnMethod(preview.returnSatang, input.returnMethod)
 
   const { row: updated, excessClaimId } = await prisma.$transaction(async (tx) => {
     const claimed = await tx.advance.updateMany({
       where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
       // ⚠️ ห้ามส่ง `returnSatang` — เป็น generated column ของ DB (`02` §5)
-      data: { status, usedSatang: input.usedSatang, clearedAt: at, updatedBy: user.id },
+      data: { status, usedSatang: input.usedSatang, clearedAt: at, returnMethod, updatedBy: user.id },
     })
     if (claimed.count !== 1) {
       throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
@@ -442,6 +526,7 @@ export async function settleAdvance(
           status,
           used_satang: row.usedSatang,
           return_satang: row.returnSatang,
+          return_method: returnMethod,
           excess_satang: preview.excessSatang,
           excess_claim_id: excessClaim?.id ?? null,
           // `15` §13 — ใบเสร็จอ้างอิงเก็บใน audit (ตาราง `advances` ไม่มีคอลัมน์เก็บไฟล์)
@@ -477,4 +562,169 @@ async function resolveTeamPlanSnapshot(
   })
   const plan = payee?.user.team?.compensationPlan ?? null
   return { compPlanId: plan?.id ?? null, compPlanVersion: plan?.version ?? null }
+}
+
+// ── ยอดคืนเงินทดรอง (มติ PO 05/10/2569 UAT U30 · BUG-109 · `15` §9.3) ─────────────
+
+/**
+ * ล็อกแถวเงินทดรองแล้วอ่านยอดค้างใหม่ในทรานแซกชัน — กันสองคำขอ (หรือคำขอ + การสร้างรอบจ่าย)
+ * ตัดสินจากยอดค้างเดียวกัน (trigger ของ DB เป็นด่านสุดท้ายอีกชั้น)
+ */
+async function lockAdvanceForReturn(
+  tx: ExpenseTxClient,
+  organizationId: string,
+  advanceId: string,
+): Promise<AdvanceRow> {
+  await tx.$queryRaw`SELECT id FROM advances WHERE id = ${advanceId}::uuid FOR UPDATE`
+  const row = await tx.advance.findFirst({
+    where: { id: advanceId, organizationId, deletedAt: null },
+    select: advanceSelect,
+  })
+  if (row === null) throw new AdvanceError('ADVANCE_NOT_FOUND', { detail: `advance=${advanceId}` })
+  return row
+}
+
+/**
+ * `PATCH /api/advances/:id/return-method` — การเงินเปลี่ยนวิธีคืน (เหตุผล + audit)
+ * ทำได้เมื่อยังมียอดค้าง — ยอดที่ถูกหักในรอบจ่ายที่สร้างแล้วไม่ใช่ยอดค้าง ⇒ "ก่อนรอบจ่ายที่จะหักถูกสร้าง"
+ */
+export async function changeAdvanceReturnMethod(
+  context: AdvanceMutationContext,
+  advanceId: string,
+  input: AdvanceReturnMethodChangeInput,
+  now: Date = new Date(),
+): Promise<AdvanceDto> {
+  const user = context.actor
+  if (!user.isSuperadmin && !canApproveAdvance(user)) {
+    throw new AdvanceError('ADVANCE_NOT_FOUND', { detail: `advance=${advanceId} (ไม่ใช่ผู้ถือสิทธิ์การเงิน)` })
+  }
+  await findAdvance(user, advanceId)
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await lockAdvanceForReturn(tx as ExpenseTxClient, user.organizationId, advanceId)
+    const { outstanding } = returnOutstandingOf(current)
+    assertCanChangeReturnMethod({
+      status: current.status,
+      current: current.returnMethod,
+      target: input.returnMethod,
+      outstandingSatang: outstanding,
+    })
+
+    const row = await tx.advance.update({
+      where: { id: advanceId },
+      data: { returnMethod: input.returnMethod, updatedBy: user.id },
+      select: advanceSelect,
+    })
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        action: 'update',
+        targetType: TARGET,
+        targetId: advanceId,
+        before: { return_method: current.returnMethod, return_outstanding_satang: outstanding },
+        after: { return_method: input.returnMethod, return_outstanding_satang: outstanding },
+        reason: input.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+    return row
+  })
+
+  return toDto(updated, now)
+}
+
+/**
+ * `POST /api/advances/:id/returns` — การเงินบันทึกรับคืนแยก (เงินสด/โอน + วันที่ + ยอด + หลักฐาน)
+ * ยอดครบ ⇒ ยอดคืนปิด (`returnState = closed`) · ยอดไม่ครบ ⇒ ยังค้างส่วนที่เหลือ (วิธีคืนยังเป็นรับคืนแยก)
+ * ไฟล์ตรวจฝั่ง server ก่อนเข้าทรานแซกชัน (กลไกอัปโหลดเดิม — `verifyUploadedFile()`)
+ */
+export async function recordAdvanceSeparateReturn(
+  context: AdvanceMutationContext,
+  advanceId: string,
+  input: AdvanceSeparateReturnInput,
+  now: Date = new Date(),
+): Promise<AdvanceDto> {
+  const user = context.actor
+  if (!user.isSuperadmin && !canApproveAdvance(user)) {
+    throw new AdvanceError('ADVANCE_NOT_FOUND', { detail: `advance=${advanceId} (ไม่ใช่ผู้ถือสิทธิ์การเงิน)` })
+  }
+  const before = await findAdvance(user, advanceId)
+  // ตรวจก่อนอัปโหลด/เปิดทรานแซกชันเพื่อให้ผู้ใช้ได้ข้อความที่ถูกเหตุ (ตรวจซ้ำในทรานแซกชันอีกชั้น)
+  assertSeparateReturnAllowed({
+    status: before.status,
+    method: before.returnMethod,
+    outstandingSatang: returnOutstandingOf(before).outstanding,
+    amountSatang: input.amountSatang,
+  })
+  // เงินเข้ามาในวันที่รับจริง ⇒ งวดของวันนั้นต้องยังเปิด (Period Lock — `30`/`20`)
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: input.receivedDate,
+    targetType: 'advances',
+    targetId: advanceId,
+  })
+  const verified = await verifyUploadedFile(input.evidenceFilePath, advanceReturnFileRule(advanceId))
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await lockAdvanceForReturn(tx as ExpenseTxClient, user.organizationId, advanceId)
+    const { outstanding } = returnOutstandingOf(current)
+    assertSeparateReturnAllowed({
+      status: current.status,
+      method: current.returnMethod,
+      outstandingSatang: outstanding,
+      amountSatang: input.amountSatang,
+    })
+
+    const created = await tx.advanceReturn.create({
+      data: {
+        organizationId: user.organizationId,
+        advanceId,
+        payeeId: current.payeeId,
+        channel: input.channel,
+        amountSatang: input.amountSatang,
+        receivedDate: input.receivedDate,
+        evidenceFilePath: input.evidenceFilePath,
+        evidenceFileSha256: verified.sha256,
+        note: input.note,
+        createdBy: user.id,
+      },
+      select: { id: true },
+    })
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        action: 'create',
+        targetType: 'advance_returns',
+        targetId: created.id,
+        after: {
+          advance_id: advanceId,
+          channel: input.channel,
+          amount_satang: input.amountSatang,
+          received_date: input.receivedDate.toISOString().slice(0, 10),
+          evidence_file_path: input.evidenceFilePath,
+          evidence_file_sha256: verified.sha256,
+          return_outstanding_before_satang: outstanding,
+          return_outstanding_after_satang: outstanding - input.amountSatang,
+        },
+        reason: input.note,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+
+    return tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
+  })
+
+  return toDto(updated, now)
 }

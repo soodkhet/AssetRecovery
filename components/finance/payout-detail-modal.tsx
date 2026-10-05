@@ -101,6 +101,13 @@ export function PayoutDetailModal({
               Gross {fmtSatangSymbol(batch.grossSatang)} · WHT{' '}
               <span className="text-red-600">{fmtSatangSymbol(batch.whtSatang)}</span> · สุทธิ{' '}
               <span className="font-bold text-emerald-700">{fmtSatangSymbol(batch.netSatang)}</span>
+              {/* มติ PO U30 — หักคืนเงินทดรองหลังภาษี ⇒ ยอดโอนจริงลดลง */}
+              {batch.advanceOffsetSatang > 0 && (
+                <>
+                  {' '}· หักคืนเงินทดรอง <span className="text-amber-700">{fmtSatangSymbol(batch.advanceOffsetSatang)}</span>
+                  {' '}· ยอดโอน <span className="font-bold text-emerald-700">{fmtSatangSymbol(batch.transferSatang)}</span>
+                </>
+              )}
             </span>
           </div>
 
@@ -184,6 +191,14 @@ export function PayoutDetailModal({
                     </Td>
                     <Td numeric className="font-semibold text-emerald-700">
                       {fmtSatangSymbol(item.netSatang)}
+                      {item.advanceOffsets.map((offset) => (
+                        <p key={offset.advanceId} className="text-[10px] font-normal text-amber-700">
+                          หักคืนเงินทดรอง {offset.advanceRef} ({fmtSatangSymbol(offset.amountSatang)})
+                        </p>
+                      ))}
+                      {item.advanceOffsetSatang > 0 && (
+                        <p className="text-[10px] text-slate-600">โอน {fmtSatangSymbol(item.transferSatang)}</p>
+                      )}
                     </Td>
                   </Tr>
                 ))}

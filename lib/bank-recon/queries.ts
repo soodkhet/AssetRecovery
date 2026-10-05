@@ -1,3 +1,4 @@
+import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { ensurePeriodForDate, type AccountingMutationContext } from '@/lib/accounting/queries'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import type { ApiWarning } from '@/lib/api/envelope'
@@ -268,7 +269,14 @@ async function loadCandidates(
       status: { in: ['file_generated', 'completed'] },
       ...(search === undefined || search === '' ? {} : { name: { contains: search, mode: 'insensitive' } }),
     },
-    select: { id: true, name: true, netSatang: true, paymentFileGeneratedAt: true, status: true },
+    select: {
+      id: true,
+      name: true,
+      netSatang: true,
+      advanceOffsetSatang: true,
+      paymentFileGeneratedAt: true,
+      status: true,
+    },
     orderBy: { paymentFileGeneratedAt: 'desc' },
     take: 100,
   })
@@ -277,7 +285,8 @@ async function loadCandidates(
     kind: 'payout' as const,
     id: row.id,
     ref: row.name,
-    amountSatang: row.netSatang,
+    // มติ PO U30 — เงินออกจากบัญชีจริง = ยอดโอน (net − หักคืนเงินทดรอง · `22` §6.14) ไม่ใช่ net
+    amountSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
     altAmountSatang: null,
     // รอบที่ `completed` แล้วไม่เข้าเกณฑ์อัตโนมัติ (จับคู่ไปแล้วครั้งหนึ่ง) — เลือก manual ได้เท่านั้น
     referenceDate: row.status === 'file_generated' ? row.paymentFileGeneratedAt : null,

@@ -73,6 +73,8 @@ export const TRANSACTIONAL_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensi
   /// มติ PO UAT Q21 — การ settle ค่าน้ำมันเหมา/เบี้ยเลี้ยงรายวัน (insert-only โดย job)
   field_day_settlements: 'money',
   advances: 'money',
+  // มติ PO 05/10/2569 (UAT U30) — สมุดย่อยการคืนยอดเงินทดรอง (หักกลบในรอบจ่าย/รับคืนแยก)
+  advance_returns: 'money',
   payout_batches: 'money',
   payout_batch_items: 'money',
   revenues: 'money',
