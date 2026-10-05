@@ -199,7 +199,7 @@ describe('portal DTO — ใบเพิ่มหนี้แยกช่อง 
       totalSatang: 1_284_000,
       deliveryFormat: 'paper_pdf',
       creditNotes: [
-        { id: 'cn-1', creditNoteNumber: 'CN-1', issueDate: '2026-07-05', amountBeforeVatSatang: 10_000, vatSatang: 700, totalSatang: 10_700 },
+        { id: 'cn-1', creditNoteNumber: 'CN-1', issueDate: '2026-07-05', amountBeforeVatSatang: 10_000, vatSatang: 700, totalSatang: 10_700, buyerBranchCode: '00000' },
         {
           id: 'dn-1',
           noteType: 'debit',
@@ -208,13 +208,23 @@ describe('portal DTO — ใบเพิ่มหนี้แยกช่อง 
           amountBeforeVatSatang: 50_000,
           vatSatang: 3_500,
           totalSatang: 53_500,
+          buyerBranchCode: '00001',
           ...({ reason: 'ภายใน', filePath: 'x', adjustmentId: 'a' } as object),
         },
       ],
     })
     expect(dto.creditNotes.map((note) => note.creditNoteNumber)).toEqual(['CN-1'])
     expect(dto.debitNotes).toEqual([
-      { id: 'dn-1', creditNoteNumber: 'DN-1', issueDate: '2026-07-06', amountBeforeVatSatang: 50_000, vatSatang: 3_500, totalSatang: 53_500 },
+      {
+        id: 'dn-1',
+        creditNoteNumber: 'DN-1',
+        issueDate: '2026-07-06',
+        amountBeforeVatSatang: 50_000,
+        vatSatang: 3_500,
+        totalSatang: 53_500,
+        // มติ PO U82 — สาขาผู้ซื้อตามใบกำกับเดิม (ข้อความ ไม่ใช่รหัสดิบ)
+        branchLabel: 'สาขาที่ 00001',
+      },
     ])
     expect(dto.netTotalSatang).toBe(1_284_000 - 10_700 + 53_500)
     expect(dto.netBeforeVatSatang).toBe(1_240_000)

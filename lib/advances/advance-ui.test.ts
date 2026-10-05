@@ -59,6 +59,7 @@ function advance(overrides: Partial<AdvanceDto> = {}): AdvanceDto {
     returnState: 'none',
     returns: [],
     payoutBatch: null,
+    paidOut: true,
     ...overrides,
   }
 }
@@ -220,8 +221,13 @@ describe('settleUsedField — ช่องยอดที่ใช้จริ�
 })
 
 describe('มติ PO U74 — ปุ่มเคลียร์ยอดปิดเมื่ออยู่ในรอบจ่ายที่ยังไม่โอน', () => {
-  it('ยังไม่อยู่ในรอบจ่าย → เคลียร์ได้', () => {
+  it('ไม่อยู่ในรอบจ่ายที่ค้างโอน + เคยจ่ายแล้ว → เคลียร์ได้', () => {
     expect(settleBlockedReason(advance())).toBeNull()
+  })
+
+  it('มติ PO U83 — ยังไม่เคยจ่ายจริง → ปิดพร้อมเหตุผล "ยังไม่ได้จ่าย…"', () => {
+    expect(settleBlockedReason(advance({ paidOut: false }))).toBe('ยังไม่ได้จ่ายเงินทดรองนี้ — เคลียร์ได้หลังจ่ายแล้ว')
+    expect(settleBlockedReason(advance({ status: 'overdue', paidOut: false }))).not.toBeNull()
   })
 
   it.each(['draft', 'checking', 'file_generated'] as const)('รอบสถานะ %s → ปิดพร้อมเหตุผลที่บอกชื่อรอบ', (status) => {

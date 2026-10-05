@@ -474,6 +474,8 @@ export interface CustomerWhtExportSource {
   certificateDate: Date | null
   whtSatang: number | null
   status: 'pending' | 'received'
+  /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U79 — คอลัมน์ต่อท้าย) */
+  billingBatchNumber: string | null
 }
 
 /**
@@ -515,7 +517,9 @@ export async function customerWhtExportSources(
     withheldDate: row.withheldDate,
     companyName: row.company.name,
     companyTaxId: row.company.taxId,
-    billingRef: row.billingBatch === null ? null : `${row.billingBatch.batchNumber} · ${row.billingBatch.period}`,
+    // มติ U79 — `billing_ref` คงเป็นรอบเดือนแบบเดิม · เลขรอบแยกคอลัมน์ต่อท้าย
+    billingRef: row.billingBatch?.period ?? null,
+    billingBatchNumber: row.billingBatch?.batchNumber ?? null,
     taxInvoiceNumbers: row.billingBatch?.salesRecord?.taxInvoices.map((invoice) => invoice.invoiceNumber) ?? [],
     withheldSatang: row.withheldSatang,
     certificateNumber: row.certificateNumber,

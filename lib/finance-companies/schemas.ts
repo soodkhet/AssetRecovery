@@ -1,12 +1,7 @@
 import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
-import {
-  BRANCH_CODE_PATTERN,
-  DEFAULT_CUSTOMER_WHT_PCT,
-  DEFAULT_VAT_MODE,
-  HEAD_OFFICE_BRANCH_CODE,
-  normalizeTaxId,
-} from '@/lib/finance-companies/company'
+import { DEFAULT_CUSTOMER_WHT_PCT, DEFAULT_VAT_MODE, normalizeTaxId } from '@/lib/finance-companies/company'
+import { branchCodeSchema } from '@/lib/format/branch'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลบริษัทไฟแนนซ์ (ไฟล์ 10 · Rule 04 · Rule 13)
@@ -37,15 +32,8 @@ export const taxIdSchema = z
   .transform(normalizeTaxId)
   .refine((value) => /^\d{13}$/.test(value), 'เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก')
 
-/**
- * สำนักงานใหญ่/สาขา (มติ PO U77 · ม.86/4) — ตัวเลข 5 หลัก · `00000` = สำนักงานใหญ่ ·
- * ไม่ส่งมาเลย = สำนักงานใหญ่ (ไม่เปลี่ยนพฤติกรรมของผู้เรียกเดิม)
- */
-export const branchCodeSchema = z
-  .string()
-  .trim()
-  .refine((value) => BRANCH_CODE_PATTERN.test(value), 'รหัสสาขาต้องเป็นตัวเลข 5 หลัก (สำนักงานใหญ่ = 00000)')
-  .default(HEAD_OFFICE_BRANCH_CODE)
+/** สำนักงานใหญ่/สาขา (มติ PO U77 · ม.86/4) — schema กลางใช้ร่วมฝั่งผู้ขาย (U82) */
+export { branchCodeSchema }
 
 const optionalText = (max: number) =>
   z

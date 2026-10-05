@@ -21,6 +21,7 @@
 | v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: เพิ่ม §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว (ฐาน WHT / การออก 50 ทวิ / ประเภทเงินได้) effective-dated + snapshot ลงรอบจ่าย · แก้ได้เฉพาะ Superadmin/บริหาร (`manage_wht_policy`) พร้อมเหตุผล · §11/§13 เติมสิทธิ์/endpoint |
 | v3.3 | 15/08/2569 | **มติ PO 15/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม Phase 6.3 (D18)** — เพิ่ม **§6.14 เกณฑ์ SLA งานติดตาม** (แท็บที่ 14): ไฟล์ 96 §6-O2/O4 อ้าง `slaAlertHours` ว่าอยู่ใน "Finance Settings (ไฟล์ 03)" แต่ไฟล์ 03 ไม่เคยนิยาม ⇒ ตั้งค่าที่ไฟล์นี้ เก็บที่ `assignment_policy_settings.sla_alert_hours` (ไฟล์ 02 v4.4) ค่าเริ่มต้น 72 ชม. = 3 วัน · ใช้กับ**รายงาน O2/O4 เท่านั้น** ไม่บล็อก flow ใด · §7 แก้ "13 แท็บ" → "14 แท็บ" |
 | v3.8 | 05/10/2569 | **มติ PO 05/10/2569 (U57/U68)**: §6.9 ชุดไฟล์ Export Pack 11 → 13 ไฟล์ — `12_Tax_Invoices.csv` (ใบกำกับภาษีที่ออก/ยกเลิกในรอบ + PDF ในโฟลเดอร์ `tax_invoices/` ของ zip) + `13_Advance_Returns.csv` (รับคืนเงินทดรอง หักกลบ/รับแยก/กลับรายการ) · รายละเอียดที่ `37` §6.1 v2.7 |
+| v3.9 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U82 · ม.86/4)**: §6.12 เพิ่ม **สำนักงานใหญ่/สาขาของผู้ขาย** (`organizations.branch_code` — `02` v4.31 · ค่าเริ่มต้น `00000`) แสดง/แก้ในแท็บเลขที่ใบกำกับภาษี (การ์ด "ข้อมูลผู้ขายบนใบกำกับภาษี") · แก้ = `manage_invoice_numbering` (ล็อก Superadmin) + เหตุผลบังคับ + audit · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ (ใบที่ออกแล้วไม่เปลี่ยน) · §13 เพิ่ม `GET/PATCH /api/settings/seller-branch` |
 | v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (U40/U41)**: §6.9 ชุดไฟล์ Export Pack 9 → 11 ไฟล์ — `10_Customer_WHT.csv` + `11_Suspense_Receipts.csv` (`37` v2.5) · ยังเป็นชุดตายตัว |
 | v3.3 | 05/10/2569 | **มติ PO 05/10/2569 (U21)**: §6.9 ชุดไฟล์ Export Pack 8 → 9 ไฟล์ — เพิ่ม `09_Credit_Notes.csv` (ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — `37` v2.3) · ยังเป็นชุดตายตัว ผู้ใช้เพิ่ม/ลบไม่ได้ |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
@@ -263,6 +264,12 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | last_number | integer | yes | เลขล่าสุดที่ออกไปแล้ว — ระบบ track อัตโนมัติ ไม่ให้แก้มือ |
 | last_reset_year | integer \| null | — | ปีที่ reset ล่าสุด (พ.ศ.) — ใช้เฉพาะ `yearly_reset` |
 
+**สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO 06/10/2569 — UAT U82 · ม.86/4)** — ค่าตั้งระดับองค์กรคู่กับเลขประจำตัวผู้เสียภาษีของเรา อยู่การ์ดเดียวกับแท็บนี้
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| branch_code | string(5) | yes | `00000` = สำนักงานใหญ่ (ค่าเริ่มต้น) · `00001`… = สาขาที่ — ตัวเลข 5 หลักตามใบทะเบียน ภ.พ.20 · พิมพ์ต่อจากเลขประจำตัวผู้เสียภาษีของผู้ขายบนใบกำกับ · **snapshot** ลง `tax_invoices.seller_branch_code` ตอนออกใบ (แก้ภายหลังไม่กระทบใบเดิม) · แก้ได้เฉพาะ `manage_invoice_numbering` + เหตุผล + audit |
+
 > **Schema sync 04/07/2569 (DEC-006/D1)**: field ทั้งชุดอยู่บนตาราง `organizations` ใน `02` v3.5 (`tax_invoice_numbering_mode`, `tax_invoice_prefix`, `tax_invoice_digit_length`, `tax_invoice_seq`, `tax_invoice_last_reset_year`)
 
 ### 6.13 Tax Document Template Settings (รูปแบบเอกสารภาษีทางการ)
@@ -350,6 +357,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | GET / POST / PATCH | /api/settings/vat-rates | VAT Rate (effective-dated) |
 | GET / POST | /api/settings/wht-policy | ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated insert-only — §6.4.2) |
 | GET / PATCH | /api/settings/tax-invoice-numbering | Tax Invoice Numbering Format |
+| GET / PATCH | /api/settings/seller-branch | สำนักงานใหญ่/สาขาของผู้ขาย (U82) — อ่าน `view_master_data` · แก้ `manage_invoice_numbering` + reason |
 | GET / POST / PATCH | /api/settings/cost-centers | Cost Center |
 | GET | /api/settings/document-templates | Internal Doc Templates (read-only, ดูไฟล์ 28 สำหรับแก้ไข) |
 | GET / POST / PATCH | /api/settings/bank-file-formats | Bank File Format |

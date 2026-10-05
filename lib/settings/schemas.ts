@@ -8,6 +8,7 @@ import {
   MAX_AGING_BUCKET_DAYS,
   MIN_AGING_BUCKETS,
 } from '@/lib/settings/finance-policy'
+import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
 import { MAX_DIGIT_LENGTH, MIN_DIGIT_LENGTH } from '@/lib/settings/numbering'
 import {
   MAX_ACCEPT_DEADLINE_HOURS,
@@ -387,6 +388,19 @@ export function bodyTouchesNumberingSequence(body: unknown): boolean {
   if (typeof body !== 'object' || body === null) return false
   return NUMBERING_READONLY_KEYS.some((key) => key in (body as Record<string, unknown>))
 }
+
+// ── สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) ───────────────────────
+/**
+ * แก้สาขาผู้ขาย (องค์กรเรา) — บังคับส่งรหัสทุกครั้ง (ไม่มีค่า default ตอนแก้) · กระทบเอกสารภาษี ⇒ เหตุผลบังคับ
+ */
+export const sellerBranchUpdateSchema = z.object({
+  branchCode: z
+    .string()
+    .trim()
+    .refine((value) => BRANCH_CODE_PATTERN.test(value), 'รหัสสาขาต้องเป็นตัวเลข 5 หลัก (สำนักงานใหญ่ = 00000)'),
+  reason: reasonSchema,
+})
+export type SellerBranchUpdateInput = z.infer<typeof sellerBranchUpdateSchema>
 
 // ── §6.13 รูปแบบเอกสารภาษีทางการ ───────────────────────────────────────
 export const taxDocumentTypeSchema = z.enum(['tax_invoice', 'wht_certificate'])

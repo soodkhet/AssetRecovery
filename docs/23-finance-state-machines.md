@@ -18,6 +18,7 @@
 | v2.3 | 05/10/2569 | **UAT BUG-092 (S4 — งานแก้ของ fixer AK ตามรายการที่ PO มอบ 05/10/2569)** — §6.3 เพิ่ม transition `pending_approval → pending_warehouse_confirm` (action `hold_for_warehouse`) **เฉพาะแถวรายวัน** (job `daily_field_allowance` / เบิกย้อนหลัง U50) ที่ถูกสร้างตอนเคสยังเปิด แล้วเคสปิดสำเร็จภายหลัง — ทำในทรานแซกชันเดียวกับการปิดงาน (และการส่งหลักฐานใหม่) เฉพาะแถวที่ยังไม่มีผู้อนุมัติขั้นใดประทับ/ไม่อยู่ในรอบจ่าย · ปลดกลับด้วย `warehouse_confirm` ตอนล็อต confirmed ตามเดิม · แถวที่มีผู้อนุมัติแล้วบางขั้น/อนุมัติครบ/ตีกลับ/เข้ารอบจ่าย **ไม่แตะ** (รอมติ PO) · ไม่มี state ใหม่ |
 | v2.4 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U67)** — §6.6 เพิ่มสถานะ terminal `cancelled` (ยกเลิกรอบจ่ายก่อนโอนจริง จาก `draft`/`checking`/`file_generated` · `completed` ยกเลิกไม่ได้) — enum `payout_batch_status` ใน `02` §3 v4.25 |
 | v2.5 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U74)** — §6.4 เงื่อนไขเพิ่มของ `settle` (approved/overdue → cleared): เงินทดรองต้องไม่อยู่ในรอบจ่าย (§6.6) ที่ยังไม่ `completed` — ไม่เช่นนั้น `ADVANCE_IN_PENDING_PAYOUT` · ไม่เพิ่ม state |
+| v2.6 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U83)** — §6.4 guard ของ `settle` เพิ่ม: ต้อง**เคยอยู่ในรอบจ่าย (§6.6) ที่ `completed`** อย่างน้อยหนึ่งรอบ (จ่ายจริงแล้ว) — ไม่เช่นนั้น `ADVANCE_IN_PENDING_PAYOUT` · ไม่เพิ่ม state |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -77,6 +78,8 @@ pending_approval → rejected (terminal, การเงินไม่อนุ
 ```
 
 > **Guard ของ `settle` (มติ PO 05/10/2569 — UAT U74)**: เงินทดรองที่ถูกดึงเข้ารอบจ่าย (§6.6 — ผ่าน `advances.payout_batch_item_id`) ซึ่งยังเป็น `draft`/`checking`/`file_generated` ⇒ **ห้าม settle** (`ADVANCE_IN_PENDING_PAYOUT`) จนกว่ารอบนั้น `completed` · รอบ `cancelled` ⇒ เงินทดรองหลุดจากรอบแล้ว ไม่ติด guard · การสร้างรอบจ่ายดึงเฉพาะเงินทดรอง `approved`/`overdue` (ตรวจซ้ำตอนยึดรายการ) ⇒ เงินทดรอง `cleared` ไม่ถูกดึงเข้ารอบอีก
+>
+> **Guard เพิ่ม (มติ PO 06/10/2569 — UAT U83)**: `settle` ทำได้เฉพาะเงินทดรองที่**เคยอยู่ในรอบจ่ายที่ `completed`** (จ่ายจริงแล้ว) อย่างน้อยหนึ่งรอบ — ยังไม่เคยถูกดึงเข้ารอบ / รอบถูกยกเลิก ⇒ `ADVANCE_IN_PENDING_PAYOUT` ("ยังไม่ได้จ่ายเงินทดรองนี้ — เคลียร์ได้หลังจ่ายแล้ว")
 
 > แก้ไขจาก v1 (`waiting_settlement`/`settled` เดิม) — ตัด `waiting_settlement` (ซ้ำซ้อนกับ approved), เปลี่ยน `settled`→`cleared`, เพิ่ม `overdue`/`rejected` — sync กับไฟล์ 15 v2 และ `02-database-schema-design.md` v3.1 แล้ว
 

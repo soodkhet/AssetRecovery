@@ -109,9 +109,9 @@ async function seedNote(invoiceId: string, type: 'credit' | 'debit', amount: num
   const vat = Math.round(amount * 0.07)
   await db().$executeRawUnsafe(`
     INSERT INTO credit_notes (organization_id, tax_invoice_id, note_type, adjustment_id, credit_note_number, issue_date,
-                              amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by)
+                              amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by, buyer_branch_code)
     VALUES ('${ORG_ID}', '${invoiceId}', '${type}', ${adjustmentId === null ? 'NULL' : `'${adjustmentId}'`},
-            'CN-${TAG}-${seq}', '2026-08-20', ${amount}, ${vat}, ${amount + vat}, 7, 'เอกสารทดสอบ', '${USER_ID}')
+            'CN-${TAG}-${seq}', '2026-08-20', ${amount}, ${vat}, ${amount + vat}, 7, 'เอกสารทดสอบ', '${USER_ID}', '00000')
   `)
 }
 
@@ -158,8 +158,8 @@ beforeAll(async () => {
     VALUES ('${ORG_ID}', '${period[0]?.id ?? ''}', '${billingBatchId}', '${COMPANY_ID}', 373000, 26110, 399110, '${USER_ID}') RETURNING id
   `)
   const invoice = await tx.$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, created_by)
-    VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}', '2026-08-12', '00000', '${USER_ID}') RETURNING id
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, created_by)
+    VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}', '2026-08-12', '00000', '00000', '${USER_ID}') RETURNING id
   `)
   invoiceId = invoice[0]?.id ?? ''
 })
@@ -242,8 +242,8 @@ suite('U44 — บรรทัดกระทบยอด F2 กับใบก�
       VALUES ('${ORG_ID}', '${periodId}', '${batchId}', '${COMPANY_ID}', 100000, 7000, 107000, '${USER_ID}') RETURNING id
     `)
     await db().$executeRawUnsafe(`
-      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, created_by)
-      VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}-B', '2026-08-25', '00000', '${USER_ID}')
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, created_by)
+      VALUES ('${ORG_ID}', '${sales[0]?.id ?? ''}', 'INV-${TAG}-B', '2026-08-25', '00000', '00000', '${USER_ID}')
     `)
     // Adjustment ลด 10,000 ผูกรอบ (ไม่ผูกรายได้) ⇒ ส่วนของรายได้ ส.ค. = 10,000 × 60/100 = 6,000
     await db().$executeRawUnsafe(`

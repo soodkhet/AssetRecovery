@@ -294,6 +294,7 @@ function CreditNoteBlock({ invoice }: { invoice: PortalTaxInvoiceDto }) {
               {note.creditNoteNumber}
             </RefText>
             <span className="text-slate-500">{fmtDate(note.issueDate)}</span>
+            <span className="text-slate-500">{note.branchLabel}</span>
             <span className="font-mono">
               ก่อน VAT {fmtSatangSymbol(note.amountBeforeVatSatang)} · VAT{" "}
               {fmtSatangSymbol(note.vatSatang)} · รวม{" "}

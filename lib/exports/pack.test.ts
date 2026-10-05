@@ -365,10 +365,31 @@ describe('06_Bank_Reconciliation.csv — enum เต็ม 4 ค่า (DEC-006/
         matchStatus: 'manual_matched',
         matchedType: 'payout_batch',
         matchedRef: 'PB-2569-06-002',
+        billingBatchNumber: null,
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      '05/07/2569,BTR-2569-07-0012,8245.00,debit,payout_batch,PB-2569-06-002,manual_matched',
+      '05/07/2569,BTR-2569-07-0012,8245.00,debit,payout_batch,PB-2569-06-002,manual_matched,-',
+    )
+  })
+
+  it('มติ U79 — จับคู่รอบวางบิล: `matched_ref` คงรูปแบบเดิม (บริษัท + รอบเดือน) · เลขรอบอยู่คอลัมน์ต่อท้าย', () => {
+    const lines = bankReconCsv([
+      {
+        transactionDate: new Date('2026-06-28T00:00:00Z'),
+        description: 'BTR-2569-06-0231',
+        amountSatang: 1_808_942,
+        matchStatus: 'auto_matched',
+        matchedType: 'billing_batch',
+        matchedRef: 'บริษัท สยามไฟแนนซ์ จำกัด 2569-06',
+        billingBatchNumber: 'BL-2569-001',
+      },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(lines[0]?.split(',').at(-1)).toBe('billing_batch_number')
+    expect(lines[1]).toBe(
+      '28/06/2569,BTR-2569-06-0231,18089.42,credit,billing_batch,บริษัท สยามไฟแนนซ์ จำกัด 2569-06,auto_matched,BL-2569-001',
     )
   })
 
@@ -381,10 +402,11 @@ describe('06_Bank_Reconciliation.csv — enum เต็ม 4 ค่า (DEC-006/
         matchStatus: 'unmatched_resolved',
         matchedType: null,
         matchedRef: null,
+        billingBatchNumber: null,
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      '06/07/2569,เงินเข้าไม่ทราบที่มา,500.00,credit,-,-,unmatched_resolved',
+      '06/07/2569,เงินเข้าไม่ทราบที่มา,500.00,credit,-,-,unmatched_resolved,-',
     )
   })
 })
@@ -401,13 +423,27 @@ describe('07_Adjustment_Log.csv', () => {
           reason: 'แก้ไขยอด VAT คำนวณผิดพลาดจากปัดเศษ',
           approvedByName: 'Executive (คุณวิภา)',
           approvedAt: new Date('2026-07-03T00:00:00Z'),
+          billingBatchNumber: null,
+        },
+        {
+          // มติ U79 — `target_ref` ของรอบวางบิลคงเป็นรอบเดือน · เลขรอบอยู่คอลัมน์ต่อท้าย
+          targetType: 'billing_batch',
+          targetRef: '2569-06',
+          signedSatang: 5_000,
+          reason: 'ปรับยอดรอบ',
+          approvedByName: 'Executive (คุณวิภา)',
+          approvedAt: new Date('2026-07-03T00:00:00Z'),
+          billingBatchNumber: 'BL-2569-001',
         },
       ],
       { yearBe: 2569, month: 6 },
     )
-    expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'ADJ-2569-06-001,revenue,SF-2026-00791,-100.00,แก้ไขยอด VAT คำนวณผิดพลาดจากปัดเศษ,Executive (คุณวิภา),03/07/2569',
+    const lines = csv.slice(CSV_BOM.length).split('\r\n')
+    expect(lines[0]).toBe(ADJUSTMENT_HEADERS.join(','))
+    expect(lines[1]).toBe(
+      'ADJ-2569-06-001,revenue,SF-2026-00791,-100.00,แก้ไขยอด VAT คำนวณผิดพลาดจากปัดเศษ,Executive (คุณวิภา),03/07/2569,-',
     )
+    expect(lines[2]).toBe('ADJ-2569-06-002,billing_batch,2569-06,50.00,ปรับยอดรอบ,Executive (คุณวิภา),03/07/2569,BL-2569-001')
   })
 })
 
@@ -539,6 +575,7 @@ describe('09_Credit_Notes.csv (มติ PO 05/10/2569 U21)', () => {
         reason: 'ลดค่าบริการ, ตามที่ตกลง',
         status: 'active',
         adjustmentRef: 'ADJ-2569-06-001',
+        companyBranchCode: '00000',
       },
       {
         documentType: 'DN',
@@ -552,16 +589,18 @@ describe('09_Credit_Notes.csv (มติ PO 05/10/2569 U21)', () => {
         reason: 'เพิ่มค่าบริการ',
         status: 'cancelled',
         adjustmentRef: null,
+        // มติ PO U82 — สาขาผู้ซื้อตามใบกำกับเดิม (คอลัมน์ต่อท้าย)
+        companyBranchCode: '00001',
       },
     ])
     expect(csv.startsWith(CSV_BOM)).toBe(true)
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(CREDIT_NOTE_HEADERS.join(','))
     expect(lines[1]).toBe(
-      'CN,CN-2569-001,05/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,100.00,7.00,107.00,"ลดค่าบริการ, ตามที่ตกลง",active,ADJ-2569-06-001',
+      'CN,CN-2569-001,05/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,100.00,7.00,107.00,"ลดค่าบริการ, ตามที่ตกลง",active,ADJ-2569-06-001,สำนักงานใหญ่',
     )
     expect(lines[2]).toBe(
-      'DN,DN-2569-001,06/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,50.00,3.50,53.50,เพิ่มค่าบริการ,cancelled,-',
+      'DN,DN-2569-001,06/07/2569,INV-2569-0014,บริษัท สยามไฟแนนซ์ จำกัด,50.00,3.50,53.50,เพิ่มค่าบริการ,cancelled,-,สาขาที่ 00001',
     )
     expect(lines[3]).toBe('')
   })
@@ -585,6 +624,7 @@ describe('10_Customer_WHT.csv (มติ PO 05/10/2569 U40)', () => {
         certificateDate: new Date('2026-09-10T00:00:00Z'),
         whtSatang: 11_190,
         status: 'received',
+        billingBatchNumber: 'BL-2569-004',
       },
       {
         withheldDate: new Date('2026-09-28T00:00:00Z'),
@@ -597,15 +637,16 @@ describe('10_Customer_WHT.csv (มติ PO 05/10/2569 U40)', () => {
         certificateDate: null,
         whtSatang: null,
         status: 'pending',
+        billingBatchNumber: null,
       },
     ])
     expect(csv.startsWith(CSV_BOM)).toBe(true)
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(CUSTOMER_WHT_HEADERS.join(','))
     expect(lines[1]).toBe(
-      '12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received',
+      '12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received,BL-2569-004',
     )
-    expect(lines[2]).toBe('28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,-,-,-,240.00,-,-,-,pending')
+    expect(lines[2]).toBe('28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,-,-,-,240.00,-,-,-,pending,-')
   })
 
   it('ไม่มีรายการ ⇒ มีแต่หัวคอลัมน์', () => {
@@ -626,6 +667,20 @@ describe('11_Suspense_Receipts.csv (มติ PO 05/10/2569 U41)', () => {
         matchedRef: null,
         resolvedDate: null,
         refundNote: null,
+        billingBatchNumber: null,
+      },
+      {
+        transactionDate: new Date('2026-09-22T00:00:00Z'),
+        description: 'TRF IN KBANK 5521',
+        amountSatang: 535_000,
+        suspendedAt: new Date('2026-09-23T03:00:00Z'),
+        suspenseNote: 'ยอดไม่ตรงบิลใด',
+        matchStatus: 'manual_matched',
+        // มติ U79 — `resolved_ref` คงรูปแบบเดิม · เลขรอบอยู่คอลัมน์ต่อท้าย
+        matchedRef: 'บริษัท สยามไฟแนนซ์ จำกัด 2569-08',
+        resolvedDate: new Date('2026-09-30T03:00:00Z'),
+        refundNote: null,
+        billingBatchNumber: 'BL-2569-004',
       },
       {
         transactionDate: new Date('2026-09-25T00:00:00Z'),
@@ -637,13 +692,17 @@ describe('11_Suspense_Receipts.csv (มติ PO 05/10/2569 U41)', () => {
         matchedRef: null,
         resolvedDate: new Date('2026-09-27T00:00:00Z'),
         refundNote: 'คืนตามคำขอ, มีสลิป',
+        billingBatchNumber: null,
       },
     ])
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(SUSPENSE_HEADERS.join(','))
-    expect(lines[1]).toBe('20/09/2569,TRF IN 0987,123.45,21/09/2569,ไม่ระบุผู้โอน,suspense,-,-,-')
+    expect(lines[1]).toBe('20/09/2569,TRF IN 0987,123.45,21/09/2569,ไม่ระบุผู้โอน,suspense,-,-,-,-')
     expect(lines[2]).toBe(
-      '25/09/2569,TRF IN SCB,500.00,25/09/2569,โอนผิดบัญชี,suspense_refunded,-,27/09/2569,"คืนตามคำขอ, มีสลิป"',
+      '22/09/2569,TRF IN KBANK 5521,5350.00,23/09/2569,ยอดไม่ตรงบิลใด,manual_matched,บริษัท สยามไฟแนนซ์ จำกัด 2569-08,30/09/2569,-,BL-2569-004',
+    )
+    expect(lines[3]).toBe(
+      '25/09/2569,TRF IN SCB,500.00,25/09/2569,โอนผิดบัญชี,suspense_refunded,-,27/09/2569,"คืนตามคำขอ, มีสลิป",-',
     )
   })
 })
@@ -657,6 +716,7 @@ describe('12_Tax_Invoices.csv (มติ PO 05/10/2569 U57)', () => {
     totalSatang: 399_110,
     vatRatesPct: ['7', '7.00'],
     billingRef: '2569-06',
+    billingBatchNumber: 'BL-2569-002',
     companyBranchCode: '00000',
   }
 
@@ -690,10 +750,10 @@ describe('12_Tax_Invoices.csv (มติ PO 05/10/2569 U57)', () => {
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(TAX_INVOICE_HEADERS.join(','))
     expect(lines[1]).toBe(
-      'INV-2569-0014,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0014.pdf,สำนักงานใหญ่',
+      'INV-2569-0014,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,active,-,-,-,tax_invoices/INV-2569-0014.pdf,สำนักงานใหญ่,BL-2569-002',
     )
     expect(lines[2]).toBe(
-      'INV-2569-0015,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,cancelled,03/07/2569,"ที่อยู่ผิด, ออกใหม่",INV-2569-0016,-,สาขาที่ 00001',
+      'INV-2569-0015,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,3730.00,261.10,3991.10,7.00,2569-06,cancelled,03/07/2569,"ที่อยู่ผิด, ออกใหม่",INV-2569-0016,-,สาขาที่ 00001,BL-2569-002',
     )
   })
 

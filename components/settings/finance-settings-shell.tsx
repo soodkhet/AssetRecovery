@@ -11,6 +11,7 @@ import { ExportFormatsTab } from '@/components/settings/export-formats-tab'
 import { FunctionalPermissionsTab } from '@/components/settings/functional-permissions-tab'
 import { InternalDocumentsTab } from '@/components/settings/internal-documents-tab'
 import { InvoiceNumberingTab } from '@/components/settings/invoice-numbering-tab'
+import { SellerBranchCard } from '@/components/settings/seller-branch-card'
 import { PayeeTab } from '@/components/settings/payee-tab'
 import { PeriodLockTab } from '@/components/settings/period-lock-tab'
 import { SlaPolicyTab } from '@/components/settings/sla-policy-tab'
@@ -102,7 +103,13 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'export' && <ExportFormatsTab />}
           {current?.id === 'permission' && <FunctionalPermissionsTab />}
           {current?.id === 'lock' && <PeriodLockTab />}
-          {current?.id === 'numbering' && <InvoiceNumberingTab />}
+          {current?.id === 'numbering' && (
+            <div className="space-y-6">
+              <InvoiceNumberingTab />
+              {/* มติ PO U82 — สาขาผู้ขายบนใบกำกับ (ค่าตั้งระดับองค์กร) */}
+              <SellerBranchCard />
+            </div>
+          )}
           {current?.id === 'taxdoc' && <TaxDocTemplatesTab />}
           {current?.id === 'sla' && <SlaPolicyTab />}
           {current?.id === 'assignment' && <AssignmentPolicyTab />}

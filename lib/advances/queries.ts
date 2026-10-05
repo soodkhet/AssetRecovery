@@ -10,6 +10,7 @@ import {
   assertNoUnclearedAdvance,
   assertSeparateReturnAllowed,
   assertSettleNotInPendingPayout,
+  isAdvancePaidOut,
   assertWithinAdvanceMax,
   type AdvancePayoutBatchRef,
   isAdvanceOverdue,
@@ -123,6 +124,11 @@ function payoutBatchOf(row: Pick<AdvanceRow, 'payoutBatchItemId' | 'payoutItems'
   return item === undefined ? null : { ...item.payoutBatch }
 }
 
+/** มติ PO U83 — เคยอยู่ในรอบจ่ายที่ `completed` (จ่ายจริงแล้ว) หรือไม่ — ดูทุกแถวในรอบจ่ายของเงินทดรองนี้ */
+function paidOutOf(row: Pick<AdvanceRow, 'payoutItems'>): boolean {
+  return isAdvancePaidOut(row.payoutItems.map((item) => item.payoutBatch))
+}
+
 /** ยอดคืนค้าง (`22` §6.14) — นับเฉพาะแถวที่ยังไม่กลับรายการ */
 function returnOutstandingOf(row: Pick<AdvanceRow, 'returnSatang' | 'returns'>): {
   collected: number
@@ -189,6 +195,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     }),
     returns: row.returns.map(toReturnDto),
     payoutBatch: payoutBatchOf(row),
+    paidOut: paidOutOf(row),
   }
 }
 
@@ -503,7 +510,8 @@ export async function settleAdvance(
     // มติ PO U74 — ล็อกแถวก่อนอ่านรอบจ่ายที่ชี้อยู่ ⇒ การสร้าง/ยกเลิกรอบจ่ายที่แตะแถวนี้ต้องรอ
     // (สร้างรอบ: ยึด `payout_batch_item_id` ด้วย `updateMany` ที่ผูกสถานะ approved|overdue ⇒ หลังเคลียร์แล้วยึดไม่ได้)
     const locked = await lockAdvanceForReturn(tx as ExpenseTxClient, user.organizationId, advanceId)
-    assertSettleNotInPendingPayout(advanceId, payoutBatchOf(locked))
+    // มติ PO U83 — ต้องเคยอยู่ในรอบจ่ายที่ completed (เงินออกจริงแล้ว) ก่อนเคลียร์ได้
+    assertSettleNotInPendingPayout(advanceId, payoutBatchOf(locked), paidOutOf(locked))
 
     const claimed = await tx.advance.updateMany({
       where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },

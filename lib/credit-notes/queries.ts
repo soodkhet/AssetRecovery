@@ -29,6 +29,7 @@ import type {
 } from '@/lib/credit-notes/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/enums'
+import { formatBranch } from '@/lib/format/branch'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { prisma } from '@/lib/prisma'
 import { SalesError } from '@/lib/sales/errors'
@@ -87,6 +88,7 @@ const CREDIT_NOTE_SELECT = {
   vatSatang: true,
   totalSatang: true,
   vatRatePctUsed: true,
+  buyerBranchCode: true,
   reason: true,
   filePath: true,
   status: true,
@@ -121,6 +123,8 @@ function toDto(row: CreditNoteRow): CreditNoteDto {
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
     vatRatePctUsed: row.vatRatePctUsed.toString(),
+    buyerBranchCode: row.buyerBranchCode,
+    buyerBranchLabel: formatBranch(row.buyerBranchCode),
     reason: row.reason,
     filePath: row.filePath,
     status: row.status,
@@ -140,6 +144,7 @@ const INVOICE_SELECT = {
   status: true,
   invoiceNumber: true,
   invoiceDate: true,
+  buyerBranchCode: true,
   salesRecord: {
     select: {
       id: true,
@@ -284,6 +289,7 @@ const CREDIT_NOTE_SUMMARY_SELECT = {
   amountBeforeVatSatang: true,
   vatSatang: true,
   totalSatang: true,
+  buyerBranchCode: true,
   taxInvoice: { select: { invoiceNumber: true } },
 } as const satisfies Prisma.CreditNoteSelect
 
@@ -300,6 +306,7 @@ function toCreditNoteSummary(
     amountBeforeVatSatang: row.amountBeforeVatSatang,
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
+    buyerBranchCode: row.buyerBranchCode,
   }
 }
 
@@ -497,6 +504,8 @@ export async function createCreditNote(
           vatSatang: amounts.vatSatang,
           totalSatang: amounts.totalSatang,
           vatRatePctUsed: new Prisma.Decimal(vatRatePct),
+          // มติ PO U82 (ม.86/4) — สาขาผู้ซื้อตาม snapshot บนใบกำกับเดิม (ไม่ใช่ค่าปัจจุบันของบริษัท)
+          buyerBranchCode: invoice.buyerBranchCode,
           reason,
           filePath,
           fileSha256: verified?.sha256 ?? null,
@@ -527,6 +536,7 @@ export async function createCreditNote(
             vat_satang: row.vatSatang,
             total_satang: row.totalSatang,
             vat_rate_pct_used: vatRatePct,
+            buyer_branch_code: row.buyerBranchCode,
             file_path: filePath,
             file_sha256: verified?.sha256 ?? null,
             status: row.status,

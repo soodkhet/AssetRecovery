@@ -170,6 +170,7 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
             amountBeforeVatSatang: 10_000,
             vatSatang: 700,
             totalSatang: 10_700,
+            buyerBranchCode: '00000',
           } as Parameters<typeof serializePortalTaxInvoice>[0]['creditNotes'][number],
         ],
       }),
@@ -222,6 +223,7 @@ describe('portal serializers — เนื้อหา', () => {
           amountBeforeVatSatang: 10_000,
           vatSatang: 700,
           totalSatang: 10_700,
+          buyerBranchCode: '00000',
           reason: 'ลับ',
           createdBy: 'u-1',
           filePath: 'x/y.pdf',
@@ -231,7 +233,15 @@ describe('portal serializers — เนื้อหา', () => {
     })
     expect(dto).toMatchObject({ totalSatang: 107_000, netBeforeVatSatang: 90_000, netVatSatang: 6_300, netTotalSatang: 96_300 })
     expect(dto.creditNotes).toEqual([
-      { id: 'cn-1', creditNoteNumber: 'CN-1', issueDate: '2026-10-01', amountBeforeVatSatang: 10_000, vatSatang: 700, totalSatang: 10_700 },
+      {
+        id: 'cn-1',
+        creditNoteNumber: 'CN-1',
+        issueDate: '2026-10-01',
+        amountBeforeVatSatang: 10_000,
+        vatSatang: 700,
+        totalSatang: 10_700,
+        branchLabel: 'สำนักงานใหญ่',
+      },
     ])
   })
 

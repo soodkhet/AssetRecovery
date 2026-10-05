@@ -277,13 +277,49 @@ export function pendingPayoutSettleMessage(batchName: string): string {
   return `เงินทดรองนี้อยู่ในรอบจ่าย "${batchName}" ที่ยังไม่ยืนยันโอนเงิน — เคลียร์ยอดได้หลังรอบจ่ายนี้โอนเงินสำเร็จ`
 }
 
-/** ยามฝั่ง service — อยู่ในรอบจ่ายที่ยังไม่ `completed` ⇒ `ADVANCE_IN_PENDING_PAYOUT` */
-export function assertSettleNotInPendingPayout(advanceId: string, batch: AdvancePayoutBatchRef | null): void {
+/**
+ * มติ PO U83 — เงินทดรองถือว่า "จ่ายแล้ว" เมื่อเคยอยู่ในรอบจ่ายที่ `completed` (โอนจริงแล้ว) อย่างน้อยหนึ่งรอบ
+ * · รอบที่ยกเลิก (U67) / ยังไม่โอน ไม่นับ · ไม่เคยถูกดึงเข้ารอบใดเลย = ยังไม่จ่าย
+ */
+export function isAdvancePaidOut(batches: readonly Pick<AdvancePayoutBatchRef, 'status'>[]): boolean {
+  return batches.some((batch) => batch.status === 'completed')
+}
+
+/** ข้อความที่ผู้ใช้เห็นเมื่อเงินทดรองยังไม่เคยจ่ายจริง (มติ PO U83) — ใช้ร่วม error ฝั่ง API และเหตุผลปุ่มที่ปิดไว้ */
+export const ADVANCE_NOT_PAID_SETTLE_MESSAGE = 'ยังไม่ได้จ่ายเงินทดรองนี้ — เคลียร์ได้หลังจ่ายแล้ว'
+
+/**
+ * เหตุผลที่ยังเคลียร์ยอดไม่ได้เพราะเงินยังไม่ออกจริง (`null` = เคลียร์ได้)
+ * ① อยู่ในรอบจ่ายที่ยังไม่ยืนยันโอน (U74) ⇒ บอกชื่อรอบ ② ยังไม่เคยอยู่ในรอบจ่ายที่ `completed` (U83)
+ */
+export function settlePayoutBlockMessage(batch: AdvancePayoutBatchRef | null, paidOut: boolean): string | null {
   const blocking = pendingPayoutBlockingSettle(batch)
-  if (blocking === null) return
+  if (blocking !== null) return pendingPayoutSettleMessage(blocking.name)
+  return paidOut ? null : ADVANCE_NOT_PAID_SETTLE_MESSAGE
+}
+
+/**
+ * ยามฝั่ง service — เงินยังไม่ออกจริง ⇒ `ADVANCE_IN_PENDING_PAYOUT`
+ * (U74: อยู่ในรอบจ่ายที่ยังไม่ `completed` · U83: ยังไม่เคยอยู่ในรอบจ่ายที่ `completed` — ใช้ code เดียวกัน
+ * เพราะความหมายเดียวกันคือ "รอจ่าย" ต่างกันที่ข้อความ)
+ */
+export function assertSettleNotInPendingPayout(
+  advanceId: string,
+  batch: AdvancePayoutBatchRef | null,
+  paidOut: boolean,
+): void {
+  const blocking = pendingPayoutBlockingSettle(batch)
+  if (blocking !== null) {
+    throw new AdvanceError('ADVANCE_IN_PENDING_PAYOUT', {
+      message: pendingPayoutSettleMessage(blocking.name),
+      context: { payoutBatchId: blocking.id, payoutBatchName: blocking.name, payoutBatchStatus: blocking.status },
+      detail: `advance=${advanceId} อยู่ในรอบจ่าย ${blocking.id} (${blocking.status})`,
+    })
+  }
+  if (paidOut) return
   throw new AdvanceError('ADVANCE_IN_PENDING_PAYOUT', {
-    message: pendingPayoutSettleMessage(blocking.name),
-    context: { payoutBatchId: blocking.id, payoutBatchName: blocking.name, payoutBatchStatus: blocking.status },
-    detail: `advance=${advanceId} อยู่ในรอบจ่าย ${blocking.id} (${blocking.status})`,
+    message: ADVANCE_NOT_PAID_SETTLE_MESSAGE,
+    context: { payoutBatchId: null, payoutBatchName: null, payoutBatchStatus: null },
+    detail: `advance=${advanceId} ยังไม่เคยอยู่ในรอบจ่ายที่ completed`,
   })
 }

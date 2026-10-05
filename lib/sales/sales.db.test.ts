@@ -474,6 +474,46 @@ suite('มติ PO U77 (ม.86/4) — สำนักงานใหญ่/ส�
   })
 })
 
+suite('มติ PO U82 (ม.86/4) — สำนักงานใหญ่/สาขาผู้ขาย snapshot ตอนออกใบ', () => {
+  it('ค่าตั้งองค์กร → snapshot บนใบ · แก้ค่าภายหลังใบเดิมไม่เปลี่ยน · audit + เหตุผล · แก้ snapshot ไม่ได้', async () => {
+    const { updateSellerBranch, getSellerBranch } = await import('@/lib/settings/queries/seller-branch')
+    await setNumbering({ seq: 700 })
+    await db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '00000' WHERE id = '${ORG_ID}'`)
+    expect((await getSellerBranch(ORG_ID)).branchLabel).toBe('สำนักงานใหญ่')
+
+    const updated = await updateSellerBranch({ actor: accountant, meta, reason: 'ออกใบกำกับจากสาขาที่ 2 (เทสต์ U82)' }, '00002')
+    expect(updated).toMatchObject({ branchCode: '00002', branchLabel: 'สาขาที่ 00002' })
+    const audit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'organizations', targetId: ORG_ID },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit?.beforeData).toEqual({ branch_code: '00000' })
+    expect(audit?.afterData).toEqual({ branch_code: '00002' })
+    expect(audit?.reason).toBe('ออกใบกำกับจากสาขาที่ 2 (เทสต์ U82)')
+
+    const batch = await seedBilling({ status: 'sent' })
+    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const invoice = await sales.issueTaxInvoice(ctx, { salesRecordId: record?.id ?? '' })
+    const source = await sales.getTaxInvoiceDocSource(accountant, invoice.id)
+    expect(source.sellerBranchCode).toBe('00002')
+    expect(buildTaxInvoiceDoc(source).seller.branchLabel).toBe('สาขาที่ 00002')
+
+    // กลับเป็นสำนักงานใหญ่ — ใบเดิมยังพิมพ์สาขาเดิม (ไม่อ่านค่า live ย้อนหลัง)
+    await updateSellerBranch({ actor: accountant, meta, reason: 'กลับไปออกที่สำนักงานใหญ่ (เทสต์ U82)' }, '00000')
+    expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).sellerBranchCode).toBe('00002')
+
+    await expect(
+      db().$executeRawUnsafe(`UPDATE tax_invoices SET seller_branch_code = '00000' WHERE id = '${invoice.id}'`),
+      'snapshot สาขาผู้ขายบนใบแก้ไม่ได้ (ยาม immutable ระดับ DB)',
+    ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '12' WHERE id = '${ORG_ID}'`),
+      'รหัสสาขาต้องเป็นตัวเลข 5 หลัก',
+    ).rejects.toThrow(/chk_organizations_branch_code/)
+    await setNumbering({ seq: 0 })
+  })
+})
+
 suite('Phase 4.3 — ยาม immutable + period lock', () => {
   it('งวดที่ locked ⇒ ออกใบกำกับภาษีไม่ได้ (`PERIOD_LOCKED_DIRECT_EDIT`)', async () => {
     await setNumbering({ seq: 200 })
