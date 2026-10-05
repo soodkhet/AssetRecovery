@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ACTIVE_EXPENSE_STATUSES } from '@/lib/field/expense-status'
 import {
   closeExpenseToastDescription,
+  FIELD_PENDING_EXPENSE_STATUSES,
+  pendingExpenseSatang,
   CASE_BOUND_STATUS_FILTERS,
   EXPENSE_STATUS_LABEL,
   EXPENSE_TYPE_LABEL,
@@ -249,5 +251,30 @@ describe('toast หลังปิดงานสะท้อนรายกา�
     expect(
       closeExpenseToastDescription({ createdExpenses: [{ expenseType: 'allowance', grossSatang: 20_000 }] }, true),
     ).toBe('รายการเบิกของรอบเดิมถูกแทนที่ด้วย: เบี้ยเลี้ยง ฿200.00')
+  })
+})
+
+describe('ยอดรอดำเนินการ (มติ PO U27)', () => {
+  it('ชุดสถานะรอดำเนินการ = 4 ตัว — approved/rejected/superseded ไม่นับ', () => {
+    expect([...FIELD_PENDING_EXPENSE_STATUSES].sort()).toEqual(
+      ['needs_revision', 'pending_approval', 'pending_finance_approval', 'pending_warehouse_confirm'].sort(),
+    )
+  })
+
+  it('ตัวอย่าง UAT: ผูกเคส ฿1,350 + เบิกแยก ฿600 = ฿1,950 (satang ล้วน)', () => {
+    const caseBound = [
+      { status: 'pending_warehouse_confirm' as const, grossSatang: 100_000 },
+      { status: 'pending_approval' as const, grossSatang: 35_000 },
+      { status: 'superseded' as const, grossSatang: 35_000 },
+    ]
+    const separate = [
+      { status: 'needs_revision' as const, grossSatang: 60_000 },
+      { status: 'rejected' as const, grossSatang: 99_000 },
+      { status: 'approved' as const, grossSatang: 10_000 },
+    ]
+    expect(pendingExpenseSatang(caseBound)).toBe(135_000)
+    expect(pendingExpenseSatang(separate)).toBe(60_000)
+    expect(pendingExpenseSatang([...caseBound, ...separate])).toBe(195_000)
+    expect(pendingExpenseSatang([])).toBe(0)
   })
 })

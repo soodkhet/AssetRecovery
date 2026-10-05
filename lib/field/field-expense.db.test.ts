@@ -750,6 +750,126 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     }
   })
 
+  it('มติ PO U26 (BUG-100) — ปิด 30/09 ส่งหลักฐานใหม่ 01/10: เวลาปิดครั้งแรกคงเดิม เคสยังอยู่เดือน ก.ย.', async () => {
+    const caseId = await closeSuccessfully()
+    // ย้อนเวลาปิดครั้งแรกไป 30/09/2569 23:45 น. (เวลาไทย) — ทุกคอลัมน์ที่ปิดงานรอบแรกเขียนไว้
+    const FIRST_CLOSED_ISO = '2026-09-30T16:45:00.000Z'
+    await db().$executeRawUnsafe(
+      `UPDATE case_evidences SET submitted_at = '${FIRST_CLOSED_ISO}' WHERE case_id = '${caseId}'`,
+    )
+    await db().$executeRawUnsafe(
+      `UPDATE case_assignments SET completed_at = '${FIRST_CLOSED_ISO}' WHERE case_id = '${caseId}'`,
+    )
+    await db().$executeRawUnsafe(`UPDATE cases SET closed_at = '${FIRST_CLOSED_ISO}' WHERE id = '${caseId}'`)
+    await db().$executeRawUnsafe(`UPDATE assets SET closed_at = '${FIRST_CLOSED_ISO}' WHERE case_id = '${caseId}'`)
+    await db().$executeRawUnsafe(`UPDATE expenses SET expense_date = DATE '2026-09-30' WHERE case_id = '${caseId}'`)
+
+    await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
+    // ก่อนส่งใหม่: ยังไม่มีเวลาส่งใหม่
+    expect((await field.getFieldCase(agentA, caseId)).resubmittedAt).toBeNull()
+
+    clearDistanceCache()
+    stubDistanceMatrix(2_000)
+    const resubmitted = await field.resubmitCloseCase(
+      agentA,
+      caseId,
+      { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
+      { actor: agentA, meta },
+    )
+    expect(resubmitted.status).toBe('closed_success')
+
+    // เวลาปิดครั้งแรกไม่ถูกเขียนทับ — ทั้งเคส / assignment / เครื่องในคลัง
+    const caseRow = await db().case.findUniqueOrThrow({ where: { id: caseId } })
+    const assignment = await db().caseAssignment.findFirstOrThrow({ where: { caseId } })
+    const asset = await db().asset.findFirstOrThrow({ where: { caseId } })
+    expect(caseRow.closedAt?.toISOString()).toBe(FIRST_CLOSED_ISO)
+    expect(assignment.completedAt?.toISOString()).toBe(FIRST_CLOSED_ISO)
+    expect(asset.closedAt.toISOString()).toBe(FIRST_CLOSED_ISO)
+
+    // เวลาส่งใหม่เก็บที่หลักฐานชุดใหม่ และแสดงคู่กับเวลาปิดครั้งแรก
+    const latest = await db().caseEvidence.findFirstOrThrow({ where: { caseId }, orderBy: { submittedAt: 'desc' } })
+    expect(latest.submittedAt.getTime()).toBeGreaterThan(new Date(FIRST_CLOSED_ISO).getTime())
+    const detail = await field.getFieldCase(agentA, caseId)
+    expect(detail.closedAt).toBe(FIRST_CLOSED_ISO)
+    expect(detail.resubmittedAt).toBe(latest.submittedAt.toISOString())
+    const closedList = await field.listFieldCases(agentA, { view: 'own', status: 'closed' })
+    const card = closedList.items.find((item) => item.caseId === caseId)
+    expect(card?.closedAt).toBe(FIRST_CLOSED_ISO)
+    expect(card?.resubmittedAt).toBe(latest.submittedAt.toISOString())
+
+    // ทุกที่ที่อิงเดือนใช้เวลาปิดครั้งแรก: สรุปรายได้ ก.ย. ยังมีเคสนี้ · ต.ค. ไม่มี · รายการเบิกชุดใหม่ลงวันที่ 30/09
+    const september = await expenses.getIncomeSummary(agentA, { month: '2026-09' })
+    expect(september.items.map((item) => item.caseId)).toContain(caseId)
+    const october = await expenses.getIncomeSummary(agentA, { month: '2026-10' })
+    expect(october.items.map((item) => item.caseId)).not.toContain(caseId)
+    const active = (await expensesOf(caseId)).filter((row) => row.status !== 'superseded')
+    expect(active.length).toBeGreaterThan(0)
+    expect(active.every((row) => row.expenseDate.toISOString().slice(0, 10) === '2026-09-30')).toBe(true)
+
+    // กติกาเดิมยังผ่าน: ของเดิม superseded ครบ + ชุดใหม่ชนิดละ 1 รายการ (ไม่ซ้ำไม่หาย)
+    const superseded = (await expensesOf(caseId)).filter((row) => row.status === 'superseded')
+    expect(superseded.map((row) => row.expenseType).sort()).toEqual(['commission', 'fuel'])
+    expect(active.map((row) => row.expenseType).sort()).toEqual(['commission', 'fuel'])
+
+    // audit ของการส่งใหม่บันทึกทั้งสองเวลา
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'case_assignments', targetId: assignment.id, action: 'status_change' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({
+      closedAt: FIRST_CLOSED_ISO,
+      resubmittedAt: latest.submittedAt.toISOString(),
+    })
+  })
+
+  it('มติ PO U27 (BUG-101) — ยอดรอดำเนินการรวมทุกแท็บ = ผูกเคส + เบิกแยก + เบิกส่วนเกินเงินทดรอง (เท่ากันทุกแท็บ)', async () => {
+    const caseId = await closeSuccessfully()
+    await expenses.submitHotelClaim(
+      agentA,
+      {
+        expenseDate: new Date(`${DAY_1}T00:00:00.000Z`),
+        amountSatang: 60_000,
+        sharedWithUserId: null,
+        receiptFileUrl: 'field/receipts/h-u27.jpg',
+        note: null,
+      },
+      { actor: agentA, meta },
+    )
+    const payee = await db().payeeProfile.findFirstOrThrow({ where: { organizationId: ORG_ID, userId: AGENT_A } })
+    // คำขอเบิกส่วนเกินเงินทดรองของตัวเอง (case_id = NULL) ที่รออนุมัติ + รายการที่ถูกปฏิเสธ (ต้องไม่นับ)
+    for (const [grossSatang, status] of [
+      [25_000, 'pending_approval'],
+      [99_000, 'rejected'],
+    ] as const) {
+      await db().expense.create({
+        data: {
+          organizationId: ORG_ID,
+          payeeId: payee.id,
+          expenseType: 'manual',
+          grossSatang,
+          expenseDate: new Date(`${DAY_1}T00:00:00.000Z`),
+          calculationSource: 'manual',
+          status,
+          createdBy: AGENT_A,
+        },
+      })
+    }
+
+    const caseBound = await expenses.listFieldExpenses(agentA, { type: 'caseBound' })
+    const separate = await expenses.listFieldExpenses(agentA, { type: 'separate' })
+    const caseBoundPending = (await expensesOf(caseId))
+      .filter((row) => row.status === 'pending_warehouse_confirm')
+      .reduce((sum, row) => sum + row.grossSatang, 0)
+
+    // ยอดต่อแท็บคงเดิม
+    expect(caseBound.pendingSatang).toBe(caseBoundPending)
+    expect(separate.pendingSatang).toBe(60_000 + 25_000)
+    // ยอดรวมทุกแท็บ = ผลบวกของทุกแท็บ และเท่ากันไม่ว่าเปิดแท็บไหน
+    expect(caseBound.pendingAllTabsSatang).toBe(caseBoundPending + 60_000 + 25_000)
+    expect(separate.pendingAllTabsSatang).toBe(caseBound.pendingAllTabsSatang)
+    expect(Number.isInteger(caseBound.pendingAllTabsSatang)).toBe(true)
+  })
+
   it('reject_expense แตะแค่รายการเบิก ไม่กระทบ assignment_status (`41` §20)', async () => {
     const caseId = await closeSuccessfully()
     // ผ่านขั้นคลังแล้วจึงตีกลับเอกสารได้ (`23` §6.3)

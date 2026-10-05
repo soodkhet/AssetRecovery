@@ -42,8 +42,13 @@ export function FieldEvidenceSection({
       </div>
 
       <p className="mb-3 text-xs text-slate-600">
-        ส่งโดย <span className="font-semibold text-slate-800">{evidence.agentName}</span> · ส่งเมื่อ{' '}
-        {fmtDateTime(evidence.submittedAt)}
+        ส่งโดย <span className="font-semibold text-slate-800">{evidence.agentName}</span> · ปิดงานเมื่อ{' '}
+        {fmtDateTime(evidence.firstSubmittedAt)}
+        {evidence.resubmittedAt !== null && (
+          <span className="block" data-testid="evidence-resubmitted-at">
+            ส่งหลักฐานใหม่เมื่อ {fmtDateTime(evidence.resubmittedAt)}
+          </span>
+        )}
       </p>
 
       {evidence.evidenceStatus === 'approved' && (

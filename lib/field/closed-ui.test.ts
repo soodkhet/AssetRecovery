@@ -34,6 +34,7 @@ function item(overrides: Partial<FieldCaseListItemDto> = {}): FieldCaseListItemD
     scheduleDate: '2026-08-05',
     scheduleOrder: 1,
     closedAt: '2026-08-05T09:00:00.000Z',
+    resubmittedAt: null,
     outcome: 'closed_success',
     hasDraft: false,
     hasPendingReassignment: false,

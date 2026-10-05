@@ -18,6 +18,7 @@ import {
   nextExpenseStatus,
 } from '@/lib/field/expense-status'
 import { assertHotelClaimFields, assertSharedAgentInTeam } from '@/lib/field/hotel-claim'
+import { FIELD_PENDING_EXPENSE_STATUSES, pendingExpenseSatang } from '@/lib/field/expense-ui'
 import { pairSupersededExpenses } from '@/lib/field/supersede-pairing'
 import type {
   FieldExpenseListQuery,
@@ -556,7 +557,14 @@ export async function listFieldExpenses(
 ): Promise<FieldExpenseListDto> {
   const payeeId = await findOwnPayeeId(user)
   if (payeeId === null) {
-    return { type: query.type, items: [], pendingSatang: 0, approvedSatang: 0, pendingFieldDates: [] }
+    return {
+      type: query.type,
+      items: [],
+      pendingSatang: 0,
+      approvedSatang: 0,
+      pendingAllTabsSatang: 0,
+      pendingFieldDates: [],
+    }
   }
 
   const rows = await prisma.expense.findMany({
@@ -596,16 +604,35 @@ export async function listFieldExpenses(
   )
 
   // สรุปยอดบนหัวหน้าจอ (`41` §7.9) — superseded/rejected ไม่นับทั้งสองช่อง
-  const pendingSatang = items
-    .filter((item) => ['pending_warehouse_confirm', 'pending_approval', 'pending_finance_approval', 'needs_revision'].includes(item.status))
-    .reduce((sum, item) => sum + item.grossSatang, 0)
+  const pendingSatang = pendingExpenseSatang(items)
   const approvedSatang = items
     .filter((item) => item.status === 'approved')
     .reduce((sum, item) => sum + item.grossSatang, 0)
 
-  const pendingFieldDates = query.type === 'caseBound' ? await pendingFieldDatesOf(user) : []
+  const [pendingFieldDates, pendingAllTabsSatang] = await Promise.all([
+    query.type === 'caseBound' ? pendingFieldDatesOf(user) : Promise.resolve([]),
+    pendingAllTabsSatangOf(user.organizationId, payeeId),
+  ])
 
-  return { type: query.type, items, pendingSatang, approvedSatang, pendingFieldDates }
+  return { type: query.type, items, pendingSatang, approvedSatang, pendingAllTabsSatang, pendingFieldDates }
+}
+
+/**
+ * ยอด "รอดำเนินการ" รวม**ทุกแท็บ** ของผู้เรียก (มติ PO 05/10/2569 U27 · UAT BUG-101) — คำนวณที่ DB เป็น satang
+ * ไม่ขึ้นกับแท็บที่เปิดอยู่และไม่ถูกจำกัดจำนวนแถวของรายการ · ครอบคลุมทั้งรายการผูกเคส, เบิกแยก และ
+ * คำขอเบิกส่วนเกินเงินทดรองของตัวเอง (`case_id` = NULL) เพราะทั้งหมดเป็นรายการเบิกของ payee เดียวกัน
+ */
+async function pendingAllTabsSatangOf(organizationId: string, payeeId: string): Promise<number> {
+  const result = await prisma.expense.aggregate({
+    where: {
+      organizationId,
+      payeeId,
+      deletedAt: null,
+      status: { in: [...FIELD_PENDING_EXPENSE_STATUSES] },
+    },
+    _sum: { grossSatang: true },
+  })
+  return result._sum.grossSatang ?? 0
 }
 
 /**

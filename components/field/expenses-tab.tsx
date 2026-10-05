@@ -220,8 +220,17 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
 
   return (
     <>
+      <div
+        className="mb-2.5 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm lg:max-w-[480px]"
+        data-testid="expense-pending-all-tabs"
+      >
+        <span className="text-xs font-semibold text-slate-600">รอดำเนินการรวมทุกแท็บ</span>
+        <span className="text-base font-extrabold text-amber-700">
+          {fmtSatangSymbol(data?.pendingAllTabsSatang ?? 0)}
+        </span>
+      </div>
       <div className="mb-4 grid grid-cols-2 gap-2.5 lg:max-w-[480px]">
-        <SummaryBox label="รอดำเนินการ" amountSatang={data?.pendingSatang ?? 0} tone="pending" />
+        <SummaryBox label="รอดำเนินการในแท็บนี้" amountSatang={data?.pendingSatang ?? 0} tone="pending" />
         <SummaryBox label="อนุมัติแล้ว" amountSatang={data?.approvedSatang ?? 0} tone="approved" />
       </div>
 

@@ -39,6 +39,7 @@ function detailOf(overrides: Partial<FieldCaseDetailDto> = {}): FieldCaseDetailD
     scheduleDate: '2026-08-20',
     scheduleOrder: 1,
     closedAt: null,
+    resubmittedAt: null,
     outcome: null,
     hasDraft: false,
     hasPendingReassignment: false,
