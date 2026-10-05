@@ -232,6 +232,7 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
     grossSatang: 850000,
     whtSatang: 25500,
     whtPct: '3.00',
+    filingForm: 'PND3',
   }
 
   it('ตัดขีด/ช่องว่างออกเหลือ 13 หลักล้วน', () => {
@@ -257,8 +258,32 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
 
   it('แถวออกมาตรงรูปแบบตัวอย่าง', () => {
     expect(whtCsv([base]).slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00',
+      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3',
     )
+  })
+
+  it('filing_form ต่อท้ายสุด — คอลัมน์เดิมไม่เปลี่ยนลำดับ/ชื่อ (มติ PO 05/10/2569 U15)', () => {
+    expect(WHT_HEADERS).toEqual([
+      'cert_no',
+      'payee',
+      'payee_tax_id',
+      'pay_date',
+      'income_type',
+      'gross_baht',
+      'wht_baht',
+      'wht_pct',
+      'filing_form',
+    ])
+    const lines = whtCsv([
+      base,
+      { ...base, certificateNumber: '0143', filingForm: 'PND53' },
+      { ...base, certificateNumber: '0144', whtSatang: 0, whtPct: '0.00', filingForm: 'PND1' },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(lines.slice(1, 4).map((line) => line.split(',').at(-1))).toEqual(['PND3', 'PND53', 'PND1'])
+    // 40(2) อัตรา 0% (U16) — ภาษี 0 แต่ยังเป็นแถวของ ภ.ง.ด.1
+    expect(lines[3]).toBe('0144,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,0.00,0.00,PND1')
   })
 })
 

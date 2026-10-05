@@ -366,6 +366,7 @@ async function whtFile(organizationId: string, scope: PeriodScope): Promise<stri
       paymentDate: true,
       grossSatang: true,
       whtSatang: true,
+      filingForm: true,
       payee: { select: { nationalId: true, user: { select: { fullName: true } } } },
       expenseRecord: { select: { payoutBatchItem: { select: { whtPctSnapshot: true } } } },
     },
@@ -380,6 +381,7 @@ async function whtFile(organizationId: string, scope: PeriodScope): Promise<stri
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
     whtPct: row.expenseRecord.payoutBatchItem.whtPctSnapshot?.toString() ?? null,
+    filingForm: row.filingForm,
   }))
 
   // `payee_tax_id` ต้องเป็นเลข 13 หลักล้วนทุกแถว (DEC-006/D10) — ขาดแม้แถวเดียวคือหยุด ไม่ส่งช่องว่างออกไป

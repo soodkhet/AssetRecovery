@@ -373,6 +373,9 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     const whtCsv = fileAt([...storage.keys()].find((path) => path.endsWith('05_WHT_Data.csv')) ?? '')
     expect(whtCsv).toContain('ประยุทธ์ บุญมี,3100000004600,25/06/2569')
     expect(whtCsv).toContain('8500.00,255.00,3.00')
+    // มติ PO 05/10/2569 (U15) — filing_form ต่อท้ายสุด ค่าจาก `wht_certificates.filing_form`
+    expect(whtCsv).toContain('wht_baht,wht_pct,filing_form\r\n')
+    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3\r\n')
   })
 
   it('Export ซ้ำรอบเดิม ⇒ v1.1 คนละแถว ไฟล์เดิมยังอยู่ครบ (`37` §16 — ไม่เขียนทับ)', async () => {

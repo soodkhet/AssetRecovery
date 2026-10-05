@@ -7,6 +7,7 @@ import type {
   ExceptionLevel,
   ExceptionStatus,
   ExportRecordStatus,
+  WhtFilingForm,
 } from '@/lib/generated/prisma/enums'
 
 /**
@@ -287,6 +288,8 @@ export const WHT_HEADERS = [
   'gross_baht',
   'wht_baht',
   'wht_pct',
+  // มติ PO 05/10/2569 (UAT U15) — ต่อท้ายสุด ไม่เปลี่ยนลำดับ/ชื่อคอลัมน์เดิม (แจ้งสำนักงานบัญชีแล้ว)
+  'filing_form',
 ] as const
 
 export interface WhtExportRow {
@@ -300,6 +303,8 @@ export interface WhtExportRow {
   whtSatang: number
   /** snapshot `wht_pct` ของรายการจ่าย (`92` §7.1) — NULL = ไม่เคยหัก (ไม่ควรมีใบ) */
   whtPct: string | null
+  /** `wht_certificates.filing_form` — แบบที่ต้องยื่น `PND1`/`PND3`/`PND53` (U15 · รหัสตรง enum `wht_filing_form`) */
+  filingForm: WhtFilingForm
 }
 
 /** ตัวเลข 13 หลักล้วน — ตัดขีด/ช่องว่างที่คนกรอกติดมา แล้วตรวจความยาว (DEC-006/D10) */
@@ -339,6 +344,7 @@ export function whtCsv(rows: readonly WhtExportRow[]): string {
       csvBaht(row.grossSatang),
       csvBaht(row.whtSatang),
       whtPctText(row.whtPct),
+      row.filingForm,
     ]),
   )
 }
