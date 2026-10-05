@@ -87,6 +87,17 @@ describe('POST /api/accounting/credit-notes', () => {
     expect(input.issueDate.toISOString()).toBe('2026-10-05T00:00:00.000Z')
   })
 
+  it('ชนิดเอกสาร (U19): ไม่ส่ง = ใบลดหนี้ · ส่ง debit ⇒ ใบเพิ่มหนี้ · ค่าอื่น ⇒ 400', async () => {
+    requireSessionMock.mockResolvedValue(ACCOUNTANT)
+    await createRoute(request(BASE, { method: 'POST', body: JSON.stringify(body) }), {})
+    expect(queriesMock.createCreditNote.mock.calls[0]?.[1]).toMatchObject({ noteType: 'credit' })
+    await createRoute(request(BASE, { method: 'POST', body: JSON.stringify({ ...body, noteType: 'debit' }) }), {})
+    expect(queriesMock.createCreditNote.mock.calls[1]?.[1]).toMatchObject({ noteType: 'debit' })
+    const bad = await createRoute(request(BASE, { method: 'POST', body: JSON.stringify({ ...body, noteType: 'refund' }) }), {})
+    expect(bad.status).toBe(400)
+    expect(queriesMock.createCreditNote).toHaveBeenCalledTimes(2)
+  })
+
   it.each([
     ['การเงิน', FINANCE],
     ['ผู้บริหาร', EXECUTIVE],

@@ -4,13 +4,16 @@ import { AdjustmentError } from '@/lib/adjustments/errors'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import {
+  adjustmentAmountMismatchWarning,
   assertAdjustmentLinkable,
   assertCreditNoteCancellable,
   assertInvoiceCreditable,
   assertIssueDateNotBeforeInvoice,
   assertWithinInvoiceBalance,
+  AWAITING_NOTE_LABEL,
+  awaitingNoteType,
   CREDIT_NOTE_STATUS_LABEL,
-  isAwaitingCreditNote,
+  CREDIT_NOTE_TYPE_LABEL,
   requireCreditNoteCancelReason,
   resolveCreditNoteAmounts,
   resolveCreditNoteVatRate,
@@ -18,13 +21,15 @@ import {
 import type { CreditNoteCancelInput, CreditNoteCreateInput, CreditNoteListQuery } from '@/lib/credit-notes/schemas'
 import type {
   AwaitingCreditNoteDto,
+  CreditNoteCreateResultDto,
   CreditNoteDto,
   CreditNoteListDto,
   CreditNoteSummary,
   CreditNoteTotals,
 } from '@/lib/credit-notes/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { CreditNoteStatus } from '@/lib/generated/prisma/enums'
+import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/enums'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import { prisma } from '@/lib/prisma'
 import { SalesError } from '@/lib/sales/errors'
 import { creditNoteFileRule } from '@/lib/uploads/rules'
@@ -41,6 +46,12 @@ import { verifyUploadedFile } from '@/lib/uploads/verify'
  * - ยอดห้ามเกินยอดคงเหลือของใบกำกับ — ตรวจที่นี่ (ข้อความดี) + trigger ระดับ DB ที่ล็อกแถวใบกำกับ (กันแข่งกัน)
  * - ยกเลิกต้องมีเหตุผล · ห้ามลบ (trigger) · audit before/after + reason ทุกครั้ง (หมวด `tax`)
  * - สิทธิ์: บันทึก/ยกเลิก = `manage_tax_invoice` (บัญชี) · ดู = `SALES_READ_CAPABILITIES` (การเงินดูได้) — ตรวจที่ route
+ *
+ * ### ใบเพิ่มหนี้ (มติ PO 05/10/2569 U19) — ตารางเดียวกัน `note_type = 'debit'`
+ * - กติกาเดียวกับใบลดหนี้ทุกข้อ (งวดล็อก/งวด sent ⇒ ปฏิเสธ · VAT อัตราใบกำกับเดิม · ยกเลิกต้องมีเหตุผล)
+ *   ยกเว้น: **ไม่มีเพดาน**ยอดใบกำกับ และผูกได้เฉพาะ Adjustment `increase`
+ * - ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (`netInvoiceAmounts` / portal `documented-amounts.ts`)
+ * - ยอดก่อน VAT ไม่ตรง Adjustment ที่อ้างถึง ⇒ **เตือน ไม่บล็อก** (U21) คืนใน `warnings` + audit `amount_matches_adjustment`
  */
 
 const TARGET = 'credit_notes'
@@ -67,6 +78,7 @@ function invoiceWhere(user: SessionUser): Prisma.TaxInvoiceWhereInput {
 
 const CREDIT_NOTE_SELECT = {
   id: true,
+  noteType: true,
   taxInvoiceId: true,
   adjustmentId: true,
   creditNoteNumber: true,
@@ -96,6 +108,8 @@ type CreditNoteRow = Prisma.CreditNoteGetPayload<{ select: typeof CREDIT_NOTE_SE
 function toDto(row: CreditNoteRow): CreditNoteDto {
   return {
     id: row.id,
+    noteType: row.noteType,
+    noteTypeLabel: CREDIT_NOTE_TYPE_LABEL[row.noteType],
     taxInvoiceId: row.taxInvoiceId,
     invoiceNumber: row.taxInvoice.invoiceNumber,
     companyId: row.taxInvoice.salesRecord.companyId,
@@ -163,6 +177,7 @@ export async function listCreditNotes(user: SessionUser, query: CreditNoteListQu
       taxInvoice: invoiceWhere(user),
       ...(query.taxInvoiceId === undefined ? {} : { taxInvoiceId: query.taxInvoiceId }),
       ...(query.status === undefined ? {} : { status: query.status }),
+      ...(query.noteType === undefined ? {} : { noteType: query.noteType }),
     },
     select: CREDIT_NOTE_SELECT,
     orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }],
@@ -176,11 +191,12 @@ const EMPTY_TOTALS: CreditNoteTotals = { amountBeforeVatSatang: 0, vatSatang: 0,
 
 /**
  * ยอดรวมใบลดหนี้ **active** ต่อใบกำกับ (หลายใบในคำสั่งเดียว — กัน N+1) · ใบที่ไม่มีใบลดหนี้ได้ยอด 0
+ * `noteType` ไม่ส่ง = ใบลดหนี้ · `'debit'` = รวมใบเพิ่มหนี้ (U19) — **ไม่ปนกันสองชนิดในผลเดียว**
  * ⚠️ ไม่ตรวจสิทธิ์ — ผู้เรียก (portal/route) ต้องกรองใบกำกับตาม scope ของตัวเองมาก่อน
  */
 export async function sumCreditNotesByInvoice(
   taxInvoiceIds: readonly string[],
-  options: { organizationId?: string } = {},
+  options: { organizationId?: string; noteType?: CreditNoteType } = {},
 ): Promise<Map<string, CreditNoteTotals>> {
   const result = new Map<string, CreditNoteTotals>(taxInvoiceIds.map((id) => [id, { ...EMPTY_TOTALS }]))
   if (taxInvoiceIds.length === 0) return result
@@ -189,6 +205,7 @@ export async function sumCreditNotesByInvoice(
     where: {
       taxInvoiceId: { in: [...taxInvoiceIds] },
       status: 'active',
+      noteType: options.noteType ?? 'credit',
       ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
     },
     _sum: { amountBeforeVatSatang: true, vatSatang: true, totalSatang: true },
@@ -205,10 +222,10 @@ export async function sumCreditNotesByInvoice(
   return result
 }
 
-/** ยอดรวมใบลดหนี้ **active** ของใบกำกับหนึ่งใบ (ไม่มี = 0) — ไม่ตรวจสิทธิ์ (ดู `sumCreditNotesByInvoice`) */
+/** ยอดรวมใบลดหนี้ (หรือใบเพิ่มหนี้ตาม `noteType`) **active** ของใบกำกับหนึ่งใบ (ไม่มี = 0) — ไม่ตรวจสิทธิ์ */
 export async function sumCreditNotesForInvoice(
   taxInvoiceId: string,
-  options: { organizationId?: string } = {},
+  options: { organizationId?: string; noteType?: CreditNoteType } = {},
 ): Promise<CreditNoteTotals> {
   const totals = await sumCreditNotesByInvoice([taxInvoiceId], options)
   return totals.get(taxInvoiceId) ?? { ...EMPTY_TOTALS }
@@ -260,6 +277,7 @@ export async function creditNotesByInvoice(
 
 const CREDIT_NOTE_SUMMARY_SELECT = {
   id: true,
+  noteType: true,
   taxInvoiceId: true,
   creditNoteNumber: true,
   issueDate: true,
@@ -274,6 +292,7 @@ function toCreditNoteSummary(
 ): CreditNoteSummary {
   return {
     id: row.id,
+    noteType: row.noteType,
     taxInvoiceId: row.taxInvoiceId,
     invoiceNumber: row.taxInvoice.invoiceNumber,
     creditNoteNumber: row.creditNoteNumber,
@@ -285,8 +304,8 @@ function toCreditNoteSummary(
 }
 
 /**
- * Adjustment ที่ "รอใบลดหนี้" — ลดยอด + อนุมัติแล้ว + รอบวางบิลของรายการต้นทางมีใบกำกับ active
- * + ยังไม่มีใบลดหนี้ active อ้างถึง (ป้ายในหน้า Adjustment/ใบกำกับ)
+ * Adjustment ที่ "รอใบลดหนี้" (ลดยอด) / "รอใบเพิ่มหนี้" (เพิ่มยอด — U19) — อนุมัติแล้ว + รอบวางบิลของรายการต้นทาง
+ * มีใบกำกับ active + ยังไม่มีเอกสาร active อ้างถึง (ป้ายในหน้า Adjustment/ใบกำกับ)
  */
 export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Promise<AwaitingCreditNoteDto[]> {
   if (companyScope(user) === null) return []
@@ -294,7 +313,7 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
     where: {
       organizationId: user.organizationId,
       status: 'approved',
-      adjustmentType: 'decrease',
+      adjustmentType: { in: ['decrease', 'increase'] },
       OR: [{ billingBatchId: { not: null } }, { revenue: { billingBatchId: { not: null } } }],
     },
     select: {
@@ -327,18 +346,17 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
     const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
     const invoice = batchId === null ? undefined : invoiceByBatch.get(batchId)
     if (batchId === null || invoice === undefined) continue
-    if (
-      !isAwaitingCreditNote({
-        status: row.status,
-        adjustmentType: row.adjustmentType,
-        hasActiveInvoice: true,
-        hasActiveCreditNote: row.creditNotes.length > 0,
-      })
-    ) {
-      continue
-    }
+    const noteType = awaitingNoteType({
+      status: row.status,
+      adjustmentType: row.adjustmentType,
+      hasActiveInvoice: true,
+      hasActiveCreditNote: row.creditNotes.length > 0,
+    })
+    if (noteType === null) continue
     awaiting.push({
       adjustmentId: row.id,
+      noteType,
+      label: AWAITING_NOTE_LABEL[noteType],
       taxInvoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       billingBatchId: batchId,
@@ -358,10 +376,17 @@ async function vatRateOfInvoice(billingBatchId: string): Promise<number> {
   return resolveCreditNoteVatRate(revenues.map((row) => row.vatRatePctUsed.toString()))
 }
 
-async function assertAdjustment(user: SessionUser, adjustmentId: string, invoice: InvoiceRow): Promise<void> {
+/** ตรวจ Adjustment ที่อ้างถึง — คืนยอดของมัน (ไว้เทียบยอดเอกสาร · U21) */
+async function assertAdjustment(
+  user: SessionUser,
+  adjustmentId: string,
+  invoice: InvoiceRow,
+  noteType: CreditNoteType,
+): Promise<{ amountSatang: number }> {
   const adjustment = await prisma.adjustment.findFirst({
     where: { id: adjustmentId, organizationId: user.organizationId },
     select: {
+      amountSatang: true,
       status: true,
       adjustmentType: true,
       billingBatchId: true,
@@ -378,7 +403,9 @@ async function assertAdjustment(user: SessionUser, adjustmentId: string, invoice
       hasActiveCreditNote: adjustment.creditNotes.length > 0,
     },
     invoice.salesRecord.billingBatchId,
+    noteType,
   )
+  return { amountSatang: adjustment.amountSatang }
 }
 
 /** แปลง error ของ DB (unique / trigger ยอดเกิน) เป็น code ของ `24` — ไม่ปล่อย Prisma error ดิบ */
@@ -386,7 +413,7 @@ function translateDbError(error: unknown, input: { creditNoteNumber: string; adj
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     const target = JSON.stringify(error.meta ?? {})
     if (target.includes('adjustment')) {
-      return new SalesError('CREDIT_NOTE_ADJUSTMENT_MISMATCH', { detail: `adjustment=${input.adjustmentId} มีใบลดหนี้แล้ว` })
+      return new SalesError('CREDIT_NOTE_ADJUSTMENT_MISMATCH', { detail: `adjustment=${input.adjustmentId} มีเอกสารแล้ว` })
     }
     return new SalesError('CREDIT_NOTE_NUMBER_DUPLICATE', {
       detail: `credit_note_number=${input.creditNoteNumber}`,
@@ -402,16 +429,20 @@ function translateDbError(error: unknown, input: { creditNoteNumber: string; adj
 }
 
 /**
- * `POST /api/accounting/credit-notes` — บันทึกใบลดหนี้ที่สำนักงานบัญชีออกแล้ว
+ * `POST /api/accounting/credit-notes` — บันทึกใบลดหนี้/ใบเพิ่มหนี้ที่สำนักงานบัญชีออกแล้ว
  *
  * ลำดับ: ใบกำกับ (scope/สถานะ/วันที่) → งวดของวันที่ออก → Adjustment ที่อ้างถึง → อัตรา VAT เดิม + ยอด →
- * ยอดคงเหลือ → ตรวจไฟล์สแกน (นอก transaction) → insert + audit ใน transaction เดียว
+ * ยอดคงเหลือ (ใบลดหนี้เท่านั้น) → ตรวจไฟล์สแกน (นอก transaction) → insert + audit ใน transaction เดียว
+ * · ยอดก่อน VAT ไม่ตรง Adjustment ⇒ บันทึกได้ + `warnings` (U21)
  */
 export async function createCreditNote(
   ctx: CreditNoteMutationContext,
-  input: CreditNoteCreateInput,
-): Promise<CreditNoteDto> {
+  // `noteType` ไม่ส่ง = ใบลดหนี้ (ผู้เรียกเดิมก่อน U19)
+  input: Omit<CreditNoteCreateInput, 'noteType'> & { noteType?: CreditNoteType },
+): Promise<CreditNoteCreateResultDto> {
   const organizationId = ctx.actor.organizationId
+  const noteType: CreditNoteType = input.noteType ?? 'credit'
+  const typeLabel = CREDIT_NOTE_TYPE_LABEL[noteType]
   const invoice = await findInvoice(ctx.actor, input.taxInvoiceId)
   assertInvoiceCreditable(invoice.status)
   assertIssueDateNotBeforeInvoice(input.issueDate, invoice.invoiceDate)
@@ -419,7 +450,7 @@ export async function createCreditNote(
   await assertPeriodOpenAt({ organizationId, at: input.issueDate, targetType: TARGET, targetId: invoice.id })
 
   const adjustmentId = input.adjustmentId ?? null
-  if (adjustmentId !== null) await assertAdjustment(ctx.actor, adjustmentId, invoice)
+  const adjustment = adjustmentId === null ? null : await assertAdjustment(ctx.actor, adjustmentId, invoice, noteType)
 
   const vatRatePct = await vatRateOfInvoice(invoice.salesRecord.billingBatchId)
   const amounts = resolveCreditNoteAmounts({
@@ -428,11 +459,24 @@ export async function createCreditNote(
     vatRatePct,
   })
 
-  const existing = await prisma.creditNote.findMany({
-    where: { taxInvoiceId: invoice.id },
-    select: { amountBeforeVatSatang: true, vatSatang: true, totalSatang: true, status: true },
-  })
-  assertWithinInvoiceBalance(invoice.salesRecord, existing, amounts)
+  // ใบเพิ่มหนี้ไม่มีเพดาน (U19) — ตรวจยอดคงเหลือเฉพาะใบลดหนี้
+  if (noteType === 'credit') {
+    const existing = await prisma.creditNote.findMany({
+      where: { taxInvoiceId: invoice.id },
+      select: { amountBeforeVatSatang: true, vatSatang: true, totalSatang: true, status: true, noteType: true },
+    })
+    assertWithinInvoiceBalance(invoice.salesRecord, existing, amounts)
+  }
+
+  const mismatchWarning =
+    adjustment === null
+      ? null
+      : adjustmentAmountMismatchWarning({
+          noteType,
+          amountBeforeVatSatang: amounts.amountBeforeVatSatang,
+          adjustmentAmountSatang: adjustment.amountSatang,
+          formatSatang: (satang) => fmtSatangSymbol(satang),
+        })
 
   const filePath = input.filePath ?? null
   const verified = filePath === null ? null : await verifyUploadedFile(filePath, creditNoteFileRule(invoice.id))
@@ -444,6 +488,7 @@ export async function createCreditNote(
       const row = await tx.creditNote.create({
         data: {
           organizationId,
+          noteType,
           taxInvoiceId: invoice.id,
           adjustmentId,
           creditNoteNumber,
@@ -469,11 +514,15 @@ export async function createCreditNote(
           targetType: TARGET,
           targetId: row.id,
           after: {
+            note_type: noteType,
             credit_note_number: row.creditNoteNumber,
             issue_date: row.issueDate.toISOString(),
             tax_invoice_id: invoice.id,
             invoice_number: invoice.invoiceNumber,
             adjustment_id: adjustmentId,
+            // U21 — เก็บว่ายอดไม่ตรง Adjustment ที่อ้างถึง (เตือน ไม่บล็อก)
+            adjustment_amount_satang: adjustment?.amountSatang ?? null,
+            amount_matches_adjustment: adjustment === null ? null : mismatchWarning === null,
             amount_before_vat_satang: row.amountBeforeVatSatang,
             vat_satang: row.vatSatang,
             total_satang: row.totalSatang,
@@ -482,7 +531,7 @@ export async function createCreditNote(
             file_sha256: verified?.sha256 ?? null,
             status: row.status,
           },
-          reason: `บันทึกใบลดหนี้ ${row.creditNoteNumber} อ้างใบกำกับ ${invoice.invoiceNumber} — ${reason}`,
+          reason: `บันทึก${typeLabel} ${row.creditNoteNumber} อ้างใบกำกับ ${invoice.invoiceNumber} — ${reason}`,
           ipAddress: ctx.meta.ipAddress,
           userAgent: ctx.meta.userAgent,
         },
@@ -494,7 +543,7 @@ export async function createCreditNote(
       throw translateDbError(error, { creditNoteNumber, adjustmentId })
     })
 
-  return toDto(created)
+  return { ...toDto(created), warnings: mismatchWarning === null ? [] : [mismatchWarning] }
 }
 
 // ── ยกเลิก ──────────────────────────────────────────────────────────────────
@@ -546,6 +595,7 @@ export async function cancelCreditNote(
           status: 'cancelled' satisfies CreditNoteStatus,
           cancel_reason: reason,
           cancelled_at: now.toISOString(),
+          note_type: row.noteType,
           credit_note_number: row.creditNoteNumber,
           total_satang: row.totalSatang,
         },

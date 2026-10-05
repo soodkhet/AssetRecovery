@@ -8,6 +8,9 @@ import { buildChecklistWorkbook } from '@/lib/exports/checklist-excel'
 import { ExportError } from '@/lib/exports/errors'
 import {
   adjustmentCsv,
+  adjustmentRef,
+  creditNoteCsv,
+  type CreditNoteExportRow,
   bankReconCsv,
   buildPackCoverDoc,
   canTransitionExport,
@@ -45,6 +48,7 @@ import type { ExportHistoryListDto, ExportRecordDto } from '@/lib/exports/types'
 import { buildZip, type ZipEntry } from '@/lib/exports/zip'
 import { expenseCategoryOf } from '@/lib/expenses/expense-record'
 import { signedAdjustmentSatang } from '@/lib/adjustments/adjustment'
+import { CREDIT_NOTE_DOCUMENT_CODE } from '@/lib/credit-notes/credit-note'
 import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { voucherNumber } from '@/lib/payout/payout-doc'
@@ -119,7 +123,7 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     status: row.status,
     statusLabel: EXPORT_STATUS_LABEL[row.status],
     statusGroup: EXPORT_STATUS_GROUP[row.status],
-    // นับเฉพาะไฟล์หลัก 01–08 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
+    // นับเฉพาะไฟล์หลัก 01–09 (`37` §7.1) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
     // เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมในชุด — ดูหมายเหตุที่ `37` §7.1 ใน PROGRESS_ARCHIVE 4.6
     attachmentCount: 0,
@@ -462,7 +466,30 @@ function adjustmentTargetDate(row: {
   return null
 }
 
-async function adjustmentFile(organizationId: string, scope: PeriodScope): Promise<string> {
+interface AdjustmentLogEntry {
+  id: string
+  row: AdjustmentExportRow
+}
+
+/** ช่วงวันของงวดตามปี พ.ศ./เดือน (date-only UTC) — ตัวเดียวกับ `scopeOf()` */
+function periodRange(yearBe: number, month: number): Pick<PeriodScope, 'yearBe' | 'month' | 'start' | 'end'> {
+  const yearCe = yearBe - 543
+  return {
+    yearBe,
+    month,
+    start: new Date(Date.UTC(yearCe, month - 1, 1)),
+    end: new Date(Date.UTC(month === 12 ? yearCe + 1 : yearCe, month === 12 ? 0 : month, 1)),
+  }
+}
+
+/**
+ * แถวของ `07_Adjustment_Log.csv` ของงวด (เรียงตามลำดับที่ใช้เดินเลข `adjustmentRef()`) พร้อม `id` ของ Adjustment
+ * — ใช้ทั้งประกอบไฟล์ 07 และหาเลขที่อ้างถึงในไฟล์ 09 (ลำดับต้องตรงกัน)
+ */
+async function adjustmentLogOf(
+  organizationId: string,
+  scope: Pick<PeriodScope, 'start' | 'end'>,
+): Promise<AdjustmentLogEntry[]> {
   const rows = await prisma.adjustment.findMany({
     where: {
       organizationId,
@@ -472,6 +499,7 @@ async function adjustmentFile(organizationId: string, scope: PeriodScope): Promi
     },
     orderBy: [{ createdAt: 'asc' }],
     select: {
+      id: true,
       adjustmentType: true,
       amountSatang: true,
       reason: true,
@@ -484,7 +512,7 @@ async function adjustmentFile(organizationId: string, scope: PeriodScope): Promi
     },
   })
 
-  const exportRows: AdjustmentExportRow[] = []
+  const entries: AdjustmentLogEntry[] = []
   for (const row of rows) {
     const targetDate = adjustmentTargetDate(row)
     if (targetDate === null || targetDate < scope.start || targetDate >= scope.end) continue
@@ -498,17 +526,105 @@ async function adjustmentFile(organizationId: string, scope: PeriodScope): Promi
             ? { type: 'billing_batch', ref: row.billingBatch.period }
             : { type: 'payout_batch', ref: row.payoutBatch?.name ?? null }
 
-    exportRows.push({
-      targetType: target.type,
-      targetRef: target.ref ?? '',
-      signedSatang: signedAdjustmentSatang(row.adjustmentType, row.amountSatang),
-      reason: row.reason,
-      approvedByName: row.approvedByUser?.fullName ?? null,
-      approvedAt: row.approvedAt,
+    entries.push({
+      id: row.id,
+      row: {
+        targetType: target.type,
+        targetRef: target.ref ?? '',
+        signedSatang: signedAdjustmentSatang(row.adjustmentType, row.amountSatang),
+        reason: row.reason,
+        approvedByName: row.approvedByUser?.fullName ?? null,
+        approvedAt: row.approvedAt,
+      },
     })
   }
+  return entries
+}
 
-  return adjustmentCsv(exportRows, { yearBe: scope.yearBe, month: scope.month })
+async function adjustmentFile(organizationId: string, scope: PeriodScope): Promise<string> {
+  const entries = await adjustmentLogOf(organizationId, scope)
+  return adjustmentCsv(
+    entries.map((entry) => entry.row),
+    { yearBe: scope.yearBe, month: scope.month },
+  )
+}
+
+/**
+ * `09_Credit_Notes.csv` (มติ PO 05/10/2569 U21) — ใบลดหนี้ + ใบเพิ่มหนี้ที่**ลงวันที่ในรอบ** (รวมใบที่ยกเลิก)
+ * · `adjustment_ref` = เลขที่ของ Adjustment ที่อ้างถึงในไฟล์ 07 **ของงวดเป้าหมายของ Adjustment นั้น** (ใบลดหนี้มักออก
+ *   เดือนถัดจากรายได้ที่ปรับ ⇒ หาเลขจาก log ของงวดนั้น · memo ต่องวด) · หาไม่เจอ/ไม่ผูก ⇒ `-`
+ */
+async function creditNoteFile(organizationId: string, scope: PeriodScope): Promise<string> {
+  const rows = await prisma.creditNote.findMany({
+    where: { organizationId, issueDate: { gte: scope.start, lt: scope.end } },
+    orderBy: [{ issueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      noteType: true,
+      creditNoteNumber: true,
+      issueDate: true,
+      amountBeforeVatSatang: true,
+      vatSatang: true,
+      totalSatang: true,
+      reason: true,
+      status: true,
+      taxInvoice: { select: { invoiceNumber: true, salesRecord: { select: { company: { select: { name: true } } } } } },
+      adjustment: {
+        select: {
+          id: true,
+          revenue: { select: { revenueDate: true } },
+          expense: { select: { expenseDate: true } },
+          billingBatch: { select: { period: true, dueDate: true } },
+          payoutBatch: { select: { createdAt: true } },
+        },
+      },
+    },
+  })
+
+  const logs = new Map<string, Promise<AdjustmentLogEntry[]>>()
+  async function refOf(adjustment: (typeof rows)[number]['adjustment']): Promise<string | null> {
+    if (adjustment === null) return null
+    const targetDate = adjustmentTargetDate(adjustment)
+    if (targetDate === null) return null
+    const ym = fmtYearMonth(targetDate)
+    const range = periodRange(ym.yearBe, ym.month)
+    const key = `${range.yearBe}-${range.month}`
+    let log = logs.get(key)
+    if (log === undefined) {
+      log = adjustmentLogOf(organizationId, range)
+      logs.set(key, log)
+    }
+    const index = (await log).findIndex((entry) => entry.id === adjustment.id)
+    return index < 0 ? null : adjustmentRef({ yearBe: range.yearBe, month: range.month, index: index + 1 })
+  }
+
+  const exportRows: CreditNoteExportRow[] = []
+  for (const row of rows) {
+    exportRows.push({
+      documentType: CREDIT_NOTE_DOCUMENT_CODE[row.noteType],
+      number: row.creditNoteNumber,
+      issueDate: row.issueDate,
+      taxInvoiceRef: row.taxInvoice.invoiceNumber,
+      companyName: row.taxInvoice.salesRecord.company.name,
+      amountBeforeVatSatang: row.amountBeforeVatSatang,
+      vatSatang: row.vatSatang,
+      totalSatang: row.totalSatang,
+      reason: row.reason,
+      status: row.status,
+      adjustmentRef: await refOf(row.adjustment),
+    })
+  }
+  return creditNoteCsv(exportRows)
+}
+
+/** เนื้อไฟล์ `09_Credit_Notes.csv` ของงวด (ปี พ.ศ./เดือน) — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
+export async function buildCreditNotePackFile(organizationId: string, yearBe: number, month: number): Promise<string> {
+  const range = periodRange(yearBe, month)
+  return creditNoteFile(organizationId, { ...range, id: '', periodLabel: '' })
+}
+
+/** ปี พ.ศ./เดือน ของวันที่ (date-only UTC — คอลัมน์ DATE ของงวดเป้าหมาย) */
+function fmtYearMonth(date: Date): { yearBe: number; month: number } {
+  return { yearBe: date.getUTCFullYear() + 543, month: date.getUTCMonth() + 1 }
 }
 
 async function checklistRowsOf(organizationId: string, scope: PeriodScope): Promise<ChecklistExportRow[]> {
@@ -566,9 +682,9 @@ export async function createExportPack(
   })
   assertExportNotBlocked(exceptions)
 
-  // ② ประกอบเนื้อไฟล์ทั้ง 8 (อ่านอย่างเดียว — ยิงขนานได้)
+  // ② ประกอบเนื้อไฟล์ทั้ง 9 (อ่านอย่างเดียว — ยิงขนานได้)
   const expenseRecords = await expenseRecordsOf(actor.organizationId, scope)
-  const [revenue, receipts, payments, wht, bank, adjustments, checklist, readiness, organization] =
+  const [revenue, receipts, payments, wht, bank, adjustments, checklist, readiness, organization, creditNotes] =
     await Promise.all([
       revenueFile(actor.organizationId, scope),
       cashReceiptFile(actor.organizationId, scope),
@@ -579,6 +695,7 @@ export async function createExportPack(
       checklistRowsOf(actor.organizationId, scope),
       getPeriodReadiness(actor, scope.id),
       prisma.organization.findUniqueOrThrow({ where: { id: actor.organizationId }, select: { name: true } }),
+      creditNoteFile(actor.organizationId, scope),
     ])
 
   const generatedAt = new Date()
@@ -601,6 +718,8 @@ export async function createExportPack(
       }),
       kind: 'xlsx',
     },
+    // มติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ
+    { key: '09', fileName: packFileName('09'), bytes: encoder.encode(creditNotes), kind: 'csv' },
   ]
 
   // ③ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
@@ -611,7 +730,7 @@ export async function createExportPack(
   })
   const version = (last?.version ?? 0) + 1
 
-  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–08" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
+  // ④ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 01–09" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
   const contentDigest = packContentDigest(dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })))
   const cover = await renderPackCover(
     buildPackCoverDoc({

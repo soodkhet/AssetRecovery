@@ -11,19 +11,28 @@ import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
 
 const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
 
+/** `credit` = ใบลดหนี้ (ม.86/10) · `debit` = ใบเพิ่มหนี้ (ม.86/9 — มติ PO U19) */
+export const creditNoteTypeSchema = z.enum(['credit', 'debit'], { message: 'เลือกชนิดเอกสาร' })
+
+export type CreditNoteType = z.infer<typeof creditNoteTypeSchema>
+
 export const creditNoteCreateSchema = z.object({
+  // ไม่ส่ง = ใบลดหนี้ (รองรับผู้เรียกเดิมก่อน U19)
+  noteType: creditNoteTypeSchema.default('credit'),
   taxInvoiceId: uuidSchema,
   adjustmentId: uuidSchema.nullish(),
-  creditNoteNumber: z.string().trim().min(1, 'กรอกเลขที่ใบลดหนี้').max(50, 'เลขที่ยาวเกิน 50 ตัวอักษร'),
-  issueDate: dateOnlySchema('วันที่ออกใบลดหนี้'),
-  amountBeforeVatSatang: z.number().int('ยอดต้องเป็นสตางค์จำนวนเต็ม').positive('มูลค่าที่ลดต้องมากกว่า 0'),
+  creditNoteNumber: z.string().trim().min(1, 'กรอกเลขที่เอกสาร').max(50, 'เลขที่ยาวเกิน 50 ตัวอักษร'),
+  issueDate: dateOnlySchema('วันที่ออกเอกสาร'),
+  amountBeforeVatSatang: z.number().int('ยอดต้องเป็นสตางค์จำนวนเต็ม').positive('มูลค่าก่อนภาษีต้องมากกว่า 0'),
   vatSatang: z.number().int('ยอดต้องเป็นสตางค์จำนวนเต็ม').nonnegative('ภาษีติดลบไม่ได้').nullish(),
   // กระทบเงิน/ภาษี ⇒ เหตุผลบังคับ (Rule 03)
-  reason: z.string().trim().min(1, 'กรอกเหตุผลของใบลดหนี้').max(1000),
+  reason: z.string().trim().min(1, 'กรอกเหตุผลของเอกสาร').max(1000),
   filePath: z.string().min(1).max(MAX_STORAGE_PATH_LENGTH).nullish(),
 })
 
 export type CreditNoteCreateInput = z.infer<typeof creditNoteCreateSchema>
+/** รูปที่ผู้เรียกส่งเข้า (ก่อนเติมค่าเริ่มต้น — `noteType` ไม่บังคับ) */
+export type CreditNoteCreateRequest = z.input<typeof creditNoteCreateSchema>
 
 export const creditNoteCancelSchema = z.object({
   reason: z.string().min(1).max(1000),
@@ -34,6 +43,7 @@ export type CreditNoteCancelInput = z.infer<typeof creditNoteCancelSchema>
 export const creditNoteListQuerySchema = z.object({
   taxInvoiceId: uuidSchema.optional(),
   status: z.enum(['active', 'cancelled']).optional(),
+  noteType: creditNoteTypeSchema.optional(),
 })
 
 export type CreditNoteListQuery = z.infer<typeof creditNoteListQuerySchema>

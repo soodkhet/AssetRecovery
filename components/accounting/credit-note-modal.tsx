@@ -21,8 +21,9 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
-import type { AwaitingCreditNoteDto, CreditNoteDto } from '@/lib/credit-notes/types'
+import { creditableInvoiceBalance, CREDIT_NOTE_TYPE_LABEL, netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
+import type { CreditNoteType } from '@/lib/credit-notes/schemas'
+import type { AwaitingCreditNoteDto, CreditNoteCreateResultDto, CreditNoteDto } from '@/lib/credit-notes/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 import { signedFileUrl, StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
@@ -34,6 +35,8 @@ import { signedFileUrl, StorageUploadError, uploadToStorage } from '@/lib/upload
  * - ฟอร์ม "บันทึกใบลดหนี้" (เฉพาะบัญชี) — ใบลดหนี้ออกโดยสำนักงานบัญชี ระบบแค่บันทึกตามเอกสาร
  *   เลขที่กรอกตามเอกสาร · VAT ไม่กรอก = ระบบคิดจากอัตราของใบกำกับเดิม · แนบไฟล์สแกนผ่าน server (DEC-014)
  * - ยกเลิกใบที่บันทึกผิดพร้อมเหตุผล (ห้ามลบ)
+ * - มติ PO U19: เลือกชนิด "ใบลดหนี้ / ใบเพิ่มหนี้" ในฟอร์มเดียวกัน (ใบเพิ่มหนี้ไม่มีเพดาน · ผูกได้เฉพาะ Adjustment เพิ่มยอด)
+ * - มติ PO U21: ยอดไม่ตรงรายการปรับปรุงที่อ้างถึง ⇒ server บันทึกให้และคืน `warnings` ⇒ แสดง toast เตือน
  * ยอดสุทธิใช้ `netInvoiceAmounts()` (pure SSOT) — ไม่คำนวณเงินเองบนจอ (Rule 01)
  */
 
@@ -63,6 +66,7 @@ export function CreditNoteModal({
   onChanged: () => void
 }) {
   const { showToast } = useToast()
+  const [noteType, setNoteType] = useState<CreditNoteType>('credit')
   const [creditNoteNumber, setCreditNoteNumber] = useState('')
   const [issueDate, setIssueDate] = useState(toInputDate(new Date()))
   const [amountText, setAmountText] = useState('')
@@ -77,8 +81,12 @@ export function CreditNoteModal({
   if (invoice === null) return null
 
   const net = netInvoiceAmounts(invoice, notes)
-  const amountError = bahtInputError(amountText, 'มูลค่าที่ลด')
-  const vatError = bahtInputError(vatText, 'ภาษีที่ลด')
+  const creditable = creditableInvoiceBalance(invoice, notes)
+  const typeLabel = CREDIT_NOTE_TYPE_LABEL[noteType]
+  const isDebit = noteType === 'debit'
+  const awaitingOfType = awaiting.filter((row) => row.noteType === noteType)
+  const amountError = bahtInputError(amountText, isDebit ? 'มูลค่าที่เพิ่ม' : 'มูลค่าที่ลด')
+  const vatError = bahtInputError(vatText, isDebit ? 'ภาษีที่เพิ่ม' : 'ภาษีที่ลด')
   const amountSatang = parseBahtInput(amountText)
   const vatSatang = parseBahtInput(vatText)
   const canSubmit =
@@ -103,9 +111,10 @@ export function CreditNoteModal({
       return
     }
 
-    const result = await callApi<CreditNoteDto>(
+    const result = await callApi<CreditNoteCreateResultDto>(
       '/api/accounting/credit-notes',
       jsonRequest('POST', {
+        noteType,
         taxInvoiceId: invoice.id,
         creditNoteNumber: creditNoteNumber.trim(),
         issueDate,
@@ -123,9 +132,13 @@ export function CreditNoteModal({
     }
     showToast({
       tone: 'success',
-      title: `บันทึกใบลดหนี้เลขที่ ${result.data?.creditNoteNumber ?? ''} แล้ว`,
-      description: `ลด ${fmtSatangSymbol(result.data?.totalSatang ?? 0)} จากใบกำกับ ${invoice.invoiceNumber}`,
+      title: `บันทึก${typeLabel}เลขที่ ${result.data?.creditNoteNumber ?? ''} แล้ว`,
+      description: `${isDebit ? 'เพิ่ม' : 'ลด'} ${fmtSatangSymbol(result.data?.totalSatang ?? 0)} ${isDebit ? 'ให้' : 'จาก'}ใบกำกับ ${invoice.invoiceNumber}`,
     })
+    // ยอดไม่ตรงรายการปรับปรุงที่อ้างถึง — เตือน ไม่บล็อก
+    for (const warning of result.data?.warnings ?? []) {
+      showToast({ tone: 'warning', title: 'ยอดไม่ตรงรายการปรับปรุงที่อ้างถึง', description: warning })
+    }
     setCreditNoteNumber('')
     setAmountText('')
     setVatText('')
@@ -147,7 +160,7 @@ export function CreditNoteModal({
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
-    showToast({ tone: 'success', title: `ยกเลิกใบลดหนี้เลขที่ ${cancelling.creditNoteNumber} แล้ว` })
+    showToast({ tone: 'success', title: `ยกเลิก${cancelling.noteTypeLabel}เลขที่ ${cancelling.creditNoteNumber} แล้ว` })
     setCancelling(null)
     setCancelReason('')
     onChanged()
@@ -168,7 +181,7 @@ export function CreditNoteModal({
         open={cancelling === null}
         onClose={onClose}
         size="lg"
-        title={`ใบลดหนี้ — ใบกำกับ ${invoice.invoiceNumber}`}
+        title={`ใบลดหนี้ / ใบเพิ่มหนี้ — ใบกำกับ ${invoice.invoiceNumber}`}
         description={`${invoice.companyName} · ออกเมื่อ ${fmtDate(invoice.invoiceDate)}`}
         footer={
           <>
@@ -177,7 +190,7 @@ export function CreditNoteModal({
             </Button>
             {canManage && (
               <Button loading={saving} disabled={!canSubmit} onClick={() => void submit()}>
-                บันทึกใบลดหนี้
+                บันทึก{typeLabel}
               </Button>
             )}
           </>
@@ -190,23 +203,29 @@ export function CreditNoteModal({
               <span className="font-mono font-semibold">{fmtSatangSymbol(invoice.totalSatang)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">ยอดสุทธิหลังหักใบลดหนี้</span>
+              <span className="text-slate-500">ยอดสุทธิตามเอกสาร</span>
               <span className="font-mono font-bold text-slate-900">{fmtSatangSymbol(net.totalSatang)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">คงเหลือก่อนภาษี (ลดได้อีก)</span>
-              <span className="font-mono">{fmtSatangSymbol(net.totalBeforeVatSatang)}</span>
+              <span className="text-slate-500">คงเหลือก่อนภาษี (ลดหนี้ได้อีก)</span>
+              <span className="font-mono">{fmtSatangSymbol(creditable.totalBeforeVatSatang)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">ภาษีขายคงเหลือ</span>
+              <span className="text-slate-500">ภาษีขายตามเอกสาร</span>
               <span className="font-mono">{fmtSatangSymbol(net.vatSatang)}</span>
             </div>
           </div>
 
-          {awaiting.length > 0 && (
+          {awaiting.some((row) => row.noteType === 'credit') && (
             <InlineAlert tone="warning" title="รอใบลดหนี้">
-              มีรายการปรับปรุงลดยอดที่อนุมัติแล้ว {awaiting.length} รายการของใบกำกับนี้ที่ยังไม่มีใบลดหนี้ — ขอให้สำนักงานบัญชีออก
+              มีรายการปรับปรุงลดยอดที่อนุมัติแล้ว {awaiting.filter((row) => row.noteType === 'credit').length} รายการของใบกำกับนี้ที่ยังไม่มีใบลดหนี้ — ขอให้สำนักงานบัญชีออก
               ใบลดหนี้แล้วบันทึกที่นี่ ลูกค้าจะเห็นยอดลดลงเมื่อบันทึกใบลดหนี้แล้วเท่านั้น
+            </InlineAlert>
+          )}
+          {awaiting.some((row) => row.noteType === 'debit') && (
+            <InlineAlert tone="warning" title="รอใบเพิ่มหนี้">
+              มีรายการปรับปรุงเพิ่มยอดที่อนุมัติแล้ว {awaiting.filter((row) => row.noteType === 'debit').length} รายการของใบกำกับนี้ที่ยังไม่มีใบเพิ่มหนี้ — ขอให้สำนักงานบัญชีออก
+              ใบเพิ่มหนี้แล้วบันทึกที่นี่ ลูกค้าจะเห็นยอดเพิ่มขึ้นเมื่อบันทึกใบเพิ่มหนี้แล้วเท่านั้น
             </InlineAlert>
           )}
 
@@ -214,7 +233,7 @@ export function CreditNoteModal({
             <Table>
               <THead>
                 <Tr>
-                  <Th>เลขที่ / วันที่</Th>
+                  <Th>ชนิด / เลขที่ / วันที่</Th>
                   <Th numeric>ก่อนภาษี</Th>
                   <Th numeric>ภาษี</Th>
                   <Th numeric>รวม</Th>
@@ -226,13 +245,14 @@ export function CreditNoteModal({
                 {notes.length === 0 && (
                   <Tr>
                     <Td colSpan={6} className="py-6 text-center text-xs text-slate-400">
-                      ยังไม่มีใบลดหนี้ของใบกำกับนี้
+                      ยังไม่มีใบลดหนี้หรือใบเพิ่มหนี้ของใบกำกับนี้
                     </Td>
                   </Tr>
                 )}
                 {notes.map((note) => (
                   <Tr key={note.id}>
                     <Td>
+                      <div className="text-[10px] font-semibold text-slate-500">{note.noteTypeLabel}</div>
                       <RefText className={note.status === 'cancelled' ? 'line-through text-red-500' : undefined}>
                         {note.creditNoteNumber}
                       </RefText>
@@ -287,9 +307,30 @@ export function CreditNoteModal({
 
           {canManage && (
             <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-              <h3 className="text-sm font-semibold text-slate-900">บันทึกใบลดหนี้ที่สำนักงานบัญชีออกแล้ว</h3>
+              <h3 className="text-sm font-semibold text-slate-900">บันทึกเอกสารที่สำนักงานบัญชีออกแล้ว</h3>
+              <Field
+                id="cn-type"
+                label="ชนิดเอกสาร"
+                hint={
+                  isDebit
+                    ? 'ใบเพิ่มหนี้ — เพิ่มมูลค่าบริการหลังออกใบกำกับแล้ว (ผูกได้เฉพาะรายการปรับปรุงเพิ่มยอด)'
+                    : 'ใบลดหนี้ — ลดมูลค่าบริการหลังออกใบกำกับแล้ว (ยอดรวมต้องไม่เกินยอดใบกำกับ)'
+                }
+              >
+                <Select
+                  id="cn-type"
+                  value={noteType}
+                  onChange={(event) => {
+                    setNoteType(event.target.value === 'debit' ? 'debit' : 'credit')
+                    setAdjustmentId('')
+                  }}
+                >
+                  <option value="credit">{CREDIT_NOTE_TYPE_LABEL.credit}</option>
+                  <option value="debit">{CREDIT_NOTE_TYPE_LABEL.debit}</option>
+                </Select>
+              </Field>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field id="cn-number" label="เลขที่ใบลดหนี้" hint="ตามเอกสารที่สำนักงานบัญชีออก">
+                <Field id="cn-number" label={`เลขที่${typeLabel}`} hint="ตามเอกสารที่สำนักงานบัญชีออก">
                   <Input
                     id="cn-number"
                     className="font-mono"
@@ -300,12 +341,12 @@ export function CreditNoteModal({
                 </Field>
                 <Field
                   id="cn-date"
-                  label="วันที่ออกใบลดหนี้"
-                  hint="ภาษีขายลดในเดือนที่ออก — งวดที่ปิดแล้วบันทึกไม่ได้ · ช่องนี้ใช้ ค.ศ. ตามที่เบราว์เซอร์บังคับ"
+                  label={`วันที่ออก${typeLabel}`}
+                  hint={`ภาษีขาย${isDebit ? 'เพิ่ม' : 'ลด'}ในเดือนที่ออก — งวดที่ปิดแล้วบันทึกไม่ได้ · ช่องนี้ใช้ ค.ศ. ตามที่เบราว์เซอร์บังคับ`}
                 >
                   <Input id="cn-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} />
                 </Field>
-                <Field id="cn-amount" label="มูลค่าที่ลด (ก่อนภาษี, บาท)" error={amountError ?? undefined}>
+                <Field id="cn-amount" label={`มูลค่าที่${isDebit ? 'เพิ่ม' : 'ลด'} (ก่อนภาษี, บาท)`} error={amountError ?? undefined}>
                   <Input
                     id="cn-amount"
                     numeric
@@ -317,7 +358,7 @@ export function CreditNoteModal({
                 </Field>
                 <Field
                   id="cn-vat"
-                  label="ภาษีมูลค่าเพิ่มที่ลด (บาท)"
+                  label={`ภาษีมูลค่าเพิ่มที่${isDebit ? 'เพิ่ม' : 'ลด'} (บาท)`}
                   hint="เว้นว่าง = คำนวณจากอัตราภาษีของใบกำกับเดิม · กรอกตามเอกสารได้ (คลาดได้ไม่เกิน 1 สตางค์)"
                   error={vatError ?? undefined}
                 >
@@ -331,13 +372,17 @@ export function CreditNoteModal({
                   />
                 </Field>
               </div>
-              {awaiting.length > 0 && (
-                <Field id="cn-adjustment" label="รายการปรับปรุงที่เป็นต้นเหตุ (ถ้ามี)">
+              {awaitingOfType.length > 0 && (
+                <Field
+                  id="cn-adjustment"
+                  label="รายการปรับปรุงที่เป็นต้นเหตุ (ถ้ามี)"
+                  hint="ยอดก่อนภาษีไม่เท่ายอดรายการปรับปรุง — ระบบบันทึกให้แต่จะเตือนให้ตรวจอีกครั้ง"
+                >
                   <Select id="cn-adjustment" value={adjustmentId} onChange={(event) => setAdjustmentId(event.target.value)}>
                     <option value="">— ไม่ระบุ —</option>
-                    {awaiting.map((row) => (
+                    {awaitingOfType.map((row) => (
                       <option key={row.adjustmentId} value={row.adjustmentId}>
-                        ลดยอด {fmtSatangSymbol(row.amountSatang)}
+                        {isDebit ? 'เพิ่มยอด' : 'ลดยอด'} {fmtSatangSymbol(row.amountSatang)}
                       </option>
                     ))}
                   </Select>
@@ -349,11 +394,11 @@ export function CreditNoteModal({
                   rows={2}
                   value={reason}
                   maxLength={1000}
-                  placeholder="เช่น ลดค่าบริการตามที่ตกลงกับลูกค้า"
+                  placeholder={isDebit ? 'เช่น เพิ่มค่าบริการตามที่ตกลงกับลูกค้า' : 'เช่น ลดค่าบริการตามที่ตกลงกับลูกค้า'}
                   onChange={(event) => setReason(event.target.value)}
                 />
               </Field>
-              <Field id="cn-file" label="ไฟล์สแกนใบลดหนี้ (PDF/รูป)" hint="ไม่บังคับ แต่ควรแนบเพื่อเป็นหลักฐาน">
+              <Field id="cn-file" label={`ไฟล์สแกน${typeLabel} (PDF/รูป)`} hint="ไม่บังคับ แต่ควรแนบเพื่อเป็นหลักฐาน">
                 <Input
                   id="cn-file"
                   type="file"
@@ -371,9 +416,9 @@ export function CreditNoteModal({
 
       <ReasonConfirmModal
         open={cancelling !== null}
-        title={`ยกเลิกใบลดหนี้เลขที่ ${cancelling?.creditNoteNumber ?? ''}`}
+        title={`ยกเลิก${cancelling?.noteTypeLabel ?? 'เอกสาร'}เลขที่ ${cancelling?.creditNoteNumber ?? ''}`}
         description="ใช้เมื่อบันทึกผิดหรือสำนักงานบัญชียกเลิกเอกสาร — ยอดจะกลับไปเป็นของใบกำกับตามเดิม"
-        confirmLabel="ยืนยันยกเลิกใบลดหนี้"
+        confirmLabel={`ยืนยันยกเลิก${cancelling?.noteTypeLabel ?? 'เอกสาร'}`}
         loading={saving}
         reason={cancelReason}
         onReasonChange={setCancelReason}

@@ -248,13 +248,31 @@ function Amount({
   );
 }
 
-/** ใบลดหนี้ที่อ้างถึงใบกำกับ — สรุป "ลดหนี้ N ใบ · ยอดสุทธิ" + รายการ (เลขที่/วันที่/ก่อน VAT/VAT/รวม) */
+/** มีใบลดหนี้/ใบเพิ่มหนี้ active อ้างถึงใบนี้ไหม (มติ U14/U19) */
+function hasAdjustmentNotes(invoice: PortalTaxInvoiceDto): boolean {
+  return invoice.creditNotes.length > 0 || invoice.debitNotes.length > 0;
+}
+
+/**
+ * ใบลดหนี้/ใบเพิ่มหนี้ที่อ้างถึงใบกำกับ — สรุป "ลดหนี้ N ใบ · เพิ่มหนี้ M ใบ · ยอดสุทธิ" + รายการ
+ * (ชนิด/เลขที่/วันที่/ก่อน VAT/VAT/รวม) · ยอดสุทธิมาจาก server (ไม่คำนวณบนจอ)
+ */
 function CreditNoteBlock({ invoice }: { invoice: PortalTaxInvoiceDto }) {
-  if (invoice.creditNotes.length === 0) return null;
+  if (!hasAdjustmentNotes(invoice)) return null;
+  const summary = [
+    invoice.creditNotes.length > 0 ? `ลดหนี้ ${fmtCount(invoice.creditNotes.length)} ใบ` : null,
+    invoice.debitNotes.length > 0 ? `เพิ่มหนี้ ${fmtCount(invoice.debitNotes.length)} ใบ` : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+  const rows = [
+    ...invoice.creditNotes.map((note) => ({ note, label: "ใบลดหนี้" })),
+    ...invoice.debitNotes.map((note) => ({ note, label: "ใบเพิ่มหนี้" })),
+  ];
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs">
       <div className="font-semibold text-amber-800">
-        ลดหนี้ {fmtCount(invoice.creditNotes.length)} ใบ · ยอดสุทธิ{" "}
+        {summary} · ยอดสุทธิ{" "}
         {fmtSatangSymbol(invoice.netTotalSatang)}
         <span className="ml-1 font-normal text-slate-500">
           (ก่อน VAT {fmtSatangSymbol(invoice.netBeforeVatSatang)} · VAT{" "}
@@ -262,12 +280,12 @@ function CreditNoteBlock({ invoice }: { invoice: PortalTaxInvoiceDto }) {
         </span>
       </div>
       <ul className="mt-1 space-y-0.5">
-        {invoice.creditNotes.map((note) => (
+        {rows.map(({ note, label }) => (
           <li
             key={note.id}
             className="flex flex-wrap items-baseline gap-x-2 text-slate-600"
           >
-            <span>ใบลดหนี้</span>
+            <span>{label}</span>
             <RefText className="font-semibold text-slate-700">
               {note.creditNoteNumber}
             </RefText>
@@ -368,7 +386,7 @@ function InvoiceTable({
                   </Td>
                 )}
               </Tr>
-              {invoice.creditNotes.length > 0 && (
+              {hasAdjustmentNotes(invoice) && (
                 <Tr>
                   <Td colSpan={canDownload ? 8 : 7} className="pt-0">
                     <CreditNoteBlock invoice={invoice} />
@@ -434,7 +452,7 @@ function InvoiceCards({
                 ใบนี้ถูกยกเลิกแล้ว
               </div>
             )}
-            {invoice.creditNotes.length > 0 && (
+            {hasAdjustmentNotes(invoice) && (
               <div className="mt-2">
                 <CreditNoteBlock invoice={invoice} />
               </div>

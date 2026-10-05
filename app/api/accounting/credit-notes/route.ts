@@ -19,7 +19,7 @@ export const GET = withApiPermission(
 )
 
 /**
- * `POST /api/accounting/credit-notes` (มติ PO 05/10/2569 U14) — **บันทึก**ใบลดหนี้ที่สำนักงานบัญชีออกแล้ว
+ * `POST /api/accounting/credit-notes` (มติ PO 05/10/2569 U14) — **บันทึก**ใบลดหนี้/ใบเพิ่มหนี้ (U19) ที่สำนักงานบัญชีออกแล้ว
  * สิทธิ์ = `manage_tax_invoice` (บัญชี) เท่านั้น — การเงินที่ดูรายการขายได้บันทึกเอกสารภาษีไม่ได้
  */
 export const POST = withApiPermission(

@@ -24,7 +24,8 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { AWAITING_CREDIT_NOTE_LABEL, netInvoiceAmounts, sumActiveCreditNotes } from '@/lib/credit-notes/credit-note'
+import { AWAITING_NOTE_LABEL, netInvoiceAmounts, sumActiveCreditNotes, sumActiveDebitNotes } from '@/lib/credit-notes/credit-note'
+import type { CreditNoteType } from '@/lib/credit-notes/schemas'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
@@ -184,9 +185,13 @@ export function SalesTab() {
                         <CreditNoteSummaryCell
                           notes={creditNotes.byInvoice.get(row.activeTaxInvoice.id) ?? []}
                           invoice={row}
-                          awaiting={awaitingCreditNotes.items.some(
-                            (item) => item.taxInvoiceId === row.activeTaxInvoice?.id,
-                          )}
+                          awaiting={[
+                            ...new Set(
+                              awaitingCreditNotes.items
+                                .filter((item) => item.taxInvoiceId === row.activeTaxInvoice?.id)
+                                .map((item) => item.noteType),
+                            ),
+                          ]}
                         />
                       </>
                     )}
@@ -217,7 +222,7 @@ export function SalesTab() {
                       )}
                       {row.activeTaxInvoice !== null && (
                         <Button size="sm" variant="ghost" onClick={() => openCreditNotes(row)}>
-                          {canManageInvoice ? 'บันทึกใบลดหนี้' : 'ใบลดหนี้'}
+                          {canManageInvoice ? 'บันทึกใบลด/เพิ่มหนี้' : 'ใบลด/เพิ่มหนี้'}
                         </Button>
                       )}
                       {canManageInvoice && row.activeTaxInvoice === null && (
@@ -283,7 +288,7 @@ export function SalesTab() {
   )
 }
 
-/** ยอดใบลดหนี้ + ยอดสุทธิของใบกำกับในตาราง (ยอดจาก pure SSOT — ไม่คำนวณเงินบนจอเอง) */
+/** ยอดใบลดหนี้/ใบเพิ่มหนี้ + ยอดสุทธิของใบกำกับในตาราง (ยอดจาก pure SSOT — ไม่คำนวณเงินบนจอเอง) */
 function CreditNoteSummaryCell({
   notes,
   invoice,
@@ -291,23 +296,32 @@ function CreditNoteSummaryCell({
 }: {
   notes: readonly CreditNoteDto[]
   invoice: SalesRecordDto
-  awaiting: boolean
+  /** ชนิดเอกสารที่ยังรอ (ป้าย "รอใบลดหนี้" / "รอใบเพิ่มหนี้") */
+  awaiting: readonly CreditNoteType[]
 }) {
   const active = notes.filter((note) => note.status === 'active')
-  if (active.length === 0 && !awaiting) return null
-  const used = sumActiveCreditNotes(active)
+  if (active.length === 0 && awaiting.length === 0) return null
+  const credits = active.filter((note) => note.noteType === 'credit')
+  const debits = active.filter((note) => note.noteType === 'debit')
   const net = netInvoiceAmounts(invoice, active)
   return (
     <div className="mt-1 space-y-0.5">
-      {active.length > 0 && (
-        <>
-          <div className="text-[10px] text-amber-700">
-            ลดหนี้ {fmtCount(active.length)} ใบ −{fmtSatangSymbol(used.totalSatang)}
-          </div>
-          <div className="text-[10px] font-semibold text-slate-700">สุทธิ {fmtSatangSymbol(net.totalSatang)}</div>
-        </>
+      {credits.length > 0 && (
+        <div className="text-[10px] text-amber-700">
+          ลดหนี้ {fmtCount(credits.length)} ใบ −{fmtSatangSymbol(sumActiveCreditNotes(credits).totalSatang)}
+        </div>
       )}
-      {awaiting && <StatusBadge group="pending" label={AWAITING_CREDIT_NOTE_LABEL} />}
+      {debits.length > 0 && (
+        <div className="text-[10px] text-blue-700">
+          เพิ่มหนี้ {fmtCount(debits.length)} ใบ +{fmtSatangSymbol(sumActiveDebitNotes(debits).totalSatang)}
+        </div>
+      )}
+      {active.length > 0 && (
+        <div className="text-[10px] font-semibold text-slate-700">สุทธิ {fmtSatangSymbol(net.totalSatang)}</div>
+      )}
+      {awaiting.map((type) => (
+        <StatusBadge key={type} group="pending" label={AWAITING_NOTE_LABEL[type]} />
+      ))}
     </div>
   )
 }

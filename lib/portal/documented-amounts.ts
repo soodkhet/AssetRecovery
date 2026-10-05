@@ -1,5 +1,6 @@
 import { sumCreditNotesByInvoice } from '@/lib/credit-notes/queries'
 import { allocateLargestRemainder } from '@/lib/finance/wht-calc'
+import type { CreditNoteType } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -12,7 +13,11 @@ import { prisma } from '@/lib/prisma'
  * - ยอดหน้าใบกำกับ = snapshot ใน `sales_records` (สร้างตอนส่งบิล — ก่อน VAT/VAT/รวม ตัวเดียวกับที่พิมพ์ลงใบ)
  *   · ยังไม่มี `sales_records` (ยังไม่ออกใบ/sync ล้ม) ⇒ ยอดรวม = `billing_batches.total_satang` (ยอดใบวางบิลที่ส่งจริง)
  *     ส่วนก่อน VAT/VAT = ผลรวม snapshot ของ `revenues` ในรอบ (ตัวเดียวกับที่จะลงใบ)
- * - **ไม่มีสูตรเงินใหม่**: `documented = invoiced − creditNotes` (บวก/ลบ satang ล้วน)
+ * - **ไม่มีสูตรเงินใหม่**: `documented = invoiced − creditNotes + debitNotes` (บวก/ลบ satang ล้วน)
+ *
+ * ### ใบเพิ่มหนี้ (fixer X4 · มติ PO 05/10/2569 U19 · ม.86/9)
+ * ใบเพิ่มหนี้ active **บวก**ยอดตามเอกสารทุกจุดเดียวกับที่ใบลดหนี้หัก (วางบิล/AR/dashboard/กราฟ) ·
+ * Adjustment เพิ่มยอดที่ยังไม่มีใบเพิ่มหนี้ไม่สะท้อนในพอร์ทัล (แนวเดียวกับใบลดหนี้)
  *
  * ### ใบลดหนี้ (fixer X2/X3)
  * `loadCreditNoteTotals()` รวมใบลดหนี้ **active** ของใบกำกับทุกใบของรอบ (รวมใบกำกับที่ยกเลิกแล้ว — ใบลดหนี้
@@ -37,52 +42,72 @@ export interface DocumentedBillingAmounts {
   invoiced: DocumentAmounts
   /** ผลรวมใบลดหนี้ active ของรอบ (ไม่มี ⇒ 0) */
   creditNotes: DocumentAmounts
-  /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ (ยอดที่พอร์ทัลแสดง/นับ) */
+  /** ผลรวมใบเพิ่มหนี้ active ของรอบ (ไม่มี ⇒ 0 — U19) */
+  debitNotes: DocumentAmounts
+  /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (ยอดที่พอร์ทัลแสดง/นับ) */
   documented: DocumentAmounts
 }
 
 export type DocumentedBillingRef = { billingBatchId: string } | { taxInvoiceId: string }
 
-/** pure — `invoiced − creditNotes` ทีละช่อง */
-export function applyCreditNotes(invoiced: DocumentAmounts, creditNotes: DocumentAmounts): DocumentAmounts {
+/** pure — `invoiced − creditNotes + debitNotes` ทีละช่อง (ไม่ส่งใบเพิ่มหนี้ = 0) */
+export function applyCreditNotes(
+  invoiced: DocumentAmounts,
+  creditNotes: DocumentAmounts,
+  debitNotes: DocumentAmounts = ZERO_AMOUNTS,
+): DocumentAmounts {
   return {
-    beforeVatSatang: invoiced.beforeVatSatang - creditNotes.beforeVatSatang,
-    vatSatang: invoiced.vatSatang - creditNotes.vatSatang,
-    totalSatang: invoiced.totalSatang - creditNotes.totalSatang,
+    beforeVatSatang: invoiced.beforeVatSatang - creditNotes.beforeVatSatang + debitNotes.beforeVatSatang,
+    vatSatang: invoiced.vatSatang - creditNotes.vatSatang + debitNotes.vatSatang,
+    totalSatang: invoiced.totalSatang - creditNotes.totalSatang + debitNotes.totalSatang,
   }
 }
 
+interface NoteTotalsByBatch {
+  credit: ReadonlyMap<string, DocumentAmounts>
+  debit: ReadonlyMap<string, DocumentAmounts>
+}
+
 /**
- * ผลรวมใบลดหนี้ **active** ต่อรอบวางบิล (กรององค์กร · 2 query ไม่ว่ากี่รอบ — กัน N+1) · รอบที่ไม่มีใบลดหนี้ไม่มีคีย์
- * ⚠️ ไม่ตรวจสิทธิ์/บริษัท — ผู้เรียกกรองรอบตาม scope มาแล้ว
+ * ผลรวมใบลดหนี้ / ใบเพิ่มหนี้ **active** ต่อรอบวางบิล (กรององค์กร · 3 query ไม่ว่ากี่รอบ — กัน N+1)
+ * · รอบที่ไม่มีเอกสารชนิดนั้นไม่มีคีย์ · ⚠️ ไม่ตรวจสิทธิ์/บริษัท — ผู้เรียกกรองรอบตาม scope มาแล้ว
  */
 async function loadCreditNoteTotals(
   organizationId: string,
   billingBatchIds: readonly string[],
-): Promise<ReadonlyMap<string, DocumentAmounts>> {
-  const result = new Map<string, DocumentAmounts>()
-  if (billingBatchIds.length === 0) return result
+): Promise<NoteTotalsByBatch> {
+  const credit = new Map<string, DocumentAmounts>()
+  const debit = new Map<string, DocumentAmounts>()
+  if (billingBatchIds.length === 0) return { credit, debit }
   const invoices = await prisma.taxInvoice.findMany({
     where: { organizationId, salesRecord: { billingBatchId: { in: [...billingBatchIds] } } },
     select: { id: true, salesRecord: { select: { billingBatchId: true } } },
   })
-  if (invoices.length === 0) return result
-  const totals = await sumCreditNotesByInvoice(
-    invoices.map((invoice) => invoice.id),
-    { organizationId },
-  )
-  for (const invoice of invoices) {
-    const sum = totals.get(invoice.id)
-    if (sum === undefined || sum.count === 0) continue
-    const batchId = invoice.salesRecord.billingBatchId
-    const current = result.get(batchId) ?? ZERO_AMOUNTS
-    result.set(batchId, {
-      beforeVatSatang: current.beforeVatSatang + sum.amountBeforeVatSatang,
-      vatSatang: current.vatSatang + sum.vatSatang,
-      totalSatang: current.totalSatang + sum.totalSatang,
-    })
+  if (invoices.length === 0) return { credit, debit }
+  const ids = invoices.map((invoice) => invoice.id)
+  const [creditTotals, debitTotals] = await Promise.all([
+    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'credit' }),
+    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'debit' }),
+  ])
+  const accumulate = (
+    target: Map<string, DocumentAmounts>,
+    totals: Awaited<ReturnType<typeof sumCreditNotesByInvoice>>,
+  ): void => {
+    for (const invoice of invoices) {
+      const sum = totals.get(invoice.id)
+      if (sum === undefined || sum.count === 0) continue
+      const batchId = invoice.salesRecord.billingBatchId
+      const current = target.get(batchId) ?? ZERO_AMOUNTS
+      target.set(batchId, {
+        beforeVatSatang: current.beforeVatSatang + sum.amountBeforeVatSatang,
+        vatSatang: current.vatSatang + sum.vatSatang,
+        totalSatang: current.totalSatang + sum.totalSatang,
+      })
+    }
   }
-  return result
+  accumulate(credit, creditTotals)
+  accumulate(debit, debitTotals)
+  return { credit, debit }
 }
 
 /** ยอดตามเอกสารของหลายรอบวางบิลในครั้งเดียว (ไม่พบ/ถูกลบ ⇒ ไม่มีคีย์ใน Map) */
@@ -93,7 +118,7 @@ export async function documentedAmountsForBatches(
   const result = new Map<string, DocumentedBillingAmounts>()
   if (billingBatchIds.length === 0) return result
   const ids = [...new Set(billingBatchIds)]
-  const [batches, creditNotes] = await Promise.all([
+  const [batches, notes] = await Promise.all([
     prisma.billingBatch.findMany({
       where: { organizationId, id: { in: ids }, deletedAt: null },
       select: {
@@ -128,13 +153,15 @@ export async function documentedAmountsForBatches(
             vatSatang: batch.revenues.reduce((sum, row) => sum + row.vatSatang, 0),
             totalSatang: batch.totalSatang,
           }
-    const credit = creditNotes.get(batch.id) ?? ZERO_AMOUNTS
+    const credit = notes.credit.get(batch.id) ?? ZERO_AMOUNTS
+    const debit = notes.debit.get(batch.id) ?? ZERO_AMOUNTS
     result.set(batch.id, {
       billingBatchId: batch.id,
       taxInvoice: sales?.taxInvoices[0] ?? null,
       invoiced,
       creditNotes: credit,
-      documented: applyCreditNotes(invoiced, credit),
+      debitNotes: debit,
+      documented: applyCreditNotes(invoiced, credit, debit),
     })
   }
   return result
@@ -179,10 +206,12 @@ export function allocateDocumentedRevenue(
   return new Map(revenues.map((revenue, index) => [revenue.id, shares[index] ?? 0]))
 }
 
-/** ใบลดหนี้ active หนึ่งใบสำหรับกราฟรายได้ — `revenueId` = รายได้ที่ Adjustment ต้นเหตุชี้ (ไม่มี ⇒ `null`) */
+/** ใบลดหนี้/ใบเพิ่มหนี้ active หนึ่งใบสำหรับกราฟรายได้ — `revenueId` = รายได้ที่ Adjustment ต้นเหตุชี้ (ไม่มี ⇒ `null`) */
 export interface RevenueCreditNote {
   amountBeforeVatSatang: number
   revenueId: string | null
+  /** ไม่ส่ง = `credit` (ใบลดหนี้ — หัก) · `debit` = ใบเพิ่มหนี้ (บวก — U19) */
+  noteType?: CreditNoteType
 }
 
 /**
@@ -194,14 +223,18 @@ export interface RevenueCreditNote {
  * 3. ใบลดหนี้ที่เหลือ (ไม่ผูก/ผูกรอบหรือค่าใช้จ่าย/ส่วนเกิน) รวมเป็นก้อนเดียว ⇒ กระจายตามสัดส่วน**ยอดคงเหลือ**
  *    หลังข้อ 2 (largest remainder — deterministic · ไม่มีใบไหนติดลบเมื่อก้อนไม่เกินยอดคงเหลือรวม ซึ่ง DB
  *    บังคับไว้แล้วว่าใบลดหนี้รวมต้องไม่เกินใบกำกับ)
- * ⇒ ผลรวมทุกใบ = ยอดก่อน VAT ใบกำกับ − ใบลดหนี้ก่อน VAT = `documented.beforeVatSatang`
+ * 4. ใบเพิ่มหนี้ (U19) — ผูก Adjustment → รายได้ในรอบ ⇒ **บวกตรงรายได้ใบนั้น** · ที่เหลือรวมเป็นก้อนเดียว
+ *    ⇒ กระจายตามสัดส่วนยอดคงเหลือหลังข้อ 2–3 (ทุกใบเป็น 0 ⇒ ตามสัดส่วน `grossSatang` ⇒ ยังเป็น 0 ⇒ ลงใบแรก)
+ * ⇒ ผลรวมทุกใบ = ยอดก่อน VAT ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (ก่อน VAT) = `documented.beforeVatSatang`
  */
 export function allocateRevenueAfterCreditNotes(
   invoicedBeforeVatSatang: number,
   revenues: readonly { id: string; grossSatang: number }[],
-  creditNotes: readonly RevenueCreditNote[],
+  notes: readonly RevenueCreditNote[],
 ): Map<string, number> {
   const amounts = allocateDocumentedRevenue(invoicedBeforeVatSatang, revenues)
+  const creditNotes = notes.filter((note) => (note.noteType ?? 'credit') === 'credit')
+  const debitNotes = notes.filter((note) => note.noteType === 'debit')
   let pool = 0
   for (const note of creditNotes) {
     const current = note.revenueId === null ? undefined : amounts.get(note.revenueId)
@@ -221,7 +254,35 @@ export function allocateRevenueAfterCreditNotes(
     )
     ids.forEach((id, index) => amounts.set(id, (amounts.get(id) ?? 0) - (shares[index] ?? 0)))
   }
+  addDebitNotes(amounts, revenues, debitNotes)
   return amounts
+}
+
+/** ข้อ 4 ของ `allocateRevenueAfterCreditNotes` — บวกใบเพิ่มหนี้ลงรายได้ (แก้ `amounts` ในที่) */
+function addDebitNotes(
+  amounts: Map<string, number>,
+  revenues: readonly { id: string; grossSatang: number }[],
+  debitNotes: readonly RevenueCreditNote[],
+): void {
+  let pool = 0
+  for (const note of debitNotes) {
+    const current = note.revenueId === null ? undefined : amounts.get(note.revenueId)
+    if (note.revenueId === null || current === undefined) {
+      pool += note.amountBeforeVatSatang
+      continue
+    }
+    amounts.set(note.revenueId, current + note.amountBeforeVatSatang)
+  }
+  const ids = [...amounts.keys()]
+  if (pool <= 0 || ids.length === 0) return
+  let weights = ids.map((id) => Math.max(0, amounts.get(id) ?? 0))
+  if (weights.every((weight) => weight === 0)) {
+    const gross = new Map(revenues.map((revenue) => [revenue.id, Math.max(0, revenue.grossSatang)]))
+    weights = ids.map((id) => gross.get(id) ?? 0)
+  }
+  if (weights.every((weight) => weight === 0)) weights = ids.map((_, index) => (index === 0 ? 1 : 0))
+  const shares = allocateLargestRemainder(pool, weights)
+  ids.forEach((id, index) => amounts.set(id, (amounts.get(id) ?? 0) + (shares[index] ?? 0)))
 }
 
 /**
@@ -246,6 +307,7 @@ export async function documentedRevenueAmounts(
     prisma.creditNote.findMany({
       where: { organizationId, status: 'active', taxInvoice: { salesRecord: { billingBatchId: { in: ids } } } },
       select: {
+        noteType: true,
         amountBeforeVatSatang: true,
         adjustment: { select: { revenueId: true } },
         taxInvoice: { select: { salesRecord: { select: { billingBatchId: true } } } },
@@ -264,7 +326,11 @@ export async function documentedRevenueAmounts(
   for (const note of creditNotes) {
     const batchId = note.taxInvoice.salesRecord.billingBatchId
     const list = notesByBatch.get(batchId) ?? []
-    list.push({ amountBeforeVatSatang: note.amountBeforeVatSatang, revenueId: note.adjustment?.revenueId ?? null })
+    list.push({
+      amountBeforeVatSatang: note.amountBeforeVatSatang,
+      revenueId: note.adjustment?.revenueId ?? null,
+      noteType: note.noteType,
+    })
     notesByBatch.set(batchId, list)
   }
   for (const [batchId, list] of byBatch) {

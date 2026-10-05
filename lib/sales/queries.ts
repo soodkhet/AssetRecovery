@@ -1,6 +1,7 @@
 import { ensurePeriod, type AccountingMutationContext } from '@/lib/accounting/queries'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
+import { assertInvoiceHasNoActiveNotes } from '@/lib/credit-notes/credit-note'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
@@ -500,6 +501,10 @@ async function findTaxInvoice(user: SessionUser, invoiceId: string): Promise<{ i
  *
  * ยกเลิก **ไม่ใช่ลบ**: แถวเดิมอยู่ครบพร้อมเลขที่เดิม (`02` §13 immutable) — ออกใบใหม่ได้เลขถัดไป
  * ไม่ recycle เลขเดิม (`31` §9.1 · เทสต์เคส "ยกเลิก 005 ⇒ ใบใหม่ได้ 006")
+ *
+ * มติ PO 05/10/2569 U18 — ใบที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ `active` ยกเลิกไม่ได้ (`TAX_INVOICE_HAS_ACTIVE_NOTES`
+ * บอกเลขเอกสารที่ต้องยกเลิกก่อน) · ตรวจซ้ำใน transaction หลังยึดแถวใบกำกับแล้ว — trigger ของ `credit_notes`
+ * ล็อกแถวใบกำกับ `FOR UPDATE` ก่อน insert ⇒ บันทึกเอกสารพร้อมกับกดยกเลิกไม่หลุดทั้งสองทาง
  */
 export async function cancelTaxInvoice(
   ctx: SalesMutationContext,
@@ -510,6 +515,7 @@ export async function cancelTaxInvoice(
   const { invoice, sales } = await findTaxInvoice(ctx.actor, invoiceId)
   assertCancellable(invoice.status)
   const reason = requireCancelReason(input.reason)
+  assertInvoiceHasNoActiveNotes(await prisma.creditNote.findMany(activeNotesQuery(invoice.id)))
 
   await assertPeriodOpenAt({
     organizationId: ctx.actor.organizationId,
@@ -527,6 +533,8 @@ export async function cancelTaxInvoice(
     if (claimed.count === 0) {
       throw new SalesError('TAX_INVOICE_INVALID_STATUS', { detail: 'ใบนี้ถูกยกเลิกไปแล้วโดยผู้ใช้อื่น' })
     }
+    // ยึดแถวแล้ว — ตรวจซ้ำกันเอกสารที่บันทึกเข้ามาระหว่างตรวจรอบแรก (rollback ทั้งก้อน)
+    assertInvoiceHasNoActiveNotes(await tx.creditNote.findMany(activeNotesQuery(invoice.id)))
 
     await emitAudit(
       {
@@ -555,6 +563,15 @@ export async function cancelTaxInvoice(
   })
 
   return toInvoiceDto(cancelled, sales)
+}
+
+/** ใบลดหนี้/ใบเพิ่มหนี้ `active` ที่อ้างใบกำกับนี้ (เรียงตามวันที่ออก) — ยามของ U18 */
+function activeNotesQuery(invoiceId: string) {
+  return {
+    where: { taxInvoiceId: invoiceId, status: 'active' },
+    select: { noteType: true, creditNoteNumber: true },
+    orderBy: [{ issueDate: 'asc' }, { createdAt: 'asc' }],
+  } as const satisfies Prisma.CreditNoteFindManyArgs
 }
 
 /** ข้อมูลดิบของใบกำกับภาษีสำหรับ PDF (`28` §6.2) — ประกอบเป็นข้อความที่ `buildTaxInvoiceDoc()` */

@@ -1,8 +1,11 @@
-import type { CreditNoteStatus } from '@/lib/generated/prisma/enums'
+import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/enums'
 
-/** DTO ของใบลดหนี้ (มติ PO U14) — เงินเป็น satang · วันที่เป็น ISO UTC (หน้าจอแปลง พ.ศ. เอง) */
+/** DTO ของใบลดหนี้/ใบเพิ่มหนี้ (มติ PO U14/U19) — เงินเป็น satang · วันที่เป็น ISO UTC (หน้าจอแปลง พ.ศ. เอง) */
 export interface CreditNoteDto {
   id: string
+  /** `credit` = ใบลดหนี้ · `debit` = ใบเพิ่มหนี้ */
+  noteType: CreditNoteType
+  noteTypeLabel: string
   taxInvoiceId: string
   invoiceNumber: string
   companyId: string
@@ -26,6 +29,11 @@ export interface CreditNoteDto {
   createdByName: string
 }
 
+/** ผลการบันทึก — `warnings` = เรื่องที่ต้องบอกแต่ไม่บล็อก (มติ PO U21: ยอดไม่ตรง Adjustment ที่อ้างถึง) */
+export interface CreditNoteCreateResultDto extends CreditNoteDto {
+  warnings: string[]
+}
+
 export interface CreditNoteListDto {
   items: CreditNoteDto[]
 }
@@ -38,9 +46,10 @@ export interface CreditNoteTotals {
   count: number
 }
 
-/** ใบลดหนี้ active แบบย่อของรอบวางบิล (ให้ portal) */
+/** ใบลดหนี้/ใบเพิ่มหนี้ active แบบย่อของรอบวางบิล (ให้ portal) */
 export interface CreditNoteSummary {
   id: string
+  noteType: CreditNoteType
   taxInvoiceId: string
   invoiceNumber: string
   creditNoteNumber: string
@@ -50,9 +59,13 @@ export interface CreditNoteSummary {
   totalSatang: number
 }
 
-/** Adjustment ที่อนุมัติแล้วแต่ยังไม่มีใบลดหนี้ — ป้าย "รอใบลดหนี้" */
+/** Adjustment ที่อนุมัติแล้วแต่ยังไม่มีเอกสาร — ป้าย "รอใบลดหนี้" (ลดยอด) / "รอใบเพิ่มหนี้" (เพิ่มยอด — U19) */
 export interface AwaitingCreditNoteDto {
   adjustmentId: string
+  /** ชนิดเอกสารที่รอ — ลดยอด ⇒ `credit` · เพิ่มยอด ⇒ `debit` */
+  noteType: CreditNoteType
+  /** ป้ายบนจอ ("รอใบลดหนี้" / "รอใบเพิ่มหนี้") */
+  label: string
   taxInvoiceId: string
   invoiceNumber: string
   billingBatchId: string

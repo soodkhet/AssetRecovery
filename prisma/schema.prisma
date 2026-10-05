@@ -488,6 +488,14 @@ enum CreditNoteStatus {
   @@map("credit_note_status")
 }
 
+/// ชนิดเอกสารปรับปรุงใบกำกับ (มติ PO 05/10/2569 U19) — credit = ใบลดหนี้ ม.86/10 · debit = ใบเพิ่มหนี้ ม.86/9
+enum CreditNoteType {
+  credit
+  debit
+
+  @@map("credit_note_type")
+}
+
 enum WhtFilingForm {
   PND3 // บุคคลธรรมดา (ภ.ง.ด.3)
   PND53 // นิติบุคคล (ภ.ง.ด.53)
@@ -2607,7 +2615,9 @@ model CreditNote {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId        String           @map("organization_id") @db.Uuid
   taxInvoiceId          String           @map("tax_invoice_id") @db.Uuid
-  /// Adjustment ที่เป็นต้นเหตุ (ถ้ามี) — ต้องเป็น `decrease` ที่ `approved` ของรอบวางบิลเดียวกัน
+  /// `credit` = ใบลดหนี้ (ค่าเริ่มต้น — แถวเดิมทั้งหมด) · `debit` = ใบเพิ่มหนี้ (มติ PO U19)
+  noteType              CreditNoteType   @default(credit) @map("note_type")
+  /// Adjustment ที่เป็นต้นเหตุ (ถ้ามี) — `approved` ของรอบวางบิลเดียวกัน · ใบลดหนี้ ⇒ `decrease` · ใบเพิ่มหนี้ ⇒ `increase`
   adjustmentId          String?          @map("adjustment_id") @db.Uuid
   /// เลขที่ตามเอกสารที่สำนักงานบัญชีออก (ไม่ได้เดินเลขโดยระบบ)
   creditNoteNumber      String           @map("credit_note_number") @db.VarChar(50)
