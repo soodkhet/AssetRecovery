@@ -13,6 +13,7 @@ import {
   maskAccountNumber,
   missingFieldsForVerification,
   normalizePayeeValues,
+  payeeAddressLine,
   shouldResetVerification,
   toPayeeAuditPayload,
   type PayeeValues,
@@ -58,6 +59,14 @@ const payeeSelect = {
   accountNumber: true,
   idDocumentUrl: true,
   wht402Pct: true,
+  nameTitle: true,
+  addressDetail: true,
+  addressSubdistrict: true,
+  addressDistrict: true,
+  addressProvince: true,
+  addressPostalCode: true,
+  branchCode: true,
+  whtCondition: true,
   isVerified: true,
   verifiedAt: true,
   updatedAt: true,
@@ -83,7 +92,59 @@ function toValues(row: PayeeRow): PayeeValues {
     accountNumber: row.accountNumber,
     idDocumentUrl: row.idDocumentUrl,
     wht402Pct: row.wht402Pct === null ? null : row.wht402Pct.toNumber(),
+    nameTitle: row.nameTitle,
+    addressDetail: row.addressDetail,
+    addressSubdistrict: row.addressSubdistrict,
+    addressDistrict: row.addressDistrict,
+    addressProvince: row.addressProvince,
+    addressPostalCode: row.addressPostalCode,
+    branchCode: row.branchCode,
+    whtCondition: row.whtCondition,
   }
+}
+
+/**
+ * ค่าฟอร์ม → ค่าเต็มของผู้รับ — ฟิลด์ใบ 50 ทวิ (คำนำหน้า/ที่อยู่/สาขา/เงื่อนไขการหัก — มติ PO U94) ที่ไม่ส่งมา
+ * = คงค่าเดิม (`base`) · ตอนสร้าง `base` = ค่าเริ่มต้น
+ */
+function mergeInput(input: PayeeFieldsInput, base: PayeeValues): PayeeValues {
+  return {
+    payeeType: input.payeeType,
+    taxProfileId: input.taxProfileId,
+    nationalId: input.nationalId,
+    bankName: input.bankName,
+    accountName: input.accountName,
+    accountNumber: input.accountNumber,
+    idDocumentUrl: input.idDocumentUrl,
+    wht402Pct: input.wht402Pct === undefined ? base.wht402Pct : input.wht402Pct,
+    nameTitle: input.nameTitle === undefined ? base.nameTitle : input.nameTitle,
+    addressDetail: input.address === undefined ? base.addressDetail : input.address.detail,
+    addressSubdistrict: input.address === undefined ? base.addressSubdistrict : input.address.subdistrict,
+    addressDistrict: input.address === undefined ? base.addressDistrict : input.address.district,
+    addressProvince: input.address === undefined ? base.addressProvince : input.address.province,
+    addressPostalCode: input.address === undefined ? base.addressPostalCode : input.address.postalCode,
+    branchCode: input.branchCode ?? base.branchCode,
+    whtCondition: input.whtCondition ?? base.whtCondition,
+  }
+}
+
+const NEW_PAYEE_BASE: PayeeValues = {
+  payeeType: 'individual',
+  taxProfileId: null,
+  nationalId: null,
+  bankName: null,
+  accountName: null,
+  accountNumber: null,
+  idDocumentUrl: null,
+  wht402Pct: null,
+  nameTitle: null,
+  addressDetail: null,
+  addressSubdistrict: null,
+  addressDistrict: null,
+  addressProvince: null,
+  addressPostalCode: null,
+  branchCode: '00000',
+  whtCondition: 'withhold',
 }
 
 /** `canSeeFullAccount` = ผู้ถือสิทธิ์ `manage` เท่านั้น (เลขบัญชีเต็มคือข้อมูลที่โอนเงินได้จริง) */
@@ -106,6 +167,17 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean): PayeeDto {
     accountNumberMasked: maskAccountNumber(row.accountNumber),
     idDocumentUrl: row.idDocumentUrl,
     wht402Pct: values.wht402Pct,
+    nameTitle: row.nameTitle,
+    address: {
+      detail: row.addressDetail,
+      postalCode: row.addressPostalCode,
+      province: row.addressProvince,
+      district: row.addressDistrict,
+      subdistrict: row.addressSubdistrict,
+    },
+    addressLine: payeeAddressLine(values),
+    branchCode: row.branchCode,
+    whtCondition: row.whtCondition,
     isVerified: row.isVerified,
     verifiedAt: row.verifiedAt?.toISOString() ?? null,
     verifiedByName: row.verifiedByUser?.fullName ?? null,
@@ -208,6 +280,14 @@ function toWriteData(values: PayeeValues) {
     accountNumber: normalized.accountNumber,
     idDocumentUrl: normalized.idDocumentUrl,
     wht402Pct: normalized.wht402Pct,
+    nameTitle: normalized.nameTitle,
+    addressDetail: normalized.addressDetail,
+    addressSubdistrict: normalized.addressSubdistrict,
+    addressDistrict: normalized.addressDistrict,
+    addressProvince: normalized.addressProvince,
+    addressPostalCode: normalized.addressPostalCode,
+    branchCode: normalized.branchCode,
+    whtCondition: normalized.whtCondition,
   }
 }
 
@@ -273,7 +353,7 @@ export async function createPayee(
   await assertNoPayeeForUser(organizationId, input.userId)
 
   await assertTaxProfileUsable(organizationId, input.taxProfileId)
-  const data = toWriteData({ ...input, wht402Pct: input.wht402Pct ?? null })
+  const data = toWriteData(mergeInput(input, NEW_PAYEE_BASE))
 
   const created = await prisma.$transaction(async (tx) => {
     const row = await tx.payeeProfile.create({
@@ -319,8 +399,8 @@ export async function updatePayee(
   await assertTaxProfileUsable(organizationId, input.taxProfileId)
 
   const before = toValues(current)
-  // ไม่ส่งอัตรา 40(2) มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
-  const data = toWriteData({ ...input, wht402Pct: input.wht402Pct === undefined ? before.wht402Pct : input.wht402Pct })
+  // ไม่ส่งอัตรา 40(2)/ฟิลด์ใบ 50 ทวิ มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
+  const data = toWriteData(mergeInput(input, before))
   // `18` §9 — verified + แก้ธนาคาร/ภาษี ⇒ ต้องยืนยันใหม่ (ล้างผู้ยืนยันเดิมออกด้วย ไม่ใช่แค่ flag)
   const reset = shouldResetVerification({ isVerified: current.isVerified, before, after: data })
 

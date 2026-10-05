@@ -42,7 +42,7 @@ const MESSAGES: Record<PayeeErrorCode, ErrorMessage> = {
   },
   REQUIRED_MISSING: {
     title: 'ข้อมูลไม่ครบ',
-    message: 'ยืนยันผู้รับเงินได้ต่อเมื่อข้อมูลภาษีและบัญชีธนาคารครบถ้วนแล้ว',
+    message: 'ยืนยันผู้รับเงินได้ต่อเมื่อข้อมูลภาษี ที่อยู่ และบัญชีธนาคารครบถ้วนแล้ว',
   },
   INVALID_TAX_ID_FORMAT: {
     title: 'เลขประจำตัวผู้เสียภาษีไม่ถูกต้อง',

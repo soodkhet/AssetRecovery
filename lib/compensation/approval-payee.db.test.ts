@@ -133,6 +133,14 @@ async function expectCode(run: () => Promise<unknown>, code: string): Promise<vo
   await expect(run()).rejects.toSatisfy((error: unknown) => codeOf(error) === code, `ต้องได้ error code ${code}`)
 }
 
+const ADDRESS = {
+  detail: '12 ม.3',
+  postalCode: '51000',
+  province: 'ลำพูน',
+  district: 'เมืองลำพูน',
+  subdistrict: 'ในเมือง',
+}
+
 const BANK: PayeeFieldsInput = {
   payeeType: 'individual',
   taxProfileId: TAX_PROFILE_ID,
@@ -141,6 +149,8 @@ const BANK: PayeeFieldsInput = {
   accountName: 'พนักงาน 3.2',
   accountNumber: '1234567890',
   idDocumentUrl: null,
+  // ที่อยู่ผู้ถูกหักภาษีบังคับครบก่อนยืนยัน (มติ PO U94 ข้อ 1)
+  address: ADDRESS,
 }
 
 async function resetPayees(): Promise<void> {
@@ -313,6 +323,46 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
   it('ข้อมูลภาษี/ธนาคารไม่ครบ ⇒ ยืนยันไม่ได้ (`REQUIRED_MISSING`)', async () => {
     const payeeId = await seedPayee(AGENT_ID, { bankName: null, accountNumber: null })
     await expectCode(() => payees.verifyPayee(ctx(finance, 'ลองยืนยันทั้งที่ยังไม่ครบ'), payeeId), 'REQUIRED_MISSING')
+  })
+
+  it('มติ PO U94 ข้อ 1 — ที่อยู่ไม่ครบ ⇒ ยืนยันไม่ได้ · กรอกครบแล้วยืนยันได้ · แก้ที่อยู่ ⇒ ต้องยืนยันใหม่', async () => {
+    const payeeId = await seedPayee(AGENT_ID, { address: { ...ADDRESS, subdistrict: null, postalCode: null } })
+    await expectCode(() => payees.verifyPayee(ctx(finance, 'ยังไม่มีที่อยู่ครบ'), payeeId), 'REQUIRED_MISSING')
+
+    const filled = await payees.updatePayee(ctx(finance, 'เติมที่อยู่ตามบัตรประชาชน'), payeeId, {
+      ...BANK,
+      nameTitle: 'นาย',
+      address: ADDRESS,
+      whtCondition: 'pay_always',
+    })
+    expect(filled.payee.addressLine).toBe('12 ม.3 ต.ในเมือง อ.เมืองลำพูน จ.ลำพูน 51000')
+    expect(filled.payee.nameTitle).toBe('นาย')
+    expect(filled.payee.whtCondition).toBe('pay_always')
+    const verified = await payees.verifyPayee(ctx(finance, 'ตรวจที่อยู่กับบัตรแล้ว'), payeeId)
+    expect(verified.payee.isVerified).toBe(true)
+
+    // ไม่ส่งฟิลด์ที่อยู่/คำนำหน้า/เงื่อนไขมา = คงค่าเดิม (ผู้เรียกเก่าไม่ล้างข้อมูลทิ้ง) และยังยืนยันอยู่
+    const { address: _omitAddress, ...withoutAddress } = BANK
+    const kept = await payees.updatePayee(ctx(finance, 'แนบเอกสารเพิ่ม'), payeeId, {
+      ...withoutAddress,
+      idDocumentUrl: 'https://storage.test/payees/id.pdf',
+    })
+    expect(kept.payee.addressLine).toBe(filled.payee.addressLine)
+    expect(kept.payee.nameTitle).toBe('นาย')
+    expect(kept.payee.whtCondition).toBe('pay_always')
+    expect(kept.payee.isVerified).toBe(true)
+
+    const moved = await payees.updatePayee(ctx(finance, 'ผู้รับย้ายที่อยู่'), payeeId, {
+      ...BANK,
+      address: { ...ADDRESS, detail: '99 ถ.เจริญราษฎร์' },
+    })
+    expect(moved.payee.isVerified).toBe(false)
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'payee_profiles', targetId: payeeId, reason: 'ผู้รับย้ายที่อยู่' },
+      select: { beforeData: true, afterData: true },
+    })
+    expect(JSON.stringify(audit.afterData)).toContain('99 ถ.เจริญราษฎร์')
+    expect(JSON.stringify(audit.beforeData)).toContain('12 ม.3')
   })
 
   it('`require_payee_id_document = true` + ไม่มีไฟล์แนบ ⇒ `PAYEE_ID_DOCUMENT_REQUIRED` (`13` §6.2.1)', async () => {

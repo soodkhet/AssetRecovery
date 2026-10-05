@@ -58,13 +58,19 @@ describe('สระอำในเอกสาร PDF (UAT R7cv3-B06)', () => {
         paymentDate: new Date('2026-10-04T03:00:00Z'),
         grossSatang: 7_500,
         whtSatang: 225,
-        payer: { name: 'AssetRecovery', taxId: '0105560000000', address: 'กรุงเทพฯ', phone: '021234567' },
-        payee: { name: 'ผู้รับเงิน ทดสอบ', taxId: '3100000001234', address: 'กรุงเทพฯ', phone: null },
+        issuedAt: new Date('2026-10-04T03:00:00Z'),
+        payeeType: 'individual',
+        incomeCategory: 'sec_40_8',
+        whtCondition: 'withhold',
+        filingSequence: 1,
+        payer: { name: 'AssetRecovery', taxId: '0105560000000', address: 'กรุงเทพฯ', branchLabel: 'สำนักงานใหญ่' },
+        payee: { name: 'ผู้รับเงิน ทดสอบ', taxId: '3100000001234', address: 'กรุงเทพฯ', branchLabel: null },
       }),
     )
     const text = extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
-    expect(text).toContain('จำนวนเงินที่จ่าย (บาท)')
+    expect(text).toContain('รวมเงินภาษีที่หักนำส่ง (ตัวอักษร)')
     expect(text).toContain('ค่าจ้างทำของ มาตรา 40(8)')
-    expect(text).toContain('ผู้มีอำนาจลงนาม (ผู้จ่ายเงิน)')
+    expect(text).toContain('ตามคำสั่งกรมสรรพากรที่ออกตามมาตรา 3 เตรส')
+    expect(text).toContain('(ผู้มีหน้าที่หักภาษี ณ ที่จ่าย)')
   })
 })

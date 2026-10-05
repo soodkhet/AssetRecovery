@@ -255,8 +255,13 @@ describe('แบบข้อมูลใบ 50 ทวิ (`28` §6.3)', () => {
     paymentDate: PAYMENT_AT,
     grossSatang: 45_000_00,
     whtSatang: 1_350_00,
-    payer: { name: 'AssetRecovery', taxId: '0105560000000', address: 'กรุงเทพฯ', phone: '021234567' },
-    payee: { name: 'ประยุทธ์ บุญมี', taxId: '3100000001234', address: EMPTY_FIELD_TEXT, phone: null },
+    issuedAt: new Date('2026-06-26T03:00:00Z'),
+    payeeType: 'individual',
+    incomeCategory: 'sec_40_8',
+    whtCondition: 'withhold',
+    filingSequence: 3,
+    payer: { name: 'AssetRecovery', taxId: '0105560000000', address: 'กรุงเทพฯ', branchLabel: 'สำนักงานใหญ่' },
+    payee: { name: 'นายประยุทธ์ บุญมี', taxId: '3100000001234', address: EMPTY_FIELD_TEXT, branchLabel: null },
   }
 
   it('ประกอบข้อความเป็น พ.ศ. + คั่นหลักพัน + ยอดสุทธิ = gross − wht (ห้ามคำนวณซ้ำที่ component)', () => {

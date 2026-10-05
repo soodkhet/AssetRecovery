@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
+import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
+import { WHT_CONDITIONS } from '@/lib/payees/payee'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของผู้รับเงิน (ไฟล์ 18 · Rule 13)
@@ -27,6 +29,23 @@ const optionalUuid = z.preprocess(
 
 export const payeeTypeSchema = z.enum(['individual', 'corporate'])
 
+export const whtConditionSchema = z.enum(WHT_CONDITIONS)
+
+/**
+ * ที่อยู่ผู้ถูกหักภาษี (มติ PO U94 ข้อ 1) — โครงเดียวกับ `AddressFields` / ที่อยู่ของเคส
+ * ทุกช่องว่างได้ตอนบันทึก · ความครบถูกบังคับตอน "ยืนยัน" (`missingFieldsForVerification()`)
+ */
+export const payeeAddressSchema = z.object({
+  detail: optionalText(500, 'บ้านเลขที่/ถนน'),
+  postalCode: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().regex(/^\d{5}$/, 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก').nullable().default(null),
+  ),
+  province: optionalText(100, 'จังหวัด'),
+  district: optionalText(100, 'อำเภอ/เขต'),
+  subdistrict: optionalText(100, 'ตำบล/แขวง'),
+})
+
 /**
  * ฟิลด์ของฟอร์ม (`18` §8) — ทุกช่องยกเว้นประเภทปล่อยว่างได้ตอนสร้าง เพราะ payee โครงเปล่าเกิด
  * อัตโนมัติจาก `ensureAgentPayeeId()` (Phase 2.9) ตั้งแต่พนักงานปิดงานเคสแรก แล้วการเงินมาเติมทีหลัง
@@ -49,6 +68,22 @@ export const payeeFieldsSchema = z.object({
     (value) => (value === '' ? null : typeof value === 'string' ? Number(value) : value),
     pctSchema('อัตราหัก 40(1)/40(2)').nullable().optional(),
   ),
+  /**
+   * ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1) — ไม่ส่งมา (`undefined`) = **คงค่าเดิม**
+   * ตอนแก้ไข (กันผู้เรียกที่ไม่รู้จักฟิลด์ล้างข้อมูลทิ้ง) · ตอนสร้าง = ว่าง/ค่าเริ่มต้น
+   */
+  nameTitle: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().max(50, 'คำนำหน้าชื่อยาวเกิน 50 ตัวอักษร').nullable().optional(),
+  ),
+  address: payeeAddressSchema.optional(),
+  /** นิติบุคคล: `00000` = สำนักงานใหญ่ · สาขา = ตัวเลข 5 หลัก */
+  branchCode: z
+    .string()
+    .trim()
+    .refine((value) => BRANCH_CODE_PATTERN.test(value), 'รหัสสาขาต้องเป็นตัวเลข 5 หลัก (สำนักงานใหญ่ = 00000)')
+    .optional(),
+  whtCondition: whtConditionSchema.optional(),
 })
 
 export const payeeCreateSchema = payeeFieldsSchema.extend({
@@ -68,6 +103,7 @@ export const payeeListQuerySchema = z.object({
 })
 
 export type PayeeFieldsInput = z.infer<typeof payeeFieldsSchema>
+export type PayeeAddressInput = z.infer<typeof payeeAddressSchema>
 export type PayeeCreateInput = z.infer<typeof payeeCreateSchema>
 export type PayeeUpdateInput = z.infer<typeof payeeUpdateSchema>
 export type PayeeListQuery = z.infer<typeof payeeListQuerySchema>

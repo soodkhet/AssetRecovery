@@ -9,10 +9,14 @@ import {
   missingFieldsForVerification,
   normalizeAccountNumber,
   normalizePayeeValues,
+  payeeAddressLine,
+  payeeDisplayName,
   shouldResetVerification,
+  whtConditionAffectsFormula,
   toPayeeAuditPayload,
   type PayeeValues,
 } from '@/lib/payees/payee'
+import { payeeFieldsSchema } from '@/lib/payees/schemas'
 
 const complete = (overrides: Partial<PayeeValues> = {}): PayeeValues => ({
   payeeType: 'individual',
@@ -23,6 +27,14 @@ const complete = (overrides: Partial<PayeeValues> = {}): PayeeValues => ({
   accountNumber: '1234567890',
   idDocumentUrl: null,
   wht402Pct: null,
+  nameTitle: 'นาย',
+  addressDetail: '99/1 ถ.สุขุมวิท',
+  addressSubdistrict: 'คลองเตย',
+  addressDistrict: 'คลองเตย',
+  addressProvince: 'กรุงเทพมหานคร',
+  addressPostalCode: '10110',
+  branchCode: '00000',
+  whtCondition: 'withhold',
   ...overrides,
 })
 
@@ -84,8 +96,14 @@ describe('auto-reset verification (`18` §9 · `23` §6.2)', () => {
     ['bankName', complete({ bankName: 'ธนาคารไทยพาณิชย์' })],
     ['accountName', complete({ accountName: 'สมหญิง ใจงาม' })],
     ['payeeType', complete({ payeeType: 'corporate' })],
+    // ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO U94 ข้อ 1)
+    ['nameTitle', complete({ nameTitle: 'นาง' })],
+    ['addressDetail', complete({ addressDetail: '1 ถ.พระราม 4' })],
+    ['addressPostalCode', complete({ addressPostalCode: '10500' })],
+    ['whtCondition', complete({ whtCondition: 'pay_once' })],
   ])('ฟิลด์ธนาคาร/ภาษี "%s" เปลี่ยน ⇒ reset', (field, after) => {
-    expect(changedVerificationFields(complete(), after)).toEqual([field])
+    // ฟิลด์แรกที่เปลี่ยนคือฟิลด์ที่แก้ (เปลี่ยนเป็นนิติบุคคล ⇒ คำนำหน้าถูกล้างตามไปด้วย — นับเป็นการแก้ภาษีเช่นกัน)
+    expect(changedVerificationFields(complete(), after)[0]).toBe(field)
     expect(shouldResetVerification({ isVerified: true, before: complete(), after })).toBe(true)
   })
 
@@ -193,6 +211,72 @@ describe('การแสดงผล / audit', () => {
       account_number: '1234567890',
       id_document_url: null,
       wht_40_2_pct: null,
+      name_title: 'นาย',
+      address_detail: '99/1 ถ.สุขุมวิท',
+      address_subdistrict: 'คลองเตย',
+      address_district: 'คลองเตย',
+      address_province: 'กรุงเทพมหานคร',
+      address_postal_code: '10110',
+      branch_code: '00000',
+      wht_condition: 'withhold',
     })
+  })
+})
+
+describe('ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1)', () => {
+  it('ยืนยันไม่ได้ถ้าที่อยู่ไม่ครบ 5 ช่อง — แจ้งชื่อช่องที่ขาด', () => {
+    const values = complete({ addressDetail: null, addressPostalCode: '  ' })
+    expect(missingFieldsForVerification(values)).toEqual(['addressDetail', 'addressPostalCode'])
+    expect(() => assertPayeeReadyForVerification({ values, requireIdDocument: false })).toThrow(PayeeError)
+  })
+
+  it('ชื่อบนเอกสาร: บุคคลธรรมดาต่อคำนำหน้า · นิติบุคคลไม่ต่อ · ไม่ต่อซ้ำ', () => {
+    expect(payeeDisplayName({ name: 'สมชาย ใจดี', nameTitle: 'นาย', payeeType: 'individual' })).toBe('นายสมชาย ใจดี')
+    expect(payeeDisplayName({ name: 'นายสมชาย ใจดี', nameTitle: 'นาย', payeeType: 'individual' })).toBe('นายสมชาย ใจดี')
+    expect(payeeDisplayName({ name: 'บริษัท ก จำกัด', nameTitle: 'นาย', payeeType: 'corporate' })).toBe('บริษัท ก จำกัด')
+    expect(payeeDisplayName({ name: 'สมชาย', nameTitle: null, payeeType: 'individual' })).toBe('สมชาย')
+  })
+
+  it('normalize: นิติบุคคลไม่มีคำนำหน้า · บุคคลธรรมดาไม่มีสาขา (เก็บเป็นสำนักงานใหญ่)', () => {
+    const corporate = normalizePayeeValues(complete({ payeeType: 'corporate', branchCode: '00002' }))
+    expect(corporate.nameTitle).toBeNull()
+    expect(corporate.branchCode).toBe('00002')
+    expect(normalizePayeeValues(complete({ branchCode: '00002' })).branchCode).toBe('00000')
+  })
+
+  it('ที่อยู่บรรทัดเดียวจากโปรไฟล์', () => {
+    expect(payeeAddressLine(complete())).toBe('99/1 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110')
+  })
+
+  it('เงื่อนไข (2)/(3) บันทึก/พิมพ์เท่านั้น — สูตรยังเป็นแบบหัก ณ ที่จ่าย', () => {
+    expect(whtConditionAffectsFormula('withhold')).toBe(false)
+    expect(whtConditionAffectsFormula('pay_always')).toBe(true)
+    expect(whtConditionAffectsFormula('pay_once')).toBe(true)
+  })
+
+  it('Zod: รหัสสาขา/รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก · ไม่ส่งฟิลด์ใหม่มา = undefined (คงค่าเดิมตอนแก้ไข)', () => {
+    const base = { payeeType: 'corporate', taxProfileId: '', nationalId: '', bankName: '', accountName: '', accountNumber: '', idDocumentUrl: '' }
+    const parsed = payeeFieldsSchema.parse(base)
+    expect(parsed.nameTitle).toBeUndefined()
+    expect(parsed.address).toBeUndefined()
+    expect(parsed.branchCode).toBeUndefined()
+    expect(parsed.whtCondition).toBeUndefined()
+    expect(payeeFieldsSchema.safeParse({ ...base, branchCode: '1' }).success).toBe(false)
+    expect(
+      payeeFieldsSchema.safeParse({
+        ...base,
+        address: { detail: '', postalCode: '123', province: '', district: '', subdistrict: '' },
+      }).success,
+    ).toBe(false)
+    const ok = payeeFieldsSchema.parse({
+      ...base,
+      nameTitle: '',
+      address: { detail: '1', postalCode: '10110', province: 'กรุงเทพมหานคร', district: '', subdistrict: '' },
+      branchCode: '00001',
+      whtCondition: 'pay_always',
+    })
+    expect(ok.nameTitle).toBeNull()
+    expect(ok.address?.district).toBeNull()
+    expect(ok.whtCondition).toBe('pay_always')
   })
 })

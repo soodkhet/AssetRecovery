@@ -4,16 +4,19 @@ import { fmtSatang } from '@/lib/format/money'
 import type {
   PayeeType,
   WhtCertificateStatus,
+  WhtCondition,
   WhtDeliveryFormat,
   WhtFilingForm,
   WhtFilingStatus,
 } from '@/lib/generated/prisma/enums'
+import { formatBranch } from '@/lib/format/branch'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { formatInvoiceNumber, type NumberingFormat } from '@/lib/settings/numbering'
 import {
   INCOME_TYPE_TEXT_40_1,
   INCOME_TYPE_TEXT_40_2,
+  INCOME_TYPE_TEXT_CORPORATE,
   usesPerPayeeWhtRate,
   WHT_FILING_METHOD_SUFFIX,
   type WhtCertificateMode,
@@ -41,7 +44,8 @@ import { WhtError } from '@/lib/wht/errors'
  * ### สิ่งที่ยังไม่มีในสคีมา (`02` ชนะไฟล์ 33 ตามลำดับเอกสารขัดกัน — `02_OPEN_DECISIONS` D11/D15)
  * - ไม่มีตัวเดินเลข `wht_certificate_seq` ใน `organizations` (มีแต่ของใบกำกับภาษี) ⇒ เลขที่ derive
  *   จากใบที่ออกไปแล้วของปี พ.ศ. เดียวกัน ภายใต้ `SELECT … FOR UPDATE` (D11 default)
- * - `payee_profiles`/`users` ไม่มีคอลัมน์ที่อยู่ ⇒ ที่อยู่ผู้ถูกหักบนใบ 50 ทวิ พิมพ์เป็น "—"
+ * - (ปิดแล้ว — มติ PO U94 ข้อ 1/D15) ที่อยู่/คำนำหน้า/สาขา/เงื่อนไขการหักของผู้ถูกหักอยู่ใน `payee_profiles`
+ *   และ **snapshot ลงใบตอนออก** (U96 #4) — เอกสาร/ไฟล์ส่งบัญชีอ่านจาก snapshot เท่านั้น
  */
 
 // ── สิทธิ์ (`25` §7.5 · `33` §12) ────────────────────────────────────────────
@@ -124,8 +128,8 @@ export function shouldIssueZeroRate402Certificate(input: {
 }
 
 /**
- * แบบที่ต้องยื่น — เงินได้ 40(1)/40(2) ⇒ **ภ.ง.ด.1** เสมอ (มติ PO 05/10/2569 UAT U7 · U33) · 40(8) ใช้ Tax Profile
- * ที่ snapshot ไว้ (`18` §6.3) · ไม่มีก็เดาจากชนิดผู้รับเงิน
+ * แบบที่ต้องยื่น — **นิติบุคคล ⇒ ภ.ง.ด.53 เสมอ** (มติ PO 06/10/2569 UAT U96 #2) · บุคคลธรรมดาเงินได้ 40(1)/40(2)
+ * ⇒ **ภ.ง.ด.1** (มติ PO 05/10/2569 UAT U7 · U33) · 40(8) ใช้ Tax Profile ที่ snapshot ไว้ (`18` §6.3) · ไม่มี = ภ.ง.ด.3
  */
 export function filingFormOf(input: {
   taxProfileFilingForm: WhtFilingForm | null
@@ -133,9 +137,11 @@ export function filingFormOf(input: {
   /** snapshot `payout_batch_items.wht_income_category` — `null` = รอบเก่า (40(8)) */
   incomeCategory?: WhtIncomeCategory | null
 }): WhtFilingForm {
+  // นิติบุคคล ⇒ ภ.ง.ด.53 เสมอ ไม่ว่าโหมดค่าตั้ง/Tax Profile จะเป็นอะไร (มติ PO 06/10/2569 UAT U96 #2 · ม.69 ทวิ)
+  if (input.payeeType === 'corporate') return 'PND53'
   if (usesPerPayeeWhtRate(input.incomeCategory)) return 'PND1'
   if (input.taxProfileFilingForm !== null && input.taxProfileFilingForm !== 'PND1') return input.taxProfileFilingForm
-  return input.payeeType === 'corporate' ? 'PND53' : 'PND3'
+  return 'PND3'
 }
 
 /** ประเภทเงินได้พึงประเมิน (`28` §6.3 ฟิลด์บังคับ) — จาก Tax Profile ที่ snapshot ไว้ */
@@ -145,7 +151,16 @@ export const DEFAULT_INCOME_TYPE = 'ค่าจ้างทำของ มา�
  * 40(1)/40(2) ⇒ ข้อความของมาตรานั้นเสมอ (Tax Profile เป็นของ 40(8)) · 40(8) ⇒ ข้อความจาก Tax Profile
  * (มติ PO 05/10/2569 UAT U7 · U33 — 50 ทวิ ต้องระบุประเภท 40(1) ให้ตรงแถวของแบบ)
  */
-export function incomeTypeOf(taxProfileIncomeType: string | null, incomeCategory: WhtIncomeCategory | null = null): string {
+export function incomeTypeOf(
+  taxProfileIncomeType: string | null,
+  incomeCategory: WhtIncomeCategory | null = null,
+  payeeType: PayeeType = 'individual',
+): string {
+  // นิติบุคคล (U96 #2): ไม่ใช่เงินได้มาตรา 40 — ข้อความ Tax Profile ที่อ้าง "มาตรา 40" (หรือว่าง) ใช้หมวดค่าบริการแทน
+  if (payeeType === 'corporate') {
+    const text = (taxProfileIncomeType ?? '').trim()
+    return text === '' || /40\s*\(/.test(text) ? INCOME_TYPE_TEXT_CORPORATE : text
+  }
   if (incomeCategory === 'sec_40_1') return INCOME_TYPE_TEXT_40_1
   if (incomeCategory === 'sec_40_2') return INCOME_TYPE_TEXT_40_2
   const trimmed = (taxProfileIncomeType ?? '').trim()
@@ -457,13 +472,112 @@ export function assertFilingMarkable(status: WhtFilingStatus): void {
   throw new WhtError('WHT_FILING_ALREADY_FILED', { context: { currentStatus: status } })
 }
 
-// ── แบบข้อมูลของเอกสาร PDF (`28` §6.3) ──────────────────────────────────────
+// ── แบบฟอร์มทางการ 50 ทวิ (มติ PO 06/10/2569 UAT U96 #13) ─────────────────────
 
+/** ช่องแบบ ภ.ง.ด. บนหนังสือรับรอง 50 ทวิ ตามแบบของกรมสรรพากร (เรียงตามแบบ — 7 ช่อง) */
+export const WHT_FORM_FILING_BOXES = [
+  { key: 'PND1A', label: '(1) ภ.ง.ด.1ก' },
+  { key: 'PND1A_SPECIAL', label: '(2) ภ.ง.ด.1ก พิเศษ' },
+  { key: 'PND2', label: '(3) ภ.ง.ด.2' },
+  { key: 'PND3', label: '(4) ภ.ง.ด.3' },
+  { key: 'PND2A', label: '(5) ภ.ง.ด.2ก' },
+  { key: 'PND3A', label: '(6) ภ.ง.ด.3ก' },
+  { key: 'PND53', label: '(7) ภ.ง.ด.53' },
+] as const
+
+export type WhtFormFilingBox = (typeof WHT_FORM_FILING_BOXES)[number]['key']
+
+/**
+ * แบบที่ยื่นจริง → ช่องที่ติ๊กบนใบ 50 ทวิ — ภ.ง.ด.1 รายเดือน (เงินได้ 40(1)/40(2)) ติ๊ก **ภ.ง.ด.1ก**
+ * (แบบสรุปรายปีที่ผู้มีเงินได้ใช้อ้างอิง — แนวปฏิบัติของแบบ 50 ทวิ) · ภ.ง.ด.3 / ภ.ง.ด.53 ติ๊กช่องของตัวเอง
+ */
+export function officialFilingBoxOf(filingForm: WhtFilingForm): WhtFormFilingBox {
+  if (filingForm === 'PND1') return 'PND1A'
+  return filingForm
+}
+
+/** แถวประเภทเงินได้บนแบบ 50 ทวิ (ข้อความย่อตามแบบ) — แถว 4 แยก (ก)/(ข) ในแบบจริง รวมเป็นแถวเดียวที่นี่ */
+export const WHT_FORM_INCOME_ROWS = [
+  { no: '1', label: 'เงินเดือน ค่าจ้าง เบี้ยเลี้ยง โบนัส ฯลฯ ตามมาตรา 40(1)' },
+  { no: '2', label: 'ค่าธรรมเนียม ค่านายหน้า ฯลฯ ตามมาตรา 40(2)' },
+  { no: '3', label: 'ค่าแห่งลิขสิทธิ์ ฯลฯ ตามมาตรา 40(3)' },
+  { no: '4', label: 'ดอกเบี้ย ฯลฯ ตามมาตรา 40(4)(ก) / เงินปันผล ส่วนแบ่งกำไร ฯลฯ ตามมาตรา 40(4)(ข)' },
+  {
+    no: '5',
+    label:
+      'การจ่ายเงินได้ที่ต้องหักภาษี ณ ที่จ่าย ตามคำสั่งกรมสรรพากรที่ออกตามมาตรา 3 เตรส เช่น ค่าจ้างทำของ ค่าบริการ ค่าโฆษณา ค่าเช่า ค่าขนส่ง ฯลฯ',
+  },
+  { no: '6', label: 'อื่น ๆ (ระบุ)' },
+] as const
+
+export type WhtFormIncomeRow = (typeof WHT_FORM_INCOME_ROWS)[number]['no']
+
+/**
+ * แถวของแบบที่ยอดเงินของใบนี้ลง — 40(1) = แถว 1 · 40(2) = แถว 2 · ค่าจ้างทำของ 40(8) ของบุคคลธรรมดา และ
+ * ค่าบริการของนิติบุคคล (U96 #2) = แถว 5 (หัก ณ ที่จ่ายตาม ม.3 เตรส) · `incomeCategory` = snapshot ของรอบจ่าย
+ */
+export function officialIncomeRowOf(input: {
+  incomeCategory: WhtIncomeCategory | null
+  payeeType: PayeeType
+}): WhtFormIncomeRow {
+  if (input.payeeType === 'corporate') return '5'
+  if (input.incomeCategory === 'sec_40_1') return '1'
+  if (input.incomeCategory === 'sec_40_2') return '2'
+  return '5'
+}
+
+/** ช่อง "ผู้จ่ายเงิน" บนแบบ 50 ทวิ — (1)–(3) ตรง enum `wht_condition` · (4) อื่น ๆ ไม่ใช้ในระบบ (แสดงว่าง) */
+export const WHT_FORM_CONDITION_BOXES = [
+  { key: 'withhold', label: '(1) หัก ณ ที่จ่าย' },
+  { key: 'pay_always', label: '(2) ออกให้ตลอดไป' },
+  { key: 'pay_once', label: '(3) ออกให้ครั้งเดียว' },
+  { key: 'other', label: '(4) อื่น ๆ (ระบุ)' },
+] as const satisfies readonly { key: WhtCondition | 'other'; label: string }[]
+
+export interface FilingSequenceEntry {
+  payeeId: string
+  certificateNumber: string
+  status: WhtCertificateStatus
+}
+
+/** เลขที่ใบเรียงแบบตัวเลข (`WHT-2569-1000` มาหลัง `WHT-2569-999`) */
+function compareCertificateNumber(a: string, b: string): number {
+  return a.localeCompare(b, 'en', { numeric: true })
+}
+
+/**
+ * **ลำดับที่ในแบบ ภ.ง.ด.** (ช่อง "ลำดับที่ … ในแบบ" ของ 50 ทวิ) — ผู้รับแต่ละรายได้ลำดับเดียวในแบบเดียวกันของงวด
+ * เรียงตามเลขที่หนังสือรับรองใบแรกของผู้รับ (เลขเดินตามเวลาออก) · นับเฉพาะใบที่ใช้งาน (ใบยกเลิกไม่อยู่ในแบบ)
+ * ยกเว้นผู้รับเป้าหมายเอง (ใบยกเลิกยังพิมพ์ได้ — ใช้ลำดับ ณ ตำแหน่งเดิม)
+ *
+ * ผู้เรียกต้องกรอง `entries` ให้เหลือ **งวด + แบบเดียวกัน** ก่อน · ไม่พบผู้รับ = `null`
+ */
+export function filingSequenceNumber(entries: readonly FilingSequenceEntry[], payeeId: string): number | null {
+  const firstNumber = new Map<string, string>()
+  for (const entry of entries) {
+    if (entry.status !== 'active' && entry.payeeId !== payeeId) continue
+    const current = firstNumber.get(entry.payeeId)
+    if (current === undefined || compareCertificateNumber(entry.certificateNumber, current) < 0) {
+      firstNumber.set(entry.payeeId, entry.certificateNumber)
+    }
+  }
+  const ordered = [...firstNumber.entries()].sort((a, b) => compareCertificateNumber(a[1], b[1]))
+  const index = ordered.findIndex(([id]) => id === payeeId)
+  return index === -1 ? null : index + 1
+}
+
+// ── แบบข้อมูลของเอกสาร PDF (`28` §6.3 · แบบทางการ — มติ PO U96 #13) ─────────
+
+/** คู่สัญญาบนใบ (ผู้มีหน้าที่หัก / ผู้ถูกหัก) — ค่าจาก **snapshot ของใบ** (U96 #4) */
 export interface WhtCertificateParty {
+  /** ชื่อเต็มที่พิมพ์ (รวมคำนำหน้าแล้ว) */
   name: string
+  /** เลขประจำตัวผู้เสียภาษี 13 หลัก — ไม่มี = "—" */
   taxId: string
+  /** ที่อยู่บรรทัดเดียว — ไม่มี = "—" */
   address: string
-  phone: string | null
+  /** "สำนักงานใหญ่" / "สาขาที่ 00001" — บุคคลธรรมดา = null (ไม่พิมพ์) */
+  branchLabel: string | null
 }
 
 export interface WhtCertificateDocSource {
@@ -478,12 +592,49 @@ export interface WhtCertificateDocSource {
   paymentDate: Date
   grossSatang: number
   whtSatang: number
+  /** วันที่ออกหนังสือรับรอง (`wht_certificates.created_at`) */
+  issuedAt: Date
+  /** ชนิดผู้ถูกหัก (snapshot) — ตัดสินแถวเงินได้/การพิมพ์สาขา */
+  payeeType: PayeeType
+  /** snapshot `payout_batch_items.wht_income_category` — `null` = รอบเก่า (40(8)) */
+  incomeCategory: WhtIncomeCategory | null
+  /** เงื่อนไขการหัก (snapshot) */
+  whtCondition: WhtCondition
+  /** ลำดับที่ในแบบ ภ.ง.ด. ของงวด (`filingSequenceNumber()`) — `null` = คำนวณไม่ได้ (พิมพ์ "—") */
+  filingSequence: number | null
   /** ใบแบบต่อผู้รับต่อรอบจ่าย — แสดงว่าเป็นยอดรวมของรอบไหนกี่รายการ (`null` = ใบต่อรายการ) */
   coverage?: { payoutBatchName: string; itemCount: number } | null
-  /** ผู้จ่ายเงิน = องค์กรเจ้าของระบบ (`28` §6.3) */
+  /** ผู้มีหน้าที่หักภาษี ณ ที่จ่าย = องค์กร (snapshot) */
   payer: WhtCertificateParty
-  /** ผู้ถูกหักภาษี = payee (`18`) */
+  /** ผู้ถูกหักภาษี ณ ที่จ่าย = payee (snapshot) */
   payee: WhtCertificateParty
+}
+
+export interface WhtCertificateCopy {
+  label: string
+  purpose: string
+}
+
+/** 2 ฉบับในไฟล์เดียวตามแบบทางการ — ข้อความตามแบบของกรมสรรพากร */
+export const WHT_CERTIFICATE_COPIES: readonly WhtCertificateCopy[] = [
+  { label: 'ฉบับที่ 1', purpose: '(สำหรับผู้ถูกหักภาษี ณ ที่จ่าย ใช้แนบพร้อมกับแบบแสดงรายการภาษี)' },
+  { label: 'ฉบับที่ 2', purpose: '(สำหรับผู้ถูกหักภาษี ณ ที่จ่าย เก็บไว้เป็นหลักฐาน)' },
+]
+
+export interface WhtCertificateIncomeLine {
+  no: WhtFormIncomeRow
+  label: string
+  /** ใส่เฉพาะแถวที่ยอดของใบนี้ลง — แถวอื่นว่าง */
+  dateText: string
+  grossText: string
+  whtText: string
+  /** ข้อความประเภทเงินได้ที่ snapshot ไว้ (พิมพ์ใต้แถวที่มียอด) */
+  detail: string | null
+}
+
+export interface WhtCertificateBox {
+  label: string
+  checked: boolean
 }
 
 /** เอกสารที่ประกอบเป็นข้อความครบแล้ว — component PDF ห้าม format/คำนวณซ้ำ (Rule 01) */
@@ -510,13 +661,33 @@ export interface WhtCertificateDoc {
   whtInWordsText: string
   netText: string
   fileName: string
+  /** ฉบับที่ 1 / ฉบับที่ 2 — 1 หน้าต่อฉบับ */
+  copies: readonly WhtCertificateCopy[]
+  /** "ลำดับที่ … ในแบบ" */
+  filingSequenceText: string
+  filingBoxes: readonly WhtCertificateBox[]
+  incomeLines: readonly WhtCertificateIncomeLine[]
+  conditionBoxes: readonly WhtCertificateBox[]
+  /** วัน เดือน ปี ที่ออกหนังสือรับรอง (พ.ศ.) */
+  issueDateLabel: string
 }
 
-/** ค่าที่ไม่มีในสคีมา (ที่อยู่ผู้ถูกหัก — D15) พิมพ์เป็นขีดกลาง ห้ามเว้นว่างบนเอกสารทางการ */
+/** ค่าที่ยังไม่มีในโปรไฟล์ตอนออกใบ พิมพ์เป็นขีดกลาง ห้ามเว้นว่างบนเอกสารทางการ */
 export const EMPTY_FIELD_TEXT = '—'
+
+/** ป้ายสาขาบนใบ — นิติบุคคลเท่านั้น (บุคคลธรรมดาไม่มีสาขา) */
+export function whtPartyBranchLabel(branchCode: string | null, payeeType: PayeeType = 'corporate'): string | null {
+  if (payeeType !== 'corporate' || branchCode === null) return null
+  return formatBranch(branchCode)
+}
 
 export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCertificateDoc {
   const isCancelled = source.status === 'cancelled'
+  const paymentDateLabel = fmtDate(source.paymentDate)
+  const grossText = fmtSatang(source.grossSatang)
+  const whtText = fmtSatang(source.whtSatang)
+  const filedBox = officialFilingBoxOf(source.filingForm)
+  const incomeRow = officialIncomeRowOf({ incomeCategory: source.incomeCategory, payeeType: source.payeeType })
 
   return {
     title: WHT_CERTIFICATE_TITLE,
@@ -540,13 +711,26 @@ export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCert
     filingFormLabel: WHT_FILING_FORM_LABEL[source.filingForm],
     filingForm: source.filingForm,
     incomeType: source.incomeType,
-    paymentDateLabel: fmtDate(source.paymentDate),
+    paymentDateLabel,
     payer: source.payer,
     payee: source.payee,
-    grossText: fmtSatang(source.grossSatang),
-    whtText: fmtSatang(source.whtSatang),
+    grossText,
+    whtText,
     whtInWordsText: bahtInWords(source.whtSatang),
     netText: fmtSatang(source.grossSatang - source.whtSatang),
     fileName: `${source.certificateNumber}.pdf`,
+    copies: WHT_CERTIFICATE_COPIES,
+    filingSequenceText: source.filingSequence === null ? EMPTY_FIELD_TEXT : String(source.filingSequence),
+    filingBoxes: WHT_FORM_FILING_BOXES.map((box) => ({ label: box.label, checked: box.key === filedBox })),
+    incomeLines: WHT_FORM_INCOME_ROWS.map((row) =>
+      row.no === incomeRow
+        ? { no: row.no, label: row.label, dateText: paymentDateLabel, grossText, whtText, detail: source.incomeType }
+        : { no: row.no, label: row.label, dateText: '', grossText: '', whtText: '', detail: null },
+    ),
+    conditionBoxes: WHT_FORM_CONDITION_BOXES.map((box) => ({
+      label: box.label,
+      checked: box.key === source.whtCondition,
+    })),
+    issueDateLabel: fmtDate(source.issuedAt),
   }
 }

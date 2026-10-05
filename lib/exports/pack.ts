@@ -9,6 +9,7 @@ import type {
   ExceptionLevel,
   ExceptionStatus,
   ExportRecordStatus,
+  WhtCondition,
   WhtFilingForm,
 } from '@/lib/generated/prisma/enums'
 
@@ -313,6 +314,11 @@ export const WHT_HEADERS = [
   'wht_pct',
   // มติ PO 05/10/2569 (UAT U15) — ต่อท้ายสุด ไม่เปลี่ยนลำดับ/ชื่อคอลัมน์เดิม (แจ้งสำนักงานบัญชีแล้ว)
   'filing_form',
+  // มติ PO 06/10/2569 (UAT U94 ข้อ 1) — ต่อท้ายสุด · ค่าจาก snapshot ของใบ 50 ทวิ (U96 #4)
+  'payee_title',
+  'payee_address',
+  'payee_branch',
+  'wht_condition',
 ] as const
 
 export interface WhtExportRow {
@@ -328,6 +334,14 @@ export interface WhtExportRow {
   whtPct: string | null
   /** `wht_certificates.filing_form` — แบบที่ต้องยื่น `PND1`/`PND3`/`PND53` (U15 · รหัสตรง enum `wht_filing_form`) */
   filingForm: WhtFilingForm
+  /** snapshot คำนำหน้า (บุคคลธรรมดา) — ว่าง = ไม่มี (U94) */
+  payeeTitle: string | null
+  /** snapshot ที่อยู่บรรทัดเดียว — ว่าง = ยังไม่กรอกตอนออกใบ (U94) */
+  payeeAddress: string | null
+  /** snapshot รหัสสาขา 5 หลัก (นิติบุคคล — `00000` = สำนักงานใหญ่) · บุคคลธรรมดา = ว่าง (U94) */
+  payeeBranchCode: string | null
+  /** snapshot เงื่อนไขการหัก — รหัสตรง enum `wht_condition` (U94) */
+  whtCondition: WhtCondition
 }
 
 /** ตัวเลข 13 หลักล้วน — ตัดขีด/ช่องว่างที่คนกรอกติดมา แล้วตรวจความยาว (DEC-006/D10) */
@@ -368,6 +382,10 @@ export function whtCsv(rows: readonly WhtExportRow[]): string {
       csvBaht(row.whtSatang),
       whtPctText(row.whtPct),
       row.filingForm,
+      row.payeeTitle ?? CSV_EMPTY,
+      row.payeeAddress ?? CSV_EMPTY,
+      row.payeeBranchCode ?? CSV_EMPTY,
+      row.whtCondition,
     ]),
   )
 }

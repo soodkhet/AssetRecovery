@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { INCOME_TYPE_TEXT_CORPORATE } from '@/lib/settings/wht-policy'
 
 /**
  * เทสต์ระดับ DB ของ Phase 4.5 — DoD ของไฟล์ 33
@@ -271,8 +272,9 @@ suite('Phase 4.5 — ออกใบ 50 ทวิ อัตโนมัติจ
     expect(issued.every((row) => row.status === 'active')).toBe(true)
     expect(issued.every((row) => row.certificateNumber.startsWith('WHT-2569-'))).toBe(true)
     // ประเภทเงินได้มาจาก Tax Profile ที่ snapshot ไว้ (นิติบุคคล) ไม่ใช่ค่า default ของบุคคลธรรมดา
+    // นิติบุคคล (มติ PO U96 #2) — ข้อความ Tax Profile ที่อ้าง "มาตรา 40" ถูกแทนด้วยหมวดค่าบริการ (ม.3 เตรส)
     const juristic = issued.find((row) => row.filingForm === 'PND53')
-    expect(juristic?.incomeType).toBe('ค่าบริการ มาตรา 40(8)')
+    expect(juristic?.incomeType).toBe(INCOME_TYPE_TEXT_CORPORATE)
     expect(juristic?.whtSatang).toBe(360_00)
 
     // เรียกซ้ำ (เส้นทางกระทบยอดธนาคารรันซ้ำได้) ⇒ จำนวนใบต้องเท่าเดิม
@@ -741,5 +743,95 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
       () => wht.markWhtFilingFiled(ctx, missing, { reason: 'ทดสอบ' }),
       'WHT_FILING_SUMMARY_NOT_FOUND',
     )
+  })
+})
+
+suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot คู่สัญญาบนใบ 50 ทวิ', () => {
+  it('ออกใบแล้ว snapshot ชื่อ/คำนำหน้า/ที่อยู่/เงื่อนไข · แก้โปรไฟล์ทีหลังใบเดิมไม่เปลี่ยน · DB ห้ามแก้ snapshot', async () => {
+    await setPeriodStatus('collecting')
+    await db().$executeRawUnsafe(`
+      UPDATE payee_profiles
+      SET name_title = 'นาย', address_detail = '12 ม.3', address_subdistrict = 'ป่าแดด',
+          address_district = 'เมืองเชียงใหม่', address_province = 'เชียงใหม่', address_postal_code = '50100',
+          wht_condition = 'pay_once'
+      WHERE id = '${PAYEE_PERSON_ID}'
+    `)
+    try {
+      const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 20_000_00, wht: 600_00 }])
+      await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+      const certificate = await db().whtCertificate.findFirstOrThrow({
+        where: { organizationId: ORG_ID, expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } } },
+      })
+      expect(certificate.payeeName).toBe('ประยุทธ์ บุญมี')
+      expect(certificate.payeeNameTitle).toBe('นาย')
+      expect(certificate.payeeAddress).toBe('12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100')
+      expect(certificate.payeeBranchCode).toBeNull()
+      expect(certificate.whtCondition).toBe('pay_once')
+      expect(certificate.payerName).toBe('Phase45Test')
+      expect(certificate.payerTaxId).toBe('9999999994500')
+      expect(certificate.payerBranchCode).toBe('00000')
+
+      // แก้โปรไฟล์ + ข้อมูลองค์กรหลังออกใบ ⇒ ใบเดิม (PDF) ยังเป็นค่าตอนออก
+      await db().$executeRawUnsafe(`
+        UPDATE payee_profiles SET name_title = 'นาง', address_detail = '99 ถ.ใหม่', wht_condition = 'withhold'
+        WHERE id = '${PAYEE_PERSON_ID}'
+      `)
+      await db().$executeRawUnsafe(`UPDATE organizations SET address = 'ย้ายที่อยู่ใหม่' WHERE id = '${ORG_ID}'`)
+      const source = await wht.getWhtCertificateDocSource(accountant, certificate.id)
+      expect(source.payee.name).toBe('นายประยุทธ์ บุญมี')
+      expect(source.payee.address).toBe('12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100')
+      expect(source.payee.branchLabel).toBeNull()
+      expect(source.payer.address).toBe('ที่อยู่ทดสอบ 4.5 กรุงเทพฯ')
+      expect(source.payer.branchLabel).toBe('สำนักงานใหญ่')
+      expect(source.whtCondition).toBe('pay_once')
+      expect(source.filingSequence).toBeGreaterThanOrEqual(1)
+
+      // ยาม immutable ระดับ DB — snapshot แก้ตรงไม่ได้ (ใบ active แก้ได้ทางเดียวคือยกเลิก)
+      await expect(
+        db().$executeRawUnsafe(`UPDATE wht_certificates SET payee_address = 'แก้เอง' WHERE id = '${certificate.id}'`),
+      ).rejects.toThrow(/WHT_CERTIFICATE_IMMUTABLE/)
+    } finally {
+      await db().$executeRawUnsafe(`
+        UPDATE payee_profiles
+        SET name_title = NULL, address_detail = NULL, address_subdistrict = NULL, address_district = NULL,
+            address_province = NULL, address_postal_code = NULL, wht_condition = 'withhold'
+        WHERE id = '${PAYEE_PERSON_ID}'
+      `)
+      await db().$executeRawUnsafe(`UPDATE organizations SET address = 'ที่อยู่ทดสอบ 4.5 กรุงเทพฯ' WHERE id = '${ORG_ID}'`)
+    }
+  })
+
+  it('นิติบุคคล: ภ.ง.ด.53 + snapshot สาขา + PDF ข้อมูลสาขา/แถวเงินได้ 5 + ลำดับที่ในแบบ', async () => {
+    await setPeriodStatus('collecting')
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET branch_code = '00002' WHERE id = '${PAYEE_COMPANY_ID}'`)
+    try {
+      // Tax Profile ไม่ระบุ (fallback) — นิติบุคคลยังต้องเป็น ภ.ง.ด.53
+      const seeded = await seedBatch([{ payeeId: PAYEE_COMPANY_ID, gross: 15_000_00, wht: 450_00 }])
+      await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+      const certificate = await db().whtCertificate.findFirstOrThrow({
+        where: { organizationId: ORG_ID, expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } } },
+      })
+      expect(certificate.filingForm).toBe('PND53')
+      expect(certificate.payeeType).toBe('corporate')
+      expect(certificate.payeeBranchCode).toBe('00002')
+      expect(certificate.payeeNameTitle).toBeNull()
+
+      const { buildWhtCertificateDoc } = await import('@/lib/wht/wht')
+      const doc = buildWhtCertificateDoc(await wht.getWhtCertificateDocSource(accountant, certificate.id))
+      expect(doc.payee.branchLabel).toBe('สาขาที่ 00002')
+      expect(doc.filingBoxes.find((box) => box.checked)?.label).toBe('(7) ภ.ง.ด.53')
+      expect(doc.incomeLines.find((line) => line.grossText !== '')?.no).toBe('5')
+      expect(doc.filingSequenceText).not.toBe('—')
+
+      const { renderWhtCertificate } = await import('@/components/pdf/wht-certificate')
+      const { extractPdfText } = await import('@/components/pdf/extract-text')
+      const text = extractPdfText(new Uint8Array(await renderWhtCertificate(doc))).replace(/\n/g, '')
+      expect(text).toContain('ฉบับที่ 1')
+      expect(text).toContain('ฉบับที่ 2')
+      expect(text).toContain('สาขาที่ 00002')
+      expect(text).toContain('สี่ร้อยห้าสิบบาทถ้วน')
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE payee_profiles SET branch_code = '00000' WHERE id = '${PAYEE_COMPANY_ID}'`)
+    }
   })
 })

@@ -46,3 +46,34 @@ export function addressFromDto(dto: AddressDtoLike | null | undefined): AddressV
 export function isAddressEmpty(value: AddressValue): boolean {
   return Object.values(value).every((field) => field.trim() === '')
 }
+
+const BANGKOK_PROVINCES = new Set(['กรุงเทพมหานคร', 'กรุงเทพฯ', 'กรุงเทพ'])
+
+function withPrefix(value: string, prefix: string, alreadyPrefixed: readonly string[]): string {
+  return alreadyPrefixed.some((known) => value.startsWith(known)) ? value : `${prefix}${value}`
+}
+
+/**
+ * ที่อยู่ 1 ชุด → ข้อความบรรทัดเดียวสำหรับเอกสาร (ใบ 50 ทวิ / ไฟล์ส่งสำนักงานบัญชี — มติ PO U94 ข้อ 1)
+ * - กรุงเทพมหานคร ใช้ "แขวง/เขต" · จังหวัดอื่นใช้ "ต./อ./จ." (ไม่เติมซ้ำถ้าผู้ใช้พิมพ์คำนำหน้ามาเอง)
+ * - ช่องว่างถูกข้าม · ว่างทั้งชุด = `null` (ผู้เรียกพิมพ์ "—" บนเอกสารทางการเอง)
+ */
+export function formatThaiAddressLine(address: AddressDtoLike | null | undefined): string | null {
+  if (address === null || address === undefined) return null
+  const clean = (value: string | null): string => (value ?? '').trim()
+  const detail = clean(address.detail)
+  const subdistrict = clean(address.subdistrict)
+  const district = clean(address.district)
+  const province = clean(address.province)
+  const postalCode = clean(address.postalCode)
+  const bangkok = BANGKOK_PROVINCES.has(province)
+
+  const parts = [
+    detail,
+    subdistrict === '' ? '' : withPrefix(subdistrict, bangkok ? 'แขวง' : 'ต.', ['ต.', 'ตำบล', 'แขวง']),
+    district === '' ? '' : withPrefix(district, bangkok ? 'เขต' : 'อ.', ['อ.', 'อำเภอ', 'เขต']),
+    province === '' ? '' : bangkok ? 'กรุงเทพมหานคร' : withPrefix(province, 'จ.', ['จ.', 'จังหวัด']),
+    postalCode,
+  ].filter((part) => part !== '')
+  return parts.length === 0 ? null : parts.join(' ')
+}

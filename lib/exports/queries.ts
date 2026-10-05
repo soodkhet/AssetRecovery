@@ -409,21 +409,31 @@ async function whtFile(organizationId: string, scope: PeriodScope): Promise<stri
       grossSatang: true,
       whtSatang: true,
       filingForm: true,
-      payee: { select: { nationalId: true, user: { select: { fullName: true } } } },
+      // snapshot ผู้ถูกหัก ณ วันออกใบ (มติ PO U96 #4) — ไม่อ่านโปรไฟล์ปัจจุบัน
+      payeeName: true,
+      payeeNameTitle: true,
+      payeeTaxId: true,
+      payeeAddress: true,
+      payeeBranchCode: true,
+      whtCondition: true,
       expenseRecord: { select: { payoutBatchItem: { select: { whtPctSnapshot: true } } } },
     },
   })
 
   const exportRows: WhtExportRow[] = rows.map((row) => ({
     certificateNumber: row.certificateNumber,
-    payeeName: row.payee.user.fullName,
-    payeeTaxId: row.payee.nationalId,
+    payeeName: row.payeeName,
+    payeeTaxId: row.payeeTaxId,
     paymentDate: row.paymentDate,
     incomeType: row.incomeType,
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
     whtPct: row.expenseRecord.payoutBatchItem.whtPctSnapshot?.toString() ?? null,
     filingForm: row.filingForm,
+    payeeTitle: row.payeeNameTitle,
+    payeeAddress: row.payeeAddress,
+    payeeBranchCode: row.payeeBranchCode,
+    whtCondition: row.whtCondition,
   }))
 
   // `payee_tax_id` ต้องเป็นเลข 13 หลักล้วนทุกแถว (DEC-006/D10) — ขาดแม้แถวเดียวคือหยุด ไม่ส่งช่องว่างออกไป

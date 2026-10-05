@@ -1,5 +1,7 @@
-import type { PayeeType } from '@/lib/generated/prisma/enums'
+import type { PayeeType, WhtCondition } from '@/lib/generated/prisma/enums'
+import { formatThaiAddressLine } from '@/lib/address/address-value'
 import { isValidTaxId, normalizeTaxId } from '@/lib/finance-companies/company'
+import { HEAD_OFFICE_BRANCH_CODE } from '@/lib/format/branch'
 import { PayeeError } from '@/lib/payees/errors'
 
 /**
@@ -31,6 +33,90 @@ export interface PayeeValues {
    * `null` = ยังไม่กรอก · ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) เท่านั้น
    */
   wht402Pct: number | null
+  /** คำนำหน้าชื่อ (บุคคลธรรมดา) — มติ PO U94 ข้อ 1 · นิติบุคคลไม่ใช้ */
+  nameTitle: string | null
+  /** ที่อยู่ผู้ถูกหักภาษี 5 ช่อง (โครงเดียวกับที่อยู่ของเคส) — บังคับครบก่อนยืนยัน (มติ PO U94 ข้อ 1) */
+  addressDetail: string | null
+  addressSubdistrict: string | null
+  addressDistrict: string | null
+  addressProvince: string | null
+  addressPostalCode: string | null
+  /** สำนักงานใหญ่ `00000` / สาขา 5 หลัก — ใช้เฉพาะนิติบุคคล (บุคคลธรรมดา normalize เป็น `00000`) */
+  branchCode: string
+  /** เงื่อนไขการหัก (1)/(2)/(3) — บันทึก/พิมพ์บนใบ 50 ทวิ เท่านั้น ไม่เปลี่ยนสูตร */
+  whtCondition: WhtCondition
+}
+
+// ── คำนำหน้า / เงื่อนไขการหัก (มติ PO 06/10/2569 UAT U94 ข้อ 1) ────────────────
+
+/** ตัวเลือกคำนำหน้าบนฟอร์ม — "อื่น ๆ" ให้พิมพ์เอง (เก็บเป็นข้อความที่พิมพ์บนเอกสาร) */
+export const PAYEE_NAME_TITLE_OPTIONS = ['นาย', 'นาง', 'นางสาว'] as const
+
+export type PayeeNameTitleChoice = (typeof PAYEE_NAME_TITLE_OPTIONS)[number] | 'other' | ''
+
+/** ค่าที่เก็บ → ตัวเลือกบนฟอร์ม (ข้อความที่ไม่อยู่ในรายการ = "อื่น ๆ") */
+export function nameTitleChoiceOf(title: string | null): PayeeNameTitleChoice {
+  const trimmed = (title ?? '').trim()
+  if (trimmed === '') return ''
+  return (PAYEE_NAME_TITLE_OPTIONS as readonly string[]).includes(trimmed)
+    ? (trimmed as PayeeNameTitleChoice)
+    : 'other'
+}
+
+/** ตัวเลือกบนฟอร์ม → ข้อความที่ส่ง API (`''` = ไม่ระบุ) */
+export function nameTitleFromForm(choice: PayeeNameTitleChoice, other: string): string {
+  if (choice === 'other') return other.trim()
+  return choice
+}
+
+/**
+ * ช่องที่อยู่ที่ต้องครบก่อน "ยืนยัน" — ชุดเดียวที่ FE (ดอกจันบน `AddressFields`) และ BE
+ * (`missingFieldsForVerification()`) ใช้ร่วมกัน (มติ PO U94 ข้อ 1)
+ */
+export const PAYEE_REQUIRED_ADDRESS_FIELDS = [
+  'detail',
+  'postalCode',
+  'province',
+  'district',
+  'subdistrict',
+] as const
+
+/** ค่าตรง enum `wht_condition` ของ `02` §3 — เรียงตามช่อง "ผู้จ่ายเงิน" บนแบบ 50 ทวิ */
+export const WHT_CONDITIONS = ['withhold', 'pay_always', 'pay_once'] as const satisfies readonly WhtCondition[]
+
+export const WHT_CONDITION_LABEL: Readonly<Record<WhtCondition, string>> = {
+  withhold: '(1) หัก ณ ที่จ่าย',
+  pay_always: '(2) ออกให้ตลอดไป',
+  pay_once: '(3) ออกให้ครั้งเดียว',
+}
+
+/**
+ * ⚠️ ระบบคำนวณภาษีแบบ (1) หัก ณ ที่จ่ายเสมอ — (2)/(3) ผู้จ่ายออกภาษีให้ ⇒ ฐานภาษีต้องคำนวณแบบทบยอด
+ * (gross-up) ซึ่งเป็นงานของสำนักงานบัญชี (Hybrid Boundary) · ระบบรองรับแค่บันทึก + พิมพ์บนใบ 50 ทวิ
+ */
+export function whtConditionAffectsFormula(condition: WhtCondition): boolean {
+  return condition !== 'withhold'
+}
+
+/** ชื่อเต็มบนเอกสาร — บุคคลธรรมดาต่อคำนำหน้า (ถ้ามี) · นิติบุคคลใช้ชื่อตามจริง */
+export function payeeDisplayName(input: { name: string; nameTitle: string | null; payeeType: PayeeType }): string {
+  const title = (input.nameTitle ?? '').trim()
+  if (input.payeeType === 'corporate' || title === '') return input.name
+  return input.name.startsWith(title) ? input.name : `${title}${input.name}`
+}
+
+/** ที่อยู่ของผู้รับเป็นบรรทัดเดียว (สำหรับ snapshot ใบ 50 ทวิ / ไฟล์ส่งบัญชี) — ว่างทั้งชุด = `null` */
+export function payeeAddressLine(values: Pick<
+  PayeeValues,
+  'addressDetail' | 'addressSubdistrict' | 'addressDistrict' | 'addressProvince' | 'addressPostalCode'
+>): string | null {
+  return formatThaiAddressLine({
+    detail: values.addressDetail,
+    subdistrict: values.addressSubdistrict,
+    district: values.addressDistrict,
+    province: values.addressProvince,
+    postalCode: values.addressPostalCode,
+  })
 }
 
 /**
@@ -49,6 +135,15 @@ export const PAYEE_VERIFICATION_RESET_FIELDS = [
   'accountNumber',
   // อัตราหัก 40(2) กระทบยอดภาษีที่หักโดยตรง (มติ PO 05/10/2569 UAT U7)
   'wht402Pct',
+  // ข้อมูลผู้ถูกหักที่พิมพ์บนใบ 50 ทวิ (มติ PO U94 ข้อ 1) — แก้แล้วต้องมีคนตรวจซ้ำก่อนออกใบรอบถัดไป
+  'nameTitle',
+  'addressDetail',
+  'addressSubdistrict',
+  'addressDistrict',
+  'addressProvince',
+  'addressPostalCode',
+  'branchCode',
+  'whtCondition',
 ] as const satisfies readonly (keyof PayeeValues)[]
 
 export type PayeeVerificationResetField = (typeof PAYEE_VERIFICATION_RESET_FIELDS)[number]
@@ -77,6 +172,15 @@ export function normalizePayeeValues(values: PayeeValues): PayeeValues {
     accountNumber: normalizeAccountNumber(values.accountNumber),
     idDocumentUrl: trimOrNull(values.idDocumentUrl),
     wht402Pct: values.wht402Pct ?? null,
+    nameTitle: values.payeeType === 'corporate' ? null : trimOrNull(values.nameTitle),
+    addressDetail: trimOrNull(values.addressDetail),
+    addressSubdistrict: trimOrNull(values.addressSubdistrict),
+    addressDistrict: trimOrNull(values.addressDistrict),
+    addressProvince: trimOrNull(values.addressProvince),
+    addressPostalCode: trimOrNull(values.addressPostalCode),
+    // บุคคลธรรมดาไม่มีสาขา — เก็บเป็นสำนักงานใหญ่ให้คอลัมน์ NOT NULL และไม่พิมพ์บนเอกสาร
+    branchCode: values.payeeType === 'corporate' ? (trimOrNull(values.branchCode) ?? HEAD_OFFICE_BRANCH_CODE) : HEAD_OFFICE_BRANCH_CODE,
+    whtCondition: values.whtCondition,
   }
 }
 
@@ -138,13 +242,21 @@ export function checkBankAccountName(payeeName: string, accountName: string | nu
   return { matches: foldName(payeeName) === foldName(account), payeeName, accountName: account }
 }
 
-/** ฟิลด์ที่ต้องครบก่อนกด "ยืนยัน" (`18` §9 — พร้อมเข้ารอบจ่ายเงินของไฟล์ 17) */
-const REQUIRED_FOR_VERIFY = [
+/**
+ * ฟิลด์ที่ต้องครบก่อนกด "ยืนยัน" (`18` §9 — พร้อมเข้ารอบจ่ายเงินของไฟล์ 17)
+ * + ที่อยู่ผู้ถูกหักภาษีครบ 5 ช่อง (มติ PO U94 ข้อ 1 — ใบ 50 ทวิ ต้องมีที่อยู่ตาม ม.50 ทวิ)
+ */
+export const REQUIRED_FOR_VERIFY = [
   'taxProfileId',
   'nationalId',
   'bankName',
   'accountName',
   'accountNumber',
+  'addressDetail',
+  'addressSubdistrict',
+  'addressDistrict',
+  'addressProvince',
+  'addressPostalCode',
 ] as const satisfies readonly (keyof PayeeValues)[]
 
 export function missingFieldsForVerification(values: PayeeValues): string[] {
@@ -193,5 +305,13 @@ export function toPayeeAuditPayload(values: PayeeValues): Record<string, unknown
     account_number: normalized.accountNumber,
     id_document_url: normalized.idDocumentUrl,
     wht_40_2_pct: normalized.wht402Pct,
+    name_title: normalized.nameTitle,
+    address_detail: normalized.addressDetail,
+    address_subdistrict: normalized.addressSubdistrict,
+    address_district: normalized.addressDistrict,
+    address_province: normalized.addressProvince,
+    address_postal_code: normalized.addressPostalCode,
+    branch_code: normalized.branchCode,
+    wht_condition: normalized.whtCondition,
   }
 }

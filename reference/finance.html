@@ -1789,6 +1789,13 @@ function renderModal() {
       ${formInput('py_name','ชื่อ-นามสกุล / ชื่อบริษัท (ตามหน้าสมุดบัญชี)','','text','ตามหน้าสมุดบัญชีเท่านั้น',true)}
       ${formInput('py_tax','Tax ID (13 หลัก)','','text','x-xxxx-xxxxx-xx-x',true)}
       ${formSelect('py_taxprofile','Tax Profile (กำหนดอัตรา WHT)',store.finSettings.tax.map(t=>({val:t.id,text:`${t.name} (WHT ${t.whtRate}%)`})),store.finSettings.tax[0].id)}
+      ${formSelect('py_title','คำนำหน้าชื่อ (บุคคลธรรมดา)',[{val:'',text:'— ไม่ระบุ —'},{val:'นาย',text:'นาย'},{val:'นาง',text:'นาง'},{val:'นางสาว',text:'นางสาว'},{val:'other',text:'อื่น ๆ (ระบุ)'}],'')}
+      ${formSelect('py_branch','สำนักงานใหญ่ / สาขา (นิติบุคคล)',[{val:'head_office',text:'สำนักงานใหญ่'},{val:'branch',text:'สาขาที่ (เลข 5 หลัก)'}],'head_office')}
+      <div class="border-t border-slate-100 pt-3 space-y-3">
+        <h3 class="font-bold text-sm mb-2">ที่อยู่ผู้ถูกหักภาษี <span class="text-red-500">*</span> <span class="text-[10px] font-normal text-slate-500">พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่าย — ต้องครบก่อนยืนยัน</span></h3>
+        ${formInput('py_addr','บ้านเลขที่ / ถนน','','text','',true)}${formInput('py_zip','รหัสไปรษณีย์','','text','5 หลัก — เติมจังหวัด/อำเภอ/ตำบลให้',true)}${formInput('py_prov','จังหวัด','','text','',true)}${formInput('py_dist','อำเภอ/เขต','','text','',true)}${formInput('py_subdist','ตำบล/แขวง','','text','',true)}
+      </div>
+      ${formSelect('py_whtcond','เงื่อนไขการหักภาษี ณ ที่จ่าย',[{val:'withhold',text:'(1) หัก ณ ที่จ่าย'},{val:'pay_always',text:'(2) ออกให้ตลอดไป'},{val:'pay_once',text:'(3) ออกให้ครั้งเดียว'}],'withhold')}
       <div class="border-t border-slate-100 pt-3">
         <h3 class="font-bold text-sm text-slate-800 mb-3">ข้อมูลธนาคาร</h3>
         ${formSelect('py_bank','ธนาคาร',[{val:'ธนาคารกสิกรไทย',text:'ธนาคารกสิกรไทย'},{val:'ธนาคารไทยพาณิชย์',text:'ธนาคารไทยพาณิชย์'},{val:'ธนาคารกรุงไทย',text:'ธนาคารกรุงไทย'},{val:'ธนาคารกรุงเทพ',text:'ธนาคารกรุงเทพ'}],'ธนาคารกสิกรไทย')}

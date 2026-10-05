@@ -216,7 +216,7 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
   - `36` `reference`/`due_date` = **ไม่ implement** (ไม่มีคอลัมน์) ⇒ ตารางข้อซักถามแสดง "บันทึกเมื่อ" แทน Due Date และไม่มีการเตือนเลยกำหนด
 - **[default]**: เพิ่มคอลัมน์ 3 ชุด — (1) `expense_records.payee_name TEXT NOT NULL` (snapshot ตอน sync) (2) `expense_records.mapping_rule cost_center_mapping_rule NOT NULL DEFAULT 'manual'` + `teams.cost_center_id UUID REFERENCES cost_centers(id)` เพื่อให้ auto-mapping เกิดได้จริง (3) `accountant_questions.reference TEXT` + `due_date DATE` · **บล็อก**: ไม่บล็อก 4.4 (ส่งงานได้ตามที่ทำไปแล้ว) แต่กระทบ 4.6 ถ้า `04_Expenses.csv` ต้องมี payee/ประเภท/วันจ่ายแบบ snapshot และกระทบคุณค่าของไฟล์ 36 (ไม่มี due date = ตามงานไม่ได้) · **คำตอบ**:
 
-### ⬜ D15 — ไฟล์ 33/28 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.5 — ตระกูลเดียวกับ D13/D14)
+### ✅ D15 — ไฟล์ 33/28 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.5 — ตระกูลเดียวกับ D13/D14)
 - **ปัญหา**:
   - `28` §6.3 บังคับให้ใบ 50 ทวิ มี **ชื่อ/ที่อยู่/เลขประจำตัวผู้เสียภาษีของผู้ถูกหัก** ครบตามกฎหมาย แต่ `payee_profiles` (และ `users`) ใน `02` **ไม่มีคอลัมน์ที่อยู่** เลย · เลขผู้เสียภาษีใช้ `payee_profiles.national_id` (VARCHAR(13)) ซึ่งเป็นช่องเดียวที่มี — นิติบุคคลก็ต้องกรอกเลข 13 หลักลงช่องนี้
   - `33` §7.1 ระบุ `delivery_format` เป็นฟิลด์**บังคับต่อใบ** และมีคอลัมน์จริงใน `02` แต่ **ไม่มี endpoint ให้เลือก** (§14 มี 4 endpoint: list/cancel/summary/mark-filed) ⇒ ทุกใบใช้ค่า default `paper`
@@ -226,6 +226,7 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
   - `delivery_format` = ใช้ค่า default ของคอลัมน์ (`paper`) และแสดงบนใบ/ตาราง — ยังเลือกรายใบไม่ได้
   - ออกใบแทน = ธง `reissue` ใน body ของ `PATCH /:id/cancel` (default `false`) + เส้นทางอัตโนมัติเมื่อ sync รอบจ่ายเดิมซ้ำแล้วพบว่าใบเดิมถูกยกเลิก ⇒ ไม่เพิ่ม endpoint นอก `27` §6.12
 - **[default]**: เพิ่ม (1) `payee_profiles.address TEXT` + `tax_id VARCHAR(13)` แยกจาก `national_id` (นิติบุคคลใช้เลขผู้เสียภาษี ไม่ใช่เลขบัตร) (2) endpoint/ฟิลด์ให้เลือก `delivery_format` รายใบตอนออก/ก่อนส่ง · **บล็อก**: ไม่บล็อก 4.5 (ส่งงานได้ตามที่ทำไปแล้ว) แต่**กระทบความถูกต้องตามกฎหมายของใบ 50 ทวิ จริง** — ต้องถามนักบัญชี/PO ก่อนใช้งาน production · **คำตอบ**:
+- **✅ ปิดแล้ว — มติ PO 06/10/2569 (UAT U94 ข้อ 1 · U96 #4/#13)**: `payee_profiles` เพิ่มคำนำหน้า (`name_title`) · ที่อยู่ 5 ช่อง (`address_detail`/`address_subdistrict`/`address_district`/`address_province`/`address_postal_code` — โครงเดียวกับที่อยู่ของเคส · **บังคับครบก่อนยืนยันผู้รับ**) · สาขา (`branch_code` — นิติบุคคล) · เงื่อนไขการหัก (`wht_condition` (1)/(2)/(3) — บันทึก+พิมพ์ ไม่เปลี่ยนสูตร) · เลขผู้เสียภาษีของนิติบุคคล**ยังใช้ `national_id` ช่องเดียว** (ไม่แยก `tax_id` ตาม default เดิม — 13 หลักรูปแบบเดียวกัน แยกความหมายด้วย `payee_type`) · `wht_certificates` snapshot ผู้ถูกหัก/ผู้หัก 11 คอลัมน์ ณ วันออก (immutable) · PDF ตามแบบทางการ 2 ฉบับ · `05_WHT_Data.csv` คอลัมน์ต่อท้าย 4 ตัว (ไฟล์ 37 v2.12) · migration `20261006141000_payee_tax_address_wht_snapshot` · `delivery_format` รายใบ **ยังไม่ทำ** (นอกขอบเขตมติ U94 — คงค่า `paper`)
 
 ### ✅ D16 — `90` §6.3 มี 2 event ที่สคีมาปัจจุบันไม่มีที่ให้ emit (พบตอนรีวิว Phase 5)
 - **ปัญหา**:
