@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 05/10/2569 ~19:30 merge fixer AH `a6995ce` (U51 ห้ามส่ง/ล็อกงวดก่อนสิ้นเดือน · error `PERIOD_NOT_ENDED` · U53 F4 แยกค่าใช้จ่ายตามใบเสร็จ · U54 เตือน IMEI พิมพ์ผิด) · verify 308/4,064 · ⚠️ งวด ต.ค. UAT ล็อกไม่ได้จนถึง 01/11/2569 (รอมติ asOf dev) · รอบจ่ายเก่าก่อน U3 F4 คอลัมน์ใบเสร็จ = 0 (รอมติ)
 - 05/10/2569 ~18:30 session ใหม่: ถาม PO 4 ชุด + รีวิว O → มติ **U22–U46** · ลบ worktree เก่า 14 อัน (สะอาด merge แล้ว · U37) · merge fixer AB `1a87b28` (U26/U27) · AA `308320d` (U22–U24 คลังเฉพาะทีม/บริหาร export/IMEI ตัดตัวคั่น · seed +แถว `intake_asset` view) · AC `0356329` (U25/U29 แจ้งเตือน · event ใหม่ 4) · AD `d752c06` (U31/U33 · migration `20261005163300_wht_income_category_40_1`) · verify 308/4,047 · migration ใหม่รวม **16 ตัว** · ยังไม่ push (U36) · ค้าง: U30 (คืนเงินทดรอง) · U40/U41 (50 ทวิ ลูกค้า/เงินรอตรวจสอบ แบบเต็ม) · U44/U45 · รีวิว O ต่อ · ตรวจขอบเขตบัญชี (U42) เสร็จ รอผู้ใช้ตัดสิน
 - 05/10/2569 ~16:30 merge fixer X4 `536966a` (U18 `TAX_INVOICE_HAS_ACTIVE_NOTES` · U19 ใบเพิ่มหนี้ `note_type` migration `20261005150000` · U21 Export `09_Credit_Notes.csv` (pack 9 ไฟล์) + เตือนยอดไม่ตรง Adjustment) · verify 305/3,970 · migration ใหม่รวม **15 ตัว** · **มติ U18–U21 ทำครบ**
 - 05/10/2569 ~15:30 merge fixer X3 `07606e2` (portal หักใบลดหนี้ active ในยอดค้าง/AR/dashboard/กราฟ · หน้าใบกำกับแสดงใบลดหนี้ · กระจายในกราฟ: ผูก Adjustment หักตรงเคส ส่วนเหลือกระจายตามสัดส่วน) · verify 304/3,946 · **มติ U11–U17 ทำครบ**
