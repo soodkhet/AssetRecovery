@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 merge fixer BA `4d93262` (U95 ใบแจ้งหนี้/ใบวางบิล PDF ตอนวางบิล + ใบเสร็จรับเงิน/ใบกำกับภาษีตอนรับเงิน (`tax_invoice_doc_kind`) · U96 #3 no_vat บล็อก · #4 snapshot คู่ค้า · #7 วันที่เรียงเลข · #8 ใบแทน · #9 VAT ณ วันรับเงิน · #11 AR นิยามเดียวกับ portal · #12 · portal 16 endpoint · error ใหม่ 6) · migration `20261006160000_receipt_tax_invoice` (เปลี่ยนชื่อจาก 140000 กันชน) · verify 338/4,558 · migration ใหม่รวม **34 ตัว** · มติ O60–O63 · ⚠️ สคริปต์ UAT `uat/bin/r7v3/s11-12.mjs` + `uat/steps/R7.md` ใช้ API ใบกำกับแบบเดิม
 - 06/10/2569 merge fixer BD `cf703ab` (U96 #14 `receipt_in_company_name` + คอลัมน์ไฟล์ 03 · #18 F5 → อายุเงินทดรองคงค้าง · U97 `data_retention_settings` + job `purge_debtor_documents` + `manage_data_retention`) · migration `20261006140000` + `20261006150000` · regenerate 00_MAP · verify 336/4,532 · migration ใหม่รวม **33 ตัว** · มติ O58/O59 · รอ fixer BA (U95)
 - 06/10/2569 merge fixer BB `3b99b93` (ที่อยู่/คำนำหน้า/สาขา/เงื่อนไขการหักของผู้รับ · ปิด D15 · นิติบุคคล → ภ.ง.ด.53 ทุกโหมด · 50 ทวิ แบบทางการ 2 ฉบับ + snapshot · ไฟล์ 05 คอลัมน์ใหม่) · migration `20261006141000_payee_tax_address_wht_snapshot` · verify 333/4,504 · migration ใหม่รวม **31 ตัว** · มติ O55–O57 · Q18 นักบัญชี
 - 06/10/2569 ผู้ใช้ยอมรับ O54 · มติ U98: เล่น R14 รอบยืนยันหลัง U95 (หลัง merge BA/BB/BD/Export Pack U94)

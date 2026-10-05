@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (218 KB, 2445 บรรทัด — v4.38)
+### `docs/02-database-schema-design.md` (222 KB, 2474 บรรทัด — v4.39)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -127,28 +127,28 @@
 | 3 | # 02 — Database Schema Design (Full Production Schema) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 73 | ## 1. Summary |
-| 76 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
-| 78 | ### 2.1 Naming |
-| 88 | ### 2.2 Money |
-| 95 | ### 2.3 Timestamps |
-| 100 | ### 2.4 Common Columns (ทุก table มีครบ) |
-| 111 | ### 2.5 Permission Architecture |
-| 118 | ## 3. Enum Types (ทั้งหมด) |
-| 466 | ## 4. Schema Group A — Identity & Access |
-| 568 | ## 5. Schema Group B — Master Data |
-| 908 | ## 6. Schema Group C — Case Workflow |
-| 1284 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1372 | ## 8. Schema Group E — Finance Operation |
-| 1749 | ## 9. Schema Group F — Accounting Handover |
-| 2140 | ## 10. Schema Group G — Platform |
-| 2260 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 2335 | ## 12. Seed Data |
-| 2403 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 2424 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 2434 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 74 | ## 1. Summary |
+| 77 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
+| 79 | ### 2.1 Naming |
+| 89 | ### 2.2 Money |
+| 96 | ### 2.3 Timestamps |
+| 101 | ### 2.4 Common Columns (ทุก table มีครบ) |
+| 112 | ### 2.5 Permission Architecture |
+| 119 | ## 3. Enum Types (ทั้งหมด) |
+| 473 | ## 4. Schema Group A — Identity & Access |
+| 575 | ## 5. Schema Group B — Master Data |
+| 915 | ## 6. Schema Group C — Case Workflow |
+| 1291 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
+| 1379 | ## 8. Schema Group E — Finance Operation |
+| 1756 | ## 9. Schema Group F — Accounting Handover |
+| 2169 | ## 10. Schema Group G — Platform |
+| 2289 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 2364 | ## 12. Seed Data |
+| 2432 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 2453 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 2463 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/02_OPEN_DECISIONS.md` (69 KB, 300 บรรทัด)
+### `docs/02_OPEN_DECISIONS.md` (71 KB, 300 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -194,7 +194,7 @@
 | 188 | ### ✅ D10 — Google Maps ล่ม/quota หมดตอนปิดงาน + expense ยอด 0 + payout batch ว่าง |
 | 192 | ### ⬜ D11 — เลขรันนิ่งเอกสาร: กัน race + ขอบปี + receipt/50ทวิ ไม่มี format config |
 | 197 | ### ⬜ D12 — Advance เคลียร์บางส่วน / overdue ค้างข้ามงวด |
-| 200 | ### ⬜ D13 — ไฟล์ 31 §7 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.3) |
+| 200 | ### ✅ D13 — ไฟล์ 31 §7 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.3) — **ปิด... |
 | 208 | ### ⬜ D14 — ไฟล์ 32/36 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.4 — ตระกูล... |
 | 219 | ### ✅ D15 — ไฟล์ 33/28 มีฟิลด์ที่ `02` ไม่มีคอลัมน์รองรับ (พบตอน implement 4.5 — ตระกูล... |
 | 231 | ### ✅ D16 — `90` §6.3 มี 2 event ที่สคีมาปัจจุบันไม่มีที่ให้ emit (พบตอนรีวิว Phase 5) |
@@ -669,7 +669,7 @@
 | 191 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 199 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/19-revenue-billing-receivable.md` (36 KB, 240 บรรทัด — v2.6)
+### `docs/19-revenue-billing-receivable.md` (38 KB, 246 บรรทัด — v2.7)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -677,32 +677,32 @@
 | 3 | # 19 — Revenue, Billing & Receivable (รายได้ วางบิล และลูกหนี้การค้า) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 30 | ## 1. Summary |
-| 34 | ## 2. Purpose |
-| 38 | ## 3. In Scope |
-| 45 | ## 4. Out of Scope |
-| 51 | ## 5. Actors & Responsibilities |
-| 59 | ## 6. Core Concepts |
-| 61 | ### 6.1 Revenue Record (รายการรายได้) 🔑 Complex Trigger Logic |
-| 79 | ### 6.2 Billing Batch (รอบวางบิล) |
-| 89 | ### 6.3 VAT Handling 🔶 สำคัญมาก — อัตราอาจเปลี่ยนใน 3 เดือนข้างหน้า |
-| 105 | ### 6.4 AR Aging |
-| 109 | ## 7. Data Entities / Required Objects |
-| 111 | ### 7.1 Revenue |
-| 127 | ### 7.2 Billing Batch |
-| 140 | ## 8. UI / UX Rules |
-| 148 | ## 9. Workflow / Lifecycle |
-| 150 | ### 9.1 Revenue → Billing Batch |
-| 154 | ### 9.2 Billing Batch Payment Tracking |
-| 160 | ## 10. Security / Control Rules |
-| 165 | ## 11. Validation & Error Handling |
-| 174 | ## 12. Permission Requirements |
-| 182 | ## 13. Audit Log Requirements |
-| 187 | ## 14. API / Integration Draft |
-| 197 | ## 15. Acceptance Criteria |
-| 203 | ## 16. Test Cases |
-| 221 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 231 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 31 | ## 1. Summary |
+| 35 | ## 2. Purpose |
+| 39 | ## 3. In Scope |
+| 46 | ## 4. Out of Scope |
+| 52 | ## 5. Actors & Responsibilities |
+| 60 | ## 6. Core Concepts |
+| 62 | ### 6.1 Revenue Record (รายการรายได้) 🔑 Complex Trigger Logic |
+| 80 | ### 6.2 Billing Batch (รอบวางบิล) |
+| 90 | ### 6.3 VAT Handling 🔶 สำคัญมาก — อัตราอาจเปลี่ยนใน 3 เดือนข้างหน้า |
+| 106 | ### 6.4 AR Aging |
+| 112 | ## 7. Data Entities / Required Objects |
+| 114 | ### 7.1 Revenue |
+| 130 | ### 7.2 Billing Batch |
+| 143 | ## 8. UI / UX Rules |
+| 153 | ## 9. Workflow / Lifecycle |
+| 155 | ### 9.1 Revenue → Billing Batch |
+| 159 | ### 9.2 Billing Batch Payment Tracking |
+| 165 | ## 10. Security / Control Rules |
+| 170 | ## 11. Validation & Error Handling |
+| 179 | ## 12. Permission Requirements |
+| 187 | ## 13. Audit Log Requirements |
+| 192 | ## 14. API / Integration Draft |
+| 203 | ## 15. Acceptance Criteria |
+| 209 | ## 16. Test Cases |
+| 227 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 237 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/20-adjustment.md` (17 KB, 162 บรรทัด — v2.5)
 
@@ -734,7 +734,7 @@
 | 146 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 155 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/22-finance-calculation-spec.md` (46 KB, 369 บรรทัด — v3.13)
+### `docs/22-finance-calculation-spec.md` (50 KB, 390 บรรทัด — v3.14)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -742,33 +742,33 @@
 | 3 | # 22 — Finance Calculation Spec (สูตรคำนวณรวมทั้งระบบ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 39 | ## 1. Summary |
-| 43 | ## 2. Purpose |
-| 47 | ## 3. In Scope |
-| 51 | ## 4. Out of Scope |
-| 56 | ## 5. Actors & Responsibilities |
-| 60 | ## 6. สูตรคำนวณทั้งหมด |
-| 62 | ### 6.1 ค่าน้ำมัน (Fuel) — โหมด PER_KM (อ้างอิงไฟล์ 11, 41 §6.4.2) |
-| 74 | ### 6.2 ค่าน้ำมัน (Fuel) — โหมด DAILY_FLAT (อ้างอิงไฟล์ 11) — แก้ไขแล้ว (ดู Changelog v... |
-| 88 | ### 6.3 เบี้ยเลี้ยง (Allowance) — แก้ไขแล้ว (ดู Changelog v2, v3.4) |
-| 101 | ### 6.4 Commission / No-Success Fee (อ้างอิงไฟล์ 11) |
-| 111 | ### 6.5 รายได้จาก Service Fee — Model SUCCESS_FEE (อ้างอิงไฟล์ 12, 19) |
-| 123 | ### 6.6 รายได้จาก Service Fee — Model FLAT (อ้างอิงไฟล์ 12) |
-| 130 | ### 6.7 รายได้จาก Service Fee — Model HYBRID (อ้างอิงไฟล์ 12) |
-| 144 | ### 6.8 VAT (อ้างอิงไฟล์ 13 §6.5, 19 §6.3) |
-| 186 | ### 6.9 ภาษีหัก ณ ที่จ่าย (WHT) (อ้างอิงไฟล์ 13 §6.4, 17, 18) |
-| 259 | ### 6.10 ยอด Payout Batch รวม (อ้างอิงไฟล์ 17) |
-| 269 | ### 6.11 AR คงค้าง (อ้างอิงไฟล์ 19 §6.4) |
-| 275 | ### 6.12 กำไรขั้นต้น (Gross Profit) — ไฟล์ 21 (Actual เท่านั้น ไม่ใช่ projection) |
-| 285 | ### 6.13 เงินทดรองจ่าย — ยอดคืน (อ้างอิงไฟล์ 15) — แก้ไขแล้ว (มติ PO 03/10/2569 — UAT Q3) |
-| 305 | ### 6.14 เงินทดรองจ่าย — ยอดคืนค้าง + หักกลบในรอบจ่าย (อ้างอิงไฟล์ 15 §9.3, 17 §6.4) — ... |
-| 325 | ### 6.15 เพดานค่าที่พักต่อคืน (อ้างอิงไฟล์ 11, 41 §6.6) — มติ PO 06/10/2569 (U89) |
-| 342 | ## 7. Data Entities / Required Objects |
-| 346 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 352 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 362 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 40 | ## 1. Summary |
+| 44 | ## 2. Purpose |
+| 48 | ## 3. In Scope |
+| 52 | ## 4. Out of Scope |
+| 57 | ## 5. Actors & Responsibilities |
+| 61 | ## 6. สูตรคำนวณทั้งหมด |
+| 63 | ### 6.1 ค่าน้ำมัน (Fuel) — โหมด PER_KM (อ้างอิงไฟล์ 11, 41 §6.4.2) |
+| 75 | ### 6.2 ค่าน้ำมัน (Fuel) — โหมด DAILY_FLAT (อ้างอิงไฟล์ 11) — แก้ไขแล้ว (ดู Changelog v... |
+| 89 | ### 6.3 เบี้ยเลี้ยง (Allowance) — แก้ไขแล้ว (ดู Changelog v2, v3.4) |
+| 102 | ### 6.4 Commission / No-Success Fee (อ้างอิงไฟล์ 11) |
+| 112 | ### 6.5 รายได้จาก Service Fee — Model SUCCESS_FEE (อ้างอิงไฟล์ 12, 19) |
+| 124 | ### 6.6 รายได้จาก Service Fee — Model FLAT (อ้างอิงไฟล์ 12) |
+| 131 | ### 6.7 รายได้จาก Service Fee — Model HYBRID (อ้างอิงไฟล์ 12) |
+| 145 | ### 6.8 VAT (อ้างอิงไฟล์ 13 §6.5, 19 §6.3) |
+| 207 | ### 6.9 ภาษีหัก ณ ที่จ่าย (WHT) (อ้างอิงไฟล์ 13 §6.4, 17, 18) |
+| 280 | ### 6.10 ยอด Payout Batch รวม (อ้างอิงไฟล์ 17) |
+| 290 | ### 6.11 AR คงค้าง (อ้างอิงไฟล์ 19 §6.4) |
+| 296 | ### 6.12 กำไรขั้นต้น (Gross Profit) — ไฟล์ 21 (Actual เท่านั้น ไม่ใช่ projection) |
+| 306 | ### 6.13 เงินทดรองจ่าย — ยอดคืน (อ้างอิงไฟล์ 15) — แก้ไขแล้ว (มติ PO 03/10/2569 — UAT Q3) |
+| 326 | ### 6.14 เงินทดรองจ่าย — ยอดคืนค้าง + หักกลบในรอบจ่าย (อ้างอิงไฟล์ 15 §9.3, 17 §6.4) — ... |
+| 346 | ### 6.15 เพดานค่าที่พักต่อคืน (อ้างอิงไฟล์ 11, 41 §6.6) — มติ PO 06/10/2569 (U89) |
+| 363 | ## 7. Data Entities / Required Objects |
+| 367 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 373 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 383 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/23-finance-state-machines.md` (24 KB, 247 บรรทัด — v2.6)
+### `docs/23-finance-state-machines.md` (26 KB, 251 บรรทัด — v2.7)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -776,32 +776,32 @@
 | 3 | # 23 — Finance State Machines (สถานะรวมทุก Entity) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 29 | ## 1. Summary |
-| 33 | ## 2. Purpose |
-| 37 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 41 | ## 6. State Machines ทั้งหมด |
-| 43 | ### 6.1 Finance Company (ไฟล์ 10) |
-| 49 | ### 6.2 Payee Profile (ไฟล์ 18) |
-| 58 | ### 6.3 Expense / Claim (ไฟล์ 15, 41 §6.6 — entity เดียวกัน enum เดียวกัน) — แก้ไขแล้ว |
-| 71 | ### 6.4 Advance — เงินทดรองจ่าย (ไฟล์ 15) — แก้ไขแล้ว (5 สถานะ) |
-| 86 | ### 6.5 Compensation Approval — Multi-step (ไฟล์ 16, ผูกกับ §6.3 ด้านบน) |
-| 95 | ### 6.6 Payout Batch (ไฟล์ 17) — เติม `draft` แล้ว |
-| 106 | ### 6.7 Revenue (ไฟล์ 19) |
-| 114 | ### 6.8 Billing Batch (ไฟล์ 19) |
-| 121 | ### 6.9 Adjustment (ไฟล์ 20) |
-| 128 | ### 6.10 Tax Invoice (ไฟล์ 31) — แก้ไขแล้ว ✅ |
-| 136 | ### 6.11 WHT Filing Period Summary (ไฟล์ 33) |
-| 144 | ### 6.12 Exception (ไฟล์ 34) — แก้ไขแล้ว ✅ |
-| 153 | ### 6.13 Accounting Period — Period Lock Policy (ไฟล์ 13 §6.11, ไฟล์ 30) — **state แม่ท... |
-| 165 | ### 6.14 Bank Transaction (ไฟล์ 35) — แก้ไขแล้ว ✅ |
-| 189 | ### 6.15 Accountant Question (ไฟล์ 36) — ตรวจสอบแล้ว ✅ |
-| 197 | ### 6.16 Export Record (ไฟล์ 37) — แก้ไขแล้ว ✅ |
-| 209 | ## 7. ความสัมพันธ์ระหว่าง State Machines (Cross-Entity Flow) |
-| 227 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 233 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 240 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 30 | ## 1. Summary |
+| 34 | ## 2. Purpose |
+| 38 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 42 | ## 6. State Machines ทั้งหมด |
+| 44 | ### 6.1 Finance Company (ไฟล์ 10) |
+| 50 | ### 6.2 Payee Profile (ไฟล์ 18) |
+| 59 | ### 6.3 Expense / Claim (ไฟล์ 15, 41 §6.6 — entity เดียวกัน enum เดียวกัน) — แก้ไขแล้ว |
+| 72 | ### 6.4 Advance — เงินทดรองจ่าย (ไฟล์ 15) — แก้ไขแล้ว (5 สถานะ) |
+| 87 | ### 6.5 Compensation Approval — Multi-step (ไฟล์ 16, ผูกกับ §6.3 ด้านบน) |
+| 96 | ### 6.6 Payout Batch (ไฟล์ 17) — เติม `draft` แล้ว |
+| 107 | ### 6.7 Revenue (ไฟล์ 19) |
+| 115 | ### 6.8 Billing Batch (ไฟล์ 19) |
+| 122 | ### 6.9 Adjustment (ไฟล์ 20) |
+| 129 | ### 6.10 Tax Invoice (ไฟล์ 31) — แก้ไขแล้ว ✅ |
+| 139 | ### 6.11 WHT Filing Period Summary (ไฟล์ 33) |
+| 147 | ### 6.12 Exception (ไฟล์ 34) — แก้ไขแล้ว ✅ |
+| 156 | ### 6.13 Accounting Period — Period Lock Policy (ไฟล์ 13 §6.11, ไฟล์ 30) — **state แม่ท... |
+| 168 | ### 6.14 Bank Transaction (ไฟล์ 35) — แก้ไขแล้ว ✅ |
+| 192 | ### 6.15 Accountant Question (ไฟล์ 36) — ตรวจสอบแล้ว ✅ |
+| 200 | ### 6.16 Export Record (ไฟล์ 37) — แก้ไขแล้ว ✅ |
+| 212 | ## 7. ความสัมพันธ์ระหว่าง State Machines (Cross-Entity Flow) |
+| 231 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 237 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 244 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/24-finance-validation-rules.md` (84 KB, 332 บรรทัด — v4.33)
+### `docs/24-finance-validation-rules.md` (88 KB, 339 บรรทัด — v4.34)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -809,26 +809,26 @@
 | 3 | # 24 — Finance Validation Rules (กฎตรวจสอบรวมทั้งระบบ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 67 | ## 1. Summary |
-| 71 | ## 2. Purpose |
-| 75 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 79 | ## 6. Validation Rules แยกตามหมวด |
-| 81 | ### 6.1 หมวดข้อมูลพื้นฐาน (Master Data — ไฟล์ 08, 09, 10, 11, 12, 18) |
-| 121 | ### 6.2 หมวดภาษี/VAT (ไฟล์ 13, 19) |
-| 134 | ### 6.3 หมวดธนาคาร/ไฟล์ (ไฟล์ 13, 17, 35) |
-| 159 | ### 6.4 หมวด Claim/Advance/Approval (ไฟล์ 15, 16) — แก้ไขแล้ว |
-| 174 | ### 6.5 หมวด Payout/Payee (ไฟล์ 17, 18) |
-| 191 | ### 6.6 หมวด Revenue/Billing (ไฟล์ 19) |
-| 200 | ### 6.7 หมวด Adjustment / Period Lock (ไฟล์ 13, 20, 30) |
-| 218 | ### 6.8 หมวดเอกสารทางการ/บัญชี (ไฟล์ 31, 32, 34) |
-| 258 | ### 6.9 หมวด Auth & Access Control (ไฟล์ 05, 07, 08) |
-| 282 | ### 6.10 หมวด Audit (Platform — ไฟล์ 90) |
-| 290 | ### 6.11 หมวด Background Job (Platform — ไฟล์ 91) |
-| 301 | ### 6.12 หมวดรายงาน (Platform — ไฟล์ 96) |
-| 310 | ## 7. Validation Code Naming Convention |
-| 314 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 320 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 325 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 68 | ## 1. Summary |
+| 72 | ## 2. Purpose |
+| 76 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 80 | ## 6. Validation Rules แยกตามหมวด |
+| 82 | ### 6.1 หมวดข้อมูลพื้นฐาน (Master Data — ไฟล์ 08, 09, 10, 11, 12, 18) |
+| 122 | ### 6.2 หมวดภาษี/VAT (ไฟล์ 13, 19) |
+| 135 | ### 6.3 หมวดธนาคาร/ไฟล์ (ไฟล์ 13, 17, 35) |
+| 160 | ### 6.4 หมวด Claim/Advance/Approval (ไฟล์ 15, 16) — แก้ไขแล้ว |
+| 175 | ### 6.5 หมวด Payout/Payee (ไฟล์ 17, 18) |
+| 192 | ### 6.6 หมวด Revenue/Billing (ไฟล์ 19) |
+| 201 | ### 6.7 หมวด Adjustment / Period Lock (ไฟล์ 13, 20, 30) |
+| 219 | ### 6.8 หมวดเอกสารทางการ/บัญชี (ไฟล์ 31, 32, 34) |
+| 265 | ### 6.9 หมวด Auth & Access Control (ไฟล์ 05, 07, 08) |
+| 289 | ### 6.10 หมวด Audit (Platform — ไฟล์ 90) |
+| 297 | ### 6.11 หมวด Background Job (Platform — ไฟล์ 91) |
+| 308 | ### 6.12 หมวดรายงาน (Platform — ไฟล์ 96) |
+| 317 | ## 7. Validation Code Naming Convention |
+| 321 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 327 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 332 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/25-finance-permission-matrix.md` (30 KB, 219 บรรทัด — v2.12)
 
@@ -912,7 +912,7 @@
 | 100 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 106 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/30-accounting-handover-monthly-close.md` (23 KB, 185 บรรทัด — v2.5)
+### `docs/30-accounting-handover-monthly-close.md` (24 KB, 187 บรรทัด — v2.6)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -920,30 +920,30 @@
 | 3 | # 30 — Accounting Handover & Monthly Close (ปิดงวดบัญชีรายเดือน) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 28 | ## 1. Summary |
-| 32 | ## 2. Purpose |
-| 36 | ## 3. In Scope |
-| 42 | ## 4. Out of Scope |
-| 48 | ## 5. Actors & Responsibilities |
-| 55 | ## 6. Core Concepts |
-| 57 | ### 6.1 Accounting Period State Machine |
-| 65 | ### 6.2 ความพร้อมก่อนปิดงวด (Readiness Check) |
-| 76 | ### 6.2a ส่ง/ล็อกได้เมื่องวดสิ้นเดือนแล้วเท่านั้น (มติ PO U51) |
-| 84 | ## 7. Data Entities / Required Objects |
-| 86 | ### 7.1 Accounting Period |
-| 98 | ## 8. UI / UX Rules |
-| 106 | ## 9. Workflow / Lifecycle |
-| 112 | ## 10. Security / Control Rules |
-| 117 | ## 11. Validation & Error Handling |
-| 127 | ## 12. Permission Requirements |
-| 135 | ## 13. Audit Log Requirements |
-| 140 | ## 14. API / Integration Draft |
-| 150 | ## 15. Acceptance Criteria |
-| 156 | ## 16. Test Cases |
-| 171 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 178 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 29 | ## 1. Summary |
+| 33 | ## 2. Purpose |
+| 37 | ## 3. In Scope |
+| 43 | ## 4. Out of Scope |
+| 49 | ## 5. Actors & Responsibilities |
+| 56 | ## 6. Core Concepts |
+| 58 | ### 6.1 Accounting Period State Machine |
+| 66 | ### 6.2 ความพร้อมก่อนปิดงวด (Readiness Check) |
+| 78 | ### 6.2a ส่ง/ล็อกได้เมื่องวดสิ้นเดือนแล้วเท่านั้น (มติ PO U51) |
+| 86 | ## 7. Data Entities / Required Objects |
+| 88 | ### 7.1 Accounting Period |
+| 100 | ## 8. UI / UX Rules |
+| 108 | ## 9. Workflow / Lifecycle |
+| 114 | ## 10. Security / Control Rules |
+| 119 | ## 11. Validation & Error Handling |
+| 129 | ## 12. Permission Requirements |
+| 137 | ## 13. Audit Log Requirements |
+| 142 | ## 14. API / Integration Draft |
+| 152 | ## 15. Acceptance Criteria |
+| 158 | ## 16. Test Cases |
+| 173 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 180 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/31-accounting-sales-and-receipts.md` (45 KB, 278 บรรทัด — v3.4)
+### `docs/31-accounting-sales-and-receipts.md` (64 KB, 325 บรรทัด — v4.0)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -951,36 +951,37 @@
 | 3 | # 31 — Accounting: Sales and Receipts (บัญชีขายและเงินรับ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 29 | ## 1. Summary |
-| 33 | ## 2. Purpose |
-| 37 | ## 3. In Scope |
-| 45 | ## 4. Out of Scope |
-| 51 | ## 5. Actors & Responsibilities |
-| 58 | ## 6. Core Concepts |
-| 60 | ### 6.1 Sales Record (รายการขาย — มุมมองบัญชี) |
-| 64 | ### 6.2 Tax Invoice (ใบกำกับภาษี) 🔶 มีข้อกำหนดทางกฎหมายเข้มงวด — ต้องให้นักบัญชียืนยันก... |
-| 76 | ### 6.3 Cash Receipt (เงินรับจริง) |
-| 82 | ### 6.4 Receipt (ใบเสร็จรับเงิน) |
-| 86 | ### 6.5 Credit Note (ใบลดหนี้ — มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชี... |
-| 97 | ### 6.6 50 ทวิ ที่ลูกค้าหักเรา (มติ PO 05/10/2569 U40 — แบบเต็ม) |
-| 108 | ## 7. Data Entities / Required Objects |
-| 110 | ### 7.1 Sales Record |
-| 120 | ### 7.2 Tax Invoice (แก้ไข status แล้ว — ดู Changelog v2) |
-| 138 | ### 7.3 Cash Receipt |
-| 149 | ### 7.4 Credit Note (มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก)) |
-| 166 | ## 8. UI / UX Rules |
-| 174 | ## 9. Workflow / Lifecycle |
-| 176 | ### 9.1 Tax Invoice (แก้ไขแล้ว) |
-| 182 | ### 9.2 Cash Receipt |
-| 186 | ## 10. Security / Control Rules |
-| 192 | ## 11. Validation & Error Handling |
-| 207 | ## 12. Permission Requirements |
-| 215 | ## 13. Audit Log Requirements |
-| 221 | ## 14. API / Integration Draft |
-| 234 | ## 15. Acceptance Criteria |
-| 240 | ## 16. Test Cases |
-| 263 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 270 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 30 | ## 1. Summary |
+| 34 | ## 2. Purpose |
+| 38 | ## 3. In Scope |
+| 46 | ## 4. Out of Scope |
+| 52 | ## 5. Actors & Responsibilities |
+| 59 | ## 6. Core Concepts |
+| 61 | ### 6.1 Sales Record (รายการขาย — มุมมองบัญชี) |
+| 65 | ### 6.1.1 ใบแจ้งหนี้/ใบวางบิล (มติ PO 06/10/2569 U95 · U96 #12) |
+| 71 | ### 6.2 ใบเสร็จรับเงิน/ใบกำกับภาษี (Tax Invoice) 🔶 มีข้อกำหนดทางกฎหมายเข้มงวด — ต้องให้... |
+| 101 | ### 6.3 Cash Receipt (เงินรับจริง) |
+| 107 | ### 6.4 Receipt (ใบเสร็จรับเงิน) |
+| 111 | ### 6.5 Credit Note (ใบลดหนี้ — มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชี... |
+| 122 | ### 6.6 50 ทวิ ที่ลูกค้าหักเรา (มติ PO 05/10/2569 U40 — แบบเต็ม) |
+| 133 | ## 7. Data Entities / Required Objects |
+| 135 | ### 7.1 Sales Record |
+| 145 | ### 7.2 Tax Invoice (แก้ไข status แล้ว — ดู Changelog v2) |
+| 166 | ### 7.3 Cash Receipt |
+| 177 | ### 7.4 Credit Note (มติ PO 05/10/2569 (U14 — บันทึกใบลดหนี้ที่สำนักงานบัญชีออก)) |
+| 194 | ## 8. UI / UX Rules |
+| 203 | ## 9. Workflow / Lifecycle |
+| 205 | ### 9.1 Tax Invoice (แก้ไขแล้ว) |
+| 211 | ### 9.2 Cash Receipt |
+| 215 | ## 10. Security / Control Rules |
+| 221 | ## 11. Validation & Error Handling |
+| 241 | ## 12. Permission Requirements |
+| 249 | ## 13. Audit Log Requirements |
+| 255 | ## 14. API / Integration Draft |
+| 270 | ## 15. Acceptance Criteria |
+| 276 | ## 16. Test Cases |
+| 309 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 317 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/33-accounting-wht-data.md` (37 KB, 217 บรรทัด — v3.7)
 
@@ -1079,7 +1080,7 @@
 | 172 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 179 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/37-accounting-pack-export-history.md` (34 KB, 187 บรรทัด — v2.13)
+### `docs/37-accounting-pack-export-history.md` (36 KB, 188 บรรทัด — v2.14)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1087,27 +1088,27 @@
 | 3 | # 37 — Accounting Pack Export History (ประวัติส่งมอบบัญชี) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 36 | ## 1. Summary |
-| 40 | ## 2. Purpose |
-| 44 | ## 3. In Scope |
-| 50 | ## 4. Out of Scope |
-| 55 | ## 5. Actors & Responsibilities |
-| 61 | ## 6. Core Concepts |
-| 63 | ### 6.1 รายชื่อไฟล์มาตรฐานใน Accounting Pack (เรียงเลขต่อเนื่อง พร้อม Adjustment Log) |
-| 84 | ### 6.2 Version Control |
-| 88 | ## 7. Data Entities / Required Objects |
-| 90 | ### 7.1 Export Record (แก้ไข status แล้ว — ดู Changelog v2) |
-| 104 | ## 8. UI / UX Rules |
-| 113 | ## 9. Workflow / Lifecycle |
-| 119 | ## 10. Security / Control Rules |
-| 124 | ## 11. Validation & Error Handling |
-| 130 | ## 12. Permission Requirements |
-| 137 | ## 13. Audit Log Requirements |
-| 142 | ## 14. API / Integration Draft |
-| 151 | ## 15. Acceptance Criteria |
-| 158 | ## 16. Test Cases |
-| 173 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 180 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 37 | ## 1. Summary |
+| 41 | ## 2. Purpose |
+| 45 | ## 3. In Scope |
+| 51 | ## 4. Out of Scope |
+| 56 | ## 5. Actors & Responsibilities |
+| 62 | ## 6. Core Concepts |
+| 64 | ### 6.1 รายชื่อไฟล์มาตรฐานใน Accounting Pack (เรียงเลขต่อเนื่อง พร้อม Adjustment Log) |
+| 85 | ### 6.2 Version Control |
+| 89 | ## 7. Data Entities / Required Objects |
+| 91 | ### 7.1 Export Record (แก้ไข status แล้ว — ดู Changelog v2) |
+| 105 | ## 8. UI / UX Rules |
+| 114 | ## 9. Workflow / Lifecycle |
+| 120 | ## 10. Security / Control Rules |
+| 125 | ## 11. Validation & Error Handling |
+| 131 | ## 12. Permission Requirements |
+| 138 | ## 13. Audit Log Requirements |
+| 143 | ## 14. API / Integration Draft |
+| 152 | ## 15. Acceptance Criteria |
+| 159 | ## 16. Test Cases |
+| 174 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 181 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/38-case-submission.md` (115 KB, 530 บรรทัด — v3.7)
 
@@ -1512,7 +1513,7 @@
 | 481 | ## 15. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 488 | ## 16. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/97-client-portal.md` (75 KB, 356 บรรทัด — v5.9)
+### `docs/97-client-portal.md` (77 KB, 358 บรรทัด — v6.0)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1520,41 +1521,41 @@
 | 3 | # 97 — Client Portal (พอร์ทัลบริษัทไฟแนนซ์) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 37 | ## 1. Summary |
-| 40 | ## 2. Purpose |
-| 43 | ## 3. Scope |
-| 45 | ### 3.1 In Scope |
-| 54 | ### 3.2 Out of Scope (ยืนยันถาวร — ไม่ใช่ Open Item) |
-| 60 | ### 3.3 รอการตัดสินใจ (ดู §22) |
-| 76 | ## 4. Actors & Responsibilities |
-| 88 | ## 5. Menu & Navigation |
-| 107 | ## 6. Data Requirements |
-| 109 | ### 6.1 เคสของเรา (จากไฟล์ 38) |
-| 123 | ### 6.2 รอบวางบิล / AR (จากไฟล์ 19) |
-| 138 | ### 6.3 ใบกำกับภาษี (จากไฟล์ 31) |
-| 141 | ### 6.4 ใบส่งมอบทรัพย์ (จากไฟล์ 44) |
-| 150 | ### 6.5 รายงานสรุป |
-| 154 | ### 6.6 ข้อมูลบริษัท (read-only) |
-| 159 | ## 7. UI Requirements |
-| 166 | ## 8. Actions & Buttons |
-| 179 | ## 9. Workflow |
-| 187 | ## 10. Status / State Machine |
-| 189 | ### 10.1 Case Status Mapping (ใหม่ — เฉพาะพอร์ทัลนี้ ไม่ใช่ state machine ใหม่ แค่ labe... |
-| 202 | ### 10.2 HandoverLot Status Mapping |
-| 209 | ### 10.3 Tax Invoice / Billing Batch |
-| 212 | ## 11. Business Rules |
-| 223 | ## 12. Validation & Error Handling |
-| 232 | ## 13. Permissions |
-| 246 | ### 13.1 ดู portal ในฐานะลูกค้า (ผู้ใช้ภายใน — มติ PO 05/10/2569 U59) |
-| 261 | ## 14. Audit Log |
-| 268 | ## 15. Notifications |
-| 271 | ## 16. Integration Points |
-| 274 | ## 17. API / Event Contract Draft |
-| 306 | ## 18. Export / Document Requirements |
-| 312 | ## 19. Acceptance Criteria |
-| 320 | ## 20. Test Cases |
-| 334 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions — ยืนยันในรอบสนทนานี้ 03/07/2569) |
-| 345 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 38 | ## 1. Summary |
+| 41 | ## 2. Purpose |
+| 44 | ## 3. Scope |
+| 46 | ### 3.1 In Scope |
+| 55 | ### 3.2 Out of Scope (ยืนยันถาวร — ไม่ใช่ Open Item) |
+| 61 | ### 3.3 รอการตัดสินใจ (ดู §22) |
+| 77 | ## 4. Actors & Responsibilities |
+| 89 | ## 5. Menu & Navigation |
+| 108 | ## 6. Data Requirements |
+| 110 | ### 6.1 เคสของเรา (จากไฟล์ 38) |
+| 124 | ### 6.2 รอบวางบิล / AR (จากไฟล์ 19) |
+| 139 | ### 6.3 ใบกำกับภาษี (จากไฟล์ 31) |
+| 142 | ### 6.4 ใบส่งมอบทรัพย์ (จากไฟล์ 44) |
+| 151 | ### 6.5 รายงานสรุป |
+| 155 | ### 6.6 ข้อมูลบริษัท (read-only) |
+| 160 | ## 7. UI Requirements |
+| 167 | ## 8. Actions & Buttons |
+| 180 | ## 9. Workflow |
+| 188 | ## 10. Status / State Machine |
+| 190 | ### 10.1 Case Status Mapping (ใหม่ — เฉพาะพอร์ทัลนี้ ไม่ใช่ state machine ใหม่ แค่ labe... |
+| 203 | ### 10.2 HandoverLot Status Mapping |
+| 210 | ### 10.3 Tax Invoice / Billing Batch |
+| 213 | ## 11. Business Rules |
+| 224 | ## 12. Validation & Error Handling |
+| 233 | ## 13. Permissions |
+| 247 | ### 13.1 ดู portal ในฐานะลูกค้า (ผู้ใช้ภายใน — มติ PO 05/10/2569 U59) |
+| 262 | ## 14. Audit Log |
+| 269 | ## 15. Notifications |
+| 272 | ## 16. Integration Points |
+| 275 | ## 17. API / Event Contract Draft |
+| 308 | ## 18. Export / Document Requirements |
+| 314 | ## 19. Acceptance Criteria |
+| 322 | ## 20. Test Cases |
+| 336 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions — ยืนยันในรอบสนทนานี้ 03/07/2569) |
+| 347 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/DECISIONS-NEEDED-BATCH6.md` (19 KB, 263 บรรทัด)
 
@@ -1886,14 +1887,14 @@
 | 249 | ### 🟡 รอ Product Owner (ดู `DECISIONS-NEEDED.md`) |
 | 254 | ### 🟢 เฟส 2 (ออกแบบแล้ว ยังไม่ implement) |
 
-### `docs/REUSE_INDEX.md` (393 KB, 620 บรรทัด)
+### `docs/REUSE_INDEX.md` (395 KB, 623 บรรทัด)
 
 | บรรทัด | หัวข้อ |
 |---|---|
 | 1 | # REUSE_INDEX.md — ของที่มีแล้ว / แม่แบบ / กับดัก (เช็คก่อนเขียนโค้ดใหม่ทุกครั้ง) |
 | 5 | ## Shared Components (Frontend) |
 | 82 | ## Shared Services / Utils (Backend) |
-| 534 | ## กับดัก (Lessons Learned) |
+| 537 | ## กับดัก (Lessons Learned) |
 
 ### `docs/implementation-todo.md` (16 KB, 184 บรรทัด)
 
@@ -2266,7 +2267,7 @@
 | 658 | `renderToastEl` |
 | 666 | `render` |
 
-### `reference/97-client-portal-mockup.html` (61 KB, 699 บรรทัด)
+### `reference/97-client-portal-mockup.html` (62 KB, 699 บรรทัด)
 
 | บรรทัด | function |
 |---|---|
@@ -2299,7 +2300,7 @@
 | 668 | `renderToast` |
 | 676 | `render` |
 
-### `reference/accounting.html` (138 KB, 1743 บรรทัด)
+### `reference/accounting.html` (139 KB, 1746 บรรทัด)
 
 | บรรทัด | function |
 |---|---|
@@ -2320,9 +2321,9 @@
 | 245 | `formTextarea` |
 | 250 | `renderTopNav` |
 | 280 | `renderAccountingOperations` |
-| 852 | `renderModal` |
-| 1666 | `renderToast` |
-| 1681 | `render` |
+| 855 | `renderModal` |
+| 1669 | `renderToast` |
+| 1684 | `render` |
 
 ### `reference/app-shell.html` (18 KB, 335 บรรทัด)
 
