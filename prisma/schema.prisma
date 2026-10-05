@@ -2190,6 +2190,9 @@ model Expense {
 
   /// ผู้พักร่วมห้องของรายการเบิกที่พัก (`41` §6.6) — ต้องเป็นคนในทีมเดียวกันเท่านั้น (validate ฝั่ง BE)
   sharedWithUserId      String? @map("shared_with_user_id") @db.Uuid
+  /// จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50 · `02` v4.34) — เพดาน = อัตรา/คืน × จำนวนคืน (`22` §6.15)
+  /// รายการชนิดอื่น = 1 เสมอ · CHECK 1–31 และ ≠ 1 ได้เฉพาะ `hotel` อยู่ใน raw SQL migration
+  hotelNights           Int     @default(1) @map("hotel_nights")
   /// ใบเสร็จของรายการเบิกแยก (`41` §6.6 — บังคับสำหรับที่พัก)
   receiptFileUrl        String? @map("receipt_file_url")
   /// SHA-256 ของใบเสร็จที่ server ดาวน์โหลดมาตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — UAT BUG-072 · `02` v4.10)

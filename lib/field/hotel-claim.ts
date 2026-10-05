@@ -1,11 +1,11 @@
 import { FieldError } from '@/lib/field/errors'
-import { bahtInputError, fmtSatang, parseBahtInput } from '@/lib/format/money'
+import { bahtInputError, fmtSatang, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 
 /**
  * เบิกที่พัก — กลุ่ม "เบิกแยก" ของ `41` §6.6 · §11 · §12 — **pure ล้วน ใช้ร่วม FE/BE**
  *
  * - ที่พัก **ไม่ผูกกับเคสเดียว** เพราะใบเสร็จ 1 ใบครอบหลายวัน/หลายเคสได้ (`41` §11)
- * - `matched_case_ids` = auto-mapping กับเคสที่ `schedule_date` ตรงกับวันที่เบิก — **ใช้ตรวจสอบเท่านั้น
+ * - `matched_case_ids` = auto-mapping กับเคสที่ `schedule_date` อยู่ในช่วงวันที่พัก (`hotelStayDateKeys()`) — **ใช้ตรวจสอบเท่านั้น
  *   ไม่มีผลต่อยอดเงิน** (`41` §6.6) ⇒ ที่นี่ไม่มีสูตรคิดเงินจาก matched cases เด็ดขาด
  * - ผู้พักร่วมเลือกได้เฉพาะคนในทีมเดียวกัน — dropdown กรองให้แล้ว แต่ **validate ซ้ำฝั่ง BE** (`41` §12)
  */
@@ -47,13 +47,66 @@ export function assertSharedAgentInTeam(
   }
 }
 
+// ── จำนวนคืน (มติ PO O50 · `41` §6.6 · `22` §6.15) ──────────────────────────────
+
+/** จำนวนคืนต่อใบเบิก — ไม่บังคับกรอก (ว่าง = 1) · จำนวนเต็ม 1–31 · DB CHECK ช่วงเดียวกัน */
+export const HOTEL_NIGHTS_DEFAULT = 1
+export const HOTEL_NIGHTS_MIN = 1
+export const HOTEL_NIGHTS_MAX = 31
+
+export const HOTEL_NIGHTS_RANGE_MESSAGE = `จำนวนคืนต้องเป็นจำนวนเต็ม ${HOTEL_NIGHTS_MIN}–${HOTEL_NIGHTS_MAX}`
+
+export function isValidHotelNights(nights: number): boolean {
+  return Number.isInteger(nights) && nights >= HOTEL_NIGHTS_MIN && nights <= HOTEL_NIGHTS_MAX
+}
+
+/**
+ * ค่าจากช่อง "จำนวนคืน" ของฟอร์ม → จำนวนเต็ม · ว่าง = ค่าเริ่มต้น 1 · ไม่ใช่จำนวนเต็มบวกในช่วง = `null`
+ * (ไม่ปัด/ไม่ตัดเศษ — "1.5" หรือ "2 คืน" ถือว่าผิด)
+ */
+export function parseHotelNightsInput(text: string): number | null {
+  const trimmed = text.trim()
+  if (trimmed === '') return HOTEL_NIGHTS_DEFAULT
+  if (!/^\d+$/.test(trimmed)) return null
+  const nights = Number(trimmed)
+  return isValidHotelNights(nights) ? nights : null
+}
+
+/**
+ * วันที่ (`YYYY-MM-DD`) ที่ใบเบิกครอบ = วันเข้าพัก … วันเข้าพัก + จำนวนคืน − 1
+ * ใช้เป็นช่วงของ auto-mapping `matched_case_ids` (ตรวจสอบเท่านั้น ไม่มีผลต่อยอด)
+ */
+export function hotelStayDateKeys(checkInDate: string, nights: number): string[] {
+  if (!isValidHotelNights(nights)) throw new RangeError(HOTEL_NIGHTS_RANGE_MESSAGE)
+  const start = new Date(`${checkInDate}T00:00:00.000Z`)
+  if (Number.isNaN(start.getTime())) throw new RangeError('วันที่เข้าพักไม่ถูกต้อง')
+  return Array.from({ length: nights }, (_, offset) =>
+    new Date(start.getTime() + offset * 86_400_000).toISOString().slice(0, 10),
+  )
+}
+
+/** ข้อความสั้น "2 คืน · เพดาน ฿1,600.00" (ไม่ตั้งเพดาน → "2 คืน") — ใช้ทั้งรายการเบิกและคิวอนุมัติ */
+export function hotelNightsCapText(nights: number, maxPerNightSatang: number | null): string {
+  const cap = hotelClaimCapSatang(maxPerNightSatang, nights)
+  return cap === null ? `${nights} คืน` : `${nights} คืน · เพดาน ${fmtSatangSymbol(cap)}`
+}
+
 /**
  * ข้อความ inline ของฟอร์มเบิกที่พัก — แยกต่อช่อง (UAT BUG-073: ยอด 0/ติดลบเคยขึ้นข้อความรวม
  * "กรุณากรอกวันที่และจำนวนเงิน" ทำให้เข้าใจว่าวันที่ว่าง) · คืน `null` = ผ่าน
  * ⚠️ UX guard ฝั่งฟอร์ม — ตัวบังคับจริงคือ `assertHotelClaimFields()` + Zod ฝั่ง BE
  */
-export function hotelClaimFormError(input: { expenseDate: string; amountBaht: string; hasReceipt: boolean }): string | null {
+export function hotelClaimFormError(input: {
+  expenseDate: string
+  amountBaht: string
+  hasReceipt: boolean
+  /** ช่อง "จำนวนคืน" (ไม่บังคับ — ไม่ส่ง/ว่าง = 1) */
+  nightsText?: string
+}): string | null {
   if (input.expenseDate.trim() === '') return 'กรุณาเลือกวันที่เข้าพัก'
+  if (input.nightsText !== undefined && parseHotelNightsInput(input.nightsText) === null) {
+    return HOTEL_NIGHTS_RANGE_MESSAGE
+  }
   const amountSatang = parseBahtInput(input.amountBaht)
   if (amountSatang === null) return 'กรุณากรอกจำนวนเงิน'
   const formatError = bahtInputError(input.amountBaht, 'จำนวนเงิน')
@@ -71,7 +124,7 @@ export interface HotelCapInput {
   amountSatang: number
   /** `hotel_max_per_night_satang` ของแผนที่ snapshot ไว้ — `null` = แผนไม่ตั้งเพดาน (ไม่จำกัด) */
   maxPerNightSatang: number | null
-  /** จำนวนคืนตามช่วงวันที่ในใบเบิก — ใบเบิกรายคืนเดียว (ฟอร์มปัจจุบันมีวันที่เข้าพักวันเดียว) = 1 */
+  /** จำนวนคืนของใบเบิก (`expenses.hotel_nights` — มติ PO O50 · ไม่กรอก = 1) */
   nights: number
 }
 
@@ -84,7 +137,7 @@ export function hotelClaimCapSatang(maxPerNightSatang: number | null, nights: nu
   if (!Number.isInteger(maxPerNightSatang) || maxPerNightSatang < 0) {
     throw new RangeError('เพดานค่าที่พักต่อคืนต้องเป็นจำนวนเต็มสตางค์ที่ไม่ติดลบ')
   }
-  if (!Number.isInteger(nights) || nights < 1) throw new RangeError('จำนวนคืนต้องเป็นจำนวนเต็มอย่างน้อย 1')
+  if (!isValidHotelNights(nights)) throw new RangeError(HOTEL_NIGHTS_RANGE_MESSAGE)
   return maxPerNightSatang * nights
 }
 

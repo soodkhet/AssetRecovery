@@ -976,6 +976,27 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     expect(list.pendingSatang).toBe(80_000)
   })
 
+  it('auto-mapping ครอบช่วงวันที่พัก: เข้าพักวันก่อน 2 คืนจับคู่เคสวันถัดไป · 1 คืนไม่จับคู่ (มติ PO O50)', async () => {
+    stubDistanceMatrix(1_000)
+    const caseId = await seedReadyToClose()
+    const base = {
+      expenseDate: new Date('2026-08-31T00:00:00.000Z'),
+      amountSatang: 80_000,
+      sharedWithUserId: null,
+      receiptFileUrl: 'field/receipts/range.jpg',
+      note: null,
+    }
+    const oneNight = await expenses.submitHotelClaim(agentA, base, { actor: agentA, meta })
+    const twoNights = await expenses.submitHotelClaim(agentA, { ...base, hotelNights: 2 }, { actor: agentA, meta })
+    expect(oneNight.hotelNights).toBe(1)
+    expect(twoNights.hotelNights).toBe(2)
+
+    const list = await expenses.listFieldExpenses(agentA, { type: 'separate' })
+    const byId = new Map(list.items.map((item) => [item.id, item]))
+    expect(byId.get(oneNight.id)?.matchedCaseIds).toEqual([])
+    expect(byId.get(twoNights.id)?.matchedCaseIds).toContain(caseId)
+  })
+
   it('ผู้พักร่วมนอกทีมถูกปฏิเสธฝั่ง BE แม้ dropdown จะกรองแล้ว (`41` §20)', async () => {
     await expectCode(
       () =>
@@ -1194,6 +1215,77 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
       const resubmitted = await expenses.resubmitFieldExpense(agentA, claim.id, { amountSatang: 80_000 }, { actor: agentA, meta })
       expect(resubmitted.status).toBe('pending_approval')
       expect(resubmitted.grossSatang).toBe(80_000)
+    })
+
+    it('2 คืน: เท่าเพดาน × 2 ผ่าน (เก็บจำนวนคืน + แสดงในรายการ) · เกิน 1 สตางค์ถูกบล็อก (มติ PO O50)', async () => {
+      const ok = await expenses.submitHotelClaim(agentA, { ...hotel(160_000), hotelNights: 2 }, { actor: agentA, meta })
+      expect(ok.hotelNights).toBe(2)
+      expect(ok.hotelMaxPerNightSatang).toBe(80_000)
+      const row = await db().expense.findFirstOrThrow({ where: { id: ok.id } })
+      expect(row.hotelNights).toBe(2)
+
+      const error = await expenses
+        .submitHotelClaim(agentA, { ...hotel(160_001), hotelNights: 2 }, { actor: agentA, meta })
+        .catch((e: unknown) => e)
+      expect(codeOf(error)).toBe('HOTEL_CLAIM_EXCEEDS_CAP')
+      expect((error as { userMessage: string }).userMessage).toContain('800.00 บาท/คืน × 2 คืน = 1,600.00 บาท')
+      // ไม่ระบุจำนวนคืน = 1 คืน ⇒ ยอด 2 คืนถูกบล็อก
+      await expectCode(
+        () => expenses.submitHotelClaim(agentA, hotel(160_000), { actor: agentA, meta }),
+        'HOTEL_CLAIM_EXCEEDS_CAP',
+      )
+
+      const list = await expenses.listFieldExpenses(agentA, { type: 'separate' })
+      expect(list.items.map((item) => [item.hotelNights, item.hotelMaxPerNightSatang])).toEqual([[2, 80_000]])
+    })
+
+    it('ส่งใหม่หลังตีกลับแก้จำนวนคืน: ตรวจเพดานด้วยจำนวนคืนใหม่ + บันทึกลงใบเบิก + audit (มติ PO O50)', async () => {
+      const claim = await expenses.submitHotelClaim(agentA, hotel(80_000), { actor: agentA, meta })
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+
+      // ยอด 2 คืนแต่ไม่แก้จำนวนคืน (ยังเป็น 1) = บล็อก
+      await expectCode(
+        () => expenses.resubmitFieldExpense(agentA, claim.id, { amountSatang: 160_000 }, { actor: agentA, meta }),
+        'HOTEL_CLAIM_EXCEEDS_CAP',
+      )
+      const resubmitted = await expenses.resubmitFieldExpense(
+        agentA,
+        claim.id,
+        { amountSatang: 160_000, hotelNights: 2, note: 'พัก 2 คืน' },
+        { actor: agentA, meta },
+      )
+      expect(resubmitted.status).toBe('pending_approval')
+      expect(resubmitted.hotelNights).toBe(2)
+      expect((await db().expense.findFirstOrThrow({ where: { id: claim.id } })).hotelNights).toBe(2)
+
+      const audit = await db().auditLog.findFirstOrThrow({
+        where: { targetId: claim.id, action: 'status_change' },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(audit.beforeData).toMatchObject({ hotelNights: 1 })
+      expect(audit.afterData).toMatchObject({ hotelNights: 2 })
+
+      // ตีกลับอีกรอบแล้วลดจำนวนคืนลงโดยไม่ลดยอด = บล็อก
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+      await expectCode(
+        () => expenses.resubmitFieldExpense(agentA, claim.id, { hotelNights: 1 }, { actor: agentA, meta }),
+        'HOTEL_CLAIM_EXCEEDS_CAP',
+      )
+    })
+
+    it('DB CHECK: จำนวนคืนนอกช่วง 1–31 หรือรายการที่ไม่ใช่ค่าที่พักมีจำนวนคืน ≠ 1 = ปฏิเสธ', async () => {
+      const claim = await expenses.submitHotelClaim(agentA, hotel(50_000), { actor: agentA, meta })
+      await expect(
+        db().$executeRawUnsafe(`UPDATE expenses SET hotel_nights = 32 WHERE id = '${claim.id}'`),
+      ).rejects.toThrow(/chk_expenses_hotel_nights_range/)
+      await expect(
+        db().$executeRawUnsafe(`UPDATE expenses SET hotel_nights = 0 WHERE id = '${claim.id}'`),
+      ).rejects.toThrow(/chk_expenses_hotel_nights_range/)
+      await expect(
+        db().$executeRawUnsafe(
+          `UPDATE expenses SET expense_type = 'fuel', hotel_nights = 2 WHERE id = '${claim.id}'`,
+        ),
+      ).rejects.toThrow(/chk_expenses_hotel_nights_hotel_only/)
     })
 
     it('ใบเก่าที่ยังไม่มี snapshot: ส่งใหม่ตรวจกับแผน ณ วันที่เข้าพัก แล้วเก็บ snapshot', async () => {

@@ -4,6 +4,7 @@ import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { fmtSatang } from '@/lib/format/money'
 import { fmtDate } from '@/lib/format/datetime'
+import { hotelNightsCapText } from '@/lib/field/hotel-claim'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   appendApprovalHistory,
@@ -80,6 +81,7 @@ const expenseSelect = {
   grossSatang: true,
   expenseDate: true,
   distanceKm: true,
+  hotelNights: true,
   status: true,
   approvalStepCurrent: true,
   approvalStepTotal: true,
@@ -220,6 +222,8 @@ export function describeExpenseBasis(row: {
   expenseType: ExpenseRow['expenseType']
   grossSatang: number
   distanceKm: Prisma.Decimal | null
+  /** จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50) — ไม่ส่ง = 1 */
+  hotelNights?: number
   compPlan: {
     fuelRatePerKmSatang: number | null
     fuelDailyFlatSatang: number | null
@@ -253,8 +257,13 @@ export function describeExpenseBasis(row: {
     const days = Math.round(row.grossSatang / row.compPlan.allowanceSatang)
     return `${days} วัน × ${satangToBaht(row.compPlan.allowanceSatang)} บาท/วัน`
   }
-  if (row.expenseType === 'hotel' && row.compPlan?.hotelMaxPerNightSatang != null) {
-    return `${satangToBaht(row.grossSatang)} บาท (เพดาน ${satangToBaht(row.compPlan.hotelMaxPerNightSatang)} บาท/คืน)`
+  if (row.expenseType === 'hotel') {
+    // มติ PO O50 — "2 คืน · เพดาน ฿1,600.00" (เพดาน = อัตรา/คืน × จำนวนคืนจาก snapshot แผนของใบเบิก)
+    const nights = row.hotelNights ?? 1
+    const maxPerNight = row.compPlan?.hotelMaxPerNightSatang ?? null
+    if (maxPerNight !== null || nights > 1) {
+      return `${satangToBaht(row.grossSatang)} บาท (${hotelNightsCapText(nights, maxPerNight)})`
+    }
   }
   return `${satangToBaht(row.grossSatang)} บาท`
 }

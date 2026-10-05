@@ -95,7 +95,7 @@ let store = {
       { id: 'e4', case_id: 'CASE-26-0038', type: 'allowance', amount: 300, status: 'pending_approval', date: '23/06/2569' },
     ],
     hotel: [
-      { id: 'h1', date: '20/06/2569', amount: 850, status: 'approved', note: 'โรงแรมที่ชลบุรี', receipt: 'receipt_0620.jpg' },
+      { id: 'h1', date: '20/06/2569', nights: 2, amount: 850, status: 'approved', note: 'โรงแรมที่ชลบุรี', receipt: 'receipt_0620.jpg' },
     ],
   },
 
@@ -1494,7 +1494,7 @@ function renderSeparateExpenseTab() {
         <div class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2.5">
           <div>
             <div class="text-[14px] font-semibold text-slate-700">🏨 ${h.note}</div>
-            <div class="text-[12px] text-slate-400 mt-0.5">วันที่ ${h.date}</div>
+            <div class="text-[12px] text-slate-400 mt-0.5">วันที่ ${h.date} · ${h.nights || 1} คืน · เพดาน ฿${money((h.nights || 1) * teamCompensation[me.team_id].hotel)}</div>
             <button class="mt-1 text-[12px] font-bold text-blue-600 inline-flex items-center gap-1">📄 ดูใบเสร็จ</button>
           </div>
           <div class="text-right">
@@ -1596,6 +1596,12 @@ function renderHotelClaimModal() {
       <input type="date" id="hotelDate" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus-ring">
     </div>
     <div>
+      <!-- มติ PO O50: จำนวนคืน ไม่บังคับ (ค่าเริ่มต้น 1 · จำนวนเต็ม 1–31) — เพดาน = อัตรา/คืน × จำนวนคืน -->
+      <label class="text-xs font-bold text-slate-600 block mb-1.5">จำนวนคืน</label>
+      <input type="number" id="hotelNights" value="1" min="1" max="31" step="1" inputmode="numeric" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus-ring">
+      <p class="text-[11px] text-slate-400 mt-1">ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน</p>
+    </div>
+    <div>
       <label class="text-xs font-bold text-slate-600 block mb-1.5">จำนวนเงิน (บาท)</label>
       <input type="number" id="hotelAmount" placeholder="0.00" class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus-ring">
     </div>
@@ -1613,7 +1619,7 @@ function renderHotelClaimModal() {
         <span class="text-xs font-semibold">แตะเพื่อแนบใบเสร็จ</span>
       </button>
     </div>
-    <p class="text-[13px] text-slate-500">ระบบจะจับคู่กับเคสที่มีกำหนดวันตรงกับวันที่พักนี้โดยอัตโนมัติ เพื่อใช้ตรวจสอบเท่านั้น</p>
+    <p class="text-[13px] text-slate-500">ระบบจะจับคู่กับเคสที่มีกำหนดวันอยู่ในช่วงวันที่พักนี้โดยอัตโนมัติ เพื่อใช้ตรวจสอบเท่านั้น</p>
     <button onclick="submitHotelClaim()" class="w-full py-4 rounded-xl bg-slate-900 text-white font-extrabold text-[16px] active-scale">ส่งคำขอเบิก</button>
   </div>`;
 }
@@ -1621,8 +1627,11 @@ function renderHotelClaimModal() {
 function submitHotelClaim() {
   const date = document.getElementById('hotelDate').value;
   const amount = document.getElementById('hotelAmount').value;
+  const nightsText = document.getElementById('hotelNights').value.trim();
+  const nights = nightsText === '' ? 1 : Number(nightsText);
   if (!date || !amount) { showToast('กรุณากรอกวันที่และจำนวนเงิน', 'error'); return; }
-  store.expenses.hotel.push({ id: 'h' + Date.now(), date: new Date(date).toLocaleDateString('th-TH'), amount: Number(amount), status: 'pending_approval', note: 'ที่พัก (รอตรวจสอบ)' });
+  if (!Number.isInteger(nights) || nights < 1 || nights > 31) { showToast('จำนวนคืนต้องเป็นจำนวนเต็ม 1–31', 'error'); return; }
+  store.expenses.hotel.push({ id: 'h' + Date.now(), date: new Date(date).toLocaleDateString('th-TH'), nights, amount: Number(amount), status: 'pending_approval', note: 'ที่พัก (รอตรวจสอบ)' });
   openModal('expense');
   showToast('ส่งคำขอเบิกค่าที่พักแล้ว — รอผู้อนุมัติตรวจสอบ');
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
 import { FileViewerModal } from '@/components/cases/file-viewer-modal'
 import { HotelClaimModal } from '@/components/field/hotel-claim-modal'
+import { hotelNightsCapText } from '@/lib/field/hotel-claim'
 import { IconAlert, IconChevronRight, IconFile, IconPlus } from '@/components/field/field-icons'
 import { ResubmitExpenseModal } from '@/components/field/resubmit-expense-modal'
 import { Button, EmptyState, ErrorState, InlineAlert, LoadingState, Select, StatusBadge } from '@/components/ui'
@@ -185,6 +186,9 @@ function NeedsRevisionBlock({
               </div>
               <div className="mt-0.5 truncate text-xs text-slate-500">
                 {item.caseRef ?? fmtDate(item.expenseDate)}
+                {item.expenseType === 'hotel'
+                  ? ` · ${hotelNightsCapText(item.hotelNights, item.hotelMaxPerNightSatang)}`
+                  : ''}
                 {item.rejectReason === null ? '' : ` · เหตุผล: ${item.rejectReason}`}
               </div>
               {item.note !== null && <div className="mt-0.5 truncate text-xs text-slate-500">หมายเหตุ: {item.note}</div>}
@@ -342,6 +346,9 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                         </div>
                         <div className="truncate text-xs text-slate-400">
                           วันที่ {fmtDate(item.expenseDate)}
+                          {item.expenseType === 'hotel'
+                            ? ` · ${hotelNightsCapText(item.hotelNights, item.hotelMaxPerNightSatang)}`
+                            : ''}
                           {item.sharedWithName === null ? '' : ` · พักร่วมกับ ${item.sharedWithName}`}
                         </div>
                         {item.resubmitNote !== null && (

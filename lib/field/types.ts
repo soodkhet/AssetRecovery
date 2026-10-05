@@ -254,7 +254,11 @@ export interface FieldExpenseDto {
   receiptFileUrl: string | null
   sharedWithUserId: string | null
   sharedWithName: string | null
-  /** auto-mapping เคสที่ลงพื้นที่วันเดียวกัน — **ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด** (`41` §6.6) */
+  /** จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50) — รายการชนิดอื่น = 1 เสมอ */
+  hotelNights: number
+  /** เพดานต่อคืนจาก snapshot แผนของใบเบิกค่าที่พัก — `null` = ไม่ตั้งเพดาน/ไม่ใช่ค่าที่พัก */
+  hotelMaxPerNightSatang: number | null
+  /** auto-mapping เคสที่ลงพื้นที่ในช่วงวันที่พัก (วันเข้าพัก … + จำนวนคืน − 1) — **ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด** (`41` §6.6) */
   matchedCaseIds: string[]
   createdAt: string
 }

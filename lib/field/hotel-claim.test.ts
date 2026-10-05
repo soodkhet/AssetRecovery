@@ -8,8 +8,13 @@ import {
   assertHotelClaimFields,
   assertSharedAgentInTeam,
   hotelClaimFormError,
+  hotelNightsCapText,
+  hotelStayDateKeys,
+  isValidHotelNights,
   missingHotelClaimFields,
+  parseHotelNightsInput,
 } from '@/lib/field/hotel-claim'
+import { hotelClaimSchema, resubmitExpenseSchema } from '@/lib/field/schemas'
 
 const valid = {
   expenseDate: new Date('2026-08-10T00:00:00Z'),
@@ -134,5 +139,64 @@ describe('เพดานค่าที่พักต่อคืน (มต�
     expect(() => hotelClaimCapSatang(80_000, 0)).toThrow(RangeError)
     expect(() => hotelClaimCapSatang(80_000, 1.5)).toThrow(RangeError)
     expect(() => hotelClaimCapSatang(-1, 1)).toThrow(RangeError)
+    expect(() => hotelClaimCapSatang(80_000, 32)).toThrow(RangeError)
+  })
+})
+
+describe('จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50)', () => {
+  it('1 / 2 / 31 คืน = ถูกต้อง · 0 / 32 / ทศนิยม = ผิด', () => {
+    for (const nights of [1, 2, 31]) expect(isValidHotelNights(nights)).toBe(true)
+    for (const nights of [0, 32, -1, 1.5, Number.NaN]) expect(isValidHotelNights(nights)).toBe(false)
+  })
+
+  it('เพดานรวม 1 / 2 / 31 คืน', () => {
+    expect(hotelClaimCapSatang(80_000, 1)).toBe(80_000)
+    expect(hotelClaimCapSatang(80_000, 2)).toBe(160_000)
+    expect(hotelClaimCapSatang(80_000, 31)).toBe(2_480_000)
+    expect(() => hotelClaimCapSatang(80_000, 0)).toThrow(RangeError)
+    expect(() => hotelClaimCapSatang(80_000, 32)).toThrow(RangeError)
+  })
+
+  it('ช่องในฟอร์ม: ว่าง = 1 · ตัวเลขในช่วง = ค่านั้น · อื่น ๆ = null (ไม่ปัดเศษ)', () => {
+    expect(parseHotelNightsInput('')).toBe(1)
+    expect(parseHotelNightsInput('  ')).toBe(1)
+    expect(parseHotelNightsInput('2')).toBe(2)
+    expect(parseHotelNightsInput(' 31 ')).toBe(31)
+    for (const text of ['0', '32', '1.5', '-1', '2 คืน', 'abc']) expect(parseHotelNightsInput(text)).toBeNull()
+  })
+
+  it('ข้อความฟอร์มบอกช่วงจำนวนคืน · ไม่ส่งช่องจำนวนคืน = ผ่านตามเดิม', () => {
+    const ok = { expenseDate: '2026-10-03', amountBaht: '1600', hasReceipt: true }
+    expect(hotelClaimFormError(ok)).toBeNull()
+    expect(hotelClaimFormError({ ...ok, nightsText: '2' })).toBeNull()
+    expect(hotelClaimFormError({ ...ok, nightsText: '' })).toBeNull()
+    expect(hotelClaimFormError({ ...ok, nightsText: '0' })).toBe('จำนวนคืนต้องเป็นจำนวนเต็ม 1–31')
+    expect(hotelClaimFormError({ ...ok, nightsText: '32' })).toBe('จำนวนคืนต้องเป็นจำนวนเต็ม 1–31')
+  })
+
+  it('Zod: ไม่ส่ง = 1 · 1/2/31 ผ่าน · 0/32/ทศนิยม ไม่ผ่าน (schema เดียวกับฟอร์ม)', () => {
+    const base = { expenseDate: '2026-10-03', amountSatang: 160_000, receiptFileUrl: 'expenses/u/r.jpg' }
+    const parsed = hotelClaimSchema.safeParse(base)
+    expect(parsed.success && parsed.data.hotelNights).toBe(1)
+    for (const hotelNights of [1, 2, 31]) expect(hotelClaimSchema.safeParse({ ...base, hotelNights }).success).toBe(true)
+    for (const hotelNights of [0, 32, 1.5]) expect(hotelClaimSchema.safeParse({ ...base, hotelNights }).success).toBe(false)
+    expect(resubmitExpenseSchema.safeParse({ hotelNights: 3 }).success).toBe(true)
+    expect(resubmitExpenseSchema.safeParse({ hotelNights: 0 }).success).toBe(false)
+    const omitted = resubmitExpenseSchema.safeParse({})
+    expect(omitted.success && omitted.data.hotelNights).toBeUndefined()
+  })
+
+  it('ช่วงวันที่ auto-mapping = วันเข้าพัก … + จำนวนคืน − 1 (ข้ามเดือนได้)', () => {
+    expect(hotelStayDateKeys('2026-10-03', 1)).toEqual(['2026-10-03'])
+    expect(hotelStayDateKeys('2026-10-30', 3)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01'])
+    expect(hotelStayDateKeys('2026-10-01', 31)).toHaveLength(31)
+    expect(() => hotelStayDateKeys('2026-10-01', 0)).toThrow(RangeError)
+    expect(() => hotelStayDateKeys('bad', 1)).toThrow(RangeError)
+  })
+
+  it('ข้อความแสดง "2 คืน · เพดาน ฿1,600.00" · ไม่ตั้งเพดาน = จำนวนคืนอย่างเดียว', () => {
+    expect(hotelNightsCapText(2, 80_000)).toBe('2 คืน · เพดาน ฿1,600.00')
+    expect(hotelNightsCapText(1, 80_000)).toBe('1 คืน · เพดาน ฿800.00')
+    expect(hotelNightsCapText(2, null)).toBe('2 คืน')
   })
 })
