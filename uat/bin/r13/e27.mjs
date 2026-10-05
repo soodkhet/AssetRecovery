@@ -1,0 +1,23 @@
+// R13.27 ยืนยันโอนสำเร็จ → completed · 50 ทวิ · สรุปนำส่ง · probe ยกเลิกหลัง completed
+import { openAs, shot, log, settle, sleep, R, q, BASE, toasts } from './_h.mjs'
+const NAME = 'UAT IN-R13b', ID = 'c1e8fdb8-c6bf-4a6a-b817-ca5939adcca2'
+const T = new Date().toISOString()
+const flat = s => s.replace(/\s*\n+\s*/g, ' | ')
+const { browser, page } = await openAs('uat.finance')
+await page.goto(`${BASE}/finance?tab=payout`); await settle(page); await sleep(1000)
+await page.locator('tbody tr').filter({ hasText: NAME }).getByRole('button', { name: '✓ ยืนยันจ่ายแล้ว' }).click(); await sleep(700)
+const d = page.locator('[role="dialog"]').last()
+log('complete modal', flat(await d.innerText()).slice(0, 700))
+await d.locator('textarea').fill('ตรวจสลิปโอนกสิกรไทยครบ ยอด 2,059.50 (UAT R13)')
+await shot(page, R, '27-complete-modal')
+await d.getByRole('button', { name: 'ยืนยันจ่ายแล้ว' }).click()
+log('toasts', await toasts(page, 4000))
+await settle(page); await sleep(800); await shot(page, R, '27-completed', { fullPage: true })
+const r = await page.request.post(`${BASE}/api/payout-batches/${ID}/cancel`, { data: { reason: 'UAT R13 probe ยกเลิกหลังโอน', fileNotUploadedConfirmed: true }, failOnStatusCode: false })
+log('probe cancel completed', r.status(), (await r.text()).slice(0, 250))
+await page.goto(`${BASE}/finance?tab=wht`); await settle(page); await sleep(1200)
+log('wht tab', flat(await page.locator('main').innerText()).slice(0, 1200))
+await shot(page, R, '27-wht-tab', { fullPage: true })
+await browser.close()
+log(q(`select name,status,completed_at is not null from payout_batches where id='${ID}'`))
+log(q(`select certificate_number,income_type,form_type,wht_satang,base_satang,status from wht_certificates where created_at>'${T}'`))

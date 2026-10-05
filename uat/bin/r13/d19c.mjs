@@ -1,0 +1,30 @@
+// R13.19 ค — in1 แก้ยอดค่าที่พักเป็น 800.00 แล้วส่งใหม่ · mgr.in อนุมัติขั้น 1
+import { openAs, shot, log, settle, sleep, R, q, BASE, toasts, trackMutations } from './_h.mjs'
+import { uiApprove } from '../r6v3/_h.mjs'
+const HOTEL = 'd61baf6f-a5d8-4fe5-9e34-3b5cdfaf0c52'
+const a = await openAs('uat.agent.in1', { mobile: true }); const page = a.page
+const m = trackMutations(page)
+await page.goto(`${BASE}/field/expenses`); await settle(page); await sleep(1000)
+await page.getByRole('button', { name: 'เบิกแยก', exact: true }).click(); await sleep(1000)
+log('sep tab', (await page.locator('main').innerText()).replace(/\s*\n+\s*/g, ' | ').slice(0, 800))
+log('buttons', (await page.getByRole('button').allInnerTexts()).map(s => s.trim()).filter(Boolean))
+const b = page.getByRole('button', { name: /แก้ไข|ส่งใหม่/ }).first()
+await b.click(); await sleep(1000)
+const dlg = page.getByRole('dialog').last()
+log('resubmit modal', (await dlg.innerText()).replace(/\s*\n+\s*/g, ' | ').slice(0, 600))
+const amt = dlg.locator('input[inputmode=decimal]')
+if (await amt.count()) await amt.fill('800')
+const ta = dlg.locator('textarea'); if (await ta.count()) await ta.first().fill('แก้ยอดเป็น 800.00 ตามเพดาน (UAT R13)')
+await shot(page, R, '19-in1-resubmit-hotel')
+await dlg.getByRole('button', { name: /ส่ง/ }).last().click()
+log('resubmit toasts', await toasts(page, 3000), m.res)
+await a.browser.close()
+log(q(`select gross_satang,status,approval_step_current,receipt_file_url is not null rc from expenses where id='${HOTEL}'`))
+const mm = await openAs('uat.mgr.in')
+await mm.page.goto(`${BASE}/finance?tab=comp`); await settle(mm.page); await sleep(1200)
+const r = mm.page.locator('tbody tr').filter({ hasText: 'ไม่ผูกเคส' }).filter({ has: mm.page.getByRole('button', { name: 'อนุมัติขั้น 1' }) })
+log('hotel rows w/ approve', await r.count(), (await r.first().innerText()).replace(/\s+/g, ' ').slice(0, 200))
+await r.first().getByRole('button', { name: 'อนุมัติขั้น 1' }).click()
+log('approve hotel toasts', await toasts(mm.page, 3000))
+await mm.browser.close()
+log(q(`select gross_satang,status,approval_step_current from expenses where id='${HOTEL}'`))

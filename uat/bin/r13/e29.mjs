@@ -1,0 +1,32 @@
+// R13.29 บันทึกรับคืน ADV5 — probe 200.00 แล้วบันทึก 150.00 โอนเข้าบัญชีบริษัท + แนบสลิป
+import { openAs, shot, log, settle, sleep, R, q, BASE, toasts, F, trackMutations } from './_h.mjs'
+const ADV5 = '02221e05-4e8d-4e57-aa54-5d8cd8b557dd'
+const SLIP = process.env.SLIP ?? 'R4-C1-photo.jpg'
+const flat = s => s.replace(/\s*\n+\s*/g, ' | ')
+const { browser, page } = await openAs('uat.finance')
+const m = trackMutations(page)
+await page.goto(`${BASE}/finance?tab=advances`); await settle(page); await sleep(1000)
+await page.locator('tbody tr').filter({ hasText: 'ADV-02221E05' }).first().getByRole('button', { name: 'บันทึกรับคืน' }).click(); await sleep(900)
+const d = page.locator('[role="dialog"]').last()
+log('modal', flat(await d.innerText()).slice(0, 900))
+log('inputs', await d.locator('input,select,textarea').evaluateAll(es => es.map(e => `${e.tagName}:${e.type}:${e.getAttribute('inputmode') ?? ''}:${e.tagName === 'SELECT' ? [...e.options].map(o => o.value + '=' + o.text).join('/') : ''}`)))
+const sel = d.locator('select').first(); if (await sel.count()) await sel.selectOption({ label: /โอนเข้าบัญชีบริษัท/ }).catch(async () => { const v = await sel.locator('option', { hasText: 'โอน' }).first().getAttribute('value'); await sel.selectOption(v) })
+const radio = d.getByText('โอนเข้าบัญชีบริษัท').first(); if (!(await sel.count()) && await radio.count()) await radio.click()
+await d.locator('input[type=file]').first().setInputFiles(F(SLIP)); await sleep(2000)
+await d.locator('input[type=date]').fill('2026-10-05')
+const amt = d.locator('input[inputmode=decimal]').first()
+const save = d.getByRole('button', { name: /บันทึก/ }).last()
+await amt.fill('200'); await sleep(300); m.res.length = 0
+log('save disabled @200?', await save.isDisabled()); if (!(await save.isDisabled())) await save.click(); await sleep(1500)
+log('probe 200', flat(await d.innerText()).slice(-400), await toasts(page, 1500), m.res.splice(0))
+await shot(page, R, '29-return-probe-200')
+await amt.fill('150'); await d.locator('textarea').first().fill('UAT R13 รับคืน ADV5 โอนเข้าบัญชีบริษัท').catch(() => {})
+await shot(page, R, '29-return-form')
+await save.click()
+log('save', await toasts(page, 3000), m.res.splice(0))
+await settle(page); await sleep(800)
+log('row after', (await page.locator('tbody tr').filter({ hasText: 'ADV-02221E05' }).first().innerText()).replace(/\s+/g, ' ').slice(0, 300))
+await shot(page, R, '29-return-recorded', { fullPage: true })
+await browser.close()
+log(q(`select channel,amount_satang,received_date,evidence_file_path,length(evidence_file_sha256) sha_len,note from advance_returns where advance_id='${ADV5}'`))
+log(q(`select action,target_type,reason from audit_logs where created_at>now()-interval '3 min' and action<>'login'`))

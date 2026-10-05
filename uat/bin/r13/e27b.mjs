@@ -1,0 +1,15 @@
+// R13.27 ต่อ — สรุปนำส่ง ต.ค. + ADV1 ยอดค้างหัก
+import { openAs, shot, log, settle, sleep, R, BASE } from './_h.mjs'
+const flat = s => s.replace(/\s*\n+\s*/g, ' | ')
+const a = await openAs('uat.account')
+const r = await a.page.request.get(`${BASE}/api/accounting/wht-filing-summary?period=2026-10`, { failOnStatusCode: false })
+log('filing summary API', r.status(), (await r.text()).slice(0, 700))
+await a.page.goto(`${BASE}/accounting?tab=wht`); await settle(a.page); await sleep(1500)
+const t = flat(await a.page.locator('main').innerText()); const i = t.indexOf('ภ.ง.ด.3'); log('acct wht page', t.slice(Math.max(0, i - 300), i + 500))
+await shot(a.page, R, '27-wht-filing-summary', { fullPage: true })
+await a.browser.close()
+const f = await openAs('uat.finance')
+await f.page.goto(`${BASE}/finance?tab=advances`); await settle(f.page); await sleep(1000)
+log('ADV1 row', (await f.page.locator('tbody tr').filter({ hasText: 'ADV-3BDE18D7' }).first().innerText()).replace(/\s+/g, ' ').slice(0, 300))
+await shot(f.page, R, '27-adv1-offset-done', { fullPage: true })
+await f.browser.close()

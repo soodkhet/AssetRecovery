@@ -1,0 +1,13 @@
+// R13.19 ก — mgr.in ดูแจ้งเตือน + หน้าค่าตอบแทน (ยังไม่กด)
+import { openAs, shot, log, settle, sleep, R, BASE } from './_h.mjs'
+const { browser, page } = await openAs('uat.mgr.in')
+await page.goto(`${BASE}/notifications`); await settle(page); await sleep(1000)
+log('noti page', (await page.locator('main').innerText()).replace(/\s*\n+\s*/g, ' | ').slice(0, 900))
+await shot(page, R, '19-mgr-in-notifications')
+await page.goto(`${BASE}/finance?tab=comp`); await settle(page); await sleep(1200)
+const rows = await page.locator('tbody tr').allInnerTexts()
+log('rows', rows.filter(r => /901|007|ที่พัก/.test(r)).map(r => r.replace(/\s+/g, ' ').slice(0, 220)))
+const hr = page.locator('tbody tr').filter({ hasText: '800.01' })
+log('hotel row buttons', await hr.getByRole('button').allInnerTexts())
+await shot(page, R, '19-mgr-in-comp', { fullPage: true })
+await browser.close()
