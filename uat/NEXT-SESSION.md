@@ -32,7 +32,7 @@
 1. **verify เต็มบนเครื่อง**: `pnpm typecheck && pnpm lint && pnpm test` เขียว
 2. **ตรวจรายได้ซ้ำใน staging ก่อน deploy** (BUG-089 · จดใน STATE 03/10/2569) — ต้องว่าง:
    `select case_id, tracking_round, count(*) from revenues where deleted_at is null group by 1,2 having count(*)>1`
-3. **migration ใหม่ 29 ตัว** (`20261003113300_revenue_vat_mode_snapshot` … `20261006120000_expense_hotel_nights`):
+3. **migration ใหม่ 30 ตัว** (`20261003113300_revenue_vat_mode_snapshot` … `20261006130000_public_holidays`):
    `PRISMA_ENV_FILE=.env.staging pnpm prisma migrate status` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy`
 4. **`db:seed` บน staging** (สิทธิ์ใหม่: `manage_wht_policy`, portal 5 หมวด, `view_client_portal_as`, `manage_customer_wht`, แถวคลัง/รอบจ่ายของบัญชี-บริหาร ฯลฯ — คำสั่งใน memory `staging-migrations-manual`)
 5. **Vercel**: ยืนยัน `CRON_SECRET` ตั้งบน staging/production (มติ O40)
