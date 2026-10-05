@@ -5,7 +5,7 @@ import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของใบลดหนี้ (มติ PO 05/10/2569 U14) — Rule 13
  *
- * ⚠️ ไม่มี field `totalSatang` / `vatRateUsed` — ยอดรวมคิดที่ server และอัตรา snapshot จากใบกำกับเดิมเสมอ
+ * ⚠️ ไม่มี field `totalSatang` / `vatRatePctUsed` — ยอดรวมคิดที่ server และอัตรา snapshot จากใบกำกับเดิมเสมอ
  * ⚠️ `vatSatang` ไม่ส่ง = ใช้ค่าที่คำนวณจากอัตราเดิม · ส่งมา = ยอดตามเอกสาร (ตรวจ ±1 สตางค์ที่ service)
  */
 

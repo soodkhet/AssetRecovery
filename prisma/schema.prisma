@@ -2612,7 +2612,7 @@ model CreditNote {
   vatSatang             Int              @map("vat_satang")
   totalSatang           Int              @map("total_satang")
   /// snapshot อัตรา VAT ของใบกำกับเดิม (จาก `revenues.vat_rate_pct_used` ของรอบวางบิล)
-  vatRateUsed           Decimal          @map("vat_rate_used") @db.Decimal(5, 2)
+  vatRatePctUsed        Decimal          @map("vat_rate_pct_used") @db.Decimal(5, 2)
   reason                String
   /// path ไฟล์สแกนใน bucket `case-documents` (`tax-invoices/<id>/credit-notes/…`)
   filePath              String?          @map("file_path")

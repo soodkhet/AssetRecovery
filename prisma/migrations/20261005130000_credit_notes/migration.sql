@@ -27,7 +27,7 @@ CREATE TABLE "credit_notes" (
     "amount_before_vat_satang" INTEGER NOT NULL,
     "vat_satang" INTEGER NOT NULL,
     "total_satang" INTEGER NOT NULL,
-    "vat_rate_used" DECIMAL(5,2) NOT NULL,
+    "vat_rate_pct_used" DECIMAL(5,2) NOT NULL,
     "reason" TEXT NOT NULL,
     "file_path" TEXT,
     "file_sha256" VARCHAR(64),
@@ -44,7 +44,7 @@ CREATE TABLE "credit_notes" (
     CONSTRAINT "chk_credit_notes_amount_positive" CHECK ("amount_before_vat_satang" > 0),
     CONSTRAINT "chk_credit_notes_vat_non_negative" CHECK ("vat_satang" >= 0),
     CONSTRAINT "chk_credit_notes_total" CHECK ("total_satang" = "amount_before_vat_satang" + "vat_satang"),
-    CONSTRAINT "chk_credit_notes_vat_rate" CHECK ("vat_rate_used" >= 0 AND "vat_rate_used" <= 100),
+    CONSTRAINT "chk_credit_notes_vat_rate" CHECK ("vat_rate_pct_used" >= 0 AND "vat_rate_pct_used" <= 100),
     CONSTRAINT "chk_credit_notes_number_not_blank" CHECK (btrim("credit_note_number") <> ''),
     CONSTRAINT "chk_credit_notes_reason_not_blank" CHECK (btrim("reason") <> ''),
     CONSTRAINT "chk_credit_notes_cancel_fields" CHECK (
@@ -146,7 +146,7 @@ BEGIN
      OR NEW.amount_before_vat_satang <> OLD.amount_before_vat_satang
      OR NEW.vat_satang <> OLD.vat_satang
      OR NEW.total_satang <> OLD.total_satang
-     OR NEW.vat_rate_used <> OLD.vat_rate_used
+     OR NEW.vat_rate_pct_used <> OLD.vat_rate_pct_used
      OR NEW.reason <> OLD.reason
      OR NEW.file_path IS DISTINCT FROM OLD.file_path
      OR NEW.file_sha256 IS DISTINCT FROM OLD.file_sha256 THEN

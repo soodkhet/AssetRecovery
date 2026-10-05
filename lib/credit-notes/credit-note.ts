@@ -9,7 +9,7 @@ import { SalesError } from '@/lib/sales/errors'
  * เพื่อให้ยอดที่ลูกค้าเห็น (portal) และชุดเอกสารบัญชีตรงกับเอกสารที่ออกให้ลูกค้า
  *
  * ### VAT ของใบลดหนี้ (`22` §6.8 ส่วนต่อท้าย v-U14)
- * - อัตรา = `vat_rate_used` ของ **ใบกำกับเดิม** (snapshot จาก `revenues.vat_rate_pct_used` ของรอบวางบิล)
+ * - อัตรา = `vat_rate_pct_used` ของ **ใบกำกับเดิม** (snapshot จาก `revenues.vat_rate_pct_used` ของรอบวางบิล)
  *   ห้ามใช้อัตราปัจจุบัน และห้าม hardcode (Rule 01)
  * - VAT ที่คาด = `pctOfSatang(มูลค่าที่ลดก่อน VAT, อัตรา)` (ปัดครึ่งขึ้นครั้งเดียว — ตัวคูณกลางของระบบ)
  * - **รับยอด VAT ตามเอกสารจริง** ได้ ถ้าต่างจากที่คาดไม่เกิน {@link CREDIT_NOTE_VAT_TOLERANCE_SATANG}

@@ -231,7 +231,7 @@ suite('ใบลดหนี้ — บันทึก (มติ U14/B1)', () =
       amountBeforeVatSatang: 10_000,
       vatSatang: 700,
       totalSatang: 10_700,
-      vatRateUsed: '7',
+      vatRatePctUsed: '7',
       status: 'active',
       invoiceNumber: seeded.invoiceNumber,
     })
@@ -258,7 +258,7 @@ suite('ใบลดหนี้ — บันทึก (มติ U14/B1)', () =
     await expect(
       db().$executeRawUnsafe(`
         INSERT INTO credit_notes (organization_id, tax_invoice_id, credit_note_number, issue_date,
-                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_used, reason, created_by)
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by)
         VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 300000, 21000, 321000, 7, 'ตรง', '${ACCOUNTING_ID}')
       `),
     ).rejects.toThrow(/CREDIT_NOTE_EXCEEDS_INVOICE/)
@@ -274,7 +274,7 @@ suite('ใบลดหนี้ — บันทึก (มติ U14/B1)', () =
     await expect(
       db().$executeRawUnsafe(`
         INSERT INTO credit_notes (organization_id, tax_invoice_id, credit_note_number, issue_date,
-                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_used, reason, created_by)
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by)
         VALUES ('${ORG_ID}', '${seeded.invoiceId}', '${nextNumber()}', '2026-10-05', 100, 7, 999, 7, 'ตรง', '${ACCOUNTING_ID}')
       `),
     ).rejects.toThrow(/chk_credit_notes_total|check constraint/i)

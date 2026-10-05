@@ -14,7 +14,7 @@ export interface CreditNoteDto {
   vatSatang: number
   totalSatang: number
   /** อัตรา VAT ของใบกำกับเดิม เช่น `"7"` */
-  vatRateUsed: string
+  vatRatePctUsed: string
   reason: string
   filePath: string | null
   status: CreditNoteStatus
