@@ -1,10 +1,11 @@
 /**
- * แคตตาล็อก "Model Phone" — แบรนด์/รุ่นเครื่อง (มติ PO U155 → U157 · DEC-016 · `13` §6.18 · `38` §6.2)
+ * แคตตาล็อก "Model Phone" — แบรนด์/รุ่นเครื่อง (มติ PO U155 → U159 · U166 · DEC-017 · `13` §6.18 · `38` §6.2)
  * **pure ล้วน** ใช้ร่วม FE/BE — ห้าม import อะไรที่แตะ DB/เครือข่าย
  *
- * U159 (แทนส่วนกรองของ U157): job ดึงทุกแบรนด์/รุ่นเก็บไว้ · **การแสดงในตัวเลือก** = ค่าที่ผู้ดูแลตั้งด้วยมือ
- * (`manual_status` — ชนะเสมอ) ไม่งั้นตามตัวกรองในค่าตั้ง (แบรนด์ในรายชื่อ + รุ่นที่ออกภายใน N ปีล่าสุด)
- * คำนวณตอนอ่าน ⇒ เปลี่ยนตัวกรองแล้วมีผลทันทีโดยไม่ต้องดึง API และไม่เขียนทับค่าที่ตั้งด้วยมือ
+ * U166: แหล่งรุ่นคือฐาน TAC (`lib/device-catalog/tac.ts`) — นำเข้าแล้วเก็บทุกแบรนด์/รุ่น · **การแสดงในตัวเลือก**
+ * = ค่าที่ผู้ดูแลตั้งด้วยมือ (`manual_status` — ชนะเสมอ) ไม่งั้นตามตัวกรองในค่าตั้ง (แบรนด์ในรายชื่อ +
+ * รุ่นที่ออกภายใน N ปีล่าสุด — TAC มีปีที่ออก ตัวกรองปีจึงกลับมาใช้) คำนวณตอนอ่าน ⇒ เปลี่ยนตัวกรองแล้วมีผลทันที
+ * และไม่เขียนทับค่าที่ตั้งด้วยมือ
  */
 
 export const DEVICE_ASSET_KINDS = ['smartphone', 'tablet'] as const
@@ -13,7 +14,7 @@ export type DeviceAssetKind = (typeof DEVICE_ASSET_KINDS)[number]
 export const DEVICE_CATALOG_STATUSES = ['active', 'hidden'] as const
 export type DeviceCatalogStatusCode = (typeof DEVICE_CATALOG_STATUSES)[number]
 
-export const DEVICE_CATALOG_SOURCES = ['api', 'manual'] as const
+export const DEVICE_CATALOG_SOURCES = ['tacdb', 'manual'] as const
 export type DeviceCatalogSourceCode = (typeof DEVICE_CATALOG_SOURCES)[number]
 
 export const DEVICE_CATALOG_STATUS_LABEL: Readonly<Record<DeviceCatalogStatusCode, string>> = {
@@ -89,9 +90,17 @@ export function isBrandVisible(brand: { manualStatus: DeviceCatalogStatusCode | 
   return filter.brandKeys.has(brand.nameKey)
 }
 
-/** รุ่นผ่านตัวกรองปีไหม — ไม่ทราบปี (ต้นทางไม่ให้มา) = ผ่าน */
-export function passesRecentYears(releaseYear: number | null, filter: CatalogFilter): boolean {
-  return releaseYear === null || releaseYear >= filter.minReleaseYear
+/**
+ * รุ่นผ่านตัวกรองปีไหม — ไม่ทราบปี: รุ่นที่ผู้ดูแลเพิ่มเอง = ผ่าน · รุ่นจากฐาน TAC = **ไม่ผ่าน**
+ * (ฐาน TAC มีรุ่นเก่าไม่มีปีจำนวนมาก — U166) ผู้ดูแลเปิดเองรายรุ่นได้ / IMEI ที่ตรงรุ่นยังเติมให้ฟอร์มได้เสมอ
+ */
+export function passesRecentYears(
+  releaseYear: number | null,
+  filter: CatalogFilter,
+  source: DeviceCatalogSourceCode = 'manual',
+): boolean {
+  if (releaseYear === null) return source === 'manual'
+  return releaseYear >= filter.minReleaseYear
 }
 
 /**
@@ -99,13 +108,13 @@ export function passesRecentYears(releaseYear: number | null, filter: CatalogFil
  * รุ่นตั้งด้วยมือชนะ · ไม่ตั้ง = ผ่านตัวกรองปี
  */
 export function isModelVisible(
-  model: { manualStatus: DeviceCatalogStatusCode | null; releaseYear: number | null },
+  model: { manualStatus: DeviceCatalogStatusCode | null; releaseYear: number | null; source?: DeviceCatalogSourceCode },
   brandVisible: boolean,
   filter: CatalogFilter,
 ): boolean {
   if (!brandVisible) return false
   if (model.manualStatus !== null) return model.manualStatus === 'active'
-  return passesRecentYears(model.releaseYear, filter)
+  return passesRecentYears(model.releaseYear, filter, model.source ?? 'manual')
 }
 
 /** ทำความสะอาดรายชื่อแบรนด์จากฟอร์มตั้งค่า — ตัดว่าง/ซ้ำ (ไม่สนตัวพิมพ์/ช่องว่าง) คงลำดับเดิม */
@@ -128,7 +137,7 @@ export function parseBrandListText(text: string): string[] {
 }
 
 export const DEVICE_CATALOG_SOURCE_LABEL: Readonly<Record<DeviceCatalogSourceCode, string>> = {
-  api: 'ดึงอัตโนมัติ',
+  tacdb: 'ฐาน TAC',
   manual: 'เพิ่มเอง',
 }
 
@@ -153,7 +162,7 @@ export function deviceSnapshotText(brandName: string, modelName: string): string
 }
 
 /**
- * ชื่อรุ่นจาก API บางตัวมีชื่อแบรนด์นำหน้า ("Samsung Galaxy S24") — ตัดออกให้เหลือชื่อรุ่น (ตัดแล้วว่าง = คงเดิม)
+ * ชื่อรุ่นจากต้นทางบางแถวมีชื่อแบรนด์นำหน้า ("Samsung Galaxy S24") — ตัดออกให้เหลือชื่อรุ่น (ตัดแล้วว่าง = คงเดิม)
  */
 export function stripBrandPrefix(brandName: string, modelName: string): string {
   const model = cleanCatalogName(modelName)
@@ -165,7 +174,7 @@ export function stripBrandPrefix(brandName: string, modelName: string): string {
   return model
 }
 
-/** ชื่อที่บ่งว่าเป็นแท็บเล็ต — ต้นทางไม่แยกประเภท ⇒ จัดประเภทจากชื่อรุ่น (ผู้ดูแลแก้ได้) */
+/** ชื่อที่บ่งว่าเป็นแท็บเล็ต — ฐาน TAC ไม่แยกประเภท ⇒ จัดประเภทจากชื่อรุ่น (ผู้ดูแลแก้ได้) */
 const TABLET_PATTERN = /\b(ipad\w*|tab\d*|tablet|slate|\w*pad\d*)\b/i
 
 /** จัดประเภททรัพย์จากชื่อรุ่น — ไม่กรองทิ้ง (U157): ไม่ใช่แท็บเล็ต = มือถือ */
@@ -244,7 +253,7 @@ export type ModelUpsertPlan =
   | { kind: 'unchanged'; id: string }
 
 /**
- * ตัดสินว่ารุ่นที่ดึงมาต้อง สร้างใหม่ / เติมข้อมูล / ไม่ต้องทำอะไร — หัวใจของ idempotency
+ * ตัดสินว่ารุ่นจากฐาน TAC ต้อง สร้างใหม่ / เติมข้อมูล / ไม่ต้องทำอะไร — หัวใจของ idempotency
  *
  * - จับคู่ด้วย `external_id` ก่อน แล้วค่อยชื่อ (ไม่สนตัวพิมพ์/ช่องว่าง)
  * - **ไม่แตะค่าที่ผู้ดูแลตั้งด้วยมือ** (`manual_status` — U159) · **ไม่ทับชื่อที่ผู้ดูแลแก้** (`name_edited_at`)
@@ -274,37 +283,4 @@ export function planModelUpsert(existing: readonly ExistingModelRow[], incoming:
     data.nameKey = nameKey
   }
   return Object.keys(data).length === 0 ? { kind: 'unchanged', id: match.id } : { kind: 'update', id: match.id, data }
-}
-
-/**
- * ลำดับแบรนด์ที่ job ดึงรายการรุ่นในรอบนี้ (ประหยัดโควตา — U157 · U162):
- * ① แบรนด์**ในรายชื่อตลาดไทย** (`priorityBrandNames` = รายชื่อแบรนด์ในค่าตั้ง) ที่ยังไม่เคยดึง — **ตามลำดับรายชื่อ** (U162)
- * ② แบรนด์อื่นที่ยังไม่เคยดึง (`lastSyncedAt = null`) ตามชื่อ
- * ③ แบรนด์ที่ดึงแล้ว — ดึงนานที่สุดก่อน (หมุนเวียนหารุ่นใหม่)
- * การดึงครบครั้งแรก resume ต่อจากที่ค้างได้เพราะแบรนด์ที่ดึงแล้วมี `last_synced_at` · แบรนด์เพิ่มเอง (ไม่มีชื่อฝั่ง API)
- * ไม่ถูกดึง · จำกัดจำนวนตาม `budget` (จำนวน request ที่เหลือของรอบ)
- */
-export function pickBrandsToSync<T extends { externalId: string | null; lastSyncedAt: Date | null; name: string }>(
-  brands: readonly T[],
-  budget: number,
-  priorityBrandNames: readonly string[] = [],
-): T[] {
-  if (budget <= 0) return []
-  const priorityRank = new Map<string, number>()
-  priorityBrandNames.forEach((name, index) => {
-    const key = normalizeCatalogName(name)
-    if (key !== '' && !priorityRank.has(key)) priorityRank.set(key, index)
-  })
-  const rankOf = (brand: T): number | undefined => priorityRank.get(normalizeCatalogName(brand.name))
-
-  const remote = brands.filter((brand) => brand.externalId !== null)
-  const never = remote.filter((brand) => brand.lastSyncedAt === null)
-  const priorityNever = never
-    .filter((brand) => rankOf(brand) !== undefined)
-    .sort((a, b) => (rankOf(a) ?? 0) - (rankOf(b) ?? 0) || a.name.localeCompare(b.name))
-  const otherNever = never.filter((brand) => rankOf(brand) === undefined).sort((a, b) => a.name.localeCompare(b.name))
-  const synced = remote
-    .filter((brand) => brand.lastSyncedAt !== null)
-    .sort((a, b) => (a.lastSyncedAt?.getTime() ?? 0) - (b.lastSyncedAt?.getTime() ?? 0))
-  return [...priorityNever, ...otherNever, ...synced].slice(0, budget)
 }

@@ -714,10 +714,20 @@ enum DeviceCatalogStatus {
 
 /// มติ PO U155 — ที่มาของรายการแคตตาล็อก: api = job ดึงจาก RapidAPI (DEC-016) · manual = ผู้ดูแลเพิ่มเอง
 enum DeviceCatalogSource {
-  api
+  /// มาจากฐาน TAC (มติ PO U166 · DEC-017)
+  tacdb
   manual
 
   @@map("device_catalog_source")
+}
+
+/// ที่มาของแถว TAC (มติ PO U166) — tacdb = ไฟล์ฐาน TAC สาธารณะ · learned = ระบบจำจากงานจริง · manual = ผู้ดูแลเพิ่ม/ผูกเอง
+enum DeviceTacSource {
+  tacdb
+  learned
+  manual
+
+  @@map("device_tac_source")
 }
 
 enum NotificationOutboxStatus {
@@ -815,6 +825,7 @@ model Organization {
   deviceBrands                   DeviceBrand[]
   deviceCatalogSettings          DeviceCatalogSettings?
   deviceModels                   DeviceModel[]
+  deviceTacs                     DeviceTac[]
   checkIns                       CheckIn[]
   fieldDaySettlements            FieldDaySettlement[]
   caseEvidences                  CaseEvidence[]
@@ -1028,6 +1039,7 @@ model User {
   deviceBrandsCreated           DeviceBrand[]                   @relation("device_brands_created_by")
   deviceCatalogSettingsUpdated  DeviceCatalogSettings[]         @relation("device_catalog_settings_updated_by")
   deviceModelsCreated           DeviceModel[]                   @relation("device_models_created_by")
+  deviceTacsCreated             DeviceTac[]                     @relation("device_tacs_created_by")
   checkInsCreated               CheckIn[]                       @relation("checkins_created_by")
   fieldDaySettlements           FieldDaySettlement[]            @relation("field_day_settlements_agent")
   evidencesCreated              CaseEvidence[]                  @relation("evidences_created_by")
@@ -1378,12 +1390,12 @@ model ServiceFeeTemplate {
   model          ServiceFeeModel
 
   /// FLAT / HYBRID
-  baseSatang   Int              @default(0) @map("base_satang")
+  baseSatang    Int              @default(0) @map("base_satang")
   /// SUCCESS_FEE / HYBRID
-  ratePct      Decimal          @default(0) @map("rate_pct") @db.Decimal(5, 2)
-  basis        ServiceFeeBasis?
+  ratePct       Decimal          @default(0) @map("rate_pct") @db.Decimal(5, 2)
+  basis         ServiceFeeBasis?
   /// มติ PO U165 — ยอดค่าบริการกรณีไม่สำเร็จ (ทุกโมเดล) · NULL = ไม่เก็บกรณีไม่สำเร็จ · CHECK ≥ 0 (raw SQL)
-  failFeeSatang Int?            @map("fail_fee_satang")
+  failFeeSatang Int?             @map("fail_fee_satang")
   // มติ PO U125 — ตัดสวิตช์ charge_per_tracking_round: คิดค่าบริการทุกรอบติดตามอิสระเสมอ
 
   version   Int     @default(1)
@@ -1408,20 +1420,20 @@ model ServiceFeeTemplate {
 
 /// กติกาภาษีต่อ Payee (ไฟล์ 18 §6.3) — Payee-level ชนะ Plan-level เสมอ
 model TaxProfile {
-  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId        String        @map("organization_id") @db.Uuid
+  id                    String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String               @map("organization_id") @db.Uuid
   name                  String
   /// % หัก ณ ที่จ่าย
-  whtPct                Decimal       @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
+  whtPct                Decimal              @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
   /// before_vat | gross_amount — ฐานคำนวณ WHT
-  whtBasis              String        @default("before_vat") @map("wht_basis")
+  whtBasis              String               @default("before_vat") @map("wht_basis")
   /// ต่ำกว่านี้ไม่หัก (default 1,000 บาท)
-  whtMinThresholdSatang Int           @default(100000) @map("wht_min_threshold_satang")
+  whtMinThresholdSatang Int                  @default(100000) @map("wht_min_threshold_satang")
   /// ประเภทเงินได้จากรายการมาตรฐาน (มติ PO U148)
   incomeTypeCode        TaxProfileIncomeType @default(hire_of_work_40_8) @map("income_type_code")
   /// ข้อความที่พิมพ์ลง 50 ทวิ — รายการมาตรฐาน = ป้ายของรายการ (ระบบเขียนให้) · `other` = ข้อความที่ระบุเอง
-  incomeType            String        @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
-  filingForm            WhtFilingForm @default(PND3) @map("filing_form")
+  incomeType            String               @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
+  filingForm            WhtFilingForm        @default(PND3) @map("filing_form")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -1556,8 +1568,8 @@ model BankAccount {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  createdByUser User         @relation("bank_accounts_created_by", fields: [createdBy], references: [id])
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  createdByUser     User            @relation("bank_accounts_created_by", fields: [createdBy], references: [id])
   statementFormat   BankFileFormat? @relation("bank_account_statement_format", fields: [statementFormatId], references: [id], onDelete: Restrict)
   paymentFileFormat BankFileFormat? @relation("bank_account_payment_file_format", fields: [paymentFileFormatId], references: [id], onDelete: Restrict)
 
@@ -1870,6 +1882,9 @@ model Case {
   deviceModelId    String?    @map("device_model_id") @db.Uuid
   /// A6 (มติ PO 2026-08-12) — IMEI 15 หลักเท่านั้น (exact match ห้าม fuzzy · `44` §6.5)
   imei             String?    @db.VarChar(15)
+  /// มติ PO U166 — ความจุ/สีตามสัญญา (snapshot ข้อความ · "ไม่ระบุในสัญญา" เป็นค่าที่เลือกได้) · บังคับก่อนส่งตรวจ
+  assetCapacity    String?    @map("asset_capacity")
+  assetColor       String?    @map("asset_color")
   /// A6 — เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ) เก็บ serial แทน · ต้องมีอย่างน้อย 1 อย่างก่อนปิดงานสำเร็จ
   serialNo         String?    @map("serial_no")
   debtAmountSatang Int?       @map("debt_amount_satang")
@@ -2021,28 +2036,28 @@ model CaseEditHistory {
 /// คำขอ recycle เคส closed_fail (`38` §6.5) — insert-only
 /// แถวที่ `status = approved` คือ `recycle_history` ของ `38` §6.4 (previous_round → new_round)
 model RecycleRequest {
-  id                         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId             String           @map("organization_id") @db.Uuid
-  caseId                     String           @map("case_id") @db.Uuid
-  status                     RecycleStatus    @default(pending)
-  requestNote                String           @map("request_note")
-  decisionNote               String?          @map("decision_note")
+  id                          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId              String           @map("organization_id") @db.Uuid
+  caseId                      String           @map("case_id") @db.Uuid
+  status                      RecycleStatus    @default(pending)
+  requestNote                 String           @map("request_note")
+  decisionNote                String?          @map("decision_note")
   /// `38` §6.4 `recycle_history` — เลขรอบก่อน/หลังอนุมัติ (เติมตอน approve เท่านั้น)
-  previousRound              Int?             @map("previous_round")
-  newRound                   Int?             @map("new_round")
+  previousRound               Int?             @map("previous_round")
+  newRound                    Int?             @map("new_round")
   /// มติ PO O72(2) (BUG-SF2) — snapshot ของ**รอบก่อนอนุมัติรีไซเกิล** (ผลปิดงาน/วันปิดงาน/ค่าบริการ/ยอดหนี้)
   /// เคสถูกล้างค่าเหล่านี้ตอนขึ้นรอบใหม่ ⇒ รายการเบิกของรอบเดิมที่อนุมัติทีหลังยังสร้างรายได้ของรอบเดิมได้
   /// (`revenues.tracking_round` = `previous_round`) · เติมตอน approve เท่านั้น · NULL = คำขอเก่าก่อนมติ (backfill จาก audit)
-  prevOutcome                CaseOutcome?     @map("prev_outcome")
-  prevClosedAt               DateTime?        @map("prev_closed_at") @db.Timestamptz(6)
-  prevServiceFeeModel        ServiceFeeModel? @map("prev_service_fee_model")
-  prevServiceFeeBaseSatang   Int?             @map("prev_service_fee_base_satang")
-  prevServiceFeeRatePct      Decimal?         @map("prev_service_fee_rate_pct") @db.Decimal(5, 2)
-  prevServiceFeeBasis        ServiceFeeBasis? @map("prev_service_fee_basis")
-  prevServiceFeeFailFeeSatang Int?            @map("prev_service_fee_fail_fee_satang")
-  prevDebtAmountSatang       Int?             @map("prev_debt_amount_satang")
-  decidedBy                  String?          @map("decided_by") @db.Uuid
-  decidedAt                  DateTime?        @map("decided_at") @db.Timestamptz(6)
+  prevOutcome                 CaseOutcome?     @map("prev_outcome")
+  prevClosedAt                DateTime?        @map("prev_closed_at") @db.Timestamptz(6)
+  prevServiceFeeModel         ServiceFeeModel? @map("prev_service_fee_model")
+  prevServiceFeeBaseSatang    Int?             @map("prev_service_fee_base_satang")
+  prevServiceFeeRatePct       Decimal?         @map("prev_service_fee_rate_pct") @db.Decimal(5, 2)
+  prevServiceFeeBasis         ServiceFeeBasis? @map("prev_service_fee_basis")
+  prevServiceFeeFailFeeSatang Int?             @map("prev_service_fee_fail_fee_satang")
+  prevDebtAmountSatang        Int?             @map("prev_debt_amount_satang")
+  decidedBy                   String?          @map("decided_by") @db.Uuid
+  decidedAt                   DateTime?        @map("decided_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -2224,11 +2239,18 @@ model DataRetentionSettings {
 /// ค่าตั้งตัวกรองของ Model Phone (มติ PO U159 · `13` §6.18) — 1 record ต่อองค์กร · ไม่มีแถว = ค่าเริ่มต้น
 /// เปลี่ยนแล้วการแสดงคำนวณใหม่ทันที (คำนวณตอนอ่าน — ไม่ต้องดึง API และไม่แตะ manual override)
 model DeviceCatalogSettings {
-  organizationId String   @id @map("organization_id") @db.Uuid
+  organizationId  String    @id @map("organization_id") @db.Uuid
   /// รายชื่อแบรนด์ที่แสดงตั้งต้น (เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง)
-  brandNames     String[] @default([]) @map("brand_names")
+  brandNames      String[]  @default([]) @map("brand_names")
   /// แสดงรุ่นที่ออกภายใน N ปีล่าสุด — CHECK 1–30 (raw SQL)
-  recentYears    Int      @default(5) @map("recent_years")
+  recentYears     Int       @default(5) @map("recent_years")
+  /// ETag ของไฟล์ TAC ที่นำเข้าล่าสุด (U166) — ส่ง If-None-Match ไม่เปลี่ยน = จบงาน
+  tacEtag         String?   @map("tac_etag")
+  tacCheckedAt    DateTime? @map("tac_checked_at") @db.Timestamptz(6)
+  tacImportedAt   DateTime? @map("tac_imported_at") @db.Timestamptz(6)
+  /// ตัวเลือกความจุ/สีของฟอร์มรับเคส (U166) — ผู้ดูแลแก้ได้ในหน้า Model Phone
+  capacityOptions String[]  @default(["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]) @map("capacity_options")
+  colorOptions    String[]  @default(["ดำ", "ขาว", "เงิน", "เทา", "ทอง", "น้ำเงิน", "ฟ้า", "เขียว", "ม่วง", "ชมพู", "แดง", "ส้ม", "เหลือง"]) @map("color_options")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
@@ -2251,10 +2273,6 @@ model DeviceBrand {
   /// ค่าที่ผู้ดูแลตั้งด้วยมือ (U159) — NULL = ตามตัวกรอง
   manualStatus   DeviceCatalogStatus? @map("manual_status")
   source         DeviceCatalogSource
-  /// ชื่อแบรนด์ฝั่ง API (สะกดตามต้นทาง ใช้เรียก endpoint รุ่น) — NULL = เพิ่มเอง
-  externalId     String?              @map("external_id")
-  /// ดึงรายการรุ่นของแบรนด์นี้ครั้งล่าสุดเมื่อไร — NULL = ยังไม่เคยดึง (ดึงครบครั้งแรก resume ได้จากค่านี้)
-  lastSyncedAt   DateTime?            @map("last_synced_at") @db.Timestamptz(6)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String?   @map("created_by") @db.Uuid
@@ -2267,7 +2285,6 @@ model DeviceBrand {
   models        DeviceModel[]
 
   @@unique([organizationId, nameKey], map: "uniq_device_brands_org_name")
-  @@index([organizationId, lastSyncedAt], map: "idx_device_brands_org_last_synced")
   @@map("device_brands")
 }
 
@@ -2284,7 +2301,7 @@ model DeviceModel {
   /// ค่าที่ผู้ดูแลตั้งด้วยมือ (U159) — NULL = ตามตัวกรอง
   manualStatus   DeviceCatalogStatus? @map("manual_status")
   source         DeviceCatalogSource
-  /// รหัสรุ่นฝั่ง API (ไม่มี = ชื่อรุ่นฝั่งต้นทาง) — UNIQUE ต่อแบรนด์ · ใช้ upsert แบบ idempotent
+  /// กุญแจชื่อรุ่นตามฐาน TAC (U166) — UNIQUE ต่อแบรนด์ · ผู้ดูแลแก้ชื่อแล้วรอบหน้ายังจับคู่แถวเดิมได้ · NULL = เพิ่มเอง
   externalId     String?              @map("external_id")
   /// ปีที่ออก (ค.ศ. ตามข้อมูลต้นทาง ถ้ามี) — ตัวกรอง "ภายใน N ปีล่าสุด" (U159) · NULL = ไม่ทราบ (ผ่านตัวกรอง)
   releaseYear    Int?                 @map("release_year")
@@ -2301,11 +2318,45 @@ model DeviceModel {
   brand         DeviceBrand  @relation(fields: [brandId], references: [id])
   createdByUser User?        @relation("device_models_created_by", fields: [createdBy], references: [id])
   cases         Case[]
+  tacs          DeviceTac[]
 
   @@unique([brandId, nameKey], map: "uniq_device_models_brand_name")
   @@unique([brandId, externalId], map: "uniq_device_models_brand_external")
   @@index([organizationId, assetKind], map: "idx_device_models_org_kind")
   @@map("device_models")
+}
+
+/// ฐาน TAC (8 หลักแรกของ IMEI) → ยี่ห้อ/รุ่น (มติ PO U166 · DEC-017 · `13` §6.18) — 1 แถวต่อ TAC ต่อองค์กร
+/// job รายสัปดาห์เพิ่ม**เฉพาะ TAC ใหม่** (ไม่ทับแถวเดิม — ทั้งที่ระบบจำ/ผู้ดูแลผูก/ฐานเดิม)
+model DeviceTac {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String          @map("organization_id") @db.Uuid
+  /// ตัวเลข 8 หลัก — CHECK (raw SQL)
+  tac            String          @db.Char(8)
+  brandName      String          @map("brand_name")
+  /// ชื่อรุ่นเต็ม (ไม่มีชื่อแบรนด์นำหน้า)
+  modelName      String          @map("model_name")
+  /// รหัสรุ่นย่อย/รหัสรุ่นผู้ผลิต เช่น SM-A546E/DS
+  variant        String?
+  releaseYear    Int?            @map("release_year")
+  source         DeviceTacSource
+  /// รุ่นในแคตตาล็อกที่ผูก — NULL = ยังไม่ผูก (แสดงข้อความยี่ห้อ/รุ่นของแถวนี้แทน)
+  deviceModelId  String?         @map("device_model_id") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  deviceModel   DeviceModel? @relation(fields: [deviceModelId], references: [id])
+  createdByUser User?        @relation("device_tacs_created_by", fields: [createdBy], references: [id])
+
+  @@unique([organizationId, tac], map: "uniq_device_tacs_org_tac")
+  @@index([organizationId, deviceModelId], map: "idx_device_tacs_org_model")
+  @@index([organizationId, source], map: "idx_device_tacs_org_source")
+  @@map("device_tacs")
 }
 
 /// เช็คอินระหว่างลงพื้นที่ (`41` §6.2) — GPS จริงเท่านั้น · insert-only
@@ -2479,13 +2530,17 @@ model Asset {
   deviceDesc String @map("device_desc")
 
   /// IMEI ตามสัญญา (15 หลัก) — NULL ได้เฉพาะเครื่องที่ไม่มี IMEI (ต้องมี `serialContract` แทน)
-  imeiContract   String? @map("imei_contract") @db.VarChar(15)
+  imeiContract         String?  @map("imei_contract") @db.VarChar(15)
   /// IMEI ที่ตรวจจริงตอนรับเข้าคลัง — ต่างจากสัญญา = IMEI_MISMATCH (เตือน ไม่ block)
-  imeiActual     String? @map("imei_actual") @db.VarChar(15)
+  imeiActual           String?  @map("imei_actual") @db.VarChar(15)
   /// A6 — serial ตามสัญญา (เครื่องไม่มี IMEI)
-  serialContract String? @map("serial_contract")
+  serialContract       String?  @map("serial_contract")
   /// A6 — serial ที่ตรวจจริงตอนรับเข้าคลัง
-  serialActual   String? @map("serial_actual")
+  serialActual         String?  @map("serial_actual")
+  /// มติ PO U166 — ความจุ/สีตามสัญญา (snapshot จากเคส) + ผลติ๊ก "สี/ความจุตรง" ตอนรับเข้าคลัง (NULL = ยังไม่ตรวจ)
+  deviceCapacity       String?  @map("device_capacity")
+  deviceColor          String?  @map("device_color")
+  colorCapacityMatched Boolean? @map("color_capacity_matched")
 
   assetStatus   AssetStatus     @default(pending_intake) @map("asset_status")
   condition     AssetCondition?
@@ -2623,9 +2678,9 @@ model PayeeProfile {
   whtCondition       WhtCondition @default(withhold) @map("wht_condition")
 
   /// บังคับเมื่อ `finance_policy_settings.require_payee_id_document = true` (`13` §6.2)
-  idDocumentUrl String? @map("id_document_url")
+  idDocumentUrl        String? @map("id_document_url")
   /// SHA-256 ของเอกสารยืนยันตัวตนที่ server ดาวน์โหลดมาตรวจเอง (มติ PO U150)
-  idDocumentHash String? @map("id_document_hash") @db.VarChar(64)
+  idDocumentHash       String? @map("id_document_hash") @db.VarChar(64)
   /// เอกสารเดิมที่เป็น URL พิมพ์เอง (ก่อนมติ PO U150) — ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร
   /// CHECK (raw SQL): มี path ⇒ ต้องมี hash หรือ flag นี้ = true
   idDocumentUnverified Boolean @default(false) @map("id_document_unverified")
