@@ -267,6 +267,13 @@ const MATRIX: Readonly<Record<string, ReadonlyArray<readonly [RoleRef, Capabilit
     [executive, 'view'],
   ],
 
+  // แคตตาล็อกแบรนด์/รุ่นเครื่อง (มติ PO U155): ธุรการ (คนรับเคส) จัดการ · บริหาร ดู · Superadmin ไม่มี record
+  // role อื่นมอบได้ที่หน้าจัดการ Role (ไม่ล็อก)
+  manage_device_catalog: [
+    [adminOffice, 'manage'],
+    [executive, 'view'],
+  ],
+
   // ── นอก matrix: ผู้ใช้ภายในดูพอร์ทัลในฐานะลูกค้า (มติ PO 05/10/2569 U59 · `97` §13.1) ──
   // ค่าเริ่มต้น = ธุรการ (ช่วยลูกค้า) · Superadmin โดยนิยาม (ไม่มี record) · role ภายในอื่นมอบได้ที่หน้าจัดการ Role
   view_client_portal_as: [[adminOffice, 'view']],
@@ -299,6 +306,8 @@ export const BOUND_NON_MATRIX_CAPABILITIES: readonly string[] = [
   'manage_holidays',
   // ระยะเก็บเอกสารลูกหนี้ (มติ PO 06/10/2569 U97)
   'manage_data_retention',
+  // แคตตาล็อกแบรนด์/รุ่นเครื่อง (มติ PO U155)
+  'manage_device_catalog',
   // พอร์ทัลบริษัทไฟแนนซ์ (มติ PO 05/10/2569 U6/O43 D1)
   'portal_cases',
   'portal_finance',

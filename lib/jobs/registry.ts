@@ -4,6 +4,7 @@ import { runPurgeDebtorDocumentsJob } from '@/lib/cases/debtor-document-purge-jo
 import type { SessionUser } from '@/lib/auth/types'
 import { loadSessionUser } from '@/lib/auth/session'
 import { createExportPack } from '@/lib/exports/queries'
+import { maxRequestsFromPayload, runDeviceCatalogSyncJob } from '@/lib/device-catalog/sync-job'
 import { runDailyFieldAllowanceJob } from '@/lib/field/daily-allowance-job'
 import { runFuelDistanceRetryJob } from '@/lib/field/fuel-distance-job'
 import type { JobRow } from '@/lib/jobs/engine'
@@ -38,6 +39,7 @@ import { runWhtSummaryJob } from '@/lib/wht/summary-job'
  * | `daily_field_allowance` | `runDailyFieldAllowanceJob()` | มติ PO 03/10/2569 UAT Q21 (DEC-012) |
  * | `purge_debtor_documents` | `runPurgeDebtorDocumentsJob()` | มติ PO 06/10/2569 U97 (PDPA) |
  * | `payout_completion_repair` | `runPayoutCompletionRepair()` | มติ PO 07/10/2569 U134 — ตั้งโดยตัวกวาดด้านล่าง |
+ * | `device_catalog_sync` | `runDeviceCatalogSyncJob()` | มติ PO 07/10/2569 U155 → U157 · DEC-016 |
  *
  * `fuel_distance_retry` **ไม่อยู่ในทะเบียนนี้** — handler เดิม (`runFuelDistanceRetryJob()`) เป็น
  * ตัวกวาดคิว: มันไปหยิบ job ของตัวเองจากตาราง `jobs` แล้วจัดการสถานะ/retry เองครบตั้งแต่ Phase 2.9
@@ -174,6 +176,17 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
     const result = await runPurgeDebtorDocumentsJob({
       now,
       jobId: job.id,
+      ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
+    })
+    return { ...result }
+  },
+
+  device_catalog_sync: async ({ job, now }) => {
+    const result = await runDeviceCatalogSyncJob({
+      now,
+      jobId: job.id,
+      // ผู้ดูแลกด "ดึงข้อมูลตอนนี้" ส่งเพดาน request มากกว่าคืนปกติ (ดึงครบครั้งแรก — มติ PO U157)
+      maxRequests: maxRequestsFromPayload(job.payload),
       ...(job.organizationId === null ? {} : { organizationId: job.organizationId }),
     })
     return { ...result }

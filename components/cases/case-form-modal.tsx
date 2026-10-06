@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
 import { CaseAttachmentsFields, type StagedFile } from '@/components/cases/case-attachments-fields'
 import { CaseContactsFields } from '@/components/cases/case-contacts-fields'
+import { DeviceModelPicker } from '@/components/cases/device-model-picker'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
 import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -532,7 +533,10 @@ export function CaseFormModal({
                 id="asset-type"
                 value={form.assetType}
                 invalid={fieldErrors.assetType !== undefined}
-                onChange={(event) => patch({ assetType: event.target.value as CaseFormState['assetType'] })}
+                // เปลี่ยนประเภททรัพย์ = รุ่นที่เลือกจากรายการเดิมไม่ตรงประเภทแล้ว (ข้อความยังคงไว้)
+                onChange={(event) =>
+                  patch({ assetType: event.target.value as CaseFormState['assetType'], deviceModelId: null })
+                }
               >
                 <option value="">— เลือกประเภท —</option>
                 {Object.entries(ASSET_TYPE_LABEL).map(([value, label]) => (
@@ -543,12 +547,12 @@ export function CaseFormModal({
               </Select>
             </Field>
             <Field id="asset-model" label="ยี่ห้อ/รุ่นเครื่อง" required error={fieldErrors.assetBrandModel}>
-              <Input
+              <DeviceModelPicker
                 id="asset-model"
-                value={form.assetBrandModel}
-                placeholder="เช่น iPhone 14 Pro"
+                assetKind={form.assetType === '' ? null : form.assetType}
+                value={{ deviceModelId: form.deviceModelId, text: form.assetBrandModel }}
                 invalid={fieldErrors.assetBrandModel !== undefined}
-                onChange={(event) => patch({ assetBrandModel: event.target.value })}
+                onChange={(next) => patch({ deviceModelId: next.deviceModelId, assetBrandModel: next.text })}
               />
             </Field>
             <Field

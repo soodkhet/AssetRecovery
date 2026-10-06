@@ -6,6 +6,7 @@ import { createCase, type CaseMutationContext } from '@/lib/cases/queries'
 import type { CaseImportInput } from '@/lib/cases/schemas'
 import type { CaseImportResultDto, CaseImportRowResultDto } from '@/lib/cases/types'
 import { ModuleError } from '@/lib/api/errors'
+import { loadCatalogMatcher } from '@/lib/device-catalog/queries'
 import { prisma } from '@/lib/prisma'
 import { splitAssetIdentifier } from '@/lib/cases/case'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
@@ -59,6 +60,11 @@ export async function importCases(
     }),
   )
 
+  // มติ PO U155 — จับคู่ข้อความ "ยี่ห้อ/รุ่น" กับแคตตาล็อก (ไม่สนตัวพิมพ์/ช่องว่าง) · ไม่เจอ = เก็บข้อความเดิม
+  const matchDevice = plan.rows.some((row) => (row.input.assetBrandModel ?? '') !== '')
+    ? await loadCatalogMatcher(organizationId)
+    : null
+
   const results: CaseImportRowResultDto[] = plan.errors.map((error) => ({
     rowNumber: error.rowNumber,
     caseRef: error.caseRef,
@@ -101,7 +107,14 @@ export async function importCases(
     }
 
     try {
-      const created = await createCase(row.input, context)
+      const matched =
+        matchDevice === null || row.input.assetBrandModel == null
+          ? null
+          : matchDevice(row.input.assetBrandModel, row.input.assetType ?? null)
+      const created = await createCase(
+        matched === null ? row.input : { ...row.input, deviceModelId: matched.modelId },
+        context,
+      )
       results.push({
         rowNumber: row.rowNumber,
         caseRef: created.caseRef,

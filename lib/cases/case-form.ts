@@ -37,6 +37,8 @@ export interface CaseFormState {
   addressIdCard: AddressValue
   assetType: '' | 'smartphone' | 'tablet'
   assetBrandModel: string
+  /** มติ PO U155 — รุ่นที่เลือกจากแคตตาล็อก (`null` = ระบุเอง) · ข้อความ snapshot อยู่ที่ `assetBrandModel` */
+  deviceModelId: string | null
   assetImeiSerial: string
   /** ค่าที่ผู้ใช้พิมพ์เป็น **บาท** (ยังไม่แปลง) */
   outstandingDebtBaht: string
@@ -104,6 +106,7 @@ export const EMPTY_CASE_FORM: CaseFormState = {
   addressIdCard: EMPTY_ADDRESS,
   assetType: 'smartphone',
   assetBrandModel: '',
+  deviceModelId: null,
   assetImeiSerial: '',
   outstandingDebtBaht: '',
   contacts: [],
@@ -133,6 +136,7 @@ export function caseFormFromDetail(detail: CaseDetailDto | null): CaseFormState 
     addressIdCard: addressFromDto(detail.addressIdCard),
     assetType: detail.assetType === 'smartphone' || detail.assetType === 'tablet' ? detail.assetType : '',
     assetBrandModel: detail.assetBrandModel ?? '',
+    deviceModelId: detail.deviceModelId,
     assetImeiSerial: detail.assetImeiSerial ?? '',
     outstandingDebtBaht: toBahtInput(detail.outstandingDebtSatang),
     contacts: detail.contacts.map((contact) => ({
@@ -182,6 +186,7 @@ export function buildCasePayload(
     contacts: contactsPayload(form.contacts),
     assetType: form.assetType === '' ? null : form.assetType,
     assetBrandModel: form.assetBrandModel,
+    deviceModelId: form.deviceModelId,
     assetImeiSerial: form.assetImeiSerial,
     outstandingDebtSatang: Number.isNaN(debt) ? form.outstandingDebtBaht : debt,
     documentMode: form.documentMode,

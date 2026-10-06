@@ -703,6 +703,23 @@ enum JobStatus {
 }
 
 /// สถานะแถวคิวแจ้งเตือน (DEC-015 · มติ PO U120) — pending = รอส่ง/รอ retry · sent = ส่งแล้ว · failed = ครบเพดาน retry
+/// มติ PO U155 → U159 — ค่าที่ผู้ดูแลตั้งด้วยมือในแคตตาล็อก Model Phone (`02` §3 v4.5x-DE)
+/// active = เปิด · hidden = ปิด — ใช้เป็น **manual override** เท่านั้น (NULL = ตามตัวกรอง) · ชนะตัวกรองเสมอ
+enum DeviceCatalogStatus {
+  active
+  hidden
+
+  @@map("device_catalog_status")
+}
+
+/// มติ PO U155 — ที่มาของรายการแคตตาล็อก: api = job ดึงจาก RapidAPI (DEC-016) · manual = ผู้ดูแลเพิ่มเอง
+enum DeviceCatalogSource {
+  api
+  manual
+
+  @@map("device_catalog_source")
+}
+
 enum NotificationOutboxStatus {
   pending
   sent
@@ -795,6 +812,9 @@ model Organization {
   reassignmentHistory            ReassignmentHistory[]
   assignmentPolicySettings       AssignmentPolicySettings?
   dataRetentionSettings          DataRetentionSettings?
+  deviceBrands                   DeviceBrand[]
+  deviceCatalogSettings          DeviceCatalogSettings?
+  deviceModels                   DeviceModel[]
   checkIns                       CheckIn[]
   fieldDaySettlements            FieldDaySettlement[]
   caseEvidences                  CaseEvidence[]
@@ -1005,6 +1025,9 @@ model User {
   reassignmentHistoryActor      ReassignmentHistory[]           @relation("reassignment_history_reassigned_by")
   assignmentPolicyUpdated       AssignmentPolicySettings[]      @relation("assignment_policy_settings_updated_by")
   dataRetentionUpdated          DataRetentionSettings[]         @relation("data_retention_settings_updated_by")
+  deviceBrandsCreated           DeviceBrand[]                   @relation("device_brands_created_by")
+  deviceCatalogSettingsUpdated  DeviceCatalogSettings[]         @relation("device_catalog_settings_updated_by")
+  deviceModelsCreated           DeviceModel[]                   @relation("device_models_created_by")
   checkInsCreated               CheckIn[]                       @relation("checkins_created_by")
   fieldDaySettlements           FieldDaySettlement[]            @relation("field_day_settlements_agent")
   evidencesCreated              CaseEvidence[]                  @relation("evidences_created_by")
@@ -1841,6 +1864,9 @@ model Case {
   assetKind        AssetKind? @map("asset_kind")
   /// `38` §6.2 `asset_brand_model` — ยี่ห้อ/รุ่นเครื่อง (คอลัมน์เดิมของ `02` §6)
   assetDescription String?    @map("asset_description")
+  /// มติ PO U155 — อ้างรุ่นในแคตตาล็อกเมื่อผู้ใช้เลือกจากรายการ (NULL = ระบุเอง/ไม่พบในรายการ)
+  /// ข้อความ `asset_description` ยังเป็น snapshot หลักเสมอ — ผู้ดูแลแก้ชื่อรุ่นภายหลังไม่กระทบเคสเดิม
+  deviceModelId    String?    @map("device_model_id") @db.Uuid
   /// A6 (มติ PO 2026-08-12) — IMEI 15 หลักเท่านั้น (exact match ห้าม fuzzy · `44` §6.5)
   imei             String?    @db.VarChar(15)
   /// A6 — เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ) เก็บ serial แทน · ต้องมีอย่างน้อย 1 อย่างก่อนปิดงานสำเร็จ
@@ -1891,6 +1917,7 @@ model Case {
   reviewedByUser     User?               @relation("cases_reviewed_by", fields: [reviewedBy], references: [id])
   createdByUser      User                @relation("cases_created_by", fields: [createdBy], references: [id])
   updatedByUser      User?               @relation("cases_updated_by", fields: [updatedBy], references: [id])
+  deviceModel        DeviceModel?        @relation(fields: [deviceModelId], references: [id])
 
   documents   CaseDocument[]
   contacts    CaseContact[]
@@ -2191,6 +2218,93 @@ model DataRetentionSettings {
   updatedByUser User?        @relation("data_retention_settings_updated_by", fields: [updatedBy], references: [id])
 
   @@map("data_retention_settings")
+}
+
+/// ค่าตั้งตัวกรองของ Model Phone (มติ PO U159 · `13` §6.18) — 1 record ต่อองค์กร · ไม่มีแถว = ค่าเริ่มต้น
+/// เปลี่ยนแล้วการแสดงคำนวณใหม่ทันที (คำนวณตอนอ่าน — ไม่ต้องดึง API และไม่แตะ manual override)
+model DeviceCatalogSettings {
+  organizationId String   @id @map("organization_id") @db.Uuid
+  /// รายชื่อแบรนด์ที่แสดงตั้งต้น (เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง)
+  brandNames     String[] @default([]) @map("brand_names")
+  /// แสดงรุ่นที่ออกภายใน N ปีล่าสุด — CHECK 1–30 (raw SQL)
+  recentYears    Int      @default(5) @map("recent_years")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  updatedByUser User?        @relation("device_catalog_settings_updated_by", fields: [updatedBy], references: [id])
+
+  @@map("device_catalog_settings")
+}
+
+/// แบรนด์ในแคตตาล็อก "Model Phone" (มติ PO U155 → U159) — job ดึงทุกแบรนด์จาก RapidAPI เก็บไว้ (DEC-016)
+/// แสดงในตัวเลือก = `manual_status` ถ้าผู้ดูแลตั้ง ไม่งั้นตามตัวกรอง (อยู่ในรายชื่อแบรนด์ของค่าตั้ง)
+/// ปิดแบรนด์ = ทุกรุ่นของแบรนด์ไม่แสดง · job/การเปลี่ยนตัวกรองไม่เขียน `manual_status` เด็ดขาด
+model DeviceBrand {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  name           String
+  /// ชื่อที่ตัดช่องว่าง/ขีด/จุด + ตัวพิมพ์เล็ก — กุญแจกันซ้ำ/จับคู่ข้อความนำเข้า (`normalizeCatalogName()`)
+  nameKey        String               @map("name_key")
+  /// ค่าที่ผู้ดูแลตั้งด้วยมือ (U159) — NULL = ตามตัวกรอง
+  manualStatus   DeviceCatalogStatus? @map("manual_status")
+  source         DeviceCatalogSource
+  /// ชื่อแบรนด์ฝั่ง API (สะกดตามต้นทาง ใช้เรียก endpoint รุ่น) — NULL = เพิ่มเอง
+  externalId     String?              @map("external_id")
+  /// ดึงรายการรุ่นของแบรนด์นี้ครั้งล่าสุดเมื่อไร — NULL = ยังไม่เคยดึง (ดึงครบครั้งแรก resume ได้จากค่านี้)
+  lastSyncedAt   DateTime?            @map("last_synced_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  createdByUser User?         @relation("device_brands_created_by", fields: [createdBy], references: [id])
+  models        DeviceModel[]
+
+  @@unique([organizationId, nameKey], map: "uniq_device_brands_org_name")
+  @@index([organizationId, lastSyncedAt], map: "idx_device_brands_org_last_synced")
+  @@map("device_brands")
+}
+
+/// รุ่นในแคตตาล็อก (มติ PO U155 → U159) — job เก็บทุกรุ่น · แสดง = `manual_status` ถ้าผู้ดูแลตั้ง
+/// ไม่งั้นตามตัวกรอง (ออกภายใน N ปีล่าสุด) และแบรนด์ต้องแสดงด้วย · job ไม่แตะ `manual_status`
+model DeviceModel {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  brandId        String               @map("brand_id") @db.Uuid
+  /// ประเภททรัพย์ (`38` §6.2) — ต้นทางไม่แยก ⇒ จัดจากชื่อรุ่น (แท็บเล็ต/มือถือ) · ผู้ดูแลแก้ได้
+  assetKind      AssetKind            @map("asset_kind")
+  name           String
+  nameKey        String               @map("name_key")
+  /// ค่าที่ผู้ดูแลตั้งด้วยมือ (U159) — NULL = ตามตัวกรอง
+  manualStatus   DeviceCatalogStatus? @map("manual_status")
+  source         DeviceCatalogSource
+  /// รหัสรุ่นฝั่ง API (ไม่มี = ชื่อรุ่นฝั่งต้นทาง) — UNIQUE ต่อแบรนด์ · ใช้ upsert แบบ idempotent
+  externalId     String?              @map("external_id")
+  /// ปีที่ออก (ค.ศ. ตามข้อมูลต้นทาง ถ้ามี) — ตัวกรอง "ภายใน N ปีล่าสุด" (U159) · NULL = ไม่ทราบ (ผ่านตัวกรอง)
+  releaseYear    Int?                 @map("release_year")
+  /// ผู้ดูแลแก้ชื่อแล้ว ⇒ job ไม่ทับชื่ออีก
+  nameEditedAt   DateTime?            @map("name_edited_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  brand         DeviceBrand  @relation(fields: [brandId], references: [id])
+  createdByUser User?        @relation("device_models_created_by", fields: [createdBy], references: [id])
+  cases         Case[]
+
+  @@unique([brandId, nameKey], map: "uniq_device_models_brand_name")
+  @@unique([brandId, externalId], map: "uniq_device_models_brand_external")
+  @@index([organizationId, assetKind], map: "idx_device_models_org_kind")
+  @@map("device_models")
 }
 
 /// เช็คอินระหว่างลงพื้นที่ (`41` §6.2) — GPS จริงเท่านั้น · insert-only

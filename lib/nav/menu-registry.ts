@@ -299,6 +299,16 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         capabilityGate: { audiences: ['admin_office'], anyOf: ['view_client_portal_as'] },
         available: true,
       },
+      // มติ PO U155 → U159 — "Model Phone" แคตตาล็อกแบรนด์/รุ่นเครื่อง (mockup `settings.html` แท็บ `modelphone`)
+      // ธุรการเห็นเมื่อถือ `manage_device_catalog` (ค่าเริ่มต้น = manage) · API ตรวจ capability เดียวกันทุก endpoint
+      {
+        id: 'settings.device-catalog',
+        label: 'Model Phone',
+        path: '/settings/device-catalog',
+        audiences: ['superadmin', 'executive', 'admin_office'],
+        capabilityGate: { audiences: ['admin_office'], anyOf: ['manage_device_catalog'] },
+        available: true,
+      },
       // `06` §9 — แท็บที่สองของหน้าตั้งค่าตาม mockup `settings.html` ("ตั้งค่าบัญชี/การเงิน")
       // ข้างในเป็นแท็บแนวตั้ง 13 ตัวตามไฟล์ 13 §6.1–6.13 (5 ตัวแรกเกิดใน 1.11 · ที่เหลือ 1.12)
       {

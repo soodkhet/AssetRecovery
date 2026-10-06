@@ -84,6 +84,7 @@
 | v4.5x-DD | 07/10/2569 | **มติ PO 07/10/2569 (U151) — ผู้มีอำนาจลงนามบนเอกสารส่งออกนอก** (migration `20261008100000_authorized_signer`): `organizations` + `authorized_signer_name TEXT` / `authorized_signer_title TEXT` (ไม่บังคับ) · `document_template_snapshot` (JSONB เดิมบน `tax_invoices`/`billing_batches`/`handover_lots`) เพิ่มคีย์ `signer_name`/`signer_title` (+ `counterparty_signer_name` = `finance_companies.signer_name` ณ ตอนยืนยันล็อต — ใบส่งมอบเท่านั้น) — ไม่เปลี่ยนคอลัมน์ · `wht_certificates` + `payer_signer_name TEXT` / `payer_signer_title TEXT` (snapshot ณ วันออกใบ · trigger `wht_certificates_immutable` ครอบเพิ่ม) · เอกสาร/ใบเก่าไม่มีคีย์/NULL = ไม่พิมพ์ชื่อ (ไม่ backfill) |
 | v4.5x-DA | 07/10/2569 | **มติ PO 07/10/2569 (U143 + U150)** (migration `20261008070000_receipt_id_document_verification`) — ใบเสร็จของเบิกด้วยมือ/เคลียร์เงินทดรอง และเอกสารยืนยันตัวตนผู้รับเงิน **อัปโหลดจริงผ่าน server** (ตรวจไฟล์ + SHA-256) แทนช่อง path/URL พิมพ์เอง · `expenses` + `receipt_file_unverified BOOLEAN NOT NULL DEFAULT false` · `payee_profiles` + `id_document_hash VARCHAR(64)` + `id_document_unverified BOOLEAN NOT NULL DEFAULT false` · backfill: แถวเดิมที่มี path แต่ไม่มี hash ⇒ `*_unverified = true` (**ไม่ลบข้อมูล** — ระบบถือว่าไม่มีไฟล์: Export Pack `03_Expenses.receipt_file` · ความครบเอกสารบัญชีค่าใช้จ่าย · เกตยืนยันผู้รับเงิน) · CHECK `chk_expenses_receipt_verified` / `chk_payee_profiles_id_document_verified`: มี path ⇒ ต้องมี hash หรือเป็นข้อมูลเก่าที่ทำเครื่องหมายไว้ · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ flag = false |
 | v4.5x-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)** (migration `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source`): **(U145)** `finance_policy_settings` ลบ `advance_uncleared_to_employee_receivable` (สวิตช์ไม่เคยมีผล — รอบจ่ายหักคืนเงินทดรองค้างเสมอ) · **(U144)** `billing_batches` + `bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0` + `bank_fee_written_off_date DATE` (CHECK ≥ 0 · ยอด 0 ⇔ วันที่ NULL · partial index `idx_billing_batches_bank_fee_date (organization_id, bank_fee_written_off_date) WHERE ยอด > 0`) — ส่วนต่างรับขาด ≤ `write_off_tolerance_satang` เป็นค่าธรรมเนียมธนาคาร (`22` §6.11.1) · **(U146)** `finance_companies` ลบ `billing_day` / `payment_due_days` (รอบบิลเป็นแหล่งเดียว — บริษัทที่ไม่มีรอบครอบถูกจัดเข้ารอบบิลใหม่ `fixed_dates [billing_day]` + `net_days payment_due_days` ต่อกลุ่มค่า ⇒ วันครบกำหนดเท่าเดิม) · enum `cutoff_rule_type` ตัด `custom_text` (ค่าเดิม: เลขวันที่ในข้อความ + "สิ้นเดือน"=31 ⇒ `fixed_dates` · ไม่มี ⇒ `month_end`) · `cutoff_text` → `legacy_cutoff_text` (อ้างอิงเท่านั้น) · CHECK `cycles_cutoff_shape` ตัดกรณี custom_text · `cycles_due_rule_shape` ให้ `net_days` = 0 ได้ · ไม่มีตารางใหม่ |
+| v4.5x-DE | 07/10/2569 | **มติ PO U155 → U156 → U157 → U159 (Model Phone · DEC-016)** (migration `20261008110000_device_catalog`): enum ใหม่ `device_catalog_status` (`active`/`hidden` — ใช้เป็น **ค่าที่ผู้ดูแลตั้งด้วยมือ** เท่านั้น · ไม่มี `pending_review` ตาม U156) + `device_catalog_source` (`api`/`manual`) · ตารางใหม่ `device_catalog_settings` (1 แถว/org: `brand_names TEXT[]` + `recent_years` CHECK 1–30 ค่าเริ่มต้น 5 — ตัวกรองการแสดง) · `device_brands` (`name_key` UNIQUE ต่อ org · `manual_status` NULL = ตามตัวกรอง · `external_id` = ชื่อฝั่ง API · `last_synced_at` ใช้ resume การดึงครั้งแรก) · `device_models` (`asset_kind` · `manual_status` · `external_id` UNIQUE ต่อแบรนด์ · `release_year` CHECK 1990–2100 · `name_edited_at` = job ไม่ทับชื่อ) · `cases.device_model_id` (FK `ON DELETE SET NULL` — อ้างรุ่นเมื่อเลือกจากรายการ · ข้อความ snapshot ยังอยู่ที่ `asset_description`) · **การแสดงคำนวณตอนอ่าน** (`manual_status` ชนะ · ไม่งั้นแบรนด์ในรายชื่อ + รุ่นออกภายใน N ปี · ไม่ทราบปี = ผ่าน) — job ไม่เขียน `manual_status` · enum รวม 76 ตัว |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -495,6 +496,11 @@ CREATE TYPE job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'ca
 -- v4.48 มติ PO 06/10/2569 (U120 · DEC-015): สถานะแถวคิวแจ้งเตือนของ job
 -- pending = รอส่ง/รอ retry (available_at = เวลาที่หยิบได้) · sent = ส่งแล้ว · failed = ครบ max_attempts / payload ผิดรูป
 CREATE TYPE notification_outbox_status AS ENUM ('pending', 'sent', 'failed');
+
+-- v4.5x-DE มติ PO U155 → U159 (DEC-016): แคตตาล็อก Model Phone
+-- device_catalog_status = ค่าที่ผู้ดูแลตั้งด้วยมือ (active แสดง / hidden ไม่แสดง) · คอลัมน์ NULL = ตามตัวกรอง
+CREATE TYPE device_catalog_status AS ENUM ('active', 'hidden');
+CREATE TYPE device_catalog_source AS ENUM ('api', 'manual');
 ```
 
 ---
@@ -1091,6 +1097,7 @@ CREATE TABLE cases (
   -- Asset
   asset_kind          asset_kind,               -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.2 `asset_type`
   asset_description   TEXT,                     -- = `asset_brand_model` ของไฟล์ 38 §6.2
+  device_model_id     UUID REFERENCES device_models(id) ON DELETE SET NULL, -- v4.5x-DE (U155) รุ่นที่เลือกจาก Model Phone · NULL = ระบุเอง
   imei                VARCHAR(15),                     -- A6: IMEI 15 หลักเท่านั้น (exact match)
   serial_no           TEXT,                            -- A6: เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ)
   debt_amount_satang  INTEGER,
@@ -1304,6 +1311,63 @@ CREATE TABLE data_retention_settings (
   updated_by                      UUID        REFERENCES users(id),
   CONSTRAINT chk_data_retention_years_range CHECK (debtor_document_retention_years BETWEEN 1 AND 20)
 );
+
+-- ── device_catalog_settings / device_brands / device_models (v4.5x-DE) ─────
+-- แคตตาล็อก "Model Phone" (มติ PO U155 → U159 · DEC-016 · ไฟล์ 13 §6.18 · 38 §6.2)
+-- job device_catalog_sync ดึงทุกแบรนด์/รุ่นจาก RapidAPI เก็บไว้ · การแสดงในตัวเลือก (คำนวณตอนอ่าน) =
+--   manual_status ที่ผู้ดูแลตั้ง (ชนะเสมอ) ไม่งั้นตัวกรอง: แบรนด์ในรายชื่อ + รุ่นออกภายใน recent_years ปี (ไม่ทราบปี = ผ่าน)
+--   ปิดแบรนด์ = ทุกรุ่นไม่แสดง · job ไม่เขียน manual_status และไม่ทับชื่อที่ผู้ดูแลแก้ (name_edited_at)
+CREATE TABLE device_catalog_settings (
+  organization_id UUID        PRIMARY KEY REFERENCES organizations(id),
+  brand_names     TEXT[]      NOT NULL DEFAULT ARRAY[]::TEXT[],
+  recent_years    INTEGER     NOT NULL DEFAULT 5,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID        REFERENCES users(id),
+  CONSTRAINT chk_device_catalog_recent_years CHECK (recent_years BETWEEN 1 AND 30)
+);
+
+CREATE TABLE device_brands (
+  id              UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                  NOT NULL REFERENCES organizations(id),
+  name            TEXT                  NOT NULL,
+  name_key        TEXT                  NOT NULL,  -- ตัวพิมพ์เล็ก ตัดช่องว่าง/ขีด/จุด (normalizeCatalogName)
+  manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
+  source          device_catalog_source NOT NULL,
+  external_id     TEXT,                            -- ชื่อแบรนด์ฝั่ง API · NULL = เพิ่มเอง
+  last_synced_at  TIMESTAMPTZ,                     -- NULL = ยังไม่เคยดึงรายการรุ่น (resume การดึงครั้งแรก)
+  created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  created_by      UUID                  REFERENCES users(id),
+  updated_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  updated_by      UUID,
+  deleted_at      TIMESTAMPTZ,
+  CONSTRAINT chk_device_brands_name_not_blank CHECK (btrim(name) <> '' AND name_key <> '')
+);
+CREATE UNIQUE INDEX uniq_device_brands_org_name ON device_brands(organization_id, name_key);
+CREATE INDEX idx_device_brands_org_last_synced ON device_brands(organization_id, last_synced_at);
+
+CREATE TABLE device_models (
+  id              UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                  NOT NULL REFERENCES organizations(id),
+  brand_id        UUID                  NOT NULL REFERENCES device_brands(id),
+  asset_kind      asset_kind            NOT NULL,  -- จัดจากชื่อรุ่น (ต้นทางไม่แยก) · ผู้ดูแลแก้ได้
+  name            TEXT                  NOT NULL,
+  name_key        TEXT                  NOT NULL,
+  manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
+  source          device_catalog_source NOT NULL,
+  external_id     TEXT,                            -- รหัสรุ่นฝั่ง API (ไม่มี = ชื่อรุ่นฝั่งต้นทาง)
+  release_year    INTEGER,                         -- ค.ศ. ตามต้นทาง · NULL = ไม่ทราบ
+  name_edited_at  TIMESTAMPTZ,                     -- ผู้ดูแลแก้ชื่อแล้ว ⇒ job ไม่ทับ
+  created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  created_by      UUID                  REFERENCES users(id),
+  updated_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  updated_by      UUID,
+  deleted_at      TIMESTAMPTZ,
+  CONSTRAINT chk_device_models_name_not_blank CHECK (btrim(name) <> '' AND name_key <> ''),
+  CONSTRAINT chk_device_models_release_year CHECK (release_year IS NULL OR release_year BETWEEN 1990 AND 2100)
+);
+CREATE UNIQUE INDEX uniq_device_models_brand_name ON device_models(brand_id, name_key);
+CREATE UNIQUE INDEX uniq_device_models_brand_external ON device_models(brand_id, external_id);
+CREATE INDEX idx_device_models_org_kind ON device_models(organization_id, asset_kind);
 
 -- ── check_ins ────────────────────────────────────────────────
 -- เช็คอินระหว่างลงพื้นที่ ตามไฟล์ 41 §6.2
@@ -3068,6 +3132,7 @@ CREATE TABLE cases (
   -- Asset
   asset_kind          asset_kind,               -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.2 `asset_type`
   asset_description   TEXT,                     -- = `asset_brand_model` ของไฟล์ 38 §6.2
+  device_model_id     UUID REFERENCES device_models(id) ON DELETE SET NULL, -- v4.5x-DE (U155) รุ่นที่เลือกจาก Model Phone · NULL = ระบุเอง
   imei                VARCHAR(15),                     -- A6: IMEI 15 หลักเท่านั้น (exact match)
   serial_no           TEXT,                            -- A6: เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ)
   debt_amount_satang  INTEGER,
@@ -3291,6 +3356,63 @@ CREATE TABLE data_retention_settings (
   updated_by                      UUID        REFERENCES users(id),
   CONSTRAINT chk_data_retention_years_range CHECK (debtor_document_retention_years BETWEEN 1 AND 20)
 );
+
+-- ── device_catalog_settings / device_brands / device_models (v4.5x-DE) ─────
+-- แคตตาล็อก "Model Phone" (มติ PO U155 → U159 · DEC-016 · ไฟล์ 13 §6.18 · 38 §6.2)
+-- job device_catalog_sync ดึงทุกแบรนด์/รุ่นจาก RapidAPI เก็บไว้ · การแสดงในตัวเลือก (คำนวณตอนอ่าน) =
+--   manual_status ที่ผู้ดูแลตั้ง (ชนะเสมอ) ไม่งั้นตัวกรอง: แบรนด์ในรายชื่อ + รุ่นออกภายใน recent_years ปี (ไม่ทราบปี = ผ่าน)
+--   ปิดแบรนด์ = ทุกรุ่นไม่แสดง · job ไม่เขียน manual_status และไม่ทับชื่อที่ผู้ดูแลแก้ (name_edited_at)
+CREATE TABLE device_catalog_settings (
+  organization_id UUID        PRIMARY KEY REFERENCES organizations(id),
+  brand_names     TEXT[]      NOT NULL DEFAULT ARRAY[]::TEXT[],
+  recent_years    INTEGER     NOT NULL DEFAULT 5,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID        REFERENCES users(id),
+  CONSTRAINT chk_device_catalog_recent_years CHECK (recent_years BETWEEN 1 AND 30)
+);
+
+CREATE TABLE device_brands (
+  id              UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                  NOT NULL REFERENCES organizations(id),
+  name            TEXT                  NOT NULL,
+  name_key        TEXT                  NOT NULL,  -- ตัวพิมพ์เล็ก ตัดช่องว่าง/ขีด/จุด (normalizeCatalogName)
+  manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
+  source          device_catalog_source NOT NULL,
+  external_id     TEXT,                            -- ชื่อแบรนด์ฝั่ง API · NULL = เพิ่มเอง
+  last_synced_at  TIMESTAMPTZ,                     -- NULL = ยังไม่เคยดึงรายการรุ่น (resume การดึงครั้งแรก)
+  created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  created_by      UUID                  REFERENCES users(id),
+  updated_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  updated_by      UUID,
+  deleted_at      TIMESTAMPTZ,
+  CONSTRAINT chk_device_brands_name_not_blank CHECK (btrim(name) <> '' AND name_key <> '')
+);
+CREATE UNIQUE INDEX uniq_device_brands_org_name ON device_brands(organization_id, name_key);
+CREATE INDEX idx_device_brands_org_last_synced ON device_brands(organization_id, last_synced_at);
+
+CREATE TABLE device_models (
+  id              UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                  NOT NULL REFERENCES organizations(id),
+  brand_id        UUID                  NOT NULL REFERENCES device_brands(id),
+  asset_kind      asset_kind            NOT NULL,  -- จัดจากชื่อรุ่น (ต้นทางไม่แยก) · ผู้ดูแลแก้ได้
+  name            TEXT                  NOT NULL,
+  name_key        TEXT                  NOT NULL,
+  manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
+  source          device_catalog_source NOT NULL,
+  external_id     TEXT,                            -- รหัสรุ่นฝั่ง API (ไม่มี = ชื่อรุ่นฝั่งต้นทาง)
+  release_year    INTEGER,                         -- ค.ศ. ตามต้นทาง · NULL = ไม่ทราบ
+  name_edited_at  TIMESTAMPTZ,                     -- ผู้ดูแลแก้ชื่อแล้ว ⇒ job ไม่ทับ
+  created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  created_by      UUID                  REFERENCES users(id),
+  updated_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  updated_by      UUID,
+  deleted_at      TIMESTAMPTZ,
+  CONSTRAINT chk_device_models_name_not_blank CHECK (btrim(name) <> '' AND name_key <> ''),
+  CONSTRAINT chk_device_models_release_year CHECK (release_year IS NULL OR release_year BETWEEN 1990 AND 2100)
+);
+CREATE UNIQUE INDEX uniq_device_models_brand_name ON device_models(brand_id, name_key);
+CREATE UNIQUE INDEX uniq_device_models_brand_external ON device_models(brand_id, external_id);
+CREATE INDEX idx_device_models_org_kind ON device_models(organization_id, asset_kind);
 
 -- ── check_ins ────────────────────────────────────────────────
 -- เช็คอินระหว่างลงพื้นที่ ตามไฟล์ 41 §6.2

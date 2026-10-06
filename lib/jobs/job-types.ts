@@ -10,6 +10,7 @@ import { toInputDate } from '@/lib/format/datetime'
  *  · `wht_filing_reminder` — `33` §6.2/§8 · `90` §6.3 แถว 8 (Phase 5.2)
  *  · `report_export` — E13 (`02_OPEN_DECISIONS`) · `96` §11 (Phase 6.1) — รายงานเกิน 5,000 แถว
  *  · `payout_completion_repair` — มติ PO U134 (07/10/2569) — ตัวกวาดทำขั้นหลังรอบจ่าย `completed` ต่อให้ครบ
+ *  · `device_catalog_sync` — มติ PO U155 → U157 (07/10/2569 · DEC-016) — เติมแคตตาล็อก Model Phone จาก RapidAPI ทุกเที่ยงคืนไทย
  *
  * ทั้งสองตัวรันผ่านตัวรันงานเดียวกัน แต่ **ไม่อยู่ในรายการที่ dev trigger เรียกได้**
  * เพราะ `91` §14.1 ล็อกไว้ว่า "รับ job_type ตามรายการใน §6.1 เท่านั้น" (ดู `DEV_TRIGGER_JOB_TYPES`)
@@ -28,6 +29,7 @@ export const JOB_TYPES = [
   'daily_field_allowance',
   'purge_debtor_documents',
   'payout_completion_repair',
+  'device_catalog_sync',
 ] as const
 
 export type JobTypeCode = (typeof JOB_TYPES)[number]
@@ -140,6 +142,17 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
     inSpecCatalog: false,
     // ตัวกวาดใน `runSweeperJobs()` ตั้งงานนี้ต่อรอบจ่ายที่ค้าง (คีย์กันซ้ำต่อรอบจ่าย) — ไม่มีรอบเวลาของตัวเอง
     schedule: null,
+  },
+
+  device_catalog_sync: {
+    code: 'device_catalog_sync',
+    label: 'เติมแคตตาล็อกรุ่นเครื่อง (Model Phone)',
+    description:
+      'ดึงแบรนด์/รุ่นมือถือและแท็บเล็ตจากแหล่งข้อมูลภายนอก — ของใหม่แสดงในฟอร์มรับเคสทันที ของที่ปิดไว้ไม่ถูกเปิดกลับ · ประหยัดโควตา: ดึงครบครั้งแรกทีละส่วนจนครบ แล้วหมุนดึงแบรนด์ทีละชุดทุกคืน · โควตาหมด/ไม่ได้ตั้งคีย์ = ข้าม',
+    source: 'มติ PO 07/10/2569 (U155 → U157) · DEC-016 · `91` §6.1 · `13` §6.18',
+    inSpecCatalog: true,
+    // คีย์กันซ้ำรายวันตามวันไทย ⇒ cron รอบแรกหลังเที่ยงคืนไทย (17:00 UTC) ตั้งงานให้ · upsert idempotent
+    schedule: { kind: 'daily' },
   },
 
   fuel_distance_retry: {

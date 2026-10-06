@@ -45,6 +45,7 @@
 | v3.x-DC | 07/10/2569 | **มติ PO 07/10/2569 (U147 + U148 + U149 — Final Test ด่าน 5 ND-5/6/7)**: **§6.2** `approval_flow` เก็บ **role id** (ตัวเลือก = role ผู้อนุมัติ seed 1 ตัวต่อขั้น: ผู้จัดการทีม/การเงิน/บริหาร · ชื่อแสดงอ่านสดจาก role ⇒ เปลี่ยนชื่อแล้วสายยังชี้ role เดิม) + ลบ role ที่อยู่ในสายไม่ได้ (`ROLE_IN_USE`) · **§6.4** ประเภทเงินได้ของ Tax Profile เลือกจากรายการมาตรฐาน (แถวเงินได้ ม.3 เตรส บน 50 ทวิ) + "อื่น ๆ (ระบุ)" — ข้อความที่พิมพ์ลง 50 ทวิ = ป้ายรายการตรงตัว · **§6.3** บัญชีอ้างรูปแบบไฟล์ด้วย id + ชนิดตรงช่อง (`BANK_FILE_FORMAT_NOT_FOUND`) · **§6.8** เพิ่ม "ใช้สำหรับ" (statement / ไฟล์โอน) + ธนาคารจากรายการธนาคารไทยมาตรฐาน + คอลัมน์เลือกจากคำศัพท์ของชนิดนั้น · ทดสอบรูปแบบ statement = อ่านไฟล์ตัวอย่างด้วยตัวนำเข้าจริง · ปิดใช้งานรูปแบบที่บัญชีอ้างอยู่ไม่ได้ (`BANK_FILE_FORMAT_IN_USE`) |
 | v3.x-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)**: §6.2.1 เพดานตัดส่วนต่างค่าธรรมเนียม (`write_off_tolerance`) **มีผลจริง** (ตัดส่วนต่างรับขาดเป็นค่าธรรมเนียมธนาคาร · Export Pack ไฟล์ 18) · ตัดสวิตช์ `advance_uncleared_to_employee_receivable` (หักคืนในรอบจ่ายเสมอ) · §6.1 รอบบิลเป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม (หน้าบริษัทเลือกรอบบิลที่ใช้ · หน้าสร้างรอบเสนอวันตัดรอบ) · ตัด `custom_text` (`cutoff_text` → `legacy_cutoff_text`) · `net_days` รับ 0 · §6.9 ไฟล์ 18 |
 | v3.x-CC | 07/10/2569 | **มติ PO 07/10/2569 (U133 + U132)**: §6.1 "ใช้กับ (ขอบเขต)" เปลี่ยนจากข้อความอิสระที่ไม่มีผล เป็น **ขอบเขตจริง** `scope_kind` — รอบบิล AR: บริษัทไฟแนนซ์ทุกราย / เลือกรายบริษัท (junction `billing_cycle_companies`) · รอบจ่าย AP: ทุกทีม / In-house / Outsource · **ห้ามซ้อน** กับรอบชนิดเดียวกันที่ยังใช้งาน (`CYCLE_SCOPE_OVERLAP`) · สร้างรอบวางบิล/รอบจ่ายแล้วระบบเลือกรอบที่ตรงให้อัตโนมัติ (แก้เป็น "ไม่ใช้รอบ" ได้ · ส่งรอบที่ไม่ครอบ = `CYCLE_SCOPE_MISMATCH`) · รอบจ่ายเก็บ `cycle_id` + กำหนดจ่าย `pay_due_date` (snapshot) · migration แปลงข้อมูลเดิม: AR = ทุกบริษัท · AP = ฝั่งเดียวที่ข้อความระบุชัด ไม่งั้นทุกทีม · ข้อความเดิมเก็บที่ `legacy_scope_note` (แสดงในตาราง/ฟอร์ม · ไม่มีผล) · §6.9 ชุดไฟล์ Export Pack 17 → **18 ไฟล์ (00–17)** — `17_Company_Documents.csv` (U132 · `37` §6.1) |
+| v3.x-DE | 07/10/2569 | **มติ PO U155 → U156 → U157 → U159 (DEC-016)**: เพิ่ม **§6.18 Model Phone** (แคตตาล็อกแบรนด์/รุ่นเครื่องสำหรับช่องยี่ห้อ/รุ่นของฟอร์มรับเคส — แท็บใต้ "ตั้งค่าทั่วไป") · capability ใหม่ `manage_device_catalog` (`25`) · §11/§13 เติมสิทธิ์/endpoint · §15 เติม test case |
 
 ขอบเขตเอกสารนี้: รวมการตั้งค่าพื้นฐานทั้งหมดที่โมดูล Finance/Accounting อื่นต้องอ้างอิง — รอบบิล/รอบจ่าย, สายการอนุมัติ, บัญชีธนาคารบริษัท, Tax Profile, VAT Rate, Cost Center, รูปแบบเอกสาร, รูปแบบไฟล์โอนธนาคาร, Export format, Functional Permission Matrix, นโยบายล็อกรอบบัญชี, รูปแบบเลขที่ใบกำกับภาษี, และรูปแบบเอกสารภาษีทางการ — **13 sub-section ทั้งหมด**
 
@@ -435,6 +436,24 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 - **ค่าตัวอย่างจาก seed** (เลขผู้เสียภาษี `0000000000000` / ที่อยู่ "(รอกรอกที่อยู่จริงก่อน go-live)") — seed ไม่ทับแถวเดิม ⇒ หน้านี้แสดงคำเตือนเด่น · Readiness Check ปิดงวดและหน้าออกใบเสร็จรับเงิน/ใบกำกับภาษี **เตือน ไม่บล็อก**
 - โลโก้บนเอกสารทุกใบมาจาก §6.17 — `logo_url` ของ §6.13 ถูกตัดแล้ว (v3.21 · U122)
 
+### 6.18 Model Phone (แคตตาล็อกแบรนด์/รุ่นเครื่อง) — มติ PO 07/10/2569 (U155 → U156 → U157 → U159 · DEC-016)
+
+หน้า "Model Phone" ใต้ **ตั้งค่าทั่วไป** (mockup `settings.html` แท็บ `modelphone`) — แหล่งตัวเลือกของช่อง "ยี่ห้อ/รุ่นเครื่อง" ในฟอร์มรับเคส/นำเข้า (`38` §6.2) · ตาราง `device_brands` / `device_models` / `device_catalog_settings` (`02` v4.5x-DE)
+
+- **แหล่งข้อมูล**: job รายวัน `device_catalog_sync` (`91` §6.1) ดึง **ทุกแบรนด์/ทุกรุ่น** จาก RapidAPI "Mobile Phone Specs Database" มาเก็บไว้ (ไม่กรองตอนดึง — U157) · ปุ่ม **"ดึงข้อมูลตอนนี้"** (สั่งเอง — ใช้ดึงครบครั้งแรก กดซ้ำ = ทำต่อจากที่ค้าง) · ไม่ตั้งคีย์/โควตาหมด = ข้าม ตัวเลือกเดิมใช้ได้ (หน้าจอแสดงคำเตือน)
+- **การแสดงในตัวเลือก** (คำนวณตอนอ่าน — U159): ผู้ดูแล **ตั้งด้วยมือ** ได้รายแบรนด์/รายรุ่น (แสดง / ไม่แสดง / ตามตัวกรอง) → **ชนะตัวกรองเสมอ** · ไม่ได้ตั้ง = ตามตัวกรอง · **ปิดแบรนด์ = ทุกรุ่นของแบรนด์ไม่แสดง** · job และการเปลี่ยนตัวกรองไม่เขียนทับการตั้งด้วยมือ · รุ่นใหม่ของแบรนด์ในรายชื่อแสดงทันทีที่ job บันทึก
+
+| Field (ตัวกรอง — `device_catalog_settings` 1 แถว/องค์กร) | Type | Description |
+|---|---|---|
+| brand_names | text[] | รายชื่อแบรนด์ที่แสดงตั้งต้น (เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง) — ค่าเริ่มต้น: Samsung, Apple, OPPO, vivo, Xiaomi, Redmi, POCO, realme, HONOR, Infinix, TECNO, HUAWEI, OnePlus, Google, Nokia, HMD, Motorola, ASUS, Sony, Nothing, ZTE, nubia, itel, Lenovo (แบรนด์ย่อยที่ต้นทางแยกไว้ใส่แยก) |
+| recent_years | integer 1–30 | แสดงรุ่นที่ออกภายใน N ปีล่าสุด (นับปีนี้ด้วย) — ค่าเริ่มต้น **5** · รุ่นที่ต้นทางไม่ระบุปี = แสดง |
+
+- เปลี่ยนตัวกรอง = มีผลทันที (ไม่ต้องดึง API) · ไม่มีแถว = ค่าเริ่มต้น (GET ไม่เขียน DB · seed สร้างแถวค่าเริ่มต้น)
+- หน้า: สรุป (แบรนด์/รุ่นที่แสดง · แบรนด์ที่ยังไม่ได้ดึงรุ่น · ดึงล่าสุด) + แท็บ **แบรนด์** / **รุ่น** (ค้นหา + แบ่งหน้าฝั่ง server — ข้อมูลราว 12,000 รุ่น · ตั้งการแสดงทีละแถวหรือหลายแถว) / **ตัวกรองการแสดง**
+- **เพิ่มเอง**: แบรนด์/รุ่นที่ผู้ดูแลเพิ่ม (`source = manual`) ตั้งให้แสดงด้วยมือทันที · ชื่อซ้ำ (ไม่สนตัวพิมพ์/ช่องว่าง/ขีด/จุด) = `DUPLICATE_DEVICE_CATALOG_ITEM` · แก้ชื่อรุ่นแล้ว job ไม่ทับชื่อ · แก้ประเภททรัพย์ (มือถือ/แท็บเล็ต) ได้
+- เคสที่บันทึกไปแล้วเก็บข้อความ snapshot — แก้/ปิดรายการในแคตตาล็อกภายหลังไม่กระทบเคสเดิม
+- สิทธิ์: `manage_device_catalog` — ธุรการ = manage · บริหาร = view · Superadmin โดยนิยาม · ไม่ใช่ "✅ only" · เหตุผลไม่บังคับ (ไม่ใช่เงิน/สิทธิ์/ภาษี) · ทุกการแก้ลง audit
+
 ## 7. UI / UX Rules
 
 - เมนูซ้าย/แท็บแบ่งตาม sub-section ใน §6 (**14 แท็บ** — 13 แท็บเดิม + §6.14 เกณฑ์ SLA ตามมติ PO 15/08/2569) + §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย + §6.15 ปฏิทินวันหยุด (U93)
@@ -505,6 +524,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | แก้ข้อมูลองค์กร / โลโก้ / รูปลายเซ็น (§6.17) | Superadmin only (`manage_invoice_numbering`) · บริหาร/บัญชี ดูอย่างเดียว (ไม่เห็นรูปลายเซ็น) | มติ PO U99/U122 — ต้องมีเหตุผล · มีผลกับเอกสารที่ออกหลังบันทึกเท่านั้น |
 | แก้เทมเพลตเอกสาร (§6.13) | Superadmin only (`manage_tax_profiles`) · ผู้มี `view_master_data` ดูได้ | มติ PO U122 — ต้องมีเหตุผล · snapshot ลงเอกสารตอนออก |
 | ตั้งระยะเก็บเอกสารลูกหนี้ (§6.16) | บริหาร (`manage_data_retention` manage) · Superadmin | มติ PO U97 — ต้องมีเหตุผล |
+| Model Phone (§6.18) — ดู/ตั้งการแสดง/เพิ่มเอง/ตัวกรอง/ดึงข้อมูลตอนนี้ | ธุรการ (`manage_device_catalog` manage) · บริหาร ดูอย่างเดียว · Superadmin |
 | เพิ่ม/ลบ/นำเข้าปฏิทินวันหยุด (§6.15) | ธุรการ, บัญชี, การเงิน (`manage_holidays` manage) · บริหาร ดูอย่างเดียว | มติ PO U93 · ไม่ล็อก · reason บังคับ |
 
 ## 12. Audit Log Requirements
@@ -529,6 +549,15 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | POST | /api/settings/holidays/import | นำเข้าหลายวัน (วันที่ซ้ำถูกข้าม) |
 | DELETE | /api/settings/holidays/:id | ลบวันหยุด (soft delete + reason) |
 | GET / PATCH | /api/settings/data-retention | ระยะเก็บเอกสารลูกหนี้ (§6.16) — `manage_data_retention` · PATCH ต้องมี reason |
+| GET | /api/settings/device-catalog | สรุป Model Phone (§6.18) — `manage_device_catalog` view |
+| GET / PATCH | /api/settings/device-catalog/settings | ตัวกรองการแสดง (รายชื่อแบรนด์ + N ปี) — PATCH manage · เหตุผลไม่บังคับ |
+| GET / POST | /api/settings/device-catalog/brands | ค้นหา+แบ่งหน้า (`visibility` = all/visible/hidden/manual) / เพิ่มแบรนด์เอง |
+| PATCH | /api/settings/device-catalog/brands/:id | แก้ชื่อ / `manualStatus` (`active`/`hidden`/`null` = ตามตัวกรอง) |
+| GET / POST | /api/settings/device-catalog/models | ค้นหา (หลายคำ)+แบ่งหน้า (`visibility`/`assetKind`/`brandId`) / เพิ่มรุ่นเองใต้แบรนด์ |
+| PATCH | /api/settings/device-catalog/models/:id | แก้ชื่อ/ประเภท/ปีที่ออก/`manualStatus` |
+| POST | /api/settings/device-catalog/models/status | ตั้ง `manualStatus` หลายรุ่น (สูงสุด 500) |
+| POST | /api/settings/device-catalog/sync | ดึงข้อมูลตอนนี้ — ตั้งงาน `device_catalog_sync` (เพดาน 200 request · คีย์กันซ้ำรายชั่วโมง) |
+| GET | /api/device-catalog/options | ค้นหาตัวเลือกให้ฟอร์มรับเคส (`assetKind`/`q`/`limit`) — ผู้สร้าง/แก้เคสหรือผู้ดูแลแคตตาล็อก · เฉพาะรายการที่แสดง |
 | GET | /api/settings/document-templates | Internal Doc Templates (read-only, ดูไฟล์ 28 สำหรับแก้ไข) |
 | GET / PATCH | /api/settings/tax-document-templates | เทมเพลตเอกสาร (§6.13 · U122) — ข้อความท้าย + เปิด/ปิดพิมพ์ลายเซ็น ต่อชนิด · แก้ `manage_tax_profiles` + reason |
 | POST / DELETE | /api/settings/organization/signature | รูปลายเซ็นผู้มีอำนาจ (§6.17 · U122) — Superadmin + reason |
@@ -554,6 +583,8 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | ใช้ Bank File ที่ยังไม่ทดสอบ | สร้างไฟล์โอนจริงด้วย format ที่ test_status = pending | reject BANK_FILE_NOT_TESTED |
 | แก้ไขขณะ locked | พยายามแก้ค่าใช้จ่ายเดิมในรอบที่ locked | reject PERIOD_LOCKED_DIRECT_EDIT |
 | เพิ่ม VAT Rate ทับช่วงเดิม | เพิ่มอัตราใหม่ที่ effective_from อยู่ในช่วงของอัตราเดิมที่ยังไม่หมด | reject VAT_RATE_OVERLAP |
+| Model Phone: ตั้งด้วยมือชนะตัวกรอง | ตั้งรุ่นที่ออกเกิน N ปีให้แสดง · ปิดแบรนด์ในรายชื่อ · รัน job ซ้ำ · เปลี่ยนตัวกรอง | รุ่นที่ตั้งแสดงยังแสดง · ทุกรุ่นของแบรนด์ที่ปิดไม่แสดง · job/ตัวกรองไม่เปลี่ยนค่าที่ตั้งด้วยมือ |
+| Model Phone: โควตาหมดกลางทาง | ดึงครั้งแรกแล้ว API ตอบ 429 | งานจบแบบสำเร็จพร้อมบันทึกโควตาหมด · รอบถัดไปดึงต่อจากแบรนด์ที่ค้าง · ตัวเลือกเดิมใช้ได้ |
 
 ---
 

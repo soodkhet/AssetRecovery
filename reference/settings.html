@@ -639,6 +639,7 @@ function renderSettingsLayout() {
       { id: 'organization', label: 'ข้อมูลองค์กร' },
       { id: 'compensation', label: 'แผนค่าตอบแทน' }, 
       { id: 'servicefee', label: 'เทมเพลตค่าบริการ' },
+      { id: 'modelphone', label: 'Model Phone' },
       { id: 'system', label: 'ตั้งค่าระบบกลาง' }, 
       { id: 'auditlog', label: 'บันทึกการใช้งาน (Audit Log)' }
     ];
@@ -652,6 +653,7 @@ function renderSettingsLayout() {
     else if(state.settingsTab==='organization') content = renderOrganizationContent();
     else if(state.settingsTab==='compensation') content = renderCompensationContent();
     else if(state.settingsTab==='servicefee') content = renderServiceFeeContent();
+    else if(state.settingsTab==='modelphone') content = renderModelPhoneContent();
     else if(state.settingsTab==='system') content = renderSystemSettingsContent();
     else if(state.settingsTab==='auditlog') content = renderAuditLogContent();
   } 
@@ -1133,6 +1135,52 @@ function renderSystemSettingsContent() {
   <div class="text-right"><button data-action="toast" data-msg="บันทึกการตั้งค่าระบบเรียบร้อย" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 shadow-sm">บันทึกการตั้งค่าระบบ</button></div>`;
 }
  
+// Model Phone — แคตตาล็อกแบรนด์/รุ่นสำหรับช่องยี่ห้อ/รุ่นในฟอร์มรับเคส (มติ PO U155 → U159)
+// การแสดง = ตั้งด้วยมือ (ชนะเสมอ) ไม่งั้นตามตัวกรอง · ค้นหา + แบ่งหน้าฝั่ง server
+function renderModelPhoneContent() {
+  const brands = [
+    { name: 'Samsung', visible: true, manual: null, shown: 182, total: 1420, synced: '07/10/2569 00:05' },
+    { name: 'Apple', visible: true, manual: null, shown: 48, total: 132, synced: '07/10/2569 00:05' },
+    { name: 'BLU', visible: false, manual: null, shown: 0, total: 310, synced: '06/10/2569 00:05' },
+    { name: 'Wiko', visible: true, manual: 'active', shown: 3, total: 3, synced: '—' },
+  ];
+  const badge = (b) => `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.visible ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}">${b.visible ? 'แสดง' : 'ไม่แสดง'}</span> <span class="text-[11px] text-slate-400">${b.manual ? 'ตั้งด้วยมือ' : 'ตามตัวกรอง'}</span>`;
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900">Model Phone</h2>
+        <p class="text-xs text-slate-500 mt-0.5">แคตตาล็อกแบรนด์/รุ่นสำหรับช่อง "ยี่ห้อ/รุ่นเครื่อง" ในฟอร์มรับเคส — ระบบดึงข้อมูลทุกเที่ยงคืน · การตั้งด้วยมือชนะตัวกรองเสมอ</p>
+      </div>
+      <button data-action="toast" data-msg="เริ่มดึงข้อมูลแล้ว" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">ดึงข้อมูลตอนนี้</button>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-xs">
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">แบรนด์ที่แสดง</div><div class="font-mono text-base font-bold">24 / 118</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">รุ่นที่แสดง</div><div class="font-mono text-base font-bold">1,204 / 12,310</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">ยังไม่ได้ดึงรุ่น (ครั้งแรก)</div><div class="font-mono text-base font-bold">0 แบรนด์</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">ดึงข้อมูลล่าสุด</div><div>07/10/2569 00:05</div></div>
+    </div>
+    <div class="flex gap-1 border-b border-slate-200 mb-4 text-xs font-semibold">
+      <button class="px-3 py-2 border-b-2 border-slate-900 text-slate-900">แบรนด์</button>
+      <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">รุ่น</button>
+      <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">ตัวกรองการแสดง</button>
+    </div>
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div class="flex gap-2"><input placeholder="ค้นหาแบรนด์" class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-56"><select class="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"><option>ทั้งหมด</option><option>แสดงในตัวเลือก</option><option>ไม่แสดง</option><option>ตั้งด้วยมือ</option></select></div>
+      <button class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">+ เพิ่มแบรนด์</button>
+    </div>
+    <table class="w-full text-sm"><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="text-left p-3">แบรนด์</th><th class="text-left p-3">การแสดง</th><th class="text-right p-3">รุ่นที่แสดง / ทั้งหมด</th><th class="text-left p-3">ดึงข้อมูลล่าสุด</th><th class="text-right p-3">จัดการ</th></tr></thead>
+    <tbody>${brands.map(b => `<tr class="border-t border-slate-100"><td class="p-3 font-semibold">${b.name}</td><td class="p-3">${badge(b)}</td><td class="p-3 text-right font-mono text-xs">${b.shown} / ${b.total}</td><td class="p-3 text-xs text-slate-500">${b.synced}</td><td class="p-3 text-right"><select class="border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white"><option ${!b.manual ? 'selected' : ''}>ตามตัวกรอง</option><option ${b.manual === 'active' ? 'selected' : ''}>แสดง (ตั้งเอง)</option><option>ไม่แสดง (ตั้งเอง)</option></select> <button class="border border-slate-300 rounded-lg px-2 py-1 text-xs">ดูรุ่น</button></td></tr>`).join('')}</tbody></table>
+    <div class="mt-4 flex justify-between text-xs text-slate-500"><span>แสดง 4 จาก 118 รายการ (หน้า 1/3)</span><span><button class="border border-slate-300 rounded-lg px-2 py-1">ก่อนหน้า</button> <button class="border border-slate-300 rounded-lg px-2 py-1">ถัดไป</button></span></div>
+    <div class="mt-6 rounded-lg border border-slate-200 p-4 text-xs">
+      <div class="font-semibold text-slate-800 mb-2">ตัวกรองการแสดง (แท็บที่ 3)</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label class="block font-bold text-slate-700 mb-1">รายชื่อแบรนด์ที่แสดง (บรรทัดละแบรนด์)</label><textarea rows="5" class="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono">Samsung\nApple\nOPPO\nvivo\nXiaomi\nRedmi\nPOCO\n…</textarea></div>
+        <div><label class="block font-bold text-slate-700 mb-1">แสดงรุ่นที่ออกภายใน (ปีล่าสุด)</label><input type="number" value="5" class="w-32 border border-slate-300 rounded-lg px-3 py-2"><p class="text-slate-400 mt-1">ตอนนี้ = รุ่นที่ออกตั้งแต่ปี พ.ศ. 2565 ขึ้นไป · ไม่ทราบปี = แสดง</p></div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderAuditLogContent() {
   return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex justify-between items-center mb-4"><h2 class="text-lg font-bold text-slate-900">บันทึกการใช้งาน (Audit Log)</h2><button data-action="audit-filter-export" class="border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50 text-slate-700 focus-ring">Filter / Export</button></div><div class="border border-slate-200 rounded-lg overflow-hidden"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">วันเวลา</th><th class="px-4 py-3 font-medium">การกระทำ (Action)</th><th class="px-4 py-3 font-medium">ผู้ดำเนินการ</th><th class="px-4 py-3 font-medium">เป้าหมาย (Target)</th><th class="px-4 py-3 font-medium">รายละเอียด</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${store.auditLogs.map(log => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${log.date}</td><td class="px-4 py-3 font-bold text-slate-800">${log.action}</td><td class="px-4 py-3 text-slate-600">${log.user}</td><td class="px-4 py-3 text-slate-600">${log.target}</td><td class="px-4 py-3 text-xs text-slate-500">${log.detail}</td></tr>`).join('')}</tbody></table></div></div>`;
 }

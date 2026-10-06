@@ -195,6 +195,10 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'report_cache_entries',
   // มติ PO 06/10/2569 (U120 · DEC-015) — คิวแจ้งเตือนของ job (ตารางระบบ ไม่ใช่เงิน/สิทธิ์ · ไม่ลง audit)
   'notification_outbox',
+  // มติ PO U155 → U159 — แคตตาล็อก Model Phone (ตัวเลือกยี่ห้อ/รุ่นในฟอร์มรับเคส — ไม่ใช่เงิน/สิทธิ์/ภาษี)
+  'device_brands',
+  'device_models',
+  'device_catalog_settings',
   'jobs',
   'files',
   'audit_logs',

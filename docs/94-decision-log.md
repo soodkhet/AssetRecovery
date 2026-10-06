@@ -24,6 +24,7 @@
 | v3.5 | 03/10/2569 | **เพิ่ม DEC-012** (job รายวัน `daily_field_allowance` — ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงเกิดหลังจบวันแทนตอนปิดงาน · มติ PO UAT Q21) |
 | v3.7 | 05/10/2569 | **เพิ่ม DEC-014** (Storage ไม่มี policy ให้ผู้ใช้ — อัปโหลด/เปิดดูไฟล์ผ่านโทเคน/signed URL ที่ API ออกให้หลังตรวจสิทธิ์ · ปิด BUG-143) |
 | v3.8 | 06/10/2569 | **เพิ่ม DEC-015** (Notification outbox ของ job — เขียนคิวแจ้งเตือนในทรานแซกชันเดียวกับการเปลี่ยนสถานะ · ตัวส่งแยก idempotent · มติ PO U120) |
+| v3.9 | 07/10/2569 | **เพิ่ม DEC-016** (บริการภายนอกใหม่: RapidAPI "Mobile Phone Specs Database" เป็นแหล่งเติมแคตตาล็อก Model Phone — มติ PO U155 → U157 → U159) |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
 
@@ -296,6 +297,16 @@
 | Reason | เดิม job เรียก `dispatchNotificationAwaited()` **หลัง** commit และไม่มี try/catch ⇒ ขั้นแจ้งเตือนล้ม = job ล้มทั้งที่สถานะเปลี่ยนแล้ว และรอบหน้าไม่หยิบรายการเดิมซ้ำ (เงื่อนไขสถานะไม่ตรงแล้ว) ⇒ แจ้งเตือนหายถาวร (at-most-once) — ผู้ยืมไม่รู้ว่าเงินทดรองเลยกำหนด / พนักงานไม่รู้ว่าได้งานใหม่ |
 | Impact | ตารางใหม่ `notification_outbox` + enum `notification_outbox_status` (migration `20261007000000_notification_outbox`) · `lib/notifications/{outbox,outbox-core}.ts` · `lib/assignments/timeout-job.ts` · `lib/advances/overdue-job.ts` · `lib/field/{daily-allowance-job,fuel-distance-job}.ts` · `lib/jobs/registry.ts` (`runSweeperJobs()`) · `91` §6.3 |
 | Reversible | สูง — job กลับไปเรียก dispatch หลัง commit ได้ (แต่จะกลับไปเป็น at-most-once) · ตารางเป็นคิวชั่วคราว ลบได้โดยไม่กระทบข้อมูลธุรกิจ |
+
+### DEC-016 — แคตตาล็อก Model Phone เติมจาก RapidAPI "Mobile Phone Specs Database" (07/10/2569)
+
+| Field | Value |
+|---|---|
+| Decision | ช่อง "ยี่ห้อ/รุ่นเครื่อง" ของฟอร์มรับเคส/นำเข้าเลือกจากแคตตาล็อกของเรา (`device_brands`/`device_models` · `02` v4.5x-DE) ที่ job รายวัน `device_catalog_sync` (`91` §6.1) เติมจาก **RapidAPI "Mobile Phone Specs Database"** (provider makingdatameaningful — ข้อมูลแบบ GSMArena · **ไม่มีข้อมูลประเทศที่ขาย**) · endpoint ที่ใช้: `GET /brands` + `GET /models/{brandName}` (ไม่ใช้ `/specifications` — ประหยัดโควตา) · client ลอง path แบบเอกสาร provider ก่อน ถ้า 404 ลองแบบ RapidAPI `/gsm/all-brands` · `/gsm/get-models-by-brandname/{brand}` แล้วจำไว้ · **ดึงทุกแบรนด์/รุ่นเก็บไว้** (U157) — การแสดงในตัวเลือกคำนวณตอนอ่าน: `manual_status` ที่ผู้ดูแลตั้ง **ชนะเสมอ** ไม่งั้นตามตัวกรอง `device_catalog_settings` (รายชื่อแบรนด์ + รุ่นที่ออกภายใน N ปี ค่าเริ่มต้น 5 — U159) · job ไม่เขียน `manual_status`/ชื่อที่ผู้ดูแลแก้ · **ประหยัดโควตา BASIC ฟรี**: เพดาน request ต่อรอบ (คืนละ 20 · สั่งเอง 200) + หยุดเมื่อ header `x-ratelimit-requests-remaining` ≤ 5 · ดึงครบครั้งแรกแบบ resume ได้ (`last_synced_at`) แล้วหมุนแบรนด์ที่ดึงนานที่สุด · 429 = บันทึกแล้วข้าม · ไม่มีคีย์ = ข้าม · ตัวเลือกเดิมใช้ได้เสมอ และฟอร์มมี "ไม่พบในรายการ — ระบุเอง" เสมอ (ไม่บล็อกการรับเคส) · เคสเก็บข้อความ snapshot ที่ `asset_description` + อ้าง `device_model_id` เมื่อเลือกจากรายการ · **คีย์**: env `RAPIDAPI_KEY` (บังคับ) + `RAPIDAPI_MOBILE_SPECS_HOST` (ไม่บังคับ ค่าเริ่มต้น `mobile-phone-specs-database.p.rapidapi.com`) ผู้ใช้ตั้งเองใน `.env.local`/Vercel — **ห้ามมีคีย์ใดใน repo/test** · เทสต์ใช้ mock/fixture เท่านั้น |
+| Approved by | Product Owner — มติ U155 → U156 → U157 → U159 (07/10/2569 · `uat/PO-DECISIONS-2569-10-04.md`) |
+| Reason | พิมพ์ยี่ห้อ/รุ่นอิสระทำให้ข้อมูลเคสสะกดไม่สม่ำเสมอ (ค้นหา/รายงานไม่ได้) · ไม่มีแหล่งข้อมูลรุ่นที่ขายในไทยโดยตรง ⇒ ใช้แหล่งข้อมูลรุ่นทั่วโลก + ตัวกรอง/การตั้งด้วยมือของผู้ดูแลแทน · แพ็กเกจฟรีมีโควตาต่ำ จึงต้องเก็บไว้ในฐานของเรา ไม่เรียกสดตอนกรอกฟอร์ม |
+| Impact | ตาราง `device_brands`/`device_models`/`device_catalog_settings` + enum `device_catalog_status`/`device_catalog_source` + `cases.device_model_id` (migration `20261008110000_device_catalog`) · `lib/device-catalog/*` · job `device_catalog_sync` (`lib/jobs/{job-types,registry}.ts`) · capability `manage_device_catalog` (`25`) · แท็บตั้งค่า "Model Phone" (`13` §6.18) · ฟอร์มรับเคส/นำเข้า (`38` §6.2) |
+| Reversible | สูง — ปิด job/ไม่ตั้งคีย์ได้ทันที (ตัวเลือกเดิม + ระบุเองยังใช้ได้) · เคสเก็บข้อความ snapshot อยู่แล้ว ถอดแคตตาล็อกออกได้โดยข้อมูลเคสไม่เสีย |
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 
