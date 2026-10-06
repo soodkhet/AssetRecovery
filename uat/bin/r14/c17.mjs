@@ -1,0 +1,21 @@
+// R14.17 จับคู่ 4,490.00 → BL-2569-006 (ปิดยอด) — ออกใบ INV-0007 ใช้ issue.mjs ต่อ
+import { openAs, shot, BASE, settle, sleep, toasts, log, R, q } from './_h.mjs'
+const a = await openAs('uat.account'); const p = a.page
+const res = []; p.on('response', async r => { if (r.url().includes('/api/') && r.request().method() !== 'GET') res.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname} ${(await r.text().catch(() => '')).slice(0, 300)}`) })
+const dlg = () => p.locator('[role="dialog"]').last()
+await p.goto(`${BASE}/accounting?tab=bank`); await settle(p); await sleep(1200)
+const row = p.locator('tbody tr').filter({ hasText: '4,490.00' }).first()
+await row.getByRole('button', { name: 'จับคู่ Manual' }).click(); await sleep(1500)
+const opts = await dlg().locator('select option').allInnerTexts(); log('candidates', opts)
+const vals = await dlg().locator('select option').evaluateAll(os => os.map(o => o.value))
+const pick = opts.findIndex(o => o.includes('BL-2569-006'))
+await dlg().locator('select').first().selectOption(vals[pick]); await sleep(400)
+log('modal', (await dlg().innerText()).replace(/\s+/g, ' ').slice(0, 700))
+const ta = dlg().locator('textarea'); if (await ta.count()) await ta.first().fill('รับชำระงวดที่ 2 (ปิดยอด)')
+await shot(p, R, '17-match-modal')
+await dlg().getByRole('button', { name: 'ยืนยันการจับคู่' }).click(); await sleep(2500)
+log('toast', (await toasts(p, 300)).slice(0, 1)); log('res', res.splice(0))
+await settle(p); await shot(p, R, '17-bank-after', { fullPage: true })
+log('5xx', a.serverErrors); await a.browser.close()
+log(q(`select batch_number,status,total_satang,received_satang from billing_batches where batch_number='BL-2569-006'`))
+log(q(`select amount_satang,received_date from cash_receipts order by created_at desc limit 1`))

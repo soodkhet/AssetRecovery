@@ -1,0 +1,20 @@
+// R14.16 probe ออกซ้ำ / เปลี่ยนการจับคู่ของเงินรับที่ออกใบแล้ว (uat.account)
+import { openAs, shot, BASE, settle, sleep, log, R, q, qa, post } from './_h.mjs'
+const CR = '60c87e2a-4785-4e50-8a6a-39c39e2fc0d3', TX = '5c3eeb74-c0e0-48c3-98d5-1013a89a8c69', BL6 = '417ea137-1789-419f-a04f-8916e173d019'
+const before = qa(`select count(*) from tax_invoices`) + ' | ' + qa(`select tax_invoice_seq from organizations`) + ' | ' + qa(`select match_status||' '||coalesce(matched_billing_id::text,'') from bank_transactions where id='${TX}'`) + ' | cr=' + qa(`select count(*)||'/'||sum(amount_satang) from cash_receipts`)
+const a = await openAs('uat.account'); const p = a.page
+log('probe 1 POST tax-invoices ซ้ำ', await post(p, '/api/accounting/tax-invoices', { cashReceiptId: CR }))
+const r = await p.request.patch(`${BASE}/api/bank-reconciliation/transactions/${TX}/match`, { data: { targetKind: 'billing', targetId: BL6, matchNote: 'UAT R14 probe', confirmRematch: true }, failOnStatusCode: false })
+log('probe 3 PATCH rematch', r.status(), (await r.text()).slice(0, 500))
+await p.goto(`${BASE}/accounting?tab=receipts`); await settle(p); await sleep(1500)
+const row = p.locator('tbody tr').filter({ hasText: '฿3,000.00' }).first()
+log('row 3000 buttons', (await row.getByRole('button').allInnerTexts()).map(s => s.trim()), '|', (await row.innerText()).replace(/\s+/g, ' ').slice(-80))
+await row.scrollIntoViewIfNeeded(); await shot(p, R, '16-receipt-row-issued')
+await p.goto(`${BASE}/accounting?tab=bank`); await settle(p); await sleep(1500)
+const br = p.locator('tbody tr').filter({ hasText: '3,000.00' }).first()
+log('bank row 3000', (await br.innerText()).replace(/\s+/g, ' '), (await br.getByRole('button').allInnerTexts()).map(s => s.trim()))
+await shot(p, R, '16-bank-row')
+log('5xx', a.serverErrors)
+await a.browser.close()
+const after = qa(`select count(*) from tax_invoices`) + ' | ' + qa(`select tax_invoice_seq from organizations`) + ' | ' + qa(`select match_status||' '||coalesce(matched_billing_id::text,'') from bank_transactions where id='${TX}'`) + ' | cr=' + qa(`select count(*)||'/'||sum(amount_satang) from cash_receipts`)
+log('before', before); log('after ', after)
