@@ -21,6 +21,14 @@ vi.mock('@/lib/bank-recon/queries', () => ({
   MANAGE_BANK_RECONCILIATION: 'manage_bank_reconciliation',
 }))
 
+const cancelTaxInvoice = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/sales/queries', () => ({ cancelTaxInvoice }))
+
+const cancelCreditNote = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/credit-notes/queries', () => ({ cancelCreditNote }))
+
+const { PATCH: cancelTaxInvoiceRoute } = await import('@/app/api/accounting/tax-invoices/[id]/cancel/route')
+const { PATCH: cancelCreditNoteRoute } = await import('@/app/api/accounting/credit-notes/[id]/cancel/route')
 const { PATCH: cancelWht } = await import('@/app/api/accounting/wht-certificates/[id]/cancel/route')
 const { PATCH: resolveUnmatched } = await import(
   '@/app/api/bank-reconciliation/transactions/[id]/resolve-unmatched/route'
@@ -41,7 +49,7 @@ const ACCOUNTANT: SessionUser = {
   isSuperadmin: false,
   teamId: null,
   companyId: null,
-  capabilities: { manage_wht: 'manage', manage_bank_reconciliation: 'manage' },
+  capabilities: { manage_wht: 'manage', manage_bank_reconciliation: 'manage', manage_tax_invoice: 'manage' },
   scope: { kind: 'global', teamIds: [], companyId: null, userId: 'user-1' },
   loginAt: new Date().toISOString(),
 }
@@ -78,6 +86,17 @@ describe('UAT R7cv3-B03 — เหตุผลบังคับได้ code �
     expect(cancelWhtCertificate).not.toHaveBeenCalled()
   })
 
+  it('BUG-161 — ยกเลิกใบกำกับ/ใบเสร็จรับเงิน และใบลดหนี้ ไม่ส่ง/ว่าง ⇒ CANCEL_REQUIRES_REASON', async () => {
+    for (const body of [{}, { reason: '' }, { reason: '   ' }, { reason: null }]) {
+      const invoice = await codeOf(await cancelTaxInvoiceRoute(request(body), params))
+      expect(invoice).toEqual({ status: 400, code: 'CANCEL_REQUIRES_REASON' })
+      const creditNote = await codeOf(await cancelCreditNoteRoute(request(body), params))
+      expect(creditNote).toEqual({ status: 400, code: 'CANCEL_REQUIRES_REASON' })
+    }
+    expect(cancelTaxInvoice).not.toHaveBeenCalled()
+    expect(cancelCreditNote).not.toHaveBeenCalled()
+  })
+
   it('ปิดรายการธนาคารโดยไม่จับคู่ ไม่ส่ง/ว่าง ⇒ MATCH_NOTE_REQUIRED', async () => {
     for (const body of [{}, { matchNote: '' }, { matchNote: '  ' }]) {
       const result = await codeOf(await resolveUnmatched(request(body), params))
@@ -92,5 +111,7 @@ describe('UAT R7cv3-B03 — เหตุผลบังคับได้ code �
     expect(wht.code).toBe('REQUIRED_MISSING')
     const bank = await codeOf(await resolveUnmatched(request({ matchNote: 'ก'.repeat(1001) }), params))
     expect(bank.code).toBe('REQUIRED_MISSING')
+    const invoice = await codeOf(await cancelTaxInvoiceRoute(request({ reason: 'ก'.repeat(1001) }), params))
+    expect(invoice.code).toBe('REQUIRED_MISSING')
   })
 })

@@ -10,6 +10,7 @@ import {
   canSendBillingBatch,
   isArOutstanding,
   isArOverdue,
+  customerWhtSummary,
   REVENUE_STATUS_FILTERS,
   REVENUE_STATUS_LABEL,
   revenueStatusBadgeGroup,
@@ -101,5 +102,28 @@ describe('ป้าย VAT อ่านจาก snapshot (มติ PO 03/10/25
     expect(billingBatchVatLabel({ vatModes: ['exclude_vat'] })).toBe('Exclude VAT')
     expect(billingBatchVatLabel({ vatModes: ['exclude_vat', 'include_vat'] })).toBe('Exclude VAT / Include VAT')
     expect(billingBatchVatLabel({ vatModes: [] })).toBe('—')
+  })
+})
+
+describe('BUG-165 — ภาษีที่ลูกค้าจะหัก (ประมาณ) + ยอดที่คาดว่าจะได้รับ', () => {
+  it('รอบร่าง: ป้าย "ประมาณ" + อัตรา + ยอดที่คาดว่าจะได้รับ', () => {
+    expect(
+      customerWhtSummary({ customerWhtSatang: 3_000, customerWhtIsEstimate: true, customerWhtPct: 3, expectedReceiptSatang: 104_000 }),
+    ).toEqual({
+      label: 'ภาษีที่ลูกค้าจะหัก ณ ที่จ่าย (ประมาณ 3.00%)',
+      whtText: '฿30.00',
+      expectedLabel: 'ยอดที่คาดว่าจะได้รับ',
+      expectedText: '฿1,040.00',
+    })
+  })
+
+  it('บันทึกยอดหักจริงแล้ว ⇒ ไม่มีคำว่าประมาณ · บริษัทไม่หัก ⇒ ไม่แสดง', () => {
+    expect(
+      customerWhtSummary({ customerWhtSatang: 3_000, customerWhtIsEstimate: false, customerWhtPct: 3, expectedReceiptSatang: 104_000 })
+        ?.label,
+    ).toBe('ภาษีที่ลูกค้าหัก ณ ที่จ่าย')
+    expect(
+      customerWhtSummary({ customerWhtSatang: 0, customerWhtIsEstimate: true, customerWhtPct: null, expectedReceiptSatang: 107_000 }),
+    ).toBeNull()
   })
 })

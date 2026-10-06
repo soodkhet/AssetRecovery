@@ -35,6 +35,7 @@ import {
   billingStatusBadgeGroup,
   canDeleteBillingBatch,
   canSendBillingBatch,
+  customerWhtSummary,
   isArOutstanding,
   isArOverdue,
   REVENUE_STATUS_FILTERS,
@@ -116,6 +117,7 @@ export function RevenueTab() {
     reloadAll()
   }
 
+  const sendWht = action?.kind === 'send' ? customerWhtSummary(action.batch) : null
   const unbilledCount = revenues.data.filter((revenue) => revenue.billingBatchId === null).length
 
   return (
@@ -233,6 +235,12 @@ export function RevenueTab() {
                       </Td>
                       <Td numeric className="font-semibold">
                         {fmtSatangSymbol(batch.totalSatang)}
+                        {batch.customerWhtIsEstimate && batch.customerWhtSatang > 0 && (
+                          <p className="mt-0.5 text-[10px] font-normal text-slate-400">
+                            ลูกค้าจะหัก (ประมาณ) {fmtSatangSymbol(batch.customerWhtSatang)} · คาดรับ{' '}
+                            {fmtSatangSymbol(batch.expectedReceiptSatang)}
+                          </p>
+                        )}
                       </Td>
                       <Td numeric className="text-emerald-700">
                         {fmtSatangSymbol(batch.receivedSatang)}
@@ -408,6 +416,11 @@ export function RevenueTab() {
             <InlineAlert tone={action.kind === 'delete' ? 'warning' : 'info'} title="ยอดเรียกเก็บของรอบ">
               {fmtSatangSymbol(action.batch.totalSatang)} · {fmtCount(action.batch.revenueCount)} รายการ ·
               ครบกำหนด {fmtDate(action.batch.dueDate)}
+              {sendWht !== null && (
+                <span className="mt-1 block">
+                  {sendWht.label} {sendWht.whtText} · {sendWht.expectedLabel} {sendWht.expectedText}
+                </span>
+              )}
             </InlineAlert>
           )}
           {action?.kind === 'delete' && (

@@ -1,5 +1,6 @@
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
-import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
+import { PERIOD_ASSUMED_OPEN, type PeriodClosedLookup } from '@/lib/accounting/period'
+import { assertPeriodOpenAt, loadPeriodClosedLookup } from '@/lib/accounting/period-guard'
 import { AdjustmentError } from '@/lib/adjustments/errors'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
@@ -107,7 +108,7 @@ const CREDIT_NOTE_SELECT = {
 
 type CreditNoteRow = Prisma.CreditNoteGetPayload<{ select: typeof CREDIT_NOTE_SELECT }>
 
-function toDto(row: CreditNoteRow): CreditNoteDto {
+function toDto(row: CreditNoteRow, periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN): CreditNoteDto {
   return {
     id: row.id,
     noteType: row.noteType,
@@ -134,6 +135,8 @@ function toDto(row: CreditNoteRow): CreditNoteDto {
     cancelledByName: row.cancelledByUser?.fullName ?? null,
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
+    // ยามยกเลิกใช้งวดของ `issue_date` — ตัวเดียวกับที่นี่ (UAT BUG-169)
+    periodClosed: periodClosed(row.issueDate),
   }
 }
 
@@ -189,7 +192,8 @@ export async function listCreditNotes(user: SessionUser, query: CreditNoteListQu
     select: CREDIT_NOTE_SELECT,
     orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }],
   })
-  return { items: rows.map(toDto) }
+  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
+  return { items: rows.map((row) => toDto(row, periodClosed)) }
 }
 
 // ── ฟังก์ชันให้ portal / โมดูลอื่น (active เท่านั้น) ─────────────────────────

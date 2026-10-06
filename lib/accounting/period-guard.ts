@@ -1,4 +1,4 @@
-import { periodKeyOf, type PeriodKey } from '@/lib/accounting/period'
+import { buildPeriodClosedLookup, periodKeyOf, type PeriodClosedLookup, type PeriodKey } from '@/lib/accounting/period'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
@@ -123,4 +123,16 @@ export async function assertPeriodOpenForLabel(
     },
     client,
   )
+}
+
+/**
+ * โหลดสถานะรอบบัญชีทั้งองค์กรครั้งเดียว แล้วคืนตัวตอบ "งวดของวันที่นี้ปิดแล้วหรือยัง" (UAT BUG-169)
+ * — ใช้ตอนประกอบ list DTO ของเอกสารที่ยกเลิกได้ (ใบกำกับ/ใบลดหนี้/50 ทวิ) โดยไม่ยิง query ต่อแถว
+ */
+export async function loadPeriodClosedLookup(organizationId: string): Promise<PeriodClosedLookup> {
+  const rows = await prisma.accountingPeriod.findMany({
+    where: { organizationId },
+    select: { yearBe: true, month: true, status: true },
+  })
+  return buildPeriodClosedLookup(rows)
 }

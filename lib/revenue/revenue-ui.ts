@@ -1,4 +1,4 @@
-import { fmtPercent } from '@/lib/format/money'
+import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import type { BillingBatchStatus, RevenueStatus, VatMode } from '@/lib/generated/prisma/enums'
 import { canTransitionBillingBatch } from '@/lib/revenue/revenue'
 import type { BillingBatchDto } from '@/lib/revenue/types'
@@ -121,3 +121,21 @@ export const REVENUE_STATUS_FILTERS: readonly { value: RevenueStatusFilter; labe
   { value: 'ready_for_billing', label: REVENUE_STATUS_LABEL.ready_for_billing },
   { value: 'billed', label: REVENUE_STATUS_LABEL.billed },
 ]
+
+/**
+ * UAT BUG-165 — บรรทัด "ภาษีที่ลูกค้าจะหัก ณ ที่จ่าย (ประมาณ)" + "ยอดที่คาดว่าจะได้รับ" ของรอบวางบิล
+ * — ยอดคิดที่ backend แล้ว (`estimateCustomerWhtForBilling`) ที่นี่แค่จัดข้อความ · บริษัทไม่หัก ⇒ `null` (ไม่แสดง)
+ */
+export function customerWhtSummary(
+  batch: Pick<BillingBatchDto, 'customerWhtSatang' | 'customerWhtIsEstimate' | 'customerWhtPct' | 'expectedReceiptSatang'>,
+): { label: string; whtText: string; expectedLabel: string; expectedText: string } | null {
+  if (batch.customerWhtSatang <= 0) return null
+  return {
+    label: batch.customerWhtIsEstimate
+      ? `ภาษีที่ลูกค้าจะหัก ณ ที่จ่าย (ประมาณ ${fmtPercent(batch.customerWhtPct)})`
+      : 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย',
+    whtText: fmtSatangSymbol(batch.customerWhtSatang),
+    expectedLabel: batch.customerWhtIsEstimate ? 'ยอดที่คาดว่าจะได้รับ' : 'ยอดรับสุทธิ',
+    expectedText: fmtSatangSymbol(batch.expectedReceiptSatang),
+  }
+}

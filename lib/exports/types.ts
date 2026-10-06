@@ -23,7 +23,7 @@ export interface ExportRecordDto {
   statusGroup: StatusBadgeGroup
   /** จำนวนไฟล์หลักในชุด (`37` §7.1 — นับเฉพาะ 00–16 ไม่รวมหน้าปก/ไฟล์ zip) */
   fileCount: number
-  /** เอกสารแนบ (ใบเสร็จ/หลักฐาน) — ยังไม่รวมในชุดรอบนี้ ดู `37` §7.1 */
+  /** จำนวน PDF ที่แนบใน zip (ใบเสร็จฯ/50 ทวิ/ใบสำคัญจ่าย+สลิป/ใบแจ้งหนี้) — ไม่นับ `NOT_ATTACHED.txt` */
   attachmentCount: number
   files: readonly ExportPackFileDto[]
   /** SHA-256 ของไฟล์ `.zip` ทั้งชุด (`export_records.file_hash`) */

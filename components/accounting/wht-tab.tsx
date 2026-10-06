@@ -20,6 +20,7 @@ import {
   Th,
   Tr,
 } from '@/components/ui'
+import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtCertificateDto, WhtFilingSummaryDto } from '@/lib/wht/types'
@@ -238,7 +239,13 @@ export function WhtTab() {
                           หนังสือรับรอง
                         </a>
                         {row.status === 'active' && canManage && (
-                          <Button size="sm" variant="danger" onClick={() => setCancelling(row)}>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            disabled={row.periodClosed}
+                            title={row.periodClosed ? PERIOD_CLOSED_CANCEL_HINT : undefined}
+                            onClick={() => setCancelling(row)}
+                          >
                             ยกเลิก
                           </Button>
                         )}

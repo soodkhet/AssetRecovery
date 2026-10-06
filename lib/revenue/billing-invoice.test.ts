@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { BILLING_INVOICE_NOT_TAX_NOTE, buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
+import {
+  BILLING_INVOICE_NOT_TAX_NOTE,
+  billingInvoicePartiesOf,
+  billingPartySnapshotOf,
+  buildBillingInvoiceDoc,
+} from '@/lib/revenue/billing-invoice'
 
 /** ใบแจ้งหนี้/ใบวางบิล (มติ PO U95 · U96 #12) — ไม่ใช่เอกสารภาษี · VAT เป็นยอดประมาณการ */
 describe('buildBillingInvoiceDoc', () => {
@@ -36,5 +41,51 @@ describe('buildBillingInvoiceDoc', () => {
     ])
     expect(doc.buyer.branchLabel).toBe('สาขาที่ 00002')
     expect(doc.fileName).toBe('BL-2569-007.pdf')
+  })
+})
+
+describe('BUG-164 — snapshot คู่ค้าของใบแจ้งหนี้', () => {
+  const seller = { name: 'ผู้ขาย', taxId: '0105500000001', address: 'กทม.', phone: '02-000', branchCode: '00000' }
+  const buyer = { name: 'ไฟแนนซ์ ก', taxId: '0105500000002', address: null, phone: null, branchCode: '00003' }
+
+  it('ทำ snapshot จากค่าปัจจุบัน — ที่อยู่ว่างเป็นสตริงว่าง', () => {
+    expect(billingPartySnapshotOf(seller, buyer)).toEqual({
+      sellerName: 'ผู้ขาย',
+      sellerTaxId: '0105500000001',
+      sellerAddress: 'กทม.',
+      sellerPhone: '02-000',
+      sellerBranchCode: '00000',
+      buyerName: 'ไฟแนนซ์ ก',
+      buyerTaxId: '0105500000002',
+      buyerAddress: '',
+      buyerPhone: null,
+      buyerBranchCode: '00003',
+    })
+  })
+
+  it('มี snapshot ⇒ ใช้ snapshot ไม่สนค่าปัจจุบันที่แก้ภายหลัง', () => {
+    const snapshot = billingPartySnapshotOf(seller, buyer)
+    const parties = billingInvoicePartiesOf(snapshot, {
+      seller: { ...seller, name: 'ผู้ขาย (เปลี่ยนชื่อ)' },
+      buyer: { ...buyer, name: 'ไฟแนนซ์ ก (เปลี่ยนชื่อ)', address: 'ที่อยู่ใหม่' },
+    })
+    expect(parties.seller.name).toBe('ผู้ขาย')
+    expect(parties.buyer).toEqual({ name: 'ไฟแนนซ์ ก', taxId: '0105500000002', address: '', phone: null, branchCode: '00003' })
+  })
+
+  it('ไม่มี snapshot (แถวที่ไม่ผ่านการส่งรอบ) ⇒ ใช้ค่าปัจจุบัน', () => {
+    const empty = {
+      sellerName: null,
+      sellerTaxId: null,
+      sellerAddress: null,
+      sellerPhone: null,
+      sellerBranchCode: null,
+      buyerName: null,
+      buyerTaxId: null,
+      buyerAddress: null,
+      buyerPhone: null,
+      buyerBranchCode: null,
+    }
+    expect(billingInvoicePartiesOf(empty, { seller, buyer }).buyer.name).toBe('ไฟแนนซ์ ก')
   })
 })

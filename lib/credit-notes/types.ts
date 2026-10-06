@@ -31,6 +31,8 @@ export interface CreditNoteDto {
   cancelledByName: string | null
   createdAt: string
   createdByName: string
+  /** งวดของวันที่ออกส่งบัญชี/ล็อกแล้ว ⇒ ยกเลิกตรงไม่ได้ ต้องผ่าน Adjustment (UAT BUG-169) */
+  periodClosed: boolean
 }
 
 /** ผลการบันทึก — `warnings` = เรื่องที่ต้องบอกแต่ไม่บล็อก (มติ PO U21: ยอดไม่ตรง Adjustment ที่อ้างถึง) */

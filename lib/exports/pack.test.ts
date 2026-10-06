@@ -44,7 +44,9 @@ import {
   packFileRangeLabel,
   packNotAttachedFile,
   packNotAttachedText,
+  packAttachmentCount,
   packPdfEntryName,
+  packPdfRef,
   PACK_ATTACHMENT_NOTE,
   CUSTOMER_WHT_HEADERS,
   customerWhtCsv,
@@ -1271,5 +1273,31 @@ describe('PDF ใน zip — เพดานร่วมทุกโฟลเด
     expect(
       packNotAttachedText({ documentLabel: 'ใบแจ้งหนี้', unit: 'ใบ', csvFileName: null, refs: ['BL-1'] }),
     ).not.toContain('.csv')
+  })
+})
+
+describe('BUG-167/168 — จำนวนเอกสารแนบ + ชื่อไฟล์เอกสารยกเลิก', () => {
+  it('เอกสารยกเลิกต่อท้าย -CANCELLED แบบเดียวกันทุกโฟลเดอร์', () => {
+    expect(packPdfRef('WHT-2569-009', true)).toBe('WHT-2569-009-CANCELLED')
+    expect(packPdfRef('WHT-2569-009', false)).toBe('WHT-2569-009')
+    expect(taxInvoicePdfEntryName('INV-0005', true)).toBe('tax_invoices/INV-0005-CANCELLED.pdf')
+    expect(taxInvoicePdfEntryName('INV-0005')).toBe('tax_invoices/INV-0005.pdf')
+    expect(packPdfEntryName('wht_certificates', packPdfRef('WHT-2569-009', true))).toBe(
+      'wht_certificates/WHT-2569-009-CANCELLED.pdf',
+    )
+  })
+
+  it('นับ PDF ที่แนบจริงรวมทุกโฟลเดอร์ · ค่าที่อ่านไม่ออก = 0', () => {
+    expect(
+      packAttachmentCount({
+        tax_invoices: { attached: 8, not_attached: [] },
+        wht_certificates: { attached: 17, not_attached: [] },
+        vouchers: { attached: 12, not_attached: ['SLIP-X'] },
+        billing_invoices: { attached: 6, not_attached: [] },
+      }),
+    ).toBe(43)
+    expect(packAttachmentCount(null)).toBe(0)
+    expect(packAttachmentCount([])).toBe(0)
+    expect(packAttachmentCount({ x: { attached: -1 }, y: { attached: '3' }, z: null })).toBe(0)
   })
 })

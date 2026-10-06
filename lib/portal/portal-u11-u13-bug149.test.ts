@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PORTAL_CUSTOMER_WHT_NOTICE,
   PORTAL_REVENUE_BASIS_LABEL,
+  PORTAL_REVENUE_BASIS_NOTE,
   portalAgingBucketTone,
   portalAlertTextClass,
   portalAlertTone,
@@ -49,8 +50,11 @@ describe('U11 — ภาษีหัก ณ ที่จ่ายที่ลู
 })
 
 describe('U14/BUG-146 — กราฟรายได้', () => {
-  it('ป้ายบอกฐานยอดตามใบกำกับ (ก่อน VAT)', () => {
-    expect(PORTAL_REVENUE_BASIS_LABEL).toBe('ยอดตามใบกำกับ (ก่อน VAT)')
+  it('BUG-162 — ป้ายบอกฐาน = ยอดวางบิล (ก่อน VAT) ไม่ใช่ "ยอดตามใบกำกับ" (ใบกำกับออกตอนรับเงิน)', () => {
+    expect(PORTAL_REVENUE_BASIS_LABEL).toBe('ยอดวางบิล (ก่อน VAT)')
+    expect(PORTAL_REVENUE_BASIS_LABEL).not.toContain('ใบกำกับ')
+    expect(PORTAL_REVENUE_BASIS_NOTE).toContain('หักใบลดหนี้ บวกใบเพิ่มหนี้')
+    expect(PORTAL_REVENUE_BASIS_NOTE).not.toMatch(/§|ไฟล์ \d/)
   })
 
   it('จอแคบ: เอียงมากขึ้น + แสดงเว้นเดือน · จอกว้าง: ทุกเดือน', () => {

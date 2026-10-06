@@ -666,6 +666,22 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
       reason: 'วางบิลรอบสิงหาคม',
     })
 
+    // BUG-165 — รอบร่างแสดงภาษีที่ลูกค้าจะหัก (ประมาณ) ตามอัตราของบริษัท + ยอดที่คาดว่าจะได้รับ
+    const companyPct = await db().financeCompany.findUniqueOrThrow({
+      where: { id: COMPANY_A },
+      select: { whtWithheldByCustomerPct: true },
+    })
+    const pct = companyPct.whtWithheldByCustomerPct === null ? null : companyPct.whtWithheldByCustomerPct.toNumber()
+    const { calculateCustomerWithheldWht } = await import('@/lib/finance/wht-calc')
+    const expectedWht = calculateCustomerWithheldWht({ amountBeforeVatSatang: created.amountBeforeVatSatang, whtPct: pct })
+    expect(created.amountBeforeVatSatang).toBeGreaterThan(0)
+    expect(created.customerWhtPct).toBe(pct)
+    expect(created.customerWhtIsEstimate).toBe(true)
+    expect(created.customerWhtSatang).toBe(expectedWht)
+    expect(created.expectedReceiptSatang).toBe(created.totalSatang - expectedWht)
+    const listed = (await revenue.listBillingBatches(finance, { status: 'all' })).find((row) => row.id === created.id)
+    expect(listed?.customerWhtSatang).toBe(expectedWht)
+
     const sent = await revenue.sendBillingBatch(
       { actor: finance, meta, reason: 'ส่งใบวางบิลให้ไฟแนนซ์ A' },
       created.id,

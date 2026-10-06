@@ -798,8 +798,8 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     const BATCH_NUMBER_TAIL = /,BL-25\d{2}-\d{3,},ใบกำกับภาษี,-$/
     expect(lines.slice(1, -1).every((line) => BATCH_NUMBER_TAIL.test(line))).toBe(true)
     expect(lines.slice(1, -1).map((line) => line.replace(BATCH_NUMBER_TAIL, ''))).toEqual([
-      'INV-T46-0000,31/05/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,1000.00,70.00,1070.00,7.00,2569-06-3,cancelled,02/06/2569,ออกซ้ำ,-,tax_invoices/INV-T46-0000.pdf,สำนักงานใหญ่',
-      'INV-T46-0001,28/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,8000.00,560.00,8560.00,7.00,2569-06-2,cancelled,29/06/2569,ที่อยู่ผู้ซื้อไม่ถูกต้อง,INV-T46-0003,tax_invoices/INV-T46-0001.pdf,สำนักงานใหญ่',
+      'INV-T46-0000,31/05/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,1000.00,70.00,1070.00,7.00,2569-06-3,cancelled,02/06/2569,ออกซ้ำ,-,tax_invoices/INV-T46-0000-CANCELLED.pdf,สำนักงานใหญ่',
+      'INV-T46-0001,28/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,8000.00,560.00,8560.00,7.00,2569-06-2,cancelled,29/06/2569,ที่อยู่ผู้ซื้อไม่ถูกต้อง,INV-T46-0003,tax_invoices/INV-T46-0001-CANCELLED.pdf,สำนักงานใหญ่',
       'INV-T46-0002,30/06/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105560046000,3730.00,261.10,3991.10,7.00,2569-06-1,active,-,-,-,tax_invoices/INV-T46-0002.pdf,สำนักงานใหญ่',
     ])
 
@@ -807,8 +807,8 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     const zipBytes = storage.get(zipPath) ?? new Uint8Array()
     const names = zipEntryNames(zipBytes)
     expect(names.filter((name) => name.startsWith('tax_invoices/'))).toEqual([
-      'tax_invoices/INV-T46-0000.pdf',
-      'tax_invoices/INV-T46-0001.pdf',
+      'tax_invoices/INV-T46-0000-CANCELLED.pdf',
+      'tax_invoices/INV-T46-0001-CANCELLED.pdf',
       'tax_invoices/INV-T46-0002.pdf',
     ])
     const pdf = zipEntryBytes(zipBytes, 'tax_invoices/INV-T46-0002.pdf')
@@ -846,7 +846,7 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     expect(result.attached).toBe(1)
     expect(result.notAttached).toEqual(['INV-T46-0001', 'INV-T46-0002'])
     expect(result.entries.map((entry) => entry.name)).toEqual([
-      'tax_invoices/INV-T46-0000.pdf',
+      'tax_invoices/INV-T46-0000-CANCELLED.pdf',
       'tax_invoices/NOT_ATTACHED.txt',
     ])
     const lines = result.csv.slice(CSV_BOM.length).split('\r\n')
@@ -1253,5 +1253,45 @@ suite('มติ PO U94 ข้อ 4/5 · U96 #15 — ยอดรวมควบ
       { after_data: { attachments?: { vouchers?: { attached: number; not_attached: string[] } } } }[]
     >(`SELECT after_data FROM audit_logs WHERE target_type = 'export_records' AND target_id = '${limited.id}'`)
     expect(audit[0]?.after_data.attachments?.vouchers).toEqual({ attached: 1, not_attached: [`SLIP-${batchRef}`] })
+  })
+
+  it('BUG-167 — ประวัติ Export นับเอกสารแนบ = PDF ที่แนบใน zip จริง (จาก audit ตอนสร้าง)', async () => {
+    const history = await exportsApi.listExportHistory(accountant, {})
+    const byVersion = new Map(history.items.map((item) => [item.version, item]))
+    // v2 = เพดาน 3 ไฟล์ (50 ทวิ 2 + ใบสำคัญจ่าย 1) · v1 = ครบ (50 ทวิ 2 + ใบสำคัญจ่าย + สลิป)
+    expect(byVersion.get(2)?.attachmentCount).toBe(3)
+    expect(byVersion.get(1)?.attachmentCount).toBe(4)
+    const v1Zip = [...storage.keys()].find((key) => key.includes('/v1/') && key.endsWith('.zip')) ?? ''
+    const pdfs = zipEntryNames(storage.get(v1Zip) ?? new Uint8Array()).filter(
+      (name) => name.includes('/') && name.endsWith('.pdf'),
+    )
+    expect(pdfs).toHaveLength(4)
+  })
+
+  it('BUG-168 — wht_certificates/ แนบใบที่ยกเลิกในงวดด้วย (ชื่อลงท้าย -CANCELLED) · 05_WHT_Data.csv ยังมีเฉพาะใบที่มีผล', async () => {
+    const certs = await db().$queryRawUnsafe<{ id: string; certificate_number: string }[]>(
+      `SELECT id, certificate_number FROM wht_certificates WHERE organization_id = '${ORG_ID}' ORDER BY certificate_number`,
+    )
+    expect(certs).toHaveLength(2)
+    const [cancelled, active] = certs
+    await db().$executeRawUnsafe(
+      `UPDATE wht_certificates SET status = 'cancelled', cancel_reason = 'ทดสอบ BUG-168', cancelled_by = '${USER_ID}', cancelled_at = now()
+        WHERE id = '${cancelled?.id ?? ''}'`,
+    )
+    const periodId = await junePeriodId()
+    const record = await exportsApi.createExportPack(ctx, { periodId })
+    const zip =
+      storage.get([...storage.keys()].find((key) => key.includes(`/v${record.version}/`) && key.endsWith('.zip')) ?? '') ??
+      new Uint8Array()
+    const whtNames = zipEntryNames(zip).filter((name) => name.startsWith('wht_certificates/'))
+    expect(whtNames).toEqual(
+      [
+        `wht_certificates/${cancelled?.certificate_number ?? ''}-CANCELLED.pdf`,
+        `wht_certificates/${active?.certificate_number ?? ''}.pdf`,
+      ].sort(),
+    )
+    const whtCsv = packFile(record.version, '05_WHT_Data.csv')
+    expect(whtCsv).toContain(active?.certificate_number ?? '-')
+    expect(whtCsv).not.toContain(cancelled?.certificate_number ?? '-')
   })
 })

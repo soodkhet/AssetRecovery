@@ -34,6 +34,7 @@ import {
   packNotAttachedFile,
   packNotAttachedText,
   packPdfEntryName,
+  packPdfRef,
   packStoragePath,
   packZipDownloadName,
   packZipFileName,
@@ -48,6 +49,7 @@ import {
   whtCsv,
   EXPORT_STATUS_GROUP,
   EXPORT_STATUS_LABEL,
+  packAttachmentCount,
   PACK_BILLING_INVOICE_PDF_DIR,
   PACK_COVER_FILE_NAME,
   PACK_COVER_KEY,
@@ -167,7 +169,7 @@ function fileNameOf(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
-function toExportDto(row: ExportRow): ExportRecordDto {
+function toExportDto(row: ExportRow, attachmentCount: number): ExportRecordDto {
   const entries = fileEntriesOf(row.fileUrls)
   const zip = entries.find((entry) => entry.key === PACK_ZIP_KEY)
 
@@ -182,8 +184,8 @@ function toExportDto(row: ExportRow): ExportRecordDto {
     statusGroup: EXPORT_STATUS_GROUP[row.status],
     // นับเฉพาะไฟล์ข้อมูล 00–16 (`37` §7.1 · 00 = ยอดรวมควบคุม มติ U94) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
-    // เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมในชุด — ดูหมายเหตุที่ `37` §7.1 ใน PROGRESS_ARCHIVE 4.6
-    attachmentCount: 0,
+    // จำนวน PDF ใน zip (ทุกโฟลเดอร์) ตามที่บันทึกตอนสร้างชุด (UAT BUG-167 · `37` §7.1)
+    attachmentCount,
     files: entries.map((entry) => ({ key: entry.key, fileName: fileNameOf(entry.path) })),
     fileHash: row.fileHash,
     // ชื่อที่ผู้ใช้เห็น (ไทยได้) — key จริงใน Storage เป็น ASCII ดู `packZipFileName()`
@@ -211,7 +213,32 @@ export async function listExportHistory(
     orderBy: [{ generatedAt: 'desc' }],
     select: EXPORT_SELECT,
   })
-  return { items: rows.map(toExportDto) }
+  const counts = await loadAttachmentCounts(
+    user.organizationId,
+    rows.map((row) => row.id),
+  )
+  return { items: rows.map((row) => toExportDto(row, counts.get(row.id) ?? 0)) }
+}
+
+/**
+ * จำนวน PDF ที่แนบใน zip ต่อชุด — อ่านจาก `after_data.attachments` ของ audit `export` ที่บันทึกตอนสร้าง
+ * (immutable — ไม่ต้องเพิ่มคอลัมน์ และชุดเก่าที่สร้างไปแล้วได้ค่าถูกย้อนหลัง · UAT BUG-167)
+ */
+async function loadAttachmentCounts(organizationId: string, exportIds: readonly string[]): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (exportIds.length === 0) return counts
+  const audits = await prisma.auditLog.findMany({
+    where: { organizationId, targetType: EXPORT_TARGET, targetId: { in: [...exportIds] }, action: 'export' },
+    orderBy: { createdAt: 'asc' },
+    select: { targetId: true, afterData: true },
+  })
+  for (const audit of audits) {
+    if (audit.targetId === null || counts.has(audit.targetId)) continue
+    const after = audit.afterData
+    if (after === null || typeof after !== 'object' || Array.isArray(after) || !('attachments' in after)) continue
+    counts.set(audit.targetId, packAttachmentCount(after.attachments))
+  }
+  return counts
 }
 
 export async function findExportRecord(user: SessionUser, id: string): Promise<ExportRow> {
@@ -876,7 +903,7 @@ async function taxInvoiceFile(
       notAttached.push(invoice.source.invoiceNumber)
       continue
     }
-    let name = taxInvoicePdfEntryName(invoice.source.invoiceNumber)
+    let name = taxInvoicePdfEntryName(invoice.source.invoiceNumber, invoice.source.status === 'cancelled')
     // เลขที่ใบกำกับ unique อยู่แล้ว — กันชื่อชนหลังตัดอักขระ (เช่น `A/1` กับ `A_1`)
     if (usedNames.has(name)) name = name.replace(/\.pdf$/, `_${invoice.id.slice(0, 8)}.pdf`)
     usedNames.add(name)
@@ -1232,15 +1259,44 @@ async function packPdfFolder<T extends { id: string; ref: string }>(input: {
   return { entries, attached, notAttached }
 }
 
-/** `wht_certificates/` — ใบ 50 ทวิ ชุดเดียวกับ `05_WHT_Data.csv` · renderer เดียวกับพิมพ์รายใบ (2 ฉบับในไฟล์) */
+/**
+ * ใบ 50 ทวิ ที่**ยกเลิก**ของงวด — ใบของงวดนี้ที่ยกเลิกแล้ว + ใบงวดอื่นที่ถูกยกเลิกในช่วงงวดนี้
+ * (แบบเดียวกับ `tax_invoices/` ที่แนบใบยกเลิกในงวด · UAT BUG-168) · ใช้แนบ PDF เท่านั้น —
+ * `05_WHT_Data.csv` ยังมีเฉพาะใบที่มีผล (ใบยกเลิกไม่นับยอด ภ.ง.ด.)
+ */
+async function cancelledWhtCertificatesForPack(
+  organizationId: string,
+  scope: PeriodScope,
+): Promise<{ id: string; number: string }[]> {
+  const rows = await prisma.whtCertificate.findMany({
+    where: {
+      organizationId,
+      status: 'cancelled',
+      OR: [
+        { expenseRecord: { periodId: scope.id } },
+        { cancelledAt: { gte: startOfBangkokDay(scope.start), lt: startOfBangkokDay(scope.end) } },
+      ],
+    },
+    orderBy: [{ certificateNumber: 'asc' }],
+    select: { id: true, certificateNumber: true },
+  })
+  return rows.map((row) => ({ id: row.id, number: row.certificateNumber }))
+}
+
+/**
+ * `wht_certificates/` — ใบ 50 ทวิ ชุดเดียวกับ `05_WHT_Data.csv` + ใบที่ยกเลิกในงวด (ชื่อไฟล์ลงท้าย
+ * `-CANCELLED`) · renderer เดียวกับพิมพ์รายใบ (2 ฉบับในไฟล์)
+ */
 async function whtCertificatePdfs(
   actor: SessionUser,
-  certificates: readonly { id: string; number: string }[],
+  certificates: readonly { id: string; number: string; cancelled: boolean }[],
   budget: PackPdfBudget,
 ): Promise<PackPdfFolderResult> {
   return packPdfFolder({
     dir: PACK_WHT_CERTIFICATE_PDF_DIR,
-    items: certificates.map((cert) => ({ id: cert.id, ref: cert.number })),
+    items: [...certificates]
+      .sort((left, right) => left.number.localeCompare(right.number))
+      .map((cert) => ({ id: cert.id, ref: packPdfRef(cert.number, cert.cancelled) })),
     budget,
     render: (item) => [
       {
@@ -1423,7 +1479,15 @@ export async function createExportPack(
   // ③ PDF ใน zip — เพดานเดียวทั้งชุด (จำนวน/เวลา) เรียงตามความสำคัญ: เอกสารภาษีก่อน (มติ U57 · U94 ข้อ 5)
   const pdfBudget = createPackPdfBudget(options.pdfBudget)
   const taxInvoices = await taxInvoiceFile(actor.organizationId, scope, pdfBudget)
-  const whtPdfs = await whtCertificatePdfs(actor, wht.certificates, pdfBudget)
+  const cancelledWht = await cancelledWhtCertificatesForPack(actor.organizationId, scope)
+  const whtPdfs = await whtCertificatePdfs(
+    actor,
+    [
+      ...wht.certificates.map((cert) => ({ ...cert, cancelled: false })),
+      ...cancelledWht.map((cert) => ({ ...cert, cancelled: true })),
+    ],
+    pdfBudget,
+  )
   const voucherFiles = await voucherPdfs(actor, vouchers.batches, pdfBudget)
   const billingInvoices = await billingInvoicePdfs(actor, scope, pdfBudget)
 
@@ -1621,7 +1685,7 @@ export async function createExportPack(
     throw error
   })
 
-  return toExportDto(created)
+  return toExportDto(created, packAttachmentCount(attachments))
 }
 
 
@@ -1702,7 +1766,8 @@ async function transitionExport(
     return next
   })
 
-  return toExportDto(updated)
+  const counts = await loadAttachmentCounts(ctx.actor.organizationId, [updated.id])
+  return toExportDto(updated, counts.get(updated.id) ?? 0)
 }
 
 export async function markExportSent(

@@ -357,6 +357,46 @@ suite('มติ PO U95 — วางบิล ⇒ ใบแจ้งหนี�
     const draft = await seedBilling()
     await expectCode(() => getBillingInvoiceSource(accountant, draft.id), 'BILLING_BATCH_INVALID_STATUS')
   })
+
+  it('BUG-164 — ผู้ขาย/ผู้ซื้อบนใบแจ้งหนี้ = snapshot ตอนส่งรอบ · แก้ชื่อ/ที่อยู่ภายหลังใบเดิมไม่เปลี่ยน · snapshot แก้ไม่ได้', async () => {
+    const { getBillingInvoiceSource } = await import('@/lib/revenue/billing-invoice-queries')
+    const company = await db().financeCompany.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { name: true, address: true, taxId: true },
+    })
+    const org = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { name: true } })
+    const batch = await seedBilling()
+    const draftRow = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id }, select: { buyerName: true } })
+    expect(draftRow.buyerName, 'รอบร่างยังไม่มี snapshot').toBeNull()
+    await revenue.sendBillingBatch(billingCtx, batch.id, { reason: billingCtx.reason })
+
+    const sentRow = await db().billingBatch.findUniqueOrThrow({
+      where: { id: batch.id },
+      select: { buyerName: true, buyerTaxId: true, sellerName: true },
+    })
+    expect(sentRow).toEqual({ buyerName: company.name, buyerTaxId: company.taxId, sellerName: org.name })
+
+    try {
+      await db().financeCompany.update({
+        where: { id: companyId },
+        data: { name: `${company.name} (เปลี่ยนชื่อ)`, address: 'ที่อยู่ใหม่หลังส่งบิล' },
+      })
+      await db().organization.update({ where: { id: ORG_ID }, data: { name: `${org.name} (ใหม่)` } })
+
+      const source = await getBillingInvoiceSource(accountant, batch.id)
+      expect(source.buyer.name).toBe(company.name)
+      expect(source.buyer.address).toBe(company.address ?? '')
+      expect(source.seller.name).toBe(org.name)
+
+      // ยาม DB — snapshot ของรอบที่ส่งแล้วแก้ไม่ได้
+      await expect(
+        db().billingBatch.update({ where: { id: batch.id }, data: { buyerName: 'แก้ทับ' } }),
+      ).rejects.toThrow(/BILLING_PARTY_SNAPSHOT_IMMUTABLE/)
+    } finally {
+      await db().financeCompany.update({ where: { id: companyId }, data: { name: company.name, address: company.address } })
+      await db().organization.update({ where: { id: ORG_ID }, data: { name: org.name } })
+    }
+  })
 })
 
 suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จรับเงิน/ใบกำกับภาษี', () => {

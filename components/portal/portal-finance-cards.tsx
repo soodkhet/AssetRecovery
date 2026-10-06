@@ -10,6 +10,7 @@ import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
   PORTAL_REVENUE_BASIS_LABEL,
+  PORTAL_REVENUE_BASIS_NOTE,
   portalAgingBucketTone,
   portalAlertTextClass,
   portalRevenueChartAxis,
@@ -43,7 +44,7 @@ function StateOr<T>({ state, children }: { state: LoadState<T>; children: (data:
 /**
  * ยอดเรียกเก็บค่าบริการ 6 เดือนย้อนหลัง (`97` §6.5 Revenue Summary · mockup `renderDashboard()` ส่วนล่าง)
  * — กราฟ Recharts ตัวเดียวกับเมนูรายงาน + ตารางรายเดือน · ตัวเลขทั้งหมดจาก API (คำนวณสดฝั่ง server)
- * · ยอด = ยอดก่อน VAT ตามใบกำกับที่ออกจริง (มติ U14) — ป้ายกราฟบอกฐานชัดเจน
+ * · ยอด = ยอดวางบิลก่อน VAT ตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · มติ U14 · BUG-162) — ป้ายกราฟบอกฐานชัดเจน
  * · จอแคบ: ป้ายเดือนเอียงมากขึ้น + แสดงเว้นเดือน (BUG-146)
  */
 export function PortalRevenueSummaryCard({ state }: { state: LoadState<PortalRevenueSummaryDto> }) {
@@ -104,6 +105,7 @@ export function PortalRevenueSummaryCard({ state }: { state: LoadState<PortalRev
                   ))}
                 </TBody>
               </Table>
+              <p className="text-xs text-slate-500">{PORTAL_REVENUE_BASIS_NOTE}</p>
             </div>
           )
         }

@@ -1,5 +1,6 @@
 import { ensurePeriod, type AccountingMutationContext } from '@/lib/accounting/queries'
-import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
+import { PERIOD_ASSUMED_OPEN, type PeriodClosedLookup } from '@/lib/accounting/period'
+import { assertPeriodOpenAt, loadPeriodClosedLookup } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { assertInvoiceHasNoActiveNotes } from '@/lib/credit-notes/credit-note'
 import type { SessionUser } from '@/lib/auth/types'
@@ -147,7 +148,7 @@ const SALES_SELECT = {
 
 type SalesRow = Prisma.SalesRecordGetPayload<{ select: typeof SALES_SELECT }>
 
-function toInvoiceSummary(row: TaxInvoiceRow): TaxInvoiceSummaryDto {
+function toInvoiceSummary(row: TaxInvoiceRow, periodClosed: PeriodClosedLookup): TaxInvoiceSummaryDto {
   return {
     id: row.id,
     docKind: row.docKind,
@@ -166,6 +167,7 @@ function toInvoiceSummary(row: TaxInvoiceRow): TaxInvoiceSummaryDto {
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
     cancelledByName: row.cancelledByUser?.fullName ?? null,
     createdAt: row.createdAt.toISOString(),
+    periodClosed: periodClosed(row.invoiceDate),
   }
 }
 
@@ -173,7 +175,7 @@ function activeInvoiceOf(row: SalesRow): TaxInvoiceRow | null {
   return row.taxInvoices.find((invoice) => invoice.status === 'active') ?? null
 }
 
-function toSalesDto(row: SalesRow): SalesRecordDto {
+function toSalesDto(row: SalesRow, periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN): SalesRecordDto {
   const active = activeInvoiceOf(row)
   return {
     id: row.id,
@@ -189,8 +191,8 @@ function toSalesDto(row: SalesRow): SalesRecordDto {
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
     createdAt: row.createdAt.toISOString(),
-    activeTaxInvoice: active === null ? null : toInvoiceSummary(active),
-    taxInvoices: row.taxInvoices.map(toInvoiceSummary),
+    activeTaxInvoice: active === null ? null : toInvoiceSummary(active, periodClosed),
+    taxInvoices: row.taxInvoices.map((invoice) => toInvoiceSummary(invoice, periodClosed)),
     invoicedBeforeVatSatang: row.taxInvoices
       .filter((invoice) => invoice.status === 'active')
       .reduce((sum, invoice) => sum + invoice.amountBeforeVatSatang, 0),
@@ -300,7 +302,8 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
     select: SALES_SELECT,
   })
 
-  const items = rows.map(toSalesDto)
+  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
+  const items = rows.map((row) => toSalesDto(row, periodClosed))
   return {
     items,
     totalBeforeVatSatang: items.reduce((sum, item) => sum + item.totalBeforeVatSatang, 0),
@@ -312,9 +315,13 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
 
 // ── ใบกำกับภาษี / ใบเสร็จรับเงิน/ใบกำกับภาษี ────────────────────────────────
 
-function toInvoiceDto(row: TaxInvoiceRow, sales: SalesRow): TaxInvoiceDto {
+function toInvoiceDto(
+  row: TaxInvoiceRow,
+  sales: SalesRow,
+  periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN,
+): TaxInvoiceDto {
   return {
-    ...toInvoiceSummary(row),
+    ...toInvoiceSummary(row, periodClosed),
     salesRecordId: sales.id,
     companyId: sales.companyId,
     // U96 #4 — ชื่อผู้ซื้อตาม snapshot บนใบ (ไม่ใช่ชื่อปัจจุบันของบริษัท)
@@ -335,12 +342,13 @@ export async function listTaxInvoices(user: SessionUser, query: TaxInvoiceListQu
     },
     select: SALES_SELECT,
   })
+  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
 
   const items = rows
     .flatMap((sales) =>
       sales.taxInvoices
         .filter((invoice) => query.status === undefined || invoice.status === query.status)
-        .map((invoice) => toInvoiceDto(invoice, sales)),
+        .map((invoice) => toInvoiceDto(invoice, sales, periodClosed)),
     )
     .sort((left, right) => right.invoiceNumber.localeCompare(left.invoiceNumber))
 
@@ -994,6 +1002,7 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
     },
   })
 
+  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
   const items: CashReceiptDto[] = rows.map((row) => {
     const active = row.taxInvoices.find((invoice) => invoice.status === 'active') ?? null
     return {
@@ -1010,8 +1019,10 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
       billingStatus: row.billingBatch.status,
       note: row.note,
       createdAt: row.createdAt.toISOString(),
-      taxInvoice: active === null ? null : toInvoiceSummary(active),
-      cancelledTaxInvoices: row.taxInvoices.filter((invoice) => invoice.status === 'cancelled').map(toInvoiceSummary),
+      taxInvoice: active === null ? null : toInvoiceSummary(active, periodClosed),
+      cancelledTaxInvoices: row.taxInvoices
+        .filter((invoice) => invoice.status === 'cancelled')
+        .map((invoice) => toInvoiceSummary(invoice, periodClosed)),
       coveredByLegacyInvoice: (row.billingBatch.salesRecord?.taxInvoices.length ?? 0) > 0,
     }
   })

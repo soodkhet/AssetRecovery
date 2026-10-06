@@ -337,3 +337,26 @@ export function calculateCustomerWithheldWht(input: {
   assertWhtPctValid(input.whtPct)
   return pctOfSatang(input.amountBeforeVatSatang, input.whtPct)
 }
+
+/**
+ * ภาษีที่ลูกค้าจะหัก ณ ที่จ่าย **(ประมาณ)** + ยอดที่คาดว่าจะได้รับ ของรอบวางบิล (UAT BUG-165)
+ * — แสดงบนรอบร่าง/รายละเอียดรอบให้การเงินเห็นก่อนเงินเข้า · **ไม่บันทึกลง DB** (ยอดหักจริงบันทึกตอนจับคู่เงินรับ)
+ *
+ * - บันทึกยอดหักจริงแล้ว (`recordedWhtSatang > 0`) ⇒ ใช้ยอดจริง (`isEstimate = false`)
+ * - ยังไม่มี ⇒ ประมาณจากอัตราของบริษัทด้วยสูตรเดียวกับ `calculateCustomerWithheldWht()` (ฐานก่อน VAT)
+ * - ยอดที่คาดว่าจะได้รับ = ยอดเรียกเก็บรวม VAT − ภาษีที่ลูกค้าหัก (ไม่ติดลบ)
+ */
+export function estimateCustomerWhtForBilling(input: {
+  amountBeforeVatSatang: number
+  totalSatang: number
+  recordedWhtSatang: number
+  whtPct: number | null
+}): { whtSatang: number; isEstimate: boolean; expectedReceiptSatang: number } {
+  assertNonNegativeSatang(input.totalSatang, 'ยอดเรียกเก็บของรอบวางบิล')
+  assertNonNegativeSatang(input.recordedWhtSatang, 'ภาษีที่ลูกค้าหักที่บันทึกแล้ว')
+  const isEstimate = input.recordedWhtSatang === 0
+  const whtSatang = isEstimate
+    ? calculateCustomerWithheldWht({ amountBeforeVatSatang: input.amountBeforeVatSatang, whtPct: input.whtPct })
+    : input.recordedWhtSatang
+  return { whtSatang, isEstimate, expectedReceiptSatang: Math.max(0, input.totalSatang - whtSatang) }
+}

@@ -23,6 +23,7 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
+import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { AWAITING_NOTE_LABEL, netInvoiceAmounts, sumActiveCreditNotes, sumActiveDebitNotes } from '@/lib/credit-notes/credit-note'
 import type { CreditNoteType } from '@/lib/credit-notes/schemas'
@@ -223,6 +224,8 @@ export function SalesTab() {
                               <Button
                                 size="sm"
                                 variant="ghost"
+                                disabled={invoice.periodClosed}
+                                title={invoice.periodClosed ? PERIOD_CLOSED_CANCEL_HINT : undefined}
                                 onClick={() => {
                                   setReason('')
                                   setCancelling(invoice)

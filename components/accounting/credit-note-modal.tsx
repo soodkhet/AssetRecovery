@@ -20,6 +20,7 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
+import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { creditableInvoiceBalance, CREDIT_NOTE_TYPE_LABEL, netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
 import type { CreditNoteType } from '@/lib/credit-notes/schemas'
@@ -289,6 +290,8 @@ export function CreditNoteModal({
                           <Button
                             size="sm"
                             variant="ghost"
+                            disabled={note.periodClosed}
+                            title={note.periodClosed ? PERIOD_CLOSED_CANCEL_HINT : undefined}
                             onClick={() => {
                               setCancelReason('')
                               setCancelling(note)

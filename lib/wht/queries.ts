@@ -1,7 +1,8 @@
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
-import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
+import { PERIOD_ASSUMED_OPEN, type PeriodClosedLookup } from '@/lib/accounting/period'
+import { assertPeriodOpenAt, loadPeriodClosedLookup } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
@@ -123,7 +124,7 @@ const CERT_SELECT = {
 
 type CertRow = Prisma.WhtCertificateGetPayload<{ select: typeof CERT_SELECT }>
 
-function toCertDto(row: CertRow): WhtCertificateDto {
+function toCertDto(row: CertRow, periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN): WhtCertificateDto {
   return {
     id: row.id,
     certificateNumber: row.certificateNumber,
@@ -152,6 +153,8 @@ function toCertDto(row: CertRow): WhtCertificateDto {
     periodId: row.expenseRecord.periodId,
     periodLabel: row.expenseRecord.period.periodLabel,
     createdAt: row.createdAt.toISOString(),
+    // ยามยกเลิกใช้งวดของ `payment_date` — ตัวเดียวกับที่นี่ (UAT BUG-169)
+    periodClosed: periodClosed(row.paymentDate),
   }
 }
 
@@ -543,7 +546,7 @@ export async function syncWhtCertificatesFromPayout(
     }
   }
 
-  return issued.map(toCertDto)
+  return issued.map((row) => toCertDto(row))
 }
 
 // ── GET /api/accounting/wht-certificates (`33` §14) ─────────────────────────
@@ -564,7 +567,8 @@ export async function listWhtCertificates(
     select: CERT_SELECT,
   })
 
-  return { items: rows.map(toCertDto), summary: summarizeFilingTotals(rows) }
+  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
+  return { items: rows.map((row) => toCertDto(row, periodClosed)), summary: summarizeFilingTotals(rows) }
 }
 
 async function findCertificate(user: SessionUser, certificateId: string): Promise<CertRow> {

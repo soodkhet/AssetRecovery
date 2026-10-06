@@ -2670,6 +2670,18 @@ model BillingBatch {
   dueDate                     DateTime           @map("due_date") @db.Date
   sentAt                      DateTime?          @map("sent_at") @db.Timestamptz(6)
   sentBy                      String?            @map("sent_by") @db.Uuid
+  /// UAT BUG-164 — snapshot ผู้ขาย/ผู้ซื้อของใบแจ้งหนี้/ใบวางบิล ตอนส่งรอบ (`draft` = NULL ทั้งชุด)
+  /// CHECK `billing_party_snapshot_complete` + trigger immutable อยู่ใน migration `20261006170000_billing_batch_party_snapshot`
+  sellerName                  String?            @map("seller_name")
+  sellerTaxId                 String?            @map("seller_tax_id") @db.VarChar(13)
+  sellerAddress               String?            @map("seller_address")
+  sellerPhone                 String?            @map("seller_phone") @db.VarChar(20)
+  sellerBranchCode            String?            @map("seller_branch_code") @db.VarChar(5)
+  buyerName                   String?            @map("buyer_name")
+  buyerTaxId                  String?            @map("buyer_tax_id") @db.VarChar(13)
+  buyerAddress                String?            @map("buyer_address")
+  buyerPhone                  String?            @map("buyer_phone") @db.VarChar(20)
+  buyerBranchCode             String?            @map("buyer_branch_code") @db.VarChar(5)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid

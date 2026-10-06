@@ -5,7 +5,7 @@ import { MONTH_NAMES_TH } from '@/lib/field/calendar'
 import { fmtDate, startOfBangkokDay } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { periodLockPolicyFor } from '@/lib/settings/period-lock'
+import { isDirectEditRejected, periodLockPolicyFor } from '@/lib/settings/period-lock'
 
 /**
  * กติกาของรอบบัญชี (ไฟล์ 30) — **pure ล้วน ไม่มี I/O** ใช้ร่วม FE/BE
@@ -212,6 +212,42 @@ export interface ReadinessCheck {
   passed: boolean
   /** รายละเอียดที่ผู้ใช้อ่านแล้วรู้ว่าต้องไปแก้อะไร (`30` §8 — checklist ใน Modal) */
   detail: string
+}
+
+/**
+ * ตัวตอบ "งวดของวันที่นี้ปิดแล้วหรือยัง" สำหรับติดไปกับ DTO ของเอกสารที่ยกเลิกได้ (UAT BUG-169)
+ * — `true` = งวดอยู่สถานะที่**ปฏิเสธการแก้ที่กระทบยอด** (`sent_to_accountant`/`locked`) ⇒ หน้าจอปิดปุ่ม
+ * "ยกเลิก" แล้วบอกให้ทำผ่าน Adjustment · กติกาเดียวกับยาม `assertPeriodOpenAt()` (นโยบายกลาง
+ * `isDirectEditRejected`) — UI เป็นแค่ UX, API ยังตรวจซ้ำทุกครั้ง (DEC-002)
+ * · ไม่มีรอบของเดือนนั้น = ยังเก็บข้อมูลอยู่ ⇒ `false`
+ */
+export type PeriodClosedLookup = (at: Date) => boolean
+
+export function buildPeriodClosedLookup(
+  rows: readonly { yearBe: number; month: number; status: AccountingPeriodStatus }[],
+): PeriodClosedLookup {
+  const closed = new Set(
+    rows.filter((row) => isDirectEditRejected(row.status, true)).map((row) => `${row.yearBe}-${row.month}`),
+  )
+  return (at) => {
+    const key = periodKeyOf(at)
+    return closed.has(`${key.yearBe}-${key.month}`)
+  }
+}
+
+/** tooltip ของปุ่ม "ยกเลิก" เมื่อเอกสารอยู่ในงวดที่ปิดแล้ว (UAT BUG-169) */
+export const PERIOD_CLOSED_CANCEL_HINT = 'งวดปิดแล้ว ต้องทำผ่าน Adjustment'
+
+/** ใช้กับ DTO ที่คืนจาก mutation ซึ่งเพิ่งผ่านยามงวดมาแล้ว (งวดเปิดอยู่แน่นอน) */
+export const PERIOD_ASSUMED_OPEN: PeriodClosedLookup = () => false
+
+/**
+ * คำอธิบายหัว Modal ตรวจความพร้อม — จำนวนข้อ**นับจากรายการที่ตรวจจริง** (UAT BUG-163: เคยเขียนตายตัว
+ * "3 ข้อ" ขณะที่ checklist มี 4 รายการ) · ยังไม่มีผลตรวจ (`null`) ⇒ ไม่ระบุจำนวน
+ */
+export function readinessDescription(checkCount: number | null): string {
+  const tail = 'ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม'
+  return checkCount === null ? tail : `เงื่อนไข ${checkCount} ข้อ — ${tail}`
 }
 
 /**

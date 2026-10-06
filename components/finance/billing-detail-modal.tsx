@@ -21,6 +21,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
   BILLING_STATUS_LABEL,
   billingStatusBadgeGroup,
+  customerWhtSummary,
   isArOutstanding,
   REVENUE_STATUS_LABEL,
   revenueStatusBadgeGroup,
@@ -62,6 +63,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
   if (batch === null) return null
 
   const revenues = detail?.revenues ?? []
+  const customerWht = customerWhtSummary(detail ?? batch)
 
   return (
     <Modal
@@ -108,10 +110,19 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
           <span>สร้างโดย {batch.createdByName}</span>
           <span>{fmtCount(batch.revenueCount)} รายการ</span>
           {batch.sentAt !== null && <span>ส่งบิล {fmtDate(batch.sentAt)}</span>}
-          {batch.whtWithheldByCustomerSatang > 0 && (
-            <span>ลูกค้าหัก ณ ที่จ่าย {fmtSatangSymbol(batch.whtWithheldByCustomerSatang)}</span>
-          )}
         </div>
+
+        {customerWht !== null && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-4 py-3 text-xs">
+            <span className="text-slate-600">
+              {customerWht.label} <span className="font-semibold text-slate-800">{customerWht.whtText}</span>
+            </span>
+            <span className="text-slate-600">
+              {customerWht.expectedLabel}{' '}
+              <span className="font-semibold text-emerald-700">{customerWht.expectedText}</span>
+            </span>
+          </div>
+        )}
 
         {batch.status !== 'draft' && (
           <InlineAlert tone="info">

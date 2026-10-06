@@ -4,6 +4,7 @@ import {
   calculateCustomerWithheldWht,
   calculateWht,
   calculateWhtForPayee,
+  estimateCustomerWhtForBilling,
   resolveWhtRate,
 } from '@/lib/finance/wht-calc'
 import { DEFAULT_WHT_MIN_THRESHOLD_SATANG } from '@/lib/settings/tax-profile'
@@ -189,6 +190,26 @@ describe('calculateCustomerWithheldWht — A1 ลูกค้าหักภา�
   it('ยอดติดลบ / อัตรานอกช่วง ⇒ โยนทิ้ง ไม่ปล่อยค่าเพี้ยนลงฐาน', () => {
     expect(() => calculateCustomerWithheldWht({ amountBeforeVatSatang: -1, whtPct: 3 })).toThrow()
     expect(() => calculateCustomerWithheldWht({ amountBeforeVatSatang: 750_000, whtPct: 120 })).toThrow()
+  })
+})
+
+describe('estimateCustomerWhtForBilling — BUG-165 ภาษีที่ลูกค้าจะหัก (ประมาณ) บนรอบวางบิล', () => {
+  it('รอบร่าง 1,000 + VAT 70 · บริษัทหัก 3% ⇒ ประมาณ 30 · คาดว่าจะได้รับ 1,040', () => {
+    expect(
+      estimateCustomerWhtForBilling({ amountBeforeVatSatang: 100_000, totalSatang: 107_000, recordedWhtSatang: 0, whtPct: 3 }),
+    ).toEqual({ whtSatang: 3_000, isEstimate: true, expectedReceiptSatang: 104_000 })
+  })
+
+  it('บันทึกยอดหักจริงแล้ว ⇒ ใช้ยอดจริง ไม่ใช่ประมาณ', () => {
+    expect(
+      estimateCustomerWhtForBilling({ amountBeforeVatSatang: 100_000, totalSatang: 107_000, recordedWhtSatang: 2_000, whtPct: 3 }),
+    ).toEqual({ whtSatang: 2_000, isEstimate: false, expectedReceiptSatang: 105_000 })
+  })
+
+  it('บริษัทไม่หัก ⇒ 0 · ยอดที่คาดว่าจะได้รับ = ยอดเต็ม', () => {
+    expect(
+      estimateCustomerWhtForBilling({ amountBeforeVatSatang: 100_000, totalSatang: 107_000, recordedWhtSatang: 0, whtPct: null }),
+    ).toEqual({ whtSatang: 0, isEstimate: true, expectedReceiptSatang: 107_000 })
   })
 })
 
