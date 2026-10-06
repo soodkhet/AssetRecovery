@@ -83,3 +83,13 @@ export type OrganizationLogoSetInput = z.infer<typeof organizationLogoSetSchema>
 
 export const organizationLogoRemoveSchema = z.object({ reason: reasonSchema })
 export type OrganizationLogoRemoveInput = z.infer<typeof organizationLogoRemoveSchema>
+
+/** ผูกรูปลายเซ็นผู้มีอำนาจที่อัปโหลดแล้ว (มติ PO U122) — server ตรวจชนิด/ขนาดจากเนื้อไฟล์อีกชั้น */
+export const organizationSignatureSetSchema = z.object({
+  path: z.string().trim().min(1, 'กรุณาเลือกไฟล์รูปลายเซ็น').max(MAX_STORAGE_PATH_LENGTH),
+  reason: reasonSchema,
+})
+export type OrganizationSignatureSetInput = z.infer<typeof organizationSignatureSetSchema>
+
+export const organizationSignatureRemoveSchema = z.object({ reason: reasonSchema })
+export type OrganizationSignatureRemoveInput = z.infer<typeof organizationSignatureRemoveSchema>

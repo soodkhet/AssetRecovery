@@ -2,7 +2,7 @@ import type { AdvanceDocSource, AdvanceReturnDocSource } from '@/lib/advances/ad
 import { sumPayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { monthLabelTH } from '@/lib/field/calendar'
 import { toBangkokParts } from '@/lib/format/datetime'
-import type { DocumentNumberType } from '@/lib/generated/prisma/enums'
+import type { DocumentNumberType, TemplateDocumentType } from '@/lib/generated/prisma/enums'
 import { PACK_FILES } from '@/lib/exports/pack'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PayoutDocIssuer, PayoutPayeeDocInfo } from '@/lib/payout/payout-doc'
@@ -13,6 +13,7 @@ import type { SubstituteReceiptDocSource } from '@/lib/substitute-receipts/subst
 import type { HandoverParty } from '@/lib/warehouse/handover-doc'
 import type { AssetListItemDto, LotDetailDto } from '@/lib/warehouse/types'
 import type { WhtCertificateDocSource } from '@/lib/wht/wht'
+import type { DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * **ข้อมูลสมมติคงที่** ของหน้าตัวอย่างเอกสาร (มติ PO U104) — pure ล้วน ไม่แตะ DB
@@ -28,6 +29,11 @@ export interface DocumentSampleContext {
   /** เลขที่ตัวอย่างต่อชุดเลข (เลขถัดไป ณ `asOf`) */
   numbers: Readonly<Record<DocumentNumberType, string>>
   asOf: Date
+  /**
+   * ข้อความท้าย + รูปลายเซ็นตามค่าตั้งปัจจุบันของแท็บ "เทมเพลตเอกสาร" (มติ PO U122) — ปุ่ม "ดูตัวอย่าง PDF"
+   * ของแท็บนั้นเปิดตัวอย่างชุดนี้ · ไม่ส่ง/ไม่มีชนิดนั้น = ไม่พิมพ์
+   */
+  templates?: Partial<Record<TemplateDocumentType, DocTemplateRender>>
 }
 
 /** ชื่อ/ข้อมูลสมมติทั้งหมดของตัวอย่าง — เทสต์ใช้ตรวจว่าไม่มีข้อมูลจริงหลุดเข้ามา */
@@ -114,6 +120,7 @@ export function sampleBillingSource(context: DocumentSampleContext): BillingInvo
     seller: seller(context),
     buyer: { ...SAMPLE_CUSTOMER },
     sellerProfile: null,
+    templateSnapshot: null,
     lines: Array.from({ length: 4 }, (_, index) => ({
       caseRef: sampleCaseRef(index + 1),
       revenueDate: daysBefore(context.asOf, 10),
@@ -159,6 +166,7 @@ export function sampleTaxInvoiceSource(
     buyerBranchCode: SAMPLE_CUSTOMER.branchCode,
     sellerBranchCode: party.branchCode,
     sellerProfile: null,
+    templateSnapshot: null,
     description: `ค่าบริการติดตามทรัพย์ รอบเดือน ${samplePeriodLabel(context.asOf)} (ใบแจ้งหนี้ ${context.numbers.billing_batch})`,
     periodLabel: samplePeriodLabel(context.asOf),
     amounts,

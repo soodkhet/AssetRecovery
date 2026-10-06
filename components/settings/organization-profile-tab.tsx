@@ -25,11 +25,16 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { formatTaxId } from '@/lib/finance-companies/company'
 import { branchCodeFromForm, branchKindOf, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
-import { ORGANIZATION_LOGO_ACCEPT, ORGANIZATION_LOGO_MAX_BYTES } from '@/lib/organization/profile'
+import {
+  ORGANIZATION_LOGO_ACCEPT,
+  ORGANIZATION_LOGO_MAX_BYTES,
+  ORGANIZATION_SIGNATURE_ACCEPT,
+} from '@/lib/organization/profile'
 import {
   ORGANIZATION_REQUIRED_ADDRESS_FIELDS,
   organizationLogoSetSchema,
   organizationProfileUpdateSchema,
+  organizationSignatureSetSchema,
 } from '@/lib/organization/schemas'
 import type { OrganizationProfileDto } from '@/lib/organization/types'
 import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
@@ -40,12 +45,58 @@ import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
  * - ข้อมูลผู้ขายบนใบกำกับภาษี/ใบแจ้งหนี้ + หัวเอกสารของ PDF ทุกใบ (ยกเว้นแบบ 50 ทวิ ที่ใช้แบบฟอร์มทางการ)
  * - แก้ได้เฉพาะ Superadmin (`manage_invoice_numbering`) · บริหาร/บัญชีดูอย่างเดียว · ทุกการแก้ต้องมีเหตุผล
  * - เอกสารที่ออกแล้วไม่เปลี่ยน (อ่าน snapshot ตอนออก) — แก้แล้วมีผลกับเอกสารที่ออกหลังจากนี้เท่านั้น
+ * - รูปลายเซ็นผู้มีอำนาจ (มติ PO U122 · ไม่บังคับ) — กติกาเดียวกับโลโก้ · ผู้ดูอย่างเดียวไม่เห็นรูป (เห็นแค่สถานะ)
  * - โลโก้ PNG/JPG ≤ 1 MB อัปโหลดผ่าน server (ตรวจชนิด/ขนาดจากเนื้อไฟล์อีกชั้นตอนบันทึก) · ลบ = ปลดออกจากหัวเอกสาร
  * - สำนักงานใหญ่/สาขา ย้ายมารวมที่นี่ (เดิมเป็นการ์ดในแท็บเลขที่ใบกำกับภาษี)
  */
 
 const ENDPOINT = '/api/settings/organization'
-const LOGO_ENDPOINT = '/api/settings/organization/logo'
+
+/** รูปที่อัปโหลดได้ในหน้านี้ — โลโก้ (U99) และรูปลายเซ็นผู้มีอำนาจ (U122 · ไม่บังคับ) ใช้กติกาเดียวกัน */
+type ImageKind = 'logo' | 'signature'
+
+interface ImageConfig {
+  endpoint: string
+  target: 'organization_logo' | 'organization_signature'
+  noun: string
+  modalTitle: string
+  hint: string
+  reasonPlaceholder: string
+  note: string
+  savedDescription: string
+  removeTitle: string
+  removeDescription: string
+  removedToast: string
+}
+
+const IMAGE_CONFIG: Readonly<Record<ImageKind, ImageConfig>> = {
+  logo: {
+    endpoint: '/api/settings/organization/logo',
+    target: 'organization_logo',
+    noun: 'โลโก้',
+    modalTitle: 'อัปโหลดโลโก้บริษัท',
+    hint: 'PNG / JPG · ขนาดแนะนำ 400×400 px · ไฟล์ไม่เกิน 1 MB',
+    reasonPlaceholder: 'เช่น ใช้โลโก้ใหม่ตามแบบของบริษัท',
+    note: 'โลโก้จะปรากฏบนใบกำกับภาษี ใบเสร็จรับเงิน ใบแจ้งหนี้ และเอกสาร PDF ที่ระบบสร้างหลังจากนี้ — เอกสารที่ออกแล้วไม่เปลี่ยน',
+    savedDescription: 'เอกสารที่ออกหลังจากนี้จะพิมพ์โลโก้ใหม่',
+    removeTitle: 'ลบโลโก้ออกจากหัวเอกสาร',
+    removeDescription: 'เอกสารที่ออกหลังจากนี้จะไม่มีโลโก้ · เอกสารที่ออกไปแล้วยังพิมพ์โลโก้เดิม',
+    removedToast: 'นำโลโก้ออกจากหัวเอกสารแล้ว',
+  },
+  signature: {
+    endpoint: '/api/settings/organization/signature',
+    target: 'organization_signature',
+    noun: 'รูปลายเซ็น',
+    modalTitle: 'อัปโหลดรูปลายเซ็นผู้มีอำนาจ',
+    hint: 'PNG พื้นโปร่งแนะนำ (หรือ JPG) · ไฟล์ไม่เกิน 1 MB',
+    reasonPlaceholder: 'เช่น ใช้ลายเซ็นกรรมการผู้มีอำนาจคนปัจจุบัน',
+    note: 'รูปจะพิมพ์บนเอกสารชนิดที่เปิดไว้ในแท็บ "เทมเพลตเอกสาร" ที่ออกหลังจากนี้ — เอกสารที่ออกแล้วไม่เปลี่ยน',
+    savedDescription: 'พิมพ์บนเอกสารชนิดที่เปิดไว้ในแท็บเทมเพลตเอกสาร',
+    removeTitle: 'ลบรูปลายเซ็นผู้มีอำนาจ',
+    removeDescription: 'เอกสารที่ออกหลังจากนี้จะเว้นช่องให้เซ็นมือ · เอกสารที่ออกไปแล้วยังพิมพ์รูปเดิม',
+    removedToast: 'นำรูปลายเซ็นออกแล้ว',
+  },
+}
 
 interface FormState {
   name: string
@@ -114,13 +165,13 @@ export function OrganizationProfileTab() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
-  const [logoOpen, setLogoOpen] = useState(false)
+  const [imageKind, setImageKind] = useState<ImageKind | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoReason, setLogoReason] = useState('')
   const [logoError, setLogoError] = useState<string | null>(null)
   const [logoSaving, setLogoSaving] = useState(false)
 
-  const [removeOpen, setRemoveOpen] = useState(false)
+  const [removeKind, setRemoveKind] = useState<ImageKind | null>(null)
   const [removeReason, setRemoveReason] = useState('')
   const [removing, setRemoving] = useState(false)
 
@@ -190,11 +241,11 @@ export function OrganizationProfileTab() {
     }
   }
 
-  function openLogo(): void {
+  function openImage(kind: ImageKind): void {
     setLogoFile(null)
     setLogoReason('')
     setLogoError(null)
-    setLogoOpen(true)
+    setImageKind(kind)
   }
 
   function pickLogo(file: File | null): void {
@@ -217,49 +268,56 @@ export function OrganizationProfileTab() {
     setLogoFile(file)
   }
 
-  async function saveLogo(organizationId: string): Promise<void> {
+  async function saveImage(kind: ImageKind, organizationId: string): Promise<void> {
+    const config = IMAGE_CONFIG[kind]
     if (logoFile === null) {
-      setLogoError('กรุณาเลือกไฟล์โลโก้')
+      setLogoError(`กรุณาเลือกไฟล์${config.noun}`)
       return
     }
     setLogoSaving(true)
     try {
       let path: string
       try {
-        path = await uploadToStorage({ kind: 'organization_logo', organizationId }, logoFile)
+        path = await uploadToStorage({ kind: config.target, organizationId }, logoFile)
       } catch (uploadError) {
-        setLogoError(uploadError instanceof StorageUploadError ? uploadError.message : 'อัปโหลดโลโก้ไม่สำเร็จ')
+        setLogoError(uploadError instanceof StorageUploadError ? uploadError.message : `อัปโหลด${config.noun}ไม่สำเร็จ`)
         return
       }
-      const parsed = organizationLogoSetSchema.safeParse({ path, reason: logoReason })
+      // schema ของโลโก้/ลายเซ็นรูปเดียวกัน ({ path, reason }) — ใช้ตัวที่ตรงชนิดเพื่อข้อความผิดพลาดที่ถูกต้อง
+      const schema = kind === 'logo' ? organizationLogoSetSchema : organizationSignatureSetSchema
+      const parsed = schema.safeParse({ path, reason: logoReason })
       if (!parsed.success) {
         setLogoError(toFieldErrors(parsed.error).reason ?? 'ข้อมูลไม่ครบ')
         return
       }
-      const result = await callApi<OrganizationProfileDto>(LOGO_ENDPOINT, jsonRequest('POST', parsed.data))
+      const result = await callApi<OrganizationProfileDto>(config.endpoint, jsonRequest('POST', parsed.data))
       if (result.error !== undefined) {
         setLogoError(result.error.message)
         return
       }
       setProfile(result.data ?? null)
-      showToast({ tone: 'success', title: 'บันทึกโลโก้แล้ว', description: 'เอกสารที่ออกหลังจากนี้จะพิมพ์โลโก้ใหม่' })
-      setLogoOpen(false)
+      showToast({ tone: 'success', title: `บันทึก${config.noun}แล้ว`, description: config.savedDescription })
+      setImageKind(null)
     } finally {
       setLogoSaving(false)
     }
   }
 
-  async function removeLogo(): Promise<void> {
+  async function removeImage(kind: ImageKind): Promise<void> {
+    const config = IMAGE_CONFIG[kind]
     setRemoving(true)
     try {
-      const result = await callApi<OrganizationProfileDto>(LOGO_ENDPOINT, jsonRequest('DELETE', { reason: removeReason }))
+      const result = await callApi<OrganizationProfileDto>(
+        config.endpoint,
+        jsonRequest('DELETE', { reason: removeReason }),
+      )
       if (result.error !== undefined) {
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
       setProfile(result.data ?? null)
-      showToast({ tone: 'success', title: 'นำโลโก้ออกจากหัวเอกสารแล้ว' })
-      setRemoveOpen(false)
+      showToast({ tone: 'success', title: config.removedToast })
+      setRemoveKind(null)
     } finally {
       setRemoving(false)
     }
@@ -333,7 +391,11 @@ export function OrganizationProfileTab() {
           <div className="mb-2 text-xs text-slate-400">โลโก้บริษัท (ปรากฏบนเอกสาร)</div>
           <Can action="manage" resource={MANAGE_INVOICE_NUMBERING}>
             <div className="flex items-center gap-3">
-              <button type="button" onClick={openLogo} className="text-xs font-semibold text-blue-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => openImage('logo')}
+                className="text-xs font-semibold text-blue-600 hover:underline"
+              >
                 {profile.logoPath === null ? 'อัปโหลดโลโก้' : 'เปลี่ยนโลโก้'}
               </button>
               {profile.logoPath !== null && (
@@ -341,7 +403,7 @@ export function OrganizationProfileTab() {
                   type="button"
                   onClick={() => {
                     setRemoveReason('')
-                    setRemoveOpen(true)
+                    setRemoveKind('logo')
                   }}
                   className="text-xs font-semibold text-red-600 hover:underline"
                 >
@@ -350,6 +412,46 @@ export function OrganizationProfileTab() {
               )}
             </div>
           </Can>
+
+          {/* รูปลายเซ็นผู้มีอำนาจ (มติ PO U122 · ไม่บังคับ) — จะพิมพ์บนเอกสารชนิดใดตั้งที่แท็บ "เทมเพลตเอกสาร" */}
+          <div className="mt-5 w-full border-t border-dashed border-slate-200 pt-5">
+            {profile.signaturePreviewUrl !== null ? (
+              // eslint-disable-next-line @next/next/no-img-element -- signed URL อายุสั้นจาก Storage (ไม่ผ่าน next/image)
+              <img
+                src={profile.signaturePreviewUrl}
+                alt="รูปลายเซ็นผู้มีอำนาจ"
+                className="mx-auto mb-2 h-12 object-contain"
+              />
+            ) : (
+              <div className="mb-2 flex h-12 items-center justify-center text-xs text-slate-400">
+                {profile.hasSignature ? 'มีรูปลายเซ็นแล้ว' : 'ยังไม่มีรูปลายเซ็น'}
+              </div>
+            )}
+            <div className="mb-2 text-xs text-slate-400">รูปลายเซ็นผู้มีอำนาจ (ไม่บังคับ)</div>
+            <Can action="manage" resource={MANAGE_INVOICE_NUMBERING}>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => openImage('signature')}
+                  className="text-xs font-semibold text-blue-600 hover:underline"
+                >
+                  {profile.hasSignature ? 'เปลี่ยนรูปลายเซ็น' : 'อัปโหลดรูปลายเซ็น'}
+                </button>
+                {profile.hasSignature && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRemoveReason('')
+                      setRemoveKind('signature')
+                    }}
+                    className="text-xs font-semibold text-red-600 hover:underline"
+                  >
+                    ลบรูปลายเซ็น
+                  </button>
+                )}
+              </div>
+            </Can>
+          </div>
         </div>
 
         <div className="space-y-4 lg:col-span-2">
@@ -528,62 +630,69 @@ export function OrganizationProfileTab() {
       </Modal>
 
       <Modal
-        open={logoOpen}
-        onClose={() => setLogoOpen(false)}
-        title="อัปโหลดโลโก้บริษัท"
+        open={imageKind !== null}
+        onClose={() => setImageKind(null)}
+        title={imageKind === null ? '' : IMAGE_CONFIG[imageKind].modalTitle}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setLogoOpen(false)} disabled={logoSaving}>
+            <Button variant="secondary" onClick={() => setImageKind(null)} disabled={logoSaving}>
               ยกเลิก
             </Button>
-            <Button onClick={() => void saveLogo(profile.organizationId)} loading={logoSaving}>
-              บันทึกโลโก้
+            <Button
+              onClick={() => {
+                if (imageKind !== null) void saveImage(imageKind, profile.organizationId)
+              }}
+              loading={logoSaving}
+            >
+              {imageKind === null ? 'บันทึก' : `บันทึก${IMAGE_CONFIG[imageKind].noun}`}
             </Button>
           </>
         }
       >
-        <div className="space-y-4">
-          <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-            <div className="mb-1 font-semibold text-slate-600">เลือกไฟล์รูปโลโก้</div>
-            <div className="text-xs text-slate-400">PNG / JPG · ขนาดแนะนำ 400×400 px · ไฟล์ไม่เกิน 1 MB</div>
-            <input
-              type="file"
-              accept={ORGANIZATION_LOGO_ACCEPT}
-              aria-label="ไฟล์โลโก้"
-              className="mt-3 text-sm text-slate-500"
-              onChange={(event) => pickLogo(event.target.files?.[0] ?? null)}
-            />
-            {logoFile !== null && <div className="mt-2 text-xs text-slate-600">{logoFile.name}</div>}
+        {imageKind !== null && (
+          <div className="space-y-4">
+            <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+              <div className="mb-1 font-semibold text-slate-600">เลือกไฟล์{IMAGE_CONFIG[imageKind].noun}</div>
+              <div className="text-xs text-slate-400">{IMAGE_CONFIG[imageKind].hint}</div>
+              <input
+                type="file"
+                accept={imageKind === 'logo' ? ORGANIZATION_LOGO_ACCEPT : ORGANIZATION_SIGNATURE_ACCEPT}
+                aria-label={`ไฟล์${IMAGE_CONFIG[imageKind].noun}`}
+                className="mt-3 text-sm text-slate-500"
+                onChange={(event) => pickLogo(event.target.files?.[0] ?? null)}
+              />
+              {logoFile !== null && <div className="mt-2 text-xs text-slate-600">{logoFile.name}</div>}
+            </div>
+            {logoError !== null && (
+              <InlineAlert tone="error" title={`อัปโหลด${IMAGE_CONFIG[imageKind].noun}ไม่ได้`}>
+                {logoError}
+              </InlineAlert>
+            )}
+            <Field id="org-image-reason" label="เหตุผล" required>
+              <Textarea
+                id="org-image-reason"
+                value={logoReason}
+                onChange={(event) => setLogoReason(event.target.value)}
+                placeholder={IMAGE_CONFIG[imageKind].reasonPlaceholder}
+              />
+            </Field>
+            <div className="text-xs text-slate-500">{IMAGE_CONFIG[imageKind].note}</div>
           </div>
-          {logoError !== null && (
-            <InlineAlert tone="error" title="อัปโหลดโลโก้ไม่ได้">
-              {logoError}
-            </InlineAlert>
-          )}
-          <Field id="org-logo-reason" label="เหตุผล" required>
-            <Textarea
-              id="org-logo-reason"
-              value={logoReason}
-              onChange={(event) => setLogoReason(event.target.value)}
-              placeholder="เช่น ใช้โลโก้ใหม่ตามแบบของบริษัท"
-            />
-          </Field>
-          <div className="text-xs text-slate-500">
-            โลโก้จะปรากฏบนใบกำกับภาษี ใบเสร็จรับเงิน ใบแจ้งหนี้ และเอกสาร PDF ที่ระบบสร้างหลังจากนี้ — เอกสารที่ออกแล้วไม่เปลี่ยน
-          </div>
-        </div>
+        )}
       </Modal>
 
       <ReasonConfirmModal
-        open={removeOpen}
-        title="ลบโลโก้ออกจากหัวเอกสาร"
-        description="เอกสารที่ออกหลังจากนี้จะไม่มีโลโก้ · เอกสารที่ออกไปแล้วยังพิมพ์โลโก้เดิม"
-        confirmLabel="ลบโลโก้"
+        open={removeKind !== null}
+        title={removeKind === null ? '' : IMAGE_CONFIG[removeKind].removeTitle}
+        description={removeKind === null ? '' : IMAGE_CONFIG[removeKind].removeDescription}
+        confirmLabel={removeKind === null ? 'ลบ' : `ลบ${IMAGE_CONFIG[removeKind].noun}`}
         loading={removing}
         reason={removeReason}
         onReasonChange={setRemoveReason}
-        onClose={() => setRemoveOpen(false)}
-        onConfirm={() => void removeLogo()}
+        onClose={() => setRemoveKind(null)}
+        onConfirm={() => {
+          if (removeKind !== null) void removeImage(removeKind)
+        }}
       />
     </Card>
   )

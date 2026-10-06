@@ -12,6 +12,8 @@ import type {
   VatMode,
 } from '@/lib/generated/prisma/enums'
 import { parseSellerProfileSnapshot, sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
+import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
+import { documentTemplateSnapshotJson, parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
 import { prisma } from '@/lib/prisma'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
@@ -116,6 +118,7 @@ const TAX_INVOICE_SELECT = {
   sellerAddress: true,
   sellerPhone: true,
   sellerProfileSnapshot: true,
+  documentTemplateSnapshot: true,
   buyerName: true,
   buyerTaxId: true,
   buyerAddress: true,
@@ -644,7 +647,12 @@ export async function issueTaxInvoice(
 
   await assertPeriodOpenAt({ organizationId, at: invoiceDate, targetType: TAX_INVOICE_TARGET, targetId: sales.id })
 
-  const [seller, buyer] = await Promise.all([loadSeller(organizationId), loadBuyer(sales.companyId)])
+  const [seller, buyer, documentTemplate] = await Promise.all([
+    loadSeller(organizationId),
+    loadBuyer(sales.companyId),
+    // มติ PO U122 — ข้อความท้าย + รูปลายเซ็น ณ ตอนออก (snapshot ลงใบ · พิมพ์ซ้ำหน้าตาเดิม)
+    loadDocumentTemplateSnapshot(prisma, organizationId, 'tax_invoice'),
+  ])
   const title = TAX_INVOICE_DOC_KIND_TITLE[plan.docKind]
 
   const created = await prisma
@@ -710,6 +718,7 @@ export async function issueTaxInvoice(
           sellerBranchCode: seller.branchCode,
           // มติ PO U99 — หัวเอกสาร (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) ณ ตอนออก · แก้ข้อมูลองค์กรภายหลังใบนี้ไม่เปลี่ยน
           sellerProfileSnapshot: sellerProfileSnapshotJson(sellerProfileOf(seller)),
+          documentTemplateSnapshot: documentTemplateSnapshotJson(documentTemplate),
           createdBy: ctx.actor.id,
         },
         select: TAX_INVOICE_SELECT,
@@ -911,6 +920,7 @@ function docSourceOf(
     buyerBranchCode: invoice.buyerBranchCode,
     sellerBranchCode: invoice.sellerBranchCode,
     sellerProfile: parseSellerProfileSnapshot(invoice.sellerProfileSnapshot),
+    templateSnapshot: parseDocumentTemplateSnapshot(invoice.documentTemplateSnapshot),
     description: invoice.description,
     periodLabel: context.periodLabel,
     amounts: {

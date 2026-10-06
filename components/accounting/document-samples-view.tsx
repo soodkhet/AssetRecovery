@@ -32,14 +32,17 @@ import { downloadFile } from '@/lib/imports/download-client'
 
 const GROUP_ORDER: readonly DocumentSampleGroup[] = ['customer', 'payout', 'advance', 'internal']
 
-type PdfResult = { blob: Blob } | { error: { title: string; message: string } }
+export type PdfResult = { blob: Blob } | { error: { title: string; message: string } }
 
 function pdfUrl(type: string): string {
   return `/api/accounting/document-samples/${encodeURIComponent(type)}/pdf`
 }
 
-/** โหลด PDF ตัวอย่างเป็น Blob — ล้มเหลวคืนข้อความภาษาไทยจาก envelope ของ API */
-async function fetchSamplePdf(type: string): Promise<PdfResult> {
+/**
+ * โหลด PDF ตัวอย่างเป็น Blob — ล้มเหลวคืนข้อความภาษาไทยจาก envelope ของ API
+ * · ใช้ร่วมกับปุ่ม "ดูตัวอย่าง PDF" ของแท็บเทมเพลตเอกสาร (มติ PO U122)
+ */
+export async function fetchSamplePdf(type: string): Promise<PdfResult> {
   try {
     const response = await fetch(pdfUrl(type))
     if (response.ok) return { blob: await response.blob() }

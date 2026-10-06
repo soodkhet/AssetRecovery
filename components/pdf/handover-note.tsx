@@ -13,6 +13,7 @@ import {
   PartyPanel,
   Signatures,
   SummaryRow,
+  TemplateFooterNote,
   type DocColumn,
   type DocCopyKind,
 } from '@/components/pdf/doc-layout'
@@ -20,6 +21,7 @@ import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { HandoverDocModel } from '@/lib/warehouse/handover-doc'
 import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
+import { NO_DOC_TEMPLATE, signatureImagesOf, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * **ใบส่งมอบสินทรัพย์คืน** (`44` §6.4 · เลย์เอาต์ตามแบบที่อนุมัติ มติ PO U100/U101)
@@ -28,6 +30,8 @@ import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
  *
  * ⚠️ วันที่ทุกจุดเป็น พ.ศ. มาแล้วจาก `buildHandoverDoc()` — component นี้ **ห้าม format วันที่เอง**
  */
+
+const SIGNERS: readonly string[] = ['ผู้ส่งมอบ', 'ผู้รับมอบ']
 
 const COLUMNS: readonly DocColumn[] = [
   { label: 'ลำดับ', width: '7%', align: 'center' },
@@ -40,10 +44,12 @@ const COLUMNS: readonly DocColumn[] = [
 function HandoverCopy({
   doc,
   letterhead,
+  template,
   copy,
 }: {
   doc: HandoverDocModel
   letterhead: DocLetterhead
+  template: DocTemplateRender
   copy: DocCopyKind
 }): React.JSX.Element {
   const extras: Array<readonly [string, string]> = [
@@ -107,23 +113,37 @@ function HandoverCopy({
       <NoteText>
         ผู้รับมอบได้ตรวจนับและตรวจเลข IMEI ตรงกับรายการข้างต้นครบถ้วนแล้ว · หากพบความไม่ถูกต้องโปรดแจ้งภายในวันที่รับมอบ
       </NoteText>
-      <Signatures roles={['ผู้ส่งมอบ', 'ผู้รับมอบ']} />
+      <TemplateFooterNote text={template.footerNote} />
+      <Signatures roles={SIGNERS} images={signatureImagesOf(template, SIGNERS.length)} />
     </DocPage>
   )
 }
 
-export function HandoverNote({ doc, letterhead }: { doc: HandoverDocModel; letterhead: DocLetterhead }): React.JSX.Element {
+export function HandoverNote({
+  doc,
+  letterhead,
+  template = NO_DOC_TEMPLATE,
+}: {
+  doc: HandoverDocModel
+  letterhead: DocLetterhead
+  /** ข้อความท้าย + รูปลายเซ็น (มติ PO U122) — ล็อตยืนยันแล้วใช้ snapshot ตอนยืนยัน · ไม่ส่ง = ไม่พิมพ์ */
+  template?: DocTemplateRender
+}): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.docRef}`} author={doc.issuer.name}>
       {ORIGINAL_AND_COPY.map((copy) => (
-        <HandoverCopy key={copy} doc={doc} letterhead={letterhead} copy={copy} />
+        <HandoverCopy key={copy} doc={doc} letterhead={letterhead} template={template} copy={copy} />
       ))}
     </Document>
   )
 }
 
 /** เรนเดอร์เป็นไฟล์ PDF (`28` §7 — `renderToBuffer()` ฝั่ง server แล้วคืนพร้อม header) */
-export async function renderHandoverNote(doc: HandoverDocModel, letterhead: DocLetterhead): Promise<Buffer> {
+export async function renderHandoverNote(
+  doc: HandoverDocModel,
+  letterhead: DocLetterhead,
+  template: DocTemplateRender = NO_DOC_TEMPLATE,
+): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<HandoverNote doc={doc} letterhead={letterhead} />)
+  return renderToBuffer(<HandoverNote doc={doc} letterhead={letterhead} template={template} />)
 }

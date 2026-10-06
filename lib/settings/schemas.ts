@@ -64,10 +64,6 @@ const optionalText = (max: number) =>
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
     z.string().trim().max(max, `ข้อความยาวเกิน ${max} ตัวอักษร`).nullable().default(null),
   )
-const optionalUrl = z.preprocess(
-  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
-  z.string().trim().max(500, 'ลิงก์ยาวเกินไป').url('รูปแบบลิงก์ไม่ถูกต้อง').nullable().default(null),
-)
 
 // ── §6.1 รอบบิล/รอบจ่าย ────────────────────────────────────────────────
 export const cycleTypeSchema = z.enum(['AR', 'AP'])
@@ -510,24 +506,22 @@ export const sellerBranchUpdateSchema = z.object({
 })
 export type SellerBranchUpdateInput = z.infer<typeof sellerBranchUpdateSchema>
 
-// ── §6.13 รูปแบบเอกสารภาษีทางการ ───────────────────────────────────────
-export const taxDocumentTypeSchema = z.enum(['tax_invoice', 'wht_certificate'])
-export const taxDocPaperSizeSchema = z.enum(['A4', 'A5'])
-export const taxDocLanguageSchema = z.enum(['th', 'th_en_bilingual'])
+// ── §6.13 เทมเพลตเอกสาร (มติ PO U122) ─────────────────────────────────────
+export const templateDocumentTypeSchema = z.enum(['billing_invoice', 'tax_invoice', 'handover_note'])
 
 const taxDocTemplateFields = z.object({
-  logoUrl: optionalUrl,
   footerNote: optionalText(MAX_FOOTER_NOTE_LENGTH),
-  signatureImageUrl: optionalUrl,
-  paperSize: taxDocPaperSizeSchema,
-  language: taxDocLanguageSchema,
+  printSignature: z.boolean({ error: () => 'กรุณาระบุว่าจะพิมพ์รูปลายเซ็นหรือไม่' }),
 })
 
 export const taxDocTemplateFieldsSchema = taxDocTemplateFields
-export const taxDocTemplateUpdateSchema = taxDocTemplateFields.extend({
-  documentType: taxDocumentTypeSchema,
-  reason: reasonSchema,
-})
+/** `.strict()` — ช่องที่ตัดออกแล้ว (โลโก้/ลายเซ็น URL/ขนาดกระดาษ/ภาษา) ส่งมา = 400 ไม่ใช่ถูกเพิกเฉยเงียบ ๆ */
+export const taxDocTemplateUpdateSchema = taxDocTemplateFields
+  .extend({
+    documentType: templateDocumentTypeSchema,
+    reason: reasonSchema,
+  })
+  .strict()
 
 export type CycleInput = z.infer<typeof cycleFieldsSchema>
 export type CycleListQuery = z.infer<typeof cycleListQuerySchema>

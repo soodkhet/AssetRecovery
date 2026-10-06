@@ -24,7 +24,8 @@ import { buildBillingInvoiceDoc, type BillingInvoiceSource } from '@/lib/revenue
 import { buildTaxInvoiceDoc, type TaxInvoiceDocSource } from '@/lib/sales/sales'
 import { buildHandoverDoc } from '@/lib/warehouse/handover-doc'
 import type { AssetListItemDto, LotDetailDto } from '@/lib/warehouse/types'
-import { testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
+import { TINY_PNG, testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
+import { NO_DOC_TEMPLATE, TEMPLATE_SIGNATURE_SLOT, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * เอกสาร PDF ตามแบบที่อนุมัติ (มติ PO U100/U101 · `reference/documents.html`) — จำนวนฉบับ/หน้า · ป้ายฉบับ ·
@@ -74,6 +75,7 @@ function billingSource(overrides: Partial<BillingInvoiceSource> = {}, lineCount 
     seller: { name: LETTERHEAD.nameTh, taxId: LETTERHEAD.taxId, address: LETTERHEAD.address, phone: null, branchCode: '00000' },
     buyer: CUSTOMER,
     sellerProfile: null,
+    templateSnapshot: null,
     lines: Array.from({ length: lineCount }, (_, index) => ({
       caseRef: `UAT-CO1-${String(index + 1).padStart(3, '0')}`,
       revenueDate: new Date('2026-10-10T00:00:00Z'),
@@ -161,6 +163,7 @@ function taxSource(overrides: Partial<TaxInvoiceDocSource> = {}): TaxInvoiceDocS
     buyerBranchCode: '00001',
     sellerBranchCode: '00000',
     sellerProfile: null,
+    templateSnapshot: null,
     description: 'ค่าบริการติดตามทรัพย์ รอบเดือน ตุลาคม 2569 (ใบแจ้งหนี้ BL-2569-005)',
     periodLabel: 'พฤศจิกายน 2569',
     amounts: { totalBeforeVatSatang: 600_000, vatSatang: 42_000, totalSatang: 642_000 },
@@ -588,5 +591,45 @@ describe('เอกสารภายใน — แถบหัวตามแ�
     expect(reportText).toContain('เอกสารภายใน')
     expect(reportText).toContain('ช่วงเวลา: ตุลาคม 2569')
     expect(reportText).toContain('พิมพ์เมื่อ: 04/10/2569 10:00')
+  })
+})
+
+describe('มติ PO U122 — ข้อความท้าย + รูปลายเซ็นจากเทมเพลตเอกสาร', () => {
+  const NO_LOGO = testLetterhead()
+  const FOOTER = 'ข้อความท้ายทดสอบเทมเพลต'
+  const withTemplate = (slot: number, signature = true): DocTemplateRender => ({
+    footerNote: FOOTER,
+    signature: signature ? { data: Buffer.from(TINY_PNG), format: 'png' } : null,
+    signatureSlot: slot,
+  })
+  const imageOf = (pdf: Buffer): boolean => pdf.toString('latin1').includes('/Subtype /Image')
+  const textOf = (pdf: Buffer): string => extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
+
+  const renders: ReadonlyArray<readonly [string, (template: DocTemplateRender) => Promise<Buffer>, number]> = [
+    ['ใบแจ้งหนี้', (t) => renderBillingInvoice(buildBillingInvoiceDoc(billingSource()), NO_LOGO, t), TEMPLATE_SIGNATURE_SLOT.billing_invoice],
+    ['ใบเสร็จ/ใบกำกับภาษี', (t) => renderTaxInvoice(buildTaxInvoiceDoc(taxSource()), NO_LOGO, t), TEMPLATE_SIGNATURE_SLOT.tax_invoice],
+    [
+      'ใบส่งมอบ',
+      (t) => renderHandoverNote(buildHandoverDoc(lot(2), HANDOVER_ISSUER, HANDOVER_RECIPIENT), NO_LOGO, t),
+      TEMPLATE_SIGNATURE_SLOT.handover_note,
+    ],
+  ]
+
+  it.each(renders)('%s: มีค่า ⇒ พิมพ์ข้อความท้าย + ฝังรูปลายเซ็น', async (_label, render, slot) => {
+    const pdf = await render(withTemplate(slot))
+    expect(textOf(pdf)).toContain(FOOTER)
+    expect(imageOf(pdf)).toBe(true)
+  })
+
+  it.each(renders)('%s: ไม่มีเทมเพลต (เอกสารก่อน U122) ⇒ ไม่พิมพ์ข้อความท้าย ไม่มีรูป (เว้นช่องเซ็นมือ)', async (_label, render) => {
+    const pdf = await render(NO_DOC_TEMPLATE)
+    expect(textOf(pdf)).not.toContain(FOOTER)
+    expect(imageOf(pdf)).toBe(false)
+  })
+
+  it.each(renders)('%s: ปิดลายเซ็น/โหลดรูปไม่ได้ ⇒ ข้อความท้ายยังพิมพ์ ไม่มีรูป', async (_label, render, slot) => {
+    const pdf = await render(withTemplate(slot, false))
+    expect(textOf(pdf)).toContain(FOOTER)
+    expect(imageOf(pdf)).toBe(false)
   })
 })

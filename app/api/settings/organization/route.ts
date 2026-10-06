@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
+import { checkPermission } from '@/lib/auth/permission'
 import { MANAGE_ORGANIZATION_PROFILE, VIEW_ORGANIZATION_PROFILE } from '@/lib/organization/permissions'
 import { getOrganizationProfile, updateOrganizationProfile } from '@/lib/organization/queries'
 import { organizationProfileUpdateSchema } from '@/lib/organization/schemas'
@@ -17,7 +18,9 @@ export const GET = withApiPermission(
   VIEW_ORGANIZATION_PROFILE,
   toModuleErrorResponse,
   async (_request: NextRequest, _context: unknown, user) => {
-    return Response.json({ data: await getOrganizationProfile(user.organizationId) })
+    // signed URL ของรูปลายเซ็นออกให้เฉพาะผู้มีสิทธิ์แก้ (มติ PO U122 — ลายเซ็นเป็นข้อมูลอ่อนไหว)
+    const canManage = checkPermission(user, 'manage', MANAGE_ORGANIZATION_PROFILE) === null
+    return Response.json({ data: await getOrganizationProfile(user.organizationId, { canManage }) })
   },
 )
 

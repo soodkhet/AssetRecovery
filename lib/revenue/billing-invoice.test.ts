@@ -18,6 +18,7 @@ describe('buildBillingInvoiceDoc', () => {
     seller: party,
     buyer: { ...party, name: 'ไฟแนนซ์ ข', branchCode: '00002' },
     sellerProfile: null,
+    templateSnapshot: null,
     lines: [
       { caseRef: 'C-1', revenueDate: new Date('2026-09-10T00:00:00Z'), grossSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000, vatRatePct: '7.00' },
       { caseRef: 'C-2', revenueDate: new Date('2026-09-20T00:00:00Z'), grossSatang: 50_000, vatSatang: 3_500, totalSatang: 53_500, vatRatePct: '7.00' },
@@ -130,6 +131,7 @@ describe('billingCustomerWhtLines — ภาษีที่ลูกค้าห
       seller: { name: 'ก', taxId: '1', address: 'x', phone: null, branchCode: '00000' },
       buyer: { name: 'ข', taxId: '2', address: 'y', phone: null, branchCode: '00000' },
       sellerProfile: null,
+      templateSnapshot: null,
       lines: [line],
     }
     const plain = buildBillingInvoiceDoc(base)

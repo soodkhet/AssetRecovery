@@ -1,3 +1,4 @@
+import { NO_DOC_TEMPLATE } from '@/lib/settings/tax-doc-template'
 import type { DocLetterhead } from '@/lib/organization/profile'
 
 /**
@@ -41,6 +42,8 @@ export function fakeLetterheadModule(): typeof import('@/lib/organization/letter
     current: async () => testLetterhead(),
     forSnapshot: async () => testLetterhead(),
     forOrganizationSnapshot: async () => testLetterhead(),
+    template: async () => NO_DOC_TEMPLATE,
+    currentTemplate: async () => NO_DOC_TEMPLATE,
   }
   return {
     loadLetterheadLogo: async () => null,
@@ -49,5 +52,8 @@ export function fakeLetterheadModule(): typeof import('@/lib/organization/letter
     taxInvoiceLetterhead: async () => testLetterhead(),
     billingInvoiceLetterhead: async () => testLetterhead(),
     handoverLetterhead: async () => testLetterhead(),
+    taxInvoiceTemplate: async () => NO_DOC_TEMPLATE,
+    billingInvoiceTemplate: async () => NO_DOC_TEMPLATE,
+    handoverTemplate: async () => NO_DOC_TEMPLATE,
   }
 }

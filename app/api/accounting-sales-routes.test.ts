@@ -88,6 +88,7 @@ function docSource(overrides: Partial<TaxInvoiceDocSource> = {}): TaxInvoiceDocS
     docKind: 'receipt_tax_invoice',
     replacementNote: null,
     sellerProfile: null,
+    templateSnapshot: null,
     billingBatchNumber: 'BL-2569-001',
     receivedDate: new Date('2026-06-25T00:00:00Z'),
     invoiceNumber: 'INV-0006',

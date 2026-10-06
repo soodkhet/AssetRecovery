@@ -31,6 +31,7 @@ import {
   intakePhotoRule,
   lotDocumentRule,
   organizationLogoRule,
+  organizationSignatureRule,
   substituteReceiptFileRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, type StoragePathOwner, type UploadTarget } from '@/lib/uploads/targets'
@@ -135,6 +136,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return bankRefundFileRule(target.transactionId)
     case 'organization_logo':
       return organizationLogoRule(target.organizationId)
+    case 'organization_signature':
+      return organizationSignatureRule(target.organizationId)
     case 'substitute_receipt':
       return substituteReceiptFileRule(target.substituteReceiptId)
   }
@@ -193,6 +196,14 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       // โลโก้บนหัวเอกสาร = แก้ข้อมูลองค์กร ⇒ สิทธิ์เดียวกับ endpoint ผูกโลโก้ (Superadmin — มติ PO U99)
       const user = await requirePermission('manage', MANAGE_ORGANIZATION_PROFILE)
       if (target.organizationId !== user.organizationId) throw denied(user, `upload:organization-logo org=${target.organizationId}`)
+      return user
+    }
+    case 'organization_signature': {
+      // รูปลายเซ็นผู้มีอำนาจ = แก้ข้อมูลองค์กร ⇒ สิทธิ์เดียวกับ endpoint ผูกรูป (Superadmin — มติ PO U122)
+      const user = await requirePermission('manage', MANAGE_ORGANIZATION_PROFILE)
+      if (target.organizationId !== user.organizationId) {
+        throw denied(user, `upload:organization-signature org=${target.organizationId}`)
+      }
       return user
     }
     case 'substitute_receipt': {
@@ -307,6 +318,17 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
         throw denied(user, `view:organization-logo org=${owner.organizationId}`)
       }
       if (owner.organizationId !== user.organizationId) throw denied(user, `view:organization-logo org=${owner.organizationId}`)
+      return
+    }
+    case 'organization_signature': {
+      // ลายเซ็นผู้มีอำนาจเป็นข้อมูลอ่อนไหว (ปลอมแปลงได้) — เปิดไฟล์ได้เฉพาะผู้มีสิทธิ์แก้ข้อมูลองค์กร
+      // (PDF ที่ออกแล้วฝังรูปฝั่ง server ด้วย service role — ไม่ผ่านด่านนี้)
+      if (!hasAny(user, 'manage', [MANAGE_ORGANIZATION_PROFILE])) {
+        throw denied(user, `view:organization-signature org=${owner.organizationId}`)
+      }
+      if (owner.organizationId !== user.organizationId) {
+        throw denied(user, `view:organization-signature org=${owner.organizationId}`)
+      }
       return
     }
     case 'substitute_receipt': {

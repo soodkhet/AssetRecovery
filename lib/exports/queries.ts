@@ -87,9 +87,11 @@ import { renderPayslips } from '@/components/pdf/payslip'
 import { renderWhtCertificate } from '@/components/pdf/wht-certificate'
 import {
   billingInvoiceLetterhead,
+  billingInvoiceTemplate,
   createLetterheadResolver,
   currentLetterhead,
   taxInvoiceLetterhead,
+  taxInvoiceTemplate,
 } from '@/lib/organization/letterhead'
 import { buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
 import { getBillingInvoiceSource } from '@/lib/revenue/billing-invoice-queries'
@@ -941,7 +943,11 @@ async function taxInvoiceFile(
     // เลขที่ใบกำกับ unique อยู่แล้ว — กันชื่อชนหลังตัดอักขระ (เช่น `A/1` กับ `A_1`)
     if (usedNames.has(name)) name = name.replace(/\.pdf$/, `_${invoice.id.slice(0, 8)}.pdf`)
     usedNames.add(name)
-    const pdf = await renderTaxInvoice(buildTaxInvoiceDoc(invoice.source), await taxInvoiceLetterhead(letterheads, invoice.source))
+    const pdf = await renderTaxInvoice(
+      buildTaxInvoiceDoc(invoice.source),
+      await taxInvoiceLetterhead(letterheads, invoice.source),
+      await taxInvoiceTemplate(letterheads, invoice.source),
+    )
     entries.push({ name, data: new Uint8Array(pdf) })
     pdfFileOf.set(invoice.id, name)
   }
@@ -1424,7 +1430,11 @@ async function billingInvoicePdfs(
         render: async () => {
           const source = await getBillingInvoiceSource(actor, item.id)
           return new Uint8Array(
-            await renderBillingInvoice(buildBillingInvoiceDoc(source), await billingInvoiceLetterhead(letterheads, source)),
+            await renderBillingInvoice(
+              buildBillingInvoiceDoc(source),
+              await billingInvoiceLetterhead(letterheads, source),
+              await billingInvoiceTemplate(letterheads, source),
+            ),
           )
         },
       },

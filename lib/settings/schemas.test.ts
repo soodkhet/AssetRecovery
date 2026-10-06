@@ -329,31 +329,42 @@ describe('documentNumberingUpdateSchema (§6.12 · มติ PO U102)', () => {
   })
 })
 
-describe('taxDocTemplateUpdateSchema (§6.13)', () => {
+describe('taxDocTemplateUpdateSchema (§6.13 · มติ PO U122)', () => {
   const base = {
     reason: REASON,
     documentType: 'tax_invoice',
-    logoUrl: '',
     footerNote: '',
-    signatureImageUrl: '',
-    paperSize: 'A4',
-    language: 'th',
+    printSignature: false,
   }
 
-  it('ช่องว่างกลายเป็น null', () => {
+  it('ข้อความท้ายว่างกลายเป็น null', () => {
     const parsed = taxDocTemplateUpdateSchema.parse(base)
-    expect(parsed.logoUrl).toBeNull()
-    expect(parsed.signatureImageUrl).toBeNull()
+    expect(parsed.footerNote).toBeNull()
+    expect(parsed.printSignature).toBe(false)
   })
 
-  it('ลิงก์ที่ไม่ใช่ URL = ไม่ผ่าน', () => {
-    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, logoUrl: 'logo.png' }).success).toBe(false)
-    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, logoUrl: 'https://cdn.example.com/l.png' }).success).toBe(true)
+  it('3 ชนิดเอกสารผ่าน · 50 ทวิ (แบบทางการ) ไม่มีค่าตั้ง = ไม่ผ่าน', () => {
+    for (const documentType of ['billing_invoice', 'tax_invoice', 'handover_note']) {
+      expect(taxDocTemplateUpdateSchema.safeParse({ ...base, documentType }).success).toBe(true)
+    }
+    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, documentType: 'wht_certificate' }).success).toBe(false)
   })
 
-  it('ขนาดกระดาษ/ภาษานอก enum = ไม่ผ่าน', () => {
-    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, paperSize: 'A3' }).success).toBe(false)
-    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, language: 'en' }).success).toBe(false)
+  it('ช่องที่ตัดออกแล้ว (โลโก้/ลายเซ็น URL/ขนาดกระดาษ/ภาษา) ส่งมา = ไม่ผ่าน', () => {
+    for (const extra of [
+      { logoUrl: 'https://cdn.example.com/l.png' },
+      { signatureImageUrl: 'https://cdn.example.com/s.png' },
+      { paperSize: 'A4' },
+      { language: 'th' },
+    ]) {
+      expect(taxDocTemplateUpdateSchema.safeParse({ ...base, ...extra }).success).toBe(false)
+    }
+  })
+
+  it('ข้อความท้ายเกิน 500 ตัวอักษร / ไม่ระบุสวิตช์ลายเซ็น / ไม่มีเหตุผล = ไม่ผ่าน', () => {
+    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, footerNote: 'ก'.repeat(501) }).success).toBe(false)
+    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, printSignature: undefined }).success).toBe(false)
+    expect(taxDocTemplateUpdateSchema.safeParse({ ...base, reason: '' }).success).toBe(false)
   })
 })
 

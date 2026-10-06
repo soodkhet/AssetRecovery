@@ -1,8 +1,6 @@
 import type {
   BankAccountUsage,
   BankFileTestStatus,
-  TaxDocLanguage,
-  TaxDocPaperSize,
   WhtFilingForm,
 } from '@/lib/generated/prisma/enums'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
@@ -77,17 +75,6 @@ export const WHT_FILING_FORM_LABEL: Readonly<Record<WhtFilingForm, string>> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
   PND1: 'ภ.ง.ด.1 (เงินได้ 40(1)/40(2))',
-}
-
-/** รูปแบบเอกสารภาษีทางการ (`13` §6.13) */
-export const TAX_DOC_PAPER_SIZE_LABEL: Readonly<Record<TaxDocPaperSize, string>> = {
-  A4: 'A4',
-  A5: 'A5',
-}
-
-export const TAX_DOC_LANGUAGE_LABEL: Readonly<Record<TaxDocLanguage, string>> = {
-  th: 'ไทย',
-  th_en_bilingual: 'ไทย-อังกฤษ (Bilingual)',
 }
 
 /** สถานะใช้งาน/ปิดใช้งานของตารางตั้งค่า — กลุ่มสีมาจาก mapper กลางเท่านั้น */

@@ -117,6 +117,7 @@ const store = {
     phone: '02-000-1234',
     email: 'accounting@jaidee.co.th',
     logoUrl: null,
+    signatureUrl: null,          // มติ PO U122 — รูปลายเซ็นผู้มีอำนาจ (ไม่บังคับ · อัปโหลดแบบโลโก้)
     vatRegistered: true,
     branchCode: '00000',         // สำนักงานใหญ่/สาขาของผู้ขาย (ม.86/4) — 00000 = สำนักงานใหญ่ · snapshot ลงใบกำกับตอนออก
     taxInvoicePrefix: 'INV',     // ตามไฟล์ 13 §6.12 + DB Schema ไฟล์ 02 §5
@@ -652,7 +653,7 @@ function renderSettingsLayout() {
       { id: 'cost',       label: 'Cost Center' }, 
       { id: 'numbering',  label: 'เลขที่เอกสาร' },
       { id: 'docs',       label: 'รูปแบบเอกสาร' },
-      { id: 'taxdoc',     label: 'เทมเพลตเอกสารภาษี' },
+      { id: 'taxdoc',     label: 'เทมเพลตเอกสาร' },
       { id: 'bankfile',   label: 'ไฟล์โอนธนาคาร' },
       { id: 'export',     label: 'Export Format' },
       { id: 'lock',       label: 'การล็อกรอบและ Adjustment' },
@@ -973,6 +974,19 @@ function renderOrganizationContent() {
           </button>
           ${org.logoUrl ? '<button class="text-xs text-red-600 font-semibold hover:underline">ลบโลโก้</button>' : ''}
         </div>
+        <!-- รูปลายเซ็นผู้มีอำนาจ (มติ PO U122 · ไม่บังคับ) — พิมพ์บนเอกสารชนิดใดตั้งที่แท็บ "เทมเพลตเอกสาร" -->
+        <div class="mt-5 pt-5 border-t border-dashed border-slate-200 w-full">
+          ${org.signatureUrl
+            ? `<img src="${org.signatureUrl}" alt="รูปลายเซ็นผู้มีอำนาจ" class="h-12 mx-auto object-contain mb-2">`
+            : `<div class="h-12 flex items-center justify-center text-xs text-slate-400 mb-2">ยังไม่มีรูปลายเซ็น</div>`}
+          <div class="text-xs text-slate-400 mb-2">รูปลายเซ็นผู้มีอำนาจ (ไม่บังคับ)</div>
+          <div class="flex items-center justify-center gap-3">
+            <button data-action="open-modal" data-type="upload-signature" class="text-xs text-blue-600 font-semibold hover:underline">
+              ${org.signatureUrl ? 'เปลี่ยนรูปลายเซ็น' : 'อัปโหลดรูปลายเซ็น'}
+            </button>
+            ${org.signatureUrl ? '<button class="text-xs text-red-600 font-semibold hover:underline">ลบรูปลายเซ็น</button>' : ''}
+          </div>
+        </div>
       </div>
 
       <!-- ข้อมูลหลัก -->
@@ -1244,47 +1258,50 @@ function renderSettingsCost() {
   </tbody></table></div>`;
 }
 
-// ============ ตั้งค่าบัญชี/การเงิน: เทมเพลตเอกสารภาษี (ไฟล์ 13 §6.13 — เพิ่ม 04/07/2569) ============
+// ============ ตั้งค่าบัญชี/การเงิน: เทมเพลตเอกสาร (ไฟล์ 13 §6.13 — มติ PO U122 06/10/2569) ============
+// ใช้ร่วมทุกเอกสาร (โลโก้/ข้อมูลบริษัท/รูปลายเซ็น) → หน้า "ข้อมูลองค์กร" · ต่างกันตามชนิด → ที่นี่
+// แบบเอกสาร A4 ภาษาไทยตายตัว (documents.html) — ไม่มีขนาดกระดาษ/ภาษา · 50 ทวิ แบบทางการ ไม่มีค่าตั้ง
 function renderSettingsTaxDoc() {
+  const hasSignature = !!store.orgProfile.signatureUrl;
   const docs = [
-    { type: 'tax_invoice',     name: 'ใบกำกับภาษี / ใบเสร็จรับเงิน', paper: 'A4', lang: 'th', footer: 'ขอบคุณที่ใช้บริการ', hasLogo: true,  hasSign: true  },
-    { type: 'wht_certificate', name: 'หนังสือรับรองการหัก ณ ที่จ่าย (50 ทวิ)', paper: 'A4', lang: 'th', footer: '', hasLogo: true,  hasSign: false }
+    { type: 'billing_invoice', name: 'ใบแจ้งหนี้ / ใบวางบิล',        slot: 'ผู้วางบิล / ผู้ให้บริการ', footer: 'โปรดชำระภายในวันครบกำหนด', sign: false, sample: 'billing-invoice' },
+    { type: 'tax_invoice',     name: 'ใบเสร็จรับเงิน / ใบกำกับภาษี', slot: 'ผู้มีอำนาจลงนาม',        footer: 'ขอบคุณที่ใช้บริการ',        sign: true,  sample: 'receipt-tax-invoice' },
+    { type: 'handover_note',   name: 'ใบส่งมอบทรัพย์',               slot: 'ผู้ส่งมอบ',              footer: '',                          sign: false, sample: 'handover-note' }
   ];
-  return `<h2 class="text-lg font-bold text-slate-900 mb-1">เทมเพลตเอกสารภาษี (Tax Document Template)</h2>
-  <p class="text-xs text-slate-500 mb-4">รูปแบบเอกสารภาษีทางการ</p>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  return `<h2 class="text-lg font-bold text-slate-900 mb-1">เทมเพลตเอกสาร (Document Template)</h2>
+  <p class="text-xs text-slate-500 mb-4">ค่าที่ต่างกันตามชนิดเอกสาร — โลโก้ ข้อมูลบริษัท และรูปลายเซ็นผู้มีอำนาจ ตั้งที่ ตั้งค่าทั่วไป → ข้อมูลองค์กร</p>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     ${docs.map(d => `
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-      <h3 class="font-semibold text-slate-800 text-sm mb-4">${d.name}</h3>
+      <div class="flex items-start justify-between gap-2 mb-4">
+        <h3 class="font-semibold text-slate-800 text-sm">${d.name}</h3>
+        <span class="text-[10px] text-slate-400">แก้ไขล่าสุด 06/10/2569</span>
+      </div>
       <div class="space-y-3">
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">โลโก้บริษัท</label>
-          <div class="border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs ${d.hasLogo ? 'text-emerald-600 bg-emerald-50/50' : 'text-slate-400'}">${d.hasLogo ? '✓ logo-company.png (อัปโหลดแล้ว)' : 'ยังไม่ได้อัปโหลด — คลิกเพื่ออัปโหลด'}</div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความท้ายเอกสาร</label>
+          <textarea rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring" placeholder="เช่น เงื่อนไขการชำระเงิน หรือข้อความขอบคุณ">${d.footer}</textarea>
+          <div class="text-[11px] text-slate-400 mt-1">พิมพ์เหนือช่องลายเซ็น · เว้นว่าง = ไม่พิมพ์ · ไม่เกิน 500 ตัวอักษร</div>
         </div>
+        <label class="flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" class="mt-0.5 rounded border-slate-300" ${d.sign ? 'checked' : ''}>
+          <span>พิมพ์รูปลายเซ็นผู้มีอำนาจ ในช่อง "${d.slot}"
+            <span class="block text-[11px] text-slate-400">${hasSignature ? 'มีรูปลายเซ็นในข้อมูลองค์กรแล้ว' : 'ยังไม่ได้อัปโหลดรูปลายเซ็นในข้อมูลองค์กร — เอกสารจะเว้นช่องให้เซ็นมือ'}</span>
+          </span>
+        </label>
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">ลายเซ็นผู้มีอำนาจ</label>
-          <div class="border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs ${d.hasSign ? 'text-emerald-600 bg-emerald-50/50' : 'text-slate-400'}">${d.hasSign ? '✓ signature-ceo.png (อัปโหลดแล้ว)' : 'ยังไม่ได้อัปโหลด — คลิกเพื่ออัปโหลด'}</div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">เหตุผล <span class="text-red-500">*</span></label>
+          <textarea rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring" placeholder="เช่น เพิ่มเงื่อนไขการชำระเงินตามที่ฝ่ายบริหารอนุมัติ"></textarea>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ขนาดกระดาษ</label>
-            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option ${d.paper==='A4'?'selected':''}>A4</option><option ${d.paper==='A5'?'selected':''}>A5</option></select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ภาษา</label>
-            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option ${d.lang==='th'?'selected':''}>ไทย</option><option ${d.lang==='th_en_bilingual'?'selected':''}>ไทย-อังกฤษ (Bilingual)</option></select>
-          </div>
+        <div class="flex items-center justify-between gap-2">
+          <a href="#" class="text-xs font-semibold text-blue-600 hover:underline">ดูตัวอย่าง PDF</a>
+          <button class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-800 focus-ring">บันทึกเทมเพลต</button>
         </div>
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">ข้อความท้ายเอกสาร (Footer)</label>
-          <input class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring" value="${d.footer}" placeholder="เช่น เงื่อนไขการชำระเงิน / ข้อความขอบคุณ">
-        </div>
-        <button class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-800 focus-ring">บันทึกเทมเพลต</button>
       </div>
     </div>`).join('')}
   </div>
   <div class="mt-4 text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg p-3">
-    <b>ข้อจำกัด:</b> ฟิลด์บังคับตามกฎหมาย (เลขประจำตัวผู้เสียภาษี, ชื่อ-ที่อยู่, ยอด VAT/WHT, เลขที่เอกสาร) <b>ปิดหรือซ่อนไม่ได้</b> — เทมเพลตปรับได้เฉพาะโลโก้ ลายเซ็น footer ขนาดกระดาษ และภาษาเท่านั้น
+    <b>ข้อจำกัด:</b> ฟิลด์บังคับตามกฎหมาย (เลขประจำตัวผู้เสียภาษี, ชื่อ-ที่อยู่, ยอด VAT/WHT, เลขที่เอกสาร) <b>ปิดหรือซ่อนไม่ได้</b> — ตั้งได้เฉพาะข้อความท้ายเอกสารและการพิมพ์รูปลายเซ็น · แบบเอกสารเป็น A4 ภาษาไทย · หนังสือรับรองหัก ณ ที่จ่าย (50 ทวิ) ใช้แบบฟอร์มทางการ ไม่มีค่าตั้ง · ค่าที่ตั้งถูกบันทึกลงเอกสารตอนออก — แก้ภายหลังเอกสารเดิมไม่เปลี่ยน
   </div>`;
 }
 
@@ -1621,6 +1638,19 @@ function renderModal() {
       </div>
       ${formInput('logo_reason', 'เหตุผล', '', 'text', 'เช่น ใช้โลโก้ใหม่ตามแบบของบริษัท', true)}
       <div class="text-xs text-slate-500">โลโก้จะปรากฏบนใบกำกับภาษี ใบเสร็จรับเงิน ใบแจ้งหนี้ และเอกสาร PDF ที่ระบบสร้างหลังจากนี้ — เอกสารที่ออกแล้วไม่เปลี่ยน</div>
+    </div>`;
+  }
+  else if (type === 'upload-signature') {
+    title = 'อัปโหลดรูปลายเซ็นผู้มีอำนาจ';
+    saveText = 'บันทึกรูปลายเซ็น';
+    body = `<div class="space-y-4">
+      <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+        <div class="font-semibold text-slate-600 mb-1">คลิกหรือลากไฟล์รูปมาวางที่นี่</div>
+        <div class="text-xs text-slate-400">PNG พื้นโปร่งแนะนำ (หรือ JPG) · ไฟล์ไม่เกิน 1 MB</div>
+        <input type="file" accept="image/png,image/jpeg" class="mt-3 text-sm text-slate-500">
+      </div>
+      ${formInput('signature_reason', 'เหตุผล', '', 'text', 'เช่น ใช้ลายเซ็นกรรมการผู้มีอำนาจคนปัจจุบัน', true)}
+      <div class="text-xs text-slate-500">รูปจะพิมพ์บนเอกสารชนิดที่เปิดไว้ในแท็บ "เทมเพลตเอกสาร" ที่ออกหลังจากนี้ — เอกสารที่ออกแล้วไม่เปลี่ยน</div>
     </div>`;
   }
   else if (type === 'create-sf' || type === 'edit-sf') {

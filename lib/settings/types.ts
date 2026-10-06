@@ -15,9 +15,7 @@ import type {
   CutoffRuleType,
   CycleType,
   DueRuleType,
-  TaxDocLanguage,
-  TaxDocPaperSize,
-  TaxDocumentType,
+  TemplateDocumentType,
   WhtFilingForm,
 } from '@/lib/generated/prisma/enums'
 import type { MatrixLevel } from '@/lib/roles/matrix'
@@ -257,14 +255,16 @@ export interface SellerBranchDto {
   branchLabel: string
 }
 
+/** เทมเพลตเอกสาร 1 ชนิด (`13` §6.13 · มติ PO U122) */
 export interface TaxDocTemplateDto {
-  documentType: TaxDocumentType
+  documentType: TemplateDocumentType
   documentTypeLabel: string
-  logoUrl: string | null
   footerNote: string | null
-  signatureImageUrl: string | null
-  paperSize: TaxDocPaperSize
-  language: TaxDocLanguage
+  printSignature: boolean
+  /** ชื่อช่องลายเซ็นที่รูปจะไปอยู่ (เช่น "ผู้มีอำนาจลงนาม") */
+  signatureSlotLabel: string
+  /** ชนิดตัวอย่าง PDF (`/api/accounting/document-samples/:type/pdf`) */
+  sampleType: string
   updatedAt: string | null
 }
 

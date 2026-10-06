@@ -131,25 +131,17 @@ enum DocumentNumberType {
   @@map("document_number_type")
 }
 
-enum TaxDocumentType {
+/// ชนิดเอกสารที่ตั้ง "เทมเพลตเอกสาร" ได้ (มติ PO U122) — เอกสารถึงบริษัทไฟแนนซ์ 3 ชนิด
+/// (50 ทวิ ใช้แบบทางการ — ไม่มีค่าตั้ง · enum เดิม `tax_document_type`/`tax_doc_paper_size`/`tax_doc_language` ถูกลบ)
+enum TemplateDocumentType {
+  /// ใบแจ้งหนี้ / ใบวางบิล
+  billing_invoice
+  /// ใบเสร็จรับเงิน / ใบกำกับภาษี
   tax_invoice
-  wht_certificate
+  /// ใบส่งมอบทรัพย์ (LOT/DLV)
+  handover_note
 
-  @@map("tax_document_type")
-}
-
-enum TaxDocPaperSize {
-  A4
-  A5
-
-  @@map("tax_doc_paper_size")
-}
-
-enum TaxDocLanguage {
-  th
-  th_en_bilingual
-
-  @@map("tax_doc_language")
+  @@map("template_document_type")
 }
 
 enum FunctionalGroup {
@@ -729,6 +721,11 @@ model Organization {
   /// SHA-256 ของไฟล์โลโก้ปัจจุบัน (มติ PO U110) — เขียนพร้อม `logo_url` · snapshot ลงเอกสารภาษี/ใบส่งมอบ
   /// เพื่อพิมพ์ซ้ำได้รูปเดียวกับตอนออก · NULL = ไม่มีโลโก้/โลโก้ก่อน U110 · CHECK hex 64 ใน raw SQL `20261006220000_letterhead_snapshot_period_payouts`
   logoSha256         String? @map("logo_sha256") @db.VarChar(64)
+  /// รูปลายเซ็นผู้มีอำนาจ (มติ PO U122 · ไม่บังคับ) — path `organization/<orgId>/signature/<uuid>.<ext>` อัปโหลดผ่าน server
+  /// แบบเดียวกับโลโก้: เปลี่ยน/ลบ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ · พิมพ์บนเอกสารตามสวิตช์ของแท็บ "เทมเพลตเอกสาร"
+  /// CHECK path/hash มาคู่กัน + hex 64 ใน raw SQL `20261007010000_document_template_signature`
+  signaturePath      String? @map("signature_path")
+  signatureSha256    String? @map("signature_sha256") @db.VarChar(64)
   vatRegistered      Boolean @default(true) @map("vat_registered")
   /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
   /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
@@ -1628,16 +1625,16 @@ model BankFileFormat {
   @@map("bank_file_formats")
 }
 
-/// รูปแบบเอกสารภาษีทางการ (ไฟล์ 13 §6.13) — ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (`28` §6.2–6.3)
+/// เทมเพลตเอกสาร (ไฟล์ 13 §6.13 · มติ PO U122) — ค่าที่**ต่างกันตามชนิดเอกสาร**เท่านั้น (ค่าที่ใช้ร่วมอยู่ที่ `organizations`)
+/// ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (`28` §6.2–6.3) · snapshot ลงเอกสารตอนออก (`document_template_snapshot`)
 model TaxDocumentTemplateSettings {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId    String          @map("organization_id") @db.Uuid
-  documentType      TaxDocumentType @map("document_type")
-  logoUrl           String?         @map("logo_url")
-  footerNote        String?         @map("footer_note")
-  signatureImageUrl String?         @map("signature_image_url")
-  paperSize         TaxDocPaperSize @default(A4) @map("paper_size")
-  language          TaxDocLanguage  @default(th)
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  documentType   TemplateDocumentType @map("document_type")
+  /// ข้อความท้ายเอกสาร (≤ 500 ตัวอักษร) — NULL = ไม่พิมพ์
+  footerNote     String?              @map("footer_note")
+  /// พิมพ์รูปลายเซ็นผู้มีอำนาจ (จากข้อมูลองค์กร) บนเอกสารชนิดนี้ — ปิด/ไม่มีรูป = เว้นช่องเซ็นมือ
+  printSignature Boolean              @default(false) @map("print_signature")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
@@ -2300,17 +2297,20 @@ model HandoverLot {
   confirmedBy String?   @map("confirmed_by") @db.Uuid
 
   /// ① ใบเซ็นรับ — บังคับก่อน confirmed
-  signedDocUrl       String? @map("signed_doc_url")
+  signedDocUrl             String? @map("signed_doc_url")
   /// ② หลักฐานจัดส่ง — บังคับเฉพาะ `we_deliver`
-  deliveryProofUrl   String? @map("delivery_proof_url")
+  deliveryProofUrl         String? @map("delivery_proof_url")
   /// SHA-256 ที่ server คำนวณจากไฟล์จริงตอนแนบ (มติ PO 03/10/2569 — UAT Q13)
-  signedDocHash      String? @map("signed_doc_hash") @db.VarChar(64)
-  deliveryProofHash  String? @map("delivery_proof_hash") @db.VarChar(64)
-  note               String?
+  signedDocHash            String? @map("signed_doc_hash") @db.VarChar(64)
+  deliveryProofHash        String? @map("delivery_proof_hash") @db.VarChar(64)
+  note                     String?
   /// มติ PO U111 — snapshot หัวกระดาษองค์กรทั้งชุด ตอนยืนยันล็อต (เขียนใน `$transaction` ของ confirm)
   /// `{ name, tax_id, address, phone, branch_code, name_en, email, website, logo_path, logo_sha256 }`
   /// NULL = ยังไม่ยืนยัน/ล็อตก่อน U111 (ใบส่งมอบใช้ค่าปัจจุบัน) · ล็อต confirmed แก้ไม่ได้ (trigger immutable)
-  letterheadSnapshot Json?   @map("letterhead_snapshot")
+  letterheadSnapshot       Json?   @map("letterhead_snapshot")
+  /// มติ PO U122 — snapshot เทมเพลตใบส่งมอบ `{ footer_note, signature_path, signature_sha256 }` ตอนยืนยันล็อต
+  /// NULL + ยังไม่ยืนยัน = ใช้ค่าปัจจุบัน · NULL + ยืนยันก่อน U122 = ไม่พิมพ์ข้อความท้าย/ลายเซ็น
+  documentTemplateSnapshot Json?   @map("document_template_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2929,6 +2929,9 @@ model BillingBatch {
   /// มติ PO U99 — snapshot หัวเอกสารส่วนที่เพิ่ม (ชื่ออังกฤษ/อีเมล/เว็บไซต์/path โลโก้) ตอนส่งรอบ
   /// `{ name_en, email, website, logo_path }` · NULL = ส่งก่อน U99 ⇒ PDF ใช้ค่าปัจจุบันเฉพาะฟิลด์ชุดนี้ · immutable หลังส่ง
   sellerProfileSnapshot       Json?              @map("seller_profile_snapshot")
+  /// มติ PO U122 — snapshot เทมเพลตเอกสาร `{ footer_note, signature_path, signature_sha256 }` ตอนส่งรอบ
+  /// NULL = ส่งก่อน U122 ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น (ไม่ดึงค่าปัจจุบัน) · immutable หลังส่ง (trigger party snapshot)
+  documentTemplateSnapshot    Json?              @map("document_template_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -3079,50 +3082,53 @@ model SalesRecord {
 /// ใบกำกับภาษี (`31` §8) — เลขที่ auto-gen **ห้าม gap ห้ามแก้**
 /// ⚠️ Immutable (`02` §13): `status = cancelled` ห้าม DELETE ห้าม reverse cancel
 model TaxInvoice {
-  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId        String                @map("organization_id") @db.Uuid
-  salesRecordId         String                @map("sales_record_id") @db.Uuid
+  id                       String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId           String                @map("organization_id") @db.Uuid
+  salesRecordId            String                @map("sales_record_id") @db.Uuid
   /// ไม่ซ้ำต่อองค์กร (`uniq_tax_invoice_number`) — ออกจาก `document_number_series` ชนิด `tax_invoice`
-  invoiceNumber         String                @map("invoice_number")
-  invoiceDate           DateTime              @map("invoice_date") @db.Date
+  invoiceNumber            String                @map("invoice_number")
+  invoiceDate              DateTime              @map("invoice_date") @db.Date
   /// snapshot สาขาผู้ซื้อ ณ ตอนออกใบ (มติ PO U77 · ม.86/4) — `00000` = สำนักงานใหญ่ · ไม่มี default (ต้องส่งทุกครั้ง)
   /// CHECK + ยาม immutable อยู่ใน raw SQL `20261005201000_finance_company_branch_code`
-  buyerBranchCode       String                @map("buyer_branch_code") @db.VarChar(5)
+  buyerBranchCode          String                @map("buyer_branch_code") @db.VarChar(5)
   /// snapshot สาขาผู้ขาย (องค์กรเรา) ณ ตอนออกใบ (มติ PO U82) — ไม่มี default · CHECK + ยาม immutable อยู่ใน raw SQL
   /// `20261005202000_seller_branch_credit_note_buyer_branch`
-  sellerBranchCode      String                @map("seller_branch_code") @db.VarChar(5)
+  sellerBranchCode         String                @map("seller_branch_code") @db.VarChar(5)
   /// มติ PO U95 — ชนิดเอกสาร (ไม่มี default: ส่งทุกครั้ง) · ใบเดิมก่อน U95 = `tax_invoice`
-  docKind               TaxInvoiceDocKind     @map("doc_kind")
+  docKind                  TaxInvoiceDocKind     @map("doc_kind")
   /// เงินรับต้นเหตุของใบเสร็จรับเงิน/ใบกำกับภาษี (U95) — ใบแบบเดิม = null · เงินรับถูกถอน ⇒ ใบที่ยกเลิกแล้วเหลือ null
   /// (FK ON DELETE SET NULL · partial unique `uniq_tax_invoice_active_per_receipt` อยู่ใน raw SQL `20261006160000_receipt_tax_invoice`)
-  cashReceiptId         String?               @map("cash_receipt_id") @db.Uuid
+  cashReceiptId            String?               @map("cash_receipt_id") @db.Uuid
   /// ใบที่ใบนี้ออกแทน (มติ PO U96 #8 — พิมพ์ "ออกแทนฉบับเลขที่ … ลงวันที่ … เนื่องจาก …")
-  replacesTaxInvoiceId  String?               @map("replaces_tax_invoice_id") @db.Uuid
+  replacesTaxInvoiceId     String?               @map("replaces_tax_invoice_id") @db.Uuid
   /// ยอดบนใบ (snapshot ตอนออก — U95: รับเงินบางส่วนได้หลายใบต่อรอบวางบิล) · CHECK total = ก่อน VAT + VAT
-  amountBeforeVatSatang Int                   @map("amount_before_vat_satang")
-  vatSatang             Int                   @map("vat_satang")
-  totalSatang           Int                   @map("total_satang")
+  amountBeforeVatSatang    Int                   @map("amount_before_vat_satang")
+  vatSatang                Int                   @map("vat_satang")
+  totalSatang              Int                   @map("total_satang")
   /// อัตรา VAT ณ จุดความรับผิด (วันรับเงิน — U96 #9) · ใบเดิมหลายอัตรา = null
-  vatRatePctUsed        Decimal?              @map("vat_rate_pct_used") @db.Decimal(5, 2)
+  vatRatePctUsed           Decimal?              @map("vat_rate_pct_used") @db.Decimal(5, 2)
   /// snapshot ผู้ขาย/ผู้ซื้อ ณ ตอนออก (มติ PO U96 #4) — PDF/Export/portal อ่านจากนี่เสมอ · immutable
-  sellerName            String                @map("seller_name")
-  sellerTaxId           String                @map("seller_tax_id") @db.VarChar(13)
-  sellerAddress         String                @map("seller_address")
-  sellerPhone           String?               @map("seller_phone") @db.VarChar(20)
-  buyerName             String                @map("buyer_name")
-  buyerTaxId            String                @map("buyer_tax_id") @db.VarChar(13)
-  buyerAddress          String                @map("buyer_address")
-  buyerPhone            String?               @map("buyer_phone") @db.VarChar(20)
+  sellerName               String                @map("seller_name")
+  sellerTaxId              String                @map("seller_tax_id") @db.VarChar(13)
+  sellerAddress            String                @map("seller_address")
+  sellerPhone              String?               @map("seller_phone") @db.VarChar(20)
+  buyerName                String                @map("buyer_name")
+  buyerTaxId               String                @map("buyer_tax_id") @db.VarChar(13)
+  buyerAddress             String                @map("buyer_address")
+  buyerPhone               String?               @map("buyer_phone") @db.VarChar(20)
   /// มติ PO U99 — snapshot หัวเอกสารส่วนที่เพิ่ม `{ name_en, email, website, logo_path }` ตอนออกใบ
   /// NULL = ใบก่อน U99 ⇒ PDF ใช้ค่าปัจจุบันขององค์กรเฉพาะฟิลด์ชุดนี้ · immutable ทั้งแถว (trigger `tax_invoices_immutable`)
-  sellerProfileSnapshot Json?                 @map("seller_profile_snapshot")
+  sellerProfileSnapshot    Json?                 @map("seller_profile_snapshot")
+  /// มติ PO U122 — snapshot เทมเพลตเอกสาร `{ footer_note, signature_path, signature_sha256 }` ตอนออกใบ
+  /// NULL = ใบก่อน U122 ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น · immutable ทั้งแถว (trigger `tax_invoices_immutable`)
+  documentTemplateSnapshot Json?                 @map("document_template_snapshot")
   /// snapshot รูปแบบการส่งเอกสาร (ปิด D13 ส่วน delivery_format) — ค่าเริ่มต้นของบริษัท ณ ตอนออก
-  deliveryFormat        InvoiceDeliveryFormat @map("delivery_format")
-  description           String
-  status                TaxInvoiceStatus      @default(active)
-  cancelReason          String?               @map("cancel_reason")
-  cancelledBy           String?               @map("cancelled_by") @db.Uuid
-  cancelledAt           DateTime?             @map("cancelled_at") @db.Timestamptz(6)
+  deliveryFormat           InvoiceDeliveryFormat @map("delivery_format")
+  description              String
+  status                   TaxInvoiceStatus      @default(active)
+  cancelReason             String?               @map("cancel_reason")
+  cancelledBy              String?               @map("cancelled_by") @db.Uuid
+  cancelledAt              DateTime?             @map("cancelled_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
