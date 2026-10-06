@@ -1,20 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
+**อัปเดตล่าสุด:** 2026-10-06 — ปิด Phase 6.6 แดชบอร์ดหลัก (`1a98a87`) — งาน build ครบทุก Phase · งานถัดไป = **Final Test รอบสุดท้าย** · ก่อนหน้า: 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Phase 6.6: แดชบอร์ดหลัก (Top Nav เมนูแรก)
+## 🎯 งานถัดไป — Final Test รอบสุดท้าย (Phase 8 final · ด่าน orchestrator)
 
-> **มติ PO 2026-08-16** (ปลดล็อกทั้งสองงานที่ค้าง):
-> 1. **6.6 อนุมัติ spec แล้ว** — สร้างตาม `reference/dashboard.html` (DRAFT) โดย**ปรับให้เข้ากับข้อมูล/ฟีเจอร์ที่มีจริงในระบบ** ส่วนที่ mockup อ้างข้อมูลที่ไม่มีจริง ให้ใช้ของจริงแทนหรือตัดออก แล้วบันทึกจุดเบี่ยงลง PROGRESS_ARCHIVE (ไม่ต้องกลับมาถาม)
-> 2. **Phase 7 ปลดล็อก** — Auth method = **Supabase Auth ชุดเดียวกับ internal** (email+password, ใช้ invite/reset password flow เดิม) · แยกขอบเขตข้อมูลด้วย scope middleware `company_id` ตาม PLAN §7.1 · ไม่ทำ magic link ใน release แรก
+> งาน build ครบทุก Phase แล้ว (6.6 ปิด 2026-10-06 · Phase 7 ปิดในรอบ UAT 05/10/2569) — เหลือ **Final Test รอบสุดท้าย** ตามมติ PO 2026-08-16
+> (orchestrator รันเองเมื่องานหมด — ใช้โมเดล Fable 5 ตาม `orchestrator/config.mjs` · override `RTB_MODEL_FINAL`)
 
-- ทำตาม `docs/01_PLAN.md` §6.6 — ใช้ shared components/design tokens เดิม (1.5) · widget ตาม role (menu registry `06` §7.2) · ข้อมูลจาก endpoint KPI/รายงานที่มีแล้ว (Phase 6) ห้ามสร้างสูตรใหม่
-- ลำดับที่เหลือ: 6.6 → 7.1 → 7.2 → 7.3 → **Final Test รอบสุดท้าย** (ด่าน orchestrator รันเองเมื่องานหมด — ใช้โมเดล Fable 5 ตาม config)
-- ⚠️ ก่อนเริ่ม: `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` (migration ใหม่จาก 8.2/8.3 รวม 5 ตัว)
+- ด่านทดสอบตาม `orchestrator/final-tests/*.md` (แนวเดียวกับ 8.3: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — **รวมแดชบอร์ดหลักใหม่ (6.6)**: ทุก role เปิด `/dashboard` ได้ไม่มี error · ตัวเลขคิวเท่ากับจำนวนแถวในหน้าปลายทาง · ผู้จัดการเห็นเฉพาะทีมตัวเอง · บริษัทไฟแนนซ์เรียก `GET /api/dashboard` = 403
+- จุดเบี่ยงของแดชบอร์ดจาก mockup ดู `docs/PROGRESS_ARCHIVE.md` § Phase 6.6
+- ⚠️ ก่อนเริ่ม: `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` (migration ใหม่จาก 8.2/8.3 + รอบ UAT)
 
 ### หนี้ที่ Final Test ตรวจเจอแต่ **ไม่ได้แก้** (ต้องมีมติก่อน — ห้ามแก้เงียบ ๆ)
 
@@ -112,7 +111,7 @@
 | 6.3 | รายงานหมวด O (O1–O5) | ✅ | 2026-08-15 · `f4b824f` · O1–O5 ครบ + **D18: เกณฑ์ SLA ระดับองค์กร** (`assignment_policy_settings.sla_alert_hours` default 72 ชม. + แท็บที่ 14 ของหน้าตั้งค่า `13` §6.14) · เทสต์ pure 36 + DB 17 · ⚠️ ต้องรัน `pnpm db:deploy` ต่อ environment → archive |
 | 6.4 | รายงานหมวด A (A1–A4) | ✅ | 2026-08-15 · `ec43687` · A1–A4 ครบ (WHT รายเดือน/ใบกำกับภาษี 2 มิติ/ประวัติส่งออกทุกเวอร์ชัน/ข้อยกเว้นรายงวดที่แยก `authorized` จาก `resolved`) + ตัวแปลงช่วงวันที่ → ช่วงงวดบัญชี · เทสต์ pure 29 + DB 12 → archive |
 | 6.5 | Executive Dashboard (E1–E3) | ✅ | 2026-08-15 · `9e0d570` · E1–E3 ครบ (KPI 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard บริษัท/ทีม) + `<ReportLineChart>` shared ⇒ **รายงานครบ 17/17 ตัวของไฟล์ 96** · เทสต์ pure 25 + DB 11 → archive |
-| 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⬜ | PLAN §6.6 · มติ PO 2026-08-16: ตาม mockup + ปรับเข้าข้อมูลจริง |
+| 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ✅ | 2026-10-06 · `1a98a87` · `GET /api/dashboard` คิวงาน 17 ชนิดตาม capability+scope · KPI จาก E1/การเงินเดิม (ไม่มีสูตรใหม่) · กระดานเคส + แจ้งเตือน · จุดเบี่ยงจาก mockup 12 ข้อ → archive |
 
 ## Phase 7 — Client Portal (ไฟล์ 97) ✅ (ทำในรอบ UAT ตามมติ U6/O43 · 05/10/2569 — รายละเอียดใน `uat/STATE.md` + `uat/report/R12-portal-v1.md`)
 
