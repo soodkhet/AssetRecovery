@@ -1,21 +1,21 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-10-06 — ปิด Phase 6.6 แดชบอร์ดหลัก (`1a98a87`) — งาน build ครบทุก Phase · งานถัดไป = **Final Test รอบสุดท้าย** · ก่อนหน้า: 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
+**อัปเดตล่าสุด:** 2026-10-07 — **Final Test รอบสุดท้ายเสร็จ** (`ff22ebd` · `uat/report/FINAL-SUMMARY.md`) — งานถัดไป = ผู้ใช้ push staging + ทดสอบบน staging + ตัดสิน BUG-185 · ก่อนหน้า: 2026-10-06 — ปิด Phase 6.6 แดชบอร์ดหลัก (`1a98a87`) — งาน build ครบทุก Phase · งานถัดไป = **Final Test รอบสุดท้าย** · ก่อนหน้า: 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — Final Test รอบสุดท้าย (Phase 8 final · ด่าน orchestrator)
+## 🎯 งานถัดไป — ผู้ใช้ push staging + ทดสอบบน staging + ตัดสิน BUG-185
 
-> งาน build ครบทุก Phase แล้ว (6.6 ปิด 2026-10-06 · Phase 7 ปิดในรอบ UAT 05/10/2569) — เหลือ **Final Test รอบสุดท้าย** ตามมติ PO 2026-08-16
-> (orchestrator รันเองเมื่องานหมด — ใช้โมเดล Fable 5 ตาม `orchestrator/config.mjs` · override `RTB_MODEL_FINAL`)
+> **Final Test รอบสุดท้าย ✅ เสร็จ 07/10/2569** — `staging` @ `ff22ebd` · ด่าน 1–7 + 7b ผ่าน · verify 394 ไฟล์ / 5,672 tests · seed verify 207/207 · สรุป: **`uat/report/FINAL-SUMMARY.md`** · รายละเอียด → `docs/PROGRESS_ARCHIVE.md` § Phase 8 final
 
-- ด่านทดสอบตาม `orchestrator/final-tests/*.md` (แนวเดียวกับ 8.3: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — **รวมแดชบอร์ดหลักใหม่ (6.6)**: ทุก role เปิด `/dashboard` ได้ไม่มี error · ตัวเลขคิวเท่ากับจำนวนแถวในหน้าปลายทาง · ผู้จัดการเห็นเฉพาะทีมตัวเอง · บริษัทไฟแนนซ์เรียก `GET /api/dashboard` = 403
-- จุดเบี่ยงของแดชบอร์ดจาก mockup ดู `docs/PROGRESS_ARCHIVE.md` § Phase 6.6
-- ⚠️ ก่อนเริ่ม: `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` (migration ใหม่จาก 8.2/8.3 + รอบ UAT)
+1. ผู้ใช้ทำตาม `uat/report/FINAL-SUMMARY.md` §8: ลบ `RAPIDAPI_*` (.env.local/.env.example/Vercel) → `pnpm typecheck && pnpm test` → `git push origin staging` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` (migration ใหม่ 19 ตัว ตั้งแต่ `20261008010000`) → Model Phone กด "อัปเดตตอนนี้" บน staging → (ตัวเลือก) seed → ทดสอบมือถือจริง → PR `staging`→`main`
+2. **BUG-185** (ใบลดหนี้หลังบิลชำระครบ → จ่ายเกิน) `[[NEEDS_DECISION]]` — แนะนำ ก: บล็อกใบลดหนี้ที่เกินยอดค้างตามเอกสาร + คืนเงินให้สำนักงานบัญชีจัดการนอกระบบ
+3. **BUG-184** (พอร์ทัลรายละเอียดเคสไม่แสดงรุ่น/ความจุ/สี) + รายการแก้อื่นของ O77 — สั่งแก้แล้ว รอ merge
+4. ทบทวนมติที่ตัดสินแทนตอนผู้ใช้หลับ O75–O77 · ก่อน go-live: ลบบัญชี Auth/ไฟล์ Storage ตัวอย่าง · นักบัญชีจริงยืนยันค่าตั้ง 21 รายการ · ปิด public signup production · CLAUDE.md อัปเดต DEC ถึง DEC-017
 
-### หนี้ที่ Final Test ตรวจเจอแต่ **ไม่ได้แก้** (ต้องมีมติก่อน — ห้ามแก้เงียบ ๆ)
+### หนี้ที่ Final Test (8.3) ตรวจเจอแต่ไม่ได้แก้ — ✅ ปิดครบ 4 ข้อ
 
 1. ~~**เอกสารล็อตส่งมอบเขียนทับได้ ไม่มี hash**~~ → **ปิดแล้ว 03/10/2569** (มติ PO 03/10/2569 UAT Q13) — path ต่อเวอร์ชัน `handover-lots/<lotId>/<ชนิด>/<uuid>.<ext>` (`upsert: false`) + ผูกผ่าน `POST /api/handover-lots/:id/documents` ที่ server ตรวจไฟล์ (มีจริง · path ใต้ล็อต · magic bytes · ขนาด) + เก็บ `signed_doc_hash`/`delivery_proof_hash` · ล็อต confirmed แล้วแนบไม่ได้ (`44` §6.4 v2.2)
 2. ~~**แจ้งเตือนของ job หายถาวรเมื่อ dispatch ล้ม**~~ → **ปิดแล้ว (U120/DEC-015)** 06/10/2569 — ตาราง `notification_outbox` (migration `20261007000000_notification_outbox`) เขียนคิวใน `$transaction` เดียวกับการเปลี่ยนสถานะ · ตัวส่ง `drainNotificationOutbox()` ท้าย job + ทุกรอบ cron (retry/backoff · ครบ 8 ครั้ง = `failed` · กันซ้ำด้วย claim + `dedupeKey`) · ครอบ `reassign_timeout` / `advance_overdue` / `daily_field_allowance` / `fuel_distance_retry` · เดิม: (จาก 8.2) — `lib/assignments/timeout-job.ts` / `lib/advances/overdue-job.ts` เรียก `dispatchNotificationAwaited()` **นอก** tx และไม่มี try/catch ⇒ dispatch ล้มหลัง commit = job ล้มทั้งที่สถานะเปลี่ยนแล้ว และรอบหน้าไม่หยิบซ้ำ (at-most-once) · แก้ให้ถูกต้องต้องมี **outbox table** ⇒ ต้องมี DEC ใหม่
@@ -128,6 +128,7 @@
 | 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ✅ | 2026-08-15 · `7c8fbd4` · `tests/acceptance/*.db.test.ts` 3 ไฟล์ (รายรับ/รายจ่าย+เงินทดรอง/ปิดงวด+Adjustment) เดินผ่าน service จริงทุกก้าว + Checklist `29` §7 ครบ 9 จุด → archive |
 | 8.2 | Consistency Sweep + Hardening | ✅ | 2026-08-16 · `0ae328c`+`91de430`+`32b71ff`+`0d743f9`+`b69a6b2`+`9bd34bc`+`c98f9a7`+`05cd29f` · กวาด 5 แกน (เงิน/วันที่ · RBAC · audit · idempotency · index) — ปิดช่องโอนซ้ำของไฟล์โอน, Export pack ล็อกรอบตัวเองถาวร, เงินเข้าถูกนับซ้ำตอนนำเข้า statement พร้อมกัน + ยาม scope 5 โมดูล + trigger immutable ครบ `02` §13 → archive |
 | 8.3 | Final Test ทั้งระบบ (ด่าน orchestrator) | ✅ | 2026-08-16 · `db0c416`+`9a4e3a7`+`e852f36`+`0e8f872`+`94d66ef`+`adea507`+`bcf2086` · รัน 6 ด่านครบ — แก้บั๊กจริง 8 จุด (A1 ลูกค้าหักภาษีก่อนโอนทั้งเส้น · ใบกำกับภาษี/ใบ 50 ทวิ ออกซ้ำเมื่อยิงพร้อมกัน · อนุมัติเงินทดรองใบที่สอง 500 · สรุปรายได้ขยับย้อนหลัง · badge KPI โกหกเมื่อ N/A · ยามของ job/export/อนุมัติจาก session ก่อน) + migration 2 ตัว · หนี้ที่ต้องมีมติ 4 ข้อ → archive |
+| 8.4 | Final Test รอบสุดท้าย (มติ U119 · ด่าน 1–7 + 7b เบราว์เซอร์จริง) | ✅ | 2026-10-07 · `ff22ebd` · 108 commit จาก `0109def` · มติ U119–U170 + O71–O77 · บั๊กแก้ BUG-178–183 + ด่าน 1–6 · ค้าง BUG-184 (รอ merge) / BUG-185 (needs-decision) · `uat/report/FINAL-SUMMARY.md` → archive |
 
 ---
 

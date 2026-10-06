@@ -5,6 +5,31 @@
 
 ---
 
+## Phase 8.4 — Final Test รอบสุดท้าย (มติ U119 · ด่าน 1–7 + 7b)
+
+**วันที่**: 2026-10-06 → 2026-10-07 · **commit**: `ff22ebd` (ปลาย · 108 commit นับจาก `0109def` · merge 41 ครั้ง) · **รายงานสรุป**: `uat/report/FINAL-SUMMARY.md`
+
+### สิ่งที่ทำ
+- ตรวจหนี้ค้าง 3 ข้อจาก 8.3 → มติ U120 (outbox แจ้งเตือน · DEC-015) · U121 (Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ) · U122 (เทมเพลตเอกสารมีผลจริง) — หนี้ 8.3 ปิดครบ 4 ข้อ
+- ตาราง pairwise + golden (`uat/report/FINAL-coverage.md`) + สคริปต์ seed scenario `scripts/seed-final/` (ผ่าน service layer · รันซ้ำได้) — ฐาน dev รอบ 2 verify 207/207
+- ด่าน 1 Ops E2E · 2 การเงิน (ตรง golden ถึงสตางค์) · 3 บัญชี · 4 สิทธิ์/audit/multi-tenant/portal · 5 ความครบของ UI · 6 ความทนทาน · 7 เบราว์เซอร์จริง 18 persona × ทุกเมนู + flow ครบสาย · 7b รอบทวน — รายงาน `uat/report/FINAL-{1..6}-*.md`, `FINAL-7-browser.md`, `FINAL-7b-browser.md`
+- มติใหม่ U119–U170 + O71–O77 (`uat/PO-DECISIONS-2569-10-04.md`) — fixer แก้ตามมติครบ ยกเว้น O77 (รอ merge)
+- verify ปลายงาน: typecheck + lint + test เขียว **394 ไฟล์ / 5,672 tests** (ต้น Final 366 / 5,104)
+
+### บั๊กที่แก้ (สำคัญ)
+- วันรับรู้รายได้ = วันยืนยันล็อต (เดิม `closed_at`) · รายได้รอบ 1 หายหลังรีไซเกิล · IMEI ซ้ำ → 500 (U129) · รอบ ภ.ง.ด. `filed` ถูกคิดทับ · job ค่าน้ำมันเขียนงวดล็อก · ใบรับรองแทนใบเสร็จระดับ view ทำ mutation ได้ · ส่ง/ล็อกงวด + อนุมัติ/ปฏิเสธเงินทดรองพร้อมกัน (CAS) · รอบจ่าย completed แต่ sync ล้ม (ตัวกวาด U134) · statement ซ้ำในวันเดียว (U136)
+- ด่าน 7: BUG-178 AR ไม่หัก CN/DN · BUG-179 ใบกำกับบิลที่ตัดค่าธรรมเนียม (U169) · BUG-180 หน้ารวมค่าตั้งรอนักบัญชี (U170) · BUG-181–183 · O74 overdue เฉพาะทดรองที่จ่ายแล้ว · O75 `paid → partially_paid` เมื่อมีใบเพิ่มหนี้
+
+### ค้าง / จุดที่คนถัดไปควรรู้
+- **BUG-185** needs-decision (ใบลดหนี้หลังชำระครบ → จ่ายเกิน · แนะนำบล็อก CN เกินยอดค้าง) · **BUG-184** open (O77 สั่งแก้)
+- O75–O77 ตัดสินแทนตอนผู้ใช้หลับ — รอทบทวน
+- Model Phone เปลี่ยนเป็น TAC จาก IMEI (DEC-017 แทน DEC-016 RapidAPI) — ต้องลบ `RAPIDAPI_*` และกด "อัปเดตตอนนี้" ครั้งแรกบน staging
+- staging DB มี migration ถึง `20261007100000` — ต้อง deploy เพิ่ม 19 ตัว (`20261008010000` … `20261008153000`)
+- ฐาน dev อยู่สภาพ `after-stage7b` (ย้อนด้วย `uat/bin/restore.sh final-seeded-2`) · ภาพ/PDF อยู่ `uat/shots/final*/` (ไม่ commit)
+- บัญชี Auth/ไฟล์ Storage ตัวอย่างที่ต้องลบก่อน go-live — รายการใน FINAL-SUMMARY §8
+
+---
+
 ## Phase 6.6 — แดชบอร์ดหลัก (เมนูแรก Top Nav)
 
 **วันที่**: 2026-10-06 · **commit**: `1a98a87` · **มติ**: PO 2026-08-16 (ตาม `reference/dashboard.html` DRAFT ปรับเข้าข้อมูลจริง — ไม่ต้องกลับมาถาม)
