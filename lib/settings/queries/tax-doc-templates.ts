@@ -131,6 +131,8 @@ export async function loadDocumentTemplateSnapshot(
   client: ReadClient,
   organizationId: string,
   documentType: TemplateDocumentType,
+  /** ผู้ลงนามฝั่งคู่ค้า (มติ PO U151 — ใบส่งมอบ: ผู้ลงนามของบริษัทไฟแนนซ์) */
+  counterpartySignerName: string | null = null,
 ): Promise<DocumentTemplateSnapshot> {
   // ทีละคำสั่ง — ใช้ใน interactive transaction ได้ (ไม่ยิงขนานบน connection เดียว)
   const template = await client.taxDocumentTemplateSettings.findUnique({
@@ -139,7 +141,7 @@ export async function loadDocumentTemplateSnapshot(
   })
   const organization = await client.organization.findUniqueOrThrow({
     where: { id: organizationId },
-    select: { signaturePath: true, signatureSha256: true },
+    select: { signaturePath: true, signatureSha256: true, authorizedSignerName: true, authorizedSignerTitle: true },
   })
-  return documentTemplateSnapshotOf(template, organization)
+  return documentTemplateSnapshotOf(template, organization, counterpartySignerName)
 }

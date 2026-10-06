@@ -695,41 +695,45 @@ enum NotificationOutboxStatus {
 
 /// องค์กรเจ้าของระบบ (multi-tenant ready) — root table: ไม่มี organization_id และลบไม่ได้ (ไม่มี soft delete)
 model Organization {
-  id                 String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// ชื่อบริษัท (ไทย) — ชื่อนิติบุคคลเต็มที่พิมพ์บนเอกสาร
-  name               String
+  name                  String
   /// ชื่อบริษัท (อังกฤษ) — ไม่บังคับ · พิมพ์ใต้ชื่อไทยบนหัวเอกสาร (มติ PO U99)
-  nameEn             String? @map("name_en")
-  taxId              String  @unique @map("tax_id") @db.VarChar(13)
+  nameEn                String? @map("name_en")
+  taxId                 String  @unique @map("tax_id") @db.VarChar(13)
   /// ที่อยู่บรรทัดเดียว (ประกอบจาก 5 ช่องด้านล่างด้วย `formatThaiAddressLine()` ทุกครั้งที่บันทึก — มติ PO U99)
   /// คงคอลัมน์ไว้เพราะ snapshot ของใบกำกับ/ใบแจ้งหนี้/50 ทวิ/ใบส่งมอบ อ่านบรรทัดนี้
-  address            String
+  address               String
   /// ที่อยู่แยกช่อง (มติ PO U99 — โครงเดียวกับ `AddressFields`) · ข้อมูลก่อน U99 = NULL ทั้งชุด (ยังมีแต่ `address`)
   /// CHECK รหัสไปรษณีย์ 5 หลักใน raw SQL `20261006180000_organization_profile_letterhead`
-  addressDetail      String? @map("address_detail")
-  addressSubdistrict String? @map("address_subdistrict")
-  addressDistrict    String? @map("address_district")
-  addressProvince    String? @map("address_province")
-  addressPostalCode  String? @map("address_postal_code") @db.VarChar(5)
-  phone              String? @db.VarChar(20)
-  email              String? @db.VarChar(255)
+  addressDetail         String? @map("address_detail")
+  addressSubdistrict    String? @map("address_subdistrict")
+  addressDistrict       String? @map("address_district")
+  addressProvince       String? @map("address_province")
+  addressPostalCode     String? @map("address_postal_code") @db.VarChar(5)
+  phone                 String? @db.VarChar(20)
+  email                 String? @db.VarChar(255)
   /// เว็บไซต์ (มติ PO U99) — ไม่บังคับ
-  website            String? @db.VarChar(255)
+  website               String? @db.VarChar(255)
   /// path ของโลโก้ใน bucket `case-documents` (`organization/<orgId>/logo/<uuid>.<ext>` — อัปโหลดผ่าน server · มติ PO U99)
   /// เปลี่ยน/ลบโลโก้ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ (เอกสารที่ snapshot path เดิมไว้ยังพิมพ์โลโก้เดิมได้)
-  logoUrl            String? @map("logo_url")
+  logoUrl               String? @map("logo_url")
   /// SHA-256 ของไฟล์โลโก้ปัจจุบัน (มติ PO U110) — เขียนพร้อม `logo_url` · snapshot ลงเอกสารภาษี/ใบส่งมอบ
   /// เพื่อพิมพ์ซ้ำได้รูปเดียวกับตอนออก · NULL = ไม่มีโลโก้/โลโก้ก่อน U110 · CHECK hex 64 ใน raw SQL `20261006220000_letterhead_snapshot_period_payouts`
-  logoSha256         String? @map("logo_sha256") @db.VarChar(64)
+  logoSha256            String? @map("logo_sha256") @db.VarChar(64)
   /// รูปลายเซ็นผู้มีอำนาจ (มติ PO U122 · ไม่บังคับ) — path `organization/<orgId>/signature/<uuid>.<ext>` อัปโหลดผ่าน server
   /// แบบเดียวกับโลโก้: เปลี่ยน/ลบ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ · พิมพ์บนเอกสารตามสวิตช์ของแท็บ "เทมเพลตเอกสาร"
   /// CHECK path/hash มาคู่กัน + hex 64 ใน raw SQL `20261007010000_document_template_signature`
-  signaturePath      String? @map("signature_path")
-  signatureSha256    String? @map("signature_sha256") @db.VarChar(64)
-  vatRegistered      Boolean @default(true) @map("vat_registered")
+  signaturePath         String? @map("signature_path")
+  signatureSha256       String? @map("signature_sha256") @db.VarChar(64)
+  /// ผู้มีอำนาจลงนาม (มติ PO U151 · ไม่บังคับ) — พิมพ์ใต้ช่องลายเซ็นฝั่งบริษัทบนเอกสารส่งออกนอก
+  /// (ใบแจ้งหนี้ · ใบเสร็จ/ใบกำกับภาษี · ใบส่งมอบ · 50 ทวิ) — snapshot ลงเอกสารตอนออก ไม่อ่านค่าปัจจุบันย้อนหลัง
+  authorizedSignerName  String? @map("authorized_signer_name")
+  authorizedSignerTitle String? @map("authorized_signer_title")
+  vatRegistered         Boolean @default(true) @map("vat_registered")
   /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
   /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
-  branchCode         String  @default("00000") @map("branch_code") @db.VarChar(5)
+  branchCode            String  @default("00000") @map("branch_code") @db.VarChar(5)
 
   // เลขที่เอกสารทุกชนิด (รวมใบกำกับภาษี/รอบวางบิลเดิม) ย้ายไป `document_number_series` แล้ว (มติ PO U102)
 
@@ -3416,20 +3420,23 @@ model WhtCertificate {
   /// ── snapshot ผู้ถูกหัก/ผู้หัก ณ วันออกใบ (มติ PO 06/10/2569 UAT U96 #4) — **immutable** (trigger
   /// `wht_certificates_immutable`) · PDF/ไฟล์ 05 อ่านจากตรงนี้เท่านั้น ห้ามอ่านโปรไฟล์ปัจจุบันย้อนหลัง (Rule 08)
   /// ใบที่ออกก่อน migration `20261006141000_payee_tax_address_wht_snapshot` = เติมจากค่าปัจจุบัน ณ วัน migrate
-  payeeName       String       @map("payee_name")
-  payeeNameTitle  String?      @map("payee_name_title") @db.VarChar(50)
-  payeeType       PayeeType    @map("payee_type")
+  payeeName        String       @map("payee_name")
+  payeeNameTitle   String?      @map("payee_name_title") @db.VarChar(50)
+  payeeType        PayeeType    @map("payee_type")
   /// เลขประจำตัวผู้เสียภาษี 13 หลักของผู้ถูกหัก — NULL = โปรไฟล์ยังไม่กรอกตอนออกใบ
-  payeeTaxId      String?      @map("payee_tax_id") @db.VarChar(13)
+  payeeTaxId       String?      @map("payee_tax_id") @db.VarChar(13)
   /// ที่อยู่ที่ประกอบเป็นบรรทัดเดียวแล้ว (`formatThaiAddress()`) — NULL = ยังไม่กรอกตอนออกใบ
-  payeeAddress    String?      @map("payee_address")
+  payeeAddress     String?      @map("payee_address")
   /// นิติบุคคลเท่านั้น (`00000` = สำนักงานใหญ่) · บุคคลธรรมดา = NULL
-  payeeBranchCode String?      @map("payee_branch_code") @db.VarChar(5)
-  whtCondition    WhtCondition @map("wht_condition")
-  payerName       String       @map("payer_name")
-  payerTaxId      String       @map("payer_tax_id") @db.VarChar(13)
-  payerAddress    String       @map("payer_address")
-  payerBranchCode String       @map("payer_branch_code") @db.VarChar(5)
+  payeeBranchCode  String?      @map("payee_branch_code") @db.VarChar(5)
+  whtCondition     WhtCondition @map("wht_condition")
+  payerName        String       @map("payer_name")
+  payerTaxId       String       @map("payer_tax_id") @db.VarChar(13)
+  payerAddress     String       @map("payer_address")
+  payerBranchCode  String       @map("payer_branch_code") @db.VarChar(5)
+  /// ผู้ลงนามฝั่งผู้จ่ายเงิน ณ วันออกใบ (มติ PO U151) — NULL = ใบก่อน U151/องค์กรยังไม่กรอก ⇒ ไม่พิมพ์ชื่อ
+  payerSignerName  String?      @map("payer_signer_name")
+  payerSignerTitle String?      @map("payer_signer_title")
 
   status                WhtCertificateStatus @default(active)
   /// บังคับกรอกเมื่อ cancelled (WHT_CANCEL_REQUIRES_REASON)

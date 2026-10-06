@@ -610,6 +610,11 @@ export interface WhtCertificateDocSource {
   payer: WhtCertificateParty
   /** ผู้ถูกหักภาษี ณ ที่จ่าย = payee (snapshot) */
   payee: WhtCertificateParty
+  /**
+   * ผู้มีอำนาจลงนามฝั่งผู้จ่ายเงิน ณ วันออกใบ (มติ PO U151 — `wht_certificates.payer_signer_*`)
+   * ไม่ส่ง/`null` = ใบก่อน U151 หรือองค์กรยังไม่กรอก ⇒ เว้นจุดให้เขียนเอง (ไม่ดึงค่าปัจจุบัน)
+   */
+  payerSigner?: { name: string | null; title: string | null } | null
 }
 
 export interface WhtCertificateCopy {
@@ -672,6 +677,9 @@ export interface WhtCertificateDoc {
   conditionBoxes: readonly WhtCertificateBox[]
   /** วัน เดือน ปี ที่ออกหนังสือรับรอง (พ.ศ.) */
   issueDateLabel: string
+  /** ชื่อ/ตำแหน่งผู้ลงนามฝั่งผู้จ่ายเงิน (มติ PO U151) — `null` = เว้นจุด */
+  payerSignerName: string | null
+  payerSignerTitle: string | null
 }
 
 /** ค่าที่ยังไม่มีในโปรไฟล์ตอนออกใบ พิมพ์เป็นขีดกลาง ห้ามเว้นว่างบนเอกสารทางการ */
@@ -681,6 +689,11 @@ export const EMPTY_FIELD_TEXT = '—'
 export function whtPartyBranchLabel(branchCode: string | null, payeeType: PayeeType = 'corporate'): string | null {
   if (payeeType !== 'corporate' || branchCode === null) return null
   return formatBranch(branchCode)
+}
+
+function textOrNull(value: string | null): string | null {
+  const trimmed = (value ?? '').trim()
+  return trimmed === '' ? null : trimmed
 }
 
 export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCertificateDoc {
@@ -734,5 +747,7 @@ export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCert
       checked: box.key === source.whtCondition,
     })),
     issueDateLabel: fmtDate(source.issuedAt),
+    payerSignerName: textOrNull(source.payerSigner?.name ?? null),
+    payerSignerTitle: textOrNull(source.payerSigner?.title ?? null),
   }
 }

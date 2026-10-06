@@ -26,6 +26,8 @@ import { buildHandoverDoc } from '@/lib/warehouse/handover-doc'
 import type { AssetListItemDto, LotDetailDto } from '@/lib/warehouse/types'
 import { TINY_PNG, testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
 import { NO_DOC_TEMPLATE, TEMPLATE_SIGNATURE_SLOT, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
+import { renderWhtCertificate } from '@/components/pdf/wht-certificate'
+import { buildWhtCertificateDoc, type WhtCertificateDocSource } from '@/lib/wht/wht'
 
 /**
  * เอกสาร PDF ตามแบบที่อนุมัติ (มติ PO U100/U101 · `reference/documents.html`) — จำนวนฉบับ/หน้า · ป้ายฉบับ ·
@@ -601,6 +603,7 @@ describe('มติ PO U122 — ข้อความท้าย + รูปล
   const NO_LOGO = testLetterhead()
   const FOOTER = 'ข้อความท้ายทดสอบเทมเพลต'
   const withTemplate = (slot: number, signature = true): DocTemplateRender => ({
+    ...NO_DOC_TEMPLATE,
     footerNote: FOOTER,
     signature: signature ? { data: Buffer.from(TINY_PNG), format: 'png' } : null,
     signatureSlot: slot,
@@ -634,5 +637,101 @@ describe('มติ PO U122 — ข้อความท้าย + รูปล
     const pdf = await render(withTemplate(slot, false))
     expect(textOf(pdf)).toContain(FOOTER)
     expect(imageOf(pdf)).toBe(false)
+  })
+})
+
+describe('มติ PO U151 — ชื่อ/ตำแหน่งผู้มีอำนาจลงนามบนเอกสารส่งออกนอก', () => {
+  const NO_LOGO = testLetterhead()
+  const SIGNER = 'นายผู้ลงนาม ทดสอบหนึ่ง'
+  const TITLE = 'กรรมการผู้จัดการทดสอบ'
+  const RECEIVER = 'นางสาวผู้รับมอบ ไฟแนนซ์'
+  const textOf = (pdf: Buffer): string => extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
+  const withSigner = (slot: number): DocTemplateRender => ({
+    ...NO_DOC_TEMPLATE,
+    signatureSlot: slot,
+    signerName: SIGNER,
+    signerTitle: TITLE,
+    counterpartySignerName: RECEIVER,
+  })
+
+  const renders: ReadonlyArray<readonly [string, (template: DocTemplateRender) => Promise<Buffer>, number]> = [
+    ['ใบแจ้งหนี้', (t) => renderBillingInvoice(buildBillingInvoiceDoc(billingSource()), NO_LOGO, t), TEMPLATE_SIGNATURE_SLOT.billing_invoice],
+    ['ใบเสร็จ/ใบกำกับภาษี', (t) => renderTaxInvoice(buildTaxInvoiceDoc(taxSource()), NO_LOGO, t), TEMPLATE_SIGNATURE_SLOT.tax_invoice],
+    [
+      'ใบส่งมอบ',
+      (t) => renderHandoverNote(buildHandoverDoc(lot(2), HANDOVER_ISSUER, HANDOVER_RECIPIENT), NO_LOGO, t),
+      TEMPLATE_SIGNATURE_SLOT.handover_note,
+    ],
+  ]
+
+  it.each(renders)('%s: snapshot มีผู้ลงนาม ⇒ พิมพ์ชื่อ + ตำแหน่ง', async (_label, render, slot) => {
+    const text = textOf(await render(withSigner(slot)))
+    expect(text).toContain(SIGNER)
+    expect(text).toContain(`ตำแหน่ง ${TITLE}`)
+  })
+
+  it.each(renders)('%s: เอกสารเก่าไม่มี snapshot ⇒ ไม่พิมพ์ชื่อ (เว้นจุด)', async (_label, render) => {
+    const text = textOf(await render(NO_DOC_TEMPLATE))
+    expect(text).not.toContain(SIGNER)
+    expect(text).not.toContain('ตำแหน่ง')
+  })
+
+  it('ใบส่งมอบ: ผู้ลงนามบริษัทไฟแนนซ์พิมพ์ช่องผู้รับมอบ · ใบแจ้งหนี้/ใบกำกับไม่พิมพ์ชื่อคู่ค้า', async () => {
+    const handover = textOf(
+      await renderHandoverNote(
+        buildHandoverDoc(lot(1), HANDOVER_ISSUER, HANDOVER_RECIPIENT),
+        NO_LOGO,
+        withSigner(TEMPLATE_SIGNATURE_SLOT.handover_note),
+      ),
+    )
+    expect(handover).toContain(RECEIVER)
+    const invoice = textOf(
+      await renderBillingInvoice(
+        buildBillingInvoiceDoc(billingSource()),
+        NO_LOGO,
+        withSigner(TEMPLATE_SIGNATURE_SLOT.billing_invoice),
+      ),
+    )
+    expect(invoice).not.toContain(RECEIVER)
+  })
+
+  const whtSource: WhtCertificateDocSource = {
+    certificateNumber: 'WHT-2569-151',
+    status: 'active',
+    cancelReason: null,
+    cancelledAt: null,
+    replacesCertificateNumber: null,
+    deliveryFormat: 'paper',
+    filingForm: 'PND3',
+    incomeType: 'ค่าจ้างทำของ มาตรา 40(8)',
+    paymentDate: new Date('2026-10-04T03:00:00Z'),
+    grossSatang: 7_500,
+    whtSatang: 225,
+    issuedAt: new Date('2026-10-04T03:00:00Z'),
+    payeeType: 'individual',
+    incomeCategory: 'sec_40_8',
+    whtCondition: 'withhold',
+    filingSequence: 1,
+    payer: { name: 'บริษัท ผู้จ่าย จำกัด', taxId: '0105560000000', address: 'กรุงเทพฯ', branchLabel: 'สำนักงานใหญ่' },
+    payee: { name: 'ผู้รับเงิน ทดสอบ', taxId: '3100000001234', address: 'กรุงเทพฯ', branchLabel: null },
+  }
+
+  it('50 ทวิ: snapshot ผู้ลงนามของใบ ⇒ พิมพ์ชื่อ/ตำแหน่งช่องผู้จ่ายเงิน', async () => {
+    const text = textOf(
+      await renderWhtCertificate(buildWhtCertificateDoc({ ...whtSource, payerSigner: { name: SIGNER, title: TITLE } })),
+    )
+    expect(text).toContain(SIGNER)
+    expect(text).toContain(`ตำแหน่ง ${TITLE}`)
+    expect(text).toContain('(ผู้มีหน้าที่หักภาษี ณ ที่จ่าย)')
+  })
+
+  it('50 ทวิ: ใบก่อน U151 (ไม่มี snapshot) ⇒ ไม่พิมพ์ชื่อ', async () => {
+    const text = textOf(await renderWhtCertificate(buildWhtCertificateDoc(whtSource)))
+    expect(text).not.toContain(SIGNER)
+    expect(text).not.toContain('ตำแหน่ง')
+    const blank = textOf(
+      await renderWhtCertificate(buildWhtCertificateDoc({ ...whtSource, payerSigner: { name: ' ', title: null } })),
+    )
+    expect(blank).not.toContain('ตำแหน่ง')
   })
 })

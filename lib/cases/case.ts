@@ -369,7 +369,7 @@ export const REQUIRED_FIELD_LABEL: Record<string, string> = {
   assetType: 'ประเภททรัพย์',
   assetBrandModel: 'ยี่ห้อ/รุ่นเครื่อง',
   assetImeiSerial: 'IMEI / Serial Number',
-  outstandingDebtSatang: 'มูลหนี้/มูลค่าสินค้าคงเหลือ',
+  outstandingDebtSatang: 'มูลหนี้คงเหลือ',
 }
 
 function stringList(value: unknown): string[] {

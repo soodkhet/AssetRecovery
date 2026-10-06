@@ -574,7 +574,7 @@ export function CaseFormModal({
             </Field>
             <Field
               id="asset-debt"
-              label="มูลหนี้/มูลค่าสินค้าคงเหลือ (บาท)"
+              label="มูลหนี้คงเหลือ (บาท)"
               required
               hint="ระบบไม่มีเกณฑ์ตัดรับอัตโนมัติจากมูลค่า — ใช้ประกอบการพิจารณาเท่านั้น"
               error={fieldErrors.outstandingDebtSatang}

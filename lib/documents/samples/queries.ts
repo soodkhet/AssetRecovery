@@ -2,7 +2,7 @@ import {
   DOCUMENT_SAMPLES,
   type DocumentSampleListItemDto,
 } from '@/lib/documents/samples/catalog'
-import type { DocumentSampleContext } from '@/lib/documents/samples/fixtures'
+import { SAMPLE_CUSTOMER, type DocumentSampleContext } from '@/lib/documents/samples/fixtures'
 import { listDocumentNumbering } from '@/lib/document-numbering/queries'
 import type { DocumentNumberingDto } from '@/lib/document-numbering/types'
 import type { DocumentNumberType } from '@/lib/generated/prisma/enums'
@@ -36,13 +36,16 @@ export async function loadDocumentSampleContext(
     // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นตามค่าตั้งปัจจุบัน (ปุ่มดูตัวอย่างของแท็บ "เทมเพลตเอกสาร")
     resolver.currentTemplate('billing_invoice'),
     resolver.currentTemplate('tax_invoice'),
-    resolver.currentTemplate('handover_note'),
+    // มติ PO U151 — ใบส่งมอบตัวอย่างพิมพ์ผู้ลงนามสมมติของบริษัทไฟแนนซ์ช่อง "ผู้รับมอบ"
+    resolver.currentTemplate('handover_note', SAMPLE_CUSTOMER.signerName),
   ])
   return {
     letterhead,
     numbers: numbersOf(numbering),
     asOf,
     templates: { billing_invoice: billingInvoice, tax_invoice: taxInvoice, handover_note: handoverNote },
+    // ผู้มีอำนาจลงนามขององค์กร (U151) — ทุกชนิดอ่านจากองค์กรชุดเดียวกัน ใช้ค่าจากเทมเพลตที่โหลดแล้ว (ไม่ query ซ้ำ)
+    signer: { name: billingInvoice.signerName, title: billingInvoice.signerTitle },
   }
 }
 

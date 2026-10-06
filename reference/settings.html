@@ -118,6 +118,8 @@ const store = {
     email: 'accounting@jaidee.co.th',
     logoUrl: null,
     signatureUrl: null,          // มติ PO U122 — รูปลายเซ็นผู้มีอำนาจ (ไม่บังคับ · อัปโหลดแบบโลโก้)
+    signerName: 'นายใจดี มีสุข',  // มติ PO U151 — ผู้มีอำนาจลงนาม (ไม่บังคับ) พิมพ์บนเอกสารส่งออกนอก · snapshot ตอนออก
+    signerTitle: 'กรรมการผู้จัดการ',
     vatRegistered: true,
     branchCode: '00000',         // สำนักงานใหญ่/สาขาของผู้ขาย (ม.86/4) — 00000 = สำนักงานใหญ่ · snapshot ลงใบกำกับตอนออก
     taxInvoicePrefix: 'INV',     // ตามไฟล์ 13 §6.12 + DB Schema ไฟล์ 02 §5
@@ -1025,6 +1027,11 @@ function renderOrganizationContent() {
             <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">ที่อยู่ตามที่จดทะเบียน</div>
             <div class="text-slate-700 text-sm leading-relaxed">${org.address}</div>
           </div>
+          <div class="col-span-2">
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">ผู้มีอำนาจลงนาม</div>
+            <div class="font-medium text-slate-700">${org.signerName || 'ไม่ระบุ'}</div>
+            <div class="text-xs text-slate-400 mt-0.5">${org.signerTitle || 'ไม่ระบุตำแหน่ง'} · พิมพ์บนใบแจ้งหนี้ ใบเสร็จรับเงิน/ใบกำกับภาษี ใบส่งมอบทรัพย์ และหนังสือรับรองการหักภาษี ณ ที่จ่าย</div>
+          </div>
 
         </div>
       </div>
@@ -1656,6 +1663,8 @@ function renderModal() {
         ${formInput('org_phone', 'เบอร์โทรสำนักงาน', org.phone, 'tel', '02-xxx-xxxx', true)}
         ${formInput('org_email', 'อีเมลองค์กร', org.email, 'email', '')}
         <div class="col-span-2">${formInput('org_website', 'เว็บไซต์', org.website || '', 'text', 'www.example.co.th')}</div>
+        ${formInput('org_signerName', 'ชื่อผู้มีอำนาจลงนาม (ไม่บังคับ)', org.signerName || '', 'text', 'เช่น นายสมชาย ใจดี')}
+        ${formInput('org_signerTitle', 'ตำแหน่ง', org.signerTitle || '', 'text', 'เช่น กรรมการผู้จัดการ')}
         <div class="col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">ที่อยู่ตามที่จดทะเบียน <span class="text-red-500">*</span></label>
           <div class="grid grid-cols-2 gap-3">
             <input id="org_addrDetail" placeholder="บ้านเลขที่/อาคาร/ถนน" class="col-span-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">

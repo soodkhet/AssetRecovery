@@ -34,6 +34,8 @@ export interface DocumentSampleContext {
    * ของแท็บนั้นเปิดตัวอย่างชุดนี้ · ไม่ส่ง/ไม่มีชนิดนั้น = ไม่พิมพ์
    */
   templates?: Partial<Record<TemplateDocumentType, DocTemplateRender>>
+  /** ผู้มีอำนาจลงนามปัจจุบันขององค์กร (มติ PO U151) — ช่องผู้จ่ายเงินของ 50 ทวิ ตัวอย่าง · ไม่ส่ง = เว้นจุด */
+  signer?: { name: string | null; title: string | null }
 }
 
 /** ชื่อ/ข้อมูลสมมติทั้งหมดของตัวอย่าง — เทสต์ใช้ตรวจว่าไม่มีข้อมูลจริงหลุดเข้ามา */
@@ -43,6 +45,8 @@ export const SAMPLE_CUSTOMER = {
   address: '99/9 ถนนตัวอย่าง แขวงสมมติ เขตตัวอย่าง กรุงเทพมหานคร 10000',
   phone: '02-000-0000',
   branchCode: '00000',
+  /** ผู้ลงนามสมมติของบริษัทไฟแนนซ์ — ช่อง "ผู้รับมอบ" ของใบส่งมอบตัวอย่าง (มติ PO U151) */
+  signerName: 'นางสาวสมมติ ผู้รับมอบ',
 } as const
 
 export const SAMPLE_PAYEE = {
@@ -447,6 +451,7 @@ export function sampleWhtCertificateSource(context: DocumentSampleContext): WhtC
       branchLabel: context.letterhead.branchLabel,
     },
     payee: { name: SAMPLE_PAYEE_DISPLAY, taxId: SAMPLE_PAYEE.nationalId, address: SAMPLE_PAYEE_ADDRESS, branchLabel: null },
+    payerSigner: context.signer ?? null,
   }
 }
 

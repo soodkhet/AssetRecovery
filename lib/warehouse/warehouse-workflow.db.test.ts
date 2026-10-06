@@ -873,7 +873,7 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     ).rejects.toThrow()
   })
 
-  it('มติ PO U122 — ยืนยันล็อต snapshot เทมเพลตใบส่งมอบ (ข้อความท้าย + ลายเซ็น) · แก้ค่าตั้งภายหลังไม่ขยับ · ล็อตยังไม่ยืนยันใช้ค่าปัจจุบัน', async () => {
+  it('มติ PO U122/U151 — ยืนยันล็อต snapshot เทมเพลตใบส่งมอบ (ข้อความท้าย + ลายเซ็น + ผู้ลงนามสองฝั่ง) · แก้ค่าตั้งภายหลังไม่ขยับ · ล็อตยังไม่ยืนยันใช้ค่าปัจจุบัน', async () => {
     const signaturePath = `organization/${ORG_ID}/signature/22222222-2222-4222-8222-000000000122.png`
     const sha = 'b'.repeat(64)
     const upsertTemplate = (footerNote: string, printSignature: boolean) =>
@@ -884,12 +884,15 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
       })
     await db().organization.update({
       where: { id: ORG_ID },
-      data: { signaturePath, signatureSha256: sha },
+      data: { signaturePath, signatureSha256: sha, authorizedSignerName: 'นายผู้ส่ง ลงนาม', authorizedSignerTitle: 'ผู้จัดการ' },
     })
     await upsertTemplate('ตรวจรับครบแล้ว (U122)', true)
+    let companyId: string | null = null
     try {
       const { lotId } = await seedPendingLot()
       const { lotId: pendingLotId } = await seedPendingLot()
+      companyId = (await db().handoverLot.findUniqueOrThrow({ where: { id: lotId }, select: { companyId: true } })).companyId
+      await db().financeCompany.update({ where: { id: companyId }, data: { signerName: 'นางผู้รับ ไฟแนนซ์' } })
       await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
 
       const row = await db().handoverLot.findUniqueOrThrow({
@@ -900,24 +903,38 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
         footer_note: 'ตรวจรับครบแล้ว (U122)',
         signature_path: signaturePath,
         signature_sha256: sha,
+        signer_name: 'นายผู้ส่ง ลงนาม',
+        signer_title: 'ผู้จัดการ',
+        counterparty_signer_name: 'นางผู้รับ ไฟแนนซ์',
       })
 
-      // แก้ค่าตั้งหลังยืนยัน ⇒ ใบส่งมอบเดิมไม่เปลี่ยน · ล็อตที่ยังไม่ยืนยันใช้ค่าปัจจุบัน
+      // แก้ค่าตั้ง/ผู้ลงนามหลังยืนยัน ⇒ ใบส่งมอบเดิมไม่เปลี่ยน · ล็อตที่ยังไม่ยืนยันใช้ค่าปัจจุบัน
       await upsertTemplate('ข้อความใหม่หลังยืนยัน', false)
+      await db().organization.update({ where: { id: ORG_ID }, data: { authorizedSignerName: 'คนใหม่' } })
+      await db().financeCompany.update({ where: { id: companyId }, data: { signerName: 'ผู้รับคนใหม่' } })
       const confirmed = await warehouse.getHandoverDocSource(admin, lotId)
       expect(confirmed.documentTemplate).toEqual({
         footerNote: 'ตรวจรับครบแล้ว (U122)',
         signaturePath,
         signatureSha256: sha,
+        signerName: 'นายผู้ส่ง ลงนาม',
+        signerTitle: 'ผู้จัดการ',
+        counterpartySignerName: 'นางผู้รับ ไฟแนนซ์',
       })
-      expect((await warehouse.getHandoverDocSource(admin, pendingLotId)).documentTemplate).toBe('current')
+      expect((await warehouse.getHandoverDocSource(admin, pendingLotId)).documentTemplate).toEqual({
+        current: { companySignerName: 'ผู้รับคนใหม่' },
+      })
 
       // ล็อต confirmed แก้ snapshot ไม่ได้ (trigger immutable)
       await expect(
         db().$executeRawUnsafe(`UPDATE handover_lots SET document_template_snapshot = '{}'::jsonb WHERE id = '${lotId}'`),
       ).rejects.toThrow()
     } finally {
-      await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath: null, signatureSha256: null } })
+      await db().organization.update({
+        where: { id: ORG_ID },
+        data: { signaturePath: null, signatureSha256: null, authorizedSignerName: null, authorizedSignerTitle: null },
+      })
+      if (companyId !== null) await db().financeCompany.update({ where: { id: companyId }, data: { signerName: null } })
       await db().taxDocumentTemplateSettings.deleteMany({ where: { organizationId: ORG_ID } })
     }
   })

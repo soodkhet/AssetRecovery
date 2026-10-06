@@ -80,6 +80,7 @@
 | v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
 | v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
 | v4.5x-fixer-u132 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
+| v4.5x-DD | 07/10/2569 | **มติ PO 07/10/2569 (U151) — ผู้มีอำนาจลงนามบนเอกสารส่งออกนอก** (migration `20261008100000_authorized_signer`): `organizations` + `authorized_signer_name TEXT` / `authorized_signer_title TEXT` (ไม่บังคับ) · `document_template_snapshot` (JSONB เดิมบน `tax_invoices`/`billing_batches`/`handover_lots`) เพิ่มคีย์ `signer_name`/`signer_title` (+ `counterparty_signer_name` = `finance_companies.signer_name` ณ ตอนยืนยันล็อต — ใบส่งมอบเท่านั้น) — ไม่เปลี่ยนคอลัมน์ · `wht_certificates` + `payer_signer_name TEXT` / `payer_signer_title TEXT` (snapshot ณ วันออกใบ · trigger `wht_certificates_immutable` ครอบเพิ่ม) · เอกสาร/ใบเก่าไม่มีคีย์/NULL = ไม่พิมพ์ชื่อ (ไม่ backfill) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -516,6 +517,8 @@ CREATE TABLE organizations (
   logo_sha256     VARCHAR(64),                    -- v4.45 (U110) SHA-256 ของไฟล์โลโก้ · CHECK ^[0-9a-f]{64}$ · NULL = ไม่มีโลโก้/ก่อน U110
   signature_path  TEXT,                           -- v4.50 (U122) รูปลายเซ็นผู้มีอำนาจ `organization/<orgId>/signature/<uuid>.<ext>` · ไม่บังคับ · ไม่ลบไฟล์เดิม
   signature_sha256 VARCHAR(64),                   -- v4.50 (U122) CHECK hex 64 · มาคู่กับ signature_path
+  authorized_signer_name  TEXT,                   -- v4.5x-DD (U151) ชื่อผู้มีอำนาจลงนาม · ไม่บังคับ · snapshot ลงเอกสารส่งออกนอกตอนออก
+  authorized_signer_title TEXT,                   -- v4.5x-DD (U151) ตำแหน่ง · ไม่บังคับ
   vat_registered  BOOLEAN       NOT NULL DEFAULT true,
   branch_code     VARCHAR(5)    NOT NULL DEFAULT '00000',  -- สำนักงานใหญ่/สาขาของผู้ขาย (U82 · ม.86/4) · CHECK ตัวเลข 5 หลัก
   -- v4.41 (มติ PO U102): tax_invoice_* / billing_batch_seq* ย้ายไป document_number_series แล้วลบ
@@ -2140,6 +2143,8 @@ CREATE TABLE wht_certificates (
   payer_tax_id        VARCHAR(13)       NOT NULL,
   payer_address       TEXT              NOT NULL,
   payer_branch_code   VARCHAR(5)        NOT NULL CHECK (payer_branch_code ~ '^[0-9]{5}$'),
+  payer_signer_name   TEXT,             -- v4.5x-DD (U151) ผู้มีอำนาจลงนามฝั่งผู้จ่ายเงิน ณ วันออกใบ · NULL = ใบก่อน U151/ไม่ได้กรอก (ไม่พิมพ์ชื่อ)
+  payer_signer_title  TEXT,             -- v4.5x-DD (U151) ตำแหน่ง
   created_at          TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
   created_by          UUID              NOT NULL REFERENCES users(id),
   CONSTRAINT wht_cert_batch_mode_has_batch CHECK (issue_mode <> 'per_payee_batch' OR payout_batch_id IS NOT NULL)

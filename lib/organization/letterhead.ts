@@ -19,6 +19,7 @@ import {
 import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
 import {
   NO_DOC_TEMPLATE,
+  TEMPLATE_COUNTERPARTY_SLOT,
   TEMPLATE_SIGNATURE_SLOT,
   type DocTemplateRender,
   type DocumentTemplateSnapshot,
@@ -97,7 +98,7 @@ export function createLetterheadResolver(organizationId: string): {
   forSnapshot: (core: SnapshotCore, snapshot: SellerProfileSnapshot | null) => Promise<DocLetterhead>
   forOrganizationSnapshot: (snapshot: OrganizationLetterheadSnapshot | null) => Promise<DocLetterhead>
   template: (documentType: TemplateDocumentType, snapshot: DocumentTemplateSnapshot | null) => Promise<DocTemplateRender>
-  currentTemplate: (documentType: TemplateDocumentType) => Promise<DocTemplateRender>
+  currentTemplate: (documentType: TemplateDocumentType, counterpartySignerName?: string | null) => Promise<DocTemplateRender>
 } {
   let organization: Promise<OrganizationLetterheadRow> | null = null
   const logos = new Map<string, Promise<LetterheadLogo | null>>()
@@ -133,14 +134,22 @@ export function createLetterheadResolver(organizationId: string): {
       footerNote: snapshot.footerNote,
       signature: await loadLogo(snapshot.signaturePath, snapshot.signatureSha256),
       signatureSlot: TEMPLATE_SIGNATURE_SLOT[documentType],
+      // มติ PO U151 — ผู้ลงนามจาก snapshot เท่านั้น (snapshot ก่อน U151 ไม่มีคีย์ = ไม่พิมพ์ชื่อ)
+      signerName: snapshot.signerName,
+      signerTitle: snapshot.signerTitle,
+      counterpartySignerName:
+        TEMPLATE_COUNTERPARTY_SLOT[documentType] === undefined ? null : snapshot.counterpartySignerName,
     }
   }
 
   return {
     current,
     template,
-    async currentTemplate(documentType) {
-      return template(documentType, await loadDocumentTemplateSnapshot(prisma, organizationId, documentType))
+    async currentTemplate(documentType, counterpartySignerName = null) {
+      return template(
+        documentType,
+        await loadDocumentTemplateSnapshot(prisma, organizationId, documentType, counterpartySignerName),
+      )
     },
     async forSnapshot(core, snapshot) {
       // มติ PO U110 — เอกสารก่อน U99 ไม่มี snapshot ชุดนี้ ⇒ เว้นว่าง (ห้ามดึงค่าปัจจุบันขององค์กร)
@@ -221,15 +230,16 @@ export function billingInvoiceTemplate(resolver: LetterheadResolver, source: Bil
 }
 
 /**
- * ข้อความท้าย + ลายเซ็นของใบส่งมอบ (มติ PO U122) — ล็อตยืนยันแล้ว = snapshot ตอนยืนยัน (ไม่มี = ไม่พิมพ์)
- * · ล็อตที่ยังไม่ยืนยัน (`'current'`) = ค่าตั้งปัจจุบัน (ใบที่พิมพ์ให้ลูกค้าเซ็นก่อนยืนยัน)
+ * ข้อความท้าย + ลายเซ็น + ผู้ลงนามของใบส่งมอบ (มติ PO U122/U151) — ล็อตยืนยันแล้ว = snapshot ตอนยืนยัน
+ * (ไม่มี = ไม่พิมพ์) · ล็อตที่ยังไม่ยืนยัน (`{ current }`) = ค่าตั้งปัจจุบัน + ผู้ลงนามปัจจุบันของบริษัทไฟแนนซ์
+ * (ใบที่พิมพ์ให้ลูกค้าเซ็นก่อนยืนยัน)
  */
 export function handoverTemplate(
   organizationId: string,
-  documentTemplate: DocumentTemplateSnapshot | null | 'current',
+  documentTemplate: DocumentTemplateSnapshot | null | { current: { companySignerName: string | null } },
 ): Promise<DocTemplateRender> {
   const resolver = createLetterheadResolver(organizationId)
-  return documentTemplate === 'current'
-    ? resolver.currentTemplate('handover_note')
+  return documentTemplate !== null && 'current' in documentTemplate
+    ? resolver.currentTemplate('handover_note', documentTemplate.current.companySignerName)
     : resolver.template('handover_note', documentTemplate)
 }

@@ -14,7 +14,7 @@ import {
   partyLines,
   PartyPanel,
   PaymentChannelRow,
-  Signatures,
+  TemplateSignatures,
   SummaryRow,
   TemplateFooterNote,
   type DocColumn,
@@ -23,7 +23,7 @@ import {
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { BillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
-import { NO_DOC_TEMPLATE, signatureImagesOf, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
+import { NO_DOC_TEMPLATE, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * **ใบแจ้งหนี้/ใบวางบิล** (มติ PO U95 · U96 #12 · เลย์เอาต์ตามแบบที่อนุมัติ U100/U101) — ออกตอนส่งรอบวางบิล
@@ -100,7 +100,7 @@ function BillingInvoiceCopy({
 
       <NoteText>{doc.footnote}</NoteText>
       <TemplateFooterNote text={template.footerNote} />
-      <Signatures roles={doc.signers} images={signatureImagesOf(template, doc.signers.length)} />
+      <TemplateSignatures roles={doc.signers} template={template} />
     </DocPage>
   )
 }

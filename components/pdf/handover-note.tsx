@@ -11,7 +11,7 @@ import {
   ORIGINAL_AND_COPY,
   partyLines,
   PartyPanel,
-  Signatures,
+  TemplateSignatures,
   SummaryRow,
   TemplateFooterNote,
   type DocColumn,
@@ -21,7 +21,7 @@ import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { HandoverDocModel } from '@/lib/warehouse/handover-doc'
 import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
-import { NO_DOC_TEMPLATE, signatureImagesOf, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
+import { NO_DOC_TEMPLATE, TEMPLATE_COUNTERPARTY_SLOT, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * **ใบส่งมอบสินทรัพย์คืน** (`44` §6.4 · เลย์เอาต์ตามแบบที่อนุมัติ มติ PO U100/U101)
@@ -114,7 +114,7 @@ function HandoverCopy({
         ผู้รับมอบได้ตรวจนับและตรวจเลข IMEI ตรงกับรายการข้างต้นครบถ้วนแล้ว · หากพบความไม่ถูกต้องโปรดแจ้งภายในวันที่รับมอบ
       </NoteText>
       <TemplateFooterNote text={template.footerNote} />
-      <Signatures roles={SIGNERS} images={signatureImagesOf(template, SIGNERS.length)} />
+      <TemplateSignatures roles={SIGNERS} template={template} counterpartySlot={TEMPLATE_COUNTERPARTY_SLOT.handover_note ?? null} />
     </DocPage>
   )
 }

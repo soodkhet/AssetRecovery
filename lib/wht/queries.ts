@@ -118,6 +118,8 @@ const CERT_SELECT = {
   payerTaxId: true,
   payerAddress: true,
   payerBranchCode: true,
+  payerSignerName: true,
+  payerSignerTitle: true,
   cancelledByUser: { select: { fullName: true } },
   replaces: { select: { certificateNumber: true } },
   expenseRecord: {
@@ -473,7 +475,14 @@ async function issueCertificate(
   // ผู้หัก = องค์กร ณ วันออกใบ (snapshot — มติ PO U96 #4)
   const payer = await tx.organization.findUniqueOrThrow({
     where: { id: organizationId },
-    select: { name: true, taxId: true, address: true, branchCode: true },
+    select: {
+      name: true,
+      taxId: true,
+      address: true,
+      branchCode: true,
+      authorizedSignerName: true,
+      authorizedSignerTitle: true,
+    },
   })
 
   const created = await tx.whtCertificate.create({
@@ -495,6 +504,9 @@ async function issueCertificate(
       payerTaxId: payer.taxId,
       payerAddress: payer.address,
       payerBranchCode: payer.branchCode,
+      // มติ PO U151 — ผู้ลงนามฝั่งผู้จ่ายเงิน ณ วันออกใบ (ช่อง "ลงชื่อ … ผู้จ่ายเงิน" ตามแบบทางการ)
+      payerSignerName: payer.authorizedSignerName,
+      payerSignerTitle: payer.authorizedSignerTitle,
       paymentDate,
       grossSatang: group.grossSatang,
       whtSatang: group.whtSatang,
@@ -1017,6 +1029,7 @@ export async function getWhtCertificateDocSource(
       address: certificate.payerAddress.trim() === '' ? EMPTY_FIELD_TEXT : certificate.payerAddress,
       branchLabel: whtPartyBranchLabel(certificate.payerBranchCode),
     },
+    payerSigner: { name: certificate.payerSignerName, title: certificate.payerSignerTitle },
     payee: {
       name: payeeDisplayName({
         name: certificate.payeeName,
