@@ -6,6 +6,7 @@ import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
+import type { WhtCondition } from '@/lib/generated/prisma/enums'
 import {
   assertPayeeNationalId,
   assertPayeeReadyForVerification,
@@ -23,6 +24,8 @@ import type { PayeeFieldsInput, PayeeListQuery } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
+import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
+import { isWhtConditionAllowed } from '@/lib/settings/wht-policy'
 import { SettingsError } from '@/lib/settings/errors'
 
 /**
@@ -339,6 +342,33 @@ async function assertNoPayeeForUser(organizationId: string, userId: string): Pro
   }
 }
 
+/**
+ * มติ PO 06/10/2569 U105 — ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" ที่มีผลวันนี้ (ฟอร์มผู้รับใช้กรองตัวเลือก)
+ * ใช้ resolver เดียวกับรอบจ่าย ⇒ ฟอร์ม/การบันทึก/การสร้างรอบเห็นค่าเดียวกัน
+ */
+export async function getPayeeWhtConditionPolicy(
+  user: SessionUser,
+  now: Date = new Date(),
+): Promise<{ allowGrossUpConditions: boolean }> {
+  const { values } = await resolveWhtPolicyForPayout(user.organizationId, now)
+  return { allowGrossUpConditions: values.allowGrossUpConditions }
+}
+
+/**
+ * เงื่อนไข (2)/(3) บันทึกได้เฉพาะเมื่อค่าตั้งอนุญาต (U105) — ค่าเดิมที่ตั้งไว้ก่อนปิดค่าตั้ง **คงไว้ได้**
+ * (แก้ข้อมูลอื่นของผู้รับได้ตามปกติ) แต่รอบจ่ายจะบล็อกจนกว่าจะเปลี่ยนเป็น (1) หรือเปิดค่าตั้ง
+ */
+async function assertWhtConditionAllowed(
+  organizationId: string,
+  condition: WhtCondition,
+  previous: WhtCondition | null,
+): Promise<void> {
+  if (condition === 'withhold' || condition === previous) return
+  const { values } = await resolveWhtPolicyForPayout(organizationId, new Date())
+  if (isWhtConditionAllowed(values, condition)) return
+  throw new PayeeError('WHT_CONDITION_NOT_ALLOWED', { detail: `wht_condition=${condition}` })
+}
+
 export async function createPayee(
   context: PayeeMutationContext,
   input: PayeeFieldsInput & { userId: string },
@@ -354,6 +384,7 @@ export async function createPayee(
 
   await assertTaxProfileUsable(organizationId, input.taxProfileId)
   const data = toWriteData(mergeInput(input, NEW_PAYEE_BASE))
+  await assertWhtConditionAllowed(organizationId, data.whtCondition, null)
 
   const created = await prisma.$transaction(async (tx) => {
     const row = await tx.payeeProfile.create({
@@ -401,6 +432,7 @@ export async function updatePayee(
   const before = toValues(current)
   // ไม่ส่งอัตรา 40(2)/ฟิลด์ใบ 50 ทวิ มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
   const data = toWriteData(mergeInput(input, before))
+  await assertWhtConditionAllowed(organizationId, data.whtCondition, before.whtCondition)
   // `18` §9 — verified + แก้ธนาคาร/ภาษี ⇒ ต้องยืนยันใหม่ (ล้างผู้ยืนยันเดิมออกด้วย ไม่ใช่แค่ flag)
   const reset = shouldResetVerification({ isVerified: current.isVerified, before, after: data })
 

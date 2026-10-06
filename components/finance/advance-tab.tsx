@@ -174,7 +174,9 @@ export function AdvanceTab() {
                           receipt={advance.substituteReceipt}
                           compact
                           canUpload={canApproveAdvance}
+                          canCancel={canApproveAdvance}
                           onSigned={() => void reload()}
+                          onChanged={() => void reload()}
                         />
                       )}
                     </Td>

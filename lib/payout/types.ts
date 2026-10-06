@@ -1,4 +1,4 @@
-import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
+import type { PayoutBatchSide, PayoutBatchStatus, WhtCondition } from '@/lib/generated/prisma/enums'
 import type { WhtIncomeCategory, WhtPolicyValues } from '@/lib/settings/wht-policy'
 
 /**
@@ -62,6 +62,11 @@ export interface PayoutBatchItemDto {
   whtBaseIncluded: boolean
   /** snapshot ประเภทเงินได้ — `null` = รอบเก่า/เงินทดรองจ่าย */
   whtIncomeCategory: WhtIncomeCategory | null
+  /**
+   * snapshot เงื่อนไขการหัก (มติ PO U105) — `null` = รอบเก่า/เงินทดรองจ่าย (= หัก ณ ที่จ่าย)
+   * ออกให้ตลอดไป/ครั้งเดียว ⇒ `gross` = ค่าตอบแทน + ภาษีที่บริษัทออกให้ · `net` = ค่าตอบแทนเต็ม (`payoutItemTaxSplit()`)
+   */
+  whtCondition: WhtCondition | null
   /** snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (มติ PO U30) */
   advanceOffsetSatang: number
   /** ยอดโอนจริงของบรรทัด = net − ยอดหัก */

@@ -68,6 +68,7 @@
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
 | v3.7 | 13/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md`) — implement ใน Phase 1.1**: (A1) เพิ่ม `finance_companies.wht_withheld_by_customer_pct` NUMERIC(5,2) default 3.00 — เก็บอัตรา WHT ที่บริษัทไฟแนนซ์หักจากเรา (ตั้งต่อบริษัทได้ · NULL = ไม่หัก) · (A3) เพิ่ม `service_fee_templates.charge_per_tracking_round` BOOLEAN default true — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) · (A5) `billing_payout_cycles.due_rule` เดิมเป็น free text คำนวณ `due_date` ไม่ได้ → เพิ่ม enum `due_rule_type` (`net_days`/`day_of_next_month`/`month_end`) + `due_rule_value` INTEGER โดย**คง `due_rule` เดิมไว้เป็น label** ที่ผู้ใช้เห็น + CHECK `cycles_due_rule_shape` บังคับให้ 2 ชนิดแรกมีค่าตัวเลขเสมอ (enum รวมเป็น 55 ตัว) · (B4) เพิ่ม `finance_policy_settings.write_off_tolerance_satang` INTEGER default 5000 · (D12) เพิ่ม `finance_policy_settings.advance_uncleared_to_employee_receivable` BOOLEAN default true — **ไม่มีการแก้ column เดิมหรือลบอะไร** ทั้งหมดเป็นการเติมตามมติที่อนุมัติแล้ว |
 | v4.43 | 06/10/2569 | **มติ PO 06/10/2569 (U103 — ใบรับรองแทนใบเสร็จรับเงิน)** (migration `20261006200000_substitute_receipts`): enum ใหม่ `substitute_receipt_status` (`pending_signature`/`signed`) · ตารางใหม่ **`substitute_receipts`** (เลข CRT · ผู้จ่าย = payee · ผูก `expense_id` **หรือ** `advance_id` — CHECK exactly-one ตาม DEC-004 · `issue_date` · `total_satang` = Σ บรรทัด · ไฟล์ฉบับเซ็น + SHA-256 · common columns) + **`substitute_receipt_lines`** (insert-only: วันที่/รายละเอียด/จำนวนเงิน/หมายเหตุ) · partial unique 1 ใบต่อใบเบิก/ต่อเงินทดรอง · trigger ห้ามแก้ใบที่ออกแล้ว · `finance_policy_settings` + `substitute_receipt_max_per_doc_satang` (50000) / `substitute_receipt_max_per_month_satang` (300000) CHECK > 0 · `document_number_max_seq()` รู้จักตารางใหม่ (ชนิด `substitute_receipt` ของ U102) · §13 เพิ่มกฎ immutable |
+| v4.44 | 06/10/2569 | **มติ PO 06/10/2569 (U105 — เงื่อนไขการหัก (2)/(3) เป็นค่าตั้ง · U107 — ยกเลิกใบรับรองแทนใบเสร็จ)** (migration `20261006210000_wht_gross_up_conditions` · `20261006211000_substitute_receipt_cancelled_status` · `20261006212000_substitute_receipt_cancel`): `wht_policy_history` + `allow_gross_up_conditions BOOLEAN NOT NULL DEFAULT false` · `payout_batches` + snapshot `wht_allow_gross_up_conditions BOOLEAN` (NULL = รอบเก่า ⇒ ไม่อนุญาต) · `payout_batch_items` + snapshot `wht_condition wht_condition` (NULL = รอบเก่า/เงินทดรอง ⇒ (1) · CHECK เงินทดรองไม่มีเงื่อนไข · (2)/(3): gross = เงินได้ + ภาษีที่ออกให้ · net = เงินได้ — `net = gross − wht` ยังจริง) · enum `substitute_receipt_status` + `cancelled` · `substitute_receipts` + `cancelled_at`/`cancelled_by`/`cancel_reason` (CHECK ครบชุด ⇔ cancelled · เหตุผลไม่ว่าง) · CHECK ไฟล์ฉบับเซ็นแยกเป็น "ครบหรือไม่มีเลย" + สถานะ (ใบที่ยกเลิกหลังเซ็นเก็บไฟล์เดิม) · partial unique ต่อใบเบิก/เงินทดรองเพิ่ม `status <> 'cancelled'` (ออกใบใหม่แทนได้) · trigger: cancelled = terminal (แก้/คืนสถานะไม่ได้) · ห้าม soft delete ใบที่ออกแล้ว · ห้าม DELETE แถวที่ยกเลิก · §13 เพิ่มกฎ immutable |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -753,6 +754,7 @@ CREATE TABLE wht_policy_history (
   inhouse_income_category   wht_income_category NOT NULL DEFAULT 'sec_40_2',  -- โหมด by_team_side: ประเภทเงินได้ฝั่ง inhouse (v4.22 UAT U33)
   outsource_income_category wht_income_category NOT NULL DEFAULT 'sec_40_8',  -- โหมด by_team_side: ประเภทเงินได้ฝั่ง outsource (v4.22 UAT U33)
   filing_method      wht_filing_method    NOT NULL DEFAULT 'online',  -- วิธียื่น ภ.ง.ด. ⇒ วันกำหนดยื่น (v4.23 UAT U45)
+  allow_gross_up_conditions BOOLEAN NOT NULL DEFAULT false,  -- อนุญาตเงื่อนไขการหัก (2)/(3) — ทบยอดภาษีที่ออกให้ (มติ PO U105 · `22` §6.9.2)
   reason             TEXT                 NOT NULL CHECK (btrim(reason) <> ''),
   created_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   created_by         UUID                 NOT NULL REFERENCES users(id)
@@ -1575,7 +1577,7 @@ CREATE UNIQUE INDEX uniq_active_advance_per_payee
 CREATE TYPE advance_return_method  AS ENUM ('payout_offset', 'separate');           -- เลือกตอนเคลียร์ยอด (ค่าเริ่มต้น payout_offset)
 CREATE TYPE advance_return_channel AS ENUM ('payout_offset', 'cash', 'bank_transfer');
 -- v4.43 มติ PO U103 — สถานะใบรับรองแทนใบเสร็จรับเงิน (`23` §6.17)
-CREATE TYPE substitute_receipt_status AS ENUM ('pending_signature', 'signed');
+CREATE TYPE substitute_receipt_status AS ENUM ('pending_signature', 'signed', 'cancelled');  -- cancelled: มติ PO U107
 ALTER TABLE advances ADD COLUMN return_method advance_return_method;               -- NULL = ไม่มียอดคืน
 ALTER TABLE advances ADD CONSTRAINT chk_advances_return_method_shape
   CHECK (return_method IS NULL OR (status = 'cleared' AND return_satang > 0));
@@ -1608,6 +1610,7 @@ CREATE TABLE payout_batches (
   wht_issue_zero_rate_40_2_certificate BOOLEAN,  -- snapshot U16 (v4.19) — NULL = รอบเก่า ⇒ ไม่ออกใบ 0%
   wht_inhouse_income_category   wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(2)
   wht_outsource_income_category wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(8)
+  wht_allow_gross_up_conditions BOOLEAN,              -- snapshot U105 — NULL = รอบเก่า ⇒ ไม่อนุญาต (คิดแบบ (1))
   -- v4.25 (มติ PO U67) ยกเลิกรอบจ่าย — ครบทั้ง 3 ช่องเมื่อ (และเฉพาะเมื่อ) status = 'cancelled'
   cancelled_at          TIMESTAMPTZ,
   cancelled_by          UUID                 REFERENCES users(id),
@@ -1641,6 +1644,7 @@ CREATE TABLE payout_batch_items (
   wht_pct_snapshot  NUMERIC(5,2),
   wht_base_included   BOOLEAN NOT NULL DEFAULT true,  -- snapshot: อยู่ในฐาน WHT (มติ PO 05/10/2569 UAT U3)
   wht_income_category wht_income_category,            -- snapshot ประเภทเงินได้ (NULL = รอบเก่า/เงินทดรอง)
+  wht_condition       wht_condition,                  -- snapshot เงื่อนไขการหัก (มติ PO U105) — NULL = รอบเก่า/เงินทดรอง (= (1)) · (2)/(3): gross = เงินได้ + ภาษี · net = เงินได้
   -- v4.23 (มติ PO U30) snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (หลัง WHT · ไม่กระทบฐาน WHT/50 ทวิ)
   advance_offset_satang INTEGER NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
   -- v4.41 (มติ PO U102) เลขที่ใบสำคัญจ่าย — 1 เลข/ผู้รับ/รอบ ออกตอนสร้างไฟล์โอนครั้งแรก · NULL = ยังไม่สร้างไฟล์ · ตั้งแล้วแก้ไม่ได้
@@ -1711,20 +1715,33 @@ CREATE TABLE substitute_receipts (
   signed_file_sha256 VARCHAR(64),
   signed_at          TIMESTAMPTZ,
   signed_by          UUID                      REFERENCES users(id),
+  cancelled_at       TIMESTAMPTZ,              -- มติ PO U107 — ครบทั้ง 3 ช่อง ⇔ status = cancelled
+  cancelled_by       UUID                      REFERENCES users(id),
+  cancel_reason      TEXT,                     -- เหตุผลบังคับ (ไม่ว่าง)
   created_at         TIMESTAMPTZ               NOT NULL DEFAULT NOW(),
   created_by         UUID                      NOT NULL REFERENCES users(id),
   updated_at         TIMESTAMPTZ               NOT NULL,
   updated_by         UUID                      REFERENCES users(id),
   deleted_at         TIMESTAMPTZ,
   CONSTRAINT chk_substitute_receipts_exactly_one_link CHECK (num_nonnulls(expense_id, advance_id) = 1),
+  -- U107: ไฟล์ฉบับเซ็นครบหรือไม่มีเลย · signed ⇒ มีไฟล์ · pending ⇒ ไม่มี · cancelled ได้ทั้งสองแบบ (เก็บไฟล์เดิม)
   CONSTRAINT chk_substitute_receipts_signed_shape CHECK (
-    (status = 'signed') = (signed_file_path IS NOT NULL AND signed_file_sha256 IS NOT NULL AND signed_at IS NOT NULL AND signed_by IS NOT NULL))
+    (signed_file_path IS NOT NULL AND signed_file_sha256 IS NOT NULL AND signed_at IS NOT NULL AND signed_by IS NOT NULL)
+    OR (signed_file_path IS NULL AND signed_file_sha256 IS NULL AND signed_at IS NULL AND signed_by IS NULL)),
+  CONSTRAINT chk_substitute_receipts_signed_status CHECK (
+    (status = 'signed' AND signed_file_path IS NOT NULL) OR (status = 'pending_signature' AND signed_file_path IS NULL)
+    OR status = 'cancelled'),
+  CONSTRAINT chk_substitute_receipts_cancel_shape CHECK (
+    (status = 'cancelled') = (cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL AND cancel_reason IS NOT NULL)),
+  CONSTRAINT chk_substitute_receipts_cancel_reason CHECK (cancel_reason IS NULL OR length(btrim(cancel_reason)) > 0)
   -- + trigger trg_substitute_receipts_guard: เลข/ผู้จ่าย/การผูก/วันที่/ยอดห้ามแก้ · ฉบับเซ็นเปลี่ยนไม่ได้
+  --   · cancelled = terminal (U107) · ห้าม soft delete ใบที่ออกแล้ว · trg_substitute_receipts_guard_delete ห้ามลบแถวที่ยกเลิก
 );
 CREATE UNIQUE INDEX uniq_substitute_receipt_number ON substitute_receipts(organization_id, receipt_number);
 CREATE INDEX idx_substitute_receipts_org_payee_date ON substitute_receipts(organization_id, payee_id, issue_date);
-CREATE UNIQUE INDEX uniq_substitute_receipts_expense ON substitute_receipts(expense_id) WHERE expense_id IS NOT NULL AND deleted_at IS NULL;
-CREATE UNIQUE INDEX uniq_substitute_receipts_advance ON substitute_receipts(advance_id) WHERE advance_id IS NOT NULL AND deleted_at IS NULL;
+-- U107: ใบที่ยกเลิกไม่กันการออกใบใหม่แทน
+CREATE UNIQUE INDEX uniq_substitute_receipts_expense ON substitute_receipts(expense_id) WHERE expense_id IS NOT NULL AND deleted_at IS NULL AND status <> 'cancelled';
+CREATE UNIQUE INDEX uniq_substitute_receipts_advance ON substitute_receipts(advance_id) WHERE advance_id IS NOT NULL AND deleted_at IS NULL AND status <> 'cancelled';
 
 -- บรรทัดรายจ่าย — insert-only (ไม่มี updated_*/deleted_at · trigger ห้าม UPDATE)
 CREATE TABLE substitute_receipt_lines (

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { renderPackCover } from '@/components/pdf/pack-cover'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
+import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import {
   accruedExpenseWhere,
   findPeriodById,
@@ -348,7 +349,8 @@ const EXPENSE_RECORD_SELECT = {
           case: { select: { caseRef: true } },
           // มติ PO U103 — ใบรับรองแทนใบเสร็จของใบเบิก (เลข CRT + ไฟล์ฉบับเซ็น)
           substituteReceipts: {
-            where: { deletedAt: null },
+            // มติ PO U107 — ใบที่ยกเลิกแล้วไม่ใช่หลักฐานของรายการ
+            where: { deletedAt: null, status: { not: 'cancelled' } },
             select: { receiptNumber: true, signedFilePath: true },
           },
         },
@@ -449,7 +451,10 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
         select: {
           id: true,
           payeeId: true,
+          grossSatang: true,
+          whtSatang: true,
           netSatang: true,
+          whtCondition: true,
           advanceOffsetSatang: true,
           voucherNumber: true,
           payee: { select: { user: { select: { fullName: true } } } },
@@ -472,24 +477,29 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
         payeeName: string
         netSatang: number
         advanceOffsetSatang: number
+        whtPaidByPayerSatang: number
         inPeriod: boolean
         voucherNumber: string | null
       }
     >()
     for (const item of batch.items) {
       const existing = groups.get(item.payeeId)
+      // มติ PO U105 — ภาษีที่บริษัทออกให้ (snapshot ของรายการ · ไม่คิดใหม่)
+      const paidByPayer = payoutItemTaxSplit(item).whtPaidByPayerSatang
       if (existing === undefined) {
         groups.set(item.payeeId, {
           payeeId: item.payeeId,
           payeeName: item.payee.user.fullName,
           netSatang: item.netSatang,
           advanceOffsetSatang: item.advanceOffsetSatang,
+          whtPaidByPayerSatang: paidByPayer,
           inPeriod: paidItemIds.has(item.id),
           voucherNumber: item.voucherNumber,
         })
       } else {
         existing.netSatang += item.netSatang
         existing.advanceOffsetSatang += item.advanceOffsetSatang
+        existing.whtPaidByPayerSatang += paidByPayer
         existing.inPeriod = existing.inPeriod || paidItemIds.has(item.id)
         existing.voucherNumber = existing.voucherNumber ?? item.voucherNumber
       }
@@ -508,6 +518,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
         payeeName: group.payeeName,
         netSatang: group.netSatang,
         advanceOffsetSatang: group.advanceOffsetSatang,
+        whtPaidByPayerSatang: group.whtPaidByPayerSatang,
         voucherRef,
       })
     }
@@ -1114,6 +1125,7 @@ async function accruedExpenseRows(
             payeeType: true,
             nationalId: true,
             wht402Pct: true,
+            whtCondition: true,
             taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
             user: {
               select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
@@ -1146,6 +1158,7 @@ async function accruedExpenseRows(
             },
       planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
       section402Pct: row.payee.wht402Pct === null ? null : Number(row.payee.wht402Pct),
+      whtCondition: row.payee.whtCondition,
     })),
     policy.values,
   )

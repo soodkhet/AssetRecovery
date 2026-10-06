@@ -13,6 +13,8 @@ import {
   payeeDisplayName,
   shouldResetVerification,
   whtConditionAffectsFormula,
+  selectableWhtConditions,
+  whtConditionHint,
   toPayeeAuditPayload,
   type PayeeValues,
 } from '@/lib/payees/payee'
@@ -278,5 +280,24 @@ describe('ข้อมูลผู้ถูกหักบนใบ 50 ทวิ
     expect(ok.nameTitle).toBeNull()
     expect(ok.address?.district).toBeNull()
     expect(ok.whtCondition).toBe('pay_always')
+  })
+})
+
+describe('U105 — ตัวเลือกเงื่อนไขการหักในฟอร์มผู้รับตามค่าตั้ง (มติ PO 06/10/2569)', () => {
+  it('ค่าตั้งปิด ⇒ เลือกได้เฉพาะ (1) + ค่าเดิมของผู้รับ (ให้เห็นว่าต้องเปลี่ยน) · เปิด ⇒ ครบสามแบบ', () => {
+    expect(selectableWhtConditions(false, null)).toEqual(['withhold'])
+    expect(selectableWhtConditions(false, 'withhold')).toEqual(['withhold'])
+    expect(selectableWhtConditions(false, 'pay_once')).toEqual(['withhold', 'pay_once'])
+    expect(selectableWhtConditions(true, null)).toEqual(['withhold', 'pay_always', 'pay_once'])
+  })
+
+  it('คำอธิบาย: ปิดแต่ตั้ง (2)/(3) ไว้ ⇒ เตือนว่าสร้างรอบจ่ายไม่ได้ · เปิด ⇒ บอกสูตร · ไม่มีเลขอ้างอิงสเปค', () => {
+    expect(whtConditionHint('pay_always', false)).toContain('สร้างรอบจ่าย')
+    expect(whtConditionHint('pay_always', true)).toContain('÷ (1 − อัตรา)')
+    expect(whtConditionHint('pay_once', true)).toContain('เงินได้ × อัตรา')
+    expect(whtConditionHint('withhold', false)).toContain('ผู้จ่ายเงิน')
+    for (const text of [whtConditionHint('pay_always', true), whtConditionHint('pay_once', false)]) {
+      expect(text).not.toMatch(/§|`\d\d`/)
+    }
   })
 })

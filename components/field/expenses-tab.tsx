@@ -361,7 +361,10 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                           <SubstituteReceiptPanel
                             receipt={item.substituteReceipt}
                             canUpload
+                            // มติ PO U107 — เจ้าของยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติ
+                            canCancel={item.status !== 'approved'}
                             onSigned={() => void load(view)}
+                            onChanged={() => void load(view)}
                           />
                         )}
                       </div>

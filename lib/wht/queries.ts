@@ -285,6 +285,8 @@ const EXPENSE_SOURCE_SELECT = {
       payeeId: true,
       whtBaseIncluded: true,
       whtIncomeCategory: true,
+      // มติ PO U105 — เงื่อนไขการหักที่ snapshot ตอนสร้างรอบ (ตัวที่ใช้คิดยอดจริง) — ไม่ใช่ค่าปัจจุบันของผู้รับ
+      whtCondition: true,
       payoutBatch: {
         select: {
           name: true,
@@ -394,6 +396,9 @@ async function issueCertificate(
   })
   const perBatch = group.mode === 'per_payee_batch'
   const payee = item.payee
+  // มติ PO U105 — ช่อง "ผู้จ่ายเงิน" ต้องตรงกับวิธีคิดยอดจริงของรอบ ⇒ ใช้ snapshot ของรายการ (NULL = รอบเก่า = (1))
+  // เงินได้บนใบ (gross) ของ (2)/(3) รวมภาษีที่ออกให้อยู่แล้วตั้งแต่สร้างรอบ (`payout_batch_items.gross_satang`)
+  const whtCondition = item.whtCondition ?? 'withhold'
   // ผู้หัก = องค์กร ณ วันออกใบ (snapshot — มติ PO U96 #4)
   const payer = await tx.organization.findUniqueOrThrow({
     where: { id: organizationId },
@@ -414,7 +419,7 @@ async function issueCertificate(
       payeeTaxId: payee.nationalId,
       payeeAddress: payeeAddressLine(payee),
       payeeBranchCode: payee.payeeType === 'corporate' ? payee.branchCode : null,
-      whtCondition: payee.whtCondition,
+      whtCondition,
       payerName: payer.name,
       payerTaxId: payer.taxId,
       payerAddress: payer.address,
@@ -445,7 +450,7 @@ async function issueCertificate(
         payee_tax_id: payee.nationalId,
         payee_address: payeeAddressLine(payee),
         payee_branch_code: payee.payeeType === 'corporate' ? payee.branchCode : null,
-        wht_condition: payee.whtCondition,
+        wht_condition: whtCondition,
         expense_record_id: source.id,
         payout_batch_id: item.payoutBatchId,
         issue_mode: group.mode,

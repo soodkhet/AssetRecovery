@@ -40,7 +40,8 @@ const docSelect = {
   payoutItems: {
     select: { payoutBatch: { select: { name: true, status: true, createdAt: true } } },
   },
-  substituteReceipts: { where: { deletedAt: null }, select: { receiptNumber: true } },
+  // มติ PO U107 — ใบที่ยกเลิกแล้วไม่พิมพ์อ้างอิงบนเอกสารเงินทดรอง
+  substituteReceipts: { where: { deletedAt: null, status: { not: 'cancelled' } }, select: { receiptNumber: true } },
   returns: {
     select: {
       id: true,

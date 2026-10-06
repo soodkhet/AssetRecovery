@@ -40,6 +40,7 @@ function item(overrides: Partial<PayoutBatchItemDto> = {}): PayoutBatchItemDto {
     whtPctSnapshot: 3,
     whtBaseIncluded: true,
     whtIncomeCategory: 'sec_40_8',
+    whtCondition: 'withhold',
     advanceOffsetSatang: 0,
     transferSatang: 824_500,
     advanceOffsets: [],
@@ -356,5 +357,41 @@ describe('มติ PO U100/U101 — ข้อมูลผู้รับ · ร
     expect(doc.printedAtLabel).toBe('31/10/2569 16:45')
     expect(doc.rows[0]?.offsetCellText).toBe('0.00')
     expect(doc.totalOffsetCellText).toBe('0.00')
+  })
+})
+
+describe('มติ PO U105 — ผู้จ่ายออกภาษีให้: ใบสำคัญจ่าย/สลิปแยกบรรทัด "ภาษีที่บริษัทออกให้" ไม่หักจากผู้รับ', () => {
+  // snapshot ของรอบ: เงินได้ 10,000 อัตรา 3% แบบ (2) ⇒ gross 10,309.28 · wht 309.28 · net 10,000
+  const grossedUp = item({
+    grossSatang: 1_030_928,
+    whtSatang: 30_928,
+    netSatang: 1_000_000,
+    transferSatang: 1_000_000,
+    whtPctSnapshot: 3,
+    whtCondition: 'pay_always',
+  })
+
+  it('ใบสำคัญจ่าย: ค่าตอบแทน 10,000 · หักภาษี 0 · บรรทัดภาษีที่บริษัทออกให้ 309.28 · ยอดโอน 10,000', () => {
+    const voucher = buildPaymentVoucherDocs(batch([grossedUp]), ISSUER)[0]!
+    expect(voucher.grossText).toBe('10,000.00')
+    expect(voucher.lines.map((line) => line.amountText)).toEqual(['10,000.00'])
+    expect(voucher.whtDeductText).toBe('0.00')
+    expect(voucher.payerTaxLine).toEqual({ label: 'ภาษีที่บริษัทออกให้ 3% (ไม่หักจากผู้รับ)', amountText: '309.28' })
+    expect(voucher.netText).toBe('10,000.00')
+  })
+
+  it('สลิป: แถว = ค่าตอบแทน · ภาษีที่หัก 0 · มีบรรทัดภาษีที่บริษัทออกให้', () => {
+    const slip = buildPayslipDocs(batch([grossedUp]), ISSUER)[0]!
+    expect(slip.rows.map((row) => row.amountText)).toEqual(['10,000.00'])
+    expect(slip.grossText).toBe('10,000.00')
+    expect(slip.whtText).toBe('0.00')
+    expect(slip.payerTaxLine?.amountText).toBe('309.28')
+    expect(slip.netText).toBe('10,000.00')
+  })
+
+  it('หัก ณ ที่จ่ายตามปกติ ⇒ ไม่มีบรรทัดภาษีที่บริษัทออกให้ (เอกสารเดิมไม่เปลี่ยน)', () => {
+    const voucher = buildPaymentVoucherDocs(batch([item()]), ISSUER)[0]!
+    expect(voucher.payerTaxLine).toBeNull()
+    expect(buildPayslipDocs(batch([item()]), ISSUER)[0]!.payerTaxLine).toBeNull()
   })
 })

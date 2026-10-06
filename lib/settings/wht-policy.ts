@@ -1,4 +1,4 @@
-import type { ExpenseType, PayeeType, PayoutBatchSide } from '@/lib/generated/prisma/enums'
+import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
 import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
 
 /**
@@ -18,6 +18,10 @@ import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
  * 4. **40(1)/40(2) อัตรา 0% ออก 50 ทวิ** (U16 · U33 ขยายถึง 40(1)) — เปิด (ค่าเริ่มต้น) = ผู้รับ 40(1)/40(2) ที่อัตรา 0% ได้ใบ 50 ทวิ
  *    ยอดภาษี 0 และนับในสรุป ภ.ง.ด.1 (ผู้รับใช้ยื่น ภ.ง.ด.90/91) · ปิด = ไม่ออก (พฤติกรรมเดิม) ·
  *    40(8) ที่ต่ำกว่าเกณฑ์ ฿1,000 **ไม่เกี่ยว** — ยังไม่ออกใบเหมือนเดิม
+ *
+ * 5. **อนุญาตเงื่อนไขการหัก (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว** (มติ PO 06/10/2569 U105) — ค่าเริ่มต้น **ปิด**
+ *    ปิด = ผู้รับเลือกได้เฉพาะ (1) หัก ณ ที่จ่าย · ผู้รับที่ตั้ง (2)/(3) ไว้แล้ว ⇒ **บล็อกการสร้างรอบจ่าย**
+ *    (`WHT_CONDITION_NOT_ALLOWED` — ใบ 50 ทวิ จะพิมพ์เงื่อนไขไม่ตรงกับยอด) · เปิด = คิดภาษีแบบทบยอด (`whtGrossUp()`)
  *
  * **effective-dated แบบ `vat_rate_history`** (U8): ตาราง `wht_policy_history` insert-only ·
  * รอบจ่ายใช้ค่าที่มีผล ณ วันที่สร้างรอบ (วันตามปฏิทินไทย) แล้ว **snapshot ลง `payout_batches`** —
@@ -61,6 +65,8 @@ export interface WhtPolicyValues {
   inhouseIncomeCategory: WhtIncomeCategory
   /** โหมด `by_team_side`: ประเภทเงินได้ของผู้รับฝั่ง outsource (U33) — โหมดอื่นเก็บไว้แต่ไม่ใช้ */
   outsourceIncomeCategory: WhtIncomeCategory
+  /** อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (U105) — ปิด = ใช้ได้เฉพาะ (1) */
+  allowGrossUpConditions: boolean
 }
 
 /**
@@ -80,6 +86,7 @@ export const DEFAULT_WHT_POLICY: WhtPolicySettings = {
   issueZeroRate402Certificate: true,
   inhouseIncomeCategory: 'sec_40_2',
   outsourceIncomeCategory: 'sec_40_8',
+  allowGrossUpConditions: false,
   filingMethod: 'online',
 }
 
@@ -95,6 +102,8 @@ export const LEGACY_WHT_POLICY: WhtPolicyValues = {
   // การจับคู่ก่อน U33 (fix ไว้ในโค้ด) — รอบเก่าที่ snapshot การจับคู่เป็น NULL ตีความตามนี้
   inhouseIncomeCategory: 'sec_40_2',
   outsourceIncomeCategory: 'sec_40_8',
+  // ก่อน U105 ระบบคิดแบบ (1) เสมอ ⇒ รอบเก่าตีความเป็น "ไม่อนุญาต"
+  allowGrossUpConditions: false,
 }
 
 export const WHT_CERTIFICATE_MODE_LABEL: Record<WhtCertificateMode, string> = {
@@ -128,6 +137,20 @@ export const WHT_FILING_METHOD_SUFFIX: Record<WhtFilingMethod, string> = {
 
 /** ป้ายของค่าตั้ง U16 บนหน้าตั้งค่า/รายละเอียดรอบจ่าย */
 export const ISSUE_ZERO_RATE_40_2_LABEL = 'เงินได้ 40(1)/40(2) อัตรา 0%: ออก 50 ทวิ (ยอดภาษี 0) และรวมใน ภ.ง.ด.1'
+
+/** ป้ายของค่าตั้ง U105 บนหน้าตั้งค่า/รายละเอียดรอบจ่าย */
+export const ALLOW_GROSS_UP_CONDITIONS_LABEL = 'อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (บริษัทออกภาษีให้ผู้รับ)'
+
+/**
+ * เงื่อนไขการหักนี้ใช้ได้ภายใต้ค่าตั้งหรือไม่ (U105) — (1) ใช้ได้เสมอ · (2)/(3) ต้องเปิดค่าตั้ง
+ * ใช้ทั้งฟอร์มผู้รับ (ตัวเลือกที่เลือกได้) และ server (บันทึกผู้รับ/สร้างรอบจ่าย)
+ */
+export function isWhtConditionAllowed(
+  policy: Pick<WhtPolicyValues, 'allowGrossUpConditions'>,
+  condition: WhtCondition,
+): boolean {
+  return condition === 'withhold' || policy.allowGrossUpConditions
+}
 
 /** ข้อความประเภทเงินได้บนใบ 50 ทวิ ของ 40(2) — 40(8) ใช้ `income_type` ของ Tax Profile ตามเดิม */
 export const INCOME_TYPE_TEXT_40_2 = 'ค่าธรรมเนียม ค่านายหน้า มาตรา 40(2)'
@@ -251,6 +274,7 @@ export function toWhtPolicyAuditPayload(
     issue_zero_rate_40_2_certificate: values.issueZeroRate402Certificate,
     inhouse_income_category: values.inhouseIncomeCategory,
     outsource_income_category: values.outsourceIncomeCategory,
+    allow_gross_up_conditions: values.allowGrossUpConditions,
     ...(values.filingMethod === undefined ? {} : { filing_method: values.filingMethod }),
   }
 }
@@ -268,6 +292,8 @@ export function payoutBatchWhtPolicy(snapshot: {
   /** NULL = รอบที่สร้างก่อนมีค่าตั้ง U33 ⇒ การจับคู่เดิม inhouse 40(2) · outsource 40(8) */
   whtInhouseIncomeCategory: WhtIncomeCategory | null
   whtOutsourceIncomeCategory: WhtIncomeCategory | null
+  /** NULL = รอบที่สร้างก่อนมีค่าตั้ง U105 ⇒ ไม่อนุญาต (คิดแบบ (1) เสมอ) */
+  whtAllowGrossUpConditions?: boolean | null
 }): WhtPolicyValues {
   return {
     baseExpenseTypes: snapshot.whtBaseExpenseTypes ?? LEGACY_WHT_POLICY.baseExpenseTypes,
@@ -277,5 +303,6 @@ export function payoutBatchWhtPolicy(snapshot: {
       snapshot.whtIssueZeroRate402Certificate ?? LEGACY_WHT_POLICY.issueZeroRate402Certificate,
     inhouseIncomeCategory: snapshot.whtInhouseIncomeCategory ?? LEGACY_WHT_POLICY.inhouseIncomeCategory,
     outsourceIncomeCategory: snapshot.whtOutsourceIncomeCategory ?? LEGACY_WHT_POLICY.outsourceIncomeCategory,
+    allowGrossUpConditions: snapshot.whtAllowGrossUpConditions ?? LEGACY_WHT_POLICY.allowGrossUpConditions,
   }
 }

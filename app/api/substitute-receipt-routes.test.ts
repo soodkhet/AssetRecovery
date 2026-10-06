@@ -22,6 +22,8 @@ const receiptQueries = vi.hoisted(() => ({
   getSubstituteReceiptSource: vi.fn(),
   toSubstituteReceiptDocSource: vi.fn(),
   attachSignedSubstituteReceipt: vi.fn(),
+  cancelSubstituteReceipt: vi.fn(),
+  reissueSubstituteReceipt: vi.fn(),
   SUBSTITUTE_RECEIPT_CAPABILITIES: [
     'perform_field_work',
     'request_advance',
@@ -39,6 +41,8 @@ vi.mock('@/lib/advances/queries', () => ({ APPROVE_ADVANCE: 'approve_advance', R
 
 const { GET: getCrtPdf } = await import('@/app/api/substitute-receipts/[id]/pdf/route')
 const { POST: postSigned } = await import('@/app/api/substitute-receipts/[id]/signed/route')
+const { POST: postCancel } = await import('@/app/api/substitute-receipts/[id]/cancel/route')
+const { POST: postReissue } = await import('@/app/api/substitute-receipts/[id]/reissue/route')
 const { GET: getAdvancePdf } = await import('@/app/api/advances/[id]/pdf/route')
 
 const ID = '00000000-0000-4000-8000-0000000c7a01'
@@ -100,6 +104,8 @@ beforeEach(() => {
   receiptQueries.getSubstituteReceiptSource.mockReset().mockResolvedValue(CRT_ROW)
   receiptQueries.toSubstituteReceiptDocSource.mockReset().mockReturnValue(CRT_SOURCE)
   receiptQueries.attachSignedSubstituteReceipt.mockReset().mockResolvedValue({ id: ID, status: 'signed' })
+  receiptQueries.cancelSubstituteReceipt.mockReset().mockResolvedValue({ id: ID, status: 'cancelled' })
+  receiptQueries.reissueSubstituteReceipt.mockReset().mockResolvedValue({ id: 'new-id', status: 'pending_signature' })
   advanceDocQueries.getAdvanceRequestDocSource.mockReset()
 })
 
@@ -150,5 +156,47 @@ describe('เจ้าของ/การเงิน', () => {
     const response = await getAdvancePdf(request('GET'), params)
     expect(response.status).toBe(400)
     expect(((await response.json()) as { error: { code: string } }).error.code).toBe('ADVANCE_INVALID_STATUS')
+  })
+})
+
+describe('มติ PO U107 — ยกเลิก / ออกใบใหม่แทน', () => {
+  const LINES = { lines: [{ lineDate: '2026-10-03', description: 'ค่าผ่านทางพิเศษ', amountSatang: 7_000, note: null }] }
+
+  it('ไม่มี capability ฝั่งเบิก/อนุมัติ → 403 ไม่ถึงชั้นข้อมูล', async () => {
+    requireSessionMock.mockResolvedValue(userOf({ view_reports: 'view' }))
+    expect((await postCancel(request('POST', { reason: 'กรอกผิดวัน' }), params)).status).toBe(403)
+    expect((await postReissue(request('POST', LINES), params)).status).toBe(403)
+    expect(receiptQueries.cancelSubstituteReceipt).not.toHaveBeenCalled()
+    expect(receiptQueries.reissueSubstituteReceipt).not.toHaveBeenCalled()
+  })
+
+  it('นอก scope → 404 · เหตุผลขาด → 400 CANCEL_REQUIRES_REASON · อนุมัติจ่ายแล้ว → 400 NOT_CANCELLABLE', async () => {
+    requireSessionMock.mockResolvedValue(userOf({ approve_expense_manager: 'manage' }))
+    receiptQueries.cancelSubstituteReceipt.mockRejectedValueOnce(new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_FOUND'))
+    expect((await postCancel(request('POST', { reason: 'ขอยกเลิก' }), params)).status).toBe(404)
+
+    receiptQueries.cancelSubstituteReceipt.mockRejectedValueOnce(new SubstituteReceiptError('CANCEL_REQUIRES_REASON'))
+    const missing = await postCancel(request('POST', {}), params)
+    expect(missing.status).toBe(400)
+    expect(((await missing.json()) as { error: { code: string } }).error.code).toBe('CANCEL_REQUIRES_REASON')
+
+    receiptQueries.cancelSubstituteReceipt.mockRejectedValueOnce(
+      new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE'),
+    )
+    const paid = await postCancel(request('POST', { reason: 'ขอยกเลิกหลังจ่าย' }), params)
+    expect(paid.status).toBe(400)
+    expect(((await paid.json()) as { error: { code: string } }).error.code).toBe('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE')
+  })
+
+  it('เจ้าของยกเลิกได้ → 200 · ออกใบใหม่: รายการว่าง → 400 ไม่ถึงชั้นข้อมูล · ครบ → 201', async () => {
+    requireSessionMock.mockResolvedValue(userOf({ perform_field_work: 'manage' }))
+    const cancelled = await postCancel(request('POST', { reason: 'กรอกผิดวัน' }), params)
+    expect(cancelled.status).toBe(200)
+    expect(receiptQueries.cancelSubstituteReceipt).toHaveBeenCalledWith(expect.anything(), ID, { reason: 'กรอกผิดวัน' })
+
+    expect((await postReissue(request('POST', { lines: [] }), params)).status).toBe(400)
+    expect(receiptQueries.reissueSubstituteReceipt).not.toHaveBeenCalled()
+    expect((await postReissue(request('POST', LINES), params)).status).toBe(201)
+    expect(receiptQueries.reissueSubstituteReceipt).toHaveBeenCalledTimes(1)
   })
 })

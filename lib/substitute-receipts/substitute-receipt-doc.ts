@@ -8,9 +8,13 @@ import {
   type DocPayeeSource,
   type ReceiptStyleDoc,
 } from '@/lib/documents/receipt-style-doc'
-import { fmtDate } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import type { DocLetterhead } from '@/lib/organization/profile'
-import { substituteReceiptCertification, substituteReceiptTotalSatang } from '@/lib/substitute-receipts/substitute-receipt'
+import {
+  SUBSTITUTE_RECEIPT_CANCELLED_BANNER,
+  substituteReceiptCertification,
+  substituteReceiptTotalSatang,
+} from '@/lib/substitute-receipts/substitute-receipt'
 
 /**
  * ใบรับรองแทนใบเสร็จรับเงิน (แบบ บก.111 · มติ PO U103 · mockup `reference/documents.html` ข้อ 8 · `28` §6.1)
@@ -34,6 +38,8 @@ export interface SubstituteReceiptDocSource {
   teamName: string | null
   /** อ้างอิง: เลขเงินทดรอง (เคลียร์ยอด) หรือคำอธิบายใบเบิก */
   reference: { label: string; value: string }
+  /** มติ PO U107 — ใบที่ยกเลิกแล้ว (พิมพ์ป้าย "ยกเลิก" + เวลา/เหตุผล) · `null`/ไม่ระบุ = ใบปกติ */
+  cancellation?: { cancelledAt: Date; reason: string } | null
 }
 
 export function buildSubstituteReceiptDoc(
@@ -74,7 +80,13 @@ export function buildSubstituteReceiptDoc(
       { role: 'ผู้เบิกจ่าย', name: payeeName },
       { role: 'ผู้อนุมัติ', name: null },
     ],
-    cancelled: null,
+    cancelled:
+      source.cancellation === null || source.cancellation === undefined
+        ? null
+        : {
+            title: SUBSTITUTE_RECEIPT_CANCELLED_BANNER,
+            detail: `ยกเลิกเมื่อ ${fmtDateTime(source.cancellation.cancelledAt)} · เหตุผล: ${source.cancellation.reason} · ใช้แทนใบเสร็จไม่ได้`,
+          },
     footerLeft: `${letterhead.nameTh} · ${source.receiptNumber}`,
   }
 }

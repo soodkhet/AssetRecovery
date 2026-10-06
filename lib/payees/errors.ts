@@ -14,6 +14,8 @@ export const PAYEE_ERROR_CODES = [
   'PAYEE_ID_DOCUMENT_REQUIRED',
   'REQUIRED_MISSING',
   'INVALID_TAX_ID_FORMAT',
+  // มติ PO 06/10/2569 U105 — เลือก (2)/(3) ขณะที่ค่าตั้งภาษียังไม่อนุญาต (code ร่วมกับหมวดรอบจ่าย)
+  'WHT_CONDITION_NOT_ALLOWED',
 ] as const
 
 export type PayeeErrorCode = (typeof PAYEE_ERROR_CODES)[number]
@@ -25,6 +27,7 @@ const HTTP_STATUS: Record<PayeeErrorCode, number> = {
   PAYEE_ID_DOCUMENT_REQUIRED: 400,
   REQUIRED_MISSING: 400,
   INVALID_TAX_ID_FORMAT: 400,
+  WHT_CONDITION_NOT_ALLOWED: 400,
 }
 
 const MESSAGES: Record<PayeeErrorCode, ErrorMessage> = {
@@ -47,6 +50,11 @@ const MESSAGES: Record<PayeeErrorCode, ErrorMessage> = {
   INVALID_TAX_ID_FORMAT: {
     title: 'เลขประจำตัวผู้เสียภาษีไม่ถูกต้อง',
     message: 'เลขบัตรประชาชน/เลขทะเบียนนิติบุคคลต้องเป็นตัวเลข 13 หลัก',
+  },
+  WHT_CONDITION_NOT_ALLOWED: {
+    title: 'เงื่อนไขการหักภาษีนี้ยังไม่เปิดใช้',
+    message:
+      'ค่าตั้งภาษีหัก ณ ที่จ่ายขององค์กรยังไม่อนุญาตเงื่อนไข "ออกให้ตลอดไป" / "ออกให้ครั้งเดียว" — เลือก "หัก ณ ที่จ่าย" หรือขอให้ผู้ดูแลเปิดค่าตั้งก่อน',
   },
 }
 

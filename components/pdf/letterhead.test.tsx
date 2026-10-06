@@ -71,6 +71,7 @@ const BATCH: PayoutBatchDetailDto = {
       whtPctSnapshot: 3,
       whtBaseIncluded: true,
       whtIncomeCategory: 'sec_40_8',
+      whtCondition: 'withhold',
       advanceOffsetSatang: 0,
       transferSatang: 824_500,
       advanceOffsets: [],

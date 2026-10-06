@@ -1,4 +1,5 @@
 import { assertNonNegativeSatang, assertPct, pctOfSatang } from '@/lib/finance/satang'
+import type { WhtCondition } from '@/lib/generated/prisma/enums'
 import {
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
   assertWhtPctValid,
@@ -144,6 +145,102 @@ export function calculateWhtForPayee(input: {
   return { ...calculation, rate }
 }
 
+// ── เงื่อนไขการหัก (1)/(2)/(3) — มติ PO 06/10/2569 U105 ─────────────────────────
+
+/**
+ * เงื่อนไขที่ **ผู้จ่ายออกภาษีให้** — (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว · (1) หัก ณ ที่จ่าย = ผู้รับรับภาระเอง
+ * ค่า `null`/ไม่ระบุ (รายการรอบเก่า/เงินทดรองจ่าย) ถือเป็น (1)
+ */
+export function isPayerBorneWhtCondition(condition: WhtCondition | null | undefined): boolean {
+  return condition === 'pay_always' || condition === 'pay_once'
+}
+
+/**
+ * **ภาษีของฐานหนึ่งก้อนตามเงื่อนไขการหัก** (`22` §6.9.2 — มติ PO U105) · ปัดครึ่งขึ้นเป็นสตางค์ครั้งเดียว
+ *
+ * - (1) หัก ณ ที่จ่าย / (3) ออกให้ครั้งเดียว: `ภาษี = ฐาน × อัตรา` (`pctOfSatang()` ตัวเดียวกับสูตรเดิม)
+ * - (2) ออกให้ตลอดไป (ทบยอด): `ภาษี = ฐาน × อัตรา ÷ (1 − อัตรา)` — คิดเป็นจำนวนเต็มด้วย BigInt
+ *   (อัตรา `NUMERIC(5,2)` ⇒ แปลงเป็น basis point ×100 แล้วปัดครั้งเดียวที่ผลลัพธ์ — ไม่มีเศษ float สะสม)
+ *   อัตรา 100% ทบยอดไม่ได้ (ตัวหารเป็นศูนย์) ⇒ RangeError
+ */
+export function whtTaxForCondition(baseSatang: number, whtPct: number, condition: WhtCondition | null | undefined): number {
+  assertNonNegativeSatang(baseSatang, 'ฐานภาษี')
+  assertPct(whtPct, 'อัตรา WHT')
+  if (condition !== 'pay_always') return pctOfSatang(baseSatang, whtPct)
+  const basisPoints = BigInt(Math.round(whtPct * 100))
+  const denominator = 10_000n - basisPoints
+  if (denominator <= 0n) throw new RangeError('whtTaxForCondition: อัตรา 100% คิดภาษีแบบออกให้ตลอดไปไม่ได้')
+  // round-half-up ของ base × bp / (10000 − bp) = floor((2 × base × bp + denom) / (2 × denom))
+  const numerator = 2n * BigInt(baseSatang) * basisPoints + denominator
+  return Number(numerator / (2n * denominator))
+}
+
+export interface WhtGrossUp {
+  /** ภาษีที่ต้องนำส่ง (ผู้รับรับภาระ = หักจากผู้รับ · ผู้จ่ายออกให้ = ค่าใช้จ่ายบริษัท) */
+  whtSatang: number
+  /** เงินได้ที่แสดงบนใบ 50 ทวิ / ภ.ง.ด. — (1) = เงินได้ · (2)/(3) = เงินได้ + ภาษีที่ออกให้ */
+  certificateIncomeSatang: number
+  /** ยอดที่ผู้รับได้ (ก่อนหักคืนเงินทดรอง) — (1) = เงินได้ − ภาษี · (2)/(3) = เงินได้เต็ม */
+  payeeReceivesSatang: number
+  /** ต้นทุนรวมของบริษัท = ยอดที่ผู้รับได้ + ภาษีที่นำส่ง */
+  companyCostSatang: number
+  /** ภาษีที่บริษัทออกให้ (แยกบรรทัดในใบสำคัญจ่าย/สลิป) — (1) = 0 */
+  whtPaidByPayerSatang: number
+}
+
+/**
+ * **`whtGrossUp()` — ยอดทั้งชุดของเงินได้ก้อนเดียว** ตามเงื่อนไขการหัก (`22` §6.9.2 · มติ PO U105)
+ * ตัวอย่างที่ต้องตรงเสมอ — เงินได้ ฿10,000 อัตรา 3%:
+ * (1) ภาษี 300.00 ผู้รับได้ 9,700.00 · (2) ภาษี 309.28 เงินได้บนใบ 10,309.28 · (3) ภาษี 300.00 เงินได้บนใบ 10,300.00
+ * เกณฑ์ขั้นต่ำ (฿1,000) เทียบกับ **เงินได้ก่อนบวกภาษี** — ผู้เรียกตัดสินก่อน (ต่ำกว่าเกณฑ์ = ไม่เรียก/ภาษี 0)
+ */
+export function whtGrossUp(input: {
+  incomeSatang: number
+  whtPct: number
+  condition: WhtCondition | null | undefined
+}): WhtGrossUp {
+  const whtSatang = whtTaxForCondition(input.incomeSatang, input.whtPct, input.condition)
+  return splitByCondition(input.incomeSatang, whtSatang, input.condition)
+}
+
+/** แยกยอดของเงินได้ + ภาษีที่คิดแล้ว ตามเงื่อนไข (ไม่คิดภาษีใหม่) */
+function splitByCondition(incomeSatang: number, whtSatang: number, condition: WhtCondition | null | undefined): WhtGrossUp {
+  if (isPayerBorneWhtCondition(condition)) {
+    return {
+      whtSatang,
+      certificateIncomeSatang: incomeSatang + whtSatang,
+      payeeReceivesSatang: incomeSatang,
+      companyCostSatang: incomeSatang + whtSatang,
+      whtPaidByPayerSatang: whtSatang,
+    }
+  }
+  return {
+    whtSatang,
+    certificateIncomeSatang: incomeSatang,
+    payeeReceivesSatang: incomeSatang - whtSatang,
+    companyCostSatang: incomeSatang,
+    whtPaidByPayerSatang: 0,
+  }
+}
+
+/**
+ * ยอดแยกของ**รายการรอบจ่ายที่ snapshot แล้ว** สำหรับเอกสาร (ใบสำคัญจ่าย/สลิป/ไฟล์ส่งบัญชี) — ไม่คิดภาษีใหม่
+ *
+ * รายการของผู้รับที่ผู้จ่ายออกภาษีให้เก็บแบบ `gross = เงินได้ + ภาษี` · `net = เงินได้` (ทำให้ `net = gross − wht`
+ * ยังจริงทุกแถว และเงินได้บนใบ 50 ทวิ = ผลรวม gross ตรงตัว) ⇒ ค่าตอบแทนที่ผู้รับได้ = `net` · ภาษีที่ออกให้ = `wht`
+ */
+export function payoutItemTaxSplit(item: {
+  grossSatang: number
+  whtSatang: number
+  netSatang: number
+  whtCondition: WhtCondition | null | undefined
+}): { compensationSatang: number; whtWithheldSatang: number; whtPaidByPayerSatang: number } {
+  if (isPayerBorneWhtCondition(item.whtCondition)) {
+    return { compensationSatang: item.netSatang, whtWithheldSatang: 0, whtPaidByPayerSatang: item.whtSatang }
+  }
+  return { compensationSatang: item.grossSatang, whtWithheldSatang: item.whtSatang, whtPaidByPayerSatang: 0 }
+}
+
 export interface PayeeBatchWhtItem {
   /** ยอดก่อนหักภาษีของรายการ (`payout_batch_items.gross_satang`) */
   grossSatang: number
@@ -167,12 +264,25 @@ export interface PayeeBatchWhtOptions {
    * · `null` ⇒ คิดไม่ได้ (ผู้เรียกต้องปัดการสร้างรอบก่อน)
    */
   section402Pct?: number | null
+  /**
+   * เงื่อนไขการหักของผู้รับ (มติ PO U105 · snapshot ลงรายการรอบจ่าย) — ไม่ระบุ = (1) หัก ณ ที่จ่าย
+   * (2)/(3) ⇒ ภาษีตาม `whtTaxForCondition()` · ผู้รับได้เงินเต็ม · `payoutGrossSatang = gross + ภาษี` (เงินได้บนใบ)
+   * ผู้เรียกต้องตรวจว่าค่าตั้งอนุญาตเงื่อนไขนี้ก่อน (`isWhtConditionAllowed()`)
+   */
+  condition?: WhtCondition | null
 }
 
 export interface PayeeBatchWhtLine extends PayeeWhtResult {
   /** อยู่ในฐาน WHT หรือไม่ — `false` ⇒ `baseSatang = 0` และ `whtSatang = 0` */
   includedInBase: boolean
   incomeCategory: WhtIncomeCategory
+  /**
+   * ยอดที่บันทึกเป็น `payout_batch_items.gross_satang` — (1) = ยอดของรายการ · (2)/(3) = ยอดของรายการ + ภาษีที่ออกให้
+   * (= เงินได้บนใบ 50 ทวิ) · `netSatang` = `payoutGrossSatang − whtSatang` เสมอ
+   */
+  payoutGrossSatang: number
+  /** เงื่อนไขการหักที่ใช้ (snapshot) — `withhold` เมื่อไม่ระบุ */
+  whtCondition: WhtCondition
 }
 
 export interface PayeeBatchWht {
@@ -214,12 +324,16 @@ function section402Rate(pct: number | null | undefined): WhtRateResolution {
  *   — ยังจ่ายเต็มยอด (`net = gross`)
  * - `incomeCategory = sec_40_1 | sec_40_2` ⇒ อัตรา = `section402Pct` ของผู้รับ (ไม่ใช่ Tax Profile/Plan)
  *   **ไม่มีเกณฑ์ขั้นต่ำ** · ไม่คำนวณอัตราก้าวหน้า (Hybrid Boundary)
+ * - `condition = pay_always | pay_once` (มติ PO U105) ⇒ ภาษีของกลุ่มตาม `whtTaxForCondition()` · เกณฑ์เทียบกับ
+ *   ฐานก่อนบวกภาษี · ผู้รับได้เงินเต็ม (`net` = ยอดรายการ) · `payoutGrossSatang` = ยอดรายการ + ส่วนแบ่งภาษี
  */
 export function calculatePayeeBatchWht(
   items: readonly PayeeBatchWhtItem[],
   options: PayeeBatchWhtOptions = {},
 ): PayeeBatchWht {
   const incomeCategory = options.incomeCategory ?? 'sec_40_8'
+  const condition: WhtCondition = options.condition ?? 'withhold'
+  const payerBorne = isPayerBorneWhtCondition(condition)
   const hasIncludedItem = items.some((item) => item.includedInBase !== false)
   // 40(1)/40(2) ต้องมีอัตราต่อคน — ตรวจเฉพาะเมื่อมีรายการในฐานจริง (ทุกรายการไม่อยู่ในฐาน = ไม่มีอะไรให้หัก)
   const rate402 =
@@ -255,7 +369,8 @@ export function calculatePayeeBatchWht(
     })
     for (const [pct, members] of groups) {
       const groupBase = members.reduce((sum, index) => sum + prepared[index]!.baseSatang, 0)
-      const groupWht = pctOfSatang(groupBase, pct)
+      // U105 — (2) ทบยอด / (1)(3) ตามอัตรา · ปัดครั้งเดียวต่อกลุ่มเหมือนเดิม
+      const groupWht = whtTaxForCondition(groupBase, pct, condition)
       allocateLargestRemainder(groupWht, members.map((index) => prepared[index]!.baseSatang)).forEach(
         (share, position) => {
           whtByIndex[members[position]!] = share
@@ -266,10 +381,14 @@ export function calculatePayeeBatchWht(
 
   const lines = prepared.map((entry, index): PayeeBatchWhtLine => {
     const whtSatang = whtByIndex[index]!
+    // ผู้จ่ายออกภาษีให้ ⇒ ผู้รับได้ยอดเต็ม · ภาษีบวกเข้าเงินได้ (gross) แทนการหักออก
+    const payoutGrossSatang = payerBorne ? entry.item.grossSatang + whtSatang : entry.item.grossSatang
     return {
       baseSatang: entry.baseSatang,
       whtSatang,
-      netSatang: entry.item.grossSatang - whtSatang,
+      netSatang: payoutGrossSatang - whtSatang,
+      payoutGrossSatang,
+      whtCondition: condition,
       belowThreshold,
       whtPctUsed: entry.rate.whtPct,
       whtBasisUsed: entry.rate.whtBasis,

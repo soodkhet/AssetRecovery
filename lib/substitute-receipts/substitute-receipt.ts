@@ -1,5 +1,5 @@
 import { fmtSatangSymbol } from '@/lib/format/money'
-import type { SubstituteReceiptStatus } from '@/lib/generated/prisma/enums'
+import type { ExpenseStatus, ExpenseType, SubstituteReceiptStatus } from '@/lib/generated/prisma/enums'
 import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
 
 /**
@@ -115,10 +115,12 @@ export function substituteReceiptMonthRange(issueDate: Date): { start: Date; end
 export const SUBSTITUTE_RECEIPT_STATUS_LABEL: Readonly<Record<SubstituteReceiptStatus, string>> = {
   pending_signature: 'รออัปโหลดฉบับเซ็น',
   signed: 'อัปโหลดฉบับเซ็นแล้ว',
+  cancelled: 'ยกเลิกแล้ว',
 }
 
-/** กลุ่มสีป้ายสถานะ (`04` §8.1) — รอฉบับเซ็น = เหลือง · เซ็นแล้ว = เขียว */
-export function substituteReceiptStatusBadgeGroup(status: SubstituteReceiptStatus): 'pending' | 'success' {
+/** กลุ่มสีป้ายสถานะ (`04` §8.1) — รอฉบับเซ็น = เหลือง · เซ็นแล้ว = เขียว · ยกเลิก = แดง (ตรง mapper กลาง) */
+export function substituteReceiptStatusBadgeGroup(status: SubstituteReceiptStatus): 'pending' | 'success' | 'critical' {
+  if (status === 'cancelled') return 'critical'
   return status === 'signed' ? 'success' : 'pending'
 }
 
@@ -179,4 +181,85 @@ export function canUploadSignedSubstituteReceipt(
 ): boolean {
   if (viewer.isSuperadmin || viewer.userId === owner.payeeUserId) return true
   return owner.link === 'advance' ? viewer.canSeeAllAdvances : viewer.canSeeAllExpenses
+}
+
+// ── ยกเลิก / ออกใบใหม่แทน (มติ PO 06/10/2569 U107 · `23` §6.17) ─────────────────────
+
+/** ป้ายบน PDF ของใบที่ยกเลิกแล้ว (ใบเดิมเก็บไว้ ห้ามลบ) */
+export const SUBSTITUTE_RECEIPT_CANCELLED_BANNER = 'ยกเลิก'
+
+/** ความยาวขั้นต่ำของเหตุผลการยกเลิก — ตรงกับการยกเลิกเอกสารอื่นของระบบ */
+export const SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN = 5
+
+/** ใบที่ยังมีผล (นับเพดาน · กันออกซ้ำ · ใช้แทนใบเสร็จได้) = ไม่ถูกยกเลิก */
+export function isSubstituteReceiptActive(status: SubstituteReceiptStatus): boolean {
+  return status !== 'cancelled'
+}
+
+/** รายการที่ใบผูกอยู่ — สถานะที่ใช้ตัดสินว่ายกเลิก/ออกใหม่ได้ไหม */
+export type SubstituteReceiptLinkState =
+  | {
+      kind: 'expense'
+      expenseStatus: ExpenseStatus
+      expenseType: ExpenseType
+      expenseGrossSatang: number
+      /** ใบเบิกอยู่ในรอบจ่ายที่ `completed` แล้ว (เงินออกจริง) */
+      inCompletedPayout: boolean
+    }
+  | { kind: 'advance'; usedSatang: number | null }
+
+export type SubstituteReceiptCancelProblem = 'already_cancelled' | 'linked_paid'
+
+/**
+ * ยกเลิกได้ไหม (ไม่รวมสิทธิ์ของผู้เรียก) — `null` = ได้
+ * - ยกเลิกแล้ว = terminal ยกเลิกซ้ำไม่ได้
+ * - ใบเบิกที่ **อนุมัติจ่ายแล้ว** (`approved`) หรืออยู่ในรอบจ่ายที่จ่ายสำเร็จแล้ว ⇒ ยกเลิกไม่ได้ (หลักฐานของเงินที่จ่ายไปแล้ว
+ *   — ต้องแก้ผ่านรายการปรับปรุง) · ใบเบิกที่ถูกปฏิเสธ/แทนที่ ⇒ ยกเลิกได้ (ไม่ได้เบิกจริงอยู่แล้ว)
+ * - เงินทดรอง: การเคลียร์ยอดไม่มีขั้นอนุมัติ ⇒ ยกเลิกได้ (การเงินเท่านั้น — `canCancelSubstituteReceipt()`) ภายใต้ Period Lock
+ */
+export function substituteReceiptCancelProblem(
+  status: SubstituteReceiptStatus,
+  link: SubstituteReceiptLinkState,
+): SubstituteReceiptCancelProblem | null {
+  if (status === 'cancelled') return 'already_cancelled'
+  if (link.kind === 'expense' && (link.expenseStatus === 'approved' || link.inCompletedPayout)) return 'linked_paid'
+  return null
+}
+
+/** เหตุผลการยกเลิก — ว่าง/สั้นกว่า 5 ตัวอักษร ⇒ `CANCEL_REQUIRES_REASON` (Rule 04 — ยกเลิกทุกชนิดต้องมีเหตุผล) */
+export function requireSubstituteReceiptCancelReason(reason: string | null | undefined): string {
+  const trimmed = (reason ?? '').trim()
+  if (trimmed.length >= SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN) return trimmed
+  throw new SubstituteReceiptError('CANCEL_REQUIRES_REASON', { detail: `reason length=${trimmed.length}` })
+}
+
+/** ข้อความของปัญหาการยกเลิก — ใช้ทั้ง error ฝั่ง server และคำอธิบายบนหน้าจอ */
+export function substituteReceiptCancelProblemMessage(problem: SubstituteReceiptCancelProblem, receiptNumber: string): string {
+  if (problem === 'already_cancelled') return `ใบรับรองแทนใบเสร็จ ${receiptNumber} ถูกยกเลิกไปแล้ว`
+  return `ใบรับรองแทนใบเสร็จ ${receiptNumber} ผูกกับรายการเบิกที่อนุมัติจ่ายแล้ว — ยกเลิกไม่ได้ (แก้ไขผ่านรายการปรับปรุง)`
+}
+
+/**
+ * สิทธิ์ยกเลิก/ออกใบใหม่แทน (scope ระดับแถว) — **เจ้าของ** (ผู้จ่ายเงิน) ได้เฉพาะใบที่ผูกใบเบิกซึ่งยังไม่อนุมัติ ·
+ * **การเงิน** (ผู้เห็นทั้งองค์กรของสายนั้น) / Superadmin ได้ทุกใบที่ยกเลิกได้ · ผู้จัดการทีมไม่ได้ (ดูได้อย่างเดียว)
+ * ใบเบิกที่อนุมัติแล้วถูกปัดด้วย `substituteReceiptCancelProblem()` อีกชั้นสำหรับทุกคน
+ */
+export function canCancelSubstituteReceipt(viewer: SubstituteReceiptViewer, owner: SubstituteReceiptOwnerRef): boolean {
+  if (viewer.isSuperadmin) return true
+  if (owner.link === 'advance') return viewer.canSeeAllAdvances
+  return viewer.canSeeAllExpenses || viewer.userId === owner.payeeUserId
+}
+
+/**
+ * ยอดของใบใหม่ที่ออกแทนใบที่ยกเลิก — กติกาเดียวกับตอนออกครั้งแรก (`null` = ผ่าน):
+ * ค่าที่พัก ⇒ ยอดรวมใบต้องเท่ากับยอดเบิก · ใบเบิกชนิดอื่น ⇒ ไม่เกินยอดเบิก · เงินทดรอง ⇒ ไม่เกินยอดใช้จริง
+ */
+export function substituteReceiptReissueTotalProblem(link: SubstituteReceiptLinkState, totalSatang: number): string | null {
+  if (link.kind === 'advance') {
+    return totalSatang > (link.usedSatang ?? 0) ? 'ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริงของเงินทดรอง' : null
+  }
+  if (link.expenseType === 'hotel') {
+    return totalSatang === link.expenseGrossSatang ? null : 'ยอดรวมของใบรับรองต้องเท่ากับยอดเบิกค่าที่พัก'
+  }
+  return totalSatang > link.expenseGrossSatang ? 'ยอดรวมของใบรับรองต้องไม่เกินยอดเบิก' : null
 }

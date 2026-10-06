@@ -36,6 +36,18 @@ export const substituteReceiptSignedSchema = z.object({
   signedFilePath: z.string().trim().min(1, 'แนบไฟล์ใบรับรองฉบับเซ็นแล้ว').max(1024, 'path ของไฟล์ยาวเกินไป'),
 })
 
+/**
+ * `POST /api/substitute-receipts/:id/cancel` (มติ PO U107) — เหตุผลบังคับ (ขาด/สั้น ⇒ `CANCEL_REQUIRES_REASON` ที่ route)
+ * ไม่ trim ที่ schema ⇒ route แยกกรณี "ไม่กรอก" ออกจาก validation อื่นได้ (ตรวจซ้ำที่ service)
+ */
+export const substituteReceiptCancelSchema = z.object({
+  reason: z.string().max(500, 'เหตุผลยาวเกิน 500 ตัวอักษร').nullish(),
+})
+
+/** `POST /api/substitute-receipts/:id/reissue` (มติ PO U107) — ออกใบใหม่แทนใบที่ยกเลิก (บรรทัดชุดใหม่) */
+export const substituteReceiptReissueSchema = substituteReceiptDraftSchema
+
+export type SubstituteReceiptCancelInput = z.infer<typeof substituteReceiptCancelSchema>
 export type SubstituteReceiptLineInput = z.infer<typeof substituteReceiptLineSchema>
 export type SubstituteReceiptDraftInput = z.infer<typeof substituteReceiptDraftSchema>
 export type SubstituteReceiptSignedInput = z.infer<typeof substituteReceiptSignedSchema>

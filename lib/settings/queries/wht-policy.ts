@@ -41,6 +41,7 @@ const policySelect = {
   issueZeroRate402Certificate: true,
   inhouseIncomeCategory: true,
   outsourceIncomeCategory: true,
+  allowGrossUpConditions: true,
   filingMethod: true,
   reason: true,
   createdAt: true,
@@ -56,6 +57,7 @@ interface PolicyRow {
   issueZeroRate402Certificate: boolean
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
+  allowGrossUpConditions: boolean
   filingMethod: WhtFilingMethod
   reason: string
   createdAt: Date
@@ -73,6 +75,7 @@ function toEntry(row: PolicyRow): WhtPolicyEntry & { row: PolicyRow } {
     issueZeroRate402Certificate: row.issueZeroRate402Certificate,
     inhouseIncomeCategory: row.inhouseIncomeCategory,
     outsourceIncomeCategory: row.outsourceIncomeCategory,
+    allowGrossUpConditions: row.allowGrossUpConditions,
     filingMethod: row.filingMethod,
     row,
   }
@@ -88,6 +91,7 @@ function toDto(entry: WhtPolicyEntry & { row: PolicyRow }, currentId: string | n
     issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
     inhouseIncomeCategory: entry.inhouseIncomeCategory,
     outsourceIncomeCategory: entry.outsourceIncomeCategory,
+    allowGrossUpConditions: entry.allowGrossUpConditions,
     filingMethod: entry.filingMethod,
     reason: entry.row.reason,
     createdAt: toIso(entry.createdAt),
@@ -113,6 +117,7 @@ function valuesOf(entry: WhtPolicySettings | null): WhtPolicySettings {
     issueZeroRate402Certificate: entry.issueZeroRate402Certificate,
     inhouseIncomeCategory: entry.inhouseIncomeCategory,
     outsourceIncomeCategory: entry.outsourceIncomeCategory,
+    allowGrossUpConditions: entry.allowGrossUpConditions,
     filingMethod: entry.filingMethod,
   }
 }
@@ -239,6 +244,7 @@ export async function createWhtPolicy(
         issueZeroRate402Certificate: values.issueZeroRate402Certificate,
         inhouseIncomeCategory: values.inhouseIncomeCategory,
         outsourceIncomeCategory: values.outsourceIncomeCategory,
+        allowGrossUpConditions: values.allowGrossUpConditions,
         filingMethod: values.filingMethod,
         reason: context.reason,
         createdBy: context.actor.id,
@@ -266,6 +272,7 @@ export async function createWhtPolicy(
           issueZeroRate402Certificate: values.issueZeroRate402Certificate,
           inhouseIncomeCategory: values.inhouseIncomeCategory,
           outsourceIncomeCategory: values.outsourceIncomeCategory,
+          allowGrossUpConditions: values.allowGrossUpConditions,
           filingMethod: values.filingMethod,
           effectiveFrom: toDateOnlyIso(values.effectiveFrom),
           }),

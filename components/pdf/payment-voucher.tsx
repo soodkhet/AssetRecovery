@@ -77,6 +77,10 @@ export function PaymentVoucherPage({ doc, letterhead }: { doc: PaymentVoucherDoc
         ))}
         <SummaryRow columns={COLUMNS} tone="sub" label="รวมค่าตอบแทนก่อนหักภาษี" value={doc.grossText} />
         <SummaryRow columns={COLUMNS} tone="deduct" label={doc.whtLabel} value={doc.whtDeductText} />
+        {/* มติ PO U105 — ภาษีที่บริษัทออกให้: แสดงแยก ไม่หักจากยอดโอน */}
+        {doc.payerTaxLine === null ? null : (
+          <SummaryRow columns={COLUMNS} tone="sub" label={doc.payerTaxLine.label} value={doc.payerTaxLine.amountText} />
+        )}
         {doc.offsetLines.map((line) => (
           <SummaryRow
             key={line.label}

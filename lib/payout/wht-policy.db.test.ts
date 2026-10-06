@@ -143,7 +143,7 @@ async function reset(): Promise<void> {
     `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM wht_policy_history WHERE organization_id = '${ORG_ID}'`,
-    `UPDATE payee_profiles SET wht_40_2_pct = NULL WHERE organization_id = '${ORG_ID}'`,
+    `UPDATE payee_profiles SET wht_40_2_pct = NULL, wht_condition = 'withhold', is_verified = true WHERE organization_id = '${ORG_ID}'`,
   ]) {
     await tx.$executeRawUnsafe(statement)
   }
@@ -227,6 +227,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
       issueZeroRate402Certificate: true,
       inhouseIncomeCategory: 'sec_40_2',
       outsourceIncomeCategory: 'sec_40_8',
+      allowGrossUpConditions: false,
     })
     const hotel = batch.items.find((item) => item.grossSatang === 60_000)!
     expect(hotel.whtBaseIncluded).toBe(false)
@@ -254,6 +255,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: false,
         filingMethod: 'online',
       },
       NOW,
@@ -291,6 +293,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: false,
         filingMethod: 'online',
       },
       NOW,
@@ -327,6 +330,7 @@ suite('ประเภทเงินได้ 40(2) (U5/U7)', () => {
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: false,
         filingMethod: 'online',
       },
       NOW,
@@ -424,6 +428,7 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: false,
         filingMethod: 'online',
       },
       NOW,
@@ -451,6 +456,7 @@ suite('40(2) อัตรา 0% ออก 50 ทวิ ยอดภาษี 0 (
         issueZeroRate402Certificate,
         inhouseIncomeCategory: 'sec_40_2',
         outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: false,
         filingMethod: 'online',
       },
       NOW,
@@ -569,6 +575,7 @@ suite('U33 — ประเภทเงินได้ต่อประเภ�
         issueZeroRate402Certificate: true,
         inhouseIncomeCategory,
         outsourceIncomeCategory,
+        allowGrossUpConditions: false,
         filingMethod: 'online',
       },
       NOW,
@@ -658,5 +665,139 @@ suite('U33 — ประเภทเงินได้ต่อประเภ�
     expect(audit.reason).toBe('สำนักงานบัญชีเปลี่ยนคำแนะนำ')
     expect(audit.beforeData).toMatchObject({ inhouse_income_category: 'sec_40_2', outsource_income_category: 'sec_40_8' })
     expect(audit.afterData).toMatchObject({ inhouse_income_category: 'sec_40_1', outsource_income_category: 'sec_40_2' })
+  })
+})
+
+suite('U105 — เงื่อนไขการหัก (2)/(3) เป็นค่าตั้ง (มติ PO 06/10/2569)', () => {
+  /** ค่าตั้งชุดใหม่ที่มีผลวันสร้างรอบ (ค่าอื่นเท่าค่าเริ่มต้น) */
+  async function allowGrossUp(allow: boolean, reason: string) {
+    return policy.createWhtPolicy(
+      policyCtx(reason),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+        certificateMode: 'per_payee_batch',
+        incomeTypeMode: 'all_40_8',
+        issueZeroRate402Certificate: true,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: allow,
+        filingMethod: 'online',
+      },
+      NOW,
+    )
+  }
+
+  async function setCondition(payeeId: string, condition: 'withhold' | 'pay_always' | 'pay_once'): Promise<void> {
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_condition = '${condition}' WHERE id = '${payeeId}'`)
+  }
+
+  it('ค่าตั้งปิด (ค่าเริ่มต้น) + ผู้รับตั้ง (2) ⇒ บล็อกสร้างรอบ WHT_CONDITION_NOT_ALLOWED พร้อมรายชื่อ · ไม่มีรอบเกิด', async () => {
+    await setCondition(PAYEE_IN_ID, 'pay_always')
+    await seedExpense(PAYEE_IN_ID, 'commission', 1_000_000)
+    const error = await payout
+      .createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+      .catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('WHT_CONDITION_NOT_ALLOWED')
+    expect((error as { context?: { payees?: string[] } }).context?.payees).toEqual(['อินหนึ่ง ในบ้าน'])
+    expect(await db().payoutBatch.count({ where: { organizationId: ORG_ID } })).toBe(0)
+  })
+
+  it('ค่าตั้งปิด + ผู้รับ (2) ที่มีแต่รายการนอกฐาน ⇒ ไม่บล็อก (ไม่มีภาษีให้คิด)', async () => {
+    await setCondition(PAYEE_IN_ID, 'pay_always')
+    await seedExpense(PAYEE_IN_ID, 'hotel', 60_000)
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.whtSatang).toBe(0)
+    expect(batch.netSatang).toBe(60_000)
+  })
+
+  it('ค่าตั้งเปิด + (2) ออกให้ตลอดไป: ฿10,000 อัตรา 3% ⇒ ภาษี 309.28 · ใบ 50 ทวิ เงินได้ 10,309.28 · ผู้รับได้ 10,000 เต็ม', async () => {
+    await allowGrossUp(true, 'เปิดเงื่อนไขออกภาษีให้ตามสัญญาจ้าง')
+    await setCondition(PAYEE_IN_ID, 'pay_always')
+    await seedExpense(PAYEE_IN_ID, 'commission', 1_000_000)
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+
+    expect(batch.whtPolicy?.allowGrossUpConditions).toBe(true)
+    expect(batch.items[0]).toMatchObject({
+      grossSatang: 1_030_928,
+      whtSatang: 30_928,
+      netSatang: 1_000_000,
+      whtCondition: 'pay_always',
+    })
+    expect(batch).toMatchObject({ grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000, transferSatang: 1_000_000 })
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'payout_batches', targetId: batch.id, action: 'create' },
+    })
+    expect(audit.afterData).toMatchObject({ wht_allow_gross_up_conditions: true })
+
+    // ปิดค่าตั้งภายหลัง ⇒ รอบเดิมคง snapshot และออกใบ 50 ทวิ ได้ตามยอดเดิม
+    await allowGrossUp(false, 'ปิดเงื่อนไขชั่วคราวรอสำนักงานบัญชี')
+    await completeAndSync(batch.id)
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({ grossSatang: 1_030_928, whtSatang: 30_928 })
+    const certificate = await db().whtCertificate.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(certificate.whtCondition).toBe('pay_always')
+    const record = await db().expenseRecord.findFirstOrThrow({ where: { organizationId: ORG_ID } })
+    expect(record).toMatchObject({ grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000 })
+  })
+
+  it('ค่าตั้งเปิด + (3) ออกให้ครั้งเดียว: ภาษี 300.00 · เงินได้บนใบ 10,300.00 · (1) ผู้รับอีกคนหัก 300 ได้ 9,700', async () => {
+    await allowGrossUp(true, 'เปิดเงื่อนไขออกภาษีให้ครั้งเดียว')
+    await setCondition(PAYEE_OUT_ID, 'pay_once')
+    await seedExpense(PAYEE_OUT_ID, 'commission', 1_000_000)
+    const once = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    expect(once.batch.items[0]).toMatchObject({
+      grossSatang: 1_030_000,
+      whtSatang: 30_000,
+      netSatang: 1_000_000,
+      whtCondition: 'pay_once',
+    })
+
+    await seedExpense(PAYEE_IN_ID, 'commission', 1_000_000)
+    const normal = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(normal.batch.items[0]).toMatchObject({
+      grossSatang: 1_000_000,
+      whtSatang: 30_000,
+      netSatang: 970_000,
+      whtCondition: 'withhold',
+    })
+  })
+
+  it('ฟอร์มผู้รับ: ค่าตั้งปิด ⇒ เปลี่ยนเป็น (2) ไม่ได้ · ค่าเดิม (2) แก้ฟิลด์อื่นได้ · เปิดแล้วเปลี่ยนได้', async () => {
+    const payees = await import('@/lib/payees/queries')
+    const { payeeUpdateSchema } = await import('@/lib/payees/schemas')
+    const payeeAdmin: SessionUser = {
+      ...finance,
+      capabilities: { ...finance.capabilities, manage_payee_profile: 'manage' },
+    }
+    const payeeCtx = { actor: payeeAdmin, meta, reason: 'ปรับเงื่อนไขการหักตามสัญญา' }
+    const input = (condition: 'withhold' | 'pay_always') =>
+      payeeUpdateSchema.parse({
+        payeeType: 'individual',
+        taxProfileId: TAX_PROFILE_ID,
+        nationalId: '1100000005701',
+        bankName: 'ธนาคารกสิกรไทย',
+        accountName: 'อินหนึ่ง ในบ้าน',
+        accountNumber: '1234567890',
+        whtCondition: condition,
+        reason: 'ปรับเงื่อนไขการหักตามสัญญา',
+      })
+
+    expect(await payees.getPayeeWhtConditionPolicy(payeeAdmin, NOW)).toEqual({ allowGrossUpConditions: false })
+    const blocked = await payees
+      .updatePayee(payeeCtx, PAYEE_IN_ID, input('pay_always'))
+      .catch((caught: unknown) => caught)
+    expect(codeOf(blocked)).toBe('WHT_CONDITION_NOT_ALLOWED')
+
+    // ตั้งไว้ก่อนปิดค่าตั้ง ⇒ คงค่าเดิมได้ (แก้ฟิลด์อื่นตามปกติ)
+    await setCondition(PAYEE_IN_ID, 'pay_always')
+    const kept = await payees.updatePayee(payeeCtx, PAYEE_IN_ID, input('pay_always'))
+    expect(kept.payee.whtCondition).toBe('pay_always')
+
+    await setCondition(PAYEE_IN_ID, 'withhold')
+    await allowGrossUp(true, 'เปิดเงื่อนไขออกภาษีให้')
+    const changed = await payees.updatePayee(payeeCtx, PAYEE_IN_ID, input('pay_always'))
+    expect(changed.payee.whtCondition).toBe('pay_always')
   })
 })

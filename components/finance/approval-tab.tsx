@@ -68,6 +68,8 @@ export function ApprovalTab() {
   const canCreateClaim = CREATE_CLAIM_CAPABILITIES.some((capability) => can('manage', capability))
   const canRequestAdvance = can('manage', REQUEST_ADVANCE)
   const canApproveAdvance = can('manage', APPROVE_ADVANCE)
+  // มติ PO U107 — ผู้เห็นรายการเบิกทั้งองค์กร (ขั้นการเงิน/บริหาร) ยกเลิกใบรับรองแทนใบเสร็จได้ (ผู้จัดการทีมดูอย่างเดียว)
+  const canManageSubstituteReceipts = can('view', 'approve_expense_finance') || can('view', 'approve_expense_executive')
 
   const claims = useApprovalActions('/api/claims')
   const [claimFilter, setClaimFilter] = useState<ClaimStatusFilter>('all')
@@ -161,7 +163,15 @@ export function ApprovalTab() {
                         <RefText>{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
                         <p className="text-[10px] text-slate-400">{claimSourceLabel(item.calculationSource)}</p>
                         {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
-                        {item.substituteReceipt !== null && <SubstituteReceiptPanel receipt={item.substituteReceipt} compact />}
+                        {/* มติ PO U107 — การเงิน/ผู้บริหารยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติจ่าย (server ตรวจซ้ำ) */}
+                        {item.substituteReceipt !== null && (
+                          <SubstituteReceiptPanel
+                            receipt={item.substituteReceipt}
+                            compact
+                            canCancel={canManageSubstituteReceipts && item.status !== 'approved'}
+                            onChanged={() => void claims.reload()}
+                          />
+                        )}
                       </Td>
                       <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
                       <Td>

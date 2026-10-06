@@ -1,5 +1,6 @@
 import type { ReadinessCheck } from '@/lib/accounting/period'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
+import { isPayerBorneWhtCondition } from '@/lib/finance/wht-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
@@ -337,6 +338,8 @@ export const PAYMENT_HEADERS = [
   // มติ PO 05/10/2569 (UAT U30) — ต่อท้ายไฟล์: ยอดหักคืนเงินทดรอง (หลังภาษี) + ยอดโอนจริง = amount − หัก
   'advance_offset_baht',
   'transfer_baht',
+  // มติ PO 06/10/2569 (U105) — ต่อท้ายสุด: ภาษีที่บริษัทออกให้ผู้รับ (เงื่อนไข (2)/(3) — ค่าใช้จ่ายบริษัท ไม่ได้หักจากผู้รับ)
+  'wht_paid_by_payer_baht',
 ] as const
 
 /** ช่องทางจ่ายของระบบมีทางเดียว — โอนผ่านไฟล์ธนาคาร (`17` §6.3) */
@@ -350,6 +353,8 @@ export interface PaymentExportRow {
   voucherRef: string
   /** มติ U30 — ยอดหักคืนเงินทดรองของผู้รับในรอบ (0 = ไม่มี) */
   advanceOffsetSatang: number
+  /** มติ U105 — ภาษีที่บริษัทออกให้ผู้รับในรอบ (`payoutItemTaxSplit()` · 0 = หัก ณ ที่จ่ายตามปกติ) */
+  whtPaidByPayerSatang: number
 }
 
 export function paymentCsv(rows: readonly PaymentExportRow[]): string {
@@ -364,6 +369,7 @@ export function paymentCsv(rows: readonly PaymentExportRow[]): string {
       row.voucherRef,
       csvBaht(row.advanceOffsetSatang),
       csvBaht(payoutTransferSatang(row.netSatang, row.advanceOffsetSatang)),
+      csvBaht(row.whtPaidByPayerSatang),
     ]),
   )
 }
@@ -386,6 +392,9 @@ export const WHT_HEADERS = [
   'payee_address',
   'payee_branch',
   'wht_condition',
+  // มติ PO 06/10/2569 (U105) — ต่อท้ายสุด: ภาษีที่บริษัทออกให้ (เงื่อนไข (2)/(3) = wht_baht · (1) = 0)
+  // gross_baht ของ (2)/(3) = เงินได้ + ภาษีที่ออกให้ (ตรงกับใบ 50 ทวิ)
+  'wht_paid_by_payer_baht',
 ] as const
 
 export interface WhtExportRow {
@@ -453,6 +462,7 @@ export function whtCsv(rows: readonly WhtExportRow[]): string {
       row.payeeAddress ?? CSV_EMPTY,
       row.payeeBranchCode ?? CSV_EMPTY,
       row.whtCondition,
+      csvBaht(isPayerBorneWhtCondition(row.whtCondition) ? row.whtSatang : 0),
     ]),
   )
 }
