@@ -1073,7 +1073,10 @@ export async function resubmitFieldExpense(
         ...(isHotel && input.receiptInCompanyName !== undefined
           ? { receiptInCompanyName: input.receiptInCompanyName }
           : {}),
-        ...(newReceiptPath !== null ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash } : {}),
+        // มติ PO U143 — ใบเสร็จใหม่ผ่านการตรวจแล้ว ⇒ ล้างเครื่องหมาย "ไม่ผ่านการตรวจ" ของข้อมูลเก่า
+        ...(newReceiptPath !== null
+          ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash, receiptFileUnverified: false }
+          : {}),
         // ข้อความชี้แจงเก็บแยก — ห้ามเขียนทับ `revision_note` (หมายเหตุตอนเบิก · UAT BUG-098 · `02` v4.13)
         ...(input.note !== undefined ? { resubmitNote: input.note } : {}),
         // ใบเก่าที่ยังไม่มี snapshot เพดาน → เก็บชุดที่ใช้ตรวจครั้งนี้ (ครั้งถัดไปใช้ชุดเดิม)

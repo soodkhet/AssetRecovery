@@ -6,6 +6,10 @@ import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { parseSimulatedAsOf } from '@/lib/jobs/job-types'
 import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
 
+// มติ PO U143/U150 — ไฟล์ที่ผูกเข้าข้อมูลผ่านตัวตรวจของ server ⇒ ใช้ Storage ตัวแทน (ห้ามยิง Supabase จริง — Rule 07)
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
 /**
  * สวิตช์จำลอง "ขั้นส่งแจ้งเตือนล้ม" (DEC-015 · มติ PO U120) — ปิดไว้ = ส่งจริงตามปกติ
  * (เทสต์อื่นในไฟล์ไม่ได้รับผลกระทบ)

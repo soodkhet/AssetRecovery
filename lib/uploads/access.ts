@@ -20,6 +20,10 @@ import { MANAGE_ORGANIZATION_PROFILE, VIEW_ORGANIZATION_PROFILE } from '@/lib/or
 import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
 import { UploadError } from '@/lib/uploads/errors'
 import { assertCompanyDocumentAccess, MANAGE_COMPANIES, VIEW_COMPANY_DOCUMENTS } from '@/lib/finance-companies/document-queries'
+import { isReceiptVisibleViaExpense } from '@/lib/compensation/approval-queries'
+import { MANAGE_PAYEE_PROFILE_CAPABILITY } from '@/lib/payees/payee'
+import { PayeeError } from '@/lib/payees/errors'
+import { prisma } from '@/lib/prisma'
 import type { UploadRule } from '@/lib/uploads/inspect'
 import {
   advanceReturnFileRule,
@@ -35,6 +39,7 @@ import {
   organizationSignatureRule,
   substituteReceiptFileRule,
   companyDocumentRule,
+  payeeIdDocumentRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, type StoragePathOwner, type UploadTarget } from '@/lib/uploads/targets'
 import {
@@ -68,6 +73,17 @@ import {
  * ⚠️ ฝั่ง server เท่านั้น
  */
 
+/**
+ * ผู้อัปโหลดใบเสร็จได้ (`expenses/<ผู้อัปโหลด>/receipts/…`) — พนักงานภาคสนาม (ค่าที่พัก) · ผู้สร้างรายการเบิกด้วยมือ
+ * (การเงิน · มติ PO U143) · ผู้เคลียร์เงินทดรอง (เจ้าของคำขอ / การเงิน) ⇒ capability เดียวกับ endpoint ที่ผูกไฟล์
+ */
+export const EXPENSE_RECEIPT_UPLOAD_CAPABILITIES = [
+  FIELD_CAPABILITY,
+  'approve_expense_finance',
+  REQUEST_ADVANCE,
+  APPROVE_ADVANCE,
+] as const
+
 /** capability ที่เข้าใกล้การอัปโหลดได้อย่างน้อยหนึ่งทาง — ยามชั้นแรกของ route (ตรวจละเอียดต่อ target ด้านล่าง) */
 export const STORAGE_UPLOAD_CAPABILITIES = [
   CASE_WRITE_CAPABILITY,
@@ -80,11 +96,16 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   MANAGE_BANK_RECONCILIATION,
   MANAGE_ORGANIZATION_PROFILE,
   MANAGE_COMPANIES,
+  // มติ PO U143 — ผู้สร้างรายการเบิกด้วยมือ / ผู้เคลียร์เงินทดรองแนบใบเสร็จเองได้
+  'approve_expense_finance',
+  REQUEST_ADVANCE,
+  // มติ PO U150 — เอกสารยืนยันตัวตนผู้รับเงิน
+  MANAGE_PAYEE_PROFILE_CAPABILITY,
 ] as const
 
 /**
- * ผู้ตรวจใบเสร็จเบิกแยกของคนอื่นได้ (การเงิน/ผู้บริหาร/บัญชีค่าใช้จ่าย) — ผู้จัดการทีมยังไม่เปิด
- * เพราะยังไม่มีหน้าจอใดของผู้จัดการที่เปิดใบเสร็จ (เปิดเมื่อไรต้องเพิ่มการตรวจทีมด้วย)
+ * ผู้ตรวจใบเสร็จเบิกแยกของคนอื่นได้ทั้งองค์กร (การเงิน/ผู้บริหาร/บัญชีค่าใช้จ่าย)
+ * ผู้จัดการทีม (ขั้น 1) เปิดได้เฉพาะใบเสร็จของรายการในทีมที่ตนดูแล (มติ PO U152 — ตรวจที่ `assertCanView`)
  */
 export const RECEIPT_REVIEW_CAPABILITIES = [
   'approve_expense_finance',
@@ -92,6 +113,9 @@ export const RECEIPT_REVIEW_CAPABILITIES = [
   MANAGE_SALES_EXPENSES,
   MAP_COST_CENTER,
 ] as const
+
+/** ผู้อนุมัติขั้นผู้จัดการ (`16` §10 — scope ทีมที่ดูแล) */
+const APPROVAL_MANAGER_CAPABILITY = 'approve_expense_manager'
 
 /** capability ที่เปิดดูไฟล์ได้อย่างน้อยหนึ่งชนิด — ยามชั้นแรกของ route */
 export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
@@ -103,6 +127,10 @@ export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
     ...SALES_READ_CAPABILITIES,
     APPROVE_ADVANCE,
     REQUEST_ADVANCE,
+    // มติ PO U152 — ผู้อนุมัติขั้นผู้จัดการเปิดใบเสร็จจากคิวอนุมัติ (scope ทีม)
+    APPROVAL_MANAGER_CAPABILITY,
+    // มติ PO U150 — เอกสารยืนยันตัวตนผู้รับเงิน (การเงินทั้งองค์กร · ผู้รับเห็นของตัวเอง)
+    MANAGE_PAYEE_PROFILE_CAPABILITY,
     MANAGE_CUSTOMER_WHT,
     MANAGE_BANK_RECONCILIATION,
     VIEW_ORGANIZATION_PROFILE,
@@ -146,6 +174,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return substituteReceiptFileRule(target.substituteReceiptId)
     case 'company_document':
       return companyDocumentRule(target.companyId, target.documentType)
+    case 'payee_id_document':
+      return payeeIdDocumentRule(user.organizationId)
   }
 }
 
@@ -163,7 +193,8 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       return user
     }
     case 'expense_receipt':
-      return requirePermission('manage', FIELD_CAPABILITY)
+      // path ผูกกับผู้อัปโหลดเสมอ — ผู้มีสิทธิ์สร้าง/เคลียร์รายการที่แนบใบเสร็จได้ (มติ PO U143)
+      return requireAnyPermission('manage', EXPENSE_RECEIPT_UPLOAD_CAPABILITIES)
     case 'intake_photo': {
       const user = await requirePermission('manage', WAREHOUSE_INTAKE_CAPABILITY)
       await getAsset(user, target.assetId)
@@ -224,6 +255,9 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       await assertCompanyDocumentAccess(user, target.companyId)
       return user
     }
+    case 'payee_id_document':
+      // แนบเอกสารยืนยันตัวตน = แก้ข้อมูลผู้รับเงิน ⇒ สิทธิ์เดียวกับ endpoint ผู้รับเงิน/ฟอร์มผู้ใช้ (มติ PO U150)
+      return requirePermission('manage', MANAGE_PAYEE_PROFILE_CAPABILITY)
   }
 }
 
@@ -242,7 +276,7 @@ export async function authorizeUpload(input: {
   if (input.sizeBytes > rule.maxBytes) {
     throw new UploadError('UPLOAD_FILE_TOO_LARGE', { detail: `${input.sizeBytes} > ${rule.maxBytes}` })
   }
-  const path = uploadTargetPath(input.target, user.id, input.fileName, input.uniqueKey)
+  const path = uploadTargetPath(input.target, user.id, input.fileName, input.uniqueKey, user.organizationId)
   // ยามซ้ำ: path ต้องอยู่ใต้ prefix ที่ตัวตรวจตอนผูกไฟล์ยอมรับ (กันตัวสร้าง path กับกติกาหลุดกัน)
   if (!path.startsWith(rule.prefix) || parseStoragePath(path) === null) {
     throw new UploadError('UPLOAD_PATH_OUT_OF_SCOPE', { detail: path })
@@ -261,7 +295,7 @@ async function passes(load: () => Promise<unknown>): Promise<ModuleError | null>
   }
 }
 
-async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promise<void> {
+async function assertCanView(user: SessionUser, owner: StoragePathOwner, path: string): Promise<void> {
   switch (owner.kind) {
     case 'case': {
       // เคสเปิดดูได้ 2 ทาง: หน้ารายละเอียดเคส (ธุรการ/อนุมัติ/ผู้จัดการ/บริหาร/บริษัท) หรือหน้าเคสภาคสนาม
@@ -294,8 +328,12 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
     }
     case 'expense_receipt': {
       if (hasAny(user, 'view', RECEIPT_REVIEW_CAPABILITIES)) return
-      if (!hasAny(user, 'view', [FIELD_CAPABILITY])) throw denied(user, `view:receipt owner=${owner.userId}`)
-      if (owner.userId === user.id) return
+      const canOwn = hasAny(user, 'view', EXPENSE_RECEIPT_UPLOAD_CAPABILITIES)
+      const asManager = hasAny(user, 'view', [APPROVAL_MANAGER_CAPABILITY])
+      if (!canOwn && !asManager) throw denied(user, `view:receipt owner=${owner.userId}`)
+      if (canOwn && owner.userId === user.id) return
+      // มติ PO U152/U153 — ใบเสร็จที่ผู้อื่นแนบให้รายการของผู้เรียก (การเงินบันทึกแทน) หรือรายการในทีมที่ผู้จัดการดูแล
+      if (await isReceiptVisibleViaExpense(user, path, { asManager })) return
       // ใบเสร็จของพนักงานคนอื่น = นอก scope ⇒ ตอบเหมือน "ไม่มีรายการเบิกนี้" (ไม่ leak — UAT BUG-145)
       throw new ExpenseStateError('EXPENSE_NOT_FOUND', { detail: `view:receipt owner=${owner.userId} user=${user.id}` })
     }
@@ -358,7 +396,35 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
       await assertCompanyDocumentAccess(user, owner.companyId)
       return
     }
+    case 'payee_id_document': {
+      // มติ PO U150 — การเงิน (`manage`) เห็นทั้งองค์กร · ผู้ถือแค่ `view` (ผู้รับเงิน) เห็นเฉพาะเอกสารบนผู้รับของตัวเอง
+      if (!hasAny(user, 'view', [MANAGE_PAYEE_PROFILE_CAPABILITY])) {
+        throw denied(user, `view:payee-id-document org=${owner.organizationId}`)
+      }
+      if (owner.organizationId !== user.organizationId) {
+        throw new PayeeError('PAYEE_NOT_FOUND', { detail: `view:payee-id-document org=${owner.organizationId}` })
+      }
+      if (hasAny(user, 'manage', [MANAGE_PAYEE_PROFILE_CAPABILITY])) return
+      const own = await prisma.payeeProfile.findFirst({
+        where: { organizationId: user.organizationId, userId: user.id, idDocumentUrl: path, deletedAt: null },
+        select: { id: true },
+      })
+      if (own === null) throw new PayeeError('PAYEE_NOT_FOUND', { detail: `view:payee-id-document user=${user.id}` })
+      return
+    }
   }
+}
+
+/**
+ * ผู้รับเงินที่อ้างเอกสารยืนยันตัวตน path นี้ — ใช้ระบุเป้าหมายของ audit การเปิดไฟล์ (มติ PO U150 · U90)
+ * ยังไม่มีผู้รับอ้าง (เพิ่งอัปโหลดในฟอร์มที่ยังไม่บันทึก) = `null`
+ */
+export async function payeeIdOfIdDocument(organizationId: string, path: string): Promise<string | null> {
+  const row = await prisma.payeeProfile.findFirst({
+    where: { organizationId, idDocumentUrl: path, deletedAt: null },
+    select: { id: true },
+  })
+  return row?.id ?? null
 }
 
 /**
@@ -368,5 +434,5 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
 export async function authorizeDownload(user: SessionUser, path: string): Promise<void> {
   const owner = parseStoragePath(path)
   if (owner === null) throw new UploadError('UPLOAD_PATH_OUT_OF_SCOPE', { detail: path })
-  await assertCanView(user, owner)
+  await assertCanView(user, owner, path)
 }

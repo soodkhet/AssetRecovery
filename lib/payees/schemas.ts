@@ -59,7 +59,8 @@ export const payeeFieldsSchema = z.object({
   bankName: optionalText(120, 'ชื่อธนาคาร'),
   accountName: optionalText(120, 'ชื่อบัญชี'),
   accountNumber: optionalText(30, 'เลขบัญชี'),
-  idDocumentUrl: optionalText(500, 'ลิงก์เอกสารยืนยันตัวตน'),
+  /** มติ PO U150 — path ไฟล์จากกลไกอัปโหลดของ server (target `payee_id_document`) · server ตรวจไฟล์ + SHA-256 ตอนบันทึก */
+  idDocumentUrl: optionalText(1024, 'path ของไฟล์เอกสารยืนยันตัวตน'),
   /**
    * อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7) — 0.00–100.00 · ว่าง = ยังไม่กรอก
    * ไม่ส่งมา (`undefined`) = **คงค่าเดิม** ตอนแก้ไข / ว่างตอนสร้าง — กันผู้เรียกที่ไม่รู้จักฟิลด์ล้างอัตราทิ้ง

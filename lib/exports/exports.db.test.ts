@@ -191,9 +191,9 @@ async function seedCompletedBatch(items: readonly SeedItem[]): Promise<string> {
   for (const item of items) {
     const expenseRows = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO expenses (organization_id, case_id, payee_id, expense_type, gross_satang, expense_date, status,
-                            receipt_file_url, created_by)
+                            receipt_file_url, receipt_file_hash, created_by)
       VALUES ('${ORG_ID}', '${CASE_ID}', '${item.payeeId}', 'commission', ${item.gross}, '2026-06-20', 'approved',
-              'field/receipts/ok.jpg', '${USER_ID}')
+              'field/receipts/ok.jpg', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '${USER_ID}')
       RETURNING id
     `)
     await db().$executeRawUnsafe(`
@@ -885,9 +885,9 @@ suite('มติ PO U68 — 13_Advance_Returns.csv', () => {
     const draftId = draft[0]?.id ?? ''
     const draftExpense = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO expenses (organization_id, case_id, payee_id, expense_type, gross_satang, expense_date, status,
-                            receipt_file_url, created_by)
+                            receipt_file_url, receipt_file_hash, created_by)
       VALUES ('${ORG_ID}', '${CASE_ID}', '${PAYEE_ID}', 'commission', 10000, '2026-06-20', 'approved',
-              'field/receipts/ok.jpg', '${USER_ID}') RETURNING id
+              'field/receipts/ok.jpg', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '${USER_ID}') RETURNING id
     `)
     const draftItem = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO payout_batch_items (organization_id, payout_batch_id, expense_id, payee_id,

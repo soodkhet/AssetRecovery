@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { CalcDetailModal } from '@/components/finance/calc-detail-modal'
+import { ExpenseDetailModal } from '@/components/finance/expense-detail-modal'
 import { useApprovalActions } from '@/components/finance/use-approval-actions'
 import { PaymentInfoIncompleteBadge } from '@/components/payees/payment-info-incomplete-badge'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
@@ -45,6 +46,8 @@ export function CompensationTab() {
   const { items, loading, error, busyId, canApprove, approve, reject } = useApprovalActions('/api/compensation')
 
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
+  // มติ PO U152 — กดแถวเห็นหมายเหตุ/คำชี้แจง/ใบเสร็จ/ผู้พักร่วมก่อนอนุมัติ
+  const [detailTarget, setDetailTarget] = useState<CompensationApprovalDto | null>(null)
   const [rejectTarget, setRejectTarget] = useState<CompensationApprovalDto | null>(null)
   const [rejectReason, setRejectReason] = useState('')
 
@@ -88,7 +91,12 @@ export function CompensationTab() {
                 const actions = expenseRowActions({ status: item.status, canApprove: canApprove && item.viewerCanAct })
                 const highlight = expenseRowHighlight(item.status)
                 return (
-                  <Tr key={item.id} className={highlight ?? undefined}>
+                  <Tr
+                    key={item.id}
+                    interactive
+                    className={highlight ?? undefined}
+                    onClick={() => setDetailTarget(item)}
+                  >
                     <Td>
                       <p className="font-mono text-xs font-semibold text-slate-700">{item.caseRef ?? '— ไม่ผูกเคส'}</p>
                       <p className="text-xs text-slate-500">{item.payeeName}</p>
@@ -103,7 +111,11 @@ export function CompensationTab() {
                     <Td>
                       <RefText>{item.basisText}</RefText>
                       {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
-                      {item.substituteReceipt !== null && <SubstituteReceiptPanel receipt={item.substituteReceipt} compact />}
+                      {item.substituteReceipt !== null && (
+                        <div onClick={(event) => event.stopPropagation()}>
+                          <SubstituteReceiptPanel receipt={item.substituteReceipt} compact />
+                        </div>
+                      )}
                     </Td>
                     <Td numeric>
                       <p className="font-semibold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</p>
@@ -125,7 +137,10 @@ export function CompensationTab() {
                       </div>
                     </Td>
                     <Td className="text-right whitespace-nowrap">
-                      <div className="inline-flex flex-col items-end gap-1">
+                      <div className="inline-flex flex-col items-end gap-1" onClick={(event) => event.stopPropagation()}>
+                        <Button size="sm" variant="ghost" onClick={() => setDetailTarget(item)}>
+                          รายละเอียด
+                        </Button>
                         {actions.includes('approve') && (
                           <Button
                             size="sm"
@@ -163,6 +178,7 @@ export function CompensationTab() {
       </div>
 
       <CalcDetailModal item={formulaTarget} onClose={() => setFormulaTarget(null)} />
+      <ExpenseDetailModal item={detailTarget} onClose={() => setDetailTarget(null)} />
 
       <ReasonConfirmModal
         open={rejectTarget !== null}

@@ -131,9 +131,9 @@ async function seedBatch(items: readonly SeedItem[]): Promise<{ batchId: string;
   for (const item of items) {
     const expenseRows = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status,
-                            receipt_file_url, created_by)
+                            receipt_file_url, receipt_file_hash, created_by)
       VALUES ('${ORG_ID}', '${item.payeeId}', 'commission', ${item.gross}, '2026-06-20', 'approved',
-              'field/receipts/ok.jpg', '${USER_ID}')
+              'field/receipts/ok.jpg', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '${USER_ID}')
       RETURNING id
     `)
     const profile = item.taxProfileId === undefined || item.taxProfileId === null ? 'NULL' : `'${item.taxProfileId}'`

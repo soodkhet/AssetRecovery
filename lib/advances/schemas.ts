@@ -65,8 +65,12 @@ export const advanceSettleSchema = z.object({
   usedSatang: satangSchema('ยอดที่ใช้จริง'),
   /** มติ U30 — มียอดคืนเท่านั้นที่มีผล · เว้นว่าง = หักกลบในรอบจ่ายถัดไป (ค่าเริ่มต้น) */
   returnMethod: advanceReturnMethodSchema.default('payout_offset'),
-  /** `15` §13 — ไฟล์ใบเสร็จอ้างอิงถูกบันทึกลง audit (ตาราง `advances` ไม่มีคอลัมน์เก็บ) */
-  receiptFileUrl: optionalText(500, 'ลิงก์ใบเสร็จ'),
+  /**
+   * มติ PO U143 — **path ใบเสร็จจากกลไกอัปโหลดของ server** (target `expense_receipt`) ไม่ใช่ข้อความพิมพ์เอง
+   * server ตรวจไฟล์ + SHA-256 แล้วบันทึกลง audit (ตาราง `advances` ไม่มีคอลัมน์เก็บ — `15` §13) และส่งต่อเป็น
+   * ใบเสร็จของคำขอเบิกส่วนเกิน (ถ้ามี)
+   */
+  receiptFileUrl: optionalText(1024, 'path ของไฟล์ใบเสร็จ'),
   note: optionalText(500, 'หมายเหตุ'),
   /**
    * มติ PO U103 — ติ๊ก "ไม่มีใบเสร็จ" → รายจ่ายที่ไม่มีใบเสร็จ ระบบออกใบรับรองแทนใบเสร็จ (CRT) ผูกกับเงินทดรองนี้
@@ -74,6 +78,14 @@ export const advanceSettleSchema = z.object({
    */
   substituteReceipt: substituteReceiptDraftSchema.nullable().default(null),
 }).superRefine((value, ctx) => {
+  // มติ PO U143 — มีรายจ่าย ⇒ ต้องแนบใบเสร็จ หรือใช้ใบรับรองแทนใบเสร็จ (กติกาเดิม U103) อย่างน้อยหนึ่งอย่าง
+  if (value.usedSatang > 0 && value.receiptFileUrl === null && value.substituteReceipt === null) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['receiptFileUrl'],
+      message: 'ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ',
+    })
+  }
   if (value.substituteReceipt === null) return
   const total = value.substituteReceipt.lines.reduce((sum, line) => sum + line.amountSatang, 0)
   if (total > value.usedSatang) {

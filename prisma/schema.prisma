@@ -2470,6 +2470,11 @@ model PayeeProfile {
 
   /// บังคับเมื่อ `finance_policy_settings.require_payee_id_document = true` (`13` §6.2)
   idDocumentUrl String? @map("id_document_url")
+  /// SHA-256 ของเอกสารยืนยันตัวตนที่ server ดาวน์โหลดมาตรวจเอง (มติ PO U150)
+  idDocumentHash String? @map("id_document_hash") @db.VarChar(64)
+  /// เอกสารเดิมที่เป็น URL พิมพ์เอง (ก่อนมติ PO U150) — ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร
+  /// CHECK (raw SQL): มี path ⇒ ต้องมี hash หรือ flag นี้ = true
+  idDocumentUnverified Boolean @default(false) @map("id_document_unverified")
 
   isVerified Boolean   @default(false) @map("is_verified")
   verifiedBy String?   @map("verified_by") @db.Uuid
@@ -2532,6 +2537,9 @@ model Expense {
   receiptFileUrl        String? @map("receipt_file_url")
   /// SHA-256 ของใบเสร็จที่ server ดาวน์โหลดมาตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — UAT BUG-072 · `02` v4.10)
   receiptFileHash       String? @map("receipt_file_hash") @db.VarChar(64)
+  /// ใบเสร็จเดิมที่เป็น path พิมพ์เอง (ก่อนมติ PO U143) — ไม่ผ่านการตรวจ ⇒ ระบบถือว่าไม่มีไฟล์ (Export/ความครบ)
+  /// CHECK (raw SQL): มี path ⇒ ต้องมี hash หรือ flag นี้ = true · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ false
+  receiptFileUnverified Boolean @default(false) @map("receipt_file_unverified")
   /// รายการที่มาแทนหลัง `resubmit_close_case` (`41` §10.1) — ตัวเก่าถูก mark เป็น `superseded`
   supersededByExpenseId String? @map("superseded_by_expense_id") @db.Uuid
   /// แถวรายวัน (ค่าน้ำมันเหมา/เบี้ยเลี้ยง) ที่ job `daily_field_allowance` สร้าง — มติ PO 03/10/2569 UAT Q21 · `02` v4.12

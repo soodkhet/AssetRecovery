@@ -122,9 +122,9 @@ async function seedBatch(
 
   const expenseRows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status,
-                          receipt_file_url, created_by)
+                          receipt_file_url, receipt_file_hash, created_by)
     VALUES ('${ORG_ID}', '${PAYEE_ID}', '${options.expenseType ?? 'commission'}', ${gross}, '2026-06-20',
-            'approved', ${receipt === null ? 'NULL' : `'${receipt}'`}, '${USER_ID}')
+            'approved', ${receipt === null ? 'NULL' : `'${receipt}'`}, ${receipt === null ? 'NULL' : `'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'`}, '${USER_ID}')
     RETURNING id
   `)
   const expenseId = expenseRows[0]?.id ?? ''

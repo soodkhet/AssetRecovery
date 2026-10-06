@@ -47,6 +47,12 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     viewerCanAct: true,
     viewerCanRejectPermanently: false,
     rejectReason: null,
+    note: null,
+    resubmitNote: null,
+    receiptFilePath: null,
+    receiptUnverified: false,
+    sharedWithName: null,
+    recordedByName: null,
     createdAt: '2026-08-01T03:00:00.000Z',
     ...overrides,
   }

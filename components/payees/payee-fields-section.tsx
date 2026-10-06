@@ -1,6 +1,7 @@
 'use client'
 
 import { AddressFields } from '@/components/address/address-fields'
+import { PayeeIdDocumentField } from '@/components/payees/payee-id-document-field'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { Field, Input, Select } from '@/components/ui'
 import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
@@ -39,7 +40,10 @@ export interface PayeeFieldsForm {
   bankName: string
   accountName: string
   accountNumber: string
+  /** path ไฟล์เอกสารยืนยันตัวตน (มติ PO U150 — อัปโหลดผ่าน server) · ว่าง = ไม่มี */
   idDocumentUrl: string
+  /** เอกสารที่โหลดมาผ่านการตรวจของ server แล้ว — UI เท่านั้น (ไม่ส่งเข้า API) · URL เก่าที่พิมพ์เอง = `false` */
+  idDocumentVerified: boolean
   /** อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7) — ว่าง = ยังไม่กรอก */
   wht402Pct: string
   /** คำนำหน้า (บุคคลธรรมดา — มติ PO U94 ข้อ 1) */
@@ -61,6 +65,7 @@ export const EMPTY_PAYEE_FIELDS: PayeeFieldsForm = {
   accountName: '',
   accountNumber: '',
   idDocumentUrl: '',
+  idDocumentVerified: false,
   wht402Pct: '',
   nameTitleChoice: '',
   nameTitleOther: '',
@@ -79,6 +84,7 @@ export function payeeFieldsFromDto(payee: PayeeDto): PayeeFieldsForm {
     accountName: payee.accountName ?? '',
     accountNumber: payee.accountNumber ?? '',
     idDocumentUrl: payee.idDocumentUrl ?? '',
+    idDocumentVerified: payee.idDocumentVerified,
     wht402Pct: payee.wht402Pct === null ? '' : String(payee.wht402Pct),
     nameTitleChoice: nameTitleChoiceOf(payee.nameTitle),
     nameTitleOther: nameTitleChoiceOf(payee.nameTitle) === 'other' ? (payee.nameTitle ?? '') : '',
@@ -343,19 +349,13 @@ export function PayeeFieldsSection({
       </div>
     </div>
 
-    <Field
-      id="payee-id-document"
-      label="ลิงก์เอกสารยืนยันตัวตน"
-      hint="บังคับเมื่อองค์กรเปิด “ต้องแนบเอกสารยืนยันตัวตนก่อนยืนยัน Payee”"
+    <PayeeIdDocumentField
+      path={form.idDocumentUrl}
+      verified={form.idDocumentVerified}
       error={errors.idDocumentUrl}
-    >
-      <Input
-        id="payee-id-document"
-        value={form.idDocumentUrl}
-        onChange={(event) => onChange('idDocumentUrl', event.target.value)}
-        placeholder="https://…"
-      />
-    </Field>
+      onUploaded={(path) => onChange('idDocumentUrl', path)}
+      onClear={() => onChange('idDocumentUrl', '')}
+    />
     </>
   )
 }

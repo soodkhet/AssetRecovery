@@ -10,6 +10,9 @@ import { ADVANCE_RETURN_METHOD_LABEL, DEFAULT_ADVANCE_RETURN_METHOD } from '@/li
 import type { AdvanceReturnMethod } from '@/lib/generated/prisma/enums'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
+import { StagedFileInput } from '@/components/uploads/staged-file-input'
+import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
+import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
 import { toInputDate } from '@/lib/format/datetime'
 import {
   emptySubstituteLine,
@@ -26,6 +29,9 @@ import {
  *
  * มติ PO 03/10/2569 (UAT Q3, BUG-011): ใช้จริงเกินยอดอนุมัติ = **บันทึกได้** ยอดคืน 0 และระบบสร้าง
  * คำขอเบิกส่วนเกินให้อัตโนมัติ (เข้าคิวอนุมัติค่าตอบแทน) — ไม่เพิ่มยอดทดรองย้อนหลัง (`15` §9.1)
+ *
+ * มติ PO U143 — ใบเสร็จ **อัปโหลดไฟล์จริง** (อัปโหลดตอนกดบันทึก → server ตรวจไฟล์ + SHA-256) · มีรายจ่าย ⇒
+ * ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" (ใบรับรองแทนใบเสร็จ) อย่างน้อยหนึ่งอย่าง
  */
 export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   advance: AdvanceDto | null
@@ -34,7 +40,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
 }) {
   const { showToast } = useToast()
   const [used, setUsed] = useState('')
-  const [receiptUrl, setReceiptUrl] = useState('')
+  const [receipt, setReceipt] = useState<File | null>(null)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [returnMethod, setReturnMethod] = useState<AdvanceReturnMethod>(DEFAULT_ADVANCE_RETURN_METHOD)
   const [saving, setSaving] = useState(false)
@@ -71,13 +78,26 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       return
     }
     setSubstituteError(null)
+    if (usedSatang > 0 && receipt === null && substitute === null) {
+      setReceiptError('ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ')
+      return
+    }
+    setReceiptError(null)
     setSaving(true)
+    let receiptFileUrl: string | null = null
+    try {
+      receiptFileUrl = receipt === null ? null : await uploadExpenseReceipt(receipt)
+    } catch (uploadError) {
+      setSaving(false)
+      setReceiptError(uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
+      return
+    }
     const result = await callApi<AdvanceSettleResult>(
       `/api/advances/${advance.id}/settle`,
       jsonRequest('PATCH', {
         usedSatang,
         returnMethod,
-        receiptFileUrl: receiptUrl.trim(),
+        receiptFileUrl,
         note: note.trim(),
         substituteReceipt: substitute === null ? null : substitute.payload,
       }),
@@ -100,7 +120,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     })
     setUsed('')
     setReturnMethod(DEFAULT_ADVANCE_RETURN_METHOD)
-    setReceiptUrl('')
+    setReceipt(null)
     setNote('')
     setNoReceipt(false)
     if (settled?.substituteReceipt !== null && settled?.substituteReceipt !== undefined) {
@@ -191,11 +211,21 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           </Field>
         )}
 
-        <Field label="ลิงก์ใบเสร็จ / หลักฐาน (ถ้ามี)">
-          <Input
-            placeholder="path ของไฟล์ใน Storage เช่น expenses/<userId>/receipts/…"
-            value={receiptUrl}
-            onChange={(event) => setReceiptUrl(event.target.value)}
+        <Field
+          label="แนบใบเสร็จ"
+          error={receiptError}
+          hint={'รูปภาพหรือ PDF ไม่เกิน 10 MB — รายจ่ายที่ไม่มีใบเสร็จให้ติ๊ก "ไม่มีใบเสร็จ" ด้านล่าง'}
+        >
+          <StagedFileInput
+            fileName={receipt?.name ?? null}
+            accept={EXPENSE_RECEIPT_ACCEPT}
+            placeholder="แตะเพื่อเลือกไฟล์ใบเสร็จ"
+            disabled={saving}
+            onPick={(file) => {
+              setReceipt(file)
+              setReceiptError(null)
+            }}
+            onClear={() => setReceipt(null)}
           />
         </Field>
 

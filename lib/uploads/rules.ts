@@ -15,6 +15,7 @@ import {
 } from '@/lib/organization/profile'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
 import { companyDocumentPrefix, type CompanyDocumentType } from '@/lib/finance-companies/documents'
+import { PAYEE_ID_DOCUMENT_MAX_BYTES, payeeIdDocumentPrefix } from '@/lib/payees/id-document'
 
 /**
  * กติกาไฟล์ของแต่ละฟีเจอร์ที่ server ใช้ตรวจ (มติ PO 03/10/2569 — UAT Q13) — prefix ตรงกับ path ที่
@@ -131,4 +132,12 @@ export function organizationSignatureRule(organizationId: string): UploadRule {
  */
 export function companyDocumentRule(companyId: string, documentType: CompanyDocumentType): UploadRule {
   return { prefix: companyDocumentPrefix(companyId, documentType), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
+}
+
+/**
+ * เอกสารยืนยันตัวตนผู้รับเงิน (มติ PO U150) — `payees/<orgId>/id-documents/<uuid>.<ext>` รับรูป/PDF ≤ 10 MB
+ * ผูกกับองค์กรของผู้บันทึก (ฟอร์มผู้ใช้อัปโหลดก่อนผู้รับเงินเกิด)
+ */
+export function payeeIdDocumentRule(organizationId: string): UploadRule {
+  return { prefix: payeeIdDocumentPrefix(organizationId), accept: DOCUMENT_KINDS, maxBytes: PAYEE_ID_DOCUMENT_MAX_BYTES }
 }

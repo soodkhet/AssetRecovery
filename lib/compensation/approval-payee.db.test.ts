@@ -4,6 +4,10 @@ import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import type { PayeeFieldsInput } from '@/lib/payees/schemas'
 
+// มติ PO U143/U150 — ไฟล์ที่ผูกเข้าข้อมูลผ่านตัวตรวจของ server ⇒ ใช้ Storage ตัวแทน (ห้ามยิง Supabase จริง — Rule 07)
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
 /**
  * เทสต์ระดับ DB ของ Phase 3.2 — DoD ตาม `16` §16 + `18` §9/§16:
  *  · **`18`**: verified → แก้ธนาคาร ⇒ unverified อัตโนมัติ · ยืนยันไม่ครบ ⇒ `REQUIRED_MISSING`
@@ -327,7 +331,7 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
     await payees.verifyPayee(ctx(finance, 'ตรวจเอกสารครบแล้ว'), payeeId)
     const updated = await payees.updatePayee(ctx(finance, 'แนบสำเนาบัตรเพิ่ม'), payeeId, {
       ...BANK,
-      idDocumentUrl: 'https://storage.test/payees/id-card.pdf',
+      idDocumentUrl: `payees/${ORG_ID}/id-documents/00000000-0000-4000-8000-00000000d0c1.pdf`,
     })
     expect(updated.payee.isVerified).toBe(true)
   })
@@ -381,7 +385,7 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
     const { address: _omitAddress, ...withoutAddress } = BANK
     const kept = await payees.updatePayee(ctx(finance, 'แนบเอกสารเพิ่ม'), payeeId, {
       ...withoutAddress,
-      idDocumentUrl: 'https://storage.test/payees/id.pdf',
+      idDocumentUrl: `payees/${ORG_ID}/id-documents/00000000-0000-4000-8000-00000000d0c2.pdf`,
     })
     expect(kept.payee.addressLine).toBe(filled.payee.addressLine)
     expect(kept.payee.nameTitle).toBe('นาย')
@@ -410,7 +414,7 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
 
     const withDoc = await payees.updatePayee(ctx(finance, 'แนบสำเนาบัตรประชาชน'), payeeId, {
       ...BANK,
-      idDocumentUrl: 'https://storage.test/payees/id-card.pdf',
+      idDocumentUrl: `payees/${ORG_ID}/id-documents/00000000-0000-4000-8000-00000000d0c1.pdf`,
     })
     expect(withDoc.payee.idDocumentUrl).not.toBeNull()
     const verified = await payees.verifyPayee(ctx(finance, 'เอกสารครบแล้ว'), payeeId)
