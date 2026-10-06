@@ -360,6 +360,24 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     ).rejects.toThrow(/chk_cases_document_mode/)
   })
 
+  it('Final Test ด่าน 6 — createCase เลขเดียวกันพร้อมกัน 3 คำขอ ⇒ สำเร็จ 1 · ที่เหลือ CASE_REF_DUPLICATE (ไม่ใช่ 500)', async () => {
+    const { createCase } = await import('@/lib/cases/queries')
+    const { caseCreateSchema } = await import('@/lib/cases/schemas')
+    const make = (caseRef: string) =>
+      createCase(caseCreateSchema.parse({ caseRef, financeCompanyId: COMPANY_ID }), { actor, meta })
+
+    const results = await Promise.allSettled([make('SF-2066-0001'), make(' sf-2066-0001 '), make('Sf-2066-0001')])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const codes = results
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map((r) => (r.reason as { code?: string }).code)
+    expect(codes).toEqual(['CASE_REF_DUPLICATE', 'CASE_REF_DUPLICATE'])
+    const rows = await db().$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM cases WHERE case_ref_normalized = 'SF-2066-0001' AND company_id = '${COMPANY_ID}'`,
+    )
+    expect(Number(rows[0]?.count)).toBe(1)
+  })
+
   it('ลบเอกสาร: soft-delete (แถว + file_url ยังอยู่ ไม่แตะ Storage) + audit before/after + เหตุผลมาตรฐาน', async () => {
     const { deleteCaseDocument, CASE_DOCUMENT_DELETE_DEFAULT_REASON } = await import('@/lib/cases/queries')
     const caseId = await seedCase('SF-2026-2352', { withDocuments: true })

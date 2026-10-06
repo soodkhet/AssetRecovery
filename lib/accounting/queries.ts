@@ -583,24 +583,31 @@ async function transitionPeriod(
   const row = await findPeriodById(ctx.actor, periodId)
   assertPeriodTransition(row.status, to)
 
-  const data: Prisma.AccountingPeriodUpdateInput = { status: to }
+  // scalar ล้วน (updateMany) — เขียนทุกคอลัมน์ใน UPDATE เดียว: trigger งวดปิดของ DB ยอมเฉพาะ UPDATE ที่เปลี่ยนสถานะ
+  const data: Prisma.AccountingPeriodUncheckedUpdateManyInput = { status: to }
   if (to === 'sent_to_accountant' && extra.unlock !== true) {
     data.sentAt = now
-    data.sentByUser = { connect: { id: ctx.actor.id } }
+    data.sentBy = ctx.actor.id
     data.exportReady = true
     data.lastReadinessCheckedAt = now
   }
   if (to === 'locked') {
     data.lockedAt = now
-    data.lockedByUser = { connect: { id: ctx.actor.id } }
+    data.lockedBy = ctx.actor.id
   }
   if (extra.unlock === true) {
     data.lockedAt = null
-    data.lockedByUser = { disconnect: true }
+    data.lockedBy = null
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.accountingPeriod.update({ where: { id: periodId }, data, select: PERIOD_SELECT })
+    // ยึดแถวด้วยสถานะเดิม (compare-and-set) — สองคำขอพร้อมกันต้องเปลี่ยนสถานะได้ครั้งเดียว
+    // คำขอที่สองได้ 0 แถว ⇒ PERIOD_INVALID_STATUS (ไม่ลง audit/แจ้งเตือนซ้ำ ไม่ทับเวลาส่ง/ล็อก) — Final Test ด่าน 6
+    const claimed = await tx.accountingPeriod.updateMany({ where: { id: periodId, status: row.status }, data })
+    if (claimed.count === 0) {
+      throw new AccountingError('PERIOD_INVALID_STATUS', { detail: `status เปลี่ยนไปแล้วระหว่างทำรายการ → ${to}` })
+    }
+    const next = await tx.accountingPeriod.findUniqueOrThrow({ where: { id: periodId }, select: PERIOD_SELECT })
     await emitAudit(
       {
         organizationId: ctx.actor.organizationId,

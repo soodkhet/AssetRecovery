@@ -14,7 +14,7 @@ import type { PayoutBatchDetailDto } from '@/lib/payout/types'
 import type { ReportPayload } from '@/lib/reports/payload'
 import { buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
 import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
-import { testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
+import { TINY_PNG, testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
 
 /**
  * หัวเอกสารกลาง (มติ PO U99 · เลย์เอาต์ตามแบบที่อนุมัติ U100) — PDF ทุกตัวใน `components/pdf/` (ยกเว้นแบบ 50 ทวิ)
@@ -219,6 +219,21 @@ describe('หัวเอกสารกลาง (มติ PO U99/U100) — PD
       expect(text).toContain('เอกสารภายใน')
       expect(text).not.toContain('แขวงปทุมวัน')
     }
+  })
+
+  // Final Test ด่าน 6 — ไฟล์ผ่านยาม magic bytes/hash ของ loader แต่เนื้อรูปเสีย (อัปโหลดขาดกลาง/ไฟล์พัง)
+  // ⇒ เอกสารต้องยังออกได้ (เว้นช่องโลโก้) ไม่ใช่โยน error จน route PDF ตอบ 500
+  it.each(DOCUMENTS)('$name — โลโก้ PNG เสีย (หัวไฟล์ถูกแต่เนื้อพัง) ⇒ เอกสารยังออกได้', async ({ render }) => {
+    const corrupt = Buffer.concat([Buffer.from(TINY_PNG.subarray(0, 16)), Buffer.alloc(64, 0xff)])
+    const pdf = await render(testLetterhead({ logo: { data: corrupt, format: 'png' } }))
+    const text = extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
+    expect(text).toContain('บริษัท ใจดี โมบาย จำกัด')
+  })
+
+  it.each(DOCUMENTS)('$name — โลโก้ JPEG เสีย (หัวไฟล์ถูกแต่เนื้อพัง) ⇒ เอกสารยังออกได้', async ({ render }) => {
+    const corrupt = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 0x11)])
+    const pdf = await render(testLetterhead({ logo: { data: corrupt, format: 'jpg' } }))
+    expect(extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')).toContain('บริษัท ใจดี โมบาย จำกัด')
   })
 
   it.each(DOCUMENTS)('$name — ไม่มีโลโก้/ไม่มีช่องติดต่อ: ไม่มีรูป ไม่มีกล่อง LOGO ไม่พิมพ์บรรทัดว่าง', async ({ kind, render }) => {

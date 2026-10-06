@@ -551,6 +551,34 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     expect(locked.status).toBe('locked')
   })
 
+  it('Final Test ด่าน 6 — กดส่ง/ล็อกงวดพร้อมกัน 2 คำขอ ⇒ เปลี่ยนสถานะได้ครั้งเดียว · อีกคำขอ PERIOD_INVALID_STATUS · audit แถวเดียว', async () => {
+    const after = new Date('2026-09-02T03:00:00Z')
+    const periodId = await seedPeriod()
+
+    const sends = await Promise.allSettled([
+      accounting.sendPeriod(ctx(), periodId, reason, after),
+      accounting.sendPeriod(ctx(), periodId, reason, after),
+    ])
+    expect(sends.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const sendRejected = sends.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    expect(sendRejected.map((r) => codeOf(r.reason))).toEqual(['PERIOD_INVALID_STATUS'])
+
+    const locks = await Promise.allSettled([
+      accounting.lockPeriod(ctx(), periodId, reason, after),
+      accounting.lockPeriod(ctx(), periodId, reason, after),
+    ])
+    expect(locks.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const lockRejected = locks.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    expect(lockRejected.map((r) => codeOf(r.reason))).toEqual(['PERIOD_INVALID_STATUS'])
+
+    const audits = await db().auditLog.findMany({
+      where: { organizationId: ORG_ID, targetType: 'accounting_periods', targetId: periodId },
+      select: { action: true },
+    })
+    expect(audits.filter((a) => a.action === 'lock')).toHaveLength(1)
+    expect(audits.filter((a) => a.action === 'status_change')).toHaveLength(1)
+  })
+
   it('มติ PO U65: ทางลัด dev ส่ง/ล็อกด้วยวันจำลอง — ผ่านยามสิ้นเดือน · เวลาที่บันทึกเป็นเวลาจริง · audit ติด [จำลองวันที่]', async () => {
     const realNow = new Date('2026-08-20T03:00:00Z') // 20/08/2569 — งวด ส.ค. ยังไม่สิ้นเดือน
     const simulation = { simulatedNow: new Date('2026-09-01T05:00:00Z') } // 01/09/2569 เที่ยงวันไทย

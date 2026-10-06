@@ -392,11 +392,15 @@ export async function approveAdvance(
   })
 
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.advance.update({
-      where: { id: advanceId },
+    // ยึดแถวด้วยสถานะเดิม (compare-and-set) — อนุมัติ/ปฏิเสธใบเดียวกันพร้อมกันต้องสำเร็จได้คำขอเดียว (Final Test ด่าน 6)
+    const claimed = await tx.advance.updateMany({
+      where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
       data: { status, approvedSatang, approvedBy: user.id, approvedAt: at, updatedBy: user.id },
-      select: advanceSelect,
     })
+    if (claimed.count !== 1) {
+      throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
+    }
+    const row = await tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
 
     await emitAudit(
       {
@@ -444,11 +448,15 @@ export async function rejectAdvance(
   })
 
   const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.advance.update({
-      where: { id: advanceId },
+    // compare-and-set เหมือนอนุมัติ — คำขอที่แพ้ได้ ADVANCE_INVALID_STATUS ไม่ทับผลของอีกคน (Final Test ด่าน 6)
+    const claimed = await tx.advance.updateMany({
+      where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
       data: { status, rejectionReason: reason, updatedBy: user.id },
-      select: advanceSelect,
     })
+    if (claimed.count !== 1) {
+      throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
+    }
+    const row = await tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
 
     await emitAudit(
       {
