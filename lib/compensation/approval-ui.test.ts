@@ -29,6 +29,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     calculationSource: 'compensation_plan',
     basisText: '128.50 กม. × 3.50 บาท/กม.',
     receiptInCompanyName: null,
+    substituteReceipt: null,
     grossSatang: 45_000,
     whtSatang: 0,
     netSatang: 45_000,

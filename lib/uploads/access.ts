@@ -2,7 +2,7 @@ import { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
 import { assertAdvanceInScope } from '@/lib/advances/queries'
 import { AuthError } from '@/lib/auth/errors'
 import { checkPermission } from '@/lib/auth/permission'
-import { requirePermission } from '@/lib/auth/require-permission'
+import { requireAnyPermission, requirePermission } from '@/lib/auth/require-permission'
 import type { SessionUser } from '@/lib/auth/types'
 import { ModuleError } from '@/lib/api/errors'
 import { CASE_READ_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
@@ -31,6 +31,7 @@ import {
   intakePhotoRule,
   lotDocumentRule,
   organizationLogoRule,
+  substituteReceiptFileRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, type StoragePathOwner, type UploadTarget } from '@/lib/uploads/targets'
 import {
@@ -40,6 +41,11 @@ import {
   isTeamScopedViewer,
 } from '@/lib/warehouse/permissions'
 import { getAsset, getLot } from '@/lib/warehouse/queries'
+import {
+  assertCanUploadSignedSubstituteReceipt,
+  assertSubstituteReceiptInScope,
+  SUBSTITUTE_RECEIPT_CAPABILITIES,
+} from '@/lib/substitute-receipts/queries'
 
 /**
  * ตัดสินสิทธิ์เข้าถึงไฟล์ใน bucket `case-documents` (BUG-143 · DEC-014) — **ทางเดียว** ที่ browser จะได้
@@ -129,6 +135,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return bankRefundFileRule(target.transactionId)
     case 'organization_logo':
       return organizationLogoRule(target.organizationId)
+    case 'substitute_receipt':
+      return substituteReceiptFileRule(target.substituteReceiptId)
   }
 }
 
@@ -185,6 +193,12 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       // โลโก้บนหัวเอกสาร = แก้ข้อมูลองค์กร ⇒ สิทธิ์เดียวกับ endpoint ผูกโลโก้ (Superadmin — มติ PO U99)
       const user = await requirePermission('manage', MANAGE_ORGANIZATION_PROFILE)
       if (target.organizationId !== user.organizationId) throw denied(user, `upload:organization-logo org=${target.organizationId}`)
+      return user
+    }
+    case 'substitute_receipt': {
+      // ฉบับเซ็นของใบรับรองแทนใบเสร็จ (มติ PO U103) — เจ้าของใบหรือการเงิน ⇒ ยามเดียวกับ endpoint ผูกไฟล์
+      const user = await requireAnyPermission('view', SUBSTITUTE_RECEIPT_CAPABILITIES)
+      await assertCanUploadSignedSubstituteReceipt(user, target.substituteReceiptId)
       return user
     }
   }
@@ -293,6 +307,13 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
         throw denied(user, `view:organization-logo org=${owner.organizationId}`)
       }
       if (owner.organizationId !== user.organizationId) throw denied(user, `view:organization-logo org=${owner.organizationId}`)
+      return
+    }
+    case 'substitute_receipt': {
+      if (!hasAny(user, 'view', SUBSTITUTE_RECEIPT_CAPABILITIES)) {
+        throw denied(user, `view:substitute-receipt id=${owner.substituteReceiptId}`)
+      }
+      await assertSubstituteReceiptInScope(user, owner.substituteReceiptId)
       return
     }
   }

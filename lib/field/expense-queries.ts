@@ -47,6 +47,7 @@ import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-que
 import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
+import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
 
 /**
  * รายการเบิกของงานภาคสนาม (`41` §6.6 · §7.9 · §7.10 · §10.1) — ชั้น DB
@@ -656,6 +657,8 @@ const expenseSelect = {
   compPlan: { select: { hotelMaxPerNightSatang: true } },
   case: { select: { caseRef: true, debtorName: true } },
   sharedWithUser: { select: { fullName: true } },
+  /** มติ PO U103 — ใบรับรองแทนใบเสร็จของใบเบิก (ถ้ามี) */
+  substituteReceipts: substituteReceiptsRelationSelect,
 } as const
 
 type ExpenseRow = Prisma.ExpenseGetPayload<{ select: typeof expenseSelect }>
@@ -681,6 +684,7 @@ function toExpenseDto(row: ExpenseRow, matchedCaseIds: string[] = []): FieldExpe
     receiptInCompanyName: row.receiptInCompanyName,
     hotelMaxPerNightSatang: row.expenseType === 'hotel' ? (row.compPlan?.hotelMaxPerNightSatang ?? null) : null,
     matchedCaseIds,
+    substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -825,10 +829,13 @@ export async function submitHotelClaim(
     hotelNights: claim.hotelNights ?? HOTEL_NIGHTS_DEFAULT,
     receiptInCompanyName: claim.receiptInCompanyName ?? false,
   }
+  const substituteLines = input.substituteReceipt?.lines ?? null
+  const receiptFileUrl = input.receiptFileUrl ?? null
   assertHotelClaimFields({
     expenseDate: input.expenseDate,
     amountSatang: input.amountSatang,
-    receiptFileUrl: input.receiptFileUrl,
+    receiptFileUrl,
+    hasSubstituteReceipt: substituteLines !== null,
   })
 
   // Period Lock (`13` §6.11 · Phase 4.1) — ค่าที่พักกรอกวันที่เองได้ ⇒ ย้อนเข้างวดที่ปิดแล้วไม่ได้
@@ -865,7 +872,8 @@ export async function submitHotelClaim(
 
   // ขยายมติ PO Q13 ถึงใบเสร็จ (UAT BUG-072) — server ดาวน์โหลดมาตรวจเอง (prefix ของผู้เบิก · มีจริง ·
   // magic bytes รูป/PDF · ขนาด) แล้วเก็บ SHA-256 ที่คำนวณเอง · นอก `$transaction` (I/O เครือข่าย)
-  const receipt = await verifyUploadedFile(input.receiptFileUrl, expenseReceiptRule(user.id))
+  // มติ PO U103 — ไม่มีใบเสร็จ ⇒ ออกใบรับรองแทนใบเสร็จในทรานแซกชันเดียวกัน (ฉบับเซ็นอัปโหลดภายหลัง)
+  const receipt = receiptFileUrl === null ? null : await verifyUploadedFile(receiptFileUrl, expenseReceiptRule(user.id))
 
   const created = await prisma.$transaction(async (tx) => {
     const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
@@ -890,13 +898,24 @@ export async function submitHotelClaim(
         // เบิกแยกไม่ผ่านขั้นคลัง — เข้าคิวอนุมัติทันที (`41` §6.6)
         status: 'pending_approval',
         sharedWithUserId: input.sharedWithUserId ?? null,
-        receiptFileUrl: input.receiptFileUrl,
-        receiptFileHash: receipt.sha256,
+        receiptFileUrl,
+        receiptFileHash: receipt?.sha256 ?? null,
         revisionNote: input.note ?? null,
         createdBy: context.actor.id,
       },
-      select: expenseSelect,
+      select: { id: true },
     })
+
+    const substitute =
+      substituteLines === null
+        ? null
+        : await issueSubstituteReceipt(tx as ExpenseTxClient, context, {
+            organizationId: user.organizationId,
+            payeeId,
+            link: { kind: 'expense', expenseId: row.id },
+            lines: substituteLines,
+            at: new Date(),
+          })
 
     await emitAudit(
       {
@@ -913,8 +932,9 @@ export async function submitHotelClaim(
           hotelNights: input.hotelNights,
           receiptInCompanyName: input.receiptInCompanyName,
           sharedWithUserId: input.sharedWithUserId ?? null,
-          receiptFileUrl: input.receiptFileUrl,
-          receiptFileHash: receipt.sha256,
+          receiptFileUrl,
+          receiptFileHash: receipt?.sha256 ?? null,
+          substituteReceiptNumber: substitute?.receiptNumber ?? null,
           compPlanId: capSnapshot?.compPlanId ?? null,
           compPlanVersion: capSnapshot?.compPlanVersion ?? null,
           hotelMaxPerNightSatang: capSnapshot?.hotelMaxPerNightSatang ?? null,
@@ -928,7 +948,7 @@ export async function submitHotelClaim(
       tx as ExpenseTxClient,
     )
 
-    return row
+    return tx.expense.findUniqueOrThrow({ where: { id: row.id }, select: expenseSelect })
   })
 
   // มติ PO U29 — ค่าที่พักเข้าคิวอนุมัติทันที ⇒ แจ้งผู้อนุมัติขั้น 1 (ทีมของผู้เบิก — มติ R6-B)

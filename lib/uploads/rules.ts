@@ -6,6 +6,7 @@ import { bankRefundFilePrefix, customerWhtFilePrefix } from '@/lib/customer-wht/
 import { EXPENSE_RECEIPT_MAX_BYTES, FIELD_MEDIA_MAX_BYTES, type FieldMediaKind } from '@/lib/field/media-upload'
 import { AUDIO_KINDS, DOCUMENT_KINDS, IMAGE_KINDS, VIDEO_KINDS, type FileKind, type UploadRule } from '@/lib/uploads/inspect'
 import { lotDocumentPrefix } from '@/lib/warehouse/lot-documents'
+import { substituteReceiptFilePrefix } from '@/lib/substitute-receipts/file'
 import { ORGANIZATION_LOGO_MAX_BYTES, organizationLogoPrefix } from '@/lib/organization/profile'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
 
@@ -90,6 +91,11 @@ export function advanceReturnFileRule(advanceId: string): UploadRule {
 }
 
 /** สแกนหนังสือรับรอง 50 ทวิ ที่ลูกค้าหักเรา (มติ PO U40) — รับ PDF/รูป เพดานเท่าเอกสารล็อต */
+/** ใบรับรองแทนใบเสร็จฉบับเซ็นแล้ว (มติ PO U103) — รูป/PDF เพดานเดียวกับใบเสร็จเบิกแยก */
+export function substituteReceiptFileRule(substituteReceiptId: string): UploadRule {
+  return { prefix: substituteReceiptFilePrefix(substituteReceiptId), accept: DOCUMENT_KINDS, maxBytes: EXPENSE_RECEIPT_MAX_BYTES }
+}
+
 export function customerWhtFileRule(certificateId: string): UploadRule {
   return { prefix: customerWhtFilePrefix(certificateId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
 }

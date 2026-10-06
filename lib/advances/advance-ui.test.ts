@@ -60,6 +60,7 @@ function advance(overrides: Partial<AdvanceDto> = {}): AdvanceDto {
     returns: [],
     payoutBatch: null,
     paidOut: true,
+    substituteReceipt: null,
     ...overrides,
   }
 }

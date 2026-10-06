@@ -2,11 +2,14 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  PERIODLESS_REPORT_EMPTY_DESCRIPTION,
   REPORT_CATEGORIES,
   REPORT_DEFINITIONS,
+  REPORT_EMPTY_DESCRIPTION_DEFAULT,
   REPORT_PATH_SEGMENT,
   findReport,
   findReportByPath,
+  reportEmptyDescription,
   reportsOfCategory,
 } from '@/lib/reports/catalog'
 
@@ -94,5 +97,23 @@ describe('path ชื่อพ้องรายหมวดใน catalog ม�
     expect(findReportByPath('finance', 'advance-overdue')?.code).toBe('F5')
     expect(findReportByPath('executive', 'advance-overdue')).toBeNull()
     expect(findReportByPath('finance', 'ไม่มีจริง')).toBeNull()
+  })
+})
+
+describe('ข้อความตอนไม่มีข้อมูล (UAT BUG-170)', () => {
+  it('O4 ไม่ใช้ช่วงเวลา ⇒ ไม่บอกให้ลองเปลี่ยนช่วงเวลา', () => {
+    expect(reportEmptyDescription('O4')).toBe('ไม่มีเคสค้างเกิน SLA ในขณะนี้')
+    expect(reportEmptyDescription('O4')).not.toContain('ช่วงเวลา')
+  })
+
+  it('รายงานที่กรองตามช่วงเวลา (รวม F3/F5 ที่ใช้วันท้ายช่วงเป็น ณ วันที่) ใช้ข้อความตั้งต้น', () => {
+    for (const code of ['F1', 'F3', 'F5', 'O1', 'O5', 'A1', 'E1']) {
+      expect(reportEmptyDescription(code)).toBe(REPORT_EMPTY_DESCRIPTION_DEFAULT)
+    }
+  })
+
+  it('รายการรายงานไม่ใช้ช่วงเวลาอ้างรหัสที่มีจริงใน catalog', () => {
+    const codes = new Set(REPORT_DEFINITIONS.map((report) => report.code))
+    for (const code of Object.keys(PERIODLESS_REPORT_EMPTY_DESCRIPTION)) expect(codes.has(code)).toBe(true)
   })
 })

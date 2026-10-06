@@ -52,6 +52,7 @@ import {
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 
 /**
  * แท็บ "รออนุมัติ" (`15` §8 · mockup `finance.html` แท็บ `approval`) — **2 ตารางในหน้าเดียว**
@@ -159,6 +160,8 @@ export function ApprovalTab() {
                         <p className="text-[11px] text-slate-400">{fmtDate(item.expenseDate)}</p>
                         <RefText>{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
                         <p className="text-[10px] text-slate-400">{claimSourceLabel(item.calculationSource)}</p>
+                        {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
+                        {item.substituteReceipt !== null && <SubstituteReceiptPanel receipt={item.substituteReceipt} compact />}
                       </Td>
                       <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
                       <Td>

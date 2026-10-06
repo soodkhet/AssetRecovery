@@ -42,6 +42,7 @@ import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdvanceAwaitingApproval, notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
+import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
 import { advanceReturnFileRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 
@@ -113,6 +114,8 @@ const advanceSelect = {
   },
   approvedByUser: { select: { fullName: true } },
   createdByUser: { select: { fullName: true } },
+  /** มติ PO U103 — ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (ถ้ามี) */
+  substituteReceipts: substituteReceiptsRelationSelect,
 } as const
 
 type AdvanceRow = Prisma.AdvanceGetPayload<{ select: typeof advanceSelect }>
@@ -198,6 +201,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     returns: row.returns.map(toReturnDto),
     payoutBatch: payoutBatchOf(row),
     paidOut: paidOutOf(row),
+    substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
   }
 }
 
@@ -523,6 +527,19 @@ export async function settleAdvance(
     if (claimed.count !== 1) {
       throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
     }
+    // มติ PO U103 — รายจ่ายที่ไม่มีใบเสร็จ ⇒ ออกใบรับรองแทนใบเสร็จ (CRT) ผูกเงินทดรองนี้ในทรานแซกชันเดียวกัน
+    const substituteLines = input.substituteReceipt?.lines ?? null
+    const substitute =
+      substituteLines === null
+        ? null
+        : await issueSubstituteReceipt(tx as ExpenseTxClient, context, {
+            organizationId: user.organizationId,
+            payeeId: current.payeeId,
+            link: { kind: 'advance', advanceId },
+            lines: substituteLines,
+            at,
+          })
+
     const row = await tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
 
     const excessClaim = preview.needsExtraClaim
@@ -559,6 +576,8 @@ export async function settleAdvance(
           excess_claim_id: excessClaim?.id ?? null,
           // `15` §13 — ใบเสร็จอ้างอิงเก็บใน audit (ตาราง `advances` ไม่มีคอลัมน์เก็บไฟล์)
           receipt_file_url: input.receiptFileUrl,
+          substitute_receipt_number: substitute?.receiptNumber ?? null,
+          substitute_receipt_total_satang: substitute?.totalSatang ?? null,
         },
         reason: input.note,
         ipAddress: context.meta.ipAddress,

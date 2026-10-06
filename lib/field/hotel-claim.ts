@@ -15,6 +15,11 @@ export interface HotelClaimFields {
   expenseDate: Date | null
   amountSatang: number | null
   receiptFileUrl: string | null
+  /**
+   * ติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการใบรับรองแทนใบเสร็จ (มติ PO U103) — ช่องใบเสร็จยังบังคับ แต่ยอมรับ
+   * ใบรับรองแทนใบเสร็จแทนได้ (ฉบับเซ็นอัปโหลดภายหลังและต้องมีก่อนอนุมัติ)
+   */
+  hasSubstituteReceipt?: boolean
 }
 
 /** ทั้ง 3 ฟิลด์บังคับ (`41` §12 `HOTEL_CLAIM_FIELD_REQUIRED`) — คืนรายชื่อช่องที่ขาดไว้ให้ FE ไฮไลต์ */
@@ -24,7 +29,8 @@ export function missingHotelClaimFields(input: HotelClaimFields): string[] {
   if (input.amountSatang === null || !Number.isInteger(input.amountSatang) || input.amountSatang <= 0) {
     missing.push('amountSatang')
   }
-  if (input.receiptFileUrl === null || input.receiptFileUrl.trim() === '') missing.push('receiptFileUrl')
+  const hasReceipt = input.receiptFileUrl !== null && input.receiptFileUrl.trim() !== ''
+  if (!hasReceipt && input.hasSubstituteReceipt !== true) missing.push('receiptFileUrl')
   return missing
 }
 
@@ -121,7 +127,7 @@ export function hotelClaimFormError(input: {
   if (formatError !== null) return formatError
   if (Number.isNaN(amountSatang)) return 'จำนวนเงินต้องเป็นตัวเลข'
   if (amountSatang <= 0) return 'จำนวนเงินต้องมากกว่า 0'
-  if (!input.hasReceipt) return 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก'
+  if (!input.hasReceipt) return 'ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก'
   return null
 }
 

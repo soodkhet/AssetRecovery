@@ -38,6 +38,7 @@ function expense(overrides: Partial<FieldExpenseDto> = {}): FieldExpenseDto {
     grossSatang: 25_000,
     distanceKm: '12.50',
     expenseDate: '2026-08-10',
+    substituteReceipt: null,
     status: 'pending_approval',
     rejectReason: null,
     note: null,
