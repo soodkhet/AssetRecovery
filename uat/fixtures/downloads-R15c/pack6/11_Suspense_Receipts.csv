@@ -1,0 +1,3 @@
+﻿bank_txn_date,bank_ref,amount_baht,suspended_date,suspense_reason,status,resolved_ref,resolved_date,refund_reason,billing_batch_number
+06/10/2569,รับโอนไม่ระบุชื่อผู้โอน · อ้างอิง R13-UNK-A,780.00,06/10/2569,ยังไม่ทราบผู้โอน,manual_matched,บริษัท ยูเอที ลิสซิ่ง จำกัด ตุลาคม 2569,06/10/2569,-,BL-2569-003
+06/10/2569,รับโอนไม่ทราบที่มา · อ้างอิง R13-UNK-B,250.00,06/10/2569,ยังไม่ทราบผู้โอน,suspense_refunded,-,06/10/2569,ผู้โอนแจ้งโอนผิดบัญชี,-

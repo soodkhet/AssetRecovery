@@ -1,0 +1,2 @@
+﻿expense_id,payee,payee_tax_id,category,case_ref,work_date,status,gross_baht,estimated_wht_baht,payout_batch_ref
+0b3477d2-c1f6-4552-a194-05d68e019a7e,อนันต์ ตามทรัพย์,1103700000011,ค่าที่พัก,-,06/10/2569,pending_approval,1500.00,0.00,-

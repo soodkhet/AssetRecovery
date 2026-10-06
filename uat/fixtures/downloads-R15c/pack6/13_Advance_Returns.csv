@@ -1,0 +1,6 @@
+﻿return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason,return_number
+05/10/2569,ADV-2569-0005,อนันต์ ตามทรัพย์,150.00,bank_transfer,-,af1c85bc-6d7b-4059-89b6-8017448d43e7.jpg,active,-,-,RAV-2569-0009
+05/10/2569,ADV-2569-0001,อนันต์ ตามทรัพย์,72.75,payout_offset,PB-IN-25691005-73E684C3095B,-,active,-,-,RAV-2569-0005
+05/10/2569,ADV-2569-0001,อนันต์ ตามทรัพย์,97.00,payout_offset,PB-IN-25691005-73E684C3095B,-,active,-,-,RAV-2569-0006
+05/10/2569,ADV-2569-0001,อนันต์ ตามทรัพย์,97.00,payout_offset,PB-IN-25691005-73E684C3095B,-,active,-,-,RAV-2569-0007
+05/10/2569,ADV-2569-0001,อนันต์ ตามทรัพย์,283.25,payout_offset,PB-IN-25691005-73E684C3095B,-,active,-,-,RAV-2569-0008
