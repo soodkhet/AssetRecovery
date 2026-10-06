@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 มติ U119 เตรียม Final Test (ล้างข้อมูล · ค่าเริ่มต้นมาตรฐาน · เทมเพลตครบ · pairwise) → HANDOFF ให้ session ใหม่ (ดูบนสุด)
 - 06/10/2569 merge fixer BS `dd2014d` (U118 ปฏิเสธถาวรใบเบิกค่าที่พักจาก `needs_revision`/`pending_finance_approval` · ผู้ปฏิเสธใบ needs_revision = ขั้นที่ตีกลับล่าสุด · docs/23 v2.11 + 02 v4.47) · ไม่มี migration · verify 361/5,023 · **มติ U1–U118 ทำครบ · บั๊ก UAT open = 0** · ต่อ: Final Test รอบสุดท้าย (PROGRESS) · ใบค่าที่พัก in1 7 ใบ needs_revision ปฏิเสธถาวรได้แล้ว (ยังไม่ได้ทำบน dev)
 - 06/10/2569 merge fixer BS `335b767` (U114/BUG-177 Control Totals + หน้าปกแยก หักผู้รับ/บริษัทออกให้/รวมนำส่ง · U115 การ์ด AR + "เกิน 60 วัน" จาก F3 · U117 ออกใบรับรองแทน ดึงรายการเดิม + "ออกแทนเลขที่" + `replaces_receipt_id` · ปฏิเสธถาวรใบเบิกค่าที่พักจาก `pending_approval` ตาม docs/23) · migration `20261006234500_substitute_receipt_replaces` (ขึ้น dev+test) · migration ใหม่รวม **43 ตัว** · verify 361/5,019 · ถามผู้ใช้: ปฏิเสธถาวรจาก needs_revision/pending_finance_approval
 - 06/10/2569 merge Phase 6.6 แดชบอร์ดหลัก `1a98a87`+`d2e84d1` (`GET /api/dashboard` นับจำนวนอย่างเดียว · widget ตาม role + scope ทีม · จุดเบี่ยงจาก mockup 12 ข้อใน PROGRESS_ARCHIVE) · verify 361/5,002 · smoke บน dev 8 role (`uat/bin/r15d/dashboard.mjs`): เปิดได้ทุก role ไม่มี 5xx/console error/ปี ค.ศ. · ถาม PO: การเงิน/บัญชีเห็นกระดานเคสแต่ไม่มีลิงก์ · การ์ด AR บริหารเป็นยอดรวม (ไม่ใช่ >60 วัน) · ต่อ: Final Test รอบสุดท้าย
@@ -109,7 +110,18 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 - 03/10/2569 R1: จบครบ ไม่มีตัวบล็อก · 14 persona login + เปลี่ยนรหัสแล้ว (session อยู่ `uat/.auth/`) · template T1/T2 เป็น v2 · merge BUG-002 + verify เขียว (245 files / 3,072 tests) · ตัด `uat/bin/r*/**` ออกจาก eslint (สคริปต์ชั่วคราวต่อรอบ)
 - 03/10/2569 R0: baseline เขียว (typecheck · 241 files / 3,039 tests · lint) · Playwright 1.63 (DEC-011) · snapshot+restore ทดสอบแล้ว
 
-## ▶️ HANDOFF — 06/10/2569 (session 73c95148 ใช้ context เกิน 800K)
+## ▶️ HANDOFF — 06/10/2569 (ค่ำ) → session ใหม่: เตรียม + รัน Final Test รอบสุดท้าย (มติ U119)
+- **staging ในเครื่อง**: มติ U1–U119 · R15/R15c จบ · บั๊ก UAT open = 0 · verify 361/5,023 · migration ใหม่ **43 ตัว** (ถึง `20261006234500_substitute_receipt_replaces`) · ยังไม่ push · build ครบทุก Phase (6.6 + Phase 7 ✅)
+- **ฐาน dev**: ปลาย R15c (snapshot `R15c-end`) · งวด ต.ค. `locked` · ข้อมูลองค์กร = ค่าตัวอย่าง UAT + โลโก้ตัวอย่าง
+- **ลำดับงาน (U119)**:
+  1. ตรวจหนี้ค้าง 3 ข้อใน `PROGRESS.md` (แจ้งเตือน job หายเมื่อ dispatch ล้ม · เบิกไม่มีอัตราภาษีทั้งสองระดับ → 500 (อาจปิดแล้วจาก `wht_policy_history`/U3) · ค่าตั้งเทมเพลตเอกสารภาษีไม่มีผล (อาจซ้ำซ้อนกับ U99/U100/U110)) → ที่ยังเปิด/ต้องตัดสิน ถามผู้ใช้ด้วย AskUserQuestion
+  2. ปรับ `orchestrator/final-tests/1–6` ให้ตรงระบบปัจจุบัน (Export Pack 17 ไฟล์ · Portal มีแล้ว · "✅ only" = 9 · U99–U118 ทั้งหมด · แดชบอร์ด) + เพิ่มด่าน 7 เบราว์เซอร์จริง
+  3. ตารางความครอบคลุม (pairwise) + golden จากสูตร `22` → **ให้ผู้ใช้ดูก่อนลงมือ seed**
+  4. สคริปต์ seed scenario ผ่าน service layer (รันซ้ำได้ · ใช้ซ้ำบน staging) + reset dev: ล้างข้อมูล (คง users/persona ถ้าเก็บได้) → ค่าเริ่มต้นมาตรฐาน → เทมเพลตครบทุกแบบ → ข้อมูลทดสอบ
+  5. รันด่าน 1–6 (agent ต่อด่าน · worktree + ฐานทดสอบแยก test2…test7) → merge ทีละด่าน + verify + `pnpm build` → ด่าน 7 บน dev → รายงาน `uat/report/FINAL-*.md` → อัปเดต PROGRESS/ARCHIVE/STATE
+- **ข้อควรระวัง**: ห้าม push · ห้ามพิมพ์รหัสผ่าน persona · Storage/Supabase Auth เขียนได้เป็นข้อมูลตัวอย่าง (จดรายการไว้ลบก่อน go-live) · แก้งวดล็อกต้องให้ผู้ใช้รัน SQL superuser (R13.00) · fixer ต้อง `git merge staging` ก่อนเริ่ม และ branch ของ agent คือ `worktree-agent-<id>`
+
+## ▶️ HANDOFF (เก่า) — 06/10/2569 (session 73c95148 ใช้ context เกิน 800K)
 - **staging ในเครื่อง** ที่ commit ล่าสุด: verify เขียว 355 files / 4,917 tests · migration ใหม่ **41 ตัว** (ถึง `20261006212000_substitute_receipt_cancel`) · บั๊ก UAT open = 0 · ยังไม่ push (U92)
 - **มติ:** U1–U109 + O1–O70 รีวิวครบแล้ว (`uat/PO-DECISIONS-2569-10-04.md`)
 - ✅ **(เสร็จแล้ว — merge 06/10/2569)** **งานค้าง 1:** fixer BO (U109 แยกแสดง "ภาษีที่บริษัทออกให้" ใน PDF สรุปรอบจ่าย/รายงาน F4/หน้าจอรอบจ่าย) ทำงานอยู่ใน worktree branch `worktree-agent-a870fdd34d7bd6a64` (`.claude/worktrees/agent-a870fdd34d7bd6a64`) · ถ้ามี commit แล้ว → merge ตามขั้นตอนปกติ · ถ้ายังไม่มี commit/ไม่ครบ → ทำ U109 ใหม่ด้วย fixer (prompt: ใช้ `payoutItemTaxSplit()` · ห้ามแตะไฟล์ 05/50 ทวิ/ภ.ง.ด.)

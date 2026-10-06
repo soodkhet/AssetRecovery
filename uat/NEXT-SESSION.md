@@ -1,3 +1,14 @@
+> **อัปเดต 06/10/2569 ค่ำ (HANDOFF → Final Test)** — prompt สำหรับ session ใหม่:
+>
+> ```
+> ทำงาน AssetRecovery (~/AssetRecovery) ต่อ — เตรียมและรัน Final Test รอบสุดท้ายตามมติ U119
+> 1. อ่านก่อน (ห้ามอ่านไฟล์ใหญ่ทั้งไฟล์): uat/STATE.md ส่วน "▶️ HANDOFF — 06/10/2569 (ค่ำ)" + Log 10 บรรทัดแรก · uat/PO-DECISIONS-2569-10-04.md แถว U110–U119 · PROGRESS.md ส่วน "งานถัดไป" + หนี้ค้าง · orchestrator/final-tests/*.md
+> 2. ตรวจ dev server (curl /login = 200, ไม่ได้ใช้ ~/bin/dev asset) · pnpm prisma migrate status สะอาด
+> 3. ทำตามลำดับใน HANDOFF ข้อ 1–5 · ขั้น 3 (ตารางความครอบคลุม+golden) ให้ผมดูก่อน seed · คำถามใช้ AskUserQuestion ภาษาไทย ตัวเลือกแนะนำอยู่ตัวแรก
+> 4. ห้าม git push (ผม push เอง) · ห้ามแตะ Supabase dashboard/Vercel โดยไม่ถาม · ห้ามพิมพ์รหัสผ่านจาก uat/personas.json
+> 5. งบ context ตาม CLAUDE.md: เก็บงานที่ 600K · 800K commit แล้วเขียน HANDOFF
+> ```
+
 > **อัปเดต 06/10/2569 (HANDOFF)** — อ่าน `uat/STATE.md` ส่วน "▶️ HANDOFF — 06/10/2569" ก่อน: งานค้างคือ merge fixer BO (U109) + ถามผู้ใช้เรื่องรอบยืนยัน R15 · มติล่าสุด U109 / O70 · migration ใหม่ 41 ตัว · ชุดคำถามด้านล่างบางชุดปิดแล้ว (O48–O70 รีวิวครบ)
 
 # Prompt สำหรับ session ใหม่ (เขียน 06/10/2569 ~02:15)
