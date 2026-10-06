@@ -9,6 +9,7 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  * `NOT_READY_BILLING_REVENUE_MISMATCH` / `UNLOCK_REQUIRES_EXECUTIVE` (§6.7) ·
  * `EXPORT_BLOCKED_CRITICAL` / `AUTHORIZED_EXCEPTION_REASON_REQUIRED` (§6.8)
  * `PERIOD_NOT_ENDED` เติมเข้า `24` §6.7 ตามมติ PO U51 (ส่ง/ล็อกได้เมื่อสิ้นเดือนแล้วเท่านั้น)
+ * `PERIOD_HAS_OPEN_PAYOUTS` เติมเข้า `24` §6.7 ตามมติ PO U112 (รอบจ่ายของงวดต้อง completed/cancelled ก่อนส่ง/ล็อก)
  * ที่เติมเข้า `24` พร้อม commit นี้ (v4.5): `PERIOD_NOT_FOUND`, `PERIOD_INVALID_STATUS`,
  * `EXCEPTION_NOT_FOUND`, `EXCEPTION_INVALID_STATUS` — กรณี 404 และ transition ที่ `23`
  * §6.12/§6.13 ไม่รองรับ ซึ่งไฟล์ 30/34 ไม่ได้ระบุ code ไว้
@@ -22,6 +23,7 @@ export const ACCOUNTING_ERROR_CODES = [
   'PERIOD_NOT_FOUND',
   'PERIOD_INVALID_STATUS',
   'PERIOD_NOT_ENDED',
+  'PERIOD_HAS_OPEN_PAYOUTS',
   'NOT_READY_CRITICAL_OPEN',
   'NOT_READY_RECONCILE_INCOMPLETE',
   'NOT_READY_BILLING_REVENUE_MISMATCH',
@@ -43,6 +45,7 @@ const HTTP_STATUS: Record<AccountingErrorCode, number> = {
   PERIOD_NOT_FOUND: 404,
   PERIOD_INVALID_STATUS: 400,
   PERIOD_NOT_ENDED: 400,
+  PERIOD_HAS_OPEN_PAYOUTS: 400,
   NOT_READY_CRITICAL_OPEN: 400,
   NOT_READY_RECONCILE_INCOMPLETE: 400,
   NOT_READY_BILLING_REVENUE_MISMATCH: 400,
@@ -67,6 +70,10 @@ const MESSAGES: Record<AccountingErrorCode, ErrorMessage> = {
   PERIOD_NOT_ENDED: {
     title: 'งวดนี้ยังไม่สิ้นเดือน',
     message: 'ส่งสำนักงานบัญชีหรือล็อกงวดได้ตั้งแต่ 00:00 น. วันที่ 1 ของเดือนถัดไป (เวลาไทย) เท่านั้น',
+  },
+  PERIOD_HAS_OPEN_PAYOUTS: {
+    title: 'ยังมีรอบจ่ายของงวดนี้ค้างอยู่',
+    message: 'ส่งสำนักงานบัญชีหรือล็อกงวดไม่ได้ — ยืนยันจ่ายสำเร็จหรือยกเลิกรอบจ่ายของงวดนี้ให้ครบก่อน',
   },
   NOT_READY_CRITICAL_OPEN: {
     title: 'ยังมีข้อยกเว้นระดับวิกฤตค้างอยู่',

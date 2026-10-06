@@ -214,13 +214,13 @@ suite('มติ PO U99 — ข้อมูลองค์กร', () => {
     expect((await resolver.current()).logo).toBeNull()
     const old = await resolver.forSnapshot(
       { name: 'ชื่อเดิม', taxId: TAX_ID, address: 'ที่อยู่เดิม', phone: null, branchCode: '00001' },
-      { nameEn: 'Old Name', email: null, website: null, logoPath: path },
+      { nameEn: 'Old Name', email: null, website: null, logoPath: path, logoSha256: null },
     )
     expect(old).toMatchObject({ nameTh: 'ชื่อเดิม', nameEn: 'Old Name', branchLabel: 'สาขาที่ 00001' })
     expect(old.logo?.format).toBe('jpg')
   })
 
-  it('เอกสารก่อน U99 (ไม่มี snapshot ชุดเพิ่ม) ⇒ ใช้ค่าปัจจุบันเฉพาะชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้ · core ยังเป็น snapshot', async () => {
+  it('มติ PO U110: เอกสารก่อน U99 (ไม่มี snapshot ชุดเพิ่ม) ⇒ ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้ว่าง (ไม่ดึงค่าปัจจุบัน) · core ยังเป็น snapshot', async () => {
     await queries.updateOrganizationProfile(ctx('กรอกข้อมูลจริงก่อนใช้งาน'), INPUT)
     const legacy = await letterhead
       .createLetterheadResolver(ORG_ID)
@@ -229,11 +229,27 @@ suite('มติ PO U99 — ข้อมูลองค์กร', () => {
       nameTh: 'ชื่อตอนออกใบ',
       taxId: '1111111111111',
       address: 'ที่อยู่ตอนออกใบ',
-      nameEn: INPUT.nameEn,
-      email: INPUT.email,
-      website: INPUT.website,
+      nameEn: null,
+      email: null,
+      website: null,
       logo: null,
     })
+  })
+
+  it('มติ PO U110: อัปโหลดโลโก้เก็บ hash · snapshot hash ไม่ตรงไฟล์ ⇒ ไม่พิมพ์โลโก้ · ตรง ⇒ พิมพ์', async () => {
+    const path = logoPath('11111111-1111-4111-8111-000000000004')
+    uploads.putFakeUpload(path, TINY_PNG)
+    await queries.setOrganizationLogo(ctx('ใช้โลโก้ใหม่'), path)
+    const row = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { logoSha256: true } })
+    expect(row.logoSha256).toMatch(/^[0-9a-f]{64}$/)
+    const resolver = letterhead.createLetterheadResolver(ORG_ID)
+    const core = { name: 'ก', taxId: TAX_ID, address: 'ที่อยู่', phone: null, branchCode: '00000' }
+    const base = { nameEn: null, email: null, website: null, logoPath: path }
+    expect((await resolver.forSnapshot(core, { ...base, logoSha256: row.logoSha256 })).logo?.format).toBe('png')
+    expect((await resolver.forSnapshot(core, { ...base, logoSha256: 'f'.repeat(64) })).logo).toBeNull()
+    await queries.removeOrganizationLogo(ctx('ไม่ใช้โลโก้แล้ว'))
+    const cleared = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { logoSha256: true } })
+    expect(cleared.logoSha256).toBeNull()
   })
 
   it('โลโก้เสีย/หาย ⇒ พิมพ์เอกสารได้โดยไม่มีโลโก้ (ไม่ล้ม)', async () => {

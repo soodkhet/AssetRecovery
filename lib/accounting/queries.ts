@@ -13,6 +13,7 @@ import {
   type ExceptionSummary,
 } from '@/lib/accounting/exception'
 import {
+  assertNoOpenPayouts,
   assertPeriodActionStatus,
   assertPeriodEnded,
   assertPeriodTransition,
@@ -25,11 +26,14 @@ import {
   periodKeyOf,
   periodLabelOf,
   periodOrdinal,
+  periodRangeOf,
   periodStatusLabel,
+  CLOSED_PAYOUT_BATCH_STATUSES,
   MANAGE_ACCOUNTING_PERIOD,
   UNLOCK_PERIOD,
   type BillingRevenueMismatch,
   type DraftBillingBatchSummary,
+  type OpenPayoutBatch,
   type UnbilledRevenueSummary,
   type PeriodKey,
   type ReadinessResult,
@@ -435,6 +439,24 @@ async function draftBillingBatchSummary(organizationId: string, periodEnd: Date)
   }
 }
 
+/**
+ * มติ PO U112 — รอบจ่ายของงวดที่ยังไม่ `completed`/`cancelled` (บล็อกส่ง/ล็อกงวด)
+ * รอบจ่ายผูกงวดด้วย `created_at` ตามปฏิทินไทย — กติกาเดียวกับยามงวดของรอบจ่าย (`assertPeriodOpenAt` ใน payout)
+ */
+async function openPayoutBatchesOf(organizationId: string, key: PeriodKey): Promise<OpenPayoutBatch[]> {
+  const range = periodRangeOf(key)
+  return prisma.payoutBatch.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      status: { notIn: [...CLOSED_PAYOUT_BATCH_STATUSES] },
+      createdAt: { gte: range.start, lt: range.end },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, name: true, status: true, netSatang: true, createdAt: true },
+  })
+}
+
 /** ประกอบข้อมูลสด 3 เงื่อนไขแล้วส่งให้ตัวตัดสิน pure (`30` §6.2) */
 async function readinessOf(organizationId: string, row: PeriodRow, now: Date): Promise<ReadinessResult> {
   const key: PeriodKey = { yearBe: row.yearBe, month: row.month }
@@ -451,6 +473,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     draftBatches,
     awaitingReceiptInvoice,
     organizationProfileIssues,
+    openPayoutBatches,
   ] = await Promise.all([
     prisma.exception.findMany({
       where: { organizationId, periodId: row.id, status: 'open' },
@@ -491,6 +514,8 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     }),
     // มติ PO U99 — ข้อมูลองค์กรยังเป็นค่าตัวอย่าง ⇒ เตือน (เอกสารในงวดพิมพ์ค่านั้นไปแล้ว)
     getOrganizationProfileIssues(organizationId),
+    // มติ PO U112 — รอบจ่ายของงวดที่ยังไม่จ่ายสำเร็จ/ยกเลิก ⇒ บล็อก
+    openPayoutBatchesOf(organizationId, key),
   ])
 
   return evaluateReadiness({
@@ -506,6 +531,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     unbilledRevenue,
     draftBillingBatches: draftBatches,
     organizationProfileIssues,
+    openPayoutBatches,
     receiptsAwaitingTaxInvoice: {
       count: awaitingReceiptInvoice._count._all,
       amountSatang:
@@ -646,7 +672,10 @@ export async function sendPeriod(
   )
 }
 
-/** `sent_to_accountant → locked` — บัญชี/ผู้บริหารยืนยันปิดงวด (`30` §9) · ต้องสิ้นเดือนแล้ว (U51) */
+/**
+ * `sent_to_accountant → locked` — บัญชี/ผู้บริหารยืนยันปิดงวด (`30` §9) · ต้องสิ้นเดือนแล้ว (U51)
+ * · รอบจ่ายของงวดต้อง completed/cancelled ครบ (U112 — `PERIOD_HAS_OPEN_PAYOUTS`)
+ */
 export async function lockPeriod(
   ctx: AccountingMutationContext,
   periodId: string,
@@ -659,6 +688,8 @@ export async function lockPeriod(
   const row = await findPeriodById(ctx.actor, periodId)
   assertPeriodActionStatus('lock', row.status)
   assertPeriodEnded({ yearBe: row.yearBe, month: row.month }, sim?.simulatedNow ?? now)
+  // มติ PO U112 — รอบจ่ายของงวดต้องจ่ายสำเร็จ/ยกเลิกครบก่อนล็อก (ทางลัด dev ก็ผ่านยามนี้)
+  assertNoOpenPayouts(await openPayoutBatchesOf(ctx.actor.organizationId, { yearBe: row.yearBe, month: row.month }))
   return transitionPeriod(ctx, periodId, 'locked', input, sim === undefined ? {} : { simulation: sim }, now)
 }
 

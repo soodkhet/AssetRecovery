@@ -717,6 +717,9 @@ model Organization {
   /// path ของโลโก้ใน bucket `case-documents` (`organization/<orgId>/logo/<uuid>.<ext>` — อัปโหลดผ่าน server · มติ PO U99)
   /// เปลี่ยน/ลบโลโก้ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ (เอกสารที่ snapshot path เดิมไว้ยังพิมพ์โลโก้เดิมได้)
   logoUrl       String? @map("logo_url")
+  /// SHA-256 ของไฟล์โลโก้ปัจจุบัน (มติ PO U110) — เขียนพร้อม `logo_url` · snapshot ลงเอกสารภาษี/ใบส่งมอบ
+  /// เพื่อพิมพ์ซ้ำได้รูปเดียวกับตอนออก · NULL = ไม่มีโลโก้/โลโก้ก่อน U110 · CHECK hex 64 ใน raw SQL `20261006220000_letterhead_snapshot_period_payouts`
+  logoSha256    String? @map("logo_sha256") @db.VarChar(64)
   vatRegistered Boolean @default(true) @map("vat_registered")
   /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
   /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
@@ -2257,6 +2260,10 @@ model HandoverLot {
   signedDocHash     String? @map("signed_doc_hash") @db.VarChar(64)
   deliveryProofHash String? @map("delivery_proof_hash") @db.VarChar(64)
   note              String?
+  /// มติ PO U111 — snapshot หัวกระดาษองค์กรทั้งชุด ตอนยืนยันล็อต (เขียนใน `$transaction` ของ confirm)
+  /// `{ name, tax_id, address, phone, branch_code, name_en, email, website, logo_path, logo_sha256 }`
+  /// NULL = ยังไม่ยืนยัน/ล็อตก่อน U111 (ใบส่งมอบใช้ค่าปัจจุบัน) · ล็อต confirmed แก้ไม่ได้ (trigger immutable)
+  letterheadSnapshot Json? @map("letterhead_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid

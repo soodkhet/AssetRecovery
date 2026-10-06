@@ -22,7 +22,7 @@ import {
 } from '@/lib/portal/status-map'
 import { prisma } from '@/lib/prisma'
 import { renderHandoverNote } from '@/components/pdf/handover-note'
-import { currentLetterhead } from '@/lib/organization/letterhead'
+import { handoverLetterhead } from '@/lib/organization/letterhead'
 import { downloadUploadedFile } from '@/lib/uploads/storage'
 import { buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
 import { documentExtension, lotDocumentMime } from '@/lib/warehouse/lot-documents'
@@ -298,7 +298,7 @@ export async function getPortalLotDeliveryNote(
   const source = await getHandoverDocSourceForCompany(ctx.user.organizationId, ctx.companyId, lot.id)
   const pdf = await renderHandoverNote(
     buildHandoverDoc(source.lot, source.issuer, source.recipient),
-    await currentLetterhead(ctx.user.organizationId),
+    await handoverLetterhead(ctx.user.organizationId, source.letterheadSnapshot),
   )
   await auditLotExport(ctx, lot, 'delivery_note', request)
 

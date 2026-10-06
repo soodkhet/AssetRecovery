@@ -7,6 +7,9 @@ import {
   organizationLogoPath,
   organizationProfileIssues,
   organizationProfileWarning,
+  organizationLetterheadSnapshotJson,
+  organizationLetterheadSnapshotOf,
+  parseOrganizationLetterheadSnapshot,
   parseSellerProfileSnapshot,
   sellerProfileOf,
   sellerProfileSnapshotJson,
@@ -109,20 +112,34 @@ describe('ที่อยู่แยกช่อง → บรรทัดเ�
 })
 
 describe('snapshot หัวเอกสาร (ใบกำกับ/ใบแจ้งหนี้)', () => {
-  const org = { nameEn: 'Jaidee Mobile', email: 'a@b.co', website: null, logoUrl: 'organization/x/logo/1.png' }
+  const SHA = 'a'.repeat(64)
+  const org = { nameEn: 'Jaidee Mobile', email: 'a@b.co', website: null, logoUrl: 'organization/x/logo/1.png', logoSha256: SHA }
 
-  it('ค่าปัจจุบัน → JSON → อ่านกลับได้ค่าเดิม', () => {
+  it('ค่าปัจจุบัน → JSON → อ่านกลับได้ค่าเดิม (รวม hash โลโก้ — มติ PO U110)', () => {
     const json = sellerProfileSnapshotJson(sellerProfileOf(org))
-    expect(json).toEqual({ name_en: 'Jaidee Mobile', email: 'a@b.co', website: null, logo_path: 'organization/x/logo/1.png' })
+    expect(json).toEqual({
+      name_en: 'Jaidee Mobile',
+      email: 'a@b.co',
+      website: null,
+      logo_path: 'organization/x/logo/1.png',
+      logo_sha256: SHA,
+    })
     expect(parseSellerProfileSnapshot(json)).toEqual({
       nameEn: 'Jaidee Mobile',
       email: 'a@b.co',
       website: null,
       logoPath: 'organization/x/logo/1.png',
+      logoSha256: SHA,
     })
   })
 
-  it('เอกสารก่อน U99 (NULL) = ไม่มี snapshot ⇒ ใช้ค่าปัจจุบันเฉพาะชุดนี้ · ค่ารูปผิด = ค่าว่าง', () => {
+  it('ไม่มีโลโก้ ⇒ ไม่เก็บ hash ค้าง · snapshot ก่อน U110 (ไม่มี logo_sha256) ⇒ hash = null', () => {
+    expect(sellerProfileOf({ ...org, logoUrl: null }).logoSha256).toBeNull()
+    expect(parseSellerProfileSnapshot({ name_en: 'X', logo_path: 'p' })?.logoSha256).toBeNull()
+    expect(parseSellerProfileSnapshot({ logo_sha256: 'not-a-hash' })?.logoSha256).toBeNull()
+  })
+
+  it('เอกสารก่อน U99 (NULL) = ไม่มี snapshot · ค่ารูปผิด = ค่าว่าง', () => {
     expect(parseSellerProfileSnapshot(null)).toBeNull()
     expect(parseSellerProfileSnapshot([1, 2])).toBeNull()
     expect(parseSellerProfileSnapshot({ name_en: 5, email: '' })).toEqual({
@@ -130,7 +147,45 @@ describe('snapshot หัวเอกสาร (ใบกำกับ/ใบแ�
       email: null,
       website: null,
       logoPath: null,
+      logoSha256: null,
     })
+  })
+})
+
+describe('snapshot หัวกระดาษทั้งชุด (ใบส่งมอบ — มติ PO U111)', () => {
+  const row = {
+    name: 'บริษัท ใจดี โมบาย จำกัด',
+    nameEn: 'Jaidee Mobile',
+    taxId: '0105560123456',
+    address: '1 ถนนสีลม',
+    phone: '02-000-0000',
+    email: 'a@b.co',
+    website: 'www.jaidee.co.th',
+    branchCode: '00001',
+    logoUrl: 'organization/x/logo/1.png',
+    logoSha256: 'b'.repeat(64),
+  }
+
+  it('ค่าปัจจุบัน → JSON → อ่านกลับได้ครบทุกช่อง', () => {
+    const json = organizationLetterheadSnapshotJson(organizationLetterheadSnapshotOf(row))
+    expect(json).toMatchObject({ name: row.name, tax_id: row.taxId, branch_code: '00001', logo_sha256: row.logoSha256 })
+    expect(parseOrganizationLetterheadSnapshot(json)).toEqual({
+      name: row.name,
+      taxId: row.taxId,
+      address: row.address,
+      phone: row.phone,
+      branchCode: '00001',
+      nameEn: row.nameEn,
+      email: row.email,
+      website: row.website,
+      logoPath: row.logoUrl,
+      logoSha256: row.logoSha256,
+    })
+  })
+
+  it('NULL/ไม่มีชื่อหรือเลขผู้เสียภาษี ⇒ ไม่มี snapshot (ใช้ค่าปัจจุบัน)', () => {
+    expect(parseOrganizationLetterheadSnapshot(null)).toBeNull()
+    expect(parseOrganizationLetterheadSnapshot({ name: 'ก' })).toBeNull()
   })
 })
 

@@ -5,7 +5,9 @@ import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
 import { readinessDescription } from '@/lib/accounting/period'
 import type { AccountingPeriodDto, PeriodReadinessDto } from '@/lib/accounting/types'
 import { callApi } from '@/lib/api/types'
+import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { PAYOUT_STATUS_LABEL_SHORT } from '@/lib/payout/payout-ui'
 import { exceptionModuleLabel } from '@/lib/reports/dashboard'
 
 /**
@@ -131,6 +133,21 @@ export function ReadinessModal({
                 <div key={item.billingBatchId} className="border-t border-red-100 px-3 py-2 text-xs text-slate-700">
                   <span className="font-mono">{item.batchNumber}</span> · {item.companyName} · รอบบิล{' '}
                   {fmtSatangSymbol(item.batchTotalSatang)} ≠ รายได้ {fmtSatangSymbol(item.revenueTotalSatang)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* มติ PO U112 — รอบจ่ายของงวดที่ยังไม่จ่ายสำเร็จ/ยกเลิก: บล็อกการส่ง/ล็อกงวด */}
+          {data.openPayoutBatches.length > 0 && (
+            <div className="rounded-lg border border-red-200">
+              <div className="bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                รอบจ่ายของงวดนี้ที่ต้องยืนยันจ่ายสำเร็จหรือยกเลิกก่อน {fmtCount(data.openPayoutBatches.length)} รอบ
+              </div>
+              {data.openPayoutBatches.map((item) => (
+                <div key={item.id} className="border-t border-red-100 px-3 py-2 text-xs text-slate-700">
+                  <span className="font-semibold">{item.name}</span> · {PAYOUT_STATUS_LABEL_SHORT[item.status]} · สร้างเมื่อ{' '}
+                  {fmtDate(item.createdAt)} · ยอดสุทธิ {fmtSatangSymbol(item.netSatang)}
                 </div>
               ))}
             </div>

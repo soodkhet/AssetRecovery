@@ -529,6 +529,7 @@ export async function sendBillingBatch(
             email: true,
             website: true,
             logoUrl: true,
+            logoSha256: true,
           },
         },
         company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },

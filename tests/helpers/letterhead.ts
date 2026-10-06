@@ -40,6 +40,7 @@ export function fakeLetterheadModule(): typeof import('@/lib/organization/letter
   const resolver = {
     current: async () => testLetterhead(),
     forSnapshot: async () => testLetterhead(),
+    forOrganizationSnapshot: async () => testLetterhead(),
   }
   return {
     loadLetterheadLogo: async () => null,
@@ -47,5 +48,6 @@ export function fakeLetterheadModule(): typeof import('@/lib/organization/letter
     currentLetterhead: async () => testLetterhead(),
     taxInvoiceLetterhead: async () => testLetterhead(),
     billingInvoiceLetterhead: async () => testLetterhead(),
+    handoverLetterhead: async () => testLetterhead(),
   }
 }

@@ -17,6 +17,12 @@ import type { HandoverParty } from '@/lib/warehouse/handover-doc'
 import { compareAssetIdentity, imeiSearchKey } from '@/lib/warehouse/imei'
 import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
 import {
+  organizationLetterheadSnapshotJson,
+  organizationLetterheadSnapshotOf,
+  parseOrganizationLetterheadSnapshot,
+  type OrganizationLetterheadSnapshot,
+} from '@/lib/organization/profile'
+import {
   assertIntakeCondition,
   assertIntakeIdentity,
   assertRejectReason,
@@ -840,6 +846,20 @@ async function resolveLotDocument(
  * ⚠️ error ที่หลุดออกจากทรานแซกชันถูกห่อเป็น `CONFIRM_TRANSACTION_FAILED` (`44` §12) ยกเว้น
  *    `WarehouseError` ของกติกาที่ผู้ใช้แก้เองได้ (เอกสารไม่ครบ/ล็อตยืนยันแล้ว) ซึ่งต้องบอกตรง ๆ
  */
+/** ช่องหัวกระดาษองค์กรที่ snapshot ลงล็อตตอนยืนยัน (มติ PO U111) */
+const LETTERHEAD_SNAPSHOT_SELECT = {
+  name: true,
+  nameEn: true,
+  taxId: true,
+  address: true,
+  phone: true,
+  email: true,
+  website: true,
+  branchCode: true,
+  logoUrl: true,
+  logoSha256: true,
+} as const
+
 export async function confirmLot(
   user: SessionUser,
   lotId: string,
@@ -876,10 +896,18 @@ export async function confirmLot(
 
   try {
     result = await prisma.$transaction(async (tx) => {
+      // มติ PO U111 — snapshot หัวกระดาษองค์กร ณ ตอนยืนยัน (เขียนพร้อมการยึดล็อต — rollback ไปพร้อมกันทั้งก้อน)
+      const organization = await tx.organization.findUniqueOrThrow({
+        where: { id: user.organizationId },
+        select: LETTERHEAD_SNAPSHOT_SELECT,
+      })
+      const letterheadSnapshot = organizationLetterheadSnapshotJson(organizationLetterheadSnapshotOf(organization))
+
       // ยึดล็อตด้วยสถานะเดิม — กันสองคนกดยืนยันพร้อมกัน (คนที่สองได้ 0 แถว)
       const claimed = await tx.handoverLot.updateMany({
         where: { id: lotId, status: current.status },
         data: {
+          letterheadSnapshot,
           status: 'confirmed',
           confirmedAt,
           confirmedBy: context.actor.id,
@@ -944,6 +972,7 @@ export async function confirmLot(
             deliveryProofUrl,
             signedDocHash,
             deliveryProofHash,
+            letterheadSnapshot,
             assetIdsHandedOver: assetIds,
             expenseIdsUnlocked,
             revenueIdsCreated: revenue.revenueIdsCreated,
@@ -1013,12 +1042,14 @@ export interface HandoverDocSource {
   issuer: HandoverParty
   /** ผู้รับมอบ = บริษัทไฟแนนซ์เจ้าของล็อต (1 ล็อต = 1 บริษัทเสมอ · §6.2) */
   recipient: HandoverParty
+  /** หัวกระดาษองค์กร ณ ตอนยืนยันล็อต (มติ PO U111) — `null` = ยังไม่ยืนยัน/ล็อตก่อน U111 (ใช้ค่าปัจจุบัน) */
+  letterheadSnapshot: OrganizationLetterheadSnapshot | null
 }
 
 /**
  * ข้อมูลดิบของล็อตสำหรับออกเอกสาร — ใช้ scope เดียวกับ `getLot()` (ล็อตนอก scope = `LOT_NOT_FOUND`)
- * ที่อยู่/เลขผู้เสียภาษีของสองฝ่ายอ่าน ณ เวลาออกเอกสาร (ไม่ใช่ snapshot — ใบส่งมอบไม่ใช่เอกสารการเงิน
- * ที่ต้องตรึงค่า ต่างจาก `92` §7.1 ที่บังคับ snapshot เฉพาะเอกสารที่กระทบเงิน/ภาษี)
+ * ผู้ส่งมอบ (องค์กร) = snapshot ตอนยืนยันล็อต (มติ PO U111) · ล็อตที่ยังไม่ยืนยัน/ล็อตเก่าไม่มี snapshot = ค่าปัจจุบัน
+ * ผู้รับมอบ (บริษัท) อ่าน ณ เวลาออกเอกสาร
  */
 export async function getHandoverDocSource(user: SessionUser, lotId: string): Promise<HandoverDocSource> {
   const lot = await getLot(user, lotId)
@@ -1026,7 +1057,7 @@ export async function getHandoverDocSource(user: SessionUser, lotId: string): Pr
 }
 
 async function withHandoverParties(organizationId: string, lot: LotDetailDto): Promise<HandoverDocSource> {
-  const [organization, company] = await Promise.all([
+  const [organization, company, snapshotRow] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
       where: { id: organizationId },
       select: { name: true, address: true, taxId: true, phone: true },
@@ -1035,12 +1066,26 @@ async function withHandoverParties(organizationId: string, lot: LotDetailDto): P
       where: { id: lot.companyId },
       select: { name: true, address: true, taxId: true, phone: true, branchCode: true },
     }),
+    prisma.handoverLot.findUniqueOrThrow({ where: { id: lot.id }, select: { letterheadSnapshot: true } }),
   ])
+
+  // มติ PO U111 — ล็อตที่ยืนยันแล้วพิมพ์ซ้ำด้วยข้อมูลองค์กร ณ ตอนยืนยัน (ไม่มี snapshot = ค่าปัจจุบัน)
+  const letterheadSnapshot = parseOrganizationLetterheadSnapshot(snapshotRow.letterheadSnapshot)
+  const issuer: HandoverParty =
+    letterheadSnapshot === null
+      ? organization
+      : {
+          name: letterheadSnapshot.name,
+          address: letterheadSnapshot.address,
+          taxId: letterheadSnapshot.taxId,
+          phone: letterheadSnapshot.phone,
+        }
 
   return {
     lot,
-    issuer: organization,
+    issuer,
     recipient: company,
+    letterheadSnapshot,
   }
 }
 

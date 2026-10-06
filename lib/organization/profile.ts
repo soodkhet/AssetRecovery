@@ -92,13 +92,26 @@ export function organizationAddressLine(parts: OrganizationAddressParts): string
 
 /**
  * ฟิลด์หัวเอกสารที่เพิ่มตาม U99 — ชื่อ/เลขผู้เสียภาษี/ที่อยู่/โทร/สาขา snapshot แยกคอลัมน์อยู่แล้วตั้งแต่ก่อน
- * เก็บเป็น JSONB `seller_profile_snapshot` (NULL = เอกสารก่อน U99 ⇒ ใช้ค่าปัจจุบันเฉพาะฟิลด์ชุดนี้)
+ * เก็บเป็น JSONB `seller_profile_snapshot`
+ * มติ PO U110 — พิมพ์ซ้ำใช้ snapshot เท่านั้น: NULL (เอกสารก่อน U99) ⇒ ฟิลด์ชุดนี้**ว่าง** (ไม่ดึงค่าปัจจุบัน)
+ * + เก็บ SHA-256 ของไฟล์โลโก้ (`logo_sha256`) — ไฟล์ที่ path เดิมไม่ตรง hash = พิมพ์โดยไม่มีโลโก้
  */
 export interface SellerProfileSnapshot {
   nameEn: string | null
   email: string | null
   website: string | null
   logoPath: string | null
+  /** SHA-256 ของไฟล์โลโก้ ณ ตอนออก (U110) — `null` = snapshot ก่อน U110/องค์กรยังไม่มี hash (ไม่ตรวจ) */
+  logoSha256: string | null
+}
+
+/** ฟิลด์หัวเอกสารว่างทั้งชุด — เอกสารที่ไม่มี snapshot ชุดเพิ่ม (มติ PO U110) */
+export const EMPTY_SELLER_PROFILE: SellerProfileSnapshot = {
+  nameEn: null,
+  email: null,
+  website: null,
+  logoPath: null,
+  logoSha256: null,
 }
 
 /** ค่าปัจจุบันขององค์กร → ชุดที่ snapshot ลงเอกสาร (ใช้ตอน**ออก**เอกสารเท่านั้น) */
@@ -107,8 +120,15 @@ export function sellerProfileOf(row: {
   email: string | null
   website: string | null
   logoUrl: string | null
+  logoSha256: string | null
 }): SellerProfileSnapshot {
-  return { nameEn: row.nameEn, email: row.email, website: row.website, logoPath: row.logoUrl }
+  return {
+    nameEn: row.nameEn,
+    email: row.email,
+    website: row.website,
+    logoPath: row.logoUrl,
+    logoSha256: row.logoUrl === null ? null : row.logoSha256,
+  }
 }
 
 /** แถวองค์กร → ค่า JSONB ที่บันทึกลงเอกสาร (คีย์ snake_case ตามธรรมเนียม DB) */
@@ -117,12 +137,14 @@ export function sellerProfileSnapshotJson(profile: SellerProfileSnapshot): {
   email: string | null
   website: string | null
   logo_path: string | null
+  logo_sha256: string | null
 } {
   return {
     name_en: profile.nameEn,
     email: profile.email,
     website: profile.website,
     logo_path: profile.logoPath,
+    logo_sha256: profile.logoSha256,
   }
 }
 
@@ -130,15 +152,94 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
+function sha256OrNull(value: unknown): string | null {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : null
+}
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
 /** อ่าน JSONB กลับ — `null` = ไม่มี snapshot (เอกสารก่อน U99) · ค่าที่รูปไม่ตรงถือเป็นค่าว่างของฟิลด์นั้น */
 export function parseSellerProfileSnapshot(value: unknown): SellerProfileSnapshot | null {
-  if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) return null
-  const record = value as Record<string, unknown>
+  const record = recordOf(value)
+  if (record === null) return null
   return {
     nameEn: stringOrNull(record['name_en']),
     email: stringOrNull(record['email']),
     website: stringOrNull(record['website']),
     logoPath: stringOrNull(record['logo_path']),
+    logoSha256: sha256OrNull(record['logo_sha256']),
+  }
+}
+
+// ── snapshot หัวกระดาษทั้งชุด (ใบส่งมอบ LOT/DLV — มติ PO U111) ─────────────────
+
+/** หัวกระดาษองค์กรครบทุกช่อง ณ ตอนยืนยันล็อต — เก็บเป็น JSONB `handover_lots.letterhead_snapshot` */
+export type OrganizationLetterheadSnapshot = LetterheadCore & SellerProfileSnapshot
+
+/** ค่าปัจจุบันขององค์กร → snapshot หัวกระดาษทั้งชุด (ใช้ตอน**ยืนยันล็อต**เท่านั้น) */
+export function organizationLetterheadSnapshotOf(row: {
+  name: string
+  nameEn: string | null
+  taxId: string
+  address: string
+  phone: string | null
+  email: string | null
+  website: string | null
+  branchCode: string
+  logoUrl: string | null
+  logoSha256: string | null
+}): OrganizationLetterheadSnapshot {
+  return {
+    name: row.name,
+    taxId: row.taxId,
+    address: row.address,
+    phone: row.phone,
+    branchCode: row.branchCode,
+    ...sellerProfileOf(row),
+  }
+}
+
+/** snapshot หัวกระดาษทั้งชุด → ค่า JSONB (คีย์ snake_case) */
+export function organizationLetterheadSnapshotJson(snapshot: OrganizationLetterheadSnapshot): {
+  name: string
+  tax_id: string
+  address: string
+  phone: string | null
+  branch_code: string
+  name_en: string | null
+  email: string | null
+  website: string | null
+  logo_path: string | null
+  logo_sha256: string | null
+} {
+  return {
+    name: snapshot.name,
+    tax_id: snapshot.taxId,
+    address: snapshot.address,
+    phone: snapshot.phone,
+    branch_code: snapshot.branchCode,
+    ...sellerProfileSnapshotJson(snapshot),
+  }
+}
+
+/** อ่าน JSONB กลับ — `null` = ไม่มี snapshot (ล็อตก่อน U111) หรือรูปไม่ครบ (ไม่มีชื่อ/เลขผู้เสียภาษี) */
+export function parseOrganizationLetterheadSnapshot(value: unknown): OrganizationLetterheadSnapshot | null {
+  const record = recordOf(value)
+  const profile = parseSellerProfileSnapshot(value)
+  if (record === null || profile === null) return null
+  const name = stringOrNull(record['name'])
+  const taxId = stringOrNull(record['tax_id'])
+  if (name === null || taxId === null) return null
+  return {
+    name,
+    taxId,
+    address: typeof record['address'] === 'string' ? record['address'] : '',
+    phone: stringOrNull(record['phone']),
+    branchCode: stringOrNull(record['branch_code']) ?? '00000',
+    ...profile,
   }
 }
 
@@ -176,7 +277,7 @@ export interface LetterheadCore {
 /** ประกอบหัวเอกสาร — `extras` มาจาก snapshot (ถ้ามี) หรือค่าปัจจุบัน · โลโก้โหลดแยก (I/O) แล้วส่งเข้ามา */
 export function buildLetterhead(
   core: LetterheadCore,
-  extras: Omit<SellerProfileSnapshot, 'logoPath'>,
+  extras: Pick<SellerProfileSnapshot, 'nameEn' | 'email' | 'website'>,
   logo: LetterheadLogo | null,
 ): DocLetterhead {
   const clean = (value: string | null): string | null => {

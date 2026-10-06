@@ -718,6 +718,7 @@ suite('มติ PO U99 — หัวเอกสาร snapshot ตอนออ
       email: 'before@u99.test',
       website: 'www.before.test',
       logoPath: null,
+      logoSha256: null,
     })
     const invoiceHead = await taxInvoiceLetterhead(createLetterheadResolver(ORG_ID), invoiceSource)
     expect(invoiceHead).toMatchObject({
@@ -733,6 +734,10 @@ suite('มติ PO U99 — หัวเอกสาร snapshot ตอนออ
       await getBillingInvoiceSource(accountant, sentBatch.id),
     )
     expect(billingHead).toMatchObject({ nameTh: 'Phase43Test', nameEn: 'Before Co., Ltd.', website: 'www.before.test' })
+
+    // มติ PO U110 — ใบเก่าที่ไม่มี snapshot ชุดหัวกระดาษ (ก่อน U99) ⇒ ช่องเหล่านั้นว่าง ไม่ดึงค่าปัจจุบัน
+    const legacyHead = await taxInvoiceLetterhead(createLetterheadResolver(ORG_ID), { ...invoiceSource, sellerProfile: null })
+    expect(legacyHead).toMatchObject({ nameTh: 'Phase43Test', nameEn: null, email: null, website: null, logo: null })
 
     // เอกสารใหม่หลังแก้ ⇒ ค่าใหม่
     const { receiptId: nextReceipt } = await seedReceivedBilling()

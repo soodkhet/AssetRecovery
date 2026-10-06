@@ -203,6 +203,17 @@ async function cleanup(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
+}
+
+/** รอบจ่าย (ไม่มีรายการ) สร้างเมื่อ `createdAt` — มติ PO U112 ผูกงวดด้วยวันที่สร้างรอบ */
+async function seedPayoutBatch(name: string, status: string, createdAt: string): Promise<string> {
+  const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, wht_satang, net_satang, created_at, created_by)
+    VALUES ('${ORG_ID}', '${name}', 'outsource', '${status}', 150000, 0, 150000, '${createdAt}', '${ACCOUNTING_ID}')
+    RETURNING id
+  `)
+  return rows[0]?.id ?? ''
 }
 
 beforeAll(async () => {
@@ -506,6 +517,37 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
 
     await expectCode(() => accounting.lockPeriod(ctx(), periodId, reason, beforeMidnight), 'PERIOD_NOT_ENDED')
     const locked = await accounting.lockPeriod(ctx(), periodId, reason, midnight)
+    expect(locked.status).toBe('locked')
+  })
+
+  it('มติ PO U112: รอบจ่ายของงวดยังไม่ completed/cancelled ⇒ ส่ง/ล็อกไม่ได้ (PERIOD_HAS_OPEN_PAYOUTS) · ปิดรอบแล้วทำได้', async () => {
+    const after = new Date('2026-09-02T03:00:00Z')
+    const periodId = await seedPeriod()
+    // 01/08/2569 00:30 น. ไทย = 31/07 ค.ศ. UTC — ต้องนับเป็นงวด ส.ค. (ปฏิทินไทย)
+    const open = await seedPayoutBatch('รอบจ่ายค้าง ส.ค.', 'file_generated', '2026-07-31T17:30:00Z')
+    // รอบที่จ่ายแล้ว/ยกเลิก/อยู่งวดอื่น ไม่บล็อก
+    await seedPayoutBatch('รอบจ่ายสำเร็จ', 'completed', '2026-08-10T03:00:00Z')
+    await seedPayoutBatch('รอบงวด ก.ย.', 'draft', '2026-08-31T17:00:00Z')
+
+    const readiness = await accounting.getPeriodReadiness(accountant, periodId, after)
+    expect(readiness.ready).toBe(false)
+    expect(readiness.checks.find((check) => check.key === 'no_open_payouts')).toMatchObject({ passed: false })
+    expect(readiness.openPayoutBatches.map((batch) => batch.name)).toEqual(['รอบจ่ายค้าง ส.ค.'])
+    await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason, after), 'PERIOD_HAS_OPEN_PAYOUTS')
+
+    await db().$executeRawUnsafe(`UPDATE payout_batches SET status = 'completed' WHERE id = '${open}'`)
+    const sent = await accounting.sendPeriod(ctx(), periodId, reason, after)
+    expect(sent.status).toBe('sent_to_accountant')
+
+    // รอบจ่ายค้างที่เกิดหลังส่งแล้ว (งวดยังไม่ล็อก) ⇒ ล็อกไม่ได้ — ทางลัด dev (วันจำลอง) ก็ผ่านยามเดียวกัน
+    const late = await seedPayoutBatch('รอบจ่ายตกค้าง', 'checking', '2026-08-25T03:00:00Z')
+    await expectCode(() => accounting.lockPeriod(ctx(), periodId, reason, after), 'PERIOD_HAS_OPEN_PAYOUTS')
+    await expectCode(
+      () => accounting.lockPeriod(ctx(), periodId, reason, new Date('2026-08-20T03:00:00Z'), { simulatedNow: after }),
+      'PERIOD_HAS_OPEN_PAYOUTS',
+    )
+    await db().$executeRawUnsafe(`UPDATE payout_batches SET status = 'cancelled', cancelled_at = now(), cancelled_by = '${ACCOUNTING_ID}', cancel_reason = 'ทดสอบ' WHERE id = '${late}'`)
+    const locked = await accounting.lockPeriod(ctx(), periodId, reason, after)
     expect(locked.status).toBe('locked')
   })
 
