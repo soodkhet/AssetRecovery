@@ -185,4 +185,31 @@ describe('เลือกแบรนด์ของรอบ (ประหย�
     expect(pickBrandsToSync(brands, 1).map((brand) => brand.name)).toEqual(['Alpha'])
     expect(pickBrandsToSync(brands, 0)).toEqual([])
   })
+
+  it('U162 — แบรนด์ในรายชื่อตลาดไทยที่ยังไม่เคยดึงมาก่อน (ตามลำดับรายชื่อ ไม่สนตัวพิมพ์) แล้วค่อยแบรนด์ที่เหลือตามลำดับเดิม', () => {
+    const withThai = [
+      ...brands,
+      { name: 'Samsung', externalId: 'Samsung', lastSyncedAt: null },
+      { name: 'Apple', externalId: 'Apple', lastSyncedAt: null },
+      { name: 'vivo', externalId: 'vivo', lastSyncedAt: new Date('2026-02-01') },
+    ]
+    expect(pickBrandsToSync(withThai, 10, ['samsung', 'Apple', 'VIVO']).map((brand) => brand.name)).toEqual([
+      'Samsung',
+      'Apple',
+      'Alpha',
+      'Zeta',
+      'Older',
+      'Old',
+      'vivo',
+    ])
+  })
+
+  it('U162 — resume: แบรนด์ไทยที่ดึงแล้วไม่ถูกดึงซ้ำก่อนแบรนด์ที่ยังไม่เคยดึง · งบจำกัดได้แบรนด์ไทยก่อน', () => {
+    const withThai = [
+      ...brands,
+      { name: 'Samsung', externalId: 'Samsung', lastSyncedAt: new Date('2026-10-06') },
+      { name: 'Apple', externalId: 'Apple', lastSyncedAt: null },
+    ]
+    expect(pickBrandsToSync(withThai, 2, ['Samsung', 'Apple']).map((brand) => brand.name)).toEqual(['Apple', 'Alpha'])
+  })
 })

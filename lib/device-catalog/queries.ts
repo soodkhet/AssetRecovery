@@ -16,7 +16,11 @@ import {
   type DeviceCatalogStatusCode,
 } from '@/lib/device-catalog/catalog'
 import { rapidApiConfigFromEnv } from '@/lib/device-catalog/rapidapi-client'
-import type { DeviceBrandListQuery, DeviceModelListQuery } from '@/lib/device-catalog/schemas'
+import type {
+  DeviceBrandListQuery,
+  DeviceCatalogBulkVisibilityInput,
+  DeviceModelListQuery,
+} from '@/lib/device-catalog/schemas'
 import { getCatalogFilter } from '@/lib/device-catalog/settings-queries'
 import type {
   DeviceBrandDto,
@@ -148,9 +152,13 @@ function auditBase(context: DeviceCatalogMutationContext) {
 
 // ─── อ่าน (หน้า Model Phone) ──────────────────────────────────────
 
-export async function listDeviceBrands(organizationId: string, query: DeviceBrandListQuery): Promise<DeviceBrandListDto> {
-  const filter = await getCatalogFilter(organizationId)
-  const where: Prisma.DeviceBrandWhereInput = {
+/** เงื่อนไขของรายการแบรนด์ — ใช้ร่วมระหว่างหน้ารายการกับ "เลือกทั้งหมด/ไม่เลือกทั้งหมด" (U162 — ชุดเดียวกันเป๊ะ) */
+function brandListWhere(
+  organizationId: string,
+  filter: CatalogFilter,
+  query: Pick<DeviceBrandListQuery, 'visibility' | 'q'>,
+): Prisma.DeviceBrandWhereInput {
+  return {
     organizationId,
     deletedAt: null,
     AND: [
@@ -171,6 +179,36 @@ export async function listDeviceBrands(organizationId: string, query: DeviceBran
           },
     ],
   }
+}
+
+/** เงื่อนไขของรายการรุ่น — ใช้ร่วมระหว่างหน้ารายการกับ "เลือกทั้งหมด/ไม่เลือกทั้งหมด" (U162) */
+function modelListWhere(
+  organizationId: string,
+  filter: CatalogFilter,
+  query: Pick<DeviceModelListQuery, 'visibility' | 'assetKind' | 'brandId' | 'q'>,
+): Prisma.DeviceModelWhereInput {
+  return {
+    organizationId,
+    deletedAt: null,
+    brand: { deletedAt: null },
+    ...(query.assetKind === 'all' ? {} : { assetKind: query.assetKind }),
+    ...(query.brandId === undefined ? {} : { brandId: query.brandId }),
+    AND: [
+      query.visibility === 'visible'
+        ? modelVisibleWhere(filter)
+        : query.visibility === 'hidden'
+          ? modelHiddenWhere(filter)
+          : query.visibility === 'manual'
+            ? { manualStatus: { not: null } }
+            : {},
+      modelSearchWhere(query.q),
+    ],
+  }
+}
+
+export async function listDeviceBrands(organizationId: string, query: DeviceBrandListQuery): Promise<DeviceBrandListDto> {
+  const filter = await getCatalogFilter(organizationId)
+  const where = brandListWhere(organizationId, filter, query)
   const [rows, total] = await Promise.all([
     prisma.deviceBrand.findMany({
       where,
@@ -209,23 +247,7 @@ export async function listDeviceBrands(organizationId: string, query: DeviceBran
 
 export async function listDeviceModels(organizationId: string, query: DeviceModelListQuery): Promise<DeviceModelListDto> {
   const filter = await getCatalogFilter(organizationId)
-  const where: Prisma.DeviceModelWhereInput = {
-    organizationId,
-    deletedAt: null,
-    brand: { deletedAt: null },
-    ...(query.assetKind === 'all' ? {} : { assetKind: query.assetKind }),
-    ...(query.brandId === undefined ? {} : { brandId: query.brandId }),
-    AND: [
-      query.visibility === 'visible'
-        ? modelVisibleWhere(filter)
-        : query.visibility === 'hidden'
-          ? modelHiddenWhere(filter)
-          : query.visibility === 'manual'
-            ? { manualStatus: { not: null } }
-            : {},
-      modelSearchWhere(query.q),
-    ],
-  }
+  const where = modelListWhere(organizationId, filter, query)
   const [rows, total] = await Promise.all([
     prisma.deviceModel.findMany({
       where,
@@ -599,6 +621,64 @@ export async function bulkSetDeviceModelManualStatus(
     }
   })
   return { updated, unchanged: rows.length - updated }
+}
+
+/**
+ * "เลือกทั้งหมด / ไม่เลือกทั้งหมด" (มติ PO U162) — ตั้ง `manual_status` ให้**ทุกรายการที่ตรงตัวกรอง/คำค้นปัจจุบัน**
+ * (เงื่อนไขชุดเดียวกับหน้ารายการ — ทั้งชุด ไม่ใช่แค่หน้าที่เห็น) · ค่าที่ตั้ง = การตั้งด้วยมือ (job ไม่เขียนทับ)
+ *
+ * - ทั้งชุดใน transaction เดียว · ข้ามแถวที่ค่าเท่าเดิมอยู่แล้ว
+ * - audit **1 แถวต่อการกด** (สรุป: จำนวนที่ตรงเงื่อนไข/เปลี่ยน/คงเดิม + เงื่อนไข) — `target_id = null`
+ *   เพราะเป็นการกระทำกับชุดรายการ · เหตุผลบังคับ (schema)
+ */
+export async function bulkSetDeviceCatalogVisibility(
+  context: DeviceCatalogMutationContext,
+  input: DeviceCatalogBulkVisibilityInput,
+): Promise<DeviceCatalogBulkResultDto> {
+  const organizationId = context.actor.organizationId
+  const filter = await getCatalogFilter(organizationId)
+  const changeData = { manualStatus: input.manualStatus, updatedBy: context.actor.id }
+  const notYet = { OR: [{ manualStatus: null }, { manualStatus: { not: input.manualStatus } }] }
+
+  return prisma.$transaction(async (tx) => {
+    let matched: number
+    let updated: number
+    let criteria: Record<string, string | null>
+    if (input.target === 'brands') {
+      const where = brandListWhere(organizationId, filter, input)
+      matched = await tx.deviceBrand.count({ where })
+      updated = (await tx.deviceBrand.updateMany({ where: { AND: [where, notYet] }, data: changeData })).count
+      criteria = { visibility: input.visibility, q: input.q ?? null }
+    } else {
+      const where = modelListWhere(organizationId, filter, input)
+      matched = await tx.deviceModel.count({ where })
+      updated = (await tx.deviceModel.updateMany({ where: { AND: [where, notYet] }, data: changeData })).count
+      criteria = {
+        visibility: input.visibility,
+        asset_kind: input.assetKind,
+        brand_id: input.brandId ?? null,
+        q: input.q ?? null,
+      }
+    }
+    await emitAudit(
+      {
+        ...auditBase({ ...context, reason: input.reason }),
+        action: 'status_change',
+        targetType: input.target === 'brands' ? 'device_brands' : 'device_models',
+        targetId: null,
+        after: {
+          bulk: true,
+          manual_status: input.manualStatus,
+          criteria,
+          matched,
+          updated,
+          unchanged: matched - updated,
+        },
+      },
+      tx,
+    )
+    return { updated, unchanged: matched - updated }
+  })
 }
 
 // ─── ใช้กับเคส (ฟอร์ม/นำเข้า) ───────────────────────────────────────

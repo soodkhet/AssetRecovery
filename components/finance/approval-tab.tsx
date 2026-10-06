@@ -31,7 +31,7 @@ import {
   Tr,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
+import { advanceCreateAccess, APPROVE_ADVANCE } from '@/lib/advances/advance'
 import {
   advanceStatusBadgeGroup,
   advanceStatusLabel,
@@ -69,7 +69,9 @@ import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substit
 export function ApprovalTab() {
   const { can } = usePermission()
   const canCreateClaim = CREATE_CLAIM_CAPABILITIES.some((capability) => can('manage', capability))
-  const canRequestAdvance = can('manage', REQUEST_ADVANCE)
+  // มติ PO U160 — การเงินขอแทนผู้อื่นได้ (ไม่ถือ `manage:request_advance`) ⇒ ปุ่มขอเบิกแสดงเมื่อทำได้อย่างใดอย่างหนึ่ง
+  const advanceAccess = advanceCreateAccess((capability) => can('manage', capability))
+  const canRequestAdvance = advanceAccess.self || advanceAccess.onBehalf
   const canApproveAdvance = can('manage', APPROVE_ADVANCE)
   // มติ PO U107 — ผู้เห็นรายการเบิกทั้งองค์กร (ขั้นการเงิน/บริหาร) ยกเลิกใบรับรองแทนใบเสร็จได้ (ผู้จัดการทีมดูอย่างเดียว)
   const canManageSubstituteReceipts = can('view', 'approve_expense_finance') || can('view', 'approve_expense_executive')

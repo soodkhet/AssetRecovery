@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
-import { APPROVE_ADVANCE, minDueClearInputDate, REQUEST_ADVANCE } from '@/lib/advances/advance'
+import { advanceCreateAccess, minDueClearInputDate } from '@/lib/advances/advance'
 import { advanceRequestErrorText } from '@/lib/advances/advance-ui'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
 import type { AdvanceDto } from '@/lib/advances/types'
@@ -19,8 +19,9 @@ import { parseBahtInput } from '@/lib/format/money'
  * - ช่องเงินกรอกเป็น **บาท** แล้วแปลงด้วย `parseBahtInput()` — ห้ามคูณ 100 เองในหน้าจอ (Rule 01)
  * - กำหนดเคลียร์ยอดเป็น `<input type="date">` (ISO ค.ศ. — ข้อยกเว้นเดียวของกฎ พ.ศ.) แล้ว
  *   **ส่งค่าดิบเป็นสตริง** ให้ API parse เอง (กับดัก `dateOnlySchema` transform → Date)
- * - มติ PO U153 — ผู้ที่ขอแทนผู้อื่นได้ (`manage:approve_advance` + `manage:request_advance` ของ endpoint
- *   หรือ Superadmin) เลือกผู้รับเงินได้ · server ตรวจซ้ำ (ไม่มีสิทธิ์ส่งผู้รับมา = 403)
+ * - มติ PO U153/U160 — ผู้ที่ขอแทนผู้อื่นได้ (`manage:approve_advance` หรือ Superadmin) เลือกผู้รับเงินได้
+ *   · ถ้าขอให้ตัวเองไม่ได้ (ไม่ถือ `manage:request_advance` เช่น การเงิน) ช่องผู้รับ = บังคับเลือก
+ *   · server ตรวจซ้ำ (ไม่มีสิทธิ์ตามกรณี = 403)
  */
 export function AdvanceFormModal({ open, onClose, onCreated }: {
   open: boolean
@@ -29,7 +30,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
 }) {
   const { showToast } = useToast()
   const { can } = usePermission()
-  const canRequestForOthers = can('manage', APPROVE_ADVANCE) && can('manage', REQUEST_ADVANCE)
+  const access = advanceCreateAccess((capability) => can('manage', capability))
   const [payeeId, setPayeeId] = useState('')
   const [amount, setAmount] = useState('')
   const [purpose, setPurpose] = useState('')
@@ -49,8 +50,12 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       payeeId: payeeId === '' ? null : payeeId,
     }
     const parsed = advanceCreateSchema.safeParse(payload)
-    if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
+    const needsPayee = !access.self && payload.payeeId === null
+    if (!parsed.success || needsPayee) {
+      setErrors({
+        ...(parsed.success ? {} : toFieldErrors(parsed.error)),
+        ...(needsPayee ? { payeeId: 'เลือกผู้รับเงินที่ขอแทน' } : {}),
+      })
       return
     }
 
@@ -103,8 +108,13 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
           </InlineAlert>
         )}
 
-        {canRequestForOthers && (
-          <OnBehalfPayeeSelect value={payeeId} onChange={setPayeeId} error={errors.payeeId} />
+        {access.onBehalf && (
+          <OnBehalfPayeeSelect
+            value={payeeId}
+            onChange={setPayeeId}
+            error={errors.payeeId}
+            allowSelf={access.self}
+          />
         )}
 
         <Field label="ยอดเงินที่ขอเบิก (บาท)" required error={errors.requestedSatang}>

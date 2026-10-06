@@ -692,3 +692,36 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
     expect(log?.reason).toMatch(/\[จำลองวันที่ \d{2}\/\d{2}\/25\d{2}\]/)
   })
 })
+
+suite('ขอเงินทดรองแทนผู้อื่น (มติ PO U160)', () => {
+  it('การเงินขอแทนพนักงานได้ · เข้าสายอนุมัติปกติ (pending_approval) · audit ระบุผู้บันทึกแทน', async () => {
+    const own = await advances.createAdvance(ctx(agent), createInput({ requestedSatang: 100_000 }))
+    const created = await advances.createAdvance(ctx(finance), createInput({ payeeId: own.payeeId }))
+    expect(created.status).toBe('pending_approval')
+    expect(created.payeeId).toBe(own.payeeId)
+
+    const audit = await db().auditLog.findFirst({
+      where: { targetType: 'advances', targetId: created.id, action: 'create' },
+      select: { actorId: true, afterData: true },
+    })
+    expect(audit?.actorId).toBe(FINANCE_ID)
+    expect(audit?.afterData).toMatchObject({ recorded_by: FINANCE_ID, on_behalf_of_user_id: AGENT_ID })
+
+    // ใบที่ขอแทนเดินสายอนุมัติปกติ
+    const approved = await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
+    expect(approved.status).toBe('approved')
+  })
+
+  it('การเงินขอให้ตัวเอง (ไม่ระบุผู้รับ) ไม่ได้ ⇒ PERMISSION_DENIED', async () => {
+    await expectCode(() => advances.createAdvance(ctx(finance), createInput()), 'PERMISSION_DENIED')
+  })
+
+  it('พนักงานขอแทนผู้อื่นไม่ได้ ⇒ PERMISSION_DENIED · ไม่มีใบเกิดเพิ่ม', async () => {
+    const other = await advances.createAdvance(ctx(agent2), createInput())
+    await expectCode(
+      () => advances.createAdvance(ctx(agent), createInput({ payeeId: other.payeeId })),
+      'PERMISSION_DENIED',
+    )
+    expect(await db().advance.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+})

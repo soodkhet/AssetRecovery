@@ -14,6 +14,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Team CRUD, Manager/Supervisor scope |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + ชี้แจงว่า `manager_ids` (§7.1) implement จริงผ่าน table `team_managers` (N:N join table) ตาม `02-database-schema-design.md` ไม่ใช่ array column ตรงๆ บน `teams` — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v2.1 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q12 · BUG-009) — ทีม/แผน/หัวหน้า/ผู้จัดการต้องเป็นฝั่งเดียวกัน**: §7 dropdown แผนแสดงเฉพาะฝั่งของทีม · §7.1 หัวหน้า = role หัวหน้าทีมติดตามทรัพย์ฝั่งนั้น · ผู้จัดการ = role ผู้จัดการทีมติดตามทรัพย์ฝั่งนั้น · UI กรอง + API ตรวจ (`REQUIRED_MISSING` + field error สำหรับแผน · `INVALID_TEAM_MEMBER` สำหรับคน) |
+| v2.3-EA | 07/10/2569 | **มติ PO U161** — §8 ฟอร์มทีมแสดงกล่อง "กติกาภาษีของผู้รับในทีมนี้" อ่านอย่างเดียว (ไม่เพิ่มช่องเลือก Tax Profile) + ลิงก์ไปแท็บ Tax Profile เฉพาะผู้มีสิทธิ์ดู · §16 test case |
 | v2.2-CB | 07/10/2569 | **มติ PO U138** — `GET/PATCH/DELETE /api/teams/:id` และ sub-route (`managers`, `agents`, `agents/:agent_id/cases`, `kanban`) เมื่อทีมอยู่ในองค์กรแต่**นอก scope** ของผู้เรียก ตอบ **404 `TEAM_NOT_FOUND`** เหมือนทีมที่ไม่มีจริง (เดิม 403) — ไม่ leak ว่ามี record |
 
 ขอบเขตเอกสารนี้: จัดการทีม Inhouse/Outsource — ผู้จัดการ (many-to-many ผ่าน `team_managers`), หัวหน้าทีม (1:1), สมาชิก, พื้นที่จังหวัดที่รับผิดชอบ, และการผูก Compensation Plan
@@ -87,6 +88,7 @@
 - Filter inhouse/outsource
 - แสดง template, manager, member count, provinces
 - จังหวัดตาม PROVINCE_DATA
+- (มติ PO U161) ฟอร์มเพิ่ม/แก้ทีมแสดงกล่อง **"กติกาภาษีของผู้รับในทีมนี้" แบบอ่านอย่างเดียว** — **ไม่มีช่องเลือก Tax Profile** ที่ทีม (กติกาภาษีผูกประเภทผู้รับตาม `18` §6.3 / `13` §6.4.3 — ฝั่งทีม × ชนิดผู้รับ) · เนื้อหาตามฝั่งที่เลือกในฟอร์ม อ่านจากค่าตั้งจริง: ประเภทเงินได้ของฝั่ง (`13` §6.4.2) เป็น 40(1)/40(2) ⇒ บุคคลธรรมดา "หัก ณ ที่จ่าย 40(x) ตามอัตรารายคน" · นอกนั้น/นิติบุคคล ⇒ ชื่อ + % ของ Tax Profile ค่าเริ่มต้นชุดล่าสุด (`tax_profile_default_history`) ของช่องนั้น · ยังไม่ตั้ง = ข้อความเตือน · หมายเหตุ "ผู้รับที่ตั้ง Tax Profile รายคนไว้ใช้ค่ารายคนแทน" · ลิงก์ "ไปแท็บ Tax Profile" แสดงเฉพาะผู้ที่เปิดแท็บนั้นได้ — ค่าตั้งเริ่มต้นของระบบให้ผลตามมติ: inhouse = 40(2) รายคน · outsource = ค่าเริ่มต้นตามประเภท บุคคล/นิติบุคคล · ข้อมูลอ่านผ่าน `GET /api/settings/wht-policy` + `GET /api/settings/tax-profile-defaults` (`view:view_master_data` เดียวกับรายการทีม) — ไม่มี endpoint ใหม่
 
 ## 9. Workflow / Lifecycle
 
@@ -147,6 +149,7 @@
 | Validation | ข้อมูลไม่ครบ | แสดง error ชัดเจน |
 | Manager หลายทีม | ผูก manager คนเดียวกับ 2 ทีม | สำเร็จ — ตรวจสอบว่า `team_managers` มี 2 records |
 | Supervisor สองทีม | พยายามตั้ง supervisor_id ของ user ที่เป็น supervisor ทีมอื่นอยู่แล้ว | ควรเตือนหรือ reject ตามนโยบาย (ดู Open Items) |
+| (U161) กติกาภาษีบนฟอร์มทีม | ค่าตั้งเริ่มต้น · เปิดฟอร์มทีม inhouse / outsource · ยังไม่ตั้งค่าเริ่มต้น | inhouse บุคคลธรรมดา = 40(2) อัตรารายคน · outsource = ชื่อ Tax Profile + % ต่อชนิดผู้รับ · ยังไม่ตั้ง = ข้อความเตือน · ไม่มีช่องเลือก |
 
 ---
 

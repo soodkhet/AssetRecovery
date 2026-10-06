@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
+import { DeviceCatalogBulkVisibility } from '@/components/settings/device-catalog-bulk-visibility'
 import { MANAGE_DEVICE_CATALOG } from '@/components/settings/shared'
 import {
   Button,
@@ -51,6 +52,19 @@ const VISIBILITY_LABEL: Readonly<Record<Visibility, string>> = {
 }
 
 const PAGE_SIZE = 50
+
+/** สรุปเงื่อนไขที่ใช้อยู่ สำหรับกล่องยืนยัน "เลือกทั้งหมด / ไม่เลือกทั้งหมด" (U162) */
+function conditionText(
+  visibility: Visibility,
+  search: string,
+  extra: { brandName?: string | null; assetKindLabel?: string | null } = {},
+): string {
+  const parts = [`การแสดง = ${VISIBILITY_LABEL[visibility]}`]
+  if (extra.brandName !== undefined && extra.brandName !== null) parts.push(`แบรนด์ = ${extra.brandName}`)
+  if (extra.assetKindLabel !== undefined && extra.assetKindLabel !== null) parts.push(`ประเภท = ${extra.assetKindLabel}`)
+  parts.push(search === '' ? 'ไม่มีคำค้น' : `คำค้น “${search}”`)
+  return parts.join(' · ')
+}
 
 function manualChoice(value: DeviceCatalogStatusCode | null): ManualChoice {
   return value ?? 'auto'
@@ -258,14 +272,29 @@ export function DeviceBrandList({
           </Button>
         </form>
         {canManage && (
-          <Button
-            onClick={() => {
-              setAddErrors({})
-              setAddOpen(true)
-            }}
-          >
-            + เพิ่มแบรนด์
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* มติ PO U162 — ทั้งชุดที่ตรงคำค้น/ตัวกรองที่ใช้อยู่ (ไม่ใช่แค่หน้านี้) */}
+            <DeviceCatalogBulkVisibility
+              criteria={{ target: 'brands', visibility, q: search === '' ? undefined : search }}
+              total={data.total}
+              unitLabel="แบรนด์"
+              conditionText={conditionText(visibility, search)}
+              disabled={loading || error !== null}
+              onDone={() => {
+                setLoading(true)
+                void fetchItems().then(apply)
+                onChanged()
+              }}
+            />
+            <Button
+              onClick={() => {
+                setAddErrors({})
+                setAddOpen(true)
+              }}
+            >
+              + เพิ่มแบรนด์
+            </Button>
+          </div>
         )}
       </div>
 
@@ -575,6 +604,24 @@ export function DeviceModelList({
         </form>
         {canManage && (
           <div className="flex flex-wrap items-center gap-2">
+            {/* มติ PO U162 — ทั้งชุดที่ตรงคำค้น/ตัวกรอง/แบรนด์ที่ใช้อยู่ (ไม่ใช่แค่หน้านี้) */}
+            <DeviceCatalogBulkVisibility
+              criteria={{
+                target: 'models',
+                visibility,
+                assetKind,
+                brandId: brandId ?? undefined,
+                q: search === '' ? undefined : search,
+              }}
+              total={data.total}
+              unitLabel="รุ่น"
+              conditionText={conditionText(visibility, search, {
+                brandName: brand?.name ?? null,
+                assetKindLabel: assetKind === 'all' ? null : (ASSET_TYPE_LABEL[assetKind] ?? assetKind),
+              })}
+              disabled={loading || error !== null || saving}
+              onDone={() => void reload()}
+            />
             <span className="text-xs text-slate-500">เลือก {selected.size} รายการ:</span>
             <Button variant="secondary" size="sm" disabled={selected.size === 0 || saving} onClick={() => void setManual([...selected], 'active')}>
               แสดง

@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { DeviceBrandList, DeviceModelList } from '@/components/settings/device-catalog-lists'
 import { MANAGE_DEVICE_CATALOG } from '@/components/settings/shared'
-import { Button, Card, Field, InlineAlert, Input, Textarea, cn, useToast } from '@/components/ui'
+import { Button, Card, Field, InlineAlert, Textarea, cn, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
-import { parseBrandListText } from '@/lib/device-catalog/catalog'
+import { DEFAULT_RECENT_YEARS, parseBrandListText } from '@/lib/device-catalog/catalog'
 import { deviceCatalogSettingsSchema } from '@/lib/device-catalog/schemas'
 import type {
   DeviceBrandDto,
@@ -22,7 +22,9 @@ import { fmtDateTime } from '@/lib/format/datetime'
  *
  * - สรุป: จำนวนแบรนด์/รุ่นที่แสดง · ความคืบหน้าการดึงครั้งแรก · งานล่าสุด · ปุ่ม "ดึงข้อมูลตอนนี้"
  * - แบรนด์ / รุ่น: ค้นหา + แบ่งหน้า · ตั้งการแสดงด้วยมือ (ชนะตัวกรองเสมอ) · เพิ่มเอง
- * - ตัวกรอง: รายชื่อแบรนด์ + แสดงรุ่นภายใน N ปีล่าสุด — บันทึกแล้วมีผลทันที ไม่ต้องดึงข้อมูลใหม่
+ * - ตัวกรอง: รายชื่อแบรนด์ — บันทึกแล้วมีผลทันที ไม่ต้องดึงข้อมูลใหม่
+ * - มติ PO U162: **ไม่กรองปี** — แหล่งข้อมูลฟรีไม่ส่งปีที่ออก ⇒ ซ่อนค่าตั้ง "จำนวนปี" (ค่าเดิมส่งกลับไปตามเดิม
+ *   ไม่เปลี่ยน) · กฎ "ไม่ทราบปี = แสดง" ของ `passesRecentYears()` ทำให้ตัวกรองปีไม่มีผลกับรุ่นจากแหล่งข้อมูลอยู่แล้ว
  */
 
 type View = 'brands' | 'models' | 'filter'
@@ -181,7 +183,7 @@ export function DeviceCatalogTab() {
       {view === 'models' && (
         <DeviceModelList brand={brand} refreshKey={refreshKey} onClearBrand={() => setBrand(null)} onChanged={changed} />
       )}
-      {view === 'filter' && <DeviceCatalogFilterForm canManage={canManage} onSaved={changed} minReleaseYear={summary?.minReleaseYear ?? null} />}
+      {view === 'filter' && <DeviceCatalogFilterForm canManage={canManage} onSaved={changed} />}
     </Card>
   )
 }
@@ -189,17 +191,14 @@ export function DeviceCatalogTab() {
 function DeviceCatalogFilterForm({
   canManage,
   onSaved,
-  minReleaseYear,
 }: {
   canManage: boolean
   onSaved: () => void
-  minReleaseYear: number | null
 }) {
   const { showToast } = useToast()
   const [loaded, setLoaded] = useState<DeviceCatalogSettingsDto | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [brandsText, setBrandsText] = useState('')
-  const [years, setYears] = useState('')
   const [reason, setReason] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -211,7 +210,6 @@ function DeviceCatalogFilterForm({
     }
     setLoaded(result.data)
     setBrandsText(result.data.brandNames.join('\n'))
-    setYears(String(result.data.recentYears))
     setError(null)
   }, [])
 
@@ -227,7 +225,12 @@ function DeviceCatalogFilterForm({
   }, [apply])
 
   async function save(): Promise<void> {
-    const payload = { brandNames: parseBrandListText(brandsText), recentYears: Number(years), reason: reason.trim() }
+    // U162 — ซ่อนค่าตั้งจำนวนปี: ส่งค่าเดิมกลับไป (ไม่เปลี่ยน) จนกว่าจะมีแหล่งข้อมูลที่ให้ปีที่ออก
+    const payload = {
+      brandNames: parseBrandListText(brandsText),
+      recentYears: loaded?.recentYears ?? DEFAULT_RECENT_YEARS,
+      reason: reason.trim(),
+    }
     const parsed = deviceCatalogSettingsSchema.safeParse(payload)
     if (!parsed.success) {
       setErrors(toFieldErrors(parsed.error))
@@ -262,8 +265,10 @@ function DeviceCatalogFilterForm({
   return (
     <div className="max-w-2xl space-y-4">
       <InlineAlert tone="info" title="ตัวกรองกำหนดค่าตั้งต้นของการแสดง">
-        แบรนด์ที่อยู่ในรายชื่อจะแสดง และแสดงเฉพาะรุ่นที่ออกภายในจำนวนปีที่กำหนด (รุ่นที่ไม่ทราบปีที่ออกถือว่าแสดง)
-        — รายการที่ตั้งด้วยมือในแท็บแบรนด์/รุ่นไม่ถูกเปลี่ยน{loaded.updatedAt === null ? ' · ตอนนี้ใช้ค่าเริ่มต้น' : ''}
+        แบรนด์ที่อยู่ในรายชื่อจะแสดงทุกรุ่น — รายการที่ตั้งด้วยมือในแท็บแบรนด์/รุ่นไม่ถูกเปลี่ยน
+        {loaded.updatedAt === null ? ' · ตอนนี้ใช้ค่าเริ่มต้น' : ''}
+        <br />
+        ไม่กรองตามปีที่ออก เพราะแหล่งข้อมูลรุ่นเครื่องไม่มีปีที่ออกมาให้ · รายชื่อนี้ใช้จัดลำดับการดึงข้อมูลด้วย (ดึงแบรนด์ในรายชื่อก่อน)
       </InlineAlert>
       <Field
         id="device-filter-brands"
@@ -278,16 +283,6 @@ function DeviceCatalogFilterForm({
           disabled={!canManage}
           onChange={(event) => setBrandsText(event.target.value)}
         />
-      </Field>
-      <Field
-        id="device-filter-years"
-        label="แสดงรุ่นที่ออกภายใน (ปีล่าสุด)"
-        hint={minReleaseYear === null ? undefined : `ตอนนี้ = รุ่นที่ออกตั้งแต่ปี พ.ศ. ${minReleaseYear + 543} ขึ้นไป`}
-        error={errors.recentYears}
-      >
-        <div className="w-32">
-          <Input id="device-filter-years" numeric value={years} disabled={!canManage} onChange={(event) => setYears(event.target.value)} />
-        </div>
       </Field>
       {canManage && (
         <>

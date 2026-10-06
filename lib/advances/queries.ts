@@ -1,6 +1,7 @@
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import {
   ADVANCE_EXCESS_CLAIM_TYPE,
+  advanceCreateAccess,
   advanceExcessClaimNote,
   APPROVE_ADVANCE,
   advanceReturnState,
@@ -211,9 +212,14 @@ export function canApproveAdvance(user: SessionUser): boolean {
   return hasCapability(user, 'manage', APPROVE_ADVANCE)
 }
 
-/** มติ PO U153 — ขอเงินทดรองแทนผู้อื่น = การเงิน (`manage:approve_advance`) หรือ Superadmin */
+/** มติ PO U153/U160 — ขอเงินทดรองแทนผู้อื่น = การเงิน (`manage:approve_advance`) หรือ Superadmin */
 export function canCreateAdvanceForOthers(user: SessionUser): boolean {
-  return user.isSuperadmin || canApproveAdvance(user)
+  return advanceCreateAccess((capability) => hasCapability(user, 'manage', capability)).onBehalf
+}
+
+/** ขอเงินทดรองให้ตัวเอง = `manage:request_advance` เท่านั้น (สิทธิ์เดิม · มติ PO U160 ไม่ขยายส่วนนี้) */
+export function canCreateAdvanceForSelf(user: SessionUser): boolean {
+  return advanceCreateAccess((capability) => hasCapability(user, 'manage', capability)).self
 }
 
 /** scope ระดับแถว — ผู้อนุมัติเห็นทั้งองค์กร · ผู้ขอเห็นเฉพาะ payee ของตัวเอง (`15` §12) */
@@ -291,21 +297,33 @@ export async function createAdvance(
   // งวดที่ปิดแล้วห้ามมีรายการเงินเพิ่มโดยตรง (`30` · `20`)
   await assertPeriodOpenAt({ organizationId: user.organizationId, at: now, targetType: 'advances' })
 
-  // มติ PO U153 — ขอแทนผู้อื่นได้เฉพาะผู้ถือสิทธิ์อนุมัติเงินทดรอง (การเงิน) · ผู้อื่นส่ง payeeId มา = ปฏิเสธ
+  // มติ PO U153 — ขอแทนผู้อื่นได้เฉพาะผู้ถือสิทธิ์อนุมัติเงินทดรอง (การเงิน) · ผู้อื่นส่ง payeeId มา = ปฏิเสธ (403)
   // (เดิมเงียบแล้วผูกกับตัวเอง — ผู้ใช้ไม่รู้ว่ารายการไม่ได้ไปที่ผู้รับที่เลือก)
+  // มติ PO U160 — endpoint รับทั้ง `manage:request_advance` และ `manage:approve_advance` ⇒ แยกตรวจตามกรณีที่นี่
+  // ขอให้ตัวเอง (ไม่ส่งผู้รับ) ยังต้องถือ `manage:request_advance` เหมือนเดิม
+  if (input.payeeId === null && !canCreateAdvanceForSelf(user)) {
+    throw new AuthError('PERMISSION_DENIED', `ขอเงินทดรองให้ตัวเองต้องมีสิทธิ์ขอเงินทดรอง user=${user.id}`)
+  }
   if (input.payeeId !== null && !canCreateAdvanceForOthers(user)) {
     throw new AuthError('PERMISSION_DENIED', `ขอเงินทดรองแทนผู้อื่นต้องมีสิทธิ์อนุมัติเงินทดรอง user=${user.id}`)
   }
 
   const created = await prisma.$transaction(async (tx) => {
-    const payeeId =
-      input.payeeId !== null
-        ? await assertPayeeInOrganization(tx as ExpenseTxClient, user.organizationId, input.payeeId)
-        : await ensureAgentPayeeId(tx as ExpenseTxClient, {
-            organizationId: user.organizationId,
-            userId: user.id,
-            actorId: user.id,
-          })
+    let payeeId: string
+    if (input.payeeId !== null) {
+      const payee = await assertPayeeInOrganization(tx as ExpenseTxClient, user.organizationId, input.payeeId)
+      if (payee.userId === user.id && !canCreateAdvanceForSelf(user)) {
+        // เลือกผู้รับเป็นตัวเอง = ขอให้ตัวเอง (ไม่ใช่ขอแทน) — สิทธิ์ขอแทนใช้กับกรณีนี้ไม่ได้ (มติ PO U160)
+        throw new AuthError('PERMISSION_DENIED', `ขอเงินทดรองให้ตัวเองต้องมีสิทธิ์ขอเงินทดรอง user=${user.id}`)
+      }
+      payeeId = payee.id
+    } else {
+      payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
+        organizationId: user.organizationId,
+        userId: user.id,
+        actorId: user.id,
+      })
+    }
 
     // ชั้นที่ 1 — ตอบผู้ใช้ด้วยข้อความที่บอกได้ว่าติดรายการไหน (ชั้นที่ 2 คือ partial unique ของ DB)
     const uncleared = await tx.advance.findFirst({
@@ -378,13 +396,13 @@ async function assertPayeeInOrganization(
   tx: ExpenseTxClient,
   organizationId: string,
   payeeId: string,
-): Promise<string> {
+): Promise<{ id: string; userId: string | null }> {
   const payee = await tx.payeeProfile.findFirst({
     where: { id: payeeId, organizationId, deletedAt: null },
-    select: { id: true },
+    select: { id: true, userId: true },
   })
   if (payee === null) throw new AdvanceError('ADVANCE_NOT_FOUND', { detail: `payee=${payeeId}` })
-  return payee.id
+  return payee
 }
 
 // ── PATCH /api/advances/:id/approve · /reject · /settle ─────────────────────

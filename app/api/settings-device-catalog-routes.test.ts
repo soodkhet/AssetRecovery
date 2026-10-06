@@ -23,6 +23,7 @@ const queriesMock = vi.hoisted(() => ({
   createManualDeviceModel: vi.fn(),
   updateDeviceModel: vi.fn(),
   bulkSetDeviceModelManualStatus: vi.fn(),
+  bulkSetDeviceCatalogVisibility: vi.fn(),
   searchDeviceModelOptions: vi.fn(),
 }))
 vi.mock('@/lib/device-catalog/queries', () => queriesMock)
@@ -44,6 +45,7 @@ const brandRoute = await import('@/app/api/settings/device-catalog/brands/[id]/r
 const modelsRoute = await import('@/app/api/settings/device-catalog/models/route')
 const statusRoute = await import('@/app/api/settings/device-catalog/models/status/route')
 const syncRoute = await import('@/app/api/settings/device-catalog/sync/route')
+const bulkRoute = await import('@/app/api/settings/device-catalog/bulk-visibility/route')
 const optionsRoute = await import('@/app/api/device-catalog/options/route')
 
 function sessionUser(overrides: Partial<SessionUser>): SessionUser {
@@ -188,5 +190,56 @@ describe('ตัวเลือกในฟอร์มรับเคส', () =
 
     requireSessionMock.mockResolvedValue(FIELD_AGENT)
     expect((await optionsRoute.GET(request('GET', '/api/device-catalog/options?q=a'), {})).status).toBe(403)
+  })
+
+  describe('เลือกทั้งหมด / ไม่เลือกทั้งหมด (มติ PO U162)', () => {
+    const path = '/api/settings/device-catalog/bulk-visibility'
+
+    it('ผู้ดูแล: ส่งเงื่อนไขชุดเดียวกับรายการ + เหตุผลไปชั้นข้อมูล', async () => {
+      requireSessionMock.mockResolvedValue(ADMIN_OFFICE)
+      queriesMock.bulkSetDeviceCatalogVisibility.mockResolvedValue({ updated: 3, unchanged: 1 })
+      const response = await bulkRoute.POST(
+        request('POST', path, { target: 'models', manualStatus: 'hidden', visibility: 'all', q: 'galaxy', brandId: BRAND_ID, reason: 'ปิดรุ่นเก่า' }),
+        {},
+      )
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ data: { updated: 3, unchanged: 1 } })
+      const [context, input] = queriesMock.bulkSetDeviceCatalogVisibility.mock.calls[0] ?? []
+      expect(context).toMatchObject({ reason: 'ปิดรุ่นเก่า' })
+      expect(input).toEqual({
+        target: 'models',
+        manualStatus: 'hidden',
+        visibility: 'all',
+        assetKind: 'all',
+        brandId: BRAND_ID,
+        q: 'galaxy',
+        reason: 'ปิดรุ่นเก่า',
+      })
+    })
+
+    it('ไม่กรอกเหตุผล / สถานะนอก active-hidden / target ผิด = 400 ไม่ยิง DB', async () => {
+      requireSessionMock.mockResolvedValue(ADMIN_OFFICE)
+      for (const body of [
+        { target: 'brands', manualStatus: 'active', visibility: 'all' },
+        { target: 'brands', manualStatus: 'active', visibility: 'all', reason: '   ' },
+        { target: 'brands', manualStatus: null, visibility: 'all', reason: 'x' },
+        { target: 'phones', manualStatus: 'active', visibility: 'all', reason: 'x' },
+      ]) {
+        expect((await bulkRoute.POST(request('POST', path, body), {})).status).toBe(400)
+      }
+      expect(queriesMock.bulkSetDeviceCatalogVisibility).not.toHaveBeenCalled()
+    })
+
+    it('บริหาร (view) / การเงิน = 403 ไม่ยิง DB', async () => {
+      for (const user of [EXECUTIVE, FINANCE]) {
+        requireSessionMock.mockResolvedValue(user)
+        const response = await bulkRoute.POST(
+          request('POST', path, { target: 'brands', manualStatus: 'active', visibility: 'all', reason: 'เปิดทั้งหมด' }),
+          {},
+        )
+        expect(response.status).toBe(403)
+      }
+      expect(queriesMock.bulkSetDeviceCatalogVisibility).not.toHaveBeenCalled()
+    })
   })
 })

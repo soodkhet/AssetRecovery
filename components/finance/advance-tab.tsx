@@ -27,7 +27,7 @@ import {
   Tr,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { ADVANCE_RETURN_METHOD_LABEL, APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
+import { ADVANCE_RETURN_METHOD_LABEL, advanceCreateAccess, APPROVE_ADVANCE } from '@/lib/advances/advance'
 import {
   ADVANCE_RETURN_STATE_LABEL,
   ADVANCE_STATUS_FILTERS,
@@ -59,7 +59,9 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  */
 export function AdvanceTab() {
   const { can } = usePermission()
-  const canRequestAdvance = can('manage', REQUEST_ADVANCE)
+  // มติ PO U160 — การเงินขอแทนผู้อื่นได้ (ไม่ถือ `manage:request_advance`) ⇒ ปุ่มขอเบิกแสดงเมื่อทำได้อย่างใดอย่างหนึ่ง
+  const advanceAccess = advanceCreateAccess((capability) => can('manage', capability))
+  const canRequestAdvance = advanceAccess.self || advanceAccess.onBehalf
   const canApproveAdvance = can('manage', APPROVE_ADVANCE)
 
   const [filter, setFilter] = useState<AdvanceStatusFilter>('all')

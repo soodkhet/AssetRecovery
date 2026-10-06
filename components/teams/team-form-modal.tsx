@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CompensationPlanListDto } from '@/lib/compensation/types'
+import { TeamTaxRuleNotice } from '@/components/teams/team-tax-rule-notice'
 import { PROVINCE_DATA } from '@/lib/teams/provinces'
 import { teamCreateSchema } from '@/lib/teams/schemas'
 import { isTeamSlotEligible, type TeamSide, type TeamStatus } from '@/lib/teams/team'
@@ -15,6 +16,7 @@ import type { EligibleMemberDto, TeamDto } from '@/lib/teams/types'
  * จุดบังคับ: **ต้องเลือกแผนค่าตอบแทนเสมอ** (`09` §7) · ผู้จัดการเลือกได้หลายคน (N:N) แต่
  * หัวหน้าทีมเลือกได้คนเดียวและคนนั้นต้องยังไม่เป็นหัวหน้าของทีมอื่น (`09` §7.1 — ฟอร์มเตือน
  * ล่วงหน้าเป็น UX เท่านั้น API ปฏิเสธซ้ำเสมอด้วย `SUPERVISOR_ALREADY_ASSIGNED`)
+ * · มติ PO U161 — กล่อง "กติกาภาษีของผู้รับในทีมนี้" อ่านอย่างเดียว (`<TeamTaxRuleNotice>`) ตามฝั่งที่เลือก
  */
 
 interface FormState {
@@ -234,6 +236,9 @@ export function TeamFormModal({
             </Select>
           </Field>
         </div>
+
+        {/* มติ PO U161 — แสดงกติกาภาษีตามฝั่งทีมแบบอ่านอย่างเดียว (ไม่มีช่องเลือก Tax Profile ที่ทีม) */}
+        <TeamTaxRuleNotice side={form.side} />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field

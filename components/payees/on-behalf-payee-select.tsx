@@ -16,11 +16,17 @@ export function OnBehalfPayeeSelect({
   onChange,
   error,
   hint,
+  allowSelf = true,
 }: {
   value: string
   onChange: (payeeId: string) => void
   error?: string
   hint?: string
+  /**
+   * `false` = ผู้ใช้ทำรายการของตัวเองไม่ได้ (เช่น การเงินขอเงินทดรองแทนได้อย่างเดียว — มติ PO U160)
+   * ⇒ ช่องนี้บังคับเลือก · ไม่มีตัวเลือก "ของตัวเอง"
+   */
+  allowSelf?: boolean
 }) {
   const [options, setOptions] = useState<PayeeOptionDto[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -41,11 +47,17 @@ export function OnBehalfPayeeSelect({
   return (
     <Field
       label="ผู้รับเงิน (บันทึกแทน)"
+      required={!allowSelf}
       error={error ?? loadError ?? undefined}
-      hint={hint ?? 'เว้นไว้ = บันทึกของตัวเอง · เลือกผู้รับเมื่อบันทึกแทนพนักงาน (ระบบบันทึกชื่อผู้บันทึกแทนไว้ในประวัติ)'}
+      hint={
+        hint ??
+        (allowSelf
+          ? 'เว้นไว้ = บันทึกของตัวเอง · เลือกผู้รับเมื่อบันทึกแทนพนักงาน (ระบบบันทึกชื่อผู้บันทึกแทนไว้ในประวัติ)'
+          : 'เลือกพนักงานที่ขอแทน (ระบบบันทึกชื่อผู้บันทึกแทนไว้ในประวัติ)')
+      }
     >
       <Select value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">— ของตัวเอง —</option>
+        <option value="">{allowSelf ? '— ของตัวเอง —' : '— เลือกผู้รับเงิน —'}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>
             {option.name}
