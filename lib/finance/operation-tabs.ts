@@ -87,6 +87,26 @@ export const FINANCE_OPERATION_TABS: readonly FinanceOperationTab[] = [
 ]
 
 /**
+ * **ส่วนย่อยในแท็บ** ที่ API อ่านต่างจากแท็บแม่ (BUG-182 · `06` §7.2 ทั่วไป = ซ่อน) — ผู้ที่เห็นแท็บแต่ไม่ถือ capability
+ * ของส่วนนั้น (เช่น ผู้บริหาร: เห็นแท็บ "รออนุมัติ" ด้วย `approve_expense_executive` แต่ไม่ถือสิทธิ์เงินทดรอง)
+ * ต้อง**ไม่เห็นส่วนนั้นเลย** แทนกล่อง "ไม่มีสิทธิ์ใช้งาน" + 403 ใน console
+ * ⚠️ ต้องตรงกับ `withApiPermission()` ของ endpoint ที่ส่วนนั้นเรียก (ล็อกด้วย `operation-tabs.test.ts`)
+ */
+export const FINANCE_TAB_SECTIONS = {
+  /** แท็บรออนุมัติ → ตาราง "เงินทดรองจ่าย" (`GET /api/advances`) */
+  'approval.advances': ['request_advance', 'approve_advance'],
+  /** แท็บปรับปรุง → การ์ดวันลงพื้นที่/ค่าน้ำมันในงวดที่ปิดแล้ว (`GET /api/adjustments/field-days` · `fuel-expenses`) */
+  'adjustment.locked-sources': ['create_adjustment', 'manage_accounting_period'],
+} as const satisfies Record<string, readonly string[]>
+
+export type FinanceTabSection = keyof typeof FINANCE_TAB_SECTIONS
+
+/** ผู้ใช้เห็นส่วนย่อยนี้หรือไม่ — ถือ capability อ่านของส่วนนั้นสักตัว (Superadmin เห็นเสมอ) */
+export function canViewFinanceTabSection(viewer: CapabilityHolder, section: FinanceTabSection): boolean {
+  return FINANCE_TAB_SECTIONS[section].some((capability) => hasCapability(viewer, 'view', capability))
+}
+
+/**
  * `14` §1 — "ภาพรวม" คือ **หน้าแรกของโมดูลการเงิน** (เปิดใช้จริงตั้งแต่ Phase 3.8)
  * ก่อนหน้านั้นแท็บเริ่มต้นเป็น `approval` เพราะหน้าภาพรวมยังไม่เกิด
  */

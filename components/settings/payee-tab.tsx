@@ -10,7 +10,9 @@ import {
   payeeFieldsPayload,
   type PayeeFieldsForm,
 } from '@/components/payees/payee-fields-section'
+import { PayeeTaxRuleCell } from '@/components/payees/payee-tax-rule-cell'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
+import { useTaxRuleSettings } from '@/components/teams/use-tax-rule-settings'
 import {
   Button,
   Card,
@@ -34,7 +36,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import { verificationHint } from '@/lib/payees/payee'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
 import type { PayeeCandidateDto, PayeeDto } from '@/lib/payees/types'
@@ -79,6 +81,8 @@ function toForm(payee: PayeeDto): FormState {
 
 export function PayeeTab() {
   const { showToast } = useToast()
+  // BUG-181 (มติ PO U164) — คอลัมน์ภาษีแสดงกติกาที่ใช้จริง (inhouse 40(2) = อัตรารายคน) ไม่ใช่ Tax Profile ที่ไม่มีผล
+  const taxRule = useTaxRuleSettings()
   const [items, setItems] = useState<readonly PayeeDto[]>([])
   const [taxProfiles, setTaxProfiles] = useState<readonly TaxProfileDto[]>([])
   const [candidates, setCandidates] = useState<readonly Candidate[]>([])
@@ -340,14 +344,7 @@ export function PayeeTab() {
                   )}
                 </Td>
                 <Td>
-                  {item.whtPct === null ? (
-                    <span className="text-[10px] font-semibold text-amber-600">ยังไม่ผูก Tax Profile</span>
-                  ) : (
-                    <>
-                      <span className="text-xs font-semibold text-slate-800">{fmtPercent(item.whtPct)}</span>
-                      <div className="text-[10px] text-slate-500">{item.taxProfileName}</div>
-                    </>
-                  )}
+                  <PayeeTaxRuleCell payee={item} settings={taxRule.data} />
                 </Td>
                 <Td className="text-right">
                   <div className="flex items-center justify-end gap-2">

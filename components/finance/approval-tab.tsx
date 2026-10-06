@@ -54,6 +54,7 @@ import {
 } from '@/lib/compensation/approval-ui'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate } from '@/lib/format/datetime'
+import { canViewFinanceTabSection } from '@/lib/finance/operation-tabs'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 
@@ -67,7 +68,9 @@ import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substit
  *   — **ห้าม if สถานะเองใน JSX** · ยอดเงินทุกช่องมาจาก server ทั้งหมด หน้าจอแค่ format (Rule 01)
  */
 export function ApprovalTab() {
-  const { can } = usePermission()
+  const { can, session } = usePermission()
+  // BUG-182 — ผู้เห็นแท็บนี้แต่ไม่ถือสิทธิ์อ่านเงินทดรอง (ผู้บริหาร) ⇒ ซ่อนตาราง/การ์ดเงินทดรองทั้งส่วน ไม่ยิง API
+  const canViewAdvances = session !== null && canViewFinanceTabSection(session, 'approval.advances')
   const canCreateClaim = CREATE_CLAIM_CAPABILITIES.some((capability) => can('manage', capability))
   // มติ PO U160 — การเงินขอแทนผู้อื่นได้ (ไม่ถือ `manage:request_advance`) ⇒ ปุ่มขอเบิกแสดงเมื่อทำได้อย่างใดอย่างหนึ่ง
   const advanceAccess = advanceCreateAccess((capability) => can('manage', capability))
@@ -88,7 +91,7 @@ export function ApprovalTab() {
   const [claimFormOpen, setClaimFormOpen] = useState(false)
 
   // ตารางที่ 2 ใช้ตัวโหลดเดียวกับแท็บ "เงินทดรองจ่าย" เต็มรูป (3.4) — ห้าม fetch เอง
-  const { items: advances, loading: advLoading, error: advError, reload: reloadAdvances } = useAdvances('all')
+  const { items: advances, loading: advLoading, error: advError, reload: reloadAdvances } = useAdvances('all', canViewAdvances)
   const [advanceFormOpen, setAdvanceFormOpen] = useState(false)
   const [settleTarget, setSettleTarget] = useState<AdvanceDto | null>(null)
   const [reviewTarget, setReviewTarget] = useState<AdvanceDto | null>(null)
@@ -100,23 +103,27 @@ export function ApprovalTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className={cn('grid grid-cols-1 gap-4', canViewAdvances && 'sm:grid-cols-3')}>
         <StatCard
           label="เงินรออนุมัติ (Claim)"
           value={fmtSatangSymbol(pendingClaimTotalSatang(claims.items))}
           hint={`${fmtCount(claims.items.filter((item) => item.status === 'pending_approval' || item.status === 'pending_finance_approval').length)} รายการในคิว`}
         />
-        <StatCard
-          label="เงินทดรองที่ยังไม่เคลียร์"
-          value={fmtCount(countAwaitingSettlement(advances))}
-          hint="รวมที่อนุมัติแล้วและที่เลยกำหนด"
-        />
-        <StatCard
-          label="เลยกำหนดเคลียร์ (Overdue)"
-          value={fmtCount(overdueCount)}
-          hint="ต้องตามเคลียร์ก่อนอนุมัติรอบใหม่"
-          className={overdueCount > 0 ? 'border-red-300 bg-red-50' : undefined}
-        />
+        {canViewAdvances && (
+          <>
+            <StatCard
+              label="เงินทดรองที่ยังไม่เคลียร์"
+              value={fmtCount(countAwaitingSettlement(advances))}
+              hint="รวมที่อนุมัติแล้วและที่เลยกำหนด"
+            />
+            <StatCard
+              label="เลยกำหนดเคลียร์ (Overdue)"
+              value={fmtCount(overdueCount)}
+              hint="ต้องตามเคลียร์ก่อนอนุมัติรอบใหม่"
+              className={overdueCount > 0 ? 'border-red-300 bg-red-50' : undefined}
+            />
+          </>
+        )}
       </div>
 
       {/* ============ ตารางที่ 1 — รายการเบิก (Claims) ============ */}
@@ -279,138 +286,140 @@ export function ApprovalTab() {
       </Card>
 
       {/* ============ ตารางที่ 2 — เงินทดรองจ่าย (Advances) ============ */}
-      <Card>
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">เงินทดรองจ่าย (Advances)</h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              เบิกล่วงหน้าได้ครั้งละ 1 รายการต่อคน — ต้องเคลียร์ยอดเดิมให้เสร็จก่อนขอรอบใหม่เสมอ
-            </p>
+      {canViewAdvances && (
+        <Card>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">เงินทดรองจ่าย (Advances)</h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                เบิกล่วงหน้าได้ครั้งละ 1 รายการต่อคน — ต้องเคลียร์ยอดเดิมให้เสร็จก่อนขอรอบใหม่เสมอ
+              </p>
+            </div>
+            {canRequestAdvance && (
+              <Button size="sm" variant="secondary" onClick={() => setAdvanceFormOpen(true)}>
+                + ขอเบิกเงินทดรอง
+              </Button>
+            )}
           </div>
-          {canRequestAdvance && (
-            <Button size="sm" variant="secondary" onClick={() => setAdvanceFormOpen(true)}>
-              + ขอเบิกเงินทดรอง
-            </Button>
+
+          {overdueCount > 0 && (
+            <InlineAlert tone="error" className="mb-4">
+              มี {fmtCount(overdueCount)} รายการเลยกำหนดเคลียร์ยอดแล้ว — ต้องตามเคลียร์ก่อน ผู้ขอจะเบิกรอบใหม่ไม่ได้
+            </InlineAlert>
           )}
-        </div>
 
-        {overdueCount > 0 && (
-          <InlineAlert tone="error" className="mb-4">
-            มี {fmtCount(overdueCount)} รายการเลยกำหนดเคลียร์ยอดแล้ว — ต้องตามเคลียร์ก่อน ผู้ขอจะเบิกรอบใหม่ไม่ได้
-          </InlineAlert>
-        )}
-
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <Table>
-            <THead>
-              <Tr>
-                <Th>ผู้ขอ / ทีม</Th>
-                <Th>วัตถุประสงค์</Th>
-                <Th numeric>ขอเบิก / ใช้จริง / คืน</Th>
-                <Th>กำหนดเคลียร์</Th>
-                <Th>สถานะ</Th>
-                <Th className="text-right">จัดการ</Th>
-              </Tr>
-            </THead>
-            <TableState
-              loading={advLoading}
-              error={advError}
-              isEmpty={advances.length === 0}
-              emptyTitle="ยังไม่มีรายการเงินทดรองจ่าย"
-              colSpan={6}
-            />
-            <TBody>
-              {!advLoading &&
-                advError === null &&
-                advances.map((advance) => (
-                  <Tr key={advance.id} className={advance.status === 'overdue' ? 'bg-red-50/40' : undefined}>
-                    <Td>
-                      <p className="font-semibold text-slate-900">{advance.requesterName}</p>
-                      {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
-                    </Td>
-                    <Td className="max-w-[220px] text-xs text-slate-600">{advance.purpose}</Td>
-                    <Td numeric>
-                      <p>
-                        ขอ:{' '}
-                        <span className="font-semibold text-slate-800">
-                          {fmtSatangSymbol(advance.requestedSatang)}
-                        </span>
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        อนุมัติ: {fmtSatangSymbol(advance.approvedSatang)} · ใช้จริง:{' '}
-                        {fmtSatangSymbol(advance.usedSatang)}
-                      </p>
-                      <p
-                        className={cn(
-                          'text-[11px]',
-                          advance.returnSatang > 0 ? 'font-semibold text-emerald-700' : 'text-slate-500',
-                        )}
-                      >
-                        คืน: {fmtSatangSymbol(advance.returnSatang)}
-                        {advance.excessSatang > 0 && (
-                          <span className="ml-1 text-orange-700">
-                            (ใช้เกิน {fmtSatangSymbol(advance.excessSatang)})
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <Table>
+              <THead>
+                <Tr>
+                  <Th>ผู้ขอ / ทีม</Th>
+                  <Th>วัตถุประสงค์</Th>
+                  <Th numeric>ขอเบิก / ใช้จริง / คืน</Th>
+                  <Th>กำหนดเคลียร์</Th>
+                  <Th>สถานะ</Th>
+                  <Th className="text-right">จัดการ</Th>
+                </Tr>
+              </THead>
+              <TableState
+                loading={advLoading}
+                error={advError}
+                isEmpty={advances.length === 0}
+                emptyTitle="ยังไม่มีรายการเงินทดรองจ่าย"
+                colSpan={6}
+              />
+              <TBody>
+                {!advLoading &&
+                  advError === null &&
+                  advances.map((advance) => (
+                    <Tr key={advance.id} className={advance.status === 'overdue' ? 'bg-red-50/40' : undefined}>
+                      <Td>
+                        <p className="font-semibold text-slate-900">{advance.requesterName}</p>
+                        {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
+                      </Td>
+                      <Td className="max-w-[220px] text-xs text-slate-600">{advance.purpose}</Td>
+                      <Td numeric>
+                        <p>
+                          ขอ:{' '}
+                          <span className="font-semibold text-slate-800">
+                            {fmtSatangSymbol(advance.requestedSatang)}
                           </span>
-                        )}
-                      </p>
-                    </Td>
-                    <Td>
-                      <span
-                        className={cn(
-                          'text-xs',
-                          advance.isPastDue ? 'font-semibold text-red-600' : 'text-slate-500',
-                        )}
-                      >
-                        {fmtDate(advance.dueClearDate)}
-                      </span>
-                    </Td>
-                    <Td>
-                      <StatusBadge
-                        status={advance.status}
-                        group={advanceStatusBadgeGroup(advance.status)}
-                        label={advanceStatusLabel(advance.status)}
-                      />
-                      {advance.rejectionReason !== null && (
-                        <p className="mt-1 max-w-[180px] text-[10px] text-orange-700">
-                          เหตุผล: {advance.rejectionReason}
                         </p>
-                      )}
-                    </Td>
-                    <Td className="text-right whitespace-nowrap">
-                      <div className="inline-flex flex-col items-end gap-1">
-                        {canApproveAdvance && canReviewAdvance(advance.status) && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setReviewMode('approve')
-                                setReviewTarget(advance)
-                              }}
-                            >
-                              อนุมัติ
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setReviewMode('reject')
-                                setReviewTarget(advance)
-                              }}
-                            >
-                              ปฏิเสธ
-                            </Button>
-                          </>
+                        <p className="text-[11px] text-slate-500">
+                          อนุมัติ: {fmtSatangSymbol(advance.approvedSatang)} · ใช้จริง:{' '}
+                          {fmtSatangSymbol(advance.usedSatang)}
+                        </p>
+                        <p
+                          className={cn(
+                            'text-[11px]',
+                            advance.returnSatang > 0 ? 'font-semibold text-emerald-700' : 'text-slate-500',
+                          )}
+                        >
+                          คืน: {fmtSatangSymbol(advance.returnSatang)}
+                          {advance.excessSatang > 0 && (
+                            <span className="ml-1 text-orange-700">
+                              (ใช้เกิน {fmtSatangSymbol(advance.excessSatang)})
+                            </span>
+                          )}
+                        </p>
+                      </Td>
+                      <Td>
+                        <span
+                          className={cn(
+                            'text-xs',
+                            advance.isPastDue ? 'font-semibold text-red-600' : 'text-slate-500',
+                          )}
+                        >
+                          {fmtDate(advance.dueClearDate)}
+                        </span>
+                      </Td>
+                      <Td>
+                        <StatusBadge
+                          status={advance.status}
+                          group={advanceStatusBadgeGroup(advance.status)}
+                          label={advanceStatusLabel(advance.status)}
+                        />
+                        {advance.rejectionReason !== null && (
+                          <p className="mt-1 max-w-[180px] text-[10px] text-orange-700">
+                            เหตุผล: {advance.rejectionReason}
+                          </p>
                         )}
-                        <SettleAdvanceButton advance={advance} onSettle={setSettleTarget} />
-                      </div>
-                    </Td>
-                  </Tr>
-                ))}
-            </TBody>
-          </Table>
-        </div>
-      </Card>
+                      </Td>
+                      <Td className="text-right whitespace-nowrap">
+                        <div className="inline-flex flex-col items-end gap-1">
+                          {canApproveAdvance && canReviewAdvance(advance.status) && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setReviewMode('approve')
+                                  setReviewTarget(advance)
+                                }}
+                              >
+                                อนุมัติ
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setReviewMode('reject')
+                                  setReviewTarget(advance)
+                                }}
+                              >
+                                ปฏิเสธ
+                              </Button>
+                            </>
+                          )}
+                          <SettleAdvanceButton advance={advance} onSettle={setSettleTarget} />
+                        </div>
+                      </Td>
+                    </Tr>
+                  ))}
+              </TBody>
+            </Table>
+          </div>
+        </Card>
+      )}
 
       <CalcDetailModal item={formulaTarget} onClose={() => setFormulaTarget(null)} />
 

@@ -13,6 +13,7 @@ import {
   payeeDefaultTaxMissing,
   payeeDefaultTaxOptionLabel,
   payeeDefaultTaxRule,
+  payeeEffectiveTaxRule,
   PER_PAYEE_TAX_PROFILE_SUFFIX,
   TAX_PROFILE_TAB_PATH,
 } from '@/lib/teams/team-tax-rule'
@@ -186,6 +187,16 @@ export function PayeeFieldsSection({
         : payeeDefaultTaxOptionLabel(payoutSide, defaultLine)
   const defaultMissing = taxRule.data !== null && payeeDefaultTaxMissing(defaultLine)
   const showTaxTabLink = session !== null && canOpenTaxProfileTab(session)
+  // BUG-181 — ผู้รับที่หักตามอัตรารายคน (40(1)/40(2)) แต่เลือก Tax Profile ไว้ ⇒ บอกชัดว่า Tax Profile ไม่มีผล
+  const effectiveRule =
+    defaultLine === null
+      ? null
+      : payeeEffectiveTaxRule(defaultLine, {
+          taxProfileName: selectedProfileDto?.name ?? null,
+          whtPct: selectedProfileDto?.whtPct ?? null,
+          wht402Pct: pctFromInput(form.wht402Pct),
+        })
+  const ignoredProfileName = effectiveRule?.ignoredProfileName ?? null
 
   return (
     <>
@@ -316,6 +327,11 @@ export function PayeeFieldsSection({
             </Link>
           </>
         )}
+      </InlineAlert>
+    )}
+    {ignoredProfileName !== null && effectiveRule !== null && (
+      <InlineAlert tone="info" title="Tax Profile ที่เลือกไม่มีผลกับผู้รับรายนี้">
+        {`ระบบ${effectiveRule.label} — "${ignoredProfileName}" จะไม่ถูกใช้ ไม่ต้องเลือกก็ได้`}
       </InlineAlert>
     )}
     <SettingHelp help={payeeTaxProfileHelp(selectedTaxProfile ?? null)} />

@@ -6,6 +6,7 @@ import {
   payeeDefaultTaxMissing,
   payeeDefaultTaxOptionLabel,
   payeeDefaultTaxRule,
+  payeeEffectiveTaxRule,
   teamTaxRuleLines,
   type TeamTaxRuleProfile,
 } from '@/lib/teams/team-tax-rule'
@@ -115,5 +116,64 @@ describe('payeeDefaultTaxRule + payeeDefaultTaxOptionLabel', () => {
     for (const side of ['inhouse', 'outsource', null] as const) {
       for (const type of ['individual', 'corporate'] as const) expect(label(side, type).text).not.toMatch(/§|ไฟล์ \d/)
     }
+  })
+})
+
+/** BUG-181 (มติ PO U164 · O74) — หน้าผู้รับเงิน/ฟอร์มแสดงกติกาที่ใช้จริง ไม่ใช่ Tax Profile รายคนที่ไม่มีผล */
+describe('payeeEffectiveTaxRule', () => {
+  const OWN_3 = { taxProfileName: 'Outsource Standard 3%', whtPct: 3 }
+
+  it('inhouse บุคคลธรรมดา (40(2)) ที่ผูก Tax Profile 3% ไว้ ⇒ แสดงอัตรารายคน 5% + บอกว่า Tax Profile ไม่มีผล', () => {
+    const line = payeeDefaultTaxRule('inhouse', 'individual', BY_SIDE, DEFAULTS)
+    const summary = payeeEffectiveTaxRule(line, { ...OWN_3, wht402Pct: 5 })
+    expect(summary).toMatchObject({
+      kind: 'per_payee_rate',
+      label: 'หัก 40(2) ตามอัตรารายคน 5.00%',
+      warning: false,
+      ignoredProfileName: 'Outsource Standard 3%',
+    })
+    expect(summary.detail).toContain('ไม่มีผล')
+    expect(summary.label).not.toContain('3.00%')
+  })
+
+  it('inhouse อัตรารายคน 0% ⇒ หัก 40(2) ตามอัตรารายคน 0.00% (ไม่ใช่ 3%)', () => {
+    const line = payeeDefaultTaxRule('inhouse', 'individual', BY_SIDE, DEFAULTS)
+    expect(payeeEffectiveTaxRule(line, { ...OWN_3, wht402Pct: 0 }).label).toBe('หัก 40(2) ตามอัตรารายคน 0.00%')
+  })
+
+  it('inhouse ยังไม่กรอกอัตรารายคน ⇒ เตือน', () => {
+    const line = payeeDefaultTaxRule('inhouse', 'individual', BY_SIDE, DEFAULTS)
+    const summary = payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: null })
+    expect(summary).toMatchObject({ kind: 'per_payee_rate', warning: true, detail: null, ignoredProfileName: null })
+  })
+
+  it('outsource ผูก Tax Profile รายคน ⇒ ใช้ค่ารายคน (กำหนดเฉพาะคนนี้)', () => {
+    const line = payeeDefaultTaxRule('outsource', 'individual', BY_SIDE, DEFAULTS)
+    expect(payeeEffectiveTaxRule(line, { taxProfileName: 'พิเศษ 1%', whtPct: 1, wht402Pct: 5 })).toMatchObject({
+      kind: 'own_profile',
+      label: '1.00%',
+      detail: 'พิเศษ 1% (กำหนดเฉพาะคนนี้)',
+    })
+  })
+
+  it('outsource ไม่ผูกรายคน ⇒ ค่าเริ่มต้นตามประเภทผู้รับ', () => {
+    const line = payeeDefaultTaxRule('outsource', 'corporate', BY_SIDE, DEFAULTS)
+    expect(payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: null })).toMatchObject({
+      kind: 'default_profile',
+      label: '3.00%',
+      warning: false,
+    })
+  })
+
+  it('inhouse นิติบุคคล ไม่ใช้อัตรารายคน (นิติบุคคลไม่มีเงินได้ 40(2))', () => {
+    const line = payeeDefaultTaxRule('inhouse', 'corporate', BY_SIDE, DEFAULTS)
+    expect(payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: 5 }).kind).toBe('default_profile')
+  })
+
+  it('ไม่มีฝั่งและไม่ผูกรายคน ⇒ missing + เตือน', () => {
+    expect(payeeEffectiveTaxRule(null, { taxProfileName: null, whtPct: null, wht402Pct: null })).toMatchObject({
+      kind: 'missing',
+      warning: true,
+    })
   })
 })

@@ -20,6 +20,9 @@ import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
 /** หน้า "ตัวอย่างเอกสารทั้งหมด" (มติ PO U104) */
 export const DOCUMENT_SAMPLES_PATH = '/accounting/document-samples'
 
+/** หน้า "ค่าตั้งรอนักบัญชียืนยัน" (มติ PO U170) */
+export const SETTING_ASSUMPTIONS_PATH = '/accounting/setting-assumptions'
+
 /**
  * Menu registry — SSOT ของเมนูฝั่ง UI (`06` §7.1.1 Role Group Matrix + §7.2 Top Nav Visibility Matrix)
  *
@@ -201,6 +204,16 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         path: DOCUMENT_SAMPLES_PATH,
         audiences: ['superadmin', 'executive', 'accounting', 'finance'],
         capabilityGate: { audiences: ['executive', 'accounting', 'finance'], anyOf: [DOCUMENT_SAMPLES_CAPABILITY] },
+        available: true,
+      },
+      // มติ PO 07/10/2569 U170 (BUG-180) — หน้ารวมค่าตั้งที่เป็นสมมติฐาน: บัญชียืนยันได้โดยไม่ต้องเข้าแท็บตั้งค่า
+      // เห็นเมื่ออ่านรายการได้ (`view_master_data` — สิทธิ์ของ API อ่าน) · ปุ่มยืนยันตรวจ `manage_accountant_questions` ที่ API
+      {
+        id: 'accounting.setting-assumptions',
+        label: 'ค่าตั้งรอนักบัญชียืนยัน',
+        path: SETTING_ASSUMPTIONS_PATH,
+        audiences: ['superadmin', 'executive', 'accounting'],
+        capabilityGate: { audiences: ['executive', 'accounting'], anyOf: ['view_master_data'] },
         available: true,
       },
     ],
