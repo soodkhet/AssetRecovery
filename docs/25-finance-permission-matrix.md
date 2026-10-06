@@ -26,6 +26,7 @@
 | v2.10 | 05/10/2569 | **มติ PO 05/10/2569 (U59) — §7.3 ดูพอร์ทัลในฐานะลูกค้า**: capability ใหม่ `view_client_portal_as` (นอก matrix · อ่านอย่างเดียว) ค่าเริ่มต้น ธุรการ 👁️ · Superadmin โดยนิยาม · role ภายในอื่นมอบได้ (ไม่ใช่ "✅ only" — รายการล็อกยังคง 9) · ผู้ใช้บริษัทผูกแล้วไม่มีผล — รายละเอียด `97` §13.1 |
 | v2.11 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93)**: §7.1 เพิ่ม `manage_holidays` (ปฏิทินวันหยุด `13` §6.15) — ธุรการ/การเงิน/บัญชี ✅ · บริหาร 👁️ · Superadmin โดยนิยาม · ไม่ใช่ "✅ only" (มอบ role อื่นได้) · capability นอก Functional Matrix 37 รายการ |
 | v2.12 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)**: §7.1 เพิ่ม `manage_data_retention` (ระยะเก็บเอกสารลูกหนี้ `13` §6.16) — บริหาร ✅ · Superadmin โดยนิยาม · ไม่ล็อก (ไม่ใช่ "✅ only") · ต้องมีเหตุผล |
+| v2.13 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U102)**: แถว "แก้ไข Tax Invoice Numbering" ขยายเป็น **"แก้ไขเลขที่เอกสาร"** ครอบทุกชนิดเอกสารที่ระบบออกเลข (INV/BL/LOT/DLV/PV/WHT/ADV/RAV/CRT — `13` §6.12) · capability เดิม `manage_invoice_numbering` (✅ only Superadmin) ไม่เปลี่ยน |
 
 ขอบเขตเอกสารนี้: รวม Permission Requirement ของทุกไฟล์ในโมดูล Finance/Accounting เป็น matrix เดียวตาม Role — ให้เห็นภาพรวมว่าแต่ละ role ทำอะไรได้บ้างทั้งระบบ
 
@@ -74,7 +75,7 @@
 | จัดการปฏิทินวันหยุด (`manage_holidays` — เพิ่ม/ลบ/นำเข้าวันหยุด ใช้เลื่อนกำหนดยื่นภาษี · มติ PO 06/10/2569 UAT U93 · ไม่ล็อก · reason บังคับ) | ✅ | ✅ | ✅ | ✅ | 👁️ |
 | ตั้งระยะเก็บเอกสารลูกหนี้ (`manage_data_retention` — จำนวนปีหลังปิดเคสก่อนลบไฟล์บัตร/สัญญา/เอกสารลูกหนี้ · PDPA มติ PO 06/10/2569 U97 · ไม่ล็อก · reason บังคับ) | ✅ | — | — | — | ✅ |
 | แก้ไข Period Lock Policy | ✅ only | — | — | — | — |
-| แก้ไข Tax Invoice Numbering | ✅ only | — | — | — | — |
+| แก้ไขเลขที่เอกสาร (Document Numbering — ทุกชนิด รวมใบกำกับภาษี, มติ PO U102) | ✅ only | — | — | — | — |
 
 ### 7.2 ฝั่งรายจ่าย (ไฟล์ 15, 16, 17, 18)
 
@@ -194,7 +195,7 @@ endpoint กลุ่มนี้ **ไม่ผูกกับ capability ใ�
 > **แก้ตัวเลข 14/08/2569 (มติ PO — Phase 1.6)**: เดิมเชิงอรรถนี้เขียนว่า "7 รายการ ล็อกเฉพาะ Superadmin"
 > ซึ่งนับตกหล่นและเหมารวมเจ้าของสิทธิ์ผิด — นับรายแถวจริงในตาราง §7 ได้ `✅ only` **8 แถว**
 > (คอลัมน์ Superadmin 5: จัดการ Finance Company / จัดการ Service Fee Template / แก้ไข Tax Profile-VAT /
-> แก้ไข Period Lock Policy / แก้ไข Tax Invoice Numbering · คอลัมน์ **บริหาร** 3: อนุมัติ Adjustment (locked) /
+> แก้ไข Period Lock Policy / แก้ไขเลขที่เอกสาร · คอลัมน์ **บริหาร** 3: อนุมัติ Adjustment (locked) /
 > ปลดล็อกรอบ locked / สร้าง Authorized Exception) บวก **จัดการ Role/Permission** ที่เป็นของ Superadmin
 > ตาม `07` §12 (อยู่นอกตารางนี้ แต่อยู่ในรายการ 37 ข้อของ `13` §6.10 และ mockup `settings.html` ad7)
 > ⇒ รวม **9 รายการ** · implementation: `lib/roles/capability-locks.ts` (มีเทสต์ยามจำนวนและเจ้าของ)

@@ -75,6 +75,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   payee_profiles: 'ข้อมูลผู้รับเงิน',
   revenues: 'รายได้',
   billing_batches: 'รอบวางบิล',
+  document_number_series: 'เลขที่เอกสาร',
   adjustments: 'รายการปรับปรุง',
   accounting_periods: 'รอบบัญชี',
   exceptions: 'ข้อยกเว้น',

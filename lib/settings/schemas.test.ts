@@ -14,7 +14,7 @@ import {
   cycleDueRuleLabel,
   financePolicyUpdateSchema,
   functionalPermissionUpdateSchema,
-  numberingUpdateSchema,
+  documentNumberingUpdateSchema,
   taxDocTemplateUpdateSchema,
   taxProfileCreateSchema,
   vatRateCreateSchema,
@@ -284,26 +284,46 @@ describe('bankFileFormatCreateSchema (§6.8)', () => {
   })
 })
 
-describe('numberingUpdateSchema (§6.12)', () => {
-  const base = { reason: REASON, mode: 'continuous', prefix: 'INV', digitLength: 4 }
+describe('documentNumberingUpdateSchema (§6.12 · มติ PO U102)', () => {
+  const base = { reason: REASON, prefix: 'INV', includeYear: true, digits: 4, resetYearly: true }
 
-  it('ค่าครบผ่าน', () => {
-    expect(numberingUpdateSchema.safeParse(base).success).toBe(true)
+  it('ค่าครบผ่าน · คำนำหน้าแปลงเป็นตัวพิมพ์ใหญ่ · ขีดคั่นกลางได้ · ว่างได้', () => {
+    expect(documentNumberingUpdateSchema.parse({ ...base, prefix: 'inv' }).prefix).toBe('INV')
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, prefix: 'TAX-INV' }).success).toBe(true)
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, prefix: '' }).success).toBe(true)
   })
 
-  it('prefix ที่มีขีด/อักขระพิเศษ = ไม่ผ่าน (ตัวคั่นระบบใส่ให้)', () => {
-    expect(numberingUpdateSchema.safeParse({ ...base, prefix: 'INV-' }).success).toBe(false)
+  it('คำนำหน้าอักขระพิเศษ/ขีดหน้า-ท้าย/ซ้อน/ยาวเกิน 10 = ไม่ผ่าน', () => {
+    for (const prefix of ['INV-', '-INV', 'IN--V', 'INV/', 'ใบกำกับ', 'ABCDEFGHIJK']) {
+      expect(documentNumberingUpdateSchema.safeParse({ ...base, prefix }).success, prefix).toBe(false)
+    }
   })
 
-  it('จำนวนหลักนอกช่วง 3-10 = ไม่ผ่าน', () => {
-    expect(numberingUpdateSchema.safeParse({ ...base, digitLength: 2 }).success).toBe(false)
-    expect(numberingUpdateSchema.safeParse({ ...base, digitLength: 11 }).success).toBe(false)
+  it('จำนวนหลักนอกช่วง 3-8 = ไม่ผ่าน', () => {
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, digits: 2 }).success).toBe(false)
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, digits: 9 }).success).toBe(false)
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, digits: 8 }).success).toBe(true)
+  })
+
+  it('รีเซ็ตทุกปีแต่ไม่รวมปีในเลข = ไม่ผ่าน (เลขปีใหม่ชนปีเก่า)', () => {
+    const result = documentNumberingUpdateSchema.safeParse({ ...base, includeYear: false, resetYearly: true })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues[0]?.path).toEqual(['resetYearly'])
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, includeYear: false, resetYearly: false }).success).toBe(true)
+  })
+
+  it('เลขถัดไปต้องเป็นจำนวนเต็มบวก · เหตุผลบังคับ', () => {
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, nextSequence: 0 }).success).toBe(false)
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, nextSequence: 1.5 }).success).toBe(false)
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, nextSequence: 101 }).success).toBe(true)
+    expect(documentNumberingUpdateSchema.safeParse({ ...base, reason: '' }).success).toBe(false)
   })
 
   it('ตรวจจับความพยายามแก้ตัวเดินเลขด้วยมือ (`NUMBERING_SEQ_NOT_EDITABLE`)', () => {
     expect(bodyTouchesNumberingSequence({ ...base, lastNumber: 500 })).toBe(true)
-    expect(bodyTouchesNumberingSequence({ ...base, taxInvoiceSeq: 1 })).toBe(true)
-    expect(bodyTouchesNumberingSequence({ ...base, lastResetYear: 2569 })).toBe(true)
+    expect(bodyTouchesNumberingSequence({ ...base, currentSeq: 1 })).toBe(true)
+    expect(bodyTouchesNumberingSequence({ ...base, currentYear: 2569 })).toBe(true)
+    expect(bodyTouchesNumberingSequence({ ...base, nextSequence: 5 })).toBe(false)
     expect(bodyTouchesNumberingSequence(base)).toBe(false)
     expect(bodyTouchesNumberingSequence(null)).toBe(false)
   })

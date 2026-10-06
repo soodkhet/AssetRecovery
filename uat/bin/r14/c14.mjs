@@ -8,7 +8,7 @@ await p.goto(`${BASE}/accounting?tab=receipts`); await settle(p); await sleep(15
 
 log('url', p.url()); log('receipts tab', await mainText(p, 1800))
 await shot(p, R, '14-receipts-tab', { fullPage: true })
-const seq = () => qa(`select tax_invoice_seq from organizations`) + ' / n=' + qa(`select count(*) from tax_invoices`)
+const seq = () => qa(`select current_seq from document_number_series where doc_type='tax_invoice'`) + ' / n=' + qa(`select count(*) from tax_invoices`)
 log('seq before', seq())
 const row = p.locator('tbody tr').filter({ hasText: 'BL-2569-005' }).first()
 log('row', (await row.innerText()).replace(/\s+/g, ' '))

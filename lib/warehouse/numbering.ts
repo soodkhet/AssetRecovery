@@ -5,10 +5,8 @@ import { buddhistYear } from '@/lib/format/datetime'
  *
  * รูปแบบ `LOT-2569-001` / `DLV-2569-001` — ปี **พ.ศ. เท่านั้น** (Rule 01) และลำดับรีเซ็ตทุกปี
  *
- * ⚠️ ตัวเดินเลขจริงคือ SQL function `next_handover_number(prefix, be_year)` (migration `20260814183000`)
- *    ซึ่งใช้ PostgreSQL sequence 1 ตัวต่อ (prefix, ปี) — **ห้าม** อ่าน `MAX()` มาบวกเองในโค้ด
- *    (`nextval()` ไม่ถูก rollback ⇒ ทรานแซกชันล้มแล้วเลขก็ไม่ถูกใช้ซ้ำ ตรงกับกติกา "ไม่ recycle")
- *    ไฟล์นี้มีหน้าที่แค่ **ให้ค่านำเข้า** (prefix/ปี) กับ **อ่าน/ตรวจรูปแบบ** ฝั่งแอปเท่านั้น
+ * ⚠️ ตั้งแต่มติ PO U102 คำนำหน้า/รูปแบบตั้งค่าได้ (`document_number_series`) — ตัวเดินเลขจริงคือ
+ *    `nextDocumentNumber()` (`lib/document-numbering/queries.ts`) · ไฟล์นี้อ่าน/ตรวจได้เฉพาะ **รูปแบบค่าเริ่มต้น**
  */
 
 export const LOT_PREFIX = 'LOT'

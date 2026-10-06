@@ -86,7 +86,7 @@ async function insertBatch(org: Org, createdAt?: string, runner: Pick<PrismaClie
   return rows[0]?.batch_number ?? ''
 }
 
-suite('เลขรอบวางบิล BL — trigger next_billing_batch_number()', () => {
+suite('เลขรอบวางบิล BL — trigger → next_document_number()', () => {
   beforeAll(async () => {
     orgA = await seedOrg(1)
     orgB = await seedOrg(2)

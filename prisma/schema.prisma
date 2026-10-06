@@ -107,11 +107,28 @@ enum BankFileTestStatus {
   @@map("bank_file_test_status")
 }
 
-enum InvoiceNumberingMode {
-  continuous
-  yearly_reset
+/// ชนิดเอกสารที่ระบบออกเลขเอง (มติ PO U102 · `13` §6.12) — 1 ชุดเลขต่อองค์กรต่อชนิดใน `document_number_series`
+enum DocumentNumberType {
+  /// INV ใบเสร็จรับเงิน/ใบกำกับภาษี (เอกสารภาษี — ล็อกรูปแบบหลังออกฉบับแรก)
+  tax_invoice
+  /// BL ใบแจ้งหนี้/ใบวางบิล
+  billing_batch
+  /// LOT เลขล็อตส่งมอบ
+  handover_lot
+  /// DLV ใบส่งมอบ
+  delivery_note
+  /// PV ใบสำคัญจ่าย
+  payment_voucher
+  /// WHT หนังสือรับรองการหักภาษี ณ ที่จ่าย (เอกสารภาษี — ล็อกรูปแบบหลังออกฉบับแรก)
+  wht_certificate
+  /// ADV ใบเบิกเงินทดรอง
+  advance
+  /// RAV ใบรับคืนเงินทดรอง
+  advance_return
+  /// CRT ใบรับรองแทนใบเสร็จรับเงิน (โครงตัวนับ — มติ U103)
+  substitute_receipt
 
-  @@map("invoice_numbering_mode")
+  @@map("document_number_type")
 }
 
 enum TaxDocumentType {
@@ -677,24 +694,14 @@ model Organization {
   /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
   branchCode    String  @default("00000") @map("branch_code") @db.VarChar(5)
 
-  // Tax invoice numbering (ไฟล์ 13 §6.12) — เลขที่ห้าม gap
-  taxInvoicePrefix        String               @default("INV") @map("tax_invoice_prefix") @db.VarChar(20)
-  taxInvoiceSeq           Int                  @default(0) @map("tax_invoice_seq")
-  taxInvoiceNumberingMode InvoiceNumberingMode @default(continuous) @map("tax_invoice_numbering_mode")
-  taxInvoiceDigitLength   Int                  @default(4) @map("tax_invoice_digit_length")
-  /// ปี พ.ศ. — ใช้เฉพาะโหมด yearly_reset
-  taxInvoiceLastResetYear Int?                 @map("tax_invoice_last_reset_year")
-
-  // เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ PO U76) — เดินโดย trigger `trg_billing_batches_number` เท่านั้น ห้ามแก้จากแอป
-  billingBatchSeq     Int  @default(0) @map("billing_batch_seq")
-  /// ปี พ.ศ. ของ `billingBatchSeq` ปัจจุบัน (รีเซ็ตเมื่อขึ้นปีใหม่)
-  billingBatchSeqYear Int? @map("billing_batch_seq_year")
+  // เลขที่เอกสารทุกชนิด (รวมใบกำกับภาษี/รอบวางบิลเดิม) ย้ายไป `document_number_series` แล้ว (มติ PO U102)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   roles                       Role[]
   users                       User[]
+  documentNumberSeries        DocumentNumberSeries[]
   teams                       Team[]
   compensationPlans           CompensationPlan[]
   financeCompanies            FinanceCompany[]
@@ -786,6 +793,43 @@ model Role {
 }
 
 /// ผู้ใช้ระบบ — password จัดการโดย Supabase Auth ไม่เก็บที่นี่ (DEC-001/003)
+/// ชุดเลขที่เอกสาร (มติ PO 06/10/2569 U102 · `13` §6.12) — 1 แถวต่อองค์กรต่อชนิดเอกสาร
+/// ⚠️ ตัวนับ (`currentSeq`/`currentYear`/`lastIssued*`) เดินโดย SQL `next_document_number()` เท่านั้น (ล็อกแถว FOR UPDATE)
+///    แอปเรียกผ่าน `nextDocumentNumber()` ใน `lib/document-numbering/queries.ts` · ค่าเริ่มต้นสร้างเองครั้งแรกที่ใช้
+/// CHECK (prefix/digits/ปี พ.ศ./รีเซ็ตต้องมีปี) อยู่ใน raw SQL `20261006180000_document_number_series`
+model DocumentNumberSeries {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String             @map("organization_id") @db.Uuid
+  docType          DocumentNumberType @map("doc_type")
+  /// A–Z/0–9 คั่นด้วย `-` ได้ ≤ 10 ตัว (ว่างได้) — ตัวคั่นระหว่างคำนำหน้า/ปี/ลำดับ ระบบใส่ให้
+  prefix           String             @db.VarChar(10)
+  /// รวมปี พ.ศ. ในเลข (`INV-2569-0001`) หรือไม่ (`INV-0001`)
+  includeYear      Boolean            @map("include_year")
+  /// จำนวนหลักของลำดับ 3–8 (เกินแล้วยาวขึ้นเอง ไม่ตัดหลัก)
+  digits           Int
+  /// รีเซ็ตลำดับทุกปี พ.ศ. (ต้องรวมปีในเลข)
+  resetYearly      Boolean            @map("reset_yearly")
+  currentSeq       Int                @default(0) @map("current_seq")
+  /// ปี พ.ศ. ของ `currentSeq`
+  currentYear      Int?               @map("current_year")
+  lastIssuedNumber String?            @map("last_issued_number")
+  lastIssuedAt     DateTime?          @map("last_issued_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// NULL = ระบบสร้างค่าเริ่มต้นเอง
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser User?        @relation("document_number_series_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?        @relation("document_number_series_updated_by", fields: [updatedBy], references: [id])
+
+  @@unique([organizationId, docType], map: "uniq_document_number_series")
+  @@map("document_number_series")
+}
+
 model User {
   id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String @map("organization_id") @db.Uuid
@@ -919,6 +963,8 @@ model User {
   advanceReturnsCreated     AdvanceReturn[]             @relation("advance_returns_created_by")
   advanceReturnsUpdated     AdvanceReturn[]             @relation("advance_returns_updated_by")
   advanceReturnsReversed    AdvanceReturn[]             @relation("advance_returns_reversed_by")
+  documentSeriesCreated     DocumentNumberSeries[]      @relation("document_number_series_created_by")
+  documentSeriesUpdated     DocumentNumberSeries[]      @relation("document_number_series_updated_by")
   advancesUpdated           Advance[]                   @relation("advances_updated_by")
   advancesApproved          Advance[]                   @relation("advances_approved_by")
   payoutBatchesCreated      PayoutBatch[]               @relation("payout_batches_created_by")
@@ -2143,10 +2189,10 @@ model HandoverLot {
   id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String @map("organization_id") @db.Uuid
   companyId      String @map("company_id") @db.Uuid
-  /// LOT-2569-001 (ปี พ.ศ.)
-  lotNumber      String @unique @map("lot_number")
-  /// DLV-2569-001 (ปี พ.ศ.)
-  docRef         String @unique @map("doc_ref")
+  /// LOT-2569-001 (ปี พ.ศ.) — ไม่ซ้ำต่อองค์กร · ออกจาก `document_number_series` ชนิด `handover_lot`
+  lotNumber      String @map("lot_number")
+  /// DLV-2569-001 (ปี พ.ศ.) — ไม่ซ้ำต่อองค์กร · ออกจาก `document_number_series` ชนิด `delivery_note`
+  docRef         String @map("doc_ref")
 
   type   HandoverType
   status HandoverLotStatus @default(pending_attach)
@@ -2184,6 +2230,8 @@ model HandoverLot {
 
   assets Asset[]
 
+  @@unique([organizationId, lotNumber], map: "uniq_handover_lot_number")
+  @@unique([organizationId, docRef], map: "uniq_handover_doc_ref")
   @@index([organizationId, status], map: "idx_lots_org_status")
   @@index([organizationId, companyId, status], map: "idx_lots_org_company")
   @@map("handover_lots")
@@ -2402,6 +2450,8 @@ model Advance {
   id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId  String               @map("organization_id") @db.Uuid
   payeeId         String               @map("payee_id") @db.Uuid
+  /// เลขที่ใบเบิกเงินทดรอง (มติ PO U102) — trigger `trg_advances_number` ออกให้ตอน INSERT ห้ามส่งเอง ห้ามแก้
+  advanceNumber   String               @default(dbgenerated()) @map("advance_number")
   requestedSatang Int                  @map("requested_satang")
   approvedSatang  Int?                 @map("approved_satang")
   usedSatang      Int                  @default(0) @map("used_satang")
@@ -2440,6 +2490,7 @@ model Advance {
   bankTransactions BankTransaction[] @relation("bank_tx_matched_advance")
   returns          AdvanceReturn[]
 
+  @@unique([organizationId, advanceNumber], map: "uniq_advance_number")
   @@index([payeeId, status], map: "idx_advances_payee")
   @@index([organizationId, returnMethod, status], map: "idx_advances_org_return_method")
   @@index([organizationId, dueClearDate, status], map: "idx_advances_due")
@@ -2537,6 +2588,9 @@ model PayoutBatchItem {
   whtBaseIncluded   Boolean            @default(true) @map("wht_base_included")
   /// snapshot ประเภทเงินได้ของผู้รับ ณ วันสร้างรอบ (UAT U5) — NULL = รอบเก่า/เงินทดรองจ่าย (ไม่ใช่เงินได้)
   whtIncomeCategory WhtIncomeCategory? @map("wht_income_category")
+  /// เลขที่ใบสำคัญจ่าย (มติ PO U102) — 1 เลขต่อผู้รับเงินต่อรอบ ออกตอนสร้างไฟล์โอนครั้งแรก แล้ว snapshot ลงทุกรายการของผู้รับนั้น
+  /// NULL = ยังไม่สร้างไฟล์โอน · ตั้งแล้วแก้ไม่ได้ (trigger `trg_payout_batch_items_voucher_immutable`)
+  voucherNumber     String?            @map("voucher_number")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -2569,6 +2623,8 @@ model AdvanceReturn {
   organizationId     String               @map("organization_id") @db.Uuid
   advanceId          String               @map("advance_id") @db.Uuid
   payeeId            String               @map("payee_id") @db.Uuid
+  /// เลขที่ใบรับคืนเงินทดรอง (มติ PO U102) — trigger `trg_advance_returns_number` ออกให้ตอน INSERT ห้ามส่งเอง ห้ามแก้
+  returnNumber       String               @default(dbgenerated()) @map("return_number")
   channel            AdvanceReturnChannel
   amountSatang       Int                  @map("amount_satang")
   /// ช่องทาง `payout_offset` เท่านั้น — รอบจ่าย/บรรทัดที่หัก
@@ -2598,6 +2654,7 @@ model AdvanceReturn {
   updatedByUser   User?            @relation("advance_returns_updated_by", fields: [updatedBy], references: [id])
   reversedByUser  User?            @relation("advance_returns_reversed_by", fields: [reversedBy], references: [id], onDelete: Restrict)
 
+  @@unique([organizationId, returnNumber], map: "uniq_advance_return_number")
   @@index([organizationId, advanceId], map: "idx_advance_returns_org_advance")
   @@index([organizationId, payeeId], map: "idx_advance_returns_org_payee")
   @@index([organizationId, payoutBatchId], map: "idx_advance_returns_org_batch")
@@ -2835,7 +2892,8 @@ model TaxInvoice {
   id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId        String                @map("organization_id") @db.Uuid
   salesRecordId         String                @map("sales_record_id") @db.Uuid
-  invoiceNumber         String                @unique @map("invoice_number")
+  /// ไม่ซ้ำต่อองค์กร (`uniq_tax_invoice_number`) — ออกจาก `document_number_series` ชนิด `tax_invoice`
+  invoiceNumber         String                @map("invoice_number")
   invoiceDate           DateTime              @map("invoice_date") @db.Date
   /// snapshot สาขาผู้ซื้อ ณ ตอนออกใบ (มติ PO U77 · ม.86/4) — `00000` = สำนักงานใหญ่ · ไม่มี default (ต้องส่งทุกครั้ง)
   /// CHECK + ยาม immutable อยู่ใน raw SQL `20261005201000_finance_company_branch_code`
@@ -2886,6 +2944,7 @@ model TaxInvoice {
 
   creditNotes CreditNote[]
 
+  @@unique([organizationId, invoiceNumber], map: "uniq_tax_invoice_number")
   @@index([cashReceiptId], map: "idx_tax_invoices_cash_receipt")
   @@index([organizationId, status], map: "idx_tax_invoices_org")
   @@index([organizationId, invoiceDate], map: "idx_tax_invoices_org_invoice_date")
@@ -3012,7 +3071,8 @@ model ExpenseRecord {
 model WhtCertificate {
   id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId    String             @map("organization_id") @db.Uuid
-  certificateNumber String             @unique @map("certificate_number")
+  /// ไม่ซ้ำต่อองค์กร (`uniq_wht_certificate_number`) — ออกจาก `document_number_series` ชนิด `wht_certificate`
+  certificateNumber String             @map("certificate_number")
   payeeId           String             @map("payee_id") @db.Uuid
   expenseRecordId   String             @map("expense_record_id") @db.Uuid
   incomeType        String             @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
@@ -3065,6 +3125,7 @@ model WhtCertificate {
 
   replacedBy WhtCertificate[] @relation("wht_replaces")
 
+  @@unique([organizationId, certificateNumber], map: "uniq_wht_certificate_number")
   @@index([payeeId, paymentDate], map: "idx_wht_certs_payee")
   /// กันออกใบซ้ำที่ระดับ DB — `uniq_wht_cert_active_per_expense` เป็น **partial unique index**
   /// `(organization_id, expense_record_id) WHERE status = 'active'` ซึ่ง Prisma เขียนไม่ได้

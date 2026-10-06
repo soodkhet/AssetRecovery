@@ -669,6 +669,7 @@ const advanceAgingProvider: ReportProvider = async (ctx: ReportContext): Promise
     },
     select: {
       id: true,
+      advanceNumber: true,
       payeeId: true,
       status: true,
       approvedAt: true,
@@ -686,6 +687,7 @@ const advanceAgingProvider: ReportProvider = async (ctx: ReportContext): Promise
 
   const advances: AdvanceAgingEntry[] = rows.map((row) => ({
     advanceId: row.id,
+    advanceNumber: row.advanceNumber,
     payeeId: row.payeeId,
     payeeName: row.payee.user.fullName,
     teamName: row.payee.user.team?.name ?? null,

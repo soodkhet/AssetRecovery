@@ -33,8 +33,10 @@ export const SETTINGS_ERROR_CODES = [
   // §6.8 Bank File Format
   'BANK_FILE_FORMAT_NOT_FOUND',
   'BANK_FILE_NOT_TESTED',
-  // §6.12 เลขที่ใบกำกับภาษี
+  // §6.12 เลขที่เอกสาร (มติ PO U102)
   'NUMBERING_SEQ_NOT_EDITABLE',
+  'NUMBERING_FORMAT_LOCKED',
+  'NUMBERING_SEQ_BELOW_ISSUED',
   // §6.4.2 ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 UAT U8)
   'WHT_POLICY_EFFECTIVE_DATE_PAST',
   // §6.15 ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93)
@@ -65,6 +67,8 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   BANK_FILE_FORMAT_NOT_FOUND: 404,
   BANK_FILE_NOT_TESTED: 400,
   NUMBERING_SEQ_NOT_EDITABLE: 400,
+  NUMBERING_FORMAT_LOCKED: 400,
+  NUMBERING_SEQ_BELOW_ISSUED: 400,
   WHT_POLICY_EFFECTIVE_DATE_PAST: 400,
   HOLIDAY_NOT_FOUND: 404,
   DUPLICATE_HOLIDAY_DATE: 400,
@@ -139,7 +143,15 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   },
   NUMBERING_SEQ_NOT_EDITABLE: {
     title: 'แก้เลขล่าสุดด้วยมือไม่ได้',
-    message: 'เลขที่ใบกำกับภาษีล่าสุดระบบเดินให้อัตโนมัติ ห้ามแก้มือ (เลขต้องต่อเนื่องตามกฎหมาย)',
+    message: 'ตัวเดินเลขของเอกสารระบบเดินให้อัตโนมัติ — เอกสารภาษีตั้งเลขเองไม่ได้ (เลขต้องต่อเนื่องตามกฎหมาย)',
+  },
+  NUMBERING_FORMAT_LOCKED: {
+    title: 'รูปแบบเลขที่เอกสารภาษีถูกล็อกแล้ว',
+    message: 'ออกเอกสารภาษีชนิดนี้ไปแล้ว — เปลี่ยนคำนำหน้า/รูปแบบไม่ได้ เพื่อให้เลขต่อเนื่องตามกฎหมาย',
+  },
+  NUMBERING_SEQ_BELOW_ISSUED: {
+    title: 'เลขถัดไปต่ำกว่าเลขที่ใช้แล้ว',
+    message: 'ตั้งเลขลำดับถัดไปให้ต่ำกว่าหรือเท่ากับเลขที่ออกไปแล้วไม่ได้ — เลขเอกสารจะซ้ำ',
   },
   WHT_POLICY_EFFECTIVE_DATE_PAST: {
     title: 'วันที่มีผลย้อนหลังไม่ได้',

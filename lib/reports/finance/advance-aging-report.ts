@@ -1,4 +1,3 @@
-import { advanceRef } from '@/lib/advances/advance'
 import { advanceStatusLabel } from '@/lib/advances/advance-ui'
 import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
 import { agingBucketIndex, daysOverdue } from '@/lib/finance/ar-calc'
@@ -53,6 +52,8 @@ export interface AdvanceAgingPayoutBatch {
 /** เงินทดรอง 1 ใบ (ยอดจาก DB ตรง ๆ — ห้ามคำนวณก่อนส่งเข้ามา) */
 export interface AdvanceAgingEntry {
   advanceId: string
+  /** เลขที่ใบเบิกเงินทดรอง (`advances.advance_number`) */
+  advanceNumber: string
   payeeId: string
   payeeName: string
   teamName: string | null
@@ -93,6 +94,7 @@ export function isAdvanceClearOverdue(entry: Pick<AdvanceAgingEntry, 'status' | 
 
 export interface AdvanceAgingLine {
   advanceId: string
+  advanceNumber: string
   payeeId: string
   payeeName: string
   teamName: string | null
@@ -129,6 +131,7 @@ export function advanceAgingLines(entries: readonly AdvanceAgingEntry[], asOf: D
     const overdue = isAdvanceClearOverdue(entry, asOf)
     lines.push({
       advanceId: entry.advanceId,
+      advanceNumber: entry.advanceNumber,
       payeeId: entry.payeeId,
       payeeName: entry.payeeName,
       teamName: entry.teamName,
@@ -218,7 +221,7 @@ function advanceRows(lines: readonly AdvanceAgingLine[]): ReportRow[] {
     [ROW_KEY]: line.advanceId,
     payeeName: line.payeeName,
     teamName: line.teamName,
-    ref: advanceRef(line.advanceId),
+    ref: line.advanceNumber,
     paidAt: line.paidAt === null ? null : line.paidAt.toISOString(),
     dueClearDate: toIsoDateOnly(line.dueClearDate),
     approvedSatang: line.approvedSatang,

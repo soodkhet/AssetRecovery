@@ -37,7 +37,7 @@ export const E = [
  ['W23','POST','/api/bank-reconciliation/import','A|DDDAD|DDDDDD|DDD'], ['W24','POST','/api/accounting/export-pack','A|DDDAD|DDDDDD|DDD'],
  ['W25','PATCH','/api/accounting/expenses/{R}/cost-center','A|DDDAD|DDDDDD|DDD'], ['W26','POST','/api/users','A|ADDDD|DDDDDD|DDD'],
  ['W27','POST','/api/finance-companies','A|DDDDD|DDDDDD|DDD'], ['W28','POST','/api/service-fee-templates','A|DDDDD|DDDDDD|DDD'],
- ['W29','POST','/api/settings/tax-profiles','A|DDDDD|DDDDDD|DDD'], ['W30','PATCH','/api/settings/tax-invoice-numbering','A|DDDDD|DDDDDD|DDD'],
+ ['W29','POST','/api/settings/tax-profiles','A|DDDDD|DDDDDD|DDD'], ['W30','PATCH','/api/settings/document-numbering/tax_invoice','A|DDDDD|DDDDDD|DDD'],
  ['W31','PATCH','/api/settings/functional-permissions','A|DDDDD|DDDDDD|DDD'], ['W32','POST','/api/teams','A|DDDDD|DDDDDD|DDD'],
  ['W33','POST','/api/settings/cycles','A|DDDDD|DDDDDD|DDD'], ['W34','POST','/api/compensation-plans','A|DDADA|DDDDDD|DDD'],
  ['W35','POST','/api/jobs','A|DDDDD|DDDDDD|DDD'],

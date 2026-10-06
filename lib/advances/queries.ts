@@ -3,7 +3,6 @@ import {
   ADVANCE_EXCESS_CLAIM_TYPE,
   advanceExcessClaimNote,
   APPROVE_ADVANCE,
-  advanceRef,
   advanceReturnState,
   assertAdvanceRejectionReason,
   assertCanChangeReturnMethod,
@@ -70,6 +69,7 @@ export interface AdvanceMutationContext {
 
 const advanceSelect = {
   id: true,
+  advanceNumber: true,
   payeeId: true,
   requestedSatang: true,
   approvedSatang: true,
@@ -89,6 +89,7 @@ const advanceSelect = {
   returns: {
     select: {
       id: true,
+      returnNumber: true,
       channel: true,
       amountSatang: true,
       payoutBatchId: true,
@@ -142,6 +143,7 @@ function returnOutstandingOf(row: Pick<AdvanceRow, 'returnSatang' | 'returns'>):
 function toReturnDto(row: AdvanceReturnRow): AdvanceReturnDto {
   return {
     id: row.id,
+    returnNumber: row.returnNumber,
     channel: row.channel,
     amountSatang: row.amountSatang,
     payoutBatchId: row.payoutBatchId,
@@ -184,7 +186,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     rejectionReason: row.rejectionReason,
     createdAt: row.createdAt.toISOString(),
     requesterName: row.createdByUser.fullName,
-    ref: advanceRef(row.id),
+    ref: row.advanceNumber,
     returnMethod: row.returnMethod,
     returnCollectedSatang: returned.collected,
     returnOutstandingSatang: returned.outstanding,

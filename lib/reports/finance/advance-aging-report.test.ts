@@ -27,6 +27,7 @@ function paidOn(iso: string) {
 
 function entry(overrides: Partial<AdvanceAgingEntry> & { advanceId: string }): AdvanceAgingEntry {
   return {
+    advanceNumber: `ADV-2569-${overrides.advanceId.slice(-4).toUpperCase()}`,
     payeeId: 'p1',
     payeeName: 'สมชาย ใจดี',
     teamName: 'ทีมเหนือ',

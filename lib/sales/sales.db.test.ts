@@ -4,6 +4,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
+import { documentSeriesSeq, setDocumentSeries } from '@/tests/helpers/document-series'
 
 /**
  * เทสต์ระดับ DB ของ Phase 4.3 — DoD ของไฟล์ 31
@@ -46,7 +47,8 @@ const BANK_ACCOUNT_ID = '00000000-0000-4000-8000-0000000043a4'
 
 /** prefix เฉพาะรัน — กันชนกับใบกำกับภาษีที่ค้างจากรันก่อน (ลบไม่ได้ตาม `02` §13) */
 const RUN = `${process.pid}${Date.now() % 100_000}`
-const PREFIX = `T${RUN}`
+/** คำนำหน้าเลขที่ใบกำกับของรันนี้ (≤ 10 ตัว — กติกาชุดเลขเอกสาร) */
+const PREFIX = `T${RUN.slice(-9)}`
 /** เลขผู้เสียภาษี 13 หลักเฉพาะรัน — unique `(organization_id, tax_id)` ของ `finance_companies` */
 const RUN_TAX_ID = RUN.padEnd(13, '0').slice(0, 13)
 /** เลขผู้เสียภาษีที่ **ไม่ถูกต้อง** (ไม่ใช่ตัวเลข 13 หลัก) — ใช้ทดสอบ `TAX_INVOICE_FIELD_MISSING` */
@@ -165,21 +167,22 @@ async function seedBilling(
   return { id, period }
 }
 
-/** ตั้งค่าตัวเดินเลขของ organization โดยตรง (ระบบไม่เปิดให้แก้ผ่าน API — `13` §6.12) */
+/** ตั้งค่าตัวเดินเลขใบกำกับภาษีขององค์กรโดยตรง (ระบบไม่เปิดให้แก้ผ่าน API — มติ PO U102) */
 async function setNumbering(
   options: { seq?: number; mode?: 'continuous' | 'yearly_reset'; lastResetYear?: number | null } = {},
 ): Promise<void> {
-  const lastResetYear = options.lastResetYear === undefined ? 'NULL' : (options.lastResetYear ?? 'NULL')
-  await db().$executeRawUnsafe(`
-    UPDATE organizations
-       SET tax_invoice_seq = ${options.seq ?? 0},
-           tax_invoice_prefix = '${PREFIX}',
-           tax_invoice_numbering_mode = '${options.mode ?? 'continuous'}',
-           tax_invoice_digit_length = 4,
-           tax_invoice_last_reset_year = ${lastResetYear}
-     WHERE id = '${ORG_ID}'
-  `)
+  const yearly = options.mode === 'yearly_reset'
+  await setDocumentSeries(db(), ORG_ID, 'tax_invoice', {
+    prefix: PREFIX,
+    includeYear: yearly,
+    resetYearly: yearly,
+    digits: 4,
+    currentSeq: options.seq ?? 0,
+    currentYear: options.lastResetYear ?? null,
+  })
 }
+
+const invoiceSeq = (): Promise<number> => documentSeriesSeq(db(), ORG_ID, 'tax_invoice')
 
 async function setPeriodStatusOf(period: string, status: 'locked' | 'collecting'): Promise<void> {
   const [month = '', yearText = ''] = period.split(' ')
@@ -206,8 +209,8 @@ beforeAll(async () => {
 
   const tx = db()
   await tx.$executeRawUnsafe(`
-    INSERT INTO organizations (id, name, tax_id, address, vat_registered, tax_invoice_prefix)
-    VALUES ('${ORG_ID}', 'Phase43Test', '9999999994300', 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ', true, '${PREFIX}')
+    INSERT INTO organizations (id, name, tax_id, address, vat_registered)
+    VALUES ('${ORG_ID}', 'Phase43Test', '9999999994300', 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ', true)
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -341,13 +344,12 @@ suite('มติ PO U95 — วางบิล ⇒ ใบแจ้งหนี�
   it('ส่งบิลแล้วไม่มีใบกำกับภาษีเกิด · ใบแจ้งหนี้ PDF อ่านยอดจากรายได้ + ข้อความไม่ใช่ใบกำกับ · draft ออกไม่ได้', async () => {
     const { getBillingInvoiceSource } = await import('@/lib/revenue/billing-invoice-queries')
     const { buildBillingInvoiceDoc } = await import('@/lib/revenue/billing-invoice')
-    const before = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
+    const before = await invoiceSeq()
     const batch = await seedBilling()
     await revenue.sendBillingBatch(billingCtx, batch.id, { reason: billingCtx.reason })
 
     expect(await db().taxInvoice.count({ where: { salesRecord: { billingBatchId: batch.id } } })).toBe(0)
-    const after = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
-    expect(after.taxInvoiceSeq, 'ใบแจ้งหนี้ไม่เดินเลขใบกำกับภาษี').toBe(before.taxInvoiceSeq)
+    expect(await invoiceSeq(), 'ใบแจ้งหนี้ไม่เดินเลขใบกำกับภาษี').toBe(before)
 
     const doc = buildBillingInvoiceDoc(await getBillingInvoiceSource(accountant, batch.id))
     expect(doc.amounts).toEqual({ totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 })
@@ -460,8 +462,7 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     await db().$executeRawUnsafe(`UPDATE revenues SET vat_mode_snapshot = 'no_vat' WHERE billing_batch_id = '${batch.id}'`)
     const receiptId = await seedReceipt(batch.id)
     await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'TAX_INVOICE_NO_VAT_COMPANY')
-    const org = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
-    expect(org.taxInvoiceSeq).toBe(60)
+    expect(await invoiceSeq()).toBe(60)
   })
 
   it('U96 #7 — วันที่ล่วงหน้า / ก่อนวันที่ของเลขก่อนหน้า ⇒ ปฏิเสธพร้อมข้อความชัดเจน', async () => {
@@ -566,8 +567,7 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     `)
     const { receiptId } = await seedReceivedBilling({ company: broken[0]?.id ?? '' })
     await expectCode(() => sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }), 'TAX_INVOICE_FIELD_MISSING')
-    const org = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { taxInvoiceSeq: true } })
-    expect(org.taxInvoiceSeq, 'ตรวจฟิลด์ก่อนเดินเลข ⇒ เลขที่ต้องไม่ขยับ').toBe(20)
+    expect(await invoiceSeq(), 'ตรวจฟิลด์ก่อนเดินเลข ⇒ เลขที่ต้องไม่ขยับ').toBe(20)
   })
 
   it('DoD: ออกพร้อมกัน 4 คำขอ (คนละเงินรับ) ⇒ เลขไม่ซ้ำและไม่ขาดช่วง', async () => {

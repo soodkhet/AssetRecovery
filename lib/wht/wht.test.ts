@@ -18,13 +18,9 @@ import {
   filingOverdueWarning,
   incomeTypeOf,
   isFilingOverdue,
-  nextCertificateSequence,
-  parseCertificateSequence,
   requireWhtCancelReason,
   shouldIssueCertificate,
   summarizeFilingTotals,
-  whtCertificateNumber,
-  whtCertificateNumberPrefix,
   type FilingTotalSource,
   type WhtCertificateDocSource,
 } from '@/lib/wht/wht'
@@ -74,32 +70,6 @@ describe('เงื่อนไขการออกใบ (`33` §9)', () => {
     expect(incomeTypeOf('ค่าบริการ มาตรา 40(8)')).toBe('ค่าบริการ มาตรา 40(8)')
     expect(incomeTypeOf('   ')).toBe(DEFAULT_INCOME_TYPE)
     expect(incomeTypeOf(null)).toBe(DEFAULT_INCOME_TYPE)
-  })
-})
-
-describe('เลขที่หนังสือรับรอง (D11 — ห้ามซ้ำ ห้ามย้อน)', () => {
-  it('รูปแบบ WHT-<พ.ศ.>-NNN ตาม mockup + ใช้ปีไทยของวันที่จ่าย', () => {
-    expect(whtCertificateNumber(1, PAYMENT_AT)).toBe('WHT-2569-001')
-    expect(whtCertificateNumber(42, PAYMENT_AT)).toBe('WHT-2569-042')
-    // เกิน 999 ต้องไม่ตัดหลัก (บทเรียนจาก `lpad` ของ Phase 3.5)
-    expect(whtCertificateNumber(1234, PAYMENT_AT)).toBe('WHT-2569-1234')
-  })
-
-  it('วันที่จ่ายหลัง 17:00 น. ไทย ยังนับเป็นปี พ.ศ. ของวันไทย ไม่ใช่ของ UTC', () => {
-    // 31/12/2569 19:00 น. ไทย = 2026-12-31T12:00Z (ปีเดียวกัน) · 01/01/2570 00:30 ไทย = 2026-12-31T17:30Z
-    expect(whtCertificateNumber(1, new Date('2026-12-31T12:00:00Z'))).toBe('WHT-2569-001')
-    expect(whtCertificateNumber(1, new Date('2026-12-31T17:30:00Z'))).toBe('WHT-2570-001')
-  })
-
-  it('ลำดับถัดไปนับจากเลขสูงสุดของปีนั้น (นับใบที่ยกเลิกด้วย — เลขไม่ recycle)', () => {
-    const prefix = whtCertificateNumberPrefix(PAYMENT_AT)
-    expect(prefix).toBe('WHT-2569-')
-    expect(nextCertificateSequence([], prefix)).toBe(1)
-    expect(nextCertificateSequence(['WHT-2569-001', 'WHT-2569-003', 'WHT-2569-002'], prefix)).toBe(4)
-    // เลขของปีอื่น/รูปแบบอื่นไม่นับ
-    expect(nextCertificateSequence(['WHT-2568-900', 'INV-2569-777'], prefix)).toBe(1)
-    expect(parseCertificateSequence('WHT-2569-0012', prefix)).toBe(12)
-    expect(parseCertificateSequence('WHT-2568-001', prefix)).toBeNull()
   })
 })
 

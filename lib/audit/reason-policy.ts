@@ -58,6 +58,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   // ธนาคาร
   bank_accounts: 'bank',
   bank_file_formats: 'bank',
+  // เลขที่เอกสาร (มติ PO U102) — รวมใบกำกับภาษี/50 ทวิ ซึ่งกฎหมายบังคับเลขต่อเนื่อง
+  document_number_series: 'tax',
   payee_profiles: 'bank',
   // ภาษี
   tax_profiles: 'tax',
@@ -124,11 +126,6 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
     fields: [
       'tax_id',
       'vat_registered',
-      'tax_invoice_prefix',
-      'tax_invoice_seq',
-      'tax_invoice_numbering_mode',
-      'tax_invoice_digit_length',
-      'tax_invoice_last_reset_year',
     ],
   },
   // snapshot ค่าบริการของเคส (`10` §9.2 — snapshot ตอน approved) ห้ามขยับโดยไม่มีเหตุผล

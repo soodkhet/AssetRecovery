@@ -7,6 +7,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
+import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { loadHolidayKeys } from '@/lib/settings/queries/holiday-keys'
 import { resolveWhtFilingMethod } from '@/lib/settings/queries/wht-policy'
@@ -41,11 +42,8 @@ import {
   type CertificateGroupingOptions,
   incomeTypeOf,
   isFilingOverdue,
-  nextCertificateSequence,
   requireWhtCancelReason,
   summarizeFilingTotals,
-  whtCertificateNumber,
-  whtCertificateNumberPrefix,
   WHT_CERTIFICATE_STATUS_LABEL,
   WHT_DELIVERY_FORMAT_LABEL,
   WHT_FILING_FORM_LABEL,
@@ -268,31 +266,11 @@ export async function refreshFilingSummary(
 // ── จุดเสียบ: รอบจ่ายเงิน `completed` ⇒ ออกใบ 50 ทวิ (`33` §9) ──────────────
 
 /**
- * กุญแจ advisory lock ของตัวเดินเลขใบ 50 ทวิ — ค่าคงที่ (ไม่ผูกกับองค์กร) เพราะ
- * `wht_certificates.certificate_number` เป็น **UNIQUE ทั้งตาราง** ตาม `02` §9 ⇒ ลำดับเลขต้อง
- * เดินร่วมกันทั้งระบบ ไม่ใช่แยกต่อองค์กร (ถ้าล็อกแยกต่อองค์กร สองคำขอคนละองค์กรจะชนเลขกัน)
+ * เลขที่ใบ 50 ทวิ ถัดไป — ชุดเลขกลาง `wht_certificate` ต่อองค์กร (มติ PO U102) · ปีตามวันที่จ่ายเงิน (เวลาไทย)
+ * ล็อกแถวชุดเลข FOR UPDATE ภายในทรานแซกชันเดียวกับการออกใบ ⇒ คำขอพร้อมกันต่อคิว · ล้ม = เลขไม่ขาด
  */
-const WHT_NUMBER_LOCK_KEY = 33_50_02
-
-/** เลขที่ถัดไปของปีนั้น — อ่าน**หลัง**ได้ล็อกเสมอ (D11) ไม่งั้นสองคำขอได้เลขซ้ำ */
-async function reserveCertificateNumber(tx: TxClient, paymentDate: Date): Promise<string> {
-  // ล็อกระดับทรานแซกชัน — ปลดเองเมื่อ commit/rollback ⇒ คำขอที่เข้ามาพร้อมกันต่อคิวกันจริง
-  // cast เป็น text เพราะ Prisma อ่านคอลัมน์ชนิด `void` ของ pg ไม่ได้
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(${WHT_NUMBER_LOCK_KEY}::bigint)::text`
-
-  const prefix = whtCertificateNumberPrefix(paymentDate)
-  const issued = await tx.whtCertificate.findMany({
-    where: { certificateNumber: { startsWith: prefix } },
-    select: { certificateNumber: true },
-  })
-
-  return whtCertificateNumber(
-    nextCertificateSequence(
-      issued.map((row) => row.certificateNumber),
-      prefix,
-    ),
-    paymentDate,
-  )
+async function reserveCertificateNumber(tx: TxClient, organizationId: string, paymentDate: Date): Promise<string> {
+  return (await nextDocumentNumber(tx, organizationId, 'wht_certificate', paymentDate)).number
 }
 
 const EXPENSE_SOURCE_SELECT = {
@@ -407,7 +385,7 @@ async function issueCertificate(
   const source = group.anchor
   const item = source.payoutBatchItem
   const paymentDate = paymentDateOf(source)
-  const certificateNumber = await reserveCertificateNumber(tx, paymentDate)
+  const certificateNumber = await reserveCertificateNumber(tx, organizationId, paymentDate)
   const incomeCategory = item.whtIncomeCategory
   const filingForm = filingFormOf({
     taxProfileFilingForm: item.taxProfile?.filingForm ?? null,

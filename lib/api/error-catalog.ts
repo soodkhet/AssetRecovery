@@ -69,6 +69,9 @@ export const ERROR_CATALOG = {
   DUPLICATE_TAX_PROFILE_NAME: { status: 400, severity: 'reject', source: '24 §6.2' },
   TAX_PROFILE_IN_USE: { status: 400, severity: 'reject', source: '24 §6.2' },
   NUMBERING_SEQ_NOT_EDITABLE: { status: 400, severity: 'reject', source: '24 §6.2' },
+  // มติ PO 06/10/2569 (UAT U102) — เลขที่เอกสารตั้งค่าได้ทุกชนิด
+  NUMBERING_FORMAT_LOCKED: { status: 400, severity: 'reject', source: '24 §6.2' },
+  NUMBERING_SEQ_BELOW_ISSUED: { status: 400, severity: 'reject', source: '24 §6.2' },
   WHT_POLICY_EFFECTIVE_DATE_PAST: { status: 400, severity: 'reject', source: '24 §6.2' },
 
   // ── 24 §6.3 ธนาคาร/ไฟล์ ────────────────────────────────────────────────

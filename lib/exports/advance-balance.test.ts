@@ -19,9 +19,14 @@ const day = (date: string): Date => new Date(`${date}T00:00:00Z`)
 
 const paidBatch = (date: string) => ({ status: 'completed' as const, paymentFileGeneratedAt: at(date), updatedAt: at(date) })
 
+/** เลขที่ใบเบิกในเทสต์ = 8 ตัวแรกของ id (ให้ตามรอยง่าย — ตัวจริงมาจาก `advances.advance_number`) */
+const numberOf = (advanceId: string): string => `ADV-${advanceId.slice(0, 8).toUpperCase()}`
+
 function entry(overrides: Partial<AdvanceBalanceEntry> = {}): AdvanceBalanceEntry {
+  const advanceId = overrides.advanceId ?? '3f2a9c1b-0000-4000-8000-000000000001'
   return {
-    advanceId: '3f2a9c1b-0000-4000-8000-000000000001',
+    advanceId,
+    advanceNumber: numberOf(advanceId),
     payeeId: 'p-1',
     payeeName: 'ประยุทธ์ บุญมี',
     payeeTaxId: '3100000004600',

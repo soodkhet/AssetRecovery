@@ -12,7 +12,7 @@ import { ExportFormatsTab } from '@/components/settings/export-formats-tab'
 import { FunctionalPermissionsTab } from '@/components/settings/functional-permissions-tab'
 import { HolidaysTab } from '@/components/settings/holidays-tab'
 import { InternalDocumentsTab } from '@/components/settings/internal-documents-tab'
-import { InvoiceNumberingTab } from '@/components/settings/invoice-numbering-tab'
+import { DocumentNumberingTab } from '@/components/settings/document-numbering-tab'
 import { SellerBranchCard } from '@/components/settings/seller-branch-card'
 import { PayeeTab } from '@/components/settings/payee-tab'
 import { PeriodLockTab } from '@/components/settings/period-lock-tab'
@@ -107,7 +107,7 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'lock' && <PeriodLockTab />}
           {current?.id === 'numbering' && (
             <div className="space-y-6">
-              <InvoiceNumberingTab />
+              <DocumentNumberingTab />
               {/* มติ PO U82 — สาขาผู้ขายบนใบกำกับ (ค่าตั้งระดับองค์กร) */}
               <SellerBranchCard />
             </div>

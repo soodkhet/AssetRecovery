@@ -49,8 +49,8 @@ import type {
   TaxInvoiceListDto,
   TaxInvoiceSummaryDto,
 } from '@/lib/sales/types'
-import { formatInvoiceNumber, nextSequence, type NumberingState } from '@/lib/settings/numbering'
-import { reserveNextInvoiceNumber } from '@/lib/settings/queries/numbering'
+import { documentYear, formatDocumentNumber, nextDocumentSequence } from '@/lib/document-numbering/format'
+import { lockDocumentSeries, nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { resolveVatRate } from '@/lib/settings/queries/vat-rates'
 
 /**
@@ -61,8 +61,8 @@ import { resolveVatRate } from '@/lib/settings/queries/vat-rates'
  *   เกิดอัตโนมัติเมื่อรอบวางบิลเปลี่ยนเป็น `sent` — `syncSalesRecordFromBilling()` **idempotent**
  *   (เรียกซ้ำได้ ไม่สร้างซ้ำ) แบบเดียวกับจุดเสียบของ 4.2
  * - **เลขที่ใบกำกับภาษีห้าม gap ห้ามซ้ำ** (`31` §6.2/§10) ⇒ ใน `$transaction` เดียวกับ insert:
- *   `SELECT … FOR UPDATE` แถว `organizations` → คิดเลขที่ควรได้ (`nextSequence()`) → เดินเลขจริง
- *   (`reserveNextInvoiceNumber()`) → เทียบกัน (`INVOICE_NUMBER_GAP`) — คำขอที่เข้ามาพร้อมกันจึงต่อคิว
+ *   `SELECT … FOR UPDATE` แถวชุดเลข `tax_invoice` (`lockDocumentSeries()`) → คิดเลขที่ควรได้
+ *   (`nextDocumentSequence()`) → เดินเลขจริง (`nextDocumentNumber()` — มติ PO U102) → เทียบกัน (`INVOICE_NUMBER_GAP`) — คำขอที่เข้ามาพร้อมกันจึงต่อคิว
  *   กันที่ระดับ DB (D11 · `24` §6.8) · rollback = เลขคืนอัตโนมัติ ไม่ทิ้งช่อง
  * - **ไม่มี draft** — สร้าง = `active` · ยกเลิกเป็น terminal และ**เลขเดิมไม่ recycle** (`31` §9.1)
  * - **Cash Receipt สร้างที่นี่ไม่ได้** (`31` §6.3/§10) — โมดูลนี้อ่านอย่างเดียว ตัวสร้างจริงอยู่ที่
@@ -389,14 +389,6 @@ async function loadBuyer(companyId: string): Promise<{
   return company
 }
 
-interface NumberingLockRow {
-  tax_invoice_seq: number
-  tax_invoice_numbering_mode: NumberingState['mode']
-  tax_invoice_prefix: string
-  tax_invoice_digit_length: number
-  tax_invoice_last_reset_year: number | null
-}
-
 type Tx = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
 
 interface IssueAmounts {
@@ -629,33 +621,16 @@ export async function issueTaxInvoice(
 
   const created = await prisma
     .$transaction(async (tx) => {
-      // ล็อกแถวองค์กรก่อนอ่านตัวเดินเลข ⇒ คำขอที่เข้ามาพร้อมกันต่อคิวกันจริง (D11)
-      const rows = await tx.$queryRaw<NumberingLockRow[]>`
-        SELECT tax_invoice_seq, tax_invoice_numbering_mode, tax_invoice_prefix,
-               tax_invoice_digit_length, tax_invoice_last_reset_year
-          FROM organizations
-         WHERE id = ${organizationId}::uuid
-           FOR UPDATE
-      `
-      const state = rows[0]
-      if (state === undefined) throw new Error(`issueTaxInvoice: ไม่พบองค์กร ${organizationId}`)
-
-      const numberingFormat = {
-        mode: state.tax_invoice_numbering_mode,
-        prefix: state.tax_invoice_prefix,
-        digitLength: state.tax_invoice_digit_length,
-      }
-      const expected = nextSequence(
-        { ...numberingFormat, lastNumber: state.tax_invoice_seq, lastResetYear: state.tax_invoice_last_reset_year },
-        invoiceDate,
-      )
+      // ล็อกแถวชุดเลขก่อนอ่านตัวนับ ⇒ คำขอที่เข้ามาพร้อมกันต่อคิวกันจริง (D11 · มติ PO U102)
+      const series = await lockDocumentSeries(tx, organizationId, 'tax_invoice')
+      const expected = nextDocumentSequence(series, invoiceDate)
 
       // U96 #7 — วันที่ ≤ วันนี้ · ≥ วันที่ของเอกสาร**เลขก่อนหน้า**ในชุดเดียวกัน (รวมใบที่ยกเลิก) · ≥ วันรับเงิน
       const previous =
         expected <= 1
           ? null
           : await tx.taxInvoice.findFirst({
-              where: { organizationId, invoiceNumber: formatInvoiceNumber(numberingFormat, expected - 1, invoiceDate) },
+              where: { organizationId, invoiceNumber: formatDocumentNumber(series, expected - 1, documentYear(invoiceDate)) },
               select: { invoiceNumber: true, invoiceDate: true },
             })
       assertInvoiceDateValid({
@@ -675,7 +650,7 @@ export async function issueTaxInvoice(
         amounts: issue.amounts,
       })
 
-      const reserved = await reserveNextInvoiceNumber(organizationId, invoiceDate, tx)
+      const reserved = await nextDocumentNumber(tx, organizationId, 'tax_invoice', invoiceDate)
       assertNoNumberGap(reserved.sequence, expected - 1)
 
       const invoice = await tx.taxInvoice.create({

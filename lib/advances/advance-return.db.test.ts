@@ -288,9 +288,12 @@ suite('เคลียร์ยอด → หักกลบในรอบจ�
     expect(batch.transferSatang).toBe(430_000)
     expect(batch.items[0]?.whtSatang).toBe(15_000)
     expect(batch.items[0]?.advanceOffsetSatang).toBe(55_000)
-    expect(batch.items[0]?.advanceOffsets.map((offset) => offset.advanceRef)).toEqual(['ADV-00000000'])
-
     const adv = await getAdvance()
+    // มติ PO U102 — เลขที่ใบเบิกเงินทดรองที่ระบบออกให้ (ไม่ใช่ derive จาก id แล้ว)
+    expect(adv.ref).toMatch(/^ADV-25[0-9]{2}-[0-9]{4,}$/)
+    expect(batch.items[0]?.advanceOffsets.map((offset) => offset.advanceRef)).toEqual([adv.ref])
+    expect(adv.returns[0]?.returnNumber, 'หักกลบในรอบจ่าย = ออกใบรับคืนเงินทดรอง').toMatch(/^RAV-25[0-9]{2}-[0-9]{4,}$/)
+    expect(batch.items[0]?.voucherNumber, 'ยังไม่สร้างไฟล์โอน = ยังไม่มีเลขใบสำคัญจ่าย').toBeNull()
     expect(adv.returnOutstandingSatang).toBe(0)
     expect(adv.returnState).toBe('closed')
     expect(adv.returns[0]?.channel).toBe('payout_offset')
@@ -305,7 +308,12 @@ suite('เคลียร์ยอด → หักกลบในรอบจ�
     const text = new TextDecoder().decode(storage.values().next().value)
     expect(result.rowCount).toBe(1)
     expect(text).toContain('1234567890,4300.00,')
-    expect(text).toContain('หักคืนเงินทดรอง ADV-00000000')
+    expect(text).toContain(`หักคืนเงินทดรอง ${adv.ref}`)
+    // มติ PO U102 — ใบสำคัญจ่ายได้เลขรันจริงตอนสร้างไฟล์ครั้งแรก (snapshot ลงรายการ)
+    const voucher = (await db().payoutBatchItem.findMany({ where: { payoutBatchId: batch.id }, select: { voucherNumber: true } }))
+      .map((row) => row.voucherNumber)
+    expect(voucher).toHaveLength(1)
+    expect(voucher[0]).toMatch(/^PV-25[0-9]{2}-[0-9]{4,}$/)
 
     // idempotency ของรอบเดิมยังเหมือนเดิม — ยิงซ้ำไม่ยืนยัน = เตือน DUPLICATE_PAYMENT_FILE + key เดิม
     const again = await payout.generatePaymentFile(ctx, batch.id, {
@@ -317,6 +325,16 @@ suite('เคลียร์ยอด → หักกลบในรอบจ�
     expect(again.warning?.code).toBe('DUPLICATE_PAYMENT_FILE')
     expect(again.result.generated).toBe(false)
     expect(again.result.batch.idempotencyKey).toBe(result.batch.idempotencyKey)
+
+    // สร้างไฟล์ซ้ำ (ยืนยันแล้ว) ⇒ ใช้เลขใบสำคัญจ่ายเดิม ไม่เดินเลขใหม่
+    await payout.generatePaymentFile(ctx, batch.id, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      bankFileFormatId: FORMAT_ID,
+      confirmDuplicate: true,
+      reason: 'สร้างซ้ำยืนยัน',
+    })
+    const after = await db().payoutBatchItem.findMany({ where: { payoutBatchId: batch.id }, select: { voucherNumber: true } })
+    expect(after.map((row) => row.voucherNumber)).toEqual(voucher)
   })
 
   it('รอบถัดไปไม่หักซ้ำเมื่อคืนครบแล้ว', async () => {

@@ -14,7 +14,8 @@ import {
   payoutTransferSatang,
   type OutstandingAdvanceReturn,
 } from '@/lib/finance/advance-offset-calc'
-import { advanceOffsetLineLabel, advanceRef } from '@/lib/advances/advance'
+import { advanceOffsetLineLabel } from '@/lib/advances/advance'
+import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
@@ -156,9 +157,10 @@ const itemSelect = {
   advanceOffsetSatang: true,
   advanceReturns: {
     where: { reversedAt: null },
-    select: { advanceId: true, amountSatang: true },
+    select: { advanceId: true, amountSatang: true, advance: { select: { advanceNumber: true } } },
     orderBy: { createdAt: 'asc' },
   },
+  voucherNumber: true,
   taxProfile: { select: { name: true } },
   payee: {
     select: {
@@ -245,9 +247,10 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
     advanceOffsets: row.advanceReturns.map((entry) => ({
       advanceId: entry.advanceId,
-      advanceRef: advanceRef(entry.advanceId),
+      advanceRef: entry.advance.advanceNumber,
       amountSatang: entry.amountSatang,
     })),
+    voucherNumber: row.voucherNumber,
     bankName: row.payee.bankName,
     accountNumberMasked: maskAccountNumber(row.payee.accountNumber),
   }
@@ -947,6 +950,38 @@ async function claimIdempotencyKey(
   return claimed.idempotencyKey
 }
 
+/**
+ * ออกเลขใบสำคัญจ่ายให้ผู้รับที่ยังไม่มีเลขในรอบนี้ — เรียกในทรานแซกชันของการสร้างไฟล์เท่านั้น
+ * (ล้ม = ตัวนับ rollback) · คืนเลขที่ออกใหม่ (ว่าง = สร้างไฟล์ซ้ำ ใช้เลขเดิมทั้งหมด)
+ */
+async function assignVoucherNumbers(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  organizationId: string,
+  batchId: string,
+  items: ReadonlyArray<{ payeeId: string; voucherNumber: string | null }>,
+  at: Date,
+): Promise<string[]> {
+  const pending: string[] = []
+  const seen = new Set<string>()
+  for (const item of items) {
+    if (seen.has(item.payeeId)) continue
+    seen.add(item.payeeId)
+    const hasNumber = items.some((other) => other.payeeId === item.payeeId && other.voucherNumber !== null)
+    if (!hasNumber) pending.push(item.payeeId)
+  }
+
+  const issued: string[] = []
+  for (const payeeId of pending) {
+    const voucher = await nextDocumentNumber(tx, organizationId, 'payment_voucher', at)
+    await tx.payoutBatchItem.updateMany({
+      where: { payoutBatchId: batchId, organizationId, payeeId, voucherNumber: null },
+      data: { voucherNumber: voucher.number },
+    })
+    issued.push(voucher.number)
+  }
+  return issued
+}
+
 export async function generatePaymentFile(
   context: PayoutMutationContext,
   batchId: string,
@@ -1040,7 +1075,7 @@ export async function generatePaymentFile(
       remark:
         item.advanceReturns.length === 0
           ? batch.name
-          : `${batch.name} ${item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advanceId)).join(' ')}`,
+          : `${batch.name} ${item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advance.advanceNumber)).join(' ')}`,
       referenceNo: `${idempotencyKey}-${index + 1}`,
     }
   })
@@ -1080,6 +1115,9 @@ export async function generatePaymentFile(
     if (claimed.count !== 1) {
       throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batchId} changed during generate_file` })
     }
+    // มติ PO U102 — ใบสำคัญจ่าย 1 เลขต่อผู้รับเงินต่อรอบ ออกตอนสร้างไฟล์ครั้งแรก (สร้างซ้ำใช้เลขเดิม)
+    // ลำดับผู้รับ = ลำดับรายการแรกของแต่ละคน (ตรงกับลำดับบนเอกสาร) · ปีตามวันที่สร้างไฟล์ (เวลาไทย)
+    const vouchers = await assignVoucherNumbers(tx, user.organizationId, batchId, items, now)
     const row = await tx.payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: batchSelect })
 
     await emitAudit(
@@ -1105,6 +1143,7 @@ export async function generatePaymentFile(
           payment_file_version: version,
           payment_file_sha256: fileHash,
           row_count: file.rowCount,
+          voucher_numbers: vouchers,
           net_satang: row.netSatang,
           regenerated: previousGeneratedAt !== null,
         },

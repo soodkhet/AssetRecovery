@@ -34,7 +34,7 @@ export interface AdvanceDto {
   createdAt: string
   /** ผู้ขอเบิก (`15` §7.2 requester) */
   requesterName: string
-  /** เลขอ้างอิงที่ผู้ใช้เห็น (`ADV-xxxxxxxx`) */
+  /** เลขที่ใบเบิกเงินทดรอง (`advances.advance_number` — ระบบออกตอนยื่นขอ · มติ PO U102) */
   ref: string
   /** วิธีคืนยอดที่เหลือ (มติ PO U30) — `null` = ไม่มียอดคืน */
   returnMethod: AdvanceReturnMethod | null
@@ -57,6 +57,8 @@ export interface AdvanceDto {
 /** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */
 export interface AdvanceReturnDto {
   id: string
+  /** เลขที่ใบรับคืนเงินทดรอง (`advance_returns.return_number` — มติ PO U102) */
+  returnNumber: string
   channel: AdvanceReturnChannel
   amountSatang: number
   payoutBatchId: string | null

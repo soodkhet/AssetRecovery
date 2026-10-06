@@ -6,8 +6,9 @@ import { buddhistYear } from '@/lib/format/datetime'
  * รูปแบบ `BL-2569-001` — ปี **พ.ศ.** ตามเวลาไทยของวันที่สร้างรอบ (Rule 01) · ลำดับ 3 หลัก ต่อองค์กร รีเซ็ตทุกปี
  * (เกิน 999 ต่อปียาวขึ้นเองตามลำดับจริง — แนวเดียวกับ `LOT-`/`DLV-` ของคลัง)
  *
- * ⚠️ ตัวเดินเลขจริงคือ DB trigger `trg_billing_batches_number` → `next_billing_batch_number(org, at)`
- *    (migration `20261005200000_billing_batch_number`) ซึ่งล็อกแถว `organizations` ก่อนเพิ่มตัวนับ
+ * ⚠️ ตัวเดินเลขจริงคือ DB trigger `trg_billing_batches_number` → `next_document_number(org, 'billing_batch', at)`
+ *    (มติ PO U102 — migration `20261006180000_document_number_series`) ซึ่งล็อกแถวชุดเลขก่อนเพิ่มตัวนับ
+ *    คำนำหน้า/รูปแบบตั้งค่าได้ ⇒ ฟังก์ชันอ่าน/ตรวจรูปแบบด้านล่างใช้ได้กับ **รูปแบบค่าเริ่มต้น** เท่านั้น
  *    ⇒ **ห้าม** ส่ง `batchNumber` ตอนสร้างรอบ และห้ามอ่าน `MAX()` มาบวกเองในโค้ด
  *    ไฟล์นี้มีไว้ **ประกอบ/อ่าน/ตรวจรูปแบบ** ฝั่งแอป (เทสต์ เทียบปี แสดงผล) เท่านั้น
  */
