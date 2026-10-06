@@ -31,3 +31,4 @@ orchestrator/.run.lock
 /tmp/
 coverage/
 _to_delete/
+.vercel
