@@ -1,6 +1,6 @@
 import { ORG_ID, as, ctx, rawDb } from './context'
 import { stored } from './files'
-import { d, ids } from './state'
+import { d, ids, need } from './state'
 
 /** ขั้นตอนฝั่งเงิน (รอบจ่าย · ทดรอง · วางบิล · ธนาคาร · ใบกำกับ) — ผ่าน service ของ route เท่านั้น */
 
@@ -17,8 +17,8 @@ export async function payout(
   ids.payouts[key] = batch.id
   if (until === 'checking') return batch.id
   await q.generatePaymentFile(await ctx(FIN), batch.id, {
-    bankAccountId: ids.bankAccounts['BA-1'] ?? '',
-    bankFileFormatId: ids.bankFiles['BF-1'] ?? '',
+    bankAccountId: need('bankAccounts', 'BA-1'),
+    bankFileFormatId: need('bankFiles', 'BF-1'),
     confirmDuplicate: false,
     reason: `สร้างไฟล์โอน ${key}`,
   })
@@ -124,7 +124,7 @@ function baht(satang: number): string {
 export async function statementLine(date: string, ref: string, satang: number, account = 'BA-1'): Promise<string> {
   const q = await import('@/lib/bank-recon/queries')
   await q.importStatement(await ctx(FIN), {
-    bankAccountId: ids.bankAccounts[account] ?? '',
+    bankAccountId: need('bankAccounts', account),
     fileName: `statement-${ref}.csv`,
     csv: [
       'วันที่,รายละเอียด,เลขที่อ้างอิง,เงินเข้า,เงินออก',

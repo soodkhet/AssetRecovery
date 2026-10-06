@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { ORG_ID, as, forgetSessions, meta, rawDb } from './context'
 import { stored } from './files'
-import { ids, thaiId } from './state'
+import { need, thaiId } from './state'
 
 /**
  * ผู้ใช้ของ Final Test (FINAL-coverage C.3 · U123)
@@ -65,7 +65,7 @@ export function payeeFieldsFor(username: string, fullName: string): Record<strin
   const row = rows[username]
   if (row === undefined) return null
   return {
-    payeeType: row.payeeType, taxProfileId: ids.taxProfiles[row.taxProfile], nationalId: row.nationalId,
+    payeeType: row.payeeType, taxProfileId: need('taxProfiles', row.taxProfile), nationalId: row.nationalId,
     bankName: 'ธนาคารกสิกรไทย', accountName: fullName, accountNumber: row.account,
     // U150 — ไฟล์อัปโหลดที่ server ตรวจแล้ว (path ใต้ prefix ขององค์กร)
     idDocumentUrl: row.idDoc ? `payees/${ORG_ID}/id-documents/seed-final-${username.replaceAll('.', '-')}.pdf` : null,
@@ -177,6 +177,10 @@ export async function syncUsers(
     } else if (existing.deletedAt === null) {
       // คงชื่อ/อีเมล/เบอร์เดิมของ persona (อาจต่างจากชุดนี้บน dev) — เปลี่ยนแค่สังกัด
       const current = await getUser(admin, existing.id)
+      // สังกัดเดิมอยู่แล้ว (รันขั้นสร้างบัญชีแยกแล้วตามด้วย --seed) = ไม่ต้องแก้ ⇒ audit เท่ากับการรันคำสั่งเดียว
+      const unchanged = current.roleId === values.roleId && current.username === values.username &&
+        current.teamId === values.teamId && current.companyId === values.companyId && current.employeeCode === values.employeeCode
+      if (unchanged) continue
       await updateUser({ actor: admin, meta }, current, {
         ...values,
         email: current.email,

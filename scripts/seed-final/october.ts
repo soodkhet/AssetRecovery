@@ -40,7 +40,7 @@ import {
   statementLine,
 } from './money'
 import { clockAt } from './runtime'
-import { d, ids, strip } from './state'
+import { d, ids, need, strip } from './state'
 import { SUPERADMIN } from './users'
 
 function step(label: string): void {
@@ -205,7 +205,7 @@ async function updatePayeeFields(
   // BUG-SF1: ช่อง "ใช้ค่าเริ่มต้นตามประเภท" (taxProfileId = null) ยืนยันผู้รับไม่ได้ ⇒ ใส่ TP-1 (= ค่าช่อง outsource-บุคคล)
   await q.updatePayee({ actor: await as(FIN), meta, reason }, payeeId, {
     payeeType: current.payeeType,
-    taxProfileId: change.taxProfile === undefined ? current.taxProfileId : (ids.taxProfiles[change.taxProfile] ?? null),
+    taxProfileId: change.taxProfile === undefined ? current.taxProfileId : need('taxProfiles', change.taxProfile),
     nationalId: current.nationalId,
     bankName: current.bankName,
     accountName: current.accountName,

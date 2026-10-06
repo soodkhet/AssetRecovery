@@ -27,6 +27,55 @@ async function findId(table: 'team' | 'compensationPlan' | 'serviceFeeTemplate' 
 
 // ─── A: ค่าตั้ง ─────────────────────────────────────────────────────────────
 
+// A.3 Tax Profile 4 แถว
+const TAX_PROFILES: Array<[string, string, number, 'before_vat' | 'gross_amount', 'PND3' | 'PND53', string, string]> = [
+  ['TP-1', 'Outsource Standard 3%', 3, 'before_vat', 'PND3', 'hire_of_work_40_8', ''],
+  ['TP-2', 'Juristic Entity 3%', 3, 'before_vat', 'PND53', 'service_or_hire_of_work', ''],
+  ['TP-3', 'ทดสอบลำดับ override 2%', 2, 'before_vat', 'PND3', 'hire_of_work_40_8', ''],
+  ['TP-4', 'ฐานรวม VAT 3%', 3, 'gross_amount', 'PND3', 'other', 'ค่านายหน้าติดตามทรัพย์'],
+]
+
+// A.2 รูปแบบไฟล์ธนาคาร (U147 purpose + รหัสธนาคาร) — ไฟล์โอนครบ 3 สถานะ (passed/failed/pending) [สมมติฐาน F1] + statement 1
+const BANK_FILE_FORMATS = [
+  { key: 'BF-1', purpose: 'payment', bankCode: '004', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,transfer_date,reference_no', test: true },
+  { key: 'BF-2', purpose: 'payment', bankCode: '014', fileType: 'TXT', encoding: 'TIS_620', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,email', test: true },
+  { key: 'BF-3', purpose: 'payment', bankCode: '002', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount', test: false },
+  { key: 'BF-S', purpose: 'statement', bankCode: '004', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'transaction_date,description,reference,amount_in,amount_out', test: true },
+] as const
+
+/** A.2 บัญชีธนาคารบริษัท — key → เลขบัญชี (คีย์จับคู่ตอนโหลด id กลับจากฐาน) */
+const BANK_ACCOUNTS = { 'BA-1': '9990001112', 'BA-2': '5550002223' } as const
+
+/**
+ * เติม `ids.taxProfiles` / `ids.bankFiles` / `ids.bankAccounts` จากฐาน — เรียกทุกครั้งหลังขั้นค่าตั้ง
+ * (ทั้งตอนเพิ่งสร้างและตอนข้าม seedSettings เพราะค่าตั้งมีอยู่แล้ว เช่น --create-auth-users แล้วตามด้วย --seed)
+ * จับคู่ด้วยคีย์ที่แน่นอนของแถวที่ seedSettings สร้าง — ไม่พบ/พบมากกว่า 1 แถว = throw
+ */
+async function loadSettingIds(): Promise<void> {
+  const db = rawDb()
+  const one = (label: string, rows: Array<{ id: string }>): string => {
+    if (rows.length !== 1) {
+      throw new Error(`โหลดค่าตั้ง ${label} จากฐานไม่ได้ (พบ ${rows.length} แถว ต้องพบ 1) — ค่าตั้งไม่ตรงกับ seed-final: รัน --reset แล้ว seed ใหม่`)
+    }
+    return rows[0]?.id ?? ''
+  }
+  const base = { organizationId: ORG_ID, deletedAt: null }
+  for (const [key, name, pct, basis, form] of TAX_PROFILES) {
+    ids.taxProfiles[key] = one(`Tax Profile ${key}`, await db.taxProfile.findMany({
+      where: { ...base, name, whtPct: pct, whtBasis: basis, filingForm: form }, select: { id: true },
+    }))
+  }
+  for (const format of BANK_FILE_FORMATS) {
+    ids.bankFiles[format.key] = one(`รูปแบบไฟล์ธนาคาร ${format.key}`, await db.bankFileFormat.findMany({
+      where: { ...base, purpose: format.purpose, bankCode: format.bankCode, fileType: format.fileType, encoding: format.encoding, columnMapping: format.columnMapping },
+      select: { id: true },
+    }))
+  }
+  for (const [key, accountNumber] of Object.entries(BANK_ACCOUNTS)) {
+    ids.bankAccounts[key] = one(`บัญชีธนาคาร ${key}`, await db.bankAccount.findMany({ where: { ...base, accountNumber }, select: { id: true } }))
+  }
+}
+
 async function seedSettings(): Promise<void> {
   const s = await import('@/lib/settings/schemas')
   const org = await import('@/lib/organization/schemas')
@@ -92,13 +141,7 @@ async function seedSettings(): Promise<void> {
 
   // A.3 Tax Profile 4 แถว
   // U148 — ประเภทเงินได้เลือกจากรายการมาตรฐาน 50 ทวิ (TP-4 ทดสอบ "อื่น ๆ (ระบุ)")
-  const profiles: Array<[string, string, number, 'before_vat' | 'gross_amount', 'PND3' | 'PND53', string, string]> = [
-    ['TP-1', 'Outsource Standard 3%', 3, 'before_vat', 'PND3', 'hire_of_work_40_8', ''],
-    ['TP-2', 'Juristic Entity 3%', 3, 'before_vat', 'PND53', 'service_or_hire_of_work', ''],
-    ['TP-3', 'ทดสอบลำดับ override 2%', 2, 'before_vat', 'PND3', 'hire_of_work_40_8', ''],
-    ['TP-4', 'ฐานรวม VAT 3%', 3, 'gross_amount', 'PND3', 'other', 'ค่านายหน้าติดตามทรัพย์'],
-  ]
-  for (const [key, name, pct, basis, form, incomeTypeCode, incomeType] of profiles) {
+  for (const [key, name, pct, basis, form, incomeTypeCode, incomeType] of TAX_PROFILES) {
     const created = await tp.createTaxProfile(await sctx(`สร้าง Tax Profile ${key}`), strip(
       s.taxProfileCreateSchema.parse({
         name,
@@ -191,13 +234,7 @@ async function seedSettings(): Promise<void> {
   )
 
   // A.2 รูปแบบไฟล์ธนาคาร (U147 purpose + รหัสธนาคาร) — ไฟล์โอนครบ 3 สถานะ (passed/failed/pending) [สมมติฐาน F1] + statement 1
-  const formats = [
-    { key: 'BF-1', purpose: 'payment', bankCode: '004', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,transfer_date,reference_no', test: true },
-    { key: 'BF-2', purpose: 'payment', bankCode: '014', fileType: 'TXT', encoding: 'TIS_620', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,email', test: true },
-    { key: 'BF-3', purpose: 'payment', bankCode: '002', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount', test: false },
-    { key: 'BF-S', purpose: 'statement', bankCode: '004', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'transaction_date,description,reference,amount_in,amount_out', test: true },
-  ] as const
-  for (const format of formats) {
+  for (const format of BANK_FILE_FORMATS) {
     const created = await bankFile.createBankFileFormat(await sctx(`รูปแบบไฟล์ธนาคาร ${format.key}`), strip(
       s.bankFileFormatCreateSchema.parse({ purpose: format.purpose, bankCode: format.bankCode, fileType: format.fileType, encoding: format.encoding, columnMapping: format.columnMapping, reason: R(format.key) }),
     ))
@@ -208,7 +245,7 @@ async function seedSettings(): Promise<void> {
   // A.2 บัญชีธนาคารบริษัท (U147 อ้างรูปแบบด้วย id)
   const ba1 = await bank.createBankAccount(await sctx('บัญชีหลัก BA-1'), strip(
     s.bankAccountCreateSchema.parse({
-      bankName: 'ธนาคารกสิกรไทย', accountName: 'บจก. แอสเซ็ท รีคัฟเวอรี่ (ทดสอบ)', accountNumber: '9990001112',
+      bankName: 'ธนาคารกสิกรไทย', accountName: 'บจก. แอสเซ็ท รีคัฟเวอรี่ (ทดสอบ)', accountNumber: BANK_ACCOUNTS['BA-1'],
       accountType: 'savings', usage: 'both', statementFormatId: ids.bankFiles['BF-S'], paymentFileFormatId: ids.bankFiles['BF-1'],
       autoMatchToleranceDays: 7, isPrimary: true, reason: R('BA-1'),
     }),
@@ -216,7 +253,7 @@ async function seedSettings(): Promise<void> {
   ids.bankAccounts['BA-1'] = ba1.id
   const ba2 = await bank.createBankAccount(await sctx('บัญชีรับเงิน BA-2'), strip(
     s.bankAccountCreateSchema.parse({
-      bankName: 'ธนาคารไทยพาณิชย์', accountName: 'บจก. แอสเซ็ท รีคัฟเวอรี่ (ทดสอบ)', accountNumber: '5550002223',
+      bankName: 'ธนาคารไทยพาณิชย์', accountName: 'บจก. แอสเซ็ท รีคัฟเวอรี่ (ทดสอบ)', accountNumber: BANK_ACCOUNTS['BA-2'],
       accountType: 'current', usage: 'receive', statementFormatId: null, paymentFileFormatId: null,
       autoMatchToleranceDays: 7, isPrimary: false, reason: R('BA-2'),
     }),
@@ -514,6 +551,7 @@ export async function seedMaster(options: MasterOptions): Promise<void> {
   const { ensureSuperadmin } = await import('./users')
   await ensureSuperadmin(options.bootstrap)
   if (options.settings) await seedSettings()
+  await loadSettingIds()
   await seedPlans()
   await seedTeams()
   await seedCompanies()
