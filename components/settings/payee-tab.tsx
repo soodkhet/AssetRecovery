@@ -38,6 +38,7 @@ import {
   PAYEE_REQUIRED_ADDRESS_FIELDS,
   WHT_CONDITION_LABEL,
   selectableWhtConditions,
+  verificationHint,
   whtConditionHint,
   type PayeeNameTitleChoice,
 } from '@/lib/payees/payee'
@@ -470,11 +471,7 @@ export function PayeeTab() {
                             setVerifyReason('')
                           }}
                           disabled={item.missingForVerification.length > 0}
-                          title={
-                            item.missingForVerification.length > 0
-                              ? 'กรอกข้อมูลภาษี ที่อยู่ และบัญชีธนาคารให้ครบก่อนยืนยัน'
-                              : undefined
-                          }
+                          title={verificationHint(item.missingForVerification) ?? undefined}
                         >
                           ยืนยัน
                         </Button>

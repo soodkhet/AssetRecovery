@@ -67,8 +67,15 @@ export function payeeErrorMessage(code: PayeeErrorCode): ErrorMessage {
 }
 
 export class PayeeError extends ModuleError<PayeeErrorCode> {
-  constructor(code: PayeeErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความเฉพาะกรณีที่ชัดกว่าข้อความกลางของ code (code/HTTP status เดิม) */
+  constructor(
+    code: PayeeErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: ErrorMessage },
+  ) {
+    super(code, options?.message ?? MESSAGES[code], HTTP_STATUS[code], {
+      detail: options?.detail,
+      context: options?.context,
+    })
     this.name = 'PayeeError'
   }
 }

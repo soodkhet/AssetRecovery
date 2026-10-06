@@ -6,7 +6,7 @@ import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { WhtCondition } from '@/lib/generated/prisma/enums'
+import type { PayeeType, RoleGroup, TeamSide, WhtCondition } from '@/lib/generated/prisma/enums'
 import {
   assertPayeeNationalId,
   assertPayeeReadyForVerification,
@@ -22,8 +22,11 @@ import {
 import { PayeeError } from '@/lib/payees/errors'
 import type { PayeeFieldsInput, PayeeListQuery } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
+import { resolvePayoutSide } from '@/lib/payout/payout'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
+import { loadTaxProfileDefaults } from '@/lib/settings/queries/tax-profile-defaults'
+import { pickTaxProfileDefault, type TaxProfileDefaults } from '@/lib/settings/tax-profile-defaults'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import { isWhtConditionAllowed } from '@/lib/settings/wht-policy'
 import { SettingsError } from '@/lib/settings/errors'
@@ -73,7 +76,13 @@ const payeeSelect = {
   isVerified: true,
   verifiedAt: true,
   updatedAt: true,
-  user: { select: { fullName: true, role: { select: { name: true } }, team: { select: { name: true } } } },
+  user: {
+    select: {
+      fullName: true,
+      role: { select: { name: true, roleGroup: true } },
+      team: { select: { name: true, side: true } },
+    },
+  },
   taxProfile: { select: { id: true, name: true, whtPct: true } },
   verifiedByUser: { select: { fullName: true } },
   // มติ PO U30 — ยอดคืนเงินทดรองค้าง (เฉพาะรายการที่เคลียร์แล้วและมีวิธีคืน)
@@ -151,7 +160,32 @@ const NEW_PAYEE_BASE: PayeeValues = {
 }
 
 /** `canSeeFullAccount` = ผู้ถือสิทธิ์ `manage` เท่านั้น (เลขบัญชีเต็มคือข้อมูลที่โอนเงินได้จริง) */
-function toDto(row: PayeeRow, canSeeFullAccount: boolean): PayeeDto {
+/**
+ * มีค่าเริ่มต้นตามประเภทผู้รับให้ผู้รับรายนี้ไหม (มติ PO U121) — ฝั่งจากทีม/กลุ่ม role แบบเดียวกับรอบจ่าย
+ * (`resolvePayoutSide`) × ชนิดผู้รับ · ใช้ทั้งความพร้อมก่อนยืนยันและป้าย "ข้อมูลรับเงินไม่ครบ"
+ */
+export function payeeTypeDefaultAvailable(
+  defaults: TaxProfileDefaults<unknown>,
+  input: { teamSide: TeamSide | null; roleGroup: RoleGroup; payeeType: PayeeType },
+): boolean {
+  const side = resolvePayoutSide({ teamSide: input.teamSide, roleGroup: input.roleGroup })
+  return pickTaxProfileDefault(defaults, side, input.payeeType) !== null
+}
+
+function rowTypeDefaultAvailable(row: PayeeRow, defaults: TaxProfileDefaults<unknown>): boolean {
+  return payeeTypeDefaultAvailable(defaults, {
+    teamSide: row.user.team?.side ?? null,
+    roleGroup: row.user.role.roleGroup,
+    payeeType: row.payeeType,
+  })
+}
+
+/** ค่าเริ่มต้นตามประเภทผู้รับที่มีผลอยู่ (แค่ว่าแต่ละช่องมีหรือไม่) */
+async function loadTypeDefaults(organizationId: string): Promise<TaxProfileDefaults<unknown>> {
+  return (await loadTaxProfileDefaults(organizationId)).profiles
+}
+
+function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfileDefaults<unknown>): PayeeDto {
   const values = toValues(row)
   return {
     id: row.id,
@@ -185,7 +219,9 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean): PayeeDto {
     verifiedAt: row.verifiedAt?.toISOString() ?? null,
     verifiedByName: row.verifiedByUser?.fullName ?? null,
     bankAccountNameMatches: checkBankAccountName(row.user.fullName, row.accountName).matches,
-    missingForVerification: missingFieldsForVerification(values),
+    missingForVerification: missingFieldsForVerification(values, {
+      typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
+    }),
     advanceReturnOutstandingSatang: row.advances.reduce(
       (total, advance) =>
         total +
@@ -235,7 +271,8 @@ export async function listPayees(user: SessionUser, query: PayeeListQuery): Prom
     take: 500,
   })
   const full = canManage(user)
-  return rows.map((row) => toDto(row, full))
+  const typeDefaults = await loadTypeDefaults(user.organizationId)
+  return rows.map((row) => toDto(row, full, typeDefaults))
 }
 
 async function findPayeeRow(user: SessionUser, payeeId: string): Promise<PayeeRow> {
@@ -248,7 +285,7 @@ async function findPayeeRow(user: SessionUser, payeeId: string): Promise<PayeeRo
 }
 
 export async function getPayee(user: SessionUser, payeeId: string): Promise<PayeeDto> {
-  return toDto(await findPayeeRow(user, payeeId), canManage(user))
+  return toDto(await findPayeeRow(user, payeeId), canManage(user), await loadTypeDefaults(user.organizationId))
 }
 
 /** Tax Profile ที่ผูกต้องมีจริงและยังใช้งานอยู่ — ไม่งั้นยอด WHT จะอ้างของที่ถูกปิดไปแล้ว */
@@ -417,7 +454,10 @@ export async function createPayee(
     }),
   )
 
-  return { payee: toDto(created, true), warning: bankNameWarning(owner.fullName, data.accountName) }
+  return {
+    payee: toDto(created, true, await loadTypeDefaults(organizationId)),
+    warning: bankNameWarning(owner.fullName, data.accountName),
+  }
 }
 
 export async function updatePayee(
@@ -468,7 +508,10 @@ export async function updatePayee(
     return row
   })
 
-  return { payee: toDto(updated, true), warning: bankNameWarning(current.user.fullName, data.accountName) }
+  return {
+    payee: toDto(updated, true, await loadTypeDefaults(organizationId)),
+    warning: bankNameWarning(current.user.fullName, data.accountName),
+  }
 }
 
 /**
@@ -479,10 +522,13 @@ export async function verifyPayee(context: PayeeMutationContext, payeeId: string
   const organizationId = context.actor.organizationId
   const current = await findPayeeRow(context.actor, payeeId)
   const policy = await getFinancePolicy(organizationId)
+  const typeDefaults = await loadTypeDefaults(organizationId)
 
+  // BUG-SF1 (มติ PO U121): ผู้รับที่ใช้ค่าเริ่มต้นตามประเภทยืนยันได้ — ไม่บังคับ Tax Profile รายคน
   assertPayeeReadyForVerification({
     values: toValues(current),
     requireIdDocument: policy.requirePayeeIdDocument,
+    typeDefaultAvailable: rowTypeDefaultAvailable(current, typeDefaults),
   })
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -523,5 +569,8 @@ export async function verifyPayee(context: PayeeMutationContext, payeeId: string
     return row
   })
 
-  return { payee: toDto(updated, true), warning: bankNameWarning(current.user.fullName, updated.accountName) }
+  return {
+    payee: toDto(updated, true, typeDefaults),
+    warning: bankNameWarning(current.user.fullName, updated.accountName),
+  }
 }
