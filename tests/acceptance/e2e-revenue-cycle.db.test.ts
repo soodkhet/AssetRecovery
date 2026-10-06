@@ -282,12 +282,20 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
        WHERE organization_id = '${ORG_ID}' AND status IN ('draft', 'sent', 'partially_paid')
     `)
 
+    // มติ PO U146 — รอบบิลเป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม: ชุดทดสอบใช้รอบ "ทุกบริษัท" (สิ้นเดือน · Net 30)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO billing_payout_cycles (id, organization_id, name, type, cutoff_rule_type, cutoff_dates,
+                                         due_rule_type, due_rule_value, due_rule, scope_kind, created_by, updated_at)
+      VALUES ('00000000-0000-4000-8000-0000000081af', '${ORG_ID}', 'รอบบิลทดสอบ E2E', 'AR', 'month_end', ARRAY[]::INTEGER[],
+              'net_days', 30, 'Net 30 วัน', 'all_companies', '${ADMIN_ID}', NOW())
+      ON CONFLICT (id) DO NOTHING
+    `)
     // บริษัทไฟแนนซ์ใหม่ทุกรัน — ใบกำกับภาษีของรันก่อนลบไม่ได้ (`02` §13)
     const company = await tx.$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode,
-                                     payment_due_days, service_fee_template_id, created_by)
+                                     service_fee_template_id, created_by)
       VALUES ('${ORG_ID}', 'ไฟแนนซ์ E2E (${RUN})', 'E81', '${RUN_TAX_ID}', '2 ถนนสีลม กรุงเทพฯ 10500',
-              'exclude_vat', 30, '${TEMPLATE_ID}', '${ADMIN_ID}')
+              'exclude_vat', '${TEMPLATE_ID}', '${ADMIN_ID}')
       RETURNING id
     `)
     companyId = company[0]?.id ?? ''

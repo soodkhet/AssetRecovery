@@ -173,11 +173,12 @@ describe('VAT / การวางบิล', () => {
     expect(valueOf(none, 'คาดว่าจะได้รับ')).toBe('฿1,000.00')
   })
 
-  it('รอบวางบิล: ตัดรอบวันที่ 25 + เครดิต 30 วัน → 24/11/2569', () => {
-    const help = companyBillingHelp(25, 30)
+  it('รอบบิลที่บริษัทใช้ (มติ U146): ตัดรอบวันที่ 25 + Net 30 วัน → 24/11/2569', () => {
+    const cycle = { name: 'รอบหลัก', cutoffRuleType: 'fixed_dates' as const, cutoffDates: [25], dueRuleType: 'net_days' as const, dueRuleValue: 30 }
+    const help = companyBillingHelp(cycle)
     expect(valueOf(help, 'วันตัดรอบ')).toBe('25/10/2569')
     expect(valueOf(help, 'ครบกำหนดชำระ')).toBe('24/11/2569')
-    expect(companyBillingHelp(null, 30).examples).toEqual([])
+    expect(companyBillingHelp(null).examples).toEqual([])
   })
 
   it('รอบบิล: วันที่ 5 ของเดือนถัดไป / สิ้นเดือน', () => {
@@ -234,10 +235,10 @@ describe('นโยบายการเงิน / สายอนุมัต�
   })
 
   it('เงินทดรอง: เพดาน ฿3,000 ขอ ฿5,000 ไม่ได้ · ใช้ ฿4,200 คืน ฿800', () => {
-    const help = advancePolicyHelp({ maxSatang: 300_000, unclearedToEmployeeReceivable: true })
+    const help = advancePolicyHelp({ maxSatang: 300_000 })
     expect(valueOf(help, 'ผลการขอเบิก')).toBe('เกินเพดาน — ส่งคำขอไม่ได้')
     expect(valueOf(help, 'ใช้จริง')).toBe('ต้องคืน ฿800.00')
-    expect(valueOf(advancePolicyHelp({ maxSatang: null, unclearedToEmployeeReceivable: false }), 'ผลการขอเบิก')).toBe('ขอได้')
+    expect(valueOf(advancePolicyHelp({ maxSatang: null }), 'ผลการขอเบิก')).toBe('ขอได้')
   })
 
   it('ตัดส่วนต่าง: ส่วนต่าง ฿30 กับเพดาน ฿50 / ฿20', () => {
@@ -338,7 +339,7 @@ describe('ข้อความที่ผู้ใช้เห็น', () => {
     companyVatModeHelp('exclude_vat', 7),
     customerWhtHelp({ whtPct: 3, vatMode: 'include_vat', vatRatePct: 7 }),
     companyBranchHelp(),
-    companyBillingHelp(31, 30),
+    companyBillingHelp({ name: 'รอบสิ้นเดือน', cutoffRuleType: 'month_end', cutoffDates: [], dueRuleType: 'net_days', dueRuleValue: 30 }),
     cycleDueHelp({ dueRuleType: 'net_days', dueRuleValue: 30, cutoffDay: 31 }),
     documentNumberingHelp({
       docType: 'billing_batch',
@@ -354,7 +355,7 @@ describe('ข้อความที่ผู้ใช้เห็น', () => {
     approvalMatrixHelp([
       { id: 'a', condition: 'ทุกยอด', conditionThresholdSatang: null, approvalFlow: ['การเงิน'], enforceSegregationOfDuties: false },
     ]),
-    advancePolicyHelp({ maxSatang: 500_000, unclearedToEmployeeReceivable: true }),
+    advancePolicyHelp({ maxSatang: 500_000 }),
     substituteReceiptHelp(50_000, 300_000),
     writeOffToleranceHelp(5_000),
     agingBucketsHelp([30, 60, 90]),

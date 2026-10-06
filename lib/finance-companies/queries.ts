@@ -14,9 +14,15 @@ import {
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
 import { companyDocumentWarningsFor } from '@/lib/finance-companies/document-queries'
 import type { FinanceCompanyListQuery } from '@/lib/finance-companies/schemas'
-import type { CompanyUserDto, FinanceCompanyDto } from '@/lib/finance-companies/types'
+import type { CompanyBillingCycleDto, CompanyUserDto, FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
+import { describeCutoffRule, describeDueRule, pickMatchingCycle } from '@/lib/settings/cycles'
+import {
+  assignCompanyBillingCycle,
+  loadActiveBillingCycles,
+  type ActiveBillingCycle,
+} from '@/lib/settings/queries/cycles'
 
 /**
  * ชั้นข้อมูลของโมดูลบริษัทไฟแนนซ์ (ไฟล์ 10) — **แยกจาก pure logic** (`lib/finance-companies/company.ts`)
@@ -45,8 +51,6 @@ const companySelect = {
   vatMode: true,
   whtWithheldByCustomerPct: true,
   defaultInvoiceDeliveryFormat: true,
-  billingDay: true,
-  paymentDueDays: true,
   status: true,
   suspendedReason: true,
   updatedAt: true,
@@ -66,7 +70,23 @@ function toStatus(value: string): CompanyStatus {
   return value === 'suspended' ? 'suspended' : 'active'
 }
 
-function toDto(row: CompanyRow): FinanceCompanyDto {
+function toCycleDto(cycle: ActiveBillingCycle | null): CompanyBillingCycleDto | null {
+  if (cycle === null) return null
+  return {
+    id: cycle.id,
+    name: cycle.name,
+    scopeKind: cycle.scopeKind,
+    cutoffRuleType: cycle.cutoffRuleType,
+    cutoffDates: cycle.cutoffDates,
+    dueRuleType: cycle.dueRuleType,
+    dueRuleValue: cycle.dueRuleValue,
+    cutoffLabel: describeCutoffRule(cycle),
+    dueLabel: describeDueRule(cycle),
+  }
+}
+
+/** มติ PO U146 — รอบบิลของบริษัทมาจากรอบบิล (ตั้งค่า) ที่เดียว · โหลดรอบครั้งเดียวต่อหน้า */
+function toDto(row: CompanyRow, cycles: readonly ActiveBillingCycle[]): FinanceCompanyDto {
   return {
     id: row.id,
     name: row.name,
@@ -86,8 +106,7 @@ function toDto(row: CompanyRow): FinanceCompanyDto {
     vatMode: row.vatMode,
     whtWithheldByCustomerPct: row.whtWithheldByCustomerPct === null ? null : row.whtWithheldByCustomerPct.toNumber(),
     defaultInvoiceDeliveryFormat: row.defaultInvoiceDeliveryFormat,
-    billingDay: row.billingDay,
-    paymentDueDays: row.paymentDueDays,
+    billingCycle: toCycleDto(pickMatchingCycle(cycles, { companyId: row.id })),
     status: toStatus(row.status),
     suspendedReason: row.suspendedReason,
     caseCount: row._count.cases,
@@ -133,8 +152,7 @@ function toValues(dto: FinanceCompanyDto): FinanceCompanyValues {
     vatMode: dto.vatMode,
     whtWithheldByCustomerPct: dto.whtWithheldByCustomerPct,
     defaultInvoiceDeliveryFormat: dto.defaultInvoiceDeliveryFormat,
-    billingDay: dto.billingDay,
-    paymentDueDays: dto.paymentDueDays,
+    billingCycleId: dto.billingCycle?.id ?? null,
   }
 }
 
@@ -180,7 +198,11 @@ export async function listFinanceCompanies(
     // การ์ด active ขึ้นก่อน suspended (`10` §8) — 'active' < 'suspended' ตามลำดับตัวอักษร
     orderBy: [{ status: 'asc' }, { name: 'asc' }],
   })
-  return withDocumentWarnings(user, rows.map(toDto))
+  const cycles = await loadActiveBillingCycles(organizationId)
+  return withDocumentWarnings(
+    user,
+    rows.map((row) => toDto(row, cycles)),
+  )
 }
 
 export async function getFinanceCompany(user: SessionUser, companyId: string): Promise<FinanceCompanyDto> {
@@ -190,7 +212,7 @@ export async function getFinanceCompany(user: SessionUser, companyId: string): P
   })
   if (!row) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${companyId}` })
   assertCompanyInScope(user, row.id)
-  return withWarnings(user, toDto(row))
+  return withWarnings(user, toDto(row, await loadActiveBillingCycles(user.organizationId)))
 }
 
 /**
@@ -294,8 +316,6 @@ export async function createFinanceCompany(
         vatMode: values.vatMode,
         whtWithheldByCustomerPct: toPctDecimal(values.whtWithheldByCustomerPct),
         defaultInvoiceDeliveryFormat: values.defaultInvoiceDeliveryFormat,
-        billingDay: values.billingDay,
-        paymentDueDays: values.paymentDueDays,
         status: 'active',
         createdBy: context.actor.id,
       },
@@ -318,10 +338,15 @@ export async function createFinanceCompany(
       tx,
     )
 
+    // มติ PO U146 — รอบบิลที่เลือกจากหน้าบริษัท (รายชื่อบริษัทของรอบ) · ไม่เลือก = ไม่ผูก
+    if (values.billingCycleId !== null) {
+      await assignCompanyBillingCycle(tx, { context, companyId: company.id, cycleId: values.billingCycleId })
+    }
+
     return company
   }).catch(onUniqueViolation(() => rethrowDuplicateTaxId(organizationId, values.taxId)))
 
-  return withWarnings(context.actor, toDto(created))
+  return withWarnings(context.actor, toDto(created, await loadActiveBillingCycles(organizationId)))
 }
 
 export async function updateFinanceCompany(
@@ -357,8 +382,6 @@ export async function updateFinanceCompany(
         vatMode: values.vatMode,
         whtWithheldByCustomerPct: toPctDecimal(values.whtWithheldByCustomerPct),
         defaultInvoiceDeliveryFormat: values.defaultInvoiceDeliveryFormat,
-        billingDay: values.billingDay,
-        paymentDueDays: values.paymentDueDays,
         updatedBy: context.actor.id,
       },
       select: companySelect,
@@ -381,10 +404,15 @@ export async function updateFinanceCompany(
       tx,
     )
 
+    // มติ PO U146 — เปลี่ยนรอบบิลที่ใช้เฉพาะเมื่อค่าเปลี่ยน (รอบเดิม = รอบที่ครอบบริษัทอยู่ตอนนี้)
+    if (values.billingCycleId !== before.billingCycleId) {
+      await assignCompanyBillingCycle(tx, { context, companyId: current.id, cycleId: values.billingCycleId })
+    }
+
     return company
   }).catch(onUniqueViolation(() => rethrowDuplicateTaxId(organizationId, values.taxId, current.id)))
 
-  return withWarnings(context.actor, toDto(updated))
+  return withWarnings(context.actor, toDto(updated, await loadActiveBillingCycles(organizationId)))
 }
 
 /**
@@ -432,5 +460,5 @@ export async function setFinanceCompanyStatus(
     return company
   })
 
-  return withWarnings(context.actor, toDto(updated))
+  return withWarnings(context.actor, toDto(updated, await loadActiveBillingCycles(organizationId)))
 }

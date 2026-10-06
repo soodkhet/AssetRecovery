@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { PayoutBatchDto } from '@/lib/payout/types'
-import { cycleCoversSide, pickMatchingCycle } from '@/lib/settings/cycles'
+import { fmtDate, toInputDate } from '@/lib/format/datetime'
+import { cycleCoversSide, pickMatchingCycle, suggestCutoffDate } from '@/lib/settings/cycles'
 import type { CycleDto } from '@/lib/settings/types'
 
 /** รอบ AP ในรูปที่ใช้ตัดสินขอบเขต (มติ PO U133) */
@@ -61,6 +62,12 @@ export function CreatePayoutModal({
   const matchingCycles = cycles.filter((cycle) => cycleCoversSide(scopeOf(cycle), side))
   const autoCycleId = pickMatchingCycle(cycles.map(scopeOf), { side })?.id ?? NO_CYCLE
   const selectedCycle = cycleChoice ?? autoCycleId
+  // มติ PO U146 — รอบเป็นที่กำหนดวันตัดรอบ: เสนอวันตัดรอบล่าสุดตามกติกาของรอบที่เลือก (กดใช้ได้ · แก้ได้)
+  const cycleForCutoff = cycles.find((cycle) => cycle.id === selectedCycle) ?? null
+  const suggestedCutoff =
+    cycleForCutoff === null
+      ? null
+      : suggestCutoffDate(cycleForCutoff, new Date(`${toInputDate(new Date())}T00:00:00Z`)).toISOString().slice(0, 10)
 
   async function submit(): Promise<void> {
     if (cutoffDate === '') return
@@ -135,6 +142,15 @@ export function CreatePayoutModal({
 
         <Field label="วันตัดรอบ (Cut-off Date)" required>
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
+          {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && (
+            <button
+              type="button"
+              className="focus-ring mt-1 text-[11px] font-semibold text-emerald-700 hover:underline"
+              onClick={() => setCutoffDate(suggestedCutoff)}
+            >
+              ใช้วันตัดรอบตามรอบจ่าย ({fmtDate(`${suggestedCutoff}T00:00:00Z`)})
+            </button>
+          )}
         </Field>
 
         <Field

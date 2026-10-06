@@ -1,4 +1,4 @@
-import { assertSatang, sumSatang } from '@/lib/finance/satang'
+import { assertNonNegativeSatang, assertSatang, sumSatang } from '@/lib/finance/satang'
 import { describeAgingBuckets } from '@/lib/settings/finance-policy'
 import { toBangkokDayNumber, toDayNumber } from '@/lib/settings/vat'
 
@@ -20,6 +20,11 @@ export interface BillingBatchAmounts {
    * แล้วยอดค้างไม่ตรงกับสถานะ `paid` ของบิลเดียวกัน · ไม่มีการหัก ⇒ ส่ง `0`
    */
   whtWithheldByCustomerSatang: number
+  /**
+   * มติ PO U144 — ส่วนต่างที่ตัดเป็น **ค่าธรรมเนียมธนาคาร** ตอนรับชำระขาดไม่เกินเพดาน
+   * (`resolveBankFeeWriteOff()`) · ต้องระบุเสมอเหตุผลเดียวกับ WHT — ไม่งั้นบิลที่ปิดแล้วยังค้างในรายงาน · ไม่มี ⇒ `0`
+   */
+  bankFeeWrittenOffSatang: number
 }
 
 /**
@@ -32,7 +37,33 @@ export interface BillingBatchAmounts {
 export function settledSatang(batch: BillingBatchAmounts): number {
   assertSatang(batch.receivedSatang, 'ยอดรับชำระแล้ว')
   assertSatang(batch.whtWithheldByCustomerSatang, 'WHT ที่ลูกค้าหัก')
-  return batch.receivedSatang + batch.whtWithheldByCustomerSatang
+  assertSatang(batch.bankFeeWrittenOffSatang, 'ค่าธรรมเนียมธนาคารที่ตัดส่วนต่าง')
+  return batch.receivedSatang + batch.whtWithheldByCustomerSatang + batch.bankFeeWrittenOffSatang
+}
+
+/**
+ * มติ PO 07/10/2569 U144 (`22` §6.11.1) — **ตัดส่วนต่างที่ขาดเป็นค่าธรรมเนียมธนาคาร**
+ *
+ * ลูกค้าโอนขาดไม่กี่สิบบาทเพราะธนาคารหักค่าธรรมเนียมปลายทาง — ถ้าส่วนที่ขาด (หลังนับ WHT ที่ลูกค้าหัก) ไม่เกิน
+ * เพดาน `finance_policy_settings.write_off_tolerance_satang` ⇒ ตัดส่วนต่างนั้นเป็นค่าธรรมเนียมธนาคาร (รอบปิดเป็น `paid`)
+ * · เกินเพดาน / ยังไม่รับเงินเลย / รับครบหรือเกิน / เพดาน = 0 ⇒ `0` (ไม่ตัด — ค้างตามเดิม)
+ *
+ * รับ **ยอดสะสม** (ไม่ใช่ส่วนเพิ่ม) ⇒ คำนวณซ้ำได้ทุกครั้งที่ยอดรับเปลี่ยน (idempotent) — ผลไม่สะสมทับกัน
+ */
+export function resolveBankFeeWriteOff(input: {
+  totalSatang: number
+  receivedSatang: number
+  whtWithheldByCustomerSatang: number
+  toleranceSatang: number
+}): number {
+  assertSatang(input.totalSatang, 'ยอดบิลรวม')
+  assertSatang(input.receivedSatang, 'ยอดรับชำระแล้ว')
+  assertSatang(input.whtWithheldByCustomerSatang, 'WHT ที่ลูกค้าหัก')
+  assertNonNegativeSatang(input.toleranceSatang, 'เพดานตัดส่วนต่างค่าธรรมเนียม')
+  if (input.receivedSatang <= 0) return 0
+  const shortfall = input.totalSatang - input.receivedSatang - input.whtWithheldByCustomerSatang
+  if (shortfall <= 0) return 0
+  return shortfall <= input.toleranceSatang ? shortfall : 0
 }
 
 /**

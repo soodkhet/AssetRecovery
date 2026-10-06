@@ -234,8 +234,8 @@ beforeAll(async () => {
     `)
   }
   await tx.$executeRawUnsafe(`
-    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days, created_by)
-    VALUES ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ CO1 U40', 'CO1U40', '0105540400001', 'exclude_vat', 30, '${USER_ID}')
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, created_by)
+    VALUES ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ CO1 U40', 'CO1U40', '0105540400001', 'exclude_vat', '${USER_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -617,7 +617,7 @@ suite('มติ PO U40/U41 — Export Pack 10_Customer_WHT.csv + 11_Suspense_Re
     await recon.moveToSuspense(ctx, txId, { reason: 'ไม่ทราบที่มา' })
 
     const record = await exportsApi.createExportPack(ctx, { periodId: await augustPeriodId() })
-    expect(record.fileCount).toBe(18)
+    expect(record.fileCount).toBe(19)
 
     const decoder = new TextDecoder()
     const fileText = (suffix: string): string =>

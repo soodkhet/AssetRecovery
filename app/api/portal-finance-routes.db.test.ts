@@ -434,10 +434,9 @@ beforeAll(async () => {
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
-    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days,
-                                   address, created_by) VALUES
-      ('${CO1}', '${ORG_ID}', 'ไฟแนนซ์หนึ่ง P5', 'CO1P5', '0105512975001', 'exclude_vat', 30, '1 ถ.สีลม', '${FINANCE_ID}'),
-      ('${CO2}', '${ORG_ID}', 'ไฟแนนซ์สอง P5', 'CO2P5', '0105512975002', 'exclude_vat', 30, '2 ถ.สาทร', '${FINANCE_ID}')
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, address, created_by) VALUES
+      ('${CO1}', '${ORG_ID}', 'ไฟแนนซ์หนึ่ง P5', 'CO1P5', '0105512975001', 'exclude_vat', '1 ถ.สีลม', '${FINANCE_ID}'),
+      ('${CO2}', '${ORG_ID}', 'ไฟแนนซ์สอง P5', 'CO2P5', '0105512975002', 'exclude_vat', '2 ถ.สาทร', '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -861,10 +860,9 @@ suite('โหมดดู portal ในฐานะลูกค้า (มติ
       VALUES ('${OTHER_ORG_ID}', 'PortalViewAsOtherOrg', '9999999997599', 'ที่อยู่องค์กรอื่น') ON CONFLICT (id) DO NOTHING
     `)
     await db().$executeRawUnsafe(`
-      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days,
-                                     address, created_by)
+      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, address, created_by)
       VALUES ('${OTHER_ORG_COMPANY}', '${OTHER_ORG_ID}', 'ไฟแนนซ์องค์กรอื่น', 'OTHERORG', '0105512975099',
-              'exclude_vat', 30, '9 ถ.อื่น', '${FINANCE_ID}')
+              'exclude_vat', '9 ถ.อื่น', '${FINANCE_ID}')
       ON CONFLICT (id) DO NOTHING
     `)
   })

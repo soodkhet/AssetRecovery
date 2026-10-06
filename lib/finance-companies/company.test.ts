@@ -38,8 +38,7 @@ const baseValues: FinanceCompanyValues = {
   vatMode: 'include_vat',
   whtWithheldByCustomerPct: 3,
   defaultInvoiceDeliveryFormat: 'e_tax_invoice',
-  billingDay: 5,
-  paymentDueDays: 30,
+  billingCycleId: null,
 }
 
 function codeOf(fn: () => unknown): string {

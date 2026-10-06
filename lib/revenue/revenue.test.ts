@@ -157,7 +157,7 @@ describe('summarizeBillingBatch', () => {
 })
 
 describe('resolveBillingStatusAfterReceipt (`19` §9.2 — จุดเสียบของไฟล์ 35)', () => {
-  const base = { current: 'sent' as const, totalSatang: 107_000, whtWithheldByCustomerSatang: 0 }
+  const base = { current: 'sent' as const, totalSatang: 107_000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }
 
   it('ยังไม่มีเงินเข้า = คงสถานะเดิม', () => {
     expect(resolveBillingStatusAfterReceipt({ ...base, receivedSatang: 0 })).toBe('sent')
@@ -178,6 +178,7 @@ describe('resolveBillingStatusAfterReceipt (`19` §9.2 — จุดเสีย
         ...base,
         receivedSatang: 104_000,
         whtWithheldByCustomerSatang: 3_000,
+        bankFeeWrittenOffSatang: 0,
       }),
     ).toBe('paid')
   })

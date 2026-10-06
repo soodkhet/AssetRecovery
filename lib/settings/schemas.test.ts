@@ -33,7 +33,6 @@ const validCycle = {
   type: 'AR',
   cutoffRuleType: 'fixed_dates',
   cutoffDates: [15, 30],
-  cutoffText: '',
   dueRuleType: 'net_days',
   dueRuleValue: 30,
   scopeKind: 'all_companies',
@@ -72,16 +71,21 @@ describe('cycleCreateSchema (§6.1)', () => {
     if (!parsed.success) expect(parsed.error.issues.flatMap((issue) => issue.path)).toContain('cutoffDates')
   })
 
-  it('custom_text ที่ไม่มีข้อความ = ไม่ผ่าน', () => {
+  it('มติ PO U146 — กติกาตัดรอบแบบข้อความอิสระ (custom_text) ถูกตัด = ไม่ผ่าน', () => {
     expect(
-      cycleCreateSchema.safeParse({ ...validCycle, cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: '' }).success,
+      cycleCreateSchema.safeParse({ ...validCycle, cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: 'ทุกวันศุกร์' })
+        .success,
     ).toBe(false)
   })
 
-  it('month_end ไม่ต้องมี cutoffDates/cutoffText', () => {
-    expect(
-      cycleCreateSchema.safeParse({ ...validCycle, cutoffRuleType: 'month_end', cutoffDates: [], cutoffText: '' }).success,
-    ).toBe(true)
+  it('month_end ไม่ต้องมี cutoffDates', () => {
+    expect(cycleCreateSchema.safeParse({ ...validCycle, cutoffRuleType: 'month_end', cutoffDates: [] }).success).toBe(true)
+  })
+
+  it('net_days รับ 0 (ครบกำหนดวันตัดรอบ) · day_of_next_month ต้อง 1-31', () => {
+    expect(cycleCreateSchema.safeParse({ ...validCycle, dueRuleValue: 0 }).success).toBe(true)
+    expect(cycleCreateSchema.safeParse({ ...validCycle, dueRuleType: 'day_of_next_month', dueRuleValue: 0 }).success).toBe(false)
+    expect(cycleCreateSchema.safeParse({ ...validCycle, dueRuleType: 'day_of_next_month', dueRuleValue: 5 }).success).toBe(true)
   })
 
   it('วันที่ตัดรอบนอกช่วง 1-31 = ไม่ผ่าน', () => {
@@ -150,7 +154,6 @@ describe('financePolicyUpdateSchema (§6.2.1)', () => {
     requirePayeeIdDocument: false,
     arAgingBuckets: [30, 60, 90],
     writeOffToleranceSatang: 5_000,
-    advanceUnclearedToEmployeeReceivable: true,
   }
 
   it('ค่าครบผ่าน + เพดาน advance ไม่ส่ง = null (ไม่จำกัด)', () => {

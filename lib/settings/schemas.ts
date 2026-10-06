@@ -79,7 +79,8 @@ const optionalUuid = (message: string) =>
 
 // ── §6.1 รอบบิล/รอบจ่าย ────────────────────────────────────────────────
 export const cycleTypeSchema = z.enum(['AR', 'AP'])
-export const cutoffRuleTypeSchema = z.enum(['fixed_dates', 'month_end', 'custom_text'])
+/** มติ PO U146 — ตัด `custom_text` (กติกาต้องคำนวณวันตัดรอบได้) */
+export const cutoffRuleTypeSchema = z.enum(['fixed_dates', 'month_end'])
 export const dueRuleTypeSchema = z.enum(['net_days', 'day_of_next_month', 'month_end'])
 export const cycleScopeKindSchema = z.enum(['all_companies', 'selected_companies', 'all_teams', 'inhouse', 'outsource'])
 
@@ -97,12 +98,12 @@ const cycleFieldsBase = z.object({
     )
     .max(MAX_CUTOFF_DAY, 'ระบุวันที่ตัดรอบเกินจำนวนวันในเดือน')
     .default([]),
-  cutoffText: optionalText(200),
   dueRuleType: dueRuleTypeSchema,
+  // net_days รับ 0 ได้ (ครบกำหนดวันตัดรอบ — มติ PO U146) · day_of_next_month ≥ 1 ตรวจใน refine
   dueRuleValue: z
     .number()
     .int('ค่าของเงื่อนไขต้องเป็นจำนวนเต็ม')
-    .min(1, 'ค่าของเงื่อนไขต้องมากกว่า 0')
+    .min(0, 'ค่าของเงื่อนไขต้องไม่ติดลบ')
     .max(365, 'ค่าของเงื่อนไขมากเกินไป')
     .nullable()
     .default(null),
@@ -118,14 +119,15 @@ const refineCycle: RefineFn<z.infer<typeof cycleFieldsBase>> = (values, ctx) => 
   if (values.cutoffRuleType === 'fixed_dates' && values.cutoffDates.length === 0) {
     ctx.addIssue({ code: 'custom', path: ['cutoffDates'], message: 'เลือกวันที่ตัดรอบอย่างน้อย 1 วัน' })
   }
-  if (values.cutoffRuleType === 'custom_text' && (values.cutoffText === null || values.cutoffText.length === 0)) {
-    ctx.addIssue({ code: 'custom', path: ['cutoffText'], message: 'ระบุคำอธิบายกติกาวันตัดรอบ' })
-  }
   // ตรงกับ CHECK `cycles_due_rule_shape` (A5)
   if (values.dueRuleType !== 'month_end' && values.dueRuleValue === null) {
     ctx.addIssue({ code: 'custom', path: ['dueRuleValue'], message: 'ระบุค่าของเงื่อนไขกำหนดชำระ' })
   }
-  if (values.dueRuleType === 'day_of_next_month' && values.dueRuleValue !== null && values.dueRuleValue > MAX_CUTOFF_DAY) {
+  if (
+    values.dueRuleType === 'day_of_next_month' &&
+    values.dueRuleValue !== null &&
+    (values.dueRuleValue < 1 || values.dueRuleValue > MAX_CUTOFF_DAY)
+  ) {
     ctx.addIssue({ code: 'custom', path: ['dueRuleValue'], message: `วันที่ต้องอยู่ระหว่าง 1-${MAX_CUTOFF_DAY}` })
   }
   // มติ PO U133 — ขอบเขตต้องเข้าคู่กับชนิดรอบ (ตรงกับ CHECK `cycles_scope_matches_type`)
@@ -201,7 +203,6 @@ const financePolicyFields = z.object({
     .min(MIN_AGING_BUCKETS, 'ต้องมีช่วงอายุหนี้อย่างน้อย 1 ช่วง')
     .max(MAX_AGING_BUCKETS, `ช่วงอายุหนี้ได้ไม่เกิน ${MAX_AGING_BUCKETS} ช่วง`),
   writeOffToleranceSatang: satangSchema('เพดานตัดส่วนต่างค่าธรรมเนียม'),
-  advanceUnclearedToEmployeeReceivable: z.boolean(),
   // มติ PO U103 — เพดานใบรับรองแทนใบเสร็จ (ต้องมากกว่า 0 · ไม่ส่ง = ค่าเริ่มต้น)
   substituteReceiptMaxPerDocSatang: satangSchema('เพดานใบรับรองแทนใบเสร็จต่อใบ')
     .refine((value) => value > 0, 'เพดานใบรับรองแทนใบเสร็จต่อใบต้องมากกว่า 0')

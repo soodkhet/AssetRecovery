@@ -20,7 +20,7 @@ function dueDaysAgo(days: number): Date {
 }
 
 function batch(days: number, totalSatang: number) {
-  return { dueDate: dueDaysAgo(days), totalSatang, receivedSatang: 0, whtWithheldByCustomerSatang: 0 }
+  return { dueDate: dueDaysAgo(days), totalSatang, receivedSatang: 0, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }
 }
 
 describe('F3 — คอลัมน์ช่วงอายุหนี้', () => {
@@ -116,7 +116,7 @@ describe('F3 — ยอดและ KPI', () => {
           companyId: 'c1',
           companyName: 'ไฟแนนซ์ A',
           batches: [
-            { dueDate: dueDaysAgo(10), totalSatang: 1_070_000, receivedSatang: 1_040_000, whtWithheldByCustomerSatang: 30_000 },
+            { dueDate: dueDaysAgo(10), totalSatang: 1_070_000, receivedSatang: 1_040_000, whtWithheldByCustomerSatang: 30_000, bankFeeWrittenOffSatang: 0 },
           ],
         },
       ],

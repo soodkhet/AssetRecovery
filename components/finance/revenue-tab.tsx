@@ -249,6 +249,11 @@ export function RevenueTab() {
                             + WHT ลูกค้าหัก {fmtSatangSymbol(batch.whtWithheldByCustomerSatang)}
                           </p>
                         )}
+                        {batch.bankFeeWrittenOffSatang > 0 && (
+                          <p className="mt-0.5 text-[10px] text-slate-400">
+                            + ค่าธรรมเนียมธนาคาร {fmtSatangSymbol(batch.bankFeeWrittenOffSatang)}
+                          </p>
+                        )}
                       </Td>
                       <Td
                         numeric

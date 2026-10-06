@@ -91,7 +91,9 @@ export function ManualMatchModal({
       title: 'จับคู่รายการสำเร็จ',
       description:
         effect?.kind === 'billing'
-          ? `สร้างเงินรับให้แล้ว · ยอดคงค้างของรอบ ${fmtSatangSymbol(effect.outstandingSatang)}`
+          ? effect.bankFeeWrittenOffSatang > 0
+            ? `สร้างเงินรับให้แล้ว · ส่วนต่าง ${fmtSatangSymbol(effect.bankFeeWrittenOffSatang)} ไม่เกินเพดาน บันทึกเป็นค่าธรรมเนียมธนาคาร · รอบชำระครบ`
+            : `สร้างเงินรับให้แล้ว · ยอดคงค้างของรอบ ${fmtSatangSymbol(effect.outstandingSatang)}`
           : effect?.kind === 'payout'
             ? 'ยืนยันรอบจ่ายเป็น "จ่ายแล้ว" ให้อัตโนมัติ'
             : undefined,

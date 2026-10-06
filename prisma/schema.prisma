@@ -69,10 +69,10 @@ enum CycleType {
   @@map("cycle_type")
 }
 
+/// มติ PO U146 — ตัด `custom_text` (ข้อความอิสระคำนวณวันตัดรอบไม่ได้) · ค่าเดิมแปลงเป็นวันที่/สิ้นเดือน
 enum CutoffRuleType {
   fixed_dates
   month_end
-  custom_text
 
   @@map("cutoff_rule_type")
 }
@@ -1262,10 +1262,8 @@ model FinanceCompany {
   /// รูปแบบส่งใบกำกับภาษีเริ่มต้นของบริษัทนี้ (`10` §7.1) — เปลี่ยนต่อใบได้ตอนออกเอกสาร (`31` §6.2)
   defaultInvoiceDeliveryFormat InvoiceDeliveryFormat @default(paper_pdf) @map("default_invoice_delivery_format")
 
-  /// วันตัดรอบบิล
-  billingDay      Int     @default(1) @map("billing_day")
-  /// วันครบกำหนดชำระ
-  paymentDueDays  Int     @default(30) @map("payment_due_days")
+  /// (มติ PO U146 — ตัด `billing_day`/`payment_due_days`: รอบบิลที่บริษัทอยู่ใน `billing_cycle_companies`
+  ///  หรือรอบ "ทุกบริษัท" เป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม)
   /// active | suspended (`10` §9.3 — มติ PO 14/08/2569 · คงชนิด TEXT ตาม `02` §5 ไม่แปลงเป็น enum)
   status          String  @default("active")
   /// เหตุผลที่ระงับ — บังคับกรอกเมื่อเปลี่ยนเป็น suspended (`10` §7.1/§11 `SUSPEND_REASON_REQUIRED`)
@@ -1599,15 +1597,15 @@ model PublicHoliday {
 /// รอบบิล/รอบจ่าย (ไฟล์ 13 §6.1)
 /// CHECK `cycles_cutoff_shape` อยู่ใน raw SQL migration (Prisma ไม่รองรับ CHECK)
 model BillingPayoutCycle {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String         @map("organization_id") @db.Uuid
-  name           String
-  type           CycleType
-  cutoffRuleType CutoffRuleType @map("cutoff_rule_type")
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String         @map("organization_id") @db.Uuid
+  name             String
+  type             CycleType
+  cutoffRuleType   CutoffRuleType @map("cutoff_rule_type")
   /// ใช้เมื่อ fixed_dates เช่น [15, 30]
-  cutoffDates    Int[]          @map("cutoff_dates")
-  /// ใช้เมื่อ custom_text
-  cutoffText     String?        @map("cutoff_text")
+  cutoffDates      Int[]          @map("cutoff_dates")
+  /// ข้อความกติกาตัดรอบแบบอิสระเดิม (ก่อนมติ PO U146) — อ้างอิงเท่านั้น ไม่มีผล · รอบใหม่ = NULL
+  legacyCutoffText String?        @map("legacy_cutoff_text")
 
   /// A5 (มติ PO 2026-08-12) — เดิมเป็น free text คำนวณ due_date ไม่ได้ · ตอนนี้เก็บเป็นโครงสร้าง
   dueRuleType  DueRuleType @default(net_days) @map("due_rule_type")
@@ -1705,13 +1703,12 @@ model FinancePolicySettings {
   arAgingBuckets                   Int[]   @default([30, 60, 90]) @map("ar_aging_buckets")
 
   /// B4 (มติ PO 2026-08-12) — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
-  writeOffToleranceSatang              Int     @default(5000) @map("write_off_tolerance_satang")
-  /// D12 (มติ PO 2026-08-12) — ตัด advance ที่ไม่มีใบเสร็จเป็นลูกหนี้พนักงาน แล้วหักจาก payout รอบถัดไป
-  advanceUnclearedToEmployeeReceivable Boolean @default(true) @map("advance_uncleared_to_employee_receivable")
+  writeOffToleranceSatang            Int @default(5000) @map("write_off_tolerance_satang")
+  /// (สวิตช์ D12 "เงินทดรองไม่เคลียร์เป็นลูกหนี้พนักงาน" ถูกตัดตามมติ PO U145 — รอบจ่ายหักคืนเงินทดรองค้างเสมอ)
   /// มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน ต่อใบ (ค่าเริ่มต้น ฿500) · CHECK > 0 ใน raw SQL `20261006200000_substitute_receipts`
-  substituteReceiptMaxPerDocSatang     Int     @default(50000) @map("substitute_receipt_max_per_doc_satang")
+  substituteReceiptMaxPerDocSatang   Int @default(50000) @map("substitute_receipt_max_per_doc_satang")
   /// มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน ต่อคนต่อเดือน (ค่าเริ่มต้น ฿3,000 · เดือนตามวันที่ออกใบ เวลาไทย)
-  substituteReceiptMaxPerMonthSatang   Int     @default(300000) @map("substitute_receipt_max_per_month_satang")
+  substituteReceiptMaxPerMonthSatang Int @default(300000) @map("substitute_receipt_max_per_month_satang")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
@@ -3084,6 +3081,11 @@ model BillingBatch {
   receivedSatang              Int                @default(0) @map("received_satang")
   /// A1 (มติ PO 2026-08-12) — WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา · auto-match เทียบ `total − wht` ด้วย (`35` §6.2)
   whtWithheldByCustomerSatang Int                @default(0) @map("wht_withheld_by_customer_satang")
+  /// มติ PO U144 — ส่วนต่างที่รับขาดไม่เกินเพดาน `finance_policy_settings.write_off_tolerance_satang` ตัดเป็น "ค่าธรรมเนียมธนาคาร"
+  /// (นับเป็นชำระแล้ว ⇒ รอบปิด `paid`) · คำนวณใหม่จากยอดสะสมทุกครั้งที่รับเงิน (`22` §6.11.1) · CHECK ≥ 0 + มาคู่กับวันที่ใน raw SQL
+  bankFeeWrittenOffSatang     Int                @default(0) @map("bank_fee_written_off_satang")
+  /// วันที่ตัดส่วนต่าง = วันรับเงินล่าสุดของรอบ (วันไทย) — Export Pack `18_Bank_Fee_Write_Offs.csv` เลือกตามวันนี้ · ไม่มีการตัด = NULL
+  bankFeeWrittenOffDate       DateTime?          @map("bank_fee_written_off_date") @db.Date
   dueDate                     DateTime           @map("due_date") @db.Date
   sentAt                      DateTime?          @map("sent_at") @db.Timestamptz(6)
   sentBy                      String?            @map("sent_by") @db.Uuid

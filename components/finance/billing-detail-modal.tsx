@@ -112,6 +112,14 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
           {batch.sentAt !== null && <span>ส่งบิล {fmtDate(batch.sentAt)}</span>}
         </div>
 
+        {/* มติ PO U144 — รับขาดไม่เกินเพดาน ⇒ ส่วนต่างบันทึกเป็นค่าธรรมเนียมธนาคาร (รอบปิดเป็นชำระครบ) */}
+        {batch.bankFeeWrittenOffSatang > 0 && (
+          <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+            ส่วนต่างที่รับขาด {fmtSatangSymbol(batch.bankFeeWrittenOffSatang)} ไม่เกินเพดานตัดส่วนต่าง — บันทึกเป็นค่าธรรมเนียมธนาคาร
+            {batch.bankFeeWrittenOffDate !== null && <> เมื่อ {fmtDate(batch.bankFeeWrittenOffDate)}</>}
+          </p>
+        )}
+
         {customerWht !== null && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-4 py-3 text-xs">
             <span className="text-slate-600">

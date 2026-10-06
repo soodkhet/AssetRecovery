@@ -6,6 +6,7 @@ import {
   isDueRuleShapeValid,
   normalizeCycleValues,
   resolveDueDate,
+  suggestCutoffDate,
   toCycleAuditPayload,
   type CycleValues,
 } from '@/lib/settings/cycles'
@@ -17,7 +18,6 @@ const base: CycleValues = {
   type: 'AR',
   cutoffRuleType: 'fixed_dates',
   cutoffDates: [30, 15, 15],
-  cutoffText: 'ค่าค้างจากชนิดอื่น',
   dueRuleType: 'net_days',
   dueRuleValue: 30,
   scopeKind: 'selected_companies',
@@ -33,20 +33,8 @@ describe('normalizeCycleValues', () => {
   })
 
   it('ล้างค่าที่ไม่เข้าคู่กับชนิดจริง — ไม่ปล่อยให้ CHECK ระดับ DB จับทีหลัง', () => {
-    expect(normalizeCycleValues(base).cutoffText).toBeNull()
     const monthEnd = normalizeCycleValues({ ...base, cutoffRuleType: 'month_end' })
     expect(monthEnd.cutoffDates).toEqual([])
-    expect(monthEnd.cutoffText).toBeNull()
-  })
-
-  it('custom_text เก็บข้อความ แต่ล้างวันที่ทิ้ง', () => {
-    const custom = normalizeCycleValues({ ...base, cutoffRuleType: 'custom_text', cutoffText: ' ทุกวันศุกร์สุดท้าย ' })
-    expect(custom.cutoffText).toBe('ทุกวันศุกร์สุดท้าย')
-    expect(custom.cutoffDates).toEqual([])
-  })
-
-  it('ข้อความว่างกลายเป็น null (ฟอร์มส่ง `` มาเสมอ)', () => {
-    expect(normalizeCycleValues({ ...base, cutoffRuleType: 'custom_text', cutoffText: '   ' }).cutoffText).toBeNull()
   })
 
   it('dueRuleType = month_end ล้าง dueRuleValue', () => {
@@ -56,25 +44,22 @@ describe('normalizeCycleValues', () => {
 
 describe('isCutoffShapeValid', () => {
   it('fixed_dates ต้องมีวันที่อย่างน้อย 1 วัน', () => {
-    expect(isCutoffShapeValid({ cutoffRuleType: 'fixed_dates', cutoffDates: [15], cutoffText: null })).toBe(true)
-    expect(isCutoffShapeValid({ cutoffRuleType: 'fixed_dates', cutoffDates: [], cutoffText: null })).toBe(false)
-  })
-
-  it('custom_text ต้องมีข้อความ', () => {
-    expect(isCutoffShapeValid({ cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: 'ทุกวันศุกร์' })).toBe(true)
-    expect(isCutoffShapeValid({ cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: '  ' })).toBe(false)
-    expect(isCutoffShapeValid({ cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: null })).toBe(false)
+    expect(isCutoffShapeValid({ cutoffRuleType: 'fixed_dates', cutoffDates: [15] })).toBe(true)
+    expect(isCutoffShapeValid({ cutoffRuleType: 'fixed_dates', cutoffDates: [] })).toBe(false)
   })
 
   it('month_end ไม่ต้องมีค่าอะไรเพิ่ม', () => {
-    expect(isCutoffShapeValid({ cutoffRuleType: 'month_end', cutoffDates: [], cutoffText: null })).toBe(true)
+    expect(isCutoffShapeValid({ cutoffRuleType: 'month_end', cutoffDates: [] })).toBe(true)
   })
 })
 
 describe('isDueRuleShapeValid', () => {
-  it('net_days / day_of_next_month ต้องมีค่ามากกว่า 0', () => {
+  it('net_days ≥ 0 (มติ PO U146 — 0 = ครบกำหนดวันตัดรอบ) · day_of_next_month ต้องมากกว่า 0', () => {
     expect(isDueRuleShapeValid({ dueRuleType: 'net_days', dueRuleValue: 30 })).toBe(true)
-    expect(isDueRuleShapeValid({ dueRuleType: 'net_days', dueRuleValue: 0 })).toBe(false)
+    expect(isDueRuleShapeValid({ dueRuleType: 'net_days', dueRuleValue: 0 })).toBe(true)
+    expect(isDueRuleShapeValid({ dueRuleType: 'net_days', dueRuleValue: -1 })).toBe(false)
+    expect(isDueRuleShapeValid({ dueRuleType: 'net_days', dueRuleValue: null })).toBe(false)
+    expect(isDueRuleShapeValid({ dueRuleType: 'day_of_next_month', dueRuleValue: 0 })).toBe(false)
     expect(isDueRuleShapeValid({ dueRuleType: 'day_of_next_month', dueRuleValue: null })).toBe(false)
   })
 
@@ -91,10 +76,40 @@ describe('describeDueRule / describeCutoffRule', () => {
   })
 
   it('label ของกติกาวันตัดรอบ', () => {
-    expect(describeCutoffRule({ cutoffRuleType: 'fixed_dates', cutoffDates: [15, 30], cutoffText: null })).toBe('ทุกวันที่ 15, 30')
-    expect(describeCutoffRule({ cutoffRuleType: 'month_end', cutoffDates: [], cutoffText: null })).toBe('ทุกสิ้นเดือน')
-    expect(describeCutoffRule({ cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: 'ทุกวันศุกร์' })).toBe('ทุกวันศุกร์')
-    expect(describeCutoffRule({ cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: null })).toBe('—')
+    expect(describeCutoffRule({ cutoffRuleType: 'fixed_dates', cutoffDates: [15, 30] })).toBe('ทุกวันที่ 15, 30')
+    expect(describeCutoffRule({ cutoffRuleType: 'month_end', cutoffDates: [] })).toBe('ทุกสิ้นเดือน')
+  })
+})
+
+describe('suggestCutoffDate (มติ PO U146 — รอบบิลเป็นที่เดียวที่กำหนดวันตัดรอบ)', () => {
+  const d = (iso: string): Date => new Date(`${iso}T00:00:00Z`)
+  const iso = (date: Date): string => date.toISOString().slice(0, 10)
+
+  it('fixed_dates: วันที่ล่าสุดที่ไม่เกินวันนี้ในเดือนนี้', () => {
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [5, 20] }, d('2026-10-07')))).toBe('2026-10-05')
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [5, 20] }, d('2026-10-20')))).toBe('2026-10-20')
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [5, 20] }, d('2026-10-25')))).toBe('2026-10-20')
+  })
+
+  it('fixed_dates: ยังไม่ถึงวันแรกของเดือน ⇒ ย้อนไปวันล่าสุดของเดือนก่อน (ข้ามปีได้)', () => {
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [5, 20] }, d('2026-10-03')))).toBe('2026-09-20')
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [25] }, d('2027-01-10')))).toBe('2026-12-25')
+  })
+
+  it('วันที่เกินจำนวนวันในเดือน (31) = วันสุดท้ายของเดือนนั้น', () => {
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [31] }, d('2026-03-10')))).toBe('2026-02-28')
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [15, 31] }, d('2026-09-30')))).toBe('2026-09-30')
+  })
+
+  it('month_end: วันนี้ถ้าเป็นสิ้นเดือน ไม่งั้นสิ้นเดือนก่อน', () => {
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'month_end', cutoffDates: [] }, d('2026-10-31')))).toBe('2026-10-31')
+    expect(iso(suggestCutoffDate({ cutoffRuleType: 'month_end', cutoffDates: [] }, d('2026-10-07')))).toBe('2026-09-30')
+  })
+
+  it('รอบที่แปลงจากบริษัท (ตัดวันที่ 1 · Net 30) ให้วันครบกำหนดเท่าเดิม', () => {
+    const cutoff = suggestCutoffDate({ cutoffRuleType: 'fixed_dates', cutoffDates: [1] }, d('2026-10-07'))
+    expect(iso(cutoff)).toBe('2026-10-01')
+    expect(iso(resolveDueDate(cutoff, { dueRuleType: 'net_days', dueRuleValue: 30 }))).toBe('2026-10-31')
   })
 })
 

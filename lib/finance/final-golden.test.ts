@@ -377,14 +377,14 @@ describe('H.5 — วางบิล / รับเงิน / ใบกำก�
 
   it('§6.11 AR สิ้น ต.ค. = 923040 (ยอดตามเอกสาร = ใบแจ้งหนี้ − CN + DN)', () => {
     const rows = [
-      { totalSatang: 66049 + 10700, receivedSatang: 64197, whtWithheldByCustomerSatang: 1852 }, // BL-001 + DN-1
-      { totalSatang: 749000 - 53500, receivedSatang: 400000, whtWithheldByCustomerSatang: 0 }, // BL-002 − CN-1
-      { totalSatang: 289296, receivedSatang: 281185, whtWithheldByCustomerSatang: 8111 }, // BL-003
-      { totalSatang: 214000, receivedSatang: 0, whtWithheldByCustomerSatang: 0 }, // BL-004 (ADJ-1 ไม่มีใบลดหนี้)
-      { totalSatang: 600000, receivedSatang: 250000, whtWithheldByCustomerSatang: 0 }, // BL-005
-      { totalSatang: 52840, receivedSatang: 0, whtWithheldByCustomerSatang: 0 }, // BL-006
-      { totalSatang: 278200, receivedSatang: 270400, whtWithheldByCustomerSatang: 7800 }, // BL-007
-      { totalSatang: 600000, receivedSatang: 600000, whtWithheldByCustomerSatang: 0 }, // BL-008
+      { totalSatang: 66049 + 10700, receivedSatang: 64197, whtWithheldByCustomerSatang: 1852, bankFeeWrittenOffSatang: 0 }, // BL-001 + DN-1
+      { totalSatang: 749000 - 53500, receivedSatang: 400000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-002 − CN-1
+      { totalSatang: 289296, receivedSatang: 281185, whtWithheldByCustomerSatang: 8111, bankFeeWrittenOffSatang: 0 }, // BL-003
+      { totalSatang: 214000, receivedSatang: 0, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-004 (ADJ-1 ไม่มีใบลดหนี้)
+      { totalSatang: 600000, receivedSatang: 250000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-005
+      { totalSatang: 52840, receivedSatang: 0, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-006
+      { totalSatang: 278200, receivedSatang: 270400, whtWithheldByCustomerSatang: 7800, bankFeeWrittenOffSatang: 0 }, // BL-007
+      { totalSatang: 600000, receivedSatang: 600000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-008
     ]
     const each = rows.map(arOutstandingSatang)
     expect(each).toEqual([10700, 295500, 0, 214000, 350000, 52840, 0, 0])

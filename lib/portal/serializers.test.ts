@@ -140,6 +140,7 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
       totalSatang: 100_000,
       receivedSatang: 40_000,
       whtWithheldByCustomerSatang: 3_000,
+      bankFeeWrittenOffSatang: 0,
       dueDate: new Date('2026-10-31T00:00:00Z'),
       sentAt: CREATED,
       caseCount: 3,
@@ -278,7 +279,7 @@ describe('portal serializers — เนื้อหา', () => {
   })
 
   it('billing draft ถูกกรอง · ยอดค้างใช้สูตรกลาง', () => {
-    const base = { id: 'b', batchNumber: 'BL-2569-002', period: '09/2569', totalSatang: 100_000, receivedSatang: 40_000, whtWithheldByCustomerSatang: 3_000, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 4 }
+    const base = { id: 'b', batchNumber: 'BL-2569-002', period: '09/2569', totalSatang: 100_000, receivedSatang: 40_000, whtWithheldByCustomerSatang: 3_000, bankFeeWrittenOffSatang: 0, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 4 }
     expect(serializePortalBillingBatch({ ...base, status: 'draft' })).toBeNull()
     expect(serializePortalBillingBatches([{ ...base, status: 'draft' }, { ...base, id: 'c', status: 'sent' }]).map((row) => row.id)).toEqual(['c'])
     const dto = serializePortalBillingBatch({ ...base, status: 'sent' })
@@ -287,7 +288,7 @@ describe('portal serializers — เนื้อหา', () => {
   })
 
   it('รอบวางบิลมีเลขที่รอบจริง BL (มติ U76 แทน BB- ของ U62) + จำนวนเคส', () => {
-    const base = { id: 'b', totalSatang: 100_000, receivedSatang: 0, whtWithheldByCustomerSatang: 0, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 5, status: 'sent' as const }
+    const base = { id: 'b', totalSatang: 100_000, receivedSatang: 0, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 5, status: 'sent' as const }
     const dto = serializePortalBillingBatch({ ...base, batchNumber: 'BL-2569-007', period: 'มิถุนายน 2569' })
     expect(dto?.batchNumber).toBe('BL-2569-007')
     expect(dto?.period).toBe('มิถุนายน 2569')

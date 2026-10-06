@@ -43,7 +43,6 @@ interface FormState {
   requirePayeeIdDocument: boolean
   arAgingBuckets: string[]
   writeOffTolerance: string
-  advanceUnclearedToEmployeeReceivable: boolean
   substituteReceiptMaxPerDoc: string
   substituteReceiptMaxPerMonth: string
   reason: string
@@ -55,7 +54,6 @@ function formOf(policy: FinancePolicyDto): FormState {
     requirePayeeIdDocument: policy.requirePayeeIdDocument,
     arAgingBuckets: policy.arAgingBuckets.map((days) => String(days)),
     writeOffTolerance: toBahtInput(policy.writeOffToleranceSatang),
-    advanceUnclearedToEmployeeReceivable: policy.advanceUnclearedToEmployeeReceivable,
     substituteReceiptMaxPerDoc: toBahtInput(policy.substituteReceiptMaxPerDocSatang),
     substituteReceiptMaxPerMonth: toBahtInput(policy.substituteReceiptMaxPerMonthSatang),
     reason: '',
@@ -133,7 +131,6 @@ export function FinancePolicyCard() {
       requirePayeeIdDocument: form.requirePayeeIdDocument,
       arAgingBuckets: form.arAgingBuckets.filter((value) => value.trim() !== '').map((value) => Number(value)),
       writeOffToleranceSatang: parseBahtInput(form.writeOffTolerance) ?? 0,
-      advanceUnclearedToEmployeeReceivable: form.advanceUnclearedToEmployeeReceivable,
       substituteReceiptMaxPerDocSatang: parseBahtInput(form.substituteReceiptMaxPerDoc) ?? 0,
       substituteReceiptMaxPerMonthSatang: parseBahtInput(form.substituteReceiptMaxPerMonth) ?? 0,
       reason: form.reason.trim(),
@@ -213,10 +210,7 @@ export function FinancePolicyCard() {
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <SettingHelp
-            help={advancePolicyHelp({
-              maxSatang: satangFromInput(form.advanceMaxAmountPerRequest),
-              unclearedToEmployeeReceivable: form.advanceUnclearedToEmployeeReceivable,
-            })}
+            help={advancePolicyHelp({ maxSatang: satangFromInput(form.advanceMaxAmountPerRequest) })}
           />
           <SettingHelp help={writeOffToleranceHelp(satangFromInput(form.writeOffTolerance))} />
         </div>
@@ -316,15 +310,6 @@ export function FinancePolicyCard() {
               className="focus-ring h-4 w-4 rounded border-slate-300"
             />
             บังคับแนบเอกสารยืนยันตัวตนผู้รับเงินก่อนอนุมัติจ่าย
-          </label>
-          <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-            <input
-              type="checkbox"
-              checked={form.advanceUnclearedToEmployeeReceivable}
-              onChange={(event) => set('advanceUnclearedToEmployeeReceivable', event.target.checked)}
-              className="focus-ring h-4 w-4 rounded border-slate-300"
-            />
-            เงินทดรองที่ยังไม่เคลียร์ให้ตั้งเป็นลูกหนี้พนักงาน
           </label>
         </div>
 

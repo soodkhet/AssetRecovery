@@ -238,8 +238,8 @@ beforeAll(async () => {
   // บริษัทไฟแนนซ์ **ใหม่ทุกครั้งที่รัน** — ข้อมูลของรันก่อนลบไม่ได้ (tax_invoices immutable)
   const company = await tx.$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode,
-                                   payment_due_days, created_by)
-    VALUES ('${ORG_ID}', 'ไฟแนนซ์ 4.3 (${RUN})', 'F43', '${RUN_TAX_ID}', '1 ถนนสีลม กรุงเทพฯ', 'exclude_vat', 30,
+                                   created_by)
+    VALUES ('${ORG_ID}', 'ไฟแนนซ์ 4.3 (${RUN})', 'F43', '${RUN_TAX_ID}', '1 ถนนสีลม กรุงเทพฯ', 'exclude_vat',
             '${ACCOUNTING_ID}')
     RETURNING id
   `)
@@ -532,9 +532,9 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
   it('U96 #4 — snapshot ผู้ซื้อ/ผู้ขายบนใบ: แก้บริษัท/องค์กรภายหลัง PDF ใบเดิมไม่เปลี่ยน · แก้ snapshot ที่ DB ไม่ได้', async () => {
     await setNumbering({ seq: 120 })
     const company = await db().$queryRawUnsafe<{ id: string }[]>(`
-      INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, payment_due_days, created_by)
+      INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, created_by)
       VALUES ('${ORG_ID}', 'ไฟแนนซ์ snapshot (${RUN})', 'SNP', '${RUN_TAX_ID.slice(0, 12)}${RUN_TAX_ID.endsWith('5') ? '6' : '5'}',
-              '5 ถนนเดิม', 'exclude_vat', 30, '${ACCOUNTING_ID}')
+              '5 ถนนเดิม', 'exclude_vat', '${ACCOUNTING_ID}')
       RETURNING id
     `)
     const companyRef = company[0]?.id ?? ''
@@ -598,8 +598,8 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     await setNumbering({ seq: 20 })
     const broken = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode,
-                                     payment_due_days, created_by)
-      VALUES ('${ORG_ID}', 'ไฟแนนซ์ไม่มีเลขภาษี (${RUN})', 'BAD', '${BAD_TAX_ID}', '9 ถนนสาทร', 'exclude_vat', 30,
+                                     created_by)
+      VALUES ('${ORG_ID}', 'ไฟแนนซ์ไม่มีเลขภาษี (${RUN})', 'BAD', '${BAD_TAX_ID}', '9 ถนนสาทร', 'exclude_vat',
               '${ACCOUNTING_ID}')
       RETURNING id
     `)
@@ -686,9 +686,9 @@ suite('มติ PO U77/U82 (ม.86/4) — สาขาผู้ซื้อ/ผ
     await setNumbering({ seq: 500 })
     const branchCompany = await db().$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO finance_companies (organization_id, name, short_name, tax_id, branch_code, address, vat_mode,
-                                     payment_due_days, created_by)
+                                     created_by)
       VALUES ('${ORG_ID}', 'ไฟแนนซ์สาขา (${RUN})', 'BR', '${RUN_TAX_ID.slice(0, 12)}${RUN_TAX_ID.endsWith('7') ? '8' : '7'}', '00003', '7 ถนนสาทร',
-              'exclude_vat', 30, '${ACCOUNTING_ID}')
+              'exclude_vat', '${ACCOUNTING_ID}')
       RETURNING id
     `)
     const company = branchCompany[0]?.id ?? ''

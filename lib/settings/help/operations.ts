@@ -1,6 +1,6 @@
 import { assertWithinAdvanceMax } from '@/lib/advances/advance'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
-import { agingBucketIndex } from '@/lib/finance/ar-calc'
+import { agingBucketIndex, resolveBankFeeWriteOff } from '@/lib/finance/ar-calc'
 import { resolveApprovalFlow, type ApprovalMatrixCandidate } from '@/lib/finance/approval-flow-resolver'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { describeAgingBuckets, isAgingBucketsValid } from '@/lib/settings/finance-policy'
@@ -64,10 +64,7 @@ export function approvalMatrixHelp(matrices: readonly ApprovalMatrixCandidate[])
 
 const WHEN_FINANCE_POLICY = 'มีผลทันทีกับรายการใหม่ — เอกสารและงวดที่ปิดไปแล้วยังอ้างค่าเดิม'
 
-export function advancePolicyHelp(input: {
-  maxSatang: number | null
-  unclearedToEmployeeReceivable: boolean
-}): SettingHelpContent {
+export function advancePolicyHelp(input: { maxSatang: number | null }): SettingHelpContent {
   const request = 500_000
   const used = 420_000
   const settle = advanceSettlement({ requestedSatang: request, approvedSatang: request, usedSatang: used })
@@ -83,9 +80,10 @@ export function advancePolicyHelp(input: {
       'เงินที่บริษัทให้ทีมงานยืมไปใช้ก่อน (เช่น ค่าเดินทางลงพื้นที่) แล้วต้องเคลียร์ด้วยใบเสร็จภายหลัง ส่วนที่ใช้ไม่หมดต้องคืน',
     options: [
       { label: 'เพดานต่อครั้ง', effect: 'ขอเบิกเกินเพดานไม่ได้ · เว้นว่าง = ไม่จำกัด' },
+      // มติ PO U145 — ไม่มีสวิตช์ "ตั้งเป็นลูกหนี้พนักงาน" แล้ว: เงินทดรองค้างถูกหักคืนในรอบจ่ายถัดไปเสมอ
       {
-        label: 'ยังไม่เคลียร์ → ลูกหนี้พนักงาน',
-        effect: `เปิด: เงินทดรองที่เลยกำหนดเคลียร์ถูกบันทึกเป็นหนี้ที่พนักงานค้างบริษัท · ปัจจุบัน ${input.unclearedToEmployeeReceivable ? 'เปิด' : 'ปิด'}`,
+        label: 'ยังไม่เคลียร์',
+        effect: 'ยอดที่ยังไม่เคลียร์ถูกหักคืนจากค่าตอบแทนในรอบจ่ายถัดไปของผู้รับคนนั้นโดยอัตโนมัติ',
       },
     ],
     examples: [
@@ -135,12 +133,21 @@ export function substituteReceiptHelp(maxPerDocSatang: number | null, maxPerMont
 
 export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHelpContent {
   const billed = 1_070_000
-  const received = 1_067_000
+  const received = 1_067_500
   const diff = billed - received
+  // มติ PO U144 — ตัวอย่างใช้สูตรเดียวกับตอนรับเงินจริง (`resolveBankFeeWriteOff`)
+  const fee =
+    toleranceSatang === null || toleranceSatang < 0 || !Number.isInteger(toleranceSatang)
+      ? 0
+      : resolveBankFeeWriteOff({ totalSatang: billed, receivedSatang: received, whtWithheldByCustomerSatang: 0, toleranceSatang })
   return {
     title: 'เพดานตัดส่วนต่างค่าธรรมเนียมคืออะไร',
     what:
-      'เวลาลูกค้าโอนเงินมาขาดเล็กน้อยเพราะธนาคารหักค่าธรรมเนียมโอน ส่วนต่างที่ไม่เกินเพดานนี้ถือเป็นค่าธรรมเนียมธนาคาร ปิดบิลได้โดยไม่ต้องตามเก็บ',
+      'เวลาลูกค้าโอนเงินมาขาดเล็กน้อยเพราะธนาคารหักค่าธรรมเนียมโอน ส่วนต่างที่ไม่เกินเพดานนี้ระบบบันทึกเป็นค่าธรรมเนียมธนาคารให้อัตโนมัติตอนจับคู่เงินรับ บิลปิดเป็นชำระครบ และรายการไปอยู่ในชุดเอกสารส่งสำนักงานบัญชี (ไฟล์ค่าธรรมเนียมธนาคาร) · ตั้ง 0 = ไม่ตัดส่วนต่าง',
+    options: [
+      { label: 'ขาดไม่เกินเพดาน', effect: 'ส่วนต่างเป็นค่าธรรมเนียมธนาคาร · บิลชำระครบ · ไม่มียอดค้าง' },
+      { label: 'ขาดเกินเพดาน', effect: 'บิลค้างชำระบางส่วนตามเดิม — ต้องตามเก็บหรือทำรายการปรับปรุง' },
+    ],
     examples:
       toleranceSatang === null
         ? []
@@ -151,14 +158,16 @@ export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHe
                 line('ส่วนต่าง', money(diff)),
                 line(
                   `เทียบเพดาน ${money(toleranceSatang)}`,
-                  diff <= toleranceSatang ? 'ตัดเป็นค่าธรรมเนียมได้' : 'เกินเพดาน — ต้องตามเก็บหรือทำรายการปรับปรุง',
+                  fee > 0 ? 'ตัดเป็นค่าธรรมเนียมได้' : 'เกินเพดาน — ต้องตามเก็บหรือทำรายการปรับปรุง',
                   true,
                 ),
+                line('ค่าธรรมเนียมธนาคารที่บันทึก', money(fee)),
               ],
             },
           ],
     who: WHO_SETTINGS,
-    when: WHEN_FINANCE_POLICY,
+    when: `${WHEN_FINANCE_POLICY} · ใช้เพดาน ณ ตอนจับคู่เงินรับ`,
+    assumption: 'bank_fee_write_off',
   }
 }
 

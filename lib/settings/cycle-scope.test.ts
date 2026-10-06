@@ -85,7 +85,6 @@ describe('normalizeCycleValues + schema', () => {
     type: 'AR' as const,
     cutoffRuleType: 'month_end' as const,
     cutoffDates: [],
-    cutoffText: null,
     dueRuleType: 'net_days' as const,
     dueRuleValue: 30,
   }

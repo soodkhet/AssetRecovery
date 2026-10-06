@@ -214,8 +214,8 @@ suite('เลขที่เอกสาร — ชุดเลขกลาง d
     const back = await seedOrg(4)
     // รอบวางบิลมีเลขของปี 2569 อยู่แล้ว 3 ใบ (เทียบสถานการณ์ย้ายตัวนับจากข้อมูลเดิม)
     const company = await db().$queryRawUnsafe<{ id: string }[]>(
-      `INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, payment_due_days, created_by)
-       VALUES ($1::uuid, 'ไฟแนนซ์เลขเอกสาร', 'FDN', $2, 'กรุงเทพฯ', 'exclude_vat', 30, $3::uuid) RETURNING id`,
+      `INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, created_by)
+       VALUES ($1::uuid, 'ไฟแนนซ์เลขเอกสาร', 'FDN', $2, 'กรุงเทพฯ', 'exclude_vat', $3::uuid) RETURNING id`,
       back.orgId,
       taxId(40),
       back.userId,

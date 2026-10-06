@@ -150,8 +150,7 @@ describe('P2002 จากคำขอพร้อมกัน → error code ข
         vatMode: 'exclude_vat',
         whtWithheldByCustomerPct: null,
         defaultInvoiceDeliveryFormat: 'paper_pdf',
-        billingDay: 1,
-        paymentDueDays: 30,
+        billingCycleId: null,
       }),
     ).rejects.toMatchObject({ code: 'DUPLICATE_TAX_ID', status: 400 })
   })

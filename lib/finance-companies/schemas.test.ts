@@ -34,8 +34,9 @@ describe('financeCompanyCreateSchema', () => {
     expect(parsed.taxId).toBe('0105512345678')
     expect(parsed.vatRegistered).toBe(true)
     expect(parsed.defaultInvoiceDeliveryFormat).toBe('paper_pdf')
-    expect(parsed.billingDay).toBe(1)
-    expect(parsed.paymentDueDays).toBe(30)
+    // มติ PO U146 — ไม่มีวันตัดรอบ/เครดิตเทอมที่บริษัทแล้ว · รอบบิลที่ใช้ไม่ระบุ = null
+    expect(parsed.billingCycleId).toBeNull()
+    expect(parsed).not.toHaveProperty('billingDay')
   })
 
   it('ไม่ส่งรูปแบบ VAT / อัตราที่ลูกค้าหักมา → ใช้ default ของ DB (exclude_vat · 3.00) ไม่เปลี่ยนพฤติกรรมเดิม', () => {
@@ -89,9 +90,9 @@ describe('financeCompanyCreateSchema', () => {
     expect(fieldsOf(withoutReason)).toContain('reason')
   })
 
-  it('วันตัดรอบบิลต้องอยู่ในช่วง 1-31', () => {
-    expect(fieldsOf({ ...validInput, billingDay: 0 })).toContain('billingDay')
-    expect(fieldsOf({ ...validInput, billingDay: 32 })).toContain('billingDay')
+  it('รอบบิลที่ใช้ต้องเป็น id รอบ (ค่าว่างจากฟอร์ม = ยังไม่เลือก)', () => {
+    expect(fieldsOf({ ...validInput, billingCycleId: 'abc' })).toContain('billingCycleId')
+    expect(financeCompanyCreateSchema.parse({ ...validInput, billingCycleId: '' }).billingCycleId).toBeNull()
   })
 })
 

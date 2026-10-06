@@ -116,8 +116,8 @@ beforeAll(async () => {
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
-    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days, created_by)
-    VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ 6.6', 'F66', '0105512660001', 'exclude_vat', 30, '${USER_ID}')
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, created_by)
+    VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ 6.6', 'F66', '0105512660001', 'exclude_vat', '${USER_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await cleanup()

@@ -5,6 +5,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import {
   arOutstandingSatang,
   daysOverdue,
+  resolveBankFeeWriteOff,
   summarizeArAging,
   type ArAgingRow,
 } from '@/lib/finance/ar-calc'
@@ -51,7 +52,7 @@ import type {
   RevenueDto,
 } from '@/lib/revenue/types'
 import { cycleCoversCompany, resolveDueDate } from '@/lib/settings/cycles'
-import { loadActiveCycleForScope } from '@/lib/settings/queries/cycles'
+import { loadActiveCycleForScope, resolveCompanyBillingCycle } from '@/lib/settings/queries/cycles'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
 import { SettingsError } from '@/lib/settings/errors'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -187,6 +188,8 @@ const batchSelect = {
   totalSatang: true,
   receivedSatang: true,
   whtWithheldByCustomerSatang: true,
+  bankFeeWrittenOffSatang: true,
+  bankFeeWrittenOffDate: true,
   dueDate: true,
   sentAt: true,
   createdAt: true,
@@ -219,10 +222,13 @@ function toBatchDto(row: BatchRow, asOf: Date, amountBeforeVatSatang: number): B
     totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
     whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+    bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
+    bankFeeWrittenOffDate: row.bankFeeWrittenOffDate === null ? null : toDateOnlyIso(row.bankFeeWrittenOffDate),
     outstandingSatang: arOutstandingSatang({
       totalSatang: row.totalSatang,
       receivedSatang: row.receivedSatang,
       whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+      bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
     }),
     amountBeforeVatSatang,
     customerWhtPct,
@@ -353,22 +359,23 @@ export async function getBillingBatch(
 // ── POST /api/billing-batches (`19` §9.1) ───────────────────────────────────
 
 /**
- * วันครบกำหนดชำระ (`19` §7.2) — รอบบิล `AR` ที่ผู้ใช้เลือกชนะเสมอ (`13` §6.1 เป็นที่ตั้งกติกา)
- * ไม่ได้เลือกรอบ ⇒ ใช้ `finance_companies.payment_due_days` ของบริษัทนั้นเป็น Net N วัน (`02` §5)
- * มติ PO U133: รอบที่เลือกต้องครอบบริษัทนั้น (ทุกบริษัท หรือมีชื่อในรายบริษัท) — ไม่ครอบ = `CYCLE_SCOPE_MISMATCH`
- * (หน้าจอเลือกรอบที่ตรงให้อัตโนมัติ · ผู้ใช้เปลี่ยนเป็น "ไม่ใช้รอบ" ได้)
+ * วันครบกำหนดชำระ (`19` §7.2) — มติ PO U146: **รอบบิล (`13` §6.1) เป็นแหล่งเดียว** ของวันตัดรอบ + เครดิตเทอม
+ * · ไม่ระบุรอบ ⇒ รอบบิลที่ครอบบริษัทนั้น (เลือกจากหน้าบริษัท / รอบ "ทุกบริษัท") · ไม่มีรอบเลย = `BILLING_CYCLE_NOT_SET`
+ *   (เดิมใช้ `finance_companies.payment_due_days` — คอลัมน์ถูกตัดแล้ว ค่าเดิมแปลงเป็นรอบบิลใน migration)
+ * · ระบุรอบ ⇒ ต้องครอบบริษัทนั้น (มติ PO U133) ไม่ครอบ = `CYCLE_SCOPE_MISMATCH`
  */
 async function resolveBatchDueDate(input: {
   organizationId: string
   companyId: string
   cycleId: string | null
   cutoffDate: Date
-  paymentDueDays: number
 }): Promise<{ dueDate: Date; source: string }> {
   if (input.cycleId === null) {
+    const own = await resolveCompanyBillingCycle(input.organizationId, input.companyId)
+    if (own === null) throw new SettingsError('BILLING_CYCLE_NOT_SET', { detail: `company=${input.companyId}` })
     return {
-      dueDate: resolveDueDate(input.cutoffDate, { dueRuleType: 'net_days', dueRuleValue: input.paymentDueDays }),
-      source: `company.payment_due_days=${input.paymentDueDays}`,
+      dueDate: resolveDueDate(input.cutoffDate, own),
+      source: `cycle=${own.name} (${own.dueRuleType}${own.dueRuleValue === null ? '' : ` ${own.dueRuleValue}`})`,
     }
   }
 
@@ -391,7 +398,7 @@ export async function createBillingBatch(
   const user = context.actor
   const company = await prisma.financeCompany.findFirst({
     where: { id: input.companyId, organizationId: user.organizationId, deletedAt: null, ...scopeWhere(user) },
-    select: { id: true, name: true, paymentDueDays: true },
+    select: { id: true, name: true },
   })
   if (company === null) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${input.companyId}` })
 
@@ -409,7 +416,6 @@ export async function createBillingBatch(
     companyId: company.id,
     cycleId: input.cycleId,
     cutoffDate: input.cutoffDate,
-    paymentDueDays: company.paymentDueDays,
   })
 
   const batchId = await prisma.$transaction(async (tx) => {
@@ -709,6 +715,7 @@ export async function getArAging(
         totalSatang: true,
         receivedSatang: true,
         whtWithheldByCustomerSatang: true,
+        bankFeeWrittenOffSatang: true,
         company: { select: { name: true } },
       },
     }),
@@ -729,6 +736,7 @@ export async function getArAging(
     totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
     whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+    bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
   })
 
   const buckets = summarizeArAging(rows.map(agingRow), policy.arAgingBuckets, asOf)
@@ -787,12 +795,18 @@ export async function applyBillingReceipt(input: {
   receivedSatang: number
   /** A1 — ยอดสะสมที่ลูกค้าหัก ณ ที่จ่ายไว้ (ไม่ระบุ = คงค่าเดิม) */
   whtWithheldByCustomerSatang?: number
+  /**
+   * มติ PO U144 — วันรับเงินล่าสุดของรอบ (date-only) ใช้เป็นวันที่ตัดส่วนต่างค่าธรรมเนียม ·
+   * ไม่ระบุ = วันนี้ตามเวลาไทย
+   */
+  lastReceivedDate?: Date | null
   /** ธุรกรรม/เอกสารต้นทาง — ลง audit เพื่อ trace กลับได้ */
   sourceRef: string
   /** ผู้สั่งงาน — `null` = job อัตโนมัติ */
   actorId: string | null
   actorRole: string
-}): Promise<{ status: BillingBatchStatus; outstandingSatang: number }> {
+  now?: Date
+}): Promise<{ status: BillingBatchStatus; outstandingSatang: number; bankFeeWrittenOffSatang: number }> {
   const batch = await prisma.billingBatch.findFirst({
     where: { id: input.batchId, organizationId: input.organizationId, deletedAt: null },
     select: {
@@ -801,39 +815,63 @@ export async function applyBillingReceipt(input: {
       totalSatang: true,
       receivedSatang: true,
       whtWithheldByCustomerSatang: true,
+      bankFeeWrittenOffSatang: true,
+      bankFeeWrittenOffDate: true,
     },
   })
   if (batch === null) throw new RevenueError('BILLING_BATCH_NOT_FOUND', { detail: `batch=${input.batchId}` })
 
   const whtSatang = input.whtWithheldByCustomerSatang ?? batch.whtWithheldByCustomerSatang
+  // มติ PO U144 — ขาดไม่เกินเพดาน ⇒ ส่วนต่างเป็นค่าธรรมเนียมธนาคาร (คำนวณใหม่จากยอดสะสมทุกครั้ง · ไม่สะสมทับ)
+  const policy = await getFinancePolicy(input.organizationId)
+  const bankFeeSatang = resolveBankFeeWriteOff({
+    totalSatang: batch.totalSatang,
+    receivedSatang: input.receivedSatang,
+    whtWithheldByCustomerSatang: whtSatang,
+    toleranceSatang: policy.writeOffToleranceSatang,
+  })
+  // ยอดตัดเท่าเดิม ⇒ คงวันที่เดิม (ยิงซ้ำไม่ขยับวัน) · ยอดเปลี่ยน ⇒ วันรับเงินล่าสุด
+  const bankFeeDate =
+    bankFeeSatang === 0
+      ? null
+      : bankFeeSatang === batch.bankFeeWrittenOffSatang && batch.bankFeeWrittenOffDate !== null
+        ? batch.bankFeeWrittenOffDate
+        : (input.lastReceivedDate ?? toBangkokDateOnly(input.now ?? new Date()))
   const status = resolveBillingStatusAfterReceipt({
     current: batch.status,
     totalSatang: batch.totalSatang,
     receivedSatang: input.receivedSatang,
     whtWithheldByCustomerSatang: whtSatang,
+    bankFeeWrittenOffSatang: bankFeeSatang,
   })
 
   const unchanged =
     batch.receivedSatang === input.receivedSatang &&
     batch.whtWithheldByCustomerSatang === whtSatang &&
+    batch.bankFeeWrittenOffSatang === bankFeeSatang &&
     batch.status === status
   if (unchanged) {
     return {
       status,
+      bankFeeWrittenOffSatang: bankFeeSatang,
       outstandingSatang: arOutstandingSatang({
         totalSatang: batch.totalSatang,
         receivedSatang: batch.receivedSatang,
         whtWithheldByCustomerSatang: batch.whtWithheldByCustomerSatang,
+        bankFeeWrittenOffSatang: batch.bankFeeWrittenOffSatang,
       }),
     }
   }
 
+  const bankFeeChanged = batch.bankFeeWrittenOffSatang !== bankFeeSatang
   await prisma.$transaction(async (tx) => {
     await tx.billingBatch.update({
       where: { id: batch.id },
       data: {
         receivedSatang: input.receivedSatang,
         whtWithheldByCustomerSatang: whtSatang,
+        bankFeeWrittenOffSatang: bankFeeSatang,
+        bankFeeWrittenOffDate: bankFeeDate,
         status,
         updatedBy: input.actorId,
       },
@@ -850,15 +888,24 @@ export async function applyBillingReceipt(input: {
           status: batch.status,
           received_satang: batch.receivedSatang,
           wht_withheld_by_customer_satang: batch.whtWithheldByCustomerSatang,
+          bank_fee_written_off_satang: batch.bankFeeWrittenOffSatang,
+          bank_fee_written_off_date: batch.bankFeeWrittenOffDate === null ? null : toDateOnlyIso(batch.bankFeeWrittenOffDate),
         },
         after: {
           status,
           received_satang: input.receivedSatang,
           wht_withheld_by_customer_satang: whtSatang,
+          bank_fee_written_off_satang: bankFeeSatang,
+          bank_fee_written_off_date: bankFeeDate === null ? null : toDateOnlyIso(bankFeeDate),
+          // เพดานที่ใช้ตัดสิน ณ ตอนนั้น (snapshot ใน audit — ค่าตั้งเปลี่ยนภายหลังไม่ย้อนแก้)
+          ...(bankFeeChanged ? { write_off_tolerance_satang: policy.writeOffToleranceSatang } : {}),
           received_source: 'bank_reconciliation',
           source_ref: input.sourceRef,
         },
-        reason: `รับชำระจากรายการเดินบัญชี ${input.sourceRef}`,
+        reason:
+          bankFeeChanged && bankFeeSatang > 0
+            ? `รับชำระจากรายการเดินบัญชี ${input.sourceRef} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${(bankFeeSatang / 100).toFixed(2)} บาท (ไม่เกินเพดาน)`
+            : `รับชำระจากรายการเดินบัญชี ${input.sourceRef}`,
         ipAddress: null,
         userAgent: null,
         diffOnly: false,
@@ -869,10 +916,12 @@ export async function applyBillingReceipt(input: {
 
   return {
     status,
+    bankFeeWrittenOffSatang: bankFeeSatang,
     outstandingSatang: arOutstandingSatang({
       totalSatang: batch.totalSatang,
       receivedSatang: input.receivedSatang,
       whtWithheldByCustomerSatang: whtSatang,
+      bankFeeWrittenOffSatang: bankFeeSatang,
     }),
   }
 }

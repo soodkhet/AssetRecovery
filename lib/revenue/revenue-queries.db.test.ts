@@ -280,10 +280,10 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode,
-                                   payment_due_days, created_by) VALUES
-      ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ A 3.6', 'A36', '0105512360001', 'exclude_vat', 30, '${FINANCE_ID}'),
-      ('${COMPANY_B}', '${ORG_ID}', 'ไฟแนนซ์ B 3.6', 'B36', '0105512360002', 'exclude_vat', 45, '${FINANCE_ID}'),
-      ('${COMPANY_NOVAT}', '${ORG_ID}', 'ไฟแนนซ์ ไม่คิด VAT 3.6', 'N36', '0105512360003', 'no_vat', 30, '${FINANCE_ID}')
+                                   created_by) VALUES
+      ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ A 3.6', 'A36', '0105512360001', 'exclude_vat', '${FINANCE_ID}'),
+      ('${COMPANY_B}', '${ORG_ID}', 'ไฟแนนซ์ B 3.6', 'B36', '0105512360002', 'exclude_vat', '${FINANCE_ID}'),
+      ('${COMPANY_NOVAT}', '${ORG_ID}', 'ไฟแนนซ์ ไม่คิด VAT 3.6', 'N36', '0105512360003', 'no_vat', '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`UPDATE users SET company_id = '${COMPANY_A}' WHERE id = '${COMPANY_USER_ID}'`)
@@ -696,8 +696,8 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
     expect(batch.vatModes).toEqual(['exclude_vat'])
     expect(batch.totalSatang).toBe(214_000)
     expect(batch.outstandingSatang).toBe(214_000)
-    // ไม่ระบุรอบบิล ⇒ Net 30 วันจาก `payment_due_days` ของบริษัท (31/08 + 30 = 30/09)
-    expect(batch.dueDate).toBe('2026-09-30')
+    // มติ PO U146 — ไม่ระบุรอบ ⇒ รอบบิลที่บริษัทใช้ (รอบ "ทุกบริษัท" ของชุดนี้: วันที่ 5 ของเดือนถัดไป)
+    expect(batch.dueDate).toBe('2026-09-05')
     expect(batch.revenues.every((row) => row.status === 'billed')).toBe(true)
   })
 
@@ -710,6 +710,25 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
       reason: 'วางบิลตามรอบ AR',
     })
     expect(batch.dueDate).toBe('2026-09-05')
+  })
+
+  it('มติ PO U146 — บริษัทที่ไม่มีรอบบิลครอบ (ไม่มีรอบทุกบริษัท/ไม่ได้เลือกรอบ) ⇒ BILLING_CYCLE_NOT_SET', async () => {
+    await seedBillableRevenue()
+    await db().$executeRawUnsafe(`UPDATE billing_payout_cycles SET deleted_at = NOW() WHERE id = '${CYCLE_AR_ID}'`)
+    try {
+      await expectCode(
+        () =>
+          revenue.createBillingBatch(ctx(), {
+            companyId: COMPANY_A,
+            cutoffDate: CUTOFF,
+            cycleId: null,
+            reason: 'วางบิลไม่มีรอบ',
+          }),
+        'BILLING_CYCLE_NOT_SET',
+      )
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE billing_payout_cycles SET deleted_at = NULL WHERE id = '${CYCLE_AR_ID}'`)
+    }
   })
 
   it('มติ PO U133 — รอบบิลที่ไม่ครอบบริษัทนี้ (เลือกรายบริษัท ไม่มีบริษัทนี้) ⇒ CYCLE_SCOPE_MISMATCH', async () => {
@@ -1050,6 +1069,66 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
     })
     expect(result.status).toBe('paid')
     expect((await revenue.getArAging(finance, {})).totalOutstandingSatang).toBe(0)
+  })
+
+  it('มติ PO U144 — รับขาดไม่เกินเพดาน ⇒ ส่วนต่างเป็นค่าธรรมเนียมธนาคาร + paid + audit · เกินเพดาน = partially_paid', async () => {
+    const batchId = await seedSentBatch()
+    const policy = await db().financePolicySettings.findUnique({ where: { organizationId: ORG_ID } })
+    const tolerance = policy?.writeOffToleranceSatang ?? 5_000
+    try {
+      await db().financePolicySettings.upsert({
+        where: { organizationId: ORG_ID },
+        update: { writeOffToleranceSatang: 5_000 },
+        create: { organizationId: ORG_ID, writeOffToleranceSatang: 5_000 },
+      })
+      // ขาด ฿50.01 (เกินเพดาน ฿50) ⇒ ค้างตามเดิม
+      const over = await revenue.applyBillingReceipt({
+        organizationId: ORG_ID,
+        batchId,
+        receivedSatang: 101_999,
+        sourceRef: 'BANKTX-FEE-0',
+        actorId: null,
+        actorRole: 'system',
+      })
+      expect(over).toMatchObject({ status: 'partially_paid', bankFeeWrittenOffSatang: 0, outstandingSatang: 5_001 })
+
+      // ขาด ฿25 ⇒ ตัดเป็นค่าธรรมเนียม · วันที่ = วันรับเงินล่าสุด
+      const within = await revenue.applyBillingReceipt({
+        organizationId: ORG_ID,
+        batchId,
+        receivedSatang: 104_500,
+        lastReceivedDate: new Date(Date.UTC(2026, 8, 3)),
+        sourceRef: 'BANKTX-FEE-1',
+        actorId: null,
+        actorRole: 'system',
+      })
+      expect(within).toMatchObject({ status: 'paid', bankFeeWrittenOffSatang: 2_500, outstandingSatang: 0 })
+      const row = await db().billingBatch.findUniqueOrThrow({ where: { id: batchId } })
+      expect(row.bankFeeWrittenOffSatang).toBe(2_500)
+      expect(row.bankFeeWrittenOffDate?.toISOString().slice(0, 10)).toBe('2026-09-03')
+      const audit = await db().auditLog.findFirst({
+        where: { targetId: batchId, action: 'update' },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(audit?.reason).toContain('ค่าธรรมเนียมธนาคาร')
+      expect(audit?.afterData).toMatchObject({ bank_fee_written_off_satang: 2_500, write_off_tolerance_satang: 5_000 })
+      const detail = await revenue.getBillingBatch(finance, batchId)
+      expect(detail).toMatchObject({ bankFeeWrittenOffSatang: 2_500, bankFeeWrittenOffDate: '2026-09-03', outstandingSatang: 0 })
+      expect((await revenue.getArAging(finance, {})).totalOutstandingSatang).toBe(0)
+
+      // Export Pack: แถวของงวดกันยายน 2569
+      const exportsApi = await import('@/lib/exports/queries')
+      const rows = await exportsApi.bankFeeWriteOffRows(ORG_ID, {
+        start: new Date(Date.UTC(2026, 8, 1)),
+        end: new Date(Date.UTC(2026, 9, 1)),
+      })
+      expect(rows.find((r) => r.billingRef === row.batchNumber)).toMatchObject({ bankFeeSatang: 2_500, receivedSatang: 104_500 })
+    } finally {
+      await db().financePolicySettings.update({
+        where: { organizationId: ORG_ID },
+        data: { writeOffToleranceSatang: tolerance },
+      })
+    }
   })
 })
 

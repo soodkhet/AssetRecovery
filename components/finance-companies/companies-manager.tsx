@@ -22,6 +22,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import type { CycleDto } from '@/lib/settings/types'
 import { MANAGE_CUSTOMER_WHT } from '@/lib/customer-wht/customer-wht'
 import type { CustomerWhtCompanySummary, CustomerWhtListDto } from '@/lib/customer-wht/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
@@ -69,6 +70,8 @@ export function CompaniesManager() {
   const [pendingWht, setPendingWht] = useState<ReadonlyMap<string, CustomerWhtCompanySummary>>(new Map())
   const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
   const [templates, setTemplates] = useState<readonly ServiceFeeTemplateListDto[]>([])
+  /** มติ PO U146 — รอบบิลที่ใช้งาน ให้ฟอร์มเลือก "รอบบิลที่ใช้" */
+  const [billingCycles, setBillingCycles] = useState<readonly CycleDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -137,8 +140,13 @@ export function CompaniesManager() {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const result = await callApi<ServiceFeeTemplateListDto[]>('/api/service-fee-templates?status=active')
-      if (!cancelled) setTemplates(result.data ?? [])
+      const [result, cycles] = await Promise.all([
+        callApi<ServiceFeeTemplateListDto[]>('/api/service-fee-templates?status=active'),
+        callApi<CycleDto[]>('/api/settings/cycles?type=AR&status=active'),
+      ])
+      if (cancelled) return
+      setTemplates(result.data ?? [])
+      setBillingCycles(cycles.data ?? [])
     })()
     return () => {
       cancelled = true
@@ -303,9 +311,15 @@ export function CompaniesManager() {
                   </Detail>
                   <Detail label="รูปแบบส่งใบแจ้งหนี้">
                     {company.defaultInvoiceDeliveryFormat === 'e_tax_invoice' ? '📧 e-Tax Invoice' : '📄 กระดาษ/PDF'}
-                    <div className="text-xs text-slate-500">
-                      ตัดรอบวันที่ {company.billingDay} · เครดิต {company.paymentDueDays} วัน
-                    </div>
+                    {/* มติ PO U146 — วันตัดรอบ/เครดิตเทอมมาจากรอบบิลที่ใช้ (แหล่งเดียว) */}
+                    {company.billingCycle === null ? (
+                      <div className="text-xs font-semibold text-amber-700">ยังไม่เลือกรอบบิล — สร้างรอบวางบิลไม่ได้</div>
+                    ) : (
+                      <div className="text-xs text-slate-500">
+                        รอบบิล {company.billingCycle.name} · ตัดรอบ{company.billingCycle.cutoffLabel} · ครบกำหนด{' '}
+                        {company.billingCycle.dueLabel}
+                      </div>
+                    )}
                   </Detail>
                 </div>
 
@@ -365,6 +379,7 @@ export function CompaniesManager() {
           open={formOpen}
           company={formCompany}
           templates={templates}
+          billingCycles={billingCycles}
           onClose={() => setFormOpen(false)}
           onSaved={() => void reload()}
         />

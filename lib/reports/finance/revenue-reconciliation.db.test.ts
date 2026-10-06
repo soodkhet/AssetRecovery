@@ -139,8 +139,8 @@ beforeAll(async () => {
     `INSERT INTO teams (id, organization_id, name, side, provinces, status, created_by) VALUES ('${TEAM_ID}', '${ORG_ID}', 'ทีม ${TAG}', 'inhouse', ARRAY['เชียงใหม่'], 'active', '${USER_ID}')`,
   )
   await tx.$executeRawUnsafe(`
-    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days, created_by)
-    VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ ${TAG}', 'R${TAG.slice(0, 3)}', '01${Date.now().toString().slice(-11)}', 'exclude_vat', 30, '${USER_ID}')
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, created_by)
+    VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ ${TAG}', 'R${TAG.slice(0, 3)}', '01${Date.now().toString().slice(-11)}', 'exclude_vat', '${USER_ID}')
   `)
   const period = await tx.$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)

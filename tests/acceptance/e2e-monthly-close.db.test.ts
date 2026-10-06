@@ -375,9 +375,17 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, address, vat_mode,
-                                   payment_due_days, service_fee_template_id, created_by)
+                                   service_fee_template_id, created_by)
     VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ 8.1ง', 'D81', '0105512810004', '4 ถนนทดสอบ กรุงเทพฯ',
-            'exclude_vat', 30, '${TEMPLATE_ID}', '${ADMIN_ID}')
+            'exclude_vat', '${TEMPLATE_ID}', '${ADMIN_ID}')
+    ON CONFLICT (id) DO NOTHING
+  `)
+  // มติ PO U146 — รอบบิลเป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม: ชุดทดสอบใช้รอบ "ทุกบริษัท" (สิ้นเดือน · Net 30)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO billing_payout_cycles (id, organization_id, name, type, cutoff_rule_type, cutoff_dates,
+                                       due_rule_type, due_rule_value, due_rule, scope_kind, created_by, updated_at)
+    VALUES ('00000000-0000-4000-8000-0000000081ee', '${ORG_ID}', 'รอบบิลทดสอบ E2E', 'AR', 'month_end', ARRAY[]::INTEGER[],
+            'net_days', 30, 'Net 30 วัน', 'all_companies', '${ADMIN_ID}', NOW())
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`

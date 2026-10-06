@@ -17,7 +17,6 @@ export interface CycleValues {
   type: CycleType
   cutoffRuleType: CutoffRuleType
   cutoffDates: number[]
-  cutoffText: string | null
   dueRuleType: DueRuleType
   dueRuleValue: number | null
   /** ขอบเขตจริง (มติ PO U133) — AR: all_companies | selected_companies · AP: all_teams | inhouse | outsource */
@@ -36,7 +35,6 @@ export function normalizeCycleValues(input: CycleValues): CycleValues {
     input.cutoffRuleType === 'fixed_dates'
       ? [...new Set(input.cutoffDates)].sort((a, b) => a - b)
       : []
-  const cutoffText = input.cutoffRuleType === 'custom_text' ? (input.cutoffText?.trim() ?? null) : null
   const dueRuleValue = input.dueRuleType === 'month_end' ? null : input.dueRuleValue
 
   return {
@@ -44,7 +42,6 @@ export function normalizeCycleValues(input: CycleValues): CycleValues {
     type: input.type,
     cutoffRuleType: input.cutoffRuleType,
     cutoffDates,
-    cutoffText: cutoffText === '' ? null : cutoffText,
     dueRuleType: input.dueRuleType,
     dueRuleValue,
     scopeKind: input.scopeKind,
@@ -52,22 +49,27 @@ export function normalizeCycleValues(input: CycleValues): CycleValues {
   }
 }
 
-/** ตรงกับ CHECK `cycles_cutoff_shape` เป๊ะ (`02` §5) */
-export function isCutoffShapeValid(values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates' | 'cutoffText'>): boolean {
+/**
+ * ตรงกับ CHECK `cycles_cutoff_shape` เป๊ะ (`02` §5) — มติ PO U146: กติกาตัดรอบต้อง**คำนวณได้**เสมอ
+ * (ตัดชนิดข้อความอิสระ `custom_text` ออก) เพราะรอบบิลเป็นที่เดียวที่กำหนดวันตัดรอบ
+ */
+export function isCutoffShapeValid(values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates'>): boolean {
   switch (values.cutoffRuleType) {
     case 'fixed_dates':
       return values.cutoffDates.length > 0
-    case 'custom_text':
-      return values.cutoffText !== null && values.cutoffText.trim().length > 0
     case 'month_end':
       return true
   }
 }
 
-/** ตรงกับ CHECK `cycles_due_rule_shape` เป๊ะ (A5) */
+/**
+ * ตรงกับ CHECK `cycles_due_rule_shape` เป๊ะ (A5) — `net_days` รับ 0 ได้ (ครบกำหนดวันตัดรอบ · มติ PO U146
+ * แปลงเครดิตเทอม 0 วันของบริษัทเดิม) · `day_of_next_month` ต้อง ≥ 1
+ */
 export function isDueRuleShapeValid(values: Pick<CycleValues, 'dueRuleType' | 'dueRuleValue'>): boolean {
   if (values.dueRuleType === 'month_end') return true
-  return values.dueRuleValue !== null && values.dueRuleValue > 0
+  if (values.dueRuleValue === null) return false
+  return values.dueRuleType === 'net_days' ? values.dueRuleValue >= 0 : values.dueRuleValue > 0
 }
 
 /** label ภาษาไทยของเงื่อนไขกำหนดชำระ — ใช้เป็นค่าเริ่มต้นของช่อง `due_rule` บนฟอร์ม */
@@ -121,17 +123,44 @@ export function resolveDueDate(
 }
 
 /** label ภาษาไทยของกติกาวันตัดรอบ (ตารางแท็บรอบบิลแสดงคอลัมน์นี้ — `13` §7) */
-export function describeCutoffRule(
-  values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates' | 'cutoffText'>,
-): string {
+export function describeCutoffRule(values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates'>): string {
   switch (values.cutoffRuleType) {
     case 'fixed_dates':
       return `ทุกวันที่ ${values.cutoffDates.join(', ')}`
     case 'month_end':
       return 'ทุกสิ้นเดือน'
-    case 'custom_text':
-      return values.cutoffText ?? '—'
   }
+}
+
+/**
+ * **วันตัดรอบที่เสนอ** (มติ PO U146 — รอบบิล/รอบจ่ายเป็นที่เดียวที่กำหนดวันตัดรอบ) = วันตัดรอบ**ล่าสุดที่ไม่เกิน**
+ * `today` ตามกติกาของรอบ — หน้าสร้างรอบวางบิล/รอบจ่ายเติมให้อัตโนมัติ (ผู้ใช้แก้ได้)
+ *
+ * | ชนิด | ผลลัพธ์ |
+ * |---|---|
+ * | `fixed_dates` | วันที่ในรายการที่ล่าสุด ≤ วันนี้ (เดือนนี้ หรือย้อนไปเดือนก่อน) · วันที่เกินจำนวนวันในเดือน (เช่น 31) = วันสุดท้ายของเดือน |
+ * | `month_end` | วันนี้ถ้าเป็นวันสิ้นเดือน ไม่งั้นวันสุดท้ายของเดือนก่อน |
+ *
+ * ⚠️ `today` ต้องเป็นค่า **date-only (เที่ยงคืน UTC ของวันไทย)** — ผลลัพธ์รูปแบบเดียวกัน
+ */
+export function suggestCutoffDate(values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates'>, today: Date): Date {
+  const year = today.getUTCFullYear()
+  const month = today.getUTCMonth()
+  const day = today.getUTCDate()
+  const lastThisMonth = lastDayOfMonthUtc(year, month)
+  const lastPrevMonth = lastDayOfMonthUtc(year, month - 1)
+
+  if (values.cutoffRuleType === 'month_end' || values.cutoffDates.length === 0) {
+    return day === lastThisMonth
+      ? new Date(Date.UTC(year, month, day))
+      : new Date(Date.UTC(year, month - 1, lastPrevMonth))
+  }
+  const thisMonth = [...new Set(values.cutoffDates.map((date) => Math.min(date, lastThisMonth)))]
+    .filter((date) => date <= day)
+    .sort((a, b) => b - a)[0]
+  if (thisMonth !== undefined) return new Date(Date.UTC(year, month, thisMonth))
+  const prevMonth = Math.max(...values.cutoffDates.map((date) => Math.min(date, lastPrevMonth)))
+  return new Date(Date.UTC(year, month - 1, prevMonth))
 }
 
 /** payload ที่ลง audit — โครงเดียวกันทั้ง create/update เพื่อให้ diff อ่านรู้เรื่อง (`90` §13) */
@@ -141,7 +170,6 @@ export function toCycleAuditPayload(values: CycleValues): Record<string, unknown
     type: values.type,
     cutoff_rule_type: values.cutoffRuleType,
     cutoff_dates: values.cutoffDates,
-    cutoff_text: values.cutoffText,
     due_rule_type: values.dueRuleType,
     due_rule_value: values.dueRuleValue,
     due_rule: describeDueRule(values),

@@ -91,6 +91,7 @@ describe('serializePortalArAging', () => {
     totalSatang,
     receivedSatang,
     whtWithheldByCustomerSatang,
+    bankFeeWrittenOffSatang: 0,
   })
 
   it('ช่วง/ยอดเท่ากับ summarizeArAging (สูตรกลาง) · WHT ที่ลูกค้าหักถือว่าชำระแล้ว · ไม่มีชื่อบริษัท', () => {

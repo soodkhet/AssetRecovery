@@ -543,6 +543,7 @@ export async function loadArAgingCompanies(
       totalSatang: true,
       receivedSatang: true,
       whtWithheldByCustomerSatang: true,
+      bankFeeWrittenOffSatang: true,
       company: { select: { name: true } },
     },
   })
@@ -562,6 +563,7 @@ export async function loadArAgingCompanies(
       totalSatang: row.totalSatang,
       receivedSatang: row.receivedSatang,
       whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+      bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
     })
   }
 

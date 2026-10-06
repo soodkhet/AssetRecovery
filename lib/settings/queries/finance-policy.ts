@@ -29,7 +29,6 @@ const policySelect = {
   requirePayeeIdDocument: true,
   arAgingBuckets: true,
   writeOffToleranceSatang: true,
-  advanceUnclearedToEmployeeReceivable: true,
   substituteReceiptMaxPerDocSatang: true,
   substituteReceiptMaxPerMonthSatang: true,
   updatedAt: true,
@@ -40,7 +39,6 @@ interface PolicyRow {
   requirePayeeIdDocument: boolean
   arAgingBuckets: number[]
   writeOffToleranceSatang: number
-  advanceUnclearedToEmployeeReceivable: boolean
   substituteReceiptMaxPerDocSatang: number
   substituteReceiptMaxPerMonthSatang: number
   updatedAt: Date
@@ -53,7 +51,6 @@ function toDto(row: PolicyRow): FinancePolicyDto {
     arAgingBuckets: row.arAgingBuckets,
     arAgingLabels: describeAgingBuckets(row.arAgingBuckets),
     writeOffToleranceSatang: row.writeOffToleranceSatang,
-    advanceUnclearedToEmployeeReceivable: row.advanceUnclearedToEmployeeReceivable,
     substituteReceiptMaxPerDocSatang: row.substituteReceiptMaxPerDocSatang,
     substituteReceiptMaxPerMonthSatang: row.substituteReceiptMaxPerMonthSatang,
     updatedAt: toIso(row.updatedAt),
@@ -66,7 +63,6 @@ function toValues(dto: FinancePolicyDto): FinancePolicyValues {
     requirePayeeIdDocument: dto.requirePayeeIdDocument,
     arAgingBuckets: dto.arAgingBuckets,
     writeOffToleranceSatang: dto.writeOffToleranceSatang,
-    advanceUnclearedToEmployeeReceivable: dto.advanceUnclearedToEmployeeReceivable,
     substituteReceiptMaxPerDocSatang: dto.substituteReceiptMaxPerDocSatang,
     substituteReceiptMaxPerMonthSatang: dto.substituteReceiptMaxPerMonthSatang,
   }
@@ -78,7 +74,6 @@ const DEFAULT_POLICY: FinancePolicyValues = {
   requirePayeeIdDocument: false,
   arAgingBuckets: [...DEFAULT_AR_AGING_BUCKETS],
   writeOffToleranceSatang: DEFAULT_WRITE_OFF_TOLERANCE_SATANG,
-  advanceUnclearedToEmployeeReceivable: true,
   substituteReceiptMaxPerDocSatang: DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
   substituteReceiptMaxPerMonthSatang: DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
 }
@@ -119,7 +114,6 @@ export async function updateFinancePolicy(
         requirePayeeIdDocument: normalized.requirePayeeIdDocument,
         arAgingBuckets: normalized.arAgingBuckets,
         writeOffToleranceSatang: normalized.writeOffToleranceSatang,
-        advanceUnclearedToEmployeeReceivable: normalized.advanceUnclearedToEmployeeReceivable,
         substituteReceiptMaxPerDocSatang: normalized.substituteReceiptMaxPerDocSatang,
         substituteReceiptMaxPerMonthSatang: normalized.substituteReceiptMaxPerMonthSatang,
         updatedBy: context.actor.id,
@@ -129,7 +123,6 @@ export async function updateFinancePolicy(
         requirePayeeIdDocument: normalized.requirePayeeIdDocument,
         arAgingBuckets: normalized.arAgingBuckets,
         writeOffToleranceSatang: normalized.writeOffToleranceSatang,
-        advanceUnclearedToEmployeeReceivable: normalized.advanceUnclearedToEmployeeReceivable,
         substituteReceiptMaxPerDocSatang: normalized.substituteReceiptMaxPerDocSatang,
         substituteReceiptMaxPerMonthSatang: normalized.substituteReceiptMaxPerMonthSatang,
         updatedBy: context.actor.id,

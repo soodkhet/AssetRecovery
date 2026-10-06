@@ -16,8 +16,6 @@ export interface FinancePolicyValues {
   arAgingBuckets: number[]
   /** เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (B4 — มติ PO 2026-08-12) */
   writeOffToleranceSatang: number
-  /** D12 — ตัด advance ที่ไม่มีใบเสร็จเป็นลูกหนี้พนักงาน แล้วหักจาก payout รอบถัดไป */
-  advanceUnclearedToEmployeeReceivable: boolean
   /** มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงินต่อใบ (ค่าเริ่มต้น ฿500) */
   substituteReceiptMaxPerDocSatang: number
   /** มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงินต่อคนต่อเดือน (ค่าเริ่มต้น ฿3,000) */
@@ -40,7 +38,6 @@ export function normalizeFinancePolicyValues(input: FinancePolicyValues): Financ
     requirePayeeIdDocument: input.requirePayeeIdDocument,
     arAgingBuckets: [...new Set(input.arAgingBuckets)].sort((a, b) => a - b),
     writeOffToleranceSatang: input.writeOffToleranceSatang,
-    advanceUnclearedToEmployeeReceivable: input.advanceUnclearedToEmployeeReceivable,
     substituteReceiptMaxPerDocSatang: input.substituteReceiptMaxPerDocSatang,
     substituteReceiptMaxPerMonthSatang: input.substituteReceiptMaxPerMonthSatang,
   }
@@ -76,7 +73,6 @@ export function toFinancePolicyAuditPayload(values: FinancePolicyValues): Record
     require_payee_id_document: values.requirePayeeIdDocument,
     ar_aging_buckets: values.arAgingBuckets,
     write_off_tolerance_satang: values.writeOffToleranceSatang,
-    advance_uncleared_to_employee_receivable: values.advanceUnclearedToEmployeeReceivable,
     substitute_receipt_max_per_doc_satang: values.substituteReceiptMaxPerDocSatang,
     substitute_receipt_max_per_month_satang: values.substituteReceiptMaxPerMonthSatang,
   }

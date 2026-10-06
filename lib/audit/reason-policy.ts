@@ -124,8 +124,8 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
       'vat_mode',
       'vat_registered',
       'wht_withheld_by_customer_pct',
-      'payment_due_days',
-      'billing_day',
+      // มติ PO U146 — วันตัดรอบ/เครดิตเทอมย้ายไปรอบบิล · บริษัทเลือก "รอบบิลที่ใช้" แทน
+      'billing_cycle_id',
       'status',
       'tax_id',
       // `10` §13 — ผู้มีอำนาจลงนามกระทบเอกสารทางการ (สัญญา/ใบส่งมอบ) จึงต้องมีเหตุผลเสมอ
