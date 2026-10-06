@@ -22,7 +22,8 @@ export interface CaseServiceFeeSnapshot {
   baseSatang: number
   ratePct: number
   basis: ServiceFeeBasis | null
-  chargeOnFail: boolean
+  /** มติ U165 — ยอดกรณีไม่สำเร็จ · null = ไม่เก็บ */
+  failFeeSatang: number | null
 }
 
 export interface RevenueRowInput {

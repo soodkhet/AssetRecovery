@@ -131,17 +131,14 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
     const basis = fee.basisLabel === null ? '' : ` ของ${fee.basisLabel}`
     rows.push({ label: 'อัตราค่าบริการเมื่อสำเร็จ', value: `${fmtPercent(fee.ratePct)}${basis}` })
   }
-  rows.push({ label: 'เมื่อติดตามไม่สำเร็จ', value: chargeOnFailText(fee) })
+  rows.push({ label: 'เมื่อติดตามไม่สำเร็จ', value: failFeeText(fee) })
   if (fee.projectedRevenueSatang !== null) {
     rows.push({ label: 'ค่าบริการโดยประมาณ', value: fmtSatangSymbol(fee.projectedRevenueSatang) })
   }
   return rows
 }
 
-function chargeOnFailText(fee: PortalServiceFeeDto): string {
-  if (fee.model === 'SUCCESS_FEE') return 'ไม่เรียกเก็บ'
-  if (fee.chargeOnFail === true) {
-    return fee.baseSatang === null ? 'เรียกเก็บค่าบริการคงที่' : `เรียกเก็บ ${fmtSatangSymbol(fee.baseSatang)}`
-  }
-  return 'ไม่เรียกเก็บ'
+/** มติ U165 — ยอดกรณีไม่สำเร็จแยกจากกรณีสำเร็จ ใช้ได้ทุกโมเดล */
+function failFeeText(fee: PortalServiceFeeDto): string {
+  return fee.failFeeSatang === null ? 'ไม่เรียกเก็บ' : `เรียกเก็บ ${fmtSatangSymbol(fee.failFeeSatang)}`
 }

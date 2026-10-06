@@ -110,7 +110,7 @@ export interface PortalCaseServiceFeeSource {
   serviceFeeRatePct: number | string | { toString(): string } | null
   serviceFeeBaseSatang: number | null
   serviceFeeBasisSnapshot: ServiceFeeBasis | null
-  serviceFeeChargeOnFail: boolean | null
+  serviceFeeFailFeeSatang: number | null
   projectedRevenueSatang: number | null
 }
 
@@ -133,7 +133,8 @@ export interface PortalServiceFeeDto {
   baseSatang: number | null
   basis: ServiceFeeBasis | null
   basisLabel: string | null
-  chargeOnFail: boolean | null
+  /** มติ U165 — ยอดค่าบริการกรณีไม่สำเร็จ (snapshot) · `null` = ไม่เรียกเก็บ */
+  failFeeSatang: number | null
   projectedRevenueSatang: number | null
 }
 
@@ -163,7 +164,7 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource): PortalServiceFeeD
     baseSatang: row.serviceFeeBaseSatang,
     basis,
     basisLabel: basis === null ? null : SERVICE_FEE_BASIS_LABEL[basis],
-    chargeOnFail: row.serviceFeeChargeOnFail,
+    failFeeSatang: row.serviceFeeFailFeeSatang,
     projectedRevenueSatang: row.projectedRevenueSatang,
   }
 }

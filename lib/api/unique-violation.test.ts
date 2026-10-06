@@ -163,7 +163,7 @@ describe('P2002 จากคำขอพร้อมกัน → error code ข
         baseSatang: 50000,
         ratePct: 0,
         basis: null,
-        chargeOnFail: false,
+        failFeeSatang: null,
       }),
     ).rejects.toMatchObject({ code: 'DUPLICATE_TEMPLATE_NAME' })
   })

@@ -96,8 +96,8 @@ beforeAll(async () => {
   )
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
-      (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลต', 'FLAT', 50000, 0, NULL, false, 1, true, '${SYSTEM_USER}')
+      (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลต', 'FLAT', 50000, 0, NULL, NULL, 1, true, '${SYSTEM_USER}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`

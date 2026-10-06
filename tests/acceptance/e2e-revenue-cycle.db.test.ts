@@ -237,8 +237,8 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
     // SUCCESS_FEE 10% ของมูลหนี้ (`22` §6.5) — เก็บค่าบริการเมื่อปิดสำเร็จเท่านั้น
     await tx.$executeRawUnsafe(`
       INSERT INTO service_fee_templates
-        (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-      VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลตสำเร็จ 8.1', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', false,
+        (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+      VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลตสำเร็จ 8.1', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', NULL,
               1, true, '${ADMIN_ID}')
       ON CONFLICT (id) DO NOTHING
     `)

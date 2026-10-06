@@ -17,12 +17,13 @@ import type { CaseOutcome, ServiceFeeModel } from '@/lib/generated/prisma/enums'
  * |---|---|---|
  * ทุกแถวต้องผ่าน "วันที่ลงพื้นที่ถูก settle ครบ" ก่อน (มติ PO UAT Q21 — `fieldDaysSettled`)
  *
- * | `SUCCESS_FEE` | `closed_success` | expense approved (ถ้ามี expense) **+ lot confirmed** |
- * | `SUCCESS_FEE` | `closed_fail` | ไม่เกิดเลย (ไม่มีความสำเร็จให้คิดค่าบริการ) |
- * | `FLAT`/`HYBRID` `charge_on_fail = true` | `closed_fail` | expense approved (ถ้ามี expense) — ไม่ต้องผ่านคลัง |
- * | `FLAT`/`HYBRID` `charge_on_fail = true` | `closed_success` | expense approved (ถ้ามี) **+ lot confirmed** |
- * | `FLAT`/`HYBRID` `charge_on_fail = false` | `closed_fail` | ไม่เกิด |
- * | `FLAT`/`HYBRID` `charge_on_fail = false` | `closed_success` | expense approved (ถ้ามี) **+ lot confirmed** |
+ * มติ PO U165 — ทุกโมเดลตั้ง "ยอดกรณีไม่สำเร็จ" (`fail_fee_satang`) แยกได้ · `null` = ไม่เก็บ
+ *
+ * | model | outcome | ต้องมีอะไรครบ |
+ * |---|---|---|
+ * | ทุกโมเดล | `closed_success` | expense approved (ถ้ามี expense) **+ lot confirmed** |
+ * | ทุกโมเดล `fail_fee ≠ null` | `closed_fail` | expense approved (ถ้ามี expense) — ไม่ต้องผ่านคลัง |
+ * | ทุกโมเดล `fail_fee = null` | `closed_fail` | ไม่เกิด |
  */
 
 /** สถานะ expense ของเคสเท่าที่ตัวตัดสินใจต้องรู้ (`23` §6.5) */
@@ -34,8 +35,8 @@ export type LotGateState = 'confirmed' | 'not_confirmed'
 export interface RevenueTriggerInput {
   /** snapshot ค่าบริการในตัวเคส (`10` §9.2) — `null` = เคสยังไม่ผ่าน approved จึงยังไม่มี snapshot */
   model: ServiceFeeModel | null
-  /** snapshot `service_fee_charge_on_fail` — ใช้กับ `FLAT`/`HYBRID` เท่านั้น */
-  chargeOnFail: boolean | null
+  /** snapshot `service_fee_fail_fee_satang` (มติ U165) — `null` = ไม่เก็บกรณีไม่สำเร็จ */
+  failFeeSatang: number | null
   outcome: CaseOutcome | null
   /** เคสนี้มีรายการเบิกอยู่จริงไหม — `false` = เคสไม่มี expense เลย (DEC-006/D6) */
   hasExpense: boolean
@@ -73,7 +74,7 @@ export function evaluateRevenueTrigger(input: RevenueTriggerInput): RevenueTrigg
   if (input.model === null) return { shouldCreate: false, blockedBy: 'no_snapshot' }
   if (input.outcome === null) return { shouldCreate: false, blockedBy: 'no_outcome' }
 
-  const chargesOnFail = input.model !== 'SUCCESS_FEE' && input.chargeOnFail === true
+  const chargesOnFail = input.failFeeSatang !== null
   if (input.outcome === 'closed_fail' && !chargesOnFail) {
     return { shouldCreate: false, blockedBy: 'model_excludes_fail' }
   }

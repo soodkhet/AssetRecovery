@@ -278,13 +278,10 @@ export function ServiceFeeTemplatesManager() {
                   </div>
 
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    {template.model === 'SUCCESS_FEE' ? (
-                      <Badge className="border border-slate-200 bg-slate-50 text-slate-400">
-                        เก็บเฉพาะเคสสำเร็จโดยนิยามของโมเดล — ไม่มีตัวเลือกเก็บเงินเมื่อไม่สำเร็จ
-                      </Badge>
-                    ) : template.chargeOnFail ? (
+                    {/* มติ PO U165 — กรณีไม่สำเร็จเป็นยอดแยกได้ทุกโมเดล */}
+                    {chargesOnFail ? (
                       <Badge className="border border-amber-200 bg-amber-100 text-amber-800">
-                        ⚠️ เก็บค่าเปิดเคสเสมอไม่ว่าผลจะเป็นอย่างไร
+                        ⚠️ เรียกเก็บกรณีไม่สำเร็จด้วย (ยอดแยก)
                       </Badge>
                     ) : (
                       <Badge className="border border-slate-200 bg-slate-50 text-slate-400">

@@ -18,7 +18,7 @@ const SUCCESS_FEE: ServiceFeeTemplateValues = {
   baseSatang: 0,
   ratePct: 10,
   basis: 'debt_amount',
-  chargeOnFail: false,
+  failFeeSatang: null,
 }
 
 const FLAT: ServiceFeeTemplateValues = {
@@ -27,7 +27,7 @@ const FLAT: ServiceFeeTemplateValues = {
   baseSatang: 300_000,
   ratePct: 0,
   basis: null,
-  chargeOnFail: false,
+  failFeeSatang: null,
 }
 
 const HYBRID: ServiceFeeTemplateValues = {
@@ -36,7 +36,7 @@ const HYBRID: ServiceFeeTemplateValues = {
   baseSatang: 200_000,
   ratePct: 5,
   basis: 'debt_amount',
-  chargeOnFail: true,
+  failFeeSatang: 200_000,
 }
 
 const V1: ServiceFeeTemplateVersion = { ...SUCCESS_FEE, id: 'tpl-1', version: 1, isCurrent: true }
@@ -60,10 +60,10 @@ describe('assertRateRange (`12` §11 · `24` §6.1)', () => {
 })
 
 describe('normalizeTemplateValues (`12` §7.1)', () => {
-  it('SUCCESS_FEE ล้าง base และ charge_on_fail', () => {
-    const result = normalizeTemplateValues({ ...SUCCESS_FEE, baseSatang: 500_000, chargeOnFail: true })
+  it('SUCCESS_FEE ล้าง base แต่คงยอดกรณีไม่สำเร็จ (มติ U165 ใช้ได้ทุกโมเดล)', () => {
+    const result = normalizeTemplateValues({ ...SUCCESS_FEE, baseSatang: 500_000, failFeeSatang: 30_000 })
     expect(result.baseSatang).toBe(0)
-    expect(result.chargeOnFail).toBe(false)
+    expect(result.failFeeSatang).toBe(30_000)
   })
 
   it('FLAT ล้าง rate และ basis', () => {
@@ -85,26 +85,33 @@ describe('describeServiceFeeFormula — สูตร 2 กรณี (`22` §6.5�
     })
   })
 
-  it('FLAT + charge_on_fail=true: เรียกเก็บ base ทั้งสองกรณี', () => {
-    expect(describeServiceFeeFormula({ ...FLAT, chargeOnFail: true })).toEqual({
-      onSuccess: { kind: 'flat', baseSatang: 300_000 },
-      onFail: { kind: 'flat', baseSatang: 300_000 },
+  it('SUCCESS_FEE + ยอดกรณีไม่สำเร็จ: ไม่สำเร็จ = ยอดแยก', () => {
+    expect(describeServiceFeeFormula({ ...SUCCESS_FEE, failFeeSatang: 30_000 }).onFail).toEqual({
+      kind: 'flat',
+      baseSatang: 30_000,
     })
   })
 
-  it('FLAT + charge_on_fail=false: เคสไม่สำเร็จไม่เรียกเก็บ', () => {
+  it('FLAT สำเร็จ 1,500 / ไม่สำเร็จ 300 (ตัวอย่างมติ U165)', () => {
+    expect(describeServiceFeeFormula({ ...FLAT, baseSatang: 150_000, failFeeSatang: 30_000 })).toEqual({
+      onSuccess: { kind: 'flat', baseSatang: 150_000 },
+      onFail: { kind: 'flat', baseSatang: 30_000 },
+    })
+  })
+
+  it('FLAT ไม่เก็บกรณีไม่สำเร็จ: เคสไม่สำเร็จไม่เรียกเก็บ', () => {
     expect(describeServiceFeeFormula(FLAT).onFail).toEqual({ kind: 'none' })
   })
 
-  it('HYBRID สำเร็จ = base + rate × basis · ไม่สำเร็จ = base เมื่อ charge_on_fail', () => {
+  it('HYBRID สำเร็จ = base + rate × basis · ไม่สำเร็จ = ยอดกรณีไม่สำเร็จ', () => {
     expect(describeServiceFeeFormula(HYBRID)).toEqual({
       onSuccess: { kind: 'hybrid', baseSatang: 200_000, ratePct: 5, basis: 'debt_amount' },
       onFail: { kind: 'flat', baseSatang: 200_000 },
     })
   })
 
-  it('HYBRID + charge_on_fail=false: ไม่สำเร็จไม่เรียกเก็บ ส่วน rate ยังผูกกับความสำเร็จเสมอ', () => {
-    expect(describeServiceFeeFormula({ ...HYBRID, chargeOnFail: false }).onFail).toEqual({ kind: 'none' })
+  it('HYBRID ไม่เก็บกรณีไม่สำเร็จ: ไม่สำเร็จไม่เรียกเก็บ ส่วน rate ยังผูกกับความสำเร็จเสมอ', () => {
+    expect(describeServiceFeeFormula({ ...HYBRID, failFeeSatang: null }).onFail).toEqual({ kind: 'none' })
   })
 })
 
@@ -133,14 +140,14 @@ describe('planNextTemplateVersion (`12` §9)', () => {
 
 describe('snapshot (`10` §9.2 · `92` §7.1)', () => {
   it('เก็บ id + version + ค่าที่ normalize แล้ว', () => {
-    expect(toServiceFeeSnapshot({ ...V1, baseSatang: 999, chargeOnFail: true })).toEqual({
+    expect(toServiceFeeSnapshot({ ...V1, baseSatang: 999, failFeeSatang: 30_000 })).toEqual({
       serviceFeeTemplateId: 'tpl-1',
       serviceFeeTemplateVersion: 1,
       model: 'SUCCESS_FEE',
       baseSatang: 0,
       ratePct: 10,
       basis: 'debt_amount',
-      chargeOnFail: false,
+      failFeeSatang: 30_000,
     })
   })
 

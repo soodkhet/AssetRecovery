@@ -69,9 +69,9 @@ describe('ประมาณการรายได้ (`38` §6.5)', () => {
     expect(result.missingBasis).toBe(true)
   })
 
-  it('เป็น best-case 100% — ไม่คูณลด และไม่สนใจ charge_on_fail', () => {
-    const chargeOnFailIrrelevant = calculateProjectedRevenue(HYBRID, DEBT_10K).amountSatang
-    expect(chargeOnFailIrrelevant).toBe(HYBRID.baseSatang + 150_000)
+  it('เป็น best-case 100% — ไม่คูณลด และไม่สนใจยอดกรณีไม่สำเร็จ', () => {
+    const failFeeIrrelevant = calculateProjectedRevenue(HYBRID, DEBT_10K).amountSatang
+    expect(failFeeIrrelevant).toBe(HYBRID.baseSatang + 150_000)
   })
 
   it('ผลลัพธ์เป็นจำนวนเต็มสตางค์เสมอ แม้ rate มีทศนิยม', () => {

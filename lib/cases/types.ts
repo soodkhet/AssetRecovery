@@ -254,7 +254,7 @@ export interface CaseDetailDto extends CaseListItemDto {
   /** NUMERIC(5,2) — ส่งเป็น number เพื่อให้ FE แสดงได้ตรง (ไม่ใช่ยอดเงิน) */
   serviceFeeRatePct: number | null
   serviceFeeBasisSnapshot: string | null
-  serviceFeeChargeOnFail: boolean | null
+  serviceFeeFailFeeSatang: number | null
   /** action ที่ทำได้จากสถานะปัจจุบัน (`38` §10) — UX เท่านั้น API ตรวจซ้ำเสมอ */
   allowedActions: string[]
   reviewNote: string | null

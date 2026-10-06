@@ -115,8 +115,8 @@ beforeAll(async () => {
   // เทมเพลตค่าบริการ v1 = HYBRID base 500 บาท + 15% ของมูลหนี้ (`38` §20)
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
-      (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-    VALUES ('${TEMPLATE_V1}', '${ORG_ID}', 'เทมเพลตทดสอบ 2.3', 'HYBRID', 50000, 15.00, 'debt_amount', false, 1, true, '${USER_ID}')
+      (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+    VALUES ('${TEMPLATE_V1}', '${ORG_ID}', 'เทมเพลตทดสอบ 2.3', 'HYBRID', 50000, 15.00, 'debt_amount', NULL, 1, true, '${USER_ID}')
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, service_fee_template_id, created_by)
@@ -247,8 +247,8 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     // เจรจาสัญญาใหม่ → เทมเพลตเวอร์ชันใหม่ + ย้ายบริษัทมาผูกเวอร์ชันนี้ (pattern ของ Phase 1.7)
     await db().$executeRawUnsafe(`
       INSERT INTO service_fee_templates
-        (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-      VALUES ('${TEMPLATE_V2}', '${ORG_ID}', 'เทมเพลตทดสอบ 2.3', 'FLAT', 999900, 0, NULL, true, 2, true, '${USER_ID}')
+        (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+      VALUES ('${TEMPLATE_V2}', '${ORG_ID}', 'เทมเพลตทดสอบ 2.3', 'FLAT', 999900, 0, NULL, 999900, 2, true, '${USER_ID}')
     `)
     await db().$executeRawUnsafe(
       `UPDATE finance_companies SET service_fee_template_id = '${TEMPLATE_V2}' WHERE id = '${COMPANY_ID}'`,
@@ -619,7 +619,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       expect(detail.serviceFeeRatePct).toBe(asGlobal.serviceFeeRatePct)
       expect(detail.serviceFeeBaseSatang).toBe(asGlobal.serviceFeeBaseSatang)
       expect(detail.serviceFeeBasisSnapshot).toBe(asGlobal.serviceFeeBasisSnapshot)
-      expect(detail.serviceFeeChargeOnFail).toBe(asGlobal.serviceFeeChargeOnFail)
+      expect(detail.serviceFeeFailFeeSatang).toBe(asGlobal.serviceFeeFailFeeSatang)
       expect(detail.projectedRevenueSatang).toBe(asGlobal.projectedRevenueSatang)
       // ข้อมูลภายในถูกตัด
       expect(detail.serviceFeeTemplateId).toBeNull()

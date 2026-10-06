@@ -25,6 +25,7 @@
 | v2.9 | 06/10/2569 | มติ PO 06/10/2569 **U110** — ใบแจ้งหนี้/ใบวางบิล: `seller_profile_snapshot` เพิ่ม `logo_sha256` · พิมพ์ซ้ำใช้ snapshot เท่านั้น — รอบที่ไม่มี snapshot ชุดหัวกระดาษ (ก่อน U99) ⇒ ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้**ว่าง** (ไม่ดึงค่าปัจจุบันขององค์กร) |
 | v2.11-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 U144 + U146**: §7.2 + §9.2 ตัดส่วนต่างรับขาดไม่เกินเพดานเป็นค่าธรรมเนียมธนาคาร (`bank_fee_written_off_satang/_date` · รอบ `paid` · Export Pack ไฟล์ 18) · §7.2 + §9.1 `due_date` มาจากรอบบิลที่บริษัทใช้เท่านั้น (ตัด fallback `payment_due_days` · ไม่มีรอบ = `BILLING_CYCLE_NOT_SET`) + หน้าสร้างรอบวางบิลเสนอวันตัดรอบตามกติกาของรอบ |
 | v2.1x-FA | 07/10/2569 | **มติ PO 07/10/2569 U163**: §9.2 ลูกค้าหักภาษี ณ ที่จ่าย + ค่าธรรมเนียมโอนในรายการเดียว — ยอดรับสะสมขาดจากยอดคาดรับหลังหักภาษีไม่เกินเพดาน ⇒ บันทึกภาษีลูกค้าหักเต็มจำนวนก่อน ส่วนต่างที่เหลือเป็นค่าธรรมเนียมธนาคาร · รอบ `paid` (`22` §6.11.1) |
+| v2.1x-FD | 07/10/2569 | **มติ PO U165**: §6.1 เงื่อนไข `closed_fail` ใช้ snapshot `fail_fee_satang` (ยอดกรณีไม่สำเร็จ) **ทุกโมเดล** แทน `charge_on_fail` (FLAT/HYBRID) — ตั้งยอด ⇒ เกิดเมื่อ expense approved ไม่ผ่านคลัง · NULL ⇒ ไม่เกิด · ข้อมูลเดิมแปลงแล้วผลเท่าเดิม · §15/§16 ปรับตาม |
 | v2.10 | 07/10/2569 | **มติ PO O72(1)(2)**: (1) §7.1 `revenue_date` = **วันยืนยันล็อตส่งมอบ** (วันไทย) สำหรับเคสผ่านคลัง — เดิมเขียน "= วันปิดงาน" ขัดมติ A7/U39 · `closed_fail` ที่คิดเงิน = วันปิดงานของรอบ · งวดของวันยืนยันปิดแล้ว ⇒ ยืนยันล็อตไม่ได้ (`PERIOD_LOCKED_DIRECT_EDIT`) · (2) §6.1 ประเมินรายได้ต่อ (เคส, รอบติดตาม) — รอบก่อนรีไซเกิลใช้ snapshot `recycle_requests.prev_*` (`02` v4.5x-BY) |
 
 ขอบเขตเอกสารนี้: สร้างรายการรายได้จากเคสที่ปิดงานสำเร็จ รวมเป็นรอบวางบิล (Billing Batch) ส่งให้บริษัทไฟแนนซ์ และติดตามยอดค้างรับ (AR Aging) — รวม **Revenue Trigger Logic ที่ซับซ้อนที่สุดในระบบ** (ต้องผ่าน Warehouse gate)
@@ -74,9 +75,9 @@
 
 เงื่อนไขการเกิดตามเงื่อนไข Service Fee Template (snapshot ในตัวเคส ตามไฟล์ 10 §9.2):
 
-- `SUCCESS_FEE`: เกิดเมื่อ `closed_success` **และ** expense ของเคสนั้นเข้าสู่ `approved` **และ** `HandoverLot.status = confirmed` (ไฟล์ 44 §6) — ทั้งสามเงื่อนไขต้องครบพร้อมกัน
-- `FLAT`/`HYBRID` ที่ `charge_on_fail = true`: เกิดเมื่อ expense `approved` ไม่ว่า outcome จะเป็น `closed_success` หรือ `closed_fail` (สำหรับ `closed_success` ต้องรอ Lot confirmed ด้วย)
-- `FLAT`/`HYBRID` ที่ `charge_on_fail = false`: เกิดเฉพาะ `closed_success` ที่ expense `approved` **และ** Lot confirmed แล้ว
+- ทุกโมเดล `closed_success`: เกิดเมื่อ expense ของเคสนั้นเข้าสู่ `approved` **และ** `HandoverLot.status = confirmed` (ไฟล์ 44 §6) — ครบพร้อมกัน
+- ทุกโมเดล `closed_fail` ที่ตั้งยอดกรณีไม่สำเร็จ (`fail_fee_satang` ≠ NULL — มติ PO U165, `12` §6.5): เกิดเมื่อ expense `approved` (ไม่ผ่านคลัง) · ยอด = `fail_fee`
+- ทุกโมเดล `closed_fail` ที่ไม่ตั้งยอด (NULL): ไม่เกิด
 
 > **เหตุผลที่เพิ่มเงื่อนไข Lot confirmed**: ป้องกันการวางบิลรายได้ก่อนที่จะส่งมอบเครื่องให้บริษัทไฟแนนซ์จริง — ถ้าเครื่องมีปัญหา (IMEI ไม่ตรง/ชำรุด) ที่พบในคลัง ยังสามารถตีกลับเคสได้ก่อนรายได้เกิด — นี่คือ **"Warehouse gate"** ที่บันทึกไว้เป็นหลักการสำคัญใน `92-platform-data-model.md` §6.1
 
@@ -218,7 +219,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — รา�
 
 ## 15. Acceptance Criteria
 
-- Revenue เกิดอัตโนมัติถูกต้องตามเงื่อนไข model/charge_on_fail ของ Service Fee Template ที่ snapshot ไว้
+- Revenue เกิดอัตโนมัติถูกต้องตามเงื่อนไข model/ยอดกรณีไม่สำเร็จ (`fail_fee`) ของ Service Fee Template ที่ snapshot ไว้
 - VAT คำนวณถูกต้องตามอัตราที่ effective ณ revenue_date — ทดสอบกรณีอัตราเปลี่ยนข้ามช่วงเวลาได้
 - Billing Batch รวมยอดถูกต้อง ติดตาม AR ได้แม่นยำ
 
@@ -230,7 +231,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — รา�
 | VAT เปลี่ยนอัตราไม่กระทบของเก่า | เปลี่ยน vat_rate_history เพิ่มอัตราใหม่ 10% มีผล 1 ต.ค. 2569 แล้วดู Revenue เก่าก่อนหน้านั้น | vat_rate_used ของ Revenue เก่ายังเป็น 7% เหมือนเดิม |
 | แก้ Revenue ที่ billed แล้ว | พยายามแก้ gross_amount ของ Revenue ที่ผูก Billing Batch สถานะ sent | reject EDIT_BILLED_REVENUE |
 | Revenue ไม่เกิดทันที closed_success | เคส closed_success แต่ expense ยังอยู่ที่ pending_warehouse_confirm/pending_approval (ยังไม่ approved) | ยังไม่มี Revenue เกิดขึ้น |
-| Revenue เกิดหลัง expense approved (closed_fail) | เคส closed_fail และ expense เข้าสู่ approved แล้ว | Revenue ถูกสร้างขึ้นตอนนี้ (ถ้า model charge_on_fail = true) |
+| Revenue เกิดหลัง expense approved (closed_fail) | เคส closed_fail และ expense เข้าสู่ approved แล้ว | Revenue ถูกสร้างขึ้นตอนนี้ ยอด = `fail_fee` (ถ้าเทมเพลตตั้งยอดกรณีไม่สำเร็จ — ทุกโมเดล) |
 | Revenue เกิดหลัง expense approved + Lot confirmed (closed_success) | เคส closed_success, expense = approved, HandoverLot = confirmed | Revenue ถูกสร้างขึ้น |
 | Revenue ยังไม่เกิดแม้ expense approved แต่ Lot ยังไม่ confirmed | เคส closed_success, expense = approved แต่ HandoverLot ยังเป็น pending_attach | Revenue ยังไม่เกิด — รอ Lot confirmed ก่อน (ไฟล์ 44) |
 | เคสถูกตีกลับก่อน Revenue เกิด | เคส closed_success ถูก reject_evidence เป็น needs_revision ก่อนที่ expense จะ approved | ไม่มี Revenue เกิดขึ้นเลย — ไม่ต้องย้อนกลับแก้ไขอะไร เพราะยังไม่เคยสร้าง |

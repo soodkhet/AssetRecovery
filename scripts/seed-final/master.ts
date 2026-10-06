@@ -393,11 +393,13 @@ async function seedCompanies(): Promise<void> {
   const fc = await import('@/lib/finance-companies/schemas')
   const fcq = await import('@/lib/finance-companies/queries')
   const templates = [
-    { key: 'T1', name: 'T1 สำเร็จ 5%', model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 5, basis: 'debt_amount', chargeOnFail: false },
-    { key: 'T2', name: 'T2 เหมา 7,490 ไม่คิดเมื่อไม่สำเร็จ', model: 'FLAT', baseSatang: 749000, ratePct: 0, basis: null, chargeOnFail: false },
-    { key: 'T3', name: 'T3 ผสม', model: 'HYBRID', baseSatang: 200000, ratePct: 3, basis: 'debt_amount', chargeOnFail: true },
-    { key: 'T4', name: 'T4 เหมา 3,000 คิดเมื่อไม่สำเร็จ', model: 'FLAT', baseSatang: 300000, ratePct: 0, basis: null, chargeOnFail: true },
-    { key: 'T5', name: 'T5 สำเร็จ 5% (บริษัทปิด)', model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 5, basis: 'debt_amount', chargeOnFail: false },
+    // มติ PO U165 — failFeeSatang = ยอดกรณีไม่สำเร็จ (null = ไม่เก็บ) · T3 = base เดิม (ผลเท่า charge_on_fail เดิม)
+    // T4 = แบบ "สำเร็จ ≠ ไม่สำเร็จ" (สำเร็จ 3,000 / ไม่สำเร็จ 1,000) — เคสไม่สำเร็จที่ใช้: FT-12, FT-13 รอบ 1
+    { key: 'T1', name: 'T1 สำเร็จ 5%', model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 5, basis: 'debt_amount', failFeeSatang: null },
+    { key: 'T2', name: 'T2 เหมา 7,490 ไม่คิดเมื่อไม่สำเร็จ', model: 'FLAT', baseSatang: 749000, ratePct: 0, basis: null, failFeeSatang: null },
+    { key: 'T3', name: 'T3 ผสม', model: 'HYBRID', baseSatang: 200000, ratePct: 3, basis: 'debt_amount', failFeeSatang: 200000 },
+    { key: 'T4', name: 'T4 เหมา 3,000 ไม่สำเร็จ 1,000', model: 'FLAT', baseSatang: 300000, ratePct: 0, basis: null, failFeeSatang: 100000 },
+    { key: 'T5', name: 'T5 สำเร็จ 5% (บริษัทปิด)', model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 5, basis: 'debt_amount', failFeeSatang: null },
   ]
   for (const template of templates) {
     const existing = await findId('serviceFeeTemplate', template.name)

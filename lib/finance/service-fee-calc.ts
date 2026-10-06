@@ -11,20 +11,23 @@ import type { CaseOutcome, ServiceFeeBasis, ServiceFeeModel } from '@/lib/genera
  * `approved`) ห้ามอ่านเทมเพลตปัจจุบันมาคิดย้อนหลัง (Rule 08)
  *
  * ⚠️ อย่าสับสนกับ `lib/cases/projected-revenue.ts` (`38` §6.5) ซึ่งเป็น **ประมาณการ best-case 100%**
- * ก่อนรับเคส — ตัวนั้นไม่สนใจ `charge_on_fail` และไม่ใช่ยอดที่วางบิลจริง
+ * ก่อนรับเคส — ตัวนั้นไม่สนใจยอดกรณีไม่สำเร็จ และไม่ใช่ยอดที่วางบิลจริง
  */
 
 /** snapshot เทมเพลตค่าบริการในตัวเคส (`02` §5 — `cases.service_fee_*`) */
 export interface ServiceFeeSnapshot {
   model: ServiceFeeModel
-  /** ใช้กับ `FLAT`/`HYBRID` */
+  /** ใช้กับ `FLAT`/`HYBRID` — ส่วน "กรณีสำเร็จ" */
   baseSatang: number
-  /** ใช้กับ `SUCCESS_FEE`/`HYBRID` */
+  /** ใช้กับ `SUCCESS_FEE`/`HYBRID` — ส่วน "กรณีสำเร็จ" */
   ratePct: number
   /** ฐานคำนวณของส่วน rate — `null` เมื่อโมเดลไม่ใช้ (FLAT) */
   basis: ServiceFeeBasis | null
-  /** ใช้กับ `FLAT`/`HYBRID` เท่านั้น — `SUCCESS_FEE` ไม่คิดเงินเมื่อไม่สำเร็จเสมอ */
-  chargeOnFail: boolean
+  /**
+   * มติ PO U165 — ยอดค่าบริการ "กรณีไม่สำเร็จ" (สตางค์) ใช้ได้**ทุกโมเดล** แยกจากส่วนกรณีสำเร็จ
+   * `null` = ไม่เรียกเก็บกรณีไม่สำเร็จ (แทนสวิตช์ `charge_on_fail` เดิม)
+   */
+  failFeeSatang: number | null
 }
 
 /**
@@ -38,8 +41,10 @@ export interface ServiceFeeBasisValues {
 export interface ServiceFeeRevenue {
   /** ยอดก่อน VAT — `null` เมื่อยังคิดไม่ได้เพราะเคสไม่มีฐานคำนวณ (`missingBasis = true`) */
   grossSatang: number | null
-  /** ส่วน base ที่ได้จริง (0 เมื่อ outcome ไม่เข้าเงื่อนไข `charge_on_fail`) */
+  /** ส่วน base ของกรณีสำเร็จที่ได้จริง (0 เมื่อ `closed_fail` หรือโมเดล `SUCCESS_FEE`) */
   baseComponentSatang: number
+  /** ยอดกรณีไม่สำเร็จที่ได้จริง (มติ U165) — ได้เฉพาะ `closed_fail` · 0 เมื่อสำเร็จหรือเทมเพลตไม่เก็บ */
+  failFeeComponentSatang: number
   /** ส่วน `ฐาน × rate` ที่ได้จริง — ได้เฉพาะ `closed_success` เสมอ */
   rateComponentSatang: number
   /** ฐานคำนวณที่ใช้จริง (สตางค์) — `null` เมื่อโมเดลไม่ใช้ฐาน หรือเคสยังไม่กรอก */
@@ -56,13 +61,15 @@ function basisValueOf(values: ServiceFeeBasisValues): number | null {
 }
 
 /**
- * `22` §6.5–6.7 — ยอดค่าบริการก่อน VAT ตาม fee model และ outcome
+ * `22` §6.5–6.7 — ยอดค่าบริการก่อน VAT ตาม fee model และ outcome (มติ PO U165)
  *
  * | model | `closed_success` | `closed_fail` |
  * |---|---|---|
- * | `SUCCESS_FEE` | `ฐาน × rate` | `0` เสมอ (ไม่มี `charge_on_fail`) |
- * | `FLAT` | `base` | `base` ถ้า `charge_on_fail` มิฉะนั้น `0` |
- * | `HYBRID` | `base + (ฐาน × rate)` | `base` ถ้า `charge_on_fail` มิฉะนั้น `0` (ส่วน rate ไม่ได้เลย) |
+ * | `SUCCESS_FEE` | `ฐาน × rate` | `fail_fee ?? 0` |
+ * | `FLAT` | `base` | `fail_fee ?? 0` |
+ * | `HYBRID` | `base + (ฐาน × rate)` | `fail_fee ?? 0` |
+ *
+ * กรณีไม่สำเร็จไม่ใช้ base/rate เลย — ใช้ยอดกรณีไม่สำเร็จที่ตั้งแยกไว้เท่านั้น
  */
 export function calculateServiceFeeRevenue(
   snapshot: ServiceFeeSnapshot,
@@ -71,23 +78,34 @@ export function calculateServiceFeeRevenue(
 ): ServiceFeeRevenue {
   assertNonNegativeSatang(snapshot.baseSatang, 'ค่าบริการส่วน base')
   assertPct(snapshot.ratePct, 'อัตราค่าบริการ')
+  if (snapshot.failFeeSatang !== null) assertNonNegativeSatang(snapshot.failFeeSatang, 'ค่าบริการกรณีไม่สำเร็จ')
 
-  const isSuccess = outcome === 'closed_success'
-  const usesBase = snapshot.model !== 'SUCCESS_FEE'
-  const usesRate = snapshot.model !== 'FLAT'
-
-  // ส่วน base: `SUCCESS_FEE` ไม่มี · `FLAT`/`HYBRID` ได้เมื่อสำเร็จ หรือเมื่อ charge_on_fail = true
-  const baseComponentSatang = usesBase && (isSuccess || snapshot.chargeOnFail) ? snapshot.baseSatang : 0
-
-  // ส่วน rate: ได้เฉพาะ closed_success เสมอ ไม่มีเงื่อนไข charge_on_fail (`22` §6.7)
-  if (!usesRate || !isSuccess) {
+  if (outcome === 'closed_fail') {
+    const failFeeComponentSatang = snapshot.failFeeSatang ?? 0
     return {
-      grossSatang: baseComponentSatang,
-      baseComponentSatang,
+      grossSatang: failFeeComponentSatang,
+      baseComponentSatang: 0,
+      failFeeComponentSatang,
       rateComponentSatang: 0,
       basisSatang: null,
       missingBasis: false,
-      formula: describeFormula(snapshot, outcome, null, baseComponentSatang, 0),
+      formula: describeFormula(snapshot, outcome, null, 0, 0, failFeeComponentSatang),
+    }
+  }
+
+  const usesBase = snapshot.model !== 'SUCCESS_FEE'
+  const usesRate = snapshot.model !== 'FLAT'
+  const baseComponentSatang = usesBase ? snapshot.baseSatang : 0
+
+  if (!usesRate) {
+    return {
+      grossSatang: baseComponentSatang,
+      baseComponentSatang,
+      failFeeComponentSatang: 0,
+      rateComponentSatang: 0,
+      basisSatang: null,
+      missingBasis: false,
+      formula: describeFormula(snapshot, outcome, null, baseComponentSatang, 0, 0),
     }
   }
 
@@ -96,10 +114,11 @@ export function calculateServiceFeeRevenue(
     return {
       grossSatang: null,
       baseComponentSatang,
+      failFeeComponentSatang: 0,
       rateComponentSatang: 0,
       basisSatang: null,
       missingBasis: true,
-      formula: describeFormula(snapshot, outcome, null, baseComponentSatang, 0),
+      formula: describeFormula(snapshot, outcome, null, baseComponentSatang, 0, 0),
     }
   }
 
@@ -109,10 +128,11 @@ export function calculateServiceFeeRevenue(
   return {
     grossSatang: baseComponentSatang + rateComponentSatang,
     baseComponentSatang,
+    failFeeComponentSatang: 0,
     rateComponentSatang,
     basisSatang,
     missingBasis: false,
-    formula: describeFormula(snapshot, outcome, basisSatang, baseComponentSatang, rateComponentSatang),
+    formula: describeFormula(snapshot, outcome, basisSatang, baseComponentSatang, rateComponentSatang, 0),
   }
 }
 
@@ -122,10 +142,16 @@ function describeFormula(
   basisSatang: number | null,
   baseComponentSatang: number,
   rateComponentSatang: number,
+  failFeeComponentSatang: number,
 ): string {
   const parts: string[] = [`model=${snapshot.model}`, `outcome=${outcome}`]
+  if (outcome === 'closed_fail') {
+    const failText = snapshot.failFeeSatang === null ? 'ไม่เก็บ' : String(failFeeComponentSatang)
+    parts.push(`fail_fee=${failText}`)
+    return parts.join(' · ')
+  }
   if (snapshot.model !== 'SUCCESS_FEE') {
-    parts.push(`base=${baseComponentSatang}`, `charge_on_fail=${snapshot.chargeOnFail}`)
+    parts.push(`base=${baseComponentSatang}`)
   }
   if (snapshot.model !== 'FLAT') {
     const basisText = basisSatang === null ? 'ยังไม่มีค่า' : String(basisSatang)
