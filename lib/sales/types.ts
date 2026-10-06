@@ -35,6 +35,11 @@ export interface TaxInvoiceSummaryDto {
   cancelledAt: string | null
   cancelledByName: string | null
   createdAt: string
+  /**
+   * งวดของวันที่ออกใบส่งบัญชี/ล็อกแล้ว ⇒ ยกเลิกตรงไม่ได้ ต้องผ่าน Adjustment (UAT BUG-169)
+   * — หน้าจอปิดปุ่ม "ยกเลิก" ตามค่านี้ · API ตรวจซ้ำด้วยยามงวดเสมอ
+   */
+  periodClosed: boolean
 }
 
 export interface SalesRecordDto {

@@ -20,6 +20,9 @@ import {
   periodYearCe,
   PERIOD_TRANSITIONS,
   type ReadinessInput,
+  readinessDescription,
+  buildPeriodClosedLookup,
+  PERIOD_CLOSED_CANCEL_HINT,
 } from '@/lib/accounting/period'
 
 /** `30` §16 — Readiness Check 3 เงื่อนไข + state machine `23` §6.13 */
@@ -372,5 +375,40 @@ describe('งวดสิ้นเดือนแล้วจึงส่ง/ล
     ])
     expect(onTime.ready).toBe(true)
     expect(() => assertReadyToSend(onTime)).not.toThrow()
+  })
+})
+
+describe('BUG-163 — หัว Modal ตรวจความพร้อมนับจำนวนข้อจากรายการจริง', () => {
+  it('ใช้จำนวนรายการที่ได้จาก API', () => {
+    expect(readinessDescription(4)).toBe('เงื่อนไข 4 ข้อ — ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม')
+    expect(readinessDescription(3)).toContain('เงื่อนไข 3 ข้อ')
+  })
+  it('ยังไม่มีผลตรวจ ⇒ ไม่ระบุจำนวน', () => {
+    expect(readinessDescription(null)).not.toMatch(/\d/)
+  })
+})
+
+describe('BUG-169 — ปุ่มยกเลิกเอกสารปิดเมื่องวดปิดแล้ว (สถานะงวดติดไปกับ DTO)', () => {
+  const lookup = buildPeriodClosedLookup([
+    { yearBe: 2569, month: 9, status: 'locked' },
+    { yearBe: 2569, month: 10, status: 'sent_to_accountant' },
+    { yearBe: 2569, month: 11, status: 'collecting' },
+  ])
+
+  it('ล็อก/ส่งบัญชีแล้ว ⇒ ปิด · เก็บข้อมูลอยู่หรือยังไม่มีงวด ⇒ เปิด', () => {
+    expect(lookup(new Date('2026-09-15T05:00:00Z'))).toBe(true)
+    expect(lookup(new Date('2026-10-06T05:00:00Z'))).toBe(true)
+    expect(lookup(new Date('2026-11-02T05:00:00Z'))).toBe(false)
+    expect(lookup(new Date('2026-12-02T05:00:00Z'))).toBe(false)
+  })
+
+  it('ยึดปฏิทินไทย — 30/09 23:30 น. (UTC 16:30) ยังเป็นงวด ก.ย.', () => {
+    expect(lookup(new Date('2026-09-30T16:30:00Z'))).toBe(true)
+    expect(lookup(new Date('2026-08-31T17:30:00Z'))).toBe(true)
+    expect(lookup(new Date('2026-08-31T16:30:00Z'))).toBe(false)
+  })
+
+  it('ข้อความ tooltip ไม่มีเลขอ้างอิงสเปค', () => {
+    expect(PERIOD_CLOSED_CANCEL_HINT).toBe('งวดปิดแล้ว ต้องทำผ่าน Adjustment')
   })
 })

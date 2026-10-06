@@ -50,6 +50,18 @@ export interface BillingBatchDto {
   whtWithheldByCustomerSatang: number
   /** `22` §6.11 — `total − received` (ติดลบได้เมื่อรับเกิน) */
   outstandingSatang: number
+  /** ยอดรายได้ในรอบ **ก่อน VAT** (ผลรวม `revenues.gross_satang`) */
+  amountBeforeVatSatang: number
+  /** อัตราที่บริษัทหักภาษี ณ ที่จ่ายจากเรา (ค่าปัจจุบันของบริษัท) — `null` = ไม่หัก */
+  customerWhtPct: number | null
+  /**
+   * UAT BUG-165 — ภาษีที่ลูกค้าจะหัก ณ ที่จ่าย: ยังไม่รับเงิน = **ประมาณ** จากอัตราของบริษัท (`customerWhtIsEstimate`)
+   * · บันทึกยอดหักจริงแล้ว = ยอดจริง · ไม่บันทึกลง DB
+   */
+  customerWhtSatang: number
+  customerWhtIsEstimate: boolean
+  /** ยอดที่คาดว่าจะได้รับ = ยอดเรียกเก็บรวม VAT − ภาษีที่ลูกค้าหัก */
+  expectedReceiptSatang: number
   /** `YYYY-MM-DD` */
   dueDate: string
   /** จำนวนวันเลยกำหนดชำระ ณ วันที่ดูรายการ (ลบ = ยังไม่ถึงกำหนด) */

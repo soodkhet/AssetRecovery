@@ -44,6 +44,8 @@ export interface WhtCertificateDto {
   periodId: string
   periodLabel: string
   createdAt: string
+  /** งวดของวันที่จ่ายส่งบัญชี/ล็อกแล้ว ⇒ ยกเลิกตรงไม่ได้ ต้องผ่าน Adjustment (UAT BUG-169) */
+  periodClosed: boolean
 }
 
 export interface WhtCertificateListDto {

@@ -836,10 +836,21 @@ export const PACK_TAX_INVOICE_PDF_LIMIT = 200
 /** เพดานเวลาประกอบ PDF ทั้งหมดต่อชุด (มิลลิวินาที) — เกินแล้วหยุดแนบ ใบที่เหลือไปอยู่ในรายชื่อไม่ได้แนบ */
 export const PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS = 60_000
 
+/**
+ * ต่อท้ายชื่อไฟล์ PDF ของเอกสารที่**ยกเลิกแล้ว**ใน zip — ใช้แบบเดียวกันทุกโฟลเดอร์เอกสารภาษี
+ * (`tax_invoices/` · `wht_certificates/`) ให้สำนักงานบัญชีแยกออกได้จากชื่อไฟล์ (UAT BUG-168)
+ */
+export const PACK_CANCELLED_PDF_SUFFIX = '-CANCELLED'
+
+/** เลขเอกสารที่ใช้ตั้งชื่อไฟล์ — ยกเลิกแล้วต่อท้าย `-CANCELLED` */
+export function packPdfRef(documentNumber: string, cancelled: boolean): string {
+  return cancelled ? `${documentNumber.trim()}${PACK_CANCELLED_PDF_SUFFIX}` : documentNumber
+}
+
 /** ชื่อไฟล์ PDF ใน zip — ตัดอักขระที่ใช้เป็นชื่อไฟล์ไม่ได้ (เลขที่ใบกำกับตั้ง prefix เองได้) */
-export function taxInvoicePdfEntryName(invoiceNumber: string): string {
+export function taxInvoicePdfEntryName(invoiceNumber: string, cancelled = false): string {
   const safe = invoiceNumber.trim().replace(/[\\/:*?"<>|\s]+/g, '_')
-  return `${PACK_TAX_INVOICE_PDF_DIR}/${safe === '' ? 'invoice' : safe}.pdf`
+  return `${PACK_TAX_INVOICE_PDF_DIR}/${packPdfRef(safe === '' ? 'invoice' : safe, cancelled)}.pdf`
 }
 
 /** เนื้อไฟล์ `NOT_ATTACHED.txt` — บอกสำนักงานบัญชีว่าใบไหนไม่มี PDF ในชุด และไปเอาจากที่ไหน */
@@ -1332,10 +1343,14 @@ export function packFileRangeLabel(): string {
   return `${first}–${last}`
 }
 
+/**
+ * ⚠️ ข้อความที่พิมพ์ลง PDF ต้องใช้อักษรที่ฟอนต์ไทยมีเท่านั้น — ลูกศร (⇒ →) / เครื่องหมายถูก-ผิด ไม่มี glyph
+ *    แล้วพิมพ์เป็นสัญลักษณ์เพี้ยนทับตัวถัดไป (UAT BUG-166 · เทสต์ `components/pdf/font-glyphs.test.ts`)
+ */
 export const PACK_ATTACHMENT_NOTE =
   `สำเนา PDF ใน zip: ${PACK_TAX_INVOICE_PDF_DIR}/ (ใบเสร็จรับเงิน/ใบกำกับภาษี) · ${PACK_WHT_CERTIFICATE_PDF_DIR}/ (50 ทวิ) · ` +
   `${PACK_VOUCHER_PDF_DIR}/ (ใบสำคัญจ่าย/สลิปค่าตอบแทน) · ${PACK_BILLING_INVOICE_PDF_DIR}/ (ใบแจ้งหนี้ — ไม่ใช่เอกสารภาษี) · ` +
-  `เกินเพดานต่อชุด ⇒ รายชื่อใน NOT_ATTACHED.txt ของแต่ละโฟลเดอร์`
+  `เกินเพดานต่อชุด ดูรายชื่อใน NOT_ATTACHED.txt ของแต่ละโฟลเดอร์`
 
 export const PACK_COVER_TITLE = 'หน้าปกชุดเอกสารบัญชี'
 export const PACK_COVER_HEADER_NOTE = 'ส่งสำนักงานบัญชี — ประจำรอบเดือน'
@@ -1378,4 +1393,20 @@ export function buildPackCoverDoc(input: {
     attachmentNote: PACK_ATTACHMENT_NOTE,
     fileName: PACK_COVER_FILE_NAME,
   }
+}
+
+/**
+ * จำนวน PDF ที่แนบใน zip จริง — รวม `attached` ทุกโฟลเดอร์จาก `attachments` ที่บันทึกใน audit `export`
+ * ตอนสร้างชุด (UAT BUG-167: ประวัติเคยแสดง "เอกสารแนบ 0 ไฟล์" ตายตัว) · ค่าที่อ่านไม่ออก = 0
+ * (`NOT_ATTACHED.txt` ไม่ใช่เอกสารแนบ — ไม่นับ)
+ */
+export function packAttachmentCount(attachments: unknown): number {
+  if (attachments === null || typeof attachments !== 'object' || Array.isArray(attachments)) return 0
+  let total = 0
+  for (const folder of Object.values(attachments as Record<string, unknown>)) {
+    if (folder === null || typeof folder !== 'object') continue
+    const attached = (folder as { attached?: unknown }).attached
+    if (typeof attached === 'number' && Number.isInteger(attached) && attached > 0) total += attached
+  }
+  return total
 }

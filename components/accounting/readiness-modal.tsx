@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
+import { readinessDescription } from '@/lib/accounting/period'
 import type { AccountingPeriodDto, PeriodReadinessDto } from '@/lib/accounting/types'
 import { callApi } from '@/lib/api/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
@@ -55,7 +56,7 @@ export function ReadinessModal({
       onClose={onClose}
       size="lg"
       title={`ตรวจความพร้อมก่อนส่งบัญชี — ${period.periodLabel}`}
-      description="เงื่อนไข 3 ข้อ — ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม"
+      description={readinessDescription(data === null ? null : data.checks.length)}
       footer={
         <Button variant="ghost" onClick={onClose}>
           ปิดหน้าต่าง

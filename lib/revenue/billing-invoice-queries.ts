@@ -1,6 +1,6 @@
 import type { SessionUser } from '@/lib/auth/types'
 import { prisma } from '@/lib/prisma'
-import type { BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
+import { billingInvoicePartiesOf, type BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
 import { RevenueError } from '@/lib/revenue/errors'
 
 /**
@@ -8,7 +8,7 @@ import { RevenueError } from '@/lib/revenue/errors'
  *
  * - รอบ `draft` ยังไม่ได้ส่งให้ลูกค้า ⇒ ยังไม่มีใบแจ้งหนี้ (`BILLING_BATCH_INVALID_STATUS`)
  * - scope: Company User เห็นเฉพาะบริษัทตัวเอง · นอก scope = 404 แบบไม่ leak (`BILLING_BATCH_NOT_FOUND`)
- * - ผู้ขาย/ผู้ซื้อ = ค่าปัจจุบันขององค์กร/บริษัท (ใบแจ้งหนี้ไม่ใช่เอกสารภาษี — snapshot คู่ค้าบังคับเฉพาะใบเสร็จรับเงิน/ใบกำกับภาษี)
+ * - ผู้ขาย/ผู้ซื้อ = **snapshot ตอนส่งรอบวางบิล** (UAT BUG-164) — แก้ชื่อ/ที่อยู่บริษัทภายหลัง ใบที่ส่งแล้วไม่เปลี่ยน
  */
 export async function getBillingInvoiceSource(user: SessionUser, billingBatchId: string): Promise<BillingInvoiceSource> {
   const scope = user.scope
@@ -25,6 +25,16 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
             status: true,
             sentAt: true,
             dueDate: true,
+            sellerName: true,
+            sellerTaxId: true,
+            sellerAddress: true,
+            sellerPhone: true,
+            sellerBranchCode: true,
+            buyerName: true,
+            buyerTaxId: true,
+            buyerAddress: true,
+            buyerPhone: true,
+            buyerBranchCode: true,
             company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
             organization: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
             revenues: {
@@ -51,8 +61,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
     period: batch.period,
     sentAt: batch.sentAt,
     dueDate: batch.dueDate,
-    seller: { ...batch.organization },
-    buyer: { ...batch.company, address: batch.company.address ?? '' },
+    ...billingInvoicePartiesOf(batch, { seller: batch.organization, buyer: batch.company }),
     lines: batch.revenues.map((revenue) => ({
       caseRef: revenue.case.caseRef,
       revenueDate: revenue.revenueDate,

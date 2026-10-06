@@ -1,8 +1,15 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  bodyStringField,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { cancelCreditNote } from '@/lib/credit-notes/queries'
+import { requireCreditNoteCancelReason } from '@/lib/credit-notes/credit-note'
 import { creditNoteCancelSchema } from '@/lib/credit-notes/schemas'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 
@@ -18,7 +25,10 @@ export const PATCH = withApiPermission<RouteContext>(
   toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
-    const parsed = creditNoteCancelSchema.safeParse(await readJsonBody(request))
+    const body = await readJsonBody(request)
+    // ไม่มีเหตุผล/ว่าง/ช่องว่างล้วน ⇒ `CANCEL_REQUIRES_REASON` (`24` §6.8) ไม่ใช่ `REQUIRED_MISSING` (UAT BUG-161)
+    requireCreditNoteCancelReason(bodyStringField(body, 'reason'))
+    const parsed = creditNoteCancelSchema.safeParse(body)
     if (!parsed.success) return validationErrorResponse(parsed.error)
     return apiSuccess(await cancelCreditNote({ actor: user, meta: getRequestMeta(request) }, id, parsed.data))
   },

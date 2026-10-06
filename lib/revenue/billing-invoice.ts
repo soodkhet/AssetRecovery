@@ -26,6 +26,96 @@ export interface BillingInvoiceParty {
   branchCode: string
 }
 
+/** แถวคอลัมน์ snapshot ของ `billing_batches` (UAT BUG-164) — `null` ทั้งชุด = รอบยังไม่ได้ส่ง */
+export interface BillingPartySnapshotColumns {
+  sellerName: string | null
+  sellerTaxId: string | null
+  sellerAddress: string | null
+  sellerPhone: string | null
+  sellerBranchCode: string | null
+  buyerName: string | null
+  buyerTaxId: string | null
+  buyerAddress: string | null
+  buyerPhone: string | null
+  buyerBranchCode: string | null
+}
+
+/** ข้อมูลคู่ค้าปัจจุบันขององค์กร/บริษัท ที่ใช้ทำ snapshot ตอนส่งรอบ */
+export interface BillingLiveParty {
+  name: string
+  taxId: string
+  address: string | null
+  phone: string | null
+  branchCode: string
+}
+
+/**
+ * ค่าที่บันทึกลง `billing_batches` ตอน**ส่งรอบวางบิล** (UAT BUG-164) — ใบแจ้งหนี้ที่ส่งลูกค้าแล้วต้องคงชื่อ/
+ * ที่อยู่/เลขผู้เสียภาษีของผู้ขายและผู้ซื้อ ณ วันส่ง แม้แก้ข้อมูลบริษัท/องค์กรภายหลัง (แนวเดียวกับ snapshot ของใบกำกับภาษี)
+ */
+export function billingPartySnapshotOf(seller: BillingLiveParty, buyer: BillingLiveParty): {
+  [K in keyof BillingPartySnapshotColumns]: K extends 'sellerPhone' | 'buyerPhone' ? string | null : string
+} {
+  return {
+    sellerName: seller.name,
+    sellerTaxId: seller.taxId,
+    sellerAddress: seller.address ?? '',
+    sellerPhone: seller.phone,
+    sellerBranchCode: seller.branchCode,
+    buyerName: buyer.name,
+    buyerTaxId: buyer.taxId,
+    buyerAddress: buyer.address ?? '',
+    buyerPhone: buyer.phone,
+    buyerBranchCode: buyer.branchCode,
+  }
+}
+
+/**
+ * คู่ค้าที่พิมพ์บนใบแจ้งหนี้ — อ่านจาก **snapshot ตอนส่งรอบ** เสมอ (ภายใน · พอร์ทัล · Export Pack ได้ค่าเดียวกัน)
+ * · รอบที่ส่งแล้วถูก backfill ตอน migrate ทุกใบ ⇒ ค่าสด (`live`) ใช้เฉพาะแถวที่ไม่มี snapshot เท่านั้น
+ *   (เช่น ข้อมูลที่ใส่ตรงลงฐานโดยไม่ผ่านการส่งรอบ) — ไม่ใช่ทางปกติ
+ */
+export function billingInvoicePartiesOf(
+  snapshot: BillingPartySnapshotColumns,
+  live: { seller: BillingLiveParty; buyer: BillingLiveParty },
+): { seller: BillingInvoiceParty; buyer: BillingInvoiceParty } {
+  if (snapshot.sellerName !== null && snapshot.buyerName !== null) {
+    return {
+      seller: {
+        name: snapshot.sellerName,
+        taxId: snapshot.sellerTaxId ?? '',
+        address: snapshot.sellerAddress ?? '',
+        phone: snapshot.sellerPhone,
+        branchCode: snapshot.sellerBranchCode ?? '00000',
+      },
+      buyer: {
+        name: snapshot.buyerName,
+        taxId: snapshot.buyerTaxId ?? '',
+        address: snapshot.buyerAddress ?? '',
+        phone: snapshot.buyerPhone,
+        branchCode: snapshot.buyerBranchCode ?? '00000',
+      },
+    }
+  }
+  const fallback = billingPartySnapshotOf(live.seller, live.buyer)
+  return {
+    seller: {
+      name: fallback.sellerName,
+      taxId: fallback.sellerTaxId,
+      address: fallback.sellerAddress,
+      phone: fallback.sellerPhone,
+      branchCode: fallback.sellerBranchCode,
+    },
+    buyer: {
+      name: fallback.buyerName,
+      taxId: fallback.buyerTaxId,
+      address: fallback.buyerAddress,
+      phone: fallback.buyerPhone,
+      branchCode: fallback.buyerBranchCode,
+    },
+  }
+}
+
 export interface BillingInvoiceLineSource {
   caseRef: string
   revenueDate: Date

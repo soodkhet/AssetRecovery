@@ -8,6 +8,7 @@ import {
   summarizeArAging,
   type ArAgingRow,
 } from '@/lib/finance/ar-calc'
+import { estimateCustomerWhtForBilling } from '@/lib/finance/wht-calc'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { adjustmentsAwaitingNotesByBatch, withDocumentedArTotals } from '@/lib/portal/documented-amounts'
 import type {
@@ -15,6 +16,7 @@ import type {
   RevenueStatus,
 } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { billingPartySnapshotOf } from '@/lib/revenue/billing-invoice'
 import { RevenueError } from '@/lib/revenue/errors'
 import { syncSalesRecordFromBilling } from '@/lib/sales/queries'
 import {
@@ -183,7 +185,7 @@ const batchSelect = {
   dueDate: true,
   sentAt: true,
   createdAt: true,
-  company: { select: { name: true } },
+  company: { select: { name: true, whtWithheldByCustomerPct: true } },
   createdByUser: { select: { fullName: true } },
   _count: { select: { revenues: true } },
   // UAT Q6 — ป้าย VAT ของรอบอ่านจาก snapshot ของรายได้ในรอบ ไม่ใช่ค่าปัจจุบันของบริษัท
@@ -192,7 +194,15 @@ const batchSelect = {
 
 type BatchRow = Prisma.BillingBatchGetPayload<{ select: typeof batchSelect }>
 
-function toBatchDto(row: BatchRow, asOf: Date): BillingBatchDto {
+function toBatchDto(row: BatchRow, asOf: Date, amountBeforeVatSatang: number): BillingBatchDto {
+  const customerWhtPct =
+    row.company.whtWithheldByCustomerPct === null ? null : row.company.whtWithheldByCustomerPct.toNumber()
+  const customerWht = estimateCustomerWhtForBilling({
+    amountBeforeVatSatang,
+    totalSatang: row.totalSatang,
+    recordedWhtSatang: row.whtWithheldByCustomerSatang,
+    whtPct: customerWhtPct,
+  })
   return {
     id: row.id,
     companyId: row.companyId,
@@ -209,6 +219,11 @@ function toBatchDto(row: BatchRow, asOf: Date): BillingBatchDto {
       receivedSatang: row.receivedSatang,
       whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
     }),
+    amountBeforeVatSatang,
+    customerWhtPct,
+    customerWhtSatang: customerWht.whtSatang,
+    customerWhtIsEstimate: customerWht.isEstimate,
+    expectedReceiptSatang: customerWht.expectedReceiptSatang,
     dueDate: toDateOnlyIso(row.dueDate),
     daysOverdue: daysOverdue(row.dueDate, asOf),
     sentAt: row.sentAt === null ? null : toIso(row.sentAt),
@@ -278,7 +293,26 @@ export async function listBillingBatches(
     orderBy: [{ createdAt: 'desc' }],
     take: 200,
   })
-  return rows.map((row) => toBatchDto(row, now))
+  const grossByBatch = await batchGrossSatang(
+    user.organizationId,
+    rows.map((row) => row.id),
+  )
+  return rows.map((row) => toBatchDto(row, now, grossByBatch.get(row.id) ?? 0))
+}
+
+/** ยอดก่อน VAT ต่อรอบ (ผลรวมรายได้ที่ยังไม่ถูกลบ) — query เดียวทั้งหน้า */
+async function batchGrossSatang(organizationId: string, batchIds: readonly string[]): Promise<Map<string, number>> {
+  if (batchIds.length === 0) return new Map()
+  const groups = await prisma.revenue.groupBy({
+    by: ['billingBatchId'],
+    where: { organizationId, deletedAt: null, billingBatchId: { in: [...batchIds] } },
+    _sum: { grossSatang: true },
+  })
+  return new Map(
+    groups.flatMap((group) =>
+      group.billingBatchId === null ? [] : [[group.billingBatchId, group._sum.grossSatang ?? 0] as const],
+    ),
+  )
 }
 
 async function findBatch(user: SessionUser, batchId: string): Promise<BatchRow> {
@@ -307,7 +341,8 @@ export async function getBillingBatch(
     select: revenueSelect,
     orderBy: [{ revenueDate: 'asc' }],
   })
-  return { ...toBatchDto(batch, now), revenues: revenues.map(toRevenueDto) }
+  const gross = revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0)
+  return { ...toBatchDto(batch, now, gross), revenues: revenues.map(toRevenueDto) }
 }
 
 // ── POST /api/billing-batches (`19` §9.1) ───────────────────────────────────
@@ -478,10 +513,19 @@ export async function sendBillingBatch(
   })
 
   await prisma.$transaction(async (tx) => {
+    // UAT BUG-164 — snapshot ผู้ขาย/ผู้ซื้อของใบแจ้งหนี้ ณ วันส่ง (ใบที่ส่งแล้วไม่เปลี่ยนตามการแก้ข้อมูลภายหลัง)
+    const parties = await tx.billingBatch.findUniqueOrThrow({
+      where: { id: batchId },
+      select: {
+        organization: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
+        company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
+      },
+    })
+    const snapshot = billingPartySnapshotOf(parties.organization, parties.company)
     // ยึดด้วยสถานะเดิม — สองคนกดส่งพร้อมกัน คนที่สองได้ 0 แถวแล้วโดนปฏิเสธ (ไม่ทับ `sent_at`)
     const claimed = await tx.billingBatch.updateMany({
       where: { id: batchId, status: 'draft' },
-      data: { status: 'sent', sentAt: now, sentBy: user.id, updatedBy: user.id },
+      data: { status: 'sent', sentAt: now, sentBy: user.id, updatedBy: user.id, ...snapshot },
     })
     if (claimed.count === 0) {
       throw new RevenueError('BILLING_BATCH_INVALID_STATUS', { detail: 'รอบนี้ถูกส่งไปแล้วโดยผู้ใช้อื่น' })
@@ -497,7 +541,14 @@ export async function sendBillingBatch(
         targetType: TARGET,
         targetId: batchId,
         before: { status: batch.status, sent_at: null },
-        after: { status: 'sent', sent_at: toIso(now), total_satang: batch.totalSatang },
+        after: {
+          status: 'sent',
+          sent_at: toIso(now),
+          total_satang: batch.totalSatang,
+          buyer_name: snapshot.buyerName,
+          buyer_tax_id: snapshot.buyerTaxId,
+          seller_name: snapshot.sellerName,
+        },
         reason: context.reason,
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,

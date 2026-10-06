@@ -1,9 +1,15 @@
 import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
-import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
+import {
+  bodyStringField,
+  readJsonBody,
+  toModuleErrorResponse,
+  validationErrorResponse,
+  withApiPermission,
+} from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { cancelTaxInvoice } from '@/lib/sales/queries'
-import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
+import { MANAGE_TAX_INVOICE, requireCancelReason } from '@/lib/sales/sales'
 import { taxInvoiceCancelSchema } from '@/lib/sales/schemas'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -20,7 +26,10 @@ export const PATCH = withApiPermission<RouteContext>(
   toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
-    const parsed = taxInvoiceCancelSchema.safeParse(await readJsonBody(request))
+    const body = await readJsonBody(request)
+    // ไม่มีเหตุผล/ว่าง/ช่องว่างล้วน ⇒ `CANCEL_REQUIRES_REASON` (`24` §6.8) ไม่ใช่ `REQUIRED_MISSING` (UAT BUG-161)
+    requireCancelReason(bodyStringField(body, 'reason'))
+    const parsed = taxInvoiceCancelSchema.safeParse(body)
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     return apiSuccess(await cancelTaxInvoice({ actor: user, meta: getRequestMeta(request) }, id, parsed.data))
