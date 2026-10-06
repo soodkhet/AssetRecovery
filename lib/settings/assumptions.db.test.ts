@@ -116,4 +116,15 @@ suite('U140 — ป้าย "รอนักบัญชียืนยัน"'
       }),
     ).rejects.toThrow()
   })
+
+  it('มติ PO U170 (BUG-180) — หน้ารวมได้ทุกรายการ + ค่าที่ใช้อยู่จาก query เดิม + สถานะยืนยันตรงกับป้าย', async () => {
+    const overview = await queries.listSettingAssumptionOverview(ORG_ID)
+    const statuses = await queries.listSettingAssumptions(ORG_ID)
+    expect(overview.map((row) => row.key)).toEqual(statuses.map((row) => row.key))
+    expect(overview.every((row) => row.currentValue.length > 0)).toBe(true)
+    expect(overview.map((row) => row.confirmed)).toEqual(statuses.map((row) => row.confirmed))
+    // องค์กรทดสอบไม่มีแถวค่าตั้ง ⇒ ค่าเริ่มต้นตามมติ (เพดานค่าธรรมเนียม ฿50 · ยื่นออนไลน์)
+    expect(overview.find((row) => row.key === 'bank_fee_write_off')?.currentValue).toBe('เพดาน ฿50.00')
+    expect(overview.find((row) => row.key === 'wht_filing_method')?.currentValue).toContain('ออนไลน์')
+  })
 })

@@ -1268,6 +1268,7 @@ export async function getIncomeSummary(
   const items = assignments.map((row) => {
     const success = row.status === 'closed_success'
     return {
+      assignmentId: row.id,
       caseId: row.caseId,
       caseRef: row.case.caseRef,
       debtorName: row.case.debtorName,

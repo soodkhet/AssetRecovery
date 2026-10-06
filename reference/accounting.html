@@ -143,6 +143,7 @@ const state = {
   mainTab: 'accounting',
   accountingSubTab: 'closing',
   // เมนูย่อยของ "บัญชี" (มติ PO 06/10/2569 U104): 'operations' = งานบัญชี · 'samples' = ตัวอย่างเอกสารทั้งหมด
+  // · 'assumptions' = ค่าตั้งรอนักบัญชียืนยัน (มติ PO 07/10/2569 U170)
   accountingView: 'operations',
   sampleViewer: null,
   modal: null,
@@ -1734,7 +1735,8 @@ function renderToast() {
 function renderAccountingSubNav() {
   const items = [
     { id: 'operations', label: 'งานบัญชี' },
-    { id: 'samples', label: 'ตัวอย่างเอกสารทั้งหมด' }
+    { id: 'samples', label: 'ตัวอย่างเอกสารทั้งหมด' },
+    { id: 'assumptions', label: 'ค่าตั้งรอนักบัญชียืนยัน' }
   ];
   return `
   <div class="bg-slate-50 border-b border-slate-200">
@@ -1810,6 +1812,52 @@ function renderDocumentSamples() {
   </div>`;
 }
 
+// ===================== ค่าตั้งรอนักบัญชียืนยัน (มติ PO 07/10/2569 U170) =====================
+// รวมทุกรายการจากทะเบียนสมมติฐาน (ของจริง lib/settings/assumptions.ts) + ค่าที่ใช้อยู่ (อ่านอย่างเดียว) + สถานะยืนยัน
+// ปุ่ม "ยืนยันแล้ว" (เหตุผลบังคับ + audit) เฉพาะผู้ถือสิทธิ์ยืนยัน · ลิงก์ "ไปหน้าตั้งค่า" เฉพาะผู้ที่เปิดแท็บนั้นได้
+const ASSUMPTION_ROWS = [
+  { label: 'ประเภทเงินได้ของผู้รับเงิน', value: 'แยกตามประเภททีม — Inhouse 40(2) · Outsource 40(8)', question: 'พนักงานที่มีสัญญาจ้างแรงงานควรเป็น 40(1)/40(2) ยื่น ภ.ง.ด.1 หรือไม่', confirmed: null, link: true },
+  { label: 'เกณฑ์ขั้นต่ำไม่หักภาษี', value: 'Outsource Standard 3% · 3.00% · ขั้นต่ำ ฿1,000.00', question: 'ไม่หักเมื่อยอดต่อคนต่อรอบจ่ายต่ำกว่า ฿1,000', confirmed: null, link: true },
+  { label: 'ปฏิทินวันหยุด', value: 'ปี 2569 มี 19 วัน', question: 'วันหยุดราชการของปีที่ใช้เลื่อนกำหนดยื่นแบบ', confirmed: { by: 'บัญชี ทดสอบ', at: '07/10/2569 10:15', reason: 'สำนักงานบัญชียืนยันทางอีเมล' }, link: true },
+  { label: 'การปัดเศษภาษีมูลค่าเพิ่ม', value: 'อัตรา VAT ปัจจุบัน 7.00% · คำนวณต่อเคสแล้วรวมเป็นยอดใบ', question: 'อาจต่างจากคิดจากยอดรวมไม่กี่สตางค์ — ใช้ได้หรือไม่', confirmed: null, link: false },
+  { label: 'ตัดส่วนต่างรับเงินเป็นค่าธรรมเนียมธนาคาร', value: 'เพดาน ฿50.00', question: 'เพดานและการบันทึกบัญชีถูกต้องหรือไม่', confirmed: null, link: false }
+];
+
+function renderAssumptions() {
+  const pending = ASSUMPTION_ROWS.filter(r => !r.confirmed).length;
+  return `
+  <div class="animate-fade-in">
+    <div class="mb-5">
+      <h1 class="text-lg font-bold text-slate-900">ค่าตั้งรอนักบัญชียืนยัน</h1>
+      <p class="text-sm text-slate-500 mt-1">ค่าที่ระบบใช้ค่าแนะนำไปก่อนระหว่างรอคำตอบจากสำนักงานบัญชี — ยืนยันได้จากหน้านี้โดยไม่ต้องเข้าหน้าตั้งค่า (การแก้ค่ายังทำที่หน้าตั้งค่าตามสิทธิ์เดิม)</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><div class="text-xs text-slate-500">รอนักบัญชียืนยัน</div><div class="text-2xl font-bold text-amber-600">${pending}</div></div>
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5"><div class="text-xs text-slate-500">ยืนยันแล้ว</div><div class="text-2xl font-bold text-emerald-600">${ASSUMPTION_ROWS.length - pending}</div></div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-600"><tr>
+          <th class="px-4 py-3 text-left">รายการ</th><th class="px-4 py-3 text-left">ค่าที่ใช้อยู่</th><th class="px-4 py-3 text-left">สถานะ</th><th class="px-4 py-3 text-right"></th>
+        </tr></thead>
+        <tbody class="divide-y divide-slate-100">
+          ${ASSUMPTION_ROWS.map(r => `<tr>
+            <td class="px-4 py-3 align-top"><div class="font-semibold text-slate-800">${r.label}</div><div class="text-xs text-slate-500 mt-0.5">${r.question}</div></td>
+            <td class="px-4 py-3 align-top text-xs text-slate-700">${r.value}</td>
+            <td class="px-4 py-3 align-top">${r.confirmed
+              ? `<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">ยืนยันแล้ว</span><div class="text-[11px] text-slate-500 mt-1">${r.confirmed.by} · ${r.confirmed.at}</div><div class="text-[11px] text-slate-400">${r.confirmed.reason}</div>`
+              : `<span class="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">รอนักบัญชียืนยัน</span>`}</td>
+            <td class="px-4 py-3 align-top text-right whitespace-nowrap">
+              ${r.link ? `<a href="settings.html" class="text-xs font-semibold text-emerald-700 hover:underline mr-3">ไปหน้าตั้งค่า</a>` : ''}
+              ${r.confirmed ? '' : `<button data-action="toast" data-msg="ยืนยัน &quot;${r.label}&quot; แล้ว" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 focus-ring">ยืนยันแล้ว</button>`}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
 function renderSampleViewer() {
   if (!state.sampleViewer) return '';
   const d = SAMPLE_DOCS.find(x => x.id === state.sampleViewer);
@@ -1842,7 +1890,9 @@ function renderSampleViewer() {
 // ===================== MAIN RENDER =====================
 function render() {
   const app = document.getElementById('app');
-  const mainContent = state.accountingView === 'samples' ? renderDocumentSamples() : renderAccountingOperations();
+  const mainContent = state.accountingView === 'samples' ? renderDocumentSamples()
+    : state.accountingView === 'assumptions' ? renderAssumptions()
+    : renderAccountingOperations();
   app.innerHTML = renderTopNav()
     + renderAccountingSubNav()
     + `<main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${mainContent}</main>`

@@ -292,6 +292,11 @@ export interface FieldExpenseListDto {
 }
 
 export interface FieldIncomeItemDto {
+  /**
+   * งานมอบหมายของแถวนี้ — **key ของรายการ** (BUG-183): เคสรีไซเคิลมีหลายรอบ ⇒ `caseId` ซ้ำได้ในรายการเดียวกัน
+   * (1 แถว = 1 งานที่ปิดแล้ว)
+   */
+  assignmentId: string
   caseId: string
   caseRef: string
   debtorName: string | null

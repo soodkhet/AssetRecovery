@@ -21,6 +21,7 @@ import {
   type MenuAudience,
   type MenuViewer,
   resolveMenuAudience,
+  SETTING_ASSUMPTIONS_PATH,
   visibleMenus,
 } from '@/lib/nav/menu-registry'
 
@@ -381,6 +382,37 @@ describe('เมนูย่อย "ตัวอย่างเอกสาร�
   it('role อื่นไม่เห็นแม้ถือสิทธิ์ (เมนูบัญชีไม่ใช่ของ role นั้น)', () => {
     for (const audience of ['admin_office', 'case_approver', 'team_lead', 'field_agent', 'company_user'] as const) {
       expect(canViewMenu({ ...VIEWERS[audience], capabilities: SAMPLES }, 'accounting.document-samples')).toBe(false)
+    }
+  })
+})
+
+/**
+ * มติ PO 07/10/2569 U170 (BUG-180 · `06` §7.2 v2.13) — เมนูย่อย "ค่าตั้งรอนักบัญชียืนยัน" ของเมนูบัญชี
+ * เห็น: Superadmin · บริหาร/บัญชีที่อ่านรายการได้ (`view_master_data`) · การเงิน/role อื่น = ซ่อน
+ */
+describe('เมนูย่อย "ค่าตั้งรอนักบัญชียืนยัน" (มติ PO U170)', () => {
+  const MASTER = { view_master_data: 'view' as const }
+
+  it('บัญชี/บริหารที่อ่านรายการได้ เห็นเมนูย่อย · Superadmin เห็นเสมอ · แท็บแรกของบัญชียังเป็นงานบัญชี', () => {
+    for (const audience of ['accounting', 'executive'] as const) {
+      const holder = { ...VIEWERS[audience], capabilities: MASTER }
+      expect(canViewMenu(holder, 'accounting.setting-assumptions')).toBe(true)
+      expect(firstVisibleChildPath(holder, 'accounting')).toBe('/accounting')
+    }
+    expect(canViewMenu(VIEWERS.superadmin, 'accounting.setting-assumptions')).toBe(true)
+    expect(findMenu('accounting.setting-assumptions')?.path).toBe(SETTING_ASSUMPTIONS_PATH)
+  })
+
+  it('ไม่ถือสิทธิ์อ่าน = ซ่อน · การเงิน (แม้ถือสิทธิ์อ่าน) ไม่เห็น', () => {
+    expect(canViewMenu({ ...VIEWERS.accounting, capabilities: {} }, 'accounting.setting-assumptions')).toBe(false)
+    const finance = { ...VIEWERS.finance, capabilities: { ...MASTER, view_document_samples: 'view' as const } }
+    expect(canViewMenu(finance, 'accounting.setting-assumptions')).toBe(false)
+    expect(firstVisibleChildPath(finance, 'accounting')).toBe('/accounting/document-samples')
+  })
+
+  it('role อื่นไม่เห็น', () => {
+    for (const audience of ['admin_office', 'case_approver', 'team_lead', 'field_agent', 'company_user'] as const) {
+      expect(canViewMenu({ ...VIEWERS[audience], capabilities: MASTER }, 'accounting.setting-assumptions')).toBe(false)
     }
   })
 })

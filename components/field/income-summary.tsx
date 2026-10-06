@@ -108,7 +108,7 @@ export function IncomeSummary() {
             <div className="space-y-1.5 lg:space-y-3">
               {data?.items.map((item) => (
                 <div
-                  key={item.caseId}
+                  key={item.assignmentId}
                   className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2.5"
                 >
                   <div className="min-w-0">

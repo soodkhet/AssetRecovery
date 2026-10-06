@@ -20,9 +20,12 @@ export interface AdvancesState {
   reload: () => Promise<void>
 }
 
-export function useAdvances(status: AdvanceStatusFilter = 'all'): AdvancesState {
+/**
+ * `enabled = false` = ผู้ใช้ไม่มีสิทธิ์อ่านเงินทดรอง (BUG-182 — ส่วนนั้นถูกซ่อน) ⇒ ไม่ยิง API เลย (ไม่มี 403 ใน console)
+ */
+export function useAdvances(status: AdvanceStatusFilter = 'all', enabled = true): AdvancesState {
   const [items, setItems] = useState<readonly AdvanceDto[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
 
   const fetchItems = useCallback(
@@ -31,6 +34,7 @@ export function useAdvances(status: AdvanceStatusFilter = 'all'): AdvancesState 
   )
 
   const reload = useCallback(async () => {
+    if (!enabled) return
     const result = await fetchItems()
     if (result.error !== undefined) {
       setError({ title: result.error.title, message: result.error.message })
@@ -40,9 +44,10 @@ export function useAdvances(status: AdvanceStatusFilter = 'all'): AdvancesState 
     setItems(result.data ?? [])
     setError(null)
     setLoading(false)
-  }, [fetchItems])
+  }, [fetchItems, enabled])
 
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     void (async () => {
       const result = await fetchItems()
@@ -59,7 +64,7 @@ export function useAdvances(status: AdvanceStatusFilter = 'all'): AdvancesState 
     return () => {
       cancelled = true
     }
-  }, [fetchItems])
+  }, [fetchItems, enabled])
 
   return { items, loading, error, reload }
 }

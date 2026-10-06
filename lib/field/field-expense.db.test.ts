@@ -1552,6 +1552,10 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
     expect(summary.commissionSatang).toBe(COMMISSION_SATANG)
     expect(summary.noSuccessFeeSatang).toBe(NO_SUCCESS_FEE_SATANG)
     expect(summary.items).toHaveLength(2)
+    // BUG-183 — key ของรายการ = งานมอบหมาย (เคสรีไซเคิลหลายรอบมี caseId ซ้ำได้) ⇒ ต้องมีครบและไม่ซ้ำ
+    const keys = summary.items.map((item) => item.assignmentId)
+    expect(keys.every((key) => typeof key === 'string' && key.length > 0)).toBe(true)
+    expect(new Set(keys).size).toBe(keys.length)
   })
 
   it('Final Test ด่าน 2 — เคสที่ไม่มี snapshot ต้องไม่หยิบแผน**ปัจจุบัน**ของทีมมาคิดย้อนหลัง (`92` §7.1)', async () => {

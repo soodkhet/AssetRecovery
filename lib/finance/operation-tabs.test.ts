@@ -7,11 +7,17 @@ import {
   TEAM_SUPERVISOR_ROLE_NAME,
 } from '@/lib/auth/constants'
 import type { CapabilityHolder } from '@/lib/auth/permission'
+import { MANAGE_ACCOUNTING_PERIOD } from '@/lib/accounting/period'
+import { CREATE_ADJUSTMENT } from '@/lib/adjustments/adjustment'
+import { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
 import {
+  canViewFinanceTabSection,
   DEFAULT_FINANCE_OPERATION_TAB,
   FINANCE_OPERATION_TABS,
+  FINANCE_TAB_SECTIONS,
   resolveFinanceOperationTab,
   visibleFinanceOperationTabs,
+  type FinanceTabSection,
 } from '@/lib/finance/operation-tabs'
 import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
 import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
@@ -116,5 +122,30 @@ describe('แท็บหน้าการเงิน', () => {
     expect(executive).toContain('comp')
     // `17` §12 — บริหารดูรอบจ่ายได้ (read-only · UAT R6-F)
     expect(executive).toContain('payout')
+  })
+})
+
+/** BUG-182 — ส่วนย่อยในแท็บที่ API อ่านต่างจากแท็บแม่ ⇒ ซ่อนเฉพาะส่วน (ไม่ใช่กล่อง "ไม่มีสิทธิ์ใช้งาน") */
+describe('ส่วนย่อยในแท็บการเงิน (FINANCE_TAB_SECTIONS)', () => {
+  it('capability ของแต่ละส่วนตรงกับ API ที่ส่วนนั้นเรียก', () => {
+    expect([...FINANCE_TAB_SECTIONS['approval.advances']].sort()).toEqual([APPROVE_ADVANCE, REQUEST_ADVANCE].sort())
+    expect([...FINANCE_TAB_SECTIONS['adjustment.locked-sources']].sort()).toEqual(
+      [CREATE_ADJUSTMENT, MANAGE_ACCOUNTING_PERIOD].sort(),
+    )
+  })
+
+  it('ผู้บริหาร: เห็นแท็บรออนุมัติ/ปรับปรุง แต่ไม่เห็นตารางเงินทดรอง + การ์ดงวดปิด', () => {
+    const executive = roleHolder(EXECUTIVE_ROLE_NAME, 'system')
+    expect(tabIds(executive)).toEqual(expect.arrayContaining(['approval', 'adjustment']))
+    expect(canViewFinanceTabSection(executive, 'approval.advances')).toBe(false)
+    expect(canViewFinanceTabSection(executive, 'adjustment.locked-sources')).toBe(false)
+  })
+
+  it('การเงินเห็นทั้งสองส่วน · Superadmin เห็นเสมอ', () => {
+    const finance = roleHolder(FINANCE_ROLE_NAME, 'system')
+    for (const section of Object.keys(FINANCE_TAB_SECTIONS) as FinanceTabSection[]) {
+      expect(canViewFinanceTabSection(finance, section)).toBe(true)
+      expect(canViewFinanceTabSection(SUPER, section)).toBe(true)
+    }
   })
 })

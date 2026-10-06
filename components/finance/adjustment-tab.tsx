@@ -44,6 +44,7 @@ import {
   type AdjustmentTargetFilter,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto } from '@/lib/adjustments/types'
+import { canViewFinanceTabSection } from '@/lib/finance/operation-tabs'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 
@@ -55,8 +56,10 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  * ⚠️ ยอดในฐานข้อมูลเป็นบวกเสมอ — เครื่องหมาย/สีมาจาก `adjustment-ui.ts` ไม่ใช่คำนวณบนจอ (Rule 01)
  */
 export function AdjustmentTab() {
-  const { can } = usePermission()
+  const { can, session } = usePermission()
   const canCreate = can('manage', CREATE_ADJUSTMENT)
+  // BUG-182 — การ์ดงวดปิด (วันลงพื้นที่/ค่าน้ำมัน) อ่านได้เฉพาะการเงิน/บัญชี ⇒ ผู้บริหารไม่เห็นส่วนนี้ (ไม่ยิง API)
+  const canViewLockedSources = session !== null && canViewFinanceTabSection(session, 'adjustment.locked-sources')
   // BUG-130 — ปุ่มอนุมัติ/ปฏิเสธต้องถือ capability "ของระดับนั้น" (รอบ locked = ผู้บริหารเท่านั้น)
   // ตัวเดียวกับที่ API ตรวจ (`approvalCapabilityFor`) — ซ่อนเป็นแค่ UX, API ยังปฏิเสธเองเสมอ (DEC-002)
   const canReview = (row: AdjustmentDto): boolean =>
@@ -89,8 +92,12 @@ export function AdjustmentTab() {
       </div>
 
       {/* มติ PO U50 — ปลายทางของแจ้งเตือนวันลงพื้นที่ในงวดปิด (ไม่มีรายการ = ไม่แสดง) */}
-      <LockedFieldDaysCard />
-      <LockedFuelExpensesCard />
+      {canViewLockedSources && (
+        <>
+          <LockedFieldDaysCard />
+          <LockedFuelExpensesCard />
+        </>
+      )}
 
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

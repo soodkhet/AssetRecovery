@@ -119,3 +119,75 @@ export function canOpenTaxProfileTab(viewer: MenuViewer & FinanceTabViewer): boo
     visibleFinanceSettingsTabs(viewer).some((tab) => tab.id === 'tax' && tab.available)
   )
 }
+
+/** ค่าของผู้รับที่ใช้สรุปกติกาภาษีที่ใช้จริง (ตรงกับ `PayeeDto` บางส่วน / ค่าในฟอร์ม) */
+export interface PayeeTaxRuleInput {
+  /** Tax Profile ที่ผูกรายคน — `null` = ไม่ผูก (ใช้ค่าเริ่มต้นตามประเภท) */
+  taxProfileName: string | null
+  whtPct: number | null
+  /** อัตราหัก 40(1)/40(2) รายคน — `null` = ยังไม่กรอก */
+  wht402Pct: number | null
+}
+
+export interface PayeeTaxRuleSummary {
+  kind: 'per_payee_rate' | 'own_profile' | 'default_profile' | 'missing'
+  /** บรรทัดหลัก เช่น "หัก 40(2) ตามอัตรารายคน 5.00%" / "3.00%" */
+  label: string
+  /** บรรทัดรอง (ชื่อ Tax Profile / ที่มา) */
+  detail: string | null
+  /** ต้องเตือน — ยังไม่กรอกอัตรารายคน / ไม่มีค่าเริ่มต้นและไม่ผูกรายคน */
+  warning: boolean
+  /** Tax Profile รายคนที่ผูกไว้แต่**ไม่มีผล** (ผู้รับหักตามอัตรารายคน) — `null` = ไม่มี */
+  ignoredProfileName: string | null
+}
+
+/**
+ * **กติกาภาษีที่ใช้จริงของผู้รับ** (มติ PO 07/10/2569 U164 · BUG-181) — pure ใช้หน้าผู้รับเงินและฟอร์มผู้ใช้
+ *
+ * ลำดับเดียวกับรอบจ่าย (`calculatePayeeBatchWht()` ใน `lib/finance/wht-calc.ts`): ประเภทเงินได้ของฝั่ง × ชนิดผู้รับเป็น
+ * 40(1)/40(2) ⇒ หัก**อัตรารายคน**เสมอ (Tax Profile รายคนไม่มีผล) · นอกนั้น Tax Profile รายคน → ค่าเริ่มต้นตามประเภท
+ * · `defaultLine` = ผลของ `payeeDefaultTaxRule()` (`null` = ไม่มีฝั่ง)
+ */
+export function payeeEffectiveTaxRule(
+  defaultLine: TeamTaxRuleLine | null,
+  payee: PayeeTaxRuleInput,
+): PayeeTaxRuleSummary {
+  if (defaultLine !== null && defaultLine.kind === 'per_payee_rate') {
+    const income = (defaultLine.incomeLabel ?? '').replace(/^มาตรา\s*/, '')
+    const missingRate = payee.wht402Pct === null
+    return {
+      kind: 'per_payee_rate',
+      label: missingRate
+        ? `หัก ${income} ตามอัตรารายคน — ยังไม่กรอกอัตรา`
+        : `หัก ${income} ตามอัตรารายคน ${fmtPercent(payee.wht402Pct)}`,
+      detail: payee.taxProfileName === null ? null : `Tax Profile "${payee.taxProfileName}" ไม่มีผลกับผู้รับรายนี้`,
+      warning: missingRate,
+      ignoredProfileName: payee.taxProfileName,
+    }
+  }
+  if (payee.taxProfileName !== null) {
+    return {
+      kind: 'own_profile',
+      label: fmtPercent(payee.whtPct),
+      detail: `${payee.taxProfileName} ${PER_PAYEE_TAX_PROFILE_SUFFIX}`,
+      warning: false,
+      ignoredProfileName: null,
+    }
+  }
+  if (defaultLine !== null && defaultLine.kind === 'tax_profile' && defaultLine.profile !== null) {
+    return {
+      kind: 'default_profile',
+      label: fmtPercent(defaultLine.profile.whtPct),
+      detail: `${defaultLine.profile.name} (ค่าเริ่มต้นตามประเภทผู้รับ)`,
+      warning: false,
+      ignoredProfileName: null,
+    }
+  }
+  return {
+    kind: 'missing',
+    label: 'ยังไม่มีกติกาภาษีที่ใช้ได้',
+    detail: 'ตั้งค่าเริ่มต้นตามประเภทผู้รับ หรือเลือก Tax Profile ให้คนนี้',
+    warning: true,
+    ignoredProfileName: null,
+  }
+}
