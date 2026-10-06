@@ -85,6 +85,7 @@
 | v4.5x-DA | 07/10/2569 | **มติ PO 07/10/2569 (U143 + U150)** (migration `20261008070000_receipt_id_document_verification`) — ใบเสร็จของเบิกด้วยมือ/เคลียร์เงินทดรอง และเอกสารยืนยันตัวตนผู้รับเงิน **อัปโหลดจริงผ่าน server** (ตรวจไฟล์ + SHA-256) แทนช่อง path/URL พิมพ์เอง · `expenses` + `receipt_file_unverified BOOLEAN NOT NULL DEFAULT false` · `payee_profiles` + `id_document_hash VARCHAR(64)` + `id_document_unverified BOOLEAN NOT NULL DEFAULT false` · backfill: แถวเดิมที่มี path แต่ไม่มี hash ⇒ `*_unverified = true` (**ไม่ลบข้อมูล** — ระบบถือว่าไม่มีไฟล์: Export Pack `03_Expenses.receipt_file` · ความครบเอกสารบัญชีค่าใช้จ่าย · เกตยืนยันผู้รับเงิน) · CHECK `chk_expenses_receipt_verified` / `chk_payee_profiles_id_document_verified`: มี path ⇒ ต้องมี hash หรือเป็นข้อมูลเก่าที่ทำเครื่องหมายไว้ · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ flag = false |
 | v4.5x-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)** (migration `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source`): **(U145)** `finance_policy_settings` ลบ `advance_uncleared_to_employee_receivable` (สวิตช์ไม่เคยมีผล — รอบจ่ายหักคืนเงินทดรองค้างเสมอ) · **(U144)** `billing_batches` + `bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0` + `bank_fee_written_off_date DATE` (CHECK ≥ 0 · ยอด 0 ⇔ วันที่ NULL · partial index `idx_billing_batches_bank_fee_date (organization_id, bank_fee_written_off_date) WHERE ยอด > 0`) — ส่วนต่างรับขาด ≤ `write_off_tolerance_satang` เป็นค่าธรรมเนียมธนาคาร (`22` §6.11.1) · **(U146)** `finance_companies` ลบ `billing_day` / `payment_due_days` (รอบบิลเป็นแหล่งเดียว — บริษัทที่ไม่มีรอบครอบถูกจัดเข้ารอบบิลใหม่ `fixed_dates [billing_day]` + `net_days payment_due_days` ต่อกลุ่มค่า ⇒ วันครบกำหนดเท่าเดิม) · enum `cutoff_rule_type` ตัด `custom_text` (ค่าเดิม: เลขวันที่ในข้อความ + "สิ้นเดือน"=31 ⇒ `fixed_dates` · ไม่มี ⇒ `month_end`) · `cutoff_text` → `legacy_cutoff_text` (อ้างอิงเท่านั้น) · CHECK `cycles_cutoff_shape` ตัดกรณี custom_text · `cycles_due_rule_shape` ให้ `net_days` = 0 ได้ · ไม่มีตารางใหม่ |
 | v4.5x-DE | 07/10/2569 | **มติ PO U155 → U156 → U157 → U159 (Model Phone · DEC-016)** (migration `20261008110000_device_catalog`): enum ใหม่ `device_catalog_status` (`active`/`hidden` — ใช้เป็น **ค่าที่ผู้ดูแลตั้งด้วยมือ** เท่านั้น · ไม่มี `pending_review` ตาม U156) + `device_catalog_source` (`api`/`manual`) · ตารางใหม่ `device_catalog_settings` (1 แถว/org: `brand_names TEXT[]` + `recent_years` CHECK 1–30 ค่าเริ่มต้น 5 — ตัวกรองการแสดง) · `device_brands` (`name_key` UNIQUE ต่อ org · `manual_status` NULL = ตามตัวกรอง · `external_id` = ชื่อฝั่ง API · `last_synced_at` ใช้ resume การดึงครั้งแรก) · `device_models` (`asset_kind` · `manual_status` · `external_id` UNIQUE ต่อแบรนด์ · `release_year` CHECK 1990–2100 · `name_edited_at` = job ไม่ทับชื่อ) · `cases.device_model_id` (FK `ON DELETE SET NULL` — อ้างรุ่นเมื่อเลือกจากรายการ · ข้อความ snapshot ยังอยู่ที่ `asset_description`) · **การแสดงคำนวณตอนอ่าน** (`manual_status` ชนะ · ไม่งั้นแบรนด์ในรายชื่อ + รุ่นออกภายใน N ปี · ไม่ทราบปี = ผ่าน) — job ไม่เขียน `manual_status` · enum รวม 76 ตัว |
+| v4.5x-FD | 07/10/2569 | **มติ PO U165** (migration `20261008140000_service_fee_fail_fee`): แทน `service_fee_templates.charge_on_fail BOOLEAN` ด้วย **`fail_fee_satang INTEGER NULL`** (ยอดค่าบริการกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ · CHECK ≥ 0) · snapshot บนเคส `cases.service_fee_charge_on_fail` → **`service_fee_fail_fee_satang`** · `recycle_requests.prev_service_fee_charge_on_fail` → **`prev_service_fee_fail_fee_satang`** · แปลงข้อมูล: `true` + FLAT/HYBRID ⇒ = base · นอกนั้น ⇒ NULL (ผลรายได้เท่าเดิมทุกบาท) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -758,8 +759,8 @@ CREATE TABLE service_fee_templates (
   -- SUCCESS_FEE / HYBRID
   rate_pct            NUMERIC(5,2)         NOT NULL DEFAULT 0,
   basis               service_fee_basis,
-  -- FLAT / HYBRID
-  charge_on_fail      BOOLEAN              NOT NULL DEFAULT false,
+  -- (v4.5x-FD มติ PO U165) ยอดกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ (แทน charge_on_fail)
+  fail_fee_satang     INTEGER              CHECK (fail_fee_satang IS NULL OR fail_fee_satang >= 0),
   -- (v4.51 มติ PO U125) ตัดคอลัมน์ charge_per_tracking_round — คิดค่าบริการทุกรอบติดตามอิสระเสมอ
   -- Versioning (snapshot ลงใน Case ตอน approved)
   version             INTEGER              NOT NULL DEFAULT 1,
@@ -1070,7 +1071,7 @@ CREATE TABLE cases (
   service_fee_base_satang      INTEGER,
   service_fee_rate_pct         NUMERIC(5,2),
   service_fee_basis_snapshot   service_fee_basis,
-  service_fee_charge_on_fail   BOOLEAN,
+  service_fee_fail_fee_satang  INTEGER CHECK (service_fee_fail_fee_satang IS NULL OR service_fee_fail_fee_satang >= 0), -- U165
   -- Debtor info
   -- แก้ 14/08/2569 (Phase 2.2): `debtor_name`/`asset_description` ปลด NOT NULL — ไฟล์ 38 §11 บังคับว่า
   -- เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ (ความครบถ้วนบังคับตอนขอขึ้น pending_review แทน)
@@ -1213,7 +1214,7 @@ CREATE TABLE recycle_requests (
   prev_service_fee_base_satang    INTEGER,
   prev_service_fee_rate_pct       NUMERIC(5,2),
   prev_service_fee_basis          service_fee_basis,
-  prev_service_fee_charge_on_fail BOOLEAN,
+  prev_service_fee_fail_fee_satang INTEGER CHECK (prev_service_fee_fail_fee_satang IS NULL OR prev_service_fee_fail_fee_satang >= 0), -- U165
   prev_debt_amount_satang         INTEGER,
   decided_by      UUID            REFERENCES users(id),
   decided_at      TIMESTAMPTZ,

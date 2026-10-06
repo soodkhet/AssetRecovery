@@ -20,6 +20,7 @@ import { parseBahtInput, toBahtInput } from '@/lib/format/money'
  *
  * เลือก model ก่อน → แสดงเฉพาะฟิลด์ที่ model นั้นใช้ (`12` §8 — ซ่อนที่เหลือกัน confusion)
  * ค่าที่ซ่อนถูกส่งเป็น 0/null จริง ไม่ใช่แค่ไม่แสดง (`12` §7.1) · validation ใช้ Zod ตัวเดียวกับ API
+ * มติ PO U165 — ส่วน "กรณีสำเร็จ" ตามโมเดล + ช่องติ๊ก "เรียกเก็บกรณีไม่สำเร็จ" กรอกยอดบาทแยก (ทุกโมเดล)
  */
 
 interface FormState {
@@ -28,7 +29,8 @@ interface FormState {
   base: string
   ratePct: string
   basis: ServiceFeeBasis
-  chargeOnFail: boolean
+  failFeeEnabled: boolean
+  failFee: string
   reason: string
 }
 
@@ -39,7 +41,8 @@ function emptyForm(): FormState {
     base: '',
     ratePct: '',
     basis: 'debt_amount',
-    chargeOnFail: false,
+    failFeeEnabled: false,
+    failFee: '',
     reason: '',
   }
 }
@@ -51,7 +54,8 @@ function formOf(template: ServiceFeeTemplateListDto): FormState {
     base: toBahtInput(template.baseSatang),
     ratePct: String(template.ratePct),
     basis: template.basis ?? 'debt_amount',
-    chargeOnFail: template.chargeOnFail,
+    failFeeEnabled: template.failFeeSatang !== null,
+    failFee: template.failFeeSatang === null ? '' : toBahtInput(template.failFeeSatang),
     reason: '',
   }
 }
@@ -66,7 +70,8 @@ function payloadOf(form: FormState): Record<string, unknown> {
     baseSatang: usesBase ? (parseBahtInput(form.base) ?? 0) : 0,
     ratePct: usesRate ? Number(form.ratePct === '' ? Number.NaN : form.ratePct) : 0,
     basis: usesRate ? form.basis : null,
-    chargeOnFail: usesBase && form.chargeOnFail,
+    // ติ๊กแล้วแต่กรอกไม่ถูก ⇒ NaN ให้ Zod แจ้ง error ที่ช่องยอด (ไม่เงียบกลายเป็น "ไม่เก็บ")
+    failFeeSatang: form.failFeeEnabled ? (parseBahtInput(form.failFee) ?? Number.NaN) : null,
     reason: form.reason.trim(),
   }
 }
@@ -184,6 +189,8 @@ export function ServiceFeeFormModal({
           </Select>
         </Field>
 
+        <p className="text-xs font-semibold text-slate-700">กรณีสำเร็จ</p>
+
         {usesBase && (
           <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <Field id="sf-base" label="ค่าดำเนินการคงที่ (Base Fee) — บาท" required error={errors.baseSatang}>
@@ -196,16 +203,6 @@ export function ServiceFeeFormModal({
                 placeholder="3,000.00"
               />
             </Field>
-
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={form.chargeOnFail}
-                onChange={(event) => set('chargeOnFail', event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              เรียกเก็บค่าเปิดเคสแม้เคสไม่สำเร็จ
-            </label>
           </div>
         )}
 
@@ -231,13 +228,43 @@ export function ServiceFeeFormModal({
           </div>
         )}
 
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={form.failFeeEnabled}
+              onChange={(event) => set('failFeeEnabled', event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            เรียกเก็บกรณีไม่สำเร็จ
+          </label>
+          {form.failFeeEnabled && (
+            <Field
+              id="sf-fail-fee"
+              label="ค่าบริการกรณีไม่สำเร็จ — บาท"
+              required
+              hint="เก็บเมื่อเคสปิดไม่สำเร็จที่หลักฐานครบและผ่านอนุมัติ"
+              error={errors.failFeeSatang}
+            >
+              <Input
+                id="sf-fail-fee"
+                numeric
+                inputMode="decimal"
+                value={form.failFee}
+                onChange={(event) => set('failFee', event.target.value)}
+                placeholder="300.00"
+              />
+            </Field>
+          )}
+        </div>
+
         <SettingHelp
           help={serviceFeeHelp({
             model: form.model,
             baseSatang: satangFromInput(form.base),
             ratePct: pctFromInput(form.ratePct),
             basis: form.basis,
-            chargeOnFail: form.chargeOnFail,
+            failFeeSatang: form.failFeeEnabled ? (satangFromInput(form.failFee) ?? 0) : null,
           })}
         />
 

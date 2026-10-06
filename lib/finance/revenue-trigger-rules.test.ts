@@ -13,7 +13,7 @@ import {
 function input(overrides: Partial<RevenueTriggerInput> = {}): RevenueTriggerInput {
   return {
     model: 'SUCCESS_FEE',
-    chargeOnFail: null,
+    failFeeSatang: null,
     outcome: 'closed_success',
     hasExpense: true,
     expenseState: 'approved',
@@ -47,30 +47,32 @@ describe('evaluateRevenueTrigger — SUCCESS_FEE (`19` §6.1)', () => {
     ).toEqual({ shouldCreate: false, blockedBy: 'model_excludes_fail' })
   })
 
-  it('chargeOnFail = true ไม่มีผลกับ SUCCESS_FEE — closed_fail ยังไม่เกิดรายได้', () => {
-    expect(shouldCreateRevenue(input({ outcome: 'closed_fail', chargeOnFail: true }))).toBe(false)
+  it('มติ U165: SUCCESS_FEE ที่ตั้งยอดกรณีไม่สำเร็จ → closed_fail เกิดรายได้ (ไม่ผ่านคลัง)', () => {
+    expect(
+      shouldCreateRevenue(input({ outcome: 'closed_fail', failFeeSatang: 30_000, lotState: 'not_confirmed' })),
+    ).toBe(true)
   })
 })
 
 describe('evaluateRevenueTrigger — FLAT/HYBRID (`19` §6.1)', () => {
-  it.each(['FLAT', 'HYBRID'] as const)('%s + charge_on_fail = true + closed_fail + expense approved → เกิด (§16)', (model) => {
+  it.each(['FLAT', 'HYBRID'] as const)('%s + ตั้งยอดกรณีไม่สำเร็จ + closed_fail + expense approved → เกิด (§16)', (model) => {
     expect(
-      shouldCreateRevenue(input({ model, chargeOnFail: true, outcome: 'closed_fail', lotState: 'not_confirmed' })),
+      shouldCreateRevenue(input({ model, failFeeSatang: 30_000, outcome: 'closed_fail', lotState: 'not_confirmed' })),
     ).toBe(true)
   })
 
-  it.each(['FLAT', 'HYBRID'] as const)('%s + charge_on_fail = false + closed_fail → ไม่เกิด', (model) => {
-    expect(shouldCreateRevenue(input({ model, chargeOnFail: false, outcome: 'closed_fail' }))).toBe(false)
+  it.each(['FLAT', 'HYBRID'] as const)('%s + ไม่เก็บกรณีไม่สำเร็จ + closed_fail → ไม่เกิด', (model) => {
+    expect(shouldCreateRevenue(input({ model, failFeeSatang: null, outcome: 'closed_fail' }))).toBe(false)
   })
 
-  it('FLAT + charge_on_fail = true + closed_success ยังต้องผ่าน Warehouse gate (§6.1 วงเล็บท้ายบรรทัด)', () => {
+  it('FLAT + ตั้งยอดกรณีไม่สำเร็จ + closed_success ยังต้องผ่าน Warehouse gate (§6.1 วงเล็บท้ายบรรทัด)', () => {
     expect(
-      evaluateRevenueTrigger(input({ model: 'FLAT', chargeOnFail: true, lotState: 'not_confirmed' })),
+      evaluateRevenueTrigger(input({ model: 'FLAT', failFeeSatang: 30_000, lotState: 'not_confirmed' })),
     ).toEqual({ shouldCreate: false, blockedBy: 'warehouse_gate' })
   })
 
-  it('HYBRID + charge_on_fail = false + closed_success ครบ 3 เงื่อนไข → เกิด', () => {
-    expect(shouldCreateRevenue(input({ model: 'HYBRID', chargeOnFail: false }))).toBe(true)
+  it('HYBRID + ไม่เก็บกรณีไม่สำเร็จ + closed_success ครบ 3 เงื่อนไข → เกิด', () => {
+    expect(shouldCreateRevenue(input({ model: 'HYBRID', failFeeSatang: null }))).toBe(true)
   })
 })
 
@@ -90,7 +92,7 @@ describe('evaluateRevenueTrigger — เคสไม่มี expense (DEC-006/D
       shouldCreateRevenue(
         input({
           model: 'FLAT',
-          chargeOnFail: true,
+          failFeeSatang: 300_000,
           outcome: 'closed_fail',
           hasExpense: false,
           expenseState: 'not_approved',
@@ -116,8 +118,8 @@ describe('evaluateRevenueTrigger — ข้อมูลยังไม่พร�
     })
   })
 
-  it('FLAT ที่ยังไม่มี snapshot charge_on_fail (null) + closed_fail → ไม่เกิด (ไม่เดาว่าคิดเงิน)', () => {
-    expect(shouldCreateRevenue(input({ model: 'FLAT', chargeOnFail: null, outcome: 'closed_fail' }))).toBe(false)
+  it('FLAT ที่ยังไม่มี snapshot ยอดกรณีไม่สำเร็จ (null) + closed_fail → ไม่เกิด (ไม่เดาว่าคิดเงิน)', () => {
+    expect(shouldCreateRevenue(input({ model: 'FLAT', failFeeSatang: null, outcome: 'closed_fail' }))).toBe(false)
   })
 })
 
@@ -140,7 +142,7 @@ describe('evaluateRevenueTrigger — รอ settle รายการราย�
   it('เคสไม่มี expense เลย (DEC-006/D6) ก็ยังต้องรอ settle', () => {
     expect(
       evaluateRevenueTrigger(
-        input({ model: 'FLAT', chargeOnFail: true, outcome: 'closed_fail', hasExpense: false, fieldDaysSettled: false }),
+        input({ model: 'FLAT', failFeeSatang: 300_000, outcome: 'closed_fail', hasExpense: false, fieldDaysSettled: false }),
       ),
     ).toEqual({ shouldCreate: false, blockedBy: 'field_days_not_settled' })
   })

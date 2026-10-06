@@ -18,7 +18,7 @@ import {
 function snapshot(overrides: Partial<CaseRevenueSnapshot> & { caseId: string }): CaseRevenueSnapshot {
   return {
     model: 'SUCCESS_FEE',
-    chargeOnFail: null,
+    failFeeSatang: null,
     outcome: 'closed_success',
     hasExpense: true,
     expenseState: 'approved',
@@ -108,7 +108,7 @@ describe('evaluateCaseRevenueGates', () => {
       snapshot({
         caseId: 'c1',
         model: 'FLAT',
-        chargeOnFail: true,
+        failFeeSatang: 300_000,
         outcome: 'closed_fail',
         lotState: 'not_confirmed',
       }),

@@ -41,13 +41,17 @@ const OCT = new Date('2026-10-03T05:00:00Z')
 
 // ── C.1 template (snapshot ในเคส) ───────────────────────────────────────────
 const successFee = (ratePct: number): ServiceFeeSnapshot => ({
-  model: 'SUCCESS_FEE', baseSatang: 0, ratePct, basis: 'debt_amount', chargeOnFail: false,
+  model: 'SUCCESS_FEE', baseSatang: 0, ratePct, basis: 'debt_amount', failFeeSatang: null,
 })
 const flat = (chargeOnFail: boolean): ServiceFeeSnapshot => ({
-  model: 'FLAT', baseSatang: chargeOnFail ? 300000 : 749000, ratePct: 0, basis: null, chargeOnFail,
+  model: 'FLAT', baseSatang: chargeOnFail ? 300000 : 749000, ratePct: 0, basis: null,
+  failFeeSatang: chargeOnFail ? 300000 : null,
 })
+/** มติ PO U165 — T4 (CO4) สำเร็จ 300000 / ไม่สำเร็จ 100000 */
+const t4: ServiceFeeSnapshot = { model: 'FLAT', baseSatang: 300000, ratePct: 0, basis: null, failFeeSatang: 100000 }
 const hybrid = (ratePct: number, chargeOnFail: boolean): ServiceFeeSnapshot => ({
-  model: 'HYBRID', baseSatang: 200000, ratePct, basis: 'debt_amount', chargeOnFail,
+  model: 'HYBRID', baseSatang: 200000, ratePct, basis: 'debt_amount',
+  failFeeSatang: chargeOnFail ? 200000 : null,
 })
 
 function revenueOf(
@@ -73,8 +77,8 @@ describe('H.1 — service fee / รายได้ / VAT ต่อเคส (§6
     'FT-16': revenueOf(flat(false), 'closed_success', 2490000, 'include_vat', SEP),
     'FT-17': revenueOf(hybrid(3, true), 'closed_fail', 1200000, 'exclude_vat', SEP),
     'FT-18': revenueOf(hybrid(3, true), 'closed_success', 2345678, 'exclude_vat', SEP),
-    'FT-19': revenueOf(flat(true), 'closed_success', 1500000, 'no_vat', SEP),
-    'FT-20': revenueOf(flat(true), 'closed_success', 1590000, 'no_vat', SEP),
+    'FT-19': revenueOf(t4, 'closed_success', 1500000, 'no_vat', SEP),
+    'FT-20': revenueOf(t4, 'closed_success', 1590000, 'no_vat', SEP),
   }
   const oct = {
     'FT-03 r2': revenueOf(successFee(5), 'closed_success', 987654, 'exclude_vat', OCT),
@@ -83,9 +87,9 @@ describe('H.1 — service fee / รายได้ / VAT ต่อเคส (§6
     'FT-07 r2': revenueOf(flat(false), 'closed_success', 1850000, 'include_vat', OCT),
     'FT-09': revenueOf(hybrid(4, false), 'closed_success', 1500000, 'exclude_vat', OCT),
     'FT-11': revenueOf(hybrid(3, true), 'closed_success', 1111111, 'exclude_vat', OCT),
-    'FT-12': revenueOf(flat(true), 'closed_fail', 1600000, 'no_vat', OCT),
-    'FT-13 r1': revenueOf(flat(true), 'closed_fail', 3120000, 'no_vat', OCT),
-    'FT-13 r2': revenueOf(flat(true), 'closed_success', 3120000, 'no_vat', OCT),
+    'FT-12': revenueOf(t4, 'closed_fail', 1600000, 'no_vat', OCT),
+    'FT-13 r1': revenueOf(t4, 'closed_fail', 3120000, 'no_vat', OCT),
+    'FT-13 r2': revenueOf(t4, 'closed_success', 3120000, 'no_vat', OCT),
   }
 
   it.each([
@@ -101,13 +105,18 @@ describe('H.1 — service fee / รายได้ / VAT ต่อเคส (§6
     ['FT-07 r2', oct['FT-07 r2'], 749000, 700000, 49000, 749000],
     ['FT-09', oct['FT-09'], 260000, 260000, 18200, 278200],
     ['FT-11', oct['FT-11'], 233333, 233333, 16333, 249666],
-    ['FT-12', oct['FT-12'], 300000, 300000, 0, 300000],
+    ['FT-12', oct['FT-12'], 100000, 100000, 0, 100000],
   ])('%s', (_label, actual, gross, beforeVat, vat, total) => {
     expect(actual).toMatchObject({ gross, beforeVat, vat, total })
   })
 
-  it('FT-13 คิดทุกรอบอิสระ (U125) — r1 fail + r2 success = 600000', () => {
-    expect(oct['FT-13 r1'].total + oct['FT-13 r2'].total).toBe(600000)
+  it('FT-13 คิดทุกรอบอิสระ (U125) — r1 fail 100000 + r2 success 300000 = 400000 (U165)', () => {
+    expect(oct['FT-13 r1'].total).toBe(100000)
+    expect(oct['FT-13 r1'].total + oct['FT-13 r2'].total).toBe(400000)
+  })
+
+  it('FLAT cof=true เดิม (ไม่สำเร็จ = base) ยังได้ base เท่าเดิม', () => {
+    expect(calculateServiceFeeRevenue(flat(true), 'closed_fail', { debtAmountSatang: 1 }).grossSatang).toBe(300000)
   })
 
   it('เคส fail ที่ไม่คิดเงิน = 0 (SUCCESS_FEE fail · FLAT cof=false fail · HYBRID cof=false fail)', () => {
@@ -124,7 +133,7 @@ describe('H.1 — service fee / รายได้ / VAT ต่อเคส (§6
       )
     expect(sum(sep)).toEqual({ beforeVat: 1832098, vat: 86247, total: 1918345 })
     // FT-13 r1 + r2 นับทั้งคู่ (U125)
-    expect(sum(oct)).toEqual({ beforeVat: 2942716, vat: 142990, total: 3085706 })
+    expect(sum(oct)).toEqual({ beforeVat: 2542716, vat: 142990, total: 2685706 })
     expect(sep['FT-15'].rate).toBe(7)
     expect(oct['FT-04'].rate).toBe(7)
   })
@@ -384,7 +393,7 @@ describe('H.5 — วางบิล / รับเงิน / ใบกำก�
       { totalSatang: 600000, receivedSatang: 250000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-005
       { totalSatang: 52840, receivedSatang: 0, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-006
       { totalSatang: 278200, receivedSatang: 270400, whtWithheldByCustomerSatang: 7800, bankFeeWrittenOffSatang: 0 }, // BL-007
-      { totalSatang: 600000, receivedSatang: 600000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-008
+      { totalSatang: 400000, receivedSatang: 400000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }, // BL-008 (U165)
     ]
     const each = rows.map(arOutstandingSatang)
     expect(each).toEqual([10700, 295500, 0, 214000, 350000, 52840, 0, 0])
@@ -393,12 +402,12 @@ describe('H.5 — วางบิล / รับเงิน / ใบกำก�
 })
 
 describe('H.7 — กำไรขั้นต้น (§6.12)', () => {
-  it('FT-13: 600000 − 150000 = 450000 margin 75.00%', () => {
+  it('FT-13: 400000 − 150000 = 250000 margin 62.50% (U165)', () => {
     const cost = directCostSatang({ fuelSatang: 40000, allowanceSatang: 30000, commissionSatang: 20000 + 60000 })
     expect(cost).toBe(150000)
-    const gp = grossProfit({ revenueSatang: 600000, directCostSatang: cost })
-    expect(gp.grossProfitSatang).toBe(450000)
-    expect(gp.marginPct).toBeCloseTo(75, 10)
+    const gp = grossProfit({ revenueSatang: 400000, directCostSatang: cost })
+    expect(gp.grossProfitSatang).toBe(250000)
+    expect(gp.marginPct).toBeCloseTo(62.5, 10)
   })
   it('FT-05: revenue 0 → margin null (แสดง N/A) ห้ามหารศูนย์', () => {
     const gp = grossProfit({ revenueSatang: 0, directCostSatang: 45000 })

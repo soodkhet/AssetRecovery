@@ -1382,8 +1382,8 @@ model ServiceFeeTemplate {
   /// SUCCESS_FEE / HYBRID
   ratePct      Decimal          @default(0) @map("rate_pct") @db.Decimal(5, 2)
   basis        ServiceFeeBasis?
-  /// FLAT / HYBRID — เก็บค่าบริการแม้เคสไม่สำเร็จ
-  chargeOnFail Boolean          @default(false) @map("charge_on_fail")
+  /// มติ PO U165 — ยอดค่าบริการกรณีไม่สำเร็จ (ทุกโมเดล) · NULL = ไม่เก็บกรณีไม่สำเร็จ · CHECK ≥ 0 (raw SQL)
+  failFeeSatang Int?            @map("fail_fee_satang")
   // มติ PO U125 — ตัดสวิตช์ charge_per_tracking_round: คิดค่าบริการทุกรอบติดตามอิสระเสมอ
 
   version   Int     @default(1)
@@ -1821,7 +1821,8 @@ model Case {
   serviceFeeBaseSatang    Int?             @map("service_fee_base_satang")
   serviceFeeRatePct       Decimal?         @map("service_fee_rate_pct") @db.Decimal(5, 2)
   serviceFeeBasisSnapshot ServiceFeeBasis? @map("service_fee_basis_snapshot")
-  serviceFeeChargeOnFail  Boolean?         @map("service_fee_charge_on_fail")
+  /// มติ PO U165 — snapshot ยอดกรณีไม่สำเร็จ · NULL = ไม่เก็บ
+  serviceFeeFailFeeSatang Int?             @map("service_fee_fail_fee_satang")
 
   // Debtor
   /// `38` §11 — เคสจาก API สร้าง draft ได้แม้ข้อมูลยังไม่ครบ ⇒ ฟิลด์ "required" ของ §6 เป็น NULL ได้ที่ชั้น DB
@@ -2038,7 +2039,7 @@ model RecycleRequest {
   prevServiceFeeBaseSatang   Int?             @map("prev_service_fee_base_satang")
   prevServiceFeeRatePct      Decimal?         @map("prev_service_fee_rate_pct") @db.Decimal(5, 2)
   prevServiceFeeBasis        ServiceFeeBasis? @map("prev_service_fee_basis")
-  prevServiceFeeChargeOnFail Boolean?         @map("prev_service_fee_charge_on_fail")
+  prevServiceFeeFailFeeSatang Int?            @map("prev_service_fee_fail_fee_satang")
   prevDebtAmountSatang       Int?             @map("prev_debt_amount_satang")
   decidedBy                  String?          @map("decided_by") @db.Uuid
   decidedAt                  DateTime?        @map("decided_at") @db.Timestamptz(6)

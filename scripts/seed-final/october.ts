@@ -178,7 +178,7 @@ async function octoberSettings(): Promise<void> {
   const t3 = await sf.getServiceFeeTemplate(ORG_ID, ids.templates['T3'] ?? '')
   await sf.updateServiceFeeTemplate(await sctx('T3 v2 อัตรา 4% ไม่คิดเมื่อไม่สำเร็จ'), t3, strip(
     sfS.serviceFeeTemplateUpdateSchema.parse({
-      name: t3.name, model: 'HYBRID', baseSatang: 200000, ratePct: 4, basis: 'debt_amount', chargeOnFail: false, reason: reason('T3 v2'),
+      name: t3.name, model: 'HYBRID', baseSatang: 200000, ratePct: 4, basis: 'debt_amount', failFeeSatang: null, reason: reason('T3 v2'),
     }),
   ))
 
@@ -476,16 +476,17 @@ async function oct5(): Promise<void> {
     await sales.cancelTaxInvoice(await ctx(FIN), inv4, { reason: 'พิมพ์สาขาผู้ซื้อผิด ออกใบใหม่' })
     await sales.issueTaxInvoice(await ctx(FIN), { replacesInvoiceId: inv4 })
   }
-  await statementLine('2026-10-05', 'IN-BL008', 600000)
+  // มติ U165 — BL-008 = FT-13 r1 ไม่สำเร็จ 100000 + r2 สำเร็จ 300000 (T4) ⇒ รับเต็ม 400000
+  await statementLine('2026-10-05', 'IN-BL008', 400000)
   // U144 — รับขาดไม่เกินเพดาน (฿50) = ปิดบิล + ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร
   const bl005Rest = await statementLine('2026-10-05', 'IN-BL005-2', 345000)
   await matchToBilling(bl005Rest, 'BL-005', 'ลูกค้าโอนงวดสุดท้าย ขาดค่าธรรมเนียมโอนต่างธนาคาร')
   // U163 — ลูกค้าหักภาษี 3% + ค่าโอนในรายการเดียว ⇒ นับภาษีเต็ม 1481 ก่อน ส่วนต่าง 3520 เป็นค่าธรรมเนียม · paid
   const bl006Short = await statementLine('2026-10-05', 'IN-BL006', 47839)
   await matchToBilling(bl006Short, 'BL-006', 'ลูกค้าหักภาษี ณ ที่จ่าย และหักค่าโอนต่างธนาคาร')
-  // U144 — รอบใหม่ CO4 (FT-12) รับขาด 5001 เกินเพดาน 1 สตางค์ ⇒ ค้าง partially_paid
+  // U144 — รอบใหม่ CO4 (FT-12 ไม่สำเร็จ 100000 ตาม U165) รับขาด 5001 เกินเพดาน 1 สตางค์ ⇒ ค้าง partially_paid
   await billing('BL-010', 'CO4', '2026-10-05', true)
-  const bl010Short = await statementLine('2026-10-05', 'IN-BL010', 294999)
+  const bl010Short = await statementLine('2026-10-05', 'IN-BL010', 94999)
   await matchToBilling(bl010Short, 'BL-010', 'ลูกค้าโอนขาด เกินเพดานค่าธรรมเนียม รอติดตามส่วนที่เหลือ')
   const recon = await import('@/lib/bank-recon/queries')
   await statementLine('2026-10-05', 'IN-UNKNOWN', 20000)

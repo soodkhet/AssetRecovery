@@ -152,9 +152,9 @@ export function commissionHelp(commission: number | null, noSuccessFee: number |
 export const SAMPLE_DEBT_SATANG = 5_000_000
 
 const MODEL_EFFECT: Readonly<Record<ServiceFeeModel, string>> = {
-  SUCCESS_FEE: 'คิดเป็น % ของยอดหนี้คงเหลือ เฉพาะเคสสำเร็จ — ไม่สำเร็จได้ 0',
-  FLAT: 'ค่าคงที่ต่อเคส — เลือกได้ว่าเคสไม่สำเร็จคิดเงินด้วยหรือไม่',
-  HYBRID: 'ค่าคงที่ + % ของยอดหนี้คงเหลือ (ส่วน % ได้เฉพาะเคสสำเร็จ)',
+  SUCCESS_FEE: 'เคสสำเร็จคิดเป็น % ของยอดหนี้คงเหลือ',
+  FLAT: 'เคสสำเร็จคิดค่าคงที่ต่อเคส',
+  HYBRID: 'เคสสำเร็จคิดค่าคงที่ + % ของยอดหนี้คงเหลือ',
 }
 
 export function serviceFeeHelp(input: {
@@ -162,7 +162,8 @@ export function serviceFeeHelp(input: {
   baseSatang: number | null
   ratePct: number | null
   basis: ServiceFeeBasis
-  chargeOnFail: boolean
+  /** มติ U165 — ยอดกรณีไม่สำเร็จ (สตางค์) · null = ไม่เรียกเก็บ */
+  failFeeSatang: number | null
 }): SettingHelpContent {
   const examples: SettingHelpExample[] = []
   const usesBase = input.model !== 'SUCCESS_FEE'
@@ -174,7 +175,7 @@ export function serviceFeeHelp(input: {
       baseSatang: usesBase ? (input.baseSatang ?? 0) : 0,
       ratePct: usesRate ? (input.ratePct ?? 0) : 0,
       basis: usesRate ? input.basis : null,
-      chargeOnFail: usesBase && input.chargeOnFail,
+      failFeeSatang: input.failFeeSatang,
     }
     const values = { debtAmountSatang: SAMPLE_DEBT_SATANG }
     const success = calculateServiceFeeRevenue(snapshot, 'closed_success', values)
@@ -191,7 +192,7 @@ export function serviceFeeHelp(input: {
   // มติ PO U125 — ไม่มีสวิตช์ "คิดต่อรอบ" แล้ว: ทุกรอบติดตามคิดค่าบริการอิสระเสมอ
   return {
     title: 'เทมเพลตค่าบริการคิดรายได้อย่างไร',
-    what: 'สูตรรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ต่อเคส ผูกกับบริษัทไฟแนนซ์ และถูกบันทึกลงเคสตอนรับเคส (อนุมัติเคส) · เคสที่บริษัทไฟแนนซ์ส่งกลับมาติดตามรอบใหม่ คิดค่าบริการรอบนั้นแยกอิสระเสมอ ไม่หักกลบกับรอบก่อน',
+    what: 'สูตรรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ต่อเคส ผูกกับบริษัทไฟแนนซ์ และถูกบันทึกลงเคสตอนรับเคส (อนุมัติเคส) · กรณีสำเร็จคิดตามโมเดล · กรณีไม่สำเร็จเลือกได้ทุกโมเดลว่าจะเรียกเก็บยอดคงที่แยกหรือไม่ (เช่น สำเร็จ 1,500 บาท / ไม่สำเร็จ 300 บาท) · เคสที่บริษัทไฟแนนซ์ส่งกลับมาติดตามรอบใหม่ คิดค่าบริการรอบนั้นแยกอิสระเสมอ ไม่หักกลบกับรอบก่อน',
     options: (['SUCCESS_FEE', 'FLAT', 'HYBRID'] as const).map((model) => ({
       label: `${model === input.model ? '▸ ' : ''}${SERVICE_FEE_MODEL_LABEL[model]}`,
       effect: MODEL_EFFECT[model],

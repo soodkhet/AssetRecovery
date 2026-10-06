@@ -251,12 +251,12 @@ async function seedApprovedCase(): Promise<string> {
       debtor_name, addr_province, addr_district, asset_kind, asset_description, imei,
       debt_amount_satang, assigned_team_id,
       service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_rate_pct,
-      service_fee_basis_snapshot, service_fee_charge_on_fail
+      service_fee_basis_snapshot, service_fee_fail_fee_satang
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_ID}', 'manual', 'approved', '${ADMIN_ID}',
       'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15', '${imei}',
       1000000, '${TEAM_ID}',
-      '${TEMPLATE_ID}', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', false
+      '${TEMPLATE_ID}', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', NULL
     ) RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -400,8 +400,8 @@ beforeAll(async () => {
   await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_ID}' WHERE id = '${AGENT_ID}'`)
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
-      (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลต 8.1ข', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', false,
+      (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลต 8.1ข', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', NULL,
             1, true, '${ADMIN_ID}')
     ON CONFLICT (id) DO NOTHING
   `)

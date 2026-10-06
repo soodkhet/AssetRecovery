@@ -130,7 +130,7 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     baseSatang: 50000,
     basis: 'debt_amount',
     basisLabel: 'มูลค่าหนี้คงเหลือ',
-    chargeOnFail: true,
+    failFeeSatang: 50000,
     projectedRevenueSatang: 350000,
   }
 
@@ -152,13 +152,18 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
   })
 
   it('Success Fee ไม่แสดงค่าคงที่ และไม่เก็บเมื่อไม่สำเร็จ', () => {
-    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'Success Fee (% ความสำเร็จ)', projectedRevenueSatang: null })
+    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'Success Fee (% ความสำเร็จ)', failFeeSatang: null, projectedRevenueSatang: null })
     expect(rows?.map((row) => row.label)).toEqual(['รูปแบบค่าบริการ', 'อัตราค่าบริการเมื่อสำเร็จ', 'เมื่อติดตามไม่สำเร็จ'])
     expect(rows?.at(-1)?.value).toBe('ไม่เรียกเก็บ')
   })
 
-  it('Flat ไม่แสดงอัตรา % · ไม่เก็บเมื่อไม่สำเร็จถ้า chargeOnFail = false', () => {
-    const rows = portalServiceFeeRows({ ...base, model: 'FLAT', modelLabel: 'Flat Rate (เหมาจ่ายรายเคส)', chargeOnFail: false })
+  it('มติ U165: Success Fee ตั้งยอดกรณีไม่สำเร็จแยกได้', () => {
+    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'Success Fee (% ความสำเร็จ)', failFeeSatang: 30000 })
+    expect(rows?.find((row) => row.label === 'เมื่อติดตามไม่สำเร็จ')?.value).toBe('เรียกเก็บ ฿300.00')
+  })
+
+  it('Flat ไม่แสดงอัตรา % · ไม่เก็บเมื่อไม่สำเร็จถ้าไม่ตั้งยอด', () => {
+    const rows = portalServiceFeeRows({ ...base, model: 'FLAT', modelLabel: 'Flat Rate (เหมาจ่ายรายเคส)', failFeeSatang: null })
     expect(rows?.map((row) => row.label)).not.toContain('อัตราค่าบริการเมื่อสำเร็จ')
     expect(rows?.find((row) => row.label === 'เมื่อติดตามไม่สำเร็จ')?.value).toBe('ไม่เรียกเก็บ')
   })

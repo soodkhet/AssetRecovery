@@ -73,7 +73,7 @@ interface CompanyTemplate {
   baseSatang: number
   ratePct: number
   basis: 'debt_amount' | null
-  chargeOnFail: boolean
+  failFeeSatang: number | null
 }
 
 /** เทมเพลตค่าบริการปัจจุบันของบริษัทไฟแนนซ์ (`10` §9 — ทุกบริษัทต้องผูกไว้เสมอ) */
@@ -90,7 +90,7 @@ async function loadCompanyTemplate(organizationId: string, companyId: string): P
           baseSatang: true,
           ratePct: true,
           basis: true,
-          chargeOnFail: true,
+          failFeeSatang: true,
         },
       },
     },
@@ -106,7 +106,7 @@ async function loadCompanyTemplate(organizationId: string, companyId: string): P
     baseSatang: template.baseSatang,
     ratePct: Number(template.ratePct),
     basis: template.basis,
-    chargeOnFail: template.chargeOnFail,
+    failFeeSatang: template.failFeeSatang,
   }
 }
 
@@ -368,7 +368,7 @@ export async function changeCaseStatus(
                 prevServiceFeeBaseSatang: row.serviceFeeBaseSatang,
                 prevServiceFeeRatePct: row.serviceFeeRatePct,
                 prevServiceFeeBasis: row.serviceFeeBasisSnapshot,
-                prevServiceFeeChargeOnFail: row.serviceFeeChargeOnFail,
+                prevServiceFeeFailFeeSatang: row.serviceFeeFailFeeSatang,
                 prevDebtAmountSatang: row.debtAmountSatang,
               }
             : {}),
@@ -434,7 +434,7 @@ function serviceFeeSnapshotData(template: CompanyTemplate) {
     serviceFeeBaseSatang: template.baseSatang,
     serviceFeeRatePct: template.ratePct,
     serviceFeeBasisSnapshot: template.basis,
-    serviceFeeChargeOnFail: template.chargeOnFail,
+    serviceFeeFailFeeSatang: template.failFeeSatang,
   }
 }
 
@@ -445,7 +445,7 @@ function serviceFeeSnapshotAudit(row: CaseDetailRow) {
     serviceFeeBaseSatang: row.serviceFeeBaseSatang,
     serviceFeeRatePct: row.serviceFeeRatePct === null ? null : Number(row.serviceFeeRatePct),
     serviceFeeBasisSnapshot: row.serviceFeeBasisSnapshot,
-    serviceFeeChargeOnFail: row.serviceFeeChargeOnFail,
+    serviceFeeFailFeeSatang: row.serviceFeeFailFeeSatang,
   }
 }
 

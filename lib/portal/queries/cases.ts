@@ -162,7 +162,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       serviceFeeRatePct: true,
       serviceFeeBaseSatang: true,
       serviceFeeBasisSnapshot: true,
-      serviceFeeChargeOnFail: true,
+      serviceFeeFailFeeSatang: true,
       projectedRevenueSatang: true,
     },
   })

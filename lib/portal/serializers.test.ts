@@ -112,7 +112,7 @@ function caseRow(status: CaseStatus, extra: Partial<PortalCaseDetailSource> = {}
     serviceFeeRatePct: '10.50',
     serviceFeeBaseSatang: 50_000,
     serviceFeeBasisSnapshot: 'debt_amount',
-    serviceFeeChargeOnFail: true,
+    serviceFeeFailFeeSatang: 50_000,
     projectedRevenueSatang: 150_000,
     asset: { ...FORBIDDEN, id: 'asset-1', photos: [PHOTO_PATH, 'p2', 'p3'], condition: 'damaged', conditionNote: 'จอแตก' },
     ...extra,
@@ -262,7 +262,7 @@ describe('portal serializers — เนื้อหา', () => {
 
   it('ค่าบริการเห็นครบ (v4.1) แต่ไม่มี template id · ยังไม่อนุมัติ = null', () => {
     const fee = serializePortalCaseDetail(caseRow('active')).serviceFee
-    expect(fee).toMatchObject({ model: 'HYBRID', ratePct: 10.5, baseSatang: 50_000, basis: 'debt_amount', chargeOnFail: true, projectedRevenueSatang: 150_000 })
+    expect(fee).toMatchObject({ model: 'HYBRID', ratePct: 10.5, baseSatang: 50_000, basis: 'debt_amount', failFeeSatang: 50_000, projectedRevenueSatang: 150_000 })
     expect(serializePortalCaseDetail(caseRow('pending_review', { serviceFeeModelSnapshot: null })).serviceFee).toBeNull()
   })
 
