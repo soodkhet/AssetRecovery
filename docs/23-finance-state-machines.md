@@ -24,6 +24,7 @@
 | v2.9 | 06/10/2569 | **มติ PO 06/10/2569 (U107)**: §6.17 เพิ่มสถานะ `cancelled` (terminal) — `pending_signature`/`signed` → `cancelled` ครั้งเดียว · เหตุผลบังคับ (`CANCEL_REQUIRES_REASON`) + audit · ใบเดิมห้ามลบ PDF พิมพ์ป้าย "ยกเลิก" · ไม่นับเพดานต่อเดือน · ออกใบใหม่แทนได้ (เลขใหม่ ผูกรายการเดิม) · ยกเลิกไม่ได้ถ้าใบเบิกที่ผูกอนุมัติจ่ายแล้ว (`SUBSTITUTE_RECEIPT_NOT_CANCELLABLE`) |
 | v2.10 | 06/10/2569 | **มติ PO 06/10/2569 (U117 ข้อ 3)** — §6.3 เส้น `pending_approval → rejected` (ปฏิเสธถาวร) เปิดใช้จริงสำหรับใบเบิกค่าที่พัก (`PATCH /api/claims/:id/reject-permanent`) · **ไม่เพิ่มเส้นใหม่** — โค้ดเดิมที่ยอมจาก `pending_finance_approval` ถูกปรับให้ตรงเอกสาร (จาก `pending_approval` เท่านั้น) |
 | v2.11 | 06/10/2569 | **มติ PO 06/10/2569 (U118)** — §6.3 เพิ่มเส้น `pending_finance_approval → rejected` และ `needs_revision → rejected` (ปฏิเสธถาวรใบเบิกค่าที่พัก) · เหตุผลบังคับ + audit · สิทธิ์: ขั้นที่รายการรออยู่ หรือขั้นที่ตีกลับครั้งล่าสุดเมื่อ `needs_revision` · ใบรับรองแทนใบเสร็จที่ผูกไม่นับเพดานต่อเดือนทันที |
+| v2.x-DE | 07/10/2569 | **มติ PO U155 → U159**: เพิ่ม §6.18 หมายเหตุ Model Phone — `device_catalog_status` เป็น**ค่าที่ผู้ดูแลตั้งด้วยมือ** (ไม่ใช่ state machine · ไม่มีขั้นรอตรวจ) |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -227,6 +228,12 @@ signed            → cancelled      (มติ PO U107 — ไฟล์ฉบ�
 ---
 
 **สรุป: ทุก flag ในไฟล์นี้ปิดครบแล้วหลัง Batch 5 เสร็จสมบูรณ์** — state machine ทั้งหมดในโมดูล Finance/Accounting ตรวจสอบและ sync กับ `02-database-schema-design.md` เรียบร้อย
+
+### 6.18 Model Phone — แบรนด์/รุ่นเครื่อง (`13` §6.18 · มติ PO U155 → U159) — ไม่ใช่ state machine
+
+- `device_brands.manual_status` / `device_models.manual_status` (enum `device_catalog_status` = `active` | `hidden`) คือ **ค่าที่ผู้ดูแลตั้งด้วยมือ** — `NULL` = ตามตัวกรอง · สลับได้อิสระทุกทิศ (แสดง ↔ ไม่แสดง ↔ ตามตัวกรอง) ไม่มีขั้นรอตรวจ (U156)
+- การแสดงจริงคำนวณตอนอ่าน: แบรนด์ = ค่าที่ตั้ง ?? (อยู่ในรายชื่อตัวกรอง) · รุ่น = แบรนด์แสดง ∧ (ค่าที่ตั้ง ?? ออกภายใน N ปี/ไม่ทราบปี)
+- job `device_catalog_sync` **ไม่เปลี่ยนค่านี้เลย** (ห้ามเปิดของที่ถูกปิดกลับ · ห้ามปิดของที่ตั้งให้แสดง)
 
 ## 7. ความสัมพันธ์ระหว่าง State Machines (Cross-Entity Flow)
 

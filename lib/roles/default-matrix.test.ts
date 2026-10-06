@@ -13,10 +13,10 @@ describe('capability catalog (`02` §12 · `13` §6.10)', () => {
   // + `manage_wht_policy` (มติ PO 05/10/2569 UAT U8) + พอร์ทัลบริษัท 5 หมวด (มติ PO 05/10/2569 U6/O43 D1)
   // + `manage_customer_wht` (มติ PO 05/10/2569 U40) + `view_client_portal_as` (มติ PO 05/10/2569 U59)
   // + `manage_holidays` (มติ PO 06/10/2569 UAT U93) + `manage_data_retention` (มติ PO 06/10/2569 U97)
-  // + `view_document_samples` (มติ PO 06/10/2569 U104)
+  // + `view_document_samples` (มติ PO 06/10/2569 U104) + `manage_device_catalog` (มติ PO U155)
   // — ทั้งหมดอยู่นอก Functional Matrix 37 รายการ
-  it('มี 60 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
-    expect(CAPABILITIES).toHaveLength(60)
+  it('มี 61 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
+    expect(CAPABILITIES).toHaveLength(61)
     expect(MATRIX_CAPABILITIES).toHaveLength(37)
     expect(new Set(MATRIX_CAPABILITIES.map((capability) => capability.functionalGroup)).size).toBe(4)
   })

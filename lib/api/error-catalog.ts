@@ -66,6 +66,9 @@ export const ERROR_CATALOG = {
   // มติ PO 06/10/2569 (UAT U93) — ปฏิทินวันหยุด
   HOLIDAY_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
   DUPLICATE_HOLIDAY_DATE: { status: 400, severity: 'reject', source: '24 §6.1' },
+  // มติ PO U155 — แคตตาล็อกแบรนด์/รุ่นเครื่อง
+  DEVICE_CATALOG_ITEM_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
+  DUPLICATE_DEVICE_CATALOG_ITEM: { status: 400, severity: 'reject', source: '24 §6.1' },
 
   // ── 24 §6.2 ภาษี/VAT ───────────────────────────────────────────────────
   INVALID_WHT_RATE: { status: 400, severity: 'reject', source: '24 §6.2' },

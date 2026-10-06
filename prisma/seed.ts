@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { CapabilityAccessLevel, RoleGroup, WhtFilingForm } from '@/lib/generated/prisma/enums'
+import { DEFAULT_FILTER_BRANDS, DEFAULT_RECENT_YEARS } from '@/lib/device-catalog/catalog'
 import { CAPABILITIES } from '@/lib/roles/capability-catalog'
 import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
 
@@ -174,6 +175,13 @@ async function main() {
       requirePayeeIdDocument: false,
       arAgingBuckets: [30, 60, 90],
     },
+  })
+
+  // ── 6.1 ตัวกรองของ Model Phone (มติ PO U159 — 1 record/org) — มีแถวแล้วไม่ทับ (ผู้ดูแลอาจแก้ไปแล้ว)
+  await prisma.deviceCatalogSettings.upsert({
+    where: { organizationId: org.id },
+    update: {},
+    create: { organizationId: org.id, brandNames: [...DEFAULT_FILTER_BRANDS], recentYears: DEFAULT_RECENT_YEARS },
   })
 
   // ── 7. Capabilities ───────────────────────────────────────

@@ -46,6 +46,7 @@ import type {
 } from '@/lib/cases/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseStatus } from '@/lib/generated/prisma/enums'
+import { resolveDeviceSelection } from '@/lib/device-catalog/queries'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -150,6 +151,7 @@ export const detailSelect = {
   idCardAddrPostalCode: true,
   idCardAddrDetail: true,
   assetKind: true,
+  deviceModelId: true,
   imei: true,
   serialNo: true,
   assetValueSatang: true,
@@ -320,6 +322,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
   return {
     ...toListDto(row),
     caseRefNormalized: row.caseRefNormalized,
+    deviceModelId: row.deviceModelId,
     debtorNationality: row.debtorNationality,
     debtorNationalityOther: row.debtorNationalityOther,
     debtorNationalId: row.debtorNationalId,
@@ -686,6 +689,13 @@ export async function createCase(
   await assertCaseRefAvailable(organizationId, input.financeCompanyId, input.caseRef)
 
   const identifier = splitAssetIdentifier(input.assetImeiSerial)
+  // มติ PO U155 — เลือกจากแคตตาล็อก = เก็บ id + ข้อความ snapshot · id ใช้ไม่ได้ = เก็บข้อความเดิม (ไม่บล็อก)
+  const device = await resolveDeviceSelection(
+    organizationId,
+    input.assetType ?? null,
+    input.deviceModelId ?? null,
+    input.assetBrandModel ?? null,
+  )
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
@@ -710,7 +720,8 @@ export async function createCase(
           ...addressColumns('work', input.addressWork),
           ...addressColumns('idCard', input.addressIdCard),
           assetKind: input.assetType ?? null,
-          assetDescription: input.assetBrandModel ?? null,
+          assetDescription: device.text,
+          deviceModelId: device.deviceModelId,
           imei: identifier.imei,
           serialNo: identifier.serialNo,
           debtAmountSatang: input.outstandingDebtSatang ?? null,
@@ -742,7 +753,7 @@ export async function createCase(
           action: 'create',
           targetType: 'cases',
           targetId: created.id,
-          after: toCaseAuditPayload(input),
+          after: { ...toCaseAuditPayload(input), assetBrandModel: device.text, deviceModelId: device.deviceModelId },
           reason: context.reason,
           ipAddress: context.meta.ipAddress,
           userAgent: context.meta.userAgent,
@@ -804,6 +815,21 @@ export async function updateCase(
   const identifier =
     values.assetImeiSerial === undefined ? undefined : splitAssetIdentifier(values.assetImeiSerial)
 
+  // มติ PO U155 — ส่งข้อความเดิมมาโดยไม่ระบุรุ่น (เช่น ผู้เรียกภายนอก) = คงรุ่นเดิมไว้
+  const device =
+    values.deviceModelId === undefined && values.assetBrandModel === undefined && values.assetType === undefined
+      ? undefined
+      : await resolveDeviceSelection(
+          organizationId,
+          (values.assetType === undefined ? current.assetKind : values.assetType) ?? null,
+          values.deviceModelId === undefined
+            ? values.assetBrandModel === undefined || values.assetBrandModel === current.assetDescription
+              ? current.deviceModelId
+              : null
+            : values.deviceModelId,
+          values.assetBrandModel === undefined ? current.assetDescription : values.assetBrandModel,
+        )
+
   const beforePayload = {
     caseRef: current.caseRef,
     financeCompanyId: current.companyId,
@@ -818,6 +844,7 @@ export async function updateCase(
     debtorFacebook: current.debtorFacebook,
     assetType: current.assetKind,
     assetBrandModel: current.assetDescription,
+    deviceModelId: current.deviceModelId,
     assetImeiSerial: joinAssetIdentifier(current.imei, current.serialNo),
     outstandingDebtSatang: current.debtAmountSatang,
     documentMode: current.documentMode,
@@ -845,7 +872,11 @@ export async function updateCase(
     ),
     contactCount: current.contacts.length,
   }
-  const afterPayload: Record<string, unknown> = { ...beforePayload, ...toCaseAuditPayload(values) }
+  const afterPayload: Record<string, unknown> = {
+    ...beforePayload,
+    ...toCaseAuditPayload(values),
+    ...(device === undefined ? {} : { assetBrandModel: device.text, deviceModelId: device.deviceModelId }),
+  }
   const changedFields = changedFieldsOf(beforePayload, afterPayload)
 
   try {
@@ -872,7 +903,7 @@ export async function updateCase(
           ...addressColumns('work', values.addressWork),
           ...addressColumns('idCard', values.addressIdCard),
           ...(values.assetType === undefined ? {} : { assetKind: values.assetType }),
-          ...(values.assetBrandModel === undefined ? {} : { assetDescription: values.assetBrandModel }),
+          ...(device === undefined ? {} : { assetDescription: device.text, deviceModelId: device.deviceModelId }),
           ...(identifier === undefined ? {} : { imei: identifier.imei, serialNo: identifier.serialNo }),
           ...(values.outstandingDebtSatang === undefined
             ? {}

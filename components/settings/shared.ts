@@ -32,6 +32,8 @@ export const MANAGE_INVOICE_NUMBERING = 'manage_invoice_numbering'
 /** ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93) — ธุรการ/บัญชี/การเงิน manage · บริหาร view */
 export const MANAGE_HOLIDAYS = 'manage_holidays'
 export const MANAGE_ROLES = 'manage_roles'
+/** แคตตาล็อกแบรนด์/รุ่นเครื่อง (มติ PO U155) — ธุรการ manage · บริหาร view */
+export const MANAGE_DEVICE_CATALOG = 'manage_device_catalog'
 
 export type StatusFilter = 'active' | 'inactive' | 'all'
 

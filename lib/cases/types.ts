@@ -226,6 +226,8 @@ export interface CaseDetailDto extends CaseListItemDto {
   addressWork: CaseAddressDto
   addressIdCard: CaseAddressDto
   assetType: string | null
+  /** มติ PO U155 — รุ่นในแคตตาล็อกที่เลือกจากรายการ (NULL = ระบุเอง) · ข้อความ snapshot อยู่ที่ `assetBrandModel` */
+  deviceModelId: string | null
   assetImeiSerial: string | null
   /**
    * เตือน (ไม่บล็อก) เมื่อค่าที่บันทึกเป็น Serial ดูเหมือน IMEI ที่มีตัวอักษรปน (มติ PO U54) — `null` = ไม่มี

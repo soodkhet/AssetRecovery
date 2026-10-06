@@ -44,6 +44,9 @@ export const SETTINGS_ERROR_CODES = [
   // §6.15 ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93)
   'HOLIDAY_NOT_FOUND',
   'DUPLICATE_HOLIDAY_DATE',
+  // §6.18 แคตตาล็อกแบรนด์/รุ่น (มติ PO U155)
+  'DEVICE_CATALOG_ITEM_NOT_FOUND',
+  'DUPLICATE_DEVICE_CATALOG_ITEM',
   // §6.11 ล็อกรอบบัญชี (โครง — บังคับเต็มรูปแบบ Phase 4.1)
   'PERIOD_LOCKED_DIRECT_EDIT',
 ] as const
@@ -76,6 +79,8 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   WHT_POLICY_EFFECTIVE_DATE_PAST: 400,
   HOLIDAY_NOT_FOUND: 404,
   DUPLICATE_HOLIDAY_DATE: 400,
+  DEVICE_CATALOG_ITEM_NOT_FOUND: 404,
+  DUPLICATE_DEVICE_CATALOG_ITEM: 400,
   PERIOD_LOCKED_DIRECT_EDIT: 400,
 }
 
@@ -178,6 +183,14 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   DUPLICATE_HOLIDAY_DATE: {
     title: 'วันหยุดซ้ำ',
     message: 'มีวันหยุดวันที่นี้อยู่แล้วในปฏิทิน — ลบรายการเดิมก่อนถ้าต้องการเปลี่ยนชื่อ',
+  },
+  DEVICE_CATALOG_ITEM_NOT_FOUND: {
+    title: 'ไม่พบรายการในแคตตาล็อก',
+    message: 'ไม่พบแบรนด์หรือรุ่นที่ระบุ หรือถูกลบไปแล้ว',
+  },
+  DUPLICATE_DEVICE_CATALOG_ITEM: {
+    title: 'มีรุ่นนี้อยู่แล้ว',
+    message: 'แบรนด์นี้มีรุ่นชื่อเดียวกันอยู่แล้ว (ไม่สนตัวพิมพ์/ช่องว่าง) — ถ้าถูกซ่อนไว้ ให้กดแสดงรายการเดิมแทน',
   },
   PERIOD_LOCKED_DIRECT_EDIT: {
     title: 'รอบบัญชีถูกล็อกแล้ว',

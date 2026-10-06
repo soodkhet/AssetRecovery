@@ -71,6 +71,11 @@ export const caseCreateSchema = z.object({
   assetType: z.enum(['smartphone', 'tablet']).nullable().optional(),
   assetBrandModel: optionalText(255),
   /**
+   * มติ PO U155 — รุ่นในแคตตาล็อกที่เลือกจากรายการ (`null` = ระบุเอง) · server ตรวจว่าเป็นรุ่น active ของประเภททรัพย์นั้น
+   * แล้วเก็บข้อความจากแคตตาล็อกเป็น snapshot · ใช้ไม่ได้ = เก็บข้อความที่ส่งมาตามเดิม (ไม่บล็อก)
+   */
+  deviceModelId: z.guid('รุ่นเครื่องไม่ถูกต้อง').nullable().optional(),
+  /**
    * ช่องเดียวบนฟอร์ม — ไม่มีตัวอักษร = IMEI (ตัดช่องว่าง/ขีด/จุดได้ ต้องเหลือ 15 หลักพอดี · มติ PO U24)
    * มีตัวอักษร = serial · แยกคอลัมน์ที่ `splitAssetIdentifier()`
    */

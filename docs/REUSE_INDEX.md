@@ -85,6 +85,7 @@
 
 | `<ExpensesTab>` / `<CostCenterMapModal>` / `<ExpenseDetailModal>` / `useExpenseRecords()` · `<QuestionsTab>` / `<QuestionFormModal>` / `<AnswerQuestionModal>` / `useAccountantQuestions()` | `components/accounting/*` | 4.4 | แท็บ "ค่าใช้จ่าย" (`32` §8) และ "ข้อซักถาม" (`36` §7) ใน `<AccountingShell>` — ตัวกรองยิงไป API เสมอ · ปุ่ม Map Cost Center ขึ้นเฉพาะแถว `manual` + ผู้มีสิทธิ์ (API ตรวจซ้ำ) · **ไม่มีปุ่มสร้าง/ลบรายการค่าใช้จ่าย** โดยเจตนา |
 | `<RouteErrorFallback>` | `components/shell/route-error.tsx` | Final ด่าน 5 | หน้าจอ error ของ `error.tsx` ทุก route segment (App Shell / Field / Portal) — ไม่แสดง message ดิบ แสดง digest + ปุ่มลองใหม่ |
+| `<DeviceModelPicker>` | `components/cases/device-model-picker.tsx` | U155 → U159 (fixer DE) | combobox พิมพ์ค้นหารุ่นเครื่องจาก Model Phone (`GET /api/device-catalog/options`) + "ไม่พบในรายการ — ระบุเอง" เสมอ · ค่าคือ `{ deviceModelId, text }` (text = snapshot) — ใช้ซ้ำได้ทุกฟอร์มที่ต้องให้เลือกยี่ห้อ/รุ่น |
 
 ## Shared Services / Utils (Backend)
 
@@ -594,6 +595,9 @@
 - รับชำระเข้ารอบวางบิล — **มีแล้ว** `applyBillingReceipt()` (3.6) — Phase 4.2 (ไฟล์ 35) เรียกตัวนี้ ห้าม `UPDATE received_satang` ตรง
 - เทสต์ยอมรับระดับ E2E (ไฟล์ 29) — **มีแล้ว** `tests/acceptance/*.db.test.ts` (8.1) 3 ไฟล์: รายรับ / รายจ่าย+เงินทดรอง / ปิดงวด+Adjustment · เดินผ่าน service จริงทุกก้าว **ห้าม insert ข้ามขั้น** · เพิ่ม scenario ใหม่ให้ต่อในไฟล์ที่ใกล้เคียงที่สุด (ORG_ID คนละชุดต่อไฟล์: `…81a0` / `…81b0` / `…81d0`)
 | `bankFileFormatNameOptions()` / `defaultPaymentFileFormatId()` | `lib/settings/bank-account.ts` | Final ด่าน 5 | ตัวเลือกรูปแบบไฟล์ statement/ไฟล์โอนของบัญชีธนาคาร (เลือกแทนพิมพ์อิสระ) + รูปแบบไฟล์โอนเริ่มต้นตามบัญชีต้นทาง |
+| `normalizeCatalogName()` / `buildCatalogFilter()` / `isBrandVisible()` / `isModelVisible()` / `buildCatalogMatcher()` / `pickBrandsToSync()` | `lib/device-catalog/catalog.ts` | U155 → U159 (fixer DE) | pure ของ Model Phone — การแสดง = ตั้งด้วยมือชนะตัวกรอง · ตัวจับคู่ข้อความนำเข้า · where ฝั่ง DB คู่กันที่ `modelVisibleWhere()`/`brandVisibleWhere()` (`lib/device-catalog/queries.ts`) ต้องตรงกับ pure เสมอ (มีเทสต์เทียบ) |
+| `resolveDeviceSelection()` / `loadCatalogMatcher()` / `searchDeviceModelOptions()` | `lib/device-catalog/queries.ts` | U155 → U159 (fixer DE) | ใช้กับเคส: ตรวจรุ่นที่เลือก (ไม่ผ่าน = เก็บข้อความ ไม่บล็อก) · จับคู่ข้อความ CSV · ค้นหาตัวเลือก |
+| `createRapidApiDeviceSpecsClient()` / `DeviceSpecsClient` | `lib/device-catalog/rapidapi-client.ts` | U155 → U159 (fixer DE · DEC-016) | client RapidAPI ที่ mock ได้ (ส่ง `fetchImpl`) · จำโควตาจาก header · 429 = `DeviceSpecsQuotaError` — เทสต์ห้ามเรียก API จริง |
 
 ## กับดัก (Lessons Learned)
 
