@@ -7,7 +7,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
-import { calculatePayeeBatchWht, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
+import { calculatePayeeBatchWht, sumPayoutTaxSplit, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
 import {
   advanceReturnOutstandingSatang,
   allocatePayeeAdvanceOffset,
@@ -140,6 +140,8 @@ const batchSelect = {
   createdByUser: { select: { fullName: true } },
   cancelledByUser: { select: { fullName: true } },
   _count: { select: { items: true } },
+  // มติ PO U109 — แยกภาษีที่บริษัทออกให้ออกจากค่าตอบแทนของทั้งรอบ (snapshot ต่อรายการ)
+  items: { select: { grossSatang: true, whtSatang: true, netSatang: true, whtCondition: true } },
 } as const
 
 type BatchRow = Prisma.PayoutBatchGetPayload<{ select: typeof batchSelect }>
@@ -192,6 +194,7 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
     netSatang: row.netSatang,
     advanceOffsetSatang: row.advanceOffsetSatang,
     transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    ...sumPayoutTaxSplit(row.items),
     itemCount: row._count.items,
     bankAccountId: row.bankAccountId,
     bankAccountLabel:

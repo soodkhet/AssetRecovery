@@ -163,8 +163,9 @@ export function PayoutTab() {
               <Tr>
                 <Th>ชื่อรอบจ่าย</Th>
                 <Th>ฝั่ง</Th>
-                <Th numeric>Gross</Th>
-                <Th numeric>WHT</Th>
+                <Th numeric>ค่าตอบแทน</Th>
+                <Th numeric>ภาษีที่บริษัทออกให้</Th>
+                <Th numeric>WHT หักผู้รับ</Th>
                 <Th numeric>โอนสุทธิ</Th>
                 <Th>สถานะ</Th>
                 <Th className="text-right">จัดการ</Th>
@@ -176,7 +177,7 @@ export function PayoutTab() {
               isEmpty={items.length === 0}
               emptyTitle="ยังไม่มีรอบจ่ายตามตัวกรองนี้"
               emptyDescription="กด “สร้างรอบจ่าย” เพื่อรวบรวมรายการที่อนุมัติแล้ว"
-              colSpan={7}
+              colSpan={8}
             />
             <TBody>
               {!loading &&
@@ -205,9 +206,13 @@ export function PayoutTab() {
                         {PAYOUT_SIDE_LABEL[batch.side]}
                       </span>
                     </Td>
-                    <Td numeric>{fmtSatangSymbol(batch.grossSatang)}</Td>
+                    {/* มติ PO U109 — แยกค่าตอบแทน (เงินได้จริง) กับภาษีที่บริษัทออกให้ (ยอดจาก server) */}
+                    <Td numeric>{fmtSatangSymbol(batch.compensationSatang)}</Td>
+                    <Td numeric className={batch.whtPaidByPayerSatang > 0 ? 'text-amber-700' : undefined}>
+                      {fmtSatangSymbol(batch.whtPaidByPayerSatang)}
+                    </Td>
                     <Td numeric className="text-red-600">
-                      {fmtSatangSymbol(batch.whtSatang)}
+                      {fmtSatangSymbol(batch.whtWithheldSatang)}
                     </Td>
                     <Td numeric className="text-base font-bold text-emerald-700">
                       {fmtSatangSymbol(batch.transferSatang)}

@@ -210,6 +210,8 @@ async function seedPayoutBatchWithItems(
     grossSatang: number
     whtSatang?: number
     netSatang: number
+    /** snapshot เงื่อนไขการหัก (U105) — ไม่ส่ง = NULL (รายการเก่า) */
+    whtCondition?: 'withhold' | 'pay_always' | 'pay_once'
   }[],
   /** snapshot ค่าตั้งฐาน WHT ของรอบ (U3/U8) — ไม่ส่ง = รอบก่อนมีค่าตั้ง (NULL) */
   whtBaseExpenseTypes?: readonly string[],
@@ -232,10 +234,11 @@ async function seedPayoutBatchWithItems(
   for (const item of items) {
     await db().$executeRawUnsafe(`
       INSERT INTO payout_batch_items (organization_id, payout_batch_id, expense_id, advance_id, payee_id,
-                                      gross_satang, wht_satang, net_satang, created_by)
+                                      gross_satang, wht_satang, net_satang, wht_condition, created_by)
       VALUES ('${ORG_ID}', '${batchId}', ${item.expenseId === undefined ? 'NULL' : `'${item.expenseId}'`},
               ${item.advanceId === undefined ? 'NULL' : `'${item.advanceId}'`}, '${item.payeeId}',
-              ${item.grossSatang}, ${item.whtSatang ?? 0}, ${item.netSatang}, '${FINANCE_ID}')
+              ${item.grossSatang}, ${item.whtSatang ?? 0}, ${item.netSatang},
+              ${item.whtCondition === undefined ? 'NULL' : `'${item.whtCondition}'`}, '${FINANCE_ID}')
     `)
   }
 }
@@ -577,6 +580,52 @@ suite('F4 — ค่าใช้จ่ายตามใบเสร็จแย
 
     const team = await run('compensation', { groupBy: 'team' })
     expect(team.rows[0]).toMatchObject({ compensationSatang: 800_00, receiptSatang: 0, grossSatang: 800_00 })
+  })
+})
+
+suite('F4 — ภาษีที่บริษัทออกให้แยกคอลัมน์ (มติ PO U109)', () => {
+  it('เงื่อนไข (1)/(2)/(3) ปนกัน: ค่าตอบแทน = เงินได้จริง · ภาษีที่บริษัทออกให้แยกช่อง · WHT = ที่หักจากผู้รับ', async () => {
+    const caseA = await seedCase({ teamId: TEAM_A })
+    const caseA2 = await seedCase({ teamId: TEAM_A })
+    const caseB = await seedCase({ teamId: TEAM_B })
+    const c1 = await seedExpense({ caseId: caseA, grossSatang: 10_000_00, expenseType: 'commission', payeeId: PAYEE_A })
+    const c2 = await seedExpense({ caseId: caseA2, grossSatang: 10_000_00, expenseType: 'commission', payeeId: PAYEE_A })
+    const c3 = await seedExpense({ caseId: caseB, grossSatang: 10_000_00, expenseType: 'commission', payeeId: PAYEE_B })
+    // เงินได้ ฿10,000 อัตรา 3%: (1) หัก 300 · (2) ออกให้ตลอดไป 309.28 · (3) ออกให้ครั้งเดียว 300
+    await seedPayoutBatchWithItems([
+      { payeeId: PAYEE_A, expenseId: c1, grossSatang: 10_000_00, whtSatang: 300_00, netSatang: 9_700_00, whtCondition: 'withhold' },
+      { payeeId: PAYEE_A, expenseId: c2, grossSatang: 10_309_28, whtSatang: 309_28, netSatang: 10_000_00, whtCondition: 'pay_always' },
+      { payeeId: PAYEE_B, expenseId: c3, grossSatang: 10_300_00, whtSatang: 300_00, netSatang: 10_000_00, whtCondition: 'pay_once' },
+    ])
+
+    const employee = await run('compensation', { groupBy: 'employee' })
+    const byName = (name: string) => employee.rows.find((row) => row['group'] === name)
+    expect(byName('สมชาย 6.2')).toMatchObject({
+      commissionSatang: 20_000_00,
+      whtPaidByPayerSatang: 309_28,
+      grossSatang: 20_309_28,
+      whtSatang: 300_00,
+      netSatang: 19_700_00,
+    })
+    expect(byName('สมหญิง 6.2')).toMatchObject({
+      commissionSatang: 10_000_00,
+      whtPaidByPayerSatang: 300_00,
+      whtSatang: 0,
+      netSatang: 10_000_00,
+    })
+
+    const team = await run('compensation', { groupBy: 'team' })
+    expect(team.totalRow).toMatchObject({
+      compensationSatang: 30_000_00,
+      whtPaidByPayerSatang: 609_28,
+      grossSatang: 30_609_28,
+      whtSatang: 300_00,
+      netSatang: 29_700_00,
+    })
+    expect(kpiOf(team, 'compensation')).toBe(30_000_00)
+    expect(kpiOf(team, 'whtPaidByPayer')).toBe(609_28)
+    expect(kpiOf(team, 'wht')).toBe(300_00)
+    expect(kpiOf(team, 'net')).toBe(29_700_00)
   })
 })
 

@@ -18,6 +18,7 @@ function item(overrides: Partial<CompensationItemEntry> & { payeeId: string }): 
     expenseType: 'commission',
     caseId: 'case-1',
     receiptExpense: false,
+    whtCondition: 'withhold',
     grossSatang: 100_000,
     whtSatang: 3_000,
     netSatang: 97_000,
@@ -51,9 +52,10 @@ describe('F4 — ตารางรายทีม', () => {
       'ประเภท',
       'จำนวนคน',
       'ค่าตอบแทน',
+      'ภาษีที่บริษัทออกให้',
       'ค่าใช้จ่ายตามใบเสร็จ',
       'Gross รวม',
-      'WHT รวม',
+      'WHT หักจากผู้รับ',
       'Net รวม',
       'จำนวนเคสที่ปิด',
     ])
@@ -194,5 +196,66 @@ describe('F4 — ค่าใช้จ่ายตามใบเสร็จ (U
     )
     expect(parts).toBe(Number(total?.['grossSatang']))
     expect(total?.['receiptSatang']).toBe(110_000)
+  })
+})
+
+// ── มติ PO U109 — ภาษีที่บริษัทออกให้แยกคอลัมน์จากค่าตอบแทน ──────────────────────
+
+describe('F4 — ภาษีที่บริษัทออกให้ (U109)', () => {
+  // เงินได้ ฿10,000 อัตรา 3% ต่อคน: (1) หัก 300 โอน 9,700 · (2) gross 10,309.28 ภาษีออกให้ 309.28 · (3) gross 10,300 ภาษีออกให้ 300
+  const MIXED: CompensationItemEntry[] = [
+    item({ payeeId: 'w1', whtCondition: 'withhold', grossSatang: 1_000_000, whtSatang: 30_000, netSatang: 970_000 }),
+    item({ payeeId: 'w2', whtCondition: 'pay_always', grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000 }),
+    item({ payeeId: 'w3', whtCondition: 'pay_once', grossSatang: 1_030_000, whtSatang: 30_000, netSatang: 1_000_000 }),
+    // ค่าที่พักตามใบเสร็จของผู้รับ (2) — นอกฐาน ไม่มีภาษี
+    item({ payeeId: 'w2', caseId: null, expenseType: 'hotel', receiptExpense: true, whtCondition: 'pay_always', grossSatang: 50_000, whtSatang: 0, netSatang: 50_000 }),
+  ]
+
+  it('รายพนักงาน: (2) ค่าตอบแทน 10,000 · ภาษีที่บริษัทออกให้ 309.28 · WHT หักผู้รับ 0 · Net 10,000 — (1) ไม่เปลี่ยน', () => {
+    const data = buildCompensationReport({ groupBy: 'employee', items: MIXED })
+    expect(data.columns.map((column) => column.header)).toContain('ภาษีที่บริษัทออกให้')
+    const row = (key: string) => data.rows.find((entry) => entry[ROW_KEY] === key)
+    expect(row('w1')).toMatchObject({ commissionSatang: 1_000_000, whtPaidByPayerSatang: 0, whtSatang: 30_000, netSatang: 970_000 })
+    expect(row('w2')).toMatchObject({
+      commissionSatang: 1_000_000,
+      whtPaidByPayerSatang: 30_928,
+      receiptSatang: 50_000,
+      grossSatang: 1_080_928,
+      whtSatang: 0,
+      netSatang: 1_050_000,
+    })
+    expect(row('w3')).toMatchObject({ commissionSatang: 1_000_000, whtPaidByPayerSatang: 30_000, whtSatang: 0, netSatang: 1_000_000 })
+  })
+
+  it('รายทีม + KPI: Gross = ค่าตอบแทน + ภาษีที่บริษัทออกให้ + ค่าใช้จ่ายตามใบเสร็จ · Net = Gross − ภาษีออกให้ − WHT', () => {
+    const data = buildCompensationReport({ groupBy: 'team', items: MIXED })
+    const total = data.totalRow
+    expect(total).toMatchObject({
+      compensationSatang: 3_000_000,
+      whtPaidByPayerSatang: 60_928,
+      receiptSatang: 50_000,
+      grossSatang: 3_110_928,
+      whtSatang: 30_000,
+      netSatang: 3_020_000,
+    })
+    expect(
+      Number(total?.['compensationSatang']) + Number(total?.['whtPaidByPayerSatang']) + Number(total?.['receiptSatang']),
+    ).toBe(Number(total?.['grossSatang']))
+    expect(Number(total?.['grossSatang']) - Number(total?.['whtPaidByPayerSatang']) - Number(total?.['whtSatang'])).toBe(
+      Number(total?.['netSatang']),
+    )
+    const kpi = (key: string) => data.kpis?.find((entry) => entry.key === key)?.value
+    expect(kpi('compensation')).toBe(3_000_000)
+    expect(kpi('whtPaidByPayer')).toBe(60_928)
+    expect(kpi('wht')).toBe(30_000)
+    expect(kpi('net')).toBe(3_020_000)
+  })
+
+  it('รายการเก่าที่ไม่มีเงื่อนไข (null) = หักตามปกติ', () => {
+    const data = buildCompensationReport({
+      groupBy: 'team',
+      items: [item({ payeeId: 'old', whtCondition: null, grossSatang: 100_000, whtSatang: 3_000, netSatang: 97_000 })],
+    })
+    expect(data.totalRow).toMatchObject({ compensationSatang: 100_000, whtPaidByPayerSatang: 0, whtSatang: 3_000 })
   })
 })

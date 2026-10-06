@@ -7,6 +7,7 @@ import {
   estimateCustomerWhtForBilling,
   isPayerBorneWhtCondition,
   payoutItemTaxSplit,
+  sumPayoutTaxSplit,
   resolveWhtRate,
   whtGrossUp,
   whtTaxForCondition,
@@ -419,5 +420,20 @@ describe('§6.9.2 เงื่อนไขการหัก (1)/(2)/(3) — ท
       whtWithheldSatang: 0,
       whtPaidByPayerSatang: 0,
     })
+  })
+
+  it('sumPayoutTaxSplit (มติ PO U109): รวมยอดแยกของ (1)/(2)/(3) ปนกัน — ค่าตอบแทน + ภาษีออกให้ = Σ gross · Σ gross − ภาษีทั้งสอง = Σ net', () => {
+    const items = [
+      { grossSatang: 1_000_000, whtSatang: 30_000, netSatang: 970_000, whtCondition: 'withhold' as const },
+      { grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000, whtCondition: 'pay_always' as const },
+      { grossSatang: 1_030_000, whtSatang: 30_000, netSatang: 1_000_000, whtCondition: 'pay_once' as const },
+    ]
+    const total = sumPayoutTaxSplit(items)
+    expect(total).toEqual({ compensationSatang: 3_000_000, whtWithheldSatang: 30_000, whtPaidByPayerSatang: 60_928 })
+    const gross = items.reduce((sum, item) => sum + item.grossSatang, 0)
+    const net = items.reduce((sum, item) => sum + item.netSatang, 0)
+    expect(total.compensationSatang + total.whtPaidByPayerSatang).toBe(gross)
+    expect(gross - total.whtWithheldSatang - total.whtPaidByPayerSatang).toBe(net)
+    expect(sumPayoutTaxSplit([])).toEqual({ compensationSatang: 0, whtWithheldSatang: 0, whtPaidByPayerSatang: 0 })
   })
 })

@@ -607,6 +607,8 @@ const compensationProvider: ReportProvider = async (ctx: ReportContext): Promise
       grossSatang: true,
       whtSatang: true,
       netSatang: true,
+      // snapshot เงื่อนไขการหัก (U105) — แยกภาษีที่บริษัทออกให้ออกจากค่าตอบแทน (มติ PO U109)
+      whtCondition: true,
       // snapshot ค่าตั้งฐาน WHT ของรอบ (U3/U8) — ใช้จำแนก "ค่าใช้จ่ายตามใบเสร็จ" (มติ PO U53)
       payoutBatch: { select: { whtBaseExpenseTypes: true, whtCertificateMode: true } },
       expense: { select: { expenseType: true, caseId: true } },
@@ -642,6 +644,7 @@ const compensationProvider: ReportProvider = async (ctx: ReportContext): Promise
       },
       row.expense?.expenseType ?? null,
     ),
+    whtCondition: row.whtCondition,
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
     netSatang: row.netSatang,

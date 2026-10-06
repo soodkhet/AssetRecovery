@@ -2,7 +2,7 @@ import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtRatePct, fmtSatang } from '@/lib/format/money'
 import { summarizePayoutBatch, type PayoutBatchTotals } from '@/lib/finance/payout-calc'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
-import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
+import { payoutItemTaxSplit, sumPayoutTaxSplit, type PayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { advanceOffsetLineLabel } from '@/lib/advances/advance'
 import type { PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
@@ -185,23 +185,9 @@ export interface PayoutPayeeGroup {
   whtPaidByPayerSatang: number
 }
 
-/** ยอดแยกตามเงื่อนไขการหักของชุดรายการ (U105) */
-function taxSplitTotals(items: readonly PayoutBatchItemDto[]): {
-  compensationSatang: number
-  whtWithheldSatang: number
-  whtPaidByPayerSatang: number
-} {
-  return items.reduce(
-    (sum, item) => {
-      const split = payoutItemTaxSplit(item)
-      return {
-        compensationSatang: sum.compensationSatang + split.compensationSatang,
-        whtWithheldSatang: sum.whtWithheldSatang + split.whtWithheldSatang,
-        whtPaidByPayerSatang: sum.whtPaidByPayerSatang + split.whtPaidByPayerSatang,
-      }
-    },
-    { compensationSatang: 0, whtWithheldSatang: 0, whtPaidByPayerSatang: 0 },
-  )
+/** ยอดแยกตามเงื่อนไขการหักของชุดรายการ (U105 · U109) */
+function taxSplitTotals(items: readonly PayoutBatchItemDto[]): PayoutTaxSplit {
+  return sumPayoutTaxSplit(items)
 }
 
 /** รวมบรรทัดหักคืนเงินทดรองของรายการกลุ่มหนึ่ง — ต่อเงินทดรอง ลำดับตามที่พบ */
@@ -268,6 +254,13 @@ export interface PayoutSummaryDocRow {
   grossText: string
   whtText: string
   netText: string
+  /**
+   * มติ PO U109 — แยกแสดง (`payoutItemTaxSplit()` จาก snapshot ไม่คิดใหม่): ค่าตอบแทน (เงินได้จริง ไม่รวมภาษีที่บริษัทออกให้)
+   * · ภาษีที่บริษัทออกให้ · ภาษีที่หักจากผู้รับ — `grossText`/`whtText` (gross รวมภาษีที่ออกให้) คงไว้ให้ผู้ใช้เดิม
+   */
+  compensationText: string
+  whtPaidByPayerText: string
+  whtWithheldText: string
   /** มติ PO U30 — ยอดโอนจริง (= net เมื่อไม่มีการหัก) + ยอดหักคืนเงินทดรอง (`null` = ไม่มี) */
   transferText: string
   offsetText: string | null
@@ -294,6 +287,12 @@ export interface PayoutSummaryDoc {
   totalGrossText: string
   totalWhtText: string
   totalNetText: string
+  /** มติ PO U109 — ยอดรวมแยก ค่าตอบแทน / ภาษีที่บริษัทออกให้ / ภาษีที่หักจากผู้รับ */
+  totalCompensationText: string
+  totalWhtPaidByPayerText: string
+  totalWhtWithheldText: string
+  /** `true` = มีผู้รับที่บริษัทออกภาษีให้อย่างน้อย 1 ราย (แสดงหมายเหตุใต้ตาราง) */
+  hasPayerBorneTax: boolean
   totalTransferText: string
   /** `null` = ทั้งรอบไม่มีการหักคืนเงินทดรอง */
   totalOffsetText: string | null
@@ -314,6 +313,7 @@ export function buildPayoutSummaryDoc(
   // จะจับได้ทันทีถ้ามีรายการใดที่ net ≠ gross − wht
   const totals = summarizePayoutBatch(batch.items)
   const totalOffset = groups.reduce((sum, group) => sum + group.advanceOffsetSatang, 0)
+  const split = taxSplitTotals(batch.items)
 
   return {
     title: PAYOUT_SUMMARY_TITLE,
@@ -339,6 +339,9 @@ export function buildPayoutSummaryDoc(
       grossText: fmtSatang(group.totals.grossSatang),
       whtText: fmtSatang(group.totals.whtSatang),
       netText: fmtSatang(group.totals.netSatang),
+      compensationText: fmtSatang(group.compensationSatang),
+      whtPaidByPayerText: fmtSatang(group.whtPaidByPayerSatang),
+      whtWithheldText: fmtSatang(group.whtWithheldSatang),
       transferText: fmtSatang(group.transferSatang),
       offsetText: group.advanceOffsetSatang === 0 ? null : fmtSatang(group.advanceOffsetSatang),
       offsetCellText: fmtSatang(group.advanceOffsetSatang),
@@ -347,6 +350,10 @@ export function buildPayoutSummaryDoc(
     totalGrossText: fmtSatang(totals.grossSatang),
     totalWhtText: fmtSatang(totals.whtSatang),
     totalNetText: fmtSatang(totals.netSatang),
+    totalCompensationText: fmtSatang(split.compensationSatang),
+    totalWhtPaidByPayerText: fmtSatang(split.whtPaidByPayerSatang),
+    totalWhtWithheldText: fmtSatang(split.whtWithheldSatang),
+    hasPayerBorneTax: split.whtPaidByPayerSatang > 0,
     totalTransferText: fmtSatang(payoutTransferSatang(totals.netSatang, totalOffset)),
     totalOffsetText: totalOffset === 0 ? null : fmtSatang(totalOffset),
     totalOffsetCellText: fmtSatang(totalOffset),
