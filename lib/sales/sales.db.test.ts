@@ -479,6 +479,51 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     )
   })
 
+  it('มติ PO U169 — บิลปิดด้วยการตัดส่วนต่าง (U163 ภาษีลูกค้าหัก + ค่าโอน) ⇒ ใบเต็มยอดบิล รับชำระครบ · VAT เต็ม · PDF ไม่มียอดค้าง', async () => {
+    await setNumbering({ seq: 60 })
+    // แบบ BL-2569-011: ก่อน VAT 1,750.03 + VAT 122.50 = 1,872.53 · เงินเข้า 1,800.00 · ลูกค้าหัก 52.50 · ค่าธรรมเนียม 20.03
+    const batch = await seedBilling({ status: 'sent', grossSatang: 175_003, vatSatang: 12_250 })
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 180_000, whtSatang: 5_250 })
+    await db().$executeRawUnsafe(`
+      UPDATE billing_batches SET status = 'paid', received_satang = 180000, wht_withheld_by_customer_satang = 5250,
+             bank_fee_written_off_satang = 2003, bank_fee_written_off_date = '${TODAY.toISOString().slice(0, 10)}'
+       WHERE id = '${batch.id}'
+    `)
+    const listed = (await sales.listCashReceipts(accountant, {})).items.find((item) => item.id === receiptId)
+    expect(listed?.billingBankFeeWrittenOffSatang).toBe(2_003)
+
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    expect(invoice).toMatchObject({ totalBeforeVatSatang: 175_003, vatSatang: 12_250, totalSatang: 187_253 })
+
+    const doc = buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, invoice.id))
+    expect(doc.description).not.toContain('บางส่วน')
+    expect(doc.installmentNote).toBeNull()
+    expect(doc.outstandingText).toBeNull()
+    expect(doc.totalText).toBe('1,872.53')
+    expect(doc.customerWhtText).toBe('(52.50)')
+    expect(doc.bankFeeText).toBe('(20.03)')
+    expect(doc.receivedText).toBe('1,800.00')
+  })
+
+  it('มติ PO U169 — U144 รับขาดไม่เกินเพดาน (ไม่มีภาษีลูกค้าหัก) ⇒ ใบเต็มยอด · ไม่มีการตัด ⇒ ยังออกตามยอดที่รับเหมือนเดิม', async () => {
+    await setNumbering({ seq: 70 })
+    const cut = await seedBilling({ status: 'sent' })
+    const cutReceipt = await seedReceipt(cut.id, { amountSatang: 1_280_000 })
+    await db().$executeRawUnsafe(`
+      UPDATE billing_batches SET status = 'paid', received_satang = 1280000, bank_fee_written_off_satang = 4000,
+             bank_fee_written_off_date = '${TODAY.toISOString().slice(0, 10)}'
+       WHERE id = '${cut.id}'
+    `)
+    const full = await sales.issueTaxInvoice(ctx, { cashReceiptId: cutReceipt })
+    expect(full).toMatchObject({ totalBeforeVatSatang: 1_200_000, vatSatang: 84_000, totalSatang: 1_284_000 })
+    expect(buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, full.id)).bankFeeText).toBe('(40.00)')
+
+    const plain = await seedBilling({ status: 'sent' })
+    const partial = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(plain.id, { amountSatang: 1_280_000 }) })
+    expect(partial.totalSatang).toBe(1_280_000)
+    expect(buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, partial.id)).bankFeeText).toBeNull()
+  })
+
   it('U96 #9 — อัตรา VAT เปลี่ยนระหว่างวางบิล (7%) กับรับเงิน (10%) ⇒ ใบใช้อัตรา ณ วันรับเงิน + snapshot อัตราใหม่', async () => {
     await setNumbering({ seq: 900 })
     const batch = await seedBilling({ status: 'sent' })

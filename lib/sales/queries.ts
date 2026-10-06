@@ -535,6 +535,11 @@ async function planReceiptInvoice(
         where: { salesRecordId: sales.id, status: 'active' },
         select: { amountBeforeVatSatang: true, vatSatang: true, vatRatePctUsed: true },
       })
+      // มติ PO U169 — บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร (U144/U163) ⇒ ใบที่ปิดยอดออกเต็มยอดบิล
+      const batchFee = await tx.billingBatch.findUnique({
+        where: { id: receipt.billingBatchId },
+        select: { bankFeeWrittenOffSatang: true },
+      })
       const computed = receiptInvoiceAmounts({
         basis: {
           billedBeforeVatSatang: sales.totalBeforeVatSatang,
@@ -548,6 +553,7 @@ async function planReceiptInvoice(
         })),
         // ภาษีที่ลูกค้าหัก ณ ที่จ่ายนับเป็นการรับชำระ (U95)
         paidSatang: receipt.amountSatang + receipt.whtWithheldByCustomerSatang,
+        bankFeeWrittenOffSatang: batchFee?.bankFeeWrittenOffSatang ?? 0,
         vatRatePct,
       })
       assertVatApplicable({ vatModes: vat.modes, vatRatePct, vatSatang: computed.vatSatang })
@@ -939,6 +945,8 @@ function docSourceOf(
         : {
             cashSatang: receipt.amountSatang,
             customerWhtSatang: receipt.whtWithheldByCustomerSatang,
+            // มติ PO U169 — ใบที่ออกเต็มยอดของบิลที่ตัดส่วนต่าง: ส่วนที่เกินเงินรับ = ค่าธรรมเนียมที่เรารับภาระ
+            bankFeeSatang: Math.max(0, invoice.totalSatang - receipt.amountSatang - receipt.whtWithheldByCustomerSatang),
             receivedDate: receipt.receivedDate,
             bankAccount:
               receipt.bankTransaction === null
@@ -1055,6 +1063,7 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
           period: true,
           batchNumber: true,
           status: true,
+          bankFeeWrittenOffSatang: true,
           company: { select: { name: true } },
           salesRecord: {
             select: { taxInvoices: { where: { status: 'active', docKind: 'tax_invoice' }, select: { id: true } } },
@@ -1081,6 +1090,7 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
       billingPeriod: row.billingBatch.period,
       billingBatchNumber: row.billingBatch.batchNumber,
       billingStatus: row.billingBatch.status,
+      billingBankFeeWrittenOffSatang: row.billingBatch.bankFeeWrittenOffSatang,
       note: row.note,
       createdAt: row.createdAt.toISOString(),
       taxInvoice: active === null ? null : toInvoiceSummary(active, periodClosed),

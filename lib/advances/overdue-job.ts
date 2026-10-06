@@ -14,6 +14,10 @@ import { prisma } from '@/lib/prisma'
  * มาร์ค Advance ที่ **เลย `due_clear_date` ตามปฏิทินไทย** แล้วยังไม่เคลียร์ ให้เป็น `overdue`
  * — เป็น**ทางเดียว**ที่สถานะนี้เกิดได้ ไม่มี endpoint/ปุ่มให้ผู้ใช้กด (`15` §10)
  *
+ * **มติ PO O74 (Final ด่าน 7 · ADV-5)** — นับเฉพาะเงินทดรองที่ **จ่ายออกแล้ว** (นิยามเดียวกับ U83
+ * `isAdvancePaidOut()`: เคยอยู่ในรอบจ่ายที่ `completed`) · ยังไม่เข้ารอบจ่าย / รอบยังไม่ยืนยันโอน / รอบถูกยกเลิก
+ * ⇒ ยังไม่ใช่หนี้ที่ผู้ยืมต้องเคลียร์ ⇒ คง `approved` (รอจ่าย) ไม่มาร์ค ไม่แจ้งเตือน
+ *
  * ### ทำไม idempotent
  * - เลือกเฉพาะ `status = 'approved'` แล้วเปลี่ยนด้วย **conditional update** (`updateMany` + `where status`)
  *   ⇒ รันซ้ำ/รันพร้อมกันสองตัว แถวเดิมถูกนับครั้งเดียว (ตัวที่แพ้ได้ `count = 0` แล้วข้ามเงียบ ๆ)
@@ -61,6 +65,8 @@ export async function runAdvanceOverdueJob(
       status: 'approved',
       deletedAt: null,
       dueClearDate: { lt: today },
+      // O74 — จ่ายออกแล้วเท่านั้น (U83: เคยอยู่ในรอบจ่ายที่ completed — ตัวเดียวกับ `isAdvancePaidOut()`)
+      payoutItems: { some: { payoutBatch: { status: 'completed' } } },
       ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
     },
     orderBy: { dueClearDate: 'asc' },

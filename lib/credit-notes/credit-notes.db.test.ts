@@ -568,6 +568,35 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     expect(revenue.get(seeded.revenueId)).toBe(1_240_000)
   })
 
+  it('BUG-178: ยอดค้าง (AR) แถว/การ์ดหน้ารายได้และวางบิล = ยอดตามเอกสาร (หักใบลดหนี้ บวกใบเพิ่มหนี้) ตรง AR Aging และ F3', async () => {
+    const seeded = await seedInvoice()
+    await credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 10_000 }))
+    const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 50_000 })
+    await credit.createCreditNote(
+      ctx,
+      input(seeded, { noteType: 'debit', amountBeforeVatSatang: 50_000, adjustmentId: increase }),
+    )
+    const revenue = await import('@/lib/revenue/queries')
+    const { loadArAgingCompanies } = await import('@/lib/reports/finance/providers')
+    const { totalArOutstandingSatang: totalPure } = await import('@/lib/finance/ar-calc')
+    const { totalArOutstandingSatang: totalOnPage } = await import('@/lib/revenue/revenue-ui')
+
+    // 1,284,000 − 10,700 + 53,500 (ยังไม่รับเงินในรอบ)
+    const detail = await revenue.getBillingBatch(accountant, seeded.billingBatchId)
+    expect(detail.totalSatang).toBe(1_284_000)
+    expect(detail.outstandingSatang).toBe(1_326_800)
+
+    const rows = await revenue.listBillingBatches(accountant, { status: 'all', companyId })
+    expect(rows.find((row) => row.id === seeded.billingBatchId)?.outstandingSatang).toBe(1_326_800)
+
+    const aging = await revenue.getArAging(accountant, { companyId })
+    const f3 = await loadArAgingCompanies(ORG_ID, { companyId })
+    const f3Total = totalPure(f3.flatMap((entry) => entry.batches))
+    // การ์ดบนหน้า = ผลรวมแถว · ต้องเท่ามุม AR Aging และรายงาน F3 ทุกบาท
+    expect(totalOnPage(rows)).toBe(aging.totalOutstandingSatang)
+    expect(totalOnPage(rows)).toBe(f3Total)
+  })
+
   it('U21: ยอดก่อน VAT ไม่ตรง Adjustment ⇒ บันทึกได้ + warnings + audit amount_matches_adjustment=false · ตรง ⇒ ไม่มีคำเตือน', async () => {
     const seeded = await seedInvoice()
     const mismatch = await seedAdjustment(seeded.revenueId, { amount: 10_000 })

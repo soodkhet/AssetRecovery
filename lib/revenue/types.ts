@@ -52,7 +52,10 @@ export interface BillingBatchDto {
   bankFeeWrittenOffSatang: number
   /** วันที่ตัดส่วนต่าง (ISO date) — ไม่มีการตัด = `null` */
   bankFeeWrittenOffDate: string | null
-  /** `22` §6.11 — `total − received` (ติดลบได้เมื่อรับเกิน) */
+  /**
+   * `22` §6.11 — `total − received` (ติดลบได้เมื่อรับเกิน) · `total` = **ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ +
+   * ใบเพิ่มหนี้ · U96 #11) ตัวเดียวกับ AR Aging/F3/พอร์ทัล (BUG-178) — ไม่ใช่ `totalSatang` ของ DTO นี้
+   */
   outstandingSatang: number
   /** ยอดรายได้ในรอบ **ก่อน VAT** (ผลรวม `revenues.gross_satang`) */
   amountBeforeVatSatang: number

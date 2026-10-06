@@ -202,7 +202,28 @@ const batchSelect = {
 
 type BatchRow = Prisma.BillingBatchGetPayload<{ select: typeof batchSelect }>
 
-function toBatchDto(row: BatchRow, asOf: Date, amountBeforeVatSatang: number): BillingBatchDto {
+/**
+ * BUG-178 — ยอดค้าง (AR) ของแถว/การ์ดหน้า "รายได้และวางบิล" ต้องเป็น**ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ +
+ * ใบเพิ่มหนี้ · มติ PO U96 #11) นิยามเดียวกับ AR Aging / F3 / พอร์ทัล ⇒ `arTotalSatang` มาจาก
+ * `withDocumentedArTotals()` ตัวเดียวกัน · `totalSatang` ของ DTO ยังเป็นยอดใบวางบิลที่ส่งจริง (ไม่เปลี่ยน)
+ */
+async function documentedArTotals(
+  organizationId: string,
+  rows: readonly { id: string; totalSatang: number }[],
+): Promise<Map<string, number>> {
+  const documented = await withDocumentedArTotals(
+    organizationId,
+    rows.map((row) => ({ id: row.id, totalSatang: row.totalSatang })),
+  )
+  return new Map(documented.map((row) => [row.id, row.totalSatang]))
+}
+
+function toBatchDto(
+  row: BatchRow,
+  asOf: Date,
+  amountBeforeVatSatang: number,
+  arTotalSatang: number = row.totalSatang,
+): BillingBatchDto {
   const customerWhtPct =
     row.company.whtWithheldByCustomerPct === null ? null : row.company.whtWithheldByCustomerPct.toNumber()
   const customerWht = estimateCustomerWhtForBilling({
@@ -225,7 +246,7 @@ function toBatchDto(row: BatchRow, asOf: Date, amountBeforeVatSatang: number): B
     bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
     bankFeeWrittenOffDate: row.bankFeeWrittenOffDate === null ? null : toDateOnlyIso(row.bankFeeWrittenOffDate),
     outstandingSatang: arOutstandingSatang({
-      totalSatang: row.totalSatang,
+      totalSatang: arTotalSatang,
       receivedSatang: row.receivedSatang,
       whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
       bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
@@ -304,11 +325,14 @@ export async function listBillingBatches(
     orderBy: [{ createdAt: 'desc' }],
     take: 200,
   })
-  const grossByBatch = await batchGrossSatang(
-    user.organizationId,
-    rows.map((row) => row.id),
-  )
-  return rows.map((row) => toBatchDto(row, now, grossByBatch.get(row.id) ?? 0))
+  const [grossByBatch, arTotals] = await Promise.all([
+    batchGrossSatang(
+      user.organizationId,
+      rows.map((row) => row.id),
+    ),
+    documentedArTotals(user.organizationId, rows),
+  ])
+  return rows.map((row) => toBatchDto(row, now, grossByBatch.get(row.id) ?? 0, arTotals.get(row.id)))
 }
 
 /** ยอดก่อน VAT ต่อรอบ (ผลรวมรายได้ที่ยังไม่ถูกลบ) — query เดียวทั้งหน้า */
@@ -353,7 +377,8 @@ export async function getBillingBatch(
     orderBy: [{ revenueDate: 'asc' }],
   })
   const gross = revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0)
-  return { ...toBatchDto(batch, now, gross), revenues: revenues.map(toRevenueDto) }
+  const arTotals = await documentedArTotals(user.organizationId, [batch])
+  return { ...toBatchDto(batch, now, gross, arTotals.get(batch.id)), revenues: revenues.map(toRevenueDto) }
 }
 
 // ── POST /api/billing-batches (`19` §9.1) ───────────────────────────────────

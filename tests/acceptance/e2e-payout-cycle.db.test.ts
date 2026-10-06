@@ -747,11 +747,9 @@ suite('Phase 8.1 — E2E เงินทดรอง 5 สถานะ (`29` §1
       'ADVANCE_PENDING_SETTLEMENT',
     )
 
-    // overdue — background job เท่านั้น (ไม่มีปุ่มให้กด `15` §10) + idempotent
-    const marked = await overdueJob.runAdvanceOverdueJob({ organizationId: ORG_ID, now: AFTER_DUE })
-    expect(marked.marked).toBe(1)
-    expect((await db().advance.findUniqueOrThrow({ where: { id: requested.id } })).status).toBe('overdue')
+    // มติ PO O74 — ยังไม่จ่ายออก ⇒ เลยกำหนดก็ยังไม่ overdue (ยังไม่ใช่หนี้ค้าง)
     expect((await overdueJob.runAdvanceOverdueJob({ organizationId: ORG_ID, now: AFTER_DUE })).marked).toBe(0)
+    expect((await db().advance.findUniqueOrThrow({ where: { id: requested.id } })).status).toBe('approved')
 
     // มติ PO U83 — ยังไม่เคยจ่ายจริง (ไม่อยู่ในรอบจ่าย completed) ⇒ เคลียร์ไม่ได้
     await expectCode(
@@ -759,6 +757,12 @@ suite('Phase 8.1 — E2E เงินทดรอง 5 สถานะ (`29` §1
       'ADVANCE_IN_PENDING_PAYOUT',
     )
     await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: requested.id, actorId: FINANCE_ID })
+
+    // overdue — background job เท่านั้น (ไม่มีปุ่มให้กด `15` §10) + idempotent · นับเมื่อจ่ายออกแล้ว (O74)
+    const marked = await overdueJob.runAdvanceOverdueJob({ organizationId: ORG_ID, now: AFTER_DUE })
+    expect(marked.marked).toBe(1)
+    expect((await db().advance.findUniqueOrThrow({ where: { id: requested.id } })).status).toBe('overdue')
+    expect((await overdueJob.runAdvanceOverdueJob({ organizationId: ORG_ID, now: AFTER_DUE })).marked).toBe(0)
 
     // cleared — เคลียร์ยอด ยอดคืนมาจาก generated column ของ DB (ห้ามคำนวณเอง)
     const cleared = await advances.settleAdvance(ctx(finance), requested.id, {

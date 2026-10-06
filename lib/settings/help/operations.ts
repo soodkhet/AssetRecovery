@@ -174,6 +174,11 @@ export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHe
         label: 'ลูกค้าหักภาษีด้วย',
         effect: 'นับภาษีที่ลูกค้าหักเต็มจำนวนก่อน ส่วนต่างที่เหลือ (ไม่เกินเพดาน) เป็นค่าธรรมเนียมธนาคาร · บิลชำระครบ',
       },
+      {
+        label: 'ใบเสร็จรับเงิน/ใบกำกับภาษี',
+        effect:
+          'บิลที่ตัดส่วนต่างแล้วออกใบเต็มยอดบิล สถานะรับชำระครบ ภาษีมูลค่าเพิ่มคิดจากมูลค่าบริการเต็ม · ค่าธรรมเนียมเป็นค่าใช้จ่ายของเรา ไม่ใช่ส่วนลด',
+      },
     ],
     examples:
       toleranceSatang === null
@@ -209,7 +214,7 @@ export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHe
     who: WHO_SETTINGS,
     when: `${WHEN_FINANCE_POLICY} · ใช้เพดาน ณ ตอนจับคู่เงินรับ`,
     assumption: 'bank_fee_write_off',
-    moreAssumptions: ['customer_wht_bank_fee'],
+    moreAssumptions: ['customer_wht_bank_fee', 'bank_fee_full_tax_invoice'],
   }
 }
 
