@@ -216,8 +216,8 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO approval_matrices
-      (id, organization_id, condition, condition_threshold_satang, approval_flow, enforce_segregation_of_duties, created_by)
-    VALUES ('${MATRIX_ID}', '${ORG_ID}', 'ปกติ U143', NULL, ARRAY['${MANAGER_ROLE}', '${FINANCE_ROLE}'], false, '${FINANCE_ID}')
+      (id, organization_id, condition, condition_threshold_satang, approval_flow_role_ids, enforce_segregation_of_duties, created_by)
+    VALUES ('${MATRIX_ID}', '${ORG_ID}', 'ปกติ U143', NULL, ARRAY['${ROLE_MANAGER}', '${ROLE_FINANCE}']::uuid[], false, '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`

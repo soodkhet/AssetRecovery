@@ -170,8 +170,8 @@ beforeAll(async () => {
     VALUES ('${USER_ID}', '${ORG_ID}', '${ROLE_ID}', 'u155@test.local', 'ธุรการ U155', 'active') ON CONFLICT (id) DO NOTHING
   `)
   await db().$executeRawUnsafe(`
-    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days, created_by)
-    VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ U155', 'U155', '0105515500001', 'exclude_vat', 30, '${USER_ID}')
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, created_by)
+    VALUES ('${COMPANY_ID}', '${ORG_ID}', 'ไฟแนนซ์ U155', 'U155', '0105515500001', 'exclude_vat', '${USER_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await cleanup()
