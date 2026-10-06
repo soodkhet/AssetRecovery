@@ -12,6 +12,8 @@ import type {
   BankFileEncoding,
   BankFileTestStatus,
   BankFileType,
+  BankFilePurpose,
+  TaxProfileIncomeType,
   CutoffRuleType,
   CycleScopeKind,
   CycleType,
@@ -55,6 +57,9 @@ export interface ApprovalMatrixDto {
   id: string
   condition: string
   conditionThresholdSatang: number | null
+  /** role id ต่อขั้น — ค่าที่เก็บจริง (มติ PO U149) */
+  approvalFlowRoleIds: string[]
+  /** ชื่อ role **ปัจจุบัน** ของแต่ละขั้น (แสดงผล) — ลำดับเดียวกับ `approvalFlowRoleIds` */
   approvalFlow: string[]
   enforceSegregationOfDuties: boolean
   isActive: boolean
@@ -111,8 +116,12 @@ export interface BankAccountDto {
   accountNumberMasked: string
   accountType: string
   usage: BankAccountUsage
-  statementFormat: string | null
-  paymentFileFormat: string | null
+  /** อ้างรูปแบบด้วย id (มติ PO U147) */
+  statementFormatId: string | null
+  paymentFileFormatId: string | null
+  /** ข้อความแสดงรูปแบบที่อ้าง (`null` = ไม่ได้ตั้ง) */
+  statementFormatLabel: string | null
+  paymentFileFormatLabel: string | null
   autoMatchToleranceDays: number
   isPrimary: boolean
   canPay: boolean
@@ -127,6 +136,9 @@ export interface TaxProfileDto {
   whtPct: number
   whtBasis: WhtBasis
   whtMinThresholdSatang: number
+  /** รหัสรายการมาตรฐาน (มติ PO U148) */
+  incomeTypeCode: TaxProfileIncomeType
+  /** ข้อความที่พิมพ์ลง 50 ทวิ */
   incomeType: string
   filingForm: WhtFilingForm
   isActive: boolean
@@ -238,7 +250,13 @@ export interface HolidayMutationResultDto {
 
 export interface BankFileFormatDto {
   id: string
+  /** statement / payment (มติ PO U147) */
+  purpose: BankFilePurpose
+  /** รหัสธนาคารมาตรฐาน — `null` = ข้อมูลเดิมที่ต้องเลือกธนาคารใหม่ */
+  bankCode: string | null
   bankName: string
+  /** ข้อความแสดงในตัวเลือก (ธนาคาร · ชนิดไฟล์ · จำนวนคอลัมน์) */
+  label: string
   fileType: BankFileType
   encoding: BankFileEncoding
   columnMapping: string

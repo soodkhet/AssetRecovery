@@ -5,7 +5,14 @@ import {
 } from '@/lib/substitute-receipts/substitute-receipt'
 import { dateOnlySchema, pctSchema, reasonSchema, satangSchema } from '@/lib/api/validation'
 import { MAX_APPROVAL_STEPS, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
+import { thaiBankByCode } from '@/lib/banks/thai-banks'
 import { ACCOUNT_TYPE_VALUES, MAX_AUTO_MATCH_TOLERANCE_DAYS } from '@/lib/settings/bank-account'
+import {
+  BANK_FILE_PURPOSES,
+  BANK_FILE_PURPOSE_LABEL,
+  isColumnOfPurpose,
+  parseColumnMapping,
+} from '@/lib/settings/bank-file'
 import { MAX_CUTOFF_DAY, MIN_CUTOFF_DAY, describeDueRule, isScopeKindValidForType } from '@/lib/settings/cycles'
 import {
   MAX_AGING_BUCKETS,
@@ -33,7 +40,7 @@ import {
 } from '@/lib/settings/data-retention'
 import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import { MAX_HOLIDAY_IMPORT_ROWS, MAX_HOLIDAY_NAME_LENGTH } from '@/lib/settings/holidays'
-import { WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
+import { TAX_PROFILE_INCOME_TYPE_CODES, WHT_BASIS_VALUES } from '@/lib/settings/tax-profile'
 import {
   WHT_CERTIFICATE_MODES,
   WHT_FILING_METHODS,
@@ -62,6 +69,12 @@ const optionalText = (max: number) =>
   z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
     z.string().trim().max(max, `ข้อความยาวเกิน ${max} ตัวอักษร`).nullable().default(null),
+  )
+/** อ้าง record ด้วย id ที่ยอมให้ว่าง — `''`/ไม่ส่ง = null */
+const optionalUuid = (message: string) =>
+  z.preprocess(
+    (value) => (value === undefined || (typeof value === 'string' && value.trim() === '') ? null : value),
+    z.string().trim().guid(message).nullable(),
   )
 
 // ── §6.1 รอบบิล/รอบจ่าย ────────────────────────────────────────────────
@@ -147,20 +160,21 @@ const approvalMatrixFieldsBase = z.object({
   condition: z.string().trim().min(2, 'ระบุชื่อสายอนุมัติ').max(200, 'ชื่อสายอนุมัติยาวเกินไป'),
   /** เพดานเงินเป็น **satang** เสมอ (Rule 01) — FE แปลงจากบาทด้วย `parseBahtInput()` ก่อนส่ง */
   conditionThresholdSatang: satangSchema('เพดานเงิน').nullable().default(null),
-  approvalFlow: z
-    .array(z.string().trim().min(1, 'ชื่อบทบาทว่างไม่ได้').max(120, 'ชื่อบทบาทยาวเกินไป'))
+  /** role id ต่อขั้น (มติ PO U149) — ตรวจว่าเป็น role ผู้อนุมัติที่มีจริงในองค์กรที่ชั้น DB อีกชั้น */
+  approvalFlowRoleIds: z
+    .array(z.string().trim().uuid('เลือกบทบาทผู้อนุมัติจากรายการ'))
     .min(1, 'ต้องมีขั้นอนุมัติอย่างน้อย 1 ขั้น')
     .max(MAX_APPROVAL_STEPS, `ขั้นอนุมัติได้ไม่เกิน ${MAX_APPROVAL_STEPS} ขั้น`),
   enforceSegregationOfDuties: z.boolean().default(false),
 })
 
 const refineApprovalMatrix: RefineFn<z.infer<typeof approvalMatrixFieldsBase>> = (values, ctx) => {
-  const duplicates = duplicateApprovalSteps(values.approvalFlow.map((role) => role.trim()))
+  const duplicates = duplicateApprovalSteps(values.approvalFlowRoleIds.map((id) => id.trim()))
   if (values.enforceSegregationOfDuties && duplicates.length > 0) {
     ctx.addIssue({
       code: 'custom',
-      path: ['approvalFlow'],
-      message: `บังคับแยกหน้าที่แล้วใส่บทบาทซ้ำไม่ได้: ${duplicates.join(', ')}`,
+      path: ['approvalFlowRoleIds'],
+      message: 'บังคับแยกหน้าที่แล้วใส่บทบาทเดียวกันซ้ำหลายขั้นไม่ได้',
     })
   }
 }
@@ -260,8 +274,9 @@ const bankAccountFields = z.object({
     .regex(/^[\d\s-]+$/, 'เลขบัญชีต้องเป็นตัวเลข (มี - หรือช่องว่างคั่นได้)'),
   accountType: z.enum(ACCOUNT_TYPE_VALUES),
   usage: bankAccountUsageSchema,
-  statementFormat: optionalText(120),
-  paymentFileFormat: optionalText(120),
+  /** อ้างรูปแบบด้วย id (มติ PO U147) — ชนิด statement/payment ตรวจที่ชั้น DB */
+  statementFormatId: optionalUuid('เลือกรูปแบบไฟล์ statement จากรายการ'),
+  paymentFileFormatId: optionalUuid('เลือกรูปแบบไฟล์โอนจากรายการ'),
   autoMatchToleranceDays: z
     .number()
     .int('จำนวนวันต้องเป็นจำนวนเต็ม')
@@ -289,12 +304,21 @@ const taxProfileFields = z.object({
   whtPct: pctSchema('อัตราหัก ณ ที่จ่าย'),
   whtBasis: whtBasisSchema,
   whtMinThresholdSatang: satangSchema('ยอดขั้นต่ำที่ต้องหัก'),
-  incomeType: z.string().trim().min(2, 'ระบุประเภทเงินได้').max(200, 'ประเภทเงินได้ยาวเกินไป'),
+  /** มติ PO U148 — เลือกจากรายการมาตรฐานตามแบบ 50 ทวิ */
+  incomeTypeCode: z.enum(TAX_PROFILE_INCOME_TYPE_CODES, { error: 'เลือกประเภทเงินได้จากรายการ' }),
+  /** ข้อความที่ระบุเอง — บังคับเฉพาะ "อื่น ๆ (ระบุ)" · รายการมาตรฐานระบบเขียนป้ายให้ (ค่าที่ส่งมาถูกทิ้ง) */
+  incomeType: z.string().trim().max(200, 'ประเภทเงินได้ยาวเกินไป').default(''),
   filingForm: whtFilingFormSchema,
 })
 
-export const taxProfileFieldsSchema = taxProfileFields
-export const taxProfileCreateSchema = taxProfileFields.extend({ reason: reasonSchema })
+const refineTaxProfile: RefineFn<z.infer<typeof taxProfileFields>> = (values, ctx) => {
+  if (values.incomeTypeCode === 'other' && values.incomeType.trim().length < 2) {
+    ctx.addIssue({ code: 'custom', path: ['incomeType'], message: 'ระบุประเภทเงินได้' })
+  }
+}
+
+export const taxProfileFieldsSchema = taxProfileFields.superRefine(refineTaxProfile)
+export const taxProfileCreateSchema = taxProfileFields.extend({ reason: reasonSchema }).superRefine(refineTaxProfile)
 export const taxProfileUpdateSchema = taxProfileCreateSchema
 export const taxProfileDeleteSchema = z.object({ reason: reasonSchema })
 
@@ -411,15 +435,41 @@ export const bankFileTypeSchema = z.enum(['CSV', 'TXT'])
 /** ค่า enum ใน DB คือ `UTF-8`/`TIS-620` (`@map`) — API ใช้ชื่อ Prisma เพื่อไม่ให้ขีดกลางหลุดเข้า TS */
 export const bankFileEncodingSchema = z.enum(['UTF_8', 'TIS_620'])
 
+/** มติ PO U147 — statement (นำเข้ากระทบยอด) / payment (ไฟล์โอน) */
+export const bankFilePurposeSchema = z.enum(BANK_FILE_PURPOSES, { error: 'เลือกว่าใช้สำหรับไฟล์ statement หรือไฟล์โอนเงิน' })
+
 const bankFileFormatFields = z.object({
-  bankName: nameSchema,
+  purpose: bankFilePurposeSchema,
+  /** รหัสธนาคารจากรายการธนาคารไทยมาตรฐาน — ชื่อธนาคารระบบเขียนให้ */
+  bankCode: z
+    .string()
+    .trim()
+    .refine((code) => thaiBankByCode(code) !== null, 'เลือกธนาคารจากรายการ'),
   fileType: bankFileTypeSchema,
   encoding: bankFileEncodingSchema,
-  columnMapping: z.string().trim().min(1, 'ระบุรายชื่อคอลัมน์ตามลำดับที่ธนาคารกำหนด').max(2000, 'รายชื่อคอลัมน์ยาวเกินไป'),
+  /** คอลัมน์ตามลำดับที่ธนาคารกำหนด คั่นด้วย `,` — ต้องเป็นคำศัพท์ของชนิดนั้นเท่านั้น (ตรวจใน refine) */
+  columnMapping: z.string().trim().min(1, 'เลือกคอลัมน์อย่างน้อย 1 คอลัมน์').max(2000, 'รายชื่อคอลัมน์ยาวเกินไป'),
 })
 
-export const bankFileFormatFieldsSchema = bankFileFormatFields
-export const bankFileFormatCreateSchema = bankFileFormatFields.extend({ reason: reasonSchema })
+const refineBankFileFormat: RefineFn<z.infer<typeof bankFileFormatFields>> = (values, ctx) => {
+  const columns = parseColumnMapping(values.columnMapping)
+  const unknown = columns.filter((column) => !isColumnOfPurpose(values.purpose, column))
+  if (unknown.length > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['columnMapping'],
+      message: `คอลัมน์ไม่อยู่ในรายการของ${BANK_FILE_PURPOSE_LABEL[values.purpose]}: ${unknown.join(', ')}`,
+    })
+  }
+  if (new Set(columns).size !== columns.length) {
+    ctx.addIssue({ code: 'custom', path: ['columnMapping'], message: 'เลือกคอลัมน์ซ้ำ' })
+  }
+}
+
+export const bankFileFormatFieldsSchema = bankFileFormatFields.superRefine(refineBankFileFormat)
+export const bankFileFormatCreateSchema = bankFileFormatFields
+  .extend({ reason: reasonSchema })
+  .superRefine(refineBankFileFormat)
 export const bankFileFormatUpdateSchema = bankFileFormatCreateSchema
 export const bankFileFormatDeleteSchema = z.object({ reason: reasonSchema })
 /** `POST /:id/test` — ผลทดสอบเปลี่ยน `test_status` (state machine `13` §8) ⇒ ต้องมี reason */

@@ -83,6 +83,7 @@ export const ERROR_CATALOG = {
   // ── 24 §6.3 ธนาคาร/ไฟล์ ────────────────────────────────────────────────
   BANK_FILE_NOT_TESTED: { status: 400, severity: 'reject', source: '24 §6.3' },
   BANK_FILE_FORMAT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.3' },
+  BANK_FILE_FORMAT_IN_USE: { status: 400, severity: 'reject', source: '24 §6.3' },
   BANK_ACCOUNT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.3' },
   DUPLICATE_BANK_ACCOUNT: { status: 400, severity: 'reject', source: '24 §6.3' },
   BANK_ACCOUNT_IN_USE: { status: 400, severity: 'reject', source: '24 §6.3' },

@@ -2,6 +2,8 @@ import { after } from 'next/server'
 import { APPROVE_ADVANCE } from '@/lib/advances/advance'
 import { approvalRoleContract, approversInCurrentRound, parseApprovalHistory } from '@/lib/compensation/approval'
 import { resolveApprovalFlow, type ApprovalMatrixCandidate } from '@/lib/finance/approval-flow-resolver'
+import { approvalFlowRoleNames } from '@/lib/settings/approval-matrix'
+import { loadRoleNameMap } from '@/lib/settings/queries/approval-matrix'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { planExpenseApprovalNotices, type ApprovalNotice, type ExpenseQueueItem } from '@/lib/notifications/approval-notices'
 import { dispatchNotificationAwaited } from '@/lib/notifications/dispatch'
@@ -89,7 +91,7 @@ export async function collectExpenseApprovalNotices(
       approvalStepTotal: true,
       approvalHistory: true,
       createdBy: true,
-      approvalMatrix: { select: { approvalFlow: true, enforceSegregationOfDuties: true } },
+      approvalMatrix: { select: { approvalFlowRoleIds: true, enforceSegregationOfDuties: true } },
       payee: { select: { userId: true, user: { select: { fullName: true, teamId: true } } } },
       case: { select: { caseRef: true } },
       assignment: { select: { teamId: true } },
@@ -98,15 +100,26 @@ export async function collectExpenseApprovalNotices(
   })
   if (rows.length === 0) return []
 
+  // สายเก็บ role id (มติ PO U149) — แปลงเป็นชื่อปัจจุบันก่อนส่งให้ตัวจับคู่ capability
+  const roleNames = await loadRoleNameMap(organizationId)
   let candidates: ApprovalMatrixCandidate[] | null = null
   const loadCandidates = async (): Promise<ApprovalMatrixCandidate[]> => {
     if (candidates !== null) return candidates
     const matrices = await prisma.approvalMatrix.findMany({
       where: { organizationId, deletedAt: null },
-      select: { id: true, condition: true, conditionThresholdSatang: true, approvalFlow: true, enforceSegregationOfDuties: true },
+      select: {
+        id: true,
+        condition: true,
+        conditionThresholdSatang: true,
+        approvalFlowRoleIds: true,
+        enforceSegregationOfDuties: true,
+      },
     })
-    candidates = matrices
-    return matrices
+    candidates = matrices.map(({ approvalFlowRoleIds, ...matrix }) => ({
+      ...matrix,
+      approvalFlow: approvalFlowRoleNames(approvalFlowRoleIds, roleNames),
+    }))
+    return candidates
   }
 
   const items: ExpenseQueueItem[] = []
@@ -116,7 +129,7 @@ export async function collectExpenseApprovalNotices(
     let enforceSod: boolean
     try {
       if (row.approvalMatrix !== null) {
-        steps = row.approvalMatrix.approvalFlow
+        steps = approvalFlowRoleNames(row.approvalMatrix.approvalFlowRoleIds, roleNames)
         totalSteps = row.approvalStepTotal
         enforceSod = row.approvalMatrix.enforceSegregationOfDuties
       } else {

@@ -54,8 +54,8 @@ const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
     message: 'รหัสความสามารถ (capability) ไม่มีอยู่ในระบบ',
   },
   ROLE_IN_USE: {
-    title: 'ลบบทบาทที่มีผู้ใช้อยู่ไม่ได้',
-    message: 'ย้ายผู้ใช้ทั้งหมดออกจากบทบาทนี้ก่อนจึงจะลบได้',
+    title: 'ลบบทบาทที่ยังใช้งานอยู่ไม่ได้',
+    message: 'ย้ายผู้ใช้ทั้งหมดออกจากบทบาทนี้ และนำบทบาทนี้ออกจากสายการอนุมัติก่อนจึงจะลบได้',
   },
   DUPLICATE_ROLE_NAME: {
     title: 'ชื่อบทบาทซ้ำ',

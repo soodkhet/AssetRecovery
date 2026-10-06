@@ -141,9 +141,9 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO approval_matrices
-      (id, organization_id, condition, condition_threshold_satang, approval_flow, enforce_segregation_of_duties, created_by)
+      (id, organization_id, condition, condition_threshold_satang, approval_flow_role_ids, enforce_segregation_of_duties, created_by)
     VALUES ('${MATRIX_ID}', '${ORG_ID}', 'สาย 2 ขั้น U29', NULL,
-            ARRAY['ผู้จัดการทีมติดตามทรัพย์', 'การเงิน'], true, '${FINANCE_1}')
+            ARRAY['${ROLE_MANAGER}', '${ROLE_FINANCE}']::uuid[], true, '${FINANCE_1}')
     ON CONFLICT (id) DO NOTHING
   `)
   for (const code of CAPABILITY_CODES) {

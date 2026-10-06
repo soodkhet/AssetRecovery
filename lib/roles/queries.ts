@@ -97,6 +97,13 @@ export async function countRoleUsers(roleId: string): Promise<number> {
   return prisma.user.count({ where: { roleId, deletedAt: null } })
 }
 
+/** สายอนุมัติที่ยังใช้งานซึ่งมี role นี้เป็นขั้นใดขั้นหนึ่ง (มติ PO U149 — ลบ role ที่สายใช้อยู่ไม่ได้) */
+export async function countRoleApprovalMatrices(organizationId: string, roleId: string): Promise<number> {
+  return prisma.approvalMatrix.count({
+    where: { organizationId, deletedAt: null, approvalFlowRoleIds: { has: roleId } },
+  })
+}
+
 interface MutationContext {
   actor: SessionUser
   meta: RequestMeta

@@ -79,6 +79,7 @@
 | v4.5x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U134 + U136)** — **U134** `payout_batches` + `post_completion_synced_at TIMESTAMPTZ` (ขั้นหลังรอบจ่าย completed ครบแล้ว — NULL บนรอบ completed = ค้าง ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ) + partial index `idx_payout_batches_org_post_completion_pending` · backfill: รอบ completed เดิมที่ทุกรายการมีบันทึกจ่ายแล้ว = ครบ (migration `20261008031000_payout_post_completion_marker`) · **U136** `bank_transactions` + `occurrence_seq INTEGER NOT NULL DEFAULT 1` (CHECK ≥ 1) และ `uniq_bank_tx_statement_row` รวม `occurrence_seq` (migration `20261008030000_bank_tx_statement_occurrence`) |
 | v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
 | v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
+| v4.5x-DC | 07/10/2569 | **มติ PO 07/10/2569 (U147 + U148 + U149 — Final Test ด่าน 5 ND-5/6/7)** (migration `20261008090000_approval_flow_role_ids` · `20261008091000_tax_profile_income_type_code` · `20261008092000_bank_file_format_purpose_ids`): **(U149)** `approval_matrices.approval_flow TEXT[]` (ชื่อ role) → `approval_flow_role_ids UUID[]` NOT NULL + GIN `idx_approval_matrices_flow_roles` — แปลงชื่อเดิม (รวมชื่ออังกฤษตัวอย่าง Manager/Finance/FinanceAdmin/Executive) เป็น role ผู้อนุมัติ 3 ตัว (เลือก record seed · กลุ่ม system → inhouse → outsource) · สายที่แปลงไม่ครบถูกปิดใช้งาน + NOTICE · **(U148)** enum ใหม่ `tax_profile_income_type` + `tax_profiles.income_type_code` (ค่าเดิมตรงป้ายรายการ = รหัสนั้น · ที่เหลือ = `other` + ข้อความเดิม) · `income_type` คงเป็นข้อความที่พิมพ์ลง 50 ทวิ · **(U147)** enum ใหม่ `bank_file_purpose` + `bank_file_formats.purpose` NOT NULL (คอลัมน์เดิมทุกตัวอยู่ในคำศัพท์ statement = statement · อื่น = payment) + `bank_code VARCHAR(3)` (จับคู่คำสำคัญชุดเดียวกับ `resolveBankCode()` · bank_name = ชื่อมาตรฐาน) · `bank_accounts.statement_format`/`payment_file_format` (ข้อความ) → `statement_format_id`/`payment_file_format_id` UUID FK (RESTRICT) + index `idx_bank_accounts_statement_format`/`idx_bank_accounts_payment_file_format` (ชื่อเดิมตรงรูปแบบที่ยังใช้งาน**และชนิดตรงช่อง**เท่านั้น ไม่ตรง = NULL + NOTICE) · enum รวม 76 ตัว |
 | v4.5x-fixer-u132 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
 | v4.5x-DD | 07/10/2569 | **มติ PO 07/10/2569 (U151) — ผู้มีอำนาจลงนามบนเอกสารส่งออกนอก** (migration `20261008100000_authorized_signer`): `organizations` + `authorized_signer_name TEXT` / `authorized_signer_title TEXT` (ไม่บังคับ) · `document_template_snapshot` (JSONB เดิมบน `tax_invoices`/`billing_batches`/`handover_lots`) เพิ่มคีย์ `signer_name`/`signer_title` (+ `counterparty_signer_name` = `finance_companies.signer_name` ณ ตอนยืนยันล็อต — ใบส่งมอบเท่านั้น) — ไม่เปลี่ยนคอลัมน์ · `wht_certificates` + `payer_signer_name TEXT` / `payer_signer_title TEXT` (snapshot ณ วันออกใบ · trigger `wht_certificates_immutable` ครอบเพิ่ม) · เอกสาร/ใบเก่าไม่มีคีย์/NULL = ไม่พิมพ์ชื่อ (ไม่ backfill) |
 | v4.5x-DA | 07/10/2569 | **มติ PO 07/10/2569 (U143 + U150)** (migration `20261008070000_receipt_id_document_verification`) — ใบเสร็จของเบิกด้วยมือ/เคลียร์เงินทดรอง และเอกสารยืนยันตัวตนผู้รับเงิน **อัปโหลดจริงผ่าน server** (ตรวจไฟล์ + SHA-256) แทนช่อง path/URL พิมพ์เอง · `expenses` + `receipt_file_unverified BOOLEAN NOT NULL DEFAULT false` · `payee_profiles` + `id_document_hash VARCHAR(64)` + `id_document_unverified BOOLEAN NOT NULL DEFAULT false` · backfill: แถวเดิมที่มี path แต่ไม่มี hash ⇒ `*_unverified = true` (**ไม่ลบข้อมูล** — ระบบถือว่าไม่มีไฟล์: Export Pack `03_Expenses.receipt_file` · ความครบเอกสารบัญชีค่าใช้จ่าย · เกตยืนยันผู้รับเงิน) · CHECK `chk_expenses_receipt_verified` / `chk_payee_profiles_id_document_verified`: มี path ⇒ ต้องมี hash หรือเป็นข้อมูลเก่าที่ทำเครื่องหมายไว้ · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ flag = false |
@@ -166,6 +167,8 @@ CREATE TYPE company_document_type  AS ENUM ('company_certificate', 'vat_registra
 CREATE TYPE cutoff_rule_type       AS ENUM ('fixed_dates', 'month_end', 'custom_text');
 CREATE TYPE bank_account_usage     AS ENUM ('receive', 'pay', 'both');          -- ไฟล์ 13 §6.3
 CREATE TYPE bank_file_type         AS ENUM ('CSV', 'TXT');                      -- ไฟล์ 13 §6.8
+CREATE TYPE bank_file_purpose      AS ENUM ('statement', 'payment');            -- มติ PO U147 (ไฟล์ 13 §6.8)
+CREATE TYPE tax_profile_income_type AS ENUM ('hire_of_work_40_8', 'service_or_hire_of_work', 'service', 'advertising', 'rent', 'transport', 'other'); -- มติ PO U148 (ไฟล์ 13 §6.4)
 CREATE TYPE bank_file_encoding     AS ENUM ('UTF-8', 'TIS-620');
 CREATE TYPE bank_file_test_status  AS ENUM ('pending', 'passed', 'failed');
 -- v4.41 (มติ PO U102 · ไฟล์ 13 §6.12) — ชนิดเอกสารที่ระบบออกเลข (แทน invoice_numbering_mode ที่ลบแล้ว)
@@ -765,7 +768,8 @@ CREATE TABLE tax_profiles (
   wht_pct             NUMERIC(5,2) NOT NULL DEFAULT 3.00,   -- % หัก ณ ที่จ่าย
   wht_basis           TEXT         NOT NULL DEFAULT 'before_vat', -- before_vat | gross_amount
   wht_min_threshold_satang INTEGER NOT NULL DEFAULT 100000, -- 1,000 บาท
-  income_type         TEXT         NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)',
+  income_type_code    tax_profile_income_type NOT NULL DEFAULT 'hire_of_work_40_8', -- มติ PO U148: รายการมาตรฐานตามแบบ 50 ทวิ + other
+  income_type         TEXT         NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)', -- ข้อความที่พิมพ์ลง 50 ทวิ: มาตรฐาน = ป้ายของรายการ (ระบบเขียน) · other = ข้อความที่ระบุ
   filing_form         wht_filing_form NOT NULL DEFAULT 'PND3',
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   created_by          UUID         NOT NULL REFERENCES users(id),
@@ -839,8 +843,8 @@ CREATE TABLE bank_accounts (
   is_primary          BOOLEAN NOT NULL DEFAULT false,
   -- Sync กับไฟล์ 13 §6.3 (เพิ่ม 04/07/2569 — DEC-006/D2)
   usage               bank_account_usage NOT NULL DEFAULT 'both',
-  statement_format    TEXT,   -- รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้างชื่อจาก bank_file_formats
-  payment_file_format TEXT,   -- รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้างชื่อจาก bank_file_formats
+  statement_format_id    UUID REFERENCES bank_file_formats(id) ON DELETE RESTRICT,  -- มติ PO U147: รูปแบบ statement (purpose = 'statement') นำเข้ากระทบยอด (ไฟล์ 35)
+  payment_file_format_id UUID REFERENCES bank_file_formats(id) ON DELETE RESTRICT,  -- มติ PO U147: รูปแบบไฟล์โอน (purpose = 'payment') ส่งธนาคาร (ไฟล์ 17)
   auto_match_tolerance_days INTEGER NOT NULL DEFAULT 7,   -- จำนวนวันยอมรับสำหรับ auto-match (ไฟล์ 35)
   is_payout_account   BOOLEAN NOT NULL DEFAULT false,     -- ⚠️ DEPRECATED 04/07/2569 (DEC-006/D2) — ความหมายซ้ำกับ usage ('pay'/'both') ห้ามใช้ในโค้ดใหม่ วางแผนลบใน migration ถัดไป
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -966,7 +970,7 @@ CREATE TABLE approval_matrices (
   organization_id     UUID NOT NULL REFERENCES organizations(id),
   condition           TEXT NOT NULL,
   condition_threshold_satang INTEGER,        -- เงินเป็น satang เสมอตาม convention (spec ไฟล์ 13 เขียน decimal ระดับเอกสาร)
-  approval_flow       TEXT[] NOT NULL,       -- ลำดับ role เช่น '{Manager,Finance,Executive}'
+  approval_flow_role_ids UUID[] NOT NULL,   -- มติ PO U149: ลำดับ role id ของผู้อนุมัติแต่ละขั้น (เดิม approval_flow TEXT[] ชื่อ role) · GIN idx_approval_matrices_flow_roles · ลบ role ที่อยู่ในสายไม่ได้ (ROLE_IN_USE)
   enforce_segregation_of_duties BOOLEAN NOT NULL DEFAULT false,  -- ไฟล์ 16 SEGREGATION_OF_DUTIES_VIOLATION
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL REFERENCES users(id),
@@ -999,10 +1003,12 @@ CREATE TABLE finance_policy_settings (
 CREATE TABLE bank_file_formats (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id),
-  bank_name       TEXT NOT NULL,
+  purpose         bank_file_purpose NOT NULL,  -- มติ PO U147: statement (นำเข้ากระทบยอด) / payment (ไฟล์โอน) — กำหนดคำศัพท์คอลัมน์
+  bank_code       VARCHAR(3),                  -- รหัสธนาคารจากรายการธนาคารไทยมาตรฐาน (lib/banks/thai-banks.ts) · NULL = ข้อมูลเดิมที่จับคู่ไม่ได้
+  bank_name       TEXT NOT NULL,               -- ชื่อมาตรฐานของ bank_code (ระบบเขียน)
   file_type       bank_file_type NOT NULL,
   encoding        bank_file_encoding NOT NULL,  -- 🔶 TIS-620/UTF-8 ต้องทดสอบจริงกับธนาคารก่อน production
-  column_mapping  TEXT NOT NULL,
+  column_mapping  TEXT NOT NULL,                -- คอลัมน์ตามลำดับ คั่นด้วย , — ต้องอยู่ในคำศัพท์ของ purpose (ตรวจที่ Zod/service)
   test_status     bank_file_test_status NOT NULL DEFAULT 'pending',  -- ต้อง 'passed' ก่อนใช้ตัดโอนจริง
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL REFERENCES users(id),
@@ -2753,7 +2759,8 @@ CREATE TABLE tax_profiles (
   wht_pct             NUMERIC(5,2) NOT NULL DEFAULT 3.00,   -- % หัก ณ ที่จ่าย
   wht_basis           TEXT         NOT NULL DEFAULT 'before_vat', -- before_vat | gross_amount
   wht_min_threshold_satang INTEGER NOT NULL DEFAULT 100000, -- 1,000 บาท
-  income_type         TEXT         NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)',
+  income_type_code    tax_profile_income_type NOT NULL DEFAULT 'hire_of_work_40_8', -- มติ PO U148: รายการมาตรฐานตามแบบ 50 ทวิ + other
+  income_type         TEXT         NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)', -- ข้อความที่พิมพ์ลง 50 ทวิ: มาตรฐาน = ป้ายของรายการ (ระบบเขียน) · other = ข้อความที่ระบุ
   filing_form         wht_filing_form NOT NULL DEFAULT 'PND3',
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   created_by          UUID         NOT NULL REFERENCES users(id),
@@ -2827,8 +2834,8 @@ CREATE TABLE bank_accounts (
   is_primary          BOOLEAN NOT NULL DEFAULT false,
   -- Sync กับไฟล์ 13 §6.3 (เพิ่ม 04/07/2569 — DEC-006/D2)
   usage               bank_account_usage NOT NULL DEFAULT 'both',
-  statement_format    TEXT,   -- รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้างชื่อจาก bank_file_formats
-  payment_file_format TEXT,   -- รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้างชื่อจาก bank_file_formats
+  statement_format_id    UUID REFERENCES bank_file_formats(id) ON DELETE RESTRICT,  -- มติ PO U147: รูปแบบ statement (purpose = 'statement') นำเข้ากระทบยอด (ไฟล์ 35)
+  payment_file_format_id UUID REFERENCES bank_file_formats(id) ON DELETE RESTRICT,  -- มติ PO U147: รูปแบบไฟล์โอน (purpose = 'payment') ส่งธนาคาร (ไฟล์ 17)
   auto_match_tolerance_days INTEGER NOT NULL DEFAULT 7,   -- จำนวนวันยอมรับสำหรับ auto-match (ไฟล์ 35)
   is_payout_account   BOOLEAN NOT NULL DEFAULT false,     -- ⚠️ DEPRECATED 04/07/2569 (DEC-006/D2) — ความหมายซ้ำกับ usage ('pay'/'both') ห้ามใช้ในโค้ดใหม่ วางแผนลบใน migration ถัดไป
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -2937,7 +2944,7 @@ CREATE TABLE approval_matrices (
   organization_id     UUID NOT NULL REFERENCES organizations(id),
   condition           TEXT NOT NULL,
   condition_threshold_satang INTEGER,        -- เงินเป็น satang เสมอตาม convention (spec ไฟล์ 13 เขียน decimal ระดับเอกสาร)
-  approval_flow       TEXT[] NOT NULL,       -- ลำดับ role เช่น '{Manager,Finance,Executive}'
+  approval_flow_role_ids UUID[] NOT NULL,   -- มติ PO U149: ลำดับ role id ของผู้อนุมัติแต่ละขั้น (เดิม approval_flow TEXT[] ชื่อ role) · GIN idx_approval_matrices_flow_roles · ลบ role ที่อยู่ในสายไม่ได้ (ROLE_IN_USE)
   enforce_segregation_of_duties BOOLEAN NOT NULL DEFAULT false,  -- ไฟล์ 16 SEGREGATION_OF_DUTIES_VIOLATION
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL REFERENCES users(id),
@@ -2970,10 +2977,12 @@ CREATE TABLE finance_policy_settings (
 CREATE TABLE bank_file_formats (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id),
-  bank_name       TEXT NOT NULL,
+  purpose         bank_file_purpose NOT NULL,  -- มติ PO U147: statement (นำเข้ากระทบยอด) / payment (ไฟล์โอน) — กำหนดคำศัพท์คอลัมน์
+  bank_code       VARCHAR(3),                  -- รหัสธนาคารจากรายการธนาคารไทยมาตรฐาน (lib/banks/thai-banks.ts) · NULL = ข้อมูลเดิมที่จับคู่ไม่ได้
+  bank_name       TEXT NOT NULL,               -- ชื่อมาตรฐานของ bank_code (ระบบเขียน)
   file_type       bank_file_type NOT NULL,
   encoding        bank_file_encoding NOT NULL,  -- 🔶 TIS-620/UTF-8 ต้องทดสอบจริงกับธนาคารก่อน production
-  column_mapping  TEXT NOT NULL,
+  column_mapping  TEXT NOT NULL,                -- คอลัมน์ตามลำดับ คั่นด้วย , — ต้องอยู่ในคำศัพท์ของ purpose (ตรวจที่ Zod/service)
   test_status     bank_file_test_status NOT NULL DEFAULT 'pending',  -- ต้อง 'passed' ก่อนใช้ตัดโอนจริง
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL REFERENCES users(id),

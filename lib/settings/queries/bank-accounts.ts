@@ -1,6 +1,7 @@
 import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { emitAudit } from '@/lib/audit/audit'
 import type { Prisma } from '@/lib/generated/prisma/client'
+import type { BankFilePurpose } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import {
   canPayFrom,
@@ -11,6 +12,7 @@ import {
   toBankAccountAuditPayload,
   type BankAccountValues,
 } from '@/lib/settings/bank-account'
+import { bankFileFormatLabel, parseColumnMapping } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
 import {
   statusFilter,
@@ -30,6 +32,14 @@ import type { BankAccountDto } from '@/lib/settings/types'
 
 const TARGET = 'bank_accounts'
 
+const formatLabelSelect = { bankName: true, fileType: true, encoding: true, columnMapping: true } as const
+
+type FormatLabelRow = Prisma.BankFileFormatGetPayload<{ select: typeof formatLabelSelect }>
+
+function formatLabelOf(row: FormatLabelRow | null): string | null {
+  return row === null ? null : bankFileFormatLabel({ ...row, columns: parseColumnMapping(row.columnMapping) })
+}
+
 const accountSelect = {
   id: true,
   bankName: true,
@@ -37,8 +47,10 @@ const accountSelect = {
   accountNumber: true,
   accountType: true,
   usage: true,
-  statementFormat: true,
-  paymentFileFormat: true,
+  statementFormatId: true,
+  paymentFileFormatId: true,
+  statementFormat: { select: formatLabelSelect },
+  paymentFileFormat: { select: formatLabelSelect },
   autoMatchToleranceDays: true,
   isPrimary: true,
   deletedAt: true,
@@ -56,8 +68,10 @@ function toDto(row: AccountRow): BankAccountDto {
     accountNumberMasked: maskAccountNumber(row.accountNumber),
     accountType: row.accountType,
     usage: row.usage,
-    statementFormat: row.statementFormat,
-    paymentFileFormat: row.paymentFileFormat,
+    statementFormatId: row.statementFormatId,
+    paymentFileFormatId: row.paymentFileFormatId,
+    statementFormatLabel: formatLabelOf(row.statementFormat),
+    paymentFileFormatLabel: formatLabelOf(row.paymentFileFormat),
     autoMatchToleranceDays: row.autoMatchToleranceDays,
     isPrimary: row.isPrimary,
     canPay: canPayFrom(row.usage),
@@ -75,8 +89,8 @@ function toValues(dto: BankAccountDto): BankAccountValues {
     accountNumber: dto.accountNumber,
     accountType: dto.accountType === 'current' ? 'current' : 'savings',
     usage: dto.usage,
-    statementFormat: dto.statementFormat,
-    paymentFileFormat: dto.paymentFileFormat,
+    statementFormatId: dto.statementFormatId,
+    paymentFileFormatId: dto.paymentFileFormatId,
     autoMatchToleranceDays: dto.autoMatchToleranceDays,
     isPrimary: dto.isPrimary,
   }
@@ -129,6 +143,26 @@ export async function countBankAccountUsage(
   return { payoutBatches, bankTransactions, total: payoutBatches + bankTransactions }
 }
 
+/**
+ * รูปแบบที่บัญชีอ้างต้องมีอยู่จริงในองค์กร ยังใช้งาน และ**ชนิดตรงช่อง** (มติ PO U147) — เดิมเก็บชื่อพิมพ์อิสระ
+ * พิมพ์ผิด/ผิดชนิดแล้วตัวนำเข้าใช้รูปแบบมาตรฐานเงียบ ๆ ⇒ ปฏิเสธด้วย `BANK_FILE_FORMAT_NOT_FOUND`
+ */
+async function assertFormatRef(organizationId: string, formatId: string | null, purpose: BankFilePurpose): Promise<void> {
+  if (formatId === null) return
+  const found = await prisma.bankFileFormat.findFirst({
+    where: { id: formatId, organizationId, deletedAt: null, purpose },
+    select: { id: true },
+  })
+  if (!found) {
+    throw new SettingsError('BANK_FILE_FORMAT_NOT_FOUND', { detail: `bank_file_format=${formatId} purpose=${purpose}` })
+  }
+}
+
+async function assertFormatRefs(organizationId: string, values: BankAccountValues): Promise<void> {
+  await assertFormatRef(organizationId, values.statementFormatId, 'statement')
+  await assertFormatRef(organizationId, values.paymentFileFormatId, 'payment')
+}
+
 function toWriteData(values: BankAccountValues) {
   const normalized = normalizeBankAccountValues(values)
   return {
@@ -137,8 +171,8 @@ function toWriteData(values: BankAccountValues) {
     accountNumber: normalized.accountNumber,
     accountType: normalized.accountType,
     usage: normalized.usage,
-    statementFormat: normalized.statementFormat,
-    paymentFileFormat: normalized.paymentFileFormat,
+    statementFormatId: normalized.statementFormatId,
+    paymentFileFormatId: normalized.paymentFileFormatId,
     autoMatchToleranceDays: normalized.autoMatchToleranceDays,
     isPrimary: normalized.isPrimary,
   }
@@ -168,6 +202,7 @@ export async function createBankAccount(
   const organizationId = context.actor.organizationId
   const normalized = normalizeBankAccountValues(values)
   await assertAccountNumberAvailable(organizationId, normalized.accountNumber)
+  await assertFormatRefs(organizationId, normalized)
 
   const created = await prisma.$transaction(async (tx) => {
     if (normalized.isPrimary) await demoteOtherPrimaries(tx, organizationId)
@@ -207,6 +242,7 @@ export async function updateBankAccount(
   const organizationId = context.actor.organizationId
   const normalized = normalizeBankAccountValues(values)
   await assertAccountNumberAvailable(organizationId, normalized.accountNumber, current.id)
+  await assertFormatRefs(organizationId, normalized)
 
   const updated = await prisma.$transaction(async (tx) => {
     if (normalized.isPrimary) await demoteOtherPrimaries(tx, organizationId, current.id)

@@ -2,6 +2,8 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
+  bankFileFormatLabel,
+  bankNameOfCode,
   parseColumnMapping,
   runBankFileTest,
   testStatusAfterEdit,
@@ -24,6 +26,8 @@ const TARGET = 'bank_file_formats'
 
 const formatSelect = {
   id: true,
+  purpose: true,
+  bankCode: true,
   bankName: true,
   fileType: true,
   encoding: true,
@@ -36,13 +40,17 @@ const formatSelect = {
 type FormatRow = Prisma.BankFileFormatGetPayload<{ select: typeof formatSelect }>
 
 function toDto(row: FormatRow): BankFileFormatDto {
+  const columns = parseColumnMapping(row.columnMapping)
   return {
     id: row.id,
+    purpose: row.purpose,
+    bankCode: row.bankCode,
     bankName: row.bankName,
+    label: bankFileFormatLabel({ ...row, columns }),
     fileType: row.fileType,
     encoding: row.encoding,
     columnMapping: row.columnMapping,
-    columns: parseColumnMapping(row.columnMapping),
+    columns,
     testStatus: row.testStatus,
     usable: row.testStatus === 'passed' && row.deletedAt === null,
     isActive: row.deletedAt === null,
@@ -52,7 +60,8 @@ function toDto(row: FormatRow): BankFileFormatDto {
 
 function toValues(dto: BankFileFormatDto): BankFileFormatValues {
   return {
-    bankName: dto.bankName,
+    purpose: dto.purpose,
+    bankCode: dto.bankCode,
     fileType: dto.fileType,
     encoding: dto.encoding,
     columnMapping: dto.columnMapping,
@@ -61,12 +70,32 @@ function toValues(dto: BankFileFormatDto): BankFileFormatValues {
 
 function toAuditPayload(values: BankFileFormatValues, testStatus: string): Record<string, unknown> {
   return {
-    bank_name: values.bankName.trim(),
+    purpose: values.purpose,
+    bank_code: values.bankCode,
+    bank_name: bankNameOfCode(values.bankCode),
     file_type: values.fileType,
     encoding: values.encoding,
     column_mapping: values.columnMapping.trim(),
     test_status: testStatus,
   }
+}
+
+/** ชื่อธนาคารมาตรฐานของรหัส — Zod ตรวจแล้ว ตัวนี้เป็นยามของ service (ค่าไม่ผ่านฟอร์ม) */
+function requireBankName(bankCode: string | null): string {
+  const name = bankNameOfCode(bankCode)
+  if (name === null) throw new RangeError(`bank_code ไม่อยู่ในรายการธนาคารมาตรฐาน: ${bankCode ?? ''}`)
+  return name
+}
+
+/** บัญชีธนาคารที่ยังใช้งานซึ่งอ้างรูปแบบนี้ (มติ PO U147 — ลบรูปแบบที่บัญชีอ้างอยู่ไม่ได้) */
+export async function countBankFileFormatUsage(organizationId: string, formatId: string): Promise<number> {
+  return prisma.bankAccount.count({
+    where: {
+      organizationId,
+      deletedAt: null,
+      OR: [{ statementFormatId: formatId }, { paymentFileFormatId: formatId }],
+    },
+  })
 }
 
 export async function listBankFileFormats(
@@ -76,7 +105,7 @@ export async function listBankFileFormats(
   const rows = await prisma.bankFileFormat.findMany({
     where: { organizationId, ...statusFilter(status) },
     select: formatSelect,
-    orderBy: [{ bankName: 'asc' }, { fileType: 'asc' }],
+    orderBy: [{ purpose: 'asc' }, { bankName: 'asc' }, { fileType: 'asc' }],
   })
   return rows.map(toDto)
 }
@@ -97,7 +126,9 @@ export async function createBankFileFormat(
     const row = await tx.bankFileFormat.create({
       data: {
         organizationId,
-        bankName: values.bankName.trim(),
+        purpose: values.purpose,
+        bankCode: values.bankCode,
+        bankName: requireBankName(values.bankCode),
         fileType: values.fileType,
         encoding: values.encoding,
         columnMapping: values.columnMapping.trim(),
@@ -143,7 +174,9 @@ export async function updateBankFileFormat(
     const row = await tx.bankFileFormat.update({
       where: { id: current.id },
       data: {
-        bankName: values.bankName.trim(),
+        purpose: values.purpose,
+        bankCode: values.bankCode,
+        bankName: requireBankName(values.bankCode),
         fileType: values.fileType,
         encoding: values.encoding,
         columnMapping: values.columnMapping.trim(),
@@ -181,6 +214,13 @@ export async function deleteBankFileFormat(
   current: BankFileFormatDto,
 ): Promise<BankFileFormatDto> {
   const organizationId = context.actor.organizationId
+  const accounts = await countBankFileFormatUsage(organizationId, current.id)
+  if (accounts > 0) {
+    throw new SettingsError('BANK_FILE_FORMAT_IN_USE', {
+      detail: `bank_file_format=${current.id} bank_accounts=${accounts}`,
+      context: { bankAccounts: accounts },
+    })
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.bankFileFormat.update({

@@ -134,5 +134,6 @@ export interface MatchResultDto {
 export interface StatementImportTemplateDto extends StatementImportTemplate {
   bankAccountId: string | null
   /** ชื่อรูปแบบ statement ที่ผูกกับบัญชี (`null` = ยังไม่ตั้ง ⇒ แม่แบบมาตรฐาน) */
+  /** ข้อความแสดงรูปแบบ statement ที่ผูกกับบัญชี (`null` = รูปแบบมาตรฐาน) */
   statementFormat: string | null
 }

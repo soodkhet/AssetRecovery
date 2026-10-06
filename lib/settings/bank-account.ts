@@ -1,4 +1,4 @@
-import type { BankAccountUsage } from '@/lib/generated/prisma/enums'
+import type { BankAccountUsage, BankFilePurpose } from '@/lib/generated/prisma/enums'
 
 /**
  * บัญชีธนาคารบริษัท (`13` §6.3) — **pure ล้วน**
@@ -14,8 +14,10 @@ export interface BankAccountValues {
   accountNumber: string
   accountType: 'savings' | 'current'
   usage: BankAccountUsage
-  statementFormat: string | null
-  paymentFileFormat: string | null
+  /** `bank_file_formats.id` ชนิด statement (มติ PO U147) */
+  statementFormatId: string | null
+  /** `bank_file_formats.id` ชนิด payment (มติ PO U147) */
+  paymentFileFormatId: string | null
   autoMatchToleranceDays: number
   isPrimary: boolean
 }
@@ -41,8 +43,8 @@ export function normalizeBankAccountValues(input: BankAccountValues): BankAccoun
     accountNumber: normalizeAccountNumber(input.accountNumber),
     accountType: input.accountType,
     usage: input.usage,
-    statementFormat: trimOrNull(input.statementFormat),
-    paymentFileFormat: trimOrNull(input.paymentFileFormat),
+    statementFormatId: trimOrNull(input.statementFormatId),
+    paymentFileFormatId: trimOrNull(input.paymentFileFormatId),
     autoMatchToleranceDays: input.autoMatchToleranceDays,
     isPrimary: input.isPrimary,
   }
@@ -79,46 +81,48 @@ export function toBankAccountAuditPayload(values: BankAccountValues): Record<str
     account_number: values.accountNumber,
     account_type: values.accountType,
     usage: values.usage,
-    statement_format: values.statementFormat,
-    payment_file_format: values.paymentFileFormat,
+    statement_format_id: values.statementFormatId,
+    payment_file_format_id: values.paymentFileFormatId,
     auto_match_tolerance_days: values.autoMatchToleranceDays,
     is_primary: values.isPrimary,
   }
 }
 
-// ── ผูกบัญชีกับรูปแบบไฟล์ธนาคาร (Final Test ด่าน 5) ───────────────────────
-// `statement_format` / `payment_file_format` เก็บเป็น **ชื่อธนาคารของรูปแบบไฟล์** (`bank_file_formats.bank_name`)
-// — ฝั่งนำเข้า statement จับคู่ด้วยชื่อนี้ตรงตัว (`lib/bank-recon/queries.ts` statementColumnMappingOf)
-// ⇒ หน้าจอต้องให้**เลือก**จากรูปแบบที่มีจริง ไม่ใช่พิมพ์อิสระ (พิมพ์ไม่ตรง = ใช้รูปแบบมาตรฐานเงียบ ๆ)
+// ── ผูกบัญชีกับรูปแบบไฟล์ธนาคาร (Final Test ด่าน 5 → มติ PO U147) ───────────
+// บัญชีอ้างรูปแบบด้วย **id** และชนิดต้องตรงช่อง (statement / ไฟล์โอน) — ตัวนำเข้า statement และหน้าสร้างไฟล์โอนอ่านตาม id
 
 export interface BankFileFormatRef {
   id: string
-  bankName: string
+  purpose: BankFilePurpose
+  label: string
   usable: boolean
+  isActive?: boolean
 }
 
-/** ตัวเลือกชื่อรูปแบบไฟล์ (ไม่ซ้ำ เรียงตามชื่อ) — ค่าปัจจุบันที่ไม่พบในรายการยังแสดงไว้ (`missing`) ไม่หายเงียบ */
-export function bankFileFormatNameOptions(
-  formats: readonly Pick<BankFileFormatRef, 'bankName'>[],
-  current: string,
-): { value: string; missing: boolean }[] {
-  const names = [...new Set(formats.map((format) => format.bankName))].sort((a, b) => a.localeCompare(b, 'th'))
-  const options = names.map((value) => ({ value, missing: false }))
-  const trimmed = current.trim()
-  if (trimmed !== '' && !names.includes(trimmed)) options.unshift({ value: trimmed, missing: true })
+/** ตัวเลือกรูปแบบของช่องหนึ่ง (เฉพาะชนิดนั้น ที่ยังใช้งาน) — ค่าปัจจุบันที่ไม่อยู่ในรายการแล้วยังแสดงไว้ (`missing`) ไม่หายเงียบ */
+export function bankFileFormatOptions(
+  formats: readonly BankFileFormatRef[],
+  purpose: BankFilePurpose,
+  currentId: string | null,
+): { value: string; label: string; missing: boolean }[] {
+  const options = formats
+    .filter((format) => format.purpose === purpose && format.isActive !== false)
+    .map((format) => ({ value: format.id, label: format.label, missing: false }))
+  if (currentId !== null && currentId !== '' && !options.some((option) => option.value === currentId)) {
+    options.unshift({ value: currentId, label: 'รูปแบบที่ถูกปิดใช้งาน/ไม่ตรงชนิด — เลือกใหม่', missing: true })
+  }
   return options
 }
 
 /**
- * รูปแบบไฟล์โอนที่เลือกให้ก่อนตอนสร้างไฟล์โอนเงิน — รูปแบบที่ "ใช้ได้" (ทดสอบผ่าน) และตรงกับ
- * `payment_file_format` ของบัญชีต้นทาง · ไม่ได้ตั้ง/ไม่ตรง ⇒ รูปแบบที่ใช้ได้ตัวแรก · ไม่มีเลย ⇒ `''`
+ * รูปแบบไฟล์โอนที่เลือกให้ก่อนตอนสร้างไฟล์โอนเงิน — รูปแบบไฟล์โอนที่ "ใช้ได้" (ทดสอบผ่าน) และตรงกับ
+ * `payment_file_format_id` ของบัญชีต้นทาง · ไม่ได้ตั้ง/ใช้ไม่ได้ ⇒ รูปแบบไฟล์โอนที่ใช้ได้ตัวแรก · ไม่มีเลย ⇒ `''`
  */
 export function defaultPaymentFileFormatId(
   formats: readonly BankFileFormatRef[],
-  paymentFileFormat: string | null | undefined,
+  paymentFileFormatId: string | null | undefined,
 ): string {
-  const usable = formats.filter((format) => format.usable)
-  const preferred = paymentFileFormat?.trim() ?? ''
-  const matched = preferred === '' ? undefined : usable.find((format) => format.bankName === preferred)
+  const usable = formats.filter((format) => format.usable && format.purpose === 'payment')
+  const matched = usable.find((format) => format.id === paymentFileFormatId)
   return (matched ?? usable[0])?.id ?? ''
 }

@@ -2,6 +2,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
+  approvalFlowRoleNames,
   invalidApprovalSteps,
   normalizeApprovalMatrixValues,
   sortApprovalMatrices,
@@ -25,7 +26,7 @@ const matrixSelect = {
   id: true,
   condition: true,
   conditionThresholdSatang: true,
-  approvalFlow: true,
+  approvalFlowRoleIds: true,
   enforceSegregationOfDuties: true,
   deletedAt: true,
   updatedAt: true,
@@ -33,12 +34,25 @@ const matrixSelect = {
 
 type MatrixRow = Prisma.ApprovalMatrixGetPayload<{ select: typeof matrixSelect }>
 
-function toDto(row: MatrixRow): ApprovalMatrixDto {
+/**
+ * role id → ชื่อปัจจุบัน ของทุก role ในองค์กร (รวมที่ลบแล้ว — สายเก่าที่อ้างอยู่ยังแสดงชื่อได้)
+ * ใช้ร่วมกับตัวอนุมัติ/คิวแจ้งเตือน (มติ PO U149) — ชื่ออ่านสดทุกครั้ง ⇒ เปลี่ยนชื่อ role แล้วสายยังชี้ role เดิม
+ */
+export async function loadRoleNameMap(
+  organizationId: string,
+  db: Pick<typeof prisma, 'role'> = prisma,
+): Promise<Map<string, string>> {
+  const roles = await db.role.findMany({ where: { organizationId }, select: { id: true, name: true } })
+  return new Map(roles.map((role) => [role.id, role.name]))
+}
+
+function toDto(row: MatrixRow, roleNames: ReadonlyMap<string, string>): ApprovalMatrixDto {
   return {
     id: row.id,
     condition: row.condition,
     conditionThresholdSatang: row.conditionThresholdSatang,
-    approvalFlow: row.approvalFlow,
+    approvalFlowRoleIds: row.approvalFlowRoleIds,
+    approvalFlow: approvalFlowRoleNames(row.approvalFlowRoleIds, roleNames),
     enforceSegregationOfDuties: row.enforceSegregationOfDuties,
     isActive: row.deletedAt === null,
     updatedAt: toIso(row.updatedAt),
@@ -49,7 +63,7 @@ function toValues(dto: ApprovalMatrixDto): ApprovalMatrixValues {
   return {
     condition: dto.condition,
     conditionThresholdSatang: dto.conditionThresholdSatang,
-    approvalFlow: dto.approvalFlow,
+    approvalFlowRoleIds: dto.approvalFlowRoleIds,
     enforceSegregationOfDuties: dto.enforceSegregationOfDuties,
   }
 }
@@ -58,18 +72,18 @@ export async function listApprovalMatrices(
   organizationId: string,
   status: 'active' | 'inactive' | 'all' = 'active',
 ): Promise<ApprovalMatrixDto[]> {
-  const rows = await prisma.approvalMatrix.findMany({
-    where: { organizationId, ...statusFilter(status) },
-    select: matrixSelect,
-  })
+  const [rows, roleNames] = await Promise.all([
+    prisma.approvalMatrix.findMany({ where: { organizationId, ...statusFilter(status) }, select: matrixSelect }),
+    loadRoleNameMap(organizationId),
+  ])
   // เรียงตามเพดานเงินน้อย→มาก เพื่อให้อ่านลำดับการยกระดับอนุมัติได้จากบนลงล่าง (`13` §7)
-  return sortApprovalMatrices(rows.map(toDto))
+  return sortApprovalMatrices(rows.map((row) => toDto(row, roleNames)))
 }
 
 export async function getApprovalMatrix(organizationId: string, matrixId: string): Promise<ApprovalMatrixDto> {
   const row = await prisma.approvalMatrix.findFirst({ where: { id: matrixId, organizationId }, select: matrixSelect })
   if (!row) throw new SettingsError('APPROVAL_MATRIX_NOT_FOUND', { detail: `approval_matrix=${matrixId}` })
-  return toDto(row)
+  return toDto(row, await loadRoleNameMap(organizationId))
 }
 
 function toWriteData(values: ApprovalMatrixValues) {
@@ -77,26 +91,26 @@ function toWriteData(values: ApprovalMatrixValues) {
   return {
     condition: normalized.condition,
     conditionThresholdSatang: normalized.conditionThresholdSatang,
-    approvalFlow: normalized.approvalFlow,
+    approvalFlowRoleIds: normalized.approvalFlowRoleIds,
     enforceSegregationOfDuties: normalized.enforceSegregationOfDuties,
   }
 }
 
 /**
- * ขั้นในสายที่ไม่ใช่ role อนุมัติที่มีอยู่จริงในองค์กร (UAT BUG-008) — ว่าง = ผ่าน
- * route ใช้ตัวนี้ตอบ 400 + field error ที่ช่อง `approvalFlow` ก่อนเขียน
+ * ขั้นในสายที่ไม่ใช่ role ผู้อนุมัติที่เลือกได้ในองค์กร (UAT BUG-008 · มติ PO U149) — คืน role id · ว่าง = ผ่าน
+ * route ใช้ตัวนี้ตอบ 400 + field error ที่ช่อง `approvalFlowRoleIds` ก่อนเขียน
  */
-export async function findInvalidApprovalSteps(organizationId: string, approvalFlow: readonly string[]): Promise<string[]> {
-  const roles = await prisma.role.findMany({ where: { organizationId, deletedAt: null }, select: { name: true } })
-  return invalidApprovalSteps(
-    approvalFlow,
-    roles.map((role) => role.name),
-  )
+export async function findInvalidApprovalSteps(organizationId: string, roleIds: readonly string[]): Promise<string[]> {
+  const roles = await prisma.role.findMany({
+    where: { organizationId, deletedAt: null },
+    select: { id: true, name: true, roleGroup: true, isSeed: true },
+  })
+  return invalidApprovalSteps(roleIds, roles)
 }
 
 /** ข้อความ field error ของช่องลำดับขั้นอนุมัติ */
 export function invalidApprovalStepsMessage(invalid: readonly string[]): string {
-  return `ไม่พบบทบาทผู้อนุมัติ: ${invalid.join(', ')} — เลือกจากรายชื่อบทบาทในระบบ`
+  return `มีขั้นอนุมัติ ${invalid.length} ขั้นที่ไม่ใช่บทบาทผู้อนุมัติในระบบ — เลือกจากรายการใหม่`
 }
 
 export async function createApprovalMatrix(
@@ -130,7 +144,7 @@ export async function createApprovalMatrix(
     return row
   })
 
-  return toDto(created)
+  return toDto(created, await loadRoleNameMap(organizationId))
 }
 
 export async function updateApprovalMatrix(
@@ -167,7 +181,7 @@ export async function updateApprovalMatrix(
     return row
   })
 
-  return toDto(updated)
+  return toDto(updated, await loadRoleNameMap(organizationId))
 }
 
 export async function deleteApprovalMatrix(
@@ -203,5 +217,5 @@ export async function deleteApprovalMatrix(
     return row
   })
 
-  return toDto(updated)
+  return toDto(updated, await loadRoleNameMap(organizationId))
 }

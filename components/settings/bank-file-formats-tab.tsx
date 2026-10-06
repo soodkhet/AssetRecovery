@@ -17,7 +17,6 @@ import {
   Card,
   Field,
   InlineAlert,
-  Input,
   Modal,
   Select,
   StatusBadge,
@@ -34,7 +33,16 @@ import {
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
-import { REQUIRED_BANK_FILE_COLUMNS, SUPPORTED_BANK_FILE_COLUMNS, type BankFileTestResult } from '@/lib/settings/bank-file'
+import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
+import type { BankFilePurpose } from '@/lib/generated/prisma/enums'
+import {
+  BANK_FILE_PURPOSES,
+  BANK_FILE_PURPOSE_LABEL,
+  bankFileColumnLabel,
+  bankFileColumnOptions,
+  toColumnMapping,
+  type BankFileTestResult,
+} from '@/lib/settings/bank-file'
 import { bankFileFormatCreateSchema } from '@/lib/settings/schemas'
 import type { BankFileFormatDto } from '@/lib/settings/types'
 
@@ -44,24 +52,39 @@ import type { BankFileFormatDto } from '@/lib/settings/types'
  * **รูปแบบที่ยังไม่ผ่านการทดสอบใช้ตัดโอนจริงไม่ได้** (`BANK_FILE_NOT_TESTED` — gate อยู่ที่
  * `assertBankFileUsable()` ซึ่ง Phase 3.4 เรียกตอนสร้างไฟล์โอน) ⇒ ตารางแสดงสถานะทดสอบชัดเจน
  * และการแก้ mapping/ชนิดไฟล์/encoding จะรีเซ็ตสถานะกลับเป็น "ยังไม่ทดสอบ" เสมอ
+ *
+ * มติ PO U147 — "เลือกจากรายการทั้งหมด": ใช้สำหรับ (statement / ไฟล์โอน) · ธนาคารจากรายการธนาคารไทยมาตรฐาน ·
+ * คอลัมน์เลือกทีละช่องตามลำดับจากคำศัพท์ของชนิดนั้น (ชุดเดียวกับตัวนำเข้า/ตัวสร้างไฟล์จริง) — ไม่มีช่องพิมพ์อิสระ
  */
 
 type FileType = 'CSV' | 'TXT'
 type Encoding = 'UTF_8' | 'TIS_620'
 
 interface FormState {
-  bankName: string
+  purpose: BankFilePurpose
+  /** รหัสธนาคาร 3 หลัก — `''` = ยังไม่เลือก */
+  bankCode: string
   fileType: FileType
   encoding: Encoding
-  columnMapping: string
+  /** คอลัมน์ตามลำดับ — `''` = ช่องที่ยังไม่เลือก */
+  columns: string[]
   reason: string
 }
 
+/** คอลัมน์เริ่มต้นของชนิดนั้น = คอลัมน์บังคับเรียงตามคำศัพท์ (statement เพิ่มเงินเข้า/เงินออกให้ทดสอบผ่านได้ทันที) */
+function defaultColumns(purpose: BankFilePurpose): string[] {
+  if (purpose === 'statement') return ['transaction_date', 'description', 'amount_in', 'amount_out']
+  return bankFileColumnOptions('payment')
+    .filter((option) => option.required)
+    .map((option) => option.value)
+}
+
 const EMPTY_FORM: FormState = {
-  bankName: '',
+  purpose: 'payment',
+  bankCode: '',
   fileType: 'CSV',
   encoding: 'UTF_8',
-  columnMapping: REQUIRED_BANK_FILE_COLUMNS.join(', '),
+  columns: defaultColumns('payment'),
   reason: '',
 }
 
@@ -135,10 +158,11 @@ export function BankFileFormatsTab() {
       target === null
         ? EMPTY_FORM
         : {
-            bankName: target.bankName,
+            purpose: target.purpose,
+            bankCode: target.bankCode ?? '',
             fileType: target.fileType,
             encoding: target.encoding === 'TIS_620' ? 'TIS_620' : 'UTF_8',
-            columnMapping: target.columnMapping,
+            columns: target.columns.length === 0 ? [''] : [...target.columns],
             reason: '',
           },
     )
@@ -150,19 +174,61 @@ export function BankFileFormatsTab() {
     setForm((current) => ({ ...current, [key]: value }))
   }
 
+  /** เปลี่ยนชนิด = คำศัพท์คอลัมน์คนละชุด ⇒ เริ่มคอลัมน์ใหม่จากค่าเริ่มต้นของชนิดนั้น */
+  function setPurpose(purpose: BankFilePurpose): void {
+    setForm((current) =>
+      current.purpose === purpose
+        ? current
+        : {
+            ...current,
+            purpose,
+            columns: defaultColumns(purpose),
+            ...(purpose === 'statement' ? { fileType: 'CSV' as const, encoding: 'UTF_8' as const } : {}),
+          },
+    )
+  }
+
+  function setColumn(index: number, value: string): void {
+    setForm((current) => ({ ...current, columns: current.columns.map((column, position) => (position === index ? value : column)) }))
+  }
+
+  function moveColumn(index: number, offset: -1 | 1): void {
+    setForm((current) => {
+      const target = index + offset
+      if (target < 0 || target >= current.columns.length) return current
+      const columns = [...current.columns]
+      const moved = columns[index] ?? ''
+      columns[index] = columns[target] ?? ''
+      columns[target] = moved
+      return { ...current, columns }
+    })
+  }
+
+  function removeColumn(index: number): void {
+    setForm((current) =>
+      current.columns.length <= 1 ? current : { ...current, columns: current.columns.filter((_, position) => position !== index) },
+    )
+  }
+
+  const columnOptions = bankFileColumnOptions(form.purpose)
+  const columnMapping = toColumnMapping(form.columns)
+
   /** true = การแก้ครั้งนี้กระทบไฟล์ที่จะสร้าง ⇒ สถานะทดสอบจะถูกรีเซ็ตเป็น pending */
   const resetsTestStatus =
     editing !== null &&
-    (form.columnMapping !== editing.columnMapping ||
+    (columnMapping !== editing.columnMapping ||
+      form.purpose !== editing.purpose ||
+      form.bankCode !== (editing.bankCode ?? '') ||
       form.fileType !== editing.fileType ||
       form.encoding !== editing.encoding)
 
   async function save(): Promise<void> {
     const parsed = bankFileFormatCreateSchema.safeParse({
-      bankName: form.bankName.trim(),
+      purpose: form.purpose,
+      bankCode: form.bankCode,
       fileType: form.fileType,
       encoding: form.encoding,
-      columnMapping: form.columnMapping.trim(),
+      columnMapping,
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
@@ -184,7 +250,7 @@ export function BankFileFormatsTab() {
       showToast({
         tone: 'success',
         title: editing === null ? 'เพิ่มรูปแบบไฟล์แล้ว' : 'บันทึกรูปแบบไฟล์แล้ว',
-        description: resetsTestStatus ? 'ต้องกด "ทดสอบ" ใหม่ก่อนใช้ตัดโอนจริง' : form.bankName.trim(),
+        description: resetsTestStatus ? 'ต้องกด "ทดสอบ" ใหม่ก่อนใช้งานจริง' : parsed.data.columnMapping.split(',').length + ' คอลัมน์',
       })
       setFormOpen(false)
       setTestResult(null)
@@ -214,7 +280,7 @@ export function BankFileFormatsTab() {
           title: outcome.status === 'passed' ? 'ทดสอบผ่าน' : 'ทดสอบไม่ผ่าน',
           description:
             outcome.status === 'passed'
-              ? `${testTarget.bankName} — ใช้สร้างไฟล์โอนเงินจริงได้แล้ว`
+              ? `${testTarget.bankName} — ${testTarget.purpose === 'payment' ? 'ใช้สร้างไฟล์โอนเงินจริงได้แล้ว' : 'ใช้นำเข้า statement ได้แล้ว'}`
               : outcome.issues.join(' · '),
         })
       }
@@ -253,7 +319,7 @@ export function BankFileFormatsTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">รูปแบบไฟล์ธนาคาร (Bank File Format)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            โครงไฟล์ที่ใช้ส่งให้ธนาคารตัดโอนเงินเป็นชุด — <b>ต้องทดสอบผ่านก่อนจึงใช้สร้างไฟล์โอนจริงได้</b>
+            โครงไฟล์ statement ที่นำเข้ากระทบยอด และไฟล์โอนเงินที่ส่งธนาคาร — <b>ไฟล์โอนต้องทดสอบผ่านก่อนจึงใช้จริงได้</b>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -285,6 +351,7 @@ export function BankFileFormatsTab() {
         <THead>
           <Tr>
             <Th>ธนาคาร</Th>
+            <Th>ใช้สำหรับ</Th>
             <Th>ชนิดไฟล์ / Encoding</Th>
             <Th>คอลัมน์</Th>
             <Th>สถานะทดสอบ</Th>
@@ -293,7 +360,7 @@ export function BankFileFormatsTab() {
         </THead>
         {/* `TableState` เรนเดอร์ `<tbody>` ของตัวเอง — วางเป็นพี่น้องกับ `TBody` */}
         <TableState
-          colSpan={5}
+          colSpan={6}
           loading={loading}
           error={error}
           isEmpty={items.length === 0}
@@ -318,7 +385,15 @@ export function BankFileFormatsTab() {
               <Tr key={item.id}>
                 <Td>
                   <div className="font-semibold text-slate-900">{item.bankName}</div>
+                  {item.bankCode === null ? (
+                    <div className="mt-0.5 text-[10px] text-amber-600">ยังไม่ได้เลือกธนาคารจากรายการ — แก้ไขเพื่อเลือก</div>
+                  ) : (
+                    <div className="mt-0.5 font-mono text-[10px] text-slate-500">รหัส {item.bankCode}</div>
+                  )}
                   <div className="mt-0.5 text-[10px] text-slate-500">แก้ไขล่าสุด {fmtDate(item.updatedAt)}</div>
+                </Td>
+                <Td>
+                  <span className="text-xs text-slate-700">{BANK_FILE_PURPOSE_LABEL[item.purpose]}</span>
                 </Td>
                 <Td>
                   <span className="font-mono text-xs text-slate-700">{item.fileType}</span>
@@ -327,8 +402,11 @@ export function BankFileFormatsTab() {
                   </div>
                 </Td>
                 <Td>
-                  <div className="max-w-[280px] truncate font-mono text-[10px] text-slate-500" title={item.columns.join(', ')}>
-                    {item.columns.length} คอลัมน์ — {item.columns.join(', ')}
+                  <div
+                    className="max-w-[280px] truncate text-[10px] text-slate-500"
+                    title={item.columns.map((column) => bankFileColumnLabel(item.purpose, column)).join(' → ')}
+                  >
+                    {item.columns.length} คอลัมน์ — {item.columns.map((column) => bankFileColumnLabel(item.purpose, column)).join(' → ')}
                   </div>
                 </Td>
                 <Td>
@@ -336,7 +414,7 @@ export function BankFileFormatsTab() {
                     group={BANK_FILE_TEST_BADGE[item.testStatus].group}
                     label={BANK_FILE_TEST_BADGE[item.testStatus].label}
                   />
-                  {!item.usable && (
+                  {!item.usable && item.purpose === 'payment' && (
                     <div className="mt-0.5 text-[10px] text-amber-600">ยังใช้ตัดโอนจริงไม่ได้</div>
                   )}
                   {testResult?.formatId === item.id && testResult.result.issues.length > 0 && (
@@ -395,7 +473,7 @@ export function BankFileFormatsTab() {
         onClose={() => setFormOpen(false)}
         size="lg"
         title={editing === null ? 'เพิ่มรูปแบบไฟล์ธนาคาร' : `แก้ไขรูปแบบไฟล์ — ${editing.bankName}`}
-        description="ระบุรายชื่อคอลัมน์ตามลำดับที่ธนาคารกำหนด คั่นด้วยเครื่องหมายจุลภาคหรือขึ้นบรรทัดใหม่"
+        description="เลือกชนิดไฟล์ ธนาคาร และคอลัมน์ตามลำดับที่ธนาคารกำหนดจากรายการ"
         footer={
           <>
             <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
@@ -408,14 +486,31 @@ export function BankFileFormatsTab() {
         }
       >
         <div className="space-y-4">
-          <Field id="bank-file-bank" label="ธนาคาร" required error={errors.bankName}>
-            <Input
-              id="bank-file-bank"
-              value={form.bankName}
-              onChange={(event) => set('bankName', event.target.value)}
-              placeholder='เช่น "ธนาคารกสิกรไทย (K-Cash Connect)"'
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field id="bank-file-purpose" label="ใช้สำหรับ" required error={errors.purpose}>
+              <Select
+                id="bank-file-purpose"
+                value={form.purpose}
+                onChange={(event) => setPurpose(event.target.value as BankFilePurpose)}
+              >
+                {BANK_FILE_PURPOSES.map((purpose) => (
+                  <option key={purpose} value={purpose}>
+                    {BANK_FILE_PURPOSE_LABEL[purpose]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field id="bank-file-bank" label="ธนาคาร" required error={errors.bankCode}>
+              <Select id="bank-file-bank" value={form.bankCode} onChange={(event) => set('bankCode', event.target.value)}>
+                <option value="">— เลือกธนาคาร —</option>
+                {THAI_BANK_CODES.map((bank) => (
+                  <option key={bank.code} value={bank.code}>
+                    {bank.name} ({bank.code})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="bank-file-type" label="ชนิดไฟล์" required error={errors.fileType}>
@@ -438,48 +533,79 @@ export function BankFileFormatsTab() {
               </Select>
             </Field>
           </div>
+          {form.purpose === 'statement' && (
+            <div className="text-[10px] text-slate-500">ตัวนำเข้า statement อ่านไฟล์ CSV UTF-8 หรือ Excel (.xlsx)</div>
+          )}
 
-          <Field id="bank-file-columns" label="รายชื่อคอลัมน์ (ตามลำดับ)" required error={errors.columnMapping}>
-            <Textarea
-              id="bank-file-columns"
-              className="font-mono"
-              rows={4}
-              value={form.columnMapping}
-              onChange={(event) => set('columnMapping', event.target.value)}
-              placeholder={REQUIRED_BANK_FILE_COLUMNS.join(', ')}
-            />
-          </Field>
-
-          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <div className="text-[10px] font-semibold text-slate-600">คอลัมน์ที่ระบบรองรับ (คลิกเพื่อเพิ่มต่อท้าย)</div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {SUPPORTED_BANK_FILE_COLUMNS.map((column) => {
-                const required = REQUIRED_BANK_FILE_COLUMNS.includes(column)
-                return (
+          <Field id="bank-file-columns" label="คอลัมน์ (ตามลำดับในไฟล์)" required error={errors.columnMapping}>
+            <div id="bank-file-columns" className="space-y-2">
+              {form.columns.map((column, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="w-14 shrink-0 font-mono text-[10px] font-semibold text-slate-500">ลำดับ {index + 1}</span>
+                  <div className="flex-1">
+                    <Select
+                      aria-label={`คอลัมน์ลำดับที่ ${index + 1}`}
+                      value={column}
+                      onChange={(event) => setColumn(index, event.target.value)}
+                    >
+                      <option value="">— เลือกคอลัมน์ —</option>
+                      {columnOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                          {option.required ? ' *' : ''}
+                        </option>
+                      ))}
+                      {column !== '' && !columnOptions.some((option) => option.value === column) && (
+                        <option value={column}>{column} (ไม่อยู่ในรายการ — เลือกใหม่)</option>
+                      )}
+                    </Select>
+                  </div>
                   <button
-                    key={column}
                     type="button"
-                    onClick={() =>
-                      set('columnMapping', form.columnMapping.trim() === '' ? column : `${form.columnMapping.trim()}, ${column}`)
-                    }
-                    className={
-                      required
-                        ? 'focus-ring rounded-md border border-slate-300 bg-white px-2 py-1 font-mono text-[10px] font-semibold text-slate-800 hover:border-slate-500'
-                        : 'focus-ring rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-[10px] text-slate-500 hover:border-slate-400'
-                    }
+                    onClick={() => moveColumn(index, -1)}
+                    disabled={index === 0}
+                    aria-label={`เลื่อนคอลัมน์ลำดับที่ ${index + 1} ขึ้น`}
+                    className="focus-ring rounded-md px-1.5 py-1 text-xs text-slate-400 hover:text-slate-700 disabled:opacity-30"
                   >
-                    {column}
-                    {required && <span className="ml-1 text-red-500">*</span>}
+                    ↑
                   </button>
-                )
-              })}
+                  <button
+                    type="button"
+                    onClick={() => moveColumn(index, 1)}
+                    disabled={index === form.columns.length - 1}
+                    aria-label={`เลื่อนคอลัมน์ลำดับที่ ${index + 1} ลง`}
+                    className="focus-ring rounded-md px-1.5 py-1 text-xs text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                  {form.columns.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeColumn(index)}
+                      aria-label={`ลบคอลัมน์ลำดับที่ ${index + 1}`}
+                      className="focus-ring rounded-md px-1.5 py-1 text-xs text-slate-400 hover:text-red-600"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              {form.columns.length < columnOptions.length && (
+                <Button variant="secondary" onClick={() => set('columns', [...form.columns, ''])}>
+                  + เพิ่มคอลัมน์
+                </Button>
+              )}
+              <div className="text-[10px] text-slate-500">
+                {form.purpose === 'payment'
+                  ? '* = คอลัมน์ที่ขาดไม่ได้ — ไม่ครบธนาคารตัดโอนไม่ได้'
+                  : '* = คอลัมน์ที่ขาดไม่ได้ · ต้องมีคอลัมน์ยอดเงินอย่างน้อย 1 ช่อง (เงินเข้า / เงินออก / จำนวนเงิน)'}
+              </div>
             </div>
-            <div className="mt-2 text-[10px] text-slate-500">* = คอลัมน์ที่ขาดไม่ได้ — ไม่ครบธนาคารตัดโอนไม่ได้</div>
-          </div>
+          </Field>
 
           {resetsTestStatus && (
             <InlineAlert tone="warning" title="การแก้ครั้งนี้จะรีเซ็ตสถานะทดสอบ">
-              เปลี่ยนคอลัมน์ ชนิดไฟล์ หรือ encoding แล้ว ระบบจะตั้งสถานะกลับเป็น “ยังไม่ทดสอบ” — ต้องกดทดสอบใหม่ก่อนใช้ตัดโอนจริง
+              เปลี่ยนชนิด ธนาคาร คอลัมน์ ชนิดไฟล์ หรือ encoding แล้ว ระบบจะตั้งสถานะกลับเป็น “ยังไม่ทดสอบ” — ต้องกดทดสอบใหม่ก่อนใช้งานจริง
             </InlineAlert>
           )}
 
@@ -497,7 +623,11 @@ export function BankFileFormatsTab() {
       <ReasonConfirmModal
         open={testTarget !== null}
         title={`ทดสอบรูปแบบไฟล์ "${testTarget?.bankName ?? ''}"`}
-        description="ระบบจะตรวจคอลัมน์ที่จำเป็นและสร้างตัวอย่างบรรทัดข้อมูล — ผ่านแล้วจึงใช้สร้างไฟล์โอนเงินจริงได้"
+        description={
+          testTarget?.purpose === 'statement'
+            ? 'ระบบจะสร้างไฟล์ตัวอย่างตามลำดับคอลัมน์นี้แล้วอ่านด้วยตัวนำเข้า statement จริง — ผ่าน = นำเข้าไฟล์ของธนาคารที่เรียงแบบนี้ได้'
+            : 'ระบบจะตรวจคอลัมน์ที่จำเป็นและสร้างตัวอย่างบรรทัดข้อมูล — ผ่านแล้วจึงใช้สร้างไฟล์โอนเงินจริงได้'
+        }
         confirmLabel="เริ่มทดสอบ"
         confirmVariant="primary"
         loading={testing}
@@ -511,7 +641,7 @@ export function BankFileFormatsTab() {
       <ReasonConfirmModal
         open={deleteTarget !== null}
         title={`ปิดใช้งานรูปแบบไฟล์ "${deleteTarget?.bankName ?? ''}"`}
-        description="รูปแบบที่ถูกใช้ในรอบจ่ายที่ยังไม่ปิดจะปิดใช้งานไม่ได้ — ไฟล์ที่สร้างไปแล้วยังอ้างรูปแบบเดิมได้"
+        description="รูปแบบที่บัญชีธนาคารยังอ้างอยู่ปิดใช้งานไม่ได้ — เปลี่ยนรูปแบบของบัญชีก่อน · ไฟล์ที่สร้างไปแล้วยังอ้างรูปแบบเดิมได้"
         confirmLabel="ยืนยันปิดใช้งาน"
         loading={deleting}
         reason={deleteReason}

@@ -44,8 +44,8 @@ export const POST = withApiPermission(
 
     const { reason, ...values } = parsed.data
     // ชื่อ role ต้องมีจริงในองค์กรและเป็นผู้อนุมัติได้ — เดิมพิมพ์ผิดก็บันทึกได้ (UAT BUG-008)
-    const invalid = await findInvalidApprovalSteps(user.organizationId, values.approvalFlow)
-    if (invalid.length > 0) return fieldErrorResponse({ approvalFlow: invalidApprovalStepsMessage(invalid) })
+    const invalid = await findInvalidApprovalSteps(user.organizationId, values.approvalFlowRoleIds)
+    if (invalid.length > 0) return fieldErrorResponse({ approvalFlowRoleIds: invalidApprovalStepsMessage(invalid) })
 
     const matrix = await createApprovalMatrix({ actor: user, meta: getRequestMeta(request), reason }, values)
     return Response.json({ data: matrix }, { status: 201 })

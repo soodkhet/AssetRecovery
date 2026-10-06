@@ -31,7 +31,13 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang, parseBahtInput, toBahtInput } from '@/lib/format/money'
-import { MAX_APPROVAL_STEPS, approvalRoleOptions, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
+import {
+  MAX_APPROVAL_STEPS,
+  approvalRoleOptions,
+  duplicateApprovalSteps,
+  type ApprovalRoleOption,
+  type ApprovalRoleRef,
+} from '@/lib/settings/approval-matrix'
 import { approvalMatrixCreateSchema } from '@/lib/settings/schemas'
 import type { ApprovalMatrixDto } from '@/lib/settings/types'
 
@@ -48,6 +54,7 @@ import type { ApprovalMatrixDto } from '@/lib/settings/types'
 interface FormState {
   condition: string
   threshold: string
+  /** role id ต่อขั้น (มติ PO U149) — `''` = ยังไม่เลือก */
   approvalFlow: string[]
   enforceSegregationOfDuties: boolean
   reason: string
@@ -73,8 +80,8 @@ export function ApprovalMatrixTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
-  /** ชื่อ role ผู้อนุมัติที่มีจริงในองค์กร — ขั้นอนุมัติเลือกจากรายการนี้เท่านั้น (UAT BUG-008) */
-  const [roleOptions, setRoleOptions] = useState<readonly string[]>([])
+  /** role ผู้อนุมัติที่มีจริงในองค์กร — ขั้นอนุมัติเลือกจากรายการนี้เท่านั้น เก็บเป็น role id (UAT BUG-008 · U149) */
+  const [roleOptions, setRoleOptions] = useState<readonly ApprovalRoleOption[]>([])
   const [rolesLoading, setRolesLoading] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<ApprovalMatrixDto | null>(null)
@@ -126,7 +133,7 @@ export function ApprovalMatrixTab() {
         : {
             condition: target.condition,
             threshold: toBahtInput(target.conditionThresholdSatang),
-            approvalFlow: target.approvalFlow.length === 0 ? [''] : [...target.approvalFlow],
+            approvalFlow: target.approvalFlowRoleIds.length === 0 ? [''] : [...target.approvalFlowRoleIds],
             enforceSegregationOfDuties: target.enforceSegregationOfDuties,
             reason: '',
           },
@@ -138,13 +145,20 @@ export function ApprovalMatrixTab() {
 
   async function loadRoleOptions(): Promise<void> {
     setRolesLoading(true)
-    const result = await callApi<{ name: string }[]>('/api/roles')
+    const result = await callApi<ApprovalRoleRef[]>('/api/roles')
     if (result.error !== undefined) {
-      setErrors({ approvalFlow: `โหลดรายชื่อบทบาทไม่สำเร็จ — ${result.error.message}` })
+      setErrors({ approvalFlowRoleIds: `โหลดรายชื่อบทบาทไม่สำเร็จ — ${result.error.message}` })
     } else {
-      setRoleOptions(approvalRoleOptions((result.data ?? []).map((role) => role.name)))
+      setRoleOptions(approvalRoleOptions(result.data ?? []))
     }
     setRolesLoading(false)
+  }
+
+  /** ชื่อ role ของขั้นเดิมในสายที่กำลังแก้ (role ที่ไม่อยู่ในตัวเลือกแล้ว) */
+  function editingStepName(roleId: string): string {
+    const index = editing?.approvalFlowRoleIds.indexOf(roleId) ?? -1
+    const name = index >= 0 ? editing?.approvalFlow[index] : undefined
+    return name !== undefined && name !== '' ? name : 'บทบาทที่ไม่พบ'
   }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
@@ -184,7 +198,7 @@ export function ApprovalMatrixTab() {
     const parsed = approvalMatrixCreateSchema.safeParse({
       condition: form.condition.trim(),
       conditionThresholdSatang: parseBahtInput(form.threshold),
-      approvalFlow: form.approvalFlow.map((role) => role.trim()).filter((role) => role !== ''),
+      approvalFlowRoleIds: form.approvalFlow.map((role) => role.trim()).filter((role) => role !== ''),
       enforceSegregationOfDuties: form.enforceSegregationOfDuties,
       reason: form.reason.trim(),
     })
@@ -416,7 +430,7 @@ export function ApprovalMatrixTab() {
             />
           </Field>
 
-          <Field id="approval-flow" label="ลำดับขั้นอนุมัติ" required error={errors.approvalFlow}>
+          <Field id="approval-flow" label="ลำดับขั้นอนุมัติ" required error={errors.approvalFlowRoleIds}>
             <div id="approval-flow" className="space-y-2">
               {form.approvalFlow.map((role, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -429,14 +443,14 @@ export function ApprovalMatrixTab() {
                       onChange={(event) => setStep(index, event.target.value)}
                     >
                       <option value="">{rolesLoading ? 'กำลังโหลดรายชื่อบทบาท…' : '— เลือกบทบาท —'}</option>
-                      {roleOptions.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
+                      {roleOptions.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.name}
                         </option>
                       ))}
-                      {/* ค่าเดิมที่ไม่มีในรายชื่อแล้ว (ข้อมูลก่อนแก้ BUG-008) — โชว์ให้เห็นว่าต้องเลือกใหม่ */}
-                      {role !== '' && !roleOptions.includes(role) && !rolesLoading && (
-                        <option value={role}>{role} (ไม่พบในระบบ — เลือกใหม่)</option>
+                      {/* ค่าเดิมที่ไม่ใช่ role ผู้อนุมัติแล้ว — โชว์ให้เห็นว่าต้องเลือกใหม่ */}
+                      {role !== '' && !roleOptions.some((option) => option.id === role) && !rolesLoading && (
+                        <option value={role}>{editingStepName(role)} (ไม่ใช่บทบาทผู้อนุมัติ — เลือกใหม่)</option>
                       )}
                     </Select>
                   </div>
@@ -472,7 +486,8 @@ export function ApprovalMatrixTab() {
 
           {duplicateWarning.length > 0 && (
             <InlineAlert tone="error" title="มีบทบาทซ้ำในสายอนุมัติ">
-              เปิด “บังคับแยกหน้าที่” แล้วใส่บทบาทซ้ำไม่ได้: {duplicateWarning.join(', ')}
+              เปิด “บังคับแยกหน้าที่” แล้วใส่บทบาทซ้ำไม่ได้:{' '}
+              {duplicateWarning.map((id) => roleOptions.find((option) => option.id === id)?.name ?? editingStepName(id)).join(', ')}
             </InlineAlert>
           )}
 

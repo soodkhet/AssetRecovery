@@ -23,6 +23,9 @@ import {
 /** Rule 04/13 — Zod ชุดเดียวใช้ร่วม FE/BE · `reason` บังคับทุก mutation ของไฟล์ 13 */
 
 const REASON = 'ตั้งค่าตามมติที่ประชุมการเงิน'
+/** role id ของขั้นอนุมัติ (มติ PO U149 — สายเก็บ id ไม่ใช่ชื่อ) */
+const ROLE_MGR = '00000000-0000-4000-8000-00000000a001'
+const ROLE_FIN = '00000000-0000-4000-8000-00000000a002'
 
 const validCycle = {
   reason: REASON,
@@ -42,7 +45,7 @@ describe('reason บังคับทุกหมวด', () => {
     [
       'approval-matrix',
       approvalMatrixCreateSchema,
-      { reason: REASON, condition: 'Claim ปกติ', conditionThresholdSatang: 500_000, approvalFlow: ['การเงิน'] },
+      { reason: REASON, condition: 'Claim ปกติ', conditionThresholdSatang: 500_000, approvalFlowRoleIds: [ROLE_FIN] },
     ],
     [
       'cost-centers',
@@ -107,7 +110,7 @@ describe('cycleCreateSchema (§6.1)', () => {
 })
 
 describe('approvalMatrixCreateSchema (§6.2)', () => {
-  const base = { reason: REASON, condition: 'Claim เกินเพดาน', approvalFlow: ['ผู้จัดการ', 'การเงิน'] }
+  const base = { reason: REASON, condition: 'Claim เกินเพดาน', approvalFlowRoleIds: [ROLE_MGR, ROLE_FIN] }
 
   it('เพดานเงินทศนิยม = ไม่ผ่าน (เงินเป็น satang เท่านั้น — Rule 01)', () => {
     expect(approvalMatrixCreateSchema.safeParse({ ...base, conditionThresholdSatang: 500.5 }).success).toBe(false)
@@ -123,21 +126,21 @@ describe('approvalMatrixCreateSchema (§6.2)', () => {
   })
 
   it('สายอนุมัติว่าง = ไม่ผ่าน', () => {
-    expect(approvalMatrixCreateSchema.safeParse({ ...base, approvalFlow: [] }).success).toBe(false)
+    expect(approvalMatrixCreateSchema.safeParse({ ...base, approvalFlowRoleIds: [] }).success).toBe(false)
   })
 
   it('บังคับแยกหน้าที่ + บทบาทซ้ำ = ไม่ผ่าน (ไฟล์ 16)', () => {
     expect(
       approvalMatrixCreateSchema.safeParse({
         ...base,
-        approvalFlow: ['การเงิน', 'การเงิน'],
+        approvalFlowRoleIds: [ROLE_FIN, ROLE_FIN],
         enforceSegregationOfDuties: true,
       }).success,
     ).toBe(false)
   })
 
   it('ไม่บังคับแยกหน้าที่ = บทบาทซ้ำได้', () => {
-    expect(approvalMatrixCreateSchema.safeParse({ ...base, approvalFlow: ['การเงิน', 'การเงิน'] }).success).toBe(true)
+    expect(approvalMatrixCreateSchema.safeParse({ ...base, approvalFlowRoleIds: [ROLE_FIN, ROLE_FIN] }).success).toBe(true)
   })
 })
 
@@ -172,15 +175,22 @@ describe('bankAccountCreateSchema (§6.3)', () => {
     accountNumber: '123-4-56789-0',
     accountType: 'current',
     usage: 'both',
-    statementFormat: '',
-    paymentFileFormat: '',
+    statementFormatId: '',
+    paymentFileFormatId: '',
     autoMatchToleranceDays: 7,
   }
 
   it('ค่าครบผ่าน + ช่องว่างกลายเป็น null', () => {
     const parsed = bankAccountCreateSchema.parse(base)
-    expect(parsed.statementFormat).toBeNull()
+    expect(parsed.statementFormatId).toBeNull()
     expect(parsed.isPrimary).toBe(false)
+  })
+
+  it('รูปแบบไฟล์อ้างด้วย id เท่านั้น — ส่งชื่อ (รูปแบบเดิม) = ไม่ผ่าน (มติ PO U147)', () => {
+    expect(bankAccountCreateSchema.safeParse({ ...base, statementFormatId: 'ธนาคารกสิกรไทย' }).success).toBe(false)
+    expect(
+      bankAccountCreateSchema.safeParse({ ...base, paymentFileFormatId: '00000000-0000-4000-8000-0000000000f3' }).success,
+    ).toBe(true)
   })
 
   it('เลขบัญชีที่มีตัวอักษร = ไม่ผ่าน', () => {
@@ -204,12 +214,26 @@ describe('taxProfileCreateSchema (§6.4)', () => {
     whtPct: 3,
     whtBasis: 'before_vat',
     whtMinThresholdSatang: 100_000,
-    incomeType: 'ค่าจ้างทำของ มาตรา 40(8)',
+    incomeTypeCode: 'hire_of_work_40_8',
     filingForm: 'PND3',
   }
 
-  it('ค่ามาตรฐานผ่าน', () => {
+  it('ค่ามาตรฐานผ่าน (รายการมาตรฐานไม่ต้องส่งข้อความ)', () => {
     expect(taxProfileCreateSchema.safeParse(base).success).toBe(true)
+  })
+
+  it('ประเภทเงินได้นอกรายการ / ไม่ระบุ = ไม่ผ่าน (มติ PO U148)', () => {
+    expect(taxProfileCreateSchema.safeParse({ ...base, incomeTypeCode: 'ค่าจ้าง' }).success).toBe(false)
+    expect(taxProfileCreateSchema.safeParse({ ...base, incomeTypeCode: undefined }).success).toBe(false)
+  })
+
+  it('"อื่น ๆ (ระบุ)" ต้องมีข้อความ', () => {
+    const missing = taxProfileCreateSchema.safeParse({ ...base, incomeTypeCode: 'other', incomeType: ' ' })
+    expect(missing.success).toBe(false)
+    expect(missing.error?.issues[0]?.path).toEqual(['incomeType'])
+    expect(
+      taxProfileCreateSchema.safeParse({ ...base, incomeTypeCode: 'other', incomeType: 'ค่าซ่อมบำรุง' }).success,
+    ).toBe(true)
   })
 
   it('อัตรา WHT เกิน 100 / ติดลบ = ไม่ผ่าน (`INVALID_WHT_RATE`)', () => {
@@ -259,7 +283,8 @@ describe('vatRateCreateSchema (§6.5)', () => {
 describe('bankFileFormatCreateSchema (§6.8)', () => {
   const base = {
     reason: REASON,
-    bankName: 'ธนาคารกรุงไทย',
+    purpose: 'payment',
+    bankCode: '006',
     fileType: 'CSV',
     encoding: 'UTF_8',
     columnMapping: 'receiving_bank_code, receiving_account_no, receiving_account_name, amount',
@@ -281,6 +306,19 @@ describe('bankFileFormatCreateSchema (§6.8)', () => {
   it('test_status ส่งมาเองไม่ได้ (เปลี่ยนผ่าน `POST /:id/test` เท่านั้น — Rule 04)', () => {
     const parsed = bankFileFormatCreateSchema.parse({ ...base, testStatus: 'passed' })
     expect(parsed).not.toHaveProperty('testStatus')
+  })
+
+  it('มติ PO U147: ต้องเลือกชนิด + ธนาคารจากรายการ + คอลัมน์จากคำศัพท์ของชนิดนั้น', () => {
+    expect(bankFileFormatCreateSchema.safeParse({ ...base, purpose: undefined }).success).toBe(false)
+    expect(bankFileFormatCreateSchema.safeParse({ ...base, bankCode: '999' }).success).toBe(false)
+    expect(bankFileFormatCreateSchema.safeParse({ ...base, bankCode: 'ธนาคารกรุงไทย' }).success).toBe(false)
+    const wrongVocab = bankFileFormatCreateSchema.safeParse({ ...base, purpose: 'statement' })
+    expect(wrongVocab.success).toBe(false)
+    expect(wrongVocab.error?.issues[0]?.path).toEqual(['columnMapping'])
+    expect(
+      bankFileFormatCreateSchema.safeParse({ ...base, purpose: 'statement', columnMapping: 'transaction_date,amount' }).success,
+    ).toBe(true)
+    expect(bankFileFormatCreateSchema.safeParse({ ...base, columnMapping: 'amount,amount' }).success).toBe(false)
   })
 })
 

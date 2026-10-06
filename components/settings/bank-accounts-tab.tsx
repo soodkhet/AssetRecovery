@@ -33,6 +33,7 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
+import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
@@ -40,7 +41,7 @@ import type { BankAccountUsage } from '@/lib/generated/prisma/enums'
 import {
   DEFAULT_AUTO_MATCH_TOLERANCE_DAYS,
   MAX_AUTO_MATCH_TOLERANCE_DAYS,
-  bankFileFormatNameOptions,
+  bankFileFormatOptions,
 } from '@/lib/settings/bank-account'
 import { bankAccountCreateSchema } from '@/lib/settings/schemas'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
@@ -62,8 +63,9 @@ interface FormState {
   accountNumber: string
   accountType: AccountType
   usage: BankAccountUsage
-  statementFormat: string
-  paymentFileFormat: string
+  /** `bank_file_formats.id` (มติ PO U147) — `''` = ไม่ระบุ */
+  statementFormatId: string
+  paymentFileFormatId: string
   autoMatchToleranceDays: string
   isPrimary: boolean
   reason: string
@@ -75,8 +77,8 @@ const EMPTY_FORM: FormState = {
   accountNumber: '',
   accountType: 'current',
   usage: 'both',
-  statementFormat: '',
-  paymentFileFormat: '',
+  statementFormatId: '',
+  paymentFileFormatId: '',
   autoMatchToleranceDays: String(DEFAULT_AUTO_MATCH_TOLERANCE_DAYS),
   isPrimary: false,
   reason: '',
@@ -168,8 +170,8 @@ export function BankAccountsTab() {
             accountNumber: target.accountNumber,
             accountType: target.accountType as AccountType,
             usage: target.usage,
-            statementFormat: target.statementFormat ?? '',
-            paymentFileFormat: target.paymentFileFormat ?? '',
+            statementFormatId: target.statementFormatId ?? '',
+            paymentFileFormatId: target.paymentFileFormatId ?? '',
             autoMatchToleranceDays: String(target.autoMatchToleranceDays),
             isPrimary: target.isPrimary,
             reason: '',
@@ -190,8 +192,8 @@ export function BankAccountsTab() {
       accountNumber: form.accountNumber.trim(),
       accountType: form.accountType,
       usage: form.usage,
-      statementFormat: form.statementFormat.trim(),
-      paymentFileFormat: form.paymentFileFormat.trim(),
+      statementFormatId: form.statementFormatId,
+      paymentFileFormatId: form.paymentFileFormatId,
       autoMatchToleranceDays: form.autoMatchToleranceDays.trim() === '' ? 0 : Number(form.autoMatchToleranceDays),
       isPrimary: form.isPrimary,
       reason: form.reason.trim(),
@@ -401,12 +403,18 @@ export function BankAccountsTab() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="bank-account-bank" label="ธนาคาร" required error={errors.bankName}>
-              <Input
-                id="bank-account-bank"
-                value={form.bankName}
-                onChange={(event) => set('bankName', event.target.value)}
-                placeholder='เช่น "ธนาคารกสิกรไทย"'
-              />
+              {/* รายการธนาคารไทยมาตรฐานชุดเดียวทั้งระบบ (มติ PO U147) — ค่าเดิมที่ไม่อยู่ในรายการยังแสดงไว้ */}
+              <Select id="bank-account-bank" value={form.bankName} onChange={(event) => set('bankName', event.target.value)}>
+                <option value="">— เลือกธนาคาร —</option>
+                {form.bankName !== '' && !THAI_BANK_CODES.some((bank) => bank.name === form.bankName) && (
+                  <option value={form.bankName}>{form.bankName} (นอกรายการ — เลือกใหม่)</option>
+                )}
+                {THAI_BANK_CODES.map((bank) => (
+                  <option key={bank.code} value={bank.name}>
+                    {bank.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field id="bank-account-name" label="ชื่อบัญชี" required error={errors.accountName}>
               <Input
@@ -475,22 +483,22 @@ export function BankAccountsTab() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* เลือกจากแท็บ "รูปแบบไฟล์ธนาคาร" — เดิมพิมพ์อิสระ พิมพ์ไม่ตรงชื่อ = นำเข้า statement ใช้รูปแบบมาตรฐานเงียบ ๆ (Final ด่าน 5) */}
+            {/* เลือกจากแท็บ "รูปแบบไฟล์ธนาคาร" เฉพาะชนิดตรงช่อง · เก็บเป็น id (มติ PO U147) */}
             <Field
               id="bank-account-statement"
               label="รูปแบบไฟล์ statement"
               hint="ใช้เรียงคอลัมน์ตอนนำเข้า statement ของบัญชีนี้"
-              error={errors.statementFormat}
+              error={errors.statementFormatId}
             >
               <Select
                 id="bank-account-statement"
-                value={form.statementFormat}
-                onChange={(event) => set('statementFormat', event.target.value)}
+                value={form.statementFormatId}
+                onChange={(event) => set('statementFormatId', event.target.value)}
               >
                 <option value="">ไม่ระบุ (ใช้รูปแบบมาตรฐานของระบบ)</option>
-                {bankFileFormatNameOptions(fileFormats, form.statementFormat).map((option) => (
+                {bankFileFormatOptions(fileFormats, 'statement', form.statementFormatId).map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.missing ? `${option.value} (ไม่พบในรูปแบบไฟล์ธนาคาร)` : option.value}
+                    {option.label}
                   </option>
                 ))}
               </Select>
@@ -499,17 +507,17 @@ export function BankAccountsTab() {
               id="bank-account-payment-file"
               label="รูปแบบไฟล์โอนเงิน"
               hint="ระบบเลือกรูปแบบนี้ให้ก่อนตอนสร้างไฟล์โอนจากบัญชีนี้"
-              error={errors.paymentFileFormat}
+              error={errors.paymentFileFormatId}
             >
               <Select
                 id="bank-account-payment-file"
-                value={form.paymentFileFormat}
-                onChange={(event) => set('paymentFileFormat', event.target.value)}
+                value={form.paymentFileFormatId}
+                onChange={(event) => set('paymentFileFormatId', event.target.value)}
               >
                 <option value="">ไม่ระบุ</option>
-                {bankFileFormatNameOptions(fileFormats, form.paymentFileFormat).map((option) => (
+                {bankFileFormatOptions(fileFormats, 'payment', form.paymentFileFormatId).map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.missing ? `${option.value} (ไม่พบในรูปแบบไฟล์ธนาคาร)` : option.value}
+                    {option.label}
                   </option>
                 ))}
               </Select>

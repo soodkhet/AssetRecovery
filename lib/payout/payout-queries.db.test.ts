@@ -231,10 +231,10 @@ beforeAll(async () => {
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
-    INSERT INTO bank_file_formats (id, organization_id, bank_name, file_type, encoding, column_mapping, test_status, created_by) VALUES
-      ('${FORMAT_OK_ID}', '${ORG_ID}', 'ธนาคารกรุงเทพ', 'CSV', 'UTF-8',
+    INSERT INTO bank_file_formats (id, organization_id, purpose, bank_code, bank_name, file_type, encoding, column_mapping, test_status, created_by) VALUES
+      ('${FORMAT_OK_ID}', '${ORG_ID}', 'payment', '002', 'ธนาคารกรุงเทพ', 'CSV', 'UTF-8',
        'receiving_bank_code,receiving_account_no,receiving_account_name,amount,transfer_date,reference_no', 'passed', '${FINANCE_ID}'),
-      ('${FORMAT_PENDING_ID}', '${ORG_ID}', 'ธนาคารทดสอบ', 'CSV', 'UTF-8',
+      ('${FORMAT_PENDING_ID}', '${ORG_ID}', 'payment', NULL, 'ธนาคารทดสอบ', 'CSV', 'UTF-8',
        'receiving_bank_code,receiving_account_no,receiving_account_name,amount', 'pending', '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)

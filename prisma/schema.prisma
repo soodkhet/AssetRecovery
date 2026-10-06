@@ -85,6 +85,14 @@ enum BankAccountUsage {
   @@map("bank_account_usage")
 }
 
+/// ชนิดของรูปแบบไฟล์ธนาคาร (มติ PO U147)
+enum BankFilePurpose {
+  statement // ไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35)
+  payment // ไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17)
+
+  @@map("bank_file_purpose")
+}
+
 enum BankFileType {
   CSV
   TXT
@@ -562,6 +570,20 @@ enum WhtCondition {
   pay_once
 
   @@map("wht_condition")
+}
+
+/// ประเภทเงินได้ของ Tax Profile (มติ PO U148) — รายการมาตรฐานตามแถวเงินได้ที่หักตามคำสั่งกรมสรรพากร ม.3 เตรส บนแบบ 50 ทวิ + อื่น ๆ (ระบุ)
+/// ข้อความที่พิมพ์ลง 50 ทวิ = ป้ายของรายการนั้น (`lib/settings/tax-profile.ts`) · `other` = ข้อความที่ผู้ใช้ระบุ (`income_type`)
+enum TaxProfileIncomeType {
+  hire_of_work_40_8 // ค่าจ้างทำของ มาตรา 40(8)
+  service_or_hire_of_work // ค่าบริการ / ค่าจ้างทำของ (หัก ณ ที่จ่ายตามมาตรา 3 เตรส)
+  service // ค่าบริการ
+  advertising // ค่าโฆษณา
+  rent // ค่าเช่า
+  transport // ค่าขนส่ง
+  other // อื่น ๆ (ระบุ)
+
+  @@map("tax_profile_income_type")
 }
 
 enum WhtFilingForm {
@@ -1374,6 +1396,9 @@ model TaxProfile {
   whtBasis              String        @default("before_vat") @map("wht_basis")
   /// ต่ำกว่านี้ไม่หัก (default 1,000 บาท)
   whtMinThresholdSatang Int           @default(100000) @map("wht_min_threshold_satang")
+  /// ประเภทเงินได้จากรายการมาตรฐาน (มติ PO U148)
+  incomeTypeCode        TaxProfileIncomeType @default(hire_of_work_40_8) @map("income_type_code")
+  /// ข้อความที่พิมพ์ลง 50 ทวิ — รายการมาตรฐาน = ป้ายของรายการ (ระบบเขียนให้) · `other` = ข้อความที่ระบุเอง
   incomeType            String        @default("ค่าจ้างทำของ มาตรา 40(8)") @map("income_type")
   filingForm            WhtFilingForm @default(PND3) @map("filing_form")
 
@@ -1496,10 +1521,10 @@ model BankAccount {
   isPrimary      Boolean @default(false) @map("is_primary")
 
   usage                  BankAccountUsage @default(both)
-  /// รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้างชื่อจาก bank_file_formats
-  statementFormat        String?          @map("statement_format")
-  /// รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้างชื่อจาก bank_file_formats
-  paymentFileFormat      String?          @map("payment_file_format")
+  /// รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้าง `bank_file_formats.id` ที่ `purpose = statement` (มติ PO U147)
+  statementFormatId      String?          @map("statement_format_id") @db.Uuid
+  /// รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้าง `bank_file_formats.id` ที่ `purpose = payment` (มติ PO U147)
+  paymentFileFormatId    String?          @map("payment_file_format_id") @db.Uuid
   /// จำนวนวันที่ยอมรับสำหรับ auto-match (ไฟล์ 35)
   autoMatchToleranceDays Int              @default(7) @map("auto_match_tolerance_days")
   /// ⚠️ DEPRECATED (DEC-006/D2) — ความหมายซ้ำกับ `usage` ห้ามใช้ในโค้ดใหม่
@@ -1512,11 +1537,15 @@ model BankAccount {
 
   organization  Organization @relation(fields: [organizationId], references: [id])
   createdByUser User         @relation("bank_accounts_created_by", fields: [createdBy], references: [id])
+  statementFormat   BankFileFormat? @relation("bank_account_statement_format", fields: [statementFormatId], references: [id], onDelete: Restrict)
+  paymentFileFormat BankFileFormat? @relation("bank_account_payment_file_format", fields: [paymentFileFormatId], references: [id], onDelete: Restrict)
 
   payoutBatches    PayoutBatch[]     @relation("payout_bank_account")
   bankTransactions BankTransaction[] @relation("bank_tx_account")
 
   @@unique([organizationId, accountNumber])
+  @@index([organizationId, statementFormatId], map: "idx_bank_accounts_statement_format")
+  @@index([organizationId, paymentFileFormatId], map: "idx_bank_accounts_payment_file_format")
   @@map("bank_accounts")
 }
 
@@ -1644,8 +1673,8 @@ model ApprovalMatrix {
   condition                  String
   /// เงินเป็น satang เสมอ (spec ไฟล์ 13 เขียนเป็นบาทระดับเอกสาร)
   conditionThresholdSatang   Int?     @map("condition_threshold_satang")
-  /// ลำดับ role เช่น ['Manager','Finance','Executive']
-  approvalFlow               String[] @map("approval_flow")
+  /// ลำดับ **role id** ของผู้อนุมัติแต่ละขั้น (มติ PO U149 — เดิมเก็บชื่อ role) · ลบ role ที่อยู่ในสายไม่ได้ (`ROLE_IN_USE`)
+  approvalFlowRoleIds        String[] @map("approval_flow_role_ids") @db.Uuid
   /// ไฟล์ 16 — SEGREGATION_OF_DUTIES_VIOLATION
   enforceSegregationOfDuties Boolean  @default(false) @map("enforce_segregation_of_duties")
 
@@ -1662,6 +1691,7 @@ model ApprovalMatrix {
   expenses Expense[] @relation("expenses_approval_matrix")
 
   @@index([organizationId], map: "idx_approval_matrices_org")
+  @@index([approvalFlowRoleIds], type: Gin, map: "idx_approval_matrices_flow_roles")
   @@map("approval_matrices")
 }
 
@@ -1696,6 +1726,11 @@ model FinancePolicySettings {
 model BankFileFormat {
   id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId String             @map("organization_id") @db.Uuid
+  /// statement = ไฟล์ที่นำเข้ากระทบยอด · payment = ไฟล์โอนเงินที่ส่งธนาคาร (มติ PO U147) — กำหนดคำศัพท์คอลัมน์ที่เลือกได้
+  purpose        BankFilePurpose
+  /// รหัสธนาคาร 3 หลักจากรายการธนาคารไทยมาตรฐาน (`lib/banks/thai-banks.ts`) — NULL = ข้อมูลเดิมที่จับคู่ธนาคารไม่ได้
+  bankCode       String?            @map("bank_code") @db.VarChar(3)
+  /// ชื่อธนาคารตามรายการมาตรฐาน (ระบบเขียนจาก `bank_code`)
   bankName       String             @map("bank_name")
   fileType       BankFileType       @map("file_type")
   /// 🔶 TIS-620/UTF-8 ต้องทดสอบกับธนาคารจริงก่อน production
@@ -1712,6 +1747,9 @@ model BankFileFormat {
   organization  Organization @relation(fields: [organizationId], references: [id])
   createdByUser User         @relation("bank_file_formats_created_by", fields: [createdBy], references: [id])
   updatedByUser User?        @relation("bank_file_formats_updated_by", fields: [updatedBy], references: [id])
+
+  statementAccounts BankAccount[] @relation("bank_account_statement_format")
+  paymentAccounts   BankAccount[] @relation("bank_account_payment_file_format")
 
   @@map("bank_file_formats")
 }

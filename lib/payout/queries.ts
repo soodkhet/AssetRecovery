@@ -1185,7 +1185,7 @@ export async function generatePaymentFile(
   const [format, account, items] = await Promise.all([
     prisma.bankFileFormat.findFirst({
       where: { id: input.bankFileFormatId, organizationId: user.organizationId, deletedAt: null },
-      select: { id: true, bankName: true, fileType: true, encoding: true, columnMapping: true, testStatus: true },
+      select: { id: true, purpose: true, bankName: true, fileType: true, encoding: true, columnMapping: true, testStatus: true },
     }),
     prisma.bankAccount.findFirst({
       where: { id: input.bankAccountId, organizationId: user.organizationId, deletedAt: null },
