@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { ORG_ID, as, forgetSessions, meta, rawDb } from './context'
+import { stored } from './files'
+import { ids, thaiId } from './state'
 
 /**
  * ผู้ใช้ของ Final Test (FINAL-coverage C.3 · U123)
@@ -49,6 +51,29 @@ export const PERSONAS: readonly PersonaSpec[] = [
 ]
 
 export const SUPERADMIN = 'admin'
+
+/** ข้อมูลรับเงินของผู้ใช้ภาคสนาม (ฟิลด์เดียวกับฟอร์ม Payee) — ใช้ทั้งตอนสร้างผู้ใช้ใหม่ (U131) และตอนผูกหลัง reset */
+export function payeeFieldsFor(username: string, fullName: string): Record<string, unknown> | null {
+  const address = { detail: '10 ม.1', postalCode: '12000', province: 'ปทุมธานี', district: 'เมืองปทุมธานี', subdistrict: 'บางปรอก' }
+  // BUG-SF1 แก้แล้ว (U131) แต่คง Tax Profile รายคนเท่ากับค่าช่อง ⇒ ยอดภาษีตาม golden เดิม
+  const rows: Record<string, { payeeType: 'individual' | 'corporate'; taxProfile: string; nationalId: string; account: string; wht402Pct: number | null; idDoc: boolean }> = {
+    'uat.agent.in1': { payeeType: 'individual', taxProfile: 'TP-1', nationalId: thaiId('110000000001'), account: '1110001111', wht402Pct: 5, idDoc: true },
+    'uat.agent.in2': { payeeType: 'individual', taxProfile: 'TP-1', nationalId: thaiId('110000000002'), account: '1110002222', wht402Pct: 0, idDoc: false },
+    'uat.agent.out1': { payeeType: 'individual', taxProfile: 'TP-3', nationalId: thaiId('110000000003'), account: '1110003333', wht402Pct: null, idDoc: false },
+    'uat.agent.out2': { payeeType: 'corporate', taxProfile: 'TP-2', nationalId: thaiId('010556900201'), account: '1110004444', wht402Pct: null, idDoc: true },
+  }
+  const row = rows[username]
+  if (row === undefined) return null
+  return {
+    payeeType: row.payeeType, taxProfileId: ids.taxProfiles[row.taxProfile], nationalId: row.nationalId,
+    bankName: 'ธนาคารกสิกรไทย', accountName: fullName, accountNumber: row.account,
+    // U150 — ไฟล์อัปโหลดที่ server ตรวจแล้ว (path ใต้ prefix ขององค์กร)
+    idDocumentUrl: row.idDoc ? `payees/${ORG_ID}/id-documents/seed-final-${username.replaceAll('.', '-')}.pdf` : null,
+    wht402Pct: row.wht402Pct, nameTitle: row.payeeType === 'corporate' ? 'บริษัท' : 'นาย', address,
+    ...(row.payeeType === 'corporate' ? { branchCode: '00000' } : {}), whtCondition: 'withhold',
+  }
+}
+
 
 async function roleIdOf(name: string, roleGroup: RoleGroup): Promise<string> {
   const role = await rawDb().role.findFirst({ where: { organizationId: ORG_ID, name, roleGroup }, select: { id: true } })
@@ -141,7 +166,12 @@ export async function syncUsers(
         continue
       }
       const password = `Fin-${randomBytes(9).toString('base64url')}`
-      await createUser({ actor: admin, meta, reason: null }, values, password)
+      // U131 — ผู้ใช้ภาคสนามสร้างพร้อมข้อมูลรับเงินในฟอร์มเดียว (ติ๊กยืนยัน)
+      const fields = payeeFieldsFor(spec.username, spec.fullName)
+      if (fields !== null && typeof fields['idDocumentUrl'] === 'string') await stored(fields['idDocumentUrl'])
+      const { userPaymentSchema } = await import('@/lib/payees/schemas')
+      const payment = fields === null ? undefined : userPaymentSchema.parse({ fields, verify: true, reason: `ข้อมูลรับเงิน ${spec.username} (Final Test seed)` })
+      await createUser({ actor: admin, meta, reason: null }, values, password, payment)
       if (options.realAuth) rememberPassword(spec, password)
       console.log(`[users] สร้าง ${spec.username}${options.realAuth ? ' (Auth จริง — รหัสอยู่ใน personas.json)' : ' (Auth จำลอง)'}`)
     } else if (existing.deletedAt === null) {

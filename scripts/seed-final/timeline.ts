@@ -140,7 +140,9 @@ async function september(): Promise<void> {
   await handover('CO1', ['FT-15'])
   await handover('CO2', ['FT-16'])
   await handover('CO3', ['FT-18'])
-  await handover('CO4', ['FT-19', 'FT-20'])
+  // U142 — หลายล็อตต่อบริษัท (ตารางจัดกลุ่มตามบริษัท): CO4 แยก 2 ล็อตวันเดียวกัน
+  await handover('CO4', ['FT-19'])
+  await handover('CO4', ['FT-20'])
   clockAt('2026-09-17 10:00')
   for (const key of ['FT-15', 'FT-16', 'FT-18', 'FT-19', 'FT-20'] as const) {
     await approveCase(key, key === 'FT-16' || key === 'FT-20' ? 'uat.agent.out1' : 'uat.agent.out2')

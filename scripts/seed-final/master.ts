@@ -2,7 +2,7 @@ import { ORG_ID, as, meta, rawDb } from './context'
 import { stored } from './files'
 import { clockAt } from './runtime'
 import { d, ids, strip, thaiId } from './state'
-import { SUPERADMIN, syncUsers, type UserSyncOptions } from './users'
+import { SUPERADMIN, payeeFieldsFor, syncUsers, type UserSyncOptions } from './users'
 
 /**
  * ส่วน A/B/C ของ FINAL-coverage — ค่าตั้งเริ่มต้นมาตรฐาน + เทมเพลตครบทุกแบบ + master data
@@ -66,6 +66,8 @@ async function seedSettings(): Promise<void> {
         email: 'finance@ar-test.test',
         website: 'ar-test.test',
         vatRegistered: true,
+        authorizedSignerName: 'อำนาจ บริหารกิจ',
+        authorizedSignerTitle: 'กรรมการผู้จัดการ',
         reason: R('ตั้งข้อมูลองค์กร'),
       }),
     ),
@@ -89,20 +91,22 @@ async function seedSettings(): Promise<void> {
   ))
 
   // A.3 Tax Profile 4 แถว
-  const profiles: Array<[string, string, number, 'before_vat' | 'gross_amount', 'PND3' | 'PND53']> = [
-    ['TP-1', 'Outsource Standard 3%', 3, 'before_vat', 'PND3'],
-    ['TP-2', 'Juristic Entity 3%', 3, 'before_vat', 'PND53'],
-    ['TP-3', 'ทดสอบลำดับ override 2%', 2, 'before_vat', 'PND3'],
-    ['TP-4', 'ฐานรวม VAT 3%', 3, 'gross_amount', 'PND3'],
+  // U148 — ประเภทเงินได้เลือกจากรายการมาตรฐาน 50 ทวิ (TP-4 ทดสอบ "อื่น ๆ (ระบุ)")
+  const profiles: Array<[string, string, number, 'before_vat' | 'gross_amount', 'PND3' | 'PND53', string, string]> = [
+    ['TP-1', 'Outsource Standard 3%', 3, 'before_vat', 'PND3', 'hire_of_work_40_8', ''],
+    ['TP-2', 'Juristic Entity 3%', 3, 'before_vat', 'PND53', 'service_or_hire_of_work', ''],
+    ['TP-3', 'ทดสอบลำดับ override 2%', 2, 'before_vat', 'PND3', 'hire_of_work_40_8', ''],
+    ['TP-4', 'ฐานรวม VAT 3%', 3, 'gross_amount', 'PND3', 'other', 'ค่านายหน้าติดตามทรัพย์'],
   ]
-  for (const [key, name, pct, basis, form] of profiles) {
+  for (const [key, name, pct, basis, form, incomeTypeCode, incomeType] of profiles) {
     const created = await tp.createTaxProfile(await sctx(`สร้าง Tax Profile ${key}`), strip(
       s.taxProfileCreateSchema.parse({
         name,
         whtPct: pct,
         whtBasis: basis,
         whtMinThresholdSatang: 100000,
-        incomeType: form === 'PND53' ? 'ค่าบริการ (นิติบุคคล)' : 'ค่าจ้างทำของ/ค่าบริการ',
+        incomeTypeCode,
+        incomeType,
         filingForm: form,
         reason: R(key),
       }),
@@ -136,22 +140,25 @@ async function seedSettings(): Promise<void> {
     ),
   )
 
-  // A.2 รอบบิล/รอบจ่าย (ครบ 3×3 ชนิด)
-  const cycleRows = [
-    { name: 'AR-CO1 สิ้นเดือน', type: 'AR', cutoffRuleType: 'month_end', cutoffDates: [], cutoffText: null, dueRuleType: 'net_days', dueRuleValue: 30, scope: 'บจก. ยูเอที ลิสซิ่ง' },
-    { name: 'AR-CO2 ตัดวันที่ 5', type: 'AR', cutoffRuleType: 'fixed_dates', cutoffDates: [5], cutoffText: null, dueRuleType: 'day_of_next_month', dueRuleValue: 10, scope: 'บจก. ยูเอที แคปปิตอล' },
-    { name: 'AP จ่ายพนักงาน', type: 'AP', cutoffRuleType: 'custom_text', cutoffDates: [], cutoffText: 'ทุกวันที่ 15 และสิ้นเดือน', dueRuleType: 'month_end', dueRuleValue: null, scope: 'พนักงานติดตามทรัพย์ทุกทีม' },
+  // A.2 รอบจ่าย (U133 ขอบเขตจริง · U146 ตัด custom_text) — รอบบิล AR สร้างหลังมีบริษัท (seedBillingCycles)
+  const apCycles = [
+    { name: 'AP จ่ายพนักงาน ทุกวันที่ 15 และสิ้นเดือน', type: 'AP', cutoffRuleType: 'fixed_dates', cutoffDates: [15, 31], dueRuleType: 'month_end', dueRuleValue: null, scopeKind: 'all_teams', companyIds: [] },
   ]
-  for (const row of cycleRows) {
-    await cycles.createCycle(await sctx(`รอบ ${row.name}`), strip(s.cycleCreateSchema.parse({ ...row, reason: R('รอบบิล/จ่าย') })))
+  for (const row of apCycles) {
+    await cycles.createCycle(await sctx(`รอบ ${row.name}`), strip(s.cycleCreateSchema.parse({ ...row, reason: R('รอบจ่าย') })))
   }
 
-  // A.2 สายอนุมัติ (ชุดเดียวกับ UAT M7)
+  // A.2 สายอนุมัติ (ชุดเดียวกับ UAT M7 · U149 เก็บ role id)
+  const roleIdOf = async (name: string, roleGroup: 'system' | 'inhouse') =>
+    (await rawDb().role.findFirstOrThrow({ where: { organizationId: ORG_ID, name, roleGroup, deletedAt: null }, select: { id: true } })).id
+  const mgrRole = await roleIdOf('ผู้จัดการทีมติดตามทรัพย์', 'inhouse')
+  const finRole = await roleIdOf('การเงิน', 'system')
+  const execRole = await roleIdOf('บริหาร', 'system')
   await matrix.createApprovalMatrix(await sctx('สายอนุมัติ ≤ ฿5,000'), strip(
     s.approvalMatrixCreateSchema.parse({
       condition: 'รายการไม่เกิน ฿5,000',
       conditionThresholdSatang: 500000,
-      approvalFlow: ['ผู้จัดการทีมติดตามทรัพย์', 'การเงิน'],
+      approvalFlowRoleIds: [mgrRole, finRole],
       enforceSegregationOfDuties: true,
       reason: R('สายอนุมัติ'),
     }),
@@ -160,7 +167,7 @@ async function seedSettings(): Promise<void> {
     s.approvalMatrixCreateSchema.parse({
       condition: 'รายการเกิน ฿5,000',
       conditionThresholdSatang: null,
-      approvalFlow: ['ผู้จัดการทีมติดตามทรัพย์', 'การเงิน', 'บริหาร'],
+      approvalFlowRoleIds: [mgrRole, finRole, execRole],
       enforceSegregationOfDuties: true,
       reason: R('สายอนุมัติ'),
     }),
@@ -176,7 +183,6 @@ async function seedSettings(): Promise<void> {
         requirePayeeIdDocument: false,
         arAgingBuckets: [30, 60, 90],
         writeOffToleranceSatang: 5000,
-        advanceUnclearedToEmployeeReceivable: true,
         substituteReceiptMaxPerDocSatang: 50000,
         substituteReceiptMaxPerMonthSatang: 300000,
         reason: R('นโยบายการเงิน'),
@@ -184,11 +190,26 @@ async function seedSettings(): Promise<void> {
     ),
   )
 
-  // A.2 บัญชีธนาคารบริษัท
+  // A.2 รูปแบบไฟล์ธนาคาร (U147 purpose + รหัสธนาคาร) — ไฟล์โอนครบ 3 สถานะ (passed/failed/pending) [สมมติฐาน F1] + statement 1
+  const formats = [
+    { key: 'BF-1', purpose: 'payment', bankCode: '004', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,transfer_date,reference_no', test: true },
+    { key: 'BF-2', purpose: 'payment', bankCode: '014', fileType: 'TXT', encoding: 'TIS_620', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,email', test: true },
+    { key: 'BF-3', purpose: 'payment', bankCode: '002', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount', test: false },
+    { key: 'BF-S', purpose: 'statement', bankCode: '004', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'transaction_date,description,reference,amount_in,amount_out', test: true },
+  ] as const
+  for (const format of formats) {
+    const created = await bankFile.createBankFileFormat(await sctx(`รูปแบบไฟล์ธนาคาร ${format.key}`), strip(
+      s.bankFileFormatCreateSchema.parse({ purpose: format.purpose, bankCode: format.bankCode, fileType: format.fileType, encoding: format.encoding, columnMapping: format.columnMapping, reason: R(format.key) }),
+    ))
+    ids.bankFiles[format.key] = created.id
+    if (format.test) await bankFile.testBankFileFormat(await sctx(`ทดสอบไฟล์ ${format.key}`), created)
+  }
+
+  // A.2 บัญชีธนาคารบริษัท (U147 อ้างรูปแบบด้วย id)
   const ba1 = await bank.createBankAccount(await sctx('บัญชีหลัก BA-1'), strip(
     s.bankAccountCreateSchema.parse({
       bankName: 'ธนาคารกสิกรไทย', accountName: 'บจก. แอสเซ็ท รีคัฟเวอรี่ (ทดสอบ)', accountNumber: '9990001112',
-      accountType: 'savings', usage: 'both', statementFormat: null, paymentFileFormat: null,
+      accountType: 'savings', usage: 'both', statementFormatId: ids.bankFiles['BF-S'], paymentFileFormatId: ids.bankFiles['BF-1'],
       autoMatchToleranceDays: 7, isPrimary: true, reason: R('BA-1'),
     }),
   ))
@@ -196,25 +217,11 @@ async function seedSettings(): Promise<void> {
   const ba2 = await bank.createBankAccount(await sctx('บัญชีรับเงิน BA-2'), strip(
     s.bankAccountCreateSchema.parse({
       bankName: 'ธนาคารไทยพาณิชย์', accountName: 'บจก. แอสเซ็ท รีคัฟเวอรี่ (ทดสอบ)', accountNumber: '5550002223',
-      accountType: 'current', usage: 'receive', statementFormat: null, paymentFileFormat: null,
+      accountType: 'current', usage: 'receive', statementFormatId: null, paymentFileFormatId: null,
       autoMatchToleranceDays: 7, isPrimary: false, reason: R('BA-2'),
     }),
   ))
   ids.bankAccounts['BA-2'] = ba2.id
-
-  // A.2 ไฟล์โอนธนาคาร — ครบ 3 สถานะ (passed/failed/pending) [สมมติฐาน F1]
-  const formats = [
-    { key: 'BF-1', bankName: 'ธนาคารกสิกรไทย', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,transfer_date,reference_no', test: true },
-    { key: 'BF-2', bankName: 'ธนาคารไทยพาณิชย์', fileType: 'TXT', encoding: 'TIS_620', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount,email', test: true },
-    { key: 'BF-3', bankName: 'ธนาคารกรุงเทพ', fileType: 'CSV', encoding: 'UTF_8', columnMapping: 'receiving_bank_code,receiving_account_no,receiving_account_name,amount', test: false },
-  ] as const
-  for (const format of formats) {
-    const created = await bankFile.createBankFileFormat(await sctx(`รูปแบบไฟล์โอน ${format.key}`), strip(
-      s.bankFileFormatCreateSchema.parse({ bankName: format.bankName, fileType: format.fileType, encoding: format.encoding, columnMapping: format.columnMapping, reason: R(format.key) }),
-    ))
-    ids.bankFiles[format.key] = created.id
-    if (format.test) await bankFile.testBankFileFormat(await sctx(`ทดสอบไฟล์ ${format.key}`), created)
-  }
 
   // A.2 ศูนย์ต้นทุน [สมมติฐาน Q11]
   for (const row of [
@@ -225,7 +232,7 @@ async function seedSettings(): Promise<void> {
     await cc.createCostCenter(await sctx(`ศูนย์ต้นทุน ${row.name}`), strip(s.costCenterCreateSchema.parse({ ...row, reason: R('ศูนย์ต้นทุน') })))
   }
 
-  // A.7 เทมเพลตเอกสาร (U122)
+  // A.7 เทมเพลตเอกสาร (U122) — ข้อความท้ายครบ 3 ชนิด · พิมพ์ลายเซ็นรูปบนใบแจ้งหนี้/ใบกำกับ · ใบส่งมอบเว้นช่องเซ็นมือ
   await tpl.updateTaxDocTemplate(await sctx('ข้อความท้ายใบแจ้งหนี้'), 'billing_invoice', {
     footerNote: 'กรุณาชำระภายในกำหนด โอนเข้าบัญชีกสิกรไทย 999-0-00111-2',
     printSignature: true,
@@ -234,7 +241,10 @@ async function seedSettings(): Promise<void> {
     footerNote: 'ใบเสร็จรับเงินจะสมบูรณ์เมื่อบริษัทได้รับเงินแล้ว',
     printSignature: true,
   })
-  await tpl.updateTaxDocTemplate(await sctx('ใบส่งมอบเว้นช่องเซ็นมือ'), 'handover_note', { footerNote: null, printSignature: false })
+  await tpl.updateTaxDocTemplate(await sctx('ข้อความท้ายใบส่งมอบ เว้นช่องเซ็นมือ'), 'handover_note', {
+    footerNote: 'ผู้รับมอบตรวจสภาพเครื่องและ IMEI ครบถ้วนแล้ว',
+    printSignature: false,
+  })
 
   // A.2 SLA / มอบหมาย / ระยะเก็บเอกสาร
   await sla.updateSlaPolicy(await sctx('SLA 72 ชม.'), await sla.getSlaPolicy(ORG_ID), strip(s.slaPolicyUpdateSchema.parse({ slaAlertHours: 72, reason: R('SLA') })))
@@ -363,11 +373,11 @@ async function seedCompanies(): Promise<void> {
     ids.templates[key] = created.id
   }
   const companies = [
-    { key: 'CO1', name: 'บจก. ยูเอที ลิสซิ่ง', shortName: 'UAT-L', tpl: 'T1', vatMode: 'exclude_vat', wht: 3, branch: '00000', billingDay: 25, due: 30, delivery: 'paper_pdf', taxSeed: '010556900101' },
-    { key: 'CO2', name: 'บจก. ยูเอที แคปปิตอล', shortName: 'UAT-C', tpl: 'T2', vatMode: 'include_vat', wht: null, branch: '00000', billingDay: 5, due: 15, delivery: 'paper_pdf', taxSeed: '010556900102' },
-    { key: 'CO3', name: 'บจก. ยูเอที ไฟแนนซ์', shortName: 'UAT-F', tpl: 'T3', vatMode: 'exclude_vat', wht: 3, branch: '00002', billingDay: 25, due: 30, delivery: 'paper_pdf', taxSeed: '010556900103' },
-    { key: 'CO4', name: 'บจก. ยูเอที โมบาย', shortName: 'UAT-M', tpl: 'T4', vatMode: 'no_vat', wht: null, branch: '00000', billingDay: 1, due: 30, delivery: 'e_tax_invoice', taxSeed: '010556900104' },
-    { key: 'CO5', name: 'บจก. ยูเอที ปิดกิจการ', shortName: 'UAT-X', tpl: 'T5', vatMode: 'exclude_vat', wht: 3, branch: '00000', billingDay: 1, due: 30, delivery: 'paper_pdf', taxSeed: '010556900105' },
+    { key: 'CO1', name: 'บจก. ยูเอที ลิสซิ่ง', shortName: 'UAT-L', tpl: 'T1', vatMode: 'exclude_vat', wht: 3, branch: '00000', delivery: 'paper_pdf', taxSeed: '010556900101', signer: 'นายสมชาย ลิสซิ่งดี' },
+    { key: 'CO2', name: 'บจก. ยูเอที แคปปิตอล', shortName: 'UAT-C', tpl: 'T2', vatMode: 'include_vat', wht: null, branch: '00000', delivery: 'paper_pdf', taxSeed: '010556900102', signer: 'นางสาวศิริพร แคปปิตอล' },
+    { key: 'CO3', name: 'บจก. ยูเอที ไฟแนนซ์', shortName: 'UAT-F', tpl: 'T3', vatMode: 'exclude_vat', wht: 3, branch: '00002', delivery: 'paper_pdf', taxSeed: '010556900103', signer: 'นายไพโรจน์ ไฟแนนซ์' },
+    { key: 'CO4', name: 'บจก. ยูเอที โมบาย', shortName: 'UAT-M', tpl: 'T4', vatMode: 'no_vat', wht: null, branch: '00000', delivery: 'e_tax_invoice', taxSeed: '010556900104', signer: null },
+    { key: 'CO5', name: 'บจก. ยูเอที ปิดกิจการ', shortName: 'UAT-X', tpl: 'T5', vatMode: 'exclude_vat', wht: 3, branch: '00000', delivery: 'paper_pdf', taxSeed: '010556900105', signer: null },
   ]
   const admin = await as(SUPERADMIN)
   for (const company of companies) {
@@ -380,48 +390,117 @@ async function seedCompanies(): Promise<void> {
       fc.financeCompanyCreateSchema.parse({
         name: company.name, shortName: company.shortName, taxId: thaiId(company.taxSeed), branchCode: company.branch,
         address: '99 ถ.พหลโยธิน แขวงจตุจักร เขตจตุจักร กรุงเทพมหานคร 10900', phone: '021112222', email: `ar@${company.shortName.toLowerCase()}.test`,
-        contactName: 'ฝ่ายติดตามทรัพย์', contactPhone: '0899999999', signerName: 'ผู้มีอำนาจลงนาม',
+        contactName: 'ฝ่ายติดตามทรัพย์', contactPhone: '0899999999', signerName: company.signer,
         serviceFeeTemplateId: ids.templates[company.tpl], vatRegistered: company.vatMode !== 'no_vat', vatMode: company.vatMode,
         whtWithheldByCustomerPct: company.wht, defaultInvoiceDeliveryFormat: company.delivery,
-        billingDay: company.billingDay, paymentDueDays: company.due, reason: R(company.key),
+        billingCycleId: null, reason: R(company.key),
       }),
     ))
     ids.companies[company.key] = created.id
     if (company.key === 'CO5') {
       await fcq.setFinanceCompanyStatus(await sctx('ระงับบริษัทที่ปิดกิจการ'), await fcq.getFinanceCompany(admin, created.id), 'suspended')
     }
+    await seedCompanyDocuments(company.key, created.id)
+  }
+  await seedBillingCycles()
+}
+
+/**
+ * รอบบิล (U133 ขอบเขตเลือกบริษัทจริง · U146 รอบบิลเป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม)
+ * สร้างหลังมีบริษัท — บริษัทที่ไม่มีรอบบิลวางบิลไม่ได้ (`BILLING_CYCLE_NOT_SET`)
+ */
+async function seedBillingCycles(): Promise<void> {
+  const s = await import('@/lib/settings/schemas')
+  const cycles = await import('@/lib/settings/queries/cycles')
+  if ((await rawDb().billingPayoutCycle.count({ where: { organizationId: ORG_ID, type: 'AR', deletedAt: null } })) > 0) return
+  const co = (key: string) => ids.companies[key] ?? ''
+  const rows = [
+    { name: 'AR สิ้นเดือน เครดิต 30 วัน', type: 'AR', cutoffRuleType: 'month_end', cutoffDates: [], dueRuleType: 'net_days', dueRuleValue: 30, scopeKind: 'selected_companies', companyIds: [co('CO1'), co('CO3'), co('CO4'), co('CO5')] },
+    { name: 'AR ตัดวันที่ 5 ชำระวันที่ 10 เดือนถัดไป', type: 'AR', cutoffRuleType: 'fixed_dates', cutoffDates: [5], dueRuleType: 'day_of_next_month', dueRuleValue: 10, scopeKind: 'selected_companies', companyIds: [co('CO2')] },
+  ]
+  for (const row of rows) {
+    await cycles.createCycle(await sctx(`รอบ ${row.name}`), strip(s.cycleCreateSchema.parse({ ...row, reason: R('รอบบิล') })))
   }
 }
 
+/** เอกสารบริษัท (U132) — CO1 ครบ · CO3 หนังสือรับรองเกิน 6 เดือน (เตือน) · CO2/CO4 ไม่มี (เตือน) */
+async function seedCompanyDocuments(key: string, companyId: string): Promise<void> {
+  const docs = await import('@/lib/finance-companies/documents')
+  const q = await import('@/lib/finance-companies/document-queries')
+  const plan: Record<string, Array<{ type: 'company_certificate' | 'vat_registration' | 'service_contract' | 'bank_book' | 'other'; issued: string | null; title: string | null }>> = {
+    CO1: [
+      { type: 'company_certificate', issued: '2026-08-15', title: null },
+      { type: 'vat_registration', issued: null, title: null },
+      { type: 'service_contract', issued: null, title: null },
+      { type: 'bank_book', issued: null, title: null },
+      { type: 'other', issued: null, title: 'หนังสือมอบอำนาจรับมอบทรัพย์' },
+    ],
+    CO3: [
+      { type: 'company_certificate', issued: '2026-01-15', title: null },
+      { type: 'vat_registration', issued: null, title: null },
+    ],
+  }
+  for (const row of plan[key] ?? []) {
+    const path = await stored(docs.companyDocumentPath(companyId, row.type, `${row.type}.pdf`, `seed-final-${row.type}`))
+    await q.createCompanyDocument(await sctx(`แนบเอกสารบริษัท ${key}`), companyId, docs.companyDocumentCreateSchema.parse({
+      documentType: row.type, title: row.title, issuedDate: row.issued, path, originalName: `${row.type}.pdf`,
+      replacesDocumentId: null, reason: R(`เอกสารบริษัท ${key}`),
+    }))
+  }
+}
+
+/**
+ * ผู้รับเงิน 4 คน — ผ่านส่วน "ข้อมูลรับเงิน" ของฟอร์มผู้ใช้ (U131 · service เดียวกับหน้าผู้ใช้) + ติ๊กยืนยัน
+ * (ผู้ใช้คงอยู่ข้าม reset แต่ payee ถูกล้าง ⇒ ใช้ `updateUser` พร้อม payment)
+ */
 async function seedPayees(): Promise<void> {
   const s = await import('@/lib/payees/schemas')
-  const q = await import('@/lib/payees/queries')
+  const users = await import('@/lib/users/queries')
   const db = rawDb()
-  const address = { detail: '10 ม.1', postalCode: '12000', province: 'ปทุมธานี', district: 'เมืองปทุมธานี', subdistrict: 'บางปรอก' }
-  // BUG-SF1: verifyPayee บังคับ taxProfileId แม้ U121 ให้ใช้ "ช่องตามประเภท" ได้ ⇒ seed ผูก Tax Profile ที่เท่ากับค่าในช่อง
-  // (ยอดภาษีเท่ากันทุกแถว) เพื่อให้ยืนยันผู้รับได้ — เส้นทาง resolve ผ่านช่องจึงไม่ถูกครอบในข้อมูล seed
-  const payees = [
-    { key: 'uat.agent.in1', payeeType: 'individual', taxProfile: 'TP-1', nationalId: thaiId('110000000001'), bank: 'ธนาคารกสิกรไทย', account: '1110001111', wht402Pct: 5 },
-    { key: 'uat.agent.in2', payeeType: 'individual', taxProfile: 'TP-1', nationalId: thaiId('110000000002'), bank: 'ธนาคารกสิกรไทย', account: '1110002222', wht402Pct: 0 },
-    { key: 'uat.agent.out1', payeeType: 'individual', taxProfile: 'TP-3', nationalId: thaiId('110000000003'), bank: 'ธนาคารกสิกรไทย', account: '1110003333', wht402Pct: null },
-    { key: 'uat.agent.out2', payeeType: 'corporate', taxProfile: 'TP-2', nationalId: thaiId('010556900201'), bank: 'ธนาคารกสิกรไทย', account: '1110004444', wht402Pct: null },
-  ]
-  for (const payee of payees) {
-    const user = await db.user.findFirstOrThrow({ where: { organizationId: ORG_ID, username: payee.key }, select: { id: true, fullName: true } })
-    const existing = await db.payeeProfile.findFirst({ where: { organizationId: ORG_ID, userId: user.id, deletedAt: null }, select: { id: true } })
-    if (existing !== null) {
-      ids.payees[payee.key] = existing.id
-      continue
+  const admin = await as(SUPERADMIN)
+  for (const key of ['uat.agent.in1', 'uat.agent.in2', 'uat.agent.out1', 'uat.agent.out2']) {
+    const user = await db.user.findFirstOrThrow({ where: { organizationId: ORG_ID, username: key }, select: { id: true, fullName: true } })
+    const existing = await db.payeeProfile.findFirst({ where: { organizationId: ORG_ID, userId: user.id, deletedAt: null }, select: { id: true, isVerified: true } })
+    if (existing === null || !existing.isVerified) {
+      const fields = payeeFieldsFor(key, user.fullName) ?? {}
+      if (typeof fields['idDocumentUrl'] === 'string') await stored(fields['idDocumentUrl'])
+      const payment = s.userPaymentSchema.parse({ fields, verify: true, reason: R(`ข้อมูลรับเงิน ${key}`) })
+      const current = await users.getUser(admin, user.id)
+      await users.updateUser({ actor: admin, meta }, current, {
+        roleId: current.roleId, username: current.username ?? key, email: current.email, fullName: current.fullName,
+        phone: current.phone, employeeCode: current.employeeCode, teamId: current.teamId, companyId: current.companyId,
+      }, payment)
     }
-    const parsed = s.payeeCreateSchema.parse({
-      userId: user.id, payeeType: payee.payeeType, taxProfileId: ids.taxProfiles[payee.taxProfile], nationalId: payee.nationalId,
-      bankName: payee.bank, accountName: user.fullName, accountNumber: payee.account, idDocumentUrl: null,
-      wht402Pct: payee.wht402Pct, nameTitle: payee.payeeType === 'corporate' ? 'บริษัท' : 'นาย', address,
-      ...(payee.payeeType === 'corporate' ? { branchCode: '00000' } : {}), whtCondition: 'withhold', reason: R('ผู้รับเงิน'),
-    })
-    const created = await q.createPayee(await sctx(`ผู้รับเงิน ${payee.key}`), strip(parsed))
-    ids.payees[payee.key] = created.payee.id
-    await q.verifyPayee({ ...(await sctx('ยืนยันผู้รับเงิน')), actor: await as('uat.finance') }, created.payee.id)
+    const row = await db.payeeProfile.findFirstOrThrow({ where: { organizationId: ORG_ID, userId: user.id, deletedAt: null }, select: { id: true } })
+    ids.payees[key] = row.id
+  }
+}
+
+/**
+ * แคตตาล็อก Model Phone (U155–U162) — เพิ่มเองผ่าน service ของหน้าตั้งค่า (ไม่เรียก API ภายนอก)
+ * เคส FT บางแถวเลือกจากรายการ (`deviceModelId`) บางแถว "ระบุเอง" · ซ่อน 1 รุ่นเพื่อเห็นสถานะปิด
+ */
+async function seedDeviceCatalog(): Promise<void> {
+  const q = await import('@/lib/device-catalog/queries')
+  const db = rawDb()
+  const catalog: Array<[string, Array<[string, 'smartphone' | 'tablet', number]>]> = [
+    ['Apple', [['iPhone 15', 'smartphone', 2023], ['iPhone 14', 'smartphone', 2022], ['iPad (10th generation)', 'tablet', 2022]]],
+    ['Samsung', [['Galaxy A55 5G', 'smartphone', 2024], ['Galaxy S24', 'smartphone', 2024]]],
+    ['OPPO', [['Reno12 5G', 'smartphone', 2024]]],
+  ]
+  for (const [brandName, models] of catalog) {
+    const existing = await db.deviceBrand.findFirst({ where: { organizationId: ORG_ID, name: brandName, deletedAt: null }, select: { id: true } })
+    const brandId = existing?.id ?? (await q.createManualDeviceBrand(await sctx(`เพิ่มแบรนด์ ${brandName}`), { name: brandName })).id
+    for (const [name, assetKind, releaseYear] of models) {
+      const found = await db.deviceModel.findFirst({ where: { brandId, name, deletedAt: null }, select: { id: true } })
+      const id = found?.id ?? (await q.createManualDeviceModel(await sctx(`เพิ่มรุ่น ${brandName} ${name}`), { brandId, assetKind, name, releaseYear })).id
+      ids.deviceModels[`${brandName} ${name}`] = id
+    }
+  }
+  const hidden = ids.deviceModels['Apple iPhone 14'] ?? ''
+  const row = await db.deviceModel.findUniqueOrThrow({ where: { id: hidden }, select: { manualStatus: true } })
+  if (row.manualStatus !== 'hidden') {
+    await q.updateDeviceModel(await sctx('ซ่อนรุ่นที่ไม่รับงานแล้ว'), hidden, { manualStatus: 'hidden' })
   }
 }
 
@@ -438,6 +517,7 @@ export async function seedMaster(options: MasterOptions): Promise<void> {
   await seedPlans()
   await seedTeams()
   await seedCompanies()
+  await seedDeviceCatalog()
   const missing = await syncUsers(options, {
     TEAM_A: ids.teams['TEAM_A'] ?? '', TEAM_B: ids.teams['TEAM_B'] ?? '', TEAM_C: ids.teams['TEAM_C'] ?? '',
   }, { CO1: ids.companies['CO1'] ?? '', CO2: ids.companies['CO2'] ?? '' })

@@ -6,6 +6,7 @@ import {
   acceptOnly,
   approveExpense,
   approvedCase,
+  assetOf,
   assign,
   caseAction,
   checkin,
@@ -126,6 +127,17 @@ async function closeSeptember(): Promise<void> {
     sourceModule: 'billing', sourceRef: 'BL-2569-003',
   })
   await acc.authorizeException(await ctx('uat.exec'), critical.id, { authorizeNote: 'อนุญาตปิดงวด — ติดตามใบ 50 ทวิ ในงวดถัดไป' })
+  // ภ.ง.ด. ก.ย. ยื่นแล้ว (ก่อนส่งงวด) → U127 ยกเลิก + ออก 50 ทวิ ใหม่หลังยื่น ⇒ ธง "ต้องยื่นเพิ่มเติม" (ยอดที่ยื่นไม่ถูกเขียนทับ)
+  // ต้องทำก่อนล็อกงวด — งวดที่ล็อกแล้วยกเลิกใบไม่ได้ (PERIOD_LOCKED_DIRECT_EDIT)
+  const wht = await import('@/lib/wht/queries')
+  const septFilings = await rawDb().whtFilingSummary.findMany({ where: { organizationId: ORG_ID, periodId: sept, status: 'pending' }, select: { id: true } })
+  for (const row of septFilings) await wht.markWhtFilingFiled(await ctx(ACC), row.id, { reason: 'ยื่นแบบกระดาษแล้ว' })
+  const septCert = await rawDb().whtCertificate.findFirstOrThrow({
+    where: { organizationId: ORG_ID, paymentDate: d('2026-09-20'), status: 'active', payeeId: ids.payees['uat.agent.out1'] ?? '' },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  })
+  await wht.cancelWhtCertificate(await ctx(ACC), septCert.id, { reason: 'ที่อยู่ผู้ถูกหักภาษีผิด ออกใบใหม่หลังยื่นแบบแล้ว', reissue: true })
   await acc.sendPeriod(await ctx(ACC), sept, { reason: 'ส่งข้อมูลงวด ก.ย. 2569 ให้สำนักงานบัญชี' })
   const v1 = await exp.createExportPack(await ctx(ACC), { periodId: sept, note: 'ก.ย. v1' })
   await exp.markExportSent(await ctx(ACC), v1.id, { note: 'ส่งอีเมลสำนักงานบัญชี' })
@@ -346,7 +358,9 @@ async function fieldOct3(): Promise<void> {
   step('03/10/2569 คลัง ล็อต CO1/CO2/CO3/CO4 (LOT-005…008) · รับเงิน BL-005 บางส่วน')
   clockAt('2026-10-03 16:00')
   await handover('CO1', ['FT-03', 'FT-04'])
-  await handover('CO2', ['FT-06', 'FT-07'])
+  // U142 — CO2 แยก 2 ล็อตวันเดียวกัน (ก.ย. + ต.ค. หลายล็อตต่อบริษัท)
+  await handover('CO2', ['FT-06'])
+  await handover('CO2', ['FT-07'])
   await handover('CO3', ['FT-09', 'FT-11'])
   await handover('CO4', ['FT-13'])
   clockAt('2026-10-03 17:00')
@@ -381,7 +395,8 @@ async function approvalsAndPayoutsOct4(): Promise<void> {
   // FT-11 (out1 · 03/10) ต้องเข้า PB-O-OUT2 ⇒ อนุมัติเฉพาะรายการถึง 02/10 (= วันตัดรอบ)
   await approvePayeeItems('uat.agent.out1', [extra.ft14Manual], '2026-10-02')
   await billing('BL-006', 'CO1', '2026-10-03', true)
-  await billing('BL-007', 'CO3', '2026-10-02', true)
+  // O72 — วันที่รายได้ = วันยืนยันล็อต (FT-09 ส่งมอบ 03/10) ⇒ วันตัดรอบ 03/10 (FT-11 ยังไม่เกิดรายได้ — รายการ out1 03/10 ยังไม่อนุมัติ)
+  await billing('BL-007', 'CO3', '2026-10-03', true)
   await payout('PB-O-OUT1', 'outsource', '2026-10-02', 'file_generated')
   const out1 = await rawDb().payoutBatch.findUniqueOrThrow({ where: { id: ids.payouts['PB-O-OUT1'] ?? '' }, select: { netSatang: true } })
   await statementLine('2026-10-04', 'OUT-PBOOUT1', -out1.netSatang)
@@ -462,6 +477,11 @@ async function oct5(): Promise<void> {
     await sales.issueTaxInvoice(await ctx(FIN), { replacesInvoiceId: inv4 })
   }
   await statementLine('2026-10-05', 'IN-BL008', 600000)
+  // U144 — รับขาดไม่เกินเพดาน (฿50) = ปิดบิล + ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร · เกินเพดาน 1 สตางค์ = ค้างตามเดิม
+  const bl005Rest = await statementLine('2026-10-05', 'IN-BL005-2', 345000)
+  await matchToBilling(bl005Rest, 'BL-005', 'ลูกค้าโอนงวดสุดท้าย ขาดค่าธรรมเนียมโอนต่างธนาคาร')
+  const bl006Short = await statementLine('2026-10-05', 'IN-BL006', 47839)
+  await matchToBilling(bl006Short, 'BL-006', 'ลูกค้าโอนขาด เกินเพดานค่าธรรมเนียม รอติดตามส่วนที่เหลือ')
   const recon = await import('@/lib/bank-recon/queries')
   await statementLine('2026-10-05', 'IN-UNKNOWN', 20000)
   const fee = await statementLine('2026-10-05', 'FEE-OCT', -1500)
@@ -520,6 +540,8 @@ async function xRows(): Promise<void> {
   const x10 = await intake('X-10')
   await createLot('CO1', [x10], 'finance_pickup')
   await intake('X-11')
+  // U129 — รับเคสใหม่ที่ IMEI ซ้ำกับเครื่องในคลังที่ยังไม่ส่งมอบ (X-11) ⇒ ระบบเตือนตอนส่งเคส (ไม่บล็อก) · ค้าง draft
+  await createDraftCase({ key: 'X-14', company: 'CO2', side: 'outsource', debtSatang: 500000 }, (await assetOf('X-11')).imeiContract ?? undefined)
   // X-12: ค่าที่พัก out1 ฿700 ตีกลับแล้วปฏิเสธถาวร (U118)
   clockAt('2026-10-05 16:00')
   const x12 = await hotelClaim('uat.agent.out1', '2026-10-05', 70000, 1, false)
@@ -533,7 +555,6 @@ async function accountingOct(): Promise<void> {
   const acc = await import('@/lib/accounting/queries')
   const exp = await import('@/lib/exports/queries')
   const qs = await import('@/lib/accounting/question-queries')
-  const wht = await import('@/lib/wht/queries')
   const revenueOf = async (key: string) =>
     (await rawDb().revenue.findFirstOrThrow({ where: { caseId: ids.cases[key] ?? '' }, orderBy: { trackingRound: 'asc' }, select: { id: true } })).id
   const adj1 = await adj.createAdjustment(await ctx(FIN), { targetType: 'revenue', targetId: await revenueOf('FT-17'), adjustmentType: 'decrease', amountSatang: 50000, reason: 'ลดค่าบริการ FT-17 ตามที่ตกลงกับลูกค้า (งวดล็อก)' })
@@ -555,8 +576,6 @@ async function accountingOct(): Promise<void> {
   const q1 = await qs.createAccountantQuestion(await ctx(ACC), { periodId: sept, questionText: 'ใบเพิ่มหนี้ DN-1 ลงงวดไหน' })
   await qs.answerAccountantQuestion(await ctx(ACC), q1.id, { answerText: 'ลงงวด ต.ค. ตามวันที่ออกใบ' })
   await qs.createAccountantQuestion(await ctx(ACC), { periodId: oct, questionText: 'เงินรับรอตรวจสอบ 123.45 บาท บันทึกบัญชีอย่างไร' })
-  const summaries = await rawDb().whtFilingSummary.findMany({ where: { organizationId: ORG_ID, periodId: sept, status: 'pending' }, select: { id: true } })
-  for (const row of summaries) await wht.markWhtFilingFiled(await ctx(ACC), row.id, { reason: 'ยื่นแบบกระดาษแล้ว' })
 }
 
 async function oct6(): Promise<void> {
