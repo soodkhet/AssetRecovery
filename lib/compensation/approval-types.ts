@@ -58,6 +58,8 @@ export interface CompensationApprovalDto {
    * อนุมัติ/ตีกลับรายแถว แทนการโชว์ปุ่มที่กดแล้วได้ 403 · UX เท่านั้น API ตรวจซ้ำเสมอ (DEC-002)
    */
   viewerCanAct: boolean
+  /** มติ PO U117/U118 — ผู้ดูปฏิเสธถาวรได้ (ใบเบิกค่าที่พัก · ขั้นที่รออยู่ หรือขั้นที่ตีกลับมาเมื่อ `needs_revision`) — UX เท่านั้น */
+  viewerCanRejectPermanently: boolean
   rejectReason: string | null
   createdAt: string
 }

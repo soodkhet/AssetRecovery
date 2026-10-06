@@ -44,6 +44,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     pendingStepRole: 'ผู้จัดการทีมติดตามทรัพย์',
     approvalHistory: [],
     viewerCanAct: true,
+    viewerCanRejectPermanently: false,
     rejectReason: null,
     createdAt: '2026-08-01T03:00:00.000Z',
     ...overrides,
@@ -81,19 +82,30 @@ describe('มติ PO U117 ข้อ 3 — ปุ่ม "ปฏิเสธ" (�
     ])
   })
 
-  it('ขั้นการเงิน / ชนิดอื่น / ไม่มีสิทธิ์ / ต้องแก้ไข = ไม่มีปุ่ม (ตามเส้นสถานะ pending_approval → rejected)', () => {
-    expect(expenseRowActions({ status: 'pending_finance_approval', canApprove: true, expenseType: 'hotel' })).not.toContain(
+  it('U118 — ขั้นการเงินมีปุ่มด้วย · ต้องแก้ไข = ปุ่มปฏิเสธอย่างเดียว (ตามสิทธิ์ของขั้นที่ตีกลับ)', () => {
+    expect(expenseRowActions({ status: 'pending_finance_approval', canApprove: true, expenseType: 'hotel' })).toContain(
       'reject_permanent',
     )
+    expect(
+      expenseRowActions({ status: 'needs_revision', canApprove: true, expenseType: 'hotel', canRejectPermanent: true }),
+    ).toEqual(['reject_permanent', 'view_formula'])
+    expect(
+      expenseRowActions({ status: 'needs_revision', canApprove: true, expenseType: 'hotel', canRejectPermanent: false }),
+    ).toEqual(['view_formula'])
+  })
+
+  it('ชนิดอื่น / ไม่มีสิทธิ์ / จบแล้ว = ไม่มีปุ่ม', () => {
     expect(expenseRowActions({ status: 'pending_approval', canApprove: true, expenseType: 'receipt' })).not.toContain(
       'reject_permanent',
     )
     expect(expenseRowActions({ status: 'pending_approval', canApprove: false, expenseType: 'hotel' })).toEqual([
       'view_formula',
     ])
-    expect(expenseRowActions({ status: 'needs_revision', canApprove: true, expenseType: 'hotel' })).toEqual([
-      'view_formula',
-    ])
+    for (const status of ['approved', 'rejected', 'superseded'] as ExpenseStatus[]) {
+      expect(expenseRowActions({ status, canApprove: true, expenseType: 'hotel', canRejectPermanent: true })).toEqual([
+        'view_formula',
+      ])
+    }
   })
 })
 

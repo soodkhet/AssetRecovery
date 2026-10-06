@@ -509,6 +509,57 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     expect(restart.expense.approvalStepCurrent).toBe(2)
   })
 
+  it('มติ PO U118 — ปฏิเสธถาวรใบเบิกค่าที่พักจากขั้นการเงิน / ต้องแก้ไข: สิทธิ์ตามขั้นที่รออยู่หรือขั้นที่ตีกลับ', async () => {
+    const asHotel = async (id: string) => db().expense.update({ where: { id }, data: { expenseType: 'hotel' } })
+
+    // ขั้นการเงิน (pending_finance_approval) — ผู้จัดการ (ขั้น 1) ไม่มีสิทธิ์ · การเงินปฏิเสธได้
+    const payeeA = await seedPayee(AGENT_ID)
+    const atFinance = await seedPendingExpense(payeeA)
+    await asHotel(atFinance)
+    await approvals.approveCompensationExpense({ actor: manager, meta }, atFinance, {})
+    await expectCode(
+      () => approvals.rejectExpensePermanently({ actor: manager, meta }, atFinance, { reason: 'ผู้จัดการขอปฏิเสธ' }),
+      'PERMISSION_DENIED',
+    )
+    const byFinance = await approvals.rejectExpensePermanently({ actor: finance, meta }, atFinance, {
+      reason: 'ไม่ได้ค้างคืนจริงตามวันที่เบิก',
+    })
+    expect(byFinance.expense.status).toBe('rejected')
+
+    // ต้องแก้ไข (การเงินตีกลับที่ขั้น 2) — เจ้าของคือขั้นการเงิน ผู้จัดการปฏิเสธแทนไม่ได้
+    const sentBackByFinance = await seedPendingExpense(await seedPayee(AGENT_2_ID))
+    await asHotel(sentBackByFinance)
+    await approvals.approveCompensationExpense({ actor: manager, meta }, sentBackByFinance, {})
+    await approvals.rejectCompensationExpense({ actor: finance, meta }, sentBackByFinance, { reason: 'ใบเสร็จไม่ชัดเจน' })
+    await expectCode(
+      () => approvals.rejectExpensePermanently({ actor: manager, meta }, sentBackByFinance, { reason: 'ผู้จัดการขอปฏิเสธ' }),
+      'PERMISSION_DENIED',
+    )
+    await expectCode(
+      () => approvals.rejectExpensePermanently({ actor: finance, meta }, sentBackByFinance, { reason: '  ' }),
+      'REJECT_REASON_REQUIRED',
+    )
+    const revised = await approvals.rejectExpensePermanently({ actor: finance, meta }, sentBackByFinance, {
+      reason: 'ส่งเอกสารปลอม ปฏิเสธถาวร',
+    })
+    expect(revised.expense.status).toBe('rejected')
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'expenses', targetId: sentBackByFinance, action: 'reject' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.reason).toBe('ส่งเอกสารปลอม ปฏิเสธถาวร')
+    expect(audit.afterData).toMatchObject({ status: 'rejected', permanent: true, rejected_at_step: 2 })
+    expect(audit.beforeData).toMatchObject({ status: 'needs_revision' })
+
+    // ต้องแก้ไข (ผู้จัดการตีกลับที่ขั้น 1) — ผู้จัดการปฏิเสธถาวรได้
+    const sentBackByManager = await seedPendingExpense(payeeA)
+    await asHotel(sentBackByManager)
+    await approvals.rejectCompensationExpense({ actor: manager, meta }, sentBackByManager, { reason: 'ขาดใบเสร็จโรงแรม' })
+    await expect(
+      approvals.rejectExpensePermanently({ actor: manager, meta }, sentBackByManager, { reason: 'ไม่ได้ค้างคืนจริง' }),
+    ).resolves.toMatchObject({ expense: { status: 'rejected' } })
+  })
+
   it('§12 ถือ capability ผิดขั้น ⇒ 403 (การเงินกดขั้นผู้จัดการแทนไม่ได้)', async () => {
     const expenseId = await seedPendingExpense(await seedPayee(AGENT_ID))
     await expectCode(

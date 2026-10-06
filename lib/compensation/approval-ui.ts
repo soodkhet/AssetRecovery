@@ -26,6 +26,11 @@ export interface ExpenseRowActionsInput {
   canApprove: boolean
   /** ชนิดรายการ — ปุ่ม "ปฏิเสธ" (ถาวร) มีเฉพาะใบเบิกค่าที่พัก (มติ PO U117 ข้อ 3) · ไม่ระบุ = ไม่มีปุ่ม */
   expenseType?: ExpenseType
+  /**
+   * มติ PO U118 — ผู้ดูถือสิทธิ์ของขั้นที่ "เป็นเจ้าของ" การปฏิเสธถาวร (`viewerCanRejectPermanently` ของ DTO)
+   * ไม่ระบุ = ใช้ `canApprove`
+   */
+  canRejectPermanent?: boolean
 }
 
 /**
@@ -35,12 +40,14 @@ export interface ExpenseRowActionsInput {
 export function expenseRowActions(input: ExpenseRowActionsInput): ExpenseRowAction[] {
   const inQueue =
     canExpenseAction(input.status, 'approve_manager') || canExpenseAction(input.status, 'approve_finance')
-  if (!inQueue || !input.canApprove) return ['view_formula']
   const permanent =
     input.expenseType !== undefined &&
     PERMANENT_REJECT_EXPENSE_TYPE_SET.has(input.expenseType) &&
-    canExpenseAction(input.status, 'reject_permanent')
-  return permanent ? ['approve', 'reject', 'reject_permanent', 'view_formula'] : ['approve', 'reject', 'view_formula']
+    canExpenseAction(input.status, 'reject_permanent') &&
+    (input.canRejectPermanent ?? input.canApprove)
+  const actions: ExpenseRowAction[] = inQueue && input.canApprove ? ['approve', 'reject'] : []
+  if (permanent) actions.push('reject_permanent')
+  return [...actions, 'view_formula']
 }
 
 /**

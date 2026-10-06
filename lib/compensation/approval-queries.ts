@@ -14,6 +14,8 @@ import {
   assertActorCanApproveStep,
   buildRejectExpenseUpdate,
   canActOnApprovalStep,
+  canPermanentlyRejectStep,
+  permanentRejectStep,
   isApprovalItemVisibleTo,
   expenseStatusForPendingStep,
   parseApprovalHistory,
@@ -386,6 +388,14 @@ function toDto(
       approvalStepCurrent: row.approvalStepCurrent,
       steps: flow.steps,
     }),
+    viewerCanRejectPermanently:
+      PERMANENT_REJECT_EXPENSE_TYPE_SET.has(row.expenseType) &&
+      canPermanentlyRejectStep(viewer, {
+        status: row.status,
+        approvalStepCurrent: row.approvalStepCurrent,
+        steps: flow.steps,
+        history: parseApprovalHistory(row.approvalHistory),
+      }),
     rejectReason: row.rejectionReason,
     substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
     createdAt: row.createdAt.toISOString(),
@@ -742,16 +752,21 @@ async function rejectExpenseWith(
   })
 
   const flow = flowOrNull(current, await loadMatrixCandidates(user.organizationId))
-  const stepRole = flow === null ? null : stepRoleOf(flow, current.approvalStepCurrent)
+  const history = parseApprovalHistory(current.approvalHistory)
+  // U118 — ปฏิเสธถาวรใบที่ "ต้องแก้ไข" ใช้สิทธิ์ของขั้นที่ตีกลับมา · สถานะอื่น = ขั้นที่รออยู่ (เหมือนตีกลับ)
+  const guardStep =
+    action === 'reject_permanent'
+      ? permanentRejectStep({ status: current.status, approvalStepCurrent: current.approvalStepCurrent, history })
+      : current.approvalStepCurrent
+  const stepRole = flow === null ? null : stepRoleOf(flow, guardStep)
   if (stepRole !== null) assertActorCanApproveStep(user, stepRole)
   // (ยามชุดเดียวกันถูกห่อไว้ที่ `assertCanRejectExpense()` ให้ทางเข้าฝั่ง field เรียกใช้)
 
-  const history = parseApprovalHistory(current.approvalHistory)
   const at = new Date()
   const update = buildRejectExpenseUpdate({
     status: nextStatus,
     history,
-    rejectedStep: current.approvalStepCurrent,
+    rejectedStep: guardStep,
     actorId: user.id,
     actorRole: user.roleName,
     reason,
@@ -796,7 +811,7 @@ async function rejectExpenseWith(
           status: nextStatus,
           // ตีกลับ = กลับขั้น 1 เสมอ ไม่ resume (`16` §9)
           approval_step_current: row.approvalStepCurrent,
-          rejected_at_step: current.approvalStepCurrent,
+          rejected_at_step: guardStep,
           step_role: stepRole,
           rejection_reason: reason,
           ...(action === 'reject_permanent' ? { permanent: true } : {}),

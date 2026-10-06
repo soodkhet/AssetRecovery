@@ -10,7 +10,7 @@ import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
  * pending_approval → pending_finance_approval → approved  (ไฟล์ 16)
  * pending_approval | pending_finance_approval → needs_revision  (reject_expense + reason)
  * needs_revision → pending_approval                       (resubmit_expense — ไม่ผ่านคลังซ้ำ)
- * pending_approval → rejected                             (terminal)
+ * pending_approval | pending_finance_approval | needs_revision → rejected  (terminal · ปฏิเสธถาวร — U117/U118)
  * (ทุกสถานะที่ยังไม่เข้ารอบจ่าย) → superseded              (resubmit_close_case — `41` §10.1)
  * pending_approval → pending_warehouse_confirm            (hold_for_warehouse — แถวรายวันของเคสที่เพิ่งปิดสำเร็จ · BUG-092)
  * ```
@@ -39,8 +39,8 @@ const TRANSITIONS: Readonly<Record<ExpenseAction, { from: readonly ExpenseStatus
   reject_expense: { from: ['pending_approval', 'pending_finance_approval'], to: 'needs_revision' },
   // แก้เอกสารแล้วกลับเข้าคิวอนุมัติ — **ไม่ผ่าน `pending_warehouse_confirm` ซ้ำ** (`41` §6.6)
   resubmit_expense: { from: ['needs_revision'], to: 'pending_approval' },
-  // `23` §6.3 — `pending_approval → rejected` เท่านั้น (ขั้นการเงิน/ต้องแก้ไข ไม่อยู่ในเส้นนี้ — มติ PO U117 ข้อ 3 รอตัดสินเพิ่ม)
-  reject_permanent: { from: ['pending_approval'], to: 'rejected' },
+  // `23` §6.3 — ปฏิเสธถาวร (U117) · มติ PO U118 เพิ่มจาก `pending_finance_approval` และ `needs_revision`
+  reject_permanent: { from: ['pending_approval', 'pending_finance_approval', 'needs_revision'], to: 'rejected' },
   // `41` §10.1 — รายการรอบเดิมถูกแทนที่ด้วยรายการใหม่หลังแก้หลักฐาน
   supersede: {
     from: ['pending_warehouse_confirm', 'pending_approval', 'pending_finance_approval', 'needs_revision', 'approved'],

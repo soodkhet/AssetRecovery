@@ -710,10 +710,15 @@ suite('U117 — ออกใบใหม่แทน: ดึงรายกา�
       () => approvals.rejectExpensePermanently(ctxOf(finance), target, { reason: 'กดซ้ำอีกครั้งหนึ่ง' }),
       'EXPENSE_INVALID_STATUS',
     )
-    // `23` §6.3: needs_revision → rejected ไม่อยู่ในเส้นสถานะ
+    // มติ PO U118: needs_revision → rejected ได้
     const revision = await seedHotelExpense(PAYEE_ID, 'needs_revision')
+    await expect(
+      approvals.rejectExpensePermanently(ctxOf(finance), revision, { reason: 'ปฏิเสธใบที่รอแก้ไข' }),
+    ).resolves.toMatchObject({ expense: { status: 'rejected' } })
+    // อนุมัติแล้ว = ทำไม่ได้
+    const approvedClaim = await seedHotelExpense(PAYEE_ID, 'approved')
     await expectCode(
-      () => approvals.rejectExpensePermanently(ctxOf(finance), revision, { reason: 'ปฏิเสธใบที่รอแก้ไข' }),
+      () => approvals.rejectExpensePermanently(ctxOf(finance), approvedClaim, { reason: 'ปฏิเสธใบที่อนุมัติแล้ว' }),
       'EXPENSE_INVALID_STATUS',
     )
     // เฉพาะใบเบิกค่าที่พัก

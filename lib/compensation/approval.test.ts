@@ -7,6 +7,8 @@ import {
   approverStampFor,
   assertActorCanApproveStep,
   canActOnApprovalStep,
+  canPermanentlyRejectStep,
+  permanentRejectStep,
   CLEARED_APPROVER_STAMPS,
   expenseStatusForPendingStep,
   isApprovalItemVisibleTo,
@@ -277,5 +279,29 @@ describe('`16` §10 — ผู้อนุมัติขั้น N เห็�
     const superadmin = actor({ isSuperadmin: true, capabilities: {} })
     expect(isApprovalItemVisibleTo(superadmin, item)).toBe(true)
     expect(canActOnApprovalStep(superadmin, item)).toBe(true)
+  })
+})
+
+describe('มติ PO U118 — ขั้นเจ้าของการปฏิเสธถาวร', () => {
+  const steps3 = [TEAM_MANAGER_ROLE_NAME, FINANCE_ROLE_NAME, EXECUTIVE_ROLE_NAME]
+  const manager = actor({ capabilities: { approve_expense_manager: 'manage' } })
+  const finance = actor({ capabilities: { approve_expense_finance: 'manage' } })
+  const sentBackAt2 = [entry({ step: 1, action: 'approve' }), entry({ step: 2, action: 'reject', reason: 'ไม่ชัด' })]
+
+  it('needs_revision = ขั้นที่ตีกลับล่าสุด · สถานะอื่น = ขั้นที่รออยู่', () => {
+    expect(permanentRejectStep({ status: 'needs_revision', approvalStepCurrent: 1, history: sentBackAt2 })).toBe(2)
+    expect(permanentRejectStep({ status: 'needs_revision', approvalStepCurrent: 1, history: [] })).toBe(1)
+    expect(permanentRejectStep({ status: 'pending_finance_approval', approvalStepCurrent: 2, history: sentBackAt2 })).toBe(2)
+  })
+
+  it('สิทธิ์ตามขั้นเจ้าของ · สถานะจบแล้วไม่มีใครกดได้', () => {
+    const revised = { status: 'needs_revision' as const, approvalStepCurrent: 1, steps: steps3, history: sentBackAt2 }
+    expect(canPermanentlyRejectStep(finance, revised)).toBe(true)
+    expect(canPermanentlyRejectStep(manager, revised)).toBe(false)
+    const atFinance = { status: 'pending_finance_approval' as const, approvalStepCurrent: 2, steps: steps3, history: [] }
+    expect(canPermanentlyRejectStep(finance, atFinance)).toBe(true)
+    expect(canPermanentlyRejectStep(manager, atFinance)).toBe(false)
+    const approved = { status: 'approved' as const, approvalStepCurrent: 3, steps: steps3, history: [] }
+    expect(canPermanentlyRejectStep(actor({ isSuperadmin: true, capabilities: {} }), approved)).toBe(false)
   })
 })
