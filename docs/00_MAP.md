@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (298 KB, 2911 บรรทัด — v4.51)
+### `docs/02-database-schema-design.md` (298 KB, 2911 บรรทัด — v4.63)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -406,7 +406,7 @@
 | 156 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 164 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/10-finance-companies.md` (40 KB, 252 บรรทัด — v3.4)
+### `docs/10-finance-companies.md` (40 KB, 252 บรรทัด — v3.5)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -501,7 +501,7 @@
 | 175 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 184 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/13-accounting-finance-settings.md` (154 KB, 647 บรรทัด — v3.23)
+### `docs/13-accounting-finance-settings.md` (154 KB, 647 บรรทัด — v3.32)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -546,7 +546,7 @@
 | 627 | ## 16. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 638 | ## 17. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/15-claims-and-advances.md` (65 KB, 305 บรรทัด — v2.12)
+### `docs/15-claims-and-advances.md` (65 KB, 305 บรรทัด — v2.13)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -581,7 +581,7 @@
 | 289 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 298 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/16-compensation-approval.md` (23 KB, 171 บรรทัด — v2.4)
+### `docs/16-compensation-approval.md` (23 KB, 171 บรรทัด — v2.5)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -611,7 +611,7 @@
 | 157 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 164 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/17-payroll-and-payout.md` (36 KB, 228 บรรทัด — v2.7)
+### `docs/17-payroll-and-payout.md` (36 KB, 228 บรรทัด — v2.8)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -646,7 +646,7 @@
 | 212 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 220 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/18-payee-and-tax-profile.md` (45 KB, 244 บรรทัด — v2.7)
+### `docs/18-payee-and-tax-profile.md` (45 KB, 244 บรรทัด — v2.10)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -677,7 +677,7 @@
 | 229 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 237 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/19-revenue-billing-receivable.md` (53 KB, 268 บรรทัด — v2.11)
+### `docs/19-revenue-billing-receivable.md` (53 KB, 268 บรรทัด — v2.16)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -742,7 +742,7 @@
 | 146 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 155 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/22-finance-calculation-spec.md` (76 KB, 518 บรรทัด — v3.21)
+### `docs/22-finance-calculation-spec.md` (76 KB, 518 บรรทัด — v3.24)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -778,7 +778,7 @@
 | 501 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 511 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/23-finance-state-machines.md` (37 KB, 285 บรรทัด — v2.11)
+### `docs/23-finance-state-machines.md` (37 KB, 285 บรรทัด — v2.15)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -813,7 +813,7 @@
 | 271 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 278 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/24-finance-validation-rules.md` (108 KB, 372 บรรทัด — v4.38)
+### `docs/24-finance-validation-rules.md` (108 KB, 372 บรรทัด — v4.45)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -842,7 +842,7 @@
 | 360 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 365 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/25-finance-permission-matrix.md` (39 KB, 240 บรรทัด — v2.15)
+### `docs/25-finance-permission-matrix.md` (39 KB, 240 บรรทัด — v2.20)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -870,7 +870,7 @@
 | 226 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 233 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/27-finance-api-contracts.md` (26 KB, 289 บรรทัด — v3.15)
+### `docs/27-finance-api-contracts.md` (26 KB, 289 บรรทัด — v3.19)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -904,7 +904,7 @@
 | 276 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 282 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/28-finance-export-pdf-spec.md` (46 KB, 174 บรรทัด — v2.10)
+### `docs/28-finance-export-pdf-spec.md` (46 KB, 174 บรรทัด — v2.13)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1063,7 +1063,7 @@
 | 167 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 175 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/35-bank-reconciliation.md` (30 KB, 204 บรรทัด — v2.4)
+### `docs/35-bank-reconciliation.md` (30 KB, 204 บรรทัด — v2.5)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1097,7 +1097,7 @@
 | 190 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 197 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/37-accounting-pack-export-history.md` (59 KB, 204 บรรทัด — v2.21)
+### `docs/37-accounting-pack-export-history.md` (59 KB, 204 บรรทัด — v2.22)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1127,7 +1127,7 @@
 | 190 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 197 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/38-case-submission.md` (127 KB, 545 บรรทัด — v3.8)
+### `docs/38-case-submission.md` (127 KB, 545 บรรทัด — v3.11)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1328,7 +1328,7 @@
 | 660 | ## 18. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 671 | ## 19. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/45-case-warehouse-api-contracts.md` (26 KB, 188 บรรทัด — v1.10)
+### `docs/45-case-warehouse-api-contracts.md` (26 KB, 188 บรรทัด — v1.11)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1351,7 +1351,7 @@
 | 175 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 181 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/90-platform-audit-notification-reporting.md` (35 KB, 253 บรรทัด — v4.6)
+### `docs/90-platform-audit-notification-reporting.md` (35 KB, 253 บรรทัด — v4.8)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1381,7 +1381,7 @@
 | 235 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 244 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/91-platform-api-integration-jobs.md` (41 KB, 265 บรรทัด — v2.13)
+### `docs/91-platform-api-integration-jobs.md` (41 KB, 265 บรรทัด — v2.14)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1442,7 +1442,7 @@
 | 227 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 232 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/94-decision-log.md` (56 KB, 334 บรรทัด — v4.0)
+### `docs/94-decision-log.md` (56 KB, 334 บรรทัด — v3.10)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1535,7 +1535,7 @@
 | 484 | ## 15. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 491 | ## 16. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/97-client-portal.md` (83 KB, 368 บรรทัด — v6.2)
+### `docs/97-client-portal.md` (83 KB, 368 บรรทัด — v6.6)
 
 | บรรทัด | หัวข้อ |
 |---|---|
