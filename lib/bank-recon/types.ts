@@ -125,7 +125,14 @@ export interface MatchResultDto {
   transaction: BankTransactionDto
   /** ผลข้างเคียงที่เกิดจริงจากการจับคู่ (`35` §9) — โชว์ใน toast ให้คนตรวจได้ */
   effect:
-    | { kind: 'billing'; cashReceiptId: string; billingStatus: string; outstandingSatang: number }
+    | {
+        kind: 'billing'
+        cashReceiptId: string
+        billingStatus: string
+        outstandingSatang: number
+        /** มติ PO U144 — ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (0 = ไม่ตัด) */
+        bankFeeWrittenOffSatang: number
+      }
     | { kind: 'payout'; payoutStatus: string }
     | null
 }

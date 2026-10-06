@@ -84,4 +84,8 @@ export const CONTROL_TOTALS_FIXTURE: ControlTotalsInput = {
     { companyName: 'บจก. ตัวอย่าง ลิสซิ่ง', companyTaxId: '0105555000001', documentType: 'company_certificate', documentName: 'หนังสือรับรองบริษัท', version: 2, issuedDate: new Date('2026-09-01T00:00:00Z'), originalName: 'หนังสือรับรอง-2569.pdf', fileSha256: '9f2c4a1e6b3d8f70a5c2e1d4b6a8f0c3e5d7b9a1c3e5f7092b4d6f8a0c2e4f61', uploadedAt: new Date('2026-09-05T03:00:00Z'), warnings: [] },
     { companyName: 'บจก. ตัวอย่าง แคปปิตอล', companyTaxId: '0105555000002', documentType: null, documentName: null, version: null, issuedDate: null, originalName: null, fileSha256: null, uploadedAt: null, warnings: ['ยังไม่มีหนังสือรับรองบริษัท', 'ยังไม่มี ภ.พ.20 ของบริษัท'] },
   ],
+  // มติ PO U144 — บิล ฿10,700 ลูกค้าหัก WHT ฿300 โอนมา ฿10,375 ⇒ ขาด ฿25 (≤ เพดาน ฿50) ตัดเป็นค่าธรรมเนียมธนาคาร
+  bankFeeWriteOffs: [
+    { writeOffDate: D('2026-06-29'), companyName: 'บจก. ตัวอย่าง ลิสซิ่ง', companyTaxId: '0105555000001', billingRef: 'BL-2569-004', billedTotalSatang: 1_070_000, receivedSatang: 1_037_500, customerWhtSatang: 30_000, bankFeeSatang: 2_500 },
+  ],
 }

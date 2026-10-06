@@ -486,14 +486,17 @@ export async function listMatchProposals(user: SessionUser): Promise<MatchPropos
 async function receivedTotalSatang(
   organizationId: string,
   billingBatchId: string,
-): Promise<{ receivedSatang: number; whtWithheldByCustomerSatang: number }> {
+): Promise<{ receivedSatang: number; whtWithheldByCustomerSatang: number; lastReceivedDate: Date | null }> {
   const aggregate = await prisma.cashReceipt.aggregate({
     where: { organizationId, billingBatchId },
     _sum: { amountSatang: true, whtWithheldByCustomerSatang: true },
+    // มติ PO U144 — วันรับเงินล่าสุด = วันที่ตัดส่วนต่างค่าธรรมเนียมธนาคาร (ถ้ามี)
+    _max: { receivedDate: true },
   })
   return {
     receivedSatang: aggregate._sum.amountSatang ?? 0,
     whtWithheldByCustomerSatang: aggregate._sum.whtWithheldByCustomerSatang ?? 0,
+    lastReceivedDate: aggregate._max.receivedDate,
   }
 }
 
@@ -501,18 +504,23 @@ async function syncBillingAfterReceipt(
   ctx: AccountingMutationContext,
   billingBatchId: string,
   sourceRef: string,
-): Promise<{ billingStatus: string; outstandingSatang: number }> {
+): Promise<{ billingStatus: string; outstandingSatang: number; bankFeeWrittenOffSatang: number }> {
   const received = await receivedTotalSatang(ctx.actor.organizationId, billingBatchId)
   const result = await applyBillingReceipt({
     organizationId: ctx.actor.organizationId,
     batchId: billingBatchId,
     receivedSatang: received.receivedSatang,
     whtWithheldByCustomerSatang: received.whtWithheldByCustomerSatang,
+    lastReceivedDate: received.lastReceivedDate,
     sourceRef,
     actorId: ctx.actor.id,
     actorRole: ctx.actor.roleName,
   })
-  return { billingStatus: result.status, outstandingSatang: result.outstandingSatang }
+  return {
+    billingStatus: result.status,
+    outstandingSatang: result.outstandingSatang,
+    bankFeeWrittenOffSatang: result.bankFeeWrittenOffSatang,
+  }
 }
 
 // ── นำเข้า statement ────────────────────────────────────────────────────────

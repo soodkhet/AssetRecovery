@@ -20,12 +20,13 @@ import {
 import { financeCompanyCreateSchema } from '@/lib/finance-companies/schemas'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
+import { describeCutoffRule, describeDueRule } from '@/lib/settings/cycles'
+import type { CycleDto } from '@/lib/settings/types'
 import {
   companyBillingHelp,
   companyBranchHelp,
   companyVatModeHelp,
   customerWhtHelp,
-  intFromInput,
   pctFromInput,
 } from '@/lib/settings/help'
 
@@ -62,12 +63,12 @@ interface FormState {
   /** สตริงของช่องกรอก — ค่าว่าง = ลูกค้าไม่หัก (`null`) */
   whtWithheldByCustomerPct: string
   defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
-  billingDay: string
-  paymentDueDays: string
+  /** มติ PO U146 — รอบบิลที่ใช้ (`''` = ยังไม่เลือก) */
+  billingCycleId: string
   reason: string
 }
 
-function emptyForm(defaultTemplateId: string): FormState {
+function emptyForm(defaultTemplateId: string, defaultCycleId: string): FormState {
   return {
     name: '',
     shortName: '',
@@ -85,8 +86,7 @@ function emptyForm(defaultTemplateId: string): FormState {
     vatMode: DEFAULT_VAT_MODE,
     whtWithheldByCustomerPct: DEFAULT_CUSTOMER_WHT_PCT.toFixed(2),
     defaultInvoiceDeliveryFormat: 'paper_pdf',
-    billingDay: '1',
-    paymentDueDays: '30',
+    billingCycleId: defaultCycleId,
     reason: '',
   }
 }
@@ -110,8 +110,7 @@ function formOf(company: FinanceCompanyDto): FormState {
     whtWithheldByCustomerPct:
       company.whtWithheldByCustomerPct === null ? '' : company.whtWithheldByCustomerPct.toFixed(2),
     defaultInvoiceDeliveryFormat: company.defaultInvoiceDeliveryFormat,
-    billingDay: String(company.billingDay),
-    paymentDueDays: String(company.paymentDueDays),
+    billingCycleId: company.billingCycle?.id ?? '',
     reason: '',
   }
 }
@@ -140,8 +139,7 @@ function payloadOf(form: FormState): Record<string, unknown> {
     whtWithheldByCustomerPct:
       form.whtWithheldByCustomerPct.trim() === '' ? null : toNumber(form.whtWithheldByCustomerPct),
     defaultInvoiceDeliveryFormat: form.defaultInvoiceDeliveryFormat,
-    billingDay: toNumber(form.billingDay),
-    paymentDueDays: toNumber(form.paymentDueDays),
+    billingCycleId: form.billingCycleId === '' ? null : form.billingCycleId,
     reason: form.reason.trim(),
   }
 }
@@ -150,6 +148,7 @@ export function CompanyFormModal({
   open,
   company,
   templates,
+  billingCycles,
   onClose,
   onSaved,
 }: {
@@ -157,13 +156,18 @@ export function CompanyFormModal({
   /** null = สร้างใหม่ */
   company: FinanceCompanyDto | null
   templates: readonly ServiceFeeTemplateListDto[]
+  /** มติ PO U146 — รอบบิล (AR) ที่ใช้งานอยู่ ให้เลือก "รอบบิลที่ใช้" */
+  billingCycles: readonly CycleDto[]
   onClose: () => void
   onSaved: () => void
 }) {
   const { showToast } = useToast()
+  // รอบ "ทุกบริษัท" ครอบทุกบริษัทอยู่แล้ว ⇒ เลือกรายบริษัทไม่ได้จนกว่าจะแก้ขอบเขตของรอบนั้นที่ตั้งค่า
+  const allCompaniesCycle = billingCycles.find((cycle) => cycle.scopeKind === 'all_companies') ?? null
   const [form, setForm] = useState<FormState>(
-    company === null ? emptyForm(templates[0]?.id ?? '') : formOf(company),
+    company === null ? emptyForm(templates[0]?.id ?? '', allCompaniesCycle?.id ?? '') : formOf(company),
   )
+  const selectedCycle = billingCycles.find((cycle) => cycle.id === form.billingCycleId) ?? null
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
@@ -395,23 +399,33 @@ export function CompanyFormModal({
               placeholder="เว้นว่าง = ไม่หัก"
             />
           </Field>
-          <Field id="co-billing-day" label="วันตัดรอบบิล (1-31)" required error={errors.billingDay}>
-            <Input
-              id="co-billing-day"
-              numeric
-              inputMode="numeric"
-              value={form.billingDay}
-              onChange={(event) => set('billingDay', event.target.value)}
-            />
-          </Field>
-          <Field id="co-due-days" label="เครดิตเทอม (วัน)" required error={errors.paymentDueDays}>
-            <Input
-              id="co-due-days"
-              numeric
-              inputMode="numeric"
-              value={form.paymentDueDays}
-              onChange={(event) => set('paymentDueDays', event.target.value)}
-            />
+          {/* มติ PO U146 — วันตัดรอบ + เครดิตเทอมมาจากรอบบิลที่เลือก (แหล่งเดียว) แทนการกรอกตัวเลขในหน้าบริษัท */}
+          <Field
+            id="co-billing-cycle"
+            label="รอบบิลที่ใช้"
+            error={errors.billingCycleId}
+            className="sm:col-span-2"
+            hint={
+              allCompaniesCycle !== null
+                ? `รอบ “${allCompaniesCycle.name}” ใช้กับบริษัทไฟแนนซ์ทุกราย — เลือกรายบริษัทได้เมื่อแก้ขอบเขตของรอบที่ ตั้งค่า → รอบบิล/รอบจ่าย`
+                : selectedCycle !== null
+                  ? `ตัดรอบ${describeCutoffRule(selectedCycle)} · ครบกำหนด ${describeDueRule(selectedCycle)}`
+                  : 'ยังไม่เลือก = สร้างรอบวางบิลของบริษัทนี้ไม่ได้'
+            }
+          >
+            <Select
+              id="co-billing-cycle"
+              value={form.billingCycleId}
+              disabled={allCompaniesCycle !== null}
+              onChange={(event) => set('billingCycleId', event.target.value)}
+            >
+              <option value="">— ยังไม่เลือก —</option>
+              {billingCycles.map((cycle) => (
+                <option key={cycle.id} value={cycle.id}>
+                  {cycle.name} ({describeCutoffRule(cycle)} · {describeDueRule(cycle)})
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
 
@@ -424,7 +438,7 @@ export function CompanyFormModal({
               vatRatePct,
             })}
           />
-          <SettingHelp help={companyBillingHelp(intFromInput(form.billingDay), intFromInput(form.paymentDueDays))} />
+          <SettingHelp help={companyBillingHelp(selectedCycle)} />
         </div>
 
         {isEdit && company.vatMode !== form.vatMode && (

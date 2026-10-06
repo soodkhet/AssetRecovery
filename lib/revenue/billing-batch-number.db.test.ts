@@ -66,8 +66,8 @@ async function seedOrg(salt: number): Promise<Org> {
     VALUES ('${userId}', '${orgId}', '${roleId}', 'bl-${orgId}@test.local', 'การเงิน BL', 'active')
   `)
   const company = await db().$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, payment_due_days, created_by)
-    VALUES ('${orgId}', 'ไฟแนนซ์ BL ${salt}', 'FBL', '${taxId(salt + 50)}', 'กรุงเทพฯ', 'exclude_vat', 30, '${userId}')
+    INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, created_by)
+    VALUES ('${orgId}', 'ไฟแนนซ์ BL ${salt}', 'FBL', '${taxId(salt + 50)}', 'กรุงเทพฯ', 'exclude_vat', '${userId}')
     RETURNING id
   `)
   return { orgId, userId, companyId: company[0]?.id ?? '' }

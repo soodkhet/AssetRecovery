@@ -1,8 +1,14 @@
 import { calculateVat } from '@/lib/finance/vat-calc'
 import { estimateCustomerWhtForBilling } from '@/lib/finance/wht-calc'
 import { fmtDate } from '@/lib/format/datetime'
-import type { DueRuleType, VatMode } from '@/lib/generated/prisma/enums'
-import { describeDueRule, resolveDueDate } from '@/lib/settings/cycles'
+import type { CutoffRuleType, DueRuleType, VatMode } from '@/lib/generated/prisma/enums'
+import {
+  describeCutoffRule,
+  describeDueRule,
+  isDueRuleShapeValid,
+  resolveDueDate,
+  suggestCutoffDate,
+} from '@/lib/settings/cycles'
 import {
   SAMPLE_SERVICE_FEE_SATANG,
   WHO_SETTINGS,
@@ -155,23 +161,42 @@ function sampleCutoffDate(day: number): Date {
   return new Date(Date.UTC(2026, 9, Math.min(Math.max(day, 1), lastDay)))
 }
 
-export function companyBillingHelp(billingDay: number | null, paymentDueDays: number | null): SettingHelpContent {
+/** รอบบิลที่บริษัทใช้ (มติ PO U146) — รูปที่กล่องคำอธิบายของหน้าบริษัทต้องการ */
+export interface CompanyBillingCycleSample {
+  name: string
+  cutoffRuleType: CutoffRuleType
+  cutoffDates: number[]
+  dueRuleType: DueRuleType
+  dueRuleValue: number | null
+}
+
+/**
+ * มติ PO U146 — วันตัดรอบ + เครดิตเทอมมาจาก**รอบบิลที่บริษัทใช้**ที่เดียว (หน้าบริษัทเลือกรอบ ไม่กรอกตัวเลขเอง)
+ * ตัวอย่างใช้สูตรเดียวกับตอนสร้างรอบวางบิลจริง (`suggestCutoffDate` + `resolveDueDate`)
+ */
+export function companyBillingHelp(cycle: CompanyBillingCycleSample | null): SettingHelpContent {
   const examples: SettingHelpExample[] = []
-  if (billingDay !== null && paymentDueDays !== null) {
-    const cutoff = sampleCutoffDate(billingDay)
-    const due = resolveDueDate(cutoff, { dueRuleType: 'net_days', dueRuleValue: paymentDueDays })
+  if (cycle !== null) {
+    // วันที่ตัวอย่าง: สิ้นเดือน ต.ค. 2569 ⇒ วันตัดรอบล่าสุดของเดือนนั้น
+    const cutoff = suggestCutoffDate(cycle, new Date(Date.UTC(2026, 9, 31)))
+    const due = resolveDueDate(cutoff, cycle)
     examples.push({
-      title: `ตัดรอบบิลวันที่ ${billingDay} · เครดิต ${paymentDueDays} วัน`,
+      title: `${cycle.name} — ${describeCutoffRule(cycle)} · ${describeDueRule(cycle)}`,
       lines: [line('วันตัดรอบ (เดือนตัวอย่าง)', fmtDate(cutoff)), line('ครบกำหนดชำระ', fmtDate(due), true)],
-      note: 'ถ้าเลือกรอบบิลจากแท็บรอบบิลตอนสร้างรอบวางบิล ระบบใช้เงื่อนไขของรอบนั้นแทน',
     })
   }
   return {
-    title: 'วันตัดรอบบิลและเครดิตเทอม',
-    what: 'ใช้คิดวันครบกำหนดชำระของรอบวางบิล และนับอายุหนี้ค้างชำระ (เกินกำหนดกี่วัน)',
+    title: 'รอบบิลที่ใช้',
+    what:
+      'รอบบิลกำหนดวันตัดรอบและเครดิตเทอมของบริษัทนี้ — ใช้เสนอวันตัดรอบและคิดวันครบกำหนดชำระตอนสร้างรอบวางบิล และนับอายุหนี้ค้างชำระ · แก้กติกาของรอบได้ที่ ตั้งค่า → รอบบิล/รอบจ่าย',
+    options: [
+      { label: 'รอบที่ใช้กับบริษัทไฟแนนซ์ทุกราย', effect: 'บริษัทนี้ใช้รอบนั้นโดยอัตโนมัติ (เปลี่ยนรายบริษัทไม่ได้จนกว่าจะแก้ขอบเขตของรอบ)' },
+      { label: 'รอบที่เลือกรายบริษัท', effect: 'บริษัทนี้ถูกเพิ่มเข้ารายชื่อของรอบนั้น และออกจากรอบรายบริษัทเดิม' },
+      { label: 'ยังไม่เลือก', effect: 'สร้างรอบวางบิลของบริษัทนี้ไม่ได้จนกว่าจะเลือกรอบบิล' },
+    ],
     examples,
     who: WHO_SUPERADMIN_ONLY,
-    when: 'มีผลกับรอบวางบิลที่สร้างหลังบันทึก',
+    when: 'มีผลกับรอบวางบิลที่สร้างหลังบันทึก — รอบวางบิลเดิมคงวันครบกำหนดเดิม',
   }
 }
 
@@ -181,7 +206,7 @@ export function cycleDueHelp(input: {
   cutoffDay: number | null
 }): SettingHelpContent {
   const cutoff = sampleCutoffDate(input.cutoffDay ?? 31)
-  const valid = input.dueRuleType === 'month_end' || (input.dueRuleValue !== null && input.dueRuleValue > 0)
+  const valid = isDueRuleShapeValid(input)
   return {
     title: 'รอบบิล/รอบจ่ายใช้ทำอะไร',
     what:

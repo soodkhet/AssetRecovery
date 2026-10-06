@@ -63,8 +63,11 @@ const companyFields = z.object({
   vatMode: vatModeSchema.default(DEFAULT_VAT_MODE),
   whtWithheldByCustomerPct: customerWhtPctSchema,
   defaultInvoiceDeliveryFormat: invoiceDeliveryFormatSchema.default('paper_pdf'),
-  billingDay: z.number().int().min(1, 'วันตัดรอบบิลต้องอยู่ระหว่าง 1-31').max(31, 'วันตัดรอบบิลต้องอยู่ระหว่าง 1-31').default(1),
-  paymentDueDays: z.number().int().min(0, 'จำนวนวันครบกำหนดต้องไม่ติดลบ').max(365, 'จำนวนวันครบกำหนดยาวเกินไป').default(30),
+  // มติ PO U146 — เลือก "รอบบิลที่ใช้" แทนวันตัดรอบ/เครดิตเทอมของบริษัท (รอบบิลเป็นแหล่งเดียว) · ไม่เลือก = null
+  billingCycleId: z.preprocess(
+    (value) => (value === '' || value === undefined ? null : value),
+    z.guid('เลือกรอบบิลจากรายการ').nullable().default(null),
+  ),
 })
 
 /** ตัวบริษัทล้วน (ไม่มี `reason`) — FE ใช้ตรวจฟอร์มก่อนเปิดกล่องยืนยันเหตุผล */

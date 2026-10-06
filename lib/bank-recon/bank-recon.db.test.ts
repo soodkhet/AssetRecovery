@@ -198,8 +198,8 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode,
-                                   payment_due_days, created_by)
-    VALUES ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ A 4.2', 'A42', '0105512420001', 'exclude_vat', 30, '${ACCOUNTING_ID}')
+                                   created_by)
+    VALUES ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ A 4.2', 'A42', '0105512420001', 'exclude_vat', '${ACCOUNTING_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -505,7 +505,27 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
     )
   })
 
-  it('ยอดไม่ตรง + หมายเหตุ ⇒ manual_matched + ยอดรับบางส่วน', async () => {
+  it('ยอดไม่ตรง (ขาดเกินเพดานตัดส่วนต่าง) + หมายเหตุ ⇒ manual_matched + ยอดรับบางส่วน', async () => {
+    await seedBilling(BILLING_A, 810000)
+    const id = await importUnmatched()
+
+    const { result } = await recon.matchBankTransaction(ctx, id, {
+      targetKind: 'billing',
+      targetId: BILLING_A,
+      matchNote: 'ลูกค้าโอนมาไม่ครบ',
+      confirmRematch: false,
+    })
+
+    expect(result?.transaction.matchStatus).toBe('manual_matched')
+    expect(result?.effect).toMatchObject({ kind: 'billing', billingStatus: 'partially_paid', bankFeeWrittenOffSatang: 0 })
+
+    const billing = await db().billingBatch.findUniqueOrThrow({ where: { id: BILLING_A } })
+    expect(billing.receivedSatang).toBe(800000)
+    expect(billing.status).toBe('partially_paid')
+    expect(billing.bankFeeWrittenOffSatang).toBe(0)
+  })
+
+  it('มติ PO U144 — ขาด ฿25 (ไม่เกินเพดาน ฿50) ⇒ ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร · รอบ paid · วันที่ = วันรับเงิน', async () => {
     await seedBilling(BILLING_A, 802500)
     const id = await importUnmatched()
 
@@ -517,11 +537,19 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
     })
 
     expect(result?.transaction.matchStatus).toBe('manual_matched')
-    expect(result?.effect).toMatchObject({ kind: 'billing', billingStatus: 'partially_paid' })
+    expect(result?.effect).toMatchObject({
+      kind: 'billing',
+      billingStatus: 'paid',
+      outstandingSatang: 0,
+      bankFeeWrittenOffSatang: 2500,
+    })
 
     const billing = await db().billingBatch.findUniqueOrThrow({ where: { id: BILLING_A } })
+    const receipt = await db().cashReceipt.findFirstOrThrow({ where: { billingBatchId: BILLING_A } })
     expect(billing.receivedSatang).toBe(800000)
-    expect(billing.status).toBe('partially_paid')
+    expect(billing.status).toBe('paid')
+    expect(billing.bankFeeWrittenOffSatang).toBe(2500)
+    expect(billing.bankFeeWrittenOffDate?.toISOString()).toBe(receipt.receivedDate.toISOString())
   })
 
   it('เงินเข้าจับกับรอบจ่ายไม่ได้ (ผิดฝั่ง) ⇒ BANK_TRANSACTION_INVALID_STATUS', async () => {

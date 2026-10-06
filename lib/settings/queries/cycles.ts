@@ -7,6 +7,7 @@ import {
   describeDueRule,
   findOverlappingCycle,
   normalizeCycleValues,
+  pickMatchingCycle,
   toCycleAuditPayload,
   type CycleValues,
 } from '@/lib/settings/cycles'
@@ -31,7 +32,7 @@ const cycleSelect = {
   type: true,
   cutoffRuleType: true,
   cutoffDates: true,
-  cutoffText: true,
+  legacyCutoffText: true,
   dueRuleType: true,
   dueRuleValue: true,
   dueRule: true,
@@ -51,7 +52,7 @@ function toDto(row: CycleRow): CycleDto {
     type: row.type,
     cutoffRuleType: row.cutoffRuleType,
     cutoffDates: row.cutoffDates,
-    cutoffText: row.cutoffText,
+    legacyCutoffText: row.legacyCutoffText,
     dueRuleType: row.dueRuleType,
     dueRuleValue: row.dueRuleValue,
     dueRule: row.dueRule,
@@ -71,7 +72,6 @@ function toValues(dto: CycleDto): CycleValues {
     type: dto.type,
     cutoffRuleType: dto.cutoffRuleType,
     cutoffDates: dto.cutoffDates,
-    cutoffText: dto.cutoffText,
     dueRuleType: dto.dueRuleType,
     dueRuleValue: dto.dueRuleValue,
     scopeKind: dto.scopeKind,
@@ -162,7 +162,6 @@ function toWriteData(normalized: CycleValues) {
     type: normalized.type,
     cutoffRuleType: normalized.cutoffRuleType,
     cutoffDates: normalized.cutoffDates,
-    cutoffText: normalized.cutoffText,
     dueRuleType: normalized.dueRuleType,
     dueRuleValue: normalized.dueRuleValue,
     // label ประกอบจาก type+value เสมอ ไม่รับค่าที่ผู้ใช้พิมพ์ (A5 — ห้าม parse label มาคำนวณ)
@@ -335,5 +334,118 @@ export async function loadActiveCycleForScope(
     companyIds: cycle.companies.map((link) => link.companyId),
     dueRuleType: cycle.dueRuleType,
     dueRuleValue: cycle.dueRuleValue,
+  }
+}
+
+// ── รอบบิลที่บริษัทใช้ (มติ PO U146 — รอบบิลเป็นที่เดียวที่กำหนดวันตัดรอบ + เครดิตเทอม) ──────────────
+
+/** รอบบิลที่ใช้งานในรูปที่ใช้ตัดสินว่าบริษัทไหนใช้รอบไหน + คำนวณวันตัดรอบ/ครบกำหนด */
+export interface ActiveBillingCycle {
+  id: string
+  name: string
+  type: CycleType
+  scopeKind: CycleValues['scopeKind']
+  companyIds: string[]
+  cutoffRuleType: CycleValues['cutoffRuleType']
+  cutoffDates: number[]
+  dueRuleType: CycleValues['dueRuleType']
+  dueRuleValue: number | null
+}
+
+/** รอบบิล (AR) ที่ยังใช้งานทั้งหมดขององค์กร — เรียงตามชื่อ (ใช้ทั้งหน้าบริษัท/สร้างรอบวางบิล) */
+export async function loadActiveBillingCycles(
+  organizationId: string,
+  client: SettingsTxClient = prisma,
+): Promise<ActiveBillingCycle[]> {
+  const rows = await client.billingPayoutCycle.findMany({
+    where: { organizationId, type: 'AR', deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      scopeKind: true,
+      cutoffRuleType: true,
+      cutoffDates: true,
+      dueRuleType: true,
+      dueRuleValue: true,
+      companies: { select: { companyId: true } },
+    },
+    orderBy: [{ name: 'asc' }],
+  })
+  return rows.map(({ companies, ...row }) => ({ ...row, companyIds: companies.map((link) => link.companyId) }))
+}
+
+/** รอบบิลที่ครอบบริษัทนี้ (รอบรายบริษัทชนะรอบ "ทุกบริษัท") — `null` = ยังไม่มีรอบ */
+export async function resolveCompanyBillingCycle(
+  organizationId: string,
+  companyId: string,
+  client: SettingsTxClient = prisma,
+): Promise<ActiveBillingCycle | null> {
+  return pickMatchingCycle(await loadActiveBillingCycles(organizationId, client), { companyId })
+}
+
+/**
+ * ผูกบริษัทเข้ากับรอบบิลที่เลือกจากหน้าบริษัท (มติ PO U146 — ต่อยอด junction ของ U133) — เรียก **ใน** transaction
+ *
+ * - เลือกรอบ "เลือกรายบริษัท" ⇒ เพิ่มบริษัทเข้ารายชื่อรอบนั้น + ถอดออกจากรอบรายบริษัทอื่น (บริษัทอยู่ได้รอบบิลเดียว)
+ *   · ถ้ามีรอบ "ทุกบริษัท" ที่ใช้งานอยู่ = ซ้อนกัน ⇒ `CYCLE_SCOPE_OVERLAP` (ต้องแก้ขอบเขตของรอบนั้นก่อน)
+ * - เลือกรอบ "ทุกบริษัท" ⇒ ใช้รอบนั้นอยู่แล้วโดยอัตโนมัติ (ถอดออกจากรอบรายบริษัทเดิมถ้ามี)
+ * - ไม่เลือก (`null`) ⇒ ถอดออกจากรอบรายบริษัท · รอบ "ทุกบริษัท" ยังครอบอยู่ (ถอนรายบริษัทไม่ได้)
+ * - ตรวจภายใต้ advisory lock เดียวกับการสร้าง/แก้รอบบิล ⇒ ไม่ชนกับคนแก้ขอบเขตรอบพร้อมกัน
+ * - รายชื่อบริษัทของรอบที่เปลี่ยนลง audit ของรอบนั้น (เหตุผลเดียวกับการแก้บริษัท)
+ */
+export async function assignCompanyBillingCycle(
+  tx: SettingsTxClient,
+  input: { context: SettingsMutationContext; companyId: string; cycleId: string | null },
+): Promise<void> {
+  const organizationId = input.context.actor.organizationId
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing_payout_cycles:${organizationId}:AR`}))`
+  const cycles = await loadActiveBillingCycles(organizationId, tx)
+
+  const target = input.cycleId === null ? null : (cycles.find((cycle) => cycle.id === input.cycleId) ?? null)
+  if (input.cycleId !== null && target === null) {
+    throw new SettingsError('CYCLE_NOT_FOUND', { detail: `cycle=${input.cycleId} (type=AR)` })
+  }
+  if (target !== null && target.scopeKind === 'selected_companies') {
+    const allCompanies = cycles.find((cycle) => cycle.scopeKind === 'all_companies')
+    if (allCompanies !== undefined) {
+      throw new SettingsError('CYCLE_SCOPE_OVERLAP', {
+        detail: `company=${input.companyId} cycle=${target.id} overlaps ${allCompanies.id}`,
+        context: { overlappingCycleName: allCompanies.name },
+      })
+    }
+  }
+
+  for (const cycle of cycles) {
+    if (cycle.scopeKind !== 'selected_companies') continue
+    const has = cycle.companyIds.includes(input.companyId)
+    const want = target !== null && cycle.id === target.id
+    if (has === want) continue
+    const nextIds = want
+      ? [...cycle.companyIds, input.companyId].sort()
+      : cycle.companyIds.filter((id) => id !== input.companyId).sort()
+    if (want) {
+      await tx.billingCycleCompany.create({ data: { organizationId, cycleId: cycle.id, companyId: input.companyId } })
+    } else {
+      await tx.billingCycleCompany.delete({
+        where: { cycleId_companyId: { cycleId: cycle.id, companyId: input.companyId } },
+      })
+    }
+    await emitAudit(
+      {
+        organizationId,
+        actorId: input.context.actor.id,
+        actorRole: input.context.actor.roleName,
+        action: 'update',
+        targetType: TARGET,
+        targetId: cycle.id,
+        before: { company_ids: [...cycle.companyIds].sort() },
+        after: { company_ids: nextIds, changed_from: 'finance_companies', company_id: input.companyId },
+        reason: input.context.reason,
+        ipAddress: input.context.meta.ipAddress,
+        userAgent: input.context.meta.userAgent,
+      },
+      tx,
+    )
   }
 }

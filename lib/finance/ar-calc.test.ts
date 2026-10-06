@@ -3,6 +3,7 @@ import {
   agingBucketIndex,
   arOutstandingSatang,
   daysOverdue,
+  resolveBankFeeWriteOff,
   settledSatang,
   summarizeArAging,
   totalArOutstandingSatang,
@@ -14,7 +15,7 @@ import { DEFAULT_AR_AGING_BUCKETS } from '@/lib/settings/finance-policy'
 
 const buckets = [...DEFAULT_AR_AGING_BUCKETS] // [30, 60, 90]
 
-const noWht = { whtWithheldByCustomerSatang: 0 }
+const noWht = { whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }
 
 describe('§6.11 ยอดค้างรับ', () => {
   it('outstanding = total - received', () => {
@@ -33,7 +34,7 @@ describe('§6.11 ยอดค้างรับ', () => {
 
 describe('WHT ที่ลูกค้าหัก (A1) ถือว่าชำระแล้ว', () => {
   // บิล 1,000,000 สตางค์ · ลูกค้าหัก WHT 3% = 30,000 แล้วโอนที่เหลือ 970,000 ⇒ ต้องไม่เหลือหนี้ค้าง
-  const withheld = { totalSatang: 1_000_000, receivedSatang: 970_000, whtWithheldByCustomerSatang: 30_000 }
+  const withheld = { totalSatang: 1_000_000, receivedSatang: 970_000, whtWithheldByCustomerSatang: 30_000, bankFeeWrittenOffSatang: 0 }
 
   it('settled = received + wht', () => {
     expect(settledSatang(withheld)).toBe(1_000_000)
@@ -50,6 +51,7 @@ describe('WHT ที่ลูกค้าหัก (A1) ถือว่าชำ
         totalSatang: withheld.totalSatang,
         receivedSatang: withheld.receivedSatang,
         whtWithheldByCustomerSatang: withheld.whtWithheldByCustomerSatang,
+        bankFeeWrittenOffSatang: 0,
       }),
     ).toBe('paid')
     expect(arOutstandingSatang(withheld)).toBe(0)
@@ -57,13 +59,13 @@ describe('WHT ที่ลูกค้าหัก (A1) ถือว่าชำ
 
   it('รับบางส่วน + WHT ยังค้างส่วนต่าง', () => {
     expect(
-      arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 400_000, whtWithheldByCustomerSatang: 30_000 }),
+      arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 400_000, whtWithheldByCustomerSatang: 30_000, bankFeeWrittenOffSatang: 0 }),
     ).toBe(570_000)
   })
 
   it('WHT ที่ไม่ใช่สตางค์จำนวนเต็ม = ล้ม', () => {
     expect(() =>
-      arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 0, whtWithheldByCustomerSatang: 1.5 }),
+      arOutstandingSatang({ totalSatang: 1_000_000, receivedSatang: 0, whtWithheldByCustomerSatang: 1.5, bankFeeWrittenOffSatang: 0 }),
     ).toThrow(RangeError)
   })
 })
@@ -112,6 +114,7 @@ describe('summarizeArAging', () => {
       totalSatang: 1_000_000,
       receivedSatang: 970_000,
       whtWithheldByCustomerSatang: 30_000,
+      bankFeeWrittenOffSatang: 0,
     },
   ]
 
@@ -139,5 +142,58 @@ describe('summarizeArAging', () => {
 
   it('ยอดค้างรับรวมนับเฉพาะยอดที่ยังค้าง (จ่ายเกินไม่มาหักยอดคนอื่น)', () => {
     expect(totalArOutstandingSatang(rows)).toBe(1_600_000)
+  })
+})
+
+describe('§6.11.1 ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร (มติ PO U144)', () => {
+  // บิล ฿10,700 · ลูกค้าหัก WHT ฿300 · เพดาน ฿50
+  const bill = { totalSatang: 1_070_000, whtWithheldByCustomerSatang: 30_000, toleranceSatang: 5_000 }
+
+  it('ขาด ฿25 (≤ เพดาน) ⇒ ตัด ฿25 · สถานะ paid · ยอดค้าง 0', () => {
+    const fee = resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_037_500 })
+    expect(fee).toBe(2_500)
+    const amounts = { totalSatang: bill.totalSatang, receivedSatang: 1_037_500, whtWithheldByCustomerSatang: 30_000, bankFeeWrittenOffSatang: fee }
+    expect(arOutstandingSatang(amounts)).toBe(0)
+    expect(resolveBillingStatusAfterReceipt({ current: 'sent', ...amounts })).toBe('paid')
+  })
+
+  it('ขาดเท่าเพดานพอดี ⇒ ตัด · เกิน 1 สตางค์ ⇒ ไม่ตัด (partially_paid ตามเดิม)', () => {
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_035_000 })).toBe(5_000)
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_034_999 })).toBe(0)
+    expect(
+      resolveBillingStatusAfterReceipt({
+        current: 'sent',
+        totalSatang: bill.totalSatang,
+        receivedSatang: 1_034_999,
+        whtWithheldByCustomerSatang: 30_000,
+        bankFeeWrittenOffSatang: 0,
+      }),
+    ).toBe('partially_paid')
+  })
+
+  it('รับครบ/รับเกิน/ยังไม่รับเลย ⇒ ไม่ตัด', () => {
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_040_000 })).toBe(0)
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_100_000 })).toBe(0)
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 0 })).toBe(0)
+  })
+
+  it('เพดาน 0 = ปิดการตัด', () => {
+    expect(resolveBankFeeWriteOff({ ...bill, toleranceSatang: 0, receivedSatang: 1_039_999 })).toBe(0)
+  })
+
+  it('คำนวณจากยอดสะสม — รับเพิ่มจนครบภายหลัง ⇒ ยอดตัดกลับเป็น 0 (ไม่สะสมทับ)', () => {
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_037_500 })).toBe(2_500)
+    expect(resolveBankFeeWriteOff({ ...bill, receivedSatang: 1_040_000 })).toBe(0)
+  })
+
+  it('เพดานติดลบ/ไม่ใช่สตางค์จำนวนเต็ม = ล้ม', () => {
+    expect(() => resolveBankFeeWriteOff({ ...bill, toleranceSatang: -1, receivedSatang: 1 })).toThrow(RangeError)
+    expect(() => resolveBankFeeWriteOff({ ...bill, toleranceSatang: 0.5, receivedSatang: 1 })).toThrow(RangeError)
+  })
+
+  it('settled รวมค่าธรรมเนียมที่ตัด', () => {
+    expect(
+      settledSatang({ totalSatang: 0, receivedSatang: 1_037_500, whtWithheldByCustomerSatang: 30_000, bankFeeWrittenOffSatang: 2_500 }),
+    ).toBe(1_070_000)
   })
 })

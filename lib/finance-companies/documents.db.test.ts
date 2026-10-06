@@ -351,7 +351,6 @@ suite('มติ PO U132 — เอกสารบริษัทไฟแนน
 const cycleBase = {
   cutoffRuleType: 'month_end' as const,
   cutoffDates: [],
-  cutoffText: null,
   dueRuleType: 'net_days' as const,
   dueRuleValue: 30,
 }
@@ -433,5 +432,112 @@ suite('มติ PO U133 — ขอบเขตรอบบิล/รอบจ�
         VALUES ('${ORG_ID}', 'ผิดชนิด', 'AR', 'month_end', '{}', 'net_days', 30, 'Net 30 วัน', 'inhouse', '${USER_ID}', NOW())
       `),
     ).rejects.toThrow(/cycles_scope_matches_type/)
+  })
+})
+
+suite('มติ PO U146 — หน้าบริษัทเลือก "รอบบิลที่ใช้" (รอบบิลเป็นแหล่งเดียว)', () => {
+  const TEMPLATE = '00000000-0000-4000-8000-0000001460f1'
+  beforeAll(async () => {
+    if (!url) return
+    // ฟอร์มบริษัทต้องมีเทมเพลตค่าบริการ (บันทึกบริษัทส่ง id เทมเพลตเดิมกลับไป)
+    await db().$executeRawUnsafe(`
+      INSERT INTO service_fee_templates
+        (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
+      VALUES ('${TEMPLATE}', '${ORG_ID}', 'เทมเพลต U146', 'FLAT', 100000, 0, NULL, true, 1, true, '${USER_ID}')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(
+      `UPDATE finance_companies SET service_fee_template_id = '${TEMPLATE}' WHERE organization_id = '${ORG_ID}' AND service_fee_template_id IS NULL`,
+    )
+  })
+
+  async function valuesOf(companyId: string, billingCycleId: string | null) {
+    const dto = await companies.getFinanceCompany(superadmin, companyId)
+    const values = {
+      name: dto.name,
+      shortName: dto.shortName,
+      taxId: dto.taxId,
+      branchCode: dto.branchCode,
+      address: dto.address,
+      phone: dto.phone,
+      email: dto.email,
+      contactName: dto.contactName,
+      contactPhone: dto.contactPhone,
+      signerName: dto.signerName,
+      serviceFeeTemplateId: dto.serviceFeeTemplateId,
+      vatRegistered: dto.vatRegistered,
+      vatMode: dto.vatMode,
+      whtWithheldByCustomerPct: dto.whtWithheldByCustomerPct,
+      defaultInvoiceDeliveryFormat: dto.defaultInvoiceDeliveryFormat,
+      billingCycleId,
+    }
+    return { dto, values }
+  }
+
+  it('เลือกรอบรายบริษัท ⇒ ย้ายเข้ารายชื่อรอบนั้น (ออกจากรอบเดิม) + audit ของรอบ · ไม่เลือก ⇒ ถอดออก', async () => {
+    const x = await cycles.createCycle(ctx('รอบเอ'), {
+      ...cycleBase,
+      name: 'AR X',
+      type: 'AR',
+      scopeKind: 'selected_companies',
+      companyIds: [COMPANY_A],
+    })
+    const y = await cycles.createCycle(ctx('รอบวาย'), {
+      ...cycleBase,
+      cutoffRuleType: 'fixed_dates',
+      cutoffDates: [25],
+      name: 'AR Y',
+      type: 'AR',
+      scopeKind: 'selected_companies',
+      companyIds: [COMPANY_B],
+    })
+
+    const before = await valuesOf(COMPANY_A, y.id)
+    expect(before.dto.billingCycle).toMatchObject({ id: x.id, cutoffLabel: 'ทุกสิ้นเดือน', dueLabel: 'Net 30 วัน' })
+
+    const moved = await companies.updateFinanceCompany(ctx('ย้ายบริษัทเอไปรอบวาย'), before.dto, before.values)
+    expect(moved.billingCycle).toMatchObject({ id: y.id, cutoffLabel: 'ทุกวันที่ 25' })
+    expect((await cycles.getCycle(ORG_ID, x.id)).companies).toEqual([])
+    expect((await cycles.getCycle(ORG_ID, y.id)).companies.map((c) => c.id).sort()).toEqual([COMPANY_A, COMPANY_B].sort())
+    const audits = await db().auditLog.findMany({
+      where: {
+        organizationId: ORG_ID,
+        targetType: 'billing_payout_cycles',
+        targetId: { in: [x.id, y.id] },
+        reason: 'ย้ายบริษัทเอไปรอบวาย',
+      },
+    })
+    expect(audits.map((row) => row.targetId).sort()).toEqual([x.id, y.id].sort())
+
+    const cleared = await valuesOf(COMPANY_A, null)
+    expect((await companies.updateFinanceCompany(ctx('ไม่ใช้รอบ'), cleared.dto, cleared.values)).billingCycle).toBeNull()
+    expect((await cycles.getCycle(ORG_ID, y.id)).companies.map((c) => c.id)).toEqual([COMPANY_B])
+  })
+
+  it('มีรอบ "ทุกบริษัท" ⇒ บริษัทใช้รอบนั้น · เลือกรอบรายบริษัท = CYCLE_SCOPE_OVERLAP · รอบที่ปิดแล้ว = CYCLE_NOT_FOUND', async () => {
+    const all = await cycles.createCycle(ctx('รอบทุกบริษัท'), {
+      ...cycleBase,
+      name: 'AR ทุกบริษัท',
+      type: 'AR',
+      scopeKind: 'all_companies',
+      companyIds: [],
+    })
+    const OLD = '00000000-0000-4000-8000-0000001460c1'
+    await db().$executeRawUnsafe(`
+      INSERT INTO billing_payout_cycles (id, organization_id, name, type, cutoff_rule_type, cutoff_dates, due_rule_type,
+                                         due_rule_value, due_rule, scope_kind, created_by, updated_at, deleted_at)
+      VALUES ('${OLD}', '${ORG_ID}', 'AR เก่า', 'AR', 'month_end', '{}', 'net_days', 15, 'Net 15 วัน',
+              'selected_companies', '${USER_ID}', NOW(), NOW())
+    `)
+    const { dto, values } = await valuesOf(COMPANY_B, OLD)
+    expect(dto.billingCycle?.id).toBe(all.id)
+    await expect(companies.updateFinanceCompany(ctx('เลือกรอบที่ปิดแล้ว'), dto, values)).rejects.toMatchObject({
+      code: 'CYCLE_NOT_FOUND',
+    })
+
+    await db().$executeRawUnsafe(`UPDATE billing_payout_cycles SET deleted_at = NULL WHERE id = '${OLD}'`)
+    await expect(companies.updateFinanceCompany(ctx('เลือกรอบรายบริษัท'), dto, values)).rejects.toMatchObject({
+      code: 'CYCLE_SCOPE_OVERLAP',
+    })
   })
 })

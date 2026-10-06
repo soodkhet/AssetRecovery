@@ -1,5 +1,6 @@
 import type { CompanyStatus, InvoiceDeliveryFormat, VatMode } from '@/lib/finance-companies/company'
 import type { CompanyDocumentType, CompanyDocumentWarning } from '@/lib/finance-companies/documents'
+import type { CutoffRuleType, CycleScopeKind, DueRuleType } from '@/lib/generated/prisma/enums'
 
 /**
  * รูปร่างข้อมูลที่ API ของโมดูลบริษัทไฟแนนซ์ส่งออก — **pure type ล้วน**
@@ -28,8 +29,11 @@ export interface FinanceCompanyDto {
   /** % ที่ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน · `null` = ไม่หัก (มติ PO A1) */
   whtWithheldByCustomerPct: number | null
   defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
-  billingDay: number
-  paymentDueDays: number
+  /**
+   * มติ PO U146 — รอบบิลที่บริษัทนี้ใช้ (รอบรายบริษัทที่มีชื่อบริษัท หรือรอบ "ทุกบริษัท") = แหล่งเดียวของ
+   * วันตัดรอบ + เครดิตเทอม · `null` = ยังไม่มีรอบ (สร้างรอบวางบิลไม่ได้)
+   */
+  billingCycle: CompanyBillingCycleDto | null
   status: CompanyStatus
   suspendedReason: string | null
   caseCount: number
@@ -39,6 +43,21 @@ export interface FinanceCompanyDto {
    * คำเตือนเอกสารบริษัท (มติ PO U132 — ไม่บล็อก) · ผู้ใช้ฝั่งบริษัทได้ `[]` เสมอ (พอร์ทัลไม่แสดงเอกสารบริษัท)
    */
   documentWarnings: CompanyDocumentWarning[]
+}
+
+/** รอบบิลที่บริษัทใช้ (มติ PO U146) — ค่าดิบสำหรับคำนวณตัวอย่าง + ป้ายที่ประกอบแล้ว */
+export interface CompanyBillingCycleDto {
+  id: string
+  name: string
+  scopeKind: CycleScopeKind
+  cutoffRuleType: CutoffRuleType
+  cutoffDates: number[]
+  dueRuleType: DueRuleType
+  dueRuleValue: number | null
+  /** เช่น "ทุกวันที่ 25" / "ทุกสิ้นเดือน" */
+  cutoffLabel: string
+  /** เช่น "Net 30 วัน" */
+  dueLabel: string
 }
 
 /** เอกสารบริษัทหนึ่งเวอร์ชัน (มติ PO U132) */

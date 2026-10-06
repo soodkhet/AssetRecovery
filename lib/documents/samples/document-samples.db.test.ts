@@ -91,8 +91,8 @@ suite('ตัวอย่างเอกสารทั้งหมด — ไ�
       REAL_USER,
     )
     await db().$executeRawUnsafe(
-      `INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days, created_by)
-       VALUES ($1::uuid, $2::uuid, $3, 'REAL', $4, 'exclude_vat', 30, $5::uuid)`,
+      `INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, created_by)
+       VALUES ($1::uuid, $2::uuid, $3, 'REAL', $4, 'exclude_vat', $5::uuid)`,
       randomUUID(),
       orgId,
       REAL_COMPANY,

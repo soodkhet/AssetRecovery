@@ -327,9 +327,9 @@ suite('Final Test ด่าน 1 — Ops E2E: เคส → มอบหมา�
     // บริษัทไฟแนนซ์ใหม่ทุกรัน (ล็อต/รายได้ของรันก่อนลบไม่ได้) — ผูกเทมเพลต v1 ตอนสร้างเคส
     const company = await tx.$queryRawUnsafe<{ id: string }[]>(`
       INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode,
-                                     payment_due_days, service_fee_template_id, created_by)
+                                     service_fee_template_id, created_by)
       VALUES ('${ORG_ID}', 'ไฟแนนซ์ Final 1 (${RUN})', 'F1', '${RUN_TAX_ID}', '9 ถนนทดสอบ ลำปาง 52000',
-              'exclude_vat', 30, '${TEMPLATE_V1}', '${ADMIN_ID}')
+              'exclude_vat', '${TEMPLATE_V1}', '${ADMIN_ID}')
       RETURNING id
     `)
     companyId = company[0]?.id ?? ''

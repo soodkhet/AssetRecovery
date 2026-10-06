@@ -264,9 +264,9 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode,
-                                   payment_due_days, created_by) VALUES
-      ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ A 3.8', 'A38', '0105512380001', 'exclude_vat', 30, '${FINANCE_ID}'),
-      ('${COMPANY_B}', '${ORG_ID}', 'ไฟแนนซ์ B 3.8', 'B38', '0105512380002', 'exclude_vat', 30, '${FINANCE_ID}')
+                                   created_by) VALUES
+      ('${COMPANY_A}', '${ORG_ID}', 'ไฟแนนซ์ A 3.8', 'A38', '0105512380001', 'exclude_vat', '${FINANCE_ID}'),
+      ('${COMPANY_B}', '${ORG_ID}', 'ไฟแนนซ์ B 3.8', 'B38', '0105512380002', 'exclude_vat', '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`

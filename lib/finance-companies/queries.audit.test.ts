@@ -16,6 +16,8 @@ const prismaMock = vi.hoisted(() => {
   const client = {
     financeCompany: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     financeCompanyDocument: { findMany: vi.fn().mockResolvedValue([]) },
+    // มติ PO U146 — DTO อ่านรอบบิลที่บริษัทใช้ (ไม่มีรอบ = billingCycle null)
+    billingPayoutCycle: { findMany: vi.fn().mockResolvedValue([]) },
     serviceFeeTemplate: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -77,8 +79,7 @@ const values: FinanceCompanyValues = {
   vatMode: 'include_vat',
   whtWithheldByCustomerPct: null,
   defaultInvoiceDeliveryFormat: 'paper_pdf',
-  billingDay: 1,
-  paymentDueDays: 30,
+  billingCycleId: null,
 }
 
 /** แถวที่ Prisma คืนกลับ (รูปเดียวกับ `companySelect`) — Decimal เป็น `Prisma.Decimal` จริง */
@@ -99,8 +100,6 @@ function rowOf(overrides: { vatMode: FinanceCompanyValues['vatMode']; whtPct: st
     vatMode: overrides.vatMode,
     whtWithheldByCustomerPct: overrides.whtPct === null ? null : new Prisma.Decimal(overrides.whtPct),
     defaultInvoiceDeliveryFormat: 'paper_pdf',
-    billingDay: 1,
-    paymentDueDays: 30,
     status: 'active',
     suspendedReason: null,
     updatedAt: new Date('2026-10-03T03:00:00Z'),
@@ -183,8 +182,7 @@ describe('updateFinanceCompany — เปลี่ยน vat_mode / อัตร
     vatMode: 'exclude_vat',
     whtWithheldByCustomerPct: 3,
     defaultInvoiceDeliveryFormat: 'paper_pdf',
-    billingDay: 1,
-    paymentDueDays: 30,
+    billingCycle: null,
     status: 'active',
     suspendedReason: null,
     caseCount: 0,

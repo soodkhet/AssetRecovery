@@ -392,6 +392,7 @@ export async function getDashboardKpi(
         totalSatang: true,
         receivedSatang: true,
         whtWithheldByCustomerSatang: true,
+        bankFeeWrittenOffSatang: true,
       },
     }),
     prisma.exception.findMany({
@@ -440,6 +441,7 @@ export async function getDashboardKpi(
         // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว — รวมให้ที่ `settledSatang()` ที่เดียว (`19` §6.4)
         receivedSatang: row.receivedSatang,
         whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+        bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
       }),
     )
     .filter((value) => value > 0)

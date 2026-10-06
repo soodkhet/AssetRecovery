@@ -33,6 +33,7 @@ export const SETTING_ASSUMPTION_KEYS = [
   'hotel_receipt',
   'adjustment_after_close',
   'customer_wht',
+  'bank_fee_write_off',
 ] as const
 
 export type SettingAssumptionKey = (typeof SETTING_ASSUMPTION_KEYS)[number]
@@ -158,6 +159,13 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
     label: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย',
     question: 'บันทึกเป็นเครดิตภาษี ปิดลูกหนี้เต็มจำนวน โดยมีหนังสือรับรองจากลูกค้าเป็นหลักฐาน',
     source: 'มติ A8 · U40',
+  },
+  bank_fee_write_off: {
+    key: 'bank_fee_write_off',
+    label: 'ตัดส่วนต่างรับเงินเป็นค่าธรรมเนียมธนาคาร',
+    question:
+      'ลูกค้าโอนขาดไม่เกินเพดาน (ค่าเริ่มต้น ฿50) บันทึกส่วนต่างเป็นค่าธรรมเนียมธนาคารและปิดบิลเป็นชำระครบ — เพดานและการบันทึกบัญชีถูกต้องหรือไม่',
+    source: 'B4 · U144',
   },
 }
 

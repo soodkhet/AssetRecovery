@@ -80,6 +80,7 @@
 | v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
 | v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
 | v4.5x-fixer-u132 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
+| v4.5x-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)** (migration `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source`): **(U145)** `finance_policy_settings` ลบ `advance_uncleared_to_employee_receivable` (สวิตช์ไม่เคยมีผล — รอบจ่ายหักคืนเงินทดรองค้างเสมอ) · **(U144)** `billing_batches` + `bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0` + `bank_fee_written_off_date DATE` (CHECK ≥ 0 · ยอด 0 ⇔ วันที่ NULL · partial index `idx_billing_batches_bank_fee_date (organization_id, bank_fee_written_off_date) WHERE ยอด > 0`) — ส่วนต่างรับขาด ≤ `write_off_tolerance_satang` เป็นค่าธรรมเนียมธนาคาร (`22` §6.11.1) · **(U146)** `finance_companies` ลบ `billing_day` / `payment_due_days` (รอบบิลเป็นแหล่งเดียว — บริษัทที่ไม่มีรอบครอบถูกจัดเข้ารอบบิลใหม่ `fixed_dates [billing_day]` + `net_days payment_due_days` ต่อกลุ่มค่า ⇒ วันครบกำหนดเท่าเดิม) · enum `cutoff_rule_type` ตัด `custom_text` (ค่าเดิม: เลขวันที่ในข้อความ + "สิ้นเดือน"=31 ⇒ `fixed_dates` · ไม่มี ⇒ `month_end`) · `cutoff_text` → `legacy_cutoff_text` (อ้างอิงเท่านั้น) · CHECK `cycles_cutoff_shape` ตัดกรณี custom_text · `cycles_due_rule_shape` ให้ `net_days` = 0 ได้ · ไม่มีตารางใหม่ |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -161,7 +162,7 @@ CREATE TYPE cycle_type             AS ENUM ('AR', 'AP');                        
 CREATE TYPE cycle_scope_kind       AS ENUM ('all_companies', 'selected_companies', 'all_teams', 'inhouse', 'outsource');
 -- ชนิดเอกสารบริษัทไฟแนนซ์ (v4.5x-fixer-u132 — มติ PO U132)
 CREATE TYPE company_document_type  AS ENUM ('company_certificate', 'vat_registration', 'service_contract', 'bank_book', 'other');
-CREATE TYPE cutoff_rule_type       AS ENUM ('fixed_dates', 'month_end', 'custom_text');
+CREATE TYPE cutoff_rule_type       AS ENUM ('fixed_dates', 'month_end');  -- v4.5x-fixer-db3 (มติ PO U146): ตัด custom_text
 CREATE TYPE bank_account_usage     AS ENUM ('receive', 'pay', 'both');          -- ไฟล์ 13 §6.3
 CREATE TYPE bank_file_type         AS ENUM ('CSV', 'TXT');                      -- ไฟล์ 13 §6.8
 CREATE TYPE bank_file_encoding     AS ENUM ('UTF-8', 'TIS-620');
@@ -686,8 +687,8 @@ CREATE TABLE finance_companies (
   -- รูปแบบส่งใบกำกับภาษีเริ่มต้น — มติ PO 14/08/2569 (ไฟล์ 10 §7.1 · เปลี่ยนต่อใบได้ที่ไฟล์ 31 §6.2)
   default_invoice_delivery_format invoice_delivery_format NOT NULL DEFAULT 'paper_pdf',
   -- Billing
-  billing_day           INTEGER      NOT NULL DEFAULT 1,    -- วันตัดรอบบิล
-  payment_due_days      INTEGER      NOT NULL DEFAULT 30,   -- วันครบกำหนดชำระ
+  -- v4.5x-fixer-db3 (มติ PO U146): ลบ billing_day / payment_due_days — รอบบิลที่บริษัทใช้ (billing_cycle_companies
+  -- หรือรอบ "ทุกบริษัท") เป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม · ค่าเดิมแปลงเป็นรอบบิลใน migration 20261008082000
   -- WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — มติ PO 2026-08-12 ข้อ A1 · NULL = บริษัทนี้ไม่หัก
   wht_withheld_by_customer_pct NUMERIC(5,2) DEFAULT 3.00,
   status                TEXT         NOT NULL DEFAULT 'active', -- active | suspended (ไฟล์ 10 §9.3 — แก้ 14/08/2569)
@@ -915,7 +916,7 @@ CREATE TABLE billing_payout_cycles (
   type             cycle_type NOT NULL,
   cutoff_rule_type cutoff_rule_type NOT NULL,
   cutoff_dates     INTEGER[],          -- ใช้เมื่อ fixed_dates เช่น '{15,30}'
-  cutoff_text      TEXT,               -- ใช้เมื่อ custom_text
+  legacy_cutoff_text TEXT,             -- v4.5x-fixer-db3 (U146): ข้อความกติกาแบบอิสระเดิม (custom_text ถูกตัด) อ้างอิงเท่านั้น
   -- มติ PO 2026-08-12 ข้อ A5 — ไฟล์ 19 ต้องคำนวณ due_date จากค่าเหล่านี้ (ห้าม parse จาก free text)
   due_rule_type    due_rule_type NOT NULL DEFAULT 'net_days',
   due_rule_value   INTEGER,            -- net_days = จำนวนวัน · day_of_next_month = วันที่ · month_end = ไม่ใช้
@@ -929,12 +930,12 @@ CREATE TABLE billing_payout_cycles (
   updated_by UUID REFERENCES users(id),
   deleted_at TIMESTAMPTZ,
   CONSTRAINT cycles_due_rule_shape CHECK (
-    (due_rule_type IN ('net_days','day_of_next_month') AND due_rule_value IS NOT NULL AND due_rule_value > 0) OR
+    (due_rule_type = 'net_days' AND due_rule_value IS NOT NULL AND due_rule_value >= 0) OR  -- U146: Net 0 ได้
+    (due_rule_type = 'day_of_next_month' AND due_rule_value IS NOT NULL AND due_rule_value > 0) OR
     (due_rule_type = 'month_end')
   ),
   CONSTRAINT cycles_cutoff_shape CHECK (
     (cutoff_rule_type = 'fixed_dates' AND cutoff_dates IS NOT NULL) OR
-    (cutoff_rule_type = 'custom_text' AND cutoff_text IS NOT NULL) OR
     (cutoff_rule_type = 'month_end')
   ),
   CONSTRAINT cycles_scope_matches_type CHECK (
@@ -981,8 +982,7 @@ CREATE TABLE finance_policy_settings (
   ar_aging_buckets    INTEGER[] NOT NULL DEFAULT '{30,60,90}', -- ไฟล์ 19 §6.4 (สร้างช่วง 0-30/31-60/61-90/90+ อัตโนมัติ)
   -- มติ PO 2026-08-12 ข้อ B4 — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
   write_off_tolerance_satang INTEGER NOT NULL DEFAULT 5000,
-  -- มติ PO 2026-08-12 ข้อ D12 — advance ไม่มีใบเสร็จ → ตัดเป็นลูกหนี้พนักงาน หักจาก payout รอบถัดไป
-  advance_uncleared_to_employee_receivable BOOLEAN NOT NULL DEFAULT true,
+  -- (v4.5x-fixer-db3 — มติ PO U145) คอลัมน์ advance_uncleared_to_employee_receivable ถูกลบ: รอบจ่ายหักคืนเงินทดรองค้างเสมอ (D12)
   -- v4.43 มติ PO 06/10/2569 U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน (CHECK > 0 · `22` §6.17)
   substitute_receipt_max_per_doc_satang   INTEGER NOT NULL DEFAULT 50000,   -- ต่อใบ (฿500)
   substitute_receipt_max_per_month_satang INTEGER NOT NULL DEFAULT 300000,  -- ต่อคนต่อเดือน (฿3,000)
@@ -1889,6 +1889,10 @@ CREATE TABLE billing_batches (
   received_satang   INTEGER               NOT NULL DEFAULT 0,
   -- A1 (มติ PO 2026-08-12): WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — auto-match ต้องเทียบ total − wht ด้วย
   wht_withheld_by_customer_satang INTEGER NOT NULL DEFAULT 0,
+  -- v4.5x-fixer-db3 (มติ PO U144): ส่วนต่างรับขาด ≤ finance_policy_settings.write_off_tolerance_satang ตัดเป็นค่าธรรมเนียมธนาคาร
+  -- (นับเป็นชำระแล้ว — `22` §6.11.1) · CHECK ≥ 0 + (ยอด = 0) ⇔ (วันที่ IS NULL) · partial index (org, date) WHERE ยอด > 0
+  bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0,
+  bank_fee_written_off_date   DATE,
   due_date          DATE                  NOT NULL,
   sent_at           TIMESTAMPTZ,
   sent_by           UUID                  REFERENCES users(id),
@@ -2898,7 +2902,7 @@ CREATE TABLE billing_payout_cycles (
   type             cycle_type NOT NULL,
   cutoff_rule_type cutoff_rule_type NOT NULL,
   cutoff_dates     INTEGER[],          -- ใช้เมื่อ fixed_dates เช่น '{15,30}'
-  cutoff_text      TEXT,               -- ใช้เมื่อ custom_text
+  legacy_cutoff_text TEXT,             -- v4.5x-fixer-db3 (U146): ข้อความกติกาแบบอิสระเดิม (custom_text ถูกตัด) อ้างอิงเท่านั้น
   -- มติ PO 2026-08-12 ข้อ A5 — ไฟล์ 19 ต้องคำนวณ due_date จากค่าเหล่านี้ (ห้าม parse จาก free text)
   due_rule_type    due_rule_type NOT NULL DEFAULT 'net_days',
   due_rule_value   INTEGER,            -- net_days = จำนวนวัน · day_of_next_month = วันที่ · month_end = ไม่ใช้
@@ -2910,12 +2914,12 @@ CREATE TABLE billing_payout_cycles (
   updated_by UUID REFERENCES users(id),
   deleted_at TIMESTAMPTZ,
   CONSTRAINT cycles_due_rule_shape CHECK (
-    (due_rule_type IN ('net_days','day_of_next_month') AND due_rule_value IS NOT NULL AND due_rule_value > 0) OR
+    (due_rule_type = 'net_days' AND due_rule_value IS NOT NULL AND due_rule_value >= 0) OR  -- U146: Net 0 ได้
+    (due_rule_type = 'day_of_next_month' AND due_rule_value IS NOT NULL AND due_rule_value > 0) OR
     (due_rule_type = 'month_end')
   ),
   CONSTRAINT cycles_cutoff_shape CHECK (
     (cutoff_rule_type = 'fixed_dates' AND cutoff_dates IS NOT NULL) OR
-    (cutoff_rule_type = 'custom_text' AND cutoff_text IS NOT NULL) OR
     (cutoff_rule_type = 'month_end')
   )
 );
@@ -2947,8 +2951,7 @@ CREATE TABLE finance_policy_settings (
   ar_aging_buckets    INTEGER[] NOT NULL DEFAULT '{30,60,90}', -- ไฟล์ 19 §6.4 (สร้างช่วง 0-30/31-60/61-90/90+ อัตโนมัติ)
   -- มติ PO 2026-08-12 ข้อ B4 — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
   write_off_tolerance_satang INTEGER NOT NULL DEFAULT 5000,
-  -- มติ PO 2026-08-12 ข้อ D12 — advance ไม่มีใบเสร็จ → ตัดเป็นลูกหนี้พนักงาน หักจาก payout รอบถัดไป
-  advance_uncleared_to_employee_receivable BOOLEAN NOT NULL DEFAULT true,
+  -- (v4.5x-fixer-db3 — มติ PO U145) คอลัมน์ advance_uncleared_to_employee_receivable ถูกลบ: รอบจ่ายหักคืนเงินทดรองค้างเสมอ (D12)
   -- v4.43 มติ PO 06/10/2569 U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน (CHECK > 0 · `22` §6.17)
   substitute_receipt_max_per_doc_satang   INTEGER NOT NULL DEFAULT 50000,   -- ต่อใบ (฿500)
   substitute_receipt_max_per_month_satang INTEGER NOT NULL DEFAULT 300000,  -- ต่อคนต่อเดือน (฿3,000)
@@ -3872,6 +3875,10 @@ CREATE TABLE billing_batches (
   received_satang   INTEGER               NOT NULL DEFAULT 0,
   -- A1 (มติ PO 2026-08-12): WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — auto-match ต้องเทียบ total − wht ด้วย
   wht_withheld_by_customer_satang INTEGER NOT NULL DEFAULT 0,
+  -- v4.5x-fixer-db3 (มติ PO U144): ส่วนต่างรับขาด ≤ finance_policy_settings.write_off_tolerance_satang ตัดเป็นค่าธรรมเนียมธนาคาร
+  -- (นับเป็นชำระแล้ว — `22` §6.11.1) · CHECK ≥ 0 + (ยอด = 0) ⇔ (วันที่ IS NULL) · partial index (org, date) WHERE ยอด > 0
+  bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0,
+  bank_fee_written_off_date   DATE,
   due_date          DATE                  NOT NULL,
   sent_at           TIMESTAMPTZ,
   sent_by           UUID                  REFERENCES users(id),

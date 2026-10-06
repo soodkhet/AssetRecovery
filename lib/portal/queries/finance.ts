@@ -65,6 +65,7 @@ export async function listPortalBillingBatches(ctx: PortalContext): Promise<Port
       totalSatang: true,
       receivedSatang: true,
       whtWithheldByCustomerSatang: true,
+      bankFeeWrittenOffSatang: true,
       dueDate: true,
       sentAt: true,
       // จำนวนเคสในรอบ (มติ U62) = รายการรายได้ที่ผูกรอบนี้ (1 เคส 1 รายการ — trigger idempotent ต่อเคส)
@@ -92,10 +93,26 @@ async function withDocumentedTotals<T extends { id: string; totalSatang: number 
 /** รอบวางบิลที่บริษัทเห็นได้พร้อมยอดตามเอกสาร — ฐานของการ์ด AR ค้าง (dashboard) และ AR aging */
 export async function loadPortalDocumentedBatches(
   ctx: PortalContext,
-): Promise<{ id: string; dueDate: Date; totalSatang: number; receivedSatang: number; whtWithheldByCustomerSatang: number }[]> {
+): Promise<
+  {
+    id: string
+    dueDate: Date
+    totalSatang: number
+    receivedSatang: number
+    whtWithheldByCustomerSatang: number
+    bankFeeWrittenOffSatang: number
+  }[]
+> {
   const rows = await prisma.billingBatch.findMany({
     where: visibleBatchWhere(ctx),
-    select: { id: true, dueDate: true, totalSatang: true, receivedSatang: true, whtWithheldByCustomerSatang: true },
+    select: {
+      id: true,
+      dueDate: true,
+      totalSatang: true,
+      receivedSatang: true,
+      whtWithheldByCustomerSatang: true,
+      bankFeeWrittenOffSatang: true,
+    },
   })
   return withDocumentedTotals(ctx, rows)
 }

@@ -199,6 +199,8 @@ export interface PortalBillingBatchSource {
   totalSatang: number
   receivedSatang: number
   whtWithheldByCustomerSatang: number
+  /** มติ PO U144 — ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (นับเป็นชำระแล้ว · ไม่แสดงแยกในพอร์ทัล) */
+  bankFeeWrittenOffSatang: number
   dueDate: Date
   sentAt: Date | null
   /** จำนวนรายการรายได้ (= เคส) ในรอบ — 1 เคส 1 รายการรายได้ (มติ U62) */
@@ -240,6 +242,7 @@ export function serializePortalBillingBatch(row: PortalBillingBatchSource): Port
       totalSatang: row.totalSatang,
       receivedSatang: row.receivedSatang,
       whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+      bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
     }),
     dueDate: dateOnly(row.dueDate),
     sentAt: isoOrNull(row.sentAt),

@@ -240,10 +240,10 @@ beforeAll(async () => {
       ('${INTERNAL_ID}', '${ORG_ID}', '${ROLE_INTERNAL}', 'internal-p6@test.local', 'ธุรการ P6', 'active')
     ON CONFLICT (id) DO NOTHING`)
   await tx.$executeRawUnsafe(`
-    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, payment_due_days, created_by)
+    INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, vat_mode, created_by)
     VALUES
-      ('${CO1}', '${ORG_ID}', 'ไฟแนนซ์ 1 P6', 'CO1P6', '0105512976001', 'exclude_vat', 30, '${INTERNAL_ID}'),
-      ('${CO2}', '${ORG_ID}', 'ไฟแนนซ์ 2 P6', 'CO2P6', '0105512976002', 'exclude_vat', 30, '${INTERNAL_ID}')
+      ('${CO1}', '${ORG_ID}', 'ไฟแนนซ์ 1 P6', 'CO1P6', '0105512976001', 'exclude_vat', '${INTERNAL_ID}'),
+      ('${CO2}', '${ORG_ID}', 'ไฟแนนซ์ 2 P6', 'CO2P6', '0105512976002', 'exclude_vat', '${INTERNAL_ID}')
     ON CONFLICT (id) DO NOTHING`)
   await tx.$executeRawUnsafe(`UPDATE finance_companies SET status = 'active' WHERE id IN ('${CO1}', '${CO2}')`)
   await tx.$executeRawUnsafe(`

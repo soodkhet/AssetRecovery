@@ -34,6 +34,7 @@
 | v3.17 | 06/10/2569 | **มติ PO 06/10/2569 (U103 — ใบรับรองแทนใบเสร็จรับเงิน)**: เพิ่ม §6.17 ยอดรวมของใบ (ผลรวมบรรทัด) + เพดานต่อใบ/ต่อคนต่อเดือน (ค่าตั้งนโยบายการเงิน ค่าเริ่มต้น ฿500/฿3,000 · บล็อก `SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT`) · ใบเบิกค่าที่พัก ยอดเบิก = ยอดรวมใบ · เคลียร์เงินทดรอง ยอดรวมใบ ≤ ยอดใช้จริง · **ฐาน WHT ไม่เปลี่ยน** (ชนิดรายการเดิม — ตัวจำแนกตามค่าตั้ง U3) · pure module `lib/substitute-receipts/substitute-receipt.ts` |
 | v3.19 | 06/10/2569 | **มติ PO 06/10/2569 (U121 — Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ)**: §6.9 ลำดับ resolve อัตรา = รายคน → ค่าเริ่มต้นตามประเภท (ฝั่ง × ชนิดผู้รับ) → แผน (warning) → ไม่มีอัตรา (`resolveWhtRate()` คืน `null` ไม่ throw) · resolve เฉพาะรายการในฐาน WHT · รายการในฐานที่ไม่มีอัตรา = ภาษี 0 ไม่นับฐาน + ธง `rateMissing` (คิวอนุมัติเตือน · รอบจ่ายบล็อก `WHT_RATE_MISSING`) · pure `lib/finance/wht-calc.ts` + `lib/settings/tax-profile-defaults.ts` |
 | v3.18 | 06/10/2569 | **มติ PO 06/10/2569 (U105 — เงื่อนไขการหัก (2)/(3) เป็นค่าตั้ง)**: เพิ่ม §6.9.2 — ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" (ค่าเริ่มต้นปิด · ปิด = บล็อกรอบจ่ายที่มีผู้รับ (2)/(3) `WHT_CONDITION_NOT_ALLOWED`) · เปิด = (2) ออกให้ตลอดไป ภาษี = เงินได้ × อัตรา ÷ (1 − อัตรา) · (3) ออกให้ครั้งเดียว ภาษี = เงินได้ × อัตรา · เงินได้บน 50 ทวิ/ภ.ง.ด. = เงินได้ + ภาษี · ผู้รับได้เงินเต็ม · ภาษีเป็นค่าใช้จ่ายบริษัท · เกณฑ์ ฿1,000 เทียบเงินได้ก่อนบวกภาษี · snapshot เงื่อนไขลงรายการรอบจ่าย · pure `whtGrossUp()`/`whtTaxForCondition()`/`payoutItemTaxSplit()` ใน `lib/finance/wht-calc.ts` · 🔶 นักบัญชียืนยันสูตร (Q18) |
+| v3.21-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 · B4)**: §6.11 `settled` รวมส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร · เพิ่ม **§6.11.1** สูตรตัดส่วนต่างรับชำระขาด ≤ เพดาน `write_off_tolerance_satang` (คำนวณจากยอดสะสม · เท่าเพดานพอดีตัดได้) — `resolveBankFeeWriteOff()` |
 | v3.20 | 07/10/2569 | **มติ PO U125 + U126**: §6.5/§6.7 ฐานคำนวณ = `debt_amount` อย่างเดียว (ตัด `asset_value`) · เพิ่มหมายเหตุใต้ §6.7 — คิดค่าบริการทุกรอบติดตามอิสระเสมอ (ตัดสวิตช์ `charge_per_tracking_round`) · pure `lib/finance/service-fee-calc.ts` / `lib/cases/projected-revenue.ts` |
 
 ขอบเขตเอกสารนี้: รวมสูตรคำนวณทางการเงิน/บัญชีทั้งหมดของระบบไว้ในที่เดียว เป็น single source of truth สำหรับทีมพัฒนา — ป้องกันสูตรไม่ตรงกันระหว่างโมดูล
@@ -328,8 +329,25 @@ batch.transfer_amount       = batch.net_amount - batch.advance_offset_amount   (
 ### 6.11 AR คงค้าง (อ้างอิงไฟล์ 19 §6.4)
 
 ```
-ar_outstanding = billing_batch.total_amount - billing_batch.received_amount
+ar_outstanding = billing_batch.total_amount - settled
+settled        = received_amount + wht_withheld_by_customer + bank_fee_written_off   (A1 · มติ PO U144)
 ```
+
+#### 6.11.1 ตัดส่วนต่างรับชำระขาดเป็นค่าธรรมเนียมธนาคาร (อ้างอิงไฟล์ 19 §9.2, 13 §6.2.1, 35) — มติ PO 07/10/2569 (U144 · B4)
+
+```
+shortfall          = total_amount − received_amount − wht_withheld_by_customer        (ยอดสะสม ณ ตอนรับเงิน)
+bank_fee_write_off = shortfall   ถ้า received_amount > 0 และ 0 < shortfall ≤ write_off_tolerance_satang
+                   = 0           กรณีอื่น (ยังไม่รับเงินเลย · รับครบ/เกิน · ขาดเกินเพดาน · เพดาน = 0)
+สถานะรอบ           = paid เมื่อ settled ≥ total_amount (settled รวม bank_fee_write_off — §6.11)
+วันที่ตัด           = วันรับเงินล่าสุดของรอบ (date-only) · ยอดตัดเท่าเดิม = วันที่เดิม
+```
+
+- **คำนวณใหม่จากยอดสะสมทุกครั้ง** (idempotent — ไม่สะสมทับ): รับเงินเพิ่มจนครบภายหลัง ⇒ ยอดตัดกลับเป็น 0 · ถอนการจับคู่จนยอดรับลด ⇒ ประเมินใหม่
+- เพดาน = `finance_policy_settings.write_off_tolerance_satang` (ค่าเริ่มต้น 5,000 สตางค์ = ฿50) ณ ตอนรับเงิน — snapshot ลง audit · ไม่ย้อนแก้เมื่อเปลี่ยนค่าตั้ง
+- เท่าเพดานพอดีตัดได้ · เกิน 1 สตางค์ไม่ตัด · Implementation: `lib/finance/ar-calc.ts` (`resolveBankFeeWriteOff` · `settledSatang`)
+
+> ตัวอย่าง: บิล ฿10,700 ลูกค้าหัก WHT ฿300 โอนมา ฿10,375 ⇒ ขาด ฿25 ≤ ฿50 ⇒ ค่าธรรมเนียมธนาคาร ฿25 · รอบ `paid` · ยอดค้าง 0 · ถ้าโอนมา ฿10,349.99 ⇒ ขาด ฿50.01 ⇒ ไม่ตัด (`partially_paid`)
 
 ### 6.12 กำไรขั้นต้น (Gross Profit) — ไฟล์ 21 (Actual เท่านั้น ไม่ใช่ projection)
 

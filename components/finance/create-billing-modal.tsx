@@ -5,13 +5,13 @@ import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
+import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import type { BillingBatchDetailDto } from '@/lib/revenue/types'
-import { cycleCoversCompany, pickMatchingCycle } from '@/lib/settings/cycles'
-import type { CycleDto } from '@/lib/settings/types'
+import { resolveDueDate, suggestCutoffDate } from '@/lib/settings/cycles'
 
-/** รอบ AR ในรูปที่ใช้ตัดสินขอบเขต (มติ PO U133) */
-function scopeOf(cycle: CycleDto) {
-  return { ...cycle, companyIds: cycle.companies.map((company) => company.id) }
+/** วันนี้ตามเวลาไทยในรูป date-only (เที่ยงคืน UTC) — ฐานของการเสนอวันตัดรอบ */
+function todayDateOnly(): Date {
+  return new Date(`${toInputDate(new Date())}T00:00:00Z`)
 }
 
 /**
@@ -20,10 +20,9 @@ function scopeOf(cycle: CycleDto) {
  * ผู้ใช้เลือกแค่ **บริษัท + วันตัดรอบ (+ รอบ AR)** — ระบบดึง Revenue ที่ `ready_for_billing` ที่ยังไม่ผูกรอบ
  * ของบริษัทนั้นทั้งหมดที่ `revenue_date ≤ วันตัดรอบ` มารวมเอง (มติ U86 · `19` §9.1) ⇒ **ห้ามคิดยอดล่วงหน้าบนหน้าจอ**
  *
- * ⚠️ วันครบกำหนดมี 2 แหล่ง (A5): เลือกรอบ AR = รอบชนะเสมอ · ไม่เลือก = `payment_due_days`
- *    ของบริษัทนั้น — ที่มาถูกบันทึกลง audit ทุกครั้ง (ดูกับดักใน REUSE_INDEX)
- * ⚠️ มติ PO U133: เลือกบริษัทแล้วระบบเลือกรอบ AR ที่ใช้กับบริษัทนั้นให้อัตโนมัติ (แก้เป็น "ไม่ใช้รอบ" ได้)
- *    · แสดงเฉพาะรอบที่ครอบบริษัทนั้น (API ตอบ `CYCLE_SCOPE_MISMATCH` ถ้าส่งรอบที่ไม่ครอบ)
+ * ⚠️ มติ PO U146: **รอบบิลที่บริษัทใช้เป็นแหล่งเดียว** ของวันตัดรอบ + เครดิตเทอม (ไม่มี "ไม่ใช้รอบ" แล้ว) —
+ *    เลือกบริษัทแล้วระบบเสนอวันตัดรอบล่าสุดตามกติกาของรอบ (แก้ได้) และแสดงวันครบกำหนดที่จะได้ ·
+ *    บริษัทที่ยังไม่มีรอบบิล = สร้างไม่ได้ (API ตอบ `BILLING_CYCLE_NOT_SET`) ให้ไปเลือกที่หน้าบริษัท
  * ⚠️ มติ PO U132: แสดงคำเตือนเอกสารบริษัท (ไม่มีหนังสือรับรอง/ภ.พ.20 · หนังสือรับรองเกิน 6 เดือน) — ไม่บล็อก
  * ⚠️ `<input type="date">` เป็นข้อยกเว้นเดียวที่ใช้ ค.ศ. (browser บังคับ — Rule 01)
  */
@@ -38,10 +37,8 @@ export function CreateBillingModal({
 }) {
   const { showToast } = useToast()
   const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
-  const [cycles, setCycles] = useState<readonly CycleDto[]>([])
   const [companyId, setCompanyId] = useState('')
   const [cutoffDate, setCutoffDate] = useState('')
-  const [cycleId, setCycleId] = useState('')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -49,13 +46,9 @@ export function CreateBillingModal({
     if (!open) return
     let cancelled = false
     void (async () => {
-      const [companyResult, cycleResult] = await Promise.all([
-        callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active'),
-        callApi<CycleDto[]>('/api/settings/cycles?type=AR&status=active'),
-      ])
+      const companyResult = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active')
       if (cancelled) return
       setCompanies(companyResult.data ?? [])
-      setCycles(cycleResult.data ?? [])
     })()
     return () => {
       cancelled = true
@@ -65,14 +58,20 @@ export function CreateBillingModal({
   if (!open) return null
 
   const selectedCompany = companies.find((company) => company.id === companyId)
-  const matchingCycles = companyId === '' ? [] : cycles.filter((cycle) => cycleCoversCompany(scopeOf(cycle), companyId))
+  const cycle = selectedCompany?.billingCycle ?? null
+  // วันครบกำหนดที่จะได้ — สูตรเดียวกับฝั่ง server (`resolveDueDate`) แสดงให้ตรวจก่อนสร้าง
+  const dueDatePreview =
+    cycle !== null && /^\d{4}-\d{2}-\d{2}$/.test(cutoffDate)
+      ? resolveDueDate(new Date(`${cutoffDate}T00:00:00Z`), cycle)
+      : null
 
   function selectCompany(nextCompanyId: string): void {
     setCompanyId(nextCompanyId)
-    const matched = nextCompanyId === '' ? null : pickMatchingCycle(cycles.map(scopeOf), { companyId: nextCompanyId })
-    setCycleId(matched?.id ?? '')
+    const nextCycle = companies.find((company) => company.id === nextCompanyId)?.billingCycle ?? null
+    // มติ PO U146 — เสนอวันตัดรอบล่าสุดตามกติกาของรอบบิล (ผู้ใช้แก้ได้)
+    setCutoffDate(nextCycle === null ? '' : suggestCutoffDate(nextCycle, todayDateOnly()).toISOString().slice(0, 10))
   }
-  const ready = companyId !== '' && cutoffDate !== '' && reason.trim().length >= REASON_MIN_LENGTH
+  const ready = companyId !== '' && cycle !== null && cutoffDate !== '' && reason.trim().length >= REASON_MIN_LENGTH
 
   async function submit(): Promise<void> {
     if (!ready) return
@@ -82,7 +81,7 @@ export function CreateBillingModal({
       jsonRequest('POST', {
         companyId,
         cutoffDate,
-        cycleId: cycleId === '' ? null : cycleId,
+        cycleId: cycle?.id ?? null,
         reason: reason.trim(),
       }),
     )
@@ -98,7 +97,6 @@ export function CreateBillingModal({
     })
     setCompanyId('')
     setCutoffDate('')
-    setCycleId('')
     setReason('')
     onCreated()
     onClose()
@@ -148,28 +146,29 @@ export function CreateBillingModal({
           </InlineAlert>
         )}
 
-        <Field label="วันตัดรอบ (Cut-off Date)" required>
-          <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
-        </Field>
+        {selectedCompany !== undefined && cycle === null && (
+          <InlineAlert tone="warning" title="บริษัทนี้ยังไม่มีรอบบิล">
+            เลือก “รอบบิลที่ใช้” ที่หน้าบริษัทไฟแนนซ์ก่อน — รอบบิลกำหนดวันตัดรอบและวันครบกำหนดชำระ
+          </InlineAlert>
+        )}
+
+        {cycle !== null && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            รอบบิลที่ใช้: <span className="font-semibold text-slate-800">{cycle.name}</span> · ตัดรอบ{cycle.cutoffLabel} ·
+            ครบกำหนด {cycle.dueLabel}
+          </div>
+        )}
 
         <Field
-          label="รอบวางบิล (AR) ที่ใช้คำนวณวันครบกำหนด"
+          label="วันตัดรอบ (Cut-off Date)"
+          required
           hint={
-            selectedCompany === undefined
-              ? 'ไม่เลือก = ใช้เครดิตเทอมของบริษัทที่ตั้งไว้ในข้อมูลบริษัท'
-              : matchingCycles.length === 0
-                ? `ยังไม่มีรอบบิลที่ใช้กับ ${selectedCompany.name} — ใช้เครดิตเทอมของบริษัท (${selectedCompany.paymentDueDays} วัน)`
-                : `ระบบเลือกรอบที่ใช้กับ ${selectedCompany.name} ให้แล้ว · ไม่ใช้รอบ = เครดิตเทอมของบริษัท (${selectedCompany.paymentDueDays} วัน)`
+            dueDatePreview === null
+              ? 'ระบบเสนอวันตัดรอบล่าสุดตามรอบบิลให้ — แก้ได้'
+              : `ครบกำหนดชำระ ${fmtDate(dueDatePreview)} · ระบบเสนอวันตัดรอบตามรอบบิลให้ แก้ได้`
           }
         >
-          <Select value={cycleId} onChange={(event) => setCycleId(event.target.value)}>
-            <option value="">— ใช้เครดิตเทอมของบริษัท —</option>
-            {matchingCycles.map((cycle) => (
-              <option key={cycle.id} value={cycle.id}>
-                {cycle.name} · {cycle.dueRule}
-              </option>
-            ))}
-          </Select>
+          <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
         </Field>
 
         <Field label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกลง audit log`}>

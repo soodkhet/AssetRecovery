@@ -1848,7 +1848,9 @@ function renderModal() {
     title = 'สร้างรอบวางบิล (Create Billing Batch)';
     body = `<div class="space-y-4">
       ${formSelect('bb_company','บริษัทไฟแนนซ์',store.companies.map(c=>({val:c.id,text:c.name})),store.companies[0].id)}
-      ${formInput('bb_period','รอบเดือน','มิถุนายน 2569','text','เช่น มิถุนายน 2569',true)}
+      <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">รอบบิลที่ใช้: <span class="font-semibold text-slate-800">AR รอบวางบิลหลัก</span> · ตัดรอบทุกวันที่ 15, 30 · ครบกำหนด Net 30 วัน</div>
+      ${formInput('bb_cutoff','วันตัดรอบ (Cut-off Date)','2026-06-30','date','',true)}
+      <div class="text-[11px] text-slate-500 -mt-2">ครบกำหนดชำระ 30/07/2569 · ระบบเสนอวันตัดรอบตามรอบบิลให้ แก้ได้</div>
       <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg text-xs text-blue-800">
         ระบบดึง Revenue ที่ <b>ready_for_billing</b> ของบริษัทในรอบนี้มารวมอัตโนมัติ<br>
         ถ้าไม่มีรายการ → reject NO_REVENUE_TO_BILL

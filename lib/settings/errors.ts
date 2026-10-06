@@ -14,6 +14,8 @@ export const SETTINGS_ERROR_CODES = [
   'CYCLE_NOT_FOUND',
   'CYCLE_SCOPE_OVERLAP',
   'CYCLE_SCOPE_MISMATCH',
+  // มติ PO U146 — บริษัทต้องมีรอบบิลก่อนสร้างรอบวางบิล (รอบบิลเป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม)
+  'BILLING_CYCLE_NOT_SET',
   'DUPLICATE_CYCLE_NAME',
   // §6.2 สายอนุมัติ
   'APPROVAL_MATRIX_NOT_FOUND',
@@ -55,6 +57,7 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   CYCLE_NOT_FOUND: 404,
   CYCLE_SCOPE_OVERLAP: 409,
   CYCLE_SCOPE_MISMATCH: 400,
+  BILLING_CYCLE_NOT_SET: 400,
   DUPLICATE_CYCLE_NAME: 400,
   APPROVAL_MATRIX_NOT_FOUND: 404,
   BANK_ACCOUNT_NOT_FOUND: 404,
@@ -87,6 +90,11 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   CYCLE_SCOPE_MISMATCH: {
     title: 'รอบที่เลือกไม่ครอบคลุมรายการนี้',
     message: 'รอบที่เลือกไม่ได้ใช้กับบริษัทหรือฝั่งทีมนี้ — เลือกรอบที่ตรงขอบเขต หรือไม่ใช้รอบ',
+  },
+  BILLING_CYCLE_NOT_SET: {
+    title: 'บริษัทยังไม่มีรอบบิล',
+    message:
+      'บริษัทนี้ยังไม่ได้เลือกรอบบิล — เลือก "รอบบิลที่ใช้" ที่หน้าบริษัทไฟแนนซ์ หรือเพิ่มบริษัทเข้ารอบบิลในตั้งค่า ก่อนสร้างรอบวางบิล',
   },
   CYCLE_NOT_FOUND: {
     title: 'ไม่พบรอบบิล/รอบจ่าย',

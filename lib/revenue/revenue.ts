@@ -181,6 +181,7 @@ export function summarizeBillingBatch(revenues: readonly RevenueAmounts[]): Bill
  * สถานะของรอบหลังรับชำระ (`19` §9.2) — **จุดเสียบของไฟล์ 35** (Phase 4.2) ไม่ใช่การกรอกมือ
  *
  * รับครบ/เกิน ⇒ `paid` · รับบางส่วน ⇒ `partially_paid` · ยังไม่รับ ⇒ คงสถานะเดิม
+ * · มติ PO U144: ขาดไม่เกินเพดาน ⇒ ส่วนต่างตัดเป็นค่าธรรมเนียมธนาคาร (ส่งมาใน `bankFeeWrittenOffSatang`) ⇒ `paid`
  * ⚠️ WHT ที่ลูกค้าหักจากเรา (A1) ถือว่า "รับครบแล้ว" ด้วย — เงินส่วนนั้นไปเป็นเครดิตภาษี ไม่ใช่หนี้ค้าง
  */
 export function resolveBillingStatusAfterReceipt(input: {
@@ -188,6 +189,8 @@ export function resolveBillingStatusAfterReceipt(input: {
   totalSatang: number
   receivedSatang: number
   whtWithheldByCustomerSatang: number
+  /** มติ PO U144 — ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (`resolveBankFeeWriteOff()`) นับเป็นชำระแล้ว */
+  bankFeeWrittenOffSatang: number
 }): BillingBatchStatus {
   const settled = settledSatang(input)
   if (settled <= 0) return input.current

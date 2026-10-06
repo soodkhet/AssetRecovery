@@ -80,8 +80,11 @@ export interface FinanceCompanyValues {
    */
   whtWithheldByCustomerPct: number | null
   defaultInvoiceDeliveryFormat: InvoiceDeliveryFormat
-  billingDay: number
-  paymentDueDays: number
+  /**
+   * มติ PO U146 — **รอบบิลที่ใช้** (แหล่งเดียวของวันตัดรอบ + เครดิตเทอม · แทน `billing_day`/`payment_due_days` เดิม)
+   * ไม่ใช่คอลัมน์ของบริษัท — เก็บเป็นรายชื่อของรอบ (`billing_cycle_companies`) · `null` = ยังไม่เลือก
+   */
+  billingCycleId: string | null
 }
 
 /**
@@ -179,8 +182,7 @@ export function toCompanyAuditPayload(
     vat_mode: normalized.vatMode,
     wht_withheld_by_customer_pct: normalized.whtWithheldByCustomerPct,
     default_invoice_delivery_format: normalized.defaultInvoiceDeliveryFormat,
-    billing_day: normalized.billingDay,
-    payment_due_days: normalized.paymentDueDays,
+    billing_cycle_id: normalized.billingCycleId,
     status: state.status,
     suspended_reason: state.suspendedReason,
   }

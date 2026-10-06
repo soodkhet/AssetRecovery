@@ -11,7 +11,7 @@ import { CSV_BOM } from '@/lib/exports/csv'
  *  - `37` §16: Export ขณะมี critical `open` ⇒ `EXPORT_BLOCKED_CRITICAL` · `authorized` แล้วผ่าน (`34` §11)
  *  - `37` §16: Export ซ้ำรอบเดิม ⇒ version ถัดไป (v1.0 → v1.1) **ไม่ทับของเดิม** และไฟล์เก่ายังอยู่ครบ
  *  - `37` §16: mark-sent ⇒ `sent` + `sent_at` · ข้ามขั้น `generated → accepted` ⇒ `EXPORT_INVALID_STATUS`
- *  - `37` §6.1: ชุดมีไฟล์ 00–17 ครบ (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94) + หน้าปก + `.zip` · `file_hash` = SHA-256 ของ `.zip` จริง
+ *  - `37` §6.1: ชุดมีไฟล์ 00–18 ครบ (18 = U144 · 09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94) + หน้าปก + `.zip` · `file_hash` = SHA-256 ของ `.zip` จริง
  *  - มติ PO U94: ค่าใช้จ่ายค้างจ่าย · เงินทดรองยกมา/คงเหลือ · ยอดรวมควบคุมตรงกับผลรวมไฟล์ · PDF 50 ทวิ/ใบสำคัญจ่าย/สลิปใน zip · เพดาน
  *  - DEC-006/D10: payee ที่ไม่มีเลขผู้เสียภาษี 13 หลัก ⇒ `EXPORT_PAYEE_TAX_ID_MISSING` (ไม่ปล่อยช่องว่างออกไป)
  *  - `37` §10: ไม่มีทางลบระเบียนเก่า — export ครั้งใหม่เพิ่มแถว ไม่ใช่ update แถวเดิม
@@ -335,7 +335,7 @@ afterAll(async () => {
 })
 
 suite('Phase 4.6 — สร้างชุดเอกสารส่งบัญชี (`37` §6.1 · §16)', () => {
-  it('ชุดมีไฟล์ 00–17 ครบ + หน้าปก + .zip + PDF 50 ทวิ/ใบสำคัญจ่าย/สลิป · file_hash = SHA-256 ของ .zip จริง', async () => {
+  it('ชุดมีไฟล์ 00–18 ครบ + หน้าปก + .zip + PDF 50 ทวิ/ใบสำคัญจ่าย/สลิป · file_hash = SHA-256 ของ .zip จริง', async () => {
     await resetOrgData()
     await seedCompletedBatch([{ payeeId: PAYEE_ID, gross: 850000, wht: 25500 }])
     await seedRevenue()
@@ -345,7 +345,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
 
     expect(record.versionLabel).toBe('v1.0')
     expect(record.status).toBe('generated')
-    expect(record.fileCount).toBe(18)
+    expect(record.fileCount).toBe(19)
     expect(record.files.map((file) => file.key).sort()).toEqual([
       '00',
       '01',
@@ -365,6 +365,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       '15',
       '16',
       '17',
+      '18',
       'cover',
       'pack',
     ])
@@ -397,6 +398,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       '15_Accrued_Expenses.csv',
       '16_Advance_Balance.csv',
       '17_Company_Documents.csv',
+      '18_Bank_Fee_Write_Offs.csv',
       // มติ PO U94 ข้อ 5 — 50 ทวิ ของงวด (ชุดเดียวกับไฟล์ 05) + ใบสำคัญจ่าย/สลิปของรอบที่โอนแล้ว (ชุดเดียวกับไฟล์ 04)
       'wht_certificates/<cert>.pdf',
       'vouchers/PV-PB-4.6-1-KEY.pdf',
@@ -588,8 +590,8 @@ suite('Phase 4.6 — สถานะการส่งมอบ (`37` §9 · §1
     expect(exported).toBeDefined()
     const after = exported?.after_data as { version?: string; file_names?: string[]; file_hash?: string } | undefined
     expect(after?.version).toBe('v1.0')
-    // หน้าปก + 18 ไฟล์ข้อมูล + PDF 50 ทวิ 1 + ใบสำคัญจ่าย/สลิป 2
-    expect(after?.file_names).toHaveLength(22)
+    // หน้าปก + 19 ไฟล์ข้อมูล + PDF 50 ทวิ 1 + ใบสำคัญจ่าย/สลิป 2
+    expect(after?.file_names).toHaveLength(23)
     expect(after?.file_hash).toMatch(/^[0-9a-f]{64}$/)
   })
 })
@@ -632,8 +634,8 @@ suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บ�
     const record = await exportsApi.createExportPack(ctx, { periodId })
     const row = await db().exportRecord.findUniqueOrThrow({ where: { id: record.id }, select: { fileUrls: true } })
     const paths = Object.values(row.fileUrls as Record<string, string>)
-    // 18 ไฟล์ข้อมูล + หน้าปก + zip (PDF อยู่ใน zip เท่านั้น)
-    expect(paths).toHaveLength(20)
+    // 19 ไฟล์ข้อมูล + หน้าปก + zip (PDF อยู่ใน zip เท่านั้น)
+    expect(paths).toHaveLength(21)
     for (const path of paths) expect(path, path).toMatch(/^[A-Za-z0-9!\-_.*'()/]+$/)
     expect(paths.some((path) => path.endsWith('/AccountingPack_2569-06_v1.0.zip'))).toBe(true)
     // ชื่อที่ผู้ใช้เห็น/ได้ตอนดาวน์โหลดยังเป็นภาษาไทย
@@ -656,7 +658,7 @@ suite('UAT R7cv3-B01 — อัปโหลดเข้าที่เก็บ�
     }
 
     expect(storage.size).toBe(0)
-    expect(removed).toHaveLength(19)
+    expect(removed).toHaveLength(20)
     expect(await db().exportRecord.count({ where: { periodId } })).toBe(0)
 
     const retried = await exportsApi.createExportPack(ctx, { periodId })
@@ -796,7 +798,7 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     const periodId = await junePeriodId()
 
     const record = await exportsApi.createExportPack(ctx, { periodId })
-    expect(record.fileCount).toBe(18)
+    expect(record.fileCount).toBe(19)
 
     const csv = fileAt([...storage.keys()].find((path) => path.endsWith('12_Tax_Invoices.csv')) ?? '')
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
@@ -819,8 +821,8 @@ suite('มติ PO U57 — 12_Tax_Invoices.csv + PDF ใบกำกับใ�
     ])
     const pdf = zipEntryBytes(zipBytes, 'tax_invoices/INV-T46-0002.pdf')
     expect(decoder.decode((pdf ?? new Uint8Array()).subarray(0, 5))).toBe('%PDF-')
-    // PDF อยู่ใน zip เท่านั้น — ไม่อัปโหลดแยก (18 ไฟล์ข้อมูล + หน้าปก + zip)
-    expect([...storage.keys()].filter((path) => path.includes(`/v${record.version}/`))).toHaveLength(20)
+    // PDF อยู่ใน zip เท่านั้น — ไม่อัปโหลดแยก (19 ไฟล์ข้อมูล + หน้าปก + zip)
+    expect([...storage.keys()].filter((path) => path.includes(`/v${record.version}/`))).toHaveLength(21)
 
     // audit บอกจำนวน PDF ที่แนบ
     const audit = await db().$queryRawUnsafe<
@@ -1200,8 +1202,8 @@ suite('มติ PO U94 ข้อ 4/5 · U96 #15 — ยอดรวมควบ
     const control = csvRows(packFile(record.version, '00_Control_Totals.csv'))
     expect(control[0]).toBe('section,file,item,description,row_count,amount_baht')
     const fileLines = control.slice(1).map((line) => line.split(',')).filter((cells) => cells[0] === 'file')
-    // ทุกไฟล์ 01–17 มีบรรทัดควบคุม
-    expect(new Set(fileLines.map((cells) => cells[1])).size).toBe(17)
+    // ทุกไฟล์ 01–18 มีบรรทัดควบคุม
+    expect(new Set(fileLines.map((cells) => cells[1])).size).toBe(18)
     let checked = 0
     for (const [, fileName, item, , rowCount, amount] of fileLines) {
       if (fileName === undefined || fileName.endsWith('.xlsx') || item === undefined || item === '-' || item.includes('[')) continue

@@ -34,8 +34,8 @@ export const billingBatchListQuerySchema = z.object({
  * สร้างรอบวางบิล (`19` §9.1) — รวม Revenue ที่ `ready_for_billing` ของบริษัทนั้น
  * ตั้งแต่ต้นเดือนของวันตัดรอบจนถึงวันตัดรอบ
  *
- * `cycleId` = รอบบิล (`13` §6.1 ชนิด `AR`) ที่ใช้คำนวณวันครบกำหนด — ไม่ระบุจะใช้
- * `finance_companies.payment_due_days` ของบริษัทนั้นเป็น Net N วันแทน (`02` §5)
+ * `cycleId` = รอบบิล (`13` §6.1 ชนิด `AR`) ที่ใช้คำนวณวันครบกำหนด — ไม่ระบุ = รอบบิลที่บริษัทใช้
+ * (มติ PO U146 — รอบบิลเป็นแหล่งเดียว · บริษัทไม่มีรอบ = `BILLING_CYCLE_NOT_SET`)
  */
 export const billingBatchCreateSchema = z.object({
   companyId: uuidSchema,

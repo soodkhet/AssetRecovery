@@ -212,8 +212,8 @@ beforeAll(async () => {
   `)
 
   const company = await tx.$queryRawUnsafe<{ id: string }[]>(`
-    INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, payment_due_days, created_by)
-    VALUES ('${ORG_ID}', 'ไฟแนนซ์ CN (${RUN})', 'FCN', '${RUN_TAX_ID}', '1 ถนนสีลม กรุงเทพฯ', 'exclude_vat', 30,
+    INSERT INTO finance_companies (organization_id, name, short_name, tax_id, address, vat_mode, created_by)
+    VALUES ('${ORG_ID}', 'ไฟแนนซ์ CN (${RUN})', 'FCN', '${RUN_TAX_ID}', '1 ถนนสีลม กรุงเทพฯ', 'exclude_vat',
             '${ACCOUNTING_ID}')
     RETURNING id
   `)

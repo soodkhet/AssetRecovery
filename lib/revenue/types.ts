@@ -48,6 +48,10 @@ export interface BillingBatchDto {
   receivedSatang: number
   /** A1 — WHT ที่บริษัทไฟแนนซ์หักจากเรา (นับเป็นรับชำระแล้ว ไม่ใช่หนี้ค้าง) */
   whtWithheldByCustomerSatang: number
+  /** มติ PO U144 — ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (รับขาดไม่เกินเพดาน · นับเป็นชำระแล้ว) */
+  bankFeeWrittenOffSatang: number
+  /** วันที่ตัดส่วนต่าง (ISO date) — ไม่มีการตัด = `null` */
+  bankFeeWrittenOffDate: string | null
   /** `22` §6.11 — `total − received` (ติดลบได้เมื่อรับเกิน) */
   outstandingSatang: number
   /** ยอดรายได้ในรอบ **ก่อน VAT** (ผลรวม `revenues.gross_satang`) */

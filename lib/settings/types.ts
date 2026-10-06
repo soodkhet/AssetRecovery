@@ -36,7 +36,8 @@ export interface CycleDto {
   type: CycleType
   cutoffRuleType: CutoffRuleType
   cutoffDates: number[]
-  cutoffText: string | null
+  /** ข้อความกติกาตัดรอบแบบอิสระเดิม (ก่อนมติ PO U146) — อ้างอิงเท่านั้น · รอบใหม่ = null */
+  legacyCutoffText: string | null
   dueRuleType: DueRuleType
   dueRuleValue: number | null
   /** label ที่ผู้ใช้เห็น — ห้าม parse มาคำนวณ (A5) */
@@ -68,7 +69,6 @@ export interface FinancePolicyDto {
   /** ชื่อช่วงอายุหนี้ที่รายงาน AR Aging ใช้ (ไฟล์ 19 §6.4) — คำนวณจาก `arAgingBuckets` */
   arAgingLabels: string[]
   writeOffToleranceSatang: number
-  advanceUnclearedToEmployeeReceivable: boolean
   /** มติ PO U103 — เพดานใบรับรองแทนใบเสร็จต่อใบ / ต่อคนต่อเดือน */
   substituteReceiptMaxPerDocSatang: number
   substituteReceiptMaxPerMonthSatang: number

@@ -53,7 +53,8 @@ import type { CycleDto } from '@/lib/settings/types'
  * ห้ามซ้อนกับรอบชนิดเดียวกัน (API ตอบ `CYCLE_SCOPE_OVERLAP`) · ตอนสร้างรอบวางบิล/รอบจ่ายระบบเลือกรอบที่ตรงให้
  */
 
-type CutoffRuleType = 'fixed_dates' | 'month_end' | 'custom_text'
+// มติ PO U146 — ตัดชนิดข้อความอิสระ: กติกาต้องคำนวณวันตัดรอบได้ (หน้าสร้างรอบวางบิล/รอบจ่ายเสนอวันตัดให้)
+type CutoffRuleType = 'fixed_dates' | 'month_end'
 type DueRuleType = 'net_days' | 'day_of_next_month' | 'month_end'
 type ScopeKind = 'all_companies' | 'selected_companies' | 'all_teams' | 'inhouse' | 'outsource'
 
@@ -62,7 +63,6 @@ interface FormState {
   type: 'AR' | 'AP'
   cutoffRuleType: CutoffRuleType
   cutoffDates: number[]
-  cutoffText: string
   dueRuleType: DueRuleType
   dueRuleValue: string
   scopeKind: ScopeKind
@@ -75,7 +75,6 @@ const EMPTY_FORM: FormState = {
   type: 'AR',
   cutoffRuleType: 'fixed_dates',
   cutoffDates: [],
-  cutoffText: '',
   dueRuleType: 'net_days',
   dueRuleValue: '30',
   scopeKind: 'all_companies',
@@ -86,7 +85,6 @@ const EMPTY_FORM: FormState = {
 const CUTOFF_RULE_LABEL: Readonly<Record<CutoffRuleType, string>> = {
   fixed_dates: 'วันที่คงที่ทุกเดือน',
   month_end: 'ทุกสิ้นเดือน',
-  custom_text: 'กำหนดเอง (อธิบายเป็นข้อความ)',
 }
 
 const DUE_RULE_LABEL: Readonly<Record<DueRuleType, string>> = {
@@ -185,7 +183,6 @@ export function CyclesTab() {
             type: target.type,
             cutoffRuleType: target.cutoffRuleType,
             cutoffDates: [...target.cutoffDates],
-            cutoffText: target.cutoffText ?? '',
             dueRuleType: target.dueRuleType,
             dueRuleValue: target.dueRuleValue === null ? '' : String(target.dueRuleValue),
             scopeKind: target.scopeKind,
@@ -226,7 +223,6 @@ export function CyclesTab() {
       type: form.type,
       cutoffRuleType: form.cutoffRuleType,
       cutoffDates: form.cutoffRuleType === 'fixed_dates' ? form.cutoffDates : [],
-      cutoffText: form.cutoffRuleType === 'custom_text' ? form.cutoffText.trim() : '',
       dueRuleType: form.dueRuleType,
       dueRuleValue: form.dueRuleType === 'month_end' || form.dueRuleValue.trim() === '' ? null : Number(form.dueRuleValue),
       scopeKind: form.scopeKind,
@@ -507,15 +503,8 @@ export function CyclesTab() {
             </Field>
           )}
 
-          {form.cutoffRuleType === 'custom_text' && (
-            <Field id="cycle-cutoff-text" label="อธิบายกติกาวันตัดรอบ" required error={errors.cutoffText}>
-              <Input
-                id="cycle-cutoff-text"
-                value={form.cutoffText}
-                onChange={(event) => set('cutoffText', event.target.value)}
-                placeholder='เช่น "ทุกวันศุกร์สุดท้ายของเดือน"'
-              />
-            </Field>
+          {editing?.legacyCutoffText !== null && editing?.legacyCutoffText !== undefined && (
+            <p className="text-[11px] text-slate-500">กติกาเดิมที่พิมพ์ไว้: “{editing.legacyCutoffText}” (แปลงเป็นวันที่ตัดรอบด้านบนแล้ว)</p>
           )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
