@@ -114,13 +114,13 @@
 | 6.5 | Executive Dashboard (E1–E3) | ✅ | 2026-08-15 · `9e0d570` · E1–E3 ครบ (KPI 6 การ์ด + เทรนด์ 12 เดือน + Top 5 บริษัท · Scorecard บริษัท/ทีม) + `<ReportLineChart>` shared ⇒ **รายงานครบ 17/17 ตัวของไฟล์ 96** · เทสต์ pure 25 + DB 11 → archive |
 | 6.6 | แดชบอร์ดหลัก (เมนูแรก Top Nav) | ⬜ | PLAN §6.6 · มติ PO 2026-08-16: ตาม mockup + ปรับเข้าข้อมูลจริง |
 
-## Phase 7 — Client Portal (ไฟล์ 97) (ปลดล็อกแล้ว — มติ PO 2026-08-16: Supabase Auth เดียวกับ internal)
+## Phase 7 — Client Portal (ไฟล์ 97) ✅ (ทำในรอบ UAT ตามมติ U6/O43 · 05/10/2569 — รายละเอียดใน `uat/STATE.md` + `uat/report/R12-portal-v1.md`)
 
 | # | งาน | สถานะ | หมายเหตุ |
 |---|---|---|---|
-| 7.1 | Portal Auth + Scope Middleware (company_id) | ⬜ | PLAN §7.1 · Auth = Supabase Auth เดียวกับ internal |
-| 7.2 | Portal API 11 endpoints + Status Mapping | ⬜ | PLAN §7.2 · GET เท่านั้น |
-| 7.3 | Portal FE (Desktop + Mobile) | ⬜ | PLAN §7.3 |
+| 7.1 | Portal Auth + Scope Middleware (company_id) | ✅ | 2026-10-05 · `ee104b1` `ae69fb4` · ทำในรอบ UAT มติ U6 (P1 capability/สิทธิ์ 3 ระดับ · P3 guard `requirePortalAccess` + บริษัท suspended) |
+| 7.2 | Portal API 11 endpoints + Status Mapping | ✅ | 2026-10-05 · `b59da2a` `71b829f` · P2 status-map/serializers whitelist · P4–P6 API (ขยายเป็น 16 endpoint ตาม U96) · GET เท่านั้น |
+| 7.3 | Portal FE (Desktop + Mobile) | ✅ | 2026-10-05 · `bfa6f6d`…`d7b206d` · P7–P10 UI · P11 acceptance R12 ผ่าน (ข้ามบริษัท 39/39 ไม่รั่ว · GET-only 52/52) |
 
 ## Phase 8 — Integration, Acceptance & Final
 
