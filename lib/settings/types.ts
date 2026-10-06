@@ -244,17 +244,6 @@ export interface BankFileFormatDto {
   updatedAt: string
 }
 
-/** ข้อมูลผู้ขายบนใบกำกับภาษี (มติ PO U82) — ชื่อ/เลขผู้เสียภาษีอ่านอย่างเดียว · แก้ได้เฉพาะสาขา */
-export interface SellerBranchDto {
-  name: string
-  taxId: string
-  vatRegistered: boolean
-  /** `00000` = สำนักงานใหญ่ */
-  branchCode: string
-  /** "สำนักงานใหญ่" / "สาขาที่ 00001" */
-  branchLabel: string
-}
-
 /** เทมเพลตเอกสาร 1 ชนิด (`13` §6.13 · มติ PO U122) */
 export interface TaxDocTemplateDto {
   documentType: TemplateDocumentType

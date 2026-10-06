@@ -15,6 +15,7 @@ import {
   LoadingState,
   PageHeader,
   Select,
+  StatusBadge,
   Textarea,
   useToast,
 } from '@/components/ui'
@@ -245,11 +246,10 @@ export function ServiceFeeTemplatesManager() {
                         <span className="font-mono text-[10px] text-slate-400">v{template.version}</span>
                       </div>
                     </div>
-                    <Badge
-                      className={template.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}
-                    >
-                      {template.isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
-                    </Badge>
+                    <StatusBadge
+                      group={template.isActive ? 'success' : 'neutral'}
+                      label={template.isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                    />
                   </div>
 
                   <div className="mb-4 grid grid-cols-2 gap-3">

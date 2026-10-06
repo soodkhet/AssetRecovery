@@ -92,6 +92,14 @@ export interface AssignmentRowInput {
   canAct: boolean
 }
 
+/**
+ * กดการ์ด Kanban แล้วเปิดอะไร — ไม่มีสิทธิ์มอบหมาย (settings ปิด/อ่านอย่างเดียว) ⇒ รายละเอียดอ่านอย่างเดียว
+ * **ห้าม**เปิดฟอร์มมอบหมายแล้วปล่อยให้ API ปฏิเสธ (`40` §7.2 ซ่อน ไม่ใช่ disable · Final ด่าน 5)
+ */
+export function kanbanCardOpens(canAct: boolean): 'assign_modal' | 'detail_readonly' {
+  return canAct ? 'assign_modal' : 'detail_readonly'
+}
+
 /** ปุ่มบนแถว/การ์ดของหน้ารายการ — ปุ่ม "ดูรายละเอียด" ไม่ผูกกับ settings จึงไม่อยู่ในชุดนี้ */
 export function assignmentRowActions(input: AssignmentRowInput): AssignmentActionButton[] {
   if (!input.canAct) return []

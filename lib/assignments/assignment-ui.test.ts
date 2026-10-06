@@ -12,6 +12,7 @@ import {
   reassignWarning,
   teamSideBadgeClass,
   teamSideLabel,
+  kanbanCardOpens,
 } from '@/lib/assignments/assignment-ui'
 import { AssignmentError } from '@/lib/assignments/errors'
 
@@ -144,5 +145,12 @@ describe('เวลาที่เหลือของคำขอ (`40` §6.1.
 
   it('เลยกำหนดแล้วบอกว่ารอระบบเปลี่ยนอัตโนมัติ (job อาจยังไม่รัน)', () => {
     expect(expiresInText('2026-08-14T02:59:00Z', now)).toBe('หมดเวลาแล้ว — รอระบบเปลี่ยนให้อัตโนมัติ')
+  })
+})
+
+describe('การ์ด Kanban ตามสิทธิ์มอบหมาย (Final ด่าน 5)', () => {
+  it('มีสิทธิ์ → ฟอร์มมอบหมาย · ไม่มี (settings ปิด) → รายละเอียดอ่านอย่างเดียว', () => {
+    expect(kanbanCardOpens(true)).toBe('assign_modal')
+    expect(kanbanCardOpens(false)).toBe('detail_readonly')
   })
 })

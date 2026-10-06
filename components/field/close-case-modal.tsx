@@ -762,7 +762,7 @@ export function CloseCaseModal({
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-[15px] font-bold text-slate-800">{detail.debtorName ?? '—'}</div>
             <div className="mt-0.5 text-xs text-slate-500">
-              {detail.caseRef} · รอบที่ {detail.trackingRound}
+              <span className="font-mono">{detail.caseRef}</span> · รอบที่ {detail.trackingRound}
             </div>
           </div>
 

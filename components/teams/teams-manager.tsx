@@ -12,13 +12,14 @@ import {
   Input,
   PageHeader,
   Select,
-  TBody,
-  THead,
+  StatusBadge,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -300,13 +301,10 @@ export function TeamsManager() {
                   </Td>
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Badge
-                        className={
-                          team.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
-                        }
-                      >
-                        {team.status === 'active' ? 'Active' : 'Inactive'}
-                      </Badge>
+                      <StatusBadge
+                        group={team.status === 'active' ? 'success' : 'neutral'}
+                        label={team.status === 'active' ? 'Active' : 'Inactive'}
+                      />
                       <Can action="manage" resource={MANAGE_RESOURCE}>
                         <Button
                           variant="secondary"

@@ -15,6 +15,7 @@ import {
   LoadingState,
   PageHeader,
   Select,
+  StatusBadge,
   Textarea,
   useToast,
 } from '@/components/ui'
@@ -229,9 +230,10 @@ export function CompensationPlansManager() {
                       </span>
                     </div>
                   </div>
-                  <Badge className={plan.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}>
-                    {plan.isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
-                  </Badge>
+                  <StatusBadge
+                    group={plan.isActive ? 'success' : 'neutral'}
+                    label={plan.isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
+                  />
                 </div>
 
                 <div className="mb-4 grid grid-cols-2 gap-3">

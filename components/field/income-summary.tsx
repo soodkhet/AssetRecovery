@@ -114,7 +114,7 @@ export function IncomeSummary() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-slate-700">{item.debtorName ?? '—'}</div>
                     <div className="truncate text-[11px] text-slate-400">
-                      {item.caseRef} · {fmtDateTime(item.closedAt)}
+                      <span className="font-mono">{item.caseRef}</span> · {fmtDateTime(item.closedAt)}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">

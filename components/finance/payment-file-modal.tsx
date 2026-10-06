@@ -8,6 +8,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { hasAdvanceOffset, isDuplicatePaymentFile, payoutTransferText } from '@/lib/payout/payout-ui'
 import type { PaymentFileResultDto, PayoutBatchDto } from '@/lib/payout/types'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
+import { defaultPaymentFileFormatId } from '@/lib/settings/bank-account'
 
 /**
  * Modal "สร้างไฟล์โอนเงินธนาคาร" (`17` §8/§6.3 · mockup `finance.html` `payment-file`)
@@ -61,13 +62,21 @@ export function PaymentFileModal({
       if (cancelled) return
       setFormats(options.formats)
       setAccounts(options.accounts)
-      setFormatId(options.formats.find((format) => format.usable)?.id ?? '')
-      setAccountId(options.accounts.find((account) => account.isPrimary)?.id ?? options.accounts[0]?.id ?? '')
+      const account = options.accounts.find((item) => item.isPrimary) ?? options.accounts[0]
+      setAccountId(account?.id ?? '')
+      // รูปแบบไฟล์โอนที่ตั้งไว้กับบัญชีต้นทาง (ตั้งค่า → บัญชีธนาคารบริษัท) ถูกเลือกให้ก่อน — Final ด่าน 5
+      setFormatId(defaultPaymentFileFormatId(options.formats, account?.paymentFileFormat))
     })()
     return () => {
       cancelled = true
     }
   }, [batchId, loadOptions])
+
+  function changeAccount(nextId: string): void {
+    setAccountId(nextId)
+    const account = accounts.find((item) => item.id === nextId)
+    if (account?.paymentFileFormat) setFormatId(defaultPaymentFileFormatId(formats, account.paymentFileFormat))
+  }
 
   if (batch === null) return null
 
@@ -218,7 +227,7 @@ export function PaymentFileModal({
               </Field>
 
               <Field label="บัญชีบริษัทที่จ่าย" required>
-                <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+                <Select value={accountId} onChange={(event) => changeAccount(event.target.value)}>
                   <option value="">— เลือกบัญชี —</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>

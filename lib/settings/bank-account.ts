@@ -85,3 +85,40 @@ export function toBankAccountAuditPayload(values: BankAccountValues): Record<str
     is_primary: values.isPrimary,
   }
 }
+
+// ── ผูกบัญชีกับรูปแบบไฟล์ธนาคาร (Final Test ด่าน 5) ───────────────────────
+// `statement_format` / `payment_file_format` เก็บเป็น **ชื่อธนาคารของรูปแบบไฟล์** (`bank_file_formats.bank_name`)
+// — ฝั่งนำเข้า statement จับคู่ด้วยชื่อนี้ตรงตัว (`lib/bank-recon/queries.ts` statementColumnMappingOf)
+// ⇒ หน้าจอต้องให้**เลือก**จากรูปแบบที่มีจริง ไม่ใช่พิมพ์อิสระ (พิมพ์ไม่ตรง = ใช้รูปแบบมาตรฐานเงียบ ๆ)
+
+export interface BankFileFormatRef {
+  id: string
+  bankName: string
+  usable: boolean
+}
+
+/** ตัวเลือกชื่อรูปแบบไฟล์ (ไม่ซ้ำ เรียงตามชื่อ) — ค่าปัจจุบันที่ไม่พบในรายการยังแสดงไว้ (`missing`) ไม่หายเงียบ */
+export function bankFileFormatNameOptions(
+  formats: readonly Pick<BankFileFormatRef, 'bankName'>[],
+  current: string,
+): { value: string; missing: boolean }[] {
+  const names = [...new Set(formats.map((format) => format.bankName))].sort((a, b) => a.localeCompare(b, 'th'))
+  const options = names.map((value) => ({ value, missing: false }))
+  const trimmed = current.trim()
+  if (trimmed !== '' && !names.includes(trimmed)) options.unshift({ value: trimmed, missing: true })
+  return options
+}
+
+/**
+ * รูปแบบไฟล์โอนที่เลือกให้ก่อนตอนสร้างไฟล์โอนเงิน — รูปแบบที่ "ใช้ได้" (ทดสอบผ่าน) และตรงกับ
+ * `payment_file_format` ของบัญชีต้นทาง · ไม่ได้ตั้ง/ไม่ตรง ⇒ รูปแบบที่ใช้ได้ตัวแรก · ไม่มีเลย ⇒ `''`
+ */
+export function defaultPaymentFileFormatId(
+  formats: readonly BankFileFormatRef[],
+  paymentFileFormat: string | null | undefined,
+): string {
+  const usable = formats.filter((format) => format.usable)
+  const preferred = paymentFileFormat?.trim() ?? ''
+  const matched = preferred === '' ? undefined : usable.find((format) => format.bankName === preferred)
+  return (matched ?? usable[0])?.id ?? ''
+}

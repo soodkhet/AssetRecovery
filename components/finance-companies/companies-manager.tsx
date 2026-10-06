@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
 import { CompanyFormModal } from '@/components/finance-companies/company-form-modal'
 import {
-  Badge,
   Button,
+  buttonClass,
   Card,
   ConfirmModal,
   EmptyState,
@@ -16,8 +16,8 @@ import {
   LoadingState,
   PageHeader,
   Select,
+  StatusBadge,
   Textarea,
-  buttonClass,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -241,13 +241,10 @@ export function CompaniesManager() {
             {companies.map((company) => (
               <div key={company.id} className="relative rounded-lg border border-slate-200 p-5 shadow-sm">
                 <div className="absolute top-5 right-5">
-                  <Badge
-                    className={
-                      company.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                    }
-                  >
-                    {company.status === 'active' ? 'Active' : 'Suspended'}
-                  </Badge>
+                  <StatusBadge
+                    group={company.status === 'active' ? 'success' : 'critical'}
+                    label={company.status === 'active' ? 'Active' : 'Suspended'}
+                  />
                 </div>
 
                 <div className="mb-1 text-lg font-bold text-slate-900">{company.name}</div>

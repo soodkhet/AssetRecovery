@@ -39,6 +39,7 @@
 | v3.20 | 06/10/2569 | **มติ PO 06/10/2569 (U108)**: เพิ่ม **§7.1 คำอธิบายในหน้าจอ** — ทุกค่าตั้งด้านบัญชี/การเงิน/ภาษี/เอกสารมีกล่องคำอธิบาย (คืออะไร · ผลของแต่ละตัวเลือก · ตัวอย่างตัวเลขคำนวณสดจากค่าที่กำลังเลือกด้วยสูตรจริง · ใครแก้ได้/มีผลเมื่อไร) ทุกแท็บ + หน้าบริษัทไฟแนนซ์/แผนค่าตอบแทน/เทมเพลตค่าบริการ (`10`/`11`/`12`/`18`) · ไม่เปลี่ยน business logic |
 | v3.21 | 07/10/2569 | **มติ PO 06/10/2569 (U122)** — หลัก: **ใช้ร่วมทุกเอกสาร → §6.17 ข้อมูลองค์กร · ต่างกันตามชนิด → §6.13 เทมเพลตเอกสาร** · §6.13 เปลี่ยนชื่อแท็บเป็น "เทมเพลตเอกสาร" — ชนิดเอกสาร `billing_invoice` / `tax_invoice` / `handover_note` (ตัด 50 ทวิ — แบบทางการ) · ตัด `logo_url` / `signature_image_url` / `paper_size` / `language` (ซ้ำข้อมูลองค์กร หรือแบบตายตัว A4 ไทย) · ต่อชนิดเหลือ `footer_note` + `print_signature` + ปุ่มดูตัวอย่าง PDF · snapshot ลงเอกสารตอนออก · §6.17 เพิ่ม `signature_path`/`signature_sha256` รูปลายเซ็นผู้มีอำนาจ (อัปโหลดแบบโลโก้ · ไม่บังคับ) · §11 เพิ่มแถวสิทธิ์ · §17 ปิดข้อ `logo_url` ซ้ำ |
 | v3.22 | 07/10/2569 | **Final Test ด่าน 3 (ข้อสังเกต J.2 ของ `uat/report/FINAL-coverage.md`) — ปรับข้อความให้ตรงมติที่อนุมัติแล้ว ไม่เปลี่ยนพฤติกรรม**: §6.4 ตาราง Tax Profile แถว `vat_mode` → `filing_form` (PND3/PND53 เท่านั้น — PND1 มาจากอัตรารายคน 40(1)/40(2) · O57 · U96 #2) · แถว `applies_to` → ระบุว่าไม่มีคอลัมน์ ใช้ `tax_profile_default_history` (U121) · §6.4.2 วิธียื่น ภ.ง.ด. "ไม่เลื่อนตามวันหยุด" → เลื่อนตามปฏิทินวันหยุด (U93) |
+| v3.23 | 07/10/2569 | **มติ O73 (Final Test ด่าน 5)**: ลบ endpoint `/api/settings/seller-branch` (ไม่มีหน้าจอเรียกแล้วหลัง U99 · ซ้ำกับ `PATCH /api/settings/organization`) — สาขาผู้ขายแก้ที่ §6.17 ข้อมูลองค์กรจุดเดียว |
 
 ขอบเขตเอกสารนี้: รวมการตั้งค่าพื้นฐานทั้งหมดที่โมดูล Finance/Accounting อื่นต้องอ้างอิง — รอบบิล/รอบจ่าย, สายการอนุมัติ, บัญชีธนาคารบริษัท, Tax Profile, VAT Rate, Cost Center, รูปแบบเอกสาร, รูปแบบไฟล์โอนธนาคาร, Export format, Functional Permission Matrix, นโยบายล็อกรอบบัญชี, รูปแบบเลขที่ใบกำกับภาษี, และรูปแบบเอกสารภาษีทางการ — **13 sub-section ทั้งหมด**
 
@@ -321,7 +322,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 - เลขเอกสารไม่ซ้ำ**ต่อองค์กร** (UNIQUE `(organization_id, เลข)` ของทุกตารางเอกสาร)
 - UI: ตาราง ชนิด | รูปแบบ | ตัวอย่างเลขถัดไป (สด) | ออกล่าสุด | สถานะล็อก + modal แก้ไข (mockup `reference/settings.html` `renderSettingsNumbering`)
 
-**สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO 06/10/2569 — UAT U82 · ม.86/4)** — ค่าตั้งระดับองค์กรคู่กับเลขประจำตัวผู้เสียภาษีของเรา · **v3.16 (มติ U99): ย้ายหน้าจอไปรวมที่ §6.17 ข้อมูลองค์กร** (API `/api/settings/seller-branch` เดิมยังใช้ได้ — สิทธิ์/กติกาเดียวกัน)
+**สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO 06/10/2569 — UAT U82 · ม.86/4)** — ค่าตั้งระดับองค์กรคู่กับเลขประจำตัวผู้เสียภาษีของเรา · **v3.16 (มติ U99): ย้ายหน้าจอไปรวมที่ §6.17 ข้อมูลองค์กร** (API `/api/settings/seller-branch` เดิม**ถูกลบแล้ว** — มติ O73 · แก้ผ่าน `PATCH /api/settings/organization` จุดเดียว สิทธิ์/กติกาเดียวกัน)
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -501,7 +502,6 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | GET / POST / PATCH | /api/settings/vat-rates | VAT Rate (effective-dated) |
 | GET / POST | /api/settings/wht-policy | ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated insert-only — §6.4.2) |
 | GET / PATCH | /api/settings/tax-invoice-numbering | Tax Invoice Numbering Format |
-| GET / PATCH | /api/settings/seller-branch | สำนักงานใหญ่/สาขาของผู้ขาย (U82) — อ่าน `view_master_data` · แก้ `manage_invoice_numbering` + reason |
 | GET / POST / PATCH | /api/settings/cost-centers | Cost Center |
 | GET / POST | /api/settings/holidays | ปฏิทินวันหยุด (§6.15) — GET `?yearBe=` · อ่าน `manage_holidays` view · เพิ่ม manage + reason |
 | POST | /api/settings/holidays/import | นำเข้าหลายวัน (วันที่ซ้ำถูกข้าม) |

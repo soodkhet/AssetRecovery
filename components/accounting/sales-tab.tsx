@@ -241,7 +241,7 @@ export function SalesTab() {
                       .filter((invoice) => invoice.status === 'cancelled')
                       .map((invoice) => (
                         <div key={invoice.id} className="mt-1 flex items-center gap-1.5 text-[10px] text-red-500">
-                          <span className="line-through">{invoice.invoiceNumber}</span>
+                          <span className="font-mono line-through">{invoice.invoiceNumber}</span>
                           {canManageInvoice && invoice.docKind === 'tax_invoice' && !isReplaced(row, invoice) && (
                             <Button size="sm" variant="ghost" onClick={() => setIssuing({ kind: 'replace', invoice, record: row })}>
                               ออกใบแทน

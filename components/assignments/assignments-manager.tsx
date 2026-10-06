@@ -31,6 +31,7 @@ import {
   assignmentStateBadgeGroup,
   assignmentStateLabel,
   expiresInText,
+  kanbanCardOpens,
   PENDING_REASSIGNMENT_BADGE_GROUP,
   PENDING_REASSIGNMENT_LABEL,
   targetFromListItem,
@@ -167,10 +168,21 @@ export function AssignmentsManager({ canAct }: { canAct: boolean }) {
           teams={teams}
           reloadToken={reloadToken}
           onBack={() => setView('list')}
-          onOpenCase={setTarget}
+          // ไม่มีสิทธิ์มอบหมาย (Supervisor ที่ settings ปิด / ผู้ดูอ่านอย่างเดียว) ⇒ การ์ดเปิดรายละเอียดอ่านอย่างเดียว
+          // ไม่เปิดฟอร์มมอบหมาย — ปุ่มต้อง "ซ่อน" ไม่ใช่ปล่อยให้กดแล้วโดน API ปฏิเสธ (`40` §7.2 · Final ด่าน 5)
+          onOpenCase={(next) =>
+            kanbanCardOpens(mayAct) === 'assign_modal' ? setTarget(next) : setDetailCaseId(next.caseId)
+          }
+        />
+        <CaseDetailModal
+          open={detailCaseId !== null}
+          caseId={detailCaseId}
+          hideWorkflowActions
+          description="ดูรายละเอียดเคสจากหน้ามอบหมายงาน (อ่านอย่างเดียว)"
+          onClose={() => setDetailCaseId(null)}
         />
         <AssignmentModal
-          open={target !== null}
+          open={mayAct && target !== null}
           target={target}
           onClose={() => setTarget(null)}
           onDone={() => {
