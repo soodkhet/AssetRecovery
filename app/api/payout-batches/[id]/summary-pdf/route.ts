@@ -3,6 +3,7 @@ import { renderPayoutBatchSummary } from '@/components/pdf/payout-batch-summary'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { currentLetterhead } from '@/lib/organization/letterhead'
 import { assertPayoutDocReady, buildPayoutSummaryDoc } from '@/lib/payout/payout-doc'
 import { getPayoutDocSource, MANAGE_PAYOUT_BATCH } from '@/lib/payout/queries'
 
@@ -26,7 +27,10 @@ export const GET = withApiPermission<RouteContext>(
     const source = await getPayoutDocSource(user, id)
     assertPayoutDocReady(source.batch.status)
 
-    const pdf = await renderPayoutBatchSummary(buildPayoutSummaryDoc(source.batch, source.issuer))
+    const pdf = await renderPayoutBatchSummary(
+      buildPayoutSummaryDoc(source.batch, source.issuer),
+      await currentLetterhead(user.organizationId),
+    )
 
     const fileName = `${source.batch.name}.pdf`
     // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)

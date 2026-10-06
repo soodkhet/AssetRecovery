@@ -8,6 +8,7 @@ import { expenseReceiptPath, FIELD_MEDIA_KINDS, fieldEvidencePath } from '@/lib/
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
 import { intakePhotoPath } from '@/lib/warehouse/intake-photos'
 import { lotDocumentPath } from '@/lib/warehouse/lot-documents'
+import { organizationLogoPath } from '@/lib/organization/profile'
 import { LOT_DOCUMENTS } from '@/lib/warehouse/lot-status'
 
 /**
@@ -34,6 +35,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('customer_wht'), certificateId: z.uuid() }),
   /** หลักฐานคืนเงินผู้โอนของเงินรับรอตรวจสอบ (มติ PO U41) — ผูกกับรายการเดินบัญชี */
   z.object({ kind: z.literal('bank_refund'), transactionId: z.uuid() }),
+  /** โลโก้บริษัทบนหัวเอกสาร (มติ PO U99) — server ตรวจว่าเป็นองค์กรของผู้เรียกเอง */
+  z.object({ kind: z.literal('organization_logo'), organizationId: z.uuid() }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>
@@ -89,6 +92,8 @@ export function uploadTargetPath(
       return customerWhtFilePath(target.certificateId, fileName, uniqueKey)
     case 'bank_refund':
       return bankRefundFilePath(target.transactionId, fileName, uniqueKey)
+    case 'organization_logo':
+      return organizationLogoPath(target.organizationId, fileName, uniqueKey)
   }
 }
 
@@ -102,6 +107,7 @@ export type StoragePathOwner =
   | { kind: 'advance'; advanceId: string }
   | { kind: 'customer_wht'; certificateId: string }
   | { kind: 'bank_transaction'; transactionId: string }
+  | { kind: 'organization_logo'; organizationId: string }
 
 const HEX = '[0-9a-fA-F]'
 const UUID = `${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}`
@@ -125,6 +131,10 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^bank-transactions/(${UUID})/refund/[^/]`),
     owner: (id) => ({ kind: 'bank_transaction', transactionId: id }),
+  },
+  {
+    pattern: new RegExp(`^organization/(${UUID})/logo/[^/]`),
+    owner: (id) => ({ kind: 'organization_logo', organizationId: id }),
   },
 ]
 

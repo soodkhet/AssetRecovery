@@ -665,12 +665,27 @@ enum JobStatus {
 /// องค์กรเจ้าของระบบ (multi-tenant ready) — root table: ไม่มี organization_id และลบไม่ได้ (ไม่มี soft delete)
 model Organization {
   id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// ชื่อบริษัท (ไทย) — ชื่อนิติบุคคลเต็มที่พิมพ์บนเอกสาร
   name          String
+  /// ชื่อบริษัท (อังกฤษ) — ไม่บังคับ · พิมพ์ใต้ชื่อไทยบนหัวเอกสาร (มติ PO U99)
+  nameEn        String? @map("name_en")
   taxId         String  @unique @map("tax_id") @db.VarChar(13)
+  /// ที่อยู่บรรทัดเดียว (ประกอบจาก 5 ช่องด้านล่างด้วย `formatThaiAddressLine()` ทุกครั้งที่บันทึก — มติ PO U99)
+  /// คงคอลัมน์ไว้เพราะ snapshot ของใบกำกับ/ใบแจ้งหนี้/50 ทวิ/ใบส่งมอบ อ่านบรรทัดนี้
   address       String
+  /// ที่อยู่แยกช่อง (มติ PO U99 — โครงเดียวกับ `AddressFields`) · ข้อมูลก่อน U99 = NULL ทั้งชุด (ยังมีแต่ `address`)
+  /// CHECK รหัสไปรษณีย์ 5 หลักใน raw SQL `20261006180000_organization_profile_letterhead`
+  addressDetail      String? @map("address_detail")
+  addressSubdistrict String? @map("address_subdistrict")
+  addressDistrict    String? @map("address_district")
+  addressProvince    String? @map("address_province")
+  addressPostalCode  String? @map("address_postal_code") @db.VarChar(5)
   phone         String? @db.VarChar(20)
   email         String? @db.VarChar(255)
-  /// Supabase Storage URL
+  /// เว็บไซต์ (มติ PO U99) — ไม่บังคับ
+  website       String? @db.VarChar(255)
+  /// path ของโลโก้ใน bucket `case-documents` (`organization/<orgId>/logo/<uuid>.<ext>` — อัปโหลดผ่าน server · มติ PO U99)
+  /// เปลี่ยน/ลบโลโก้ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ (เอกสารที่ snapshot path เดิมไว้ยังพิมพ์โลโก้เดิมได้)
   logoUrl       String? @map("logo_url")
   vatRegistered Boolean @default(true) @map("vat_registered")
   /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
@@ -2682,6 +2697,9 @@ model BillingBatch {
   buyerAddress                String?            @map("buyer_address")
   buyerPhone                  String?            @map("buyer_phone") @db.VarChar(20)
   buyerBranchCode             String?            @map("buyer_branch_code") @db.VarChar(5)
+  /// มติ PO U99 — snapshot หัวเอกสารส่วนที่เพิ่ม (ชื่ออังกฤษ/อีเมล/เว็บไซต์/path โลโก้) ตอนส่งรอบ
+  /// `{ name_en, email, website, logo_path }` · NULL = ส่งก่อน U99 ⇒ PDF ใช้ค่าปัจจุบันเฉพาะฟิลด์ชุดนี้ · immutable หลังส่ง
+  sellerProfileSnapshot       Json?              @map("seller_profile_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2865,6 +2883,9 @@ model TaxInvoice {
   buyerTaxId            String                @map("buyer_tax_id") @db.VarChar(13)
   buyerAddress          String                @map("buyer_address")
   buyerPhone            String?               @map("buyer_phone") @db.VarChar(20)
+  /// มติ PO U99 — snapshot หัวเอกสารส่วนที่เพิ่ม `{ name_en, email, website, logo_path }` ตอนออกใบ
+  /// NULL = ใบก่อน U99 ⇒ PDF ใช้ค่าปัจจุบันขององค์กรเฉพาะฟิลด์ชุดนี้ · immutable ทั้งแถว (trigger `tax_invoices_immutable`)
+  sellerProfileSnapshot Json?                 @map("seller_profile_snapshot")
   /// snapshot รูปแบบการส่งเอกสาร (ปิด D13 ส่วน delivery_format) — ค่าเริ่มต้นของบริษัท ณ ตอนออก
   deliveryFormat        InvoiceDeliveryFormat @map("delivery_format")
   description           String

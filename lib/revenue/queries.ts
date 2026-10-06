@@ -17,6 +17,7 @@ import type {
 } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { billingPartySnapshotOf } from '@/lib/revenue/billing-invoice'
+import { sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
 import { RevenueError } from '@/lib/revenue/errors'
 import { syncSalesRecordFromBilling } from '@/lib/sales/queries'
 import {
@@ -517,11 +518,27 @@ export async function sendBillingBatch(
     const parties = await tx.billingBatch.findUniqueOrThrow({
       where: { id: batchId },
       select: {
-        organization: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
+        organization: {
+          select: {
+            name: true,
+            taxId: true,
+            address: true,
+            phone: true,
+            branchCode: true,
+            nameEn: true,
+            email: true,
+            website: true,
+            logoUrl: true,
+          },
+        },
         company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
       },
     })
-    const snapshot = billingPartySnapshotOf(parties.organization, parties.company)
+    const snapshot = {
+      ...billingPartySnapshotOf(parties.organization, parties.company),
+      // มติ PO U99 — หัวเอกสาร (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) ณ วันส่ง
+      sellerProfileSnapshot: sellerProfileSnapshotJson(sellerProfileOf(parties.organization)),
+    }
     // ยึดด้วยสถานะเดิม — สองคนกดส่งพร้อมกัน คนที่สองได้ 0 แถวแล้วโดนปฏิเสธ (ไม่ทับ `sent_at`)
     const claimed = await tx.billingBatch.updateMany({
       where: { id: batchId, status: 'draft' },

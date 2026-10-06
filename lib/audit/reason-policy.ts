@@ -124,6 +124,15 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
     fields: [
       'tax_id',
       'vat_registered',
+      // มติ PO U99 — ข้อมูลผู้ขาย/หัวเอกสารที่พิมพ์บนใบกำกับภาษี/ใบแจ้งหนี้ (snapshot ตอนออก)
+      'name',
+      'name_en',
+      'branch_code',
+      'address',
+      'phone',
+      'email',
+      'website',
+      'logo_url',
       'tax_invoice_prefix',
       'tax_invoice_seq',
       'tax_invoice_numbering_mode',

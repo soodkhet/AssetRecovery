@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { OrganizationProfileNotice } from '@/components/settings/organization-profile-notice'
 import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -90,6 +91,8 @@ export function IssueTaxInvoiceModal({
       }
     >
       <div className="space-y-4">
+        {/* มติ PO U99 — ข้อมูลผู้ขายยังเป็นค่าตัวอย่าง ⇒ เตือน (ไม่บล็อก) */}
+        <OrganizationProfileNotice />
         {target.kind === 'receipt' ? (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
             <div className="flex justify-between py-0.5">

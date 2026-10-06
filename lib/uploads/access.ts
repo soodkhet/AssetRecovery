@@ -16,6 +16,7 @@ import { MANAGE_SALES_EXPENSES, MAP_COST_CENTER } from '@/lib/expenses/expense-r
 import { ExpenseStateError } from '@/lib/field/expense-status'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
 import { MANAGE_TAX_INVOICE, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
+import { MANAGE_ORGANIZATION_PROFILE, VIEW_ORGANIZATION_PROFILE } from '@/lib/organization/permissions'
 import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
 import { UploadError } from '@/lib/uploads/errors'
 import type { UploadRule } from '@/lib/uploads/inspect'
@@ -29,6 +30,7 @@ import {
   fieldEvidenceRule,
   intakePhotoRule,
   lotDocumentRule,
+  organizationLogoRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, type StoragePathOwner, type UploadTarget } from '@/lib/uploads/targets'
 import {
@@ -67,6 +69,7 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   APPROVE_ADVANCE,
   MANAGE_CUSTOMER_WHT,
   MANAGE_BANK_RECONCILIATION,
+  MANAGE_ORGANIZATION_PROFILE,
 ] as const
 
 /**
@@ -92,6 +95,7 @@ export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
     REQUEST_ADVANCE,
     MANAGE_CUSTOMER_WHT,
     MANAGE_BANK_RECONCILIATION,
+    VIEW_ORGANIZATION_PROFILE,
   ]),
 ]
 
@@ -123,6 +127,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return customerWhtFileRule(target.certificateId)
     case 'bank_refund':
       return bankRefundFileRule(target.transactionId)
+    case 'organization_logo':
+      return organizationLogoRule(target.organizationId)
   }
 }
 
@@ -173,6 +179,12 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       // หลักฐานคืนเงินผู้โอน = บันทึกคืนเงิน ⇒ สิทธิ์กระทบยอดธนาคาร (มติ PO U41)
       const user = await requirePermission('manage', MANAGE_BANK_RECONCILIATION)
       await assertBankTransactionInScope(user, target.transactionId, { requireSuspense: true })
+      return user
+    }
+    case 'organization_logo': {
+      // โลโก้บนหัวเอกสาร = แก้ข้อมูลองค์กร ⇒ สิทธิ์เดียวกับ endpoint ผูกโลโก้ (Superadmin — มติ PO U99)
+      const user = await requirePermission('manage', MANAGE_ORGANIZATION_PROFILE)
+      if (target.organizationId !== user.organizationId) throw denied(user, `upload:organization-logo org=${target.organizationId}`)
       return user
     }
   }
@@ -273,6 +285,14 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
         throw denied(user, `view:bank-refund tx=${owner.transactionId}`)
       }
       await assertBankTransactionInScope(user, owner.transactionId)
+      return
+    }
+    case 'organization_logo': {
+      // โลโก้ไม่ใช่ข้อมูลส่วนบุคคล — ผู้ดูข้อมูลองค์กรได้เห็นได้ · องค์กรอื่น = ปฏิเสธเหมือนกันทุกกรณี
+      if (!hasAny(user, 'view', [VIEW_ORGANIZATION_PROFILE, MANAGE_ORGANIZATION_PROFILE])) {
+        throw denied(user, `view:organization-logo org=${owner.organizationId}`)
+      }
+      if (owner.organizationId !== user.organizationId) throw denied(user, `view:organization-logo org=${owner.organizationId}`)
       return
     }
   }

@@ -6,6 +6,7 @@ import { bankRefundFilePrefix, customerWhtFilePrefix } from '@/lib/customer-wht/
 import { EXPENSE_RECEIPT_MAX_BYTES, FIELD_MEDIA_MAX_BYTES, type FieldMediaKind } from '@/lib/field/media-upload'
 import { AUDIO_KINDS, DOCUMENT_KINDS, IMAGE_KINDS, VIDEO_KINDS, type FileKind, type UploadRule } from '@/lib/uploads/inspect'
 import { lotDocumentPrefix } from '@/lib/warehouse/lot-documents'
+import { ORGANIZATION_LOGO_MAX_BYTES, organizationLogoPrefix } from '@/lib/organization/profile'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
 
 /**
@@ -96,4 +97,9 @@ export function customerWhtFileRule(certificateId: string): UploadRule {
 /** หลักฐานคืนเงินผู้โอน (สลิปโอนคืน — มติ PO U41) — รับ PDF/รูป เพดานเท่าเอกสารล็อต */
 export function bankRefundFileRule(transactionId: string): UploadRule {
   return { prefix: bankRefundFilePrefix(transactionId), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
+}
+
+/** โลโก้บริษัทบนหัวเอกสาร (มติ PO U99) — `organization/<orgId>/logo/…` รับ PNG/JPG เท่านั้น ≤ 1 MB (ฝังลง PDF ได้ตรง ๆ) */
+export function organizationLogoRule(organizationId: string): UploadRule {
+  return { prefix: organizationLogoPrefix(organizationId), accept: ['png', 'jpeg'], maxBytes: ORGANIZATION_LOGO_MAX_BYTES }
 }

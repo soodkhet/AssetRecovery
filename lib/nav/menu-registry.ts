@@ -232,6 +232,15 @@ export const MENU_ITEMS: readonly MenuItem[] = [
         audiences: ['superadmin', 'executive', 'admin_office'],
         available: true,
       },
+      // มติ PO U99 — "ข้อมูลองค์กร" (mockup `settings.html` แท็บ `organization` ต่อจากผู้ใช้งาน)
+      // ผู้ขาย/หัวเอกสารบนเอกสารทุกใบ · แก้ได้เฉพาะ Superadmin (`manage_invoice_numbering` ที่ API) · บริหาร/บัญชีดูได้
+      {
+        id: 'settings.organization',
+        label: 'ข้อมูลองค์กร',
+        path: '/settings/organization',
+        audiences: ['superadmin', 'executive', 'accounting'],
+        available: true,
+      },
       {
         id: 'settings.compensation',
         label: 'แผนค่าตอบแทน',

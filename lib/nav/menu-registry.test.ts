@@ -119,10 +119,14 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
    * บันทึกการใช้งาน + งานเบื้องหลังได้ ⇒ เห็นเมนู "การตั้งค่า" เฉพาะสองแท็บนี้เท่านั้น
    * แท็บที่ตั้งค่าจริง (สิทธิ์/ผู้ใช้/แผนค่าตอบแทน/…) ยังเป็นของ Superadmin+บริหาร
    */
-  it('การเงิน/บัญชี เห็น "การตั้งค่า" เฉพาะแท็บอ่านอย่างเดียว 2 ตัว', () => {
+  it('การเงิน/บัญชี เห็น "การตั้งค่า" เฉพาะแท็บอ่านอย่างเดียว (บัญชีเห็นข้อมูลองค์กรเพิ่ม — มติ PO U99)', () => {
     for (const audience of ['finance', 'accounting'] as const) {
       const settings = visibleMenus(VIEWERS[audience]).find((item) => item.id === 'settings')
-      expect(settings?.children?.map((child) => child.id)).toEqual(['settings.audit-logs', 'settings.jobs'])
+      expect(settings?.children?.map((child) => child.id)).toEqual(
+        audience === 'accounting'
+          ? ['settings.organization', 'settings.audit-logs', 'settings.jobs']
+          : ['settings.audit-logs', 'settings.jobs'],
+      )
       expect(canViewMenu(VIEWERS[audience], 'settings.audit-logs')).toBe(true)
       expect(canViewMenu(VIEWERS[audience], 'settings.jobs')).toBe(true)
       expect(canViewMenu(VIEWERS[audience], 'settings.roles')).toBe(false)
@@ -144,6 +148,7 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
     expect(canViewMenu(VIEWERS.admin_office, 'settings.users')).toBe(true)
     for (const other of [
       'settings.roles',
+      'settings.organization',
       'settings.compensation',
       'settings.service-fee',
       'settings.teams',
@@ -185,7 +190,7 @@ describe('visibleMenus — Top Nav Visibility Matrix (`06` §7.2)', () => {
   it('แท็บแรกของ "การตั้งค่า" ต่างกันตาม role', () => {
     expect(firstVisibleChildPath(VIEWERS.superadmin, 'settings')).toBe('/settings/roles')
     expect(firstVisibleChildPath(VIEWERS.finance, 'settings')).toBe('/settings/audit-logs')
-    expect(firstVisibleChildPath(VIEWERS.accounting, 'settings')).toBe('/settings/audit-logs')
+    expect(firstVisibleChildPath(VIEWERS.accounting, 'settings')).toBe('/settings/organization') // มติ PO U99 — บัญชีดูข้อมูลองค์กรได้
     expect(firstVisibleChildPath(VIEWERS.field_agent, 'settings')).toBeNull()
   })
 

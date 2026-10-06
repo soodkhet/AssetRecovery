@@ -1,6 +1,8 @@
 import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/renderer'
+import { Letterhead } from '@/components/pdf/letterhead'
 import { Text } from '@/components/pdf/text'
 import { ensureThaiFont, THAI_FONT } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { HandoverDocModel } from '@/lib/warehouse/handover-doc'
 import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
 
@@ -21,7 +23,7 @@ const styles = StyleSheet.create({
   page: { fontFamily: THAI_FONT, fontSize: 9, paddingHorizontal: 36, paddingTop: 36, paddingBottom: 56, color: '#0f172a' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
   title: { fontSize: 16, fontWeight: 700 },
-  issuerName: { fontSize: 9, color: '#64748b', marginTop: 3 },
+  headerNote: { fontSize: 8, color: '#64748b', marginTop: 3 },
   headerRight: { alignItems: 'flex-end' },
   docRef: { fontSize: 11, fontWeight: 700 },
   headerMeta: { fontSize: 8, color: '#64748b', marginTop: 2 },
@@ -79,14 +81,16 @@ function PartyBox({
   )
 }
 
-export function HandoverNote({ doc }: { doc: HandoverDocModel }): React.JSX.Element {
+export function HandoverNote({ doc, letterhead }: { doc: HandoverDocModel; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.docRef}`} author={doc.issuer.name}>
       <Page size="A4" style={styles.page}>
+        {/* หัวเอกสารกลาง (ค่าปัจจุบันขององค์กร — เอกสารภายใน · มติ PO U99) */}
+        <Letterhead letterhead={letterhead} />
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.title}>{doc.title}</Text>
-            <Text style={styles.issuerName}>{doc.issuer.name}</Text>
+            <Text style={styles.headerNote}>เอกสารภายใน — ไม่ใช่เอกสารทางภาษี</Text>
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.docRef}>เลขที่: {doc.docRef}</Text>
@@ -181,7 +185,7 @@ export function HandoverNote({ doc }: { doc: HandoverDocModel }): React.JSX.Elem
 }
 
 /** เรนเดอร์เป็นไฟล์ PDF (`28` §7 — `renderToBuffer()` ฝั่ง server แล้วคืนพร้อม header) */
-export async function renderHandoverNote(doc: HandoverDocModel): Promise<Buffer> {
+export async function renderHandoverNote(doc: HandoverDocModel, letterhead: DocLetterhead): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<HandoverNote doc={doc} />)
+  return renderToBuffer(<HandoverNote doc={doc} letterhead={letterhead} />)
 }

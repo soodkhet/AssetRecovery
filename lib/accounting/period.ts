@@ -1,4 +1,5 @@
 import { AccountingError } from '@/lib/accounting/errors'
+import { organizationProfileWarning } from '@/lib/organization/profile'
 import { periodKeyOf, type PeriodKey } from '@/lib/adjustments/adjustment'
 import { BUDDHIST_YEAR_OFFSET } from '@/lib/constants'
 import { MONTH_NAMES_TH } from '@/lib/field/calendar'
@@ -309,6 +310,8 @@ export interface ReadinessInput {
   unbilledRevenue?: UnbilledRevenueSummary
   /** BUG-160 — รอบวางบิลร่างค้าง · **เตือน ไม่บล็อก** */
   draftBillingBatches?: DraftBillingBatchSummary
+  /** มติ PO U99 — ข้อมูลองค์กรยังเป็นค่าตัวอย่าง (เลขผู้เสียภาษี/ที่อยู่) · **เตือน ไม่บล็อก** */
+  organizationProfileIssues?: readonly string[]
 }
 
 export interface ReadinessResult {
@@ -427,6 +430,8 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   if (unbilledWarning !== null) warnings.push(unbilledWarning)
   const draftWarning = draftBillingBatchWarning(draftBillingBatches)
   if (draftWarning !== null) warnings.push(draftWarning)
+  const profileWarning = organizationProfileWarning(input.organizationProfileIssues ?? [])
+  if (profileWarning !== null) warnings.push(profileWarning)
 
   return {
     ready: checks.every((check) => check.passed),

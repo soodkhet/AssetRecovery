@@ -2,6 +2,7 @@ import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
 import type { InvoiceDeliveryFormat, TaxInvoiceDocKind, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
+import type { SellerProfileSnapshot } from '@/lib/organization/profile'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
@@ -229,6 +230,8 @@ export interface TaxInvoiceDocSource {
   buyerBranchCode: string
   /** สาขาผู้ขาย (องค์กรเรา) ที่ snapshot ไว้บนใบตอนออก (มติ PO U82 · ม.86/4) — ใบก่อนมีช่องนี้ = `00000` */
   sellerBranchCode: string
+  /** หัวเอกสารส่วนที่ snapshot เพิ่มตามมติ PO U99 (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) — ใบก่อน U99 = `null` */
+  sellerProfile: SellerProfileSnapshot | null
   description: string
   periodLabel: string
   amounts: SalesAmounts

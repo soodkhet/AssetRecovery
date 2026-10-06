@@ -13,6 +13,7 @@ import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/type
 
 const requireSessionMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock }))
+vi.mock('@/lib/organization/letterhead', async () => (await import('@/tests/helpers/letterhead')).fakeLetterheadModule())
 
 const queriesMock = vi.hoisted(() => ({
   getPayoutDocSource: vi.fn(),

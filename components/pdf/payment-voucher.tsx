@@ -2,6 +2,7 @@ import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/ren
 import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, SignatureRow, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PaymentVoucherDoc } from '@/lib/payout/payout-doc'
 
 /**
@@ -44,10 +45,10 @@ function InfoRow({ label, value }: { label: string; value: string }): React.JSX.
   )
 }
 
-export function PaymentVoucherPage({ doc }: { doc: PaymentVoucherDoc }): React.JSX.Element {
+export function PaymentVoucherPage({ doc, letterhead }: { doc: PaymentVoucherDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Page size="A4" style={docStyles.page}>
-      <DocHeader headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+      <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
 
       {doc.pendingNote === null ? null : (
         <View style={docStyles.warnBox}>
@@ -100,7 +101,13 @@ export function PaymentVoucherPage({ doc }: { doc: PaymentVoucherDoc }): React.J
   )
 }
 
-export function PaymentVouchers({ docs }: { docs: readonly PaymentVoucherDoc[] }): React.JSX.Element {
+export function PaymentVouchers({
+  docs,
+  letterhead,
+}: {
+  docs: readonly PaymentVoucherDoc[]
+  letterhead: DocLetterhead
+}): React.JSX.Element {
   const first = docs[0]
   // ผู้เรียกกรอง `NO_ITEMS_TO_PAY` มาแล้ว (`selectPayoutDocItems()`) — ยามท้ายทางกัน PDF หน้าเปล่า
   if (first === undefined) throw new RangeError('ใบสำคัญจ่ายต้องมีอย่างน้อย 1 รายการ')
@@ -108,13 +115,16 @@ export function PaymentVouchers({ docs }: { docs: readonly PaymentVoucherDoc[] }
   return (
     <Document title={`${first.title} ${first.batchName}`} author={first.issuer.name}>
       {docs.map((doc) => (
-        <PaymentVoucherPage key={doc.voucherNo} doc={doc} />
+        <PaymentVoucherPage key={doc.voucherNo} doc={doc} letterhead={letterhead} />
       ))}
     </Document>
   )
 }
 
-export async function renderPaymentVouchers(docs: readonly PaymentVoucherDoc[]): Promise<Buffer> {
+export async function renderPaymentVouchers(
+  docs: readonly PaymentVoucherDoc[],
+  letterhead: DocLetterhead,
+): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<PaymentVouchers docs={docs} />)
+  return renderToBuffer(<PaymentVouchers docs={docs} letterhead={letterhead} />)
 }

@@ -1,5 +1,6 @@
 import type { SessionUser } from '@/lib/auth/types'
 import { prisma } from '@/lib/prisma'
+import { parseSellerProfileSnapshot } from '@/lib/organization/profile'
 import { billingInvoicePartiesOf, type BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
 import { RevenueError } from '@/lib/revenue/errors'
 
@@ -30,6 +31,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
             sellerAddress: true,
             sellerPhone: true,
             sellerBranchCode: true,
+            sellerProfileSnapshot: true,
             buyerName: true,
             buyerTaxId: true,
             buyerAddress: true,
@@ -62,6 +64,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
     sentAt: batch.sentAt,
     dueDate: batch.dueDate,
     ...billingInvoicePartiesOf(batch, { seller: batch.organization, buyer: batch.company }),
+    sellerProfile: parseSellerProfileSnapshot(batch.sellerProfileSnapshot),
     lines: batch.revenues.map((revenue) => ({
       caseRef: revenue.case.caseRef,
       revenueDate: revenue.revenueDate,

@@ -3,6 +3,7 @@ import { renderBillingInvoice } from '@/components/pdf/billing-invoice'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { billingInvoiceLetterhead, createLetterheadResolver } from '@/lib/organization/letterhead'
 import { buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
 import { getBillingInvoiceSource } from '@/lib/revenue/billing-invoice-queries'
 import { BILLING_READ_CAPABILITIES } from '@/lib/revenue/queries'
@@ -26,7 +27,10 @@ export const GET = withApiPermission<RouteContext>(
     const { id } = await context.params
     const source = await getBillingInvoiceSource(user, id)
     const doc = buildBillingInvoiceDoc(source)
-    const pdf = await renderBillingInvoice(doc)
+    const pdf = await renderBillingInvoice(
+      doc,
+      await billingInvoiceLetterhead(createLetterheadResolver(user.organizationId), source),
+    )
 
     await emitDocumentExportAudit({
       actor: user,

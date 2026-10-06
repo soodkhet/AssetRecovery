@@ -2,6 +2,7 @@ import { renderBillingInvoice } from '@/components/pdf/billing-invoice'
 import { emitAudit } from '@/lib/audit/audit'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { billingInvoiceLetterhead, createLetterheadResolver } from '@/lib/organization/letterhead'
 import { portalScopedUser, portalViewAsAuditFields, requirePortalRow, withPortal } from '@/lib/portal/guard'
 import { findPortalBillingBatchRow } from '@/lib/portal/queries/finance'
 import { buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
@@ -30,7 +31,10 @@ export const GET = withPortal<RouteContext>('finance', { download: true }, async
   // scope `company` ⇒ ยามใน `getBillingInvoiceSource` ตรวจบริษัทซ้ำอีกชั้น (โหมดดูแทน — มติ U59)
   const source = await getBillingInvoiceSource(portalScopedUser(portal), row.id)
   const doc = buildBillingInvoiceDoc(source)
-  const pdf = await renderBillingInvoice(doc)
+  const pdf = await renderBillingInvoice(
+    doc,
+    await billingInvoiceLetterhead(createLetterheadResolver(portal.user.organizationId), source),
+  )
 
   const meta = getRequestMeta(request)
   await emitAudit({

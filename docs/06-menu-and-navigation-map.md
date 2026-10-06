@@ -23,6 +23,7 @@
 | v2.7 | 05/10/2569 | **มติ PO 05/10/2569 (U40)**: §7.2 แถว "การเงิน" คอลัมน์ธุรการ ❌ → 🔺 = เห็นเมนูการเงิน**เฉพาะผู้ถือ `manage_customer_wht`** และเห็นเฉพาะแท็บ **"50 ทวิ ลูกค้า"** (ช่วยตามหนังสือรับรองที่ลูกค้าหักภาษี) · หน้าการเงิน/บัญชีเพิ่มแท็บ "50 ทวิ ลูกค้า" · mockup `app-shell.html` `ROLE_CONFIG.admin_office` เพิ่ม `finance` |
 | v2.8 | 05/10/2569 | **มติ PO 05/10/2569 (U59) — ธุรการเปิดดูพอร์ทัลของลูกค้า**: §7.2 หมายเหตุ 🔹 ธุรการ — ผู้ถือ `view_client_portal_as` (ค่าเริ่มต้น ธุรการ) เห็นแท็บ "บริษัทไฟแนนซ์" ของการตั้งค่าแบบ**อ่านอย่างเดียว** (ปุ่มแก้ไข/ระงับยังต้อง `manage_companies`) เพื่อใช้ปุ่ม **"เปิด portal ของลูกค้า"** บนการ์ดบริษัท → แท็บใหม่ `/portal/view-as/<companyId>` (ดูอย่างเดียว — `97` §13.1) · ปุ่มซ่อนเมื่อไม่มีสิทธิ์ · Superadmin เห็นปุ่มโดยนิยาม |
 | v2.9 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93)**: §7.2 การตั้งค่า — การเงิน/บัญชี/ธุรการที่ถือ `manage_holidays` เห็นแท็บ "ตั้งค่าบัญชี/การเงิน" เพื่อใช้แท็บปฏิทินวันหยุดเท่านั้น (หมายเหตุ 🗓️) |
+| v2.10 | 06/10/2569 | **มติ PO 06/10/2569 (U99)**: ตั้งค่าทั่วไปเพิ่มแท็บ **ข้อมูลองค์กร** (`/settings/organization` ต่อจากผู้ใช้งาน — mockup `settings.html`) · เห็น: Superadmin/บริหาร/บัญชี (บัญชีจึงมีแท็บแรกของการตั้งค่า = ข้อมูลองค์กร) · แก้ได้เฉพาะ Superadmin ที่ API |
 | v2.1 | 04/07/2569 | **Mockup Audit Batch**: (1) เพิ่ม reference mockup ใหม่ 3 ไฟล์ใน §8 — `dashboard.html` (DRAFT), `case-management.html`, `notifications.html` (2) ระบุจำนวนรายงาน 17 ให้ตรงไฟล์ 96 |
 
 ขอบเขตเอกสารนี้: แผนผังเมนูทั้งหมดของระบบ — Top Nav, Sub Menu, Role Group × Menu Visibility Matrix, Top Nav Permission Matrix — ต้องตรงกับ UI mockup และ README เสมอ
@@ -122,7 +123,7 @@
 - แดชบอร์ดหลัก (Top nav "แดชบอร์ด") — Mockup: `dashboard.html` 🔶 **DRAFT** — ประกอบจากสเปกที่มีอยู่ (คิวงานต่อ role/KPI 96 E1/แจ้งเตือน 90 §6.3) **ยังไม่มีไฟล์ spec .md** รอ Product Owner อนุมัติ mockup แล้วเขียน spec ตาม (ดู `93` §7.1)
 - จัดการเคส (Case Management) — Mockup: `case-management.html` (รายการเคส / คิวพิจารณารับเคส / Recycle Review — สเปกไฟล์ 38 §6.4-6.6, enum `case_status`) + `38-case-submission-mockup.html` (ฟอร์มรับเคส)
 - การแจ้งเตือน In-app — Mockup: `notifications.html` (กระดิ่ง+dropdown บน header ทุกหน้า + หน้ารายการเต็ม — ไฟล์ 90 §6.3/§14, ตาราง `notifications` schema 02 v3.5, DEC-006/D3)
-- Settings แบ่ง 2 หมวดหลัก: **ตั้งค่าทั่วไป** (roles, teams, companies, users, compensation, servicefee, system, auditlog) และ **ตั้งค่าบัญชี/การเงิน** 13 sub-tabs (ดูไฟล์ 13 §6.1-6.13)
+- Settings แบ่ง 2 หมวดหลัก: **ตั้งค่าทั่วไป** (roles, teams, companies, users, organization — v2.10 มติ U99, compensation, servicefee, system, auditlog) และ **ตั้งค่าบัญชี/การเงิน** 13 sub-tabs (ดูไฟล์ 13 §6.1-6.13)
 
 ### 7.2 สิทธิ์เข้าถึงเมนูหลัก (Top Nav Visibility Matrix)
 

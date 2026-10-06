@@ -156,6 +156,7 @@ describe('แบบข้อมูลเอกสาร PDF (`28` §6.2)', () =>
     replacementNote: null,
     billingBatchNumber: 'BL-2569-001',
     receivedDate: null,
+    sellerProfile: null,
     invoiceNumber: 'INV-0006',
     // 25/06/2026 = 25/06/2569 พ.ศ. (เวลาไทย)
     invoiceDate: new Date('2026-06-25T03:00:00Z'),

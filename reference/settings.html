@@ -110,6 +110,8 @@ const store = {
   // ข้อมูลองค์กร (ผู้ให้บริการ AssetRecovery เอง) — ใช้ออกเอกสาร/ใบกำกับภาษีฝั่งผู้ขาย
   orgProfile: {
     name: 'บริษัท ใจดี โมบาย จำกัด',
+    nameEn: 'Jaidee Mobile Co., Ltd.', // มติ PO U99 — ไม่บังคับ
+    website: 'www.jaidee.co.th',      // มติ PO U99 — ไม่บังคับ
     taxId: '0105560123456',
     address: '123/45 อาคารสยามสแควร์ ชั้น 10 ถ.พระราม 1 แขวงปทุมวัน เขตปทุมวัน กรุงเทพมหานคร 10330',
     phone: '02-000-1234',
@@ -942,9 +944,12 @@ function renderOrganizationContent() {
                <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
              </div>`}
         <div class="text-xs text-slate-400 mb-2">โลโก้บริษัท (ปรากฏบนเอกสาร)</div>
-        <button data-action="open-modal" data-type="upload-logo" class="text-xs text-blue-600 font-semibold hover:underline">
-          ${org.logoUrl ? 'เปลี่ยนโลโก้' : 'อัปโหลดโลโก้'}
-        </button>
+        <div class="flex items-center gap-3">
+          <button data-action="open-modal" data-type="upload-logo" class="text-xs text-blue-600 font-semibold hover:underline">
+            ${org.logoUrl ? 'เปลี่ยนโลโก้' : 'อัปโหลดโลโก้'}
+          </button>
+          ${org.logoUrl ? '<button class="text-xs text-red-600 font-semibold hover:underline">ลบโลโก้</button>' : ''}
+        </div>
       </div>
 
       <!-- ข้อมูลหลัก -->
@@ -953,6 +958,7 @@ function renderOrganizationContent() {
           <div class="col-span-2 border-b border-slate-100 pb-4">
             <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">ชื่อนิติบุคคล</div>
             <div class="font-bold text-slate-900 text-base">${org.name}</div>
+            ${org.nameEn ? `<div class="text-xs text-slate-500">${org.nameEn}</div>` : ''}
           </div>
           <div>
             <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">เลขประจำตัวผู้เสียภาษี</div>
@@ -964,6 +970,7 @@ function renderOrganizationContent() {
             <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">เบอร์โทรสำนักงาน</div>
             <div class="font-medium text-slate-700">${org.phone}</div>
             <div class="text-xs text-slate-400 mt-0.5">${org.email}</div>
+            <div class="text-xs text-slate-400 mt-0.5">${org.website || 'ไม่ระบุเว็บไซต์'}</div>
           </div>
           <div class="col-span-2">
             <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">ที่อยู่ตามที่จดทะเบียน</div>
@@ -1518,18 +1525,29 @@ function renderModal() {
         ⚠️ ข้อมูลนี้ปรากฏบนใบกำกับภาษีทุกฉบับ — มีผลกับเอกสารที่ออกหลังจากบันทึกเท่านั้น · สิทธิ์: Superadmin เท่านั้น
       </div>
       <div class="grid grid-cols-2 gap-4">
-        <div class="col-span-2">${formInput('org_name', 'ชื่อนิติบุคคลเต็ม', org.name, 'text', 'บริษัท xxx จำกัด', true)}</div>
+        <div class="col-span-2">${formInput('org_name', 'ชื่อบริษัท (ไทย)', org.name, 'text', 'บริษัท xxx จำกัด', true)}</div>
+        <div class="col-span-2">${formInput('org_nameEn', 'ชื่อบริษัท (อังกฤษ)', org.nameEn || '', 'text', 'xxx Co., Ltd.')}</div>
         ${formInput('org_taxId', 'เลขประจำตัวผู้เสียภาษี (13 หลัก)', org.taxId, 'text', '0000000000000', true)}
         <div><label class="block text-xs font-bold text-slate-700 mb-1">สำนักงานใหญ่ / สาขา <span class="text-red-500">*</span></label><select id="org_branchKind" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option value="head_office" ${org.branchCode === '00000' ? 'selected' : ''}>สำนักงานใหญ่</option><option value="branch" ${org.branchCode !== '00000' ? 'selected' : ''}>สาขาที่</option></select></div>
         ${formInput('org_branchNo', 'เลขที่สาขา (5 หลัก)', org.branchCode === '00000' ? '' : org.branchCode, 'text', '00001')}
         ${formInput('org_phone', 'เบอร์โทรสำนักงาน', org.phone, 'tel', '02-xxx-xxxx', true)}
-        <div class="col-span-2">${formInput('org_email', 'อีเมลองค์กร', org.email, 'email', '')}</div>
-        <div class="col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">ที่อยู่ตามที่จดทะเบียน <span class="text-red-500">*</span></label><textarea id="org_address" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">${org.address}</textarea></div>
+        ${formInput('org_email', 'อีเมลองค์กร', org.email, 'email', '')}
+        <div class="col-span-2">${formInput('org_website', 'เว็บไซต์', org.website || '', 'text', 'www.example.co.th')}</div>
+        <div class="col-span-2"><label class="block text-xs font-bold text-slate-700 mb-1">ที่อยู่ตามที่จดทะเบียน <span class="text-red-500">*</span></label>
+          <div class="grid grid-cols-2 gap-3">
+            <input id="org_addrDetail" placeholder="บ้านเลขที่/อาคาร/ถนน" class="col-span-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <input id="org_addrPostal" placeholder="รหัสไปรษณีย์" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <input id="org_addrProvince" placeholder="จังหวัด" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <input id="org_addrDistrict" placeholder="อำเภอ/เขต" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+            <input id="org_addrSubdistrict" placeholder="ตำบล/แขวง" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring">
+          </div>
+        </div>
         <div class="flex items-center gap-3 col-span-2 pt-1">
           <label class="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
             <input type="checkbox" id="org_vat" ${org.vatRegistered ? 'checked' : ''} class="rounded text-blue-600 focus-ring"> จดทะเบียนภาษีมูลค่าเพิ่ม (VAT)
           </label>
         </div>
+        <div class="col-span-2">${formInput('org_reason', 'เหตุผล', '', 'text', 'เช่น กรอกข้อมูลจริงตามหนังสือรับรองบริษัท', true)}</div>
       </div>
     </div>`;
   }
@@ -1540,10 +1558,11 @@ function renderModal() {
       <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
         <svg class="w-10 h-10 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <div class="font-semibold text-slate-600 mb-1">คลิกหรือลากไฟล์รูปมาวางที่นี่</div>
-        <div class="text-xs text-slate-400">PNG / JPG / SVG · ขนาดแนะนำ 400×400 px · ไฟล์ไม่เกิน 2 MB</div>
-        <input type="file" accept="image/*" class="mt-3 text-sm text-slate-500">
+        <div class="text-xs text-slate-400">PNG / JPG · ขนาดแนะนำ 400×400 px · ไฟล์ไม่เกิน 1 MB</div>
+        <input type="file" accept="image/png,image/jpeg" class="mt-3 text-sm text-slate-500">
       </div>
-      <div class="text-xs text-slate-500">โลโก้จะปรากฏบนใบกำกับภาษี ใบเสร็จรับเงิน และเอกสาร PDF ทั้งหมดที่ระบบสร้าง</div>
+      ${formInput('logo_reason', 'เหตุผล', '', 'text', 'เช่น ใช้โลโก้ใหม่ตามแบบของบริษัท', true)}
+      <div class="text-xs text-slate-500">โลโก้จะปรากฏบนใบกำกับภาษี ใบเสร็จรับเงิน ใบแจ้งหนี้ และเอกสาร PDF ที่ระบบสร้างหลังจากนี้ — เอกสารที่ออกแล้วไม่เปลี่ยน</div>
     </div>`;
   }
   else if (type === 'create-sf' || type === 'edit-sf') {

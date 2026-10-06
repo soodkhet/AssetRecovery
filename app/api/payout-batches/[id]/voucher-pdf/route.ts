@@ -3,6 +3,7 @@ import { renderPaymentVouchers } from '@/components/pdf/payment-voucher'
 import { toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { currentLetterhead } from '@/lib/organization/letterhead'
 import {
   assertVoucherReady,
   buildPaymentVoucherDocs,
@@ -34,7 +35,10 @@ export const GET = withApiPermission<RouteContext>(
     assertVoucherReady(source.batch.status)
 
     const scoped = selectPayoutDocItems(source.batch, parsed.data.payeeId)
-    const pdf = await renderPaymentVouchers(buildPaymentVoucherDocs(scoped, source.issuer))
+    const pdf = await renderPaymentVouchers(
+      buildPaymentVoucherDocs(scoped, source.issuer),
+      await currentLetterhead(user.organizationId),
+    )
 
     const fileName = `ใบสำคัญจ่าย ${scoped.name}.pdf`
     // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
