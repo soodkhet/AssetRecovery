@@ -17,6 +17,7 @@ import {
   type DeviceSpecsClient,
   type RemoteModel,
 } from '@/lib/device-catalog/rapidapi-client'
+import { getDeviceCatalogSettings } from '@/lib/device-catalog/settings-queries'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -27,8 +28,9 @@ import { prisma } from '@/lib/prisma'
  * job **ไม่ตัดสินการแสดง** — การแสดงคำนวณตอนอ่านจากตัวกรองในค่าตั้ง + ค่าที่ผู้ดูแลตั้งด้วยมือ
  * ⇒ รุ่นใหม่ของแบรนด์ในรายชื่อแสดงทันทีที่บันทึก · ของที่ผู้ดูแลปิด/เปิดไว้ job ไม่เขียนทับ
  * ① `GET brands` 1 ครั้ง → แบรนด์ใหม่ (ทุกองค์กร)
- * ② เลือกแบรนด์ที่จะดึงรายการรุ่นรอบนี้ตาม {@link pickBrandsToSync}: ยังไม่เคยดึงก่อน (ดึงครบครั้งแรก — **resume ได้**
- *    ถ้าโควตาหมดกลางทาง เพราะแบรนด์ที่ดึงแล้วมี `last_synced_at`) แล้วค่อยหมุนแบรนด์ที่ดึงนานที่สุด
+ * ② เลือกแบรนด์ที่จะดึงรายการรุ่นรอบนี้ตาม {@link pickBrandsToSync}: **แบรนด์ในรายชื่อตลาดไทย (รายชื่อแบรนด์ในค่าตั้ง)
+ *    ที่ยังไม่เคยดึงก่อน ตามลำดับรายชื่อ** (U162) → แบรนด์อื่นที่ยังไม่เคยดึง (ดึงครบครั้งแรก — **resume ได้**
+ *    ถ้าโควตาหมดกลางทาง เพราะแบรนด์ที่ดึงแล้วมี `last_synced_at`) → หมุนแบรนด์ที่ดึงนานที่สุด
  * ③ `GET models/{brand}` 1 ครั้งต่อแบรนด์ → เพิ่มรุ่นใหม่ · จัดประเภทมือถือ/แท็บเล็ตจากชื่อรุ่น
  *
  * ### ประหยัดโควตา (RapidAPI BASIC ฟรี)
@@ -186,7 +188,7 @@ export async function runDeviceCatalogSyncJob(options: DeviceCatalogSyncOptions 
     groups.set(externalId, group)
   }
   const budget = Math.max(0, maxRequests - client.requestCount())
-  const picked = pickBrandsToSync([...groups.values()], budget)
+  const picked = pickBrandsToSync([...groups.values()], budget, await thaiMarketBrandNames(orgIds))
 
   // ③ รายการรุ่นต่อแบรนด์ (1 request ต่อแบรนด์)
   for (const group of picked) {
@@ -370,4 +372,16 @@ async function upsertBrandModels(
     tally.unchanged += toCreate.length - tally.created
   }
   return tally
+}
+
+/**
+ * รายชื่อแบรนด์ตลาดไทยที่ใช้จัดลำดับการดึง (มติ PO U162) = รายชื่อแบรนด์ในค่าตั้งของทุกองค์กร
+ * รวมกันตามลำดับ (ซ้ำ = ใช้ตำแหน่งแรก) · องค์กรที่ยังไม่บันทึกค่าตั้ง = รายชื่อเริ่มต้น
+ */
+async function thaiMarketBrandNames(orgIds: readonly string[]): Promise<string[]> {
+  const names: string[] = []
+  for (const organizationId of orgIds) {
+    names.push(...(await getDeviceCatalogSettings(organizationId)).brandNames)
+  }
+  return names
 }

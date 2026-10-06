@@ -121,6 +121,40 @@ export const deviceModelListQuerySchema = z.object({
   ...pageFields,
 })
 
+/**
+ * "เลือกทั้งหมด / ไม่เลือกทั้งหมด" (มติ PO U162) — ตั้งการแสดงด้วยมือให้**ทุกรายการที่ตรงตัวกรอง/คำค้นปัจจุบัน**
+ * (ทั้งชุด ไม่ใช่แค่หน้าที่เห็น) · เงื่อนไขชุดเดียวกับ query ของรายการ · เหตุผล**บังคับ** (กระทบหลายรายการในครั้งเดียว)
+ */
+const bulkReason = z
+  .string({ error: 'กรุณาระบุเหตุผล' })
+  .trim()
+  .min(1, 'กรุณาระบุเหตุผล')
+  .max(500, 'เหตุผลยาวเกิน 500 ตัวอักษร')
+
+const bulkStatus = z.enum(DEVICE_CATALOG_STATUSES, { error: 'สถานะไม่ถูกต้อง' })
+const bulkQuery = z.string().trim().max(120).optional()
+
+export const deviceCatalogBulkVisibilitySchema = z.discriminatedUnion('target', [
+  z.object({
+    target: z.literal('brands'),
+    manualStatus: bulkStatus,
+    visibility: visibilityFilter,
+    q: bulkQuery,
+    reason: bulkReason,
+  }),
+  z.object({
+    target: z.literal('models'),
+    manualStatus: bulkStatus,
+    visibility: visibilityFilter,
+    assetKind: z.enum([...DEVICE_ASSET_KINDS, 'all']).default('all'),
+    brandId: catalogIdSchema.optional(),
+    q: bulkQuery,
+    reason: bulkReason,
+  }),
+])
+
+export type DeviceCatalogBulkVisibilityInput = z.infer<typeof deviceCatalogBulkVisibilitySchema>
+
 export type DeviceBrandListQuery = z.infer<typeof deviceBrandListQuerySchema>
 export type DeviceModelListQuery = z.infer<typeof deviceModelListQuerySchema>
 

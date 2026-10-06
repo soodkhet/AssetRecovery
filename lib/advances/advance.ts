@@ -140,6 +140,23 @@ export function minDueClearInputDate(now: Date): string {
 export const REQUEST_ADVANCE = 'request_advance'
 export const APPROVE_ADVANCE = 'approve_advance'
 
+/** สิทธิ์ขอเงินทดรองแยกตาม "ขอให้ตัวเอง" กับ "ขอแทนผู้อื่น" */
+export type AdvanceCreateAccess = {
+  /** ขอให้ตัวเอง — `manage:request_advance` (สิทธิ์เดิม) */
+  readonly self: boolean
+  /** ขอแทนผู้อื่น — `manage:approve_advance` (การเงิน · มติ PO U153/U160) */
+  readonly onBehalf: boolean
+}
+
+/**
+ * มติ PO U160 — การเงิน (`manage:approve_advance`) ขอเงินทดรอง**แทนผู้อื่น**ได้แม้ไม่ถือ `manage:request_advance`
+ * · ขอให้ตัวเองยังต้องถือ `manage:request_advance` เท่านั้น · Superadmin ได้ทั้งคู่ (ผ่าน `canManage`)
+ * pure — หน้าจอใช้ตัดสินปุ่ม/ช่องเลือกผู้รับ (UX) · server เรียกตัวเดียวกันตรวจซ้ำที่ชั้นข้อมูล
+ */
+export function advanceCreateAccess(canManage: (capability: string) => boolean): AdvanceCreateAccess {
+  return { self: canManage(REQUEST_ADVANCE), onBehalf: canManage(APPROVE_ADVANCE) }
+}
+
 /**
  * คำขอเบิกส่วนเกินอัตโนมัติตอนเคลียร์ยอด (มติ PO 03/10/2569 — UAT Q3, BUG-011 · `15` §9.1 · `22` §6.13)
  * ใช้ค่า `manual` ของ `expense_type` (`02` §3) — ไม่สร้าง enum ใหม่ · เข้าคิวอนุมัติสายเดียวกับ Manual Claim

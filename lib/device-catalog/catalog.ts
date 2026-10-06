@@ -277,21 +277,34 @@ export function planModelUpsert(existing: readonly ExistingModelRow[], incoming:
 }
 
 /**
- * ลำดับแบรนด์ที่ job ดึงรายการรุ่นในรอบนี้ (ประหยัดโควตา — U157):
- * ① แบรนด์ที่ยังไม่เคยดึง (`lastSyncedAt = null` — การดึงครบครั้งแรก resume ต่อจากที่ค้าง) ตามชื่อ
- * ② แบรนด์ที่ดึงนานที่สุด (หมุนเวียนหารุ่นใหม่) · แบรนด์เพิ่มเอง (ไม่มีชื่อฝั่ง API) ไม่ถูกดึง
- * จำกัดจำนวนตาม `budget` (จำนวน request ที่เหลือของรอบ)
+ * ลำดับแบรนด์ที่ job ดึงรายการรุ่นในรอบนี้ (ประหยัดโควตา — U157 · U162):
+ * ① แบรนด์**ในรายชื่อตลาดไทย** (`priorityBrandNames` = รายชื่อแบรนด์ในค่าตั้ง) ที่ยังไม่เคยดึง — **ตามลำดับรายชื่อ** (U162)
+ * ② แบรนด์อื่นที่ยังไม่เคยดึง (`lastSyncedAt = null`) ตามชื่อ
+ * ③ แบรนด์ที่ดึงแล้ว — ดึงนานที่สุดก่อน (หมุนเวียนหารุ่นใหม่)
+ * การดึงครบครั้งแรก resume ต่อจากที่ค้างได้เพราะแบรนด์ที่ดึงแล้วมี `last_synced_at` · แบรนด์เพิ่มเอง (ไม่มีชื่อฝั่ง API)
+ * ไม่ถูกดึง · จำกัดจำนวนตาม `budget` (จำนวน request ที่เหลือของรอบ)
  */
 export function pickBrandsToSync<T extends { externalId: string | null; lastSyncedAt: Date | null; name: string }>(
   brands: readonly T[],
   budget: number,
+  priorityBrandNames: readonly string[] = [],
 ): T[] {
   if (budget <= 0) return []
+  const priorityRank = new Map<string, number>()
+  priorityBrandNames.forEach((name, index) => {
+    const key = normalizeCatalogName(name)
+    if (key !== '' && !priorityRank.has(key)) priorityRank.set(key, index)
+  })
+  const rankOf = (brand: T): number | undefined => priorityRank.get(normalizeCatalogName(brand.name))
+
   const remote = brands.filter((brand) => brand.externalId !== null)
-  const never = remote.filter((brand) => brand.lastSyncedAt === null).sort((a, b) => a.name.localeCompare(b.name))
+  const never = remote.filter((brand) => brand.lastSyncedAt === null)
+  const priorityNever = never
+    .filter((brand) => rankOf(brand) !== undefined)
+    .sort((a, b) => (rankOf(a) ?? 0) - (rankOf(b) ?? 0) || a.name.localeCompare(b.name))
+  const otherNever = never.filter((brand) => rankOf(brand) === undefined).sort((a, b) => a.name.localeCompare(b.name))
   const synced = remote
     .filter((brand) => brand.lastSyncedAt !== null)
     .sort((a, b) => (a.lastSyncedAt?.getTime() ?? 0) - (b.lastSyncedAt?.getTime() ?? 0))
-  return [...never, ...synced].slice(0, budget)
+  return [...priorityNever, ...otherNever, ...synced].slice(0, budget)
 }
-

@@ -11,7 +11,8 @@ import { getRequestMeta } from '@/lib/auth/request-meta'
  * อ่าน = `view` ของ `request_advance` (พนักงาน — เห็นเฉพาะของตัวเอง) **หรือ** `approve_advance`
  * (การเงิน/ผู้อนุมัติ — เห็นทั้งองค์กร) · scope ระดับแถวบังคับในชั้นข้อมูล (`25` §7.2)
  *
- * ขอเบิก = `manage:request_advance` — การเงินถือแค่ `view` ตาม `25` §7.2 จึงขอเบิกเองไม่ได้
+ * ขอเบิก = `manage:request_advance` (ขอให้ตัวเอง) **หรือ** `manage:approve_advance` (มติ PO U160 — การเงินขอ**แทน**
+ * ผู้อื่นได้ · ขอให้ตัวเองไม่ได้เพราะถือ `request_advance` แค่ `view`) — ชั้นข้อมูลแยกตรวจตามกรณีอีกชั้น (403)
  * (ยาม "ห้ามเบิกซ้อน" อยู่ในชั้นข้อมูล 2 ชั้น: pre-check + partial unique ของ DB)
  */
 
@@ -28,7 +29,7 @@ export const GET = withApiPermission(
 
 export const POST = withApiPermission(
   'manage',
-  REQUEST_ADVANCE,
+  [REQUEST_ADVANCE, APPROVE_ADVANCE],
   toModuleErrorResponse,
   async (request: NextRequest, _context: unknown, user) => {
     const parsed = advanceCreateSchema.safeParse(await readJsonBody(request))

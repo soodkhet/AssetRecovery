@@ -12,9 +12,9 @@ import {
   TEAM_MANAGER_ROLE_NAME,
   TEAM_SUPERVISOR_ROLE_NAME,
 } from '@/lib/auth/constants'
-import { checkPermission } from '@/lib/auth/permission'
+import { checkPermission, hasCapability } from '@/lib/auth/permission'
 import type { SessionUser } from '@/lib/auth/types'
-import { APPROVE_ADVANCE } from '@/lib/advances/advance'
+import { advanceCreateAccess, APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
 import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
 import { DEFAULT_ROLE_CAPABILITIES } from '@/lib/roles/default-matrix'
 
@@ -81,4 +81,41 @@ describe('สิทธิ์อนุมัติ/ปฏิเสธเงิน
       expect(checkPermission(userOf(name, group), 'manage', APPROVE_ADVANCE)).toBe('PERMISSION_DENIED')
     },
   )
+})
+
+/** ประตู `POST /api/advances` = any-of `manage` ของ 2 capability (มติ PO U160) */
+function passesCreateGate(user: SessionUser): boolean {
+  return [REQUEST_ADVANCE, APPROVE_ADVANCE].some((capability) => checkPermission(user, 'manage', capability) === null)
+}
+
+function accessOf(user: SessionUser) {
+  return advanceCreateAccess((capability) => hasCapability(user, 'manage', capability))
+}
+
+describe('สิทธิ์ขอเงินทดรองให้ตัวเอง / ขอแทน (มติ PO U160)', () => {
+  it('การเงิน: ผ่านประตู endpoint · ขอแทนได้ · ขอให้ตัวเองไม่ได้', () => {
+    const finance = userOf(FINANCE_ROLE_NAME, 'system')
+    expect(passesCreateGate(finance)).toBe(true)
+    expect(accessOf(finance)).toEqual({ self: false, onBehalf: true })
+  })
+
+  it.each([
+    [FIELD_AGENT_ROLE_NAME, 'inhouse'],
+    [FIELD_AGENT_ROLE_NAME, 'outsource'],
+  ] as const)('พนักงาน %s (%s): ขอให้ตัวเองได้ · ขอแทนไม่ได้', (name, group) => {
+    const agent = userOf(name, group)
+    expect(passesCreateGate(agent)).toBe(true)
+    expect(accessOf(agent)).toEqual({ self: true, onBehalf: false })
+  })
+
+  it('Superadmin ได้ทั้งคู่', () => {
+    const superadmin = { ...userOf(EXECUTIVE_ROLE_NAME, 'system'), isSuperadmin: true }
+    expect(accessOf(superadmin)).toEqual({ self: true, onBehalf: true })
+  })
+
+  it.each(
+    SEED_ROLES.filter(([name]) => name !== FINANCE_ROLE_NAME && name !== FIELD_AGENT_ROLE_NAME),
+  )('%s (%s) ไม่ผ่านประตูขอเงินทดรอง (403)', (name, group) => {
+    expect(passesCreateGate(userOf(name, group))).toBe(false)
+  })
 })

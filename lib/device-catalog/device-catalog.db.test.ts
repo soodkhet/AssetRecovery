@@ -256,18 +256,21 @@ suite('job device_catalog_sync (มติ PO U155 → U159)', () => {
 
   it('โควตาหมดกลางทาง = จบแบบสำเร็จ + บันทึก · รอบหน้าดึงต่อจากแบรนด์ที่ค้าง (resume)', async () => {
     const fixture = baseFixture()
-    // ลำดับดึงครั้งแรก = ตามชื่อ (Apple → BLU → Samsung) ⇒ โควตาหมดที่ Samsung
-    fixture.failModelsFor = { Samsung: new DeviceSpecsQuotaError('/models/Samsung') }
-    const first = await runJob(fixture)
+    // ลำดับดึงครั้งแรก (U162) = แบรนด์ในรายชื่อตลาดไทยตามลำดับรายชื่อ (Samsung → Apple) แล้วค่อยที่เหลือ (BLU)
+    // ⇒ โควตาหมดที่ BLU
+    fixture.failModelsFor = { BLU: new DeviceSpecsQuotaError('/models/BLU') }
+    const firstClient = mockClient(fixture)
+    const first = await loaded(job).runDeviceCatalogSyncJob({ organizationId: ORG_ID, now: NOW, client: firstClient, maxRequests: 50 })
+    expect(firstClient.calls).toEqual(['brands', 'models:Samsung', 'models:Apple', 'models:BLU'])
     expect(first.quotaExceeded).toBe(true)
     expect(first.brandsPendingFirstSync).toBe(1)
-    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(3)
+    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(5)
 
     const resumed = mockClient(baseFixture())
     const second = await loaded(job).runDeviceCatalogSyncJob({ organizationId: ORG_ID, now: NOW, client: resumed, maxRequests: 2 })
-    // งบ 2 request = brands + แบรนด์ที่ค้าง 1 ตัว (ยังไม่เคยดึงมาก่อนเสมอ)
-    expect(resumed.calls).toEqual(['brands', 'models:Samsung'])
-    expect(second).toMatchObject({ quotaExceeded: false, brandsPendingFirstSync: 0, modelsCreated: 3 })
+    // งบ 2 request = brands + แบรนด์ที่ค้าง 1 ตัว (ยังไม่เคยดึงมาก่อนเสมอ — ไม่วนกลับไปดึงแบรนด์ไทยที่ดึงแล้ว)
+    expect(resumed.calls).toEqual(['brands', 'models:BLU'])
+    expect(second).toMatchObject({ quotaExceeded: false, brandsPendingFirstSync: 0, modelsCreated: 1 })
   })
 
   it('โควตาหมดตั้งแต่ดึงรายชื่อแบรนด์ = ข้าม ไม่แตะข้อมูลเดิม', async () => {
@@ -281,9 +284,10 @@ suite('job device_catalog_sync (มติ PO U155 → U159)', () => {
 
   it('ต้นทางล่ม (5xx) = โยน error ให้ตัวรันงาน retry · ของที่ดึงแล้วคงอยู่', async () => {
     const fixture = baseFixture()
-    fixture.failModelsFor = { Samsung: new DeviceSpecsApiError('down', 503) }
+    // ลำดับดึง (U162): Samsung → Apple (รายชื่อตลาดไทย) → BLU ⇒ ล่มที่ BLU หลังดึง 2 แบรนด์แรกแล้ว
+    fixture.failModelsFor = { BLU: new DeviceSpecsApiError('down', 503) }
     await expect(runJob(fixture)).rejects.toBeInstanceOf(DeviceSpecsApiError)
-    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(3)
+    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(5)
   })
 })
 
@@ -472,5 +476,72 @@ suite('เคส: เลือกจากรายการ / ระบุเ�
     const byRef = new Map(rows.map((row) => [row.caseRef, row]))
     expect(byRef.get(first)).toMatchObject({ deviceModelId: a55.id, assetDescription: 'Samsung Galaxy A55' })
     expect(byRef.get(second)).toMatchObject({ deviceModelId: null, assetDescription: 'Nokia 3310 เก่ามาก' })
+  })
+})
+
+suite('เลือกทั้งหมด / ไม่เลือกทั้งหมด (มติ PO U162)', () => {
+  async function bulkAudits(targetType: string) {
+    return db().auditLog.findMany({
+      where: { organizationId: ORG_ID, targetType, targetId: null, actorId: USER_ID },
+      orderBy: { createdAt: 'asc' },
+    })
+  }
+
+  it('ไม่เลือกแบรนด์ทั้งหมด: ทั้งชุดที่ตรงเงื่อนไข (ไม่ใช่แค่หน้าที่เห็น) · audit 1 แถวต่อการกด · job ไม่เขียนทับ', async () => {
+    await runJob(baseFixture())
+    const before = await bulkAudits('device_brands')
+    const result = await loaded(queries).bulkSetDeviceCatalogVisibility(context, {
+      target: 'brands',
+      manualStatus: 'hidden',
+      visibility: 'all',
+      q: undefined,
+      reason: 'ปิดทุกแบรนด์ก่อนเลือกใหม่',
+    })
+    expect(result).toEqual({ updated: 3, unchanged: 0 })
+    const brands = await db().deviceBrand.findMany({ where: { organizationId: ORG_ID } })
+    expect(brands.every((brand) => brand.manualStatus === 'hidden')).toBe(true)
+    expect(await loaded(queries).searchDeviceModelOptions(ORG_ID, { q: '', limit: 50 })).toEqual([])
+
+    const audits = (await bulkAudits('device_brands')).slice(before.length)
+    expect(audits).toHaveLength(1)
+    expect(audits[0]?.reason).toBe('ปิดทุกแบรนด์ก่อนเลือกใหม่')
+    expect(audits[0]?.afterData).toMatchObject({
+      bulk: true,
+      manual_status: 'hidden',
+      criteria: { visibility: 'all', q: null },
+      matched: 3,
+      updated: 3,
+      unchanged: 0,
+    })
+
+    // ค่าที่ตั้ง = การตั้งด้วยมือ ⇒ job รอบถัดไปไม่เขียนทับ
+    await runJob(baseFixture(), 50, 'job-u162')
+    const afterJob = await db().deviceBrand.findMany({ where: { organizationId: ORG_ID } })
+    expect(afterJob.every((brand) => brand.manualStatus === 'hidden')).toBe(true)
+  })
+
+  it('เลือกรุ่นทั้งหมดตามคำค้น + แบรนด์ + ประเภท: เปลี่ยนเฉพาะที่ตรง · กดซ้ำ = ไม่เปลี่ยน แต่ยังลง audit ของการกด', async () => {
+    await runJob(baseFixture())
+    const samsung = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'Samsung' } })
+    const input = {
+      target: 'models' as const,
+      manualStatus: 'active' as const,
+      visibility: 'all' as const,
+      assetKind: 'smartphone' as const,
+      brandId: samsung.id,
+      q: 'galaxy',
+      reason: 'เปิดมือถือ Samsung ทุกรุ่น',
+    }
+    const first = await loaded(queries).bulkSetDeviceCatalogVisibility(context, input)
+    // Galaxy A55 + Galaxy S10 (Galaxy Tab S9 เป็นแท็บเล็ต — ไม่ตรงเงื่อนไข)
+    expect(first).toEqual({ updated: 2, unchanged: 0 })
+    expect((await model('Galaxy S10')).manualStatus).toBe('active')
+    expect((await model('Galaxy Tab S9')).manualStatus).toBeNull()
+    expect((await model('iPhone 16')).manualStatus).toBeNull()
+
+    const second = await loaded(queries).bulkSetDeviceCatalogVisibility(context, input)
+    expect(second).toEqual({ updated: 0, unchanged: 2 })
+    const audits = await bulkAudits('device_models')
+    expect(audits.slice(-2).map((audit) => (audit.afterData as { updated: number }).updated)).toEqual([2, 0])
   })
 })
