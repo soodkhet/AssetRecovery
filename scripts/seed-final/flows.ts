@@ -43,6 +43,17 @@ export interface CaseSpec {
   debtSatang: number
 }
 
+/**
+ * Model Phone (U155) — เคส FT เลขหาร 3 ลงตัว = Samsung Galaxy A55 5G · เหลือเศษ 1 = Apple iPhone 15 (เลือกจากรายการ)
+ * เศษ 2 / แถว X = "ไม่พบในรายการ — ระบุเอง" (ข้อความอิสระ)
+ */
+function deviceOf(key: string): { deviceModelId: string | null; assetBrandModel: string } {
+  const n = key.startsWith('FT-') ? Number(key.slice(3)) : -1
+  if (n >= 0 && n % 3 === 0) return { deviceModelId: ids.deviceModels['Samsung Galaxy A55 5G'] ?? null, assetBrandModel: 'Samsung Galaxy A55 5G' }
+  if (n >= 0 && n % 3 === 1) return { deviceModelId: ids.deviceModels['Apple iPhone 15'] ?? null, assetBrandModel: 'Apple iPhone 15' }
+  return { deviceModelId: null, assetBrandModel: 'iPhone 15 สีดำ' }
+}
+
 /** ธุรการรับเคส (createCase + เอกสาร 3 ช่อง) — ค้างที่ `draft` */
 export async function createDraftCase(spec: CaseSpec, imei?: string): Promise<string> {
   const cases = await import('@/lib/cases/queries')
@@ -60,7 +71,7 @@ export async function createDraftCase(spec: CaseSpec, imei?: string): Promise<st
       addressCurrent: address,
       addressIdCard: address,
       assetType: 'smartphone',
-      assetBrandModel: 'iPhone 15 สีดำ',
+      ...deviceOf(spec.key),
       assetImeiSerial: imei ?? imeiFor(spec.key),
       outstandingDebtSatang: spec.debtSatang,
     },

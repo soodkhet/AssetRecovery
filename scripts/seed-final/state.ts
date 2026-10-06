@@ -13,6 +13,7 @@ export const ids = {
   payouts: {} as Record<string, string>,
   billing: {} as Record<string, string>,
   periods: {} as Record<string, string>,
+  deviceModels: {} as Record<string, string>,
 }
 
 /** เลขผู้เสียภาษี 13 หลักตาม mod-11 (สมมติ) */

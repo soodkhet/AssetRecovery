@@ -1,5 +1,5 @@
 {
-  "_source": "คัดจาก uat/report/FINAL-coverage.md ส่วน H (golden คำนวณอิสระด้วยสูตร docs/22 — ห้ามแก้ให้ตรงโค้ด) · หน่วยสตางค์",
+  "_source": "คัดจาก uat/report/FINAL-coverage.md ส่วน H (golden คำนวณอิสระด้วยสูตร docs/22 — ห้ามแก้ให้ตรงโค้ด) · หน่วยสตางค์ · BX2 07/10/2569: BL-005/BL-006/AR ตาม U144 (§6.11.1)",
   "revenues": {
     "FT-15": [{ "round": 1, "gross": 61728, "beforeVat": 61728, "vat": 4321, "total": 66049, "period": "2026-09" }],
     "FT-16": [{ "round": 1, "gross": 749000, "beforeVat": 700000, "vat": 49000, "total": 749000, "period": "2026-09" }],
@@ -58,14 +58,14 @@
     "BL-2569-002": { "company": "CO2", "status": "partially_paid", "total": 749000, "received": 400000, "arEnd": 295500 },
     "BL-2569-003": { "company": "CO3", "status": "paid", "total": 289296, "received": 281185, "customerWht": 8111, "arEnd": 0 },
     "BL-2569-004": { "company": "CO3", "status": "sent", "total": 214000, "received": 0, "arEnd": 214000 },
-    "BL-2569-005": { "company": "CO4", "status": "partially_paid", "total": 600000, "received": 250000, "arEnd": 350000 },
-    "BL-2569-006": { "company": "CO1", "status": "sent", "total": 52840, "received": 0, "arEnd": 52840 },
+    "BL-2569-005": { "company": "CO4", "status": "paid", "total": 600000, "received": 595000, "bankFee": 5000, "arEnd": 0 },
+    "BL-2569-006": { "company": "CO1", "status": "partially_paid", "total": 52840, "received": 47839, "bankFee": 0, "arEnd": 5001 },
     "BL-2569-007": { "company": "CO3", "status": "paid", "total": 278200, "received": 270400, "customerWht": 7800, "arEnd": 0 },
     "BL-2569-008": { "company": "CO4", "status": "paid", "total": 600000, "received": 600000, "arEnd": 0 },
     "DRAFT-CO2": { "company": "CO2", "status": "draft", "total": 1498000 }
   },
-  "arTotalEndOct": 923040,
-  "arByCompany": { "_source": "ผลรวมคอลัมน์ AR สิ้น ต.ค. ของ H.5 ต่อบริษัท", "CO1": 63540, "CO2": 295500, "CO3": 214000, "CO4": 350000 },
+  "arTotalEndOct": 525201,
+  "arByCompany": { "_source": "ผลรวมคอลัมน์ AR สิ้น ต.ค. ของ H.5 ต่อบริษัท", "CO1": 15701, "CO2": 295500, "CO3": 214000, "CO4": 0 },
   "taxInvoices": {
     "INV-0001": { "status": "active", "beforeVat": 61728, "vat": 4321 },
     "INV-0002": { "status": "active", "beforeVat": 270370, "vat": 18926 },
@@ -75,7 +75,7 @@
   },
   "controlTotals": {
     "2026-09": { "revenueBeforeVat": 1832098, "adjustment": -50000, "outputVat": 23247, "payoutGross": 1495000, "payoutWht": 15400, "payoutNet": 1479600, "whtWithheld": 15400, "whtCompanyBorne": 0, "pnd3": 4600, "pnd53": 10800 },
-    "2026-10": { "revenueBeforeVat": 2942716, "outputVat": 41568, "payoutGross": 709897, "payoutWht": 9897, "payoutNet": 700000, "whtWithheld": 0, "whtCompanyBorne": 9897, "pnd3": 9897, "pnd1": 0, "suspense": 12345 }
+    "2026-10": { "revenueBeforeVat": 2942716, "outputVat": 41568, "payoutGross": 709897, "payoutWht": 9897, "payoutNet": 700000, "whtWithheld": 0, "whtCompanyBorne": 9897, "pnd3": 9897, "pnd1": 0, "suspense": 12345, "bankFeeWriteOff": 5000 }
   },
   "grossProfit": {
     "FT-13": { "revenue": 600000, "directCost": 150000, "gp": 450000, "margin": "75.00%" },

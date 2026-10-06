@@ -33,7 +33,7 @@ interface Golden {
   payeeBatches: Record<string, { batch: string; payee: string; wht: number; gross: number; net: number }>
   advances: Record<string, { status: string; approved?: number; used?: number; returned?: number }>
   payoutBatches: Record<string, { status: string; gross?: number; wht?: number; net?: number; offset?: number; transfer?: number }>
-  billing: Record<string, { company: string; status: string; total: number; received?: number; customerWht?: number }>
+  billing: Record<string, { company: string; status: string; total: number; received?: number; customerWht?: number; bankFee?: number }>
   arTotalEndOct: number
   arByCompany: Record<string, number | string>
   taxInvoices: Record<string, { status: string; beforeVat?: number; vat?: number }>
@@ -106,7 +106,7 @@ async function verifyMoney(golden: Golden): Promise<void> {
 
   const billings = await db.billingBatch.findMany({
     where: { ...ORG, deletedAt: null },
-    select: { batchNumber: true, status: true, totalSatang: true, receivedSatang: true, companyId: true },
+    select: { batchNumber: true, status: true, totalSatang: true, receivedSatang: true, bankFeeWrittenOffSatang: true, companyId: true },
     orderBy: { createdAt: 'asc' },
   })
   const cwht = await db.customerWhtCertificate.findMany({ where: ORG, select: { billingBatchId: true, withheldSatang: true } })
@@ -119,6 +119,10 @@ async function verifyMoney(golden: Golden): Promise<void> {
     if (exp.received !== undefined) {
       actual['received'] = row?.receivedSatang ?? null
       expected['received'] = exp.received
+    }
+    if (exp.bankFee !== undefined) {
+      actual['bankFee'] = row?.bankFeeWrittenOffSatang ?? null
+      expected['bankFee'] = exp.bankFee
     }
     if (exp.customerWht !== undefined) {
       actual['customerWht'] = cwht.find((c) => c.billingBatchId === id)?.withheldSatang ?? null
@@ -251,13 +255,13 @@ async function verifyQueues(): Promise<void> {
     ['uat.approver', 'case_pending_review', 1, 'X-02'],
     ['uat.approver', 'case_recycle_review', 1, 'FT-01'],
     ['uat.finance', 'advance_pending_approval', 1, 'ADV-6'],
-    ['uat.finance', 'bank_unmatched', 1, 'เงินเข้า 200.00'],
     ['uat.finance', 'payout_in_progress', 2, 'PB-O-IN2/OUT2'],
     ['uat.finance', 'compensation_my_step', 2, 'FT-10 r1'],
     ['uat.exec', 'compensation_my_step', 1, 'FT-14 manual'],
     ['uat.exec', 'adjustment_pending', 1, 'ADJ-2'],
     ['uat.mgr.in', 'compensation_my_step', 4, 'FT-01'],
-    ['uat.admin', 'asset_pending_intake', 1, 'FT-08'],
+    // U129/O72 — FT-14 (ตีกลับหลักฐาน · เครื่องยังไม่เข้าคลัง) นับในคิวรับเข้าด้วย
+    ['uat.admin', 'asset_pending_intake', 2, 'FT-08 + FT-14'],
     ['uat.sup.in', 'case_awaiting_assignment', 1, 'X-06'],
     ['uat.sup.out', 'case_awaiting_assignment', 1, 'X-13'],
   ]
@@ -266,6 +270,45 @@ async function verifyQueues(): Promise<void> {
     const item = overview.queues.find((q) => q.id === queue)
     check('G คิว', `${persona} ${queue} (${note})`, count, item === undefined ? 'ไม่แสดงคิว' : item.count)
   }
+  // O72 — คิวรายการธนาคารยังไม่จับคู่ของการเงินถูกตัดออกจากแดชบอร์ด
+  const finance = await getDashboardOverview(await as('uat.finance'))
+  check('G คิว', 'uat.finance ไม่มีคิว bank_unmatched', 'ไม่แสดงคิว', finance.queues.some((q) => q.id === 'bank_unmatched') ? 'แสดงคิว' : 'ไม่แสดงคิว')
+}
+
+/** มติ U120–U162 ที่ seed ต้องครอบ (ข้อมูลตัวอย่างให้เห็นบนหน้าจอในด่าน 7) */
+async function verifyDecisions(): Promise<void> {
+  const db = rawDb()
+  const where = { organizationId: ORG_ID }
+  const org = await db.organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { authorizedSignerName: true, authorizedSignerTitle: true } })
+  check('มติ', 'U151 ผู้ลงนามองค์กร ชื่อ+ตำแหน่ง', true, org.authorizedSignerName !== null && org.authorizedSignerTitle !== null)
+  atLeast('มติ', 'U151 บริษัทไฟแนนซ์มีผู้ลงนาม', 3, await db.financeCompany.count({ where: { ...where, signerName: { not: null } } }))
+  const templates = await db.taxDocumentTemplateSettings.findMany({ where, select: { documentType: true, footerNote: true, printSignature: true } })
+  check('มติ', 'U122 ข้อความท้ายเอกสารครบ 3 ชนิด', 3, templates.filter((t) => (t.footerNote ?? '') !== '').length)
+  atLeast('มติ', 'U122 เปิดพิมพ์ลายเซ็นรูป ≥ 1 ชนิด', 1, templates.filter((t) => t.printSignature).length)
+  const docs = await db.financeCompanyDocument.groupBy({ by: ['companyId'], where, _count: true })
+  const companies = await db.financeCompany.findMany({ where, select: { id: true, name: true } })
+  const docCount = (name: string) => docs.find((d) => d.companyId === companies.find((c) => c.name === name)?.id)?._count ?? 0
+  check('มติ', 'U132 เอกสารบริษัท CO1 ครบ 5 / CO3 2 (หนังสือรับรองเก่า) / CO2 ไม่มี', [5, 2, 0],
+    [docCount('บจก. ยูเอที ลิสซิ่ง'), docCount('บจก. ยูเอที ไฟแนนซ์'), docCount('บจก. ยูเอที แคปปิตอล')])
+  const cycles = await db.billingPayoutCycle.groupBy({ by: ['scopeKind'], where: { ...where, deletedAt: null }, _count: true })
+  check('มติ', 'U133/U146 รอบบิลเลือกบริษัท 2 · รอบจ่ายทุกทีม 1', [2, 1],
+    [cycles.find((c) => c.scopeKind === 'selected_companies')?._count ?? 0, cycles.find((c) => c.scopeKind === 'all_teams')?._count ?? 0])
+  const withIdDoc = await db.payeeProfile.count({ where: { ...where, idDocumentHash: { not: null } } })
+  check('มติ', 'U150 เอกสารยืนยันตัวตนผู้รับ (ไฟล์ตรวจแล้ว)', 2, withIdDoc)
+  const unhashedReceipts = await db.expense.count({ where: { ...where, receiptFileUrl: { not: null }, receiptFileHash: null } })
+  check('มติ', 'U143 ใบเสร็จทุกใบเป็นไฟล์ที่ตรวจแล้ว (มี SHA-256)', 0, unhashedReceipts)
+  const sept = await db.whtFilingSummary.findFirst({ where: { ...where, periodLabel: { startsWith: 'กันยายน' } }, select: { supplementaryRequiredAt: true } })
+  check('มติ', 'U127 ภ.ง.ด. ก.ย. ติดธงต้องยื่นเพิ่มเติม', true, sept?.supplementaryRequiredAt !== null && sept !== null)
+  const x14 = await db.case.findFirst({ where: { ...where, caseRef: 'FINAL-X-14' }, select: { status: true, imei: true } })
+  const x11Asset = await db.asset.findFirst({ where: { ...where, case: { caseRef: 'FINAL-X-11' } }, select: { imeiContract: true } })
+  check('มติ', 'U129 X-14 IMEI ซ้ำเครื่องในคลัง (ค้าง draft)', ['draft', true], [x14?.status ?? null, x14 !== null && x14.imei === x11Asset?.imeiContract])
+  const fromCatalog = await db.case.count({ where: { ...where, deviceModelId: { not: null } } })
+  const typed = await db.case.count({ where: { ...where, deviceModelId: null } })
+  atLeast('มติ', 'U155 เคสเลือกรุ่นจากแคตตาล็อก', 5, fromCatalog)
+  atLeast('มติ', 'U155 เคสระบุรุ่นเอง', 5, typed)
+  check('มติ', 'U157 รุ่นที่ซ่อน', 1, await db.deviceModel.count({ where: { ...where, manualStatus: 'hidden' } }))
+  const lots = await db.handoverLot.groupBy({ by: ['companyId'], where: { ...where, status: 'confirmed' }, _count: true })
+  atLeast('มติ', 'U142 บริษัทที่มีล็อตส่งมอบแล้ว ≥ 3 ล็อต', 2, lots.filter((l) => l._count >= 3).length)
 }
 
 export async function runVerify(): Promise<boolean> {
@@ -273,6 +316,7 @@ export async function runVerify(): Promise<boolean> {
   await verifyMoney(golden)
   await verifyStates()
   await verifyQueues()
+  await verifyDecisions()
   const failed = rows.filter((row) => !row.ok)
   let section = ''
   for (const row of rows) {
