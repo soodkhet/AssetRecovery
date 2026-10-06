@@ -35,6 +35,8 @@ interface FormState {
   arAgingBuckets: string[]
   writeOffTolerance: string
   advanceUnclearedToEmployeeReceivable: boolean
+  substituteReceiptMaxPerDoc: string
+  substituteReceiptMaxPerMonth: string
   reason: string
 }
 
@@ -45,6 +47,8 @@ function formOf(policy: FinancePolicyDto): FormState {
     arAgingBuckets: policy.arAgingBuckets.map((days) => String(days)),
     writeOffTolerance: toBahtInput(policy.writeOffToleranceSatang),
     advanceUnclearedToEmployeeReceivable: policy.advanceUnclearedToEmployeeReceivable,
+    substituteReceiptMaxPerDoc: toBahtInput(policy.substituteReceiptMaxPerDocSatang),
+    substituteReceiptMaxPerMonth: toBahtInput(policy.substituteReceiptMaxPerMonthSatang),
     reason: '',
   }
 }
@@ -121,6 +125,8 @@ export function FinancePolicyCard() {
       arAgingBuckets: form.arAgingBuckets.filter((value) => value.trim() !== '').map((value) => Number(value)),
       writeOffToleranceSatang: parseBahtInput(form.writeOffTolerance) ?? 0,
       advanceUnclearedToEmployeeReceivable: form.advanceUnclearedToEmployeeReceivable,
+      substituteReceiptMaxPerDocSatang: parseBahtInput(form.substituteReceiptMaxPerDoc) ?? 0,
+      substituteReceiptMaxPerMonthSatang: parseBahtInput(form.substituteReceiptMaxPerMonth) ?? 0,
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
@@ -160,7 +166,7 @@ export function FinancePolicyCard() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">นโยบายการเงินระดับองค์กร</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ค่ากลางที่ใช้ทั้งระบบ — เพดานเงินทดรอง เอกสารผู้รับเงิน ช่วงอายุหนี้ และเพดานตัดส่วนต่าง
+            ค่ากลางที่ใช้ทั้งระบบ — เพดานเงินทดรอง ใบรับรองแทนใบเสร็จ เอกสารผู้รับเงิน ช่วงอายุหนี้ และเพดานตัดส่วนต่าง
           </p>
         </div>
         <div className="text-[10px] text-slate-400">
@@ -193,6 +199,42 @@ export function FinancePolicyCard() {
               value={form.writeOffTolerance}
               onChange={(event) => set('writeOffTolerance', event.target.value)}
               placeholder="50.00"
+            />
+          </Field>
+        </div>
+
+        {/* มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน (รายจ่ายที่เรียกใบเสร็จไม่ได้) เกิน = บล็อก */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            id="policy-substitute-doc"
+            label="เพดานใบรับรองแทนใบเสร็จต่อใบ (บาท)"
+            required
+            hint="ค่าเริ่มต้น 500.00"
+            error={errors.substituteReceiptMaxPerDocSatang}
+          >
+            <Input
+              id="policy-substitute-doc"
+              numeric
+              inputMode="decimal"
+              value={form.substituteReceiptMaxPerDoc}
+              onChange={(event) => set('substituteReceiptMaxPerDoc', event.target.value)}
+              placeholder="500.00"
+            />
+          </Field>
+          <Field
+            id="policy-substitute-month"
+            label="เพดานใบรับรองแทนใบเสร็จต่อคนต่อเดือน (บาท)"
+            required
+            hint="ค่าเริ่มต้น 3,000.00 — นับตามเดือนของวันที่ออกใบ"
+            error={errors.substituteReceiptMaxPerMonthSatang}
+          >
+            <Input
+              id="policy-substitute-month"
+              numeric
+              inputMode="decimal"
+              value={form.substituteReceiptMaxPerMonth}
+              onChange={(event) => set('substituteReceiptMaxPerMonth', event.target.value)}
+              placeholder="3000.00"
             />
           </Field>
         </div>

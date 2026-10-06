@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import {
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
+} from '@/lib/substitute-receipts/substitute-receipt'
 import { dateOnlySchema, pctSchema, reasonSchema, satangSchema } from '@/lib/api/validation'
 import { MAX_APPROVAL_STEPS, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
 import { ACCOUNT_TYPE_VALUES, MAX_AUTO_MATCH_TOLERANCE_DAYS } from '@/lib/settings/bank-account'
@@ -174,6 +178,13 @@ const financePolicyFields = z.object({
     .max(MAX_AGING_BUCKETS, `ช่วงอายุหนี้ได้ไม่เกิน ${MAX_AGING_BUCKETS} ช่วง`),
   writeOffToleranceSatang: satangSchema('เพดานตัดส่วนต่างค่าธรรมเนียม'),
   advanceUnclearedToEmployeeReceivable: z.boolean(),
+  // มติ PO U103 — เพดานใบรับรองแทนใบเสร็จ (ต้องมากกว่า 0 · ไม่ส่ง = ค่าเริ่มต้น)
+  substituteReceiptMaxPerDocSatang: satangSchema('เพดานใบรับรองแทนใบเสร็จต่อใบ')
+    .refine((value) => value > 0, 'เพดานใบรับรองแทนใบเสร็จต่อใบต้องมากกว่า 0')
+    .default(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG),
+  substituteReceiptMaxPerMonthSatang: satangSchema('เพดานใบรับรองแทนใบเสร็จต่อเดือน')
+    .refine((value) => value > 0, 'เพดานใบรับรองแทนใบเสร็จต่อเดือนต้องมากกว่า 0')
+    .default(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG),
 })
 
 export const financePolicyFieldsSchema = financePolicyFields

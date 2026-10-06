@@ -428,6 +428,16 @@ enum AdvanceReturnChannel {
   @@map("advance_return_channel")
 }
 
+/// สถานะใบรับรองแทนใบเสร็จรับเงิน (มติ PO U103 · `23` §6.17) — ออกแล้วรอฉบับเซ็น → อัปโหลดฉบับเซ็นแล้ว
+enum SubstituteReceiptStatus {
+  /// ระบบออกเลข CRT + PDF แล้ว — รอผู้จ่ายเงินเซ็นแล้วอัปโหลดกลับ
+  pending_signature
+  /// อัปโหลดฉบับเซ็นแล้ว (ไฟล์ตรวจฝั่ง server + SHA-256) — ใช้แทนใบเสร็จได้
+  signed
+
+  @@map("substitute_receipt_status")
+}
+
 enum PayoutBatchSide {
   inhouse
   outsource
@@ -755,6 +765,8 @@ model Organization {
   expenses                   Expense[]
   advances                   Advance[]
   advanceReturns             AdvanceReturn[]
+  substituteReceipts         SubstituteReceipt[]
+  substituteReceiptLines     SubstituteReceiptLine[]
   payoutBatches              PayoutBatch[]
   payoutBatchItems           PayoutBatchItem[]
   revenues                   Revenue[]
@@ -978,6 +990,10 @@ model User {
   advanceReturnsCreated     AdvanceReturn[]             @relation("advance_returns_created_by")
   advanceReturnsUpdated     AdvanceReturn[]             @relation("advance_returns_updated_by")
   advanceReturnsReversed    AdvanceReturn[]             @relation("advance_returns_reversed_by")
+  substituteReceiptsCreated SubstituteReceipt[]         @relation("substitute_receipts_created_by")
+  substituteReceiptsUpdated SubstituteReceipt[]         @relation("substitute_receipts_updated_by")
+  substituteReceiptsSigned  SubstituteReceipt[]         @relation("substitute_receipts_signed_by")
+  substituteReceiptLinesCreated SubstituteReceiptLine[] @relation("substitute_receipt_lines_created_by")
   documentSeriesCreated     DocumentNumberSeries[]      @relation("document_number_series_created_by")
   documentSeriesUpdated     DocumentNumberSeries[]      @relation("document_number_series_updated_by")
   advancesUpdated           Advance[]                   @relation("advances_updated_by")
@@ -1517,6 +1533,10 @@ model FinancePolicySettings {
   writeOffToleranceSatang              Int     @default(5000) @map("write_off_tolerance_satang")
   /// D12 (มติ PO 2026-08-12) — ตัด advance ที่ไม่มีใบเสร็จเป็นลูกหนี้พนักงาน แล้วหักจาก payout รอบถัดไป
   advanceUnclearedToEmployeeReceivable Boolean @default(true) @map("advance_uncleared_to_employee_receivable")
+  /// มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน ต่อใบ (ค่าเริ่มต้น ฿500) · CHECK > 0 ใน raw SQL `20261006200000_substitute_receipts`
+  substituteReceiptMaxPerDocSatang     Int     @default(50000) @map("substitute_receipt_max_per_doc_satang")
+  /// มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน ต่อคนต่อเดือน (ค่าเริ่มต้น ฿3,000 · เดือนตามวันที่ออกใบ เวลาไทย)
+  substituteReceiptMaxPerMonthSatang   Int     @default(300000) @map("substitute_receipt_max_per_month_satang")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
@@ -2312,6 +2332,7 @@ model PayeeProfile {
   expenses        Expense[]
   advances        Advance[]
   advanceReturns  AdvanceReturn[]
+  substituteReceipts SubstituteReceipt[]
   payoutItems     PayoutBatchItem[]
   whtCertificates WhtCertificate[]
 
@@ -2414,6 +2435,8 @@ model Expense {
   supersedes  Expense[]         @relation("expenses_superseded_by")
   payoutItems PayoutBatchItem[]
   adjustments Adjustment[]
+  /// ใบรับรองแทนใบเสร็จของใบเบิกนี้ (มติ PO U103) — มีได้ไม่เกิน 1 ใบ (partial unique ใน raw SQL)
+  substituteReceipts SubstituteReceipt[]
 
   @@index([organizationId, status, expenseDate], map: "idx_expenses_org_status_date")
   @@index([caseId, status], map: "idx_expenses_case")
@@ -2504,6 +2527,8 @@ model Advance {
   payoutItems      PayoutBatchItem[]
   bankTransactions BankTransaction[] @relation("bank_tx_matched_advance")
   returns          AdvanceReturn[]
+  /// ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (มติ PO U103) — มีได้ไม่เกิน 1 ใบ (partial unique ใน raw SQL)
+  substituteReceipts SubstituteReceipt[]
 
   @@unique([organizationId, advanceNumber], map: "uniq_advance_number")
   @@index([payeeId, status], map: "idx_advances_payee")
@@ -2674,6 +2699,74 @@ model AdvanceReturn {
   @@index([organizationId, payeeId], map: "idx_advance_returns_org_payee")
   @@index([organizationId, payoutBatchId], map: "idx_advance_returns_org_batch")
   @@map("advance_returns")
+}
+
+/// ใบรับรองแทนใบเสร็จรับเงิน (มติ PO 06/10/2569 U103 · `15` §9.4 · `41` §6.6) — ผู้จ่ายเงิน (พนักงาน/payee) รับรองรายจ่ายที่เรียกใบเสร็จไม่ได้
+/// ผูกกับใบเบิกแยก (`expense_id`) **หรือ** การเคลียร์เงินทดรอง (`advance_id`) อย่างใดอย่างหนึ่ง — CHECK exactly-one (DEC-004)
+/// เลข `receipt_number` (CRT) ออกจาก `nextDocumentNumber()` ในทรานแซกชันเดียวกับ INSERT · ยอดรวม = ผลรวมบรรทัด (`22` §6.17)
+/// ⚠️ ออกแล้วแก้ไม่ได้ (trigger `trg_substitute_receipts_guard`) — เปลี่ยนได้เฉพาะ `pending_signature` → `signed` + ไฟล์ฉบับเซ็น
+/// CHECK/partial unique/trigger อยู่ใน raw SQL `20261006200000_substitute_receipts` (Rule 02)
+model SubstituteReceipt {
+  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String                  @map("organization_id") @db.Uuid
+  receiptNumber    String                  @map("receipt_number")
+  payeeId          String                  @map("payee_id") @db.Uuid
+  expenseId        String?                 @map("expense_id") @db.Uuid
+  advanceId        String?                 @map("advance_id") @db.Uuid
+  /// วันที่ออกใบ (วันไทย) — ฐานของเพดานต่อคนต่อเดือน
+  issueDate        DateTime                @map("issue_date") @db.Date
+  /// ผลรวม `amount_satang` ของบรรทัด (snapshot ตอนออก) · CHECK > 0
+  totalSatang      Int                     @map("total_satang")
+  status           SubstituteReceiptStatus @default(pending_signature)
+  /// ไฟล์ฉบับเซ็นแล้ว (อัปโหลดผ่าน server — ตรวจ prefix/magic bytes/ขนาด) · CHECK มีค่า ⇔ `signed`
+  signedFilePath   String?                 @map("signed_file_path")
+  signedFileSha256 String?                 @map("signed_file_sha256") @db.VarChar(64)
+  signedAt         DateTime?               @map("signed_at") @db.Timestamptz(6)
+  signedBy         String?                 @map("signed_by") @db.Uuid
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization  Organization            @relation(fields: [organizationId], references: [id])
+  payee         PayeeProfile            @relation(fields: [payeeId], references: [id])
+  expense       Expense?                @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  advance       Advance?                @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  createdByUser User                    @relation("substitute_receipts_created_by", fields: [createdBy], references: [id])
+  updatedByUser User?                   @relation("substitute_receipts_updated_by", fields: [updatedBy], references: [id])
+  signedByUser  User?                   @relation("substitute_receipts_signed_by", fields: [signedBy], references: [id])
+  lines         SubstituteReceiptLine[]
+
+  @@unique([organizationId, receiptNumber], map: "uniq_substitute_receipt_number")
+  @@index([organizationId, payeeId, issueDate], map: "idx_substitute_receipts_org_payee_date")
+  @@map("substitute_receipts")
+}
+
+/// บรรทัดรายจ่ายของใบรับรองแทนใบเสร็จ (มติ PO U103) — insert-only (ไม่มี updated_*/deleted_at · ห้ามแก้/ลบ ด้วย trigger)
+model SubstituteReceiptLine {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId      String   @map("organization_id") @db.Uuid
+  substituteReceiptId String   @map("substitute_receipt_id") @db.Uuid
+  /// ลำดับบรรทัด 1..n
+  lineNo              Int      @map("line_no")
+  /// วันที่จ่ายจริง (วันไทย)
+  lineDate            DateTime @map("line_date") @db.Date
+  description         String
+  /// CHECK > 0
+  amountSatang        Int      @map("amount_satang")
+  note                String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization      Organization      @relation(fields: [organizationId], references: [id])
+  substituteReceipt SubstituteReceipt @relation(fields: [substituteReceiptId], references: [id], onDelete: Cascade)
+  createdByUser     User              @relation("substitute_receipt_lines_created_by", fields: [createdBy], references: [id])
+
+  @@unique([substituteReceiptId, lineNo], map: "uniq_substitute_receipt_lines_no")
+  @@map("substitute_receipt_lines")
 }
 
 /// รายได้ (ไฟล์ 19) — เกิดเมื่อ `expense.approved` **AND** `HandoverLot.confirmed` (DEC-006/D6)

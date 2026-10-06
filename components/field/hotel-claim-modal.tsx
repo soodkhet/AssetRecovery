@@ -9,7 +9,14 @@ import { HOTEL_NIGHTS_MAX, HOTEL_NIGHTS_MIN, hotelClaimFormError, parseHotelNigh
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
-import { parseBahtInput } from '@/lib/format/money'
+import { parseBahtInput, toBahtInput } from '@/lib/format/money'
+import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
+import {
+  emptySubstituteLine,
+  substituteDraftPayload,
+  substituteDraftTotalSatang,
+  type SubstituteLineDraft,
+} from '@/lib/substitute-receipts/form'
 
 /**
  * ฟอร์มเบิกค่าที่พัก (`41` §6.6 กลุ่ม "เบิกแยก" · §7.9)
@@ -39,6 +46,9 @@ export function HotelClaimModal({
   const [receipt, setReceipt] = useState<File | null>(null)
   // มติ PO U96 #14 — ค่าเริ่มต้นไม่ติ๊ก ให้ผู้เบิกเลือกเองตามใบเสร็จจริง
   const [receiptInCompanyName, setReceiptInCompanyName] = useState(false)
+  // มติ PO U103 — ไม่มีใบเสร็จ ⇒ กรอกรายการ แล้วระบบออกใบรับรองแทนใบเสร็จ (ยอดเบิก = ยอดรวมรายการ)
+  const [noReceipt, setNoReceipt] = useState(false)
+  const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>([emptySubstituteLine('line-0')])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -54,19 +64,36 @@ export function HotelClaimModal({
     }
   }, [])
 
+  const substituteTotal = substituteDraftTotalSatang(substituteLines)
+
   async function submit(): Promise<void> {
-    const formError = hotelClaimFormError({ expenseDate, amountBaht, hasReceipt: receipt !== null, nightsText })
-    const amountSatang = parseBahtInput(amountBaht)
+    const effectiveAmountBaht = noReceipt ? toBahtInput(substituteTotal) : amountBaht
+    const formError = hotelClaimFormError({
+      expenseDate,
+      amountBaht: effectiveAmountBaht,
+      hasReceipt: noReceipt || receipt !== null,
+      nightsText,
+    })
+    const amountSatang = parseBahtInput(effectiveAmountBaht)
     const hotelNights = parseHotelNightsInput(nightsText)
-    if (formError !== null || receipt === null || amountSatang === null || hotelNights === null) {
-      setError(formError ?? 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
+    const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
+    if (formError !== null || amountSatang === null || Number.isNaN(amountSatang) || hotelNights === null) {
+      setError(formError ?? 'กรุณากรอกข้อมูลให้ครบ')
+      return
+    }
+    if (substitute !== null && substitute.error !== null) {
+      setError(substitute.error)
+      return
+    }
+    if (!noReceipt && receipt === null) {
+      setError('ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
       return
     }
 
     setSubmitting(true)
     setError(null)
     try {
-      const receiptFileUrl = await uploadExpenseReceipt(receipt)
+      const receiptFileUrl = noReceipt || receipt === null ? null : await uploadExpenseReceipt(receipt)
       const response = await callApi<FieldExpenseDto>(
         apiPath('field.hotelClaim'),
         jsonRequest('POST', {
@@ -76,6 +103,7 @@ export function HotelClaimModal({
           receiptInCompanyName,
           sharedWithUserId: sharedWithUserId === '' ? null : sharedWithUserId,
           receiptFileUrl,
+          substituteReceipt: substitute === null ? null : substitute.payload,
           note: note.trim() === '' ? null : note.trim(),
         }),
       )
@@ -87,7 +115,14 @@ export function HotelClaimModal({
         })
         return
       }
-      showToast({ tone: 'success', title: 'ส่งคำขอเบิกค่าที่พักแล้ว — รอผู้อนุมัติตรวจสอบ' })
+      showToast({
+        tone: 'success',
+        title: 'ส่งคำขอเบิกค่าที่พักแล้ว — รอผู้อนุมัติตรวจสอบ',
+        description:
+          response.data.substituteReceipt === null
+            ? undefined
+            : `ออกใบรับรองแทนใบเสร็จ ${response.data.substituteReceipt.receiptNumber} แล้ว — ดาวน์โหลดไปเซ็นแล้วอัปโหลดฉบับเซ็นจากรายการเบิก`,
+      })
       onCreated(response.data)
       onClose()
     } catch (uploadError) {
@@ -125,12 +160,13 @@ export function HotelClaimModal({
           />
         </Field>
 
-        <Field label="จำนวนเงิน (บาท)" required>
+        <Field label="จำนวนเงิน (บาท)" required hint={noReceipt ? 'ไม่มีใบเสร็จ — ใช้ยอดรวมของรายการด้านล่าง' : undefined}>
           <Input
             numeric
             inputMode="decimal"
             placeholder="0.00"
-            value={amountBaht}
+            disabled={noReceipt}
+            value={noReceipt ? toBahtInput(substituteTotal) : amountBaht}
             onChange={(event) => setAmountBaht(event.target.value)}
           />
         </Field>
@@ -146,6 +182,18 @@ export function HotelClaimModal({
           </Select>
         </Field>
 
+        <NoReceiptToggle
+          checked={noReceipt}
+          onChange={(checked) => {
+            setNoReceipt(checked)
+            setError(null)
+          }}
+          hint="เรียกใบเสร็จจากผู้รับเงินไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
+        />
+
+        {noReceipt ? (
+          <NoReceiptLinesEditor lines={substituteLines} onChange={setSubstituteLines} defaultDate={expenseDate} />
+        ) : (
         <Field label="แนบใบเสร็จ" required>
           <button
             type="button"
@@ -168,6 +216,7 @@ export function HotelClaimModal({
             }}
           />
         </Field>
+        )}
 
         <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />
 

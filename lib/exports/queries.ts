@@ -346,6 +346,11 @@ const EXPENSE_RECORD_SELECT = {
           expenseDate: true,
           receiptFileUrl: true,
           case: { select: { caseRef: true } },
+          // มติ PO U103 — ใบรับรองแทนใบเสร็จของใบเบิก (เลข CRT + ไฟล์ฉบับเซ็น)
+          substituteReceipts: {
+            where: { deletedAt: null },
+            select: { receiptNumber: true, signedFilePath: true },
+          },
         },
       },
       payee: { select: { user: { select: { fullName: true } } } },
@@ -391,7 +396,9 @@ function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers
       voucherRef: vouchers.voucherRefOf.get(voucherKey(item.payoutBatchId, item.payeeId)) ?? null,
       caseRef: expense?.case?.caseRef ?? null,
       costCenter: row.costCenter?.code ?? null,
-      receiptFilePath: expense?.receiptFileUrl ?? null,
+      // มติ PO U103 — ใช้ใบรับรองแทนใบเสร็จ ⇒ `receipt_file` = ไฟล์ใบรับรองฉบับเซ็น (ปกติคือไฟล์เดียวกับใบเสร็จของใบเบิก)
+      receiptFilePath: expense?.receiptFileUrl ?? expense?.substituteReceipts[0]?.signedFilePath ?? null,
+      substituteReceiptNumber: expense?.substituteReceipts[0]?.receiptNumber ?? null,
     }
   })
 }
@@ -991,6 +998,7 @@ async function advanceReturnRows(organizationId: string, scope: PeriodScope): Pr
     select: {
       advanceId: true,
       advance: { select: { advanceNumber: true } },
+      returnNumber: true,
       channel: true,
       amountSatang: true,
       receivedDate: true,
@@ -1016,6 +1024,7 @@ async function advanceReturnRows(organizationId: string, scope: PeriodScope): Pr
     evidenceFilePath: row.evidenceFilePath,
     reversedAt: row.reversedAt,
     reversalReason: row.reversalReason,
+    returnNumber: row.returnNumber,
     createdAt: row.createdAt,
   }))
   exportRows.sort(

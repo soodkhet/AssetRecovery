@@ -1,3 +1,4 @@
+import type { SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
 import { z } from 'zod'
 import { reasonSchema } from '@/lib/api/validation'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
@@ -33,6 +34,8 @@ export interface CompensationApprovalDto {
   basisText: string
   /** ค่าที่พัก: ใบเสร็จออกในนามบริษัทหรือไม่ (มติ PO U96 #14) — รายการชนิดอื่น = `null` */
   receiptInCompanyName: boolean | null
+  /** มติ PO U103 — ใบรับรองแทนใบเสร็จของรายการ (ป้ายบนคิวอนุมัติ) · ไม่มี = `null` */
+  substituteReceipt: SubstituteReceiptRefDto | null
   grossSatang: number
   whtSatang: number
   netSatang: number

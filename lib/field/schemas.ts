@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { substituteReceiptDraftSchema } from '@/lib/substitute-receipts/schemas'
 import { dateOnlySchema } from '@/lib/api/validation'
 import { CLOSE_FAIL_REASONS } from '@/lib/field/fail-reasons'
 import { FIELD_GROUPS } from '@/lib/field/field-status'
@@ -163,8 +164,26 @@ export const hotelClaimSchema = z.object({
   /** ใบเสร็จออกในนามบริษัท (มติ PO U96 #14) — ผู้เบิกติ๊กเอง · ไม่ส่ง = ไม่ติ๊ก */
   receiptInCompanyName: z.boolean().default(false),
   sharedWithUserId: z.uuid('ผู้พักร่วมไม่ถูกต้อง').nullish(),
-  receiptFileUrl: fileUrl,
+  /** ใบเสร็จจริง — ไม่มีใบเสร็จให้ส่ง `substituteReceipt` แทน (มติ PO U103 · อย่างใดอย่างหนึ่งเท่านั้น) */
+  receiptFileUrl: fileUrl.nullish(),
+  /** ติ๊ก "ไม่มีใบเสร็จ" → รายการของใบรับรองแทนใบเสร็จ · ยอดรวมของรายการต้องเท่ากับยอดเบิก */
+  substituteReceipt: substituteReceiptDraftSchema.nullish(),
   note: trimmedText.max(1000).nullish(),
+}).superRefine((value, ctx) => {
+  const hasReceipt = value.receiptFileUrl !== null && value.receiptFileUrl !== undefined
+  const substitute = value.substituteReceipt ?? null
+  if (hasReceipt && substitute !== null) {
+    ctx.addIssue({ code: 'custom', path: ['substituteReceipt'], message: 'แนบใบเสร็จแล้ว ไม่ต้องกรอกใบรับรองแทนใบเสร็จ' })
+  }
+  if (!hasReceipt && substitute === null) {
+    ctx.addIssue({ code: 'custom', path: ['receiptFileUrl'], message: 'ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ' })
+  }
+  if (substitute !== null) {
+    const total = substitute.lines.reduce((sum, line) => sum + line.amountSatang, 0)
+    if (total !== value.amountSatang) {
+      ctx.addIssue({ code: 'custom', path: ['amountSatang'], message: 'จำนวนเงินต้องเท่ากับยอดรวมของรายการในใบรับรองแทนใบเสร็จ' })
+    }
+  }
 })
 
 export type HotelClaimInput = z.infer<typeof hotelClaimSchema>

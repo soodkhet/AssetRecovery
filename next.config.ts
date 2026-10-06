@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
     '/api/accounting/**': ['./public/fonts/**'],
     // ไฟล์ PDF ของเมนูรายงาน (`96` §11 · E13 "PDF ฝัง Noto Sans Thai")
     '/api/reports/**': ['./public/fonts/**'],
+    // ใบเบิก/ใบรับคืนเงินทดรอง + ใบรับรองแทนใบเสร็จรับเงิน (มติ PO U100/U103)
+    '/api/advances/**': ['./public/fonts/**'],
+    '/api/substitute-receipts/**': ['./public/fonts/**'],
   },
   // ⚠️ ไม่ตั้ง process.env.TZ ที่นี่โดยเจตนา — server เก็บ/คำนวณเป็น UTC เสมอ
   //    การแปลงเป็น Asia/Bangkok + พ.ศ. ทำที่ display layer ผ่าน utils กลาง (Rule 01 · Phase 1.5)

@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
+import { AdvanceRequestPdfLink, AdvanceReturnHistory } from '@/components/finance/advance-doc-links'
+import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
 import { ChangeReturnMethodModal, RecordSeparateReturnModal } from '@/components/finance/advance-return-modals'
 import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
@@ -25,7 +27,7 @@ import {
   Tr,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { ADVANCE_RETURN_CHANNEL_LABEL, ADVANCE_RETURN_METHOD_LABEL, APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
+import { ADVANCE_RETURN_METHOD_LABEL, APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/advance'
 import {
   ADVANCE_RETURN_STATE_LABEL,
   ADVANCE_STATUS_FILTERS,
@@ -158,12 +160,24 @@ export function AdvanceTab() {
                     <Td>
                       <RefText>{advance.ref}</RefText>
                       <p className="text-[10px] text-slate-400">ขอเมื่อ {fmtDate(advance.createdAt)}</p>
+                      <AdvanceRequestPdfLink advance={advance} />
                     </Td>
                     <Td>
                       <p className="font-semibold text-slate-900">{advance.payeeName}</p>
                       {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
                     </Td>
-                    <Td className="max-w-[220px] text-xs text-slate-600">{advance.purpose}</Td>
+                    <Td className="max-w-[220px] text-xs text-slate-600">
+                      {advance.purpose}
+                      {/* มติ PO U103 — ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (การเงินอัปโหลดฉบับเซ็นแทนได้) */}
+                      {advance.substituteReceipt !== null && (
+                        <SubstituteReceiptPanel
+                          receipt={advance.substituteReceipt}
+                          compact
+                          canUpload={canApproveAdvance}
+                          onSigned={() => void reload()}
+                        />
+                      )}
+                    </Td>
                     <Td numeric className="font-semibold">
                       {fmtSatangSymbol(advance.requestedSatang)}
                     </Td>
@@ -193,18 +207,8 @@ export function AdvanceTab() {
                               {ADVANCE_RETURN_METHOD_LABEL[advance.returnMethod]}
                             </p>
                           )}
-                          {advance.returns
-                            .filter((entry) => entry.reversedAt === null)
-                            .map((entry) => (
-                              <p key={entry.id} className="text-[10px] font-normal text-slate-500">
-                                {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]} {fmtSatangSymbol(entry.amountSatang)}
-                                {entry.payoutBatchName !== null
-                                  ? ` · ${entry.payoutBatchName}`
-                                  : entry.receivedDate !== null
-                                    ? ` · ${fmtDate(entry.receivedDate)}`
-                                    : ''}
-                              </p>
-                            ))}
+                          {/* มติ PO U100 — ประวัติการคืน + ใบรับคืนเงินทดรอง (RAV) ต่อแถว */}
+                          <AdvanceReturnHistory advance={advance} />
                         </div>
                       )}
                       {advance.excessSatang > 0 && (

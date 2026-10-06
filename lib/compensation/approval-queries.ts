@@ -40,6 +40,11 @@ import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-que
 import { dispatchNotification } from '@/lib/notifications/dispatch'
 import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
+import {
+  assertExpenseSubstituteReceiptSigned,
+  substituteReceiptRefOf,
+  substituteReceiptsRelationSelect,
+} from '@/lib/substitute-receipts/queries'
 import { SettingsError } from '@/lib/settings/errors'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
 import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
@@ -122,6 +127,8 @@ const expenseSelect = {
   fieldDaySettlement: {
     select: { fieldDate: true, caseCount: true, fuelTotalSatang: true, allowanceTotalSatang: true },
   },
+  /** มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" บนคิวอนุมัติ */
+  substituteReceipts: substituteReceiptsRelationSelect,
 } as const
 
 type ExpenseRow = Prisma.ExpenseGetPayload<{ select: typeof expenseSelect }>
@@ -329,6 +336,7 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow, viewer: CapabilityHolder): C
       steps: flow.steps,
     }),
     rejectReason: row.rejectionReason,
+    substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -510,6 +518,9 @@ export async function approveCompensationExpense(
   }
 
   const outcome = await prisma.$transaction(async (tx) => {
+    // มติ PO U103 — ใบเบิกที่ใช้ใบรับรองแทนใบเสร็จต้องอัปโหลดฉบับเซ็นแล้วก่อนอนุมัติ (ทุกขั้น)
+    await assertExpenseSubstituteReceiptSigned(tx, expenseId)
+
     // ยาม optimistic (Final Test ด่าน 6) — สถานะถูกอ่าน **นอก** transaction จึงต้องยืนยันอีกครั้ง
     // ตอนเขียน ไม่งั้นคนที่กดทีหลังทับผลของคนแรก (เช่น "ปฏิเสธ" ถูกพลิกกลับเป็น "อนุมัติ"
     // แล้ว `tryCreateRevenue()` ยิงต่อ · หรือประทับตราผู้อนุมัติของคนแรกหายไป)

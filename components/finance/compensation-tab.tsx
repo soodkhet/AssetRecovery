@@ -27,6 +27,7 @@ import {
 } from '@/lib/compensation/approval-ui'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 
 /**
  * แท็บ "ค่าตอบแทน" (ไฟล์ 16 §8 · mockup `finance.html` แท็บ `comp`)
@@ -94,6 +95,8 @@ export function CompensationTab() {
                     <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
                     <Td>
                       <RefText>{item.basisText}</RefText>
+                      {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
+                      {item.substituteReceipt !== null && <SubstituteReceiptPanel receipt={item.substituteReceipt} compact />}
                     </Td>
                     <Td numeric>
                       <p className="font-semibold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</p>

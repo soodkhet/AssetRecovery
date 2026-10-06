@@ -1,3 +1,4 @@
+import type { SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
 import type { FieldGroup } from '@/lib/field/field-status'
 import type { ExpenseViewType } from '@/lib/field/schemas'
 import type {
@@ -262,6 +263,8 @@ export interface FieldExpenseDto {
   receiptInCompanyName: boolean
   /** auto-mapping เคสที่ลงพื้นที่ในช่วงวันที่พัก (วันเข้าพัก … + จำนวนคืน − 1) — **ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด** (`41` §6.6) */
   matchedCaseIds: string[]
+  /** ใบรับรองแทนใบเสร็จ (มติ PO U103) — ใบเบิกที่ติ๊ก "ไม่มีใบเสร็จ" · ไม่มี = `null` */
+  substituteReceipt: SubstituteReceiptRefDto | null
   createdAt: string
 }
 

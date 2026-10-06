@@ -37,6 +37,7 @@ import { jobErrorStatus, JOB_ERROR_CODES } from '@/lib/jobs/errors'
 import { exportErrorStatus, EXPORT_ERROR_CODES } from '@/lib/exports/errors'
 import { uploadErrorStatus, UPLOAD_ERROR_CODES } from '@/lib/uploads/errors'
 import { whtErrorStatus, WHT_ERROR_CODES } from '@/lib/wht/errors'
+import { substituteReceiptErrorStatus, SUBSTITUTE_RECEIPT_ERROR_CODES } from '@/lib/substitute-receipts/errors'
 
 /**
  * Catalog ต้องตรงกับเอกสารทั้งสองทาง (Rule 04):
@@ -145,6 +146,7 @@ const MODULE_STATUS: Array<[string, readonly string[], (code: never) => number]>
   ['accounting', ACCOUNTING_ERROR_CODES, accountingErrorStatus as (code: never) => number],
   ['adjustments', ADJUSTMENT_ERROR_CODES, adjustmentErrorStatus as (code: never) => number],
   ['advances', ADVANCE_ERROR_CODES, advanceErrorStatus as (code: never) => number],
+  ['substitute-receipts', SUBSTITUTE_RECEIPT_ERROR_CODES, substituteReceiptErrorStatus as (code: never) => number],
   ['revenue', REVENUE_ERROR_CODES, revenueErrorStatus as (code: never) => number],
   ['bank-recon', BANK_RECON_ERROR_CODES, bankReconErrorStatus as (code: never) => number],
   ['sales', SALES_ERROR_CODES, salesErrorStatus as (code: never) => number],

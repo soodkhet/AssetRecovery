@@ -1,4 +1,8 @@
 import { emitAudit } from '@/lib/audit/audit'
+import {
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
+} from '@/lib/substitute-receipts/substitute-receipt'
 import { prisma } from '@/lib/prisma'
 import {
   DEFAULT_AR_AGING_BUCKETS,
@@ -26,6 +30,8 @@ const policySelect = {
   arAgingBuckets: true,
   writeOffToleranceSatang: true,
   advanceUnclearedToEmployeeReceivable: true,
+  substituteReceiptMaxPerDocSatang: true,
+  substituteReceiptMaxPerMonthSatang: true,
   updatedAt: true,
 } as const
 
@@ -35,6 +41,8 @@ interface PolicyRow {
   arAgingBuckets: number[]
   writeOffToleranceSatang: number
   advanceUnclearedToEmployeeReceivable: boolean
+  substituteReceiptMaxPerDocSatang: number
+  substituteReceiptMaxPerMonthSatang: number
   updatedAt: Date
 }
 
@@ -46,6 +54,8 @@ function toDto(row: PolicyRow): FinancePolicyDto {
     arAgingLabels: describeAgingBuckets(row.arAgingBuckets),
     writeOffToleranceSatang: row.writeOffToleranceSatang,
     advanceUnclearedToEmployeeReceivable: row.advanceUnclearedToEmployeeReceivable,
+    substituteReceiptMaxPerDocSatang: row.substituteReceiptMaxPerDocSatang,
+    substituteReceiptMaxPerMonthSatang: row.substituteReceiptMaxPerMonthSatang,
     updatedAt: toIso(row.updatedAt),
   }
 }
@@ -57,6 +67,8 @@ function toValues(dto: FinancePolicyDto): FinancePolicyValues {
     arAgingBuckets: dto.arAgingBuckets,
     writeOffToleranceSatang: dto.writeOffToleranceSatang,
     advanceUnclearedToEmployeeReceivable: dto.advanceUnclearedToEmployeeReceivable,
+    substituteReceiptMaxPerDocSatang: dto.substituteReceiptMaxPerDocSatang,
+    substituteReceiptMaxPerMonthSatang: dto.substituteReceiptMaxPerMonthSatang,
   }
 }
 
@@ -67,6 +79,8 @@ const DEFAULT_POLICY: FinancePolicyValues = {
   arAgingBuckets: [...DEFAULT_AR_AGING_BUCKETS],
   writeOffToleranceSatang: DEFAULT_WRITE_OFF_TOLERANCE_SATANG,
   advanceUnclearedToEmployeeReceivable: true,
+  substituteReceiptMaxPerDocSatang: DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
+  substituteReceiptMaxPerMonthSatang: DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
 }
 
 /**
@@ -106,6 +120,8 @@ export async function updateFinancePolicy(
         arAgingBuckets: normalized.arAgingBuckets,
         writeOffToleranceSatang: normalized.writeOffToleranceSatang,
         advanceUnclearedToEmployeeReceivable: normalized.advanceUnclearedToEmployeeReceivable,
+        substituteReceiptMaxPerDocSatang: normalized.substituteReceiptMaxPerDocSatang,
+        substituteReceiptMaxPerMonthSatang: normalized.substituteReceiptMaxPerMonthSatang,
         updatedBy: context.actor.id,
       },
       update: {
@@ -114,6 +130,8 @@ export async function updateFinancePolicy(
         arAgingBuckets: normalized.arAgingBuckets,
         writeOffToleranceSatang: normalized.writeOffToleranceSatang,
         advanceUnclearedToEmployeeReceivable: normalized.advanceUnclearedToEmployeeReceivable,
+        substituteReceiptMaxPerDocSatang: normalized.substituteReceiptMaxPerDocSatang,
+        substituteReceiptMaxPerMonthSatang: normalized.substituteReceiptMaxPerMonthSatang,
         updatedBy: context.actor.id,
       },
       select: policySelect,

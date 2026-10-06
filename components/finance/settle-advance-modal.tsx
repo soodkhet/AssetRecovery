@@ -9,6 +9,14 @@ import { settleUsedField } from '@/lib/advances/advance-ui'
 import { ADVANCE_RETURN_METHOD_LABEL, DEFAULT_ADVANCE_RETURN_METHOD } from '@/lib/advances/advance'
 import type { AdvanceReturnMethod } from '@/lib/generated/prisma/enums'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
+import { toInputDate } from '@/lib/format/datetime'
+import {
+  emptySubstituteLine,
+  substituteDraftPayload,
+  substituteDraftTotalSatang,
+  type SubstituteLineDraft,
+} from '@/lib/substitute-receipts/form'
 
 /**
  * Modal "เคลียร์ยอดเงินทดรอง" (`15` §8/§9.1 · mockup `finance.html` `action-clear-advance`)
@@ -30,6 +38,12 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   const [note, setNote] = useState('')
   const [returnMethod, setReturnMethod] = useState<AdvanceReturnMethod>(DEFAULT_ADVANCE_RETURN_METHOD)
   const [saving, setSaving] = useState(false)
+  // มติ PO U103 — รายจ่ายที่ไม่มีใบเสร็จ ⇒ ระบบออกใบรับรองแทนใบเสร็จ (CRT) ผูกเงินทดรองนี้
+  const [noReceipt, setNoReceipt] = useState(false)
+  const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>([
+    emptySubstituteLine('line-0', toInputDate(new Date())),
+  ])
+  const [substituteError, setSubstituteError] = useState<string | null>(null)
 
   if (advance === null) return null
 
@@ -47,10 +61,26 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
 
   async function submit(): Promise<void> {
     if (advance === null || !validUsed) return
+    const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
+    if (substitute !== null && substitute.error !== null) {
+      setSubstituteError(substitute.error)
+      return
+    }
+    if (substitute !== null && substituteDraftTotalSatang(substituteLines) > usedSatang) {
+      setSubstituteError('ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง')
+      return
+    }
+    setSubstituteError(null)
     setSaving(true)
     const result = await callApi<AdvanceSettleResult>(
       `/api/advances/${advance.id}/settle`,
-      jsonRequest('PATCH', { usedSatang, returnMethod, receiptFileUrl: receiptUrl.trim(), note: note.trim() }),
+      jsonRequest('PATCH', {
+        usedSatang,
+        returnMethod,
+        receiptFileUrl: receiptUrl.trim(),
+        note: note.trim(),
+        substituteReceipt: substitute === null ? null : substitute.payload,
+      }),
     )
     setSaving(false)
     if (result.error !== undefined) {
@@ -72,6 +102,14 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     setReturnMethod(DEFAULT_ADVANCE_RETURN_METHOD)
     setReceiptUrl('')
     setNote('')
+    setNoReceipt(false)
+    if (settled?.substituteReceipt !== null && settled?.substituteReceipt !== undefined) {
+      showToast({
+        tone: 'success',
+        title: `ออกใบรับรองแทนใบเสร็จ ${settled.substituteReceipt.receiptNumber} แล้ว`,
+        description: 'ดาวน์โหลดไปให้ผู้เบิกเซ็น แล้วอัปโหลดฉบับเซ็นจากรายการเงินทดรอง',
+      })
+    }
     onSettled()
     onClose()
   }
@@ -160,6 +198,25 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
             onChange={(event) => setReceiptUrl(event.target.value)}
           />
         </Field>
+
+        <NoReceiptToggle
+          checked={noReceipt}
+          onChange={(checked) => {
+            setNoReceipt(checked)
+            setSubstituteError(null)
+          }}
+          hint="มีรายจ่ายบางรายการที่เรียกใบเสร็จไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
+        />
+        {noReceipt && (
+          <>
+            <NoReceiptLinesEditor
+              lines={substituteLines}
+              onChange={setSubstituteLines}
+              defaultDate={toInputDate(new Date())}
+            />
+            {substituteError !== null && <p className="text-xs font-semibold text-red-600">{substituteError}</p>}
+          </>
+        )}
 
         <Field label="หมายเหตุ (ถ้ามี)">
           <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
