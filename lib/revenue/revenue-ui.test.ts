@@ -6,6 +6,9 @@ import {
   BILLING_STATUS_FILTERS,
   BILLING_STATUS_LABEL,
   billingStatusBadgeGroup,
+  billingStatusView,
+  DEBIT_NOTE_OUTSTANDING_LABEL,
+  hasDebitNoteOutstanding,
   canDeleteBillingBatch,
   canSendBillingBatch,
   isArOutstanding,
@@ -125,5 +128,39 @@ describe('BUG-165 — ภาษีที่ลูกค้าจะหัก (�
     expect(
       customerWhtSummary({ customerWhtSatang: 0, customerWhtIsEstimate: true, customerWhtPct: null, expectedReceiptSatang: 107_000 }),
     ).toBeNull()
+  })
+})
+
+describe('มติ O74 — ป้ายสถานะรอบสะท้อนยอดตามเอกสาร (ใบเพิ่มหนี้หลังรับชำระครบ)', () => {
+  it('paid + ค้าง 107.00 ⇒ แสดง "รับชำระบางส่วน" + ป้ายเสริม · สถานะใน DB ไม่ถูกเปลี่ยน', () => {
+    expect(billingStatusView('paid', 10_700)).toEqual({
+      displayStatus: 'partially_paid',
+      label: BILLING_STATUS_LABEL.partially_paid,
+      group: 'partial',
+      debitNoteOutstanding: true,
+    })
+    expect(DEBIT_NOTE_OUTSTANDING_LABEL).toBe('มีใบเพิ่มหนี้ค้าง')
+  })
+
+  it('paid ที่ไม่ค้าง/รับเกิน ⇒ "รับชำระครบ" ตามเดิม', () => {
+    for (const outstanding of [0, -500]) {
+      expect(billingStatusView('paid', outstanding)).toMatchObject({
+        displayStatus: 'paid',
+        label: BILLING_STATUS_LABEL.paid,
+        debitNoteOutstanding: false,
+      })
+    }
+  })
+
+  it('สถานะอื่นคงป้ายเดิมเสมอ (ค้างอยู่แล้วโดยนิยาม)', () => {
+    for (const status of ['draft', 'sent', 'partially_paid'] as const) {
+      expect(billingStatusView(status, 10_700)).toMatchObject({
+        displayStatus: status,
+        label: BILLING_STATUS_LABEL[status],
+        group: billingStatusBadgeGroup(status),
+        debitNoteOutstanding: false,
+      })
+      expect(hasDebitNoteOutstanding(status, 10_700)).toBe(false)
+    }
   })
 })

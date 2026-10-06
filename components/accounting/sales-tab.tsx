@@ -1,5 +1,6 @@
 'use client'
 
+import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { useState } from 'react'
 import { CreditNoteModal, type CreditNoteInvoice } from '@/components/accounting/credit-note-modal'
 import { IssueTaxInvoiceModal, type IssueTarget } from '@/components/accounting/issue-tax-invoice-modal'
@@ -29,7 +30,6 @@ import { AWAITING_NOTE_LABEL, netInvoiceAmounts, sumActiveCreditNotes, sumActive
 import type { CreditNoteType } from '@/lib/credit-notes/schemas'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
-import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 import type { CreditNoteDto } from '@/lib/credit-notes/types'
 import type { SalesRecordDto, TaxInvoiceDto, TaxInvoiceSummaryDto } from '@/lib/sales/types'
@@ -171,7 +171,7 @@ export function SalesTab() {
                     <RefText>{row.billingBatchNumber}</RefText>
                     <p className="mt-0.5 text-[10px] text-slate-500">{row.billingPeriod}</p>
                     <div className="mt-0.5">
-                      <StatusBadge status={row.billingStatus} label={BILLING_STATUS_LABEL[row.billingStatus]} />
+                      <BillingStatusBadge status={row.billingStatus} outstandingSatang={row.billingOutstandingSatang} />
                     </div>
                   </Td>
                   <Td className="text-xs font-semibold text-slate-900">{row.companyName}</Td>

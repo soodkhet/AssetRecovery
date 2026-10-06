@@ -11,6 +11,7 @@ import type {
   TaxInvoiceStatus,
   VatMode,
 } from '@/lib/generated/prisma/enums'
+import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { parseSellerProfileSnapshot, sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
 import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
 import { documentTemplateSnapshotJson, parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
@@ -155,7 +156,10 @@ const SALES_SELECT = {
   createdAt: true,
   period: { select: { periodLabel: true } },
   company: { select: { name: true } },
-  billingBatch: { select: { period: true, batchNumber: true, status: true } },
+  billingBatch: {
+    // มติ O74 — ยอดของรอบสำหรับคิดยอดค้างตามเอกสาร (ป้ายสถานะรอบ)
+    select: { id: true, period: true, batchNumber: true, status: true, totalSatang: true, receivedSatang: true, whtWithheldByCustomerSatang: true, bankFeeWrittenOffSatang: true },
+  },
   taxInvoices: { select: TAX_INVOICE_SELECT, orderBy: { createdAt: 'desc' } },
 } satisfies Prisma.SalesRecordSelect
 
@@ -188,7 +192,11 @@ function activeInvoiceOf(row: SalesRow): TaxInvoiceRow | null {
   return row.taxInvoices.find((invoice) => invoice.status === 'active') ?? null
 }
 
-function toSalesDto(row: SalesRow, periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN): SalesRecordDto {
+function toSalesDto(
+  row: SalesRow,
+  periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN,
+  outstandingByBatch: ReadonlyMap<string, number> = new Map(),
+): SalesRecordDto {
   const active = activeInvoiceOf(row)
   return {
     id: row.id,
@@ -200,6 +208,7 @@ function toSalesDto(row: SalesRow, periodClosed: PeriodClosedLookup = PERIOD_ASS
     billingPeriod: row.billingBatch.period,
     billingBatchNumber: row.billingBatch.batchNumber,
     billingStatus: row.billingBatch.status,
+    billingOutstandingSatang: outstandingByBatch.get(row.billingBatchId) ?? 0,
     totalBeforeVatSatang: row.totalBeforeVatSatang,
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
@@ -315,8 +324,14 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
     select: SALES_SELECT,
   })
 
-  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
-  const items = rows.map((row) => toSalesDto(row, periodClosed))
+  const [periodClosed, outstandingByBatch] = await Promise.all([
+    loadPeriodClosedLookup(user.organizationId),
+    documentedOutstandingByBatch(
+      user.organizationId,
+      rows.map((row) => row.billingBatch),
+    ),
+  ])
+  const items = rows.map((row) => toSalesDto(row, periodClosed, outstandingByBatch))
   return {
     items,
     totalBeforeVatSatang: items.reduce((sum, item) => sum + item.totalBeforeVatSatang, 0),
@@ -1062,7 +1077,11 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
         select: {
           period: true,
           batchNumber: true,
+          id: true,
           status: true,
+          totalSatang: true,
+          receivedSatang: true,
+          whtWithheldByCustomerSatang: true,
           bankFeeWrittenOffSatang: true,
           company: { select: { name: true } },
           salesRecord: {
@@ -1075,7 +1094,13 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
     },
   })
 
-  const periodClosed = await loadPeriodClosedLookup(user.organizationId)
+  const [periodClosed, outstandingByBatch] = await Promise.all([
+    loadPeriodClosedLookup(user.organizationId),
+    documentedOutstandingByBatch(
+      user.organizationId,
+      rows.map((row) => row.billingBatch),
+    ),
+  ])
   const items: CashReceiptDto[] = rows.map((row) => {
     const active = row.taxInvoices.find((invoice) => invoice.status === 'active') ?? null
     return {
@@ -1090,6 +1115,7 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
       billingPeriod: row.billingBatch.period,
       billingBatchNumber: row.billingBatch.batchNumber,
       billingStatus: row.billingBatch.status,
+      billingOutstandingSatang: outstandingByBatch.get(row.billingBatchId) ?? 0,
       billingBankFeeWrittenOffSatang: row.billingBatch.bankFeeWrittenOffSatang,
       note: row.note,
       createdAt: row.createdAt.toISOString(),

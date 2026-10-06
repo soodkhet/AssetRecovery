@@ -1,5 +1,6 @@
 'use client'
 
+import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { useState } from 'react'
 import { IssueTaxInvoiceModal, type IssueTarget } from '@/components/accounting/issue-tax-invoice-modal'
 import { useCashReceipts } from '@/components/accounting/use-sales'
@@ -21,7 +22,6 @@ import {
 import { BANK_MATCH_STATUS_LABEL } from '@/lib/bank-recon/matching'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
-import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 
 /**
@@ -112,7 +112,7 @@ export function ReceiptsTab() {
                     <RefText>{row.billingBatchNumber}</RefText>
                     <p className="mt-0.5 text-[10px] text-slate-500">{row.billingPeriod}</p>
                     <div className="mt-0.5">
-                      <StatusBadge status={row.billingStatus} label={BILLING_STATUS_LABEL[row.billingStatus]} />
+                      <BillingStatusBadge status={row.billingStatus} outstandingSatang={row.billingOutstandingSatang} />
                     </div>
                   </Td>
                   <Td>

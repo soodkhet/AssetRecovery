@@ -13,6 +13,7 @@
 |---|---|---|
 | v1 | (เดิม) | Drafted from UI Reference — KPI 4 ตัว + Exception aggregation |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
+| v2.1x-HC | 07/10/2569 | **มติ O74 (ความสอดคล้องยอด AR)**: §6.1 KPI "เงินค้างรับ (AR)" ใช้ยอดตามเอกสารจากแหล่งเดียวกับ F3/AR Aging/การ์ดบริหาร แทนยอดบิล ± Adjustment ภายใน |
 
 ขอบเขตเอกสารนี้: หน้าแรกของโมดูลการเงิน — สรุป KPI สำคัญ 4 ตัว และรายการ Exception ที่ต้องจัดการเร่งด่วน เป็น read-only aggregation view
 
@@ -53,7 +54,7 @@
 |---|---|
 | เงินรออนุมัติ | ผลรวม Claim ที่ `status != approved/rejected` (ไฟล์ 15/16) |
 | เงินรอจ่าย | ผลรวม `net_amount` ของ Payout Batch ที่ยังไม่ `completed` (ไฟล์ 17) |
-| เงินค้างรับ (AR Aging) | ผลรวม `total_amount - received_amount` ของ Billing Batch ที่ยังไม่ `paid` (ไฟล์ 19) |
+| เงินค้างรับ (AR Aging) | ผลรวมยอดค้าง > 0 ของรอบวางบิลที่ส่งแล้ว — ใช้**ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ − รับแล้ว − ภาษีลูกค้าหัก) **แหล่งเดียวกับ F3/AR Aging** (`loadArAgingCompanies()` + `totalArOutstandingSatang()` — มติ O74) · Adjustment ที่ยังไม่มีใบลด/เพิ่มหนี้ไม่หักยอด (ไฟล์ 19 §6.4) |
 | กำไรขั้นต้นเดือนนี้ | Revenue เดือนนี้ - ต้นทุนตรงเดือนนี้ (ดูไฟล์ 21 สำหรับสูตรเต็ม) |
 
 ### 6.2 Exception Severity Levels

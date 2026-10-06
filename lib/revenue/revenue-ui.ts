@@ -33,6 +33,39 @@ export function billingStatusBadgeGroup(status: BillingBatchStatus): StatusBadge
   return BILLING_STATUS_GROUP[status]
 }
 
+/** ป้ายเสริมเมื่อรอบที่รับชำระครบแล้วมียอดตามเอกสารเพิ่มภายหลัง (มติ O74) */
+export const DEBIT_NOTE_OUTSTANDING_LABEL = 'มีใบเพิ่มหนี้ค้าง'
+
+/**
+ * มติ O74 — รอบ `paid` แต่**ยอดตามเอกสาร**ยังค้าง (> 0) = ออกใบเพิ่มหนี้หลังรับชำระครบ ⇒ state machine ของรอบวางบิล
+ * ไม่มีทางย้อน `paid → partially_paid` ⇒ แก้ที่การแสดงผลเท่านั้น (สถานะใน DB คงเดิม)
+ * · `documentedOutstandingSatang` = `arOutstandingSatang()` บนยอดตามเอกสาร (คิดที่ backend เสมอ)
+ */
+export function hasDebitNoteOutstanding(status: BillingBatchStatus, documentedOutstandingSatang: number): boolean {
+  return status === 'paid' && documentedOutstandingSatang > 0
+}
+
+export interface BillingStatusView {
+  /** สถานะที่ใช้แสดง — ไม่ใช่ค่าที่เก็บใน DB (ปุ่ม/transition ยังอ่าน `status` จริงเสมอ) */
+  displayStatus: BillingBatchStatus
+  label: string
+  group: StatusBadgeGroup
+  /** แสดงป้ายเสริม `DEBIT_NOTE_OUTSTANDING_LABEL` คู่กัน */
+  debitNoteOutstanding: boolean
+}
+
+/** ป้ายสถานะรอบวางบิลตามยอดตามเอกสาร — ใช้ร่วมหน้าภายในทุกจุดและพอร์ทัล (มติ O74) */
+export function billingStatusView(status: BillingBatchStatus, documentedOutstandingSatang: number): BillingStatusView {
+  const debitNoteOutstanding = hasDebitNoteOutstanding(status, documentedOutstandingSatang)
+  const displayStatus: BillingBatchStatus = debitNoteOutstanding ? 'partially_paid' : status
+  return {
+    displayStatus,
+    label: BILLING_STATUS_LABEL[displayStatus],
+    group: BILLING_STATUS_GROUP[displayStatus],
+    debitNoteOutstanding,
+  }
+}
+
 export const REVENUE_STATUS_LABEL: Readonly<Record<RevenueStatus, string>> = {
   ready_for_billing: 'รอวางบิล',
   billed: 'รวมเข้ารอบแล้ว',
