@@ -122,7 +122,9 @@ export function SettingHelp({
   if (help.assumption === undefined) return box
   return (
     <div className={cn('space-y-1.5', className)}>
-      <AssumptionBadge assumptionKey={help.assumption} />
+      {[help.assumption, ...(help.moreAssumptions ?? [])].map((key) => (
+        <AssumptionBadge key={key} assumptionKey={key} />
+      ))}
       {box}
     </div>
   )

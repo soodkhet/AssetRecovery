@@ -49,4 +49,6 @@ export interface SettingHelpContent {
    * ⇒ `<SettingHelp>` แสดงป้าย "รอนักบัญชียืนยัน" จนกว่าบัญชีจะกดยืนยันแล้ว · เป็นรหัส ไม่ใช่ข้อความ
    */
   assumption?: SettingAssumptionKey
+  /** สมมติฐานเพิ่มเติมที่ผูกกับค่าตั้งเดียวกัน (ป้ายเรียงต่อจาก `assumption`) — เช่น เพดานค่าธรรมเนียมใช้ทั้ง U144 และ U163 */
+  moreAssumptions?: readonly SettingAssumptionKey[]
 }

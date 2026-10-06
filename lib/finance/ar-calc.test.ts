@@ -4,6 +4,7 @@ import {
   arOutstandingSatang,
   daysOverdue,
   resolveBankFeeWriteOff,
+  resolveCustomerWhtForReceipt,
   settledSatang,
   summarizeArAging,
   totalArOutstandingSatang,
@@ -195,5 +196,65 @@ describe('§6.11.1 ตัดส่วนต่างเป็นค่าธร�
     expect(
       settledSatang({ totalSatang: 0, receivedSatang: 1_037_500, whtWithheldByCustomerSatang: 30_000, bankFeeWrittenOffSatang: 2_500 }),
     ).toBe(1_070_000)
+  })
+})
+
+describe('§6.11.1 ภาษีลูกค้าหัก + ค่าธรรมเนียมโอนในรายการเดียว (มติ PO U163)', () => {
+  // บิล ฿3,210 · ลูกค้าหัก ฿90 (ยอดคาดรับ ฿3,120) · เพดาน ฿50
+  const bill = { totalSatang: 321_000, expectedWhtSatang: 9_000, priorReceivedSatang: 0, priorWhtSatang: 0, toleranceSatang: 5_000 }
+  const settle = (receivedSatang: number) => {
+    const wht = resolveCustomerWhtForReceipt({ ...bill, receiptSatang: receivedSatang })
+    const fee = resolveBankFeeWriteOff({
+      totalSatang: bill.totalSatang,
+      receivedSatang,
+      whtWithheldByCustomerSatang: wht,
+      toleranceSatang: bill.toleranceSatang,
+    })
+    const amounts = { totalSatang: bill.totalSatang, receivedSatang, whtWithheldByCustomerSatang: wht, bankFeeWrittenOffSatang: fee }
+    return { wht, fee, outstanding: arOutstandingSatang(amounts), status: resolveBillingStatusAfterReceipt({ current: 'sent', ...amounts }) }
+  }
+
+  it('ตัวอย่างมติ: บิล 3,210 · หัก 90 · เงินเข้า 3,105 ⇒ ภาษี 90 + ค่าธรรมเนียม 15 · paid', () => {
+    expect(settle(310_500)).toEqual({ wht: 9_000, fee: 1_500, outstanding: 0, status: 'paid' })
+  })
+
+  it('เงินเข้า = ยอดคาดรับพอดี ⇒ ภาษีเต็ม ไม่มีค่าธรรมเนียม (กติกาเดิม)', () => {
+    expect(settle(312_000)).toEqual({ wht: 9_000, fee: 0, outstanding: 0, status: 'paid' })
+  })
+
+  it('ขอบล่างของช่วง (ขาดเท่าเพดาน) ⇒ ภาษีเต็ม + ค่าธรรมเนียมเท่าเพดาน · ต่ำกว่า 1 สตางค์ ⇒ ไม่นับภาษี ค้างบางส่วน', () => {
+    expect(settle(307_000)).toEqual({ wht: 9_000, fee: 5_000, outstanding: 0, status: 'paid' })
+    expect(settle(306_999)).toMatchObject({ wht: 0, fee: 0, status: 'partially_paid' })
+  })
+
+  it('รับเต็มยอดบิล (ลูกค้าไม่หัก) ⇒ ภาษี 0 · paid', () => {
+    expect(settle(321_000)).toEqual({ wht: 0, fee: 0, outstanding: 0, status: 'paid' })
+  })
+
+  it('เงินเข้าระหว่างยอดคาดรับกับยอดเต็ม ⇒ ไม่นับภาษี · ขาดไม่เกินเพดานตัดเป็นค่าธรรมเนียมตามเดิม', () => {
+    expect(settle(318_000)).toMatchObject({ wht: 0, fee: 3_000, status: 'paid' })
+    expect(settle(314_000)).toMatchObject({ wht: 0, fee: 0, status: 'partially_paid' })
+  })
+
+  it('ลูกค้าไม่ได้ตั้งให้หัก ⇒ ภาษี 0 (พฤติกรรมตัดค่าธรรมเนียมเดิม)', () => {
+    expect(resolveCustomerWhtForReceipt({ ...bill, expectedWhtSatang: 0, receiptSatang: 310_500 })).toBe(0)
+  })
+
+  it('เพดาน 0 ⇒ เหลือเฉพาะเงินเข้า = ยอดคาดรับพอดี', () => {
+    expect(resolveCustomerWhtForReceipt({ ...bill, toleranceSatang: 0, receiptSatang: 312_000 })).toBe(9_000)
+    expect(resolveCustomerWhtForReceipt({ ...bill, toleranceSatang: 0, receiptSatang: 311_999 })).toBe(0)
+  })
+
+  it('ยอดสะสมหลายใบ: ใบแรกขาดมาก (ไม่นับภาษี) · ใบที่ทำให้ยอดสะสมเข้าช่วงได้ภาษีเต็ม · ใบก่อนบันทึกไว้แล้วไม่นับซ้ำ', () => {
+    expect(resolveCustomerWhtForReceipt({ ...bill, receiptSatang: 200_000 })).toBe(0)
+    expect(resolveCustomerWhtForReceipt({ ...bill, priorReceivedSatang: 200_000, receiptSatang: 110_500 })).toBe(9_000)
+    expect(
+      resolveCustomerWhtForReceipt({ ...bill, priorReceivedSatang: 310_000, priorWhtSatang: 9_000, receiptSatang: 500 }),
+    ).toBe(0)
+  })
+
+  it('ค่าไม่ใช่สตางค์จำนวนเต็ม/ติดลบ = ล้ม', () => {
+    expect(() => resolveCustomerWhtForReceipt({ ...bill, receiptSatang: 1.5 })).toThrow(RangeError)
+    expect(() => resolveCustomerWhtForReceipt({ ...bill, toleranceSatang: -1, receiptSatang: 1 })).toThrow(RangeError)
   })
 })

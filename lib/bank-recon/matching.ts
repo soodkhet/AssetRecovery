@@ -1,4 +1,5 @@
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { resolveCustomerWhtForReceipt } from '@/lib/finance/ar-calc'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -207,17 +208,25 @@ export function matchCandidateOptionText(
  *
  * ยอดที่เข้าบัญชีจริงเท่ากับ `total − wht` เมื่อใดก็ตามที่ลูกค้าหักภาษีก่อนโอน ⇒ ส่วนต่างคือ
  * **เครดิตภาษีของบริษัท** ต้องเก็บไว้กับใบเงินรับ ไม่ใช่ปล่อยเป็น 0 (ไม่งั้นตามเครดิตรายใบไม่ได้)
- * · คืน 0 เมื่อรับเต็มจำนวนหรือยอดไม่ตรงทั้งสองค่า — **ไม่เดาส่วนต่าง** เพราะยอดที่ไม่ตรงเป๊ะ
- *   เกิดได้จากจ่ายบางส่วน/ค่าธรรมเนียม ซึ่งไม่ใช่ภาษีหัก ณ ที่จ่าย
+ * · มติ PO U163 — ยอดรับสะสมขาดจาก `total − wht` ไม่เกินเพดานค่าธรรมเนียม (U144) ก็ยังนับภาษีเต็ม
+ *   ส่วนต่างที่เหลือไปเป็นค่าธรรมเนียมธนาคาร — สูตรอยู่ที่ `resolveCustomerWhtForReceipt()` ที่เดียว
+ * · รับเต็มยอด/ขาดเกินช่วง/ลูกค้าไม่ได้ตั้งให้หัก (`altAmountSatang = null`) ⇒ 0
  * · เลขจำนวนเต็มล้วน ไม่คิดอัตราภาษีใหม่ (อัตราถูก snapshot ไว้ที่ `billing_batches` แล้ว)
  */
 export function whtWithheldForReceipt(
   transactionAmountSatang: number,
   candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang'>,
+  context: { priorReceivedSatang: number; priorWhtSatang: number; toleranceSatang: number },
 ): number {
-  const absolute = Math.abs(transactionAmountSatang)
-  if (candidate.altAmountSatang === null || absolute !== candidate.altAmountSatang) return 0
-  return candidate.amountSatang - absolute
+  if (candidate.altAmountSatang === null) return 0
+  return resolveCustomerWhtForReceipt({
+    totalSatang: candidate.amountSatang,
+    expectedWhtSatang: Math.max(0, candidate.amountSatang - candidate.altAmountSatang),
+    priorReceivedSatang: context.priorReceivedSatang,
+    priorWhtSatang: context.priorWhtSatang,
+    receiptSatang: Math.abs(transactionAmountSatang),
+    toleranceSatang: context.toleranceSatang,
+  })
 }
 
 /** `MATCH_NOTE_REQUIRED` — จับคู่ manual ที่ยอดไม่ตรงเป๊ะต้องมีหมายเหตุ (`35` §11) */

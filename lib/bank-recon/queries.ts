@@ -65,6 +65,7 @@ import { syncPayoutBatchCompleted } from '@/lib/payout/queries'
 import { RevenueError } from '@/lib/revenue/errors'
 import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { applyBillingReceipt } from '@/lib/revenue/queries'
+import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 import { bankFileFormatLabel, parseColumnMapping } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
@@ -823,6 +824,10 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
       ? `ยืนยันคู่ที่ระบบเสนอ: จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} โดยเจ้าหน้าที่`
       : `จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} ${input.mode === 'auto' ? 'อัตโนมัติ' : 'โดยเจ้าหน้าที่'}`)
 
+  // มติ PO U163 — เพดานค่าธรรมเนียม (U144) ใช้ตัดสินภาษีลูกค้าหักของใบเงินรับด้วย
+  const writeOffToleranceSatang =
+    input.candidate.kind === 'billing' ? (await getFinancePolicy(ctx.actor.organizationId)).writeOffToleranceSatang : 0
+
   const { cashReceiptId } = await prisma.$transaction(async (tx) => {
     // มติ PO U67 — ล็อกแถวรอบจ่ายก่อนผูกรายการเดินบัญชี ⇒ แข่งกับการยกเลิกรอบได้ผู้ชนะคนเดียว
     // (การยกเลิกล็อกแถวเดียวกันแล้วตรวจว่ามีรายการเดินบัญชีจับคู่หรือยัง)
@@ -901,7 +906,19 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
     let receiptId: string | null = null
     if (input.candidate.kind === 'billing') {
       // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ เก็บส่วนต่างไว้กับใบเงินรับเป็นเครดิตภาษี (`31` §8)
-      const whtWithheldSatang = whtWithheldForReceipt(before.amountSatang, input.candidate)
+      // มติ PO U163 — ตัดสินจากยอดรับสะสม (ใบก่อน ๆ + ใบนี้) ⇒ ล็อกแถวรอบวางบิลกันสองรายการเดินบัญชีนับภาษีซ้ำ
+      await tx.$queryRaw`SELECT id FROM billing_batches
+         WHERE id = ${input.candidate.id}::uuid AND organization_id = ${ctx.actor.organizationId}::uuid
+         FOR UPDATE`
+      const prior = await tx.cashReceipt.aggregate({
+        where: { organizationId: ctx.actor.organizationId, billingBatchId: input.candidate.id },
+        _sum: { amountSatang: true, whtWithheldByCustomerSatang: true },
+      })
+      const whtWithheldSatang = whtWithheldForReceipt(before.amountSatang, input.candidate, {
+        priorReceivedSatang: prior._sum.amountSatang ?? 0,
+        priorWhtSatang: prior._sum.whtWithheldByCustomerSatang ?? 0,
+        toleranceSatang: writeOffToleranceSatang,
+      })
       const receipt = await tx.cashReceipt.create({
         data: {
           organizationId: ctx.actor.organizationId,
