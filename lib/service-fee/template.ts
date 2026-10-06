@@ -11,7 +11,8 @@ import { ServiceFeeError } from '@/lib/service-fee/errors'
  */
 
 export type ServiceFeeModel = 'SUCCESS_FEE' | 'FLAT' | 'HYBRID'
-export type ServiceFeeBasis = 'debt_amount' | 'asset_value'
+/** มติ PO U126 — ตัดฐานมูลค่าเครื่อง เหลือยอดหนี้คงเหลืออย่างเดียว */
+export type ServiceFeeBasis = 'debt_amount'
 
 /** ค่าที่ผู้ใช้ตั้งได้ต่อเทมเพลต 1 เวอร์ชัน — ตรงกับคอลัมน์ `service_fee_templates` (`02` §5) */
 export interface ServiceFeeTemplateValues {
@@ -21,7 +22,6 @@ export interface ServiceFeeTemplateValues {
   ratePct: number
   basis: ServiceFeeBasis | null
   chargeOnFail: boolean
-  chargePerTrackingRound: boolean
 }
 
 export interface ServiceFeeTemplateVersion extends ServiceFeeTemplateValues {
@@ -37,7 +37,6 @@ const VALUE_FIELDS = [
   'ratePct',
   'basis',
   'chargeOnFail',
-  'chargePerTrackingRound',
 ] as const satisfies readonly (keyof ServiceFeeTemplateValues)[]
 
 /** ช่วง `rate` ตาม `12` §11 — ใช้ code เฉพาะ `INVALID_RATE_RANGE` ไม่ใช่ `REQUIRED_MISSING` */
@@ -106,7 +105,6 @@ export interface ServiceFeeSnapshot {
   ratePct: number
   basis: ServiceFeeBasis | null
   chargeOnFail: boolean
-  chargePerTrackingRound: boolean
 }
 
 export function toServiceFeeSnapshot(template: ServiceFeeTemplateVersion): ServiceFeeSnapshot {
@@ -119,13 +117,12 @@ export function toServiceFeeSnapshot(template: ServiceFeeTemplateVersion): Servi
     ratePct: values.ratePct,
     basis: values.basis,
     chargeOnFail: values.chargeOnFail,
-    chargePerTrackingRound: values.chargePerTrackingRound,
   }
 }
 
 /**
  * องค์ประกอบของยอดที่เรียกเก็บ 1 กรณี — ไม่ใช่ยอดเงินที่คำนวณแล้ว
- * (ต้องรู้ `debt_amount`/`asset_value` ของเคสก่อนถึงจะได้ตัวเลขจริง — `22` §6.5–6.7)
+ * (ต้องรู้ `debt_amount` ของเคสก่อนถึงจะได้ตัวเลขจริง — `22` §6.5–6.7)
  */
 export type ServiceFeeCharge =
   | { kind: 'none' }
@@ -175,7 +172,6 @@ export function describeServiceFeeFormula(template: ServiceFeeTemplateValues): S
 
 export const SERVICE_FEE_BASIS_LABEL: Record<ServiceFeeBasis, string> = {
   debt_amount: 'มูลค่าหนี้คงเหลือ',
-  asset_value: 'มูลค่าเครื่อง',
 }
 
 export const SERVICE_FEE_MODEL_LABEL: Record<ServiceFeeModel, string> = {

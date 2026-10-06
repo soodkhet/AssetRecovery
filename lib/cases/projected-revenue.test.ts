@@ -39,12 +39,12 @@ const HYBRID: ProjectedRevenueTemplate = {
   templateVersion: 2,
 }
 
-const DEBT_10K = { debtAmountSatang: 1_000_000, assetValueSatang: 800_000 }
+const DEBT_10K = { debtAmountSatang: 1_000_000 }
 
 describe('ประมาณการรายได้ (`38` §6.5)', () => {
   it('FLAT = base ไม่ขึ้นกับมูลหนี้', () => {
     expect(calculateProjectedRevenue(FLAT, DEBT_10K).amountSatang).toBe(150_000)
-    expect(calculateProjectedRevenue(FLAT, { debtAmountSatang: null, assetValueSatang: null }).amountSatang).toBe(
+    expect(calculateProjectedRevenue(FLAT, { debtAmountSatang: null }).amountSatang).toBe(
       150_000,
     )
   })
@@ -57,14 +57,14 @@ describe('ประมาณการรายได้ (`38` §6.5)', () => {
     expect(calculateProjectedRevenue(HYBRID, DEBT_10K).amountSatang).toBe(200_000)
   })
 
-  it('basis = asset_value ใช้มูลค่าเครื่องแทนมูลหนี้ (`12` §6.1)', () => {
-    const template = { ...SUCCESS_FEE, basis: 'asset_value' as const }
-    expect(calculateProjectedRevenue(template, DEBT_10K).basisSatang).toBe(800_000)
-    expect(calculateProjectedRevenue(template, DEBT_10K).amountSatang).toBe(160_000)
+  it('ฐานคำนวณมีแบบเดียวคือมูลหนี้ (มติ PO U126) — basis null ที่หลุดมาก็ใช้มูลหนี้', () => {
+    const template = { ...SUCCESS_FEE, basis: null }
+    expect(calculateProjectedRevenue(template, DEBT_10K).basisSatang).toBe(1_000_000)
+    expect(calculateProjectedRevenue(template, DEBT_10K).amountSatang).toBe(200_000)
   })
 
   it('ยังไม่มีฐานคำนวณ → ยอด null + missingBasis (ห้ามเดาเป็น 0)', () => {
-    const result = calculateProjectedRevenue(SUCCESS_FEE, { debtAmountSatang: null, assetValueSatang: null })
+    const result = calculateProjectedRevenue(SUCCESS_FEE, { debtAmountSatang: null })
     expect(result.amountSatang).toBeNull()
     expect(result.missingBasis).toBe(true)
   })
@@ -76,7 +76,7 @@ describe('ประมาณการรายได้ (`38` §6.5)', () => {
 
   it('ผลลัพธ์เป็นจำนวนเต็มสตางค์เสมอ แม้ rate มีทศนิยม', () => {
     const template = { ...SUCCESS_FEE, ratePct: 12.35 }
-    const result = calculateProjectedRevenue(template, { debtAmountSatang: 999_999, assetValueSatang: null })
+    const result = calculateProjectedRevenue(template, { debtAmountSatang: 999_999 })
     expect(Number.isInteger(result.amountSatang)).toBe(true)
     expect(result.amountSatang).toBe(pctOfSatang(999_999, 12.35))
   })
@@ -91,7 +91,7 @@ describe('ประมาณการรายได้ (`38` §6.5)', () => {
       [1_001_250, 8.04],
     ]
     for (const [debtAmountSatang, ratePct] of cases) {
-      const result = calculateProjectedRevenue({ ...SUCCESS_FEE, ratePct }, { debtAmountSatang, assetValueSatang: null })
+      const result = calculateProjectedRevenue({ ...SUCCESS_FEE, ratePct }, { debtAmountSatang })
       expect(result.amountSatang).toBe(pctOfSatang(debtAmountSatang, ratePct))
       // สูตรเดิมที่ถูกถอดออก — ยืนยันว่าเลิกใช้แล้วจริง (ต่างกัน 1 สตางค์ทุกคู่)
       expect(result.amountSatang).not.toBe(Math.round((debtAmountSatang * ratePct) / 100))
@@ -110,7 +110,7 @@ describe('ข้อความที่มาประมาณการสำ�
   const TEMPLATE_ID = '3f2a9c4e-1b7d-4e8a-9c3f-2d1e0b9a8c7d'
 
   function sourceOf(template: ProjectedRevenueTemplate): string {
-    return calculateProjectedRevenue(template, { debtAmountSatang: 1_000_000, assetValueSatang: null }).source
+    return calculateProjectedRevenue(template, { debtAmountSatang: 1_000_000 }).source
   }
 
   it('อ่านค่าดิบกลับเป็นชิ้นส่วนได้ครบ', () => {
@@ -150,9 +150,9 @@ describe('ข้อความที่มาประมาณการสำ�
     const flat = sourceOf({ model: 'FLAT', baseSatang: 150_000, ratePct: 0, basis: null, templateVersion: 1 })
     expect(projectedRevenueSourceText(flat, null)).toBe('เทมเพลต v1 · Flat Rate: ฿1,500.00')
 
-    const success = sourceOf({ model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 2.5, basis: 'asset_value' })
-    expect(projectedRevenueSourceText(success, 'ตามมูลค่าเครื่อง')).toBe(
-      'เทมเพลต "ตามมูลค่าเครื่อง" · Success Fee: 2.5% ของมูลค่าเครื่อง',
+    const success = sourceOf({ model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 2.5, basis: 'debt_amount' })
+    expect(projectedRevenueSourceText(success, 'ตามมูลหนี้')).toBe(
+      'เทมเพลต "ตามมูลหนี้" · Success Fee: 2.5% ของมูลหนี้',
     )
   })
 

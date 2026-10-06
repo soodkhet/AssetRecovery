@@ -27,9 +27,9 @@ export interface ProjectedRevenueTemplate {
   templateVersion?: number
 }
 
+/** มติ PO U126 — ฐานคำนวณมีแบบเดียวคือยอดหนี้คงเหลือ */
 export interface ProjectedRevenueCaseValues {
   debtAmountSatang: number | null
-  assetValueSatang: number | null
 }
 
 export interface ProjectedRevenue {
@@ -43,9 +43,8 @@ export interface ProjectedRevenue {
   missingBasis: boolean
 }
 
-function basisValue(basis: ServiceFeeBasis | null, values: ProjectedRevenueCaseValues): number | null {
-  if (basis === 'asset_value') return values.assetValueSatang
-  // `12` §7.1 — `basis` บังคับเมื่อมี rate; ค่า null ที่หลุดมาถือเป็นมูลหนี้ตามค่าเริ่มต้นของ `38` §6.5
+function basisValue(values: ProjectedRevenueCaseValues): number | null {
+  // `12` §7.1 — `basis` บังคับเมื่อมี rate; ฐานเดียวคือมูลหนี้ (U126) ค่า null ที่หลุดมาก็ถือเป็นมูลหนี้
   return values.debtAmountSatang
 }
 
@@ -74,7 +73,7 @@ export function calculateProjectedRevenue(
     return { amountSatang: template.baseSatang, source, basisSatang: null, missingBasis: false }
   }
 
-  const base = basisValue(template.basis, values)
+  const base = basisValue(values)
   if (base === null) {
     return { amountSatang: null, source, basisSatang: null, missingBasis: true }
   }
@@ -96,7 +95,7 @@ export interface ProjectedRevenueSourceParts {
 }
 
 const MODELS: readonly ServiceFeeModel[] = ['SUCCESS_FEE', 'FLAT', 'HYBRID']
-const BASES: readonly ServiceFeeBasis[] = ['debt_amount', 'asset_value']
+const BASES: readonly ServiceFeeBasis[] = ['debt_amount']
 
 /** อ่านค่าดิบที่ `describe()` เขียนไว้กลับเป็นชิ้นส่วน — ชิ้นที่อ่านไม่ออกเป็น `null` (ค่าดิบใน DB ไม่เปลี่ยน) */
 export function parseProjectedRevenueSource(source: string): ProjectedRevenueSourceParts {
@@ -133,7 +132,6 @@ const MODEL_SHORT_LABEL: Readonly<Record<ServiceFeeModel, string>> = {
 
 const BASIS_SHORT_LABEL: Readonly<Record<ServiceFeeBasis, string>> = {
   debt_amount: 'มูลหนี้',
-  asset_value: 'มูลค่าเครื่อง',
 }
 
 /**

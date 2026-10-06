@@ -7,7 +7,7 @@ import {
 
 /** `22` §6.5–6.7 — ยอดรายได้ค่าบริการก่อน VAT ครบทั้ง 3 model × 2 outcome × charge_on_fail */
 
-const values: ServiceFeeBasisValues = { debtAmountSatang: 5_000_000, assetValueSatang: 2_000_000 }
+const values: ServiceFeeBasisValues = { debtAmountSatang: 5_000_000 }
 
 function snapshot(overrides: Partial<ServiceFeeSnapshot> = {}): ServiceFeeSnapshot {
   return { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', chargeOnFail: false, ...overrides }
@@ -26,16 +26,14 @@ describe('§6.5 SUCCESS_FEE', () => {
     expect(calculateServiceFeeRevenue(snapshot({ chargeOnFail: true }), 'closed_fail', values).grossSatang).toBe(0)
   })
 
-  it('basis = asset_value ใช้มูลค่าทรัพย์ ไม่ใช่มูลหนี้', () => {
-    const result = calculateServiceFeeRevenue(snapshot({ basis: 'asset_value' }), 'closed_success', values)
-    expect(result.basisSatang).toBe(2_000_000)
-    expect(result.grossSatang).toBe(200_000)
+  it('ฐานคำนวณมีแบบเดียวคือมูลหนี้ (มติ PO U126) — basis null ที่หลุดมาก็ใช้มูลหนี้', () => {
+    const result = calculateServiceFeeRevenue(snapshot({ basis: null }), 'closed_success', values)
+    expect(result.basisSatang).toBe(5_000_000)
   })
 
   it('เคสยังไม่มีฐานคำนวณ → gross = null + missingBasis (ห้ามสร้าง Revenue)', () => {
     const result = calculateServiceFeeRevenue(snapshot(), 'closed_success', {
       debtAmountSatang: null,
-      assetValueSatang: null,
     })
     expect(result.grossSatang).toBeNull()
     expect(result.missingBasis).toBe(true)
@@ -59,7 +57,6 @@ describe('§6.6 FLAT', () => {
   it('ไม่มีส่วน rate เลย แม้ตั้ง ratePct มา (และไม่ต้องใช้ฐานคำนวณ)', () => {
     const result = calculateServiceFeeRevenue({ ...flat, ratePct: 10 }, 'closed_success', {
       debtAmountSatang: null,
-      assetValueSatang: null,
     })
     expect(result.rateComponentSatang).toBe(0)
     expect(result.missingBasis).toBe(false)
@@ -98,7 +95,6 @@ describe('ยามและคำอธิบายสูตร', () => {
   it('เศษสตางค์ปัดครึ่งขึ้น — ฿123.45 × 7% = 864 สตางค์', () => {
     const result = calculateServiceFeeRevenue(snapshot({ ratePct: 7 }), 'closed_success', {
       debtAmountSatang: 12_345,
-      assetValueSatang: null,
     })
     expect(result.grossSatang).toBe(864)
   })
@@ -109,7 +105,7 @@ describe('ยามและคำอธิบายสูตร', () => {
     )
     expect(() => calculateServiceFeeRevenue(snapshot({ ratePct: 101 }), 'closed_success', values)).toThrow(RangeError)
     expect(() =>
-      calculateServiceFeeRevenue(snapshot(), 'closed_success', { debtAmountSatang: -5, assetValueSatang: null }),
+      calculateServiceFeeRevenue(snapshot(), 'closed_success', { debtAmountSatang: -5 }),
     ).toThrow(RangeError)
   })
 

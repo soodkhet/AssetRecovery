@@ -42,8 +42,8 @@ export interface TryCreateRevenueInput {
 }
 
 /**
- * `missing_basis` = ผ่านเกตแล้วแต่เคสยังไม่มีฐานคำนวณ (เช่น `basis = asset_value` แต่ไม่ได้กรอก
- * มูลค่าทรัพย์) ⇒ ยังสร้าง Revenue ไม่ได้ ต้องให้คนกรอกก่อน (`22` §6.5–6.7 — ห้ามเดาเป็น 0)
+ * `missing_basis` = ผ่านเกตแล้วแต่เคสยังไม่มีฐานคำนวณ (มีอัตรา % แต่เคสไม่ได้กรอกยอดหนี้คงเหลือ)
+ * ⇒ ยังสร้าง Revenue ไม่ได้ ต้องให้คนกรอกก่อน (`22` §6.5–6.7 — ห้ามเดาเป็น 0)
  */
 export type RevenueSkipReason = RevenueBlockReason | 'already_created' | 'missing_basis'
 
@@ -194,7 +194,6 @@ export async function tryCreateRevenue(
         serviceFeeBasisSnapshot: true,
         serviceFeeChargeOnFail: true,
         debtAmountSatang: true,
-        assetValueSatang: true,
         company: { select: { vatMode: true } },
       },
     }),
@@ -286,7 +285,7 @@ export async function tryCreateRevenue(
         chargeOnFail: row.serviceFeeChargeOnFail ?? false,
       },
       outcome: row.outcome,
-      basisValues: { debtAmountSatang: row.debtAmountSatang, assetValueSatang: row.assetValueSatang },
+      basisValues: { debtAmountSatang: row.debtAmountSatang },
       vatMode: row.company.vatMode,
       revenueDate,
       vatRatePeriods,

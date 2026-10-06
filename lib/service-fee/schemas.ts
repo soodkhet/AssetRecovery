@@ -16,7 +16,8 @@ import { reasonSchema, satangSchema } from '@/lib/api/validation'
  */
 
 export const serviceFeeModelSchema = z.enum(['SUCCESS_FEE', 'FLAT', 'HYBRID'])
-export const serviceFeeBasisSchema = z.enum(['debt_amount', 'asset_value'])
+/** มติ PO U126 — ฐานคำนวณเหลือยอดหนี้คงเหลืออย่างเดียว */
+export const serviceFeeBasisSchema = z.enum(['debt_amount'])
 
 const templateFieldsSchema = z.object({
   name: z.string().trim().min(2, 'ชื่อเทมเพลตสั้นเกินไป').max(120, 'ชื่อเทมเพลตยาวเกินไป'),
@@ -30,8 +31,6 @@ const templateFieldsSchema = z.object({
     ),
   basis: serviceFeeBasisSchema.nullable().default(null),
   chargeOnFail: z.boolean(),
-  /** A3 (มติ PO 2026-08-12) — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ) */
-  chargePerTrackingRound: z.boolean(),
 })
 
 export type ServiceFeeTemplateFields = z.infer<typeof templateFieldsSchema>

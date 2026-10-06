@@ -27,7 +27,7 @@ function input(overrides: Partial<RevenueRowInput> = {}): RevenueRowInput {
   return {
     snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', chargeOnFail: false },
     outcome: 'closed_success',
-    basisValues: { debtAmountSatang: 1_000_000, assetValueSatang: null },
+    basisValues: { debtAmountSatang: 1_000_000 },
     vatMode: 'exclude_vat',
     revenueDate: new Date('2026-08-31T00:00:00.000Z'),
     vatRatePeriods: PERIODS,
@@ -110,11 +110,11 @@ describe('buildRevenueRow — FLAT / HYBRID', () => {
 })
 
 describe('buildRevenueRow — ข้อห้าม', () => {
-  it('เคสที่ไม่มีฐานคำนวณ (basis = asset_value แต่ยังไม่กรอก) ⇒ missing_basis ห้ามสร้าง Revenue', () => {
+  it('เคสที่ไม่มีฐานคำนวณ (มีอัตรา % แต่ยังไม่กรอกยอดหนี้) ⇒ missing_basis ห้ามสร้าง Revenue', () => {
     const result = buildRevenueRow(
       input({
-        snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'asset_value', chargeOnFail: false },
-        basisValues: { debtAmountSatang: 1_000_000, assetValueSatang: null },
+        snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', chargeOnFail: false },
+        basisValues: { debtAmountSatang: null },
       }),
     )
     expect(result).toEqual({ ok: false, reason: 'missing_basis' })

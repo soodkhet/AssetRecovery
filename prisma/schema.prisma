@@ -169,16 +169,16 @@ enum FuelMode {
 }
 
 enum ServiceFeeModel {
-  SUCCESS_FEE // % ของมูลหนี้/มูลค่าทรัพย์ เฉพาะ closed_success
+  SUCCESS_FEE // % ของยอดหนี้คงเหลือ เฉพาะ closed_success
   FLAT // ค่าคงที่ต่อเคส
   HYBRID // base + % (ไฟล์ 12)
 
   @@map("service_fee_model")
 }
 
+/// มติ PO U126 — ตัดฐาน asset_value เหลือยอดหนี้คงเหลืออย่างเดียว
 enum ServiceFeeBasis {
   debt_amount
-  asset_value
 
   @@map("service_fee_basis")
 }
@@ -1282,9 +1282,7 @@ model ServiceFeeTemplate {
   basis        ServiceFeeBasis?
   /// FLAT / HYBRID — เก็บค่าบริการแม้เคสไม่สำเร็จ
   chargeOnFail Boolean          @default(false) @map("charge_on_fail")
-
-  /// A3 (มติ PO 2026-08-12) — คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบอิสระ)
-  chargePerTrackingRound Boolean @default(true) @map("charge_per_tracking_round")
+  // มติ PO U125 — ตัดสวิตช์ charge_per_tracking_round: คิดค่าบริการทุกรอบติดตามอิสระเสมอ
 
   version   Int     @default(1)
   isCurrent Boolean @default(true) @map("is_current")

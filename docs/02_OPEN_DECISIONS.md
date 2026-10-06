@@ -14,7 +14,7 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 | ข้อ | Setting ใหม่ | อยู่แท็บ | Default |
 |---|---|---|---|
 | A1 | อัตรา WHT ที่ลูกค้าหักจากเรา (ต่อบริษัทไฟแนนซ์: ไม่หัก/3%/กำหนดเอง) | ตั้งค่าบริษัทไฟแนนซ์ (`10`) | 3% |
-| A3 | `charge_per_tracking_round` — คิดค่าบริการต่อรอบการติดตามหรือไม่ | Service Fee Template (`12`) | เปิด (แต่ละรอบอิสระ = ตัวเลือก ก) ✅ column ลงแล้ว Phase 1.1 |
+| A3 | `charge_per_tracking_round` — คิดค่าบริการต่อรอบการติดตามหรือไม่ | Service Fee Template (`12`) | เปิด (แต่ละรอบอิสระ = ตัวเลือก ก) ✅ column ลงแล้ว Phase 1.1 · **ตัดสวิตช์ตามมติ U125 (07/10/2569)** — ลบคอลัมน์ออก คิดค่าบริการทุกรอบติดตามอิสระเสมอ (ผลเท่าตัวเลือก ก ถาวร ไม่มีค่าตั้ง) |
 | B3 | จำนวนเงินขั้นต่ำ WHT | มีแล้ว (`13` §6.4) | 1,000 บาท |
 | B4 | `write_off_tolerance_satang` — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ | ตั้งค่าบัญชี/การเงิน (`13`) | 5,000 satang ✅ column ลงแล้ว Phase 1.1 |
 | D3 | เพดานขนาด/จำนวนไฟล์สื่อ (รูป/วิดีโอ/เสียง/เอกสาร) | ตั้งค่าระบบ | ตามตาราง D3 |
@@ -61,7 +61,7 @@ PO (Boonphone) เคาะหลักการครอบทุกข้อ�
 - **ปัญหา**: รอบ 1 `closed_fail` + model `charge_on_fail=true` → เกิด Revenue ใบ 1 + จ่าย no_success_fee แล้ว → recycle → รอบ 2 `closed_success` → spec ไม่ห้ามเกิด Revenue ใบ 2 (บิลซ้ำสำหรับทรัพย์ชิ้นเดียว) + จ่าย commission ทับ · `revenues` ไม่มี field `tracking_round` เลย
 - **เสนอ**: เพิ่ม `tracking_round` ลง revenues + payout_batch_items ตั้งแต่ตอนนี้ไม่ว่าคำตอบเป็นอะไร · ตัวเลือก: (a) แต่ละรอบอิสระเก็บได้ทุกรอบ (b) รอบใหม่หักกลบรอบเก่า (c) รอบเก่าต้องออก Credit Note
 - **ผู้ตอบ**: PO (ขึ้นกับสัญญากับไฟแนนซ์) · **บล็อก**: 1.2 (เพิ่ม column), 3.6 (logic)
-- **คำตอบ**: ✅ ตามมติ PO 2026-08-12 — **column ทำแล้วใน Phase 1.2** (`02` v3.8): `revenues.tracking_round` + `payout_batch_items.tracking_round` (default 1) · ตัวเลือกกติกาเก็บเงิน = (a) แต่ละรอบอิสระ ตาม `service_fee_templates.charge_per_tracking_round` ที่ลงไว้แล้วใน 1.1 (A3) · **logic กันบิลซ้ำ/commission ทับ อยู่ใน 3.6**
+- **คำตอบ**: ✅ ตามมติ PO 2026-08-12 — **column ทำแล้วใน Phase 1.2** (`02` v3.8): `revenues.tracking_round` + `payout_batch_items.tracking_round` (default 1) · ตัวเลือกกติกาเก็บเงิน = (a) แต่ละรอบอิสระ ตาม `service_fee_templates.charge_per_tracking_round` ที่ลงไว้แล้วใน 1.1 (A3) — *ตัดสวิตช์ตามมติ U125: แต่ละรอบอิสระเสมอโดยไม่มีคอลัมน์* · **logic กันบิลซ้ำ/commission ทับ อยู่ใน 3.6**
 
 ### ✅ A4 — Advance ไม่มีเส้นทางจ่ายเงินออก/รับเงินคืน
 - **ปัญหา**: `payout_batch_items.source_expense_id` บังคับ → Advance (ไม่ใช่ expense) เข้ารอบจ่ายไม่ได้ = เงินออกนอกระบบ → bank reconciliation มีรายการ match ไม่ได้ทุกครั้งที่เบิก และเงินคืน (`return_satang`) ก็ไม่มี flow รับ
