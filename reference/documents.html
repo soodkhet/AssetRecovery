@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AssetRecovery - Documents</title>
+<!--
+  Mockup เอกสารทั้งหมด (มติ PO U100 · 06/10/2569) — ออกแบบตามเลย์เอาต์ใบเสร็จตัวอย่างที่ผู้ใช้ชอบ
+  ข้อมูลทั้งหมดเป็นข้อมูลสมมติ (ผู้ขาย = บริษัทสมมติ, ลูกค้า = ข้อมูล UAT M1.CO1, พนักงาน = นายทดสอบ ภาคสนาม)
+  แหล่งข้อมูลจริงของแต่ละเอกสาร (สำหรับตอนทำ PDF):
+    1 ใบแจ้งหนี้/ใบวางบิล  → components/pdf/billing-invoice.tsx + lib/revenue/billing-invoice*.ts (U95 · U96 #12)
+    2 ใบเสร็จรับเงิน/ใบกำกับภาษี → components/pdf/tax-invoice.tsx + lib/sales/receipt-invoice.ts (U95 · U96 #4 #7 #8 · ม.86/4)
+    3 ใบส่งมอบทรัพย์ → components/pdf/handover-note.tsx + lib/warehouse/handover-doc.ts (44 · BUG-080 วันนัด)
+    4 ใบสำคัญจ่าย / 5 สลิปค่าตอบแทน → components/pdf/payment-voucher.tsx / payslip.tsx + lib/payout/payout-doc.ts (U30 หักคืนเงินทดรองหลัง WHT · U89/O50 ค่าที่พักต่อคืน)
+    6 ใบเบิกเงินทดรอง / 7 ใบรับคืนเงินทดรอง → ข้อมูลเงินทดรอง (15 · U30) — ยังไม่มี PDF
+    8 ใบรับรองแทนใบเสร็จรับเงิน (บก.111) → ยังไม่มีฟีเจอร์บันทึกรายจ่ายไม่มีใบเสร็จ (U96 #15)
+    9 หัวเอกสารภายใน → components/pdf/internal-doc.tsx, payout-batch-summary.tsx, pack-cover.tsx, report-doc.tsx (U99)
+    10 50 ทวิ → components/pdf/wht-certificate.tsx (U96 #13 — แบบทางการ ไม่ใช้เทมเพลตนี้)
+  กติกา: วันที่ พ.ศ. DD/MM/YYYY · เงิน 2 ตำแหน่ง + comma · ห้ามมีเลขอ้างอิงสเปคในข้อความที่มองเห็น (Rule 05)
+  ตัวเลขทุกตัวคำนวณจาก satang ใน script ด้านล่าง (ผลรวม/VAT/WHT/จำนวนเงินตัวอักษร) — ไม่พิมพ์ผลลัพธ์ตรง
+-->
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; background-color: #f8fafc; color: #0f172a; }
+  .focus-ring:focus-visible { outline: 2px solid #0f172a; outline-offset: 2px; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* ===== กระดาษ A4 (210×297mm ≈ 794×1123px @96dpi) ===== */
+  .paper-wrap { overflow-x: auto; padding: 4px 0 8px; }
+  .paper { width: 794px; min-height: 1123px; margin: 0 auto; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.12), 0 8px 24px rgba(15,23,42,.08);
+           padding: 44px 56px 32px; display: flex; flex-direction: column; font-size: 12.5px; line-height: 1.5; color: #111827; position: relative; }
+  .paper.compact { min-height: 0; }
+  .doc-title { color: #1e3a8a; font-size: 30px; font-weight: 700; line-height: 1.2; letter-spacing: .2px; }
+  .doc-title-en { color: #1e3a8a; font-size: 13px; font-weight: 600; }
+  .doc-copy { color: #334155; font-size: 13px; font-weight: 600; }
+  .party { border: 1px solid #111827; }
+  .party-label { font-weight: 700; }
+  table.doc { width: 100%; border-collapse: collapse; }
+  table.doc th, table.doc td { border: 1px solid #111827; padding: 4px 8px; vertical-align: top; }
+  table.doc thead th { background: #e5e7eb; font-weight: 700; text-align: left; }
+  table.doc .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.doc .center { text-align: center; }
+  table.doc tr.deduct td { color: #dc2626; }
+  table.doc tr.total td { background: #e5e7eb; font-weight: 700; }
+  table.doc tr.words td { font-weight: 700; }
+  table.doc tr.sub td { font-weight: 600; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .sig-line { border-bottom: 1px dotted #111827; height: 30px; }
+  .banner { border: 1.5px solid #dc2626; color: #b91c1c; font-weight: 700; text-align: center; padding: 4px 8px; }
+  .banner.info { border-color: #1e3a8a; color: #1e3a8a; }
+  .chk { display: inline-block; width: 12px; height: 12px; border: 1px solid #111827; margin-right: 6px; vertical-align: -1px; text-align: center; line-height: 10px; font-size: 10px; }
+  .paper-foot { margin-top: auto; padding-top: 16px; display: flex; justify-content: space-between; font-size: 10.5px; color: #64748b; border-top: 1px solid #e5e7eb; }
+  .internal-head { border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; }
+
+  @media print {
+    @page { size: A4; margin: 0; }
+    body { background: #fff; }
+    .no-print { display: none !important; }
+    .paper { box-shadow: none; margin: 0; page-break-after: always; }
+    .paper-wrap { padding: 0; overflow: visible; }
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== แถบเมนูเลือกเอกสาร ===== -->
+<header class="no-print sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+    <div class="flex items-center gap-2 mr-2">
+      <div class="w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center text-xs font-bold">AR</div>
+      <div>
+        <div class="text-sm font-semibold text-slate-900">แบบเอกสาร (Mockup)</div>
+        <div class="text-xs text-slate-500">ตัวอย่างใช้ข้อมูลสมมติทั้งหมด</div>
+      </div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <span class="text-xs text-slate-500">ฉบับ:</span>
+      <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50" role="group" aria-label="สลับต้นฉบับ/สำเนา">
+        <button data-copy="original" class="copy-btn focus-ring px-3 py-1.5 rounded-md text-xs font-semibold">ต้นฉบับ</button>
+        <button data-copy="copy" class="copy-btn focus-ring px-3 py-1.5 rounded-md text-xs font-semibold">สำเนา</button>
+      </div>
+      <button onclick="window.print()" class="focus-ring px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50">พิมพ์</button>
+    </div>
+  </div>
+  <nav class="max-w-6xl mx-auto px-4 pb-2 flex gap-1 overflow-x-auto no-scrollbar" id="doc-tabs" aria-label="เลือกเอกสาร"></nav>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+  <div id="doc-area"></div>
+
+  <!-- ===== ตารางสรุปเอกสาร ===== -->
+  <section class="no-print mt-10 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <h2 class="text-base font-semibold text-slate-900">สรุปเอกสารทั้งหมด</h2>
+    <p class="text-xs text-slate-500 mt-1">สถานะเทียบกับระบบปัจจุบัน — เมื่ออนุมัติแบบแล้วจึงปรับ PDF จริงตามหน้านี้</p>
+    <div class="overflow-x-auto mt-4">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-600">
+          <tr><th class="text-left font-semibold px-3 py-2">เอกสาร</th><th class="text-left font-semibold px-3 py-2">ผู้รับ</th><th class="text-left font-semibold px-3 py-2">ออกเมื่อ</th><th class="text-left font-semibold px-3 py-2">สถานะในระบบ</th></tr>
+        </thead>
+        <tbody id="summary-body" class="divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// HELPERS — เงินเก็บเป็น satang (integer) · แสดง 2 ตำแหน่ง + comma
+// ═══════════════════════════════════════════════════════
+const money = (s) => {
+  const neg = s < 0; const a = Math.abs(s);
+  const baht = Math.floor(a / 100).toLocaleString('en-US');
+  const st = String(a % 100).padStart(2, '0');
+  return (neg ? '-' : '') + baht + '.' + st;
+};
+const pct = (base, p) => Math.round(base * p / 100); // ปัดครึ่งขึ้นระดับสตางค์
+const sum = (arr, k) => arr.reduce((t, r) => t + (k ? r[k] : r), 0);
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// จำนวนเงินตัวอักษรไทย (บาท/สตางค์)
+const DIGITS = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+const POS = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน'];
+function readInt(n) {
+  if (n === 0) return '';
+  if (n >= 1000000) {
+    const hi = Math.floor(n / 1000000), lo = n % 1000000;
+    return readInt(hi) + 'ล้าน' + (lo ? readLow(lo, true) : '');
+  }
+  return readLow(n, false);
+}
+function readLow(n, afterMillion) {
+  const s = String(n); let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const d = +s[i]; const p = s.length - i - 1;
+    if (d === 0) continue;
+    if (p === 1 && d === 1) out += 'สิบ';
+    else if (p === 1 && d === 2) out += 'ยี่สิบ';
+    else if (p === 0 && d === 1 && (s.length > 1 || afterMillion)) out += 'เอ็ด';
+    else out += DIGITS[d] + POS[p];
+  }
+  return out;
+}
+function bahtText(satang) {
+  const b = Math.floor(satang / 100), st = satang % 100;
+  if (b === 0 && st === 0) return 'ศูนย์บาทถ้วน';
+  return (b ? readInt(b) + 'บาท' : '') + (st ? readInt(st) + 'สตางค์' : 'ถ้วน');
+}
+
+// ═══════════════════════════════════════════════════════
+// MOCK DATA — ข้อมูลสมมติทั้งหมด
+// ═══════════════════════════════════════════════════════
+const ORG = {
+  name: 'บริษัท แอสเซท รีคัฟเวอรี่ จำกัด', nameEn: 'Asset Recovery Co., Ltd.',
+  phone: '02-000-0000', address: '99/9 อาคารทดสอบ ชั้น 9 ถนนสีลม แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500',
+  taxId: '0105569999999', branch: 'สำนักงานใหญ่ (สาขาที่ 00000)',
+  bank: 'ธนาคารกสิกรไทย สาขาสีลม · เลขที่บัญชี 123-4-56789-0 · ชื่อบัญชี บริษัท แอสเซท รีคัฟเวอรี่ จำกัด',
+};
+const CUSTOMER = {
+  name: 'บริษัท ยูเอที ลิสซิ่ง จำกัด', phone: '02-100-0001',
+  address: '99 ถนนสาทร แขวงยานนาวา เขตสาทร กรุงเทพมหานคร 10120',
+  taxId: '0105561000011', branch: 'สำนักงานใหญ่ (สาขาที่ 00000)', contact: 'คุณมาลี ลิสซิ่ง 081-000-0012',
+};
+const EMP = {
+  name: 'นายทดสอบ ภาคสนาม', phone: '080-000-0099', taxId: '1103700000992', team: 'ทีม A',
+  address: '123 หมู่ 4 ตำบลทดสอบ อำเภอเมืองชลบุรี จังหวัดชลบุรี 20000',
+  bank: 'ธนาคารกรุงไทย · เลขที่บัญชี 987-6-54321-0 · ชื่อบัญชี นายทดสอบ ภาคสนาม',
+};
+
+const CASES = [
+  { ref: 'UAT-CO1-001', contract: 'HP-UAT-00811', model: 'Samsung Galaxy A15', fee: 150000 },
+  { ref: 'UAT-CO1-004', contract: 'HP-UAT-00815', model: 'Apple iPhone 13 128GB', fee: 200000 },
+  { ref: 'UAT-CO1-007', contract: 'HP-UAT-00822', model: 'OPPO A78', fee: 150000 },
+  { ref: 'UAT-CO1-010', contract: 'HP-UAT-00830', model: 'vivo Y36', fee: 120000 },
+];
+const VAT_PCT = 7;   // ตัวอย่างเท่านั้น — ระบบจริงดึงจากประวัติอัตรา VAT ตามวันที่
+const CUST_WHT = 3;  // อัตราที่ลูกค้าหัก ณ ที่จ่าย (ตั้งค่าที่บริษัทไฟแนนซ์)
+
+const ASSETS = [
+  { contract: 'HP-UAT-00811', model: 'Samsung Galaxy A15', imei: '356789100000011', cond: 'สภาพดี มีรอยขีดข่วนเล็กน้อย' },
+  { contract: 'HP-UAT-00815', model: 'Apple iPhone 13 128GB', imei: '356789100000022', cond: 'สภาพดี พร้อมสายชาร์จ' },
+  { contract: 'HP-UAT-00822', model: 'OPPO A78', imei: '356789100000033', cond: 'จอร้าวมุมขวาบน' },
+  { contract: 'HP-UAT-00830', model: 'vivo Y36', imei: '356789100000044', cond: 'สภาพดี' },
+  { contract: 'HP-UAT-00834', model: 'Xiaomi Redmi 13C', imei: '356789100000055', cond: 'แบตเตอรี่บวม — แยกถุง' },
+];
+
+const PAY_LINES = [
+  { desc: 'ค่าคอมมิชชันติดตามทรัพย์', detail: '6 เคสสำเร็จ', amt: 480000 },
+  { desc: 'ค่าน้ำมันเหมาจ่าย', detail: '6 เคส × 150.00', amt: 90000 },
+  { desc: 'เบี้ยเลี้ยงรายวัน', detail: '5 วัน × 200.00', amt: 100000 },
+  { desc: 'ค่าที่พัก', detail: '2 คืน × 600.00 (ใบเสร็จในนามบริษัท)', amt: 120000 },
+];
+const PAY_WHT = 3;
+const ADV = { no: 'ADV-2569-0012', amount: 300000, used: 250000 };
+const ADV_RETURN = ADV.amount - ADV.used;
+
+const NO_RECEIPT = [
+  { date: '03/10/2569', desc: 'ค่าผ่านทางพิเศษ ด่านบางนา (ขาไป)', amt: 7000, note: 'ทางพิเศษ — ไม่ได้รับใบเสร็จ' },
+  { date: '03/10/2569', desc: 'ค่ารถจักรยานยนต์รับจ้าง ไปที่อยู่ลูกหนี้ เคส UAT-CO1-004', amt: 4000, note: 'วินหน้าตลาด' },
+  { date: '04/10/2569', desc: 'ค่ารถจักรยานยนต์รับจ้าง ไปที่อยู่ลูกหนี้ เคส UAT-CO1-007', amt: 6000, note: 'วินหน้าซอย' },
+  { date: '05/10/2569', desc: 'ค่าที่จอดรถ ตลาดสด', amt: 2000, note: 'ลานจอดเอกชน' },
+  { date: '06/10/2569', desc: 'ค่าผ่านทางพิเศษ ด่านชลบุรี (ขากลับ)', amt: 7000, note: 'ทางพิเศษ — ไม่ได้รับใบเสร็จ' },
+];
+
+// ═══════════════════════════════════════════════════════
+// BUILDING BLOCKS
+// ═══════════════════════════════════════════════════════
+let COPY = 'original';
+const copyLabel = () => COPY === 'original' ? '(ต้นฉบับ / Original)' : '(สำเนา / Copy)';
+
+const LOGO = `<svg width="56" height="56" viewBox="0 0 56 56" aria-label="โลโก้บริษัท"><rect x="1" y="1" width="54" height="54" rx="10" fill="#0f172a"/><rect x="7" y="7" width="42" height="42" rx="6" fill="none" stroke="#34d399" stroke-width="1.5"/><text x="28" y="35" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="#fff">AR</text></svg>`;
+
+function header(title, titleEn, opts = {}) {
+  return `
+  <div class="flex items-start justify-between gap-6">
+    <div class="flex items-center gap-3">
+      ${LOGO}
+      <div class="leading-tight">
+        <div class="font-bold text-[13px]">${ORG.name}</div>
+        <div class="text-[11px] text-slate-500">${ORG.nameEn}</div>
+      </div>
+    </div>
+    <div class="text-right">
+      <div class="doc-title">${title}</div>
+      ${titleEn ? `<div class="doc-title-en">${titleEn}</div>` : ''}
+      ${opts.noCopy ? '' : `<div class="doc-copy mt-0.5">${copyLabel()}</div>`}
+    </div>
+  </div>`;
+}
+
+// แถว "วันที่:" ซ้าย / "เลขที่:" ขวา (+ meta เพิ่มเติม)
+function metaRow(date, no, extras = []) {
+  const ex = extras.map(([k, v]) => `<div><span class="font-semibold">${k}:</span> ${v}</div>`).join('');
+  return `
+  <div class="flex justify-between items-end mt-6 text-[13px]">
+    <div><span class="font-semibold">วันที่:</span> ${date}</div>
+    <div><span class="font-semibold">เลขที่:</span> <span class="mono">${no}</span></div>
+  </div>
+  ${extras.length ? `<div class="grid grid-cols-2 gap-x-6 mt-1 text-[12px] text-slate-700">${ex}</div>` : ''}`;
+}
+
+function partyLines(p, opt = {}) {
+  const lines = [`<div class="font-semibold">${p.name}</div>`];
+  if (p.phone) lines.push(`<div>โทร. ${p.phone}</div>`);
+  if (p.address) lines.push(`<div>${p.address}</div>`);
+  if (p.taxId) lines.push(`<div>${opt.taxLabel || 'เลขประจำตัวผู้เสียภาษี'} <span class="mono">${p.taxId}</span></div>`);
+  if (p.taxId && p.branch && !opt.noBranch) lines.push(`<div>${p.branch}</div>`);
+  (opt.extra || []).forEach((l) => lines.push(`<div>${l}</div>`));
+  return lines.join('');
+}
+function parties(lLabel, lHtml, rLabel, rHtml) {
+  return `
+  <div class="grid grid-cols-2 mt-3 party">
+    <div class="p-3 border-r border-slate-900"><div class="party-label">${lLabel} :</div>${lHtml}</div>
+    <div class="p-3"><div class="party-label">${rLabel} :</div>${rHtml}</div>
+  </div>`;
+}
+
+function signatures(roles, cols) {
+  const c = cols || roles.length;
+  return `
+  <div class="grid gap-6 mt-6" style="grid-template-columns: repeat(${c}, minmax(0,1fr))">
+    ${roles.map((r) => `
+      <div class="text-center text-[12px]">
+        <div class="sig-line"></div>
+        <div class="mt-1">( ........................................ )</div>
+        <div class="font-semibold mt-0.5">${r}</div>
+        <div class="text-slate-600">วันที่ ......../......../............</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function footer(docNo, page = '1/1') {
+  return `<div class="paper-foot"><span>${ORG.name} · <span class="mono">${docNo}</span></span><span>หน้า ${page}</span></div>`;
+}
+
+function paper(inner, opts = {}) {
+  return `<div class="paper-wrap"><article class="paper ${opts.compact ? 'compact' : ''}">${inner}</article></div>`;
+}
+
+function notes(items) {
+  return `
+  <div class="no-print max-w-[794px] mx-auto mt-4 rounded-lg bg-slate-100 border border-slate-200 px-4 py-3 text-xs text-slate-700 space-y-1">
+    ${items.map(([k, v]) => `<div><span class="font-semibold text-slate-900">${k}:</span> ${v}</div>`).join('')}
+  </div>`;
+}
+function sectionTitle(t, sub) {
+  return `<div class="no-print max-w-[794px] mx-auto mt-10 mb-3"><h3 class="text-sm font-semibold text-slate-900">${t}</h3>${sub ? `<p class="text-xs text-slate-500">${sub}</p>` : ''}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// 1. ใบแจ้งหนี้/ใบวางบิล
+// ═══════════════════════════════════════════════════════
+function docBilling() {
+  const before = sum(CASES, 'fee'); const vat = pct(before, VAT_PCT); const total = before + vat;
+  const wht = pct(before, CUST_WHT); const expect = total - wht;
+  const rows = CASES.map((c, i) => `
+    <tr><td class="center">${i + 1}</td>
+      <td><div class="mono">${c.ref}</div><div class="mono text-slate-600">${c.contract}</div></td>
+      <td>ค่าบริการติดตามทรัพย์คืนสำเร็จ<div class="text-slate-600">${c.model} · ใบส่งมอบ <span class="mono">DLV-2569-007</span></div></td>
+      <td class="num">${money(c.fee)}</td></tr>`).join('');
+  const inner = `
+    ${header('ใบแจ้งหนี้ / ใบวางบิล', 'Invoice / Billing Note')}
+    ${metaRow('25/10/2569', 'BL-2569-005', [['วันครบกำหนดชำระ', '24/11/2569 (30 วัน)'], ['รอบบริการ', 'ตุลาคม 2569']])}
+    ${parties('เรียกเก็บจาก', partyLines(CUSTOMER), 'ผู้เรียกเก็บ', partyLines(ORG))}
+    <div class="banner mt-3">เอกสารนี้ไม่ใช่ใบกำกับภาษี — ใบเสร็จรับเงิน/ใบกำกับภาษีจะออกให้เมื่อได้รับชำระเงิน</div>
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th style="width:140px">เลขเคส / เลขสัญญา</th><th>รายการ (Descriptions)</th><th class="num" style="width:130px">บาท (Baht)</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="sub"><td colspan="3" class="num">มูลค่าบริการก่อนภาษีมูลค่าเพิ่ม</td><td class="num">${money(before)}</td></tr>
+        <tr><td colspan="3" class="num">ภาษีมูลค่าเพิ่ม ${VAT_PCT}% (ประมาณการ ณ วันวางบิล)</td><td class="num">${money(vat)}</td></tr>
+        <tr class="total"><td colspan="3" class="num">รวมเงินทั้งสิ้น :</td><td class="num">${money(total)}</td></tr>
+        <tr class="deduct"><td colspan="3" class="num">หัก ภาษีเงินได้หัก ณ ที่จ่าย ${CUST_WHT}% ที่ลูกค้าจะหัก (ประมาณการ)</td><td class="num">(${money(wht)})</td></tr>
+        <tr class="sub"><td colspan="3" class="num">ยอดที่คาดว่าจะได้รับโอน</td><td class="num">${money(expect)}</td></tr>
+        <tr><td colspan="4"><span class="font-semibold">ช่องทางการชำระเงิน :</span> โอนเข้าบัญชี ${ORG.bank}</td></tr>
+        <tr class="words"><td colspan="4">จำนวนเงิน: -${bahtText(total)}-</td></tr>
+      </tbody>
+    </table>
+    <p class="text-[11.5px] text-slate-600 mt-2">ภาษีมูลค่าเพิ่มเกิดเมื่อได้รับชำระเงิน — อัตราและยอดจริงจะแสดงในใบเสร็จรับเงิน/ใบกำกับภาษี · โปรดส่งหนังสือรับรองการหักภาษี ณ ที่จ่ายมาพร้อมการโอน</p>
+    ${signatures(['ผู้วางบิล / ผู้ให้บริการ', 'ผู้รับวางบิล / ลูกค้า'])}
+    ${footer('BL-2569-005')}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'รายได้ที่รับรู้แล้วของบริษัทไฟแนนซ์ในรอบวางบิล (เคสปิดสำเร็จ + ล็อตส่งมอบยืนยันแล้ว) · อัตรา VAT ณ วันวางบิล · อัตราหัก ณ ที่จ่ายของลูกค้า · บัญชีรับโอนของบริษัท'],
+    ['ใครได้รับ', 'บริษัทไฟแนนซ์ (ต้นฉบับ) · เก็บสำเนาที่ฝ่ายการเงิน'],
+    ['ออกเมื่อ', 'ตอนสร้างรอบวางบิล — ไม่ใช่เอกสารภาษี (ไม่นับเป็นภาษีขาย)'],
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════
+// 2. ใบเสร็จรับเงิน/ใบกำกับภาษี (+ ตัวอย่างย่อย: ใบแทน / รับบางส่วน)
+// ═══════════════════════════════════════════════════════
+function taxInvoicePaper({ no, date, banner, rows, before, vat, wht, refNote, channel, extraRows = '', compact = false }) {
+  const total = before + vat; const received = total - wht;
+  const inner = `
+    ${header('ใบเสร็จรับเงิน / ใบกำกับภาษี', 'Receipt / Tax Invoice')}
+    ${metaRow(date, no, [['อ้างอิงใบแจ้งหนี้', `<span class="mono">${refNote}</span>`], ['วันที่รับชำระ', date]])}
+    ${banner ? `<div class="banner info mt-3">${banner}</div>` : ''}
+    ${parties('ชำระโดย', partyLines(CUSTOMER), 'ชำระให้', partyLines(ORG))}
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th>รายการ (Descriptions)</th><th class="num" style="width:130px">บาท (Baht)</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="sub"><td colspan="2" class="num">รวมมูลค่าก่อนภาษีมูลค่าเพิ่ม</td><td class="num">${money(before)}</td></tr>
+        <tr><td colspan="2" class="num">ภาษีมูลค่าเพิ่ม ${VAT_PCT}%</td><td class="num">${money(vat)}</td></tr>
+        <tr class="total"><td colspan="2" class="num">รวมเงินทั้งสิ้น :</td><td class="num">${money(total)}</td></tr>
+        <tr class="deduct"><td colspan="2" class="num">หัก ภาษีเงินได้หัก ณ ที่จ่าย ${CUST_WHT}% (ผู้ชำระหัก)</td><td class="num">(${money(wht)})</td></tr>
+        <tr class="sub"><td colspan="2" class="num">ยอดรับชำระจริง</td><td class="num">${money(received)}</td></tr>
+        ${extraRows}
+        <tr><td colspan="3"><span class="font-semibold">ช่องทางการชำระเงิน :</span> ${channel}</td></tr>
+        <tr class="words"><td colspan="3">จำนวนเงิน: -${bahtText(total)}-</td></tr>
+      </tbody>
+    </table>
+    <p class="text-[11.5px] text-slate-600 mt-2">ได้รับเงินตามรายการข้างต้นถูกต้องแล้ว (รวมภาษีที่ผู้ชำระหัก ณ ที่จ่ายตามหนังสือรับรองของผู้ชำระ) · ใบเสร็จรับเงินนี้จะสมบูรณ์เมื่อบริษัทได้รับเงินตามจำนวนข้างต้นแล้ว</p>
+    ${signatures(['ผู้รับเงิน', 'ผู้มีอำนาจลงนาม'])}
+    ${footer(no)}`;
+  return paper(inner, { compact });
+}
+function docTaxInvoice() {
+  const before = sum(CASES, 'fee'); const vat = pct(before, VAT_PCT); const wht = pct(before, CUST_WHT);
+  const rows = CASES.map((c, i) => `<tr><td class="center">${i + 1}</td><td>ค่าบริการติดตามทรัพย์คืน เคส <span class="mono">${c.ref}</span> สัญญา <span class="mono">${c.contract}</span><div class="text-slate-600">${c.model}</div></td><td class="num">${money(c.fee)}</td></tr>`).join('');
+  const channel = 'โอนเข้าบัญชี ธนาคารกสิกรไทย เลขที่ 123-4-56789-0 เมื่อ 20/11/2569';
+  const main = taxInvoicePaper({ no: 'INV-0005', date: '20/11/2569', rows, before, vat, wht, refNote: 'BL-2569-005', channel });
+
+  // ก. ใบแทน
+  const repl = taxInvoicePaper({ no: 'INV-0007', date: '24/11/2569', rows, before, vat, wht, refNote: 'BL-2569-005', channel, compact: true,
+    banner: 'ออกแทนฉบับเลขที่ INV-0005 ลงวันที่ 20/11/2569 เนื่องจาก ที่อยู่ผู้ซื้อไม่ถูกต้อง (ฉบับเดิมยกเลิกแล้ว)' });
+
+  // ข. รับชำระบางส่วน — ยอดที่รับเป็นยอดรวม VAT แล้วถอด VAT ออก
+  const invTotal = 1070000; const recvGross = 321000;
+  const pBefore = Math.round(recvGross * 100 / (100 + VAT_PCT)); const pVat = recvGross - pBefore; const pWht = pct(pBefore, CUST_WHT);
+  const pRows = `<tr><td class="center">1</td><td>ค่าบริการติดตามทรัพย์คืน รอบเดือน ตุลาคม 2569 — รับชำระบางส่วน<div class="text-slate-600">ยอดตามใบแจ้งหนี้ <span class="mono">BL-2569-006</span> รวม ${money(invTotal)} บาท</div></td><td class="num">${money(pBefore)}</td></tr>`;
+  const partial = taxInvoicePaper({ no: 'INV-0006', date: '22/11/2569', rows: pRows, before: pBefore, vat: pVat, wht: pWht, refNote: 'BL-2569-006', compact: true,
+    channel: 'โอนเข้าบัญชี ธนาคารกสิกรไทย เลขที่ 123-4-56789-0 เมื่อ 22/11/2569',
+    banner: 'รับชำระบางส่วนครั้งที่ 1 ของใบแจ้งหนี้เลขที่ BL-2569-006',
+    extraRows: `<tr><td colspan="2" class="num">ยอดคงค้างตามใบแจ้งหนี้ (รวมภาษีมูลค่าเพิ่ม)</td><td class="num">${money(invTotal - recvGross)}</td></tr>` });
+
+  return main + notes([
+    ['ข้อมูลที่ใช้', 'ใบแจ้งหนี้ที่อ้างอิง · ยอดรับเงินจริง + วันที่รับ · อัตรา VAT ณ วันรับเงิน · ข้อมูลผู้ซื้อ/ผู้ขาย (ชื่อ ที่อยู่ เลขผู้เสียภาษี สาขา) บันทึกถาวรลงเอกสารตอนออก'],
+    ['ใครได้รับ', 'บริษัทไฟแนนซ์ (ต้นฉบับ) · สำเนาเก็บเข้าชุดเอกสารบัญชีส่งสำนักงานบัญชี (รายงานภาษีขาย)'],
+    ['ออกเมื่อ', 'ตอนบันทึกรับเงินจากบริษัทไฟแนนซ์ — 1 ครั้งที่รับ = 1 ฉบับ · เลขเรียงต่อเนื่อง วันที่ไม่ย้อน/ไม่ล่วงหน้า'],
+  ])
+  + sectionTitle('ตัวอย่างย่อย ก — ใบแทน', 'ออกแทนฉบับเดิมที่ยกเลิก ต้องระบุเลขที่ + วันที่ฉบับเดิม + เหตุผล') + repl
+  + sectionTitle('ตัวอย่างย่อย ข — รับชำระบางส่วน', 'ยอดที่รับเป็นยอดรวมภาษีมูลค่าเพิ่ม · ครั้งถัดไปออกใบใหม่ปิดยอดคงค้าง ผลรวมทุกใบเท่ากับใบแจ้งหนี้') + partial;
+}
+
+// ═══════════════════════════════════════════════════════
+// 3. ใบส่งมอบทรัพย์
+// ═══════════════════════════════════════════════════════
+function docHandover() {
+  const rows = ASSETS.map((a, i) => `<tr><td class="center">${i + 1}</td><td class="mono">${a.contract}</td><td>${a.model}</td><td class="mono">${a.imei}</td><td>${a.cond}</td></tr>`).join('');
+  const inner = `
+    ${header('ใบส่งมอบทรัพย์', 'Asset Handover Note')}
+    ${metaRow('08/10/2569', 'DLV-2569-007', [['เลขล็อต', '<span class="mono">LOT-2569-012</span>'], ['รูปแบบ', 'บริษัทไฟแนนซ์มารับเอง'], ['วันนัดรับ', '08/10/2569 10:00'], ['สถานที่', 'คลังสินค้า สำนักงานใหญ่']])}
+    ${parties('ผู้ส่งมอบ', partyLines(ORG), 'ผู้รับมอบ', partyLines(CUSTOMER, { extra: [`ผู้ประสานงาน: ${CUSTOMER.contact}`] }))}
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th style="width:118px">เลขสัญญา</th><th>ยี่ห้อ / รุ่น</th><th style="width:150px">IMEI</th><th style="width:190px">สภาพ / หมายเหตุ</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="total"><td colspan="4" class="num">จำนวนทรัพย์รวม :</td><td>${ASSETS.length} เครื่อง</td></tr>
+      </tbody>
+    </table>
+    <p class="text-[11.5px] text-slate-600 mt-2">ผู้รับมอบได้ตรวจนับและตรวจเลข IMEI ตรงกับรายการข้างต้นครบถ้วนแล้ว · หากพบความไม่ถูกต้องโปรดแจ้งภายในวันที่รับมอบ</p>
+    ${signatures(['ผู้ส่งมอบ', 'ผู้รับมอบ'])}
+    ${footer('DLV-2569-007')}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'ล็อตส่งมอบ (1 ล็อต = 1 บริษัทไฟแนนซ์) · ทรัพย์ในล็อต (เลขสัญญา รุ่น IMEI 15 หลัก สภาพ) · วันนัดรับ/กำหนดจัดส่ง · ผู้ประสานงานของลูกค้า'],
+    ['ใครได้รับ', 'บริษัทไฟแนนซ์ 1 ฉบับ + คลังเก็บ 1 ฉบับ (เซ็นทั้งสองฝ่าย) — ฉบับที่เซ็นแล้วสแกนแนบในล็อตเป็นหลักฐาน'],
+    ['ออกเมื่อ', 'ตอนเตรียมส่งมอบล็อต — การยืนยันล็อตทำให้เกิดรายได้ของเคส'],
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════
+// 4. ใบสำคัญจ่าย  /  5. สลิปค่าตอบแทน
+// ═══════════════════════════════════════════════════════
+function payCalc() {
+  const gross = sum(PAY_LINES, 'amt'); const wht = pct(gross, PAY_WHT); const offset = ADV_RETURN;
+  return { gross, wht, offset, net: gross - wht - offset };
+}
+function payTable(c) {
+  const rows = PAY_LINES.map((l, i) => `<tr><td class="center">${i + 1}</td><td>${l.desc}<div class="text-slate-600">${l.detail}</div></td><td class="num">${money(l.amt)}</td></tr>`).join('');
+  return `
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th>รายการ (Descriptions)</th><th class="num" style="width:130px">บาท (Baht)</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="sub"><td colspan="2" class="num">รวมค่าตอบแทนก่อนหักภาษี</td><td class="num">${money(c.gross)}</td></tr>
+        <tr class="deduct"><td colspan="2" class="num">หัก ภาษี ณ ที่จ่าย ${PAY_WHT}%</td><td class="num">(${money(c.wht)})</td></tr>
+        <tr class="deduct"><td colspan="2" class="num">หัก คืนเงินทดรอง <span class="mono">${ADV.no}</span> (หักกลบในรอบจ่ายนี้)</td><td class="num">(${money(c.offset)})</td></tr>
+        <tr><td colspan="3"><span class="font-semibold">ช่องทางการชำระเงิน :</span> โอนเข้าบัญชี ${EMP.bank}</td></tr>
+        <tr class="total"><td colspan="2" class="num">ยอดโอนสุทธิ :</td><td class="num">${money(c.net)}</td></tr>
+        <tr class="words"><td colspan="3">จำนวนเงิน: -${bahtText(c.net)}-</td></tr>
+      </tbody>
+    </table>`;
+}
+function docVoucher() {
+  const c = payCalc();
+  const inner = `
+    ${header('ใบสำคัญจ่าย', 'Payment Voucher')}
+    ${metaRow('31/10/2569', 'PV-2569-0031', [['อ้างอิงรอบจ่าย', 'ค่าตอบแทน ต.ค. 2569 รอบ 2'], ['วันที่จ่าย', '31/10/2569'], ['วิธีจ่ายเงิน', 'โอนผ่านธนาคาร'], ['ทีม', EMP.team]])}
+    ${parties('จ่ายโดย', partyLines(ORG), 'จ่ายให้', partyLines(EMP, { taxLabel: 'เลขประจำตัวประชาชน', extra: [`บัญชีรับโอน: ${EMP.bank}`] }))}
+    ${payTable(c)}
+    <p class="text-[11.5px] text-slate-600 mt-2">หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก · ค่าที่พักมีใบเสร็จในนามบริษัทแนบในระบบ</p>
+    ${signatures(['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'])}
+    ${footer('PV-2569-0031')}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'รายการเบิกที่อนุมัติแล้วของผู้รับในรอบจ่าย (ค่าคอมมิชชัน ค่าน้ำมันเหมาจ่าย เบี้ยเลี้ยงรายวัน ค่าที่พักตามจำนวนคืน) · อัตราหัก ณ ที่จ่ายจากข้อมูลภาษีของผู้รับ · ยอดหักคืนเงินทดรอง (หักหลังภาษี ไม่กระทบฐานภาษี)'],
+    ['ใครได้รับ', 'เก็บที่ฝ่ายการเงิน + เข้าชุดเอกสารบัญชี (หลักฐานรายจ่าย) — ผู้รับเงินเซ็นรับ'],
+    ['ออกเมื่อ', 'ตอนรอบจ่ายยืนยันการโอนสำเร็จ (ก่อนยืนยันพิมพ์เป็นฉบับตรวจสอบได้)'],
+  ]);
+}
+function docPayslip() {
+  const c = payCalc();
+  const inner = `
+    ${header('สลิปค่าตอบแทน', 'Payslip', { noCopy: true })}
+    ${metaRow('31/10/2569', 'PV-2569-0031', [['ชื่อ', EMP.name], ['ทีม', EMP.team], ['รอบ', 'ค่าตอบแทน ต.ค. 2569 รอบ 2'], ['วันที่โอน', '31/10/2569']])}
+    <div class="grid grid-cols-4 mt-4 party text-center">
+      ${[['เคสสำเร็จ', '6 เคส'], ['วันทำงานภาคสนาม', '5 วัน'], ['คืนที่พัก', '2 คืน'], ['ยอดโอนสุทธิ', money(c.net) + ' บาท']].map(([k, v], i) =>
+        `<div class="p-3 ${i < 3 ? 'border-r border-slate-900' : ''}"><div class="text-[11px] text-slate-600">${k}</div><div class="font-bold text-[15px]">${v}</div></div>`).join('')}
+    </div>
+    ${payTable(c)}
+    <div class="mt-6 rounded border border-slate-300 bg-slate-50 px-3 py-2 text-[11.5px] text-slate-700">
+      เอกสารนี้ออกโดยระบบ ไม่ต้องลงลายมือชื่อ · หนังสือรับรองการหักภาษี ณ ที่จ่ายออกแยกต่างหาก · หากรายการไม่ถูกต้องโปรดติดต่อฝ่ายการเงินภายใน 7 วัน
+    </div>
+    ${footer('PV-2569-0031')}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'ชุดเดียวกับใบสำคัญจ่าย + สรุปจำนวนเคส/วันทำงาน/คืนที่พัก'],
+    ['ใครได้รับ', 'พนักงานภาคสนาม (ดาวน์โหลดจากหน้าค่าตอบแทนของตนเอง)'],
+    ['ออกเมื่อ', 'ตอนรอบจ่ายยืนยันการโอนสำเร็จ'],
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════
+// 6. ใบเบิกเงินทดรอง  /  7. ใบรับคืนเงินทดรอง
+// ═══════════════════════════════════════════════════════
+function docAdvance() {
+  const inner = `
+    ${header('ใบเบิกเงินทดรอง', 'Cash Advance Request')}
+    ${metaRow('01/10/2569', ADV.no, [['กำหนดเคลียร์ยอด', '13/10/2569'], ['ทีม', EMP.team]])}
+    ${parties('จ่ายโดย', partyLines(ORG), 'ผู้เบิก', partyLines(EMP, { taxLabel: 'เลขประจำตัวประชาชน', extra: [`บัญชีรับโอน: ${EMP.bank}`] }))}
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th>รายการ (Descriptions)</th><th class="num" style="width:130px">บาท (Baht)</th></tr></thead>
+      <tbody>
+        <tr><td class="center">1</td><td>เงินทดรองค่าเดินทางและที่พัก งานติดตามทรัพย์ จังหวัดชลบุรี<div class="text-slate-600">ช่วงวันที่ 02/10/2569 – 06/10/2569 · เคสที่มอบหมาย 6 เคส</div></td><td class="num">${money(ADV.amount)}</td></tr>
+        <tr><td colspan="3"><span class="font-semibold">ช่องทางการจ่ายเงิน :</span> โอนเข้าบัญชี ${EMP.bank}</td></tr>
+        <tr class="total"><td colspan="2" class="num">รวมเงินเบิกทั้งสิ้น :</td><td class="num">${money(ADV.amount)}</td></tr>
+        <tr class="words"><td colspan="3">จำนวนเงิน: -${bahtText(ADV.amount)}-</td></tr>
+      </tbody>
+    </table>
+    <p class="text-[11.5px] text-slate-600 mt-2">ผู้เบิกต้องเคลียร์ยอดด้วยใบเสร็จ/ใบรับรองแทนใบเสร็จภายในกำหนด · ยอดเหลือคืนบริษัทเป็นเงินสด/โอน หรือหักกลบในรอบจ่ายถัดไป · ระหว่างยังไม่เคลียร์ เบิกเงินทดรองซ้อนไม่ได้</p>
+    ${signatures(['ผู้เบิก', 'ผู้อนุมัติ', 'ผู้จ่ายเงิน'])}
+    ${footer(ADV.no)}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'คำขอเงินทดรองที่อนุมัติแล้ว (ผู้เบิก จำนวนเงิน วัตถุประสงค์ กำหนดเคลียร์ วันที่จ่าย)'],
+    ['ใครได้รับ', 'ฝ่ายการเงินเก็บต้นฉบับ (ผู้เบิกเซ็น) · ผู้เบิกได้สำเนา'],
+    ['ออกเมื่อ', 'ตอนอนุมัติ/จ่ายเงินทดรอง'],
+  ]);
+}
+function docAdvanceReturn() {
+  const inner = `
+    ${header('ใบรับคืนเงินทดรอง', 'Cash Advance Return Receipt')}
+    ${metaRow('31/10/2569', 'RAV-2569-0004', [['อ้างอิงใบเบิก', `<span class="mono">${ADV.no}</span> ลงวันที่ 01/10/2569`], ['วันที่เคลียร์ยอด', '07/10/2569']])}
+    ${parties('ชำระโดย', partyLines(EMP, { taxLabel: 'เลขประจำตัวประชาชน' }), 'ชำระให้', partyLines(ORG))}
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th>รายการ (Descriptions)</th><th class="num" style="width:130px">บาท (Baht)</th></tr></thead>
+      <tbody>
+        <tr><td class="center">1</td><td>ยอดเงินทดรองที่เบิก <span class="mono">${ADV.no}</span></td><td class="num">${money(ADV.amount)}</td></tr>
+        <tr class="deduct"><td class="center">2</td><td>หัก ใช้จ่ายจริงตามหลักฐาน (ใบเสร็จ 4 ใบ + ใบรับรองแทนใบเสร็จ <span class="mono">CRT-2569-0009</span>)</td><td class="num">(${money(ADV.used)})</td></tr>
+        <tr><td colspan="3"><span class="font-semibold">ช่องทางการชำระเงิน :</span>
+          <span class="ml-2"><span class="chk"></span>เงินสด</span>
+          <span class="ml-3"><span class="chk"></span>โอนเข้าบัญชีบริษัท</span>
+          <span class="ml-3"><span class="chk">✓</span>หักกลบในรอบจ่าย ต.ค. 2569 รอบ 2 (<span class="mono">PV-2569-0031</span>)</span></td></tr>
+        <tr class="total"><td colspan="2" class="num">ยอดรับคืนทั้งสิ้น :</td><td class="num">${money(ADV_RETURN)}</td></tr>
+        <tr class="words"><td colspan="3">จำนวนเงิน: -${bahtText(ADV_RETURN)}-</td></tr>
+      </tbody>
+    </table>
+    <p class="text-[11.5px] text-slate-600 mt-2">กรณีหักกลบแล้วยอดรอบจ่ายไม่พอ ระบบหักเท่าที่มีและยกยอดเหลือไปรอบถัดไป — ใบนี้แสดงยอดที่รับคืนครบแล้ว</p>
+    ${signatures(['ผู้รับเงิน (การเงิน)', 'ผู้คืนเงิน'])}
+    ${footer('RAV-2569-0004')}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'เงินทดรองที่เคลียร์ยอดแล้ว (ยอดเบิก / ใช้จริง / คืน) · วิธีรับคืนที่การเงินเลือกตอนเคลียร์ (เงินสด / โอน + หลักฐาน / หักกลบรอบจ่าย)'],
+    ['ใครได้รับ', 'ผู้เบิก (ต้นฉบับ) · ฝ่ายการเงินเก็บสำเนาเข้าชุดเอกสารบัญชี'],
+    ['ออกเมื่อ', 'ตอนรับเงินคืนแยก หรือเมื่อรอบจ่ายที่หักกลบยืนยันโอนสำเร็จ'],
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════
+// 8. ใบรับรองแทนใบเสร็จรับเงิน (แบบ บก.111)
+// ═══════════════════════════════════════════════════════
+function docNoReceipt() {
+  const total = sum(NO_RECEIPT, 'amt');
+  const rows = NO_RECEIPT.map((r) => `<tr><td class="center">${r.date}</td><td>${r.desc}</td><td class="num">${money(r.amt)}</td><td>${r.note}</td></tr>`).join('');
+  const inner = `
+    ${header('ใบรับรองแทนใบเสร็จรับเงิน', 'Substitute Receipt Certificate')}
+    ${metaRow('07/10/2569', 'CRT-2569-0009', [['อ้างอิงเงินทดรอง', `<span class="mono">${ADV.no}</span>`], ['ทีม', EMP.team]])}
+    ${parties('ผู้จ่ายเงิน (ในนามบริษัท)', partyLines(EMP, { taxLabel: 'เลขประจำตัวประชาชน' }), 'บริษัท', partyLines(ORG))}
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:96px">วัน เดือน ปี</th><th>รายละเอียดรายจ่าย</th><th class="num" style="width:110px">จำนวนเงิน (บาท)</th><th style="width:170px">หมายเหตุ</th></tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="total"><td colspan="2" class="num">รวมเงินทั้งสิ้น :</td><td class="num">${money(total)}</td><td></td></tr>
+        <tr class="words"><td colspan="4">จำนวนเงิน: -${bahtText(total)}-</td></tr>
+      </tbody>
+    </table>
+    <div class="mt-4 border border-slate-900 p-3 text-[12.5px] leading-relaxed">
+      ข้าพเจ้า <span class="font-semibold">${EMP.name}</span> (ผู้เบิกจ่าย) ขอรับรองว่ารายจ่ายข้างต้นไม่อาจเรียกใบเสร็จรับเงินจากผู้รับได้ และข้าพเจ้าได้จ่ายไปในงานของทางบริษัทโดยแท้
+    </div>
+    ${signatures(['ผู้เบิกจ่าย', 'ผู้อนุมัติ'])}
+    ${footer('CRT-2569-0009')}`;
+  return paper(inner) + notes([
+    ['ข้อมูลที่ใช้', 'รายการรายจ่ายที่พนักงานบันทึกว่า "ไม่มีใบเสร็จ" (วันที่ รายละเอียด จำนวนเงิน ผู้รับ/สถานที่) — ต้องเพิ่มฟีเจอร์บันทึก'],
+    ['ใครได้รับ', 'แนบเป็นหลักฐานรายจ่ายในชุดเอกสารบัญชี · ผู้เบิกเซ็นรับรอง ผู้อนุมัติเซ็น'],
+    ['ออกเมื่อ', 'ตอนเคลียร์เงินทดรอง / ตอนอนุมัติรายจ่ายที่ไม่มีใบเสร็จ'],
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════
+// 9. หัวเอกสารภายใน
+// ═══════════════════════════════════════════════════════
+function internalHead(title, lines) {
+  return `
+  <div class="internal-head flex items-start justify-between gap-6">
+    <div class="flex items-center gap-3">
+      ${LOGO}
+      <div class="leading-tight">
+        <div class="font-bold text-[13px]">${ORG.name}</div>
+        <div class="text-[11px] text-slate-500">เลขประจำตัวผู้เสียภาษี <span class="mono">${ORG.taxId}</span> · ${ORG.branch}</div>
+        <div class="inline-block mt-1 px-2 py-0.5 rounded bg-slate-100 text-[10.5px] font-semibold text-slate-600">เอกสารภายใน</div>
+      </div>
+    </div>
+    <div class="text-right">
+      <div class="text-[22px] font-bold text-[#1e3a8a] leading-tight">${title}</div>
+      ${lines.map((l) => `<div class="text-[12px] text-slate-700">${l}</div>`).join('')}
+    </div>
+  </div>`;
+}
+function docInternal() {
+  const ROWS = [
+    { name: EMP.name, gross: sum(PAY_LINES, 'amt'), off: ADV_RETURN },
+    { name: 'นางสาวทดสอบ ติดตาม', gross: 540000, off: 0 },
+    { name: 'นายทดสอบ สนามสอง', gross: 320000, off: 0 },
+  ].map((r) => ({ ...r, wht: pct(r.gross, PAY_WHT) })).map((r) => ({ ...r, net: r.gross - r.wht - r.off }));
+  const body = ROWS.map((r, i) => `<tr><td class="center">${i + 1}</td><td>${r.name}</td><td class="num">${money(r.gross)}</td><td class="num">${money(r.wht)}</td><td class="num">${money(r.off)}</td><td class="num">${money(r.net)}</td></tr>`).join('');
+  const T = (k) => money(sum(ROWS, k));
+  const summary = `
+    ${internalHead('สรุปรอบจ่ายเงิน', ['รอบ: ค่าตอบแทน ต.ค. 2569 รอบ 2', 'วันที่เอกสาร: 31/10/2569', 'พิมพ์เมื่อ: 31/10/2569 16:45'])}
+    <div class="grid grid-cols-3 gap-x-6 mt-4 text-[12px]">
+      <div><span class="font-semibold">สถานะรอบจ่าย:</span> โอนสำเร็จ</div>
+      <div><span class="font-semibold">บัญชีที่จ่าย:</span> กสิกรไทย 123-4-56789-0</div>
+      <div><span class="font-semibold">จำนวนผู้รับ:</span> ${ROWS.length} ราย</div>
+    </div>
+    <table class="doc mt-3">
+      <thead><tr><th class="center" style="width:44px">ลำดับ</th><th>ชื่อผู้รับเงิน</th><th class="num">ยอดก่อนหัก</th><th class="num">หักภาษี ณ ที่จ่าย</th><th class="num">หักคืนเงินทดรอง</th><th class="num">โอนสุทธิ</th></tr></thead>
+      <tbody>${body}
+        <tr class="total"><td colspan="2" class="num">รวม :</td><td class="num">${T('gross')}</td><td class="num">${T('wht')}</td><td class="num">${T('off')}</td><td class="num">${T('net')}</td></tr>
+      </tbody>
+    </table>
+    <p class="text-[11.5px] text-slate-600 mt-2">ใช้ตรวจสอบก่อนตัดโอนเงินจริง · ไฟล์โอนธนาคารสร้างจากรอบจ่ายนี้</p>
+    ${signatures(['ผู้จัดทำ (การเงิน)', 'ผู้อนุมัติโอนเงิน'])}
+    ${footer('สรุปรอบจ่าย ต.ค. 2569 รอบ 2')}`;
+  const pack = `
+    ${internalHead('หน้าปกชุดเอกสารบัญชี', ['งวดบัญชี: ตุลาคม 2569', 'เวอร์ชัน: 2', 'พิมพ์เมื่อ: 05/11/2569 09:10'])}
+    <div class="mt-4 text-[12px] text-slate-500">— เนื้อหา: เงื่อนไขก่อนส่ง · รายการไฟล์ · ยอดสรุป (ตามหน้าปกเดิม) —</div>`;
+  const report = `
+    ${internalHead('รายงานลูกหนี้คงค้าง', ['ข้อมูล ณ วันที่: 30/11/2569', 'ตัวกรอง: ทุกบริษัทไฟแนนซ์', 'พิมพ์เมื่อ: 01/12/2569 08:30'])}
+    <div class="mt-4 text-[12px] text-slate-500">— เนื้อหารายงาน (ตาราง/สรุป) —</div>`;
+  return paper(summary) + notes([
+    ['ข้อมูลที่ใช้', 'หัวกลางเดียวกันทุกเอกสารภายใน: โลโก้ + ชื่อบริษัท + เลขผู้เสียภาษี/สาขา (จากหน้าข้อมูลองค์กร) · ชื่อเอกสาร + งวด/เลข + วันที่พิมพ์'],
+    ['ใครได้รับ', 'ใช้ภายใน (การเงิน/บัญชี/ผู้บริหาร) · หน้าปกเข้าชุดเอกสารส่งสำนักงานบัญชี'],
+    ['ออกเมื่อ', 'สรุปรอบจ่าย: ก่อนตัดโอน · หน้าปก: ตอน Export ชุดเอกสาร · รายงาน: ตอนสั่งพิมพ์/ส่งออก'],
+  ])
+  + sectionTitle('หน้าปกชุดเอกสารบัญชี — ส่วนหัว') + paper(pack, { compact: true })
+  + sectionTitle('รายงาน — ส่วนหัว') + paper(report, { compact: true });
+}
+
+// ═══════════════════════════════════════════════════════
+// 10. 50 ทวิ — ใช้แบบทางการ
+// ═══════════════════════════════════════════════════════
+function docWht() {
+  const box = (y, h, label) => `<rect x="20" y="${y}" width="360" height="${h}" fill="none" stroke="#94a3b8"/><text x="28" y="${y + 14}" font-size="9" fill="#475569">${label}</text>`;
+  const svg = `<svg viewBox="0 0 400 560" width="300" aria-label="ภาพย่อโครงแบบฟอร์ม 50 ทวิ" class="bg-white border border-slate-300 rounded">
+    <text x="200" y="22" text-anchor="middle" font-size="11" font-weight="700" fill="#0f172a">หนังสือรับรองการหักภาษี ณ ที่จ่าย</text>
+    <text x="200" y="36" text-anchor="middle" font-size="8" fill="#475569">ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร · ฉบับที่ 1 / ฉบับที่ 2</text>
+    ${box(46, 50, 'ผู้มีหน้าที่หักภาษี ณ ที่จ่าย — ชื่อ ที่อยู่ เลขประจำตัวผู้เสียภาษี')}
+    ${box(102, 50, 'ผู้ถูกหักภาษี ณ ที่จ่าย — ชื่อ ที่อยู่ เลขประจำตัว')}
+    ${box(158, 26, 'ลำดับที่ในแบบ · ภ.ง.ด.1ก / 3 / 53 ฯลฯ')}
+    ${box(190, 220, 'ประเภทเงินได้ · วันเดือนปีที่จ่าย · จำนวนเงินที่จ่าย · ภาษีที่หักและนำส่ง')}
+    ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `<line x1="20" x2="380" y1="${212 + i * 24}" y2="${212 + i * 24}" stroke="#e2e8f0"/>`).join('')}
+    ${box(416, 26, 'รวมเงินที่จ่ายและภาษีที่หักนำส่ง (ตัวอักษร)')}
+    ${box(448, 30, 'เงินที่จ่ายเข้า กบข./ประกันสังคม/กองทุนสำรองเลี้ยงชีพ')}
+    ${box(484, 60, 'ผู้จ่ายเงิน: หัก ณ ที่จ่าย / ออกให้ตลอดไป / ครั้งเดียว · ลงชื่อผู้มีหน้าที่หักภาษี · ตราประทับ')}
+  </svg>`;
+  return `
+  <div class="max-w-[794px] mx-auto bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+    <div class="flex flex-col sm:flex-row gap-6 items-start">
+      ${svg}
+      <div class="text-sm text-slate-700 space-y-3">
+        <div class="inline-block px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">ทำแล้ว — ใช้แบบฟอร์มทางการ</div>
+        <h3 class="text-base font-semibold text-slate-900">หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)</h3>
+        <p>ใช้แบบฟอร์มทางการของกรมสรรพากร (ทำแล้ว) — <span class="font-semibold">ไม่ใช้เทมเพลตนี้</span> เพราะรูปแบบถูกกำหนดโดยกฎหมาย (ฉบับที่ 1/2, เงื่อนไขการหัก, ลำดับที่ในแบบ, จำนวนเงินตัวอักษร)</p>
+        <p class="text-xs text-slate-500">ภาพทางซ้ายเป็นภาพย่อโครงแบบฟอร์มเพื่ออ้างอิงเท่านั้น</p>
+      </div>
+    </div>
+  </div>` + notes([
+    ['ข้อมูลที่ใช้', 'รายการหัก ณ ที่จ่ายของผู้รับเงินในรอบจ่าย (ข้อมูลผู้รับบันทึกถาวรตอนออก)'],
+    ['ใครได้รับ', 'ผู้ถูกหักภาษี (ฉบับที่ 1 แนบแบบแสดงรายการ / ฉบับที่ 2 เก็บเป็นหลักฐาน) · สำเนาเข้าชุดเอกสารบัญชี'],
+    ['ออกเมื่อ', 'ตอนรอบจ่ายยืนยันโอนสำเร็จ'],
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════
+// NAV + SUMMARY
+// ═══════════════════════════════════════════════════════
+const DOCS = [
+  { id: 'billing', name: 'ใบแจ้งหนี้/ใบวางบิล', render: docBilling, to: 'บริษัทไฟแนนซ์', when: 'ตอนวางบิล', status: ['มีแล้ว', 'ปรับหน้าตาตามแบบนี้ + เพิ่มแถวภาษีที่ลูกค้าหัก/ยอดที่คาดว่าได้รับ และบัญชีรับโอน'] },
+  { id: 'taxinv', name: 'ใบเสร็จรับเงิน/ใบกำกับภาษี', render: docTaxInvoice, to: 'บริษัทไฟแนนซ์', when: 'ตอนรับเงิน (รวมใบแทน/รับบางส่วน)', status: ['มีแล้ว', 'ปรับหน้าตา + เพิ่มแถวภาษีหัก ณ ที่จ่าย/ยอดรับจริง/ช่องทางชำระ'] },
+  { id: 'handover', name: 'ใบส่งมอบทรัพย์', render: docHandover, to: 'บริษัทไฟแนนซ์ + คลัง', when: 'ตอนส่งมอบล็อต', status: ['มีแล้ว', 'ปรับหน้าตาตามแบบนี้'] },
+  { id: 'voucher', name: 'ใบสำคัญจ่าย', render: docVoucher, to: 'การเงิน/บัญชี (ผู้รับเงินเซ็น)', when: 'ตอนรอบจ่ายโอนสำเร็จ', status: ['มีแล้ว', 'ปรับหน้าตา + แยกรายการตามประเภทค่าตอบแทน'] },
+  { id: 'payslip', name: 'สลิปค่าตอบแทน', render: docPayslip, to: 'พนักงานภาคสนาม', when: 'ตอนรอบจ่ายโอนสำเร็จ', status: ['มีแล้ว', 'ปรับหน้าตา + สรุปจำนวนเคส/วัน/คืน'] },
+  { id: 'advance', name: 'ใบเบิกเงินทดรอง', render: docAdvance, to: 'ผู้เบิก + การเงิน', when: 'ตอนอนุมัติ/จ่ายเงินทดรอง', status: ['ต้องเพิ่ม PDF', 'ข้อมูลเงินทดรองมีในระบบแล้ว'] },
+  { id: 'advreturn', name: 'ใบรับคืนเงินทดรอง', render: docAdvanceReturn, to: 'ผู้เบิก + การเงิน', when: 'ตอนรับคืน/หักกลบสำเร็จ', status: ['ต้องเพิ่ม PDF', 'ข้อมูลเคลียร์ยอดมีในระบบแล้ว · ต้องมีเลขที่เอกสารใหม่'] },
+  { id: 'noreceipt', name: 'ใบรับรองแทนใบเสร็จรับเงิน', render: docNoReceipt, to: 'การเงิน/บัญชี', when: 'ตอนเคลียร์เงินทดรอง/อนุมัติรายจ่าย', status: ['ต้องเพิ่มฟีเจอร์', 'บันทึกรายจ่ายที่ไม่มีใบเสร็จ + PDF'] },
+  { id: 'internal', name: 'หัวเอกสารภายใน', render: docInternal, to: 'ภายใน', when: 'สรุปรอบจ่าย/หน้าปก/รายงาน', status: ['มีแล้ว', 'เปลี่ยนเป็นหัวกลางตามแบบนี้'] },
+  { id: 'wht', name: '50 ทวิ', render: docWht, to: 'ผู้ถูกหักภาษี', when: 'ตอนรอบจ่ายโอนสำเร็จ', status: ['มีแล้ว', 'แบบทางการ — ไม่เปลี่ยน'] },
+];
+let current = 'billing';
+try { const s = localStorage.getItem('docs-mock-current'); if (s && DOCS.some((d) => d.id === s)) current = s; } catch (e) { /* ignore */ }
+
+function render() {
+  document.getElementById('doc-tabs').innerHTML = DOCS.map((d, i) => `
+    <button data-doc="${d.id}" class="focus-ring shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${d.id === current ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}">${i + 1}. ${d.name}</button>`).join('');
+  document.querySelectorAll('.copy-btn').forEach((b) => {
+    const on = b.dataset.copy === COPY;
+    b.className = `copy-btn focus-ring px-3 py-1.5 rounded-md text-xs font-semibold ${on ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'}`;
+  });
+  const doc = DOCS.find((d) => d.id === current);
+  document.getElementById('doc-area').innerHTML = doc.render();
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-doc],[data-copy]');
+  if (!t) return;
+  if (t.dataset.doc) { current = t.dataset.doc; try { localStorage.setItem('docs-mock-current', current); } catch (err) { /* ignore */ } }
+  if (t.dataset.copy) COPY = t.dataset.copy;
+  render();
+});
+
+const badge = (s) => s === 'มีแล้ว'
+  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+  : s === 'ต้องเพิ่ม PDF' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200';
+document.getElementById('summary-body').innerHTML = DOCS.map((d) => `
+  <tr>
+    <td class="px-3 py-2 font-medium text-slate-900">${d.name}</td>
+    <td class="px-3 py-2 text-slate-700">${d.to}</td>
+    <td class="px-3 py-2 text-slate-700">${d.when}</td>
+    <td class="px-3 py-2"><span class="inline-block px-2 py-0.5 rounded-full border text-xs font-semibold ${badge(d.status[0])}">${d.status[0]}</span><div class="text-xs text-slate-500 mt-0.5">${d.status[1]}</div></td>
+  </tr>`).join('');
+
+render();
+</script>
+</body>
+</html>
