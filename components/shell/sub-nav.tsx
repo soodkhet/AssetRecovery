@@ -16,6 +16,11 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
   const active = menus.find((menu) => pathname === menu.path || pathname.startsWith(`${menu.path}/`))
   const items = active?.children ?? []
   if (items.length === 0) return null
+  // แท็บที่ตรง pathname **ยาวที่สุด** = แท็บปัจจุบัน — แท็บที่ชี้หน้าแม่ (เช่น "งานบัญชี" = `/accounting`)
+  // ต้องไม่ติดไฮไลต์ตอนอยู่หน้าลูก `/accounting/document-samples` (มติ PO U104)
+  const currentPath = items
+    .filter((item) => pathname === item.path || pathname.startsWith(`${item.path}/`))
+    .reduce<string | null>((best, item) => (best === null || item.path.length > best.length ? item.path : best), null)
 
   return (
     <div className={cn('flex-shrink-0 border-b border-slate-200 bg-slate-50', className)}>
@@ -24,7 +29,7 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
         className="no-scrollbar mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8"
       >
         {items.map((item) => {
-          const current = pathname === item.path || pathname.startsWith(`${item.path}/`)
+          const current = item.path === currentPath
 
           if (!item.available) {
             return (

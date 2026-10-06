@@ -14,7 +14,11 @@ import {
 } from '@/lib/auth/constants'
 import { hasCapability } from '@/lib/auth/permission'
 import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
+import { DOCUMENT_SAMPLES_CAPABILITY } from '@/lib/documents/samples/catalog'
 import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
+
+/** หน้า "ตัวอย่างเอกสารทั้งหมด" (มติ PO U104) */
+export const DOCUMENT_SAMPLES_PATH = '/accounting/document-samples'
 
 /**
  * Menu registry — SSOT ของเมนูฝั่ง UI (`06` §7.1.1 Role Group Matrix + §7.2 Top Nav Visibility Matrix)
@@ -174,9 +178,32 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     id: 'accounting',
     label: 'บัญชี',
     path: '/accounting',
-    audiences: ['superadmin', 'executive', 'accounting'],
+    // การเงิน = เห็นเมนูนี้**เฉพาะเมื่อถือ `view_document_samples`** และข้างในเห็นแค่เมนูย่อย "ตัวอย่างเอกสารทั้งหมด"
+    // (มติ PO 06/10/2569 U104 · `06` §7.2 v2.11) — งานบัญชี 10 แท็บยังเป็นของ Superadmin/บริหาร/บัญชีตามเดิม
+    audiences: ['superadmin', 'executive', 'accounting', 'finance'],
+    capabilityGate: { audiences: ['finance'], anyOf: [DOCUMENT_SAMPLES_CAPABILITY] },
     available: true,
     plannedPhase: '4.7',
+    children: [
+      // หน้าเดิมของเมนูบัญชี (แท็บงานบัญชีอยู่ข้างใน `<AccountingShell>`)
+      {
+        id: 'accounting.operations',
+        label: 'งานบัญชี',
+        path: '/accounting',
+        audiences: ['superadmin', 'executive', 'accounting'],
+        available: true,
+        plannedPhase: '4.7',
+      },
+      // มติ PO 06/10/2569 U104 — ดูหน้าตาเอกสารทุกชนิดที่ระบบออก (PDF จริงจาก renderer · ข้อมูลสมมติ)
+      {
+        id: 'accounting.document-samples',
+        label: 'ตัวอย่างเอกสารทั้งหมด',
+        path: DOCUMENT_SAMPLES_PATH,
+        audiences: ['superadmin', 'executive', 'accounting', 'finance'],
+        capabilityGate: { audiences: ['executive', 'accounting', 'finance'], anyOf: [DOCUMENT_SAMPLES_CAPABILITY] },
+        available: true,
+      },
+    ],
   },
   {
     id: 'warehouse',
