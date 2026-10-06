@@ -577,6 +577,33 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
     expect(await db().reassignmentHistory.count({ where: { caseId } })).toBe(1)
   })
 
+  it('Final Test ด่าน 6 — job 2 instance + ผู้รับงานตอบ ยิงพร้อมกันตอนหมดเวลา ⇒ โอนครั้งเดียว · คนตอบได้ REASSIGNMENT_ALREADY_TIMED_OUT', async () => {
+    const caseId = await seedWaitingRequest()
+    await expireLatestRequest(caseId)
+
+    const [jobA, jobB, answer] = await Promise.allSettled([
+      timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID }),
+      timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID }),
+      queries.respondReassignment(agentA, caseId, { decision: 'consent' }, { actor: agentA, meta }),
+    ])
+    expect(jobA.status).toBe('fulfilled')
+    expect(jobB.status).toBe('fulfilled')
+    const resolved =
+      (jobA.status === 'fulfilled' ? jobA.value.resolved : 0) + (jobB.status === 'fulfilled' ? jobB.value.resolved : 0)
+    expect(resolved).toBe(1)
+    expect(answer.status).toBe('rejected')
+    expect(codeOf((answer as PromiseRejectedResult).reason)).toBe('REASSIGNMENT_ALREADY_TIMED_OUT')
+
+    expect(await db().caseAssignment.count({ where: { caseId } })).toBe(2)
+    expect(
+      await db().caseAssignment.count({
+        where: { caseId, status: { in: ['pending_accept', 'accepted_unscheduled', 'scheduled', 'needs_revision'] } },
+      }),
+    ).toBe(1)
+    expect(await db().reassignmentHistory.count({ where: { caseId } })).toBe(1)
+    expect((await db().pendingReassignment.findFirstOrThrow({ where: { caseId } })).status).toBe('timeout_auto')
+  })
+
   it('ตอบหลัง job resolve ไปแล้ว = REASSIGNMENT_ALREADY_TIMED_OUT (ไม่เขียนทับผลของ job)', async () => {
     const caseId = await seedWaitingRequest()
     await expireLatestRequest(caseId)

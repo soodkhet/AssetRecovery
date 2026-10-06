@@ -930,6 +930,64 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
       db().$executeRawUnsafe(`UPDATE handover_lots SET note = 'แก้ย้อนหลัง' WHERE id = '${lotId}'`),
     ).rejects.toThrowError(/LOT_ALREADY_CONFIRMED/)
   })
+
+  it('Final Test ด่าน 6 — 2 คนกดยืนยันล็อตเดียวกันพร้อมกัน ⇒ สำเร็จ 1 · อีกคน LOT_ALREADY_CONFIRMED · รายได้/audit ชุดเดียว', async () => {
+    const { caseId, lotId } = await seedPendingLot()
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${caseId}'`)
+    const secondAdmin = { ...admin, id: MANAGER_ID }
+
+    const results = await Promise.allSettled([
+      warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin)),
+      warehouse.confirmLot(admin, lotId, confirmInput(), ctx(secondAdmin)),
+    ])
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled')
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect(codeOf(rejected[0]?.reason)).toBe('LOT_ALREADY_CONFIRMED')
+    expect(await db().revenue.count({ where: { caseId } })).toBe(1)
+    expect(
+      await db().auditLog.count({ where: { targetType: 'handover_lots', targetId: lotId, action: 'confirm' } }),
+    ).toBe(1)
+  })
+
+  it('Final Test ด่าน 6 — step 4 (สร้างรายได้) ล้ม ⇒ rollback ทั้งชุดรวม snapshot หัวกระดาษ · ไม่มี audit/รายได้ค้าง', async () => {
+    const { caseId, assetId, lotId } = await seedPendingLot()
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${caseId}'`)
+
+    await db().$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION test_fail_revenue_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'จำลอง DB fail ใน step 4 (tryCreateRevenue)'; END $$
+    `)
+    await db().$executeRawUnsafe(`
+      CREATE TRIGGER trg_test_fail_revenue_insert BEFORE INSERT ON revenues
+      FOR EACH ROW EXECUTE FUNCTION test_fail_revenue_insert()
+    `)
+    try {
+      await expectCode(
+        () => warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin)),
+        'CONFIRM_TRANSACTION_FAILED',
+      )
+    } finally {
+      await db().$executeRawUnsafe(`DROP TRIGGER IF EXISTS trg_test_fail_revenue_insert ON revenues`)
+      await db().$executeRawUnsafe(`DROP FUNCTION IF EXISTS test_fail_revenue_insert()`)
+    }
+
+    const lot = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+    expect(lot.status).toBe('pending_attach')
+    expect(lot.letterheadSnapshot).toBeNull()
+    expect(lot.documentTemplateSnapshot).toBeNull()
+    expect((await db().asset.findUniqueOrThrow({ where: { id: assetId } })).assetStatus).toBe('handover_pending')
+    expect(await db().revenue.count({ where: { caseId } })).toBe(0)
+    expect(
+      await db().auditLog.count({ where: { targetType: 'handover_lots', targetId: lotId, action: 'confirm' } }),
+    ).toBe(0)
+
+    // ยืนยันใหม่หลังเหตุขัดข้องหาย ⇒ ผ่านครบทุกขั้น
+    const retry = await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
+    expect(retry.revenueIdsCreated).toHaveLength(1)
+  })
 })
 
 suite('UAT Q13 (BUG-037/050 · หนี้ #1) — server ตรวจไฟล์เอกสารล็อต + รูปรับเข้าคลัง', () => {

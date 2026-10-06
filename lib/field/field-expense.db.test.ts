@@ -560,6 +560,40 @@ suite('Phase 2.9 — D10: Google Maps ใช้ไม่ได้ตอนปิ
     expect(after.status).toBe('pending')
   })
 
+  it('Final Test ด่าน 6 — job คร่อมปิดงวด: งวดของวันปิดงานถูกล็อกแล้ว ⇒ ไม่เขียนค่าน้ำมันย้อนเข้างวด · งาน failed ไม่ retry วน', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('down', { status: 500 })),
+    )
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
+    const closedAt = (await db().caseAssignment.findFirstOrThrow({ where: { caseId }, select: { completedAt: true } }))
+      .completedAt
+    const bangkok = new Date((closedAt ?? new Date()).getTime() + 7 * 3_600_000)
+    const yearBe = bangkok.getUTCFullYear() + 543
+    const month = bangkok.getUTCMonth() + 1
+
+    await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ ${month}/${yearBe}', ${yearBe}, ${month}, 'locked', '${MANAGER_ID}')
+    `)
+    try {
+      stubDistanceMatrix(10_000)
+      const result = await fuelJob.runFuelDistanceRetryJob({ organizationId: ORG_ID })
+      expect(result.created).toBe(0)
+      expect((await expensesOf(caseId)).filter((row) => row.expenseType === 'fuel')).toHaveLength(0)
+      const job = await db().job.findFirstOrThrow({
+        where: { jobType: 'fuel_distance_retry', organizationId: ORG_ID },
+        select: { status: true, errorMessage: true },
+      })
+      expect(job.status).toBe('failed')
+      expect(job.errorMessage ?? '').not.toBe('')
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    }
+  })
+
   it('ยอดที่คำนวณได้เป็น 0 = ไม่สร้าง record (DEC-006/D6)', async () => {
     vi.stubGlobal(
       'fetch',

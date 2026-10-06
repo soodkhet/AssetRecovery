@@ -1,3 +1,4 @@
+import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { kmHundredthsToDecimalString, metersToKmHundredths, routePoints } from '@/lib/field/distance'
 import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
@@ -227,6 +228,15 @@ async function createFuelExpense(params: {
 
   const outcome = assignment.case.outcome ?? (assignment.status === 'closed_success' ? 'closed_success' : 'closed_fail')
   const status = initialCaseExpenseStatus(outcome)
+
+  // Period Lock (`13` §6.11) — job คร่อมปิดงวด (retry ข้ามสิ้นเดือน/Superadmin สั่ง retry หลังล็อก) ห้ามเขียนรายการ
+  // ย้อนเข้างวดที่ส่ง/ล็อกแล้ว ⇒ โยน PERIOD_LOCKED_DIRECT_EDIT ให้งานเป็น `failed` (ไม่ retry วน) เห็นใน Job Log
+  // กติกาเดียวกับ job เบี้ยเลี้ยงรายวัน (`isFieldDayPeriodLocked`) — Final Test ด่าน 6
+  await assertPeriodOpenAt({
+    organizationId: params.organizationId,
+    at: bangkokBusinessDate(closedAt),
+    targetType: 'expenses',
+  })
 
   await prisma.$transaction(async (tx) => {
     const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {

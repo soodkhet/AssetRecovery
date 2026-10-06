@@ -269,6 +269,27 @@ suite('ห้ามเบิกซ้อน (`15` §9.2/§16)', () => {
     expect(rows).toHaveLength(1)
   })
 
+  it('Final Test ด่าน 6 — อนุมัติกับปฏิเสธใบเดียวกันพร้อมกัน ⇒ สำเร็จคำขอเดียว · อีกคำขอ ADVANCE_INVALID_STATUS · audit แถวเดียว', async () => {
+    const a = await advances.createAdvance(ctx(agent), createInput())
+
+    const results = await Promise.allSettled([
+      advances.approveAdvance(ctx(finance), a.id, { approvedSatang: null, note: null }),
+      advances.rejectAdvance(ctx(finance), a.id, { rejectionReason: 'ยอดเกินความจำเป็นของงาน' }),
+    ])
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const loser = results.find((result) => result.status === 'rejected') as PromiseRejectedResult
+    expect(codeOf(loser.reason)).toBe('ADVANCE_INVALID_STATUS')
+
+    const row = await db().advance.findUniqueOrThrow({ where: { id: a.id }, select: { status: true, rejectionReason: true } })
+    const winner = results.findIndex((result) => result.status === 'fulfilled')
+    expect(row.status).toBe(winner === 0 ? 'approved' : 'rejected')
+    if (row.status === 'approved') expect(row.rejectionReason).toBeNull()
+    const audits = await db().auditLog.count({
+      where: { organizationId: ORG_ID, targetType: 'advances', targetId: a.id, action: { in: ['approve', 'reject'] } },
+    })
+    expect(audits).toBe(1)
+  })
+
   it('Final Test ด่าน 2 — อนุมัติใบที่สอง **ตามลำดับ** (ไม่ได้พร้อมกัน) ⇒ `ADVANCE_PENDING_SETTLEMENT` ไม่ใช่ 500', async () => {
     const first = await advances.createAdvance(ctx(agent), createInput())
     const second = await advances.createAdvance(ctx(agent), createInput())
