@@ -564,6 +564,51 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
     expect(rows[0]?.reassignReason).toBeNull()
   })
 
+  it('Final ด่าน 1 (U120) — ส่งแจ้งเตือนล้มตอน job timeout: การเปลี่ยนคน commit แล้ว + แจ้งเตือนค้างในคิว · รอบ cron ถัดไปส่งครบไม่หาย', async () => {
+    const caseId = await seedWaitingRequest()
+    await expireLatestRequest(caseId)
+    const jobId = `final1-outbox-${Date.now()}`
+    const eventCode = 'assignment.reassignment_timeout_resolved'
+    const notifiedCount = () => db().notification.count({ where: { organizationId: ORG_ID, eventCode } })
+    const before = await notifiedCount()
+
+    // จำลองช่องทางส่งล่ม: เขียน `notifications` ไม่ได้ระหว่าง job
+    await db().$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION test_fail_notification_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'จำลองช่องทางแจ้งเตือนล่ม'; END $$
+    `)
+    await db().$executeRawUnsafe(`
+      CREATE TRIGGER trg_test_fail_notification_insert BEFORE INSERT ON notifications
+      FOR EACH ROW EXECUTE FUNCTION test_fail_notification_insert()
+    `)
+    let result: Awaited<ReturnType<TimeoutJob['resolveExpiredReassignments']>>
+    try {
+      result = await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId })
+    } finally {
+      await db().$executeRawUnsafe(`DROP TRIGGER IF EXISTS trg_test_fail_notification_insert ON notifications`)
+      await db().$executeRawUnsafe(`DROP FUNCTION IF EXISTS test_fail_notification_insert()`)
+    }
+
+    // job ไม่ล้ม · การเปลี่ยนคนเกิดจริง · แจ้งเตือนยังไม่ถึงใคร แต่ค้างในคิวพร้อมสาเหตุ
+    expect(result.resolved).toBe(1)
+    expect(result.notifications).toMatchObject({ sent: 0, retried: 3 })
+    const active = await db().caseAssignment.findFirstOrThrow({ where: { caseId, status: 'pending_accept' } })
+    expect(active.agentId).toBe(AGENT_B)
+    expect(await notifiedCount()).toBe(before)
+    const queued = await db().notificationOutbox.findMany({ where: { organizationId: ORG_ID, sourceJobRef: jobId } })
+    expect(queued).toHaveLength(3)
+    expect(queued.every((row) => row.status === 'pending' && row.attempts === 1 && row.lastError !== null)).toBe(true)
+
+    // รอบ cron ถัดไป (หลัง backoff) — ส่งครบ 3 คน ไม่ซ้ำ
+    const { drainNotificationOutbox } = await import('@/lib/notifications/outbox')
+    const later = new Date(Date.now() + 2 * 60 * 60 * 1000)
+    expect(await drainNotificationOutbox({ organizationId: ORG_ID, now: later })).toMatchObject({ sent: 3, failed: 0 })
+    expect(await drainNotificationOutbox({ organizationId: ORG_ID, now: later })).toMatchObject({ due: 0 })
+    const after = await db().notificationOutbox.findMany({ where: { organizationId: ORG_ID, sourceJobRef: jobId } })
+    expect(after.every((row) => row.status === 'sent')).toBe(true)
+    expect(await notifiedCount()).toBe(before + 3)
+  })
+
   it('job รันซ้ำแล้วผลไม่เปลี่ยน (idempotent — `91` §17)', async () => {
     const caseId = await seedWaitingRequest()
     await expireLatestRequest(caseId)
