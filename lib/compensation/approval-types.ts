@@ -1,3 +1,4 @@
+import type { WhtRateOrigin } from '@/lib/finance/wht-calc'
 import type { SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
 import { z } from 'zod'
 import { reasonSchema } from '@/lib/api/validation'
@@ -41,7 +42,8 @@ export interface CompensationApprovalDto {
   netSatang: number
   whtPctUsed: number
   /** `payee` = ใช้ Tax Profile ของผู้รับเงิน · `plan` = fallback ชั่วคราว ต้องโชว์ `whtWarning` */
-  whtRateSource: 'payee' | 'plan'
+  /** มติ PO U121 — `type_default` = ค่าเริ่มต้นตามประเภทผู้รับ · `none` = ไม่ได้ใช้อัตรา */
+  whtRateSource: WhtRateOrigin
   whtWarning: string | null
   /** BUG-176 — เงื่อนไข (2)/(3) บริษัทออกภาษีให้ ⇒ `whtSatang` = ภาษีที่ออกให้ (ไม่หักจากผู้รับ) · `net = gross` */
   whtPayerBorne: boolean

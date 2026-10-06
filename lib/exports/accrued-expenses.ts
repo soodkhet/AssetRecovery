@@ -10,7 +10,8 @@ import { isInWhtBase, isWhtConditionAllowed, resolveIncomeCategory, type WhtPoli
  * - รายการที่ยังไม่เข้ารอบ ⇒ จำลองว่าทุกรายการค้างของผู้รับคนนั้นเข้ารอบจ่ายเดียวกัน แล้วคิดด้วยค่าตั้ง WHT ที่มีผล
  *   ณ วันสร้างชุด (เกณฑ์ขั้นต่ำต่อผู้รับต่อรอบ · ฐานตามชนิดรายการ · ประเภทเงินได้ตามฝั่ง/ชนิดผู้รับ)
  *   ⇒ เป็น **ยอดประมาณ** — ยอดจริงขึ้นกับว่ารายการถูกจัดเข้ารอบจ่ายไหนบ้าง
- * - คิดไม่ได้ (ผู้รับ 40(1)/40(2) ยังไม่มีอัตรา · ไม่มีทั้ง Tax Profile และอัตราแผน) ⇒ `null` (ไฟล์เป็น `-`)
+ * - คิดไม่ได้ (ผู้รับ 40(1)/40(2) ยังไม่มีอัตรา · ไม่มี Tax Profile รายคน/ค่าเริ่มต้นตามประเภท และไม่มีอัตราแผน
+ *   ของรายการในฐาน — มติ PO U121) ⇒ `null` (ไฟล์เป็น `-`) · รายการนอกฐานไม่ต้องมีอัตรา
  */
 
 export interface AccruedWhtItem {
@@ -22,6 +23,8 @@ export interface AccruedWhtItem {
   payeeType: PayeeType
   side: PayoutBatchSide | null
   payeeTaxProfile: PayeeTaxProfileValues | null
+  /** Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121) · ไม่ระบุ/`null` = ไม่มี */
+  typeDefaultTaxProfile?: PayeeTaxProfileValues | null
   planWhtPct: number | null
   section402Pct: number | null
   /**
@@ -52,13 +55,17 @@ export function estimateAccruedWhtSatang(
     const first = items[members[0] ?? -1]
     if (first === undefined) continue
     try {
-      const { lines } = calculatePayeeBatchWht(
+      const { lines, rateMissing } = calculatePayeeBatchWht(
         members.map((index) => {
           const item = items[index]!
           return {
             grossSatang: item.grossSatang,
             includedInBase: isInWhtBase(policy, item.expenseType),
-            source: { payeeTaxProfile: item.payeeTaxProfile, planWhtPct: item.planWhtPct },
+            source: {
+              payeeTaxProfile: item.payeeTaxProfile,
+              typeDefaultTaxProfile: item.typeDefaultTaxProfile ?? null,
+              planWhtPct: item.planWhtPct,
+            },
           }
         }),
         {
@@ -72,7 +79,10 @@ export function estimateAccruedWhtSatang(
         },
       )
       members.forEach((index, position) => {
-        result[index] = lines[position]?.whtSatang ?? null
+        const line = lines[position]
+        // มติ PO U121 — รายการในฐานที่ไม่มีอัตรา ⇒ ประมาณไม่ได้ (`-`) · ไม่มีอัตราแต่มีรายการอื่นของผู้รับคนเดียวกัน
+        // ⇒ ยอดรวมของผู้รับไม่ครบ จึงเว้นทั้งผู้รับ (รอบจ่ายจะถูกบล็อกจนกว่าจะกำหนดอัตรา)
+        result[index] = rateMissing || line === undefined ? null : line.whtSatang
       })
     } catch (error) {
       // ประมาณไม่ได้ (ข้อมูลอัตราไม่ครบ) ⇒ เว้นเป็น `-` ให้สำนักงานบัญชีเห็น ไม่เดาอัตรา (Hybrid Boundary)

@@ -49,4 +49,15 @@ describe('estimateAccruedWhtSatang', () => {
   it('ไม่มีทั้ง Tax Profile และอัตราแผน ⇒ null', () => {
     expect(estimateAccruedWhtSatang([item({ payeeTaxProfile: null, planWhtPct: null })], policy)).toEqual([null])
   })
+
+  it('มติ PO U121 — รายการนอกฐานของผู้รับที่ไม่มีอัตรา ⇒ 0 (ไม่ต้องมีอัตรา) · ในฐาน ⇒ null', () => {
+    expect(
+      estimateAccruedWhtSatang([item({ expenseType: 'hotel', payeeTaxProfile: null, planWhtPct: null })], policy),
+    ).toEqual([0])
+  })
+
+  it('มติ PO U121 — ไม่มี Tax Profile รายคน ⇒ ใช้ค่าเริ่มต้นตามประเภท (ไม่มีแผนก็คิดได้)', () => {
+    const fromDefault = item({ payeeTaxProfile: null, planWhtPct: null, typeDefaultTaxProfile: profile3, grossSatang: 200_000 })
+    expect(estimateAccruedWhtSatang([fromDefault], policy)).toEqual([6_000])
+  })
 })

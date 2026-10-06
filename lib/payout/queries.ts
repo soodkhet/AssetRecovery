@@ -72,6 +72,8 @@ import { assertBankFileUsable } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
+import { loadTaxProfileDefaults, type LoadedTaxProfileDefaults } from '@/lib/settings/queries/tax-profile-defaults'
+import { pickTaxProfileDefault } from '@/lib/settings/tax-profile-defaults'
 import {
   LEGACY_WHT_POLICY,
   isInWhtBase,
@@ -433,6 +435,7 @@ async function collectExpenseCandidates(
   cutoffDate: Date,
   side: PayoutBatchSide,
   policy: WhtPolicyValues,
+  typeDefaults: LoadedTaxProfileDefaults,
 ): Promise<Candidate[]> {
   const rows = await prisma.expense.findMany({
     where: {
@@ -527,10 +530,14 @@ async function collectExpenseCandidates(
   }
 
   const whtByIndex = new Array<PayeeBatchWhtLine | undefined>(sided.length)
+  /** Tax Profile ค่าเริ่มต้นตามประเภทของผู้รับ (มติ PO U121) — snapshot id เมื่อถูกใช้จริง */
+  const typeDefaultByIndex = new Array<string | null>(sided.length).fill(null)
+  const missingRate: string[] = []
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
     const incomeCategory = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType)
-    const { lines } = calculatePayeeBatchWht(
+    const typeDefault = pickTaxProfileDefault(typeDefaults.profiles, first.side, first.row.payee.payeeType)
+    const { lines, rateMissing } = calculatePayeeBatchWht(
       members.map((index) => {
         const row = sided[index]!.row
         return {
@@ -538,6 +545,7 @@ async function collectExpenseCandidates(
           includedInBase: isInWhtBase(policy, row.expenseType),
           source: {
             payeeTaxProfile: payeeTaxValues(row.payee),
+            typeDefaultTaxProfile: typeDefault?.values ?? null,
             planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
           },
         }
@@ -548,8 +556,18 @@ async function collectExpenseCandidates(
         condition: first.row.payee.whtCondition,
       },
     )
+    if (rateMissing) missingRate.push(first.row.payee.user.fullName)
     members.forEach((index, position) => {
       whtByIndex[index] = lines[position]
+      if (lines[position]?.rate.source === 'type_default') typeDefaultByIndex[index] = typeDefault?.taxProfileId ?? null
+    })
+  }
+  // มติ PO U121 — รายการในฐานที่ไม่มีอัตราเลย (ไม่มี Tax Profile รายคน/ค่าเริ่มต้นตามประเภท และไม่มีอัตราแผน)
+  // ⇒ ปัดทั้งรอบพร้อมรายชื่อ ห้ามเดาอัตรา
+  if (missingRate.length > 0) {
+    throw new PayoutError('WHT_RATE_MISSING', {
+      detail: `payees=${missingRate.join(', ')}`,
+      context: { payees: missingRate },
     })
   }
 
@@ -568,7 +586,8 @@ async function collectExpenseCandidates(
       grossSatang: wht.payoutGrossSatang,
       whtSatang: wht.whtSatang,
       netSatang: wht.netSatang,
-      taxProfileId: row.payee.taxProfileId,
+      // snapshot Tax Profile ที่ใช้จริง — มาจากค่าเริ่มต้นตามประเภท ⇒ id ของ profile ค่าเริ่มต้น (มติ PO U121)
+      taxProfileId: typeDefaultByIndex[index] ?? row.payee.taxProfileId,
       whtPctSnapshot: wht.rate.whtPct,
       // fallback อัตราของ Plan มีความหมายเฉพาะรายการที่อยู่ในฐาน 40(8) จริง
       whtRateFromPlan: wht.rate.source === 'plan' && wht.includedInBase,
@@ -827,9 +846,11 @@ export async function createPayoutBatch(
   // ค่าตั้งภาษีที่มีผล ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — snapshot ลงรอบด้านล่าง
   // รอบที่สร้างแล้วไม่ถูกคิดใหม่เมื่อค่าตั้งเปลี่ยน (Rule 08)
   const whtPolicy = await resolveWhtPolicyForPayout(user.organizationId, context.now ?? new Date())
+  // Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ ณ วันสร้างรอบ (มติ PO U121) — snapshot id ของชุดลงรอบ
+  const typeDefaults = await loadTaxProfileDefaults(user.organizationId)
 
   const [expenses, advances] = await Promise.all([
-    collectExpenseCandidates(user.organizationId, input.cutoffDate, input.side, whtPolicy.values),
+    collectExpenseCandidates(user.organizationId, input.cutoffDate, input.side, whtPolicy.values, typeDefaults),
     collectAdvanceCandidates(user.organizationId, input.cutoffDate),
   ])
 
@@ -868,6 +889,7 @@ export async function createPayoutBatch(
         whtInhouseIncomeCategory: whtPolicy.values.inhouseIncomeCategory,
         whtOutsourceIncomeCategory: whtPolicy.values.outsourceIncomeCategory,
         whtAllowGrossUpConditions: whtPolicy.values.allowGrossUpConditions,
+        taxProfileDefaultId: typeDefaults.id,
         createdBy: user.id,
       },
       select: { id: true },
@@ -978,6 +1000,7 @@ export async function createPayoutBatch(
           wht_inhouse_income_category: whtPolicy.values.inhouseIncomeCategory,
           wht_outsource_income_category: whtPolicy.values.outsourceIncomeCategory,
           wht_allow_gross_up_conditions: whtPolicy.values.allowGrossUpConditions,
+          tax_profile_default_id: typeDefaults.id,
         },
         reason: null,
         ipAddress: context.meta.ipAddress,

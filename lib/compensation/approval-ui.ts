@@ -1,3 +1,4 @@
+import type { WhtRateOrigin } from '@/lib/finance/wht-calc'
 import type { ApiCallError } from '@/lib/api/types'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
@@ -136,17 +137,22 @@ export function whtAmountLabel(item: { whtPayerBorne: boolean }): string {
   return item.whtPayerBorne ? 'ภาษีที่บริษัทออกให้' : 'WHT'
 }
 
+/** ที่มาของอัตรา (มติ PO U121 — เพิ่มค่าเริ่มต้นตามประเภทผู้รับ / ไม่ได้ใช้อัตรา) */
+const WHT_RATE_SOURCE_HINT: Record<WhtRateOrigin, string> = {
+  payee: 'จาก Tax Profile ของผู้รับเงิน',
+  type_default: 'จาก Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ',
+  plan: 'ตกไปใช้อัตราของแผน',
+  none: 'ไม่ได้ใช้อัตรา (ไม่อยู่ในฐานภาษีหรือยังไม่มีอัตรา)',
+}
+
 /** คำอธิบายใต้ยอดภาษีใน modal "ดูสูตร" (BUG-176) */
 export function whtAmountHint(item: {
   whtPctUsed: number
-  whtRateSource: 'payee' | 'plan'
+  whtRateSource: WhtRateOrigin
   whtPayerBorne: boolean
   whtFromPayout: boolean
 }, fmtPct: (pct: number) => string): string {
-  const parts = [
-    fmtPct(item.whtPctUsed),
-    item.whtRateSource === 'payee' ? 'จาก Tax Profile ของผู้รับเงิน' : 'ตกไปใช้อัตราของแผน',
-  ]
+  const parts = [fmtPct(item.whtPctUsed), WHT_RATE_SOURCE_HINT[item.whtRateSource]]
   if (item.whtPayerBorne) parts.push('บริษัทออกให้ ไม่หักจากผู้รับ')
   parts.push(item.whtFromPayout ? 'ยอดตามรอบจ่ายที่บันทึกแล้ว' : 'ยอดคาดการณ์ — ยอดจริงคิดตอนสร้างรอบจ่าย')
   return parts.join(' · ')

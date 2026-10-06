@@ -19,13 +19,21 @@ import { usesPerPayeeWhtRate, type WhtIncomeCategory } from '@/lib/settings/wht-
  *    ห้าม hardcode ในสูตร
  */
 
+/**
+ * อัตรามาจากไหน (`18` §6.3 · มติ PO 06/10/2569 U121)
+ * - `payee` = Tax Profile ที่ผูกรายคน (หรืออัตรา 40(1)/40(2) ต่อคน)
+ * - `type_default` = Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (ฝั่ง × ชนิดผู้รับ) — **นับเป็นฝั่ง payee** (ไม่เตือน)
+ * - `plan` = fallback อัตราของแผน (ต้องแสดง `warning`)
+ * - `none` = ไม่ได้ใช้อัตรา: รายการไม่อยู่ในฐาน WHT (ไม่ resolve) หรือไม่มีอัตราเลย (`rateMissing`)
+ */
+export type WhtRateOrigin = 'payee' | 'type_default' | 'plan' | 'none'
+
 /** ค่าที่ resolve ได้จริงว่าจะใช้อัตราไหน (`18` §6.3) */
 export interface WhtRateResolution {
   whtPct: number
   whtBasis: WhtBasis
   minThresholdSatang: number
-  /** `payee` = มี Tax Profile · `plan` = fallback ชั่วคราว (ต้องแสดง `warning`) */
-  source: 'payee' | 'plan'
+  source: WhtRateOrigin
   /** ข้อความเตือนสำหรับ `warning` ใน envelope — มีเฉพาะกรณี fallback (`18` §6.3) */
   warning?: string
 }
@@ -40,32 +48,46 @@ export interface PayeeTaxProfileValues {
 export interface WhtRateSource {
   /** `payee_profiles.tax_profile_id → tax_profiles` — `null` = ยังไม่ผูก */
   payeeTaxProfile: PayeeTaxProfileValues | null
-  /** `compensation_plans.wht_pct` ที่ snapshot ไว้กับรายการเบิก — ใช้เป็น fallback เท่านั้น */
+  /**
+   * Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121 — `tax_profile_default_history` ช่องที่ตรงฝั่ง × ชนิดผู้รับ)
+   * · ไม่ระบุ/`null` = ไม่มีค่าเริ่มต้นสำหรับประเภทนี้
+   */
+  typeDefaultTaxProfile?: PayeeTaxProfileValues | null
+  /** `compensation_plans.wht_pct` ที่ snapshot ไว้กับรายการเบิก — ใช้เป็น fallback เท่านั้น · `null` = รายการไม่มีแผน */
   planWhtPct: number | null
 }
 
+export const WHT_PLAN_FALLBACK_WARNING =
+  'ผู้รับเงินยังไม่มีกติกาภาษี (Tax Profile) ทั้งแบบรายคนและค่าเริ่มต้นตามประเภทผู้รับ — ใช้อัตราจากแผนค่าตอบแทนชั่วคราว โปรดผูก Tax Profile โดยเร็ว'
+
+function fromProfile(profile: PayeeTaxProfileValues, source: 'payee' | 'type_default'): WhtRateResolution {
+  assertWhtPctValid(profile.whtPct)
+  assertNonNegativeSatang(profile.whtMinThresholdSatang, 'เกณฑ์ขั้นต่ำ WHT')
+  return {
+    whtPct: profile.whtPct,
+    whtBasis: profile.whtBasis,
+    minThresholdSatang: profile.whtMinThresholdSatang,
+    source,
+  }
+}
+
 /**
- * `18` §6.3 — Payee ชนะ Plan เสมอ · ไม่มี Tax Profile ⇒ fallback Plan + warning
+ * ลำดับ resolve อัตรา 40(8)/นิติบุคคล (`18` §6.3 · มติ PO 06/10/2569 U121):
+ * 1. Tax Profile ที่ผูกรายคน (override)
+ * 2. Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (นับเป็นฝั่ง payee — "Payee ชนะ Plan" คงเดิม)
+ * 3. อัตราของแผน + warning (fallback ชั่วคราว)
+ * 4. ไม่มีเลย ⇒ **`null`** (ไม่ throw · ไม่เดาอัตรา) — ผู้เรียกแสดงคำเตือน/บล็อกการสร้างรอบจ่ายเอง
  *
- * fallback ใช้ `wht_basis`/threshold **มาตรฐาน** (`before_vat` / 1,000 บาท) เพราะ Plan level เก็บแค่
+ * fallback แผนใช้ `wht_basis`/threshold **มาตรฐาน** (`before_vat` / 1,000 บาท) เพราะ Plan level เก็บแค่
  * อัตรา (`02` §5 — `compensation_plans.wht_pct` ตัวเดียว) ไม่มีฐานหักและเกณฑ์ขั้นต่ำของตัวเอง
  */
-export function resolveWhtRate(source: WhtRateSource): WhtRateResolution {
-  if (source.payeeTaxProfile !== null) {
-    assertWhtPctValid(source.payeeTaxProfile.whtPct)
-    assertNonNegativeSatang(source.payeeTaxProfile.whtMinThresholdSatang, 'เกณฑ์ขั้นต่ำ WHT')
-    return {
-      whtPct: source.payeeTaxProfile.whtPct,
-      whtBasis: source.payeeTaxProfile.whtBasis,
-      minThresholdSatang: source.payeeTaxProfile.whtMinThresholdSatang,
-      source: 'payee',
-    }
+export function resolveWhtRate(source: WhtRateSource): WhtRateResolution | null {
+  if (source.payeeTaxProfile !== null) return fromProfile(source.payeeTaxProfile, 'payee')
+  if (source.typeDefaultTaxProfile !== undefined && source.typeDefaultTaxProfile !== null) {
+    return fromProfile(source.typeDefaultTaxProfile, 'type_default')
   }
-
-  if (source.planWhtPct === null) {
-    // ไม่ควรเกิด: `compensation_plans.wht_pct` เป็น NOT NULL (`02` §5) — หลุดมาถึงตรงนี้คือข้อมูลพัง
-    throw new RangeError('resolveWhtRate: ไม่มีทั้ง Tax Profile ของผู้รับเงินและอัตราของแผนค่าตอบแทน')
-  }
+  // รายการไม่มีแผน (เบิกเอง/ค่าที่พัก) + ไม่มี Tax Profile ใด ๆ ⇒ ไม่มีอัตรา (มติ PO U121 — ห้าม 500)
+  if (source.planWhtPct === null) return null
   assertWhtPctValid(source.planWhtPct)
 
   return {
@@ -73,9 +95,12 @@ export function resolveWhtRate(source: WhtRateSource): WhtRateResolution {
     whtBasis: 'before_vat',
     minThresholdSatang: DEFAULT_WHT_MIN_THRESHOLD_SATANG,
     source: 'plan',
-    warning: 'ผู้รับเงินยังไม่มีกติกาภาษี (Tax Profile) — ใช้อัตราจากแผนค่าตอบแทนชั่วคราว โปรดผูก Tax Profile โดยเร็ว',
+    warning: WHT_PLAN_FALLBACK_WARNING,
   }
 }
+
+/** อัตราว่างของรายการที่ไม่ได้ใช้อัตรา (ไม่อยู่ในฐาน/ไม่มีอัตรา) — ภาษี 0 เสมอ */
+const NO_RATE: WhtRateResolution = { whtPct: 0, whtBasis: 'before_vat', minThresholdSatang: 0, source: 'none' }
 
 export interface WhtCalculationInput {
   /** ยอดก่อนหักภาษี ของรายการที่จะจ่าย (`payout_batch_items.gross_satang`) */
@@ -126,15 +151,16 @@ export interface PayeeWhtResult extends WhtCalculation {
 }
 
 /**
- * ทางลัดที่ Payout Batch (Phase 3.4) ใช้จริง: resolve อัตราตามลำดับ Payee → Plan แล้วคิดยอดในก้าวเดียว
- * — **จุดเดียว**ที่ประกอบกฎ priority ของ `18` เข้ากับสูตร `22` §6.9 (ห้ามประกอบเองซ้ำที่ service)
+ * ทางลัด resolve อัตราตามลำดับ (`resolveWhtRate()`) แล้วคิดยอดในก้าวเดียว — ใช้กับตัวอย่างคำอธิบายค่าตั้ง
+ * · ไม่มีอัตราเลย ⇒ `null` (ไม่ throw — มติ PO U121)
  */
 export function calculateWhtForPayee(input: {
   grossSatang: number
   vatSatang?: number
   source: WhtRateSource
-}): PayeeWhtResult {
+}): PayeeWhtResult | null {
   const rate = resolveWhtRate(input.source)
+  if (rate === null) return null
   const calculation = calculateWht({
     grossSatang: input.grossSatang,
     vatSatang: input.vatSatang,
@@ -314,6 +340,11 @@ export interface PayeeBatchWhtLine extends PayeeWhtResult {
   payoutGrossSatang: number
   /** เงื่อนไขการหักที่ใช้ (snapshot) — `withhold` เมื่อไม่ระบุ */
   whtCondition: WhtCondition
+  /**
+   * รายการอยู่ในฐาน WHT แต่**ไม่มีอัตราเลย** (ไม่มี Tax Profile รายคน/ค่าเริ่มต้นตามประเภท และไม่มีอัตราแผน
+   * — มติ PO U121) ⇒ ภาษี 0 ไม่นับเข้าฐาน/เกณฑ์ · คิวอนุมัติแสดงคำเตือน · รอบจ่ายต้องบล็อก (`WHT_RATE_MISSING`)
+   */
+  rateMissing: boolean
 }
 
 export interface PayeeBatchWht {
@@ -326,6 +357,8 @@ export interface PayeeBatchWht {
   /** true = ฐานรวมของ payee ต่ำกว่าเกณฑ์ ⇒ ไม่หักทุกรายการ (40(1)/40(2) ไม่มีเกณฑ์ ⇒ false เมื่อมีรายการในฐาน) */
   belowThreshold: boolean
   incomeCategory: WhtIncomeCategory
+  /** มีรายการในฐานที่ไม่มีอัตรา (`lines[].rateMissing`) — ผู้สร้างรอบจ่ายต้องปัดทั้งรอบ (มติ PO U121) */
+  rateMissing: boolean
 }
 
 /** 40(1)/40(2) ไม่มีเกณฑ์ขั้นต่ำ ฿1,000 และฐานเป็นยอดก่อน VAT เสมอ (มติ PO 05/10/2569 U7 · U33) */
@@ -342,7 +375,8 @@ function section402Rate(pct: number | null | undefined): WhtRateResolution {
  *
  * เกณฑ์ขั้นต่ำ (ค่าเริ่มต้น ฿1,000) เทียบกับ **ฐานรวมของ payee ทั้งรอบจ่าย** ไม่ใช่ต่อรายการ แล้วกระจาย
  * ภาษีรวมกลับลงรายการ:
- * 1. resolve อัตราต่อรายการด้วย `resolveWhtRate()` (Payee ชนะ Plan — `18` §6.3)
+ * 1. resolve อัตราต่อรายการด้วย `resolveWhtRate()` (รายคน → ค่าเริ่มต้นตามประเภท → Plan — `18` §6.3 · U121)
+ *    **เฉพาะรายการในฐาน** · ไม่มีอัตราเลย ⇒ `rateMissing` (ภาษี 0 ไม่นับฐาน) แทนการ throw
  * 2. ฐานรวม < เกณฑ์ ⇒ ทุกรายการ wht = 0
  * 3. ไม่งั้นจัดกลุ่มตามอัตรา → ภาษีของกลุ่ม = `pctOfSatang(ฐานรวมของกลุ่ม, อัตรา)` (ปัดครั้งเดียวต่อกลุ่ม)
  * 4. กระจายภาษีของกลุ่มลงรายการตามสัดส่วนฐาน ด้วย **largest remainder** (ปัดลงก่อน แล้วแจกเศษทีละ
@@ -373,15 +407,20 @@ export function calculatePayeeBatchWht(
     assertNonNegativeSatang(item.grossSatang, 'ยอดก่อนหักภาษี')
     assertNonNegativeSatang(item.vatSatang ?? 0, 'VAT ของรายการ')
     const includedInBase = item.includedInBase !== false
-    const rate = rate402 ?? resolveWhtRate(item.source)
+    // มติ PO U121 — รายการนอกฐาน WHT ไม่ resolve อัตรา (เดิมล้มด้วย RangeError เมื่อไม่มีแผน/Tax Profile)
+    const resolved = includedInBase ? (rate402 ?? resolveWhtRate(item.source)) : NO_RATE
+    const rateMissing = resolved === null
+    const rate = resolved ?? NO_RATE
     const fullBase = rate.whtBasis === 'gross_amount' ? item.grossSatang + (item.vatSatang ?? 0) : item.grossSatang
-    return { item, rate, includedInBase, baseSatang: includedInBase ? fullBase : 0 }
+    // ไม่มีอัตรา ⇒ ไม่นับเข้าฐาน/เกณฑ์ (ภาษี 0) แต่ยังคงสถานะ "อยู่ในฐาน" ไว้ให้ผู้เรียกบล็อก/เตือน
+    const counted = includedInBase && !rateMissing
+    return { item, rate, includedInBase, rateMissing, counted, baseSatang: counted ? fullBase : 0 }
   })
   if (prepared.length === 0) {
-    return { lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true, incomeCategory }
+    return { lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true, incomeCategory, rateMissing: false }
   }
 
-  const inBase = prepared.filter((entry) => entry.includedInBase)
+  const inBase = prepared.filter((entry) => entry.counted)
   const threshold = inBase[0]?.rate.minThresholdSatang ?? 0
   if (inBase.some((entry) => entry.rate.minThresholdSatang !== threshold)) {
     throw new RangeError('calculatePayeeBatchWht: เกณฑ์ขั้นต่ำ WHT ไม่เท่ากันภายใน payee เดียว — ต้องจัดกลุ่มต่อ payee ก่อน')
@@ -393,7 +432,7 @@ export function calculatePayeeBatchWht(
   if (!belowThreshold) {
     const groups = new Map<number, number[]>()
     prepared.forEach((entry, index) => {
-      if (!entry.includedInBase) return
+      if (!entry.counted) return
       const members = groups.get(entry.rate.whtPct) ?? []
       members.push(index)
       groups.set(entry.rate.whtPct, members)
@@ -426,6 +465,7 @@ export function calculatePayeeBatchWht(
       rate: entry.rate,
       includedInBase: entry.includedInBase,
       incomeCategory,
+      rateMissing: entry.rateMissing,
     }
   })
   return {
@@ -434,6 +474,7 @@ export function calculatePayeeBatchWht(
     totalWhtSatang: whtByIndex.reduce((sum, value) => sum + value, 0),
     belowThreshold,
     incomeCategory,
+    rateMissing: prepared.some((entry) => entry.rateMissing),
   }
 }
 

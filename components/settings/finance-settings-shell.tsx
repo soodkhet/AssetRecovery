@@ -17,6 +17,7 @@ import { PayeeTab } from '@/components/settings/payee-tab'
 import { PeriodLockTab } from '@/components/settings/period-lock-tab'
 import { SlaPolicyTab } from '@/components/settings/sla-policy-tab'
 import { TaxDocTemplatesTab } from '@/components/settings/tax-doc-templates-tab'
+import { TaxProfileDefaultsCard } from '@/components/settings/tax-profile-defaults-card'
 import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
 import { VatRatesTab } from '@/components/settings/vat-rates-tab'
 import { WhtPolicyTab } from '@/components/settings/wht-policy-tab'
@@ -95,7 +96,13 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
           {current?.id === 'approval' && <ApprovalMatrixTab />}
           {current?.id === 'bank' && <BankAccountsTab />}
           {current?.id === 'payee' && <PayeeTab />}
-          {current?.id === 'tax' && <TaxProfilesTab />}
+          {current?.id === 'tax' && (
+            <div className="space-y-4">
+              <TaxProfilesTab />
+              {/* มติ PO U121 — ค่าเริ่มต้นตามประเภทผู้รับ อยู่แท็บเดียวกับ Tax Profile */}
+              <TaxProfileDefaultsCard />
+            </div>
+          )}
           {current?.id === 'vat' && <VatRatesTab />}
           {current?.id === 'whtpolicy' && <WhtPolicyTab />}
           {current?.id === 'cost' && <CostCentersTab />}

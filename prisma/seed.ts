@@ -139,6 +139,30 @@ async function main() {
     })
   }
 
+  // ── 5b. Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO 06/10/2569 U121) ─────
+  // outsource บุคคลธรรมดา → 3% ก่อน VAT เกณฑ์ ฿1,000 ภ.ง.ด.3 · outsource นิติบุคคล → 3% ภ.ง.ด.53
+  // · inhouse ปล่อยว่าง (ใช้อัตรา 40(1)/40(2) ต่อคนตามค่าตั้งภาษีเหมือนเดิม) · idempotent: สร้างเฉพาะเมื่อยังไม่เคยตั้ง
+  const defaultsExisting = await prisma.taxProfileDefaultHistory.findFirst({ where: { organizationId: org.id } })
+  if (!defaultsExisting) {
+    const [outsourceIndividual, outsourceCorporate] = await Promise.all(
+      taxProfiles.map((profile) =>
+        prisma.taxProfile.findUniqueOrThrow({
+          where: { organizationId_name: { organizationId: org.id, name: profile.name } },
+          select: { id: true },
+        }),
+      ),
+    )
+    await prisma.taxProfileDefaultHistory.create({
+      data: {
+        organizationId: org.id,
+        outsourceIndividualTaxProfileId: outsourceIndividual?.id ?? null,
+        outsourceCorporateTaxProfileId: outsourceCorporate?.id ?? null,
+        reason: 'ค่าเริ่มต้นมาตรฐานตอนติดตั้งระบบ (outsource บุคคลธรรมดา ภ.ง.ด.3 · นิติบุคคล ภ.ง.ด.53 · 3%)',
+        createdBy: SEED_USER_ID,
+      },
+    })
+  }
+
   // ── 6. Finance Policy Settings (1 record/org — DEC-006/D1) ──
   await prisma.financePolicySettings.upsert({
     where: { organizationId: org.id },

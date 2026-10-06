@@ -92,6 +92,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   export_records: 'ประวัติการส่งออก',
   vat_rate_history: 'อัตรา VAT',
   wht_policy_history: 'ค่าตั้งภาษีหัก ณ ที่จ่าย',
+  tax_profile_default_history: 'Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ',
   tax_profiles: 'โปรไฟล์ภาษี',
   bank_accounts: 'บัญชีธนาคาร',
   approval_matrices: 'สายอนุมัติ',

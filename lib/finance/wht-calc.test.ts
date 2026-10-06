@@ -24,28 +24,29 @@ const payeeProfile = { whtPct: 1, whtBasis: 'before_vat' as const, whtMinThresho
 
 describe('§6.3 ของ `18` — ลำดับความสำคัญของอัตรา', () => {
   it('Payee มี Tax Profile → ใช้อัตราของ Payee ชนะ Plan เสมอ (1% ชนะ 3%)', () => {
-    const rate = resolveWhtRate({ payeeTaxProfile: payeeProfile, planWhtPct: 3 })
+    const rate = resolveWhtRate({ payeeTaxProfile: payeeProfile, planWhtPct: 3 })!
     expect(rate.whtPct).toBe(1)
     expect(rate.source).toBe('payee')
     expect(rate.warning).toBeUndefined()
   })
 
   it('Payee ไม่มี Tax Profile → fallback Plan **พร้อม warning** (ห้ามเงียบ)', () => {
-    const rate = resolveWhtRate({ payeeTaxProfile: null, planWhtPct: 3 })
+    const rate = resolveWhtRate({ payeeTaxProfile: null, planWhtPct: 3 })!
     expect(rate.whtPct).toBe(3)
     expect(rate.source).toBe('plan')
     expect(rate.warning).toContain('Tax Profile')
   })
 
   it('fallback ใช้ฐาน before_vat และเกณฑ์มาตรฐาน 1,000 บาท (Plan ไม่มีสองค่านี้)', () => {
-    const rate = resolveWhtRate({ payeeTaxProfile: null, planWhtPct: 3 })
+    const rate = resolveWhtRate({ payeeTaxProfile: null, planWhtPct: 3 })!
     expect(rate.whtBasis).toBe('before_vat')
     expect(rate.minThresholdSatang).toBe(DEFAULT_WHT_MIN_THRESHOLD_SATANG)
     expect(rate.minThresholdSatang).toBe(100_000)
   })
 
-  it('ไม่มีทั้งสองระดับ = ข้อมูลพัง ต้องล้ม ไม่เดา 3%', () => {
-    expect(() => resolveWhtRate({ payeeTaxProfile: null, planWhtPct: null })).toThrow(RangeError)
+  it('ไม่มีอัตราเลย ⇒ `null` (ไม่ throw · ไม่เดา 3% — มติ PO U121)', () => {
+    expect(resolveWhtRate({ payeeTaxProfile: null, planWhtPct: null })).toBeNull()
+    expect(resolveWhtRate({ payeeTaxProfile: null, typeDefaultTaxProfile: null, planWhtPct: null })).toBeNull()
   })
 
   it('อัตราที่ผิดช่วง = INVALID_WHT_RATE (`13` §10)', () => {
@@ -155,7 +156,7 @@ describe('calculateWhtForPayee — resolve + คิดยอดในก้า�
     const result = calculateWhtForPayee({
       grossSatang: 1_000_000,
       source: { payeeTaxProfile: payeeProfile, planWhtPct: 3 },
-    })
+    })!
     expect(result.rate.source).toBe('payee')
     expect(result.whtPctUsed).toBe(1)
     expect(result.whtSatang).toBe(10_000)
@@ -166,9 +167,13 @@ describe('calculateWhtForPayee — resolve + คิดยอดในก้า�
     const result = calculateWhtForPayee({
       grossSatang: 1_000_000,
       source: { payeeTaxProfile: null, planWhtPct: 3 },
-    })
+    })!
     expect(result.whtSatang).toBe(30_000)
     expect(result.rate.warning).toBeDefined()
+  })
+
+  it('ไม่มีอัตราเลย ⇒ `null` แทนการ throw (มติ PO U121)', () => {
+    expect(calculateWhtForPayee({ grossSatang: 1_000_000, source: { payeeTaxProfile: null, planWhtPct: null } })).toBeNull()
   })
 })
 
@@ -247,7 +252,7 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
 
   it('รายการเดียว = ผลเท่ากับ calculateWhtForPayee() เดิม (golden OUT-1: ฿5,500 × 3% = ฿165)', () => {
     const batch = calculatePayeeBatchWht([item(550_000)])
-    const single = calculateWhtForPayee({ grossSatang: 550_000, source: item(550_000).source })
+    const single = calculateWhtForPayee({ grossSatang: 550_000, source: item(550_000).source })!
     expect(batch.lines[0]).toEqual({
       ...single,
       includedInBase: true,
@@ -255,6 +260,7 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
       // U105 — ไม่ระบุเงื่อนไข = (1) หัก ณ ที่จ่าย ⇒ gross ของรายการรอบจ่าย = ยอดรายการเดิม
       payoutGrossSatang: 550_000,
       whtCondition: 'withhold',
+      rateMissing: false,
     })
     expect(batch.totalWhtSatang).toBe(16_500)
   })
@@ -288,7 +294,14 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
   })
 
   it('ไม่มีรายการ → ศูนย์ทั้งหมด', () => {
-    expect(calculatePayeeBatchWht([])).toEqual({ lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true, incomeCategory: 'sec_40_8' })
+    expect(calculatePayeeBatchWht([])).toEqual({
+      lines: [],
+      totalBaseSatang: 0,
+      totalWhtSatang: 0,
+      belowThreshold: true,
+      incomeCategory: 'sec_40_8',
+      rateMissing: false,
+    })
   })
 
   it('เกณฑ์ขั้นต่ำไม่เท่ากันในชุดเดียว (ปน payee) → ล้ม ไม่เดา', () => {
@@ -435,5 +448,96 @@ describe('§6.9.2 เงื่อนไขการหัก (1)/(2)/(3) — ท
     expect(total.compensationSatang + total.whtPaidByPayerSatang).toBe(gross)
     expect(gross - total.whtWithheldSatang - total.whtPaidByPayerSatang).toBe(net)
     expect(sumPayoutTaxSplit([])).toEqual({ compensationSatang: 0, whtWithheldSatang: 0, whtPaidByPayerSatang: 0 })
+  })
+})
+
+describe('ลำดับ resolve อัตรา: รายคน → ค่าเริ่มต้นตามประเภท → แผน → ไม่มีอัตรา (มติ PO 06/10/2569 U121)', () => {
+  const personal = { whtPct: 1, whtBasis: 'before_vat' as const, whtMinThresholdSatang: 100_000 }
+  const typeDefault = { whtPct: 3, whtBasis: 'before_vat' as const, whtMinThresholdSatang: 100_000 }
+
+  it('1. ตั้งรายคน ชนะค่าเริ่มต้นตามประเภทและแผน', () => {
+    const rate = resolveWhtRate({ payeeTaxProfile: personal, typeDefaultTaxProfile: typeDefault, planWhtPct: 5 })
+    expect(rate).toEqual({ whtPct: 1, whtBasis: 'before_vat', minThresholdSatang: 100_000, source: 'payee' })
+  })
+
+  it('2. ไม่มีรายคน ⇒ ค่าเริ่มต้นตามประเภท (นับเป็นฝั่ง payee — ชนะแผน · ไม่มีคำเตือน)', () => {
+    const rate = resolveWhtRate({ payeeTaxProfile: null, typeDefaultTaxProfile: typeDefault, planWhtPct: 5 })
+    expect(rate).toEqual({ whtPct: 3, whtBasis: 'before_vat', minThresholdSatang: 100_000, source: 'type_default' })
+  })
+
+  it('2b. ค่าเริ่มต้นตามประเภทใช้ได้แม้รายการไม่มีแผน (เบิกเอง/ค่าที่พัก)', () => {
+    expect(resolveWhtRate({ payeeTaxProfile: null, typeDefaultTaxProfile: typeDefault, planWhtPct: null })?.source).toBe(
+      'type_default',
+    )
+  })
+
+  it('3. ไม่มีรายคน/ค่าเริ่มต้น ⇒ แผน + คำเตือน (พฤติกรรมเดิม)', () => {
+    const rate = resolveWhtRate({ payeeTaxProfile: null, typeDefaultTaxProfile: null, planWhtPct: 5 })
+    expect(rate?.source).toBe('plan')
+    expect(rate?.warning).toBeDefined()
+  })
+
+  it('4. ไม่มีเลย ⇒ null', () => {
+    expect(resolveWhtRate({ payeeTaxProfile: null, typeDefaultTaxProfile: null, planWhtPct: null })).toBeNull()
+  })
+
+  it('ค่าเริ่มต้นตามประเภทที่อัตราผิดช่วง ⇒ INVALID_WHT_RATE (ตรวจเหมือน Tax Profile รายคน)', () => {
+    try {
+      resolveWhtRate({ payeeTaxProfile: null, typeDefaultTaxProfile: { ...typeDefault, whtPct: 120 }, planWhtPct: null })
+      expect.unreachable('ต้องโยน INVALID_WHT_RATE')
+    } catch (error) {
+      expect(isSettingsError(error) && error.code).toBe('INVALID_WHT_RATE')
+    }
+  })
+
+  it('batch: ค่าเริ่มต้นตามประเภทคิดภาษีจริง ฿10,000 × 3% = ฿300 · ที่มา type_default', () => {
+    const result = calculatePayeeBatchWht([
+      { grossSatang: 1_000_000, source: { payeeTaxProfile: null, typeDefaultTaxProfile: typeDefault, planWhtPct: null } },
+    ])
+    expect(result.totalWhtSatang).toBe(30_000)
+    expect(result.rateMissing).toBe(false)
+    expect(result.lines[0]?.rate.source).toBe('type_default')
+  })
+})
+
+describe('รายการนอกฐาน WHT / ไม่มีอัตรา — ไม่ล้ม (มติ PO 06/10/2569 U121 · บั๊ก RangeError → 500)', () => {
+  const noRate = { payeeTaxProfile: null, planWhtPct: null }
+
+  it('รายการนอกฐาน (ค่าที่พัก/เบิกเอง) ของผู้รับที่ไม่มี Tax Profile และไม่มีแผน ⇒ ไม่ resolve อัตรา · จ่ายเต็ม', () => {
+    const result = calculatePayeeBatchWht([{ grossSatang: 160_000, includedInBase: false, source: noRate }])
+    expect(result.rateMissing).toBe(false)
+    expect(result.totalWhtSatang).toBe(0)
+    expect(result.lines[0]).toMatchObject({
+      whtSatang: 0,
+      netSatang: 160_000,
+      includedInBase: false,
+      rateMissing: false,
+      whtPctUsed: 0,
+    })
+    expect(result.lines[0]?.rate.source).toBe('none')
+  })
+
+  it('รายการนอกฐานไม่ resolve แม้มีอัตรา (อัตราผิดช่วงก็ไม่ถูกตรวจ เพราะไม่ได้ใช้)', () => {
+    const broken = { payeeTaxProfile: { whtPct: 120, whtBasis: 'before_vat' as const, whtMinThresholdSatang: 0 }, planWhtPct: null }
+    expect(calculatePayeeBatchWht([{ grossSatang: 1_000, includedInBase: false, source: broken }]).totalWhtSatang).toBe(0)
+  })
+
+  it('รายการในฐานแต่ไม่มีอัตรา ⇒ `rateMissing` ภาษี 0 ไม่นับฐาน (ไม่ throw)', () => {
+    const result = calculatePayeeBatchWht([{ grossSatang: 500_000, source: noRate }])
+    expect(result.rateMissing).toBe(true)
+    expect(result.totalBaseSatang).toBe(0)
+    expect(result.totalWhtSatang).toBe(0)
+    expect(result.lines[0]).toMatchObject({ rateMissing: true, includedInBase: true, whtSatang: 0, netSatang: 500_000 })
+  })
+
+  it('ปนกัน: รายการมีแผน + รายการไม่มีอัตรา ⇒ รายการที่มีอัตราคิดตามปกติ · ธง rateMissing ระดับผู้รับ', () => {
+    const result = calculatePayeeBatchWht([
+      { grossSatang: 200_000, source: { payeeTaxProfile: null, planWhtPct: 3 } },
+      { grossSatang: 50_000, source: noRate },
+    ])
+    expect(result.rateMissing).toBe(true)
+    expect(result.totalBaseSatang).toBe(200_000)
+    expect(result.lines.map((line) => line.whtSatang)).toEqual([6_000, 0])
+    expect(result.lines.map((line) => line.rateMissing)).toEqual([false, true])
   })
 })

@@ -73,6 +73,7 @@
 | v4.46 | 06/10/2569 | **มติ PO 06/10/2569 (U117 ข้อ 2 — ใบรับรองแทนใบเสร็จ "ออกแทนเลขที่")** (migration `20261006234500_substitute_receipt_replaces`): `substitute_receipts` + `replaces_receipt_id UUID REFERENCES substitute_receipts(id)` (ใบที่ยกเลิกซึ่งใบนี้ออกแทน · NULL = ออกครั้งแรก/ใบก่อน migration) · CHECK ห้ามอ้างตัวเอง · partial unique `uniq_substitute_receipts_replaces` (ใบที่ยกเลิก 1 ใบถูกแทนได้ครั้งเดียว) · trigger `trg_substitute_receipts_guard` เพิ่มคอลัมน์นี้ในชุดห้ามแก้หลังออกใบ |
 | v4.47 | 06/10/2569 | **มติ PO 06/10/2569 (U118)** — §3 `expense_status`: `rejected` = ปฏิเสธถาวร (terminal) เข้าได้จาก `pending_approval` / `pending_finance_approval` / `needs_revision` (ตาม `23` §6.3 v2.11) · **ไม่เปลี่ยน enum/คอลัมน์ ไม่มี migration** |
 | v4.48 | 06/10/2569 | **มติ PO 06/10/2569 (U120 · DEC-015 — คิวแจ้งเตือนของ job)** (migration `20261007000000_notification_outbox`): enum ใหม่ `notification_outbox_status` (`pending`/`sent`/`failed`) · ตารางใหม่ **`notification_outbox`** (§10) — แถวคิวแจ้งเตือนที่ job เขียนใน `$transaction` เดียวกับการเปลี่ยนสถานะ · `dedupe_key` UNIQUE ต่อองค์กร · `attempts`/`max_attempts`/`last_error`/`available_at` (backoff + lease) · `payload` JSONB (ตรวจด้วย Zod ที่ service) · `source_job_type`/`source_job_ref` ตามรอย job · ตารางระบบ ⇒ ไม่มี `created_by`/`updated_by`/`deleted_at` · FK องค์กร `ON DELETE CASCADE` |
+| v4.49 | 06/10/2569 | **มติ PO 06/10/2569 (U121 — Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ · ปิดหนี้ค้าง #3)** (migration `20261007090000_tax_profile_defaults_by_payee_type`): ตารางใหม่ `tax_profile_default_history` (insert-only — ไม่มี updated_*/deleted_at · 4 FK nullable → `tax_profiles` `ON DELETE RESTRICT` · CHECK เหตุผลไม่ว่าง · index `(organization_id, created_at)`) · `payout_batches` + snapshot `tax_profile_default_id` (FK `ON DELETE SET NULL` · NULL = ยังไม่เคยตั้ง/รอบเก่า) · Tax Profile ที่ใช้จริงต่อรายการยังอยู่ที่ `payout_batch_items.tax_profile_id` เดิม (รวมกรณีมาจากค่าเริ่มต้น) · seed §12 เพิ่มชุดค่าเริ่มต้น outsource · ไม่มี enum ใหม่ · ข้อมูลเดิมไม่เปลี่ยน |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -769,6 +770,24 @@ CREATE TABLE wht_policy_history (
   created_by         UUID                 NOT NULL REFERENCES users(id)
 );
 CREATE INDEX idx_wht_policy_history_org_date ON wht_policy_history(organization_id, effective_from);
+
+-- ── tax_profile_default_history ───────────────────────────────
+-- Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (v4.49 มติ PO 06/10/2569 U121 — ไฟล์ 13 §6.4.3 · 18 §6.3)
+-- 4 ช่อง = ฝั่ง inhouse/outsource × ชนิดผู้รับ individual/corporate — ว่างได้ทุกช่อง
+-- ลำดับ resolve: tax_profile รายคน → ช่องที่ตรงประเภท → อัตราแผน (warning) → ไม่มีเลย = บล็อกรอบจ่าย (WHT_RATE_MISSING)
+-- insert-only (ไม่มี updated_*/deleted_at · ไม่มี PATCH/DELETE) · แถวล่าสุด (created_at) มีผลทันที
+CREATE TABLE tax_profile_default_history (
+  id                                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id                     UUID        NOT NULL REFERENCES organizations(id),
+  inhouse_individual_tax_profile_id   UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  inhouse_corporate_tax_profile_id    UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  outsource_individual_tax_profile_id UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  outsource_corporate_tax_profile_id  UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  reason                              TEXT        NOT NULL CHECK (btrim(reason) <> ''),  -- บังคับ (กระทบภาษี)
+  created_at                          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by                          UUID        NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_tax_profile_default_history_org_created ON tax_profile_default_history(organization_id, created_at);
 
 -- ── bank_accounts ─────────────────────────────────────────────
 -- บัญชีธนาคารบริษัท ตามไฟล์ 13 §6.3
@@ -1621,6 +1640,7 @@ CREATE TABLE payout_batches (
   wht_inhouse_income_category   wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(2)
   wht_outsource_income_category wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(8)
   wht_allow_gross_up_conditions BOOLEAN,              -- snapshot U105 — NULL = รอบเก่า ⇒ ไม่อนุญาต (คิดแบบ (1))
+  tax_profile_default_id UUID REFERENCES tax_profile_default_history(id) ON DELETE SET NULL,  -- snapshot ชุดค่าเริ่มต้นตามประเภทผู้รับ (v4.49 U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า · profile ที่ใช้จริงอยู่ที่ payout_batch_items.tax_profile_id
   -- v4.25 (มติ PO U67) ยกเลิกรอบจ่าย — ครบทั้ง 3 ช่องเมื่อ (และเฉพาะเมื่อ) status = 'cancelled'
   cancelled_at          TIMESTAMPTZ,
   cancelled_by          UUID                 REFERENCES users(id),
@@ -2555,6 +2575,12 @@ INSERT INTO tax_profiles (name, wht_pct, filing_form, organization_id, created_b
 VALUES
   ('Outsource Standard 3%', 3.00, 'PND3',  '...', '...'),
   ('Juristic Entity 3%',    3.00, 'PND53', '...', '...');
+
+-- ── 4.0.1 Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (v4.49 มติ PO U121) — สร้างเมื่อยังไม่เคยตั้ง (idempotent)
+-- outsource บุคคลธรรมดา → Outsource Standard 3% (before_vat · ฿1,000 · ภ.ง.ด.3) · outsource นิติบุคคล → Juristic Entity 3% (ภ.ง.ด.53)
+-- · ช่อง inhouse ว่าง (ใช้อัตรา 40(1)/40(2) ต่อคนตามค่าตั้งภาษี)
+INSERT INTO tax_profile_default_history (organization_id, outsource_individual_tax_profile_id, outsource_corporate_tax_profile_id, reason, created_by)
+VALUES ('...org_id...', '...Outsource Standard 3%...', '...Juristic Entity 3%...', 'ค่าเริ่มต้นมาตรฐานตอนติดตั้งระบบ', '...');
 
 -- ── 4.1 Finance Policy Settings ค่าเริ่มต้น (DEC-006/D1) ────
 INSERT INTO finance_policy_settings (organization_id, advance_max_amount_per_request_satang, require_payee_id_document, ar_aging_buckets)

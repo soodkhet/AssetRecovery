@@ -1,3 +1,4 @@
+import type { TaxProfileDefaults } from '@/lib/settings/tax-profile-defaults'
 import type {
   WhtCertificateMode,
   WhtFilingMethod,
@@ -126,6 +127,30 @@ export interface TaxProfileDto {
   filingForm: WhtFilingForm
   isActive: boolean
   updatedAt: string
+}
+
+/** ช่องหนึ่งของค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121) */
+export interface TaxProfileDefaultSlotDto {
+  taxProfileId: string
+  name: string
+  whtPct: number
+  filingForm: WhtFilingForm
+}
+
+/** ชุดค่าเริ่มต้นหนึ่งแถว (insert-only) — `slots` ช่องว่าง = `null` */
+export interface TaxProfileDefaultsDto {
+  id: string
+  slots: TaxProfileDefaults<TaxProfileDefaultSlotDto>
+  reason: string
+  createdAt: string
+  createdByName: string
+}
+
+export interface TaxProfileDefaultsOverviewDto {
+  /** ชุดที่มีผลอยู่ (บันทึกล่าสุด) · `null` = ยังไม่เคยตั้ง (ว่างทั้ง 4 ช่อง) */
+  current: TaxProfileDefaultsDto | null
+  /** ใหม่ → เก่า */
+  history: TaxProfileDefaultsDto[]
 }
 
 export interface VatRateDto {

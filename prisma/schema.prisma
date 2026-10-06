@@ -749,6 +749,7 @@ model Organization {
   taxProfiles                 TaxProfile[]
   vatRateHistory              VatRateHistory[]
   whtPolicyHistory            WhtPolicyHistory[]
+  taxProfileDefaultHistory    TaxProfileDefaultHistory[]
   bankAccounts                BankAccount[]
   costCenters                 CostCenter[]
   publicHolidays              PublicHoliday[]
@@ -930,6 +931,7 @@ model User {
   taxProfilesCreated                 TaxProfile[]                  @relation("tax_profiles_created_by")
   vatRateHistoryCreated              VatRateHistory[]              @relation("vat_rate_history_created_by")
   whtPolicyHistoryCreated            WhtPolicyHistory[]            @relation("wht_policy_history_created_by")
+  taxProfileDefaultsCreated          TaxProfileDefaultHistory[]    @relation("tax_profile_defaults_created_by")
   bankAccountsCreated                BankAccount[]                 @relation("bank_accounts_created_by")
   costCentersCreated                 CostCenter[]                  @relation("cost_centers_created_by")
   publicHolidaysCreated              PublicHoliday[]               @relation("public_holidays_created_by")
@@ -1332,8 +1334,43 @@ model TaxProfile {
   payeeProfiles    PayeeProfile[]    @relation("payee_tax_profile")
   payoutBatchItems PayoutBatchItem[] @relation("payout_items_tax_profile")
 
+  /// ช่องค่าเริ่มต้นตามประเภทผู้รับที่อ้าง profile นี้ (มติ PO U121)
+  defaultsInhouseIndividual   TaxProfileDefaultHistory[] @relation("tax_profile_default_inhouse_individual")
+  defaultsInhouseCorporate    TaxProfileDefaultHistory[] @relation("tax_profile_default_inhouse_corporate")
+  defaultsOutsourceIndividual TaxProfileDefaultHistory[] @relation("tax_profile_default_outsource_individual")
+  defaultsOutsourceCorporate  TaxProfileDefaultHistory[] @relation("tax_profile_default_outsource_corporate")
+
   @@unique([organizationId, name])
   @@map("tax_profiles")
+}
+
+/// Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO 06/10/2569 U121 · `13` §6.4.3 · `18` §6.3)
+/// 4 ช่อง = ฝั่ง inhouse/outsource × ชนิดผู้รับ บุคคลธรรมดา/นิติบุคคล — ว่างได้ทุกช่อง
+/// ลำดับ: Tax Profile รายคน → ค่าเริ่มต้นตามประเภท → อัตราแผน (เตือน) → ไม่มีเลย = บล็อกการสร้างรอบจ่าย
+/// **insert-only** (ไม่มี updated_at/updated_by/deleted_at — `02` §2.4) · แถวที่บันทึกล่าสุดมีผลทันทีกับรอบจ่ายที่สร้างหลังบันทึก
+/// · เหตุผลบังคับ (กระทบภาษี — `90` §13) · รอบจ่าย snapshot แถวที่ใช้ไว้ที่ `payout_batches.tax_profile_default_id`
+model TaxProfileDefaultHistory {
+  id                              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId                  String  @map("organization_id") @db.Uuid
+  inhouseIndividualTaxProfileId   String? @map("inhouse_individual_tax_profile_id") @db.Uuid
+  inhouseCorporateTaxProfileId    String? @map("inhouse_corporate_tax_profile_id") @db.Uuid
+  outsourceIndividualTaxProfileId String? @map("outsource_individual_tax_profile_id") @db.Uuid
+  outsourceCorporateTaxProfileId  String? @map("outsource_corporate_tax_profile_id") @db.Uuid
+  reason                          String
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization        Organization  @relation(fields: [organizationId], references: [id])
+  createdByUser       User          @relation("tax_profile_defaults_created_by", fields: [createdBy], references: [id])
+  inhouseIndividual   TaxProfile?   @relation("tax_profile_default_inhouse_individual", fields: [inhouseIndividualTaxProfileId], references: [id], onDelete: Restrict)
+  inhouseCorporate    TaxProfile?   @relation("tax_profile_default_inhouse_corporate", fields: [inhouseCorporateTaxProfileId], references: [id], onDelete: Restrict)
+  outsourceIndividual TaxProfile?   @relation("tax_profile_default_outsource_individual", fields: [outsourceIndividualTaxProfileId], references: [id], onDelete: Restrict)
+  outsourceCorporate  TaxProfile?   @relation("tax_profile_default_outsource_corporate", fields: [outsourceCorporateTaxProfileId], references: [id], onDelete: Restrict)
+  payoutBatches       PayoutBatch[] @relation("payout_tax_profile_defaults")
+
+  @@index([organizationId, createdAt], map: "idx_tax_profile_default_history_org_created")
+  @@map("tax_profile_default_history")
 }
 
 /// ประวัติอัตรา VAT — **ห้าม hardcode 7%** ต้อง resolve ตาม revenue_date + snapshot ลง record (`19` §6.3)
@@ -2602,6 +2639,9 @@ model PayoutBatch {
   whtOutsourceIncomeCategory     WhtIncomeCategory?  @map("wht_outsource_income_category")
   /// snapshot ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" (มติ PO 06/10/2569 U105) — NULL = รอบเก่า (ไม่อนุญาต · คิดแบบ (1))
   whtAllowGrossUpConditions      Boolean?            @map("wht_allow_gross_up_conditions")
+  /// snapshot ชุด Tax Profile ค่าเริ่มต้นตามประเภทผู้รับที่มีผล ณ วันสร้างรอบ (มติ PO U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า
+  /// · Tax Profile ที่ใช้จริงต่อรายการอยู่ที่ `payout_batch_items.tax_profile_id` (รวมกรณีมาจากค่าเริ่มต้น)
+  taxProfileDefaultId            String?             @map("tax_profile_default_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2609,12 +2649,13 @@ model PayoutBatch {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization    Organization      @relation(fields: [organizationId], references: [id])
-  bankAccount     BankAccount?      @relation("payout_bank_account", fields: [bankAccountId], references: [id])
-  whtPolicy       WhtPolicyHistory? @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
-  createdByUser   User              @relation("payout_batches_created_by", fields: [createdBy], references: [id])
-  updatedByUser   User?             @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
-  cancelledByUser User?             @relation("payout_batches_cancelled_by", fields: [cancelledBy], references: [id])
+  organization      Organization              @relation(fields: [organizationId], references: [id])
+  bankAccount       BankAccount?              @relation("payout_bank_account", fields: [bankAccountId], references: [id])
+  whtPolicy         WhtPolicyHistory?         @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
+  taxProfileDefault TaxProfileDefaultHistory? @relation("payout_tax_profile_defaults", fields: [taxProfileDefaultId], references: [id])
+  createdByUser     User                      @relation("payout_batches_created_by", fields: [createdBy], references: [id])
+  updatedByUser     User?                     @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
+  cancelledByUser   User?                     @relation("payout_batches_cancelled_by", fields: [cancelledBy], references: [id])
 
   items            PayoutBatchItem[]
   advanceReturns   AdvanceReturn[]

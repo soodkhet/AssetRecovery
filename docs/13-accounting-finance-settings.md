@@ -35,6 +35,7 @@
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
 | v3.18 | 06/10/2569 | **มติ PO 06/10/2569 (U103)**: §6.2.1 เพิ่มเพดานใบรับรองแทนใบเสร็จรับเงิน 2 ค่า — ต่อใบ (฿500) / ต่อคนต่อเดือน (฿3,000) · สิทธิ์/เหตุผล/audit เดียวกับค่านโยบายการเงินเดิม · Export Pack: `03_Expenses.csv` ต่อท้าย `substitute_receipt_number` · `13_Advance_Returns.csv` ต่อท้าย `return_number` (รายละเอียด `37`) |
 | v3.19 | 06/10/2569 | **มติ PO 06/10/2569 (U105)**: §6.4.2 เพิ่มค่าตั้ง "อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว" (`allow_gross_up_conditions` ช่องติ๊ก · ค่าเริ่มต้น **ปิด**) ในชุดค่าตั้งภาษีหัก ณ ที่จ่ายเดิม (effective-dated + `manage_wht_policy` + เหตุผล + audit + snapshot ลงรอบจ่าย) · ปิด = ฟอร์มผู้รับเลือกได้เฉพาะ (1) และบล็อกรอบจ่ายที่ยังมีผู้รับ (2)/(3) (`WHT_CONDITION_NOT_ALLOWED`) · เปิด = คิดภาษีแบบทบยอดตาม `22` §6.9.2 |
+| v3.21 | 06/10/2569 | **มติ PO 06/10/2569 (U121 — ปิดหนี้ค้าง #3)**: เพิ่ม **§6.4.3 Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ** 4 ช่อง (inhouse/outsource × บุคคลธรรมดา/นิติบุคคล · ว่างได้) — `tax_profile_default_history` insert-only มีผลทันที · ลำดับ resolve: รายคน → ค่าเริ่มต้นตามประเภท → แผน (เตือน) → ไม่มีเลย = คิวอนุมัติเตือนต่อแถว + รอบจ่ายบล็อก `WHT_RATE_MISSING` · รายการนอกฐาน WHT ไม่ resolve อัตรา · `manage_tax_profiles` (Superadmin) + เหตุผล + audit · snapshot ลงรอบจ่าย · §13 เพิ่ม endpoint |
 | v3.20 | 06/10/2569 | **มติ PO 06/10/2569 (U108)**: เพิ่ม **§7.1 คำอธิบายในหน้าจอ** — ทุกค่าตั้งด้านบัญชี/การเงิน/ภาษี/เอกสารมีกล่องคำอธิบาย (คืออะไร · ผลของแต่ละตัวเลือก · ตัวอย่างตัวเลขคำนวณสดจากค่าที่กำลังเลือกด้วยสูตรจริง · ใครแก้ได้/มีผลเมื่อไร) ทุกแท็บ + หน้าบริษัทไฟแนนซ์/แผนค่าตอบแทน/เทมเพลตค่าบริการ (`10`/`11`/`12`/`18`) · ไม่เปลี่ยน business logic |
 
 ขอบเขตเอกสารนี้: รวมการตั้งค่าพื้นฐานทั้งหมดที่โมดูล Finance/Accounting อื่นต้องอ้างอิง — รอบบิล/รอบจ่าย, สายการอนุมัติ, บัญชีธนาคารบริษัท, Tax Profile, VAT Rate, Cost Center, รูปแบบเอกสาร, รูปแบบไฟล์โอนธนาคาร, Export format, Functional Permission Matrix, นโยบายล็อกรอบบัญชี, รูปแบบเลขที่ใบกำกับภาษี, และรูปแบบเอกสารภาษีทางการ — **13 sub-section ทั้งหมด**
@@ -166,6 +167,20 @@
 - หน้าจอ: แท็บ "ค่าตั้งภาษีหัก ณ ที่จ่าย" ถัดจาก Tax Profile — แสดงค่าที่มีผลวันนี้ + ประวัติ + ฟอร์มชุดใหม่ (mockup `settings.html` → `renderSettingsWhtPolicy`)
 - 🔶 ประเภทเงินได้จริง (40(1)/40(2)/40(8)) รอนักบัญชียืนยันตามสัญญาจ้าง (A3) — ค่าตั้งให้เปลี่ยนได้โดยไม่ต้องแก้โค้ด
 - **ผู้รับนิติบุคคล (มติ PO 06/10/2569 U96 #2)**: ค่าตั้งประเภทเงินได้ใช้กับบุคคลธรรมดาเท่านั้น — ผู้รับ `payee_type = corporate` ใช้อัตรา/เกณฑ์ Tax Profile (ไม่ใช่อัตราต่อคน 40(1)/40(2)) และใบ 50 ทวิ ยื่น ภ.ง.ด.53 เสมอ ไม่ว่าโหมดใด (ไฟล์ 33 §6.4)
+
+#### 6.4.3 Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO 06/10/2569 — U121)
+
+ค่าตั้ง **4 ช่อง** = ฝั่งผู้รับ (inhouse/outsource — ตามทีม/role ของผู้รับ แบบเดียวกับการแยกฝั่งรอบจ่าย) × ชนิดผู้รับ (บุคคลธรรมดา/นิติบุคคล — `payee_profiles.payee_type`) · แต่ละช่องผูก Tax Profile ที่ใช้งานอยู่ได้ 0–1 ตัว (**ว่างได้**) · เก็บที่ `tax_profile_default_history` (`02` v4.48) แบบ **insert-only** — บันทึก = เพิ่มชุดใหม่ (ประวัติไม่ถูกแก้/ลบ) · ชุดที่บันทึกล่าสุด **มีผลทันที** กับคิวอนุมัติ/ไฟล์ค้างจ่าย/รอบจ่ายที่สร้างหลังบันทึก
+
+- **ลำดับ resolve อัตรา 40(8)/นิติบุคคล** (`18` §6.3 · `22` §6.9): Tax Profile **รายคน** (`payee_profiles.tax_profile_id` — ข้อยกเว้น/override) → **ค่าเริ่มต้นตามประเภท** (นับเป็นฝั่ง payee ⇒ "Payee ชนะ Plan" คงเดิม · ไม่เตือน) → อัตราของแผน (fallback + `WHT_RATE_FALLBACK_TO_PLAN` เดิม) → **ไม่มีเลย = บล็อก**: คิวอนุมัติแสดงคำเตือนต่อแถว (ไม่ล้มทั้งหน้า) · สร้างรอบจ่ายไม่ได้ `WHT_RATE_MISSING` พร้อมรายชื่อ (ห้ามเดาอัตรา)
+- รายการที่**ไม่อยู่ในฐาน WHT** (§6.4.2) ไม่ resolve อัตราเลย — ผู้รับที่ไม่มีอัตราก็จ่ายรายการนอกฐานได้ตามปกติ
+- อัตรา 40(1)/40(2) ต่อคน (`wht_40_2_pct`) **คงเดิม** — ค่าเริ่มต้นตามประเภทใช้กับเงินได้ที่ใช้ Tax Profile เท่านั้น · นิติบุคคลยื่น ภ.ง.ด.53 เสมอ (ไม่ขึ้นกับ `filing_form` ของ profile)
+- Snapshot: รอบจ่ายเก็บ Tax Profile ที่ใช้จริงต่อรายการที่ `payout_batch_items.tax_profile_id` (รวมกรณีมาจากค่าเริ่มต้น) + id ชุดค่าเริ่มต้นที่ `payout_batches.tax_profile_default_id` ⇒ แก้ค่าตั้งภายหลังไม่กระทบรอบเดิม
+- สิทธิ์: อ่าน = `view_master_data` · แก้ = `manage_tax_profiles` (**ล็อก Superadmin** — แนวเดียวกับ Tax Profile) · **เหตุผลบังคับ** + audit before/after (`target_type = tax_profile_default_history`)
+- อ้าง Tax Profile ที่ไม่มี/ปิดใช้งาน/ข้ามองค์กร ⇒ `TAX_PROFILE_NOT_FOUND` · ปิดใช้งาน Tax Profile ที่เป็นค่าเริ่มต้นของชุดที่มีผล ⇒ `TAX_PROFILE_IN_USE` (เปลี่ยนค่าเริ่มต้นก่อน)
+- ค่าเริ่มต้นตอนติดตั้ง (seed): outsource บุคคลธรรมดา → 3% ก่อน VAT เกณฑ์ ฿1,000 ภ.ง.ด.3 · outsource นิติบุคคล → 3% ภ.ง.ด.53 · ช่อง inhouse ว่าง (ใช้อัตรา 40(1)/40(2) ต่อคนตามค่าตั้ง §6.4.2)
+- หน้าจอ: กล่อง "Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ" ในแท็บ Tax Profile (ใต้ตาราง profile) + กล่องคำอธิบาย (§7.1) — mockup `settings.html` → `renderSettingsTax`
+- API: `GET /api/settings/tax-profile-defaults` (ชุดที่มีผล + ประวัติ) · `POST` (ชุดใหม่ + `reason`)
 
 ### 6.5 VAT Rate Setting (อัตราภาษีมูลค่าเพิ่ม) 🔶 สำคัญมาก — ติดตามใกล้ชิด
 
@@ -474,6 +489,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | GET / POST / PATCH | /api/settings/approval-matrix | Approval Matrix |
 | GET / POST / PATCH | /api/settings/bank-accounts | Corporate Banks |
 | GET / POST / PATCH | /api/settings/tax-profiles | Tax Profile |
+| GET / POST | /api/settings/tax-profile-defaults | Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (§6.4.3 · POST = ชุดใหม่ insert-only · `manage_tax_profiles` + reason) |
 | GET / POST / PATCH | /api/settings/vat-rates | VAT Rate (effective-dated) |
 | GET / POST | /api/settings/wht-policy | ค่าตั้งภาษีหัก ณ ที่จ่าย (effective-dated insert-only — §6.4.2) |
 | GET / PATCH | /api/settings/tax-invoice-numbering | Tax Invoice Numbering Format |
