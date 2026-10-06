@@ -25,7 +25,10 @@ export interface PayeeDto {
   /** เลขบัญชีเต็มสำหรับผู้มีสิทธิ์ `manage` · ผู้มีสิทธิ์แค่ `view` ได้ค่าที่ปิดบังแล้ว */
   accountNumber: string | null
   accountNumberMasked: string | null
+  /** path เอกสารยืนยันตัวตนใน bucket (มติ PO U150 — อัปโหลดผ่าน server) · เปิดดูผ่าน signed URL */
   idDocumentUrl: string | null
+  /** ผ่านการตรวจของ server แล้ว (มี SHA-256) · `false` + มี path = URL เก่าที่พิมพ์เอง (ไม่ผ่านการตรวจ) */
+  idDocumentVerified: boolean
   /** อัตราหัก 40(2) ต่อคน (%) — ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(2) · `null` = ยังไม่กรอก */
   wht402Pct: number | null
   /** คำนำหน้าชื่อ (บุคคลธรรมดา) — มติ PO U94 ข้อ 1 */
@@ -48,4 +51,12 @@ export interface PayeeDto {
   /** ยอดคืนเงินทดรองค้างของผู้รับ (มติ PO U30 — เคลียร์แล้วแต่ยังไม่หัก/รับคืน · `22` §6.14) */
   advanceReturnOutstandingSatang: number
   updatedAt: string
+}
+
+/** ตัวเลือกผู้รับเงินของช่อง "บันทึกแทน" (มติ PO U153) — ข้อมูลน้อยที่สุด (ไม่มีบัญชี/ภาษี) */
+export interface PayeeOptionDto {
+  id: string
+  userId: string
+  name: string
+  teamName: string | null
 }

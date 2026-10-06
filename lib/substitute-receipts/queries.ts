@@ -508,7 +508,12 @@ export async function attachSignedSubstituteReceipt(
       })
       await tx.expense.update({
         where: { id: current.expenseId },
-        data: { receiptFileUrl: input.signedFilePath, receiptFileHash: verified.sha256, updatedBy: user.id },
+        data: {
+          receiptFileUrl: input.signedFilePath,
+          receiptFileHash: verified.sha256,
+          receiptFileUnverified: false,
+          updatedBy: user.id,
+        },
       })
       await emitAudit(
         {
@@ -684,7 +689,7 @@ export async function cancelSubstituteReceipt(
       if (current.signedFilePath !== null && expense.receiptFileUrl === current.signedFilePath) {
         await tx.expense.update({
           where: { id: current.expenseId },
-          data: { receiptFileUrl: null, receiptFileHash: null, updatedBy: user.id },
+          data: { receiptFileUrl: null, receiptFileHash: null, receiptFileUnverified: false, updatedBy: user.id },
         })
         await emitAudit(
           {

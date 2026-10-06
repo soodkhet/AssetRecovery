@@ -105,9 +105,9 @@ function codeOf(error: unknown): string {
 async function seedExpense(payeeId: string, type: string, grossSatang: number): Promise<void> {
   await db().$executeRawUnsafe(`
     INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status,
-                          comp_plan_id, comp_plan_version, receipt_file_url, created_by)
+                          comp_plan_id, comp_plan_version, receipt_file_url, receipt_file_hash, created_by)
     VALUES ('${ORG_ID}', '${payeeId}', '${type}', ${grossSatang}, '2026-10-03', 'approved',
-            '${PLAN_ID}', 1, 'field/receipts/ok.jpg', '${FINANCE_ID}')
+            '${PLAN_ID}', 1, 'field/receipts/ok.jpg', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '${FINANCE_ID}')
   `)
 }
 

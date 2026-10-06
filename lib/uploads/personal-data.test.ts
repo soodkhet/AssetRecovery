@@ -79,3 +79,22 @@ describe('ไฟล์ข้อมูลส่วนบุคคล (มติ P
     ).toBeNull()
   })
 })
+
+describe('มติ PO U150 — เอกสารยืนยันตัวตนผู้รับเงิน = ข้อมูลส่วนบุคคล', () => {
+  const ORG = '00000000-0000-4000-8000-0000000000c1'
+  const PAYEE = '00000000-0000-4000-8000-0000000000c2'
+  const path = `payees/${ORG}/id-documents/k.pdf`
+
+  it('บันทึกการเปิด · ระบุผู้รับเงินที่อ้างไฟล์ได้ ⇒ target = payee_profiles', () => {
+    expect(personalDataFileOf(path)).toMatchObject({ kind: 'payee_id_document', fileName: 'k.pdf' })
+    const entry = buildPersonalFileViewAudit({ actor, path, ipAddress: null, userAgent: null, payeeId: PAYEE })
+    expect(entry).toMatchObject({ action: 'view', targetType: 'payee_profiles', targetId: PAYEE })
+    expect(entry?.after).toMatchObject({ kind: 'payee_id_document', path, fileName: 'k.pdf' })
+    expect(JSON.stringify(entry)).not.toContain('signed')
+  })
+
+  it('ไฟล์ที่ยังไม่มีผู้รับอ้าง (เพิ่งอัปโหลดในฟอร์ม) ⇒ ลงที่องค์กร', () => {
+    const entry = buildPersonalFileViewAudit({ actor, path, ipAddress: null, userAgent: null, payeeId: null })
+    expect(entry).toMatchObject({ targetType: 'organizations', targetId: ORG })
+  })
+})

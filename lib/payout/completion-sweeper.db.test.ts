@@ -89,8 +89,8 @@ async function seedFileGeneratedBatch(): Promise<{ batchId: string; itemId: stri
   `)
   const [expense] = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status,
-                          receipt_file_url, created_by)
-    VALUES ('${ORG_ID}', '${PAYEE_ID}', 'commission', ${gross}, '2026-06-20', 'approved', 'field/receipts/ok.jpg', '${USER_ID}')
+                          receipt_file_url, receipt_file_hash, created_by)
+    VALUES ('${ORG_ID}', '${PAYEE_ID}', 'commission', ${gross}, '2026-06-20', 'approved', 'field/receipts/ok.jpg', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '${USER_ID}')
     RETURNING id
   `)
   const [item] = await db().$queryRawUnsafe<{ id: string }[]>(`

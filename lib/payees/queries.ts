@@ -23,7 +23,7 @@ import {
 } from '@/lib/payees/payee'
 import { PayeeError } from '@/lib/payees/errors'
 import type { PayeeFieldsInput, PayeeListQuery } from '@/lib/payees/schemas'
-import type { PayeeDto } from '@/lib/payees/types'
+import type { PayeeDto, PayeeOptionDto } from '@/lib/payees/types'
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -32,6 +32,9 @@ import { pickTaxProfileDefault, type TaxProfileDefaults } from '@/lib/settings/t
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import { isWhtConditionAllowed } from '@/lib/settings/wht-policy'
 import { SettingsError } from '@/lib/settings/errors'
+import { isIdDocumentVerified } from '@/lib/payees/id-document'
+import { payeeIdDocumentRule } from '@/lib/uploads/rules'
+import { verifyUploadedFile } from '@/lib/uploads/verify'
 
 /**
  * ผู้รับเงิน (Payee Profile) — ชั้น DB (ไฟล์ 18)
@@ -66,6 +69,8 @@ const payeeSelect = {
   accountName: true,
   accountNumber: true,
   idDocumentUrl: true,
+  idDocumentHash: true,
+  idDocumentUnverified: true,
   wht402Pct: true,
   nameTitle: true,
   addressDetail: true,
@@ -205,6 +210,7 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfi
     accountNumber: canSeeFullAccount ? row.accountNumber : null,
     accountNumberMasked: maskAccountNumber(row.accountNumber),
     idDocumentUrl: row.idDocumentUrl,
+    idDocumentVerified: isIdDocumentVerified(row),
     wht402Pct: values.wht402Pct,
     nameTitle: row.nameTitle,
     address: {
@@ -367,6 +373,25 @@ export async function listPayeeCandidates(
   }))
 }
 
+/**
+ * ผู้รับเงินที่ยังใช้งานอยู่ขององค์กร (ผู้ใช้ active) — ผู้เรียกต้องผ่านยาม `ON_BEHALF_CAPABILITIES` ที่ route แล้ว
+ * ผู้ใช้ที่ยังไม่มี Payee Profile ไม่อยู่ในรายการ (การเงินสร้างให้ที่หน้าผู้รับเงิน/ผู้ใช้ก่อน)
+ */
+export async function listPayeeOptions(user: SessionUser): Promise<PayeeOptionDto[]> {
+  const rows = await prisma.payeeProfile.findMany({
+    where: { organizationId: user.organizationId, deletedAt: null, user: { deletedAt: null, status: 'active' } },
+    select: { id: true, userId: true, user: { select: { fullName: true, team: { select: { name: true } } } } },
+    orderBy: { user: { fullName: 'asc' } },
+    take: 500,
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.userId,
+    name: row.user.fullName,
+    teamName: row.user.team?.name ?? null,
+  }))
+}
+
 /** 1 ผู้ใช้ = 1 payee (unique `organization_id, user_id`) — แนบ id payee เดิมให้ UI ลิงก์ไปเปิดได้ */
 async function assertNoPayeeForUser(organizationId: string, userId: string): Promise<void> {
   const duplicate = await prisma.payeeProfile.findFirst({
@@ -410,7 +435,27 @@ async function assertWhtConditionAllowed(
 
 export type PayeeTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
 type PayeeTx = PayeeTxClient
-type PayeeWriteData = ReturnType<typeof toWriteData>
+/**
+ * ข้อมูลเขียน + สถานะการตรวจเอกสารยืนยันตัวตน (มติ PO U150) — ฟิลด์ hash/flag มีเฉพาะเมื่อเอกสารเปลี่ยน
+ * (คงเอกสารเดิม = ไม่แตะ hash/flag เดิม)
+ */
+type PayeeWriteData = ReturnType<typeof toWriteData> & { idDocumentHash?: string | null; idDocumentUnverified?: boolean }
+
+/**
+ * มติ PO U150 — เอกสารยืนยันตัวตนต้องเป็นไฟล์ที่อัปโหลดผ่าน server (target `payee_id_document`)
+ * เปลี่ยนเอกสาร ⇒ ดาวน์โหลดมาตรวจ (prefix ขององค์กร · มีจริง · magic bytes · ขนาด) + SHA-256 · ล้าง ⇒ ล้าง hash
+ * เอกสารเดิมไม่เปลี่ยน (รวม URL เก่าที่ไม่ผ่านการตรวจ) ⇒ ไม่แตะ · ⚠️ เรียกนอก transaction (I/O เครือข่าย)
+ */
+async function resolveIdDocumentWrite(
+  organizationId: string,
+  nextPath: string | null,
+  previousPath: string | null,
+): Promise<{ idDocumentHash?: string | null; idDocumentUnverified?: boolean }> {
+  if (nextPath === previousPath) return {}
+  if (nextPath === null) return { idDocumentHash: null, idDocumentUnverified: false }
+  const verified = await verifyUploadedFile(nextPath, payeeIdDocumentRule(organizationId))
+  return { idDocumentHash: verified.sha256, idDocumentUnverified: false }
+}
 
 /** ตรวจ + เตรียมข้อมูลเขียน (นอก transaction) — ใช้ร่วม API ผู้รับเงิน และฟอร์มผู้ใช้ (U131) */
 async function preparePayeeWrite(
@@ -422,7 +467,8 @@ async function preparePayeeWrite(
   // ไม่ส่งอัตรา 40(2)/ฟิลด์ใบ 50 ทวิ มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
   const data = toWriteData(mergeInput(input, before ?? NEW_PAYEE_BASE))
   await assertWhtConditionAllowed(organizationId, data.whtCondition, before?.whtCondition ?? null)
-  return data
+  const previousPath = before === null ? null : normalizePayeeValues(before).idDocumentUrl
+  return { ...data, ...(await resolveIdDocumentWrite(organizationId, data.idDocumentUrl, previousPath)) }
 }
 
 async function insertPayeeInTx(
@@ -444,7 +490,7 @@ async function insertPayeeInTx(
       action: 'create',
       targetType: TARGET,
       targetId: row.id,
-      after: toPayeeAuditPayload(toValues(row)),
+      after: { ...toPayeeAuditPayload(toValues(row)), id_document_hash: row.idDocumentHash },
       reason: context.reason,
       ipAddress: context.meta.ipAddress,
       userAgent: context.meta.userAgent,
@@ -480,8 +526,8 @@ async function updatePayeeInTx(
       action: 'update',
       targetType: TARGET,
       targetId: current.id,
-      before: { ...toPayeeAuditPayload(before), is_verified: current.isVerified },
-      after: { ...toPayeeAuditPayload(toValues(row)), is_verified: row.isVerified },
+      before: { ...toPayeeAuditPayload(before), id_document_hash: current.idDocumentHash, is_verified: current.isVerified },
+      after: { ...toPayeeAuditPayload(toValues(row)), id_document_hash: row.idDocumentHash, is_verified: row.isVerified },
       reason: context.reason,
       ipAddress: context.meta.ipAddress,
       userAgent: context.meta.userAgent,
@@ -499,7 +545,8 @@ function assertRowReadyForVerification(
   typeDefaults: TaxProfileDefaults<unknown>,
 ): void {
   assertPayeeReadyForVerification({
-    values: toValues(row),
+    // มติ PO U150 — เอกสารที่ไม่ผ่านการตรวจของ server (URL เก่าที่พิมพ์เอง) = ไม่มีเอกสาร
+    values: { ...toValues(row), idDocumentUrl: isIdDocumentVerified(row) ? row.idDocumentUrl : null },
     requireIdDocument: policy.requirePayeeIdDocument,
     typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
   })

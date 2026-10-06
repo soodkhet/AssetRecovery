@@ -12,6 +12,7 @@ import { organizationLogoPath, organizationSignaturePath } from '@/lib/organizat
 import { substituteReceiptFilePath } from '@/lib/substitute-receipts/file'
 import { LOT_DOCUMENTS } from '@/lib/warehouse/lot-status'
 import { companyDocumentPath, companyDocumentTypeSchema } from '@/lib/finance-companies/documents'
+import { payeeIdDocumentPath } from '@/lib/payees/id-document'
 
 /**
  * ปลายทางอัปโหลด + การอ่าน path ของ bucket `case-documents` (BUG-143 · DEC-014)
@@ -48,6 +49,11 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('substitute_receipt'), substituteReceiptId: z.guid() }),
   /** เอกสารบริษัทไฟแนนซ์ (มติ PO U132) — path ต่อเวอร์ชัน · server ตรวจ `manage_companies` + บริษัทในองค์กร */
   z.object({ kind: z.literal('company_document'), companyId: z.guid(), documentType: companyDocumentTypeSchema }),
+  /**
+   * เอกสารยืนยันตัวตนผู้รับเงิน (มติ PO U150) — path ผูกกับ **องค์กรของผู้เรียก** (server ใช้ session ไม่รับจาก client)
+   * เพราะฟอร์มผู้ใช้ (U131) อัปโหลดก่อนผู้รับเงินเกิด · server ตรวจ `manage:manage_payee_profile`
+   */
+  z.object({ kind: z.literal('payee_id_document') }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>
@@ -77,12 +83,16 @@ export interface SignedDownloadDto {
   expiresInSeconds: number
 }
 
-/** path ใน bucket ของ target — `ownerUserId` ใช้เฉพาะใบเสร็จ (ต้องเป็นผู้เรียกเสมอ) */
+/**
+ * path ใน bucket ของ target — `ownerUserId` ใช้เฉพาะใบเสร็จ (ต้องเป็นผู้เรียกเสมอ) · `organizationId` ใช้เฉพาะ
+ * เอกสารยืนยันตัวตนผู้รับเงิน (องค์กรของผู้เรียกเสมอ)
+ */
 export function uploadTargetPath(
   target: UploadTarget,
   ownerUserId: string,
   fileName: string,
   uniqueKey: string,
+  organizationId = '',
 ): string {
   switch (target.kind) {
     case 'case_document':
@@ -111,6 +121,8 @@ export function uploadTargetPath(
       return substituteReceiptFilePath(target.substituteReceiptId, fileName, uniqueKey)
     case 'company_document':
       return companyDocumentPath(target.companyId, target.documentType, fileName, uniqueKey)
+    case 'payee_id_document':
+      return payeeIdDocumentPath(organizationId, fileName, uniqueKey)
   }
 }
 
@@ -128,6 +140,7 @@ export type StoragePathOwner =
   | { kind: 'organization_signature'; organizationId: string }
   | { kind: 'substitute_receipt'; substituteReceiptId: string }
   | { kind: 'finance_company'; companyId: string }
+  | { kind: 'payee_id_document'; organizationId: string }
 
 const HEX = '[0-9a-fA-F]'
 const UUID = `${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}`
@@ -167,6 +180,10 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^finance-companies/(${UUID})/documents/[^/]`),
     owner: (id) => ({ kind: 'finance_company', companyId: id }),
+  },
+  {
+    pattern: new RegExp(`^payees/(${UUID})/id-documents/[^/]`),
+    owner: (id) => ({ kind: 'payee_id_document', organizationId: id }),
   },
 ]
 

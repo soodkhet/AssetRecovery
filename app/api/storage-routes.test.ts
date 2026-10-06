@@ -40,6 +40,10 @@ vi.mock('@/lib/audit/audit', () => auditMock)
 const customerWhtQueries = vi.hoisted(() => ({ assertCustomerWhtInScope: vi.fn(async () => undefined) }))
 vi.mock('@/lib/customer-wht/queries', () => customerWhtQueries)
 
+// มติ PO U152/U153 — ใบเสร็จที่ผู้อื่นแนบให้รายการของผู้เรียก/ทีมที่ดูแล (ตรวจจริงในเทสต์ DB `receipt-upload.db.test.ts`)
+const approvalQueries = vi.hoisted(() => ({ isReceiptVisibleViaExpense: vi.fn(async () => false) }))
+vi.mock('@/lib/compensation/approval-queries', () => approvalQueries)
+
 const { POST: postUploadUrl } = await import('@/app/api/storage/upload-url/route')
 const { POST: postDownloadUrl } = await import('@/app/api/storage/download-url/route')
 

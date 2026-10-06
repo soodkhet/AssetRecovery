@@ -1,4 +1,5 @@
 import { createException, ensurePeriodForDate, type AccountingMutationContext } from '@/lib/accounting/queries'
+import { verifiedReceiptPath } from '@/lib/claims/receipt'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
 import { ExpenseRecordError } from '@/lib/expenses/errors'
@@ -63,7 +64,9 @@ const RECORD_SELECT = {
         select: { name: true, paymentFileGeneratedAt: true, updatedAt: true },
       },
       payee: { select: { user: { select: { fullName: true } } } },
-      expense: { select: { expenseType: true, receiptFileUrl: true } },
+      expense: {
+        select: { expenseType: true, receiptFileUrl: true, receiptFileHash: true, receiptFileUnverified: true },
+      },
     },
   },
 } satisfies Prisma.ExpenseRecordSelect
@@ -80,7 +83,8 @@ function documentSourceOf(row: RecordRow): DocumentSource {
   const expense = row.payoutBatchItem.expense
   return {
     expenseType: expense?.expenseType ?? null,
-    receiptFileUrl: expense?.receiptFileUrl ?? null,
+    // มติ PO U143 — ใบเสร็จนับเฉพาะไฟล์ที่ server ตรวจแล้ว (path เก่าที่พิมพ์เอง = ไม่มีเอกสาร)
+    receiptFileUrl: expense === null ? null : verifiedReceiptPath(expense),
   }
 }
 
@@ -147,7 +151,9 @@ export async function syncExpenseRecordsFromPayout(
           whtSatang: true,
           netSatang: true,
           payee: { select: { user: { select: { fullName: true } } } },
-          expense: { select: { expenseType: true, receiptFileUrl: true } },
+          expense: {
+            select: { expenseType: true, receiptFileUrl: true, receiptFileHash: true, receiptFileUnverified: true },
+          },
         },
       },
     },
@@ -170,7 +176,7 @@ export async function syncExpenseRecordsFromPayout(
 
     const source = {
       expenseType: item.expense?.expenseType ?? null,
-      receiptFileUrl: item.expense?.receiptFileUrl ?? null,
+      receiptFileUrl: item.expense === null ? null : verifiedReceiptPath(item.expense),
     }
     const payeeName = item.payee.user.fullName
 

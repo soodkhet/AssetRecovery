@@ -30,6 +30,7 @@ import type {
 } from '@/lib/advances/schemas'
 import type { AdvanceDto, AdvanceReturnDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { emitAudit } from '@/lib/audit/audit'
+import { AuthError } from '@/lib/auth/errors'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -44,7 +45,7 @@ import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
-import { advanceReturnFileRule } from '@/lib/uploads/rules'
+import { advanceReturnFileRule, expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 
 /**
@@ -210,6 +211,11 @@ export function canApproveAdvance(user: SessionUser): boolean {
   return hasCapability(user, 'manage', APPROVE_ADVANCE)
 }
 
+/** มติ PO U153 — ขอเงินทดรองแทนผู้อื่น = การเงิน (`manage:approve_advance`) หรือ Superadmin */
+export function canCreateAdvanceForOthers(user: SessionUser): boolean {
+  return user.isSuperadmin || canApproveAdvance(user)
+}
+
 /** scope ระดับแถว — ผู้อนุมัติเห็นทั้งองค์กร · ผู้ขอเห็นเฉพาะ payee ของตัวเอง (`15` §12) */
 function scopeFilter(user: SessionUser): Prisma.AdvanceWhereInput {
   if (user.isSuperadmin || canApproveAdvance(user)) return {}
@@ -285,9 +291,15 @@ export async function createAdvance(
   // งวดที่ปิดแล้วห้ามมีรายการเงินเพิ่มโดยตรง (`30` · `20`)
   await assertPeriodOpenAt({ organizationId: user.organizationId, at: now, targetType: 'advances' })
 
+  // มติ PO U153 — ขอแทนผู้อื่นได้เฉพาะผู้ถือสิทธิ์อนุมัติเงินทดรอง (การเงิน) · ผู้อื่นส่ง payeeId มา = ปฏิเสธ
+  // (เดิมเงียบแล้วผูกกับตัวเอง — ผู้ใช้ไม่รู้ว่ารายการไม่ได้ไปที่ผู้รับที่เลือก)
+  if (input.payeeId !== null && !canCreateAdvanceForOthers(user)) {
+    throw new AuthError('PERMISSION_DENIED', `ขอเงินทดรองแทนผู้อื่นต้องมีสิทธิ์อนุมัติเงินทดรอง user=${user.id}`)
+  }
+
   const created = await prisma.$transaction(async (tx) => {
     const payeeId =
-      input.payeeId !== null && (user.isSuperadmin || canApproveAdvance(user))
+      input.payeeId !== null
         ? await assertPayeeInOrganization(tx as ExpenseTxClient, user.organizationId, input.payeeId)
         : await ensureAgentPayeeId(tx as ExpenseTxClient, {
             organizationId: user.organizationId,
@@ -330,6 +342,9 @@ export async function createAdvance(
         targetId: row.id,
         after: {
           payee_id: payeeId,
+          // มติ PO U153 — บันทึกแทนผู้อื่น: ผู้รับ (เจ้าของ payee) แยกจากผู้บันทึก (`actor_id`)
+          recorded_by: user.id,
+          on_behalf_of_user_id: row.payee.userId !== user.id ? row.payee.userId : null,
           requested_satang: row.requestedSatang,
           purpose: row.purpose,
           due_clear_date: row.dueClearDate.toISOString().slice(0, 10),
@@ -526,6 +541,10 @@ export async function settleAdvance(
     usedSatang: input.usedSatang,
   })
   const at = new Date()
+  // มติ PO U143 — ใบเสร็จต้องเป็นไฟล์ที่อัปโหลดผ่าน server แล้ว: ตรวจไฟล์ (prefix ของผู้เคลียร์ · มีจริง · magic bytes ·
+  // ขนาด) + SHA-256 ของ server · นอก `$transaction` (I/O เครือข่าย)
+  const receiptFileUrl = input.receiptFileUrl ?? null
+  const receipt = receiptFileUrl === null ? null : await verifyUploadedFile(receiptFileUrl, expenseReceiptRule(user.id))
   // มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) · ไม่มียอดคืน ⇒ NULL
   const returnMethod = resolveSettleReturnMethod(preview.returnSatang, input.returnMethod)
 
@@ -565,7 +584,8 @@ export async function settleAdvance(
           claimType: ADVANCE_EXCESS_CLAIM_TYPE,
           grossSatang: preview.excessSatang,
           expenseDate: bangkokBusinessDate(at),
-          receiptFileUrl: input.receiptFileUrl,
+          receiptFileUrl,
+          receiptFileHash: receipt?.sha256 ?? null,
           note: advanceExcessClaimNote({
             purpose: current.purpose,
             approvedSatang: current.approvedSatang ?? 0,
@@ -592,7 +612,8 @@ export async function settleAdvance(
           excess_satang: preview.excessSatang,
           excess_claim_id: excessClaim?.id ?? null,
           // `15` §13 — ใบเสร็จอ้างอิงเก็บใน audit (ตาราง `advances` ไม่มีคอลัมน์เก็บไฟล์)
-          receipt_file_url: input.receiptFileUrl,
+          receipt_file_url: receiptFileUrl,
+          receipt_file_hash: receipt?.sha256 ?? null,
           substitute_receipt_number: substitute?.receiptNumber ?? null,
           substitute_receipt_total_satang: substitute?.totalSatang ?? null,
         },

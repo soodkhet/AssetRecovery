@@ -3,6 +3,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 
+// มติ PO U143/U150 — ไฟล์ที่ผูกเข้าข้อมูลผ่านตัวตรวจของ server ⇒ ใช้ Storage ตัวแทน (ห้ามยิง Supabase จริง — Rule 07)
+vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
+vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-uploads')).fakeVerifyModule())
+
 /**
  * เทสต์ระดับ DB ของ Phase 4.1 — DoD ของไฟล์ 30 + 34 + interceptor Period Lock
  *
@@ -726,7 +730,8 @@ suite('Phase 4.1 — Period Lock guard (`13` §6.11 · interceptor)', () => {
       grossSatang: 250_00,
       expenseDate: new Date('2026-08-20T00:00:00Z'),
       payeeId: null,
-      receiptFileUrl: null,
+      // มติ PO U143 — ต้องมีใบเสร็จ (ไฟล์ผ่านตัวตรวจ — Storage ตัวแทน) หรือใบรับรองแทนใบเสร็จ
+      receiptFileUrl: 'expenses/receipt-period-a.pdf',
       note: 'ค่าเดินทางเพิ่มเติม',
     })
     expect(created.id).toBeTruthy()
@@ -737,7 +742,7 @@ suite('Phase 4.1 — Period Lock guard (`13` §6.11 · interceptor)', () => {
       grossSatang: 100_00,
       expenseDate: new Date('2026-09-05T00:00:00Z'),
       payeeId: null,
-      receiptFileUrl: null,
+      receiptFileUrl: 'expenses/receipt-period-b.pdf',
       note: 'ค่าเดินทางเดือนถัดไป',
     })
     expect(nextMonth.id).toBeTruthy()

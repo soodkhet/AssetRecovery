@@ -65,6 +65,20 @@ export interface CompensationApprovalDto {
   /** มติ PO U117/U118 — ผู้ดูปฏิเสธถาวรได้ (ใบเบิกค่าที่พัก · ขั้นที่รออยู่ หรือขั้นที่ตีกลับมาเมื่อ `needs_revision`) — UX เท่านั้น */
   viewerCanRejectPermanently: boolean
   rejectReason: string | null
+  /** มติ PO U152 — หมายเหตุ/รายละเอียดของผู้เบิกตอนสร้างรายการ (`revision_note`) */
+  note: string | null
+  /** มติ PO U152 — คำชี้แจงตอนส่งใหม่หลังถูกตีกลับ (ครั้งล่าสุด) */
+  resubmitNote: string | null
+  /**
+   * มติ PO U152/U143 — path ใบเสร็จที่ **ผ่านการตรวจของ server แล้ว** (เปิดผ่าน signed URL) · ไม่มี/ไม่ผ่าน = `null`
+   */
+  receiptFilePath: string | null
+  /** ข้อมูลเก่าที่เป็น path พิมพ์เอง (ไม่ผ่านการตรวจ — U143) ⇒ ป้ายเตือน "ใบเสร็จไม่ผ่านการตรวจ" */
+  receiptUnverified: boolean
+  /** มติ PO U152 — ผู้พักร่วม (ค่าที่พัก) · ไม่มี = `null` */
+  sharedWithName: string | null
+  /** มติ PO U153 — ผู้บันทึกแทน (ผู้สร้างรายการไม่ใช่เจ้าของ payee) · บันทึกเอง = `null` */
+  recordedByName: string | null
   createdAt: string
 }
 

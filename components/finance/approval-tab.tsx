@@ -5,6 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
 import { CalcDetailModal } from '@/components/finance/calc-detail-modal'
+import { ExpenseDetailModal } from '@/components/finance/expense-detail-modal'
 import { ManualClaimModal } from '@/components/finance/manual-claim-modal'
 import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
@@ -76,6 +77,8 @@ export function ApprovalTab() {
   const claims = useApprovalActions('/api/claims')
   const [claimFilter, setClaimFilter] = useState<ClaimStatusFilter>('all')
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
+  // มติ PO U152 — กดแถวเห็นหมายเหตุ/คำชี้แจง/ใบเสร็จ/ผู้พักร่วมก่อนอนุมัติ
+  const [detailTarget, setDetailTarget] = useState<CompensationApprovalDto | null>(null)
   const [rejectTarget, setRejectTarget] = useState<CompensationApprovalDto | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [permanentTarget, setPermanentTarget] = useState<CompensationApprovalDto | null>(null)
@@ -163,7 +166,12 @@ export function ApprovalTab() {
                     canRejectPermanent: claims.canApprove && item.viewerCanRejectPermanently,
                   })
                   return (
-                    <Tr key={item.id} className={expenseRowHighlight(item.status) ?? undefined}>
+                    <Tr
+                      key={item.id}
+                      interactive
+                      className={expenseRowHighlight(item.status) ?? undefined}
+                      onClick={() => setDetailTarget(item)}
+                    >
                       <Td>
                         <p className="text-[11px] text-slate-400">{fmtDate(item.expenseDate)}</p>
                         <RefText>{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
@@ -171,12 +179,14 @@ export function ApprovalTab() {
                         {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
                         {/* มติ PO U107 — การเงิน/ผู้บริหารยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติจ่าย (server ตรวจซ้ำ) */}
                         {item.substituteReceipt !== null && (
-                          <SubstituteReceiptPanel
-                            receipt={item.substituteReceipt}
-                            compact
-                            canCancel={canManageSubstituteReceipts && item.status !== 'approved'}
-                            onChanged={() => void claims.reload()}
-                          />
+                          <div onClick={(event) => event.stopPropagation()}>
+                            <SubstituteReceiptPanel
+                              receipt={item.substituteReceipt}
+                              compact
+                              canCancel={canManageSubstituteReceipts && item.status !== 'approved'}
+                              onChanged={() => void claims.reload()}
+                            />
+                          </div>
                         )}
                       </Td>
                       <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
@@ -212,7 +222,10 @@ export function ApprovalTab() {
                         )}
                       </Td>
                       <Td className="text-right whitespace-nowrap">
-                        <div className="inline-flex flex-col items-end gap-1">
+                        <div className="inline-flex flex-col items-end gap-1" onClick={(event) => event.stopPropagation()}>
+                          <Button size="sm" variant="ghost" onClick={() => setDetailTarget(item)}>
+                            รายละเอียด
+                          </Button>
                           {actions.includes('approve') && (
                             <Button
                               size="sm"
@@ -440,6 +453,8 @@ export function ApprovalTab() {
         }}
         placeholder="เช่น ไม่ได้ค้างคืนจริงตามวันที่เบิก"
       />
+
+      <ExpenseDetailModal item={detailTarget} onClose={() => setDetailTarget(null)} />
 
       <ManualClaimModal
         open={claimFormOpen}

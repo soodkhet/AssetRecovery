@@ -1,4 +1,5 @@
 import { PERMANENT_REJECT_EXPENSE_TYPE_SET } from '@/lib/compensation/approval-ui'
+import { hasUnverifiedReceipt, verifiedReceiptPath } from '@/lib/claims/receipt'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
@@ -155,6 +156,15 @@ const expenseSelect = {
   },
   /** มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" บนคิวอนุมัติ */
   substituteReceipts: substituteReceiptsRelationSelect,
+  /** มติ PO U152 — รายละเอียดก่อนอนุมัติ: หมายเหตุ · คำชี้แจงตอนส่งใหม่ · ใบเสร็จ (ตรวจแล้ว) · ผู้พักร่วม · ผู้บันทึกแทน */
+  revisionNote: true,
+  resubmitNote: true,
+  receiptFileUrl: true,
+  receiptFileHash: true,
+  receiptFileUnverified: true,
+  sharedWithUser: { select: { fullName: true } },
+  createdBy: true,
+  createdByUser: { select: { fullName: true } },
 } as const
 
 type ExpenseRow = Prisma.ExpenseGetPayload<{ select: typeof expenseSelect }>
@@ -423,6 +433,13 @@ function toDto(
       }),
     rejectReason: row.rejectionReason,
     substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
+    note: row.revisionNote,
+    resubmitNote: row.resubmitNote,
+    receiptFilePath: verifiedReceiptPath(row),
+    receiptUnverified: hasUnverifiedReceipt(row),
+    sharedWithName: row.sharedWithUser?.fullName ?? null,
+    // มติ PO U153 — บันทึกแทนผู้อื่น (ผู้สร้างรายการ ≠ เจ้าของ payee) ⇒ แสดงชื่อผู้บันทึก
+    recordedByName: row.createdBy !== row.payee.userId ? row.createdByUser.fullName : null,
     createdAt: row.createdAt.toISOString(),
   }
 }
@@ -441,7 +458,7 @@ function toDto(
  * - ⚠️ ใช้ทีมของผู้เบิก **เฉพาะเมื่อไม่มีงาน** — รายการผูกงานยังยึดทีมของงานเสมอ (พนักงานย้ายทีม
  *   ภายหลังไม่ทำให้ผู้จัดการทีมใหม่เห็นค่าตอบแทนของงานเก่า)
  */
-function scopeFilter(user: SessionUser): Prisma.ExpenseWhereInput {
+export function approvalScopeFilter(user: SessionUser): Prisma.ExpenseWhereInput {
   if (user.isSuperadmin) return {}
   if (
     hasCapability(user, 'view', 'approve_expense_finance') ||
@@ -456,6 +473,33 @@ function scopeFilter(user: SessionUser): Prisma.ExpenseWhereInput {
       { assignmentId: null, payee: { user: { teamId: { in: teamIds } } } },
     ],
   }
+}
+
+/**
+ * มติ PO U152 — ผู้เปิดใบเสร็จจากคิวอนุมัติได้ (ไม่ใช่เจ้าของ path): ผู้รับเงินของรายการ (การเงินบันทึกแทน — U153)
+ * หรือผู้อนุมัติขั้นผู้จัดการที่รายการอยู่ใน scope ทีมของตน (`approvalScopeFilter` ตัวเดียวกับคิว)
+ * ตรวจจาก **รายการเบิกที่อ้าง path นี้** — ไม่มีรายการ/นอก scope = `false` (ผู้เรียกตอบ 404 ไม่ leak)
+ */
+export async function isReceiptVisibleViaExpense(
+  user: SessionUser,
+  path: string,
+  options: { asManager: boolean },
+): Promise<boolean> {
+  const found = await prisma.expense.findFirst({
+    where: {
+      AND: [
+        { organizationId: user.organizationId, deletedAt: null, receiptFileUrl: path },
+        {
+          OR: [
+            { payee: { userId: user.id } },
+            ...(options.asManager ? [approvalScopeFilter(user)] : []),
+          ],
+        },
+      ],
+    },
+    select: { id: true },
+  })
+  return found !== null
 }
 
 const STATUS_FILTER: Readonly<Record<CompensationApprovalListQuery['status'], readonly ExpenseStatus[]>> = {
@@ -478,7 +522,7 @@ export async function listCompensationApprovals(
           deletedAt: null,
           status: { in: [...STATUS_FILTER[query.status]] },
         },
-        scopeFilter(user),
+        approvalScopeFilter(user),
         query.caseId === undefined ? {} : { caseId: query.caseId },
         query.payeeId === undefined ? {} : { payeeId: query.payeeId },
       ],
@@ -515,7 +559,7 @@ export async function listCompensationApprovals(
 async function findExpense(user: SessionUser, expenseId: string): Promise<ExpenseRow> {
   const row = await prisma.expense.findFirst({
     where: {
-      AND: [{ id: expenseId, organizationId: user.organizationId, deletedAt: null }, scopeFilter(user)],
+      AND: [{ id: expenseId, organizationId: user.organizationId, deletedAt: null }, approvalScopeFilter(user)],
     },
     select: expenseSelect,
   })

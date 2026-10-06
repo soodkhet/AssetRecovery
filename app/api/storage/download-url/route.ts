@@ -4,9 +4,9 @@ import { readJsonBody, toModuleErrorResponse, validationErrorResponse } from '@/
 import { emitAudit } from '@/lib/audit/audit'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { requireAnyPermission } from '@/lib/auth/require-permission'
-import { authorizeDownload, STORAGE_VIEW_CAPABILITIES } from '@/lib/uploads/access'
+import { authorizeDownload, payeeIdOfIdDocument, STORAGE_VIEW_CAPABILITIES } from '@/lib/uploads/access'
 import { UploadError } from '@/lib/uploads/errors'
-import { buildPersonalFileViewAudit } from '@/lib/uploads/personal-data'
+import { buildPersonalFileViewAudit, personalDataFileOf } from '@/lib/uploads/personal-data'
 import { createSignedDownloadUrl, SIGNED_DOWNLOAD_TTL_SECONDS } from '@/lib/uploads/storage'
 import { signedDownloadRequestSchema, type SignedDownloadDto } from '@/lib/uploads/targets'
 
@@ -29,11 +29,17 @@ export async function POST(request: NextRequest): Promise<Response> {
     const url = await createSignedDownloadUrl(parsed.data.path)
     if (url === null) throw new UploadError('UPLOAD_FILE_NOT_FOUND', { detail: parsed.data.path })
     const meta = getRequestMeta(request)
+    // มติ PO U150 — เอกสารยืนยันตัวตน: ลง audit ที่ผู้รับเงินที่อ้างไฟล์นี้ (path ผูกแค่องค์กร)
+    const payeeId =
+      personalDataFileOf(parsed.data.path)?.kind === 'payee_id_document'
+        ? await payeeIdOfIdDocument(user.organizationId, parsed.data.path)
+        : null
     const audit = buildPersonalFileViewAudit({
       actor: user,
       path: parsed.data.path,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
+      payeeId,
     })
     if (audit !== null) await emitAudit(audit)
     const data: SignedDownloadDto = { url, expiresInSeconds: SIGNED_DOWNLOAD_TTL_SECONDS }

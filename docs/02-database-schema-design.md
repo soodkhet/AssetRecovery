@@ -81,6 +81,7 @@
 | v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
 | v4.5x-fixer-u132 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
 | v4.5x-DD | 07/10/2569 | **มติ PO 07/10/2569 (U151) — ผู้มีอำนาจลงนามบนเอกสารส่งออกนอก** (migration `20261008100000_authorized_signer`): `organizations` + `authorized_signer_name TEXT` / `authorized_signer_title TEXT` (ไม่บังคับ) · `document_template_snapshot` (JSONB เดิมบน `tax_invoices`/`billing_batches`/`handover_lots`) เพิ่มคีย์ `signer_name`/`signer_title` (+ `counterparty_signer_name` = `finance_companies.signer_name` ณ ตอนยืนยันล็อต — ใบส่งมอบเท่านั้น) — ไม่เปลี่ยนคอลัมน์ · `wht_certificates` + `payer_signer_name TEXT` / `payer_signer_title TEXT` (snapshot ณ วันออกใบ · trigger `wht_certificates_immutable` ครอบเพิ่ม) · เอกสาร/ใบเก่าไม่มีคีย์/NULL = ไม่พิมพ์ชื่อ (ไม่ backfill) |
+| v4.5x-DA | 07/10/2569 | **มติ PO 07/10/2569 (U143 + U150)** (migration `20261008070000_receipt_id_document_verification`) — ใบเสร็จของเบิกด้วยมือ/เคลียร์เงินทดรอง และเอกสารยืนยันตัวตนผู้รับเงิน **อัปโหลดจริงผ่าน server** (ตรวจไฟล์ + SHA-256) แทนช่อง path/URL พิมพ์เอง · `expenses` + `receipt_file_unverified BOOLEAN NOT NULL DEFAULT false` · `payee_profiles` + `id_document_hash VARCHAR(64)` + `id_document_unverified BOOLEAN NOT NULL DEFAULT false` · backfill: แถวเดิมที่มี path แต่ไม่มี hash ⇒ `*_unverified = true` (**ไม่ลบข้อมูล** — ระบบถือว่าไม่มีไฟล์: Export Pack `03_Expenses.receipt_file` · ความครบเอกสารบัญชีค่าใช้จ่าย · เกตยืนยันผู้รับเงิน) · CHECK `chk_expenses_receipt_verified` / `chk_payee_profiles_id_document_verified`: มี path ⇒ ต้องมี hash หรือเป็นข้อมูลเก่าที่ทำเครื่องหมายไว้ · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ flag = false |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1509,7 +1510,9 @@ CREATE TABLE payee_profiles (
   account_name    TEXT,
   account_number  TEXT,
   national_id     VARCHAR(13),
-  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2)
+  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2) · v4.5x-DA = path ไฟล์ที่อัปโหลดผ่าน server (มติ PO U150)
+  id_document_hash VARCHAR(64),  -- v4.5x-DA SHA-256 ของเอกสารยืนยันตัวตนที่ server ตรวจเอง (มติ PO U150)
+  id_document_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.5x-DA URL เก่าที่พิมพ์เอง = ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร · CHECK chk_payee_profiles_id_document_verified
   wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(1)/40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 · U33 ช่องเดียวใช้ทั้งสองประเภท — ไฟล์ 18 §6.3)
   -- ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1 — ไฟล์ 18 §7.1) · ที่อยู่บังคับครบก่อนยืนยัน
   name_title          VARCHAR(50),                   -- คำนำหน้า (บุคคลธรรมดา)
@@ -1571,6 +1574,7 @@ CREATE TABLE expenses (
   receipt_in_company_name BOOLEAN NOT NULL DEFAULT false,  -- v4.36 ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14) — CHECK ชนิดอื่น = false · ไม่เปลี่ยนสูตร WHT
   receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
   receipt_file_hash     VARCHAR(64),        -- v4.10 SHA-256 ของใบเสร็จที่ server ตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — BUG-072)
+  receipt_file_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.5x-DA path เก่าที่พิมพ์เอง (ก่อนมติ PO U143) = ไม่ผ่านการตรวจ ⇒ ถือว่าไม่มีไฟล์ · CHECK chk_expenses_receipt_verified: url IS NULL OR hash IS NOT NULL OR unverified
   superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)
   field_day_settlement_id UUID REFERENCES field_day_settlements(id),  -- v4.12 แถวรายวันค่าน้ำมันเหมา/เบี้ยเลี้ยง (UAT Q21) · NULL = รายการอื่น
   -- Payout (FK → payout_batch_items เมื่อเข้ารอบจ่าย)
@@ -3487,7 +3491,9 @@ CREATE TABLE payee_profiles (
   account_name    TEXT,
   account_number  TEXT,
   national_id     VARCHAR(13),
-  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2)
+  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2) · v4.5x-DA = path ไฟล์ที่อัปโหลดผ่าน server (มติ PO U150)
+  id_document_hash VARCHAR(64),  -- v4.5x-DA SHA-256 ของเอกสารยืนยันตัวตนที่ server ตรวจเอง (มติ PO U150)
+  id_document_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.5x-DA URL เก่าที่พิมพ์เอง = ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร · CHECK chk_payee_profiles_id_document_verified
   wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(1)/40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 · U33 ช่องเดียวใช้ทั้งสองประเภท — ไฟล์ 18 §6.3)
   -- ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1 — ไฟล์ 18 §7.1) · ที่อยู่บังคับครบก่อนยืนยัน
   name_title          VARCHAR(50),                   -- คำนำหน้า (บุคคลธรรมดา)
@@ -3549,6 +3555,7 @@ CREATE TABLE expenses (
   receipt_in_company_name BOOLEAN NOT NULL DEFAULT false,  -- v4.36 ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14) — CHECK ชนิดอื่น = false · ไม่เปลี่ยนสูตร WHT
   receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
   receipt_file_hash     VARCHAR(64),        -- v4.10 SHA-256 ของใบเสร็จที่ server ตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — BUG-072)
+  receipt_file_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.5x-DA path เก่าที่พิมพ์เอง (ก่อนมติ PO U143) = ไม่ผ่านการตรวจ ⇒ ถือว่าไม่มีไฟล์ · CHECK chk_expenses_receipt_verified: url IS NULL OR hash IS NOT NULL OR unverified
   superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)
   field_day_settlement_id UUID REFERENCES field_day_settlements(id),  -- v4.12 แถวรายวันค่าน้ำมันเหมา/เบี้ยเลี้ยง (UAT Q21) · NULL = รายการอื่น
   -- Payout (FK → payout_batch_items เมื่อเข้ารอบจ่าย)

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { verifiedReceiptPath } from '@/lib/claims/receipt'
 import { renderPackCover } from '@/components/pdf/pack-cover'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
@@ -356,6 +357,8 @@ const EXPENSE_RECORD_SELECT = {
           receiptInCompanyName: true,
           expenseDate: true,
           receiptFileUrl: true,
+          receiptFileHash: true,
+          receiptFileUnverified: true,
           case: { select: { caseRef: true } },
           // มติ PO U103 — ใบรับรองแทนใบเสร็จของใบเบิก (เลข CRT + ไฟล์ฉบับเซ็น)
           substituteReceipts: {
@@ -409,7 +412,9 @@ function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers
       caseRef: expense?.case?.caseRef ?? null,
       costCenter: row.costCenter?.code ?? null,
       // มติ PO U103 — ใช้ใบรับรองแทนใบเสร็จ ⇒ `receipt_file` = ไฟล์ใบรับรองฉบับเซ็น (ปกติคือไฟล์เดียวกับใบเสร็จของใบเบิก)
-      receiptFilePath: expense?.receiptFileUrl ?? expense?.substituteReceipts[0]?.signedFilePath ?? null,
+      // มติ PO U143 — ใช้เฉพาะไฟล์ที่ server ตรวจแล้ว · path เก่าที่พิมพ์เอง (ไม่ผ่านการตรวจ) = ไม่มีไฟล์
+      receiptFilePath:
+        (expense === null ? null : verifiedReceiptPath(expense)) ?? expense?.substituteReceipts[0]?.signedFilePath ?? null,
       substituteReceiptNumber: expense?.substituteReceipts[0]?.receiptNumber ?? null,
     }
   })

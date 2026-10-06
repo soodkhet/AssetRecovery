@@ -20,6 +20,7 @@
 | v2.5 | 06/10/2569 | **มติ PO 06/10/2569 (U121 — ปิดหนี้ค้าง #3)**: §6.3 เพิ่ม **Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ** (ฝั่ง × ชนิดผู้รับ — ไฟล์ 13 §6.4.3) เป็นลำดับที่ 2 ระหว่าง Tax Profile รายคนกับอัตราแผน (นับเป็นฝั่ง payee — "Payee ชนะ Plan" คงเดิม) · ไม่มีอัตราเลย = คิวอนุมัติเตือนต่อแถว + รอบจ่ายบล็อก `WHT_RATE_MISSING` (เดิม 500) · รายการนอกฐาน WHT ไม่ resolve อัตรา · snapshot Tax Profile ที่ใช้จริงลงรายการรอบจ่าย |
 | v2.4 | 06/10/2569 | **มติ PO 06/10/2569 (U108)**: §8 เพิ่มกล่องคำอธิบายในหน้าจอ (คืออะไร · ผลของตัวเลือก · ตัวอย่างตัวเลขคำนวณสดด้วยสูตรจริง · ใครแก้ได้/มีผลเมื่อไร — รูปแบบกลางตาม `13` §7.1) ให้ค่าตั้ง: Tax Profile ที่ผูก · อัตรา 40(1)/40(2) ต่อคน · เงื่อนไขการหัก (1)/(2)/(3) — ตัวอย่างจากอัตราของ Profile ที่เลือก · ไม่เปลี่ยน business logic |
 | v2.6-CB | 07/10/2569 | **BUG-SF1 (มติ PO U121/U131)**: §9 ความพร้อมก่อนยืนยันไม่บังคับ Tax Profile รายคนแล้ว — ยืนยันได้เมื่อ resolve อัตราได้จาก Tax Profile รายคน / ค่าเริ่มต้นตามประเภทผู้รับ / อัตรา 40(1)/40(2) รายคน (บุคคลธรรมดา) · ไม่มีเลย = `REQUIRED_MISSING` ข้อความ "ยังไม่มีอัตราภาษีหัก ณ ที่จ่าย" · §7.1 `tax_profile_id` เป็น override ว่างได้ · §16 เพิ่ม test case |
+| v2.7 | 07/10/2569 | **มติ PO 07/10/2569 (U150 · Final ด่าน 5 ND-8)** — §7.1/§8/§10/§12/§13/§16: เอกสารยืนยันตัวตน **อัปโหลดไฟล์จริง** แทนช่องพิมพ์ URL — ทั้งหน้า "ผู้รับเงิน" และส่วนข้อมูลรับเงินในฟอร์มผู้ใช้ (U131 · ช่องชุดเดียว) · upload target `payee_id_document` (path `payees/<orgId>/id-documents/<uuid>.<ext>` — ผูกกับองค์กรเพราะฟอร์มผู้ใช้ใหม่ยังไม่มีผู้รับ) · server ตรวจไฟล์ (รูป/PDF ≤ 10 MB · magic bytes · มีจริง) + เก็บ SHA-256 (`id_document_hash`) · เปิดดูผ่าน signed URL + **audit การเปิด** (ไฟล์ข้อมูลส่วนบุคคล — U90) · URL เก่าที่พิมพ์เอง: ไม่ลบ ทำเครื่องหมาย "ไม่ผ่านการตรวจ" ⇒ เกต `require_payee_id_document` ถือว่าไม่มีเอกสาร (ต้องแนบไฟล์ใหม่) · schema `02` v4.5x-DA |
 
 ขอบเขตเอกสารนี้: จัดการข้อมูลผู้รับเงิน (Payee) ที่ AssetRecovery จ่ายค่าตอบแทนให้ — ครอบคลุมพนักงาน inhouse (เฉพาะค่าตอบแทนจากเคส ไม่ใช่เงินเดือน) และทีม/บุคคล outsource — เก็บข้อมูลบัญชีธนาคารและ Tax Profile ที่ผูกกับแต่ละราย รวมถึง **กฎ WHT Priority ที่สำคัญที่สุดของระบบการเงินทั้งหมด**
 
@@ -124,7 +125,8 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | address | address_detail, address_subdistrict, address_district, address_province, address_postal_code | string × 5 \| null | **บังคับก่อนยืนยัน** | ที่อยู่ผู้ถูกหักภาษี (บ้านเลขที่/ถนน · ตำบล/แขวง · อำเภอ/เขต · จังหวัด · รหัสไปรษณีย์ 5 หลัก) — ใช้ช่องกรอกที่อยู่กลางเดียวกับเคส · ประกอบเป็นบรรทัดเดียวบนเอกสาร (กรุงเทพฯ ใช้แขวง/เขต) (มติ PO U94 ข้อ 1) |
 | branch_code | branch_code | string(5) | yes (default `00000`) | สำนักงานใหญ่ `00000` / สาขาที่ 5 หลัก — ใช้กับนิติบุคคลเท่านั้น (บุคคลธรรมดาเก็บ `00000` ไม่พิมพ์) |
 | wht_condition | wht_condition | enum | yes (default `withhold`) | เงื่อนไขการหัก: `withhold` (1) หัก ณ ที่จ่าย · `pay_always` (2) ออกให้ตลอดไป · `pay_once` (3) ออกให้ครั้งเดียว — (2)/(3) คิดภาษีแบบทบยอด (`22` §6.9.2) **เฉพาะเมื่อค่าตั้งภาษีอนุญาต** (`13` §6.4.2 · มติ PO U105 — ค่าเริ่มต้นปิด: เลือกได้เฉพาะ (1) และรอบจ่ายที่มีผู้รับ (2)/(3) ถูกบล็อก `WHT_CONDITION_NOT_ALLOWED`) · snapshot ลง `payout_batch_items.wht_condition` |
-| id_document_url | id_document_url | string \| null | — | ไฟล์แนบยืนยันตัวตน (สำเนาบัตรประชาชน/หนังสือรับรองบริษัท) — ไม่บังคับเป็นค่าเริ่มต้น แต่ตั้งค่าให้บังคับได้ที่ไฟล์ 13 (ดู §10) — **เพิ่มเข้า schema แล้ว (v2)** |
+| id_document_url | id_document_url | string \| null | — | ไฟล์แนบยืนยันตัวตน (สำเนาบัตรประชาชน/หนังสือรับรองบริษัท) — ไม่บังคับเป็นค่าเริ่มต้น แต่ตั้งค่าให้บังคับได้ที่ไฟล์ 13 (ดู §10) — **เพิ่มเข้า schema แล้ว (v2)** · (มติ PO U150) = **path ไฟล์ที่อัปโหลดผ่าน server** (target `payee_id_document`) ห้ามพิมพ์ URL เอง |
+| id_document_hash / id_document_unverified | id_document_hash, id_document_unverified | string \| null, boolean | — | (มติ PO U150) SHA-256 ที่ server คำนวณตอนบันทึก · `unverified = true` = URL เก่าที่พิมพ์เอง (ถือว่าไม่มีเอกสาร) |
 
 ## 8. UI / UX Rules
 
@@ -149,7 +151,7 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 
 - Payee ที่ `is_verified = false` ห้ามถูกรวมเข้า Payout Batch เด็ดขาด (validation บล็อกที่ไฟล์ 17)
 - แก้ไขข้อมูลธนาคาร/Tax ID ต้อง audit log เสมอ (ความเสี่ยงสูงเรื่องการเงิน)
-- ถ้าตั้งค่า `require_payee_id_document = true` (ไฟล์ 13) การยืนยัน Payee ต้องมี `id_document_url` แนบมาก่อนเท่านั้น — ถ้า `false` (ค่าเริ่มต้น) ไม่บังคับ ให้การเงินใช้ดุลยพินิจเป็นรายกรณี
+- ถ้าตั้งค่า `require_payee_id_document = true` (ไฟล์ 13) การยืนยัน Payee ต้องมี `id_document_url` แนบมาก่อนเท่านั้น — ถ้า `false` (ค่าเริ่มต้น) ไม่บังคับ ให้การเงินใช้ดุลยพินิจเป็นรายกรณี · (มติ PO U150) นับเฉพาะเอกสารที่ **server ตรวจแล้ว** (มี SHA-256) — URL เก่าที่ไม่ผ่านการตรวจ = ไม่มีเอกสาร (`PAYEE_ID_DOCUMENT_REQUIRED`)
 
 ## 11. Validation & Error Handling
 
@@ -166,11 +168,14 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | สร้าง/แก้ไข/ยืนยัน Payee | การเงิน | full |
 | ดู Payee ทั้งหมด | บัญชี | read-only |
 | ดู Payee ของตัวเอง | ทุก User | own scope |
+| อัปโหลดเอกสารยืนยันตัวตน (มติ PO U150) | การเงิน (`manage:manage_payee_profile`) | path ใต้องค์กรของผู้อัปโหลด |
+| เปิดดูเอกสารยืนยันตัวตน (มติ PO U150) | การเงิน (`manage`) ทั้งองค์กร · ผู้รับเงินเห็นของตัวเอง (`view` + own) | signed URL อายุสั้น · ผู้รับคนอื่น 404 · ไม่มี capability 403 · ทุกครั้งลง audit `view` |
 
 ## 13. Audit Log Requirements
 
 - แก้ไขข้อมูลธนาคาร/Tax ID/Tax Profile ต้อง audit พร้อม before/after เสมอ
 - การยืนยัน (verified) ต้องบันทึกว่าใครยืนยันเมื่อไหร่
+- (มติ PO U150) แนบ/เปลี่ยน/เอาออกเอกสารยืนยันตัวตน = `update` ของ `payee_profiles` เก็บ `id_document_url` + `id_document_hash` ใน before/after · **เปิดดูไฟล์** = `view` (target ผู้รับเงินที่อ้างไฟล์ · เก็บ path ไม่เก็บ signed URL · เหตุผลอัตโนมัติ)
 
 ## 14. API / Integration Draft
 
@@ -192,6 +197,10 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 
 | Test Case | Steps | Expected Result |
 |---|---|---|
+| (U150) แนบเอกสารยืนยันตัวตน | เลือกไฟล์ PDF/รูปจริง → บันทึก | เก็บ path + SHA-256 · องค์กรบังคับเอกสาร ⇒ ยืนยันได้ |
+| (U150) พิมพ์ URL / path องค์กรอื่น / ไฟล์ไม่มีจริง | ส่ง `idDocumentUrl` ที่ไม่ได้มาจากการอัปโหลด | reject `UPLOAD_PATH_OUT_OF_SCOPE` / `UPLOAD_FILE_NOT_FOUND` |
+| (U150) URL เก่า | ผู้รับที่มีลิงก์พิมพ์เองก่อนมติ + องค์กรบังคับเอกสาร → ยืนยัน | `PAYEE_ID_DOCUMENT_REQUIRED` · ฟอร์มแสดงป้าย "ไม่ผ่านการตรวจ — แนบไฟล์ใหม่" |
+| (U150) สิทธิ์เปิดไฟล์ | การเงิน / เจ้าของ / ผู้รับคนอื่น / ผู้ไม่มีสิทธิ์ผู้รับเงิน | ได้ / ได้ / 404 / 403 · ทุกครั้งที่ได้ URL ลง audit `view` |
 | แก้บัญชีธนาคารแล้วต้องยืนยันใหม่ | แก้ account_number ของ Payee ที่ verified แล้ว | is_verified เปลี่ยนเป็น false อัตโนมัติ |
 | รวม unverified payee เข้า payout | พยายามสร้าง Payout Batch ที่มี payee unverified อยู่ในรายการ | reject UNVERIFIED_PAYEE_IN_PAYOUT |
 | WHT Priority | Payee มี tax_profile ตั้ง 1% แต่ plan ของทีมตั้ง 3% | ใช้ 1% (Payee level ชนะ) |

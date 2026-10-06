@@ -29,7 +29,9 @@ describe('ป้ายบรรทัดหัก', () => {
 describe('วิธีคืนตอนเคลียร์ยอด', () => {
   it('มียอดคืน ไม่ระบุ ⇒ หักกลบในรอบจ่ายถัดไป (ค่าเริ่มต้น)', () => {
     expect(resolveSettleReturnMethod(55_000, undefined)).toBe('payout_offset')
-    expect(advanceSettleSchema.parse({ usedSatang: 245_000 }).returnMethod).toBe('payout_offset')
+    expect(
+      advanceSettleSchema.parse({ usedSatang: 245_000, receiptFileUrl: 'expenses/u/receipts/a.pdf' }).returnMethod,
+    ).toBe('payout_offset')
   })
   it('เลือกรับคืนแยกได้', () => {
     expect(resolveSettleReturnMethod(55_000, 'separate')).toBe('separate')

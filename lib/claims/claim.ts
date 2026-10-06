@@ -35,3 +35,10 @@ export const CREATE_CLAIM_CAPABILITIES = ['approve_expense_finance', 'perform_fi
 export function isManualClaim(calculationSource: string | null): boolean {
   return calculationSource === MANUAL_CLAIM_CALCULATION_SOURCE || calculationSource === 'receipt'
 }
+
+/**
+ * capability ที่ "บันทึกแทนผู้อื่น" ได้ (มติ PO U153 · `25` §7.2) — เบิกด้วยมือ: `manage:approve_expense_finance`
+ * · ขอเงินทดรอง: `manage:approve_advance` (+ `manage:request_advance` ของ endpoint) · Superadmin ได้ทุกอย่าง
+ * pure — หน้าจอใช้ตัดสินว่าแสดงช่องเลือกผู้รับ (UX) · server ตรวจซ้ำที่ชั้นข้อมูลเสมอ
+ */
+export const ON_BEHALF_CAPABILITIES = ['approve_expense_finance', 'approve_advance'] as const

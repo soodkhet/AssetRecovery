@@ -11,6 +11,7 @@ import { parseStoragePath } from '@/lib/uploads/targets'
  * - สแกน 50 ทวิ ที่ลูกค้าหักเรา `customer-wht/<certificateId>/…`
  * - ฉบับเซ็นของใบรับรองแทนใบเสร็จ `substitute-receipts/<id>/signed/…` — มีชื่อ/เลขบัตร/ที่อยู่ผู้รับเงิน (มติ PO U141)
  * - เอกสารบริษัทไฟแนนซ์ `finance-companies/<companyId>/documents/…` (มติ PO U132 — หนังสือรับรอง/ภ.พ.20/สัญญา/สมุดบัญชี)
+ * - เอกสารยืนยันตัวตนผู้รับเงิน `payees/<orgId>/id-documents/…` (มติ PO U150 — สำเนาบัตร/หนังสือรับรอง)
  *
  * **ไม่บันทึก**: รูปสินค้า, หลักฐานปิดงาน (`cases/<id>/field_evidence/…`), รูปรับเข้าคลัง, ใบเสร็จ,
  * เอกสารล็อต, หลักฐานคืนเงิน ฯลฯ — ไม่ใช่เอกสารระบุตัวบุคคลโดยตรง
@@ -31,6 +32,8 @@ export type PersonalDataFile =
   | { kind: 'customer_wht'; targetType: 'customer_wht_certificates'; targetId: string; fileName: string }
   | { kind: 'substitute_receipt_signed'; targetType: 'substitute_receipts'; targetId: string; fileName: string }
   | { kind: 'company_document'; targetType: 'finance_companies'; targetId: string; fileName: string }
+  /** `targetId` = องค์กร (path ไม่มีรหัสผู้รับ) — ผู้เรียกระบุผู้รับเงินจริงผ่าน `payeeId` ของ audit */
+  | { kind: 'payee_id_document'; targetType: 'organizations'; targetId: string; fileName: string }
 
 /** เหตุผลมาตรฐานของ audit — ผู้ใช้ไม่ต้องกรอก */
 export const PERSONAL_FILE_VIEW_REASON = 'เปิดดูเอกสารข้อมูลส่วนบุคคล'
@@ -75,6 +78,14 @@ export function personalDataFileOf(path: string): PersonalDataFile | null {
       fileName: lastSegment(path),
     }
   }
+  if (owner.kind === 'payee_id_document') {
+    return {
+      kind: 'payee_id_document',
+      targetType: 'organizations',
+      targetId: owner.organizationId,
+      fileName: lastSegment(path),
+    }
+  }
   if (owner.kind === 'finance_company') {
     return {
       kind: 'company_document',
@@ -95,16 +106,19 @@ export function buildPersonalFileViewAudit(input: {
   path: string
   ipAddress: string | null
   userAgent: string | null
+  /** เอกสารยืนยันตัวตน: ผู้รับเงินที่อ้าง path นี้ (ยังไม่มีผู้รับอ้าง = `null` → ลงที่องค์กร) */
+  payeeId?: string | null
 }): AuditEntry | null {
   const file = personalDataFileOf(input.path)
   if (file === null) return null
+  const payeeTarget = file.kind === 'payee_id_document' && input.payeeId !== undefined && input.payeeId !== null
   return {
     organizationId: input.actor.organizationId,
     actorId: input.actor.id,
     actorRole: input.actor.roleName,
     action: 'view',
-    targetType: file.targetType,
-    targetId: file.targetId,
+    targetType: payeeTarget ? 'payee_profiles' : file.targetType,
+    targetId: payeeTarget ? (input.payeeId ?? file.targetId) : file.targetId,
     after: {
       kind: file.kind,
       ...(file.kind === 'case_document' ? { slot: file.slot } : {}),

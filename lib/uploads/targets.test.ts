@@ -10,6 +10,7 @@ import {
   intakePhotoRule,
   lotDocumentRule,
   organizationLogoRule,
+  payeeIdDocumentRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, uploadTargetSchema, type UploadTarget } from '@/lib/uploads/targets'
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
@@ -120,5 +121,24 @@ describe('BUG-173 — id จาก seed (ไม่ใช่ UUID ตาม versi
       uploadTargetSchema.safeParse({ kind: 'organization_logo', organizationId: '00000000-0000-0000-0000-00000000001' })
         .success,
     ).toBe(false)
+  })
+})
+
+describe('มติ PO U150 — เอกสารยืนยันตัวตนผู้รับเงิน', () => {
+  it('path ผูกกับองค์กรของผู้เรียก (ไม่รับจาก client) · อยู่ใต้ prefix ของกติกา · อ่านเจ้าของกลับได้', () => {
+    const target: UploadTarget = { kind: 'payee_id_document' }
+    expect(uploadTargetSchema.safeParse(target).success).toBe(true)
+    // client ส่ง organizationId มาเองก็ถูกตัดทิ้ง (schema ไม่มีฟิลด์นี้)
+    expect(uploadTargetSchema.parse({ kind: 'payee_id_document', organizationId: ASSET_ID })).toEqual(target)
+    const path = uploadTargetPath(target, USER_ID, '../บัตร ประชาชน.PDF', KEY, ORG_ID)
+    expect(path).toBe(`payees/${ORG_ID}/id-documents/${KEY}.pdf`)
+    expect(path.startsWith(payeeIdDocumentRule(ORG_ID).prefix)).toBe(true)
+    expect(parseStoragePath(path)).toEqual({ kind: 'payee_id_document', organizationId: ORG_ID })
+  })
+
+  it('path นอกโครง (ไม่มีโฟลเดอร์ id-documents / ไม่ใช่ UUID) = ปฏิเสธ', () => {
+    expect(parseStoragePath(`payees/${ORG_ID}/other/a.pdf`)).toBeNull()
+    expect(parseStoragePath('payees/123/id-documents/a.pdf')).toBeNull()
+    expect(parseStoragePath('https://example.test/id.pdf')).toBeNull()
   })
 })
