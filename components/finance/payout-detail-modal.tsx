@@ -17,6 +17,7 @@ import {
 } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
+import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
 import { canCancelPayout, PAYOUT_STATUS_LABEL_SHORT, payoutStatusBadgeGroup } from '@/lib/payout/payout-ui'
@@ -29,6 +30,7 @@ import type { PayoutBatchDetailDto, PayoutBatchDto } from '@/lib/payout/types'
  * ปุ่มเอกสาร 3 ใบ (`28` §6.1) เป็น `<a href>` ตรงไป endpoint — session cookie พาไปเอง
  *
  * ⚠️ ยอดทุกช่องเป็น snapshot ของรายการ ณ เวลาที่เข้ารอบ (`92` §7.1) — หน้าจอไม่คิดใหม่
+ * มติ PO U109 — แยก "ค่าตอบแทน" (เงินได้จริง) กับ "ภาษีที่บริษัทออกให้" ด้วย `payoutItemTaxSplit()` (ไม่คิดภาษีใหม่)
  */
 export function PayoutDetailModal({
   batch,
@@ -113,8 +115,14 @@ export function PayoutDetailModal({
               label={PAYOUT_STATUS_LABEL_SHORT[batch.status]}
             />
             <span>
-              Gross {fmtSatangSymbol(batch.grossSatang)} · WHT{' '}
-              <span className="text-red-600">{fmtSatangSymbol(batch.whtSatang)}</span> · สุทธิ{' '}
+              ค่าตอบแทน {fmtSatangSymbol(batch.compensationSatang)}
+              {batch.whtPaidByPayerSatang > 0 && (
+                <>
+                  {' '}· ภาษีที่บริษัทออกให้{' '}
+                  <span className="text-amber-700">{fmtSatangSymbol(batch.whtPaidByPayerSatang)}</span>
+                </>
+              )}
+              {' '}· WHT หักผู้รับ <span className="text-red-600">{fmtSatangSymbol(batch.whtWithheldSatang)}</span> · สุทธิ{' '}
               <span className="font-bold text-emerald-700">{fmtSatangSymbol(batch.netSatang)}</span>
               {/* มติ PO U30 — หักคืนเงินทดรองหลังภาษี ⇒ ยอดโอนจริงลดลง */}
               {batch.advanceOffsetSatang > 0 && (
@@ -160,8 +168,9 @@ export function PayoutDetailModal({
                 <Th>ผู้รับเงิน / ทีม</Th>
                 <Th>รายการ</Th>
                 <Th>บัญชีรับเงิน</Th>
-                <Th numeric>ก่อนหัก</Th>
-                <Th numeric>WHT</Th>
+                <Th numeric>ค่าตอบแทน</Th>
+                <Th numeric>ภาษีที่บริษัทออกให้</Th>
+                <Th numeric>WHT หักผู้รับ</Th>
                 <Th numeric>สุทธิ</Th>
               </Tr>
             </THead>
@@ -170,12 +179,25 @@ export function PayoutDetailModal({
               error={error}
               isEmpty={items.length === 0}
               emptyTitle="รอบนี้ยังไม่มีรายการ"
-              colSpan={6}
+              colSpan={7}
             />
             <TBody>
               {!loading &&
                 error === null &&
-                items.map((item) => (
+                items.map((item) => {
+                  const split = payoutItemTaxSplit(item)
+                  const rateNote =
+                    item.whtPctSnapshot !== null && item.whtSatang > 0 ? (
+                      <p className="text-[10px] text-slate-400">
+                        {fmtPercent(item.whtPctSnapshot)} ·{' '}
+                        {item.whtIncomeCategory === 'sec_40_1'
+                          ? 'เงินได้ 40(1)'
+                          : item.whtIncomeCategory === 'sec_40_2'
+                            ? 'เงินได้ 40(2)'
+                            : (item.taxProfileName ?? '—')}
+                      </p>
+                    ) : null
+                  return (
                   <Tr key={item.id}>
                     <Td>
                       <p className="font-semibold text-slate-900">{item.payeeName}</p>
@@ -197,19 +219,19 @@ export function PayoutDetailModal({
                       {item.bankName ?? '—'}
                       <p className="font-mono text-[10px] text-slate-400">{item.accountNumberMasked ?? '—'}</p>
                     </Td>
-                    <Td numeric>{fmtSatangSymbol(item.grossSatang)}</Td>
-                    <Td numeric className={item.whtSatang > 0 ? 'text-red-600' : undefined}>
-                      {fmtSatangSymbol(item.whtSatang)}
-                      {item.whtPctSnapshot !== null && item.whtSatang > 0 && (
-                        <p className="text-[10px] text-slate-400">
-                          {fmtPercent(item.whtPctSnapshot)} ·{' '}
-                          {item.whtIncomeCategory === 'sec_40_1'
-                            ? 'เงินได้ 40(1)'
-                            : item.whtIncomeCategory === 'sec_40_2'
-                              ? 'เงินได้ 40(2)'
-                              : (item.taxProfileName ?? '—')}
-                        </p>
+                    <Td numeric>{fmtSatangSymbol(split.compensationSatang)}</Td>
+                    <Td numeric className={split.whtPaidByPayerSatang > 0 ? 'text-amber-700' : undefined}>
+                      {fmtSatangSymbol(split.whtPaidByPayerSatang)}
+                      {split.whtPaidByPayerSatang > 0 && (
+                        <>
+                          {rateNote}
+                          <p className="text-[10px] text-slate-400">ไม่หักจากผู้รับ</p>
+                        </>
                       )}
+                    </Td>
+                    <Td numeric className={split.whtWithheldSatang > 0 ? 'text-red-600' : undefined}>
+                      {fmtSatangSymbol(split.whtWithheldSatang)}
+                      {split.whtWithheldSatang > 0 && rateNote}
                       {/* ค่าตั้งฐาน WHT (มติ PO 05/10/2569 UAT U3) — รายการนอกฐานจ่ายเต็ม ไม่หัก */}
                       {item.source === 'expense' && !item.whtBaseIncluded && (
                         <p className="text-[10px] text-slate-400">ไม่อยู่ในฐานภาษี</p>
@@ -227,7 +249,8 @@ export function PayoutDetailModal({
                       )}
                     </Td>
                   </Tr>
-                ))}
+                  )
+                })}
             </TBody>
           </Table>
         </div>

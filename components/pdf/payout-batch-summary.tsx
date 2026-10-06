@@ -16,19 +16,21 @@ import type { PayoutSummaryDoc } from '@/lib/payout/payout-doc'
 
 /**
  * **สรุปรอบจ่ายเงิน (Payout Batch Summary)** — เอกสารภายใน (`28` §6.1) · แถบหัวเอกสารภายในตามแบบที่อนุมัติ
- * (มติ PO U100 ข้อ 9) → สถานะ/บัญชีที่จ่าย/จำนวนผู้รับ → ตารางต่อผู้รับ (ก่อนหัก · หัก ณ ที่จ่าย · หักคืนเงินทดรอง · โอนสุทธิ)
+ * (มติ PO U100 ข้อ 9) → สถานะ/บัญชีที่จ่าย/จำนวนผู้รับ → ตารางต่อผู้รับ (ค่าตอบแทน · ภาษีที่บริษัทออกให้ ·
+ * หัก ณ ที่จ่าย · หักคืนเงินทดรอง · โอนสุทธิ — มติ PO U109 แยกภาษีที่บริษัทออกให้ออกจากค่าตอบแทน)
  * → ผู้จัดทำ/ผู้อนุมัติโอนเงิน
  *
  * ⚠️ ยอดทุกช่องเป็นข้อความที่ประกอบมาแล้วจาก `buildPayoutSummaryDoc()` (pure) — ห้ามคำนวณ/format เอง (Rule 01)
  */
 
 const COLUMNS: readonly DocColumn[] = [
-  { label: 'ลำดับ', width: '7%', align: 'center' },
-  { label: 'ชื่อผู้รับเงิน', width: '29%' },
-  { label: 'ยอดก่อนหัก', width: '16%', align: 'right' },
-  { label: 'หักภาษี ณ ที่จ่าย', width: '16%', align: 'right' },
-  { label: 'หักคืนเงินทดรอง', width: '16%', align: 'right' },
-  { label: 'โอนสุทธิ', width: '16%', align: 'right' },
+  { label: 'ลำดับ', width: '6%', align: 'center' },
+  { label: 'ชื่อผู้รับเงิน', width: '21%' },
+  { label: 'ค่าตอบแทน', width: '14%', align: 'right' },
+  { label: 'ภาษีที่บริษัทออกให้', width: '17%', align: 'right' },
+  { label: 'หักภาษี ณ ที่จ่าย', width: '14%', align: 'right' },
+  { label: 'หักคืนเงินทดรอง', width: '14%', align: 'right' },
+  { label: 'โอนสุทธิ', width: '14%', align: 'right' },
 ]
 
 const styles = StyleSheet.create({
@@ -72,8 +74,9 @@ export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc;
               cells={[
                 { main: String(row.no) },
                 { main: row.payeeName, detail: `${row.teamName} · ${row.itemCountText}` },
-                { main: row.grossText },
-                { main: row.whtText },
+                { main: row.compensationText },
+                { main: row.whtPaidByPayerText },
+                { main: row.whtWithheldText },
                 { main: row.offsetCellText },
                 { main: row.transferText },
               ]}
@@ -85,8 +88,9 @@ export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc;
             cells={[
               { main: '' },
               { main: 'รวม :' },
-              { main: doc.totalGrossText },
-              { main: doc.totalWhtText },
+              { main: doc.totalCompensationText },
+              { main: doc.totalWhtPaidByPayerText },
+              { main: doc.totalWhtWithheldText },
               { main: doc.totalOffsetCellText },
               { main: doc.totalTransferText },
             ]}
@@ -96,6 +100,12 @@ export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc;
         {doc.totalOffsetText === null ? null : (
           <NoteText>หักคืนเงินทดรองหักหลังภาษี ไม่กระทบฐานภาษีหัก ณ ที่จ่าย</NoteText>
         )}
+        {doc.hasPayerBorneTax ? (
+          <NoteText>
+            ภาษีที่บริษัทออกให้ไม่หักจากผู้รับ — บริษัทนำส่งเอง ยอดเงินได้บนหนังสือรับรองการหักภาษี ณ ที่จ่าย = ค่าตอบแทน +
+            ภาษีที่บริษัทออกให้
+          </NoteText>
+        ) : null}
         <NoteText>ใช้ตรวจสอบก่อนตัดโอนเงินจริง · {doc.note}</NoteText>
         <Signatures roles={['ผู้จัดทำ (การเงิน)', 'ผู้อนุมัติโอนเงิน']} />
       </DocPage>

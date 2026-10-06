@@ -19,6 +19,13 @@ export interface PayoutBatchDto {
   advanceOffsetSatang: number
   /** ยอดโอนจริงของรอบ = net − ยอดหักคืนเงินทดรอง (`22` §6.14) */
   transferSatang: number
+  /**
+   * มติ PO U109 — ยอดแยกของทั้งรอบ (`sumPayoutTaxSplit()` จาก snapshot รายการ): ค่าตอบแทน (เงินได้จริง)
+   * · ภาษีที่หักจากผู้รับ · ภาษีที่บริษัทออกให้ — `gross` ของรอบรวมภาษีที่ออกให้ไว้แล้ว
+   */
+  compensationSatang: number
+  whtWithheldSatang: number
+  whtPaidByPayerSatang: number
   itemCount: number
   bankAccountId: string | null
   bankAccountLabel: string | null

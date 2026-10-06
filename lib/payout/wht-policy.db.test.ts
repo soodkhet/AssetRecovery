@@ -725,6 +725,14 @@ suite('U105 — เงื่อนไขการหัก (2)/(3) เป็น�
       whtCondition: 'pay_always',
     })
     expect(batch).toMatchObject({ grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000, transferSatang: 1_000_000 })
+    // มติ PO U109 — ยอดของรอบแยก ค่าตอบแทน 10,000 · ภาษีที่บริษัทออกให้ 309.28 · หักผู้รับ 0 (หน้ารายการรอบจ่าย)
+    expect(batch).toMatchObject({ compensationSatang: 1_000_000, whtPaidByPayerSatang: 30_928, whtWithheldSatang: 0 })
+    const listed = await payout.listPayoutBatches(finance, { status: 'all', side: 'all' })
+    expect(listed.find((row) => row.id === batch.id)).toMatchObject({
+      compensationSatang: 1_000_000,
+      whtPaidByPayerSatang: 30_928,
+      whtWithheldSatang: 0,
+    })
     const audit = await db().auditLog.findFirstOrThrow({
       where: { organizationId: ORG_ID, targetType: 'payout_batches', targetId: batch.id, action: 'create' },
     })
@@ -762,6 +770,9 @@ suite('U105 — เงื่อนไขการหัก (2)/(3) เป็น�
       netSatang: 970_000,
       whtCondition: 'withhold',
     })
+    // มติ PO U109 — (3) ภาษีที่บริษัทออกให้ 300 แยกจากค่าตอบแทน · (1) ไม่เปลี่ยน (หักผู้รับ 300)
+    expect(once.batch).toMatchObject({ compensationSatang: 1_000_000, whtPaidByPayerSatang: 30_000, whtWithheldSatang: 0 })
+    expect(normal.batch).toMatchObject({ compensationSatang: 1_000_000, whtPaidByPayerSatang: 0, whtWithheldSatang: 30_000 })
   })
 
   it('ฟอร์มผู้รับ: ค่าตั้งปิด ⇒ เปลี่ยนเป็น (2) ไม่ได้ · ค่าเดิม (2) แก้ฟิลด์อื่นได้ · เปิดแล้วเปลี่ยนได้', async () => {

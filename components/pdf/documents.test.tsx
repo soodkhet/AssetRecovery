@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { sumPayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { renderBillingInvoice } from '@/components/pdf/billing-invoice'
@@ -389,6 +390,7 @@ function batch(items: PayoutBatchItemDto[]): PayoutBatchDetailDto {
     netSatang: sum('netSatang'),
     advanceOffsetSatang: sum('advanceOffsetSatang'),
     transferSatang: sum('transferSatang'),
+    ...sumPayoutTaxSplit(items),
     itemCount: items.length,
     bankAccountId: 'acc-1',
     bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x6789-x',
@@ -511,6 +513,31 @@ describe('เอกสารภายใน — แถบหัวตามแ�
     expect(text).toContain('1 ราย')
     expect(text).toContain('5,356.00')
     expect(text).toContain('ผู้อนุมัติโอนเงิน')
+    expect(text).toContain('ค่าตอบแทน')
+    expect(text).toContain('ภาษีที่บริษัทออกให้')
+    // รอบที่หักตามปกติทั้งหมด ⇒ ไม่มีหมายเหตุภาษีที่บริษัทออกให้
+    expect(text).not.toContain('ไม่หักจากผู้รับ')
+  })
+
+  it('สรุปรอบจ่าย (มติ PO U109) — ผู้รับ (1)/(2)/(3) ปนกัน: แยกคอลัมน์ค่าตอบแทน / ภาษีที่บริษัทออกให้ / หักผู้รับ', async () => {
+    const base = { grossSatang: 1_000_000, whtSatang: 30_000, netSatang: 970_000, transferSatang: 970_000 }
+    const mixed = [
+      item({ id: 'm1', payeeId: 'p1', payeeName: 'ผู้รับหักปกติ', ...base, whtCondition: 'withhold' }),
+      item({ id: 'm2', payeeId: 'p2', payeeName: 'ผู้รับออกให้ตลอดไป', grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000, transferSatang: 1_000_000, whtCondition: 'pay_always' }),
+      item({ id: 'm3', payeeId: 'p3', payeeName: 'ผู้รับออกให้ครั้งเดียว', grossSatang: 1_030_000, whtSatang: 30_000, netSatang: 1_000_000, transferSatang: 1_000_000, whtCondition: 'pay_once' }),
+    ]
+    const pdf = await renderPayoutBatchSummary(buildPayoutSummaryDoc(batch(mixed), ISSUER), LETTERHEAD)
+    save('09c-payout-summary-payer-tax', pdf)
+    const text = textOf(pdf)
+    expect(text).toContain('ภาษีที่บริษัทออกให้')
+    expect(text).toContain('309.28')
+    expect(text).toContain('609.28')
+    expect(text).toContain('30,000.00')
+    expect(text).toContain('29,700.00')
+    // ยอดรวมภาษี (gross) ไม่โผล่บนสรุปรอบจ่ายแล้ว
+    expect(text).not.toContain('10,309.28')
+    expect(text).not.toContain('31,309.28')
+    expect(text).toContain('ไม่หักจากผู้รับ')
   })
 
   it('หน้าปกชุดเอกสารบัญชี + รายงาน — แถบหัวเดียวกัน', async () => {

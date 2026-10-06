@@ -1,4 +1,5 @@
 import type { AdvanceDocSource, AdvanceReturnDocSource } from '@/lib/advances/advance-doc'
+import { sumPayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { monthLabelTH } from '@/lib/field/calendar'
 import { toBangkokParts } from '@/lib/format/datetime'
 import type { DocumentNumberType } from '@/lib/generated/prisma/enums'
@@ -316,6 +317,7 @@ export function samplePayoutBatch(context: DocumentSampleContext): PayoutBatchDe
     netSatang: sum('netSatang'),
     advanceOffsetSatang: sum('advanceOffsetSatang'),
     transferSatang: sum('transferSatang'),
+    ...sumPayoutTaxSplit(items),
     itemCount: items.length,
     bankAccountId: SAMPLE_ID,
     bankAccountLabel: `${SAMPLE_BANK.bankName} xxx-x-x0000-x`,

@@ -241,6 +241,37 @@ export function payoutItemTaxSplit(item: {
   return { compensationSatang: item.grossSatang, whtWithheldSatang: item.whtSatang, whtPaidByPayerSatang: 0 }
 }
 
+/** ยอดแยกของรายการรอบจ่าย 3 ส่วน (`payoutItemTaxSplit()`) */
+export interface PayoutTaxSplit {
+  /** ค่าตอบแทน (เงินได้จริง — ไม่รวมภาษีที่บริษัทออกให้) */
+  compensationSatang: number
+  /** ภาษีที่หักจากผู้รับ (เงื่อนไข (1)) */
+  whtWithheldSatang: number
+  /** ภาษีที่บริษัทออกให้ (เงื่อนไข (2)/(3) — ไม่หักจากผู้รับ) */
+  whtPaidByPayerSatang: number
+}
+
+/**
+ * ผลรวมยอดแยกของหลายรายการ (มติ PO U109 — สรุปรอบจ่าย/รายการรอบจ่าย/รายงานค่าตอบแทน แยกแสดง
+ * "ค่าตอบแทน" กับ "ภาษีที่บริษัทออกให้") · ไม่คิดภาษีใหม่ — บวกจาก snapshot ผ่าน `payoutItemTaxSplit()` เท่านั้น
+ * ⇒ `compensation + whtPaidByPayer = Σ gross` และ `Σ gross − whtWithheld − whtPaidByPayer = Σ net` เสมอ
+ */
+export function sumPayoutTaxSplit(
+  items: ReadonlyArray<Parameters<typeof payoutItemTaxSplit>[0]>,
+): PayoutTaxSplit {
+  return items.reduce<PayoutTaxSplit>(
+    (sum, item) => {
+      const split = payoutItemTaxSplit(item)
+      return {
+        compensationSatang: sum.compensationSatang + split.compensationSatang,
+        whtWithheldSatang: sum.whtWithheldSatang + split.whtWithheldSatang,
+        whtPaidByPayerSatang: sum.whtPaidByPayerSatang + split.whtPaidByPayerSatang,
+      }
+    },
+    { compensationSatang: 0, whtWithheldSatang: 0, whtPaidByPayerSatang: 0 },
+  )
+}
+
 export interface PayeeBatchWhtItem {
   /** ยอดก่อนหักภาษีของรายการ (`payout_batch_items.gross_satang`) */
   grossSatang: number

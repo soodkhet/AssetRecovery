@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { sumPayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { PayoutError } from '@/lib/payout/errors'
 import {
   assertPayoutDocReady,
@@ -64,6 +65,7 @@ function batch(items: readonly PayoutBatchItemDto[], overrides: Partial<PayoutBa
     netSatang: gross - wht,
     advanceOffsetSatang: 0,
     transferSatang: gross - wht,
+    ...sumPayoutTaxSplit(items),
     itemCount: items.length,
     bankAccountId: 'acc-1',
     bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x9876-x',
@@ -393,5 +395,43 @@ describe('มติ PO U105 — ผู้จ่ายออกภาษีให
     const voucher = buildPaymentVoucherDocs(batch([item()]), ISSUER)[0]!
     expect(voucher.payerTaxLine).toBeNull()
     expect(buildPayslipDocs(batch([item()]), ISSUER)[0]!.payerTaxLine).toBeNull()
+  })
+})
+
+describe('มติ PO U109 — สรุปรอบจ่ายแยก "ค่าตอบแทน" กับ "ภาษีที่บริษัทออกให้"', () => {
+  // เงินได้ ฿10,000 อัตรา 3% คนละเงื่อนไข: (1) หัก 300 · (2) ออกให้ 309.28 · (3) ออกให้ 300
+  const mixed = [
+    item({ id: 'w1', payeeId: 'p1', payeeName: 'หนึ่ง หักปกติ', grossSatang: 1_000_000, whtSatang: 30_000, netSatang: 970_000, transferSatang: 970_000, whtCondition: 'withhold' }),
+    item({ id: 'w2', payeeId: 'p2', payeeName: 'สอง ออกให้ตลอดไป', grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000, transferSatang: 1_000_000, whtCondition: 'pay_always' }),
+    item({ id: 'w3', payeeId: 'p3', payeeName: 'สาม ออกให้ครั้งเดียว', grossSatang: 1_030_000, whtSatang: 30_000, netSatang: 1_000_000, transferSatang: 1_000_000, whtCondition: 'pay_once' }),
+  ]
+  const doc = buildPayoutSummaryDoc(batch(mixed), ISSUER)
+
+  it('ต่อผู้รับ: (2) ค่าตอบแทน 10,000.00 · ภาษีที่บริษัทออกให้ 309.28 · หักผู้รับ 0.00 · โอน 10,000.00 — (1) ไม่เปลี่ยน', () => {
+    expect(
+      doc.rows.map((row) => [row.payeeName, row.compensationText, row.whtPaidByPayerText, row.whtWithheldText, row.transferText]),
+    ).toEqual([
+      ['หนึ่ง หักปกติ', '10,000.00', '0.00', '300.00', '9,700.00'],
+      ['สอง ออกให้ตลอดไป', '10,000.00', '309.28', '0.00', '10,000.00'],
+      ['สาม ออกให้ครั้งเดียว', '10,000.00', '300.00', '0.00', '10,000.00'],
+    ])
+    // ยอดรวมภาษีเดิม (gross/wht รวมภาษีที่ออกให้) ยังอยู่สำหรับผู้ใช้เดิม
+    expect(doc.rows[1]?.grossText).toBe('10,309.28')
+  })
+
+  it('แถวรวม: ค่าตอบแทน 30,000.00 · ภาษีที่บริษัทออกให้ 609.28 · หักผู้รับ 300.00 · โอน 29,700.00 + มีหมายเหตุ', () => {
+    expect(doc.totalCompensationText).toBe('30,000.00')
+    expect(doc.totalWhtPaidByPayerText).toBe('609.28')
+    expect(doc.totalWhtWithheldText).toBe('300.00')
+    expect(doc.totalTransferText).toBe('29,700.00')
+    expect(doc.hasPayerBorneTax).toBe(true)
+  })
+
+  it('รอบที่หัก ณ ที่จ่ายตามปกติทั้งหมด ⇒ ภาษีที่บริษัทออกให้ 0.00 และไม่มีหมายเหตุ', () => {
+    const normal = buildPayoutSummaryDoc(batch([item()]), ISSUER)
+    expect(normal.totalCompensationText).toBe('8,500.00')
+    expect(normal.totalWhtPaidByPayerText).toBe('0.00')
+    expect(normal.totalWhtWithheldText).toBe('255.00')
+    expect(normal.hasPayerBorneTax).toBe(false)
   })
 })
