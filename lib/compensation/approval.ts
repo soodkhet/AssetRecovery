@@ -1,5 +1,6 @@
 import { ModuleError } from '@/lib/api/errors'
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
+import { canExpenseAction } from '@/lib/field/expense-status'
 import { resetApprovalToFirstStep } from '@/lib/finance/approval-flow-resolver'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { approvalRoleColumn, type ApproverColumn } from '@/lib/settings/approval-matrix'
@@ -202,6 +203,30 @@ export function canActOnApprovalStep(actor: CapabilityHolder, item: ApprovalVisi
   if (!AWAITING_APPROVER.includes(item.status)) return false
   if (actor.isSuperadmin) return true
   return holdsStepCapability(actor, item.steps[item.approvalStepCurrent - 1], 'manage')
+}
+
+/**
+ * ขั้นที่ "เป็นเจ้าของ" การปฏิเสธถาวร (มติ PO U118) — `needs_revision` = ขั้นที่ตีกลับรายการนี้ครั้งล่าสุด
+ * (ประวัติ `reject` ล่าสุด · ไม่มีประวัติ = ขั้นปัจจุบัน) · สถานะอื่น = ขั้นที่รายการรออยู่
+ */
+export function permanentRejectStep(item: {
+  status: ExpenseStatus
+  approvalStepCurrent: number
+  history: readonly ApprovalHistoryEntry[]
+}): number {
+  if (item.status !== 'needs_revision') return item.approvalStepCurrent
+  const lastReject = [...item.history].reverse().find((entry) => entry.action === 'reject')
+  return lastReject?.step ?? item.approvalStepCurrent
+}
+
+/** ผู้ใช้ปฏิเสธถาวรรายการนี้ได้ไหม (UX — API ตรวจซ้ำด้วย `assertActorCanApproveStep()` ขั้นเดียวกัน) */
+export function canPermanentlyRejectStep(
+  actor: CapabilityHolder,
+  item: ApprovalVisibilityInput & { history: readonly ApprovalHistoryEntry[] },
+): boolean {
+  if (!canExpenseAction(item.status, 'reject_permanent')) return false
+  if (actor.isSuperadmin) return true
+  return holdsStepCapability(actor, item.steps[permanentRejectStep(item) - 1], 'manage')
 }
 
 /** คอลัมน์ผู้อนุมัติที่ต้องเขียนเมื่อผ่านขั้นนี้ (คอลัมน์ที่ไม่ตรงขั้นไม่ถูกแตะ) */

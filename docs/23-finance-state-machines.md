@@ -23,6 +23,7 @@
 | v2.8 | 06/10/2569 | **มติ PO 06/10/2569 (U103)**: เพิ่ม §6.17 Substitute Receipt (`pending_signature` → `signed`) — ใบรับรองแทนใบเสร็จรับเงิน · ไม่มีสถานะยกเลิก (ใบของใบเบิกที่ถูกปฏิเสธไม่นับเพดาน) |
 | v2.9 | 06/10/2569 | **มติ PO 06/10/2569 (U107)**: §6.17 เพิ่มสถานะ `cancelled` (terminal) — `pending_signature`/`signed` → `cancelled` ครั้งเดียว · เหตุผลบังคับ (`CANCEL_REQUIRES_REASON`) + audit · ใบเดิมห้ามลบ PDF พิมพ์ป้าย "ยกเลิก" · ไม่นับเพดานต่อเดือน · ออกใบใหม่แทนได้ (เลขใหม่ ผูกรายการเดิม) · ยกเลิกไม่ได้ถ้าใบเบิกที่ผูกอนุมัติจ่ายแล้ว (`SUBSTITUTE_RECEIPT_NOT_CANCELLABLE`) |
 | v2.10 | 06/10/2569 | **มติ PO 06/10/2569 (U117 ข้อ 3)** — §6.3 เส้น `pending_approval → rejected` (ปฏิเสธถาวร) เปิดใช้จริงสำหรับใบเบิกค่าที่พัก (`PATCH /api/claims/:id/reject-permanent`) · **ไม่เพิ่มเส้นใหม่** — โค้ดเดิมที่ยอมจาก `pending_finance_approval` ถูกปรับให้ตรงเอกสาร (จาก `pending_approval` เท่านั้น) |
+| v2.11 | 06/10/2569 | **มติ PO 06/10/2569 (U118)** — §6.3 เพิ่มเส้น `pending_finance_approval → rejected` และ `needs_revision → rejected` (ปฏิเสธถาวรใบเบิกค่าที่พัก) · เหตุผลบังคับ + audit · สิทธิ์: ขั้นที่รายการรออยู่ หรือขั้นที่ตีกลับครั้งล่าสุดเมื่อ `needs_revision` · ใบรับรองแทนใบเสร็จที่ผูกไม่นับเพดานต่อเดือนทันที |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -65,7 +66,7 @@ verified → unverified   (auto-reset เมื่อแก้ไขข้อม
 pending_warehouse_confirm (เฉพาะ closed_success รอคลังยืนยัน) → pending_approval
 pending_approval → pending_finance_approval → approved
 pending_approval/pending_finance_approval → needs_revision (reject_expense, ต้องมี reason) → pending_approval (resubmit)
-pending_approval → rejected (terminal — ปฏิเสธถาวร ไม่ใช่ขอแก้ไข)
+pending_approval/pending_finance_approval/needs_revision → rejected (reject_permanent — terminal ปฏิเสธถาวร ไม่ใช่ขอแก้ไข · เหตุผลบังคับ · มติ PO U118: ใบที่ needs_revision ใช้สิทธิ์ของขั้นที่ตีกลับมา)
 approved → superseded (ถูกแทนที่ด้วยรอบ recycle ใหม่ — ไฟล์ 41)
 pending_approval → pending_warehouse_confirm (hold_for_warehouse — เฉพาะแถวรายวันที่ยังไม่มีผู้อนุมัติ เมื่อเคสปิดสำเร็จภายหลัง · BUG-092)
 ```

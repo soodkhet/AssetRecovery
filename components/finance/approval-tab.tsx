@@ -159,6 +159,7 @@ export function ApprovalTab() {
                     status: item.status,
                     canApprove: claims.canApprove && item.viewerCanAct,
                     expenseType: item.expenseType,
+                    canRejectPermanent: claims.canApprove && item.viewerCanRejectPermanently,
                   })
                   return (
                     <Tr key={item.id} className={expenseRowHighlight(item.status) ?? undefined}>
