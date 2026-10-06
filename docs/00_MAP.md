@@ -2359,6 +2359,46 @@
 |---|---|
 | 162 | `render` |
 
+### `reference/documents.html` (68 KB, 705 บรรทัด)
+
+| บรรทัด | function |
+|---|---|
+| 114 | `money` |
+| 120 | `pct` |
+| 121 | `sum` |
+| 122 | `esc` |
+| 127 | `readInt` |
+| 135 | `readLow` |
+| 147 | `bahtText` |
+| 212 | `copyLabel` |
+| 216 | `header` |
+| 235 | `metaRow` |
+| 245 | `partyLines` |
+| 254 | `parties` |
+| 262 | `signatures` |
+| 276 | `footer` |
+| 280 | `paper` |
+| 284 | `notes` |
+| 290 | `sectionTitle` |
+| 297 | `docBilling` |
+| 336 | `taxInvoicePaper` |
+| 362 | `docTaxInvoice` |
+| 393 | `docHandover` |
+| 419 | `payCalc` |
+| 423 | `payTable` |
+| 439 | `docVoucher` |
+| 455 | `docPayslip` |
+| 479 | `docAdvance` |
+| 502 | `docAdvanceReturn` |
+| 533 | `docNoReceipt` |
+| 563 | `internalHead` |
+| 580 | `docInternal` |
+| 587 | `T` |
+| 622 | `docWht` |
+| 623 | `box` |
+| 672 | `render` |
+| 690 | `badge` |
+
 ### `reference/finance.html` (254 KB, 2512 บรรทัด)
 
 | บรรทัด | function |
