@@ -663,6 +663,48 @@ suite('Phase 2.13 — สร้างล็อตส่งมอบ (`44` §17 T
     expect(lot1.lotNumber).not.toBe(lot2.lotNumber)
     expect(lot1.docRef).not.toBe(lot2.docRef)
   })
+
+  it('Final ด่าน 1 (U102) — สร้างล็อตพร้อมกัน 5 คำขอ: LOT/DLV เดินจากชุดเลขเอกสาร ปี พ.ศ. ไม่ซ้ำ ไม่ข้าม · คำขอที่ล้มไม่กินเลข', async () => {
+    const seeded = await Promise.all(Array.from({ length: 5 }, () => seedInCustody()))
+    const beYear = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Bangkok', year: 'numeric' }).format(new Date()),
+    ) + 543
+    const seqOf = (value: string, prefix: string): number => {
+      const match = new RegExp(`^${prefix}-${beYear}-(\\d{3,})$`).exec(value)
+      if (match === null) throw new Error(`รูปแบบเลข ${value} ไม่ใช่ ${prefix}-${beYear}-NNN`)
+      return Number(match[1])
+    }
+    const series = async (docType: 'handover_lot' | 'delivery_note'): Promise<number> => {
+      const rows = await db().$queryRawUnsafe<Array<{ current_seq: number }>>(
+        `SELECT current_seq FROM document_number_series WHERE organization_id = '${ORG_ID}' AND doc_type = '${docType}'`,
+      )
+      return Number(rows[0]?.current_seq ?? 0)
+    }
+    const lotBefore = await series('handover_lot')
+    const dlvBefore = await series('delivery_note')
+
+    const lots = await Promise.all(
+      seeded.map(({ assetId }) => warehouse.createLot(admin, lotInput([assetId], 'finance_pickup'), ctx(admin))),
+    )
+    const lotSeqs = lots.map((lot) => seqOf(lot.lotNumber, 'LOT')).sort((a, b) => a - b)
+    const dlvSeqs = lots.map((lot) => seqOf(lot.docRef, 'DLV')).sort((a, b) => a - b)
+    expect(lotSeqs).toEqual([1, 2, 3, 4, 5].map((step) => lotBefore + step))
+    expect(dlvSeqs).toEqual([1, 2, 3, 4, 5].map((step) => dlvBefore + step))
+
+    // สองคำขอแย่งเครื่องเดียวกัน ⇒ สำเร็จ 1 · อีกคำขอ rollback ทั้งทรานแซกชัน (รวมตัวนับ) ⇒ เลขถัดไปไม่ข้าม
+    const contested = await seedInCustody()
+    const raced = await Promise.allSettled([
+      warehouse.createLot(admin, lotInput([contested.assetId], 'finance_pickup'), ctx(admin)),
+      warehouse.createLot(admin, lotInput([contested.assetId], 'finance_pickup'), ctx(admin)),
+    ])
+    expect(raced.filter((row) => row.status === 'fulfilled')).toHaveLength(1)
+    expect(await series('handover_lot')).toBe(lotBefore + 6)
+    expect(await series('delivery_note')).toBe(dlvBefore + 6)
+    const next = await seedInCustody()
+    const after = await warehouse.createLot(admin, lotInput([next.assetId], 'finance_pickup'), ctx(admin))
+    expect(seqOf(after.lotNumber, 'LOT')).toBe(lotBefore + 7)
+    expect(seqOf(after.docRef, 'DLV')).toBe(dlvBefore + 7)
+  })
 })
 
 suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ขั้น (`44` §11 · §17 T09–T14)', () => {
@@ -920,6 +962,68 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     const expenses = await db().expense.findMany({ where: { caseId }, select: { status: true } })
     expect(expenses.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
   })
+
+  /**
+   * Final Test ด่าน 1 (ข้อ 2) — ทำให้ขั้น**ท้าย**ของทรานแซกชันพัง (step 4 สร้าง Revenue / step 3 audit)
+   * แล้วยืนยันว่าขั้นก่อนหน้า (ยึดล็อต + snapshot หัวกระดาษ U111 + step 1 + step 2) ถูก rollback ทั้งหมด
+   */
+  for (const failing of [
+    {
+      name: 'step 4 (สร้าง Revenue)',
+      table: 'revenues',
+      when: 'TRUE',
+    },
+    {
+      name: 'step 3 (audit lot.confirmed)',
+      table: 'audit_logs',
+      when: `NEW.target_type = 'handover_lots' AND NEW.action::text = 'confirm'`,
+    },
+  ] as const) {
+    it(`Final ด่าน 1 — ${failing.name} ล้ม = rollback ทั้งชุด รวม letterhead_snapshot (U111) · ไม่มีขั้นไหนค้าง`, async () => {
+      const { caseId, assetId, lotId } = await seedPendingLot()
+      // expense อนุมัติครบแล้ว ⇒ step 4 จะสร้าง Revenue จริง (ให้ trigger ของ revenues มีอะไรให้ล้ม)
+      await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${caseId}'`)
+      const auditBefore = await db().auditLog.count({ where: { targetType: 'handover_lots', targetId: lotId } })
+
+      await db().$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION test_fail_lot_confirm_tail() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'จำลอง DB fail ที่ขั้นท้ายของการยืนยันล็อต'; END $$
+      `)
+      await db().$executeRawUnsafe(`
+        CREATE TRIGGER trg_test_fail_lot_confirm_tail BEFORE INSERT ON ${failing.table}
+        FOR EACH ROW WHEN (${failing.when}) EXECUTE FUNCTION test_fail_lot_confirm_tail()
+      `)
+      try {
+        await expectCode(
+          () => warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin)),
+          'CONFIRM_TRANSACTION_FAILED',
+        )
+      } finally {
+        await db().$executeRawUnsafe(`DROP TRIGGER IF EXISTS trg_test_fail_lot_confirm_tail ON ${failing.table}`)
+        await db().$executeRawUnsafe(`DROP FUNCTION IF EXISTS test_fail_lot_confirm_tail()`)
+      }
+
+      const lot = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+      expect(lot.status).toBe('pending_attach')
+      expect(lot.confirmedAt).toBeNull()
+      expect(lot.confirmedBy).toBeNull()
+      expect(lot.letterheadSnapshot).toBeNull()
+      expect(lot.documentTemplateSnapshot).toBeNull()
+      expect(lot.signedDocUrl).toBeNull()
+      expect((await db().asset.findUniqueOrThrow({ where: { id: assetId } })).assetStatus).toBe('handover_pending')
+      const expenses = await db().expense.findMany({ where: { caseId }, select: { status: true } })
+      expect(expenses.every((row) => row.status === 'approved')).toBe(true)
+      expect(await db().revenue.count({ where: { caseId } })).toBe(0)
+      expect(await db().auditLog.count({ where: { targetType: 'handover_lots', targetId: lotId } })).toBe(auditBefore)
+
+      // ซ่อมแล้วกดยืนยันใหม่ได้ทันที — ครบทั้ง 4 ขั้นในครั้งเดียว (idempotent ต่อเคส)
+      const retried = await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
+      expect(retried.lot.status).toBe('confirmed')
+      expect(retried.revenueIdsCreated).toHaveLength(1)
+      expect(await db().revenue.count({ where: { caseId } })).toBe(1)
+      expect((await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })).letterheadSnapshot).not.toBeNull()
+    })
+  }
 
   it('T14 — ล็อตที่ยืนยันแล้วแตะไม่ได้ ทั้งชั้น service และ trigger ระดับ DB', async () => {
     const { lotId } = await seedPendingLot()
