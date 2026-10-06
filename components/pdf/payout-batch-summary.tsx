@@ -1,102 +1,104 @@
-import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
+import { Document, renderToBuffer, StyleSheet, View } from '@react-pdf/renderer'
+import {
+  DocPage,
+  DocRow,
+  DocTable,
+  InternalHeader,
+  layout,
+  NoteText,
+  Signatures,
+  type DocColumn,
+} from '@/components/pdf/doc-layout'
 import { Text } from '@/components/pdf/text'
-import { DocFooter, DocHeader, MetaCell, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PayoutSummaryDoc } from '@/lib/payout/payout-doc'
 
 /**
- * **สรุปรอบจ่ายเงิน (Payout Batch Summary)** — เอกสารภายในใบที่ 1 ของไฟล์ 17 (`28` §6.1)
- * เลย์เอาต์เทียบ `reference/samples/04_payout_batch_summary.pdf`
+ * **สรุปรอบจ่ายเงิน (Payout Batch Summary)** — เอกสารภายใน (`28` §6.1) · แถบหัวเอกสารภายในตามแบบที่อนุมัติ
+ * (มติ PO U100 ข้อ 9) → สถานะ/บัญชีที่จ่าย/จำนวนผู้รับ → ตารางต่อผู้รับ (ก่อนหัก · หัก ณ ที่จ่าย · หักคืนเงินทดรอง · โอนสุทธิ)
+ * → ผู้จัดทำ/ผู้อนุมัติโอนเงิน
  *
- * ⚠️ ยอดทุกช่องเป็นข้อความที่ประกอบมาแล้วจาก `buildPayoutSummaryDoc()` (pure) — component นี้
- *    **ห้ามคำนวณ/format ตัวเลขหรือวันที่เอง** (Rule 01)
+ * ⚠️ ยอดทุกช่องเป็นข้อความที่ประกอบมาแล้วจาก `buildPayoutSummaryDoc()` (pure) — ห้ามคำนวณ/format เอง (Rule 01)
  */
 
-/** สัดส่วนคอลัมน์ (รวม = 100) — ลำดับ/ชื่อผู้รับเงิน/ยอดก่อนหัก/WHT/สุทธิ */
-const COLUMNS = ['7%', '38%', '18%', '17%', '20%'] as const
+const COLUMNS: readonly DocColumn[] = [
+  { label: 'ลำดับ', width: '7%', align: 'center' },
+  { label: 'ชื่อผู้รับเงิน', width: '29%' },
+  { label: 'ยอดก่อนหัก', width: '16%', align: 'right' },
+  { label: 'หักภาษี ณ ที่จ่าย', width: '16%', align: 'right' },
+  { label: 'หักคืนเงินทดรอง', width: '16%', align: 'right' },
+  { label: 'โอนสุทธิ', width: '16%', align: 'right' },
+]
+
+const styles = StyleSheet.create({
+  meta: { flexDirection: 'row', flexWrap: 'wrap', fontSize: 9 },
+  metaCell: { width: '33.33%', paddingRight: 8, marginBottom: 2 },
+})
+
+function Meta({ label, value }: { label: string; value: string }): React.JSX.Element {
+  return (
+    <Text style={styles.metaCell}>
+      <Text style={layout.bold}>{label}:</Text> {value}
+    </Text>
+  )
+}
 
 export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.batchName}`} author={doc.issuer.name}>
-      <Page size="A4" style={docStyles.page}>
-        <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+      <DocPage footerLeft={`${doc.issuer.name} · ${doc.title} ${doc.batchName}`}>
+        <InternalHeader
+          letterhead={letterhead}
+          title={doc.title}
+          lines={[`รอบ: ${doc.batchName}`, `วันที่เอกสาร: ${doc.issuedAtLabel}`, `พิมพ์เมื่อ: ${doc.printedAtLabel}`]}
+        />
 
-        <View style={docStyles.metaGrid}>
-          <MetaCell label="ชื่อรอบจ่าย" value={doc.batchName} />
-          <MetaCell label="วันที่เอกสาร" value={doc.issuedAtLabel} />
-          <MetaCell label="ประเภท" value={`${doc.sideLabel} — ค่าตอบแทนจากการทำเคส`} />
-          <MetaCell label="สถานะรอบจ่าย" value={doc.statusLabel} />
-          <MetaCell label="บัญชีที่จ่าย" value={doc.bankAccountLabel} />
-          <MetaCell label="ไฟล์โอน" value={doc.paymentFileLabel} />
-          <MetaCell label="Idempotency Key" value={doc.idempotencyKey} />
-          <MetaCell label="จำนวนรายการในรอบ" value={doc.itemCountText} />
+        <View style={styles.meta}>
+          <Meta label="สถานะรอบจ่าย" value={doc.statusLabel} />
+          <Meta label="บัญชีที่จ่าย" value={doc.bankAccountLabel} />
+          <Meta label="จำนวนผู้รับ" value={doc.payeeCountText} />
+          <Meta label="ประเภท" value={doc.sideLabel} />
+          <Meta label="จำนวนรายการ" value={doc.itemCountText} />
+          <Meta label="ไฟล์โอน" value={doc.paymentFileLabel} />
+          <Meta label="Idempotency Key" value={doc.idempotencyKey} />
         </View>
 
-        <View style={docStyles.table}>
-          <View style={docStyles.tableHeader} fixed>
-            <Text style={[docStyles.th, { width: COLUMNS[0] }]}>ลำดับ</Text>
-            <Text style={[docStyles.th, { width: COLUMNS[1] }]}>ชื่อผู้รับเงิน</Text>
-            <Text style={[docStyles.th, docStyles.amount, { width: COLUMNS[2] }]}>ยอดก่อนหัก (บาท)</Text>
-            <Text style={[docStyles.th, docStyles.amount, { width: COLUMNS[3] }]}>หัก WHT (บาท)</Text>
-            <Text style={[docStyles.th, docStyles.amount, { width: COLUMNS[4] }]}>โอนสุทธิ (บาท)</Text>
-          </View>
-
+        <DocTable columns={COLUMNS}>
           {doc.rows.map((row) => (
-            <View key={row.no} style={docStyles.tableRow} wrap={false}>
-              <Text style={[docStyles.td, { width: COLUMNS[0] }]}>{row.no}</Text>
-              <View style={[docStyles.td, { width: COLUMNS[1] }]}>
-                <Text>{row.payeeName}</Text>
-                <Text style={docStyles.tdMuted}>
-                  {row.teamName} · {row.itemCountText}
-                </Text>
-              </View>
-              <Text style={[docStyles.td, docStyles.amount, { width: COLUMNS[2] }]}>{row.grossText}</Text>
-              <Text style={[docStyles.td, docStyles.amount, { width: COLUMNS[3] }]}>{row.whtText}</Text>
-              <View style={[docStyles.td, { width: COLUMNS[4] }]}>
-                <Text style={docStyles.amount}>{row.transferText}</Text>
-                {row.offsetText === null ? null : (
-                  <Text style={[docStyles.tdMuted, docStyles.amount]}>
-                    สุทธิ {row.netText} หักคืนเงินทดรอง {row.offsetText}
-                  </Text>
-                )}
-              </View>
-            </View>
+            <DocRow
+              key={row.no}
+              columns={COLUMNS}
+              cells={[
+                { main: String(row.no) },
+                { main: row.payeeName, detail: `${row.teamName} · ${row.itemCountText}` },
+                { main: row.grossText },
+                { main: row.whtText },
+                { main: row.offsetCellText },
+                { main: row.transferText },
+              ]}
+            />
           ))}
+          <DocRow
+            columns={COLUMNS}
+            tone="total"
+            cells={[
+              { main: '' },
+              { main: 'รวม :' },
+              { main: doc.totalGrossText },
+              { main: doc.totalWhtText },
+              { main: doc.totalOffsetCellText },
+              { main: doc.totalTransferText },
+            ]}
+          />
+        </DocTable>
 
-          <View style={docStyles.totalRow}>
-            <Text style={[docStyles.tdBold, { width: COLUMNS[0] }]} />
-            <Text style={[docStyles.tdBold, { width: COLUMNS[1] }]}>รวม</Text>
-            <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[2] }]}>{doc.totalGrossText}</Text>
-            <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[3] }]}>{doc.totalWhtText}</Text>
-            <Text style={[docStyles.tdBold, docStyles.amount, { width: COLUMNS[4] }]}>{doc.totalTransferText}</Text>
-          </View>
-          {doc.totalOffsetText === null ? null : (
-            <View style={docStyles.tableRow}>
-              <Text style={[docStyles.td, { width: COLUMNS[0] }]} />
-              <Text style={[docStyles.tdMuted, { width: '73%' }]}>
-                สุทธิหลังหักภาษี {doc.totalNetText} หักคืนเงินทดรองรวม {doc.totalOffsetText} (หักหลังภาษี ไม่กระทบฐานภาษีหัก ณ ที่จ่าย)
-              </Text>
-              <Text style={[docStyles.td, { width: '20%' }]} />
-            </View>
-          )}
-        </View>
-
-        <Text style={docStyles.noteText}>หมายเหตุ: {doc.note}</Text>
-
-        <View style={docStyles.signRow}>
-          <View style={docStyles.signBox}>
-            <Text style={docStyles.signLine}>............................................................</Text>
-            <Text style={docStyles.signLabel}>ผู้จัดทำ (การเงิน)</Text>
-          </View>
-          <View style={docStyles.signBox}>
-            <Text style={docStyles.signLine}>............................................................</Text>
-            <Text style={docStyles.signLabel}>ผู้อนุมัติโอนเงิน</Text>
-          </View>
-        </View>
-
-        <DocFooter left={`${doc.batchName} · ${doc.issuer.name}`} />
-      </Page>
+        {doc.totalOffsetText === null ? null : (
+          <NoteText>หักคืนเงินทดรองหักหลังภาษี ไม่กระทบฐานภาษีหัก ณ ที่จ่าย</NoteText>
+        )}
+        <NoteText>ใช้ตรวจสอบก่อนตัดโอนเงินจริง · {doc.note}</NoteText>
+        <Signatures roles={['ผู้จัดทำ (การเงิน)', 'ผู้อนุมัติโอนเงิน']} />
+      </DocPage>
     </Document>
   )
 }

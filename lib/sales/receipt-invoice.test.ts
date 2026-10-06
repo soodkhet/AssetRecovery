@@ -4,6 +4,7 @@ import {
   assertVatApplicable,
   receiptInvoiceAmounts,
   receiptInvoiceDescriptionOf,
+  receiptInstallmentOf,
   replacementNoteOf,
   TAX_INVOICE_DOC_KIND_TITLE,
 } from '@/lib/sales/receipt-invoice'
@@ -144,5 +145,38 @@ describe('ข้อความบนเอกสาร', () => {
     expect(receiptInvoiceDescriptionOf({ periodLabel: 'กันยายน 2569', billingBatchNumber: 'BL-2569-001', coversRemainder: false })).toBe(
       'ค่าบริการติดตามทรัพย์ รอบเดือน กันยายน 2569 (ใบแจ้งหนี้ BL-2569-001) — รับชำระบางส่วน',
     )
+  })
+})
+
+describe('receiptInstallmentOf — ลำดับรับชำระบางส่วน (มติ PO U100)', () => {
+  const at = (minute: number): Date => new Date(Date.UTC(2026, 10, 20, 3, minute))
+  const invoices = [
+    { id: 'b', status: 'active' as const, totalSatang: 400_000, createdAt: at(2) },
+    { id: 'a', status: 'active' as const, totalSatang: 321_000, createdAt: at(1) },
+    { id: 'x', status: 'cancelled' as const, totalSatang: 999_999, createdAt: at(0) },
+  ]
+
+  it('ใบแรกรับบางส่วน — ครั้งที่ 1 + คงค้าง = ยอดใบแจ้งหนี้ − ยอดใบนี้ (ใบยกเลิกไม่นับ)', () => {
+    expect(receiptInstallmentOf({ invoiceId: 'a', billedTotalSatang: 1_070_000, invoices })).toEqual({
+      sequence: 1,
+      outstandingSatang: 749_000,
+    })
+  })
+
+  it('ใบที่สอง — ครั้งที่ 2 + คงค้างหลังรวมทุกใบก่อนหน้า', () => {
+    expect(receiptInstallmentOf({ invoiceId: 'b', billedTotalSatang: 1_070_000, invoices })).toEqual({
+      sequence: 2,
+      outstandingSatang: 349_000,
+    })
+  })
+
+  it('ใบเดียวรับครบ ⇒ null · ใบที่ยกเลิก/ไม่พบ ⇒ null · คงค้างไม่ติดลบ', () => {
+    expect(receiptInstallmentOf({ invoiceId: 'a', billedTotalSatang: 321_000, invoices: invoices.slice(1) })).toBeNull()
+    expect(receiptInstallmentOf({ invoiceId: 'x', billedTotalSatang: 1_070_000, invoices })).toBeNull()
+    expect(receiptInstallmentOf({ invoiceId: 'zz', billedTotalSatang: 1_070_000, invoices })).toBeNull()
+    expect(receiptInstallmentOf({ invoiceId: 'b', billedTotalSatang: 500_000, invoices })).toEqual({
+      sequence: 2,
+      outstandingSatang: 0,
+    })
   })
 })

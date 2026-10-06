@@ -83,6 +83,17 @@ export function fmtPercent(value: number | string | null | undefined, fallback =
 }
 
 /**
+ * อัตราบนเอกสาร PDF ("3%" · "1.5%") — ตัดศูนย์ท้ายทศนิยมตามแบบเอกสารที่อนุมัติ (มติ PO U100)
+ * ต่างจาก {@link fmtPercent} ที่แสดง 2 ตำแหน่งเสมอบนหน้าจอ
+ */
+export function fmtRatePct(value: number | string | null | undefined, fallback = EMPTY_AMOUNT_DISPLAY): string {
+  if (value === null || value === undefined || value === '') return fallback
+  const numeric = typeof value === 'string' ? Number(value) : value
+  if (!Number.isFinite(numeric)) return fallback
+  return `${String(Number(numeric.toFixed(2)))}%`
+}
+
+/**
  * อัตราส่วนที่ **คำนวณมาแล้ว** จาก pure module ของ `22` (เช่น gross margin %) → ข้อความ
  * `null` = คำนวณไม่ได้ (เช่น `revenue = 0` ซึ่งห้ามหารศูนย์ — Rule 01) → แสดง `"N/A"`
  *

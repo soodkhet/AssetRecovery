@@ -2,11 +2,12 @@ import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
 import type { InvoiceDeliveryFormat, TaxInvoiceDocKind, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
+import { bankAccountLine, type DocBankAccount } from '@/lib/organization/bank-account-line'
 import type { SellerProfileSnapshot } from '@/lib/organization/profile'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
-import { TAX_INVOICE_DOC_KIND_TITLE, TAX_INVOICE_DOC_KIND_TITLE_EN } from '@/lib/sales/receipt-invoice'
+import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 
 /**
  * กติกาของบัญชีขาย/ใบกำกับภาษี (ไฟล์ 31) — **pure ล้วน ไม่มี I/O** ใช้ร่วม FE/BE
@@ -243,6 +244,22 @@ export interface TaxInvoiceDocSource {
   billingBatchNumber: string | null
   /** วันที่รับเงิน (ใบเสร็จรับเงิน/ใบกำกับภาษี) — ใบแบบเดิม = `null` */
   receivedDate: Date | null
+  /**
+   * เงินรับที่ใบนี้ออกให้ (มติ PO U100) — เงินโอนเข้าจริง · ภาษีที่ลูกค้าหัก · บัญชีที่เงินเข้า (จับคู่รายการธนาคาร)
+   * · ใบแบบเดิม/เงินรับถูกถอน = `null` (ไม่พิมพ์แถวหัก/ยอดรับ/ช่องทาง)
+   */
+  receipt?: TaxInvoiceReceiptInfo | null
+  /** ลำดับการรับชำระของรอบ (`receiptInstallmentOf()`) — รับครบในใบเดียว = `null` */
+  installment?: { sequence: number; outstandingSatang: number } | null
+}
+
+export interface TaxInvoiceReceiptInfo {
+  /** เงินที่โอนเข้าจริง (`cash_receipts.amount_satang`) */
+  cashSatang: number
+  /** ภาษีที่ลูกค้าหัก ณ ที่จ่ายจากเงินรับนี้ (`cash_receipts.wht_withheld_by_customer_satang`) */
+  customerWhtSatang: number
+  receivedDate: Date
+  bankAccount: DocBankAccount | null
 }
 
 /** เอกสารที่ประกอบเป็นข้อความครบแล้ว — component PDF ห้าม format/คำนวณซ้ำ (Rule 01) */
@@ -273,6 +290,49 @@ export interface TaxInvoiceDoc {
   replacementNote: string | null
   billingBatchNumber: string | null
   receivedDateLabel: string | null
+  /** ป้ายกล่องสองฝ่าย — ใบเสร็จฯ "ชำระโดย/ชำระให้" · ใบกำกับแบบเดิม "ผู้ซื้อ/ผู้ขาย" */
+  buyerRole: string
+  sellerRole: string
+  /** แถวหักภาษีที่ลูกค้าหัก (ไม่มี = `null`) */
+  customerWhtLabel: string
+  customerWhtText: string | null
+  /** ยอดเงินโอนเข้าจริง (ใบแบบเดิม = `null`) */
+  receivedText: string | null
+  paymentChannelText: string | null
+  /** "รับชำระบางส่วนครั้งที่ N ของใบแจ้งหนี้เลขที่ …" (รับครบในใบเดียว = `null`) */
+  installmentNote: string | null
+  /** ยอดคงค้างตามใบแจ้งหนี้หลังใบนี้ (รับบางส่วนเท่านั้น) */
+  outstandingText: string | null
+  footnote: string
+  signers: readonly string[]
+}
+
+/** ชื่อเอกสารบนกระดาษ — เว้นวรรครอบ "/" ตามแบบที่อนุมัติ (มติ PO U100) */
+function spacedTitle(title: string): string {
+  return title.replace(/\s*\/\s*/g, ' / ')
+}
+
+/** ชื่อเอกสารภาษาอังกฤษตามแบบที่อนุมัติ (มติ PO U100) */
+const DOC_TITLE_EN: Record<TaxInvoiceDocKind, string> = {
+  tax_invoice: 'Tax Invoice',
+  receipt_tax_invoice: 'Receipt / Tax Invoice',
+}
+
+function installmentNoteOf(
+  installment: { sequence: number; outstandingSatang: number },
+  billingBatchNumber: string | null,
+): string {
+  const ref = billingBatchNumber === null ? '' : ` ของใบแจ้งหนี้เลขที่ ${billingBatchNumber}`
+  return installment.outstandingSatang > 0
+    ? `รับชำระบางส่วนครั้งที่ ${installment.sequence}${ref}`
+    : `รับชำระครั้งที่ ${installment.sequence} (ครบยอด)${ref}`
+}
+
+function paymentChannelOf(receipt: TaxInvoiceReceiptInfo): string {
+  const when = `เมื่อ ${fmtDate(receipt.receivedDate)}`
+  return receipt.bankAccount === null
+    ? `รับชำระ ${when}`
+    : `โอนเข้าบัญชี ${bankAccountLine({ ...receipt.bankAccount, accountName: null })} ${when}`
 }
 
 /** หัวคอลัมน์ VAT — อัตราเดียวกันทั้งรอบจึงระบุ % ได้ (`19` §6.3 snapshot ต่อใบรายได้) */
@@ -288,9 +348,13 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
   const isCancelled = source.status === 'cancelled'
   const beforeVat = source.amounts.totalBeforeVatSatang
 
+  const isReceipt = source.docKind === 'receipt_tax_invoice'
+  const receipt = isReceipt ? (source.receipt ?? null) : null
+  const installment = isReceipt && !isCancelled ? (source.installment ?? null) : null
+
   return {
-    title: TAX_INVOICE_DOC_KIND_TITLE[source.docKind],
-    titleEn: TAX_INVOICE_DOC_KIND_TITLE_EN[source.docKind],
+    title: spacedTitle(TAX_INVOICE_DOC_KIND_TITLE[source.docKind]),
+    titleEn: DOC_TITLE_EN[source.docKind],
     invoiceNumber: source.invoiceNumber,
     invoiceDateLabel: fmtDate(source.invoiceDate),
     statusLabel: TAX_INVOICE_STATUS_LABEL[source.status],
@@ -314,5 +378,19 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
     replacementNote: source.replacementNote,
     billingBatchNumber: source.billingBatchNumber,
     receivedDateLabel: source.receivedDate === null ? null : fmtDate(source.receivedDate),
+    buyerRole: isReceipt ? 'ชำระโดย' : 'ผู้ซื้อ',
+    sellerRole: isReceipt ? 'ชำระให้' : 'ผู้ขาย',
+    customerWhtLabel: 'หัก ภาษีเงินได้หัก ณ ที่จ่าย (ผู้ชำระหัก)',
+    customerWhtText: receipt === null || receipt.customerWhtSatang <= 0 ? null : `(${fmtSatang(receipt.customerWhtSatang)})`,
+    receivedText: receipt === null ? null : fmtSatang(receipt.cashSatang),
+    paymentChannelText: receipt === null ? null : paymentChannelOf(receipt),
+    installmentNote: installment === null ? null : installmentNoteOf(installment, source.billingBatchNumber),
+    outstandingText:
+      installment === null || installment.outstandingSatang <= 0 ? null : fmtSatang(installment.outstandingSatang),
+    footnote: isReceipt
+      ? 'ได้รับเงินตามรายการข้างต้นถูกต้องแล้ว (รวมภาษีที่ผู้ชำระหัก ณ ที่จ่ายตามหนังสือรับรองของผู้ชำระ) · ' +
+        'ใบเสร็จรับเงินนี้จะสมบูรณ์เมื่อบริษัทได้รับเงินตามจำนวนข้างต้นแล้ว'
+      : 'เลขที่เอกสารเดินอัตโนมัติเรียงต่อเนื่อง ใบที่ยกเลิกจะไม่ถูกนำเลขที่กลับมาใช้ซ้ำ',
+    signers: isReceipt ? ['ผู้รับเงิน', 'ผู้มีอำนาจลงนาม'] : ['ผู้รับเอกสาร / ผู้ซื้อ', 'ผู้มีอำนาจลงนาม'],
   }
 }

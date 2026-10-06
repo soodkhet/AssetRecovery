@@ -1,6 +1,8 @@
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtSatang } from '@/lib/format/money'
+import { estimateCustomerWhtForBilling } from '@/lib/finance/wht-calc'
+import { fmtRatePct, fmtSatang } from '@/lib/format/money'
+import { bankAccountLine, type DocBankAccount } from '@/lib/organization/bank-account-line'
 import type { SellerProfileSnapshot } from '@/lib/organization/profile'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { summarizeSalesAmounts, vatLabelOf, type SalesAmounts } from '@/lib/sales/sales'
@@ -14,8 +16,8 @@ import { summarizeSalesAmounts, vatLabelOf, type SalesAmounts } from '@/lib/sale
  * · ยอดทุกช่องมาจาก snapshot `revenues` (ผลรวม = `sales_records`) — ห้ามคิดสูตรบนเอกสาร (Rule 01)
  */
 
-export const BILLING_INVOICE_TITLE = 'ใบแจ้งหนี้/ใบวางบิล'
-export const BILLING_INVOICE_TITLE_EN = 'INVOICE / BILLING NOTE'
+export const BILLING_INVOICE_TITLE = 'ใบแจ้งหนี้ / ใบวางบิล'
+export const BILLING_INVOICE_TITLE_EN = 'Invoice / Billing Note'
 export const BILLING_INVOICE_NOT_TAX_NOTE =
   'เอกสารนี้ไม่ใช่ใบกำกับภาษี — ใบเสร็จรับเงิน/ใบกำกับภาษีจะออกให้เมื่อได้รับชำระเงิน'
 
@@ -124,6 +126,10 @@ export interface BillingInvoiceLineSource {
   vatSatang: number
   totalSatang: number
   vatRatePct: string
+  /** ยี่ห้อ/รุ่นเครื่องของเคส (มติ PO U100 — บรรทัดรองของรายการ) · ไม่มี = ไม่พิมพ์ */
+  assetDescription?: string | null
+  /** เลขที่ใบส่งมอบ `DLV-<พ.ศ.>-XXX` ของล็อตที่ส่งมอบเครื่องของเคสนี้ · ไม่มี = ไม่พิมพ์ */
+  handoverDocRef?: string | null
 }
 
 export interface BillingInvoiceSource {
@@ -136,6 +142,14 @@ export interface BillingInvoiceSource {
   /** หัวเอกสารส่วนที่ snapshot เพิ่มตอนส่งรอบ (มติ PO U99) — รอบที่ส่งก่อน U99 = `null` (ใช้ค่าปัจจุบันเฉพาะชุดนี้) */
   sellerProfile: SellerProfileSnapshot | null
   lines: readonly BillingInvoiceLineSource[]
+  /**
+   * UAT BUG-165 · มติ PO U100 — อัตราที่ลูกค้าหักภาษี ณ ที่จ่ายจากเรา (`finance_companies` ค่าปัจจุบัน) +
+   * ยอดหักที่บันทึกแล้วจากเงินรับ (`billing_batches.wht_withheld_by_customer_satang`) · ไม่ส่ง = ไม่พิมพ์แถวหัก
+   */
+  customerWhtPct?: number | null
+  recordedCustomerWhtSatang?: number
+  /** บัญชีรับโอนของเรา (ค่าตั้งบัญชีธนาคาร — ใช้รับเงิน) · ไม่มี = ไม่พิมพ์แถวช่องทางการชำระเงิน */
+  receivingAccount?: DocBankAccount | null
 }
 
 export interface BillingInvoiceLine {
@@ -143,6 +157,17 @@ export interface BillingInvoiceLine {
   caseRef: string
   revenueDateLabel: string
   beforeVatText: string
+  /** บรรทัดรองใต้รายการ: "รุ่นเครื่อง · ใบส่งมอบ DLV-…" (ไม่มีข้อมูล = `null`) */
+  detail: string | null
+}
+
+/** แถว "หัก ภาษีที่ลูกค้าจะหัก (ประมาณการ)" + "ยอดที่คาดว่าจะได้รับโอน" — ยอดคิดที่ `22` §6.16 แล้ว */
+export interface BillingCustomerWhtLines {
+  whtLabel: string
+  /** ยอดหักในวงเล็บ `(1,860.00)` */
+  whtText: string
+  expectedLabel: string
+  expectedText: string
 }
 
 export interface BillingInvoiceDoc {
@@ -163,7 +188,46 @@ export interface BillingInvoiceDoc {
   totalText: string
   totalInWordsText: string
   notTaxInvoiceNote: string
+  /** BUG-165 — ภาษีที่ลูกค้าจะหัก + ยอดคาดรับ (บริษัทไม่หัก = `null` ไม่พิมพ์) */
+  customerWht: BillingCustomerWhtLines | null
+  /** "โอนเข้าบัญชี …" — ไม่มีบัญชีรับเงิน = `null` (ซ่อนแถว) */
+  paymentChannelText: string | null
+  /** ผู้เซ็น (มติ PO U101) */
+  signers: readonly string[]
+  footnote: string
   fileName: string
+}
+
+export const BILLING_INVOICE_SIGNERS = ['ผู้วางบิล / ผู้ให้บริการ', 'ผู้รับวางบิล / ลูกค้า'] as const
+export const BILLING_INVOICE_FOOTNOTE =
+  'ภาษีมูลค่าเพิ่มเกิดเมื่อได้รับชำระเงิน — อัตราและยอดจริงจะแสดงในใบเสร็จรับเงิน/ใบกำกับภาษี · ' +
+  'โปรดส่งหนังสือรับรองการหักภาษี ณ ที่จ่ายมาพร้อมการโอน'
+
+/** BUG-165 — แถวภาษีที่ลูกค้าหัก: สูตรอยู่ `estimateCustomerWhtForBilling()` (`22` §6.16) ที่นี่แค่จัดข้อความ */
+export function billingCustomerWhtLines(input: {
+  amountBeforeVatSatang: number
+  totalSatang: number
+  recordedWhtSatang: number
+  whtPct: number | null
+}): BillingCustomerWhtLines | null {
+  const result = estimateCustomerWhtForBilling(input)
+  if (result.whtSatang <= 0) return null
+  return {
+    whtLabel: result.isEstimate
+      ? `หัก ภาษีเงินได้หัก ณ ที่จ่าย ${fmtRatePct(input.whtPct)} ที่ลูกค้าจะหัก (ประมาณการ)`
+      : 'หัก ภาษีเงินได้หัก ณ ที่จ่ายที่ลูกค้าหักแล้ว',
+    whtText: `(${fmtSatang(result.whtSatang)})`,
+    expectedLabel: result.isEstimate ? 'ยอดที่คาดว่าจะได้รับโอน' : 'ยอดรับสุทธิ',
+    expectedText: fmtSatang(result.expectedReceiptSatang),
+  }
+}
+
+function lineDetail(line: BillingInvoiceLineSource): string | null {
+  const parts = [
+    (line.assetDescription ?? '').trim(),
+    (line.handoverDocRef ?? '').trim() === '' ? '' : `ใบส่งมอบ ${(line.handoverDocRef ?? '').trim()}`,
+  ].filter((part) => part !== '')
+  return parts.length === 0 ? null : parts.join(' · ')
 }
 
 function partyOf(party: BillingInvoiceParty): Omit<BillingInvoiceParty, 'branchCode'> & { branchLabel: string } {
@@ -195,6 +259,7 @@ export function buildBillingInvoiceDoc(source: BillingInvoiceSource): BillingInv
       caseRef: line.caseRef,
       revenueDateLabel: fmtDate(line.revenueDate),
       beforeVatText: fmtSatang(line.grossSatang),
+      detail: lineDetail(line),
     })),
     amounts,
     amountBeforeVatText: fmtSatang(amounts.totalBeforeVatSatang),
@@ -203,6 +268,21 @@ export function buildBillingInvoiceDoc(source: BillingInvoiceSource): BillingInv
     totalText: fmtSatang(amounts.totalSatang),
     totalInWordsText: bahtInWords(amounts.totalSatang),
     notTaxInvoiceNote: BILLING_INVOICE_NOT_TAX_NOTE,
+    customerWht:
+      source.customerWhtPct === undefined
+        ? null
+        : billingCustomerWhtLines({
+            amountBeforeVatSatang: amounts.totalBeforeVatSatang,
+            totalSatang: amounts.totalSatang,
+            recordedWhtSatang: source.recordedCustomerWhtSatang ?? 0,
+            whtPct: source.customerWhtPct,
+          }),
+    paymentChannelText:
+      source.receivingAccount === undefined || source.receivingAccount === null
+        ? null
+        : `โอนเข้าบัญชี ${bankAccountLine(source.receivingAccount)}`,
+    signers: BILLING_INVOICE_SIGNERS,
+    footnote: BILLING_INVOICE_FOOTNOTE,
     fileName: `${source.batchNumber}.pdf`,
   }
 }

@@ -7,8 +7,10 @@ import {
   buildPayoutSummaryDoc,
   buildPayslipDocs,
   groupPayoutItemsByPayee,
+  payslipStatsOf,
   voucherNumber,
   type PayoutDocIssuer,
+  type PayoutPayeeDocInfo,
 } from '@/lib/payout/payout-doc'
 import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/types'
 
@@ -211,7 +213,7 @@ describe('buildPayslipDocs (`06_payslip.pdf`)', () => {
       { description: 'ค่าน้ำมัน — เคส CT-0002 (รอบติดตามที่ 2)', amountText: '930.00' },
     ])
     expect(slip.grossText).toBe('9,430.00')
-    expect(slip.whtLabel).toBe('หักภาษี ณ ที่จ่าย (3.00%)')
+    expect(slip.whtLabel).toBe('หักภาษี ณ ที่จ่าย (3%)')
     expect(slip.whtText).toBe('(282.90)')
     expect(slip.netText).toBe('9,147.10')
   })
@@ -266,5 +268,89 @@ describe('มติ PO U30 — บรรทัด "หักคืนเงิ�
     expect(doc.totalOffsetText).toBeNull()
     expect(doc.totalTransferText).toBe(doc.totalNetText)
     expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.offsetLines).toEqual([])
+  })
+})
+
+describe('มติ PO U100/U101 — ข้อมูลผู้รับ · รายการรวมตามประเภท · WHT ตามฐานจริง · สถิติสลิป', () => {
+  const commission = item({ id: 'c1', sourceId: 'e1', grossSatang: 480_000, whtSatang: 14_400, netSatang: 465_600, transferSatang: 465_600 })
+  const commission2 = item({ id: 'c2', sourceId: 'e2', caseRef: 'CT-0002', grossSatang: 20_000, whtSatang: 600, netSatang: 19_400, transferSatang: 19_400 })
+  const hotel = item({
+    id: 'h1',
+    sourceId: 'e3',
+    description: 'ค่าที่พัก',
+    caseRef: null,
+    grossSatang: 120_000,
+    whtSatang: 0,
+    netSatang: 120_000,
+    transferSatang: 120_000,
+    whtBaseIncluded: false,
+  })
+  const info: PayoutPayeeDocInfo = {
+    displayName: 'นายประยุทธ์ บุญมี',
+    taxId: '1103700000992',
+    isCorporate: false,
+    address: '1 ถ.ทดสอบ',
+    branchLabel: null,
+    stats: { successCases: 2, fieldDays: 3, hotelNights: 2 },
+  }
+
+  it('ใบสำคัญจ่าย — รวมตามประเภท + แยกรายการนอกฐาน · ป้าย WHT ระบุฐานที่ระบบคิดจริง (ยอดหักจาก snapshot)', () => {
+    const [voucher] = buildPaymentVoucherDocs(batch([commission, commission2, hotel]), ISSUER, new Map([['payee-1', info]]))
+    expect(voucher?.payee.displayName).toBe('นายประยุทธ์ บุญมี')
+    expect(voucher?.lines).toEqual([
+      { description: 'ค่าคอมมิชชั่น', detail: '2 รายการ', amountText: '5,000.00' },
+      { description: 'ค่าที่พัก', detail: '1 รายการ · ไม่อยู่ในฐานภาษีหัก ณ ที่จ่าย', amountText: '1,200.00' },
+    ])
+    expect(voucher?.whtLabel).toBe('หัก ภาษี ณ ที่จ่าย 3% (ฐานภาษี 5,000.00)')
+    expect(voucher?.whtDeductText).toBe('(150.00)')
+    expect(voucher?.signers).toEqual(['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'])
+  })
+
+  it('ใบสำคัญจ่าย — ทุกรายการอยู่ในฐาน ⇒ ไม่ต้องพิมพ์ฐาน · ไม่มีข้อมูลผู้รับ ⇒ ใช้ชื่อจากรายการ', () => {
+    const [voucher] = buildPaymentVoucherDocs(batch([commission]), ISSUER)
+    expect(voucher?.whtLabel).toBe('หัก ภาษี ณ ที่จ่าย 3%')
+    expect(voucher?.payee.displayName).toBe('ประยุทธ์ บุญมี')
+    expect(voucher?.payee.address).toBeNull()
+  })
+
+  it('สลิป — ช่องสรุปเคส/วันทำงาน/คืนที่พัก/ยอดโอน + เลขที่ใบสำคัญจ่ายเดียวกัน', () => {
+    const payees = new Map([['payee-1', info]])
+    const [slip] = buildPayslipDocs(batch([commission, hotel]), ISSUER, payees)
+    const [voucher] = buildPaymentVoucherDocs(batch([commission, hotel]), ISSUER, payees)
+    expect(slip?.payeeName).toBe('นายประยุทธ์ บุญมี')
+    expect(slip?.stats).toEqual([
+      { label: 'เคสสำเร็จ', value: '2 เคส' },
+      { label: 'วันทำงานภาคสนาม', value: '3 วัน' },
+      { label: 'คืนที่พัก', value: '2 คืน' },
+      { label: 'ยอดโอนสุทธิ', value: '5,856.00 บาท' },
+    ])
+    expect(slip?.voucherNo).toBe(voucher?.voucherNo)
+    expect(slip?.note).toContain('เอกสารนี้ออกโดยระบบ')
+  })
+
+  it('payslipStatsOf — เคสสำเร็จนับเคสไม่ซ้ำของค่าคอมมิชชัน · วันทำงาน = วันไม่ซ้ำของแถวรายวัน · คืนที่พักรวมจำนวนคืน', () => {
+    const day = (d: number): Date => new Date(Date.UTC(2026, 9, d))
+    expect(
+      payslipStatsOf([
+        { expenseType: 'commission', caseId: 'a', fieldDaySettlementId: null, expenseDate: day(1), hotelNights: 1 },
+        { expenseType: 'commission', caseId: 'a', fieldDaySettlementId: null, expenseDate: day(1), hotelNights: 1 },
+        { expenseType: 'commission', caseId: 'b', fieldDaySettlementId: null, expenseDate: day(2), hotelNights: 1 },
+        { expenseType: 'no_success_fee', caseId: 'c', fieldDaySettlementId: null, expenseDate: day(2), hotelNights: 1 },
+        { expenseType: 'fuel', caseId: null, fieldDaySettlementId: 's1', expenseDate: day(3), hotelNights: 1 },
+        { expenseType: 'allowance', caseId: null, fieldDaySettlementId: 's1', expenseDate: day(3), hotelNights: 1 },
+        { expenseType: 'allowance', caseId: null, fieldDaySettlementId: 's2', expenseDate: day(4), hotelNights: 1 },
+        { expenseType: 'hotel', caseId: null, fieldDaySettlementId: null, expenseDate: day(4), hotelNights: 2 },
+        { expenseType: 'hotel', caseId: null, fieldDaySettlementId: null, expenseDate: day(5), hotelNights: 1 },
+      ]),
+    ).toEqual({ successCases: 2, fieldDays: 2, hotelNights: 3 })
+    expect(payslipStatsOf([])).toEqual({ successCases: 0, fieldDays: 0, hotelNights: 0 })
+  })
+
+  it('สรุปรอบจ่าย — จำนวนผู้รับ · วันเวลาที่พิมพ์ (พ.ศ.) · หักคืนเงินทดรองในตาราง', () => {
+    const doc = buildPayoutSummaryDoc(batch([commission, hotel]), ISSUER, new Date('2026-10-31T09:45:00Z'))
+    expect(doc.payeeCountText).toBe('1 ราย')
+    expect(doc.printedAtLabel).toBe('31/10/2569 16:45')
+    expect(doc.rows[0]?.offsetCellText).toBe('0.00')
+    expect(doc.totalOffsetCellText).toBe('0.00')
   })
 })

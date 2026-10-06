@@ -3,6 +3,7 @@ import {
   EMPTY_AMOUNT_DISPLAY,
   fmtCount,
   fmtPercent,
+  fmtRatePct,
   fmtRatioPct,
   fmtSatang,
   fmtSatangRounded,
@@ -136,5 +137,14 @@ describe('toBahtInput / parseBahtInput (ช่องกรอกเงินใ�
   it('ช่องว่าง = ไม่กำหนดค่า (null) · ข้อความที่ไม่ใช่ตัวเลข = NaN', () => {
     expect(parseBahtInput('   ')).toBeNull()
     expect(parseBahtInput('abc')).toBeNaN()
+  })
+})
+
+describe('fmtRatePct — อัตราบนเอกสาร PDF (มติ PO U100)', () => {
+  it('ตัดศูนย์ท้ายทศนิยม · รับ string จาก Decimal · ว่าง = fallback', () => {
+    expect(fmtRatePct(3)).toBe('3%')
+    expect(fmtRatePct('1.50')).toBe('1.5%')
+    expect(fmtRatePct(7.25)).toBe('7.25%')
+    expect(fmtRatePct(null)).toBe(EMPTY_AMOUNT_DISPLAY)
   })
 })

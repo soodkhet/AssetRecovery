@@ -1035,7 +1035,7 @@ async function withHandoverParties(organizationId: string, lot: LotDetailDto): P
     }),
     prisma.financeCompany.findUniqueOrThrow({
       where: { id: lot.companyId },
-      select: { name: true, address: true, taxId: true, phone: true },
+      select: { name: true, address: true, taxId: true, phone: true, branchCode: true },
     }),
   ])
 

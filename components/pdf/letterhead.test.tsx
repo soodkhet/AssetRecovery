@@ -17,9 +17,15 @@ import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
 import { testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
 
 /**
- * หัวเอกสารกลาง (มติ PO U99) — PDF ทุกตัวใน `components/pdf/` (ยกเว้นแบบ 50 ทวิ) พิมพ์หัวเอกสารเดียวกัน
+ * หัวเอกสารกลาง (มติ PO U99 · เลย์เอาต์ตามแบบที่อนุมัติ U100) — PDF ทุกตัวใน `components/pdf/` (ยกเว้นแบบ 50 ทวิ)
  * ทั้งกรณีมีโลโก้ (ฝังรูปจริง) และไม่มีโลโก้ (ไม่มีรูป/กล่องว่าง) · ใบส่งมอบทดสอบที่ `lib/warehouse/handover-doc.test.ts`
+ *
+ * ข้อมูลองค์กรที่พิมพ์ตามชนิดเอกสาร (แบบ `reference/documents.html`):
+ * - `party` — เอกสารที่มีกล่องสองฝ่าย: ชื่อไทย/อังกฤษบนหัว + ที่อยู่/ติดต่อ/เลขผู้เสียภาษี+สาขาในกล่องฝ่ายเรา
+ * - `payslip` — สลิปไม่มีกล่องฝ่าย: ชื่อไทย/อังกฤษบนหัวเท่านั้น
+ * - `internal` — แถบหัวเอกสารภายใน: ชื่อไทย + เลขผู้เสียภาษี/สาขา + ป้าย "เอกสารภายใน"
  */
+type LetterheadKind = 'party' | 'payslip' | 'internal'
 
 const PARTY = { name: 'บริษัท สยามไฟแนนซ์ จำกัด', taxId: '0105512420001', address: '1 ถนนสีลม กรุงเทพฯ', phone: null }
 
@@ -97,9 +103,14 @@ const REPORT: ReportPayload = {
 }
 
 /** เอกสารทุกตัวที่ใช้หัวเอกสารกลาง — คืน PDF ตามหัวเอกสารที่ส่งเข้าไป */
-const DOCUMENTS: ReadonlyArray<{ name: string; render: (letterhead: DocLetterhead) => Promise<Buffer> }> = [
+const DOCUMENTS: ReadonlyArray<{
+  name: string
+  kind: LetterheadKind
+  render: (letterhead: DocLetterhead) => Promise<Buffer>
+}> = [
   {
     name: 'ใบเสร็จรับเงิน/ใบกำกับภาษี',
+    kind: 'party',
     render: (letterhead) =>
       renderTaxInvoice(
         buildTaxInvoiceDoc({
@@ -128,6 +139,7 @@ const DOCUMENTS: ReadonlyArray<{ name: string; render: (letterhead: DocLetterhea
   },
   {
     name: 'ใบแจ้งหนี้/ใบวางบิล',
+    kind: 'party',
     render: (letterhead) =>
       renderBillingInvoice(
         buildBillingInvoiceDoc({
@@ -145,11 +157,12 @@ const DOCUMENTS: ReadonlyArray<{ name: string; render: (letterhead: DocLetterhea
         letterhead,
       ),
   },
-  { name: 'ใบสำคัญจ่าย', render: (letterhead) => renderPaymentVouchers(buildPaymentVoucherDocs(BATCH, ISSUER), letterhead) },
-  { name: 'สลิปค่าตอบแทน', render: (letterhead) => renderPayslips(buildPayslipDocs(BATCH, ISSUER), letterhead) },
-  { name: 'สรุปรอบจ่าย', render: (letterhead) => renderPayoutBatchSummary(buildPayoutSummaryDoc(BATCH, ISSUER), letterhead) },
+  { name: 'ใบสำคัญจ่าย', kind: 'party', render: (letterhead) => renderPaymentVouchers(buildPaymentVoucherDocs(BATCH, ISSUER), letterhead) },
+  { name: 'สลิปค่าตอบแทน', kind: 'payslip', render: (letterhead) => renderPayslips(buildPayslipDocs(BATCH, ISSUER), letterhead) },
+  { name: 'สรุปรอบจ่าย', kind: 'internal', render: (letterhead) => renderPayoutBatchSummary(buildPayoutSummaryDoc(BATCH, ISSUER), letterhead) },
   {
     name: 'หน้าปกชุดเอกสารบัญชี',
+    kind: 'internal',
     render: (letterhead) =>
       renderPackCover(
         buildPackCoverDoc({
@@ -166,6 +179,7 @@ const DOCUMENTS: ReadonlyArray<{ name: string; render: (letterhead: DocLetterhea
   },
   {
     name: 'รายงาน',
+    kind: 'internal',
     render: (letterhead) =>
       renderReportPdf({ payload: REPORT, generatedAt: new Date('2026-10-04T03:00:00Z'), generatedByName: 'บริหาร', letterhead }),
   },
@@ -176,25 +190,36 @@ function hasEmbeddedImage(pdf: Buffer): boolean {
   return pdf.toString('latin1').includes('/Subtype /Image')
 }
 
-describe('หัวเอกสารกลาง (มติ PO U99) — PDF ทุกตัว', () => {
-  it.each(DOCUMENTS)('$name — มีโลโก้: ฝังรูป + พิมพ์ชื่อไทย/อังกฤษ/ที่อยู่/ติดต่อ/เลขผู้เสียภาษี+สาขา', async ({ render }) => {
+describe('หัวเอกสารกลาง (มติ PO U99/U100) — PDF ทุกตัว', () => {
+  it.each(DOCUMENTS)('$name — มีโลโก้: ฝังรูป + ชื่อบริษัท + ข้อมูลองค์กรตามชนิดเอกสาร', async ({ kind, render }) => {
     const pdf = await render(testLetterheadWithLogo())
     const text = extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
     expect(hasEmbeddedImage(pdf)).toBe(true)
     expect(text).toContain('บริษัท ใจดี โมบาย จำกัด')
-    expect(text).toContain('Jaidee Mobile Co., Ltd.')
-    expect(text).toContain('แขวงปทุมวัน เขตปทุมวัน กรุงเทพมหานคร 10330')
-    expect(text).toContain('โทร. 02-000-1234 · อีเมล accounting@jaidee.co.th · เว็บไซต์ www.jaidee.co.th')
-    expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สำนักงานใหญ่')
     expect(text).not.toContain('LOGO')
+    if (kind === 'party') {
+      expect(text).toContain('Jaidee Mobile Co., Ltd.')
+      expect(text).toContain('แขวงปทุมวัน เขตปทุมวัน กรุงเทพมหานคร 10330')
+      expect(text).toContain('โทร. 02-000-1234 · อีเมล accounting@jaidee.co.th · เว็บไซต์ www.jaidee.co.th')
+      expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สำนักงานใหญ่')
+    }
+    if (kind === 'payslip') {
+      expect(text).toContain('Jaidee Mobile Co., Ltd.')
+      expect(text).not.toContain('แขวงปทุมวัน')
+    }
+    if (kind === 'internal') {
+      expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สำนักงานใหญ่')
+      expect(text).toContain('เอกสารภายใน')
+      expect(text).not.toContain('แขวงปทุมวัน')
+    }
   })
 
-  it.each(DOCUMENTS)('$name — ไม่มีโลโก้/ไม่มีช่องติดต่อ: ไม่มีรูป ไม่มีกล่อง LOGO ไม่พิมพ์บรรทัดว่าง', async ({ render }) => {
+  it.each(DOCUMENTS)('$name — ไม่มีโลโก้/ไม่มีช่องติดต่อ: ไม่มีรูป ไม่มีกล่อง LOGO ไม่พิมพ์บรรทัดว่าง', async ({ kind, render }) => {
     const pdf = await render(testLetterhead({ nameEn: null, phone: null, email: null, website: null, branchLabel: 'สาขาที่ 00002' }))
     const text = extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
     expect(hasEmbeddedImage(pdf)).toBe(false)
     expect(text).toContain('บริษัท ใจดี โมบาย จำกัด')
-    expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สาขาที่ 00002')
+    if (kind !== 'payslip') expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สาขาที่ 00002')
     expect(text).not.toContain('Jaidee')
     expect(text).not.toContain('accounting@jaidee.co.th')
     expect(text).not.toContain('โทร. 02-000-1234')

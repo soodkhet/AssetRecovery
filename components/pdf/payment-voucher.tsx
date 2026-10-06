@@ -1,103 +1,99 @@
-import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/renderer'
-import { Text } from '@/components/pdf/text'
-import { DocFooter, DocHeader, SignatureRow, docStyles } from '@/components/pdf/internal-doc'
+import { Document, renderToBuffer } from '@react-pdf/renderer'
+import {
+  AmountInWordsRow,
+  Banner,
+  DateNumberRow,
+  DOC_COPY_LABEL,
+  DocPage,
+  DocRow,
+  DocTable,
+  DocTitleHeader,
+  letterheadPartyLines,
+  NoteText,
+  partyLines,
+  PartyPanel,
+  PaymentChannelRow,
+  Signatures,
+  SummaryRow,
+  type DocColumn,
+} from '@/components/pdf/doc-layout'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PaymentVoucherDoc } from '@/lib/payout/payout-doc'
 
 /**
- * **ใบสำคัญจ่าย (Payment Voucher)** — เอกสารภายในใบที่ 2 ของไฟล์ 17 (`28` §6.1 · `13` §6.7)
- * เลย์เอาต์เทียบ `reference/samples/05_payment_voucher.pdf`: ตารางป้าย-ค่า 7 แถว → บล็อกยอด 3 บรรทัด
- * (ก่อนหักภาษี / หัก ณ ที่จ่าย / สุทธิ + ตัวอักษร) → ช่องเซ็น 3 ช่อง
+ * **ใบสำคัญจ่าย (Payment Voucher)** — เลย์เอาต์ตามแบบที่อนุมัติ (มติ PO U100/U101) · **ต้นฉบับเดียว**
+ * จ่ายโดย (หัวเอกสารกลาง) / จ่ายให้ (ข้อมูลผู้รับ U94) → รายการรวมตามประเภท → หัก ณ ที่จ่ายตามที่ระบบคิดจริง
+ * (ฐานตามค่าตั้ง U3) + หักคืนเงินทดรอง (แดง — หักหลังภาษี มติ U30) → ยอดโอนสุทธิ + ตัวอักษร → ผู้จัดทำ/ผู้อนุมัติ/ผู้รับเงิน
  *
- * **1 ผู้รับเงิน = 1 หน้า** — เรียก 1 ครั้งต่อรอบได้ทั้งชุด (`renderPaymentVouchers()`)
- * ⚠️ ทุกค่าประกอบมาแล้วจาก `buildPaymentVoucherDocs()` (pure) — ห้าม format ซ้ำที่นี่
+ * **1 ผู้รับเงิน = 1 ชุดหน้า** — เลขที่ใบสำคัญจ่ายมาจากข้อมูล (`doc.voucherNo`) ที่นี่ไม่สร้างเลขเอง
+ * ⚠️ ทุกค่าประกอบมาแล้วจาก `buildPaymentVoucherDocs()` (pure) — ห้าม format/คำนวณซ้ำที่นี่
  */
 
-const styles = StyleSheet.create({
-  infoTable: { borderWidth: 1, borderColor: '#cbd5e1', marginBottom: 16 },
-  infoRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: '#e2e8f0' },
-  infoLabel: {
-    width: '30%',
-    fontSize: 9,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    backgroundColor: '#f8fafc',
-    borderRightWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  infoValue: { width: '70%', fontSize: 9, paddingHorizontal: 8, paddingVertical: 7 },
-  amountRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#e2e8f0', paddingVertical: 6 },
-  amountTotalRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: '#94a3b8', paddingVertical: 6 },
-  amountLabel: { fontSize: 9 },
-  amountLabelBold: { fontSize: 10, fontWeight: 700 },
-  amountValue: { fontSize: 9 },
-  amountValueBold: { fontSize: 10, fontWeight: 700 },
-  inWords: { fontSize: 9, color: '#475569', marginTop: 6 },
-})
-
-function InfoRow({ label, value }: { label: string; value: string }): React.JSX.Element {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  )
-}
+const COLUMNS: readonly DocColumn[] = [
+  { label: 'ลำดับ', width: '8%', align: 'center' },
+  { label: 'รายการ (Descriptions)', width: '66%' },
+  { label: 'บาท (Baht)', width: '26%', align: 'right' },
+]
 
 export function PaymentVoucherPage({ doc, letterhead }: { doc: PaymentVoucherDoc; letterhead: DocLetterhead }): React.JSX.Element {
+  const payee = doc.payee
   return (
-    <Page size="A4" style={docStyles.page}>
-      <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+    <DocPage footerLeft={`${doc.issuer.name} · ${doc.voucherNo}`}>
+      <DocTitleHeader letterhead={letterhead} title={doc.title} titleEn={doc.titleEn} copyLabel={DOC_COPY_LABEL.original} />
+      <DateNumberRow
+        date={doc.payDateLabel}
+        number={doc.voucherNo}
+        extras={[
+          ['อ้างอิงรอบจ่าย', doc.batchName],
+          ['วันที่จ่าย', doc.payDateLabel],
+          ['วิธีจ่ายเงิน', doc.methodLabel],
+          ['ทีม', doc.teamName],
+        ]}
+      />
+      {doc.pendingNote === null ? null : <Banner tone="info" text={doc.pendingNote} />}
+      <PartyPanel
+        left={{ label: 'จ่ายโดย', name: letterhead.nameTh, lines: letterheadPartyLines(letterhead) }}
+        right={{
+          label: 'จ่ายให้',
+          name: payee.displayName,
+          lines: partyLines({
+            address: payee.address,
+            taxId: payee.taxId,
+            branchLabel: payee.branchLabel,
+            ...(payee.isCorporate ? {} : { taxLabel: 'เลขประจำตัวประชาชน' }),
+            extra: [`บัญชีรับโอน: ${doc.bankLine}`],
+          }),
+        }}
+      />
 
-      {doc.pendingNote === null ? null : (
-        <View style={docStyles.warnBox}>
-          <Text style={docStyles.warnText}>{doc.pendingNote}</Text>
-        </View>
-      )}
+      <DocTable columns={COLUMNS}>
+        {doc.lines.map((line, index) => (
+          <DocRow
+            key={`${line.description}-${index}`}
+            columns={COLUMNS}
+            cells={[{ main: String(index + 1) }, { main: line.description, detail: line.detail }, { main: line.amountText }]}
+          />
+        ))}
+        <SummaryRow columns={COLUMNS} tone="sub" label="รวมค่าตอบแทนก่อนหักภาษี" value={doc.grossText} />
+        <SummaryRow columns={COLUMNS} tone="deduct" label={doc.whtLabel} value={doc.whtDeductText} />
+        {doc.offsetLines.map((line) => (
+          <SummaryRow
+            key={line.label}
+            columns={COLUMNS}
+            tone="deduct"
+            label={`${line.label} (หักกลบในรอบจ่ายนี้)`}
+            value={line.amountText}
+          />
+        ))}
+        <PaymentChannelRow text={doc.paymentChannelText} />
+        <SummaryRow columns={COLUMNS} tone="total" label="ยอดโอนสุทธิ :" value={doc.netText} />
+        <AmountInWordsRow words={doc.netInWords} />
+      </DocTable>
 
-      <View style={styles.infoTable}>
-        <InfoRow label="เลขที่ใบสำคัญจ่าย" value={doc.voucherNo} />
-        <InfoRow label="จ่ายให้" value={doc.payeeName} />
-        <InfoRow label="บัญชีธนาคารผู้รับ" value={doc.bankLine} />
-        <InfoRow label="รายการ / วัตถุประสงค์" value={doc.description} />
-        <InfoRow label="อ้างอิงรอบจ่าย" value={doc.batchName} />
-        <InfoRow label="วิธีจ่ายเงิน" value={doc.methodLabel} />
-        <InfoRow label="วันที่จ่าย" value={doc.payDateLabel} />
-      </View>
-
-      <View style={styles.amountRow}>
-        <Text style={styles.amountLabel}>ยอดก่อนหักภาษี</Text>
-        <Text style={styles.amountValue}>{doc.grossText}</Text>
-      </View>
-      <View style={styles.amountRow}>
-        <Text style={styles.amountLabel}>หักภาษี ณ ที่จ่าย</Text>
-        <Text style={styles.amountValue}>{doc.whtText}</Text>
-      </View>
-      {doc.offsetLines.length === 0 ? null : (
-        <>
-          <View style={styles.amountRow}>
-            <Text style={styles.amountLabel}>สุทธิหลังหักภาษี</Text>
-            <Text style={styles.amountValue}>{doc.netAfterWhtText}</Text>
-          </View>
-          {doc.offsetLines.map((line) => (
-            <View key={line.label} style={styles.amountRow}>
-              <Text style={styles.amountLabel}>{line.label}</Text>
-              <Text style={styles.amountValue}>{line.amountText}</Text>
-            </View>
-          ))}
-        </>
-      )}
-      <View style={styles.amountTotalRow}>
-        <Text style={styles.amountLabelBold}>จำนวนเงินสุทธิที่จ่ายจริง</Text>
-        <Text style={styles.amountValueBold}>{doc.netText}</Text>
-      </View>
-      <Text style={styles.inWords}>({doc.netInWords})</Text>
-
-      <SignatureRow labels={['ผู้จ่ายเงิน', 'ผู้รับเงิน', 'ผู้อนุมัติ']} />
-
-      <DocFooter left={`${doc.voucherNo} · ${doc.issuer.name}`} />
-    </Page>
+      <NoteText>{doc.footnote}</NoteText>
+      <Signatures roles={doc.signers} />
+    </DocPage>
   )
 }
 

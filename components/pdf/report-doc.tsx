@@ -42,15 +42,16 @@ export function ReportDocument({
       <Page size="A4" orientation="landscape" style={docStyles.page}>
         <DocHeader
           letterhead={letterhead}
-          headerNote="เอกสารภายใน — ใช้เพื่อการบริหารจัดการ ไม่ใช่เอกสารทางภาษี"
           title={payload.report.title}
-          titleEn={payload.report.code}
+          lines={[
+            `ช่วงเวลา: ${payload.range.label}`,
+            `ข้อมูล ณ: ${fmtDateTime(payload.cache.computedAt)}`,
+            `พิมพ์เมื่อ: ${fmtDateTime(generatedAt)}`,
+          ]}
         />
 
         <View style={docStyles.metaGrid}>
-          <MetaCell label="ช่วงเวลา" value={payload.range.label} />
-          <MetaCell label="ข้อมูล ณ" value={fmtDateTime(payload.cache.computedAt)} />
-          <MetaCell label="ออกรายงานเมื่อ" value={fmtDateTime(generatedAt)} />
+          <MetaCell label="รหัสรายงาน" value={payload.report.code} />
           <MetaCell label="ออกโดย" value={generatedByName} />
         </View>
 

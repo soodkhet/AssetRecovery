@@ -181,8 +181,8 @@ describe('แบบข้อมูลเอกสาร PDF (`28` §6.2)', () =>
       receivedDate: new Date('2026-06-28T00:00:00Z'),
       replacementNote: 'ออกแทนฉบับเลขที่ INV-0005 ลงวันที่ 25/06/2569 เนื่องจาก ที่อยู่ผิด',
     })
-    expect(doc.title).toBe('ใบเสร็จรับเงิน/ใบกำกับภาษี')
-    expect(doc.titleEn).toBe('RECEIPT / TAX INVOICE')
+    expect(doc.title).toBe('ใบเสร็จรับเงิน / ใบกำกับภาษี')
+    expect(doc.titleEn).toBe('Receipt / Tax Invoice')
     expect(doc.receivedDateLabel).toBe('28/06/2569')
     expect(doc.replacementNote).toContain('INV-0005')
     expect(buildTaxInvoiceDoc(source).title).toBe('ใบกำกับภาษี')
