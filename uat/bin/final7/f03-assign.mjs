@@ -1,0 +1,20 @@
+// Flow 3 — หัวหน้าทีม A มอบหมาย FINAL7-001 ให้ in1 (อนันต์)
+import { openAs, shot, log, q } from './_h.mjs'
+import { collect, trackApi } from '../r2/_h.mjs'
+const REF = 'FINAL7-001'
+const s = await openAs('uat.sup.in'); const { page } = s; const api = trackApi(page)
+await page.goto('http://localhost:3000/cases/assign'); await page.waitForLoadState('networkidle'); await page.waitForTimeout(800)
+const row = page.locator('tr', { hasText: REF }).first()
+log('f03', 'row', (await row.innerText().catch(() => 'NO ROW')).replace(/\s+/g, ' '))
+await row.getByRole('button', { name: 'มอบหมาย', exact: true }).click()
+const d = page.getByRole('dialog'); await d.waitFor(); await page.waitForTimeout(1200)
+log('f03', 'dlg', (await d.innerText()).replace(/\s+/g, ' ').slice(0, 500))
+await d.getByText('อนันต์ ตามทรัพย์').first().click(); await page.waitForTimeout(300)
+await shot(page, 'final/flow', 'f03-assign-modal')
+await d.getByRole('button', { name: 'ยืนยันมอบหมาย' }).click()
+log('f03', 'toasts', await collect(page, 3500), api.splice(0).map(x => x.slice(0, 150)))
+await page.waitForTimeout(800)
+log('f03', 'row after', (await page.locator('tr', { hasText: REF }).first().innerText().catch(() => 'NO ROW')).replace(/\s+/g, ' '))
+await shot(page, 'final/flow', 'f03-after')
+log('f03', q(`select a.status,u.username,a.created_at from case_assignments a join users u on u.id=a.agent_id join cases c on c.id=a.case_id where c.case_ref='${REF}'`))
+log('f03', 'console', s.consoleErrors, s.serverErrors); await s.browser.close()

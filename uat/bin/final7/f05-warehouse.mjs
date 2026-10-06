@@ -1,0 +1,61 @@
+// Flow 5 — ธุรการ: รับเข้าคลัง FINAL7-001 (IMEI ผิดก่อน) → นัดส่งมอบ (ไฟแนนซ์มารับ) → แนบใบเซ็นรับ → ยืนยันล็อต → รายได้เกิด
+import { openAs, shot, log, q } from './_h.mjs'
+import { collect, trackApi } from '../r2/_h.mjs'
+const REF = 'FINAL7-001'
+const s = await openAs('uat.admin'); const { page } = s; const api = trackApi(page)
+const dt = async () => (await page.locator('[role=dialog]').last().innerText().catch(() => '')).replace(/\s+/g, ' ')
+const step = process.argv[2] ?? 'intake'
+await page.goto('http://localhost:3000/warehouse'); await page.waitForLoadState('networkidle'); await page.waitForTimeout(800)
+if (step === 'intake') {
+  const row = page.locator('tr', { hasText: REF }).first()
+  log('f05', 'row', (await row.innerText()).replace(/\s+/g, ' '))
+  await row.getByRole('button', { name: 'รับเข้าคลัง', exact: true }).click(); await page.waitForTimeout(800)
+  const dlg = page.locator('[role=dialog]').last(); const imei = dlg.getByPlaceholder('พิมพ์หรือสแกน IMEI')
+  await dlg.getByRole('button', { name: 'ปกติ', exact: true }).click()
+  await imei.fill('359000000007002'); await page.waitForTimeout(300)
+  await dlg.getByRole('button', { name: /ยืนยันรับ/ }).click(); await page.waitForTimeout(700)
+  log('f05', 'IMEI mismatch:', (await dt()).slice(0, 500)); await shot(page, 'final/flow', 'f05-imei-mismatch')
+  await imei.fill('359 000 000 007 001'); await page.waitForTimeout(300)
+  log('f05', 'IMEI ok box:', (await dt()).slice(0, 300))
+  await dlg.getByRole('button', { name: /ยืนยันรับ/ }).click()
+  log('f05', 'intake', await collect(page, 4000), api.splice(0).map(x => x.slice(0, 140)))
+  await shot(page, 'final/flow', 'f05-intake-done')
+}
+if (step === 'lot') {
+  await page.getByRole('tab', { name: /^ในคลัง/ }).click(); await page.waitForTimeout(900)
+  log('f05', 'custody', (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 800))
+  await page.getByText('บจก. ยูเอที ลิสซิ่ง').last().click(); await page.waitForTimeout(900)
+  const cb = page.getByRole('checkbox', { name: `เลือก ${REF}` })
+  log('f05', 'cb count', await cb.count()); await cb.check(); await page.waitForTimeout(300)
+  await page.getByRole('button', { name: /นัดวันส่งมอบ/ }).click(); await page.waitForTimeout(900)
+  const dlg = page.locator('[role=dialog]').last()
+  await dlg.getByRole('button', { name: /ไฟแนนซ์มารับที่คลัง/ }).click(); await page.waitForTimeout(300)
+  const SCHED = new Date(Date.now() + 7 * 3600e3 + 3600e3).toISOString().slice(0, 16)
+  await dlg.locator('input[type=datetime-local]').fill(SCHED)
+  await dlg.getByPlaceholder('เช่น คุณวิภา ฝ่ายติดตามทรัพย์').fill('คุณวิภา (ด่าน 7)')
+  await shot(page, 'final/flow', 'f05-lot-form')
+  await dlg.getByRole('button', { name: 'บันทึกการนัด' }).click()
+  log('f05', 'lot', await collect(page, 4000), api.splice(0).map(x => x.slice(0, 160)))
+}
+if (step === 'confirm') {
+  await page.getByRole('tab', { name: /^รอส่งมอบ/ }).click(); await page.waitForTimeout(1500)
+  const card = page.locator('div', { hasText: process.argv[3] }).filter({ has: page.getByRole('button', { name: 'ดูรายการ' }) }).last()
+  await card.getByRole('button', { name: 'ดูรายการ' }).click(); await page.waitForTimeout(1000)
+  await page.getByRole('button', { name: 'แนบเอกสาร & ยืนยัน' }).click(); await page.waitForTimeout(1000)
+  const dlg = page.locator('[role=dialog]').last()
+  log('f05', 'confirm dlg', (await dt()).slice(0, 700))
+  const btn = dlg.getByRole('button', { name: 'ยืนยันส่งมอบสำเร็จ' })
+  log('f05', 'confirm disabled before doc:', await btn.isDisabled())
+  const fi = dlg.locator('input[type=file]'); log('f05', 'file inputs', await fi.count())
+  await fi.first().setInputFiles('uat/fixtures/files/C1-contract.pdf'); await page.waitForTimeout(3000)
+  log('f05', 'after upload', (await dt()).slice(0, 400), 'disabled:', await btn.isDisabled())
+  await shot(page, 'final/flow', 'f05-confirm-dlg')
+  await btn.click()
+  log('f05', 'confirm', await collect(page, 8000), api.splice(0).filter(x => !x.includes('/storage/v1')).map(x => x.slice(0, 160)))
+  await page.getByRole('tab', { name: /^ส่งมอบแล้ว/ }).click(); await page.waitForTimeout(1500)
+  log('f05', 'delivered tab (U142):', (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 1500))
+  await shot(page, 'final/flow', 'f05-delivered-grouped', { fullPage: true })
+}
+log('f05', q(`select a.asset_status,a.imei_actual,l.lot_number,l.status,l.type from assets a left join handover_lots l on l.id=a.lot_id where a.case_id=(select id from cases where case_ref='${REF}')`))
+log('f05', q(`select r.status,r.gross_satang,r.vat_satang,r.total_satang,r.vat_rate_pct_used,r.vat_mode_snapshot,r.revenue_date from revenues r where r.case_id=(select id from cases where case_ref='${REF}')`).slice(0, 600))
+log('f05', 'console', s.consoleErrors, s.serverErrors); await s.browser.close()
