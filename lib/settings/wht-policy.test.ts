@@ -7,6 +7,7 @@ import {
   effectiveWhtPolicy,
   isEffectiveFromAllowed,
   isInWhtBase,
+  isWhtConditionAllowed,
   normalizeBaseExpenseTypes,
   payoutBatchWhtPolicy,
   resolveWhtPolicyAt,
@@ -138,6 +139,7 @@ describe('normalize/audit', () => {
       issue_zero_rate_40_2_certificate: true,
       inhouse_income_category: 'sec_40_2',
       outsource_income_category: 'sec_40_8',
+      allow_gross_up_conditions: false,
       filing_method: 'online',
     })
   })
@@ -265,5 +267,50 @@ describe('BUG-157 — ฟอร์มไม่ส่งการจับคู�
   it('โหมดแยกตามประเภททีม ⇒ ส่งค่าที่ผู้ใช้เลือกตามเดิม', () => {
     const form = { incomeTypeMode: 'by_team_side', inhouseIncomeCategory: 'sec_40_2', outsourceIncomeCategory: 'sec_40_2' } as const
     expect(effectiveTeamSideCategories(form, current)).toBe(form)
+  })
+})
+
+describe('U105 — อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (มติ PO 06/10/2569)', () => {
+  it('ค่าเริ่มต้น = ปิด · รอบเก่า (snapshot NULL) = ปิด · schema ไม่ส่ง = ปิด', () => {
+    expect(DEFAULT_WHT_POLICY.allowGrossUpConditions).toBe(false)
+    expect(LEGACY_WHT_POLICY.allowGrossUpConditions).toBe(false)
+    expect(
+      payoutBatchWhtPolicy({
+        whtBaseExpenseTypes: null,
+        whtCertificateMode: null,
+        whtIncomeTypeMode: null,
+        whtIssueZeroRate402Certificate: null,
+        whtInhouseIncomeCategory: null,
+        whtOutsourceIncomeCategory: null,
+        whtAllowGrossUpConditions: null,
+      }).allowGrossUpConditions,
+    ).toBe(false)
+    expect(
+      payoutBatchWhtPolicy({
+        whtBaseExpenseTypes: ['commission'],
+        whtCertificateMode: 'per_payee_batch',
+        whtIncomeTypeMode: 'all_40_8',
+        whtIssueZeroRate402Certificate: true,
+        whtInhouseIncomeCategory: 'sec_40_2',
+        whtOutsourceIncomeCategory: 'sec_40_8',
+        whtAllowGrossUpConditions: true,
+      }).allowGrossUpConditions,
+    ).toBe(true)
+    const parsed = whtPolicyCreateSchema.parse({
+      effectiveFrom: '2026-10-06',
+      baseExpenseTypes: ['commission'],
+      certificateMode: 'per_payee_batch',
+      incomeTypeMode: 'all_40_8',
+      reason: 'ตั้งค่าตามสำนักงานบัญชี',
+    })
+    expect(parsed.allowGrossUpConditions).toBe(false)
+  })
+
+  it('ปิด ⇒ ใช้ได้เฉพาะ (1) · เปิด ⇒ ใช้ได้ทั้งสามแบบ', () => {
+    expect(isWhtConditionAllowed({ allowGrossUpConditions: false }, 'withhold')).toBe(true)
+    expect(isWhtConditionAllowed({ allowGrossUpConditions: false }, 'pay_always')).toBe(false)
+    expect(isWhtConditionAllowed({ allowGrossUpConditions: false }, 'pay_once')).toBe(false)
+    expect(isWhtConditionAllowed({ allowGrossUpConditions: true }, 'pay_always')).toBe(true)
+    expect(isWhtConditionAllowed({ allowGrossUpConditions: true }, 'pay_once')).toBe(true)
   })
 })

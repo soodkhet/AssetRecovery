@@ -88,6 +88,7 @@ PATCH  /api/service-fee-templates/:id
 ```
 GET    /api/payees
 GET    /api/payees/candidates                           (v3.5 — ผู้ใช้ที่ยังไม่มี Payee Profile สำหรับฟอร์มสร้าง · `18` §6.1)
+GET    /api/payees/wht-condition-policy                 (มติ PO U105 — ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" ที่มีผลวันนี้ สำหรับฟอร์มผู้รับ · `manage_payee_profile` manage)
 POST   /api/payees
 PATCH  /api/payees/:id
 PATCH  /api/payees/:id/verify

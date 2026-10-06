@@ -91,11 +91,30 @@ export const WHT_CONDITION_LABEL: Readonly<Record<WhtCondition, string>> = {
 }
 
 /**
- * ⚠️ ระบบคำนวณภาษีแบบ (1) หัก ณ ที่จ่ายเสมอ — (2)/(3) ผู้จ่ายออกภาษีให้ ⇒ ฐานภาษีต้องคำนวณแบบทบยอด
- * (gross-up) ซึ่งเป็นงานของสำนักงานบัญชี (Hybrid Boundary) · ระบบรองรับแค่บันทึก + พิมพ์บนใบ 50 ทวิ
+ * (2)/(3) = ผู้จ่ายออกภาษีให้ ⇒ สูตรต่างจาก (1) (มติ PO 06/10/2569 U105 — คิดแบบทบยอด `whtGrossUp()` เมื่อค่าตั้ง
+ * อนุญาต · ค่าตั้งปิด ⇒ การสร้างรอบจ่ายถูกบล็อกจนกว่าจะเปลี่ยนเป็น (1))
  */
 export function whtConditionAffectsFormula(condition: WhtCondition): boolean {
   return condition !== 'withhold'
+}
+
+/**
+ * ตัวเลือกเงื่อนไขในฟอร์มผู้รับ (U105) — ค่าตั้งปิด ⇒ เฉพาะ (1) + ค่าเดิมที่ผู้รับตั้งไว้แล้ว (ให้เห็นว่าต้องเปลี่ยน)
+ */
+export function selectableWhtConditions(allowGrossUp: boolean, current: WhtCondition | null): WhtCondition[] {
+  if (allowGrossUp) return [...WHT_CONDITIONS]
+  return WHT_CONDITIONS.filter((condition) => condition === 'withhold' || condition === current)
+}
+
+/** คำอธิบายใต้ช่องเงื่อนไขการหักในฟอร์มผู้รับ (U105) */
+export function whtConditionHint(condition: WhtCondition, allowGrossUp: boolean): string {
+  if (!whtConditionAffectsFormula(condition)) return 'พิมพ์ในช่อง “ผู้จ่ายเงิน” บนหนังสือรับรองการหักภาษี ณ ที่จ่าย'
+  if (!allowGrossUp) {
+    return 'ค่าตั้งภาษีขององค์กรยังไม่อนุญาตเงื่อนไขนี้ — เปลี่ยนเป็น (1) หัก ณ ที่จ่าย มิฉะนั้นจะสร้างรอบจ่ายที่มีผู้รับรายนี้ไม่ได้'
+  }
+  return condition === 'pay_always'
+    ? 'บริษัทออกภาษีให้ตลอดไป — ผู้รับได้เงินเต็ม ภาษี = เงินได้ × อัตรา ÷ (1 − อัตรา) และเงินได้บนหนังสือรับรอง = เงินได้ + ภาษี'
+    : 'บริษัทออกภาษีให้ครั้งเดียว — ผู้รับได้เงินเต็ม ภาษี = เงินได้ × อัตรา และเงินได้บนหนังสือรับรอง = เงินได้ + ภาษี'
 }
 
 /** ชื่อเต็มบนเอกสาร — บุคคลธรรมดาต่อคำนำหน้า (ถ้ามี) · นิติบุคคลใช้ชื่อตามจริง */

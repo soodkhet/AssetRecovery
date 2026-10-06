@@ -151,6 +151,8 @@ export interface WhtPolicyDto {
   /** โหมดแยกตามประเภททีม: ประเภทเงินได้ของ inhouse / outsource (U33) */
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
+  /** อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (U105) */
+  allowGrossUpConditions: boolean
   /** วิธียื่น ภ.ง.ด. (U45) */
   filingMethod: WhtFilingMethod
   reason: string

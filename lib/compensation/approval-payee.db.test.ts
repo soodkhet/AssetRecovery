@@ -329,6 +329,13 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
     const payeeId = await seedPayee(AGENT_ID, { address: { ...ADDRESS, subdistrict: null, postalCode: null } })
     await expectCode(() => payees.verifyPayee(ctx(finance, 'ยังไม่มีที่อยู่ครบ'), payeeId), 'REQUIRED_MISSING')
 
+    // มติ PO U105 — ค่าตั้งภาษียังปิด (2)/(3) ⇒ เลือกใหม่ไม่ได้ แต่ค่าเดิมที่ตั้งไว้ก่อนปิดคงไว้ได้
+    await expectCode(
+      () => payees.updatePayee(ctx(finance, 'ลองเปลี่ยนเงื่อนไข'), payeeId, { ...BANK, whtCondition: 'pay_always' }),
+      'WHT_CONDITION_NOT_ALLOWED',
+    )
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET wht_condition = 'pay_always' WHERE id = '${payeeId}'`)
+
     const filled = await payees.updatePayee(ctx(finance, 'เติมที่อยู่ตามบัตรประชาชน'), payeeId, {
       ...BANK,
       nameTitle: 'นาย',

@@ -11,6 +11,7 @@ import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
  *  · เพดานต่อใบ/ต่อคนต่อเดือน (ใบของใบเบิกที่ถูกปฏิเสธไม่นับ) — ทะลุพร้อมกันไม่ได้
  *  · อัปโหลดฉบับเซ็น → เป็นใบเสร็จของใบเบิก · ซ้ำไม่ได้ · ยามอนุมัติ · DB ห้ามแก้ใบที่ออกแล้ว
  *  · scope: เจ้าของ/การเงิน/ผู้จัดการทีม เห็น · คนอื่น 404
+ *  · U107: ยกเลิก (เหตุผลบังคับ · ครั้งเดียว · ไม่นับเพดาน · ห้ามลบ · ใบเบิกอนุมัติแล้วยกเลิกไม่ได้) + ออกใบใหม่แทน
  *
  * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
  */
@@ -141,7 +142,13 @@ async function issueFor(expenseId: string, amounts: number[], payeeId = PAYEE_ID
 
 async function reset(): Promise<void> {
   const tx = db()
-  await tx.$executeRawUnsafe(`DELETE FROM substitute_receipts WHERE organization_id = '${ORG_ID}'`)
+  // ใบที่ยกเลิกแล้วลบไม่ได้ด้วย trigger (มติ PO U107) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  await tx.$executeRawUnsafe(`ALTER TABLE substitute_receipts DISABLE TRIGGER trg_substitute_receipts_guard_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM substitute_receipts WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE substitute_receipts ENABLE TRIGGER trg_substitute_receipts_guard_delete`)
+  }
   await tx.$executeRawUnsafe(`DELETE FROM advance_returns WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
@@ -433,5 +440,184 @@ suite('เคลียร์เงินทดรอง "ไม่มีใบ�
       () => advanceDocs.getAdvanceReturnDocSource(finance, ADV_ID, '00000000-0000-4000-8000-0000000000ff'),
       'ADVANCE_NOT_FOUND',
     )
+  })
+})
+
+suite('U107 — ยกเลิกใบรับรองแทนใบเสร็จ + ออกใบใหม่แทน (มติ PO 06/10/2569)', () => {
+  const ctxOf = (actor: SessionUser) => ({ actor, meta })
+
+  it('เหตุผลบังคับ (CANCEL_REQUIRES_REASON) · ยกเลิกแล้วเก็บใบเดิม + เวลา/ผู้ยกเลิก/เหตุผล + audit · ยกเลิกซ้ำไม่ได้', async () => {
+    const issued = await issueFor(await seedHotelExpense(), [10_000])
+    await expectCode(() => receipts.cancelSubstituteReceipt(ctxOf(agent), issued.id, { reason: '   ' }), 'CANCEL_REQUIRES_REASON')
+    await expectCode(() => receipts.cancelSubstituteReceipt(ctxOf(agent), issued.id, {}), 'CANCEL_REQUIRES_REASON')
+
+    const cancelled = await receipts.cancelSubstituteReceipt(ctxOf(agent), issued.id, { reason: 'กรอกรายการผิดวัน' })
+    expect(cancelled).toMatchObject({ status: 'cancelled', cancelReason: 'กรอกรายการผิดวัน' })
+    expect(cancelled.cancelledAt).not.toBeNull()
+    const row = await db().substituteReceipt.findUniqueOrThrow({ where: { id: issued.id } })
+    expect(row).toMatchObject({ status: 'cancelled', cancelledBy: AGENT_ID, deletedAt: null })
+
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'substitute_receipts', targetId: issued.id, action: 'status_change' },
+    })
+    expect(audit.reason).toBe('กรอกรายการผิดวัน')
+    expect(audit.afterData).toMatchObject({ status: 'cancelled', events: ['substitute_receipt.cancelled'] })
+
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt(ctxOf(finance), issued.id, { reason: 'ยกเลิกซ้ำอีกครั้ง' }),
+      'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+    )
+    // PDF ยังพิมพ์ได้ (ใบเดิมห้ามลบ) พร้อมข้อมูลการยกเลิก
+    const source = receipts.toSubstituteReceiptDocSource(await receipts.getSubstituteReceiptSource(agent, issued.id))
+    expect(source.cancellation?.reason).toBe('กรอกรายการผิดวัน')
+  })
+
+  it('ใบที่ยกเลิกไม่นับเพดานต่อเดือน: ใช้เต็ม ฿3,000 → ยกเลิกใบ ฿500 → ออกได้อีก ฿500', async () => {
+    const issuedIds: string[] = []
+    for (let index = 0; index < 6; index += 1) issuedIds.push((await issueFor(await seedHotelExpense(), [50_000])).id)
+    await expectCode(() => issueFor(seedHotelExpenseSync(), [100]), 'SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT')
+    await receipts.cancelSubstituteReceipt(ctxOf(finance), issuedIds[0]!, { reason: 'ได้ใบเสร็จจริงมาแล้ว' })
+    await expect(issueFor(await seedHotelExpense(), [50_000])).resolves.toMatchObject({ totalSatang: 50_000 })
+  })
+
+  it('ใบเบิกอนุมัติจ่ายแล้ว ⇒ ยกเลิก/ออกใหม่ไม่ได้ (SUBSTITUTE_RECEIPT_NOT_CANCELLABLE) แม้เป็นการเงิน', async () => {
+    const expenseId = await seedHotelExpense()
+    const issued = await issueFor(expenseId, [10_000])
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE id = '${expenseId}'`)
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt(ctxOf(finance), issued.id, { reason: 'ขอยกเลิกหลังอนุมัติ' }),
+      'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+    )
+    expect((await db().substituteReceipt.findUniqueOrThrow({ where: { id: issued.id } })).status).toBe('pending_signature')
+  })
+
+  it('สิทธิ์: เจ้าของ/การเงิน ยกเลิกได้ · ผู้จัดการทีม/คนอื่น 404 (ไม่ leak) · เงินทดรอง: เจ้าของยกเลิกเองไม่ได้', async () => {
+    const issued = await issueFor(await seedHotelExpense(), [10_000])
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt(ctxOf(manager), issued.id, { reason: 'ผู้จัดการขอยกเลิก' }),
+      'SUBSTITUTE_RECEIPT_NOT_FOUND',
+    )
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt(ctxOf(otherAgent), issued.id, { reason: 'คนอื่นขอยกเลิก' }),
+      'SUBSTITUTE_RECEIPT_NOT_FOUND',
+    )
+    await expect(
+      receipts.cancelSubstituteReceipt(ctxOf(finance), issued.id, { reason: 'การเงินตรวจพบรายการซ้ำ' }),
+    ).resolves.toMatchObject({ status: 'cancelled' })
+
+    await db().$executeRawUnsafe(`
+      INSERT INTO advances (id, organization_id, payee_id, requested_satang, approved_satang, used_satang, purpose,
+                            due_clear_date, status, approved_at, approved_by, cleared_at, return_method, created_by)
+      VALUES ('${ADV_ID}', '${ORG_ID}', '${PAYEE_ID}', 300000, 300000, 250000, 'ค่าเดินทาง U107',
+              '2026-12-31', 'cleared', '2026-10-01T03:00:00Z', '${FINANCE_ID}', '2026-10-05T03:00:00Z', 'separate', '${AGENT_ID}')
+    `)
+    const advanceCrt = await db().$transaction((tx) =>
+      receipts.issueSubstituteReceipt(tx as never, ctxOf(agent), {
+        organizationId: ORG_ID,
+        payeeId: PAYEE_ID,
+        link: { kind: 'advance', advanceId: ADV_ID },
+        lines: [line(11_000)],
+        at: AT,
+      }),
+    )
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt(ctxOf(agent), advanceCrt.id, { reason: 'เจ้าของขอยกเลิกเอง' }),
+      'SUBSTITUTE_RECEIPT_NOT_FOUND',
+    )
+    await expect(
+      receipts.cancelSubstituteReceipt(ctxOf(advanceOnlyFinance), advanceCrt.id, { reason: 'การเงินยกเลิกใบเคลียร์ยอด' }),
+    ).resolves.toMatchObject({ status: 'cancelled' })
+    // ออกใบใหม่แทนให้เงินทดรองเดิม (ยอดไม่เกินยอดใช้จริง)
+    const reissued = await receipts.reissueSubstituteReceipt(ctxOf(advanceOnlyFinance), advanceCrt.id, [line(12_000)])
+    expect(reissued).toMatchObject({ status: 'pending_signature', totalSatang: 12_000 })
+    expect(await db().substituteReceipt.count({ where: { advanceId: ADV_ID } })).toBe(2)
+  })
+
+  it('ยกเลิกหลังอัปโหลดฉบับเซ็น ⇒ ล้างใบเสร็จของใบเบิก + ยามอนุมัติปัด → ออกใบใหม่แทน (เลขใหม่ ผูกใบเบิกเดิม) → เซ็นแล้วอนุมัติได้', async () => {
+    const expenseId = await seedHotelExpense()
+    const issued = await issueFor(expenseId, [10_000])
+    const path = `substitute-receipts/${issued.id}/signed/44444444-4444-4444-8444-444444444444.pdf`
+    await receipts.attachSignedSubstituteReceipt(ctxOf(agent), issued.id, { signedFilePath: path })
+
+    await receipts.cancelSubstituteReceipt(ctxOf(agent), issued.id, { reason: 'เซ็นผิดช่อง ต้องออกใหม่' })
+    const cancelledRow = await db().substituteReceipt.findUniqueOrThrow({ where: { id: issued.id } })
+    expect(cancelledRow.signedFilePath).toBe(path) // ไฟล์เดิมเก็บไว้เป็นหลักฐาน
+    expect((await db().expense.findUniqueOrThrow({ where: { id: expenseId } })).receiptFileUrl).toBeNull()
+    await expectCode(() => receipts.assertExpenseSubstituteReceiptSigned(db() as never, expenseId), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
+    await expectCode(
+      () => receipts.attachSignedSubstituteReceipt(ctxOf(agent), issued.id, { signedFilePath: path }),
+      'SUBSTITUTE_RECEIPT_ALREADY_SIGNED',
+    )
+
+    // ยอดใบใหม่ของค่าที่พักต้องเท่ายอดเบิก
+    await expectCode(
+      () => receipts.reissueSubstituteReceipt(ctxOf(agent), issued.id, [line(9_000)]),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    const reissued = await receipts.reissueSubstituteReceipt(ctxOf(agent), issued.id, [line(6_000), line(4_000)])
+    expect(reissued.receiptNumber).not.toBe(issued.receiptNumber)
+    expect(reissued).toMatchObject({ status: 'pending_signature', totalSatang: 10_000 })
+    const reissueAudit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'substitute_receipts', targetId: reissued.id, action: 'update' },
+    })
+    expect(reissueAudit.afterData).toMatchObject({ replaces_receipt_number: issued.receiptNumber })
+
+    // มีใบที่ใช้งานอยู่แล้ว ⇒ ออกซ้ำจากใบเดิมไม่ได้ · ใบใหม่ยังไม่ยกเลิก ⇒ ออกแทนจากใบใหม่ไม่ได้
+    await expectCode(
+      () => receipts.reissueSubstituteReceipt(ctxOf(agent), issued.id, [line(10_000)]),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    await expectCode(
+      () => receipts.reissueSubstituteReceipt(ctxOf(agent), reissued.id, [line(10_000)]),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+
+    // DTO ของใบเบิกแสดงใบที่ใช้งานอยู่ (ไม่ใช่ใบที่ยกเลิก)
+    const rows = await db().substituteReceipt.findMany({
+      where: { expenseId },
+      select: {
+        id: true,
+        receiptNumber: true,
+        status: true,
+        totalSatang: true,
+        issueDate: true,
+        signedAt: true,
+        cancelledAt: true,
+        cancelReason: true,
+        createdAt: true,
+        deletedAt: true,
+      },
+    })
+    expect(receipts.substituteReceiptRefOf(rows)?.id).toBe(reissued.id)
+
+    const newPath = `substitute-receipts/${reissued.id}/signed/55555555-5555-4555-8555-555555555555.pdf`
+    await receipts.attachSignedSubstituteReceipt(ctxOf(agent), reissued.id, { signedFilePath: newPath })
+    await expect(receipts.assertExpenseSubstituteReceiptSigned(db() as never, expenseId)).resolves.toBeUndefined()
+  })
+
+  it('ยาม DB: ยกเลิกแล้วแก้/คืนสถานะ/ลบไม่ได้ · ใบที่ออกแล้ว soft delete ไม่ได้ · ข้อมูลยกเลิกต้องครบ · unique ใบใช้งานต่อรายการ', async () => {
+    const expenseId = await seedHotelExpense()
+    const issued = await issueFor(expenseId, [10_000])
+    await expect(
+      db().$executeRawUnsafe(`UPDATE substitute_receipts SET deleted_at = now() WHERE id = '${issued.id}'`),
+    ).rejects.toThrow(/ห้ามลบ/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE substitute_receipts SET status = 'cancelled' WHERE id = '${issued.id}'`),
+    ).rejects.toThrow(/chk_substitute_receipts_cancel_shape/)
+
+    await receipts.cancelSubstituteReceipt(ctxOf(finance), issued.id, { reason: 'ยกเลิกเพื่อทดสอบยาม' })
+    await expect(
+      db().$executeRawUnsafe(`UPDATE substitute_receipts SET status = 'pending_signature' WHERE id = '${issued.id}'`),
+    ).rejects.toThrow(/ถูกยกเลิกแล้ว/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE substitute_receipts SET cancel_reason = 'แก้เหตุผล' WHERE id = '${issued.id}'`),
+    ).rejects.toThrow(/ถูกยกเลิกแล้ว/)
+    await expect(db().$executeRawUnsafe(`DELETE FROM substitute_receipts WHERE id = '${issued.id}'`)).rejects.toThrow(
+      /ห้ามลบ/,
+    )
+
+    // ใบใช้งานได้ไม่เกิน 1 ใบต่อใบเบิก (ใบที่ยกเลิกไม่นับ)
+    await issueFor(expenseId, [10_000])
+    await expect(issueFor(expenseId, [10_000])).rejects.toThrow()
   })
 })

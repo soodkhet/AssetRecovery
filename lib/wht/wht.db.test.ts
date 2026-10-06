@@ -314,6 +314,7 @@ suite('Phase 4.5 — ออกใบ 50 ทวิ อัตโนมัติจ
       issueZeroRate402Certificate: true,
       inhouseIncomeCategory: 'sec_40_2' as const,
       outsourceIncomeCategory: 'sec_40_8' as const,
+      allowGrossUpConditions: false,
     }
     const paper = await settings.createWhtPolicy(
       { actor: accountant, meta, reason: 'สำนักงานบัญชียื่นแบบกระดาษ' },
@@ -758,6 +759,10 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
     `)
     try {
       const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 20_000_00, wht: 600_00 }])
+      // มติ PO U105 — ช่อง "ผู้จ่ายเงิน" มาจาก snapshot ของรายการรอบจ่าย (ตัวที่ใช้คิดยอดจริง) ไม่ใช่โปรไฟล์ปัจจุบัน
+      await db().$executeRawUnsafe(
+        `UPDATE payout_batch_items SET wht_condition = 'pay_once' WHERE payout_batch_id = '${seeded.batchId}'`,
+      )
       await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
       const certificate = await db().whtCertificate.findFirstOrThrow({
         where: { organizationId: ORG_ID, expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } } },

@@ -2,6 +2,7 @@ import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtRatePct, fmtSatang } from '@/lib/format/money'
 import { summarizePayoutBatch, type PayoutBatchTotals } from '@/lib/finance/payout-calc'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
+import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import { advanceOffsetLineLabel } from '@/lib/advances/advance'
 import type { PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
@@ -175,6 +176,32 @@ export interface PayoutPayeeGroup {
   transferSatang: number
   /** บรรทัด "หักคืนเงินทดรอง ADV-xxx" ต่อเงินทดรอง (รวมยอดข้ามหลายบรรทัดในรอบ) */
   offsetLines: ReadonlyArray<{ label: string; amountSatang: number }>
+  /**
+   * มติ PO U105 — แยกยอดตามเงื่อนไขการหัก (`payoutItemTaxSplit()` จาก snapshot ไม่คิดใหม่):
+   * ค่าตอบแทนที่ผู้รับได้ก่อนหักภาษี · ภาษีที่หักจากผู้รับ · ภาษีที่บริษัทออกให้ (ไม่หักจากผู้รับ)
+   */
+  compensationSatang: number
+  whtWithheldSatang: number
+  whtPaidByPayerSatang: number
+}
+
+/** ยอดแยกตามเงื่อนไขการหักของชุดรายการ (U105) */
+function taxSplitTotals(items: readonly PayoutBatchItemDto[]): {
+  compensationSatang: number
+  whtWithheldSatang: number
+  whtPaidByPayerSatang: number
+} {
+  return items.reduce(
+    (sum, item) => {
+      const split = payoutItemTaxSplit(item)
+      return {
+        compensationSatang: sum.compensationSatang + split.compensationSatang,
+        whtWithheldSatang: sum.whtWithheldSatang + split.whtWithheldSatang,
+        whtPaidByPayerSatang: sum.whtPaidByPayerSatang + split.whtPaidByPayerSatang,
+      }
+    },
+    { compensationSatang: 0, whtWithheldSatang: 0, whtPaidByPayerSatang: 0 },
+  )
 }
 
 /** รวมบรรทัดหักคืนเงินทดรองของรายการกลุ่มหนึ่ง — ต่อเงินทดรอง ลำดับตามที่พบ */
@@ -226,6 +253,7 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
       advanceOffsetSatang,
       transferSatang: payoutTransferSatang(totals.netSatang, advanceOffsetSatang),
       offsetLines: collectOffsetLines(bucket),
+      ...taxSplitTotals(bucket),
     }
   })
 }
@@ -358,6 +386,11 @@ export interface PaymentVoucherDoc {
   whtLabel: string
   /** ยอดหักในวงเล็บ `(231.00)` · ไม่หัก = `0.00` */
   whtDeductText: string
+  /**
+   * มติ PO U105 — บรรทัด "ภาษีที่บริษัทออกให้" (เงื่อนไข (2)/(3) — ค่าใช้จ่ายบริษัท **ไม่หักจากผู้รับ**)
+   * `null` = ไม่มี (หัก ณ ที่จ่ายตามปกติ)
+   */
+  payerTaxLine: { label: string; amountText: string } | null
   /** "โอนเข้าบัญชี …" */
   paymentChannelText: string
   signers: readonly string[]
@@ -403,7 +436,8 @@ export function buildPaymentVoucherDocs(
     teamName: orDash(group.teamName),
     lines: voucherLinesOf(group.items),
     whtLabel: whtLineLabel(group),
-    whtDeductText: group.totals.whtSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.totals.whtSatang)})`,
+    whtDeductText: group.whtWithheldSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.whtWithheldSatang)})`,
+    payerTaxLine: payerTaxLineOf(group),
     paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
     signers: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'],
     footnote: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก',
@@ -412,8 +446,9 @@ export function buildPaymentVoucherDocs(
     batchName: batch.name,
     methodLabel: 'โอนผ่านธนาคาร (Bank Transfer)',
     payDateLabel: fmtDate(payDate),
-    grossText: fmtSatang(group.totals.grossSatang),
-    whtText: fmtSatang(group.totals.whtSatang),
+    // U105 — ค่าตอบแทนที่ผู้รับได้ (ไม่รวมภาษีที่บริษัทออกให้ — แยกบรรทัด `payerTaxLine`)
+    grossText: fmtSatang(group.compensationSatang),
+    whtText: fmtSatang(group.whtWithheldSatang),
     netAfterWhtText: fmtSatang(group.totals.netSatang),
     offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
     netText: fmtSatang(group.transferSatang),
@@ -436,12 +471,23 @@ function payeeBankLine(group: PayoutPayeeGroup): string {
  * ค่าที่พักตามใบเสร็จนามบริษัท) · ยอดหักเป็น snapshot ของรายการ (ไม่คิดใหม่บนเอกสาร — Rule 01)
  */
 function whtLineLabel(group: PayoutPayeeGroup): string {
-  const rate = group.whtPctSnapshot === null || group.totals.whtSatang === 0 ? '' : ` ${fmtRatePct(group.whtPctSnapshot)}`
+  const rate = group.whtPctSnapshot === null || group.whtWithheldSatang === 0 ? '' : ` ${fmtRatePct(group.whtPctSnapshot)}`
   const baseSatang = group.items
     .filter((item) => item.source === 'expense' && item.whtBaseIncluded)
-    .reduce((sum, item) => sum + item.grossSatang, 0)
-  const base = group.totals.whtSatang > 0 && baseSatang !== group.totals.grossSatang ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
+    .reduce((sum, item) => sum + payoutItemTaxSplit(item).compensationSatang, 0)
+  const base =
+    group.whtWithheldSatang > 0 && baseSatang !== group.compensationSatang ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
   return `หัก ภาษี ณ ที่จ่าย${rate}${base}`
+}
+
+/** U105 — "ภาษีที่บริษัทออกให้ 3.00% (ไม่หักจากผู้รับ)" · ไม่มี = `null` */
+function payerTaxLineOf(group: PayoutPayeeGroup): { label: string; amountText: string } | null {
+  if (group.whtPaidByPayerSatang === 0) return null
+  const rate = group.whtPctSnapshot === null ? '' : ` ${fmtRatePct(group.whtPctSnapshot)}`
+  return {
+    label: `ภาษีที่บริษัทออกให้${rate} (ไม่หักจากผู้รับ)`,
+    amountText: fmtSatang(group.whtPaidByPayerSatang),
+  }
 }
 
 /** แถวรายการของใบสำคัญจ่าย — รวมตามประเภทรายการเบิก (+ แยกรายการนอกฐานภาษี/เงินทดรองจ่าย) ลำดับตามที่พบ */
@@ -457,10 +503,12 @@ function voucherLinesOf(items: readonly PayoutBatchItemDto[]): PayoutDocLine[] {
           : 'ไม่อยู่ในฐานภาษีหัก ณ ที่จ่าย'
     const key = `${description}|${note ?? ''}`
     const bucket = groups.get(key)
-    if (bucket === undefined) groups.set(key, { description, note, count: 1, grossSatang: item.grossSatang })
+    // U105 — ยอดบรรทัด = ค่าตอบแทนของผู้รับ (ภาษีที่บริษัทออกให้แยกบรรทัดท้ายใบ)
+    const amount = payoutItemTaxSplit(item).compensationSatang
+    if (bucket === undefined) groups.set(key, { description, note, count: 1, grossSatang: amount })
     else {
       bucket.count += 1
-      bucket.grossSatang += item.grossSatang
+      bucket.grossSatang += amount
     }
   }
   return [...groups.values()].map((group) => ({
@@ -510,6 +558,8 @@ export interface PayslipDoc {
   whtLabel: string
   /** ยอดหักแสดงในวงเล็บตามตัวอย่าง 06 — `(255.90)` */
   whtText: string
+  /** มติ PO U105 — บรรทัด "ภาษีที่บริษัทออกให้" (ไม่หักจากผู้รับ) · `null` = ไม่มี */
+  payerTaxLine: { label: string; amountText: string } | null
   /** มติ PO U30 — บรรทัด "หักคืนเงินทดรอง ADV-xxx" หลังหักภาษี (ว่าง = ไม่มีการหัก) */
   offsetLines: ReadonlyArray<{ label: string; amountText: string }>
   /** ยอดโอนสุทธิ (หลังหักภาษีและหักคืนเงินทดรอง) */
@@ -547,14 +597,15 @@ export function buildPayslipDocs(
     paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
     rows: group.items.map((item) => ({
       description: payslipRowLabel(item),
-      amountText: fmtSatang(item.grossSatang),
+      amountText: fmtSatang(payoutItemTaxSplit(item).compensationSatang),
     })),
-    grossText: fmtSatang(group.totals.grossSatang),
+    grossText: fmtSatang(group.compensationSatang),
     whtLabel:
-      group.whtPctSnapshot === null || group.totals.whtSatang === 0
+      group.whtPctSnapshot === null || group.whtWithheldSatang === 0
         ? 'หักภาษี ณ ที่จ่าย'
         : `หักภาษี ณ ที่จ่าย (${fmtRatePct(group.whtPctSnapshot)})`,
-    whtText: group.totals.whtSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.totals.whtSatang)})`,
+    whtText: group.whtWithheldSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.whtWithheldSatang)})`,
+    payerTaxLine: payerTaxLineOf(group),
     offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
     netText: fmtSatang(group.transferSatang),
     note:

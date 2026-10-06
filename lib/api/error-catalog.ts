@@ -111,6 +111,9 @@ export const ERROR_CATALOG = {
   SUBSTITUTE_RECEIPT_NOT_SIGNED: { status: 400, severity: 'reject', source: '24 §6.4' },
   SUBSTITUTE_RECEIPT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.4' },
   SUBSTITUTE_RECEIPT_ALREADY_SIGNED: { status: 400, severity: 'reject', source: '24 §6.4' },
+  // มติ PO 06/10/2569 U107 — ยกเลิก/ออกใบใหม่แทน (`CANCEL_REQUIRES_REASON` ใช้ร่วมกับ §6.8)
+  SUBSTITUTE_RECEIPT_NOT_CANCELLABLE: { status: 400, severity: 'reject', source: '24 §6.4' },
+  SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED: { status: 400, severity: 'reject', source: '24 §6.4' },
   REJECTION_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   APPROVAL_STEP_OUT_OF_ORDER: { status: 400, severity: 'reject', source: '24 §6.4' },
@@ -131,6 +134,8 @@ export const ERROR_CATALOG = {
   NO_ITEMS_TO_PAY: { status: 400, severity: 'reject', source: '24 §6.5' },
   PAYMENT_FILE_NOT_GENERATED: { status: 404, severity: 'reject', source: '24 §6.5' },
   WHT_40_2_RATE_MISSING: { status: 400, severity: 'reject', source: '24 §6.5' },
+  // มติ PO 06/10/2569 U105 — เงื่อนไข (2)/(3) ขณะค่าตั้งไม่อนุญาต (ฟอร์มผู้รับ + สร้างรอบจ่าย)
+  WHT_CONDITION_NOT_ALLOWED: { status: 400, severity: 'reject', source: '24 §6.5' },
 
   // ── 24 §6.6 Revenue/Billing ────────────────────────────────────────────
   NO_REVENUE_TO_BILL: { status: 400, severity: 'reject', source: '24 §6.6' },

@@ -335,6 +335,8 @@ export const whtPolicyCreateSchema = z.object({
    */
   inhouseIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_2'),
   outsourceIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_8'),
+  /** อนุญาตเงื่อนไขการหัก (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (มติ PO 06/10/2569 U105) — ไม่ส่ง = ปิด (ค่าเริ่มต้น) */
+  allowGrossUpConditions: z.boolean().default(false),
   /** วิธียื่น ภ.ง.ด. — ออนไลน์ (วันที่ 15) / กระดาษ (วันที่ 7) · ไม่ส่ง = ออนไลน์ (มติ PO 05/10/2569 UAT U45) */
   filingMethod: z.enum(WHT_FILING_METHODS).default('online'),
   reason: reasonSchema,

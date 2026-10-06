@@ -72,6 +72,10 @@ export function PayslipPage({ doc, letterhead }: { doc: PayslipDoc; letterhead: 
         ))}
         <SummaryRow columns={COLUMNS} tone="sub" label="รวมค่าตอบแทนก่อนหักภาษี" value={doc.grossText} />
         <SummaryRow columns={COLUMNS} tone="deduct" label={doc.whtLabel} value={doc.whtText} />
+        {/* มติ PO U105 — ภาษีที่บริษัทออกให้: แสดงแยก ไม่หักจากยอดโอน */}
+        {doc.payerTaxLine === null ? null : (
+          <SummaryRow columns={COLUMNS} tone="sub" label={doc.payerTaxLine.label} value={doc.payerTaxLine.amountText} />
+        )}
         {doc.offsetLines.map((line) => (
           <SummaryRow key={line.label} columns={COLUMNS} tone="deduct" label={line.label} value={line.amountText} />
         ))}

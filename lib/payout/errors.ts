@@ -18,6 +18,8 @@ export const PAYOUT_ERROR_CODES = [
   'PAYMENT_FILE_NOT_GENERATED',
   // มติ PO 05/10/2569 (UAT U7) — ผู้รับประเภท 40(2) ต้องมีอัตราหักต่อคนก่อนสร้างรอบ
   'WHT_40_2_RATE_MISSING',
+  // มติ PO 06/10/2569 U105 — ผู้รับตั้งเงื่อนไข (2)/(3) แต่ค่าตั้งภาษียังไม่อนุญาต ⇒ บล็อกทั้งรอบพร้อมรายชื่อ
+  'WHT_CONDITION_NOT_ALLOWED',
   // มติ PO U67 (05/10/2569) — ยกเลิกรอบจ่าย: เหตุผลบังคับ (code ร่วมกับหมวดเอกสาร) · โอนแล้วยกเลิกไม่ได้
   // · รอบที่สร้างไฟล์โอนแล้วต้องยืนยันว่ายังไม่ได้ส่งไฟล์เข้าธนาคาร
   'CANCEL_REQUIRES_REASON',
@@ -36,6 +38,7 @@ const HTTP_STATUS: Record<PayoutErrorCode, number> = {
   NO_ITEMS_TO_PAY: 400,
   PAYMENT_FILE_NOT_GENERATED: 404,
   WHT_40_2_RATE_MISSING: 400,
+  WHT_CONDITION_NOT_ALLOWED: 400,
   CANCEL_REQUIRES_REASON: 400,
   PAYOUT_BATCH_ALREADY_PAID: 400,
   PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED: 400,
@@ -71,6 +74,11 @@ const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
     title: 'ผู้รับเงินประเภท 40(1)/40(2) ยังไม่มีอัตราหัก',
     message:
       'ค่าตั้งภาษีจัดผู้รับเงินบางคนเป็นเงินได้ 40(1) หรือ 40(2) แต่ยังไม่ได้กรอก "อัตราหัก 40(1)/40(2)" ในข้อมูลผู้รับเงิน — กรอกอัตราที่สำนักงานบัญชีคำนวณให้ก่อนสร้างรอบจ่าย',
+  },
+  WHT_CONDITION_NOT_ALLOWED: {
+    title: 'เงื่อนไขการหักภาษีของผู้รับยังไม่เปิดใช้',
+    message:
+      'มีผู้รับเงินที่ตั้งเงื่อนไข "ออกให้ตลอดไป" หรือ "ออกให้ครั้งเดียว" แต่ค่าตั้งภาษียังไม่อนุญาตเงื่อนไขนี้ — เปลี่ยนผู้รับเป็น "หัก ณ ที่จ่าย" หรือเปิดค่าตั้งก่อนสร้างรอบจ่าย',
   },
   CANCEL_REQUIRES_REASON: {
     title: 'ต้องระบุเหตุผลการยกเลิก',

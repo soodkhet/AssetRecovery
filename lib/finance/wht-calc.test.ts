@@ -5,7 +5,11 @@ import {
   calculateWht,
   calculateWhtForPayee,
   estimateCustomerWhtForBilling,
+  isPayerBorneWhtCondition,
+  payoutItemTaxSplit,
   resolveWhtRate,
+  whtGrossUp,
+  whtTaxForCondition,
 } from '@/lib/finance/wht-calc'
 import { DEFAULT_WHT_MIN_THRESHOLD_SATANG } from '@/lib/settings/tax-profile'
 import { isSettingsError } from '@/lib/settings/errors'
@@ -243,7 +247,14 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
   it('รายการเดียว = ผลเท่ากับ calculateWhtForPayee() เดิม (golden OUT-1: ฿5,500 × 3% = ฿165)', () => {
     const batch = calculatePayeeBatchWht([item(550_000)])
     const single = calculateWhtForPayee({ grossSatang: 550_000, source: item(550_000).source })
-    expect(batch.lines[0]).toEqual({ ...single, includedInBase: true, incomeCategory: 'sec_40_8' })
+    expect(batch.lines[0]).toEqual({
+      ...single,
+      includedInBase: true,
+      incomeCategory: 'sec_40_8',
+      // U105 — ไม่ระบุเงื่อนไข = (1) หัก ณ ที่จ่าย ⇒ gross ของรายการรอบจ่าย = ยอดรายการเดิม
+      payoutGrossSatang: 550_000,
+      whtCondition: 'withhold',
+    })
     expect(batch.totalWhtSatang).toBe(16_500)
   })
 
@@ -287,5 +298,126 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
         { grossSatang: 60_000, source: { payeeTaxProfile: { ...profile3, whtMinThresholdSatang: 50_000 }, planWhtPct: 3 } },
       ]),
     ).toThrow(RangeError)
+  })
+})
+
+describe('§6.9.2 เงื่อนไขการหัก (1)/(2)/(3) — ทบยอดภาษีที่ออกให้ (มติ PO 06/10/2569 U105)', () => {
+  const tax3 = { payeeTaxProfile: { whtPct: 3, whtBasis: 'before_vat' as const, whtMinThresholdSatang: 100_000 }, planWhtPct: 3 }
+
+  it('ตัวเลขทองคำ: เงินได้ ฿10,000 อัตรา 3%', () => {
+    // (1) หัก ณ ที่จ่าย — ภาษี 300.00 ผู้รับได้ 9,700.00
+    expect(whtGrossUp({ incomeSatang: 1_000_000, whtPct: 3, condition: 'withhold' })).toEqual({
+      whtSatang: 30_000,
+      certificateIncomeSatang: 1_000_000,
+      payeeReceivesSatang: 970_000,
+      companyCostSatang: 1_000_000,
+      whtPaidByPayerSatang: 0,
+    })
+    // (2) ออกให้ตลอดไป — ภาษี = 10,000 × 3 ÷ 97 = 309.28 · เงินได้บนใบ 10,309.28 · ผู้รับได้เต็ม
+    expect(whtGrossUp({ incomeSatang: 1_000_000, whtPct: 3, condition: 'pay_always' })).toEqual({
+      whtSatang: 30_928,
+      certificateIncomeSatang: 1_030_928,
+      payeeReceivesSatang: 1_000_000,
+      companyCostSatang: 1_030_928,
+      whtPaidByPayerSatang: 30_928,
+    })
+    // (3) ออกให้ครั้งเดียว — ภาษี 300.00 · เงินได้บนใบ 10,300.00 · ผู้รับได้เต็ม
+    expect(whtGrossUp({ incomeSatang: 1_000_000, whtPct: 3, condition: 'pay_once' })).toEqual({
+      whtSatang: 30_000,
+      certificateIncomeSatang: 1_030_000,
+      payeeReceivesSatang: 1_000_000,
+      companyCostSatang: 1_030_000,
+      whtPaidByPayerSatang: 30_000,
+    })
+  })
+
+  it('(2) ทบยอดถูกต้องตามนิยาม: ภาษี = อัตรา × (เงินได้ + ภาษี) (ปัดครึ่งขึ้นเป็นสตางค์ ห่างไม่เกิน 1 สตางค์)', () => {
+    for (const [income, pct] of [
+      [1_000_000, 3],
+      [123_457, 5],
+      [99_999_999, 1.5],
+      [500_000, 0.75],
+      [1, 3],
+    ] as const) {
+      const tax = whtTaxForCondition(income, pct, 'pay_always')
+      // ภาษีของ "เงินได้ทบยอด" คิดด้วยอัตราปกติต้องได้ภาษีเดิม (ต่างได้ไม่เกินเศษปัด 1 สตางค์)
+      expect(Math.abs(Math.round(((income + tax) * pct) / 100) - tax)).toBeLessThanOrEqual(1)
+    }
+    // ปัดครึ่งขึ้น: 10,000 × 3 / 97 = 309.2783… → 309.28 · 1 สตางค์ × 3/97 = 0.03 → 0
+    expect(whtTaxForCondition(1_000_000, 3, 'pay_always')).toBe(30_928)
+    expect(whtTaxForCondition(1, 3, 'pay_always')).toBe(0)
+    // อัตรา 0% ⇒ 0 ทุกเงื่อนไข
+    expect(whtTaxForCondition(1_000_000, 0, 'pay_always')).toBe(0)
+    // ทบยอดที่อัตรา 100% ไม่มีความหมาย (ตัวหารเป็นศูนย์)
+    expect(() => whtTaxForCondition(1_000_000, 100, 'pay_always')).toThrow(RangeError)
+    // (1)/(3)/ไม่ระบุ = สูตรเดิม
+    expect(whtTaxForCondition(1_000_000, 3, 'pay_once')).toBe(30_000)
+    expect(whtTaxForCondition(1_000_000, 3, null)).toBe(30_000)
+  })
+
+  it('isPayerBorneWhtCondition: (2)/(3) = ผู้จ่ายออกให้ · (1)/null/undefined = ไม่ใช่', () => {
+    expect(isPayerBorneWhtCondition('pay_always')).toBe(true)
+    expect(isPayerBorneWhtCondition('pay_once')).toBe(true)
+    expect(isPayerBorneWhtCondition('withhold')).toBe(false)
+    expect(isPayerBorneWhtCondition(null)).toBe(false)
+    expect(isPayerBorneWhtCondition(undefined)).toBe(false)
+  })
+
+  it('รอบจ่าย (2): ภาษีทบยอดต่อกลุ่ม → กระจาย largest remainder · ผู้รับได้ยอดรายการเต็ม · gross = ยอด + ภาษี · net = gross − wht', () => {
+    const result = calculatePayeeBatchWht(
+      [
+        { grossSatang: 600_000, source: tax3 },
+        { grossSatang: 400_000, source: tax3 },
+      ],
+      { condition: 'pay_always' },
+    )
+    expect(result.totalWhtSatang).toBe(30_928)
+    expect(result.lines.map((line) => line.whtSatang)).toEqual([18_557, 12_371])
+    expect(result.lines.map((line) => line.netSatang)).toEqual([600_000, 400_000])
+    expect(result.lines.map((line) => line.payoutGrossSatang)).toEqual([618_557, 412_371])
+    for (const line of result.lines) {
+      expect(line.netSatang).toBe(line.payoutGrossSatang - line.whtSatang)
+      expect(line.whtCondition).toBe('pay_always')
+    }
+    // ผลรวมเงินได้บนใบ 50 ทวิ = 10,309.28
+    expect(result.lines.reduce((sum, line) => sum + line.payoutGrossSatang, 0)).toBe(1_030_928)
+  })
+
+  it('รอบจ่าย (3): ภาษีอัตราปกติ แต่ไม่หักจากผู้รับ · (1): หักตามเดิม', () => {
+    const once = calculatePayeeBatchWht([{ grossSatang: 1_000_000, source: tax3 }], { condition: 'pay_once' })
+    expect(once.lines[0]).toMatchObject({ whtSatang: 30_000, netSatang: 1_000_000, payoutGrossSatang: 1_030_000 })
+    const withhold = calculatePayeeBatchWht([{ grossSatang: 1_000_000, source: tax3 }], { condition: 'withhold' })
+    expect(withhold.lines[0]).toMatchObject({ whtSatang: 30_000, netSatang: 970_000, payoutGrossSatang: 1_000_000 })
+  })
+
+  it('เกณฑ์ ฿1,000 เทียบกับเงินได้ก่อนบวกภาษี: ฿990 แบบ (2) ⇒ ไม่หัก (แม้ 990 + ภาษีจะเกิน 1,000) · รายการนอกฐานไม่บวกภาษี', () => {
+    const below = calculatePayeeBatchWht([{ grossSatang: 99_000, source: tax3 }], { condition: 'pay_always' })
+    expect(below.belowThreshold).toBe(true)
+    expect(below.lines[0]).toMatchObject({ whtSatang: 0, netSatang: 99_000, payoutGrossSatang: 99_000 })
+
+    const mixed = calculatePayeeBatchWht(
+      [
+        { grossSatang: 1_000_000, source: tax3 },
+        { grossSatang: 60_000, source: tax3, includedInBase: false },
+      ],
+      { condition: 'pay_always' },
+    )
+    expect(mixed.lines[1]).toMatchObject({ whtSatang: 0, netSatang: 60_000, payoutGrossSatang: 60_000 })
+    expect(mixed.lines[0]).toMatchObject({ whtSatang: 30_928, netSatang: 1_000_000 })
+  })
+
+  it('payoutItemTaxSplit: แยกค่าตอบแทน/ภาษีที่หัก/ภาษีที่บริษัทออกให้ จาก snapshot โดยไม่คิดใหม่', () => {
+    expect(
+      payoutItemTaxSplit({ grossSatang: 1_030_928, whtSatang: 30_928, netSatang: 1_000_000, whtCondition: 'pay_always' }),
+    ).toEqual({ compensationSatang: 1_000_000, whtWithheldSatang: 0, whtPaidByPayerSatang: 30_928 })
+    expect(
+      payoutItemTaxSplit({ grossSatang: 1_000_000, whtSatang: 30_000, netSatang: 970_000, whtCondition: 'withhold' }),
+    ).toEqual({ compensationSatang: 1_000_000, whtWithheldSatang: 30_000, whtPaidByPayerSatang: 0 })
+    // รอบเก่า (snapshot NULL) = หัก ณ ที่จ่าย
+    expect(payoutItemTaxSplit({ grossSatang: 50_000, whtSatang: 0, netSatang: 50_000, whtCondition: null })).toEqual({
+      compensationSatang: 50_000,
+      whtWithheldSatang: 0,
+      whtPaidByPayerSatang: 0,
+    })
   })
 })

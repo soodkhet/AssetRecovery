@@ -375,10 +375,11 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
         netSatang: 824500,
         voucherRef: 'PV-2569-PB-2569-06-002-001',
         advanceOffsetSatang: 0,
+        whtPaidByPayerSatang: 0,
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,0.00,8245.00',
+      'PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,0.00,8245.00,0.00',
     )
   })
 
@@ -391,11 +392,31 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
         netSatang: 824500,
         voucherRef: 'PV-2569-PB-2569-06-002-001',
         advanceOffsetSatang: 55000,
+        whtPaidByPayerSatang: 0,
       },
     ])
     const [header, row] = csv.slice(CSV_BOM.length).split('\r\n')
-    expect(header).toBe('payout_batch_ref,payment_date,payee,amount_baht,method,voucher_ref,advance_offset_baht,transfer_baht')
-    expect(row).toBe('PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,550.00,7695.00')
+    expect(header).toBe(
+      'payout_batch_ref,payment_date,payee,amount_baht,method,voucher_ref,advance_offset_baht,transfer_baht,wht_paid_by_payer_baht',
+    )
+    expect(row).toBe('PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,550.00,7695.00,0.00')
+  })
+
+  it('มติ PO U105: ภาษีที่บริษัทออกให้ต่อท้ายไฟล์ — ผู้รับได้เงินเต็ม (amount = เงินได้ ไม่หักภาษี)', () => {
+    const [, row] = paymentCsv([
+      {
+        batchRef: 'PB-2569-10-001',
+        paymentDate: new Date('2026-10-06T00:00:00Z'),
+        payeeName: 'ประยุทธ์ บุญมี',
+        netSatang: 1_000_000,
+        voucherRef: 'PV-2569-0100',
+        advanceOffsetSatang: 0,
+        whtPaidByPayerSatang: 30_928,
+      },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(row).toBe('PB-2569-10-001,06/10/2569,ประยุทธ์ บุญมี,10000.00,Bank Transfer,PV-2569-0100,0.00,10000.00,309.28')
   })
 })
 
@@ -439,7 +460,7 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
 
   it('แถวออกมาตรงรูปแบบตัวอย่าง', () => {
     expect(whtCsv([base]).slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold',
+      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold,0.00',
     )
   })
 
@@ -458,6 +479,7 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
       'payee_address',
       'payee_branch',
       'wht_condition',
+      'wht_paid_by_payer_baht',
     ])
     const lines = whtCsv([
       base,
@@ -486,8 +508,9 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
     ])
       .slice(CSV_BOM.length)
       .split('\r\n')
-    expect(person?.endsWith(',PND3,นาย,-,-,pay_once')).toBe(true)
-    expect(company?.endsWith(',PND53,-,"1 อาคาร A, ชั้น 2 แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500",00001,withhold')).toBe(true)
+    // มติ PO U105 — (3) ออกให้ครั้งเดียว: ภาษีทั้งก้อนเป็นภาษีที่บริษัทออกให้ · (1) = 0
+    expect(person?.endsWith(',PND3,นาย,-,-,pay_once,255.00')).toBe(true)
+    expect(company?.endsWith(',PND53,-,"1 อาคาร A, ชั้น 2 แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500",00001,withhold,0.00')).toBe(true)
   })
 })
 

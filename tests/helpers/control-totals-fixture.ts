@@ -22,7 +22,7 @@ export const CONTROL_TOTALS_FIXTURE: ControlTotalsInput = {
     { payeeName: 'ประยุทธ์ บุญมี', category: 'ค่าที่พัก', grossSatang: 80_000, whtSatang: 0, netSatang: 80_000, receiptInCompanyName: true },
   ],
   payments: [
-    { batchRef: 'PB-1', paymentDate: D('2026-06-25'), payeeName: 'ประยุทธ์ บุญมี', netSatang: 904_500, voucherRef: 'PV-2569-PB-1-001', advanceOffsetSatang: 55_000 },
+    { batchRef: 'PB-1', paymentDate: D('2026-06-25'), payeeName: 'ประยุทธ์ บุญมี', netSatang: 904_500, voucherRef: 'PV-2569-PB-1-001', advanceOffsetSatang: 55_000, whtPaidByPayerSatang: 0 },
   ],
   wht: [
     {

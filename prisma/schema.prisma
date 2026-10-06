@@ -434,6 +434,9 @@ enum SubstituteReceiptStatus {
   pending_signature
   /// อัปโหลดฉบับเซ็นแล้ว (ไฟล์ตรวจฝั่ง server + SHA-256) — ใช้แทนใบเสร็จได้
   signed
+  /// ยกเลิกแล้ว (มติ PO 06/10/2569 U107) — ใบเดิมเก็บไว้ (ห้ามลบ) PDF พิมพ์ป้าย "ยกเลิก" · ไม่นับเพดานต่อเดือน
+  /// เหตุผลบังคับ · เปลี่ยนเป็นสถานะนี้ได้ครั้งเดียว (terminal) · ใบเบิก/เงินทดรองเดิมออกใบใหม่แทนได้
+  cancelled
 
   @@map("substitute_receipt_status")
 }
@@ -993,6 +996,7 @@ model User {
   substituteReceiptsCreated SubstituteReceipt[]         @relation("substitute_receipts_created_by")
   substituteReceiptsUpdated SubstituteReceipt[]         @relation("substitute_receipts_updated_by")
   substituteReceiptsSigned  SubstituteReceipt[]         @relation("substitute_receipts_signed_by")
+  substituteReceiptsCancelled SubstituteReceipt[]       @relation("substitute_receipts_cancelled_by")
   substituteReceiptLinesCreated SubstituteReceiptLine[] @relation("substitute_receipt_lines_created_by")
   documentSeriesCreated     DocumentNumberSeries[]      @relation("document_number_series_created_by")
   documentSeriesUpdated     DocumentNumberSeries[]      @relation("document_number_series_updated_by")
@@ -1359,6 +1363,9 @@ model WhtPolicyHistory {
   outsourceIncomeCategory     WhtIncomeCategory  @default(sec_40_8) @map("outsource_income_category")
   /// วิธียื่น ภ.ง.ด. ⇒ วันกำหนดยื่น (ออนไลน์ 15 / กระดาษ 7 ของเดือนถัดไป — มติ PO 05/10/2569 UAT U45 · ค่าเริ่มต้น = ออนไลน์)
   filingMethod                WhtFilingMethod    @default(online) @map("filing_method")
+  /// อนุญาตเงื่อนไขการหัก (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (มติ PO 06/10/2569 U105 · ค่าเริ่มต้น = ปิด)
+  /// ปิด = ผู้รับใช้ได้เฉพาะ (1) และผู้รับที่ตั้ง (2)/(3) ไว้ ⇒ บล็อกการสร้างรอบจ่าย · เปิด = คิดภาษีแบบทบยอด (`22` §6.9.2)
+  allowGrossUpConditions      Boolean            @default(false) @map("allow_gross_up_conditions")
   /// เหตุผลบังคับ (กระทบภาษี — `90` §13)
   reason                      String
 
@@ -2576,6 +2583,8 @@ model PayoutBatch {
   /// snapshot การจับคู่ประเภทเงินได้ต่อประเภททีม (มติ PO 05/10/2569 UAT U33) — NULL = รอบเก่า (inhouse 40(2) · outsource 40(8))
   whtInhouseIncomeCategory       WhtIncomeCategory?  @map("wht_inhouse_income_category")
   whtOutsourceIncomeCategory     WhtIncomeCategory?  @map("wht_outsource_income_category")
+  /// snapshot ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" (มติ PO 06/10/2569 U105) — NULL = รอบเก่า (ไม่อนุญาต · คิดแบบ (1))
+  whtAllowGrossUpConditions      Boolean?            @map("wht_allow_gross_up_conditions")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2628,6 +2637,9 @@ model PayoutBatchItem {
   whtBaseIncluded   Boolean            @default(true) @map("wht_base_included")
   /// snapshot ประเภทเงินได้ของผู้รับ ณ วันสร้างรอบ (UAT U5) — NULL = รอบเก่า/เงินทดรองจ่าย (ไม่ใช่เงินได้)
   whtIncomeCategory WhtIncomeCategory? @map("wht_income_category")
+  /// snapshot เงื่อนไขการหักของผู้รับ ณ วันสร้างรอบ (มติ PO 06/10/2569 U105) — NULL = รอบเก่า/เงินทดรองจ่าย (= (1))
+  /// (2)/(3) ⇒ `gross` = เงินได้ + ภาษีที่บริษัทออกให้ (= เงินได้บนใบ 50 ทวิ) · `net` = เงินได้เต็ม · `wht` = ภาษีที่ออกให้
+  whtCondition      WhtCondition?      @map("wht_condition")
   /// เลขที่ใบสำคัญจ่าย (มติ PO U102) — 1 เลขต่อผู้รับเงินต่อรอบ ออกตอนสร้างไฟล์โอนครั้งแรก แล้ว snapshot ลงทุกรายการของผู้รับนั้น
   /// NULL = ยังไม่สร้างไฟล์โอน · ตั้งแล้วแก้ไม่ได้ (trigger `trg_payout_batch_items_voucher_immutable`)
   voucherNumber     String?            @map("voucher_number")
@@ -2723,6 +2735,10 @@ model SubstituteReceipt {
   signedFileSha256 String?                 @map("signed_file_sha256") @db.VarChar(64)
   signedAt         DateTime?               @map("signed_at") @db.Timestamptz(6)
   signedBy         String?                 @map("signed_by") @db.Uuid
+  /// การยกเลิก (มติ PO U107) — CHECK มีค่าครบทั้ง 3 ⇔ `status = cancelled` · เหตุผลไม่ว่าง
+  cancelledAt      DateTime?               @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy      String?                 @map("cancelled_by") @db.Uuid
+  cancelReason     String?                 @map("cancel_reason")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2737,6 +2753,7 @@ model SubstituteReceipt {
   createdByUser User                    @relation("substitute_receipts_created_by", fields: [createdBy], references: [id])
   updatedByUser User?                   @relation("substitute_receipts_updated_by", fields: [updatedBy], references: [id])
   signedByUser  User?                   @relation("substitute_receipts_signed_by", fields: [signedBy], references: [id])
+  cancelledByUser User?                 @relation("substitute_receipts_cancelled_by", fields: [cancelledBy], references: [id])
   lines         SubstituteReceiptLine[]
 
   @@unique([organizationId, receiptNumber], map: "uniq_substitute_receipt_number")

@@ -449,8 +449,8 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     // มติ PO 05/10/2569 (U15) — filing_form ต่อท้ายสุด ค่าจาก `wht_certificates.filing_form`
     expect(whtCsv).toContain('wht_baht,wht_pct,filing_form,')
     // มติ PO 06/10/2569 (U94 ข้อ 1) — คอลัมน์ผู้ถูกหักต่อท้าย · ค่าจาก snapshot ของใบ (U96 #4)
-    expect(whtCsv).toContain('filing_form,payee_title,payee_address,payee_branch,wht_condition\r\n')
-    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold\r\n')
+    expect(whtCsv).toContain('filing_form,payee_title,payee_address,payee_branch,wht_condition,wht_paid_by_payer_baht\r\n')
+    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold,0.00\r\n')
   })
 
   it('Export ซ้ำรอบเดิม ⇒ v1.1 คนละแถว ไฟล์เดิมยังอยู่ครบ (`37` §16 — ไม่เขียนทับ)', async () => {

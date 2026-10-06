@@ -36,8 +36,8 @@ import {
   PAYEE_NAME_TITLE_OPTIONS,
   PAYEE_REQUIRED_ADDRESS_FIELDS,
   WHT_CONDITION_LABEL,
-  WHT_CONDITIONS,
-  whtConditionAffectsFormula,
+  selectableWhtConditions,
+  whtConditionHint,
   type PayeeNameTitleChoice,
 } from '@/lib/payees/payee'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
@@ -171,6 +171,9 @@ export function PayeeTab() {
   /** รายชื่อผู้ใช้ของ dropdown ยังโหลดไม่เสร็จ — ห้ามกดบันทึกระหว่างนี้ (UAT BUG-017) */
   const [candidatesLoading, setCandidatesLoading] = useState(false)
 
+  /** มติ PO U105 — ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" ที่มีผลวันนี้ (ปิด = เลือกได้เฉพาะ (1)) · server ตรวจซ้ำเสมอ */
+  const [allowGrossUp, setAllowGrossUp] = useState(false)
+
   const [verifyTarget, setVerifyTarget] = useState<PayeeDto | null>(null)
   const [verifyReason, setVerifyReason] = useState('')
   const [verifying, setVerifying] = useState(false)
@@ -225,6 +228,10 @@ export function PayeeTab() {
     setForm(target === null ? EMPTY_FORM : toForm(target))
     setErrors({})
     setFormOpen(true)
+    void (async () => {
+      const policy = await callApi<{ allowGrossUpConditions: boolean }>('/api/payees/wht-condition-policy')
+      setAllowGrossUp(policy.data?.allowGrossUpConditions ?? false)
+    })()
     if (target === null) {
       setCandidatesLoading(true)
       const result = await callApi<Candidate[]>('/api/payees/candidates')
@@ -661,18 +668,14 @@ export function PayeeTab() {
             id="payee-wht-condition"
             label="เงื่อนไขการหักภาษี ณ ที่จ่าย"
             error={errors.whtCondition}
-            hint={
-              whtConditionAffectsFormula(form.whtCondition)
-                ? 'ระบบยังคำนวณยอดแบบหัก ณ ที่จ่ายตามปกติ — ใช้พิมพ์บนหนังสือรับรองเท่านั้น ภาษีที่บริษัทออกให้ต้องให้สำนักงานบัญชีคำนวณ'
-                : 'พิมพ์ในช่อง “ผู้จ่ายเงิน” บนหนังสือรับรองการหักภาษี ณ ที่จ่าย'
-            }
+            hint={whtConditionHint(form.whtCondition, allowGrossUp)}
           >
             <Select
               id="payee-wht-condition"
               value={form.whtCondition}
               onChange={(event) => set('whtCondition', event.target.value as WhtCondition)}
             >
-              {WHT_CONDITIONS.map((condition) => (
+              {selectableWhtConditions(allowGrossUp, editing?.whtCondition ?? null).map((condition) => (
                 <option key={condition} value={condition}>
                   {WHT_CONDITION_LABEL[condition]}
                 </option>

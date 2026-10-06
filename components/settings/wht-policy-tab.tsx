@@ -40,6 +40,7 @@ import {
   WHT_POLICY_EXPENSE_TYPES,
   WHT_TEAM_SIDE_INCOME_CATEGORIES,
   ISSUE_ZERO_RATE_40_2_LABEL,
+  ALLOW_GROSS_UP_CONDITIONS_LABEL,
   effectiveTeamSideCategories,
   normalizeBaseExpenseTypes,
   usesPerPayeeWhtRate,
@@ -69,6 +70,7 @@ interface FormState {
   issueZeroRate402Certificate: boolean
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
+  allowGrossUpConditions: boolean
   filingMethod: WhtFilingMethod
   reason: string
 }
@@ -82,6 +84,11 @@ function zeroRateText(issue: boolean): string {
   return issue ? 'ออก 50 ทวิ (ภาษี 0) + รวมใน ภ.ง.ด.1' : 'ไม่ออก 50 ทวิ'
 }
 
+/** มติ PO 06/10/2569 U105 */
+function grossUpText(allow: boolean): string {
+  return allow ? 'ใช้ได้ทั้ง (1) (2) (3) — (2)/(3) บริษัทออกภาษีให้' : 'เฉพาะ (1) หัก ณ ที่จ่าย'
+}
+
 /** ประเภทเงินได้ที่แสดงบนหน้าจอ — โหมดแยกตามประเภททีมแสดงการจับคู่ที่ตั้งไว้ (มติ PO 05/10/2569 UAT U33) */
 function incomeTypeText(
   values: Pick<WhtPolicyValues, 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
@@ -93,7 +100,7 @@ function incomeTypeText(
 function PolicySummary({ values }: { values: WhtPolicySettings }) {
   const excluded = WHT_POLICY_EXPENSE_TYPES.filter((type) => !values.baseExpenseTypes.includes(type))
   return (
-    <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-5">
+    <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">ฐาน WHT (รวม)</dt>
         <dd className="mt-1 text-slate-900">{baseTypesText(values.baseExpenseTypes)}</dd>
@@ -110,6 +117,10 @@ function PolicySummary({ values }: { values: WhtPolicySettings }) {
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">40(1)/40(2) อัตรา 0%</dt>
         <dd className="mt-1 text-slate-900">{zeroRateText(values.issueZeroRate402Certificate)}</dd>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <dt className="font-semibold text-slate-500">เงื่อนไขการหัก</dt>
+        <dd className="mt-1 text-slate-900">{grossUpText(values.allowGrossUpConditions)}</dd>
       </div>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">วิธียื่น ภ.ง.ด.</dt>
@@ -166,6 +177,7 @@ export function WhtPolicyTab() {
       issueZeroRate402Certificate: overview.current.issueZeroRate402Certificate,
       inhouseIncomeCategory: overview.current.inhouseIncomeCategory,
       outsourceIncomeCategory: overview.current.outsourceIncomeCategory,
+      allowGrossUpConditions: overview.current.allowGrossUpConditions,
       filingMethod: overview.current.filingMethod,
       reason: '',
     })
@@ -255,18 +267,19 @@ export function WhtPolicyTab() {
               <Th>การออก 50 ทวิ</Th>
               <Th>ประเภทเงินได้</Th>
               <Th>40(1)/40(2) อัตรา 0%</Th>
+              <Th>เงื่อนไขการหัก</Th>
               <Th>วิธียื่น ภ.ง.ด.</Th>
               <Th>เหตุผล / ผู้บันทึก</Th>
               <Th className="text-right">สถานะ</Th>
             </Tr>
           </THead>
           <TableState
-            colSpan={8}
+            colSpan={9}
             loading={loading}
             error={error}
             isEmpty={history.length === 0}
             emptyTitle="ยังไม่เคยตั้งค่า — ใช้ค่าเริ่มต้น"
-            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(1)/40(2) อัตรา 0% ออก 50 ทวิ · ยื่น ภ.ง.ด. ออนไลน์"
+            emptyDescription="ฐานไม่รวมค่าที่พัก/เบิกตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบจ่าย · 40(8) ทั้งหมด · 40(1)/40(2) อัตรา 0% ออก 50 ทวิ · เงื่อนไขการหักเฉพาะหัก ณ ที่จ่าย · ยื่น ภ.ง.ด. ออนไลน์"
             onRetry={
               <Button
                 variant="secondary"
@@ -298,6 +311,9 @@ export function WhtPolicyTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{zeroRateText(item.issueZeroRate402Certificate)}</span>
+                  </Td>
+                  <Td>
+                    <span className="text-xs text-slate-700">{grossUpText(item.allowGrossUpConditions)}</span>
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{WHT_FILING_METHOD_LABEL[item.filingMethod]}</span>
@@ -471,6 +487,25 @@ export function WhtPolicyTab() {
               <p className="mt-1.5 text-[11px] text-slate-500">
                 ผู้รับเงินได้ 40(1)/40(2) ที่อัตราหัก 0% จะได้หนังสือรับรองยอดภาษี 0 (เงินได้ = ยอดที่จ่ายในฐาน) เพื่อใช้ยื่น ภ.ง.ด.90/91
                 และนับในสรุป ภ.ง.ด.1 · ไม่เกี่ยวกับเงินได้ 40(8) ที่ต่ำกว่าเกณฑ์ขั้นต่ำ (ยังไม่ออกหนังสือรับรอง)
+              </p>
+            </div>
+
+            <div>
+              <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
+                <input
+                  id="wht-policy-gross-up"
+                  type="checkbox"
+                  checked={form.allowGrossUpConditions}
+                  onChange={(event) => set('allowGrossUpConditions', event.target.checked)}
+                  className="focus-ring mt-0.5 h-4 w-4 rounded border-slate-300"
+                />
+                {ALLOW_GROSS_UP_CONDITIONS_LABEL}
+              </label>
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                เปิด: ผู้รับได้เงินเต็ม ภาษีเป็นค่าใช้จ่ายบริษัท — (2) ออกให้ตลอดไป ภาษี = เงินได้ × อัตรา ÷ (1 − อัตรา) ·
+                (3) ออกให้ครั้งเดียว ภาษี = เงินได้ × อัตรา · เงินได้บนหนังสือรับรอง = เงินได้ + ภาษีที่ออกให้ ·
+                ปิด (ค่าเริ่มต้น): ผู้รับเลือกได้เฉพาะ (1) หัก ณ ที่จ่าย และสร้างรอบจ่ายไม่ได้ถ้ายังมีผู้รับที่ตั้ง (2)/(3) ไว้ ·
+                ยืนยันสูตรกับสำนักงานบัญชีก่อนเปิดใช้
               </p>
             </div>
 

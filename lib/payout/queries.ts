@@ -18,7 +18,7 @@ import { advanceOffsetLineLabel } from '@/lib/advances/advance'
 import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
+import type { PayoutBatchSide, PayoutBatchStatus, WhtCondition } from '@/lib/generated/prisma/enums'
 import { maskAccountNumber, payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
 import { formatBranch } from '@/lib/format/branch'
 import { PayeeError } from '@/lib/payees/errors'
@@ -78,6 +78,7 @@ import {
   normalizeBaseExpenseTypes,
   resolveIncomeCategory,
   usesPerPayeeWhtRate,
+  isWhtConditionAllowed,
   type WhtIncomeCategory,
   type WhtPolicyValues,
 } from '@/lib/settings/wht-policy'
@@ -130,6 +131,7 @@ const batchSelect = {
   whtIssueZeroRate402Certificate: true,
   whtInhouseIncomeCategory: true,
   whtOutsourceIncomeCategory: true,
+  whtAllowGrossUpConditions: true,
   createdAt: true,
   updatedAt: true,
   cancelledAt: true,
@@ -155,6 +157,7 @@ const itemSelect = {
   whtPctSnapshot: true,
   whtBaseIncluded: true,
   whtIncomeCategory: true,
+  whtCondition: true,
   advanceOffsetSatang: true,
   advanceReturns: {
     where: { reversedAt: null },
@@ -211,6 +214,8 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
             // NULL = รอบที่สร้างก่อนมีค่าตั้ง U33 ⇒ การจับคู่เดิม (inhouse 40(2) · outsource 40(8))
             inhouseIncomeCategory: row.whtInhouseIncomeCategory ?? LEGACY_WHT_POLICY.inhouseIncomeCategory,
             outsourceIncomeCategory: row.whtOutsourceIncomeCategory ?? LEGACY_WHT_POLICY.outsourceIncomeCategory,
+            // NULL = รอบที่สร้างก่อนมีค่าตั้ง U105 ⇒ ไม่อนุญาต (คิดแบบ (1) เสมอ)
+            allowGrossUpConditions: row.whtAllowGrossUpConditions ?? LEGACY_WHT_POLICY.allowGrossUpConditions,
           },
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
@@ -244,6 +249,7 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     whtPctSnapshot: row.whtPctSnapshot === null ? null : Number(row.whtPctSnapshot),
     whtBaseIncluded: row.whtBaseIncluded,
     whtIncomeCategory: row.whtIncomeCategory,
+    whtCondition: row.whtCondition,
     advanceOffsetSatang: row.advanceOffsetSatang,
     transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
     advanceOffsets: row.advanceReturns.map((entry) => ({
@@ -396,6 +402,8 @@ interface Candidate {
   whtBaseIncluded: boolean
   /** snapshot ประเภทเงินได้ของผู้รับ (UAT U5) — `null` = เงินทดรองจ่าย (ไม่ใช่เงินได้) */
   whtIncomeCategory: WhtIncomeCategory | null
+  /** snapshot เงื่อนไขการหักของผู้รับ (มติ PO U105) — `null` = เงินทดรองจ่าย */
+  whtCondition: WhtCondition | null
 }
 
 /** payee ที่ verified แล้วต้องมี Tax Profile เสมอ (`18` §9) ⇒ ค่านี้ไม่ควรเป็น null ตอนคิด WHT */
@@ -443,6 +451,8 @@ async function collectExpenseCandidates(
           isVerified: true,
           taxProfileId: true,
           wht402Pct: true,
+          // มติ PO U105 — เงื่อนไขการหัก (1)/(2)/(3) ⇒ snapshot ลงรายการ + ตรวจกับค่าตั้ง
+          whtCondition: true,
           // นิติบุคคล ⇒ ไม่ใช่เงินได้ 40(1)/40(2) ไม่ว่าโหมดค่าตั้งเป็นอะไร (มติ PO U96 #2)
           payeeType: true,
           taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
@@ -496,6 +506,23 @@ async function collectExpenseCandidates(
     })
   }
 
+  // มติ PO 06/10/2569 U105 — ค่าตั้งปิดเงื่อนไข (2)/(3) แต่ผู้รับยังตั้งไว้ ⇒ **บล็อกทั้งรอบ** พร้อมรายชื่อ
+  // (ไม่คิดแบบ (1) แทนเงียบ ๆ — ใบ 50 ทวิ จะพิมพ์ช่อง "ผู้จ่ายเงิน" ไม่ตรงกับยอดภาษีจริง)
+  const disallowedConditions: string[] = []
+  for (const members of indicesByPayee.values()) {
+    const first = sided[members[0]!]!
+    const hasBaseItem = members.some((index) => isInWhtBase(policy, sided[index]!.row.expenseType))
+    if (hasBaseItem && !isWhtConditionAllowed(policy, first.row.payee.whtCondition)) {
+      disallowedConditions.push(first.row.payee.user.fullName)
+    }
+  }
+  if (disallowedConditions.length > 0) {
+    throw new PayoutError('WHT_CONDITION_NOT_ALLOWED', {
+      detail: `payees=${disallowedConditions.join(', ')}`,
+      context: { payees: disallowedConditions },
+    })
+  }
+
   const whtByIndex = new Array<PayeeBatchWhtLine | undefined>(sided.length)
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
@@ -515,6 +542,7 @@ async function collectExpenseCandidates(
       {
         incomeCategory,
         section402Pct: first.row.payee.wht402Pct === null ? null : Number(first.row.payee.wht402Pct),
+        condition: first.row.payee.whtCondition,
       },
     )
     members.forEach((index, position) => {
@@ -533,7 +561,8 @@ async function collectExpenseCandidates(
       isVerified: row.payee.isVerified,
       side: payeeSide,
       trackingRound: row.case?.trackingRound ?? 1,
-      grossSatang: row.grossSatang,
+      // U105 — ผู้จ่ายออกภาษีให้ ⇒ gross = ยอดรายการ + ภาษีที่ออกให้ (เงินได้บนใบ 50 ทวิ) · net = ยอดรายการเต็ม
+      grossSatang: wht.payoutGrossSatang,
       whtSatang: wht.whtSatang,
       netSatang: wht.netSatang,
       taxProfileId: row.payee.taxProfileId,
@@ -542,6 +571,7 @@ async function collectExpenseCandidates(
       whtRateFromPlan: wht.rate.source === 'plan' && wht.includedInBase,
       whtBaseIncluded: wht.includedInBase,
       whtIncomeCategory: wht.incomeCategory,
+      whtCondition: wht.whtCondition,
     }
   })
 }
@@ -615,6 +645,7 @@ async function collectAdvanceCandidates(
       // ไม่ใช่เงินได้ ⇒ ไม่อยู่ในฐาน WHT และไม่มีประเภทเงินได้
       whtBaseIncluded: false,
       whtIncomeCategory: null,
+      whtCondition: null,
     }
   })
 }
@@ -833,6 +864,7 @@ export async function createPayoutBatch(
         whtIssueZeroRate402Certificate: whtPolicy.values.issueZeroRate402Certificate,
         whtInhouseIncomeCategory: whtPolicy.values.inhouseIncomeCategory,
         whtOutsourceIncomeCategory: whtPolicy.values.outsourceIncomeCategory,
+        whtAllowGrossUpConditions: whtPolicy.values.allowGrossUpConditions,
         createdBy: user.id,
       },
       select: { id: true },
@@ -854,6 +886,7 @@ export async function createPayoutBatch(
           whtPctSnapshot: new Prisma.Decimal(candidate.whtPctSnapshot.toFixed(2)),
           whtBaseIncluded: candidate.whtBaseIncluded,
           whtIncomeCategory: candidate.whtIncomeCategory,
+          whtCondition: candidate.whtCondition,
           advanceOffsetSatang: lineOffsets[itemIds.length] ?? 0,
           createdBy: user.id,
         },
@@ -941,6 +974,7 @@ export async function createPayoutBatch(
           wht_income_type_mode: whtPolicy.values.incomeTypeMode,
           wht_inhouse_income_category: whtPolicy.values.inhouseIncomeCategory,
           wht_outsource_income_category: whtPolicy.values.outsourceIncomeCategory,
+          wht_allow_gross_up_conditions: whtPolicy.values.allowGrossUpConditions,
         },
         reason: null,
         ipAddress: context.meta.ipAddress,

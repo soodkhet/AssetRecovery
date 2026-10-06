@@ -10,6 +10,10 @@ export const SUBSTITUTE_RECEIPT_ERROR_CODES = [
   'SUBSTITUTE_RECEIPT_NOT_SIGNED',
   'SUBSTITUTE_RECEIPT_NOT_FOUND',
   'SUBSTITUTE_RECEIPT_ALREADY_SIGNED',
+  // มติ PO 06/10/2569 U107 — ยกเลิกใบ: ยกเลิกซ้ำ/รายการที่ผูกอนุมัติจ่ายแล้ว · เหตุผลบังคับ (code ร่วม) · ออกใบใหม่แทน
+  'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+  'CANCEL_REQUIRES_REASON',
+  'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
 ] as const
 
 export type SubstituteReceiptErrorCode = (typeof SUBSTITUTE_RECEIPT_ERROR_CODES)[number]
@@ -20,6 +24,9 @@ const HTTP_STATUS: Record<SubstituteReceiptErrorCode, number> = {
   // ไม่พบ/นอก scope = 404 เสมอ (ไม่ leak ว่ามีใบนี้)
   SUBSTITUTE_RECEIPT_NOT_FOUND: 404,
   SUBSTITUTE_RECEIPT_ALREADY_SIGNED: 400,
+  SUBSTITUTE_RECEIPT_NOT_CANCELLABLE: 400,
+  CANCEL_REQUIRES_REASON: 400,
+  SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED: 400,
 }
 
 const MESSAGES: Record<SubstituteReceiptErrorCode, ErrorMessage> = {
@@ -38,6 +45,18 @@ const MESSAGES: Record<SubstituteReceiptErrorCode, ErrorMessage> = {
   SUBSTITUTE_RECEIPT_ALREADY_SIGNED: {
     title: 'อัปโหลดฉบับเซ็นแล้ว',
     message: 'ใบรับรองแทนใบเสร็จนี้อัปโหลดฉบับเซ็นแล้ว เปลี่ยนไฟล์ไม่ได้',
+  },
+  SUBSTITUTE_RECEIPT_NOT_CANCELLABLE: {
+    title: 'ยกเลิกใบรับรองแทนใบเสร็จไม่ได้',
+    message: 'ใบนี้ถูกยกเลิกไปแล้ว หรือผูกกับรายการเบิกที่อนุมัติจ่ายแล้ว — แก้ไขผ่านรายการปรับปรุง',
+  },
+  CANCEL_REQUIRES_REASON: {
+    title: 'ต้องระบุเหตุผลการยกเลิก',
+    message: 'การยกเลิกใบรับรองแทนใบเสร็จกระทบหลักฐานรายจ่าย — กรอกเหตุผลอย่างน้อย 5 ตัวอักษรก่อนยืนยัน',
+  },
+  SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED: {
+    title: 'ออกใบรับรองแทนใบเสร็จใหม่ไม่ได้',
+    message: 'ออกใบใหม่แทนได้เฉพาะใบที่ยกเลิกแล้ว และรายการนั้นยังไม่มีใบที่ใช้งานอยู่ — ตรวจสอบยอดรวมของใบใหม่ด้วย',
   },
 }
 

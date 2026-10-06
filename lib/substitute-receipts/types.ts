@@ -14,4 +14,7 @@ export interface SubstituteReceiptRefDto {
   issueDate: string
   /** เวลาอัปโหลดฉบับเซ็น (ISO UTC) — ยังไม่อัปโหลด = `null` */
   signedAt: string | null
+  /** มติ PO U107 — เวลายกเลิก (ISO UTC) + เหตุผล · ยังไม่ยกเลิก = `null` */
+  cancelledAt: string | null
+  cancelReason: string | null
 }

@@ -1,6 +1,6 @@
 import { calculatePayeeBatchWht, type PayeeTaxProfileValues } from '@/lib/finance/wht-calc'
-import type { ExpenseType, PayeeType, PayoutBatchSide } from '@/lib/generated/prisma/enums'
-import { isInWhtBase, resolveIncomeCategory, type WhtPolicyValues } from '@/lib/settings/wht-policy'
+import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
+import { isInWhtBase, isWhtConditionAllowed, resolveIncomeCategory, type WhtPolicyValues } from '@/lib/settings/wht-policy'
 
 /**
  * `15_Accrued_Expenses.csv` (มติ PO 06/10/2569 U94 ข้อ 2) — **ภาษีหัก ณ ที่จ่ายที่คาดว่าจะหัก** ของรายการค้างจ่าย
@@ -24,12 +24,20 @@ export interface AccruedWhtItem {
   payeeTaxProfile: PayeeTaxProfileValues | null
   planWhtPct: number | null
   section402Pct: number | null
+  /**
+   * เงื่อนไขการหักของผู้รับ (มติ PO U105) — ค่าตั้งอนุญาต ⇒ (2)/(3) ประมาณแบบทบยอด · ไม่อนุญาต/ไม่ระบุ ⇒ คิดแบบ (1)
+   * (รอบจ่ายจะถูกบล็อกจนกว่าจะแก้ — ยอดประมาณใช้วิธีที่ระบบคิดได้)
+   */
+  whtCondition?: WhtCondition | null
 }
 
 /** ยอด WHT ที่คาดว่าจะหัก ต่อรายการ (ลำดับเดียวกับ input) */
 export function estimateAccruedWhtSatang(
   items: readonly AccruedWhtItem[],
-  policy: Pick<WhtPolicyValues, 'baseExpenseTypes' | 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
+  policy: Pick<
+    WhtPolicyValues,
+    'baseExpenseTypes' | 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'
+  > & Partial<Pick<WhtPolicyValues, 'allowGrossUpConditions'>>,
 ): (number | null)[] {
   const result: (number | null)[] = items.map((item) => item.batchWhtSatang)
   const byPayee = new Map<string, number[]>()
@@ -56,6 +64,11 @@ export function estimateAccruedWhtSatang(
         {
           incomeCategory: resolveIncomeCategory(policy, first.side, first.payeeType),
           section402Pct: first.section402Pct,
+          condition:
+            first.whtCondition !== null && first.whtCondition !== undefined &&
+            isWhtConditionAllowed({ allowGrossUpConditions: policy.allowGrossUpConditions ?? false }, first.whtCondition)
+              ? first.whtCondition
+              : 'withhold',
         },
       )
       members.forEach((index, position) => {

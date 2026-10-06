@@ -224,6 +224,18 @@ describe('ใบรับรองแทนใบเสร็จรับเง�
   it('ยอด snapshot ไม่ตรงผลรวมบรรทัด = ไม่พิมพ์ (ข้อมูลเสีย)', () => {
     expect(() => buildSubstituteReceiptDoc({ ...CRT, totalSatang: 99 }, LH)).toThrow(RangeError)
   })
+
+  it('มติ PO U107 — ใบที่ยกเลิก: พิมพ์ป้าย "ยกเลิก" + วันเวลา พ.ศ. + เหตุผล · ใบปกติไม่มีป้าย', () => {
+    expect(buildSubstituteReceiptDoc(CRT, LH).cancelled).toBeNull()
+    const doc = buildSubstituteReceiptDoc(
+      { ...CRT, cancellation: { cancelledAt: new Date('2026-10-06T08:30:00Z'), reason: 'กรอกรายการผิดวัน' } },
+      LH,
+    )
+    expect(doc.cancelled?.title).toBe('ยกเลิก')
+    expect(doc.cancelled?.detail).toContain('06/10/2569 15:30')
+    expect(doc.cancelled?.detail).toContain('กรอกรายการผิดวัน')
+    expect(missingGlyphs(docTexts(doc))).toEqual([])
+  })
 })
 
 /** ตั้ง `PDF_SAMPLE_DIR=<โฟลเดอร์>` ตอนรัน ⇒ เขียนไฟล์ตัวอย่างไว้ตรวจด้วยตา (ไม่ commit) */
