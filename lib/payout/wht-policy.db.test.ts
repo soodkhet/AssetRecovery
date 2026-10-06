@@ -775,6 +775,38 @@ suite('U105 — เงื่อนไขการหัก (2)/(3) เป็น�
     expect(normal.batch).toMatchObject({ compensationSatang: 1_000_000, whtPaidByPayerSatang: 0, whtWithheldSatang: 30_000 })
   })
 
+  it('Final ด่าน 2 golden PY-5 — (2) ทบยอด 3% ฐาน 320000 ⇒ ภาษี 9897 · gross 559897 · net/โอน 550000 · ใบ 50 ทวิ เงินได้ 329897', async () => {
+    await allowGrossUp(true, 'เปิดเงื่อนไขออกภาษีให้ — Final ด่าน 2')
+    await setCondition(PAYEE_OUT_ID, 'pay_always')
+    // FT-03 r1 · FT-03 r2 · FT-05 · FT-09 (ในฐาน) + ค่าที่พัก/เบิกส่วนเกิน (นอกฐาน) — `FINAL-coverage.md` H.2
+    for (const gross of [15_000, 30_000, 15_000, 100_000, 15_000, 30_000, 15_000, 100_000]) {
+      await seedExpense(PAYEE_OUT_ID, gross === 15_000 ? 'allowance' : 'commission', gross)
+    }
+    for (const gross of [150_000, 25_000, 45_000, 10_000]) await seedExpense(PAYEE_OUT_ID, 'hotel', gross)
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+
+    expect(batch).toMatchObject({ grossSatang: 559_897, whtSatang: 9_897, netSatang: 550_000, transferSatang: 550_000 })
+    expect(batch).toMatchObject({ compensationSatang: 550_000, whtPaidByPayerSatang: 9_897, whtWithheldSatang: 0 })
+    const shares = batch.items.map((item) => item.whtSatang).filter((wht) => wht > 0).sort((a, b) => a - b)
+    expect(shares).toEqual([464, 464, 464, 464, 928, 928, 3092, 3093])
+
+    await completeAndSync(batch.id)
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({ grossSatang: 329_897, whtSatang: 9_897 })
+  })
+
+  it('Final ด่าน 2 golden PY-8 — (3) ครั้งเดียว 3% ฐาน 160000 ⇒ ภาษี 4800 · gross 764800 · net 760000', async () => {
+    await allowGrossUp(true, 'เปิดเงื่อนไขออกภาษีให้ — Final ด่าน 2')
+    await setCondition(PAYEE_OUT_ID, 'pay_once')
+    for (const gross of [15_000, 100_000, 15_000, 30_000]) await seedExpense(PAYEE_OUT_ID, 'allowance', gross)
+    await seedExpense(PAYEE_OUT_ID, 'hotel', 600_000)
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    expect(batch).toMatchObject({ grossSatang: 764_800, whtSatang: 4_800, netSatang: 760_000 })
+    const shares = batch.items.map((item) => item.whtSatang).filter((wht) => wht > 0).sort((a, b) => a - b)
+    expect(shares).toEqual([450, 450, 900, 3000])
+  })
+
   it('ฟอร์มผู้รับ: ค่าตั้งปิด ⇒ เปลี่ยนเป็น (2) ไม่ได้ · ค่าเดิม (2) แก้ฟิลด์อื่นได้ · เปิดแล้วเปลี่ยนได้', async () => {
     const payees = await import('@/lib/payees/queries')
     const { payeeUpdateSchema } = await import('@/lib/payees/schemas')
