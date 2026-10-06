@@ -1,9 +1,21 @@
 'use client'
 
+import Link from 'next/link'
 import { AddressFields } from '@/components/address/address-fields'
+import { useSession } from '@/components/auth/permission-provider'
 import { PayeeIdDocumentField } from '@/components/payees/payee-id-document-field'
 import { SettingHelp } from '@/components/settings/setting-help'
-import { Field, Input, Select } from '@/components/ui'
+import { useTaxRuleSettings } from '@/components/teams/use-tax-rule-settings'
+import { Field, InlineAlert, Input, Select } from '@/components/ui'
+import type { TeamSide } from '@/lib/teams/team'
+import {
+  canOpenTaxProfileTab,
+  payeeDefaultTaxMissing,
+  payeeDefaultTaxOptionLabel,
+  payeeDefaultTaxRule,
+  PER_PAYEE_TAX_PROFILE_SUFFIX,
+  TAX_PROFILE_TAB_PATH,
+} from '@/lib/teams/team-tax-rule'
 import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
 import { branchCodeFromForm, branchKindOf, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
 import { fmtPercent } from '@/lib/format/money'
@@ -131,7 +143,13 @@ export function PayeeFieldsSection({
   taxProfiles,
   allowGrossUp,
   originalCondition,
+  payoutSide,
 }: {
+  /**
+   * ฝั่งของผู้รับสำหรับกติกาภาษี (มติ PO U164) — ฟอร์มผู้ใช้ = ทีม/กลุ่มที่เลือกอยู่ · หน้าผู้รับเงิน = ค่าที่ระบบ
+   * resolve (`PayeeDto.payoutSide`) · `null` = ไม่มีฝั่ง ⇒ "ไม่มีค่าเริ่มต้นที่ใช้ได้ — กรุณาเลือก"
+   */
+  payoutSide: TeamSide | null
   form: PayeeFieldsForm
   onChange: (key: keyof PayeeFieldsForm, value: PayeeFieldsForm[keyof PayeeFieldsForm]) => void
   /** error ตามชื่อฟิลด์ของ `payeeFieldsSchema` (`nationalId`, `address.postalCode` …) */
@@ -152,6 +170,22 @@ export function PayeeFieldsSection({
           whtBasis: selectedProfileDto.whtBasis,
           whtMinThresholdSatang: selectedProfileDto.whtMinThresholdSatang,
         }
+
+  /** U164 — ตัวเลือกแรก = ค่าที่ใช้จริงเมื่อไม่ผูกรายคน (ฝั่ง × ชนิดผู้รับในฟอร์ม — อัปเดตตามทันที) */
+  const session = useSession()
+  const taxRule = useTaxRuleSettings()
+  const defaultLine =
+    taxRule.data === null
+      ? null
+      : payeeDefaultTaxRule(payoutSide, form.payeeType, taxRule.data.policy, taxRule.data.defaults)
+  const defaultOptionLabel =
+    taxRule.error !== null
+      ? 'ตามค่าเริ่มต้นตามประเภทผู้รับ (โหลดค่าตั้งไม่สำเร็จ)'
+      : taxRule.data === null
+        ? 'กำลังโหลดค่าเริ่มต้น…'
+        : payeeDefaultTaxOptionLabel(payoutSide, defaultLine)
+  const defaultMissing = taxRule.data !== null && payeeDefaultTaxMissing(defaultLine)
+  const showTaxTabLink = session !== null && canOpenTaxProfileTab(session)
 
   return (
     <>
@@ -250,20 +284,40 @@ export function PayeeFieldsSection({
       />
     </Field>
 
-    <Field id="payee-tax-profile" label="กติกาภาษี (Tax Profile)" error={errors.taxProfileId}>
+    <Field
+      id="payee-tax-profile"
+      label="กติกาภาษี (Tax Profile)"
+      error={errors.taxProfileId}
+      hint="ไม่ต้องเลือก — เลือกเฉพาะกรณีคนนี้มีอัตราพิเศษ เช่น มีหนังสือลดอัตรา"
+    >
       <Select
         id="payee-tax-profile"
         value={form.taxProfileId}
         onChange={(event) => onChange('taxProfileId', event.target.value)}
       >
-        <option value="">— ยังไม่ผูก (ใช้ค่าเริ่มต้นตามประเภทผู้รับ ถ้าไม่มีใช้อัตราจากแผนชั่วคราว) —</option>
+        <option value="">{defaultOptionLabel}</option>
         {taxProfiles.map((profile) => (
           <option key={profile.id} value={profile.id}>
-            {profile.name} · {fmtPercent(profile.whtPct)}
+            {profile.name} · {fmtPercent(profile.whtPct)} {PER_PAYEE_TAX_PROFILE_SUFFIX}
           </option>
         ))}
       </Select>
     </Field>
+    {defaultMissing && form.taxProfileId === '' && (
+      <InlineAlert tone="warning" title="ยังไม่มีค่าเริ่มต้นที่ใช้ได้">
+        {payoutSide === null
+          ? 'ผู้รับรายนี้ไม่อยู่ฝั่ง Inhouse/Outsource จึงไม่มี Tax Profile ค่าเริ่มต้น — กรุณาเลือก Tax Profile ให้คนนี้'
+          : 'ยังไม่ได้ตั้ง Tax Profile ค่าเริ่มต้นของฝั่งและประเภทผู้รับนี้ — ตั้งค่าเริ่มต้นก่อน หรือเลือก Tax Profile ให้คนนี้'}
+        {showTaxTabLink && (
+          <>
+            {' '}
+            <Link href={TAX_PROFILE_TAB_PATH} className="font-semibold text-emerald-700 hover:underline">
+              ไปแท็บ Tax Profile →
+            </Link>
+          </>
+        )}
+      </InlineAlert>
+    )}
     <SettingHelp help={payeeTaxProfileHelp(selectedTaxProfile ?? null)} />
 
     <Field

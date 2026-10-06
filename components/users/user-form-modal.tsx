@@ -8,6 +8,7 @@ import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { ROLE_GROUP_LABEL } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
 import type { TeamDto } from '@/lib/teams/types'
+import { resolvePayoutSide } from '@/lib/payout/payout'
 import { usePermission } from '@/components/auth/permission-provider'
 import { EMPTY_PAYEE_FIELDS, payeeFieldsPayload, type PayeeFieldsForm } from '@/components/payees/payee-fields-section'
 import {
@@ -175,6 +176,11 @@ export function UserFormModal({
   }
 
   const showPayment = canManagePayment && hasPaymentSection(form.roleGroup)
+  /** มติ PO U164 — ฝั่งของผู้รับตามทีม/กลุ่มที่เลือกในฟอร์ม (ตรรกะเดียวกับรอบจ่าย) · เปลี่ยนแล้วช่อง Tax Profile อัปเดตทันที */
+  const payoutSide = resolvePayoutSide({
+    teamSide: teams.find((team) => team.id === form.teamId)?.side ?? null,
+    roleGroup: form.roleGroup,
+  })
   const paymentTouched = showPayment && isUserPaymentTouched(payment, paymentInitial)
 
   async function save(): Promise<void> {
@@ -414,6 +420,7 @@ export function UserFormModal({
             state={payment}
             onChange={setPayment}
             onLoaded={setPaymentInitial}
+            payoutSide={payoutSide}
             errors={paymentErrorsOf(errors)}
           />
         )}

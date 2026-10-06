@@ -37,7 +37,7 @@ import { fmtDate } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { verificationHint } from '@/lib/payees/payee'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
-import type { PayeeDto } from '@/lib/payees/types'
+import type { PayeeCandidateDto, PayeeDto } from '@/lib/payees/types'
 import type { TaxProfileDto } from '@/lib/settings/types'
 
 /**
@@ -64,12 +64,7 @@ const STATUS_FILTER_LABEL: Readonly<Record<StatusFilter, string>> = {
 /** ฟิลด์ที่แก้แล้ว payee ที่ยืนยันแล้วต้องยืนยันใหม่ (`18` §9) — ใช้เตือนล่วงหน้าในฟอร์ม */
 const RESET_LABELS = 'ประเภท / Tax ID / คำนำหน้า / ที่อยู่ / สาขา / เงื่อนไขการหัก / กติกาภาษี / ข้อมูลธนาคาร'
 
-interface Candidate {
-  id: string
-  fullName: string
-  teamName: string | null
-  roleName: string
-}
+type Candidate = PayeeCandidateDto
 
 interface FormState extends PayeeFieldsForm {
   userId: string
@@ -445,6 +440,11 @@ export function PayeeTab() {
             taxProfiles={taxProfiles}
             allowGrossUp={allowGrossUp}
             originalCondition={editing?.whtCondition ?? null}
+            payoutSide={
+              editing !== null
+                ? editing.payoutSide
+                : (candidates.find((candidate) => candidate.id === form.userId)?.payoutSide ?? null)
+            }
           />
 
           <Field

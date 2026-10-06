@@ -1,5 +1,5 @@
 import type { AddressDtoLike } from '@/lib/address/address-value'
-import type { PayeeType, WhtCondition } from '@/lib/generated/prisma/enums'
+import type { PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
 
 /**
  * DTO ของผู้รับเงินที่ส่งออก API (ไฟล์ 18 §8/§14)
@@ -14,6 +14,11 @@ export interface PayeeDto {
   name: string
   teamName: string | null
   roleName: string
+  /**
+   * ฝั่งของผู้รับสำหรับกติกาภาษี (ทีม → กลุ่ม role — `resolvePayoutSide()` ตัวเดียวกับรอบจ่าย)
+   * · `null` = ไม่มีฝั่ง (เช่น role ระบบ) ⇒ ไม่มีค่าเริ่มต้นตามประเภทให้ใช้ (มติ PO U164)
+   */
+  payoutSide: PayoutBatchSide | null
   payeeType: PayeeType
   taxProfileId: string | null
   taxProfileName: string | null
@@ -59,4 +64,14 @@ export interface PayeeOptionDto {
   userId: string
   name: string
   teamName: string | null
+}
+
+/** ผู้ใช้ที่ยังไม่มี Payee Profile — ตัวเลือกของฟอร์ม "เพิ่มผู้รับเงิน" (`GET /api/payees/candidates`) */
+export interface PayeeCandidateDto {
+  id: string
+  fullName: string
+  teamName: string | null
+  roleName: string
+  /** ฝั่งสำหรับกติกาภาษี (มติ PO U164) — `null` = ไม่มีฝั่ง */
+  payoutSide: PayoutBatchSide | null
 }
