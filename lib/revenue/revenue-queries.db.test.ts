@@ -166,17 +166,32 @@ async function seedExpense(caseId: string, status: string): Promise<void> {
 }
 
 /** เครื่องของเคส + ล็อต (ระบุ `lotStatus = null` = ยังไม่เข้าล็อต) */
-async function seedAssetInLot(caseId: string, lotStatus: string | null, companyId = COMPANY_A): Promise<void> {
+/**
+ * มติ PO O72(1): `revenue_date` = วันยืนยันล็อต ⇒ ล็อต `confirmed` ต้องมี `confirmed_at`
+ * ค่าเริ่มต้น = วันปิดงานของเคส (ยืนยันวันเดียวกัน) · ระบุ `confirmedAt` เพื่อทดสอบวันยืนยันคนละวัน
+ */
+async function seedAssetInLot(
+  caseId: string,
+  lotStatus: string | null,
+  companyId = COMPANY_A,
+  confirmedAt?: string,
+): Promise<void> {
   seq += 1
   let lotId = 'NULL'
   if (lotStatus !== null) {
     // ล็อตที่ `confirmed` **ลบไม่ได้** (trigger `02` §13) ⇒ เลขล็อตจากรันก่อน ๆ ค้างในฐานทดสอบตลอด
     // ⇒ suffix ต้องมีเอนโทรปีพอ ไม่งั้นชน `handover_lots_lot_number_key` แบบสุ่ม (เดิมใช้ ms 3 หลัก)
     const suffix = `${seq}-${Date.now()}-${process.pid}`
+    const confirmedAtSql =
+      lotStatus !== 'confirmed'
+        ? 'NULL'
+        : confirmedAt === undefined
+          ? `(SELECT closed_at FROM cases WHERE id = '${caseId}')`
+          : `'${confirmedAt}'`
     const lot = await db().$queryRawUnsafe<{ id: string }[]>(`
-      INSERT INTO handover_lots (organization_id, company_id, lot_number, doc_ref, type, status, created_by)
+      INSERT INTO handover_lots (organization_id, company_id, lot_number, doc_ref, type, status, confirmed_at, created_by)
       VALUES ('${ORG_ID}', '${companyId}', 'LOT-2569-${suffix}', 'DLV-2569-${suffix}',
-              'finance_pickup', '${lotStatus}', '${FINANCE_ID}')
+              'finance_pickup', '${lotStatus}', ${confirmedAtSql}, '${FINANCE_ID}')
       RETURNING id
     `)
     lotId = `'${lot[0]?.id ?? ''}'`
@@ -220,6 +235,8 @@ async function cleanup(): Promise<void> {
   } finally {
     await tx.$executeRawUnsafe(`ALTER TABLE handover_lots ENABLE TRIGGER trg_handover_lots_confirmed_no_delete`)
   }
+  await tx.$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM recycle_requests WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
 }
 
@@ -560,6 +577,89 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     const result = await runRevenue([ready, blocked])
     expect(result.eligibleCaseIds).toEqual([ready])
     expect(result.skipped).toEqual([{ caseId: blocked, reason: 'expense_not_approved' }])
+  })
+
+  it('O72(1) — revenue_date = วันยืนยันล็อต (วันไทย) ไม่ใช่วันปิดงาน · VAT ตามอัตรา ณ วันยืนยัน', async () => {
+    // ปิดงาน 30/09/2569 (VAT 7%) · ยืนยันล็อต 01/10/2569 00:30 น. เวลาไทย (= 30/09 17:30 UTC · VAT 10%)
+    const caseId = await seedCase({ closedAt: '2026-09-30T03:00:00Z' })
+    await seedExpense(caseId, 'approved')
+    await seedAssetInLot(caseId, 'confirmed', COMPANY_A, '2026-09-30T17:30:00Z')
+
+    await runRevenue([caseId])
+    const row = await db().revenue.findFirstOrThrow({ where: { caseId } })
+    expect(row.revenueDate.toISOString().slice(0, 10)).toBe('2026-10-01')
+    expect(row.vatRatePctUsed.toNumber()).toBe(10)
+  })
+
+  describe('O72(2) BUG-SF2 — ประเมินรายได้ต่อรอบติดตาม (U125)', () => {
+    /** เคสรอบ 2 ที่รีไซเกิลมาจากรอบ 1 (`closed_fail` · FLAT คิดเงินเมื่อไม่สำเร็จ 500 บาท) */
+    async function seedRecycledCase(round2: { outcome: 'closed_success' | 'closed_fail' | null }): Promise<string> {
+      const caseId = await seedCase({
+        model: 'FLAT',
+        baseSatang: 80_000,
+        ratePct: 0,
+        basis: null,
+        chargeOnFail: true,
+        outcome: round2.outcome,
+        status: round2.outcome ?? 'active',
+      })
+      await db().$executeRawUnsafe(`UPDATE cases SET tracking_round = 2 WHERE id = '${caseId}'`)
+      await db().$executeRawUnsafe(`
+        INSERT INTO recycle_requests (organization_id, case_id, status, request_note, previous_round, new_round,
+                                      prev_outcome, prev_closed_at, prev_service_fee_model, prev_service_fee_base_satang,
+                                      prev_service_fee_rate_pct, prev_service_fee_basis, prev_service_fee_charge_on_fail,
+                                      prev_debt_amount_satang, created_by)
+        VALUES ('${ORG_ID}', '${caseId}', 'approved', 'ไฟแนนซ์ส่งกลับมาใหม่', 1, 2,
+                'closed_fail', '2026-08-10T03:00:00Z', 'FLAT', 50000, 0, NULL, true, 1000000, '${FINANCE_ID}')
+      `)
+      return caseId
+    }
+
+    async function seedRoundExpense(caseId: string, round: number, status: string): Promise<void> {
+      const assignment = await db().$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO case_assignments (organization_id, case_id, agent_id, team_id, tracking_round, status, created_by)
+        VALUES ('${ORG_ID}', '${caseId}', '${FINANCE_ID}', '${TEAM_ID}', ${round},
+                '${round === 1 ? 'closed_fail' : 'closed_success'}', '${FINANCE_ID}')
+        RETURNING id
+      `)
+      await db().$executeRawUnsafe(`
+        INSERT INTO expenses (organization_id, case_id, assignment_id, payee_id, expense_type, gross_satang,
+                              expense_date, status, created_by)
+        VALUES ('${ORG_ID}', '${caseId}', '${assignment[0]?.id ?? ''}', '${PAYEE_ID}', 'commission', 150000,
+                '2026-08-20', '${status}', '${FINANCE_ID}')
+      `)
+    }
+
+    it('รายการเบิกรอบ 1 อนุมัติหลังรีไซเกิล ⇒ เกิดรายได้รอบ 1 จาก snapshot ของรอบ 1 (ลงวันปิดงานรอบ 1)', async () => {
+      const caseId = await seedRecycledCase({ outcome: null })
+      await seedRoundExpense(caseId, 1, 'approved')
+
+      const result = await runRevenue([caseId])
+      expect(result.revenueIdsCreated).toHaveLength(1)
+      const rows = await db().revenue.findMany({ where: { caseId } })
+      expect(rows.map((row) => row.trackingRound)).toEqual([1])
+      expect(rows[0]?.grossSatang).toBe(50_000)
+      expect(rows[0]?.revenueDate.toISOString().slice(0, 10)).toBe('2026-08-10')
+
+      // idempotent ต่อ (เคส, รอบ)
+      const again = await runRevenue([caseId])
+      expect(again.revenueIdsCreated).toEqual([])
+      expect(await db().revenue.count({ where: { caseId } })).toBe(1)
+    })
+
+    it('รายการรอบ 1 ที่ยังไม่อนุมัติไม่บล็อกรายได้รอบ 2 · รอบ 1 ลงเหตุผลพร้อมเลขรอบ', async () => {
+      const caseId = await seedRecycledCase({ outcome: 'closed_success' })
+      await seedRoundExpense(caseId, 1, 'pending_approval')
+      await seedRoundExpense(caseId, 2, 'approved')
+      await seedAssetInLot(caseId, 'confirmed')
+
+      const result = await runRevenue([caseId])
+      expect(result.revenueIdsCreated).toHaveLength(1)
+      const rows = await db().revenue.findMany({ where: { caseId } })
+      expect(rows.map((row) => row.trackingRound)).toEqual([2])
+      expect(rows[0]?.grossSatang).toBe(80_000)
+      expect(result.skipped).toEqual([{ caseId, reason: 'expense_not_approved', trackingRound: 1 }])
+    })
   })
 })
 

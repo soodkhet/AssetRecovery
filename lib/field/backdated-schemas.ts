@@ -13,3 +13,14 @@ export const backdatedFieldDaySchema = z.object({
 })
 
 export type BackdatedFieldDayInput = z.infer<typeof backdatedFieldDaySchema>
+
+/**
+ * "สร้างรายการเบิกย้อนหลัง" ของค่าน้ำมันตามระยะทางที่คำนวณได้หลังงวดของวันปิดงานปิดแล้ว (มติ PO U135)
+ * `jobId` = งาน `fuel_distance_retry` ที่เก็บยอดไว้ · เหตุผลบังคับ (กระทบเงิน — `90` §13)
+ */
+export const backdatedFuelExpenseSchema = z.object({
+  jobId: requiredIdSchema('งานคำนวณค่าน้ำมัน'),
+  reason: reasonSchema,
+})
+
+export type BackdatedFuelExpenseInput = z.infer<typeof backdatedFuelExpenseSchema>

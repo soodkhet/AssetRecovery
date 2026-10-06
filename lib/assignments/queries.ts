@@ -237,7 +237,7 @@ function assertCaseAssignable(row: CaseRow): void {
  * แปลงสถานะระดับเคส (`40` §10) เป็นเงื่อนไข DB — ต้องกรองที่ DB ไม่ใช่หลัง map
  * ไม่งั้น `total`/pagination จะไม่ตรงกับรายการที่เห็น (1 เคสมี assignment ที่ยังใช้งานอยู่ได้ตัวเดียว)
  */
-function assignmentStateFilter(state: AssignmentState | undefined): Prisma.CaseWhereInput {
+export function assignmentStateFilter(state: AssignmentState | undefined): Prisma.CaseWhereInput {
   switch (state) {
     case undefined:
       return {}

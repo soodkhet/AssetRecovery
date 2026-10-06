@@ -33,6 +33,8 @@ export const WAREHOUSE_ERROR_CODES = [
   'LOT_NOT_FOUND',
   // code กลาง — คลังใช้กับ "ยืนยันรับเข้าโดยไม่กรอก IMEI/serial ที่ตรวจจริง" (UAT BUG-074)
   'REQUIRED_MISSING',
+  // มติ PO U129 — ปิดงานสำเร็จแต่ IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ (แทน 500 จาก `uniq_assets_active_imei`)
+  'IMEI_DUPLICATE_ACTIVE_ASSET',
 ] as const
 
 export type WarehouseErrorCode = (typeof WAREHOUSE_ERROR_CODES)[number]
@@ -57,6 +59,7 @@ const HTTP_STATUS: Record<WarehouseErrorCode, number> = {
   ASSET_INVALID_STATUS: 400,
   LOT_NOT_FOUND: 404,
   REQUIRED_MISSING: 400,
+  IMEI_DUPLICATE_ACTIVE_ASSET: 400,
 }
 
 const MESSAGES: Record<WarehouseErrorCode, ErrorMessage> = {
@@ -120,6 +123,12 @@ const MESSAGES: Record<WarehouseErrorCode, ErrorMessage> = {
     title: 'ยังไม่ได้กรอก IMEI ที่ตรวจจริง',
     message: 'ต้องกรอก IMEI ที่ตรวจจริงบนเครื่องก่อนยืนยันรับเข้าคลัง (เครื่องที่ไม่มี IMEI ให้กรอก Serial แทน)',
   },
+  IMEI_DUPLICATE_ACTIVE_ASSET: {
+    title: 'IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ',
+    message:
+      'ปิดงานสำเร็จไม่ได้ — IMEI ของเคสนี้ตรงกับเครื่องของอีกเคสที่ยังอยู่ในคลังหรือยังไม่ส่งมอบ ' +
+      'ติดต่อคลังหรือผู้ดูแลเคสเพื่อตรวจสอบ IMEI ก่อนปิดงาน',
+  },
 }
 
 export function warehouseErrorStatus(code: WarehouseErrorCode): number {
@@ -131,8 +140,11 @@ export function warehouseErrorMessage(code: WarehouseErrorCode): ErrorMessage {
 }
 
 export class WarehouseError extends ModuleError<WarehouseErrorCode> {
-  constructor(code: WarehouseErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  constructor(
+    code: WarehouseErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; messages?: ErrorMessage },
+  ) {
+    super(code, options?.messages ?? MESSAGES[code], HTTP_STATUS[code], options)
     this.name = 'WarehouseError'
   }
 }

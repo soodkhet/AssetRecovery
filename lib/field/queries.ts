@@ -15,6 +15,7 @@ import {
   generateCaseExpenses,
   holdFieldDayExpensesForWarehouse,
   linkSupersededExpenses,
+  openPeriodDateForWork,
   resolvePlanSnapshot,
   resolveRoundPricing,
   supersedeCaseExpenses,
@@ -1586,6 +1587,11 @@ export async function resubmitCloseCase(
   // สิ้นเดือนต้องไม่ทำให้เคสย้ายเดือน · ชุดแรกของรอบ = `pricing.pricedAt` (ใช้เติมค่าเดิมที่ถูกเขียนทับไปแล้วด้วย)
   const firstClosedAt = pricing.pricedAt ?? current.completedAt ?? resubmittedAt
 
+  // มติ PO U135 — งวดของวันปิดงานเดิมปิดแล้ว ⇒ รายการชุดใหม่ลงงวดที่เปิดอยู่ (วันนี้) อ้างวันงานเดิมในหมายเหตุ
+  // (ทางเดียวกับ "สร้างรายการเบิกย้อนหลัง" U50) · รายการเดิมที่ยังไม่อนุมัติยัง supersede ได้ตามปกติ
+  // งวดของวันนี้ก็ปิด ⇒ PERIOD_LOCKED_DIRECT_EDIT (ไม่มีงวดเปิดให้ลง)
+  const openPeriodExpenseDate = await openPeriodDateForWork(user.organizationId, firstClosedAt, resubmittedAt)
+
   const result = await prisma.$transaction(async (tx) => {
     const claimed = await tx.caseAssignment.updateMany({
       where: { id: current.id, status: 'needs_revision' },
@@ -1656,8 +1662,9 @@ export async function resubmitCloseCase(
       outcome,
       plan: pricing.plan,
       distanceKmHundredths,
-      // วันที่รายการ = วันปิดงานครั้งแรก (UAT Q7 · มติ PO U26)
+      // วันที่รายการ = วันปิดงานครั้งแรก (UAT Q7 · มติ PO U26) — เว้นงวดนั้นปิดแล้ว (U135)
       closedAt: firstClosedAt,
+      ...(openPeriodExpenseDate === null ? {} : { openPeriodExpenseDate }),
       actor: context.actor,
       meta: context.meta,
     })

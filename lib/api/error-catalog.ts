@@ -315,6 +315,8 @@ export const ERROR_CATALOG = {
   ASSET_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
   ASSET_INVALID_STATUS: { status: 400, severity: 'reject', source: '44 §12' },
   LOT_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
+  // มติ PO U129 — เติมเข้า `44` §12 + บันทึกใน `24` (Rule 04 — doc + code คอมมิตเดียวกัน)
+  IMEI_DUPLICATE_ACTIVE_ASSET: { status: 400, severity: 'reject', source: '44 §12' },
 } as const satisfies Record<string, ErrorCodeContract>
 
 export type ApiErrorCode = keyof typeof ERROR_CATALOG

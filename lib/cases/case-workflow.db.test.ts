@@ -536,6 +536,14 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       [3, 4],
     ])
     expect(history.every((entry) => entry.status === 'approved')).toBe(true)
+
+    // มติ PO O72(2) — snapshot ของรอบเดิมถูกเก็บก่อนเคสถูกล้าง (รายการเบิกรอบเดิมอนุมัติทีหลังยังคิดรายได้ได้)
+    const snapshots = await db().$queryRawUnsafe<
+      Array<{ prev_outcome: string | null; prev_closed_at: Date | null; prev_debt_amount_satang: number | null }>
+    >(
+      `SELECT prev_outcome, prev_closed_at, prev_debt_amount_satang FROM recycle_requests WHERE case_id = '${caseId}' ORDER BY previous_round`,
+    )
+    expect(snapshots.every((entry) => entry.prev_outcome === 'closed_fail' && entry.prev_closed_at !== null)).toBe(true)
   })
 
   it('ไม่อนุมัติรีไซเกิล → กลับ closed_fail เดิม รอบไม่ขยับ + ต้องมีเหตุผล', async () => {
@@ -899,6 +907,50 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(preview.createdCount).toBe(2)
     expect(preview.rows[0]?.warnings).toEqual({ assetImeiSerial: IMEI_TYPO_WARNING_MESSAGE })
     expect(preview.rows[1]?.warnings).toBeNull()
+  })
+
+  it('มติ PO U129: IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ ⇒ เตือน ไม่บล็อก (สร้างเคส + นำเข้าไฟล์ต่อแถว)', async () => {
+    const { createCase } = await import('@/lib/cases/queries')
+    const { caseCreateSchema } = await import('@/lib/cases/schemas')
+    const { importCases } = await import('@/lib/cases/import-queries')
+    const { ACTIVE_ASSET_IMEI_WARNING_MESSAGE } = await import('@/lib/warehouse/imei-duplicate')
+
+    // เคสเดิมที่ปิดสำเร็จแล้ว เครื่องยังรอรับเข้าคลัง (ยังไม่ส่งมอบ)
+    const owner = await createCase(
+      caseCreateSchema.parse({ caseRef: 'SF-2026-2380', financeCompanyId: COMPANY_ID, assetImeiSerial: '356938035640001' }),
+      { actor, meta },
+    )
+    await db().$executeRawUnsafe(`
+      INSERT INTO assets (organization_id, case_id, company_id, case_ref, debtor_name, device_desc, imei_contract,
+                          asset_status, closed_at, created_by)
+      VALUES ('${ORG_ID}', '${owner.id}', '${COMPANY_ID}', 'SF-2026-2380', 'ลูกหนี้', 'iPhone', '356938035640001',
+              'pending_intake', NOW(), '${actor.id}')
+    `)
+    try {
+      const created = await createCase(
+        caseCreateSchema.parse({ caseRef: 'SF-2026-2381', financeCompanyId: COMPANY_ID, assetImeiSerial: '356938035640001' }),
+        { actor, meta },
+      )
+      expect(created.status).toBe('draft')
+      expect(created.activeAssetImeiWarning).toBe(ACTIVE_ASSET_IMEI_WARNING_MESSAGE)
+
+      const preview = await importCases(
+        {
+          financeCompanyId: COMPANY_ID,
+          dryRun: true,
+          rows: [
+            { 'เลขที่สัญญา': 'SF-2026-2382', 'IMEI / Serial': '35-6938035-640001' },
+            { 'เลขที่สัญญา': 'SF-2026-2383', 'IMEI / Serial': '356938035640002' },
+          ],
+        },
+        { actor, meta },
+      )
+      expect(preview.createdCount).toBe(2)
+      expect(preview.rows[0]?.warnings).toEqual({ assetImeiSerial: ACTIVE_ASSET_IMEI_WARNING_MESSAGE })
+      expect(preview.rows[1]?.warnings).toBeNull()
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM assets WHERE organization_id = '${ORG_ID}'`)
+    }
   })
 
   it('Import dryRun ไม่เขียนอะไรลง DB (preview ก่อนยืนยัน)', async () => {

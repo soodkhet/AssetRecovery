@@ -17,6 +17,7 @@ import {
   caseScopeWhere,
   detailSelect,
   toDetailDto,
+  withActiveAssetImeiWarning,
   type CaseDetailRow,
   type CaseMutationContext,
   type CaseTxClient,
@@ -356,7 +357,20 @@ export async function changeCaseStatus(
           decidedAt: new Date(),
           // `38` §6.4 `recycle_history` — เก็บเลขรอบก่อน/หลังเฉพาะตอนอนุมัติ (ไม่อนุมัติ = ไม่เปลี่ยนรอบ)
           ...(action === 'approve_recycle'
-            ? { previousRound: row.trackingRound, newRound: row.trackingRound + 1 }
+            ? {
+                previousRound: row.trackingRound,
+                newRound: row.trackingRound + 1,
+                // มติ PO O72(2) (BUG-SF2) — เก็บข้อมูลของรอบเดิมก่อนเคสถูกล้าง ⇒ รายการเบิกของรอบเดิมที่อนุมัติ
+                // ทีหลังยังสร้างรายได้ของรอบเดิมได้ (`tryCreateRevenue()` ประเมินต่อรอบ)
+                prevOutcome: row.outcome,
+                prevClosedAt: row.closedAt,
+                prevServiceFeeModel: row.serviceFeeModelSnapshot,
+                prevServiceFeeBaseSatang: row.serviceFeeBaseSatang,
+                prevServiceFeeRatePct: row.serviceFeeRatePct,
+                prevServiceFeeBasis: row.serviceFeeBasisSnapshot,
+                prevServiceFeeChargeOnFail: row.serviceFeeChargeOnFail,
+                prevDebtAmountSatang: row.debtAmountSatang,
+              }
             : {}),
         },
       })
@@ -393,7 +407,8 @@ export async function changeCaseStatus(
     )
   }
 
-  return { case: toDetailDto(updated), suggestion }
+  // มติ PO U129 — ส่งเคสแล้ว IMEI ชนเครื่องที่ยังไม่ส่งมอบ ⇒ เตือนในผลลัพธ์ (ไม่บล็อก)
+  return { case: await withActiveAssetImeiWarning(organizationId, toDetailDto(updated)), suggestion }
 }
 
 /**

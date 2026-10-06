@@ -184,6 +184,10 @@ export function CaseFormModal({
         title: isEdit ? 'บันทึกการแก้ไขเคสแล้ว' : 'สร้างเคสร่างแล้ว',
         description: `${saved.caseRef} · ${saved.financeCompanyName}`,
       })
+      // มติ PO U129 — IMEI ชนเครื่องที่ยังไม่ส่งมอบ: บันทึกได้ แต่เตือนให้ตรวจสอบกับคลังก่อนปิดงาน
+      if (saved.activeAssetImeiWarning !== null) {
+        showToast({ tone: 'warning', title: 'IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ', description: saved.activeAssetImeiWarning })
+      }
       setStaged([])
       onSaved(saved)
     } finally {

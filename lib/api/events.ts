@@ -94,8 +94,9 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
   },
   'field_allowance.period_locked': {
     module: 'finance',
-    source: '41 §6.6 · 91 §6.1 · 90 §6.3 (U25)',
-    description: 'job `daily_field_allowance` ข้ามวันที่อยู่ในงวดที่ปิดแล้ว — แจ้งฝ่ายการเงินให้ทำรายการปรับปรุงพร้อมยอดที่คำนวณไว้',
+    source: '41 §6.6 · 91 §6.1 · 90 §6.3 (U25 · U135)',
+    description:
+      'job `daily_field_allowance` ข้ามวันที่อยู่ในงวดที่ปิดแล้ว / job `fuel_distance_retry` คำนวณค่าน้ำมัน PER_KM ได้หลังงวดปิด — แจ้งฝ่ายการเงินให้สร้างรายการเบิกย้อนหลังพร้อมยอดที่คำนวณไว้',
   },
 
   // ── Payout (17) + Advance job (15) — เข้าทะเบียนที่ Phase 5.2 ──────────

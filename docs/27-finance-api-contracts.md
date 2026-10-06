@@ -19,6 +19,7 @@
 | v3.5 | 15/08/2569 | **เติม §6.3/§6.6 ที่ตกหล่นตอนรีวิว Phase 3**: `GET /api/payees/candidates` (ฟอร์มสร้าง Payee ต้องเลือกจากผู้ใช้ที่ยังไม่มี Payee Profile — กติกา "1 User = 1 Payee" ของ `18` §6.1 บังคับอยู่แล้ว) และ PDF ภายในของรอบจ่าย 3 ใบ `GET /api/payout-batches/:id/{summary,voucher,payslip}-pdf` (เอกสารทั้งสามถูกกำหนดไว้แล้วที่ `28` §6.1 + `01_PLAN` §3.4 แต่ไม่เคยถูกเติมลงรายการ endpoint) — implementation มีอยู่จริงตั้งแต่ Phase 3.2/3.4 เอกสารเป็นฝั่งที่ตามไม่ทัน ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3.2–v3.4) |
 | v3.7 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U3–U8)**: เติม `GET/POST /api/settings/wht-policy` (ค่าตั้งภาษีหัก ณ ที่จ่าย effective-dated — ไฟล์ 13 §6.4.2) |
 | v3.8 | 05/10/2569 | **มติ PO 05/10/2569 (U50)** — §6.8 เติม `GET /api/adjustments/field-days` (วันลงพื้นที่ในงวดปิดที่รอเบิกย้อนหลัง · อ่าน: การเงิน/บัญชี) + `POST /api/adjustments/field-days/backdated` (การเงิน `create_adjustment` · body `agentId`/`fieldDate`/`reason` · 201 สร้าง / 200 `created: false` เมื่อมีแล้ว) ตาม `41` §6.6 |
+| v3.x-BY | 07/10/2569 | **มติ PO U135** — §6.8 เติม `GET /api/adjustments/fuel-expenses` + `POST /api/adjustments/fuel-expenses/backdated` (ค่าน้ำมัน `PER_KM` ที่คำนวณได้หลังงวดของวันปิดงานปิดแล้ว — สิทธิ์เหมือน field-days ของ U50) |
 | v3.9 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 เพิ่ม `PATCH /api/advances/:id/return-method` (เปลี่ยนวิธีคืนยอด · เหตุผลบังคับ) + `POST /api/advances/:id/returns` (บันทึกรับคืนแยก + หลักฐาน) — การเงินเท่านั้น (`manage:approve_advance`) · `GET /api/advances?status=return_outstanding` · `PATCH /settle` รับ `returnMethod` |
 | v3.10 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U67)**: §6.6 เติม `POST /api/payout-batches/:id/cancel` — ยกเลิกรอบจ่ายก่อนโอนจริง (`{ reason, confirmFileNotSent }` · `manage:manage_payout_batch` · `17` §9.1) |
 | v3.11 | 06/10/2569 | **มติ PO 06/10/2569 (U104)** — §6.17 ใหม่ ตัวอย่างเอกสารทั้งหมด: `GET /api/accounting/document-samples` (ทะเบียนตัวอย่าง + เลขถัดไปตามค่าตั้งเลขที่เอกสาร) + `GET /api/accounting/document-samples/:docType/pdf` (PDF ตัวอย่างจาก renderer จริง · ข้อมูลสมมติ · ป้ายตัวอย่างทุกหน้า) — สิทธิ์ `view_document_samples` (`25` §7.1) · อ่านอย่างเดียว ไม่เดินตัวนับ ไม่ลง audit export (`28` §6.5) · `:docType` ที่ไม่รู้จัก ⇒ 400 `REQUIRED_MISSING` + field `docType` (ไม่ตั้ง error code ใหม่) |
@@ -161,6 +162,8 @@ GET    /api/adjustments
 GET    /api/adjustments/targets        ← ตัวเลือกรายการต้นทางของฟอร์ม (ไฟล์ 20 §8/§14 v2.2)
 GET    /api/adjustments/field-days     ← วันลงพื้นที่ในงวดปิดที่รอเบิกย้อนหลัง (มติ PO U50 · ไฟล์ 41 §6.6)
 POST   /api/adjustments/field-days/backdated ← สร้างรายการเบิกย้อนหลังลงงวดที่เปิดอยู่ (U50 · idempotent)
+GET    /api/adjustments/fuel-expenses  ← ค่าน้ำมันตามระยะทางที่คำนวณได้หลังงวดปิด รอเบิกย้อนหลัง (มติ PO U135 · ไฟล์ 41 §6.6)
+POST   /api/adjustments/fuel-expenses/backdated ← สร้างรายการค่าน้ำมันย้อนหลังลงงวดที่เปิดอยู่ ({ jobId, reason } · U135 · idempotent)
 POST   /api/adjustments
 PATCH  /api/adjustments/:id/approve
 PATCH  /api/adjustments/:id/reject

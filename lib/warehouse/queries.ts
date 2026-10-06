@@ -38,6 +38,11 @@ import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
 import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-service'
+import { periodKeyOf } from '@/lib/accounting/period'
+import { periodStatusAt, type PeriodQueryClient } from '@/lib/accounting/period-guard'
+import { isDirectEditRejected } from '@/lib/settings/period-lock'
+import { SettingsError } from '@/lib/settings/errors'
+import { fmtDate } from '@/lib/format/datetime'
 import type {
   AssetIntakeInput,
   AssetListQuery,
@@ -866,6 +871,31 @@ const LETTERHEAD_SNAPSHOT_SELECT = {
   logoSha256: true,
 } as const
 
+/**
+ * มติ PO O72(1) — ยืนยันล็อต = จุดรับรู้รายได้ (`revenue_date` = วันยืนยันล็อตตามปฏิทินไทย)
+ * งวดของวันยืนยันถูกส่งสำนักงานบัญชี/ล็อกแล้ว ⇒ บล็อกด้วย `PERIOD_LOCKED_DIRECT_EDIT` พร้อมข้อความเฉพาะเรื่องล็อต
+ * (ยืนยันได้เมื่อเข้างวดถัดไป หรือให้ผู้บริหารปลดล็อกงวด) — นโยบายงวดอยู่ที่ `isDirectEditRejected()` ที่เดียว
+ */
+async function assertLotConfirmPeriodOpen(
+  client: PeriodQueryClient,
+  organizationId: string,
+  lotId: string,
+  confirmedAt: Date,
+): Promise<void> {
+  const status = await periodStatusAt(organizationId, periodKeyOf(confirmedAt), client)
+  if (status === null || !isDirectEditRejected(status, true)) return
+  throw new SettingsError('PERIOD_LOCKED_DIRECT_EDIT', {
+    detail: `target=handover_lots:${lotId} period_status=${status}`,
+    context: { targetType: 'handover_lots', periodStatus: status, affectsAmount: true },
+    messages: {
+      title: 'งวดบัญชีของวันนี้ปิดแล้ว',
+      message:
+        `ยืนยันส่งมอบไม่ได้ — รายได้ของเคสในล็อตจะลงวันที่ยืนยัน (${fmtDate(confirmedAt)}) ` +
+        'แต่งวดบัญชีของวันนี้ถูกปิดแล้ว ยืนยันได้เมื่อเข้างวดถัดไป หรือขอผู้บริหารปลดล็อกงวดก่อน',
+    },
+  })
+}
+
 export async function confirmLot(
   user: SessionUser,
   lotId: string,
@@ -931,6 +961,10 @@ export async function confirmLot(
         },
       })
       if (claimed.count === 0) throw new WarehouseError('LOT_ALREADY_CONFIRMED')
+
+      // มติ PO O72(1) — รายได้ของเคสในล็อตรับรู้ ณ **วันยืนยันล็อต** ⇒ งวดของวันนี้ต้องยังเปิดอยู่
+      // (ล็อกงวดก่อนสิ้นเดือนได้ — U51) · อ่านในทรานแซกชันเดียวกับการยึดล็อต
+      await assertLotConfirmPeriodOpen(tx, user.organizationId, lotId, confirmedAt)
 
       const assets = await tx.asset.findMany({
         where: { lotId, deletedAt: null },

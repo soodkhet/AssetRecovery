@@ -29,6 +29,7 @@ import { loadCaseResubmittedAt } from '@/lib/field/resubmission'
 import { caseDocumentRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
+import { activeAssetImeiWarning } from '@/lib/warehouse/imei-duplicate'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -345,6 +346,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetType: row.assetKind,
     assetImeiSerial,
     assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
+    activeAssetImeiWarning: null,
     projectedRevenueSatang: row.projectedRevenueSatang,
     projectedRevenueSource: row.projectedRevenueSource,
     projectedRevenueSourceLabel:
@@ -511,6 +513,23 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
   }
 }
 
+/**
+ * เติมคำเตือน IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ (มติ PO U129) ลง detail — ใช้หลังบันทึก/ส่งเคส/เปิดดูเคส
+ * อ่าน IMEI จากเคสเอง (DTO รวม IMEI/Serial เป็นช่องเดียว) · ไม่ตรวจเคสที่ปิดแล้ว (เครื่องของเคสเองคือตัวที่ชน)
+ */
+export async function withActiveAssetImeiWarning(
+  organizationId: string,
+  detail: CaseDetailDto,
+): Promise<CaseDetailDto> {
+  if (detail.status === 'closed_success' || detail.status === 'closed_fail') return detail
+  const row = await prisma.case.findFirst({
+    where: { id: detail.id, organizationId },
+    select: { imei: true },
+  })
+  const warning = await activeAssetImeiWarning(organizationId, row?.imei ?? null, detail.id)
+  return warning === null ? detail : { ...detail, activeAssetImeiWarning: warning }
+}
+
 /** อ่านเคสเดียว — นอก scope ตอบ `CASE_NOT_FOUND` เหมือนไม่มีเคสนี้ (ไม่ leak ข้ามทีม/ข้ามบริษัท) */
 export async function getCase(user: SessionUser, caseId: string): Promise<CaseDetailDto> {
   const row = await prisma.case.findFirst({
@@ -527,6 +546,8 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   }
   // บริษัทไฟแนนซ์เห็นเหตุผลปิดงานไม่สำเร็จของเคสตัวเองได้ (มติ PO 03/10/2569 — UAT Q16)
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
+  const warned = await withActiveAssetImeiWarning(user.organizationId, detail)
+  detail.activeAssetImeiWarning = warned.activeAssetImeiWarning
   const [fieldEvidence, resubmittedAt] = await Promise.all([
     loadCaseFieldEvidence(user, row.id),
     loadCaseResubmittedAt(user.organizationId, row.id),
@@ -667,7 +688,7 @@ export async function createCase(
   const identifier = splitAssetIdentifier(input.assetImeiSerial)
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    const saved = await prisma.$transaction(async (tx) => {
       const created = await tx.case.create({
         data: {
           organizationId,
@@ -731,6 +752,7 @@ export async function createCase(
 
       return toDetailDto(created)
     })
+    return await withActiveAssetImeiWarning(organizationId, saved)
   } catch (error) {
     rethrowDuplicate(error, input.caseRef)
   }
@@ -827,7 +849,7 @@ export async function updateCase(
   const changedFields = changedFieldsOf(beforePayload, afterPayload)
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    const saved = await prisma.$transaction(async (tx) => {
       const updated = await tx.case.update({
         where: { id: caseId },
         data: {
@@ -914,6 +936,7 @@ export async function updateCase(
           : ((await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })) as typeof updated)
       return toDetailDto(refreshed)
     })
+    return await withActiveAssetImeiWarning(organizationId, saved)
   } catch (error) {
     rethrowDuplicate(error, values.caseRef ?? current.caseRef)
   }

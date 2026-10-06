@@ -49,7 +49,16 @@ function db(): PrismaClient {
 }
 
 let seq = 0
-async function seedCase(status: string, teamId: string, closedAt: string | null = null): Promise<void> {
+/**
+ * `assignmentStatus` = การมอบหมายของเคส (ค่าเริ่มต้น: เคส `active` ถือโดยพนักงานแล้ว = `scheduled` · อื่น ๆ ไม่มี)
+ * — คิว "รอมอบหมาย" นับเฉพาะเคสที่ยังไม่มีการมอบหมายที่ active (มติ PO O72(4))
+ */
+async function seedCase(
+  status: string,
+  teamId: string,
+  closedAt: string | null = null,
+  assignmentStatus: string | null = status === 'active' ? 'scheduled' : null,
+): Promise<void> {
   seq += 1
   const caseRef = `DSH66-${seq}-${Date.now()}`
   const closed = status === 'closed_success' || status === 'closed_fail'
@@ -64,6 +73,12 @@ async function seedCase(status: string, teamId: string, closedAt: string | null 
       1000000, '${teamId}', ${closed ? `'${status}'` : 'NULL'}, ${closedAt === null ? 'NULL' : `'${closedAt}'`}
     )
   `)
+  if (assignmentStatus === null) return
+  await db().$executeRawUnsafe(`
+    INSERT INTO case_assignments (organization_id, case_id, agent_id, team_id, status, created_by)
+    SELECT '${ORG_ID}', id, '${USER_ID}', '${teamId}', '${assignmentStatus}', '${USER_ID}'
+      FROM cases WHERE organization_id = '${ORG_ID}' AND case_ref = $$${caseRef}$$
+  `)
 }
 
 function inOrg(user: SessionUser): SessionUser {
@@ -71,6 +86,7 @@ function inOrg(user: SessionUser): SessionUser {
 }
 
 async function cleanup(): Promise<void> {
+  await db().$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
   await db().$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
 }
 
@@ -153,5 +169,16 @@ suite('getDashboardOverview — DB จริง', () => {
     expect(counts).toMatchObject({ active: 1, approved: 1, pending_review: 0 })
     expect(overview.queues.find((queue) => queue.id === 'case_awaiting_assignment')?.count).toBe(1)
     expect(overview.queues.map((queue) => queue.id)).not.toContain('advance_overdue')
+  })
+
+  it('มติ PO O72(4) — เคสรอมอบหมาย นับเฉพาะเคสที่ยังไม่มีการมอบหมายที่ active (ไม่รวมรอกดรับ/รับแล้วยังไม่นัด)', async () => {
+    await seedCase('approved', TEAM_A)
+    await seedCase('approved', TEAM_A, null, 'pending_accept')
+    await seedCase('approved', TEAM_A, null, 'accepted_unscheduled')
+    // การมอบหมายที่ปิด/ถูกถอนไปแล้ว ไม่นับว่าถือเคส ⇒ ยังรอมอบหมาย
+    await seedCase('approved', TEAM_A, null, 'reassigned_away')
+
+    const overview = await overviewOf(inOrg(ROLE_USERS.superadmin()), NOW)
+    expect(overview.queues.find((queue) => queue.id === 'case_awaiting_assignment')?.count).toBe(2)
   })
 })

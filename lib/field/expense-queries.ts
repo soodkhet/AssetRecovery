@@ -1,4 +1,4 @@
-import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
+import { assertPeriodOpenAt, periodStatusAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -40,7 +40,9 @@ import type {
   FieldIncomeSummaryDto,
 } from '@/lib/field/types'
 import { sumSatang } from '@/lib/finance/satang'
-import { toBangkokParts } from '@/lib/format/datetime'
+import { fmtDate, toBangkokParts } from '@/lib/format/datetime'
+import { periodKeyOf } from '@/lib/accounting/period'
+import { isDirectEditRejected } from '@/lib/settings/period-lock'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseOutcome, ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
@@ -285,6 +287,21 @@ export async function resolveRoundPricing(
   }
 }
 
+/**
+ * มติ PO U135 — วันลงรายการของงานที่เกิดใน**งวดที่ปิดแล้ว** (ส่งหลักฐานใหม่ข้ามงวด / ค่าน้ำมันคำนวณได้หลังปิดงวด)
+ * - งวดของวันงานยังเปิด ⇒ `null` (ลงวันงานตามปกติ)
+ * - งวดของวันงานปิดแล้ว ⇒ **วันนี้ (วันไทย)** ในงวดที่เปิดอยู่ — ทางเดียวกับ "สร้างรายการเบิกย้อนหลัง" (U50)
+ * - งวดของวันนี้ก็ปิด ⇒ `PERIOD_LOCKED_DIRECT_EDIT` (ไม่มีงวดเปิดให้ลง — ต้องไปทาง Adjustment)
+ */
+export async function openPeriodDateForWork(organizationId: string, workAt: Date, now: Date): Promise<Date | null> {
+  const workDate = bangkokBusinessDate(workAt)
+  const status = await periodStatusAt(organizationId, periodKeyOf(workDate))
+  if (status === null || !isDirectEditRejected(status, true)) return null
+  const today = bangkokBusinessDate(now)
+  await assertPeriodOpenAt({ organizationId, at: today, targetType: 'expenses' })
+  return today
+}
+
 export interface GenerateCaseExpensesParams {
   organizationId: string
   caseId: string
@@ -295,6 +312,11 @@ export interface GenerateCaseExpensesParams {
   /** ระยะทางที่คำนวณได้ก่อนเข้า transaction — `null` = คำนวณไม่ได้ (D10) */
   distanceKmHundredths: number | null
   closedAt: Date
+  /**
+   * มติ PO U135 — งวดของวันปิดงานเดิมปิดแล้ว (ส่งหลักฐานใหม่ข้ามงวด) ⇒ ลงรายการในงวดที่เปิดอยู่แทน
+   * ไม่ระบุ = ลงวันปิดงาน (`closedAt`) ตามปกติ · ระบุ = ลงวันนี้ + หมายเหตุอ้างวันงานเดิม
+   */
+  openPeriodExpenseDate?: Date
   actor: SessionUser
   meta: RequestMeta
 }
@@ -328,7 +350,12 @@ export async function generateCaseExpenses(
     distanceKmHundredths: params.distanceKmHundredths,
   })
 
-  const expenseDate = bangkokBusinessDate(params.closedAt)
+  const workDate = bangkokBusinessDate(params.closedAt)
+  const expenseDate = params.openPeriodExpenseDate ?? workDate
+  const movedNote =
+    params.openPeriodExpenseDate === undefined
+      ? null
+      : `ลงงวดที่เปิดอยู่ — งานปิดเมื่อ ${fmtDate(workDate)} (งวดนั้นปิดแล้ว)`
   const payeeId = await ensureAgentPayeeId(tx, {
     organizationId: params.organizationId,
     userId: params.agentId,
@@ -354,6 +381,7 @@ export async function generateCaseExpenses(
         compPlanId: plan.planId,
         compPlanVersion: plan.version,
         status: draft.status,
+        revisionNote: movedNote,
         createdBy: params.actor.id,
       },
       select: { id: true },
@@ -377,6 +405,9 @@ export async function generateCaseExpenses(
           status: draft.status,
           compPlanId: plan.planId,
           compPlanVersion: plan.version,
+          ...(movedNote === null
+            ? {}
+            : { expenseDate: expenseDate.toISOString().slice(0, 10), workDate: workDate.toISOString().slice(0, 10) }),
           events: ['expense.case_bound_created'],
         },
         ipAddress: params.meta.ipAddress,

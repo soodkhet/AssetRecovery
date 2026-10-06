@@ -1,4 +1,5 @@
 import { AssignmentsManager } from '@/components/assignments/assignments-manager'
+import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
 import { canPerformAssignmentAction } from '@/lib/assignments/policy'
 import { getAssignmentPolicy } from '@/lib/assignments/policy-queries'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
@@ -10,10 +11,13 @@ import { requireMenuPage } from '@/lib/nav/menu-guard'
  * assign/reassign เลย (hide ไม่ใช่ disabled — §7.2)** แต่ยังเห็นตาราง Kanban และรายละเอียดได้ตามปกติ
  * เป็นชั้น UX เท่านั้น — endpoint ตรวจ `canPerformAssignmentAction()` ซ้ำทุกครั้ง (DEC-002)
  */
-export default async function CaseAssignPage() {
+export default async function CaseAssignPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const user = await requireMenuPage('cases.assign')
   const policy = await getAssignmentPolicy(user.organizationId)
   const canAct = canPerformAssignmentAction({ roleName: user.roleName, roleGroup: user.roleGroup }, policy)
 
-  return <AssignmentsManager canAct={canAct} />
+  // ลิงก์จากคิวแดชบอร์ด (`?status=ready_to_assign`) เปิดมาที่ตัวกรองเดียวกับที่คิวนับ (มติ PO O72(4))
+  const { status } = await searchParams
+  const initialStatus = ASSIGNMENT_STATE_FILTERS.find((state) => state === status) ?? 'all'
+  return <AssignmentsManager canAct={canAct} initialStatus={initialStatus} />
 }
