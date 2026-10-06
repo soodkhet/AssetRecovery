@@ -606,7 +606,7 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     expect(f3OrgBatches.length).toBeGreaterThan(0)
   })
 
-  it('O74: รอบรับชำระครบแล้วมีใบเพิ่มหนี้ ⇒ สถานะใน DB คง paid แต่ป้ายพอร์ทัล/หน้าภายใน = ยังค้าง + "มีใบเพิ่มหนี้ค้าง"', async () => {
+  it('O75: ใบเพิ่มหนี้หลังรับชำระครบ ⇒ paid → partially_paid (ใน transaction + audit) · รับ 107.00 ⇒ paid · ยกเลิกใบ ⇒ กลับ paid', async () => {
     const seeded = await seedInvoice()
     // รับชำระครบตามใบแจ้งหนี้ (1,284,000) ⇒ paid
     await db().billingBatch.update({
@@ -614,11 +614,23 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
       data: { status: 'paid', receivedSatang: 1_284_000 },
     })
     const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 10_000 })
-    await credit.createCreditNote(
+    const dn = await credit.createCreditNote(
       ctx,
       input(seeded, { noteType: 'debit', amountBeforeVatSatang: 10_000, adjustmentId: increase }),
     )
 
+    // สถานะจริงเปลี่ยนแล้ว + audit มีเหตุผล
+    const afterDn = await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })
+    expect(afterDn.status).toBe('partially_paid')
+    const audit = await db().auditLog.findFirst({
+      where: { targetType: 'billing_batches', targetId: seeded.billingBatchId, action: 'status_change' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit?.beforeData).toMatchObject({ status: 'paid' })
+    expect(audit?.afterData).toMatchObject({ status: 'partially_paid', documented_total_satang: 1_294_700 })
+    expect(audit?.reason).toContain(dn.creditNoteNumber)
+
+    // พอร์ทัล / หน้าภายใน / แท็บขาย เห็นยอดค้าง 107.00 และสถานะ "รับชำระบางส่วน"
     const { listPortalBillingBatches } = await import('@/lib/portal/queries/finance')
     const portal = await listPortalBillingBatches({
       user: accountant,
@@ -628,24 +640,79 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     })
     expect(portal.find((row) => row.id === seeded.billingBatchId)).toMatchObject({
       outstandingSatang: 10_700,
-      debitNoteOutstanding: true,
-      statusDisplay: { code: 'paid', label: 'รับชำระบางส่วน', tone: 'partial' },
+      statusDisplay: { code: 'partially_paid', label: 'รับชำระบางส่วน', tone: 'partial' },
     })
-
     const revenue = await import('@/lib/revenue/queries')
-    const { billingStatusView } = await import('@/lib/revenue/revenue-ui')
     const detail = await revenue.getBillingBatch(accountant, seeded.billingBatchId)
-    expect(detail.status).toBe('paid')
-    expect(billingStatusView(detail.status, detail.outstandingSatang)).toMatchObject({
-      label: 'รับชำระบางส่วน',
-      debitNoteOutstanding: true,
-    })
-
+    expect(detail).toMatchObject({ status: 'partially_paid', outstandingSatang: 10_700 })
     const salesList = await sales.listSalesRecords(accountant, { companyId })
     expect(salesList.items.find((row) => row.billingBatchId === seeded.billingBatchId)).toMatchObject({
-      billingStatus: 'paid',
+      billingStatus: 'partially_paid',
       billingOutstandingSatang: 10_700,
     })
+
+    // รับเงินส่วนเพิ่ม 107.00 (ยอดสะสม) ⇒ เทียบยอดตามเอกสาร ⇒ paid
+    const paid = await revenue.applyBillingReceipt({
+      organizationId: ORG_ID,
+      batchId: seeded.billingBatchId,
+      receivedSatang: 1_294_700,
+      sourceRef: 'TEST-O75',
+      actorId: ACCOUNTING_ID,
+      actorRole: 'บัญชี',
+    })
+    expect(paid).toMatchObject({ status: 'paid', outstandingSatang: 0, bankFeeWrittenOffSatang: 0 })
+
+    // ยกเลิกใบเพิ่มหนี้ ⇒ ยอดตามเอกสารลด (รับเกิน) ⇒ คง paid · ไม่มีการเปลี่ยนสถานะซ้ำ
+    await credit.cancelCreditNote(ctx, dn.id, { reason: 'บันทึกผิด' })
+    expect((await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })).status).toBe('paid')
+  })
+
+  it('O75: ยกเลิกใบเพิ่มหนี้ที่ยังไม่รับเงิน ⇒ partially_paid → paid · backfill migration ปรับรอบ paid ที่ค้างตามเอกสาร', async () => {
+    const seeded = await seedInvoice()
+    await db().billingBatch.update({
+      where: { id: seeded.billingBatchId },
+      data: { status: 'paid', receivedSatang: 1_284_000 },
+    })
+    const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 10_000 })
+    const dn = await credit.createCreditNote(
+      ctx,
+      input(seeded, { noteType: 'debit', amountBeforeVatSatang: 10_000, adjustmentId: increase }),
+    )
+    expect((await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })).status).toBe(
+      'partially_paid',
+    )
+    await credit.cancelCreditNote(ctx, dn.id, { reason: 'สำนักงานบัญชียกเลิกเอกสาร' })
+    expect((await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })).status).toBe('paid')
+
+    // ข้อมูลเก่า (ก่อน O75): ใบเพิ่มหนี้ active แต่รอบยังค้าง paid ⇒ migration ปรับเป็น partially_paid + audit
+    const increase2 = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 10_000 })
+    await credit.createCreditNote(
+      ctx,
+      input(seeded, {
+        noteType: 'debit',
+        creditNoteNumber: `X-${RUN}-o75-legacy`,
+        amountBeforeVatSatang: 10_000,
+        adjustmentId: increase2,
+      }),
+    )
+    await db().billingBatch.update({ where: { id: seeded.billingBatchId }, data: { status: 'paid' } })
+    const { readFileSync } = await import('node:fs')
+    const sql = readFileSync('prisma/migrations/20261008153000_billing_status_debit_note_backfill/migration.sql', 'utf8')
+    await db().$executeRawUnsafe(sql)
+    expect((await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })).status).toBe(
+      'partially_paid',
+    )
+    const audit = await db().auditLog.findFirst({
+      where: { targetType: 'billing_batches', targetId: seeded.billingBatchId, actorRole: 'system' },
+    })
+    expect(audit?.reason).toContain('20261008153000_billing_status_debit_note_backfill')
+    // รันซ้ำไม่เปลี่ยนอะไร (idempotent)
+    await db().$executeRawUnsafe(sql)
+    expect(
+      await db().auditLog.count({
+        where: { targetType: 'billing_batches', targetId: seeded.billingBatchId, actorRole: 'system' },
+      }),
+    ).toBe(1)
   })
 
   it('U21: ยอดก่อน VAT ไม่ตรง Adjustment ⇒ บันทึกได้ + warnings + audit amount_matches_adjustment=false · ตรง ⇒ ไม่มีคำเตือน', async () => {

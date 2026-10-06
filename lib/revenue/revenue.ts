@@ -101,12 +101,15 @@ export function assertNoOpenDraftBatch(
 
 // ── State machine (`23` §6.8) ───────────────────────────────────────────────
 
-/** `draft → sent → partially_paid → paid` (จ่ายครบทีเดียวข้าม `partially_paid` ได้) */
+/**
+ * `draft → sent → partially_paid → paid` (จ่ายครบทีเดียวข้าม `partially_paid` ได้)
+ * · มติ O75 — `paid → partially_paid` เมื่อออกใบเพิ่มหนี้ (หรือยกเลิกใบลดหนี้) จนยอดตามเอกสารค้าง > 0
+ */
 export const BILLING_BATCH_TRANSITIONS: Readonly<Record<BillingBatchStatus, readonly BillingBatchStatus[]>> = {
   draft: ['sent'],
   sent: ['partially_paid', 'paid'],
   partially_paid: ['paid'],
-  paid: [],
+  paid: ['partially_paid'],
 }
 
 export function canTransitionBillingBatch(from: BillingBatchStatus, to: BillingBatchStatus): boolean {
@@ -196,4 +199,22 @@ export function resolveBillingStatusAfterReceipt(input: {
   if (settled <= 0) return input.current
   if (settled >= input.totalSatang) return 'paid'
   return input.current === 'draft' ? input.current : 'partially_paid'
+}
+
+/**
+ * มติ O75 — สถานะของรอบหลัง**เอกสารเปลี่ยนยอด** (บันทึก/ยกเลิกใบลดหนี้-ใบเพิ่มหนี้) — `totalSatang` = **ยอดตามเอกสาร**
+ * · `paid` แต่ค้าง > 0 ⇒ `partially_paid` · `partially_paid` ที่ชำระครบแล้วตามเอกสาร ⇒ `paid` · อื่น ๆ คงเดิม
+ * (`draft`/`sent` ยังไม่มีเงินเข้า ⇒ ไม่แตะ)
+ */
+export function resolveBillingStatusAfterDocumentChange(input: {
+  current: BillingBatchStatus
+  totalSatang: number
+  receivedSatang: number
+  whtWithheldByCustomerSatang: number
+  bankFeeWrittenOffSatang: number
+}): BillingBatchStatus {
+  const outstanding = input.totalSatang - settledSatang(input)
+  if (input.current === 'paid' && outstanding > 0) return 'partially_paid'
+  if (input.current === 'partially_paid' && outstanding <= 0) return 'paid'
+  return input.current
 }

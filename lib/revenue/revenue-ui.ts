@@ -37,8 +37,8 @@ export function billingStatusBadgeGroup(status: BillingBatchStatus): StatusBadge
 export const DEBIT_NOTE_OUTSTANDING_LABEL = 'มีใบเพิ่มหนี้ค้าง'
 
 /**
- * มติ O74 — รอบ `paid` แต่**ยอดตามเอกสาร**ยังค้าง (> 0) = ออกใบเพิ่มหนี้หลังรับชำระครบ ⇒ state machine ของรอบวางบิล
- * ไม่มีทางย้อน `paid → partially_paid` ⇒ แก้ที่การแสดงผลเท่านั้น (สถานะใน DB คงเดิม)
+ * มติ O74 — รอบ `paid` แต่**ยอดตามเอกสาร**ยังค้าง (> 0) · ตั้งแต่มติ O75 สถานะจริงถูกปรับเป็น `partially_paid`
+ * ใน transaction ที่บันทึกเอกสารแล้ว (`syncBillingStatusWithDocuments()`) ⇒ ตัวนี้เหลือเป็น**ตัวกัน**กรณีข้อมูลที่ยังไม่ถูกปรับ
  * · `documentedOutstandingSatang` = `arOutstandingSatang()` บนยอดตามเอกสาร (คิดที่ backend เสมอ)
  */
 export function hasDebitNoteOutstanding(status: BillingBatchStatus, documentedOutstandingSatang: number): boolean {

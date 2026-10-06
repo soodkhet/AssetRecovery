@@ -10,6 +10,7 @@ import {
   canTransitionBillingBatch,
   parseBillingPeriodLabel,
   isRevenueBillableAt,
+  resolveBillingStatusAfterDocumentChange,
   resolveBillingStatusAfterReceipt,
   summarizeBillingBatch,
   toBangkokDateOnly,
@@ -106,6 +107,40 @@ describe('state machine (`23` §6.8)', () => {
     expect(canTransitionBillingBatch('draft', 'paid')).toBe(false)
     expect(canTransitionBillingBatch('sent', 'draft')).toBe(false)
     expect(canTransitionBillingBatch('paid', 'sent')).toBe(false)
+  })
+
+  it('มติ O75 — paid → partially_paid ได้ (ใบเพิ่มหนี้หลังรับชำระครบ) · ห้ามกลับไป sent/draft', () => {
+    expect(canTransitionBillingBatch('paid', 'partially_paid')).toBe(true)
+    expect(canTransitionBillingBatch('paid', 'draft')).toBe(false)
+  })
+
+  it('มติ O75 — สถานะหลังเอกสารเปลี่ยนยอด (ยอดตามเอกสาร)', () => {
+    const base = { receivedSatang: 1_284_000, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0 }
+    // ใบเพิ่มหนี้ 107.00 หลังรับชำระครบ ⇒ partially_paid
+    expect(resolveBillingStatusAfterDocumentChange({ ...base, current: 'paid', totalSatang: 1_294_700 })).toBe(
+      'partially_paid',
+    )
+    // ยกเลิกใบเพิ่มหนี้ / ใบลดหนี้ปิดยอด ⇒ paid (รวม WHT ที่ลูกค้าหัก)
+    expect(resolveBillingStatusAfterDocumentChange({ ...base, current: 'partially_paid', totalSatang: 1_284_000 })).toBe(
+      'paid',
+    )
+    expect(
+      resolveBillingStatusAfterDocumentChange({
+        current: 'partially_paid',
+        totalSatang: 1_000_000,
+        receivedSatang: 970_000,
+        whtWithheldByCustomerSatang: 30_000,
+        bankFeeWrittenOffSatang: 0,
+      }),
+    ).toBe('paid')
+    // ยังค้าง / ยังไม่มีเงินเข้า ⇒ คงเดิม
+    expect(resolveBillingStatusAfterDocumentChange({ ...base, current: 'partially_paid', totalSatang: 1_294_700 })).toBe(
+      'partially_paid',
+    )
+    for (const current of ['draft', 'sent'] as const) {
+      expect(resolveBillingStatusAfterDocumentChange({ ...base, current, totalSatang: 1_294_700 })).toBe(current)
+    }
+    expect(resolveBillingStatusAfterDocumentChange({ ...base, current: 'paid', totalSatang: 1_284_000 })).toBe('paid')
   })
 
   it('ส่งบิลได้จาก draft เท่านั้น — ส่งซ้ำโดน BILLING_BATCH_INVALID_STATUS', () => {
