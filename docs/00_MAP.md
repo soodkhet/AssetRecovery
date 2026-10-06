@@ -1277,7 +1277,7 @@
 | 584 | ## 21. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 599 | ## 22. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/44-asset-custody-handover.md` (50 KB, 662 บรรทัด — v2.6)
+### `docs/44-asset-custody-handover.md` (56 KB, 667 บรรทัด — v2.7)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1285,44 +1285,44 @@
 | 3 | # 44 — Asset Custody & Handover (คลังสินค้าและการส่งมอบทรัพย์คืน) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 30 | ## 1. Summary |
-| 33 | ## 2. Purpose |
-| 39 | ## 3. In Scope |
-| 47 | ## 4. Out of Scope |
-| 55 | ## 5. Actors & Responsibilities |
-| 68 | ## 6. Core Concepts |
-| 70 | ### 6.1 Asset (ทรัพย์ที่ยึดคืน) |
-| 75 | ### 6.2 HandoverLot (ล็อตส่งมอบ) |
-| 84 | ### 6.3 รูปแบบการส่งมอบ (HandoverType) |
-| 93 | ### 6.4 เอกสาร |
-| 100 | ### 6.5 IMEI Validation |
-| 109 | ## 7. Data Entities / Required Objects |
-| 111 | ### 7.1 Asset |
-| 145 | ### 7.2 HandoverLot |
-| 180 | ## 8. UI / UX Rules (อ้างอิง warehouse.html) |
-| 182 | ### 8.1 โครงสร้างหน้า |
-| 193 | ### 8.2 แท็บ "รับเข้าคลัง" |
-| 236 | ### 8.3 แท็บ "ในคลัง" |
-| 275 | ### 8.4 แท็บ "รอส่งมอบ" |
-| 300 | ### 8.5 แท็บ "ส่งมอบแล้ว" |
-| 319 | ## 9. Workflow / State Machines |
-| 321 | ### 9.1 Asset Status Flow |
-| 343 | ### 9.2 HandoverLot Status Flow |
-| 370 | ### 9.3 สรุป Draft / Confirmed ใน UI |
-| 380 | ## 10. Security / Control Rules |
-| 397 | ## 11. ผลกระทบต่อ Module อื่นเมื่อ Lot.status = confirmed |
-| 435 | ## 12. Validation & Error Handling |
-| 458 | ## 13. Permission Requirements |
-| 475 | ## 14. Audit Log Requirements |
-| 492 | ## 15. API Endpoints |
-| 494 | ### Assets |
-| 537 | ### HandoverLots |
-| 608 | ## 16. Acceptance Criteria |
-| 624 | ## 17. Test Cases |
-| 646 | ## 18. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 657 | ## 19. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 31 | ## 1. Summary |
+| 34 | ## 2. Purpose |
+| 40 | ## 3. In Scope |
+| 48 | ## 4. Out of Scope |
+| 56 | ## 5. Actors & Responsibilities |
+| 69 | ## 6. Core Concepts |
+| 71 | ### 6.1 Asset (ทรัพย์ที่ยึดคืน) |
+| 76 | ### 6.2 HandoverLot (ล็อตส่งมอบ) |
+| 85 | ### 6.3 รูปแบบการส่งมอบ (HandoverType) |
+| 94 | ### 6.4 เอกสาร |
+| 101 | ### 6.5 IMEI Validation |
+| 110 | ## 7. Data Entities / Required Objects |
+| 112 | ### 7.1 Asset |
+| 146 | ### 7.2 HandoverLot |
+| 181 | ## 8. UI / UX Rules (อ้างอิง warehouse.html) |
+| 183 | ### 8.1 โครงสร้างหน้า |
+| 194 | ### 8.2 แท็บ "รับเข้าคลัง" |
+| 237 | ### 8.3 แท็บ "ในคลัง" |
+| 276 | ### 8.4 แท็บ "รอส่งมอบ" |
+| 301 | ### 8.5 แท็บ "ส่งมอบแล้ว" |
+| 322 | ## 9. Workflow / State Machines |
+| 324 | ### 9.1 Asset Status Flow |
+| 346 | ### 9.2 HandoverLot Status Flow |
+| 373 | ### 9.3 สรุป Draft / Confirmed ใน UI |
+| 383 | ## 10. Security / Control Rules |
+| 400 | ## 11. ผลกระทบต่อ Module อื่นเมื่อ Lot.status = confirmed |
+| 438 | ## 12. Validation & Error Handling |
+| 461 | ## 13. Permission Requirements |
+| 478 | ## 14. Audit Log Requirements |
+| 495 | ## 15. API Endpoints |
+| 497 | ### Assets |
+| 540 | ### HandoverLots |
+| 614 | ## 16. Acceptance Criteria |
+| 630 | ## 17. Test Cases |
+| 652 | ## 18. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 663 | ## 19. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/45-case-warehouse-api-contracts.md` (23 KB, 180 บรรทัด — v1.8)
+### `docs/45-case-warehouse-api-contracts.md` (25 KB, 181 บรรทัด — v1.9)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1330,20 +1330,20 @@
 | 3 | # 45 — Case & Warehouse API Contracts (รวม API Endpoint ทั้งระบบ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 10 | ## Changelog |
-| 31 | ## 1. Summary |
-| 35 | ## 2. Purpose |
-| 39 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 43 | ## 6. API Endpoints รวมทั้งหมด (จัดกลุ่มตาม Resource) |
-| 45 | ### 6.1 Case Submission (ไฟล์ 38) |
-| 60 | ### 6.2 Case Assignment & Routing (ไฟล์ 40) |
-| 74 | ### 6.3 Field Tracker — Mobile/Desktop (ไฟล์ 41) |
-| 99 | ### 6.4 Warehouse — Assets (ไฟล์ 44) |
-| 108 | ### 6.5 Warehouse — Handover Lots (ไฟล์ 44) |
-| 120 | ## 7. Events รวม (สรุปย่อ — รายละเอียดเต็มดูไฟล์ต้นทาง §17.2/§16) |
-| 151 | ## 8. REST Convention ที่ใช้สม่ำเสมอทั้งระบบ |
-| 161 | ## 9-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 167 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 173 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 32 | ## 1. Summary |
+| 36 | ## 2. Purpose |
+| 40 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 44 | ## 6. API Endpoints รวมทั้งหมด (จัดกลุ่มตาม Resource) |
+| 46 | ### 6.1 Case Submission (ไฟล์ 38) |
+| 61 | ### 6.2 Case Assignment & Routing (ไฟล์ 40) |
+| 75 | ### 6.3 Field Tracker — Mobile/Desktop (ไฟล์ 41) |
+| 100 | ### 6.4 Warehouse — Assets (ไฟล์ 44) |
+| 109 | ### 6.5 Warehouse — Handover Lots (ไฟล์ 44) |
+| 122 | ## 7. Events รวม (สรุปย่อ — รายละเอียดเต็มดูไฟล์ต้นทาง §17.2/§16) |
+| 153 | ## 8. REST Convention ที่ใช้สม่ำเสมอทั้งระบบ |
+| 163 | ## 9-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 169 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 175 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/90-platform-audit-notification-reporting.md` (33 KB, 249 บรรทัด — v4.5)
 

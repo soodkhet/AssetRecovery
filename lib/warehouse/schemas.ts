@@ -119,12 +119,26 @@ export const lotListQuerySchema = z.object({
   type: z.enum(HANDOVER_TYPES).optional(),
   dateFrom: filterDate.optional(),
   dateTo: filterDate.optional(),
+  /**
+   * มติ PO U142 — ช่วง "วันส่งมอบ" ของแท็บ "ส่งมอบแล้ว" (วันตามปฏิทิน**ไทย** รวมทั้งสองขอบ)
+   * วันส่งมอบ = วันส่งมอบจริง → ถ้ายังไม่มี (รอหลักฐาน) ใช้กำหนดส่ง → วันสร้างล็อต (`handoverDateWhere()`)
+   */
+  handedOverFrom: filterDate.optional(),
+  handedOverTo: filterDate.optional(),
   search: trimmedText.min(1).max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 })
 
 export type LotListQuery = z.infer<typeof lotListQuerySchema>
+
+/**
+ * `GET /api/handover-lots/company-summary` (มติ PO U142) — ตัวกรองชุดเดียวกับ `lot.list`
+ * ไม่มีแบ่งหน้า เพราะคืนยอดรวมต่อบริษัท (บริษัทในองค์กรมีหลักสิบ)
+ */
+export const lotCompanySummaryQuerySchema = lotListQuerySchema.omit({ page: true, limit: true })
+
+export type LotCompanySummaryQuery = z.infer<typeof lotCompanySummaryQuerySchema>
 
 /**
  * `POST /api/handover-lots` — 1 ล็อต = 1 บริษัท (`44` §6.2)

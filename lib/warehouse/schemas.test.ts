@@ -6,6 +6,7 @@ import {
   assetRejectIntakeSchema,
   lotConfirmSchema,
   lotCreateSchema,
+  lotCompanySummaryQuerySchema,
   lotListQuerySchema,
 } from '@/lib/warehouse/schemas'
 
@@ -20,6 +21,21 @@ describe('query ตรงกับ API_CONTRACT', () => {
 
   it('GET /api/handover-lots ประกาศ filter ครบตาม contract', () => {
     expect(Object.keys(lotListQuerySchema.shape).sort()).toEqual([...API_CONTRACT['lot.list'].query].sort())
+  })
+
+  it('มติ U142 — GET /api/handover-lots/company-summary ใช้ตัวกรองชุดเดียวกับ list (ไม่มี page/limit)', () => {
+    expect(Object.keys(lotCompanySummaryQuerySchema.shape).sort()).toEqual(
+      [...API_CONTRACT['lot.companySummary'].query].sort(),
+    )
+  })
+
+  it('มติ U142 — ช่วงวันส่งมอบต้องเป็นวันที่จริง YYYY-MM-DD', () => {
+    expect(lotListQuerySchema.parse({ handedOverFrom: '2026-10-01', handedOverTo: '2026-10-31' })).toMatchObject({
+      handedOverFrom: '2026-10-01',
+      handedOverTo: '2026-10-31',
+    })
+    expect(lotListQuerySchema.safeParse({ handedOverFrom: '2026-02-30' }).success).toBe(false)
+    expect(lotListQuerySchema.safeParse({ handedOverTo: '10/2026' }).success).toBe(false)
   })
 })
 

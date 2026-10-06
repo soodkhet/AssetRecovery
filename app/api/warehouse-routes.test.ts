@@ -22,6 +22,7 @@ const queriesMock = vi.hoisted(() => ({
   intakeAsset: vi.fn(),
   rejectAssetIntake: vi.fn(),
   listLots: vi.fn(),
+  summarizeLotsByCompany: vi.fn(),
   getLot: vi.fn(),
   createLot: vi.fn(),
   confirmLot: vi.fn(),
@@ -45,6 +46,7 @@ const { GET: getPdf } = await import('@/app/api/handover-lots/[id]/pdf/route')
 const { GET: getExcel } = await import('@/app/api/handover-lots/[id]/export-excel/route')
 const { GET: getAssetDetail } = await import('@/app/api/assets/[id]/route')
 const { GET: getLots } = await import('@/app/api/handover-lots/route')
+const { GET: getLotSummary } = await import('@/app/api/handover-lots/company-summary/route')
 const { GET: getLotDetail } = await import('@/app/api/handover-lots/[id]/route')
 const { POST: postLotDocument } = await import('@/app/api/handover-lots/[id]/documents/route')
 
@@ -185,9 +187,11 @@ describe('สิทธิ์ของแต่ละ endpoint (DEC-002 · `44` �
         jsonRequest(`http://localhost/api/handover-lots/${LOT_ID}/confirm`, 'PATCH', {}),
         params(LOT_ID),
       ),
+      getLotSummary(request('http://localhost/api/handover-lots/company-summary'), undefined),
     ])
 
     for (const response of responses) expect(response.status).toBe(403)
+    expect(queriesMock.summarizeLotsByCompany).not.toHaveBeenCalled()
     expect(queriesMock.listAssets).not.toHaveBeenCalled()
     expect(queriesMock.intakeAsset).not.toHaveBeenCalled()
   })
@@ -212,6 +216,17 @@ describe('สิทธิ์ของแต่ละ endpoint (DEC-002 · `44` �
     expect((await getAssets(request(), undefined)).status).toBe(200)
     expect((await getAssetDetail(request(`http://localhost/api/assets/${ASSET_ID}`), params(ASSET_ID))).status).toBe(200)
     expect((await getLots(request('http://localhost/api/handover-lots'), undefined)).status).toBe(200)
+    // มติ U142 — ยอดหัวกลุ่มใช้สิทธิ์อ่านชุดเดียวกับรายการล็อต · ส่งผู้ใช้ (scope) ต่อให้ query เสมอ
+    queriesMock.summarizeLotsByCompany.mockResolvedValue({ groups: [], totalLots: 0, totalAssets: 0, totalPendingLots: 0 })
+    expect(
+      (await getLotSummary(request('http://localhost/api/handover-lots/company-summary?handedOverFrom=2026-10-01'), undefined))
+        .status,
+    ).toBe(200)
+    expect(queriesMock.summarizeLotsByCompany.mock.calls[0]?.[0]).toBe(TEAM_LEAD)
+    expect(
+      (await getLotSummary(request('http://localhost/api/handover-lots/company-summary?handedOverFrom=10/2026'), undefined))
+        .status,
+    ).toBe(400)
     expect((await getLotDetail(request(`http://localhost/api/handover-lots/${LOT_ID}`), params(LOT_ID))).status).toBe(200)
     // query ถูกเรียกด้วยผู้ใช้ scope ทีม — ขอบเขตแถวบังคับที่ `assetScopeWhere()` (เทสต์ฝั่ง DB)
     expect(queriesMock.listAssets.mock.calls[0]?.[0]).toBe(TEAM_LEAD)

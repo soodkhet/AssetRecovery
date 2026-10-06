@@ -87,6 +87,24 @@ export interface LotListDto {
   limit: number
 }
 
+/** แถวหัวกลุ่มของแท็บ "ส่งมอบแล้ว" (มติ PO U142) — ยอดคิดฝั่ง server ตามตัวกรอง + scope ของผู้เรียก */
+export interface LotCompanyGroupDto {
+  companyId: string
+  companyName: string
+  lotCount: number
+  /** เครื่องรวมในล็อตของกลุ่ม — นับเฉพาะเครื่องที่ผู้เรียกมองเห็น (แนวเดียวกับ `assetCount` ของล็อต) */
+  assetCount: number
+  /** ล็อตที่ยังไม่ยืนยัน (รอเอกสาร/หลักฐาน) */
+  pendingLotCount: number
+}
+
+export interface LotCompanySummaryDto {
+  groups: readonly LotCompanyGroupDto[]
+  totalLots: number
+  totalAssets: number
+  totalPendingLots: number
+}
+
 /**
  * ผลของการยืนยันส่งมอบ (`44` §11) — คืนสิ่งที่ side effect ทำไปทั้งหมดเพื่อให้หน้าจอ/เทสต์
  * ตรวจได้ว่า 4 ขั้นเกิดครบจริง (ไม่ใช่แค่สถานะล็อตเปลี่ยน)

@@ -35,6 +35,7 @@ import {
   imeiMismatchWarning,
 } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
+import { bangkokDayRange, buildLotCompanyGroups } from '@/lib/warehouse/lot-company-groups'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
 import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-service'
@@ -45,6 +46,7 @@ import type {
   LotConfirmInput,
   LotCreateInput,
   LotDocumentAttachInput,
+  LotCompanySummaryQuery,
   LotListQuery,
 } from '@/lib/warehouse/schemas'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
@@ -54,6 +56,7 @@ import type {
   AssetDetailDto,
   AssetListDto,
   AssetListItemDto,
+  LotCompanySummaryDto,
   LotConfirmResultDto,
   LotDetailDto,
   LotListDto,
@@ -566,13 +569,32 @@ export async function rejectAssetIntake(
 
 // ── GET /api/handover-lots (`44` §15) ───────────────────────────────────────
 
-export async function listLots(user: SessionUser, query: LotListQuery): Promise<LotListDto> {
+/**
+ * มติ PO U142 — "วันส่งมอบ" ของล็อต = วันส่งมอบจริง (`delivered_at` · ตั้งตอนยืนยัน) → ยังไม่ยืนยัน
+ * (we_deliver รอหลักฐาน) ใช้กำหนดส่ง (`scheduled_at`) → ไม่มีกำหนดส่งใช้วันสร้างล็อต
+ * ⇒ ล็อตที่รอหลักฐานยังโผล่ในเดือนที่ของออกจากคลัง ไม่หายไปจากตารางเพียงเพราะยังไม่มีวันส่งมอบจริง
+ */
+function handoverDateWhere(from: string | undefined, to: string | undefined): Prisma.HandoverLotWhereInput {
+  const range = bangkokDayRange(from, to)
+  if (range === null) return {}
+  return {
+    OR: [
+      { deliveredAt: range },
+      { deliveredAt: null, scheduledAt: range },
+      { deliveredAt: null, scheduledAt: null, createdAt: range },
+    ],
+  }
+}
+
+/** เงื่อนไขของ `lot.list` และ `lot.companySummary` — ชุดเดียวกันเสมอ ยอดหัวกลุ่มจึงตรงกับแถวที่กางดู */
+function lotListWhere(user: SessionUser, query: LotCompanySummaryQuery): Prisma.HandoverLotWhereInput {
   // scope อยู่คนละก้อนกับ filter ใน `AND` — เหตุผลเดียวกับ `listAssets()` (`?companyId=` ห้ามทับ scope)
-  const where: Prisma.HandoverLotWhereInput = {
+  return {
     organizationId: user.organizationId,
     deletedAt: null,
     AND: [
       lotScopeWhere(user),
+      handoverDateWhere(query.handedOverFrom, query.handedOverTo),
       {
         ...(query.status === undefined ? {} : { status: { in: query.status } }),
         ...(query.companyId === undefined ? {} : { companyId: query.companyId }),
@@ -614,12 +636,21 @@ export async function listLots(user: SessionUser, query: LotListQuery): Promise<
       },
     ],
   }
+}
+
+export async function listLots(user: SessionUser, query: LotListQuery): Promise<LotListDto> {
+  const where = lotListWhere(user, query)
+  // ช่วงวันส่งมอบ (แท็บ "ส่งมอบแล้ว" · U142) เรียงล็อตที่ยังรอหลักฐานขึ้นก่อน แล้วตามวันส่งมอบจริงล่าสุด
+  const orderBy: Prisma.HandoverLotOrderByWithRelationInput[] =
+    query.handedOverFrom === undefined && query.handedOverTo === undefined
+      ? [{ createdAt: 'desc' }]
+      : [{ deliveredAt: { sort: 'desc', nulls: 'first' } }, { createdAt: 'desc' }, { id: 'asc' }]
 
   const [rows, total] = await Promise.all([
     prisma.handoverLot.findMany({
       where,
       select: lotSelectFor(user),
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy,
       skip: (query.page - 1) * query.limit,
       take: query.limit,
     }),
@@ -627,6 +658,47 @@ export async function listLots(user: SessionUser, query: LotListQuery): Promise<
   ])
 
   return { items: rows.map(toLotSummary), total, page: query.page, limit: query.limit }
+}
+
+// ── GET /api/handover-lots/company-summary (มติ PO U142) ───────────────────
+
+/**
+ * ยอดหัวกลุ่มต่อบริษัทของแท็บ "ส่งมอบแล้ว" — **aggregate ที่ DB** ตามตัวกรอง + scope เดียวกับ `listLots()`
+ * (ไม่ใช่นับจากหน้าที่โหลด) · จำนวนเครื่องนับเฉพาะเครื่องที่ผู้เรียกมองเห็น (ทีมไม่เห็นยอดของทีมอื่น)
+ */
+export async function summarizeLotsByCompany(
+  user: SessionUser,
+  query: LotCompanySummaryQuery,
+): Promise<LotCompanySummaryDto> {
+  const where = lotListWhere(user, query)
+
+  const [lotRows, assetRows] = await Promise.all([
+    prisma.handoverLot.groupBy({ by: ['companyId', 'status'], where, _count: { _all: true } }),
+    prisma.asset.groupBy({
+      by: ['companyId'],
+      where: {
+        organizationId: user.organizationId,
+        deletedAt: null,
+        AND: [assetScopeWhere(user), { lot: { is: where } }],
+      },
+      _count: { _all: true },
+    }),
+  ])
+
+  const companyIds = [...new Set(lotRows.map((row) => row.companyId))]
+  const companies =
+    companyIds.length === 0
+      ? []
+      : await prisma.financeCompany.findMany({
+          where: { organizationId: user.organizationId, id: { in: companyIds } },
+          select: { id: true, name: true },
+        })
+
+  return buildLotCompanyGroups(
+    lotRows.map((row) => ({ companyId: row.companyId, status: row.status, lots: row._count._all })),
+    assetRows.map((row) => ({ companyId: row.companyId, assets: row._count._all })),
+    new Map(companies.map((company) => [company.id, company.name])),
+  )
 }
 
 async function loadLot(user: SessionUser, lotId: string): Promise<LotRow> {
