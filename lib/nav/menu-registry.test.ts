@@ -344,3 +344,43 @@ describe('เมนูการเงินของผู้จัดการ�
     expect(canViewMenu(VIEWERS.executive, 'finance')).toBe(true)
   })
 })
+
+/**
+ * มติ PO 06/10/2569 U104 (`06` §7.2 v2.11) — เมนูบัญชีมีเมนูย่อย "งานบัญชี" + "ตัวอย่างเอกสารทั้งหมด"
+ * · ตัวอย่างเอกสารเห็นเมื่อถือ `view_document_samples` (บัญชี/การเงิน/บริหาร · Superadmin โดยนิยาม)
+ * · การเงินเห็นเมนูบัญชีเฉพาะเมื่อถือสิทธิ์นี้ และข้างในเห็นแค่ตัวอย่างเอกสาร (ไม่เห็นงานบัญชี)
+ */
+describe('เมนูย่อย "ตัวอย่างเอกสารทั้งหมด" (มติ PO U104)', () => {
+  const SAMPLES = { view_document_samples: 'view' as const }
+
+  it('บัญชี/บริหารที่ถือสิทธิ์ เห็นทั้งงานบัญชีและตัวอย่างเอกสาร · Superadmin เห็นเสมอ', () => {
+    for (const audience of ['accounting', 'executive'] as const) {
+      const holder = { ...VIEWERS[audience], capabilities: SAMPLES }
+      expect(canViewMenu(holder, 'accounting.operations')).toBe(true)
+      expect(canViewMenu(holder, 'accounting.document-samples')).toBe(true)
+      expect(firstVisibleChildPath(holder, 'accounting')).toBe('/accounting')
+    }
+    expect(canViewMenu(VIEWERS.superadmin, 'accounting.document-samples')).toBe(true)
+  })
+
+  it('ไม่ถือสิทธิ์ = ซ่อนเมนูย่อยตัวอย่างเอกสาร (งานบัญชียังเห็นตามเดิม)', () => {
+    const accountant = { ...VIEWERS.accounting, capabilities: {} }
+    expect(canViewMenu(accountant, 'accounting.operations')).toBe(true)
+    expect(canViewMenu(accountant, 'accounting.document-samples')).toBe(false)
+  })
+
+  it('การเงินที่ถือสิทธิ์ เห็นเมนูบัญชีเฉพาะตัวอย่างเอกสาร · แท็บแรก = หน้าตัวอย่าง · ไม่ถือ = ไม่เห็นเมนูบัญชี', () => {
+    const finance = { ...VIEWERS.finance, capabilities: SAMPLES }
+    expect(canViewMenu(finance, 'accounting')).toBe(true)
+    expect(canViewMenu(finance, 'accounting.operations')).toBe(false)
+    expect(canViewMenu(finance, 'accounting.document-samples')).toBe(true)
+    expect(firstVisibleChildPath(finance, 'accounting')).toBe('/accounting/document-samples')
+    expect(canViewMenu({ ...VIEWERS.finance, capabilities: { manage_billing: 'manage' } }, 'accounting')).toBe(false)
+  })
+
+  it('role อื่นไม่เห็นแม้ถือสิทธิ์ (เมนูบัญชีไม่ใช่ของ role นั้น)', () => {
+    for (const audience of ['admin_office', 'case_approver', 'team_lead', 'field_agent', 'company_user'] as const) {
+      expect(canViewMenu({ ...VIEWERS[audience], capabilities: SAMPLES }, 'accounting.document-samples')).toBe(false)
+    }
+  })
+})

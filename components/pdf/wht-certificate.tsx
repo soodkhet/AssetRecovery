@@ -1,4 +1,5 @@
 import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/renderer'
+import { SampleStamp } from '@/components/pdf/sample-stamp'
 import { Text } from '@/components/pdf/text'
 import { OfficialFooter, officialStyles } from '@/components/pdf/official-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
@@ -246,6 +247,7 @@ function CertificatePage({ doc, copy }: { doc: WhtCertificateDoc; copy: WhtCerti
       </View>
 
       <OfficialFooter left={`${doc.title} ${doc.certificateNumber} · ${copy.label}`} right={doc.payer.name} />
+      <SampleStamp />
     </Page>
   )
 }

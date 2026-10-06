@@ -99,6 +99,10 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   // ── นอก Functional Matrix: ผู้ใช้ภายในดู portal ในฐานะลูกค้า (มติ PO 05/10/2569 U59 · `97` §13.1 · `07` §5.1) ──
   // ไม่ขึ้นต้น `portal_` (ไม่ใช่สิทธิ์หมวดของผู้ใช้บริษัท) · อ่านอย่างเดียว ⇒ `manage` = `view` · ไม่ใช่ "✅ only"
   { code: 'view_client_portal_as', label: 'ดูพอร์ทัลในฐานะลูกค้า', module: 'portal', functionalGroup: null, description: 'เปิดพอร์ทัลของบริษัทไฟแนนซ์แบบดูอย่างเดียว เห็นเหมือนผู้จัดการของบริษัท (ทุกการเปิดและดาวน์โหลดลงบันทึกการใช้งาน)' },
+
+  // ── นอก Functional Matrix: ตัวอย่างเอกสารทั้งหมด (มติ PO 06/10/2569 U104 · เมนูบัญชี → เมนูย่อย) ──
+  // อ่านอย่างเดียว (ข้อมูลสมมติ + หัวเอกสารขององค์กร) ⇒ `manage` = `view` · ไม่ใช่ "✅ only"
+  { code: 'view_document_samples', label: 'ดูตัวอย่างเอกสารทั้งหมด', module: 'accounting', functionalGroup: null, description: 'ดูหน้าตาเอกสารทุกชนิดที่ระบบออก ด้วยข้อมูลสมมติและหัวเอกสารขององค์กร · อ่านอย่างเดียว ไม่เดินเลขที่เอกสาร' },
 ]
 
 /** capability ที่อยู่ใน Functional Permission Matrix (`13` §6.10 — ต้องเท่ากับ 37 เสมอ) */

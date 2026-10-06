@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { Image, Page, StyleSheet, View } from '@react-pdf/renderer'
+import { SampleStamp } from '@/components/pdf/sample-stamp'
 import { Text } from '@/components/pdf/text'
 import { THAI_FONT } from '@/components/pdf/thai-font'
 import { letterheadContactLine, letterheadTaxLine, type DocLetterhead } from '@/lib/organization/profile'
@@ -554,6 +555,7 @@ export function DocPage({
   return (
     <Page size="A4" orientation={orientation} style={layout.page}>
       {children}
+      <SampleStamp />
       <View style={layout.footer} fixed>
         <Text>{footerLeft}</Text>
         <Text render={({ subPageNumber, subPageTotalPages }) => `หน้า ${subPageNumber}/${subPageTotalPages}`} />

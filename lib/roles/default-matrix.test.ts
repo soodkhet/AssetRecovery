@@ -13,9 +13,10 @@ describe('capability catalog (`02` §12 · `13` §6.10)', () => {
   // + `manage_wht_policy` (มติ PO 05/10/2569 UAT U8) + พอร์ทัลบริษัท 5 หมวด (มติ PO 05/10/2569 U6/O43 D1)
   // + `manage_customer_wht` (มติ PO 05/10/2569 U40) + `view_client_portal_as` (มติ PO 05/10/2569 U59)
   // + `manage_holidays` (มติ PO 06/10/2569 UAT U93) + `manage_data_retention` (มติ PO 06/10/2569 U97)
+  // + `view_document_samples` (มติ PO 06/10/2569 U104)
   // — ทั้งหมดอยู่นอก Functional Matrix 37 รายการ
-  it('มี 59 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
-    expect(CAPABILITIES).toHaveLength(59)
+  it('มี 60 capability และอยู่ใน Functional Matrix 37 รายการ 4 กลุ่ม', () => {
+    expect(CAPABILITIES).toHaveLength(60)
     expect(MATRIX_CAPABILITIES).toHaveLength(37)
     expect(new Set(MATRIX_CAPABILITIES.map((capability) => capability.functionalGroup)).size).toBe(4)
   })
@@ -230,6 +231,17 @@ describe('ค่าเริ่มต้นของ role_capabilities (`25` §7
     )
     expect(capabilityLockOwner('manage_holidays')).toBeNull()
     const capability = CAPABILITIES.find((each) => each.code === 'manage_holidays')
+    expect(capability?.functionalGroup).toBeNull()
+    expect(`${capability?.label ?? ''} ${capability?.description ?? ''}`).not.toMatch(/§|`\d{2}`|ไฟล์ \d{2}/)
+  })
+
+  it('ตัวอย่างเอกสารทั้งหมด (มติ PO 06/10/2569 U104): บัญชี/การเงิน/บริหาร view · ไม่ล็อก · ไม่มีเลขอ้างอิงสเปค', () => {
+    const rows = DEFAULT_ROLE_CAPABILITIES.filter((each) => each.capabilityCode === 'view_document_samples')
+      .map((each) => `${each.role.roleGroup}:${each.role.name}=${each.level}`)
+      .sort()
+    expect(rows).toEqual(['system:บัญชี=view', 'system:การเงิน=view', 'system:บริหาร=view'].sort())
+    expect(capabilityLockOwner('view_document_samples')).toBeNull()
+    const capability = CAPABILITIES.find((each) => each.code === 'view_document_samples')
     expect(capability?.functionalGroup).toBeNull()
     expect(`${capability?.label ?? ''} ${capability?.description ?? ''}`).not.toMatch(/§|`\d{2}`|ไฟล์ \d{2}/)
   })

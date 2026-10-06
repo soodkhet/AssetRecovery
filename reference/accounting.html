@@ -136,6 +136,9 @@ const store = {
 const state = {
   mainTab: 'accounting',
   accountingSubTab: 'closing',
+  // เมนูย่อยของ "บัญชี" (มติ PO 06/10/2569 U104): 'operations' = งานบัญชี · 'samples' = ตัวอย่างเอกสารทั้งหมด
+  accountingView: 'operations',
+  sampleViewer: null,
   modal: null,
   toast: null
 };
@@ -1680,25 +1683,147 @@ function renderToast() {
   </div>`;
 }
 
+// ===================== SUB NAV ของเมนูบัญชี (มติ PO 06/10/2569 U104) =====================
+// แถบเมนูย่อยใต้ Top Nav แบบเดียวกับ `app-shell.html` renderCaseSubNav — การเงินที่ถือสิทธิ์ดูตัวอย่างเอกสาร
+// เห็นเฉพาะ "ตัวอย่างเอกสารทั้งหมด" (งานบัญชีซ่อน)
+function renderAccountingSubNav() {
+  const items = [
+    { id: 'operations', label: 'งานบัญชี' },
+    { id: 'samples', label: 'ตัวอย่างเอกสารทั้งหมด' }
+  ];
+  return `
+  <div class="bg-slate-50 border-b border-slate-200">
+    <nav aria-label="แท็บย่อย" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+      ${items.map(i => `<button data-action="set-view" data-id="${i.id}" class="px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap focus-ring-inset transition-colors ${state.accountingView === i.id ? 'bg-white text-slate-900 border border-slate-300 shadow-sm' : 'text-slate-500 hover:text-slate-800'}">${i.label}</button>`).join('')}
+    </nav>
+  </div>`;
+}
+
+// ===================== ตัวอย่างเอกสารทั้งหมด (มติ PO 06/10/2569 U104) =====================
+// ของจริง: PDF จาก renderer ของระบบด้วยข้อมูลสมมติ + หัวเอกสารองค์กร · ทุกหน้ามีลายน้ำ "ตัวอย่าง — ไม่ใช่เอกสารจริง"
+// หน้าตาเนื้อเอกสารแต่ละใบดู `documents.html`
+const SAMPLE_GROUPS = [
+  { id: 'customer', label: 'เอกสารถึงบริษัทไฟแนนซ์' },
+  { id: 'payout', label: 'การจ่ายเงินและภาษีหัก ณ ที่จ่าย' },
+  { id: 'advance', label: 'เงินทดรอง' },
+  { id: 'internal', label: 'เอกสารภายใน' }
+];
+const SAMPLE_DOCS = [
+  { id: 'billing-invoice', group: 'customer', title: 'ใบแจ้งหนี้ / ใบวางบิล', to: 'บริษัทไฟแนนซ์ (ต้นฉบับ) · ฝ่ายการเงินเก็บสำเนา', when: 'ตอนส่งรอบวางบิล — ไม่ใช่เอกสารภาษี', copies: 'ต้นฉบับ + สำเนา', signers: 'ผู้วางบิล/ผู้ให้บริการ · ผู้รับวางบิล/ลูกค้า', no: 'BL-2569-007', pattern: 'BL-{พ.ศ.}-NNN' },
+  { id: 'receipt-tax-invoice', group: 'customer', title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี', to: 'บริษัทไฟแนนซ์ (ต้นฉบับ) · สำเนาเข้าชุดเอกสารบัญชี', when: 'ตอนบันทึกรับเงิน — รับ 1 ครั้ง = 1 ฉบับ', copies: 'ต้นฉบับ + สำเนา', signers: 'ผู้รับเงิน · ผู้มีอำนาจลงนาม', no: 'INV-0042', pattern: 'INV-NNNN' },
+  { id: 'receipt-tax-invoice-replacement', group: 'customer', title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี', variant: 'ฉบับออกแทน', to: 'บริษัทไฟแนนซ์ · สำเนาเข้าชุดเอกสารบัญชี', when: 'ยกเลิกฉบับเดิมที่ข้อมูลผิดแล้วออกใหม่', copies: 'ต้นฉบับ + สำเนา', signers: 'ผู้รับเงิน · ผู้มีอำนาจลงนาม', no: 'INV-0042', pattern: 'INV-NNNN' },
+  { id: 'receipt-tax-invoice-partial', group: 'customer', title: 'ใบเสร็จรับเงิน / ใบกำกับภาษี', variant: 'รับชำระบางส่วน', to: 'บริษัทไฟแนนซ์ · สำเนาเข้าชุดเอกสารบัญชี', when: 'รับเงินไม่เต็มยอดใบแจ้งหนี้', copies: 'ต้นฉบับ + สำเนา', signers: 'ผู้รับเงิน · ผู้มีอำนาจลงนาม', no: 'INV-0042', pattern: 'INV-NNNN' },
+  { id: 'handover-note', group: 'customer', title: 'ใบส่งมอบทรัพย์', to: 'บริษัทไฟแนนซ์ 1 ฉบับ + คลังเก็บ 1 ฉบับ', when: 'ตอนเตรียมส่งมอบล็อต', copies: '2 ฉบับ (ต้นฉบับ / สำเนา)', signers: 'ผู้ส่งมอบ · ผู้รับมอบ', no: 'DLV-2569-001', pattern: 'DLV-{พ.ศ.}-NNN' },
+  { id: 'payment-voucher', group: 'payout', title: 'ใบสำคัญจ่าย', to: 'ฝ่ายการเงิน + ชุดเอกสารบัญชี (ผู้รับเงินเซ็นรับ)', when: 'ตอนรอบจ่ายยืนยันการโอนสำเร็จ', copies: 'ต้นฉบับเดียว', signers: 'ผู้จัดทำ · ผู้อนุมัติ · ผู้รับเงิน', no: 'PV-2569-0001', pattern: 'PV-{พ.ศ.}-NNNN' },
+  { id: 'payslip', group: 'payout', title: 'สลิปค่าตอบแทน', to: 'พนักงานภาคสนาม', when: 'ตอนรอบจ่ายยืนยันการโอนสำเร็จ', copies: 'ไม่มีป้ายฉบับ', signers: 'ไม่ต้องลงลายมือชื่อ (ออกโดยระบบ)', no: 'PV-2569-0001', pattern: 'PV-{พ.ศ.}-NNNN' },
+  { id: 'wht-certificate', group: 'payout', title: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)', to: 'ผู้ถูกหักภาษี (ฉบับที่ 1 / 2) · สำเนาเข้าชุดเอกสารบัญชี', when: 'ตอนรอบจ่ายยืนยันการโอนสำเร็จ', copies: '2 ฉบับ', signers: 'ผู้จ่ายเงิน (ผู้มีหน้าที่หักภาษี)', no: 'WHT-2569-001', pattern: 'WHT-{พ.ศ.}-NNN' },
+  { id: 'advance-request', group: 'advance', title: 'ใบเบิกเงินทดรอง', to: 'การเงินเก็บต้นฉบับ · ผู้เบิกได้สำเนา', when: 'หลังอนุมัติเงินทดรอง', copies: 'ต้นฉบับเดียว', signers: 'ผู้เบิก · ผู้อนุมัติ · ผู้จ่ายเงิน', no: 'ADV-2569-0012', pattern: 'ADV-{พ.ศ.}-NNNN' },
+  { id: 'advance-return', group: 'advance', title: 'ใบรับคืนเงินทดรอง', to: 'ผู้เบิก (ต้นฉบับ) · การเงินเก็บสำเนา', when: 'ตอนรับคืนแยก / หักกลบในรอบจ่ายสำเร็จ', copies: 'ต้นฉบับเดียว', signers: 'ผู้รับเงิน (การเงิน) · ผู้คืนเงิน', no: 'RAV-2569-0001', pattern: 'RAV-{พ.ศ.}-NNNN' },
+  { id: 'substitute-receipt', group: 'advance', title: 'ใบรับรองแทนใบเสร็จรับเงิน', to: 'แนบเป็นหลักฐานรายจ่ายในชุดเอกสารบัญชี', when: 'ตอนเคลียร์เงินทดรอง / เบิกค่าใช้จ่ายที่ไม่มีใบเสร็จ', copies: 'ต้นฉบับเดียว', signers: 'ผู้เบิกจ่าย · ผู้อนุมัติ', no: 'CRT-2569-0001', pattern: 'CRT-{พ.ศ.}-NNNN' },
+  { id: 'payout-summary', group: 'internal', title: 'สรุปรอบจ่ายเงิน', to: 'ใช้ภายใน (การเงิน / บัญชี / ผู้บริหาร)', when: 'ก่อนตัดโอนเงินของรอบจ่าย', copies: 'เอกสารภายใน', signers: 'ผู้จัดทำ (การเงิน) · ผู้อนุมัติโอนเงิน', no: null },
+  { id: 'pack-cover', group: 'internal', title: 'หน้าปกชุดเอกสารบัญชี', to: 'สำนักงานบัญชี (ไฟล์แรกของชุดเอกสารส่งมอบ)', when: 'ตอนสร้างชุดเอกสารส่งสำนักงานบัญชี', copies: 'เอกสารภายใน', signers: 'ผู้จัดทำ (บัญชี) · ผู้อนุมัติส่งมอบ', no: null }
+];
+
+function renderDocumentSamples() {
+  const row = (k, v) => `<div class="grid grid-cols-[88px_1fr] gap-2 text-xs"><dt class="font-semibold text-slate-500">${k}</dt><dd class="text-slate-700">${v}</dd></div>`;
+  const card = (d) => `
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-2">
+        <h3 class="text-sm font-bold text-slate-900">${d.title}</h3>
+        ${d.variant ? `<span class="shrink-0 inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">${d.variant}</span>` : ''}
+      </div>
+      <dl class="flex-1 space-y-1.5">
+        ${row('ใครได้รับ', d.to)}
+        ${row('ออกเมื่อ', d.when)}
+        ${row('จำนวนฉบับ', d.copies)}
+        ${row('ผู้เซ็น', d.signers)}
+        ${d.no ? row('เลขตัวอย่าง', `<span class="font-mono text-xs text-slate-700">${d.no}</span> <span class="text-slate-400">(รูปแบบ ${d.pattern})</span>`) : ''}
+      </dl>
+      <div class="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+        <button data-action="view-sample" data-id="${d.id}" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 focus-ring">ดูตัวอย่าง</button>
+        <button data-action="toast" data-msg="ดาวน์โหลด ตัวอย่าง-${d.id}.pdf แล้ว" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus-ring">ดาวน์โหลด PDF</button>
+      </div>
+    </div>`;
+  return `
+  <div class="animate-fade-in">
+    <div class="mb-5">
+      <h1 class="text-lg font-bold text-slate-900">ตัวอย่างเอกสารทั้งหมด</h1>
+      <p class="text-sm text-slate-500 mt-1">หน้าตาเอกสารทุกชนิดที่ระบบออก — สร้างจากแบบเอกสารจริงของระบบ ด้วยข้อมูลสมมติและหัวเอกสารขององค์กร</p>
+    </div>
+    <div class="mb-5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 px-4 py-3 text-xs">
+      ทุกหน้าของตัวอย่างพิมพ์ลายน้ำและข้อความ "ตัวอย่าง — ไม่ใช่เอกสารจริง" · เลขที่บนตัวอย่างคือเลขถัดไปตามค่าตั้งเลขที่เอกสาร (การเปิดดูตัวอย่างไม่ทำให้เลขที่เอกสารจริงเดิน)
+    </div>
+    <div class="space-y-8">
+      ${SAMPLE_GROUPS.map(g => `
+      <section>
+        <h2 class="mb-3 text-sm font-bold text-slate-700">${g.label}</h2>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          ${SAMPLE_DOCS.filter(d => d.group === g.id).map(card).join('')}
+        </div>
+      </section>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderSampleViewer() {
+  if (!state.sampleViewer) return '';
+  const d = SAMPLE_DOCS.find(x => x.id === state.sampleViewer);
+  if (!d) return '';
+  return `
+  <div class="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4" id="modalBackdrop">
+    <div class="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[94vh] flex flex-col">
+      <div class="flex items-start justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-xl">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">${d.title}${d.variant ? ` — ${d.variant}` : ''}</h2>
+          <p class="text-xs text-slate-500 mt-0.5">ตัวอย่างจากแบบเอกสารจริงของระบบ ด้วยข้อมูลสมมติ — ไม่ใช่เอกสารจริง</p>
+        </div>
+        <button data-action="close-sample" class="text-slate-400 hover:text-slate-700 hover:bg-slate-200 focus-ring rounded p-1.5 transition-colors">${Icon.x}</button>
+      </div>
+      <div class="px-6 py-5">
+        <div class="relative h-[60vh] w-full rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center overflow-hidden">
+          <span class="absolute top-3 left-1/2 -translate-x-1/2 rounded border border-red-700 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700">ตัวอย่าง — ไม่ใช่เอกสารจริง</span>
+          <span class="select-none text-7xl font-bold text-red-600/10 -rotate-[32deg]">ตัวอย่าง</span>
+          <span class="absolute bottom-3 text-xs text-slate-500">PDF ตัวอย่างแสดงในกรอบนี้ (หน้าตาเนื้อเอกสารดู documents.html)</span>
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+        <button data-action="toast" data-msg="ดาวน์โหลด ตัวอย่าง-${d.id}.pdf แล้ว" class="px-4 py-2 text-sm font-semibold text-slate-700 rounded-lg hover:bg-slate-200 border border-slate-300 bg-white focus-ring">ดาวน์โหลด PDF</button>
+        <button data-action="close-sample" class="px-4 py-2 text-sm font-semibold text-slate-700 rounded-lg hover:bg-slate-200 border border-slate-300 bg-white focus-ring">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ===================== MAIN RENDER =====================
 function render() {
   const app = document.getElementById('app');
-  const mainContent = renderAccountingOperations();
+  const mainContent = state.accountingView === 'samples' ? renderDocumentSamples() : renderAccountingOperations();
   app.innerHTML = renderTopNav()
+    + renderAccountingSubNav()
     + `<main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${mainContent}</main>`
     + renderModal()
+    + renderSampleViewer()
     + renderToast();
 }
 
 // ===================== EVENT LISTENER =====================
 document.addEventListener('click', e => {
-  if (e.target.id === 'modalBackdrop') { closeModal(); return; }
+  if (e.target.id === 'modalBackdrop') { if (state.sampleViewer) { setState({ sampleViewer: null }); return; } closeModal(); return; }
   const el = e.target.closest('[data-action]');
   if (!el) return;
   const action = el.dataset.action;
 
   if (action === 'set-main') {
     setState({ mainTab: el.dataset.id });
+  }
+  else if (action === 'set-view') {
+    setState({ accountingView: el.dataset.id, sampleViewer: null });
+  }
+  else if (action === 'view-sample') {
+    setState({ sampleViewer: el.dataset.id });
+  }
+  else if (action === 'close-sample') {
+    setState({ sampleViewer: null });
   }
   else if (action === 'set-sub') {
     setState({ [el.dataset.parent]: el.dataset.id });

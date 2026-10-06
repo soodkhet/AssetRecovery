@@ -1,4 +1,5 @@
 import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
+import { SampleStamp } from '@/components/pdf/sample-stamp'
 import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, SignatureRow, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
@@ -100,6 +101,7 @@ export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: 
         <SignatureRow labels={['ผู้จัดทำ (บัญชี)', 'ผู้อนุมัติส่งมอบ']} />
 
         <DocFooter left={`${doc.periodLabel} · ${doc.versionLabel} · ${doc.organizationName}`} />
+        <SampleStamp />
       </Page>
     </Document>
   )
