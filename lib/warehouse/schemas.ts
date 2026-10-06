@@ -92,9 +92,19 @@ export const assetIntakeSchema = z.object({
   condition: z.enum(ASSET_CONDITIONS).nullish().transform((value) => value ?? null),
   conditionNote: nullableText(1000),
   photos: z.array(fileUrl).max(20).default([]),
+  /**
+   * "สี/ความจุตรงกับสัญญา" (มติ PO U166) — ไม่บังคับ ไม่ block · ไม่ติ๊ก/ไม่ส่ง = `false` (แปลงที่ `intakeColorCapacityMatched()`)
+   * (ค่า `null` บนแถว = ยังไม่ได้ตรวจรับ ซึ่งเกิดได้เฉพาะก่อนรับเข้าคลัง)
+   */
+  colorCapacityMatched: z.boolean().optional(),
 })
 
 export type AssetIntakeInput = z.infer<typeof assetIntakeSchema>
+
+/** ค่าที่บันทึกลง `assets.color_capacity_matched` ตอนรับเข้า — ไม่ส่งมา = ไม่ได้ยืนยัน (`false`) */
+export function intakeColorCapacityMatched(input: Pick<AssetIntakeInput, 'colorCapacityMatched'>): boolean {
+  return input.colorCapacityMatched ?? false
+}
 
 /**
  * `POST /api/assets/:id/reject-intake` — ความว่างเปล่าถูกจับที่ `assertRejectReason()`

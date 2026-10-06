@@ -25,6 +25,7 @@
 | v3.7 | 05/10/2569 | **เพิ่ม DEC-014** (Storage ไม่มี policy ให้ผู้ใช้ — อัปโหลด/เปิดดูไฟล์ผ่านโทเคน/signed URL ที่ API ออกให้หลังตรวจสิทธิ์ · ปิด BUG-143) |
 | v3.8 | 06/10/2569 | **เพิ่ม DEC-015** (Notification outbox ของ job — เขียนคิวแจ้งเตือนในทรานแซกชันเดียวกับการเปลี่ยนสถานะ · ตัวส่งแยก idempotent · มติ PO U120) |
 | v3.9 | 07/10/2569 | **เพิ่ม DEC-016** (บริการภายนอกใหม่: RapidAPI "Mobile Phone Specs Database" เป็นแหล่งเติมแคตตาล็อก Model Phone — มติ PO U155 → U157 → U159) |
+| v4.0-GA | 07/10/2569 | **เพิ่ม DEC-017** (ยี่ห้อ/รุ่นจาก IMEI/TAC ด้วยไฟล์เปิด `MoazEb/tac-database` · job รายวัน `device_tac_sync` เช็ก sha/ETag ก่อนดาวน์โหลด · ประวัติการอัปเดต · ความจุ/สี — มติ PO U166 → U167 → U168) · **DEC-016 ถูกแทน (superseded)** |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
 
@@ -298,7 +299,9 @@
 | Impact | ตารางใหม่ `notification_outbox` + enum `notification_outbox_status` (migration `20261007000000_notification_outbox`) · `lib/notifications/{outbox,outbox-core}.ts` · `lib/assignments/timeout-job.ts` · `lib/advances/overdue-job.ts` · `lib/field/{daily-allowance-job,fuel-distance-job}.ts` · `lib/jobs/registry.ts` (`runSweeperJobs()`) · `91` §6.3 |
 | Reversible | สูง — job กลับไปเรียก dispatch หลัง commit ได้ (แต่จะกลับไปเป็น at-most-once) · ตารางเป็นคิวชั่วคราว ลบได้โดยไม่กระทบข้อมูลธุรกิจ |
 
-### DEC-016 — แคตตาล็อก Model Phone เติมจาก RapidAPI "Mobile Phone Specs Database" (07/10/2569)
+### DEC-016 — แคตตาล็อก Model Phone เติมจาก RapidAPI "Mobile Phone Specs Database" (07/10/2569) — ⛔ SUPERSEDED โดย DEC-017
+
+> **สถานะ: ยกเลิกแล้ว (superseded by DEC-017 · มติ U166 07/10/2569)** — RapidAPI client, job `device_catalog_sync`, ปุ่ม "ดึงข้อมูลตอนนี้" และ env `RAPIDAPI_*` ถูกถอดออกทั้งหมด · ข้อความด้านล่างคงไว้เป็นประวัติ
 
 | Field | Value |
 |---|---|
@@ -307,6 +310,18 @@
 | Reason | พิมพ์ยี่ห้อ/รุ่นอิสระทำให้ข้อมูลเคสสะกดไม่สม่ำเสมอ (ค้นหา/รายงานไม่ได้) · ไม่มีแหล่งข้อมูลรุ่นที่ขายในไทยโดยตรง ⇒ ใช้แหล่งข้อมูลรุ่นทั่วโลก + ตัวกรอง/การตั้งด้วยมือของผู้ดูแลแทน · แพ็กเกจฟรีมีโควตาต่ำ จึงต้องเก็บไว้ในฐานของเรา ไม่เรียกสดตอนกรอกฟอร์ม |
 | Impact | ตาราง `device_brands`/`device_models`/`device_catalog_settings` + enum `device_catalog_status`/`device_catalog_source` + `cases.device_model_id` (migration `20261008110000_device_catalog`) · `lib/device-catalog/*` · job `device_catalog_sync` (`lib/jobs/{job-types,registry}.ts`) · capability `manage_device_catalog` (`25`) · แท็บตั้งค่า "Model Phone" (`13` §6.18) · ฟอร์มรับเคส/นำเข้า (`38` §6.2) |
 | Reversible | สูง — ปิด job/ไม่ตั้งคีย์ได้ทันที (ตัวเลือกเดิม + ระบุเองยังใช้ได้) · เคสเก็บข้อความ snapshot อยู่แล้ว ถอดแคตตาล็อกออกได้โดยข้อมูลเคสไม่เสีย |
+
+### DEC-017 — ยี่ห้อ/รุ่นจาก IMEI (TAC) ด้วยไฟล์เปิด `MoazEb/tac-database` แทน RapidAPI (07/10/2569)
+
+| Field | Value |
+|---|---|
+| Status | ✅ ใช้งาน — **แทน DEC-016** |
+| Decision | แหล่งยี่ห้อ/รุ่นเครื่องเปลี่ยนเป็น **TAC (8 หลักแรกของ IMEI)** จากไฟล์ `tac_full.csv` ของ GitHub repo `MoazEb/tac-database` (สัญญาอนุญาต MIT · ~255k TAC · 11.8 MB · ยี่ห้อ/รุ่น/รหัสรุ่นย่อย/ปีที่ออก · รวบรวมจากหลายแหล่งรวมถึงฐาน TAC ของ Osmocom (CC BY-SA)) — **ไม่มีคีย์/โควตา** · นำเข้ามาเก็บที่ตาราง `device_tacs` (`02`) แล้วเติม `device_brands`/`device_models` เดิม (แถวใหม่ `source = tacdb`) · **job รายวัน `device_tac_sync`** (`91` §6.1 · หลังเที่ยงคืนเวลาไทย — U168) ลำดับ: (1) GitHub REST `GET /repos/MoazEb/tac-database/commits?path=tac_full.csv&per_page=1` (ไม่ใช้ token) → sha + วันที่แก้ล่าสุด (2) sha เท่ารอบนำเข้าสำเร็จล่าสุด = ไม่ดาวน์โหลด (ประวัติ "ไม่มีของใหม่") (3) sha เปลี่ยน = ดาวน์โหลด raw CSV → parse → **เพิ่มเฉพาะ TAC ใหม่** (4) commits API ล้ม (rate limit/เครือข่าย) = ดาวน์โหลดแบบมี `If-None-Match` (ETag) — 304 = ไม่มีของใหม่ · ปุ่ม "อัปเดตตอนนี้" ลำดับเดียวกัน + ตัวเลือก "บังคับดึงไฟล์ใหม่" · "นำเข้าไฟล์เอง" = อัปโหลด CSV (หัว `Brand,TAC,SPECS`) · **ไม่ทับ**: TAC เดิมทุกแหล่ง (`learned`/`manual`/`tacdb`), `manual_status`, ชื่อที่ผู้ดูแลแก้ · ทุกรอบลงตาราง insert-only `device_tac_updates` (ประวัติการอัปเดต — U167) · ล้ม = แถวประวัติ `failed` + แจ้งผู้ดูแล (`device_catalog.tac_update_failed` ผ่าน outbox DEC-015) แล้ว retry ตามปกติ · **ฟอร์มรับเคส**: กรอก IMEI ก่อน → ค้น TAC เติมยี่ห้อ/รุ่น (แก้ได้) · ไม่พบ = เลือก/ระบุเอง แล้ว**ระบบจำ** (`learned`) · ผู้ดูแล**ผูก TAC เอง** (`manual` — ชนะทุกแหล่ง) · ทรัพย์ Serial เลือกเอง · **ความจุ/สี** เลือกจากรายการมาตรฐาน (ค่าตั้ง) + ระบุเอง + "ไม่ระบุในสัญญา" เก็บเป็นข้อความ snapshot · ตัวกรองปีที่ออกกลับมาใช้ (TAC มีปี) |
+| Approved by | Product Owner — มติ U166 → U167 → U168 (07/10/2569 · `uat/PO-DECISIONS-2569-10-04.md`) |
+| Alternatives | (ก) คง RapidAPI — แพ็กเกจฟรีไม่ส่งปีที่ออก + โควตาต่ำ (ทดสอบจริง 25 request เหลือ 5 · U162) ตัดทิ้ง · (ข) GSMA TAC database ทางการ — ต้องสมัคร/มีค่าใช้จ่าย/สัญญาจำกัดการใช้ ไม่คุ้มขนาดธุรกิจ · (ค) ไม่ใช้แหล่งภายนอก ให้ผู้ใช้พิมพ์เอง — ข้อมูลสะกดไม่สม่ำเสมอ (ปัญหาเดิมของ U155) · (ง) ✅ ไฟล์ TAC เปิด + ระบบจำ + ผูกเอง |
+| Risk | **แหล่งข้อมูลดูแลโดยคนเดียว + เป็นข้อมูลชุมชน** (อาจหยุดอัปเดต/ไม่ครบ/คลาดเคลื่อน/repo ถูกลบ) · ข้อมูลบางส่วนสืบทอด CC BY-SA ⇒ ต้องแสดงแหล่งที่มา · **มาตรการ**: (1) ระบบจำ TAC จากงานจริง (`learned`) (2) ผู้ดูแลผูก TAC เอง (`manual` ชนะเสมอ) (3) ป้าย "แหล่งข้อมูลอาจหยุดอัปเดต" เมื่อไฟล์บน GitHub ไม่ถูกแก้เกิน `stale_alert_days` (ค่าเริ่มต้น 90) (4) "นำเข้าไฟล์เอง" ใช้ไฟล์ fork/สำเนาได้ถ้า repo หาย (5) ข้อมูลที่นำเข้าแล้วอยู่ในฐานเรา — แหล่งหายไม่กระทบเคส · ยี่ห้อ/รุ่นจาก TAC เป็นแค่ค่าเติมให้ แก้ได้เสมอ (ไม่ใช่ข้อมูลยืนยันทางกฎหมาย) · ข้อความแหล่งที่มาแสดงท้ายหน้าตั้งค่า Model Phone |
+| Impact | migration `20261008150000_device_tac` (ลบแถว `source='api'` — เคสคง `asset_description`, `device_model_id` → NULL · enum `device_catalog_source` = `tacdb`/`manual` · ลบ `device_brands.external_id`/`last_synced_at` · ตาราง `device_tacs` · ค่าตั้ง `tac_etag`/`tac_checked_at`/`tac_imported_at`/`capacity_options`/`color_options` · `cases.asset_capacity`/`asset_color` · `assets.device_capacity`/`device_color`/`color_capacity_matched` · ยกเลิก job `device_catalog_sync` ที่ค้างคิว) + `20261008150100_device_tac_updates` (`tac_source_sha`/`tac_source_updated_at`/`stale_alert_days` · ตาราง `device_tac_updates`) · `lib/device-catalog/{tac,tac-source,tac-import,tac-sync-job,tac-queries,device-attributes}.ts` · job `device_tac_sync` · event `device_catalog.tac_update_failed` (`45` §7) · error `DEVICE_TAC_FILE_INVALID` (`24`) · upload target `device_tac_file` · `13` §6.18 · `38` §6.2 · `91` §6.1 · ไม่มี capability ใหม่ (`manage_device_catalog`) · ถอด RapidAPI client/job/env `RAPIDAPI_*` |
+| Reversible | สูง — หยุด job/ไม่นำเข้าได้ทันที (ตัวเลือกเดิม + ระบุเองยังใช้ได้) · เคสเก็บข้อความ snapshot (ยี่ห้อ/รุ่น/ความจุ/สี) ⇒ ถอด TAC ออกได้โดยข้อมูลเคสไม่เสีย |
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 

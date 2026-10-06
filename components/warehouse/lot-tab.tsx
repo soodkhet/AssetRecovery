@@ -29,6 +29,7 @@ import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { monthLabel } from '@/lib/field/month-filter'
+import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { matchesAssetSearch, type FilterOption } from '@/lib/warehouse/asset-filters'
 import { lotDocumentSlots } from '@/lib/warehouse/lot-documents'
 import {
@@ -354,7 +355,7 @@ export function LotTab({
                     <div className="font-semibold text-slate-800">{asset.debtorName}</div>
                   </Td>
                   <Td>
-                    <div>{asset.deviceDesc}</div>
+                    <div>{documentDeviceText(asset)}</div>
                     <div className="font-mono text-[10px] text-slate-400">
                       {asset.imeiActual ?? asset.imeiContract ?? '—'}
                     </div>

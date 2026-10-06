@@ -110,6 +110,9 @@ export interface FieldCaseListItemDto {
   province: string | null
   district: string | null
   assetDescription: string | null
+  /** ความจุ/สีตามสัญญา — ข้อความ snapshot บนเคส (มติ PO U166) · เคสเก่า = `null` */
+  assetCapacity: string | null
+  assetColor: string | null
   debtAmountSatang: number | null
   assignedAt: string
   acceptedAt: string | null

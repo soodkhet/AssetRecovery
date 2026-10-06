@@ -143,13 +143,13 @@ async function seedCase(
       organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
       debtor_name, debtor_nationality, debtor_national_id, debtor_phone_mobile,
       addr_province, addr_detail, id_card_addr_province, id_card_addr_detail,
-      asset_kind, asset_description, imei, debt_amount_satang, asset_value_satang
+      asset_kind, asset_description, imei, debt_amount_satang, asset_value_satang, asset_capacity, asset_color
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef.toUpperCase()}$$, '${COMPANY_ID}', 'manual',
       '${options.status ?? 'draft'}', '${USER_ID}',
       'สมชาย ทดสอบ', 'TH', '1234567890123', '0812345678',
       '${PROVINCE}', '99/1 หมู่ 2', '${PROVINCE}', '99/1 หมู่ 2',
-      'smartphone', 'iPhone 15', '123456789012345', 1000000, 800000
+      'smartphone', 'iPhone 15', '123456789012345', 1000000, 800000, '128GB', 'ดำ'
     ) RETURNING id
   `)
   const caseId = rows[0]?.id

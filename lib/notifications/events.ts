@@ -223,6 +223,12 @@ export const NOTIFICATION_EVENTS = {
     source: '33 §9 (มติ PO 07/10/2569 U127)',
     description: 'มีการยกเลิก/ออกหนังสือรับรองใหม่ในเดือนที่ยื่นแบบแล้ว — ต้องยื่นเพิ่มเติม',
   },
+  'device_catalog.tac_update_failed': {
+    module: 'ตั้งค่า',
+    level: 'critical',
+    source: '13 §6.18 · 91 §6.1 (มติ PO 07/10/2569 U167)',
+    description: 'อัปเดตฐานยี่ห้อ/รุ่นจาก IMEI ไม่สำเร็จ — ระบบจะลองใหม่ ตัวเลือกเดิมยังใช้ได้',
+  },
   'exception.created': {
     module: 'บัญชี',
     level: 'critical',

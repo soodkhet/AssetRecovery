@@ -189,6 +189,8 @@ async function createReadyCase(caseRef: string, imeiSerial: string): Promise<str
       assetType: 'smartphone',
       assetBrandModel: 'Samsung A55',
       assetImeiSerial: imeiSerial,
+      assetCapacity: '128GB',
+      assetColor: 'ดำ',
       outstandingDebtSatang: DEBT_SATANG,
     }),
     ctx(admin),

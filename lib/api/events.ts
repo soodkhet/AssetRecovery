@@ -8,7 +8,7 @@ import { EVENT_NAMES, type DomainEventName } from '@/lib/api/event-names'
  * ส่วนที่ `45` §7 เขียนไม่ตรงกับไฟล์ต้นทาง บันทึกไว้ที่ `EVENT_NAME_DIFFS` ด้านล่าง (ห้ามเงียบ)
  */
 
-export type EventModule = 'case' | 'assignment' | 'field' | 'warehouse' | 'finance' | 'accounting'
+export type EventModule = 'case' | 'assignment' | 'field' | 'warehouse' | 'finance' | 'accounting' | 'settings'
 
 export interface DomainEventContract {
   readonly module: EventModule
@@ -121,6 +121,11 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
     module: 'accounting',
     source: '33 §9 (มติ PO 07/10/2569 U127)',
     description: 'ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่บัญชี mark ว่ายื่น ภ.ง.ด. แล้ว — ติดธงต้องยื่นเพิ่มเติมบนรอบนำส่ง',
+  },
+  'device_catalog.tac_update_failed': {
+    module: 'settings',
+    source: '13 §6.18 · 91 §6.1 (มติ PO 07/10/2569 U167)',
+    description: 'job อัปเดตฐาน TAC (ยี่ห้อ/รุ่นจาก IMEI) ล้มเหลว — แจ้งผู้ถือ `manage_device_catalog` ผ่าน outbox · ตัวเลือกเดิมยังใช้ได้',
   },
   'exception.created': {
     module: 'accounting',

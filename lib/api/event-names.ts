@@ -65,6 +65,8 @@ export const EVENT_NAMES = [
   'wht.filing_due_reminder',
   // มติ PO 07/10/2569 U127 — ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่ยื่น ภ.ง.ด. แล้ว ⇒ ต้องยื่นเพิ่มเติม
   'wht.supplementary_filing_required',
+  // มติ PO 07/10/2569 U167 — job อัปเดตฐาน TAC (Model Phone) ล้มเหลว ⇒ แจ้งผู้ดูแลแคตตาล็อก
+  'device_catalog.tac_update_failed',
   'exception.created',
   'question.asked',
   'period.sent_to_accountant',

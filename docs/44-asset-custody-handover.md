@@ -22,6 +22,7 @@
 | v2.7 | 07/10/2569 | มติ PO 07/10/2569 **U142** — §8.1/§8.5 แท็บ "ส่งมอบแล้ว" เปลี่ยนจากการ์ดสะสมไม่จำกัดเป็น**ตารางจัดกลุ่มตามบริษัท**: ค่าเริ่มต้น = เดือนปัจจุบัน (เวลาไทย · เลื่อนเดือนได้ · ป้าย พ.ศ.) · หัวกลุ่ม (ล็อต · เครื่อง · รอเอกสาร) คิดฝั่ง server · แบ่งหน้าจริงต่อบริษัทแทนเพดาน 200 · "วันส่งมอบ" = วันส่งมอบจริง → กำหนดส่ง → วันสร้าง · ตัวกรองเดิมคงไว้และกรองที่ server ทั้งหมด · §15 เพิ่ม `handedOverFrom`/`handedOverTo` + `GET /api/handover-lots/company-summary` (`45` v1.9) · แท็บ "รอส่งมอบ" ไม่เปลี่ยน · ไม่มีการเปลี่ยน state/enum/schema |
 | v2.6 | 06/10/2569 | มติ PO 06/10/2569 **U111** — ยืนยันล็อต (`$transaction` เดิม ไม่เพิ่มขั้น) บันทึก `handover_lots.letterhead_snapshot` (ชื่อ/ชื่ออังกฤษ/เลขผู้เสียภาษี/สาขา/ที่อยู่/โทร/อีเมล/เว็บไซต์/โลโก้ + SHA-256) พร้อมการยึดล็อต — rollback ไปด้วยกัน · ใบส่งมอบพิมพ์ซ้ำ (ภายใน + พอร์ทัล) ใช้ snapshot ทั้งหัวกระดาษและช่องผู้ส่งมอบ · ล็อตก่อน U111/ยังไม่ยืนยัน = ค่าปัจจุบัน · ล็อต confirmed แก้ snapshot ไม่ได้ (trigger immutable เดิม) |
 | v2.7 | 07/10/2569 | **มติ PO U129 + O72(1)**: §12 เพิ่ม `IMEI_DUPLICATE_ACTIVE_ASSET` (ปิดงานสำเร็จที่ IMEI ซ้ำเครื่องที่ยังไม่ส่งมอบ = 400 แทน 500) และ `PERIOD_LOCKED_DIRECT_EDIT` ตอนยืนยันล็อตในงวดที่ปิดแล้ว (รายได้ลงวันยืนยันล็อต — `19` v2.10) |
+| v2.8-GA | 07/10/2569 | **มติ PO U166 — ความจุ/สีของเครื่อง**: §7.1 เพิ่ม `device_capacity`/`device_color` (snapshot จากเคสตอนปิดงานคู่กับ `device_desc`) + `color_capacity_matched` · §8.2 modal รับเข้าขั้น 1 เพิ่ม checkbox "สี/ความจุตรงกับสัญญา" แสดงค่าตามสัญญาข้างกัน (ไม่บังคับ ไม่ block · ลง audit) · ตาราง/หัวการ์ดทุกแท็บ + ใบส่งมอบ PDF/Excel แสดงอุปกรณ์เป็น "ชื่อรุ่น · ความจุ · สี" |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -122,11 +123,14 @@ Asset เกิดขึ้นอัตโนมัติเมื่อ Case �
 | case_ref | string | ✅ | snapshot จาก Case เช่น SF-2026-00832 |
 | debtor_name | string | ✅ | snapshot ชื่อลูกหนี้ |
 | device_desc | string | ✅ | ยี่ห้อ รุ่น สี |
+| device_capacity | string \| null | — | ความจุตามสัญญา — snapshot จาก `cases.asset_capacity` ตอนปิดงาน (มติ PO U166) · null = เครื่องก่อนมติ |
+| device_color | string \| null | — | สีตามสัญญา — snapshot จาก `cases.asset_color` ตอนปิดงาน (มติ PO U166) |
 | imei_contract | varchar(15) | ✅ | IMEI จากสัญญา (ดึงจาก Case) |
 | imei_actual | varchar(15) \| null | — | IMEI ที่ตรวจจริง (null ก่อนตรวจ) |
 | asset_status | enum | ✅ | ดู §9.1 |
 | condition | enum \| null | — | normal / damaged / partial_loss |
 | condition_note | string \| null | — | บังคับถ้า condition ≠ normal |
+| color_capacity_matched | boolean \| null | — | ติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้า (มติ PO U166) · null = ยังไม่ตรวจรับ · false = ไม่ได้ยืนยัน (ไม่บังคับ ไม่ block) · ลงใน audit การรับเข้า |
 | photos | string[] | — | Supabase Storage URLs (7 มุม) |
 | closed_at | timestamptz | ✅ | วันที่เคสปิด (snapshot จาก Case) |
 | received_at | timestamptz \| null | — | วันเวลารับเข้าคลัง |
@@ -217,6 +221,7 @@ Asset เกิดขึ้นอัตโนมัติเมื่อ Case �
   - กรอก IMEI จริงบนเครื่อง
   - ถ้าตรง → highlight เขียว ไปขั้น 2
   - ถ้าไม่ตรง → highlight แดง เตือน แต่ยังไปต่อได้ (force proceed ถ้าธุรการยืนยัน)
+  - Checkbox "สี/ความจุตรงกับสัญญา" พร้อมแสดงค่าตามสัญญา (ความจุ · สี) — ไม่บังคับ ไม่ติ๊ก = บันทึก false (มติ PO U166)
 
 ขั้น 2/3: บันทึกสภาพ
   - Radio: ปกติ / ชำรุด / อุปกรณ์ขาดหาย

@@ -82,6 +82,12 @@ export const caseCreateSchema = z.object({
   assetImeiSerial: optionalText(100).refine((value) => isAcceptableAssetIdentifier(value), {
     message: IMEI_FORMAT_MESSAGE,
   }),
+  /**
+   * มติ PO U166 — ความจุ/สีตามสัญญา (ข้อความ snapshot · ตัวเลือกมาตรฐาน/ระบุเอง/"ไม่ระบุในสัญญา")
+   * บังคับก่อนส่งตรวจที่ `missingRequiredFields()` (ร่างเว้นได้)
+   */
+  assetCapacity: optionalText(50),
+  assetColor: optionalText(50),
   /** มูลหนี้คงเหลือ — **สตางค์** (Rule 01) FE แปลงจากบาทด้วย `parseBahtInput()` ก่อนส่ง */
   outstandingDebtSatang: satangSchema('มูลค่าหนี้คงเหลือ').nullable().optional(),
 

@@ -47,6 +47,7 @@ import type {
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseStatus } from '@/lib/generated/prisma/enums'
 import { resolveDeviceSelection } from '@/lib/device-catalog/queries'
+import { learnDeviceTacFromCase } from '@/lib/device-catalog/tac-queries'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -152,6 +153,8 @@ export const detailSelect = {
   idCardAddrDetail: true,
   assetKind: true,
   deviceModelId: true,
+  assetCapacity: true,
+  assetColor: true,
   imei: true,
   serialNo: true,
   assetValueSatang: true,
@@ -348,6 +351,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     ),
     assetType: row.assetKind,
     assetImeiSerial,
+    assetCapacity: row.assetCapacity,
+    assetColor: row.assetColor,
     assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
     activeAssetImeiWarning: null,
     projectedRevenueSatang: row.projectedRevenueSatang,
@@ -431,6 +436,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
         assetKind: row.assetKind,
         assetBrandModel: row.assetDescription,
         assetImeiSerial,
+        assetCapacity: row.assetCapacity,
+        assetColor: row.assetColor,
         debtAmountSatang: row.debtAmountSatang,
       },
       documentCounts(row.documents),
@@ -695,6 +702,7 @@ export async function createCase(
     input.assetType ?? null,
     input.deviceModelId ?? null,
     input.assetBrandModel ?? null,
+    identifier.imei,
   )
 
   try {
@@ -724,6 +732,8 @@ export async function createCase(
           deviceModelId: device.deviceModelId,
           imei: identifier.imei,
           serialNo: identifier.serialNo,
+          assetCapacity: input.assetCapacity ?? null,
+          assetColor: input.assetColor ?? null,
           debtAmountSatang: input.outstandingDebtSatang ?? null,
           // จำโหมดเอกสาร + ติ๊กรูปสินค้า (มติ PO 04/10/2569 v3.4) — เคสใหม่ยังไม่มีไฟล์ จึงไม่มีอะไรขัด
           documentMode: input.documentMode ?? 'separate',
@@ -760,6 +770,18 @@ export async function createCase(
         },
         tx as CaseTxClient,
       )
+      // มติ PO U166 — TAC ที่ฐานยังไม่รู้จัก + ผู้ใช้เลือก/พิมพ์รุ่นเองในฟอร์ม ⇒ ระบบจำ (ไม่ทับแถวเดิม)
+      if (input.sourceChannel === 'manual') {
+        await learnDeviceTacFromCase(tx as CaseTxClient, {
+          organizationId,
+          imei: identifier.imei,
+          deviceModelId: device.deviceModelId,
+          text: device.text,
+          caseId: created.id,
+          actorId: context.actor.id,
+          actorRole: context.actor.roleName,
+        })
+      }
 
       return toDetailDto(created)
     })
@@ -828,6 +850,7 @@ export async function updateCase(
               : null
             : values.deviceModelId,
           values.assetBrandModel === undefined ? current.assetDescription : values.assetBrandModel,
+          identifier === undefined ? current.imei : identifier.imei,
         )
 
   const beforePayload = {
@@ -846,6 +869,8 @@ export async function updateCase(
     assetBrandModel: current.assetDescription,
     deviceModelId: current.deviceModelId,
     assetImeiSerial: joinAssetIdentifier(current.imei, current.serialNo),
+    assetCapacity: current.assetCapacity,
+    assetColor: current.assetColor,
     outstandingDebtSatang: current.debtAmountSatang,
     documentMode: current.documentMode,
     productPhotoInContract: current.productPhotoInContract,
@@ -905,6 +930,8 @@ export async function updateCase(
           ...(values.assetType === undefined ? {} : { assetKind: values.assetType }),
           ...(device === undefined ? {} : { assetDescription: device.text, deviceModelId: device.deviceModelId }),
           ...(identifier === undefined ? {} : { imei: identifier.imei, serialNo: identifier.serialNo }),
+          ...(values.assetCapacity === undefined ? {} : { assetCapacity: values.assetCapacity }),
+          ...(values.assetColor === undefined ? {} : { assetColor: values.assetColor }),
           ...(values.outstandingDebtSatang === undefined
             ? {}
             : { debtAmountSatang: values.outstandingDebtSatang }),
@@ -960,6 +987,18 @@ export async function updateCase(
         },
         tx as CaseTxClient,
       )
+      // มติ PO U166 — ระบบจำ TAC → รุ่น จากการแก้ในฟอร์ม (เฉพาะ TAC ที่ยังไม่มี)
+      if (device !== undefined || identifier !== undefined) {
+        await learnDeviceTacFromCase(tx as CaseTxClient, {
+          organizationId,
+          imei: identifier === undefined ? current.imei : identifier.imei,
+          deviceModelId: device === undefined ? current.deviceModelId : device.deviceModelId,
+          text: device === undefined ? current.assetDescription : device.text,
+          caseId,
+          actorId: context.actor.id,
+          actorRole: context.actor.roleName,
+        })
+      }
 
       const refreshed =
         values.contacts === undefined

@@ -67,7 +67,11 @@ export function PendingAcceptTab() {
                   </div>
                 </div>
                 <div className="mb-3 text-xs text-slate-500">
-                  <RefText>{item.caseRef}</RefText> · {assetSummary({ assetDescription: item.assetDescription })} ·
+                  <RefText>{item.caseRef}</RefText> · {assetSummary({
+                    assetDescription: item.assetDescription,
+                    assetCapacity: item.assetCapacity,
+                    assetColor: item.assetColor,
+                  })} ·
                   มูลหนี้{' '}
                   <span className="font-mono">
                     {item.debtAmountSatang === null ? '—' : fmtSatangSymbol(item.debtAmountSatang)}

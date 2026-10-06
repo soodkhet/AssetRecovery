@@ -44,7 +44,7 @@ const teamCompensation = {
 let store = {
   cases: [
     // รอรับงาน (assigned, ยังไม่ accept)
-    { id: 'CASE-26-0050', case_ref: 'SF-2026-00901', debtor: 'อรุณ ทองสุก', national_id: '1-2345-67890-12-3', phone_mobile: '081-234-5678', phone_work: '02-111-2222', line_id: 'arun_ts', facebook: '-', company: 'บริษัท สยามไฟแนนซ์ จำกัด', province: 'นนทบุรี', district: 'บางใหญ่', address_detail: '88/12 หมู่บ้านสวนทอง ถนนกาญจนาภิเษก', asset: 'iPhone 14', imei: '356789012345111', debt: 16500, status: 'pending_accept', agent_id: 'a1', round: 1, assigned_at: '26/06/2569 08:30',
+    { id: 'CASE-26-0050', case_ref: 'SF-2026-00901', debtor: 'อรุณ ทองสุก', national_id: '1-2345-67890-12-3', phone_mobile: '081-234-5678', phone_work: '02-111-2222', line_id: 'arun_ts', facebook: '-', company: 'บริษัท สยามไฟแนนซ์ จำกัด', province: 'นนทบุรี', district: 'บางใหญ่', address_detail: '88/12 หมู่บ้านสวนทอง ถนนกาญจนาภิเษก', asset: 'iPhone 14', capacity: '128GB', color: 'ม่วง', imei: '356789012345111', debt: 16500, status: 'pending_accept', agent_id: 'a1', round: 1, assigned_at: '26/06/2569 08:30',
       addresses: {
         current: { label: 'ที่อยู่ปัจจุบัน', detail: '88/12 หมู่บ้านสวนทอง ถนนกาญจนาภิเษก', subdistrict: 'บางม่วง', district: 'บางใหญ่', province: 'นนทบุรี', postcode: '11140', lat: 13.8762, lng: 100.3922 },
         work: { label: 'ที่ทำงาน', detail: '99/5 อาคารสำนักงาน ชั้น 3 ถนนแจ้งวัฒนะ', subdistrict: 'ทุ่งสองห้อง', district: 'หลักสี่', province: 'กรุงเทพมหานคร', postcode: '10210', lat: 13.8915, lng: 100.5731 },
@@ -53,7 +53,7 @@ let store = {
       contacts: [{ name: 'สมหญิง ทองสุก', relation: 'คู่สมรส', phone: '089-111-2222' }],
       files: { contract: [{ name: 'สัญญา_SF00901.pdf', type: 'pdf' }], id_card: [{ name: 'บัตรประชาชน.jpg', type: 'image' }], other: [], photos: [{ name: 'iphone14_1.jpg' }, { name: 'iphone14_2.jpg' }] } },
     // รับงานแล้ว ยังไม่ลงวัน (accepted, no schedule)
-    { id: 'CASE-26-0048', case_ref: 'SF-2026-00890', debtor: 'มานี ใจบุญ', national_id: '1-3456-78901-23-4', phone_mobile: '085-222-3333', phone_work: '-', line_id: 'manee_jb', facebook: 'Manee Jaiboon', company: 'บริษัท สยามไฟแนนซ์ จำกัด', province: 'นนทบุรี', district: 'บางใหญ่', address_detail: '45 ซอยบางใหญ่ 7', asset: 'iPad Air 5', imei: '352345678901222', debt: 12000, status: 'accepted_unscheduled', agent_id: 'a1', round: 1, accepted_at: '25/06/2569 14:00',
+    { id: 'CASE-26-0048', case_ref: 'SF-2026-00890', debtor: 'มานี ใจบุญ', national_id: '1-3456-78901-23-4', phone_mobile: '085-222-3333', phone_work: '-', line_id: 'manee_jb', facebook: 'Manee Jaiboon', company: 'บริษัท สยามไฟแนนซ์ จำกัด', province: 'นนทบุรี', district: 'บางใหญ่', address_detail: '45 ซอยบางใหญ่ 7', asset: 'iPad Air 5', capacity: '64GB', color: 'ไม่ระบุในสัญญา', imei: '352345678901222', debt: 12000, status: 'accepted_unscheduled', agent_id: 'a1', round: 1, accepted_at: '25/06/2569 14:00',
       contacts: [], files: { contract: [{ name: 'contract.pdf', type: 'pdf' }], id_card: [{ name: 'id.jpg', type: 'image' }], other: [], photos: [{ name: 'ipad1.jpg' }] } },
     { id: 'CASE-26-0049', case_ref: 'SF-2026-00895', debtor: 'สมศักดิ์ มีทรัพย์', national_id: '1-4567-89012-34-5', phone_mobile: '062-333-4444', phone_work: '-', line_id: '-', facebook: '-', company: 'บริษัท กรุงไทยลีสซิ่ง จำกัด', province: 'นนทบุรี', district: 'บางบัวทอง', address_detail: '120 หมู่ 4 ถนนบางกรวย-ไทรน้อย', asset: 'iPhone 13', imei: '353456789012333', debt: 9800, status: 'accepted_unscheduled', agent_id: 'a1', round: 1, accepted_at: '25/06/2569 15:10',
       contacts: [{ name: 'สมหมาย มีทรัพย์', relation: 'บุตร', phone: '081-555-6666' }], files: { contract: [{ name: 'contract.pdf', type: 'pdf' }], id_card: [], other: [], photos: [] } },
@@ -724,7 +724,7 @@ function renderCaseFullDetailBody(c) {
     <div class="grid grid-cols-2 gap-2.5 text-sm">
       <div class="bg-slate-50 rounded-xl p-3"><div class="text-[12px] text-slate-400 mb-0.5">เลขบัตรประชาชน</div><div class="font-bold text-slate-800 text-[14px] font-mono">${c.national_id || '-'}</div></div>
       <div class="bg-slate-50 rounded-xl p-3"><div class="text-[12px] text-slate-400 mb-0.5">มูลหนี้คงเหลือ</div><div class="font-extrabold text-slate-900 text-[15px]">฿${money(c.debt)}</div></div>
-      <div class="bg-slate-50 rounded-xl p-3 col-span-2"><div class="text-[12px] text-slate-400 mb-0.5">ทรัพย์</div><div class="font-bold text-slate-800 text-[14px]">${c.asset} ${c.imei ? `(IMEI: ${c.imei})` : ''}</div></div>
+      <div class="bg-slate-50 rounded-xl p-3 col-span-2"><div class="text-[12px] text-slate-400 mb-0.5">ทรัพย์</div><div class="font-bold text-slate-800 text-[14px]">${c.asset}${[c.capacity, c.color].filter(Boolean).map(v => ` · ${v}`).join('')} ${c.imei ? `(IMEI: ${c.imei})` : ''}</div><!-- มติ PO U166 ความจุ/สีตามสัญญา --></div>
     </div>
 
     <div class="bg-white border border-slate-200 rounded-xl p-3.5">

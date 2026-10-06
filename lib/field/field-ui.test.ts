@@ -34,6 +34,8 @@ function item(overrides: Partial<FieldCaseListItemDto> = {}): FieldCaseListItemD
     province: 'ชลบุรี',
     district: 'ศรีราชา',
     assetDescription: 'iPhone 15',
+    assetCapacity: null,
+    assetColor: null,
     debtAmountSatang: 1_000_000,
     assignedAt: '2026-08-01T03:00:00.000Z',
     acceptedAt: null,
@@ -244,5 +246,10 @@ describe('ที่อยู่ + ช่องทางติดต่อ (`41` 
     )
     expect(assetSummary({ assetDescription: 'iPad', imei: null, serialNo: 'SN-1' })).toBe('iPad (S/N: SN-1)')
     expect(assetSummary({ assetDescription: null })).toBe('—')
+    // มติ PO U166 — ความจุ/สีตามสัญญาต่อท้ายชื่อรุ่น
+    expect(
+      assetSummary({ assetDescription: 'iPhone 15', assetCapacity: '128GB', assetColor: 'ดำ', imei: '123456789012345' }),
+    ).toBe('iPhone 15 · 128GB · ดำ (IMEI: 123456789012345)')
+    expect(assetSummary({ assetDescription: 'iPhone 15', assetCapacity: null, assetColor: 'ขาว' })).toBe('iPhone 15 · ขาว')
   })
 })

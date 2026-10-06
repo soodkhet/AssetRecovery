@@ -2,6 +2,7 @@
 
 import { RefText, StatusBadge } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
+import { deviceAttributesText } from '@/lib/device-catalog/device-attributes'
 import type { AssetListItemDto } from '@/lib/warehouse/types'
 import { assetStatusBadgeGroup, assetStatusLabel } from '@/lib/warehouse/warehouse-ui'
 
@@ -34,6 +35,10 @@ export function AssetSummaryHeader({
         </div>
         <div className="text-right">
           <div className="font-semibold text-slate-800">{asset.deviceDesc}</div>
+          {/* มติ PO U166 — ความจุ/สีตามสัญญา */}
+          <div className="text-xs text-slate-500">
+            {deviceAttributesText(asset.deviceCapacity, asset.deviceColor)}
+          </div>
           <div className="mt-0.5 font-mono text-[11px] text-slate-500">
             IMEI ในสัญญา: {asset.imeiContract ?? '—'}
           </div>

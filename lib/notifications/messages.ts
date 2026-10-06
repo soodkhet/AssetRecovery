@@ -645,3 +645,17 @@ export function periodSentToAccountantMessage(input: {
     dedupeKey: `period-sent-${input.periodId}`,
   }
 }
+
+/**
+ * มติ PO 07/10/2569 U167 — job อัปเดตฐาน TAC ล้มเหลว ⇒ แจ้งผู้ดูแล Model Phone
+ * คีย์ = วันไทย ⇒ retry หลายรอบในวันเดียวกันแจ้งครั้งเดียว · วันถัดไปที่ยังล้มแจ้งใหม่
+ */
+export function deviceTacUpdateFailedMessage(input: { jobRef: string; dayKey: string; reason: string }): NotificationMessage {
+  return {
+    eventCode: 'device_catalog.tac_update_failed',
+    title: 'อัปเดตฐานยี่ห้อ/รุ่นจาก IMEI ไม่สำเร็จ',
+    body: withReason('ระบบจะลองใหม่อัตโนมัติ ตัวเลือกยี่ห้อ/รุ่นเดิมยังใช้ได้', input.reason),
+    linkPath: '/settings/device-catalog',
+    dedupeKey: `device-tac-update-failed-${input.dayKey}`,
+  }
+}

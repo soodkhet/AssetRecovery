@@ -199,6 +199,9 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'device_brands',
   'device_models',
   'device_catalog_settings',
+  // มติ PO U166/U167 — ฐาน TAC (ยี่ห้อ/รุ่นจาก IMEI) + ประวัติการอัปเดต (insert-only ของ job)
+  'device_tacs',
+  'device_tac_updates',
   'jobs',
   'files',
   'audit_logs',

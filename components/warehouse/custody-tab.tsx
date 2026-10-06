@@ -38,6 +38,7 @@ import {
   type AssetFilterState,
   type FilterOption,
 } from '@/lib/warehouse/asset-filters'
+import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { WAREHOUSE_CREATE_LOT_CAPABILITY } from '@/lib/warehouse/permissions'
 import { ASSET_CONDITIONS } from '@/lib/warehouse/schemas'
 import type { AssetDetailDto, AssetListDto, AssetListItemDto } from '@/lib/warehouse/types'
@@ -369,7 +370,7 @@ export function CustodyTab({
                       <div className="font-semibold text-slate-800">{item.debtorName}</div>
                     </Td>
                     <Td>
-                      <div>{item.deviceDesc}</div>
+                      <div>{documentDeviceText(item)}</div>
                       <div className="font-mono text-[10px] text-slate-400">
                         {item.imeiActual ?? item.imeiContract ?? '—'}
                       </div>

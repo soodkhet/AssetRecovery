@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { API_CONTRACT } from '@/lib/api/contract'
 import {
   assetIntakeSchema,
+  intakeColorCapacityMatched,
   assetListQuerySchema,
   assetRejectIntakeSchema,
   lotConfirmSchema,
@@ -94,6 +95,13 @@ describe('assetIntakeSchema', () => {
 
   it('ช่องข้อความว่างถูกเก็บเป็น null ไม่ใช่ "" (คอลัมน์ nullable)', () => {
     expect(assetIntakeSchema.parse({ condition: 'normal', serialActual: '   ' }).serialActual).toBeNull()
+  })
+
+  it('สี/ความจุตรงกับสัญญา (มติ PO U166) — ไม่บังคับ ไม่ส่ง = false · รับเฉพาะ boolean', () => {
+    expect(intakeColorCapacityMatched(assetIntakeSchema.parse({ condition: 'normal' }))).toBe(false)
+    expect(intakeColorCapacityMatched(assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: true }))).toBe(true)
+    expect(intakeColorCapacityMatched(assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: false }))).toBe(false)
+    expect(assetIntakeSchema.safeParse({ condition: 'normal', colorCapacityMatched: 'yes' }).success).toBe(false)
   })
 })
 

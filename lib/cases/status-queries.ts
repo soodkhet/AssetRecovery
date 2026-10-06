@@ -132,6 +132,8 @@ function readinessOf(row: CaseDetailRow) {
       assetKind: row.assetKind,
       assetBrandModel: row.assetDescription,
       assetImeiSerial: row.imei ?? row.serialNo,
+      assetCapacity: row.assetCapacity,
+      assetColor: row.assetColor,
       debtAmountSatang: row.debtAmountSatang,
     },
     documentCountsOf(row.documents),

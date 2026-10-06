@@ -5,6 +5,7 @@ import { testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhe
 import { attachmentHeader } from '@/lib/format/attachment'
 import {
   buildHandoverDoc,
+  documentDeviceText,
   documentIdentifier,
   documentIdentifierActual,
   handoverFileName,
@@ -40,6 +41,9 @@ function asset(overrides: Partial<AssetListItemDto> = {}): AssetListItemDto {
     caseRef: 'SF-2026-00832',
     debtorName: 'สมชาย ใจดี',
     deviceDesc: 'iPhone 15 สีดำ',
+    deviceCapacity: null,
+    deviceColor: null,
+    colorCapacityMatched: null,
     imeiContract: '355000000000001',
     imeiActual: '355000000000001',
     serialContract: null,
@@ -141,6 +145,20 @@ describe('buildHandoverDoc', () => {
       '12/07/2569',
     )
     expect(buildHandoverDoc(lot({ scheduledAt: null }), ISSUER, RECIPIENT).issuedAtLabel).toBe('05/07/2569')
+  })
+
+  it('ช่องอุปกรณ์พ่วงความจุ/สีตามสัญญา (มติ PO U166) — เครื่องก่อนมติไม่มีค่า = ชื่อเครื่องอย่างเดียว', () => {
+    expect(documentDeviceText({ deviceDesc: 'iPhone 15', deviceCapacity: '128GB', deviceColor: 'ดำ' })).toBe(
+      'iPhone 15 · 128GB · ดำ',
+    )
+    expect(documentDeviceText({ deviceDesc: 'iPhone 15', deviceCapacity: null, deviceColor: 'ขาว' })).toBe('iPhone 15 · ขาว')
+    expect(documentDeviceText({ deviceDesc: 'iPhone 15', deviceCapacity: null, deviceColor: null })).toBe('iPhone 15')
+    const doc = buildHandoverDoc(
+      lot({ assets: [asset({ deviceDesc: 'iPhone 15', deviceCapacity: '256GB', deviceColor: 'ไม่ระบุในสัญญา' })] }),
+      ISSUER,
+      RECIPIENT,
+    )
+    expect(doc.rows[0]?.deviceDesc).toBe('iPhone 15 · 256GB · ไม่ระบุในสัญญา')
   })
 
   it('ลำดับรายการเริ่มที่ 1 และนับจำนวนเครื่องตามจริง', () => {

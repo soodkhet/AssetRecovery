@@ -78,6 +78,8 @@ describe('ไฟล์ตัวอย่างนำเข้าเคส', () =
         assetKind: input.assetType,
         assetBrandModel: input.assetBrandModel,
         assetImeiSerial: input.assetImeiSerial,
+        assetCapacity: input.assetCapacity,
+        assetColor: input.assetColor,
         debtAmountSatang: input.outstandingDebtSatang,
       })
       expect(missing).toEqual([])

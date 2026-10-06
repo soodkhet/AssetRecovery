@@ -7,6 +7,8 @@ import type { CaseImportInput } from '@/lib/cases/schemas'
 import type { CaseImportResultDto, CaseImportRowResultDto } from '@/lib/cases/types'
 import { ModuleError } from '@/lib/api/errors'
 import { loadCatalogMatcher } from '@/lib/device-catalog/queries'
+import { tacImportDecision, tacOfImei } from '@/lib/device-catalog/tac'
+import { loadTacLabels } from '@/lib/device-catalog/tac-queries'
 import { prisma } from '@/lib/prisma'
 import { splitAssetIdentifier } from '@/lib/cases/case'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
@@ -35,11 +37,16 @@ function headersOf(rows: readonly Record<string, unknown>[]): string[] {
 function rowWarnings(
   assetImeiSerial: string | null | undefined,
   activeImeis: ReadonlySet<string> = new Set(),
+  deviceWarning: string | null = null,
 ): Record<string, string> | null {
   const imei = splitAssetIdentifier(assetImeiSerial).imei
   const warning =
     imei !== null && activeImeis.has(imei) ? ACTIVE_ASSET_IMEI_WARNING_MESSAGE : assetIdentifierWarning(assetImeiSerial)
-  return warning === null ? null : { assetImeiSerial: warning }
+  const warnings: Record<string, string> = {}
+  if (warning !== null) warnings.assetImeiSerial = warning
+  // มติ PO U166 — เติมยี่ห้อ/รุ่นจาก IMEI ให้ / ยี่ห้อในไฟล์ไม่ตรงกับ IMEI
+  if (deviceWarning !== null) warnings.assetBrandModel = deviceWarning
+  return Object.keys(warnings).length === 0 ? null : warnings
 }
 
 export async function importCases(
@@ -65,6 +72,25 @@ export async function importCases(
     ? await loadCatalogMatcher(organizationId)
     : null
 
+  // มติ PO U166 — ยี่ห้อ/รุ่นจากฐาน TAC ของ IMEI ในไฟล์ (โหลดครั้งเดียว) · ว่าง = เติมให้ · ไม่ตรง = เตือน
+  const tacLabels = await loadTacLabels(
+    organizationId,
+    plan.rows.flatMap((row) => {
+      const imei = splitAssetIdentifier(row.input.assetImeiSerial).imei
+      return imei === null ? [] : [imei]
+    }),
+  )
+  const deviceOf = (row: (typeof plan.rows)[number]) => {
+    const tac = tacOfImei(splitAssetIdentifier(row.input.assetImeiSerial).imei)
+    const found = tac === null ? undefined : tacLabels.get(tac)
+    const decision = tacImportDecision(row.input.assetBrandModel, found ?? null)
+    const input =
+      decision.fill && found !== undefined
+        ? { ...row.input, assetBrandModel: found.label, deviceModelId: found.deviceModelId }
+        : row.input
+    return { input, warning: decision.warning }
+  }
+
   const results: CaseImportRowResultDto[] = plan.errors.map((error) => ({
     rowNumber: error.rowNumber,
     caseRef: error.caseRef,
@@ -77,6 +103,7 @@ export async function importCases(
   }))
 
   for (const row of plan.rows) {
+    const device = deviceOf(row)
     if (duplicateRowNumbers.has(row.rowNumber)) {
       const duplicate = new CaseError('CASE_REF_DUPLICATE', { context: { caseRef: row.input.caseRef } })
       results.push({
@@ -87,7 +114,7 @@ export async function importCases(
         errorCode: duplicate.code,
         errorMessage: 'เลขที่สัญญาซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน',
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
       })
       continue
     }
@@ -101,18 +128,18 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
       })
       continue
     }
 
     try {
       const matched =
-        matchDevice === null || row.input.assetBrandModel == null
+        device.input.deviceModelId != null || matchDevice === null || device.input.assetBrandModel == null
           ? null
-          : matchDevice(row.input.assetBrandModel, row.input.assetType ?? null)
+          : matchDevice(device.input.assetBrandModel, device.input.assetType ?? null)
       const created = await createCase(
-        matched === null ? row.input : { ...row.input, deviceModelId: matched.modelId },
+        matched === null ? device.input : { ...device.input, deviceModelId: matched.modelId },
         context,
       )
       results.push({
@@ -123,7 +150,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
       })
     } catch (error) {
       // error ของโมดูล (ref ซ้ำ/บริษัทถูกระงับ/เลขบัตรผิด) = แถวนั้นตก · error อื่นถือเป็นความผิดพลาดจริง
@@ -136,7 +163,7 @@ export async function importCases(
         errorCode: error.code,
         errorMessage: error.userMessage,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
       })
     }
   }

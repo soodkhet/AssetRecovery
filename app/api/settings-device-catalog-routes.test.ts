@@ -8,7 +8,8 @@ import type { SessionUser } from '@/lib/auth/types'
  *  · หน้าผู้ดูแล = `manage_device_catalog` (ธุรการ manage · บริหาร view · Superadmin โดยนิยาม)
  *  · บริหาร (view) อ่านได้ แก้ไม่ได้ · การเงินไม่มีสิทธิ์ = 403 · ไม่แตะชั้นข้อมูลเมื่อถูกปฏิเสธ
  *  · ตัวเลือกในฟอร์มรับเคส = ผู้สร้าง/แก้เคส (`record_admin_data` ฯลฯ) หรือผู้ดูแลแคตตาล็อก
- *  · "ดึงข้อมูลตอนนี้" ตั้งงานด้วยเพดาน request ของการสั่งเอง — **ไม่รันงานจริง/ไม่เรียก API** (mock engine)
+ *  · (U166/U167) "อัปเดตตอนนี้"/"นำเข้าไฟล์เอง"/TAC/ประวัติ = ผู้ดูแล · ค้น TAC จาก IMEI = ผู้สร้างเคส
+ *    — **ไม่รันงานจริง/ไม่เรียกเน็ต/ไม่แตะ storage จริง** (mock ชั้นข้อมูล + storage)
  */
 
 const requireSessionMock = vi.hoisted(() => vi.fn())
@@ -34,6 +35,19 @@ const settingsMock = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/device-catalog/settings-queries', () => settingsMock)
 
+const tacMock = vi.hoisted(() => ({
+  requestDeviceTacUpdate: vi.fn(),
+  listDeviceTacs: vi.fn(),
+  bindDeviceTac: vi.fn(),
+  getDeviceTacHistory: vi.fn(),
+  lookupDeviceTac: vi.fn(),
+  isOwnTacFilePath: (organizationId: string, path: string) => path.startsWith(`organization/${organizationId}/device-tac/`),
+}))
+vi.mock('@/lib/device-catalog/tac-queries', () => tacMock)
+
+const storageMock = vi.hoisted(() => ({ downloadUploadedFile: vi.fn() }))
+vi.mock('@/lib/uploads/storage', () => storageMock)
+
 const engineMock = vi.hoisted(() => ({ enqueueJob: vi.fn(), runJobById: vi.fn() }))
 vi.mock('@/lib/jobs/engine', () => engineMock)
 vi.mock('next/server', async (original) => ({ ...(await original<typeof import('next/server')>()), after: vi.fn() }))
@@ -44,7 +58,12 @@ const brandsRoute = await import('@/app/api/settings/device-catalog/brands/route
 const brandRoute = await import('@/app/api/settings/device-catalog/brands/[id]/route')
 const modelsRoute = await import('@/app/api/settings/device-catalog/models/route')
 const statusRoute = await import('@/app/api/settings/device-catalog/models/status/route')
-const syncRoute = await import('@/app/api/settings/device-catalog/sync/route')
+const tacUpdateRoute = await import('@/app/api/settings/device-catalog/tac-update/route')
+const tacImportRoute = await import('@/app/api/settings/device-catalog/tac-import/route')
+const tacsRoute = await import('@/app/api/settings/device-catalog/tacs/route')
+const tacHistoryRoute = await import('@/app/api/settings/device-catalog/tac-history/route')
+const tacLookupRoute = await import('@/app/api/device-catalog/tac-lookup/route')
+const attributesRoute = await import('@/app/api/device-catalog/attributes/route')
 const bulkRoute = await import('@/app/api/settings/device-catalog/bulk-visibility/route')
 const optionsRoute = await import('@/app/api/device-catalog/options/route')
 
@@ -93,6 +112,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) })
 beforeEach(() => {
   requireSessionMock.mockReset()
   for (const mock of [...Object.values(queriesMock), ...Object.values(settingsMock), ...Object.values(engineMock)]) mock.mockReset()
+  for (const mock of [tacMock.requestDeviceTacUpdate, tacMock.listDeviceTacs, tacMock.bindDeviceTac, tacMock.getDeviceTacHistory, tacMock.lookupDeviceTac, storageMock.downloadUploadedFile]) mock.mockReset()
   queriesMock.getDeviceCatalogSummary.mockResolvedValue({ brandCount: 0 })
   queriesMock.listDeviceBrands.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 })
   queriesMock.listDeviceModels.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 })
@@ -116,7 +136,7 @@ describe('หน้า Model Phone — สิทธิ์ manage_device_catalog'
     expect((await brandsRoute.GET(request('GET', '/api/settings/device-catalog/brands?visibility=hidden&page=2'), {})).status).toBe(200)
     expect(queriesMock.listDeviceBrands.mock.calls[0]?.[1]).toMatchObject({ visibility: 'hidden', page: 2 })
     expect((await brandRoute.PATCH(request('PATCH', `/api/settings/device-catalog/brands/${BRAND_ID}`, { manualStatus: null }), params(BRAND_ID))).status).toBe(403)
-    expect((await syncRoute.POST(request('POST', '/api/settings/device-catalog/sync', {}), {})).status).toBe(403)
+    expect((await tacUpdateRoute.POST(request('POST', '/api/settings/device-catalog/tac-update', {}), {})).status).toBe(403)
     expect(queriesMock.updateDeviceBrand).toHaveBeenCalledTimes(1)
   })
 
@@ -135,11 +155,11 @@ describe('หน้า Model Phone — สิทธิ์ manage_device_catalog'
   it('ตั้งค่าตัวกรอง: ทำความสะอาดรายชื่อ · จำนวนปีนอกช่วง = 400', async () => {
     requireSessionMock.mockResolvedValue(ADMIN_OFFICE)
     const ok = await settingsRoute.PATCH(
-      request('PATCH', '/api/settings/device-catalog/settings', { brandNames: [' Samsung ', 'samsung', 'OPPO'], recentYears: 3 }),
+      request('PATCH', '/api/settings/device-catalog/settings', { brandNames: [' Samsung ', 'samsung', 'OPPO'], recentYears: 3, capacityOptions: ['128GB'], colorOptions: ['ดำ'], staleAlertDays: 90 }),
       {},
     )
     expect(ok.status).toBe(200)
-    expect(settingsMock.updateDeviceCatalogSettings.mock.calls[0]?.[2]).toEqual({ brandNames: ['Samsung', 'OPPO'], recentYears: 3 })
+    expect(settingsMock.updateDeviceCatalogSettings.mock.calls[0]?.[2]).toEqual({ brandNames: ['Samsung', 'OPPO'], recentYears: 3, capacityOptions: ['128GB'], colorOptions: ['ดำ'], staleAlertDays: 90 })
     for (const recentYears of [0, 31, 2.5]) {
       const bad = await settingsRoute.PATCH(request('PATCH', '/api/settings/device-catalog/settings', { brandNames: [], recentYears }), {})
       expect(bad.status).toBe(400)
@@ -165,23 +185,80 @@ describe('หน้า Model Phone — สิทธิ์ manage_device_catalog'
     expect(queriesMock.updateDeviceBrand).not.toHaveBeenCalled()
   })
 
-  it('ดึงข้อมูลตอนนี้: ตั้งงานขององค์กรด้วยเพดาน request ของการสั่งเอง (ไม่รันงานจริงในเทสต์)', async () => {
+  it('อัปเดตตอนนี้ (U166/U167): ผู้ดูแลตั้งงาน (ส่ง force ต่อ) · บริหาร (view) = 403 · ไม่รันงานจริงในเทสต์', async () => {
     requireSessionMock.mockResolvedValue(ADMIN_OFFICE)
-    const response = await syncRoute.POST(request('POST', '/api/settings/device-catalog/sync', {}), {})
+    tacMock.requestDeviceTacUpdate.mockResolvedValue({ jobId: 'job-1', duplicate: false })
+    const response = await tacUpdateRoute.POST(request('POST', '/api/settings/device-catalog/tac-update', { force: true }), {})
     expect(response.status).toBe(202)
-    expect(engineMock.enqueueJob).toHaveBeenCalledWith(
-      expect.objectContaining({
-        organizationId: 'org-1',
-        jobType: 'device_catalog_sync',
-        payload: expect.objectContaining({ maxRequests: 200 }),
-        createdBy: ADMIN_OFFICE.id,
-      }),
-    )
-    expect(engineMock.runJobById).not.toHaveBeenCalled()
+    expect(tacMock.requestDeviceTacUpdate.mock.calls[0]?.[1]).toEqual({ force: true })
+    expect(tacMock.requestDeviceTacUpdate.mock.calls[0]?.[0]).toMatchObject({ actor: { id: ADMIN_OFFICE.id } })
+
+    requireSessionMock.mockResolvedValue(EXECUTIVE)
+    expect((await tacUpdateRoute.POST(request('POST', '/api/settings/device-catalog/tac-update', {}), {})).status).toBe(403)
+    expect(tacMock.requestDeviceTacUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('นำเข้าไฟล์เอง: path ขององค์กรอื่น = ปฏิเสธ · หัวตารางผิด = DEVICE_TAC_FILE_INVALID · ถูกต้อง = ตั้งงาน', async () => {
+    requireSessionMock.mockResolvedValue(ADMIN_OFFICE)
+    const path = '/api/settings/device-catalog/tac-import'
+    const other = await tacImportRoute.POST(request('POST', path, { path: 'organization/org-2/device-tac/a.csv' }), {})
+    expect(other.status).toBe(400)
+    expect(storageMock.downloadUploadedFile).not.toHaveBeenCalled()
+
+    storageMock.downloadUploadedFile.mockResolvedValueOnce(new TextEncoder().encode('a,b,c\n1,2,3'))
+    const bad = await tacImportRoute.POST(request('POST', path, { path: 'organization/org-1/device-tac/a.csv' }), {})
+    expect(bad.status).toBe(400)
+    expect(await bad.json()).toMatchObject({ error: { code: 'DEVICE_TAC_FILE_INVALID' } })
+
+    storageMock.downloadUploadedFile.mockResolvedValueOnce(new TextEncoder().encode('Brand,TAC,SPECS\nAPPLE,35000005,"APPLE IPHONE 16, N/A, A1, 2024"'))
+    tacMock.requestDeviceTacUpdate.mockResolvedValue({ jobId: 'job-2', duplicate: false })
+    const ok = await tacImportRoute.POST(request('POST', path, { path: 'organization/org-1/device-tac/b.csv' }), {})
+    expect(ok.status).toBe(202)
+    expect(tacMock.requestDeviceTacUpdate.mock.calls.at(-1)?.[1]).toEqual({ filePath: 'organization/org-1/device-tac/b.csv' })
+  })
+
+  it('TAC: บริหารค้นได้ ผูกไม่ได้ · ผู้ดูแลผูก (TAC ผิดรูป = 400) · ประวัติ = view', async () => {
+    requireSessionMock.mockResolvedValue(EXECUTIVE)
+    tacMock.listDeviceTacs.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 })
+    expect((await tacsRoute.GET(request('GET', '/api/settings/device-catalog/tacs?q=3500&source=learned'), {})).status).toBe(200)
+    expect(tacMock.listDeviceTacs.mock.calls[0]?.[1]).toMatchObject({ q: '3500', source: 'learned' })
+    expect((await tacsRoute.POST(request('POST', '/api/settings/device-catalog/tacs', { tac: '35000005', deviceModelId: MODEL_ID }), {})).status).toBe(403)
+    tacMock.getDeviceTacHistory.mockResolvedValue({ updates: [], learned: [] })
+    expect((await tacHistoryRoute.GET(request('GET', '/api/settings/device-catalog/tac-history'), {})).status).toBe(200)
+
+    requireSessionMock.mockResolvedValue(ADMIN_OFFICE)
+    const bad = await tacsRoute.POST(request('POST', '/api/settings/device-catalog/tacs', { tac: '3500', deviceModelId: MODEL_ID }), {})
+    expect(bad.status).toBe(400)
+    tacMock.bindDeviceTac.mockResolvedValue({ id: 't1' })
+    const ok = await tacsRoute.POST(request('POST', '/api/settings/device-catalog/tacs', { tac: '3500-0005', deviceModelId: MODEL_ID }), {})
+    expect(ok.status).toBe(201)
+    expect(tacMock.bindDeviceTac.mock.calls[0]?.[1]).toMatchObject({ tac: '35000005', deviceModelId: MODEL_ID })
+
+    requireSessionMock.mockResolvedValue(FINANCE)
+    expect((await tacHistoryRoute.GET(request('GET', '/api/settings/device-catalog/tac-history'), {})).status).toBe(403)
   })
 })
 
 describe('ตัวเลือกในฟอร์มรับเคส', () => {
+  it('(U166) ค้น TAC จาก IMEI: IMEI ผ่าน parseImei() ก่อน (ผิดรูป = 400) · พนักงานภาคสนาม = 403', async () => {
+    requireSessionMock.mockResolvedValue(CASE_CLERK)
+    tacMock.lookupDeviceTac.mockResolvedValue({ found: false })
+    const ok = await tacLookupRoute.GET(request('GET', '/api/device-catalog/tac-lookup?imei=35-000005-123456-7'), {})
+    expect(ok.status).toBe(200)
+    expect(tacMock.lookupDeviceTac).toHaveBeenCalledWith('org-1', '350000051234567')
+    expect((await tacLookupRoute.GET(request('GET', '/api/device-catalog/tac-lookup?imei=35000005123456X'), {})).status).toBe(400)
+
+    requireSessionMock.mockResolvedValue(FIELD_AGENT)
+    expect((await tacLookupRoute.GET(request('GET', '/api/device-catalog/tac-lookup?imei=350000051234567'), {})).status).toBe(403)
+  })
+
+  it('(U166) ตัวเลือกความจุ/สี = ค่าตั้งขององค์กร', async () => {
+    requireSessionMock.mockResolvedValue(CASE_CLERK)
+    settingsMock.getDeviceCatalogSettings.mockResolvedValue({ capacityOptions: ['128GB'], colorOptions: ['ดำ'] })
+    const response = await attributesRoute.GET(request('GET', '/api/device-catalog/attributes'), {})
+    expect(await response.json()).toEqual({ data: { capacityOptions: ['128GB'], colorOptions: ['ดำ'] } })
+  })
+
   it('ผู้สร้างเคสค้นได้ (ส่ง assetKind/q ต่อ) · พนักงานภาคสนาม = 403', async () => {
     requireSessionMock.mockResolvedValue(CASE_CLERK)
     const ok = await optionsRoute.GET(request('GET', '/api/device-catalog/options?assetKind=tablet&q=ipad'), {})

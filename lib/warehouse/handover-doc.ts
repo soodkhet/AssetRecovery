@@ -1,3 +1,4 @@
+import { deviceAttributesText } from '@/lib/device-catalog/device-attributes'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { assetConditionLabel, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -66,6 +67,19 @@ function orDash(value: string | null | undefined): string {
   return trimmed === '' ? EMPTY_DOC_VALUE : trimmed
 }
 
+/**
+ * ชื่อเครื่อง + ความจุ/สีตามสัญญา (มติ PO U166) — "iPhone 15 · 128GB · ดำ"
+ * ใช้ทั้งเอกสาร (PDF/Excel) และตารางหน้าคลัง · เครื่องก่อนมติ (ไม่มีค่า) = ชื่อเครื่องอย่างเดียว
+ */
+export function documentDeviceText(row: {
+  deviceDesc: string
+  deviceCapacity: string | null
+  deviceColor: string | null
+}): string {
+  const attributes = deviceAttributesText(row.deviceCapacity, row.deviceColor)
+  return attributes === EMPTY_DOC_VALUE ? row.deviceDesc : `${row.deviceDesc} · ${attributes}`
+}
+
 /** ตัวระบุเครื่องที่พิมพ์ลงเอกสาร — IMEI มาก่อน serial (เครื่องไม่มี IMEI คือ A6) */
 export function documentIdentifier(row: {
   imeiContract: string | null
@@ -118,7 +132,7 @@ export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recip
       no: index + 1,
       caseRef: asset.caseRef,
       debtorName: asset.debtorName,
-      deviceDesc: asset.deviceDesc,
+      deviceDesc: documentDeviceText(asset),
       identifier: documentIdentifier(asset),
       identifierActual: documentIdentifierActual(asset),
       condition: assetConditionLabel(asset.condition),

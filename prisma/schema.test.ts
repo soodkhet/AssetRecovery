@@ -93,7 +93,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // + company_document_type (มติ PO U132) · cycle_scope_kind (มติ PO U133)
     // + bank_file_purpose (มติ PO U147) · tax_profile_income_type (มติ PO U148)
     // + device_catalog_status / device_catalog_source (มติ PO U155 → U159 — Model Phone)
-    expect(enums.length).toBe(78)
+    // + device_tac_source / device_tac_update_trigger / device_tac_update_status (มติ PO U166 → U168 — ฐาน TAC)
+    expect(enums.length).toBe(81)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

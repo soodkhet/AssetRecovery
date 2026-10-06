@@ -322,6 +322,8 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
         assetType: 'smartphone',
         assetBrandModel: 'iPhone 15 สีดำ',
         assetImeiSerial: `35581${RUN}`.slice(0, 15).padEnd(15, '0'),
+        assetCapacity: '128GB',
+        assetColor: 'ดำ',
         outstandingDebtSatang: DEBT_SATANG,
       },
       ctx(admin),

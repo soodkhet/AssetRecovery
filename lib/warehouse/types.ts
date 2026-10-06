@@ -15,6 +15,11 @@ export interface AssetListItemDto {
   caseRef: string
   debtorName: string
   deviceDesc: string
+  /** ความจุ/สีตามสัญญา — snapshot จากเคสตอนปิดงาน (มติ PO U166) · เครื่องก่อนมติ = `null` */
+  deviceCapacity: string | null
+  deviceColor: string | null
+  /** ผลตรวจตอนรับเข้าคลัง "สี/ความจุตรงกับสัญญา" · ยังไม่ได้ตรวจรับ = `null` */
+  colorCapacityMatched: boolean | null
   imeiContract: string | null
   imeiActual: string | null
   serialContract: string | null

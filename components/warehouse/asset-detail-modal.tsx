@@ -66,6 +66,13 @@ export function AssetDetailModal({
               {asset.serialContract !== null && (
                 <DetailRow label="Serial ที่ตรวจจริง" value={asset.serialActual ?? '—'} mono />
               )}
+              {/* มติ PO U166 — ผลติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้า (ยังไม่ได้ตรวจรับ = —) */}
+              <DetailRow
+                label="สี/ความจุตรงกับสัญญา"
+                value={
+                  asset.colorCapacityMatched === null ? '—' : asset.colorCapacityMatched ? 'ตรง' : 'ไม่ได้ยืนยัน'
+                }
+              />
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-slate-400">สภาพ</dt>
                 <dd>

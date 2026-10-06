@@ -33,6 +33,8 @@ function detailOf(overrides: Partial<FieldCaseDetailDto> = {}): FieldCaseDetailD
     province: 'ชลบุรี',
     district: 'ศรีราชา',
     assetDescription: 'iPhone 15',
+    assetCapacity: null,
+    assetColor: null,
     debtAmountSatang: 1_000_000,
     assignedAt: '2026-08-01T03:00:00.000Z',
     acceptedAt: '2026-08-01T04:00:00.000Z',

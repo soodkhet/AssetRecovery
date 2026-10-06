@@ -22,7 +22,7 @@ import {
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
-import type { DeviceAssetKind, DeviceCatalogStatusCode } from '@/lib/device-catalog/catalog'
+import { DEVICE_CATALOG_SOURCE_LABEL, type DeviceAssetKind, type DeviceCatalogStatusCode } from '@/lib/device-catalog/catalog'
 import { deviceBrandCreateSchema, deviceModelCreateSchema } from '@/lib/device-catalog/schemas'
 import type {
   DeviceBrandDto,
@@ -32,7 +32,6 @@ import type {
   DeviceModelRowDto,
 } from '@/lib/device-catalog/types'
 import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
-import { fmtDateTime } from '@/lib/format/datetime'
 
 /**
  * รายการแบรนด์/รุ่นของหน้า "Model Phone" (มติ PO U157/U159 · mockup `settings.html` แท็บ `modelphone`)
@@ -108,7 +107,7 @@ function ManualSelect({
   )
 }
 
-function Pager({
+export function Pager({
   page,
   pageSize,
   total,
@@ -304,7 +303,7 @@ export function DeviceBrandList({
             <Th>แบรนด์</Th>
             <Th>การแสดง</Th>
             <Th className="text-right">รุ่นที่แสดง / ทั้งหมด</Th>
-            <Th>ดึงข้อมูลล่าสุด</Th>
+            <Th>ที่มา</Th>
             <Th className="text-right">จัดการ</Th>
           </Tr>
         </THead>
@@ -348,9 +347,7 @@ export function DeviceBrandList({
                   {brand.visibleModelCount.toLocaleString('th-TH')} / {brand.modelCount.toLocaleString('th-TH')}
                 </Td>
                 <Td>
-                  <span className="text-xs text-slate-500">
-                    {brand.lastSyncedAt === null ? '—' : fmtDateTime(brand.lastSyncedAt)}
-                  </span>
+                  <span className="text-xs text-slate-500">{DEVICE_CATALOG_SOURCE_LABEL[brand.source]}</span>
                 </Td>
                 <Td className="text-right">
                   <div className="flex items-center justify-end gap-2">

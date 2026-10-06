@@ -31,10 +31,24 @@ const DISTRICT = { inhouse: 'บางรัก', outsource: 'เมืองป
 
 let imeiCounter = 0
 
-function imeiFor(key: string): string {
+/**
+ * TAC ของ fixture `lib/device-catalog/fixtures/tac-sample.csv` (มติ PO U166) — IMEI ทุกเคสขึ้นต้นด้วย TAC ที่ฐานรู้จัก
+ * (ไม่ให้ระบบจำรุ่นมั่ว) ยกเว้น {@link TAC_UNKNOWN} ที่ตั้งใจให้ "ไม่พบ → ระบบจำ" 1 เคส
+ */
+export const TAC_A55 = '35984745' // Samsung Galaxy A55 5G
+export const TAC_IPHONE15 = '35089945' // Apple iPhone 15
+const TAC_TYPED = '35087403' // Apple iPhone XR — เคส "ระบุเอง" (ข้อความไม่ตรงก็ไม่ทับฐาน)
+export const TAC_UNKNOWN = '86999001'
+
+/** IMEI 15 หลัก = TAC 8 หลัก + เลขลำดับ 7 หลัก (ไม่ซ้ำกันทั้งชุด) */
+function imeiFor(tac: string): string {
   imeiCounter += 1
-  return `3569${String(Number(key.replace(/\D/g, '') || '0')).padStart(3, '0')}${String(imeiCounter).padStart(8, '0')}`.slice(0, 15)
+  return `${tac}${String(imeiCounter).padStart(7, '0')}`
 }
+
+/** ความจุ/สีตามสัญญา (มติ PO U166) — หมุนให้ครบทั้งค่ามาตรฐาน · "ระบุเอง" · "ไม่ระบุในสัญญา" */
+const CAPACITIES = ['128GB', '256GB', 'ไม่ระบุในสัญญา', '512GB'] as const
+const COLORS = ['ดำ', 'ขาว', 'ไม่ระบุในสัญญา', 'ม่วงลาเวนเดอร์', 'น้ำเงิน'] as const
 
 export interface CaseSpec {
   key: string
@@ -44,14 +58,18 @@ export interface CaseSpec {
 }
 
 /**
- * Model Phone (U155) — เคส FT เลขหาร 3 ลงตัว = Samsung Galaxy A55 5G · เหลือเศษ 1 = Apple iPhone 15 (เลือกจากรายการ)
- * เศษ 2 / แถว X = "ไม่พบในรายการ — ระบุเอง" (ข้อความอิสระ)
+ * Model Phone (U155 · U166) — เคส FT เลขหาร 3 ลงตัว = Samsung Galaxy A55 5G · เหลือเศษ 1 = Apple iPhone 15
+ * (IMEI ขึ้นต้นด้วย TAC ของรุ่นนั้น — ฟอร์มเติมรุ่นจาก IMEI) · FT-02 = TAC ที่ฐานไม่รู้จัก แล้วเลือก Galaxy S24 จากรายการ
+ * ⇒ ระบบจำ (learned) · ที่เหลือ / แถว X = "ไม่พบในรายการ — ระบุเอง" (ข้อความอิสระ)
  */
-function deviceOf(key: string): { deviceModelId: string | null; assetBrandModel: string } {
+function deviceOf(key: string): { deviceModelId: string | null; assetBrandModel: string; tac: string } {
   const n = key.startsWith('FT-') ? Number(key.slice(3)) : -1
-  if (n >= 0 && n % 3 === 0) return { deviceModelId: ids.deviceModels['Samsung Galaxy A55 5G'] ?? null, assetBrandModel: 'Samsung Galaxy A55 5G' }
-  if (n >= 0 && n % 3 === 1) return { deviceModelId: ids.deviceModels['Apple iPhone 15'] ?? null, assetBrandModel: 'Apple iPhone 15' }
-  return { deviceModelId: null, assetBrandModel: 'iPhone 15 สีดำ' }
+  if (n === 2) return { deviceModelId: ids.deviceModels['Samsung Galaxy S24'] ?? null, assetBrandModel: 'Samsung Galaxy S24', tac: TAC_UNKNOWN }
+  if (n >= 0 && n % 3 === 0) {
+    return { deviceModelId: ids.deviceModels['Samsung Galaxy A55 5G'] ?? null, assetBrandModel: 'Samsung Galaxy A55 5G', tac: TAC_A55 }
+  }
+  if (n >= 0 && n % 3 === 1) return { deviceModelId: ids.deviceModels['Apple iPhone 15'] ?? null, assetBrandModel: 'Apple iPhone 15', tac: TAC_IPHONE15 }
+  return { deviceModelId: null, assetBrandModel: 'iPhone 15 สีดำ', tac: TAC_TYPED }
 }
 
 /** ธุรการรับเคส (createCase + เอกสาร 3 ช่อง) — ค้างที่ `draft` */
@@ -59,6 +77,7 @@ export async function createDraftCase(spec: CaseSpec, imei?: string): Promise<st
   const cases = await import('@/lib/cases/queries')
   const admin = await as('uat.admin')
   const address = { detail: `${spec.key} ม.1`, province: PROVINCE[spec.side], district: DISTRICT[spec.side] }
+  const { tac, ...device } = deviceOf(spec.key)
   const created = await cases.createCase(
     {
       caseRef: `FINAL-${spec.key}`,
@@ -71,8 +90,10 @@ export async function createDraftCase(spec: CaseSpec, imei?: string): Promise<st
       addressCurrent: address,
       addressIdCard: address,
       assetType: 'smartphone',
-      ...deviceOf(spec.key),
-      assetImeiSerial: imei ?? imeiFor(spec.key),
+      ...device,
+      assetImeiSerial: imei ?? imeiFor(tac),
+      assetCapacity: CAPACITIES[imeiCounter % CAPACITIES.length],
+      assetColor: COLORS[imeiCounter % COLORS.length],
       outstandingDebtSatang: spec.debtSatang,
     },
     { actor: admin, meta: (await ctx('uat.admin')).meta },
@@ -184,7 +205,14 @@ export async function intake(caseKey: string): Promise<string> {
   await warehouse.intakeAsset(
     await as('uat.admin'),
     asset.id,
-    { imeiActual: asset.imeiContract, serialActual: null, condition: 'normal', conditionNote: null, photos: await storedAll([`assets/${asset.id}/intake/front.jpg`]) },
+    {
+      imeiActual: asset.imeiContract,
+      serialActual: null,
+      condition: 'normal',
+      conditionNote: null,
+      photos: await storedAll([`assets/${asset.id}/intake/front.jpg`]),
+      colorCapacityMatched: true,
+    },
     await ctx('uat.admin'),
   )
   return asset.id

@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
 import { CaseAttachmentsFields, type StagedFile } from '@/components/cases/case-attachments-fields'
 import { CaseContactsFields } from '@/components/cases/case-contacts-fields'
+import { DeviceAttributeSelect } from '@/components/cases/device-attribute-select'
 import { DeviceModelPicker } from '@/components/cases/device-model-picker'
+import { useDeviceAttributeOptions } from '@/components/cases/use-device-attribute-options'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
 import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -124,6 +126,9 @@ export function CaseFormModal({
       cancelled = true
     }
   }, [open])
+
+  // มติ PO U166 — ตัวเลือกความจุ/สี (ผู้ดูแลแก้ได้ในหน้า Model Phone)
+  const attributeOptions = useDeviceAttributeOptions(open)
 
   function patch(next: Partial<CaseFormState>): void {
     setForm((current) => ({ ...current, ...next }))
@@ -546,15 +551,6 @@ export function CaseFormModal({
                 ))}
               </Select>
             </Field>
-            <Field id="asset-model" label="ยี่ห้อ/รุ่นเครื่อง" required error={fieldErrors.assetBrandModel}>
-              <DeviceModelPicker
-                id="asset-model"
-                assetKind={form.assetType === '' ? null : form.assetType}
-                value={{ deviceModelId: form.deviceModelId, text: form.assetBrandModel }}
-                invalid={fieldErrors.assetBrandModel !== undefined}
-                onChange={(next) => patch({ deviceModelId: next.deviceModelId, assetBrandModel: next.text })}
-              />
-            </Field>
             <Field
               id="asset-imei"
               label="IMEI / Serial Number"
@@ -575,6 +571,37 @@ export function CaseFormModal({
                   {assetIdentifierWarning(form.assetImeiSerial)}
                 </p>
               )}
+            </Field>
+            {/* มติ PO U166 — กรอก IMEI ก่อน แล้วเติมยี่ห้อ/รุ่นจากฐาน TAC (แก้ได้) */}
+            <Field id="asset-model" label="ยี่ห้อ/รุ่นเครื่อง" required error={fieldErrors.assetBrandModel}>
+              <DeviceModelPicker
+                id="asset-model"
+                assetKind={form.assetType === '' ? null : form.assetType}
+                value={{ deviceModelId: form.deviceModelId, text: form.assetBrandModel }}
+                identifier={form.assetImeiSerial}
+                invalid={fieldErrors.assetBrandModel !== undefined}
+                onChange={(next) => patch({ deviceModelId: next.deviceModelId, assetBrandModel: next.text })}
+              />
+            </Field>
+            <Field id="asset-capacity" label="ความจุ" required error={fieldErrors.assetCapacity}>
+              <DeviceAttributeSelect
+                id="asset-capacity"
+                value={form.assetCapacity}
+                options={attributeOptions.capacityOptions}
+                customPlaceholder="เช่น 128GB"
+                invalid={fieldErrors.assetCapacity !== undefined}
+                onChange={(next) => patch({ assetCapacity: next })}
+              />
+            </Field>
+            <Field id="asset-color" label="สี" required error={fieldErrors.assetColor}>
+              <DeviceAttributeSelect
+                id="asset-color"
+                value={form.assetColor}
+                options={attributeOptions.colorOptions}
+                customPlaceholder="เช่น ม่วงลาเวนเดอร์"
+                invalid={fieldErrors.assetColor !== undefined}
+                onChange={(next) => patch({ assetColor: next })}
+              />
             </Field>
             <Field
               id="asset-debt"

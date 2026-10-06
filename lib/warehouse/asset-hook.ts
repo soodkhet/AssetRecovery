@@ -86,6 +86,8 @@ export async function ensureAssetForClosedCase(
       debtorName: true,
       assetKind: true,
       assetDescription: true,
+      assetCapacity: true,
+      assetColor: true,
       imei: true,
       serialNo: true,
     },
@@ -116,6 +118,9 @@ export async function ensureAssetForClosedCase(
         // เคสที่ปิดงานสำเร็จผ่าน `assertReadyForReview()` มาแล้ว ⇒ มีชื่อลูกหนี้เสมอ (กันไว้ที่ชั้นนี้อีกชั้น)
         debtorName: source.debtorName ?? '(ไม่ระบุชื่อลูกหนี้)',
         deviceDesc: buildDeviceDesc(source.assetKind, source.assetDescription),
+        // มติ PO U166 — snapshot ความจุ/สีตามสัญญาตอนปิดงาน (แก้เคสภายหลังไม่กระทบเครื่องในคลัง)
+        deviceCapacity: source.assetCapacity,
+        deviceColor: source.assetColor,
         imeiContract: source.imei,
         serialContract: source.serialNo,
         assetStatus: 'pending_intake',

@@ -23,6 +23,7 @@
 | v1.3 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.2**: §6.1 เติม `PATCH /api/cases/:id` (action `edit_case` ที่ `38` §8/§12 นิยามไว้พร้อม error `CASE_LOCKED_AFTER_APPROVAL` และ `edit_history` ใน §6.4 แต่ §17.1 ของไฟล์ 38 ไม่เคยประกาศ endpoint) — ไม่มี business logic ใหม่ รวมเป็น 40 endpoints |
 | v1.4 | 05/10/2569 | sync `44` v2.4 (มติ PO U64 · UAT BUG-075): body ของ `reject-intake` รับ `imeiActual?`/`serialActual?` ที่ตรวจพบ (ไม่บังคับ) — ไม่มีการเปลี่ยน endpoint/สิทธิ์ |
 | v1.9-BZ | 07/10/2569 | **มติ PO 07/10/2569 U127** — ขึ้นทะเบียน event `wht.supplementary_filing_required` (กลุ่ม Notification §7): ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่รอบ ภ.ง.ด. เป็น `filed` แล้ว ⇒ ติดธงต้องยื่นเพิ่มเติม + แจ้งผู้ถือ `manage_wht` (คิว outbox ในทรานแซกชันเดียวกับการยกเลิก/ออกใบ) |
+| v1.10-GA | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)** — ขึ้นทะเบียน event `device_catalog.tac_update_failed` (กลุ่ม Notification §7): job `device_tac_sync` / "อัปเดตตอนนี้" / "นำเข้าไฟล์เอง" ล้มเหลว ⇒ แจ้งผู้ดูแล Model Phone (`13` §6.18 · `91` §6.1) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -145,6 +146,9 @@ Notification (90 §6.3): expense.rejected / payout_batch.completed / advance.ove
                    expense.approval_requested / advance.approval_requested /
                    adjustment.approval_requested / field_allowance.period_locked /
                    wht.supplementary_filing_required (มติ PO 07/10/2569 U127)
+                   device_catalog.tac_update_failed (มติ PO 07/10/2569 U167 · DEC-017 — อัปเดตฐาน TAC
+                   ไม่สำเร็จ · โมดูลตั้งค่า · ระดับ critical · ถึงผู้ถือ manage_device_catalog ระดับ manage ·
+                   เข้าคิวผ่าน notification_outbox ในทรานแซกชันเดียวกับแถวประวัติ · กันซ้ำวันละครั้งตามวันไทย)
                    (4 ตัวท้าย มติ PO 05/10/2569 U29/U25 — แจ้งผู้อนุมัติขั้นที่รออยู่ ·
                    job รายวันเจองวดปิดแล้ว)
                    (7 ตัวนี้ไฟล์ต้นทาง 15/16/17/30/33/34/36 ไม่มีตาราง event ของตัวเอง — SSOT ของชื่อ

@@ -8,7 +8,7 @@ import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fromInputDateTime } from '@/lib/format/datetime'
 import type { HandoverType } from '@/lib/generated/prisma/enums'
-import { documentIdentifier } from '@/lib/warehouse/handover-doc'
+import { documentDeviceText, documentIdentifier } from '@/lib/warehouse/handover-doc'
 import { HANDOVER_TYPES, lotCreateSchema } from '@/lib/warehouse/schemas'
 import type { AssetListItemDto, LotDetailDto } from '@/lib/warehouse/types'
 import { assetConditionLabel, HANDOVER_TYPE_LABEL, LOT_TAB_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -282,7 +282,7 @@ export function HandoverLotModal({
                       <span className="ml-2 text-slate-500">{asset.debtorName}</span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-slate-600">{asset.deviceDesc}</span>
+                      <span className="text-slate-600">{documentDeviceText(asset)}</span>
                       <span className="hidden font-mono text-slate-400 sm:inline">{documentIdentifier(asset)}</span>
                       <Badge className="bg-slate-100 text-slate-600">{assetConditionLabel(asset.condition)}</Badge>
                     </div>

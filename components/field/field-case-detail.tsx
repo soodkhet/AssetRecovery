@@ -190,6 +190,8 @@ export function FieldCaseDetailBody({
           <div className="text-sm font-bold text-slate-800">
             {assetSummary({
               assetDescription: detail.assetDescription,
+              assetCapacity: detail.assetCapacity,
+              assetColor: detail.assetColor,
               imei: detail.imei,
               serialNo: detail.serialNo,
             })}

@@ -85,9 +85,9 @@ const store = {
   ],
   assets: [
     // pending_intake
-    { id:'WH-001', companyId:'SF',  caseRef:'SF-2026-00832', debtor:'วิทยา มีเงิน',      agent:'ประยุทธ์ บุญมี',   team:'ทีมรับเหมาเหนือ', device:'iPad Air 5',        imeiContract:'353456789012345', imeiActual:null, closedAt:'24/06/2569 17:30', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
-    { id:'WH-002', companyId:'KTL', caseRef:'KTL-9981-X',   debtor:'สมหมาย ดีใจ',       agent:'วิชัย ขยันดี',     team:'ทีม A',             device:'Samsung S24 Ultra', imeiContract:'352345678901234', imeiActual:null, closedAt:'25/06/2569 10:15', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
-    { id:'WH-011', companyId:'ATF', caseRef:'ATF-5501-Z',   debtor:'มานะ ใจดี',          agent:'สมหญิง ดูแลดี',   team:'ทีม B',             device:'iPhone 15 Pro',     imeiContract:'359888777666555', imeiActual:null, closedAt:'26/06/2569 09:00', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
+    { id:'WH-001', companyId:'SF',  caseRef:'SF-2026-00832', debtor:'วิทยา มีเงิน',      agent:'ประยุทธ์ บุญมี',   team:'ทีมรับเหมาเหนือ', device:'iPad Air 5',        capacity:'256GB', color:'เทา', imeiContract:'353456789012345', imeiActual:null, closedAt:'24/06/2569 17:30', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
+    { id:'WH-002', companyId:'KTL', caseRef:'KTL-9981-X',   debtor:'สมหมาย ดีใจ',       agent:'วิชัย ขยันดี',     team:'ทีม A',             device:'Samsung S24 Ultra', capacity:'512GB', color:'ดำ', imeiContract:'352345678901234', imeiActual:null, closedAt:'25/06/2569 10:15', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
+    { id:'WH-011', companyId:'ATF', caseRef:'ATF-5501-Z',   debtor:'มานะ ใจดี',          agent:'สมหญิง ดูแลดี',   team:'ทีม B',             device:'iPhone 15 Pro',     capacity:'128GB', color:'ไม่ระบุในสัญญา', imeiContract:'359888777666555', imeiActual:null, closedAt:'26/06/2569 09:00', receivedAt:null, condition:null, conditionNote:null, photos:[], lotId:null, asset_status:'pending_intake' },
     // intake_rejected
     { id:'WH-003', companyId:'SF',  caseRef:'SF-2026-00799', debtor:'ธนกร ศักดิ์สิทธิ์', agent:'ประสิทธิ์ มากมี', team:'ทีมรับเหมาเหนือ', device:'iPhone 14 Pro',     imeiContract:'354567890123456', imeiActual:'354567890199999', closedAt:'23/06/2569 14:00', receivedAt:null, condition:null, conditionNote:'IMEI ไม่ตรง — อาจสลับเครื่องกับเคสอื่น', photos:['front.jpg','back.jpg'], lotId:null, rejectReason:'IMEI บนเครื่อง (354567890199999) ไม่ตรงกับสัญญา (354567890123456)', rejectAt:'23/06/2569 15:30', asset_status:'intake_rejected' },
     // in_custody
@@ -149,11 +149,12 @@ const st = {
   mIntakeImei:'',
   mIntakeCond:'',
   mIntakeNote:'',
+  mIntakeColorMatch:false, /* มติ PO U166 */
 };
 
 function S(p){Object.assign(st,p);render();}
 function openModal(type,id='',extra={}){S({modal:{type,id,...extra}});}
-function closeModal(){S({modal:null,mHandoverType:'',mHandoverAddr:'',mHandoverTracking:'',mHandoverNote:'',mIntakeImei:'',mIntakeCond:'',mIntakeNote:'',selectedAssets:{}});}
+function closeModal(){S({modal:null,mHandoverType:'',mHandoverAddr:'',mHandoverTracking:'',mHandoverNote:'',mIntakeImei:'',mIntakeCond:'',mIntakeNote:'',mIntakeColorMatch:false,selectedAssets:{}});}
 function toast(msg,color='violet'){S({toast:{msg,color}});setTimeout(()=>{if(st.toast?.msg===msg)S({toast:null});},3500);}
 
 // ═══════════════════════════════════════════════════════
@@ -761,6 +762,8 @@ function renderModal(){
         </div>
         <div class="text-right">
           <div class="font-bold text-slate-800">${a.device}</div>
+          <!-- มติ PO U166 — ความจุ/สีตามสัญญา -->
+          <div class="text-[11px] text-slate-500">${[a.capacity,a.color].filter(Boolean).join(' · ')||'—'}</div>
           <div class="font-mono text-[10px] text-slate-500 mt-0.5">IMEI: ${a.imeiContract}</div>
         </div>
       </div>
@@ -793,6 +796,12 @@ function renderModal(){
         </div>
         ${match?`<div class="flex items-center gap-1.5 mt-2 text-emerald-700 text-xs font-bold">${SVG.check} IMEI ตรงกัน ✅</div>`:''}
         ${mismatch?`<div class="flex items-center gap-1.5 mt-2 text-red-700 text-xs font-bold">${SVG.x} IMEI ไม่ตรง — ควรกด "ตีกลับ" แทน</div>`:''}
+        <!-- มติ PO U166 — checkbox ไม่บังคับ ไม่ block -->
+        <label class="flex items-start gap-2 mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <input type="checkbox" class="mt-0.5 rounded focus-ring" ${st.mIntakeColorMatch?'checked':''} onchange="S({mIntakeColorMatch:this.checked})">
+          <span class="text-sm"><span class="font-semibold text-slate-800">สี/ความจุตรงกับสัญญา</span>
+            <span class="block text-xs text-slate-500 mt-0.5">ตามสัญญา: ความจุ ${a.capacity||'—'} · สี ${a.color||'—'}</span></span>
+        </label>
       </div>
       <!-- สภาพ -->
       <div>
@@ -1277,6 +1286,7 @@ document.addEventListener('click',e=>{
     a.imeiActual=st.mIntakeImei||a.imeiContract;
     a.condition=st.mIntakeCond;
     a.conditionNote=st.mIntakeNote;
+    a.colorCapacityMatched=st.mIntakeColorMatch;
     a.photos=['front.jpg','back.jpg','imei.jpg'];
     closeModal();
     toast('รับเครื่องเข้าคลังแล้ว — Field Agent เริ่มเบิกได้เมื่อส่งมอบสำเร็จ');

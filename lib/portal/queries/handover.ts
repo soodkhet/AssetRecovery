@@ -168,6 +168,8 @@ const lotAssetSelect = {
   caseRef: true,
   debtorName: true,
   deviceDesc: true,
+  deviceCapacity: true,
+  deviceColor: true,
   condition: true,
   conditionNote: true,
   photos: true,

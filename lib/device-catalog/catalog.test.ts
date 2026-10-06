@@ -13,13 +13,12 @@ import {
   minVisibleReleaseYear,
   normalizeCatalogName,
   parseBrandListText,
-  pickBrandsToSync,
   planModelUpsert,
   stripBrandPrefix,
   type ExistingModelRow,
 } from '@/lib/device-catalog/catalog'
 
-/** แคตตาล็อก Model Phone — ส่วน pure (มติ PO U155 → U157 → U159) */
+/** แคตตาล็อก Model Phone — ส่วน pure (มติ PO U155 → U159 · U166) */
 
 const NOW = new Date('2026-10-07T05:00:00Z')
 
@@ -88,6 +87,13 @@ describe('ตัวกรองการแสดง + การตั้งด�
 
   it('รุ่น: ปิดแบรนด์ = ไม่แสดงทุกรุ่น แม้ตั้งรุ่นให้แสดง', () => {
     expect(isModelVisible({ manualStatus: 'active', releaseYear: 2025 }, false, filter)).toBe(false)
+  })
+
+  it('U166 — ไม่ทราบปี: รุ่นจากฐาน TAC = ไม่แสดง · รุ่นที่เพิ่มเอง = แสดง', () => {
+    expect(isModelVisible({ manualStatus: null, releaseYear: null, source: 'tacdb' }, true, filter)).toBe(false)
+    expect(isModelVisible({ manualStatus: null, releaseYear: null, source: 'manual' }, true, filter)).toBe(true)
+    expect(isModelVisible({ manualStatus: 'active', releaseYear: null, source: 'tacdb' }, true, filter)).toBe(true)
+    expect(isModelVisible({ manualStatus: null, releaseYear: 2024, source: 'tacdb' }, true, filter)).toBe(true)
   })
 
   it('รุ่น: ไม่ตั้งด้วยมือ = ตามปี (ไม่ทราบปี = แสดง) · ตั้งด้วยมือชนะตัวกรองปี', () => {
@@ -165,51 +171,5 @@ describe('แผน upsert ของ job — idempotent + ไม่ทับก�
   it('ชื่อจากต้นทางเปลี่ยน (ผู้ดูแลยังไม่แก้) = อัปเดตชื่อ', () => {
     const plan = planModelUpsert([row({})], { externalId: 'ext-1', name: 'Galaxy A55 5G', releaseYear: 2024 })
     expect(plan).toMatchObject({ kind: 'update', data: { name: 'Galaxy A55 5G', nameKey: 'galaxya555g' } })
-  })
-})
-
-describe('เลือกแบรนด์ของรอบ (ประหยัดโควตา · resume ได้)', () => {
-  const brands = [
-    { name: 'Zeta', externalId: 'Zeta', lastSyncedAt: null },
-    { name: 'Alpha', externalId: 'Alpha', lastSyncedAt: null },
-    { name: 'Old', externalId: 'Old', lastSyncedAt: new Date('2026-01-01') },
-    { name: 'Older', externalId: 'Older', lastSyncedAt: new Date('2025-01-01') },
-    { name: 'Manual', externalId: null, lastSyncedAt: null },
-  ]
-
-  it('ยังไม่เคยดึงก่อน (ตามชื่อ) แล้วค่อยแบรนด์ที่ดึงนานที่สุด · แบรนด์เพิ่มเองไม่ถูกดึง', () => {
-    expect(pickBrandsToSync(brands, 10).map((brand) => brand.name)).toEqual(['Alpha', 'Zeta', 'Older', 'Old'])
-  })
-
-  it('จำกัดตามงบ request', () => {
-    expect(pickBrandsToSync(brands, 1).map((brand) => brand.name)).toEqual(['Alpha'])
-    expect(pickBrandsToSync(brands, 0)).toEqual([])
-  })
-
-  it('U162 — แบรนด์ในรายชื่อตลาดไทยที่ยังไม่เคยดึงมาก่อน (ตามลำดับรายชื่อ ไม่สนตัวพิมพ์) แล้วค่อยแบรนด์ที่เหลือตามลำดับเดิม', () => {
-    const withThai = [
-      ...brands,
-      { name: 'Samsung', externalId: 'Samsung', lastSyncedAt: null },
-      { name: 'Apple', externalId: 'Apple', lastSyncedAt: null },
-      { name: 'vivo', externalId: 'vivo', lastSyncedAt: new Date('2026-02-01') },
-    ]
-    expect(pickBrandsToSync(withThai, 10, ['samsung', 'Apple', 'VIVO']).map((brand) => brand.name)).toEqual([
-      'Samsung',
-      'Apple',
-      'Alpha',
-      'Zeta',
-      'Older',
-      'Old',
-      'vivo',
-    ])
-  })
-
-  it('U162 — resume: แบรนด์ไทยที่ดึงแล้วไม่ถูกดึงซ้ำก่อนแบรนด์ที่ยังไม่เคยดึง · งบจำกัดได้แบรนด์ไทยก่อน', () => {
-    const withThai = [
-      ...brands,
-      { name: 'Samsung', externalId: 'Samsung', lastSyncedAt: new Date('2026-10-06') },
-      { name: 'Apple', externalId: 'Apple', lastSyncedAt: null },
-    ]
-    expect(pickBrandsToSync(withThai, 2, ['Samsung', 'Apple']).map((brand) => brand.name)).toEqual(['Apple', 'Alpha'])
   })
 })

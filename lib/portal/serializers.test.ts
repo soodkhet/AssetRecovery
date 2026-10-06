@@ -190,7 +190,7 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
         ],
       }),
     )
-    const lotAsset = { ...FORBIDDEN, id: 'asset-1', caseRef: 'SF-1', debtorName: 'ก', deviceDesc: 'iPhone 15', condition: null, conditionNote: null, photos: [PHOTO_PATH] }
+    const lotAsset = { ...FORBIDDEN, id: 'asset-1', caseRef: 'SF-1', debtorName: 'ก', deviceDesc: 'iPhone 15', deviceCapacity: '128GB', deviceColor: 'ดำ', condition: null, conditionNote: null, photos: [PHOTO_PATH] }
     for (const status of Object.values(HandoverLotStatus)) {
       const lot = { ...FORBIDDEN, id: 'lot-1', lotNumber: 'LOT-2569-001', docRef: 'DLV-2569-001', type: 'we_deliver' as const, status, createdAt: CREATED, confirmedAt: null }
       deepScan(serializePortalLotListItem({ ...lot, assetCount: 1 }))

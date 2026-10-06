@@ -68,6 +68,7 @@
 | v3.3 | 14/08/2569 | **เพิ่ม §6.10 หมวด Audit (Platform)** (Phase 1.4) — `AUDIT_REASON_REQUIRED` (บังคับ `reason` ตาม `90` §13) และ `AUDIT_IMMUTABLE` (`02` §13 — ห้าม UPDATE/DELETE audit_logs) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.2 | 14/08/2569 | **เพิ่ม §6.9 หมวด Auth & Access Control** (Phase 1.3) — รวบ `PERMISSION_DENIED` (05 §11) / `LAST_SUPERADMIN_REMOVAL` (07 §11) ที่กระจายอยู่ไฟล์ต้นทาง เข้ามาไว้ใน dictionary กลาง + เพิ่ม code ใหม่ที่ implementation ต้องใช้จริง: `UNAUTHENTICATED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `ACCOUNT_INACTIVE`, `USER_NOT_PROVISIONED` — ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127)** — เติม §6.8 `WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED` (400): กด "ยื่นเพิ่มเติมแล้ว" บนรอบ ภ.ง.ด. ที่ไม่ได้ติดธงต้องยื่นเพิ่มเติม (ยังไม่ยื่น/ไม่มีธง/มีคนบันทึกไปแล้ว — compare-and-set) · ตรวจแล้วไม่ซ้ำ code เดิม · ไม่ใช่ warning-only |
+| v4.5x-GA | 07/10/2569 | **มติ PO U166 (DEC-017)** — เติม §6.1 `DEVICE_TAC_FILE_INVALID` (400 — นำเข้าไฟล์ TAC เองผิดรูปแบบ) |
 | v4.5x-DE | 07/10/2569 | **มติ PO U155 → U159 (Model Phone · DEC-016)** — เติม §6.1 `DEVICE_CATALOG_ITEM_NOT_FOUND` (404) + `DUPLICATE_DEVICE_CATALOG_ITEM` (400) ของแท็บ Model Phone (`13` §6.18) · ไม่มี code เตือนใหม่ · ฟอร์มรับเคสเลือกรุ่นที่ไม่แสดงแล้ว **ไม่ใช่ error** (เก็บข้อความ ไม่บล็อก) |
 
 ขอบเขตเอกสารนี้: รวม Error Code และเงื่อนไขการ validate ทั้งหมดของระบบไว้จุดเดียว เพื่อให้ frontend/backend ใช้ code เดียวกันสม่ำเสมอ และนักพัฒนาเช็คได้ว่ามี code ซ้ำ/ขัดแย้งกันหรือไม่
@@ -136,6 +137,7 @@
 | DUPLICATE_HOLIDAY_DATE | เพิ่มวันหยุดวันที่ที่มีอยู่แล้วในปฏิทิน (partial unique `uniq_public_holidays_active_date` — `13` §6.15 · การนำเข้าหลายวันข้ามวันที่ซ้ำแทนการปฏิเสธ) | 13 |
 | DEVICE_CATALOG_ITEM_NOT_FOUND | อ้างแบรนด์/รุ่นใน Model Phone ที่ไม่มีในองค์กรของผู้เรียก หรือรหัสผิดรูป (404 — `13` §6.18 · มติ PO U155 → U159) | 13 |
 | DUPLICATE_DEVICE_CATALOG_ITEM | เพิ่ม/แก้ชื่อแบรนด์หรือรุ่นใน Model Phone ให้ซ้ำกับที่มีอยู่ (ไม่สนตัวพิมพ์/ช่องว่าง/ขีด/จุด — UNIQUE `(organization_id, name_key)` ของแบรนด์ · `(brand_id, name_key)` ของรุ่น · `13` §6.18 · มติ PO U155 → U159) | 13 |
+| DEVICE_TAC_FILE_INVALID | (400) นำเข้าไฟล์ TAC เองในหน้า Model Phone แล้วไฟล์ไม่ใช่ CSV หัวตาราง `Brand,TAC,SPECS` หรือไม่มีแถวที่ใช้ได้ / ไม่พบไฟล์ที่อัปโหลด (`13` §6.18 · มติ PO U166) | 13 |
 
 ### 6.2 หมวดภาษี/VAT (ไฟล์ 13, 19)
 
