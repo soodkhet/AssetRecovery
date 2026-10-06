@@ -19,7 +19,6 @@ const SUCCESS_FEE: ServiceFeeTemplateValues = {
   ratePct: 10,
   basis: 'debt_amount',
   chargeOnFail: false,
-  chargePerTrackingRound: true,
 }
 
 const FLAT: ServiceFeeTemplateValues = {
@@ -29,7 +28,6 @@ const FLAT: ServiceFeeTemplateValues = {
   ratePct: 0,
   basis: null,
   chargeOnFail: false,
-  chargePerTrackingRound: true,
 }
 
 const HYBRID: ServiceFeeTemplateValues = {
@@ -37,9 +35,8 @@ const HYBRID: ServiceFeeTemplateValues = {
   model: 'HYBRID',
   baseSatang: 200_000,
   ratePct: 5,
-  basis: 'asset_value',
+  basis: 'debt_amount',
   chargeOnFail: true,
-  chargePerTrackingRound: true,
 }
 
 const V1: ServiceFeeTemplateVersion = { ...SUCCESS_FEE, id: 'tpl-1', version: 1, isCurrent: true }
@@ -101,7 +98,7 @@ describe('describeServiceFeeFormula — สูตร 2 กรณี (`22` §6.5�
 
   it('HYBRID สำเร็จ = base + rate × basis · ไม่สำเร็จ = base เมื่อ charge_on_fail', () => {
     expect(describeServiceFeeFormula(HYBRID)).toEqual({
-      onSuccess: { kind: 'hybrid', baseSatang: 200_000, ratePct: 5, basis: 'asset_value' },
+      onSuccess: { kind: 'hybrid', baseSatang: 200_000, ratePct: 5, basis: 'debt_amount' },
       onFail: { kind: 'flat', baseSatang: 200_000 },
     })
   })
@@ -144,7 +141,6 @@ describe('snapshot (`10` §9.2 · `92` §7.1)', () => {
       ratePct: 10,
       basis: 'debt_amount',
       chargeOnFail: false,
-      chargePerTrackingRound: true,
     })
   })
 

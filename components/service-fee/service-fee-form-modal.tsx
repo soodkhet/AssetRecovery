@@ -29,7 +29,6 @@ interface FormState {
   ratePct: string
   basis: ServiceFeeBasis
   chargeOnFail: boolean
-  chargePerTrackingRound: boolean
   reason: string
 }
 
@@ -41,7 +40,6 @@ function emptyForm(): FormState {
     ratePct: '',
     basis: 'debt_amount',
     chargeOnFail: false,
-    chargePerTrackingRound: true,
     reason: '',
   }
 }
@@ -54,7 +52,6 @@ function formOf(template: ServiceFeeTemplateListDto): FormState {
     ratePct: String(template.ratePct),
     basis: template.basis ?? 'debt_amount',
     chargeOnFail: template.chargeOnFail,
-    chargePerTrackingRound: template.chargePerTrackingRound,
     reason: '',
   }
 }
@@ -70,7 +67,6 @@ function payloadOf(form: FormState): Record<string, unknown> {
     ratePct: usesRate ? Number(form.ratePct === '' ? Number.NaN : form.ratePct) : 0,
     basis: usesRate ? form.basis : null,
     chargeOnFail: usesBase && form.chargeOnFail,
-    chargePerTrackingRound: form.chargePerTrackingRound,
     reason: form.reason.trim(),
   }
 }
@@ -226,18 +222,11 @@ export function ServiceFeeFormModal({
               />
             </Field>
 
-            <Field id="sf-basis" label="ฐานคำนวณ" required error={errors.basis}>
-              <Select
-                id="sf-basis"
-                value={form.basis}
-                onChange={(event) => set('basis', event.target.value as ServiceFeeBasis)}
-              >
-                {(Object.keys(SERVICE_FEE_BASIS_LABEL) as ServiceFeeBasis[]).map((basis) => (
-                  <option key={basis} value={basis}>
-                    {SERVICE_FEE_BASIS_LABEL[basis]}
-                  </option>
-                ))}
-              </Select>
+            {/* มติ PO U126 — ฐานคำนวณมีแบบเดียว (ยอดหนี้คงเหลือ) จึงแสดงเป็นข้อความ ไม่ให้เลือก */}
+            <Field id="sf-basis" label="ฐานคำนวณ" error={errors.basis}>
+              <p id="sf-basis" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                {SERVICE_FEE_BASIS_LABEL[form.basis]}
+              </p>
             </Field>
           </div>
         )}
@@ -251,16 +240,6 @@ export function ServiceFeeFormModal({
             chargeOnFail: form.chargeOnFail,
           })}
         />
-
-        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-          <input
-            type="checkbox"
-            checked={form.chargePerTrackingRound}
-            onChange={(event) => set('chargePerTrackingRound', event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300"
-          />
-          คิดค่าบริการต่อรอบการติดตาม (แต่ละรอบคิดแยกกัน)
-        </label>
 
         <Field id="sf-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (กระทบรายได้)" error={errors.reason}>
           <Textarea

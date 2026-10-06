@@ -13,7 +13,7 @@ import type { VatRatePeriod } from '@/lib/settings/vat'
  * - **ทุกค่าเป็น snapshot ของเคส** (`cases.service_fee_*` ตอน `approved` — `10` §9.2) ห้ามอ่านเทมเพลตสด
  * - **VAT ห้าม hardcode 7%** — อัตรามาจาก `vat_rate_history` ตาม `revenue_date` แล้ว snapshot ลงแถว
  *   · ไม่มีอัตราครอบคลุมวันนั้น ⇒ `calculateVatForRevenue()` โยน `VAT_RATE_NOT_FOUND` (ห้าม fallback)
- * - เคสที่ยังไม่มีฐานคำนวณ (`basis = asset_value` แต่เคสไม่ได้กรอกมูลค่าทรัพย์) ⇒ **ห้ามสร้าง Revenue**
+ * - เคสที่ยังไม่มีฐานคำนวณ (มีอัตรา % แต่เคสไม่ได้กรอกยอดหนี้คงเหลือ) ⇒ **ห้ามสร้าง Revenue**
  *   คืน `missingBasis` ให้ผู้เรียกข้ามเคสนั้นแล้วบันทึกเหตุผลลง audit (ไม่เดาเป็น 0)
  */
 

@@ -30,7 +30,6 @@ const templateSelect = {
   ratePct: true,
   basis: true,
   chargeOnFail: true,
-  chargePerTrackingRound: true,
   version: true,
   isCurrent: true,
   deletedAt: true,
@@ -52,7 +51,6 @@ function toRecord(row: TemplateRow): ServiceFeeTemplateRecord {
     ratePct: row.ratePct.toNumber(),
     basis: row.basis,
     chargeOnFail: row.chargeOnFail,
-    chargePerTrackingRound: row.chargePerTrackingRound,
     version: row.version,
     isCurrent: row.isCurrent,
     isActive: row.deletedAt === null,
@@ -70,7 +68,6 @@ function toAuditPayload(values: ServiceFeeTemplateValues, version: number): Reco
     rate_pct: normalized.ratePct,
     basis: normalized.basis,
     charge_on_fail: normalized.chargeOnFail,
-    charge_per_tracking_round: normalized.chargePerTrackingRound,
     version,
   }
 }
@@ -84,7 +81,6 @@ function toCreateData(values: ServiceFeeTemplateValues) {
     ratePct: new Prisma.Decimal(normalized.ratePct.toFixed(2)),
     basis: normalized.basis,
     chargeOnFail: normalized.chargeOnFail,
-    chargePerTrackingRound: normalized.chargePerTrackingRound,
   }
 }
 

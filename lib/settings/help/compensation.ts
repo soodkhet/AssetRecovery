@@ -146,14 +146,13 @@ export function commissionHelp(commission: number | null, noSuccessFee: number |
   }
 }
 
-/** มูลหนี้/มูลค่าทรัพย์ตัวอย่างของเคส (สตางค์) */
+/** มูลหนี้ตัวอย่างของเคส (สตางค์) — ฐานคำนวณเดียวที่มี (มติ PO U126) */
 export const SAMPLE_DEBT_SATANG = 5_000_000
-export const SAMPLE_ASSET_VALUE_SATANG = 3_000_000
 
 const MODEL_EFFECT: Readonly<Record<ServiceFeeModel, string>> = {
-  SUCCESS_FEE: 'คิดเป็น % ของฐาน (มูลหนี้หรือมูลค่าทรัพย์) เฉพาะเคสสำเร็จ — ไม่สำเร็จได้ 0',
+  SUCCESS_FEE: 'คิดเป็น % ของยอดหนี้คงเหลือ เฉพาะเคสสำเร็จ — ไม่สำเร็จได้ 0',
   FLAT: 'ค่าคงที่ต่อเคส — เลือกได้ว่าเคสไม่สำเร็จคิดเงินด้วยหรือไม่',
-  HYBRID: 'ค่าคงที่ + % ของฐาน (ส่วน % ได้เฉพาะเคสสำเร็จ)',
+  HYBRID: 'ค่าคงที่ + % ของยอดหนี้คงเหลือ (ส่วน % ได้เฉพาะเคสสำเร็จ)',
 }
 
 export function serviceFeeHelp(input: {
@@ -175,11 +174,11 @@ export function serviceFeeHelp(input: {
       basis: usesRate ? input.basis : null,
       chargeOnFail: usesBase && input.chargeOnFail,
     }
-    const values = { debtAmountSatang: SAMPLE_DEBT_SATANG, assetValueSatang: SAMPLE_ASSET_VALUE_SATANG }
+    const values = { debtAmountSatang: SAMPLE_DEBT_SATANG }
     const success = calculateServiceFeeRevenue(snapshot, 'closed_success', values)
     const fail = calculateServiceFeeRevenue(snapshot, 'closed_fail', values)
     examples.push({
-      title: `เคสมูลหนี้ ${money(SAMPLE_DEBT_SATANG)} · มูลค่าทรัพย์ ${money(SAMPLE_ASSET_VALUE_SATANG)}${usesRate ? ` · อัตรา ${pct(snapshot.ratePct)}` : ''}`,
+      title: `เคสมูลหนี้ ${money(SAMPLE_DEBT_SATANG)}${usesRate ? ` · อัตรา ${pct(snapshot.ratePct)}` : ''}`,
       lines: [
         line('ปิดสำเร็จ → ค่าบริการ (ก่อน VAT)', money(success.grossSatang ?? 0), true),
         line('ปิดไม่สำเร็จ → ค่าบริการ (ก่อน VAT)', money(fail.grossSatang ?? 0)),
@@ -187,9 +186,10 @@ export function serviceFeeHelp(input: {
       note: 'VAT คิดเพิ่มตามรูปแบบราคาของบริษัทไฟแนนซ์',
     })
   }
+  // มติ PO U125 — ไม่มีสวิตช์ "คิดต่อรอบ" แล้ว: ทุกรอบติดตามคิดค่าบริการอิสระเสมอ
   return {
     title: 'เทมเพลตค่าบริการคิดรายได้อย่างไร',
-    what: 'สูตรรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ต่อเคส ผูกกับบริษัทไฟแนนซ์ และถูกบันทึกลงเคสตอนรับเคส (อนุมัติเคส)',
+    what: 'สูตรรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ต่อเคส ผูกกับบริษัทไฟแนนซ์ และถูกบันทึกลงเคสตอนรับเคส (อนุมัติเคส) · เคสที่บริษัทไฟแนนซ์ส่งกลับมาติดตามรอบใหม่ คิดค่าบริการรอบนั้นแยกอิสระเสมอ ไม่หักกลบกับรอบก่อน',
     options: (['SUCCESS_FEE', 'FLAT', 'HYBRID'] as const).map((model) => ({
       label: `${model === input.model ? '▸ ' : ''}${SERVICE_FEE_MODEL_LABEL[model]}`,
       effect: MODEL_EFFECT[model],

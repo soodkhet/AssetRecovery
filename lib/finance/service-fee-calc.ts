@@ -27,10 +27,12 @@ export interface ServiceFeeSnapshot {
   chargeOnFail: boolean
 }
 
-/** ฐานคำนวณจากตัวเคส (`38` §6.4) — `null` = เคสยังไม่กรอกยอดนั้น */
+/**
+ * ฐานคำนวณจากตัวเคส (`38` §6.4) — `null` = เคสยังไม่กรอกยอดนั้น
+ * มติ PO U126 — ฐานมีแบบเดียวคือยอดหนี้คงเหลือ (ตัดมูลค่าเครื่องออก)
+ */
 export interface ServiceFeeBasisValues {
   debtAmountSatang: number | null
-  assetValueSatang: number | null
 }
 
 export interface ServiceFeeRevenue {
@@ -48,13 +50,9 @@ export interface ServiceFeeRevenue {
   formula: string
 }
 
-function basisValueOf(basis: ServiceFeeBasis | null, values: ServiceFeeBasisValues): number | null {
-  // `12` §7.1 — `basis` บังคับเมื่อมี rate; ค่า null ที่หลุดมาถือเป็นมูลหนี้ (ค่าเริ่มต้นเดียวกับ `38` §6.5)
-  return basis === 'asset_value' ? values.assetValueSatang : values.debtAmountSatang
-}
-
-function basisLabel(basis: ServiceFeeBasis | null): string {
-  return basis === 'asset_value' ? 'มูลค่าทรัพย์' : 'มูลหนี้'
+function basisValueOf(values: ServiceFeeBasisValues): number | null {
+  // `12` §7.1 — `basis` บังคับเมื่อมี rate; ค่าเดียวที่เป็นไปได้คือ debt_amount (U126) และ null ที่หลุดมาก็ถือเป็นมูลหนี้
+  return values.debtAmountSatang
 }
 
 /**
@@ -93,7 +91,7 @@ export function calculateServiceFeeRevenue(
     }
   }
 
-  const basisSatang = basisValueOf(snapshot.basis, values)
+  const basisSatang = basisValueOf(values)
   if (basisSatang === null) {
     return {
       grossSatang: null,
@@ -105,7 +103,7 @@ export function calculateServiceFeeRevenue(
     }
   }
 
-  assertNonNegativeSatang(basisSatang, `ฐานคำนวณ (${basisLabel(snapshot.basis)})`)
+  assertNonNegativeSatang(basisSatang, 'ฐานคำนวณ (มูลหนี้)')
   const rateComponentSatang = pctOfSatang(basisSatang, snapshot.ratePct)
 
   return {
@@ -131,7 +129,7 @@ function describeFormula(
   }
   if (snapshot.model !== 'FLAT') {
     const basisText = basisSatang === null ? 'ยังไม่มีค่า' : String(basisSatang)
-    parts.push(`${basisLabel(snapshot.basis)}=${basisText} × ${snapshot.ratePct}% = ${rateComponentSatang}`)
+    parts.push(`มูลหนี้=${basisText} × ${snapshot.ratePct}% = ${rateComponentSatang}`)
   }
   return parts.join(' · ')
 }

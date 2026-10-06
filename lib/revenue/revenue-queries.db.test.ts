@@ -122,7 +122,7 @@ interface SeedCaseInput {
   model?: 'SUCCESS_FEE' | 'FLAT' | 'HYBRID'
   baseSatang?: number
   ratePct?: number
-  basis?: 'debt_amount' | 'asset_value' | null
+  basis?: 'debt_amount' | null
   chargeOnFail?: boolean
   debtAmountSatang?: number | null
   assetValueSatang?: number | null
@@ -398,6 +398,33 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     expect(await db().revenue.count({ where: { caseId } })).toBe(1)
   })
 
+  it('U125 — รีไซเคิลรอบ 2 ปิดสำเร็จ ⇒ Revenue ใบใหม่ของรอบ 2 แยกจากรอบ 1 ไม่หักกลบ (คิดทุกรอบอิสระเสมอ)', async () => {
+    const caseId = await seedCase()
+    await seedExpense(caseId, 'approved')
+    await seedAssetInLot(caseId, 'confirmed')
+    const first = await runRevenue([caseId])
+    expect(first.revenueIdsCreated).toHaveLength(1)
+
+    // จำลองไฟแนนซ์ส่งเคสกลับมารอบใหม่ (approve_recycle) แล้วรอบ 2 ปิดสำเร็จด้วยยอดหนี้ใหม่ 20,000 บาท
+    await db().$executeRawUnsafe(
+      `UPDATE cases SET tracking_round = 2, debt_amount_satang = 2000000, outcome = 'closed_success' WHERE id = '${caseId}'`,
+    )
+    const second = await runRevenue([caseId])
+    expect(second.revenueIdsCreated).toHaveLength(1)
+    expect(second.revenueIdsCreated[0]).not.toBe(first.revenueIdsCreated[0])
+
+    const rows = await db().revenue.findMany({
+      where: { caseId, deletedAt: null },
+      orderBy: { trackingRound: 'asc' },
+      select: { trackingRound: true, grossSatang: true },
+    })
+    // รอบ 1 = 10% × 10,000 · รอบ 2 = 10% × 20,000 — ใบรอบ 1 ไม่ถูกแก้/หักกลบ
+    expect(rows).toEqual([
+      { trackingRound: 1, grossSatang: 100_000 },
+      { trackingRound: 2, grossSatang: 200_000 },
+    ])
+  })
+
   /**
    * UAT R6-E (บั๊กเงิน S2) — อนุมัติรายการเบิก **ตัวสุดท้าย 2 ตัวของเคสเดียวกันพร้อมกัน**
    * จำลองลำดับที่แย่ที่สุดแบบกำหนดได้: ทั้งสองทรานแซกชันเขียน `approved` ของตัวเองเสร็จก่อน (barrier)
@@ -503,7 +530,7 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
   })
 
   it('เคสที่ยังไม่มีฐานคำนวณ ⇒ ข้ามพร้อมเหตุผล `missing_basis` ไม่เดายอดเป็น 0', async () => {
-    const caseId = await seedCase({ basis: 'asset_value', assetValueSatang: null })
+    const caseId = await seedCase({ debtAmountSatang: null })
     await seedExpense(caseId, 'approved')
     await seedAssetInLot(caseId, 'confirmed')
 

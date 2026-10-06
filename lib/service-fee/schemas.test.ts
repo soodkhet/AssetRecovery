@@ -6,7 +6,7 @@ import { serviceFeeTemplateCreateSchema } from '@/lib/service-fee/schemas'
  * เทสต์ชุดนี้แดง = ฟอร์ม/route ยอมให้สร้างเทมเพลตที่คำนวณรายได้ไม่ได้จริง
  */
 
-const BASE = { chargePerTrackingRound: true, reason: 'ตั้งค่าตามสัญญาฉบับใหม่' }
+const BASE = { reason: 'ตั้งค่าตามสัญญาฉบับใหม่' }
 
 const SUCCESS_FEE = {
   ...BASE,
@@ -34,7 +34,7 @@ const HYBRID = {
   model: 'HYBRID' as const,
   baseSatang: 200_000,
   ratePct: 5,
-  basis: 'asset_value' as const,
+  basis: 'debt_amount' as const,
   chargeOnFail: false,
 }
 
@@ -59,6 +59,15 @@ describe('model SUCCESS_FEE (`12` §6.1/§7.1)', () => {
 
   it('ต้องเลือก basis', () => {
     expect(fieldsOf({ ...SUCCESS_FEE, basis: null })).toContain('basis')
+  })
+
+  it('ฐานมูลค่าเครื่อง (asset_value) ถูกตัดออกแล้ว — รับเฉพาะยอดหนี้คงเหลือ (มติ PO U126)', () => {
+    expect(fieldsOf({ ...SUCCESS_FEE, basis: 'asset_value' })).toContain('basis')
+  })
+
+  it('ไม่มีสวิตช์คิดต่อรอบแล้ว — ค่าเก่าที่ส่งมาถูกตัดทิ้ง ไม่ไปถึงชั้นบันทึก (มติ PO U125)', () => {
+    const parsed = serviceFeeTemplateCreateSchema.parse({ ...SUCCESS_FEE, chargePerTrackingRound: false })
+    expect(parsed).not.toHaveProperty('chargePerTrackingRound')
   })
 
   it('ตั้ง charge_on_fail ไม่ได้ (เก็บเฉพาะเคสสำเร็จโดยนิยาม)', () => {

@@ -50,7 +50,7 @@ const MODEL_BADGE: Record<ServiceFeeModel, string> = {
   HYBRID: 'bg-purple-100 text-purple-800',
 }
 
-/** แปลงองค์ประกอบของสูตรเป็นข้อความ — ไม่คำนวณเงิน (ต้องรู้มูลหนี้/มูลค่าเครื่องของเคสก่อน) */
+/** แปลงองค์ประกอบของสูตรเป็นข้อความ — ไม่คำนวณเงิน (ต้องรู้มูลหนี้ของเคสก่อน) */
 function chargeText(charge: ServiceFeeCharge): string {
   switch (charge.kind) {
     case 'none':

@@ -71,7 +71,7 @@ interface CompanyTemplate {
   model: 'SUCCESS_FEE' | 'FLAT' | 'HYBRID'
   baseSatang: number
   ratePct: number
-  basis: 'debt_amount' | 'asset_value' | null
+  basis: 'debt_amount' | null
   chargeOnFail: boolean
 }
 
@@ -232,7 +232,6 @@ export async function changeCaseStatus(
     const template = await loadCompanyTemplate(organizationId, row.companyId)
     const projected = calculateProjectedRevenue(template, {
       debtAmountSatang: row.debtAmountSatang,
-      assetValueSatang: row.assetValueSatang,
     })
     data.projectedRevenueSatang = projected.amountSatang
     data.projectedRevenueSource = projected.source
@@ -302,14 +301,14 @@ export async function changeCaseStatus(
     auditAfter.trackingRound = row.trackingRound + 1
     auditBefore.outcome = row.outcome
 
-    // แต่ละรอบคิดค่าบริการอิสระ (A3 `charge_per_tracking_round`) ⇒ snapshot ใหม่ที่จุด approved ของรอบนี้
+    // แต่ละรอบคิดค่าบริการอิสระเสมอ (มติ PO U125 — ไม่มีสวิตช์แล้ว) ⇒ snapshot ใหม่ที่จุด approved ของรอบนี้
+    // รอบใหม่ได้ Revenue ใบใหม่ของตัวเอง (unique ต่อ case + tracking_round) ไม่หักกลบกับรอบก่อน
     recycleTemplate = await loadCompanyTemplate(organizationId, row.companyId)
     Object.assign(data, serviceFeeSnapshotData(recycleTemplate))
     Object.assign(auditBefore, serviceFeeSnapshotAudit(row))
     Object.assign(auditAfter, serviceFeeSnapshotData(recycleTemplate))
     const projected = calculateProjectedRevenue(recycleTemplate, {
       debtAmountSatang: row.debtAmountSatang,
-      assetValueSatang: row.assetValueSatang,
     })
     data.projectedRevenueSatang = projected.amountSatang
     data.projectedRevenueSource = projected.source
