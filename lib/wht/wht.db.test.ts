@@ -606,9 +606,9 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     const pair = numbers.map((number) => Number(number.replace('WHT-2569-', ''))).sort((a, b) => a - b)
     expect((pair[1] ?? 0) - (pair[0] ?? 0)).toBe(1)
 
-    // เลขที่เป็น UNIQUE **ทั้งตาราง** (`02` §9) ⇒ ตรวจว่าไม่มีเลขซ้ำข้ามองค์กรด้วย
+    // เลขที่เป็น UNIQUE **ต่อองค์กร** (มติ PO U102 — ตัวนับเลขเอกสารแยกต่อองค์กร) ⇒ ตรวจไม่มีเลขซ้ำภายในองค์กร
     const all = await db().whtCertificate.findMany({
-      where: { certificateNumber: { startsWith: 'WHT-2569-' } },
+      where: { organizationId: ORG_ID, certificateNumber: { startsWith: 'WHT-2569-' } },
       select: { certificateNumber: true },
     })
     expect(new Set(all.map((row) => row.certificateNumber)).size).toBe(all.length)

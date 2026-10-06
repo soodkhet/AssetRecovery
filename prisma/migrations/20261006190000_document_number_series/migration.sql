@@ -229,6 +229,8 @@ CREATE UNIQUE INDEX uniq_advance_number ON advances(organization_id, advance_num
 
 -- 3.3 ใบรับคืนเงินทดรอง (รับแยก/หักกลบ) — แถวที่กลับรายการแล้วคงเลขเดิม (ไม่ recycle)
 ALTER TABLE advance_returns ADD COLUMN return_number TEXT;
+-- backfill ครั้งเดียว: ปิดยามกันแก้แถวชั่วคราว (ยามอนุญาตเฉพาะการกลับรายการ) แล้วเปิดคืนทันทีหลังเติมเลข
+ALTER TABLE advance_returns DISABLE TRIGGER trg_advance_returns_guard_update;
 WITH numbered AS (
   SELECT id, document_number_be_year(created_at) AS be_year,
          ROW_NUMBER() OVER (PARTITION BY organization_id, document_number_be_year(created_at) ORDER BY created_at, id) AS seq
@@ -236,6 +238,7 @@ WITH numbered AS (
 )
 UPDATE advance_returns r SET return_number = format_document_number('RAV', true, 4, n.be_year, n.seq::int)
   FROM numbered n WHERE n.id = r.id;
+ALTER TABLE advance_returns ENABLE TRIGGER trg_advance_returns_guard_update;
 ALTER TABLE advance_returns ALTER COLUMN return_number SET NOT NULL;
 CREATE UNIQUE INDEX uniq_advance_return_number ON advance_returns(organization_id, return_number);
 
