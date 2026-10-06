@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 HANDOFF: session 73c95148 ปิดงานเพราะ context เกิน 800K · fixer BO (U109) ยังทำอยู่ใน worktree — session ใหม่ merge ต่อ · ดู HANDOFF บนสุด
 - 06/10/2569 merge fixer BN `d58d52a` (U108 `<SettingHelp>` ~45 ค่าตั้ง 22 แท็บ + ฟอร์มบริษัท/แผน/service fee · ตัวอย่างจากสูตรจริง · `lib/settings/help/*`) · ไม่มี migration · verify 355/4,917 · ผู้ใช้รีวิว O70 → U109 (แยกแสดงภาษีที่บริษัทออกให้) กำลังทำ
 - 06/10/2569 merge fixer BM `fd2d2df` (U105 ค่าตั้ง `allow_gross_up_conditions` ปิดเป็นค่าเริ่มต้น + สูตรทบยอด (2)/(3) + snapshot ในรอบจ่าย · U107 ยกเลิก/ออกใหม่ใบรับรองแทนใบเสร็จ) · migration `20261006210000` / `211000` / `212000` · verify 353/4,843 · migration ใหม่รวม **41 ตัว** · ผู้ใช้รีวิว O55–O69 แล้ว (U105–U107) · มติ O70 · Q18 แก้ข้อความ → ต่อ: U108 คำอธิบายค่าตั้งบัญชี
 - 06/10/2569 merge fixer BL `75f0f89` (U104 บัญชี → "ตัวอย่างเอกสารทั้งหมด" `/accounting/document-samples` · 13 ตัวอย่าง PDF จริง + ลายน้ำ "ตัวอย่าง" · `view_document_samples`) · ไม่มี migration · verify 353/4,807 · มติ O69 · **งานตามมติครบ U22–U104**
@@ -99,7 +100,15 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 - 03/10/2569 R1: จบครบ ไม่มีตัวบล็อก · 14 persona login + เปลี่ยนรหัสแล้ว (session อยู่ `uat/.auth/`) · template T1/T2 เป็น v2 · merge BUG-002 + verify เขียว (245 files / 3,072 tests) · ตัด `uat/bin/r*/**` ออกจาก eslint (สคริปต์ชั่วคราวต่อรอบ)
 - 03/10/2569 R0: baseline เขียว (typecheck · 241 files / 3,039 tests · lint) · Playwright 1.63 (DEC-011) · snapshot+restore ทดสอบแล้ว
 
-## ▶️ HANDOFF — หลัง UAT (เขียน 05/10/2569 ~00:30 · ผู้ใช้สั่ง "ทำเลยทั้งหมด" ตามมติ U3–U10)
+## ▶️ HANDOFF — 06/10/2569 (session 73c95148 ใช้ context เกิน 800K)
+- **staging ในเครื่อง** ที่ commit ล่าสุด: verify เขียว 355 files / 4,917 tests · migration ใหม่ **41 ตัว** (ถึง `20261006212000_substitute_receipt_cancel`) · บั๊ก UAT open = 0 · ยังไม่ push (U92)
+- **มติ:** U1–U109 + O1–O70 รีวิวครบแล้ว (`uat/PO-DECISIONS-2569-10-04.md`)
+- **งานค้าง 1:** fixer BO (U109 แยกแสดง "ภาษีที่บริษัทออกให้" ใน PDF สรุปรอบจ่าย/รายงาน F4/หน้าจอรอบจ่าย) ทำงานอยู่ใน worktree branch `worktree-agent-a870fdd34d7bd6a64` (`.claude/worktrees/agent-a870fdd34d7bd6a64`) · ถ้ามี commit แล้ว → merge ตามขั้นตอนปกติ · ถ้ายังไม่มี commit/ไม่ครบ → ทำ U109 ใหม่ด้วย fixer (prompt: ใช้ `payoutItemTaxSplit()` · ห้ามแตะไฟล์ 05/50 ทวิ/ภ.ง.ด.)
+- **งานค้าง 2:** รอบยืนยัน **R15** (ผู้ใช้ยังไม่ยืนยัน — ถามก่อน) ครอบ: หน้าข้อมูลองค์กร + อัปโหลดโลโก้ (U99) · แท็บเลขที่เอกสาร (U102) · PDF แบบใหม่ 8+3 ชนิด (U100/U101/BUG-171) · ใบเบิก/รับคืนเงินทดรอง + ใบรับรองแทนใบเสร็จ + ยกเลิก (U103/U107) · หน้าตัวอย่างเอกสาร (U104) · ค่าตั้งเงื่อนไขออกภาษีให้ (U105) · กล่องคำอธิบายค่าตั้ง (U108) · ⚠️ งวด ต.ค. บน dev = `locked` (ปลาย R14) → ถ้าต้องเขียนยอด ต.ค. ให้ผู้ใช้รันคำสั่ง SQL superuser ใน `uat/steps/R13.md` R13.00
+- **ขั้นตอน merge fixer:** `git merge --no-ff <branch>` → แก้ conflict changelog (เก็บทั้งคู่ เลขเวอร์ชันไม่ซ้ำ) → ถ้ามี migration ที่ timestamp ≤ ตัวล่าสุดที่ apply แล้ว ให้ `git mv` เปลี่ยนชื่อให้ใหม่กว่า → `pnpm db:generate && pnpm db:deploy && PRISMA_USE_TEST_DB=1 pnpm db:deploy:test && pnpm db:seed` → `~/bin/dev restart asset` → `pnpm typecheck && pnpm lint && pnpm test` → `python3 .claude/hooks/generate-map.py` → อัปเดต BUGS/STATE → commit
+- **ก่อน push (ผู้ใช้ทำ):** กรอกหน้า "ข้อมูลองค์กร" ด้วยข้อมูลจริง · ตั้งรูปแบบเลข INV/WHT (ล็อกหลังออกฉบับแรก) · เช็คลิสต์ใน `uat/NEXT-SESSION.md` · ส่ง `docs/QUESTIONS-FOR-ACCOUNTANT.md` (Q1–Q18)
+
+## ▶️ HANDOFF (เก่า) — หลัง UAT (เขียน 05/10/2569 ~00:30 · ผู้ใช้สั่ง "ทำเลยทั้งหมด" ตามมติ U3–U10)
 
 **งานคืนนี้ (orchestrator ทำต่อใน session เดิม — ถ้าหลุด ให้ session ใหม่ทำต่อจากนี้):** มติอยู่ใน `uat/PO-DECISIONS-2569-10-04.md` แถว U3–U10
 1. ✅ **fixer T เสร็จ** merge `f19ba1e` (ตาราง `wht_policy_history` effective-dated · snapshot ในรอบจ่าย · `manage_wht_policy` บริหาร · แท็บ "ค่าตั้งภาษีหัก ณ ที่จ่าย" · `wht_40_2_pct` ต่อผู้รับ · ภ.ง.ด.1 · error `WHT_40_2_RATE_MISSING`/`WHT_POLICY_EFFECTIVE_DATE_PAST` · migration `20261005100000` · A1 ทดสอบได้ in1 WHT 4050) — เดิม: ฐาน WHT เลือกชนิดรายการได้ · การออก 50 ทวิ ต่อผู้รับต่อรอบ/ต่อรายการ · ประเภทเงินได้ 40(8) ทั้งหมด / 40(2) ทั้งหมด / แยกตามประเภททีม · 40(2) ใช้อัตราต่อคนใน Tax Profile + ภ.ง.ด.1 · Superadmin/บริหารแก้ได้ + เหตุผล + audit + effective-dated + snapshot ในรอบจ่าย · ค่าเริ่มต้น = มติ (ฐานไม่รวมค่าใช้จ่ายตามใบเสร็จ · 50 ทวิ ต่อผู้รับต่อรอบ · 40(8))
