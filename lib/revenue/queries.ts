@@ -845,12 +845,18 @@ export async function applyBillingReceipt(input: {
     },
   })
   if (batch === null) throw new RevenueError('BILLING_BATCH_NOT_FOUND', { detail: `batch=${input.batchId}` })
+  // มติ O75 — ตัดสินสถานะ/ยอดค้าง/ส่วนต่างจาก**ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้) ไม่ใช่ยอดบิลดิบ
+  // ⇒ รับเงินส่วนของใบเพิ่มหนี้ครบแล้วรอบจึงเป็น `paid` · `billing_batches.total_satang` ไม่ถูกแก้ (ยอดที่ส่งบิลจริง)
+  const [documented] = await withDocumentedArTotals(input.organizationId, [
+    { id: batch.id, totalSatang: batch.totalSatang },
+  ])
+  const documentedTotalSatang = documented?.totalSatang ?? batch.totalSatang
 
   const whtSatang = input.whtWithheldByCustomerSatang ?? batch.whtWithheldByCustomerSatang
   // มติ PO U144 — ขาดไม่เกินเพดาน ⇒ ส่วนต่างเป็นค่าธรรมเนียมธนาคาร (คำนวณใหม่จากยอดสะสมทุกครั้ง · ไม่สะสมทับ)
   const policy = await getFinancePolicy(input.organizationId)
   const bankFeeSatang = resolveBankFeeWriteOff({
-    totalSatang: batch.totalSatang,
+    totalSatang: documentedTotalSatang,
     receivedSatang: input.receivedSatang,
     whtWithheldByCustomerSatang: whtSatang,
     toleranceSatang: policy.writeOffToleranceSatang,
@@ -864,7 +870,7 @@ export async function applyBillingReceipt(input: {
         : (input.lastReceivedDate ?? toBangkokDateOnly(input.now ?? new Date()))
   const status = resolveBillingStatusAfterReceipt({
     current: batch.status,
-    totalSatang: batch.totalSatang,
+    totalSatang: documentedTotalSatang,
     receivedSatang: input.receivedSatang,
     whtWithheldByCustomerSatang: whtSatang,
     bankFeeWrittenOffSatang: bankFeeSatang,
@@ -880,7 +886,7 @@ export async function applyBillingReceipt(input: {
       status,
       bankFeeWrittenOffSatang: bankFeeSatang,
       outstandingSatang: arOutstandingSatang({
-        totalSatang: batch.totalSatang,
+        totalSatang: documentedTotalSatang,
         receivedSatang: batch.receivedSatang,
         whtWithheldByCustomerSatang: batch.whtWithheldByCustomerSatang,
         bankFeeWrittenOffSatang: batch.bankFeeWrittenOffSatang,
@@ -943,7 +949,7 @@ export async function applyBillingReceipt(input: {
     status,
     bankFeeWrittenOffSatang: bankFeeSatang,
     outstandingSatang: arOutstandingSatang({
-      totalSatang: batch.totalSatang,
+      totalSatang: documentedTotalSatang,
       receivedSatang: input.receivedSatang,
       whtWithheldByCustomerSatang: whtSatang,
       bankFeeWrittenOffSatang: bankFeeSatang,

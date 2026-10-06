@@ -89,6 +89,8 @@ export interface MatchCandidateDto {
   amountSatang: number
   /** A1 — ยอดหลังลูกค้าหัก WHT (`total − wht`) ถ้ามี */
   altAmountSatang: number | null
+  /** มติ O75 — ยอดค้างที่เหลือของรอบที่รับเงินบางส่วนแล้ว (ถ้ามี) */
+  remainingAmountSatang: number | null
   referenceDate: string | null
   /** ยอดตรงกับรายการเดินบัญชีที่กำลังจับคู่ไหม — FE ใช้เตือนว่าต้องกรอกหมายเหตุ */
   exactAmount: boolean

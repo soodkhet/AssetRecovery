@@ -27,6 +27,7 @@
 | v2.x-DE | 07/10/2569 | **มติ PO U155 → U159**: เพิ่ม §6.18 หมายเหตุ Model Phone — `device_catalog_status` เป็น**ค่าที่ผู้ดูแลตั้งด้วยมือ** (ไม่ใช่ state machine · ไม่มีขั้นรอตรวจ) |
 | v2.x-HA | 07/10/2569 | **มติ PO O74**: §6.4 guard ของ `approved → overdue` — ต้องจ่ายออกแล้ว (เคยอยู่ในรอบจ่าย `completed` — U83) · ยังไม่จ่ายคง `approved` · ไม่เพิ่ม state |
 | v2.x-GA | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)**: §6.18 job เปลี่ยนเป็น `device_tac_sync` (รายวัน · ไม่เปลี่ยน `manual_status` · ไม่ทับ TAC เดิม) · รุ่นไม่ทราบปีจากฐาน TAC ไม่แสดงตั้งต้น · `device_tacs.source` เป็นแหล่งที่มา ไม่ใช่ state · `device_tac_updates.status` บันทึกครั้งเดียว — ยังไม่ใช่ state machine |
+| v2.x-HC | 07/10/2569 | **มติ O75**: §6.8 เพิ่มเส้น `paid → partially_paid` เมื่อเอกสาร (ใบเพิ่มหนี้/ยกเลิกใบลดหนี้) ทำให้ยอดตามเอกสารค้าง > 0 · สถานะทั้งตอนรับเงินและตอนเอกสารเปลี่ยนยอดเทียบ**ยอดตามเอกสาร** |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -124,7 +125,10 @@ draft | checking | file_generated --(ยกเลิก + เหตุผล)-->
 ```
 draft → sent → partially_paid → paid
 draft → sent → paid   (ถ้าจ่ายครบทีเดียว ข้าม partially_paid)
+paid → partially_paid (มติ O75 — บันทึกใบเพิ่มหนี้/ยกเลิกใบลดหนี้จนยอดตามเอกสารค้าง > 0)
 ```
+
+> **มติ O75 (07/10/2569)**: สถานะของรอบตัดสินจาก**ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ active) เทียบยอดชำระแล้ว (รับ + ภาษีลูกค้าหัก + ส่วนต่างค่าธรรมเนียม) ทั้งตอนรับเงิน (`resolveBillingStatusAfterReceipt`) และตอนเอกสารเปลี่ยนยอด (`resolveBillingStatusAfterDocumentChange` — เรียกใน transaction เดียวกับการบันทึก/ยกเลิกใบลดหนี้-ใบเพิ่มหนี้ · audit `status_change` พร้อมเหตุผล) · `paid` ที่ค้าง > 0 ⇒ `partially_paid` · `partially_paid` ที่ชำระครบตามเอกสาร ⇒ `paid` · `draft`/`sent` ไม่ถูกแตะ
 
 ### 6.9 Adjustment (ไฟล์ 20)
 

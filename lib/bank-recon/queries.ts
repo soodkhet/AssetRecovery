@@ -57,6 +57,8 @@ import type {
   BankFileType,
   BankMatchStatus,
 } from '@/lib/generated/prisma/enums'
+import { arOutstandingSatang } from '@/lib/finance/ar-calc'
+import { withDocumentedArTotals } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { PayoutError } from '@/lib/payout/errors'
 import { PAYOUT_STATUS_LABEL } from '@/lib/payout/payout'
@@ -299,6 +301,7 @@ async function loadCandidates(
         totalSatang: true,
         receivedSatang: true,
         whtWithheldByCustomerSatang: true,
+        bankFeeWrittenOffSatang: true,
         sentAt: true,
         company: { select: { name: true, whtWithheldByCustomerPct: true } },
         revenues: { select: { grossSatang: true } },
@@ -307,15 +310,22 @@ async function loadCandidates(
       take: 100,
     })
 
-    return rows.map((row) => ({
-      kind: 'billing' as const,
-      id: row.id,
-      ref: billingRef(row),
-      amountSatang: row.totalSatang,
-      // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ ยอดเข้าจริง = total − wht (`35` §6.2 · มติ PO A1)
-      altAmountSatang: altAmountForBilling(row),
-      referenceDate: row.sentAt,
-    }))
+    // มติ O75 — ยอดของรอบ = ยอดตามเอกสาร (รวมใบลด/เพิ่มหนี้) · รอบที่รับเงินไปบางส่วนแล้วรับ "ยอดค้างที่เหลือ" เป็นยอดตรงด้วย
+    const documented = await withDocumentedArTotals(organizationId, rows)
+    return documented.map((row) => {
+      const remaining = arOutstandingSatang(row)
+      const hasReceipts = remaining !== row.totalSatang
+      return {
+        kind: 'billing' as const,
+        id: row.id,
+        ref: billingRef(row),
+        amountSatang: row.totalSatang,
+        // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ ยอดเข้าจริง = total − wht (`35` §6.2 · มติ PO A1)
+        altAmountSatang: altAmountForBilling(row),
+        remainingAmountSatang: hasReceipts && remaining > 0 ? remaining : null,
+        referenceDate: row.sentAt,
+      }
+    })
   }
 
   const rows = await prisma.payoutBatch.findMany({
@@ -371,6 +381,7 @@ export async function listMatchCandidates(
     label: candidate.ref,
     amountSatang: candidate.amountSatang,
     altAmountSatang: candidate.altAmountSatang,
+    remainingAmountSatang: candidate.remainingAmountSatang ?? null,
     referenceDate: candidate.referenceDate?.toISOString() ?? null,
     exactAmount: isExactMatchAmount(transaction.amountSatang, candidate),
   }))

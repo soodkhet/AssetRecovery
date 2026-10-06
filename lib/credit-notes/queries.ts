@@ -33,6 +33,7 @@ import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/en
 import { formatBranch } from '@/lib/format/branch'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { prisma } from '@/lib/prisma'
+import { syncBillingStatusWithDocuments } from '@/lib/revenue/billing-status-sync'
 import { SalesError } from '@/lib/sales/errors'
 import { creditNoteFileRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
@@ -207,11 +208,16 @@ const EMPTY_TOTALS: CreditNoteTotals = { amountBeforeVatSatang: 0, vatSatang: 0,
  */
 export async function sumCreditNotesByInvoice(
   taxInvoiceIds: readonly string[],
-  options: { organizationId?: string; noteType?: CreditNoteType } = {},
+  options: {
+    organizationId?: string
+    noteType?: CreditNoteType
+    /** มติ O75 — อ่านใน transaction เดียวกับการบันทึก/ยกเลิกเอกสาร (ไม่ส่ง = `prisma`) */
+    client?: Pick<typeof prisma, 'creditNote'>
+  } = {},
 ): Promise<Map<string, CreditNoteTotals>> {
   const result = new Map<string, CreditNoteTotals>(taxInvoiceIds.map((id) => [id, { ...EMPTY_TOTALS }]))
   if (taxInvoiceIds.length === 0) return result
-  const groups = await prisma.creditNote.groupBy({
+  const groups = await (options.client ?? prisma).creditNote.groupBy({
     by: ['taxInvoiceId'],
     where: {
       taxInvoiceId: { in: [...taxInvoiceIds] },
@@ -561,6 +567,16 @@ export async function createCreditNote(
         },
         tx,
       )
+      // มติ O75 — ใบเพิ่มหนี้หลังรับชำระครบ ⇒ รอบกลับเป็น `partially_paid` (ใบลดหนี้ที่ปิดยอดค้าง ⇒ `paid`)
+      await syncBillingStatusWithDocuments(tx, {
+        organizationId,
+        billingBatchId: invoice.salesRecord.billingBatchId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        sourceRef: `${typeLabel} ${row.creditNoteNumber}`,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+      })
       return row
     })
     .catch((error: unknown) => {
@@ -630,6 +646,21 @@ export async function cancelCreditNote(
       },
       tx,
     )
+
+    // มติ O75 — ยกเลิกเอกสารเปลี่ยนยอดตามเอกสาร ⇒ สถานะรอบตามยอดใหม่
+    const invoiceOfNote = await tx.taxInvoice.findUniqueOrThrow({
+      where: { id: row.taxInvoiceId },
+      select: { salesRecord: { select: { billingBatchId: true } } },
+    })
+    await syncBillingStatusWithDocuments(tx, {
+      organizationId: ctx.actor.organizationId,
+      billingBatchId: invoiceOfNote.salesRecord.billingBatchId,
+      actorId: ctx.actor.id,
+      actorRole: ctx.actor.roleName,
+      sourceRef: `ยกเลิก${CREDIT_NOTE_TYPE_LABEL[row.noteType]} ${row.creditNoteNumber}`,
+      ipAddress: ctx.meta.ipAddress,
+      userAgent: ctx.meta.userAgent,
+    })
 
     return tx.creditNote.findUniqueOrThrow({ where: { id: row.id }, select: CREDIT_NOTE_SELECT })
   })

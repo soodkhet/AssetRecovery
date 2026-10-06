@@ -282,3 +282,27 @@ describe('findMatchProposals — จับคู่ทางกลับแบ�
     ).toEqual([])
   })
 })
+
+describe('มติ O75 — ยอดค้างที่เหลือของรอบที่รับเงินบางส่วนแล้ว (ใบเพิ่มหนี้หลังรับชำระครบ)', () => {
+  const later = new Date('2026-08-05T00:00:00Z')
+
+  it('เงินเข้าเท่ายอดค้างที่เหลือ ⇒ ตรง (auto/คู่ที่เสนอ/manual) โดยไม่อนุมานเป็น WHT', () => {
+    const candidate = billing({ amountSatang: 1_294_700, remainingAmountSatang: 10_700 })
+    expect(findAutoMatch({ amountSatang: 10_700, transactionDate: later, toleranceDays: 7 }, [candidate])).toMatchObject({
+      matched: true,
+      matchedAmountSatang: 10_700,
+    })
+    expect(
+      findMatchProposals([candidate], [{ id: 'tx-1', amountSatang: 10_700, transactionDate: later, toleranceDays: 7 }]),
+    ).toHaveLength(1)
+    expect(isExactMatchAmount(10_700, candidate)).toBe(true)
+    expect(whtWithheldForReceipt(10_700, candidate, { toleranceSatang: 0, priorReceivedSatang: 0, priorWhtSatang: 0 })).toBe(0)
+    expect(matchCandidateOptionText(10_700, { ...candidate, label: 'BL-2569-001' })).toBe(
+      'BL-2569-001 · ฿107.00 (ยอดตรงกับยอดค้างที่เหลือ · ยอดเต็ม ฿12,947.00)',
+    )
+  })
+
+  it('ไม่มียอดค้างที่เหลือ ⇒ พฤติกรรมเดิม', () => {
+    expect(isExactMatchAmount(10_700, billing({ remainingAmountSatang: null }))).toBe(false)
+  })
+})

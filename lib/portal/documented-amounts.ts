@@ -73,22 +73,26 @@ interface NoteTotalsByBatch {
  * ผลรวมใบลดหนี้ / ใบเพิ่มหนี้ **active** ต่อรอบวางบิล (กรององค์กร · 3 query ไม่ว่ากี่รอบ — กัน N+1)
  * · รอบที่ไม่มีเอกสารชนิดนั้นไม่มีคีย์ · ⚠️ ไม่ตรวจสิทธิ์/บริษัท — ผู้เรียกกรองรอบตาม scope มาแล้ว
  */
+/** client ที่อ่านยอดตามเอกสารได้ทั้ง `prisma` และ `tx` (มติ O75 — อ่านในธุรกรรมเดียวกับการบันทึกเอกสาร) */
+export type DocumentedReadClient = Pick<typeof prisma, 'billingBatch' | 'taxInvoice' | 'creditNote'>
+
 async function loadCreditNoteTotals(
   organizationId: string,
   billingBatchIds: readonly string[],
+  client: DocumentedReadClient = prisma,
 ): Promise<NoteTotalsByBatch> {
   const credit = new Map<string, DocumentAmounts>()
   const debit = new Map<string, DocumentAmounts>()
   if (billingBatchIds.length === 0) return { credit, debit }
-  const invoices = await prisma.taxInvoice.findMany({
+  const invoices = await client.taxInvoice.findMany({
     where: { organizationId, salesRecord: { billingBatchId: { in: [...billingBatchIds] } } },
     select: { id: true, salesRecord: { select: { billingBatchId: true } } },
   })
   if (invoices.length === 0) return { credit, debit }
   const ids = invoices.map((invoice) => invoice.id)
   const [creditTotals, debitTotals] = await Promise.all([
-    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'credit' }),
-    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'debit' }),
+    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'credit', client }),
+    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'debit', client }),
   ])
   const accumulate = (
     target: Map<string, DocumentAmounts>,
@@ -115,12 +119,13 @@ async function loadCreditNoteTotals(
 export async function documentedAmountsForBatches(
   organizationId: string,
   billingBatchIds: readonly string[],
+  client: DocumentedReadClient = prisma,
 ): Promise<Map<string, DocumentedBillingAmounts>> {
   const result = new Map<string, DocumentedBillingAmounts>()
   if (billingBatchIds.length === 0) return result
   const ids = [...new Set(billingBatchIds)]
   const [batches, notes] = await Promise.all([
-    prisma.billingBatch.findMany({
+    client.billingBatch.findMany({
       where: { organizationId, id: { in: ids }, deletedAt: null },
       select: {
         id: true,
@@ -141,7 +146,7 @@ export async function documentedAmountsForBatches(
         revenues: { where: { deletedAt: null }, select: { grossSatang: true, vatSatang: true } },
       },
     }),
-    loadCreditNoteTotals(organizationId, ids),
+    loadCreditNoteTotals(organizationId, ids, client),
   ])
 
   for (const batch of batches) {
@@ -353,10 +358,12 @@ export async function documentedRevenueAmounts(
 export async function withDocumentedArTotals<T extends { id: string; totalSatang: number }>(
   organizationId: string,
   rows: readonly T[],
+  client: DocumentedReadClient = prisma,
 ): Promise<T[]> {
   const documented = await documentedAmountsForBatches(
     organizationId,
     rows.map((row) => row.id),
+    client,
   )
   return rows.map((row) => ({ ...row, totalSatang: documented.get(row.id)?.documented.totalSatang ?? row.totalSatang }))
 }

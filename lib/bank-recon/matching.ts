@@ -40,6 +40,11 @@ export interface MatchCandidate {
    * `null` = ไม่มีทางเลือกอื่น
    */
   altAmountSatang: number | null
+  /**
+   * มติ O75 — ยอดค้างที่เหลือของรอบที่รับเงินไปบางส่วนแล้ว (เช่น ส่วนของใบเพิ่มหนี้หลังรับชำระครบ) ถือว่า "ตรง" ด้วย ·
+   * แยกจาก `altAmountSatang` เพราะไม่ใช่ยอดหลังลูกค้าหัก ณ ที่จ่าย (ห้ามอนุมาน WHT จากยอดนี้) · ไม่มี = `null`/ไม่ส่ง
+   */
+  remainingAmountSatang?: number | null
   /** วันอ้างอิงของเอกสาร (วันวางบิล / วันสร้างไฟล์โอน) — `null` = ไม่รู้วัน ⇒ ไม่เข้าเกณฑ์ auto */
   referenceDate: Date | null
 }
@@ -65,7 +70,7 @@ export function candidateMatches(
   input: { amountSatang: number; transactionDate: Date; toleranceDays: number },
 ): { matched: boolean; matchedAmountSatang: number } {
   const absolute = Math.abs(input.amountSatang)
-  const acceptable = [candidate.amountSatang, candidate.altAmountSatang].filter(
+  const acceptable = [candidate.amountSatang, candidate.altAmountSatang, candidate.remainingAmountSatang ?? null].filter(
     (value): value is number => value !== null && value > 0,
   )
   const matchedAmount = acceptable.find((value) => value === absolute)
@@ -173,10 +178,15 @@ export function allowedTargetKind(amountSatang: number): MatchTargetKind {
  */
 export function isExactMatchAmount(
   transactionAmountSatang: number,
-  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang'>,
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang'>,
 ): boolean {
   const absolute = Math.abs(transactionAmountSatang)
-  return absolute === candidate.amountSatang || (candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang)
+  const remaining = candidate.remainingAmountSatang ?? null
+  return (
+    absolute === candidate.amountSatang ||
+    (candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang) ||
+    (remaining !== null && absolute === remaining)
+  )
 }
 
 /**
@@ -188,12 +198,16 @@ export function isExactMatchAmount(
  */
 export function matchCandidateOptionText(
   transactionAmountSatang: number,
-  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang'> & { label: string },
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang'> & { label: string },
 ): string {
   const absolute = Math.abs(transactionAmountSatang)
   const full = fmtSatangSymbol(candidate.amountSatang)
   const alt = candidate.altAmountSatang
+  const remaining = candidate.remainingAmountSatang ?? null
   if (absolute === candidate.amountSatang) return `${candidate.label} · ${full} (ยอดตรง)`
+  if (remaining !== null && absolute === remaining) {
+    return `${candidate.label} · ${fmtSatangSymbol(remaining)} (ยอดตรงกับยอดค้างที่เหลือ · ยอดเต็ม ${full})`
+  }
   if (alt !== null && absolute === alt) {
     return `${candidate.label} · ${fmtSatangSymbol(alt)} (ยอดตรงหลังลูกค้าหัก ณ ที่จ่าย · ยอดเต็ม ${full})`
   }
