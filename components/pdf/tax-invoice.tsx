@@ -90,6 +90,10 @@ function TaxInvoiceCopy({
         {doc.customerWhtText === null ? null : (
           <SummaryRow columns={COLUMNS} tone="deduct" label={doc.customerWhtLabel} value={doc.customerWhtText} />
         )}
+        {/* มติ PO U169 — บิลปิดด้วยการตัดส่วนต่าง: ใบออกเต็มยอด แสดงส่วนต่างเป็นค่าธรรมเนียมที่เรารับภาระ */}
+        {doc.bankFeeText === null ? null : (
+          <SummaryRow columns={COLUMNS} tone="deduct" label={doc.bankFeeLabel} value={doc.bankFeeText} />
+        )}
         {doc.receivedText === null ? null : (
           <SummaryRow columns={COLUMNS} tone="sub" label="ยอดรับชำระจริง" value={doc.receivedText} />
         )}

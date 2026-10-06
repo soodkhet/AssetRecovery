@@ -528,14 +528,41 @@ suite('อนุมัติ/ปฏิเสธ + scope (`15` §12/§16)', () =>
 })
 
 suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
-  async function seedOverdueCandidate(): Promise<string> {
+  async function seedOverdueCandidate(options: { paidOut?: boolean } = {}): Promise<string> {
     const created = await advances.createAdvance(ctx(agent), createInput())
     await advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null })
     await db().$executeRawUnsafe(
       `UPDATE advances SET due_clear_date = CURRENT_DATE - INTERVAL '1 day' WHERE id = '${created.id}'`,
     )
+    // O74 — overdue นับเฉพาะเงินทดรองที่จ่ายออกแล้ว (รอบจ่าย completed — U83)
+    if (options.paidOut !== false) {
+      await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: created.id, actorId: FINANCE_ID })
+    }
     return created.id
   }
+
+  it('O74 — เลยกำหนดแต่ยังไม่จ่ายออก (ไม่อยู่ในรอบจ่าย / รอบยังไม่ completed) ⇒ ไม่มาร์ค overdue · จ่ายแล้วจึงมาร์ค', async () => {
+    const id = await seedOverdueCandidate({ paidOut: false })
+    expect((await job.runAdvanceOverdueJob({ organizationId: ORG_ID })).marked).toBe(0)
+    expect((await db().advance.findUniqueOrThrow({ where: { id }, select: { status: true } })).status).toBe('approved')
+
+    // อยู่ในรอบจ่ายที่ยังไม่ยืนยันโอน ⇒ ยังไม่ใช่หนี้ค้าง
+    const pendingBatch = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, net_satang, created_by)
+      VALUES ('${ORG_ID}', 'รอบจ่ายรอยืนยัน O74 ${id}', 'outsource', 'file_generated', 1, 1, '${FINANCE_ID}')
+      RETURNING id
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO payout_batch_items (organization_id, payout_batch_id, advance_id, payee_id, gross_satang, net_satang, created_by)
+      SELECT '${ORG_ID}', '${pendingBatch[0]?.id ?? ''}', id, payee_id, 1, 1, '${FINANCE_ID}' FROM advances WHERE id = '${id}'
+    `)
+    expect((await job.runAdvanceOverdueJob({ organizationId: ORG_ID })).marked).toBe(0)
+    expect(await db().notification.count({ where: { organizationId: ORG_ID, eventCode: 'advance.overdue' } })).toBe(0)
+
+    await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: id, actorId: FINANCE_ID })
+    expect((await job.runAdvanceOverdueJob({ organizationId: ORG_ID })).marked).toBe(1)
+    expect((await db().advance.findUniqueOrThrow({ where: { id }, select: { status: true } })).status).toBe('overdue')
+  })
 
   it('เลยกำหนดแล้วยังไม่เคลียร์ → มาร์คเป็น overdue อัตโนมัติ', async () => {
     const id = await seedOverdueCandidate()
@@ -666,6 +693,7 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
     await db().$executeRawUnsafe(
       `UPDATE advances SET due_clear_date = DATE '${todayBangkok}' WHERE id = '${created.id}'`,
     )
+    await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: created.id, actorId: FINANCE_ID })
 
     // ครบกำหนดวันนี้ = ยังไม่เลย ⇒ เวลาจริงไม่มาร์ค
     const real = await job.runAdvanceOverdueJob({ organizationId: ORG_ID, now: realNow })

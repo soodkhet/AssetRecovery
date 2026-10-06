@@ -35,6 +35,7 @@ export const SETTING_ASSUMPTION_KEYS = [
   'customer_wht',
   'bank_fee_write_off',
   'customer_wht_bank_fee',
+  'bank_fee_full_tax_invoice',
 ] as const
 
 export type SettingAssumptionKey = (typeof SETTING_ASSUMPTION_KEYS)[number]
@@ -174,6 +175,13 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
     question:
       'เงินเข้าขาดจากยอดหลังหักภาษีไม่เกินเพดาน ระบบนับภาษีที่ลูกค้าหักเต็มจำนวนก่อน แล้วบันทึกส่วนต่างที่เหลือเป็นค่าธรรมเนียมธนาคารและปิดบิลเป็นชำระครบ — ลำดับการบันทึกนี้ถูกต้องหรือไม่',
     source: 'B4 · U163 (ต่อยอด A1 · U144)',
+  },
+  bank_fee_full_tax_invoice: {
+    key: 'bank_fee_full_tax_invoice',
+    label: 'ใบกำกับภาษีของบิลที่ตัดส่วนต่างค่าธรรมเนียม',
+    question:
+      'บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ออกใบเสร็จรับเงิน/ใบกำกับภาษีเต็มยอดบิลและภาษีมูลค่าเพิ่มจากมูลค่าบริการเต็ม โดยบันทึกค่าธรรมเนียมเป็นค่าใช้จ่ายของเรา (ไม่ออกใบลดหนี้) — ถูกต้องหรือไม่',
+    source: 'U169 · BUG-179 (ต่อยอด U144 · U163) · ม.79 · ไม่เข้าเหตุ ม.86/10',
   },
 }
 

@@ -103,14 +103,28 @@ export function IssueTaxInvoiceModal({
               <span className="text-slate-500">ภาษีที่ลูกค้าหัก ณ ที่จ่าย (นับเป็นการรับชำระ)</span>
               <span className="font-mono font-semibold">{fmtSatangSymbol(target.receipt.whtWithheldByCustomerSatang)}</span>
             </div>
+            {target.receipt.billingBankFeeWrittenOffSatang > 0 && (
+              <div className="flex justify-between py-0.5">
+                <span className="text-slate-500">ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (เรารับภาระ)</span>
+                <span className="font-mono font-semibold">
+                  {fmtSatangSymbol(target.receipt.billingBankFeeWrittenOffSatang)}
+                </span>
+              </div>
+            )}
             <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5">
               <span className="font-semibold text-slate-700">ยอดรับชำระบนเอกสาร (รวม VAT)</span>
               <span className="font-mono font-bold text-slate-900">
-                {fmtSatangSymbol(target.receipt.amountSatang + target.receipt.whtWithheldByCustomerSatang)}
+                {fmtSatangSymbol(
+                  target.receipt.amountSatang +
+                    target.receipt.whtWithheldByCustomerSatang +
+                    target.receipt.billingBankFeeWrittenOffSatang,
+                )}
               </span>
             </div>
             <p className="mt-2 text-slate-500">
-              ภาษีมูลค่าเพิ่มคิดตามอัตรา ณ วันรับเงิน · รับไม่ครบยอดใบแจ้งหนี้ = ออกตามยอดที่รับ (รับชำระบางส่วน)
+              {target.receipt.billingBankFeeWrittenOffSatang > 0
+                ? 'บิลนี้ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ⇒ ใบที่ปิดยอดออกเต็มยอดใบแจ้งหนี้ สถานะรับชำระครบ · ภาษีมูลค่าเพิ่มคิดจากมูลค่าบริการเต็ม ณ วันรับเงิน'
+                : 'ภาษีมูลค่าเพิ่มคิดตามอัตรา ณ วันรับเงิน · รับไม่ครบยอดใบแจ้งหนี้ = ออกตามยอดที่รับ (รับชำระบางส่วน)'}
             </p>
           </div>
         ) : (

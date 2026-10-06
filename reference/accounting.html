@@ -1016,6 +1016,14 @@ function renderModal() {
         <b>Sales Record:</b> ${sr.id} · ${sr.company} · ${sr.caseRef}<br>
         <b>ยอด Gross:</b> ฿ ${money(sr.gross)} + VAT ฿ ${money(sr.vat)} = <b>฿ ${money(sr.total)}</b>
       </div>
+      <!-- U169: บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ⇒ แสดงแถวส่วนต่าง + ออกเต็มยอดใบแจ้งหนี้ -->
+      <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+        <div class="flex justify-between py-0.5"><span class="text-slate-500">เงินโอนเข้า</span><span class="font-mono font-semibold">฿1,800.00</span></div>
+        <div class="flex justify-between py-0.5"><span class="text-slate-500">ภาษีที่ลูกค้าหัก ณ ที่จ่าย (นับเป็นการรับชำระ)</span><span class="font-mono font-semibold">฿52.50</span></div>
+        <div class="flex justify-between py-0.5"><span class="text-slate-500">ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (เรารับภาระ)</span><span class="font-mono font-semibold">฿20.03</span></div>
+        <div class="mt-1 flex justify-between border-t border-slate-200 pt-1.5"><span class="font-semibold text-slate-700">ยอดรับชำระบนเอกสาร (รวม VAT)</span><span class="font-mono font-bold text-slate-900">฿1,872.53</span></div>
+        <p class="mt-2 text-slate-500">บิลนี้ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ⇒ ใบที่ปิดยอดออกเต็มยอดใบแจ้งหนี้ สถานะรับชำระครบ · ภาษีมูลค่าเพิ่มคิดจากมูลค่าบริการเต็ม ณ วันรับเงิน</p>
+      </div>
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
         🔶 เลขที่ใบกำกับภาษีระบบ generate อัตโนมัติ เรียงต่อเนื่องไม่ขาดช่วง (ไม่สามารถกรอกมือได้)
       </div>

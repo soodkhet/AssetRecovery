@@ -443,7 +443,7 @@ async function approvalsAndPayoutsOct4(): Promise<void> {
 }
 
 async function oct5(): Promise<void> {
-  step('05/10/2569 อนุมัติ FT-11/FT-12 → PB-O-OUT2 file_generated · ADV-5/ADV-8 อนุมัติ')
+  step('05/10/2569 อนุมัติ FT-11/FT-12 → PB-O-OUT2 file_generated · ADV-5 อนุมัติ+โอน (PB-O-ADV-IN) · ADV-8 อนุมัติ')
   clockAt('2026-10-05 09:00')
   await approvePayeeItems('uat.agent.out1', [extra.ft14Manual])
   // FT-12 manual ผ่านครบ 3 ขั้น (บริหาร) · FT-10 r1 / hotel FT-10 ไม่อยู่ในรอบ (ค้างตามแถว E)
@@ -456,6 +456,9 @@ async function oct5(): Promise<void> {
   await approveExpense(manualFt12.id, 'uat.mgr.out')
   await payout('PB-O-OUT2', 'outsource', '2026-10-05', 'file_generated')
   await advanceApprove('ADV-5')
+  // O74 — job overdue นับเฉพาะเงินทดรองที่จ่ายออกแล้ว ⇒ ADV-5 ต้องโอนจริงก่อน (รอบจ่ายเงินทดรองแยก ไม่อยู่ใน golden H.4
+  // แบบเดียวกับ PB-S-ADV-IN/OUT) · ADV-8 คง "อนุมัติ ยังไม่จ่าย"
+  await payout('PB-O-ADV-IN', 'inhouse', '2026-10-05', 'completed')
   await advanceApprove('ADV-8')
 
   step('05/10/2569 ค้างตามแถว E: FT-10 r1 ขั้นการเงิน · ค่าที่พัก FT-10 ตีกลับ · FT-14 manual ค้างบริหาร · FT-01 รอผู้จัดการ')

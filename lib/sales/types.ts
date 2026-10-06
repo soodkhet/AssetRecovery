@@ -102,6 +102,10 @@ export interface CashReceiptDto {
   /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U76) */
   billingBatchNumber: string
   billingStatus: BillingBatchStatus
+  /**
+   * มติ PO U169 — ส่วนต่างที่รอบวางบิลตัดเป็นค่าธรรมเนียมธนาคาร (U144/U163) · `> 0` ⇒ ใบที่ปิดยอดออกเต็มยอดบิล
+   */
+  billingBankFeeWrittenOffSatang: number
   note: string | null
   createdAt: string
   /** U95 — ใบเสร็จรับเงิน/ใบกำกับภาษีที่ใช้งานอยู่ของเงินรับนี้ (`null` = ยังไม่ออก) */

@@ -17,6 +17,10 @@ import { SalesError } from '@/lib/sales/errors'
  *   (อัตราเดิมทั้งรอบ ⇒ VAT = VAT ตามใบแจ้งหนี้ − VAT ที่ออกไปแล้ว ⇒ ผลรวมทุกใบเท่าใบแจ้งหนี้เป๊ะ ไม่มีเศษสตางค์หลุด)
  * - รับบางส่วน ⇒ ยอดที่รับถือเป็นยอด**รวม** VAT: VAT = ยอด × อัตรา/(100+อัตรา) · ก่อน VAT = ยอด − VAT
  * - รับเกินยอดคงเหลือ ⇒ ส่วนเกินไม่ใช่การขาย (คืนใน `excessSatang` ให้ผู้เรียกบันทึก/แจ้ง)
+ * - **มติ PO U169** — บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร (U144/U163) ⇒ ใบที่**ปิดยอด**ของรอบออก
+ *   **เต็มยอดคงเหลือ** (VAT จากมูลค่าบริการเต็ม — ม.79) · ค่าธรรมเนียมเป็นค่าใช้จ่ายของเราแยกต่างหาก ไม่ใช่ส่วนลด
+ *   ⇒ นับส่วนต่างที่ตัดเป็น "ชำระแล้ว" **เฉพาะเมื่อ** เงินรับใบนี้ + ส่วนต่าง ≥ ยอดคงเหลือ (ใบรับบางส่วนก่อนหน้า
+ *   ไม่ดูดส่วนต่างไปใช้ — ใบเดียวที่ปิดยอดเป็นผู้รับส่วนต่างเสมอ ไม่ว่าออกใบตามลำดับใด)
  */
 
 export const RECEIPT_TAX_INVOICE_TITLE = 'ใบเสร็จรับเงิน/ใบกำกับภาษี'
@@ -57,6 +61,11 @@ export interface ReceiptInvoiceInput {
   paidSatang: number
   /** อัตรา VAT ณ วันรับเงิน */
   vatRatePct: number
+  /**
+   * มติ PO U169 — ส่วนต่างที่รอบวางบิลตัดเป็นค่าธรรมเนียมธนาคารแล้ว (`billing_batches.bank_fee_written_off_satang`)
+   * · ไม่มีการตัด = `0` (ค่าเริ่มต้น — พฤติกรรมเดิม)
+   */
+  bankFeeWrittenOffSatang?: number
 }
 
 export interface ReceiptInvoiceAmounts {
@@ -68,6 +77,8 @@ export interface ReceiptInvoiceAmounts {
   coversRemainder: boolean
   /** รับเกินยอดคงเหลือ (ไม่นำมาออกเอกสาร) */
   excessSatang: number
+  /** มติ PO U169 — ส่วนต่างค่าธรรมเนียมธนาคารที่ใบนี้รวมไว้ในยอดเต็ม (ใบรับบางส่วน = `0`) */
+  bankFeeSatang: number
 }
 
 function sameRate(a: number, b: number): boolean {
@@ -76,6 +87,10 @@ function sameRate(a: number, b: number): boolean {
 
 export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoiceAmounts {
   const { basis, prior, paidSatang, vatRatePct } = input
+  const bankFee = input.bankFeeWrittenOffSatang ?? 0
+  if (!Number.isInteger(bankFee) || bankFee < 0) {
+    throw new RangeError(`ส่วนต่างค่าธรรมเนียมธนาคารต้องเป็นจำนวนเต็มสตางค์ไม่ติดลบ (ได้ ${bankFee})`)
+  }
   const priorBefore = prior.reduce((sum, row) => sum + row.amountBeforeVatSatang, 0)
   const priorVat = prior.reduce((sum, row) => sum + row.vatSatang, 0)
   const remainingBefore = basis.billedBeforeVatSatang - priorBefore
@@ -95,14 +110,15 @@ export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoic
     : pctOfSatang(remainingBefore, vatRatePct)
   const remainingTotal = remainingBefore + remainingVat
 
-  if (paidSatang >= remainingTotal) {
+  if (paidSatang + bankFee >= remainingTotal) {
     return {
       totalBeforeVatSatang: remainingBefore,
       vatSatang: remainingVat,
       totalSatang: remainingTotal,
       vatRatePct,
       coversRemainder: true,
-      excessSatang: paidSatang - remainingTotal,
+      excessSatang: Math.max(0, paidSatang - remainingTotal),
+      bankFeeSatang: Math.max(0, remainingTotal - paidSatang),
     }
   }
 
@@ -114,6 +130,7 @@ export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoic
     vatRatePct,
     coversRemainder: false,
     excessSatang: 0,
+    bankFeeSatang: 0,
   }
 }
 

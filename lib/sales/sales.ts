@@ -261,6 +261,11 @@ export interface TaxInvoiceReceiptInfo {
   cashSatang: number
   /** ภาษีที่ลูกค้าหัก ณ ที่จ่ายจากเงินรับนี้ (`cash_receipts.wht_withheld_by_customer_satang`) */
   customerWhtSatang: number
+  /**
+   * มติ PO U169 — ส่วนต่างที่บิลตัดเป็นค่าธรรมเนียมธนาคาร (U144/U163) ซึ่งใบนี้ออกรวมไว้ในยอดเต็ม
+   * (= ยอดรวมบนใบ − เงินโอน − ภาษีลูกค้าหัก) · ไม่มี = `0`/ไม่ระบุ
+   */
+  bankFeeSatang?: number
   receivedDate: Date
   bankAccount: DocBankAccount | null
 }
@@ -299,6 +304,9 @@ export interface TaxInvoiceDoc {
   /** แถวหักภาษีที่ลูกค้าหัก (ไม่มี = `null`) */
   customerWhtLabel: string
   customerWhtText: string | null
+  /** มติ PO U169 — แถวหักค่าธรรมเนียมการโอนที่เรารับภาระ (ไม่มี = `null`) */
+  bankFeeLabel: string
+  bankFeeText: string | null
   /** ยอดเงินโอนเข้าจริง (ใบแบบเดิม = `null`) */
   receivedText: string | null
   paymentChannelText: string | null
@@ -385,6 +393,9 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
     sellerRole: isReceipt ? 'ชำระให้' : 'ผู้ขาย',
     customerWhtLabel: 'หัก ภาษีเงินได้หัก ณ ที่จ่าย (ผู้ชำระหัก)',
     customerWhtText: receipt === null || receipt.customerWhtSatang <= 0 ? null : `(${fmtSatang(receipt.customerWhtSatang)})`,
+    bankFeeLabel: 'หัก ค่าธรรมเนียมการโอน (ผู้รับเงินเป็นผู้รับภาระ)',
+    bankFeeText:
+      receipt === null || (receipt.bankFeeSatang ?? 0) <= 0 ? null : `(${fmtSatang(receipt.bankFeeSatang ?? 0)})`,
     receivedText: receipt === null ? null : fmtSatang(receipt.cashSatang),
     paymentChannelText: receipt === null ? null : paymentChannelOf(receipt),
     installmentNote: installment === null ? null : installmentNoteOf(installment, source.billingBatchNumber),

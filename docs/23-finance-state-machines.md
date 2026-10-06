@@ -25,6 +25,7 @@
 | v2.10 | 06/10/2569 | **มติ PO 06/10/2569 (U117 ข้อ 3)** — §6.3 เส้น `pending_approval → rejected` (ปฏิเสธถาวร) เปิดใช้จริงสำหรับใบเบิกค่าที่พัก (`PATCH /api/claims/:id/reject-permanent`) · **ไม่เพิ่มเส้นใหม่** — โค้ดเดิมที่ยอมจาก `pending_finance_approval` ถูกปรับให้ตรงเอกสาร (จาก `pending_approval` เท่านั้น) |
 | v2.11 | 06/10/2569 | **มติ PO 06/10/2569 (U118)** — §6.3 เพิ่มเส้น `pending_finance_approval → rejected` และ `needs_revision → rejected` (ปฏิเสธถาวรใบเบิกค่าที่พัก) · เหตุผลบังคับ + audit · สิทธิ์: ขั้นที่รายการรออยู่ หรือขั้นที่ตีกลับครั้งล่าสุดเมื่อ `needs_revision` · ใบรับรองแทนใบเสร็จที่ผูกไม่นับเพดานต่อเดือนทันที |
 | v2.x-DE | 07/10/2569 | **มติ PO U155 → U159**: เพิ่ม §6.18 หมายเหตุ Model Phone — `device_catalog_status` เป็น**ค่าที่ผู้ดูแลตั้งด้วยมือ** (ไม่ใช่ state machine · ไม่มีขั้นรอตรวจ) |
+| v2.x-HA | 07/10/2569 | **มติ PO O74**: §6.4 guard ของ `approved → overdue` — ต้องจ่ายออกแล้ว (เคยอยู่ในรอบจ่าย `completed` — U83) · ยังไม่จ่ายคง `approved` · ไม่เพิ่ม state |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -78,7 +79,7 @@ pending_approval → pending_warehouse_confirm (hold_for_warehouse — เฉพ
 
 ```
 pending_approval → approved (รวมความหมาย "รอเคลียร์ยอด")
-approved → overdue (auto-mark โดย background job เมื่อเลย due_clear_date)
+approved → overdue (auto-mark โดย background job เมื่อเลย due_clear_date **และจ่ายออกแล้ว** — เคยอยู่ในรอบจ่าย completed · มติ PO O74)
 approved/overdue → cleared (terminal, เคลียร์ยอดเสร็จ)
 pending_approval → rejected (terminal, การเงินไม่อนุมัติ)
 ```

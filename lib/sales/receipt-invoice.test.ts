@@ -34,6 +34,7 @@ describe('receiptInvoiceAmounts — ยอดบนใบเสร็จรั�
       vatRatePct: 7,
       coversRemainder: true,
       excessSatang: 0,
+      bankFeeSatang: 0,
     })
   })
 
@@ -75,6 +76,82 @@ describe('receiptInvoiceAmounts — ยอดบนใบเสร็จรั�
     const result = receiptInvoiceAmounts({ basis, prior: [], paidSatang: 1_300_000, vatRatePct: 7 })
     expect(result.totalSatang).toBe(1_284_000)
     expect(result.excessSatang).toBe(16_000)
+  })
+
+  describe('มติ PO U169 — บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ออกเต็มยอดบิล', () => {
+    it('U144 รับขาดไม่เกินเพดาน (ไม่มีภาษีลูกค้าหัก) ⇒ เต็มยอด · VAT จากมูลค่าเต็ม · ส่วนต่างเป็นค่าธรรมเนียม', () => {
+      // บิล 12,840.00 · เงินเข้า 12,800.00 · ตัดส่วนต่าง 40.00 เป็นค่าธรรมเนียมธนาคาร
+      const result = receiptInvoiceAmounts({
+        basis,
+        prior: [],
+        paidSatang: 1_280_000,
+        bankFeeWrittenOffSatang: 4_000,
+        vatRatePct: 7,
+      })
+      expect(result).toEqual({
+        totalBeforeVatSatang: 1_200_000,
+        vatSatang: 84_000,
+        totalSatang: 1_284_000,
+        vatRatePct: 7,
+        coversRemainder: true,
+        excessSatang: 0,
+        bankFeeSatang: 4_000,
+      })
+      expect(receiptInvoiceDescriptionOf({ periodLabel: 'ตุลาคม 2569', billingBatchNumber: 'BL-2569-011', coversRemainder: result.coversRemainder })).not.toContain('บางส่วน')
+    })
+
+    it('U163 ภาษีลูกค้าหัก + ค่าโอนในรายการเดียว (BL-2569-011) ⇒ 1,750.03 + VAT 122.50 = 1,872.53 · ค่าธรรมเนียม 20.03', () => {
+      const bl011 = { billedBeforeVatSatang: 175_003, billedVatSatang: 12_250, billedVatRatesPct: [7] }
+      const result = receiptInvoiceAmounts({
+        basis: bl011,
+        prior: [],
+        paidSatang: 180_000 + 5_250, // เงินเข้า + ภาษีที่ลูกค้าหัก
+        bankFeeWrittenOffSatang: 2_003,
+        vatRatePct: 7,
+      })
+      expect(result).toMatchObject({
+        totalBeforeVatSatang: 175_003,
+        vatSatang: 12_250,
+        totalSatang: 187_253,
+        coversRemainder: true,
+        bankFeeSatang: 2_003,
+      })
+      // ไม่มียอดคงค้างบนเอกสาร (ใบเดียวครบยอด)
+      const installment = receiptInstallmentOf({
+        invoiceId: 'inv',
+        billedTotalSatang: 187_253,
+        invoices: [{ id: 'inv', status: 'active', totalSatang: result.totalSatang, createdAt: day('2026-10-07') }],
+      })
+      expect(installment).toBeNull()
+    })
+
+    it('รับหลายครั้ง — ใบรับบางส่วนไม่ดูดส่วนต่าง · ใบที่ปิดยอดเป็นผู้รับส่วนต่างไม่ว่าออกใบลำดับใด · ผลรวมเท่าบิล', () => {
+      // บิล 12,840.00 · รับ 5,000.00 + 7,800.00 · ตัดส่วนต่าง 40.00
+      const fee = 4_000
+      const lateFirst = receiptInvoiceAmounts({ basis, prior: [], paidSatang: 780_000, bankFeeWrittenOffSatang: fee, vatRatePct: 7 })
+      expect(lateFirst).toMatchObject({ totalSatang: 780_000, coversRemainder: false, bankFeeSatang: 0 })
+      const closing = receiptInvoiceAmounts({
+        basis,
+        prior: [{ amountBeforeVatSatang: lateFirst.totalBeforeVatSatang, vatSatang: lateFirst.vatSatang, vatRatePct: 7 }],
+        paidSatang: 500_000,
+        bankFeeWrittenOffSatang: fee,
+        vatRatePct: 7,
+      })
+      expect(closing).toMatchObject({ coversRemainder: true, bankFeeSatang: fee })
+      expect(lateFirst.totalSatang + closing.totalSatang).toBe(1_284_000)
+      expect(lateFirst.vatSatang + closing.vatSatang).toBe(84_000)
+    })
+
+    it('ไม่มีการตัดส่วนต่าง ⇒ พฤติกรรมเดิม (รับขาด = รับชำระบางส่วน) · ส่วนต่างติดลบ/ทศนิยม ⇒ ปฏิเสธ', () => {
+      expect(receiptInvoiceAmounts({ basis, prior: [], paidSatang: 1_280_000, vatRatePct: 7 })).toMatchObject({
+        coversRemainder: false,
+        totalSatang: 1_280_000,
+        bankFeeSatang: 0,
+      })
+      expect(() =>
+        receiptInvoiceAmounts({ basis, prior: [], paidSatang: 1_280_000, bankFeeWrittenOffSatang: -1, vatRatePct: 7 }),
+      ).toThrow(RangeError)
+    })
   })
 
   it('ออกครบแล้ว (รวมใบกำกับแบบเดิม) / ยอดรับ 0 ⇒ TAX_INVOICE_NOTHING_TO_INVOICE', () => {
