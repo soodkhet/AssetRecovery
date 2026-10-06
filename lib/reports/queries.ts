@@ -1,11 +1,12 @@
 import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
-import { arOutstandingSatang } from '@/lib/finance/ar-calc'
+import { arOutstandingSatang, totalArOutstandingSatang } from '@/lib/finance/ar-calc'
 import { sumSatang } from '@/lib/finance/satang'
 import type { AdjustmentStatus, AdjustmentType, ExceptionLevel } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { withDailyCache } from '@/lib/reports/cache'
+import { loadArAgingCompanies } from '@/lib/reports/finance/ar-source'
 import {
   DASHBOARD_KPI_META,
   compareExceptionLevel,
@@ -370,7 +371,7 @@ export async function getDashboardKpi(
   const organizationId = user.organizationId
   const asOf = query.asOf ?? now
 
-  const [claims, payouts, billings, exceptions, profit] = await Promise.all([
+  const [claims, payouts, arCompanies, exceptions, profit] = await Promise.all([
     prisma.expense.findMany({
       where: { organizationId, deletedAt: null, status: { in: [...PENDING_CLAIM_STATUSES] } },
       select: { id: true, grossSatang: true },
@@ -380,21 +381,9 @@ export async function getDashboardKpi(
       where: { organizationId, deletedAt: null, status: { notIn: ['completed', 'cancelled'] } },
       select: { id: true, netSatang: true },
     }),
-    prisma.billingBatch.findMany({
-      where: {
-        organizationId,
-        deletedAt: null,
-        // บิลที่ยัง `draft` ยังไม่ใช่ลูกหนี้การค้า — กติกาเดียวกับ AR Aging (`19` §9.1)
-        status: { in: ['sent', 'partially_paid', 'paid'] },
-      },
-      select: {
-        id: true,
-        totalSatang: true,
-        receivedSatang: true,
-        whtWithheldByCustomerSatang: true,
-        bankFeeWrittenOffSatang: true,
-      },
-    }),
+    // O74 — ยอดค้างรับใช้แหล่งเดียวกับ F3 (AR Aging) / การ์ดบริหาร = **ยอดตามเอกสาร** (ใบแจ้งหนี้ − ใบลดหนี้ +
+    // ใบเพิ่มหนี้ · มติ PO U96 #11) ไม่ใช่ยอดบิล ± Adjustment ภายใน ⇒ ตัวเลขทุกเมนูตรงกัน
+    loadArAgingCompanies(organizationId),
     prisma.exception.findMany({
       where: { organizationId, status: 'open' },
       select: { level: true },
@@ -409,13 +398,11 @@ export async function getDashboardKpi(
       OR: [
         { expenseId: { in: claims.map((row) => row.id) } },
         { payoutBatchId: { in: payouts.map((row) => row.id) } },
-        { billingBatchId: { in: billings.map((row) => row.id) } },
       ],
     },
     select: {
       expenseId: true,
       payoutBatchId: true,
-      billingBatchId: true,
       adjustmentType: true,
       amountSatang: true,
       status: true,
@@ -424,7 +411,6 @@ export async function getDashboardKpi(
 
   const claimAdjustments = indexAdjustments(adjustmentRows.map((row) => ({ ...row, targetId: row.expenseId })))
   const payoutAdjustments = indexAdjustments(adjustmentRows.map((row) => ({ ...row, targetId: row.payoutBatchId })))
-  const billingAdjustments = indexAdjustments(adjustmentRows.map((row) => ({ ...row, targetId: row.billingBatchId })))
 
   const pendingClaimSatang = sumSatang(
     claims.map((row) => netOf(row.grossSatang, claimAdjustments, row.id)),
@@ -434,23 +420,15 @@ export async function getDashboardKpi(
     payouts.map((row) => netOf(row.netSatang, payoutAdjustments, row.id)),
     'เงินรอจ่าย',
   )
-  const outstandingRows = billings
-    .map((row) =>
-      arOutstandingSatang({
-        totalSatang: netOf(row.totalSatang, billingAdjustments, row.id),
-        // WHT ที่ลูกค้าหักไว้ (A1) ถือว่ารับชำระแล้ว — รวมให้ที่ `settledSatang()` ที่เดียว (`19` §6.4)
-        receivedSatang: row.receivedSatang,
-        whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
-        bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
-      }),
-    )
-    .filter((value) => value > 0)
-  const arOutstanding = sumSatang(outstandingRows, 'ยอดค้างรับ')
+  const arBatches = arCompanies.flatMap((company) => company.batches)
+  const outstandingCount = arBatches.filter((batch) => arOutstandingSatang(batch) > 0).length
+  // สูตรเดียวกับ KPI บนหน้า AR / F3 — บิลที่รับเกินไม่หักยอดของบิลอื่น
+  const arOutstanding = totalArOutstandingSatang(arBatches)
 
   const amounts: Readonly<Record<(typeof DASHBOARD_KPI_META)[number]['id'], { amountSatang: number; hint: string }>> = {
     pending_approval: { amountSatang: pendingClaimSatang, hint: `${claims.length} รายการ` },
     pending_payout: { amountSatang: pendingPayoutSatang, hint: `${payouts.length} รอบ` },
-    ar_outstanding: { amountSatang: arOutstanding, hint: `${outstandingRows.length} รอบวางบิลค้างชำระ` },
+    ar_outstanding: { amountSatang: arOutstanding, hint: `${outstandingCount} รอบวางบิลค้างชำระ` },
     gross_profit: {
       amountSatang: profit.total.grossProfitSatang,
       hint: `รายได้ ${profit.rows.length} มิติ · ${profit.periodLabel}`,

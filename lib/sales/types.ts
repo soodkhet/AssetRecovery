@@ -53,6 +53,8 @@ export interface SalesRecordDto {
   /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U76) */
   billingBatchNumber: string
   billingStatus: BillingBatchStatus
+  /** มติ O74 — ยอดค้างตามเอกสารของรอบ (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ − รับแล้ว) · ใช้กับป้ายสถานะรอบ */
+  billingOutstandingSatang: number
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
@@ -102,6 +104,8 @@ export interface CashReceiptDto {
   /** เลขรอบวางบิล `BL-<พ.ศ.>-NNN` (มติ U76) */
   billingBatchNumber: string
   billingStatus: BillingBatchStatus
+  /** มติ O74 — ยอดค้างตามเอกสารของรอบ (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ − รับแล้ว) · ใช้กับป้ายสถานะรอบ */
+  billingOutstandingSatang: number
   /**
    * มติ PO U169 — ส่วนต่างที่รอบวางบิลตัดเป็นค่าธรรมเนียมธนาคาร (U144/U163) · `> 0` ⇒ ใบที่ปิดยอดออกเต็มยอดบิล
    */

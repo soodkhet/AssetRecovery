@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { ArAgingPanel } from '@/components/finance/ar-aging-panel'
+import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { BillingDetailModal } from '@/components/finance/billing-detail-modal'
 import { CreateBillingModal } from '@/components/finance/create-billing-modal'
 import { useBillingBatches, useRevenues } from '@/components/finance/use-billing'
@@ -31,8 +32,6 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { MANAGE_BILLING } from '@/lib/revenue/revenue'
 import {
   BILLING_STATUS_FILTERS,
-  BILLING_STATUS_LABEL,
-  billingStatusBadgeGroup,
   canDeleteBillingBatch,
   canSendBillingBatch,
   customerWhtSummary,
@@ -262,11 +261,7 @@ export function RevenueTab() {
                         {fmtSatangSymbol(batch.outstandingSatang)}
                       </Td>
                       <Td>
-                        <StatusBadge
-                          status={batch.status}
-                          group={billingStatusBadgeGroup(batch.status)}
-                          label={BILLING_STATUS_LABEL[batch.status]}
-                        />
+                        <BillingStatusBadge status={batch.status} outstandingSatang={batch.outstandingSatang} />
                         {/* Rule 05 — "ส่งบิล" เป็น action สำคัญ ต้องเห็นวันที่บน list ไม่ใช่เฉพาะใน modal */}
                         {batch.sentAt !== null && (
                           <p className="mt-1 text-[10px] text-slate-400">ส่งบิล {fmtDate(batch.sentAt)}</p>

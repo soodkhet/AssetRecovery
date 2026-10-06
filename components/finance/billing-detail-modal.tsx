@@ -15,12 +15,11 @@ import {
   Th,
   Tr,
 } from '@/components/ui'
+import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { callApi } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
-  BILLING_STATUS_LABEL,
-  billingStatusBadgeGroup,
   customerWhtSummary,
   isArOutstanding,
   REVENUE_STATUS_LABEL,
@@ -102,11 +101,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-          <StatusBadge
-            status={batch.status}
-            group={billingStatusBadgeGroup(batch.status)}
-            label={BILLING_STATUS_LABEL[batch.status]}
-          />
+          <BillingStatusBadge status={batch.status} outstandingSatang={batch.outstandingSatang} />
           <span>สร้างโดย {batch.createdByName}</span>
           <span>{fmtCount(batch.revenueCount)} รายการ</span>
           {batch.sentAt !== null && <span>ส่งบิล {fmtDate(batch.sentAt)}</span>}

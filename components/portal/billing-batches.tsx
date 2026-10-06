@@ -37,6 +37,7 @@ import {
   type PortalBillingFilter,
 } from '@/lib/portal/finance-ui'
 import type { PortalBillingBatchDto } from '@/lib/portal/serializers'
+import { DEBIT_NOTE_OUTSTANDING_LABEL } from '@/lib/revenue/revenue-ui'
 
 const FILTER_OPTIONS = portalBillingFilterOptions()
 
@@ -231,12 +232,25 @@ function BillingTable({
             </Td>
             <Td className="text-xs whitespace-nowrap text-slate-500">{fmtDateTime(row.sentAt)}</Td>
             <Td>
-              <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
+              <BillingStatus row={row} />
             </Td>
           </Tr>
         ))}
       </TBody>
     </Table>
+  )
+}
+
+/**
+ * ป้ายสถานะรอบ — มติ O74: รอบที่รับชำระครบแล้วแต่ยังค้างจากใบเพิ่มหนี้ ⇒ API ส่งป้าย "รับชำระบางส่วน"
+ * มาแล้ว + ป้ายเสริม "มีใบเพิ่มหนี้ค้าง" (ป้ายเดียวกับหน้าภายใน)
+ */
+function BillingStatus({ row }: { row: PortalBillingBatchDto }) {
+  return (
+    <span className="inline-flex flex-wrap items-center justify-end gap-1">
+      <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
+      {row.debitNoteOutstanding && <StatusBadge group="pending" label={DEBIT_NOTE_OUTSTANDING_LABEL} />}
+    </span>
   )
 }
 
@@ -261,7 +275,7 @@ function BillingCards({
                 <BatchNumber value={row.batchNumber} /> · {fmtCount(row.caseCount)} เคส
               </div>
             </div>
-            <StatusBadge group={row.statusDisplay.tone} label={row.statusDisplay.label} />
+            <BillingStatus row={row} />
           </div>
           <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-center">
             <div>

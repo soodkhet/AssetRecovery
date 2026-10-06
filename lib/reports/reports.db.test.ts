@@ -540,7 +540,7 @@ suite('Dashboard KPI (`14` §6.1/§16)', () => {
     expect(dashboard.periodLabel).toBe('สิงหาคม 2569')
   })
 
-  it('ยอดของ KPI คิดหลัง adjustment ที่ approved แล้ว (`20` §9)', async () => {
+  it('ยอดของ KPI คิดหลัง adjustment ที่ approved แล้ว (`20` §9) · AR = ยอดตามเอกสาร ตรง F3 (มติ O74)', async () => {
     const claimId = await seedExpense({ caseId: null, grossSatang: 10_000_00, status: 'pending_approval' })
     const payoutId = await seedPayoutBatch({ netSatang: 20_000_00 })
     const billingId = await seedBillingBatch({ totalSatang: 30_000_00 })
@@ -554,7 +554,12 @@ suite('Dashboard KPI (`14` §6.1/§16)', () => {
 
     expect(kpi('pending_approval')?.amountSatang).toBe(9_000_00)
     expect(kpi('pending_payout')?.amountSatang).toBe(22_000_00)
-    expect(kpi('ar_outstanding')?.amountSatang).toBe(25_000_00)
+    // มติ O74 — Adjustment ลดยอดที่ยังไม่มีใบลดหนี้ ยังไม่ลดลูกหนี้ (รอใบลดหนี้) ⇒ KPI = ยอดตามเอกสาร = F3
+    expect(kpi('ar_outstanding')?.amountSatang).toBe(30_000_00)
+    const { loadArAgingCompanies } = await import('@/lib/reports/finance/ar-source')
+    const { totalArOutstandingSatang } = await import('@/lib/finance/ar-calc')
+    const f3 = await loadArAgingCompanies(finance.organizationId)
+    expect(kpi('ar_outstanding')?.amountSatang).toBe(totalArOutstandingSatang(f3.flatMap((entry) => entry.batches)))
   })
 
   it('ไม่มีข้อมูลเลย ⇒ ศูนย์ทุกการ์ด และ margin เป็น null (ไม่หารศูนย์)', async () => {

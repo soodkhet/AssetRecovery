@@ -1,4 +1,5 @@
 import { sumCreditNotesByInvoice } from '@/lib/credit-notes/queries'
+import { arOutstandingSatang, type BillingBatchAmounts } from '@/lib/finance/ar-calc'
 import { allocateLargestRemainder } from '@/lib/finance/wht-calc'
 import type { CreditNoteType } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
@@ -358,6 +359,19 @@ export async function withDocumentedArTotals<T extends { id: string; totalSatang
     rows.map((row) => row.id),
   )
   return rows.map((row) => ({ ...row, totalSatang: documented.get(row.id)?.documented.totalSatang ?? row.totalSatang }))
+}
+
+/**
+ * มติ O74 — **ยอดค้างตามเอกสาร** ต่อรอบวางบิล (`withDocumentedArTotals()` + `arOutstandingSatang()`) สำหรับหน้าที่
+ * แสดงสถานะรอบแต่ไม่ได้ดึงยอด AR ของรอบมาเอง (เช่น แท็บขาย/เงินรับของบัญชี) ⇒ ป้ายสถานะตรงพอร์ทัล/หน้ารายได้
+ */
+export async function documentedOutstandingByBatch(
+  organizationId: string,
+  batches: readonly (BillingBatchAmounts & { id: string })[],
+): Promise<Map<string, number>> {
+  const unique = [...new Map(batches.map((batch) => [batch.id, batch])).values()]
+  const documented = await withDocumentedArTotals(organizationId, unique)
+  return new Map(documented.map((batch) => [batch.id, arOutstandingSatang(batch)]))
 }
 
 /**

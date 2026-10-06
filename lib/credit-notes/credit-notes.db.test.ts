@@ -595,6 +595,57 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     // การ์ดบนหน้า = ผลรวมแถว · ต้องเท่ามุม AR Aging และรายงาน F3 ทุกบาท
     expect(totalOnPage(rows)).toBe(aging.totalOutstandingSatang)
     expect(totalOnPage(rows)).toBe(f3Total)
+
+    // O74 — KPI "ยอดค้างรับ (AR)" บนแดชบอร์ดการเงิน = F3 ทั้งองค์กร (ไม่ใช่ยอดบิล ± Adjustment ภายใน)
+    const { getDashboardKpi } = await import('@/lib/reports/queries')
+    const kpi = await getDashboardKpi(accountant, { refresh: true })
+    const f3Org = await loadArAgingCompanies(ORG_ID)
+    const f3OrgBatches = f3Org.flatMap((entry) => entry.batches)
+    const arKpi = kpi.kpis.find((row) => row.id === 'ar_outstanding')
+    expect(arKpi?.amountSatang).toBe(totalPure(f3OrgBatches))
+    expect(f3OrgBatches.length).toBeGreaterThan(0)
+  })
+
+  it('O74: รอบรับชำระครบแล้วมีใบเพิ่มหนี้ ⇒ สถานะใน DB คง paid แต่ป้ายพอร์ทัล/หน้าภายใน = ยังค้าง + "มีใบเพิ่มหนี้ค้าง"', async () => {
+    const seeded = await seedInvoice()
+    // รับชำระครบตามใบแจ้งหนี้ (1,284,000) ⇒ paid
+    await db().billingBatch.update({
+      where: { id: seeded.billingBatchId },
+      data: { status: 'paid', receivedSatang: 1_284_000 },
+    })
+    const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 10_000 })
+    await credit.createCreditNote(
+      ctx,
+      input(seeded, { noteType: 'debit', amountBeforeVatSatang: 10_000, adjustmentId: increase }),
+    )
+
+    const { listPortalBillingBatches } = await import('@/lib/portal/queries/finance')
+    const portal = await listPortalBillingBatches({
+      user: accountant,
+      companyId,
+      capabilities: { portal_finance: 'view' },
+      section: 'finance',
+    })
+    expect(portal.find((row) => row.id === seeded.billingBatchId)).toMatchObject({
+      outstandingSatang: 10_700,
+      debitNoteOutstanding: true,
+      statusDisplay: { code: 'paid', label: 'รับชำระบางส่วน', tone: 'partial' },
+    })
+
+    const revenue = await import('@/lib/revenue/queries')
+    const { billingStatusView } = await import('@/lib/revenue/revenue-ui')
+    const detail = await revenue.getBillingBatch(accountant, seeded.billingBatchId)
+    expect(detail.status).toBe('paid')
+    expect(billingStatusView(detail.status, detail.outstandingSatang)).toMatchObject({
+      label: 'รับชำระบางส่วน',
+      debitNoteOutstanding: true,
+    })
+
+    const salesList = await sales.listSalesRecords(accountant, { companyId })
+    expect(salesList.items.find((row) => row.billingBatchId === seeded.billingBatchId)).toMatchObject({
+      billingStatus: 'paid',
+      billingOutstandingSatang: 10_700,
+    })
   })
 
   it('U21: ยอดก่อน VAT ไม่ตรง Adjustment ⇒ บันทึกได้ + warnings + audit amount_matches_adjustment=false · ตรง ⇒ ไม่มีคำเตือน', async () => {

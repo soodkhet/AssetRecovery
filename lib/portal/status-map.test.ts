@@ -113,6 +113,17 @@ describe('portal status-map — billing / ใบกำกับ (97 §10.3)', ()
     expect(() => portalBillingStatusDisplay('bogus' as BillingBatchStatus)).toThrow()
   })
 
+  it('มติ O74 — paid ที่ยอดตามเอกสารยังค้าง ⇒ ป้าย "รับชำระบางส่วน" แต่ code คงสถานะจริง', () => {
+    expect(portalBillingStatusDisplay('paid', 10_700)).toEqual({
+      code: 'paid',
+      label: 'รับชำระบางส่วน',
+      tone: 'partial',
+      outline: false,
+    })
+    expect(portalBillingStatusDisplay('paid', 0)).toMatchObject({ label: 'รับชำระครบ', tone: 'success' })
+    expect(portalBillingStatusDisplay('draft', 10_700)).toBeNull()
+  })
+
   it('ใบกำกับครบทุก enum', () => {
     for (const status of Object.values(TaxInvoiceStatus)) {
       expect(portalTaxInvoiceStatusDisplay(status).code).toBe(status)

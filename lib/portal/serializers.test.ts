@@ -146,6 +146,20 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
       caseCount: 3,
     }
     deepScan(serializePortalBillingBatches([billing]))
+    // มติ O74 — BL-001 รับชำระครบแล้วมีใบเพิ่มหนี้ 107.00 (ยอดตามเอกสารมาจาก query) ⇒ ป้ายยังค้าง + ป้ายเสริม
+    const afterDebitNote = serializePortalBillingBatch({
+      ...billing,
+      status: 'paid',
+      totalSatang: 110_700,
+      receivedSatang: 97_000,
+      whtWithheldByCustomerSatang: 3_000,
+    })
+    expect(afterDebitNote).toMatchObject({
+      outstandingSatang: 10_700,
+      debitNoteOutstanding: true,
+      statusDisplay: { code: 'paid', label: 'รับชำระบางส่วน', tone: 'partial' },
+    })
+    expect(serializePortalBillingBatch(billing)?.debitNoteOutstanding).toBe(false)
     deepScan(
       serializePortalTaxInvoice({
         ...FORBIDDEN,

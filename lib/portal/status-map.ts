@@ -5,7 +5,7 @@ import type {
   HandoverLotStatus,
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
-import { BILLING_STATUS_LABEL, billingStatusBadgeGroup } from '@/lib/revenue/revenue-ui'
+import { billingStatusView } from '@/lib/revenue/revenue-ui'
 import { TAX_INVOICE_STATUS_LABEL } from '@/lib/sales/sales'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -149,17 +149,24 @@ export function portalLotDownloadable(status: HandoverLotStatus): boolean {
 
 export type PortalBillingStatusCode = Exclude<BillingBatchStatus, 'draft'>
 
-/** `draft` ไม่แสดงในพอร์ทัลเด็ดขาด (`97` §6.2) ⇒ คืน `null` ให้ผู้เรียกกรองทิ้ง */
+/**
+ * `draft` ไม่แสดงในพอร์ทัลเด็ดขาด (`97` §6.2) ⇒ คืน `null` ให้ผู้เรียกกรองทิ้ง
+ * · มติ O74 — ป้ายสะท้อน**ยอดตามเอกสาร**: รอบ `paid` ที่ยังค้างจากใบเพิ่มหนี้ ⇒ ป้าย "รับชำระบางส่วน"
+ *   (`billingStatusView()` ตัวเดียวกับหน้าภายใน) · `code` คงสถานะจริงของรอบ (ตัวกรองอิงสถานะใน DB)
+ */
 export function portalBillingStatusDisplay(
   status: BillingBatchStatus,
+  documentedOutstandingSatang = 0,
 ): PortalStatusDisplay<PortalBillingStatusCode> | null {
   switch (status) {
     case 'draft':
       return null
     case 'sent':
     case 'partially_paid':
-    case 'paid':
-      return { code: status, label: BILLING_STATUS_LABEL[status], tone: billingStatusBadgeGroup(status), outline: false }
+    case 'paid': {
+      const view = billingStatusView(status, documentedOutstandingSatang)
+      return { code: status, label: view.label, tone: view.group, outline: false }
+    }
     default:
       return assertNever(status, 'billing_batch_status')
   }

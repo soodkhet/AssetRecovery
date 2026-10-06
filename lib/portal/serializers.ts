@@ -28,6 +28,7 @@ import {
   type PortalStatusDisplay,
 } from '@/lib/portal/status-map'
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
+import { hasDebitNoteOutstanding } from '@/lib/revenue/revenue-ui'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
@@ -223,11 +224,20 @@ export interface PortalBillingBatchDto {
   dueDate: string
   sentAt: string | null
   statusDisplay: PortalStatusDisplay<PortalBillingStatusCode>
+  /** มติ O74 — รับชำระครบแล้วแต่ยังค้างจากใบเพิ่มหนี้ ⇒ หน้าจอแสดงป้ายเสริม "มีใบเพิ่มหนี้ค้าง" */
+  debitNoteOutstanding: boolean
 }
 
 /** `draft` → `null` (ห้ามแสดงในพอร์ทัล — `97` §6.2) */
 export function serializePortalBillingBatch(row: PortalBillingBatchSource): PortalBillingBatchDto | null {
-  const statusDisplay = portalBillingStatusDisplay(row.status)
+  // สูตรกลาง `22` §6.11 (รวม WHT ที่ลูกค้าหัก — ตัวเดียวกับฝั่งภายใน) · `totalSatang` = ยอดตามเอกสาร
+  const outstandingSatang = arOutstandingSatang({
+    totalSatang: row.totalSatang,
+    receivedSatang: row.receivedSatang,
+    whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
+    bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
+  })
+  const statusDisplay = portalBillingStatusDisplay(row.status, outstandingSatang)
   if (statusDisplay === null) return null
   return {
     id: row.id,
@@ -238,16 +248,11 @@ export function serializePortalBillingBatch(row: PortalBillingBatchSource): Port
     totalSatang: row.totalSatang,
     receivedSatang: row.receivedSatang,
     customerWhtSatang: row.whtWithheldByCustomerSatang,
-    // สูตรกลาง `22` §6.11 (รวม WHT ที่ลูกค้าหัก — ตัวเดียวกับฝั่งภายใน)
-    outstandingSatang: arOutstandingSatang({
-      totalSatang: row.totalSatang,
-      receivedSatang: row.receivedSatang,
-      whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
-      bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,
-    }),
+    outstandingSatang,
     dueDate: dateOnly(row.dueDate),
     sentAt: isoOrNull(row.sentAt),
     statusDisplay,
+    debitNoteOutstanding: hasDebitNoteOutstanding(row.status, outstandingSatang),
   }
 }
 
