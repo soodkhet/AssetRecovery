@@ -6,7 +6,7 @@
 
 ---
 
-## 🎯 งานถัดไป — ผู้ใช้ push staging + ทดสอบบน staging + ตัดสิน BUG-185
+## 🎯 งานถัดไป — **8.5** ผู้ใช้ push staging + ทดสอบบน staging + ตัดสิน BUG-185
 
 > **Final Test รอบสุดท้าย ✅ เสร็จ 07/10/2569** — `staging` @ `ff22ebd` · ด่าน 1–7 + 7b ผ่าน · verify 394 ไฟล์ / 5,672 tests · seed verify 207/207 · สรุป: **`uat/report/FINAL-SUMMARY.md`** · รายละเอียด → `docs/PROGRESS_ARCHIVE.md` § Phase 8 final
 
@@ -128,7 +128,8 @@
 | 8.1 | E2E Acceptance Tests (ไฟล์ 29 — 5 scenarios + 9 checks) | ✅ | 2026-08-15 · `7c8fbd4` · `tests/acceptance/*.db.test.ts` 3 ไฟล์ (รายรับ/รายจ่าย+เงินทดรอง/ปิดงวด+Adjustment) เดินผ่าน service จริงทุกก้าว + Checklist `29` §7 ครบ 9 จุด → archive |
 | 8.2 | Consistency Sweep + Hardening | ✅ | 2026-08-16 · `0ae328c`+`91de430`+`32b71ff`+`0d743f9`+`b69a6b2`+`9bd34bc`+`c98f9a7`+`05cd29f` · กวาด 5 แกน (เงิน/วันที่ · RBAC · audit · idempotency · index) — ปิดช่องโอนซ้ำของไฟล์โอน, Export pack ล็อกรอบตัวเองถาวร, เงินเข้าถูกนับซ้ำตอนนำเข้า statement พร้อมกัน + ยาม scope 5 โมดูล + trigger immutable ครบ `02` §13 → archive |
 | 8.3 | Final Test ทั้งระบบ (ด่าน orchestrator) | ✅ | 2026-08-16 · `db0c416`+`9a4e3a7`+`e852f36`+`0e8f872`+`94d66ef`+`adea507`+`bcf2086` · รัน 6 ด่านครบ — แก้บั๊กจริง 8 จุด (A1 ลูกค้าหักภาษีก่อนโอนทั้งเส้น · ใบกำกับภาษี/ใบ 50 ทวิ ออกซ้ำเมื่อยิงพร้อมกัน · อนุมัติเงินทดรองใบที่สอง 500 · สรุปรายได้ขยับย้อนหลัง · badge KPI โกหกเมื่อ N/A · ยามของ job/export/อนุมัติจาก session ก่อน) + migration 2 ตัว · หนี้ที่ต้องมีมติ 4 ข้อ → archive |
-| 8.4 | Final Test รอบสุดท้าย (มติ U119 · ด่าน 1–7 + 7b เบราว์เซอร์จริง) | ✅ | 2026-10-07 · `ff22ebd` · 108 commit จาก `0109def` · มติ U119–U170 + O71–O77 · บั๊กแก้ BUG-178–183 + ด่าน 1–6 · ค้าง BUG-184 (รอ merge) / BUG-185 (needs-decision) · `uat/report/FINAL-SUMMARY.md` → archive |
+| 8.4 | Final Test รอบสุดท้าย (มติ U119 · ด่าน 1–7 + 7b เบราว์เซอร์จริง) | ✅ | 2026-10-07 · `ff22ebd` · 108 commit จาก `0109def` · มติ U119–U170 + O71–O77 · บั๊กแก้ BUG-178–183 + ด่าน 1–6 · BUG-184 แก้แล้ว (fixer IA) / ค้าง BUG-185 (needs-decision) · `uat/report/FINAL-SUMMARY.md` → archive |
+| 8.5 | ผู้ใช้ push staging + migrate + ทดสอบบน staging + ตัดสิน BUG-185 | ⏸️ | รอผู้ใช้ (งานของคน — orchestrator ห้ามหยิบ) · ดู `uat/report/FINAL-SUMMARY.md` ส่วน "สิ่งที่ผู้ใช้ต้องทำ" |
 
 ---
 

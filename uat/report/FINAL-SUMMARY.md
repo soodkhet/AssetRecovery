@@ -7,7 +7,7 @@
 
 **ผ่าน — พร้อม push ขึ้น staging** โดยมีเรื่องค้าง 2 เรื่อง (ไม่บล็อกการ push ขึ้น staging)
 - **BUG-185** ใบลดหนี้หลังบิลชำระครบ → ลูกค้าจ่ายเกิน — **รอผู้ใช้ตัดสิน** (ดูข้อ 5)
-- **BUG-184** พอร์ทัล: หน้ารายละเอียดเคสไม่แสดงยี่ห้อ/รุ่น/ความจุ/สี (S4) — มติ O77 สั่งแก้แล้ว แต่ ณ `ff22ebd` ยังไม่ merge
+- ~~**BUG-184** พอร์ทัล: หน้ารายละเอียดเคสไม่แสดงยี่ห้อ/รุ่น/ความจุ/สี (S4)~~ → แก้แล้ว (fixer IA `da8265e` · O77)
 
 ตัวเลข verify ล่าสุด
 - `pnpm typecheck` + `pnpm lint` + `pnpm test` เขียว — **394 ไฟล์ / 5,672 tests** (ต้น Final: 366 ไฟล์ / 5,104)
@@ -60,7 +60,7 @@
 - BUG-183 S5 `/field/income` React key ซ้ำ (เคสรีไซเกิล) ✅
 - O74 เงินทดรองยังไม่จ่ายขึ้น overdue ✅
 - O75 บิล `paid` + ใบเพิ่มหนี้ → `partially_paid` + รับเงินส่วนเพิ่มได้ ✅
-- BUG-184 S4 พอร์ทัลรายละเอียดเคสไม่แสดงรุ่น/ความจุ/สี — **open** (O77 สั่งแก้)
+- BUG-184 S4 พอร์ทัลรายละเอียดเคสไม่แสดงรุ่น/ความจุ/สี — **แก้แล้ว** (IA `da8265e`) · O77 อื่น ๆ (คู่ที่เสนอ/คลังตรง-ไม่ตรง/ป้าย TAC/ฟอนต์ PDF) แก้แล้ว · migration `20261008180000_asset_color_capacity_note`
 - BUG-185 S4 ใบลดหนี้หลังชำระครบ → จ่ายเกิน — **needs-decision**
 
 ## 4. มติใหม่ U119–U170 + O71–O77 (จัดกลุ่ม)
@@ -109,11 +109,11 @@
 2. รัน `pnpm typecheck && pnpm test` เต็มหนึ่งรอบบนเครื่อง
 3. `git push origin staging`
 4. `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` — staging มีถึง `20261007100000` แล้ว · migration ใหม่ **19 ตัว**:
-   `20261008010000_recycle_previous_round_snapshot` · `20261008020000_supplementary_filing_doc_snapshots_assumptions` · `20261008030000_bank_tx_statement_occurrence` · `20261008031000_payout_post_completion_marker` · `20261008050000_finance_company_documents` · `20261008051000_cycle_scope_kind` · `20261008070000_receipt_id_document_verification` · `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source` · `20261008090000_approval_flow_role_ids` · `20261008091000_tax_profile_income_type_code` · `20261008092000_bank_file_format_purpose_ids` · `20261008100000_authorized_signer` · `20261008110000_device_catalog` · `20261008140000_service_fee_fail_fee` · `20261008150000_device_tac` · `20261008150100_device_tac_updates` · `20261008153000_billing_status_debit_note_backfill`
+   `20261008010000_recycle_previous_round_snapshot` · `20261008020000_supplementary_filing_doc_snapshots_assumptions` · `20261008030000_bank_tx_statement_occurrence` · `20261008031000_payout_post_completion_marker` · `20261008050000_finance_company_documents` · `20261008051000_cycle_scope_kind` · `20261008070000_receipt_id_document_verification` · `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source` · `20261008090000_approval_flow_role_ids` · `20261008091000_tax_profile_income_type_code` · `20261008092000_bank_file_format_purpose_ids` · `20261008100000_authorized_signer` · `20261008110000_device_catalog` · `20261008140000_service_fee_fail_fee` · `20261008150000_device_tac` · `20261008150100_device_tac_updates` · `20261008153000_billing_status_debit_note_backfill` · `20261008180000_asset_color_capacity_note`
 5. หน้า ตั้งค่า → Model Phone บน staging กด **"อัปเดตตอนนี้"** (นำเข้า TAC ครั้งแรก — หลังจากนั้น job เช็กเองทุกเที่ยงคืน)
 6. (ตัวเลือก) seed ข้อมูลตัวอย่างบน staging — ถ้าใช้ seed-final ให้แก้ข้อความแถว VAT "V-2 ต่ออายุมาตรการ (O71)" ที่มีเลขมติติดมา
 7. ทดสอบบน staging domain: flow จริง + **Field Tracker บนมือถือจริง** (GPS/กล้อง/วิดีโอ/push) + พอร์ทัลบนมือถือ · ยืนยัน `CRON_SECRET` บน Vercel · ขนาดอัปโหลดของ Supabase project ≥ 100 MB (วิดีโอ)
-8. ตัดสิน **BUG-185** (+ รอ merge BUG-184 ตาม O77) → เปิด **PR `staging` → `main`** เมื่อทดสอบผ่าน
+8. ตัดสิน **BUG-185** → เปิด **PR `staging` → `main`** เมื่อทดสอบผ่าน
 
 ### ก่อน go-live (production)
 - **ลบบัญชี Supabase Auth ตัวอย่าง**: `uat.agent.out2` · `uat.sup.out` · `uat.temp1` (ระงับ) · `uat.temp2` (ลบ soft) — ด่าน 7 เปลี่ยนรหัส `uat.agent.out2`/`uat.sup.out` (ไม่ได้สร้างเพิ่ม) · 7b ไม่แตะ Auth · รวมถึง persona UAT 14 คนเดิมถ้าไม่ใช้ต่อ
