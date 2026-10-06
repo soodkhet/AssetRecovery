@@ -4,6 +4,10 @@ import {
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
   DEFAULT_WHT_PCT,
   assertWhtPctValid,
+  TAX_PROFILE_INCOME_TYPE_CODES,
+  TAX_PROFILE_INCOME_TYPE_TEXT,
+  incomeTypeCodeOf,
+  incomeTypeTextOf,
   normalizeTaxProfileValues,
   suggestedFilingForm,
   toTaxProfileAuditPayload,
@@ -17,7 +21,8 @@ const base: TaxProfileValues = {
   whtPct: 3,
   whtBasis: 'before_vat',
   whtMinThresholdSatang: DEFAULT_WHT_MIN_THRESHOLD_SATANG,
-  incomeType: ' ค่าจ้างทำของ มาตรา 40(8) ',
+  incomeTypeCode: 'other',
+  incomeType: ' ค่าจ้างทำของ   มาตรา 40(8) ',
   filingForm: 'PND3',
 }
 
@@ -40,6 +45,11 @@ describe('normalizeTaxProfileValues', () => {
     const values = normalizeTaxProfileValues(base)
     expect(values.name).toBe('Outsource บุคคลธรรมดา')
     expect(values.incomeType).toBe('ค่าจ้างทำของ มาตรา 40(8)')
+  })
+
+  it('รายการมาตรฐาน = ป้ายของรายการตรงตัว ไม่สนข้อความที่ส่งมา (มติ PO U148)', () => {
+    const values = normalizeTaxProfileValues({ ...base, incomeTypeCode: 'service', incomeType: 'พิมพ์มั่ว' })
+    expect(values.incomeType).toBe('ค่าบริการ')
   })
 
   it('ไม่แตะตัวเลข (เงิน/อัตราต้องผ่านมาแล้วจาก Zod)', () => {
@@ -80,8 +90,34 @@ describe('toTaxProfileAuditPayload', () => {
       wht_pct: 3,
       wht_basis: 'before_vat',
       wht_min_threshold_satang: 100_000,
+      income_type_code: 'other',
       income_type: 'ค่าจ้างทำของ มาตรา 40(8)',
       filing_form: 'PND3',
     })
+  })
+})
+
+describe('ประเภทเงินได้จากรายการมาตรฐาน (มติ PO U148 — ND-6)', () => {
+  it('ทุกรายการมาตรฐานมีข้อความที่พิมพ์ลง 50 ทวิ และไม่ซ้ำกัน · "อื่น ๆ" เป็นตัวสุดท้าย', () => {
+    const standard = TAX_PROFILE_INCOME_TYPE_CODES.filter((code) => code !== 'other')
+    const texts = standard.map((code) => TAX_PROFILE_INCOME_TYPE_TEXT[code])
+    expect(new Set(texts).size).toBe(standard.length)
+    expect(TAX_PROFILE_INCOME_TYPE_CODES.at(-1)).toBe('other')
+  })
+
+  it('ค่าเริ่มต้นเดิมของตาราง = ค่าจ้างทำของ มาตรา 40(8)', () => {
+    expect(TAX_PROFILE_INCOME_TYPE_TEXT.hire_of_work_40_8).toBe('ค่าจ้างทำของ มาตรา 40(8)')
+  })
+
+  it('incomeTypeTextOf(): มาตรฐาน = ป้าย · อื่น ๆ = ข้อความที่ระบุ (ตัดช่องว่างซ้อน)', () => {
+    expect(incomeTypeTextOf('transport', 'อะไรก็ได้')).toBe('ค่าขนส่ง')
+    expect(incomeTypeTextOf('other', '  ค่าซ่อม  บำรุง ')).toBe('ค่าซ่อม บำรุง')
+  })
+
+  it('incomeTypeCodeOf() (ตรรกะเดียวกับ migration): ตรงป้าย = รหัสนั้น · ไม่ตรง = other', () => {
+    expect(incomeTypeCodeOf(' ค่าจ้างทำของ  มาตรา 40(8) ')).toBe('hire_of_work_40_8')
+    expect(incomeTypeCodeOf('ค่าเช่า')).toBe('rent')
+    expect(incomeTypeCodeOf('ค่าจ้างทำของ/ค่าบริการ')).toBe('other')
+    expect(incomeTypeCodeOf('ค่าบริการ (นิติบุคคล)')).toBe('other')
   })
 })

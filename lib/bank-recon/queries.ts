@@ -51,7 +51,12 @@ import { SalesError } from '@/lib/sales/errors'
 import type { SessionUser } from '@/lib/auth/types'
 import { calculateCustomerWithheldWht } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
+import type {
+  BankFileEncoding,
+  BankFilePurpose,
+  BankFileType,
+  BankMatchStatus,
+} from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { PayoutError } from '@/lib/payout/errors'
 import { PAYOUT_STATUS_LABEL } from '@/lib/payout/payout'
@@ -60,6 +65,7 @@ import { syncPayoutBatchCompleted } from '@/lib/payout/queries'
 import { RevenueError } from '@/lib/revenue/errors'
 import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { applyBillingReceipt } from '@/lib/revenue/queries'
+import { bankFileFormatLabel, parseColumnMapping } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { createPendingCustomerWht, releaseCustomerWhtForReceipt } from '@/lib/customer-wht/queries'
@@ -530,14 +536,29 @@ interface PreparedRow extends StatementRow {
  * ขั้นตอน: อ่านไฟล์ตาม format ที่ตั้งไว้ → ผูกงวดด้วย `ensurePeriodForDate()` → กันแถวซ้ำ →
  * บันทึก + audit ต่อแถว → พยายาม auto-match ทีละรายการ (ผลข้างเคียงเดินผ่านทางเดียวกับ manual)
  */
-/** `column_mapping` ของรูปแบบ statement ที่ผูกกับบัญชี (`13` §6.3 → §6.8) — ไม่ได้ตั้ง = `null` */
-async function statementColumnMappingOf(organizationId: string, statementFormat: string | null): Promise<string | null> {
-  if (statementFormat === null) return null
-  const format = await prisma.bankFileFormat.findFirst({
-    where: { organizationId, deletedAt: null, bankName: statementFormat },
-    select: { columnMapping: true },
-  })
-  return format?.columnMapping ?? null
+/**
+ * รูปแบบ statement ที่ผูกกับบัญชี (`13` §6.3 → §6.8) — อ้างด้วย id (มติ PO U147 · เดิมจับคู่ด้วยชื่อพิมพ์อิสระ)
+ * ไม่ได้ตั้ง/ไม่ใช่ชนิด statement = `null` (อ่านจากหัวตาราง) · รูปแบบลบไม่ได้ขณะบัญชีอ้างอยู่ (`BANK_FILE_FORMAT_IN_USE`)
+ */
+const statementFormatSelect = {
+  statementFormat: { select: { purpose: true, bankName: true, fileType: true, encoding: true, columnMapping: true } },
+} as const
+
+function statementFormatOf(account: {
+  statementFormat: {
+    purpose: BankFilePurpose
+    bankName: string
+    fileType: BankFileType
+    encoding: BankFileEncoding
+    columnMapping: string
+  } | null
+}): { columnMapping: string; label: string } | null {
+  const format = account.statementFormat
+  if (format === null || format.purpose !== 'statement') return null
+  return {
+    columnMapping: format.columnMapping,
+    label: bankFileFormatLabel({ ...format, columns: parseColumnMapping(format.columnMapping) }),
+  }
 }
 
 /**
@@ -555,14 +576,14 @@ export async function getStatementImportTemplate(
   }
   const account = await prisma.bankAccount.findFirst({
     where: { id: bankAccountId, organizationId: user.organizationId, deletedAt: null },
-    select: { id: true, statementFormat: true },
+    select: { id: true, ...statementFormatSelect },
   })
   if (account === null) throw new SettingsError('BANK_ACCOUNT_NOT_FOUND', { detail: bankAccountId })
-  const columnMapping = await statementColumnMappingOf(user.organizationId, account.statementFormat)
+  const format = statementFormatOf(account)
   return {
-    ...buildStatementImportTemplate(columnMapping),
+    ...buildStatementImportTemplate(format?.columnMapping ?? null),
     bankAccountId: account.id,
-    statementFormat: account.statementFormat,
+    statementFormat: format?.label ?? null,
   }
 }
 
@@ -573,12 +594,12 @@ export async function importStatement(
   assertOrgWideReadable(ctx.actor, 'bank-transactions')
   const account = await prisma.bankAccount.findFirst({
     where: { id: input.bankAccountId, organizationId: ctx.actor.organizationId, deletedAt: null },
-    select: { id: true, bankName: true, accountNumber: true, statementFormat: true, autoMatchToleranceDays: true },
+    select: { id: true, bankName: true, accountNumber: true, autoMatchToleranceDays: true, ...statementFormatSelect },
   })
   // code ของโมดูลตั้งค่า (`13` §10 · `24` §6.3) — ใช้ซ้ำ ไม่ประกาศใหม่ (Rule 04)
   if (account === null) throw new SettingsError('BANK_ACCOUNT_NOT_FOUND', { detail: input.bankAccountId })
 
-  const columnMapping = await statementColumnMappingOf(ctx.actor.organizationId, account.statementFormat)
+  const columnMapping = statementFormatOf(account)?.columnMapping ?? null
 
   let parsed
   try {

@@ -17,6 +17,7 @@
 | v2.1 | 04/07/2569 | **Schema sync (DEC-006/D5)**: field multi-step ใน §7 (`approval_step_current`, `approval_step_total`, `approval_history`) เดิม**ไม่มี column รองรับ**ในตาราง `expenses` — `02` v3.5 เพิ่มครบแล้ว พร้อม `executive_approved_by/at` (ขั้นเกินเพดาน) และ `approval_matrix_id` (snapshot ว่ารายการใช้ matrix แถวไหน) — ไม่มีการเปลี่ยน business logic ในไฟล์นี้ |
 | v2.2 | 05/10/2569 | **มติ PO 05/10/2569 (U29 · BUG-106)** — เพิ่ม §9.1 แจ้งเตือนผู้อนุมัติขั้นที่รออยู่ทันทีที่รายการเข้าคิว/ผ่านขั้นก่อนหน้า (ในระบบเท่านั้น) · ผู้รับตาม capability ของขั้น + scope ทีม (มติ R6-A/R6-B) · กันแจ้งซ้ำ · event `expense.approval_requested` |
 | v2.3 | 05/10/2569 | **มติ PO 05/10/2569 (U50)**: รายการเบิกย้อนหลังของวันลงพื้นที่ในงวดปิด (`41` §6.6) เข้าสายอนุมัติ**ปกติ**ตั้งแต่ขั้น 1 (สถานะเริ่มต้นเหมือนแถวรายวันของ job) + แจ้งผู้อนุมัติตาม §9.1 · ไม่มีขั้น/สถานะใหม่ |
+| v2.x-DC | 07/10/2569 | **มติ PO 07/10/2569 (U149)**: สายอนุมัติ (`approval_matrices`) เก็บ **role id** ของแต่ละขั้น — ขั้นที่รออยู่จับคู่สิทธิ์อนุมัติ (`approve_expense_manager`/`finance`/`executive`) จาก role ที่อ้าง (ชื่ออ่านสดจาก role · role ผู้อนุมัติเป็น seed เปลี่ยนชื่อ/ลบไม่ได้) · role ชื่อซ้ำข้ามกลุ่ม (เช่น "ผู้จัดการ" ของบริษัทไฟแนนซ์) ไม่ถูกจับคู่เป็นผู้อนุมัติ · ลบ role ที่อยู่ในสายไม่ได้ (`ROLE_IN_USE`) |
 
 ขอบเขตเอกสารนี้: ตรวจสอบและอนุมัติค่าตอบแทนที่เกิดจากการทำเคส (ค่าน้ำมัน, เบี้ยเลี้ยง, คอมมิชชั่น) ก่อนเข้าสู่รอบจ่ายเงินจริง — เป็นจุดที่ "ขั้นอนุมัติจ่ายเงินทำหน้าที่ตรวจสอบ" แทน QC แยก
 
@@ -76,7 +77,7 @@
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| approval_step_current | integer | yes | ขั้นอนุมัติปัจจุบัน (1, 2, 3...) ตาม approval_flow ที่ Approval Matrix กำหนด |
+| approval_step_current | integer | yes | ขั้นอนุมัติปัจจุบัน (1, 2, 3...) ตาม approval_flow ที่ Approval Matrix กำหนด (เก็บ role id ต่อขั้น — มติ PO U149) |
 | approval_step_total | integer | yes | จำนวนขั้นทั้งหมดที่ต้องผ่าน |
 | approval_history | array | yes | ประวัติแต่ละขั้น: `{step, approver_id, action (approve/reject), timestamp, reason}` |
 

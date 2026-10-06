@@ -30,6 +30,7 @@ const profileSelect = {
   whtPct: true,
   whtBasis: true,
   whtMinThresholdSatang: true,
+  incomeTypeCode: true,
   incomeType: true,
   filingForm: true,
   deletedAt: true,
@@ -45,6 +46,7 @@ function toDto(row: ProfileRow): TaxProfileDto {
     whtPct: row.whtPct.toNumber(),
     whtBasis: row.whtBasis === 'gross_amount' ? 'gross_amount' : 'before_vat',
     whtMinThresholdSatang: row.whtMinThresholdSatang,
+    incomeTypeCode: row.incomeTypeCode,
     incomeType: row.incomeType,
     filingForm: row.filingForm,
     isActive: row.deletedAt === null,
@@ -58,6 +60,7 @@ function toValues(dto: TaxProfileDto): TaxProfileValues {
     whtPct: dto.whtPct,
     whtBasis: dto.whtBasis as WhtBasis,
     whtMinThresholdSatang: dto.whtMinThresholdSatang,
+    incomeTypeCode: dto.incomeTypeCode,
     incomeType: dto.incomeType,
     filingForm: dto.filingForm,
   }
@@ -118,6 +121,7 @@ function toWriteData(values: TaxProfileValues) {
     whtPct: new Prisma.Decimal(normalized.whtPct.toFixed(2)),
     whtBasis: normalized.whtBasis,
     whtMinThresholdSatang: normalized.whtMinThresholdSatang,
+    incomeTypeCode: normalized.incomeTypeCode,
     incomeType: normalized.incomeType,
     filingForm: normalized.filingForm,
   }

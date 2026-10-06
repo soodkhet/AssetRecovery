@@ -855,20 +855,21 @@ suite('ไฟล์ตัวอย่าง statement — มติ PO 04/10/256
     )
   })
 
-  it('บัญชีที่ตั้งรูปแบบไว้ ⇒ แม่แบบเรียงตาม column_mapping และนำเข้าไฟล์แม่แบบได้ครบทุกแถว', async () => {
+  it('บัญชีที่ตั้งรูปแบบไว้ (อ้างด้วย id — มติ PO U147) ⇒ แม่แบบเรียงตาม column_mapping และนำเข้าไฟล์แม่แบบได้ครบทุกแถว', async () => {
     const tx = db()
+    const FORMAT_ID = '00000000-0000-4000-8000-0000000042f1'
     await tx.$executeRawUnsafe(`
-      INSERT INTO bank_file_formats (organization_id, bank_name, file_type, encoding, column_mapping, created_by)
-      VALUES ('${ORG_ID}', '${FORMAT_NAME}', 'CSV', 'UTF-8', 'description,transaction_date,amount,balance',
+      INSERT INTO bank_file_formats (id, organization_id, purpose, bank_code, bank_name, file_type, encoding, column_mapping, created_by)
+      VALUES ('${FORMAT_ID}', '${ORG_ID}', 'statement', '004', '${FORMAT_NAME}', 'CSV', 'UTF-8', 'description,transaction_date,amount,balance',
               '${ACCOUNTING_ID}')
     `)
     await tx.$executeRawUnsafe(
-      `UPDATE bank_accounts SET statement_format = '${FORMAT_NAME}' WHERE id = '${BANK_ACCOUNT_ID}'`,
+      `UPDATE bank_accounts SET statement_format_id = '${FORMAT_ID}' WHERE id = '${BANK_ACCOUNT_ID}'`,
     )
     try {
       const template = await recon.getStatementImportTemplate(accountant, BANK_ACCOUNT_ID)
       expect(template.usedConfiguredMapping).toBe(true)
-      expect(template.statementFormat).toBe(FORMAT_NAME)
+      expect(template.statementFormat).toContain(FORMAT_NAME)
       expect(template.columns.map((column) => column.header)).toEqual([
         'รายละเอียด',
         'วันที่',
@@ -884,7 +885,7 @@ suite('ไฟล์ตัวอย่าง statement — มติ PO 04/10/256
       expect(result.imported).toBe(2)
       expect(result.skippedRows).toEqual([])
     } finally {
-      await tx.$executeRawUnsafe(`UPDATE bank_accounts SET statement_format = NULL WHERE id = '${BANK_ACCOUNT_ID}'`)
+      await tx.$executeRawUnsafe(`UPDATE bank_accounts SET statement_format_id = NULL WHERE id = '${BANK_ACCOUNT_ID}'`)
       await tx.$executeRawUnsafe(`DELETE FROM bank_file_formats WHERE organization_id = '${ORG_ID}'`)
     }
   })

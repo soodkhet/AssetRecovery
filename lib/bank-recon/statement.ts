@@ -413,6 +413,11 @@ const STATEMENT_COLUMN_TEMPLATE: Record<StatementColumn, { header: string; forma
   balance: { header: 'ยอดคงเหลือ', format: 'ไม่นำไปใช้ (อ่านข้าม)', examples: ['118089.42', '109844.42'] },
 }
 
+/** ชื่อคอลัมน์ภาษาไทย (หัวคอลัมน์ของแม่แบบ) — ตัวเลือกคอลัมน์ของรูปแบบ statement ในหน้าตั้งค่า (มติ PO U147) */
+export const STATEMENT_COLUMN_LABEL: Readonly<Record<StatementColumn, string>> = Object.fromEntries(
+  SUPPORTED_STATEMENT_COLUMNS.map((column) => [column, STATEMENT_COLUMN_TEMPLATE[column].header]),
+) as Record<StatementColumn, string>
+
 /** ลำดับคอลัมน์มาตรฐานของระบบ — ใช้เมื่อบัญชีนั้นยังไม่ได้ตั้งรูปแบบ statement */
 export const DEFAULT_STATEMENT_TEMPLATE_COLUMNS: readonly StatementColumn[] = [
   'transaction_date',

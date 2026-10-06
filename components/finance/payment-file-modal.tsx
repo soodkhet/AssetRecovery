@@ -49,7 +49,8 @@ export function PaymentFileModal({
       callApi<BankAccountDto[]>('/api/settings/bank-accounts?status=active'),
     ])
     return {
-      formats: formatResult.data ?? [],
+      // ไฟล์โอนเท่านั้น — รูปแบบ statement ใช้นำเข้ากระทบยอด ไม่ใช่สร้างไฟล์โอน (มติ PO U147)
+      formats: (formatResult.data ?? []).filter((format) => format.purpose === 'payment'),
       accounts: (accountResult.data ?? []).filter((account) => account.canPay),
     }
   }, [])
@@ -65,7 +66,7 @@ export function PaymentFileModal({
       const account = options.accounts.find((item) => item.isPrimary) ?? options.accounts[0]
       setAccountId(account?.id ?? '')
       // รูปแบบไฟล์โอนที่ตั้งไว้กับบัญชีต้นทาง (ตั้งค่า → บัญชีธนาคารบริษัท) ถูกเลือกให้ก่อน — Final ด่าน 5
-      setFormatId(defaultPaymentFileFormatId(options.formats, account?.paymentFileFormat))
+      setFormatId(defaultPaymentFileFormatId(options.formats, account?.paymentFileFormatId))
     })()
     return () => {
       cancelled = true
@@ -75,7 +76,7 @@ export function PaymentFileModal({
   function changeAccount(nextId: string): void {
     setAccountId(nextId)
     const account = accounts.find((item) => item.id === nextId)
-    if (account?.paymentFileFormat) setFormatId(defaultPaymentFileFormatId(formats, account.paymentFileFormat))
+    if (account?.paymentFileFormatId) setFormatId(defaultPaymentFileFormatId(formats, account.paymentFileFormatId))
   }
 
   if (batch === null) return null
@@ -219,7 +220,7 @@ export function PaymentFileModal({
                   <option value="">— เลือกรูปแบบ —</option>
                   {formats.map((format) => (
                     <option key={format.id} value={format.id} disabled={!format.usable}>
-                      {format.bankName} ({format.fileType}, {format.encoding})
+                      {format.label}
                       {format.usable ? '' : ' — ยังไม่ผ่านทดสอบ'}
                     </option>
                   ))}

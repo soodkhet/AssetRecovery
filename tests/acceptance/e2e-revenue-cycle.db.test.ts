@@ -203,10 +203,10 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
     await tx.$executeRawUnsafe(`
       INSERT INTO roles (id, organization_id, name, role_group, is_seed) VALUES
         ('${ROLE_ADMIN}', '${ORG_ID}', 'ธุรการ 8.1', 'system', false),
-        ('${ROLE_MANAGER}', '${ORG_ID}', 'ผู้จัดการทีม 8.1', 'inhouse', false),
-        ('${ROLE_FINANCE}', '${ORG_ID}', 'การเงิน 8.1', 'system', false),
+        ('${ROLE_MANAGER}', '${ORG_ID}', 'ผู้จัดการทีมติดตามทรัพย์', 'inhouse', false),
+        ('${ROLE_FINANCE}', '${ORG_ID}', 'การเงิน', 'system', false),
         ('${ROLE_AGENT}', '${ORG_ID}', 'พนักงานติดตามทรัพย์', 'inhouse', false)
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
     `)
     // ผู้รับงานต้องเป็น role พนักงานติดตามทรัพย์จริง (UAT BUG-039) — แก้ชื่อแถวเก่าใน DB ทดสอบที่ค้างจากรอบก่อน
     await tx.$executeRawUnsafe(`UPDATE roles SET name = 'พนักงานติดตามทรัพย์' WHERE id = '${ROLE_AGENT}'`)
@@ -249,11 +249,11 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
     `)
     await tx.$executeRawUnsafe(`
       INSERT INTO approval_matrices
-        (id, organization_id, condition, condition_threshold_satang, approval_flow,
+        (id, organization_id, condition, condition_threshold_satang, approval_flow_role_ids,
          enforce_segregation_of_duties, created_by)
       VALUES ('${MATRIX_ID}', '${ORG_ID}', 'สายอนุมัติมาตรฐาน 8.1', NULL,
-              ARRAY['ผู้จัดการทีมติดตามทรัพย์', 'การเงิน'], true, '${ADMIN_ID}')
-      ON CONFLICT (id) DO NOTHING
+              ARRAY['${ROLE_MANAGER}', '${ROLE_FINANCE}']::uuid[], true, '${ADMIN_ID}')
+      ON CONFLICT (id) DO UPDATE SET approval_flow_role_ids = EXCLUDED.approval_flow_role_ids, deleted_at = NULL
     `)
     await tx.$executeRawUnsafe(`
       INSERT INTO finance_policy_settings (organization_id, require_payee_id_document)

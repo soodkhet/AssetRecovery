@@ -27,6 +27,8 @@ export interface RoleDeleteCheck {
   role: RoleGuardInput
   /** จำนวน user ที่ยังผูกกับบทบาทนี้ (ไม่รวมที่ soft delete แล้ว) */
   userCount: number
+  /** จำนวนสายอนุมัติที่ยังใช้งานซึ่งอ้าง role นี้ (มติ PO U149) — ไม่ส่ง = 0 */
+  approvalMatrixCount?: number
   /** จำนวน Superadmin ที่ยัง active ทั้งองค์กร — ใช้เฉพาะตอนเป้าหมายคือบทบาท Superadmin */
   activeSuperadminCount: number
 }
@@ -36,6 +38,7 @@ export interface RoleDeleteCheck {
  * 1. ลบบทบาท Superadmin ทั้งที่ยังมีคนใช้อยู่ = lockout ทั้งระบบ (`LAST_SUPERADMIN_REMOVAL`, `07` §11)
  * 2. seed role ลบไม่ได้ (`SEED_ROLE_DELETE`)
  * 3. บทบาทที่ยังมีผู้ใช้ผูกอยู่ลบไม่ได้ (`ROLE_IN_USE` — 1 user ต้องมี role เสมอ, `07` §10)
+ * 4. บทบาทที่อยู่ในสายอนุมัติลบไม่ได้ (`ROLE_IN_USE` — มติ PO U149: ลบแล้วสายพังเงียบ)
  */
 export function assertRoleDeletable(check: RoleDeleteCheck): void {
   if (isSuperadminRole(check.role) && check.activeSuperadminCount > 0) {
@@ -46,6 +49,9 @@ export function assertRoleDeletable(check: RoleDeleteCheck): void {
   }
   if (check.userCount > 0) {
     throw new RoleError('ROLE_IN_USE', `role=${check.role.name} users=${check.userCount}`)
+  }
+  if ((check.approvalMatrixCount ?? 0) > 0) {
+    throw new RoleError('ROLE_IN_USE', `role=${check.role.name} approval_matrices=${check.approvalMatrixCount ?? 0}`)
   }
 }
 

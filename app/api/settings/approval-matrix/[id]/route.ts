@@ -41,8 +41,8 @@ export const PATCH = withApiPermission<RouteContext>(
     const current = await getApprovalMatrix(user.organizationId, id)
     const { reason, ...values } = parsed.data
     // ชื่อ role ต้องมีจริงในองค์กรและเป็นผู้อนุมัติได้ (UAT BUG-008)
-    const invalid = await findInvalidApprovalSteps(user.organizationId, values.approvalFlow)
-    if (invalid.length > 0) return fieldErrorResponse({ approvalFlow: invalidApprovalStepsMessage(invalid) })
+    const invalid = await findInvalidApprovalSteps(user.organizationId, values.approvalFlowRoleIds)
+    if (invalid.length > 0) return fieldErrorResponse({ approvalFlowRoleIds: invalidApprovalStepsMessage(invalid) })
     const matrix = await updateApprovalMatrix({ actor: user, meta: getRequestMeta(request), reason }, current, values)
     return Response.json({ data: matrix })
   },

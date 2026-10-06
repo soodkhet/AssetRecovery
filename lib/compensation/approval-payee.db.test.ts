@@ -241,10 +241,10 @@ beforeAll(async () => {
   // สาย 2 ขั้น ผู้จัดการ → การเงิน (`16` §6.1) · สาย SoD ใช้เฉพาะเทสต์แยกหน้าที่
   await tx.$executeRawUnsafe(`
     INSERT INTO approval_matrices
-      (id, organization_id, condition, condition_threshold_satang, approval_flow, enforce_segregation_of_duties, created_by)
+      (id, organization_id, condition, condition_threshold_satang, approval_flow_role_ids, enforce_segregation_of_duties, created_by)
     VALUES
       ('${MATRIX_2_STEP}', '${ORG_ID}', 'ปกติไม่เกินเพดาน 3.2', NULL,
-       ARRAY['${MANAGER_ROLE}', '${FINANCE_ROLE}'], false, '${FINANCE_ID}')
+       ARRAY['${ROLE_MANAGER}', '${ROLE_FINANCE}']::uuid[], false, '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -633,9 +633,9 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
   it('§10 SoD เปิด ⇒ คนเดิมอนุมัติ 2 ขั้นในรายการเดียวกันไม่ได้', async () => {
     await db().$executeRawUnsafe(`
       INSERT INTO approval_matrices
-        (id, organization_id, condition, condition_threshold_satang, approval_flow, enforce_segregation_of_duties, created_by)
+        (id, organization_id, condition, condition_threshold_satang, approval_flow_role_ids, enforce_segregation_of_duties, created_by)
       VALUES ('${MATRIX_SOD}', '${ORG_ID}', 'สายแยกหน้าที่ 3.2', 100000,
-              ARRAY['${FINANCE_ROLE}', '${FINANCE_ROLE}'], true, '${FINANCE_ID}')
+              ARRAY['${ROLE_FINANCE}', '${ROLE_FINANCE}']::uuid[], true, '${FINANCE_ID}')
       ON CONFLICT (id) DO NOTHING
     `)
     try {

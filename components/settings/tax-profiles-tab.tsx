@@ -34,12 +34,15 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang, parseBahtInput, toBahtInput } from '@/lib/format/money'
-import type { WhtFilingForm } from '@/lib/generated/prisma/enums'
+import type { TaxProfileIncomeType, WhtFilingForm } from '@/lib/generated/prisma/enums'
 import { pctFromInput, satangFromInput, taxProfileHelp } from '@/lib/settings/help'
 import { taxProfileCreateSchema } from '@/lib/settings/schemas'
 import {
+  DEFAULT_TAX_PROFILE_INCOME_TYPE,
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
   DEFAULT_WHT_PCT,
+  TAX_PROFILE_INCOME_TYPE_CODES,
+  TAX_PROFILE_INCOME_TYPE_OPTION_LABEL,
   WHT_BASIS_VALUES,
   type WhtBasis,
 } from '@/lib/settings/tax-profile'
@@ -61,6 +64,9 @@ interface FormState {
   whtPct: string
   whtBasis: WhtBasis
   whtMinThreshold: string
+  /** มติ PO U148 — เลือกจากรายการมาตรฐานตามแบบ 50 ทวิ */
+  incomeTypeCode: TaxProfileIncomeType
+  /** ข้อความที่ระบุเอง (ใช้เฉพาะ "อื่น ๆ (ระบุ)") */
   incomeType: string
   filingForm: WhtFilingForm
   reason: string
@@ -71,6 +77,7 @@ const EMPTY_FORM: FormState = {
   whtPct: String(DEFAULT_WHT_PCT),
   whtBasis: 'before_vat',
   whtMinThreshold: toBahtInput(DEFAULT_WHT_MIN_THRESHOLD_SATANG),
+  incomeTypeCode: DEFAULT_TAX_PROFILE_INCOME_TYPE,
   incomeType: '',
   filingForm: 'PND3',
   reason: '',
@@ -140,7 +147,8 @@ export function TaxProfilesTab() {
             whtPct: String(target.whtPct),
             whtBasis: target.whtBasis,
             whtMinThreshold: toBahtInput(target.whtMinThresholdSatang),
-            incomeType: target.incomeType,
+            incomeTypeCode: target.incomeTypeCode,
+            incomeType: target.incomeTypeCode === 'other' ? target.incomeType : '',
             filingForm: target.filingForm,
             reason: '',
           },
@@ -159,7 +167,8 @@ export function TaxProfilesTab() {
       whtPct: Number(form.whtPct),
       whtBasis: form.whtBasis,
       whtMinThresholdSatang: parseBahtInput(form.whtMinThreshold),
-      incomeType: form.incomeType.trim(),
+      incomeTypeCode: form.incomeTypeCode,
+      incomeType: form.incomeTypeCode === 'other' ? form.incomeType.trim() : '',
       filingForm: form.filingForm,
       reason: form.reason.trim(),
     })
@@ -358,14 +367,35 @@ export function TaxProfilesTab() {
                 placeholder='เช่น "Outsource บุคคลธรรมดา"'
               />
             </Field>
-            <Field id="tax-income-type" label="ประเภทเงินได้" required error={errors.incomeType}>
-              <Input
+            <Field
+              id="tax-income-type"
+              label="ประเภทเงินได้"
+              required
+              hint="ข้อความนี้พิมพ์ลงหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ตรงตามรายการ"
+              error={errors.incomeTypeCode}
+            >
+              <Select
                 id="tax-income-type"
-                value={form.incomeType}
-                onChange={(event) => set('incomeType', event.target.value)}
-                placeholder="เช่น ค่าจ้างทำของ/ค่าบริการ ม.40(8)"
-              />
+                value={form.incomeTypeCode}
+                onChange={(event) => set('incomeTypeCode', event.target.value as TaxProfileIncomeType)}
+              >
+                {TAX_PROFILE_INCOME_TYPE_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {TAX_PROFILE_INCOME_TYPE_OPTION_LABEL[code]}
+                  </option>
+                ))}
+              </Select>
             </Field>
+            {form.incomeTypeCode === 'other' && (
+              <Field id="tax-income-type-other" label="ระบุประเภทเงินได้" required error={errors.incomeType}>
+                <Input
+                  id="tax-income-type-other"
+                  value={form.incomeType}
+                  onChange={(event) => set('incomeType', event.target.value)}
+                  placeholder="ข้อความที่จะพิมพ์ลง 50 ทวิ"
+                />
+              </Field>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

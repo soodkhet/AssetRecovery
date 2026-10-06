@@ -34,6 +34,7 @@ export const SETTINGS_ERROR_CODES = [
   'COST_CENTER_IN_USE',
   // §6.8 Bank File Format
   'BANK_FILE_FORMAT_NOT_FOUND',
+  'BANK_FILE_FORMAT_IN_USE',
   'BANK_FILE_NOT_TESTED',
   // §6.12 เลขที่เอกสาร (มติ PO U102)
   'NUMBERING_SEQ_NOT_EDITABLE',
@@ -69,6 +70,7 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   COST_CENTER_NOT_FOUND: 404,
   COST_CENTER_IN_USE: 400,
   BANK_FILE_FORMAT_NOT_FOUND: 404,
+  BANK_FILE_FORMAT_IN_USE: 400,
   BANK_FILE_NOT_TESTED: 400,
   NUMBERING_SEQ_NOT_EDITABLE: 400,
   NUMBERING_FORMAT_LOCKED: 400,
@@ -148,7 +150,11 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   },
   BANK_FILE_FORMAT_NOT_FOUND: {
     title: 'ไม่พบรูปแบบไฟล์ธนาคาร',
-    message: 'ไม่พบรูปแบบไฟล์ธนาคารที่ระบุ หรือถูกลบไปแล้ว',
+    message: 'ไม่พบรูปแบบไฟล์ธนาคารที่ระบุ ถูกลบไปแล้ว หรือไม่ใช่ชนิดที่ใช้ได้ในช่องนี้ (statement / ไฟล์โอนเงิน)',
+  },
+  BANK_FILE_FORMAT_IN_USE: {
+    title: 'ปิดใช้งานรูปแบบไฟล์ที่บัญชีธนาคารใช้อยู่ไม่ได้',
+    message: 'เปลี่ยนรูปแบบไฟล์ของบัญชีธนาคารที่อ้างรูปแบบนี้ก่อน จึงจะปิดใช้งานได้',
   },
   BANK_FILE_NOT_TESTED: {
     title: 'รูปแบบไฟล์ธนาคารยังไม่ผ่านการทดสอบ',

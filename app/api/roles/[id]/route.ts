@@ -2,7 +2,7 @@ import { getRequestMeta } from '@/lib/auth/request-meta'
 import { countActiveSuperadmins } from '@/lib/auth/superadmin-queries'
 import { assertRoleDeletable, assertRoleRenamable } from '@/lib/roles/guards'
 import { readJsonBody, validationErrorResponse, withRolePermission } from '@/lib/roles/http'
-import { countRoleUsers, deleteRole, getRole, updateRole } from '@/lib/roles/queries'
+import { countRoleApprovalMatrices, countRoleUsers, deleteRole, getRole, updateRole } from '@/lib/roles/queries'
 import { roleDeleteSchema, roleUpdateSchema } from '@/lib/roles/schemas'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -47,12 +47,13 @@ export const DELETE = withRolePermission<RouteContext>(
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const role = await getRole(user.organizationId, id)
-    const [userCount, activeSuperadminCount] = await Promise.all([
+    const [userCount, activeSuperadminCount, approvalMatrixCount] = await Promise.all([
       countRoleUsers(role.id),
       countActiveSuperadmins(user.organizationId),
+      countRoleApprovalMatrices(user.organizationId, role.id),
     ])
 
-    assertRoleDeletable({ role, userCount, activeSuperadminCount })
+    assertRoleDeletable({ role, userCount, activeSuperadminCount, approvalMatrixCount })
 
     await deleteRole({ actor: user, meta: getRequestMeta(request), reason: parsed.data.reason }, role)
 

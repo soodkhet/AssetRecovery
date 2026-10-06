@@ -61,6 +61,8 @@ import {
   substituteReceiptsRelationSelect,
 } from '@/lib/substitute-receipts/queries'
 import { SettingsError } from '@/lib/settings/errors'
+import { approvalFlowRoleNames } from '@/lib/settings/approval-matrix'
+import { loadRoleNameMap } from '@/lib/settings/queries/approval-matrix'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
 import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
 import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
@@ -124,7 +126,7 @@ const expenseSelect = {
     },
   },
   approvalMatrix: {
-    select: { id: true, condition: true, approvalFlow: true, enforceSegregationOfDuties: true },
+    select: { id: true, condition: true, approvalFlowRoleIds: true, enforceSegregationOfDuties: true },
   },
   payee: {
     select: {
@@ -178,26 +180,44 @@ interface ResolvedFlow {
   projected: boolean
 }
 
-async function loadMatrixCandidates(organizationId: string): Promise<ApprovalMatrixCandidate[]> {
-  const rows = await prisma.approvalMatrix.findMany({
-    where: { organizationId, deletedAt: null },
-    select: { id: true, condition: true, conditionThresholdSatang: true, approvalFlow: true, enforceSegregationOfDuties: true },
-  })
-  return rows.map((row) => ({
-    id: row.id,
-    condition: row.condition,
-    conditionThresholdSatang: row.conditionThresholdSatang,
-    approvalFlow: row.approvalFlow,
-    enforceSegregationOfDuties: row.enforceSegregationOfDuties,
-  }))
+/** สายอนุมัติที่ใช้ได้ + ชื่อ role ปัจจุบัน (สายเก็บ role id — มติ PO U149) */
+interface MatrixContext {
+  candidates: ApprovalMatrixCandidate[]
+  roleNames: ReadonlyMap<string, string>
+}
+
+async function loadMatrixCandidates(organizationId: string): Promise<MatrixContext> {
+  const [rows, roleNames] = await Promise.all([
+    prisma.approvalMatrix.findMany({
+      where: { organizationId, deletedAt: null },
+      select: {
+        id: true,
+        condition: true,
+        conditionThresholdSatang: true,
+        approvalFlowRoleIds: true,
+        enforceSegregationOfDuties: true,
+      },
+    }),
+    loadRoleNameMap(organizationId),
+  ])
+  return {
+    roleNames,
+    candidates: rows.map((row) => ({
+      id: row.id,
+      condition: row.condition,
+      conditionThresholdSatang: row.conditionThresholdSatang,
+      approvalFlow: approvalFlowRoleNames(row.approvalFlowRoleIds, roleNames),
+      enforceSegregationOfDuties: row.enforceSegregationOfDuties,
+    })),
+  }
 }
 
 /** สาย snapshot ของรายการ (ถ้ามี) — ไม่มีก็คาดการณ์จาก matrix ปัจจุบันตามยอดของรายการนั้น */
-function flowOf(row: ExpenseRow, candidates: readonly ApprovalMatrixCandidate[]): ResolvedFlow {
+function flowOf(row: ExpenseRow, { candidates, roleNames }: MatrixContext): ResolvedFlow {
   if (row.approvalMatrix !== null) {
     return {
       matrixId: row.approvalMatrix.id,
-      steps: row.approvalMatrix.approvalFlow,
+      steps: approvalFlowRoleNames(row.approvalMatrix.approvalFlowRoleIds, roleNames),
       totalSteps: row.approvalStepTotal,
       enforceSegregationOfDuties: row.approvalMatrix.enforceSegregationOfDuties,
       projected: false,
@@ -220,9 +240,9 @@ function flowOf(row: ExpenseRow, candidates: readonly ApprovalMatrixCandidate[])
  * แต่การตีกลับเป็นวาล์วนิรภัย — ถ้าบล็อกเพราะตั้งค่ายังไม่ครบ รายการที่เอกสารผิดจะค้างคิวโดยไม่มี
  * ทางออก · สิทธิ์ยังถูกตรวจที่ API layer (ต้องถือ capability ผู้อนุมัติสักขั้น) เสมอ
  */
-function flowOrNull(row: ExpenseRow, candidates: readonly ApprovalMatrixCandidate[]): ResolvedFlow | null {
+function flowOrNull(row: ExpenseRow, context: MatrixContext): ResolvedFlow | null {
   try {
-    return flowOf(row, candidates)
+    return flowOf(row, context)
   } catch (error) {
     if (error instanceof SettingsError && error.code === 'APPROVAL_MATRIX_NOT_FOUND') return null
     throw error

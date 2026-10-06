@@ -10,6 +10,7 @@
  */
 
 import { EXECUTIVE_ROLE_NAME, FINANCE_ROLE_NAME, TEAM_MANAGER_ROLE_NAME } from '@/lib/auth/constants'
+import type { RoleGroup } from '@/lib/generated/prisma/enums'
 
 /** คอลัมน์ผู้อนุมัติบน `expenses` ที่ขั้นนั้นต้องประทับ (`02` §8 · `16` §7 DEC-006/D5) */
 export type ApproverColumn = 'manager' | 'finance' | 'executive'
@@ -29,6 +30,9 @@ const APPROVAL_ROLE_COLUMNS: Readonly<Record<string, ApproverColumn>> = {
   executive: 'executive',
 }
 
+/** ชื่อ role seed ที่เป็นผู้อนุมัติ (ชื่ออังกฤษใน `APPROVAL_ROLE_COLUMNS` มีไว้แปลงข้อมูลเก่าเท่านั้น) */
+const SEED_APPROVER_NAMES: readonly string[] = [TEAM_MANAGER_ROLE_NAME, FINANCE_ROLE_NAME, EXECUTIVE_ROLE_NAME]
+
 /** คอลัมน์ผู้อนุมัติของชื่อ role ในสาย — `null` = ไม่มี role อนุมัติชื่อนี้ */
 export function approvalRoleColumn(roleName: string): ApproverColumn | null {
   const exact = APPROVAL_ROLE_COLUMNS[roleName.trim()]
@@ -36,30 +40,75 @@ export function approvalRoleColumn(roleName: string): ApproverColumn | null {
   return APPROVAL_ROLE_COLUMNS[roleName.trim().toLowerCase().replace(/\s+/g, '')] ?? null
 }
 
-/**
- * ตัวเลือกของ dropdown ขั้นอนุมัติ — ชื่อ role **ที่มีอยู่จริงในองค์กร** (ไม่ซ้ำ — ชื่อเดียวกันข้ามกลุ่ม
- * นับครั้งเดียว) และตัวอนุมัติรู้จัก (UAT BUG-008: เดิมพิมพ์อิสระ พิมพ์ผิดก็บันทึกได้แล้วไปพังตอนอนุมัติ)
- */
-export function approvalRoleOptions(roleNames: readonly string[]): string[] {
-  const options: string[] = []
-  for (const name of roleNames) {
-    const trimmed = name.trim()
-    if (approvalRoleColumn(trimmed) !== null && !options.includes(trimmed)) options.push(trimmed)
-  }
-  return options
+/** role เท่าที่ตัวเลือกขั้นอนุมัติต้องรู้ (`roles`) */
+export interface ApprovalRoleRef {
+  id: string
+  name: string
+  roleGroup: RoleGroup
+  isSeed: boolean
+  /** soft delete — role ที่ลบแล้วเลือกเป็นขั้นใหม่ไม่ได้ */
+  deletedAt?: Date | string | null
 }
 
-/** ขั้นในสายที่ไม่ใช่ตัวเลือกที่ใช้ได้ (ไม่มี role ชื่อนี้ในองค์กร หรือ role นี้อนุมัติไม่ได้) — ว่าง = ผ่าน */
-export function invalidApprovalSteps(approvalFlow: readonly string[], roleNames: readonly string[]): string[] {
-  const options = approvalRoleOptions(roleNames)
-  return [...new Set(approvalFlow.map((step) => step.trim()).filter((step) => !options.includes(step)))]
+/** role ผู้อนุมัติ 1 ตัวเลือกต่อคอลัมน์ — `id` คือค่าที่เก็บลง `approval_flow_role_ids` */
+export interface ApprovalRoleOption {
+  id: string
+  name: string
+  column: ApproverColumn
+}
+
+/** ลำดับความสำคัญของกลุ่มเมื่อ role ผู้อนุมัติชื่อเดียวกันมีหลาย record (ผู้จัดการทีม inhouse/outsource) */
+const ROLE_GROUP_PRIORITY: Readonly<Record<RoleGroup, number>> = {
+  system: 0,
+  inhouse: 1,
+  outsource: 2,
+  finance_company: 3,
+}
+
+/**
+ * ตัวเลือกของ dropdown ขั้นอนุมัติ (มติ PO U149) — role **seed** ที่ตัวอนุมัติรู้จัก 1 ตัวต่อคอลัมน์ผู้อนุมัติ
+ *
+ * - เก็บเป็น **role id** — role ชื่อซ้ำข้ามกลุ่ม (เช่น "ผู้จัดการ" ของบริษัทไฟแนนซ์) จึงไม่ถูกจับคู่ผิด
+ * - ผู้จัดการทีมมี 2 record (inhouse/outsource) ที่ถือสิทธิ์อนุมัติขั้นเดียวกัน ⇒ ใช้ record เดียว (system → inhouse → outsource)
+ * - role ที่สร้างเองไม่อยู่ในรายการ — สิทธิ์อนุมัติแต่ละขั้นผูกกับ capability ของ role seed (`16` §10)
+ */
+export function approvalRoleOptions(roles: readonly ApprovalRoleRef[]): ApprovalRoleOption[] {
+  const byColumn = new Map<ApproverColumn, ApprovalRoleRef>()
+  for (const role of roles) {
+    if (!role.isSeed || (role.deletedAt !== undefined && role.deletedAt !== null)) continue
+    const column = approvalRoleColumn(role.name)
+    if (column === null || !SEED_APPROVER_NAMES.includes(role.name.trim())) continue
+    const current = byColumn.get(column)
+    if (current === undefined || ROLE_GROUP_PRIORITY[role.roleGroup] < ROLE_GROUP_PRIORITY[current.roleGroup]) {
+      byColumn.set(column, role)
+    }
+  }
+  const order: readonly ApproverColumn[] = ['manager', 'finance', 'executive']
+  return order.flatMap((column) => {
+    const role = byColumn.get(column)
+    return role === undefined ? [] : [{ id: role.id, name: role.name.trim(), column }]
+  })
+}
+
+/** ขั้นในสายที่ไม่ใช่ role ผู้อนุมัติที่เลือกได้ (ไม่มี/ถูกลบ/ไม่ใช่ role อนุมัติ) — คืน role id · ว่าง = ผ่าน */
+export function invalidApprovalSteps(roleIds: readonly string[], roles: readonly ApprovalRoleRef[]): string[] {
+  const allowed = new Set(approvalRoleOptions(roles).map((option) => option.id))
+  return [...new Set(roleIds.map((id) => id.trim()).filter((id) => !allowed.has(id)))]
+}
+
+/**
+ * role id ของสาย → ชื่อ role **ปัจจุบัน** (ใช้แสดงผลและส่งต่อให้ตัวอนุมัติ) — ชื่อตามจริงทุกครั้งที่อ่าน
+ * ⇒ เปลี่ยนชื่อ role แล้วสายยังชี้ role เดิม · id ที่ไม่พบ = `''` (ตัวอนุมัติปฏิเสธเป็น `APPROVAL_MATRIX_NOT_FOUND`)
+ */
+export function approvalFlowRoleNames(roleIds: readonly string[], roleNames: ReadonlyMap<string, string>): string[] {
+  return roleIds.map((id) => roleNames.get(id) ?? '')
 }
 
 export interface ApprovalMatrixValues {
   condition: string
   conditionThresholdSatang: number | null
-  /** ลำดับ role ที่ต้องอนุมัติ เช่น `['ผู้จัดการ','การเงิน']` — ลำดับมีความหมาย */
-  approvalFlow: string[]
+  /** ลำดับ **role id** ที่ต้องอนุมัติ — ลำดับมีความหมาย (มติ PO U149) */
+  approvalFlowRoleIds: string[]
   enforceSegregationOfDuties: boolean
 }
 
@@ -70,7 +119,7 @@ export function normalizeApprovalMatrixValues(input: ApprovalMatrixValues): Appr
   return {
     condition: input.condition.trim(),
     conditionThresholdSatang: input.conditionThresholdSatang,
-    approvalFlow: input.approvalFlow.map((role) => role.trim()).filter((role) => role.length > 0),
+    approvalFlowRoleIds: input.approvalFlowRoleIds.map((id) => id.trim()).filter((id) => id.length > 0),
     enforceSegregationOfDuties: input.enforceSegregationOfDuties,
   }
 }
@@ -97,10 +146,12 @@ export function duplicateApprovalSteps(approvalFlow: readonly string[]): string[
 }
 
 /** สายนี้ใช้ได้จริงไหมเมื่อรวมเงื่อนไขแยกหน้าที่ */
-export function isApprovalFlowConsistent(values: Pick<ApprovalMatrixValues, 'approvalFlow' | 'enforceSegregationOfDuties'>): boolean {
-  if (!isApprovalFlowShapeValid(values.approvalFlow)) return false
+export function isApprovalFlowConsistent(
+  values: Pick<ApprovalMatrixValues, 'approvalFlowRoleIds' | 'enforceSegregationOfDuties'>,
+): boolean {
+  if (!isApprovalFlowShapeValid(values.approvalFlowRoleIds)) return false
   if (!values.enforceSegregationOfDuties) return true
-  return duplicateApprovalSteps(values.approvalFlow).length === 0
+  return duplicateApprovalSteps(values.approvalFlowRoleIds).length === 0
 }
 
 /** label ของสายอนุมัติที่ตารางแท็บแสดง (`13` §7) — `ผู้จัดการ → การเงิน → บริหาร` */
@@ -122,7 +173,7 @@ export function toApprovalMatrixAuditPayload(values: ApprovalMatrixValues): Reco
   return {
     condition: values.condition,
     condition_threshold_satang: values.conditionThresholdSatang,
-    approval_flow: values.approvalFlow,
+    approval_flow_role_ids: values.approvalFlowRoleIds,
     enforce_segregation_of_duties: values.enforceSegregationOfDuties,
   }
 }

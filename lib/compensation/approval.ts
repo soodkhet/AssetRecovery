@@ -95,7 +95,7 @@ interface ApprovalRoleContract {
 }
 
 /**
- * role ในสายอนุมัติ (`approval_matrices.approval_flow` — ข้อความอิสระที่ตั้งได้เองใน `13` §6.2)
+ * role ในสายอนุมัติ (`approval_matrices.approval_flow_role_ids` → ชื่อ role ปัจจุบัน — มติ PO U149)
  * → capability ที่ต้องถือจริง + คอลัมน์ผู้อนุมัติ
  *
  * รับทั้งชื่อ role ตาม seed (`07` §5) และชื่ออังกฤษที่ `13` §6.2 ยกเป็นตัวอย่าง (`[Manager, FinanceAdmin]`)

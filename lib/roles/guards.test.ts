@@ -56,6 +56,14 @@ describe('seed role guards (`07` §10/§11/§16)', () => {
     ).toBe('ROLE_IN_USE')
   })
 
+  it('ลบ role ที่อยู่ในสายอนุมัติ = ROLE_IN_USE แม้ไม่มีผู้ใช้ (มติ PO U149)', () => {
+    expect(
+      codeOf(() =>
+        assertRoleDeletable({ role: customRole, userCount: 0, activeSuperadminCount: 2, approvalMatrixCount: 1 }),
+      ),
+    ).toBe('ROLE_IN_USE')
+  })
+
   it('ลบ custom role ที่ไม่มีผู้ใช้ได้', () => {
     expect(() =>
       assertRoleDeletable({ role: customRole, userCount: 0, activeSuperadminCount: 2 }),
