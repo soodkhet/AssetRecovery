@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (441 KB, 4861 บรรทัด — v4.51)
+### `docs/02-database-schema-design.md` (287 KB, 2839 บรรทัด — v4.51)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -137,26 +137,16 @@
 | 140 | ## 3. Enum Types (ทั้งหมด) |
 | 508 | ## 4. Schema Group A — Identity & Access |
 | 613 | ## 5. Schema Group B — Master Data |
-| 1044 | ## 6. Schema Group C — Case Workflow |
-| 1478 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1568 | ## 8. Schema Group E — Finance Operation |
-| 2029 | ## 9. Schema Group F — Accounting Handover |
-| 2444 | ## 10. Schema Group G — Platform |
-| 2592 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 2670 | ## 12. Seed Data |
-| 2744 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 2767 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 2777 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
-| 3079 | ## 6. Schema Group C — Case Workflow |
-| 3523 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 3613 | ## 8. Schema Group E — Finance Operation |
-| 4082 | ## 9. Schema Group F — Accounting Handover |
-| 4506 | ## 10. Schema Group G — Platform |
-| 4668 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 4744 | ## 12. Seed Data |
-| 4818 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 4840 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 4850 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 1050 | ## 6. Schema Group C — Case Workflow |
+| 1494 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
+| 1584 | ## 8. Schema Group E — Finance Operation |
+| 2055 | ## 9. Schema Group F — Accounting Handover |
+| 2481 | ## 10. Schema Group G — Platform |
+| 2643 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 2721 | ## 12. Seed Data |
+| 2795 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 2818 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 2828 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/02_OPEN_DECISIONS.md` (72 KB, 300 บรรทัด)
 
