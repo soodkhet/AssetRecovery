@@ -416,7 +416,7 @@ describe('GET /api/cron/jobs (`91` §17 · DEC-001)', () => {
     engineMock.enqueueScheduledJobs.mockResolvedValue({ enqueued: 2, duplicated: 0 })
     engineMock.runDueJobs.mockResolvedValue({ picked: 1, completed: 1, retryScheduled: 0, deadLettered: 0, skipped: 0 })
     engineMock.reclaimStaleJobs.mockResolvedValue(0)
-    registryMock.runSweeperJobs.mockResolvedValue({ fuelDistance: { claimed: 0, created: 0, skippedZero: 0, deferred: 0 } })
+    registryMock.runSweeperJobs.mockResolvedValue({ fuelDistance: { claimed: 0, created: 0, skippedZero: 0, deferred: 0, periodLocked: 0 } })
 
     const denied = await cronRoute(request('http://localhost/api/cron/jobs', 'GET', undefined, { authorization: 'Bearer wrong-secret' }))
     expect(denied.status).toBe(401)

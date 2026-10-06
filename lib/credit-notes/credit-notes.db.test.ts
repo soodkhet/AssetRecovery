@@ -677,3 +677,51 @@ suite('มติ PO U82 (ม.86/4) — ใบลดหนี้/ใบเพิ�
     expect(lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`))).toMatch(/,สาขาที่ 00004,(\d{13}|-)$/)
   })
 })
+
+suite('Final Test ด่าน 3 — งวดส่งสำนักงานบัญชี + ทางแข่งกันของใบลดหนี้', () => {
+  it('U20: ใบลดหนี้ลงวันในงวด sent_to_accountant ⇒ PERIOD_LOCKED_DIRECT_EDIT (ไม่ใช่แค่งวด locked)', async () => {
+    // เม.ย. 2570 (2027-04) = ส่งสำนักงานบัญชีแล้วแต่ยังไม่ล็อก
+    await db().$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'เมษายน 2570', 2570, 4, 'sent_to_accountant', '${ACCOUNTING_ID}')
+      ON CONFLICT DO NOTHING
+    `)
+    const seeded = await seedInvoice('2026-09-15')
+    await expectCode(
+      () => credit.createCreditNote(ctx, input(seeded, { issueDate: day('2027-04-10') })),
+      'PERIOD_LOCKED_DIRECT_EDIT',
+    )
+    // ใบใหม่ลงวันที่ในงวดที่ยังเปิด ⇒ ผ่าน (มติ U20 ก.)
+    const ok = await credit.createCreditNote(ctx, input(seeded, { issueDate: day('2026-10-05') }))
+    expect(ok.status).toBe('active')
+  })
+
+  it('U32 ภายใต้ concurrency: บันทึกใบลดหนี้ 2 ใบพร้อมกันที่รวมแล้วเกินหน้าใบกำกับ ⇒ ผ่านใบเดียว', async () => {
+    const seeded = await seedInvoice() // หน้าใบ 12,000 + VAT
+    const results = await Promise.allSettled([
+      credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 700_000 })),
+      credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 700_000 })),
+    ])
+    const ok = results.filter((row) => row.status === 'fulfilled')
+    const failed = results.filter((row): row is PromiseRejectedResult => row.status === 'rejected')
+    expect(ok).toHaveLength(1)
+    expect(failed).toHaveLength(1)
+    expect(`${codeOf(failed[0]?.reason)} ${String(failed[0]?.reason)}`).toContain('CREDIT_NOTE_EXCEEDS_INVOICE')
+    expect((await credit.sumCreditNotesForInvoice(seeded.invoiceId)).totalSatang).toBe(749_000)
+  })
+
+  it('U18 ภายใต้ concurrency: ยกเลิกใบกำกับพร้อมบันทึกใบลดหนี้ ⇒ ไม่มีทาง "ใบกำกับยกเลิก + ใบลดหนี้ active"', async () => {
+    for (let round = 0; round < 3; round += 1) {
+      const seeded = await seedInvoice()
+      await Promise.allSettled([
+        sales.cancelTaxInvoice(ctx, seeded.invoiceId, { reason: 'ออกผิด (ทดสอบแข่งกัน)' }),
+        credit.createCreditNote(ctx, input(seeded)),
+      ])
+      const invoice = await db().taxInvoice.findUniqueOrThrow({ where: { id: seeded.invoiceId }, select: { status: true } })
+      const activeNotes = await db().creditNote.count({ where: { taxInvoiceId: seeded.invoiceId, status: 'active' } })
+      expect(invoice.status === 'cancelled' && activeNotes > 0).toBe(false)
+      // อย่างน้อยหนึ่งฝั่งต้องสำเร็จ
+      expect(invoice.status === 'cancelled' || activeNotes === 1).toBe(true)
+    }
+  })
+})

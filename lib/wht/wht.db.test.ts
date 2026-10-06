@@ -713,9 +713,12 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
 
   it('Final Test ด่าน 6 — งานเบื้องหลังสรุปรอบนำส่งต้องไม่เขียนทับงวดที่ปิดไปแล้ว', async () => {
     await setPeriodStatus('collecting')
+    const periodId = await junePeriodId()
+    // รอบนี้ถูก mark filed ในเทสต์ก่อนหน้า — รอบ filed ไม่ถูกคิดใหม่อีกแล้ว (`33` §7.2) ⇒ ทดสอบกับรอบ pending
+    const filedBefore = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
+    await db().whtFilingSummary.update({ where: { periodId }, data: { status: 'pending', filedAt: null } })
     const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 30_000_00, wht: 900_00 }])
     await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
-    const periodId = await junePeriodId()
     const real = (await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang
 
     // ปักยอดปลอมไว้ — ถ้า job ยังทำงานกับงวดที่ปิดแล้ว ยอดนี้จะถูกคำนวณทับกลับเป็นของจริง
@@ -735,6 +738,10 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     const refreshed = await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
     expect(refreshed.refreshed).toBe(1)
     expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang).toBe(real)
+    await db().whtFilingSummary.update({
+      where: { periodId },
+      data: { status: filedBefore.status, filedAt: filedBefore.filedAt },
+    })
   })
 
   it('อ้าง id ที่ไม่มีในองค์กร ⇒ 404 ไม่ leak (WHT_CERTIFICATE_NOT_FOUND / WHT_FILING_SUMMARY_NOT_FOUND)', async () => {
@@ -837,6 +844,46 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
       expect(text).toContain('สี่ร้อยห้าสิบบาทถ้วน')
     } finally {
       await db().$executeRawUnsafe(`UPDATE payee_profiles SET branch_code = '00000' WHERE id = '${PAYEE_COMPANY_ID}'`)
+    }
+  })
+
+  it('Final Test ด่าน 3 — รอบที่ mark filed แล้ว ⇒ คิดสรุปใหม่ (ออก/ยกเลิกใบ · job) ไม่แตะยอด/วันกำหนด/วิธียื่น', async () => {
+    await setPeriodStatus('collecting')
+    const periodId = await junePeriodId()
+    const before = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
+    const fakeDue = new Date('2026-07-20T00:00:00Z')
+    // จำลองรอบที่บัญชียื่นไปแล้วนอกระบบ — ยอด/วันที่ปักไว้ต้องคงอยู่ (`33` §7.2 "รอบที่ filed แล้วไม่แตะ")
+    await db().whtFilingSummary.update({
+      where: { periodId },
+      data: { status: 'filed', filedAt: new Date(), pnd3Satang: 1, filingDueDate: fakeDue },
+    })
+    try {
+      const { prisma } = await import('@/lib/prisma')
+      const period = await db().accountingPeriod.findUniqueOrThrow({ where: { id: periodId }, select: { periodLabel: true } })
+      const row = await wht.refreshFilingSummary(prisma, {
+        organizationId: ORG_ID,
+        periodId,
+        periodLabel: period.periodLabel,
+        yearBe: 2569,
+        month: 6,
+      })
+      expect(row.pnd3Satang).toBe(1)
+      await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
+
+      const after = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
+      expect(after.status).toBe('filed')
+      expect(after.pnd3Satang).toBe(1)
+      expect(after.filingDueDate.toISOString()).toBe(fakeDue.toISOString())
+    } finally {
+      await db().whtFilingSummary.update({
+        where: { periodId },
+        data: {
+          status: before.status,
+          filedAt: before.filedAt,
+          pnd3Satang: before.pnd3Satang,
+          filingDueDate: before.filingDueDate,
+        },
+      })
     }
   })
 })
