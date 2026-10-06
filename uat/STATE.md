@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 07/10/2569 merge FA (U163) + seed ตาม U163 · **ฐาน dev: snapshot `pre-final-seed` → ล้างข้อมูลธุรกิจ (คงผู้ใช้) → Auth 4 บัญชี (U123) → seed + Storage → verify ✅200/0 → snapshot `final-seeded`** · บั๊ก seed: รัน `--create-auth-users` แยกแล้ว `--seed` ข้ามตั้งค่าแต่ไม่โหลด id (bankFiles ว่าง) → แก้ด้วยรัน reset+seed ใหม่ (ต้องแก้สคริปต์ให้โหลด id) · fixer FB (U164) กำลังทำ · ต่อ: ด่าน 7 เบราว์เซอร์จริง
 - 07/10/2569 merge fixer รอบ 2 ครบ: DD (U151/U154) · DA (U143/U150/U152/U153) · DC (U147–U149) · DB (U144–U146 · Export Pack +`18_Bank_Fee_Write_Offs`) · DE (U155–U159 Model Phone · DEC-016 · env `RAPIDAPI_KEY` ผู้ใช้ตั้งแล้ว) · EA (U160–U162) · ซ่อม docs/02 ซ้ำ (`0e4f870`) · seed-final ปรับตาม U120–U162 (BX2) · verify 389/5,533 · seed test6 ✅197/0 · ทดสอบ RapidAPI จริงบน dev: 124 แบรนด์/2,137 รุ่น โควตาฟรีเหลือ 5 (ไม่มีปีที่ออก → U162) · มติ U160–U163 · ผู้ใช้อนุมัติล้างฐาน dev + Auth 4 บัญชี + Storage (หลัง fixer FA U163) · ค้าง: ผู้ใช้เพิ่ม `RAPIDAPI_KEY=`/`RAPIDAPI_MOBILE_SPECS_HOST=` ใน .env.example เอง (เราอ่าน/แก้ไม่ได้) · เลข changelog ชั่วคราว `x-<fixer>` ต้องเรียงใหม่
 - 07/10/2569 merge fixer รอบ 1 ครบ: CD (U142) · ด่าน 5 (`3075b2a` ตัวเลือก/ค่าตั้งมีผล 4 จุด + O73) · CA (U134/U136/U137) · CB (U131/BUG-SF1/U138/U141) · BY (O72 วันรับรู้รายได้=วันยืนยันล็อต · รายได้ต่อรอบ · U129 `IMEI_DUPLICATE_ACTIVE_ASSET` · U135) · BZ (U127/U128/U130/U140) · CC (U132 + ไฟล์ `17_Company_Documents` → Export Pack 18 ไฟล์ · U133) · verify 380/5,356 · migration ใหม่ถึง `20261008051000` (ขึ้น dev+test · staging ยังไม่) · มติ U143–U155 · fixer รอบ 2 DA/DB/DC/DD/DE กำลังทำ (test2/3/4/5/7) · ต่อ: ปรับ seed-final ตามของใหม่ (CC: cycles `scopeKind` + reset trigger finance_company_documents · BY: revenue_date = วันยืนยันล็อต · golden คิว G) → ถามผู้ใช้ก่อน reset dev → ด่าน 7 · เลข changelog ชั่วคราว `x-<fixer>` ใน docs 02/13/27/37/90 ต้องเรียงใหม่ก่อนจบ
 - 07/10/2569 Final ด่าน 1/2/3/4/6 merge ครบ (ด่าน 4 แก้สิทธิ์ใบรับรองแทนใบเสร็จ · ด่าน 3 รอบ ภ.ง.ด. filed ไม่ถูกเขียนทับ + job PER_KM งวดล็อก · ด่าน 6 ส่ง/ล็อกงวดพร้อมกัน + อนุมัติเงินทดรองพร้อมกัน · ด่าน 2 golden ตรงถึงสตางค์) · merge U125/U126 (`20261007100000`) — staging DB ผู้ใช้ migrate เองแล้ว 73 ตัว · merge สคริปต์ seed `scripts/seed-final/` (test6: verify 179✅/4❌ คิวแดชบอร์ด) · verify 5,225+ · มติ U127–U141 + O72 · fixer BY/BZ/CA/CB/CC + ด่าน 5 กำลังทำ (test2/3/4/5/7/6) · ยังไม่ reset/seed ฐาน dev (ต้องถามผู้ใช้ก่อน)
@@ -212,9 +213,11 @@ snapshot `R4a-end-v3` → R4b (R4.24–R4.38: ใช้ prompt แบบเด�
 - 03/10/2569 PO ยืนยันช่วงค่าหน้านโยบายมอบหมายงาน: timeout 1–168 ชม. · เส้นตายกดรับงาน 1–720 ชม. ⇒ เติมเป็น `docs/40` v2.3 แล้ว
 
 ## บัญชี Supabase Auth กำพร้า (สะสมจากการ restore — ไว้ลบตอน go-live)
+- 07/10/2569 Final seed (U123): `uat.agent.out2` · `uat.sup.out` · `uat.temp1` (ระงับ) · `uat.temp2` (ลบ soft) — บัญชีตัวอย่าง ลบก่อน go-live
 - (ยังไม่มีบัญชี Auth กำพร้า)
 
 ## ไฟล์ทดสอบใน Storage ที่ตั้งใจให้ค้าง (ไว้ลบตอน go-live)
+- 07/10/2569 `pnpm seed:final --seed --with-storage` บนฐาน dev **2 รอบ** (รอบแรกล้มกลางทางที่ไฟล์โอน PB-S-IN — ไฟล์ที่อัปโหลดก่อนจุดนั้นกลายเป็นไฟล์กำพร้า) · bucket `case-documents` + bucket ไฟล์โอน/export — ไฟล์ที่ใช้จริงอ้างอยู่ในคอลัมน์ path ของฐาน dev (snapshot `final-seeded`) · ลบทั้ง prefix ขององค์กร `00000000-0000-0000-0000-000000000001` ที่สร้างวันที่ 07/10/2569 ก่อน go-live
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/4b1dcc07-6a53-4d69-9745-b62394b20e73-R4-fake-video.mp4` (R4a เดิม)
 - `case-documents/cases/7de5741e-1dfd-4a5b-ad7b-7df4206d5314/field_evidence/video/aa8879c5-b474-4cd8-bf71-f8d170e48831-R4-fake-video.mp4` (R4a v2)
 - R4b v2: `cases/d4d82f78…/field_evidence/product_photo/7d772c98-…-R4-C4-product-v2.jpg`, `expenses/88cb577d…/receipts/91324d20-…-R4-C1-photo.jpg` (ใช้งานจริง ไม่ใช่ขยะ)
