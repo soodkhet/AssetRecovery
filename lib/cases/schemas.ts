@@ -49,7 +49,7 @@ export type CaseContactInput = z.infer<typeof caseContactSchema>
 export const caseCreateSchema = z.object({
   /** เก็บค่าดิบ ไม่ถูกแก้ไข — ตัว normalize สำหรับเทียบซ้ำอยู่ที่ `normalizeCaseRef()` */
   caseRef: trimmedText.min(1, 'กรุณาระบุเลขที่สัญญา').max(100),
-  financeCompanyId: z.uuid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
+  financeCompanyId: z.guid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
   sourceChannel: z.enum(['manual', 'import', 'api']).default('manual'),
 
   debtorName: optionalText(255),
@@ -135,7 +135,7 @@ export type CaseDocumentDeleteInput = z.infer<typeof caseDocumentDeleteSchema>
 export const caseStatusChangeSchema = z.object({
   action: z.enum(CASE_STATUS_ACTIONS),
   reason: optionalText(1000),
-  teamId: z.uuid('ทีมไม่ถูกต้อง').nullable().optional(),
+  teamId: z.guid('ทีมไม่ถูกต้อง').nullable().optional(),
   teamChangeReason: optionalText(500),
   /**
    * ผู้ตรวจติ๊กยืนยันว่าเอกสารชุด (สแกนรวมเล่ม) มีสัญญาและบัตรประชาชนครบ — บังคับเฉพาะ `accept` ของเคสโหมดชุด
@@ -155,7 +155,7 @@ export type CaseStatusChangeInput = z.infer<typeof caseStatusChangeSchema>
  */
 export const caseImportSchema = z
   .object({
-    financeCompanyId: z.uuid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
+    financeCompanyId: z.guid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
     rows: z.array(z.record(z.string(), z.unknown())).max(1000, 'นำเข้าได้สูงสุด 1,000 แถวต่อครั้ง').optional(),
     csv: z.string().max(5_000_000).optional(),
     dryRun: z.boolean().default(false),
@@ -171,7 +171,7 @@ export type CaseImportInput = z.infer<typeof caseImportSchema>
 export const caseListQuerySchema = z.object({
   status: z.enum(CASE_STATUSES).optional(),
   source_channel: z.enum(['manual', 'import', 'api']).optional(),
-  finance_company_id: z.uuid().optional(),
+  finance_company_id: z.guid().optional(),
   province: trimmedText.min(1).max(100).optional(),
   search: trimmedText.min(1).max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),

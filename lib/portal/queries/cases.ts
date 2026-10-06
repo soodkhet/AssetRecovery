@@ -152,7 +152,7 @@ export interface PortalCaseDetailRow {
  * · ประกอบ DTO เฉพาะแถวของบริษัทผู้เรียกเท่านั้น (แถวบริษัทอื่นไม่ถูก serialize เลย)
  */
 export async function findPortalCaseDetail(ctx: PortalContext, id: string): Promise<PortalCaseDetailRow | null> {
-  if (!z.uuid().safeParse(id).success) return null
+  if (!z.guid().safeParse(id).success) return null
   const row = await prisma.case.findFirst({
     where: { id, organizationId: ctx.user.organizationId, deletedAt: null },
     select: {

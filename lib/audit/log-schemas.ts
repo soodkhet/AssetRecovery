@@ -39,8 +39,8 @@ const dateOnly = z
 export const auditLogListQuerySchema = z.object({
   /** ชื่อตารางปลายทาง (snake_case ตาม `02`) เช่น `cases` / `expenses` */
   targetType: z.string().trim().max(60).optional(),
-  targetId: z.string().uuid('รูปแบบรหัสไม่ถูกต้อง').optional(),
-  actorId: z.string().uuid('รูปแบบรหัสไม่ถูกต้อง').optional(),
+  targetId: z.string().guid('รูปแบบรหัสไม่ถูกต้อง').optional(),
+  actorId: z.string().guid('รูปแบบรหัสไม่ถูกต้อง').optional(),
   action: auditActionSchema.optional(),
   /** ตั้งแต่ (วันไทย 00:00) */
   dateFrom: dateOnly.optional(),

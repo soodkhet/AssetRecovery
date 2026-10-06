@@ -6,7 +6,7 @@ import { markNotificationsRead } from '@/lib/notifications/queries'
 
 const markReadSchema = z.object({
   /** ไม่ส่ง = อ่านทั้งหมดของตัวเอง (E11 — เปิด dropdown ไม่ auto-mark หน้าจอเป็นคนสั่ง) */
-  ids: z.array(z.uuid()).max(200).optional(),
+  ids: z.array(z.guid()).max(200).optional(),
 })
 
 /**

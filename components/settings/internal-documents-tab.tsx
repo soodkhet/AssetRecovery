@@ -3,7 +3,7 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { internalDocumentsHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, Card, InlineAlert, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
+import { Button, Card, InlineAlert, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
 import type { InternalDocumentTemplate } from '@/lib/settings/catalogs'
 
@@ -78,12 +78,11 @@ export function InternalDocumentsTab() {
               <Th>เอกสาร</Th>
               <Th>ใช้เมื่อ</Th>
               <Th>รหัสอ้างอิง</Th>
-              <Th className="text-right">สเปคต้นทาง</Th>
             </Tr>
           </THead>
           {/* `TableState` เรนเดอร์ `<tbody>` ของตัวเอง — วางเป็นพี่น้องกับ `TBody` */}
           <TableState
-            colSpan={4}
+            colSpan={3}
             loading={loading}
             error={error}
             isEmpty={items.length === 0}
@@ -114,9 +113,6 @@ export function InternalDocumentsTab() {
                   </Td>
                   <Td>
                     <span className="font-mono text-[10px] text-slate-400">{item.code}</span>
-                  </Td>
-                  <Td className="text-right">
-                    <Badge className="bg-slate-100 text-slate-600">ไฟล์ {item.sourceFile}</Badge>
                   </Td>
                 </Tr>
               ))}

@@ -8,7 +8,7 @@ import { z } from 'zod'
  *    code ตามสเปค ไม่ใช่ field error ทั่วไป
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const documentStatusSchema = z.enum(['complete', 'incomplete'])
 

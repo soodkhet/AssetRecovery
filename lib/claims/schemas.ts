@@ -19,7 +19,7 @@ export const claimCreateSchema = z.object({
   /** บันทึกแทนผู้อื่น — ใช้ได้เฉพาะผู้ถือสิทธิ์อนุมัติขั้นการเงิน (`25` §7.2) */
   payeeId: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
-    z.string().uuid('รูปแบบรหัสไม่ถูกต้อง').nullable().default(null),
+    z.string().guid('รูปแบบรหัสไม่ถูกต้อง').nullable().default(null),
   ),
   receiptFileUrl: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),

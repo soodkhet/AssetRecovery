@@ -256,7 +256,7 @@ async function createFuelExpense(params: {
           status,
           events: ['expense.case_bound_created'],
         },
-        reason: `[job:${params.jobId}] คำนวณระยะทางย้อนหลังสำเร็จ — สร้างรายการค่าน้ำมันที่ค้างจากตอนปิดงาน (D10)`,
+        reason: `[job:${params.jobId}] คำนวณระยะทางย้อนหลังสำเร็จ — สร้างรายการค่าน้ำมันที่ค้างจากตอนปิดงาน`, // D10
         diffOnly: false,
       },
       tx as ExpenseTxClient,

@@ -11,7 +11,7 @@ import { satangSchema } from '@/lib/api/validation'
  * ⚠️ `amountSatang` เป็น **ค่าบวกเสมอ** (`20` §7.1) — ทิศทางอยู่ที่ `adjustmentType`
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const adjustmentTargetTypeSchema = z.enum(ADJUSTMENT_TARGET_TYPES)
 

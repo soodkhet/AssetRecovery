@@ -13,7 +13,7 @@ import { WHT_CONDITIONS } from '@/lib/payees/payee'
  * อยู่ที่ `lib/payees/payee.ts` ที่เดียว
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 /** ช่องข้อความที่ปล่อยว่างได้ — ฟอร์มส่ง `''` มาเสมอ ต้องกลายเป็น null ก่อนตรวจรูปแบบ */
 const optionalText = (max: number, label: string) =>

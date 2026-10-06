@@ -67,9 +67,9 @@ export const ASSET_CONDITIONS = ['normal', 'damaged', 'partial_loss'] as const
 /** query ของ `GET /api/assets` — filter 8 ตัวตาม §8.2 + paging */
 export const assetListQuerySchema = z.object({
   status: csvEnum(ASSET_STATUSES).optional(),
-  companyId: z.uuid().optional(),
-  teamId: z.uuid().optional(),
-  agentId: z.uuid().optional(),
+  companyId: z.guid().optional(),
+  teamId: z.guid().optional(),
+  agentId: z.guid().optional(),
   condition: z.enum(ASSET_CONDITIONS).optional(),
   search: trimmedText.min(1).max(100).optional(),
   dateFrom: filterDate.optional(),
@@ -115,7 +115,7 @@ export const HANDOVER_TYPES = ['finance_pickup', 'we_deliver'] as const
 
 export const lotListQuerySchema = z.object({
   status: csvEnum(LOT_STATUSES).optional(),
-  companyId: z.uuid().optional(),
+  companyId: z.guid().optional(),
   type: z.enum(HANDOVER_TYPES).optional(),
   dateFrom: filterDate.optional(),
   dateTo: filterDate.optional(),
@@ -135,9 +135,9 @@ export type LotListQuery = z.infer<typeof lotListQuerySchema>
  * จึงตกที่ validation กลาง (`REQUIRED_MISSING` + field error) ไม่ใช่ code ใหม่ (Rule 04)
  */
 export const lotCreateSchema = z.object({
-  companyId: z.uuid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
+  companyId: z.guid('บริษัทไฟแนนซ์ไม่ถูกต้อง'),
   assetIds: z
-    .array(z.uuid('รหัสเครื่องไม่ถูกต้อง'))
+    .array(z.guid('รหัสเครื่องไม่ถูกต้อง'))
     .max(500)
     .default([])
     .refine((ids) => new Set(ids).size === ids.length, 'เลือกเครื่องซ้ำกัน'),

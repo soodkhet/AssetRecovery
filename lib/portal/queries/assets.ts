@@ -48,7 +48,7 @@ function mimeTypesOf(value: unknown): Record<string, string> {
  * แยก "ไม่พบ"/"ข้ามบริษัท" ใน audit แต่ตอบ 403 เหมือนกัน (D3/D4) · ไม่นับทรัพย์ที่ถูกปฏิเสธตอนรับเข้า/ถูกลบ
  */
 export async function findPortalAssetPhotoRow(ctx: PortalContext, id: string): Promise<PortalAssetPhotoRow | null> {
-  if (!z.uuid().safeParse(id).success) return null
+  if (!z.guid().safeParse(id).success) return null
   const asset = await prisma.asset.findFirst({
     where: { id, organizationId: ctx.user.organizationId, deletedAt: null, assetStatus: { not: 'intake_rejected' } },
     select: {

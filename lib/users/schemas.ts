@@ -17,7 +17,7 @@ import { passwordPairFields, refinePasswordPair } from '@/lib/auth/schemas'
  *   (ไม่ส่งอีเมลเชิญ) · แก้ไขผู้ใช้ไม่แตะรหัสผ่าน — ตั้งใหม่ผ่าน `POST /api/users/:id/password` เท่านั้น
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 /** ช่องที่ฟอร์มส่งค่าว่างมาเสมอ → แปลงเป็น null ก่อนตรวจรูปแบบ (กับดักเดียวกับไฟล์ 09/10) */
 const optionalText = (schema: z.ZodTypeAny) =>

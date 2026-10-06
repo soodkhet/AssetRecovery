@@ -9,7 +9,7 @@ import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
  * ⚠️ ไม่มี field ยอดที่ถูกหัก — ยอดนั้นมาจากเงินรับ (snapshot ตอนจับคู่) แก้จากหน้านี้ไม่ได้
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const customerWhtStatusSchema = z.enum(['pending', 'received'])
 

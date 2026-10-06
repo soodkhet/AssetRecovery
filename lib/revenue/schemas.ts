@@ -11,7 +11,7 @@ import { dateOnlySchema, reasonSchema } from '@/lib/api/validation'
  *    (เที่ยงคืน **UTC**) เหมือน 3.3/3.4 — ห้ามใช้ `fromInputDate()` (ดูกับดักใน REUSE_INDEX)
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const revenueListQuerySchema = z.object({
   companyId: uuidSchema.optional(),

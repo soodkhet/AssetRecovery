@@ -1,7 +1,7 @@
 'use client'
 
 import { Badge, InlineAlert, Modal, StatusBadge } from '@/components/ui'
-import { approvalHistoryLabel, approvalStepText } from '@/lib/compensation/approval-ui'
+import { approvalHistoryLabel, approvalStepText, whtAmountHint, whtAmountLabel } from '@/lib/compensation/approval-ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { EXPENSE_TYPE_LABEL, EXPENSE_STATUS_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
@@ -36,9 +36,9 @@ export function CalcDetailModal({
           <div className="grid grid-cols-3 gap-3">
             <Amount label="Gross" value={fmtSatangSymbol(item.grossSatang)} />
             <Amount
-              label="WHT"
+              label={whtAmountLabel(item)}
               value={fmtSatangSymbol(item.whtSatang)}
-              hint={`${fmtPercent(item.whtPctUsed)} · ${item.whtRateSource === 'payee' ? 'จาก Tax Profile ของผู้รับเงิน' : 'ตกไปใช้อัตราของแผน'}`}
+              hint={whtAmountHint(item, fmtPercent)}
             />
             <Amount label="Net จ่ายจริง" value={fmtSatangSymbol(item.netSatang)} tone="emerald" />
           </div>

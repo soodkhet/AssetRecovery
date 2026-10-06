@@ -9,7 +9,7 @@ import { ADVANCE_OVERDUE_AS_OF_MAX_DAYS, parseSimulatedAsOf } from '@/lib/jobs/j
  *    ไม่ใช่ field error ทั่วไป
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const exceptionLevelSchema = z.enum(['info', 'warning', 'critical'])
 export const exceptionStatusSchema = z.enum(['open', 'resolved', 'authorized'])

@@ -7,7 +7,7 @@ import { z } from 'zod'
  *    เก็บเป็น audit trail ทุกเวอร์ชัน (`37` §10 · `02` §13)
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const exportHistoryListQuerySchema = z.object({
   periodId: uuidSchema.optional(),

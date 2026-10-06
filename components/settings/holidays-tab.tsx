@@ -288,7 +288,7 @@ export function HolidaysTab() {
             error={error}
             isEmpty={data.items.length === 0}
             emptyTitle={year === ALL_YEARS ? 'ยังไม่มีวันหยุดในปฏิทิน' : `ยังไม่มีวันหยุดของปี ${year}`}
-            emptyDescription="กรอกวันหยุดปีละครั้ง — กด “นำเข้าหลายวัน” แล้ววางรายการวันหยุดราชการทั้งปีได้ในครั้งเดียว (เช่น 2026-12-31,วันสิ้นปี)"
+            emptyDescription="กรอกวันหยุดปีละครั้ง — กด “นำเข้าหลายวัน” แล้ววางรายการวันหยุดราชการทั้งปีได้ในครั้งเดียว (เช่น 2569-12-31,วันสิ้นปี)"
             onRetry={
               <Button
                 variant="secondary"

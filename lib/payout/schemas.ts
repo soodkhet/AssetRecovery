@@ -11,7 +11,7 @@ import { dateOnlySchema } from '@/lib/api/validation'
  *    (เที่ยงคืน **UTC**) เหมือน 3.3 — ห้ามใช้ `fromInputDate()` (ดูกับดักใน REUSE_INDEX)
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 /** เหตุผลบังคับของ action ที่ทำให้เงินออก/ปิดรอบ (`90` §13 — เงิน+ธนาคาร) */
 const reasonSchema = z

@@ -19,27 +19,30 @@ import { LOT_DOCUMENTS } from '@/lib/warehouse/lot-status'
  * จากตัวสร้างเดิมของแต่ละโมดูล (prefix ตรงกับ `lib/uploads/rules.ts` ที่ใช้ตรวจตอนผูกไฟล์)
  *
  * **pure ล้วน** — Zod schema ชุดเดียวใช้ร่วม FE/BE (Rule 04)
+ *
+ * รหัสอ้างอิงใช้ `z.guid()` (รูปแบบ 8-4-4-4-12 hex เท่ากับที่ Postgres `uuid` รับ) ไม่ใช่ `z.uuid()` ที่บังคับ
+ * version/variant ตาม RFC — id จาก seed เช่นองค์กร `00000000-0000-0000-0000-000000000001` ไม่ผ่าน `z.uuid()` (BUG-173)
  */
 
 export const uploadTargetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('case_document'), caseId: z.uuid(), slot: z.enum(DOCUMENT_SLOTS) }),
-  z.object({ kind: z.literal('field_evidence'), caseId: z.uuid(), mediaKind: z.enum(FIELD_MEDIA_KINDS) }),
+  z.object({ kind: z.literal('case_document'), caseId: z.guid(), slot: z.enum(DOCUMENT_SLOTS) }),
+  z.object({ kind: z.literal('field_evidence'), caseId: z.guid(), mediaKind: z.enum(FIELD_MEDIA_KINDS) }),
   /** ใบเสร็จเบิกแยก — path ผูกกับผู้เรียกเสมอ (server ใช้ `user.id` ไม่รับ userId จาก client) */
   z.object({ kind: z.literal('expense_receipt') }),
-  z.object({ kind: z.literal('intake_photo'), assetId: z.uuid(), angle: z.enum(INTAKE_PHOTO_ANGLES) }),
-  z.object({ kind: z.literal('lot_document'), lotId: z.uuid(), document: z.enum(LOT_DOCUMENTS) }),
+  z.object({ kind: z.literal('intake_photo'), assetId: z.guid(), angle: z.enum(INTAKE_PHOTO_ANGLES) }),
+  z.object({ kind: z.literal('lot_document'), lotId: z.guid(), document: z.enum(LOT_DOCUMENTS) }),
   /** ไฟล์สแกนใบลดหนี้ที่สำนักงานบัญชีออก (มติ PO U14) — ผูกกับใบกำกับที่อ้างถึง */
-  z.object({ kind: z.literal('credit_note'), taxInvoiceId: z.uuid() }),
+  z.object({ kind: z.literal('credit_note'), taxInvoiceId: z.guid() }),
   /** หลักฐานรับคืนเงินทดรองแยก (มติ PO U30) — ผูกกับเงินทดรองที่รับคืน */
-  z.object({ kind: z.literal('advance_return'), advanceId: z.uuid() }),
+  z.object({ kind: z.literal('advance_return'), advanceId: z.guid() }),
   /** สแกนหนังสือรับรอง 50 ทวิ ที่ลูกค้าหักเรา (มติ PO U40) — ผูกกับรายการ "รอ 50 ทวิ" */
-  z.object({ kind: z.literal('customer_wht'), certificateId: z.uuid() }),
+  z.object({ kind: z.literal('customer_wht'), certificateId: z.guid() }),
   /** หลักฐานคืนเงินผู้โอนของเงินรับรอตรวจสอบ (มติ PO U41) — ผูกกับรายการเดินบัญชี */
-  z.object({ kind: z.literal('bank_refund'), transactionId: z.uuid() }),
+  z.object({ kind: z.literal('bank_refund'), transactionId: z.guid() }),
   /** โลโก้บริษัทบนหัวเอกสาร (มติ PO U99) — server ตรวจว่าเป็นองค์กรของผู้เรียกเอง */
-  z.object({ kind: z.literal('organization_logo'), organizationId: z.uuid() }),
+  z.object({ kind: z.literal('organization_logo'), organizationId: z.guid() }),
   /** ใบรับรองแทนใบเสร็จฉบับเซ็นแล้ว (มติ PO U103) — ผูกกับใบ CRT · server ตรวจว่าเป็นเจ้าของใบ/การเงิน */
-  z.object({ kind: z.literal('substitute_receipt'), substituteReceiptId: z.uuid() }),
+  z.object({ kind: z.literal('substitute_receipt'), substituteReceiptId: z.guid() }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>

@@ -13,7 +13,7 @@ export const ASSIGNMENT_STATE_FILTERS = ['ready_to_assign', 'assigned', 'accepte
 
 /** `POST /api/cases/:id/assign` — เลือกพนักงาน 1 คน (`40` §8) */
 export const assignCaseSchema = z.object({
-  agentId: z.uuid('พนักงานไม่ถูกต้อง'),
+  agentId: z.guid('พนักงานไม่ถูกต้อง'),
 })
 
 export type AssignCaseInput = z.infer<typeof assignCaseSchema>
@@ -37,7 +37,7 @@ export function isAssignmentReasonLongEnough(reason: string | null | undefined):
  * แนวเดียวกับ `declineReason` ด้านล่าง
  */
 export const reassignCaseSchema = z.object({
-  agentId: z.uuid('พนักงานไม่ถูกต้อง'),
+  agentId: z.guid('พนักงานไม่ถูกต้อง'),
   reason: trimmedText.max(ASSIGNMENT_REASON_MAX, `เหตุผลยาวเกิน ${ASSIGNMENT_REASON_MAX} ตัวอักษร`).optional(),
 })
 
@@ -57,7 +57,7 @@ export type RespondReassignmentInput = z.infer<typeof respondReassignmentSchema>
 
 /** query ของ `GET /api/assignments` — คีย์ต้องตรงกับ `query` ของ `assignment.list` (`45` §6.2) */
 export const assignmentListQuerySchema = z.object({
-  team: z.uuid().optional(),
+  team: z.guid().optional(),
   status: z.enum(ASSIGNMENT_STATE_FILTERS).optional(),
   search: trimmedText.min(1).max(100).optional(),
   page: z.coerce.number().int().min(1).default(1),
