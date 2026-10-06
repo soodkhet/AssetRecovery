@@ -1,11 +1,13 @@
 import { StyleSheet, View } from '@react-pdf/renderer'
+import { Letterhead } from '@/components/pdf/letterhead'
 import { Text } from '@/components/pdf/text'
 import { THAI_FONT } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 
 /**
  * ชิ้นส่วนร่วมของ **เอกสารภายใน** (`28` §6.1 · `13` §6.7) — หัวกระดาษ/ตาราง/ช่องเซ็น
- * เลย์เอาต์ยึดตัวอย่างจริงใน `reference/samples/` (03–07): กล่อง LOGO ซ้ายบน + คำกำกับประเภทเอกสาร
- * ทางขวา → ชื่อเอกสารไทยตัวใหญ่ + ชื่ออังกฤษตัวเล็กใต้กัน → เนื้อหา → ช่องลายมือชื่อ
+ * เลย์เอาต์ยึดตัวอย่างจริงใน `reference/samples/` (03–07): หัวเอกสารกลาง (โลโก้ + ข้อมูลองค์กร — มติ PO U99)
+ * + คำกำกับประเภทเอกสารทางขวา → ชื่อเอกสารไทยตัวใหญ่ + ชื่ออังกฤษตัวเล็กใต้กัน → เนื้อหา → ช่องลายมือชื่อ
  *
  * ⚠️ เอกสารกลุ่มนี้ **ไม่มีข้อกำหนดทางกฎหมาย** (ต่างจากใบกำกับภาษี/50 ทวิ ใน §6.2/§6.3 ที่ต้อง
  *    ล็อกฟิลด์ตามแบบสรรพากร) — ห้ามนำ component ชุดนี้ไปใช้กับเอกสารทางการ
@@ -20,17 +22,6 @@ export const docStyles = StyleSheet.create({
     paddingBottom: 56,
     color: '#0f172a',
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 14 },
-  logoBox: {
-    width: 120,
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: { fontSize: 9, color: '#94a3b8' },
-  headerNote: { flex: 1, fontSize: 8, color: '#64748b', textAlign: 'center' },
   titleBlock: { alignItems: 'center', marginBottom: 16 },
   title: { fontSize: 18, fontWeight: 700 },
   titleEn: { fontSize: 9, color: '#64748b', marginTop: 1 },
@@ -73,23 +64,21 @@ export const docStyles = StyleSheet.create({
   },
 })
 
+/** หัวเอกสารภายใน — หัวเอกสารกลาง (ค่าปัจจุบันขององค์กร) + ชื่อเอกสาร · `headerNote` พิมพ์มุมขวา */
 export function DocHeader({
+  letterhead,
   headerNote,
   title,
   titleEn,
 }: {
+  letterhead: DocLetterhead
   headerNote: string
   title: string
   titleEn: string
 }): React.JSX.Element {
   return (
     <>
-      <View style={docStyles.headerRow}>
-        <View style={docStyles.logoBox}>
-          <Text style={docStyles.logoText}>LOGO</Text>
-        </View>
-        <Text style={docStyles.headerNote}>{headerNote}</Text>
-      </View>
+      <Letterhead letterhead={letterhead} note={headerNote} />
       <View style={docStyles.titleBlock}>
         <Text style={docStyles.title}>{title}</Text>
         <Text style={docStyles.titleEn}>{titleEn}</Text>

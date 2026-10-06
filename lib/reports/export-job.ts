@@ -128,6 +128,7 @@ export async function runReportExportJob(input: {
     format: parsed.format,
     generatedAt: input.requestedAt,
     generatedByName: input.actor.fullName,
+    organizationId: input.actor.organizationId,
   })
   const storagePath = reportExportStoragePath({
     organizationId: input.actor.organizationId,

@@ -8,6 +8,7 @@ import {
   officialStyles,
 } from '@/components/pdf/official-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { TaxInvoiceDoc } from '@/lib/sales/sales'
 
 /**
@@ -18,7 +19,8 @@ import type { TaxInvoiceDoc } from '@/lib/sales/sales'
  *
  * ฟิลด์บังคับตามกฎหมายครบ 7 ข้อบนหน้ากระดาษนี้:
  *  1. คำว่า "ใบกำกับภาษี" เด่นชัด (หัวเอกสาร)
- *  2. ชื่อ/ที่อยู่/เลขผู้เสียภาษีของผู้ขาย  3. ของผู้ซื้อ (กล่องคู่สัญญา)
+ *  2. ชื่อ/ที่อยู่/เลขผู้เสียภาษี/สาขาของผู้ขาย (หัวเอกสารกลาง — จาก snapshot บนใบ · มติ PO U99)
+ *  3. ของผู้ซื้อ (กล่องคู่สัญญา)
  *  4. เลขที่ใบกำกับภาษี  5. วันเดือนปีที่ออก (กล่องข้อมูลเอกสาร)
  *  6. รายการ/ปริมาณ/มูลค่าบริการ (ตาราง)
  *  7. จำนวน VAT **แยกบรรทัดออกจากมูลค่าบริการ** (ท้ายตาราง)
@@ -30,11 +32,11 @@ import type { TaxInvoiceDoc } from '@/lib/sales/sales'
 
 const COLUMNS = ['46%', '10%', '20%', '24%'] as const
 
-export function TaxInvoicePDF({ doc }: { doc: TaxInvoiceDoc }): React.JSX.Element {
+export function TaxInvoicePDF({ doc, letterhead }: { doc: TaxInvoiceDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.invoiceNumber}`} author={doc.seller.name}>
       <Page size="A4" style={officialStyles.page}>
-        <OfficialHeader title={doc.title} titleEn={doc.titleEn} copyLabel="ต้นฉบับ / ORIGINAL" />
+        <OfficialHeader letterhead={letterhead} title={doc.title} titleEn={doc.titleEn} copyLabel="ต้นฉบับ / ORIGINAL" />
 
         {doc.cancelNote === null ? null : (
           <View style={officialStyles.cancelBanner}>
@@ -49,7 +51,7 @@ export function TaxInvoicePDF({ doc }: { doc: TaxInvoiceDoc }): React.JSX.Elemen
         )}
 
         <View style={officialStyles.partyRow}>
-          <PartyBox role="ผู้ขาย / SELLER" party={doc.seller} />
+          {/* ผู้ขายพิมพ์ที่หัวเอกสาร (snapshot เดียวกัน — มติ PO U99) ⇒ กล่องคู่สัญญาเหลือผู้ซื้อ */}
           <PartyBox role="ผู้ซื้อ / BUYER" party={doc.buyer} />
         </View>
 
@@ -120,7 +122,7 @@ export function TaxInvoicePDF({ doc }: { doc: TaxInvoiceDoc }): React.JSX.Elemen
   )
 }
 
-export async function renderTaxInvoice(doc: TaxInvoiceDoc): Promise<Buffer> {
+export async function renderTaxInvoice(doc: TaxInvoiceDoc, letterhead: DocLetterhead): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<TaxInvoicePDF doc={doc} />)
+  return renderToBuffer(<TaxInvoicePDF doc={doc} letterhead={letterhead} />)
 }

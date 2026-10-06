@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
+import { createLetterheadResolver, taxInvoiceLetterhead } from '@/lib/organization/letterhead'
 import { attachmentHeader } from '@/lib/format/attachment'
 import { getTaxInvoiceDocSource } from '@/lib/sales/queries'
 import { buildTaxInvoiceDoc, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
@@ -25,7 +26,7 @@ export const GET = withApiPermission<RouteContext>(
     const { id } = await context.params
     const source = await getTaxInvoiceDocSource(user, id)
     const doc = buildTaxInvoiceDoc(source)
-    const pdf = await renderTaxInvoice(doc)
+    const pdf = await renderTaxInvoice(doc, await taxInvoiceLetterhead(createLetterheadResolver(user.organizationId), source))
 
     // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)
     await emitDocumentExportAudit({

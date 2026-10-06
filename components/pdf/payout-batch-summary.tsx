@@ -2,6 +2,7 @@ import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
 import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PayoutSummaryDoc } from '@/lib/payout/payout-doc'
 
 /**
@@ -15,11 +16,11 @@ import type { PayoutSummaryDoc } from '@/lib/payout/payout-doc'
 /** สัดส่วนคอลัมน์ (รวม = 100) — ลำดับ/ชื่อผู้รับเงิน/ยอดก่อนหัก/WHT/สุทธิ */
 const COLUMNS = ['7%', '38%', '18%', '17%', '20%'] as const
 
-export function PayoutBatchSummary({ doc }: { doc: PayoutSummaryDoc }): React.JSX.Element {
+export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.batchName}`} author={doc.issuer.name}>
       <Page size="A4" style={docStyles.page}>
-        <DocHeader headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+        <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
 
         <View style={docStyles.metaGrid}>
           <MetaCell label="ชื่อรอบจ่าย" value={doc.batchName} />
@@ -100,7 +101,7 @@ export function PayoutBatchSummary({ doc }: { doc: PayoutSummaryDoc }): React.JS
   )
 }
 
-export async function renderPayoutBatchSummary(doc: PayoutSummaryDoc): Promise<Buffer> {
+export async function renderPayoutBatchSummary(doc: PayoutSummaryDoc, letterhead: DocLetterhead): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<PayoutBatchSummary doc={doc} />)
+  return renderToBuffer(<PayoutBatchSummary doc={doc} letterhead={letterhead} />)
 }

@@ -2,6 +2,7 @@ import { Document, Page, StyleSheet, View, renderToBuffer } from '@react-pdf/ren
 import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, SignatureRow, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PayslipDoc } from '@/lib/payout/payout-doc'
 
 /**
@@ -34,10 +35,10 @@ const styles = StyleSheet.create({
   sumValueBold: { fontSize: 10, fontWeight: 700 },
 })
 
-export function PayslipPage({ doc }: { doc: PayslipDoc }): React.JSX.Element {
+export function PayslipPage({ doc, letterhead }: { doc: PayslipDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Page size="A4" style={docStyles.page}>
-      <DocHeader headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+      <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
 
       <View style={docStyles.metaGrid}>
         <MetaCell label="ชื่อ" value={doc.payeeName} />
@@ -88,7 +89,13 @@ export function PayslipPage({ doc }: { doc: PayslipDoc }): React.JSX.Element {
   )
 }
 
-export function Payslips({ docs }: { docs: readonly PayslipDoc[] }): React.JSX.Element {
+export function Payslips({
+  docs,
+  letterhead,
+}: {
+  docs: readonly PayslipDoc[]
+  letterhead: DocLetterhead
+}): React.JSX.Element {
   const first = docs[0]
   // ผู้เรียกกรอง `NO_ITEMS_TO_PAY` มาแล้ว (`selectPayoutDocItems()`) — ยามท้ายทางกัน PDF หน้าเปล่า
   if (first === undefined) throw new RangeError('สลิปค่าตอบแทนต้องมีอย่างน้อย 1 รายการ')
@@ -96,13 +103,13 @@ export function Payslips({ docs }: { docs: readonly PayslipDoc[] }): React.JSX.E
   return (
     <Document title={`${first.title} ${first.batchName}`} author={first.issuer.name}>
       {docs.map((doc) => (
-        <PayslipPage key={`${doc.batchRef}-${doc.payeeName}`} doc={doc} />
+        <PayslipPage key={`${doc.batchRef}-${doc.payeeName}`} doc={doc} letterhead={letterhead} />
       ))}
     </Document>
   )
 }
 
-export async function renderPayslips(docs: readonly PayslipDoc[]): Promise<Buffer> {
+export async function renderPayslips(docs: readonly PayslipDoc[], letterhead: DocLetterhead): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<Payslips docs={docs} />)
+  return renderToBuffer(<Payslips docs={docs} letterhead={letterhead} />)
 }

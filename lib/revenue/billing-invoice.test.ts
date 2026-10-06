@@ -16,6 +16,7 @@ describe('buildBillingInvoiceDoc', () => {
     dueDate: new Date('2026-10-31T00:00:00Z'),
     seller: party,
     buyer: { ...party, name: 'ไฟแนนซ์ ข', branchCode: '00002' },
+    sellerProfile: null,
     lines: [
       { caseRef: 'C-1', revenueDate: new Date('2026-09-10T00:00:00Z'), grossSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000, vatRatePct: '7.00' },
       { caseRef: 'C-2', revenueDate: new Date('2026-09-20T00:00:00Z'), grossSatang: 50_000, vatSatang: 3_500, totalSatang: 53_500, vatRatePct: '7.00' },

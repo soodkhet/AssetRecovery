@@ -14,6 +14,7 @@ import type { AssetDetailDto, LotDetailDto } from '@/lib/warehouse/types'
 
 const requireSessionMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock }))
+vi.mock('@/lib/organization/letterhead', async () => (await import('@/tests/helpers/letterhead')).fakeLetterheadModule())
 
 const queriesMock = vi.hoisted(() => ({
   listAssets: vi.fn(),

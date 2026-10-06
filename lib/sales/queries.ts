@@ -11,6 +11,7 @@ import type {
   TaxInvoiceStatus,
   VatMode,
 } from '@/lib/generated/prisma/enums'
+import { parseSellerProfileSnapshot, sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
 import { prisma } from '@/lib/prisma'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
@@ -113,6 +114,7 @@ const TAX_INVOICE_SELECT = {
   sellerTaxId: true,
   sellerAddress: true,
   sellerPhone: true,
+  sellerProfileSnapshot: true,
   buyerName: true,
   buyerTaxId: true,
   buyerAddress: true,
@@ -363,10 +365,26 @@ async function loadSeller(organizationId: string): Promise<{
   phone: string | null
   vatRegistered: boolean
   branchCode: string
+  nameEn: string | null
+  email: string | null
+  website: string | null
+  logoUrl: string | null
 }> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { name: true, taxId: true, address: true, phone: true, vatRegistered: true, branchCode: true },
+    select: {
+      name: true,
+      taxId: true,
+      address: true,
+      phone: true,
+      vatRegistered: true,
+      branchCode: true,
+      // มติ PO U99 — หัวเอกสารส่วนที่ snapshot เพิ่ม
+      nameEn: true,
+      email: true,
+      website: true,
+      logoUrl: true,
+    },
   })
   if (org === null) throw new Error(`loadSeller: ไม่พบองค์กร ${organizationId}`)
   return org
@@ -705,6 +723,8 @@ export async function issueTaxInvoice(
           // มติ PO U77/U82 (ม.86/4) — snapshot สำนักงานใหญ่/สาขาของผู้ซื้อ/ผู้ขาย ณ ตอนออกใบ
           buyerBranchCode: buyer.branchCode,
           sellerBranchCode: seller.branchCode,
+          // มติ PO U99 — หัวเอกสาร (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) ณ ตอนออก · แก้ข้อมูลองค์กรภายหลังใบนี้ไม่เปลี่ยน
+          sellerProfileSnapshot: sellerProfileSnapshotJson(sellerProfileOf(seller)),
           createdBy: ctx.actor.id,
         },
         select: TAX_INVOICE_SELECT,
@@ -886,6 +906,7 @@ function docSourceOf(
     buyer: { name: invoice.buyerName, taxId: invoice.buyerTaxId, address: invoice.buyerAddress, phone: invoice.buyerPhone },
     buyerBranchCode: invoice.buyerBranchCode,
     sellerBranchCode: invoice.sellerBranchCode,
+    sellerProfile: parseSellerProfileSnapshot(invoice.sellerProfileSnapshot),
     description: invoice.description,
     periodLabel: context.periodLabel,
     amounts: {

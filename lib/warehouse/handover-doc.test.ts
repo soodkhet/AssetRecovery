@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { extractPdfText } from '@/components/pdf/extract-text'
 import { renderHandoverNote } from '@/components/pdf/handover-note'
+import { testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhead'
 import { attachmentHeader } from '@/lib/format/attachment'
 import {
   buildHandoverDoc,
@@ -213,7 +214,7 @@ describe('Export Excel', () => {
 
 describe('PDF ใบส่งมอบ (UAT BUG-079 · BUG-080)', () => {
   async function pdfText(doc: ReturnType<typeof buildHandoverDoc>): Promise<string> {
-    const pdf = await renderHandoverNote(doc)
+    const pdf = await renderHandoverNote(doc, testLetterhead({ nameTh: ISSUER.name }))
     return extractPdfText(new Uint8Array(pdf)).replace(/\n/g, '')
   }
 
@@ -228,5 +229,16 @@ describe('PDF ใบส่งมอบ (UAT BUG-079 · BUG-080)', () => {
     expect(await pdfText(buildHandoverDoc(lot({ type: 'we_deliver' }), ISSUER, RECIPIENT))).toContain(
       'กำหนดจัดส่ง: 10/07/2569 10:00',
     )
+  })
+
+  it('มติ PO U99 — หัวเอกสารกลาง: มีโลโก้ฝังรูป · ไม่มีโลโก้ไม่มีรูป · พิมพ์ข้อมูลติดต่อ/เลขผู้เสียภาษีขององค์กร', async () => {
+    const doc = buildHandoverDoc(lot(), ISSUER, RECIPIENT)
+    const withLogo = await renderHandoverNote(doc, testLetterheadWithLogo())
+    const withoutLogo = await renderHandoverNote(doc, testLetterhead())
+    expect(withLogo.toString('latin1')).toContain('/Subtype /Image')
+    expect(withoutLogo.toString('latin1')).not.toContain('/Subtype /Image')
+    const text = extractPdfText(new Uint8Array(withLogo)).replace(/\n/g, '')
+    expect(text).toContain('Jaidee Mobile Co., Ltd.')
+    expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สำนักงานใหญ่')
   })
 })

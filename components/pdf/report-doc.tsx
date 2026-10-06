@@ -2,6 +2,7 @@ import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
 import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { reconciliationTextLines, reportTextRows } from '@/lib/reports/export'
 import { NUMERIC_COLUMN_TYPES, formatCellText, type ReportPayload } from '@/lib/reports/payload'
@@ -26,10 +27,12 @@ export function ReportDocument({
   payload,
   generatedAt,
   generatedByName,
+  letterhead,
 }: {
   payload: ReportPayload
   generatedAt: Date
   generatedByName: string
+  letterhead: DocLetterhead
 }): React.JSX.Element {
   const rows = reportTextRows(payload)
   const hasTotalRow = payload.totalRow !== null
@@ -38,6 +41,7 @@ export function ReportDocument({
     <Document>
       <Page size="A4" orientation="landscape" style={docStyles.page}>
         <DocHeader
+          letterhead={letterhead}
           headerNote="เอกสารภายใน — ใช้เพื่อการบริหารจัดการ ไม่ใช่เอกสารทางภาษี"
           title={payload.report.title}
           titleEn={payload.report.code}
@@ -125,6 +129,7 @@ export async function renderReportPdf(options: {
   payload: ReportPayload
   generatedAt: Date
   generatedByName: string
+  letterhead: DocLetterhead
 }): Promise<Buffer> {
   ensureThaiFont()
   return renderToBuffer(
@@ -132,6 +137,7 @@ export async function renderReportPdf(options: {
       payload={options.payload}
       generatedAt={options.generatedAt}
       generatedByName={options.generatedByName}
+      letterhead={options.letterhead}
     />,
   )
 }

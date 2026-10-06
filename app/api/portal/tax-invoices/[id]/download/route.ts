@@ -2,6 +2,7 @@ import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
 import { emitAudit } from '@/lib/audit/audit'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { createLetterheadResolver, taxInvoiceLetterhead } from '@/lib/organization/letterhead'
 import { portalScopedUser, portalViewAsAuditFields, requirePortalRow, withPortal } from '@/lib/portal/guard'
 import { findPortalTaxInvoiceRow } from '@/lib/portal/queries/finance'
 import { getTaxInvoiceDocSource } from '@/lib/sales/queries'
@@ -33,7 +34,10 @@ export const GET = withPortal<RouteContext>('finance', { download: true }, async
   // (โหมดดูแทนของผู้ใช้ภายใน — บังคับ scope เป็นบริษัทที่เปิดดู · มติ U59)
   const source = await getTaxInvoiceDocSource(portalScopedUser(portal), row.id)
   const doc = buildTaxInvoiceDoc(source)
-  const pdf = await renderTaxInvoice(doc)
+  const pdf = await renderTaxInvoice(
+    doc,
+    await taxInvoiceLetterhead(createLetterheadResolver(portal.user.organizationId), source),
+  )
 
   const meta = getRequestMeta(request)
   await emitAudit({

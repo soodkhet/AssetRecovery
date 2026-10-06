@@ -1,4 +1,5 @@
 import { AccountingError } from '@/lib/accounting/errors'
+import { getOrganizationProfileIssues } from '@/lib/organization/queries'
 import {
   assertAuthorizeNote,
   assertExceptionEditable,
@@ -449,6 +450,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     unbilledRevenue,
     draftBatches,
     awaitingReceiptInvoice,
+    organizationProfileIssues,
   ] = await Promise.all([
     prisma.exception.findMany({
       where: { organizationId, periodId: row.id, status: 'open' },
@@ -487,6 +489,8 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
       _count: { _all: true },
       _sum: { amountSatang: true, whtWithheldByCustomerSatang: true },
     }),
+    // มติ PO U99 — ข้อมูลองค์กรยังเป็นค่าตัวอย่าง ⇒ เตือน (เอกสารในงวดพิมพ์ค่านั้นไปแล้ว)
+    getOrganizationProfileIssues(organizationId),
   ])
 
   return evaluateReadiness({
@@ -501,6 +505,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     pendingCustomerWht: { count: pendingWht._count._all, withheldSatang: pendingWht._sum.withheldSatang ?? 0 },
     unbilledRevenue,
     draftBillingBatches: draftBatches,
+    organizationProfileIssues,
     receiptsAwaitingTaxInvoice: {
       count: awaitingReceiptInvoice._count._all,
       amountSatang:

@@ -62,7 +62,7 @@ describe('GET /api/meta/menu (`06` §14)', () => {
 
     const body = (await response.json()) as MenuResponseBody
     expect(body.data.audience).toBe('accounting')
-    // `06` §7.2 v2.2 (D17) — บัญชีเห็น "การตั้งค่า" แบบบางส่วน (เฉพาะ 2 แท็บอ่านอย่างเดียว)
+    // `06` §7.2 v2.2 (D17) — บัญชีเห็น "การตั้งค่า" แบบบางส่วน (แท็บอ่านอย่างเดียว)
     expect(body.data.menus.map((menu) => menu.id)).toEqual([
       'dashboard',
       'accounting',
@@ -71,6 +71,7 @@ describe('GET /api/meta/menu (`06` §14)', () => {
       'settings',
     ])
     expect(body.data.menus.find((menu) => menu.id === 'settings')?.children?.map((child) => child.id)).toEqual([
+      'settings.organization', // มติ PO U99 — ข้อมูลองค์กร (อ่านอย่างเดียว)
       'settings.audit-logs',
       'settings.jobs',
     ])

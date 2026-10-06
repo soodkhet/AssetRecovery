@@ -9,6 +9,7 @@ import {
   fieldEvidenceRule,
   intakePhotoRule,
   lotDocumentRule,
+  organizationLogoRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, uploadTargetSchema, type UploadTarget } from '@/lib/uploads/targets'
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
@@ -23,6 +24,7 @@ const USER_ID = '00000000-0000-4000-8000-0000000000a1'
 const INVOICE_ID = '00000000-0000-4000-8000-000000000301'
 const ADVANCE_ID = '00000000-0000-4000-8000-000000000401'
 const KEY = '11111111-1111-4111-8111-111111111111'
+const ORG_ID = '00000000-0000-4000-8000-000000000501'
 
 describe('uploadTargetPath ↔ rules prefix ↔ parseStoragePath', () => {
   const cases: Array<{ target: UploadTarget; prefix: string; owner: ReturnType<typeof parseStoragePath> }> = [
@@ -60,6 +62,12 @@ describe('uploadTargetPath ↔ rules prefix ↔ parseStoragePath', () => {
       target: { kind: 'advance_return', advanceId: ADVANCE_ID },
       prefix: advanceReturnFileRule(ADVANCE_ID).prefix,
       owner: { kind: 'advance', advanceId: ADVANCE_ID },
+    },
+    // มติ PO U99 — โลโก้บนหัวเอกสาร
+    {
+      target: { kind: 'organization_logo', organizationId: ORG_ID },
+      prefix: organizationLogoRule(ORG_ID).prefix,
+      owner: { kind: 'organization_logo', organizationId: ORG_ID },
     },
   ]
 

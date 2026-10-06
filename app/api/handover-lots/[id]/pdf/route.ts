@@ -3,6 +3,7 @@ import { renderHandoverNote } from '@/components/pdf/handover-note'
 import { withEndpoint } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { currentLetterhead } from '@/lib/organization/letterhead'
 import { buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
 import { WAREHOUSE_EXPORT_CAPABILITIES } from '@/lib/warehouse/permissions'
 import { getHandoverDocSource } from '@/lib/warehouse/queries'
@@ -25,7 +26,10 @@ export const GET = withEndpoint<RouteContext, never>({
   handler: async (request: NextRequest, context, user) => {
     const { id } = await context.params
     const source = await getHandoverDocSource(user, id)
-    const pdf = await renderHandoverNote(buildHandoverDoc(source.lot, source.issuer, source.recipient))
+    const pdf = await renderHandoverNote(
+      buildHandoverDoc(source.lot, source.issuer, source.recipient),
+      await currentLetterhead(user.organizationId),
+    )
 
     const fileName = handoverFileName(source.lot, 'pdf')
     // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)

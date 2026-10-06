@@ -83,6 +83,12 @@ import { renderBillingInvoice } from '@/components/pdf/billing-invoice'
 import { renderPaymentVouchers } from '@/components/pdf/payment-voucher'
 import { renderPayslips } from '@/components/pdf/payslip'
 import { renderWhtCertificate } from '@/components/pdf/wht-certificate'
+import {
+  billingInvoiceLetterhead,
+  createLetterheadResolver,
+  currentLetterhead,
+  taxInvoiceLetterhead,
+} from '@/lib/organization/letterhead'
 import { buildBillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
 import { getBillingInvoiceSource } from '@/lib/revenue/billing-invoice-queries'
 import { buildPaymentVoucherDocs, buildPayslipDocs } from '@/lib/payout/payout-doc'
@@ -893,6 +899,8 @@ async function taxInvoiceFile(
     startAt: startOfBangkokDay(scope.start),
     endAt: startOfBangkokDay(scope.end),
   })
+  // หัวเอกสารจาก snapshot บนใบ (มติ PO U99) — cache โลโก้ต่อ path ทั้งชุด
+  const letterheads = createLetterheadResolver(organizationId)
 
   const entries: PackPdfEntry[] = []
   const pdfFileOf = new Map<string, string>()
@@ -907,7 +915,7 @@ async function taxInvoiceFile(
     // เลขที่ใบกำกับ unique อยู่แล้ว — กันชื่อชนหลังตัดอักขระ (เช่น `A/1` กับ `A_1`)
     if (usedNames.has(name)) name = name.replace(/\.pdf$/, `_${invoice.id.slice(0, 8)}.pdf`)
     usedNames.add(name)
-    const pdf = await renderTaxInvoice(buildTaxInvoiceDoc(invoice.source))
+    const pdf = await renderTaxInvoice(buildTaxInvoiceDoc(invoice.source), await taxInvoiceLetterhead(letterheads, invoice.source))
     entries.push({ name, data: new Uint8Array(pdf) })
     pdfFileOf.set(invoice.id, name)
   }
@@ -1315,6 +1323,7 @@ async function voucherPdfs(
   batches: readonly { id: string; ref: string }[],
   budget: PackPdfBudget,
 ): Promise<PackPdfFolderResult> {
+  const letterheads = createLetterheadResolver(actor.organizationId)
   return packPdfFolder({
     dir: PACK_VOUCHER_PDF_DIR,
     items: batches,
@@ -1322,19 +1331,20 @@ async function voucherPdfs(
     render: (item) => {
       let source: Promise<Awaited<ReturnType<typeof getPayoutDocSource>>> | null = null
       const load = () => (source ??= getPayoutDocSource(actor, item.id))
+      // เอกสารภายใน ⇒ หัวเอกสารจากค่าปัจจุบันขององค์กร (มติ PO U99)
       return [
         {
           suffix: 'PV-',
           render: async () => {
             const { batch, issuer } = await load()
-            return new Uint8Array(await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer)))
+            return new Uint8Array(await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer), await letterheads.current()))
           },
         },
         {
           suffix: 'SLIP-',
           render: async () => {
             const { batch, issuer } = await load()
-            return new Uint8Array(await renderPayslips(buildPayslipDocs(batch, issuer)))
+            return new Uint8Array(await renderPayslips(buildPayslipDocs(batch, issuer), await letterheads.current()))
           },
         },
       ]
@@ -1362,6 +1372,7 @@ async function billingInvoicePdfs(
     orderBy: [{ sentAt: 'asc' }, { batchNumber: 'asc' }],
     select: { id: true, batchNumber: true },
   })
+  const letterheads = createLetterheadResolver(actor.organizationId)
   return packPdfFolder({
     dir: PACK_BILLING_INVOICE_PDF_DIR,
     items: batches.map((batch) => ({ id: batch.id, ref: batch.batchNumber })),
@@ -1369,8 +1380,12 @@ async function billingInvoicePdfs(
     render: (item) => [
       {
         suffix: '',
-        render: async () =>
-          new Uint8Array(await renderBillingInvoice(buildBillingInvoiceDoc(await getBillingInvoiceSource(actor, item.id)))),
+        render: async () => {
+          const source = await getBillingInvoiceSource(actor, item.id)
+          return new Uint8Array(
+            await renderBillingInvoice(buildBillingInvoiceDoc(source), await billingInvoiceLetterhead(letterheads, source)),
+          )
+        },
       },
     ],
     notAttached: { documentLabel: 'ใบแจ้งหนี้/ใบวางบิล', unit: 'ใบ', csvFileName: null },
@@ -1575,6 +1590,7 @@ export async function createExportPack(
       checks: readiness.checks,
       controlTotals: controlTotalsForCover(controlLines),
     }),
+    await currentLetterhead(actor.organizationId),
   )
 
   const attachments = {

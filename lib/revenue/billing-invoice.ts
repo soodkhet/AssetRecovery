@@ -1,6 +1,7 @@
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang } from '@/lib/format/money'
+import type { SellerProfileSnapshot } from '@/lib/organization/profile'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { summarizeSalesAmounts, vatLabelOf, type SalesAmounts } from '@/lib/sales/sales'
 
@@ -132,6 +133,8 @@ export interface BillingInvoiceSource {
   dueDate: Date
   seller: BillingInvoiceParty
   buyer: BillingInvoiceParty
+  /** หัวเอกสารส่วนที่ snapshot เพิ่มตอนส่งรอบ (มติ PO U99) — รอบที่ส่งก่อน U99 = `null` (ใช้ค่าปัจจุบันเฉพาะชุดนี้) */
+  sellerProfile: SellerProfileSnapshot | null
   lines: readonly BillingInvoiceLineSource[]
 }
 

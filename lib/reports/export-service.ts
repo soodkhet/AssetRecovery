@@ -120,6 +120,7 @@ export async function exportReport(
       format: request.format,
       generatedAt: now,
       generatedByName: ctx.actor.fullName,
+      organizationId: ctx.actor.organizationId,
     })
     await auditExportRequest(ctx, report, {
       format: request.format,

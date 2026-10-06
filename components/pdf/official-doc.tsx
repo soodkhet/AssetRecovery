@@ -1,6 +1,8 @@
 import { StyleSheet, View } from '@react-pdf/renderer'
+import { Letterhead } from '@/components/pdf/letterhead'
 import { Text } from '@/components/pdf/text'
 import { THAI_FONT } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 
 /**
  * ชิ้นส่วนร่วมของ **เอกสารทางการ** (`28` §6.2/§6.3) — ใบกำกับภาษี (ไฟล์ 31) และใบ 50 ทวิ (ไฟล์ 33)
@@ -24,7 +26,6 @@ export const officialStyles = StyleSheet.create({
   titleBlock: { alignItems: 'center', marginBottom: 4 },
   title: { fontSize: 20, fontWeight: 700 },
   titleEn: { fontSize: 9, color: '#475569', marginTop: 1, letterSpacing: 1 },
-  copyLabel: { fontSize: 8, color: '#64748b', marginTop: 2 },
   cancelBanner: {
     borderWidth: 1,
     borderColor: '#b91c1c',
@@ -80,22 +81,29 @@ export const officialStyles = StyleSheet.create({
   },
 })
 
-/** หัวเอกสาร — คำระบุชนิดเอกสารต้อง "เห็นเด่นชัด" ตามประมวลรัษฎากร (`28` §6.2) */
+/**
+ * หัวเอกสาร — หัวเอกสารกลาง (ผู้ออกเอกสาร = ผู้ขาย จาก **snapshot บนเอกสาร** · มติ PO U99) + คำระบุชนิดเอกสาร
+ * ที่ต้อง "เห็นเด่นชัด" ตามประมวลรัษฎากร (`28` §6.2) · ฉบับ (ต้นฉบับ/สำเนา) พิมพ์มุมขวาของหัวเอกสาร
+ */
 export function OfficialHeader({
+  letterhead,
   title,
   titleEn,
   copyLabel,
 }: {
+  letterhead: DocLetterhead
   title: string
   titleEn: string
   copyLabel: string
 }): React.JSX.Element {
   return (
-    <View style={officialStyles.titleBlock}>
-      <Text style={officialStyles.title}>{title}</Text>
-      <Text style={officialStyles.titleEn}>{titleEn}</Text>
-      <Text style={officialStyles.copyLabel}>{copyLabel}</Text>
-    </View>
+    <>
+      <Letterhead letterhead={letterhead} note={copyLabel} />
+      <View style={officialStyles.titleBlock}>
+        <Text style={officialStyles.title}>{title}</Text>
+        <Text style={officialStyles.titleEn}>{titleEn}</Text>
+      </View>
+    </>
   )
 }
 

@@ -2,6 +2,7 @@ import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
 import { Text } from '@/components/pdf/text'
 import { MetaRow, OfficialFooter, OfficialHeader, PartyBox, officialStyles } from '@/components/pdf/official-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { BillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
 
 /**
@@ -12,18 +13,18 @@ import type { BillingInvoiceDoc } from '@/lib/revenue/billing-invoice'
 
 const COLUMNS = ['8%', '44%', '22%', '26%'] as const
 
-export function BillingInvoicePDF({ doc }: { doc: BillingInvoiceDoc }): React.JSX.Element {
+export function BillingInvoicePDF({ doc, letterhead }: { doc: BillingInvoiceDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.documentNumber}`} author={doc.seller.name}>
       <Page size="A4" style={officialStyles.page}>
-        <OfficialHeader title={doc.title} titleEn={doc.titleEn} copyLabel="ต้นฉบับ / ORIGINAL" />
+        <OfficialHeader letterhead={letterhead} title={doc.title} titleEn={doc.titleEn} copyLabel="ต้นฉบับ / ORIGINAL" />
 
         <View style={officialStyles.cancelBanner}>
           <Text style={officialStyles.cancelText}>{doc.notTaxInvoiceNote}</Text>
         </View>
 
         <View style={officialStyles.partyRow}>
-          <PartyBox role="ผู้ให้บริการ / SELLER" party={doc.seller} />
+          {/* ผู้ให้บริการพิมพ์ที่หัวเอกสาร (snapshot ตอนส่งรอบ — มติ PO U99) ⇒ กล่องคู่สัญญาเหลือลูกค้า */}
           <PartyBox role="ลูกค้า / CUSTOMER" party={doc.buyer} />
         </View>
 
@@ -91,7 +92,7 @@ export function BillingInvoicePDF({ doc }: { doc: BillingInvoiceDoc }): React.JS
   )
 }
 
-export async function renderBillingInvoice(doc: BillingInvoiceDoc): Promise<Buffer> {
+export async function renderBillingInvoice(doc: BillingInvoiceDoc, letterhead: DocLetterhead): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<BillingInvoicePDF doc={doc} />)
+  return renderToBuffer(<BillingInvoicePDF doc={doc} letterhead={letterhead} />)
 }

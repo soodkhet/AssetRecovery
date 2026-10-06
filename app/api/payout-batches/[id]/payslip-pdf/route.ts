@@ -3,6 +3,7 @@ import { renderPayslips } from '@/components/pdf/payslip'
 import { toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
+import { currentLetterhead } from '@/lib/organization/letterhead'
 import { assertPayoutDocReady, buildPayslipDocs, selectPayoutDocItems } from '@/lib/payout/payout-doc'
 import { getPayoutDocSource, MANAGE_PAYOUT_BATCH } from '@/lib/payout/queries'
 import { payoutDocQuerySchema } from '@/lib/payout/schemas'
@@ -30,7 +31,7 @@ export const GET = withApiPermission<RouteContext>(
     assertPayoutDocReady(source.batch.status)
 
     const scoped = selectPayoutDocItems(source.batch, parsed.data.payeeId)
-    const pdf = await renderPayslips(buildPayslipDocs(scoped, source.issuer))
+    const pdf = await renderPayslips(buildPayslipDocs(scoped, source.issuer), await currentLetterhead(user.organizationId))
 
     const fileName = `สลิปค่าตอบแทน ${scoped.name}.pdf`
     // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)

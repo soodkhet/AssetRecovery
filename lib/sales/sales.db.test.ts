@@ -689,6 +689,73 @@ suite('มติ PO U77/U82 (ม.86/4) — สาขาผู้ซื้อ/ผ
   })
 })
 
+suite('มติ PO U99 — หัวเอกสาร snapshot ตอนออก (ใบกำกับภาษี + ใบแจ้งหนี้)', () => {
+  it('แก้ข้อมูลองค์กรภายหลัง ⇒ เอกสารเดิมพิมพ์หัวเอกสารเดิม · เอกสารใหม่ใช้ค่าใหม่ · แก้ snapshot ไม่ได้', async () => {
+    const { getBillingInvoiceSource } = await import('@/lib/revenue/billing-invoice-queries')
+    const { createLetterheadResolver, billingInvoiceLetterhead, taxInvoiceLetterhead } = await import(
+      '@/lib/organization/letterhead'
+    )
+    const setProfile = (name: string, nameEn: string, email: string, website: string, address: string) =>
+      db().$executeRawUnsafe(`
+        UPDATE organizations SET name = $$${name}$$, name_en = $$${nameEn}$$, email = '${email}', website = '${website}',
+          address = $$${address}$$, phone = '02-555-0000', logo_url = NULL
+        WHERE id = '${ORG_ID}'
+      `)
+    await setNumbering({ seq: 800 })
+    await setProfile('Phase43Test', 'Before Co., Ltd.', 'before@u99.test', 'www.before.test', 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ')
+
+    const { receiptId } = await seedReceivedBilling()
+    const sentBatch = await seedBilling()
+    await revenue.sendBillingBatch(billingCtx, sentBatch.id, { reason: billingCtx.reason })
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+
+    // แก้ข้อมูลองค์กรหลังออกเอกสาร
+    await setProfile('ชื่อใหม่หลังแก้', 'After Co., Ltd.', 'after@u99.test', 'www.after.test', 'ที่อยู่ใหม่หลังแก้')
+
+    const invoiceSource = await sales.getTaxInvoiceDocSource(accountant, invoice.id)
+    expect(invoiceSource.sellerProfile).toEqual({
+      nameEn: 'Before Co., Ltd.',
+      email: 'before@u99.test',
+      website: 'www.before.test',
+      logoPath: null,
+    })
+    const invoiceHead = await taxInvoiceLetterhead(createLetterheadResolver(ORG_ID), invoiceSource)
+    expect(invoiceHead).toMatchObject({
+      nameTh: 'Phase43Test',
+      nameEn: 'Before Co., Ltd.',
+      address: 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ',
+      email: 'before@u99.test',
+      taxId: '9999999994300',
+    })
+
+    const billingHead = await billingInvoiceLetterhead(
+      createLetterheadResolver(ORG_ID),
+      await getBillingInvoiceSource(accountant, sentBatch.id),
+    )
+    expect(billingHead).toMatchObject({ nameTh: 'Phase43Test', nameEn: 'Before Co., Ltd.', website: 'www.before.test' })
+
+    // เอกสารใหม่หลังแก้ ⇒ ค่าใหม่
+    const { receiptId: nextReceipt } = await seedReceivedBilling()
+    const next = await sales.issueTaxInvoice(ctx, { cashReceiptId: nextReceipt })
+    const nextHead = await taxInvoiceLetterhead(
+      createLetterheadResolver(ORG_ID),
+      await sales.getTaxInvoiceDocSource(accountant, next.id),
+    )
+    expect(nextHead).toMatchObject({ nameTh: 'ชื่อใหม่หลังแก้', nameEn: 'After Co., Ltd.', address: 'ที่อยู่ใหม่หลังแก้' })
+
+    // snapshot แก้ตรงไม่ได้ (ยามระดับ DB)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE tax_invoices SET seller_profile_snapshot = '{}'::jsonb WHERE id = '${invoice.id}'`),
+    ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE billing_batches SET seller_profile_snapshot = '{}'::jsonb WHERE id = '${sentBatch.id}'`),
+    ).rejects.toThrow(/BILLING_PARTY_SNAPSHOT_IMMUTABLE/)
+
+    await setProfile('Phase43Test', 'Before Co., Ltd.', 'before@u99.test', 'www.before.test', 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ')
+    await setNumbering({ seq: 0 })
+  })
+})
+
 suite('Phase 4.3 — ยาม immutable + period lock', () => {
   it('งวดของวันที่เอกสารถูกล็อก ⇒ ออกไม่ได้ (`PERIOD_LOCKED_DIRECT_EDIT`)', async () => {
     await setNumbering({ seq: 260 })

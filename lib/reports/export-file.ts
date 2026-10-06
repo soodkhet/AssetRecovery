@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { renderReportPdf } from '@/components/pdf/report-doc'
+import { currentLetterhead } from '@/lib/organization/letterhead'
 import {
   REPORT_EXPORT_CONTENT_TYPE,
   reportExportFileName,
@@ -46,6 +47,8 @@ export async function buildReportExportFile(options: {
   format: ReportExportFormat
   generatedAt: Date
   generatedByName: string
+  /** องค์กรผู้ออกรายงาน — หัวเอกสารกลางของ PDF (มติ PO U99) */
+  organizationId: string
 }): Promise<ReportExportFile> {
   const fileName = reportExportFileName({
     code: options.payload.report.code,
@@ -63,6 +66,7 @@ export async function buildReportExportFile(options: {
     payload: options.payload,
     generatedAt: options.generatedAt,
     generatedByName: options.generatedByName,
+    letterhead: await currentLetterhead(options.organizationId),
   })
   return { fileName, contentType, bytes: new Uint8Array(pdf) }
 }

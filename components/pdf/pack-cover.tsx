@@ -2,6 +2,7 @@ import { Document, Page, View, renderToBuffer } from '@react-pdf/renderer'
 import { Text } from '@/components/pdf/text'
 import { DocFooter, DocHeader, MetaCell, SignatureRow, docStyles } from '@/components/pdf/internal-doc'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
+import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PackCoverDoc } from '@/lib/exports/pack'
 
 /**
@@ -17,11 +18,11 @@ const CHECK_COLUMNS = ['76%', '24%'] as const
 const FILE_COLUMNS = ['30%', '58%', '12%'] as const
 const TOTAL_COLUMNS = ['70%', '30%'] as const
 
-export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
+export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: DocLetterhead }): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.periodLabel} ${doc.versionLabel}`} author={doc.organizationName}>
       <Page size="A4" style={docStyles.page}>
-        <DocHeader headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+        <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
 
         <View style={docStyles.metaGrid}>
           <MetaCell label="รอบบัญชี" value={doc.periodLabel} />
@@ -100,7 +101,7 @@ export function PackCover({ doc }: { doc: PackCoverDoc }): React.JSX.Element {
   )
 }
 
-export async function renderPackCover(doc: PackCoverDoc): Promise<Buffer> {
+export async function renderPackCover(doc: PackCoverDoc, letterhead: DocLetterhead): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<PackCover doc={doc} />)
+  return renderToBuffer(<PackCover doc={doc} letterhead={letterhead} />)
 }
