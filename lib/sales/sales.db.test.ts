@@ -808,7 +808,11 @@ suite('มติ PO U122 — เทมเพลตเอกสาร snapshot �
     const sha = 'c'.repeat(64)
     const settingsCtx = { actor: accountant, meta, reason: 'ตั้งข้อความท้ายเอกสาร (เทสต์ U122)' }
     await setNumbering({ seq: 1220 })
-    await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath, signatureSha256: sha } })
+    await db().organization.update({
+      where: { id: ORG_ID },
+      // มติ PO U151 — ผู้มีอำนาจลงนาม ณ ตอนออก
+      data: { signaturePath, signatureSha256: sha, authorizedSignerName: 'นายผู้ลงนาม เดิม', authorizedSignerTitle: 'กรรมการ' },
+    })
     try {
       await updateTaxDocTemplate(settingsCtx, 'tax_invoice', { footerNote: 'ขอบคุณที่ใช้บริการ', printSignature: true })
       await updateTaxDocTemplate(settingsCtx, 'billing_invoice', { footerNote: 'โปรดชำระภายในกำหนด', printSignature: false })
@@ -821,18 +825,24 @@ suite('มติ PO U122 — เทมเพลตเอกสาร snapshot �
       // แก้ค่าตั้ง + ลบรูปลายเซ็นหลังออกเอกสาร
       await updateTaxDocTemplate(settingsCtx, 'tax_invoice', { footerNote: 'ข้อความใหม่', printSignature: false })
       await updateTaxDocTemplate(settingsCtx, 'billing_invoice', { footerNote: null, printSignature: true })
-      await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath: null, signatureSha256: null } })
+      await db().organization.update({
+        where: { id: ORG_ID },
+        data: { signaturePath: null, signatureSha256: null, authorizedSignerName: 'นางผู้ลงนาม ใหม่', authorizedSignerTitle: null },
+      })
 
+      const OLD_SIGNER = { signerName: 'นายผู้ลงนาม เดิม', signerTitle: 'กรรมการ', counterpartySignerName: null }
       expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).templateSnapshot).toEqual({
         footerNote: 'ขอบคุณที่ใช้บริการ',
         signaturePath,
         signatureSha256: sha,
+        ...OLD_SIGNER,
       })
       // ใบแจ้งหนี้ปิดสวิตช์ลายเซ็นตอนส่ง ⇒ ไม่มีรูปแม้องค์กรมีรูปตอนนั้น
       expect((await getBillingInvoiceSource(accountant, sentBatch.id)).templateSnapshot).toEqual({
         footerNote: 'โปรดชำระภายในกำหนด',
         signaturePath: null,
         signatureSha256: null,
+        ...OLD_SIGNER,
       })
 
       // เอกสารใหม่หลังแก้ ⇒ ค่าใหม่
@@ -841,6 +851,9 @@ suite('มติ PO U122 — เทมเพลตเอกสาร snapshot �
         footerNote: 'ข้อความใหม่',
         signaturePath: null,
         signatureSha256: null,
+        signerName: 'นางผู้ลงนาม ใหม่',
+        signerTitle: null,
+        counterpartySignerName: null,
       })
 
       // snapshot แก้ตรงไม่ได้ (ยามระดับ DB)
@@ -853,7 +866,10 @@ suite('มติ PO U122 — เทมเพลตเอกสาร snapshot �
         ),
       ).rejects.toThrow(/BILLING_PARTY_SNAPSHOT_IMMUTABLE/)
     } finally {
-      await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath: null, signatureSha256: null } })
+      await db().organization.update({
+        where: { id: ORG_ID },
+        data: { signaturePath: null, signatureSha256: null, authorizedSignerName: null, authorizedSignerTitle: null },
+      })
       await db().taxDocumentTemplateSettings.deleteMany({ where: { organizationId: ORG_ID } })
       await setNumbering({ seq: 0 })
     }

@@ -14,7 +14,7 @@ import {
   partyLines,
   PartyPanel,
   PaymentChannelRow,
-  Signatures,
+  TemplateSignatures,
   SummaryRow,
   TemplateFooterNote,
   type DocColumn,
@@ -23,7 +23,7 @@ import {
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { TaxInvoiceDoc } from '@/lib/sales/sales'
-import { NO_DOC_TEMPLATE, signatureImagesOf, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
+import { NO_DOC_TEMPLATE, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * **ใบเสร็จรับเงิน/ใบกำกับภาษี** (ออกตอนรับเงิน — มติ PO U95) และ **ใบกำกับภาษีแบบเดิม** (ข้อมูลก่อน U95)
@@ -102,7 +102,7 @@ function TaxInvoiceCopy({
 
       <NoteText>{doc.footnote}</NoteText>
       <TemplateFooterNote text={template.footerNote} />
-      <Signatures roles={doc.signers} images={signatureImagesOf(template, doc.signers.length)} />
+      <TemplateSignatures roles={doc.signers} template={template} />
     </DocPage>
   )
 }

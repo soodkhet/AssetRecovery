@@ -109,6 +109,8 @@ interface FormState {
   email: string
   website: string
   vatRegistered: boolean
+  authorizedSignerName: string
+  authorizedSignerTitle: string
   reason: string
 }
 
@@ -134,6 +136,8 @@ function formOf(profile: OrganizationProfileDto): FormState {
     email: profile.email ?? '',
     website: profile.website ?? '',
     vatRegistered: profile.vatRegistered,
+    authorizedSignerName: profile.authorizedSignerName ?? '',
+    authorizedSignerTitle: profile.authorizedSignerTitle ?? '',
     reason: '',
   }
 }
@@ -217,6 +221,8 @@ export function OrganizationProfileTab() {
       email: form.email,
       website: form.website,
       vatRegistered: form.vatRegistered,
+      authorizedSignerName: form.authorizedSignerName,
+      authorizedSignerTitle: form.authorizedSignerTitle,
       reason: form.reason,
     })
     if (!parsed.success) {
@@ -483,6 +489,16 @@ export function OrganizationProfileTab() {
                 <div className="text-sm leading-relaxed text-slate-700">{profile.address}</div>
               </InfoItem>
             </div>
+            {/* มติ PO U151 — พิมพ์ใต้ช่องลายเซ็นฝั่งบริษัทบนเอกสารส่งออกนอก (คู่รูปลายเซ็นด้านซ้าย) */}
+            <div className="sm:col-span-2">
+              <InfoItem label="ผู้มีอำนาจลงนาม">
+                <div className="font-medium text-slate-700">{profile.authorizedSignerName ?? 'ไม่ระบุ'}</div>
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {profile.authorizedSignerTitle ?? 'ไม่ระบุตำแหน่ง'} · พิมพ์บนใบแจ้งหนี้ ใบเสร็จรับเงิน/ใบกำกับภาษี
+                  ใบส่งมอบทรัพย์ และหนังสือรับรองการหักภาษี ณ ที่จ่าย
+                </div>
+              </InfoItem>
+            </div>
           </div>
         </div>
       </div>
@@ -590,6 +606,25 @@ export function OrganizationProfileTab() {
                   value={form.website}
                   onChange={(event) => set('website', event.target.value)}
                   placeholder="www.example.co.th"
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field id="org-signer-name" label="ชื่อผู้มีอำนาจลงนาม (ไม่บังคับ)" error={errors.authorizedSignerName}>
+                <Input
+                  id="org-signer-name"
+                  value={form.authorizedSignerName}
+                  onChange={(event) => set('authorizedSignerName', event.target.value)}
+                  placeholder="เช่น นายสมชาย ใจดี"
+                />
+              </Field>
+              <Field id="org-signer-title" label="ตำแหน่ง" error={errors.authorizedSignerTitle}>
+                <Input
+                  id="org-signer-title"
+                  value={form.authorizedSignerTitle}
+                  onChange={(event) => set('authorizedSignerTitle', event.target.value)}
+                  placeholder="เช่น กรรมการผู้จัดการ"
                 />
               </Field>
             </div>

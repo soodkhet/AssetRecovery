@@ -23,6 +23,9 @@ export interface OrganizationProfileDto {
   logoPath: string | null
   /** signed URL อายุสั้นสำหรับแสดงตัวอย่างโลโก้ — ออกไม่ได้/ไม่มีโลโก้ = `null` */
   logoPreviewUrl: string | null
+  /** ชื่อ/ตำแหน่งผู้มีอำนาจลงนาม (มติ PO U151) — `null` = ไม่ระบุ (เอกสารเว้นจุดให้เขียนเอง) */
+  authorizedSignerName: string | null
+  authorizedSignerTitle: string | null
   /** มีรูปลายเซ็นผู้มีอำนาจแล้วหรือไม่ (มติ PO U122) */
   hasSignature: boolean
   /**

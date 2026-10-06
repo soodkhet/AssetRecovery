@@ -43,6 +43,8 @@ const PROFILE_SELECT = {
   vatRegistered: true,
   logoUrl: true,
   signaturePath: true,
+  authorizedSignerName: true,
+  authorizedSignerTitle: true,
   updatedAt: true,
 } as const
 
@@ -64,6 +66,8 @@ interface ProfileRow {
   vatRegistered: boolean
   logoUrl: string | null
   signaturePath: string | null
+  authorizedSignerName: string | null
+  authorizedSignerTitle: string | null
   updatedAt: Date
 }
 
@@ -98,6 +102,8 @@ async function toDto(row: ProfileRow, canManage: boolean): Promise<OrganizationP
     vatRegistered: row.vatRegistered,
     logoPath: row.logoUrl,
     logoPreviewUrl: row.logoUrl === null ? null : await createSignedDownloadUrl(row.logoUrl),
+    authorizedSignerName: row.authorizedSignerName,
+    authorizedSignerTitle: row.authorizedSignerTitle,
     hasSignature: row.signaturePath !== null,
     signaturePreviewUrl:
       canManage && row.signaturePath !== null ? await createSignedDownloadUrl(row.signaturePath) : null,
@@ -125,6 +131,8 @@ function auditValues(row: ProfileRow): Record<string, string | boolean | null> {
     vat_registered: row.vatRegistered,
     logo_url: row.logoUrl,
     signature_path: row.signaturePath,
+    authorized_signer_name: row.authorizedSignerName,
+    authorized_signer_title: row.authorizedSignerTitle,
   }
 }
 
@@ -170,6 +178,8 @@ export async function updateOrganizationProfile(
         email: input.email,
         website: input.website,
         vatRegistered: input.vatRegistered,
+        authorizedSignerName: input.authorizedSignerName,
+        authorizedSignerTitle: input.authorizedSignerTitle,
       },
       select: PROFILE_SELECT,
     })

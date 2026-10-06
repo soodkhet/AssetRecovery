@@ -6,7 +6,10 @@ import {
   TEMPLATE_DOCUMENT_SAMPLE,
   TEMPLATE_DOCUMENT_TYPES,
   TEMPLATE_DOCUMENT_TYPE_LABEL,
+  TEMPLATE_COUNTERPARTY_SLOT,
   TEMPLATE_SIGNATURE_SLOT,
+  signerNamesOf,
+  signerTitlesOf,
   documentTemplateSnapshotJson,
   documentTemplateSnapshotOf,
   normalizeTaxDocTemplateValues,
@@ -19,8 +22,10 @@ import { DOCUMENT_SAMPLE_TYPES } from '@/lib/documents/samples/catalog'
 /** `13` §6.13 · มติ PO U122 — ต่อชนิด: ข้อความท้าย + เปิด/ปิดพิมพ์ลายเซ็น · snapshot ลงเอกสารตอนออก */
 
 const SHA = 'a'.repeat(64)
-const SIGNATURE = { signaturePath: 'organization/org/signature/x.png', signatureSha256: SHA }
-const NO_SIGNATURE = { signaturePath: null, signatureSha256: null }
+const NO_SIGNER = { authorizedSignerName: null, authorizedSignerTitle: null }
+const SIGNATURE = { signaturePath: 'organization/org/signature/x.png', signatureSha256: SHA, ...NO_SIGNER }
+const NO_SIGNATURE = { signaturePath: null, signatureSha256: null, ...NO_SIGNER }
+const NO_SIGNER_SNAPSHOT = { signerName: null, signerTitle: null, counterpartySignerName: null }
 
 describe('ค่าตั้งต้น', () => {
   it('ค่าเริ่มต้น: ไม่มีข้อความท้าย + ไม่พิมพ์ลายเซ็น (ตรง @default)', () => {
@@ -73,6 +78,7 @@ describe('documentTemplateSnapshotOf — ค่าที่ snapshot ลงเ�
       footerNote: 'ขอบคุณ',
       signaturePath: SIGNATURE.signaturePath,
       signatureSha256: SHA,
+      ...NO_SIGNER_SNAPSHOT,
     })
   })
 
@@ -81,6 +87,7 @@ describe('documentTemplateSnapshotOf — ค่าที่ snapshot ลงเ�
       footerNote: null,
       signaturePath: null,
       signatureSha256: null,
+      ...NO_SIGNER_SNAPSHOT,
     })
   })
 
@@ -93,6 +100,7 @@ describe('documentTemplateSnapshotOf — ค่าที่ snapshot ลงเ�
       footerNote: null,
       signaturePath: null,
       signatureSha256: null,
+      ...NO_SIGNER_SNAPSHOT,
     })
   })
 })
@@ -114,7 +122,58 @@ describe('snapshot JSONB ไป–กลับ', () => {
       footerNote: null,
       signaturePath: 'p',
       signatureSha256: null,
+      ...NO_SIGNER_SNAPSHOT,
     })
+  })
+
+  it('มติ PO U151: snapshot ก่อน U151 (ไม่มีคีย์ผู้ลงนาม) = ไม่พิมพ์ชื่อ — ไม่ดึงค่าปัจจุบัน', () => {
+    const parsed = parseDocumentTemplateSnapshot({ footer_note: 'x', signature_path: null, signature_sha256: null })
+    expect(parsed?.signerName).toBeNull()
+    expect(parsed?.signerTitle).toBeNull()
+    expect(parsed?.counterpartySignerName).toBeNull()
+  })
+})
+
+describe('มติ PO U151 — ผู้มีอำนาจลงนามใน snapshot', () => {
+  const SIGNER = { ...SIGNATURE, authorizedSignerName: ' นายสมชาย ใจดี ', authorizedSignerTitle: 'กรรมการผู้จัดการ' }
+
+  it('เก็บชื่อ/ตำแหน่ง (ตัดช่องว่าง) แม้ปิดสวิตช์รูปลายเซ็น — ชื่อไม่ขึ้นกับรูป', () => {
+    const snapshot = documentTemplateSnapshotOf({ footerNote: null, printSignature: false }, SIGNER)
+    expect(snapshot.signaturePath).toBeNull()
+    expect(snapshot.signerName).toBe('นายสมชาย ใจดี')
+    expect(snapshot.signerTitle).toBe('กรรมการผู้จัดการ')
+  })
+
+  it('ผู้ลงนามคู่ค้า (ใบส่งมอบ) เก็บแยก · ว่าง = null', () => {
+    expect(documentTemplateSnapshotOf(null, SIGNER, 'นางสาวรับมอบ').counterpartySignerName).toBe('นางสาวรับมอบ')
+    expect(documentTemplateSnapshotOf(null, SIGNER, '  ').counterpartySignerName).toBeNull()
+  })
+
+  it('json → parse ได้ชื่อเดิม (พิมพ์ซ้ำได้ชื่อ ณ ตอนออก)', () => {
+    const snapshot = documentTemplateSnapshotOf({ footerNote: null, printSignature: true }, SIGNER, 'ผู้รับ')
+    expect(parseDocumentTemplateSnapshot(documentTemplateSnapshotJson(snapshot))).toEqual(snapshot)
+  })
+
+  it('signerNamesOf/signerTitlesOf: ชื่อบริษัทที่ช่องลายเซ็นของบริษัท · ชื่อคู่ค้าที่ช่องคู่ค้า · ช่องอื่นเว้นจุด', () => {
+    const template = {
+      ...NO_DOC_TEMPLATE,
+      signatureSlot: TEMPLATE_SIGNATURE_SLOT.handover_note,
+      signerName: 'ผู้ส่ง',
+      signerTitle: 'ผู้จัดการ',
+      counterpartySignerName: 'ผู้รับ',
+    }
+    expect(signerNamesOf(template, 2, TEMPLATE_COUNTERPARTY_SLOT.handover_note ?? null)).toEqual(['ผู้ส่ง', 'ผู้รับ'])
+    expect(signerNamesOf(template, 2)).toEqual(['ผู้ส่ง', null])
+    expect(signerTitlesOf(template, 2)).toEqual(['ผู้จัดการ', null])
+    expect(signerNamesOf({ ...template, signatureSlot: 1 }, 2)).toEqual([null, 'ผู้ส่ง'])
+  })
+
+  it('เอกสารที่ไม่มีเทมเพลต = ไม่มีชื่อทุกช่อง', () => {
+    expect(signerNamesOf(NO_DOC_TEMPLATE, 2, 1)).toEqual([null, null])
+  })
+
+  it('ใบส่งมอบเท่านั้นที่มีช่องคู่ค้า ("ผู้รับมอบ")', () => {
+    expect(TEMPLATE_COUNTERPARTY_SLOT).toEqual({ handover_note: 1 })
   })
 })
 
@@ -122,7 +181,7 @@ describe('signatureImagesOf', () => {
   const image = { data: Buffer.from([1]), format: 'png' as const }
 
   it('ใส่รูปเฉพาะช่องของบริษัท — ช่องอื่นเซ็นมือ', () => {
-    expect(signatureImagesOf({ footerNote: null, signature: image, signatureSlot: 1 }, 2)).toEqual([null, image])
+    expect(signatureImagesOf({ ...NO_DOC_TEMPLATE, signature: image, signatureSlot: 1 }, 2)).toEqual([null, image])
   })
 
   it('ไม่มีเทมเพลต = ทุกช่องเซ็นมือ', () => {

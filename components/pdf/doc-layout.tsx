@@ -4,6 +4,12 @@ import { SampleStamp } from '@/components/pdf/sample-stamp'
 import { Text } from '@/components/pdf/text'
 import { THAI_FONT } from '@/components/pdf/thai-font'
 import { letterheadContactLine, letterheadTaxLine, type DocLetterhead, type LetterheadLogo } from '@/lib/organization/profile'
+import {
+  signatureImagesOf,
+  signerNamesOf,
+  signerTitlesOf,
+  type DocTemplateRender,
+} from '@/lib/settings/tax-doc-template'
 
 /**
  * **เลย์เอาต์เอกสารตามแบบที่ผู้ใช้อนุมัติ** (มติ PO U100/U101 · ต้นแบบ `reference/documents.html` · `28` §6.0)
@@ -537,10 +543,13 @@ const BLANK_SIGNER = '........................................'
 export function Signatures({
   roles,
   names = [],
+  titles = [],
   images = [],
 }: {
   roles: readonly string[]
   names?: ReadonlyArray<string | null>
+  /** ตำแหน่งผู้เซ็นต่อช่อง (มติ PO U151) — พิมพ์ใต้ชื่อ · `null`/ไม่ส่ง = ไม่พิมพ์บรรทัดตำแหน่ง */
+  titles?: ReadonlyArray<string | null>
   /** รูปลายเซ็นต่อช่อง (มติ PO U122) — `null`/ไม่ส่ง = เว้นเส้นประให้เซ็นมือ */
   images?: ReadonlyArray<LetterheadLogo | null>
 }): React.JSX.Element {
@@ -550,11 +559,36 @@ export function Signatures({
         <View key={role} style={layout.signBox}>
           <SignLine image={images[index] ?? null} />
           <Text style={{ marginTop: 3 }}>( {names[index] ?? BLANK_SIGNER} )</Text>
+          {(titles[index] ?? null) !== null && <Text style={layout.muted}>ตำแหน่ง {titles[index]}</Text>}
           <Text style={layout.bold}>{role}</Text>
           <Text style={layout.muted}>วันที่ ......../......../............</Text>
         </View>
       ))}
     </View>
+  )
+}
+
+/**
+ * ช่องลายเซ็นของเอกสารส่งออกนอก (ใบแจ้งหนี้ · ใบเสร็จ/ใบกำกับภาษี · ใบส่งมอบ) — รูปลายเซ็น (U122) + ชื่อ/ตำแหน่ง
+ * ผู้มีอำนาจลงนาม (U151) ที่ช่องฝั่งบริษัท · ชื่อผู้ลงนามคู่ค้าที่ `counterpartySlot` (ใบส่งมอบ: ผู้รับมอบ)
+ * ทั้งหมดมาจาก snapshot ของเอกสาร — ไม่มี = เว้นจุดให้เขียนเอง
+ */
+export function TemplateSignatures({
+  roles,
+  template,
+  counterpartySlot = null,
+}: {
+  roles: readonly string[]
+  template: DocTemplateRender
+  counterpartySlot?: number | null
+}): React.JSX.Element {
+  return (
+    <Signatures
+      roles={roles}
+      names={signerNamesOf(template, roles.length, counterpartySlot)}
+      titles={signerTitlesOf(template, roles.length)}
+      images={signatureImagesOf(template, roles.length)}
+    />
   )
 }
 

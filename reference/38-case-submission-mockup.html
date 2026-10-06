@@ -622,7 +622,7 @@ function renderCreateCaseModal(existingCase = null) {
         ${formSelect('asset_type', 'ประเภททรัพย์', [{ val: 'smartphone', text: 'สมาร์ทโฟน' }, { val: 'tablet', text: 'Tablet / iPad' }], 'smartphone')}
         ${formInput('asset_brand_model', 'ยี่ห้อ/รุ่นเครื่อง', v('asset'), 'text', 'เช่น iPhone 14 Pro', true)}
         ${formInput('asset_imei_serial', 'IMEI / Serial Number', '', 'text', '', true)}
-        ${formInput('outstanding_debt_amount', 'มูลหนี้/มูลค่าสินค้าคงเหลือ (บาท)', v('debt'), 'number', '0.00', true)}
+        ${formInput('outstanding_debt_amount', 'มูลหนี้คงเหลือ (บาท)', v('debt'), 'number', '0.00', true)}
       </div>
       <p class="text-[11px] text-slate-400 mt-2">* ระบบไม่มีเกณฑ์ตัดรับอัตโนมัติจากมูลค่า — ผู้จัดการพื้นที่พิจารณารับ/ไม่รับเองทุกเคส</p>
     </div>

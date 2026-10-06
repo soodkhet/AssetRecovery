@@ -767,6 +767,10 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
           wht_condition = 'pay_once'
       WHERE id = '${PAYEE_PERSON_ID}'
     `)
+    // มติ PO U151 — ผู้มีอำนาจลงนามขององค์กร ณ วันออกใบ
+    await db().$executeRawUnsafe(
+      `UPDATE organizations SET authorized_signer_name = 'นายผู้ลงนาม 50ทวิ', authorized_signer_title = 'กรรมการ' WHERE id = '${ORG_ID}'`,
+    )
     try {
       const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 20_000_00, wht: 600_00 }])
       // มติ PO U105 — ช่อง "ผู้จ่ายเงิน" มาจาก snapshot ของรายการรอบจ่าย (ตัวที่ใช้คิดยอดจริง) ไม่ใช่โปรไฟล์ปัจจุบัน
@@ -785,14 +789,19 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
       expect(certificate.payerName).toBe('Phase45Test')
       expect(certificate.payerTaxId).toBe('9999999994500')
       expect(certificate.payerBranchCode).toBe('00000')
+      expect(certificate.payerSignerName).toBe('นายผู้ลงนาม 50ทวิ')
+      expect(certificate.payerSignerTitle).toBe('กรรมการ')
 
       // แก้โปรไฟล์ + ข้อมูลองค์กรหลังออกใบ ⇒ ใบเดิม (PDF) ยังเป็นค่าตอนออก
       await db().$executeRawUnsafe(`
         UPDATE payee_profiles SET name_title = 'นาง', address_detail = '99 ถ.ใหม่', wht_condition = 'withhold'
         WHERE id = '${PAYEE_PERSON_ID}'
       `)
-      await db().$executeRawUnsafe(`UPDATE organizations SET address = 'ย้ายที่อยู่ใหม่' WHERE id = '${ORG_ID}'`)
+      await db().$executeRawUnsafe(
+        `UPDATE organizations SET address = 'ย้ายที่อยู่ใหม่', authorized_signer_name = 'คนใหม่' WHERE id = '${ORG_ID}'`,
+      )
       const source = await wht.getWhtCertificateDocSource(accountant, certificate.id)
+      expect(source.payerSigner).toEqual({ name: 'นายผู้ลงนาม 50ทวิ', title: 'กรรมการ' })
       expect(source.payee.name).toBe('นายประยุทธ์ บุญมี')
       expect(source.payee.address).toBe('12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100')
       expect(source.payee.branchLabel).toBeNull()
@@ -805,6 +814,9 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
       await expect(
         db().$executeRawUnsafe(`UPDATE wht_certificates SET payee_address = 'แก้เอง' WHERE id = '${certificate.id}'`),
       ).rejects.toThrow(/WHT_CERTIFICATE_IMMUTABLE/)
+      await expect(
+        db().$executeRawUnsafe(`UPDATE wht_certificates SET payer_signer_name = 'แก้เอง' WHERE id = '${certificate.id}'`),
+      ).rejects.toThrow(/WHT_CERTIFICATE_IMMUTABLE/)
     } finally {
       await db().$executeRawUnsafe(`
         UPDATE payee_profiles
@@ -812,7 +824,9 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
             address_province = NULL, address_postal_code = NULL, wht_condition = 'withhold'
         WHERE id = '${PAYEE_PERSON_ID}'
       `)
-      await db().$executeRawUnsafe(`UPDATE organizations SET address = 'ที่อยู่ทดสอบ 4.5 กรุงเทพฯ' WHERE id = '${ORG_ID}'`)
+      await db().$executeRawUnsafe(
+        `UPDATE organizations SET address = 'ที่อยู่ทดสอบ 4.5 กรุงเทพฯ', authorized_signer_name = NULL, authorized_signer_title = NULL WHERE id = '${ORG_ID}'`,
+      )
     }
   })
 

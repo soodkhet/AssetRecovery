@@ -240,6 +240,9 @@ function CertificatePage({ doc, copy }: { doc: WhtCertificateDoc; copy: WhtCerti
         <View style={styles.signBox}>
           <Text style={styles.signText}>ขอรับรองว่าข้อความและตัวเลขดังกล่าวข้างต้นถูกต้องตรงกับความจริงทุกประการ</Text>
           <Text style={styles.signLine}>ลงชื่อ ............................................................ ผู้จ่ายเงิน</Text>
+          {/* มติ PO U151 — ชื่อ/ตำแหน่งผู้มีอำนาจลงนามจาก snapshot ของใบ · ไม่มี = ไม่พิมพ์ (เว้นให้เขียนเอง) */}
+          {doc.payerSignerName !== null && <Text style={styles.signLabel}>( {doc.payerSignerName} )</Text>}
+          {doc.payerSignerTitle !== null && <Text style={styles.signLabel}>ตำแหน่ง {doc.payerSignerTitle}</Text>}
           <Text style={styles.signLabel}>(ผู้มีหน้าที่หักภาษี ณ ที่จ่าย)</Text>
           <Text style={styles.signDate}>วัน เดือน ปี ที่ออกหนังสือรับรองฯ {doc.issueDateLabel}</Text>
           <Text style={styles.stamp}>ประทับตรานิติบุคคล (ถ้ามี)</Text>

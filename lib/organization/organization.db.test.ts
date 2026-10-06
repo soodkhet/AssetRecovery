@@ -83,6 +83,8 @@ const INPUT = {
   email: 'info@letterhead.test',
   website: 'www.letterhead.test',
   vatRegistered: true,
+  authorizedSignerName: null,
+  authorizedSignerTitle: null,
 }
 
 function codeOf(error: unknown): string {
@@ -137,7 +139,8 @@ beforeEach(async () => {
     UPDATE organizations SET name = 'U99 Org', name_en = NULL, address = '(รอกรอกที่อยู่จริงก่อน go-live)',
       address_detail = NULL, address_subdistrict = NULL, address_district = NULL, address_province = NULL,
       address_postal_code = NULL, phone = NULL, email = NULL, website = NULL, logo_url = NULL, branch_code = '00000',
-      logo_sha256 = NULL, signature_path = NULL, signature_sha256 = NULL
+      logo_sha256 = NULL, signature_path = NULL, signature_sha256 = NULL,
+      authorized_signer_name = NULL, authorized_signer_title = NULL
     WHERE id = '${ORG_ID}'
   `)
   await db().$executeRawUnsafe(`DELETE FROM tax_document_template_settings WHERE organization_id = '${ORG_ID}'`)
@@ -325,6 +328,9 @@ suite('มติ PO U122 — รูปลายเซ็นผู้มีอำ
       footerNote: null,
       signaturePath: null,
       signatureSha256: null,
+      signerName: null,
+      signerTitle: null,
+      counterpartySignerName: null,
     })
 
     const saved = await templates.updateTaxDocTemplate(ctx('เปิดพิมพ์ลายเซ็นบนใบเสร็จ'), 'tax_invoice', {
@@ -340,7 +346,14 @@ suite('มติ PO U122 — รูปลายเซ็นผู้มีอำ
     expect(audit.afterData).toEqual({ document_type: 'tax_invoice', footer_note: 'ขอบคุณที่ใช้บริการ', print_signature: true })
 
     const snapshot = await templates.loadDocumentTemplateSnapshot(prisma, ORG_ID, 'tax_invoice')
-    expect(snapshot).toEqual({ footerNote: 'ขอบคุณที่ใช้บริการ', signaturePath: path, signatureSha256: uploads.sha256Of(TINY_PNG) })
+    expect(snapshot).toEqual({
+      footerNote: 'ขอบคุณที่ใช้บริการ',
+      signaturePath: path,
+      signatureSha256: uploads.sha256Of(TINY_PNG),
+      signerName: null,
+      signerTitle: null,
+      counterpartySignerName: null,
+    })
 
     const resolver = letterhead.createLetterheadResolver(ORG_ID)
     const render = await resolver.template('tax_invoice', snapshot)
@@ -355,11 +368,67 @@ suite('มติ PO U122 — รูปลายเซ็นผู้มีอำ
       (await resolver.template('tax_invoice', { ...snapshot, signaturePath: signaturePath('44444444-4444-4444-8444-00000000dead') }))
         .signature,
     ).toBeNull()
-    expect(await resolver.template('tax_invoice', null)).toEqual({ footerNote: null, signature: null, signatureSlot: 0 })
+    expect(await resolver.template('tax_invoice', null)).toEqual({
+      footerNote: null,
+      signature: null,
+      signatureSlot: 0,
+      signerName: null,
+      signerTitle: null,
+      counterpartySignerName: null,
+    })
 
     // ทั้ง 3 ชนิดเสมอ (ชนิดที่ยังไม่ตั้งค่าแสดงค่าเริ่มต้น) · ไม่มี 50 ทวิ
     const list = await templates.listTaxDocTemplates(ORG_ID)
     expect(list.map((item) => item.documentType)).toEqual(['billing_invoice', 'tax_invoice', 'handover_note'])
     expect(await templates.organizationHasSignature(ORG_ID)).toBe(true)
+  })
+})
+
+suite('มติ PO U151 — ผู้มีอำนาจลงนาม', () => {
+  it('บันทึกชื่อ/ตำแหน่ง + audit (เหตุผล) · snapshot ตอนออกเก็บค่า ณ ตอนนั้น · แก้ภายหลัง snapshot เดิมไม่ขยับ', async () => {
+    const templates = await import('@/lib/settings/queries/tax-doc-templates')
+    const { prisma } = await import('@/lib/prisma')
+
+    const saved = await queries.updateOrganizationProfile(ctx('กำหนดผู้มีอำนาจลงนาม'), {
+      ...INPUT,
+      authorizedSignerName: '  นายสมชาย ใจดี ',
+      authorizedSignerTitle: 'กรรมการผู้จัดการ',
+    })
+    // Zod ตัดช่องว่างที่ชั้น route — ที่นี่ส่งตรงเข้า query จึงเก็บตามที่ส่ง · snapshot ตัดช่องว่างเองอีกชั้น
+    expect(saved.authorizedSignerTitle).toBe('กรรมการผู้จัดการ')
+    const audit = await lastAudit()
+    expect(audit.reason).toBe('กำหนดผู้มีอำนาจลงนาม')
+    expect(audit.after_data).toMatchObject({ authorized_signer_title: 'กรรมการผู้จัดการ' })
+
+    const issued = await templates.loadDocumentTemplateSnapshot(prisma, ORG_ID, 'handover_note', 'นางสาวผู้รับ')
+    expect(issued).toMatchObject({
+      signerName: 'นายสมชาย ใจดี',
+      signerTitle: 'กรรมการผู้จัดการ',
+      counterpartySignerName: 'นางสาวผู้รับ',
+    })
+
+    // เปลี่ยนผู้ลงนามภายหลัง ⇒ เอกสารที่ออกแล้ว (snapshot) ยังพิมพ์ชื่อเดิม
+    await queries.updateOrganizationProfile(ctx('เปลี่ยนกรรมการ'), {
+      ...INPUT,
+      authorizedSignerName: 'นางใหม่ ลงนาม',
+      authorizedSignerTitle: null,
+    })
+    const render = await letterhead.createLetterheadResolver(ORG_ID).template('handover_note', issued)
+    expect(render).toMatchObject({
+      signerName: 'นายสมชาย ใจดี',
+      signerTitle: 'กรรมการผู้จัดการ',
+      counterpartySignerName: 'นางสาวผู้รับ',
+      signatureSlot: 0,
+    })
+    // เอกสารชนิดที่ไม่มีช่องคู่ค้า ไม่พิมพ์ชื่อคู่ค้าแม้ snapshot มีค่า
+    expect((await letterhead.createLetterheadResolver(ORG_ID).template('tax_invoice', issued)).counterpartySignerName).toBeNull()
+    // ค่าปัจจุบัน (ใบส่งมอบที่ยังไม่ยืนยัน) ใช้ชื่อใหม่
+    expect(await letterhead.handoverTemplate(ORG_ID, { current: { companySignerName: 'ผู้รับปัจจุบัน' } })).toMatchObject({
+      signerName: 'นางใหม่ ลงนาม',
+      signerTitle: null,
+      counterpartySignerName: 'ผู้รับปัจจุบัน',
+    })
+    // เอกสารก่อน U122/U151 (ไม่มี snapshot) ⇒ ไม่พิมพ์ชื่อ
+    expect(await letterhead.handoverTemplate(ORG_ID, null)).toMatchObject({ signerName: null, counterpartySignerName: null })
   })
 })

@@ -68,6 +68,9 @@ export const organizationProfileFormSchema = z.object({
       .default(null),
   ),
   vatRegistered: z.boolean({ error: () => 'กรุณาระบุสถานะจดทะเบียนภาษีมูลค่าเพิ่ม' }),
+  /** ผู้มีอำนาจลงนาม (มติ PO U151) — ไม่บังคับ · พิมพ์ใต้ช่องลายเซ็นฝั่งบริษัทบนเอกสารส่งออกนอก */
+  authorizedSignerName: optionalText(200),
+  authorizedSignerTitle: optionalText(200),
 })
 export type OrganizationProfileFormInput = z.input<typeof organizationProfileFormSchema>
 

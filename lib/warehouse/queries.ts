@@ -998,9 +998,13 @@ export async function confirmLot(
         select: LETTERHEAD_ORGANIZATION_SELECT,
       })
       const letterheadSnapshot = organizationLetterheadSnapshotJson(organizationLetterheadSnapshotOf(organization))
-      // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นของใบส่งมอบ ณ ตอนยืนยัน (พิมพ์ซ้ำหน้าตาเดิม)
+      // มติ PO U122/U151 — ข้อความท้าย + รูปลายเซ็น + ผู้ลงนามทั้งสองฝั่งของใบส่งมอบ ณ ตอนยืนยัน (พิมพ์ซ้ำหน้าตาเดิม)
+      const lotCompany = await tx.handoverLot.findUniqueOrThrow({
+        where: { id: lotId },
+        select: { company: { select: { signerName: true } } },
+      })
       const documentTemplateSnapshot = documentTemplateSnapshotJson(
-        await loadDocumentTemplateSnapshot(tx, user.organizationId, 'handover_note'),
+        await loadDocumentTemplateSnapshot(tx, user.organizationId, 'handover_note', lotCompany.company.signerName),
       )
 
       // ยึดล็อตด้วยสถานะเดิม — กันสองคนกดยืนยันพร้อมกัน (คนที่สองได้ 0 แถว)
@@ -1152,9 +1156,9 @@ export interface HandoverDocSource {
   letterheadSnapshot: OrganizationLetterheadSnapshot | null
   /**
    * เทมเพลตใบส่งมอบ (มติ PO U122): ล็อตยืนยันแล้ว = snapshot ตอนยืนยัน (`null` = ยืนยันก่อน U122 ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น)
-   * · ล็อตที่ยังไม่ยืนยัน = `'current'` (ใช้ค่าตั้งปัจจุบัน — ใบที่พิมพ์ให้ลูกค้าเซ็นก่อนยืนยัน)
+   * · ล็อตที่ยังไม่ยืนยัน = `{ current }` (ใช้ค่าตั้งปัจจุบัน + ผู้ลงนามปัจจุบันของบริษัท — ใบที่พิมพ์ให้ลูกค้าเซ็นก่อนยืนยัน · U151)
    */
-  documentTemplate: DocumentTemplateSnapshot | null | 'current'
+  documentTemplate: DocumentTemplateSnapshot | null | { current: { companySignerName: string | null } }
 }
 
 /**
@@ -1175,7 +1179,7 @@ async function withHandoverParties(organizationId: string, lot: LotDetailDto): P
     }),
     prisma.financeCompany.findUniqueOrThrow({
       where: { id: lot.companyId },
-      select: { name: true, address: true, taxId: true, phone: true, branchCode: true },
+      select: { name: true, address: true, taxId: true, phone: true, branchCode: true, signerName: true },
     }),
     prisma.handoverLot.findUniqueOrThrow({
       where: { id: lot.id },
@@ -1198,10 +1202,12 @@ async function withHandoverParties(organizationId: string, lot: LotDetailDto): P
   return {
     lot,
     issuer,
-    recipient: company,
+    recipient: { name: company.name, address: company.address, taxId: company.taxId, phone: company.phone, branchCode: company.branchCode },
     letterheadSnapshot,
     documentTemplate:
-      snapshotRow.status === 'confirmed' ? parseDocumentTemplateSnapshot(snapshotRow.documentTemplateSnapshot) : 'current',
+      snapshotRow.status === 'confirmed'
+        ? parseDocumentTemplateSnapshot(snapshotRow.documentTemplateSnapshot)
+        : { current: { companySignerName: company.signerName } },
   }
 }
 

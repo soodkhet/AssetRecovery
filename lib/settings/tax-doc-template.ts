@@ -104,12 +104,32 @@ export interface DocumentTemplateSnapshot {
   signaturePath: string | null
   /** SHA-256 ของไฟล์ลายเซ็น ณ ตอนออก — พิมพ์ซ้ำแล้วไฟล์ไม่ตรง hash = เว้นช่องเซ็นมือ */
   signatureSha256: string | null
+  /**
+   * ชื่อ/ตำแหน่งผู้มีอำนาจลงนามขององค์กร ณ ตอนออก (มติ PO U151) — พิมพ์ใต้ช่องลายเซ็นฝั่งบริษัท
+   * **ไม่ขึ้นกับสวิตช์รูปลายเซ็น** · `null` = ไม่ได้กรอก/snapshot ก่อน U151 ⇒ เว้นจุดให้เขียนเอง
+   */
+  signerName: string | null
+  signerTitle: string | null
+  /**
+   * ชื่อผู้ลงนามฝั่งคู่ค้า (มติ PO U151) — ใช้กับใบส่งมอบเท่านั้น: ผู้ลงนามของบริษัทไฟแนนซ์ ณ ตอนยืนยันล็อต
+   * พิมพ์ช่อง "ผู้รับมอบ" · เอกสารชนิดอื่น = `null`
+   */
+  counterpartySignerName: string | null
 }
 
-/** ค่าตั้งปัจจุบัน + รูปลายเซ็นขององค์กร → ชุดที่ snapshot ลงเอกสาร (ใช้ตอน**ออก**เอกสารเท่านั้น) */
+/** ผู้มีอำนาจลงนาม + รูปลายเซ็นขององค์กร — คอลัมน์ที่ snapshot ต้องอ่าน */
+export interface DocumentSignerSource {
+  signaturePath: string | null
+  signatureSha256: string | null
+  authorizedSignerName: string | null
+  authorizedSignerTitle: string | null
+}
+
+/** ค่าตั้งปัจจุบัน + รูปลายเซ็น/ผู้ลงนามขององค์กร → ชุดที่ snapshot ลงเอกสาร (ใช้ตอน**ออก**เอกสารเท่านั้น) */
 export function documentTemplateSnapshotOf(
   template: TaxDocTemplateValues | null,
-  organization: { signaturePath: string | null; signatureSha256: string | null },
+  organization: DocumentSignerSource,
+  counterpartySignerName: string | null = null,
 ): DocumentTemplateSnapshot {
   const values = template ?? DEFAULT_TAX_DOC_TEMPLATE
   const withSignature = values.printSignature && organization.signaturePath !== null
@@ -117,6 +137,9 @@ export function documentTemplateSnapshotOf(
     footerNote: trimOrNull(values.footerNote),
     signaturePath: withSignature ? organization.signaturePath : null,
     signatureSha256: withSignature ? organization.signatureSha256 : null,
+    signerName: trimOrNull(organization.authorizedSignerName),
+    signerTitle: trimOrNull(organization.authorizedSignerTitle),
+    counterpartySignerName: trimOrNull(counterpartySignerName),
   }
 }
 
@@ -125,11 +148,17 @@ export function documentTemplateSnapshotJson(snapshot: DocumentTemplateSnapshot)
   footer_note: string | null
   signature_path: string | null
   signature_sha256: string | null
+  signer_name: string | null
+  signer_title: string | null
+  counterparty_signer_name: string | null
 } {
   return {
     footer_note: snapshot.footerNote,
     signature_path: snapshot.signaturePath,
     signature_sha256: snapshot.signatureSha256,
+    signer_name: snapshot.signerName,
+    signer_title: snapshot.signerTitle,
+    counterparty_signer_name: snapshot.counterpartySignerName,
   }
 }
 
@@ -137,7 +166,10 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null
 }
 
-/** อ่าน JSONB กลับ — `null` = ไม่มี snapshot (เอกสารก่อน U122) · ค่าที่รูปไม่ตรงถือเป็นค่าว่างของช่องนั้น */
+/**
+ * อ่าน JSONB กลับ — `null` = ไม่มี snapshot (เอกสารก่อน U122) · ค่าที่รูปไม่ตรงถือเป็นค่าว่างของช่องนั้น
+ * · snapshot ก่อน U151 ไม่มีคีย์ผู้ลงนาม ⇒ `null` (ไม่พิมพ์ชื่อ — ห้ามดึงค่าปัจจุบัน)
+ */
 export function parseDocumentTemplateSnapshot(value: unknown): DocumentTemplateSnapshot | null {
   if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) return null
   const record = value as Record<string, unknown>
@@ -147,6 +179,9 @@ export function parseDocumentTemplateSnapshot(value: unknown): DocumentTemplateS
     footerNote: stringOrNull(record['footer_note']),
     signaturePath,
     signatureSha256: signaturePath !== null && typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? sha : null,
+    signerName: stringOrNull(record['signer_name']),
+    signerTitle: stringOrNull(record['signer_title']),
+    counterpartySignerName: stringOrNull(record['counterparty_signer_name']),
   }
 }
 
@@ -159,10 +194,45 @@ export interface DocTemplateRender {
   signature: LetterheadLogo | null
   /** ลำดับช่องลายเซ็นที่พิมพ์รูป ({@link TEMPLATE_SIGNATURE_SLOT}) */
   signatureSlot: number
+  /** ผู้มีอำนาจลงนาม (มติ PO U151) — พิมพ์ที่ช่อง `signatureSlot` · `null` = เว้นจุดให้เขียนเอง */
+  signerName: string | null
+  signerTitle: string | null
+  /** ผู้ลงนามฝั่งคู่ค้า (ใบส่งมอบ: ผู้รับมอบ) ที่ช่อง {@link TEMPLATE_COUNTERPARTY_SLOT} */
+  counterpartySignerName: string | null
 }
 
 /** ไม่พิมพ์อะไรเพิ่ม — เอกสารก่อน U122 / ตัวพิมพ์ที่ไม่ได้ส่งเทมเพลตมา */
-export const NO_DOC_TEMPLATE: DocTemplateRender = { footerNote: null, signature: null, signatureSlot: 0 }
+export const NO_DOC_TEMPLATE: DocTemplateRender = {
+  footerNote: null,
+  signature: null,
+  signatureSlot: 0,
+  signerName: null,
+  signerTitle: null,
+  counterpartySignerName: null,
+}
+
+/** ช่องลายเซ็นฝั่งคู่ค้าที่พิมพ์ชื่อผู้ลงนามของบริษัทไฟแนนซ์ (มติ PO U151) — มีเฉพาะใบส่งมอบ ("ผู้รับมอบ") */
+export const TEMPLATE_COUNTERPARTY_SLOT: Readonly<Partial<Record<TemplateDocumentType, number>>> = {
+  handover_note: 1,
+}
+
+/** ชื่อผู้ลงนามเรียงตามช่อง — ช่องที่ไม่ทราบชื่อ = `null` (เว้นจุด) */
+export function signerNamesOf(
+  template: DocTemplateRender,
+  slotCount: number,
+  counterpartySlot: number | null = null,
+): Array<string | null> {
+  return Array.from({ length: slotCount }, (_, index) => {
+    if (index === template.signatureSlot) return template.signerName
+    if (counterpartySlot !== null && index === counterpartySlot) return template.counterpartySignerName
+    return null
+  })
+}
+
+/** ตำแหน่งผู้ลงนามเรียงตามช่อง — มีเฉพาะช่องของบริษัทเรา */
+export function signerTitlesOf(template: DocTemplateRender, slotCount: number): Array<string | null> {
+  return Array.from({ length: slotCount }, (_, index) => (index === template.signatureSlot ? template.signerTitle : null))
+}
 
 /** รูปลายเซ็นเรียงตามช่องผู้เซ็น — ช่องอื่นเป็น `null` (เซ็นมือ) */
 export function signatureImagesOf(
