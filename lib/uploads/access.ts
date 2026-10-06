@@ -19,6 +19,7 @@ import { MANAGE_TAX_INVOICE, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
 import { MANAGE_ORGANIZATION_PROFILE, VIEW_ORGANIZATION_PROFILE } from '@/lib/organization/permissions'
 import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
 import { UploadError } from '@/lib/uploads/errors'
+import { assertCompanyDocumentAccess, MANAGE_COMPANIES, VIEW_COMPANY_DOCUMENTS } from '@/lib/finance-companies/document-queries'
 import type { UploadRule } from '@/lib/uploads/inspect'
 import {
   advanceReturnFileRule,
@@ -33,6 +34,7 @@ import {
   organizationLogoRule,
   organizationSignatureRule,
   substituteReceiptFileRule,
+  companyDocumentRule,
 } from '@/lib/uploads/rules'
 import { parseStoragePath, uploadTargetPath, type StoragePathOwner, type UploadTarget } from '@/lib/uploads/targets'
 import {
@@ -77,6 +79,7 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   MANAGE_CUSTOMER_WHT,
   MANAGE_BANK_RECONCILIATION,
   MANAGE_ORGANIZATION_PROFILE,
+  MANAGE_COMPANIES,
 ] as const
 
 /**
@@ -103,6 +106,7 @@ export const STORAGE_VIEW_CAPABILITIES: readonly string[] = [
     MANAGE_CUSTOMER_WHT,
     MANAGE_BANK_RECONCILIATION,
     VIEW_ORGANIZATION_PROFILE,
+    VIEW_COMPANY_DOCUMENTS,
   ]),
 ]
 
@@ -140,6 +144,8 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return organizationSignatureRule(target.organizationId)
     case 'substitute_receipt':
       return substituteReceiptFileRule(target.substituteReceiptId)
+    case 'company_document':
+      return companyDocumentRule(target.companyId, target.documentType)
   }
 }
 
@@ -210,6 +216,12 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
       // ฉบับเซ็นของใบรับรองแทนใบเสร็จ (มติ PO U103) — เจ้าของใบหรือการเงิน ⇒ ยามเดียวกับ endpoint ผูกไฟล์
       const user = await requireAnyPermission('view', SUBSTITUTE_RECEIPT_CAPABILITIES)
       await assertCanUploadSignedSubstituteReceipt(user, target.substituteReceiptId)
+      return user
+    }
+    case 'company_document': {
+      // แนบเอกสารบริษัท = แก้ข้อมูลบริษัท ⇒ สิทธิ์เดียวกับ endpoint ผูกไฟล์ (Superadmin `manage_companies` — มติ PO U132)
+      const user = await requirePermission('manage', MANAGE_COMPANIES)
+      await assertCompanyDocumentAccess(user, target.companyId)
       return user
     }
   }
@@ -336,6 +348,14 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner): Promis
         throw denied(user, `view:substitute-receipt id=${owner.substituteReceiptId}`)
       }
       await assertSubstituteReceiptInScope(user, owner.substituteReceiptId)
+      return
+    }
+    case 'finance_company': {
+      // เอกสารบริษัท (มติ PO U132) — ผู้ดูข้อมูลบริษัทได้ (view_master_data) เห็นได้ · ผู้ใช้บริษัท (พอร์ทัล) ไม่เห็น
+      if (!hasAny(user, 'view', [VIEW_COMPANY_DOCUMENTS, MANAGE_COMPANIES])) {
+        throw denied(user, `view:company-document company=${owner.companyId}`)
+      }
+      await assertCompanyDocumentAccess(user, owner.companyId)
       return
     }
   }

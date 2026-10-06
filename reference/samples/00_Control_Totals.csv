@@ -34,6 +34,7 @@ file,16_Advance_Balance.csv,cleared_baht,ผลรวมคอลัมน์ cl
 file,16_Advance_Balance.csv,returned_offset_baht,ผลรวมคอลัมน์ returned_offset_baht,1,550.00
 file,16_Advance_Balance.csv,returned_direct_baht,ผลรวมคอลัมน์ returned_direct_baht,1,0.00
 file,16_Advance_Balance.csv,closing_baht,ผลรวมคอลัมน์ closing_baht,1,550.00
+file,17_Company_Documents.csv,-,จำนวนแถว,2,-
 summary,01_Revenue.csv,revenue_before_vat,รายได้ก่อน VAT (รายได้ที่รับรู้ในงวด),2,12750.00
 summary,12_Tax_Invoices.csv,output_vat_documents,VAT ขาย ตามใบเสร็จรับเงิน/ใบกำกับภาษีที่ลงวันที่ในงวด (ไม่รวมใบที่ยกเลิก),1,840.00
 summary,09_Credit_Notes.csv,output_vat_credit_debit_notes,ปรับ VAT ขาย ตามใบเพิ่มหนี้ − ใบลดหนี้ที่ลงวันที่ในงวด (ไม่รวมใบที่ยกเลิก),1,-7.00

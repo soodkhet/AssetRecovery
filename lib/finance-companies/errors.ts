@@ -7,6 +7,8 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
 
 export const FINANCE_COMPANY_ERROR_CODES = [
   'COMPANY_NOT_FOUND',
+  'COMPANY_DOCUMENT_NOT_FOUND',
+  'COMPANY_DOCUMENT_VERSION_CONFLICT',
   'DUPLICATE_TAX_ID',
   'INVALID_TAX_ID_FORMAT',
   'SUSPEND_REASON_REQUIRED',
@@ -18,6 +20,8 @@ export type FinanceCompanyErrorCode = (typeof FINANCE_COMPANY_ERROR_CODES)[numbe
 /** 400 = ผิดกติกาข้อมูล/สถานะ · 404 = ไม่พบเป้าหมาย (ไม่ leak ว่ามี record นี้ในองค์กรอื่นไหม) */
 const HTTP_STATUS: Record<FinanceCompanyErrorCode, number> = {
   COMPANY_NOT_FOUND: 404,
+  COMPANY_DOCUMENT_NOT_FOUND: 404,
+  COMPANY_DOCUMENT_VERSION_CONFLICT: 409,
   DUPLICATE_TAX_ID: 400,
   INVALID_TAX_ID_FORMAT: 400,
   SUSPEND_REASON_REQUIRED: 400,
@@ -28,6 +32,15 @@ const MESSAGES: Record<FinanceCompanyErrorCode, ErrorMessage> = {
   COMPANY_NOT_FOUND: {
     title: 'ไม่พบบริษัทไฟแนนซ์',
     message: 'ไม่พบบริษัทไฟแนนซ์ที่ระบุ หรือบริษัทนี้ถูกลบไปแล้ว',
+  },
+  COMPANY_DOCUMENT_NOT_FOUND: {
+    title: 'ไม่พบเอกสารบริษัท',
+    message: 'ไม่พบเอกสารที่ต้องการแทนที่ของบริษัทนี้ — โหลดรายการเอกสารใหม่แล้วลองอีกครั้ง',
+  },
+  COMPANY_DOCUMENT_VERSION_CONFLICT: {
+    title: 'เอกสารมีเวอร์ชันใหม่กว่าแล้ว',
+    message:
+      'เอกสารชนิดนี้มีอยู่แล้ว หรือมีคนแนบเวอร์ชันใหม่ไปก่อน — โหลดรายการใหม่แล้วกด "แนบเวอร์ชันใหม่" ที่เอกสารปัจจุบัน',
   },
   DUPLICATE_TAX_ID: {
     title: 'เลขประจำตัวผู้เสียภาษีซ้ำ',

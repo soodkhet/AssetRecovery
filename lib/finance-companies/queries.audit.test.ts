@@ -15,6 +15,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 const prismaMock = vi.hoisted(() => {
   const client = {
     financeCompany: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    financeCompanyDocument: { findMany: vi.fn().mockResolvedValue([]) },
     serviceFeeTemplate: { findFirst: vi.fn() },
     auditLog: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -164,6 +165,7 @@ describe('createFinanceCompany — vat_mode + wht_withheld_by_customer_pct (UAT 
 describe('updateFinanceCompany — เปลี่ยน vat_mode / อัตราที่ลูกค้าหัก', () => {
   const current: FinanceCompanyDto = {
     id: COMPANY_ID,
+    documentWarnings: [],
     name: values.name,
     shortName: values.shortName,
     taxId: values.taxId,

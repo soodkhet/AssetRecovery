@@ -12,6 +12,7 @@ import {
   type FinanceCompanyValues,
 } from '@/lib/finance-companies/company'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
+import { companyDocumentWarningsFor } from '@/lib/finance-companies/document-queries'
 import type { FinanceCompanyListQuery } from '@/lib/finance-companies/schemas'
 import type { CompanyUserDto, FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { Prisma } from '@/lib/generated/prisma/client'
@@ -92,7 +93,22 @@ function toDto(row: CompanyRow): FinanceCompanyDto {
     caseCount: row._count.cases,
     userCount: row._count.users,
     updatedAt: row.updatedAt.toISOString(),
+    documentWarnings: [],
   }
+}
+
+/**
+ * เติมคำเตือนเอกสารบริษัท (มติ PO U132) — query เดียวทั้งชุด · ผู้ใช้ฝั่งบริษัทไม่ได้รับ (พอร์ทัลไม่แสดง)
+ */
+async function withDocumentWarnings(user: SessionUser, dtos: FinanceCompanyDto[]): Promise<FinanceCompanyDto[]> {
+  if (user.scope.kind === 'company' || dtos.length === 0) return dtos
+  const warnings = await companyDocumentWarningsFor(user.organizationId, dtos)
+  return dtos.map((dto) => ({ ...dto, documentWarnings: warnings.get(dto.id) ?? [] }))
+}
+
+async function withWarnings(user: SessionUser, dto: FinanceCompanyDto): Promise<FinanceCompanyDto> {
+  const [result] = await withDocumentWarnings(user, [dto])
+  return result ?? dto
 }
 
 /** NUMERIC(5,2) — แปลงผ่าน `toFixed(2)` กันเศษ float (`null` = ลูกค้าไม่หัก ต้องเก็บเป็น NULL จริง) */
@@ -164,7 +180,7 @@ export async function listFinanceCompanies(
     // การ์ด active ขึ้นก่อน suspended (`10` §8) — 'active' < 'suspended' ตามลำดับตัวอักษร
     orderBy: [{ status: 'asc' }, { name: 'asc' }],
   })
-  return rows.map(toDto)
+  return withDocumentWarnings(user, rows.map(toDto))
 }
 
 export async function getFinanceCompany(user: SessionUser, companyId: string): Promise<FinanceCompanyDto> {
@@ -174,7 +190,7 @@ export async function getFinanceCompany(user: SessionUser, companyId: string): P
   })
   if (!row) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${companyId}` })
   assertCompanyInScope(user, row.id)
-  return toDto(row)
+  return withWarnings(user, toDto(row))
 }
 
 /**
@@ -305,7 +321,7 @@ export async function createFinanceCompany(
     return company
   }).catch(onUniqueViolation(() => rethrowDuplicateTaxId(organizationId, values.taxId)))
 
-  return toDto(created)
+  return withWarnings(context.actor, toDto(created))
 }
 
 export async function updateFinanceCompany(
@@ -368,7 +384,7 @@ export async function updateFinanceCompany(
     return company
   }).catch(onUniqueViolation(() => rethrowDuplicateTaxId(organizationId, values.taxId, current.id)))
 
-  return toDto(updated)
+  return withWarnings(context.actor, toDto(updated))
 }
 
 /**
@@ -416,5 +432,5 @@ export async function setFinanceCompanyStatus(
     return company
   })
 
-  return toDto(updated)
+  return withWarnings(context.actor, toDto(updated))
 }

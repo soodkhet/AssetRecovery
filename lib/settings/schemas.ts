@@ -6,7 +6,7 @@ import {
 import { dateOnlySchema, pctSchema, reasonSchema, satangSchema } from '@/lib/api/validation'
 import { MAX_APPROVAL_STEPS, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
 import { ACCOUNT_TYPE_VALUES, MAX_AUTO_MATCH_TOLERANCE_DAYS } from '@/lib/settings/bank-account'
-import { MAX_CUTOFF_DAY, MIN_CUTOFF_DAY, describeDueRule } from '@/lib/settings/cycles'
+import { MAX_CUTOFF_DAY, MIN_CUTOFF_DAY, describeDueRule, isScopeKindValidForType } from '@/lib/settings/cycles'
 import {
   MAX_AGING_BUCKETS,
   MAX_AGING_BUCKET_DAYS,
@@ -69,6 +69,7 @@ const optionalText = (max: number) =>
 export const cycleTypeSchema = z.enum(['AR', 'AP'])
 export const cutoffRuleTypeSchema = z.enum(['fixed_dates', 'month_end', 'custom_text'])
 export const dueRuleTypeSchema = z.enum(['net_days', 'day_of_next_month', 'month_end'])
+export const cycleScopeKindSchema = z.enum(['all_companies', 'selected_companies', 'all_teams', 'inhouse', 'outsource'])
 
 const cycleFieldsBase = z.object({
   name: nameSchema,
@@ -93,7 +94,10 @@ const cycleFieldsBase = z.object({
     .max(365, 'ค่าของเงื่อนไขมากเกินไป')
     .nullable()
     .default(null),
-  scope: z.string().trim().min(2, 'ระบุขอบเขตที่ใช้รอบนี้').max(200, 'ขอบเขตยาวเกินไป'),
+  /** ขอบเขตจริง (มติ PO U133) — ต้องเข้าคู่กับชนิดรอบ (CHECK `cycles_scope_matches_type`) */
+  scopeKind: cycleScopeKindSchema,
+  /** บริษัทที่รอบบิลใช้ — บังคับอย่างน้อย 1 เมื่อ `selected_companies` · ชนิดอื่นถูกล้างเป็น [] */
+  companyIds: z.array(z.guid()).max(500, 'เลือกบริษัทมากเกินไป').default([]),
 })
 
 /** ตัวตรวจรูปร่างเงื่อนไข — ใช้ร่วมทั้ง schema ฝั่งฟอร์มและ schema ที่มี `reason` (ห้าม copy) */
@@ -111,6 +115,17 @@ const refineCycle: RefineFn<z.infer<typeof cycleFieldsBase>> = (values, ctx) => 
   }
   if (values.dueRuleType === 'day_of_next_month' && values.dueRuleValue !== null && values.dueRuleValue > MAX_CUTOFF_DAY) {
     ctx.addIssue({ code: 'custom', path: ['dueRuleValue'], message: `วันที่ต้องอยู่ระหว่าง 1-${MAX_CUTOFF_DAY}` })
+  }
+  // มติ PO U133 — ขอบเขตต้องเข้าคู่กับชนิดรอบ (ตรงกับ CHECK `cycles_scope_matches_type`)
+  if (!isScopeKindValidForType(values.type, values.scopeKind)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['scopeKind'],
+      message: values.type === 'AR' ? 'รอบบิลใช้กับบริษัทไฟแนนซ์เท่านั้น' : 'รอบจ่ายใช้กับฝั่งทีมเท่านั้น',
+    })
+  }
+  if (values.scopeKind === 'selected_companies' && values.companyIds.length === 0) {
+    ctx.addIssue({ code: 'custom', path: ['companyIds'], message: 'เลือกบริษัทที่ใช้รอบนี้อย่างน้อย 1 บริษัท' })
   }
 }
 

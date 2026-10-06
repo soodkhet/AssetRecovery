@@ -279,9 +279,9 @@ beforeAll(async () => {
   `)
   await tx.$executeRawUnsafe(`
     INSERT INTO billing_payout_cycles (id, organization_id, name, type, cutoff_rule_type, cutoff_dates,
-                                       due_rule_type, due_rule_value, due_rule, scope, created_by)
+                                       due_rule_type, due_rule_value, due_rule, scope_kind, created_by)
     VALUES ('${CYCLE_AR_ID}', '${ORG_ID}', 'AR รอบวางบิลหลัก 3.6', 'AR', 'month_end', ARRAY[]::INTEGER[],
-            'day_of_next_month', 5, 'วันที่ 5 ของเดือนถัดไป', 'ทุกไฟแนนซ์', '${FINANCE_ID}')
+            'day_of_next_month', 5, 'วันที่ 5 ของเดือนถัดไป', 'all_companies', '${FINANCE_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await cleanup()
@@ -610,6 +610,29 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
       reason: 'วางบิลตามรอบ AR',
     })
     expect(batch.dueDate).toBe('2026-09-05')
+  })
+
+  it('มติ PO U133 — รอบบิลที่ไม่ครอบบริษัทนี้ (เลือกรายบริษัท ไม่มีบริษัทนี้) ⇒ CYCLE_SCOPE_MISMATCH', async () => {
+    await seedBillableRevenue()
+    await db().$executeRawUnsafe(
+      `UPDATE billing_payout_cycles SET scope_kind = 'selected_companies' WHERE id = '${CYCLE_AR_ID}'`,
+    )
+    try {
+      await expectCode(
+        () =>
+          revenue.createBillingBatch(ctx(), {
+            companyId: COMPANY_A,
+            cutoffDate: CUTOFF,
+            cycleId: CYCLE_AR_ID,
+            reason: 'วางบิลตามรอบ AR',
+          }),
+        'CYCLE_SCOPE_MISMATCH',
+      )
+    } finally {
+      await db().$executeRawUnsafe(
+        `UPDATE billing_payout_cycles SET scope_kind = 'all_companies' WHERE id = '${CYCLE_AR_ID}'`,
+      )
+    }
   })
 
   it('`NO_REVENUE_TO_BILL` — ไม่มีรายได้ที่พร้อมวางบิลในงวด', async () => {

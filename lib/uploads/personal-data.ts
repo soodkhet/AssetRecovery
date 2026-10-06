@@ -9,6 +9,7 @@ import { parseStoragePath } from '@/lib/uploads/targets'
  * - เอกสารเคสจากบริษัทไฟแนนซ์ `cases/<caseId>/<slot>/…` ที่ slot เป็นเอกสารของลูกหนี้
  *   (สัญญา / บัตรประชาชน / เอกสารชุดรับเคส / เอกสารอื่นจากไฟแนนซ์)
  * - สแกน 50 ทวิ ที่ลูกค้าหักเรา `customer-wht/<certificateId>/…`
+ * - เอกสารบริษัทไฟแนนซ์ `finance-companies/<companyId>/documents/…` (มติ PO U132 — หนังสือรับรอง/ภ.พ.20/สัญญา/สมุดบัญชี)
  *
  * **ไม่บันทึก**: รูปสินค้า, หลักฐานปิดงาน (`cases/<id>/field_evidence/…`), รูปรับเข้าคลัง, ใบเสร็จ,
  * เอกสารล็อต, หลักฐานคืนเงิน ฯลฯ — ไม่ใช่เอกสารระบุตัวบุคคลโดยตรง
@@ -27,9 +28,13 @@ export const PERSONAL_DATA_CASE_SLOTS: readonly DocumentSlot[] = [
 export type PersonalDataFile =
   | { kind: 'case_document'; targetType: 'cases'; targetId: string; slot: DocumentSlot; fileName: string }
   | { kind: 'customer_wht'; targetType: 'customer_wht_certificates'; targetId: string; fileName: string }
+  | { kind: 'company_document'; targetType: 'finance_companies'; targetId: string; fileName: string }
 
 /** เหตุผลมาตรฐานของ audit — ผู้ใช้ไม่ต้องกรอก */
 export const PERSONAL_FILE_VIEW_REASON = 'เปิดดูเอกสารข้อมูลส่วนบุคคล'
+
+/** เหตุผลมาตรฐานของการเปิดเอกสารบริษัทไฟแนนซ์ (มติ PO U132) */
+export const COMPANY_DOCUMENT_VIEW_REASON = 'เปิดดูเอกสารบริษัทไฟแนนซ์'
 
 function lastSegment(path: string): string {
   const segments = path.split('/')
@@ -57,6 +62,14 @@ export function personalDataFileOf(path: string): PersonalDataFile | null {
       kind: 'customer_wht',
       targetType: 'customer_wht_certificates',
       targetId: owner.certificateId,
+      fileName: lastSegment(path),
+    }
+  }
+  if (owner.kind === 'finance_company') {
+    return {
+      kind: 'company_document',
+      targetType: 'finance_companies',
+      targetId: owner.companyId,
       fileName: lastSegment(path),
     }
   }
@@ -88,7 +101,7 @@ export function buildPersonalFileViewAudit(input: {
       path: input.path,
       fileName: file.fileName,
     },
-    reason: PERSONAL_FILE_VIEW_REASON,
+    reason: file.kind === 'company_document' ? COMPANY_DOCUMENT_VIEW_REASON : PERSONAL_FILE_VIEW_REASON,
     ipAddress: input.ipAddress,
     userAgent: input.userAgent,
   }

@@ -20,7 +20,7 @@ import type {
  * Accounting Pack (ไฟล์ 37) — **ตัวประกอบไฟล์ทั้งชุด แบบ pure ล้วน**
  *
  * ### กติกาที่ห้ามหลุด
- * - **รายชื่อไฟล์ 00–16 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
+ * - **รายชื่อไฟล์ 00–17 ครบไม่มีช่องว่าง** (`37` §6.1) — เพิ่ม/ลดไฟล์ = แก้ `PACK_FILES` ที่เดียว
  *   · หัวคอลัมน์ของทุกไฟล์ต้องตรง `reference/samples/01–09` เป๊ะ (มีเทสต์อ่านไฟล์ตัวอย่างมาเทียบ)
  *   · `09_Credit_Notes.csv` เพิ่มตามมติ PO 05/10/2569 (U21) — ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ · ไฟล์ 01–08 ไม่เปลี่ยน
  *   · `10_Customer_WHT.csv` (U40 — 50 ทวิ ที่ลูกค้าหักเรา) + `11_Suspense_Receipts.csv` (U41 — เงินรับรอตรวจสอบ)
@@ -32,6 +32,8 @@ import type {
  *   · มติ PO 06/10/2569 (U94 ข้อ 2–5 · U96 #15): `00_Control_Totals.csv` (ยอดรวมควบคุม — ไฟล์แรกของชุด) +
  *     `15_Accrued_Expenses.csv` (ค่าใช้จ่ายค้างจ่าย) + `16_Advance_Balance.csv` (เงินทดรองยกมา/เคลื่อนไหว/คงเหลือ)
  *     ⇒ ชุดเป็น 00–16 (17 ไฟล์) · `03` ต่อท้ายคอลัมน์หลักฐานรายจ่าย · `09` ต่อท้าย `company_tax_id`
+ *   · `17_Company_Documents.csv` (มติ PO 07/10/2569 U132 — รายการเอกสารบริษัทไฟแนนซ์เวอร์ชันปัจจุบัน + คำเตือน
+ *     ภาพ ณ เวลาสร้างชุด · ไม่แนบตัวไฟล์) ⇒ ชุดเป็น 00–17 (18 ไฟล์) · ไฟล์ 00–16 ไม่เปลี่ยน
  *     · zip มีโฟลเดอร์ PDF `tax_invoices/` `wht_certificates/` `vouchers/` `billing_invoices/` ใช้เพดานร่วมกัน
  * - `05_WHT_Data.csv` — `payee_tax_id` เป็น **ตัวเลข 13 หลักล้วน** (DEC-006/D10) ⇒ payee ที่ยังไม่กรอก
  *   เลขประจำตัวผู้เสียภาษีต้องหยุดตั้งแต่ต้น (`assertPayeeTaxIdsComplete()`) ไม่ใช่ปล่อยช่องว่างไปถึง
@@ -123,6 +125,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '14', fileName: '14_Unbilled_Revenue.csv', kind: 'csv', description: 'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) — case_ref, company, delivered_date, before_vat, vat, total', sourceDoc: '19' },
   { no: '15', fileName: '15_Accrued_Expenses.csv', kind: 'csv', description: 'ค่าตอบแทน/ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด (ภาพ ณ เวลาสร้างชุด) — expense_id, payee, status, gross, estimated_wht, payout_batch_ref', sourceDoc: '17' },
   { no: '16', fileName: '16_Advance_Balance.csv', kind: 'csv', description: 'เงินทดรองต่อคน — ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs', sourceDoc: '15' },
+  { no: '17', fileName: '17_Company_Documents.csv', kind: 'csv', description: 'เอกสารบริษัทไฟแนนซ์เวอร์ชันปัจจุบัน (หนังสือรับรอง/ภ.พ.20/สัญญา/สมุดบัญชี/อื่น ๆ) + คำเตือนเอกสารไม่ครบ — ภาพ ณ เวลาสร้างชุด', sourceDoc: '10' },
 ]
 
 /** ชื่อไฟล์ตามเลขลำดับ — ผู้ประกอบชุดอ้างเลข ไม่ใช่ตำแหน่งใน array (`37` §6.1) */
@@ -1191,6 +1194,55 @@ export function advanceBalanceCsv(rows: readonly AdvanceBalanceExportRow[]): str
   )
 }
 
+// ── 17_Company_Documents.csv (มติ PO 07/10/2569 U132) ───────────────────────
+
+export const COMPANY_DOCUMENT_HEADERS = [
+  'company',
+  'company_tax_id',
+  'document_type',
+  'document_name',
+  'version',
+  'issued_date',
+  'original_name',
+  'file_sha256',
+  'uploaded_at',
+  'company_warnings',
+] as const
+
+/** หนึ่งแถว = เอกสารเวอร์ชันปัจจุบัน 1 ชิ้น · บริษัทที่ยังไม่มีเอกสารเลยได้ 1 แถว (ช่องเอกสารเป็น `-`) */
+export interface CompanyDocumentExportRow {
+  companyName: string
+  companyTaxId: string
+  /** enum `company_document_type` — null = บริษัทที่ยังไม่มีเอกสาร */
+  documentType: string | null
+  documentName: string | null
+  version: number | null
+  issuedDate: Date | null
+  originalName: string | null
+  fileSha256: string | null
+  uploadedAt: Date | null
+  /** ข้อความเตือนของบริษัท (ไม่บล็อก) — คั่นด้วย ` | ` */
+  warnings: readonly string[]
+}
+
+export function companyDocumentCsv(rows: readonly CompanyDocumentExportRow[]): string {
+  return buildCsv(
+    COMPANY_DOCUMENT_HEADERS,
+    rows.map((row) => [
+      row.companyName,
+      normalizeTaxId(row.companyTaxId) ?? CSV_EMPTY,
+      csvText(row.documentType),
+      csvText(row.documentName),
+      row.version === null ? CSV_EMPTY : String(row.version),
+      csvDate(row.issuedDate),
+      csvText(row.originalName),
+      csvText(row.fileSha256),
+      csvDate(row.uploadedAt),
+      row.warnings.length === 0 ? CSV_EMPTY : row.warnings.join(' | '),
+    ]),
+  )
+}
+
 // ── 08_Document_Checklist.xlsx (ไฟล์ 34) ────────────────────────────────────
 
 export const CHECKLIST_HEADERS = [
@@ -1344,9 +1396,9 @@ export interface PackCoverDoc {
   versionLabel: string
   generatedByName: string
   generatedAtLabel: string
-  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 00–16** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
+  /** SHA-256 ของ **เนื้อไฟล์ข้อมูล 00–17** (คำนวณซ้ำจากไฟล์ในชุดนี้ได้ — ดู `packContentDigest()`) */
   contentDigest: string
-  /** ป้ายช่วงไฟล์ที่ digest ครอบคลุม เช่น `00–16` — มาจาก `PACK_FILES` ไม่พิมพ์ตายตัวใน component */
+  /** ป้ายช่วงไฟล์ที่ digest ครอบคลุม เช่น `00–17` — มาจาก `PACK_FILES` ไม่พิมพ์ตายตัวใน component */
   fileRangeLabel: string
   checks: readonly { label: string; passed: boolean }[]
   files: readonly PackCoverFileRow[]
@@ -1357,7 +1409,7 @@ export interface PackCoverDoc {
   fileName: string
 }
 
-/** ช่วงเลขไฟล์ข้อมูลในชุด เช่น `00–16` */
+/** ช่วงเลขไฟล์ข้อมูลในชุด เช่น `00–17` */
 export function packFileRangeLabel(): string {
   const first = PACK_FILES[0]?.no ?? ''
   const last = PACK_FILES.at(-1)?.no ?? ''

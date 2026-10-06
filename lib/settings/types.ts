@@ -13,6 +13,7 @@ import type {
   BankFileTestStatus,
   BankFileType,
   CutoffRuleType,
+  CycleScopeKind,
   CycleType,
   DueRuleType,
   TemplateDocumentType,
@@ -40,7 +41,12 @@ export interface CycleDto {
   dueRuleValue: number | null
   /** label ที่ผู้ใช้เห็น — ห้าม parse มาคำนวณ (A5) */
   dueRule: string
-  scope: string
+  /** ขอบเขตจริง (มติ PO U133) */
+  scopeKind: CycleScopeKind
+  /** บริษัทที่รอบบิลใช้ (เฉพาะ selected_companies) — เรียงตามชื่อ */
+  companies: Array<{ id: string; name: string }>
+  /** ข้อความ "ใช้กับ" แบบอิสระเดิมก่อนมติ — อ้างอิงเท่านั้น · รอบใหม่ = null */
+  legacyScopeNote: string | null
   isActive: boolean
   updatedAt: string
 }

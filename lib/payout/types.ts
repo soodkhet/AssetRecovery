@@ -35,6 +35,11 @@ export interface PayoutBatchDto {
   paymentFileGeneratedAt: string | null
   /** snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — `null` = รอบที่สร้างก่อนมีค่าตั้ง (พฤติกรรมเดิม) */
   whtPolicy: WhtPolicyValues | null
+  /** รอบจ่าย AP ที่ใช้ (มติ PO U133) — null = ไม่ใช้รอบ/รอบเก่า */
+  cycleName: string | null
+  cycleDueRule: string | null
+  /** กำหนดจ่ายตามรอบ `YYYY-MM-DD` (date-only) */
+  payDueDate: string | null
   createdAt: string
   createdByName: string
   updatedAt: string

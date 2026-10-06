@@ -2,7 +2,7 @@
  * รายการ read-only ของไฟล์ 13 — **pure ล้วน (ค่าคงที่ถอดจาก spec ตรงตัว)**
  *
  *  · §6.7 Internal Document Templates — เอกสารภายในที่ระบบสร้างอัตโนมัติ (แก้รูปแบบจริงที่ไฟล์ 28)
- *  · §6.9 Export Format — ไฟล์มาตรฐานของ Accounting Pack 00–16 (รายละเอียดเต็มที่ `37` §6.1 · 00/15/16 = มติ PO U94)
+ *  · §6.9 Export Format — ไฟล์มาตรฐานของ Accounting Pack 00–17 (รายละเอียดเต็มที่ `37` §6.1 · 00/15/16 = มติ PO U94 · 17 = U132)
  *
  * ทั้งสองหมวดไม่มีตารางใน `02` เพราะเป็น "รายการที่ระบบรู้จัก" ไม่ใช่ข้อมูลที่ผู้ใช้เพิ่มได้ —
  * endpoint จึงเป็น **GET อย่างเดียว** ตรงตาม `13` §13 / `27` §6.1
@@ -52,8 +52,8 @@ export const INTERNAL_DOCUMENT_TEMPLATES: readonly InternalDocumentTemplate[] = 
 
 export interface ExportFormatSpec {
   /**
-   * ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 00–16 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41 ·
-   * 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94)
+   * ชื่อไฟล์ในชุด Export Pack — เรียงเลขต่อเนื่อง 00–17 ห้ามขาด (`37` §6.1 · 09 = มติ PO U21 · 10/11 = U40/U41 ·
+   * 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94 · 17 = U132)
    */
   fileName: string
   format: 'CSV UTF-8' | 'XLSX'
@@ -180,5 +180,13 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
     content:
       'เงินทดรองต่อคน — payee, payee_tax_id, ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs',
     sourceFile: '15',
+  },
+  // มติ PO 07/10/2569 U132 — รายการเอกสารบริษัทไฟแนนซ์ (ภาพ ณ เวลาสร้างชุด)
+  {
+    fileName: '17_Company_Documents.csv',
+    format: 'CSV UTF-8',
+    content:
+      'เอกสารบริษัทไฟแนนซ์เวอร์ชันปัจจุบัน — company, company_tax_id, ชนิดเอกสาร, ชื่อเอกสาร, เวอร์ชัน, วันที่ออก, ชื่อไฟล์, SHA-256, วันที่แนบ, คำเตือนเอกสารไม่ครบ',
+    sourceFile: '10',
   },
 ]

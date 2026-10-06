@@ -1,9 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { PayoutBatchDto } from '@/lib/payout/types'
+import { cycleCoversSide, pickMatchingCycle } from '@/lib/settings/cycles'
+import type { CycleDto } from '@/lib/settings/types'
+
+/** รอบ AP ในรูปที่ใช้ตัดสินขอบเขต (มติ PO U133) */
+function scopeOf(cycle: CycleDto) {
+  return { ...cycle, companyIds: [] }
+}
+
+/** ค่า select "ไม่ใช้รอบ" */
+const NO_CYCLE = 'none'
 
 /**
  * Modal "สร้างรอบจ่ายเงิน" (`17` §8 · mockup `finance.html` `create-payout`)
@@ -13,6 +23,8 @@ import type { PayoutBatchDto } from '@/lib/payout/types'
  *
  * ⚠️ ห้ามคิดยอดล่วงหน้าบนหน้าจอ — ยอดของรอบมาจาก API หลังสร้างเสร็จเท่านั้น (Rule 01)
  * ⚠️ `<input type="date">` เป็นข้อยกเว้นเดียวที่ใช้ ค.ศ. (browser บังคับ — Rule 01)
+ * ⚠️ มติ PO U133: ระบบเลือกรอบจ่าย (AP) ที่ใช้กับฝั่งนั้นให้อัตโนมัติ (แก้ได้ รวมถึง "ไม่ใช้รอบ") — กำหนดจ่าย
+ *    คำนวณฝั่ง server จากเงื่อนไขของรอบ (หน้าจอไม่คิดเอง)
  */
 export function CreatePayoutModal({
   open,
@@ -28,15 +40,39 @@ export function CreatePayoutModal({
   const [cutoffDate, setCutoffDate] = useState('')
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [cycles, setCycles] = useState<readonly CycleDto[]>([])
+  /** `null` = ให้ระบบเลือกตามฝั่ง · `NO_CYCLE` = ไม่ใช้รอบ · อื่น = id รอบที่ผู้ใช้เลือกเอง */
+  const [cycleChoice, setCycleChoice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void (async () => {
+      const result = await callApi<CycleDto[]>('/api/settings/cycles?type=AP&status=active')
+      if (!cancelled) setCycles(result.data ?? [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open])
 
   if (!open) return null
+
+  const matchingCycles = cycles.filter((cycle) => cycleCoversSide(scopeOf(cycle), side))
+  const autoCycleId = pickMatchingCycle(cycles.map(scopeOf), { side })?.id ?? NO_CYCLE
+  const selectedCycle = cycleChoice ?? autoCycleId
 
   async function submit(): Promise<void> {
     if (cutoffDate === '') return
     setSaving(true)
     const result = await callApi<PayoutBatchDto>(
       '/api/payout-batches',
-      jsonRequest('POST', { side, cutoffDate, name: name.trim() }),
+      jsonRequest('POST', {
+        side,
+        cutoffDate,
+        name: name.trim(),
+        cycleId: selectedCycle === NO_CYCLE ? null : selectedCycle,
+      }),
     )
     setSaving(false)
     if (result.error !== undefined) {
@@ -55,6 +91,7 @@ export function CreatePayoutModal({
     }
     setCutoffDate('')
     setName('')
+    setCycleChoice(null)
     onCreated()
     onClose()
   }
@@ -83,7 +120,14 @@ export function CreatePayoutModal({
         </InlineAlert>
 
         <Field label="ฝั่งของรอบการจ่าย" required>
-          <Select value={side} onChange={(event) => setSide(event.target.value === 'inhouse' ? 'inhouse' : 'outsource')}>
+          <Select
+            value={side}
+            onChange={(event) => {
+              setSide(event.target.value === 'inhouse' ? 'inhouse' : 'outsource')
+              // เปลี่ยนฝั่ง = ให้ระบบเลือกรอบที่ตรงฝั่งใหม่
+              setCycleChoice(null)
+            }}
+          >
             <option value="outsource">Outsource (หัก WHT ตาม Tax Profile ของผู้รับเงิน)</option>
             <option value="inhouse">Inhouse</option>
           </Select>
@@ -91,6 +135,24 @@ export function CreatePayoutModal({
 
         <Field label="วันตัดรอบ (Cut-off Date)" required>
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
+        </Field>
+
+        <Field
+          label="รอบจ่าย (AP) ที่ใช้กำหนดวันจ่าย"
+          hint={
+            matchingCycles.length === 0
+              ? 'ยังไม่มีรอบจ่ายที่ใช้กับฝั่งนี้ — ตั้งได้ที่ตั้งค่า > รอบบิล/รอบจ่าย'
+              : 'ระบบเลือกรอบที่ใช้กับฝั่งนี้ให้แล้ว — กำหนดจ่ายคิดจากวันตัดรอบตามเงื่อนไขของรอบ'
+          }
+        >
+          <Select value={selectedCycle} onChange={(event) => setCycleChoice(event.target.value)}>
+            <option value={NO_CYCLE}>— ไม่ใช้รอบ (ไม่มีกำหนดจ่าย) —</option>
+            {matchingCycles.map((cycle) => (
+              <option key={cycle.id} value={cycle.id}>
+                {cycle.name} · {cycle.dueRule}
+              </option>
+            ))}
+          </Select>
         </Field>
 
         {/* มติ PO 03/10/2569 (UAT Q5 · R6-G) — เกณฑ์ WHT ต่อ payee ต่อรอบจ่าย ไม่ใช่ต่อรายการ */}

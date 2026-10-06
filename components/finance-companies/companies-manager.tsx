@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
+import { CompanyDocumentsModal } from '@/components/finance-companies/company-documents-modal'
 import { CompanyFormModal } from '@/components/finance-companies/company-form-modal'
 import {
   Badge,
@@ -36,6 +37,8 @@ import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
  * สิทธิ์บนปุ่มเป็นแค่ UX — API ตรวจ `manage_companies` (Superadmin) ซ้ำเสมอ (DEC-002 · `10` §12)
  * ปุ่ม "เปิด portal ของลูกค้า" (มติ PO U59) — ผู้ถือ `view_client_portal_as` เปิดแท็บใหม่ดูพอร์ทัลของบริษัทนั้น
  * แบบดูอย่างเดียว · ยามจริงอยู่ที่หน้า `/portal/view-as/*` และ `/api/portal/*?as=` (DEC-002)
+ * ส่วน "เอกสารบริษัท" (มติ PO U132) — คำเตือนบนการ์ด (ไม่บล็อก) + ปุ่มเปิด modal เอกสาร (ดูได้ทุกคนที่เห็นหน้านี้
+ * · แนบ = Superadmin) — พอร์ทัลของลูกค้าไม่แสดงส่วนนี้
  */
 
 const MANAGE_RESOURCE = 'manage_companies'
@@ -76,6 +79,7 @@ export function CompaniesManager() {
   const [formOpen, setFormOpen] = useState(false)
 
   const [statusTarget, setStatusTarget] = useState<FinanceCompanyDto | null>(null)
+  const [docsCompany, setDocsCompany] = useState<FinanceCompanyDto | null>(null)
   const [statusReason, setStatusReason] = useState('')
   const [statusSaving, setStatusSaving] = useState(false)
 
@@ -268,6 +272,14 @@ export function CompaniesManager() {
                   </div>
                 )}
 
+                {company.documentWarnings.length > 0 && (
+                  <div className="mb-3">
+                    <InlineAlert tone="warning" title="เอกสารบริษัทยังไม่ครบ">
+                      {company.documentWarnings.map((warning) => warning.message).join(' · ')}
+                    </InlineAlert>
+                  </div>
+                )}
+
                 <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 lg:grid-cols-4">
                   <Detail label="ผู้ติดต่อบริษัท">
                     {company.contactName ?? '—'}
@@ -306,6 +318,9 @@ export function CompaniesManager() {
                     <span className="font-bold text-slate-800">{company.userCount}</span> บัญชีผู้ใช้
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button variant="secondary" onClick={() => setDocsCompany(company)}>
+                      📎 เอกสารบริษัท
+                    </Button>
                     <Can action="view" resource={VIEW_CLIENT_PORTAL_AS_CAPABILITY}>
                       <a
                         href={portalViewAsHomePath(company.id)}
@@ -355,6 +370,15 @@ export function CompaniesManager() {
           templates={templates}
           onClose={() => setFormOpen(false)}
           onSaved={() => void reload()}
+        />
+      )}
+
+      {docsCompany !== null && (
+        <CompanyDocumentsModal
+          key={docsCompany.id}
+          company={docsCompany}
+          onClose={() => setDocsCompany(null)}
+          onChanged={() => void reload()}
         />
       )}
 

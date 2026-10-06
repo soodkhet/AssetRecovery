@@ -162,6 +162,7 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM billing_payout_cycles WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
   // คืนทั้ง `is_verified` และ `tax_profile_id` — เทสต์ WHT fallback ถอด Tax Profile ออกชั่วคราว
@@ -249,6 +250,27 @@ beforeEach(async () => {
 })
 
 suite('batch builder (`17` §9)', () => {
+  it('มติ PO U133 — รอบจ่าย AP ที่ตรงฝั่ง ⇒ บันทึกรอบ + กำหนดจ่ายตามเงื่อนไขรอบ · รอบคนละฝั่ง = CYCLE_SCOPE_MISMATCH', async () => {
+    const outCycle = '00000000-0000-4000-8000-0000000034f1'
+    const inCycle = '00000000-0000-4000-8000-0000000034f2'
+    await db().$executeRawUnsafe(`
+      INSERT INTO billing_payout_cycles (id, organization_id, name, type, cutoff_rule_type, cutoff_dates, due_rule_type, due_rule_value, due_rule, scope_kind, created_by, updated_at)
+      VALUES ('${outCycle}', '${ORG_ID}', 'AP นอก 3.4', 'AP', 'month_end', '{}', 'net_days', 15, 'Net 15 วัน', 'outsource', '${FINANCE_ID}', NOW()),
+             ('${inCycle}', '${ORG_ID}', 'AP ใน 3.4', 'AP', 'month_end', '{}', 'day_of_next_month', 5, 'วันที่ 5 ของเดือนถัดไป', 'inhouse', '${FINANCE_ID}', NOW())
+    `)
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034e1', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
+
+    await expect(
+      payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null, cycleId: inCycle }),
+    ).rejects.toMatchObject({ code: 'CYCLE_SCOPE_MISMATCH' })
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null, cycleId: outCycle })
+    expect(batch.cycleName).toBe('AP นอก 3.4')
+    expect(batch.cycleDueRule).toBe('Net 15 วัน')
+    // วันตัดรอบ 31/08/2569 + Net 15 วัน = 15/09/2569
+    expect(batch.payDueDate).toBe('2026-09-15')
+  })
+
   it('ดึงเฉพาะรายการ approved ของฝั่งที่เลือก + คิด WHT + ปิดท้ายที่สถานะ checking', async () => {
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034c1', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034c2', payeeId: PAYEE_IN_ID, grossSatang: 300_000 })

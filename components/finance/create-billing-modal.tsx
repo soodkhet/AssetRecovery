@@ -6,7 +6,13 @@ import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } 
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { BillingBatchDetailDto } from '@/lib/revenue/types'
+import { cycleCoversCompany, pickMatchingCycle } from '@/lib/settings/cycles'
 import type { CycleDto } from '@/lib/settings/types'
+
+/** รอบ AR ในรูปที่ใช้ตัดสินขอบเขต (มติ PO U133) */
+function scopeOf(cycle: CycleDto) {
+  return { ...cycle, companyIds: cycle.companies.map((company) => company.id) }
+}
 
 /**
  * Modal "สร้างรอบวางบิล" (`19` §9.1 · mockup `finance.html` `create-billing`)
@@ -16,6 +22,9 @@ import type { CycleDto } from '@/lib/settings/types'
  *
  * ⚠️ วันครบกำหนดมี 2 แหล่ง (A5): เลือกรอบ AR = รอบชนะเสมอ · ไม่เลือก = `payment_due_days`
  *    ของบริษัทนั้น — ที่มาถูกบันทึกลง audit ทุกครั้ง (ดูกับดักใน REUSE_INDEX)
+ * ⚠️ มติ PO U133: เลือกบริษัทแล้วระบบเลือกรอบ AR ที่ใช้กับบริษัทนั้นให้อัตโนมัติ (แก้เป็น "ไม่ใช้รอบ" ได้)
+ *    · แสดงเฉพาะรอบที่ครอบบริษัทนั้น (API ตอบ `CYCLE_SCOPE_MISMATCH` ถ้าส่งรอบที่ไม่ครอบ)
+ * ⚠️ มติ PO U132: แสดงคำเตือนเอกสารบริษัท (ไม่มีหนังสือรับรอง/ภ.พ.20 · หนังสือรับรองเกิน 6 เดือน) — ไม่บล็อก
  * ⚠️ `<input type="date">` เป็นข้อยกเว้นเดียวที่ใช้ ค.ศ. (browser บังคับ — Rule 01)
  */
 export function CreateBillingModal({
@@ -56,6 +65,13 @@ export function CreateBillingModal({
   if (!open) return null
 
   const selectedCompany = companies.find((company) => company.id === companyId)
+  const matchingCycles = companyId === '' ? [] : cycles.filter((cycle) => cycleCoversCompany(scopeOf(cycle), companyId))
+
+  function selectCompany(nextCompanyId: string): void {
+    setCompanyId(nextCompanyId)
+    const matched = nextCompanyId === '' ? null : pickMatchingCycle(cycles.map(scopeOf), { companyId: nextCompanyId })
+    setCycleId(matched?.id ?? '')
+  }
   const ready = companyId !== '' && cutoffDate !== '' && reason.trim().length >= REASON_MIN_LENGTH
 
   async function submit(): Promise<void> {
@@ -112,7 +128,7 @@ export function CreateBillingModal({
         </InlineAlert>
 
         <Field label="บริษัทไฟแนนซ์" required>
-          <Select value={companyId} onChange={(event) => setCompanyId(event.target.value)}>
+          <Select value={companyId} onChange={(event) => selectCompany(event.target.value)}>
             <option value="">— เลือกบริษัท —</option>
             {companies.map((company) => (
               <option key={company.id} value={company.id}>
@@ -121,6 +137,16 @@ export function CreateBillingModal({
             ))}
           </Select>
         </Field>
+
+        {selectedCompany !== undefined && selectedCompany.documentWarnings.length > 0 && (
+          <InlineAlert tone="warning" title="เอกสารบริษัทยังไม่ครบ (สร้างรอบต่อได้)">
+            <ul className="list-disc pl-4">
+              {selectedCompany.documentWarnings.map((warning) => (
+                <li key={warning.kind}>{warning.message}</li>
+              ))}
+            </ul>
+          </InlineAlert>
+        )}
 
         <Field label="วันตัดรอบ (Cut-off Date)" required>
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
@@ -131,12 +157,14 @@ export function CreateBillingModal({
           hint={
             selectedCompany === undefined
               ? 'ไม่เลือก = ใช้เครดิตเทอมของบริษัทที่ตั้งไว้ในข้อมูลบริษัท'
-              : `ไม่เลือก = ใช้เครดิตเทอมของ ${selectedCompany.name} (${selectedCompany.paymentDueDays} วัน)`
+              : matchingCycles.length === 0
+                ? `ยังไม่มีรอบบิลที่ใช้กับ ${selectedCompany.name} — ใช้เครดิตเทอมของบริษัท (${selectedCompany.paymentDueDays} วัน)`
+                : `ระบบเลือกรอบที่ใช้กับ ${selectedCompany.name} ให้แล้ว · ไม่ใช้รอบ = เครดิตเทอมของบริษัท (${selectedCompany.paymentDueDays} วัน)`
           }
         >
           <Select value={cycleId} onChange={(event) => setCycleId(event.target.value)}>
             <option value="">— ใช้เครดิตเทอมของบริษัท —</option>
-            {cycles.map((cycle) => (
+            {matchingCycles.map((cycle) => (
               <option key={cycle.id} value={cycle.id}>
                 {cycle.name} · {cycle.dueRule}
               </option>

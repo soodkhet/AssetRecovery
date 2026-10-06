@@ -5,6 +5,7 @@ import {
   type AccruedExpenseExportRow,
   type AdjustmentExportRow,
   type AdvanceBalanceExportRow,
+  type CompanyDocumentExportRow,
   type AdvanceReturnExportRow,
   type BankReconExportRow,
   type CashReceiptExportRow,
@@ -70,6 +71,8 @@ export interface ControlTotalsInput {
   unbilledRevenue: readonly UnbilledRevenueExportRow[]
   accruedExpenses: readonly AccruedExpenseExportRow[]
   advanceBalances: readonly AdvanceBalanceExportRow[]
+  /** มติ PO U132 — นับจำนวนแถวของ 17 (ไม่มีคอลัมน์เงิน) */
+  companyDocuments: readonly CompanyDocumentExportRow[]
 }
 
 function sum(values: readonly number[]): number {
@@ -176,6 +179,7 @@ export function buildControlTotals(input: ControlTotalsInput): ControlTotalLine[
     ['returned_direct_baht', sum(r.advanceBalances.map((row) => row.returnedDirectSatang))],
     ['closing_baht', sum(r.advanceBalances.map((row) => row.closingSatang))],
   ])
+  file('17', r.companyDocuments.length, [])
 
   // ── ยอดสรุปของงวด ───────────────────────────────────────────────────────────
   summary('01', 'revenue_before_vat', r.revenue.length, sum(r.revenue.map((row) => row.grossSatang)))
