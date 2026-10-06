@@ -1,40 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
+import { useTaxRuleSettings } from '@/components/teams/use-tax-rule-settings'
 import { InlineAlert, Skeleton } from '@/components/ui'
-import { callApi } from '@/lib/api/types'
 import { fmtPercent } from '@/lib/format/money'
-import { emptyTaxProfileDefaults } from '@/lib/settings/tax-profile-defaults'
-import type { TaxProfileDefaultsOverviewDto, WhtPolicyOverviewDto } from '@/lib/settings/types'
 import type { TeamSide } from '@/lib/teams/team'
 import {
   canOpenTaxProfileTab,
   TAX_PROFILE_TAB_PATH,
   teamTaxRuleLines,
   type TeamTaxRuleLine,
-  type TeamTaxRuleProfile,
 } from '@/lib/teams/team-tax-rule'
 
 /**
  * กล่อง "กติกาภาษีของผู้รับในทีมนี้" บนฟอร์มทีม (มติ PO U161 · `09` §7) — **อ่านอย่างเดียว ไม่มีช่องเลือก**
  *
- * อ่านค่าตั้งจริงจาก `GET /api/settings/wht-policy` + `GET /api/settings/tax-profile-defaults`
- * (สิทธิ์ `view:view_master_data` เดียวกับหน้ารายการทีม) แล้วให้ `teamTaxRuleLines()` สรุปตามฝั่งของทีม
+ * อ่านค่าตั้งจริงผ่าน `useTaxRuleSettings()` (wht-policy + tax-profile-defaults · `view:view_master_data`) แล้วให้ `teamTaxRuleLines()` สรุปตามฝั่งของทีม
  * · ลิงก์ไปแท็บ Tax Profile แสดงเฉพาะผู้ที่เปิดแท็บนั้นได้ (`canOpenTaxProfileTab()`)
  */
-
-interface TaxRuleData {
-  policy: WhtPolicyOverviewDto['current']
-  defaults: Parameters<typeof teamTaxRuleLines>[2]
-}
-
-function defaultsOf(overview: TaxProfileDefaultsOverviewDto): TaxRuleData['defaults'] {
-  const slots = overview.current?.slots
-  if (slots === undefined) return emptyTaxProfileDefaults<TeamTaxRuleProfile>()
-  return slots
-}
 
 function LineText({ line }: { line: TeamTaxRuleLine }) {
   if (line.kind === 'per_payee_rate') {
@@ -57,31 +41,7 @@ function LineText({ line }: { line: TeamTaxRuleLine }) {
 
 export function TeamTaxRuleNotice({ side }: { side: TeamSide }) {
   const session = useSession()
-  const [data, setData] = useState<TaxRuleData | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const [policy, defaults] = await Promise.all([
-        callApi<WhtPolicyOverviewDto>('/api/settings/wht-policy'),
-        callApi<TaxProfileDefaultsOverviewDto>('/api/settings/tax-profile-defaults'),
-      ])
-      if (cancelled) return
-      if (policy.error !== undefined || policy.data === undefined) {
-        setError(policy.error?.message ?? 'โหลดค่าตั้งภาษีไม่สำเร็จ')
-        return
-      }
-      if (defaults.error !== undefined || defaults.data === undefined) {
-        setError(defaults.error?.message ?? 'โหลด Tax Profile ค่าเริ่มต้นไม่สำเร็จ')
-        return
-      }
-      setData({ policy: policy.data.current, defaults: defaultsOf(defaults.data) })
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const { data, error } = useTaxRuleSettings()
 
   const showLink = session !== null && canOpenTaxProfileTab(session)
 

@@ -13,6 +13,7 @@ import { callApi } from '@/lib/api/types'
 import { verificationHint } from '@/lib/payees/payee'
 import type { PayeeDto } from '@/lib/payees/types'
 import type { TaxProfileDto } from '@/lib/settings/types'
+import type { TeamSide } from '@/lib/teams/team'
 
 /**
  * ส่วน "ข้อมูลรับเงิน" ในฟอร์มเพิ่ม/แก้ผู้ใช้เจ้าหน้าที่ติดตามทรัพย์ (มติ PO U131)
@@ -42,7 +43,10 @@ export function UserPaymentSection({
   onChange,
   onLoaded,
   errors,
+  payoutSide,
 }: {
+  /** ฝั่งของผู้รับตามทีม/กลุ่มที่เลือกในฟอร์มผู้ใช้ (มติ PO U164) */
+  payoutSide: TeamSide | null
   /** Payee เดิมของผู้ใช้ (`UserDto.payeeId`) · `null` = ยังไม่มี (สร้างเมื่อบันทึก) */
   payeeId: string | null
   state: UserPaymentState
@@ -132,6 +136,7 @@ export function UserPaymentSection({
             taxProfiles={taxProfiles}
             allowGrossUp={allowGrossUp}
             originalCondition={payee?.whtCondition ?? null}
+            payoutSide={payoutSide}
           />
 
           {payee?.isVerified === true && (

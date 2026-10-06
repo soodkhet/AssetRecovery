@@ -1,3 +1,4 @@
+import { fmtPercent } from '@/lib/format/money'
 import type { PayeeType } from '@/lib/generated/prisma/enums'
 import { canViewMenu, type MenuViewer } from '@/lib/nav/menu-registry'
 import { visibleFinanceSettingsTabs, type FinanceTabViewer } from '@/lib/settings/finance-tabs'
@@ -66,6 +67,47 @@ export function teamTaxRuleLines(
       : { ...base, kind: 'tax_profile', incomeLabel: null, profile: { name: profile.name, whtPct: profile.whtPct } }
   })
 }
+
+/**
+ * **ค่าที่ใช้จริงเมื่อไม่ผูก Tax Profile รายคน** (มติ PO 07/10/2569 U164 · `18` §7.1) — ตัวเลือกแรกของช่อง
+ * "กติกาภาษี (Tax Profile)" ในฟอร์มผู้ใช้ (U131) และหน้าผู้รับเงิน · ใช้ `teamTaxRuleLines()` ตัวเดียวกับฟอร์มทีม
+ * (ไม่ resolve ซ้ำ) แล้วเลือกบรรทัดของชนิดผู้รับ
+ *
+ * `side` = ฝั่งของผู้รับแบบเดียวกับรอบจ่าย (`resolvePayoutSide()` — ทีม → กลุ่ม role) · `null` = ไม่มีฝั่ง
+ * (เช่น role ระบบ) ⇒ ไม่มีค่าเริ่มต้นให้ใช้ ⇒ `null`
+ */
+export function payeeDefaultTaxRule(
+  side: TeamSide | null,
+  payeeType: PayeeType,
+  policy: Parameters<typeof teamTaxRuleLines>[1],
+  defaults: TaxProfileDefaults<TeamTaxRuleProfile>,
+): TeamTaxRuleLine | null {
+  if (side === null) return null
+  return teamTaxRuleLines(side, policy, defaults).find((line) => line.payeeType === payeeType) ?? null
+}
+
+const SIDE_LABEL: Record<TeamSide, string> = { inhouse: 'Inhouse', outsource: 'Outsource' }
+
+/** ข้อความตัวเลือกแรก (ค่าที่บันทึก = ไม่ผูก/`null` เสมอ) — `line === null` = ไม่มีฝั่ง */
+export function payeeDefaultTaxOptionLabel(side: TeamSide | null, line: TeamTaxRuleLine | null): string {
+  if (side === null || line === null) return 'ไม่มีค่าเริ่มต้นที่ใช้ได้ — กรุณาเลือก'
+  if (line.kind === 'per_payee_rate') {
+    const income = (line.incomeLabel ?? '').replace(/^มาตรา\s*/, '')
+    return `หัก ${income} ตามอัตรารายคนด้านล่าง (แนะนำ)`
+  }
+  if (line.kind === 'tax_profile' && line.profile !== null) {
+    return `ตามค่าเริ่มต้นของทีม ${SIDE_LABEL[side]} — ${line.profile.name} ${fmtPercent(line.profile.whtPct)} (แนะนำ)`
+  }
+  return `ยังไม่ตั้งค่าเริ่มต้นของทีม ${SIDE_LABEL[side]} (${line.payeeTypeLabel}) — กรุณาเลือก`
+}
+
+/** ต้องเตือนให้ตั้งค่าเริ่มต้น/เลือกเอง — ไม่มีฝั่ง หรือฝั่งนี้ยังไม่ตั้ง Tax Profile ค่าเริ่มต้นของชนิดผู้รับ */
+export function payeeDefaultTaxMissing(line: TeamTaxRuleLine | null): boolean {
+  return line === null || line.kind === 'missing'
+}
+
+/** ป้ายต่อท้ายตัวเลือก Tax Profile อื่น (ผูกรายคน = override) */
+export const PER_PAYEE_TAX_PROFILE_SUFFIX = '(กำหนดเฉพาะคนนี้)'
 
 /** ปลายทางลิงก์ "ไปแท็บ Tax Profile" */
 export const TAX_PROFILE_TAB_PATH = '/settings/finance?tab=tax'

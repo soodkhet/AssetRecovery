@@ -23,7 +23,7 @@ import {
 } from '@/lib/payees/payee'
 import { PayeeError } from '@/lib/payees/errors'
 import type { PayeeFieldsInput, PayeeListQuery } from '@/lib/payees/schemas'
-import type { PayeeDto, PayeeOptionDto } from '@/lib/payees/types'
+import type { PayeeCandidateDto, PayeeDto, PayeeOptionDto } from '@/lib/payees/types'
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -200,6 +200,7 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfi
     name: row.user.fullName,
     teamName: row.user.team?.name ?? null,
     roleName: row.user.role.name,
+    payoutSide: resolvePayoutSide({ teamSide: row.user.team?.side ?? null, roleGroup: row.user.role.roleGroup }),
     payeeType: row.payeeType,
     taxProfileId: row.taxProfileId,
     taxProfileName: row.taxProfile?.name ?? null,
@@ -352,7 +353,7 @@ export interface PayeeMutationResult {
  */
 export async function listPayeeCandidates(
   user: SessionUser,
-): Promise<Array<{ id: string; fullName: string; teamName: string | null; roleName: string }>> {
+): Promise<PayeeCandidateDto[]> {
   const rows = await prisma.user.findMany({
     where: {
       organizationId: user.organizationId,
@@ -361,7 +362,12 @@ export async function listPayeeCandidates(
       payeeProfile: { none: {} },
       role: { roleGroup: { in: ['system', 'inhouse', 'outsource'] } },
     },
-    select: { id: true, fullName: true, team: { select: { name: true } }, role: { select: { name: true } } },
+    select: {
+      id: true,
+      fullName: true,
+      team: { select: { name: true, side: true } },
+      role: { select: { name: true, roleGroup: true } },
+    },
     orderBy: { fullName: 'asc' },
     take: 300,
   })
@@ -370,6 +376,7 @@ export async function listPayeeCandidates(
     fullName: row.fullName,
     teamName: row.team?.name ?? null,
     roleName: row.role.name,
+    payoutSide: resolvePayoutSide({ teamSide: row.team?.side ?? null, roleGroup: row.role.roleGroup }),
   }))
 }
 

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { emptyTaxProfileDefaults } from '@/lib/settings/tax-profile-defaults'
 import type { WhtPolicyValues } from '@/lib/settings/wht-policy'
-import { canOpenTaxProfileTab, teamTaxRuleLines, type TeamTaxRuleProfile } from '@/lib/teams/team-tax-rule'
+import {
+  canOpenTaxProfileTab,
+  payeeDefaultTaxMissing,
+  payeeDefaultTaxOptionLabel,
+  payeeDefaultTaxRule,
+  teamTaxRuleLines,
+  type TeamTaxRuleProfile,
+} from '@/lib/teams/team-tax-rule'
 
 /** มติ PO U161 — กติกาภาษีของผู้รับในทีม (อ่านอย่างเดียว) */
 
@@ -58,5 +65,55 @@ describe('canOpenTaxProfileTab', () => {
     expect(
       canOpenTaxProfileTab({ isSuperadmin: false, roleGroup: 'system', roleName: 'ธุรการ', capabilities: { view_master_data: 'view' } }),
     ).toBe(false)
+  })
+})
+
+/** มติ PO U164 — ตัวเลือกแรกของช่อง "กติกาภาษี (Tax Profile)" แสดงค่าที่ใช้จริง */
+describe('payeeDefaultTaxRule + payeeDefaultTaxOptionLabel', () => {
+  function label(
+    side: 'inhouse' | 'outsource' | null,
+    payeeType: 'individual' | 'corporate',
+    policy: Policy = BY_SIDE,
+  ): { text: string; missing: boolean; isNull: boolean } {
+    const line = payeeDefaultTaxRule(side, payeeType, policy, DEFAULTS)
+    return { text: payeeDefaultTaxOptionLabel(side, line), missing: payeeDefaultTaxMissing(line), isNull: line === null }
+  }
+
+  it('Outsource บุคคลธรรมดา ⇒ ชื่อ profile + % ของค่าเริ่มต้นฝั่ง Outsource (แนะนำ)', () => {
+    const { text, missing } = label('outsource', 'individual')
+    expect(text).toBe('ตามค่าเริ่มต้นของทีม Outsource — Outsource บุคคล 3% 3.00% (แนะนำ)')
+    expect(missing).toBe(false)
+  })
+
+  it('Outsource นิติบุคคล ⇒ ใช้ช่องนิติบุคคล (เปลี่ยนประเภทผู้รับแล้วข้อความเปลี่ยนตาม)', () => {
+    expect(label('outsource', 'corporate').text).toContain('Outsource นิติ 3%')
+  })
+
+  it('Inhouse บุคคลธรรมดา (ค่าตั้งเริ่มต้น) ⇒ หัก 40(2) ตามอัตรารายคนด้านล่าง', () => {
+    expect(label('inhouse', 'individual').text).toBe('หัก 40(2) ตามอัตรารายคนด้านล่าง (แนะนำ)')
+  })
+
+  it('ตามโหมดประเภทเงินได้จริง — outsource ตั้ง 40(1) ⇒ หัก 40(1) ตามอัตรารายคน', () => {
+    const policy: Policy = { ...BY_SIDE, outsourceIncomeCategory: 'sec_40_1' }
+    expect(label('outsource', 'individual', policy).text).toBe('หัก 40(1) ตามอัตรารายคนด้านล่าง (แนะนำ)')
+  })
+
+  it('ฝั่งนี้ยังไม่ตั้งค่าเริ่มต้น ⇒ ข้อความให้เลือก + ต้องเตือน', () => {
+    const { text, missing } = label('inhouse', 'individual', { ...BY_SIDE, incomeTypeMode: 'all_40_8' })
+    expect(text).toBe('ยังไม่ตั้งค่าเริ่มต้นของทีม Inhouse (บุคคลธรรมดา) — กรุณาเลือก')
+    expect(missing).toBe(true)
+  })
+
+  it('ไม่มีฝั่ง (เช่น role ระบบ) ⇒ ไม่มีค่าเริ่มต้นที่ใช้ได้', () => {
+    const { text, missing, isNull } = label(null, 'individual')
+    expect(isNull).toBe(true)
+    expect(text).toBe('ไม่มีค่าเริ่มต้นที่ใช้ได้ — กรุณาเลือก')
+    expect(missing).toBe(true)
+  })
+
+  it('ข้อความไม่มีเลขอ้างอิงสเปค', () => {
+    for (const side of ['inhouse', 'outsource', null] as const) {
+      for (const type of ['individual', 'corporate'] as const) expect(label(side, type).text).not.toMatch(/§|ไฟล์ \d/)
+    }
   })
 })
