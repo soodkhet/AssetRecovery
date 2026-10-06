@@ -18,6 +18,8 @@ const base: FinancePolicyValues = {
   arAgingBuckets: [90, 30, 60, 30],
   writeOffToleranceSatang: DEFAULT_WRITE_OFF_TOLERANCE_SATANG,
   advanceUnclearedToEmployeeReceivable: true,
+  substituteReceiptMaxPerDocSatang: 50_000,
+  substituteReceiptMaxPerMonthSatang: 300_000,
 }
 
 describe('ค่าเริ่มต้น', () => {
@@ -90,6 +92,8 @@ describe('toFinancePolicyAuditPayload', () => {
       ar_aging_buckets: [30, 60, 90],
       write_off_tolerance_satang: 5_000,
       advance_uncleared_to_employee_receivable: true,
+      substitute_receipt_max_per_doc_satang: 50_000,
+      substitute_receipt_max_per_month_satang: 300_000,
     })
   })
 })

@@ -421,7 +421,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
       `${CSV_BOM}invoice_number,invoice_date,company,company_tax_id,amount_before_vat_baht,vat_baht,total_baht,vat_rate_pct,billing_ref,status,cancelled_date,cancel_reason,replaced_by,pdf_file,company_branch,billing_batch_number,document_type,received_date\r\n`,
     )
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('13_Advance_Returns.csv')) ?? '')).toBe(
-      `${CSV_BOM}return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason\r\n`,
+      `${CSV_BOM}return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason,return_number\r\n`,
     )
     // มติ PO 05/10/2569 (U21) — รอบนี้ไม่มีใบลดหนี้/ใบเพิ่มหนี้ ⇒ มีแต่หัวคอลัมน์
     const creditCsv = fileAt([...storage.keys()].find((path) => path.endsWith('09_Credit_Notes.csv')) ?? '')
@@ -928,11 +928,13 @@ suite('มติ PO U68 — 13_Advance_Returns.csv', () => {
     await exportsApi.createExportPack(ctx, { periodId })
     const csv = fileAt([...storage.keys()].find((path) => path.endsWith('13_Advance_Returns.csv')) ?? '')
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
-    expect(lines.slice(1, -1)).toEqual([
+    // มติ PO O67 · U100 — เลขที่ใบรับคืน (RAV) ต่อท้ายสุด
+    expect(lines.slice(1, -1).map((line) => line.replace(/,RAV-\d{4}-\d{4}$/, ''))).toEqual([
       `15/06/2569,${advanceRef(adv2)},ประยุทธ์ บุญมี,1200.00,cash,-,receipt-cash.jpg,active,-,-`,
       `20/06/2569,${advanceRef(adv3)},ประยุทธ์ บุญมี,300.00,bank_transfer,-,slip.pdf,reversed,22/06/2569,บันทึกซ้ำ`,
       `25/06/2569,${advanceRef(adv1)},ประยุทธ์ บุญมี,550.00,payout_offset,PB-4.6-${batchCursor}-KEY,-,active,-,-`,
     ])
+    for (const line of lines.slice(1, -1)) expect(line).toMatch(/,RAV-\d{4}-\d{4}$/)
   })
 })
 
@@ -1223,14 +1225,15 @@ suite('มติ PO U94 ข้อ 4/5 · U96 #15 — ยอดรวมควบ
     // U96 #15 — หลักฐานรายจ่ายต่อท้าย: expense_id/วันทำงาน/วันจ่าย/รอบ/ใบสำคัญจ่าย (เลขเดียวกับไฟล์ 04)/เคส/ใบเสร็จ
     const expenses = csvRows(packFile(record.version, '03_Expenses.csv'))
     expect(expenses[0]).toBe(
-      'payee,category,gross_baht,wht_baht,net_baht,receipt_in_company_name,expense_id,work_date,payment_date,payout_batch_ref,voucher_ref,case_ref,cost_center,receipt_file',
+      'payee,category,gross_baht,wht_baht,net_baht,receipt_in_company_name,expense_id,work_date,payment_date,payout_batch_ref,voucher_ref,case_ref,cost_center,receipt_file,substitute_receipt_number',
     )
     const payments = csvRows(packFile(record.version, '04_Payments.csv'))
     const voucherRef = payments[1]?.split(',')[5]
     for (const row of expenses.slice(1)) {
       const cells = row.split(',')
       expect(cells[6]).toMatch(/^[0-9a-f-]{36}$/)
-      expect(cells.slice(7)).toEqual(['20/06/2569', '25/06/2569', cells[9], voucherRef, 'SF-2026-04600', '-', 'ok.jpg'])
+      // มติ PO U103 — รายการที่ไม่ใช้ใบรับรองแทนใบเสร็จ: `substitute_receipt_number` = `-`
+      expect(cells.slice(7)).toEqual(['20/06/2569', '25/06/2569', cells[9], voucherRef, 'SF-2026-04600', '-', 'ok.jpg', '-'])
     }
 
     // หน้าปกเป็น PDF ที่ประกอบได้ (มีตารางยอดรวมควบคุม — ตรวจเนื้อหาที่ pure test)

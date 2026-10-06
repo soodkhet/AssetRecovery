@@ -108,7 +108,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '00', fileName: '00_Control_Totals.csv', kind: 'csv', description: 'ยอดรวมควบคุม — จำนวนแถว + ยอดรวมคอลัมน์เงินหลักของทุกไฟล์ และยอดสรุปของงวด (ภาพ ณ เวลาสร้างชุด)', sourceDoc: '37' },
   { no: '01', fileName: '01_Revenue.csv', kind: 'csv', description: 'รายการรายได้ — company, case_ref, revenue_date, gross, vat_flag', sourceDoc: '19' },
   { no: '02', fileName: '02_Cash_Receipts.csv', kind: 'csv', description: 'รายการเงินรับ — receipt_date, payer, amount, bank_ref', sourceDoc: '31' },
-  { no: '03', fileName: '03_Expenses.csv', kind: 'csv', description: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท + หลักฐาน (expense_id, วันทำงาน, วันจ่าย, รอบจ่าย, ใบสำคัญจ่าย, เคส, ศูนย์ต้นทุน, ไฟล์ใบเสร็จ)', sourceDoc: '32' },
+  { no: '03', fileName: '03_Expenses.csv', kind: 'csv', description: 'รายการค่าใช้จ่าย — payee, category, gross, wht, net, ใบเสร็จค่าที่พักในนามบริษัท + หลักฐาน (expense_id, วันทำงาน, วันจ่าย, รอบจ่าย, ใบสำคัญจ่าย, เคส, ศูนย์ต้นทุน, ไฟล์ใบเสร็จ, เลขใบรับรองแทนใบเสร็จ)', sourceDoc: '32' },
   { no: '04', fileName: '04_Payments.csv', kind: 'csv', description: 'รายการจ่ายเงินจริง (+ ใบสำคัญจ่าย/สลิปค่าตอบแทน PDF ในโฟลเดอร์ vouchers/)', sourceDoc: '17' },
   { no: '05', fileName: '05_WHT_Data.csv', kind: 'csv', description: 'ข้อมูลหัก ณ ที่จ่าย (+ PDF หนังสือรับรอง 50 ทวิ ในโฟลเดอร์ wht_certificates/)', sourceDoc: '33' },
   { no: '06', fileName: '06_Bank_Reconciliation.csv', kind: 'csv', description: 'ผลกระทบยอดธนาคาร', sourceDoc: '35' },
@@ -118,7 +118,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
   { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบเสร็จรับเงิน/ใบกำกับภาษี (ออกตอนรับเงิน) และใบกำกับภาษีแบบเดิมที่ออก/ยกเลิกในรอบ ตามวันที่เอกสาร — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ, ชนิดเอกสาร, วันรับเงิน (+ PDF ในโฟลเดอร์ tax_invoices/ · ใบแจ้งหนี้ที่ส่งในรอบอยู่ใน billing_invoices/)', sourceDoc: '31' },
-  { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status', sourceDoc: '15' },
+  { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status, return_number', sourceDoc: '15' },
   { no: '14', fileName: '14_Unbilled_Revenue.csv', kind: 'csv', description: 'รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล ณ วันสร้างชุด) — case_ref, company, delivered_date, before_vat, vat, total', sourceDoc: '19' },
   { no: '15', fileName: '15_Accrued_Expenses.csv', kind: 'csv', description: 'ค่าตอบแทน/ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด (ภาพ ณ เวลาสร้างชุด) — expense_id, payee, status, gross, estimated_wht, payout_batch_ref', sourceDoc: '17' },
   { no: '16', fileName: '16_Advance_Balance.csv', kind: 'csv', description: 'เงินทดรองต่อคน — ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs', sourceDoc: '15' },
@@ -262,6 +262,9 @@ export const EXPENSE_HEADERS = [
   'case_ref',
   'cost_center',
   'receipt_file',
+  // มติ PO 06/10/2569 (U103) — ต่อท้ายสุด: เลขใบรับรองแทนใบเสร็จ (CRT) เมื่อรายการใช้ใบรับรองแทนใบเสร็จ (`receipt_file`
+  // = ชื่อไฟล์ใบรับรองฉบับเซ็น) · รายการปกติ = `-`
+  'substitute_receipt_number',
 ] as const
 
 export interface ExpenseExportRow {
@@ -289,6 +292,8 @@ export interface ExpenseExportRow {
   costCenter?: string | null
   /** path ใบเสร็จใน bucket — ไฟล์ใส่แค่ชื่อไฟล์ (`evidenceFileName()`) */
   receiptFilePath?: string | null
+  /** มติ PO U103 — เลข CRT ของใบรับรองแทนใบเสร็จ · ไม่มี = ว่าง */
+  substituteReceiptNumber?: string | null
 }
 
 /** `Y`/`N` สำหรับค่าที่พัก · ชนิดอื่นเว้นว่าง (ไม่เกี่ยว) — รูปแบบเดียวกับธง `Y`/`N` ในไฟล์ 01 */
@@ -315,6 +320,7 @@ export function expenseCsv(rows: readonly ExpenseExportRow[]): string {
       csvText(row.caseRef),
       csvText(row.costCenter),
       csvText(evidenceFileName(row.receiptFilePath ?? null)),
+      csvText(row.substituteReceiptNumber),
     ]),
   )
 }
@@ -956,6 +962,8 @@ export const ADVANCE_RETURN_HEADERS = [
   'status',
   'reversed_date',
   'reversal_reason',
+  // มติ PO 06/10/2569 (O67 · U100) — ต่อท้ายสุด: เลขที่ใบรับคืนเงินทดรอง (RAV) ของแถว
+  'return_number',
 ] as const
 
 export type AdvanceReturnExportChannel = 'payout_offset' | 'cash' | 'bank_transfer'
@@ -970,6 +978,8 @@ export interface AdvanceReturnExportRow {
   evidenceFilePath: string | null
   reversedAt: Date | null
   reversalReason: string | null
+  /** เลขที่ใบรับคืนเงินทดรอง (RAV — มติ PO U102) · ข้อมูลเก่าในเทสต์ไม่ระบุ = `-` */
+  returnNumber?: string | null
 }
 
 /** ชื่อไฟล์หลักฐาน (ไม่เปิดเผย path ใน bucket) */
@@ -995,6 +1005,7 @@ export function advanceReturnCsv(rows: readonly AdvanceReturnExportRow[]): strin
         reversed ? 'reversed' : 'active',
         reversed ? csvDate(row.reversedAt) : CSV_EMPTY,
         reversed ? csvText(row.reversalReason) : CSV_EMPTY,
+        csvText(row.returnNumber),
       ]
     }),
   )

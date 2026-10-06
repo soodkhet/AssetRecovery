@@ -1,0 +1,193 @@
+import { describe, expect, it } from 'vitest'
+import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
+import { substituteReceiptDraftSchema, substituteReceiptLineSchema } from '@/lib/substitute-receipts/schemas'
+import {
+  assertWithinSubstituteReceiptLimits,
+  canUploadSignedSubstituteReceipt,
+  canViewSubstituteReceipt,
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
+  substituteReceiptBadgeText,
+  substituteReceiptCertification,
+  substituteReceiptLimitMessage,
+  substituteReceiptLimitProblem,
+  substituteReceiptMonthRange,
+  substituteReceiptPerDocWarning,
+  substituteReceiptTotalSatang,
+  SUBSTITUTE_RECEIPT_MAX_LINES,
+  type SubstituteReceiptViewer,
+} from '@/lib/substitute-receipts/substitute-receipt'
+
+const LIMITS = {
+  maxPerDocSatang: DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
+  maxPerMonthSatang: DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
+}
+
+describe('ยอดรวมใบรับรองแทนใบเสร็จ (22 §6.17)', () => {
+  it('รวมยอดทุกบรรทัดเป็นสตางค์จำนวนเต็ม (ตัวอย่าง mockup 5 บรรทัด = ฿260)', () => {
+    expect(
+      substituteReceiptTotalSatang([
+        { amountSatang: 7000 },
+        { amountSatang: 4000 },
+        { amountSatang: 6000 },
+        { amountSatang: 2000 },
+        { amountSatang: 7000 },
+      ]),
+    ).toBe(26000)
+  })
+
+  it('ไม่มีบรรทัด / ยอด 0 / ติดลบ / มีทศนิยม = ปฏิเสธ', () => {
+    expect(() => substituteReceiptTotalSatang([])).toThrow(RangeError)
+    expect(() => substituteReceiptTotalSatang([{ amountSatang: 0 }])).toThrow(RangeError)
+    expect(() => substituteReceiptTotalSatang([{ amountSatang: -100 }])).toThrow(RangeError)
+    expect(() => substituteReceiptTotalSatang([{ amountSatang: 10.5 }])).toThrow(RangeError)
+  })
+})
+
+describe('เพดานต่อใบ / ต่อคนต่อเดือน', () => {
+  it('ค่าเริ่มต้น ฿500 ต่อใบ และ ฿3,000 ต่อเดือน', () => {
+    expect(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG).toBe(50_000)
+    expect(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG).toBe(300_000)
+  })
+
+  it('เท่าเพดานพอดีผ่านทั้งสองชั้น', () => {
+    expect(substituteReceiptLimitProblem({ ...LIMITS, totalSatang: 50_000, monthUsedSatang: 250_000 })).toBeNull()
+  })
+
+  it('เกินเพดานต่อใบ 1 สตางค์ = บล็อก (ตรวจก่อนต่อเดือน)', () => {
+    expect(substituteReceiptLimitProblem({ ...LIMITS, totalSatang: 50_001, monthUsedSatang: 300_000 })).toEqual({
+      kind: 'per_doc',
+      limitSatang: 50_000,
+      totalSatang: 50_001,
+    })
+  })
+
+  it('ยอดเดือนสะสม + ใบนี้เกินเพดานต่อเดือน = บล็อก พร้อมยอดที่ยังออกได้', () => {
+    expect(substituteReceiptLimitProblem({ ...LIMITS, totalSatang: 30_000, monthUsedSatang: 280_000 })).toEqual({
+      kind: 'per_month',
+      limitSatang: 300_000,
+      totalSatang: 30_000,
+      monthUsedSatang: 280_000,
+      remainingSatang: 20_000,
+    })
+  })
+
+  it('ลดเพดานต่อเดือนลงต่ำกว่ายอดที่ใช้ไปแล้ว — ยอดคงเหลือเป็น 0 ไม่ติดลบ', () => {
+    const problem = substituteReceiptLimitProblem({ ...LIMITS, maxPerMonthSatang: 100_000, totalSatang: 100, monthUsedSatang: 150_000 })
+    expect(problem).toMatchObject({ kind: 'per_month', remainingSatang: 0 })
+  })
+
+  it('assert เกินเพดาน = SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT (400) พร้อมข้อความบอกยอด', () => {
+    try {
+      assertWithinSubstituteReceiptLimits({ ...LIMITS, totalSatang: 60_000, monthUsedSatang: 0 })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toBeInstanceOf(SubstituteReceiptError)
+      const typed = error as SubstituteReceiptError
+      expect(typed.code).toBe('SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT')
+      expect(typed.status).toBe(400)
+      expect(typed.userMessage).toContain('฿500.00')
+      expect(typed.userMessage).toContain('฿600.00')
+    }
+    expect(() => assertWithinSubstituteReceiptLimits({ ...LIMITS, totalSatang: 100, monthUsedSatang: 0 })).not.toThrow()
+  })
+
+  it('ข้อความต่อเดือนบอกยอดที่ใช้แล้ว เพดาน และยอดที่ยังออกได้ — ไม่มีเลขอ้างอิงสเปค', () => {
+    const message = substituteReceiptLimitMessage({
+      kind: 'per_month',
+      limitSatang: 300_000,
+      totalSatang: 30_000,
+      monthUsedSatang: 280_000,
+      remainingSatang: 20_000,
+    })
+    expect(message).toContain('฿2,800.00')
+    expect(message).toContain('฿3,000.00')
+    expect(message).toContain('฿200.00')
+    expect(message).not.toMatch(/§|ไฟล์ \d/)
+  })
+
+  it('คำเตือนล่วงหน้าบนฟอร์มดูแค่เพดานต่อใบ', () => {
+    expect(substituteReceiptPerDocWarning(50_000, 50_000)).toBeNull()
+    expect(substituteReceiptPerDocWarning(50_100, 50_000)).toContain('เกินเพดานต่อใบ')
+  })
+})
+
+describe('เดือนของวันที่ออกใบ', () => {
+  it('คืนช่วง [วันที่ 1, วันที่ 1 ของเดือนถัดไป) ของคอลัมน์ DATE', () => {
+    const range = substituteReceiptMonthRange(new Date(Date.UTC(2026, 9, 31)))
+    expect(range.start.toISOString()).toBe('2026-10-01T00:00:00.000Z')
+    expect(range.end.toISOString()).toBe('2026-11-01T00:00:00.000Z')
+  })
+
+  it('ข้ามปี (ธันวาคม → มกราคม)', () => {
+    const range = substituteReceiptMonthRange(new Date(Date.UTC(2026, 11, 15)))
+    expect(range.end.toISOString()).toBe('2027-01-01T00:00:00.000Z')
+  })
+})
+
+describe('ป้าย/คำรับรอง', () => {
+  it('ป้ายคิวอนุมัติ', () => {
+    expect(substituteReceiptBadgeText('CRT-2569-0009')).toBe('ใบรับรองแทนใบเสร็จ CRT-2569-0009')
+  })
+
+  it('คำรับรองระบุชื่อผู้จ่ายเงิน', () => {
+    expect(substituteReceiptCertification('นายทดสอบ ภาคสนาม')).toContain('ข้าพเจ้า นายทดสอบ ภาคสนาม (ผู้เบิกจ่าย)')
+  })
+})
+
+describe('scope การเห็น/อัปโหลด', () => {
+  const base: SubstituteReceiptViewer = {
+    userId: 'u-other',
+    isSuperadmin: false,
+    canSeeAllAdvances: false,
+    canSeeAllExpenses: false,
+    managedTeamIds: [],
+  }
+  const expenseOwner = { payeeUserId: 'u-owner', payeeTeamId: 't1', link: 'expense' as const }
+  const advanceOwner = { ...expenseOwner, link: 'advance' as const }
+
+  it('เจ้าของเห็นและอัปโหลดได้ · คนอื่นไม่ได้', () => {
+    const owner = { ...base, userId: 'u-owner' }
+    expect(canViewSubstituteReceipt(owner, expenseOwner)).toBe(true)
+    expect(canUploadSignedSubstituteReceipt(owner, advanceOwner)).toBe(true)
+    expect(canViewSubstituteReceipt(base, expenseOwner)).toBe(false)
+    expect(canUploadSignedSubstituteReceipt(base, expenseOwner)).toBe(false)
+  })
+
+  it('การเงิน (เงินทดรอง) เห็นใบของเงินทดรองแต่ไม่เห็นใบของใบเบิก', () => {
+    const finance = { ...base, canSeeAllAdvances: true }
+    expect(canViewSubstituteReceipt(finance, advanceOwner)).toBe(true)
+    expect(canViewSubstituteReceipt(finance, expenseOwner)).toBe(false)
+  })
+
+  it('ผู้จัดการทีมเห็นใบเบิกของทีมที่ดูแลแต่อัปโหลดแทนไม่ได้', () => {
+    const manager = { ...base, managedTeamIds: ['t1'] }
+    expect(canViewSubstituteReceipt(manager, expenseOwner)).toBe(true)
+    expect(canViewSubstituteReceipt(manager, { ...expenseOwner, payeeTeamId: 't2' })).toBe(false)
+    expect(canUploadSignedSubstituteReceipt(manager, expenseOwner)).toBe(false)
+  })
+
+  it('Superadmin เห็นทุกใบ', () => {
+    expect(canViewSubstituteReceipt({ ...base, isSuperadmin: true }, advanceOwner)).toBe(true)
+  })
+})
+
+describe('Zod schema (FE/BE ชุดเดียว)', () => {
+  const line = { lineDate: '2026-10-03', description: 'ค่าผ่านทางพิเศษ', amountSatang: 7000, note: '' }
+
+  it('แปลงวันที่เป็นเที่ยงคืน UTC และหมายเหตุว่าง = null', () => {
+    const parsed = substituteReceiptLineSchema.parse(line)
+    expect(parsed.lineDate.toISOString()).toBe('2026-10-03T00:00:00.000Z')
+    expect(parsed.note).toBeNull()
+  })
+
+  it('ยอด 0 / รายละเอียดสั้น / ไม่มีบรรทัด / เกินจำนวนบรรทัด = ไม่ผ่าน', () => {
+    expect(substituteReceiptLineSchema.safeParse({ ...line, amountSatang: 0 }).success).toBe(false)
+    expect(substituteReceiptLineSchema.safeParse({ ...line, description: 'ab' }).success).toBe(false)
+    expect(substituteReceiptDraftSchema.safeParse({ lines: [] }).success).toBe(false)
+    expect(
+      substituteReceiptDraftSchema.safeParse({ lines: Array.from({ length: SUBSTITUTE_RECEIPT_MAX_LINES + 1 }, () => line) })
+        .success,
+    ).toBe(false)
+  })
+})

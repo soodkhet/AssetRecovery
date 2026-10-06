@@ -64,6 +64,9 @@ export interface FinancePolicyDto {
   arAgingLabels: string[]
   writeOffToleranceSatang: number
   advanceUnclearedToEmployeeReceivable: boolean
+  /** มติ PO U103 — เพดานใบรับรองแทนใบเสร็จต่อใบ / ต่อคนต่อเดือน */
+  substituteReceiptMaxPerDocSatang: number
+  substituteReceiptMaxPerMonthSatang: number
   /** `null` = ยังไม่เคยตั้งค่า (ค่าที่เห็นคือค่าเริ่มต้น ยังไม่มีแถวใน DB) */
   updatedAt: string | null
 }

@@ -289,8 +289,27 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'ประยุทธ์ บุญมี,ค่าตอบแทนติดตามทรัพย์ (commission),8500.00,255.00,8245.00,,-,-,-,-,-,-,-,-',
+      'ประยุทธ์ บุญมี,ค่าตอบแทนติดตามทรัพย์ (commission),8500.00,255.00,8245.00,,-,-,-,-,-,-,-,-,-',
     )
+  })
+
+  it('มติ U103: ใบรับรองแทนใบเสร็จ — receipt_file = ชื่อไฟล์ฉบับเซ็น · substitute_receipt_number ต่อท้ายสุด', () => {
+    expect(EXPENSE_HEADERS.at(-1)).toBe('substitute_receipt_number')
+    const line = expenseCsv([
+      {
+        payeeName: 'สมหญิง ดูแลดี',
+        category: 'ค่าที่พัก',
+        grossSatang: 45_000,
+        whtSatang: 0,
+        netSatang: 45_000,
+        receiptInCompanyName: false,
+        receiptFilePath: 'substitute-receipts/11111111-1111-4111-8111-111111111111/signed/crt-signed-0622.pdf',
+        substituteReceiptNumber: 'CRT-2569-0003',
+      },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')[1]
+    expect(line?.split(',').slice(-2)).toEqual(['crt-signed-0622.pdf', 'CRT-2569-0003'])
   })
 
   it('ค่าใช้จ่าย (มติ U96 #14): receipt_in_company_name ต่อท้ายสุด — ค่าที่พัก Y/N · ชนิดอื่นว่าง', () => {
@@ -319,6 +338,8 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
       'case_ref',
       'cost_center',
       'receipt_file',
+      // มติ PO U103 — ต่อท้ายสุด
+      'substitute_receipt_number',
     ])
     const line = expenseCsv([
       {
@@ -341,7 +362,7 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
       .slice(CSV_BOM.length)
       .split('\r\n')[1]
     expect(line).toBe(
-      'ประยุทธ์ บุญมี,ค่าที่พัก,800.00,0.00,800.00,Y,e-1,20/06/2569,25/06/2569,PB-1,PV-2569-PB-1-001,SF-2569-0412,FIELD-N,hotel-0620.jpg',
+      'ประยุทธ์ บุญมี,ค่าที่พัก,800.00,0.00,800.00,Y,e-1,20/06/2569,25/06/2569,PB-1,PV-2569-PB-1-001,SF-2569-0412,FIELD-N,hotel-0620.jpg,-',
     )
   })
 
@@ -912,6 +933,7 @@ describe('13_Advance_Returns.csv (มติ PO 05/10/2569 U68)', () => {
         evidenceFilePath: null,
         reversedAt: null,
         reversalReason: null,
+        returnNumber: 'RAV-2569-0001',
       },
       {
         returnDate: new Date('2026-07-15T00:00:00Z'),
@@ -923,6 +945,7 @@ describe('13_Advance_Returns.csv (มติ PO 05/10/2569 U68)', () => {
         evidenceFilePath: 'advances/abc/returns/receipt-cash-0715.jpg',
         reversedAt: null,
         reversalReason: null,
+        returnNumber: 'RAV-2569-0002',
       },
       {
         returnDate: new Date('2026-07-20T00:00:00Z'),
@@ -934,14 +957,17 @@ describe('13_Advance_Returns.csv (มติ PO 05/10/2569 U68)', () => {
         evidenceFilePath: 'advances/def/returns/slip-0720.pdf',
         reversedAt: new Date('2026-07-22T04:00:00Z'),
         reversalReason: 'บันทึกยอดซ้ำกับรายการเดิม',
+        returnNumber: 'RAV-2569-0003',
       },
     ])
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(ADVANCE_RETURN_HEADERS.join(','))
-    expect(lines[1]).toBe('10/07/2569,ADV-3F2A9C1B,สมชาย ใจดี,550.00,payout_offset,PB-2569-07-01,-,active,-,-')
-    expect(lines[2]).toBe('15/07/2569,ADV-7D41E0AA,ประยุทธ์ บุญมี,1200.00,cash,-,receipt-cash-0715.jpg,active,-,-')
+    // มติ PO O67 · U100 — เลขที่ใบรับคืน (RAV) ต่อท้ายสุด คอลัมน์เดิมไม่ย้าย
+    expect(ADVANCE_RETURN_HEADERS.at(-1)).toBe('return_number')
+    expect(lines[1]).toBe('10/07/2569,ADV-3F2A9C1B,สมชาย ใจดี,550.00,payout_offset,PB-2569-07-01,-,active,-,-,RAV-2569-0001')
+    expect(lines[2]).toBe('15/07/2569,ADV-7D41E0AA,ประยุทธ์ บุญมี,1200.00,cash,-,receipt-cash-0715.jpg,active,-,-,RAV-2569-0002')
     expect(lines[3]).toBe(
-      '20/07/2569,ADV-91BC22F0,สมหญิง รักงาน,300.00,bank_transfer,-,slip-0720.pdf,reversed,22/07/2569,บันทึกยอดซ้ำกับรายการเดิม',
+      '20/07/2569,ADV-91BC22F0,สมหญิง รักงาน,300.00,bank_transfer,-,slip-0720.pdf,reversed,22/07/2569,บันทึกยอดซ้ำกับรายการเดิม,RAV-2569-0003',
     )
   })
 

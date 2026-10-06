@@ -1,5 +1,6 @@
 import type { AdvancePayoutBatchRef, AdvanceReturnState } from '@/lib/advances/advance'
 import type { AdvanceReturnChannel, AdvanceReturnMethod, AdvanceStatus } from '@/lib/generated/prisma/enums'
+import type { SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
 
 /**
  * DTO ของเงินทดรองจ่าย (ไฟล์ 15 §7.2) — **type-only** เพื่อให้ไฟล์ฝั่ง client import ได้
@@ -52,6 +53,8 @@ export interface AdvanceDto {
   payoutBatch: AdvancePayoutBatchRef | null
   /** มติ PO U83 — เคยอยู่ในรอบจ่ายที่ `completed` (จ่ายเงินทดรองจริงแล้ว) ⇒ เคลียร์ยอดได้ */
   paidOut: boolean
+  /** มติ PO U103 — ใบรับรองแทนใบเสร็จที่ออกตอนเคลียร์ยอด (ติ๊ก "ไม่มีใบเสร็จ") · ไม่มี = `null` */
+  substituteReceipt: SubstituteReceiptRefDto | null
 }
 
 /** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */

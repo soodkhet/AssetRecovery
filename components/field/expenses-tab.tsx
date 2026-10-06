@@ -33,6 +33,7 @@ import type { ExpenseViewType } from '@/lib/field/schemas'
 import type { FieldExpenseDto, FieldExpenseListDto } from '@/lib/field/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 
 /**
  * แท็บ "เบิกค่าใช้จ่าย" (`41` §7.9) — 2 ขอบแท็บที่โหลดคนละชุดจาก `GET /api/field/expenses?type=`
@@ -338,7 +339,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                   {separateItems.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2.5"
+                      className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2.5"
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-700">
@@ -355,6 +356,14 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                           <div className="truncate text-xs text-slate-500">ชี้แจงตอนส่งใหม่: {item.resubmitNote}</div>
                         )}
                         <ReceiptButton item={item} onView={setViewingReceipt} />
+                        {/* มติ PO U103 — ใบรับรองแทนใบเสร็จ: ดาวน์โหลดไปเซ็น → อัปโหลดฉบับเซ็น (ต้องมีก่อนอนุมัติ) */}
+                        {item.substituteReceipt !== null && (
+                          <SubstituteReceiptPanel
+                            receipt={item.substituteReceipt}
+                            canUpload
+                            onSigned={() => void load(view)}
+                          />
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="text-base font-bold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</div>

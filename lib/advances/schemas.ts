@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { isDueClearDateInPast } from '@/lib/advances/advance'
 import { dateOnlySchema, satangSchema } from '@/lib/api/validation'
+import { substituteReceiptDraftSchema } from '@/lib/substitute-receipts/schemas'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของเงินทดรองจ่าย (ไฟล์ 15 · Rule 13)
@@ -67,6 +68,21 @@ export const advanceSettleSchema = z.object({
   /** `15` §13 — ไฟล์ใบเสร็จอ้างอิงถูกบันทึกลง audit (ตาราง `advances` ไม่มีคอลัมน์เก็บ) */
   receiptFileUrl: optionalText(500, 'ลิงก์ใบเสร็จ'),
   note: optionalText(500, 'หมายเหตุ'),
+  /**
+   * มติ PO U103 — ติ๊ก "ไม่มีใบเสร็จ" → รายจ่ายที่ไม่มีใบเสร็จ ระบบออกใบรับรองแทนใบเสร็จ (CRT) ผูกกับเงินทดรองนี้
+   * ยอดรวมของรายการต้องไม่เกินยอดที่ใช้จริง (ส่วนที่เหลือมีใบเสร็จจริง)
+   */
+  substituteReceipt: substituteReceiptDraftSchema.nullable().default(null),
+}).superRefine((value, ctx) => {
+  if (value.substituteReceipt === null) return
+  const total = value.substituteReceipt.lines.reduce((sum, line) => sum + line.amountSatang, 0)
+  if (total > value.usedSatang) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['substituteReceipt'],
+      message: 'ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง',
+    })
+  }
 })
 
 /** เปลี่ยนวิธีคืน (การเงิน · มติ U30) — ต้องมีเหตุผลเสมอ (กระทบเงิน) */
@@ -98,8 +114,9 @@ export type AdvanceCreateInput = z.infer<typeof advanceCreateSchema>
 export type AdvanceApproveInput = z.infer<typeof advanceApproveSchema>
 export type AdvanceRejectInput = z.infer<typeof advanceRejectSchema>
 /** `returnMethod` ไม่ระบุ = ค่าเริ่มต้นหักกลบ (ผู้เรียกฝั่ง server/เทสต์ที่ไม่ได้ผ่าน schema) */
-export type AdvanceSettleInput = Omit<z.infer<typeof advanceSettleSchema>, 'returnMethod'> & {
+export type AdvanceSettleInput = Omit<z.infer<typeof advanceSettleSchema>, 'returnMethod' | 'substituteReceipt'> & {
   returnMethod?: z.infer<typeof advanceReturnMethodSchema>
+  substituteReceipt?: z.infer<typeof advanceSettleSchema>['substituteReceipt']
 }
 export type AdvanceListQuery = z.infer<typeof advanceListQuerySchema>
 export type AdvanceReturnMethodChangeInput = z.infer<typeof advanceReturnMethodChangeSchema>

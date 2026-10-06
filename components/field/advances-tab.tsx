@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
+import { AdvanceRequestPdfLink, AdvanceReturnHistory } from '@/components/finance/advance-doc-links'
+import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
 import { useAdvances } from '@/components/finance/use-advances'
@@ -114,6 +116,19 @@ export function AdvancesTab() {
                   </>
                 )}
               </dl>
+
+              {/* มติ PO U100/U103 — ใบเบิก/ใบรับคืน PDF + ใบรับรองแทนใบเสร็จ (เจ้าของอัปโหลดฉบับเซ็น) */}
+              <div className="mt-2 flex flex-wrap items-center justify-end gap-3">
+                <AdvanceRequestPdfLink advance={advance} />
+              </div>
+              <AdvanceReturnHistory advance={advance} />
+              {advance.substituteReceipt !== null && (
+                <SubstituteReceiptPanel
+                  receipt={advance.substituteReceipt}
+                  canUpload={canRequest}
+                  onSigned={() => void reload()}
+                />
+              )}
 
               {advance.rejectionReason !== null && (
                 <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800">

@@ -38,6 +38,9 @@ describe('ฟิลด์บังคับของการเบิกที�
   })
 
   it('ยอด 0 หรือติดลบ = ไม่ผ่าน', () => {
+    // มติ PO U103 — ช่องใบเสร็จยอมรับใบรับรองแทนใบเสร็จ (ติ๊ก "ไม่มีใบเสร็จ") แทนได้
+    expect(missingHotelClaimFields({ ...valid, receiptFileUrl: null, hasSubstituteReceipt: true })).toEqual([])
+    expect(missingHotelClaimFields({ ...valid, receiptFileUrl: null, hasSubstituteReceipt: false })).toEqual(['receiptFileUrl'])
     expect(missingHotelClaimFields({ ...valid, amountSatang: 0 })).toEqual(['amountSatang'])
     expect(missingHotelClaimFields({ ...valid, amountSatang: -100 })).toEqual(['amountSatang'])
   })
@@ -88,7 +91,7 @@ describe('ข้อความของฟอร์มเบิกที่พ�
     expect(hotelClaimFormError({ ...ok, amountBaht: '' })).toBe('กรุณากรอกจำนวนเงิน')
     expect(hotelClaimFormError({ ...ok, amountBaht: '600.505' })).toBe('จำนวนเงินกรอกทศนิยมได้ไม่เกิน 2 ตำแหน่ง')
     expect(hotelClaimFormError({ ...ok, amountBaht: 'abc' })).toBe('จำนวนเงินต้องเป็นตัวเลข')
-    expect(hotelClaimFormError({ ...ok, hasReceipt: false })).toBe('ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
+    expect(hotelClaimFormError({ ...ok, hasReceipt: false })).toBe('ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก')
     expect(hotelClaimFormError(ok)).toBeNull()
   })
 })

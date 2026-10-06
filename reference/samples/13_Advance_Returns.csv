@@ -1,4 +1,4 @@
-﻿return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason
-10/07/2569,ADV-3F2A9C1B,สมชาย ใจดี,550.00,payout_offset,PB-2569-07-01,-,active,-,-
-15/07/2569,ADV-7D41E0AA,ประยุทธ์ บุญมี,1200.00,cash,-,receipt-cash-0715.jpg,active,-,-
-20/07/2569,ADV-91BC22F0,สมหญิง รักงาน,300.00,bank_transfer,-,slip-0720.pdf,reversed,22/07/2569,บันทึกยอดซ้ำกับรายการเดิม
+﻿return_date,advance_ref,payee,amount_baht,channel,payout_batch_ref,evidence_file,status,reversed_date,reversal_reason,return_number
+10/07/2569,ADV-3F2A9C1B,สมชาย ใจดี,550.00,payout_offset,PB-2569-07-01,-,active,-,-,RAV-2569-0001
+15/07/2569,ADV-7D41E0AA,ประยุทธ์ บุญมี,1200.00,cash,-,receipt-cash-0715.jpg,active,-,-,RAV-2569-0002
+20/07/2569,ADV-91BC22F0,สมหญิง รักงาน,300.00,bank_transfer,-,slip-0720.pdf,reversed,22/07/2569,บันทึกยอดซ้ำกับรายการเดิม,RAV-2569-0003

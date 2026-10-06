@@ -106,6 +106,11 @@ export const ERROR_CATALOG = {
   ADVANCE_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.4' },
   ADVANCE_RETURN_EXCEEDS_OUTSTANDING: { status: 400, severity: 'reject', source: '24 §6.4' },
   ADVANCE_IN_PENDING_PAYOUT: { status: 400, severity: 'reject', source: '24 §6.4' },
+  // มติ PO 06/10/2569 (U103) — ใบรับรองแทนใบเสร็จรับเงิน
+  SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT: { status: 400, severity: 'reject', source: '24 §6.4' },
+  SUBSTITUTE_RECEIPT_NOT_SIGNED: { status: 400, severity: 'reject', source: '24 §6.4' },
+  SUBSTITUTE_RECEIPT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.4' },
+  SUBSTITUTE_RECEIPT_ALREADY_SIGNED: { status: 400, severity: 'reject', source: '24 §6.4' },
   REJECTION_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   APPROVAL_STEP_OUT_OF_ORDER: { status: 400, severity: 'reject', source: '24 §6.4' },
