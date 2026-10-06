@@ -108,7 +108,7 @@
 1. ลบ `RAPIDAPI_KEY` / `RAPIDAPI_MOBILE_SPECS_HOST` (และ `RAPIDAPI_*` อื่น) ออกจาก `.env.local` · `.env.example` · Vercel (staging + production) — เลิกใช้แล้วตาม DEC-017
 2. รัน `pnpm typecheck && pnpm test` เต็มหนึ่งรอบบนเครื่อง
 3. `git push origin staging`
-4. `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` — staging มีถึง `20261007100000` แล้ว · migration ใหม่ **19 ตัว**:
+4. `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` — staging มีถึง `20261007100000` แล้ว · migration ใหม่ **20 ตัว**:
    `20261008010000_recycle_previous_round_snapshot` · `20261008020000_supplementary_filing_doc_snapshots_assumptions` · `20261008030000_bank_tx_statement_occurrence` · `20261008031000_payout_post_completion_marker` · `20261008050000_finance_company_documents` · `20261008051000_cycle_scope_kind` · `20261008070000_receipt_id_document_verification` · `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source` · `20261008090000_approval_flow_role_ids` · `20261008091000_tax_profile_income_type_code` · `20261008092000_bank_file_format_purpose_ids` · `20261008100000_authorized_signer` · `20261008110000_device_catalog` · `20261008140000_service_fee_fail_fee` · `20261008150000_device_tac` · `20261008150100_device_tac_updates` · `20261008153000_billing_status_debit_note_backfill` · `20261008180000_asset_color_capacity_note`
 5. หน้า ตั้งค่า → Model Phone บน staging กด **"อัปเดตตอนนี้"** (นำเข้า TAC ครั้งแรก — หลังจากนั้น job เช็กเองทุกเที่ยงคืน)
 6. (ตัวเลือก) seed ข้อมูลตัวอย่างบน staging — ถ้าใช้ seed-final ให้แก้ข้อความแถว VAT "V-2 ต่ออายุมาตรการ (O71)" ที่มีเลขมติติดมา
