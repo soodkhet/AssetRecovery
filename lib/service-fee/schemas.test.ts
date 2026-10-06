@@ -15,7 +15,7 @@ const SUCCESS_FEE = {
   baseSatang: 0,
   ratePct: 10,
   basis: 'debt_amount' as const,
-  chargeOnFail: false,
+  failFeeSatang: null,
 }
 
 const FLAT = {
@@ -25,7 +25,7 @@ const FLAT = {
   baseSatang: 300_000,
   ratePct: 0,
   basis: null,
-  chargeOnFail: true,
+  failFeeSatang: 300_000,
 }
 
 const HYBRID = {
@@ -35,7 +35,7 @@ const HYBRID = {
   baseSatang: 200_000,
   ratePct: 5,
   basis: 'debt_amount' as const,
-  chargeOnFail: false,
+  failFeeSatang: null,
 }
 
 function fieldsOf(input: unknown): string[] {
@@ -70,15 +70,35 @@ describe('model SUCCESS_FEE (`12` §6.1/§7.1)', () => {
     expect(parsed).not.toHaveProperty('chargePerTrackingRound')
   })
 
-  it('ตั้ง charge_on_fail ไม่ได้ (เก็บเฉพาะเคสสำเร็จโดยนิยาม)', () => {
-    expect(fieldsOf({ ...SUCCESS_FEE, chargeOnFail: true })).toContain('chargeOnFail')
+  it('มติ U165: ตั้งยอดกรณีไม่สำเร็จได้ทุกโมเดล รวม SUCCESS_FEE', () => {
+    expect(serviceFeeTemplateCreateSchema.safeParse({ ...SUCCESS_FEE, failFeeSatang: 30_000 }).success).toBe(true)
+  })
+
+  it('มติ U165: request เก่าที่ส่ง chargeOnFail มาแทน failFeeSatang → ปฏิเสธ (ไม่เงียบตัดทิ้ง)', () => {
+    const { failFeeSatang: _drop, ...legacy } = SUCCESS_FEE
+    void _drop
+    expect(fieldsOf({ ...legacy, chargeOnFail: true })).toContain('failFeeSatang')
+  })
+
+  it('chargeOnFail ที่หลุดมาพร้อม failFeeSatang ถูกตัดทิ้ง ไม่ไปถึงชั้นบันทึก', () => {
+    const parsed = serviceFeeTemplateCreateSchema.parse({ ...SUCCESS_FEE, chargeOnFail: true })
+    expect(parsed).not.toHaveProperty('chargeOnFail')
   })
 })
 
 describe('model FLAT (`12` §6.2/§7.1)', () => {
-  it('ค่าครบถูกต้องผ่าน — charge_on_fail ตั้งได้ทั้ง true/false', () => {
+  it('ค่าครบถูกต้องผ่าน — ยอดกรณีไม่สำเร็จเป็น null (ไม่เก็บ) หรือยอดแยกได้', () => {
     expect(serviceFeeTemplateCreateSchema.safeParse(FLAT).success).toBe(true)
-    expect(serviceFeeTemplateCreateSchema.safeParse({ ...FLAT, chargeOnFail: false }).success).toBe(true)
+    expect(serviceFeeTemplateCreateSchema.safeParse({ ...FLAT, failFeeSatang: null }).success).toBe(true)
+    expect(serviceFeeTemplateCreateSchema.safeParse({ ...FLAT, baseSatang: 150_000, failFeeSatang: 30_000 }).success).toBe(
+      true,
+    )
+  })
+
+  it('ติ๊กเรียกเก็บกรณีไม่สำเร็จแล้วยอดต้อง > 0 · ติดลบ/ทศนิยมสตางค์ถูกปฏิเสธ', () => {
+    expect(fieldsOf({ ...FLAT, failFeeSatang: 0 })).toContain('failFeeSatang')
+    expect(fieldsOf({ ...FLAT, failFeeSatang: -100 })).toContain('failFeeSatang')
+    expect(fieldsOf({ ...FLAT, failFeeSatang: 300.5 })).toContain('failFeeSatang')
   })
 
   it('ต้องมี base', () => {
@@ -105,8 +125,8 @@ describe('model HYBRID (`12` §6.3/§7.1)', () => {
     expect(fieldsOf({ ...HYBRID, basis: null })).toContain('basis')
   })
 
-  it('charge_on_fail ตั้งได้ทั้งสองค่า', () => {
-    expect(serviceFeeTemplateCreateSchema.safeParse({ ...HYBRID, chargeOnFail: true }).success).toBe(true)
+  it('ยอดกรณีไม่สำเร็จตั้งได้', () => {
+    expect(serviceFeeTemplateCreateSchema.safeParse({ ...HYBRID, failFeeSatang: 50_000 }).success).toBe(true)
   })
 })
 

@@ -293,13 +293,17 @@ describe('นโยบายการเงิน / สายอนุมัต�
   })
 
   it('เทมเพลตค่าบริการ: HYBRID ฿3,000 + 10% ของมูลหนี้ ฿50,000', () => {
-    const help = serviceFeeHelp({ model: 'HYBRID', baseSatang: 300_000, ratePct: 10, basis: 'debt_amount', chargeOnFail: true })
+    const help = serviceFeeHelp({ model: 'HYBRID', baseSatang: 300_000, ratePct: 10, basis: 'debt_amount', failFeeSatang: 300_000 })
     expect(valueOf(help, 'ปิดสำเร็จ')).toBe('฿8,000.00')
     expect(valueOf(help, 'ปิดไม่สำเร็จ')).toBe('฿3,000.00')
-    const success = serviceFeeHelp({ model: 'SUCCESS_FEE', baseSatang: null, ratePct: 5, basis: 'debt_amount', chargeOnFail: false })
+    const success = serviceFeeHelp({ model: 'SUCCESS_FEE', baseSatang: null, ratePct: 5, basis: 'debt_amount', failFeeSatang: null })
     expect(valueOf(success, 'ปิดสำเร็จ')).toBe('฿2,500.00')
     expect(valueOf(success, 'ปิดไม่สำเร็จ')).toBe('฿0.00')
-    expect(serviceFeeHelp({ model: 'FLAT', baseSatang: null, ratePct: null, basis: 'debt_amount', chargeOnFail: false }).examples).toEqual([])
+    // มติ U165 — ยอดกรณีไม่สำเร็จแยก: สำเร็จ 1,500 / ไม่สำเร็จ 300
+    const split = serviceFeeHelp({ model: 'FLAT', baseSatang: 150_000, ratePct: null, basis: 'debt_amount', failFeeSatang: 30_000 })
+    expect(valueOf(split, 'ปิดสำเร็จ')).toBe('฿1,500.00')
+    expect(valueOf(split, 'ปิดไม่สำเร็จ')).toBe('฿300.00')
+    expect(serviceFeeHelp({ model: 'FLAT', baseSatang: null, ratePct: null, basis: 'debt_amount', failFeeSatang: null }).examples).toEqual([])
   })
 
   it('SLA 72 ชม. จากเคสสร้าง 06/10/2569 09:00', () => {
@@ -370,7 +374,7 @@ describe('ข้อความที่ผู้ใช้เห็น', () => {
     allowanceHelp(30_000),
     hotelCapHelp(80_000),
     commissionHelp(150_000, 50_000),
-    serviceFeeHelp({ model: 'FLAT', baseSatang: 300_000, ratePct: null, basis: 'debt_amount', chargeOnFail: true }),
+    serviceFeeHelp({ model: 'FLAT', baseSatang: 300_000, ratePct: null, basis: 'debt_amount', failFeeSatang: 300_000 }),
   ]
 
   it.each(all.map((help) => [help.title, help] as const))('"%s" ไม่มีเลขอ้างอิงสเปค และตอบครบ 4 คำถาม', (_title, help) => {

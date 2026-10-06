@@ -295,10 +295,10 @@ suite('Final Test ด่าน 1 — Ops E2E: เคส → มอบหมา�
     await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_ID}' WHERE id IN ('${AGENT_ID}', '${LEAD_ID}')`)
     await tx.$executeRawUnsafe(`
       INSERT INTO service_fee_templates
-        (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
+        (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
       VALUES
-        ('${TEMPLATE_V1}', '${ORG_ID}', 'เทมเพลต F1 v1', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', false, 1, false, '${ADMIN_ID}'),
-        ('${TEMPLATE_V2}', '${ORG_ID}', 'เทมเพลต F1 v2', 'SUCCESS_FEE', 0, 20.00, 'debt_amount', false, 2, true, '${ADMIN_ID}')
+        ('${TEMPLATE_V1}', '${ORG_ID}', 'เทมเพลต F1 v1', 'SUCCESS_FEE', 0, 10.00, 'debt_amount', NULL, 1, false, '${ADMIN_ID}'),
+        ('${TEMPLATE_V2}', '${ORG_ID}', 'เทมเพลต F1 v2', 'SUCCESS_FEE', 0, 20.00, 'debt_amount', NULL, 2, true, '${ADMIN_ID}')
       ON CONFLICT (id) DO NOTHING
     `)
     await tx.$executeRawUnsafe(`

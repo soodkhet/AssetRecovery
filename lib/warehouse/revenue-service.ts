@@ -97,7 +97,7 @@ export function revenueOutcomeByCase(
 export interface CaseRevenueSnapshot {
   caseId: string
   model: ServiceFeeModel | null
-  chargeOnFail: boolean | null
+  failFeeSatang: number | null
   outcome: CaseOutcome | null
   hasExpense: boolean
   expenseState: ExpenseGateState
@@ -123,7 +123,7 @@ export function evaluateCaseRevenueGates(snapshots: readonly CaseRevenueSnapshot
     }
     const decision = evaluateRevenueTrigger({
       model: snapshot.model,
-      chargeOnFail: snapshot.chargeOnFail,
+      failFeeSatang: snapshot.failFeeSatang,
       outcome: snapshot.outcome,
       hasExpense: snapshot.hasExpense,
       expenseState: snapshot.expenseState,
@@ -197,7 +197,7 @@ export async function tryCreateRevenue(
         serviceFeeBaseSatang: true,
         serviceFeeRatePct: true,
         serviceFeeBasisSnapshot: true,
-        serviceFeeChargeOnFail: true,
+        serviceFeeFailFeeSatang: true,
         debtAmountSatang: true,
         company: { select: { vatMode: true } },
       },
@@ -220,7 +220,7 @@ export async function tryCreateRevenue(
         prevServiceFeeBaseSatang: true,
         prevServiceFeeRatePct: true,
         prevServiceFeeBasis: true,
-        prevServiceFeeChargeOnFail: true,
+        prevServiceFeeFailFeeSatang: true,
         prevDebtAmountSatang: true,
       },
     }),
@@ -275,7 +275,7 @@ export async function tryCreateRevenue(
       baseSatang: row.serviceFeeBaseSatang,
       ratePct: row.serviceFeeRatePct === null ? null : row.serviceFeeRatePct.toNumber(),
       basis: row.serviceFeeBasisSnapshot,
-      chargeOnFail: row.serviceFeeChargeOnFail,
+      failFeeSatang: row.serviceFeeFailFeeSatang,
       outcome: row.outcome,
       closedAt: row.closedAt,
       debtAmountSatang: row.debtAmountSatang,
@@ -295,7 +295,7 @@ export async function tryCreateRevenue(
       baseSatang: recycle.prevServiceFeeBaseSatang,
       ratePct: recycle.prevServiceFeeRatePct === null ? null : recycle.prevServiceFeeRatePct.toNumber(),
       basis: recycle.prevServiceFeeBasis,
-      chargeOnFail: recycle.prevServiceFeeChargeOnFail,
+      failFeeSatang: recycle.prevServiceFeeFailFeeSatang,
       outcome: recycle.prevOutcome,
       closedAt: recycle.prevClosedAt,
       debtAmountSatang: recycle.prevDebtAmountSatang,
@@ -315,7 +315,7 @@ export async function tryCreateRevenue(
       {
         caseId: basis.caseId,
         model: basis.model,
-        chargeOnFail: basis.chargeOnFail,
+        failFeeSatang: basis.failFeeSatang,
         outcome: basis.outcome,
         ...expenseGateOf(statuses),
         lotState: lotGateOf(lotStatuses),
@@ -371,7 +371,7 @@ export async function tryCreateRevenue(
         baseSatang: basis.baseSatang ?? 0,
         ratePct: basis.ratePct ?? 0,
         basis: basis.basis,
-        chargeOnFail: basis.chargeOnFail ?? false,
+        failFeeSatang: basis.failFeeSatang,
       },
       outcome: basis.outcome,
       basisValues: { debtAmountSatang: basis.debtAmountSatang },
@@ -431,7 +431,7 @@ interface RoundBasis {
   baseSatang: number | null
   ratePct: number | null
   basis: ServiceFeeBasis | null
-  chargeOnFail: boolean | null
+  failFeeSatang: number | null
   outcome: CaseOutcome | null
   closedAt: Date | null
   debtAmountSatang: number | null

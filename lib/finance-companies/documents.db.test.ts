@@ -442,8 +442,8 @@ suite('มติ PO U146 — หน้าบริษัทเลือก "ร�
     // ฟอร์มบริษัทต้องมีเทมเพลตค่าบริการ (บันทึกบริษัทส่ง id เทมเพลตเดิมกลับไป)
     await db().$executeRawUnsafe(`
       INSERT INTO service_fee_templates
-        (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-      VALUES ('${TEMPLATE}', '${ORG_ID}', 'เทมเพลต U146', 'FLAT', 100000, 0, NULL, true, 1, true, '${USER_ID}')
+        (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+      VALUES ('${TEMPLATE}', '${ORG_ID}', 'เทมเพลต U146', 'FLAT', 100000, 0, NULL, 100000, 1, true, '${USER_ID}')
       ON CONFLICT (id) DO NOTHING
     `)
     await db().$executeRawUnsafe(

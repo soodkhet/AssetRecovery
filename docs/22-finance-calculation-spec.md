@@ -36,6 +36,7 @@
 | v3.18 | 06/10/2569 | **มติ PO 06/10/2569 (U105 — เงื่อนไขการหัก (2)/(3) เป็นค่าตั้ง)**: เพิ่ม §6.9.2 — ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" (ค่าเริ่มต้นปิด · ปิด = บล็อกรอบจ่ายที่มีผู้รับ (2)/(3) `WHT_CONDITION_NOT_ALLOWED`) · เปิด = (2) ออกให้ตลอดไป ภาษี = เงินได้ × อัตรา ÷ (1 − อัตรา) · (3) ออกให้ครั้งเดียว ภาษี = เงินได้ × อัตรา · เงินได้บน 50 ทวิ/ภ.ง.ด. = เงินได้ + ภาษี · ผู้รับได้เงินเต็ม · ภาษีเป็นค่าใช้จ่ายบริษัท · เกณฑ์ ฿1,000 เทียบเงินได้ก่อนบวกภาษี · snapshot เงื่อนไขลงรายการรอบจ่าย · pure `whtGrossUp()`/`whtTaxForCondition()`/`payoutItemTaxSplit()` ใน `lib/finance/wht-calc.ts` · 🔶 นักบัญชียืนยันสูตร (Q18) |
 | v3.21-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 · B4)**: §6.11 `settled` รวมส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร · เพิ่ม **§6.11.1** สูตรตัดส่วนต่างรับชำระขาด ≤ เพดาน `write_off_tolerance_satang` (คำนวณจากยอดสะสม · เท่าเพดานพอดีตัดได้) — `resolveBankFeeWriteOff()` |
 | v3.2x-FA | 07/10/2569 | **มติ PO 07/10/2569 (U163 · B4)**: §6.11.1 เพิ่มกติกา "ลูกค้าหักภาษี + ค่าธรรมเนียมโอนในรายการเดียว" — ยอดรับสะสมอยู่ในช่วง [total − ภาษีที่คาด − เพดาน, total − ภาษีที่คาด] ⇒ บันทึกภาษีลูกค้าหัก**เต็มจำนวนที่คาด**ลงใบเงินรับก่อน แล้วส่วนต่างที่เหลือเป็นค่าธรรมเนียมธนาคาร (เดิมนับภาษีเฉพาะเงินเข้า = total − ภาษี พอดี ⇒ ภาษีทั้งก้อนถูกปนเป็นค่าธรรมเนียม/ค้างชำระ) · §6.16 ระบุว่ายอดคาดรับใช้ตัดสินภาษีของใบเงินรับด้วย — `resolveCustomerWhtForReceipt()` |
+| v3.2x-FD | 07/10/2569 | **มติ PO U165**: §6.5–6.7 แยก "กรณีสำเร็จ" (ตามโมเดลเดิม) กับ "กรณีไม่สำเร็จ" — `closed_fail` ⇒ `revenue_gross = fail_fee ?? 0` **ทุกโมเดล** (แทน `charge_on_fail`; ไม่ใช้ base/rate) · เพิ่ม §6.7.1 · ข้อมูลเดิม `charge_on_fail = true` (FLAT/HYBRID) แปลงเป็น `fail_fee = base` ⇒ ผลเท่าเดิมทุกบาท · pure `lib/finance/service-fee-calc.ts` |
 | v3.20 | 07/10/2569 | **มติ PO U125 + U126**: §6.5/§6.7 ฐานคำนวณ = `debt_amount` อย่างเดียว (ตัด `asset_value`) · เพิ่มหมายเหตุใต้ §6.7 — คิดค่าบริการทุกรอบติดตามอิสระเสมอ (ตัดสวิตช์ `charge_per_tracking_round`) · pure `lib/finance/service-fee-calc.ts` / `lib/cases/projected-revenue.ts` |
 
 ขอบเขตเอกสารนี้: รวมสูตรคำนวณทางการเงิน/บัญชีทั้งหมดของระบบไว้ในที่เดียว เป็น single source of truth สำหรับทีมพัฒนา — ป้องกันสูตรไม่ตรงกันระหว่างโมดูล
@@ -122,7 +123,7 @@ D_allowance    = allowance_rate (บาท/วัน) ของแผน (เว
 หมายเหตุ timing: Revenue เกิดเมื่อ expense ของเคสนั้นเข้าสู่ approved แล้วเท่านั้น
                   (ไม่ใช่ทันทีที่ outcome = closed_success — ดูไฟล์ 19 §6.1 สำหรับเหตุผลเต็ม)
 
-ถ้า outcome != closed_success: revenue_gross = 0
+ถ้า outcome = closed_fail: revenue_gross = fail_fee ?? 0   (§6.7.1 — มติ U165)
 ถ้า outcome = closed_success และ expense.status = approved:
   ฐานคำนวณ = debt_amount  (ยอดหนี้คงเหลือ — ฐานเดียว ตามมติ PO U126)
   revenue_gross = ฐานคำนวณ × (rate / 100)
@@ -131,22 +132,29 @@ D_allowance    = allowance_rate (บาท/วัน) ของแผน (เว
 ### 6.6 รายได้จาก Service Fee — Model FLAT (อ้างอิงไฟล์ 12)
 
 ```
-ถ้า charge_on_fail = true:  revenue_gross = base  (ทุก outcome)
-ถ้า charge_on_fail = false: revenue_gross = base  เฉพาะ closed_success, ไม่ใช่ = 0 เมื่อ closed_fail
+ถ้า outcome = closed_success: revenue_gross = base
+ถ้า outcome = closed_fail:    revenue_gross = fail_fee ?? 0   (§6.7.1 — มติ U165)
 ```
 
 ### 6.7 รายได้จาก Service Fee — Model HYBRID (อ้างอิงไฟล์ 12)
 
 ```
-ส่วน base:
-  ถ้า charge_on_fail = true:  ได้ base ทุก outcome
-  ถ้า charge_on_fail = false: ได้ base เฉพาะ closed_success
-
-ส่วน rate × basis (ได้เฉพาะ closed_success เท่านั้น เสมอ ไม่มีเงื่อนไข charge_on_fail):
+ถ้า outcome = closed_success:
   ฐานคำนวณ = debt_amount (ยอดหนี้คงเหลือ — ฐานเดียว ตามมติ PO U126)
-  ส่วนเพิ่ม = ฐานคำนวณ × (rate / 100)
+  revenue_gross = base + ฐานคำนวณ × (rate / 100)
+ถ้า outcome = closed_fail:
+  revenue_gross = fail_fee ?? 0   (§6.7.1 — ไม่ได้ base/rate)
+```
 
-revenue_gross = base_component + (ส่วนเพิ่ม ถ้า closed_success, มิฉะนั้น 0)
+#### 6.7.1 กรณีไม่สำเร็จ — ยอดแยกทุกโมเดล (มติ PO U165)
+
+```
+fail_fee = snapshot cases.service_fee_fail_fee_satang (สตางค์ · NULL = ไม่เรียกเก็บ)
+ถ้า outcome = closed_fail:
+  fail_fee = NULL ⇒ ไม่เกิด Revenue (`19` §6.1 model_excludes_fail)
+  fail_fee ≠ NULL ⇒ revenue_gross = fail_fee   (ไม่ผ่านคลัง)
+ตัวอย่าง: FLAT base 1,500 / fail_fee 300 ⇒ สำเร็จ 1,500 · ไม่สำเร็จ 300
+ข้อมูลก่อนมติ: charge_on_fail = true (FLAT/HYBRID) ⇒ fail_fee = base · นอกนั้น ⇒ NULL (ผลเท่าเดิมทุกบาท)
 ```
 
 > **รอบการติดตาม (มติ PO U125)** — สูตร §6.5–6.7 คิดแยกต่อ (เคส, `tracking_round`) **ทุกรอบอิสระเสมอ** ไม่มีสวิตช์ · รอบใหม่ (recycle) ใช้ snapshot ค่าบริการของรอบนั้น + `debt_amount` ณ รอบนั้น → รายได้ใบใหม่ ไม่หักกลบกับรอบก่อน

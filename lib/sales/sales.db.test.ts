@@ -250,11 +250,11 @@ beforeAll(async () => {
                        debtor_name, addr_province, addr_district, asset_kind, asset_description,
                        debt_amount_satang, assigned_team_id, outcome, closed_at,
                        service_fee_model_snapshot, service_fee_base_satang, service_fee_rate_pct,
-                       service_fee_basis_snapshot, service_fee_charge_on_fail)
+                       service_fee_basis_snapshot, service_fee_fail_fee_satang)
     VALUES ('${ORG_ID}', $$SALES43-${RUN}$$, $$SALES43-${RUN}$$, '${companyId}', 'manual', 'closed_success',
             '${ACCOUNTING_ID}', 'ลูกหนี้ 4.3', 'เชียงใหม่', 'เมือง', 'smartphone', 'iPhone 15',
             1000000, '${TEAM_ID}', 'closed_success', '2026-06-25T03:00:00Z',
-            'SUCCESS_FEE', 0, 10, 'debt_amount', false)
+            'SUCCESS_FEE', 0, 10, 'debt_amount', NULL)
     RETURNING id
   `)
   caseId = seededCase[0]?.id ?? ''

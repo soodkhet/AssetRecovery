@@ -209,8 +209,8 @@ beforeAll(async () => {
   await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_ID}' WHERE id = '${AGENT_ID}'`)
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
-      (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลต 2.13', 'FLAT', 50000, 0, NULL, false, 1, true, '${MANAGER_ID}')
+      (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลต 2.13', 'FLAT', 50000, 0, NULL, NULL, 1, true, '${MANAGER_ID}')
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
@@ -245,12 +245,12 @@ async function seedApprovedCase(companyId: string, imei: string): Promise<string
       organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
       debtor_name, addr_province, addr_district, asset_kind, asset_description, imei,
       debt_amount_satang, assigned_team_id,
-      service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_charge_on_fail
+      service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_fail_fee_satang
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${companyId}', 'manual', 'approved', '${MANAGER_ID}',
       'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15 สีดำ', '${imei}',
       1000000, '${TEAM_ID}',
-      '${TEMPLATE_ID}', 'FLAT', 50000, false
+      '${TEMPLATE_ID}', 'FLAT', 50000, NULL
     ) RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -324,12 +324,12 @@ suite('Phase 8.3 — Revenue ของ `closed_fail` ที่ไม่มี ex
         organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
         debtor_name, addr_province, addr_district, asset_kind, asset_description, imei,
         debt_amount_satang, assigned_team_id,
-        service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_charge_on_fail
+        service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_fail_fee_satang
       ) VALUES (
         '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_A}', 'manual', 'approved', '${MANAGER_ID}',
         'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15 สีดำ', '3559000000${String(2000 + caseSeq)}',
         1000000, '${TEAM_ID}',
-        '${TEMPLATE_ID}', 'FLAT', 50000, ${chargeOnFail}
+        '${TEMPLATE_ID}', 'FLAT', 50000, ${chargeOnFail ? 50000 : 'NULL'}
       ) RETURNING id
     `)
     const caseId = rows[0]?.id ?? ''
@@ -362,7 +362,7 @@ suite('Phase 8.3 — Revenue ของ `closed_fail` ที่ไม่มี ex
     return caseId
   }
 
-  it('`charge_on_fail = true` → Revenue เกิดเมื่อวันลงพื้นที่ settle แล้ว (ไม่ต้องรอ expense/คลัง)', async () => {
+  it('ตั้งยอดกรณีไม่สำเร็จ → Revenue เกิดเมื่อวันลงพื้นที่ settle แล้ว (ไม่ต้องรอ expense/คลัง)', async () => {
     const caseId = await closeFailWithoutExpense(true)
 
     expect(await db().expense.count({ where: { caseId } })).toBe(0)
@@ -373,7 +373,7 @@ suite('Phase 8.3 — Revenue ของ `closed_fail` ที่ไม่มี ex
     expect(await db().asset.count({ where: { caseId } })).toBe(0)
   })
 
-  it('`charge_on_fail = false` → ไม่เกิด Revenue (`model_excludes_fail`)', async () => {
+  it('ไม่เก็บกรณีไม่สำเร็จ → ไม่เกิด Revenue (`model_excludes_fail`)', async () => {
     const caseId = await closeFailWithoutExpense(false)
     expect(await db().revenue.count({ where: { caseId } })).toBe(0)
   })
@@ -1510,7 +1510,7 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
   async function fieldWork(chargeOnFail = false): Promise<string> {
     const caseId = await seedApprovedCase(COMPANY_A, `3557000000${String(3000 + caseSeq)}`)
     if (chargeOnFail) {
-      await db().$executeRawUnsafe(`UPDATE cases SET service_fee_charge_on_fail = true WHERE id = '${caseId}'`)
+      await db().$executeRawUnsafe(`UPDATE cases SET service_fee_fail_fee_satang = service_fee_base_satang WHERE id = '${caseId}'`)
     }
     await assignments.assignCase(manager, caseId, { agentId: agent.id }, ctx(manager))
     await field.acceptFieldCase(agent, caseId, ctx(agent))

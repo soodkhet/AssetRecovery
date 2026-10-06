@@ -159,7 +159,7 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
       'service_fee_base_satang',
       'service_fee_rate_pct',
       'service_fee_basis_snapshot',
-      'service_fee_charge_on_fail',
+      'service_fee_fail_fee_satang',
     ],
   },
 }

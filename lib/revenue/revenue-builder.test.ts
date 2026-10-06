@@ -25,7 +25,7 @@ const PERIODS: VatRatePeriod[] = [
 
 function input(overrides: Partial<RevenueRowInput> = {}): RevenueRowInput {
   return {
-    snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', chargeOnFail: false },
+    snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', failFeeSatang: null },
     outcome: 'closed_success',
     basisValues: { debtAmountSatang: 1_000_000 },
     vatMode: 'exclude_vat',
@@ -91,19 +91,25 @@ describe('buildRevenueRow — โหมด VAT อื่น', () => {
 })
 
 describe('buildRevenueRow — FLAT / HYBRID', () => {
-  const flat = { model: 'FLAT' as const, baseSatang: 500_000, ratePct: 0, basis: null, chargeOnFail: true }
+  const flat = { model: 'FLAT' as const, baseSatang: 500_000, ratePct: 0, basis: null, failFeeSatang: 500_000 }
 
-  it('FLAT charge_on_fail = true ได้ base ทุก outcome', () => {
+  it('FLAT ยอดกรณีไม่สำเร็จ = base ได้ base ทุก outcome', () => {
     expect(values({ snapshot: flat, outcome: 'closed_fail' }).grossSatang).toBe(500_000)
     expect(values({ snapshot: flat, outcome: 'closed_success' }).grossSatang).toBe(500_000)
   })
 
-  it('FLAT charge_on_fail = false ไม่ได้อะไรเลยเมื่อไม่สำเร็จ', () => {
-    expect(values({ snapshot: { ...flat, chargeOnFail: false }, outcome: 'closed_fail' }).grossSatang).toBe(0)
+  it('FLAT ไม่เก็บกรณีไม่สำเร็จ ไม่ได้อะไรเลยเมื่อไม่สำเร็จ', () => {
+    expect(values({ snapshot: { ...flat, failFeeSatang: null }, outcome: 'closed_fail' }).grossSatang).toBe(0)
+  })
+
+  it('มติ U165 — สำเร็จ ฿1,500 / ไม่สำเร็จ ฿300', () => {
+    const split = { ...flat, baseSatang: 150_000, failFeeSatang: 30_000 }
+    expect(values({ snapshot: split, outcome: 'closed_success' }).grossSatang).toBe(150_000)
+    expect(values({ snapshot: split, outcome: 'closed_fail' }).grossSatang).toBe(30_000)
   })
 
   it('HYBRID — ส่วน rate ได้เฉพาะ closed_success เสมอ (`22` §6.7)', () => {
-    const hybrid = { model: 'HYBRID' as const, baseSatang: 200_000, ratePct: 5, basis: 'debt_amount' as const, chargeOnFail: true }
+    const hybrid = { model: 'HYBRID' as const, baseSatang: 200_000, ratePct: 5, basis: 'debt_amount' as const, failFeeSatang: 200_000 }
     expect(values({ snapshot: hybrid, outcome: 'closed_success' }).grossSatang).toBe(200_000 + 50_000)
     expect(values({ snapshot: hybrid, outcome: 'closed_fail' }).grossSatang).toBe(200_000)
   })
@@ -113,7 +119,7 @@ describe('buildRevenueRow — ข้อห้าม', () => {
   it('เคสที่ไม่มีฐานคำนวณ (มีอัตรา % แต่ยังไม่กรอกยอดหนี้) ⇒ missing_basis ห้ามสร้าง Revenue', () => {
     const result = buildRevenueRow(
       input({
-        snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', chargeOnFail: false },
+        snapshot: { model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 10, basis: 'debt_amount', failFeeSatang: null },
         basisValues: { debtAmountSatang: null },
       }),
     )

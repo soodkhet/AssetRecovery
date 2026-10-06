@@ -21,7 +21,8 @@ export interface ServiceFeeTemplateValues {
   baseSatang: number
   ratePct: number
   basis: ServiceFeeBasis | null
-  chargeOnFail: boolean
+  /** มติ PO U165 — ยอดกรณีไม่สำเร็จ (สตางค์) ทุกโมเดล · `null` = ไม่เรียกเก็บกรณีไม่สำเร็จ */
+  failFeeSatang: number | null
 }
 
 export interface ServiceFeeTemplateVersion extends ServiceFeeTemplateValues {
@@ -36,7 +37,7 @@ const VALUE_FIELDS = [
   'baseSatang',
   'ratePct',
   'basis',
-  'chargeOnFail',
+  'failFeeSatang',
 ] as const satisfies readonly (keyof ServiceFeeTemplateValues)[]
 
 /** ช่วง `rate` ตาม `12` §11 — ใช้ code เฉพาะ `INVALID_RATE_RANGE` ไม่ใช่ `REQUIRED_MISSING` */
@@ -52,7 +53,7 @@ export function assertRateRange(ratePct: number): void {
  */
 export function normalizeTemplateValues(values: ServiceFeeTemplateValues): ServiceFeeTemplateValues {
   if (values.model === 'SUCCESS_FEE') {
-    return { ...values, baseSatang: 0, chargeOnFail: false }
+    return { ...values, baseSatang: 0 }
   }
   if (values.model === 'FLAT') {
     return { ...values, ratePct: 0, basis: null }
@@ -104,7 +105,7 @@ export interface ServiceFeeSnapshot {
   baseSatang: number
   ratePct: number
   basis: ServiceFeeBasis | null
-  chargeOnFail: boolean
+  failFeeSatang: number | null
 }
 
 export function toServiceFeeSnapshot(template: ServiceFeeTemplateVersion): ServiceFeeSnapshot {
@@ -116,7 +117,7 @@ export function toServiceFeeSnapshot(template: ServiceFeeTemplateVersion): Servi
     baseSatang: values.baseSatang,
     ratePct: values.ratePct,
     basis: values.basis,
-    chargeOnFail: values.chargeOnFail,
+    failFeeSatang: values.failFeeSatang,
   }
 }
 
@@ -139,21 +140,20 @@ export interface ServiceFeeFormula {
 
 /**
  * สูตร 2 กรณีที่การ์ดใน UI ต้องแสดง (DEC-008 · mockup `settings.html` `renderServiceFeeContent`)
- * ตรงกับ `22` §6.5 (SUCCESS_FEE), §6.6 (FLAT), §6.7 (HYBRID)
+ * ตรงกับ `22` §6.5 (SUCCESS_FEE), §6.6 (FLAT), §6.7 (HYBRID) · กรณีไม่สำเร็จ = ยอดแยก (มติ U165)
  */
 export function describeServiceFeeFormula(template: ServiceFeeTemplateValues): ServiceFeeFormula {
   const values = normalizeTemplateValues(template)
 
+  const failCharge: ServiceFeeCharge =
+    values.failFeeSatang !== null ? { kind: 'flat', baseSatang: values.failFeeSatang } : { kind: 'none' }
+
   if (values.model === 'SUCCESS_FEE') {
     return {
       onSuccess: { kind: 'rate', ratePct: values.ratePct, basis: values.basis ?? 'debt_amount' },
-      onFail: { kind: 'none' },
+      onFail: failCharge,
     }
   }
-
-  const failCharge: ServiceFeeCharge = values.chargeOnFail
-    ? { kind: 'flat', baseSatang: values.baseSatang }
-    : { kind: 'none' }
 
   if (values.model === 'FLAT') {
     return { onSuccess: { kind: 'flat', baseSatang: values.baseSatang }, onFail: failCharge }
@@ -178,4 +178,18 @@ export const SERVICE_FEE_MODEL_LABEL: Record<ServiceFeeModel, string> = {
   SUCCESS_FEE: 'Success Fee (% ความสำเร็จ)',
   FLAT: 'Flat Rate (เหมาจ่ายรายเคส)',
   HYBRID: 'Hybrid (ผสม)',
+}
+
+/**
+ * มติ PO U165 — แปลงสวิตช์ `charge_on_fail` เดิมเป็นยอดกรณีไม่สำเร็จ (ต้องตรงกับ migration
+ * `20261008140000_service_fee_fail_fee` ทุกกิ่ง): FLAT/HYBRID + true → base · นอกนั้น → null
+ * ใช้ยืนยันใน test ว่าผลรายได้ของข้อมูลเดิมเท่าเดิมทุกบาท และให้สคริปต์ seed เก่าแปลงค่า
+ */
+export function failFeeFromLegacyChargeOnFail(
+  model: ServiceFeeModel,
+  chargeOnFail: boolean | null,
+  baseSatang: number | null,
+): number | null {
+  if (model === 'SUCCESS_FEE' || chargeOnFail !== true) return null
+  return baseSatang ?? 0
 }

@@ -6,7 +6,7 @@ import type { ServiceFeeBasis, ServiceFeeModel } from '@/lib/service-fee/templat
  * ประมาณการรายได้ก่อนรับเคส (ไฟล์ 38 §6.5) — **pure ล้วน ใช้ร่วม FE/BE**
  *
  * ⚠️ นี่คือ **projection แบบ best-case 100%** ไม่ใช่ Revenue จริง:
- * - สมมติว่าเคสสำเร็จเสมอ (`38` §6.5) ⇒ ไม่ใช้ `charge_on_fail` และไม่คูณ success rate ใด ๆ
+ * - สมมติว่าเคสสำเร็จเสมอ (`38` §6.5) ⇒ ไม่ใช้ยอดกรณีไม่สำเร็จ (`fail_fee_satang`) และไม่คูณ success rate ใด ๆ
  * - ไม่ลง GL ไม่เข้าไฟล์ 19/31 — เก็บไว้แสดงประกอบการพิจารณารับเคสเท่านั้น
  * - สูตร Revenue **จริง** (`22` §6.5–6.7 รวมกรณี `closed_fail` + VAT/WHT) เป็น pure module ของ Phase 3.1
  *   ไฟล์นี้ห้ามถูกนำไปใช้แทน (Rule 01 — สูตรเงินจริงอยู่ `22` ที่เดียว)

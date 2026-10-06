@@ -5,11 +5,14 @@ import { reasonSchema, satangSchema } from '@/lib/api/validation'
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลเทมเพลตค่าบริการ (ไฟล์ 12 · Rule 04 · Rule 13)
  *
  * หัวใจคือ **conditional validation ตาม model** (`12` §7.1):
- * | model | base | rate | basis | charge_on_fail |
+ * | model | base | rate | basis | fail_fee (มติ U165) |
  * |---|---|---|---|---|
- * | SUCCESS_FEE | ต้องเป็น 0 | บังคับ > 0 | บังคับ | ไม่ใช้ (บังคับ false) |
- * | FLAT | บังคับ > 0 | ต้องเป็น 0 | ต้องว่าง | ตั้งได้ทั้ง true/false |
- * | HYBRID | บังคับ > 0 | บังคับ > 0 | บังคับ | ตั้งได้ทั้ง true/false |
+ * | SUCCESS_FEE | ต้องเป็น 0 | บังคับ > 0 | บังคับ | `null` หรือ > 0 |
+ * | FLAT | บังคับ > 0 | ต้องเป็น 0 | ต้องว่าง | `null` หรือ > 0 |
+ * | HYBRID | บังคับ > 0 | บังคับ > 0 | บังคับ | `null` หรือ > 0 |
+ *
+ * `failFeeSatang` เป็น key บังคับ (ส่ง `null` = ไม่เก็บกรณีไม่สำเร็จ) — request เก่าที่ส่ง `chargeOnFail`
+ * มาโดยไม่มี `failFeeSatang` ได้ 400 แทนการเงียบตัดทิ้ง (กันเทมเพลตที่เคยเก็บกรณีไม่สำเร็จหลุดเป็นไม่เก็บ)
  *
  * ช่วงของ `rate` (0-100) **ไม่ได้เช็คที่นี่** — ใช้ code เฉพาะ `INVALID_RATE_RANGE` (`24` §6.1)
  * ผ่าน `assertRateRange()` ใน `lib/service-fee/template.ts` แทน `REQUIRED_MISSING` ทั่วไป
@@ -30,7 +33,7 @@ const templateFieldsSchema = z.object({
       'อัตราค่าความสำเร็จมีทศนิยมได้ไม่เกิน 2 ตำแหน่ง',
     ),
   basis: serviceFeeBasisSchema.nullable().default(null),
-  chargeOnFail: z.boolean(),
+  failFeeSatang: satangSchema('ค่าบริการกรณีไม่สำเร็จ').nullable(),
 })
 
 export type ServiceFeeTemplateFields = z.infer<typeof templateFieldsSchema>
@@ -76,12 +79,12 @@ function refineByModel(value: ServiceFeeTemplateFields, ctx: z.RefinementCtx): v
     ctx.addIssue({ code: 'custom', path: ['basis'], message: 'model FLAT ไม่ใช้ฐานคำนวณ' })
   }
 
-  // `12` §7.1 — SUCCESS_FEE ไม่มี base จึงไม่ใช้ฟิลด์นี้ (เก็บ false เสมอ กัน UI เผลอส่ง true มาค้างใน DB)
-  if (value.model === 'SUCCESS_FEE' && value.chargeOnFail) {
+  // มติ U165 — ติ๊ก "เรียกเก็บกรณีไม่สำเร็จ" แล้วต้องกรอกยอด > 0 (ไม่เก็บ = ส่ง null)
+  if (value.failFeeSatang !== null && value.failFeeSatang <= 0) {
     ctx.addIssue({
       code: 'custom',
-      path: ['chargeOnFail'],
-      message: 'โมเดล Success Fee เก็บเฉพาะเคสสำเร็จโดยนิยาม — ตั้งให้เรียกเก็บเมื่อไม่สำเร็จไม่ได้',
+      path: ['failFeeSatang'],
+      message: 'ระบุค่าบริการกรณีไม่สำเร็จมากกว่า 0 — ถ้าไม่เรียกเก็บให้เอาเครื่องหมายออก',
     })
   }
 }

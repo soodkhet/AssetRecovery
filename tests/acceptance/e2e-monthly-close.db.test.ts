@@ -22,7 +22,7 @@ vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-
  *  ทุกรายการ → Period Lock · ทุกรายการ → Export (critical บล็อกได้จริง)
  *
  * เดินผ่าน **service จริงทุกก้าว** — รายได้ที่ใช้เป็นเป้าหมาย Adjustment เกิดจากสายงานจริง
- * (`closed_fail` + `charge_on_fail` ⇒ Revenue ไม่ผ่านคลังตาม DEC-006/D6 · `19` §6.1)
+ * (`closed_fail` + ยอดกรณีไม่สำเร็จ ⇒ Revenue ไม่ผ่านคลังตาม DEC-006/D6 · `19` §6.1)
  *
  * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
  */
@@ -189,7 +189,7 @@ async function expectCode(run: () => Promise<unknown>, code: string): Promise<vo
 
 let caseSeq = 0
 
-/** เคส `approved` + snapshot FLAT/charge_on_fail — ปิดไม่สำเร็จก็ยังมีรายได้ (`22` §6.6) */
+/** เคส `approved` + snapshot FLAT + ยอดกรณีไม่สำเร็จ — ปิดไม่สำเร็จก็ยังมีรายได้ (`22` §6.6) */
 async function seedApprovedCase(): Promise<string> {
   caseSeq += 1
   const caseRef = `E2E81D-${caseSeq}-${RUN}`
@@ -199,13 +199,13 @@ async function seedApprovedCase(): Promise<string> {
       debtor_name, addr_province, addr_district, asset_kind, asset_description, imei,
       debt_amount_satang, assigned_team_id,
       service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_rate_pct,
-      service_fee_basis_snapshot, service_fee_charge_on_fail
+      service_fee_basis_snapshot, service_fee_fail_fee_satang
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_ID}', 'manual', 'approved', '${ADMIN_ID}',
       'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15',
       '${`35583${RUN}${caseSeq}`.slice(0, 15).padEnd(15, '0')}',
       1000000, '${TEAM_ID}',
-      '${TEMPLATE_ID}', 'FLAT', ${FEE_BASE_SATANG}, 0, NULL, true
+      '${TEMPLATE_ID}', 'FLAT', ${FEE_BASE_SATANG}, 0, NULL, ${FEE_BASE_SATANG}
     ) RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -368,8 +368,8 @@ beforeAll(async () => {
   await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_ID}' WHERE id = '${AGENT_ID}'`)
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
-      (id, organization_id, name, model, base_satang, rate_pct, basis, charge_on_fail, version, is_current, created_by)
-    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลตเหมาจ่าย 8.1ง', 'FLAT', ${FEE_BASE_SATANG}, 0, NULL, true,
+      (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+    VALUES ('${TEMPLATE_ID}', '${ORG_ID}', 'เทมเพลตเหมาจ่าย 8.1ง', 'FLAT', ${FEE_BASE_SATANG}, 0, NULL, ${FEE_BASE_SATANG},
             1, true, '${ADMIN_ID}')
     ON CONFLICT (id) DO NOTHING
   `)

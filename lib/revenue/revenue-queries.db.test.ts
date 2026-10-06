@@ -9,7 +9,7 @@ import { PrismaClient } from '@/lib/generated/prisma/client'
  *  2. เปลี่ยนอัตรา VAT ไม่กระทบใบเก่า (snapshot `vat_rate_pct_used`)
  *  3. แก้ Revenue ที่ billed แล้ว ⇒ `EDIT_BILLED_REVENUE`
  *  4. `closed_success` ที่ expense ยังไม่ approved ⇒ ยังไม่มี Revenue
- *  5. `closed_fail` + expense approved + `charge_on_fail` ⇒ Revenue เกิด (ไม่ผ่านคลัง)
+ *  5. `closed_fail` + expense approved + ตั้งยอดกรณีไม่สำเร็จ (มติ U165) ⇒ Revenue เกิด (ไม่ผ่านคลัง)
  *  6. `closed_success` + expense approved + lot confirmed ⇒ Revenue เกิด
  *  7. lot ยังไม่ confirmed ⇒ ยังไม่เกิด (Warehouse gate)
  *  8. เคสถูกตีกลับก่อนถึงจุดนั้น ⇒ ไม่มี Revenue เลย
@@ -123,7 +123,8 @@ interface SeedCaseInput {
   baseSatang?: number
   ratePct?: number
   basis?: 'debt_amount' | null
-  chargeOnFail?: boolean
+  /** มติ U165 — ยอดกรณีไม่สำเร็จ · ไม่ระบุ = NULL (ไม่เก็บ) */
+  failFeeSatang?: number | null
   debtAmountSatang?: number | null
   assetValueSatang?: number | null
   status?: string
@@ -141,7 +142,7 @@ async function seedCase(input: SeedCaseInput = {}): Promise<string> {
       debtor_name, addr_province, addr_district, asset_kind, asset_description,
       debt_amount_satang, asset_value_satang, assigned_team_id, outcome, closed_at,
       service_fee_model_snapshot, service_fee_base_satang, service_fee_rate_pct,
-      service_fee_basis_snapshot, service_fee_charge_on_fail
+      service_fee_basis_snapshot, service_fee_fail_fee_satang
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${input.companyId ?? COMPANY_A}', 'manual',
       '${input.status ?? 'closed_success'}', '${FINANCE_ID}',
@@ -152,7 +153,7 @@ async function seedCase(input: SeedCaseInput = {}): Promise<string> {
       ${outcome === null ? 'NULL' : `'${outcome}'`}, '${closedAt}',
       '${input.model ?? 'SUCCESS_FEE'}', ${input.baseSatang ?? 0}, ${input.ratePct ?? 10},
       ${input.basis === undefined ? `'debt_amount'` : input.basis === null ? 'NULL' : `'${input.basis}'`},
-      ${input.chargeOnFail ?? false}
+      ${input.failFeeSatang ?? 'NULL'}
     ) RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -368,7 +369,7 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     expect((await runRevenue([caseId])).revenueIdsCreated).toHaveLength(1)
   })
 
-  it('T5 — closed_fail + expense approved + charge_on_fail ⇒ เกิดโดยไม่ผ่านคลัง', async () => {
+  it('T5 — closed_fail + expense approved + ตั้งยอดกรณีไม่สำเร็จ ⇒ เกิดโดยไม่ผ่านคลัง', async () => {
     const caseId = await seedCase({
       outcome: 'closed_fail',
       status: 'closed_fail',
@@ -376,7 +377,7 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
       baseSatang: 300_000,
       ratePct: 0,
       basis: null,
-      chargeOnFail: true,
+      failFeeSatang: 300_000,
     })
     await seedExpense(caseId, 'approved')
 
@@ -385,6 +386,25 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     const row = await db().revenue.findFirstOrThrow({ where: { caseId } })
     expect(row.grossSatang).toBe(300_000)
     expect(row.feeModelSnapshot).toBe('FLAT')
+  })
+
+  it('มติ U165 — สำเร็จ ฿1,500 / ไม่สำเร็จ ฿300: closed_fail ได้ ฿300 · SUCCESS_FEE ก็ตั้งยอดไม่สำเร็จได้', async () => {
+    const flatFail = await seedCase({
+      outcome: 'closed_fail',
+      status: 'closed_fail',
+      model: 'FLAT',
+      baseSatang: 150_000,
+      ratePct: 0,
+      basis: null,
+      failFeeSatang: 30_000,
+    })
+    const successFeeFail = await seedCase({ outcome: 'closed_fail', status: 'closed_fail', failFeeSatang: 20_000 })
+    await seedExpense(flatFail, 'approved')
+    await seedExpense(successFeeFail, 'approved')
+
+    expect((await runRevenue([flatFail, successFeeFail])).revenueIdsCreated).toHaveLength(2)
+    expect((await db().revenue.findFirstOrThrow({ where: { caseId: flatFail } })).grossSatang).toBe(30_000)
+    expect((await db().revenue.findFirstOrThrow({ where: { caseId: successFeeFail } })).grossSatang).toBe(20_000)
   })
 
   it('closed_fail ของ SUCCESS_FEE ไม่เกิดรายได้', async () => {
@@ -599,7 +619,7 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
         baseSatang: 80_000,
         ratePct: 0,
         basis: null,
-        chargeOnFail: true,
+        failFeeSatang: 80_000,
         outcome: round2.outcome,
         status: round2.outcome ?? 'active',
       })
@@ -607,10 +627,10 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
       await db().$executeRawUnsafe(`
         INSERT INTO recycle_requests (organization_id, case_id, status, request_note, previous_round, new_round,
                                       prev_outcome, prev_closed_at, prev_service_fee_model, prev_service_fee_base_satang,
-                                      prev_service_fee_rate_pct, prev_service_fee_basis, prev_service_fee_charge_on_fail,
+                                      prev_service_fee_rate_pct, prev_service_fee_basis, prev_service_fee_fail_fee_satang,
                                       prev_debt_amount_satang, created_by)
         VALUES ('${ORG_ID}', '${caseId}', 'approved', 'ไฟแนนซ์ส่งกลับมาใหม่', 1, 2,
-                'closed_fail', '2026-08-10T03:00:00Z', 'FLAT', 50000, 0, NULL, true, 1000000, '${FINANCE_ID}')
+                'closed_fail', '2026-08-10T03:00:00Z', 'FLAT', 50000, 0, NULL, 50000, 1000000, '${FINANCE_ID}')
       `)
       return caseId
     }
