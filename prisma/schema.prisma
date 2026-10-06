@@ -751,6 +751,8 @@ model Organization {
   costCenters                 CostCenter[]
   publicHolidays              PublicHoliday[]
   billingPayoutCycles         BillingPayoutCycle[]
+  billingCycleCompanies       BillingCycleCompany[]
+  financeCompanyDocuments     FinanceCompanyDocument[]
   approvalMatrices            ApprovalMatrix[]
   financePolicySettings       FinancePolicySettings?
   bankFileFormats             BankFileFormat[]
@@ -936,6 +938,7 @@ model User {
   publicHolidaysUpdated              PublicHoliday[]               @relation("public_holidays_updated_by")
   billingPayoutCyclesCreated         BillingPayoutCycle[]          @relation("cycles_created_by")
   billingPayoutCyclesUpdated         BillingPayoutCycle[]          @relation("cycles_updated_by")
+  financeCompanyDocumentsCreated     FinanceCompanyDocument[]      @relation("company_documents_created_by")
   approvalMatricesCreated            ApprovalMatrix[]              @relation("approval_matrices_created_by")
   approvalMatricesUpdated            ApprovalMatrix[]              @relation("approval_matrices_updated_by")
   financePolicySettingsUpdated       FinancePolicySettings[]       @relation("finance_policy_settings_updated_by")
@@ -1266,9 +1269,58 @@ model FinanceCompany {
   salesRecords            SalesRecord[]               @relation("sales_company")
   allocations             BankTransactionAllocation[] @relation("allocations_company")
   customerWhtCertificates CustomerWhtCertificate[]    @relation("customer_wht_company")
+  documents               FinanceCompanyDocument[]    @relation("company_documents_company")
+  billingCycles           BillingCycleCompany[]       @relation("billing_cycle_companies_company")
 
   @@unique([organizationId, taxId])
   @@map("finance_companies")
+}
+
+/// ชนิดเอกสารบริษัทไฟแนนซ์ (มติ PO U132 · `10` §7.4)
+enum CompanyDocumentType {
+  company_certificate
+  vat_registration
+  service_contract
+  bank_book
+  other
+
+  @@map("company_document_type")
+}
+
+/// เอกสารบริษัทไฟแนนซ์ (มติ PO U132) — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี updated_*/deleted_at · trigger ห้าม UPDATE/DELETE)
+/// แทนที่ = แถวใหม่ที่ชี้ `replaces_document_id` (UNIQUE — แทนที่ได้ครั้งเดียว ไม่แตกสาย)
+/// CHECK รูปร่าง + partial unique `uniq_company_documents_first_singleton` + trigger อยู่ใน raw SQL
+/// `20261008050000_finance_company_documents`
+model FinanceCompanyDocument {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String              @map("organization_id") @db.Uuid
+  companyId          String              @map("company_id") @db.Uuid
+  documentType       CompanyDocumentType @map("document_type")
+  /// ชื่อเอกสาร — บังคับเฉพาะชนิด other (CHECK)
+  title              String?
+  /// วันที่ออกหนังสือ — บังคับเฉพาะหนังสือรับรองบริษัท (CHECK) · ใช้เตือนเกิน 6 เดือน
+  issuedDate         DateTime?           @map("issued_date") @db.Date
+  version            Int                 @default(1)
+  replacesDocumentId String?             @unique @map("replaces_document_id") @db.Uuid
+  /// path ใน bucket `case-documents` ต่อเวอร์ชัน (ไม่ทับของเดิม — DEC-014)
+  filePath           String              @map("file_path")
+  fileSha256         String              @map("file_sha256") @db.VarChar(64)
+  mimeType           String              @map("mime_type")
+  sizeBytes          Int                 @map("size_bytes")
+  originalName       String              @map("original_name")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization  Organization            @relation(fields: [organizationId], references: [id])
+  company       FinanceCompany          @relation("company_documents_company", fields: [companyId], references: [id])
+  createdByUser User                    @relation("company_documents_created_by", fields: [createdBy], references: [id])
+  replaces      FinanceCompanyDocument? @relation("company_document_versions", fields: [replacesDocumentId], references: [id], onDelete: Restrict)
+  replacedBy    FinanceCompanyDocument? @relation("company_document_versions")
+
+  @@unique([organizationId, filePath])
+  @@index([organizationId, companyId, documentType], map: "idx_finance_company_documents_org_company")
+  @@map("finance_company_documents")
 }
 
 /// กติกาค่าบริการ (ไฟล์ 12) — snapshot ลง case ตอน **approved** ไม่ใช่ตอนสร้าง (`10` §9.2)
@@ -1531,7 +1583,11 @@ model BillingPayoutCycle {
   /// label ที่ผู้ใช้เห็น เช่น "Net 30 Days" (ไม่ใช้คำนวณ)
   dueRule      String      @map("due_rule")
 
-  scope String
+  /// ขอบเขตจริง (มติ PO U133) — AR: all_companies | selected_companies (รายชื่อใน billing_cycle_companies)
+  /// · AP: all_teams | inhouse | outsource · CHECK `cycles_scope_matches_type` ใน raw SQL
+  scopeKind       CycleScopeKind @map("scope_kind")
+  /// ข้อความ "ใช้กับ" แบบอิสระเดิม (ก่อน U133) — เก็บไว้อ้างอิงเท่านั้น ไม่มีผลกับการเลือกรอบ · รอบใหม่ = NULL
+  legacyScopeNote String?        @map("legacy_scope_note")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -1539,12 +1595,42 @@ model BillingPayoutCycle {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
+  companies     BillingCycleCompany[]
+  payoutBatches PayoutBatch[]         @relation("payout_batch_cycle")
+
   organization  Organization @relation(fields: [organizationId], references: [id])
   createdByUser User         @relation("cycles_created_by", fields: [createdBy], references: [id])
   updatedByUser User?        @relation("cycles_updated_by", fields: [updatedBy], references: [id])
 
   @@index([organizationId, type], map: "idx_cycles_org")
   @@map("billing_payout_cycles")
+}
+
+/// ขอบเขตของรอบบิล/รอบจ่าย (มติ PO U133)
+enum CycleScopeKind {
+  all_companies
+  selected_companies
+  all_teams
+  inhouse
+  outsource
+
+  @@map("cycle_scope_kind")
+}
+
+/// บริษัทที่รอบบิล AR ใช้ (เมื่อ scope_kind = selected_companies) — junction (ไม่มี common columns ครบ — `02` §2.4)
+model BillingCycleCompany {
+  organizationId String   @map("organization_id") @db.Uuid
+  cycleId        String   @map("cycle_id") @db.Uuid
+  companyId      String   @map("company_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  cycle        BillingPayoutCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  company      FinanceCompany     @relation("billing_cycle_companies_company", fields: [companyId], references: [id])
+
+  @@id([cycleId, companyId])
+  @@index([organizationId, companyId], map: "idx_billing_cycle_companies_org_company")
+  @@map("billing_cycle_companies")
 }
 
 /// สายการอนุมัติ (ไฟล์ 13 §6.2) — ค่านโยบายการเงินแยกไป finance_policy_settings
@@ -2658,6 +2744,10 @@ model PayoutBatch {
   /// snapshot ชุด Tax Profile ค่าเริ่มต้นตามประเภทผู้รับที่มีผล ณ วันสร้างรอบ (มติ PO U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า
   /// · Tax Profile ที่ใช้จริงต่อรายการอยู่ที่ `payout_batch_items.tax_profile_id` (รวมกรณีมาจากค่าเริ่มต้น)
   taxProfileDefaultId            String?             @map("tax_profile_default_id") @db.Uuid
+  /// รอบจ่าย AP ที่ใช้ (มติ PO U133 — ระบบเลือกรอบที่ตรงฝั่งให้ แก้ได้) · NULL = ไม่ใช้รอบ/รอบเก่า
+  cycleId                        String?             @map("cycle_id") @db.Uuid
+  /// กำหนดจ่ายตามเงื่อนไขของรอบ (คำนวณจากวันตัดรอบ) — snapshot ตอนสร้าง · NULL เมื่อไม่ใช้รอบ
+  payDueDate                     DateTime?           @map("pay_due_date") @db.Date
 
   /// มติ PO U134 — เวลาที่ขั้นหลังรอบจ่าย `completed` (บันทึกจ่าย + ออก 50 ทวิ) ทำครบแล้ว
   /// NULL บนรอบ `completed` = ยังไม่ครบ ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ (partial index ใน raw SQL
@@ -2677,6 +2767,7 @@ model PayoutBatch {
   bankAccount       BankAccount?              @relation("payout_bank_account", fields: [bankAccountId], references: [id])
   whtPolicy         WhtPolicyHistory?         @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
   taxProfileDefault TaxProfileDefaultHistory? @relation("payout_tax_profile_defaults", fields: [taxProfileDefaultId], references: [id])
+  cycle             BillingPayoutCycle?       @relation("payout_batch_cycle", fields: [cycleId], references: [id], onDelete: Restrict)
   createdByUser     User                      @relation("payout_batches_created_by", fields: [createdBy], references: [id])
   updatedByUser     User?                     @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
   cancelledByUser   User?                     @relation("payout_batches_cancelled_by", fields: [cancelledBy], references: [id])

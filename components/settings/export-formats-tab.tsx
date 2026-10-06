@@ -10,7 +10,7 @@ import type { ExportFormatSpec } from '@/lib/settings/catalogs'
 /**
  * แท็บ "รูปแบบไฟล์ส่งบัญชี" (`13` §6.9) — **read-only ทั้งแท็บ**
  *
- * ชุดไฟล์ Accounting Pack 00–16 ต้องครบเสมอและเรียงเลขไม่ขาด (`37` §6.1) ⇒ ผู้ใช้เพิ่ม/ลบไม่ได้
+ * ชุดไฟล์ Accounting Pack 00–17 ต้องครบเสมอและเรียงเลขไม่ขาด (`37` §6.1) ⇒ ผู้ใช้เพิ่ม/ลบไม่ได้
  * endpoint มีแต่ `GET` · ตัวสร้างไฟล์จริง + SHA-256 + versioning อยู่ Phase 4.6
  */
 
@@ -63,7 +63,7 @@ export function ExportFormatsTab() {
       </div>
 
       <InlineAlert tone="info" title="แท็บนี้ดูอย่างเดียว">
-        ชุดไฟล์ 00–16 ต้องครบทุกไฟล์และเรียงเลขไม่ขาด — เพิ่ม/ลบไฟล์ในชุดไม่ได้
+        ชุดไฟล์ 00–17 ต้องครบทุกไฟล์และเรียงเลขไม่ขาด — เพิ่ม/ลบไฟล์ในชุดไม่ได้
       </InlineAlert>
 
       <SettingHelp className="mt-3" help={exportFormatsHelp()} />

@@ -1,4 +1,4 @@
-import type { CutoffRuleType, CycleType, DueRuleType } from '@/lib/generated/prisma/enums'
+import type { CutoffRuleType, CycleScopeKind, CycleType, DueRuleType } from '@/lib/generated/prisma/enums'
 
 /**
  * รอบบิล/รอบจ่าย (`13` §6.1) — pure ล้วน ใช้ร่วม FE/BE
@@ -20,7 +20,10 @@ export interface CycleValues {
   cutoffText: string | null
   dueRuleType: DueRuleType
   dueRuleValue: number | null
-  scope: string
+  /** ขอบเขตจริง (มติ PO U133) — AR: all_companies | selected_companies · AP: all_teams | inhouse | outsource */
+  scopeKind: CycleScopeKind
+  /** บริษัทที่รอบบิลใช้ — มีค่าเฉพาะ selected_companies (นอกนั้น [] เสมอ) */
+  companyIds: string[]
 }
 
 /** วันที่ในเดือนที่รับได้ (31 = สิ้นเดือนของเดือนที่สั้นกว่าจะถูก clamp ตอนคำนวณจริง) */
@@ -44,7 +47,8 @@ export function normalizeCycleValues(input: CycleValues): CycleValues {
     cutoffText: cutoffText === '' ? null : cutoffText,
     dueRuleType: input.dueRuleType,
     dueRuleValue,
-    scope: input.scope.trim(),
+    scopeKind: input.scopeKind,
+    companyIds: input.scopeKind === 'selected_companies' ? [...new Set(input.companyIds)].sort() : [],
   }
 }
 
@@ -141,6 +145,85 @@ export function toCycleAuditPayload(values: CycleValues): Record<string, unknown
     due_rule_type: values.dueRuleType,
     due_rule_value: values.dueRuleValue,
     due_rule: describeDueRule(values),
-    scope: values.scope,
+    scope_kind: values.scopeKind,
+    company_ids: values.companyIds,
   }
+}
+
+// ── ขอบเขตรอบ (มติ PO U133) ──────────────────────────────────────────────────
+
+export const CYCLE_SCOPE_KINDS_BY_TYPE: Readonly<Record<CycleType, readonly CycleScopeKind[]>> = {
+  AR: ['all_companies', 'selected_companies'],
+  AP: ['all_teams', 'inhouse', 'outsource'],
+}
+
+export const CYCLE_SCOPE_LABEL: Readonly<Record<CycleScopeKind, string>> = {
+  all_companies: 'บริษัทไฟแนนซ์ทุกราย',
+  selected_companies: 'เลือกรายบริษัท',
+  all_teams: 'ทุกทีม (In-house + Outsource)',
+  inhouse: 'ทีม In-house',
+  outsource: 'ทีม Outsource',
+}
+
+/** ขอบเขตเข้าคู่กับชนิดรอบ (ตรงกับ CHECK `cycles_scope_matches_type`) */
+export function isScopeKindValidForType(type: CycleType, scopeKind: CycleScopeKind): boolean {
+  return CYCLE_SCOPE_KINDS_BY_TYPE[type].includes(scopeKind)
+}
+
+export type CycleScopeValues = Pick<CycleValues, 'type' | 'scopeKind' | 'companyIds'>
+
+/**
+ * ขอบเขตของ 2 รอบซ้อนกันไหม — ชนิดต่างกันไม่ซ้อน · "ทุกบริษัท"/"ทุกทีม" ซ้อนกับรอบชนิดเดียวกันทุกรอบ
+ * · รายบริษัทซ้อนเมื่อมีบริษัทร่วม · ฝั่งทีมซ้อนเมื่อเป็นฝั่งเดียวกัน
+ */
+export function cycleScopesOverlap(a: CycleScopeValues, b: CycleScopeValues): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === 'AR') {
+    if (a.scopeKind === 'all_companies' || b.scopeKind === 'all_companies') return true
+    const other = new Set(b.companyIds)
+    return a.companyIds.some((id) => other.has(id))
+  }
+  if (a.scopeKind === 'all_teams' || b.scopeKind === 'all_teams') return true
+  return a.scopeKind === b.scopeKind
+}
+
+/** รอบอื่นที่ขอบเขตซ้อนกับรอบนี้ (ตัวแรก) — `null` = ไม่ซ้อน */
+export function findOverlappingCycle<T extends CycleScopeValues & { id: string }>(
+  candidate: CycleScopeValues & { id?: string },
+  others: readonly T[],
+): T | null {
+  return others.find((other) => other.id !== candidate.id && cycleScopesOverlap(candidate, other)) ?? null
+}
+
+/** รอบบิลนี้ใช้กับบริษัทนี้ไหม */
+export function cycleCoversCompany(cycle: CycleScopeValues, companyId: string): boolean {
+  if (cycle.type !== 'AR') return false
+  return cycle.scopeKind === 'all_companies' || cycle.companyIds.includes(companyId)
+}
+
+/** รอบจ่ายนี้ใช้กับฝั่งทีมนี้ไหม */
+export function cycleCoversSide(cycle: CycleScopeValues, side: 'inhouse' | 'outsource'): boolean {
+  if (cycle.type !== 'AP') return false
+  return cycle.scopeKind === 'all_teams' || cycle.scopeKind === side
+}
+
+/**
+ * รอบที่ตรงให้อัตโนมัติ (ตอนสร้างรอบวางบิล/รอบจ่าย — ผู้ใช้แก้ได้) — รอบที่ระบุเจาะจงชนะรอบ "ทั้งหมด"
+ * (ปกติมีได้รอบเดียวเพราะห้ามขอบเขตซ้อน แต่รอบเก่าก่อนมติอาจยังซ้อนอยู่)
+ */
+export function pickMatchingCycle<T extends CycleScopeValues>(
+  cycles: readonly T[],
+  target: { companyId: string } | { side: 'inhouse' | 'outsource' },
+): T | null {
+  const matches = cycles.filter((cycle) =>
+    'companyId' in target ? cycleCoversCompany(cycle, target.companyId) : cycleCoversSide(cycle, target.side),
+  )
+  const specific = matches.find((cycle) => cycle.scopeKind !== 'all_companies' && cycle.scopeKind !== 'all_teams')
+  return specific ?? matches[0] ?? null
+}
+
+/** ข้อความ "ใช้กับ" ที่แสดงในตาราง — รายบริษัทแสดงชื่อบริษัท */
+export function describeCycleScope(scopeKind: CycleScopeKind, companyNames: readonly string[]): string {
+  if (scopeKind === 'selected_companies' && companyNames.length > 0) return companyNames.join(', ')
+  return CYCLE_SCOPE_LABEL[scopeKind]
 }

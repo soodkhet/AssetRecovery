@@ -33,7 +33,7 @@ const validCycle = {
   cutoffText: '',
   dueRuleType: 'net_days',
   dueRuleValue: 30,
-  scope: 'ทุกไฟแนนซ์',
+  scopeKind: 'all_companies',
 }
 
 describe('reason บังคับทุกหมวด', () => {

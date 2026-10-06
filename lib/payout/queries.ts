@@ -75,6 +75,8 @@ import { parseOrganizationLetterheadSnapshot } from '@/lib/organization/profile'
 import { prisma } from '@/lib/prisma'
 import { assertBankFileUsable } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
+import { cycleCoversSide, resolveDueDate } from '@/lib/settings/cycles'
+import { loadActiveCycleForScope } from '@/lib/settings/queries/cycles'
 import type { WhtBasis } from '@/lib/settings/tax-profile'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import { loadTaxProfileDefaults, type LoadedTaxProfileDefaults } from '@/lib/settings/queries/tax-profile-defaults'
@@ -139,6 +141,8 @@ const batchSelect = {
   whtInhouseIncomeCategory: true,
   whtOutsourceIncomeCategory: true,
   whtAllowGrossUpConditions: true,
+  payDueDate: true,
+  cycle: { select: { name: true, dueRule: true } },
   createdAt: true,
   updatedAt: true,
   cancelledAt: true,
@@ -227,6 +231,10 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
             // NULL = รอบที่สร้างก่อนมีค่าตั้ง U105 ⇒ ไม่อนุญาต (คิดแบบ (1) เสมอ)
             allowGrossUpConditions: row.whtAllowGrossUpConditions ?? LEGACY_WHT_POLICY.allowGrossUpConditions,
           },
+    // มติ PO U133 — รอบจ่าย AP ที่ใช้ + กำหนดจ่ายตามรอบ (snapshot ตอนสร้าง)
+    cycleName: row.cycle?.name ?? null,
+    cycleDueRule: row.cycle?.dueRule ?? null,
+    payDueDate: row.payDueDate === null ? null : row.payDueDate.toISOString().slice(0, 10),
     createdAt: row.createdAt.toISOString(),
     createdByName: row.createdByUser.fullName,
     updatedAt: row.updatedAt.toISOString(),
@@ -853,9 +861,19 @@ export interface PayoutBatchCreateOutcome {
 
 export async function createPayoutBatch(
   context: PayoutMutationContext,
-  input: PayoutBatchCreateInput,
+  input: Omit<PayoutBatchCreateInput, 'cycleId'> & { cycleId?: string | null },
 ): Promise<PayoutBatchCreateOutcome> {
   const user = context.actor
+
+  // มติ PO U133 — รอบจ่าย AP ที่เลือกต้องครอบฝั่งของรอบนี้ · กำหนดจ่าย = เงื่อนไขของรอบนับจากวันตัดรอบ
+  const cycle =
+    input.cycleId === undefined || input.cycleId === null
+      ? null
+      : await loadActiveCycleForScope(user.organizationId, input.cycleId, 'AP')
+  if (cycle !== null && !cycleCoversSide(cycle, input.side)) {
+    throw new SettingsError('CYCLE_SCOPE_MISMATCH', { detail: `cycle=${cycle.id} side=${input.side}` })
+  }
+  const payDueDate = cycle === null ? null : resolveDueDate(input.cutoffDate, cycle)
 
   // Period Lock (`13` §6.11 · Phase 4.1) — รอบจ่ายผูกกับงวดของวันตัดรอบ (`02` ไม่มีคอลัมน์วันตัดรอบ
   // ⇒ ใช้ `cutoffDate` ที่ผู้ใช้ระบุ ซึ่งเป็นวันเดียวกับที่คัดรายการเข้ารอบ)
@@ -912,6 +930,8 @@ export async function createPayoutBatch(
         whtOutsourceIncomeCategory: whtPolicy.values.outsourceIncomeCategory,
         whtAllowGrossUpConditions: whtPolicy.values.allowGrossUpConditions,
         taxProfileDefaultId: typeDefaults.id,
+        cycleId: cycle?.id ?? null,
+        payDueDate,
         createdBy: user.id,
       },
       select: { id: true },
@@ -1006,6 +1026,9 @@ export async function createPayoutBatch(
           status,
           // `02` §8 ไม่มีคอลัมน์ `cutoff_date` ⇒ เก็บวันตัดรอบไว้ใน audit (ดู `buildPayoutBatchName()`)
           cutoff_date: input.cutoffDate.toISOString().slice(0, 10),
+          cycle_id: cycle?.id ?? null,
+          cycle_name: cycle?.name ?? null,
+          pay_due_date: payDueDate === null ? null : payDueDate.toISOString().slice(0, 10),
           gross_satang: totals.grossSatang,
           wht_satang: totals.whtSatang,
           net_satang: totals.netSatang,

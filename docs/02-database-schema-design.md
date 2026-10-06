@@ -79,6 +79,7 @@
 | v4.5x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U134 + U136)** — **U134** `payout_batches` + `post_completion_synced_at TIMESTAMPTZ` (ขั้นหลังรอบจ่าย completed ครบแล้ว — NULL บนรอบ completed = ค้าง ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ) + partial index `idx_payout_batches_org_post_completion_pending` · backfill: รอบ completed เดิมที่ทุกรายการมีบันทึกจ่ายแล้ว = ครบ (migration `20261008031000_payout_post_completion_marker`) · **U136** `bank_transactions` + `occurrence_seq INTEGER NOT NULL DEFAULT 1` (CHECK ≥ 1) และ `uniq_bank_tx_statement_row` รวม `occurrence_seq` (migration `20261008030000_bank_tx_statement_occurrence`) |
 | v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
 | v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
+| v4.5x-fixer-u132 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -156,6 +157,10 @@ CREATE TYPE payee_type AS ENUM ('individual', 'corporate'); -- เพิ่ม 0
 
 -- ══ Settings enums (ไฟล์ 13 — เพิ่ม 04/07/2569 ตาม DEC-006/D1,D2) ══
 CREATE TYPE cycle_type             AS ENUM ('AR', 'AP');                        -- ไฟล์ 13 §6.1
+-- ขอบเขตรอบ (v4.5x-fixer-u132 — มติ PO U133): AR = all_companies | selected_companies · AP = all_teams | inhouse | outsource
+CREATE TYPE cycle_scope_kind       AS ENUM ('all_companies', 'selected_companies', 'all_teams', 'inhouse', 'outsource');
+-- ชนิดเอกสารบริษัทไฟแนนซ์ (v4.5x-fixer-u132 — มติ PO U132)
+CREATE TYPE company_document_type  AS ENUM ('company_certificate', 'vat_registration', 'service_contract', 'bank_book', 'other');
 CREATE TYPE cutoff_rule_type       AS ENUM ('fixed_dates', 'month_end', 'custom_text');
 CREATE TYPE bank_account_usage     AS ENUM ('receive', 'pay', 'both');          -- ไฟล์ 13 §6.3
 CREATE TYPE bank_file_type         AS ENUM ('CSV', 'TXT');                      -- ไฟล์ 13 §6.8
@@ -694,6 +699,2015 @@ CREATE TABLE finance_companies (
   deleted_at            TIMESTAMPTZ,
   UNIQUE(organization_id, tax_id)
 );
+
+-- ── finance_company_documents (v4.5x-fixer-u132 — มติ PO U132 · ไฟล์ 10 §7.4) ──
+-- insert-only เก็บทุกเวอร์ชัน (ไม่มี updated_*/deleted_at) · trigger ห้าม UPDATE/DELETE/TRUNCATE
+-- แทนที่ = แถวใหม่ชี้เวอร์ชันก่อน · ไฟล์ใน bucket case-documents path ต่อเวอร์ชัน (DEC-014)
+CREATE TABLE finance_company_documents (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id      UUID NOT NULL REFERENCES organizations(id),
+  company_id           UUID NOT NULL REFERENCES finance_companies(id),
+  document_type        company_document_type NOT NULL,
+  title                TEXT,                  -- บังคับเฉพาะ other (CHECK)
+  issued_date          DATE,                  -- บังคับเฉพาะ company_certificate (CHECK) · เตือนเมื่อเกิน 6 เดือน
+  version              INTEGER NOT NULL DEFAULT 1,
+  replaces_document_id UUID UNIQUE REFERENCES finance_company_documents(id),
+  file_path            TEXT NOT NULL,
+  file_sha256          VARCHAR(64) NOT NULL,
+  mime_type            TEXT NOT NULL,
+  size_bytes           INTEGER NOT NULL,
+  original_name        TEXT NOT NULL,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by           UUID NOT NULL REFERENCES users(id),
+  UNIQUE (organization_id, file_path),
+  CONSTRAINT chk_company_documents_title_shape CHECK (
+    (document_type = 'other' AND title IS NOT NULL AND length(btrim(title)) > 0) OR (document_type <> 'other' AND title IS NULL)),
+  CONSTRAINT chk_company_documents_issued_date_shape CHECK (
+    (document_type = 'company_certificate' AND issued_date IS NOT NULL) OR (document_type <> 'company_certificate' AND issued_date IS NULL)),
+  CONSTRAINT chk_company_documents_version_chain CHECK (version >= 1 AND ((version = 1) = (replaces_document_id IS NULL))),
+  CONSTRAINT chk_company_documents_file CHECK (size_bytes > 0 AND file_sha256 ~ '^[0-9a-f]{64}
+-- ── service_fee_templates ────────────────────────────────────
+-- กติกาค่าบริการ ตามไฟล์ 12
+CREATE TABLE service_fee_templates (
+  id                  UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID                 NOT NULL REFERENCES organizations(id),
+  name                TEXT                 NOT NULL,
+  model               service_fee_model    NOT NULL,
+  -- FLAT / HYBRID
+  base_satang         INTEGER              NOT NULL DEFAULT 0,
+  -- SUCCESS_FEE / HYBRID
+  rate_pct            NUMERIC(5,2)         NOT NULL DEFAULT 0,
+  basis               service_fee_basis,
+  -- FLAT / HYBRID
+  charge_on_fail      BOOLEAN              NOT NULL DEFAULT false,
+  -- (v4.51 มติ PO U125) ตัดคอลัมน์ charge_per_tracking_round — คิดค่าบริการทุกรอบติดตามอิสระเสมอ
+  -- Versioning (snapshot ลงใน Case ตอน approved)
+  version             INTEGER              NOT NULL DEFAULT 1,
+  is_current          BOOLEAN              NOT NULL DEFAULT true,
+  created_at          TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by          UUID                 NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  updated_by          UUID                 REFERENCES users(id),
+  deleted_at          TIMESTAMPTZ,
+  UNIQUE(organization_id, name, version)
+);
+
+-- ── tax_profiles ──────────────────────────────────────────────
+-- กติกาภาษีต่อ Payee ตามไฟล์ 18 §6.3
+CREATE TABLE tax_profiles (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID         NOT NULL REFERENCES organizations(id),
+  name                TEXT         NOT NULL,
+  wht_pct             NUMERIC(5,2) NOT NULL DEFAULT 3.00,   -- % หัก ณ ที่จ่าย
+  wht_basis           TEXT         NOT NULL DEFAULT 'before_vat', -- before_vat | gross_amount
+  wht_min_threshold_satang INTEGER NOT NULL DEFAULT 100000, -- 1,000 บาท
+  income_type         TEXT         NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)',
+  filing_form         wht_filing_form NOT NULL DEFAULT 'PND3',
+  created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  created_by          UUID         NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  deleted_at          TIMESTAMPTZ,
+  UNIQUE(organization_id, name)
+);
+
+-- ── vat_rate_history ──────────────────────────────────────────
+-- ประวัติอัตรา VAT (ห้าม hardcode — ไฟล์ 19 §6.3)
+CREATE TABLE vat_rate_history (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID         NOT NULL REFERENCES organizations(id),
+  rate_pct        NUMERIC(5,2) NOT NULL,        -- เช่น 7.00
+  effective_from  DATE         NOT NULL,
+  effective_to    DATE,                          -- NULL = ยังใช้งานอยู่
+  note            TEXT,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  created_by      UUID         NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_vat_rates_org_date ON vat_rate_history(organization_id, effective_from);
+
+-- ── wht_policy_history ────────────────────────────────────────
+-- ค่าตั้งภาษีหัก ณ ที่จ่าย 3 ตัว effective-dated (มติ PO 05/10/2569 UAT U3/U4/U5/U8 — ไฟล์ 13 §6.4.2)
+-- insert-only แบบ vat_rate_history · ไม่มีแถว = ค่าเริ่มต้นตามมติ · รอบจ่าย snapshot ค่าที่ใช้ลง payout_batches
+CREATE TABLE wht_policy_history (
+  id                 UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID                 NOT NULL REFERENCES organizations(id),
+  effective_from     DATE                 NOT NULL,   -- ย้อนหลังไม่ได้ (WHT_POLICY_EFFECTIVE_DATE_PAST)
+  base_expense_types expense_type[],                  -- ชนิดรายการที่รวมในฐาน WHT
+  certificate_mode   wht_certificate_mode NOT NULL,
+  income_type_mode   wht_income_type_mode NOT NULL,
+  issue_zero_rate_40_2_certificate BOOLEAN NOT NULL DEFAULT true,  -- 40(1)/40(2) อัตรา 0% ออก 50 ทวิ ภาษี 0 + รวม ภ.ง.ด.1 (v4.19 มติ PO 05/10/2569 UAT U16 · U33)
+  inhouse_income_category   wht_income_category NOT NULL DEFAULT 'sec_40_2',  -- โหมด by_team_side: ประเภทเงินได้ฝั่ง inhouse (v4.22 UAT U33)
+  outsource_income_category wht_income_category NOT NULL DEFAULT 'sec_40_8',  -- โหมด by_team_side: ประเภทเงินได้ฝั่ง outsource (v4.22 UAT U33)
+  filing_method      wht_filing_method    NOT NULL DEFAULT 'online',  -- วิธียื่น ภ.ง.ด. ⇒ วันกำหนดยื่น (v4.23 UAT U45)
+  allow_gross_up_conditions BOOLEAN NOT NULL DEFAULT false,  -- อนุญาตเงื่อนไขการหัก (2)/(3) — ทบยอดภาษีที่ออกให้ (มติ PO U105 · `22` §6.9.2)
+  reason             TEXT                 NOT NULL CHECK (btrim(reason) <> ''),
+  created_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by         UUID                 NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_wht_policy_history_org_date ON wht_policy_history(organization_id, effective_from);
+
+-- ── tax_profile_default_history ───────────────────────────────
+-- Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (v4.49 มติ PO 06/10/2569 U121 — ไฟล์ 13 §6.4.3 · 18 §6.3)
+-- 4 ช่อง = ฝั่ง inhouse/outsource × ชนิดผู้รับ individual/corporate — ว่างได้ทุกช่อง
+-- ลำดับ resolve: tax_profile รายคน → ช่องที่ตรงประเภท → อัตราแผน (warning) → ไม่มีเลย = บล็อกรอบจ่าย (WHT_RATE_MISSING)
+-- insert-only (ไม่มี updated_*/deleted_at · ไม่มี PATCH/DELETE) · แถวล่าสุด (created_at) มีผลทันที
+CREATE TABLE tax_profile_default_history (
+  id                                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id                     UUID        NOT NULL REFERENCES organizations(id),
+  inhouse_individual_tax_profile_id   UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  inhouse_corporate_tax_profile_id    UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  outsource_individual_tax_profile_id UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  outsource_corporate_tax_profile_id  UUID        REFERENCES tax_profiles(id) ON DELETE RESTRICT,
+  reason                              TEXT        NOT NULL CHECK (btrim(reason) <> ''),  -- บังคับ (กระทบภาษี)
+  created_at                          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by                          UUID        NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_tax_profile_default_history_org_created ON tax_profile_default_history(organization_id, created_at);
+
+-- ── bank_accounts ─────────────────────────────────────────────
+-- บัญชีธนาคารบริษัท ตามไฟล์ 13 §6.3
+CREATE TABLE bank_accounts (
+  id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID    NOT NULL REFERENCES organizations(id),
+  bank_name           TEXT    NOT NULL,
+  account_name        TEXT    NOT NULL,
+  account_number      TEXT    NOT NULL,
+  account_type        TEXT    NOT NULL DEFAULT 'savings', -- savings | current
+  is_primary          BOOLEAN NOT NULL DEFAULT false,
+  -- Sync กับไฟล์ 13 §6.3 (เพิ่ม 04/07/2569 — DEC-006/D2)
+  usage               bank_account_usage NOT NULL DEFAULT 'both',
+  statement_format    TEXT,   -- รูปแบบไฟล์ statement นำเข้ากระทบยอด (ไฟล์ 35) — อ้างชื่อจาก bank_file_formats
+  payment_file_format TEXT,   -- รูปแบบไฟล์โอนเงินส่งธนาคาร (ไฟล์ 17) — อ้างชื่อจาก bank_file_formats
+  auto_match_tolerance_days INTEGER NOT NULL DEFAULT 7,   -- จำนวนวันยอมรับสำหรับ auto-match (ไฟล์ 35)
+  is_payout_account   BOOLEAN NOT NULL DEFAULT false,     -- ⚠️ DEPRECATED 04/07/2569 (DEC-006/D2) — ความหมายซ้ำกับ usage ('pay'/'both') ห้ามใช้ในโค้ดใหม่ วางแผนลบใน migration ถัดไป
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by          UUID    NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at          TIMESTAMPTZ,
+  UNIQUE(organization_id, account_number)
+);
+
+-- ── cost_centers ──────────────────────────────────────────────
+-- ศูนย์ต้นทุน ตามไฟล์ 13 §6.9
+CREATE TABLE cost_centers (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  code            TEXT    NOT NULL,
+  name            TEXT    NOT NULL,
+  description     TEXT,
+  is_active       BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID    NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at      TIMESTAMPTZ,
+  UNIQUE(organization_id, code)
+);
+
+-- ── document_number_series ────────────────────────────────────
+-- เลขที่เอกสารทุกชนิด (v4.41 มติ PO 06/10/2569 UAT U102 — ไฟล์ 13 §6.12) — 1 แถว/องค์กร/ชนิด
+-- ตัวนับเดินโดย next_document_number(org, doc_type, at) เท่านั้น (SELECT … FOR UPDATE แถวนี้ ในทรานแซกชันเดียวกับเอกสาร)
+-- แถวค่าเริ่มต้นสร้างเองครั้งแรกที่ใช้ (ensure_document_number_series) · INV/WHT ล็อกรูปแบบหลังออกฉบับแรก (ชั้น service)
+CREATE TABLE document_number_series (
+  id                 UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID                 NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  doc_type           document_number_type NOT NULL,
+  prefix             VARCHAR(10)          NOT NULL CHECK (prefix ~ '^([A-Z0-9]+(-[A-Z0-9]+)*)?$'),
+  include_year       BOOLEAN              NOT NULL,             -- {prefix}-{พ.ศ.}-{seq} / {prefix}-{seq}
+  digits             INTEGER              NOT NULL CHECK (digits BETWEEN 3 AND 8),
+  reset_yearly       BOOLEAN              NOT NULL,
+  current_seq        INTEGER              NOT NULL DEFAULT 0 CHECK (current_seq >= 0),
+  current_year       INTEGER              CHECK (current_year IS NULL OR current_year BETWEEN 2500 AND 2999),  -- พ.ศ.
+  last_issued_number TEXT,
+  last_issued_at     TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by         UUID                 REFERENCES users(id),  -- NULL = ระบบสร้างค่าเริ่มต้น
+  updated_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  updated_by         UUID                 REFERENCES users(id),
+  deleted_at         TIMESTAMPTZ,
+  CONSTRAINT uniq_document_number_series UNIQUE (organization_id, doc_type),
+  CONSTRAINT document_number_series_reset_needs_year CHECK (NOT reset_yearly OR include_year)
+);
+-- ค่าเริ่มต้น: INV-0001 (ต่อเนื่อง) · BL/LOT/DLV/WHT-<พ.ศ.>-001 · PV/ADV/RAV/CRT-<พ.ศ.>-0001 (รีเซ็ตรายปี)
+
+-- ── public_holidays ───────────────────────────────────────────
+-- ปฏิทินวันหยุดขององค์กร (v4.35 มติ PO 06/10/2569 UAT U93 — ไฟล์ 13 §6.15)
+-- ใช้คิดวันทำการ: กำหนดยื่น ภ.ง.ด. ที่ตรงวันหยุด/เสาร์-อาทิตย์เลื่อนเป็นวันทำการถัดไป (ไฟล์ 33 §7.2)
+CREATE TABLE public_holidays (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id),
+  holiday_date    DATE        NOT NULL,
+  name            TEXT        NOT NULL CHECK (btrim(name) <> ''),   -- chk_public_holidays_name
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID        NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID        REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ                                       -- soft delete (ลบแล้วเพิ่มวันเดิมใหม่ได้)
+);
+CREATE INDEX idx_public_holidays_org_date ON public_holidays(organization_id, holiday_date);
+CREATE UNIQUE INDEX uniq_public_holidays_active_date ON public_holidays(organization_id, holiday_date)
+  WHERE deleted_at IS NULL;                                         -- DUPLICATE_HOLIDAY_DATE
+
+-- ── billing_payout_cycles ────────────────────────────────────
+-- รอบบิล/รอบจ่าย ตามไฟล์ 13 §6.1 (เพิ่ม 04/07/2569 — DEC-006/D1)
+CREATE TABLE billing_payout_cycles (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id  UUID NOT NULL REFERENCES organizations(id),
+  name             TEXT NOT NULL,
+  type             cycle_type NOT NULL,
+  cutoff_rule_type cutoff_rule_type NOT NULL,
+  cutoff_dates     INTEGER[],          -- ใช้เมื่อ fixed_dates เช่น '{15,30}'
+  cutoff_text      TEXT,               -- ใช้เมื่อ custom_text
+  -- มติ PO 2026-08-12 ข้อ A5 — ไฟล์ 19 ต้องคำนวณ due_date จากค่าเหล่านี้ (ห้าม parse จาก free text)
+  due_rule_type    due_rule_type NOT NULL DEFAULT 'net_days',
+  due_rule_value   INTEGER,            -- net_days = จำนวนวัน · day_of_next_month = วันที่ · month_end = ไม่ใช้
+  due_rule         TEXT NOT NULL,      -- label ที่ผู้ใช้เห็น เช่น "Net 30 Days" (ไม่ใช้คำนวณ)
+  -- v4.5x-fixer-u132 (มติ PO U133): ขอบเขตจริง แทนข้อความอิสระ `scope` เดิม · ห้ามซ้อนกับรอบชนิดเดียวกันที่ใช้งาน (ชั้น service — CYCLE_SCOPE_OVERLAP)
+  scope_kind       cycle_scope_kind NOT NULL,
+  legacy_scope_note TEXT,              -- ข้อความ "ใช้กับ" เดิมก่อน U133 (อ้างอิงเท่านั้น)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id),
+  deleted_at TIMESTAMPTZ,
+  CONSTRAINT cycles_due_rule_shape CHECK (
+    (due_rule_type IN ('net_days','day_of_next_month') AND due_rule_value IS NOT NULL AND due_rule_value > 0) OR
+    (due_rule_type = 'month_end')
+  ),
+  CONSTRAINT cycles_cutoff_shape CHECK (
+    (cutoff_rule_type = 'fixed_dates' AND cutoff_dates IS NOT NULL) OR
+    (cutoff_rule_type = 'custom_text' AND cutoff_text IS NOT NULL) OR
+    (cutoff_rule_type = 'month_end')
+  ),
+  CONSTRAINT cycles_scope_matches_type CHECK (
+    (type = 'AR' AND scope_kind IN ('all_companies','selected_companies')) OR
+    (type = 'AP' AND scope_kind IN ('all_teams','inhouse','outsource'))
+  )
+);
+CREATE INDEX idx_cycles_org ON billing_payout_cycles(organization_id, type);
+
+-- ── billing_cycle_companies (v4.5x-fixer-u132 — มติ PO U133) ──
+-- junction: บริษัทที่รอบบิล AR ใช้ เมื่อ scope_kind = selected_companies (ไม่มี common columns ครบ — §2.4)
+CREATE TABLE billing_cycle_companies (
+  organization_id UUID NOT NULL REFERENCES organizations(id),
+  cycle_id        UUID NOT NULL REFERENCES billing_payout_cycles(id) ON DELETE CASCADE,
+  company_id      UUID NOT NULL REFERENCES finance_companies(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (cycle_id, company_id)
+);
+CREATE INDEX idx_billing_cycle_companies_org_company ON billing_cycle_companies(organization_id, company_id);
+
+-- ── approval_matrices ────────────────────────────────────────
+-- สายการอนุมัติ ตามไฟล์ 13 §6.2 (DEC-006/D1 — เฉพาะสายอนุมัติ; ค่านโยบายการเงินแยกไป finance_policy_settings)
+CREATE TABLE approval_matrices (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID NOT NULL REFERENCES organizations(id),
+  condition           TEXT NOT NULL,
+  condition_threshold_satang INTEGER,        -- เงินเป็น satang เสมอตาม convention (spec ไฟล์ 13 เขียน decimal ระดับเอกสาร)
+  approval_flow       TEXT[] NOT NULL,       -- ลำดับ role เช่น '{Manager,Finance,Executive}'
+  enforce_segregation_of_duties BOOLEAN NOT NULL DEFAULT false,  -- ไฟล์ 16 SEGREGATION_OF_DUTIES_VIOLATION
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id),
+  deleted_at TIMESTAMPTZ
+);
+CREATE INDEX idx_approval_matrices_org ON approval_matrices(organization_id);
+
+-- ── finance_policy_settings ──────────────────────────────────
+-- ค่านโยบายการเงินระดับองค์กร (1 record ต่อ organization) — DEC-006/D1 Option B
+CREATE TABLE finance_policy_settings (
+  organization_id     UUID PRIMARY KEY REFERENCES organizations(id),
+  advance_max_amount_per_request_satang INTEGER,            -- NULL = ไม่จำกัด (ไฟล์ 15 — validation ADVANCE_EXCEEDS_MAX)
+  require_payee_id_document BOOLEAN NOT NULL DEFAULT false, -- ไฟล์ 18
+  ar_aging_buckets    INTEGER[] NOT NULL DEFAULT '{30,60,90}', -- ไฟล์ 19 §6.4 (สร้างช่วง 0-30/31-60/61-90/90+ อัตโนมัติ)
+  -- มติ PO 2026-08-12 ข้อ B4 — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
+  write_off_tolerance_satang INTEGER NOT NULL DEFAULT 5000,
+  -- มติ PO 2026-08-12 ข้อ D12 — advance ไม่มีใบเสร็จ → ตัดเป็นลูกหนี้พนักงาน หักจาก payout รอบถัดไป
+  advance_uncleared_to_employee_receivable BOOLEAN NOT NULL DEFAULT true,
+  -- v4.43 มติ PO 06/10/2569 U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน (CHECK > 0 · `22` §6.17)
+  substitute_receipt_max_per_doc_satang   INTEGER NOT NULL DEFAULT 50000,   -- ต่อใบ (฿500)
+  substitute_receipt_max_per_month_satang INTEGER NOT NULL DEFAULT 300000,  -- ต่อคนต่อเดือน (฿3,000)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id)
+);
+
+-- ── bank_file_formats ────────────────────────────────────────
+-- รูปแบบไฟล์ธนาคาร ตามไฟล์ 13 §6.8 (DEC-006/D1) — validation BANK_FILE_NOT_TESTED อ้าง test_status ที่นี่
+CREATE TABLE bank_file_formats (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id),
+  bank_name       TEXT NOT NULL,
+  file_type       bank_file_type NOT NULL,
+  encoding        bank_file_encoding NOT NULL,  -- 🔶 TIS-620/UTF-8 ต้องทดสอบจริงกับธนาคารก่อน production
+  column_mapping  TEXT NOT NULL,
+  test_status     bank_file_test_status NOT NULL DEFAULT 'pending',  -- ต้อง 'passed' ก่อนใช้ตัดโอนจริง
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id),
+  deleted_at TIMESTAMPTZ
+);
+
+-- ── tax_document_template_settings ───────────────────────────
+-- เทมเพลตเอกสาร ตามไฟล์ 13 §6.13 (DEC-006/D1 · v4.50 มติ PO U122) — ค่าที่ต่างกันตามชนิดเอกสารเท่านั้น
+-- (โลโก้/ข้อมูลบริษัท/รูปลายเซ็นอยู่ที่ organizations) · ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (ไฟล์ 28 §6.2-6.3)
+-- v4.48: ลบ logo_url / signature_image_url / paper_size / language · snapshot ลงเอกสารที่ document_template_snapshot
+CREATE TABLE tax_document_template_settings (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id),
+  document_type   template_document_type NOT NULL,
+  footer_note     TEXT,
+  print_signature BOOLEAN NOT NULL DEFAULT false,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id),
+  UNIQUE(organization_id, document_type)
+);
+```
+
+---
+
+## 6. Schema Group C — Case Workflow
+
+```sql
+-- ── cases ─────────────────────────────────────────────────────
+-- เคสงานติดตามทรัพย์ ตามไฟล์ 38
+CREATE TABLE cases (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID         NOT NULL REFERENCES organizations(id),
+  -- Reference
+  case_ref        TEXT         NOT NULL,  -- เลขสัญญาจากไฟแนนซ์ เช่น SF-2026-00832 (เก็บค่าดิบ ไม่แก้ไข)
+  -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.1/§11: ค่าที่ normalize แล้ว (uppercase + trim เท่านั้น) ใช้เทียบซ้ำ
+  case_ref_normalized TEXT     NOT NULL,
+  tracking_round  INTEGER      NOT NULL DEFAULT 1,  -- รอบติดตาม (เพิ่มเมื่อ recycle)
+  source          case_source  NOT NULL DEFAULT 'manual',
+  status          case_status  NOT NULL DEFAULT 'draft',
+  -- Finance Company
+  company_id      UUID         NOT NULL REFERENCES finance_companies(id),
+  -- Service Fee (snapshot ตอน approved — ไฟล์ 10 §9.2)
+  service_fee_template_id      UUID REFERENCES service_fee_templates(id),
+  service_fee_model_snapshot   service_fee_model,
+  service_fee_base_satang      INTEGER,
+  service_fee_rate_pct         NUMERIC(5,2),
+  service_fee_basis_snapshot   service_fee_basis,
+  service_fee_charge_on_fail   BOOLEAN,
+  -- Debtor info
+  -- แก้ 14/08/2569 (Phase 2.2): `debtor_name`/`asset_description` ปลด NOT NULL — ไฟล์ 38 §11 บังคับว่า
+  -- เคสจาก API ต้องสร้าง draft ได้แม้ข้อมูลไม่ครบ (ความครบถ้วนบังคับตอนขอขึ้น pending_review แทน)
+  debtor_name         TEXT,
+  debtor_nationality  debtor_nationality,       -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.1
+  debtor_nationality_other TEXT,                -- เพิ่ม 14/08/2569 — ระบุเมื่อ nationality = OTHER (§6.1.1)
+  debtor_national_id  VARCHAR(13),
+  debtor_passport_no  TEXT,                     -- เพิ่ม 14/08/2569 — สัญชาติ ≠ TH ใช้ช่องนี้ free text (§6.1.1)
+  debtor_phone_mobile VARCHAR(20),
+  debtor_phone_work   VARCHAR(20),
+  debtor_line_id      TEXT,
+  debtor_facebook     TEXT,
+  -- Address (current) — ฐานเดียวของ routing ทีม (ไฟล์ 38 §6.1.2)
+  addr_province       TEXT,
+  addr_district       TEXT,
+  addr_subdistrict    TEXT,
+  addr_postal_code    VARCHAR(5),
+  addr_detail         TEXT,
+  -- Address (work + ตามบัตรประชาชน) — เพิ่ม 14/08/2569 (Phase 2.2) ไฟล์ 38 §6.1 ระบุ 3 ที่อยู่ต่อเคส
+  work_addr_province     TEXT,
+  work_addr_district     TEXT,
+  work_addr_subdistrict  TEXT,
+  work_addr_postal_code  VARCHAR(5),
+  work_addr_detail       TEXT,
+  id_card_addr_province     TEXT,
+  id_card_addr_district     TEXT,
+  id_card_addr_subdistrict  TEXT,
+  id_card_addr_postal_code  VARCHAR(5),
+  id_card_addr_detail       TEXT,
+  -- Asset
+  asset_kind          asset_kind,               -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.2 `asset_type`
+  asset_description   TEXT,                     -- = `asset_brand_model` ของไฟล์ 38 §6.2
+  imei                VARCHAR(15),                     -- A6: IMEI 15 หลักเท่านั้น (exact match)
+  serial_no           TEXT,                            -- A6: เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ)
+  debt_amount_satang  INTEGER,
+  asset_value_satang  INTEGER,
+  -- เอกสารแนบ — เพิ่ม 04/10/2569 (v4.15 มติ PO UAT — จำโหมด/ติ๊กรูปสินค้า · ไฟล์ 38 §6.3.3)
+  document_mode       TEXT     NOT NULL DEFAULT 'separate'
+                      CONSTRAINT chk_cases_document_mode CHECK (document_mode IN ('separate', 'bundle')),
+                      -- มี bundle_doc ที่ยังไม่ถูกลบ ⇒ ต้องเป็น bundle (บังคับที่ service — ไฟล์ชนะคอลัมน์)
+  product_photo_in_contract BOOLEAN NOT NULL DEFAULT false,  -- โหมดแยกประเภท: ไม่บังคับ product_photo ก่อนส่งตรวจ
+  -- Team Assignment (ไฟล์ 38 §6.4)
+  suggested_team_id   UUID     REFERENCES teams(id),   -- ระบบเสนอ
+  assigned_team_id    UUID     REFERENCES teams(id),   -- ผู้จัดการยืนยัน
+  team_change_reason  TEXT,                            -- ถ้าเปลี่ยนจากที่เสนอ
+  -- Projected revenue (เพิ่ม 14/08/2569 — ไฟล์ 38 §6.4/§6.5) ประมาณการ best-case ไม่ใช่รายได้จริงตามไฟล์ 19
+  projected_revenue_satang  INTEGER,
+  projected_revenue_source  TEXT,                       -- calculation_source: template/version ที่ใช้คำนวณ
+  -- Review
+  reviewed_by         UUID     REFERENCES users(id),
+  reviewed_at         TIMESTAMPTZ,
+  review_note         TEXT,
+  -- Close
+  outcome             case_outcome,
+  closed_at           TIMESTAMPTZ,
+  debtor_documents_purged_at TIMESTAMPTZ,  -- v4.37 ไฟล์เอกสารลูกหนี้ถูกลบตามระยะเก็บ (PDPA มติ PO U97) — NULL = ยังไม่ลบ
+  -- Audit
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by          UUID        NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by          UUID        REFERENCES users(id),
+  deleted_at          TIMESTAMPTZ,
+  UNIQUE(organization_id, company_id, case_ref, tracking_round)
+);
+-- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §11 กันเลขที่สัญญาซ้ำภายในบริษัทไฟแนนซ์เดียวกัน (ชั้น DB ของการกันซ้ำ 2 ชั้น)
+-- ไม่ partial: UNIQUE ด้านบนก็ไม่ partial ⇒ เคสที่ soft delete แล้วยังจองเลขไว้เหมือนกันทั้งคู่
+CREATE UNIQUE INDEX uniq_cases_company_case_ref ON cases(organization_id, company_id, case_ref_normalized);
+CREATE INDEX idx_cases_org_status     ON cases(organization_id, status);
+CREATE INDEX idx_cases_org_company    ON cases(organization_id, company_id);
+CREATE INDEX idx_cases_org_team       ON cases(organization_id, assigned_team_id);
+CREATE INDEX idx_cases_closed         ON cases(organization_id, outcome, closed_at);
+
+-- ── case_documents ───────────────────────────────────────────
+-- เอกสารแนบต่อเคส (ตามไฟล์ 38 §6.3)
+CREATE TABLE case_documents (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  case_id         UUID    NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  document_type   TEXT    NOT NULL,  -- contract_doc | national_id_doc | product_photo | other_doc | bundle_doc (v4.14)
+  file_url        TEXT    NOT NULL,  -- Supabase Storage URL
+  file_hash       TEXT    NOT NULL,  -- SHA-256 (ตามไฟล์ 01)
+  original_name   TEXT    NOT NULL,
+  mime_type       TEXT    NOT NULL,
+  size_bytes      INTEGER NOT NULL,
+  uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  uploaded_by     UUID    NOT NULL REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ,
+  purged_at       TIMESTAMPTZ,  -- v4.37 ไฟล์บน Storage ถูกลบตามระยะเก็บ (PDPA มติ PO U97) · แถวคงไว้เป็นหลักฐาน
+  CONSTRAINT chk_case_documents_purged_deleted CHECK (purged_at IS NULL OR deleted_at IS NOT NULL)
+);
+CREATE INDEX idx_case_docs_case ON case_documents(case_id, document_type);
+
+-- ── case_contacts ────────────────────────────────────────────
+-- ผู้ที่เกี่ยวข้องกับลูกหนี้
+CREATE TABLE case_contacts (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  case_id         UUID    NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  contact_name    TEXT    NOT NULL,
+  relation        TEXT    NOT NULL,
+  phone           VARCHAR(20),
+  note            TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID    NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_case_contacts_case ON case_contacts(case_id);
+
+-- ── case_edit_history ────────────────────────────────────────
+-- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.4 `edit_history`: ประวัติการแก้ไขเคสทุกครั้ง **append-only**
+-- (ไม่ใช่ที่เก็บ audit หลัก — audit_logs ยังต้องมีครบทุก mutation ตาม §10)
+CREATE TABLE case_edit_history (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  case_id         UUID    NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  note            TEXT,                        -- หมายเหตุที่ผู้แก้ระบุ (ไม่บังคับ)
+  changed_fields  TEXT[]  NOT NULL,            -- ชื่อ field ระดับ API ที่เปลี่ยนจริงในการแก้ครั้งนั้น
+  edited_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  edited_by       UUID    NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_case_edit_history_case ON case_edit_history(case_id, edited_at);
+
+-- ── recycle_requests ─────────────────────────────────────────
+-- คำขอ recycle เคส closed_fail (ไฟล์ 38 §6.5)
+CREATE TABLE recycle_requests (
+  id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID            NOT NULL REFERENCES organizations(id),
+  case_id         UUID            NOT NULL REFERENCES cases(id),
+  status          recycle_status  NOT NULL DEFAULT 'pending',
+  request_note    TEXT            NOT NULL,
+  decision_note   TEXT,
+  -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.4 `recycle_history` = แถวที่ status = 'approved' ของตารางนี้
+  previous_round  INTEGER,
+  new_round       INTEGER,
+  decided_by      UUID            REFERENCES users(id),
+  decided_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  created_by      UUID            NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_recycle_requests_case ON recycle_requests(case_id, status);
+
+-- ── case_assignments ─────────────────────────────────────────
+-- การมอบหมายงาน Field Agent ตามไฟล์ 40
+CREATE TABLE case_assignments (
+  id              UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID              NOT NULL REFERENCES organizations(id),
+  case_id         UUID              NOT NULL REFERENCES cases(id),
+  agent_id        UUID              NOT NULL REFERENCES users(id),  -- Field Agent
+  team_id         UUID              NOT NULL REFERENCES teams(id),
+  tracking_round  INTEGER           NOT NULL DEFAULT 1,
+  status          assignment_status NOT NULL DEFAULT 'pending_accept',
+  -- จัดวันที่
+  scheduled_date  DATE,
+  schedule_order  INTEGER,          -- ลำดับในวันเดียวกัน (ไฟล์ 41 §6.1 — recompute ทั้งวันตอนลากสลับ)
+  accepted_at     TIMESTAMPTZ,
+  completed_at    TIMESTAMPTZ,      -- = closed_at ของไฟล์ 41 §6.1
+  -- Reassign
+  reassigned_from UUID              REFERENCES case_assignments(id),
+  reassign_reason TEXT,
+  -- Audit
+  created_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  created_by      UUID              NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  updated_by      UUID              REFERENCES users(id)
+);
+CREATE INDEX idx_assignments_case   ON case_assignments(case_id, status);
+CREATE INDEX idx_assignments_agent  ON case_assignments(agent_id, status);
+CREATE INDEX idx_assignments_agent_schedule ON case_assignments(agent_id, scheduled_date, schedule_order);
+-- 1 เคส : 1 พนักงานที่ยังถือเคส (`40` §11 · v4.23)
+CREATE UNIQUE INDEX uniq_case_assignment_active ON case_assignments(case_id)
+  WHERE status IN ('pending_accept', 'accepted_unscheduled', 'scheduled', 'needs_revision');
+
+-- ── pending_reassignments ────────────────────────────────────────
+-- คำขอเปลี่ยนผู้รับผิดชอบที่รอความยินยอม ตามไฟล์ 40 §6.1.1 (เพิ่ม 14/08/2569 — Phase 2.6)
+-- resolve แล้วไม่ลบแถว (เปลี่ยน status) เพื่อคง traceability ของการปฏิเสธตาม §8
+CREATE TABLE pending_reassignments (
+  id              UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                        NOT NULL REFERENCES organizations(id),
+  case_id         UUID                        NOT NULL REFERENCES cases(id),
+  assignment_id   UUID                        NOT NULL REFERENCES case_assignments(id), -- assignment ของคนเดิม
+  from_agent_id   UUID                        NOT NULL REFERENCES users(id),
+  new_agent_id    UUID                        NOT NULL REFERENCES users(id),
+  requested_by    UUID                        NOT NULL REFERENCES users(id),
+  requested_at    TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  expires_at      TIMESTAMPTZ                 NOT NULL,  -- requested_at + reassign_timeout_hours
+  reason          TEXT                        NOT NULL,  -- ASSIGNMENT_REASON_REQUIRED
+  status          pending_reassignment_status NOT NULL DEFAULT 'waiting_consent',
+  decline_reason  TEXT,
+  resolved_at     TIMESTAMPTZ,
+  resolved_by     UUID                        REFERENCES users(id),  -- NULL = ระบบ (timeout_auto)
+  created_at      TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  created_by      UUID                        NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+  updated_by      UUID                        REFERENCES users(id)
+);
+CREATE INDEX idx_pending_reassignments_case ON pending_reassignments(case_id, status);
+CREATE INDEX idx_pending_reassignments_due  ON pending_reassignments(status, expires_at);
+-- 1 เคสมีคำขอที่รอผลได้ครั้งละ 1 คำขอ (`40` §12 REASSIGNMENT_ALREADY_PENDING)
+CREATE UNIQUE INDEX uniq_pending_reassignment_active
+  ON pending_reassignments(case_id) WHERE status = 'waiting_consent';
+
+-- ── reassignment_history ─────────────────────────────────────────
+-- ประวัติการเปลี่ยนผู้รับผิดชอบที่ **สำเร็จแล้ว** ตามไฟล์ 40 §6.1 — insert-only
+CREATE TABLE reassignment_history (
+  id                      UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id         UUID                    NOT NULL REFERENCES organizations(id),
+  case_id                 UUID                    NOT NULL REFERENCES cases(id),
+  pending_reassignment_id UUID                    REFERENCES pending_reassignments(id), -- NULL = เปลี่ยนทันที
+  from_agent_id           UUID                    NOT NULL REFERENCES users(id),
+  to_agent_id             UUID                    NOT NULL REFERENCES users(id),
+  reassigned_by           UUID                    NOT NULL REFERENCES users(id),
+  requested_at            TIMESTAMPTZ             NOT NULL,
+  resolved_at             TIMESTAMPTZ             NOT NULL,
+  resolution              reassignment_resolution NOT NULL,
+  reason                  TEXT                    NOT NULL,
+  was_accepted_before_reassign BOOLEAN            NOT NULL,
+  created_at              TIMESTAMPTZ             NOT NULL DEFAULT NOW(),
+  created_by              UUID                    NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_reassignment_history_case ON reassignment_history(organization_id, case_id);
+
+-- ── assignment_policy_settings ───────────────────────────────────
+-- ค่าตั้งระดับองค์กรของการมอบหมายงาน ตามไฟล์ 40 §6.4/§11 (1 record ต่อ org)
+CREATE TABLE assignment_policy_settings (
+  organization_id                 UUID        PRIMARY KEY REFERENCES organizations(id),
+  reassign_timeout_hours          INTEGER     NOT NULL DEFAULT 3,
+  supervisor_can_assign_system    BOOLEAN     NOT NULL DEFAULT TRUE,
+  supervisor_can_assign_inhouse   BOOLEAN     NOT NULL DEFAULT TRUE,
+  supervisor_can_assign_outsource BOOLEAN     NOT NULL DEFAULT TRUE,
+  accept_deadline_hours           INTEGER,    -- NULL = ไม่จำกัดเวลากดรับงานครั้งแรก (§11)
+  -- เกณฑ์ SLA ของงานติดตาม นับจาก cases.created_at — ใช้เฉพาะรายงาน O2/O4 (ไฟล์ 96 §6-O2/O4)
+  -- มติ PO 15/08/2569 (D18): default 72 ชม. = 3 วัน · ไม่บล็อก flow ใด ไม่มี auto-reassign
+  sla_alert_hours                 INTEGER     NOT NULL DEFAULT 72 CHECK (sla_alert_hours > 0),
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by                      UUID        REFERENCES users(id)
+);
+
+-- ── data_retention_settings (v4.37) ─────────────────────────────
+-- ระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97 · ไฟล์ 13 §6.16) — 1 record ต่อ org · ไม่มีแถว = 5 ปี
+CREATE TABLE data_retention_settings (
+  organization_id                 UUID        PRIMARY KEY REFERENCES organizations(id),
+  debtor_document_retention_years INTEGER     NOT NULL DEFAULT 5,
+  updated_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by                      UUID        REFERENCES users(id),
+  CONSTRAINT chk_data_retention_years_range CHECK (debtor_document_retention_years BETWEEN 1 AND 20)
+);
+
+-- ── check_ins ────────────────────────────────────────────────
+-- เช็คอินระหว่างลงพื้นที่ ตามไฟล์ 41 §6.2
+CREATE TABLE check_ins (
+  id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID          NOT NULL REFERENCES organizations(id),
+  case_id         UUID          NOT NULL REFERENCES cases(id),
+  assignment_id   UUID          NOT NULL REFERENCES case_assignments(id),
+  checkin_type    checkin_type  NOT NULL,
+  latitude        NUMERIC(10,7) NOT NULL,
+  longitude       NUMERIC(10,7) NOT NULL,
+  address_note    TEXT,
+  note            TEXT,
+  checked_in_at   TIMESTAMPTZ   NOT NULL,
+  created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  created_by      UUID          NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_checkins_case ON check_ins(case_id, checked_in_at);
+
+-- ── case_evidences ───────────────────────────────────────────
+-- หลักฐานปิดงาน ตามไฟล์ 41 §6.3
+CREATE TABLE case_evidences (
+  id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID            NOT NULL REFERENCES organizations(id),
+  case_id         UUID            NOT NULL REFERENCES cases(id),
+  assignment_id   UUID            NOT NULL REFERENCES case_assignments(id),
+  outcome         case_outcome    NOT NULL,
+  status          evidence_status NOT NULL DEFAULT 'pending',
+  -- Files (v4.2 — ไฟล์ 41 §6.4 เก็บแยกตามประเภทเป็น array ไม่ใช่ไฟล์เดียว)
+  product_photos  TEXT[]          NOT NULL DEFAULT '{}',  -- รูปสินค้า (บังคับเฉพาะ closed_success)
+  photos          TEXT[]          NOT NULL DEFAULT '{}',  -- รูปหน้างาน (บังคับ ≥1 ทุก outcome)
+  videos          TEXT[]          NOT NULL DEFAULT '{}',  -- วิดีโอ (บังคับ ≥1 ทุก outcome)
+  audio_url       TEXT,                                   -- เสียงบันทึกการสนทนา (ไม่บังคับ)
+  note            TEXT,                                   -- v4.7 "บันทึกเพิ่มเติม" ของฟอร์มปิดงาน (มติ PO 03/10/2569 Q15 — ไม่บังคับ)
+  fail_reason     TEXT,                                   -- v4.8 รหัสเหตุผลไม่สำเร็จจาก CLOSE_FAIL_REASONS (มติ PO Q16 — บังคับที่ชั้นแอปเมื่อ closed_fail)
+  fail_reason_detail TEXT,                                -- v4.8 คำอธิบายเพิ่ม (บังคับเมื่อ fail_reason = 'other')
+  file_hashes     JSONB           NOT NULL DEFAULT '{}',  -- v4.9 path → {sha256,mimeType,sizeBytes} ที่ server ตรวจเอง (มติ PO Q13)
+  -- Review
+  reviewed_by     UUID            REFERENCES users(id),
+  reviewed_at     TIMESTAMPTZ,
+  reject_reason   TEXT,
+  -- Travel — **snapshot** ของ travel_origins ณ เวลา submit (`92` §7.1) ตัวที่แก้ได้อยู่ตาราง travel_origins
+  travel_origin_lat   NUMERIC(10,7),
+  travel_origin_lng   NUMERIC(10,7),
+  travel_origin_source TEXT,  -- gps_auto | manual_adjusted
+  -- Audit
+  submitted_at    TIMESTAMPTZ     NOT NULL,
+  created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  created_by      UUID            NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  updated_by      UUID            REFERENCES users(id)
+);
+CREATE INDEX idx_evidences_case ON case_evidences(case_id, status);
+-- v4.8: เหตุผลไม่สำเร็จมีได้เฉพาะ outcome = closed_fail
+ALTER TABLE case_evidences ADD CONSTRAINT chk_case_evidences_fail_reason_outcome
+  CHECK (fail_reason IS NULL OR outcome = 'closed_fail');
+
+-- ── travel_origins ───────────────────────────────────────────
+-- จุดเริ่มเดินทางของเคส ตามไฟล์ 41 §6.4.1 (เพิ่ม 14/08/2569 v4.2 — Phase 2.8)
+-- ⚠️ คนละชุดกับ check_ins เด็ดขาด: เช็คอิน = หลักฐานว่าไปถึงจริง (ล็อกตลอด แก้ไม่ได้)
+--    จุดเริ่มเดินทาง = ตัวอ้างอิงคำนวณค่าน้ำมัน PER_KM เท่านั้น (ปรับตำแหน่งได้เสมอ)
+CREATE TABLE travel_origins (
+  id              UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                 NOT NULL REFERENCES organizations(id),
+  case_id         UUID                 NOT NULL REFERENCES cases(id),
+  assignment_id   UUID                 NOT NULL REFERENCES case_assignments(id),
+  latitude        NUMERIC(10,7)        NOT NULL,
+  longitude       NUMERIC(10,7)        NOT NULL,
+  source          travel_origin_source NOT NULL DEFAULT 'gps_auto',
+  set_at          TIMESTAMPTZ          NOT NULL,  -- เวลาที่กดปุ่ม "เริ่มงาน"
+  created_at      TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by      UUID                 NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  updated_by      UUID                 REFERENCES users(id)
+);
+-- "1 เคส 1 จุด" (§6.4.1) บังคับที่รอบติดตาม — รอบ recycle ใหม่ = assignment ใหม่ = จุดใหม่
+CREATE UNIQUE INDEX travel_origins_assignment_id_key ON travel_origins(assignment_id);
+CREATE INDEX idx_travel_origins_case ON travel_origins(case_id);
+
+-- ── close_case_drafts ────────────────────────────────────────
+-- ฟอร์มปิดงานที่ยังกรอกไม่ครบ ตามไฟล์ 41 §6.5 (เพิ่ม 14/08/2569 v4.2 — Phase 2.8)
+-- autoload ตอนเปิดฟอร์มซ้ำ · ลบทันทีที่ submit_close_case สำเร็จ · ไม่มี expiry (§11)
+CREATE TABLE close_case_drafts (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID         NOT NULL REFERENCES organizations(id),
+  case_id         UUID         NOT NULL REFERENCES cases(id),
+  assignment_id   UUID         NOT NULL REFERENCES case_assignments(id),
+  agent_id        UUID         NOT NULL REFERENCES users(id),
+  outcome         case_outcome,   -- NULL = ยังไม่เลือกผลการติดตาม
+  photos          TEXT[]       NOT NULL DEFAULT '{}',
+  videos          TEXT[]       NOT NULL DEFAULT '{}',
+  product_photos  TEXT[]       NOT NULL DEFAULT '{}',
+  audio_url       TEXT,
+  note            TEXT,
+  fail_reason     TEXT,  -- v4.8 เหตุผลไม่สำเร็จที่เลือกค้างไว้ (มติ PO Q16)
+  fail_reason_detail TEXT,
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  created_by      UUID         NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_by      UUID         REFERENCES users(id)
+);
+CREATE UNIQUE INDEX close_case_drafts_assignment_id_key ON close_case_drafts(assignment_id);
+CREATE INDEX idx_close_case_drafts_case ON close_case_drafts(case_id);
+```
+
+---
+
+## 7. Schema Group D — Warehouse (ไฟล์ 44)
+
+```sql
+-- ── assets ───────────────────────────────────────────────────
+CREATE TABLE assets (
+  id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID            NOT NULL REFERENCES organizations(id),
+  case_id         UUID            NOT NULL REFERENCES cases(id),
+  company_id      UUID            NOT NULL REFERENCES finance_companies(id),
+  lot_id          UUID            REFERENCES handover_lots(id),
+  -- Snapshot จาก Case
+  case_ref        TEXT            NOT NULL,
+  debtor_name     TEXT            NOT NULL,
+  device_desc     TEXT            NOT NULL,
+  -- IMEI / Serial (A6 — มติ PO 2026-08-12)
+  imei_contract   VARCHAR(15),               -- NULL ได้เฉพาะเครื่องที่ไม่มี IMEI (ต้องมี serial_contract แทน)
+  imei_actual     VARCHAR(15),
+  serial_contract TEXT,
+  serial_actual   TEXT,
+  -- Status & Condition
+  asset_status    asset_status    NOT NULL DEFAULT 'pending_intake',
+  condition       asset_condition,
+  condition_note  TEXT,
+  -- Photos (Supabase Storage URLs)
+  photos          TEXT[]          NOT NULL DEFAULT '{}',
+  -- Timestamps
+  closed_at       TIMESTAMPTZ     NOT NULL,   -- snapshot จาก Case.closed_at
+  received_at     TIMESTAMPTZ,               -- วันรับเข้าคลัง
+  -- Rejection
+  reject_reason   TEXT,
+  rejected_at     TIMESTAMPTZ,
+  rejected_by     UUID            REFERENCES users(id),
+  -- Audit
+  created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  created_by      UUID            NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  updated_by      UUID            REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ,
+  -- A6: ต้องระบุ identifier อย่างน้อย 1 อย่าง
+  CONSTRAINT assets_identifier_required CHECK (imei_contract IS NOT NULL OR serial_contract IS NOT NULL)
+);
+-- A6: เดิม UNIQUE(organization_id, imei_contract) เต็มตาราง → เครื่องเดิมที่ recycle กลับมาชน unique
+-- ใหม่: unique เฉพาะเครื่องที่ยัง**ไม่ส่งมอบ** (business check ตอน intake ยังต้องมีข้อความอ่านออก)
+CREATE UNIQUE INDEX uniq_assets_active_imei
+  ON assets(organization_id, imei_contract)
+  WHERE imei_contract IS NOT NULL AND asset_status <> 'handed_over' AND deleted_at IS NULL;
+CREATE INDEX idx_assets_org_status  ON assets(organization_id, asset_status);
+CREATE INDEX idx_assets_org_company ON assets(organization_id, company_id, asset_status);
+CREATE INDEX idx_assets_lot         ON assets(lot_id);
+
+-- ── handover_lots ────────────────────────────────────────────
+CREATE TABLE handover_lots (
+  id                  UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID                 NOT NULL REFERENCES organizations(id),
+  company_id          UUID                 NOT NULL REFERENCES finance_companies(id),
+  -- Auto-generated (ใช้ PostgreSQL sequence)
+  lot_number          TEXT                 NOT NULL,  -- LOT-2569-001 · UNIQUE(org, lot_number) uniq_handover_lot_number (v4.41)
+  doc_ref             TEXT                 NOT NULL,  -- DLV-2569-001 · UNIQUE(org, doc_ref) uniq_handover_doc_ref (v4.41)
+  -- Type & Status
+  type                handover_type        NOT NULL,
+  status              handover_lot_status  NOT NULL DEFAULT 'pending_attach',
+  -- Scheduling
+  scheduled_at        TIMESTAMPTZ,
+  contact_person      TEXT,
+  delivery_addr       TEXT,
+  -- Delivery
+  delivered_at        TIMESTAMPTZ,
+  tracking_no         TEXT,
+  -- Confirmation
+  confirmed_at        TIMESTAMPTZ,
+  confirmed_by        UUID                 REFERENCES users(id),
+  -- Documents
+  signed_doc_url      TEXT,       -- ① ใบเซ็นรับ (บังคับก่อน confirmed)
+  delivery_proof_url  TEXT,       -- ② หลักฐานจัดส่ง (บังคับเฉพาะ we_deliver)
+  note                TEXT,
+  letterhead_snapshot JSONB,      -- v4.45 (U111) หัวกระดาษองค์กร ณ ตอนยืนยันล็อต · มีได้เฉพาะ confirmed · NULL = ใช้ค่าปัจจุบัน
+  document_template_snapshot JSONB, -- v4.50 (U122) ข้อความท้าย + รูปลายเซ็นของใบส่งมอบ ณ ตอนยืนยัน · มีได้เฉพาะ confirmed
+  -- Audit
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by          UUID        NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by          UUID        REFERENCES users(id),
+  deleted_at          TIMESTAMPTZ
+);
+CREATE INDEX idx_lots_org_status  ON handover_lots(organization_id, status);
+CREATE INDEX idx_lots_org_company ON handover_lots(organization_id, company_id, status);
+```
+
+---
+
+## 8. Schema Group E — Finance Operation
+
+```sql
+-- ── payee_profiles ───────────────────────────────────────────
+-- ตามไฟล์ 18
+CREATE TABLE payee_profiles (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  user_id         UUID    NOT NULL REFERENCES users(id),
+  payee_type      payee_type NOT NULL DEFAULT 'individual', -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1) — individual/corporate ไม่ผูกกับ inhouse/outsource ตรงๆ
+  tax_profile_id  UUID    REFERENCES tax_profiles(id),  -- Payee level ชนะ Plan level (ไฟล์ 18 §6.3)
+  bank_name       TEXT,
+  account_name    TEXT,
+  account_number  TEXT,
+  national_id     VARCHAR(13),
+  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2)
+  wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(1)/40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 · U33 ช่องเดียวใช้ทั้งสองประเภท — ไฟล์ 18 §6.3)
+  -- ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1 — ไฟล์ 18 §7.1) · ที่อยู่บังคับครบก่อนยืนยัน
+  name_title          VARCHAR(50),                   -- คำนำหน้า (บุคคลธรรมดา)
+  address_detail      TEXT,
+  address_subdistrict TEXT,
+  address_district    TEXT,
+  address_province    TEXT,
+  address_postal_code VARCHAR(5) CHECK (address_postal_code IS NULL OR address_postal_code ~ '^[0-9]{5}$'),
+  branch_code         VARCHAR(5) NOT NULL DEFAULT '00000' CHECK (branch_code ~ '^[0-9]{5}$'),  -- นิติบุคคล: 00000 = สำนักงานใหญ่
+  wht_condition       wht_condition NOT NULL DEFAULT 'withhold',
+  is_verified     BOOLEAN NOT NULL DEFAULT false,
+  verified_by     UUID    REFERENCES users(id),
+  verified_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID    NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID    REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ,
+  UNIQUE(organization_id, user_id)
+);
+
+-- ── expenses ─────────────────────────────────────────────────
+-- รายการเบิกค่าตอบแทน ตามไฟล์ 15, 41 §6.6
+CREATE TABLE expenses (
+  id              UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID            NOT NULL REFERENCES organizations(id),
+  -- Source (nullable ถ้าเป็น Manual Claim ไม่ผูกเคส)
+  case_id         UUID            REFERENCES cases(id),
+  assignment_id   UUID            REFERENCES case_assignments(id),
+  payee_id        UUID            NOT NULL REFERENCES payee_profiles(id),
+  -- Type & Amount
+  expense_type    expense_type    NOT NULL,
+  gross_satang    INTEGER         NOT NULL,
+  -- Calculation source (ตามไฟล์ 38 §6.4)
+  calculation_source    TEXT,   -- 'compensation_plan' | 'manual' | 'receipt'
+  comp_plan_id          UUID    REFERENCES compensation_plans(id),  -- snapshot
+  comp_plan_version     INTEGER,
+  -- Status
+  status          expense_status  NOT NULL DEFAULT 'pending_warehouse_confirm',
+  -- Approval
+  manager_approved_by   UUID    REFERENCES users(id),
+  manager_approved_at   TIMESTAMPTZ,
+  finance_approved_by   UUID    REFERENCES users(id),
+  finance_approved_at   TIMESTAMPTZ,
+  executive_approved_by UUID    REFERENCES users(id),   -- ขั้นเกินเพดานตาม Approval Matrix (ไฟล์ 16 §6.1 — เพิ่ม 04/07/2569 DEC-006/D5)
+  executive_approved_at TIMESTAMPTZ,
+  approval_step_current INTEGER NOT NULL DEFAULT 1,     -- ไฟล์ 16 §7 — ขั้นอนุมัติปัจจุบัน
+  approval_step_total   INTEGER NOT NULL DEFAULT 2,     -- ไฟล์ 16 §7 — 2 หรือ 3 ตาม approval_flow
+  approval_history      JSONB   NOT NULL DEFAULT '[]',  -- ไฟล์ 16 §7 — [{step, approver_id, action, timestamp, reason}]
+  approval_matrix_id    UUID    REFERENCES approval_matrices(id),  -- snapshot ว่ารายการนี้ใช้ matrix แถวไหน
+  rejection_reason      TEXT,
+  revision_note         TEXT,   -- หมายเหตุของผู้เบิกตอนสร้างรายการ — ไม่ถูกเขียนทับตอน resubmit_expense (v4.13)
+  resubmit_note         TEXT,   -- v4.13 ข้อความชี้แจงตอนส่งใหม่หลังถูกตีกลับ (ครั้งล่าสุด · ประวัติอยู่ใน audit_logs) — มติ UAT 04/10/2569 BUG-098
+  -- Field Tracker (ไฟล์ 41 §6.6 — เพิ่ม 14/08/2569 มติ PO พร้อม Phase 2.9)
+  expense_date          DATE    NOT NULL,   -- วันที่เกิดรายการ: ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก (เบิกย้อนหลังได้)
+  distance_km           NUMERIC(10,2),      -- fuel โหมด PER_KM เท่านั้น (ไฟล์ 41 §6.4.2) — NULL สำหรับ DAILY_FLAT/allowance/เบิกแยก · ไม่ใช่เงิน
+  shared_with_user_id   UUID    REFERENCES users(id),  -- ผู้พักร่วมห้อง (เบิกที่พัก) — ต้องเป็นคนในทีมเดียวกัน validate ฝั่ง service
+  hotel_nights          INTEGER NOT NULL DEFAULT 1,     -- v4.34 จำนวนคืนของใบเบิกค่าที่พัก (มติ PO O50) — CHECK 1–31 · ชนิดอื่น = 1 เสมอ · เพดาน = อัตรา/คืน × จำนวนคืน
+  receipt_in_company_name BOOLEAN NOT NULL DEFAULT false,  -- v4.36 ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14) — CHECK ชนิดอื่น = false · ไม่เปลี่ยนสูตร WHT
+  receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
+  receipt_file_hash     VARCHAR(64),        -- v4.10 SHA-256 ของใบเสร็จที่ server ตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — BUG-072)
+  superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)
+  field_day_settlement_id UUID REFERENCES field_day_settlements(id),  -- v4.12 แถวรายวันค่าน้ำมันเหมา/เบี้ยเลี้ยง (UAT Q21) · NULL = รายการอื่น
+  -- Payout (FK → payout_batch_items เมื่อเข้ารอบจ่าย)
+  payout_batch_item_id  UUID,   -- FK กลับไป (set หลัง payout_batch_items สร้าง)
+  -- Audit
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID        NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID        REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ
+);
+CREATE INDEX idx_expenses_org_status ON expenses(organization_id, status);
+CREATE INDEX idx_expenses_case       ON expenses(case_id, status);
+CREATE INDEX idx_expenses_payee      ON expenses(payee_id, status);
+CREATE INDEX idx_expenses_payee_date ON expenses(payee_id, expense_date);   -- เพิ่ม 14/08/2569 (Phase 2.9) — รายการเบิก/สรุปรายได้รายเดือน (ไฟล์ 41 §7.9/§7.10)
+-- เพิ่ม 14/08/2569 (Phase 2.9) — รายการเบิกผูกเคสมีได้ชนิดละ 1 รายการที่ยังมีผลต่อ 1 รอบติดตาม
+-- (ไฟล์ 41 §10.1 — สร้างรายการใหม่ได้ต่อเมื่อรายการเดิม mark `superseded` แล้ว · กันกด submit/resubmit ซ้อน)
+-- v4.12 (UAT Q21): แถวรายวัน (field_day_settlement_id ไม่ว่าง) ยกเว้นจากกติกานี้ — เคสลงพื้นที่หลายวันมี allowance หลายแถวได้
+CREATE UNIQUE INDEX uniq_active_case_expense_per_assignment
+  ON expenses(assignment_id, expense_type)
+  WHERE assignment_id IS NOT NULL AND status <> 'superseded' AND deleted_at IS NULL
+    AND field_day_settlement_id IS NULL;
+CREATE INDEX idx_expenses_field_day_settlement ON expenses(field_day_settlement_id);
+CREATE UNIQUE INDEX uniq_expenses_field_day_case_type
+  ON expenses(field_day_settlement_id, case_id, expense_type)
+  WHERE field_day_settlement_id IS NOT NULL AND deleted_at IS NULL;
+
+-- ── field_day_settlements ────────────────────────────────────
+-- v4.12 มติ PO 03/10/2569 (UAT Q21 · DEC-012 · `22` §6.2/§6.3): ค่าน้ำมันเหมาจ่าย + เบี้ยเลี้ยง วันละครั้ง
+-- ต่อพนักงานต่อวันปฏิทินไทย — 1 แถว = (พนักงาน, วัน) ที่ job `daily_field_allowance` settle แล้ว (ยอด 0 ก็มีแถว)
+-- insert-only (ไม่มี updated_* / deleted_at) · เกตรายได้ (`19` §6.1) ใช้ตรวจว่าทุกวันลงพื้นที่ของเคส settle แล้ว
+CREATE TABLE field_day_settlements (
+  id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id         UUID        NOT NULL REFERENCES organizations(id),
+  agent_id                UUID        NOT NULL REFERENCES users(id),
+  field_date              DATE        NOT NULL,               -- วันปฏิทินไทยของเช็คอิน
+  comp_plan_id            UUID        REFERENCES compensation_plans(id),  -- snapshot แผน (เวอร์ชัน) ของทีม ณ วันนั้น · NULL = ทีมไม่ผูกแผน
+  comp_plan_version       INTEGER,
+  fuel_total_satang       INTEGER     NOT NULL,               -- D ของค่าน้ำมันเหมา (0 ถ้าโหมด PER_KM)
+  allowance_total_satang  INTEGER     NOT NULL,               -- D ของเบี้ยเลี้ยง
+  case_count              INTEGER     NOT NULL,               -- N เคสที่รับส่วนแบ่ง
+  job_id                  UUID,                               -- job ที่ settle (trace — actor = system)
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by              UUID,                               -- NULL = ระบบ
+  CONSTRAINT chk_field_day_settlements_non_negative
+    CHECK (fuel_total_satang >= 0 AND allowance_total_satang >= 0 AND case_count >= 0)
+);
+CREATE UNIQUE INDEX uniq_field_day_settlements_org_agent_date
+  ON field_day_settlements(organization_id, agent_id, field_date);
+CREATE INDEX idx_field_day_settlements_org_date ON field_day_settlements(organization_id, field_date);
+
+-- ── advances ─────────────────────────────────────────────────
+-- เงินทดรองจ่าย ตามไฟล์ 15
+CREATE TABLE advances (
+  id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID            NOT NULL REFERENCES organizations(id),
+  payee_id            UUID            NOT NULL REFERENCES payee_profiles(id),
+  advance_number      TEXT            NOT NULL,  -- v4.41 เลขที่ใบเบิก (trigger trg_advances_number ออกตอน INSERT · แก้ไม่ได้) · UNIQUE(org, advance_number)
+  requested_satang    INTEGER         NOT NULL,
+  approved_satang     INTEGER,
+  used_satang         INTEGER         NOT NULL DEFAULT 0,
+  return_satang       INTEGER         GENERATED ALWAYS AS (
+                        GREATEST(0, COALESCE(approved_satang,0) - used_satang)
+                      ) STORED,
+  status              advance_status  NOT NULL DEFAULT 'pending_approval',
+  purpose             TEXT            NOT NULL,
+  due_clear_date      DATE            NOT NULL,
+  approved_by         UUID            REFERENCES users(id),
+  approved_at         TIMESTAMPTZ,
+  cleared_at          TIMESTAMPTZ,
+  rejection_reason    TEXT,
+  -- A4 (มติ PO 2026-08-12): เส้นทางจ่ายเงินทดรองออกผ่านรอบจ่าย (คู่กับ payout_batch_items.advance_id)
+  payout_batch_item_id UUID,
+  created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  created_by          UUID            NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  updated_by          UUID            REFERENCES users(id),
+  deleted_at          TIMESTAMPTZ
+);
+CREATE INDEX idx_advances_payee  ON advances(payee_id, status);
+CREATE INDEX idx_advances_due    ON advances(organization_id, due_clear_date, status);
+-- ห้ามเบิกซ้อน: 1 payee ถือ Advance ค้าง (approved/overdue) ได้ครั้งละ 1 รายการเท่านั้น (ไฟล์ 15 §9.2 — DEC-006/D7)
+CREATE UNIQUE INDEX uniq_active_advance_per_payee
+  ON advances(payee_id) WHERE status IN ('approved','overdue') AND deleted_at IS NULL;
+
+-- v4.23 มติ PO 05/10/2569 (UAT U30 · BUG-109) — ปิดยอดคืนเงินทดรอง (migration `20261005181000_advance_returns`)
+CREATE TYPE advance_return_method  AS ENUM ('payout_offset', 'separate');           -- เลือกตอนเคลียร์ยอด (ค่าเริ่มต้น payout_offset)
+CREATE TYPE advance_return_channel AS ENUM ('payout_offset', 'cash', 'bank_transfer');
+-- v4.43 มติ PO U103 — สถานะใบรับรองแทนใบเสร็จรับเงิน (`23` §6.17)
+CREATE TYPE substitute_receipt_status AS ENUM ('pending_signature', 'signed', 'cancelled');  -- cancelled: มติ PO U107
+ALTER TABLE advances ADD COLUMN return_method advance_return_method;               -- NULL = ไม่มียอดคืน
+ALTER TABLE advances ADD CONSTRAINT chk_advances_return_method_shape
+  CHECK (return_method IS NULL OR (status = 'cleared' AND return_satang > 0));
+CREATE INDEX idx_advances_org_return_method ON advances(organization_id, return_method, status);
+
+-- ── payout_batches ───────────────────────────────────────────
+-- รอบจ่ายเงิน ตามไฟล์ 17
+CREATE TABLE payout_batches (
+  id                    UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID                 NOT NULL REFERENCES organizations(id),
+  name                  TEXT                 NOT NULL,
+  side                  payout_batch_side    NOT NULL,
+  status                payout_batch_status  NOT NULL DEFAULT 'draft',
+  -- Totals (คำนวณจาก items)
+  gross_satang          INTEGER              NOT NULL DEFAULT 0,
+  wht_satang            INTEGER              NOT NULL DEFAULT 0,
+  net_satang            INTEGER              NOT NULL DEFAULT 0,
+  -- Payment File
+  bank_account_id       UUID                 REFERENCES bank_accounts(id),
+  payment_file_url      TEXT,
+  payment_file_generated_at TIMESTAMPTZ,
+  idempotency_key       TEXT                 UNIQUE,  -- ป้องกันโอนซ้ำ (ไฟล์ 17 §6.3)
+  -- v4.23 (มติ PO U30) snapshot ยอดหักคืนเงินทดรองรวม (หลัง WHT) — ยอดโอนจริง = net_satang − ค่านี้
+  advance_offset_satang INTEGER              NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
+  -- snapshot ค่าตั้งภาษี ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — NULL ทั้งชุด = รอบเก่า (พฤติกรรมเดิม)
+  wht_policy_id          UUID                 REFERENCES wht_policy_history(id) ON DELETE SET NULL,  -- NULL = ค่าเริ่มต้น
+  wht_base_expense_types expense_type[],
+  wht_certificate_mode   wht_certificate_mode,
+  wht_income_type_mode   wht_income_type_mode,
+  wht_issue_zero_rate_40_2_certificate BOOLEAN,  -- snapshot U16 (v4.19) — NULL = รอบเก่า ⇒ ไม่ออกใบ 0%
+  wht_inhouse_income_category   wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(2)
+  wht_outsource_income_category wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(8)
+  wht_allow_gross_up_conditions BOOLEAN,              -- snapshot U105 — NULL = รอบเก่า ⇒ ไม่อนุญาต (คิดแบบ (1))
+  tax_profile_default_id UUID REFERENCES tax_profile_default_history(id) ON DELETE SET NULL,  -- snapshot ชุดค่าเริ่มต้นตามประเภทผู้รับ (v4.49 U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า · profile ที่ใช้จริงอยู่ที่ payout_batch_items.tax_profile_id
+  cycle_id              UUID REFERENCES billing_payout_cycles(id),  -- รอบจ่าย AP ที่ใช้ (v4.5x-fixer-u132 U133) — ระบบเลือกรอบที่ตรงฝั่งให้ แก้ได้ · NULL = ไม่ใช้รอบ/รอบเก่า
+  pay_due_date          DATE,                -- กำหนดจ่ายตามเงื่อนไขของรอบนับจากวันตัดรอบ (snapshot) · CHECK มีคู่กับ cycle_id
+  -- v4.25 (มติ PO U67) ยกเลิกรอบจ่าย — ครบทั้ง 3 ช่องเมื่อ (และเฉพาะเมื่อ) status = 'cancelled'
+  cancelled_at          TIMESTAMPTZ,
+  cancelled_by          UUID                 REFERENCES users(id),
+  cancel_reason         TEXT,
+  CONSTRAINT chk_payout_batches_cancelled_fields CHECK (
+    (status = 'cancelled' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL AND length(btrim(cancel_reason)) > 0)
+    OR (status <> 'cancelled' AND cancelled_at IS NULL AND cancelled_by IS NULL AND cancel_reason IS NULL)),
+  -- Audit
+  created_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by            UUID                 NOT NULL REFERENCES users(id),
+  updated_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  updated_by            UUID                 REFERENCES users(id),
+  deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX idx_payout_batches_org ON payout_batches(organization_id, status);
+
+-- ── payout_batch_items ───────────────────────────────────────
+CREATE TABLE payout_batch_items (
+  id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID    NOT NULL REFERENCES organizations(id),
+  payout_batch_id   UUID    NOT NULL REFERENCES payout_batches(id) ON DELETE CASCADE,
+  -- A4 (มติ PO 2026-08-12): แหล่งที่มา 2 แบบ — separate FK + exactly-one non-null (DEC-004)
+  expense_id        UUID    REFERENCES expenses(id),
+  advance_id        UUID    REFERENCES advances(id),
+  payee_id          UUID    NOT NULL REFERENCES payee_profiles(id),
+  tracking_round    INTEGER NOT NULL DEFAULT 1,  -- B3 (มติ PO 2026-08-12): รอบติดตามของเคสต้นทาง
+  gross_satang      INTEGER NOT NULL,
+  wht_satang        INTEGER NOT NULL DEFAULT 0,
+  net_satang        INTEGER NOT NULL,
+  tax_profile_id    UUID    REFERENCES tax_profiles(id),  -- snapshot ณ เวลาสร้าง
+  wht_pct_snapshot  NUMERIC(5,2),
+  wht_base_included   BOOLEAN NOT NULL DEFAULT true,  -- snapshot: อยู่ในฐาน WHT (มติ PO 05/10/2569 UAT U3)
+  wht_income_category wht_income_category,            -- snapshot ประเภทเงินได้ (NULL = รอบเก่า/เงินทดรอง)
+  wht_condition       wht_condition,                  -- snapshot เงื่อนไขการหัก (มติ PO U105) — NULL = รอบเก่า/เงินทดรอง (= (1)) · (2)/(3): gross = เงินได้ + ภาษี · net = เงินได้
+  -- v4.23 (มติ PO U30) snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (หลัง WHT · ไม่กระทบฐาน WHT/50 ทวิ)
+  advance_offset_satang INTEGER NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
+  -- v4.41 (มติ PO U102) เลขที่ใบสำคัญจ่าย — 1 เลข/ผู้รับ/รอบ ออกตอนสร้างไฟล์โอนครั้งแรก · NULL = ยังไม่สร้างไฟล์ · ตั้งแล้วแก้ไม่ได้
+  voucher_number    TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by        UUID    NOT NULL REFERENCES users(id),
+  UNIQUE(payout_batch_id, expense_id),
+  UNIQUE(payout_batch_id, advance_id),
+  CONSTRAINT pbi_one_source CHECK (
+    (CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END +
+     CASE WHEN advance_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+  )
+);
+CREATE INDEX idx_pbi_batch   ON payout_batch_items(payout_batch_id);
+CREATE INDEX idx_pbi_expense  ON payout_batch_items(expense_id);
+
+-- ── advance_returns ──────────────────────────────────────────
+-- v4.23 มติ PO 05/10/2569 (UAT U30 · BUG-109) — สมุดย่อยการคืนยอดเงินทดรอง (1 แถว = ได้เงินคืน 1 ครั้ง)
+-- ยอดค้าง = advances.return_satang − SUM(amount_satang WHERE reversed_at IS NULL) (`22` §6.14)
+-- ไม่มี deleted_at โดยเจตนา — แก้ได้ทางเดียวคือกลับรายการ (รอบจ่ายถูกยกเลิก/รายการถูกตัดออก)
+CREATE TABLE advance_returns (
+  id                    UUID                   PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID                   NOT NULL REFERENCES organizations(id),
+  advance_id            UUID                   NOT NULL REFERENCES advances(id) ON DELETE CASCADE,
+  payee_id              UUID                   NOT NULL REFERENCES payee_profiles(id),
+  return_number         TEXT                   NOT NULL,  -- v4.41 เลขที่ใบรับคืน (trigger ออกตอน INSERT · แก้ไม่ได้) · UNIQUE(org, return_number)
+  channel               advance_return_channel NOT NULL,
+  amount_satang         INTEGER                NOT NULL CHECK (amount_satang > 0),
+  payout_batch_id       UUID                   REFERENCES payout_batches(id) ON DELETE CASCADE,      -- channel = payout_offset
+  payout_batch_item_id  UUID                   REFERENCES payout_batch_items(id) ON DELETE CASCADE,  -- channel = payout_offset
+  received_date         DATE,                  -- รับคืนแยก (cash/bank_transfer)
+  evidence_file_path    TEXT,                  -- รับคืนแยก — ไฟล์ที่ตรวจฝั่ง server แล้ว
+  evidence_file_sha256  VARCHAR(64),
+  note                  TEXT,
+  reversed_at           TIMESTAMPTZ,
+  reversed_by           UUID                   REFERENCES users(id),
+  reversal_reason       TEXT,
+  created_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
+  created_by            UUID                   NOT NULL REFERENCES users(id),
+  updated_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
+  updated_by            UUID                   REFERENCES users(id)
+  -- + chk_advance_returns_channel_shape (payout_offset ⇔ batch+item · cash/bank_transfer ⇔ received_date+evidence)
+  -- + chk_advance_returns_reversal_fields (reversed ⇔ reversed_by + reason ครบ)
+  -- + trigger: ยอดสะสม (ไม่นับแถวกลับรายการ) ≤ advances.return_satang และเงินทดรองต้อง cleared (ล็อกแถว FOR UPDATE)
+  -- + trigger: แก้ได้เฉพาะการกลับรายการครั้งเดียว
+);
+CREATE INDEX idx_advance_returns_org_advance ON advance_returns(organization_id, advance_id);
+CREATE INDEX idx_advance_returns_org_payee   ON advance_returns(organization_id, payee_id);
+CREATE INDEX idx_advance_returns_org_batch   ON advance_returns(organization_id, payout_batch_id);
+CREATE UNIQUE INDEX uniq_advance_returns_active_item
+  ON advance_returns(advance_id, payout_batch_item_id) WHERE reversed_at IS NULL AND payout_batch_item_id IS NOT NULL;
+
+-- ── substitute_receipts / substitute_receipt_lines ──────────
+-- v4.43 มติ PO 06/10/2569 U103 — ใบรับรองแทนใบเสร็จรับเงิน (แบบ บก.111 · `15` §9.4 · `41` §6.6)
+-- ผู้จ่ายเงิน (payee) รับรองรายจ่ายที่เรียกใบเสร็จไม่ได้ · ผูกใบเบิกแยก **หรือ** การเคลียร์เงินทดรอง (DEC-004)
+-- เลข CRT จาก nextDocumentNumber('substitute_receipt') ในทรานแซกชันเดียวกับ INSERT (U102)
+CREATE TABLE substitute_receipts (
+  id                 UUID                      PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID                      NOT NULL REFERENCES organizations(id),
+  receipt_number     TEXT                      NOT NULL,  -- CRT-<พ.ศ.>-NNNN · UNIQUE(org, receipt_number)
+  payee_id           UUID                      NOT NULL REFERENCES payee_profiles(id),
+  expense_id         UUID                      REFERENCES expenses(id) ON DELETE CASCADE,  -- ใบเบิกค่าที่พัก
+  advance_id         UUID                      REFERENCES advances(id) ON DELETE CASCADE,  -- เคลียร์เงินทดรอง
+  issue_date         DATE                      NOT NULL,  -- วันไทยที่ออกใบ — ฐานเพดานต่อเดือน
+  total_satang       INTEGER                   NOT NULL CHECK (total_satang > 0),  -- = Σ บรรทัด (snapshot)
+  status             substitute_receipt_status NOT NULL DEFAULT 'pending_signature',
+  signed_file_path   TEXT,                     -- ฉบับเซ็นแล้ว (อัปโหลดผ่าน server)
+  signed_file_sha256 VARCHAR(64),
+  signed_at          TIMESTAMPTZ,
+  signed_by          UUID                      REFERENCES users(id),
+  cancelled_at       TIMESTAMPTZ,              -- มติ PO U107 — ครบทั้ง 3 ช่อง ⇔ status = cancelled
+  cancelled_by       UUID                      REFERENCES users(id),
+  cancel_reason      TEXT,                     -- เหตุผลบังคับ (ไม่ว่าง)
+  replaces_receipt_id UUID                     REFERENCES substitute_receipts(id),  -- U117: ใบที่ยกเลิกซึ่งใบนี้ออกแทน (ห้ามแก้ · ห้ามอ้างตัวเอง)
+  created_at         TIMESTAMPTZ               NOT NULL DEFAULT NOW(),
+  created_by         UUID                      NOT NULL REFERENCES users(id),
+  updated_at         TIMESTAMPTZ               NOT NULL,
+  updated_by         UUID                      REFERENCES users(id),
+  deleted_at         TIMESTAMPTZ,
+  CONSTRAINT chk_substitute_receipts_exactly_one_link CHECK (num_nonnulls(expense_id, advance_id) = 1),
+  -- U107: ไฟล์ฉบับเซ็นครบหรือไม่มีเลย · signed ⇒ มีไฟล์ · pending ⇒ ไม่มี · cancelled ได้ทั้งสองแบบ (เก็บไฟล์เดิม)
+  CONSTRAINT chk_substitute_receipts_signed_shape CHECK (
+    (signed_file_path IS NOT NULL AND signed_file_sha256 IS NOT NULL AND signed_at IS NOT NULL AND signed_by IS NOT NULL)
+    OR (signed_file_path IS NULL AND signed_file_sha256 IS NULL AND signed_at IS NULL AND signed_by IS NULL)),
+  CONSTRAINT chk_substitute_receipts_signed_status CHECK (
+    (status = 'signed' AND signed_file_path IS NOT NULL) OR (status = 'pending_signature' AND signed_file_path IS NULL)
+    OR status = 'cancelled'),
+  CONSTRAINT chk_substitute_receipts_cancel_shape CHECK (
+    (status = 'cancelled') = (cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL AND cancel_reason IS NOT NULL)),
+  CONSTRAINT chk_substitute_receipts_cancel_reason CHECK (cancel_reason IS NULL OR length(btrim(cancel_reason)) > 0)
+  -- + trigger trg_substitute_receipts_guard: เลข/ผู้จ่าย/การผูก/วันที่/ยอดห้ามแก้ · ฉบับเซ็นเปลี่ยนไม่ได้
+  --   · cancelled = terminal (U107) · ห้าม soft delete ใบที่ออกแล้ว · trg_substitute_receipts_guard_delete ห้ามลบแถวที่ยกเลิก
+);
+CREATE UNIQUE INDEX uniq_substitute_receipt_number ON substitute_receipts(organization_id, receipt_number);
+CREATE INDEX idx_substitute_receipts_org_payee_date ON substitute_receipts(organization_id, payee_id, issue_date);
+-- U107: ใบที่ยกเลิกไม่กันการออกใบใหม่แทน
+CREATE UNIQUE INDEX uniq_substitute_receipts_expense ON substitute_receipts(expense_id) WHERE expense_id IS NOT NULL AND deleted_at IS NULL AND status <> 'cancelled';
+CREATE UNIQUE INDEX uniq_substitute_receipts_advance ON substitute_receipts(advance_id) WHERE advance_id IS NOT NULL AND deleted_at IS NULL AND status <> 'cancelled';
+CREATE UNIQUE INDEX uniq_substitute_receipts_replaces ON substitute_receipts(replaces_receipt_id) WHERE replaces_receipt_id IS NOT NULL;  -- U117
+
+-- บรรทัดรายจ่าย — insert-only (ไม่มี updated_*/deleted_at · trigger ห้าม UPDATE)
+CREATE TABLE substitute_receipt_lines (
+  id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID        NOT NULL REFERENCES organizations(id),
+  substitute_receipt_id UUID        NOT NULL REFERENCES substitute_receipts(id) ON DELETE CASCADE,
+  line_no               INTEGER     NOT NULL CHECK (line_no >= 1),
+  line_date             DATE        NOT NULL,
+  description           TEXT        NOT NULL CHECK (length(btrim(description)) > 0),
+  amount_satang         INTEGER     NOT NULL CHECK (amount_satang > 0),
+  note                  TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by            UUID        NOT NULL REFERENCES users(id),
+  UNIQUE (substitute_receipt_id, line_no)
+);
+
+-- ── revenues ─────────────────────────────────────────────────
+-- รายได้ ตามไฟล์ 19
+CREATE TABLE revenues (
+  id                    UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID            NOT NULL REFERENCES organizations(id),
+  case_id               UUID            NOT NULL REFERENCES cases(id),
+  company_id            UUID            NOT NULL REFERENCES finance_companies(id),
+  billing_batch_id      UUID            REFERENCES billing_batches(id),
+  tracking_round        INTEGER         NOT NULL DEFAULT 1,  -- B3 (มติ PO 2026-08-12): กันบิลซ้ำข้ามรอบ recycle
+  -- Amounts
+  gross_satang          INTEGER         NOT NULL,
+  vat_satang            INTEGER         NOT NULL DEFAULT 0,
+  vat_rate_pct_used     NUMERIC(5,2)    NOT NULL DEFAULT 7.00,  -- snapshot
+  total_satang          INTEGER         NOT NULL,               -- gross + vat
+  -- Model snapshot
+  fee_model_snapshot    service_fee_model NOT NULL,
+  vat_mode_snapshot     vat_mode        NOT NULL,               -- snapshot finance_companies.vat_mode ตอนสร้าง (UAT Q6)
+  -- Status
+  status                revenue_status  NOT NULL DEFAULT 'ready_for_billing',
+  revenue_date          DATE            NOT NULL,
+  created_at            TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  created_by            UUID            NOT NULL REFERENCES users(id),
+  updated_at            TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+  updated_by            UUID            REFERENCES users(id),
+  deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX idx_revenues_org_status  ON revenues(organization_id, status);
+CREATE INDEX idx_revenues_company     ON revenues(company_id, status);
+CREATE INDEX idx_revenues_case        ON revenues(case_id);
+-- UAT R6-E (v4.11): 1 เคส 1 รอบติดตาม มีรายได้ที่ยังมีผลได้แถวเดียว (ยามชั้น DB — ตัวกันหลักคือ FOR UPDATE แถว cases)
+CREATE UNIQUE INDEX uniq_revenues_active_case_round ON revenues(organization_id, case_id, tracking_round) WHERE deleted_at IS NULL;
+
+-- ── billing_batches ──────────────────────────────────────────
+-- รอบวางบิล ตามไฟล์ 19
+CREATE TABLE billing_batches (
+  id                UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID                  NOT NULL REFERENCES organizations(id),
+  company_id        UUID                  NOT NULL REFERENCES finance_companies(id),
+  -- มติ PO U76 (v4.29): เลขรอบ BL-<พ.ศ.>-NNN ต่อองค์กร รีเซ็ตทุกปี พ.ศ. — trigger เดินเลขตอน INSERT · แก้ไม่ได้
+  batch_number      TEXT                  NOT NULL,  -- ค่าเริ่มต้น BL-<พ.ศ.>-NNN · คำนำหน้าตั้งค่าได้ (v4.41 ลบ CHECK รูปแบบ)
+  period            TEXT                  NOT NULL,  -- "มิถุนายน 2569"
+  status            billing_batch_status  NOT NULL DEFAULT 'draft',
+  total_satang      INTEGER               NOT NULL DEFAULT 0,
+  received_satang   INTEGER               NOT NULL DEFAULT 0,
+  -- A1 (มติ PO 2026-08-12): WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — auto-match ต้องเทียบ total − wht ด้วย
+  wht_withheld_by_customer_satang INTEGER NOT NULL DEFAULT 0,
+  due_date          DATE                  NOT NULL,
+  sent_at           TIMESTAMPTZ,
+  sent_by           UUID                  REFERENCES users(id),
+  -- UAT BUG-164 (v4.40): snapshot ผู้ขาย/ผู้ซื้อของใบแจ้งหนี้ ตอนส่งรอบ (draft = NULL ทั้งชุด · ส่งแล้วแก้ไม่ได้ — trigger)
+  seller_name TEXT, seller_tax_id VARCHAR(13), seller_address TEXT, seller_phone VARCHAR(20), seller_branch_code VARCHAR(5),
+  buyer_name  TEXT, buyer_tax_id  VARCHAR(13), buyer_address  TEXT, buyer_phone  VARCHAR(20), buyer_branch_code  VARCHAR(5),
+  created_at        TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  created_by        UUID                  NOT NULL REFERENCES users(id),
+  updated_at        TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  updated_by        UUID                  REFERENCES users(id),
+  deleted_at        TIMESTAMPTZ
+  -- มติ PO U86 (v4.32): ถอด UNIQUE(organization_id, company_id, period) — 1 บริษัทมีหลายรอบในเดือนเดียวกันได้
+);
+CREATE INDEX idx_billing_org_company_period ON billing_batches(organization_id, company_id, period);  -- U86
+CREATE UNIQUE INDEX uniq_billing_batch_number ON billing_batches(organization_id, batch_number);  -- U76
+-- trigger trg_billing_batches_number (BEFORE INSERT OR UPDATE OF batch_number) → next_document_number(org, 'billing_batch', created_at) (v4.41)
+CREATE INDEX idx_billing_org_status  ON billing_batches(organization_id, status);
+CREATE INDEX idx_billing_company     ON billing_batches(company_id, status);
+
+-- ── adjustments ──────────────────────────────────────────────
+-- รายการปรับปรุง ตามไฟล์ 20 (Separate FK columns — DEC-004)
+CREATE TABLE adjustments (
+  id                  UUID                PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID                NOT NULL REFERENCES organizations(id),
+  adjustment_type     adjustment_type     NOT NULL,
+  amount_satang       INTEGER             NOT NULL,
+  reason              TEXT                NOT NULL,
+  status              adjustment_status   NOT NULL DEFAULT 'pending_approval',
+  period_status_at_target TEXT,  -- snapshot: collecting | sent_to_accountant | locked
+  -- Polymorphic target (Separate FK columns — ไฟล์ 94 DEC-004)
+  -- ต้องมีเพียง 1 column ที่ไม่ NULL ต่อ 1 record
+  revenue_id          UUID                REFERENCES revenues(id),
+  expense_id          UUID                REFERENCES expenses(id),
+  billing_batch_id    UUID                REFERENCES billing_batches(id),
+  payout_batch_id     UUID                REFERENCES payout_batches(id),
+  -- Approval
+  approved_by         UUID                REFERENCES users(id),
+  approved_at         TIMESTAMPTZ,
+  rejection_reason    TEXT,
+  -- Audit
+  created_at          TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+  created_by          UUID                NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+  updated_by          UUID                REFERENCES users(id),
+  CONSTRAINT adjustments_one_target CHECK (
+    (CASE WHEN revenue_id IS NOT NULL THEN 1 ELSE 0 END +
+     CASE WHEN expense_id IS NOT NULL THEN 1 ELSE 0 END +
+     CASE WHEN billing_batch_id IS NOT NULL THEN 1 ELSE 0 END +
+     CASE WHEN payout_batch_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+  )
+);
+CREATE INDEX idx_adjustments_org_status ON adjustments(organization_id, status);
+```
+
+---
+
+## 9. Schema Group F — Accounting Handover
+
+```sql
+-- ── accounting_periods ───────────────────────────────────────
+-- รอบบัญชีรายเดือน ตามไฟล์ 30
+CREATE TABLE accounting_periods (
+  id                UUID                     PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID                     NOT NULL REFERENCES organizations(id),
+  period_label      TEXT                     NOT NULL,  -- "มิถุนายน 2569"
+  year_be           INTEGER                  NOT NULL,  -- 2569 (พ.ศ.)
+  month             INTEGER                  NOT NULL,  -- 1-12
+  status            accounting_period_status NOT NULL DEFAULT 'collecting',
+  -- Export
+  export_ready      BOOLEAN                  NOT NULL DEFAULT false,
+  last_readiness_checked_at TIMESTAMPTZ,
+  -- Sent to accountant
+  sent_at           TIMESTAMPTZ,
+  sent_by           UUID                     REFERENCES users(id),
+  -- Locked
+  locked_at         TIMESTAMPTZ,
+  locked_by         UUID                     REFERENCES users(id),
+  created_at        TIMESTAMPTZ              NOT NULL DEFAULT NOW(),
+  created_by        UUID                     NOT NULL REFERENCES users(id),
+  updated_at        TIMESTAMPTZ              NOT NULL DEFAULT NOW(),
+  UNIQUE(organization_id, year_be, month)
+);
+
+-- ── sales_records ────────────────────────────────────────────
+-- บันทึกขาย (บัญชีรายได้) ตามไฟล์ 31
+CREATE TABLE sales_records (
+  id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID    NOT NULL REFERENCES organizations(id),
+  period_id           UUID    NOT NULL REFERENCES accounting_periods(id),
+  billing_batch_id    UUID    NOT NULL REFERENCES billing_batches(id) UNIQUE,
+  company_id          UUID    NOT NULL REFERENCES finance_companies(id),
+  total_before_vat_satang INTEGER NOT NULL,
+  vat_satang          INTEGER NOT NULL DEFAULT 0,
+  total_satang        INTEGER NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by          UUID    NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_sales_records_period  ON sales_records(period_id);
+CREATE INDEX idx_sales_records_company ON sales_records(company_id, period_id);
+
+-- ── tax_invoices ─────────────────────────────────────────────
+-- ใบกำกับภาษี ตามไฟล์ 31 §8
+CREATE TABLE tax_invoices (
+  id                UUID                PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID                NOT NULL REFERENCES organizations(id),
+  sales_record_id   UUID                NOT NULL REFERENCES sales_records(id),
+  invoice_number    TEXT                NOT NULL,  -- auto-gen (document_number_series 'tax_invoice'), ห้ามแก้ · UNIQUE(org, invoice_number) v4.41
+  invoice_date      DATE                NOT NULL,
+  buyer_branch_code VARCHAR(5)          NOT NULL,  -- snapshot finance_companies.branch_code ตอนออกใบ (U77 · ม.86/4) ห้ามแก้
+  seller_branch_code VARCHAR(5)         NOT NULL,  -- snapshot organizations.branch_code ตอนออกใบ (U82 · ม.86/4) ห้ามแก้
+  -- v4.36 มติ PO U95/U96 — ใบเสร็จรับเงิน/ใบกำกับภาษี ตอนรับเงิน
+  doc_kind          tax_invoice_doc_kind NOT NULL,
+  cash_receipt_id   UUID                REFERENCES cash_receipts(id) ON DELETE SET NULL,  -- 1 เงินรับ = 1 ใบ active
+  replaces_tax_invoice_id UUID          REFERENCES tax_invoices(id),  -- ใบแทน (U96 #8)
+  amount_before_vat_satang INTEGER      NOT NULL,  -- ยอดบนใบ (ตามเงินที่รับ — `22` §6.8.2)
+  vat_satang        INTEGER             NOT NULL,
+  total_satang      INTEGER             NOT NULL,  -- CHECK = ก่อน VAT + VAT
+  vat_rate_pct_used NUMERIC(5,2),                  -- อัตรา ณ วันรับเงิน (U96 #9) · ใบเดิมหลายอัตรา = NULL
+  seller_name       TEXT                NOT NULL,  -- snapshot คู่ค้า (U96 #4) — ห้ามแก้
+  seller_tax_id     VARCHAR(13)         NOT NULL,
+  seller_address    TEXT                NOT NULL,
+  seller_phone      VARCHAR(20),
+  buyer_name        TEXT                NOT NULL,
+  buyer_tax_id      VARCHAR(13)         NOT NULL,
+  buyer_address     TEXT                NOT NULL,
+  buyer_phone       VARCHAR(20),
+  delivery_format   invoice_delivery_format NOT NULL,  -- snapshot ค่าเริ่มต้นของบริษัท (ปิด D13)
+  description       TEXT                NOT NULL,
+  status            tax_invoice_status  NOT NULL DEFAULT 'active',
+  cancel_reason     TEXT,
+  cancelled_by      UUID                REFERENCES users(id),
+  cancelled_at      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+  created_by        UUID                NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_tax_invoices_org ON tax_invoices(organization_id, status);
+CREATE INDEX idx_tax_invoices_cash_receipt ON tax_invoices(cash_receipt_id);
+-- raw SQL (v4.36): uniq_tax_invoice_active_per_sales (org, sales_record_id) WHERE active AND doc_kind='tax_invoice'
+--                  uniq_tax_invoice_active_per_receipt (cash_receipt_id) WHERE active AND cash_receipt_id IS NOT NULL
+--                  uniq_tax_invoice_replaces (replaces_tax_invoice_id) · chk_tax_invoices_amounts · chk_tax_invoices_receipt_kind
+
+-- ── credit_notes ─────────────────────────────────────────────
+-- ใบลดหนี้ที่สำนักงานบัญชีออกนอกระบบ (มติ PO 05/10/2569 U14 + มติบัญชี B1 · ม.86/10) — ระบบ "บันทึก" ไม่ได้ออกเอง
+-- migration `20261005130000_credit_notes` · ไม่มี deleted_at โดยเจตนา (ยกเลิกแทนลบ — แนวเดียวกับ tax_invoices)
+CREATE TYPE credit_note_status AS ENUM ('active', 'cancelled');
+CREATE TYPE credit_note_type AS ENUM ('credit', 'debit');  -- v4.21 U19: credit = ใบลดหนี้ ม.86/10 · debit = ใบเพิ่มหนี้ ม.86/9
+CREATE TABLE credit_notes (
+  id                       UUID               PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id          UUID               NOT NULL REFERENCES organizations(id),
+  tax_invoice_id           UUID               NOT NULL REFERENCES tax_invoices(id),
+  note_type                credit_note_type   NOT NULL DEFAULT 'credit',  -- v4.21 — แก้ไม่ได้
+  adjustment_id            UUID               REFERENCES adjustments(id),  -- ต้นเหตุ (approved · credit ⇒ decrease · debit ⇒ increase)
+  credit_note_number       VARCHAR(50)        NOT NULL,                    -- เลขที่จากสำนักงานบัญชี
+  issue_date               DATE               NOT NULL,                    -- หางวดบัญชี (งวดล็อก ⇒ PERIOD_LOCKED_DIRECT_EDIT)
+  amount_before_vat_satang INTEGER            NOT NULL CHECK (amount_before_vat_satang > 0),
+  vat_satang               INTEGER            NOT NULL CHECK (vat_satang >= 0),
+  total_satang             INTEGER            NOT NULL,                    -- = before_vat + vat (CHECK)
+  vat_rate_pct_used        NUMERIC(5,2)       NOT NULL,                    -- snapshot อัตราของใบกำกับเดิม (`22` §6.8.1)
+  buyer_branch_code        VARCHAR(5)         NOT NULL,                    -- v4.31 U82: snapshot = tax_invoices.buyer_branch_code (trigger ตรวจ) ห้ามแก้
+  reason                   TEXT               NOT NULL,
+  file_path                TEXT,                                           -- ไฟล์สแกน `tax-invoices/<id>/credit-notes/…`
+  file_sha256              VARCHAR(64),
+  status                   credit_note_status NOT NULL DEFAULT 'active',
+  cancel_reason            TEXT,
+  cancelled_by             UUID               REFERENCES users(id),
+  cancelled_at             TIMESTAMPTZ,
+  created_at               TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+  created_by               UUID               NOT NULL REFERENCES users(id),
+  updated_at               TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+  updated_by               UUID               REFERENCES users(id),
+  CONSTRAINT chk_credit_notes_total CHECK (total_satang = amount_before_vat_satang + vat_satang)
+  -- + chk_credit_notes_cancel_fields (cancelled ⇔ cancel_reason/by/at ครบ) · เลขที่/เหตุผลห้ามว่าง
+);
+CREATE UNIQUE INDEX uniq_credit_notes_active_number ON credit_notes(organization_id, note_type, credit_note_number) WHERE status = 'active';
+CREATE UNIQUE INDEX uniq_credit_notes_active_adjustment ON credit_notes(adjustment_id) WHERE status = 'active' AND adjustment_id IS NOT NULL;
+CREATE INDEX idx_credit_notes_org_invoice ON credit_notes(organization_id, tax_invoice_id);
+-- trigger trg_credit_notes_balance: Σ ใบลดหนี้ (credit) active ของใบกำกับ ≤ ยอดใบกำกับ (ล็อกแถวใบกำกับ FOR UPDATE) · ใบเพิ่มหนี้ไม่มีเพดาน
+-- trigger trg_credit_notes_no_update / no_delete: ห้ามลบ · แก้ได้ทางเดียวคือยกเลิก · cancelled ห้ามแก้
+
+-- ── cash_receipts ────────────────────────────────────────────
+-- บันทึกรับเงิน ตามไฟล์ 31
+CREATE TABLE cash_receipts (
+  id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID    NOT NULL REFERENCES organizations(id),
+  period_id         UUID    NOT NULL REFERENCES accounting_periods(id),
+  billing_batch_id  UUID    NOT NULL REFERENCES billing_batches(id),
+  bank_transaction_id UUID  REFERENCES bank_transactions(id),
+  amount_satang     INTEGER NOT NULL,
+  -- A1 (มติ PO 2026-08-12): WHT ที่ลูกค้าหักจากยอดนี้ = เครดิตภาษีของบริษัท
+  wht_withheld_by_customer_satang INTEGER NOT NULL DEFAULT 0,
+  received_date     DATE    NOT NULL,
+  note              TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by        UUID    NOT NULL REFERENCES users(id)
+);
+CREATE INDEX idx_cash_receipts_period  ON cash_receipts(period_id);
+CREATE INDEX idx_cash_receipts_billing ON cash_receipts(billing_batch_id);
+
+-- ── expense_records ──────────────────────────────────────────
+-- บัญชีค่าใช้จ่าย ตามไฟล์ 32
+CREATE TABLE expense_records (
+  id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID    NOT NULL REFERENCES organizations(id),
+  period_id           UUID    NOT NULL REFERENCES accounting_periods(id),
+  payout_batch_item_id UUID   NOT NULL REFERENCES payout_batch_items(id) UNIQUE,
+  cost_center_id      UUID    REFERENCES cost_centers(id),
+  gross_satang        INTEGER NOT NULL,
+  wht_satang          INTEGER NOT NULL DEFAULT 0,
+  net_satang          INTEGER NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by          UUID    NOT NULL REFERENCES users(id),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_expense_records_period ON expense_records(period_id);
+
+-- ── wht_certificates ─────────────────────────────────────────
+-- หนังสือรับรองหัก ณ ที่จ่าย (ใบ 50 ทวิ) ตามไฟล์ 33
+CREATE TABLE wht_certificates (
+  id                  UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID              NOT NULL REFERENCES organizations(id),
+  certificate_number  TEXT              NOT NULL,  -- document_number_series 'wht_certificate' · UNIQUE(org, certificate_number) v4.41
+  payee_id            UUID              NOT NULL REFERENCES payee_profiles(id),
+  expense_record_id   UUID              NOT NULL REFERENCES expense_records(id),
+  income_type         TEXT              NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)',
+  payment_date        DATE              NOT NULL,
+  gross_satang        INTEGER           NOT NULL,
+  wht_satang          INTEGER           NOT NULL,
+  filing_form         wht_filing_form   NOT NULL,
+  delivery_format     wht_delivery_format NOT NULL DEFAULT 'paper',  -- แก้ TEXT → enum 04/07/2569 (DEC-006/D4)
+  -- รูปแบบการออก (มติ PO 05/10/2569 UAT U4) — per_payee_batch: expense_record_id = รายการแรกของผู้รับในรอบ (จุดยึด)
+  issue_mode          wht_certificate_mode NOT NULL DEFAULT 'per_item',
+  payout_batch_id     UUID              REFERENCES payout_batches(id) ON DELETE SET NULL,
+  -- Cancellation model (ไฟล์ 33 §10 — เพิ่ม 04/07/2569 DEC-006/D4, หลักการเดียวกับ tax_invoices)
+  status              wht_certificate_status NOT NULL DEFAULT 'active',
+  cancel_reason       TEXT,                                   -- บังคับกรอกเมื่อ cancelled (WHT_CANCEL_REQUIRES_REASON)
+  cancelled_by        UUID              REFERENCES users(id),
+  cancelled_at        TIMESTAMPTZ,
+  replaces_certificate_id UUID          REFERENCES wht_certificates(id),  -- ใบใหม่อ้างอิงฉบับที่ถูกยกเลิก
+  -- snapshot คู่สัญญา ณ วันออกใบ (มติ PO 06/10/2569 UAT U96 #4 — ไฟล์ 33 §7.1) · immutable (trigger) · PDF/ไฟล์ 05 อ่านจากตรงนี้
+  payee_name          TEXT              NOT NULL,
+  payee_name_title    VARCHAR(50),
+  payee_type          payee_type        NOT NULL,
+  payee_tax_id        VARCHAR(13),
+  payee_address       TEXT,             -- ที่อยู่บรรทัดเดียว · NULL = ยังไม่กรอกตอนออก
+  payee_branch_code   VARCHAR(5) CHECK (payee_branch_code IS NULL OR payee_branch_code ~ '^[0-9]{5}$'),  -- นิติบุคคลเท่านั้น
+  wht_condition       wht_condition     NOT NULL,
+  payer_name          TEXT              NOT NULL,
+  payer_tax_id        VARCHAR(13)       NOT NULL,
+  payer_address       TEXT              NOT NULL,
+  payer_branch_code   VARCHAR(5)        NOT NULL CHECK (payer_branch_code ~ '^[0-9]{5}$'),
+  created_at          TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  created_by          UUID              NOT NULL REFERENCES users(id),
+  CONSTRAINT wht_cert_batch_mode_has_batch CHECK (issue_mode <> 'per_payee_batch' OR payout_batch_id IS NOT NULL)
+);
+CREATE INDEX idx_wht_certs_payee ON wht_certificates(payee_id, payment_date);
+
+-- ── wht_filing_summaries ─────────────────────────────────────
+-- สรุปยื่น WHT รายเดือน ตามไฟล์ 33
+CREATE TABLE wht_filing_summaries (
+  id              UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID              NOT NULL REFERENCES organizations(id),
+  period_id       UUID              NOT NULL REFERENCES accounting_periods(id),
+  period_label    TEXT              NOT NULL,
+  filing_due_date DATE              NOT NULL,  -- คำนวณอัตโนมัติ
+  pnd3_satang     INTEGER           NOT NULL DEFAULT 0,
+  pnd53_satang    INTEGER           NOT NULL DEFAULT 0,
+  pnd1_satang     INTEGER           NOT NULL DEFAULT 0,  -- ภ.ง.ด.1 เงินได้ 40(2) (มติ PO 05/10/2569 UAT U7)
+  filing_method   wht_filing_method NOT NULL DEFAULT 'online',  -- วิธีที่ใช้คิด filing_due_date (v4.23 UAT U45)
+  status          wht_filing_status NOT NULL DEFAULT 'pending',
+  filed_at        TIMESTAMPTZ,
+  filed_by        UUID              REFERENCES users(id),
+  created_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  UNIQUE(organization_id, period_id)
+);
+
+-- ── exceptions ───────────────────────────────────────────────
+-- ข้อยกเว้น/ปัญหาที่ต้องแก้ไขก่อน export ตามไฟล์ 34
+CREATE TABLE exceptions (
+  id              UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID              NOT NULL REFERENCES organizations(id),
+  period_id       UUID              NOT NULL REFERENCES accounting_periods(id),
+  level           exception_level   NOT NULL,
+  status          exception_status  NOT NULL DEFAULT 'open',
+  title           TEXT              NOT NULL,
+  description     TEXT              NOT NULL,
+  source_module   TEXT              NOT NULL,  -- 'billing' | 'payout' | 'bank' | etc.
+  source_ref      TEXT,                        -- เลขอ้างอิง (free text, ไม่ใช่ FK)
+  resolved_by     UUID              REFERENCES users(id),
+  resolved_at     TIMESTAMPTZ,
+  resolution_note TEXT,
+  -- Authorized exception (critical only) — Executive อนุมัติ
+  authorized_by   UUID              REFERENCES users(id),
+  authorized_at   TIMESTAMPTZ,
+  authorize_note  TEXT,
+  created_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  created_by      UUID              NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  updated_by      UUID              REFERENCES users(id)
+);
+CREATE INDEX idx_exceptions_period ON exceptions(period_id, level, status);
+
+-- ── bank_transactions ────────────────────────────────────────
+-- รายการธนาคาร ตามไฟล์ 35
+CREATE TABLE bank_transactions (
+  id                UUID                PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID                NOT NULL REFERENCES organizations(id),
+  period_id         UUID                NOT NULL REFERENCES accounting_periods(id),
+  bank_account_id   UUID                NOT NULL REFERENCES bank_accounts(id),
+  transaction_date  DATE                NOT NULL,
+  description       TEXT                NOT NULL,
+  amount_satang     INTEGER             NOT NULL,  -- บวก=รับเงิน, ลบ=จ่ายเงิน
+  match_status      bank_match_status   NOT NULL DEFAULT 'unmatched',
+  match_note        TEXT,
+  -- Polymorphic match (Separate FK — DEC-004)
+  matched_billing_id UUID               REFERENCES billing_batches(id),
+  matched_payout_id  UUID               REFERENCES payout_batches(id),
+  matched_advance_id UUID               REFERENCES advances(id),   -- A4: ขาจ่าย/รับคืนเงินทดรอง
+  -- A2: true = จับคู่แบบแบ่งยอดผ่าน bank_transaction_allocations (FK ทั้ง 3 ตัวข้างบนต้อง NULL)
+  is_split_allocation BOOLEAN           NOT NULL DEFAULT false,
+  matched_by        UUID                REFERENCES users(id),
+  matched_at        TIMESTAMPTZ,
+  -- v4.23 U41: เงินรับรอตรวจสอบ (คงค่าไว้แม้จับคู่/คืนเงินภายหลัง = ประวัติ)
+  suspense_note     TEXT,
+  suspended_at      TIMESTAMPTZ,
+  suspended_by      UUID                REFERENCES users(id),
+  -- v4.23 U41: คืนเงินผู้โอน
+  refund_date       DATE,
+  refund_note       TEXT,
+  refund_file_path  TEXT,
+  refund_file_sha256 TEXT,
+  refunded_at       TIMESTAMPTZ,
+  refunded_by       UUID                REFERENCES users(id),
+  created_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+  created_by        UUID                NOT NULL REFERENCES users(id),
+  updated_at        TIMESTAMPTZ         NOT NULL DEFAULT NOW(),
+  updated_by        UUID                REFERENCES users(id),
+  CONSTRAINT bank_tx_one_match CHECK (
+    (CASE WHEN matched_billing_id IS NOT NULL THEN 1 ELSE 0 END +
+     CASE WHEN matched_payout_id  IS NOT NULL THEN 1 ELSE 0 END +
+     CASE WHEN matched_advance_id IS NOT NULL THEN 1 ELSE 0 END) <= 1
+  ),
+  CONSTRAINT bank_tx_status_fk_shape CHECK (  -- DEC-006/D7: ผูก match_status กับการมี FK กัน state เพี้ยน
+    (match_status IN ('auto_matched','manual_matched')
+       AND (
+         (is_split_allocation = false
+            AND (matched_billing_id IS NOT NULL OR matched_payout_id IS NOT NULL OR matched_advance_id IS NOT NULL))
+         OR (is_split_allocation = true
+            AND matched_billing_id IS NULL AND matched_payout_id IS NULL AND matched_advance_id IS NULL)
+       ))
+    OR (match_status IN ('unmatched','unmatched_resolved','suspense','suspense_refunded')  -- v4.23 U41
+       AND is_split_allocation = false
+       AND matched_billing_id IS NULL AND matched_payout_id IS NULL AND matched_advance_id IS NULL)
+  ),
+  CONSTRAINT bank_tx_suspense_shape CHECK (  -- v4.23 U41: เงินเข้าเท่านั้น + ต้องมีเหตุผล
+    match_status NOT IN ('suspense','suspense_refunded')
+    OR (amount_satang > 0 AND suspended_at IS NOT NULL AND suspense_note IS NOT NULL)
+  ),
+  CONSTRAINT bank_tx_refund_shape CHECK (  -- v4.23 U41: คืนเงิน = วันที่ + เหตุผล + หลักฐาน
+    (match_status = 'suspense_refunded' AND refund_date IS NOT NULL AND refund_note IS NOT NULL
+       AND refund_file_path IS NOT NULL AND refunded_at IS NOT NULL)
+    OR (match_status <> 'suspense_refunded' AND refund_date IS NULL AND refunded_at IS NULL)
+  )
+);
+CREATE INDEX idx_bank_tx_period  ON bank_transactions(period_id, match_status);
+CREATE INDEX idx_bank_tx_org_status ON bank_transactions(organization_id, match_status);  -- v4.23 U41 ยอดคงค้าง
+CREATE INDEX idx_bank_tx_account ON bank_transactions(bank_account_id, transaction_date);
+
+-- ── bank_transaction_allocations ─────────────────────────────
+-- A2 (มติ PO 2026-08-12): เงินเข้าก้อนเดียวตัดได้หลายรอบบิล / จ่ายบางส่วน (ไฟล์ 35)
+-- ส่วนเกินจากยอดบิล → แถว is_credit = true (billing_batch_id NULL) เก็บเป็น credit ของบริษัท **ไม่ให้ AR ติดลบ**
+CREATE TABLE bank_transaction_allocations (
+  id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID    NOT NULL REFERENCES organizations(id),
+  bank_transaction_id UUID    NOT NULL REFERENCES bank_transactions(id) ON DELETE CASCADE,
+  company_id          UUID    NOT NULL REFERENCES finance_companies(id),
+  billing_batch_id    UUID    REFERENCES billing_batches(id),  -- NULL = credit ของบริษัท
+  allocated_satang    INTEGER NOT NULL,
+  is_credit           BOOLEAN NOT NULL DEFAULT false,
+  note                TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by          UUID    NOT NULL REFERENCES users(id),
+  UNIQUE(bank_transaction_id, billing_batch_id),
+  CONSTRAINT bank_tx_alloc_shape CHECK (
+    (is_credit = false AND billing_batch_id IS NOT NULL)
+    OR (is_credit = true AND billing_batch_id IS NULL)
+  ),
+  CONSTRAINT bank_tx_alloc_amount_positive CHECK (allocated_satang > 0)
+);
+CREATE INDEX idx_bank_tx_alloc_billing ON bank_transaction_allocations(billing_batch_id);
+
+-- ── customer_wht_certificates ────────────────────────────────
+-- A1 (มติ PO 2026-08-12): ใบ 50 ทวิ ที่**ลูกค้า (บริษัทไฟแนนซ์) ออกให้เรา** = เครดิตภาษีของบริษัท
+-- คนละตารางกับ wht_certificates (ที่เราออกให้ผู้รับเงิน)
+CREATE TABLE customer_wht_certificates (
+  id                 UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID    NOT NULL REFERENCES organizations(id),
+  company_id         UUID    NOT NULL REFERENCES finance_companies(id),
+  billing_batch_id   UUID    REFERENCES billing_batches(id),  -- NULL = ยังจับคู่รอบบิลไม่ได้
+  -- v4.23 U40: เกิด pending อัตโนมัติตอนจับคู่เงินรับที่ถูกหัก → received เมื่อได้หนังสือ
+  cash_receipt_id    UUID    REFERENCES cash_receipts(id) ON DELETE SET NULL,
+  status             customer_wht_status NOT NULL DEFAULT 'pending',
+  withheld_satang    INTEGER NOT NULL,   -- ยอดที่ลูกค้าหักไว้ตามเงินรับ (snapshot)
+  withheld_date      DATE    NOT NULL,   -- วันที่รับเงิน (อายุค้าง/งวดของไฟล์ส่งบัญชี)
+  certificate_number TEXT,               -- บังคับเมื่อ received
+  certificate_date   DATE,               -- บังคับเมื่อ received
+  gross_satang       INTEGER,            -- ฐาน before_vat (`22` §6.9) ตามหนังสือ — ไม่บังคับ
+  wht_satang         INTEGER,            -- ยอดตามหนังสือ — บังคับเมื่อ received (ไม่ตรง withheld = เตือน)
+  file_url           TEXT,               -- path ไฟล์สแกนใน Storage (server ประกอบ path — DEC-014)
+  file_sha256        TEXT,
+  note               TEXT,
+  received_at        TIMESTAMPTZ,
+  received_by        UUID    REFERENCES users(id),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by         UUID    NOT NULL REFERENCES users(id),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by         UUID    REFERENCES users(id),
+  deleted_at         TIMESTAMPTZ,
+  UNIQUE(organization_id, company_id, certificate_number)
+);
+CREATE INDEX idx_customer_wht_date ON customer_wht_certificates(organization_id, certificate_date);
+CREATE INDEX idx_customer_wht_status ON customer_wht_certificates(organization_id, status, withheld_date);
+CREATE UNIQUE INDEX uniq_customer_wht_cash_receipt ON customer_wht_certificates(cash_receipt_id)
+  WHERE cash_receipt_id IS NOT NULL AND deleted_at IS NULL;  -- v4.23 U40: 1 เงินรับ = 1 รายการรอ 50 ทวิ
+ALTER TABLE customer_wht_certificates ADD CONSTRAINT customer_wht_withheld_positive CHECK (withheld_satang > 0);
+ALTER TABLE customer_wht_certificates ADD CONSTRAINT customer_wht_received_shape CHECK (
+  (status = 'pending' AND received_at IS NULL)
+  OR (status = 'received' AND certificate_number IS NOT NULL AND certificate_date IS NOT NULL
+      AND wht_satang IS NOT NULL AND wht_satang > 0 AND received_at IS NOT NULL)
+);
+
+-- ── accountant_questions ─────────────────────────────────────
+-- คำถามจากสำนักงานบัญชี ตามไฟล์ 36
+CREATE TABLE accountant_questions (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  period_id       UUID    NOT NULL REFERENCES accounting_periods(id),
+  question_text   TEXT    NOT NULL,
+  answer_text     TEXT,
+  answered_by     UUID    REFERENCES users(id),
+  answered_at     TIMESTAMPTZ,
+  is_resolved     BOOLEAN NOT NULL DEFAULT false,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID    NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_accountant_questions_period ON accountant_questions(period_id, is_resolved);
+
+-- ── export_records ───────────────────────────────────────────
+-- ประวัติ Export Accounting Pack ตามไฟล์ 37
+CREATE TABLE export_records (
+  id              UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID                  NOT NULL REFERENCES organizations(id),
+  period_id       UUID                  NOT NULL REFERENCES accounting_periods(id),
+  version         INTEGER               NOT NULL DEFAULT 1,
+  status          export_record_status  NOT NULL DEFAULT 'generated',
+  file_urls       JSONB                 NOT NULL DEFAULT '{}',  -- {01: url, 02: url, ...}
+  file_hash       TEXT                  NOT NULL,  -- SHA-256 ของ pack (ไฟล์ 01)
+  generated_at    TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
+  generated_by    UUID                  NOT NULL REFERENCES users(id),
+  sent_at         TIMESTAMPTZ,
+  sent_by         UUID                  REFERENCES users(id),
+  accepted_at     TIMESTAMPTZ
+);
+CREATE INDEX idx_exports_period ON export_records(period_id, version);
+```
+
+---
+
+## 10. Schema Group G — Platform
+
+```sql
+-- ── audit_logs ───────────────────────────────────────────────
+CREATE TABLE audit_logs (
+  id              UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID          NOT NULL REFERENCES organizations(id),
+  actor_id        UUID          REFERENCES users(id),  -- null = system job
+  actor_role      TEXT,
+  action          audit_action  NOT NULL,
+  target_type     TEXT          NOT NULL,  -- 'cases' | 'expenses' | 'handover_lots' | ...
+  target_id       UUID,
+  before_data     JSONB,        -- snapshot ก่อน
+  after_data      JSONB,        -- snapshot หลัง
+  reason          TEXT,
+  ip_address      INET,
+  user_agent      TEXT,
+  created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+  -- ห้ามแก้ไข/ลบ row นี้เด็ดขาด
+);
+CREATE INDEX idx_audit_target ON audit_logs(organization_id, target_type, target_id, created_at);
+CREATE INDEX idx_audit_actor  ON audit_logs(organization_id, actor_id, created_at);
+
+-- ── notifications ────────────────────────────────────────────
+-- In-app notification เฟส 1 ตามไฟล์ 90 §6.3 (เพิ่ม 04/07/2569 — DEC-006/D3)
+CREATE TABLE notifications (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id),
+  user_id         UUID        NOT NULL REFERENCES users(id),   -- ผู้รับ
+  event_code      TEXT        NOT NULL,                        -- ตามรายการ event ไฟล์ 90 §6.3
+  title           TEXT        NOT NULL,
+  body            TEXT,
+  link_path       TEXT,                                        -- deep link ในแอป
+  read_at         TIMESTAMPTZ,                                 -- NULL = ยังไม่อ่าน
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_notifications_user ON notifications(user_id, read_at, created_at DESC);
+
+-- ── notification_outbox ──────────────────────────────────────
+-- คิวแจ้งเตือนของ job (v4.48 — มติ PO 06/10/2569 U120 · DEC-015 · `91` §6.3)
+-- job เขียนแถวนี้ใน $transaction เดียวกับการเปลี่ยนสถานะ (rollback = ไม่มีแถว) แล้วตัวส่งแยกหยิบไปเขียน `notifications`
+-- ตัวส่งจองแถวด้วย conditional update + lease (เลื่อน available_at) · ล้ม = last_error + attempts + backoff · ครบ max_attempts = failed
+-- ส่งซ้ำไม่แจ้งซ้ำ: payload พก dedupeKey ของข้อความ ⇒ id แถว notifications เป็น deterministic
+-- ตารางระบบ ⇒ ไม่มี created_by/updated_by/deleted_at (ผู้สร้าง = job — ตามรอยด้วย source_job_type/source_job_ref)
+CREATE TABLE notification_outbox (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  dedupe_key      TEXT        NOT NULL,                       -- กันเข้าคิวซ้ำ (job รันซ้ำ)
+  payload         JSONB       NOT NULL,                       -- {kind:'message', userId, eventCode, title, body, linkPath, dedupeKey} | {kind:'expense_approval_queue', expenseIds}
+  status          notification_outbox_status NOT NULL DEFAULT 'pending',
+  attempts        INTEGER     NOT NULL DEFAULT 0,             -- นับตอนจองแถว
+  max_attempts    INTEGER     NOT NULL DEFAULT 8,
+  last_error      TEXT,
+  available_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),         -- หยิบได้เมื่อถึงเวลานี้ (backoff/lease)
+  sent_at         TIMESTAMPTZ,
+  source_job_type TEXT        NOT NULL,                       -- job_type ที่เข้าคิว
+  source_job_ref  TEXT,                                       -- id ของ job ที่สั่งรัน (ตามรอย)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_notification_outbox_attempts CHECK (attempts >= 0 AND max_attempts > 0),
+  CONSTRAINT chk_notification_outbox_sent_at CHECK ((status = 'sent') = (sent_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX uniq_notification_outbox_org_dedupe_key ON notification_outbox(organization_id, dedupe_key);
+CREATE INDEX idx_notification_outbox_status_available_at ON notification_outbox(status, available_at);
+CREATE INDEX idx_notification_outbox_org_status_available_at ON notification_outbox(organization_id, status, available_at);
+
+-- ── push_subscriptions ───────────────────────────────────────
+-- Web Push (ไม่ใช่ FCM) ของ PWA ภาคสนาม ตามไฟล์ 41 §15 (เพิ่ม 14/08/2569 มติ PO พร้อม Phase 2.9)
+-- 1 อุปกรณ์/เบราว์เซอร์ = 1 แถว · endpoint UNIQUE ⇒ subscribe ซ้ำจากเครื่องเดิม = upsert (idempotent)
+-- subscription หลุดเองได้ (โดยเฉพาะ iOS) — ไฟล์ 41 §15 ไม่ให้แจ้งเตือนแยก เพราะ fallback คือ in-app notifications
+CREATE TABLE push_subscriptions (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id),
+  user_id         UUID        NOT NULL REFERENCES users(id),
+  endpoint        TEXT        NOT NULL UNIQUE,   -- endpoint ของ push service
+  p256dh          TEXT        NOT NULL,          -- กุญแจ subscription ฝั่งเบราว์เซอร์
+  auth            TEXT        NOT NULL,
+  user_agent      TEXT,
+  last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  failure_count   INTEGER     NOT NULL DEFAULT 0,  -- 404/410 จากปลายทาง = ปิด subscription (soft delete)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID        NOT NULL REFERENCES users(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by      UUID        REFERENCES users(id),
+  deleted_at      TIMESTAMPTZ
+);
+CREATE INDEX idx_push_subscriptions_user ON push_subscriptions(organization_id, user_id, deleted_at);
+
+-- ── jobs ─────────────────────────────────────────────────────
+-- Background jobs (Vercel Cron / QStash)
+CREATE TABLE jobs (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        REFERENCES organizations(id),
+  job_type        TEXT        NOT NULL,  -- 'export_pack' | 'bank_file' | 'wht_summary' | 'reassign_timeout' | 'advance_overdue' (ไฟล์ 15 §9.1) | 'daily_field_allowance' (v4.12 UAT Q21)
+  status          job_status  NOT NULL DEFAULT 'pending',
+  payload         JSONB       NOT NULL DEFAULT '{}',
+  result          JSONB,
+  error_message   TEXT,
+  retry_count     INTEGER     NOT NULL DEFAULT 0,
+  max_retries     INTEGER     NOT NULL DEFAULT 3,
+  scheduled_at    TIMESTAMPTZ,
+  started_at      TIMESTAMPTZ,
+  completed_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by      UUID        REFERENCES users(id)
+);
+CREATE INDEX idx_jobs_status ON jobs(status, scheduled_at);
+
+-- ── report_cache_entries ─────────────────────────────────────
+-- แคชรายงาน (`96` §8 · `21`) — มติ PO 05/10/2569 (UAT U9 · v4.16): ย้ายจากหน่วยความจำของ process มาไว้ที่นี่
+-- เพื่อให้การล้างแคช (ปุ่มรีเฟรช / อนุมัติ Adjustment — BUG-128) มีผลกับทุก instance บน Vercel
+-- ตารางชั่วคราว ⇒ ไม่มี created_by/updated_by/deleted_at (ค่าคำนวณใหม่ได้เสมอ · ลบจริงเมื่อหมดอายุ/ถูกล้าง · ไม่ audit)
+-- cache_key ขึ้นต้น `<org>:` หรือ `profit:<org>:` และรวมขอบเขตทีม/บริษัทของผู้เรียก · แถว `refresh-cooldown:<prefix>`
+-- = เวลากดรีเฟรชล่าสุดของรายงาน (cooldown 5 นาที E14 — payload NULL)
+CREATE TABLE report_cache_entries (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  cache_key       TEXT        NOT NULL,
+  payload         JSONB,                   -- ค่าที่คำนวณแล้ว (NULL = แถวคุม cooldown)
+  computed_at     TIMESTAMPTZ NOT NULL,    -- เขียนทับได้เฉพาะค่าที่ computed_at ใหม่กว่า/เท่ากัน
+  expires_at      TIMESTAMPTZ,             -- daily = เที่ยงคืนไทย · hourly = ต้นชั่วโมงถัดไป
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX uniq_report_cache_entries_org_key ON report_cache_entries(organization_id, cache_key);
+CREATE INDEX idx_report_cache_entries_organization_id_expires_at ON report_cache_entries(organization_id, expires_at);
+
+-- ── files ────────────────────────────────────────────────────
+-- Metadata ของไฟล์ทั้งหมดใน Supabase Storage
+CREATE TABLE files (
+  id              UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID    NOT NULL REFERENCES organizations(id),
+  bucket          TEXT    NOT NULL,      -- Supabase Storage bucket name
+  path            TEXT    NOT NULL,      -- storage path
+  url             TEXT    NOT NULL,      -- public/signed URL
+  file_hash       TEXT    NOT NULL,      -- SHA-256
+  original_name   TEXT    NOT NULL,
+  mime_type       TEXT    NOT NULL,
+  size_bytes      INTEGER NOT NULL,
+  uploaded_by     UUID    REFERENCES users(id),
+  uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at      TIMESTAMPTZ,
+  UNIQUE(bucket, path)
+);
+```
+
+---
+
+## 11. Migration Order (ลำดับที่ต้อง run)
+
+```
+01_create_enums.sql
+02_organizations.sql
+03_roles.sql
+04_tax_profiles.sql
+05_vat_rate_history.sql
+06_bank_accounts.sql
+07_cost_centers.sql
+08_capabilities.sql
+09_compensation_plans.sql
+10_service_fee_templates.sql
+11_finance_companies.sql
+12_users.sql                  ← ต้องหลัง organizations, roles, teams (circular: ใช้ DEFERRABLE FK)
+13_role_capabilities.sql
+14_team_managers.sql
+15_teams.sql                  ← ต้องหลัง users, compensation_plans
+16_payee_profiles.sql
+17_cases.sql
+18_case_documents.sql
+19_case_contacts.sql
+19b_case_edit_history.sql      ← เพิ่ม 14/08/2569 (Phase 2.2) ต้องหลัง cases, users
+20_recycle_requests.sql
+21_case_assignments.sql
+21b_pending_reassignments.sql  ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง case_assignments
+21c_reassignment_history.sql   ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง pending_reassignments
+21d_assignment_policy_settings.sql ← เพิ่ม 14/08/2569 (Phase 2.6) ต้องหลัง organizations, users
+22_check_ins.sql
+23_case_evidences.sql
+23a_travel_origins.sql        ← เพิ่ม 14/08/2569 (Phase 2.8) ต้องหลัง case_assignments
+23b_close_case_drafts.sql     ← เพิ่ม 14/08/2569 (Phase 2.8) ต้องหลัง case_assignments
+24_assets.sql
+25_handover_lots.sql
+26_expenses.sql
+27_advances.sql
+28_payout_batches.sql
+29_payout_batch_items.sql
+29a_advance_returns.sql       ← เพิ่ม 05/10/2569 (มติ PO U30) ต้องหลัง advances + payout_batch_items
+30_revenues.sql
+31_billing_batches.sql
+32_adjustments.sql
+33_accounting_periods.sql
+34_sales_records.sql
+35_tax_invoices.sql
+35b_credit_notes.sql
+36_cash_receipts.sql
+37_expense_records.sql
+38_wht_certificates.sql
+39_wht_filing_summaries.sql
+40_exceptions.sql
+41_bank_transactions.sql
+42_accountant_questions.sql
+43_export_records.sql
+44_audit_logs.sql
+45_jobs.sql
+46_files.sql
+47_billing_payout_cycles.sql    ← เพิ่ม 04/07/2569 (DEC-006/D1)
+47b_billing_cycle_companies.sql  ← v4.5x-fixer-u132 (U133) ต้องหลัง billing_payout_cycles, finance_companies
+47c_finance_company_documents.sql ← v4.5x-fixer-u132 (U132) ต้องหลัง finance_companies, users
+48_approval_matrices.sql
+49_finance_policy_settings.sql
+50_bank_file_formats.sql
+51_tax_document_template_settings.sql
+52_notifications.sql            ← DEC-006/D3
+52b_push_subscriptions.sql       ← เพิ่ม 14/08/2569 (Phase 2.9) ต้องหลัง organizations, users
+52c_notification_outbox.sql      ← v4.48 (U120 · DEC-015) ต้องหลัง organizations
+53_bank_transaction_allocations.sql  ← A2 (มติ PO 2026-08-12)
+54_customer_wht_certificates.sql     ← A1 (มติ PO 2026-08-12)
+99_seed_data.sql
+```
+
+> **หมายเหตุ Circular FK** (users ↔ teams ↔ organizations):
+> ใช้ `SET CONSTRAINTS DEFERRED` ใน transaction ที่ seed ข้อมูลเริ่มต้น หรือ
+> สร้าง FK บาง column แบบ `DEFERRABLE INITIALLY DEFERRED`
+
+---
+
+## 12. Seed Data
+
+```sql
+-- ── 1. Organization (1 record) ──────────────────────────────
+INSERT INTO organizations (id, name, tax_id, address, vat_registered, tax_invoice_prefix)
+VALUES (
+  '00000000-0000-0000-0000-000000000001',
+  'AssetRecovery Co., Ltd.',
+  '0000000000000',  -- กรอก Tax ID จริงก่อน go-live
+  '...',
+  true,
+  'INV'
+);
+
+-- ── 2. Roles (15 Seed Roles — ไฟล์ 07 §5) ──────────────────
+-- system group
+INSERT INTO roles (name, role_group, is_seed, is_editable, organization_id) VALUES
+  ('Superadmin',                     'system',          true, false, '...org_id...'),
+  ('เจ้าหน้าที่อนุมัติเคส',            'system',          true, false, '...'),
+  ('บริหาร',                          'system',          true, false, '...'),
+  ('การเงิน',                         'system',          true, false, '...'),
+  ('บัญชี',                           'system',          true, false, '...'),
+  ('ธุรการ',                          'system',          true, true,  '...'),  -- editable
+-- inhouse group
+  ('ผู้จัดการทีมติดตามทรัพย์',           'inhouse',         true, false, '...'),
+  ('หัวหน้าทีมติดตามทรัพย์',             'inhouse',         true, false, '...'),
+  ('พนักงานติดตามทรัพย์',               'inhouse',         true, false, '...'),
+-- outsource group
+  ('ผู้จัดการทีมติดตามทรัพย์',           'outsource',       true, false, '...'),
+  ('หัวหน้าทีมติดตามทรัพย์',             'outsource',       true, false, '...'),
+  ('พนักงานติดตามทรัพย์',               'outsource',       true, false, '...'),
+-- finance_company group
+  ('ผู้จัดการ',                        'finance_company', true, false, '...'),
+  ('หัวหน้า',                         'finance_company', true, false, '...'),
+  ('แอดมิน',                          'finance_company', true, false, '...');
+-- รวม 15 records (system 6 + inhouse 3 + outsource 3 + finance_company 3)
+
+-- ── 3. VAT Rate History (เริ่มต้น 7%) ──────────────────────
+INSERT INTO vat_rate_history (rate_pct, effective_from, note, organization_id, created_by)
+VALUES (7.00, '2025-10-01', 'อัตรา VAT 7% ต่ออายุ (ระบุวันหมดอายุเมื่อรู้)', '...', '...superadmin_id...');
+
+-- ── 4. Default Tax Profile ──────────────────────────────────
+INSERT INTO tax_profiles (name, wht_pct, filing_form, organization_id, created_by)
+VALUES
+  ('Outsource Standard 3%', 3.00, 'PND3',  '...', '...'),
+  ('Juristic Entity 3%',    3.00, 'PND53', '...', '...');
+
+-- ── 4.0.1 Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (v4.49 มติ PO U121) — สร้างเมื่อยังไม่เคยตั้ง (idempotent)
+-- outsource บุคคลธรรมดา → Outsource Standard 3% (before_vat · ฿1,000 · ภ.ง.ด.3) · outsource นิติบุคคล → Juristic Entity 3% (ภ.ง.ด.53)
+-- · ช่อง inhouse ว่าง (ใช้อัตรา 40(1)/40(2) ต่อคนตามค่าตั้งภาษี)
+INSERT INTO tax_profile_default_history (organization_id, outsource_individual_tax_profile_id, outsource_corporate_tax_profile_id, reason, created_by)
+VALUES ('...org_id...', '...Outsource Standard 3%...', '...Juristic Entity 3%...', 'ค่าเริ่มต้นมาตรฐานตอนติดตั้งระบบ', '...');
+
+-- ── 4.1 Finance Policy Settings ค่าเริ่มต้น (DEC-006/D1) ────
+INSERT INTO finance_policy_settings (organization_id, advance_max_amount_per_request_satang, require_payee_id_document, ar_aging_buckets)
+VALUES ('...org_id...', NULL, false, '{30,60,90}');  -- NULL = ไม่จำกัดเพดาน Advance (ปรับได้ที่เมนูตั้งค่า)
+
+-- ── 5. Capabilities (รายการ Action ทั้งหมด) ────────────────
+-- ตามไฟล์ 25 (Permission Matrix)
+-- approve_claim, reject_claim, approve_advance, approve_expense_manager,
+-- approve_expense_finance, create_payout_batch, generate_payment_file,
+-- manage_billing, issue_tax_invoice, cancel_tax_invoice,
+-- create_adjustment, approve_adjustment_locked, lock_period, unlock_period,
+-- export_accounting_pack, manage_exceptions, authorize_exception,
+-- import_bank_statement, match_bank_transaction,
+-- manage_users, manage_roles, manage_companies, manage_teams,
+-- manage_compensation_plans, manage_service_fees, manage_settings,
+-- intake_asset, reject_asset_intake, create_handover_lot, confirm_handover_lot,
+-- approve_case, reject_case, reject_evidence
+-- (เพิ่มเติมตาม business logic จริง)
+```
+
+---
+
+## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง)
+
+| Table | Trigger Condition | Rule |
+|---|---|---|
+| `case_evidences` | status = 'approved' | ห้าม UPDATE ทุก column |
+| `payout_batches` | status = 'completed' | ห้าม UPDATE gross/wht/net · ห้ามเปลี่ยนเป็น `cancelled` (v4.25) |
+| `payout_batches` | status = 'cancelled' (v4.25 — มติ PO U67) | terminal — ห้ามเปลี่ยนสถานะ/ยอด/`idempotency_key`/ข้อมูลการยกเลิก (trigger `trg_payout_batches_cancel_guard`) |
+| `tax_invoices` | status = 'cancelled' | ห้าม DELETE, ห้าม reverse cancel |
+| `credit_notes` | any | ห้าม DELETE ทุกกรณี · `active` แก้ได้ทางเดียวคือยกเลิก (พร้อมเหตุผล) · `cancelled` ห้ามแก้/ห้าม reverse (มติ PO U14) |
+| `wht_certificates` | status = 'cancelled' | ห้าม DELETE, ห้าม reverse cancel — ออกใบใหม่อ้าง `replaces_certificate_id` แทน (DEC-006/D4) |
+| `export_records` | any | ห้าม DELETE, ต้องสร้าง version ใหม่แทน |
+| `bank_transactions` | match_status != 'unmatched' | unmatch ต้องมี reason + audit |
+| `handover_lots` | status = 'confirmed' | ห้าม UPDATE, ห้าม DELETE |
+| `audit_logs` | any | ห้าม UPDATE/DELETE เด็ดขาด |
+| `finance_company_documents` | any (v4.5x-fixer-u132 — มติ PO U132) | ห้าม UPDATE/DELETE/TRUNCATE — แทนที่ = เวอร์ชันใหม่ (trigger `trg_finance_company_documents_immutable`) |
+| `substitute_receipts` | any (v4.43 — มติ PO U103) | เลข/ผู้จ่าย/การผูก/วันที่/ยอดห้ามแก้ · `pending_signature` → `signed` ได้ครั้งเดียว ไฟล์ฉบับเซ็นเปลี่ยนไม่ได้ (trigger `trg_substitute_receipts_guard`) · บรรทัด (`substitute_receipt_lines`) ห้าม UPDATE |
+| `advance_returns` | any | แก้ได้ทางเดียวคือกลับรายการครั้งเดียว (มีเหตุผล) — ช่องอื่นห้ามแก้ (trigger) · ไม่มีเส้นทางลบในระบบ (มติ PO U30) |
+| `case_edit_history` | any | append-only ที่ชั้น service — มีแต่ INSERT ไม่มี endpoint/โค้ดที่ UPDATE/DELETE (เพิ่ม 14/08/2569 · ไฟล์ 38 §6.4 "ไม่เขียนทับประวัติเดิม") · **ไม่ใส่ trigger ระดับ DB** เพราะตารางนี้ผูก `ON DELETE CASCADE` กับ `cases` — trigger จะไปบล็อก cascade ด้วย (audit ตัวจริงที่ห้ามแตะเด็ดขาดคือ `audit_logs`) |
+| `roles` | is_seed = true | ห้าม DELETE, ห้าม UPDATE name/role_group |
+| `accounting_periods` | status = 'locked' | แก้ตรงไม่ได้ — ต้องผ่าน Adjustment + Executive |
+
+---
+
+## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions)
+
+- **Polymorphic relation → Separate FK columns + CHECK constraint** (DEC-004) — ใช้กับ `adjustments` (revenue/expense/billing_batch/payout_batch) และ `bank_transactions` (matched_billing/matched_payout) แทน discriminator string ทั้งหมด
+- **Permission architecture → Backend middleware** (DEC-002) — ทุก table มี `organization_id` สำหรับ filter แต่ enforce จริงที่ API layer ไม่ใช่ RLS
+- **Money convention → INTEGER satang เสมอ** — ไม่มีตารางใดใช้ DECIMAL สำหรับเงิน ยกเว้น `rate_pct`/`wht_pct` ที่เป็นอัตราร้อยละใช้ NUMERIC(5,2)
+- **Index composite ขึ้นต้นด้วย `organization_id` เสมอ** สำหรับ query pattern หลักของแต่ละ module (multi-tenant filter ก่อนเป็นอันดับแรก)
+- **Circular FK (users ↔ teams ↔ organizations) แก้ด้วย `DEFERRABLE INITIALLY DEFERRED`** ไม่ใช่ปรับ schema ให้ตัด FK ทิ้ง (ข้อ 11)
+- **Immutable Rules บังคับที่ระดับ table ไม่ใช่แค่ระดับ application** — ระบุไว้ชัดในข้อ 13 เพื่อให้ dev รู้ว่าต้องกัน UPDATE/DELETE ที่ backend layer สำหรับ record ที่ status terminal แล้ว
+- **เพิ่ม index ที่ขาดในกลุ่ม Accounting (§9) แล้ว** (v3): `sales_records`, `cash_receipts`, `wht_certificates`, `accountant_questions`, `case_contacts`, `recycle_requests` — ปิด Open Item เดิมเรื่อง index profiling บางส่วน
+
+## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items)
+
+- [ ] **Tax Invoice Numbering format** (INV-XXXX vs INV-2569-XXXX) — 🟡 **มีเมนูตั้งค่ารองรับแล้ว** (`13-accounting-finance-settings.md` §6.12, `settings.html`) Superadmin ตั้งค่าเองได้ ไม่บล็อก build — เหลือแค่รอนักบัญชียืนยันค่าเริ่มต้น (`QUESTIONS-FOR-ACCOUNTANT.md` หมวด C1) ก่อนออก invoice แรก
+- [ ] **e-Tax Invoice / e-WHT integration** — เฟส 2 หลังตัดสินใจกับนักบัญชี — จะกระทบ column `delivery_format` ใน `wht_certificates` และอาจเพิ่ม table ใหม่สำหรับ integration status — ยังไม่มีเมนูตั้งค่ารองรับ (ต่างจาก Tax Invoice Numbering)
+- [ ] **Bank File encoding** (TIS-620 vs UTF-8) — 🟡 **มีเมนูตั้งค่ารองรับแล้ว** (`13-accounting-finance-settings.md` §6.8) ตั้ง encoding ต่อธนาคารได้ + บังคับ `test_status=passed` ก่อนใช้จริง ไม่บล็อก build — เหลือแค่**ทดสอบจริงกับธนาคาร** (`QUESTIONS-FOR-ACCOUNTANT.md` หมวด F1) — กระทบตอน generate `payment_file_url` ใน `payout_batches`
+- [ ] **Index profiling เต็มรูปแบบสำหรับ dashboard query ที่ join หลาย table** (เช่น Gross Profit Report join `revenues` + `expense_records` + `billing_batches`) ยังไม่ได้ทดสอบด้วยข้อมูลจริง — ควร EXPLAIN ANALYZE หลังมี seed data ปริมาณใกล้เคียง production
+- [ ] Prisma schema (.prisma) ยังไม่แปลงจาก SQL นี้ — เป็นงานถัดไปหลัง Batch 1 เสร็จ (ตาม Execution Workflow §2 Database First)
+
+---
+
+*เอกสารนี้เป็นไฟล์ที่ 3 ในหมวด Foundation & Platform ต่อจาก `01-architecture.md` และก่อน `03-non-functional-requirements.md`*
+)
+);
+CREATE INDEX idx_finance_company_documents_org_company ON finance_company_documents(organization_id, company_id, document_type);
+-- ชนิดเดี่ยวมีได้ 1 สายเวอร์ชันต่อบริษัท (COMPANY_DOCUMENT_VERSION_CONFLICT)
+CREATE UNIQUE INDEX uniq_company_documents_first_singleton ON finance_company_documents(company_id, document_type)
+  WHERE version = 1 AND document_type <> 'other';
 
 -- ── service_fee_templates ────────────────────────────────────
 -- กติกาค่าบริการ ตามไฟล์ 12

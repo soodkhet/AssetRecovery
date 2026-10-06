@@ -41,6 +41,7 @@
 | v3.22 | 07/10/2569 | **Final Test ด่าน 3 (ข้อสังเกต J.2 ของ `uat/report/FINAL-coverage.md`) — ปรับข้อความให้ตรงมติที่อนุมัติแล้ว ไม่เปลี่ยนพฤติกรรม**: §6.4 ตาราง Tax Profile แถว `vat_mode` → `filing_form` (PND3/PND53 เท่านั้น — PND1 มาจากอัตรารายคน 40(1)/40(2) · O57 · U96 #2) · แถว `applies_to` → ระบุว่าไม่มีคอลัมน์ ใช้ `tax_profile_default_history` (U121) · §6.4.2 วิธียื่น ภ.ง.ด. "ไม่เลื่อนตามวันหยุด" → เลื่อนตามปฏิทินวันหยุด (U93) |
 | v3.23 | 07/10/2569 | **มติ O73 (Final Test ด่าน 5)**: ลบ endpoint `/api/settings/seller-branch` (ไม่มีหน้าจอเรียกแล้วหลัง U99 · ซ้ำกับ `PATCH /api/settings/organization`) — สาขาผู้ขายแก้ที่ §6.17 ข้อมูลองค์กรจุดเดียว |
 | v3.x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U140)**: §7.1 ป้าย "รอนักบัญชียืนยัน" ข้างค่าตั้งที่เป็นสมมติฐาน + ปุ่ม "ยืนยันแล้ว" ของบัญชี (เหตุผล + audit · ตาราง `setting_assumption_confirmations`) |
+| v3.x-CC | 07/10/2569 | **มติ PO 07/10/2569 (U133 + U132)**: §6.1 "ใช้กับ (ขอบเขต)" เปลี่ยนจากข้อความอิสระที่ไม่มีผล เป็น **ขอบเขตจริง** `scope_kind` — รอบบิล AR: บริษัทไฟแนนซ์ทุกราย / เลือกรายบริษัท (junction `billing_cycle_companies`) · รอบจ่าย AP: ทุกทีม / In-house / Outsource · **ห้ามซ้อน** กับรอบชนิดเดียวกันที่ยังใช้งาน (`CYCLE_SCOPE_OVERLAP`) · สร้างรอบวางบิล/รอบจ่ายแล้วระบบเลือกรอบที่ตรงให้อัตโนมัติ (แก้เป็น "ไม่ใช้รอบ" ได้ · ส่งรอบที่ไม่ครอบ = `CYCLE_SCOPE_MISMATCH`) · รอบจ่ายเก็บ `cycle_id` + กำหนดจ่าย `pay_due_date` (snapshot) · migration แปลงข้อมูลเดิม: AR = ทุกบริษัท · AP = ฝั่งเดียวที่ข้อความระบุชัด ไม่งั้นทุกทีม · ข้อความเดิมเก็บที่ `legacy_scope_note` (แสดงในตาราง/ฟอร์ม · ไม่มีผล) · §6.9 ชุดไฟล์ Export Pack 17 → **18 ไฟล์ (00–17)** — `17_Company_Documents.csv` (U132 · `37` §6.1) |
 
 ขอบเขตเอกสารนี้: รวมการตั้งค่าพื้นฐานทั้งหมดที่โมดูล Finance/Accounting อื่นต้องอ้างอิง — รอบบิล/รอบจ่าย, สายการอนุมัติ, บัญชีธนาคารบริษัท, Tax Profile, VAT Rate, Cost Center, รูปแบบเอกสาร, รูปแบบไฟล์โอนธนาคาร, Export format, Functional Permission Matrix, นโยบายล็อกรอบบัญชี, รูปแบบเลขที่ใบกำกับภาษี, และรูปแบบเอกสารภาษีทางการ — **13 sub-section ทั้งหมด**
 
@@ -88,7 +89,14 @@
 | cutoff_dates | array of integer \| null | — | ใช้เมื่อ `cutoff_rule_type = fixed_dates` — รายการวันที่ในเดือน เช่น `[15, 30]` |
 | cutoff_text | string \| null | — | ใช้เมื่อ `cutoff_rule_type = custom_text` — คำอธิบายอิสระให้แอดมินจำเอง |
 | due_rule | string | yes | เงื่อนไขกำหนดชำระ/จ่าย (เช่น "Net 30 Days", "วันที่ 5 ของเดือนถัดไป") |
-| scope | string | yes | ขอบเขตที่ใช้รอบนี้ (เช่น "ทุกไฟแนนซ์", "ทีม Outsource") |
+| scope_kind | enum `cycle_scope_kind` | yes | ขอบเขตจริง (มติ PO U133) — AR: `all_companies` (บริษัทไฟแนนซ์ทุกราย) / `selected_companies` (เลือกรายบริษัท ≥ 1) · AP: `all_teams` / `inhouse` / `outsource` · CHECK เข้าคู่ชนิดรอบ |
+| company_ids | array of uuid | เฉพาะ `selected_companies` | บริษัทที่ใช้รอบนี้ (ตาราง `billing_cycle_companies`) |
+| legacy_scope_note | string \| null | no | ข้อความ "ใช้กับ" แบบอิสระเดิมก่อนมติ U133 — อ้างอิงเท่านั้น ไม่มีผล · รอบใหม่ = null |
+
+กติกาขอบเขต (มติ PO U133):
+- **ห้ามซ้อน** กับรอบชนิดเดียวกันที่ยังใช้งาน: "ทุกบริษัท" ซ้อนรอบบิลทุกรอบ · บริษัทเดียวกันอยู่ได้รอบบิลเดียว · "ทุกทีม" ซ้อนรอบจ่ายทุกรอบ · ฝั่ง In-house/Outsource อยู่ได้รอบเดียวต่อฝั่ง ⇒ `CYCLE_SCOPE_OVERLAP` (409) · ตรวจภายใต้ lock ต่อองค์กร+ชนิด (สร้างพร้อมกันได้รอบเดียว) · รอบที่ปิดใช้งานไม่นับ
+- **มีผลจริง**: สร้างรอบวางบิล (`19` §9.1) ⇒ ระบบเลือกรอบบิลที่ครอบบริษัทนั้นให้อัตโนมัติ (รอบที่ระบุบริษัทชนะ "ทุกบริษัท") ใช้คำนวณวันครบกำหนด · สร้างรอบจ่าย (`17` §8) ⇒ เลือกรอบจ่ายที่ครอบฝั่งนั้นให้ · คำนวณกำหนดจ่าย = เงื่อนไขกำหนดชำระของรอบนับจากวันตัดรอบ (snapshot `payout_batches.pay_due_date`) · ผู้ใช้เปลี่ยนเป็น "ไม่ใช้รอบ" ได้ · ส่งรอบที่ไม่ครอบ = `CYCLE_SCOPE_MISMATCH`
+- ข้อมูลเดิม (ก่อน U133): AR = ทุกบริษัท · AP = ฝั่งที่ข้อความระบุชัดเพียงฝั่งเดียว ไม่งั้นทุกทีม · ข้อความเดิมเก็บใน `legacy_scope_note` + audit before/after ของการแก้ครั้งถัดไป — รอบเดิมที่ซ้อนกันอยู่ต้องแก้ขอบเขตให้ไม่ซ้อนก่อนบันทึกครั้งถัดไป
 
 ### 6.2 Approval Matrix (สายการอนุมัติ)
 
@@ -259,6 +267,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | 14_Unbilled_Revenue.csv | CSV UTF-8 | รายได้ค้างรับ (ส่งมอบแล้ว ยังไม่วางบิล) — case_ref, company, company_tax_id, delivered_date, fee_model, before_vat, vat, total, vat_rate_pct, billing_batch_number (รอบร่าง) (มติ PO 06/10/2569 U87) | 19 |
 | 15_Accrued_Expenses.csv | CSV UTF-8 | ค่าตอบแทน/ค่าใช้จ่ายค้างจ่าย ณ สิ้นงวด — expense_id, payee, payee_tax_id, category, case_ref, work_date, status, gross, estimated_wht, payout_batch_ref (มติ PO 06/10/2569 U94) | 17 |
 | 16_Advance_Balance.csv | CSV UTF-8 | เงินทดรองต่อคน — ยอดยกมา, จ่าย, ใช้/เคลียร์, คืน (หักกลบ/รับแยก), คงเหลือสิ้นงวด, advance_refs (มติ PO 06/10/2569 U94) | 15 |
+| 17_Company_Documents.csv | CSV UTF-8 | เอกสารบริษัทไฟแนนซ์เวอร์ชันปัจจุบัน + คำเตือนเอกสารไม่ครบ — ภาพ ณ เวลาสร้างชุด (มติ PO 07/10/2569 U132) | 10 |
 
 ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี)
 

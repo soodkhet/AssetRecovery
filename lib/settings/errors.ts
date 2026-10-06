@@ -12,6 +12,8 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
 export const SETTINGS_ERROR_CODES = [
   // §6.1 รอบบิล/รอบจ่าย
   'CYCLE_NOT_FOUND',
+  'CYCLE_SCOPE_OVERLAP',
+  'CYCLE_SCOPE_MISMATCH',
   'DUPLICATE_CYCLE_NAME',
   // §6.2 สายอนุมัติ
   'APPROVAL_MATRIX_NOT_FOUND',
@@ -51,6 +53,8 @@ export type SettingsErrorCode = (typeof SETTINGS_ERROR_CODES)[number]
 /** 400 = ผิดกติกาข้อมูล/สถานะ · 404 = ไม่พบเป้าหมาย (ไม่ leak ว่ามี record นี้ในองค์กรอื่นไหม) */
 const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   CYCLE_NOT_FOUND: 404,
+  CYCLE_SCOPE_OVERLAP: 409,
+  CYCLE_SCOPE_MISMATCH: 400,
   DUPLICATE_CYCLE_NAME: 400,
   APPROVAL_MATRIX_NOT_FOUND: 404,
   BANK_ACCOUNT_NOT_FOUND: 404,
@@ -76,6 +80,14 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
 }
 
 const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
+  CYCLE_SCOPE_OVERLAP: {
+    title: 'ขอบเขตรอบซ้อนกับรอบอื่น',
+    message: 'บริษัทหรือฝั่งทีมนี้อยู่ในรอบชนิดเดียวกันที่ใช้งานอยู่แล้ว — 1 บริษัท/ฝั่งทีม ใช้รอบบิลหรือรอบจ่ายได้รอบเดียว',
+  },
+  CYCLE_SCOPE_MISMATCH: {
+    title: 'รอบที่เลือกไม่ครอบคลุมรายการนี้',
+    message: 'รอบที่เลือกไม่ได้ใช้กับบริษัทหรือฝั่งทีมนี้ — เลือกรอบที่ตรงขอบเขต หรือไม่ใช้รอบ',
+  },
   CYCLE_NOT_FOUND: {
     title: 'ไม่พบรอบบิล/รอบจ่าย',
     message: 'ไม่พบรอบที่ระบุ หรือรอบนี้ถูกลบไปแล้ว',

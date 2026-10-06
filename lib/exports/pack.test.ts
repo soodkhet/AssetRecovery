@@ -39,6 +39,8 @@ import {
   ACCRUED_EXPENSE_STATUSES,
   accruedExpenseCsv,
   ADVANCE_BALANCE_HEADERS,
+  COMPANY_DOCUMENT_HEADERS,
+  companyDocumentCsv,
   advanceBalanceCsv,
   buildPackCoverDoc,
   createPackPdfBudget,
@@ -92,8 +94,8 @@ function sampleHeader(fileName: string): string[] {
 }
 
 describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', () => {
-  it('ครบ 17 ไฟล์ เลข 00–16 ต่อเนื่องไม่มีช่องว่าง (09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94)', () => {
-    expect(PACK_FILES).toHaveLength(17)
+  it('ครบ 18 ไฟล์ เลข 00–17 ต่อเนื่องไม่มีช่องว่าง (17 = U132 · 09 = มติ PO U21 · 10/11 = U40/U41 · 12/13 = U57/U68 · 14 = U87 · 00/15/16 = U94)', () => {
+    expect(PACK_FILES).toHaveLength(18)
     expect(PACK_FILES.map((file) => file.no)).toEqual([
       '00',
       '01',
@@ -112,6 +114,7 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '14',
       '15',
       '16',
+      '17',
     ])
     expect(PACK_FILES.map((file) => file.fileName)).toEqual([
       '00_Control_Totals.csv',
@@ -131,8 +134,9 @@ describe('รายชื่อไฟล์มาตรฐาน (`37` §6.1)', 
       '14_Unbilled_Revenue.csv',
       '15_Accrued_Expenses.csv',
       '16_Advance_Balance.csv',
+      '17_Company_Documents.csv',
     ])
-    expect(packFileRangeLabel()).toBe('00–16')
+    expect(packFileRangeLabel()).toBe('00–17')
     expect(PACK_FILES.filter((file) => file.kind === 'xlsx').map((file) => file.no)).toEqual(['08'])
   })
 
@@ -217,6 +221,7 @@ describe('หัวคอลัมน์ตรงกับ reference/samples ท
     ['00_Control_Totals.csv', CONTROL_TOTALS_HEADERS],
     ['15_Accrued_Expenses.csv', ACCRUED_EXPENSE_HEADERS],
     ['16_Advance_Balance.csv', ADVANCE_BALANCE_HEADERS],
+    ['17_Company_Documents.csv', COMPANY_DOCUMENT_HEADERS],
   ])('%s', (fileName, headers) => {
     expect(sampleHeader(fileName)).toEqual([...headers])
   })
@@ -1316,7 +1321,7 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
     expect(amounts).toEqual(['366.00', '679.65', '1,045.65'])
   })
 
-  it('หน้าปก: จำนวนแถวต่อไฟล์ + ตารางยอดสรุปค่าเดียวกับไฟล์ 00 · ช่วงไฟล์ 00–16 · หมายเหตุโฟลเดอร์ PDF', () => {
+  it('หน้าปก: จำนวนแถวต่อไฟล์ + ตารางยอดสรุปค่าเดียวกับไฟล์ 00 · ช่วงไฟล์ 00–17 · หมายเหตุโฟลเดอร์ PDF', () => {
     const doc = buildPackCoverDoc({
       organizationName: 'บริษัททดสอบ',
       periodLabel: 'มิถุนายน 2569',
@@ -1327,8 +1332,8 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
       checks: [],
       controlTotals: controlTotalsForCover(lines),
     })
-    expect(doc.fileRangeLabel).toBe('00–16')
-    expect(doc.files).toHaveLength(17)
+    expect(doc.fileRangeLabel).toBe('00–17')
+    expect(doc.files).toHaveLength(18)
     expect(doc.files.find((file) => file.fileName === '00_Control_Totals.csv')?.rowCountText).toBe(String(lines.length))
     expect(doc.files.find((file) => file.fileName === '01_Revenue.csv')?.rowCountText).toBe('2')
     expect(doc.totals).toHaveLength(13)
@@ -1409,5 +1414,11 @@ describe('BUG-167/168 — จำนวนเอกสารแนบ + ชื่
     expect(packAttachmentCount(null)).toBe(0)
     expect(packAttachmentCount([])).toBe(0)
     expect(packAttachmentCount({ x: { attached: -1 }, y: { attached: '3' }, z: null })).toBe(0)
+  })
+})
+
+describe('17_Company_Documents.csv (มติ PO 07/10/2569 U132)', () => {
+  it('ประกอบได้ตรงไฟล์ตัวอย่าง · บริษัทที่ไม่มีเอกสารได้แถวคำเตือน', () => {
+    expect(companyDocumentCsv(CONTROL_TOTALS_FIXTURE.companyDocuments)).toBe(sampleText('17_Company_Documents.csv'))
   })
 })

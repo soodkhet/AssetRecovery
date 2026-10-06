@@ -43,6 +43,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   compensation_plans: 'money',
   service_fee_templates: 'money',
   billing_payout_cycles: 'money',
+  // มติ PO U133 — บริษัทที่รอบบิลใช้ (กำหนดวันครบกำหนดชำระของรอบวางบิล)
+  billing_cycle_companies: 'money',
   finance_policy_settings: 'money',
   cost_centers: 'money',
   // สิทธิ์
@@ -73,6 +75,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   tax_document_template_settings: 'tax',
   // มติ PO U140 — ยืนยันสมมติฐานทางบัญชี/ภาษีของค่าตั้ง
   setting_assumption_confirmations: 'tax',
+  // มติ PO U132 — เอกสารบริษัทไฟแนนซ์ (หนังสือรับรอง/ภ.พ.20 ยืนยันข้อมูลผู้ซื้อบนใบกำกับภาษี)
+  finance_company_documents: 'tax',
   // ปิด/เปิดงวด
   accounting_periods: 'period_lock',
 }

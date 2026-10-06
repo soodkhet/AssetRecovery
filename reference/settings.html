@@ -183,9 +183,9 @@ const store = {
   finSettings: {
     // §6.1 Billing/Payout Cycles
     cycles: [
-      { id: 'fc1', name: 'AR รอบวางบิลหลัก',       type: 'AR', cutoffRuleType: 'fixed_dates',  cutoffDates: [15, 30], cutoffText: '',                           due: 'Net 30 Days',                    scope: 'ทุกไฟแนนซ์' },
+      { id: 'fc1', name: 'AR รอบวางบิลหลัก',       type: 'AR', cutoffRuleType: 'fixed_dates',  cutoffDates: [15, 30], cutoffText: '',                           due: 'Net 30 Days',                    scope: 'บริษัทไฟแนนซ์ทุกราย' },
       { id: 'fc2', name: 'AP รอบจ่าย Outsource',   type: 'AP', cutoffRuleType: 'fixed_dates',  cutoffDates: [25],     cutoffText: '',                           due: 'วันที่ 5 ของเดือนถัดไป',        scope: 'ทีม Outsource' },
-      { id: 'fc3', name: 'AP รอบจ่าย Inhouse',     type: 'AP', cutoffRuleType: 'month_end',    cutoffDates: [],       cutoffText: '',                           due: 'วันที่ 5 ของเดือนถัดไป',        scope: 'ทีม Inhouse' },
+      { id: 'fc3', name: 'AP รอบจ่าย Inhouse',     type: 'AP', cutoffRuleType: 'month_end',    cutoffDates: [],       cutoffText: '',                           due: 'วันที่ 5 ของเดือนถัดไป',        scope: 'ทีม In-house' },
     ],
     // §6.2 Approval Matrix
     approvals: [
@@ -884,6 +884,7 @@ function renderCompaniesContent() {
           <div class="font-bold text-slate-900 text-lg mb-1">${c.name}</div>
           <div class="text-xs text-slate-500 font-mono mb-4">Tax ID: ${c.taxId} · ${(c.branchCode && c.branchCode !== '00000') ? 'สาขาที่ ' + c.branchCode : 'สำนักงานใหญ่'} ${c.vatRegistered ? '· <span class="text-emerald-600 font-semibold not-italic">จด VAT แล้ว</span>' : '· <span class="text-slate-400">ไม่จด VAT</span>'}</div>
           ${c.status === 'suspended' && c.suspendedReason ? `<div class="mb-3 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700">⚠️ เหตุผลระงับ: ${c.suspendedReason}</div>` : ''}
+          ${c.status === 'active' ? '<div class="mb-3 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">เอกสารบริษัทยังไม่ครบ: หนังสือรับรองบริษัทออกเกิน 6 เดือนแล้ว — ขอฉบับใหม่จากบริษัท · ยังไม่มี ภ.พ.20 ของบริษัท</div>' : ''}
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-y-3 gap-x-4 text-sm mb-4">
             <div class="col-span-2 lg:col-span-1"><span class="text-slate-400 block text-[11px] uppercase mb-0.5 font-semibold">ผู้ติดต่อบริษัท</span> <span class="font-medium text-slate-800">${c.contactName}</span> <br><span class="text-xs text-slate-500">📞 ${c.contactPhone}</span></div>
             <div class="col-span-2 lg:col-span-1"><span class="text-slate-400 block text-[11px] uppercase mb-0.5 font-semibold">ผู้ลงนามสัญญา</span> <span class="font-medium text-slate-800">${c.signer}</span> <br><span class="text-xs text-slate-500">📞 ${c.signerPhone || '-'}</span></div>
@@ -893,6 +894,7 @@ function renderCompaniesContent() {
           <div class="flex items-center justify-between pt-3 border-t border-slate-100">
             <div class="text-xs text-slate-500"><span class="font-bold text-slate-800">${c.cases}</span> เคส | <span class="font-bold text-slate-800">${c.users}</span> บัญชีผู้ใช้</div>
             <div class="flex items-center gap-2">
+              <button data-action="toast" data-msg="เอกสารบริษัท: หนังสือรับรอง (เวอร์ชัน 2) · ภ.พ.20 · สัญญาว่าจ้าง · หน้าสมุดบัญชี · อื่น ๆ — เก็บทุกเวอร์ชัน ไม่มีการลบ" class="border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">📎 เอกสารบริษัท</button>
               <button data-action="open-edit-company" data-company="${c.id}" class="border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">⚙️ แก้ไขบริษัท</button>
               ${c.status === 'active' ? `<button data-action="open-modal" data-type="suspend-company" data-id="${c.id}" class="border border-red-200 hover:bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">🚫 ระงับ</button>` : `<button data-action="toast" data-msg='เปิดใช้งานบริษัท "${c.name}" แล้ว' class="border border-emerald-200 hover:bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">✓ เปิดใช้งาน</button>`}
             </div>
@@ -1824,7 +1826,7 @@ function renderModal() {
   // --- FINANCE MASTER SETTINGS FORMS ---
   else if (type === 'fin-cycle-form') {
     title = isEdit ? 'แก้ไขรอบบิล/รอบจ่าย' : 'สร้างรอบบิล/รอบจ่าย (Cycle)';
-    body = `<div class="space-y-4">${formInput('fc_name', 'ชื่อรอบ', isEdit ? 'AR รอบวางบิลหลัก' : '', 'text', '', true)}<div class="grid grid-cols-2 gap-4">${formSelect('fc_type', 'ฝั่ง (AP/AR)', [{val:'AR',text:'AR (รับเงิน/วางบิล)'},{val:'AP',text:'AP (จ่ายเงิน)'}], 'AR')}${formInput('fc_scope', 'Scope (กลุ่มที่ใช้กฎนี้)', isEdit ? 'ทุกไฟแนนซ์' : '', 'text', 'เช่น ทีม Outsource')}${formInput('fc_cutoff', 'วันตัดรอบ (Cut-off Date)', isEdit ? 'ทุกวันที่ 15 และ 30' : '', 'text', '', true)}${formInput('fc_due', 'เงื่อนไขการรับ/จ่าย (Due Date)', isEdit ? 'Net 30 Days' : '', 'text', '', true)}</div></div>`;
+    body = `<div class="space-y-4">${formInput('fc_name', 'ชื่อรอบ', isEdit ? 'AR รอบวางบิลหลัก' : '', 'text', '', true)}<div class="grid grid-cols-2 gap-4">${formSelect('fc_type', 'ฝั่ง (AP/AR)', [{val:'AR',text:'AR (รับเงิน/วางบิล)'},{val:'AP',text:'AP (จ่ายเงิน)'}], 'AR')}${formSelect('fc_scope', 'ใช้กับ (ขอบเขต)', [{val:'all_companies',text:'รอบบิล: บริษัทไฟแนนซ์ทุกราย'},{val:'selected_companies',text:'รอบบิล: เลือกรายบริษัท'},{val:'all_teams',text:'รอบจ่าย: ทุกทีม'},{val:'inhouse',text:'รอบจ่าย: ทีม In-house'},{val:'outsource',text:'รอบจ่าย: ทีม Outsource'}], 'all_companies')}<div class="col-span-2 text-[11px] text-slate-500 -mt-2">ตอนสร้างรอบวางบิล/รอบจ่าย ระบบเลือกรอบที่ใช้กับบริษัท/ฝั่งทีมนั้นให้อัตโนมัติ — 1 บริษัท/ฝั่งทีมอยู่ได้รอบเดียวต่อชนิด (เลือกรายบริษัท = ติ๊กรายชื่อบริษัทใต้ช่องนี้)</div>${formInput('fc_cutoff', 'วันตัดรอบ (Cut-off Date)', isEdit ? 'ทุกวันที่ 15 และ 30' : '', 'text', '', true)}${formInput('fc_due', 'เงื่อนไขการรับ/จ่าย (Due Date)', isEdit ? 'Net 30 Days' : '', 'text', '', true)}</div></div>`;
   }
   else if (type === 'fin-approval-form') {
     title = isEdit ? 'แก้ไข Approval Matrix' : 'สร้างกติกาการอนุมัติ (Approval Matrix)';

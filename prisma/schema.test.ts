@@ -90,7 +90,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // + substitute_receipt_status (มติ PO 06/10/2569 U103 — ใบรับรองแทนใบเสร็จรับเงิน)
     // + notification_outbox_status (มติ PO 06/10/2569 U120 · DEC-015 — คิวแจ้งเตือนของ job)
     // − tax_document_type / tax_doc_paper_size / tax_doc_language + template_document_type (มติ PO 06/10/2569 U122)
-    expect(enums.length).toBe(72)
+    // + company_document_type (มติ PO U132) · cycle_scope_kind (มติ PO U133)
+    expect(enums.length).toBe(74)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

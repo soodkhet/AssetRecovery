@@ -29,7 +29,15 @@ import {
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
-import { MAX_CUTOFF_DAY, MIN_CUTOFF_DAY, describeCutoffRule } from '@/lib/settings/cycles'
+import {
+  CYCLE_SCOPE_KINDS_BY_TYPE,
+  CYCLE_SCOPE_LABEL,
+  MAX_CUTOFF_DAY,
+  MIN_CUTOFF_DAY,
+  describeCutoffRule,
+  describeCycleScope,
+} from '@/lib/settings/cycles'
+import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { cycleCreateSchema } from '@/lib/settings/schemas'
 import type { CycleDto } from '@/lib/settings/types'
 
@@ -40,10 +48,14 @@ import type { CycleDto } from '@/lib/settings/types'
  * ⇒ ฟอร์ม **ซ่อนช่องที่ไม่เกี่ยวกับชนิดที่เลือกจริง** ไม่ใช่แค่ disable (ค่าค้างทำให้ API ปฏิเสธ)
  *
  * `dueRule` เป็น label ที่ระบบประกอบให้เอง (A5) — ผู้ใช้พิมพ์เองไม่ได้ เพื่อไม่ให้ label ขัดกับค่าจริง
+ *
+ * มติ PO U133: "ใช้กับ" เป็นขอบเขตจริง — รอบบิล = ทุกบริษัท/เลือกรายบริษัท · รอบจ่าย = ทุกทีม/In-house/Outsource
+ * ห้ามซ้อนกับรอบชนิดเดียวกัน (API ตอบ `CYCLE_SCOPE_OVERLAP`) · ตอนสร้างรอบวางบิล/รอบจ่ายระบบเลือกรอบที่ตรงให้
  */
 
 type CutoffRuleType = 'fixed_dates' | 'month_end' | 'custom_text'
 type DueRuleType = 'net_days' | 'day_of_next_month' | 'month_end'
+type ScopeKind = 'all_companies' | 'selected_companies' | 'all_teams' | 'inhouse' | 'outsource'
 
 interface FormState {
   name: string
@@ -53,7 +65,8 @@ interface FormState {
   cutoffText: string
   dueRuleType: DueRuleType
   dueRuleValue: string
-  scope: string
+  scopeKind: ScopeKind
+  companyIds: string[]
   reason: string
 }
 
@@ -65,7 +78,8 @@ const EMPTY_FORM: FormState = {
   cutoffText: '',
   dueRuleType: 'net_days',
   dueRuleValue: '30',
-  scope: '',
+  scopeKind: 'all_companies',
+  companyIds: [],
   reason: '',
 }
 
@@ -103,6 +117,8 @@ export function CyclesTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+
+  const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
 
   const [deleteTarget, setDeleteTarget] = useState<CycleDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
@@ -146,6 +162,19 @@ export function CyclesTab() {
     }
   }, [fetchItems])
 
+  // รายชื่อบริษัทสำหรับรอบบิลแบบเลือกรายบริษัท (โหลดเมื่อเปิดฟอร์ม)
+  useEffect(() => {
+    if (!formOpen) return
+    let cancelled = false
+    void (async () => {
+      const result = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=all')
+      if (!cancelled) setCompanies(result.data ?? [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [formOpen])
+
   function openForm(target: CycleDto | null): void {
     setEditing(target)
     setForm(
@@ -159,7 +188,8 @@ export function CyclesTab() {
             cutoffText: target.cutoffText ?? '',
             dueRuleType: target.dueRuleType,
             dueRuleValue: target.dueRuleValue === null ? '' : String(target.dueRuleValue),
-            scope: target.scope,
+            scopeKind: target.scopeKind,
+            companyIds: target.companies.map((company) => company.id),
             reason: '',
           },
     )
@@ -169,6 +199,15 @@ export function CyclesTab() {
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((current) => ({ ...current, [key]: value }))
+  }
+
+  function toggleCompany(companyId: string): void {
+    setForm((current) => ({
+      ...current,
+      companyIds: current.companyIds.includes(companyId)
+        ? current.companyIds.filter((value) => value !== companyId)
+        : [...current.companyIds, companyId],
+    }))
   }
 
   function toggleCutoffDay(day: number): void {
@@ -190,7 +229,8 @@ export function CyclesTab() {
       cutoffText: form.cutoffRuleType === 'custom_text' ? form.cutoffText.trim() : '',
       dueRuleType: form.dueRuleType,
       dueRuleValue: form.dueRuleType === 'month_end' || form.dueRuleValue.trim() === '' ? null : Number(form.dueRuleValue),
-      scope: form.scope.trim(),
+      scopeKind: form.scopeKind,
+      companyIds: form.scopeKind === 'selected_companies' ? form.companyIds : [],
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
@@ -340,7 +380,15 @@ export function CyclesTab() {
                   <span className="text-xs text-slate-600">{item.dueRule}</span>
                 </Td>
                 <Td>
-                  <span className="text-xs text-slate-500">{item.scope}</span>
+                  <span className="text-xs text-slate-700">
+                    {describeCycleScope(
+                      item.scopeKind,
+                      item.companies.map((company) => company.name),
+                    )}
+                  </span>
+                  {item.legacyScopeNote !== null && (
+                    <div className="mt-0.5 text-[10px] text-slate-400">ข้อความเดิม: {item.legacyScopeNote}</div>
+                  )}
                 </Td>
                 <Td className="text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -399,7 +447,20 @@ export function CyclesTab() {
               />
             </Field>
             <Field id="cycle-type" label="ชนิดรอบ" required error={errors.type}>
-              <Select id="cycle-type" value={form.type} onChange={(event) => set('type', event.target.value as 'AR' | 'AP')}>
+              <Select
+                id="cycle-type"
+                value={form.type}
+                onChange={(event) => {
+                  const type = event.target.value as 'AR' | 'AP'
+                  // เปลี่ยนชนิด = ขอบเขตต้องเปลี่ยนตาม (รอบบิลใช้กับบริษัท · รอบจ่ายใช้กับฝั่งทีม)
+                  setForm((current) => ({
+                    ...current,
+                    type,
+                    scopeKind: CYCLE_SCOPE_KINDS_BY_TYPE[type][0] ?? current.scopeKind,
+                    companyIds: [],
+                  }))
+                }}
+              >
                 <option value="AR">AR — วางบิลบริษัทไฟแนนซ์</option>
                 <option value="AP">AP — จ่ายค่าตอบแทนทีม</option>
               </Select>
@@ -499,14 +560,57 @@ export function CyclesTab() {
             })}
           />
 
-          <Field id="cycle-scope" label="ใช้กับ (ขอบเขต)" required error={errors.scope}>
-            <Input
+          <Field
+            id="cycle-scope"
+            label="ใช้กับ (ขอบเขต)"
+            required
+            error={errors.scopeKind}
+            hint={
+              form.type === 'AR'
+                ? 'ตอนสร้างรอบวางบิล ระบบเลือกรอบที่ใช้กับบริษัทนั้นให้อัตโนมัติ — 1 บริษัทอยู่ได้รอบบิลเดียว'
+                : 'ตอนสร้างรอบจ่าย ระบบเลือกรอบที่ใช้กับฝั่งทีมนั้นให้อัตโนมัติ — 1 ฝั่งทีมอยู่ได้รอบจ่ายเดียว'
+            }
+          >
+            <Select
               id="cycle-scope"
-              value={form.scope}
-              onChange={(event) => set('scope', event.target.value)}
-              placeholder='เช่น "บริษัทไฟแนนซ์ทุกราย" หรือ "ทีม Outsource"'
-            />
+              value={form.scopeKind}
+              onChange={(event) => set('scopeKind', event.target.value as ScopeKind)}
+            >
+              {CYCLE_SCOPE_KINDS_BY_TYPE[form.type].map((value) => (
+                <option key={value} value={value}>
+                  {CYCLE_SCOPE_LABEL[value]}
+                </option>
+              ))}
+            </Select>
           </Field>
+
+          {form.type === 'AR' && form.scopeKind === 'selected_companies' && (
+            <Field id="cycle-companies" label="บริษัทที่ใช้รอบนี้" required error={errors.companyIds}>
+              <div
+                id="cycle-companies"
+                className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2"
+              >
+                {companies.length === 0 && <p className="text-xs text-slate-400">กำลังโหลดรายชื่อบริษัท…</p>}
+                {companies.map((company) => (
+                  <label key={company.id} className="flex items-center gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.companyIds.includes(company.id)}
+                      onChange={() => toggleCompany(company.id)}
+                    />
+                    {company.name}
+                    {company.status === 'suspended' && <span className="text-[10px] text-red-600">(ระงับ)</span>}
+                  </label>
+                ))}
+              </div>
+            </Field>
+          )}
+
+          {editing?.legacyScopeNote !== null && editing?.legacyScopeNote !== undefined && (
+            <InlineAlert tone="info" title="ข้อความขอบเขตเดิม">
+              “{editing.legacyScopeNote}” — ข้อความนี้ไม่มีผลกับการเลือกรอบ ตรวจว่าขอบเขตด้านบนตรงกับที่ตั้งใจ
+            </InlineAlert>
+          )}
 
           <Field id="cycle-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea

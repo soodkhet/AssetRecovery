@@ -14,6 +14,7 @@ import {
   organizationSignaturePrefix,
 } from '@/lib/organization/profile'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
+import { companyDocumentPrefix, type CompanyDocumentType } from '@/lib/finance-companies/documents'
 
 /**
  * กติกาไฟล์ของแต่ละฟีเจอร์ที่ server ใช้ตรวจ (มติ PO 03/10/2569 — UAT Q13) — prefix ตรงกับ path ที่
@@ -122,4 +123,12 @@ export function organizationSignatureRule(organizationId: string): UploadRule {
     accept: ['png', 'jpeg'],
     maxBytes: ORGANIZATION_SIGNATURE_MAX_BYTES,
   }
+}
+
+/**
+ * เอกสารบริษัทไฟแนนซ์ (มติ PO U132) — `finance-companies/<companyId>/documents/<ชนิด>/<uuid>.<ext>`
+ * รับ PDF/รูป เพดานเท่าเอกสารล็อต · path ต่อเวอร์ชัน (ไม่ทับของเดิม)
+ */
+export function companyDocumentRule(companyId: string, documentType: CompanyDocumentType): UploadRule {
+  return { prefix: companyDocumentPrefix(companyId, documentType), accept: DOCUMENT_KINDS, maxBytes: MAX_UPLOAD_BYTES }
 }

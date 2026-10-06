@@ -25,6 +25,8 @@ export const payoutBatchCreateSchema = z.object({
   side: z.enum(['inhouse', 'outsource']),
   /** วันสิ้นสุดตัดรอบ — ดึงรายการที่อนุมัติแล้วจนถึงวันนี้ (`17` §7.1) */
   cutoffDate: dateOnlySchema('วันตัดรอบ'),
+  /** รอบจ่าย AP (มติ PO U133) — หน้าจอเลือกรอบที่ตรงฝั่งให้อัตโนมัติ · null = ไม่ใช้รอบ (ไม่มีกำหนดจ่าย) */
+  cycleId: z.guid().nullable().default(null),
   /** เว้นว่าง = ระบบตั้งชื่อให้จากฝั่ง + วันตัดรอบ */
   name: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),

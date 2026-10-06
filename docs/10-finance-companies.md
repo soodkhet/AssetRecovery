@@ -17,6 +17,7 @@
 | v3 | 03/10/2569 | **มติ PO 03/10/2569 (UAT BUG-001)** — เติม 2 ฟิลด์ที่ `02` §5 มีอยู่แล้วและระบบใช้คำนวณจริงลง §7.1 + ฟอร์มสร้าง/แก้ไขบริษัท: `vat_mode` (รูปแบบราคา/VAT — ใช้ตอนสร้าง Revenue ตาม `22` §6.8) และ `wht_withheld_by_customer_pct` (อัตราที่ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน — มติ PO A1 2026-08-12 · NULL = ไม่หัก) · ค่าเริ่มต้นของฟอร์มสร้างใหม่ = default ของ DB (`exclude_vat` / 3.00) · การ์ดบริษัท (§8) แสดงทั้ง 2 ค่า · ไม่มีการแก้ schema |
 | v3.1 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U77 · ประมวลรัษฎากร ม.86/4)** — §7.1/§8/§11/§16: เพิ่มช่อง **สำนักงานใหญ่ / สาขาที่** (`branch_code` รหัส 5 หลักแบบกรมสรรพากร · `00000` = สำนักงานใหญ่ = ค่าเริ่มต้น · บริษัทเดิมทั้งหมด = สำนักงานใหญ่) ในฟอร์ม/Zod/API บริษัท (สิทธิ์ `manage_companies` เดิม · audit `branch_code`) · การ์ดบริษัทแสดงต่อจาก Tax ID · ใบกำกับภาษี snapshot ค่าตอนออกใบ (`31` v-U77) — แก้บริษัทภายหลังไม่กระทบใบเดิม · schema `02` v4.29 |
 | v3.2 | 06/10/2569 | **มติ PO 06/10/2569 (U108)**: §8 เพิ่มกล่องคำอธิบายในหน้าจอ (คืออะไร · ผลของตัวเลือก · ตัวอย่างตัวเลขคำนวณสดด้วยสูตรจริง · ใครแก้ได้/มีผลเมื่อไร — รูปแบบกลางตาม `13` §7.1) ให้ค่าตั้ง: รูปแบบราคา/VAT (ตาราง include/exclude/no_vat ของค่าบริการ ฿1,000 จากอัตรา VAT ที่มีผลวันนี้) · ภาษีที่ลูกค้าหัก (ยอดคาดรับ) · สำนักงานใหญ่/สาขา · วันตัดรอบ/เครดิตเทอม (วันครบกำหนด) · ไม่เปลี่ยน business logic |
+| v3.3 | 07/10/2569 | **มติ PO 07/10/2569 (U132 — เอกสารบริษัทไฟแนนซ์)**: เพิ่ม §7.4 ส่วน "เอกสารบริษัท" — ชนิด หนังสือรับรองบริษัท (+ วันที่ออก) · ภ.พ.20 · สัญญาว่าจ้าง · หน้าสมุดบัญชีธนาคาร (ไม่บังคับ) · อื่น ๆ (ระบุชื่อ) · อัปโหลดผ่านกลไกเดิม (DEC-014: โทเคนอัปโหลดต่อ path · path ต่อเวอร์ชัน `upsert:false` · ตรวจ magic bytes/ขนาด/SHA-256 ฝั่ง server) · **เก็บทุกเวอร์ชัน ห้ามลบ** (แทนที่ = เวอร์ชันใหม่ · ตาราง insert-only `finance_company_documents` + trigger) · เปิดไฟล์ผ่าน signed URL 300 วินาที + audit `view` (U90) · คำเตือน **ไม่บล็อก** (ไม่มีหนังสือรับรอง · ไม่มี ภ.พ.20 เฉพาะบริษัทที่จด VAT · หนังสือรับรองออกเกิน 6 เดือน) แสดงบนการ์ดบริษัท + modal สร้างรอบวางบิล · แนบ = `manage_companies` (Superadmin) · ดู = `view_master_data` · พอร์ทัลไม่แสดง · Export Pack ไฟล์ `17_Company_Documents.csv` (`37` v-U132) · error code ใหม่ `COMPANY_DOCUMENT_NOT_FOUND` / `COMPANY_DOCUMENT_VERSION_CONFLICT` (`24`) · schema `02` v4.5x-fixer-u132 |
 
 ขอบเขตเอกสารนี้: จัดการข้อมูลบริษัทไฟแนนซ์ที่เป็นคู่ค้าส่งเคสมาให้ AssetRecovery ติดตามทรัพย์ รวมถึงข้อมูลผู้ติดต่อ ผู้มีอำนาจลงนาม และการผูก Service Fee Template
 
@@ -98,6 +99,24 @@
 | phone | string | no | — |
 | status | enum | yes | `active` / `deactivated` |
 
+### 7.4 เอกสารบริษัท (Company Documents — มติ PO U132)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| document_type | enum `company_document_type` | yes | `company_certificate` หนังสือรับรองบริษัท · `vat_registration` ภ.พ.20 · `service_contract` สัญญาว่าจ้าง · `bank_book` หน้าสมุดบัญชีธนาคาร (ไม่บังคับ) · `other` อื่น ๆ |
+| title | string | เฉพาะ `other` | ชื่อเอกสาร (ชนิดอื่นเก็บ NULL — CHECK) · แทนที่โดยไม่กรอก = ใช้ชื่อเดิม |
+| issued_date | date | เฉพาะหนังสือรับรอง | วันที่ออกหนังสือรับรอง — ใช้เตือนเมื่อเกิน 6 เดือน (นับตามวันไทย · ครบ 6 เดือนพอดียังไม่เตือน) |
+| version / replaces_document_id | int / uuid | yes | เวอร์ชันแรก = 1 ไม่มีตัวก่อน · แทนที่ = แถวใหม่ชี้ตัวก่อน (UNIQUE — แทนที่ได้ครั้งเดียว ไม่แตกสาย) |
+| file_path / file_sha256 / mime_type / size_bytes / original_name | — | yes | ไฟล์ใน bucket `case-documents` path `finance-companies/<companyId>/documents/<ชนิด>/<uuid>.<ext>` (PDF/รูป ≤ 10 MB) ตรวจจากเนื้อไฟล์ฝั่ง server |
+
+กติกา:
+- **เก็บทุกเวอร์ชัน ห้ามลบ/แก้** (ตาราง insert-only + trigger ระดับ DB) — ไฟล์เดิมยังเปิดดูได้จากประวัติเวอร์ชัน
+- ชนิดเดี่ยว (4 ชนิดแรก) มีได้ 1 สายต่อบริษัท — แนบซ้ำโดยไม่แทนที่ หรือแทนที่เวอร์ชันที่ถูกแทนที่ไปแล้ว (รวมสองคนกดพร้อมกัน) = `COMPANY_DOCUMENT_VERSION_CONFLICT` · ชนิด "อื่น ๆ" มีได้หลายสาย
+- คำเตือน **ไม่บล็อกการทำงานใด ๆ**: ไม่มีหนังสือรับรอง · ไม่มี ภ.พ.20 (เฉพาะบริษัทที่ `vat_registered`) · หนังสือรับรองฉบับปัจจุบันออกเกิน 6 เดือน — แสดงบนการ์ดบริษัท (§8) และใน modal สร้างรอบวางบิล (`19` §9.1) · ไม่ใช่ error code
+- สิทธิ์: แนบ/แนบเวอร์ชันใหม่ = `manage_companies` (Superadmin "✅ only") · ดู/เปิดไฟล์ = `view_master_data` (ตามหน้าบริษัทเดิม) · **ผู้ใช้บริษัท/พอร์ทัลไม่เห็น** (403 ทุก id)
+- เปิดไฟล์ = signed URL อายุ 300 วินาทีจาก `POST /api/storage/download-url` + audit `view` (target `finance_companies` · ไม่เก็บ URL — U90)
+- Export Pack: รายการเอกสารเวอร์ชันปัจจุบัน + คำเตือนอยู่ใน `17_Company_Documents.csv` (`37` §6.1 — ไม่แนบตัวไฟล์)
+
 ## 8. UI / UX Rules
 
 - **คำอธิบายในหน้าจอ (มติ PO U108)**: ค่าตั้งที่กระทบเงินในฟอร์มนี้มีกล่องคำอธิบายพับได้ (`<SettingHelp>`) — รูปแบบราคา/VAT (ตาราง include/exclude/no_vat ของค่าบริการ ฿1,000 จากอัตรา VAT ที่มีผลวันนี้) · ภาษีที่ลูกค้าหัก (ยอดคาดรับ) · สำนักงานใหญ่/สาขา · วันตัดรอบ/เครดิตเทอม (วันครบกำหนด) · ตัวอย่างอัปเดตสดตามค่าที่กรอก (`13` §7.1)
@@ -149,6 +168,8 @@
 | REQUIRED_MISSING (field error ที่ `branchCode`) | เลือก "สาขาที่" แต่เลขสาขาไม่ใช่ตัวเลข 5 หลัก (U77) | reject 400 + field error "รหัสสาขาต้องเป็นตัวเลข 5 หลัก" — ไม่ตั้ง code ใหม่ (validation ของ schema) · DB มี CHECK อีกชั้น |
 | SUSPEND_REASON_REQUIRED | เปลี่ยนเป็น `suspended` แต่ไม่กรอกเหตุผล | reject |
 | SUSPENDED_COMPANY_NEW_CASE | พยายามสร้างเคสใหม่จากบริษัทที่ `suspended` | reject ที่ไฟล์ 38 พร้อมข้อความแจ้งให้เปิดใช้งานบริษัทก่อน |
+| COMPANY_DOCUMENT_NOT_FOUND | (U132) แนบเวอร์ชันใหม่โดยอ้างเอกสารที่ไม่มี/บริษัทอื่น/คนละชนิด | reject 404 |
+| COMPANY_DOCUMENT_VERSION_CONFLICT | (U132) ชนิดเดี่ยวแนบซ้ำโดยไม่แทนที่ · แทนที่เวอร์ชันที่ถูกแทนที่แล้ว | reject 409 — ให้โหลดใหม่แล้ว "แนบเวอร์ชันใหม่" |
 
 ## 12. Permission Requirements
 
@@ -159,6 +180,8 @@
 | ดูรายการบริษัททั้งหมด | การเงิน, บัญชี, ผู้จัดการ | read-only |
 | สร้าง/แก้ไข Company User | Superadmin only | full |
 | ดูข้อมูลบริษัทตัวเอง | Company User | เฉพาะ `company_id` ตัวเอง read-only |
+| แนบเอกสารบริษัท / เวอร์ชันใหม่ (U132) | Superadmin only (`manage_companies`) | ไม่มีการลบ |
+| ดู/เปิดเอกสารบริษัท (U132) | ผู้ถือ `view_master_data` | Company User/พอร์ทัล **ไม่เห็น** |
 
 ## 13. Audit Log Requirements
 
@@ -176,6 +199,8 @@
 | PATCH | /api/finance-companies/:id | update (ทุกฟิลด์ รวม status) | audit required, reason required สำหรับฟิลด์สำคัญ |
 | GET | /api/finance-companies/:id/users | list company users | — |
 | POST | /api/finance-companies/:id/users | create company user | — |
+| GET | /api/finance-companies/:id/documents | เอกสารทุกเวอร์ชัน + คำเตือน (U132) | `view_master_data` · company scope = 403 |
+| POST | /api/finance-companies/:id/documents | ผูกไฟล์ที่อัปโหลดผ่าน `POST /api/storage/upload-url` (target `company_document`) — เวอร์ชันแรก/แทนที่ (`replacesDocumentId`) | `manage_companies` · reason บังคับ · audit `create` |
 | EVENT | finance-company.suspended | บริษัทถูกระงับ | trigger validation ที่ไฟล์ 38 บล็อกเคสใหม่ |
 
 ## 15. Acceptance Criteria
@@ -197,6 +222,9 @@
 | Company User เห็นเฉพาะของตัวเอง | Login เป็น company user บริษัท A แล้วลองดูเคสบริษัท B | ไม่เห็น/403 |
 | (U77) ค่าเริ่มต้นสาขา | สร้างบริษัทโดยไม่เลือกสาขา | `branch_code = 00000` แสดง "สำนักงานใหญ่" |
 | (U77) สาขาผิดรูปแบบ | เลือกสาขาที่ กรอก `1` / `0000A` | reject 400 field error ที่ branchCode |
+| (U132) แทนที่หนังสือรับรอง | แนบ v1 แล้วแนบเวอร์ชันใหม่ | v2 เป็นปัจจุบัน · v1 ยังเปิดดูได้ · ลบ/แก้แถวด้วย SQL ถูก DB ปฏิเสธ |
+| (U132) แนบพร้อมกัน | สองคนแทนที่ v1 พร้อมกัน | สำเร็จ 1 · อีกคน COMPANY_DOCUMENT_VERSION_CONFLICT |
+| (U132) คำเตือน | หนังสือรับรองออก 01/12/2568 ดูวันที่ 07/10/2569 · บริษัทจด VAT ไม่มี ภ.พ.20 | เตือน 2 ข้อ ไม่บล็อก · พอร์ทัลไม่เห็น |
 | (U77) snapshot บนใบกำกับ | ออกใบตอนบริษัทเป็นสาขาที่ 00003 แล้วแก้บริษัทเป็นสำนักงานใหญ่ | ใบเดิมยังพิมพ์ "สาขาที่ 00003" · ใบใหม่พิมพ์ "สำนักงานใหญ่" |
 
 ---

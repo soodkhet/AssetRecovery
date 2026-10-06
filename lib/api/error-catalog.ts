@@ -54,6 +54,12 @@ export const ERROR_CATALOG = {
   BANK_ACCOUNT_NAME_MISMATCH: { status: 200, severity: 'warn', source: '24 §6.1' },
   CYCLE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
   DUPLICATE_CYCLE_NAME: { status: 400, severity: 'reject', source: '24 §6.1' },
+  // มติ PO U133 — ขอบเขตรอบบิล/รอบจ่ายเป็นค่าจริง (ห้ามซ้อน · รอบที่เลือกต้องครอบบริษัท/ฝั่ง)
+  CYCLE_SCOPE_OVERLAP: { status: 409, severity: 'reject', source: '24 §6.1' },
+  CYCLE_SCOPE_MISMATCH: { status: 400, severity: 'reject', source: '24 §6.1' },
+  // มติ PO U132 — เอกสารบริษัทไฟแนนซ์ (เก็บทุกเวอร์ชัน)
+  COMPANY_DOCUMENT_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
+  COMPANY_DOCUMENT_VERSION_CONFLICT: { status: 409, severity: 'reject', source: '24 §6.1' },
   APPROVAL_MATRIX_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
   COST_CENTER_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
   COST_CENTER_IN_USE: { status: 400, severity: 'reject', source: '24 §6.1' },

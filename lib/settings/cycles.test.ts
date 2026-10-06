@@ -20,14 +20,15 @@ const base: CycleValues = {
   cutoffText: 'ค่าค้างจากชนิดอื่น',
   dueRuleType: 'net_days',
   dueRuleValue: 30,
-  scope: ' ทุกไฟแนนซ์ ',
+  scopeKind: 'selected_companies',
+  companyIds: ['c2', 'c1', 'c2'],
 }
 
 describe('normalizeCycleValues', () => {
   it('ตัดช่องว่าง + เรียงวันที่ + ตัดวันซ้ำ', () => {
     const values = normalizeCycleValues(base)
     expect(values.name).toBe('AR รอบวางบิลหลัก')
-    expect(values.scope).toBe('ทุกไฟแนนซ์')
+    expect(values.companyIds).toEqual(['c1', 'c2'])
     expect(values.cutoffDates).toEqual([15, 30])
   })
 

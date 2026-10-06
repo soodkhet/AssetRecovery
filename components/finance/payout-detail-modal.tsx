@@ -16,7 +16,7 @@ import {
   Tr,
 } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
-import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
@@ -152,6 +152,15 @@ export function PayoutDetailModal({
             {batch.cancelReason !== null && ` — เหตุผล: ${batch.cancelReason}`}
             {' · '}รายการทั้งหมดกลับไปรอจ่ายแล้ว ตารางด้านล่างเป็นประวัติ ณ วันที่สร้างรอบ
           </InlineAlert>
+        )}
+
+        {/* มติ PO U133 — รอบจ่าย AP ที่ใช้ + กำหนดจ่าย (snapshot ตอนสร้างรอบ) */}
+        {batch.cycleName !== null && (
+          <div className="text-xs text-slate-600">
+            รอบจ่าย: <span className="font-semibold text-slate-800">{batch.cycleName}</span>
+            {batch.cycleDueRule !== null && ` · ${batch.cycleDueRule}`}
+            {batch.payDueDate !== null && ` · กำหนดจ่าย ${fmtDate(batch.payDueDate)}`}
+          </div>
         )}
 
         {batch.idempotencyKey !== null && (

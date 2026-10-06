@@ -50,7 +50,8 @@ import type {
   BillingBatchDto,
   RevenueDto,
 } from '@/lib/revenue/types'
-import { resolveDueDate } from '@/lib/settings/cycles'
+import { cycleCoversCompany, resolveDueDate } from '@/lib/settings/cycles'
+import { loadActiveCycleForScope } from '@/lib/settings/queries/cycles'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
 import { SettingsError } from '@/lib/settings/errors'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -354,10 +355,12 @@ export async function getBillingBatch(
 /**
  * วันครบกำหนดชำระ (`19` §7.2) — รอบบิล `AR` ที่ผู้ใช้เลือกชนะเสมอ (`13` §6.1 เป็นที่ตั้งกติกา)
  * ไม่ได้เลือกรอบ ⇒ ใช้ `finance_companies.payment_due_days` ของบริษัทนั้นเป็น Net N วัน (`02` §5)
- * — จำเป็นเพราะ `billing_payout_cycles.scope` เป็น free text จับคู่บริษัทอัตโนมัติไม่ได้
+ * มติ PO U133: รอบที่เลือกต้องครอบบริษัทนั้น (ทุกบริษัท หรือมีชื่อในรายบริษัท) — ไม่ครอบ = `CYCLE_SCOPE_MISMATCH`
+ * (หน้าจอเลือกรอบที่ตรงให้อัตโนมัติ · ผู้ใช้เปลี่ยนเป็น "ไม่ใช้รอบ" ได้)
  */
 async function resolveBatchDueDate(input: {
   organizationId: string
+  companyId: string
   cycleId: string | null
   cutoffDate: Date
   paymentDueDays: number
@@ -369,11 +372,10 @@ async function resolveBatchDueDate(input: {
     }
   }
 
-  const cycle = await prisma.billingPayoutCycle.findFirst({
-    where: { id: input.cycleId, organizationId: input.organizationId, deletedAt: null, type: 'AR' },
-    select: { id: true, name: true, dueRuleType: true, dueRuleValue: true },
-  })
-  if (cycle === null) throw new SettingsError('CYCLE_NOT_FOUND', { detail: `cycle=${input.cycleId} (type=AR)` })
+  const cycle = await loadActiveCycleForScope(input.organizationId, input.cycleId, 'AR')
+  if (!cycleCoversCompany(cycle, input.companyId)) {
+    throw new SettingsError('CYCLE_SCOPE_MISMATCH', { detail: `cycle=${cycle.id} company=${input.companyId}` })
+  }
 
   return {
     dueDate: resolveDueDate(input.cutoffDate, cycle),
@@ -404,6 +406,7 @@ export async function createBillingBatch(
 
   const { dueDate, source } = await resolveBatchDueDate({
     organizationId: user.organizationId,
+    companyId: company.id,
     cycleId: input.cycleId,
     cutoffDate: input.cutoffDate,
     paymentDueDays: company.paymentDueDays,

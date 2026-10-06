@@ -19,6 +19,8 @@ import {
   adjustmentCsv,
   adjustmentRef,
   advanceBalanceCsv,
+  companyDocumentCsv,
+  type CompanyDocumentExportRow,
   advanceReturnCsv,
   bankReconCsv,
   buildPackCoverDoc,
@@ -119,6 +121,8 @@ import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { parseOrganizationLetterheadSnapshot } from '@/lib/organization/profile'
 import { prisma } from '@/lib/prisma'
+import { companyDocumentWarningsFor } from '@/lib/finance-companies/document-queries'
+import { COMPANY_DOCUMENT_LABEL, currentCompanyDocuments } from '@/lib/finance-companies/documents'
 import { startOfBangkokDay } from '@/lib/format/datetime'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { customerWhtExportSources } from '@/lib/customer-wht/queries'
@@ -193,7 +197,7 @@ function toExportDto(row: ExportRow, attachmentCount: number): ExportRecordDto {
     status: row.status,
     statusLabel: EXPORT_STATUS_LABEL[row.status],
     statusGroup: EXPORT_STATUS_GROUP[row.status],
-    // นับเฉพาะไฟล์ข้อมูล 00–16 (`37` §7.1 · 00 = ยอดรวมควบคุม มติ U94) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
+    // นับเฉพาะไฟล์ข้อมูล 00–17 (`37` §7.1 · 00 = ยอดรวมควบคุม มติ U94) — หน้าปกและไฟล์ .zip ไม่ใช่ "ไฟล์ข้อมูล"
     fileCount: entries.filter((entry) => /^\d{2}$/.test(entry.key)).length,
     // จำนวน PDF ใน zip (ทุกโฟลเดอร์) ตามที่บันทึกตอนสร้างชุด (UAT BUG-167 · `37` §7.1)
     attachmentCount,
@@ -1338,6 +1342,79 @@ async function advanceBalanceExportRows(
   return advanceBalanceRows(entries, scope)
 }
 
+/**
+ * แถวของ `17_Company_Documents.csv` (มติ PO 07/10/2569 U132) — ภาพ ณ เวลาสร้างชุด (ไม่ขึ้นกับงวด):
+ * เอกสารเวอร์ชันปัจจุบันของบริษัทไฟแนนซ์ทุกราย (ที่ยังไม่ถูกลบ) + คำเตือนเอกสารไม่ครบ · บริษัทที่ไม่มีเอกสารได้ 1 แถว
+ */
+export async function companyDocumentExportRows(
+  organizationId: string,
+  generatedAt: Date,
+): Promise<CompanyDocumentExportRow[]> {
+  const companies = await prisma.financeCompany.findMany({
+    where: { organizationId, deletedAt: null },
+    select: { id: true, name: true, taxId: true, vatRegistered: true },
+    orderBy: [{ name: 'asc' }],
+  })
+  if (companies.length === 0) return []
+  const [documents, warnings] = await Promise.all([
+    prisma.financeCompanyDocument.findMany({
+      where: { organizationId, companyId: { in: companies.map((company) => company.id) } },
+      select: {
+        id: true,
+        companyId: true,
+        documentType: true,
+        title: true,
+        issuedDate: true,
+        version: true,
+        replacesDocumentId: true,
+        originalName: true,
+        fileSha256: true,
+        createdAt: true,
+      },
+      orderBy: [{ documentType: 'asc' }, { createdAt: 'asc' }],
+    }),
+    companyDocumentWarningsFor(organizationId, companies, generatedAt),
+  ])
+  const current = currentCompanyDocuments(
+    documents.map((doc) => ({ ...doc, issuedDate: doc.issuedDate === null ? null : doc.issuedDate.toISOString().slice(0, 10) })),
+  )
+  const rows: CompanyDocumentExportRow[] = []
+  for (const company of companies) {
+    const companyWarnings = (warnings.get(company.id) ?? []).map((warning) => warning.message)
+    const own = current.filter((doc) => doc.companyId === company.id)
+    if (own.length === 0) {
+      rows.push({
+        companyName: company.name,
+        companyTaxId: company.taxId,
+        documentType: null,
+        documentName: null,
+        version: null,
+        issuedDate: null,
+        originalName: null,
+        fileSha256: null,
+        uploadedAt: null,
+        warnings: companyWarnings,
+      })
+      continue
+    }
+    for (const doc of own) {
+      rows.push({
+        companyName: company.name,
+        companyTaxId: company.taxId,
+        documentType: doc.documentType,
+        documentName: doc.documentType === 'other' && doc.title !== null ? doc.title : COMPANY_DOCUMENT_LABEL[doc.documentType],
+        version: doc.version,
+        issuedDate: doc.issuedDate === null ? null : new Date(`${doc.issuedDate}T00:00:00Z`),
+        originalName: doc.originalName,
+        fileSha256: doc.fileSha256,
+        uploadedAt: doc.createdAt,
+        warnings: companyWarnings,
+      })
+    }
+  }
+  return rows
+}
+
 /** เนื้อไฟล์ `16_Advance_Balance.csv` ของงวด — ตัวเดียวกับที่ Export Pack ใช้ (เปิดให้เทสต์ระดับ DB) */
 export async function buildAdvanceBalancePackFile(organizationId: string, yearBe: number, month: number): Promise<string> {
   return advanceBalanceCsv(await advanceBalanceExportRows(organizationId, periodRange(yearBe, month)))
@@ -1586,7 +1663,7 @@ export async function createExportPack(
   })
   assertExportNotBlocked(exceptions)
 
-  // ② ประกอบแถวข้อมูลของไฟล์ 01–16 (อ่านอย่างเดียว — ยิงขนานได้) · ยอดรวมควบคุม (00) คิดจากแถวชุดเดียวกันนี้
+  // ② ประกอบแถวข้อมูลของไฟล์ 01–17 (อ่านอย่างเดียว — ยิงขนานได้) · ยอดรวมควบคุม (00) คิดจากแถวชุดเดียวกันนี้
   const generatedAt = new Date()
   const expenseRecords = await expenseRecordsOf(actor.organizationId, scope)
   const [
@@ -1606,6 +1683,7 @@ export async function createExportPack(
     unbilledRevenue,
     accruedExpenses,
     advanceBalances,
+    companyDocuments,
   ] = await Promise.all([
     revenueRows(actor.organizationId, scope),
     cashReceiptRows(actor.organizationId, scope),
@@ -1623,6 +1701,7 @@ export async function createExportPack(
     unbilledRevenueRows(actor.organizationId, scope),
     accruedExpenseRows(actor.organizationId, scope, generatedAt),
     advanceBalanceExportRows(actor.organizationId, scope),
+    companyDocumentExportRows(actor.organizationId, generatedAt),
   ])
   const expenses = expenseRows(expenseRecords, vouchers)
 
@@ -1661,6 +1740,7 @@ export async function createExportPack(
     unbilledRevenue,
     accruedExpenses,
     advanceBalances,
+    companyDocuments,
   })
 
   const dataFiles: readonly { key: string; fileName: string; bytes: Uint8Array; kind: PackAssetKind }[] = [
@@ -1702,6 +1782,8 @@ export async function createExportPack(
     // มติ PO 06/10/2569 (U94 ข้อ 2/3) — ค่าใช้จ่ายค้างจ่าย · เงินทดรองยกมา/คงเหลือ
     { key: '15', fileName: packFileName('15'), bytes: encoder.encode(accruedExpenseCsv(accruedExpenses)), kind: 'csv' },
     { key: '16', fileName: packFileName('16'), bytes: encoder.encode(advanceBalanceCsv(advanceBalances)), kind: 'csv' },
+    // มติ PO 07/10/2569 (U132) — รายการเอกสารบริษัทไฟแนนซ์ (ภาพ ณ เวลาสร้างชุด)
+    { key: '17', fileName: packFileName('17'), bytes: encoder.encode(companyDocumentCsv(companyDocuments)), kind: 'csv' },
   ]
 
   // ⑤ เวอร์ชันถัดไปของรอบ — ไฟล์เวอร์ชันเก่าไม่ถูกแตะ (`37` §6.2)
@@ -1712,7 +1794,7 @@ export async function createExportPack(
   })
   const version = (last?.version ?? 0) + 1
 
-  // ⑥ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 00–16" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
+  // ⑥ หน้าปกอ้าง SHA-256 ของ "เนื้อไฟล์ 00–17" (คำนวณซ้ำจากไฟล์ในชุดได้ — ดู `packContentDigest()`)
   const contentDigest = packContentDigest(dataFiles.map((file) => ({ name: file.fileName, data: file.bytes })))
   const cover = await renderPackCover(
     buildPackCoverDoc({

@@ -11,6 +11,7 @@ import { lotDocumentPath } from '@/lib/warehouse/lot-documents'
 import { organizationLogoPath, organizationSignaturePath } from '@/lib/organization/profile'
 import { substituteReceiptFilePath } from '@/lib/substitute-receipts/file'
 import { LOT_DOCUMENTS } from '@/lib/warehouse/lot-status'
+import { companyDocumentPath, companyDocumentTypeSchema } from '@/lib/finance-companies/documents'
 
 /**
  * ปลายทางอัปโหลด + การอ่าน path ของ bucket `case-documents` (BUG-143 · DEC-014)
@@ -45,6 +46,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('organization_signature'), organizationId: z.guid() }),
   /** ใบรับรองแทนใบเสร็จฉบับเซ็นแล้ว (มติ PO U103) — ผูกกับใบ CRT · server ตรวจว่าเป็นเจ้าของใบ/การเงิน */
   z.object({ kind: z.literal('substitute_receipt'), substituteReceiptId: z.guid() }),
+  /** เอกสารบริษัทไฟแนนซ์ (มติ PO U132) — path ต่อเวอร์ชัน · server ตรวจ `manage_companies` + บริษัทในองค์กร */
+  z.object({ kind: z.literal('company_document'), companyId: z.guid(), documentType: companyDocumentTypeSchema }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>
@@ -106,6 +109,8 @@ export function uploadTargetPath(
       return organizationSignaturePath(target.organizationId, fileName, uniqueKey)
     case 'substitute_receipt':
       return substituteReceiptFilePath(target.substituteReceiptId, fileName, uniqueKey)
+    case 'company_document':
+      return companyDocumentPath(target.companyId, target.documentType, fileName, uniqueKey)
   }
 }
 
@@ -122,6 +127,7 @@ export type StoragePathOwner =
   | { kind: 'organization_logo'; organizationId: string }
   | { kind: 'organization_signature'; organizationId: string }
   | { kind: 'substitute_receipt'; substituteReceiptId: string }
+  | { kind: 'finance_company'; companyId: string }
 
 const HEX = '[0-9a-fA-F]'
 const UUID = `${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}`
@@ -157,6 +163,10 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^substitute-receipts/(${UUID})/signed/[^/]`),
     owner: (id) => ({ kind: 'substitute_receipt', substituteReceiptId: id }),
+  },
+  {
+    pattern: new RegExp(`^finance-companies/(${UUID})/documents/[^/]`),
+    owner: (id) => ({ kind: 'finance_company', companyId: id }),
   },
 ]
 
