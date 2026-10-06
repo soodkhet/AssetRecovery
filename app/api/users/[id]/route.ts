@@ -35,7 +35,9 @@ export const PATCH = withApiPermission<RouteContext>(
 
     const current = await getUser(user, id)
     // ไม่มีช่องเหตุผล — ระบบสรุปสิ่งที่เปลี่ยนเป็นเหตุผลใน audit เอง (มติ PO 03/10/2569)
-    const result = await updateUser({ actor: user, meta: getRequestMeta(request) }, current, parsed.data)
+    const { payment, ...values } = parsed.data
+    // มติ PO U131 — ส่วน "ข้อมูลรับเงิน" สร้าง/อัปเดต/ยืนยัน Payee ใน transaction เดียวกับผู้ใช้
+    const result = await updateUser({ actor: user, meta: getRequestMeta(request) }, current, values, payment)
     return Response.json(
       result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },
     )

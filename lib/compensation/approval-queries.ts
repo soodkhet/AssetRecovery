@@ -53,6 +53,7 @@ import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { dispatchNotification } from '@/lib/notifications/dispatch'
 import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notifications/messages'
+import { loadPayeeInfoGaps } from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
 import {
   assertExpenseSubstituteReceiptSigned,
@@ -370,6 +371,7 @@ function toDto(
   flow: ResolvedFlow,
   viewer: CapabilityHolder,
   policy: ApprovalWhtSettings,
+  payeeGaps: ReadonlyMap<string, readonly string[]>,
 ): CompensationApprovalDto {
   const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
   const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
@@ -386,6 +388,7 @@ function toDto(
     payeeId: row.payeeId,
     payeeName: row.payee.user.fullName,
     payeeVerified: row.payee.isVerified,
+    payeeInfoIncomplete: (payeeGaps.get(row.payee.id)?.length ?? 0) > 0,
     expenseType: row.expenseType,
     expenseDate: row.expenseDate.toISOString().slice(0, 10),
     distanceKm: row.distanceKm?.toFixed(2) ?? null,
@@ -486,9 +489,13 @@ export async function listCompensationApprovals(
   })
   if (rows.length === 0) return []
 
-  const [candidates, policy] = await Promise.all([
+  const [candidates, policy, payeeGaps] = await Promise.all([
     loadMatrixCandidates(user.organizationId),
     currentWhtPolicy(user.organizationId),
+    loadPayeeInfoGaps(
+      user.organizationId,
+      rows.map((row) => row.payee.id),
+    ),
   ])
   // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
   // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
@@ -499,7 +506,7 @@ export async function listCompensationApprovals(
       approvalStepCurrent: row.approvalStepCurrent,
       steps: flow.steps,
     })
-    return visible ? [toDto(row, flow, user, policy)] : []
+    return visible ? [toDto(row, flow, user, policy, payeeGaps)] : []
   })
 }
 
@@ -711,7 +718,13 @@ export async function approveCompensationExpense(
   }
 
   return {
-    expense: toDto(outcome.row, { ...flow, projected: false }, user, await currentWhtPolicy(user.organizationId)),
+    expense: toDto(
+      outcome.row,
+      { ...flow, projected: false },
+      user,
+      await currentWhtPolicy(user.organizationId),
+      await loadPayeeInfoGaps(user.organizationId, [outcome.row.payee.id]),
+    ),
     events: outcome.events,
     revenueEligibleCaseIds: outcome.revenueEligibleCaseIds,
   }
@@ -863,7 +876,13 @@ async function rejectExpenseWith(
   )
 
   return {
-    expense: toDto(updated, flow ?? fallbackFlow(updated), user, await currentWhtPolicy(user.organizationId)),
+    expense: toDto(
+      updated,
+      flow ?? fallbackFlow(updated),
+      user,
+      await currentWhtPolicy(user.organizationId),
+      await loadPayeeInfoGaps(user.organizationId, [updated.payee.id]),
+    ),
     events: ['expense.rejected'],
   }
 }

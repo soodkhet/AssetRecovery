@@ -6,7 +6,8 @@ import type { SessionUser } from '@/lib/auth/types'
  * UAT BUG-021 (มติ PO 03/10/2569 "เปิดหน้าผู้ใช้ให้ธุรการ") — ระดับ route ทั้งชั้นสิทธิ์ + ชั้นข้อมูล
  *
  *  · ธุรการ (`manage:manage_users` — `05` §12) สร้างผู้ใช้กลุ่ม inhouse ได้
- *  · บัญชีกลุ่ม system ยังเป็นของ Superadmin เท่านั้น (DEC-010): สร้าง/แก้/ย้ายเข้ากลุ่ม/ตั้งรหัส = 403
+ *  · บัญชีกลุ่ม system ยังเป็นของ Superadmin เท่านั้น (DEC-010): สร้าง/ย้ายเข้ากลุ่ม = 403
+ *  · บัญชีกลุ่ม system ที่มองไม่เห็น (ดู/แก้/ตั้งรหัสรายคน) = 404 เหมือนไม่มีจริง (มติ PO U138 — ไม่ leak)
  *  · รายการผู้ใช้ของธุรการกรองกลุ่ม system ออก (ทั้งองค์กรเฉพาะกลุ่มที่ไม่ใช่ system)
  *
  * mock แค่ session + Prisma + Supabase Auth + audit — ใช้ `requirePermission()`/ยามของ service ตัวจริง
@@ -81,6 +82,7 @@ function userRow(id: string, roleGroup: 'system' | 'inhouse') {
     team: roleGroup === 'system' ? null : { name: 'ทีม A' },
     company: null,
     _count: { assignmentsAsAgent: 0 },
+    payeeProfile: [],
   }
 }
 
@@ -152,7 +154,7 @@ describe('ธุรการจัดการผู้ใช้ได้เฉ�
     expect(provisioningMock.createAuthAccount).not.toHaveBeenCalled()
   })
 
-  it('แก้ผู้ใช้กลุ่ม system → 403', async () => {
+  it('แก้ผู้ใช้กลุ่ม system → 404 (มองไม่เห็น — U138)', async () => {
     prismaMock.user.findFirst.mockResolvedValueOnce(userRow(SYSTEM_USER_ID, 'system'))
     const response = await userRoute.PATCH(
       request('PATCH', `http://localhost/api/users/${SYSTEM_USER_ID}`, {
@@ -161,7 +163,7 @@ describe('ธุรการจัดการผู้ใช้ได้เฉ�
       }),
       params(SYSTEM_USER_ID),
     )
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 
@@ -178,7 +180,7 @@ describe('ธุรการจัดการผู้ใช้ได้เฉ�
     expect(prismaMock.$transaction).not.toHaveBeenCalled()
   })
 
-  it('ตั้งรหัสผ่านให้ผู้ใช้กลุ่ม system → 403 · ไม่แตะ Supabase Auth', async () => {
+  it('ตั้งรหัสผ่านให้ผู้ใช้กลุ่ม system → 404 (มองไม่เห็น — U138) · ไม่แตะ Supabase Auth', async () => {
     prismaMock.user.findFirst.mockResolvedValueOnce(userRow(SYSTEM_USER_ID, 'system'))
     const response = await passwordRoute.POST(
       request('POST', `http://localhost/api/users/${SYSTEM_USER_ID}/password`, {
@@ -187,14 +189,14 @@ describe('ธุรการจัดการผู้ใช้ได้เฉ�
       }),
       params(SYSTEM_USER_ID),
     )
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
     expect(provisioningMock.setAuthPassword).not.toHaveBeenCalled()
   })
 
-  it('ดูผู้ใช้กลุ่ม system รายคน → 403', async () => {
+  it('ดูผู้ใช้กลุ่ม system รายคน → 404 (มองไม่เห็น — U138)', async () => {
     prismaMock.user.findFirst.mockResolvedValueOnce(userRow(SYSTEM_USER_ID, 'system'))
     const response = await userRoute.GET(request('GET', `http://localhost/api/users/${SYSTEM_USER_ID}`), params(SYSTEM_USER_ID))
-    expect(response.status).toBe(403)
+    expect(response.status).toBe(404)
   })
 
   it('รายการผู้ใช้กรองกลุ่ม system ออก (ยกเว้นตัวเอง)', async () => {

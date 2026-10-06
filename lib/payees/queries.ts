@@ -2,6 +2,7 @@ import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
+import { AuthError } from '@/lib/auth/errors'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -11,6 +12,7 @@ import {
   assertPayeeNationalId,
   assertPayeeReadyForVerification,
   checkBankAccountName,
+  MANAGE_PAYEE_PROFILE_CAPABILITY,
   maskAccountNumber,
   missingFieldsForVerification,
   normalizePayeeValues,
@@ -44,7 +46,7 @@ import { SettingsError } from '@/lib/settings/errors'
  * เคสแรก — `POST /api/payees` จึงใช้กับผู้รับเงินที่ยังไม่เคยมีรายการเบิกเท่านั้น
  */
 
-export const MANAGE_PAYEE_PROFILE = 'manage_payee_profile'
+export const MANAGE_PAYEE_PROFILE = MANAGE_PAYEE_PROFILE_CAPABILITY
 
 export interface PayeeMutationContext {
   actor: SessionUser
@@ -406,6 +408,139 @@ async function assertWhtConditionAllowed(
   throw new PayeeError('WHT_CONDITION_NOT_ALLOWED', { detail: `wht_condition=${condition}` })
 }
 
+export type PayeeTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
+type PayeeTx = PayeeTxClient
+type PayeeWriteData = ReturnType<typeof toWriteData>
+
+/** ตรวจ + เตรียมข้อมูลเขียน (นอก transaction) — ใช้ร่วม API ผู้รับเงิน และฟอร์มผู้ใช้ (U131) */
+async function preparePayeeWrite(
+  organizationId: string,
+  input: PayeeFieldsInput,
+  before: PayeeValues | null,
+): Promise<PayeeWriteData> {
+  await assertTaxProfileUsable(organizationId, input.taxProfileId)
+  // ไม่ส่งอัตรา 40(2)/ฟิลด์ใบ 50 ทวิ มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
+  const data = toWriteData(mergeInput(input, before ?? NEW_PAYEE_BASE))
+  await assertWhtConditionAllowed(organizationId, data.whtCondition, before?.whtCondition ?? null)
+  return data
+}
+
+async function insertPayeeInTx(
+  tx: PayeeTx,
+  context: PayeeMutationContext,
+  userId: string,
+  data: PayeeWriteData,
+): Promise<PayeeRow> {
+  const organizationId = context.actor.organizationId
+  const row = await tx.payeeProfile.create({
+    data: { organizationId, userId, ...data, createdBy: context.actor.id },
+    select: payeeSelect,
+  })
+  await emitAudit(
+    {
+      organizationId,
+      actorId: context.actor.id,
+      actorRole: context.actor.roleName,
+      action: 'create',
+      targetType: TARGET,
+      targetId: row.id,
+      after: toPayeeAuditPayload(toValues(row)),
+      reason: context.reason,
+      ipAddress: context.meta.ipAddress,
+      userAgent: context.meta.userAgent,
+    },
+    tx,
+  )
+  return row
+}
+
+async function updatePayeeInTx(
+  tx: PayeeTx,
+  context: PayeeMutationContext,
+  current: PayeeRow,
+  data: PayeeWriteData,
+): Promise<PayeeRow> {
+  const before = toValues(current)
+  // `18` §9 — verified + แก้ธนาคาร/ภาษี ⇒ ต้องยืนยันใหม่ (ล้างผู้ยืนยันเดิมออกด้วย ไม่ใช่แค่ flag)
+  const reset = shouldResetVerification({ isVerified: current.isVerified, before, after: data })
+  const row = await tx.payeeProfile.update({
+    where: { id: current.id },
+    data: {
+      ...data,
+      ...(reset ? { isVerified: false, verifiedBy: null, verifiedAt: null } : {}),
+      updatedBy: context.actor.id,
+    },
+    select: payeeSelect,
+  })
+  await emitAudit(
+    {
+      organizationId: context.actor.organizationId,
+      actorId: context.actor.id,
+      actorRole: context.actor.roleName,
+      action: 'update',
+      targetType: TARGET,
+      targetId: current.id,
+      before: { ...toPayeeAuditPayload(before), is_verified: current.isVerified },
+      after: { ...toPayeeAuditPayload(toValues(row)), is_verified: row.isVerified },
+      reason: context.reason,
+      ipAddress: context.meta.ipAddress,
+      userAgent: context.meta.userAgent,
+      diffOnly: false,
+    },
+    tx,
+  )
+  return row
+}
+
+/** ความพร้อม + policy เอกสาร (`18` §9/§10) + ค่าเริ่มต้นตามประเภท (BUG-SF1) — แถวต้องเป็นค่าล่าสุดแล้ว */
+function assertRowReadyForVerification(
+  row: PayeeRow,
+  policy: { requirePayeeIdDocument: boolean },
+  typeDefaults: TaxProfileDefaults<unknown>,
+): void {
+  assertPayeeReadyForVerification({
+    values: toValues(row),
+    requireIdDocument: policy.requirePayeeIdDocument,
+    typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
+  })
+}
+
+async function markPayeeVerifiedInTx(tx: PayeeTx, context: PayeeMutationContext, current: PayeeRow): Promise<PayeeRow> {
+  const row = await tx.payeeProfile.update({
+    where: { id: current.id },
+    data: {
+      isVerified: true,
+      verifiedBy: context.actor.id,
+      verifiedAt: new Date(),
+      updatedBy: context.actor.id,
+    },
+    select: payeeSelect,
+  })
+  await emitAudit(
+    {
+      organizationId: context.actor.organizationId,
+      actorId: context.actor.id,
+      actorRole: context.actor.roleName,
+      action: 'approve',
+      targetType: TARGET,
+      targetId: current.id,
+      before: { is_verified: current.isVerified },
+      after: {
+        is_verified: true,
+        verified_by: context.actor.id,
+        verified_at: row.verifiedAt?.toISOString() ?? null,
+        ...toPayeeAuditPayload(toValues(row)),
+      },
+      reason: context.reason,
+      ipAddress: context.meta.ipAddress,
+      userAgent: context.meta.userAgent,
+      diffOnly: false,
+    },
+    tx,
+  )
+  return row
+}
+
 export async function createPayee(
   context: PayeeMutationContext,
   input: PayeeFieldsInput & { userId: string },
@@ -418,41 +553,17 @@ export async function createPayee(
   if (owner === null) throw new PayeeError('PAYEE_NOT_FOUND', { detail: `user=${input.userId}` })
 
   await assertNoPayeeForUser(organizationId, input.userId)
+  const data = await preparePayeeWrite(organizationId, input, null)
 
-  await assertTaxProfileUsable(organizationId, input.taxProfileId)
-  const data = toWriteData(mergeInput(input, NEW_PAYEE_BASE))
-  await assertWhtConditionAllowed(organizationId, data.whtCondition, null)
-
-  const created = await prisma.$transaction(async (tx) => {
-    const row = await tx.payeeProfile.create({
-      data: { organizationId, userId: input.userId, ...data, createdBy: context.actor.id },
-      select: payeeSelect,
-    })
-
-    await emitAudit(
-      {
-        organizationId,
-        actorId: context.actor.id,
-        actorRole: context.actor.roleName,
-        action: 'create',
-        targetType: TARGET,
-        targetId: row.id,
-        after: toPayeeAuditPayload(toValues(row)),
-        reason: context.reason,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-      },
-      tx,
+  const created = await prisma
+    .$transaction((tx) => insertPayeeInTx(tx, context, input.userId, data))
+    .catch(
+      // ชน unique `(organization_id, user_id)` — 1 ผู้ใช้ = 1 payee · คำขอพร้อมกันหลุด pre-check ทั้งคู่ (UAT BUG-016)
+      onUniqueViolation(async () => {
+        await assertNoPayeeForUser(organizationId, input.userId)
+        throw new PayeeError('PAYEE_ALREADY_EXISTS', { detail: `user=${input.userId} (unique violation)` })
+      }),
     )
-
-    return row
-  }).catch(
-    // ชน unique `(organization_id, user_id)` — 1 ผู้ใช้ = 1 payee · คำขอพร้อมกันหลุด pre-check ทั้งคู่ (UAT BUG-016)
-    onUniqueViolation(async () => {
-      await assertNoPayeeForUser(organizationId, input.userId)
-      throw new PayeeError('PAYEE_ALREADY_EXISTS', { detail: `user=${input.userId} (unique violation)` })
-    }),
-  )
 
   return {
     payee: toDto(created, true, await loadTypeDefaults(organizationId)),
@@ -467,46 +578,9 @@ export async function updatePayee(
 ): Promise<PayeeMutationResult> {
   const organizationId = context.actor.organizationId
   const current = await findPayeeRow(context.actor, payeeId)
-  await assertTaxProfileUsable(organizationId, input.taxProfileId)
+  const data = await preparePayeeWrite(organizationId, input, toValues(current))
 
-  const before = toValues(current)
-  // ไม่ส่งอัตรา 40(2)/ฟิลด์ใบ 50 ทวิ มา = คงค่าเดิม (กันฟอร์ม/ผู้เรียกที่ไม่รู้จักฟิลด์ล้างค่าทิ้ง)
-  const data = toWriteData(mergeInput(input, before))
-  await assertWhtConditionAllowed(organizationId, data.whtCondition, before.whtCondition)
-  // `18` §9 — verified + แก้ธนาคาร/ภาษี ⇒ ต้องยืนยันใหม่ (ล้างผู้ยืนยันเดิมออกด้วย ไม่ใช่แค่ flag)
-  const reset = shouldResetVerification({ isVerified: current.isVerified, before, after: data })
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.payeeProfile.update({
-      where: { id: payeeId },
-      data: {
-        ...data,
-        ...(reset ? { isVerified: false, verifiedBy: null, verifiedAt: null } : {}),
-        updatedBy: context.actor.id,
-      },
-      select: payeeSelect,
-    })
-
-    await emitAudit(
-      {
-        organizationId,
-        actorId: context.actor.id,
-        actorRole: context.actor.roleName,
-        action: 'update',
-        targetType: TARGET,
-        targetId: payeeId,
-        before: { ...toPayeeAuditPayload(before), is_verified: current.isVerified },
-        after: { ...toPayeeAuditPayload(toValues(row)), is_verified: row.isVerified },
-        reason: context.reason,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-        diffOnly: false,
-      },
-      tx,
-    )
-
-    return row
-  })
+  const updated = await prisma.$transaction((tx) => updatePayeeInTx(tx, context, current, data))
 
   return {
     payee: toDto(updated, true, await loadTypeDefaults(organizationId)),
@@ -525,52 +599,128 @@ export async function verifyPayee(context: PayeeMutationContext, payeeId: string
   const typeDefaults = await loadTypeDefaults(organizationId)
 
   // BUG-SF1 (มติ PO U121): ผู้รับที่ใช้ค่าเริ่มต้นตามประเภทยืนยันได้ — ไม่บังคับ Tax Profile รายคน
-  assertPayeeReadyForVerification({
-    values: toValues(current),
-    requireIdDocument: policy.requirePayeeIdDocument,
-    typeDefaultAvailable: rowTypeDefaultAvailable(current, typeDefaults),
-  })
+  assertRowReadyForVerification(current, policy, typeDefaults)
 
-  const updated = await prisma.$transaction(async (tx) => {
-    const row = await tx.payeeProfile.update({
-      where: { id: payeeId },
-      data: {
-        isVerified: true,
-        verifiedBy: context.actor.id,
-        verifiedAt: new Date(),
-        updatedBy: context.actor.id,
-      },
-      select: payeeSelect,
-    })
-
-    await emitAudit(
-      {
-        organizationId,
-        actorId: context.actor.id,
-        actorRole: context.actor.roleName,
-        action: 'approve',
-        targetType: TARGET,
-        targetId: payeeId,
-        before: { is_verified: current.isVerified },
-        after: {
-          is_verified: true,
-          verified_by: context.actor.id,
-          verified_at: row.verifiedAt?.toISOString() ?? null,
-          ...toPayeeAuditPayload(toValues(row)),
-        },
-        reason: context.reason,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-        diffOnly: false,
-      },
-      tx,
-    )
-
-    return row
-  })
+  const updated = await prisma.$transaction((tx) => markPayeeVerifiedInTx(tx, context, current))
 
   return {
     payee: toDto(updated, true, typeDefaults),
     warning: bankNameWarning(current.user.fullName, updated.accountName),
   }
+}
+
+// ── ข้อมูลรับเงินในฟอร์มผู้ใช้ (มติ PO U131) ─────────────────────────────────────────
+
+/** ข้อมูลรับเงินที่ฟอร์มผู้ใช้ส่งมา — ฟิลด์เดียวกับฟอร์ม Payee + ติ๊กยืนยัน + เหตุผล (หมวด bank) */
+export interface UserPaymentInput {
+  fields: PayeeFieldsInput
+  verify: boolean
+  reason: string
+}
+
+/** ผลตรวจล่วงหน้า (นอก transaction) — ส่งต่อให้ `writeUserPaymentInTx()` */
+export interface PreparedUserPayment {
+  input: UserPaymentInput
+  current: PayeeRow | null
+  data: PayeeWriteData
+  /** ค่าในฟอร์มเท่ากับของเดิมทุกช่อง ⇒ ไม่เขียนแถว/ไม่ลง audit ซ้ำ */
+  unchanged: boolean
+  policy: { requirePayeeIdDocument: boolean }
+  typeDefaults: TaxProfileDefaults<unknown>
+}
+
+/**
+ * ตรวจข้อมูลรับเงินก่อนเปิด transaction ของผู้ใช้ — สิทธิ์ `manage:manage_payee_profile` เดิมของหน้า Payee
+ * (ทั้งบันทึกและยืนยัน · U106 คนแก้ = คนยืนยันได้) · `userId = null` = ผู้ใช้ใหม่ (ยังไม่มี payee)
+ */
+export async function prepareUserPayment(
+  actor: SessionUser,
+  userId: string | null,
+  input: UserPaymentInput,
+): Promise<PreparedUserPayment> {
+  if (!canManage(actor)) {
+    throw new AuthError('PERMISSION_DENIED', `user payment section needs manage:${MANAGE_PAYEE_PROFILE} user=${actor.id}`)
+  }
+  const organizationId = actor.organizationId
+  const current =
+    userId === null
+      ? null
+      : await prisma.payeeProfile.findFirst({
+          where: { organizationId, userId, deletedAt: null },
+          select: payeeSelect,
+        })
+  const before = current === null ? null : toValues(current)
+  const data = await preparePayeeWrite(organizationId, input.fields, before)
+  const unchanged =
+    before !== null && JSON.stringify(normalizePayeeValues(before)) === JSON.stringify(normalizePayeeValues(data))
+  return {
+    input,
+    current,
+    data,
+    unchanged,
+    policy: await getFinancePolicy(organizationId),
+    typeDefaults: await loadTypeDefaults(organizationId),
+  }
+}
+
+export interface UserPaymentWriteResult {
+  payeeId: string
+  isVerified: boolean
+  /** ชื่อบัญชีไม่ตรงชื่อผู้ใช้ — เตือน ไม่ block (`BANK_ACCOUNT_NAME_MISMATCH`) */
+  warning?: ApiWarning
+}
+
+/**
+ * สร้าง/อัปเดต Payee ของผู้ใช้ **ใน transaction เดียวกับผู้ใช้** (มติ PO U131) — ใช้ตัวเขียน + audit
+ * ชุดเดียวกับ `createPayee`/`updatePayee`/`verifyPayee` · ชื่อผู้รับ = `users.full_name` จุดเดียว
+ * `verify = true` ⇒ ตรวจความพร้อมจากค่าล่าสุด (หลังเขียน) แล้วยืนยันต่อในรอบเดียวกัน · ไม่พร้อม = rollback ทั้งหมด
+ */
+export async function writeUserPaymentInTx(
+  tx: PayeeTx,
+  context: PayeeMutationContext,
+  userId: string,
+  fullName: string,
+  prepared: PreparedUserPayment,
+): Promise<UserPaymentWriteResult> {
+  let row: PayeeRow
+  if (prepared.current === null) {
+    row = await insertPayeeInTx(tx, context, userId, prepared.data)
+  } else if (prepared.unchanged) {
+    row = prepared.current
+  } else {
+    row = await updatePayeeInTx(tx, context, prepared.current, prepared.data)
+  }
+  if (prepared.input.verify && !row.isVerified) {
+    // แถวอ่านใน tx เดียวกัน ⇒ ทีม/role ใหม่ของผู้ใช้มีผลกับค่าเริ่มต้นตามประเภทแล้ว
+    const fresh = await tx.payeeProfile.findUniqueOrThrow({ where: { id: row.id }, select: payeeSelect })
+    assertRowReadyForVerification(fresh, prepared.policy, prepared.typeDefaults)
+    row = await markPayeeVerifiedInTx(tx, context, fresh)
+  }
+  return { payeeId: row.id, isVerified: row.isVerified, warning: bankNameWarning(fullName, row.accountName) }
+}
+
+/**
+ * ป้าย "ข้อมูลรับเงินไม่ครบ" (มติ PO U131) — ตั้งแต่ส่งเบิก: หน้ารายการเบิกของพนักงาน + คิวอนุมัติ
+ * ครบ = ผ่านเกตความพร้อมก่อนยืนยันทุกข้อ (รวมแหล่งอัตราภาษี — BUG-SF1) · คืน map payeeId → ฟิลด์ที่ขาด
+ */
+export async function loadPayeeInfoGaps(
+  organizationId: string,
+  payeeIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>()
+  if (payeeIds.length === 0) return result
+  const [rows, typeDefaults] = await Promise.all([
+    prisma.payeeProfile.findMany({
+      where: { organizationId, id: { in: [...new Set(payeeIds)] } },
+      select: payeeSelect,
+    }),
+    loadTypeDefaults(organizationId),
+  ])
+  for (const row of rows) {
+    result.set(
+      row.id,
+      missingFieldsForVerification(toValues(row), { typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults) }),
+    )
+  }
+  return result
 }

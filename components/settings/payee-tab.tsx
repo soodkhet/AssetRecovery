@@ -1,10 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AddressFields } from '@/components/address/address-fields'
 import { Can } from '@/components/auth/permission-provider'
+import {
+  EMPTY_PAYEE_FIELDS,
+  PAYEE_TYPE_LABEL,
+  PayeeFieldsSection,
+  payeeFieldsFromDto,
+  payeeFieldsPayload,
+  type PayeeFieldsForm,
+} from '@/components/payees/payee-fields-section'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
-import { SettingHelp } from '@/components/settings/setting-help'
 import {
   Button,
   Card,
@@ -24,27 +30,14 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
-import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
-import { branchCodeFromForm, branchKindOf, formatBranch, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
+import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
-import type { WhtCondition } from '@/lib/generated/prisma/enums'
-import {
-  nameTitleChoiceOf,
-  nameTitleFromForm,
-  PAYEE_NAME_TITLE_OPTIONS,
-  PAYEE_REQUIRED_ADDRESS_FIELDS,
-  WHT_CONDITION_LABEL,
-  selectableWhtConditions,
-  verificationHint,
-  whtConditionHint,
-  type PayeeNameTitleChoice,
-} from '@/lib/payees/payee'
+import { verificationHint } from '@/lib/payees/payee'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
-import { payeeConditionHelp, payeeTaxProfileHelp, payeeWht402Help, pctFromInput } from '@/lib/settings/help'
 import type { TaxProfileDto } from '@/lib/settings/types'
 
 /**
@@ -68,11 +61,6 @@ const STATUS_FILTER_LABEL: Readonly<Record<StatusFilter, string>> = {
   unverified: 'สถานะ: รอยืนยัน',
 }
 
-const PAYEE_TYPE_LABEL: Readonly<Record<'individual' | 'corporate', string>> = {
-  individual: 'บุคคลธรรมดา',
-  corporate: 'นิติบุคคล',
-}
-
 /** ฟิลด์ที่แก้แล้ว payee ที่ยืนยันแล้วต้องยืนยันใหม่ (`18` §9) — ใช้เตือนล่วงหน้าในฟอร์ม */
 const RESET_LABELS = 'ประเภท / Tax ID / คำนำหน้า / ที่อยู่ / สาขา / เงื่อนไขการหัก / กติกาภาษี / ข้อมูลธนาคาร'
 
@@ -83,78 +71,15 @@ interface Candidate {
   roleName: string
 }
 
-interface FormState {
+interface FormState extends PayeeFieldsForm {
   userId: string
-  payeeType: 'individual' | 'corporate'
-  taxProfileId: string
-  nationalId: string
-  bankName: string
-  accountName: string
-  accountNumber: string
-  idDocumentUrl: string
-  /** อัตราหัก 40(2) ต่อคน (มติ PO 05/10/2569 UAT U7) — ว่าง = ยังไม่กรอก */
-  wht402Pct: string
-  /** คำนำหน้า (บุคคลธรรมดา — มติ PO U94 ข้อ 1) */
-  nameTitleChoice: PayeeNameTitleChoice
-  nameTitleOther: string
-  /** ที่อยู่ผู้ถูกหักภาษี — บังคับครบก่อนยืนยัน */
-  address: AddressValue
-  /** สำนักงานใหญ่/สาขา (นิติบุคคล) */
-  branchKind: BranchKind
-  branchNumber: string
-  whtCondition: WhtCondition
   reason: string
 }
 
-const EMPTY_FORM: FormState = {
-  userId: '',
-  payeeType: 'individual',
-  taxProfileId: '',
-  nationalId: '',
-  bankName: '',
-  accountName: '',
-  accountNumber: '',
-  idDocumentUrl: '',
-  wht402Pct: '',
-  nameTitleChoice: '',
-  nameTitleOther: '',
-  address: EMPTY_ADDRESS,
-  branchKind: 'head_office',
-  branchNumber: '',
-  whtCondition: 'withhold',
-  reason: '',
-}
+const EMPTY_FORM: FormState = { ...EMPTY_PAYEE_FIELDS, userId: '', reason: '' }
 
 function toForm(payee: PayeeDto): FormState {
-  return {
-    userId: payee.userId,
-    payeeType: payee.payeeType,
-    taxProfileId: payee.taxProfileId ?? '',
-    nationalId: payee.nationalId ?? '',
-    bankName: payee.bankName ?? '',
-    accountName: payee.accountName ?? '',
-    accountNumber: payee.accountNumber ?? '',
-    idDocumentUrl: payee.idDocumentUrl ?? '',
-    wht402Pct: payee.wht402Pct === null ? '' : String(payee.wht402Pct),
-    nameTitleChoice: nameTitleChoiceOf(payee.nameTitle),
-    nameTitleOther: nameTitleChoiceOf(payee.nameTitle) === 'other' ? (payee.nameTitle ?? '') : '',
-    address: addressFromDto(payee.address),
-    branchKind: branchKindOf(payee.branchCode),
-    branchNumber: isHeadOfficeBranch(payee.branchCode) ? '' : payee.branchCode,
-    whtCondition: payee.whtCondition,
-    reason: '',
-  }
-}
-
-/** error ของช่องที่อยู่จาก Zod (`address.postalCode` …) → คีย์ของ `AddressFields` */
-function addressErrors(errors: Record<string, string>): Partial<Record<keyof AddressValue, string>> {
-  return {
-    detail: errors['address.detail'],
-    postalCode: errors['address.postalCode'],
-    province: errors['address.province'],
-    district: errors['address.district'],
-    subdistrict: errors['address.subdistrict'],
-  }
+  return { ...payeeFieldsFromDto(payee), userId: payee.userId, reason: '' }
 }
 
 export function PayeeTab() {
@@ -245,21 +170,7 @@ export function PayeeTab() {
   }
 
   async function save(): Promise<void> {
-    const values = {
-      payeeType: form.payeeType,
-      taxProfileId: form.taxProfileId,
-      nationalId: form.nationalId,
-      bankName: form.bankName,
-      accountName: form.accountName,
-      accountNumber: form.accountNumber,
-      idDocumentUrl: form.idDocumentUrl,
-      wht402Pct: form.wht402Pct.trim() === '' ? null : Number(form.wht402Pct),
-      nameTitle: form.payeeType === 'individual' ? nameTitleFromForm(form.nameTitleChoice, form.nameTitleOther) : '',
-      address: form.address,
-      branchCode: form.payeeType === 'corporate' ? branchCodeFromForm(form.branchKind, form.branchNumber) : '00000',
-      whtCondition: form.whtCondition,
-      reason: form.reason.trim(),
-    }
+    const values = { ...payeeFieldsPayload(form), reason: form.reason.trim() }
     const parsed =
       editing === null
         ? payeeCreateSchema.safeParse({ ...values, userId: form.userId })
@@ -331,17 +242,6 @@ export function PayeeTab() {
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
-
-  /** U108 — ค่าของ Tax Profile ที่เลือกอยู่ในฟอร์ม (ตัวอย่างคำนวณสด) */
-  const selectedProfileDto = taxProfiles.find((profile) => profile.id === form.taxProfileId)
-  const selectedTaxProfile =
-    selectedProfileDto === undefined
-      ? undefined
-      : {
-          whtPct: selectedProfileDto.whtPct,
-          whtBasis: selectedProfileDto.whtBasis,
-          whtMinThresholdSatang: selectedProfileDto.whtMinThresholdSatang,
-        }
 
   return (
     <Card>
@@ -538,213 +438,14 @@ export function PayeeTab() {
             </Field>
           )}
 
-          <Field id="payee-type" label="ประเภทผู้รับเงิน" required error={errors.payeeType}>
-            <Select
-              id="payee-type"
-              value={form.payeeType}
-              onChange={(event) => set('payeeType', event.target.value as FormState['payeeType'])}
-            >
-              {(Object.keys(PAYEE_TYPE_LABEL) as (keyof typeof PAYEE_TYPE_LABEL)[]).map((value) => (
-                <option key={value} value={value}>
-                  {PAYEE_TYPE_LABEL[value]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          {form.payeeType === 'individual' ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field
-                id="payee-name-title"
-                label="คำนำหน้าชื่อ"
-                hint="พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่าย"
-                error={errors.nameTitle}
-              >
-                <Select
-                  id="payee-name-title"
-                  value={form.nameTitleChoice}
-                  onChange={(event) => set('nameTitleChoice', event.target.value as PayeeNameTitleChoice)}
-                >
-                  <option value="">— ไม่ระบุ —</option>
-                  {PAYEE_NAME_TITLE_OPTIONS.map((title) => (
-                    <option key={title} value={title}>
-                      {title}
-                    </option>
-                  ))}
-                  <option value="other">อื่น ๆ (ระบุ)</option>
-                </Select>
-              </Field>
-              {form.nameTitleChoice === 'other' && (
-                <Field id="payee-name-title-other" label="ระบุคำนำหน้า" required error={errors.nameTitle}>
-                  <Input
-                    id="payee-name-title-other"
-                    value={form.nameTitleOther}
-                    onChange={(event) => set('nameTitleOther', event.target.value)}
-                    placeholder="เช่น ดร."
-                  />
-                </Field>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field
-                id="payee-branch-kind"
-                label="สำนักงานใหญ่ / สาขา"
-                required
-                hint="พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่ายต่อจากเลขประจำตัวผู้เสียภาษี"
-              >
-                <Select
-                  id="payee-branch-kind"
-                  value={form.branchKind}
-                  onChange={(event) => set('branchKind', event.target.value as BranchKind)}
-                >
-                  <option value="head_office">สำนักงานใหญ่</option>
-                  <option value="branch">สาขาที่</option>
-                </Select>
-              </Field>
-              {form.branchKind === 'branch' && (
-                <Field id="payee-branch-no" label="เลขที่สาขา (5 หลัก)" required error={errors.branchCode}>
-                  <Input
-                    id="payee-branch-no"
-                    numeric
-                    inputMode="numeric"
-                    maxLength={5}
-                    value={form.branchNumber}
-                    onChange={(event) => set('branchNumber', event.target.value)}
-                    placeholder="00001"
-                  />
-                </Field>
-              )}
-            </div>
-          )}
-
-          <Field
-            id="payee-national-id"
-            label="เลขบัตรประชาชน / เลขทะเบียนนิติบุคคล (13 หลัก)"
-            error={errors.nationalId}
-          >
-            <Input
-              id="payee-national-id"
-              value={form.nationalId}
-              onChange={(event) => set('nationalId', event.target.value)}
-              className="font-mono"
-              inputMode="numeric"
-              placeholder="1234567890123"
-            />
-          </Field>
-
-          <Field id="payee-tax-profile" label="กติกาภาษี (Tax Profile)" error={errors.taxProfileId}>
-            <Select
-              id="payee-tax-profile"
-              value={form.taxProfileId}
-              onChange={(event) => set('taxProfileId', event.target.value)}
-            >
-              <option value="">— ยังไม่ผูก (ใช้ค่าเริ่มต้นตามประเภทผู้รับ ถ้าไม่มีใช้อัตราจากแผนชั่วคราว) —</option>
-              {taxProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name} · {fmtPercent(profile.whtPct)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <SettingHelp help={payeeTaxProfileHelp(selectedTaxProfile ?? null)} />
-
-          <Field
-            id="payee-wht-40-2"
-            label="อัตราหัก 40(1)/40(2) (%)"
-            error={errors.wht402Pct}
-            hint="ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(1) หรือ 40(2) เท่านั้น — กรอกอัตราที่สำนักงานบัญชีคำนวณให้ (0.00 ได้) · เว้นว่าง = ยังไม่กรอก"
-          >
-            <Input
-              id="payee-wht-40-2"
-              numeric
-              inputMode="decimal"
-              value={form.wht402Pct}
-              onChange={(event) => set('wht402Pct', event.target.value)}
-              placeholder="เช่น 2.50"
-            />
-          </Field>
-          <SettingHelp help={payeeWht402Help(pctFromInput(form.wht402Pct))} />
-
-          <div className="rounded-lg border border-slate-200 p-3">
-            <AddressFields
-              label="ที่อยู่ผู้ถูกหักภาษี (พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่าย — ต้องครบก่อนยืนยัน)"
-              value={form.address}
-              onChange={(next) => set('address', next)}
-              requiredFields={PAYEE_REQUIRED_ADDRESS_FIELDS}
-              errors={addressErrors(errors)}
-            />
-          </div>
-
-          <Field
-            id="payee-wht-condition"
-            label="เงื่อนไขการหักภาษี ณ ที่จ่าย"
-            error={errors.whtCondition}
-            hint={whtConditionHint(form.whtCondition, allowGrossUp)}
-          >
-            <Select
-              id="payee-wht-condition"
-              value={form.whtCondition}
-              onChange={(event) => set('whtCondition', event.target.value as WhtCondition)}
-            >
-              {selectableWhtConditions(allowGrossUp, editing?.whtCondition ?? null).map((condition) => (
-                <option key={condition} value={condition}>
-                  {WHT_CONDITION_LABEL[condition]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <SettingHelp
-            help={payeeConditionHelp({
-              condition: form.whtCondition,
-              allowGrossUp,
-              whtPct: selectedTaxProfile?.whtPct ?? null,
-            })}
+          <PayeeFieldsSection
+            form={form}
+            onChange={set}
+            errors={errors}
+            taxProfiles={taxProfiles}
+            allowGrossUp={allowGrossUp}
+            originalCondition={editing?.whtCondition ?? null}
           />
-
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="mb-3 text-xs font-semibold text-slate-700">ข้อมูลบัญชีธนาคาร</p>
-            <div className="space-y-3">
-              <Field id="payee-bank" label="ธนาคาร" error={errors.bankName}>
-                <Input
-                  id="payee-bank"
-                  value={form.bankName}
-                  onChange={(event) => set('bankName', event.target.value)}
-                  placeholder="ธนาคารกสิกรไทย"
-                />
-              </Field>
-              <Field id="payee-account-name" label="ชื่อบัญชี" error={errors.accountName}>
-                <Input
-                  id="payee-account-name"
-                  value={form.accountName}
-                  onChange={(event) => set('accountName', event.target.value)}
-                />
-              </Field>
-              <Field id="payee-account-number" label="เลขบัญชี" error={errors.accountNumber}>
-                <Input
-                  id="payee-account-number"
-                  value={form.accountNumber}
-                  onChange={(event) => set('accountNumber', event.target.value)}
-                  className="font-mono"
-                  inputMode="numeric"
-                />
-              </Field>
-            </div>
-          </div>
-
-          <Field
-            id="payee-id-document"
-            label="ลิงก์เอกสารยืนยันตัวตน"
-            hint="บังคับเมื่อองค์กรเปิด “ต้องแนบเอกสารยืนยันตัวตนก่อนยืนยัน Payee”"
-            error={errors.idDocumentUrl}
-          >
-            <Input
-              id="payee-id-document"
-              value={form.idDocumentUrl}
-              onChange={(event) => set('idDocumentUrl', event.target.value)}
-              placeholder="https://…"
-            />
-          </Field>
 
           <Field
             id="payee-reason"

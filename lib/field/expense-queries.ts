@@ -44,6 +44,7 @@ import { toBangkokParts } from '@/lib/format/datetime'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { CaseOutcome, ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
+import { loadPayeeInfoGaps } from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
@@ -711,6 +712,7 @@ export async function listFieldExpenses(
       approvedSatang: 0,
       pendingAllTabsSatang: 0,
       pendingFieldDates: [],
+      paymentInfoIncomplete: false,
     }
   }
 
@@ -763,12 +765,21 @@ export async function listFieldExpenses(
     .filter((item) => item.status === 'approved')
     .reduce((sum, item) => sum + item.grossSatang, 0)
 
-  const [pendingFieldDates, pendingAllTabsSatang] = await Promise.all([
+  const [pendingFieldDates, pendingAllTabsSatang, payeeGaps] = await Promise.all([
     query.type === 'caseBound' ? pendingFieldDatesOf(user) : Promise.resolve([]),
     pendingAllTabsSatangOf(user.organizationId, payeeId),
+    loadPayeeInfoGaps(user.organizationId, [payeeId]),
   ])
 
-  return { type: query.type, items, pendingSatang, approvedSatang, pendingAllTabsSatang, pendingFieldDates }
+  return {
+    type: query.type,
+    items,
+    pendingSatang,
+    approvedSatang,
+    pendingAllTabsSatang,
+    pendingFieldDates,
+    paymentInfoIncomplete: (payeeGaps.get(payeeId)?.length ?? 0) > 0,
+  }
 }
 
 /**

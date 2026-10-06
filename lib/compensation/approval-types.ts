@@ -23,6 +23,8 @@ export interface CompensationApprovalDto {
   payeeName: string
   /** payee ที่ยัง unverified รวมเข้ารอบจ่ายไม่ได้ (`18` §6.2) — เตือนตั้งแต่หน้าอนุมัติ */
   payeeVerified: boolean
+  /** มติ PO U131 — ข้อมูลรับเงินของผู้รับยังไม่ครบ (ภาษี/ที่อยู่/บัญชี/อัตรา) ⇒ ป้าย "ข้อมูลรับเงินไม่ครบ" ตั้งแต่ส่งเบิก */
+  payeeInfoIncomplete: boolean
   expenseType: ExpenseType
   /** `YYYY-MM-DD` (คอลัมน์ `DATE`) — display แปลงเป็น พ.ศ. ที่ layer บนสุด (Rule 01) */
   expenseDate: string

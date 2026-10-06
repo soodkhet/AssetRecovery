@@ -45,8 +45,14 @@ export const POST = withApiPermission(
     const parsed = userCreateSchema.safeParse(await readJsonBody(request))
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
-    const { password, confirmPassword: _confirm, ...values } = parsed.data
-    const result = await createUser({ actor: user, meta: getRequestMeta(request), reason: null }, values, password)
+    const { password, confirmPassword: _confirm, payment, ...values } = parsed.data
+    // มติ PO U131 — ส่วน "ข้อมูลรับเงิน" (ไม่บังคับ) สร้าง Payee ใน transaction เดียวกัน · ต้องถือ manage:manage_payee_profile
+    const result = await createUser(
+      { actor: user, meta: getRequestMeta(request), reason: null },
+      values,
+      password,
+      payment,
+    )
 
     return Response.json(
       result.warning === null ? { data: result.user } : { data: result.user, warning: result.warning },

@@ -12,6 +12,13 @@ import type { SessionUser } from '@/lib/auth/types'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
 import type { Prisma, UserStatus } from '@/lib/generated/prisma/client'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
+import {
+  prepareUserPayment,
+  writeUserPaymentInTx,
+  type PreparedUserPayment,
+  type UserPaymentInput,
+  type UserPaymentWriteResult,
+} from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
 import { TeamError } from '@/lib/teams/errors'
 import { ACTIVE_CASE_STATUSES } from '@/lib/teams/team'
@@ -80,6 +87,7 @@ const userSelect = {
   team: { select: { name: true } },
   company: { select: { name: true } },
   _count: { select: { assignmentsAsAgent: { where: activeAssignmentWhere } } },
+  payeeProfile: { where: { deletedAt: null }, select: { id: true }, take: 1 },
 } as const
 
 type UserRow = Prisma.UserGetPayload<{ select: typeof userSelect }>
@@ -104,6 +112,7 @@ function toDto(row: UserRow): UserDto {
     mustChangePassword: row.mustChangePassword,
     lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
     activeCaseCount: row._count.assignmentsAsAgent,
+    payeeId: row.payeeProfile[0]?.id ?? null,
     updatedAt: row.updatedAt.toISOString(),
   }
 }
@@ -345,10 +354,36 @@ async function assertSuperadminSafety(
   })
 }
 
+/**
+ * ตรวจส่วน "ข้อมูลรับเงิน" ล่วงหน้า (มติ PO U131) — บริษัทไฟแนนซ์ไม่ใช่ผู้รับเงิน (`18` §6.1) ⇒ ปฏิเสธ
+ * สิทธิ์/ความถูกต้องของข้อมูลใช้ service ของผู้รับเงินตัวเดียวกับหน้า Payee
+ */
+async function preparePayment(
+  actor: SessionUser,
+  userId: string | null,
+  roleGroup: RoleGroup,
+  payment: UserPaymentInput | undefined,
+): Promise<PreparedUserPayment | null> {
+  if (payment === undefined) return null
+  if (roleGroup === 'finance_company') {
+    throw new AuthError('PERMISSION_DENIED', `payment section for finance_company user by user=${actor.id}`)
+  }
+  return prepareUserPayment(actor, userId, payment)
+}
+
+function paymentWarning(
+  userWarning: UserMutationResult['warning'],
+  payment: UserPaymentWriteResult | null,
+): UserMutationResult['warning'] {
+  if (userWarning !== null) return userWarning
+  return payment?.warning ?? null
+}
+
 export async function createUser(
   context: MutationContext,
   input: UserValues,
   password: string,
+  payment?: UserPaymentInput,
 ): Promise<UserMutationResult> {
   const organizationId = context.actor.organizationId
   const values = normalizeUserValues(input)
@@ -360,6 +395,7 @@ export async function createUser(
   await assertEmailAvailable(organizationId, values.email)
   await assertPhoneAvailable(organizationId, values.phone)
   await assertReferencesExist(organizationId, values)
+  const preparedPayment = await preparePayment(context.actor, null, role.roleGroup, payment)
 
   // id สร้างฝั่งแอป เพื่อใช้ประกอบอีเมลภายในของ Supabase Auth ได้ก่อนเขียน DB (ผู้ใช้ที่ไม่มีอีเมล)
   const userId = crypto.randomUUID()
@@ -368,6 +404,7 @@ export async function createUser(
   const authUid = await createAuthAccount(authEmailFor({ id: userId, email: values.email }), password, isAuthUidTaken)
 
   let created: UserRow
+  let paymentResult: UserPaymentWriteResult | null = null
   try {
     created = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -412,6 +449,17 @@ export async function createUser(
         tx,
       )
 
+      // มติ PO U131 — Payee ของผู้ใช้เกิดใน transaction เดียวกัน (ล้ม = ไม่มีทั้งผู้ใช้และ Payee)
+      if (preparedPayment !== null && payment !== undefined) {
+        paymentResult = await writeUserPaymentInTx(
+          tx,
+          { actor: context.actor, meta: context.meta, reason: payment.reason },
+          user.id,
+          user.fullName,
+          preparedPayment,
+        )
+        return tx.user.findUniqueOrThrow({ where: { id: user.id }, select: userSelect })
+      }
       return user
     }).catch(onUniqueViolation(() => rethrowDuplicateUser(organizationId, values)))
   } catch (error) {
@@ -419,7 +467,7 @@ export async function createUser(
     throw error
   }
 
-  return { user: toDto(created), warning: null }
+  return { user: toDto(created), warning: paymentWarning(null, paymentResult) }
 }
 
 /** เขียน DB ไม่สำเร็จ → ลบบัญชี Auth ที่เพิ่งสร้างทิ้ง — best effort */
@@ -500,6 +548,7 @@ export async function updateUser(
   context: Omit<MutationContext, 'reason'>,
   current: UserDto,
   input: UserValues,
+  payment?: UserPaymentInput,
 ): Promise<UserMutationResult> {
   const organizationId = context.actor.organizationId
   const values = normalizeUserValues(input)
@@ -522,7 +571,9 @@ export async function updateUser(
     { roleName: current.roleName, status: current.status },
     { roleName: role.name, status: current.status },
   )
+  const preparedPayment = await preparePayment(context.actor, current.id, role.roleGroup, payment)
 
+  let paymentResult: UserPaymentWriteResult | null = null
   const updated = await prisma.$transaction(async (tx) => {
     const user = await tx.user.update({
       where: { id: current.id },
@@ -557,6 +608,17 @@ export async function updateUser(
       tx,
     )
 
+    // มติ PO U131 — สร้าง/อัปเดต/ยืนยัน Payee ใน transaction เดียวกับผู้ใช้
+    if (preparedPayment !== null && payment !== undefined) {
+      paymentResult = await writeUserPaymentInTx(
+        tx,
+        { actor: context.actor, meta: context.meta, reason: payment.reason },
+        current.id,
+        user.fullName,
+        preparedPayment,
+      )
+      return tx.user.findUniqueOrThrow({ where: { id: current.id }, select: userSelect })
+    }
     return user
   }).catch(onUniqueViolation(() => rethrowDuplicateUser(organizationId, values, current.id)))
 
@@ -577,7 +639,7 @@ export async function updateUser(
     }
   }
 
-  return { user: toDto(updated), warning }
+  return { user: toDto(updated), warning: paymentWarning(warning, paymentResult) }
 }
 
 /**

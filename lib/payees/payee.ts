@@ -280,6 +280,9 @@ export const REQUIRED_FOR_VERIFY = [
   'addressPostalCode',
 ] as const satisfies readonly (keyof PayeeValues)[]
 
+/** capability ของการบันทึก/ยืนยันข้อมูลผู้รับเงิน (ไฟล์ 18 §12) — ใช้ร่วม API และฟอร์มผู้ใช้ (U131) */
+export const MANAGE_PAYEE_PROFILE_CAPABILITY = 'manage_payee_profile'
+
 /** ชื่อฟิลด์ที่รายงานเมื่อผู้รับยังไม่มีแหล่งอัตราภาษีใดเลย — UI ใช้ชี้ไปที่ช่อง Tax Profile */
 export const WHT_RATE_SOURCE_FIELD = 'taxProfileId'
 

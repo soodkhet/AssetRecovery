@@ -1,5 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import type { PayeeFieldsInput } from '@/lib/payees/schemas'
@@ -15,6 +15,14 @@ import type { PayeeFieldsInput } from '@/lib/payees/schemas'
  *
  * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
  */
+
+// createUser แตะบัญชีเข้าสู่ระบบภายนอก — เทสต์นี้แทนด้วยตัวปลอม (ห้ามยิงของจริง)
+vi.mock('@/lib/users/provisioning', () => ({
+  createAuthAccount: vi.fn(async () => crypto.randomUUID()),
+  deleteAuthAccount: vi.fn(async () => undefined),
+  setAuthPassword: vi.fn(async () => undefined),
+  syncAuthEmail: vi.fn(async () => null),
+}))
 
 const url = process.env.TEST_DATABASE_URL
 
@@ -57,9 +65,11 @@ let client: PrismaClient | null = null
 type PayeeQueries = typeof import('@/lib/payees/queries')
 type ApprovalQueries = typeof import('@/lib/compensation/approval-queries')
 type FieldExpenseQueries = typeof import('@/lib/field/expense-queries')
+type UserQueries = typeof import('@/lib/users/queries')
 let payees: PayeeQueries
 let approvals: ApprovalQueries
 let fieldExpenses: FieldExpenseQueries
+let users: UserQueries
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -173,6 +183,7 @@ beforeAll(async () => {
   payees = await import('@/lib/payees/queries')
   approvals = await import('@/lib/compensation/approval-queries')
   fieldExpenses = await import('@/lib/field/expense-queries')
+  users = await import('@/lib/users/queries')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -843,5 +854,111 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
       () => approvals.approveCompensationExpense({ actor: manager, meta }, expenseId, {}),
       'EXPENSE_INVALID_STATUS',
     )
+  })
+})
+
+// ── มติ PO U131: ข้อมูลรับเงินในฟอร์มผู้ใช้ + ป้าย "ข้อมูลรับเงินไม่ครบ" ─────────────────────────
+
+suite('U131 — ข้อมูลรับเงินในฟอร์มผู้ใช้เจ้าหน้าที่ติดตามทรัพย์', () => {
+  /** ผู้ดูแลที่เพิ่ม/แก้ผู้ใช้ได้ + ถือสิทธิ์ผู้รับเงินระดับ manage (เหมือนการเงิน) */
+  const admin = sessionUser({
+    id: FINANCE_ID,
+    roleId: ROLE_FINANCE,
+    roleName: FINANCE_ROLE,
+    roleGroup: 'system',
+    teamId: null,
+    capabilities: { manage_users: 'manage', manage_payee_profile: 'manage' },
+    scope: { kind: 'global', teamIds: [], companyId: null, userId: FINANCE_ID },
+  })
+  /** ธุรการ — เพิ่ม/แก้ผู้ใช้ได้แต่ไม่มีสิทธิ์ผู้รับเงิน */
+  const officeAdmin: SessionUser = { ...admin, capabilities: { manage_users: 'manage' } }
+  const userCtx = (actor: SessionUser) => ({ actor, meta, reason: null })
+  const payment = (patch: Partial<PayeeFieldsInput> = {}, verify = false) => ({
+    fields: { ...BANK, ...patch },
+    verify,
+    reason: 'ตั้งข้อมูลรับเงินจากฟอร์มผู้ใช้',
+  })
+  const newUser = (username: string) => ({
+    roleId: ROLE_AGENT,
+    username,
+    email: null,
+    fullName: `พนักงานใหม่ ${username}`,
+    phone: null,
+    employeeCode: null,
+    teamId: TEAM_ID,
+    companyId: null,
+  })
+
+  // ผู้ใช้ที่สร้างในเทสต์ลบไม่ได้ (audit ผูกอยู่ · audit ห้ามแก้) ⇒ ใช้ username ไม่ซ้ำต่อรอบแทน
+
+  it('สร้างผู้ใช้พร้อมข้อมูลรับเงิน + ติ๊กยืนยัน ⇒ Payee เกิดในรอบเดียวกัน ยืนยันแล้ว · audit ของ Payee มีเหตุผล', async () => {
+    const username = `u131-a${Date.now()}`
+    const created = await users.createUser(userCtx(admin), newUser(username), 'Passw0rd!', payment({}, true))
+    expect(created.user.payeeId).not.toBeNull()
+    const payee = await db().payeeProfile.findFirstOrThrow({ where: { userId: created.user.id } })
+    expect(payee.isVerified).toBe(true)
+    expect(payee.verifiedBy).toBe(admin.id)
+    expect(payee.accountNumber).toBe('1234567890')
+    const audits = await db().auditLog.findMany({
+      where: { targetType: 'payee_profiles', targetId: payee.id },
+      select: { action: true, reason: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(audits.map((row) => row.action)).toEqual(['create', 'approve'])
+    expect(audits.every((row) => row.reason === 'ตั้งข้อมูลรับเงินจากฟอร์มผู้ใช้')).toBe(true)
+  })
+
+  it('ติ๊กยืนยันแต่ข้อมูลไม่ครบ ⇒ REQUIRED_MISSING และไม่มีทั้งผู้ใช้และ Payee (transaction เดียว)', async () => {
+    const username = `u131-b${Date.now()}`
+    await expectCode(
+      () => users.createUser(userCtx(admin), newUser(username), 'Passw0rd!', payment({ bankName: null }, true)),
+      'REQUIRED_MISSING',
+    )
+    expect(await db().user.count({ where: { organizationId: ORG_ID, username } })).toBe(0)
+  })
+
+  it('แก้ผู้ใช้ที่มี Payee โครงเปล่าอยู่แล้ว ⇒ อัปเดต Payee เดิม (ไม่สร้างซ้ำ) · ยืนยันได้ในฟอร์มเดียว', async () => {
+    const payeeId = await seedPayee(AGENT_ID, { bankName: null, accountNumber: null })
+    const current = await users.getUser(admin, AGENT_ID)
+    expect(current.payeeId).toBe(payeeId)
+    const values = {
+      roleId: current.roleId,
+      username: current.username ?? `u131-c${Date.now()}`,
+      email: current.email,
+      fullName: current.fullName,
+      phone: current.phone,
+      employeeCode: current.employeeCode,
+      teamId: current.teamId,
+      companyId: current.companyId,
+    }
+    const result = await users.updateUser({ actor: admin, meta }, current, values, payment({}, true))
+    expect(result.user.payeeId).toBe(payeeId)
+    const payee = await db().payeeProfile.findUniqueOrThrow({ where: { id: payeeId } })
+    expect(payee.isVerified).toBe(true)
+    expect(payee.bankName).toBe('กสิกรไทย')
+    expect(await db().payeeProfile.count({ where: { userId: AGENT_ID } })).toBe(1)
+  })
+
+  it('ผู้ดูแลที่ไม่มีสิทธิ์ผู้รับเงินส่งส่วนข้อมูลรับเงินมา ⇒ PERMISSION_DENIED · ไม่สร้างผู้ใช้', async () => {
+    const username = `u131-d${Date.now()}`
+    await expectCode(
+      () => users.createUser(userCtx(officeAdmin), newUser(username), 'Passw0rd!', payment()),
+      'PERMISSION_DENIED',
+    )
+    expect(await db().user.count({ where: { organizationId: ORG_ID, username } })).toBe(0)
+  })
+
+  it('ป้าย "ข้อมูลรับเงินไม่ครบ" ตั้งแต่ส่งเบิก — คิวอนุมัติ + หน้ารายการเบิกของพนักงาน', async () => {
+    const payeeId = await seedPayee(AGENT_ID, { bankName: null })
+    await seedPendingExpense(payeeId)
+    const rows = await approvals.listCompensationApprovals(manager, { status: 'all' })
+    expect(rows[0]?.payeeInfoIncomplete).toBe(true)
+    const own = await fieldExpenses.listFieldExpenses(agent, { type: 'caseBound' })
+    expect(own.paymentInfoIncomplete).toBe(true)
+
+    await payees.updatePayee(ctx(finance), payeeId, BANK)
+    const after = await approvals.listCompensationApprovals(manager, { status: 'all' })
+    expect(after[0]?.payeeInfoIncomplete).toBe(false)
+    expect((await fieldExpenses.listFieldExpenses(agent, { type: 'caseBound' })).paymentInfoIncomplete).toBe(false)
   })
 })

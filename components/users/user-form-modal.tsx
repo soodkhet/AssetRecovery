@@ -8,9 +8,17 @@ import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { ROLE_GROUP_LABEL } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
 import type { TeamDto } from '@/lib/teams/types'
-import { useSession } from '@/components/auth/permission-provider'
+import { usePermission } from '@/components/auth/permission-provider'
+import { EMPTY_PAYEE_FIELDS, payeeFieldsPayload, type PayeeFieldsForm } from '@/components/payees/payee-fields-section'
+import {
+  EMPTY_USER_PAYMENT,
+  isUserPaymentTouched,
+  UserPaymentSection,
+  type UserPaymentState,
+} from '@/components/users/user-payment-section'
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
 import { canManageAccountIn } from '@/lib/users/auth-account'
+import { MANAGE_PAYEE_PROFILE_CAPABILITY } from '@/lib/payees/payee'
 import { userCreateSchema, userUpdateSchema } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import { requiredScopeFor } from '@/lib/users/user'
@@ -25,6 +33,9 @@ import { requiredScopeFor } from '@/lib/users/user'
  * มติ PO 03/10/2569: username บังคับ · อีเมลไม่บังคับ · ตอนสร้างผู้ดูแลตั้งรหัสผ่านเริ่มต้นให้เลย
  * (ไม่ส่งอีเมลเชิญ — ผู้ใช้ถูกบังคับเปลี่ยนเองตอน login ครั้งแรก) · ตอนแก้ไขไม่มีช่องรหัสผ่าน
  * (ตั้งใหม่ผ่านปุ่ม "ตั้งรหัสผ่าน" ในตาราง — `<UserPasswordModal>`)
+ *
+ * มติ PO U131: กลุ่มเจ้าหน้าที่ติดตามทรัพย์ (Inhouse/Outsource) มีส่วน "ข้อมูลรับเงิน" (ฟิลด์เดียวกับหน้า Payee)
+ * บันทึกพร้อมผู้ใช้ใน transaction เดียว — แสดงเฉพาะผู้ถือ `manage:manage_payee_profile` · ไม่แตะ = ไม่ส่ง
  */
 
 interface FormState {
@@ -73,7 +84,16 @@ function formOf(user: UserDto): FormState {
   }
 }
 
-function payloadOf(form: FormState, isEdit: boolean): Record<string, unknown> {
+/** กลุ่มที่ฟอร์มมีส่วน "ข้อมูลรับเงิน" (มติ PO U131 — แท็บเจ้าหน้าที่ติดตามทรัพย์) */
+function hasPaymentSection(roleGroup: RoleGroup): boolean {
+  return roleGroup === 'inhouse' || roleGroup === 'outsource'
+}
+
+function payloadOf(
+  form: FormState,
+  isEdit: boolean,
+  payment: UserPaymentState | null,
+): Record<string, unknown> {
   const scope = requiredScopeFor(form.roleGroup)
   return {
     roleId: form.roleId === '' ? undefined : form.roleId,
@@ -86,7 +106,20 @@ function payloadOf(form: FormState, isEdit: boolean): Record<string, unknown> {
     companyId: scope === 'company' && form.companyId !== '' ? form.companyId : null,
     // ไม่มีช่องเหตุผล (มติ PO 03/10/2569) — แก้ไขผู้ใช้ ระบบสรุปสิ่งที่เปลี่ยนลง audit เอง
     ...(isEdit ? {} : { password: form.password, confirmPassword: form.confirmPassword }),
+    ...(payment === null
+      ? {}
+      : { payment: { fields: payeeFieldsPayload(payment.fields), verify: payment.verify, reason: payment.reason.trim() } }),
   }
+}
+
+/** error ของ Zod ใต้ `payment.fields.*` / `payment.reason` → คีย์ของส่วนข้อมูลรับเงิน */
+function paymentErrorsOf(errors: Record<string, string>): Record<string, string | undefined> {
+  const result: Record<string, string | undefined> = {}
+  for (const [path, message] of Object.entries(errors)) {
+    if (path.startsWith('payment.fields.')) result[path.slice('payment.fields.'.length)] = message
+    else if (path === 'payment.reason') result.reason = message
+  }
+  return result
 }
 
 export function UserFormModal({
@@ -110,7 +143,11 @@ export function UserFormModal({
   onSaved: () => void
 }) {
   const { showToast } = useToast()
-  const session = useSession()
+  const { session, can } = usePermission()
+  /** U131 — สิทธิ์เดิมของหน้า Payee (บันทึก+ยืนยัน) · UX เท่านั้น API ตรวจซ้ำ */
+  const canManagePayment = can('manage', MANAGE_PAYEE_PROFILE_CAPABILITY)
+  const [payment, setPayment] = useState<UserPaymentState>(EMPTY_USER_PAYMENT)
+  const [paymentInitial, setPaymentInitial] = useState<PayeeFieldsForm>(EMPTY_PAYEE_FIELDS)
   /** กลุ่มที่ผู้ใช้คนนี้มอบให้ได้ — กลุ่ม system เฉพาะ Superadmin (DEC-010 · API ตรวจซ้ำ) */
   const assignableGroups = (Object.keys(ROLE_GROUP_LABEL) as RoleGroup[]).filter(
     (group) => session !== null && canManageAccountIn(session, group),
@@ -137,8 +174,13 @@ export function UserFormModal({
     setForm((current) => ({ ...current, roleGroup, roleId: '', teamId: '', companyId: '' }))
   }
 
+  const showPayment = canManagePayment && hasPaymentSection(form.roleGroup)
+  const paymentTouched = showPayment && isUserPaymentTouched(payment, paymentInitial)
+
   async function save(): Promise<void> {
-    const parsed = (isEdit ? userUpdateSchema : userCreateSchema).safeParse(payloadOf(form, isEdit))
+    const parsed = (isEdit ? userUpdateSchema : userCreateSchema).safeParse(
+      payloadOf(form, isEdit, paymentTouched ? payment : null),
+    )
     if (!parsed.success) {
       const fields: Record<string, string> = {}
       for (const issue of parsed.error.issues) {
@@ -364,6 +406,16 @@ export function UserFormModal({
           <InlineAlert tone="warning" title="กำลังย้ายผู้ใช้ข้ามกลุ่ม">
             การเปลี่ยนกลุ่ม/บทบาทเปลี่ยนขอบเขตข้อมูลที่ผู้ใช้คนนี้มองเห็นทันทีหลังบันทึก
           </InlineAlert>
+        )}
+
+        {showPayment && (
+          <UserPaymentSection
+            payeeId={user?.payeeId ?? null}
+            state={payment}
+            onChange={setPayment}
+            onLoaded={setPaymentInitial}
+            errors={paymentErrorsOf(errors)}
+          />
         )}
 
       </div>

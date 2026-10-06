@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 import { USERNAME_PATTERN } from '@/lib/auth/login-identifier'
 import { passwordPairFields, refinePasswordPair } from '@/lib/auth/schemas'
+import { userPaymentSchema } from '@/lib/payees/schemas'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลผู้ใช้งาน (ไฟล์ 08 · Rule 04 · Rule 13)
@@ -59,11 +60,17 @@ const userFields = z.object({
 /** ตัวผู้ใช้ล้วน (ไม่มี `reason`) — FE ใช้ตรวจฟอร์มก่อนเปิดกล่องยืนยันเหตุผล */
 export const userFieldsSchema = userFields
 
+/**
+ * ส่วน "ข้อมูลรับเงิน" (มติ PO U131) — ไม่บังคับ · มีเหตุผลของตัวเอง (หมวด bank) แยกจากผู้ใช้
+ * ส่งมาได้เฉพาะผู้ถือ `manage:manage_payee_profile` (ตรวจที่ชั้น business logic)
+ */
+const paymentField = { payment: userPaymentSchema.optional() }
+
 /** สร้างผู้ใช้ = ข้อมูลผู้ใช้ + รหัสผ่านเริ่มต้นที่ผู้ดูแลตั้งให้ (ผู้ใช้ต้องเปลี่ยนเองตอน login ครั้งแรก) · ไม่มีเหตุผล */
-export const userCreateSchema = refinePasswordPair(userFields.extend(passwordPairFields.shape))
+export const userCreateSchema = refinePasswordPair(userFields.extend({ ...passwordPairFields.shape, ...paymentField }))
 
 /** PATCH ส่งค่าทั้งชุดเหมือนตอนสร้าง (ฟอร์มเดียวกัน) — ไม่ใช่ partial patch · ไม่มีรหัสผ่าน/เหตุผล */
-export const userUpdateSchema = userFields
+export const userUpdateSchema = userFields.extend(paymentField)
 
 /**
  * `POST /api/finance-companies/:id/users` (`10` §14) — สร้างบัญชีฝั่งบริษัทไฟแนนซ์
