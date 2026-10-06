@@ -71,6 +71,32 @@ describe('ปุ่มบนแถว (`16` §8 — อ่านจาก state 
   })
 })
 
+describe('มติ PO U117 ข้อ 3 — ปุ่ม "ปฏิเสธ" (ถาวร) ใบเบิกค่าที่พัก', () => {
+  it('ค่าที่พัก pending_approval + มีสิทธิ์ = มีปุ่มปฏิเสธถาวร', () => {
+    expect(expenseRowActions({ status: 'pending_approval', canApprove: true, expenseType: 'hotel' })).toEqual([
+      'approve',
+      'reject',
+      'reject_permanent',
+      'view_formula',
+    ])
+  })
+
+  it('ขั้นการเงิน / ชนิดอื่น / ไม่มีสิทธิ์ / ต้องแก้ไข = ไม่มีปุ่ม (ตามเส้นสถานะ pending_approval → rejected)', () => {
+    expect(expenseRowActions({ status: 'pending_finance_approval', canApprove: true, expenseType: 'hotel' })).not.toContain(
+      'reject_permanent',
+    )
+    expect(expenseRowActions({ status: 'pending_approval', canApprove: true, expenseType: 'receipt' })).not.toContain(
+      'reject_permanent',
+    )
+    expect(expenseRowActions({ status: 'pending_approval', canApprove: false, expenseType: 'hotel' })).toEqual([
+      'view_formula',
+    ])
+    expect(expenseRowActions({ status: 'needs_revision', canApprove: true, expenseType: 'hotel' })).toEqual([
+      'view_formula',
+    ])
+  })
+})
+
 describe('stepper ในแถว (`16` §8)', () => {
   it('กำลังรออนุมัติ = บอกขั้นและ role ที่รออยู่', () => {
     expect(approvalStepText(dto())).toBe('ขั้น 1/2: รอ ผู้จัดการทีมติดตามทรัพย์')

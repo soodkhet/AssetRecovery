@@ -97,3 +97,12 @@ describe('BUG-092 — แถวรายวันของเคสที่ป�
     expect(isFieldDayExpenseHoldable({ ...fresh, status: 'needs_revision' })).toBe(false)
   })
 })
+
+describe('reject_permanent ตรง `23` §6.3 (มติ PO U117 ข้อ 3)', () => {
+  it('pending_approval → rejected เท่านั้น', () => {
+    expect(nextExpenseStatus('pending_approval', 'reject_permanent')).toBe('rejected')
+    for (const status of ['pending_finance_approval', 'needs_revision', 'approved', 'rejected', 'superseded', 'pending_warehouse_confirm'] as const) {
+      expect(canExpenseAction(status, 'reject_permanent')).toBe(false)
+    }
+  })
+})

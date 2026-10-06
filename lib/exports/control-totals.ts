@@ -21,6 +21,7 @@ import {
   type WhtExportRow,
 } from '@/lib/exports/pack'
 import { sumSatang } from '@/lib/finance/satang'
+import { isPayerBorneWhtCondition, payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import { fmtDateTime } from '@/lib/format/datetime'
 
 /**
@@ -87,7 +88,10 @@ export const CONTROL_SUMMARY_ITEMS = {
   cash_received: 'รับเงินจากลูกค้า',
   customer_wht: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย (รับเงินในงวด)',
   payout_transfer: 'จ่ายออก (ยอดโอนจริง หลังหักคืนเงินทดรอง)',
-  wht_withheld: 'ภาษีหัก ณ ที่จ่ายที่หักผู้รับ (ใบ 50 ทวิ ที่มีผล)',
+  // มติ PO 06/10/2569 U114 (BUG-177) — แยกภาษีที่หักจากผู้รับ / บริษัทออกให้ / รวมต้องนำส่ง
+  wht_withheld: 'ภาษีหัก ณ ที่จ่าย — หักจากผู้รับ (ใบ 50 ทวิ ที่มีผล)',
+  wht_paid_by_payer: 'ภาษีหัก ณ ที่จ่าย — บริษัทออกให้ (ไม่ได้หักจากผู้รับ)',
+  wht_remit_total: 'ภาษีหัก ณ ที่จ่าย — รวมต้องนำส่ง',
   accrued_expenses: 'ค่าใช้จ่ายค้างจ่าย (ยอดก่อนหักภาษี — ภาพ ณ เวลาสร้างชุด)',
   unbilled_revenue: 'รายได้ค้างรับ (ยอดก่อน VAT — ภาพ ณ เวลาสร้างชุด)',
   suspense_outstanding: 'เงินรับรอตรวจสอบคงค้าง (ภาพ ณ เวลาสร้างชุด)',
@@ -188,7 +192,19 @@ export function buildControlTotals(input: ControlTotalsInput): ControlTotalLine[
   const withheld = r.customerWht.filter((row) => inPeriod(row.withheldDate, r.period))
   summary('10', 'customer_wht', withheld.length, sum(withheld.map((row) => row.withheldSatang)))
   summary('04', 'payout_transfer', r.payments.length, sum(transfers))
-  summary('05', 'wht_withheld', r.wht.length, sum(r.wht.map((row) => row.whtSatang)))
+  // U114: แยกตามเงื่อนไขการหักผ่าน `payoutItemTaxSplit()` (ไม่คิดภาษีใหม่) · ไฟล์ 05 เก็บ gross ของ (2)/(3) = เงินได้ + ภาษี
+  const whtSplits = r.wht.map((row) =>
+    payoutItemTaxSplit({
+      grossSatang: row.grossSatang,
+      whtSatang: row.whtSatang,
+      netSatang: row.grossSatang - row.whtSatang,
+      whtCondition: row.whtCondition,
+    }),
+  )
+  const payerBorneCount = r.wht.filter((row) => isPayerBorneWhtCondition(row.whtCondition)).length
+  summary('05', 'wht_withheld', r.wht.length - payerBorneCount, sum(whtSplits.map((split) => split.whtWithheldSatang)))
+  summary('05', 'wht_paid_by_payer', payerBorneCount, sum(whtSplits.map((split) => split.whtPaidByPayerSatang)))
+  summary('05', 'wht_remit_total', r.wht.length, sum(r.wht.map((row) => row.whtSatang)))
   summary('15', 'accrued_expenses', r.accruedExpenses.length, sum(r.accruedExpenses.map((row) => row.grossSatang)))
   summary('14', 'unbilled_revenue', r.unbilledRevenue.length, sum(r.unbilledRevenue.map((row) => row.grossSatang)))
   const open = r.suspense.filter((row) => row.matchStatus === 'suspense')

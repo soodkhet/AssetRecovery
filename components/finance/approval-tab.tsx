@@ -77,6 +77,8 @@ export function ApprovalTab() {
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
   const [rejectTarget, setRejectTarget] = useState<CompensationApprovalDto | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [permanentTarget, setPermanentTarget] = useState<CompensationApprovalDto | null>(null)
+  const [permanentReason, setPermanentReason] = useState('')
   const [claimFormOpen, setClaimFormOpen] = useState(false)
 
   // ตารางที่ 2 ใช้ตัวโหลดเดียวกับแท็บ "เงินทดรองจ่าย" เต็มรูป (3.4) — ห้าม fetch เอง
@@ -156,6 +158,7 @@ export function ApprovalTab() {
                   const actions = expenseRowActions({
                     status: item.status,
                     canApprove: claims.canApprove && item.viewerCanAct,
+                    expenseType: item.expenseType,
                   })
                   return (
                     <Tr key={item.id} className={expenseRowHighlight(item.status) ?? undefined}>
@@ -223,6 +226,19 @@ export function ApprovalTab() {
                               }}
                             >
                               ตีกลับ
+                            </Button>
+                          )}
+                          {actions.includes('reject_permanent') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-rose-700"
+                              onClick={() => {
+                                setPermanentTarget(item)
+                                setPermanentReason('')
+                              }}
+                            >
+                              ปฏิเสธ
                             </Button>
                           )}
                           {actions.includes('view_formula') && (
@@ -395,6 +411,27 @@ export function ApprovalTab() {
           })
         }}
         placeholder="เช่น ใบเสร็จไม่ชัด ขอให้ถ่ายใหม่"
+      />
+
+      <ReasonConfirmModal
+        open={permanentTarget !== null}
+        title="ปฏิเสธใบเบิกค่าที่พัก"
+        description="ปฏิเสธถาวร — ผู้เบิกแก้ไขแล้วส่งใหม่ไม่ได้ และใบรับรองแทนใบเสร็จที่ผูกกับใบเบิกนี้จะไม่นับเพดานต่อเดือนอีก ถ้าต้องการให้แก้เอกสาร ให้ใช้ “ตีกลับ” แทน"
+        confirmLabel="ปฏิเสธรายการ"
+        loading={permanentTarget !== null && claims.busyId === permanentTarget.id}
+        reason={permanentReason}
+        onReasonChange={setPermanentReason}
+        onClose={() => setPermanentTarget(null)}
+        onConfirm={() => {
+          if (permanentTarget === null) return
+          void claims.rejectPermanent(permanentTarget, permanentReason).then((ok) => {
+            if (ok) {
+              setPermanentTarget(null)
+              setPermanentReason('')
+            }
+          })
+        }}
+        placeholder="เช่น ไม่ได้ค้างคืนจริงตามวันที่เบิก"
       />
 
       <ManualClaimModal

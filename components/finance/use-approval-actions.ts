@@ -26,6 +26,8 @@ export interface ApprovalActions {
   reload: () => Promise<void>
   approve: (item: CompensationApprovalDto) => Promise<void>
   reject: (item: CompensationApprovalDto, reason: string) => Promise<boolean>
+  /** ปฏิเสธถาวร (ใบเบิกค่าที่พัก — มติ PO U117) · เฉพาะ `/api/claims` */
+  rejectPermanent: (item: CompensationApprovalDto, reason: string) => Promise<boolean>
 }
 
 /** @param endpoint `/api/compensation` (ไฟล์ 16) หรือ `/api/claims` (ไฟล์ 15) — ชั้นข้อมูลเดียวกัน */
@@ -121,5 +123,28 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
     [endpoint, reload, showToast],
   )
 
-  return { items, loading, error, busyId, canApprove, reload, approve, reject }
+  const rejectPermanent = useCallback(
+    async (item: CompensationApprovalDto, reason: string) => {
+      setBusyId(item.id)
+      const result = await callApi(
+        `/api/claims/${item.id}/reject-permanent`,
+        jsonRequest('PATCH', { reason: reason.trim() }),
+      )
+      setBusyId(null)
+      if (result.error !== undefined) {
+        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+        return false
+      }
+      showToast({
+        tone: 'success',
+        title: 'ปฏิเสธรายการเบิกแล้ว',
+        description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]} (ส่งใหม่ไม่ได้)`,
+      })
+      await reload()
+      return true
+    },
+    [reload, showToast],
+  )
+
+  return { items, loading, error, busyId, canApprove, reload, approve, reject, rejectPermanent }
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { substituteDraftPayload, substituteLinesToDrafts } from '@/lib/substitute-receipts/form'
 import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
 import { substituteReceiptDraftSchema, substituteReceiptLineSchema } from '@/lib/substitute-receipts/schemas'
 import {
@@ -267,5 +268,26 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
     expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000 }, 5_000)).toBeNull()
     expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000 }, 5_001)).toContain('ยอดที่ใช้จริง')
     expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: null }, 1)).not.toBeNull()
+  })
+})
+
+describe('มติ PO U117 ข้อ 1 — ฟอร์ม "ออกใบใหม่แทน" ดึงรายการ/ยอดจากใบที่ยกเลิก', () => {
+  it('บรรทัดเดิม → ช่องกรอก (บาท 2 ตำแหน่ง) · ส่งต่อได้ยอดเท่าเดิม', () => {
+    const drafts = substituteLinesToDrafts([
+      { lineDate: '2026-10-03', description: 'ค่าที่พัก', amountSatang: 45_050, note: 'โรงแรมชลบุรี' },
+      { lineDate: '2026-10-04', description: 'ค่าที่พักคืนที่ 2', amountSatang: 4_950, note: null },
+    ])
+    expect(drafts).toEqual([
+      { key: 'line-0', lineDate: '2026-10-03', description: 'ค่าที่พัก', amountBaht: '450.50', note: 'โรงแรมชลบุรี' },
+      { key: 'line-1', lineDate: '2026-10-04', description: 'ค่าที่พักคืนที่ 2', amountBaht: '49.50', note: '' },
+    ])
+    const payload = substituteDraftPayload(drafts)
+    expect(payload.payload?.lines.map((entry) => entry.amountSatang)).toEqual([45_050, 4_950])
+  })
+
+  it('ไม่มีบรรทัด (โหลดไม่ได้) = บรรทัดว่าง 1 แถว', () => {
+    expect(substituteLinesToDrafts([], '2026-10-06')).toEqual([
+      { key: 'line-0', lineDate: '2026-10-06', description: '', amountBaht: '', note: '' },
+    ])
   })
 })

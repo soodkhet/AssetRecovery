@@ -24,6 +24,7 @@ import { FIELD_TRACKER_PATH } from '@/lib/auth/constants'
 import {
   EXECUTIVE_DASHBOARD_KPI_KEYS,
   pendingQueueItems,
+  withArOver60Hint,
   queueCountText,
   queueKpiItems,
   type DashboardOverviewDto,
@@ -35,6 +36,7 @@ import { fmtCount, fmtRatioPct, fmtSatangSymbol } from '@/lib/format/money'
 import { notificationDisplay } from '@/lib/notifications/events'
 import type { NotificationListDto } from '@/lib/notifications/queries'
 import { KPI_TONE_CLASS } from '@/lib/reports/dashboard'
+import type { ReportKpi } from '@/lib/reports/payload'
 
 /**
  * แดชบอร์ดหลัก (เมนูแรกของ Top Nav · Phase 6.6) — mockup `dashboard.html` ปรับเข้าข้อมูลจริงตามมติ PO 2026-08-16
@@ -112,7 +114,13 @@ function SectionLink({ href, children }: { href: string; children: string }) {
 // ── KPI แถวบน ─────────────────────────────────────────────────────────────────
 
 /** ผู้บริหาร/Superadmin — การ์ดจากรายงาน KPI ภาพรวม (เดือนนี้) */
-function ExecutiveKpiRow() {
+/** U115 — การ์ด AR + บรรทัด "เกิน 60 วัน" จากรายงานอายุหนี้ (F3) · ใช้เฉพาะผู้ที่ `arOver60` = true */
+function ExecutiveKpiRowWithArAging() {
+  const arAging = useReportData('ar-aging', THIS_MONTH)
+  return <ExecutiveKpiRow arAgingKpis={arAging.error === null ? (arAging.payload?.kpis ?? null) : null} />
+}
+
+function ExecutiveKpiRow({ arAgingKpis }: { arAgingKpis: readonly ReportKpi[] | null }) {
   const report = useReportData('kpi-summary', THIS_MONTH)
   const kpis = (report.payload?.kpis ?? []).filter((kpi) =>
     (EXECUTIVE_DASHBOARD_KPI_KEYS as readonly string[]).includes(kpi.key),
@@ -138,7 +146,7 @@ function ExecutiveKpiRow() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {EXECUTIVE_DASHBOARD_KPI_KEYS.map((key) => {
             const kpi = kpis.find((each) => each.key === key)
-            return kpi === undefined ? null : <KpiCard key={key} kpi={kpi} />
+            return kpi === undefined ? null : <KpiCard key={key} kpi={withArOver60Hint(kpi, arAgingKpis)} />
           })}
         </div>
       )}
@@ -409,7 +417,11 @@ export function MainDashboard() {
       )}
 
       {source === 'executive' ? (
-        <ExecutiveKpiRow />
+        overview.data?.arOver60 === true ? (
+          <ExecutiveKpiRowWithArAging />
+        ) : (
+          <ExecutiveKpiRow arAgingKpis={null} />
+        )
       ) : source === 'finance' ? (
         <FinanceKpiRow />
       ) : (

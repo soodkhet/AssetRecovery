@@ -2746,6 +2746,8 @@ model SubstituteReceipt {
   cancelledAt      DateTime?               @map("cancelled_at") @db.Timestamptz(6)
   cancelledBy      String?                 @map("cancelled_by") @db.Uuid
   cancelReason     String?                 @map("cancel_reason")
+  /// ใบที่ยกเลิกซึ่งใบนี้ออกแทน (มติ PO U117) — NULL = ออกครั้งแรก · ห้ามแก้ (trigger) · ถูกแทนได้ครั้งเดียว
+  replacesReceiptId String?                @map("replaces_receipt_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2762,6 +2764,8 @@ model SubstituteReceipt {
   signedByUser  User?                   @relation("substitute_receipts_signed_by", fields: [signedBy], references: [id])
   cancelledByUser User?                 @relation("substitute_receipts_cancelled_by", fields: [cancelledBy], references: [id])
   lines         SubstituteReceiptLine[]
+  replacesReceipt SubstituteReceipt?      @relation("substitute_receipt_replaces", fields: [replacesReceiptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replacedBy      SubstituteReceipt[]     @relation("substitute_receipt_replaces")
 
   @@unique([organizationId, receiptNumber], map: "uniq_substitute_receipt_number")
   @@index([organizationId, payeeId, issueDate], map: "idx_substitute_receipts_org_payee_date")

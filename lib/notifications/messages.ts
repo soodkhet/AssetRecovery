@@ -359,10 +359,12 @@ export function expenseRejectedMessage(input: {
   grossSatang: number
   reason: string
   caseBound: boolean
+  /** ปฏิเสธถาวร (มติ PO U117) — ส่งใหม่ไม่ได้ */
+  permanent?: boolean
 }): NotificationMessage {
   return {
     eventCode: 'expense.rejected',
-    title: 'รายการเบิกถูกตีกลับ',
+    title: input.permanent === true ? 'รายการเบิกถูกปฏิเสธ (ส่งใหม่ไม่ได้)' : 'รายการเบิกถูกตีกลับ',
     body: withReason(`ยอด ${fmtSatangSymbol(input.grossSatang)}`, input.reason),
     linkPath: input.caseBound ? '/field/expenses' : '/field/expenses?view=separate',
   }

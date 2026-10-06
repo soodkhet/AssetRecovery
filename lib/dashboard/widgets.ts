@@ -5,7 +5,9 @@ import { CASE_STATUS_LABEL, caseStatusBadgeGroup } from '@/lib/cases/status-disp
 import type { CaseStatusValue } from '@/lib/cases/state-machine'
 import { APPROVAL_STEP_CAPABILITIES } from '@/lib/compensation/approval'
 import { canViewMenu } from '@/lib/nav/menu-registry'
-import { isExecutiveViewer } from '@/lib/reports/access'
+import { fmtSatangSymbol } from '@/lib/format/money'
+import { canViewReportCategory, isExecutiveViewer } from '@/lib/reports/access'
+import type { ReportKpi } from '@/lib/reports/payload'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
 /**
@@ -357,6 +359,26 @@ export function dashboardKpiSource(user: SessionUser): DashboardKpiSource {
 /** KPI ของรายงาน E1 ที่แสดงบนแดชบอร์ด (คีย์ตรงกับ `buildKpiSummaryReport()`) — ลำดับตามการ์ดของ mockup */
 export const EXECUTIVE_DASHBOARD_KPI_KEYS = ['revenue', 'marginPct', 'successPct', 'arOutstanding'] as const
 
+/**
+ * การ์ด AR ของผู้บริหาร: บรรทัดย่อย "เกิน 60 วัน" (มติ PO 06/10/2569 U115) — ยอดมาจาก KPI `over60` ของรายงาน F3
+ * (อายุหนี้ลูกค้า · ช่วงอายุตามค่าตั้งการเงิน) ตัวเดียวกับหน้ารายงาน **ไม่มีสูตรใหม่** · โชว์เฉพาะผู้ที่เห็นทั้งแถว KPI
+ * ผู้บริหารและรายงานหมวด F (API ของ F3 ตรวจสิทธิ์ซ้ำอีกชั้น)
+ */
+export const AR_AGING_OVER60_KPI_KEY = 'over60'
+
+export function canShowArOver60(user: SessionUser): boolean {
+  return dashboardKpiSource(user) === 'executive' && canViewReportCategory(user, 'F')
+}
+
+/** แทรกบรรทัด "เกิน 60 วัน ฿x" ลงการ์ด `arOutstanding` — ไม่มีข้อมูล F3 (โหลดไม่ได้/ไม่มีสิทธิ์) ⇒ การ์ดเดิม */
+export function withArOver60Hint(kpi: ReportKpi, arAgingKpis: readonly ReportKpi[] | null): ReportKpi {
+  if (kpi.key !== 'arOutstanding' || arAgingKpis === null) return kpi
+  const over60 = arAgingKpis.find((each) => each.key === AR_AGING_OVER60_KPI_KEY)
+  if (over60 === undefined || typeof over60.value !== 'number') return kpi
+  const line = `เกิน 60 วัน ${fmtSatangSymbol(over60.value)}`
+  return { ...kpi, hint: kpi.hint === undefined ? line : `${line} · ${kpi.hint}` }
+}
+
 /** จำนวนการ์ดสูงสุดของแถว KPI แบบคิวงาน */
 export const QUEUE_KPI_LIMIT = 4
 
@@ -464,6 +486,8 @@ export function showFieldTrackerShortcut(user: SessionUser): boolean {
 
 export interface DashboardOverviewDto {
   kpiSource: DashboardKpiSource
+  /** การ์ด AR โชว์บรรทัด "เกิน 60 วัน" ได้ (U115 · {@link canShowArOver60}) */
+  arOver60: boolean
   /** ทุกคิวที่ผู้ใช้เห็น (รวมคิวที่เป็น 0) — หน้าจอกรองเองด้วย {@link pendingQueueItems} */
   queues: DashboardQueueItemDto[]
   /** `null` = ไม่มีสิทธิ์เห็นเคส */

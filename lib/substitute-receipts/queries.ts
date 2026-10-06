@@ -36,7 +36,7 @@ import {
   type SubstituteReceiptViewer,
 } from '@/lib/substitute-receipts/substitute-receipt'
 import type { SubstituteReceiptDocSource } from '@/lib/substitute-receipts/substitute-receipt-doc'
-import type { SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
+import type { SubstituteReceiptDetailDto, SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
 import { substituteReceiptFileRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 
@@ -87,6 +87,7 @@ export const substituteReceiptRefSelect = {
   cancelReason: true,
   createdAt: true,
   deletedAt: true,
+  replacesReceipt: { select: { receiptNumber: true } },
 } as const
 
 type RefRow = Prisma.SubstituteReceiptGetPayload<{ select: typeof substituteReceiptRefSelect }>
@@ -101,6 +102,17 @@ export function substituteReceiptRefOf(rows: readonly RefRow[]): SubstituteRecei
     live.find((entry) => entry.status !== 'cancelled') ??
     [...live].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
   if (row === undefined) return null
+  // มติ PO U117 — ใบที่ยกเลิกแล้วยังแสดงบนการ์ด (ขีดฆ่า) คู่กับใบที่ใช้อยู่
+  const cancelledHistory = live
+    .filter((entry) => entry.status === 'cancelled' && entry.id !== row.id)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((entry) => ({
+      id: entry.id,
+      receiptNumber: entry.receiptNumber,
+      totalSatang: entry.totalSatang,
+      cancelledAt: entry.cancelledAt?.toISOString() ?? null,
+      cancelReason: entry.cancelReason,
+    }))
   return {
     id: row.id,
     receiptNumber: row.receiptNumber,
@@ -110,6 +122,8 @@ export function substituteReceiptRefOf(rows: readonly RefRow[]): SubstituteRecei
     signedAt: row.signedAt?.toISOString() ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
     cancelReason: row.cancelReason,
+    replacesReceiptNumber: row.replacesReceipt?.receiptNumber ?? null,
+    cancelledHistory,
   }
 }
 
@@ -131,6 +145,8 @@ export interface IssueSubstituteReceiptInput {
   lines: readonly SubstituteReceiptLineInput[]
   /** เวลาออกใบ — วันที่ออก = วันไทยของเวลานี้ (ฐานของเพดานต่อเดือน + ปีของเลข CRT) */
   at: Date
+  /** มติ PO U117 — ใบที่ยกเลิกซึ่งใบนี้ออกแทน (ผู้เรียกตรวจว่าเป็นรายการเดียวกันแล้ว) */
+  replacesReceiptId?: string
 }
 
 export interface IssuedSubstituteReceipt {
@@ -219,6 +235,7 @@ export async function issueSubstituteReceipt(
       advanceId: input.link.kind === 'advance' ? input.link.advanceId : null,
       issueDate,
       totalSatang,
+      replacesReceiptId: input.replacesReceiptId ?? null,
       createdBy: actorId,
       lines: {
         create: input.lines.map((line, index) => ({
@@ -250,6 +267,7 @@ export async function issueSubstituteReceipt(
         advance_id: input.link.kind === 'advance' ? input.link.advanceId : null,
         issue_date: issueDate.toISOString().slice(0, 10),
         total_satang: totalSatang,
+        replaces_receipt_id: input.replacesReceiptId ?? null,
         max_per_doc_satang: limits.maxPerDocSatang,
         max_per_month_satang: limits.maxPerMonthSatang,
         lines: input.lines.map((line, index) => ({
@@ -300,6 +318,7 @@ const docSourceSelect = {
   expenseId: true,
   advanceId: true,
   createdAt: true,
+  replacesReceipt: { select: { receiptNumber: true } },
   lines: {
     select: { lineNo: true, lineDate: true, description: true, amountSatang: true, note: true },
     orderBy: { lineNo: 'asc' },
@@ -374,6 +393,26 @@ async function findForViewer(
 /** แหล่งข้อมูลของ PDF/ไฟล์ฉบับเซ็น — นอก scope = `SUBSTITUTE_RECEIPT_NOT_FOUND` (404 ไม่ leak) */
 export async function getSubstituteReceiptSource(user: SessionUser, id: string): Promise<SubstituteReceiptSourceRow> {
   return findForViewer(user, id, canViewSubstituteReceipt)
+}
+
+/**
+ * `GET /api/substitute-receipts/:id` (มติ PO U117 ข้อ 1) — รายละเอียด + บรรทัดของใบ ให้ฟอร์ม "ออกใบใหม่แทน"
+ * ดึงรายการ/ยอดของใบที่ยกเลิกมาตั้งต้น · scope เดียวกับการดู PDF (นอก scope 404)
+ */
+export async function getSubstituteReceiptDetail(user: SessionUser, id: string): Promise<SubstituteReceiptDetailDto> {
+  const row = await findForViewer(user, id, canViewSubstituteReceipt)
+  return {
+    id: row.id,
+    receiptNumber: row.receiptNumber,
+    status: row.status,
+    totalSatang: row.totalSatang,
+    lines: row.lines.map((line) => ({
+      lineDate: line.lineDate.toISOString().slice(0, 10),
+      description: line.description,
+      amountSatang: line.amountSatang,
+      note: line.note,
+    })),
+  }
 }
 
 /** ยามของการออกโทเคนอัปโหลดฉบับเซ็น (`/api/storage/upload-url`) — สิทธิ์เดียวกับ endpoint ผูกไฟล์ */
@@ -571,6 +610,7 @@ export function toSubstituteReceiptDocSource(row: SubstituteReceiptSourceRow): S
     },
     teamName: row.payee.user.team?.name ?? null,
     reference,
+    replacesReceiptNumber: row.replacesReceipt?.receiptNumber ?? null,
     cancellation:
       row.status === 'cancelled' && row.cancelledAt !== null
         ? { cancelledAt: row.cancelledAt, reason: row.cancelReason ?? '' }
@@ -725,6 +765,14 @@ export async function reissueSubstituteReceipt(
   if (active !== null) {
     throw notAllowed(`รายการนี้มีใบรับรองแทนใบเสร็จ ${active.receiptNumber} ที่ใช้งานอยู่แล้ว`, 'active_exists')
   }
+  // U117 — 1 ใบที่ยกเลิกถูกแทนได้ครั้งเดียว (partial unique `uniq_substitute_receipts_replaces` กันชั้นสุดท้าย)
+  const replacement = await prisma.substituteReceipt.findFirst({
+    where: { organizationId: user.organizationId, replacesReceiptId: current.id },
+    select: { receiptNumber: true },
+  })
+  if (replacement !== null) {
+    throw notAllowed(`ใบ ${current.receiptNumber} ออกใบใหม่แทนไปแล้ว (${replacement.receiptNumber})`, 'already_replaced')
+  }
   const at = new Date()
   await assertPeriodOpenAt({ organizationId: user.organizationId, at, targetType: TARGET, targetId: id })
   const newLink: SubstituteReceiptLink =
@@ -739,6 +787,7 @@ export async function reissueSubstituteReceipt(
       link: newLink,
       lines,
       at,
+      replacesReceiptId: current.id,
     })
     await emitAudit(
       {
@@ -761,10 +810,14 @@ export async function reissueSubstituteReceipt(
       },
       tx as ExpenseTxClient,
     )
-    return tx.substituteReceipt.findUniqueOrThrow({ where: { id: created.id }, select: substituteReceiptRefSelect })
+    // U117 — คืนทุกใบของรายการเดียวกัน ⇒ การ์ดเห็นใบใหม่คู่กับใบที่ยกเลิก
+    return tx.substituteReceipt.findMany({
+      where: { organizationId: user.organizationId, deletedAt: null, ...linkWhere },
+      select: substituteReceiptRefSelect,
+    })
   })
 
-  const ref = substituteReceiptRefOf([issued])
+  const ref = substituteReceiptRefOf(issued)
   if (ref === null) throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_FOUND', { detail: `substitute_receipt=${id}` })
   return ref
 }

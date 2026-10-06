@@ -22,6 +22,7 @@
 | v3.9 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U30 · BUG-109)** — §6.4 เพิ่ม `PATCH /api/advances/:id/return-method` (เปลี่ยนวิธีคืนยอด · เหตุผลบังคับ) + `POST /api/advances/:id/returns` (บันทึกรับคืนแยก + หลักฐาน) — การเงินเท่านั้น (`manage:approve_advance`) · `GET /api/advances?status=return_outstanding` · `PATCH /settle` รับ `returnMethod` |
 | v3.10 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U67)**: §6.6 เติม `POST /api/payout-batches/:id/cancel` — ยกเลิกรอบจ่ายก่อนโอนจริง (`{ reason, confirmFileNotSent }` · `manage:manage_payout_batch` · `17` §9.1) |
 | v3.11 | 06/10/2569 | **มติ PO 06/10/2569 (U104)** — §6.17 ใหม่ ตัวอย่างเอกสารทั้งหมด: `GET /api/accounting/document-samples` (ทะเบียนตัวอย่าง + เลขถัดไปตามค่าตั้งเลขที่เอกสาร) + `GET /api/accounting/document-samples/:docType/pdf` (PDF ตัวอย่างจาก renderer จริง · ข้อมูลสมมติ · ป้ายตัวอย่างทุกหน้า) — สิทธิ์ `view_document_samples` (`25` §7.1) · อ่านอย่างเดียว ไม่เดินตัวนับ ไม่ลง audit export (`28` §6.5) · `:docType` ที่ไม่รู้จัก ⇒ 400 `REQUIRED_MISSING` + field `docType` (ไม่ตั้ง error code ใหม่) |
+| v3.12 | 06/10/2569 | **มติ PO 06/10/2569 (U117)** — §6.4 เติม `PATCH /api/claims/:id/reject-permanent` (ปฏิเสธถาวรใบเบิกค่าที่พัก = `reject_permanent` ของ `23` §6.3 `pending_approval → rejected` · เหตุผลบังคับ `REJECT_REASON_REQUIRED` · สิทธิ์/scope/ขั้นที่รออยู่ชุดเดียวกับ `/reject`) · `GET /api/substitute-receipts/:id` (รายละเอียด + บรรทัดของใบ ให้ฟอร์ม "ออกใบใหม่แทน" ตั้งต้นจากใบที่ยกเลิก · scope เดียวกับ PDF นอก scope 404) · DTO ใบรับรองที่ฝังในรายการเบิก/เงินทดรองเพิ่ม `replacesReceiptNumber` + `cancelledHistory` |
 | v3.4 | 15/08/2569 | **เติม §6.8** (Phase 3.7 — Adjustment `20`): `GET /api/adjustments/targets` — ฟอร์มสร้าง Adjustment ตาม `20` §8 ต้องค้นรายการต้นทางจากเลขที่อ้างอิง แล้วแสดง `period_status_at_target` + ระดับอนุมัติที่ต้องใช้ก่อนกดสร้าง ซึ่งอ่านจาก `accounting_periods` ที่หน้าจอเข้าไม่ถึง — เป็น endpoint ที่ flow ใน §8 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2/v3.3 · sync `20` §14 v2.2 แล้ว) |
 | v3.3 | 15/08/2569 | **เติม §6.7** (Phase 3.6 — Revenue/Billing `19`): `GET /api/billing-batches/:id` (ปุ่ม "เอกสาร" ของตาราง `19` §8 ต้องเปิดรายละเอียดรอบ + รายการรายได้ในรอบ) และ `DELETE /api/billing-batches/:id` (`19` §10 ระบุกติกา "ห้ามลบ Billing Batch ที่ `status != draft`" ไว้ตรง ๆ ⇒ ต้องมี endpoint ให้ลบรอบ `draft` ได้จริง) — เป็น endpoint ที่ flow ใน `19` §8/§10 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2) |
 | v3.2 | 15/08/2569 | **เติม §6.6** (Phase 3.4 — Payout Batch `17`): `GET /api/payout-batches/:id` (ปุ่ม "ดู" ของตารางรอบจ่าย `17` §8 ต้องมีรายละเอียด+รายการในรอบ) และ `GET /api/payout-batches/:id/payment-file` (ไฟล์โอนเก็บใน bucket private ⇒ ดาวน์โหลดต้องผ่าน endpoint ที่ตรวจ `generate_payment_file` ทุกครั้ง ห้ามแจก signed URL) — เป็น endpoint ที่ flow ใน `17` §8/§9 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3) |
@@ -101,6 +102,8 @@ GET    /api/claims
 POST   /api/claims
 PATCH  /api/claims/:id/approve
 PATCH  /api/claims/:id/reject
+PATCH  /api/claims/:id/reject-permanent                (v3.12 มติ PO U117 — ปฏิเสธถาวรใบเบิกค่าที่พัก · เหตุผลบังคับ)
+GET    /api/substitute-receipts/:id                    (v3.12 มติ PO U117 — บรรทัดของใบ สำหรับออกใบใหม่แทน)
 GET    /api/advances
 POST   /api/advances
 PATCH  /api/advances/:id/approve

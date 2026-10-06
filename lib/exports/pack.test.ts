@@ -1242,6 +1242,8 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
       'customer_wht',
       'payout_transfer',
       'wht_withheld',
+      'wht_paid_by_payer',
+      'wht_remit_total',
       'accrued_expenses',
       'unbilled_revenue',
       'suspense_outstanding',
@@ -1253,6 +1255,41 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
     expect(amount('payout_transfer')).toBe(849_500)
     expect(amount('suspense_outstanding')).toBe(50_000)
     expect(amount('advance_balance')).toBe(55_000)
+  })
+
+  it('U114 (BUG-177): ภาษีหัก ณ ที่จ่ายแยก หักจากผู้รับ / บริษัทออกให้ / รวมต้องนำส่ง — ทั้งไฟล์ 00 และหน้าปก', () => {
+    const base = CONTROL_TOTALS_FIXTURE.wht[0]
+    if (base === undefined) throw new Error('fixture')
+    const wht = [
+      { ...base, certificateNumber: 'WHT-2569-017', grossSatang: 1_220_000, whtSatang: 36_600, whtCondition: 'withhold' as const },
+      // (2)/(3): gross = เงินได้ + ภาษีที่ออกให้
+      { ...base, certificateNumber: 'WHT-2569-019', grossSatang: 1_030_928, whtSatang: 30_928, whtCondition: 'pay_always' as const },
+      { ...base, certificateNumber: 'WHT-2569-020', grossSatang: 1_271_604, whtSatang: 37_037, whtCondition: 'pay_once' as const },
+    ]
+    const split = buildControlTotals({ ...CONTROL_TOTALS_FIXTURE, wht })
+    const get = (item: string) => split.find((line) => line.section === 'summary' && line.item === item)
+    expect(get('wht_withheld')).toMatchObject({ rowCount: 1, amountSatang: 36_600 })
+    expect(get('wht_paid_by_payer')).toMatchObject({ rowCount: 2, amountSatang: 67_965 })
+    expect(get('wht_remit_total')).toMatchObject({ rowCount: 3, amountSatang: 104_565 })
+    // ป้ายหักจากผู้รับต้องไม่รวมภาษีที่บริษัทออกให้
+    expect(get('wht_withheld')?.description).toContain('หักจากผู้รับ')
+    expect(get('wht_paid_by_payer')?.description).toContain('บริษัทออกให้')
+    const csv = controlTotalsCsv(split)
+    expect(csv).toContain(',wht_withheld,ภาษีหัก ณ ที่จ่าย — หักจากผู้รับ (ใบ 50 ทวิ ที่มีผล),1,366.00')
+    expect(csv).toContain(',wht_paid_by_payer,ภาษีหัก ณ ที่จ่าย — บริษัทออกให้ (ไม่ได้หักจากผู้รับ),2,679.65')
+    expect(csv).toContain(',wht_remit_total,ภาษีหัก ณ ที่จ่าย — รวมต้องนำส่ง,3,1045.65')
+    const cover = buildPackCoverDoc({
+      organizationName: 'บริษัททดสอบ',
+      periodLabel: 'ตุลาคม 2569',
+      version: 6,
+      generatedByName: 'บัญชี',
+      generatedAt: new Date('2026-10-06T04:40:00Z'),
+      contentDigest: 'abc',
+      checks: [],
+      controlTotals: controlTotalsForCover(split),
+    })
+    const amounts = cover.totals.filter((row) => row.label.startsWith('ภาษีหัก ณ ที่จ่าย')).map((row) => row.amountText)
+    expect(amounts).toEqual(['366.00', '679.65', '1,045.65'])
   })
 
   it('หน้าปก: จำนวนแถวต่อไฟล์ + ตารางยอดสรุปค่าเดียวกับไฟล์ 00 · ช่วงไฟล์ 00–16 · หมายเหตุโฟลเดอร์ PDF', () => {
@@ -1270,7 +1307,7 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
     expect(doc.files).toHaveLength(17)
     expect(doc.files.find((file) => file.fileName === '00_Control_Totals.csv')?.rowCountText).toBe(String(lines.length))
     expect(doc.files.find((file) => file.fileName === '01_Revenue.csv')?.rowCountText).toBe('2')
-    expect(doc.totals).toHaveLength(11)
+    expect(doc.totals).toHaveLength(13)
     expect(doc.totals[0]).toEqual({ label: 'รายได้ก่อน VAT (รายได้ที่รับรู้ในงวด)', amountText: '12,750.00' })
     expect(doc.attachmentNote).toBe(PACK_ATTACHMENT_NOTE)
     for (const dir of ['tax_invoices/', 'wht_certificates/', 'vouchers/', 'billing_invoices/']) {
