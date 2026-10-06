@@ -477,11 +477,16 @@ async function oct5(): Promise<void> {
     await sales.issueTaxInvoice(await ctx(FIN), { replacesInvoiceId: inv4 })
   }
   await statementLine('2026-10-05', 'IN-BL008', 600000)
-  // U144 — รับขาดไม่เกินเพดาน (฿50) = ปิดบิล + ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร · เกินเพดาน 1 สตางค์ = ค้างตามเดิม
+  // U144 — รับขาดไม่เกินเพดาน (฿50) = ปิดบิล + ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร
   const bl005Rest = await statementLine('2026-10-05', 'IN-BL005-2', 345000)
   await matchToBilling(bl005Rest, 'BL-005', 'ลูกค้าโอนงวดสุดท้าย ขาดค่าธรรมเนียมโอนต่างธนาคาร')
+  // U163 — ลูกค้าหักภาษี 3% + ค่าโอนในรายการเดียว ⇒ นับภาษีเต็ม 1481 ก่อน ส่วนต่าง 3520 เป็นค่าธรรมเนียม · paid
   const bl006Short = await statementLine('2026-10-05', 'IN-BL006', 47839)
-  await matchToBilling(bl006Short, 'BL-006', 'ลูกค้าโอนขาด เกินเพดานค่าธรรมเนียม รอติดตามส่วนที่เหลือ')
+  await matchToBilling(bl006Short, 'BL-006', 'ลูกค้าหักภาษี ณ ที่จ่าย และหักค่าโอนต่างธนาคาร')
+  // U144 — รอบใหม่ CO4 (FT-12) รับขาด 5001 เกินเพดาน 1 สตางค์ ⇒ ค้าง partially_paid
+  await billing('BL-010', 'CO4', '2026-10-05', true)
+  const bl010Short = await statementLine('2026-10-05', 'IN-BL010', 294999)
+  await matchToBilling(bl010Short, 'BL-010', 'ลูกค้าโอนขาด เกินเพดานค่าธรรมเนียม รอติดตามส่วนที่เหลือ')
   const recon = await import('@/lib/bank-recon/queries')
   await statementLine('2026-10-05', 'IN-UNKNOWN', 20000)
   const fee = await statementLine('2026-10-05', 'FEE-OCT', -1500)
