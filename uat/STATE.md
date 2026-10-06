@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 merge fixer BN `d58d52a` (U108 `<SettingHelp>` ~45 ค่าตั้ง 22 แท็บ + ฟอร์มบริษัท/แผน/service fee · ตัวอย่างจากสูตรจริง · `lib/settings/help/*`) · ไม่มี migration · verify 355/4,917 · ผู้ใช้รีวิว O70 → U109 (แยกแสดงภาษีที่บริษัทออกให้) กำลังทำ
 - 06/10/2569 merge fixer BM `fd2d2df` (U105 ค่าตั้ง `allow_gross_up_conditions` ปิดเป็นค่าเริ่มต้น + สูตรทบยอด (2)/(3) + snapshot ในรอบจ่าย · U107 ยกเลิก/ออกใหม่ใบรับรองแทนใบเสร็จ) · migration `20261006210000` / `211000` / `212000` · verify 353/4,843 · migration ใหม่รวม **41 ตัว** · ผู้ใช้รีวิว O55–O69 แล้ว (U105–U107) · มติ O70 · Q18 แก้ข้อความ → ต่อ: U108 คำอธิบายค่าตั้งบัญชี
 - 06/10/2569 merge fixer BL `75f0f89` (U104 บัญชี → "ตัวอย่างเอกสารทั้งหมด" `/accounting/document-samples` · 13 ตัวอย่าง PDF จริง + ลายน้ำ "ตัวอย่าง" · `view_document_samples`) · ไม่มี migration · verify 353/4,807 · มติ O69 · **งานตามมติครบ U22–U104**
 - 06/10/2569 merge fixer BK `6cf824f` (+BJ `81d4fd7`: U103 ใบรับรองแทนใบเสร็จ `substitute_receipts` + PDF ใบเบิก/รับคืนเงินทดรอง · ย้ายไป `doc-layout.tsx` · ฟอนต์ไทยตัวหนา `public/fonts/NotoSansThai-Bold.ttf` · BUG-170/171) · migration `20261006200000_substitute_receipts` · verify 350/4,776 · migration ใหม่รวม **38 ตัว** · มติ O68 · ต่อ: เมนูบัญชี → ตัวอย่างเอกสารทั้งหมด (U104)
