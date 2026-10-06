@@ -55,7 +55,7 @@ import type {
   LotCompanySummaryQuery,
   LotListQuery,
 } from '@/lib/warehouse/schemas'
-import { intakeColorCapacityMatched } from '@/lib/warehouse/schemas'
+import { intakeColorCapacityMatched, intakeColorCapacityNote } from '@/lib/warehouse/schemas'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
 import { intakePhotoRule, lotDocumentRule } from '@/lib/uploads/rules'
 import { toVerifiedUploadMap, uploadMapJson, verifyUploadedFile, verifyUploadedFiles } from '@/lib/uploads/verify'
@@ -131,6 +131,7 @@ const assetSelect = {
   deviceCapacity: true,
   deviceColor: true,
   colorCapacityMatched: true,
+  colorCapacityNote: true,
   imeiContract: true,
   imeiActual: true,
   serialContract: true,
@@ -183,6 +184,7 @@ function redactAssetForCompany(item: AssetListItemDto): AssetListItemDto {
     serialActual: null,
     // ผลตรวจในคลังเป็นข้อมูลปฏิบัติการภายใน (เช่นเดียวกับ IMEI ที่ตรวจได้)
     colorCapacityMatched: null,
+    colorCapacityNote: null,
     teamId: null,
     teamName: null,
     agentId: null,
@@ -202,6 +204,7 @@ function toAssetListItem(row: AssetRow): AssetListItemDto {
     deviceCapacity: row.deviceCapacity,
     deviceColor: row.deviceColor,
     colorCapacityMatched: row.colorCapacityMatched,
+    colorCapacityNote: row.colorCapacityNote,
     imeiContract: row.imeiContract,
     imeiActual: row.imeiActual,
     serialContract: row.serialContract,
@@ -445,6 +448,7 @@ export async function intakeAsset(
         condition: input.condition,
         conditionNote: input.conditionNote,
         colorCapacityMatched: intakeColorCapacityMatched(input),
+        colorCapacityNote: intakeColorCapacityNote(input),
         photos: input.photos,
         photoHashes: uploadMapJson(photoHashes),
         receivedAt,
@@ -480,6 +484,7 @@ export async function intakeAsset(
           serialActual: input.serialActual,
           imeiMatch: comparison.matched,
           colorCapacityMatched: intakeColorCapacityMatched(input),
+          colorCapacityNote: intakeColorCapacityNote(input),
           condition: input.condition,
           photosCount: input.photos.length,
           receivedAt,

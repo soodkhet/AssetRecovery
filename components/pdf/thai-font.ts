@@ -16,7 +16,7 @@ import { Font } from '@react-pdf/renderer'
 
 export const THAI_FONT = 'NotoSansThai'
 
-/** ไฟล์ฟอนต์ตามน้ำหนัก (path จากรากโปรเจกต์) — ใช้ร่วมกับ glyph test */
+/** ไฟล์ฟอนต์ตามน้ำหนัก (path จากรากโปรเจกต์) — ใช้ร่วมกับ glyph test · ต้องตรงกับ literal ใน `ensureThaiFont()` */
 export const THAI_FONT_FILES = {
   regular: 'public/fonts/NotoSansThai.ttf',
   bold: 'public/fonts/NotoSansThai-Bold.ttf',
@@ -29,8 +29,10 @@ export function ensureThaiFont(): void {
   Font.register({
     family: THAI_FONT,
     fonts: [
-      { src: join(process.cwd(), THAI_FONT_FILES.regular), fontWeight: 'normal' },
-      { src: join(process.cwd(), THAI_FONT_FILES.bold), fontWeight: 'bold' },
+      // path ต้องเป็น literal ใต้ public/fonts (ห้ามอ้าง `THAI_FONT_FILES`) — Turbopack วิเคราะห์ได้แคบเฉพาะไฟล์ฟอนต์
+      // ถ้าเป็นค่าที่คำนวณ ⇒ "Dynamic filesystem access" ดึงทั้งโปรเจกต์เข้า server output (มติ O77)
+      { src: join(process.cwd(), 'public', 'fonts', 'NotoSansThai.ttf'), fontWeight: 'normal' },
+      { src: join(process.cwd(), 'public', 'fonts', 'NotoSansThai-Bold.ttf'), fontWeight: 'bold' },
     ],
   })
   Font.registerHyphenationCallback((word) => [word])

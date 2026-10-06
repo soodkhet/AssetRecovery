@@ -13,6 +13,7 @@ import type {
   TaxInvoiceDocKind,
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
+import { deviceAttributesText } from '@/lib/device-catalog/device-attributes'
 import { formatBranch } from '@/lib/format/branch'
 import { canAccess, type PortalCapabilities } from '@/lib/portal/access'
 import {
@@ -32,6 +33,7 @@ import { hasDebitNoteOutstanding } from '@/lib/revenue/revenue-ui'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
+import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { ASSET_CONDITION_LABEL, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
 
 /**
@@ -124,6 +126,10 @@ export interface PortalCaseAssetSource {
 }
 
 export interface PortalCaseDetailSource extends PortalCaseSource, PortalCaseServiceFeeSource {
+  /** ยี่ห้อ/รุ่น + ความจุ/สีตามสัญญา (มติ PO U166 · BUG-184) — บริษัทเป็นผู้ส่งค่าเหล่านี้มาเอง */
+  assetDescription?: string | null
+  assetCapacity?: string | null
+  assetColor?: string | null
   asset?: PortalCaseAssetSource | null
 }
 
@@ -149,6 +155,8 @@ export interface PortalAssetPhotosDto {
 }
 
 export interface PortalCaseDetailDto extends PortalCaseListItemDto {
+  /** "Samsung Galaxy A55 5G · 256GB · ดำ" (ข้อความชุดเดียวกับใบส่งมอบ) — `null` = เคสไม่มีข้อมูลเครื่อง */
+  deviceText: string | null
   /** ค่าบริการที่ snapshot ตอนอนุมัติ — `null` = ยังไม่อนุมัติ (ยังไม่มี snapshot) */
   serviceFee: PortalServiceFeeDto | null
   /** รูปสินค้า + สภาพ — เฉพาะสถานะ "ติดตามสำเร็จ" */
@@ -170,11 +178,26 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource): PortalServiceFeeD
   }
 }
 
+/** ข้อความเครื่องของเคส — ใช้ `documentDeviceText()` ชุดเดียวกับใบส่งมอบ/หน้าส่งมอบของพอร์ทัล */
+export function portalCaseDeviceText(row: {
+  assetDescription?: string | null
+  assetCapacity?: string | null
+  assetColor?: string | null
+}): string | null {
+  const description = (row.assetDescription ?? '').trim()
+  const capacity = row.assetCapacity ?? null
+  const color = row.assetColor ?? null
+  if (description !== '') return documentDeviceText({ deviceDesc: description, deviceCapacity: capacity, deviceColor: color })
+  const attributes = deviceAttributesText(capacity, color)
+  return attributes === '—' ? null : attributes
+}
+
 export function serializePortalCaseDetail(row: PortalCaseDetailSource): PortalCaseDetailDto {
   const base = serializePortalCaseListItem(row)
   const asset = row.asset ?? null
   return {
     ...base,
+    deviceText: portalCaseDeviceText(row),
     serviceFee: serializeServiceFee(row),
     assetPhotos:
       base.statusDisplay.code === 'recovered' && asset !== null

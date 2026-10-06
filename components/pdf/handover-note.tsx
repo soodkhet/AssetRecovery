@@ -96,7 +96,7 @@ function HandoverCopy({
             cells={[
               { main: String(row.no) },
               { main: row.caseRef, mono: true, detail: row.debtorName },
-              { main: row.deviceDesc },
+              { main: row.deviceDesc, detail: row.colorCapacityMismatch },
               {
                 main: row.identifier,
                 mono: true,

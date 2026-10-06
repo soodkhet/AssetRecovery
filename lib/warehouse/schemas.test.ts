@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { API_CONTRACT } from '@/lib/api/contract'
 import {
   assetIntakeSchema,
+  COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE,
+  COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE,
   intakeColorCapacityMatched,
+  intakeColorCapacityNote,
   assetListQuerySchema,
   assetRejectIntakeSchema,
   lotConfirmSchema,
@@ -72,36 +75,50 @@ describe('assetListQuerySchema', () => {
 
 describe('assetIntakeSchema', () => {
   it('IMEI ต้องเป็นตัวเลข 15 หลัก (พิมพ์ไม่ครบ = พิมพ์ผิด ไม่ใช่ "ไม่ตรงสัญญา")', () => {
-    expect(assetIntakeSchema.parse({ imeiActual: IMEI, condition: 'normal' }).imeiActual).toBe(IMEI)
-    expect(assetIntakeSchema.safeParse({ imeiActual: '35500000000', condition: 'normal' }).success).toBe(false)
-    expect(assetIntakeSchema.safeParse({ imeiActual: '35500000000000A', condition: 'normal' }).success).toBe(false)
+    expect(assetIntakeSchema.parse({ imeiActual: IMEI, condition: 'normal', colorCapacityMatched: true }).imeiActual).toBe(IMEI)
+    expect(assetIntakeSchema.safeParse({ imeiActual: '35500000000', condition: 'normal', colorCapacityMatched: true }).success).toBe(false)
+    expect(assetIntakeSchema.safeParse({ imeiActual: '35500000000000A', condition: 'normal', colorCapacityMatched: true }).success).toBe(false)
   })
 
   it('IMEI ที่ไม่ตรงกับสัญญายัง parse ผ่าน — การเตือนเป็นหน้าที่ของ service (`44` §12)', () => {
-    expect(assetIntakeSchema.safeParse({ imeiActual: '355000000000999', condition: 'normal' }).success).toBe(true)
+    expect(assetIntakeSchema.safeParse({ imeiActual: '355000000000999', condition: 'normal', colorCapacityMatched: true }).success).toBe(true)
   })
 
   it('ไม่เลือกสภาพก็ผ่าน schema — ให้ไปตกที่ INTAKE_MISSING_CONDITION แทน REQUIRED_MISSING', () => {
-    const parsed = assetIntakeSchema.parse({ imeiActual: IMEI })
+    const parsed = assetIntakeSchema.parse({ imeiActual: IMEI, colorCapacityMatched: true })
     expect(parsed.condition).toBeNull()
     expect(parsed.conditionNote).toBeNull()
   })
 
   it('photos ว่างได้ และไม่รับค่าเกินเพดาน', () => {
-    expect(assetIntakeSchema.parse({ condition: 'normal' }).photos).toEqual([])
+    expect(assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: true }).photos).toEqual([])
     const many = Array.from({ length: 21 }, (_, index) => `https://storage/${index}.jpg`)
-    expect(assetIntakeSchema.safeParse({ condition: 'normal', photos: many }).success).toBe(false)
+    expect(assetIntakeSchema.safeParse({ condition: 'normal', colorCapacityMatched: true, photos: many }).success).toBe(false)
   })
 
   it('ช่องข้อความว่างถูกเก็บเป็น null ไม่ใช่ "" (คอลัมน์ nullable)', () => {
-    expect(assetIntakeSchema.parse({ condition: 'normal', serialActual: '   ' }).serialActual).toBeNull()
+    expect(assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: true, serialActual: '   ' }).serialActual).toBeNull()
   })
 
-  it('สี/ความจุตรงกับสัญญา (มติ PO U166) — ไม่บังคับ ไม่ส่ง = false · รับเฉพาะ boolean', () => {
-    expect(intakeColorCapacityMatched(assetIntakeSchema.parse({ condition: 'normal' }))).toBe(false)
+  it('สี/ความจุตรงกับสัญญา (มติ O77) — ตัวเลือกบังคับ ตรง/ไม่ตรง · รับเฉพาะ boolean', () => {
+    const missing = assetIntakeSchema.safeParse({ condition: 'normal' })
+    expect(missing.success).toBe(false)
+    expect(missing.error?.issues[0]?.message).toBe(COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE)
     expect(intakeColorCapacityMatched(assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: true }))).toBe(true)
-    expect(intakeColorCapacityMatched(assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: false }))).toBe(false)
     expect(assetIntakeSchema.safeParse({ condition: 'normal', colorCapacityMatched: 'yes' }).success).toBe(false)
+  })
+
+  it('ไม่ตรง ⇒ ต้องระบุสิ่งที่พบ · ตรง ⇒ ไม่เก็บข้อความ', () => {
+    const noNote = assetIntakeSchema.safeParse({ condition: 'normal', colorCapacityMatched: false, colorCapacityNote: '  ' })
+    expect(noNote.success).toBe(false)
+    expect(noNote.error?.issues[0]).toMatchObject({ path: ['colorCapacityNote'], message: COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE })
+
+    const mismatch = assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: false, colorCapacityNote: ' สีขาว ' })
+    expect(intakeColorCapacityMatched(mismatch)).toBe(false)
+    expect(intakeColorCapacityNote(mismatch)).toBe('สีขาว')
+
+    const matched = assetIntakeSchema.parse({ condition: 'normal', colorCapacityMatched: true, colorCapacityNote: 'ค้างจากก่อนหน้า' })
+    expect(intakeColorCapacityNote(matched)).toBeNull()
   })
 })
 

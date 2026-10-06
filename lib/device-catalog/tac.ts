@@ -451,3 +451,23 @@ export function tacImportDecision(
   if (textKey.includes(brandKey) || textKey.includes(normalizeCatalogName(tac.label))) return { fill: false, warning: null }
   return { fill: false, warning: `ยี่ห้อ/รุ่นในไฟล์ไม่ตรงกับ IMEI (ฐานข้อมูลระบุ ${tac.label}) — ตรวจสอบก่อนส่งตรวจ` }
 }
+
+// ── ประวัติการอัปเดต (U167 · มติ O77) ─────────────────────────────────────
+
+export type TacUpdateStatusGroup = 'success' | 'sent' | 'critical'
+
+/**
+ * ป้ายผลของรอบอัปเดตฐาน TAC — มติ O77: รอบ "สำเร็จ" ที่ไม่ได้เพิ่มอะไรเลย (TAC/แบรนด์/รุ่นใหม่ 0/0/0 เช่น นำเข้าไฟล์ที่มีครบแล้ว)
+ * แสดง "ไม่มีของใหม่" เหมือนรอบที่แหล่งข้อมูลไม่เปลี่ยน (`not_modified`) — สถานะที่เก็บไม่เปลี่ยน
+ */
+export function tacUpdateStatusView(row: {
+  status: 'success' | 'not_modified' | 'failed'
+  tacsAdded: number
+  brandsAdded: number
+  modelsAdded: number
+}): { label: string; group: TacUpdateStatusGroup } {
+  if (row.status === 'failed') return { label: 'ล้มเหลว', group: 'critical' }
+  const nothingNew = row.tacsAdded === 0 && row.brandsAdded === 0 && row.modelsAdded === 0
+  if (row.status === 'not_modified' || nothingNew) return { label: 'ไม่มีของใหม่', group: 'sent' }
+  return { label: 'สำเร็จ', group: 'success' }
+}

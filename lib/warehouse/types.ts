@@ -20,6 +20,8 @@ export interface AssetListItemDto {
   deviceColor: string | null
   /** ผลตรวจตอนรับเข้าคลัง "สี/ความจุตรงกับสัญญา" · ยังไม่ได้ตรวจรับ = `null` */
   colorCapacityMatched: boolean | null
+  /** มติ O77 — "ไม่ตรง" ⇒ สิ่งที่พบ (ข้อความ) · ตรง/ยังไม่ตรวจ = `null` */
+  colorCapacityNote: string | null
   imeiContract: string | null
   imeiActual: string | null
   serialContract: string | null

@@ -269,6 +269,7 @@ function asset(index: number): AssetListItemDto {
     deviceCapacity: null,
     deviceColor: null,
     colorCapacityMatched: null,
+    colorCapacityNote: null,
     imeiContract: `3567891000000${String(index).padStart(2, '0')}`,
     imeiActual: `3567891000000${String(index).padStart(2, '0')}`,
     serialContract: null,

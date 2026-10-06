@@ -549,6 +549,8 @@ function renderModal(){
       <div class="space-y-3 text-sm">
         <div class="flex justify-between"><span class="text-slate-400">สถานะ</span>${badge(info)}</div>
         <div class="flex justify-between"><span class="text-slate-400">ลูกหนี้</span><span class="font-semibold">${c.debtor}</span></div>
+        <!-- มติ PO U166 / BUG-184 — ยี่ห้อรุ่น · ความจุ · สี ตามสัญญา (ข้อความชุดเดียวกับใบส่งมอบ) -->
+        <div class="flex justify-between"><span class="text-slate-400">ทรัพย์</span><span class="font-semibold">${c.model ?? '—'}</span></div>
         <div class="flex justify-between"><span class="text-slate-400">วันที่รับเคส</span><span>${c.createdAt}</span></div>
         ${c.recycleRound > 1 ? `<div class="flex justify-between"><span class="text-slate-400">รอบการติดตาม</span><span class="font-semibold text-violet-700">รอบที่ ${c.recycleRound}</span></div>` : ''}
         ${c.reason ? `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 mt-2"><b>หมายเหตุจากเจ้าหน้าที่:</b><br/>${c.reason}</div>` : ''}

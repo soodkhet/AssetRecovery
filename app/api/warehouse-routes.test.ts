@@ -144,6 +144,7 @@ const lotDetail = {
       deviceCapacity: null,
       deviceColor: null,
       colorCapacityMatched: null,
+      colorCapacityNote: null,
       imeiContract: '355000000000001',
       imeiActual: '355000000000001',
       serialContract: null,
@@ -236,7 +237,7 @@ describe('สิทธิ์ของแต่ละ endpoint (DEC-002 · `44` �
 
     const denied = await Promise.all([
       postIntake(
-        jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', { imeiActual: '355000000000001', condition: 'normal' }),
+        jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', { imeiActual: '355000000000001', condition: 'normal', colorCapacityMatched: true }),
         params(ASSET_ID),
       ),
       postRejectIntake(
@@ -266,6 +267,7 @@ describe('สิทธิ์ของแต่ละ endpoint (DEC-002 · `44` �
       jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
         imeiActual: '355000000000001',
         condition: 'normal',
+        colorCapacityMatched: true,
       }),
       params(ASSET_ID),
     )
@@ -295,6 +297,7 @@ describe('POST /api/assets/:id/intake', () => {
       jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
         imeiActual: '355000000000999',
         condition: 'normal',
+        colorCapacityMatched: true,
       }),
       params(ASSET_ID),
     )
@@ -310,6 +313,7 @@ describe('POST /api/assets/:id/intake', () => {
       jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
         imeiActual: '35500',
         condition: 'normal',
+        colorCapacityMatched: true,
       }),
       params(ASSET_ID),
     )
@@ -326,6 +330,7 @@ describe('POST /api/assets/:id/intake', () => {
       jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
         imeiActual: ' 35-500000.000000 1 ',
         condition: 'normal',
+        colorCapacityMatched: true,
       }),
       params(ASSET_ID),
     )
@@ -339,11 +344,27 @@ describe('POST /api/assets/:id/intake', () => {
       jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
         imeiActual: '355000000000001/01',
         condition: 'normal',
+        colorCapacityMatched: true,
       }),
       params(ASSET_ID),
     )
 
     expect(response.status).toBe(400)
+    expect(queriesMock.intakeAsset).not.toHaveBeenCalled()
+  })
+
+  it('มติ O77 — ไม่เลือก ตรง/ไม่ตรง หรือ ไม่ตรงแต่ไม่ระบุสิ่งที่พบ = 400 (ไม่ถึงชั้น service)', async () => {
+    for (const body of [
+      { imeiActual: '355000000000001', condition: 'normal' },
+      { imeiActual: '355000000000001', condition: 'normal', colorCapacityMatched: false, colorCapacityNote: ' ' },
+    ]) {
+      const response = await postIntake(
+        jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', body),
+        params(ASSET_ID),
+      )
+      expect(response.status).toBe(400)
+      expect((await envelopeOf(response)).error?.code).toBe('REQUIRED_MISSING')
+    }
     expect(queriesMock.intakeAsset).not.toHaveBeenCalled()
   })
 
@@ -354,6 +375,7 @@ describe('POST /api/assets/:id/intake', () => {
       jsonRequest(`http://localhost/api/assets/${ASSET_ID}/intake`, 'POST', {
         imeiActual: '355000000000001',
         condition: 'normal',
+        colorCapacityMatched: true,
       }),
       params(ASSET_ID),
     )

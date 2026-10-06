@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { Font } from '@react-pdf/renderer'
@@ -101,5 +102,18 @@ describe('BUG-171 — ฟอนต์ตัวหนา', () => {
     expect(boldSource?.src).toContain('NotoSansThai-Bold.ttf')
     expect(regularSource?.src).toContain('NotoSansThai.ttf')
     expect(regularSource?.src).not.toContain('Bold')
+  })
+})
+
+describe('ตำแหน่งไฟล์ฟอนต์ (มติ O77 — build warning)', () => {
+  it('ensureThaiFont() ใช้ path literal ใต้ public/fonts ที่ตรงกับ THAI_FONT_FILES', () => {
+    const source = readFileSync(join(process.cwd(), 'components/pdf/thai-font.ts'), 'utf8')
+    for (const file of Object.values(THAI_FONT_FILES)) {
+      const literal = file
+        .split('/')
+        .map((segment) => `'${segment}'`)
+        .join(', ')
+      expect(source).toContain(`join(process.cwd(), ${literal})`)
+    }
   })
 })

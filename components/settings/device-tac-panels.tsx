@@ -22,7 +22,7 @@ import {
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
-import { TAC_SOURCE_LABEL, type DeviceTacSourceCode } from '@/lib/device-catalog/tac'
+import { TAC_SOURCE_LABEL, tacUpdateStatusView, type DeviceTacSourceCode } from '@/lib/device-catalog/tac'
 import { deviceTacBindSchema } from '@/lib/device-catalog/schemas'
 import type {
   DeviceModelOptionDto,
@@ -294,12 +294,6 @@ const TRIGGER_LABEL: Readonly<Record<DeviceTacUpdateDto['trigger'], string>> = {
   file: 'นำเข้าไฟล์เอง',
 }
 
-const STATUS_VIEW: Readonly<Record<DeviceTacUpdateDto['status'], { label: string; group: 'success' | 'sent' | 'critical' }>> = {
-  success: { label: 'สำเร็จ', group: 'success' },
-  not_modified: { label: 'ไม่มีของใหม่', group: 'sent' },
-  failed: { label: 'ล้มเหลว', group: 'critical' },
-}
-
 export function DeviceTacHistory({ refreshKey }: { refreshKey: number }) {
   const [data, setData] = useState<DeviceTacHistoryDto | null>(null)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
@@ -353,7 +347,7 @@ export function DeviceTacHistory({ refreshKey }: { refreshKey: number }) {
                 <Tr key={row.id}>
                   <Td className="text-xs">{fmtDateTime(row.createdAt)}</Td>
                   <Td>
-                    <StatusBadge group={STATUS_VIEW[row.status].group} label={STATUS_VIEW[row.status].label} />
+                    <StatusBadge group={tacUpdateStatusView(row).group} label={tacUpdateStatusView(row).label} />
                     {row.errorMessage !== null && <span className="mt-1 block text-[11px] text-rose-700">{row.errorMessage}</span>}
                   </Td>
                   <Td className="text-xs">

@@ -298,6 +298,7 @@ const intakeInput = (imeiActual: string | null) => ({
   condition: 'normal' as const,
   conditionNote: null,
   photos: ['front.jpg', 'back.jpg'],
+  colorCapacityMatched: true,
 })
 
 /** รับเข้าคลังจนพร้อมจัดล็อต */
@@ -492,8 +493,9 @@ suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`4
     const stored = await db().asset.findUniqueOrThrow({ where: { id: assetId } })
     expect(stored.imeiActual).toBe(imei)
     expect(stored.receivedAt).not.toBeNull()
-    // ไม่ส่งช่อง "สี/ความจุตรงกับสัญญา" = ไม่ได้ยืนยัน (false) ไม่ block
-    expect(stored.colorCapacityMatched).toBe(false)
+    // มติ O77 — เลือก "ตรง" ⇒ true · ไม่มีข้อความสิ่งที่พบ
+    expect(stored.colorCapacityMatched).toBe(true)
+    expect(stored.colorCapacityNote).toBeNull()
   })
 
   it('มติ PO U166 — ติ๊ก "สี/ความจุตรงกับสัญญา" บันทึกลงเครื่อง + audit · DTO พกค่าตามสัญญา', async () => {
@@ -513,6 +515,30 @@ suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`4
       orderBy: { createdAt: 'desc' },
     })
     expect(audit.afterData).toMatchObject({ colorCapacityMatched: true })
+  })
+
+  it('มติ O77 — เลือก "ไม่ตรง" + สิ่งที่พบ ⇒ บันทึก false + ข้อความ · audit · DTO', async () => {
+    const { assetId, imei } = await seedClosedSuccessCase()
+    const result = await warehouse.intakeAsset(
+      admin,
+      assetId,
+      { ...intakeInput(imei), colorCapacityMatched: false, colorCapacityNote: '  พบสีขาว 64GB ' },
+      ctx(admin),
+    )
+    expect(result.asset.colorCapacityMatched).toBe(false)
+    expect(result.asset.colorCapacityNote).toBe('พบสีขาว 64GB')
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'assets', targetId: assetId, action: 'status_change' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({ colorCapacityMatched: false, colorCapacityNote: 'พบสีขาว 64GB' })
+  })
+
+  it('มติ O77 — DB ไม่ยอมให้มีข้อความสิ่งที่พบเมื่อผลตรวจ = ตรง (chk_assets_color_capacity_note)', async () => {
+    const { assetId } = await seedClosedSuccessCase()
+    await expect(
+      db().asset.update({ where: { id: assetId }, data: { colorCapacityMatched: true, colorCapacityNote: 'x' } }),
+    ).rejects.toThrow()
   })
 
   it('UAT Q14 (BUG-055) — คลังรับเข้า = หลักฐานปิดงานเคสสำเร็จผ่านอัตโนมัติ แล้วตีกลับไม่ได้', async () => {

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   TacFileFormatError,
+  tacUpdateStatusView,
   isTacCsvHeader,
   iterateCsvRows,
   normalizeTacCell,
@@ -171,5 +172,20 @@ describe('ข้อความยี่ห้อ/รุ่นของฟอร
     expect(tacImportDecision('OPPO A78', tac)).toMatchObject({ fill: false, warning: expect.stringContaining('ไม่ตรงกับ IMEI') })
     expect(tacImportDecision('samsung a55 สีดำ', tac)).toEqual({ fill: false, warning: null })
     expect(tacImportDecision('OPPO A78', null)).toEqual({ fill: false, warning: null })
+  })
+})
+
+describe('tacUpdateStatusView — ป้ายผลในประวัติ TAC (มติ O77)', () => {
+  const zero = { tacsAdded: 0, brandsAdded: 0, modelsAdded: 0 }
+  it('สำเร็จแต่ 0/0/0 ⇒ "ไม่มีของใหม่"', () => {
+    expect(tacUpdateStatusView({ status: 'success', ...zero })).toEqual({ label: 'ไม่มีของใหม่', group: 'sent' })
+  })
+  it('สำเร็จและมีของใหม่ ⇒ "สำเร็จ"', () => {
+    expect(tacUpdateStatusView({ status: 'success', ...zero, tacsAdded: 3 })).toEqual({ label: 'สำเร็จ', group: 'success' })
+    expect(tacUpdateStatusView({ status: 'success', ...zero, modelsAdded: 1 }).label).toBe('สำเร็จ')
+  })
+  it('not_modified / failed คงเดิม', () => {
+    expect(tacUpdateStatusView({ status: 'not_modified', ...zero }).label).toBe('ไม่มีของใหม่')
+    expect(tacUpdateStatusView({ status: 'failed', ...zero, tacsAdded: 5 })).toEqual({ label: 'ล้มเหลว', group: 'critical' })
   })
 })

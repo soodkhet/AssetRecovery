@@ -5,6 +5,8 @@ import { testLetterhead, testLetterheadWithLogo } from '@/tests/helpers/letterhe
 import { attachmentHeader } from '@/lib/format/attachment'
 import {
   buildHandoverDoc,
+  colorCapacityCheckText,
+  documentColorCapacityMismatch,
   documentDeviceText,
   documentIdentifier,
   documentIdentifierActual,
@@ -44,6 +46,7 @@ function asset(overrides: Partial<AssetListItemDto> = {}): AssetListItemDto {
     deviceCapacity: null,
     deviceColor: null,
     colorCapacityMatched: null,
+    colorCapacityNote: null,
     imeiContract: '355000000000001',
     imeiActual: '355000000000001',
     serialContract: null,
@@ -205,14 +208,14 @@ describe('ชื่อไฟล์ดาวน์โหลด', () => {
 
 describe('Export Excel', () => {
   it('หัวคอลัมน์เรียงเหมือนตารางในใบส่งมอบ', () => {
-    expect(HANDOVER_SHEET_HEADERS).toHaveLength(8)
+    expect(HANDOVER_SHEET_HEADERS).toHaveLength(9)
     expect(HANDOVER_SHEET_HEADERS[1]).toBe('เลขสัญญา')
   })
 
   it('แถวข้อมูลตรงกับรายการเครื่องในล็อต', () => {
     const doc = buildHandoverDoc(lot(), ISSUER, RECIPIENT)
     expect(handoverSheetRows(doc)).toEqual([
-      ['1', 'SF-2026-00832', 'สมชาย ใจดี', 'iPhone 15 สีดำ', '355000000000001', '—', 'ปกติ', '—'],
+      ['1', 'SF-2026-00832', 'สมชาย ใจดี', 'iPhone 15 สีดำ', '—', '355000000000001', '—', 'ปกติ', '—'],
     ])
   })
 
@@ -258,5 +261,43 @@ describe('PDF ใบส่งมอบ (UAT BUG-079 · BUG-080)', () => {
     const text = extractPdfText(new Uint8Array(withLogo)).replace(/\n/g, '')
     expect(text).toContain('Jaidee Mobile Co., Ltd.')
     expect(text).toContain('เลขประจำตัวผู้เสียภาษี 0105560123456 · สำนักงานใหญ่')
+  })
+})
+
+describe('มติ O77 — ผลตรวจสี/ความจุ ตรง/ไม่ตรง ในรายละเอียดเครื่องและใบส่งมอบ', () => {
+  it('ข้อความในรายละเอียดเครื่อง', () => {
+    expect(colorCapacityCheckText({ colorCapacityMatched: null, colorCapacityNote: null })).toBe('—')
+    expect(colorCapacityCheckText({ colorCapacityMatched: true, colorCapacityNote: null })).toBe('ตรง')
+    expect(colorCapacityCheckText({ colorCapacityMatched: false, colorCapacityNote: 'สีขาว 64GB' })).toBe('ไม่ตรง — สีขาว 64GB')
+    // แถวก่อนมติ O77 (ช่องติ๊กที่ไม่ได้ติ๊ก)
+    expect(colorCapacityCheckText({ colorCapacityMatched: false, colorCapacityNote: null })).toBe('ไม่ได้ยืนยัน')
+  })
+
+  it('ใบส่งมอบกำกับเฉพาะ "ไม่ตรง" ที่มีสิ่งที่พบ', () => {
+    expect(documentColorCapacityMismatch({ colorCapacityMatched: true, colorCapacityNote: null })).toBeNull()
+    expect(documentColorCapacityMismatch({ colorCapacityMatched: false, colorCapacityNote: null })).toBeNull()
+    expect(documentColorCapacityMismatch({ colorCapacityMatched: false, colorCapacityNote: 'สีขาว' })).toBe(
+      'สี/ความจุไม่ตรงสัญญา: สีขาว',
+    )
+  })
+
+  it('PDF + Excel พิมพ์ส่วนต่างสี/ความจุ', async () => {
+    const base = lot()
+    const mismatchLot = {
+      ...base,
+      assets: base.assets.map((each) => ({
+        ...each,
+        deviceCapacity: '128GB',
+        deviceColor: 'ดำ',
+        colorCapacityMatched: false,
+        colorCapacityNote: 'สีขาว 64GB',
+      })),
+    }
+    const doc = buildHandoverDoc(mismatchLot, ISSUER, RECIPIENT)
+    expect(doc.rows[0]?.colorCapacityMismatch).toBe('สี/ความจุไม่ตรงสัญญา: สีขาว 64GB')
+    expect(handoverSheetRows(doc)[0]?.[4]).toBe('สี/ความจุไม่ตรงสัญญา: สีขาว 64GB')
+    const pdf = await renderHandoverNote(doc, testLetterhead({ nameTh: ISSUER.name }))
+    const text = extractPdfText(new Uint8Array(pdf)).replace(/\s/g, '')
+    expect(text).toContain('สีขาว64GB')
   })
 })
