@@ -160,6 +160,7 @@ async function resetPayees(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM case_evidences WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM tax_profile_default_history WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payee_profiles WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(
     `UPDATE finance_policy_settings SET require_payee_id_document = false WHERE organization_id = '${ORG_ID}'`,
@@ -649,6 +650,33 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     expect(rows[0]?.whtRateSource).toBe('plan')
     expect(rows[0]?.whtPctUsed).toBe(3)
     expect(rows[0]?.whtWarning).not.toBeNull()
+  })
+
+  // มติ PO 06/10/2569 U121 — ผู้รับ 40(8) ไม่มี Tax Profile + รายการไม่มีแผน เคยทำทั้งหน้าคิวอนุมัติ 500 (RangeError)
+  it('U121 — ไม่มี Tax Profile + รายการไม่มีแผน ⇒ คิวอนุมัติไม่ล้ม · แถวนั้นมีคำเตือน · ภาษี 0', async () => {
+    const payeeId = await seedPayee(AGENT_ID, { taxProfileId: null })
+    const expenseId = await seedPendingExpense(payeeId, 500_000)
+    await db().$executeRawUnsafe(`UPDATE expenses SET comp_plan_id = NULL, comp_plan_version = NULL WHERE id = '${expenseId}'`)
+    const rows = await approvals.listCompensationApprovals(manager, { status: 'all' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.whtRateSource).toBe('none')
+    expect(rows[0]?.whtSatang).toBe(0)
+    expect(rows[0]?.netSatang).toBe(500_000)
+    expect(rows[0]?.whtWarning).toContain('ยังไม่มีอัตราหัก')
+  })
+
+  it('U121 — ไม่มี Tax Profile รายคน ⇒ ใช้ Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (ชนะแผน · ไม่เตือน)', async () => {
+    const payeeId = await seedPayee(AGENT_ID, { taxProfileId: null })
+    await seedPendingExpense(payeeId, 500_000)
+    await db().$executeRawUnsafe(`
+      INSERT INTO tax_profile_default_history (organization_id, inhouse_individual_tax_profile_id, reason, created_by)
+      VALUES ('${ORG_ID}', '${TAX_PROFILE_ID}', 'ค่าเริ่มต้น inhouse', '${FINANCE_ID}')
+    `)
+    const rows = await approvals.listCompensationApprovals(manager, { status: 'all' })
+    expect(rows[0]?.whtRateSource).toBe('type_default')
+    expect(rows[0]?.whtPctUsed).toBe(1)
+    expect(rows[0]?.whtSatang).toBe(5_000)
+    expect(rows[0]?.whtWarning).toBeNull()
   })
 
   it('§10 ผู้จัดการเห็นเฉพาะรายการของทีมที่ตนดูแล', async () => {

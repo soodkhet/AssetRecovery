@@ -77,6 +77,8 @@ import {
   type WhtExportRow,
 } from '@/lib/exports/pack'
 import { estimateAccruedWhtSatang } from '@/lib/exports/accrued-expenses'
+import { loadTaxProfileDefaults } from '@/lib/settings/queries/tax-profile-defaults'
+import { pickTaxProfileDefault } from '@/lib/settings/tax-profile-defaults'
 import { advanceBalanceRows, type AdvanceBalanceEntry } from '@/lib/exports/advance-balance'
 import { buildControlTotals, controlTotalsCsv, controlTotalsForCover } from '@/lib/exports/control-totals'
 import { renderBillingInvoice } from '@/components/pdf/billing-invoice'
@@ -1101,7 +1103,7 @@ async function accruedExpenseRows(
   scope: Pick<PeriodScope, 'end'>,
   generatedAt: Date,
 ): Promise<AccruedExpenseExportRow[]> {
-  const [rows, policy] = await Promise.all([
+  const [rows, policy, typeDefaults] = await Promise.all([
     prisma.expense.findMany({
       where: accruedExpenseWhere(organizationId, scope.end),
       orderBy: [{ expenseDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -1135,31 +1137,37 @@ async function accruedExpenseRows(
       },
     }),
     resolveWhtPolicyForPayout(organizationId, generatedAt),
+    // มติ PO U121 — Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (ชุดเดียวกับที่รอบจ่ายจะใช้)
+    loadTaxProfileDefaults(organizationId),
   ])
 
   const estimates = estimateAccruedWhtSatang(
-    rows.map((row) => ({
-      payeeId: row.payee.id,
-      grossSatang: row.grossSatang,
-      expenseType: row.expenseType,
-      batchWhtSatang: row.payoutItems[0]?.whtSatang ?? null,
-      payeeType: row.payee.payeeType,
-      side: resolvePayoutSide({
+    rows.map((row) => {
+      const side = resolvePayoutSide({
         teamSide: row.payee.user.team?.side ?? null,
         roleGroup: row.payee.user.role.roleGroup,
-      }),
-      payeeTaxProfile:
-        row.payee.taxProfile === null
-          ? null
-          : {
-              whtPct: Number(row.payee.taxProfile.whtPct),
-              whtBasis: row.payee.taxProfile.whtBasis === 'gross_amount' ? 'gross_amount' : 'before_vat',
-              whtMinThresholdSatang: row.payee.taxProfile.whtMinThresholdSatang,
-            },
-      planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
-      section402Pct: row.payee.wht402Pct === null ? null : Number(row.payee.wht402Pct),
-      whtCondition: row.payee.whtCondition,
-    })),
+      })
+      return {
+        payeeId: row.payee.id,
+        grossSatang: row.grossSatang,
+        expenseType: row.expenseType,
+        batchWhtSatang: row.payoutItems[0]?.whtSatang ?? null,
+        payeeType: row.payee.payeeType,
+        side,
+        typeDefaultTaxProfile: pickTaxProfileDefault(typeDefaults.profiles, side, row.payee.payeeType)?.values ?? null,
+        payeeTaxProfile:
+          row.payee.taxProfile === null
+            ? null
+            : {
+                whtPct: Number(row.payee.taxProfile.whtPct),
+                whtBasis: row.payee.taxProfile.whtBasis === 'gross_amount' ? 'gross_amount' : 'before_vat',
+                whtMinThresholdSatang: row.payee.taxProfile.whtMinThresholdSatang,
+              },
+        planWhtPct: row.compPlan === null ? null : Number(row.compPlan.whtPct),
+        section402Pct: row.payee.wht402Pct === null ? null : Number(row.payee.wht402Pct),
+        whtCondition: row.payee.whtCondition,
+      }
+    }),
     policy.values,
   )
 

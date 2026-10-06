@@ -24,6 +24,11 @@ import {
 } from '@/lib/settings/help/common'
 import type { SettingHelpContent, SettingHelpExample } from '@/lib/settings/help/types'
 import {
+  TAX_PROFILE_DEFAULT_SLOTS,
+  TAX_PROFILE_DEFAULT_SLOT_LABEL,
+  type TaxProfileDefaults,
+} from '@/lib/settings/tax-profile-defaults'
+import {
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
   DEFAULT_WHT_PCT,
   type WhtBasis,
@@ -366,15 +371,75 @@ export function taxProfileHelp(values: {
   }
 }
 
+/**
+ * Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO 06/10/2569 U121) — ตัวอย่างคิดสดจากอัตราของ profile ที่เลือกในแต่ละช่อง
+ * ด้วย `calculatePayeeBatchWht()` ตัวเดียวกับรอบจ่าย
+ */
+export function taxProfileDefaultsHelp(
+  slots: TaxProfileDefaults<{ name: string; profile: PayeeTaxProfileValues }>,
+): SettingHelpContent {
+  const examples: SettingHelpExample[] = []
+  for (const slot of TAX_PROFILE_DEFAULT_SLOTS) {
+    const chosen = slots[slot]
+    if (chosen === null) continue
+    const result = calculatePayeeBatchWht([
+      {
+        grossSatang: SAMPLE_INCOME_SATANG,
+        source: { payeeTaxProfile: null, typeDefaultTaxProfile: chosen.profile, planWhtPct: null },
+      },
+    ])
+    examples.push({
+      title: `${TAX_PROFILE_DEFAULT_SLOT_LABEL[slot]} ที่ยังไม่ผูก Tax Profile ได้รับ ${money(SAMPLE_INCOME_SATANG)}`,
+      lines: [
+        line(`ใช้ "${chosen.name}" ${pct(chosen.profile.whtPct)}`, `หัก ${money(result.totalWhtSatang)}`),
+        line('ผู้รับได้รับ', money(result.lines[0]!.netSatang), true),
+      ],
+    })
+  }
+  if (examples.length === 0) {
+    examples.push({
+      title: 'ยังไม่ได้ตั้งค่าเริ่มต้นช่องใดเลย',
+      lines: [
+        line('ผู้รับที่ไม่ได้ผูก Tax Profile', 'ใช้อัตราจากแผนค่าตอบแทนพร้อมคำเตือน'),
+        line('รายการที่ไม่มีแผน (เบิกเอง/ค่าที่พัก) และอยู่ในฐานภาษี', 'สร้างรอบจ่ายไม่ได้จนกว่าจะกำหนดอัตรา', true),
+      ],
+    })
+  }
+  return {
+    title: 'Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ ทำงานอย่างไร',
+    what:
+      'กำหนดกติกาภาษีให้ผู้รับที่ยังไม่ได้ผูก Tax Profile รายคน แยกตามทีม (Inhouse/Outsource) และชนิดผู้รับ (บุคคลธรรมดา/นิติบุคคล) — การตั้งรายคนในข้อมูลผู้รับเงินเป็นข้อยกเว้นที่ชนะค่าเริ่มต้นเสมอ',
+    options: [
+      { label: '1. Tax Profile รายคน', effect: 'ผูกไว้ในข้อมูลผู้รับเงิน — ใช้ก่อนเสมอ' },
+      { label: '2. ค่าเริ่มต้นตามประเภทผู้รับ', effect: 'ใช้เมื่อผู้รับไม่ได้ผูกรายคน (ไม่มีคำเตือน)' },
+      { label: '3. อัตราของแผนค่าตอบแทน', effect: 'ใช้ชั่วคราวเมื่อไม่มีทั้งสองข้อแรก พร้อมคำเตือนให้ผูก Tax Profile' },
+      {
+        label: 'ไม่มีอัตราเลย',
+        effect: 'คิวอนุมัติแสดงคำเตือนที่รายการ และสร้างรอบจ่ายไม่ได้จนกว่าจะกำหนดอัตรา — ระบบไม่เดาอัตรา',
+      },
+      {
+        label: 'ช่องว่าง',
+        effect: 'ไม่มีค่าเริ่มต้นสำหรับประเภทนั้น · เงินได้ 40(1)/40(2) ยังใช้อัตราต่อคนในข้อมูลผู้รับเงินเหมือนเดิม',
+      },
+    ],
+    examples,
+    who: WHO_SUPERADMIN_ONLY,
+    when: 'มีผลทันทีกับคิวอนุมัติและรอบจ่ายที่สร้างหลังบันทึก — รอบจ่ายที่สร้างแล้วเก็บ Tax Profile ที่ใช้จริงไว้กับรายการ ไม่คิดใหม่ย้อนหลัง',
+  }
+}
+
 // ── ผู้รับเงิน ───────────────────────────────────────────────────────────────
 
 export function payeeTaxProfileHelp(profile: PayeeTaxProfileValues | null): SettingHelpContent {
   const examples: SettingHelpExample[] = []
-  if (profile !== null) {
-    const result = calculateWhtForPayee({
-      grossSatang: SAMPLE_INCOME_SATANG,
-      source: { payeeTaxProfile: profile, planWhtPct: null },
-    })
+  const result =
+    profile === null
+      ? null
+      : calculateWhtForPayee({
+          grossSatang: SAMPLE_INCOME_SATANG,
+          source: { payeeTaxProfile: profile, planWhtPct: null },
+        })
+  if (profile !== null && result !== null) {
     examples.push({
       title: `ได้รับ ${money(SAMPLE_INCOME_SATANG)} ในรอบจ่าย (Tax Profile ที่เลือก ${pct(profile.whtPct)})`,
       lines: [
@@ -388,7 +453,11 @@ export function payeeTaxProfileHelp(profile: PayeeTaxProfileValues | null): Sett
     what: 'ผูกผู้รับกับกติกาภาษี (Tax Profile) เพื่อกำหนดอัตราหัก ณ ที่จ่ายของเงินได้ 40(8)',
     options: [
       { label: 'เลือก Tax Profile', effect: 'ใช้อัตรา/ฐาน/เกณฑ์ขั้นต่ำของ Profile นั้น (ชนะอัตราของแผนค่าตอบแทนเสมอ)' },
-      { label: 'ยังไม่ผูก', effect: 'ระบบใช้อัตราจากแผนค่าตอบแทนของทีมชั่วคราว พร้อมคำเตือนให้ผูกโดยเร็ว' },
+      {
+        label: 'ยังไม่ผูก',
+        effect:
+          'ใช้ Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (ถ้าตั้งไว้) · ไม่มีค่าเริ่มต้น ⇒ ใช้อัตราจากแผนค่าตอบแทนชั่วคราวพร้อมคำเตือน · ไม่มีทั้งสองอย่าง ⇒ สร้างรอบจ่ายไม่ได้',
+      },
     ],
     examples,
     who: WHO_PAYEE,
@@ -468,11 +537,14 @@ export function payeeConditionHelp(input: {
 
 export function planWhtHelp(planWhtPct: number | null): SettingHelpContent {
   const examples: SettingHelpExample[] = []
-  if (planWhtPct !== null) {
-    const fallback = calculateWhtForPayee({
-      grossSatang: SAMPLE_INCOME_SATANG,
-      source: { payeeTaxProfile: null, planWhtPct },
-    })
+  const fallback =
+    planWhtPct === null
+      ? null
+      : calculateWhtForPayee({
+          grossSatang: SAMPLE_INCOME_SATANG,
+          source: { payeeTaxProfile: null, planWhtPct },
+        })
+  if (planWhtPct !== null && fallback !== null) {
     examples.push({
       title: `ผู้รับที่ยังไม่ผูก Tax Profile ได้รับ ${money(SAMPLE_INCOME_SATANG)}`,
       lines: [

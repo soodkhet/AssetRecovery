@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { approvalWhtPreview, WHT_402_RATE_MISSING_WARNING, type ApprovalWhtInput } from '@/lib/compensation/approval-wht'
+import {
+  approvalWhtPreview,
+  WHT_402_RATE_MISSING_WARNING,
+  WHT_RATE_MISSING_WARNING,
+  type ApprovalWhtInput,
+} from '@/lib/compensation/approval-wht'
 import { DEFAULT_WHT_POLICY } from '@/lib/settings/wht-policy'
 
 /** BUG-176 — คิวอนุมัติต้องแสดง WHT/Net ด้วยสูตรเดียวกับรอบจ่าย (เงื่อนไข (1)/(2)/(3) · ฐาน · ประเภทเงินได้ · snapshot) */
@@ -76,5 +81,27 @@ describe('approvalWhtPreview (BUG-176)', () => {
     const result = approvalWhtPreview(input({}, { taxProfile: null }))
     expect(result.whtRateSource).toBe('plan')
     expect(result.whtWarning).not.toBeNull()
+  })
+
+  // มติ PO 06/10/2569 U121 — ผู้รับ 40(8) ไม่มี Tax Profile + รายการไม่มีแผน เคยทำทั้งหน้า 500
+  it('ไม่มี Tax Profile + รายการไม่มีแผน (ในฐาน) ⇒ คำเตือนต่อแถว ไม่ throw · ภาษี 0', () => {
+    const result = approvalWhtPreview(input({ expenseType: 'commission', planWhtPct: null }, { taxProfile: null }))
+    expect(result).toMatchObject({ whtSatang: 0, netSatang: 1_234_567, whtRateSource: 'none' })
+    expect(result.whtWarning).toBe(WHT_RATE_MISSING_WARNING)
+  })
+
+  it('ค่าที่พัก (นอกฐาน) ของผู้รับที่ไม่มี Tax Profile และไม่มีแผน ⇒ ไม่เตือน ไม่ throw', () => {
+    const result = approvalWhtPreview(input({ expenseType: 'hotel', planWhtPct: null }, { taxProfile: null }))
+    expect(result).toMatchObject({ whtSatang: 0, netSatang: 1_234_567, whtWarning: null, whtRateSource: 'none' })
+  })
+
+  it('ไม่มี Tax Profile รายคน แต่มีค่าเริ่มต้นตามประเภท ⇒ ใช้ค่าเริ่มต้น ไม่เตือน (ชนะอัตราแผน)', () => {
+    const result = approvalWhtPreview(
+      input(
+        { planWhtPct: 5 },
+        { taxProfile: null, typeDefaultTaxProfile: { whtPct: 3, whtBasis: 'before_vat', whtMinThresholdSatang: 100_000 } },
+      ),
+    )
+    expect(result).toMatchObject({ whtSatang: 37_037, whtRateSource: 'type_default', whtWarning: null })
   })
 })

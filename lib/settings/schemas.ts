@@ -288,6 +288,20 @@ export const taxProfileCreateSchema = taxProfileFields.extend({ reason: reasonSc
 export const taxProfileUpdateSchema = taxProfileCreateSchema
 export const taxProfileDeleteSchema = z.object({ reason: reasonSchema })
 
+// ── §6.4.3 Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121) ─────────────
+/** ว่าง/`null` = ไม่มีค่าเริ่มต้นสำหรับประเภทนั้น */
+const defaultSlotSchema = z.preprocess(
+  (value) => (value === '' || value === undefined ? null : value),
+  z.union([z.string().uuid('เลือก Tax Profile ไม่ถูกต้อง'), z.null()]),
+)
+export const taxProfileDefaultsCreateSchema = z.object({
+  inhouseIndividual: defaultSlotSchema,
+  inhouseCorporate: defaultSlotSchema,
+  outsourceIndividual: defaultSlotSchema,
+  outsourceCorporate: defaultSlotSchema,
+  reason: reasonSchema,
+})
+
 // ── §6.5 อัตรา VAT (effective-dated) ───────────────────────────────────
 const vatRateFieldsBase = z.object({
   ratePct: pctSchema('อัตรา VAT'),

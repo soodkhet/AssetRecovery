@@ -136,6 +136,8 @@ export const ERROR_CATALOG = {
   WHT_40_2_RATE_MISSING: { status: 400, severity: 'reject', source: '24 §6.5' },
   // มติ PO 06/10/2569 U105 — เงื่อนไข (2)/(3) ขณะค่าตั้งไม่อนุญาต (ฟอร์มผู้รับ + สร้างรอบจ่าย)
   WHT_CONDITION_NOT_ALLOWED: { status: 400, severity: 'reject', source: '24 §6.5' },
+  // มติ PO 06/10/2569 U121 — ไม่มีอัตราหักเลย (รายคน → ค่าเริ่มต้นตามประเภท → แผน) ⇒ บล็อกการสร้างรอบจ่าย
+  WHT_RATE_MISSING: { status: 400, severity: 'reject', source: '24 §6.5' },
 
   // ── 24 §6.6 Revenue/Billing ────────────────────────────────────────────
   NO_REVENUE_TO_BILL: { status: 400, severity: 'reject', source: '24 §6.6' },

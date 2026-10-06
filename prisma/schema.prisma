@@ -694,15 +694,15 @@ enum JobStatus {
 
 /// องค์กรเจ้าของระบบ (multi-tenant ready) — root table: ไม่มี organization_id และลบไม่ได้ (ไม่มี soft delete)
 model Organization {
-  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                 String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// ชื่อบริษัท (ไทย) — ชื่อนิติบุคคลเต็มที่พิมพ์บนเอกสาร
-  name          String
+  name               String
   /// ชื่อบริษัท (อังกฤษ) — ไม่บังคับ · พิมพ์ใต้ชื่อไทยบนหัวเอกสาร (มติ PO U99)
-  nameEn        String? @map("name_en")
-  taxId         String  @unique @map("tax_id") @db.VarChar(13)
+  nameEn             String? @map("name_en")
+  taxId              String  @unique @map("tax_id") @db.VarChar(13)
   /// ที่อยู่บรรทัดเดียว (ประกอบจาก 5 ช่องด้านล่างด้วย `formatThaiAddressLine()` ทุกครั้งที่บันทึก — มติ PO U99)
   /// คงคอลัมน์ไว้เพราะ snapshot ของใบกำกับ/ใบแจ้งหนี้/50 ทวิ/ใบส่งมอบ อ่านบรรทัดนี้
-  address       String
+  address            String
   /// ที่อยู่แยกช่อง (มติ PO U99 — โครงเดียวกับ `AddressFields`) · ข้อมูลก่อน U99 = NULL ทั้งชุด (ยังมีแต่ `address`)
   /// CHECK รหัสไปรษณีย์ 5 หลักใน raw SQL `20261006180000_organization_profile_letterhead`
   addressDetail      String? @map("address_detail")
@@ -710,20 +710,20 @@ model Organization {
   addressDistrict    String? @map("address_district")
   addressProvince    String? @map("address_province")
   addressPostalCode  String? @map("address_postal_code") @db.VarChar(5)
-  phone         String? @db.VarChar(20)
-  email         String? @db.VarChar(255)
+  phone              String? @db.VarChar(20)
+  email              String? @db.VarChar(255)
   /// เว็บไซต์ (มติ PO U99) — ไม่บังคับ
-  website       String? @db.VarChar(255)
+  website            String? @db.VarChar(255)
   /// path ของโลโก้ใน bucket `case-documents` (`organization/<orgId>/logo/<uuid>.<ext>` — อัปโหลดผ่าน server · มติ PO U99)
   /// เปลี่ยน/ลบโลโก้ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ (เอกสารที่ snapshot path เดิมไว้ยังพิมพ์โลโก้เดิมได้)
-  logoUrl       String? @map("logo_url")
+  logoUrl            String? @map("logo_url")
   /// SHA-256 ของไฟล์โลโก้ปัจจุบัน (มติ PO U110) — เขียนพร้อม `logo_url` · snapshot ลงเอกสารภาษี/ใบส่งมอบ
   /// เพื่อพิมพ์ซ้ำได้รูปเดียวกับตอนออก · NULL = ไม่มีโลโก้/โลโก้ก่อน U110 · CHECK hex 64 ใน raw SQL `20261006220000_letterhead_snapshot_period_payouts`
-  logoSha256    String? @map("logo_sha256") @db.VarChar(64)
-  vatRegistered Boolean @default(true) @map("vat_registered")
+  logoSha256         String? @map("logo_sha256") @db.VarChar(64)
+  vatRegistered      Boolean @default(true) @map("vat_registered")
   /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
   /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
-  branchCode    String  @default("00000") @map("branch_code") @db.VarChar(5)
+  branchCode         String  @default("00000") @map("branch_code") @db.VarChar(5)
 
   // เลขที่เอกสารทุกชนิด (รวมใบกำกับภาษี/รอบวางบิลเดิม) ย้ายไป `document_number_series` แล้ว (มติ PO U102)
 
@@ -740,6 +740,7 @@ model Organization {
   taxProfiles                 TaxProfile[]
   vatRateHistory              VatRateHistory[]
   whtPolicyHistory            WhtPolicyHistory[]
+  taxProfileDefaultHistory    TaxProfileDefaultHistory[]
   bankAccounts                BankAccount[]
   costCenters                 CostCenter[]
   publicHolidays              PublicHoliday[]
@@ -920,6 +921,7 @@ model User {
   taxProfilesCreated                 TaxProfile[]                  @relation("tax_profiles_created_by")
   vatRateHistoryCreated              VatRateHistory[]              @relation("vat_rate_history_created_by")
   whtPolicyHistoryCreated            WhtPolicyHistory[]            @relation("wht_policy_history_created_by")
+  taxProfileDefaultsCreated          TaxProfileDefaultHistory[]    @relation("tax_profile_defaults_created_by")
   bankAccountsCreated                BankAccount[]                 @relation("bank_accounts_created_by")
   costCentersCreated                 CostCenter[]                  @relation("cost_centers_created_by")
   publicHolidaysCreated              PublicHoliday[]               @relation("public_holidays_created_by")
@@ -948,108 +950,108 @@ model User {
   auditLogs            AuditLog[]            @relation("audit_actor")
 
   // ── Group C–G: back-relation ของ created_by / updated_by / actor อื่นๆ ──
-  casesCreated              Case[]                      @relation("cases_created_by")
-  casesUpdated              Case[]                      @relation("cases_updated_by")
-  casesReviewed             Case[]                      @relation("cases_reviewed_by")
-  caseDocumentsUploaded     CaseDocument[]              @relation("case_documents_uploaded_by")
-  caseContactsCreated       CaseContact[]               @relation("case_contacts_created_by")
-  caseEditsMade             CaseEditHistory[]           @relation("case_edit_history_edited_by")
-  recycleRequestsCreated    RecycleRequest[]            @relation("recycle_requests_created_by")
-  recycleRequestsDecided    RecycleRequest[]            @relation("recycle_requests_decided_by")
-  assignmentsCreated        CaseAssignment[]            @relation("assignments_created_by")
-  assignmentsUpdated        CaseAssignment[]            @relation("assignments_updated_by")
-  reassignmentsRequested    PendingReassignment[]       @relation("pending_reassignments_requested_by")
-  reassignmentsResolved     PendingReassignment[]       @relation("pending_reassignments_resolved_by")
-  reassignmentsUpdated      PendingReassignment[]       @relation("pending_reassignments_updated_by")
-  reassignmentHistoryFrom   ReassignmentHistory[]       @relation("reassignment_history_from_agent")
-  reassignmentHistoryTo     ReassignmentHistory[]       @relation("reassignment_history_to_agent")
-  reassignmentHistoryActor  ReassignmentHistory[]       @relation("reassignment_history_reassigned_by")
-  assignmentPolicyUpdated   AssignmentPolicySettings[]  @relation("assignment_policy_settings_updated_by")
-  dataRetentionUpdated      DataRetentionSettings[]     @relation("data_retention_settings_updated_by")
-  checkInsCreated           CheckIn[]                   @relation("checkins_created_by")
-  fieldDaySettlements       FieldDaySettlement[]        @relation("field_day_settlements_agent")
-  evidencesCreated          CaseEvidence[]              @relation("evidences_created_by")
-  evidencesUpdated          CaseEvidence[]              @relation("evidences_updated_by")
-  evidencesReviewed         CaseEvidence[]              @relation("evidences_reviewed_by")
-  travelOriginsCreated      TravelOrigin[]              @relation("travel_origins_created_by")
-  travelOriginsUpdated      TravelOrigin[]              @relation("travel_origins_updated_by")
-  closeCaseDraftsOwned      CloseCaseDraft[]            @relation("close_case_drafts_agent")
-  closeCaseDraftsCreated    CloseCaseDraft[]            @relation("close_case_drafts_created_by")
-  closeCaseDraftsUpdated    CloseCaseDraft[]            @relation("close_case_drafts_updated_by")
-  assetsCreated             Asset[]                     @relation("assets_created_by")
-  assetsUpdated             Asset[]                     @relation("assets_updated_by")
-  assetsRejected            Asset[]                     @relation("assets_rejected_by")
-  lotsCreated               HandoverLot[]               @relation("lots_created_by")
-  lotsUpdated               HandoverLot[]               @relation("lots_updated_by")
-  lotsConfirmed             HandoverLot[]               @relation("lots_confirmed_by")
-  payeesCreated             PayeeProfile[]              @relation("payees_created_by")
-  payeesUpdated             PayeeProfile[]              @relation("payees_updated_by")
-  payeesVerified            PayeeProfile[]              @relation("payees_verified_by")
-  expensesCreated           Expense[]                   @relation("expenses_created_by")
-  expensesUpdated           Expense[]                   @relation("expenses_updated_by")
-  expensesApprovedManager   Expense[]                   @relation("expenses_manager_approved_by")
-  expensesApprovedFinance   Expense[]                   @relation("expenses_finance_approved_by")
-  expensesApprovedExecutive Expense[]                   @relation("expenses_executive_approved_by")
-  pushSubscriptionsCreated  PushSubscription[]          @relation("push_subscriptions_created_by")
-  pushSubscriptionsUpdated  PushSubscription[]          @relation("push_subscriptions_updated_by")
-  advancesCreated           Advance[]                   @relation("advances_created_by")
-  advanceReturnsCreated     AdvanceReturn[]             @relation("advance_returns_created_by")
-  advanceReturnsUpdated     AdvanceReturn[]             @relation("advance_returns_updated_by")
-  advanceReturnsReversed    AdvanceReturn[]             @relation("advance_returns_reversed_by")
-  substituteReceiptsCreated SubstituteReceipt[]         @relation("substitute_receipts_created_by")
-  substituteReceiptsUpdated SubstituteReceipt[]         @relation("substitute_receipts_updated_by")
-  substituteReceiptsSigned  SubstituteReceipt[]         @relation("substitute_receipts_signed_by")
-  substituteReceiptsCancelled SubstituteReceipt[]       @relation("substitute_receipts_cancelled_by")
-  substituteReceiptLinesCreated SubstituteReceiptLine[] @relation("substitute_receipt_lines_created_by")
-  documentSeriesCreated     DocumentNumberSeries[]      @relation("document_number_series_created_by")
-  documentSeriesUpdated     DocumentNumberSeries[]      @relation("document_number_series_updated_by")
-  advancesUpdated           Advance[]                   @relation("advances_updated_by")
-  advancesApproved          Advance[]                   @relation("advances_approved_by")
-  payoutBatchesCreated      PayoutBatch[]               @relation("payout_batches_created_by")
-  payoutBatchesUpdated      PayoutBatch[]               @relation("payout_batches_updated_by")
-  payoutBatchesCancelled    PayoutBatch[]               @relation("payout_batches_cancelled_by")
-  payoutItemsCreated        PayoutBatchItem[]           @relation("payout_items_created_by")
-  revenuesCreated           Revenue[]                   @relation("revenues_created_by")
-  revenuesUpdated           Revenue[]                   @relation("revenues_updated_by")
-  billingCreated            BillingBatch[]              @relation("billing_created_by")
-  billingUpdated            BillingBatch[]              @relation("billing_updated_by")
-  billingSent               BillingBatch[]              @relation("billing_sent_by")
-  adjustmentsCreated        Adjustment[]                @relation("adjustments_created_by")
-  adjustmentsUpdated        Adjustment[]                @relation("adjustments_updated_by")
-  adjustmentsApproved       Adjustment[]                @relation("adjustments_approved_by")
-  periodsCreated            AccountingPeriod[]          @relation("periods_created_by")
-  periodsSent               AccountingPeriod[]          @relation("periods_sent_by")
-  periodsLocked             AccountingPeriod[]          @relation("periods_locked_by")
-  salesRecordsCreated       SalesRecord[]               @relation("sales_created_by")
-  taxInvoicesCreated        TaxInvoice[]                @relation("tax_invoices_created_by")
-  taxInvoicesCancelled      TaxInvoice[]                @relation("tax_invoices_cancelled_by")
-  creditNotesCreated        CreditNote[]                @relation("credit_notes_created_by")
-  creditNotesUpdated        CreditNote[]                @relation("credit_notes_updated_by")
-  creditNotesCancelled      CreditNote[]                @relation("credit_notes_cancelled_by")
-  cashReceiptsCreated       CashReceipt[]               @relation("cash_receipts_created_by")
-  expenseRecordsCreated     ExpenseRecord[]             @relation("expense_records_created_by")
-  whtCertsCreated           WhtCertificate[]            @relation("wht_certs_created_by")
-  whtCertsCancelled         WhtCertificate[]            @relation("wht_certs_cancelled_by")
-  whtFilingsFiled           WhtFilingSummary[]          @relation("wht_filings_filed_by")
-  exceptionsCreated         Exception[]                 @relation("exceptions_created_by")
-  exceptionsUpdated         Exception[]                 @relation("exceptions_updated_by")
-  exceptionsResolved        Exception[]                 @relation("exceptions_resolved_by")
-  exceptionsAuthorized      Exception[]                 @relation("exceptions_authorized_by")
-  bankTxCreated             BankTransaction[]           @relation("bank_tx_created_by")
-  bankTxUpdated             BankTransaction[]           @relation("bank_tx_updated_by")
-  bankTxMatched             BankTransaction[]           @relation("bank_tx_matched_by")
-  allocationsCreated        BankTransactionAllocation[] @relation("allocations_created_by")
-  customerWhtCreated        CustomerWhtCertificate[]    @relation("customer_wht_created_by")
-  customerWhtUpdated        CustomerWhtCertificate[]    @relation("customer_wht_updated_by")
-  customerWhtReceived       CustomerWhtCertificate[]    @relation("customer_wht_received_by")
-  bankTxSuspended           BankTransaction[]           @relation("bank_tx_suspended_by")
-  bankTxRefunded            BankTransaction[]           @relation("bank_tx_refunded_by")
-  questionsCreated          AccountantQuestion[]        @relation("questions_created_by")
-  questionsAnswered         AccountantQuestion[]        @relation("questions_answered_by")
-  exportsGenerated          ExportRecord[]              @relation("exports_generated_by")
-  exportsSent               ExportRecord[]              @relation("exports_sent_by")
-  jobsCreated               Job[]                       @relation("jobs_created_by")
-  filesUploaded             StoredFile[]                @relation("files_uploaded_by")
+  casesCreated                  Case[]                      @relation("cases_created_by")
+  casesUpdated                  Case[]                      @relation("cases_updated_by")
+  casesReviewed                 Case[]                      @relation("cases_reviewed_by")
+  caseDocumentsUploaded         CaseDocument[]              @relation("case_documents_uploaded_by")
+  caseContactsCreated           CaseContact[]               @relation("case_contacts_created_by")
+  caseEditsMade                 CaseEditHistory[]           @relation("case_edit_history_edited_by")
+  recycleRequestsCreated        RecycleRequest[]            @relation("recycle_requests_created_by")
+  recycleRequestsDecided        RecycleRequest[]            @relation("recycle_requests_decided_by")
+  assignmentsCreated            CaseAssignment[]            @relation("assignments_created_by")
+  assignmentsUpdated            CaseAssignment[]            @relation("assignments_updated_by")
+  reassignmentsRequested        PendingReassignment[]       @relation("pending_reassignments_requested_by")
+  reassignmentsResolved         PendingReassignment[]       @relation("pending_reassignments_resolved_by")
+  reassignmentsUpdated          PendingReassignment[]       @relation("pending_reassignments_updated_by")
+  reassignmentHistoryFrom       ReassignmentHistory[]       @relation("reassignment_history_from_agent")
+  reassignmentHistoryTo         ReassignmentHistory[]       @relation("reassignment_history_to_agent")
+  reassignmentHistoryActor      ReassignmentHistory[]       @relation("reassignment_history_reassigned_by")
+  assignmentPolicyUpdated       AssignmentPolicySettings[]  @relation("assignment_policy_settings_updated_by")
+  dataRetentionUpdated          DataRetentionSettings[]     @relation("data_retention_settings_updated_by")
+  checkInsCreated               CheckIn[]                   @relation("checkins_created_by")
+  fieldDaySettlements           FieldDaySettlement[]        @relation("field_day_settlements_agent")
+  evidencesCreated              CaseEvidence[]              @relation("evidences_created_by")
+  evidencesUpdated              CaseEvidence[]              @relation("evidences_updated_by")
+  evidencesReviewed             CaseEvidence[]              @relation("evidences_reviewed_by")
+  travelOriginsCreated          TravelOrigin[]              @relation("travel_origins_created_by")
+  travelOriginsUpdated          TravelOrigin[]              @relation("travel_origins_updated_by")
+  closeCaseDraftsOwned          CloseCaseDraft[]            @relation("close_case_drafts_agent")
+  closeCaseDraftsCreated        CloseCaseDraft[]            @relation("close_case_drafts_created_by")
+  closeCaseDraftsUpdated        CloseCaseDraft[]            @relation("close_case_drafts_updated_by")
+  assetsCreated                 Asset[]                     @relation("assets_created_by")
+  assetsUpdated                 Asset[]                     @relation("assets_updated_by")
+  assetsRejected                Asset[]                     @relation("assets_rejected_by")
+  lotsCreated                   HandoverLot[]               @relation("lots_created_by")
+  lotsUpdated                   HandoverLot[]               @relation("lots_updated_by")
+  lotsConfirmed                 HandoverLot[]               @relation("lots_confirmed_by")
+  payeesCreated                 PayeeProfile[]              @relation("payees_created_by")
+  payeesUpdated                 PayeeProfile[]              @relation("payees_updated_by")
+  payeesVerified                PayeeProfile[]              @relation("payees_verified_by")
+  expensesCreated               Expense[]                   @relation("expenses_created_by")
+  expensesUpdated               Expense[]                   @relation("expenses_updated_by")
+  expensesApprovedManager       Expense[]                   @relation("expenses_manager_approved_by")
+  expensesApprovedFinance       Expense[]                   @relation("expenses_finance_approved_by")
+  expensesApprovedExecutive     Expense[]                   @relation("expenses_executive_approved_by")
+  pushSubscriptionsCreated      PushSubscription[]          @relation("push_subscriptions_created_by")
+  pushSubscriptionsUpdated      PushSubscription[]          @relation("push_subscriptions_updated_by")
+  advancesCreated               Advance[]                   @relation("advances_created_by")
+  advanceReturnsCreated         AdvanceReturn[]             @relation("advance_returns_created_by")
+  advanceReturnsUpdated         AdvanceReturn[]             @relation("advance_returns_updated_by")
+  advanceReturnsReversed        AdvanceReturn[]             @relation("advance_returns_reversed_by")
+  substituteReceiptsCreated     SubstituteReceipt[]         @relation("substitute_receipts_created_by")
+  substituteReceiptsUpdated     SubstituteReceipt[]         @relation("substitute_receipts_updated_by")
+  substituteReceiptsSigned      SubstituteReceipt[]         @relation("substitute_receipts_signed_by")
+  substituteReceiptsCancelled   SubstituteReceipt[]         @relation("substitute_receipts_cancelled_by")
+  substituteReceiptLinesCreated SubstituteReceiptLine[]     @relation("substitute_receipt_lines_created_by")
+  documentSeriesCreated         DocumentNumberSeries[]      @relation("document_number_series_created_by")
+  documentSeriesUpdated         DocumentNumberSeries[]      @relation("document_number_series_updated_by")
+  advancesUpdated               Advance[]                   @relation("advances_updated_by")
+  advancesApproved              Advance[]                   @relation("advances_approved_by")
+  payoutBatchesCreated          PayoutBatch[]               @relation("payout_batches_created_by")
+  payoutBatchesUpdated          PayoutBatch[]               @relation("payout_batches_updated_by")
+  payoutBatchesCancelled        PayoutBatch[]               @relation("payout_batches_cancelled_by")
+  payoutItemsCreated            PayoutBatchItem[]           @relation("payout_items_created_by")
+  revenuesCreated               Revenue[]                   @relation("revenues_created_by")
+  revenuesUpdated               Revenue[]                   @relation("revenues_updated_by")
+  billingCreated                BillingBatch[]              @relation("billing_created_by")
+  billingUpdated                BillingBatch[]              @relation("billing_updated_by")
+  billingSent                   BillingBatch[]              @relation("billing_sent_by")
+  adjustmentsCreated            Adjustment[]                @relation("adjustments_created_by")
+  adjustmentsUpdated            Adjustment[]                @relation("adjustments_updated_by")
+  adjustmentsApproved           Adjustment[]                @relation("adjustments_approved_by")
+  periodsCreated                AccountingPeriod[]          @relation("periods_created_by")
+  periodsSent                   AccountingPeriod[]          @relation("periods_sent_by")
+  periodsLocked                 AccountingPeriod[]          @relation("periods_locked_by")
+  salesRecordsCreated           SalesRecord[]               @relation("sales_created_by")
+  taxInvoicesCreated            TaxInvoice[]                @relation("tax_invoices_created_by")
+  taxInvoicesCancelled          TaxInvoice[]                @relation("tax_invoices_cancelled_by")
+  creditNotesCreated            CreditNote[]                @relation("credit_notes_created_by")
+  creditNotesUpdated            CreditNote[]                @relation("credit_notes_updated_by")
+  creditNotesCancelled          CreditNote[]                @relation("credit_notes_cancelled_by")
+  cashReceiptsCreated           CashReceipt[]               @relation("cash_receipts_created_by")
+  expenseRecordsCreated         ExpenseRecord[]             @relation("expense_records_created_by")
+  whtCertsCreated               WhtCertificate[]            @relation("wht_certs_created_by")
+  whtCertsCancelled             WhtCertificate[]            @relation("wht_certs_cancelled_by")
+  whtFilingsFiled               WhtFilingSummary[]          @relation("wht_filings_filed_by")
+  exceptionsCreated             Exception[]                 @relation("exceptions_created_by")
+  exceptionsUpdated             Exception[]                 @relation("exceptions_updated_by")
+  exceptionsResolved            Exception[]                 @relation("exceptions_resolved_by")
+  exceptionsAuthorized          Exception[]                 @relation("exceptions_authorized_by")
+  bankTxCreated                 BankTransaction[]           @relation("bank_tx_created_by")
+  bankTxUpdated                 BankTransaction[]           @relation("bank_tx_updated_by")
+  bankTxMatched                 BankTransaction[]           @relation("bank_tx_matched_by")
+  allocationsCreated            BankTransactionAllocation[] @relation("allocations_created_by")
+  customerWhtCreated            CustomerWhtCertificate[]    @relation("customer_wht_created_by")
+  customerWhtUpdated            CustomerWhtCertificate[]    @relation("customer_wht_updated_by")
+  customerWhtReceived           CustomerWhtCertificate[]    @relation("customer_wht_received_by")
+  bankTxSuspended               BankTransaction[]           @relation("bank_tx_suspended_by")
+  bankTxRefunded                BankTransaction[]           @relation("bank_tx_refunded_by")
+  questionsCreated              AccountantQuestion[]        @relation("questions_created_by")
+  questionsAnswered             AccountantQuestion[]        @relation("questions_answered_by")
+  exportsGenerated              ExportRecord[]              @relation("exports_generated_by")
+  exportsSent                   ExportRecord[]              @relation("exports_sent_by")
+  jobsCreated                   Job[]                       @relation("jobs_created_by")
+  filesUploaded                 StoredFile[]                @relation("files_uploaded_by")
 
   @@unique([organizationId, email])
   @@index([organizationId, roleId], map: "idx_users_org_role")
@@ -1322,8 +1324,43 @@ model TaxProfile {
   payeeProfiles    PayeeProfile[]    @relation("payee_tax_profile")
   payoutBatchItems PayoutBatchItem[] @relation("payout_items_tax_profile")
 
+  /// ช่องค่าเริ่มต้นตามประเภทผู้รับที่อ้าง profile นี้ (มติ PO U121)
+  defaultsInhouseIndividual   TaxProfileDefaultHistory[] @relation("tax_profile_default_inhouse_individual")
+  defaultsInhouseCorporate    TaxProfileDefaultHistory[] @relation("tax_profile_default_inhouse_corporate")
+  defaultsOutsourceIndividual TaxProfileDefaultHistory[] @relation("tax_profile_default_outsource_individual")
+  defaultsOutsourceCorporate  TaxProfileDefaultHistory[] @relation("tax_profile_default_outsource_corporate")
+
   @@unique([organizationId, name])
   @@map("tax_profiles")
+}
+
+/// Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO 06/10/2569 U121 · `13` §6.4.3 · `18` §6.3)
+/// 4 ช่อง = ฝั่ง inhouse/outsource × ชนิดผู้รับ บุคคลธรรมดา/นิติบุคคล — ว่างได้ทุกช่อง
+/// ลำดับ: Tax Profile รายคน → ค่าเริ่มต้นตามประเภท → อัตราแผน (เตือน) → ไม่มีเลย = บล็อกการสร้างรอบจ่าย
+/// **insert-only** (ไม่มี updated_at/updated_by/deleted_at — `02` §2.4) · แถวที่บันทึกล่าสุดมีผลทันทีกับรอบจ่ายที่สร้างหลังบันทึก
+/// · เหตุผลบังคับ (กระทบภาษี — `90` §13) · รอบจ่าย snapshot แถวที่ใช้ไว้ที่ `payout_batches.tax_profile_default_id`
+model TaxProfileDefaultHistory {
+  id                              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId                  String  @map("organization_id") @db.Uuid
+  inhouseIndividualTaxProfileId   String? @map("inhouse_individual_tax_profile_id") @db.Uuid
+  inhouseCorporateTaxProfileId    String? @map("inhouse_corporate_tax_profile_id") @db.Uuid
+  outsourceIndividualTaxProfileId String? @map("outsource_individual_tax_profile_id") @db.Uuid
+  outsourceCorporateTaxProfileId  String? @map("outsource_corporate_tax_profile_id") @db.Uuid
+  reason                          String
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String   @map("created_by") @db.Uuid
+
+  organization        Organization  @relation(fields: [organizationId], references: [id])
+  createdByUser       User          @relation("tax_profile_defaults_created_by", fields: [createdBy], references: [id])
+  inhouseIndividual   TaxProfile?   @relation("tax_profile_default_inhouse_individual", fields: [inhouseIndividualTaxProfileId], references: [id], onDelete: Restrict)
+  inhouseCorporate    TaxProfile?   @relation("tax_profile_default_inhouse_corporate", fields: [inhouseCorporateTaxProfileId], references: [id], onDelete: Restrict)
+  outsourceIndividual TaxProfile?   @relation("tax_profile_default_outsource_individual", fields: [outsourceIndividualTaxProfileId], references: [id], onDelete: Restrict)
+  outsourceCorporate  TaxProfile?   @relation("tax_profile_default_outsource_corporate", fields: [outsourceCorporateTaxProfileId], references: [id], onDelete: Restrict)
+  payoutBatches       PayoutBatch[] @relation("payout_tax_profile_defaults")
+
+  @@index([organizationId, createdAt], map: "idx_tax_profile_default_history_org_created")
+  @@map("tax_profile_default_history")
 }
 
 /// ประวัติอัตรา VAT — **ห้าม hardcode 7%** ต้อง resolve ตาม revenue_date + snapshot ลง record (`19` §6.3)
@@ -2253,17 +2290,17 @@ model HandoverLot {
   confirmedBy String?   @map("confirmed_by") @db.Uuid
 
   /// ① ใบเซ็นรับ — บังคับก่อน confirmed
-  signedDocUrl      String? @map("signed_doc_url")
+  signedDocUrl       String? @map("signed_doc_url")
   /// ② หลักฐานจัดส่ง — บังคับเฉพาะ `we_deliver`
-  deliveryProofUrl  String? @map("delivery_proof_url")
+  deliveryProofUrl   String? @map("delivery_proof_url")
   /// SHA-256 ที่ server คำนวณจากไฟล์จริงตอนแนบ (มติ PO 03/10/2569 — UAT Q13)
-  signedDocHash     String? @map("signed_doc_hash") @db.VarChar(64)
-  deliveryProofHash String? @map("delivery_proof_hash") @db.VarChar(64)
-  note              String?
+  signedDocHash      String? @map("signed_doc_hash") @db.VarChar(64)
+  deliveryProofHash  String? @map("delivery_proof_hash") @db.VarChar(64)
+  note               String?
   /// มติ PO U111 — snapshot หัวกระดาษองค์กรทั้งชุด ตอนยืนยันล็อต (เขียนใน `$transaction` ของ confirm)
   /// `{ name, tax_id, address, phone, branch_code, name_en, email, website, logo_path, logo_sha256 }`
   /// NULL = ยังไม่ยืนยัน/ล็อตก่อน U111 (ใบส่งมอบใช้ค่าปัจจุบัน) · ล็อต confirmed แก้ไม่ได้ (trigger immutable)
-  letterheadSnapshot Json? @map("letterhead_snapshot")
+  letterheadSnapshot Json?   @map("letterhead_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2343,12 +2380,12 @@ model PayeeProfile {
   createdByUser  User         @relation("payees_created_by", fields: [createdBy], references: [id])
   updatedByUser  User?        @relation("payees_updated_by", fields: [updatedBy], references: [id])
 
-  expenses        Expense[]
-  advances        Advance[]
-  advanceReturns  AdvanceReturn[]
+  expenses           Expense[]
+  advances           Advance[]
+  advanceReturns     AdvanceReturn[]
   substituteReceipts SubstituteReceipt[]
-  payoutItems     PayoutBatchItem[]
-  whtCertificates WhtCertificate[]
+  payoutItems        PayoutBatchItem[]
+  whtCertificates    WhtCertificate[]
 
   @@unique([organizationId, userId])
   @@map("payee_profiles")
@@ -2446,9 +2483,9 @@ model Expense {
   supersededBy            Expense?            @relation("expenses_superseded_by", fields: [supersededByExpenseId], references: [id])
   fieldDaySettlement      FieldDaySettlement? @relation(fields: [fieldDaySettlementId], references: [id])
 
-  supersedes  Expense[]         @relation("expenses_superseded_by")
-  payoutItems PayoutBatchItem[]
-  adjustments Adjustment[]
+  supersedes         Expense[]           @relation("expenses_superseded_by")
+  payoutItems        PayoutBatchItem[]
+  adjustments        Adjustment[]
   /// ใบรับรองแทนใบเสร็จของใบเบิกนี้ (มติ PO U103) — มีได้ไม่เกิน 1 ใบ (partial unique ใน raw SQL)
   substituteReceipts SubstituteReceipt[]
 
@@ -2538,9 +2575,9 @@ model Advance {
   createdByUser  User         @relation("advances_created_by", fields: [createdBy], references: [id])
   updatedByUser  User?        @relation("advances_updated_by", fields: [updatedBy], references: [id])
 
-  payoutItems      PayoutBatchItem[]
-  bankTransactions BankTransaction[] @relation("bank_tx_matched_advance")
-  returns          AdvanceReturn[]
+  payoutItems        PayoutBatchItem[]
+  bankTransactions   BankTransaction[]   @relation("bank_tx_matched_advance")
+  returns            AdvanceReturn[]
   /// ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (มติ PO U103) — มีได้ไม่เกิน 1 ใบ (partial unique ใน raw SQL)
   substituteReceipts SubstituteReceipt[]
 
@@ -2592,6 +2629,9 @@ model PayoutBatch {
   whtOutsourceIncomeCategory     WhtIncomeCategory?  @map("wht_outsource_income_category")
   /// snapshot ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" (มติ PO 06/10/2569 U105) — NULL = รอบเก่า (ไม่อนุญาต · คิดแบบ (1))
   whtAllowGrossUpConditions      Boolean?            @map("wht_allow_gross_up_conditions")
+  /// snapshot ชุด Tax Profile ค่าเริ่มต้นตามประเภทผู้รับที่มีผล ณ วันสร้างรอบ (มติ PO U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า
+  /// · Tax Profile ที่ใช้จริงต่อรายการอยู่ที่ `payout_batch_items.tax_profile_id` (รวมกรณีมาจากค่าเริ่มต้น)
+  taxProfileDefaultId            String?             @map("tax_profile_default_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2599,12 +2639,13 @@ model PayoutBatch {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization    Organization      @relation(fields: [organizationId], references: [id])
-  bankAccount     BankAccount?      @relation("payout_bank_account", fields: [bankAccountId], references: [id])
-  whtPolicy       WhtPolicyHistory? @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
-  createdByUser   User              @relation("payout_batches_created_by", fields: [createdBy], references: [id])
-  updatedByUser   User?             @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
-  cancelledByUser User?             @relation("payout_batches_cancelled_by", fields: [cancelledBy], references: [id])
+  organization      Organization              @relation(fields: [organizationId], references: [id])
+  bankAccount       BankAccount?              @relation("payout_bank_account", fields: [bankAccountId], references: [id])
+  whtPolicy         WhtPolicyHistory?         @relation("payout_wht_policy", fields: [whtPolicyId], references: [id])
+  taxProfileDefault TaxProfileDefaultHistory? @relation("payout_tax_profile_defaults", fields: [taxProfileDefaultId], references: [id])
+  createdByUser     User                      @relation("payout_batches_created_by", fields: [createdBy], references: [id])
+  updatedByUser     User?                     @relation("payout_batches_updated_by", fields: [updatedBy], references: [id])
+  cancelledByUser   User?                     @relation("payout_batches_cancelled_by", fields: [cancelledBy], references: [id])
 
   items            PayoutBatchItem[]
   advanceReturns   AdvanceReturn[]
@@ -2726,28 +2767,28 @@ model AdvanceReturn {
 /// ⚠️ ออกแล้วแก้ไม่ได้ (trigger `trg_substitute_receipts_guard`) — เปลี่ยนได้เฉพาะ `pending_signature` → `signed` + ไฟล์ฉบับเซ็น
 /// CHECK/partial unique/trigger อยู่ใน raw SQL `20261006200000_substitute_receipts` (Rule 02)
 model SubstituteReceipt {
-  id               String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId   String                  @map("organization_id") @db.Uuid
-  receiptNumber    String                  @map("receipt_number")
-  payeeId          String                  @map("payee_id") @db.Uuid
-  expenseId        String?                 @map("expense_id") @db.Uuid
-  advanceId        String?                 @map("advance_id") @db.Uuid
+  id                String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String                  @map("organization_id") @db.Uuid
+  receiptNumber     String                  @map("receipt_number")
+  payeeId           String                  @map("payee_id") @db.Uuid
+  expenseId         String?                 @map("expense_id") @db.Uuid
+  advanceId         String?                 @map("advance_id") @db.Uuid
   /// วันที่ออกใบ (วันไทย) — ฐานของเพดานต่อคนต่อเดือน
-  issueDate        DateTime                @map("issue_date") @db.Date
+  issueDate         DateTime                @map("issue_date") @db.Date
   /// ผลรวม `amount_satang` ของบรรทัด (snapshot ตอนออก) · CHECK > 0
-  totalSatang      Int                     @map("total_satang")
-  status           SubstituteReceiptStatus @default(pending_signature)
+  totalSatang       Int                     @map("total_satang")
+  status            SubstituteReceiptStatus @default(pending_signature)
   /// ไฟล์ฉบับเซ็นแล้ว (อัปโหลดผ่าน server — ตรวจ prefix/magic bytes/ขนาด) · CHECK มีค่า ⇔ `signed`
-  signedFilePath   String?                 @map("signed_file_path")
-  signedFileSha256 String?                 @map("signed_file_sha256") @db.VarChar(64)
-  signedAt         DateTime?               @map("signed_at") @db.Timestamptz(6)
-  signedBy         String?                 @map("signed_by") @db.Uuid
+  signedFilePath    String?                 @map("signed_file_path")
+  signedFileSha256  String?                 @map("signed_file_sha256") @db.VarChar(64)
+  signedAt          DateTime?               @map("signed_at") @db.Timestamptz(6)
+  signedBy          String?                 @map("signed_by") @db.Uuid
   /// การยกเลิก (มติ PO U107) — CHECK มีค่าครบทั้ง 3 ⇔ `status = cancelled` · เหตุผลไม่ว่าง
-  cancelledAt      DateTime?               @map("cancelled_at") @db.Timestamptz(6)
-  cancelledBy      String?                 @map("cancelled_by") @db.Uuid
-  cancelReason     String?                 @map("cancel_reason")
+  cancelledAt       DateTime?               @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy       String?                 @map("cancelled_by") @db.Uuid
+  cancelReason      String?                 @map("cancel_reason")
   /// ใบที่ยกเลิกซึ่งใบนี้ออกแทน (มติ PO U117) — NULL = ออกครั้งแรก · ห้ามแก้ (trigger) · ถูกแทนได้ครั้งเดียว
-  replacesReceiptId String?                @map("replaces_receipt_id") @db.Uuid
+  replacesReceiptId String?                 @map("replaces_receipt_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2755,15 +2796,15 @@ model SubstituteReceipt {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization  Organization            @relation(fields: [organizationId], references: [id])
-  payee         PayeeProfile            @relation(fields: [payeeId], references: [id])
-  expense       Expense?                @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  advance       Advance?                @relation(fields: [advanceId], references: [id], onDelete: Cascade)
-  createdByUser User                    @relation("substitute_receipts_created_by", fields: [createdBy], references: [id])
-  updatedByUser User?                   @relation("substitute_receipts_updated_by", fields: [updatedBy], references: [id])
-  signedByUser  User?                   @relation("substitute_receipts_signed_by", fields: [signedBy], references: [id])
-  cancelledByUser User?                 @relation("substitute_receipts_cancelled_by", fields: [cancelledBy], references: [id])
-  lines         SubstituteReceiptLine[]
+  organization    Organization            @relation(fields: [organizationId], references: [id])
+  payee           PayeeProfile            @relation(fields: [payeeId], references: [id])
+  expense         Expense?                @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  advance         Advance?                @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  createdByUser   User                    @relation("substitute_receipts_created_by", fields: [createdBy], references: [id])
+  updatedByUser   User?                   @relation("substitute_receipts_updated_by", fields: [updatedBy], references: [id])
+  signedByUser    User?                   @relation("substitute_receipts_signed_by", fields: [signedBy], references: [id])
+  cancelledByUser User?                   @relation("substitute_receipts_cancelled_by", fields: [cancelledBy], references: [id])
+  lines           SubstituteReceiptLine[]
   replacesReceipt SubstituteReceipt?      @relation("substitute_receipt_replaces", fields: [replacesReceiptId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   replacedBy      SubstituteReceipt[]     @relation("substitute_receipt_replaces")
 

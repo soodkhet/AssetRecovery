@@ -642,7 +642,7 @@ export function PayeeTab() {
               value={form.taxProfileId}
               onChange={(event) => set('taxProfileId', event.target.value)}
             >
-              <option value="">— ยังไม่ผูก (ใช้อัตราจากแผนค่าตอบแทนชั่วคราว) —</option>
+              <option value="">— ยังไม่ผูก (ใช้ค่าเริ่มต้นตามประเภทผู้รับ ถ้าไม่มีใช้อัตราจากแผนชั่วคราว) —</option>
               {taxProfiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>
                   {profile.name} · {fmtPercent(profile.whtPct)}

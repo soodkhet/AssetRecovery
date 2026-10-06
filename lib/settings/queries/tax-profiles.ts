@@ -3,6 +3,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
+import { countCurrentDefaultSlotsUsing } from '@/lib/settings/queries/tax-profile-defaults'
 import { statusFilter, toIso, type SettingsMutationContext } from '@/lib/settings/queries/shared'
 import {
   assertWhtPctValid,
@@ -93,16 +94,20 @@ function rethrowDuplicateName(name: string): never {
   throw new SettingsError('DUPLICATE_TAX_PROFILE_NAME', { detail: `name=${name} (unique violation)` })
 }
 
-/** จำนวนที่อ้าง profile นี้อยู่ — payee ที่ผูกไว้ + รายการจ่ายที่ snapshot ไปแล้ว */
+/**
+ * จำนวนที่อ้าง profile นี้อยู่ — payee ที่ผูกไว้ + รายการจ่ายที่ snapshot ไปแล้ว + ช่องค่าเริ่มต้นตามประเภทผู้รับ
+ * ของชุดที่มีผลอยู่ (มติ PO U121 — ปิดใช้งาน profile ที่ยังเป็นค่าเริ่มต้น = ผู้รับประเภทนั้นไม่มีอัตรา)
+ */
 export async function countTaxProfileUsage(
   organizationId: string,
   profileId: string,
-): Promise<{ payeeProfiles: number; payoutBatchItems: number; total: number }> {
-  const [payeeProfiles, payoutBatchItems] = await Promise.all([
+): Promise<{ payeeProfiles: number; payoutBatchItems: number; typeDefaults: number; total: number }> {
+  const [payeeProfiles, payoutBatchItems, typeDefaults] = await Promise.all([
     prisma.payeeProfile.count({ where: { organizationId, taxProfileId: profileId } }),
     prisma.payoutBatchItem.count({ where: { organizationId, taxProfileId: profileId } }),
+    countCurrentDefaultSlotsUsing(organizationId, profileId),
   ])
-  return { payeeProfiles, payoutBatchItems, total: payeeProfiles + payoutBatchItems }
+  return { payeeProfiles, payoutBatchItems, typeDefaults, total: payeeProfiles + payoutBatchItems + typeDefaults }
 }
 
 function toWriteData(values: TaxProfileValues) {
@@ -203,8 +208,12 @@ export async function deleteTaxProfile(
   const usage = await countTaxProfileUsage(organizationId, current.id)
   if (usage.total > 0) {
     throw new SettingsError('TAX_PROFILE_IN_USE', {
-      detail: `tax_profile=${current.id} payees=${usage.payeeProfiles} payout_items=${usage.payoutBatchItems}`,
-      context: { payeeProfiles: usage.payeeProfiles, payoutBatchItems: usage.payoutBatchItems },
+      detail: `tax_profile=${current.id} payees=${usage.payeeProfiles} payout_items=${usage.payoutBatchItems} type_defaults=${usage.typeDefaults}`,
+      context: {
+        payeeProfiles: usage.payeeProfiles,
+        payoutBatchItems: usage.payoutBatchItems,
+        typeDefaults: usage.typeDefaults,
+      },
     })
   }
 

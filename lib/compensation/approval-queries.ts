@@ -40,6 +40,14 @@ import { approvalWhtPreview, type ApprovalWhtPreview } from '@/lib/compensation/
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import type { WhtPolicyValues } from '@/lib/settings/wht-policy'
+import type { PayeeTaxProfileValues } from '@/lib/finance/wht-calc'
+import { loadTaxProfileDefaults } from '@/lib/settings/queries/tax-profile-defaults'
+import {
+  TAX_PROFILE_DEFAULT_SLOTS,
+  emptyTaxProfileDefaults,
+  pickTaxProfileDefault,
+  type TaxProfileDefaults,
+} from '@/lib/settings/tax-profile-defaults'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
@@ -301,14 +309,30 @@ export function describeExpenseBasis(row: {
 
 // ── DTO ─────────────────────────────────────────────────────────────────────
 
-/** ค่าตั้ง WHT ที่มีผล ณ ตอนนี้ — ตัวเดียวกับที่รอบจ่ายใช้ (`resolveWhtPolicyForPayout()`) */
-async function currentWhtPolicy(organizationId: string): Promise<WhtPolicyValues> {
-  return (await resolveWhtPolicyForPayout(organizationId, new Date())).values
+/** ค่าตั้ง WHT + Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121) ที่มีผล ณ ตอนนี้ — ชุดเดียวกับที่รอบจ่ายใช้ */
+interface ApprovalWhtSettings {
+  policy: WhtPolicyValues
+  typeDefaults: TaxProfileDefaults<PayeeTaxProfileValues>
 }
 
-function whtOf(row: ExpenseRow, policy: WhtPolicyValues): ApprovalWhtPreview {
+/** ตัวเดียวกับที่รอบจ่ายใช้ (`resolveWhtPolicyForPayout()` + `loadTaxProfileDefaults()`) */
+async function currentWhtPolicy(organizationId: string): Promise<ApprovalWhtSettings> {
+  const [policy, defaults] = await Promise.all([
+    resolveWhtPolicyForPayout(organizationId, new Date()),
+    loadTaxProfileDefaults(organizationId),
+  ])
+  const typeDefaults = emptyTaxProfileDefaults<PayeeTaxProfileValues>()
+  for (const slot of TAX_PROFILE_DEFAULT_SLOTS) typeDefaults[slot] = defaults.profiles[slot]?.values ?? null
+  return { policy: policy.values, typeDefaults }
+}
+
+function whtOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtPreview {
   const payoutItem =
     row.payoutBatchItemId === null ? undefined : row.payoutItems.find((item) => item.id === row.payoutBatchItemId)
+  const side = resolvePayoutSide({
+    teamSide: row.payee.user.team?.side ?? null,
+    roleGroup: row.payee.user.role.roleGroup,
+  })
   return approvalWhtPreview({
     grossSatang: row.grossSatang,
     expenseType: row.expenseType,
@@ -325,12 +349,10 @@ function whtOf(row: ExpenseRow, policy: WhtPolicyValues): ApprovalWhtPreview {
       wht402Pct: row.payee.wht402Pct === null ? null : row.payee.wht402Pct.toNumber(),
       whtCondition: row.payee.whtCondition,
       payeeType: row.payee.payeeType,
-      side: resolvePayoutSide({
-        teamSide: row.payee.user.team?.side ?? null,
-        roleGroup: row.payee.user.role.roleGroup,
-      }),
+      side,
+      typeDefaultTaxProfile: pickTaxProfileDefault(settings.typeDefaults, side, row.payee.payeeType),
     },
-    policy,
+    policy: settings.policy,
     payoutItem:
       payoutItem === undefined
         ? null
@@ -347,7 +369,7 @@ function toDto(
   row: ExpenseRow,
   flow: ResolvedFlow,
   viewer: CapabilityHolder,
-  policy: WhtPolicyValues,
+  policy: ApprovalWhtSettings,
 ): CompensationApprovalDto {
   const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
   const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)

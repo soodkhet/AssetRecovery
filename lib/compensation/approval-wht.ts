@@ -2,6 +2,7 @@ import {
   calculatePayeeBatchWht,
   isPayerBorneWhtCondition,
   type PayeeTaxProfileValues,
+  type WhtRateOrigin,
 } from '@/lib/finance/wht-calc'
 import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
 import {
@@ -37,6 +38,8 @@ export interface ApprovalWhtInput {
     whtCondition: WhtCondition
     payeeType: PayeeType
     side: PayoutBatchSide | null
+    /** Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (ฝั่ง × ชนิด — มติ PO U121) · ไม่ระบุ/`null` = ไม่มี */
+    typeDefaultTaxProfile?: PayeeTaxProfileValues | null
   }
   policy: Pick<
     WhtPolicyValues,
@@ -50,7 +53,8 @@ export interface ApprovalWhtPreview {
   whtSatang: number
   netSatang: number
   whtPctUsed: number
-  whtRateSource: 'payee' | 'plan'
+  /** `none` = ไม่ได้ใช้อัตรา (รายการไม่อยู่ในฐาน WHT หรือไม่มีอัตราเลย) */
+  whtRateSource: WhtRateOrigin
   whtWarning: string | null
   /** true = บริษัทออกภาษีให้ (เงื่อนไข (2)/(3)) — ไม่หักจากผู้รับ */
   whtPayerBorne: boolean
@@ -60,6 +64,13 @@ export interface ApprovalWhtPreview {
 
 export const WHT_402_RATE_MISSING_WARNING =
   'ผู้รับเงินยังไม่มีอัตราหัก ณ ที่จ่ายแบบรายบุคคล — ต้องกำหนดก่อนสร้างรอบจ่าย (ยอดภาษีที่แสดงยังไม่รวม)'
+
+/**
+ * มติ PO 06/10/2569 U121 — รายการในฐานแต่ไม่มีอัตราเลย ⇒ คิวอนุมัติแสดงคำเตือนต่อแถว (ไม่ล้มทั้งหน้า)
+ * และรอบจ่ายถูกบล็อก (`WHT_RATE_MISSING`)
+ */
+export const WHT_RATE_MISSING_WARNING =
+  'ผู้รับเงินยังไม่มีอัตราหัก ณ ที่จ่าย (ไม่มี Tax Profile รายคน ไม่มีค่าเริ่มต้นตามประเภทผู้รับ และรายการไม่มีอัตราจากแผน) — ต้องกำหนดก่อนสร้างรอบจ่าย (ยอดภาษีที่แสดงยังไม่รวม)'
 
 export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview {
   const incomeCategory = resolveIncomeCategory(input.policy, input.payee.side, input.payee.payeeType)
@@ -72,7 +83,11 @@ export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview 
         grossSatang: input.grossSatang,
         // ขาดอัตรา 40(1)/40(2) ⇒ รอบจ่ายจะปัดทั้งรอบ — คิวอนุมัติแสดงแบบไม่หักพร้อมคำเตือนแทนการล้ม
         includedInBase: includedInBase && !missing402,
-        source: { payeeTaxProfile: input.payee.taxProfile, planWhtPct: input.planWhtPct },
+        source: {
+          payeeTaxProfile: input.payee.taxProfile,
+          typeDefaultTaxProfile: input.payee.typeDefaultTaxProfile ?? null,
+          planWhtPct: input.planWhtPct,
+        },
       },
     ],
     {
@@ -84,7 +99,13 @@ export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview 
   if (line === undefined) throw new Error('approvalWhtPreview: คำนวณ WHT ไม่ได้')
 
   const whtRateSource = line.rate.source
-  const whtWarning = missing402 ? WHT_402_RATE_MISSING_WARNING : line.includedInBase ? (line.rate.warning ?? null) : null
+  const whtWarning = missing402
+    ? WHT_402_RATE_MISSING_WARNING
+    : line.rateMissing
+      ? WHT_RATE_MISSING_WARNING
+      : line.includedInBase
+        ? (line.rate.warning ?? null)
+        : null
 
   if (input.payoutItem !== null) {
     return {
