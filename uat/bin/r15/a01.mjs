@@ -1,0 +1,12 @@
+// R15a.01 Superadmin ดูหน้า ข้อมูลองค์กร + เปิดฟอร์มแก้ไข (ยังไม่บันทึก)
+import { openAs, shot, log, settle, sleep, R, BASE, mainText, fields, yearCE } from './_h.mjs'
+const { browser, page, serverErrors, consoleErrors } = await openAs('admin')
+await page.goto(`${BASE}/settings/organization`); await settle(page); await sleep(1000)
+const t = await mainText(page, 3000); log('main', t); log('CE', yearCE(t))
+await shot(page, R, '01-org-view', { fullPage: true })
+await page.getByRole('button', { name: 'แก้ไขข้อมูล' }).click()
+const dlg = page.getByRole('dialog').last(); await dlg.waitFor(); await sleep(600)
+log('fields', await fields(dlg))
+await shot(page, R, '01-org-edit-form', { fullPage: true })
+log('5xx', serverErrors, 'console', consoleErrors.slice(0, 3))
+await browser.close()

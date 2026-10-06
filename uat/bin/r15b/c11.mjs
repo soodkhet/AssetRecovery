@@ -1,0 +1,23 @@
+// R15b.11 สร้างรอบจ่าย inhouse ผ่านหน้าจอ (การเงิน) cutoff พ.ย.: TAG · CUT
+import { openAs, shot, BASE, settle, sleep, toasts, trackMutations, log, R, q } from './_h.mjs'
+const TAG = process.env.TAG, CUT = process.env.CUT ?? '2026-11-30'
+const flat = s => s.replace(/\s*\n+\s*/g, ' | ')
+const T = new Date().toISOString()
+const { browser, page, serverErrors } = await openAs('uat.finance')
+const m = trackMutations(page)
+await page.goto(`${BASE}/finance?tab=payout`); await settle(page); await sleep(1000)
+await page.getByRole('button', { name: '+ สร้างรอบจ่าย' }).click(); await sleep(800)
+const c = page.locator('[role=dialog]').last()
+await c.locator('select').first().selectOption('inhouse'); await sleep(1200)
+await c.locator('input[type=date]').fill(CUT); await sleep(1200)
+log('create modal', flat(await c.innerText()).slice(0, 1500))
+await c.locator('input:not([type=date])').last().fill(`UAT R15b IN ${TAG}`)
+await shot(page, R, `b-11-payout-create-${TAG}`, { fullPage: true })
+await c.getByRole('button', { name: 'สร้างรอบจ่าย' }).click(); await sleep(1200); await shot(page, R, `b-11-payout-create-${TAG}-toast`)
+log('visible alerts:', flat((await page.locator('[role=alert], [role=status]').allInnerTexts().catch(() => [])).join(' ## ')).slice(0, 800))
+log('modal now:', flat(await c.innerText().catch(() => '')).slice(0, 400)); await sleep(1500)
+log('toasts', await toasts(page, 2500), m.res.splice(0))
+await shot(page, R, `b-11-payout-create-${TAG}-result`, { fullPage: true })
+log('batches', q(`select id,name,status,gross_satang,wht_satang,net_satang,wht_allow_gross_up_conditions from payout_batches where created_at>'${T}'`))
+log('5xx', serverErrors)
+await browser.close()

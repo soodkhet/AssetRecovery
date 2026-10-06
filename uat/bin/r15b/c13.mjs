@@ -1,0 +1,18 @@
+// R15b.13 F4 ช่วง พ.ย. 2569 (กำหนดเอง) รายพนักงาน + รายทีม
+import { openAs, shot, BASE, settle, sleep, log, R, get } from './_h.mjs'
+const flat = s => s.replace(/\s*\n+\s*/g, ' | ')
+const { browser, page, serverErrors } = await openAs('uat.finance')
+await page.goto(`${BASE}/reports/compensation`); await settle(page); await sleep(1500)
+await page.getByRole('button', { name: 'กำหนดเอง' }).click(); await sleep(600)
+const dates = page.locator('main input[type=date]'); log('date inputs', await dates.count())
+await dates.nth(0).fill('2026-11-01'); await dates.nth(1).fill('2026-11-30'); await sleep(400)
+const apply = page.getByRole('button', { name: /ใช้ช่วงนี้|ตกลง|แสดง/ }); if (await apply.count()) await apply.first().click()
+await sleep(2500); await settle(page)
+log('F4 team Nov:', flat(await page.locator('main').innerText()).slice(0, 1800))
+await shot(page, R, 'b-13-f4-nov-team', { fullPage: true })
+await page.getByRole('button', { name: 'รายพนักงาน' }).click(); await sleep(2500)
+log('F4 employee Nov:', flat(await page.locator('main').innerText()).slice(0, 1800))
+await shot(page, R, 'b-13-f4-nov-employee', { fullPage: true })
+log('API kpis:', (await get(page, '/api/reports/finance/compensation?groupBy=employee&preset=custom&from=2026-11-01&to=2026-11-30', 6000)).match(/"rows".*/)?.[0].slice(0, 2200))
+log('5xx', serverErrors)
+await browser.close()
