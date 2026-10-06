@@ -56,10 +56,10 @@ export function buildSubstituteReceiptDoc(
     meta: [source.reference, { label: 'ทีม', value: source.teamName ?? '-' }],
     parties: [payeeDocParty('ผู้จ่ายเงิน (ในนามบริษัท)', source.payee), organizationDocParty('บริษัท', letterhead)],
     columns: [
-      { header: 'วัน เดือน ปี', width: 70, align: 'center' },
-      { header: 'รายละเอียดรายจ่าย', align: 'left' },
-      { header: 'จำนวนเงิน (บาท)', width: 90, align: 'right' },
-      { header: 'หมายเหตุ', width: 120, align: 'left' },
+      { header: 'วัน เดือน ปี', width: '15%', align: 'center' },
+      { header: 'รายละเอียดรายจ่าย', width: '44%', align: 'left' },
+      { header: 'จำนวนเงิน (บาท)', width: '17%', align: 'right' },
+      { header: 'หมายเหตุ', width: '24%', align: 'left' },
     ],
     rows: source.lines.map((line) => ({
       cells: [fmtDate(line.lineDate), line.description, docMoney(line.amountSatang), line.note ?? ''],

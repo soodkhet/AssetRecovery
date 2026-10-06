@@ -7,44 +7,66 @@ import { inflateSync } from 'node:zlib'
  * (Flate) → อ่าน CMap → แปลง glyph id กลับเป็นอักษร · ต่อทุกช่วงข้อความเรียงตามลำดับใน content stream
  * · สระอำที่ถูกแยกเป็น นิคหิต + สระอา ตอนเรนเดอร์ จะถูกรวมกลับเป็น "ำ" ให้เทียบข้อความได้ตรง ๆ
  *   (ภาษาไทยไม่มีลำดับ "ำา" ที่ถูกต้องอยู่แล้ว)
+ * · CMap อ่าน**แยกต่อฟอนต์** (`/F1` ↔ ToUnicode ของมัน) — ตัวปกติกับตัวหนา (BUG-171) เป็น subset คนละชุด
+ *   glyph id ชนกันได้ ถ้ารวมเป็นตารางเดียวข้อความจะเพี้ยน
  */
 export function extractPdfText(pdf: Uint8Array): string {
   const buffer = Buffer.from(pdf)
   const source = buffer.toString('latin1')
-  const streams: string[] = []
+  const streams: Array<{ objectId: string | null; data: string }> = []
   const marker = /stream\r?\n/g
   let match: RegExpExecArray | null
   while ((match = marker.exec(source)) !== null) {
     const start = match.index + match[0].length
     const end = source.indexOf('endstream', start)
     if (end === -1) break
-    streams.push(inflateOrRaw(buffer.subarray(start, end)))
+    const header = source.slice(Math.max(0, match.index - 400), match.index)
+    const objectId = [...header.matchAll(/(\d+) 0 obj/g)].at(-1)?.[1] ?? null
+    streams.push({ objectId, data: inflateOrRaw(buffer.subarray(start, end)) })
+    marker.lastIndex = end + 'endstream'.length
   }
 
-  const maps = streams.filter((data) => data.includes('beginbf')).map(parseToUnicode)
+  const cmapByObject = new Map<string, Map<number, string>>()
+  for (const stream of streams) {
+    if (stream.objectId !== null && stream.data.includes('beginbf')) {
+      cmapByObject.set(stream.objectId, parseToUnicode(stream.data))
+    }
+  }
+  const allMaps = [...cmapByObject.values()]
+
+  // ฟอนต์ต่อชื่อ resource: ToUnicode ของตัวเอง · ฟอนต์มาตรฐานในตัว (เช่น Courier ของตัวเลขอ้างอิง/IMEI —
+  // มติ PO U100) ไม่มี ToUnicode: 1 ไบต์ = 1 อักษร (WinAnsi)
+  const simpleFonts = new Set<string>()
+  const fontCmaps = new Map<string, Map<number, string>>()
+  for (const ref of source.matchAll(/\/(F\d+) (\d+) 0 R/g)) {
+    const objStart = source.indexOf(`\n${ref[2] ?? ''} 0 obj`)
+    if (objStart === -1) continue
+    const body = source.slice(objStart, source.indexOf('endobj', objStart))
+    if (body.includes('/Type1') && !body.includes('/ToUnicode')) simpleFonts.add(ref[1] ?? '')
+    const toUnicode = /\/ToUnicode (\d+) 0 R/.exec(body)?.[1]
+    const cmap = toUnicode === undefined ? undefined : cmapByObject.get(toUnicode)
+    if (cmap !== undefined) fontCmaps.set(ref[1] ?? '', cmap)
+  }
+
+  let current: Map<number, string> | undefined
   const glyph = (id: number): string => {
-    for (const map of maps) {
+    const own = current?.get(id)
+    if (own !== undefined) return own
+    if (current !== undefined) return '�'
+    for (const map of allMaps) {
       const value = map.get(id)
       if (value !== undefined) return value
     }
     return '�'
   }
 
-  // ฟอนต์มาตรฐานในตัว (เช่น Courier ของตัวเลขอ้างอิง/IMEI — มติ PO U100) ไม่มี ToUnicode: 1 ไบต์ = 1 อักษร (WinAnsi)
-  const simpleFonts = new Set<string>()
-  for (const ref of source.matchAll(/\/(F\d+) (\d+) 0 R/g)) {
-    const objStart = source.indexOf(`\n${ref[2] ?? ''} 0 obj`)
-    if (objStart === -1) continue
-    const body = source.slice(objStart, source.indexOf('endobj', objStart))
-    if (body.includes('/Type1') && !body.includes('/ToUnicode')) simpleFonts.add(ref[1] ?? '')
-  }
-
   let text = ''
-  for (const data of streams) {
+  for (const { data } of streams) {
     let simple = false
     for (const op of data.matchAll(/\/(F\d+) [\d.]+ Tf|(\[[^\]]*\])\s*TJ|<([0-9a-fA-F]+)>\s*Tj/g)) {
       if (op[1] !== undefined) {
         simple = simpleFonts.has(op[1])
+        current = fontCmaps.get(op[1])
         continue
       }
       const hexes = op[2] !== undefined ? [...op[2].matchAll(/<([0-9a-fA-F]+)>/g)].map((m) => m[1] ?? '') : [op[3] ?? '']

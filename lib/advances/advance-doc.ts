@@ -70,6 +70,13 @@ function advanceAmountSatang(source: Pick<AdvanceDocSource, 'approvedSatang' | '
   return source.approvedSatang ?? source.requestedSatang
 }
 
+/** ตารางของใบเบิก/ใบรับคืน: ลำดับ · รายการ · บาท (ตามแบบเดียวกับใบสำคัญจ่าย) */
+const ADVANCE_DOC_COLUMNS: ReceiptStyleDoc['columns'] = [
+  { header: 'ลำดับ', width: '8%', align: 'center' },
+  { header: 'รายการ (Descriptions)', width: '66%', align: 'left' },
+  { header: 'บาท (Baht)', width: '26%', align: 'right' },
+]
+
 export function advanceRequestFileName(advanceNumber: string): string {
   return `ใบเบิกเงินทดรอง ${advanceNumber}.pdf`
 }
@@ -98,11 +105,7 @@ export function buildAdvanceRequestDoc(source: AdvanceDocSource, letterhead: Doc
       organizationDocParty('จ่ายโดย', letterhead),
       payeeDocParty('ผู้เบิก', source.payee, bank === null ? [] : [`บัญชีรับโอน: ${bank}`]),
     ],
-    columns: [
-      { header: 'ลำดับ', width: 44, align: 'center' },
-      { header: 'รายการ (Descriptions)', align: 'left' },
-      { header: 'บาท (Baht)', width: 110, align: 'right' },
-    ],
+    columns: ADVANCE_DOC_COLUMNS,
     rows: [
       {
         cells: ['1', `เงินทดรอง — ${source.purpose}`, docMoney(amount)],
@@ -190,11 +193,7 @@ export function buildAdvanceReturnDoc(source: AdvanceReturnDocSource, letterhead
       { label: 'ช่องทาง', value: ADVANCE_RETURN_CHANNEL_LABEL[source.channel] },
     ],
     parties: [payeeDocParty('ชำระโดย', advance.payee), organizationDocParty('ชำระให้', letterhead)],
-    columns: [
-      { header: 'ลำดับ', width: 44, align: 'center' },
-      { header: 'รายการ (Descriptions)', align: 'left' },
-      { header: 'บาท (Baht)', width: 110, align: 'right' },
-    ],
+    columns: ADVANCE_DOC_COLUMNS,
     rows,
     infoLine: null,
     choices: {

@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -5,6 +6,7 @@ import { renderAdvanceRequestPdf } from '@/components/pdf/advance-request'
 import { renderAdvanceReturnPdf } from '@/components/pdf/advance-return'
 import { extractPdfText } from '@/components/pdf/extract-text'
 import { renderSubstituteReceiptPdf } from '@/components/pdf/substitute-receipt'
+import { THAI_FONT_FILES } from '@/components/pdf/thai-font'
 import {
   assertAdvanceRequestPrintable,
   buildAdvanceRequestDoc,
@@ -92,11 +94,12 @@ interface FontLike {
   hasGlyphForCodePoint(codePoint: number): boolean
 }
 
-function openThaiFont(): FontLike {
+function openThaiFonts(): FontLike[] {
   const localRequire = createRequire(import.meta.url)
   const fontkitPath = localRequire.resolve('fontkit', { paths: [localRequire.resolve('@react-pdf/renderer')] })
   const fontkit = localRequire(fontkitPath) as { openSync(path: string): FontLike }
-  return fontkit.openSync(join(process.cwd(), 'public/fonts/NotoSansThai.ttf'))
+  // ตัวปกติ + ตัวหนา (BUG-171) — ข้อความบนเอกสารอาจพิมพ์น้ำหนักใดก็ได้
+  return [THAI_FONT_FILES.regular, THAI_FONT_FILES.bold].map((file) => fontkit.openSync(join(process.cwd(), file)))
 }
 
 /** ทุกข้อความที่จะพิมพ์ของเอกสาร */
@@ -126,8 +129,10 @@ function docTexts(doc: ReceiptStyleDoc): string {
 }
 
 function missingGlyphs(text: string): string[] {
-  const font = openThaiFont()
-  return [...new Set([...text])].filter((char) => !/\s/.test(char) && !font.hasGlyphForCodePoint(char.codePointAt(0) ?? 0))
+  const fonts = openThaiFonts()
+  return [...new Set([...text])].filter(
+    (char) => !/\s/.test(char) && fonts.some((font) => !font.hasGlyphForCodePoint(char.codePointAt(0) ?? 0)),
+  )
 }
 
 describe('ข้อมูลผู้เบิกบนเอกสาร', () => {
@@ -221,9 +226,18 @@ describe('ใบรับรองแทนใบเสร็จรับเง�
   })
 })
 
+/** ตั้ง `PDF_SAMPLE_DIR=<โฟลเดอร์>` ตอนรัน ⇒ เขียนไฟล์ตัวอย่างไว้ตรวจด้วยตา (ไม่ commit) */
+function save(name: string, pdf: Buffer): void {
+  const dir = process.env.PDF_SAMPLE_DIR
+  if (dir === undefined || dir === '') return
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, `${name}.pdf`), pdf)
+}
+
 describe('เรนเดอร์ PDF จริง 3 ชนิด', () => {
   it('ใบเบิกเงินทดรอง', async () => {
     const pdf = await renderAdvanceRequestPdf(buildAdvanceRequestDoc(ADVANCE, LH), LH)
+    save('06-advance-request', pdf)
     const text = extractPdfText(pdf).replace(/\n/g, '')
     expect(text).toContain('ใบเบิกเงินทดรอง')
     expect(text).toContain('ADV-2569-0012')
@@ -232,14 +246,19 @@ describe('เรนเดอร์ PDF จริง 3 ชนิด', () => {
 
   it('ใบรับคืนเงินทดรอง (รวมป้ายยกเลิก)', async () => {
     const doc = buildAdvanceReturnDoc({ ...RETURN, reversedAt: new Date('2026-11-02T03:00:00Z') }, LH)
-    const text = extractPdfText(await renderAdvanceReturnPdf(doc, LH)).replace(/\n/g, '')
+    const pdf = await renderAdvanceReturnPdf(doc, LH)
+    save('07-advance-return-cancelled', pdf)
+    save('07b-advance-return', await renderAdvanceReturnPdf(buildAdvanceReturnDoc(RETURN, LH), LH))
+    const text = extractPdfText(pdf).replace(/\n/g, '')
     expect(text).toContain('ใบรับคืนเงินทดรอง')
     expect(text).toContain('RAV-2569-0004')
     expect(text).toContain('ยกเลิก')
   }, 30_000)
 
   it('ใบรับรองแทนใบเสร็จรับเงิน', async () => {
-    const text = extractPdfText(await renderSubstituteReceiptPdf(buildSubstituteReceiptDoc(CRT, LH), LH)).replace(/\n/g, '')
+    const pdf = await renderSubstituteReceiptPdf(buildSubstituteReceiptDoc(CRT, LH), LH)
+    save('08-substitute-receipt', pdf)
+    const text = extractPdfText(pdf).replace(/\n/g, '')
     expect(text).toContain('ใบรับรองแทนใบเสร็จรับเงิน')
     expect(text).toContain('CRT-2569-0009')
     expect(text).toContain('สองร้อยหกสิบบาทถ้วน')

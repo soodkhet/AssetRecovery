@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { TBody, Table, TableState, Td, Th, THead, Tr } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
+import { REPORT_EMPTY_DESCRIPTION_DEFAULT } from '@/lib/reports/catalog'
 import { NUMERIC_COLUMN_TYPES, formatCellText, type ReportColumn, type ReportRow } from '@/lib/reports/payload'
 import {
   VIRTUAL_OVERSCAN,
@@ -65,7 +66,7 @@ export function ReportTable({
   loading = false,
   error = null,
   onRetry,
-  emptyDescription = 'ไม่มีข้อมูลในช่วงเวลาที่เลือก — ลองเปลี่ยนช่วงเวลาแล้วดูใหม่',
+  emptyDescription = REPORT_EMPTY_DESCRIPTION_DEFAULT,
 }: {
   columns: readonly ReportColumn[]
   rows: readonly ReportRow[]

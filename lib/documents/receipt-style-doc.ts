@@ -1,6 +1,6 @@
 import { formatThaiAddressLine } from '@/lib/address/address-value'
 import { fmtSatang } from '@/lib/format/money'
-import { letterheadTaxLine, type DocLetterhead } from '@/lib/organization/profile'
+import { letterheadContactLine, letterheadTaxLine, type DocLetterhead } from '@/lib/organization/profile'
 import { bahtInWords } from '@/lib/payout/baht-text'
 
 /**
@@ -23,16 +23,16 @@ export type ReceiptDocAlign = 'left' | 'center' | 'right'
 
 export interface ReceiptDocColumn {
   header: string
-  /** ความกว้างเป็นจุด (pt) — ไม่ระบุ = ยืดเต็มที่เหลือ */
-  width?: number
+  /** ความกว้างเป็นสัดส่วนของตาราง เช่น `'8%'` — ทุกคอลัมน์รวมกัน 100% */
+  width: string
   align: ReceiptDocAlign
 }
 
 export interface ReceiptDocRow {
   cells: string[]
-  /** บรรทัดรองใต้ช่องรายละเอียด (ช่องที่ยืดเต็ม) */
+  /** บรรทัดรองสีเทาใต้ช่องรายละเอียด (คอลัมน์ที่ 2) */
   sub?: string | null
-  /** แถวหักลบ (แสดงยอดในวงเล็บ ตัวเอียง) */
+  /** แถวหักลบ (ยอดในวงเล็บ · พิมพ์สีแดงตามแบบ) */
   deduct?: boolean
 }
 
@@ -92,11 +92,14 @@ export function docWords(satang: number): string {
   return `จำนวนเงิน: -${bahtInWords(satang)}-`
 }
 
-/** ฝ่ายองค์กร (ผู้ออกเอกสาร) จากหัวเอกสารกลาง — โทร / ที่อยู่ / เลขผู้เสียภาษี + สาขา */
+/**
+ * ฝ่ายองค์กร (ผู้ออกเอกสาร) จากหัวเอกสารกลาง — ที่อยู่ / ติดต่อ / เลขผู้เสียภาษี + สาขา
+ * (ลำดับเดียวกับ `letterheadPartyLines()` ของเอกสารอื่น)
+ */
 export function organizationDocParty(label: string, letterhead: DocLetterhead): ReceiptDocParty {
   const lines = [
-    letterhead.phone === null ? null : `โทร. ${letterhead.phone}`,
     letterhead.address === '' ? null : letterhead.address,
+    letterheadContactLine(letterhead),
     letterheadTaxLine(letterhead),
   ].filter((line): line is string => line !== null)
   return { label, name: letterhead.nameTh, lines }

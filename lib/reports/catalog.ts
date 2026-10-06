@@ -212,3 +212,21 @@ export function findReportByPath(segment: string, slug: string): ReportDefinitio
 export function reportsOfCategory(category: ReportCategory): readonly ReportDefinition[] {
   return REPORT_DEFINITIONS.filter((report) => report.category === category)
 }
+
+// ── ข้อความตอนไม่มีข้อมูล (UAT BUG-170) ───────────────────────────────────
+
+/** ข้อความว่างตั้งต้น — รายงานที่กรองตามช่วงเวลาที่เลือก */
+export const REPORT_EMPTY_DESCRIPTION_DEFAULT = 'ไม่มีข้อมูลในช่วงเวลาที่เลือก — ลองเปลี่ยนช่วงเวลาแล้วดูใหม่'
+
+/**
+ * รายงานที่**ไม่ใช้ช่วงเวลาเลย** (คำนวณจากสถานะ ณ ขณะนี้) — ข้อความ "ลองเปลี่ยนช่วงเวลา" ทำให้ผู้ใช้หลงไปลองเปลี่ยนเปล่า ๆ
+ * · O4 อ่านเคสที่ยังเปิดอยู่เทียบกับเวลาปัจจุบัน (`slaAlertHours`) ไม่ดูช่วงเวลาที่เลือก
+ * · F3/F5 ไม่อยู่ในรายการนี้ — ใช้วันสุดท้ายของช่วงที่เลือกเป็น "ณ วันที่" (เปลี่ยนช่วงแล้วผลเปลี่ยนจริง)
+ */
+export const PERIODLESS_REPORT_EMPTY_DESCRIPTION: Readonly<Record<string, string>> = {
+  O4: 'ไม่มีเคสค้างเกิน SLA ในขณะนี้',
+}
+
+export function reportEmptyDescription(code: string): string {
+  return PERIODLESS_REPORT_EMPTY_DESCRIPTION[code] ?? REPORT_EMPTY_DESCRIPTION_DEFAULT
+}

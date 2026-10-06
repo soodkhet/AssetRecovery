@@ -9,7 +9,7 @@ import { ReportTable } from '@/components/reports/report-table'
 import { useReportData } from '@/components/reports/use-report-data'
 import { readEnvelope } from '@/lib/api/envelope'
 import { fmtDateTime } from '@/lib/format/datetime'
-import type { ReportDefinition } from '@/lib/reports/catalog'
+import { reportEmptyDescription, type ReportDefinition } from '@/lib/reports/catalog'
 import type { ReportExportFormat } from '@/lib/reports/export'
 import type { ReportPayload } from '@/lib/reports/payload'
 
@@ -192,6 +192,7 @@ export function ReportView({
         totalRow={payload?.totalRow ?? null}
         loading={loading}
         error={error}
+        emptyDescription={reportEmptyDescription(report.code)}
         onRetry={
           <Button variant="secondary" size="sm" onClick={() => void reload(false)}>
             ลองใหม่

@@ -106,6 +106,7 @@ export const layout = StyleSheet.create({
     fontSize: 8.5,
     color: '#334155',
   },
+  boxed: { borderWidth: 1, borderColor: LINE, paddingVertical: 7, paddingHorizontal: 9, marginTop: 12, fontSize: 9.5 },
   signRow: { flexDirection: 'row', gap: 18, marginTop: 20 },
   signBox: { flex: 1, alignItems: 'center', fontSize: 9 },
   signLine: { alignSelf: 'stretch', height: 24, borderBottomWidth: 1, borderBottomStyle: 'dotted', borderColor: LINE },
@@ -442,24 +443,35 @@ export function DocRow({
   )
 }
 
-/** แถวสรุปท้ายตาราง — ป้ายชิดขวากินทุกคอลัมน์ยกเว้นคอลัมน์สุดท้าย · ค่าอยู่คอลัมน์สุดท้าย */
+/**
+ * แถวสรุปท้ายตาราง — ป้ายชิดขวากินทุกคอลัมน์ก่อนช่องเงิน · ค่าอยู่ช่องเงิน (`valueIndex` — ไม่ส่ง = คอลัมน์สุดท้าย)
+ * · คอลัมน์หลังช่องเงิน (เช่น "หมายเหตุ") พิมพ์เป็นช่องว่างให้เส้นตารางตรงกัน
+ */
 export function SummaryRow({
   columns,
   label,
   value,
   tone = 'normal',
+  valueIndex,
 }: {
   columns: readonly DocColumn[]
   label: string
   value: string
   tone?: RowTone
+  valueIndex?: number
 }): React.JSX.Element {
-  const last = columns[columns.length - 1]
-  const lastWidth = last?.width ?? '25%'
+  const index = valueIndex ?? columns.length - 1
+  const valueWidth = columns[index]?.width ?? '25%'
+  const trailing = columns.slice(index + 1)
   return (
     <View style={layout.row} wrap={false}>
       <Text style={[layout.cell, layout.cellFirst, { flex: 1 }, layout.right, ...toneStyle(tone)]}>{label}</Text>
-      <Text style={[layout.cell, { width: lastWidth }, layout.right, ...toneStyle(tone)]}>{value}</Text>
+      <Text style={[layout.cell, { width: valueWidth }, layout.right, ...toneStyle(tone)]}>{value}</Text>
+      {trailing.map((column) => (
+        <Text key={column.label} style={[layout.cell, { width: column.width }, ...toneStyle(tone)]}>
+          {''}
+        </Text>
+      ))}
     </View>
   )
 }
@@ -494,14 +506,30 @@ export function NoteText({ children }: { children: ReactNode }): React.JSX.Eleme
   return <Text style={layout.note}>{children}</Text>
 }
 
-/** ช่องลายเซ็น — เส้นประ · ( …… ) · บทบาท · วันที่ */
-export function Signatures({ roles }: { roles: readonly string[] }): React.JSX.Element {
+/** กล่องข้อความขอบเส้น (คำรับรองของใบรับรองแทนใบเสร็จ) */
+export function BoxedText({ children }: { children: ReactNode }): React.JSX.Element {
+  return <Text style={layout.boxed}>{children}</Text>
+}
+
+const BLANK_SIGNER = '........................................'
+
+/**
+ * ช่องลายเซ็น — เส้นประ · ( ชื่อ ) · บทบาท · วันที่
+ * · `names[i]` = ชื่อผู้เซ็นที่ทราบแล้ว (เช่น ผู้เบิก) — ไม่ส่ง/`null` = เว้นจุดให้เขียนเอง
+ */
+export function Signatures({
+  roles,
+  names = [],
+}: {
+  roles: readonly string[]
+  names?: ReadonlyArray<string | null>
+}): React.JSX.Element {
   return (
     <View style={layout.signRow} wrap={false}>
-      {roles.map((role) => (
+      {roles.map((role, index) => (
         <View key={role} style={layout.signBox}>
           <View style={layout.signLine} />
-          <Text style={{ marginTop: 3 }}>( ........................................ )</Text>
+          <Text style={{ marginTop: 3 }}>( {names[index] ?? BLANK_SIGNER} )</Text>
           <Text style={layout.bold}>{role}</Text>
           <Text style={layout.muted}>วันที่ ......../......../............</Text>
         </View>
