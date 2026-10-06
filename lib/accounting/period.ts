@@ -5,7 +5,8 @@ import { BUDDHIST_YEAR_OFFSET } from '@/lib/constants'
 import { MONTH_NAMES_TH } from '@/lib/field/calendar'
 import { fmtDate, startOfBangkokDay } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
-import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
+import type { AccountingPeriodStatus, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
+import { PAYOUT_STATUS_LABEL_SHORT } from '@/lib/payout/payout-ui'
 import { isDirectEditRejected, periodLockPolicyFor } from '@/lib/settings/period-lock'
 
 /**
@@ -120,6 +121,14 @@ export function periodCloseAvailableFrom(key: PeriodKey): Date {
   return startOfBangkokDay(new Date(Date.UTC(periodYearCe(next), next.month - 1, 1)))
 }
 
+/** ช่วงเวลาของงวดตามปฏิทินไทย `[start, end)` — 00:00 น. วันที่ 1 ของเดือน ถึง 00:00 น. วันที่ 1 ของเดือนถัดไป */
+export function periodRangeOf(key: PeriodKey): { start: Date; end: Date } {
+  return {
+    start: startOfBangkokDay(new Date(Date.UTC(periodYearCe(key), key.month - 1, 1))),
+    end: periodCloseAvailableFrom(key),
+  }
+}
+
 /** งวดนี้สิ้นเดือนแล้วหรือยัง ณ `now` (inclusive ที่ 00:00 น. วันที่ 1 ของเดือนถัดไป) */
 export function isPeriodEnded(key: PeriodKey, now: Date): boolean {
   return now.getTime() >= periodCloseAvailableFrom(key).getTime()
@@ -205,7 +214,12 @@ export function periodActionsFor(
 
 // ── Readiness Check 3 เงื่อนไข (`30` §6.2) ───────────────────────────────────
 
-export type ReadinessCheckKey = 'period_ended' | 'billing_revenue_sync' | 'bank_reconcile' | 'no_critical_exception'
+export type ReadinessCheckKey =
+  | 'period_ended'
+  | 'billing_revenue_sync'
+  | 'bank_reconcile'
+  | 'no_critical_exception'
+  | 'no_open_payouts'
 
 export interface ReadinessCheck {
   key: ReadinessCheckKey
@@ -277,6 +291,47 @@ export interface UnbilledRevenueSummary {
   byCompany: readonly { companyName: string; count: number; totalSatang: number }[]
 }
 
+/**
+ * มติ PO U112 — รอบจ่ายของงวดนี้ที่ยังไม่ `completed`/`cancelled` · **บล็อก** ทั้งส่งสำนักงานบัญชีและล็อกงวด
+ * รอบจ่ายผูกงวดด้วยวันที่สร้างรอบ (เวลาไทย) — กติกาเดียวกับยามงวดของรอบจ่าย (`assertPeriodOpenAt` ใช้ `created_at`)
+ */
+export interface OpenPayoutBatch {
+  id: string
+  name: string
+  status: PayoutBatchStatus
+  netSatang: number
+  createdAt: Date
+}
+
+/** สถานะรอบจ่ายที่ปิดแล้ว (ไม่ค้างงวด) — ที่เหลือ (`draft`/`checking`/`file_generated`) บล็อกการส่ง/ล็อกงวด */
+export const CLOSED_PAYOUT_BATCH_STATUSES: readonly PayoutBatchStatus[] = ['completed', 'cancelled']
+
+/** แสดงชื่อรอบจ่ายในข้อความไม่เกินเท่านี้ (ที่เหลือบอกเป็นจำนวน) */
+const OPEN_PAYOUT_NAMES_SHOWN = 5
+
+/** ข้อความรอบจ่ายค้าง — ใช้ทั้ง checklist และ error (มติ PO U112) */
+export function openPayoutBatchesDetail(batches: readonly Pick<OpenPayoutBatch, 'name' | 'status'>[]): string {
+  if (batches.length === 0) return 'ไม่มีรอบจ่ายของงวดนี้ค้างอยู่'
+  const shown = batches.slice(0, OPEN_PAYOUT_NAMES_SHOWN).map((batch) => `${batch.name} (${PAYOUT_STATUS_LABEL_SHORT[batch.status]})`)
+  const more = batches.length - shown.length
+  return (
+    `ยังมีรอบจ่ายของงวดนี้ที่ยังไม่จ่ายสำเร็จ ${fmtCount(batches.length)} รอบ: ${shown.join(', ')}` +
+    `${more > 0 ? ` และอีก ${fmtCount(more)} รอบ` : ''} — ยืนยันจ่ายสำเร็จหรือยกเลิกรอบก่อน`
+  )
+}
+
+/** ยามก่อน `send`/`lock` (มติ PO U112) — มีรอบจ่ายค้าง ⇒ `PERIOD_HAS_OPEN_PAYOUTS` พร้อมรายชื่อรอบ */
+export function assertNoOpenPayouts(batches: readonly OpenPayoutBatch[]): void {
+  if (batches.length === 0) return
+  throw new AccountingError('PERIOD_HAS_OPEN_PAYOUTS', {
+    detail: `open payout batches ${batches.length}`,
+    message: openPayoutBatchesDetail(batches),
+    context: {
+      openPayoutBatches: batches.map((batch) => ({ id: batch.id, name: batch.name, status: batch.status })),
+    },
+  })
+}
+
 /** BUG-160 — รอบวางบิลร่างที่ยังไม่ส่งลูกค้า (มีรายได้ของงวดนี้หรือก่อนหน้า) · **เตือน ไม่บล็อก** */
 export interface DraftBillingBatchSummary {
   count: number
@@ -310,6 +365,8 @@ export interface ReadinessInput {
   unbilledRevenue?: UnbilledRevenueSummary
   /** BUG-160 — รอบวางบิลร่างค้าง · **เตือน ไม่บล็อก** */
   draftBillingBatches?: DraftBillingBatchSummary
+  /** มติ PO U112 — รอบจ่ายของงวดที่ยังไม่ completed/cancelled · **บล็อก** · ไม่ส่ง = ไม่ตรวจข้อนี้ (เทสต์ pure เดิม) */
+  openPayoutBatches?: readonly OpenPayoutBatch[]
   /** มติ PO U99 — ข้อมูลองค์กรยังเป็นค่าตัวอย่าง (เลขผู้เสียภาษี/ที่อยู่) · **เตือน ไม่บล็อก** */
   organizationProfileIssues?: readonly string[]
 }
@@ -326,6 +383,8 @@ export interface ReadinessResult {
   unbilledRevenue: UnbilledRevenueSummary
   /** รอบวางบิลร่างค้าง (BUG-160) — ไม่มี = 0 รอบ */
   draftBillingBatches: DraftBillingBatchSummary
+  /** รอบจ่ายของงวดที่ยังไม่จ่ายสำเร็จ/ยกเลิก (มติ PO U112) — ไม่มี = [] */
+  openPayoutBatches: readonly OpenPayoutBatch[]
 }
 
 const NO_UNBILLED: UnbilledRevenueSummary = { count: 0, totalSatang: 0, inDraftCount: 0, byCompany: [] }
@@ -400,6 +459,14 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
         : `ยังมี ${input.criticalOpen.length} รายการที่ต้องแก้หรือให้ผู้บริหารอนุมัติยกเว้น`,
     },
   )
+  if (input.openPayoutBatches !== undefined) {
+    checks.push({
+      key: 'no_open_payouts',
+      label: 'รอบจ่ายของงวดจ่ายสำเร็จหรือยกเลิกครบ',
+      passed: input.openPayoutBatches.length === 0,
+      detail: openPayoutBatchesDetail(input.openPayoutBatches),
+    })
+  }
 
   const warnings: string[] = []
   if (input.warningOpenCount > 0) {
@@ -442,6 +509,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     billingMismatches: input.billingMismatches,
     unbilledRevenue,
     draftBillingBatches,
+    openPayoutBatches: input.openPayoutBatches ?? [],
   }
 }
 
@@ -472,4 +540,5 @@ export function assertReadyToSend(result: ReadinessResult): void {
       context: { billingMismatches: result.billingMismatches },
     })
   }
+  assertNoOpenPayouts(result.openPayoutBatches)
 }

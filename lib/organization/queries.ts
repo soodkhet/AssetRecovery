@@ -193,7 +193,8 @@ export async function setOrganizationLogo(context: SettingsMutationContext, path
     const before = await tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { logoUrl: true } })
     const updated = await tx.organization.update({
       where: { id: organizationId },
-      data: { logoUrl: path },
+      // มติ PO U110 — เก็บ hash คู่ path เพื่อ snapshot ลงเอกสาร (พิมพ์ซ้ำตรวจว่าเป็นรูปเดิม)
+      data: { logoUrl: path, logoSha256: verified.sha256 },
       select: PROFILE_SELECT,
     })
     await emitAudit(
@@ -225,7 +226,7 @@ export async function removeOrganizationLogo(context: SettingsMutationContext): 
     if (before.logoUrl === null) return before
     const updated = await tx.organization.update({
       where: { id: organizationId },
-      data: { logoUrl: null },
+      data: { logoUrl: null, logoSha256: null },
       select: PROFILE_SELECT,
     })
     await emitAudit(

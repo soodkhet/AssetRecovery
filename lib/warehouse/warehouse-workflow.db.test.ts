@@ -758,6 +758,41 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     })
   })
 
+  it('มติ PO U111 — ยืนยันล็อต snapshot หัวกระดาษองค์กรใน transaction เดียว · พิมพ์ซ้ำใช้ snapshot · ล็อตไม่มี snapshot ใช้ค่าปัจจุบัน', async () => {
+    const org = await db().organization.findUniqueOrThrow({
+      where: { id: ORG_ID },
+      select: { id: true, name: true, phone: true },
+    })
+    const { lotId } = await seedPendingLot()
+    const { lotId: pendingLotId } = await seedPendingLot()
+    await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
+
+    const row = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId }, select: { letterheadSnapshot: true } })
+    expect(row.letterheadSnapshot).toMatchObject({ name: org.name })
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'handover_lots', targetId: lotId, action: 'confirm' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({ letterheadSnapshot: { name: org.name } })
+
+    try {
+      await db().organization.update({ where: { id: org.id }, data: { name: 'ชื่อองค์กรหลังยืนยันล็อต', phone: '02-999-9999' } })
+      const confirmed = await warehouse.getHandoverDocSource(admin, lotId)
+      expect(confirmed.issuer).toMatchObject({ name: org.name, phone: org.phone })
+      expect(confirmed.letterheadSnapshot?.name).toBe(org.name)
+      const pending = await warehouse.getHandoverDocSource(admin, pendingLotId)
+      expect(pending.letterheadSnapshot).toBeNull()
+      expect(pending.issuer.name).toBe('ชื่อองค์กรหลังยืนยันล็อต')
+    } finally {
+      await db().organization.update({ where: { id: org.id }, data: { name: org.name, phone: org.phone } })
+    }
+
+    // ล็อต confirmed แก้ snapshot ไม่ได้ (trigger immutable)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE handover_lots SET letterhead_snapshot = '{}'::jsonb WHERE id = '${lotId}'`),
+    ).rejects.toThrow()
+  })
+
   it('T12 — expense อนุมัติแล้ว + ล็อต confirmed = เคสเข้าเงื่อนไขสร้าง Revenue', async () => {
     const { caseId, lotId } = await seedPendingLot()
     await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${caseId}'`)

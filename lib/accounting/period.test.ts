@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAccountingError } from '@/lib/accounting/errors'
 import {
+  assertNoOpenPayouts,
   assertPeriodActionStatus,
   assertPeriodEnded,
   assertPeriodTransition,
@@ -16,6 +17,7 @@ import {
   periodKeyOf,
   periodLabelOf,
   periodOrdinal,
+  periodRangeOf,
   periodStatusLabel,
   periodYearCe,
   PERIOD_TRANSITIONS,
@@ -410,5 +412,47 @@ describe('BUG-169 — ปุ่มยกเลิกเอกสารปิด�
 
   it('ข้อความ tooltip ไม่มีเลขอ้างอิงสเปค', () => {
     expect(PERIOD_CLOSED_CANCEL_HINT).toBe('งวดปิดแล้ว ต้องทำผ่าน Adjustment')
+  })
+})
+
+describe('มติ PO U112 — รอบจ่ายค้างบล็อกการส่ง/ล็อกงวด', () => {
+  const batch = (name: string) => ({
+    id: name,
+    name,
+    status: 'checking' as const,
+    netSatang: 100,
+    createdAt: new Date('2026-08-10T03:00:00Z'),
+  })
+  const base = { criticalOpen: [], warningOpenCount: 0, unmatchedBankCount: 0, billingMismatches: [] }
+
+  it('มีรอบค้าง ⇒ ข้อ no_open_payouts ไม่ผ่าน · assertReadyToSend โยน PERIOD_HAS_OPEN_PAYOUTS พร้อมชื่อรอบ', () => {
+    const result = evaluateReadiness({ ...base, openPayoutBatches: [batch('รอบ A')] })
+    expect(result.ready).toBe(false)
+    expect(result.checks.find((check) => check.key === 'no_open_payouts')?.detail).toContain('รอบ A (รอตรวจสอบ)')
+    try {
+      assertReadyToSend(result)
+      expect.unreachable()
+    } catch (error) {
+      expect(isAccountingError(error) && error.code).toBe('PERIOD_HAS_OPEN_PAYOUTS')
+    }
+  })
+
+  it('ไม่มีรอบค้าง ⇒ ผ่าน · ไม่ส่งข้อมูลรอบจ่าย = ไม่มีข้อนี้ (เทสต์เดิม)', () => {
+    const ok = evaluateReadiness({ ...base, openPayoutBatches: [] })
+    expect(ok.ready).toBe(true)
+    expect(() => assertNoOpenPayouts([])).not.toThrow()
+    expect(evaluateReadiness(base).checks.some((check) => check.key === 'no_open_payouts')).toBe(false)
+  })
+
+  it('ข้อความแสดงชื่อไม่เกิน 5 รอบ ที่เหลือบอกเป็นจำนวน', () => {
+    const many = ['1', '2', '3', '4', '5', '6', '7'].map((n) => batch(`รอบ ${n}`))
+    expect(() => assertNoOpenPayouts(many)).toThrow(/และอีก 2 รอบ/)
+  })
+
+  it('ช่วงงวดตามปฏิทินไทย', () => {
+    expect(periodRangeOf({ yearBe: 2569, month: 8 })).toEqual({
+      start: new Date('2026-07-31T17:00:00Z'),
+      end: new Date('2026-08-31T17:00:00Z'),
+    })
   })
 })

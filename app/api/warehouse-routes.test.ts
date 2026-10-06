@@ -153,6 +153,7 @@ const docSource = {
   lot: lotDetail,
   issuer: { name: 'บริษัท ใจดี โมบาย จำกัด', address: '123 ถ.พระราม 1', taxId: '0105512345678', phone: null },
   recipient: { name: 'บริษัท เอสเอฟ ลีสซิ่ง จำกัด', address: '99 ถ.สุขุมวิท', taxId: '0105598765432', phone: null },
+  letterheadSnapshot: null,
 }
 
 interface Envelope<T> {

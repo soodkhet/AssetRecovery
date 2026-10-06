@@ -377,6 +377,7 @@ async function loadSeller(organizationId: string): Promise<{
   email: string | null
   website: string | null
   logoUrl: string | null
+  logoSha256: string | null
 }> {
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -392,6 +393,7 @@ async function loadSeller(organizationId: string): Promise<{
       email: true,
       website: true,
       logoUrl: true,
+      logoSha256: true,
     },
   })
   if (org === null) throw new Error(`loadSeller: ไม่พบองค์กร ${organizationId}`)
