@@ -9,6 +9,7 @@ import { toInputDate } from '@/lib/format/datetime'
  *  · `fuel_distance_retry` — มติ PO 14/08/2569 (D10) ใช้อยู่แล้วตั้งแต่ Phase 2.9
  *  · `wht_filing_reminder` — `33` §6.2/§8 · `90` §6.3 แถว 8 (Phase 5.2)
  *  · `report_export` — E13 (`02_OPEN_DECISIONS`) · `96` §11 (Phase 6.1) — รายงานเกิน 5,000 แถว
+ *  · `payout_completion_repair` — มติ PO U134 (07/10/2569) — ตัวกวาดทำขั้นหลังรอบจ่าย `completed` ต่อให้ครบ
  *
  * ทั้งสองตัวรันผ่านตัวรันงานเดียวกัน แต่ **ไม่อยู่ในรายการที่ dev trigger เรียกได้**
  * เพราะ `91` §14.1 ล็อกไว้ว่า "รับ job_type ตามรายการใน §6.1 เท่านั้น" (ดู `DEV_TRIGGER_JOB_TYPES`)
@@ -26,6 +27,7 @@ export const JOB_TYPES = [
   'report_export',
   'daily_field_allowance',
   'purge_debtor_documents',
+  'payout_completion_repair',
 ] as const
 
 export type JobTypeCode = (typeof JOB_TYPES)[number]
@@ -127,6 +129,17 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
     inSpecCatalog: true,
     // วันละครั้งตามวันไทย — คีย์กันซ้ำรายวัน · handler เองก็ idempotent (มาร์คเฉพาะแถวที่ยังไม่ถูกลบ)
     schedule: { kind: 'daily' },
+  },
+
+  payout_completion_repair: {
+    code: 'payout_completion_repair',
+    label: 'ทำขั้นหลังรอบจ่ายสำเร็จให้ครบ',
+    description:
+      'รอบจ่ายที่ยืนยันจ่ายสำเร็จแล้วแต่บันทึกบัญชีค่าใช้จ่าย/ออกหนังสือรับรองหัก ณ ที่จ่ายยังไม่ครบ — ทำต่อให้ครบโดยไม่สร้างซ้ำ',
+    source: 'มติ PO 07/10/2569 (U134) · `91` §17 · `17` §9',
+    inSpecCatalog: false,
+    // ตัวกวาดใน `runSweeperJobs()` ตั้งงานนี้ต่อรอบจ่ายที่ค้าง (คีย์กันซ้ำต่อรอบจ่าย) — ไม่มีรอบเวลาของตัวเอง
+    schedule: null,
   },
 
   fuel_distance_retry: {

@@ -9,6 +9,11 @@ import { runFuelDistanceRetryJob } from '@/lib/field/fuel-distance-job'
 import type { JobRow } from '@/lib/jobs/engine'
 import { DEV_TRIGGER_PAYLOAD_FLAG, simulatedAsOfInstant, type JobTypeCode } from '@/lib/jobs/job-types'
 import { drainNotificationOutboxSafely, type OutboxDrainResult } from '@/lib/notifications/outbox'
+import {
+  runPayoutCompletionRepair,
+  runPayoutCompletionSweep,
+  type PayoutCompletionSweepResult,
+} from '@/lib/payout/completion-sweeper'
 import { generatePaymentFile } from '@/lib/payout/queries'
 import { prisma } from '@/lib/prisma'
 import { runReportExportJob } from '@/lib/reports/export-job'
@@ -32,6 +37,7 @@ import { runWhtSummaryJob } from '@/lib/wht/summary-job'
  * | `report_export` | `runReportExportJob()` | Phase 6.1 (E13 · `96` §11) |
  * | `daily_field_allowance` | `runDailyFieldAllowanceJob()` | มติ PO 03/10/2569 UAT Q21 (DEC-012) |
  * | `purge_debtor_documents` | `runPurgeDebtorDocumentsJob()` | มติ PO 06/10/2569 U97 (PDPA) |
+ * | `payout_completion_repair` | `runPayoutCompletionRepair()` | มติ PO 07/10/2569 U134 — ตั้งโดยตัวกวาดด้านล่าง |
  *
  * `fuel_distance_retry` **ไม่อยู่ในทะเบียนนี้** — handler เดิม (`runFuelDistanceRetryJob()`) เป็น
  * ตัวกวาดคิว: มันไปหยิบ job ของตัวเองจากตาราง `jobs` แล้วจัดการสถานะ/retry เองครบตั้งแต่ Phase 2.9
@@ -173,6 +179,15 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
     return { ...result }
   },
 
+  payout_completion_repair: async ({ job }) => {
+    const result = await runPayoutCompletionRepair({
+      jobId: job.id,
+      organizationId: job.organizationId,
+      batchId: requiredString(job, 'batchId'),
+    })
+    return { ...result }
+  },
+
   export_pack: async ({ job }) => {
     const actor = await actorOf(job)
     const record = await createExportPack(
@@ -221,6 +236,8 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
 
 export interface SweeperResult {
   fuelDistance: Awaited<ReturnType<typeof runFuelDistanceRetryJob>>
+  /** รอบจ่าย `completed` ที่ขั้นหลัง commit ยังไม่ครบ (มติ PO U134) — `null` = รอบนี้กวาดไม่สำเร็จ */
+  payoutCompletion: PayoutCompletionSweepResult | null
   /** คิวแจ้งเตือนของ job (DEC-015) — `null` = รอบนี้ส่งไม่สำเร็จ (แถวยังค้างในคิว) */
   notificationOutbox: OutboxDrainResult | null
 }
@@ -229,15 +246,31 @@ export interface SweeperResult {
  * เรียกตัวกวาดคิวที่ดูแลสถานะ job ของตัวเอง — หนึ่งครั้งต่อรอบของตัวตั้งเวลา
  * (`fuel_distance_retry` ตามมติ PO 14/08/2569 D10) แล้วปิดท้ายด้วย **คิวแจ้งเตือนของ job**
  * (DEC-015 · มติ PO U120 — retry แถวที่ส่งไม่สำเร็จจากรอบก่อน ๆ · ใช้เวลาจริงเสมอ)
+ * ระหว่างนั้นกวาด **รอบจ่ายที่ขั้นหลัง commit ยังไม่ครบ** (มติ PO U134 — `runPayoutCompletionSweep()`)
  */
 export async function runSweeperJobs(options: { now?: Date; organizationId?: string } = {}): Promise<SweeperResult> {
   const fuelDistance = await runFuelDistanceRetryJob({
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
   })
+  const payoutCompletion = await runPayoutCompletionSweepSafely(options)
+  // ต่อจากตัวกวาดรอบจ่าย — แจ้งเตือนที่งานทำต่อเข้าคิวไว้ถูกส่งในรอบเดียวกัน
   const notificationOutbox = await drainNotificationOutboxSafely(
     options.organizationId === undefined ? {} : { organizationId: options.organizationId },
     'cron',
   )
-  return { fuelDistance, notificationOutbox }
+  return { fuelDistance, payoutCompletion, notificationOutbox }
+}
+
+/** error ระดับ query (DB หลุด) ไม่พาตัวกวาดอื่นในรอบเดียวกันล้มตาม — รอบ cron ถัดไปกวาดใหม่ */
+async function runPayoutCompletionSweepSafely(options: {
+  now?: Date
+  organizationId?: string
+}): Promise<PayoutCompletionSweepResult | null> {
+  try {
+    return await runPayoutCompletionSweep(options)
+  } catch (error) {
+    console.error('[payout_completion_repair] กวาดรอบจ่ายที่ขั้นหลังยังไม่ครบไม่สำเร็จ — รอบ cron ถัดไปจะกวาดใหม่', { error })
+    return null
+  }
 }

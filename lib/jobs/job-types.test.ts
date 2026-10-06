@@ -48,7 +48,12 @@ describe('ทะเบียน job_type (`91` §6.1)', () => {
 
   it('job_type ที่เกิดนอก §6.1 ต้องอ้างที่มาของตัวเองไว้ (มติ/สเปคของโมดูล)', () => {
     const extra = JOB_TYPES.filter((code) => !JOB_TYPE_SPECS[code].inSpecCatalog)
-    expect([...extra].sort()).toEqual(['fuel_distance_retry', 'report_export', 'wht_filing_reminder'])
+    expect([...extra].sort()).toEqual([
+      'fuel_distance_retry',
+      'payout_completion_repair',
+      'report_export',
+      'wht_filing_reminder',
+    ])
     // `fuel_distance_retry` = มติ PO 14/08/2569 (D10) · `wht_filing_reminder` = `33` §6.2/§8 (Phase 5.2)
     // `report_export` = E13 ใน `02_OPEN_DECISIONS` + `96` §11 (Phase 6.1) — **ไม่เติมลงตาราง §6.1**
     // เพราะตารางนั้นผูกกับ §14.1 ที่ล็อก dev trigger ไว้ 5 ตัว และงานนี้ต้องมี payload ของรายงานจริง
@@ -57,6 +62,8 @@ describe('ทะเบียน job_type (`91` §6.1)', () => {
     expect(doc('02_OPEN_DECISIONS.md').includes('report_export')).toBe(true)
     expect(JOB_TYPE_SPECS.wht_filing_reminder.source).toContain('33')
     expect(JOB_TYPE_SPECS.report_export.source).toContain('96')
+    // `payout_completion_repair` = มติ PO U134 — ตัวกวาดตั้งงานต่อรอบจ่ายที่ขั้นหลัง commit ยังไม่ครบ
+    expect(JOB_TYPE_SPECS.payout_completion_repair.source).toContain('U134')
   })
 
   it('มีคำอธิบาย/ป้ายชื่อไทยครบทุกตัว และ code ที่ไม่รู้จักคืนค่าดิบไม่โยน error', () => {

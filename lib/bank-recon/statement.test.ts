@@ -8,6 +8,7 @@ import {
   splitCsvLine,
   StatementParseError,
   statementRowKey,
+  withOccurrenceSeq,
 } from '@/lib/bank-recon/statement'
 
 /** ไฟล์ 35 §3/§15 — นำเข้า statement ตาม format ที่ตั้งไว้ (`13` §6.8) · Rule 01 (satang จำนวนเต็ม) */
@@ -147,8 +148,43 @@ describe('parseStatementCsv', () => {
 
 describe('statementRowKey', () => {
   it('แถวเดียวกันให้คีย์เดียวกันเสมอ (กันนำเข้าซ้ำ — Rule 09)', () => {
-    const row = { transactionDate: new Date('2026-08-15T00:00:00Z'), amountSatang: 802500, description: 'โอนเข้า' }
+    const row = {
+      transactionDate: new Date('2026-08-15T00:00:00Z'),
+      amountSatang: 802500,
+      description: 'โอนเข้า',
+      occurrenceSeq: 1,
+    }
     expect(statementRowKey(row)).toBe(statementRowKey({ ...row, description: ' โอนเข้า ' }))
     expect(statementRowKey(row)).not.toBe(statementRowKey({ ...row, amountSatang: 802501 }))
+  })
+
+  it('U136 — ลำดับการเกิดต่างกัน = คีย์ต่างกัน', () => {
+    const row = { transactionDate: new Date('2026-08-15T00:00:00Z'), amountSatang: 50000, description: 'รับโอน', occurrenceSeq: 1 }
+    expect(statementRowKey(row)).not.toBe(statementRowKey({ ...row, occurrenceSeq: 2 }))
+  })
+})
+
+describe('withOccurrenceSeq (มติ PO U136)', () => {
+  const day = new Date('2026-08-15T00:00:00Z')
+  const other = new Date('2026-08-16T00:00:00Z')
+
+  it('แถวเหมือนกันทุกช่องในวันเดียว ⇒ ลำดับ 1, 2, 3 ตามบรรทัด · แถวอื่นนับแยก', () => {
+    const rows = withOccurrenceSeq([
+      { transactionDate: day, amountSatang: 50000, description: 'รับโอน' },
+      { transactionDate: day, amountSatang: 70000, description: 'รับโอน' },
+      { transactionDate: day, amountSatang: 50000, description: ' รับโอน ' },
+      { transactionDate: other, amountSatang: 50000, description: 'รับโอน' },
+      { transactionDate: day, amountSatang: 50000, description: 'รับโอน' },
+    ])
+    expect(rows.map((row) => row.occurrenceSeq)).toEqual([1, 1, 2, 1, 3])
+    expect(new Set(rows.map(statementRowKey)).size).toBe(5)
+  })
+
+  it('ไฟล์เดิมซ้ำ ⇒ คีย์ชุดเดิมเป๊ะ (ยังกันนำเข้าซ้ำได้)', () => {
+    const input = [
+      { transactionDate: day, amountSatang: 50000, description: 'รับโอน' },
+      { transactionDate: day, amountSatang: 50000, description: 'รับโอน' },
+    ]
+    expect(withOccurrenceSeq(input).map(statementRowKey)).toEqual(withOccurrenceSeq(input).map(statementRowKey))
   })
 })

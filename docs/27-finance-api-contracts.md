@@ -29,6 +29,7 @@
 | v3.4 | 15/08/2569 | **เติม §6.8** (Phase 3.7 — Adjustment `20`): `GET /api/adjustments/targets` — ฟอร์มสร้าง Adjustment ตาม `20` §8 ต้องค้นรายการต้นทางจากเลขที่อ้างอิง แล้วแสดง `period_status_at_target` + ระดับอนุมัติที่ต้องใช้ก่อนกดสร้าง ซึ่งอ่านจาก `accounting_periods` ที่หน้าจอเข้าไม่ถึง — เป็น endpoint ที่ flow ใน §8 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2/v3.3 · sync `20` §14 v2.2 แล้ว) |
 | v3.3 | 15/08/2569 | **เติม §6.7** (Phase 3.6 — Revenue/Billing `19`): `GET /api/billing-batches/:id` (ปุ่ม "เอกสาร" ของตาราง `19` §8 ต้องเปิดรายละเอียดรอบ + รายการรายได้ในรอบ) และ `DELETE /api/billing-batches/:id` (`19` §10 ระบุกติกา "ห้ามลบ Billing Batch ที่ `status != draft`" ไว้ตรง ๆ ⇒ ต้องมี endpoint ให้ลบรอบ `draft` ได้จริง) — เป็น endpoint ที่ flow ใน `19` §8/§10 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2) |
 | v3.2 | 15/08/2569 | **เติม §6.6** (Phase 3.4 — Payout Batch `17`): `GET /api/payout-batches/:id` (ปุ่ม "ดู" ของตารางรอบจ่าย `17` §8 ต้องมีรายละเอียด+รายการในรอบ) และ `GET /api/payout-batches/:id/payment-file` (ไฟล์โอนเก็บใน bucket private ⇒ ดาวน์โหลดต้องผ่าน endpoint ที่ตรวจ `generate_payment_file` ทุกครั้ง ห้ามแจก signed URL) — เป็น endpoint ที่ flow ใน `17` §8/§9 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3) |
+| v3.x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U137)** §6.14: `GET /api/bank-reconciliation/match-proposals` (คู่ที่ระบบเสนอ — สิทธิ์ view ของ `manage_bank_reconciliation`) · `PATCH /transactions/:id/match` รับ `fromProposal?: boolean` (audit ระบุที่มา · กติกาเหมือนจับคู่มือ) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -216,6 +217,7 @@ POST   /api/exceptions/:id/authorize
 POST   /api/bank-reconciliation/import
 GET    /api/bank-reconciliation/transactions
 GET    /api/bank-reconciliation/match-candidates
+GET    /api/bank-reconciliation/match-proposals      # มติ PO U137 — คู่ที่ระบบเสนอ (จับคู่ทางกลับ) · ยืนยันด้วย PATCH .../match + fromProposal: true
 PATCH  /api/bank-reconciliation/transactions/:id/match
 PATCH  /api/bank-reconciliation/transactions/:id/resolve-unmatched
 ```

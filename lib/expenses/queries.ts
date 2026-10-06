@@ -20,7 +20,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertPeriodEditable } from '@/lib/settings/period-lock'
-import { syncWhtCertificatesFromPayout } from '@/lib/wht/queries'
+import { syncWhtCertificatesFromPayout, type PayoutSyncOptions } from '@/lib/wht/queries'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 
 /**
@@ -115,6 +115,8 @@ function toDto(row: RecordRow): ExpenseRecordDto {
 
 // ── จุดเสียบ: รอบจ่ายเงิน `completed` ⇒ บันทึกบัญชีค่าใช้จ่าย (`32` §6.1/§9) ──
 
+export type { PayoutSyncOptions } from '@/lib/wht/queries'
+
 /**
  * sync รายการค่าใช้จ่ายจากรอบจ่ายที่จ่ายจริงแล้ว — **idempotent**
  *
@@ -127,6 +129,7 @@ function toDto(row: RecordRow): ExpenseRecordDto {
 export async function syncExpenseRecordsFromPayout(
   ctx: AccountingMutationContext,
   payoutBatchId: string,
+  options: PayoutSyncOptions = {},
 ): Promise<ExpenseRecordDto[]> {
   const organizationId = ctx.actor.organizationId
   const batch = await prisma.payoutBatch.findFirst({
@@ -203,7 +206,7 @@ export async function syncExpenseRecordsFromPayout(
               wht_satang: item.whtSatang,
               net_satang: item.netSatang,
             },
-            reason: `บันทึกบัญชีค่าใช้จ่ายอัตโนมัติเมื่อรอบจ่าย "${batch.name}" จ่ายเงินจริงแล้ว`,
+            reason: `บันทึกบัญชีค่าใช้จ่ายอัตโนมัติเมื่อรอบจ่าย "${batch.name}" จ่ายเงินจริงแล้ว${options.traceNote ?? ''}`,
             ipAddress: ctx.meta.ipAddress,
             userAgent: ctx.meta.userAgent,
           },
@@ -241,7 +244,7 @@ export async function syncExpenseRecordsFromPayout(
 
   // มีบัญชีค่าใช้จ่ายแล้ว ⇒ ออกใบ 50 ทวิ ให้รายการที่หักภาษีจริง (`33` §9) — idempotent เช่นกัน
   // (ต้องอยู่**หลัง** expense record เกิด เพราะ `wht_certificates.expense_record_id` เป็น FK บังคับ)
-  await syncWhtCertificatesFromPayout(ctx, payoutBatchId)
+  await syncWhtCertificatesFromPayout(ctx, payoutBatchId, options)
 
   return created.map(toDto)
 }

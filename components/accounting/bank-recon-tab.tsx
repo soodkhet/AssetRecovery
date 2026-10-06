@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ImportStatementModal } from '@/components/accounting/import-statement-modal'
 import { ManualMatchModal } from '@/components/accounting/manual-match-modal'
 import { MatchDetailModal } from '@/components/accounting/match-detail-modal'
+import { MatchProposalsPanel } from '@/components/accounting/match-proposals-panel'
 import { ResolveUnmatchedModal } from '@/components/accounting/resolve-unmatched-modal'
 import { SuspenseModal } from '@/components/accounting/suspense-modal'
 import { useBankTransactions, type BankStatusFilter } from '@/components/accounting/use-bank-transactions'
@@ -58,6 +59,12 @@ export function BankReconTab() {
 
   const [status, setStatus] = useState<BankStatusFilter>('all')
   const { data, loading, error, reload } = useBankTransactions(status)
+  // คู่ที่ระบบเสนอ (มติ PO U137) โหลดใหม่ทุกครั้งที่รายการเดินบัญชีเปลี่ยน
+  const [proposalsVersion, setProposalsVersion] = useState(0)
+  function refresh(): void {
+    void reload()
+    setProposalsVersion((version) => version + 1)
+  }
 
   const [importOpen, setImportOpen] = useState(false)
   const [matching, setMatching] = useState<BankTransactionDto | null>(null)
@@ -117,6 +124,8 @@ export function BankReconTab() {
           ปิดงวดได้ แต่ระบบจะแสดงเตือนยอดคงค้างนี้
         </InlineAlert>
       )}
+
+      <MatchProposalsPanel canManage={canManage} version={proposalsVersion} onMatched={() => void reload()} />
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <Table>
@@ -233,20 +242,20 @@ export function BankReconTab() {
         รอบจ่ายเป็น &ldquo;จ่ายแล้ว&rdquo; ให้อัตโนมัติ
       </InlineAlert>
 
-      <ImportStatementModal open={importOpen} onClose={() => setImportOpen(false)} onImported={() => void reload()} />
+      <ImportStatementModal open={importOpen} onClose={() => setImportOpen(false)} onImported={refresh} />
 
       <ManualMatchModal
         key={`match-${matching?.id ?? 'none'}`}
         transaction={matching}
         onClose={() => setMatching(null)}
-        onMatched={() => void reload()}
+        onMatched={refresh}
       />
 
       <ResolveUnmatchedModal
         key={`resolve-${resolving?.id ?? 'none'}`}
         transaction={resolving}
         onClose={() => setResolving(null)}
-        onResolved={() => void reload()}
+        onResolved={refresh}
       />
 
       <MatchDetailModal transaction={viewing} onClose={() => setViewing(null)} />
@@ -256,7 +265,7 @@ export function BankReconTab() {
         transaction={suspending}
         mode="suspend"
         onClose={() => setSuspending(null)}
-        onDone={() => void reload()}
+        onDone={refresh}
       />
 
       <SuspenseModal
@@ -264,7 +273,7 @@ export function BankReconTab() {
         transaction={refunding}
         mode="refund"
         onClose={() => setRefunding(null)}
-        onDone={() => void reload()}
+        onDone={refresh}
       />
     </div>
   )

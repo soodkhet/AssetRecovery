@@ -94,6 +94,33 @@ export interface MatchCandidateDto {
   exactAmount: boolean
 }
 
+/**
+ * `GET /api/bank-reconciliation/match-proposals` — คู่ที่ระบบเสนอ (มติ PO U137 — จับคู่ทางกลับ)
+ * เริ่มจากเอกสาร (รอบวางบิลรอรับเงิน / รอบจ่าย) ⇒ รายการเดินบัญชีที่ยังไม่จับคู่ ยอด+วันตรง · ยืนยันทีละคู่
+ */
+export interface MatchProposalDto {
+  target: {
+    kind: MatchTargetKind
+    id: string
+    ref: string
+    amountSatang: number
+    /** สถานะของเอกสารเป็นข้อความไทย (เช่น "จ่ายสำเร็จ") — โชว์ให้รู้ว่าเสนอเพราะอะไร */
+    statusLabel: string
+    referenceDate: string
+  }
+  transaction: {
+    id: string
+    transactionDate: string
+    description: string
+    amountSatang: number
+    bankAccountLabel: string
+  }
+  /** ยอดที่ตรงจริง (ยอดเต็ม หรือยอดหลังลูกค้าหัก ณ ที่จ่าย) */
+  matchedAmountSatang: number
+  /** มีทางเลือกมากกว่าหนึ่ง — ให้ผู้ใช้ตรวจก่อนยืนยัน */
+  ambiguous: boolean
+}
+
 export interface MatchResultDto {
   transaction: BankTransactionDto
   /** ผลข้างเคียงที่เกิดจริงจากการจับคู่ (`35` §9) — โชว์ใน toast ให้คนตรวจได้ */

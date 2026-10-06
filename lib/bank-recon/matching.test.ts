@@ -4,6 +4,7 @@ import {
   canTransition,
   daysAfter,
   findAutoMatch,
+  findMatchProposals,
   hasNote,
   isExactMatchAmount,
   matchCandidateOptionText,
@@ -202,5 +203,71 @@ describe('BUG-159 — ข้อความตัวเลือกจับค�
     expect(matchCandidateOptionText(-50000, { label: 'PB-1', amountSatang: 60000, altAmountSatang: null })).toBe(
       'PB-1 · ฿600.00',
     )
+  })
+})
+
+describe('findMatchProposals — จับคู่ทางกลับแบบเสนอ (มติ PO U137)', () => {
+  const sent = new Date('2026-08-01T00:00:00Z')
+  const day = (offset: number): Date => new Date(sent.getTime() + offset * 86_400_000)
+  const billing: MatchCandidate = {
+    kind: 'billing',
+    id: 'bill-1',
+    ref: 'BL-1',
+    amountSatang: 802500,
+    altAmountSatang: 780000,
+    referenceDate: sent,
+  }
+  const payout: MatchCandidate = {
+    kind: 'payout',
+    id: 'pay-1',
+    ref: 'PB-1',
+    amountSatang: 1200000,
+    altAmountSatang: null,
+    referenceDate: sent,
+  }
+
+  it('ยอดตรง + วันในช่วง tolerance ของบัญชี ⇒ เสนอ · ยอด total − wht (A1) ก็เสนอ', () => {
+    const proposals = findMatchProposals(
+      [billing],
+      [
+        { id: 'tx-full', amountSatang: 802500, transactionDate: day(3), toleranceDays: 7 },
+        { id: 'tx-late', amountSatang: 802500, transactionDate: day(9), toleranceDays: 7 },
+        { id: 'tx-early', amountSatang: 802500, transactionDate: day(-1), toleranceDays: 7 },
+        { id: 'tx-other', amountSatang: 802400, transactionDate: day(1), toleranceDays: 7 },
+      ],
+    )
+    expect(proposals.map((p) => p.transactionId)).toEqual(['tx-full'])
+    expect(proposals[0]?.ambiguous).toBe(false)
+
+    const alt = findMatchProposals([billing], [{ id: 'tx-alt', amountSatang: 780000, transactionDate: day(2), toleranceDays: 7 }])
+    expect(alt[0]?.matchedAmountSatang).toBe(780000)
+  })
+
+  it('ฝั่งเงินต้องตรงชนิดเอกสาร — เงินออกไม่ถูกเสนอให้บิล · เงินเข้าไม่ถูกเสนอให้รอบจ่าย', () => {
+    const proposals = findMatchProposals(
+      [billing, payout],
+      [
+        { id: 'tx-out', amountSatang: -802500, transactionDate: day(1), toleranceDays: 7 },
+        { id: 'tx-in', amountSatang: 1200000, transactionDate: day(1), toleranceDays: 7 },
+        { id: 'tx-pay', amountSatang: -1200000, transactionDate: day(1), toleranceDays: 7 },
+      ],
+    )
+    expect(proposals.map((p) => `${p.candidate.id}:${p.transactionId}`)).toEqual(['pay-1:tx-pay'])
+  })
+
+  it('มีหลายทางเลือก ⇒ เสนอทุกคู่แต่ติดธง ambiguous (ไม่เดาแทนคน) · ไม่มีวันอ้างอิง ⇒ ไม่เสนอ', () => {
+    const proposals = findMatchProposals(
+      [payout, { ...payout, id: 'pay-2', ref: 'PB-2' }],
+      [{ id: 'tx-pay', amountSatang: -1200000, transactionDate: day(1), toleranceDays: 7 }],
+    )
+    expect(proposals).toHaveLength(2)
+    expect(proposals.every((p) => p.ambiguous)).toBe(true)
+
+    expect(
+      findMatchProposals(
+        [{ ...payout, referenceDate: null }],
+        [{ id: 'tx-pay', amountSatang: -1200000, transactionDate: day(1), toleranceDays: 7 }],
+      ),
+    ).toEqual([])
   })
 })

@@ -88,6 +88,12 @@ const store = {
     { id: 'bt5', date: '25/06/2569', ref: 'KBANK-TRX-005', description: 'ค่าธรรมเนียมธนาคารรายเดือน', amountIn: 0, amountOut: 250, matchedWithType: null, matchedWithId: null, matchNote: 'ปิดรายการโดยไม่จับคู่ — ค่าธรรมเนียมธนาคาร ไม่ใช่รายรับ/จ่ายของระบบ (โดย: สมหญิง ดูแลดี)', status: 'unmatched_resolved' }
   ],
 
+  // --- คู่ที่ระบบเสนอ — จับคู่ทางกลับ (มติ PO U137): เอกสารที่เกิดหลังนำเข้า statement × รายการ unmatched ยอด+วันตรง ---
+  // ระบบไม่จับคู่เอง — ฝ่ายบัญชีกด "ยืนยันจับคู่" ทีละคู่ (กติกาเดียวกับจับคู่ Manual)
+  matchProposals: [
+    { id: 'mp1', btId: 'bt3', targetKind: 'billing', targetRef: 'BL-2569-009', targetStatus: 'ส่งบิลแล้ว', targetDate: '20/06/2569', amount: 12500, ambiguous: false }
+  ],
+
   // --- WHT Certificates (ไฟล์ 33) ---
   whtCertificates: [
     { id: 'WHT-001', certificateNumber: 'WHT-2569-001', payeeName: 'ประยุทธ์ บุญมี',      payeeTaxId: '310xxxxxx1234', incomeType: 'ค่าจ้างทำของ มาตรา 40(8)', paymentDate: '05/06/2569', gross: 45000, whtAmount: 1350, filingForm: 'PND3',  deliveryFormat: 'paper',         payoutBatch: 'PB-2569-05-OUT', status: 'active',    cancelReason: null, replacesCertificate: null },
@@ -560,6 +566,36 @@ function renderAccountingOperations() {
       </div>
     </div>
     ${unmatchedCount > 0 ? `<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-center gap-2 text-xs text-amber-800 font-semibold">${Icon.alert} มี ${unmatchedCount} รายการยังไม่ได้จับคู่ — ต้องจับคู่ครบ 100% ก่อนส่งงวดบัญชีได้</div>` : ''}
+    ${store.matchProposals.length > 0 ? `
+    <div class="border border-emerald-200 bg-emerald-50/40 rounded-lg mb-4">
+      <div class="px-4 py-3 border-b border-emerald-100">
+        <h3 class="font-bold text-slate-800 text-sm">คู่ที่ระบบเสนอ (${store.matchProposals.length})</h3>
+        <p class="text-xs text-slate-500 mt-0.5">รอบวางบิล/รอบจ่ายที่มีรายการเดินบัญชียังไม่จับคู่ซึ่งยอดและวันที่ตรงกัน — ระบบไม่จับคู่ให้เอง ตรวจแล้วกดยืนยันทีละคู่</p>
+      </div>
+      <table class="w-full text-left text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
+          <tr><th class="px-4 py-3">เอกสาร</th><th class="px-4 py-3">รายการเดินบัญชี</th><th class="px-4 py-3">ยอดที่ตรง</th><th class="px-4 py-3 text-right">จัดการ</th></tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          ${store.matchProposals.map(mp => {
+            const bt = store.bankTransactions.find(b => b.id === mp.btId);
+            return `
+          <tr>
+            <td class="px-4 py-3">
+              <div class="font-mono text-xs font-semibold text-slate-900">${mp.targetRef}</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${mp.targetKind === 'billing' ? 'รอบวางบิล' : 'รอบจ่าย'} · ${mp.targetStatus} · วันที่ ${mp.targetDate}</div>
+            </td>
+            <td class="px-4 py-3">
+              <div class="text-sm text-slate-900">${bt ? bt.description : ''}</div>
+              <div class="text-[10px] text-slate-400 mt-0.5">${bt ? bt.date : ''} · ธนาคารกสิกรไทย (***4440)</div>
+              ${mp.ambiguous ? '<div class="text-[10px] font-semibold text-amber-700 mt-1">มีคู่ที่เป็นไปได้มากกว่าหนึ่ง — ตรวจให้แน่ใจก่อนยืนยัน</div>' : ''}
+            </td>
+            <td class="px-4 py-3 font-bold ${mp.targetKind === 'billing' ? 'text-emerald-600' : 'text-rose-600'}">${mp.targetKind === 'billing' ? '+' : '-'}฿ ${money(mp.amount)}</td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">${btnAction('ยืนยันจับคู่', 'confirm-proposal', '', mp.id, 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800')}</td>
+          </tr>`; }).join('')}
+        </tbody>
+      </table>
+    </div>` : ''}
     <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
       <table class="w-full text-left text-sm">
         <thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200">
@@ -1833,6 +1869,19 @@ document.addEventListener('click', e => {
   }
   else if (action === 'close-modal') {
     closeModal();
+  }
+  else if (action === 'confirm-proposal') {
+    // มติ PO U137 — ยืนยันคู่ที่ระบบเสนอ = จับคู่ Manual (ยอดตรง ไม่ต้องกรอกหมายเหตุ) + audit บอกที่มา
+    const mp = store.matchProposals.find(p => p.id === el.dataset.id);
+    const bt = mp && store.bankTransactions.find(b => b.id === mp.btId);
+    if (mp && bt) {
+      bt.status = 'manual_matched';
+      bt.matchedWithType = mp.targetKind === 'billing' ? 'billing_batch' : 'payout_batch';
+      bt.matchedWithId = mp.targetRef;
+      store.matchProposals = store.matchProposals.filter(p => p.id !== mp.id);
+      showToast('ยืนยันคู่ที่เสนอแล้ว — ' + mp.targetRef, 'success');
+      render();
+    }
   }
   else if (action === 'toast') {
     closeModal();
