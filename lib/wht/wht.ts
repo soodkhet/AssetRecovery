@@ -12,7 +12,6 @@ import type {
 import { formatBranch } from '@/lib/format/branch'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
-import { formatInvoiceNumber, type NumberingFormat } from '@/lib/settings/numbering'
 import {
   INCOME_TYPE_TEXT_40_1,
   INCOME_TYPE_TEXT_40_2,
@@ -42,8 +41,7 @@ import { WhtError } from '@/lib/wht/errors'
  *   โมดูลนี้อ่าน snapshot ของ `payout_batch_items` มารับรองเท่านั้น (Rule 01)
  *
  * ### สิ่งที่ยังไม่มีในสคีมา (`02` ชนะไฟล์ 33 ตามลำดับเอกสารขัดกัน — `02_OPEN_DECISIONS` D11/D15)
- * - ไม่มีตัวเดินเลข `wht_certificate_seq` ใน `organizations` (มีแต่ของใบกำกับภาษี) ⇒ เลขที่ derive
- *   จากใบที่ออกไปแล้วของปี พ.ศ. เดียวกัน ภายใต้ `SELECT … FOR UPDATE` (D11 default)
+ * - เลขที่ใบออกจากชุดเลขกลาง `wht_certificate` (มติ PO U102 · ล็อกแถวชุดเลข FOR UPDATE)
  * - (ปิดแล้ว — มติ PO U94 ข้อ 1/D15) ที่อยู่/คำนำหน้า/สาขา/เงื่อนไขการหักของผู้ถูกหักอยู่ใน `payee_profiles`
  *   และ **snapshot ลงใบตอนออก** (U96 #4) — เอกสาร/ไฟล์ส่งบัญชีอ่านจาก snapshot เท่านั้น
  */
@@ -242,47 +240,9 @@ export function groupCertificateSources<T extends CertificateSourceItem>(
   return groups
 }
 
-// ── เลขที่หนังสือรับรอง (D11 default — ตัวเดินเลขจริงล็อกแถวใน transaction) ──
-
-/**
- * รูปแบบเลขที่ใบ 50 ทวิ — `WHT-2569-001` (ปี **พ.ศ.** ตาม mockup `accounting.html`)
- * รีเซ็ตรายปีตามปีที่จ่ายเงิน · ใช้ตัวประกอบเลขตัวเดียวกับใบกำกับภาษี (`13` §6.12) ห้ามเขียนใหม่
- */
-export const WHT_CERTIFICATE_NUMBER_FORMAT: NumberingFormat = {
-  mode: 'yearly_reset',
-  prefix: 'WHT',
-  digitLength: 3,
-}
-
-export function whtCertificateNumber(sequence: number, paymentDate: Date): string {
-  if (!Number.isInteger(sequence) || sequence < 1) {
-    throw new RangeError(`whtCertificateNumber: ลำดับต้องเป็นจำนวนเต็มบวก (${sequence})`)
-  }
-  return formatInvoiceNumber(WHT_CERTIFICATE_NUMBER_FORMAT, sequence, paymentDate)
-}
-
-/** ส่วนนำหน้าของเลขที่ในปีเดียวกัน — ใช้กรองใบเก่าตอนหาลำดับถัดไป (`WHT-2569-`) */
-export function whtCertificateNumberPrefix(paymentDate: Date): string {
-  return `${whtCertificateNumber(1, paymentDate).slice(0, -WHT_CERTIFICATE_NUMBER_FORMAT.digitLength)}`
-}
-
-/** อ่านลำดับจากเลขที่ — รูปแบบที่ไม่ตรง (เลขเก่า/ปีอื่น) คืน `null` ให้ผู้เรียกข้ามไป */
-export function parseCertificateSequence(certificateNumber: string, prefix: string): number | null {
-  if (!certificateNumber.startsWith(prefix)) return null
-  const tail = certificateNumber.slice(prefix.length)
-  if (!/^\d+$/.test(tail)) return null
-  return Number(tail)
-}
-
-/** ลำดับถัดไปจากใบที่ออกไปแล้วทั้งหมดของปีนั้น (รวมใบที่ยกเลิก — เลขไม่ recycle เหมือนใบกำกับภาษี) */
-export function nextCertificateSequence(existingNumbers: readonly string[], prefix: string): number {
-  let max = 0
-  for (const number of existingNumbers) {
-    const sequence = parseCertificateSequence(number, prefix)
-    if (sequence !== null && sequence > max) max = sequence
-  }
-  return max + 1
-}
+// ── เลขที่หนังสือรับรอง ──────────────────────────────────────────────────────
+// ตัวเดินเลขย้ายไปชุดเลขกลาง `document_number_series` ชนิด `wht_certificate` แล้ว (มติ PO U102 —
+// ค่าเริ่มต้น `WHT-<พ.ศ.>-NNN` รีเซ็ตรายปีตามปีที่จ่าย · ล็อกรูปแบบหลังออกฉบับแรก) — ดู `lib/document-numbering/`
 
 // ── กำหนดเวลานำส่ง (`33` §6.2/§7.2) ─────────────────────────────────────────
 

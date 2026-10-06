@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   advanceOffsetLineLabel,
-  advanceRef,
   advanceReturnState,
   assertCanChangeReturnMethod,
   assertSeparateReturnAllowed,
@@ -21,10 +20,9 @@ function codeOf(run: () => unknown): string | null {
   }
 }
 
-describe('เลขอ้างอิง + ป้ายบรรทัดหัก', () => {
-  it('ADV- + 8 ตัวแรกของ id ตัวพิมพ์ใหญ่', () => {
-    expect(advanceRef('3fa85f64-5717-4562-b3fc-2c963f66afa6')).toBe('ADV-3FA85F64')
-    expect(advanceOffsetLineLabel('3fa85f64-5717-4562-b3fc-2c963f66afa6')).toBe('หักคืนเงินทดรอง ADV-3FA85F64')
+describe('ป้ายบรรทัดหัก', () => {
+  it('ใช้เลขที่ใบเบิกเงินทดรองที่ระบบออก (มติ PO U102)', () => {
+    expect(advanceOffsetLineLabel('ADV-2569-0007')).toBe('หักคืนเงินทดรอง ADV-2569-0007')
   })
 })
 

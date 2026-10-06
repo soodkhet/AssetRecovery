@@ -211,8 +211,18 @@ const store = {
       { id: 'cc2', code: 'CC-002', name: 'ทีมรับเหมาเหนือ / Outsource',  mappingRule: 'auto' },
       { id: 'cc3', code: 'CC-003', name: 'ส่วนกลางสำนักงาน',             mappingRule: 'manual' },
     ],
-    // §6.8 Tax Invoice Numbering
-    taxInvoiceNumbering: { mode: 'yearly_reset', prefix: 'INV-', digitLength: 4, lastNumber: 142, lastResetYear: 2569 },
+    // §6.12 เลขที่เอกสาร (มติ PO U102) — ตั้งค่าได้ทุกชนิด · tax = ล็อกรูปแบบหลังออกฉบับแรก
+    documentNumbering: [
+      { id: 'tax_invoice',        label: 'ใบเสร็จรับเงิน/ใบกำกับภาษี', when: 'ออกเอกสารภาษี',          tax: true,  prefix: 'INV', includeYear: false, digits: 4, resetYearly: false, seq: 142, last: 'INV-0142', lastAt: '05/10/2569 14:20' },
+      { id: 'billing_batch',      label: 'ใบแจ้งหนี้/ใบวางบิล',        when: 'สร้างรอบวางบิล',          tax: false, prefix: 'BL',  includeYear: true,  digits: 3, resetYearly: true,  seq: 12,  last: 'BL-2569-012', lastAt: '04/10/2569 10:05' },
+      { id: 'handover_lot',       label: 'เลขล็อตส่งมอบ',              when: 'สร้างล็อตส่งมอบ',         tax: false, prefix: 'LOT', includeYear: true,  digits: 3, resetYearly: true,  seq: 4,   last: 'LOT-2569-004', lastAt: '03/10/2569 16:40' },
+      { id: 'delivery_note',      label: 'ใบส่งมอบ',                   when: 'สร้างล็อตส่งมอบ',         tax: false, prefix: 'DLV', includeYear: true,  digits: 3, resetYearly: true,  seq: 4,   last: 'DLV-2569-004', lastAt: '03/10/2569 16:40' },
+      { id: 'payment_voucher',    label: 'ใบสำคัญจ่าย',                when: 'สร้างไฟล์โอนครั้งแรก',     tax: false, prefix: 'PV',  includeYear: true,  digits: 4, resetYearly: true,  seq: 9,   last: 'PV-2569-0009', lastAt: '04/10/2569 09:12' },
+      { id: 'wht_certificate',    label: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย', when: 'ออกหนังสือรับรอง', tax: true,  prefix: 'WHT', includeYear: true,  digits: 3, resetYearly: true,  seq: 16,  last: 'WHT-2569-016', lastAt: '04/10/2569 11:30' },
+      { id: 'advance',            label: 'ใบเบิกเงินทดรอง',            when: 'ยื่นขอเบิกเงินทดรอง',      tax: false, prefix: 'ADV', includeYear: true,  digits: 4, resetYearly: true,  seq: 4,   last: 'ADV-2569-0004', lastAt: '02/10/2569 08:50' },
+      { id: 'advance_return',     label: 'ใบรับคืนเงินทดรอง',          when: 'บันทึกรับคืนแยกหรือหักกลบ', tax: false, prefix: 'RAV', includeYear: true,  digits: 4, resetYearly: true,  seq: 0,   last: null, lastAt: null },
+      { id: 'substitute_receipt', label: 'ใบรับรองแทนใบเสร็จรับเงิน',  when: 'ออกใบรับรองแทนใบเสร็จ',    tax: false, prefix: 'CRT', includeYear: true,  digits: 4, resetYearly: true,  seq: 0,   last: null, lastAt: null },
+    ],
     // §6.9 Bank File Formats — test_status ตามไฟล์ 13 (BANK_FILE_NOT_TESTED validation)
     bankFiles: [
       { id: 'bf1', bank: 'KBank K-Cash',    fileType: 'CSV', encoding: 'UTF-8',   columnMapping: 'payee_name, account, amount, ref', testStatus: 'passed'  },
@@ -265,7 +275,7 @@ const store = {
       { id: 'ad3',  action: 'ดูข้อมูล Master Data',                      levels: { r6:'view', r4:'view', r5:'view', r3:'view' }, note: 'ดูอย่างเดียวทุกฝ่ายหลัก' },
       { id: 'ad4',  action: 'แก้ไข Tax Profile / VAT Rate',              levels: {}, superadminOnly: true, note: '' },
       { id: 'ad5',  action: 'แก้ไข Period Lock Policy',                  levels: {}, superadminOnly: true, note: '' },
-      { id: 'ad6',  action: 'แก้ไข Tax Invoice Numbering',               levels: {}, superadminOnly: true, note: '' },
+      { id: 'ad6',  action: 'แก้ไขเลขที่เอกสาร',                         levels: {}, superadminOnly: true, note: '' },
       { id: 'ad7',  action: 'จัดการ Role / Permission',                  levels: {}, superadminOnly: true, note: 'critical action' },
       { id: 'ad8',  action: 'บันทึกข้อมูล/แนบเอกสาร (ธุรการ)',           levels: { r6:'manage' }, note: 'ตามสิทธิ์ที่ได้รับมอบหมาย' },
     ]
@@ -627,7 +637,7 @@ function renderSettingsLayout() {
       { id: 'whtpolicy',  label: 'ค่าตั้งภาษีหัก ณ ที่จ่าย' },
       { id: 'vat',        label: 'อัตรา VAT' },
       { id: 'cost',       label: 'Cost Center' }, 
-      { id: 'numbering',  label: 'เลขที่ใบกำกับภาษี' },
+      { id: 'numbering',  label: 'เลขที่เอกสาร' },
       { id: 'docs',       label: 'รูปแบบเอกสาร' },
       { id: 'taxdoc',     label: 'เทมเพลตเอกสารภาษี' },
       { id: 'bankfile',   label: 'ไฟล์โอนธนาคาร' },
@@ -1253,20 +1263,42 @@ function renderSettingsTaxDoc() {
   </div>`;
 }
 
+function docNumberPattern(d) {
+  return [d.prefix, d.includeYear ? '{พ.ศ.}' : null, 'N'.repeat(d.digits)].filter(Boolean).join('-');
+}
+function docNumberNext(d, seq) {
+  return [d.prefix, d.includeYear ? '2569' : null, String(seq).padStart(d.digits, '0')].filter(Boolean).join('-');
+}
 function renderSettingsNumbering() {
-  const n = store.finSettings.taxInvoiceNumbering || {};
-  return `<h2 class="text-lg font-bold text-slate-900 mb-4">เลขที่ใบกำกับภาษี (Tax Invoice Numbering)</h2>
-  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ แก้ไขได้เฉพาะ Superadmin — กระทบความต่อเนื่องของเลขเอกสารตามกฎหมาย ควรตั้งครั้งแรกแล้วไม่เปลี่ยน</div>
-  <div class="bg-white border border-slate-200 rounded-xl p-6 grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
-    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">รูปแบบ</div><div class="font-bold text-slate-900">${n.mode === 'yearly_reset' ? 'Reset รายปี' : n.mode}</div></div>
-    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">Prefix</div><div class="font-mono text-slate-900 font-bold">${n.prefix}</div></div>
-    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">ความยาวตัวเลข</div><div class="font-bold text-slate-900">${n.digitLength} หลัก</div></div>
-    <div><div class="text-xs text-slate-400 font-bold uppercase mb-1">เลขล่าสุด</div><div class="font-bold text-slate-900">${n.prefix}${String(n.lastNumber).padStart(n.digitLength, '0')}</div></div>
+  const rows = store.finSettings.documentNumbering || [];
+  const lockBadge = d => d.tax && d.seq > 0
+    ? '<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-800">ล็อกรูปแบบแล้ว</span>'
+    : d.tax
+      ? '<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800">ล็อกเมื่อออกฉบับแรก</span>'
+      : '<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800">เปลี่ยนได้ มีผลฉบับถัดไป</span>';
+  return `<h2 class="text-lg font-bold text-slate-900 mb-1">เลขที่เอกสาร</h2>
+  <p class="text-xs text-slate-500 mb-4">คำนำหน้าและรูปแบบเลขของเอกสารทุกชนิดที่ระบบออก — ปีในเลขเอกสารเป็น พ.ศ. เสมอ</p>
+  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ แก้ไขได้เฉพาะ Superadmin — ใบเสร็จรับเงิน/ใบกำกับภาษี และหนังสือรับรองการหักภาษี ณ ที่จ่าย <b>ล็อกรูปแบบหลังออกฉบับแรก</b> · เอกสารอื่นเปลี่ยนได้ มีผลฉบับถัดไป · ทุกการเปลี่ยนต้องระบุเหตุผล</div>
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-xs text-slate-600"><tr>
+        <th class="px-4 py-2.5 text-left font-semibold">ชนิดเอกสาร</th>
+        <th class="px-4 py-2.5 text-left font-semibold">รูปแบบ</th>
+        <th class="px-4 py-2.5 text-left font-semibold">ตัวอย่างเลขถัดไป</th>
+        <th class="px-4 py-2.5 text-left font-semibold">ออกล่าสุด</th>
+        <th class="px-4 py-2.5 text-left font-semibold">สถานะล็อก</th>
+        <th class="px-4 py-2.5 text-right font-semibold">จัดการ</th>
+      </tr></thead>
+      <tbody class="divide-y divide-slate-100">${rows.map(d => `<tr>
+        <td class="px-4 py-3"><div class="font-semibold text-slate-900">${d.label}</div><div class="text-[11px] text-slate-400">ออกเลขเมื่อ${d.when}</div></td>
+        <td class="px-4 py-3"><span class="font-mono text-xs text-slate-700">${docNumberPattern(d)}</span><div class="text-[11px] text-slate-400">${d.resetYearly ? 'เริ่มนับใหม่ทุกปี พ.ศ.' : 'นับต่อเนื่อง'}</div></td>
+        <td class="px-4 py-3"><span class="font-mono text-xs font-bold text-emerald-700">${docNumberNext(d, d.seq + 1)}</span></td>
+        <td class="px-4 py-3">${d.last ? `<span class="font-mono text-xs font-bold text-slate-900">${d.last}</span><div class="text-[11px] text-slate-400">${d.lastAt}</div>` : '<span class="text-xs text-slate-400">ยังไม่เคยออก</span>'}</td>
+        <td class="px-4 py-3">${lockBadge(d)}</td>
+        <td class="px-4 py-3 text-right">${btnAction(Icon.edit + ' แก้ไข', 'open-modal', 'fin-numbering-form', d.id)}</td>
+      </tr>`).join('')}</tbody>
+    </table>
   </div>
-  <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-600">
-    ตัวอย่างเลขที่ใบกำกับภาษีถัดไป: <span class="font-mono font-bold text-slate-900">${n.prefix}${String(n.lastNumber + 1).padStart(n.digitLength, '0')}</span>
-  </div>
-  <div class="mt-4 text-right">${btnAction(Icon.edit + ' แก้ไขการตั้งค่า', 'open-modal', 'fin-numbering-form')}</div>
   <div class="mt-6 bg-white border border-slate-200 rounded-xl p-6">
     <div class="flex items-center justify-between mb-4">
       <div><h3 class="text-sm font-bold text-slate-900">ข้อมูลผู้ขายบนใบกำกับภาษี</h3><p class="text-xs text-slate-500 mt-0.5">พิมพ์สำนักงานใหญ่/สาขาต่อจากเลขประจำตัวผู้เสียภาษีของผู้ขาย — ใบที่ออกแล้วไม่เปลี่ยนตาม</p></div>
@@ -1730,15 +1762,24 @@ function renderModal() {
     </div>`;
   }
   else if (type === 'fin-numbering-form') {
-    const n = store.finSettings.taxInvoiceNumbering || {};
-    title = 'แก้ไขการตั้งเลขที่ใบกำกับภาษี';
+    const d = (store.finSettings.documentNumbering || []).find(x => x.id === data.id) || {};
+    const locked = d.tax && d.seq > 0;
+    const dis = locked ? 'disabled' : '';
+    title = `แก้ไขเลขที่${d.label || 'เอกสาร'}`;
+    saveText = 'บันทึกเลขที่เอกสาร';
     body = `<div class="space-y-4">
-      <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800 font-semibold">⚠️ เปลี่ยนแปลงได้เฉพาะ Superadmin — กระทบเลขเอกสารตามกฎหมาย</div>
-      ${formSelect('nb_mode', 'รูปแบบการนับ', [{val:'yearly_reset',text:'Reset ทุกปีบัญชี (แนะนำ)'},{val:'continuous',text:'ต่อเนื่องตลอดไป'}], n.mode||'yearly_reset')}
+      ${locked ? '<div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">⚠️ ออกเอกสารภาษีชนิดนี้ไปแล้ว — เปลี่ยนคำนำหน้า/รูปแบบไม่ได้ เพื่อให้เลขต่อเนื่องตามกฎหมาย</div>' : ''}
       <div class="grid grid-cols-2 gap-4">
-        ${formInput('nb_prefix', 'Prefix', n.prefix||'INV-', 'text', 'เช่น INV-')}
-        ${formInput('nb_digits', 'ความยาวตัวเลข (หลัก)', n.digitLength||4, 'number', 'เช่น 4')}
+        ${formInput('nb_prefix', 'คำนำหน้า (A-Z, 0-9, ขีดคั่นกลาง ≤ 10 ตัว)', d.prefix || '', 'text', 'เช่น INV', false, dis)}
+        ${formInput('nb_digits', 'จำนวนหลักของลำดับ (3–8)', d.digits || 4, 'number', 'เช่น 4', true, dis)}
       </div>
+      <div class="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs font-medium text-slate-700">
+        <label class="flex items-center gap-2"><input type="checkbox" ${d.includeYear ? 'checked' : ''} ${dis} class="h-4 w-4 rounded border-slate-300"> รวมปี พ.ศ. ในเลขเอกสาร</label>
+        <label class="flex items-center gap-2"><input type="checkbox" ${d.resetYearly ? 'checked' : ''} ${dis} class="h-4 w-4 rounded border-slate-300"> เริ่มนับลำดับใหม่ทุกปี พ.ศ. (ต้องรวมปี)</label>
+      </div>
+      ${d.tax ? '' : formInput('nb_next', 'เลขลำดับถัดไป (ไม่บังคับ — ห้ามต่ำกว่าเลขที่ใช้แล้ว)', '', 'number', String((d.seq || 0) + 1))}
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3"><div class="text-[10px] font-bold uppercase text-emerald-700">ตัวอย่างเลขถัดไปตามรูปแบบที่เลือก</div><div class="mt-1 font-mono text-sm font-bold text-emerald-900">${d.prefix !== undefined ? docNumberNext(d, (d.seq || 0) + 1) : '—'}</div></div>
+      <div><label class="block text-xs font-bold text-slate-700 mb-1">เหตุผล <span class="text-red-500">*</span></label><textarea class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" rows="2" placeholder="เช่น ปรับคำนำหน้าเลขที่เอกสารตามที่สำนักงานบัญชีแนะนำ"></textarea></div>
     </div>`;
   }
   else if (type === 'suspend-company') {

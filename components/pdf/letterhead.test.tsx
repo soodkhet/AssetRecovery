@@ -70,6 +70,7 @@ const BATCH: PayoutBatchDetailDto = {
       advanceOffsets: [],
       bankName: 'ธนาคารกสิกรไทย',
       accountNumberMasked: 'xxx-x-x1234-x',
+      voucherNumber: 'PV-2569-0001',
     },
   ],
 }

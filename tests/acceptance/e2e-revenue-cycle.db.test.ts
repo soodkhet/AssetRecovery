@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { setDocumentSeries } from '@/tests/helpers/document-series'
 import { settleFieldDaysToday } from '@/tests/helpers/field-day'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
@@ -60,7 +61,7 @@ const PAYEE_ID = '00000000-0000-4000-8000-0000000081ae'
 const PROVINCE = 'เชียงใหม่'
 /** ตัวคั่นข้อมูลของแต่ละรัน — บริษัท/เลขที่ใบกำกับภาษีสร้างใหม่ทุกครั้ง (ลบของเก่าไม่ได้) */
 const RUN = `${process.pid}${Date.now() % 100_000}`
-const INVOICE_PREFIX = `E81${RUN}`.slice(0, 12)
+const INVOICE_PREFIX = `E${RUN.slice(-9)}`
 const RUN_TAX_ID = `9${RUN}`.padEnd(13, '0').slice(0, 13)
 
 /** มูลหนี้ 10,000 บาท × SUCCESS_FEE 10% = 1,000 บาท + VAT 7% = 1,070 บาท */
@@ -186,18 +187,19 @@ suite('Phase 8.1 — E2E `29` §6.1: ปิดเคสสำเร็จ → �
 
     const tx = db()
     await tx.$executeRawUnsafe(`
-      INSERT INTO organizations (id, name, tax_id, address, vat_registered, tax_invoice_prefix,
-                                 tax_invoice_digit_length, tax_invoice_numbering_mode)
-      VALUES ('${ORG_ID}', 'E2E 8.1 รายรับ', '9999999998110', '1 ถนนทดสอบ กรุงเทพฯ 10110', true,
-              '${INVOICE_PREFIX}', 4, 'continuous')
+      INSERT INTO organizations (id, name, tax_id, address, vat_registered)
+      VALUES ('${ORG_ID}', 'E2E 8.1 รายรับ', '9999999998110', '1 ถนนทดสอบ กรุงเทพฯ 10110', true)
       ON CONFLICT (id) DO NOTHING
     `)
     // เลขที่ใบกำกับภาษีของรันนี้ต้องไม่ทับของรันก่อน (ใบเก่าลบไม่ได้) ⇒ เปลี่ยน prefix + รีเซ็ตตัวเดินเลข
-    await tx.$executeRawUnsafe(`
-      UPDATE organizations SET tax_invoice_prefix = '${INVOICE_PREFIX}', tax_invoice_seq = 0,
-                               tax_invoice_numbering_mode = 'continuous', tax_invoice_digit_length = 4
-       WHERE id = '${ORG_ID}'
-    `)
+    await setDocumentSeries(tx, ORG_ID, 'tax_invoice', {
+      prefix: INVOICE_PREFIX,
+      includeYear: false,
+      resetYearly: false,
+      digits: 4,
+      currentSeq: 0,
+      currentYear: null,
+    })
     await tx.$executeRawUnsafe(`
       INSERT INTO roles (id, organization_id, name, role_group, is_seed) VALUES
         ('${ROLE_ADMIN}', '${ORG_ID}', 'ธุรการ 8.1', 'system', false),

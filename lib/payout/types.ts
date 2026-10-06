@@ -68,6 +68,8 @@ export interface PayoutBatchItemDto {
   transferSatang: number
   /** เงินทดรองที่หักจากบรรทัดนี้ (แถว `advance_returns` ที่ยังไม่กลับรายการ) */
   advanceOffsets: readonly PayoutAdvanceOffsetDto[]
+  /** เลขที่ใบสำคัญจ่าย (snapshot ตอนสร้างไฟล์โอนครั้งแรก — มติ PO U102) · `null` = ยังไม่สร้างไฟล์ */
+  voucherNumber: string | null
   bankName: string | null
   accountNumberMasked: string | null
 }
@@ -75,6 +77,7 @@ export interface PayoutBatchItemDto {
 /** 1 บรรทัด "หักคืนเงินทดรอง ADV-xxx" ของรายการในรอบ */
 export interface PayoutAdvanceOffsetDto {
   advanceId: string
+  /** เลขที่ใบเบิกเงินทดรอง (`advances.advance_number`) */
   advanceRef: string
   amountSatang: number
 }

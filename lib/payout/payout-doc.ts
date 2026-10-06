@@ -25,10 +25,8 @@ import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/type
  * - วันที่ทุกจุดเป็น **พ.ศ.** ผ่าน `fmtDate`/`fmtDateTime` — component PDF ห้าม format ซ้ำ
  * - เงินแปลงเป็นข้อความด้วย `fmtSatang()` (ไม่มีสัญลักษณ์ ฿ ตามตัวอย่าง 04–06)
  *
- * ⚠️ `02` §8 **ไม่มีตารางเดินเลขใบสำคัญจ่าย** (ต่างจากใบกำกับภาษีที่มีใน `13` §6.12) และ `28` §6.1
- *    จัดใบนี้เป็น "เอกสารภายใน ไม่มีข้อกำหนดทางกฎหมาย" ⇒ เลขที่ใบสำคัญจ่าย **derive จากรอบจ่าย**
- *    แบบ deterministic (`voucherNumber()`) ไม่เดินเลขลง DB — พิมพ์ซ้ำได้เลขเดิมเสมอ
- *    ถ้าภายหลังบัญชีต้องการเลขรันจริง ต้องเพิ่มตารางใน `02` + migration ก่อน
+ * - เลขที่ใบสำคัญจ่าย = **เลขรันจริงต่อปี** จากชุดเลข `payment_voucher` (มติ PO U102) ออกตอนสร้างไฟล์โอน
+ *   ครั้งแรก 1 เลขต่อผู้รับเงินต่อรอบ แล้ว snapshot ลง `payout_batch_items.voucher_number` — พิมพ์ซ้ำได้เลขเดิมเสมอ
  */
 
 export const PAYOUT_SUMMARY_TITLE = 'สรุปรอบจ่ายเงิน'
@@ -124,13 +122,20 @@ export interface PayoutPayeeGroup {
 
 /** รวมบรรทัดหักคืนเงินทดรองของรายการกลุ่มหนึ่ง — ต่อเงินทดรอง ลำดับตามที่พบ */
 function collectOffsetLines(items: readonly PayoutBatchItemDto[]): Array<{ label: string; amountSatang: number }> {
-  const byAdvance = new Map<string, number>()
+  const byAdvance = new Map<string, { advanceRef: string; amountSatang: number }>()
   for (const item of items) {
     for (const offset of item.advanceOffsets) {
-      byAdvance.set(offset.advanceId, (byAdvance.get(offset.advanceId) ?? 0) + offset.amountSatang)
+      const current = byAdvance.get(offset.advanceId)
+      byAdvance.set(offset.advanceId, {
+        advanceRef: offset.advanceRef,
+        amountSatang: (current?.amountSatang ?? 0) + offset.amountSatang,
+      })
     }
   }
-  return [...byAdvance].map(([advanceId, amountSatang]) => ({ label: advanceOffsetLineLabel(advanceId), amountSatang }))
+  return [...byAdvance.values()].map((entry) => ({
+    label: advanceOffsetLineLabel(entry.advanceRef),
+    amountSatang: entry.amountSatang,
+  }))
 }
 
 /**
@@ -257,12 +262,9 @@ export function buildPayoutSummaryDoc(
 
 // ── ② ใบสำคัญจ่าย (`05_payment_voucher.pdf`) ────────────────────────────────
 
-/**
- * เลขที่ใบสำคัญจ่าย — deterministic จาก "รหัสอ้างอิงรอบ + ลำดับผู้รับเงินในรอบ"
- * (ดูเหตุผลที่ไม่เดินเลขลง DB ที่หัวไฟล์)
- */
-export function voucherNumber(input: { batchRef: string; beYear: number; index: number }): string {
-  return `PV-${input.beYear}-${input.batchRef}-${String(input.index).padStart(3, '0')}`
+/** เลขที่ใบสำคัญจ่ายของผู้รับในรอบ = snapshot ของรายการ (ทุกรายการของผู้รับเดียวกันได้เลขเดียวกัน) */
+export function voucherNumberOf(items: readonly Pick<PayoutBatchItemDto, 'voucherNumber'>[]): string | null {
+  return items.find((item) => item.voucherNumber !== null)?.voucherNumber ?? null
 }
 
 export interface PaymentVoucherDoc {
@@ -295,25 +297,18 @@ function batchRef(batch: PayoutBatchDetailDto): string {
   return batch.idempotencyKey ?? batch.id.slice(0, 8).toUpperCase()
 }
 
-/** ปี พ.ศ. ของวันที่ (`fmtDate` คืน `DD/MM/YYYY` พ.ศ. อยู่แล้ว — อ่านปีจากตรงนั้นที่เดียว) */
-function beYearOf(iso: string): number {
-  return Number(fmtDate(iso).split('/')[2])
-}
-
 export function buildPaymentVoucherDocs(
   batch: PayoutBatchDetailDto,
   issuer: PayoutDocIssuer,
 ): PaymentVoucherDoc[] {
   const payDate = batch.paymentFileGeneratedAt ?? batch.createdAt
-  const ref = batchRef(batch)
-  const beYear = beYearOf(payDate)
 
-  return groupPayoutItemsByPayee(batch.items).map((group, index) => ({
+  return groupPayoutItemsByPayee(batch.items).map((group) => ({
     title: PAYMENT_VOUCHER_TITLE,
     titleEn: 'Payment Voucher',
     headerNote: INTERNAL_DOC_NOTE.voucher,
     issuer,
-    voucherNo: voucherNumber({ batchRef: ref, beYear, index: index + 1 }),
+    voucherNo: orDash(voucherNumberOf(group.items)),
     payeeName: group.payeeName,
     bankLine:
       group.bankName === null && group.accountNumberMasked === null

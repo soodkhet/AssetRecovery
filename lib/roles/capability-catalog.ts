@@ -61,7 +61,7 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'view_master_data', label: 'ดูข้อมูล Master Data', module: 'master_data', functionalGroup: FunctionalGroup.admin, description: 'ดูอย่างเดียวทุกฝ่ายหลัก' },
   { code: 'manage_tax_profiles', label: 'แก้ไข Tax Profile / VAT Rate', module: 'settings', functionalGroup: FunctionalGroup.admin, description: '🔒 Superadmin เท่านั้น' },
   { code: 'manage_period_lock_policy', label: 'แก้ไข Period Lock Policy', module: 'settings', functionalGroup: FunctionalGroup.admin, description: '🔒 Superadmin เท่านั้น' },
-  { code: 'manage_invoice_numbering', label: 'แก้ไข Tax Invoice Numbering', module: 'settings', functionalGroup: FunctionalGroup.admin, description: '🔒 Superadmin เท่านั้น' },
+  { code: 'manage_invoice_numbering', label: 'แก้ไขเลขที่เอกสาร', module: 'settings', functionalGroup: FunctionalGroup.admin, description: '🔒 Superadmin เท่านั้น' },
   { code: 'manage_roles', label: 'จัดการ Role / Permission', module: 'role', functionalGroup: FunctionalGroup.admin, description: '🔒 Superadmin เท่านั้น — critical action' },
   { code: 'record_admin_data', label: 'บันทึกข้อมูล/แนบเอกสาร (ธุรการ)', module: 'admin', functionalGroup: FunctionalGroup.admin, description: 'ตามสิทธิ์ที่ได้รับมอบหมาย' },
 

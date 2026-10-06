@@ -6,7 +6,7 @@ const DATES = (process.env.DATES ?? '').split(',')
 const a = await openAs('uat.account'); const p = a.page
 const res = []; p.on('response', async r => { if (r.url().includes('/api/') && r.request().method() !== 'GET') res.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname} ${(await r.text().catch(() => '')).slice(0, 500)}`) })
 const dlg = () => p.locator('[role="dialog"]').last()
-const seq = () => qa(`select tax_invoice_seq from organizations`) + ' / n=' + qa(`select count(*) from tax_invoices`)
+const seq = () => qa(`select current_seq from document_number_series where doc_type='tax_invoice'`) + ' / n=' + qa(`select count(*) from tax_invoices`)
 await p.goto(`${BASE}/accounting?tab=receipts`); await settle(p); await sleep(1500)
 log(`== ${TAG} seq before`, seq())
 const row = p.locator('tbody tr').filter({ hasText: ROW }).first()

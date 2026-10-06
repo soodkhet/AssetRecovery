@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { setDocumentSeries } from '@/tests/helpers/document-series'
 import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
 
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
@@ -39,7 +40,7 @@ const ACCOUNTING_ID = '00000000-0000-4000-8000-0000000c4a02'
 const TEAM_ID = '00000000-0000-4000-8000-0000000c4a03'
 
 const RUN = `${process.pid}${Date.now() % 100_000}`
-const PREFIX = `C${RUN}`
+const PREFIX = `C${RUN.slice(-9)}`
 const RUN_TAX_ID = RUN.padEnd(13, '1').slice(0, 13)
 
 /** งวดที่ล็อก (มี.ค. 2570 = 2027-03) — ใบกำกับออกก่อนหน้า ใบลดหนี้ลงวันในงวดนี้ต้องโดนปฏิเสธ */
@@ -172,15 +173,18 @@ beforeAll(async () => {
 
   const tx = db()
   await tx.$executeRawUnsafe(`
-    INSERT INTO organizations (id, name, tax_id, address, vat_registered, tax_invoice_prefix)
-    VALUES ('${ORG_ID}', 'CreditNoteTest', '9999999994301', 'ที่อยู่ทดสอบ ใบลดหนี้ กรุงเทพฯ', true, '${PREFIX}')
+    INSERT INTO organizations (id, name, tax_id, address, vat_registered)
+    VALUES ('${ORG_ID}', 'CreditNoteTest', '9999999994301', 'ที่อยู่ทดสอบ ใบลดหนี้ กรุงเทพฯ', true)
     ON CONFLICT (id) DO NOTHING
   `)
-  await tx.$executeRawUnsafe(`
-    UPDATE organizations SET tax_invoice_prefix = '${PREFIX}', tax_invoice_seq = 0,
-           tax_invoice_numbering_mode = 'continuous', tax_invoice_digit_length = 4, tax_invoice_last_reset_year = NULL
-     WHERE id = '${ORG_ID}'
-  `)
+  await setDocumentSeries(tx, ORG_ID, 'tax_invoice', {
+    prefix: PREFIX,
+    includeYear: false,
+    resetYearly: false,
+    digits: 4,
+    currentSeq: 0,
+    currentYear: null,
+  })
   await tx.$executeRawUnsafe(`
     INSERT INTO roles (id, organization_id, name, role_group, is_seed)
     VALUES ('${ROLE_ID}', '${ORG_ID}', 'บัญชี CN', 'system', false) ON CONFLICT (id) DO NOTHING

@@ -91,6 +91,7 @@ function item(overrides: Partial<PayoutBatchItemDto> = {}): PayoutBatchItemDto {
     advanceOffsetSatang: 0,
     transferSatang: 824_500,
     advanceOffsets: [],
+    voucherNumber: 'PV-2569-0001',
     bankName: 'ธนาคารกสิกรไทย',
     accountNumberMasked: 'xxx-x-x1234-x',
     ...overrides,

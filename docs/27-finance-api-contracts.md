@@ -54,7 +54,8 @@ GET/POST/PATCH /api/settings/bank-accounts
 GET/POST/PATCH /api/settings/tax-profiles
 GET/POST/PATCH /api/settings/vat-rates
 GET/POST       /api/settings/wht-policy          ← ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 · insert-only)
-GET/PATCH      /api/settings/tax-invoice-numbering
+GET            /api/settings/document-numbering          (มติ PO U102 — เลขที่เอกสารทุกชนิด · view_master_data)
+PATCH          /api/settings/document-numbering/:docType (manage_invoice_numbering + reason · แทน /api/settings/tax-invoice-numbering)
 GET/PATCH      /api/settings/seller-branch          (มติ PO U82 — สาขาผู้ขาย · แก้ = manage_invoice_numbering + reason · หน้าจอย้ายไป §ข้อมูลองค์กร U99)
 GET/PATCH      /api/settings/organization           (มติ PO U99 — ข้อมูลองค์กร · ดู = view_master_data · แก้ = manage_invoice_numbering + reason)
 POST/DELETE    /api/settings/organization/logo      (มติ PO U99 — ผูก path จาก upload-url target organization_logo / ปลดโลโก้ · reason บังคับ)

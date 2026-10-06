@@ -183,6 +183,10 @@ async function seedCompletedBatch(items: readonly SeedItem[]): Promise<string> {
     RETURNING id
   `)
   const batchId = rows[0]?.id ?? ''
+  // เลขใบสำคัญจ่าย = snapshot ที่ระบบออกตอนสร้างไฟล์โอน (มติ PO U102) — รอบจำลองต้องใส่เองต่อผู้รับ
+  const payees = [...new Set(items.map((item) => item.payeeId))]
+  const voucherOf = (payeeId: string): string =>
+    `PV-2569-${String(batchCursor * 100 + payees.indexOf(payeeId) + 1).padStart(4, '0')}`
 
   for (const item of items) {
     const expenseRows = await db().$queryRawUnsafe<{ id: string }[]>(`
@@ -194,9 +198,9 @@ async function seedCompletedBatch(items: readonly SeedItem[]): Promise<string> {
     `)
     await db().$executeRawUnsafe(`
       INSERT INTO payout_batch_items (organization_id, payout_batch_id, expense_id, payee_id,
-                                      gross_satang, wht_satang, net_satang, wht_pct_snapshot, created_by)
+                                      gross_satang, wht_satang, net_satang, wht_pct_snapshot, voucher_number, created_by)
       VALUES ('${ORG_ID}', '${batchId}', '${expenseRows[0]?.id}', '${item.payeeId}',
-              ${item.gross}, ${item.wht}, ${item.gross - item.wht}, 3.00, '${USER_ID}')
+              ${item.gross}, ${item.wht}, ${item.gross - item.wht}, 3.00, '${voucherOf(item.payeeId)}', '${USER_ID}')
     `)
   }
 
@@ -437,7 +441,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     expect(expenseCsv).toContain('8500.00,255.00,8245.00')
 
     const paymentCsv = fileAt([...storage.keys()].find((path) => path.endsWith('04_Payments.csv')) ?? '')
-    expect(paymentCsv).toContain('PB-4.6-1-KEY,25/06/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-4.6-1-KEY-001')
+    expect(paymentCsv).toContain('PB-4.6-1-KEY,25/06/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-0101')
 
     const whtCsv = fileAt([...storage.keys()].find((path) => path.endsWith('05_WHT_Data.csv')) ?? '')
     expect(whtCsv).toContain('ประยุทธ์ บุญมี,3100000004600,25/06/2569')
@@ -920,7 +924,7 @@ suite('มติ PO U68 — 13_Advance_Returns.csv', () => {
               '2026-06-23T04:00:00Z', '${USER_ID}', 'ยกเลิกรอบจ่าย', '${USER_ID}')
     `)
 
-    const { advanceRef } = await import('@/lib/advances/advance')
+    const advanceRef = await advanceNumbers()
     await exportsApi.createExportPack(ctx, { periodId })
     const csv = fileAt([...storage.keys()].find((path) => path.endsWith('13_Advance_Returns.csv')) ?? '')
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
@@ -1052,6 +1056,15 @@ async function seedAdvance(input: { approved: number; used: number; status: stri
   return rows[0]?.id ?? ''
 }
 
+/** เลขที่ใบเบิกเงินทดรองที่ trigger ออกให้ (มติ PO U102) — id → `advance_number` */
+async function advanceNumbers(): Promise<(advanceId: string) => string> {
+  const rows = await db().$queryRawUnsafe<{ id: string; advance_number: string }[]>(
+    `SELECT id, advance_number FROM advances WHERE organization_id = '${ORG_ID}'`,
+  )
+  const byId = new Map(rows.map((row) => [row.id, row.advance_number]))
+  return (advanceId: string) => byId.get(advanceId) ?? '?'
+}
+
 function csvRows(csv: string): string[] {
   return csv
     .slice(CSV_BOM.length)
@@ -1137,7 +1150,7 @@ suite('มติ PO U94 ข้อ 3 — 16_Advance_Balance.csv', () => {
     const july = await seedBatch({ name: 'PB-U94-JUL', status: 'completed', paidAt: '2026-07-02T03:00:00Z' })
     await seedItem({ batchId: july, advanceId: adv3, gross: 50_000 })
 
-    const { advanceRef } = await import('@/lib/advances/advance')
+    const advanceRef = await advanceNumbers()
     const june2569 = csvRows(await exportsApi.buildAdvanceBalancePackFile(ORG_ID, 2569, 6))
     expect(june2569).toEqual([
       'payee,payee_tax_id,opening_baht,paid_baht,cleared_baht,returned_offset_baht,returned_direct_baht,closing_baht,advance_refs',

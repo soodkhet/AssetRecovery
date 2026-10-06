@@ -14,7 +14,6 @@ import type {
   CutoffRuleType,
   CycleType,
   DueRuleType,
-  InvoiceNumberingMode,
   TaxDocLanguage,
   TaxDocPaperSize,
   TaxDocumentType,
@@ -215,18 +214,6 @@ export interface BankFileFormatDto {
   usable: boolean
   isActive: boolean
   updatedAt: string
-}
-
-export interface NumberingDto {
-  mode: InvoiceNumberingMode
-  prefix: string
-  digitLength: number
-  /** ระบบเดินให้เอง ห้ามแก้มือ (`NUMBERING_SEQ_NOT_EDITABLE`) */
-  lastNumber: number
-  lastResetYear: number | null
-  /** ตัวอย่างเลขถัดไปตามรูปแบบปัจจุบัน */
-  nextNumberPreview: string
-  issuedInvoiceCount: number
 }
 
 /** ข้อมูลผู้ขายบนใบกำกับภาษี (มติ PO U82) — ชื่อ/เลขผู้เสียภาษีอ่านอย่างเดียว · แก้ได้เฉพาะสาขา */

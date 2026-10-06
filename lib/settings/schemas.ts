@@ -9,7 +9,13 @@ import {
   MIN_AGING_BUCKETS,
 } from '@/lib/settings/finance-policy'
 import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
-import { MAX_DIGIT_LENGTH, MIN_DIGIT_LENGTH } from '@/lib/settings/numbering'
+import {
+  DOCUMENT_NUMBER_TYPES,
+  MAX_DIGITS,
+  MAX_PREFIX_LENGTH,
+  MIN_DIGITS,
+  PREFIX_PATTERN,
+} from '@/lib/document-numbering/format'
 import {
   MAX_ACCEPT_DEADLINE_HOURS,
   MAX_REASSIGN_TIMEOUT_HOURS,
@@ -399,34 +405,64 @@ export const functionalPermissionUpdateSchema = z.object({
   reason: reasonSchema,
 })
 
-// ── §6.12 รูปแบบเลขที่ใบกำกับภาษี ──────────────────────────────────────
-export const invoiceNumberingModeSchema = z.enum(['continuous', 'yearly_reset'])
+// ── §6.12 เลขที่เอกสาร (มติ PO U102 — ตั้งค่าได้ทุกชนิด) ─────────────────
+export const documentNumberTypeSchema = z.enum(DOCUMENT_NUMBER_TYPES)
 
-const numberingFields = z.object({
-  mode: invoiceNumberingModeSchema,
+const documentNumberingFields = z.object({
   prefix: z
     .string()
     .trim()
-    .max(20, 'ข้อความนำหน้ายาวเกินไป')
-    .regex(/^[A-Za-z0-9]*$/, 'ข้อความนำหน้าใช้ได้เฉพาะ A-Z และ 0-9 (ตัวคั่น - ระบบใส่ให้)')
-    .default(''),
-  digitLength: z
+    .toUpperCase()
+    .max(MAX_PREFIX_LENGTH, `คำนำหน้ายาวได้ไม่เกิน ${MAX_PREFIX_LENGTH} ตัวอักษร`)
+    .regex(PREFIX_PATTERN, 'คำนำหน้าใช้ได้เฉพาะ A-Z, 0-9 และขีด (-) คั่นกลาง — ไม่ขึ้นต้น/ลงท้ายด้วยขีด'),
+  includeYear: z.boolean(),
+  digits: z
     .number()
     .int('จำนวนหลักต้องเป็นจำนวนเต็ม')
-    .min(MIN_DIGIT_LENGTH, `จำนวนหลักต้องอยู่ระหว่าง ${MIN_DIGIT_LENGTH}-${MAX_DIGIT_LENGTH}`)
-    .max(MAX_DIGIT_LENGTH, `จำนวนหลักต้องอยู่ระหว่าง ${MIN_DIGIT_LENGTH}-${MAX_DIGIT_LENGTH}`),
+    .min(MIN_DIGITS, `จำนวนหลักต้องอยู่ระหว่าง ${MIN_DIGITS}-${MAX_DIGITS}`)
+    .max(MAX_DIGITS, `จำนวนหลักต้องอยู่ระหว่าง ${MIN_DIGITS}-${MAX_DIGITS}`),
+  resetYearly: z.boolean(),
+  /**
+   * เลขลำดับถัดไป (ไม่บังคับ) — เฉพาะเอกสารที่ไม่ใช่เอกสารภาษี · ต่ำกว่าเลขที่ใช้แล้วไม่ได้
+   * (`NUMBERING_SEQ_BELOW_ISSUED`) · เอกสารภาษีส่งมา = `NUMBERING_SEQ_NOT_EDITABLE`
+   */
+  nextSequence: z
+    .number()
+    .int('เลขลำดับต้องเป็นจำนวนเต็ม')
+    .min(1, 'เลขลำดับถัดไปต้องมากกว่า 0')
+    .max(99_999_999, 'เลขลำดับถัดไปมากเกินไป')
+    .optional(),
 })
 
-export const numberingFieldsSchema = numberingFields
+function resetNeedsYear<T extends { includeYear: boolean; resetYearly: boolean }>(value: T, ctx: z.RefinementCtx): void {
+  if (value.resetYearly && !value.includeYear) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['resetYearly'],
+      message: 'รีเซ็ตลำดับทุกปีต้องรวมปี พ.ศ. ในเลขด้วย — ไม่งั้นเลขปีใหม่จะซ้ำกับปีก่อน',
+    })
+  }
+}
+
+export const documentNumberingFieldsSchema = documentNumberingFields.superRefine(resetNeedsYear)
 
 /**
- * PATCH เลขที่ใบกำกับภาษี — **`lastNumber`/`lastResetYear` ห้ามส่งมา** (`13` §6.12 "ระบบ track
- * อัตโนมัติ ไม่ให้แก้มือ") · ส่งมา = `NUMBERING_SEQ_NOT_EDITABLE` ที่ชั้น route ไม่ใช่ 400 เฉยๆ
- * เพื่อให้ error สื่อสาเหตุจริง
+ * PATCH ชุดเลขเอกสาร 1 ชนิด — ตัวนับ (`currentSeq`/`currentYear`/`lastNumber` ฯลฯ) **ห้ามส่งมา**
+ * (ตอบ `NUMBERING_SEQ_NOT_EDITABLE` ที่ชั้น route ก่อน parse) · ตั้งเลขถัดไปผ่าน `nextSequence` เท่านั้น
  */
-export const numberingUpdateSchema = numberingFields.extend({ reason: reasonSchema })
+export const documentNumberingUpdateSchema = documentNumberingFields
+  .extend({ reason: reasonSchema })
+  .superRefine(resetNeedsYear)
 
-export const NUMBERING_READONLY_KEYS = ['lastNumber', 'lastResetYear', 'taxInvoiceSeq', 'seq'] as const
+export const NUMBERING_READONLY_KEYS = [
+  'lastNumber',
+  'lastResetYear',
+  'taxInvoiceSeq',
+  'seq',
+  'currentSeq',
+  'currentYear',
+  'lastIssuedNumber',
+] as const
 
 /** ตรวจว่า body พยายามแก้ตัวเดินเลขด้วยมือหรือไม่ (เรียกก่อน parse) */
 export function bodyTouchesNumberingSequence(body: unknown): boolean {
@@ -477,5 +513,5 @@ export type VatRateInput = z.infer<typeof vatRateFieldsSchema>
 export type CostCenterInput = z.infer<typeof costCenterFieldsSchema>
 export type BankFileFormatInput = z.infer<typeof bankFileFormatFieldsSchema>
 export type FunctionalPermissionUpdateInput = z.infer<typeof functionalPermissionUpdateSchema>
-export type NumberingInput = z.infer<typeof numberingFieldsSchema>
+export type DocumentNumberingInput = z.infer<typeof documentNumberingFieldsSchema>
 export type TaxDocTemplateInput = z.infer<typeof taxDocTemplateFieldsSchema>

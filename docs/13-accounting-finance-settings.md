@@ -30,6 +30,7 @@
 | v3.15 | 06/10/2569 | **มติ PO 06/10/2569 (U94 ข้อ 2–4)**: §6.9 ชุดไฟล์ Export Pack 14 → **17 ไฟล์ (00–16)** — `00_Control_Totals.csv` (ยอดรวมควบคุม) · `15_Accrued_Expenses.csv` (ค่าใช้จ่ายค้างจ่าย) · `16_Advance_Balance.csv` (เงินทดรองยกมา/คงเหลือ) · รายละเอียดที่ `37` §6.1 v2.15 · ยังเป็นชุดตายตัว |
 | v3.14 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)**: เพิ่ม **§6.16 ระยะเก็บเอกสารลูกหนี้** (แท็บที่ 19 — `data_retention_settings` `02` v4.37 · 1 record/องค์กร) จำนวนปีหลังปิดเคส ค่าเริ่มต้น **5 ปี** (1–20) · สิทธิ์ `manage_data_retention` (บริหาร manage · Superadmin โดยนิยาม · ไม่ล็อก) + เหตุผล + audit · ใช้โดย job `purge_debtor_documents` (`91` §6.1) · §11 · §13 เพิ่มแถว |
 | v3.16 | 06/10/2569 | **มติ PO 06/10/2569 (U99)**: เพิ่ม **§6.17 ข้อมูลองค์กร** (ตั้งค่าทั่วไป → แท็บ "ข้อมูลองค์กร" ตาม mockup `settings.html`) — ชื่อไทย/อังกฤษ · เลขผู้เสียภาษี · สำนักงานใหญ่/สาขา (ย้ายการ์ดสาขาผู้ขายของ U82 จาก §6.12 มารวม) · ที่อยู่แยก 5 ช่อง · โทร/อีเมล/เว็บไซต์ · จด VAT · โลโก้ (PNG/JPG ≤ 1 MB) · แก้ = `manage_invoice_numbering` (Superadmin) + เหตุผล + audit · §11 เพิ่มแถวสิทธิ์ |
+| v3.17 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U102) — เลขที่เอกสารตั้งค่าได้ทุกชนิด**: §6.12 เปลี่ยนจาก "Tax Invoice Numbering" เป็น **"เลขที่เอกสาร"** ครอบ 9 ชนิด (INV/BL/LOT/DLV/PV/WHT/ADV/RAV/CRT) — ตาราง `document_number_series` (`02` v4.41) · ค่าต่อชนิด: คำนำหน้า · รวมปี พ.ศ. · จำนวนหลัก 3–8 · รีเซ็ตรายปี · ตัวอย่างเลขถัดไป · เอกสารภาษี (INV/WHT) **ล็อกรูปแบบหลังออกฉบับแรก** (`NUMBERING_FORMAT_LOCKED` — เดิมเตือนไม่ block) · ชนิดอื่นเปลี่ยนได้ มีผลฉบับถัดไป · ตั้งเลขถัดไปได้แต่ห้ามต่ำกว่าเลขที่ใช้แล้ว (`NUMBERING_SEQ_BELOW_ISSUED`) · ใบสำคัญจ่ายเปลี่ยนเป็นเลขรันจริงต่อปี · ใบเบิก/ใบรับคืนเงินทดรองมีเลขจริง · API `GET /api/settings/document-numbering` + `PATCH /:docType` (แทน `/api/settings/tax-invoice-numbering`) |
 | v3.2 | 14/08/2569 | **มติ PO (Phase 1.6)** — §6.10 ระบุรายชื่อ capability ที่ล็อกครบทั้ง **9 รายการ** (Superadmin 6 + บริหาร 3) แทนข้อความเดิม "7 รายการ ล็อกเป็นของ Superadmin" ที่นับตกหล่นและระบุเจ้าของผิด (แถว "✅ only" ในคอลัมน์บริหารของ `25` §7.4/§7.5) — ดู `25` §16.1 v2.3 · ไม่กระทบ business logic อื่น |
 | v3.1 | 05/07/2569 | **DEC-009**: §6.10 เปลี่ยนโมเดลจาก `allowed_role_ids` (เปิด/ปิด) เป็น**ระดับสิทธิ์ 3 ระดับ** (ไม่มี / `view` / `manage`) ตาม semantic ✅/👁️ ของไฟล์ 25 — storage: `role_capabilities.access_level` (02 v3.6) + กติกา Superadmin/"✅ only" |
 
@@ -249,7 +250,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 - UI เป็น **dropdown 3 ระดับต่อ role** ต่อ capability (ดู mockup `settings.html` tab "สิทธิ์บัญชี/การเงิน" — 37 รายการครบตามไฟล์ 25)
 - **Superadmin มีสิทธิ์ `manage` ทุก capability โดยนิยาม** — ไม่แสดงในตาราง/ไม่เก็บ record, enforce ที่ permission middleware
 - Capability ที่ไฟล์ 25 ระบุ "✅ only" **9 รายการ** (มติ PO 14/08/2569 — ดู `25` §16.1) **ล็อกกับ role เจ้าของเท่านั้น มอบให้ role อื่นไม่ได้ และแก้ระดับของเจ้าของก็ไม่ได้**
-  - Superadmin 6: จัดการ Finance Company · จัดการ Service Fee Template · แก้ไข Tax Profile/VAT Rate · แก้ไข Period Lock Policy · แก้ไข Tax Invoice Numbering · จัดการ Role/Permission
+  - Superadmin 6: จัดการ Finance Company · จัดการ Service Fee Template · แก้ไข Tax Profile/VAT Rate · แก้ไข Period Lock Policy · แก้ไขเลขที่เอกสาร (เดิม Tax Invoice Numbering — U102) · จัดการ Role/Permission
   - บริหาร (Executive) 3: อนุมัติ Adjustment (รอบ locked) · ปลดล็อกรอบ locked · สร้าง Authorized Exception
 - การแก้ไข matrix เป็น critical action ต้องบันทึก audit log เสมอ (ไฟล์ 05 §10 / 90)
 
@@ -263,17 +264,39 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 
 > นโยบายนี้คือ policy หลักที่ไฟล์ 20 (Adjustment) และ 30 (Monthly Close) ต้อง enforce — เมื่อรอบบัญชีเป็น `locked` ห้ามแก้ source record โดยตรงเด็ดขาด ต้องสร้าง Adjustment record แยกเสมอ
 
-### 6.12 Tax Invoice Numbering Format (รูปแบบเลขที่ใบกำกับภาษี)
+### 6.12 Document Numbering (เลขที่เอกสาร) — มติ PO 06/10/2569 (UAT U102)
 
-ให้บัญชีเลือกรูปแบบ running number ของใบกำกับภาษีได้เอง (ดูไฟล์ 31 §6.2) — เลือกครั้งแรกแล้วไม่ควรเปลี่ยนทีหลัง เพราะกระทบความต่อเนื่องของเลขเอกสารตามกฎหมาย
+คำนำหน้าและรูปแบบเลขของ**เอกสารทุกชนิดที่ระบบออกเลขเอง**ตั้งค่าได้ (เดิมตั้งได้เฉพาะใบกำกับภาษี — ไฟล์ 31 §6.2) · 1 ชุดเลขต่อองค์กรต่อชนิด ในตาราง `document_number_series` (`02` §5)
+
+| ชนิด (`doc_type`) | เอกสาร | ค่าเริ่มต้น | ออกเลขเมื่อ |
+|---|---|---|---|
+| `tax_invoice` | ใบเสร็จรับเงิน/ใบกำกับภาษี (**เอกสารภาษี**) | `INV-0001` (ต่อเนื่อง — ค่าเดิมขององค์กร) | ออกเอกสารภาษี (ไฟล์ 31) |
+| `billing_batch` | ใบแจ้งหนี้/ใบวางบิล | `BL-<พ.ศ.>-001` รีเซ็ตรายปี | สร้างรอบวางบิล (trigger) |
+| `handover_lot` | เลขล็อตส่งมอบ | `LOT-<พ.ศ.>-001` รีเซ็ตรายปี | สร้างล็อต (ไฟล์ 44) |
+| `delivery_note` | ใบส่งมอบ | `DLV-<พ.ศ.>-001` รีเซ็ตรายปี | สร้างล็อต (ไฟล์ 44) |
+| `payment_voucher` | ใบสำคัญจ่าย | `PV-<พ.ศ.>-0001` รีเซ็ตรายปี | สร้างไฟล์โอนครั้งแรก — 1 เลขต่อผู้รับเงินต่อรอบ snapshot ลง `payout_batch_items.voucher_number` |
+| `wht_certificate` | หนังสือรับรองการหักภาษี ณ ที่จ่าย (**เอกสารภาษี**) | `WHT-<พ.ศ.>-001` รีเซ็ตรายปี (ปีตามวันที่จ่าย) | ออกหนังสือรับรอง (ไฟล์ 33) |
+| `advance` | ใบเบิกเงินทดรอง | `ADV-<พ.ศ.>-0001` รีเซ็ตรายปี | ยื่นขอเบิก (trigger ของ `advances`) |
+| `advance_return` | ใบรับคืนเงินทดรอง | `RAV-<พ.ศ.>-0001` รีเซ็ตรายปี | บันทึกรับคืนแยก หรือหักกลบในรอบจ่าย (trigger ของ `advance_returns`) |
+| `substitute_receipt` | ใบรับรองแทนใบเสร็จรับเงิน | `CRT-<พ.ศ.>-0001` รีเซ็ตรายปี | (โครงตัวนับ — ฟีเจอร์ตามมติ U103) |
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| numbering_mode | enum | yes | `continuous` (เรียงต่อเนื่องไม่มีวันสิ้นสุด เช่น 000001, 000002, ...) / `yearly_reset` (ขึ้นต้นใหม่ทุกปีปฏิทินพร้อม prefix ปี เช่น `INV-2569-0001`) |
-| prefix | string | no | ข้อความนำหน้าเลขที่ (เช่น "INV-") — ใช้ได้ทั้ง 2 mode |
-| digit_length | integer | yes | จำนวนหลักของเลขรันนิ่ง (เช่น 4 หลัก = 0001) |
-| last_number | integer | yes | เลขล่าสุดที่ออกไปแล้ว — ระบบ track อัตโนมัติ ไม่ให้แก้มือ |
-| last_reset_year | integer \| null | — | ปีที่ reset ล่าสุด (พ.ศ.) — ใช้เฉพาะ `yearly_reset` |
+| prefix | string ≤ 10 | no | คำนำหน้า A–Z/0–9 คั่นด้วย `-` ได้ (ไม่ขึ้นต้น/ลงท้ายด้วยขีด) — ว่างได้ · ขีดระหว่างคำนำหน้า/ปี/ลำดับ ระบบใส่ให้ |
+| include_year | boolean | yes | `true` = `{คำนำหน้า}-{พ.ศ.}-{ลำดับ}` · `false` = `{คำนำหน้า}-{ลำดับ}` · ปีเป็น **พ.ศ.** ตามเวลาไทยของวันที่เอกสาร |
+| digits | integer 3–8 | yes | จำนวนหลักของลำดับ (เติม 0) — เกินแล้วยาวขึ้นเอง ไม่ตัดหลัก |
+| reset_yearly | boolean | yes | เริ่มนับ 1 ใหม่ทุกปี พ.ศ. — **ต้อง** `include_year = true` (ไม่งั้นเลขปีใหม่ชนปีเก่า) |
+| current_seq / current_year | integer / integer \| null | — | ตัวนับที่ระบบเดินเอง **ห้ามแก้มือ** (`NUMBERING_SEQ_NOT_EDITABLE`) |
+| next_sequence (input) | integer | no | ตั้ง "เลขลำดับถัดไป" — เฉพาะเอกสารที่ไม่ใช่เอกสารภาษี · ต้อง **มากกว่า** เลขที่ใช้แล้ว (ทั้งตัวนับและเลขสูงสุดที่มีจริงในรูปแบบใหม่) ไม่งั้น `NUMBERING_SEQ_BELOW_ISSUED` |
+
+**กติกา**
+- ตัวเดินเลข = `next_document_number(org, doc_type, วันที่เอกสาร)` ฟังก์ชันเดียว — ล็อกแถวชุดเลข `FOR UPDATE` ในทรานแซกชันเดียวกับการสร้างเอกสาร ⇒ **ไม่ซ้ำและไม่ขาด**ภายใต้ concurrency (ล้ม = ตัวนับ rollback)
+- รีเซ็ตรายปี: ปีของเอกสารตรงกับตัวนับ = นับต่อ · ปีอื่น (ขึ้นปีใหม่/ลงวันที่ย้อนปี) = ต่อจากเลขสูงสุดที่มีจริงของปีนั้น · เอกสารย้อนปีไม่ดึงตัวนับปีปัจจุบันถอยหลัง
+- **เอกสารภาษี (INV, WHT) ล็อกรูปแบบหลังออกฉบับแรก** (`NUMBERING_FORMAT_LOCKED`) และตั้งเลขถัดไปเองไม่ได้ — ตั้งรูปแบบให้เรียบร้อยก่อนออกฉบับแรก (คำถามสำนักงานบัญชี C1)
+- ชนิดอื่นเปลี่ยนคำนำหน้า/รูปแบบได้ทุกเมื่อ **มีผลฉบับถัดไป** (เลขลำดับนับต่อ) — เอกสารที่ออกแล้วไม่เปลี่ยนเลข
+- ทุกการเปลี่ยน: สิทธิ์ `manage_invoice_numbering` (🔒 Superadmin เท่านั้น — `25`) + เหตุผลบังคับ + audit (`document_number_series` หมวด tax)
+- เลขเอกสารไม่ซ้ำ**ต่อองค์กร** (UNIQUE `(organization_id, เลข)` ของทุกตารางเอกสาร)
+- UI: ตาราง ชนิด | รูปแบบ | ตัวอย่างเลขถัดไป (สด) | ออกล่าสุด | สถานะล็อก + modal แก้ไข (mockup `reference/settings.html` `renderSettingsNumbering`)
 
 **สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO 06/10/2569 — UAT U82 · ม.86/4)** — ค่าตั้งระดับองค์กรคู่กับเลขประจำตัวผู้เสียภาษีของเรา · **v3.16 (มติ U99): ย้ายหน้าจอไปรวมที่ §6.17 ข้อมูลองค์กร** (API `/api/settings/seller-branch` เดิมยังใช้ได้ — สิทธิ์/กติกาเดียวกัน)
 
@@ -281,7 +304,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 |---|---|---|---|
 | branch_code | string(5) | yes | `00000` = สำนักงานใหญ่ (ค่าเริ่มต้น) · `00001`… = สาขาที่ — ตัวเลข 5 หลักตามใบทะเบียน ภ.พ.20 · พิมพ์ต่อจากเลขประจำตัวผู้เสียภาษีของผู้ขายบนใบกำกับ · **snapshot** ลง `tax_invoices.seller_branch_code` ตอนออกใบ (แก้ภายหลังไม่กระทบใบเดิม) · แก้ได้เฉพาะ `manage_invoice_numbering` + เหตุผล + audit |
 
-> **Schema sync 04/07/2569 (DEC-006/D1)**: field ทั้งชุดอยู่บนตาราง `organizations` ใน `02` v3.5 (`tax_invoice_numbering_mode`, `tax_invoice_prefix`, `tax_invoice_digit_length`, `tax_invoice_seq`, `tax_invoice_last_reset_year`)
+> **Schema sync 06/10/2569 (U102)**: ฟิลด์ชุดเดิมบน `organizations` (`tax_invoice_*`, `billing_batch_seq*` — `02` v3.5/v4.29) ถูกย้ายไป `document_number_series` แล้วลบทิ้ง (`02` v4.41) — ตัวนับเดิมต่อเนื่อง (ค่าเริ่มต้น = max(ตัวนับเดิม, เลขสูงสุดที่มีจริงในฐาน))
 
 ### 6.13 Tax Document Template Settings (รูปแบบเอกสารภาษีทางการ)
 
@@ -399,7 +422,7 @@ AssetRecovery จด VAT (ยืนยันจาก Product Owner) — ต้�
 | แก้ไข Cycles/Approvals/Banks/CostCenter/Docs/BankFile/Export | Superadmin only | full |
 | แก้ไข Tax Profile | Superadmin only | กระทบภาษีทั้งระบบ จำกัดสิทธิ์แคบกว่าอื่น |
 | แก้ไข VAT Rate | Superadmin only | กระทบภาษีทั้งระบบ จำกัดสิทธิ์แคบกว่าอื่น |
-| แก้ไข Tax Invoice Numbering Format | Superadmin only | ควรตั้งครั้งแรกแล้วไม่เปลี่ยน — กระทบความต่อเนื่องของเลขเอกสารตามกฎหมาย |
+| แก้ไขเลขที่เอกสาร (ทุกชนิด) | Superadmin only | เอกสารภาษีล็อกรูปแบบหลังออกฉบับแรก · เอกสารอื่นเปลี่ยนได้ มีผลฉบับถัดไป (U102) |
 | แก้ไข Functional Permission Matrix | Superadmin only | — |
 | แก้ไข Period Lock Policy | Superadmin only | — |
 | ดู settings ทั้งหมด | การเงิน, บัญชี | read-only |

@@ -52,7 +52,6 @@ async function main() {
       taxId: '0000000000000',
       address: '(รอกรอกที่อยู่จริงก่อน go-live)',
       vatRegistered: true,
-      taxInvoicePrefix: 'INV',
     },
   })
 

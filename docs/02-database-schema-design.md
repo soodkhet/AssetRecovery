@@ -62,6 +62,7 @@
 | v4.39 | 06/10/2569 | **มติ PO 06/10/2569 U95 + U96 #3/#4/#7/#8/#9 — ใบเสร็จรับเงิน/ใบกำกับภาษี ตอนรับเงิน** (migration `20261006160000_receipt_tax_invoice`): enum ใหม่ **`tax_invoice_doc_kind`** (`tax_invoice` = ใบเดิมตอนวางบิล · `receipt_tax_invoice` = ตอนรับเงิน) · `tax_invoices` เพิ่ม `doc_kind` · `cash_receipt_id` (FK → `cash_receipts` **ON DELETE SET NULL**) · `replaces_tax_invoice_id` (self-FK · ใบแทน) · ยอดบนใบ `amount_before_vat_satang`/`vat_satang`/`total_satang` (CHECK total = ก่อน VAT + VAT ≥ 0) · `vat_rate_pct_used NUMERIC(5,2)` (อัตรา ณ วันรับเงิน · ใบเดิมหลายอัตรา = NULL) · snapshot คู่ค้า `seller_name/tax_id/address/phone` + `buyer_name/tax_id/address/phone` · `delivery_format` (snapshot — ปิด D13) · `description` — ใบเดิม backfill จาก `sales_records`/ค่าปัจจุบันขององค์กร/บริษัทใน migration เดียวกัน · CHECK `chk_tax_invoices_receipt_kind` · partial unique `uniq_tax_invoice_active_per_sales` จำกัดเฉพาะ `doc_kind = 'tax_invoice'` + ใหม่ `uniq_tax_invoice_active_per_receipt (cash_receipt_id) WHERE active` + `uniq_tax_invoice_replaces` · `tax_invoices_immutable()` เทียบทุกคอลัมน์ (แก้ได้ทางเดียวคือยกเลิก · ข้อยกเว้น: FK SET NULL ของใบที่ยกเลิกแล้ว) · `credit_notes_guard_balance()` อ่านยอดจากใบที่อ้างถึง (ไม่ใช่ `sales_records`) |
 | v4.40 | 06/10/2569 | **UAT R14 BUG-164 — snapshot คู่ค้าของใบแจ้งหนี้/ใบวางบิล** (migration `20261006170000_billing_batch_party_snapshot`): `billing_batches` เพิ่ม `seller_name`/`seller_tax_id`/`seller_address`/`seller_phone`/`seller_branch_code` + `buyer_name`/`buyer_tax_id`/`buyer_address`/`buyer_phone`/`buyer_branch_code` (NULL ได้ — รอบ `draft` ยังไม่มีเอกสาร) · เขียนตอน `draft → sent` ใน transaction เดียวกับการส่ง · CHECK `billing_party_snapshot_complete` (ว่างทั้งชุดหรือครบทั้งชุด) · trigger `trg_billing_batches_party_snapshot` ห้ามเปลี่ยน snapshot ที่บันทึกแล้ว · backfill รอบที่ส่งแล้วจากค่าปัจจุบันขององค์กร/บริษัท ณ วัน migrate · PDF ใบแจ้งหนี้ (ภายใน/พอร์ทัล/Export Pack) อ่านจาก snapshot |
 | v4.41 | 06/10/2569 | **มติ PO 06/10/2569 (U99) — ข้อมูลองค์กร + หัวเอกสารกลาง** (migration `20261006180000_organization_profile_letterhead`): `organizations` เพิ่ม `name_en`, `website`, ที่อยู่แยก `address_detail/_subdistrict/_district/_province/_postal_code` (CHECK รหัสไปรษณีย์ 5 หลัก · `address` คงเป็นบรรทัดรวม) · `logo_url` = path ใน Storage · `tax_invoices` + `billing_batches` เพิ่ม `seller_profile_snapshot JSONB` (`{name_en,email,website,logo_path}` · NULL = เอกสารก่อน U99) — tax_invoices คุมด้วยยาม immutable ทั้งแถวเดิม · billing_batches เพิ่มเข้า `billing_batches_party_snapshot_immutable()` · ไม่ backfill |
+| v4.42 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U102) — เลขที่เอกสารตั้งค่าได้ทุกชนิด** (migration `20261006190000_document_number_series`): enum ใหม่ `document_number_type` (9 ค่า: `tax_invoice`/`billing_batch`/`handover_lot`/`delivery_note`/`payment_voucher`/`wht_certificate`/`advance`/`advance_return`/`substitute_receipt`) · ตารางใหม่ `document_number_series` (1 แถว/องค์กร/ชนิด — prefix ≤ 10 · include_year · digits 3–8 · reset_yearly · ตัวนับ current_seq/current_year + last_issued_* · CHECK prefix/digits/ปี พ.ศ./รีเซ็ตต้องมีปี) · ฟังก์ชัน `next_document_number[_full](org, type, at)` ล็อกแถวชุดเลข `FOR UPDATE` (ไม่ซ้ำไม่ขาดภายใต้ concurrency · ปีรีเซ็ต/ย้อนปีต่อจากเลขสูงสุดที่มีจริงของปีนั้น) · **ลบ** `organizations.tax_invoice_*` + `billing_batch_seq*` + enum `invoice_numbering_mode` + `next_billing_batch_number()` + `next_handover_number()` + sequence `seq_handover_*` (ตัวนับย้ายมาตารางใหม่ = max(ตัวนับเดิม, เลขสูงสุดที่มีจริง)) · คอลัมน์ใหม่ `payout_batch_items.voucher_number` (ใบสำคัญจ่าย — snapshot ตอนสร้างไฟล์โอนครั้งแรก 1 เลข/ผู้รับ/รอบ · แก้ไม่ได้) · `advances.advance_number` / `advance_returns.return_number` (NOT NULL · trigger ออกตอน INSERT · แก้ไม่ได้ · backfill ตาม created_at) · เลขเอกสาร unique **ต่อองค์กร** (`uniq_tax_invoice_number`/`uniq_wht_certificate_number`/`uniq_handover_lot_number`/`uniq_handover_doc_ref`/`uniq_advance_number`/`uniq_advance_return_number` — เดิม LOT/DLV/WHT/INV unique ทั้งตาราง) · ลบ CHECK `billing_batch_number_format` (คำนำหน้าตั้งค่าได้) · enum รวม **67 ตัว** (+1 −1) |
 | v4.3 | 14/08/2569 | **Sync กับไฟล์ 41 §6.4.2/§6.6/§10.1/§15 — implement ใน Phase 2.9** (มติ PO 14/08/2569 ตอบ `[[NEEDS_DECISION]]` ตอนเริ่ม task: ตาราง `expenses` ของไฟล์นี้เขียนกำกับว่า "ตามไฟล์ 15, 41 §6.6" แต่ยังไม่มีช่องที่ §6.6 บังคับใช้จริง และไฟล์นี้ยังไม่มีที่เก็บ Web Push ของ §15 เลย): (1) `expenses.expense_date` DATE NOT NULL — วันที่เชิงธุรกิจของรายการ (ผูกเคส = วันปิดงาน · เบิกแยก = วันเข้าพัก) ฐานของ auto-mapping และสรุปรายได้รายเดือน · (2) `expenses.distance_km` NUMERIC(10,2) — ระยะทางจริงของ fuel โหมด `PER_KM` (§6.4.2) เก็บไว้ตรวจย้อนหลัง **ไม่ใช่เงิน** (เงินยังเป็น satang INTEGER ตาม §2.2) · (3) `expenses.shared_with_user_id` + `receipt_file_url` — ฟอร์มเบิกที่พักของ §6.6 (ตาราง `files` ไม่มีคอลัมน์ผูก entity จึงเก็บที่นี่) · (4) `expenses.superseded_by_expense_id` — สายตีกลับหลักฐาน §10.1 (รายการรอบเดิม `superseded` ชี้ไปตัวที่มาแทน) · (5) index ใหม่ `idx_expenses_payee_date` + partial unique `uniq_active_case_expense_per_assignment` (รายการเบิกผูกเคสมีได้ชนิดละ 1 ที่ยังมีผลต่อ 1 รอบติดตาม — กันกด submit/resubmit ซ้อน) · (6) ตารางใหม่ `push_subscriptions` (§15 Web Push — ไม่ใช่ FCM · `endpoint` UNIQUE ⇒ subscribe ซ้ำ = upsert) · **ไม่มีการลบ/เปลี่ยนคอลัมน์เดิม และไม่มี enum ใหม่** (D10 ใช้ทางที่ไม่ต้องเพิ่มค่า `expense_status`) — enum คงที่ **61 ตัว** · รวมเป็น **60 tables** · migration: `20260814170000_field_expense_push` |
 | v3.9 | 14/08/2569 | **มติ PO 14/08/2569 — implement ใน Phase 1.8** (คำถาม `[[NEEDS_DECISION]]` ตอนเริ่ม task: `finance_companies` ใน §5 ขาดฟิลด์ที่ไฟล์ `10` §7.1 + mockup `settings.html` ใช้จริง): (1) เพิ่ม `finance_companies.suspended_reason` TEXT — เหตุผลระงับบริษัท บังคับกรอกเมื่อ `status = 'suspended'` (ไฟล์ 10 §9.3/§11 `SUSPEND_REASON_REQUIRED` · การ์ดบริษัทแสดงกล่องเหตุผล) · (2) เพิ่ม enum `invoice_delivery_format` (`e_tax_invoice`/`paper_pdf`) + column `finance_companies.default_invoice_delivery_format` NOT NULL DEFAULT `'paper_pdf'` (ไฟล์ 10 §7.1 — ค่าเริ่มต้นต่อบริษัท เปลี่ยนรายใบได้ตอนออกเอกสารตามไฟล์ 31 §6.2) · (3) แก้ **comment** ของ `finance_companies.status` จาก `active \| inactive` → `active \| suspended` ให้ตรงกับไฟล์ 10 §9.3 + mockup (**คงชนิด TEXT เดิม ไม่แปลงเป็น enum** — ไม่มี DDL เปลี่ยนชนิด) · enum รวมเป็น **56 ตัว** · migration: `20260814043410_finance_company_suspend_delivery_format` |
 | v3.8 | 14/08/2569 | **มติ PO 2026-08-12 (`docs/02_OPEN_DECISIONS.md` หมวด A ที่เหลือ) — implement ใน Phase 1.2**: (A1 ส่วนที่เหลือ) เพิ่ม `billing_batches.wht_withheld_by_customer_satang` + `cash_receipts.wht_withheld_by_customer_satang` + ตารางใหม่ `customer_wht_certificates` (ใบ 50 ทวิ **ฝั่งรับ** ที่ไฟแนนซ์ออกให้เรา = เครดิตภาษี) · (A2) ตารางใหม่ `bank_transaction_allocations` (เงินเข้าก้อนเดียวตัดได้หลายรอบบิล/บางส่วน · ส่วนเกิน = แถว `is_credit` ไม่ให้ AR ติดลบ) + `bank_transactions.is_split_allocation` และขยาย CHECK `bank_tx_one_match`/`bank_tx_status_fk_shape` ให้ครอบโหมดแบ่งยอด · (A4) `payout_batch_items.expense_id` เป็น nullable + เพิ่ม `advance_id` + CHECK `pbi_one_source` (exactly-one — DEC-004) + `advances.payout_batch_item_id` + `bank_transactions.matched_advance_id` — **ใช้ชื่อ `expense_id`/`advance_id` ตามคอลัมน์เดิมของไฟล์นี้** (ข้อเสนอเดิมเขียน `source_*` แต่ `02` เป็น SSOT ของชื่อคอลัมน์) · (A6) `cases.serial_no` + `assets.serial_contract`/`serial_actual`, `assets.imei_contract` เป็น nullable, เปลี่ยน `UNIQUE(org, imei_contract)` → partial unique `uniq_assets_active_imei` (เฉพาะที่ยังไม่ `handed_over`) + CHECK `assets_identifier_required` · (B3) `revenues.tracking_round` + `payout_batch_items.tracking_round` · **ไม่มีการลบคอลัมน์เดิม** — รวมเป็น **53 tables** (51 เดิม + 2 ใหม่) |
@@ -148,7 +149,9 @@ CREATE TYPE bank_account_usage     AS ENUM ('receive', 'pay', 'both');          
 CREATE TYPE bank_file_type         AS ENUM ('CSV', 'TXT');                      -- ไฟล์ 13 §6.8
 CREATE TYPE bank_file_encoding     AS ENUM ('UTF-8', 'TIS-620');
 CREATE TYPE bank_file_test_status  AS ENUM ('pending', 'passed', 'failed');
-CREATE TYPE invoice_numbering_mode AS ENUM ('continuous', 'yearly_reset');      -- ไฟล์ 13 §6.12
+-- v4.41 (มติ PO U102 · ไฟล์ 13 §6.12) — ชนิดเอกสารที่ระบบออกเลข (แทน invoice_numbering_mode ที่ลบแล้ว)
+CREATE TYPE document_number_type AS ENUM ('tax_invoice', 'billing_batch', 'handover_lot', 'delivery_note',
+  'payment_voucher', 'wht_certificate', 'advance', 'advance_return', 'substitute_receipt');
 CREATE TYPE tax_document_type      AS ENUM ('tax_invoice', 'wht_certificate');  -- ไฟล์ 13 §6.13
 CREATE TYPE tax_doc_paper_size     AS ENUM ('A4', 'A5');
 CREATE TYPE tax_doc_language       AS ENUM ('th', 'th_en_bilingual');
@@ -494,16 +497,7 @@ CREATE TABLE organizations (
   logo_url        TEXT,                           -- path ใน Storage `organization/<orgId>/logo/<uuid>.<ext>` (U99) — ไม่ลบไฟล์เดิมเมื่อเปลี่ยน
   vat_registered  BOOLEAN       NOT NULL DEFAULT true,
   branch_code     VARCHAR(5)    NOT NULL DEFAULT '00000',  -- สำนักงานใหญ่/สาขาของผู้ขาย (U82 · ม.86/4) · CHECK ตัวเลข 5 หลัก
-  -- Tax Invoice numbering prefix (ตัดสินใจก่อน production — ไฟล์ 13 §6.12)
-  tax_invoice_prefix VARCHAR(20) NOT NULL DEFAULT 'INV',
-  tax_invoice_seq    INTEGER      NOT NULL DEFAULT 0,  -- running seq
-  -- Numbering mode เต็มรูป (ไฟล์ 13 §6.12 — เพิ่ม 04/07/2569 DEC-006/D1)
-  tax_invoice_numbering_mode invoice_numbering_mode NOT NULL DEFAULT 'continuous',
-  tax_invoice_digit_length   INTEGER NOT NULL DEFAULT 4,   -- จำนวนหลัก running (เช่น 4 = 0001)
-  tax_invoice_last_reset_year INTEGER,                     -- พ.ศ. — ใช้เฉพาะ yearly_reset
-  -- เลขรอบวางบิล BL-<พ.ศ.>-NNN (มติ PO U76 · v4.29) — เดินโดย trigger ของ billing_batches เท่านั้น
-  billing_batch_seq      INTEGER NOT NULL DEFAULT 0,
-  billing_batch_seq_year INTEGER,                          -- ปี พ.ศ. ของ billing_batch_seq ปัจจุบัน
+  -- v4.41 (มติ PO U102): tax_invoice_* / billing_batch_seq* ย้ายไป document_number_series แล้วลบ
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
   -- ไม่มี organization_id (root table)
@@ -802,6 +796,32 @@ CREATE TABLE cost_centers (
   deleted_at      TIMESTAMPTZ,
   UNIQUE(organization_id, code)
 );
+
+-- ── document_number_series ────────────────────────────────────
+-- เลขที่เอกสารทุกชนิด (v4.41 มติ PO 06/10/2569 UAT U102 — ไฟล์ 13 §6.12) — 1 แถว/องค์กร/ชนิด
+-- ตัวนับเดินโดย next_document_number(org, doc_type, at) เท่านั้น (SELECT … FOR UPDATE แถวนี้ ในทรานแซกชันเดียวกับเอกสาร)
+-- แถวค่าเริ่มต้นสร้างเองครั้งแรกที่ใช้ (ensure_document_number_series) · INV/WHT ล็อกรูปแบบหลังออกฉบับแรก (ชั้น service)
+CREATE TABLE document_number_series (
+  id                 UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID                 NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  doc_type           document_number_type NOT NULL,
+  prefix             VARCHAR(10)          NOT NULL CHECK (prefix ~ '^([A-Z0-9]+(-[A-Z0-9]+)*)?$'),
+  include_year       BOOLEAN              NOT NULL,             -- {prefix}-{พ.ศ.}-{seq} / {prefix}-{seq}
+  digits             INTEGER              NOT NULL CHECK (digits BETWEEN 3 AND 8),
+  reset_yearly       BOOLEAN              NOT NULL,
+  current_seq        INTEGER              NOT NULL DEFAULT 0 CHECK (current_seq >= 0),
+  current_year       INTEGER              CHECK (current_year IS NULL OR current_year BETWEEN 2500 AND 2999),  -- พ.ศ.
+  last_issued_number TEXT,
+  last_issued_at     TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  created_by         UUID                 REFERENCES users(id),  -- NULL = ระบบสร้างค่าเริ่มต้น
+  updated_at         TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+  updated_by         UUID                 REFERENCES users(id),
+  deleted_at         TIMESTAMPTZ,
+  CONSTRAINT uniq_document_number_series UNIQUE (organization_id, doc_type),
+  CONSTRAINT document_number_series_reset_needs_year CHECK (NOT reset_yearly OR include_year)
+);
+-- ค่าเริ่มต้น: INV-0001 (ต่อเนื่อง) · BL/LOT/DLV/WHT-<พ.ศ.>-001 · PV/ADV/RAV/CRT-<พ.ศ.>-0001 (รีเซ็ตรายปี)
 
 -- ── public_holidays ───────────────────────────────────────────
 -- ปฏิทินวันหยุดขององค์กร (v4.35 มติ PO 06/10/2569 UAT U93 — ไฟล์ 13 §6.15)
@@ -1353,8 +1373,8 @@ CREATE TABLE handover_lots (
   organization_id     UUID                 NOT NULL REFERENCES organizations(id),
   company_id          UUID                 NOT NULL REFERENCES finance_companies(id),
   -- Auto-generated (ใช้ PostgreSQL sequence)
-  lot_number          TEXT                 NOT NULL UNIQUE,  -- LOT-2569-001
-  doc_ref             TEXT                 NOT NULL UNIQUE,  -- DLV-2569-001
+  lot_number          TEXT                 NOT NULL,  -- LOT-2569-001 · UNIQUE(org, lot_number) uniq_handover_lot_number (v4.41)
+  doc_ref             TEXT                 NOT NULL,  -- DLV-2569-001 · UNIQUE(org, doc_ref) uniq_handover_doc_ref (v4.41)
   -- Type & Status
   type                handover_type        NOT NULL,
   status              handover_lot_status  NOT NULL DEFAULT 'pending_attach',
@@ -1519,6 +1539,7 @@ CREATE TABLE advances (
   id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID            NOT NULL REFERENCES organizations(id),
   payee_id            UUID            NOT NULL REFERENCES payee_profiles(id),
+  advance_number      TEXT            NOT NULL,  -- v4.41 เลขที่ใบเบิก (trigger trg_advances_number ออกตอน INSERT · แก้ไม่ได้) · UNIQUE(org, advance_number)
   requested_satang    INTEGER         NOT NULL,
   approved_satang     INTEGER,
   used_satang         INTEGER         NOT NULL DEFAULT 0,
@@ -1616,6 +1637,8 @@ CREATE TABLE payout_batch_items (
   wht_income_category wht_income_category,            -- snapshot ประเภทเงินได้ (NULL = รอบเก่า/เงินทดรอง)
   -- v4.23 (มติ PO U30) snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (หลัง WHT · ไม่กระทบฐาน WHT/50 ทวิ)
   advance_offset_satang INTEGER NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
+  -- v4.41 (มติ PO U102) เลขที่ใบสำคัญจ่าย — 1 เลข/ผู้รับ/รอบ ออกตอนสร้างไฟล์โอนครั้งแรก · NULL = ยังไม่สร้างไฟล์ · ตั้งแล้วแก้ไม่ได้
+  voucher_number    TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by        UUID    NOT NULL REFERENCES users(id),
   UNIQUE(payout_batch_id, expense_id),
@@ -1637,6 +1660,7 @@ CREATE TABLE advance_returns (
   organization_id       UUID                   NOT NULL REFERENCES organizations(id),
   advance_id            UUID                   NOT NULL REFERENCES advances(id) ON DELETE CASCADE,
   payee_id              UUID                   NOT NULL REFERENCES payee_profiles(id),
+  return_number         TEXT                   NOT NULL,  -- v4.41 เลขที่ใบรับคืน (trigger ออกตอน INSERT · แก้ไม่ได้) · UNIQUE(org, return_number)
   channel               advance_return_channel NOT NULL,
   amount_satang         INTEGER                NOT NULL CHECK (amount_satang > 0),
   payout_batch_id       UUID                   REFERENCES payout_batches(id) ON DELETE CASCADE,      -- channel = payout_offset
@@ -1702,7 +1726,7 @@ CREATE TABLE billing_batches (
   organization_id   UUID                  NOT NULL REFERENCES organizations(id),
   company_id        UUID                  NOT NULL REFERENCES finance_companies(id),
   -- มติ PO U76 (v4.29): เลขรอบ BL-<พ.ศ.>-NNN ต่อองค์กร รีเซ็ตทุกปี พ.ศ. — trigger เดินเลขตอน INSERT · แก้ไม่ได้
-  batch_number      TEXT                  NOT NULL CHECK (batch_number ~ '^BL-2[5-9][0-9]{2}-[0-9]{3,}$'),
+  batch_number      TEXT                  NOT NULL,  -- ค่าเริ่มต้น BL-<พ.ศ.>-NNN · คำนำหน้าตั้งค่าได้ (v4.41 ลบ CHECK รูปแบบ)
   period            TEXT                  NOT NULL,  -- "มิถุนายน 2569"
   status            billing_batch_status  NOT NULL DEFAULT 'draft',
   total_satang      INTEGER               NOT NULL DEFAULT 0,
@@ -1724,7 +1748,7 @@ CREATE TABLE billing_batches (
 );
 CREATE INDEX idx_billing_org_company_period ON billing_batches(organization_id, company_id, period);  -- U86
 CREATE UNIQUE INDEX uniq_billing_batch_number ON billing_batches(organization_id, batch_number);  -- U76
--- trigger trg_billing_batches_number (BEFORE INSERT OR UPDATE OF batch_number) → next_billing_batch_number(org, created_at)
+-- trigger trg_billing_batches_number (BEFORE INSERT OR UPDATE OF batch_number) → next_document_number(org, 'billing_batch', created_at) (v4.41)
 CREATE INDEX idx_billing_org_status  ON billing_batches(organization_id, status);
 CREATE INDEX idx_billing_company     ON billing_batches(company_id, status);
 
@@ -1816,7 +1840,7 @@ CREATE TABLE tax_invoices (
   id                UUID                PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID                NOT NULL REFERENCES organizations(id),
   sales_record_id   UUID                NOT NULL REFERENCES sales_records(id),
-  invoice_number    TEXT                NOT NULL UNIQUE,  -- auto-gen, ห้ามแก้
+  invoice_number    TEXT                NOT NULL,  -- auto-gen (document_number_series 'tax_invoice'), ห้ามแก้ · UNIQUE(org, invoice_number) v4.41
   invoice_date      DATE                NOT NULL,
   buyer_branch_code VARCHAR(5)          NOT NULL,  -- snapshot finance_companies.branch_code ตอนออกใบ (U77 · ม.86/4) ห้ามแก้
   seller_branch_code VARCHAR(5)         NOT NULL,  -- snapshot organizations.branch_code ตอนออกใบ (U82 · ม.86/4) ห้ามแก้
@@ -1930,7 +1954,7 @@ CREATE INDEX idx_expense_records_period ON expense_records(period_id);
 CREATE TABLE wht_certificates (
   id                  UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID              NOT NULL REFERENCES organizations(id),
-  certificate_number  TEXT              NOT NULL UNIQUE,
+  certificate_number  TEXT              NOT NULL,  -- document_number_series 'wht_certificate' · UNIQUE(org, certificate_number) v4.41
   payee_id            UUID              NOT NULL REFERENCES payee_profiles(id),
   expense_record_id   UUID              NOT NULL REFERENCES expense_records(id),
   income_type         TEXT              NOT NULL DEFAULT 'ค่าจ้างทำของ มาตรา 40(8)',

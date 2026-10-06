@@ -154,11 +154,6 @@ export function advanceExcessClaimNote(input: { purpose: string; approvedSatang:
 
 // ── ยอดคืนเงินทดรอง (มติ PO 05/10/2569 UAT U30 · BUG-109 · `15` §9.3) ─────────────
 
-/** เลขอ้างอิงที่ผู้ใช้เห็น (บรรทัด "หักคืนเงินทดรอง ADV-xxxx" บนไฟล์โอน/ใบสำคัญจ่าย/สลิป) */
-export function advanceRef(advanceId: string): string {
-  return `ADV-${advanceId.replace(/-/g, '').slice(0, 8).toUpperCase()}`
-}
-
 /** วิธีคืนค่าเริ่มต้นตามมติ U30 — หักกลบในรอบจ่ายถัดไปของผู้รับ */
 export const DEFAULT_ADVANCE_RETURN_METHOD: AdvanceReturnMethod = 'payout_offset'
 
@@ -246,9 +241,12 @@ export const ADVANCE_RETURN_CHANNEL_LABEL: Readonly<Record<AdvanceReturnChannel,
   bank_transfer: 'โอนเข้าบัญชีบริษัท',
 }
 
-/** ป้ายบรรทัดหักบนไฟล์โอน/ใบสำคัญจ่าย/สลิป */
-export function advanceOffsetLineLabel(advanceId: string): string {
-  return `หักคืนเงินทดรอง ${advanceRef(advanceId)}`
+/**
+ * ป้ายบรรทัดหักบนไฟล์โอน/ใบสำคัญจ่าย/สลิป — `advanceNumber` = เลขที่ใบเบิกเงินทดรองที่ระบบออกให้
+ * (`advances.advance_number` — มติ PO U102 · เดิม derive จาก id)
+ */
+export function advanceOffsetLineLabel(advanceNumber: string): string {
+  return `หักคืนเงินทดรอง ${advanceNumber}`
 }
 
 // ── มติ PO 05/10/2569 (UAT U74) — ห้ามเคลียร์ยอดขณะเงินทดรองอยู่ในรอบจ่ายที่ยังไม่โอนจริง ─────────

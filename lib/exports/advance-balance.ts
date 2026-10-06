@@ -1,4 +1,3 @@
-import { advanceRef } from '@/lib/advances/advance'
 import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
 import { sumSatang } from '@/lib/finance/satang'
 import type { AdvanceReturnChannel, AdvanceStatus } from '@/lib/generated/prisma/enums'
@@ -38,6 +37,8 @@ export interface AdvanceBalanceReturn {
 
 export interface AdvanceBalanceEntry {
   advanceId: string
+  /** เลขที่ใบเบิกเงินทดรอง (`advances.advance_number` — มติ PO U102) */
+  advanceNumber: string
   payeeId: string
   payeeName: string
   payeeTaxId: string | null
@@ -172,7 +173,7 @@ export function advanceBalanceRows(
     row.returnedOffsetSatang += line.returnedOffsetSatang
     row.returnedDirectSatang += line.returnedDirectSatang
     row.closingSatang += line.closingSatang
-    row.advanceRefs.push(advanceRef(entry.advanceId))
+    row.advanceRefs.push(entry.advanceNumber)
     byPayee.set(entry.payeeId, row)
   }
   return [...byPayee.values()]

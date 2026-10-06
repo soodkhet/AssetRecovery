@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { renderPackCover } from '@/components/pdf/pack-cover'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
-import { advanceRef } from '@/lib/advances/advance'
 import { assertExportNotBlocked } from '@/lib/accounting/exception'
 import {
   accruedExpenseWhere,
@@ -112,9 +111,8 @@ import { signedAdjustmentSatang } from '@/lib/adjustments/adjustment'
 import { CREDIT_NOTE_DOCUMENT_CODE } from '@/lib/credit-notes/credit-note'
 import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
-import { voucherNumber } from '@/lib/payout/payout-doc'
 import { prisma } from '@/lib/prisma'
-import { buddhistYear, startOfBangkokDay } from '@/lib/format/datetime'
+import { startOfBangkokDay } from '@/lib/format/datetime'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { customerWhtExportSources } from '@/lib/customer-wht/queries'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
@@ -339,6 +337,7 @@ const EXPENSE_RECORD_SELECT = {
       payoutBatchId: true,
       payeeId: true,
       advanceId: true,
+      advance: { select: { advanceNumber: true } },
       expense: {
         select: {
           id: true,
@@ -385,7 +384,7 @@ function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers
       // มติ PO U96 #14 — เฉพาะค่าที่พัก (ชนิดอื่น/เงินทดรอง = ว่าง)
       receiptInCompanyName: expense?.expenseType === 'hotel' ? expense.receiptInCompanyName : null,
       // มติ PO U96 #15 — เงินทดรองจ่ายไม่มีใบเบิก ⇒ ใช้เลขอ้างอิงเงินทดรอง
-      expenseId: expense?.id ?? (item.advanceId === null ? null : advanceRef(item.advanceId)),
+      expenseId: expense?.id ?? item.advance?.advanceNumber ?? null,
       workDate: expense?.expenseDate ?? null,
       paymentDate: payoutPaymentDateOf(item.payoutBatch),
       payoutBatchRef: payoutBatchRefOf(item.payoutBatch),
@@ -422,7 +421,7 @@ interface PayoutVouchers {
 
 /**
  * `04_Payments.csv` — 1 แถว = 1 ใบสำคัญจ่าย (ผู้รับเงิน 1 คนต่อรอบจ่าย) เพื่อให้เลขอ้างอิงตรงกับ
- * ใบสำคัญจ่ายที่พิมพ์จริงจาก 3.5 (`voucherNumber()` — ลำดับผู้รับเงินภายในรอบจ่ายนั้น)
+ * ใบสำคัญจ่ายที่พิมพ์จริง (snapshot `payout_batch_items.voucher_number` — มติ PO U102)
  */
 async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRecordRow[]): Promise<PayoutVouchers> {
   const batchIds = [...new Set(rows.map((row) => row.payoutBatchItem.payoutBatchId))]
@@ -445,6 +444,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
           payeeId: true,
           netSatang: true,
           advanceOffsetSatang: true,
+          voucherNumber: true,
           payee: { select: { user: { select: { fullName: true } } } },
         },
       },
@@ -456,12 +456,18 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
   for (const batch of batches) {
     const batchRef = payoutBatchRefOf(batch)
     const paymentDate = payoutPaymentDateOf(batch)
-    const beYear = buddhistYear(paymentDate) ?? 0
 
     // จัดกลุ่มตามผู้รับเงินโดยคง**ลำดับรายการในรอบ** ให้ตรงกับตอนพิมพ์ใบสำคัญจ่าย (3.5)
     const groups = new Map<
       string,
-      { payeeId: string; payeeName: string; netSatang: number; advanceOffsetSatang: number; inPeriod: boolean }
+      {
+        payeeId: string
+        payeeName: string
+        netSatang: number
+        advanceOffsetSatang: number
+        inPeriod: boolean
+        voucherNumber: string | null
+      }
     >()
     for (const item of batch.items) {
       const existing = groups.get(item.payeeId)
@@ -472,21 +478,21 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
           netSatang: item.netSatang,
           advanceOffsetSatang: item.advanceOffsetSatang,
           inPeriod: paidItemIds.has(item.id),
+          voucherNumber: item.voucherNumber,
         })
       } else {
         existing.netSatang += item.netSatang
         existing.advanceOffsetSatang += item.advanceOffsetSatang
         existing.inPeriod = existing.inPeriod || paidItemIds.has(item.id)
+        existing.voucherNumber = existing.voucherNumber ?? item.voucherNumber
       }
     }
 
-    let voucherIndex = 0
     for (const group of groups.values()) {
-      voucherIndex += 1
-      const voucherRef = voucherNumber({ batchRef, beYear, index: voucherIndex })
+      // เลขใบสำคัญจ่ายเป็น snapshot ที่ออกตอนสร้างไฟล์โอน — รอบที่จ่ายแล้วมีเลขเสมอ (ว่าง = ข้อมูลผิดปกติ)
+      const voucherRef = group.voucherNumber ?? ''
       voucherRefOf.set(voucherKey(batch.id, group.payeeId), voucherRef)
       // ผู้รับเงินที่รายการยังไม่ถูก sync เข้างวดนี้ (รอบคาบเกี่ยว) ไม่ต้องอยู่ในไฟล์ของงวด
-      // — แต่ลำดับใบสำคัญจ่ายยังนับต่อเนื่องทั้งรอบ เพื่อให้เลขตรงกับใบที่พิมพ์จริง
       if (!group.inPeriod) continue
 
       out.push({
@@ -984,6 +990,7 @@ async function advanceReturnRows(organizationId: string, scope: PeriodScope): Pr
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: {
       advanceId: true,
+      advance: { select: { advanceNumber: true } },
       channel: true,
       amountSatang: true,
       receivedDate: true,
@@ -1001,7 +1008,7 @@ async function advanceReturnRows(organizationId: string, scope: PeriodScope): Pr
       row.channel === 'payout_offset' && row.payoutBatch !== null
         ? payoutPaymentDateOf(row.payoutBatch)
         : (row.receivedDate ?? row.createdAt),
-    advanceRef: advanceRef(row.advanceId),
+    advanceRef: row.advance.advanceNumber,
     payeeName: row.payee.user.fullName,
     amountSatang: row.amountSatang,
     channel: row.channel,
@@ -1182,6 +1189,7 @@ async function advanceBalanceExportRows(
     orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
     select: {
       id: true,
+      advanceNumber: true,
       status: true,
       approvedSatang: true,
       returnSatang: true,
@@ -1201,6 +1209,7 @@ async function advanceBalanceExportRows(
   })
   const entries: AdvanceBalanceEntry[] = rows.map((row) => ({
     advanceId: row.id,
+    advanceNumber: row.advanceNumber,
     payeeId: row.payee.id,
     payeeName: row.payee.user.fullName,
     payeeTaxId: row.payee.nationalId,

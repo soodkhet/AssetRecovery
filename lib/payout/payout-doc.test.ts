@@ -7,7 +7,7 @@ import {
   buildPayoutSummaryDoc,
   buildPayslipDocs,
   groupPayoutItemsByPayee,
-  voucherNumber,
+  voucherNumberOf,
   type PayoutDocIssuer,
 } from '@/lib/payout/payout-doc'
 import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/types'
@@ -41,6 +41,7 @@ function item(overrides: Partial<PayoutBatchItemDto> = {}): PayoutBatchItemDto {
     advanceOffsetSatang: 0,
     transferSatang: 824_500,
     advanceOffsets: [],
+    voucherNumber: 'PV-2569-0007',
     bankName: 'ธนาคารกสิกรไทย',
     accountNumberMasked: 'xxx-x-x1234-x',
     ...overrides,
@@ -166,7 +167,7 @@ describe('buildPayoutSummaryDoc (`04_payout_batch_summary.pdf`)', () => {
 describe('buildPaymentVoucherDocs (`05_payment_voucher.pdf`)', () => {
   it('1 ใบต่อผู้รับเงิน พร้อมยอดสุทธิเป็นตัวอักษรตามตัวอย่าง', () => {
     const voucher = buildPaymentVoucherDocs(batch([item()]), ISSUER)[0]!
-    expect(voucher.voucherNo).toBe('PV-2569-PB-OUT-25690705-ABCDEF-001')
+    expect(voucher.voucherNo).toBe('PV-2569-0007')
     expect(voucher.payeeName).toBe('ประยุทธ์ บุญมี')
     expect(voucher.bankLine).toBe('ธนาคารกสิกรไทย เลขที่บัญชี xxx-x-x1234-x')
     expect(voucher.payDateLabel).toBe('05/07/2569')
@@ -184,8 +185,11 @@ describe('buildPaymentVoucherDocs (`05_payment_voucher.pdf`)', () => {
     expect(done.pendingNote).toBeNull()
   })
 
-  it('เลขที่ใบสำคัญจ่าย deterministic — พิมพ์ซ้ำได้เลขเดิม', () => {
-    expect(voucherNumber({ batchRef: 'ABCD1234', beYear: 2569, index: 12 })).toBe('PV-2569-ABCD1234-012')
+  it('มติ PO U102 — เลขที่ใบสำคัญจ่ายมาจาก snapshot ของรายการ (พิมพ์ซ้ำได้เลขเดิม) · ยังไม่มีเลข = ขีด', () => {
+    expect(voucherNumberOf([item({ voucherNumber: null }), item({ voucherNumber: 'PV-2569-0012' })])).toBe('PV-2569-0012')
+    expect(voucherNumberOf([item({ voucherNumber: null })])).toBeNull()
+    const unnumbered = buildPaymentVoucherDocs(batch([item({ voucherNumber: null })]), ISSUER)[0]!
+    expect(unnumbered.voucherNo).toBe('—')
   })
 })
 

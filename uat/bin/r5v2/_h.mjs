@@ -30,7 +30,7 @@ export const SQL = {
   asset: `select a.case_ref,a.asset_status,a.imei_actual,a.condition,a.condition_note,cardinality(a.photos) photos,(select count(*) from jsonb_object_keys(a.photo_hashes)) hashed,to_char(a.received_at,'HH24:MI:SS') rcv,a.reject_reason,to_char(a.rejected_at,'HH24:MI:SS') rej_at,a.rejected_by is not null rej_by,l.lot_number from assets a left join handover_lots l on l.id=a.lot_id order by 1`,
   hash: `select a.case_ref,regexp_replace(k.key,'^.*/','') f,k.value->>'sha256' sha from assets a, jsonb_each(a.photo_hashes) k order by 1,2`,
   lot: `select lot_number,doc_ref,type,status,company_id=E'${CO1}' co1,scheduled_at,contact_person,delivery_addr,tracking_no,delivered_at,confirmed_at,confirmed_by is not null cby,signed_doc_url,signed_doc_hash,delivery_proof_url,delivery_proof_hash,id from handover_lots order by created_at`,
-  seq: `select (select last_value from seq_handover_lot_2569) lot_seq,(select last_value from seq_handover_dlv_2569) dlv_seq`,
+  seq: `select (select current_seq from document_number_series where doc_type='handover_lot') lot_seq,(select current_seq from document_number_series where doc_type='delivery_note') dlv_seq`,
   ev: `select c.case_ref,e.outcome,e.status,e.reviewed_by is not null rby,to_char(e.reviewed_at,'HH24:MI:SS') rat,e.submitted_at from case_evidences e join cases c on c.id=e.case_id order by 1,e.submitted_at`,
   ex: `select c.case_ref,x.expense_type,x.gross_satang,x.status,(x.field_day_settlement_id is not null) daily,x.approval_step_current from expenses x left join cases c on c.id=x.case_id order by 1 nulls last,2,4`,
   rev: `select count(*) revenues from revenues`,

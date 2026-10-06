@@ -13,7 +13,7 @@ import { TAX_INVOICE_DOC_KIND_TITLE, TAX_INVOICE_DOC_KIND_TITLE_EN } from '@/lib
  *
  * ### กติกาที่ห้ามหลุด
  * - **เลขที่ใบกำกับภาษีเดินโดยระบบเท่านั้น ห้ามกรอกมือ ห้าม gap** (`31` §10) ⇒ ที่นี่ไม่มีตัวสร้าง
- *   เลข — ตัวจริงคือ `reserveNextInvoiceNumber()` (`lib/settings/queries/numbering.ts`, Phase 1.10)
+ *   เลข — ตัวจริงคือ `nextDocumentNumber()` (`lib/document-numbering/queries.ts` — มติ PO U102)
  *   ซึ่งเดินเลขแบบ atomic ใน `$transaction` เดียวกับการ insert
  * - **ไม่มีสถานะ draft** (`31` §7.2 v2 · `02` §3 enum `tax_invoice_status`) — สร้าง = `active` ทันที
  *   · `cancelled` เป็น terminal (ห้ามลบ ห้าม reverse — `02` §13)

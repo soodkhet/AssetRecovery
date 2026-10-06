@@ -1,7 +1,6 @@
 import type {
   BankAccountUsage,
   BankFileTestStatus,
-  InvoiceNumberingMode,
   TaxDocLanguage,
   TaxDocPaperSize,
   WhtFilingForm,
@@ -78,12 +77,6 @@ export const WHT_FILING_FORM_LABEL: Readonly<Record<WhtFilingForm, string>> = {
   PND3: 'ภ.ง.ด.3 (บุคคลธรรมดา)',
   PND53: 'ภ.ง.ด.53 (นิติบุคคล)',
   PND1: 'ภ.ง.ด.1 (เงินได้ 40(1)/40(2))',
-}
-
-/** รูปแบบเดินเลขใบกำกับภาษี (`13` §6.12) */
-export const NUMBERING_MODE_LABEL: Readonly<Record<InvoiceNumberingMode, string>> = {
-  continuous: 'เรียงต่อเนื่อง (ไม่รีเซ็ต)',
-  yearly_reset: 'รีเซ็ตทุกปี พ.ศ. (แทรกปีในเลข)',
 }
 
 /** รูปแบบเอกสารภาษีทางการ (`13` §6.13) */

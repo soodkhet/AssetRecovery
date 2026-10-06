@@ -24,7 +24,7 @@ import {
 } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
-import { DELIVERY_DOC_PREFIX, LOT_PREFIX, handoverNumberYear } from '@/lib/warehouse/numbering'
+import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-service'
 import type {
   AssetIntakeInput,
@@ -642,19 +642,17 @@ export async function getLot(user: SessionUser, lotId: string): Promise<LotDetai
 // ── POST /api/handover-lots (`44` §6.2 · §9.2) ──────────────────────────────
 
 /**
- * เดินเลขล็อต/ใบส่งมอบผ่าน SQL function (`next_handover_number`) — **ห้ามอ่าน MAX() มาบวกเอง**
- * `nextval()` ไม่ถูก rollback ⇒ ต่อให้ทรานแซกชันล้ม เลขก็ไม่ถูกใช้ซ้ำ (`44` §10 "ไม่ recycle")
+ * เดินเลขล็อต/ใบส่งมอบผ่านชุดเลขกลาง (มติ PO U102 — `nextDocumentNumber()` ล็อกแถวชุดเลข FOR UPDATE)
+ * **ห้ามอ่าน MAX() มาบวกเอง** · อยู่ในทรานแซกชันเดียวกับ INSERT ล็อต ⇒ ล้ม = ตัวนับ rollback · ล็อก LOT ก่อน DLV เสมอ
  */
-async function nextHandoverNumbers(tx: WarehouseTxClient, at: Date): Promise<{ lotNumber: string; docRef: string }> {
-  const beYear = handoverNumberYear(at)
-  const [lotRow] = await tx.$queryRaw<{ value: string }[]>`
-    SELECT next_handover_number(${LOT_PREFIX}, ${beYear}::int) AS value`
-  const [docRow] = await tx.$queryRaw<{ value: string }[]>`
-    SELECT next_handover_number(${DELIVERY_DOC_PREFIX}, ${beYear}::int) AS value`
-  if (lotRow === undefined || docRow === undefined) {
-    throw new Error('next_handover_number ไม่คืนค่า — migration ของเลขเอกสารยังไม่ถูก apply?')
-  }
-  return { lotNumber: lotRow.value, docRef: docRow.value }
+async function nextHandoverNumbers(
+  tx: WarehouseTxClient,
+  organizationId: string,
+  at: Date,
+): Promise<{ lotNumber: string; docRef: string }> {
+  const lot = await nextDocumentNumber(tx, organizationId, 'handover_lot', at)
+  const doc = await nextDocumentNumber(tx, organizationId, 'delivery_note', at)
+  return { lotNumber: lot.number, docRef: doc.number }
 }
 
 export async function createLot(
@@ -688,7 +686,7 @@ export async function createLot(
       })),
     })
 
-    const { lotNumber, docRef } = await nextHandoverNumbers(tx, createdAt)
+    const { lotNumber, docRef } = await nextHandoverNumbers(tx, user.organizationId, createdAt)
     const status = initialLotStatus(input.type)
 
     const lot = await tx.handoverLot.create({

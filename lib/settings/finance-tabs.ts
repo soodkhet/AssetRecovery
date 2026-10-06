@@ -57,7 +57,7 @@ export const FINANCE_SETTINGS_TABS: readonly FinanceSettingsTab[] = [
   { id: 'export', label: 'รูปแบบไฟล์ส่งบัญชี', section: '§6.9', available: true },
   { id: 'permission', label: 'สิทธิ์บัญชี/การเงิน', section: '§6.10', available: true },
   { id: 'lock', label: 'การล็อกรอบและ Adjustment', section: '§6.11', available: true },
-  { id: 'numbering', label: 'เลขที่ใบกำกับภาษี', section: '§6.12', available: true },
+  { id: 'numbering', label: 'เลขที่เอกสาร', section: '§6.12', available: true },
   { id: 'taxdoc', label: 'เทมเพลตเอกสารภาษี', section: '§6.13', available: true },
   { id: 'sla', label: 'เกณฑ์ SLA งานติดตาม', section: '§6.14', available: true },
   { id: 'assignment', label: 'นโยบายการมอบหมายงาน', section: 'ไฟล์ 40 §6.4', available: true },
