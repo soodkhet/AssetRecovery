@@ -20,6 +20,8 @@ const queriesMock = vi.hoisted(() => ({
   updateOrganizationProfile: vi.fn(),
   setOrganizationLogo: vi.fn(),
   removeOrganizationLogo: vi.fn(),
+  setOrganizationSignature: vi.fn(),
+  removeOrganizationSignature: vi.fn(),
 }))
 vi.mock('@/lib/organization/queries', () => queriesMock)
 
@@ -34,6 +36,7 @@ vi.mock('@/lib/uploads/storage', () => storageMock)
 
 const profileRoute = await import('@/app/api/settings/organization/route')
 const logoRoute = await import('@/app/api/settings/organization/logo/route')
+const signatureRoute = await import('@/app/api/settings/organization/signature/route')
 const { POST: postUploadUrl } = await import('@/app/api/storage/upload-url/route')
 const { POST: postDownloadUrl } = await import('@/app/api/storage/download-url/route')
 
@@ -234,5 +237,71 @@ describe('โทเคนอัปโหลด/เปิดดูโลโก้
     expect((await postDownloadUrl(downloadReq(`organization/${OTHER_ORG_ID}/logo/a.png`))).status).toBe(403)
     requireSessionMock.mockResolvedValue(FIELD_AGENT)
     expect((await postDownloadUrl(downloadReq(`organization/${ORG_ID}/logo/a.png`))).status).toBe(403)
+  })
+})
+
+describe('มติ PO U122 — รูปลายเซ็นผู้มีอำนาจ (POST/DELETE /api/settings/organization/signature)', () => {
+  const PATH = `organization/${ORG_ID}/signature/22222222-2222-4222-8222-222222222222.png`
+  const sigReq = (method: string, body?: unknown) =>
+    request('http://localhost/api/settings/organization/signature', method, body)
+  const uploadReq = (body: unknown) => request('http://localhost/api/storage/upload-url', 'POST', body)
+  const downloadReq = (path: string) => request('http://localhost/api/storage/download-url', 'POST', { path })
+  const target = { kind: 'organization_signature', organizationId: ORG_ID }
+
+  it('Superadmin ผูก/ลบรูปลายเซ็นได้ (path + เหตุผล)', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    queriesMock.setOrganizationSignature.mockResolvedValue(DTO)
+    queriesMock.removeOrganizationSignature.mockResolvedValue(DTO)
+    expect((await signatureRoute.POST(sigReq('POST', { path: PATH, reason: 'ลายเซ็นกรรมการ' }), undefined)).status).toBe(200)
+    const [context, path] = queriesMock.setOrganizationSignature.mock.calls[0] as [{ reason: string }, string]
+    expect(context.reason).toBe('ลายเซ็นกรรมการ')
+    expect(path).toBe(PATH)
+    expect((await signatureRoute.DELETE(sigReq('DELETE', { reason: 'เปลี่ยนผู้มีอำนาจ' }), undefined)).status).toBe(200)
+  })
+
+  it('ไม่มีเหตุผล ⇒ 400 · บัญชี/บริหาร ⇒ 403 · ไม่แตะชั้นข้อมูล', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    expect((await signatureRoute.POST(sigReq('POST', { path: PATH }), undefined)).status).toBe(400)
+    expect((await signatureRoute.DELETE(sigReq('DELETE', {}), undefined)).status).toBe(400)
+    for (const user of [ACCOUNTING, EXECUTIVE]) {
+      requireSessionMock.mockResolvedValue(user)
+      expect((await signatureRoute.POST(sigReq('POST', { path: PATH, reason: 'ลายเซ็นกรรมการ' }), undefined)).status).toBe(403)
+      expect((await signatureRoute.DELETE(sigReq('DELETE', { reason: 'ลบรูป' }), undefined)).status).toBe(403)
+    }
+    expect(queriesMock.setOrganizationSignature).not.toHaveBeenCalled()
+    expect(queriesMock.removeOrganizationSignature).not.toHaveBeenCalled()
+  })
+
+  it('โทเคนอัปโหลด: Superadmin ได้ path ใต้ organization/<orgId>/signature/ · บัญชี/องค์กรอื่น ⇒ 403 · เกิน 1 MB ⇒ 400', async () => {
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    const ok = await postUploadUrl(uploadReq({ target, fileName: 'sign.png', sizeBytes: 20_000 }))
+    expect(ok.status).toBe(200)
+    expect(((await ok.json()) as { data: { path: string } }).data.path).toMatch(
+      new RegExp(`^organization/${ORG_ID}/signature/[0-9a-f-]+\\.png$`),
+    )
+    expect((await postUploadUrl(uploadReq({ target, fileName: 'sign.png', sizeBytes: 1024 * 1024 + 1 }))).status).toBe(400)
+    const other = { kind: 'organization_signature', organizationId: OTHER_ORG_ID }
+    expect((await postUploadUrl(uploadReq({ target: other, fileName: 'sign.png', sizeBytes: 10 }))).status).toBe(403)
+    requireSessionMock.mockResolvedValue(ACCOUNTING)
+    expect((await postUploadUrl(uploadReq({ target, fileName: 'sign.png', sizeBytes: 10 }))).status).toBe(403)
+  })
+
+  it('เปิดดูรูปลายเซ็น: เฉพาะผู้มีสิทธิ์แก้ข้อมูลองค์กร — บริหาร (ดูข้อมูลองค์กรได้) ⇒ 403', async () => {
+    const path = `organization/${ORG_ID}/signature/a.png`
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    expect((await postDownloadUrl(downloadReq(path))).status).toBe(200)
+    expect((await postDownloadUrl(downloadReq(`organization/${OTHER_ORG_ID}/signature/a.png`))).status).toBe(403)
+    requireSessionMock.mockResolvedValue(EXECUTIVE)
+    expect((await postDownloadUrl(downloadReq(path))).status).toBe(403)
+  })
+
+  it('GET ข้อมูลองค์กร: signed URL ของรูปลายเซ็นขอเฉพาะผู้มีสิทธิ์แก้', async () => {
+    queriesMock.getOrganizationProfile.mockResolvedValue(DTO)
+    requireSessionMock.mockResolvedValue(EXECUTIVE)
+    await profileRoute.GET(profileReq('GET'), undefined)
+    expect(queriesMock.getOrganizationProfile).toHaveBeenLastCalledWith(ORG_ID, { canManage: false })
+    requireSessionMock.mockResolvedValue(SUPERADMIN)
+    await profileRoute.GET(profileReq('GET'), undefined)
+    expect(queriesMock.getOrganizationProfile).toHaveBeenLastCalledWith(ORG_ID, { canManage: true })
   })
 })

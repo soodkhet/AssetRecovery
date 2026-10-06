@@ -3,7 +3,7 @@ import { Image, Page, StyleSheet, View } from '@react-pdf/renderer'
 import { SampleStamp } from '@/components/pdf/sample-stamp'
 import { Text } from '@/components/pdf/text'
 import { THAI_FONT } from '@/components/pdf/thai-font'
-import { letterheadContactLine, letterheadTaxLine, type DocLetterhead } from '@/lib/organization/profile'
+import { letterheadContactLine, letterheadTaxLine, type DocLetterhead, type LetterheadLogo } from '@/lib/organization/profile'
 
 /**
  * **เลย์เอาต์เอกสารตามแบบที่ผู้ใช้อนุมัติ** (มติ PO U100/U101 · ต้นแบบ `reference/documents.html` · `28` §6.0)
@@ -13,6 +13,7 @@ import { letterheadContactLine, letterheadTaxLine, type DocLetterhead } from '@/
  * - {@link DateNumberRow} วันที่ (ซ้าย) / เลขที่ (ขวา) + ข้อมูลประกอบ 2 คอลัมน์
  * - {@link PartyPanel} กล่องสองฝ่าย · {@link DocTable} ตารางขอบเส้น หัวตารางพื้นเทา (หัวซ้ำทุกหน้า)
  * - แถวหัก = สีแดง · แถวรวม = ตัวหนาพื้นเทา · {@link Signatures} ช่องลายเซ็น · {@link DocPage} ท้ายกระดาษ "หน้า x/y"
+ * - {@link TemplateFooterNote} ข้อความท้ายเอกสาร + รูปลายเซ็นใน {@link Signatures} ตามแท็บ "เทมเพลตเอกสาร" (มติ PO U122)
  * - {@link InternalHeader} แถบหัวเอกสารภายใน (สรุปรอบจ่าย/หน้าปก/รายงาน)
  *
  * ⚠️ ทุกค่าที่ส่งเข้ามาต้องเป็น**ข้อความที่ประกอบเสร็จแล้ว** (พ.ศ. / คั่นหลักพัน) — ที่นี่ห้ามคำนวณ/format (Rule 01)
@@ -111,6 +112,9 @@ export const layout = StyleSheet.create({
   signRow: { flexDirection: 'row', gap: 18, marginTop: 20 },
   signBox: { flex: 1, alignItems: 'center', fontSize: 9 },
   signLine: { alignSelf: 'stretch', height: 24, borderBottomWidth: 1, borderBottomStyle: 'dotted', borderColor: LINE },
+  /** ช่องเซ็นที่พิมพ์รูปลายเซ็น (มติ PO U122) — สูงกว่าช่องเซ็นมือเล็กน้อย รูปวางชิดเส้น */
+  signLineImage: { height: 36, alignItems: 'center', justifyContent: 'flex-end' },
+  signImage: { height: 32, maxWidth: 140, objectFit: 'contain' },
   footer: {
     position: 'absolute',
     bottom: 22,
@@ -512,6 +516,18 @@ export function BoxedText({ children }: { children: ReactNode }): React.JSX.Elem
   return <Text style={layout.boxed}>{children}</Text>
 }
 
+/**
+ * ข้อความท้ายเอกสารจากแท็บ "เทมเพลตเอกสาร" (มติ PO U122) — กล่องขอบเส้นจาง เหนือช่องลายเซ็น · ว่าง = ไม่พิมพ์
+ */
+export function TemplateFooterNote({ text }: { text: string | null }): React.JSX.Element | null {
+  if (text === null || text.trim() === '') return null
+  return (
+    <Text style={layout.noteBox} wrap={false}>
+      {text}
+    </Text>
+  )
+}
+
 const BLANK_SIGNER = '........................................'
 
 /**
@@ -521,20 +537,33 @@ const BLANK_SIGNER = '........................................'
 export function Signatures({
   roles,
   names = [],
+  images = [],
 }: {
   roles: readonly string[]
   names?: ReadonlyArray<string | null>
+  /** รูปลายเซ็นต่อช่อง (มติ PO U122) — `null`/ไม่ส่ง = เว้นเส้นประให้เซ็นมือ */
+  images?: ReadonlyArray<LetterheadLogo | null>
 }): React.JSX.Element {
   return (
     <View style={layout.signRow} wrap={false}>
       {roles.map((role, index) => (
         <View key={role} style={layout.signBox}>
-          <View style={layout.signLine} />
+          <SignLine image={images[index] ?? null} />
           <Text style={{ marginTop: 3 }}>( {names[index] ?? BLANK_SIGNER} )</Text>
           <Text style={layout.bold}>{role}</Text>
           <Text style={layout.muted}>วันที่ ......../......../............</Text>
         </View>
       ))}
+    </View>
+  )
+}
+
+function SignLine({ image }: { image: LetterheadLogo | null }): React.JSX.Element {
+  if (image === null) return <View style={layout.signLine} />
+  return (
+    <View style={[layout.signLine, layout.signLineImage]}>
+      {/* eslint-disable-next-line jsx-a11y/alt-text -- Image ของ react-pdf ไม่มี alt (ไม่ใช่ <img> ของ DOM) */}
+      <Image style={layout.signImage} src={{ data: image.data, format: image.format }} />
     </View>
   )
 }

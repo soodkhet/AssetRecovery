@@ -103,6 +103,7 @@ async function lastAudit(): Promise<{ before_data: Record<string, unknown>; afte
 }
 
 const logoPath = (key: string, ext = 'png', org = ORG_ID) => `organization/${org}/logo/${key}.${ext}`
+const signaturePath = (key: string, ext = 'png', org = ORG_ID) => `organization/${org}/signature/${key}.${ext}`
 
 beforeAll(async () => {
   if (!url) return
@@ -135,9 +136,11 @@ beforeEach(async () => {
   await db().$executeRawUnsafe(`
     UPDATE organizations SET name = 'U99 Org', name_en = NULL, address = '(รอกรอกที่อยู่จริงก่อน go-live)',
       address_detail = NULL, address_subdistrict = NULL, address_district = NULL, address_province = NULL,
-      address_postal_code = NULL, phone = NULL, email = NULL, website = NULL, logo_url = NULL, branch_code = '00000'
+      address_postal_code = NULL, phone = NULL, email = NULL, website = NULL, logo_url = NULL, branch_code = '00000',
+      logo_sha256 = NULL, signature_path = NULL, signature_sha256 = NULL
     WHERE id = '${ORG_ID}'
   `)
+  await db().$executeRawUnsafe(`DELETE FROM tax_document_template_settings WHERE organization_id = '${ORG_ID}'`)
 })
 
 afterAll(async () => {
@@ -258,5 +261,105 @@ suite('มติ PO U99 — ข้อมูลองค์กร', () => {
     expect((await letterhead.currentLetterhead(ORG_ID)).logo).toBeNull()
     uploads.putFakeUpload(path, uploads.sampleBytes('text'))
     expect((await letterhead.currentLetterhead(ORG_ID)).logo).toBeNull()
+  })
+})
+
+suite('มติ PO U122 — รูปลายเซ็นผู้มีอำนาจ + เทมเพลตเอกสาร', () => {
+  it('อัปโหลดรูปลายเซ็น ⇒ เก็บ path + hash + audit (เหตุผล) · signed URL เฉพาะผู้มีสิทธิ์แก้', async () => {
+    const path = signaturePath('44444444-4444-4444-8444-000000000001')
+    uploads.putFakeUpload(path, TINY_PNG)
+    const profile = await queries.setOrganizationSignature(ctx('ใช้ลายเซ็นกรรมการผู้มีอำนาจ'), path)
+    expect(profile.hasSignature).toBe(true)
+    expect(profile.signaturePreviewUrl).toBe(`https://storage.test/signed/${path}`)
+
+    const row = await db().organization.findUniqueOrThrow({
+      where: { id: ORG_ID },
+      select: { signaturePath: true, signatureSha256: true },
+    })
+    expect(row).toEqual({ signaturePath: path, signatureSha256: uploads.sha256Of(TINY_PNG) })
+    const audit = await lastAudit()
+    expect(audit.reason).toBe('ใช้ลายเซ็นกรรมการผู้มีอำนาจ')
+    expect(audit.before_data).toMatchObject({ signature_path: null })
+    expect(audit.after_data).toMatchObject({ signature_path: path, signature_mime_type: 'image/png' })
+
+    // ผู้ดูอย่างเดียวเห็นแค่ว่ามีรูป — ไม่ได้ signed URL
+    const viewer = await queries.getOrganizationProfile(ORG_ID)
+    expect(viewer).toMatchObject({ hasSignature: true, signaturePreviewUrl: null })
+    expect((await queries.getOrganizationProfile(ORG_ID, { canManage: true })).signaturePreviewUrl).not.toBeNull()
+  })
+
+  it.each([
+    ['ไม่ใช่รูป PNG/JPG', () => uploads.sampleBytes('pdf'), 'UPLOAD_FILE_TYPE_INVALID', ORG_ID, 'signature'],
+    ['path ขององค์กรอื่น', () => TINY_PNG, 'UPLOAD_PATH_OUT_OF_SCOPE', OTHER_ORG_ID, 'signature'],
+    ['path โลโก้ (ผิดช่อง)', () => TINY_PNG, 'UPLOAD_PATH_OUT_OF_SCOPE', ORG_ID, 'logo'],
+  ])('%s ⇒ %s · ไม่บันทึก', async (_label, bytes, code, org, slot) => {
+    const key = `44444444-4444-4444-8444-${String(Math.floor(Math.random() * 1e12)).padStart(12, '0')}`
+    const path = slot === 'logo' ? logoPath(key, 'png', org) : signaturePath(key, 'png', org)
+    uploads.putFakeUpload(path, bytes())
+    await expect(queries.setOrganizationSignature(ctx('ทดสอบไฟล์ลายเซ็นผิด'), path)).rejects.toSatisfy(
+      (error: unknown) => codeOf(error) === code,
+    )
+    expect((await queries.getOrganizationProfile(ORG_ID)).hasSignature).toBe(false)
+  })
+
+  it('ลบรูปลายเซ็น = ปลดลิงก์ + audit · ไฟล์เดิมไม่ถูกลบ · ไม่มีรูปอยู่แล้ว = ไม่ลง audit ซ้ำ', async () => {
+    const path = signaturePath('44444444-4444-4444-8444-000000000002', 'jpg')
+    uploads.putFakeUpload(path, uploads.sampleBytes('jpeg'))
+    await queries.setOrganizationSignature(ctx('ใช้ลายเซ็น'), path)
+    const removed = await queries.removeOrganizationSignature(ctx('เปลี่ยนผู้มีอำนาจลงนาม'))
+    expect(removed).toMatchObject({ hasSignature: false, signaturePreviewUrl: null })
+    expect(await lastAudit()).toMatchObject({ before_data: { signature_path: path }, after_data: { signature_path: null } })
+    expect(uploads.uploadTestState.files.has(path)).toBe(true)
+    expect(uploads.uploadTestState.removed).toEqual([])
+  })
+
+  it('snapshot เทมเพลตตอนออก + resolver: เปิดสวิตช์ได้รูป · hash ไม่ตรง/ไฟล์หาย = เว้นช่องเซ็นมือ (ไม่ล้ม) · ไม่มี snapshot = ไม่พิมพ์', async () => {
+    const templates = await import('@/lib/settings/queries/tax-doc-templates')
+    const { prisma } = await import('@/lib/prisma')
+    const path = signaturePath('44444444-4444-4444-8444-000000000003')
+    uploads.putFakeUpload(path, TINY_PNG)
+    await queries.setOrganizationSignature(ctx('ใช้ลายเซ็น'), path)
+
+    // ยังไม่เคยตั้งค่า ⇒ ค่าเริ่มต้น (ไม่พิมพ์ลายเซ็น)
+    expect(await templates.loadDocumentTemplateSnapshot(prisma, ORG_ID, 'tax_invoice')).toEqual({
+      footerNote: null,
+      signaturePath: null,
+      signatureSha256: null,
+    })
+
+    const saved = await templates.updateTaxDocTemplate(ctx('เปิดพิมพ์ลายเซ็นบนใบเสร็จ'), 'tax_invoice', {
+      footerNote: '  ขอบคุณที่ใช้บริการ  ',
+      printSignature: true,
+    })
+    expect(saved).toMatchObject({ footerNote: 'ขอบคุณที่ใช้บริการ', printSignature: true, signatureSlotLabel: 'ผู้มีอำนาจลงนาม' })
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'tax_document_template_settings' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit).toMatchObject({ action: 'create', reason: 'เปิดพิมพ์ลายเซ็นบนใบเสร็จ' })
+    expect(audit.afterData).toEqual({ document_type: 'tax_invoice', footer_note: 'ขอบคุณที่ใช้บริการ', print_signature: true })
+
+    const snapshot = await templates.loadDocumentTemplateSnapshot(prisma, ORG_ID, 'tax_invoice')
+    expect(snapshot).toEqual({ footerNote: 'ขอบคุณที่ใช้บริการ', signaturePath: path, signatureSha256: uploads.sha256Of(TINY_PNG) })
+
+    const resolver = letterhead.createLetterheadResolver(ORG_ID)
+    const render = await resolver.template('tax_invoice', snapshot)
+    expect(render.footerNote).toBe('ขอบคุณที่ใช้บริการ')
+    expect(render.signature?.format).toBe('png')
+    expect(render.signatureSlot).toBe(1)
+    expect((await resolver.currentTemplate('tax_invoice')).signature?.format).toBe('png')
+    expect((await resolver.currentTemplate('handover_note')).signature).toBeNull()
+
+    expect((await resolver.template('tax_invoice', { ...snapshot, signatureSha256: 'f'.repeat(64) })).signature).toBeNull()
+    expect(
+      (await resolver.template('tax_invoice', { ...snapshot, signaturePath: signaturePath('44444444-4444-4444-8444-00000000dead') }))
+        .signature,
+    ).toBeNull()
+    expect(await resolver.template('tax_invoice', null)).toEqual({ footerNote: null, signature: null, signatureSlot: 0 })
+
+    // ทั้ง 3 ชนิดเสมอ (ชนิดที่ยังไม่ตั้งค่าแสดงค่าเริ่มต้น) · ไม่มี 50 ทวิ
+    const list = await templates.listTaxDocTemplates(ORG_ID)
+    expect(list.map((item) => item.documentType)).toEqual(['billing_invoice', 'tax_invoice', 'handover_note'])
+    expect(await templates.organizationHasSignature(ORG_ID)).toBe(true)
   })
 })

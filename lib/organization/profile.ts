@@ -27,6 +27,21 @@ export function organizationLogoPath(organizationId: string, fileName: string, u
   return `${organizationLogoPrefix(organizationId)}${uniqueKey}.${documentExtension(fileName)}`
 }
 
+// ── รูปลายเซ็นผู้มีอำนาจ (มติ PO U122) ────────────────────────────────────────
+
+/** เพดาน/ชนิดไฟล์ลายเซ็น = เดียวกับโลโก้ (PNG/JPG ≤ 1 MB — ฝังลง PDF ตรง ๆ · แนะนำ PNG พื้นโปร่ง) */
+export const ORGANIZATION_SIGNATURE_MAX_BYTES = ORGANIZATION_LOGO_MAX_BYTES
+export const ORGANIZATION_SIGNATURE_ACCEPT = ORGANIZATION_LOGO_ACCEPT
+
+export function organizationSignaturePrefix(organizationId: string): string {
+  return `organization/${organizationId}/signature/`
+}
+
+/** path ต่อเวอร์ชัน `organization/<orgId>/signature/<uuid>.<ext>` — ไม่ทับไฟล์เดิม (เอกสารเก่าอ้าง path เดิมได้) */
+export function organizationSignaturePath(organizationId: string, fileName: string, uniqueKey: string): string {
+  return `${organizationSignaturePrefix(organizationId)}${uniqueKey}.${documentExtension(fileName)}`
+}
+
 // ── ค่าตัวอย่างจาก seed (ต้องแก้ก่อน go-live) ─────────────────────────────
 
 /** เลขผู้เสียภาษีตัวอย่างของ seed — ยังเป็นค่านี้ = ยังไม่ได้กรอกข้อมูลจริง */

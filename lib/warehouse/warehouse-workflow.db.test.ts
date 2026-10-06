@@ -793,6 +793,55 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     ).rejects.toThrow()
   })
 
+  it('มติ PO U122 — ยืนยันล็อต snapshot เทมเพลตใบส่งมอบ (ข้อความท้าย + ลายเซ็น) · แก้ค่าตั้งภายหลังไม่ขยับ · ล็อตยังไม่ยืนยันใช้ค่าปัจจุบัน', async () => {
+    const signaturePath = `organization/${ORG_ID}/signature/22222222-2222-4222-8222-000000000122.png`
+    const sha = 'b'.repeat(64)
+    const upsertTemplate = (footerNote: string, printSignature: boolean) =>
+      db().taxDocumentTemplateSettings.upsert({
+        where: { organizationId_documentType: { organizationId: ORG_ID, documentType: 'handover_note' } },
+        create: { organizationId: ORG_ID, documentType: 'handover_note', footerNote, printSignature },
+        update: { footerNote, printSignature },
+      })
+    await db().organization.update({
+      where: { id: ORG_ID },
+      data: { signaturePath, signatureSha256: sha },
+    })
+    await upsertTemplate('ตรวจรับครบแล้ว (U122)', true)
+    try {
+      const { lotId } = await seedPendingLot()
+      const { lotId: pendingLotId } = await seedPendingLot()
+      await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
+
+      const row = await db().handoverLot.findUniqueOrThrow({
+        where: { id: lotId },
+        select: { documentTemplateSnapshot: true },
+      })
+      expect(row.documentTemplateSnapshot).toEqual({
+        footer_note: 'ตรวจรับครบแล้ว (U122)',
+        signature_path: signaturePath,
+        signature_sha256: sha,
+      })
+
+      // แก้ค่าตั้งหลังยืนยัน ⇒ ใบส่งมอบเดิมไม่เปลี่ยน · ล็อตที่ยังไม่ยืนยันใช้ค่าปัจจุบัน
+      await upsertTemplate('ข้อความใหม่หลังยืนยัน', false)
+      const confirmed = await warehouse.getHandoverDocSource(admin, lotId)
+      expect(confirmed.documentTemplate).toEqual({
+        footerNote: 'ตรวจรับครบแล้ว (U122)',
+        signaturePath,
+        signatureSha256: sha,
+      })
+      expect((await warehouse.getHandoverDocSource(admin, pendingLotId)).documentTemplate).toBe('current')
+
+      // ล็อต confirmed แก้ snapshot ไม่ได้ (trigger immutable)
+      await expect(
+        db().$executeRawUnsafe(`UPDATE handover_lots SET document_template_snapshot = '{}'::jsonb WHERE id = '${lotId}'`),
+      ).rejects.toThrow()
+    } finally {
+      await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath: null, signatureSha256: null } })
+      await db().taxDocumentTemplateSettings.deleteMany({ where: { organizationId: ORG_ID } })
+    }
+  })
+
   it('T12 — expense อนุมัติแล้ว + ล็อต confirmed = เคสเข้าเงื่อนไขสร้าง Revenue', async () => {
     const { caseId, lotId } = await seedPendingLot()
     await db().$executeRawUnsafe(`UPDATE expenses SET status = 'approved' WHERE case_id = '${caseId}'`)

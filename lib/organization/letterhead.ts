@@ -12,6 +12,14 @@ import {
   type LetterheadLogo,
   type SellerProfileSnapshot,
 } from '@/lib/organization/profile'
+import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
+import {
+  NO_DOC_TEMPLATE,
+  TEMPLATE_SIGNATURE_SLOT,
+  type DocTemplateRender,
+  type DocumentTemplateSnapshot,
+} from '@/lib/settings/tax-doc-template'
+import type { TemplateDocumentType } from '@/lib/generated/prisma/enums'
 import { detectFileKind } from '@/lib/uploads/inspect'
 import { downloadUploadedFile } from '@/lib/uploads/storage'
 
@@ -29,6 +37,10 @@ import { downloadUploadedFile } from '@/lib/uploads/storage'
  * โลโก้: ดาวน์โหลดจาก Storage ด้วย service role แล้วฝังเป็นรูป · โหลดไม่ได้/ไม่ใช่ PNG-JPG = พิมพ์โดยไม่มีโลโก้
  * · snapshot มี `logo_sha256` แล้วไฟล์ไม่ตรง hash = พิมพ์โดยไม่มีโลโก้ (ไม่พิมพ์รูปอื่นแทนรูปตอนออก — U110)
  * (ไม่ทำให้การออกเอกสารล้ม — โลโก้เป็นส่วนประกอบ ไม่ใช่ข้อมูลบังคับทางภาษี)
+ *
+ * เทมเพลตเอกสาร (มติ PO U122 — ข้อความท้าย + รูปลายเซ็น): อ่านจาก `document_template_snapshot` ของเอกสาร
+ * · ไม่มี snapshot (เอกสารก่อน U122) = ไม่พิมพ์ · ใบส่งมอบที่ยังไม่ยืนยัน = ค่าตั้งปัจจุบัน
+ * · รูปลายเซ็นโหลดด้วยตัวเดียวกับโลโก้ (ตรวจ hash) — โหลดไม่ได้/ไม่ตรง = เว้นช่องเซ็นมือ ไม่ทำให้ออกเอกสารล้ม
  */
 
 const ORGANIZATION_SELECT = {
@@ -90,6 +102,8 @@ export function createLetterheadResolver(organizationId: string): {
   current: () => Promise<DocLetterhead>
   forSnapshot: (core: SnapshotCore, snapshot: SellerProfileSnapshot | null) => Promise<DocLetterhead>
   forOrganizationSnapshot: (snapshot: OrganizationLetterheadSnapshot | null) => Promise<DocLetterhead>
+  template: (documentType: TemplateDocumentType, snapshot: DocumentTemplateSnapshot | null) => Promise<DocTemplateRender>
+  currentTemplate: (documentType: TemplateDocumentType) => Promise<DocTemplateRender>
 } {
   let organization: Promise<OrganizationLetterheadRow> | null = null
   const logos = new Map<string, Promise<LetterheadLogo | null>>()
@@ -115,8 +129,25 @@ export function createLetterheadResolver(organizationId: string): {
     return buildLetterhead(row, extras, await loadLogo(extras.logoPath, null))
   }
 
+  const template = async (
+    documentType: TemplateDocumentType,
+    snapshot: DocumentTemplateSnapshot | null,
+  ): Promise<DocTemplateRender> => {
+    // มติ PO U122 — เอกสารก่อน U122 ไม่มี snapshot ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น (ห้ามดึงค่าปัจจุบัน)
+    if (snapshot === null) return NO_DOC_TEMPLATE
+    return {
+      footerNote: snapshot.footerNote,
+      signature: await loadLogo(snapshot.signaturePath, snapshot.signatureSha256),
+      signatureSlot: TEMPLATE_SIGNATURE_SLOT[documentType],
+    }
+  }
+
   return {
     current,
+    template,
+    async currentTemplate(documentType) {
+      return template(documentType, await loadDocumentTemplateSnapshot(prisma, organizationId, documentType))
+    },
     async forSnapshot(core, snapshot) {
       // มติ PO U110 — เอกสารก่อน U99 ไม่มี snapshot ชุดนี้ ⇒ เว้นว่าง (ห้ามดึงค่าปัจจุบันขององค์กร)
       const extras = snapshot ?? EMPTY_SELLER_PROFILE
@@ -153,4 +184,28 @@ export function handoverLetterhead(
   snapshot: OrganizationLetterheadSnapshot | null,
 ): Promise<DocLetterhead> {
   return createLetterheadResolver(organizationId).forOrganizationSnapshot(snapshot)
+}
+
+/** ข้อความท้าย + ลายเซ็นของใบกำกับภาษี/ใบเสร็จรับเงิน — snapshot ตอนออกใบ (มติ PO U122) */
+export function taxInvoiceTemplate(resolver: LetterheadResolver, source: TaxInvoiceDocSource): Promise<DocTemplateRender> {
+  return resolver.template('tax_invoice', source.templateSnapshot)
+}
+
+/** ข้อความท้าย + ลายเซ็นของใบแจ้งหนี้/ใบวางบิล — snapshot ตอนส่งรอบ (มติ PO U122) */
+export function billingInvoiceTemplate(resolver: LetterheadResolver, source: BillingInvoiceSource): Promise<DocTemplateRender> {
+  return resolver.template('billing_invoice', source.templateSnapshot)
+}
+
+/**
+ * ข้อความท้าย + ลายเซ็นของใบส่งมอบ (มติ PO U122) — ล็อตยืนยันแล้ว = snapshot ตอนยืนยัน (ไม่มี = ไม่พิมพ์)
+ * · ล็อตที่ยังไม่ยืนยัน (`'current'`) = ค่าตั้งปัจจุบัน (ใบที่พิมพ์ให้ลูกค้าเซ็นก่อนยืนยัน)
+ */
+export function handoverTemplate(
+  organizationId: string,
+  documentTemplate: DocumentTemplateSnapshot | null | 'current',
+): Promise<DocTemplateRender> {
+  const resolver = createLetterheadResolver(organizationId)
+  return documentTemplate === 'current'
+    ? resolver.currentTemplate('handover_note')
+    : resolver.template('handover_note', documentTemplate)
 }

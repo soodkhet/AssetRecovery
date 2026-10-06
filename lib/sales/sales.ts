@@ -4,6 +4,7 @@ import { fmtSatang } from '@/lib/format/money'
 import type { InvoiceDeliveryFormat, TaxInvoiceDocKind, TaxInvoiceStatus } from '@/lib/generated/prisma/enums'
 import { bankAccountLine, type DocBankAccount } from '@/lib/organization/bank-account-line'
 import type { SellerProfileSnapshot } from '@/lib/organization/profile'
+import type { DocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
@@ -233,6 +234,8 @@ export interface TaxInvoiceDocSource {
   sellerBranchCode: string
   /** หัวเอกสารส่วนที่ snapshot เพิ่มตามมติ PO U99 (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) — ใบก่อน U99 = `null` */
   sellerProfile: SellerProfileSnapshot | null
+  /** เทมเพลตเอกสาร (ข้อความท้าย + รูปลายเซ็น) ณ ตอนออก (มติ PO U122) — ใบก่อน U122 = `null` (ไม่พิมพ์) */
+  templateSnapshot: DocumentTemplateSnapshot | null
   description: string
   periodLabel: string
   amounts: SalesAmounts

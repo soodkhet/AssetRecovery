@@ -18,6 +18,8 @@ import type {
 import { prisma } from '@/lib/prisma'
 import { billingPartySnapshotOf } from '@/lib/revenue/billing-invoice'
 import { sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
+import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
+import { documentTemplateSnapshotJson } from '@/lib/settings/tax-doc-template'
 import { RevenueError } from '@/lib/revenue/errors'
 import { syncSalesRecordFromBilling } from '@/lib/sales/queries'
 import {
@@ -535,8 +537,11 @@ export async function sendBillingBatch(
         company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
       },
     })
+    // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นของใบแจ้งหนี้ ณ วันส่ง
+    const documentTemplate = await loadDocumentTemplateSnapshot(tx, user.organizationId, 'billing_invoice')
     const snapshot = {
       ...billingPartySnapshotOf(parties.organization, parties.company),
+      documentTemplateSnapshot: documentTemplateSnapshotJson(documentTemplate),
       // มติ PO U99 — หัวเอกสาร (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) ณ วันส่ง
       sellerProfileSnapshot: sellerProfileSnapshotJson(sellerProfileOf(parties.organization)),
     }

@@ -761,6 +761,66 @@ suite('มติ PO U99 — หัวเอกสาร snapshot ตอนออ
   })
 })
 
+suite('มติ PO U122 — เทมเพลตเอกสาร snapshot ตอนออก (ใบกำกับ/ใบเสร็จ + ใบแจ้งหนี้)', () => {
+  it('ข้อความท้าย + ลายเซ็น snapshot ลงเอกสาร · แก้ค่าตั้ง/ลบรูปภายหลังเอกสารเดิมไม่ขยับ · เอกสารใหม่ใช้ค่าใหม่ · แก้ snapshot ไม่ได้', async () => {
+    const { getBillingInvoiceSource } = await import('@/lib/revenue/billing-invoice-queries')
+    const { updateTaxDocTemplate } = await import('@/lib/settings/queries/tax-doc-templates')
+    const signaturePath = `organization/${ORG_ID}/signature/33333333-3333-4333-8333-000000000122.png`
+    const sha = 'c'.repeat(64)
+    const settingsCtx = { actor: accountant, meta, reason: 'ตั้งข้อความท้ายเอกสาร (เทสต์ U122)' }
+    await setNumbering({ seq: 1220 })
+    await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath, signatureSha256: sha } })
+    try {
+      await updateTaxDocTemplate(settingsCtx, 'tax_invoice', { footerNote: 'ขอบคุณที่ใช้บริการ', printSignature: true })
+      await updateTaxDocTemplate(settingsCtx, 'billing_invoice', { footerNote: 'โปรดชำระภายในกำหนด', printSignature: false })
+
+      const { receiptId } = await seedReceivedBilling()
+      const sentBatch = await seedBilling()
+      await revenue.sendBillingBatch(billingCtx, sentBatch.id, { reason: billingCtx.reason })
+      const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+
+      // แก้ค่าตั้ง + ลบรูปลายเซ็นหลังออกเอกสาร
+      await updateTaxDocTemplate(settingsCtx, 'tax_invoice', { footerNote: 'ข้อความใหม่', printSignature: false })
+      await updateTaxDocTemplate(settingsCtx, 'billing_invoice', { footerNote: null, printSignature: true })
+      await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath: null, signatureSha256: null } })
+
+      expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).templateSnapshot).toEqual({
+        footerNote: 'ขอบคุณที่ใช้บริการ',
+        signaturePath,
+        signatureSha256: sha,
+      })
+      // ใบแจ้งหนี้ปิดสวิตช์ลายเซ็นตอนส่ง ⇒ ไม่มีรูปแม้องค์กรมีรูปตอนนั้น
+      expect((await getBillingInvoiceSource(accountant, sentBatch.id)).templateSnapshot).toEqual({
+        footerNote: 'โปรดชำระภายในกำหนด',
+        signaturePath: null,
+        signatureSha256: null,
+      })
+
+      // เอกสารใหม่หลังแก้ ⇒ ค่าใหม่
+      const next = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling()).receiptId })
+      expect((await sales.getTaxInvoiceDocSource(accountant, next.id)).templateSnapshot).toEqual({
+        footerNote: 'ข้อความใหม่',
+        signaturePath: null,
+        signatureSha256: null,
+      })
+
+      // snapshot แก้ตรงไม่ได้ (ยามระดับ DB)
+      await expect(
+        db().$executeRawUnsafe(`UPDATE tax_invoices SET document_template_snapshot = '{}'::jsonb WHERE id = '${invoice.id}'`),
+      ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
+      await expect(
+        db().$executeRawUnsafe(
+          `UPDATE billing_batches SET document_template_snapshot = '{}'::jsonb WHERE id = '${sentBatch.id}'`,
+        ),
+      ).rejects.toThrow(/BILLING_PARTY_SNAPSHOT_IMMUTABLE/)
+    } finally {
+      await db().organization.update({ where: { id: ORG_ID }, data: { signaturePath: null, signatureSha256: null } })
+      await db().taxDocumentTemplateSettings.deleteMany({ where: { organizationId: ORG_ID } })
+      await setNumbering({ seq: 0 })
+    }
+  })
+})
+
 suite('Phase 4.3 — ยาม immutable + period lock', () => {
   it('งวดของวันที่เอกสารถูกล็อก ⇒ ออกไม่ได้ (`PERIOD_LOCKED_DIRECT_EDIT`)', async () => {
     await setNumbering({ seq: 260 })

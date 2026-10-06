@@ -131,25 +131,17 @@ enum DocumentNumberType {
   @@map("document_number_type")
 }
 
-enum TaxDocumentType {
+/// ชนิดเอกสารที่ตั้ง "เทมเพลตเอกสาร" ได้ (มติ PO U122) — เอกสารถึงบริษัทไฟแนนซ์ 3 ชนิด
+/// (50 ทวิ ใช้แบบทางการ — ไม่มีค่าตั้ง · enum เดิม `tax_document_type`/`tax_doc_paper_size`/`tax_doc_language` ถูกลบ)
+enum TemplateDocumentType {
+  /// ใบแจ้งหนี้ / ใบวางบิล
+  billing_invoice
+  /// ใบเสร็จรับเงิน / ใบกำกับภาษี
   tax_invoice
-  wht_certificate
+  /// ใบส่งมอบทรัพย์ (LOT/DLV)
+  handover_note
 
-  @@map("tax_document_type")
-}
-
-enum TaxDocPaperSize {
-  A4
-  A5
-
-  @@map("tax_doc_paper_size")
-}
-
-enum TaxDocLanguage {
-  th
-  th_en_bilingual
-
-  @@map("tax_doc_language")
+  @@map("template_document_type")
 }
 
 enum FunctionalGroup {
@@ -720,6 +712,11 @@ model Organization {
   /// SHA-256 ของไฟล์โลโก้ปัจจุบัน (มติ PO U110) — เขียนพร้อม `logo_url` · snapshot ลงเอกสารภาษี/ใบส่งมอบ
   /// เพื่อพิมพ์ซ้ำได้รูปเดียวกับตอนออก · NULL = ไม่มีโลโก้/โลโก้ก่อน U110 · CHECK hex 64 ใน raw SQL `20261006220000_letterhead_snapshot_period_payouts`
   logoSha256    String? @map("logo_sha256") @db.VarChar(64)
+  /// รูปลายเซ็นผู้มีอำนาจ (มติ PO U122 · ไม่บังคับ) — path `organization/<orgId>/signature/<uuid>.<ext>` อัปโหลดผ่าน server
+  /// แบบเดียวกับโลโก้: เปลี่ยน/ลบ = เปลี่ยนค่านี้เท่านั้น ไฟล์เดิมไม่ถูกลบ · พิมพ์บนเอกสารตามสวิตช์ของแท็บ "เทมเพลตเอกสาร"
+  /// CHECK path/hash มาคู่กัน + hex 64 ใน raw SQL `20261007010000_document_template_signature`
+  signaturePath   String? @map("signature_path")
+  signatureSha256 String? @map("signature_sha256") @db.VarChar(64)
   vatRegistered Boolean @default(true) @map("vat_registered")
   /// สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) — `00000` = สำนักงานใหญ่ · snapshot ลง `tax_invoices.seller_branch_code` ตอนออกใบ
   /// CHECK อยู่ใน raw SQL `20261005202000_seller_branch_credit_note_buyer_branch`
@@ -1581,16 +1578,16 @@ model BankFileFormat {
   @@map("bank_file_formats")
 }
 
-/// รูปแบบเอกสารภาษีทางการ (ไฟล์ 13 §6.13) — ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (`28` §6.2–6.3)
+/// เทมเพลตเอกสาร (ไฟล์ 13 §6.13 · มติ PO U122) — ค่าที่**ต่างกันตามชนิดเอกสาร**เท่านั้น (ค่าที่ใช้ร่วมอยู่ที่ `organizations`)
+/// ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (`28` §6.2–6.3) · snapshot ลงเอกสารตอนออก (`document_template_snapshot`)
 model TaxDocumentTemplateSettings {
-  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId    String          @map("organization_id") @db.Uuid
-  documentType      TaxDocumentType @map("document_type")
-  logoUrl           String?         @map("logo_url")
-  footerNote        String?         @map("footer_note")
-  signatureImageUrl String?         @map("signature_image_url")
-  paperSize         TaxDocPaperSize @default(A4) @map("paper_size")
-  language          TaxDocLanguage  @default(th)
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  documentType   TemplateDocumentType @map("document_type")
+  /// ข้อความท้ายเอกสาร (≤ 500 ตัวอักษร) — NULL = ไม่พิมพ์
+  footerNote     String?              @map("footer_note")
+  /// พิมพ์รูปลายเซ็นผู้มีอำนาจ (จากข้อมูลองค์กร) บนเอกสารชนิดนี้ — ปิด/ไม่มีรูป = เว้นช่องเซ็นมือ
+  printSignature Boolean              @default(false) @map("print_signature")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
@@ -2264,6 +2261,9 @@ model HandoverLot {
   /// `{ name, tax_id, address, phone, branch_code, name_en, email, website, logo_path, logo_sha256 }`
   /// NULL = ยังไม่ยืนยัน/ล็อตก่อน U111 (ใบส่งมอบใช้ค่าปัจจุบัน) · ล็อต confirmed แก้ไม่ได้ (trigger immutable)
   letterheadSnapshot Json? @map("letterhead_snapshot")
+  /// มติ PO U122 — snapshot เทมเพลตใบส่งมอบ `{ footer_note, signature_path, signature_sha256 }` ตอนยืนยันล็อต
+  /// NULL + ยังไม่ยืนยัน = ใช้ค่าปัจจุบัน · NULL + ยืนยันก่อน U122 = ไม่พิมพ์ข้อความท้าย/ลายเซ็น
+  documentTemplateSnapshot Json? @map("document_template_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -2878,6 +2878,9 @@ model BillingBatch {
   /// มติ PO U99 — snapshot หัวเอกสารส่วนที่เพิ่ม (ชื่ออังกฤษ/อีเมล/เว็บไซต์/path โลโก้) ตอนส่งรอบ
   /// `{ name_en, email, website, logo_path }` · NULL = ส่งก่อน U99 ⇒ PDF ใช้ค่าปัจจุบันเฉพาะฟิลด์ชุดนี้ · immutable หลังส่ง
   sellerProfileSnapshot       Json?              @map("seller_profile_snapshot")
+  /// มติ PO U122 — snapshot เทมเพลตเอกสาร `{ footer_note, signature_path, signature_sha256 }` ตอนส่งรอบ
+  /// NULL = ส่งก่อน U122 ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น (ไม่ดึงค่าปัจจุบัน) · immutable หลังส่ง (trigger party snapshot)
+  documentTemplateSnapshot    Json?              @map("document_template_snapshot")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -3065,6 +3068,9 @@ model TaxInvoice {
   /// มติ PO U99 — snapshot หัวเอกสารส่วนที่เพิ่ม `{ name_en, email, website, logo_path }` ตอนออกใบ
   /// NULL = ใบก่อน U99 ⇒ PDF ใช้ค่าปัจจุบันขององค์กรเฉพาะฟิลด์ชุดนี้ · immutable ทั้งแถว (trigger `tax_invoices_immutable`)
   sellerProfileSnapshot Json?                 @map("seller_profile_snapshot")
+  /// มติ PO U122 — snapshot เทมเพลตเอกสาร `{ footer_note, signature_path, signature_sha256 }` ตอนออกใบ
+  /// NULL = ใบก่อน U122 ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น · immutable ทั้งแถว (trigger `tax_invoices_immutable`)
+  documentTemplateSnapshot Json?             @map("document_template_snapshot")
   /// snapshot รูปแบบการส่งเอกสาร (ปิด D13 ส่วน delivery_format) — ค่าเริ่มต้นของบริษัท ณ ตอนออก
   deliveryFormat        InvoiceDeliveryFormat @map("delivery_format")
   description           String

@@ -7,7 +7,12 @@ import { EXPENSE_RECEIPT_MAX_BYTES, FIELD_MEDIA_MAX_BYTES, type FieldMediaKind }
 import { AUDIO_KINDS, DOCUMENT_KINDS, IMAGE_KINDS, VIDEO_KINDS, type FileKind, type UploadRule } from '@/lib/uploads/inspect'
 import { lotDocumentPrefix } from '@/lib/warehouse/lot-documents'
 import { substituteReceiptFilePrefix } from '@/lib/substitute-receipts/file'
-import { ORGANIZATION_LOGO_MAX_BYTES, organizationLogoPrefix } from '@/lib/organization/profile'
+import {
+  ORGANIZATION_LOGO_MAX_BYTES,
+  ORGANIZATION_SIGNATURE_MAX_BYTES,
+  organizationLogoPrefix,
+  organizationSignaturePrefix,
+} from '@/lib/organization/profile'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
 
 /**
@@ -108,4 +113,13 @@ export function bankRefundFileRule(transactionId: string): UploadRule {
 /** โลโก้บริษัทบนหัวเอกสาร (มติ PO U99) — `organization/<orgId>/logo/…` รับ PNG/JPG เท่านั้น ≤ 1 MB (ฝังลง PDF ได้ตรง ๆ) */
 export function organizationLogoRule(organizationId: string): UploadRule {
   return { prefix: organizationLogoPrefix(organizationId), accept: ['png', 'jpeg'], maxBytes: ORGANIZATION_LOGO_MAX_BYTES }
+}
+
+/** รูปลายเซ็นผู้มีอำนาจ (มติ PO U122) — `organization/<orgId>/signature/…` PNG/JPG ≤ 1 MB (ฝังลง PDF ตรง ๆ) */
+export function organizationSignatureRule(organizationId: string): UploadRule {
+  return {
+    prefix: organizationSignaturePrefix(organizationId),
+    accept: ['png', 'jpeg'],
+    maxBytes: ORGANIZATION_SIGNATURE_MAX_BYTES,
+  }
 }

@@ -1,3 +1,9 @@
+import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
+import {
+  documentTemplateSnapshotJson,
+  parseDocumentTemplateSnapshot,
+  type DocumentTemplateSnapshot,
+} from '@/lib/settings/tax-doc-template'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { emitAudit } from '@/lib/audit/audit'
@@ -902,12 +908,17 @@ export async function confirmLot(
         select: LETTERHEAD_SNAPSHOT_SELECT,
       })
       const letterheadSnapshot = organizationLetterheadSnapshotJson(organizationLetterheadSnapshotOf(organization))
+      // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นของใบส่งมอบ ณ ตอนยืนยัน (พิมพ์ซ้ำหน้าตาเดิม)
+      const documentTemplateSnapshot = documentTemplateSnapshotJson(
+        await loadDocumentTemplateSnapshot(tx, user.organizationId, 'handover_note'),
+      )
 
       // ยึดล็อตด้วยสถานะเดิม — กันสองคนกดยืนยันพร้อมกัน (คนที่สองได้ 0 แถว)
       const claimed = await tx.handoverLot.updateMany({
         where: { id: lotId, status: current.status },
         data: {
           letterheadSnapshot,
+          documentTemplateSnapshot,
           status: 'confirmed',
           confirmedAt,
           confirmedBy: context.actor.id,
@@ -973,6 +984,7 @@ export async function confirmLot(
             signedDocHash,
             deliveryProofHash,
             letterheadSnapshot,
+            documentTemplateSnapshot,
             assetIdsHandedOver: assetIds,
             expenseIdsUnlocked,
             revenueIdsCreated: revenue.revenueIdsCreated,
@@ -1044,6 +1056,11 @@ export interface HandoverDocSource {
   recipient: HandoverParty
   /** หัวกระดาษองค์กร ณ ตอนยืนยันล็อต (มติ PO U111) — `null` = ยังไม่ยืนยัน/ล็อตก่อน U111 (ใช้ค่าปัจจุบัน) */
   letterheadSnapshot: OrganizationLetterheadSnapshot | null
+  /**
+   * เทมเพลตใบส่งมอบ (มติ PO U122): ล็อตยืนยันแล้ว = snapshot ตอนยืนยัน (`null` = ยืนยันก่อน U122 ⇒ ไม่พิมพ์ข้อความท้าย/ลายเซ็น)
+   * · ล็อตที่ยังไม่ยืนยัน = `'current'` (ใช้ค่าตั้งปัจจุบัน — ใบที่พิมพ์ให้ลูกค้าเซ็นก่อนยืนยัน)
+   */
+  documentTemplate: DocumentTemplateSnapshot | null | 'current'
 }
 
 /**
@@ -1066,7 +1083,10 @@ async function withHandoverParties(organizationId: string, lot: LotDetailDto): P
       where: { id: lot.companyId },
       select: { name: true, address: true, taxId: true, phone: true, branchCode: true },
     }),
-    prisma.handoverLot.findUniqueOrThrow({ where: { id: lot.id }, select: { letterheadSnapshot: true } }),
+    prisma.handoverLot.findUniqueOrThrow({
+      where: { id: lot.id },
+      select: { letterheadSnapshot: true, documentTemplateSnapshot: true, status: true },
+    }),
   ])
 
   // มติ PO U111 — ล็อตที่ยืนยันแล้วพิมพ์ซ้ำด้วยข้อมูลองค์กร ณ ตอนยืนยัน (ไม่มี snapshot = ค่าปัจจุบัน)
@@ -1086,6 +1106,8 @@ async function withHandoverParties(organizationId: string, lot: LotDetailDto): P
     issuer,
     recipient: company,
     letterheadSnapshot,
+    documentTemplate:
+      snapshotRow.status === 'confirmed' ? parseDocumentTemplateSnapshot(snapshotRow.documentTemplateSnapshot) : 'current',
   }
 }
 

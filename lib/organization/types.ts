@@ -23,6 +23,13 @@ export interface OrganizationProfileDto {
   logoPath: string | null
   /** signed URL อายุสั้นสำหรับแสดงตัวอย่างโลโก้ — ออกไม่ได้/ไม่มีโลโก้ = `null` */
   logoPreviewUrl: string | null
+  /** มีรูปลายเซ็นผู้มีอำนาจแล้วหรือไม่ (มติ PO U122) */
+  hasSignature: boolean
+  /**
+   * signed URL อายุสั้นของรูปลายเซ็น — **ออกให้เฉพาะผู้มีสิทธิ์แก้ข้อมูลองค์กร** (ลายเซ็นเป็นข้อมูลอ่อนไหว)
+   * ผู้ดูอย่างเดียว/ไม่มีรูป/ออก URL ไม่ได้ = `null`
+   */
+  signaturePreviewUrl: string | null
   /** รายการที่ยังเป็นค่าตัวอย่าง/ไม่ครบ — ว่าง = พร้อมออกเอกสารจริง */
   issues: string[]
   updatedAt: string

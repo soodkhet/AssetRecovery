@@ -8,7 +8,7 @@ import { expenseReceiptPath, FIELD_MEDIA_KINDS, fieldEvidencePath } from '@/lib/
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
 import { intakePhotoPath } from '@/lib/warehouse/intake-photos'
 import { lotDocumentPath } from '@/lib/warehouse/lot-documents'
-import { organizationLogoPath } from '@/lib/organization/profile'
+import { organizationLogoPath, organizationSignaturePath } from '@/lib/organization/profile'
 import { substituteReceiptFilePath } from '@/lib/substitute-receipts/file'
 import { LOT_DOCUMENTS } from '@/lib/warehouse/lot-status'
 
@@ -41,6 +41,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('bank_refund'), transactionId: z.guid() }),
   /** โลโก้บริษัทบนหัวเอกสาร (มติ PO U99) — server ตรวจว่าเป็นองค์กรของผู้เรียกเอง */
   z.object({ kind: z.literal('organization_logo'), organizationId: z.guid() }),
+  /** รูปลายเซ็นผู้มีอำนาจ (มติ PO U122) — server ตรวจว่าเป็นองค์กรของผู้เรียกเอง */
+  z.object({ kind: z.literal('organization_signature'), organizationId: z.guid() }),
   /** ใบรับรองแทนใบเสร็จฉบับเซ็นแล้ว (มติ PO U103) — ผูกกับใบ CRT · server ตรวจว่าเป็นเจ้าของใบ/การเงิน */
   z.object({ kind: z.literal('substitute_receipt'), substituteReceiptId: z.guid() }),
 ])
@@ -100,6 +102,8 @@ export function uploadTargetPath(
       return bankRefundFilePath(target.transactionId, fileName, uniqueKey)
     case 'organization_logo':
       return organizationLogoPath(target.organizationId, fileName, uniqueKey)
+    case 'organization_signature':
+      return organizationSignaturePath(target.organizationId, fileName, uniqueKey)
     case 'substitute_receipt':
       return substituteReceiptFilePath(target.substituteReceiptId, fileName, uniqueKey)
   }
@@ -116,6 +120,7 @@ export type StoragePathOwner =
   | { kind: 'customer_wht'; certificateId: string }
   | { kind: 'bank_transaction'; transactionId: string }
   | { kind: 'organization_logo'; organizationId: string }
+  | { kind: 'organization_signature'; organizationId: string }
   | { kind: 'substitute_receipt'; substituteReceiptId: string }
 
 const HEX = '[0-9a-fA-F]'
@@ -144,6 +149,10 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^organization/(${UUID})/logo/[^/]`),
     owner: (id) => ({ kind: 'organization_logo', organizationId: id }),
+  },
+  {
+    pattern: new RegExp(`^organization/(${UUID})/signature/[^/]`),
+    owner: (id) => ({ kind: 'organization_signature', organizationId: id }),
   },
   {
     pattern: new RegExp(`^substitute-receipts/(${UUID})/signed/[^/]`),

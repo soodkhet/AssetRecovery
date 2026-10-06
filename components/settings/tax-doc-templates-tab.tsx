@@ -3,84 +3,52 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { taxDocTemplateHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
+import { fetchSamplePdf } from '@/components/accounting/document-samples-view'
 import { Can } from '@/components/auth/permission-provider'
-import {
-  MANAGE_TAX_PROFILES,
-  TAX_DOC_LANGUAGE_LABEL,
-  TAX_DOC_PAPER_SIZE_LABEL,
-} from '@/components/settings/shared'
+import { MANAGE_TAX_PROFILES } from '@/components/settings/shared'
 import {
   Button,
   Card,
   ErrorState,
   Field,
   InlineAlert,
-  Input,
   LoadingState,
-  Select,
   Textarea,
   useToast,
 } from '@/components/ui'
-import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
+import { DOCUMENT_SAMPLES_CAPABILITY } from '@/lib/documents/samples/catalog'
 import { fmtDate } from '@/lib/format/datetime'
-import type { TaxDocLanguage, TaxDocPaperSize, TaxDocumentType } from '@/lib/generated/prisma/enums'
+import type { TemplateDocumentType } from '@/lib/generated/prisma/enums'
 import { taxDocTemplateUpdateSchema } from '@/lib/settings/schemas'
-import { documentAssetName } from '@/lib/settings/tax-doc-template'
+import { MAX_FOOTER_NOTE_LENGTH } from '@/lib/settings/tax-doc-template'
 import type { TaxDocTemplateDto } from '@/lib/settings/types'
 
 /**
- * แท็บ "เทมเพลตเอกสารภาษี" (`13` §6.13) — 1 การ์ดต่อชนิดเอกสาร (ใบกำกับภาษี / 50 ทวิ)
+ * แท็บ "เทมเพลตเอกสาร" (`13` §6.13 · มติ PO U122 · mockup `settings.html` `renderSettingsTaxDoc`)
+ * — 1 การ์ดต่อชนิดเอกสาร (ใบแจ้งหนี้ · ใบเสร็จ/ใบกำกับภาษี · ใบส่งมอบทรัพย์)
  *
- * ปรับได้แค่ **ภาพลักษณ์** — ฟิลด์บังคับตามกฎหมาย (`28` §6.2–6.3) ปิดหรือซ่อนไม่ได้ จึงแสดงรายการนั้น
- * ไว้ให้เห็นชัดว่าไม่มีสวิตช์ปิด · 1 record ต่อ (องค์กร, ชนิดเอกสาร) ⇒ PATCH เป็น upsert ไม่มี POST/DELETE
- *
- * capability = `manage_tax_profiles` (ตรงกับที่ route ใช้) **ไม่ใช่** `manage_settings`
+ * ตั้งได้เฉพาะค่าที่**ต่างกันตามชนิด**: ข้อความท้ายเอกสาร + เปิด/ปิดพิมพ์รูปลายเซ็น — โลโก้/ข้อมูลบริษัท/รูปลายเซ็น
+ * อยู่ที่ "ข้อมูลองค์กร" · แบบเอกสาร A4 ภาษาไทยตายตัว · 50 ทวิ ใช้แบบทางการ (ไม่มีการ์ด)
+ * · "ดูตัวอย่าง PDF" ใช้ระบบตัวอย่างเอกสารตัวเดียวกับเมนูบัญชี (ค่าที่บันทึกแล้ว)
+ * · 1 record ต่อ (องค์กร, ชนิดเอกสาร) ⇒ PATCH เป็น upsert · capability แก้ = `manage_tax_profiles` (ตรงกับ route)
  */
 
 interface TemplatesPayload {
   templates: TaxDocTemplateDto[]
+  hasSignature: boolean
   legallyRequiredFields: string[]
 }
 
 interface FormState {
-  logoUrl: string
   footerNote: string
-  signatureImageUrl: string
-  paperSize: TaxDocPaperSize
-  language: TaxDocLanguage
+  printSignature: boolean
   reason: string
 }
 
-/**
- * กล่องสถานะรูปแบบ dashed ตาม mockup `settings.html` (`renderSettingsTaxDoc`) — mockup วาดเป็นช่อง
- * "อัปโหลด" แต่ `02` เก็บเป็น **URL** (`logo_url` / `signature_image_url`) และ Phase 1 ยังไม่มี
- * Storage integration ⇒ ช่องกรอกคือ "ลิงก์" ส่วนกล่องนี้ทำหน้าที่บอกสถานะแบบเดียวกับ mockup
- */
-function AssetStatus({ url, emptyLabel }: { url: string; emptyLabel: string }) {
-  const name = documentAssetName(url)
-  return (
-    <div
-      className={cn(
-        'rounded-lg border border-dashed p-3 text-center text-xs',
-        name === null ? 'border-slate-300 text-slate-400' : 'border-emerald-300 bg-emerald-50/50 text-emerald-700',
-      )}
-    >
-      {name === null ? emptyLabel : `✓ ${name} (ตั้งค่าแล้ว)`}
-    </div>
-  )
-}
-
 function formOf(template: TaxDocTemplateDto): FormState {
-  return {
-    logoUrl: template.logoUrl ?? '',
-    footerNote: template.footerNote ?? '',
-    signatureImageUrl: template.signatureImageUrl ?? '',
-    paperSize: template.paperSize,
-    language: template.language,
-    reason: '',
-  }
+  return { footerNote: template.footerNote ?? '', printSignature: template.printSignature, reason: '' }
 }
 
 export function TaxDocTemplatesTab() {
@@ -90,7 +58,8 @@ export function TaxDocTemplatesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({})
-  const [savingType, setSavingType] = useState<TaxDocumentType | null>(null)
+  const [savingType, setSavingType] = useState<TemplateDocumentType | null>(null)
+  const [previewType, setPreviewType] = useState<TemplateDocumentType | null>(null)
 
   /** ตัวดึงข้อมูล **ไม่มี setState ในตัวเอง** (กฎ `react-hooks/set-state-in-effect`) */
   const fetchTemplates = useCallback(
@@ -120,7 +89,7 @@ export function TaxDocTemplatesTab() {
     }
   }, [fetchTemplates])
 
-  function set<K extends keyof FormState>(documentType: TaxDocumentType, key: K, value: FormState[K]): void {
+  function set<K extends keyof FormState>(documentType: TemplateDocumentType, key: K, value: FormState[K]): void {
     setForms((current) => {
       const form = current[documentType]
       if (form === undefined) return current
@@ -134,11 +103,8 @@ export function TaxDocTemplatesTab() {
 
     const parsed = taxDocTemplateUpdateSchema.safeParse({
       documentType: template.documentType,
-      logoUrl: form.logoUrl.trim(),
       footerNote: form.footerNote.trim(),
-      signatureImageUrl: form.signatureImageUrl.trim(),
-      paperSize: form.paperSize,
-      language: form.language,
+      printSignature: form.printSignature,
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
@@ -164,23 +130,46 @@ export function TaxDocTemplatesTab() {
             ? current
             : {
                 ...current,
-                templates: current.templates.map((item) =>
-                  item.documentType === saved.documentType ? saved : item,
-                ),
+                templates: current.templates.map((item) => (item.documentType === saved.documentType ? saved : item)),
               },
         )
         setForms((current) => ({ ...current, [saved.documentType]: formOf(saved) }))
       }
-      showToast({ tone: 'success', title: 'บันทึกเทมเพลตแล้ว', description: template.documentTypeLabel })
+      showToast({
+        tone: 'success',
+        title: 'บันทึกเทมเพลตแล้ว',
+        description: `${template.documentTypeLabel} — มีผลกับเอกสารที่ออกหลังจากนี้`,
+      })
     } finally {
       setSavingType(null)
+    }
+  }
+
+  /** เปิด PDF ตัวอย่าง (ค่าที่บันทึกแล้ว) ในแท็บใหม่ — เปิดหน้าต่างก่อนรอผล กันเบราว์เซอร์บล็อกป๊อปอัป */
+  async function preview(template: TaxDocTemplateDto): Promise<void> {
+    const opened = window.open('', '_blank')
+    setPreviewType(template.documentType)
+    try {
+      const result = await fetchSamplePdf(template.sampleType)
+      if ('error' in result) {
+        opened?.close()
+        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+        return
+      }
+      const url = URL.createObjectURL(result.blob)
+      if (opened === null) window.location.assign(url)
+      else opened.location.href = url
+      // ให้แท็บใหม่โหลดเสร็จก่อนคืนหน่วยความจำ
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } finally {
+      setPreviewType(null)
     }
   }
 
   if (loading) {
     return (
       <Card>
-        <LoadingState message="กำลังโหลดเทมเพลตเอกสารภาษี" />
+        <LoadingState message="กำลังโหลดเทมเพลตเอกสาร" />
       </Card>
     )
   }
@@ -196,14 +185,14 @@ export function TaxDocTemplatesTab() {
   return (
     <div className="space-y-4">
       <Card>
-        <h2 className="text-sm font-bold text-slate-900">เทมเพลตเอกสารภาษี (Tax Document Template)</h2>
+        <h2 className="text-sm font-bold text-slate-900">เทมเพลตเอกสาร (Document Template)</h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          ปรับหน้าตาเอกสารภาษีทางการที่ระบบออกให้ — ใบกำกับภาษี และหนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ
+          ค่าที่ต่างกันตามชนิดเอกสาร — โลโก้ ข้อมูลบริษัท และรูปลายเซ็นผู้มีอำนาจ ตั้งที่ ตั้งค่าทั่วไป → ข้อมูลองค์กร
         </p>
         <SettingHelp className="mt-3" help={taxDocTemplateHelp()} />
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {payload.templates.map((template) => {
           const form = forms[template.documentType]
           const fieldErrors = errors[template.documentType] ?? {}
@@ -220,101 +209,64 @@ export function TaxDocTemplatesTab() {
 
               <div className="space-y-4">
                 <Field
-                  id={`logo-${template.documentType}`}
-                  label="โลโก้บริษัท"
-                  error={fieldErrors.logoUrl}
-                  hint="วางลิงก์รูป — เว้นว่าง = ไม่แสดงโลโก้บนเอกสาร"
-                >
-                  <div className="space-y-2">
-                    <AssetStatus url={form.logoUrl} emptyLabel="ยังไม่ได้ตั้งค่าโลโก้ — วางลิงก์รูปด้านล่าง" />
-                    <Input
-                      id={`logo-${template.documentType}`}
-                      value={form.logoUrl}
-                      onChange={(event) => set(template.documentType, 'logoUrl', event.target.value)}
-                      placeholder="https://…/logo-company.png"
-                    />
-                  </div>
-                </Field>
-
-                <Field
-                  id={`signature-${template.documentType}`}
-                  label="ลายเซ็นผู้มีอำนาจ"
-                  error={fieldErrors.signatureImageUrl}
-                  hint="วางลิงก์รูป — เว้นว่าง = เว้นที่ให้เซ็นสดบนกระดาษ"
-                >
-                  <div className="space-y-2">
-                    <AssetStatus url={form.signatureImageUrl} emptyLabel="ยังไม่ได้ตั้งค่าลายเซ็น — เว้นที่ให้เซ็นสด" />
-                    <Input
-                      id={`signature-${template.documentType}`}
-                      value={form.signatureImageUrl}
-                      onChange={(event) => set(template.documentType, 'signatureImageUrl', event.target.value)}
-                      placeholder="https://…/signature.png"
-                    />
-                  </div>
-                </Field>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field id={`paper-${template.documentType}`} label="ขนาดกระดาษ" required error={fieldErrors.paperSize}>
-                    <Select
-                      id={`paper-${template.documentType}`}
-                      value={form.paperSize}
-                      onChange={(event) =>
-                        set(template.documentType, 'paperSize', event.target.value as TaxDocPaperSize)
-                      }
-                    >
-                      {(Object.keys(TAX_DOC_PAPER_SIZE_LABEL) as TaxDocPaperSize[]).map((value) => (
-                        <option key={value} value={value}>
-                          {TAX_DOC_PAPER_SIZE_LABEL[value]}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                  <Field id={`language-${template.documentType}`} label="ภาษา" required error={fieldErrors.language}>
-                    <Select
-                      id={`language-${template.documentType}`}
-                      value={form.language}
-                      onChange={(event) =>
-                        set(template.documentType, 'language', event.target.value as TaxDocLanguage)
-                      }
-                    >
-                      {(Object.keys(TAX_DOC_LANGUAGE_LABEL) as TaxDocLanguage[]).map((value) => (
-                        <option key={value} value={value}>
-                          {TAX_DOC_LANGUAGE_LABEL[value]}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-
-                <Field
                   id={`footer-${template.documentType}`}
-                  label="ข้อความท้ายเอกสาร (Footer)"
+                  label="ข้อความท้ายเอกสาร"
                   error={fieldErrors.footerNote}
+                  hint={`พิมพ์เหนือช่องลายเซ็น · เว้นว่าง = ไม่พิมพ์ · ไม่เกิน ${MAX_FOOTER_NOTE_LENGTH} ตัวอักษร`}
                 >
                   <Textarea
                     id={`footer-${template.documentType}`}
                     value={form.footerNote}
+                    maxLength={MAX_FOOTER_NOTE_LENGTH}
                     onChange={(event) => set(template.documentType, 'footerNote', event.target.value)}
                     placeholder="เช่น เงื่อนไขการชำระเงิน หรือข้อความขอบคุณ"
                   />
                 </Field>
+
+                <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.printSignature}
+                    onChange={(event) => set(template.documentType, 'printSignature', event.target.checked)}
+                    className="focus-ring mt-0.5 h-4 w-4 rounded border-slate-300"
+                  />
+                  <span>
+                    พิมพ์รูปลายเซ็นผู้มีอำนาจ ในช่อง &quot;{template.signatureSlotLabel}&quot;
+                    <span className="mt-0.5 block text-[11px] font-normal text-slate-400">
+                      {payload.hasSignature
+                        ? 'มีรูปลายเซ็นในข้อมูลองค์กรแล้ว'
+                        : 'ยังไม่ได้อัปโหลดรูปลายเซ็นในข้อมูลองค์กร — เอกสารจะเว้นช่องให้เซ็นมือ'}
+                    </span>
+                  </span>
+                </label>
 
                 <Field id={`reason-${template.documentType}`} label="เหตุผล" required error={fieldErrors.reason}>
                   <Textarea
                     id={`reason-${template.documentType}`}
                     value={form.reason}
                     onChange={(event) => set(template.documentType, 'reason', event.target.value)}
-                    placeholder="เช่น เปลี่ยนโลโก้บริษัทตามที่ฝ่ายบริหารอนุมัติ"
+                    placeholder="เช่น เพิ่มเงื่อนไขการชำระเงินตามที่ฝ่ายบริหารอนุมัติ"
                   />
                 </Field>
 
-                <Can action="manage" resource={MANAGE_TAX_PROFILES}>
-                  <div className="flex justify-end">
+                <div className="flex items-center justify-between gap-2">
+                  <Can action="view" resource={DOCUMENT_SAMPLES_CAPABILITY}>
+                    <button
+                      type="button"
+                      onClick={() => void preview(template)}
+                      disabled={previewType === template.documentType}
+                      className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50"
+                      title="เปิดตัวอย่างตามค่าที่บันทึกแล้ว"
+                    >
+                      {previewType === template.documentType ? 'กำลังเปิดตัวอย่าง…' : 'ดูตัวอย่าง PDF'}
+                    </button>
+                  </Can>
+                  <Can action="manage" resource={MANAGE_TAX_PROFILES}>
                     <Button onClick={() => void save(template)} loading={savingType === template.documentType}>
                       บันทึกเทมเพลต
                     </Button>
-                  </div>
-                </Can>
+                  </Can>
+                </div>
               </div>
             </Card>
           )
@@ -323,7 +275,8 @@ export function TaxDocTemplatesTab() {
 
       <Card>
         <InlineAlert tone="warning" title="ฟิลด์บังคับตามกฎหมายปิดหรือซ่อนไม่ได้">
-          เอกสารทุกฉบับต้องมีรายการต่อไปนี้เสมอ ไม่มีสวิตช์ปิดในระบบ:
+          เอกสารทุกฉบับต้องมีรายการต่อไปนี้เสมอ ไม่มีสวิตช์ปิดในระบบ · แบบเอกสารเป็น A4 ภาษาไทย · หนังสือรับรองหัก ณ
+          ที่จ่าย (50 ทวิ) ใช้แบบฟอร์มทางการ ไม่มีค่าตั้ง · ค่าที่ตั้งถูกบันทึกลงเอกสารตอนออก แก้ภายหลังเอกสารเดิมไม่เปลี่ยน
         </InlineAlert>
         <ul className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
           {payload.legallyRequiredFields.map((field) => (

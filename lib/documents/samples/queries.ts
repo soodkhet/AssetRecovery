@@ -6,12 +6,12 @@ import type { DocumentSampleContext } from '@/lib/documents/samples/fixtures'
 import { listDocumentNumbering } from '@/lib/document-numbering/queries'
 import type { DocumentNumberingDto } from '@/lib/document-numbering/types'
 import type { DocumentNumberType } from '@/lib/generated/prisma/enums'
-import { currentLetterhead } from '@/lib/organization/letterhead'
+import { createLetterheadResolver } from '@/lib/organization/letterhead'
 
 /**
  * ข้อมูลจริงที่หน้าตัวอย่างเอกสารใช้ (มติ PO U104) — **อ่านอย่างเดียว 2 อย่างเท่านั้น**
  *
- * 1. หัวเอกสาร/โลโก้ขององค์กร (ค่าปัจจุบัน — ตัวเดียวกับเอกสารภายใน)
+ * 1. หัวเอกสาร/โลโก้ขององค์กร (ค่าปัจจุบัน — ตัวเดียวกับเอกสารภายใน) + เทมเพลตเอกสาร (ข้อความท้าย/รูปลายเซ็น — U122)
  * 2. "เลขถัดไป" ของทุกชุดเลขที่เอกสาร — ผ่าน `listDocumentNumbering()` ที่หน้าตั้งค่าใช้แสดงตัวอย่างเลข
  *    (SELECT ล้วน ⇒ **ไม่เดินตัวนับ** ไม่สร้างแถวชุดเลข · ล็อกด้วยเทสต์ DB เทียบ `current_seq` ก่อน/หลัง)
  *
@@ -29,11 +29,21 @@ export async function loadDocumentSampleContext(
   organizationId: string,
   asOf: Date = new Date(),
 ): Promise<DocumentSampleContext> {
-  const [letterhead, numbering] = await Promise.all([
-    currentLetterhead(organizationId),
+  const resolver = createLetterheadResolver(organizationId)
+  const [letterhead, numbering, billingInvoice, taxInvoice, handoverNote] = await Promise.all([
+    resolver.current(),
     listDocumentNumbering(organizationId, asOf),
+    // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นตามค่าตั้งปัจจุบัน (ปุ่มดูตัวอย่างของแท็บ "เทมเพลตเอกสาร")
+    resolver.currentTemplate('billing_invoice'),
+    resolver.currentTemplate('tax_invoice'),
+    resolver.currentTemplate('handover_note'),
   ])
-  return { letterhead, numbers: numbersOf(numbering), asOf }
+  return {
+    letterhead,
+    numbers: numbersOf(numbering),
+    asOf,
+    templates: { billing_invoice: billingInvoice, tax_invoice: taxInvoice, handover_note: handoverNote },
+  }
 }
 
 /** `GET /api/accounting/document-samples` — ทะเบียนตัวอย่าง + เลขตัวอย่างตามค่าตั้งปัจจุบัน */

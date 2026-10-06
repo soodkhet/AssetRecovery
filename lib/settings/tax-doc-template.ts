@@ -1,38 +1,62 @@
-import type { TaxDocLanguage, TaxDocPaperSize, TaxDocumentType } from '@/lib/generated/prisma/enums'
+import type { TemplateDocumentType } from '@/lib/generated/prisma/enums'
+import type { DocumentSampleType } from '@/lib/documents/samples/catalog'
+import type { LetterheadLogo } from '@/lib/organization/profile'
 
 /**
- * รูปแบบเอกสารภาษีทางการ (`13` §6.13) — **pure ล้วน ใช้ร่วม FE/BE**
+ * **เทมเพลตเอกสาร** (`13` §6.13 · มติ PO 06/10/2569 U122) — **pure ล้วน ใช้ร่วม FE/BE/PDF**
  *
- * ปรับได้แค่ **ภาพลักษณ์** (โลโก้ / footer / ลายเซ็น / ขนาดกระดาษ / ภาษา) —
- * ฟิลด์บังคับตามกฎหมาย (`13` §6.13 ท้ายหัวข้อ · `28` §6.2–6.3) **ปิดหรือซ่อนไม่ได้**
- * จึงไม่มีค่าตั้งใดในที่นี่ที่ทำให้ฟิลด์เหล่านั้นหายไปจาก PDF ได้เลย (Phase 4.3/4.5 เป็นตัว render)
+ * หลักของมติ: ค่าที่**ใช้ร่วมทุกเอกสาร** (โลโก้ · ข้อมูลบริษัท · รูปลายเซ็นผู้มีอำนาจ) อยู่ที่หน้า "ข้อมูลองค์กร"
+ * ค่าที่**ต่างกันตามชนิดเอกสาร**อยู่ที่นี่ — ข้อความท้ายเอกสาร + เปิด/ปิดพิมพ์รูปลายเซ็น
+ * แบบเอกสารเป็น A4 ภาษาไทยตายตัวตามแบบที่ผู้ใช้อนุมัติ (ไม่มีค่าตั้งขนาดกระดาษ/ภาษา) · 50 ทวิ ใช้แบบทางการ ไม่มีค่าตั้ง
  *
- * **1 record ต่อ (organization, document_type)** — UNIQUE ที่ `02` §5 ⇒ endpoint เป็น `GET`/`PATCH`
- * (upsert) ไม่มี POST/DELETE
+ * ค่าที่ใช้จริง **snapshot ลงเอกสารตอนออก** (`document_template_snapshot`) — แก้ค่าตั้งภายหลังเอกสารเดิมไม่เปลี่ยน
+ * · เอกสารก่อน U122 (ไม่มี snapshot) ไม่พิมพ์ข้อความท้าย/ลายเซ็น (ไม่ดึงค่าปัจจุบัน — แนวเดียวกับ U110)
+ *
+ * ฟิลด์บังคับตามกฎหมาย (`28` §6.2–6.3) **ปิดหรือซ่อนไม่ได้** — ไม่มีค่าตั้งใดในที่นี่ที่ทำให้ฟิลด์เหล่านั้นหายไปจาก PDF
+ * **1 record ต่อ (organization, document_type)** ⇒ endpoint เป็น `GET`/`PATCH` (upsert) ไม่มี POST/DELETE
  */
 
 export interface TaxDocTemplateValues {
-  logoUrl: string | null
   footerNote: string | null
-  signatureImageUrl: string | null
-  paperSize: TaxDocPaperSize
-  language: TaxDocLanguage
+  printSignature: boolean
 }
 
-export const TAX_DOCUMENT_TYPES: readonly TaxDocumentType[] = ['tax_invoice', 'wht_certificate']
+export const TEMPLATE_DOCUMENT_TYPES: readonly TemplateDocumentType[] = ['billing_invoice', 'tax_invoice', 'handover_note']
 
-export const TAX_DOCUMENT_TYPE_LABEL: Readonly<Record<TaxDocumentType, string>> = {
-  tax_invoice: 'ใบกำกับภาษี',
-  wht_certificate: 'หนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ',
+export const TEMPLATE_DOCUMENT_TYPE_LABEL: Readonly<Record<TemplateDocumentType, string>> = {
+  billing_invoice: 'ใบแจ้งหนี้ / ใบวางบิล',
+  tax_invoice: 'ใบเสร็จรับเงิน / ใบกำกับภาษี',
+  handover_note: 'ใบส่งมอบทรัพย์',
+}
+
+/** ช่องลายเซ็นที่พิมพ์รูปลายเซ็นผู้มีอำนาจ (ลำดับในแถวผู้เซ็นของเอกสารแต่ละชนิด — ฝั่งบริษัทเรา) */
+export const TEMPLATE_SIGNATURE_SLOT: Readonly<Record<TemplateDocumentType, number>> = {
+  /** "ผู้วางบิล / ผู้ให้บริการ" */
+  billing_invoice: 0,
+  /** "ผู้มีอำนาจลงนาม" (ช่องแรก = ผู้รับเงิน) */
+  tax_invoice: 1,
+  /** "ผู้ส่งมอบ" */
+  handover_note: 0,
+}
+
+/** ชื่อช่องลายเซ็นที่รูปจะไปอยู่ — แสดงในหน้าตั้งค่า */
+export const TEMPLATE_SIGNATURE_SLOT_LABEL: Readonly<Record<TemplateDocumentType, string>> = {
+  billing_invoice: 'ผู้วางบิล / ผู้ให้บริการ',
+  tax_invoice: 'ผู้มีอำนาจลงนาม',
+  handover_note: 'ผู้ส่งมอบ',
+}
+
+/** ตัวอย่าง PDF ของแต่ละชนิด (ระบบตัวอย่างเอกสารที่มีอยู่) */
+export const TEMPLATE_DOCUMENT_SAMPLE: Readonly<Record<TemplateDocumentType, DocumentSampleType>> = {
+  billing_invoice: 'billing-invoice',
+  tax_invoice: 'receipt-tax-invoice',
+  handover_note: 'handover-note',
 }
 
 /** ค่าเริ่มต้นเมื่อยังไม่เคยตั้งค่า — ตรงกับ `@default` ใน `schema.prisma` */
 export const DEFAULT_TAX_DOC_TEMPLATE: TaxDocTemplateValues = {
-  logoUrl: null,
   footerNote: null,
-  signatureImageUrl: null,
-  paperSize: 'A4',
-  language: 'th',
+  printSignature: false,
 }
 
 export const MAX_FOOTER_NOTE_LENGTH = 500
@@ -51,59 +75,101 @@ export const LEGALLY_REQUIRED_DOCUMENT_FIELDS: readonly string[] = [
   'ภาษีมูลค่าเพิ่ม / ภาษีหัก ณ ที่จ่าย แยกบรรทัดชัดเจน',
 ]
 
-/**
- * ชื่อไฟล์ที่อ่านออกจากลิงก์รูป — mockup `settings.html` แสดงสถานะเป็น "✓ logo-company.png"
- * ไม่ใช่ลิงก์ยาว ๆ (`renderSettingsTaxDoc`) · ใช้แสดงผลเท่านั้น ห้ามเอาไปตัดสินใจเชิงธุรกิจ
- *
- * คืน `null` เมื่อว่างหรือไม่ใช่ URL ที่ parse ได้ · ลิงก์ที่ไม่มีชื่อไฟล์ (ลงท้ายด้วย `/`) คืน host
- */
-export function documentAssetName(url: string | null): string | null {
-  const trimmed = url?.trim() ?? ''
-  if (trimmed === '') return null
-
-  let parsed: URL
-  try {
-    parsed = new URL(trimmed)
-  } catch {
-    return null
-  }
-
-  const segment = parsed.pathname.split('/').filter((part) => part !== '').at(-1)
-  if (segment === undefined) return parsed.host
-  try {
-    return decodeURIComponent(segment)
-  } catch {
-    // ลิงก์ที่มี `%` แบบไม่ถูก encode — โชว์ดิบดีกว่าพัง
-    return segment
-  }
-}
-
 const trimOrNull = (value: string | null): string | null => {
   const trimmed = value?.trim() ?? ''
   return trimmed === '' ? null : trimmed
 }
 
 export function normalizeTaxDocTemplateValues(input: TaxDocTemplateValues): TaxDocTemplateValues {
-  return {
-    logoUrl: trimOrNull(input.logoUrl),
-    footerNote: trimOrNull(input.footerNote),
-    signatureImageUrl: trimOrNull(input.signatureImageUrl),
-    paperSize: input.paperSize,
-    language: input.language,
-  }
+  return { footerNote: trimOrNull(input.footerNote), printSignature: input.printSignature }
 }
 
-/** payload ที่ลง audit — ชื่อคอลัมน์ snake_case ตามตารางจริง (`90` §13 — ภาษี = ต้องมี reason) */
+/** payload ที่ลง audit — ชื่อคอลัมน์ snake_case ตามตารางจริง (`90` §13 — เอกสารภาษี = ต้องมี reason) */
 export function toTaxDocTemplateAuditPayload(
-  documentType: TaxDocumentType,
+  documentType: TemplateDocumentType,
   values: TaxDocTemplateValues,
 ): Record<string, unknown> {
   return {
     document_type: documentType,
-    logo_url: values.logoUrl,
     footer_note: values.footerNote,
-    signature_image_url: values.signatureImageUrl,
-    paper_size: values.paperSize,
-    language: values.language,
+    print_signature: values.printSignature,
   }
+}
+
+// ── snapshot ลงเอกสารตอนออก (มติ PO U122 — แนว U110/U111) ─────────────────────
+
+/** ค่าเทมเพลตที่เอกสารฉบับหนึ่งใช้ — `signaturePath` = `null` เมื่อปิดสวิตช์หรือยังไม่มีรูปลายเซ็น */
+export interface DocumentTemplateSnapshot {
+  footerNote: string | null
+  signaturePath: string | null
+  /** SHA-256 ของไฟล์ลายเซ็น ณ ตอนออก — พิมพ์ซ้ำแล้วไฟล์ไม่ตรง hash = เว้นช่องเซ็นมือ */
+  signatureSha256: string | null
+}
+
+/** ค่าตั้งปัจจุบัน + รูปลายเซ็นขององค์กร → ชุดที่ snapshot ลงเอกสาร (ใช้ตอน**ออก**เอกสารเท่านั้น) */
+export function documentTemplateSnapshotOf(
+  template: TaxDocTemplateValues | null,
+  organization: { signaturePath: string | null; signatureSha256: string | null },
+): DocumentTemplateSnapshot {
+  const values = template ?? DEFAULT_TAX_DOC_TEMPLATE
+  const withSignature = values.printSignature && organization.signaturePath !== null
+  return {
+    footerNote: trimOrNull(values.footerNote),
+    signaturePath: withSignature ? organization.signaturePath : null,
+    signatureSha256: withSignature ? organization.signatureSha256 : null,
+  }
+}
+
+/** snapshot → ค่า JSONB (คีย์ snake_case ตามธรรมเนียม DB) */
+export function documentTemplateSnapshotJson(snapshot: DocumentTemplateSnapshot): {
+  footer_note: string | null
+  signature_path: string | null
+  signature_sha256: string | null
+} {
+  return {
+    footer_note: snapshot.footerNote,
+    signature_path: snapshot.signaturePath,
+    signature_sha256: snapshot.signatureSha256,
+  }
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null
+}
+
+/** อ่าน JSONB กลับ — `null` = ไม่มี snapshot (เอกสารก่อน U122) · ค่าที่รูปไม่ตรงถือเป็นค่าว่างของช่องนั้น */
+export function parseDocumentTemplateSnapshot(value: unknown): DocumentTemplateSnapshot | null {
+  if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const signaturePath = stringOrNull(record['signature_path'])
+  const sha = record['signature_sha256']
+  return {
+    footerNote: stringOrNull(record['footer_note']),
+    signaturePath,
+    signatureSha256: signaturePath !== null && typeof sha === 'string' && /^[0-9a-f]{64}$/.test(sha) ? sha : null,
+  }
+}
+
+// ── ค่าที่ตัวพิมพ์ PDF ใช้ ─────────────────────────────────────────────────
+
+/** ข้อความท้าย + รูปลายเซ็นที่โหลดแล้ว (ฝั่ง server) — component PDF แค่พิมพ์ */
+export interface DocTemplateRender {
+  footerNote: string | null
+  /** รูปลายเซ็นที่ฝังลง PDF — `null` = เว้นช่องเซ็นมือ (ปิดสวิตช์/ไม่มีรูป/โหลดไม่ได้/ไฟล์ไม่ตรง hash) */
+  signature: LetterheadLogo | null
+  /** ลำดับช่องลายเซ็นที่พิมพ์รูป ({@link TEMPLATE_SIGNATURE_SLOT}) */
+  signatureSlot: number
+}
+
+/** ไม่พิมพ์อะไรเพิ่ม — เอกสารก่อน U122 / ตัวพิมพ์ที่ไม่ได้ส่งเทมเพลตมา */
+export const NO_DOC_TEMPLATE: DocTemplateRender = { footerNote: null, signature: null, signatureSlot: 0 }
+
+/** รูปลายเซ็นเรียงตามช่องผู้เซ็น — ช่องอื่นเป็น `null` (เซ็นมือ) */
+export function signatureImagesOf(
+  template: DocTemplateRender,
+  slotCount: number,
+): Array<LetterheadLogo | null> {
+  return Array.from({ length: slotCount }, (_, index) =>
+    index === template.signatureSlot ? template.signature : null,
+  )
 }

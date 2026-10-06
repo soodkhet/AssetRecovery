@@ -16,12 +16,14 @@ import {
   PaymentChannelRow,
   Signatures,
   SummaryRow,
+  TemplateFooterNote,
   type DocColumn,
   type DocCopyKind,
 } from '@/components/pdf/doc-layout'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { TaxInvoiceDoc } from '@/lib/sales/sales'
+import { NO_DOC_TEMPLATE, signatureImagesOf, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
 
 /**
  * **ใบเสร็จรับเงิน/ใบกำกับภาษี** (ออกตอนรับเงิน — มติ PO U95) และ **ใบกำกับภาษีแบบเดิม** (ข้อมูลก่อน U95)
@@ -50,10 +52,12 @@ const COLUMNS: readonly DocColumn[] = [
 function TaxInvoiceCopy({
   doc,
   letterhead,
+  template,
   copy,
 }: {
   doc: TaxInvoiceDoc
   letterhead: DocLetterhead
+  template: DocTemplateRender
   copy: DocCopyKind
 }): React.JSX.Element {
   const extras: Array<readonly [string, string]> = []
@@ -97,22 +101,36 @@ function TaxInvoiceCopy({
       </DocTable>
 
       <NoteText>{doc.footnote}</NoteText>
-      <Signatures roles={doc.signers} />
+      <TemplateFooterNote text={template.footerNote} />
+      <Signatures roles={doc.signers} images={signatureImagesOf(template, doc.signers.length)} />
     </DocPage>
   )
 }
 
-export function TaxInvoicePDF({ doc, letterhead }: { doc: TaxInvoiceDoc; letterhead: DocLetterhead }): React.JSX.Element {
+export function TaxInvoicePDF({
+  doc,
+  letterhead,
+  template = NO_DOC_TEMPLATE,
+}: {
+  doc: TaxInvoiceDoc
+  letterhead: DocLetterhead
+  /** ข้อความท้าย + รูปลายเซ็น (มติ PO U122) — จาก snapshot ตอนออกใบ · ไม่ส่ง = ไม่พิมพ์ */
+  template?: DocTemplateRender
+}): React.JSX.Element {
   return (
     <Document title={`${doc.title} ${doc.invoiceNumber}`} author={doc.seller.name}>
       {ORIGINAL_AND_COPY.map((copy) => (
-        <TaxInvoiceCopy key={copy} doc={doc} letterhead={letterhead} copy={copy} />
+        <TaxInvoiceCopy key={copy} doc={doc} letterhead={letterhead} template={template} copy={copy} />
       ))}
     </Document>
   )
 }
 
-export async function renderTaxInvoice(doc: TaxInvoiceDoc, letterhead: DocLetterhead): Promise<Buffer> {
+export async function renderTaxInvoice(
+  doc: TaxInvoiceDoc,
+  letterhead: DocLetterhead,
+  template: DocTemplateRender = NO_DOC_TEMPLATE,
+): Promise<Buffer> {
   ensureThaiFont()
-  return renderToBuffer(<TaxInvoicePDF doc={doc} letterhead={letterhead} />)
+  return renderToBuffer(<TaxInvoicePDF doc={doc} letterhead={letterhead} template={template} />)
 }

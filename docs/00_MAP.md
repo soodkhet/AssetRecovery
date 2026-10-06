@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (243 KB, 2589 บรรทัด — v4.47)
+### `docs/02-database-schema-design.md` (246 KB, 2590 บรรทัด — v4.48)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -127,26 +127,26 @@
 | 3 | # 02 — Database Schema Design (Full Production Schema) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 82 | ## 1. Summary |
-| 85 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
-| 87 | ### 2.1 Naming |
-| 97 | ### 2.2 Money |
-| 104 | ### 2.3 Timestamps |
-| 109 | ### 2.4 Common Columns (ทุก table มีครบ) |
-| 120 | ### 2.5 Permission Architecture |
-| 127 | ## 3. Enum Types (ทั้งหมด) |
-| 483 | ## 4. Schema Group A — Identity & Access |
-| 584 | ## 5. Schema Group B — Master Data |
+| 83 | ## 1. Summary |
+| 86 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
+| 88 | ### 2.1 Naming |
+| 98 | ### 2.2 Money |
+| 105 | ### 2.3 Timestamps |
+| 110 | ### 2.4 Common Columns (ทุก table มีครบ) |
+| 121 | ### 2.5 Permission Architecture |
+| 128 | ## 3. Enum Types (ทั้งหมด) |
+| 482 | ## 4. Schema Group A — Identity & Access |
+| 585 | ## 5. Schema Group B — Master Data |
 | 954 | ## 6. Schema Group C — Case Workflow |
 | 1330 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1419 | ## 8. Schema Group E — Finance Operation |
-| 1870 | ## 9. Schema Group F — Accounting Handover |
-| 2283 | ## 10. Schema Group G — Platform |
-| 2403 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 2478 | ## 12. Seed Data |
-| 2546 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 2568 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 2578 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 1420 | ## 8. Schema Group E — Finance Operation |
+| 1871 | ## 9. Schema Group F — Accounting Handover |
+| 2284 | ## 10. Schema Group G — Platform |
+| 2404 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 2479 | ## 12. Seed Data |
+| 2547 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 2569 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 2579 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/02_OPEN_DECISIONS.md` (71 KB, 300 บรรทัด)
 
@@ -498,7 +498,7 @@
 | 156 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 164 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/13-accounting-finance-settings.md` (95 KB, 532 บรรทัด — v3.20)
+### `docs/13-accounting-finance-settings.md` (100 KB, 541 บรรทัด — v3.21)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -506,41 +506,41 @@
 | 3 | # 13 — Accounting & Finance Settings (ตั้งค่าระบบบัญชี/การเงิน) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 46 | ## 1. Summary |
-| 50 | ## 2. Purpose |
-| 54 | ## 3. In Scope |
-| 58 | ## 4. Out of Scope |
-| 63 | ## 5. Actors & Responsibilities |
-| 71 | ## 6. Core Concepts & Data Entities |
-| 73 | ### 6.1 Billing/Payout Cycles (รอบบิลและรอบจ่าย) |
-| 88 | ### 6.2 Approval Matrix (สายการอนุมัติ) |
-| 115 | ### 6.3 Corporate Bank Accounts (บัญชีธนาคารบริษัท) |
-| 130 | ### 6.4 Tax Profile (กติกาภาษี) 🔶 สำคัญมาก — ต้องนักบัญชียืนยันก่อนใช้จริง |
-| 170 | ### 6.5 VAT Rate Setting (อัตราภาษีมูลค่าเพิ่ม) 🔶 สำคัญมาก — ติดตามใกล้ชิด |
-| 187 | ### 6.6 Cost Center |
-| 196 | ### 6.7 Internal Document Templates (รูปแบบเอกสารภายใน) |
-| 210 | ### 6.8 Bank File Format (รูปแบบไฟล์ธนาคาร) |
-| 220 | ### 6.9 Export Format (รูปแบบไฟล์ Export ส่งสำนักงานบัญชี) |
-| 244 | ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี) |
-| 263 | ### 6.11 Period Lock Policy (นโยบายล็อกรอบบัญชี) |
-| 273 | ### 6.12 Document Numbering (เลขที่เอกสาร) — มติ PO 06/10/2569 (UAT U102) |
-| 315 | ### 6.13 Tax Document Template Settings (รูปแบบเอกสารภาษีทางการ) |
-| 330 | ### 6.14 SLA Alert Threshold (เกณฑ์ SLA งานติดตาม) — มติ PO 15/08/2569 (D18) |
-| 342 | ### 6.15 ปฏิทินวันหยุด (Public Holidays) — มติ PO 06/10/2569 (UAT U93) |
-| 359 | ### 6.16 ระยะเก็บเอกสารลูกหนี้ (Debtor Document Retention — PDPA) — มติ PO 06/10/2569 (... |
-| 374 | ### 6.17 ข้อมูลองค์กร (Organization Profile) — มติ PO 06/10/2569 (U99) |
-| 395 | ## 7. UI / UX Rules |
-| 401 | ### 7.1 คำอธิบายในหน้าจอ (มติ PO 06/10/2569 U108) |
-| 425 | ## 8. Workflow / Lifecycle |
-| 431 | ## 9. Security / Control Rules |
-| 438 | ## 10. Validation & Error Handling |
-| 448 | ## 11. Permission Requirements |
-| 464 | ## 12. Audit Log Requirements |
-| 469 | ## 13. API / Integration Draft |
-| 493 | ## 14. Acceptance Criteria |
-| 500 | ## 15. Test Cases |
-| 512 | ## 16. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 523 | ## 17. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 47 | ## 1. Summary |
+| 51 | ## 2. Purpose |
+| 55 | ## 3. In Scope |
+| 59 | ## 4. Out of Scope |
+| 64 | ## 5. Actors & Responsibilities |
+| 72 | ## 6. Core Concepts & Data Entities |
+| 74 | ### 6.1 Billing/Payout Cycles (รอบบิลและรอบจ่าย) |
+| 89 | ### 6.2 Approval Matrix (สายการอนุมัติ) |
+| 116 | ### 6.3 Corporate Bank Accounts (บัญชีธนาคารบริษัท) |
+| 131 | ### 6.4 Tax Profile (กติกาภาษี) 🔶 สำคัญมาก — ต้องนักบัญชียืนยันก่อนใช้จริง |
+| 171 | ### 6.5 VAT Rate Setting (อัตราภาษีมูลค่าเพิ่ม) 🔶 สำคัญมาก — ติดตามใกล้ชิด |
+| 188 | ### 6.6 Cost Center |
+| 197 | ### 6.7 Internal Document Templates (รูปแบบเอกสารภายใน) |
+| 211 | ### 6.8 Bank File Format (รูปแบบไฟล์ธนาคาร) |
+| 221 | ### 6.9 Export Format (รูปแบบไฟล์ Export ส่งสำนักงานบัญชี) |
+| 245 | ### 6.10 Functional Permission Matrix (สิทธิ์เฉพาะโมดูลการเงิน/บัญชี) |
+| 264 | ### 6.11 Period Lock Policy (นโยบายล็อกรอบบัญชี) |
+| 274 | ### 6.12 Document Numbering (เลขที่เอกสาร) — มติ PO 06/10/2569 (UAT U102) |
+| 316 | ### 6.13 เทมเพลตเอกสาร (Document Template Settings) — v3.21 มติ PO 06/10/2569 (U122) |
+| 335 | ### 6.14 SLA Alert Threshold (เกณฑ์ SLA งานติดตาม) — มติ PO 15/08/2569 (D18) |
+| 347 | ### 6.15 ปฏิทินวันหยุด (Public Holidays) — มติ PO 06/10/2569 (UAT U93) |
+| 364 | ### 6.16 ระยะเก็บเอกสารลูกหนี้ (Debtor Document Retention — PDPA) — มติ PO 06/10/2569 (... |
+| 379 | ### 6.17 ข้อมูลองค์กร (Organization Profile) — มติ PO 06/10/2569 (U99) |
+| 401 | ## 7. UI / UX Rules |
+| 407 | ### 7.1 คำอธิบายในหน้าจอ (มติ PO 06/10/2569 U108) |
+| 431 | ## 8. Workflow / Lifecycle |
+| 437 | ## 9. Security / Control Rules |
+| 444 | ## 10. Validation & Error Handling |
+| 454 | ## 11. Permission Requirements |
+| 471 | ## 12. Audit Log Requirements |
+| 476 | ## 13. API / Integration Draft |
+| 502 | ## 14. Acceptance Criteria |
+| 509 | ## 15. Test Cases |
+| 521 | ## 16. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 532 | ## 17. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/15-claims-and-advances.md` (54 KB, 286 บรรทัด — v2.10)
 
@@ -898,7 +898,7 @@
 | 261 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 267 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/28-finance-export-pdf-spec.md` (38 KB, 168 บรรทัด — v2.9)
+### `docs/28-finance-export-pdf-spec.md` (42 KB, 170 บรรทัด — v2.10)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -906,21 +906,21 @@
 | 3 | # 28 — Finance Export PDF Spec (เอกสาร PDF ทั้งหมด) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 33 | ## 1. Summary |
-| 37 | ## 2. Purpose |
-| 41 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 45 | ## 6. รายการเอกสาร PDF ทั้งหมด |
-| 47 | ### 6.0 หัวเอกสารกลาง (Letterhead) — มติ PO 06/10/2569 (U99) |
-| 56 | ### 6.0.1 เลย์เอาต์เอกสารตามแบบที่อนุมัติ — มติ PO 06/10/2569 (U100/U101) |
-| 78 | ### 6.1 เอกสารภายใน (Internal — ไม่มีข้อกำหนดทางกฎหมาย, อ้างอิงไฟล์ 13 §6.7) |
-| 93 | ### 6.2 เอกสารทางการ — ใบกำกับภาษี (ไฟล์ 31 §6.2) 🔶 มีข้อกำหนดทางกฎหมายเข้มงวด |
-| 110 | ### 6.3 เอกสารทางการ — หนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) (ไฟล์ 33 §6.3) 🔶 ม... |
-| 125 | ### 6.4 Document Checklist Export (ไฟล์ 34, ใช้ XLSX ไม่ใช่ PDF) |
-| 129 | ### 6.5 หน้าตัวอย่างเอกสารทั้งหมด — มติ PO 06/10/2569 (U104) |
-| 140 | ## 7. Implementation Notes |
-| 148 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 154 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 160 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 34 | ## 1. Summary |
+| 38 | ## 2. Purpose |
+| 42 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 46 | ## 6. รายการเอกสาร PDF ทั้งหมด |
+| 48 | ### 6.0 หัวเอกสารกลาง (Letterhead) — มติ PO 06/10/2569 (U99) |
+| 57 | ### 6.0.1 เลย์เอาต์เอกสารตามแบบที่อนุมัติ — มติ PO 06/10/2569 (U100/U101) |
+| 80 | ### 6.1 เอกสารภายใน (Internal — ไม่มีข้อกำหนดทางกฎหมาย, อ้างอิงไฟล์ 13 §6.7) |
+| 95 | ### 6.2 เอกสารทางการ — ใบกำกับภาษี (ไฟล์ 31 §6.2) 🔶 มีข้อกำหนดทางกฎหมายเข้มงวด |
+| 112 | ### 6.3 เอกสารทางการ — หนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) (ไฟล์ 33 §6.3) 🔶 ม... |
+| 127 | ### 6.4 Document Checklist Export (ไฟล์ 34, ใช้ XLSX ไม่ใช่ PDF) |
+| 131 | ### 6.5 หน้าตัวอย่างเอกสารทั้งหมด — มติ PO 06/10/2569 (U104) |
+| 142 | ## 7. Implementation Notes |
+| 150 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 156 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 162 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/30-accounting-handover-monthly-close.md` (25 KB, 188 บรรทัด — v2.7)
 

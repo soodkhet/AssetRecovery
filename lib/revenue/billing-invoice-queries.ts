@@ -2,6 +2,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { prisma } from '@/lib/prisma'
 import { pickReceivingAccount } from '@/lib/organization/bank-account-line'
 import { parseSellerProfileSnapshot } from '@/lib/organization/profile'
+import { parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
 import { billingInvoicePartiesOf, type BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
 import { RevenueError } from '@/lib/revenue/errors'
 
@@ -33,6 +34,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
             sellerPhone: true,
             sellerBranchCode: true,
             sellerProfileSnapshot: true,
+            documentTemplateSnapshot: true,
             buyerName: true,
             buyerTaxId: true,
             buyerAddress: true,
@@ -96,6 +98,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
     dueDate: batch.dueDate,
     ...billingInvoicePartiesOf(batch, { seller: batch.organization, buyer: batch.company }),
     sellerProfile: parseSellerProfileSnapshot(batch.sellerProfileSnapshot),
+    templateSnapshot: parseDocumentTemplateSnapshot(batch.documentTemplateSnapshot),
     lines: batch.revenues.map((revenue) => ({
       caseRef: revenue.case.caseRef,
       revenueDate: revenue.revenueDate,

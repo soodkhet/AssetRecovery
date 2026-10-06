@@ -37,6 +37,7 @@ import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
 import { buildSubstituteReceiptDoc } from '@/lib/substitute-receipts/substitute-receipt-doc'
 import { buildHandoverDoc } from '@/lib/warehouse/handover-doc'
 import { buildWhtCertificateDoc } from '@/lib/wht/wht'
+import { NO_DOC_TEMPLATE } from '@/lib/settings/tax-doc-template'
 
 /**
  * เรนเดอร์ **ตัวอย่างเอกสาร** (มติ PO U104) ด้วย component + builder **ตัวเดียวกับเอกสารจริงทุกใบ**
@@ -48,22 +49,49 @@ import { buildWhtCertificateDoc } from '@/lib/wht/wht'
 
 function documentOf(type: DocumentSampleType, context: DocumentSampleContext): ReactElement<DocumentProps> {
   const { letterhead } = context
+  // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นตามค่าตั้งปัจจุบันของแท็บ "เทมเพลตเอกสาร"
+  const billingTemplate = context.templates?.billing_invoice ?? NO_DOC_TEMPLATE
+  const taxTemplate = context.templates?.tax_invoice ?? NO_DOC_TEMPLATE
+  const handoverTemplate = context.templates?.handover_note ?? NO_DOC_TEMPLATE
   switch (type) {
     case 'billing-invoice':
-      return <BillingInvoicePDF doc={buildBillingInvoiceDoc(sampleBillingSource(context))} letterhead={letterhead} />
+      return (
+        <BillingInvoicePDF
+          doc={buildBillingInvoiceDoc(sampleBillingSource(context))}
+          letterhead={letterhead}
+          template={billingTemplate}
+        />
+      )
     case 'receipt-tax-invoice':
-      return <TaxInvoicePDF doc={buildTaxInvoiceDoc(sampleTaxInvoiceSource(context))} letterhead={letterhead} />
+      return (
+        <TaxInvoicePDF
+          doc={buildTaxInvoiceDoc(sampleTaxInvoiceSource(context))}
+          letterhead={letterhead}
+          template={taxTemplate}
+        />
+      )
     case 'receipt-tax-invoice-replacement':
       return (
-        <TaxInvoicePDF doc={buildTaxInvoiceDoc(sampleTaxInvoiceSource(context, 'replacement'))} letterhead={letterhead} />
+        <TaxInvoicePDF
+          doc={buildTaxInvoiceDoc(sampleTaxInvoiceSource(context, 'replacement'))}
+          letterhead={letterhead}
+          template={taxTemplate}
+        />
       )
     case 'receipt-tax-invoice-partial':
-      return <TaxInvoicePDF doc={buildTaxInvoiceDoc(sampleTaxInvoiceSource(context, 'partial'))} letterhead={letterhead} />
+      return (
+        <TaxInvoicePDF
+          doc={buildTaxInvoiceDoc(sampleTaxInvoiceSource(context, 'partial'))}
+          letterhead={letterhead}
+          template={taxTemplate}
+        />
+      )
     case 'handover-note':
       return (
         <HandoverNote
           doc={buildHandoverDoc(sampleHandoverLot(context), sampleIssuer(context), sampleHandoverRecipient())}
           letterhead={letterhead}
+          template={handoverTemplate}
         />
       )
     case 'payment-voucher':

@@ -4,6 +4,7 @@ import { estimateCustomerWhtForBilling } from '@/lib/finance/wht-calc'
 import { fmtRatePct, fmtSatang } from '@/lib/format/money'
 import { bankAccountLine, type DocBankAccount } from '@/lib/organization/bank-account-line'
 import type { SellerProfileSnapshot } from '@/lib/organization/profile'
+import type { DocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { summarizeSalesAmounts, vatLabelOf, type SalesAmounts } from '@/lib/sales/sales'
 
@@ -141,6 +142,8 @@ export interface BillingInvoiceSource {
   buyer: BillingInvoiceParty
   /** หัวเอกสารส่วนที่ snapshot เพิ่มตอนส่งรอบ (มติ PO U99) — รอบที่ส่งก่อน U99 = `null` (ใช้ค่าปัจจุบันเฉพาะชุดนี้) */
   sellerProfile: SellerProfileSnapshot | null
+  /** เทมเพลตเอกสาร (ข้อความท้าย + รูปลายเซ็น) ณ วันส่งรอบ (มติ PO U122) — รอบที่ส่งก่อน U122 = `null` (ไม่พิมพ์) */
+  templateSnapshot: DocumentTemplateSnapshot | null
   lines: readonly BillingInvoiceLineSource[]
   /**
    * UAT BUG-165 · มติ PO U100 — อัตราที่ลูกค้าหักภาษี ณ ที่จ่ายจากเรา (`finance_companies` ค่าปัจจุบัน) +

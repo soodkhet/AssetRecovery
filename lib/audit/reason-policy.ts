@@ -138,6 +138,8 @@ export const FIELD_SENSITIVE_TARGETS: Readonly<
       'email',
       'website',
       'logo_url',
+      // มติ PO U122 — รูปลายเซ็นผู้มีอำนาจที่พิมพ์บนเอกสาร
+      'signature_path',
     ],
   },
   // snapshot ค่าบริการของเคส (`10` §9.2 — snapshot ตอน approved) ห้ามขยับโดยไม่มีเหตุผล

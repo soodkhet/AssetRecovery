@@ -124,6 +124,7 @@ const DOCUMENTS: ReadonlyArray<{
           billingBatchNumber: 'BL-2569-001',
           receivedDate: new Date('2026-06-28T00:00:00Z'),
           sellerProfile: null,
+          templateSnapshot: null,
           invoiceNumber: 'INV-0006',
           invoiceDate: new Date('2026-06-28T03:00:00Z'),
           status: 'active',
@@ -155,6 +156,7 @@ const DOCUMENTS: ReadonlyArray<{
           seller: { name: letterhead.nameTh, taxId: letterhead.taxId, address: letterhead.address, phone: null, branchCode: '00000' },
           buyer: { ...PARTY, branchCode: '00000' },
           sellerProfile: null,
+          templateSnapshot: null,
           lines: [
             { caseRef: 'C-1', revenueDate: new Date('2026-09-10T00:00:00Z'), grossSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000, vatRatePct: '7.00' },
           ],

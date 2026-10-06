@@ -8,7 +8,7 @@ import {
 import type { OrganizationProfileUpdateInput } from '@/lib/organization/schemas'
 import type { OrganizationProfileDto } from '@/lib/organization/types'
 import type { SettingsMutationContext } from '@/lib/settings/queries/shared'
-import { organizationLogoRule } from '@/lib/uploads/rules'
+import { organizationLogoRule, organizationSignatureRule } from '@/lib/uploads/rules'
 import { createSignedDownloadUrl } from '@/lib/uploads/storage'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 
@@ -18,6 +18,7 @@ import { verifyUploadedFile } from '@/lib/uploads/verify'
  * - แก้ได้เฉพาะผู้ถือ `manage_invoice_numbering` (Superadmin — ตรวจที่ route) · ทุกการแก้มีเหตุผล + audit before/after
  * - เอกสารที่ออกแล้ว **ไม่เปลี่ยน** — ใบกำกับ/ใบแจ้งหนี้/50 ทวิ snapshot ค่าตอนออกไว้บนแถวของตัวเอง
  * - ที่อยู่: เก็บ 5 ช่อง + บรรทัดรวม (`address`) ที่ประกอบจากช่องทุกครั้ง — snapshot ของเอกสารอ่านบรรทัดรวม
+ * - รูปลายเซ็นผู้มีอำนาจ (มติ PO U122): กติกาเดียวกับโลโก้ · signed URL ออกให้เฉพาะผู้มีสิทธิ์แก้
  * - โลโก้: ผูก path ที่ server ออกให้ (ตรวจชนิด/ขนาดจากเนื้อไฟล์ **นอก** transaction) · ลบ = ปลดลิงก์เท่านั้น
  *   ไม่ลบไฟล์ใน Storage (เอกสารที่ snapshot path เดิมยังพิมพ์โลโก้เดิมได้)
  */
@@ -41,6 +42,7 @@ const PROFILE_SELECT = {
   website: true,
   vatRegistered: true,
   logoUrl: true,
+  signaturePath: true,
   updatedAt: true,
 } as const
 
@@ -61,6 +63,7 @@ interface ProfileRow {
   website: string | null
   vatRegistered: boolean
   logoUrl: string | null
+  signaturePath: string | null
   updatedAt: Date
 }
 
@@ -71,7 +74,11 @@ async function loadRow(organizationId: string): Promise<ProfileRow> {
   return row
 }
 
-async function toDto(row: ProfileRow): Promise<OrganizationProfileDto> {
+/**
+ * `canManage` = ผู้เรียกมีสิทธิ์แก้ข้อมูลองค์กร — ใช้ตัดสินว่าจะออก signed URL ของรูปลายเซ็นหรือไม่
+ * (ลายเซ็นผู้มีอำนาจเป็นข้อมูลอ่อนไหว ผู้ดูอย่างเดียวเห็นแค่ว่า "มีรูปแล้ว")
+ */
+async function toDto(row: ProfileRow, canManage: boolean): Promise<OrganizationProfileDto> {
   return {
     organizationId: row.id,
     name: row.name,
@@ -91,6 +98,9 @@ async function toDto(row: ProfileRow): Promise<OrganizationProfileDto> {
     vatRegistered: row.vatRegistered,
     logoPath: row.logoUrl,
     logoPreviewUrl: row.logoUrl === null ? null : await createSignedDownloadUrl(row.logoUrl),
+    hasSignature: row.signaturePath !== null,
+    signaturePreviewUrl:
+      canManage && row.signaturePath !== null ? await createSignedDownloadUrl(row.signaturePath) : null,
     issues: organizationProfileIssues(row),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -114,11 +124,15 @@ function auditValues(row: ProfileRow): Record<string, string | boolean | null> {
     website: row.website,
     vat_registered: row.vatRegistered,
     logo_url: row.logoUrl,
+    signature_path: row.signaturePath,
   }
 }
 
-export async function getOrganizationProfile(organizationId: string): Promise<OrganizationProfileDto> {
-  return toDto(await loadRow(organizationId))
+export async function getOrganizationProfile(
+  organizationId: string,
+  options: { canManage: boolean } = { canManage: false },
+): Promise<OrganizationProfileDto> {
+  return toDto(await loadRow(organizationId), options.canManage)
 }
 
 /** รายการที่ยังเป็นค่าตัวอย่าง — ใช้เตือนในความพร้อมปิดงวด (ไม่บล็อก) */
@@ -180,7 +194,7 @@ export async function updateOrganizationProfile(
     return updated
   })
 
-  return toDto(row)
+  return toDto(row, true)
 }
 
 /** ผูกโลโก้ใหม่ — path ต้องอยู่ใต้ prefix ขององค์กรเอง + เป็น PNG/JPG ≤ 1 MB (ตรวจจากเนื้อไฟล์) */
@@ -215,7 +229,7 @@ export async function setOrganizationLogo(context: SettingsMutationContext, path
     )
     return updated
   })
-  return toDto(row)
+  return toDto(row, true)
 }
 
 /** ลบโลโก้ = ปลดลิงก์ (ไฟล์เดิมยังอยู่ให้เอกสารที่ snapshot ไว้) · ไม่มีโลโก้อยู่แล้ว = คืนค่าเดิมโดยไม่ลง audit */
@@ -247,5 +261,84 @@ export async function removeOrganizationLogo(context: SettingsMutationContext): 
     )
     return updated
   })
-  return toDto(row)
+  return toDto(row, true)
+}
+
+/**
+ * ผูกรูปลายเซ็นผู้มีอำนาจ (มติ PO U122) — path ต้องอยู่ใต้ prefix ลายเซ็นขององค์กรเอง + PNG/JPG ≤ 1 MB
+ * (ตรวจจากเนื้อไฟล์นอก transaction) · เก็บ SHA-256 คู่ path เพื่อ snapshot ลงเอกสาร (พิมพ์ซ้ำตรวจว่าเป็นรูปเดิม)
+ */
+export async function setOrganizationSignature(
+  context: SettingsMutationContext,
+  path: string,
+): Promise<OrganizationProfileDto> {
+  const organizationId = context.actor.organizationId
+  const verified = await verifyUploadedFile(path, organizationSignatureRule(organizationId))
+
+  const row = await prisma.$transaction(async (tx) => {
+    const before = await tx.organization.findUniqueOrThrow({
+      where: { id: organizationId },
+      select: { signaturePath: true, signatureSha256: true },
+    })
+    const updated = await tx.organization.update({
+      where: { id: organizationId },
+      data: { signaturePath: path, signatureSha256: verified.sha256 },
+      select: PROFILE_SELECT,
+    })
+    await emitAudit(
+      {
+        organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'update',
+        targetType: TARGET,
+        targetId: organizationId,
+        before: { signature_path: before.signaturePath, signature_sha256: before.signatureSha256 },
+        after: {
+          signature_path: path,
+          signature_sha256: verified.sha256,
+          signature_mime_type: verified.mimeType,
+          signature_size_bytes: verified.sizeBytes,
+        },
+        reason: context.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+      },
+      tx,
+    )
+    return updated
+  })
+  return toDto(row, true)
+}
+
+/** ลบรูปลายเซ็น = ปลดลิงก์ (ไฟล์เดิมยังอยู่ให้เอกสารที่ snapshot ไว้) · ไม่มีรูปอยู่แล้ว = คืนค่าเดิมโดยไม่ลง audit */
+export async function removeOrganizationSignature(context: SettingsMutationContext): Promise<OrganizationProfileDto> {
+  const organizationId = context.actor.organizationId
+  const row = await prisma.$transaction(async (tx) => {
+    const before = await tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: PROFILE_SELECT })
+    if (before.signaturePath === null) return before
+    const updated = await tx.organization.update({
+      where: { id: organizationId },
+      data: { signaturePath: null, signatureSha256: null },
+      select: PROFILE_SELECT,
+    })
+    await emitAudit(
+      {
+        organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'update',
+        targetType: TARGET,
+        targetId: organizationId,
+        before: { signature_path: before.signaturePath },
+        after: { signature_path: null },
+        reason: context.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+      },
+      tx,
+    )
+    return updated
+  })
+  return toDto(row, true)
 }

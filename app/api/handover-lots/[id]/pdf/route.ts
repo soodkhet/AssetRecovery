@@ -3,7 +3,7 @@ import { renderHandoverNote } from '@/components/pdf/handover-note'
 import { withEndpoint } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
-import { handoverLetterhead } from '@/lib/organization/letterhead'
+import { handoverLetterhead, handoverTemplate } from '@/lib/organization/letterhead'
 import { buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
 import { WAREHOUSE_EXPORT_CAPABILITIES } from '@/lib/warehouse/permissions'
 import { getHandoverDocSource } from '@/lib/warehouse/queries'
@@ -29,6 +29,7 @@ export const GET = withEndpoint<RouteContext, never>({
     const pdf = await renderHandoverNote(
       buildHandoverDoc(source.lot, source.issuer, source.recipient),
       await handoverLetterhead(user.organizationId, source.letterheadSnapshot),
+      await handoverTemplate(user.organizationId, source.documentTemplate),
     )
 
     const fileName = handoverFileName(source.lot, 'pdf')

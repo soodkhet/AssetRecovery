@@ -72,6 +72,7 @@
 | v4.45 | 06/10/2569 | **มติ PO 06/10/2569 (U110/U111) — snapshot หัวกระดาษครบทุกช่อง** (migration `20261006220000_letterhead_snapshot_period_payouts`): `organizations.logo_sha256 VARCHAR(64)` (CHECK hex 64 · เขียนพร้อม `logo_url` ตอนอัปโหลด · NULL เมื่อไม่มีโลโก้) · `seller_profile_snapshot` ของ `tax_invoices`/`billing_batches` เพิ่มคีย์ `logo_sha256` (ไม่เปลี่ยนคอลัมน์) · พิมพ์ซ้ำ: snapshot NULL ⇒ ฟิลด์ชุดนี้ว่าง (ไม่ดึงค่าปัจจุบัน) · `handover_lots.letterhead_snapshot JSONB` (`{name,tax_id,address,phone,branch_code,name_en,email,website,logo_path,logo_sha256}` · เขียนใน `$transaction` ตอนยืนยันล็อต · CHECK มีได้เฉพาะ `status = 'confirmed'` และเป็น object · ล็อตเก่า NULL = ใช้ค่าปัจจุบัน · ไม่ backfill) |
 | v4.46 | 06/10/2569 | **มติ PO 06/10/2569 (U117 ข้อ 2 — ใบรับรองแทนใบเสร็จ "ออกแทนเลขที่")** (migration `20261006234500_substitute_receipt_replaces`): `substitute_receipts` + `replaces_receipt_id UUID REFERENCES substitute_receipts(id)` (ใบที่ยกเลิกซึ่งใบนี้ออกแทน · NULL = ออกครั้งแรก/ใบก่อน migration) · CHECK ห้ามอ้างตัวเอง · partial unique `uniq_substitute_receipts_replaces` (ใบที่ยกเลิก 1 ใบถูกแทนได้ครั้งเดียว) · trigger `trg_substitute_receipts_guard` เพิ่มคอลัมน์นี้ในชุดห้ามแก้หลังออกใบ |
 | v4.47 | 06/10/2569 | **มติ PO 06/10/2569 (U118)** — §3 `expense_status`: `rejected` = ปฏิเสธถาวร (terminal) เข้าได้จาก `pending_approval` / `pending_finance_approval` / `needs_revision` (ตาม `23` §6.3 v2.11) · **ไม่เปลี่ยน enum/คอลัมน์ ไม่มี migration** |
+| v4.48 | 07/10/2569 | **มติ PO 06/10/2569 (U122) — เทมเพลตเอกสารมีผลจริง** (migration `20261007010000_document_template_signature`): `organizations` + `signature_path TEXT` / `signature_sha256 VARCHAR(64)` (รูปลายเซ็นผู้มีอำนาจ · CHECK hex 64 + มาคู่กัน `chk_organizations_signature_pair`) · `tax_document_template_settings` (คงชื่อตาราง): `document_type` เปลี่ยนเป็น enum ใหม่ `template_document_type` (`billing_invoice`/`tax_invoice`/`handover_note` — แถว `wht_certificate` ถูกลบ · ค่าเดิมอยู่ใน audit) · ลบคอลัมน์ `logo_url`/`signature_image_url`/`paper_size`/`language` · เพิ่ม `print_signature BOOLEAN NOT NULL DEFAULT false` · ลบ enum `tax_document_type`/`tax_doc_paper_size`/`tax_doc_language` · `document_template_snapshot JSONB` `{footer_note, signature_path, signature_sha256}` บน `tax_invoices` (ตอนออก · immutable ทั้งแถวเดิม) / `billing_batches` (ตอนส่งรอบ · เพิ่มใน trigger `billing_batches_party_snapshot_immutable`) / `handover_lots` (ตอนยืนยันล็อต · CHECK มีได้เฉพาะ confirmed) — CHECK เป็น object · NULL = เอกสารก่อน U122 (ไม่พิมพ์ · ไม่ backfill) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -157,9 +158,7 @@ CREATE TYPE bank_file_test_status  AS ENUM ('pending', 'passed', 'failed');
 -- v4.41 (มติ PO U102 · ไฟล์ 13 §6.12) — ชนิดเอกสารที่ระบบออกเลข (แทน invoice_numbering_mode ที่ลบแล้ว)
 CREATE TYPE document_number_type AS ENUM ('tax_invoice', 'billing_batch', 'handover_lot', 'delivery_note',
   'payment_voucher', 'wht_certificate', 'advance', 'advance_return', 'substitute_receipt');
-CREATE TYPE tax_document_type      AS ENUM ('tax_invoice', 'wht_certificate');  -- ไฟล์ 13 §6.13
-CREATE TYPE tax_doc_paper_size     AS ENUM ('A4', 'A5');
-CREATE TYPE tax_doc_language       AS ENUM ('th', 'th_en_bilingual');
+CREATE TYPE template_document_type AS ENUM ('billing_invoice', 'tax_invoice', 'handover_note');  -- ไฟล์ 13 §6.13 · v4.48 (U122) แทน tax_document_type / tax_doc_paper_size / tax_doc_language (ลบแล้ว)
 CREATE TYPE functional_group       AS ENUM ('ops', 'finance', 'accounting', 'admin'); -- ไฟล์ 13 §6.10
 CREATE TYPE capability_access_level AS ENUM ('view', 'manage');  -- ระดับสิทธิ์ 3 ระดับ (ไม่มี = ไม่มี record) — DEC-009 05/07/2569
 
@@ -501,6 +500,8 @@ CREATE TABLE organizations (
   website         VARCHAR(255),                   -- v4.41 (U99)
   logo_url        TEXT,                           -- path ใน Storage `organization/<orgId>/logo/<uuid>.<ext>` (U99) — ไม่ลบไฟล์เดิมเมื่อเปลี่ยน
   logo_sha256     VARCHAR(64),                    -- v4.45 (U110) SHA-256 ของไฟล์โลโก้ · CHECK ^[0-9a-f]{64}$ · NULL = ไม่มีโลโก้/ก่อน U110
+  signature_path  TEXT,                           -- v4.48 (U122) รูปลายเซ็นผู้มีอำนาจ `organization/<orgId>/signature/<uuid>.<ext>` · ไม่บังคับ · ไม่ลบไฟล์เดิม
+  signature_sha256 VARCHAR(64),                   -- v4.48 (U122) CHECK hex 64 · มาคู่กับ signature_path
   vat_registered  BOOLEAN       NOT NULL DEFAULT true,
   branch_code     VARCHAR(5)    NOT NULL DEFAULT '00000',  -- สำนักงานใหญ่/สาขาของผู้ขาย (U82 · ม.86/4) · CHECK ตัวเลข 5 หลัก
   -- v4.41 (มติ PO U102): tax_invoice_* / billing_batch_seq* ย้ายไป document_number_series แล้วลบ
@@ -933,16 +934,15 @@ CREATE TABLE bank_file_formats (
 );
 
 -- ── tax_document_template_settings ───────────────────────────
--- รูปแบบเอกสารภาษีทางการ ตามไฟล์ 13 §6.13 (DEC-006/D1) — ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (ไฟล์ 28 §6.2-6.3)
+-- เทมเพลตเอกสาร ตามไฟล์ 13 §6.13 (DEC-006/D1 · v4.48 มติ PO U122) — ค่าที่ต่างกันตามชนิดเอกสารเท่านั้น
+-- (โลโก้/ข้อมูลบริษัท/รูปลายเซ็นอยู่ที่ organizations) · ฟิลด์บังคับตามกฎหมายปิด/ซ่อนไม่ได้ (ไฟล์ 28 §6.2-6.3)
+-- v4.48: ลบ logo_url / signature_image_url / paper_size / language · snapshot ลงเอกสารที่ document_template_snapshot
 CREATE TABLE tax_document_template_settings (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations(id),
-  document_type   tax_document_type NOT NULL,
-  logo_url        TEXT,
+  document_type   template_document_type NOT NULL,
   footer_note     TEXT,
-  signature_image_url TEXT,
-  paper_size      tax_doc_paper_size NOT NULL DEFAULT 'A4',
-  language        tax_doc_language  NOT NULL DEFAULT 'th',
+  print_signature BOOLEAN NOT NULL DEFAULT false,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by UUID REFERENCES users(id),
   UNIQUE(organization_id, document_type)
@@ -1403,6 +1403,7 @@ CREATE TABLE handover_lots (
   delivery_proof_url  TEXT,       -- ② หลักฐานจัดส่ง (บังคับเฉพาะ we_deliver)
   note                TEXT,
   letterhead_snapshot JSONB,      -- v4.45 (U111) หัวกระดาษองค์กร ณ ตอนยืนยันล็อต · มีได้เฉพาะ confirmed · NULL = ใช้ค่าปัจจุบัน
+  document_template_snapshot JSONB, -- v4.48 (U122) ข้อความท้าย + รูปลายเซ็นของใบส่งมอบ ณ ตอนยืนยัน · มีได้เฉพาะ confirmed
   -- Audit
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by          UUID        NOT NULL REFERENCES users(id),
