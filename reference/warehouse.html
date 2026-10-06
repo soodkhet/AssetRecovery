@@ -138,6 +138,8 @@ const st = {
   // delivered
   deliveredLotOpen: null,    // lotId drill-down
   fDelivSearch:'', fDelivDate:'', fDelivCompany:'', fDelivStatus:'',
+  fDelivMonth:'06/2569',     // มติ PO U142 — ค่าเริ่มต้น = เดือนปัจจุบัน (ตัวอย่างข้อมูลอยู่ มิ.ย. 2569)
+  delivGroupOpen:{},         // companyId → กาง/หุบ
   fDelivDetailSearch:'',
   // modal state
   mHandoverType:'',
@@ -644,69 +646,96 @@ function renderDeliveredTab(){
     </div>`;
   }
 
-  // ── การ์ด Lot ──────────────────────────────────────────
+  // ── ตารางจัดกลุ่มตามบริษัท (มติ PO U142) — เดือนเริ่มต้น = เดือนปัจจุบัน · หัวกลุ่มคิดฝั่ง server ──
+  // "วันส่งมอบ" ของล็อต = วันส่งมอบจริง → กำหนดส่ง → วันสร้าง (ล็อตรอหลักฐานยังโผล่ในเดือนที่ของออกจากคลัง)
+  const handoverDay = l => l.deliveredAt || (l.scheduledAt||'').slice(0,10) || l.createdAt;
+  const month = st.fDelivMonth;                       // 'MM/YYYY' (พ.ศ.)
   let lots = [...store.handoverLots].filter(l=>['confirmed','pending_delivery_proof'].includes(l.status)).reverse();
   if(st.fDelivStatus) lots=lots.filter(l=>st.fDelivStatus==='confirmed'?l.status==='confirmed':l.status==='pending_delivery_proof');
   if(st.fDelivSearch)  lots=lots.filter(l=>{ const aids=l.assetIds.map(getAsset).filter(Boolean); return aids.some(a=>matchSearch(a,st.fDelivSearch))||l.id.toLowerCase().includes(st.fDelivSearch.toLowerCase()); });
-  if(st.fDelivDate)    lots=lots.filter(l=>l.deliveredAt?.includes(st.fDelivDate.replace(/-/g,'/')));
+  if(st.fDelivDate)    lots=lots.filter(l=>handoverDay(l)===st.fDelivDate.split('-').reverse().map((v,i)=>i===2?String(+v+543):v).join('/'));
+  else                 lots=lots.filter(l=>handoverDay(l).slice(3)===month);
   if(st.fDelivCompany) lots=lots.filter(l=>l.companyId===st.fDelivCompany);
+  lots.sort((a,b)=>(a.status==='confirmed')-(b.status==='confirmed'));
+
+  const groups = {};
+  lots.forEach(l=>{ (groups[l.companyId] ||= []).push(l); });
+  const groupIds = Object.keys(groups).sort((a,b)=>getCompany(a).short.localeCompare(getCompany(b).short,'th'));
+  const isOpen = id => st.delivGroupOpen[id] ?? groupIds.length===1;
+  const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  const [mm,yyyy]=month.split('/');
+  const monthLabel = `${TH_MONTHS[+mm-1]} ${yyyy}`;
+  const pendingTotal = lots.filter(l=>l.status!=='confirmed').length;
+  const assetTotal = lots.reduce((s,l)=>s+l.assetIds.length,0);
 
   return`<div>
-    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-5 flex flex-wrap gap-3">
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 flex flex-wrap gap-3">
       ${filterInput('เลขล็อต / IMEI / ชื่อลูกหนี้','fDelivSearch',true)}
-      <input type="date" value="${st.fDelivDate||''}" onchange="S({fDelivDate:this.value})" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus-ring bg-white">
+      <input type="date" aria-label="วันส่งมอบ" value="${st.fDelivDate||''}" onchange="S({fDelivDate:this.value})" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus-ring bg-white">
       ${filterSelect('ทุกบริษัทไฟแนนซ์',Object.values(COMPANIES).map(c=>({v:c.id,l:c.short})),'fDelivCompany',true)}
       ${filterSelect('ทุกสถานะ',[{v:'pending_delivery_proof',l:'รอยืนยัน'},{v:'confirmed',l:'ยืนยันแล้ว'}],'fDelivStatus',true)}
     </div>
-    ${lots.length===0?`<div class="text-center py-16 text-slate-400"><div class="text-4xl mb-3">✅</div><div class="font-semibold">ไม่พบรายการ</div></div>`:''}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      ${lots.map(lot=>{
-        const co = getCompany(lot.companyId);
-        const assets = lot.assetIds.map(getAsset).filter(Boolean);
-        const isPickup = lot.type==='finance_pickup';
-        const isConfirmed = lot.status==='confirmed';
-        return`<div class="bg-white border-2 ${isConfirmed?'border-emerald-200':'border-amber-300'} rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group">
-          <!-- Header -->
-          <div class="flex items-start justify-between mb-3">
-            <div>
-              <div class="font-mono text-xs text-violet-700 font-bold mb-0.5">${lot.id}</div>
-              <div class="font-bold text-slate-900 group-hover:text-violet-700 transition-colors">${co.short}</div>
-            </div>
-            <div class="text-right">
-              <div class="text-2xl font-extrabold ${isConfirmed?'text-emerald-700':'text-amber-600'}">${assets.length}</div>
-              <div class="text-[10px] text-slate-400">เครื่อง</div>
-            </div>
-          </div>
-          <!-- ประเภทและสถานะ -->
-          <div class="flex flex-wrap items-center gap-1.5 mb-3">
-            <span class="pill ${isPickup?'bg-blue-100 text-blue-700':'bg-orange-100 text-orange-700'}">${isPickup?'🏢 ไฟแนนซ์มารับ':'🚚 เราส่งให้'}</span>
-            ${isConfirmed
-              ? '<span class="pill bg-emerald-100 text-emerald-800">✅ ยืนยันแล้ว</span>'
-              : '<span class="pill bg-amber-100 text-amber-800">รอแนบหลักฐาน</span>'}
-          </div>
-          <!-- เอกสาร -->
-          <div class="bg-slate-50 rounded-lg p-2.5 mb-3 space-y-1 border border-slate-100 text-[10px]">
-            ${isPickup
-              ? `<div class="${isConfirmed?'text-emerald-700':'text-slate-500'}">📄 ใบส่งมอบลายเซ็นผู้รับ ${isConfirmed?'✅ แนบแล้ว':'⏳ รอแนบ'}</div>`
-              : `<div class="${isConfirmed?'text-emerald-700':'text-slate-500'}">📄 ใบส่งมอบลายเซ็นผู้รับ ${isConfirmed?'✅ แนบแล้ว':'⏳ รอแนบ'}</div>
-                 <div class="${isConfirmed?'text-emerald-700':'text-slate-500'}">📦 หลักฐานใบเสร็จ / Delivered ${isConfirmed?'✅ แนบแล้ว':'⏳ รอแนบ'}</div>`
-            }
-          </div>
-          <!-- วันที่ -->
-          <div class="text-xs text-slate-500 mb-4">ส่งมอบ: <span class="font-semibold text-slate-700">${lot.deliveredAt||'—'}</span>
-            ${isConfirmed?` · ยืนยัน: <span class="font-semibold text-emerald-700">${lot.confirmedAt||'—'}</span>`:''}
-          </div>
-          <!-- Actions -->
-          <div class="border-t border-slate-100 pt-3 flex gap-2">
-            <button data-action="open-lot" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring flex items-center justify-center gap-1">${SVG.eye} ดูรายการ</button>
-            ${!isConfirmed
-              ? `<button data-action="open-modal" data-type="attach-doc" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-white bg-amber-500 rounded-lg hover:bg-amber-600 focus-ring flex items-center justify-center gap-1">${SVG.clip} แนบหลักฐาน</button>`
-              : `<button data-action="open-modal" data-type="view-attached-doc" data-id="${lot.id}" class="flex-1 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring flex items-center justify-center gap-1">${SVG.clip} เอกสาร</button>`
-            }
-          </div>
-        </div>`;
-      }).join('')}
+    <!-- เลื่อนเดือน (ป้าย พ.ศ.) -->
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div class="flex items-center gap-2">
+        <button data-action="deliv-month" data-id="-1" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus-ring">‹ เดือนก่อน</button>
+        <span class="min-w-[8rem] text-center text-sm font-bold text-slate-800">${monthLabel}</span>
+        <button data-action="deliv-month" data-id="1" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus-ring">เดือนถัดไป ›</button>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <span class="pill bg-slate-100 text-slate-700">${lots.length} ล็อต</span>
+        <span class="pill bg-slate-100 text-slate-700">${assetTotal} เครื่อง</span>
+        ${pendingTotal?`<span class="pill bg-amber-100 text-amber-800">รอเอกสาร ${pendingTotal} ล็อต</span>`:''}
+      </div>
     </div>
+    <div class="bg-white border border-slate-200 rounded-lg overflow-hidden"><div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
+          <th class="px-4 py-2.5 text-left font-semibold">เลขล็อต</th>
+          <th class="px-4 py-2.5 text-left font-semibold">ประเภท</th>
+          <th class="px-4 py-2.5 text-left font-semibold">วันส่งมอบจริง</th>
+          <th class="px-4 py-2.5 text-left font-semibold">วันยืนยัน</th>
+          <th class="px-4 py-2.5 text-right font-semibold">เครื่อง</th>
+          <th class="px-4 py-2.5 text-left font-semibold">สถานะ</th>
+          <th class="px-4 py-2.5 text-right font-semibold">จัดการ</th>
+        </tr></thead>
+        ${groupIds.length===0?`<tbody><tr><td colspan="7" class="text-center py-16 text-slate-400"><div class="text-4xl mb-3">✅</div><div class="font-semibold">ไม่มีล็อตที่ส่งมอบในช่วงนี้</div><div class="text-xs mt-1">ลองเลือกเดือนอื่นหรือล้างตัวกรองด้านบน</div></td></tr></tbody>`:''}
+        ${groupIds.map(cid=>{
+          const g = groups[cid];
+          const pend = g.filter(l=>l.status!=='confirmed').length;
+          const open = isOpen(cid);
+          return`<tbody class="divide-y divide-slate-100">
+            <tr class="bg-slate-50"><td colspan="7" class="p-0">
+              <button data-action="toggle-deliv-group" data-id="${cid}" aria-expanded="${open}" class="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-slate-100 focus-ring">
+                <span class="w-4 text-slate-500">${open?'▾':'▸'}</span>
+                <span class="font-bold text-slate-900">${getCompany(cid).short}</span>
+                <span class="text-xs text-slate-500">${g.length} ล็อต</span>
+                <span class="text-xs text-slate-500">${g.reduce((s,l)=>s+l.assetIds.length,0)} เครื่อง</span>
+                ${pend?`<span class="pill bg-amber-100 text-amber-800">รอเอกสาร ${pend} ล็อต</span>`:'<span class="pill bg-emerald-100 text-emerald-800">ยืนยันครบ</span>'}
+              </button>
+            </td></tr>
+            ${open?g.map(lot=>{
+              const isPickup = lot.type==='finance_pickup';
+              const isConfirmed = lot.status==='confirmed';
+              return`<tr>
+                <td class="px-4 py-3"><div class="font-mono text-xs font-bold text-slate-800">${lot.id}</div><div class="font-mono text-[10px] text-slate-400">${lot.docRef}</div></td>
+                <td class="px-4 py-3 text-xs whitespace-nowrap">${isPickup?'🏢 ไฟแนนซ์มารับ':'🚚 เราส่งให้'}</td>
+                <td class="px-4 py-3 text-xs whitespace-nowrap">${isConfirmed?lot.deliveredAt:`<span class="text-slate-400">—${lot.scheduledAt?`<div class="text-[10px]">กำหนดส่ง ${lot.scheduledAt}</div>`:''}</span>`}</td>
+                <td class="px-4 py-3 text-xs whitespace-nowrap">${lot.confirmedAt||'—'}</td>
+                <td class="px-4 py-3 text-right font-mono">${lot.assetIds.length}</td>
+                <td class="px-4 py-3">${isConfirmed?'<span class="pill bg-emerald-100 text-emerald-800">ยืนยันแล้ว</span>':'<span class="pill bg-amber-100 text-amber-800">รอแนบหลักฐานจัดส่ง</span>'}</td>
+                <td class="px-4 py-3 text-right"><div class="flex justify-end gap-1.5">
+                  <button data-action="open-lot" data-id="${lot.id}" class="px-2.5 py-1 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">ดูรายการ</button>
+                  ${!isConfirmed
+                    ? `<button data-action="open-modal" data-type="attach-doc" data-id="${lot.id}" class="px-2.5 py-1 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-700 focus-ring">แนบเอกสาร</button>`
+                    : `<button data-action="open-modal" data-type="view-attached-doc" data-id="${lot.id}" class="px-2.5 py-1 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 focus-ring">เอกสาร</button>`}
+                </div></td>
+              </tr>`;}).join(''):''}
+            ${open && g.length>20?`<tr><td colspan="7" class="px-4 py-2 text-xs text-slate-500">แสดง 20 จาก ${g.length} ล็อต (หน้า 1/${Math.ceil(g.length/20)}) · ปุ่ม ก่อนหน้า / ถัดไป</td></tr>`:''}
+          </tbody>`;
+        }).join('')}
+      </table>
+    </div></div>
   </div>`;
 }
 
@@ -1235,6 +1264,8 @@ document.addEventListener('click',e=>{
   else if(action==='pending-back') S({pendingLotOpen:null});
   else if(action==='open-lot') S({deliveredLotOpen:id,fDelivDetailSearch:''});
   else if(action==='delivered-back') S({deliveredLotOpen:null});
+  else if(action==='toggle-deliv-group'){ const cur=st.delivGroupOpen[id]; S({delivGroupOpen:{...st.delivGroupOpen,[id]:!(cur ?? false)}}); }
+  else if(action==='deliv-month'){ const [m,y]=st.fDelivMonth.split('/').map(Number); const z=y*12+(m-1)+Number(id); S({fDelivMonth:`${String(z%12+1).padStart(2,'0')}/${Math.floor(z/12)}`,fDelivDate:''}); }
   else if(action==='export-xl') toast('Export Excel เสร็จสิ้น — กำลังดาวน์โหลด','emerald');
   else if(action==='toast-dl') toast('ดาวน์โหลดเอกสารเสร็จสิ้น','emerald');
   else if(action==='preview-delivery-doc') openModal('preview-delivery-doc');

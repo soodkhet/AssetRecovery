@@ -3,10 +3,15 @@ import {
   DELIVERED_STATUS_OPTIONS,
   EMPTY_LOT_FILTERS,
   FILTER_ALL,
+  buildLotCompanySummaryQuery,
   buildLotListQuery,
   companyOptionsFromLots,
-  filterByDeliveredDate,
+  currentMonthKey,
+  initialLotFilters,
   lotFilterOptionsOrFallback,
+  monthDayRange,
+  shiftMonthKey,
+  withDeliveredDate,
 } from '@/lib/warehouse/lot-filters'
 import type { LotSummaryDto } from '@/lib/warehouse/types'
 
@@ -73,30 +78,56 @@ describe('buildLotListQuery — สถานะของแท็บต้อง
     )
   })
 
-  it('วันที่ส่งให้ API เฉพาะแท็บ "รอส่งมอบ" (API กรองได้แค่วันนัด — `44` §15)', () => {
+  it('แท็บ "รอส่งมอบ" ส่งวันที่เป็นวันนัด (dateFrom/dateTo) ไม่ส่งช่วงวันส่งมอบ', () => {
     const pending = buildLotListQuery('pending_handover', { ...EMPTY_LOT_FILTERS, date: '2026-07-10' }, 1, 50)
     expect(pending).toMatchObject({ dateFrom: '2026-07-10', dateTo: '2026-07-10' })
+    expect(pending).not.toHaveProperty('handedOverFrom')
+  })
 
-    const delivered = buildLotListQuery('handed_over', { ...EMPTY_LOT_FILTERS, date: '2026-07-10' }, 1, 50)
-    expect(delivered).not.toHaveProperty('dateFrom')
-    expect(delivered).not.toHaveProperty('dateTo')
+  it('มติ U142 — แท็บ "ส่งมอบแล้ว" กรองวันส่งมอบที่ server: เดือน = ทั้งเดือน · วันเดียวชนะเดือน', () => {
+    const month = buildLotListQuery('handed_over', { ...EMPTY_LOT_FILTERS, month: '2026-02' }, 1, 20)
+    expect(month).toMatchObject({ handedOverFrom: '2026-02-01', handedOverTo: '2026-02-28' })
+    expect(month).not.toHaveProperty('dateFrom')
+
+    const day = buildLotListQuery('handed_over', { ...EMPTY_LOT_FILTERS, month: '2026-07', date: '2026-07-10' }, 1, 20)
+    expect(day).toMatchObject({ handedOverFrom: '2026-07-10', handedOverTo: '2026-07-10' })
+
+    expect(buildLotListQuery('handed_over', EMPTY_LOT_FILTERS, 1, 20)).not.toHaveProperty('handedOverFrom')
+  })
+
+  it('query ของยอดหัวกลุ่ม = ตัวกรองชุดเดียวกับ list แต่ไม่มี page/limit', () => {
+    const filters = { ...EMPTY_LOT_FILTERS, month: '2026-10', search: 'LOT', status: 'confirmed', companyId: 'co-1' }
+    const summary = buildLotCompanySummaryQuery('handed_over', filters)
+    const { page: _page, limit: _limit, ...list } = buildLotListQuery('handed_over', filters, 3, 20)
+    expect(summary).toEqual(list)
+    expect(summary).not.toHaveProperty('page')
+    expect(summary).not.toHaveProperty('limit')
   })
 })
 
-describe('filterByDeliveredDate — เทียบวันตามเวลาไทย', () => {
-  const rows = [
-    lot({ id: 'a', deliveredAt: '2026-07-09T17:30:00Z' }), // = 10/07 00:30 เวลาไทย
-    lot({ id: 'b', deliveredAt: '2026-07-10T09:00:00Z' }),
-    lot({ id: 'c', status: 'pending_delivery_proof', deliveredAt: null }),
-  ]
-
-  it('ว่าง = ไม่กรอง', () => {
-    expect(filterByDeliveredDate(rows, '')).toHaveLength(3)
+describe('มติ U142 — เดือนของแท็บ "ส่งมอบแล้ว" (เวลาไทย)', () => {
+  it('ค่าเริ่มต้น = เดือนปัจจุบันตามเวลาไทย (ขอบเดือน: 31/10 18:00Z = 01/11 ไทย)', () => {
+    expect(currentMonthKey(new Date('2026-10-31T16:59:59Z'))).toBe('2026-10')
+    expect(currentMonthKey(new Date('2026-10-31T17:00:00Z'))).toBe('2026-11')
+    expect(initialLotFilters('handed_over', new Date('2026-12-31T18:00:00Z')).month).toBe('2027-01')
+    expect(initialLotFilters('pending_handover', new Date('2026-10-06T00:00:00Z')).month).toBe('')
   })
 
-  it('กรองตามวันไทย — ล็อตที่ยังไม่มีวันส่งมอบถูกตัดออก', () => {
-    expect(filterByDeliveredDate(rows, '2026-07-10').map((each) => each.id)).toEqual(['a', 'b'])
-    expect(filterByDeliveredDate(rows, '2026-07-09')).toEqual([])
+  it('เลื่อนเดือนข้ามปีได้ทั้งสองทาง', () => {
+    expect(shiftMonthKey('2026-01', -1)).toBe('2025-12')
+    expect(shiftMonthKey('2026-12', 1)).toBe('2027-01')
+    expect(shiftMonthKey('2026-10', 0)).toBe('2026-10')
+  })
+
+  it('ช่วงวันของเดือน — ก.พ. ปีอธิกสุรทิน 29 วัน · ธ.ค. 31 วัน', () => {
+    expect(monthDayRange('2028-02')).toEqual({ from: '2028-02-01', to: '2028-02-29' })
+    expect(monthDayRange('2026-12')).toEqual({ from: '2026-12-01', to: '2026-12-31' })
+  })
+
+  it('เลือกวันเดียว = เดือนที่แสดงขยับตาม · ล้างวัน = คงเดือนเดิม', () => {
+    const base = { ...EMPTY_LOT_FILTERS, month: '2026-10' }
+    expect(withDeliveredDate(base, '2026-08-15')).toMatchObject({ date: '2026-08-15', month: '2026-08' })
+    expect(withDeliveredDate({ ...base, date: '2026-10-02' }, '')).toMatchObject({ date: '', month: '2026-10' })
   })
 })
 

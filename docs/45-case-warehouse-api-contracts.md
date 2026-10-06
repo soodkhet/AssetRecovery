@@ -19,6 +19,7 @@
 | v1.6 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q13 · ปิดหนี้ #1)** — §6.5 เติม `POST /api/handover-lots/:id/documents`: เอกสารล็อตเดิมอัปโหลดตรงขึ้น Storage แบบ upsert ทับ path ตายตัวและไม่ผ่าน API ⇒ ไม่มีใครตรวจไฟล์/ล็อกหลัง confirmed · endpoint ใหม่ให้ server ตรวจไฟล์ (มีจริง · path ใต้ล็อต · ชนิดจากเนื้อไฟล์ · ขนาด) + เก็บ SHA-256 ของ server ก่อนผูกเข้าล็อต (`44` §6.4 v2.2) · รวมเป็น **49 endpoint** |
 | v1.7 | 04/10/2569 | **มติ PO 04/10/2569 (UAT — ลบเอกสารที่แนบผิด · `38` v3.4)** — §6.1 เติม `DELETE /api/cases/:id/documents/:documentId`: soft-delete (`deleted_at`) เฉพาะเคส `draft`/`need_info` (ก่อนส่งตรวจ — นอกนั้น `CASE_DOCUMENT_DELETE_NOT_ALLOWED`) · ไม่ลบไฟล์ใน Storage · สิทธิ์ + scope เดียวกับการแนบเอกสาร · audit before/after · รวมเป็น **50 endpoint** |
 | v1.8 | 05/10/2569 | **มติ PO 05/10/2569 (U25 · U29)** — §7 กลุ่ม Notification เติม 4 ชื่อ: `expense.approval_requested`, `advance.approval_requested`, `adjustment.approval_requested`, `field_allowance.period_locked` (คู่ event → การแจ้งเตือนกำหนดที่ `90` §6.3 v4.3) · ตรงกับ `lib/api/event-names.ts` |
+| v1.9 | 07/10/2569 | **มติ PO 07/10/2569 (U142)** — §6.5 `GET /api/handover-lots` เพิ่ม `handedOverFrom`/`handedOverTo` (ช่วง "วันส่งมอบ" ตามปฏิทินไทย = วันส่งมอบจริง → กำหนดส่ง → วันสร้างล็อต) + เติม `GET /api/handover-lots/company-summary` (ยอดหัวกลุ่มต่อบริษัทของแท็บ "ส่งมอบแล้ว" · `44` v2.7) |
 | v1.3 | 14/08/2569 | **ปิดช่องว่างจาก implement Phase 2.2**: §6.1 เติม `PATCH /api/cases/:id` (action `edit_case` ที่ `38` §8/§12 นิยามไว้พร้อม error `CASE_LOCKED_AFTER_APPROVAL` และ `edit_history` ใน §6.4 แต่ §17.1 ของไฟล์ 38 ไม่เคยประกาศ endpoint) — ไม่มี business logic ใหม่ รวมเป็น 40 endpoints |
 | v1.4 | 05/10/2569 | sync `44` v2.4 (มติ PO U64 · UAT BUG-075): body ของ `reject-intake` รับ `imeiActual?`/`serialActual?` ที่ตรวจพบ (ไม่บังคับ) — ไม่มีการเปลี่ยน endpoint/สิทธิ์ |
 
@@ -108,7 +109,8 @@ POST   /api/assets/:id/reject-intake  ตีกลับ IMEI ไม่ตรง
 ### 6.5 Warehouse — Handover Lots (ไฟล์ 44)
 
 ```
-GET    /api/handover-lots                    List lots พร้อม filter (status, companyId, type, dateFrom/dateTo, search, page/limit)
+GET    /api/handover-lots                    List lots พร้อม filter (status, companyId, type, dateFrom/dateTo, handedOverFrom/handedOverTo, search, page/limit)
+GET    /api/handover-lots/company-summary    ยอดรวมต่อบริษัทของแท็บ "ส่งมอบแล้ว" (จำนวนล็อต · เครื่อง · ล็อตยังไม่ยืนยัน) ตัวกรองชุดเดียวกับ list ไม่มี page/limit — aggregate ฝั่ง server ตาม scope (มติ PO U142)
 GET    /api/handover-lots/:id                รายละเอียด lot + assets
 POST   /api/handover-lots                    สร้าง Lot + นัดวัน (body: companyId, assetIds[], type, scheduledAt, contactPerson, deliveryAddr, trackingNo, note) — auth: ธุรการ
 POST   /api/handover-lots/:id/documents      ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต (body: document = signed_doc|delivery_proof, fileUrl, fileHash?) — server ตรวจไฟล์เอง + เก็บ SHA-256 · path ต่อเวอร์ชันไม่ทับ · ล็อต confirmed แล้วแนบไม่ได้ (มติ PO 03/10/2569 Q13) — auth: ธุรการ

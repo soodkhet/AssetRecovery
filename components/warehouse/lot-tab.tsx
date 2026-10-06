@@ -23,24 +23,36 @@ import {
 import { cn } from '@/components/ui/cn'
 import { AssetDetailModal } from '@/components/warehouse/asset-detail-modal'
 import { AttachDocModal } from '@/components/warehouse/attach-doc-modal'
+import { DeliveredLotGroups } from '@/components/warehouse/delivered-lot-groups'
 import { ViewAttachedDocModal } from '@/components/warehouse/view-attached-doc-modal'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
+import { monthLabel } from '@/lib/field/month-filter'
 import { matchesAssetSearch, type FilterOption } from '@/lib/warehouse/asset-filters'
 import { lotDocumentSlots } from '@/lib/warehouse/lot-documents'
 import {
   DELIVERED_STATUS_OPTIONS,
-  EMPTY_LOT_FILTERS,
   FILTER_ALL,
   buildLotListQuery,
-  filterByDeliveredDate,
+  currentMonthKey,
+  initialLotFilters,
   lotFilterOptionsOrFallback,
+  shiftMonthKey,
+  withDeliveredDate,
+  type LotCompanyRef,
   type LotFilterState,
 } from '@/lib/warehouse/lot-filters'
 import { LOT_STATUS_LABELS, isLotConfirmed, type LotTab as LotTabId } from '@/lib/warehouse/lot-status'
 import { WAREHOUSE_CONFIRM_LOT_CAPABILITY, WAREHOUSE_EXPORT_CAPABILITIES } from '@/lib/warehouse/permissions'
-import type { AssetDetailDto, AssetListItemDto, LotDetailDto, LotListDto, LotSummaryDto } from '@/lib/warehouse/types'
+import type {
+  AssetDetailDto,
+  AssetListItemDto,
+  LotCompanyGroupDto,
+  LotDetailDto,
+  LotListDto,
+  LotSummaryDto,
+} from '@/lib/warehouse/types'
 import {
   assetConditionBadgeGroup,
   assetConditionLabel,
@@ -50,18 +62,19 @@ import {
 } from '@/lib/warehouse/warehouse-ui'
 
 /**
- * แท็บ "รอส่งมอบ" (`44` §8.4) และ "ส่งมอบแล้ว" (`44` §8.5) — โครงหน้าเดียวกันทั้งคู่
- * (การ์ดล็อต → drill-down รายการเครื่อง) ต่างกันแค่สถานะที่ดึง ตัวกรองสถานะ และปุ่มบนการ์ด
+ * แท็บ "รอส่งมอบ" (`44` §8.4) และ "ส่งมอบแล้ว" (`44` §8.5) — ตัวกรอง/drill-down/modal ใช้ร่วมกัน
  * ⇒ รวมเป็น component เดียวคุมด้วย `tab` เพื่อไม่ให้กติกาสองแท็บเพี้ยนจากกันภายหลัง
+ * - "รอส่งมอบ" = การ์ดล็อต (คงเดิม)
+ * - "ส่งมอบแล้ว" = ตารางจัดกลุ่มตามบริษัท + เลื่อนเดือน (มติ PO U142 · `<DeliveredLotGroups>`)
  *
  * - ล็อตอยู่แท็บไหนตัดสินจาก `lotTab()` ฝั่ง API (`tab` ของ DTO) — `we_deliver` อยู่ "ส่งมอบแล้ว"
  *   ทันทีที่สร้าง แม้ยังไม่แนบหลักฐาน (§6.3 · §9.3) หน้าจอจึงห้าม if สถานะเอง
- * - "วันที่" ของสองแท็บคนละความหมาย: แท็บรอส่งมอบกรอง **วันนัด** ที่ API · แท็บส่งมอบแล้วกรอง
- *   **วันส่งมอบจริง** ฝั่ง client (API กรองได้แค่ `scheduledAt` — ดู `lot-filters.ts`)
+ * - "วันที่" ของสองแท็บคนละความหมาย: แท็บรอส่งมอบกรอง **วันนัด** · แท็บส่งมอบแล้วกรอง **วันส่งมอบ**
+ *   (เดือน/วัน ตามเวลาไทย) — ทั้งคู่กรองที่ API (ดู `lot-filters.ts`)
  * - ปุ่มยืนยัน/เอกสารผูกกับ capability ตาม `44` §13 — ไม่มีสิทธิ์ = ซ่อน (Company User ได้หน้าอ่านอย่างเดียว)
  */
 
-/** โหลดล็อตทีเดียวให้ครบ (เพดาน schema = 200) — การ์ดของแท็บนี้ไม่มี pagination ตาม mockup */
+/** แท็บ "รอส่งมอบ": โหลดล็อตทีเดียวให้ครบ (เพดาน schema = 200) — การ์ดไม่มี pagination ตาม mockup */
 const LOT_PAGE_SIZE = 200
 
 export function LotTab({
@@ -79,7 +92,10 @@ export function LotTab({
   const [result, setResult] = useState<LotListDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
-  const [filters, setFilters] = useState<LotFilterState>(EMPTY_LOT_FILTERS)
+  const [filters, setFilters] = useState<LotFilterState>(() => initialLotFilters(tab, new Date()))
+  /** ตัวเลือกบริษัทสำรองของแท็บ "ส่งมอบแล้ว" (จากหัวกลุ่ม) เมื่อเรียก master data บริษัทไม่ได้ */
+  const [groupCompanies, setGroupCompanies] = useState<readonly LotCompanyRef[]>([])
+  const delivered = tab === 'handed_over'
   const [version, setVersion] = useState(0)
 
   /** ล็อตที่เปิด drill-down อยู่ (`null` = หน้าการ์ด) */
@@ -104,6 +120,8 @@ export function LotTab({
   const fetchList = useCallback(async () => callApi<LotListDto>(listPath), [listPath])
 
   useEffect(() => {
+    // แท็บ "ส่งมอบแล้ว" ดึงข้อมูลเองใน `<DeliveredLotGroups>` (หัวกลุ่ม + แบ่งหน้าต่อบริษัท)
+    if (delivered) return
     let cancelled = false
     void (async () => {
       const response = await fetchList()
@@ -120,17 +138,34 @@ export function LotTab({
     return () => {
       cancelled = true
     }
-  }, [fetchList, version])
+  }, [fetchList, version, delivered])
 
   const items = useMemo(() => result?.items ?? [], [result])
   const total = result?.total ?? 0
-  const companyOptions = lotFilterOptionsOrFallback(companies, items)
-  // แท็บ "ส่งมอบแล้ว" กรองวันส่งมอบจริงฝั่ง client (API กรองได้แค่วันนัด)
-  const rows = tab === 'handed_over' ? filterByDeliveredDate(items, filters.date) : [...items]
+  const companyOptions = lotFilterOptionsOrFallback(companies, delivered ? groupCompanies : items)
+  const rows = items
+
+  const onGroupsLoaded = useCallback((groups: readonly LotCompanyGroupDto[]) => {
+    setGroupCompanies((current) => mergeCompanyRefs(current, groups))
+  }, [])
 
   function updateFilter(next: Partial<LotFilterState>): void {
-    setLoading(true)
+    if (!delivered) setLoading(true)
     setFilters((current) => ({ ...current, ...next }))
+  }
+
+  function updateDate(date: string): void {
+    if (!delivered) setLoading(true)
+    setFilters((current) => (delivered ? withDeliveredDate(current, date) : { ...current, date }))
+  }
+
+  /** เลื่อนเดือน = ล้างวันเดียวที่เลือกไว้ (วันนั้นอยู่คนละเดือนแล้ว) */
+  function moveMonth(delta: number): void {
+    setFilters((current) => ({
+      ...current,
+      date: '',
+      month: shiftMonthKey(current.month === '' ? currentMonthKey(new Date()) : current.month, delta),
+    }))
   }
 
   function reload(): void {
@@ -368,10 +403,10 @@ export function LotTab({
           />
           <Input
             type="date"
-            aria-label={tab === 'pending_handover' ? 'วันนัดส่งมอบ' : 'วันส่งมอบจริง'}
+            aria-label={tab === 'pending_handover' ? 'วันนัดส่งมอบ' : 'วันส่งมอบ'}
             className="sm:w-48"
             value={filters.date}
-            onChange={(event) => updateFilter({ date: event.target.value })}
+            onChange={(event) => updateDate(event.target.value)}
           />
           <Select
             aria-label="กรองตามบริษัทไฟแนนซ์"
@@ -403,8 +438,48 @@ export function LotTab({
           )}
         </div>
 
-        {loading && <div className="py-12 text-center text-sm text-slate-400">กำลังโหลด...</div>}
-        {!loading && error !== null && (
+        {delivered && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" aria-label="เดือนก่อนหน้า" onClick={() => moveMonth(-1)}>
+                ‹ เดือนก่อน
+              </Button>
+              <span className="min-w-[8rem] text-center text-sm font-bold text-slate-800">
+                {filters.month === '' ? 'ทุกเดือน' : monthLabel(filters.month)}
+              </span>
+              <Button variant="secondary" size="sm" aria-label="เดือนถัดไป" onClick={() => moveMonth(1)}>
+                เดือนถัดไป ›
+              </Button>
+            </div>
+            {filters.month !== currentMonthKey(new Date()) && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setFilters((current) => ({ ...current, date: '', month: currentMonthKey(new Date()) }))}
+              >
+                กลับเดือนนี้
+              </Button>
+            )}
+          </div>
+        )}
+
+        {delivered && (
+          <DeliveredLotGroups
+            filters={filters}
+            version={version}
+            onGroupsLoaded={onGroupsLoaded}
+            actions={{
+              canConfirm,
+              openingId,
+              onOpen: (lotId) => void loadLot(lotId, setOpenLot),
+              onAttach: (lotId) => void loadLot(lotId, setAttachLot),
+              onViewDocs: (lotId) => void loadLot(lotId, setDocsLot),
+            }}
+          />
+        )}
+
+        {!delivered && loading && <div className="py-12 text-center text-sm text-slate-400">กำลังโหลด...</div>}
+        {!delivered && !loading && error !== null && (
           <div className="py-12 text-center text-sm text-red-600">
             {error.title} — {error.message}
             <div className="mt-3">
@@ -414,11 +489,11 @@ export function LotTab({
             </div>
           </div>
         )}
-        {!loading && error === null && rows.length === 0 && (
+        {!delivered && !loading && error === null && rows.length === 0 && (
           <div className="py-16 text-center text-sm text-slate-400">ไม่มีล็อตในแท็บ “{LOT_TAB_LABEL[tab]}”</div>
         )}
 
-        {!loading && error === null && rows.length > 0 && (
+        {!delivered && !loading && error === null && rows.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rows.map((lot) => (
               <LotCard
@@ -434,7 +509,7 @@ export function LotTab({
           </div>
         )}
 
-        {!loading && error === null && total > items.length && (
+        {!delivered && !loading && error === null && total > items.length && (
           <InlineAlert className="mt-4" tone="info" title="แสดงไม่ครบทุกล็อต">
             มีล็อตในแท็บนี้ {total} ล็อต แสดงได้ {items.length} ล็อตต่อครั้ง — ใช้ตัวกรองด้านบนเพื่อดูส่วนที่เหลือ
           </InlineAlert>
@@ -444,6 +519,13 @@ export function LotTab({
       {modals}
     </>
   )
+}
+
+/** รวมบริษัทที่เคยเห็นจากหัวกลุ่ม (ไม่ให้ตัวเลือกหดเหลือบริษัทเดียวหลังกรองบริษัท) */
+function mergeCompanyRefs(current: readonly LotCompanyRef[], groups: readonly LotCompanyRef[]): LotCompanyRef[] {
+  const merged = new Map(current.map((ref) => [ref.companyId, ref]))
+  for (const group of groups) merged.set(group.companyId, { companyId: group.companyId, companyName: group.companyName })
+  return [...merged.values()]
 }
 
 function typeIcon(lot: { type: LotSummaryDto['type'] }): string {
