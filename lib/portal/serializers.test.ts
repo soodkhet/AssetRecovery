@@ -11,6 +11,7 @@ import {
   serializePortalLotDetail,
   serializePortalLotListItem,
   serializePortalTaxInvoice,
+  portalCaseDeviceText,
   type PortalCaseDetailSource,
 } from '@/lib/portal/serializers'
 
@@ -336,5 +337,32 @@ describe('portal serializers — เนื้อหา', () => {
     expect(portalAssetPhotoMeta(asset, 2)).toBeNull()
     expect(portalAssetPhotoMeta(asset, -1)).toBeNull()
     expect(portalAssetPhotoMeta(asset, 0.5)).toBeNull()
+  })
+})
+
+describe('BUG-184 — รายละเอียดเคสพอร์ทัลแสดงยี่ห้อ/รุ่น/ความจุ/สี', () => {
+  it('ข้อความชุดเดียวกับใบส่งมอบ', () => {
+    const dto = serializePortalCaseDetail(
+      caseRow('active', { assetDescription: 'Samsung Galaxy A55 5G', assetCapacity: '256GB', assetColor: 'ดำ' }),
+    )
+    expect(dto.deviceText).toBe('Samsung Galaxy A55 5G · 256GB · ดำ')
+    deepScan(dto)
+  })
+
+  it('ไม่ระบุในสัญญา/ระบุเอง แสดงตามที่เก็บ · ไม่มีความจุ/สี = ชื่อเครื่องอย่างเดียว', () => {
+    expect(portalCaseDeviceText({ assetDescription: 'Galaxy A35 5G', assetCapacity: 'ไม่ระบุในสัญญา', assetColor: 'ม่วงลาเวนเดอร์' })).toBe(
+      'Galaxy A35 5G · ไม่ระบุในสัญญา · ม่วงลาเวนเดอร์',
+    )
+    expect(portalCaseDeviceText({ assetDescription: 'iPhone 15', assetCapacity: null, assetColor: null })).toBe('iPhone 15')
+  })
+
+  it('ไม่มีชื่อเครื่อง → ความจุ/สีอย่างเดียว · ไม่มีอะไรเลย → null', () => {
+    expect(portalCaseDeviceText({ assetDescription: '  ', assetCapacity: '128GB', assetColor: null })).toBe('128GB')
+    expect(portalCaseDeviceText({})).toBeNull()
+    expect(serializePortalCaseDetail(caseRow('draft')).deviceText).toBeNull()
+  })
+
+  it('รายการเคสไม่มี deviceText (เฉพาะรายละเอียด)', () => {
+    expect('deviceText' in serializePortalCaseListItem(caseRow('active', { assetDescription: 'iPhone 15' }))).toBe(false)
   })
 })

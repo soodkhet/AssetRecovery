@@ -451,6 +451,7 @@ suite('Final Test ด่าน 1 — Ops E2E: เคส → มอบหมา�
         condition: 'normal',
         conditionNote: null,
         photos: ['front.jpg'],
+        colorCapacityMatched: true,
       }),
       ctx(admin),
     )

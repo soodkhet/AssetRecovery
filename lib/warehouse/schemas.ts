@@ -80,30 +80,50 @@ export const assetListQuerySchema = z.object({
 
 export type AssetListQuery = z.infer<typeof assetListQuerySchema>
 
+export const COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE = 'กรุณาเลือกว่าสี/ความจุตรงกับสัญญาหรือไม่'
+export const COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE = 'ไม่ตรงกับสัญญา — กรุณาระบุสิ่งที่พบ (เช่น สีที่พบ/ความจุที่พบ)'
+
 /**
  * `POST /api/assets/:id/intake` (`44` §8.2 modal 3 ขั้น)
  * — IMEI ที่กรอกตัดได้เฉพาะช่องว่าง/ขีด/จุด แล้วต้องเป็นตัวเลข 15 หลักพอดี (มติ PO U24 · `parseImei()`)
  *   รูปแบบผิด = ปฏิเสธ (พิมพ์ผิด ไม่ใช่ "ไม่ตรงสัญญา") · ส่วน "ไม่ตรงกับสัญญา" เป็นแค่ **คำเตือน**
  *   ผ่านต่อได้ (`44` §12 `IMEI_MISMATCH`) · ค่าที่บันทึกเป็นตัวเลข 15 หลักล้วนเสมอ
  */
-export const assetIntakeSchema = z.object({
-  imeiActual: imeiInputSchema,
-  serialActual: nullableText(100),
-  condition: z.enum(ASSET_CONDITIONS).nullish().transform((value) => value ?? null),
-  conditionNote: nullableText(1000),
-  photos: z.array(fileUrl).max(20).default([]),
-  /**
-   * "สี/ความจุตรงกับสัญญา" (มติ PO U166) — ไม่บังคับ ไม่ block · ไม่ติ๊ก/ไม่ส่ง = `false` (แปลงที่ `intakeColorCapacityMatched()`)
-   * (ค่า `null` บนแถว = ยังไม่ได้ตรวจรับ ซึ่งเกิดได้เฉพาะก่อนรับเข้าคลัง)
-   */
-  colorCapacityMatched: z.boolean().optional(),
-})
+export const assetIntakeSchema = z
+  .object({
+    imeiActual: imeiInputSchema,
+    serialActual: nullableText(100),
+    condition: z.enum(ASSET_CONDITIONS).nullish().transform((value) => value ?? null),
+    conditionNote: nullableText(1000),
+    photos: z.array(fileUrl).max(20).default([]),
+    /**
+     * "สี/ความจุตรงกับสัญญา" — **ตัวเลือกบังคับ** ตรง (`true`) / ไม่ตรง (`false`) (มติ O77 แทนช่องติ๊กของ U166)
+     * (ค่า `null` บนแถว = ยังไม่ได้ตรวจรับ ซึ่งเกิดได้เฉพาะก่อนรับเข้าคลัง)
+     */
+    colorCapacityMatched: z.boolean({ error: COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE }),
+    /** ไม่ตรง ⇒ ระบุสิ่งที่พบ (บังคับ) · ตรง ⇒ ไม่เก็บ (แปลงที่ `intakeColorCapacityNote()`) */
+    colorCapacityNote: z.string().trim().max(500).nullish(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.colorCapacityMatched === false && (value.colorCapacityNote ?? '') === '') {
+      ctx.addIssue({ code: 'custom', path: ['colorCapacityNote'], message: COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE })
+    }
+  })
 
 export type AssetIntakeInput = z.infer<typeof assetIntakeSchema>
 
-/** ค่าที่บันทึกลง `assets.color_capacity_matched` ตอนรับเข้า — ไม่ส่งมา = ไม่ได้ยืนยัน (`false`) */
+/** ค่าที่บันทึกลง `assets.color_capacity_matched` ตอนรับเข้า (มติ O77 — บังคับเลือก ตรง/ไม่ตรง) */
 export function intakeColorCapacityMatched(input: Pick<AssetIntakeInput, 'colorCapacityMatched'>): boolean {
-  return input.colorCapacityMatched ?? false
+  return input.colorCapacityMatched
+}
+
+/** ค่าที่บันทึกลง `assets.color_capacity_note` — เฉพาะ "ไม่ตรง" · ตรง/ว่าง ⇒ `null` */
+export function intakeColorCapacityNote(
+  input: Pick<AssetIntakeInput, 'colorCapacityMatched' | 'colorCapacityNote'>,
+): string | null {
+  if (input.colorCapacityMatched) return null
+  const note = (input.colorCapacityNote ?? '').trim()
+  return note === '' ? null : note
 }
 
 /**

@@ -1161,9 +1161,10 @@ function renderModelPhoneContent() {
     { at: '06/10/2569 00:10', status: 'failed', by: 'งานอัตโนมัติรายวัน', fileAt: '—', added: '—', models: 0, error: 'เชื่อมต่อแหล่งข้อมูลไม่ได้ (หมดเวลา) — ระบบจะลองใหม่' },
     { at: '01/10/2569 09:05', status: 'success', by: 'นำเข้าไฟล์เอง · สมศรี ใจดี', fileAt: 'ไม่ทราบ', added: '254,985 / 11,047 / 130,912', models: 2000 },
   ];
-  const resBadge = (u) => u.status === 'success'
+  // มติ O77 — รอบ "สำเร็จ" ที่ไม่มีของใหม่ (TAC/แบรนด์/รุ่นใหม่ 0/0/0) แสดง "ไม่มีของใหม่"
+  const resBadge = (u) => u.status === 'success' && u.added !== '0 / 0 / 0'
     ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-100 text-emerald-800">สำเร็จ</span>'
-    : u.status === 'not_modified'
+    : u.status !== 'failed'
       ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-700">ไม่มีของใหม่</span>'
       : `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-red-100 text-red-800">ล้มเหลว</span><div class="text-[11px] text-red-700 mt-1">${u.error}</div>`;
   const learned = [

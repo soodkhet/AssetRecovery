@@ -25,10 +25,19 @@ import {
   intakePhotoWarning,
   type IntakePhotoGroups,
 } from '@/lib/warehouse/intake-photos'
-import { ASSET_CONDITIONS } from '@/lib/warehouse/schemas'
+import {
+  ASSET_CONDITIONS,
+  COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE,
+  COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE,
+} from '@/lib/warehouse/schemas'
 import type { AssetDetailDto, AssetListItemDto } from '@/lib/warehouse/types'
 import { INTAKE_PHOTO_ACCEPT, WarehouseUploadError, uploadIntakePhoto } from '@/lib/warehouse/upload-client'
 import { ASSET_CONDITION_LABEL } from '@/lib/warehouse/warehouse-ui'
+
+const COLOR_CAPACITY_CHOICES = [
+  { value: true, label: 'ตรง' },
+  { value: false, label: 'ไม่ตรง' },
+] as const
 
 /**
  * Modal "รับเข้าคลัง" — 3 ขั้นตอนใน modal เดียว (`44` §8.2)
@@ -58,8 +67,9 @@ export function IntakeModal({
   const [serialActual, setSerialActual] = useState(asset.serialActual ?? '')
   const [condition, setCondition] = useState<AssetCondition | null>(asset.condition)
   const [conditionNote, setConditionNote] = useState(asset.conditionNote ?? '')
-  // มติ PO U166 — ไม่บังคับ ไม่ block · ไม่ติ๊ก = บันทึกว่าไม่ตรง/ไม่ได้ยืนยัน
-  const [colorCapacityMatched, setColorCapacityMatched] = useState(asset.colorCapacityMatched ?? false)
+  // มติ O77 — ตัวเลือกบังคับ ตรง/ไม่ตรง (แทนช่องติ๊กของ U166) · ไม่ตรง ⇒ ระบุสิ่งที่พบ
+  const [colorCapacityMatched, setColorCapacityMatched] = useState<boolean | null>(asset.colorCapacityMatched)
+  const [colorCapacityNote, setColorCapacityNote] = useState(asset.colorCapacityNote ?? '')
   const [photos, setPhotos] = useState<readonly string[]>([])
   const [uploading, setUploading] = useState<IntakePhotoAngle | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -130,6 +140,15 @@ export function IntakeModal({
       throw assertError
     }
 
+    if (colorCapacityMatched === null) {
+      setError({ title: 'ยังไม่ได้ตรวจสี/ความจุ', message: COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE })
+      return
+    }
+    if (!colorCapacityMatched && colorCapacityNote.trim() === '') {
+      setError({ title: 'ยังไม่ได้ระบุสิ่งที่พบ', message: COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE })
+      return
+    }
+
     if (imeiFormatInvalid) {
       setError({
         title: 'รูปแบบ IMEI ไม่ถูกต้อง',
@@ -167,6 +186,7 @@ export function IntakeModal({
           condition,
           conditionNote: conditionNote.trim() === '' ? null : conditionNote.trim(),
           colorCapacityMatched,
+          colorCapacityNote: colorCapacityMatched ? null : colorCapacityNote.trim(),
           photos,
         }),
       )
@@ -294,21 +314,45 @@ export function IntakeModal({
             </InlineAlert>
           )}
 
-          {/* มติ PO U166 — เทียบสี/ความจุของเครื่องจริงกับค่าตามสัญญา */}
-          <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <input
-              type="checkbox"
-              className="focus-ring mt-0.5 rounded"
-              checked={colorCapacityMatched}
-              onChange={(event) => setColorCapacityMatched(event.target.checked)}
-            />
-            <span className="text-sm">
-              <span className="font-semibold text-slate-800">สี/ความจุตรงกับสัญญา</span>
-              <span className="mt-0.5 block text-xs text-slate-500">
-                ตามสัญญา: ความจุ {asset.deviceCapacity ?? '—'} · สี {asset.deviceColor ?? '—'}
-              </span>
-            </span>
-          </label>
+          {/* มติ PO U166 → O77 — เทียบสี/ความจุของเครื่องจริงกับค่าตามสัญญา: ตัวเลือกบังคับ ตรง/ไม่ตรง */}
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-sm font-semibold text-slate-800">
+              สี/ความจุตรงกับสัญญา <span className="text-red-500">*</span>
+            </div>
+            <div className="mt-0.5 text-xs text-slate-500">
+              ตามสัญญา: ความจุ {asset.deviceCapacity ?? '—'} · สี {asset.deviceColor ?? '—'}
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="สี/ความจุตรงกับสัญญา">
+              {COLOR_CAPACITY_CHOICES.map((choice) => (
+                <button
+                  key={choice.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={colorCapacityMatched === choice.value}
+                  onClick={() => setColorCapacityMatched(choice.value)}
+                  className={cn(
+                    'focus-ring rounded-xl border-2 py-2 text-xs font-bold transition-colors',
+                    colorCapacityMatched === choice.value
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300',
+                  )}
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+            {colorCapacityMatched === false && (
+              <Field className="mt-2" label="สิ่งที่พบ" required hint="ระบุสี/ความจุของเครื่องที่รับจริง">
+                <Textarea
+                  rows={2}
+                  value={colorCapacityNote}
+                  maxLength={500}
+                  placeholder="เช่น สีขาว ความจุ 64GB"
+                  onChange={(event) => setColorCapacityNote(event.target.value)}
+                />
+              </Field>
+            )}
+          </div>
         </section>
 
         {/* ── ขั้น 2/3: บันทึกสภาพ ───────────────────────────────── */}

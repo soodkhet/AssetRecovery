@@ -673,6 +673,7 @@ suite('Phase 8.1 — E2E `29` §6.3: QC ตีกลับก่อนราย�
         imeiActual: asset.imeiContract,
         serialActual: null,
         condition: 'normal',
+        colorCapacityMatched: true,
         conditionNote: null,
         photos: ['front.jpg'],
       },

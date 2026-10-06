@@ -3,6 +3,7 @@ import {
   allowedTargetKind,
   canTransition,
   daysAfter,
+  debitNoteReferenceDate,
   findAutoMatch,
   findMatchProposals,
   hasNote,
@@ -304,5 +305,56 @@ describe('มติ O75 — ยอดค้างที่เหลือขอ�
 
   it('ไม่มียอดค้างที่เหลือ ⇒ พฤติกรรมเดิม', () => {
     expect(isExactMatchAmount(10_700, billing({ remainingAmountSatang: null }))).toBe(false)
+  })
+})
+
+describe('มติ O77 — คู่ที่ระบบเสนอ: ยอดค้างจากใบเพิ่มหนี้นับช่วงวันจากวันออกใบเพิ่มหนี้ล่าสุด', () => {
+  const sentAt = new Date('2026-09-25T03:00:00Z')
+  const debitDate = new Date('2026-10-03T00:00:00Z')
+  const paidAfterDebit = new Date('2026-10-06T00:00:00Z')
+  const candidate = billing({
+    amountSatang: 1_294_700,
+    referenceDate: sentAt,
+    remainingAmountSatang: 10_700,
+    remainingReferenceDate: debitNoteReferenceDate(sentAt, debitDate),
+  })
+
+  it('เงินเข้าเท่ายอดค้าง หลังวันวางบิลเกิน tolerance แต่อยู่ในช่วงของใบเพิ่มหนี้ ⇒ เสนอ (วันอ้างอิง = วันออกใบเพิ่มหนี้)', () => {
+    const proposals = findMatchProposals(
+      [candidate],
+      [{ id: 'tx-dn', amountSatang: 10_700, transactionDate: paidAfterDebit, toleranceDays: 7 }],
+    )
+    expect(proposals).toHaveLength(1)
+    expect(proposals[0]?.referenceDate).toEqual(debitDate)
+    expect(proposals[0]?.matchedAmountSatang).toBe(10_700)
+  })
+
+  it('เงินเข้าก่อนวันออกใบเพิ่มหนี้ หรือเกิน tolerance จากใบเพิ่มหนี้ ⇒ ไม่เสนอ', () => {
+    const before = new Date('2026-10-01T00:00:00Z')
+    const tooLate = new Date('2026-10-20T00:00:00Z')
+    expect(
+      findMatchProposals([candidate], [{ id: 'a', amountSatang: 10_700, transactionDate: before, toleranceDays: 7 }]),
+    ).toHaveLength(0)
+    expect(
+      findMatchProposals([candidate], [{ id: 'b', amountSatang: 10_700, transactionDate: tooLate, toleranceDays: 7 }]),
+    ).toHaveLength(0)
+  })
+
+  it('ยอดเต็มยังนับจากวันวางบิลเดิม (ไม่ขยับตามใบเพิ่มหนี้)', () => {
+    expect(
+      findMatchProposals([candidate], [{ id: 'c', amountSatang: 1_294_700, transactionDate: paidAfterDebit, toleranceDays: 7 }]),
+    ).toHaveLength(0)
+    const onTime = findMatchProposals(
+      [candidate],
+      [{ id: 'd', amountSatang: 1_294_700, transactionDate: new Date('2026-09-28T00:00:00Z'), toleranceDays: 7 }],
+    )
+    expect(onTime[0]?.referenceDate).toEqual(sentAt)
+  })
+
+  it('debitNoteReferenceDate — ไม่มีใบเพิ่มหนี้ / ออกไม่หลังวันวางบิล ⇒ null (ใช้วันวางบิล)', () => {
+    expect(debitNoteReferenceDate(sentAt, null)).toBeNull()
+    expect(debitNoteReferenceDate(sentAt, new Date('2026-09-20T00:00:00Z'))).toBeNull()
+    expect(debitNoteReferenceDate(null, debitDate)).toEqual(debitDate)
+    expect(debitNoteReferenceDate(sentAt, debitDate)).toEqual(debitDate)
   })
 })

@@ -16,6 +16,7 @@ export const HANDOVER_SHEET_HEADERS = [
   'เลขสัญญา',
   'ชื่อลูกหนี้',
   'อุปกรณ์',
+  'สี/ความจุ (ตรวจจริง เมื่อไม่ตรง)',
   'IMEI / Serial (ตามสัญญา)',
   'IMEI / Serial (ตรวจจริง เมื่อไม่ตรง)',
   'สภาพ',
@@ -31,6 +32,7 @@ export function handoverSheetRows(doc: HandoverDocModel): string[][] {
     row.caseRef,
     row.debtorName,
     row.deviceDesc,
+    row.colorCapacityMismatch ?? EMPTY_DOC_VALUE,
     row.identifier,
     row.identifierActual ?? EMPTY_DOC_VALUE,
     row.condition,
@@ -52,7 +54,7 @@ export function handoverSheetHeaderBlock(doc: HandoverDocModel): string[][] {
 }
 
 /** ความกว้างคอลัมน์ (ตัวอักษร) — ตั้งไว้ให้เปิดแล้วอ่านได้เลยโดยไม่ต้องลากขยาย */
-const COLUMN_WIDTHS = [4, 18, 24, 26, 24, 24, 14, 30]
+const COLUMN_WIDTHS = [4, 18, 24, 26, 30, 24, 24, 14, 30]
 
 export function buildHandoverWorkbook(doc: HandoverDocModel): Buffer {
   const sheet = utils.aoa_to_sheet([

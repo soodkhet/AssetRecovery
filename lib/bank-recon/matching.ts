@@ -47,6 +47,11 @@ export interface MatchCandidate {
   remainingAmountSatang?: number | null
   /** วันอ้างอิงของเอกสาร (วันวางบิล / วันสร้างไฟล์โอน) — `null` = ไม่รู้วัน ⇒ ไม่เข้าเกณฑ์ auto */
   referenceDate: Date | null
+  /**
+   * มติ O77 — วันอ้างอิงของ **ยอดค้างที่เหลือ** เมื่อยอดนั้นเกิดจากใบเพิ่มหนี้ (= วันออกใบเพิ่มหนี้ล่าสุด)
+   * ⇒ ช่วงวันของการเทียบยอดค้างนับจากวันนี้แทนวันวางบิลเดิม · ไม่มี = ใช้ `referenceDate`
+   */
+  remainingReferenceDate?: Date | null
 }
 
 export type AutoMatchOutcome =
@@ -68,18 +73,35 @@ export function daysAfter(referenceDate: Date, transactionDate: Date): number {
 export function candidateMatches(
   candidate: MatchCandidate,
   input: { amountSatang: number; transactionDate: Date; toleranceDays: number },
-): { matched: boolean; matchedAmountSatang: number } {
+): { matched: boolean; matchedAmountSatang: number; referenceDate: Date | null } {
   const absolute = Math.abs(input.amountSatang)
-  const acceptable = [candidate.amountSatang, candidate.altAmountSatang, candidate.remainingAmountSatang ?? null].filter(
-    (value): value is number => value !== null && value > 0,
-  )
-  const matchedAmount = acceptable.find((value) => value === absolute)
-  if (matchedAmount === undefined) return { matched: false, matchedAmountSatang: 0 }
-  if (candidate.referenceDate === null) return { matched: false, matchedAmountSatang: 0 }
+  // ยอดที่ยอมรับ + วันอ้างอิงของยอดนั้น — ยอดค้างจากใบเพิ่มหนี้นับช่วงวันจากวันออกใบเพิ่มหนี้ล่าสุด (มติ O77)
+  const options: { amount: number | null; referenceDate: Date | null }[] = [
+    { amount: candidate.amountSatang, referenceDate: candidate.referenceDate },
+    { amount: candidate.altAmountSatang, referenceDate: candidate.referenceDate },
+    {
+      amount: candidate.remainingAmountSatang ?? null,
+      referenceDate: candidate.remainingReferenceDate ?? candidate.referenceDate,
+    },
+  ]
+  for (const option of options) {
+    if (option.amount === null || option.amount <= 0 || option.amount !== absolute) continue
+    if (option.referenceDate === null) continue
+    const gap = daysAfter(option.referenceDate, input.transactionDate)
+    if (gap < 0 || gap > input.toleranceDays) continue
+    return { matched: true, matchedAmountSatang: option.amount, referenceDate: option.referenceDate }
+  }
+  return { matched: false, matchedAmountSatang: 0, referenceDate: null }
+}
 
-  const gap = daysAfter(candidate.referenceDate, input.transactionDate)
-  if (gap < 0 || gap > input.toleranceDays) return { matched: false, matchedAmountSatang: 0 }
-  return { matched: true, matchedAmountSatang: matchedAmount }
+/**
+ * มติ O77 — วันอ้างอิงของยอดค้างที่เหลือของรอบวางบิล: มีใบเพิ่มหนี้ active ที่ออก**หลัง**วันวางบิล ⇒ วันออกใบเพิ่มหนี้ล่าสุด
+ * (ยอดค้างหลังรับชำระครบเกิดจากใบเพิ่มหนี้ — ลูกค้าโอนส่วนเพิ่มหลังได้รับใบนั้น) · ไม่มี/ไม่หลังกว่า ⇒ `null` (ใช้วันวางบิล)
+ */
+export function debitNoteReferenceDate(sentAt: Date | null, latestDebitNoteDate: Date | null): Date | null {
+  if (latestDebitNoteDate === null) return null
+  if (sentAt !== null && latestDebitNoteDate.getTime() <= sentAt.getTime()) return null
+  return latestDebitNoteDate
 }
 
 /**
@@ -119,6 +141,8 @@ export interface MatchProposal {
   candidate: MatchCandidate
   transactionId: string
   matchedAmountSatang: number
+  /** วันอ้างอิงที่ใช้เทียบช่วงวันของคู่นี้ (วันวางบิล / วันออกใบเพิ่มหนี้ล่าสุด — มติ O77 / วันสร้างไฟล์โอน) */
+  referenceDate: Date
   /**
    * มีทางเลือกมากกว่าหนึ่ง (รายการนี้เข้าได้หลายเอกสาร หรือเอกสารนี้มีหลายรายการที่เข้าเกณฑ์)
    * ⇒ ผู้ใช้ต้องเลือกเอง — ยังกดยืนยันได้ทีละคู่ แต่หน้าจอต้องเตือนให้ตรวจ
@@ -147,8 +171,13 @@ export function findMatchProposals(
         transactionDate: transaction.transactionDate,
         toleranceDays: transaction.toleranceDays,
       })
-      if (!result.matched) continue
-      hits.push({ candidate, transactionId: transaction.id, matchedAmountSatang: result.matchedAmountSatang })
+      if (!result.matched || result.referenceDate === null) continue
+      hits.push({
+        candidate,
+        transactionId: transaction.id,
+        matchedAmountSatang: result.matchedAmountSatang,
+        referenceDate: result.referenceDate,
+      })
     }
   }
 

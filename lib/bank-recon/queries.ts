@@ -6,6 +6,7 @@ import { alreadyMatchedWarning, BankReconError } from '@/lib/bank-recon/errors'
 import {
   allowedTargetKind,
   canMoveToSuspense,
+  debitNoteReferenceDate,
   findAutoMatch,
   findMatchProposals,
   hasNote,
@@ -273,6 +274,30 @@ function altAmountForBilling(row: {
  * · เงินออก = รอบจ่ายที่สร้างไฟล์โอนแล้ว (`file_generated`) หรือที่ยืนยันจ่ายแล้ว (`completed`
  * — สำหรับเคสจับคู่ใหม่/แยกงวด) ตาม `35` §6.2 + state machine `23` §6.6/§6.8
  */
+/** วันออกใบเพิ่มหนี้ active ล่าสุดต่อรอบวางบิล (มติ O77) */
+async function latestDebitNoteDateByBatch(
+  organizationId: string,
+  billingBatchIds: readonly string[],
+): Promise<Map<string, Date>> {
+  const result = new Map<string, Date>()
+  if (billingBatchIds.length === 0) return result
+  const notes = await prisma.creditNote.findMany({
+    where: {
+      organizationId,
+      noteType: 'debit',
+      status: 'active',
+      taxInvoice: { salesRecord: { billingBatchId: { in: [...billingBatchIds] } } },
+    },
+    select: { issueDate: true, taxInvoice: { select: { salesRecord: { select: { billingBatchId: true } } } } },
+  })
+  for (const note of notes) {
+    const batchId = note.taxInvoice.salesRecord.billingBatchId
+    const current = result.get(batchId)
+    if (current === undefined || note.issueDate.getTime() > current.getTime()) result.set(batchId, note.issueDate)
+  }
+  return result
+}
+
 async function loadCandidates(
   organizationId: string,
   kind: MatchTargetKind,
@@ -311,10 +336,17 @@ async function loadCandidates(
     })
 
     // มติ O75 — ยอดของรอบ = ยอดตามเอกสาร (รวมใบลด/เพิ่มหนี้) · รอบที่รับเงินไปบางส่วนแล้วรับ "ยอดค้างที่เหลือ" เป็นยอดตรงด้วย
-    const documented = await withDocumentedArTotals(organizationId, rows)
+    const [documented, debitNoteDates] = await Promise.all([
+      withDocumentedArTotals(organizationId, rows),
+      latestDebitNoteDateByBatch(
+        organizationId,
+        rows.map((row) => row.id),
+      ),
+    ])
     return documented.map((row) => {
       const remaining = arOutstandingSatang(row)
       const hasReceipts = remaining !== row.totalSatang
+      const remainingAmountSatang = hasReceipts && remaining > 0 ? remaining : null
       return {
         kind: 'billing' as const,
         id: row.id,
@@ -322,8 +354,11 @@ async function loadCandidates(
         amountSatang: row.totalSatang,
         // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ ยอดเข้าจริง = total − wht (`35` §6.2 · มติ PO A1)
         altAmountSatang: altAmountForBilling(row),
-        remainingAmountSatang: hasReceipts && remaining > 0 ? remaining : null,
+        remainingAmountSatang,
         referenceDate: row.sentAt,
+        // มติ O77 — ยอดค้างจากใบเพิ่มหนี้ ⇒ ช่วงวันนับจากวันออกใบเพิ่มหนี้ล่าสุด
+        remainingReferenceDate:
+          remainingAmountSatang === null ? null : debitNoteReferenceDate(row.sentAt, debitNoteDates.get(row.id) ?? null),
       }
     })
   }
@@ -463,8 +498,8 @@ export async function listMatchProposals(user: SessionUser): Promise<MatchPropos
 
   return proposals.flatMap((proposal) => {
     const transaction = byId.get(proposal.transactionId)
-    const referenceDate = proposal.candidate.referenceDate
-    if (transaction === undefined || referenceDate === null) return []
+    const referenceDate = proposal.referenceDate
+    if (transaction === undefined) return []
     const statusLabel = targetLabel.get(`${proposal.candidate.kind}:${proposal.candidate.id}`) ?? ''
     return [
       {

@@ -24,6 +24,7 @@ function asset(overrides: Partial<AssetListItemDto> & { id: string }): AssetList
     deviceCapacity: null,
     deviceColor: null,
     colorCapacityMatched: null,
+    colorCapacityNote: null,
     imeiContract: '123456789012345',
     imeiActual: null,
     serialContract: null,

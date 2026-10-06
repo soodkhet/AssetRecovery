@@ -204,6 +204,7 @@ function sampleAsset(context: DocumentSampleContext, index: number): AssetListIt
     deviceCapacity: null,
     deviceColor: null,
     colorCapacityMatched: null,
+    colorCapacityNote: null,
     imeiContract: imei,
     imeiActual: imei,
     serialContract: null,

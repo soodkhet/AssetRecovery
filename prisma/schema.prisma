@@ -703,7 +703,7 @@ enum JobStatus {
 }
 
 /// สถานะแถวคิวแจ้งเตือน (DEC-015 · มติ PO U120) — pending = รอส่ง/รอ retry · sent = ส่งแล้ว · failed = ครบเพดาน retry
-/// มติ PO U155 → U159 — ค่าที่ผู้ดูแลตั้งด้วยมือในแคตตาล็อก Model Phone (`02` §3 v4.5x-DE)
+/// มติ PO U155 → U159 — ค่าที่ผู้ดูแลตั้งด้วยมือในแคตตาล็อก Model Phone (`02` §3 v4.60)
 /// active = เปิด · hidden = ปิด — ใช้เป็น **manual override** เท่านั้น (NULL = ตามตัวกรอง) · ชนะตัวกรองเสมอ
 enum DeviceCatalogStatus {
   active
@@ -2594,10 +2594,12 @@ model Asset {
   serialContract       String?  @map("serial_contract")
   /// A6 — serial ที่ตรวจจริงตอนรับเข้าคลัง
   serialActual         String?  @map("serial_actual")
-  /// มติ PO U166 — ความจุ/สีตามสัญญา (snapshot จากเคส) + ผลติ๊ก "สี/ความจุตรง" ตอนรับเข้าคลัง (NULL = ยังไม่ตรวจ)
+  /// มติ PO U166 — ความจุ/สีตามสัญญา (snapshot จากเคส) + ผลตรวจ "สี/ความจุตรงกับสัญญา" ตอนรับเข้าคลัง (NULL = ยังไม่ตรวจ · มติ O77 = ตัวเลือกบังคับ ตรง/ไม่ตรง)
   deviceCapacity       String?  @map("device_capacity")
   deviceColor          String?  @map("device_color")
   colorCapacityMatched Boolean? @map("color_capacity_matched")
+  /// มติ O77 — เลือก "ไม่ตรง" ตอนรับเข้าคลัง ⇒ ระบุสิ่งที่พบ (บังคับ) · ตรง/ยังไม่ตรวจ = NULL
+  colorCapacityNote    String?  @map("color_capacity_note")
 
   assetStatus   AssetStatus     @default(pending_intake) @map("asset_status")
   condition     AssetCondition?

@@ -37,6 +37,8 @@ export interface HandoverDocRow {
   identifier: string
   /** ค่าที่ตรวจจริงตอนรับเข้าคลัง เมื่อ**ไม่ตรง**กับสัญญา — `null` = ตรงหรือยังไม่ได้ตรวจ */
   identifierActual: string | null
+  /** มติ O77 — ผลตรวจรับเข้า "สี/ความจุไม่ตรงสัญญา" + สิ่งที่พบ · ตรง/ยังไม่ตรวจ = `null` */
+  colorCapacityMismatch: string | null
   condition: string
   conditionNote: string | null
 }
@@ -78,6 +80,27 @@ export function documentDeviceText(row: {
 }): string {
   const attributes = deviceAttributesText(row.deviceCapacity, row.deviceColor)
   return attributes === EMPTY_DOC_VALUE ? row.deviceDesc : `${row.deviceDesc} · ${attributes}`
+}
+
+/**
+ * ผลตรวจ "สี/ความจุตรงกับสัญญา" ตอนรับเข้าคลัง (มติ PO U166 → O77 ตัวเลือกบังคับ ตรง/ไม่ตรง) — ใช้หน้ารายละเอียดเครื่อง
+ * · ยังไม่ตรวจรับ = "—" · ไม่ตรง = "ไม่ตรง — <สิ่งที่พบ>" · แถวก่อนมติ O77 ที่ไม่ได้ติ๊ก (false ไม่มีข้อความ) = "ไม่ได้ยืนยัน"
+ */
+export function colorCapacityCheckText(row: { colorCapacityMatched: boolean | null; colorCapacityNote: string | null }): string {
+  if (row.colorCapacityMatched === null) return EMPTY_DOC_VALUE
+  if (row.colorCapacityMatched) return 'ตรง'
+  const note = (row.colorCapacityNote ?? '').trim()
+  return note === '' ? 'ไม่ได้ยืนยัน' : `ไม่ตรง — ${note}`
+}
+
+/** บรรทัดกำกับในใบส่งมอบเมื่อสี/ความจุไม่ตรงสัญญา (มติ O77) — ผู้รับเห็นส่วนต่างโดยไม่ต้องเปิดระบบ เช่นเดียวกับ IMEI */
+export function documentColorCapacityMismatch(row: {
+  colorCapacityMatched: boolean | null
+  colorCapacityNote: string | null
+}): string | null {
+  if (row.colorCapacityMatched !== false) return null
+  const note = (row.colorCapacityNote ?? '').trim()
+  return note === '' ? null : `สี/ความจุไม่ตรงสัญญา: ${note}`
 }
 
 /** ตัวระบุเครื่องที่พิมพ์ลงเอกสาร — IMEI มาก่อน serial (เครื่องไม่มี IMEI คือ A6) */
@@ -135,6 +158,7 @@ export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recip
       deviceDesc: documentDeviceText(asset),
       identifier: documentIdentifier(asset),
       identifierActual: documentIdentifierActual(asset),
+      colorCapacityMismatch: documentColorCapacityMismatch(asset),
       condition: assetConditionLabel(asset.condition),
       conditionNote: asset.conditionNote,
     })),

@@ -148,6 +148,7 @@ function CaseDetailBody({ detail, canViewPhotos }: { detail: PortalCaseDetailDto
           <PortalStatusBadge display={detail.statusDisplay} />
         </Row>
         <Row label="ลูกหนี้">{detail.debtorName ?? '—'}</Row>
+        <Row label="ทรัพย์">{detail.deviceText ?? '—'}</Row>
         <Row label="วันที่ส่งเคส">{fmtDate(detail.createdAt)}</Row>
         {detail.recycleRound !== null && (
           <Row label="รอบการติดตาม">

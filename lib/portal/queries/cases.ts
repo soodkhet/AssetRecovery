@@ -164,6 +164,9 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       serviceFeeBasisSnapshot: true,
       serviceFeeFailFeeSatang: true,
       projectedRevenueSatang: true,
+      assetDescription: true,
+      assetCapacity: true,
+      assetColor: true,
     },
   })
   if (row === null) return null

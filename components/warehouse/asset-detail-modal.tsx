@@ -8,6 +8,7 @@ import { fmtDateTime } from '@/lib/format/datetime'
 import { compareAssetIdentity } from '@/lib/warehouse/imei'
 import { INTAKE_PHOTO_ANGLE_LABELS } from '@/lib/warehouse/intake'
 import { angleOfIntakePhoto, groupIntakePhotos } from '@/lib/warehouse/intake-photos'
+import { colorCapacityCheckText } from '@/lib/warehouse/handover-doc'
 import type { AssetDetailDto } from '@/lib/warehouse/types'
 import { assetConditionBadgeGroup, assetConditionLabel } from '@/lib/warehouse/warehouse-ui'
 
@@ -66,13 +67,8 @@ export function AssetDetailModal({
               {asset.serialContract !== null && (
                 <DetailRow label="Serial ที่ตรวจจริง" value={asset.serialActual ?? '—'} mono />
               )}
-              {/* มติ PO U166 — ผลติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้า (ยังไม่ได้ตรวจรับ = —) */}
-              <DetailRow
-                label="สี/ความจุตรงกับสัญญา"
-                value={
-                  asset.colorCapacityMatched === null ? '—' : asset.colorCapacityMatched ? 'ตรง' : 'ไม่ได้ยืนยัน'
-                }
-              />
+              {/* มติ PO U166 → O77 — ผลตรวจ "สี/ความจุตรงกับสัญญา" ตอนรับเข้า (ไม่ตรง = สิ่งที่พบ · ยังไม่ได้ตรวจรับ = —) */}
+              <DetailRow label="สี/ความจุตรงกับสัญญา" value={colorCapacityCheckText(asset)} />
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-slate-400">สภาพ</dt>
                 <dd>
