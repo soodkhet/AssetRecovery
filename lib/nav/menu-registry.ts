@@ -116,7 +116,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
     path: DASHBOARD_PATH,
     audiences: ALL_AUDIENCES,
     available: true,
-    plannedPhase: '6.6 (เนื้อหาจริง — รอ PO อนุมัติ mockup)',
+    plannedPhase: '6.6',
   },
   {
     id: 'cases',

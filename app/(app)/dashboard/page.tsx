@@ -1,81 +1,21 @@
-import { Badge, RefText } from '@/components/ui/badge'
-import { Card, CardHeader, PageHeader } from '@/components/ui/card'
-import { InlineAlert } from '@/components/ui/states'
+import { MainDashboard } from '@/components/dashboard/main-dashboard'
+import { PageHeader } from '@/components/ui/card'
 import { requireInternalSessionPage } from '@/lib/auth/page-guard'
-import { fmtDateTime } from '@/lib/format/datetime'
-import { UNDER_DEVELOPMENT_TEXT, visibleMenus } from '@/lib/nav/menu-registry'
 
 /**
- * แดชบอร์ดหลัก — **placeholder** ตามแผน Phase 1.5
- * เนื้อหาจริง (คิวงานต่อ role / KPI 96 E1 / แจ้งเตือน `90` §6.3) เกิดใน Phase 6.6 หลัง PO อนุมัติ
- * mockup `dashboard.html` ยังเป็น 🔶 DRAFT — ห้ามเดา business logic จากมัน (`06` §8)
+ * แดชบอร์ดหลัก — เมนูแรกของ Top Nav (Phase 6.6 · มติ PO 2026-08-16: ตาม mockup `dashboard.html`
+ * ปรับเข้าข้อมูล/ฟีเจอร์ที่มีจริง — จุดเบี่ยงบันทึกไว้ที่ `docs/PROGRESS_ARCHIVE.md`)
+ *
+ * ทางเข้าหลัง login ไม่เปลี่ยน (`resolveLandingPath()`): บริษัทไฟแนนซ์ → พอร์ทัล · พนักงานภาคสนาม → Field Tracker
+ * · role อื่นมาที่หน้านี้ — widget ทุกตัวกรองตามสิทธิ์ที่ `GET /api/dashboard` + endpoint ต้นทางของมันเอง (DEC-002)
  */
 export default async function DashboardPage() {
   const user = await requireInternalSessionPage()
-  const menus = visibleMenus(user)
 
   return (
     <>
-      <PageHeader
-        title="แดชบอร์ด"
-        description="ภาพรวมงานประจำวัน — เนื้อหาเต็มจะเปิดใช้งานเร็ว ๆ นี้"
-        action={<Badge>{UNDER_DEVELOPMENT_TEXT}</Badge>}
-      />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="บัญชีที่ใช้งานอยู่" description="ข้อมูลจาก session ปัจจุบัน" />
-          <dl className="mt-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-slate-500">ผู้ใช้</dt>
-              <dd className="font-medium text-slate-800">{user.fullName}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-slate-500">ชื่อผู้ใช้ / อีเมล</dt>
-              <dd>
-                <RefText>{[user.username, user.email].filter(Boolean).join(' · ') || '-'}</RefText>
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-slate-500">บทบาท</dt>
-              <dd>
-                <RefText>
-                  {user.roleName} · {user.roleGroup}
-                </RefText>
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-slate-500">ขอบเขตข้อมูล (scope)</dt>
-              <dd>
-                <RefText>{user.scope.kind}</RefText>
-              </dd>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <dt className="text-slate-500">เข้าสู่ระบบล่าสุด</dt>
-              <dd className="font-medium text-slate-800">{fmtDateTime(user.loginAt)}</dd>
-            </div>
-          </dl>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="เมนูที่บัญชีนี้เข้าถึงได้"
-            description="กรองตาม Top Nav Visibility Matrix"
-          />
-          <ul className="mt-4 space-y-1.5 text-sm">
-            {menus.map((menu) => (
-              <li key={menu.id} className="flex items-center justify-between gap-4">
-                <span className="font-medium text-slate-800">{menu.label}</span>
-                <RefText className="text-slate-400">{menu.path}</RefText>
-              </li>
-            ))}
-          </ul>
-          {/* ซ่อนเมนูเป็นแค่ UX — API ตรวจสิทธิ์ซ้ำเสมอ (DEC-002) · ห้ามแสดงเลขอ้างอิงบนจอ (UAT BUG-113) */}
-          <InlineAlert tone="info" className="mt-4">
-            เมนูที่เห็นขึ้นกับสิทธิ์ของคุณ — ระบบตรวจสิทธิ์ซ้ำทุกครั้งที่ทำรายการ
-          </InlineAlert>
-        </Card>
-      </div>
+      <PageHeader title="แดชบอร์ด" description={`สวัสดี ${user.fullName} — งานที่รอคุณและภาพรวมประจำวัน`} />
+      <MainDashboard />
     </>
   )
 }
