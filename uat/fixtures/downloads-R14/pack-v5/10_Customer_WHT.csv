@@ -1,0 +1,3 @@
+﻿received_date,company,company_tax_id,billing_ref,tax_invoice_ref,withheld_baht,cert_no,cert_date,cert_wht_baht,status,billing_batch_number
+06/10/2569,บริษัท ยูเอที ลิสซิ่ง จำกัด,0105561000011,ตุลาคม 2569,INV-0003,22.50,R13-CWHT-001,06/10/2569,22.50,received,BL-2569-003
+06/10/2569,บริษัท ยูเอที ลิสซิ่ง จำกัด,0105561000011,ตุลาคม 2569,INV-0008,30.00,-,-,-,pending,BL-2569-005

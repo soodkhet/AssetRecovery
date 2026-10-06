@@ -1,0 +1,12 @@
+﻿bank_txn_date,bank_ref,amount_baht,direction,matched_type,matched_ref,status,billing_batch_number
+04/10/2569,รับโอน บริษัท ยูเอที ลิสซิ่ง จำกัด (หัก ณ ที่จ่าย 3%) · อ้างอิง UATL-BILL,3879.20,credit,billing_batch,บริษัท ยูเอที ลิสซิ่ง จำกัด ตุลาคม 2569,auto_matched,BL-2569-001
+04/10/2569,รับโอน บริษัท ยูเอที แคปปิตอล จำกัด · อ้างอิง UATC-BILL,7490.00,credit,billing_batch,บริษัท ยูเอที แคปปิตอล จำกัด ตุลาคม 2569,auto_matched,BL-2569-002
+04/10/2569,โอนจ่ายรอบค่าตอบแทน inhouse IN-1 · อ้างอิง PAYOUT-IN-1,4891.50,debit,payout_batch,UAT IN-1,auto_matched,-
+04/10/2569,รับโอนไม่ทราบที่มา · อ้างอิง UNKNOWN-01,123.45,credit,-,-,unmatched_resolved,-
+05/10/2569,รับโอน บริษัท ยูเอที แคปปิตอล จำกัด งวดที่ 1 · อ้างอิง UATC-R14-P1,3000.00,credit,billing_batch,บริษัท ยูเอที แคปปิตอล จำกัด ตุลาคม 2569,manual_matched,BL-2569-006
+06/10/2569,รับโอนไม่ระบุชื่อผู้โอน · อ้างอิง R13-UNK-A,780.00,credit,billing_batch,บริษัท ยูเอที ลิสซิ่ง จำกัด ตุลาคม 2569,manual_matched,BL-2569-003
+06/10/2569,รับโอน บริษัท ยูเอที แคปปิตอล จำกัด · อ้างอิง UATC-BILL-R13,7490.00,credit,billing_batch,บริษัท ยูเอที แคปปิตอล จำกัด ตุลาคม 2569,auto_matched,BL-2569-004
+06/10/2569,รับโอนไม่ทราบที่มา · อ้างอิง R13-UNK-B,250.00,credit,-,-,suspense_refunded,-
+06/10/2569,โอนจ่ายรอบค่าตอบแทน inhouse IN-R13b · อ้างอิง PAYOUT-IN-R13b,2059.50,debit,payout_batch,UAT IN-R13b,manual_matched,-
+06/10/2569,รับโอน บริษัท ยูเอที ลิสซิ่ง จำกัด หัก ณ ที่จ่าย 3% · อ้างอิง UATL-BILL-R14,1040.00,credit,billing_batch,บริษัท ยูเอที ลิสซิ่ง จำกัด ตุลาคม 2569,auto_matched,BL-2569-005
+06/10/2569,รับโอน บริษัท ยูเอที แคปปิตอล จำกัด งวดที่ 2 · อ้างอิง UATC-R14-P2,4490.00,credit,billing_batch,บริษัท ยูเอที แคปปิตอล จำกัด ตุลาคม 2569,manual_matched,BL-2569-006

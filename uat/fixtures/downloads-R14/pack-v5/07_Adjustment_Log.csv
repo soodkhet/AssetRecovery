@@ -1,0 +1,2 @@
+﻿adjustment_ref,target_type,target_ref,amount_baht,reason,approved_by,approved_date,billing_batch_number
+ADJ-2569-10-001,revenue,UAT-CO1-001,-100.00,ลดค่าบริการ C1 ตามที่ตกลงกับบริษัทไฟแนนซ์ — ทรัพย์ชำรุดเล็กน้อย ส่วนลด 100 บาท ก่อน VAT (ใบลดหนี้ออกโดยสำนักงานบัญชี) UAT R8,อำนาจ บริหารกิจ,04/10/2569,-
