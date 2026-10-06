@@ -54,7 +54,7 @@
     "PB-O-X": { "status": "cancelled" }
   },
   "billing": {
-    "BL-2569-001": { "company": "CO1", "status": "paid", "total": 66049, "received": 64197, "customerWht": 1852, "arEnd": 10700 },
+    "BL-2569-001": { "company": "CO1", "status": "partially_paid", "total": 66049, "received": 64197, "customerWht": 1852, "arEnd": 10700 },
     "BL-2569-002": { "company": "CO2", "status": "partially_paid", "total": 749000, "received": 400000, "arEnd": 295500 },
     "BL-2569-003": { "company": "CO3", "status": "paid", "total": 289296, "received": 281185, "customerWht": 8111, "arEnd": 0 },
     "BL-2569-004": { "company": "CO3", "status": "sent", "total": 214000, "received": 0, "arEnd": 214000 },

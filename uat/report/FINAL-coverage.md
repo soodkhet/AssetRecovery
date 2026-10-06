@@ -276,7 +276,7 @@
 | advance | pending_approval: ADV-6 (out1) · approved: ADV-8 (out2, ครบกำหนด 20/10/2569) · overdue: ADV-5 (in2, job — จ่ายออกแล้วใน PB-O-ADV-IN · O74: overdue นับเฉพาะที่จ่ายแล้ว) · cleared: ADV-1–4 · rejected: ADV-7 (in1) |
 | payout batch | checking: PB-O-IN2 · file_generated: PB-O-OUT2 · completed: PB-S-IN, PB-S-OUT, PB-O-IN1, PB-O-OUT1 · cancelled: PB-O-X · **draft: เห็นไม่ได้** (สร้างแล้วเป็น checking ในทรานแซกชันเดียว) |
 | revenue | ready_for_billing: FT-04, FT-11, FT-12 · billed: ที่เหลือ |
-| billing batch | draft: BL ร่าง CO2 (FT-06+07) · sent: BL-006 · partially_paid: BL-002, BL-005 · paid: BL-001, 003, 007, 008 |
+| billing batch | draft: BL ร่าง CO2 (FT-06+07) · sent: BL-006 · partially_paid: BL-001 (O75 — ใบเพิ่มหนี้ DN-1 ค้าง 107.00 หลังชำระครบ), BL-002, BL-005 · paid: 003, 007, 008 |
 | adjustment | approved: ADJ-1 · pending_approval: ADJ-2 · rejected: ADJ-3 |
 | tax invoice | active: INV-0001/0002/0003/0005 · cancelled: INV-0004 (ออกแทนด้วย 0005) |
 | credit/debit note | active: CN-1, DN-1 · cancelled: CN-2 |
@@ -550,3 +550,4 @@ VAT รวมต่อเคสแล้วรวมเป็นใบ (Q13 [ส
 | 07/10/2569 | BX2 | H.5 เพิ่ม BL-2569-010 CO4 (FT-12 300000) รับ 294999 ขาด 5001 > เพดาน ⇒ partially_paid · AR CO4 0 → 5001 · AR รวมคง **525201** · H.6 ต.ค. ค่าธรรมเนียมธนาคาร 5000 → 8520 · รายได้รอวางบิลเหลือ FT-04/FT-11 | U144 — แถว "ขาดเกินเพดาน" แทน BL-006 |
 | 07/10/2569 | FD | A/C T4 = FLAT สำเร็จ 300000 / **ไม่สำเร็จ 100000** (เดิม cof=true = 300000) · T1/T2/T5 ไม่เก็บ · T3 v1 ไม่สำเร็จ = base 200000 (ผลเท่าเดิม) · H.1 FT-12 300000 → **100000** · FT-13 r1 300000 → **100000** (รวม 400000) · รายได้ ต.ค. ก่อน VAT 2942716 → **2542716** · รวม 3085706 → **2685706** · H.5 BL-008 600000 → **400000** (รับเต็ม 400000) · BL-010 300000 → **100000** รับ 94999 (ขาด 5001 คงเดิม) · AR คง **525201** · H.6 ต.ค. รายได้ก่อน VAT **2542716** · H.7 GP FT-13 450000/75.00% → **250000/62.50%** | U165 |
 | 07/10/2569 | HA | G: ธุรการตาม 50 ทวิ ลูกค้า 2 → **3** (BL-006 ภาษีลูกค้าหัก 14.81 ตาม U163) · co2.admin บิลค้าง 1 → **0** (role แอดมินไม่มีหมวดการเงินพอร์ทัล) · E/I: ADV-5 โอนจริงใน PB-O-ADV-IN (05/10 completed) ก่อน job overdue 06/10 — golden H ไม่เปลี่ยน · U169 ไม่กระทบใบกำกับใน seed (INV-0001…0005 ไม่ใช่บิลที่ตัดส่วนต่าง) | O74 · U163 · U169 |
+- 07/10/2569 (O75) BL-2569-001 status `paid` → `partially_paid` เพราะใบเพิ่มหนี้ DN-1 ออกหลังชำระครบ ทำให้ยอดตามเอกสารค้าง 107.00 · ยอดเงินอื่นไม่เปลี่ยน
