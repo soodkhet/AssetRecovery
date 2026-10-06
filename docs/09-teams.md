@@ -14,6 +14,7 @@
 | v1 | (เดิม) | สร้างไฟล์ครั้งแรก — Team CRUD, Manager/Supervisor scope |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + ชี้แจงว่า `manager_ids` (§7.1) implement จริงผ่าน table `team_managers` (N:N join table) ตาม `02-database-schema-design.md` ไม่ใช่ array column ตรงๆ บน `teams` — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
 | v2.1 | 03/10/2569 | **มติ PO 03/10/2569 (UAT Q12 · BUG-009) — ทีม/แผน/หัวหน้า/ผู้จัดการต้องเป็นฝั่งเดียวกัน**: §7 dropdown แผนแสดงเฉพาะฝั่งของทีม · §7.1 หัวหน้า = role หัวหน้าทีมติดตามทรัพย์ฝั่งนั้น · ผู้จัดการ = role ผู้จัดการทีมติดตามทรัพย์ฝั่งนั้น · UI กรอง + API ตรวจ (`REQUIRED_MISSING` + field error สำหรับแผน · `INVALID_TEAM_MEMBER` สำหรับคน) |
+| v2.2-CB | 07/10/2569 | **มติ PO U138** — `GET/PATCH/DELETE /api/teams/:id` และ sub-route (`managers`, `agents`, `agents/:agent_id/cases`, `kanban`) เมื่อทีมอยู่ในองค์กรแต่**นอก scope** ของผู้เรียก ตอบ **404 `TEAM_NOT_FOUND`** เหมือนทีมที่ไม่มีจริง (เดิม 403) — ไม่ leak ว่ามี record |
 
 ขอบเขตเอกสารนี้: จัดการทีม Inhouse/Outsource — ผู้จัดการ (many-to-many ผ่าน `team_managers`), หัวหน้าทีม (1:1), สมาชิก, พื้นที่จังหวัดที่รับผิดชอบ, และการผูก Compensation Plan
 
@@ -103,6 +104,7 @@
 | REQUIRED_MISSING | ข้อมูลบังคับไม่ครบ | inline error |
 | DUPLICATE_RECORD | ข้อมูลซ้ำ | reject พร้อมอธิบาย |
 | PERMISSION_DENIED | ไม่มีสิทธิ์ | UI hide/disable และ API 403 |
+| TEAM_NOT_FOUND | ทีมไม่มีจริง **หรือ**อยู่นอก scope ของผู้เรียก (U138) | 404 เหมือนกันทั้งสองกรณี — ไม่ leak ว่ามี record |
 | INVALID_STATUS | สถานะไม่ถูก | reject transition |
 
 ## 12. Permission Requirements

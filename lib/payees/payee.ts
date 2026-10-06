@@ -264,9 +264,11 @@ export function checkBankAccountName(payeeName: string, accountName: string | nu
 /**
  * ฟิลด์ที่ต้องครบก่อนกด "ยืนยัน" (`18` §9 — พร้อมเข้ารอบจ่ายเงินของไฟล์ 17)
  * + ที่อยู่ผู้ถูกหักภาษีครบ 5 ช่อง (มติ PO U94 ข้อ 1 — ใบ 50 ทวิ ต้องมีที่อยู่ตาม ม.50 ทวิ)
+ *
+ * `taxProfileId` **ไม่อยู่ในรายการนี้แล้ว** (BUG-SF1 · มติ PO U121) — ตรวจแยกด้วย `hasWhtRateSource()`
+ * เพราะ Tax Profile รายคนเป็นข้อยกเว้น ผู้รับที่ใช้ค่าเริ่มต้นตามประเภทผู้รับต้องยืนยันได้
  */
 export const REQUIRED_FOR_VERIFY = [
-  'taxProfileId',
   'nationalId',
   'bankName',
   'accountName',
@@ -278,24 +280,62 @@ export const REQUIRED_FOR_VERIFY = [
   'addressPostalCode',
 ] as const satisfies readonly (keyof PayeeValues)[]
 
-export function missingFieldsForVerification(values: PayeeValues): string[] {
+/** capability ของการบันทึก/ยืนยันข้อมูลผู้รับเงิน (ไฟล์ 18 §12) — ใช้ร่วม API และฟอร์มผู้ใช้ (U131) */
+export const MANAGE_PAYEE_PROFILE_CAPABILITY = 'manage_payee_profile'
+
+/** ชื่อฟิลด์ที่รายงานเมื่อผู้รับยังไม่มีแหล่งอัตราภาษีใดเลย — UI ใช้ชี้ไปที่ช่อง Tax Profile */
+export const WHT_RATE_SOURCE_FIELD = 'taxProfileId'
+
+/**
+ * ผู้รับมีแหล่งอัตราภาษีหัก ณ ที่จ่ายที่ resolve ได้ไหม — ลำดับเดียวกับ `resolveWhtRate()` (`lib/finance/wht-calc.ts`)
+ * ฝั่ง payee: Tax Profile รายคน (override) → ค่าเริ่มต้นตามประเภทผู้รับ (ฝั่ง × ชนิด) · หรืออัตรา 40(1)/40(2) รายคน
+ * ของบุคคลธรรมดา (นิติบุคคลไม่มีเงินได้ 40(1)/40(2) — มติ U96 #2 ⇒ อัตรารายคนไม่นับ)
+ * (อัตราของแผนเป็น fallback ชั่วคราวระดับรายการ — ไม่นับเป็นความพร้อมของผู้รับ)
+ * @param typeDefaultAvailable มีค่าเริ่มต้นตามประเภทสำหรับฝั่ง × ชนิดของผู้รับรายนี้ (`pickTaxProfileDefault() !== null`)
+ */
+export function hasWhtRateSource(values: PayeeValues, typeDefaultAvailable: boolean): boolean {
   const normalized = normalizePayeeValues(values)
-  return REQUIRED_FOR_VERIFY.filter((field) => normalized[field] === null)
+  if (normalized.taxProfileId !== null || typeDefaultAvailable) return true
+  return normalized.payeeType === 'individual' && normalized.wht402Pct !== null
+}
+
+export function missingFieldsForVerification(values: PayeeValues, options: { typeDefaultAvailable?: boolean } = {}): string[] {
+  const normalized = normalizePayeeValues(values)
+  const missing: string[] = hasWhtRateSource(values, options.typeDefaultAvailable === true) ? [] : [WHT_RATE_SOURCE_FIELD]
+  return [...missing, ...REQUIRED_FOR_VERIFY.filter((field) => normalized[field] === null)]
+}
+
+/** ข้อความเมื่อขาดแหล่งอัตราภาษีอย่างเดียว — บอกทางแก้ชัด (ไม่ใช่ "ข้อมูลไม่ครบ" ลอย ๆ) */
+export const WHT_RATE_SOURCE_MISSING_MESSAGE = {
+  title: 'ยังไม่มีอัตราภาษีหัก ณ ที่จ่ายของผู้รับรายนี้',
+  message:
+    'ผู้รับรายนี้ยังไม่มีกติกาภาษี (Tax Profile) ทั้งแบบรายคนและค่าเริ่มต้นตามประเภทผู้รับ — เลือก Tax Profile ให้ผู้รับ กรอกอัตรา 40(1)/40(2) รายคน หรือให้ผู้ดูแลตั้งค่าเริ่มต้นตามประเภทผู้รับก่อนยืนยัน',
+} as const
+
+/** คำใบ้บนปุ่ม "ยืนยัน" ที่ยังกดไม่ได้ — `null` = ครบแล้ว (ใช้ร่วมหน้า Payee + ฟอร์มผู้ใช้ U131) */
+export function verificationHint(missing: readonly string[]): string | null {
+  if (missing.length === 0) return null
+  if (missing.length === 1 && missing[0] === WHT_RATE_SOURCE_FIELD) return WHT_RATE_SOURCE_MISSING_MESSAGE.message
+  return 'กรอกข้อมูลภาษี ที่อยู่ และบัญชีธนาคารให้ครบก่อนยืนยัน'
 }
 
 /**
  * `18` §9/§10 — เกตก่อนตั้ง `is_verified = true`
  * @param requireIdDocument `finance_policy_settings.require_payee_id_document` (`13` §6.2.1)
+ * @param typeDefaultAvailable มีค่าเริ่มต้นตามประเภทผู้รับให้ใช้ (มติ PO U121) — ไม่ระบุ = ไม่มี
  */
 export function assertPayeeReadyForVerification(input: {
   values: PayeeValues
   requireIdDocument: boolean
+  typeDefaultAvailable?: boolean
 }): void {
-  const missing = missingFieldsForVerification(input.values)
+  const missing = missingFieldsForVerification(input.values, { typeDefaultAvailable: input.typeDefaultAvailable })
   if (missing.length > 0) {
+    const onlyRateSource = missing.length === 1 && missing[0] === WHT_RATE_SOURCE_FIELD
     throw new PayeeError('REQUIRED_MISSING', {
       detail: `missing=${missing.join(',')}`,
       context: { fields: missing },
+      ...(onlyRateSource ? { message: WHT_RATE_SOURCE_MISSING_MESSAGE } : {}),
     })
   }
   assertPayeeNationalId(normalizePayeeValues(input.values).nationalId)

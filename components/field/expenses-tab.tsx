@@ -7,6 +7,7 @@ import { HotelClaimModal } from '@/components/field/hotel-claim-modal'
 import { hotelNightsCapText, receiptInCompanyNameText } from '@/lib/field/hotel-claim'
 import { IconAlert, IconChevronRight, IconFile, IconPlus } from '@/components/field/field-icons'
 import { ResubmitExpenseModal } from '@/components/field/resubmit-expense-modal'
+import { PAYMENT_INFO_INCOMPLETE_LABEL } from '@/components/payees/payment-info-incomplete-badge'
 import { Button, EmptyState, ErrorState, InlineAlert, LoadingState, Select, StatusBadge } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
@@ -247,6 +248,14 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
 
   return (
     <>
+      {data?.paymentInfoIncomplete === true && (
+        <div className="mb-2.5 lg:max-w-[480px]" data-testid="expense-payment-info-incomplete">
+          <InlineAlert tone="warning" title={PAYMENT_INFO_INCOMPLETE_LABEL}>
+            ข้อมูลรับเงินของคุณ (เลขผู้เสียภาษี ที่อยู่ หรือบัญชีธนาคาร) ยังไม่ครบ — ติดต่อการเงิน/ผู้ดูแลให้เติมข้อมูล
+            ไม่งั้นรายการที่อนุมัติแล้วจะยังจ่ายเงินไม่ได้
+          </InlineAlert>
+        </div>
+      )}
       <div
         className="mb-2.5 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-sm lg:max-w-[480px]"
         data-testid="expense-pending-all-tabs"

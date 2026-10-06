@@ -97,6 +97,19 @@ export const payeeUpdateSchema = payeeFieldsSchema.extend({ reason: reasonSchema
 /** ยืนยัน Payee (`18` §9) — ไม่มีฟิลด์ให้แก้ มีแต่เหตุผล (กระทบธนาคาร/ภาษี ⇒ reason บังคับ) */
 export const payeeVerifySchema = z.object({ reason: reasonSchema })
 
+/**
+ * ส่วน "ข้อมูลรับเงิน" ในฟอร์มเพิ่ม/แก้ผู้ใช้ (มติ PO U131) — ฟิลด์ชุดเดียวกับฟอร์ม Payee
+ * + ติ๊ก "ยืนยันข้อมูลรับเงิน" (สิทธิ์/audit เดิมของการยืนยัน) + เหตุผล (หมวด bank — บังคับเหมือน API ผู้รับเงิน)
+ * ฟอร์มส่งส่วนนี้เฉพาะเมื่อแก้ข้อมูลในส่วนนี้หรือติ๊กยืนยัน · ไม่ส่ง = ไม่แตะ Payee
+ */
+export const userPaymentSchema = z.object({
+  fields: payeeFieldsSchema,
+  verify: z.boolean().default(false),
+  reason: reasonSchema,
+})
+
+export type UserPaymentSchemaInput = z.infer<typeof userPaymentSchema>
+
 export const payeeListQuerySchema = z.object({
   status: z.enum(['all', 'verified', 'unverified']).default('all'),
   search: z.string().trim().max(120).optional(),

@@ -30,5 +30,7 @@ export interface UserDto {
   lastLoginAt: string | null
   /** จำนวนงานภาคสนามที่ยังไม่จบของผู้ใช้คนนี้ — ใช้เตือนก่อนระงับบัญชี (D7 default) */
   activeCaseCount: number
+  /** Payee ที่ผูกกับผู้ใช้ (มติ PO U131 — ฟอร์มผู้ใช้โหลดข้อมูลรับเงินจากตัวนี้) · `null` = ยังไม่มี */
+  payeeId: string | null
   updatedAt: string
 }

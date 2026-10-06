@@ -23,6 +23,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     payeeId: 'payee-1',
     payeeName: 'พนักงาน ก',
     payeeVerified: true,
+    payeeInfoIncomplete: false,
     expenseType: 'fuel',
     expenseDate: '2026-08-01',
     distanceKm: '128.50',

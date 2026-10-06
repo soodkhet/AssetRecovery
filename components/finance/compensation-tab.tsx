@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { CalcDetailModal } from '@/components/finance/calc-detail-modal'
 import { useApprovalActions } from '@/components/finance/use-approval-actions'
+import { PaymentInfoIncompleteBadge } from '@/components/payees/payment-info-incomplete-badge'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
   Badge,
@@ -92,6 +93,11 @@ export function CompensationTab() {
                       <p className="font-mono text-xs font-semibold text-slate-700">{item.caseRef ?? '— ไม่ผูกเคส'}</p>
                       <p className="text-xs text-slate-500">{item.payeeName}</p>
                       {item.agentName !== null && <p className="text-[10px] text-slate-400">ผู้ปฏิบัติงาน: {item.agentName}</p>}
+                      {item.payeeInfoIncomplete && (
+                        <div className="mt-1">
+                          <PaymentInfoIncompleteBadge title="เติมข้อมูลรับเงินในหน้าผู้ใช้งานก่อนถึงรอบจ่าย" />
+                        </div>
+                      )}
                     </Td>
                     <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
                     <Td>

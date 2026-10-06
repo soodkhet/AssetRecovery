@@ -1512,6 +1512,42 @@ function renderModal() {
           </select>
         </div>
       </div>
+      <!-- ข้อมูลรับเงิน: เฉพาะกลุ่ม Inhouse/Outsource + ผู้ถือสิทธิ์ผู้รับเงิน — ฟิลด์ชุดเดียวกับหน้า Payee (มติ PO U131) -->
+      <section id="m_userPayment" class="space-y-3 rounded-lg border border-slate-200 p-4 ${(defaultGroup==='inhouse'||defaultGroup==='outsource')?'':'hidden'}">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">ข้อมูลรับเงิน</h3>
+            <p class="text-xs text-slate-500 mt-0.5">ใช้จ่ายค่าตอบแทนและออกหนังสือรับรองการหักภาษี — ชื่อผู้รับเงินใช้ชื่อ-นามสกุลของผู้ใช้</p>
+          </div>
+          <span class="text-[11px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full font-semibold">ข้อมูลรับเงินไม่ครบ</span>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">ประเภทผู้รับเงิน <span class="text-red-500">*</span></label>
+            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option>บุคคลธรรมดา</option><option>นิติบุคคล</option></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">คำนำหน้าชื่อ</label>
+            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option>— ไม่ระบุ —</option><option>นาย</option><option>นาง</option><option>นางสาว</option></select>
+          </div>
+          <div class="col-span-2">${formInput('m_payTaxId', 'เลขบัตรประชาชน / เลขทะเบียนนิติบุคคล (13 หลัก)', '', 'text', '1234567890123')}</div>
+          <div class="col-span-2">
+            <label class="block text-xs font-bold text-slate-700 mb-1">กติกาภาษี (Tax Profile)</label>
+            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option>— ยังไม่ผูก (ใช้ค่าเริ่มต้นตามประเภทผู้รับ) —</option></select>
+          </div>
+          <div class="col-span-2">${formInput('m_payWht402', 'อัตราหัก 40(1)/40(2) (%)', '', 'text', 'เช่น 2.50')}</div>
+          <div class="col-span-2">${formInput('m_payAddr', 'ที่อยู่ผู้ถูกหักภาษี (บ้านเลขที่/ถนน · ตำบล/แขวง · อำเภอ/เขต · จังหวัด · รหัสไปรษณีย์)', '', 'text', '')}</div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">เงื่อนไขการหักภาษี ณ ที่จ่าย</label>
+            <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus-ring"><option>(1) หัก ณ ที่จ่าย</option></select>
+          </div>
+          ${formInput('m_payBank', 'ธนาคาร', '', 'text', 'ธนาคารกสิกรไทย')}
+          ${formInput('m_payAccName', 'ชื่อบัญชี', '', 'text', '')}
+          ${formInput('m_payAccNo', 'เลขบัญชี', '', 'text', '')}
+        </div>
+        <label class="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" class="mt-0.5"> <span><span class="font-semibold">ยืนยันข้อมูลรับเงิน</span> — ตรวจเลขบัญชีและข้อมูลภาษีกับเอกสารแล้ว</span></label>
+        ${formInput('m_payReason', 'เหตุผลการแก้ข้อมูลรับเงิน', '', 'text', 'กรอกเมื่อแก้ส่วนนี้หรือติ๊กยืนยัน', true)}
+      </section>
     </div>`;
   }
   else if (type === 'create-comp' || type === 'edit-comp') {

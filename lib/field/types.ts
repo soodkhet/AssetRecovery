@@ -284,6 +284,11 @@ export interface FieldExpenseListDto {
    * (job รายวันคิดหลังจบวัน) · หน้าจอแสดง "รอคำนวณหลังจบวัน" แทนการเดายอด · แท็บ "เบิกแยก" = ว่างเสมอ
    */
   pendingFieldDates: string[]
+  /**
+   * มติ PO U131 — ข้อมูลรับเงินของผู้เรียกยังไม่ครบ (ภาษี/ที่อยู่/บัญชี/อัตรา) ⇒ ป้าย "ข้อมูลรับเงินไม่ครบ"
+   * ตั้งแต่ส่งเบิก (ยังไม่มี payee = ยังไม่เคยเบิก ⇒ `false`)
+   */
+  paymentInfoIncomplete: boolean
 }
 
 export interface FieldIncomeItemDto {

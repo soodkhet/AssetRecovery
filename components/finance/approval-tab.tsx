@@ -10,6 +10,7 @@ import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
 import { SettleAdvanceModal } from '@/components/finance/settle-advance-modal'
 import { useAdvances } from '@/components/finance/use-advances'
 import { useApprovalActions } from '@/components/finance/use-approval-actions'
+import { PaymentInfoIncompleteBadge } from '@/components/payees/payment-info-incomplete-badge'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
   Badge,
@@ -182,6 +183,11 @@ export function ApprovalTab() {
                       <Td>
                         <p className="font-semibold text-slate-900">{item.payeeName}</p>
                         {item.agentName !== null && <p className="text-[10px] text-slate-500">{item.agentName}</p>}
+                        {item.payeeInfoIncomplete && (
+                          <div className="mt-1">
+                            <PaymentInfoIncompleteBadge title="เติมข้อมูลรับเงินในหน้าผู้ใช้งานก่อนถึงรอบจ่าย" />
+                          </div>
+                        )}
                       </Td>
                       <Td numeric>
                         <p className="font-semibold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</p>

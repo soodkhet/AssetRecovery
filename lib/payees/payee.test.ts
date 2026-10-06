@@ -168,10 +168,35 @@ describe('assertPayeeReadyForVerification (`18` §9/§10)', () => {
     )
   })
 
-  it('ยังไม่ผูก Tax Profile ⇒ ยืนยันไม่ได้ (`18` §7.1 required)', () => {
+  it('ไม่มี Tax Profile รายคน · ไม่มีค่าเริ่มต้นตามประเภท · ไม่มีอัตรา 40(2) ⇒ ยืนยันไม่ได้ พร้อมข้อความชัด (BUG-SF1)', () => {
+    const values = complete({ taxProfileId: null })
+    expect(missingFieldsForVerification(values)).toEqual(['taxProfileId'])
+    expect(() => assertPayeeReadyForVerification({ values, requireIdDocument: false })).toThrow(
+      expect.objectContaining({ code: 'REQUIRED_MISSING', title: 'ยังไม่มีอัตราภาษีหัก ณ ที่จ่ายของผู้รับรายนี้' }),
+    )
+  })
+
+  it('ไม่มี Tax Profile รายคน แต่มีค่าเริ่มต้นตามประเภทผู้รับ ⇒ ยืนยันได้ (BUG-SF1 · U121)', () => {
+    const values = complete({ taxProfileId: null })
+    expect(missingFieldsForVerification(values, { typeDefaultAvailable: true })).toEqual([])
     expect(() =>
-      assertPayeeReadyForVerification({ values: complete({ taxProfileId: null }), requireIdDocument: false }),
-    ).toThrow(expect.objectContaining({ code: 'REQUIRED_MISSING' }))
+      assertPayeeReadyForVerification({ values, requireIdDocument: false, typeDefaultAvailable: true }),
+    ).not.toThrow()
+  })
+
+  it('บุคคลธรรมดาไม่มี Tax Profile แต่มีอัตรา 40(1)/40(2) รายคน ⇒ ยืนยันได้ · นิติบุคคลไม่นับอัตรานี้', () => {
+    expect(missingFieldsForVerification(complete({ taxProfileId: null, wht402Pct: 3 }))).toEqual([])
+    expect(
+      missingFieldsForVerification(complete({ payeeType: 'corporate', nameTitle: null, taxProfileId: null, wht402Pct: 3 })),
+    ).toEqual(['taxProfileId'])
+  })
+
+  it('ขาดทั้งแหล่งอัตราและข้อมูลอื่น ⇒ ข้อความกลาง "ข้อมูลไม่ครบ" + รายชื่อฟิลด์ทั้งหมด', () => {
+    const values = complete({ taxProfileId: null, bankName: null })
+    expect(missingFieldsForVerification(values)).toEqual(['taxProfileId', 'bankName'])
+    expect(() => assertPayeeReadyForVerification({ values, requireIdDocument: false })).toThrow(
+      expect.objectContaining({ code: 'REQUIRED_MISSING', title: 'ข้อมูลไม่ครบ' }),
+    )
   })
 
   it('policy `require_payee_id_document = true` แต่ไม่มีไฟล์แนบ ⇒ PAYEE_ID_DOCUMENT_REQUIRED', () => {
