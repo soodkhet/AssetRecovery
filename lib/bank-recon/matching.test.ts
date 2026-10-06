@@ -137,15 +137,26 @@ describe('MATCH_NOTE_REQUIRED (`35` §11)', () => {
     expect(isExactMatchAmount(800000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(false)
   })
 
-  it('whtWithheldForReceipt คืนส่วนต่างเฉพาะตอนรับยอด total − wht (A1)', () => {
+  it('whtWithheldForReceipt คืนส่วนต่างเฉพาะตอนรับยอด total − wht (A1) · เพดาน 0', () => {
+    const none = { priorReceivedSatang: 0, priorWhtSatang: 0, toleranceSatang: 0 }
     // ลูกค้าหัก WHT ก่อนโอน ⇒ เข้าจริง 7,800.00 จากบิล 8,025.00 ⇒ เครดิตภาษี 225.00
-    expect(whtWithheldForReceipt(780000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(22500)
-    expect(whtWithheldForReceipt(-780000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(22500)
+    expect(whtWithheldForReceipt(780000, { amountSatang: 802500, altAmountSatang: 780000 }, none)).toBe(22500)
+    expect(whtWithheldForReceipt(-780000, { amountSatang: 802500, altAmountSatang: 780000 }, none)).toBe(22500)
     // รับเต็มจำนวน = ไม่มีการหักภาษี
-    expect(whtWithheldForReceipt(802500, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(0)
-    expect(whtWithheldForReceipt(802500, { amountSatang: 802500, altAmountSatang: null })).toBe(0)
-    // ยอดไม่ตรงทั้งสองค่า (จ่ายบางส่วน/ค่าธรรมเนียม) — ห้ามเดาว่าเป็นภาษีหัก ณ ที่จ่าย
-    expect(whtWithheldForReceipt(800000, { amountSatang: 802500, altAmountSatang: 780000 })).toBe(0)
+    expect(whtWithheldForReceipt(802500, { amountSatang: 802500, altAmountSatang: 780000 }, none)).toBe(0)
+    expect(whtWithheldForReceipt(802500, { amountSatang: 802500, altAmountSatang: null }, none)).toBe(0)
+    // ยอดไม่ตรงทั้งสองค่า + ไม่มีเพดาน — ห้ามเดาว่าเป็นภาษีหัก ณ ที่จ่าย
+    expect(whtWithheldForReceipt(800000, { amountSatang: 802500, altAmountSatang: 780000 }, none)).toBe(0)
+  })
+
+  it('U163 — ภาษีลูกค้าหัก + ค่าธรรมเนียมโอน: ขาดจากยอดคาดรับไม่เกินเพดาน ⇒ ภาษีเต็ม', () => {
+    const bill = { amountSatang: 321000, altAmountSatang: 312000 }
+    const ctx = { priorReceivedSatang: 0, priorWhtSatang: 0, toleranceSatang: 5000 }
+    expect(whtWithheldForReceipt(310500, bill, ctx)).toBe(9000)
+    expect(whtWithheldForReceipt(306999, bill, ctx)).toBe(0)
+    expect(whtWithheldForReceipt(321000, bill, ctx)).toBe(0)
+    // ลูกค้าไม่ได้ตั้งให้หัก ⇒ ไม่มีภาษี (ส่วนต่างเป็นเรื่องค่าธรรมเนียมล้วน)
+    expect(whtWithheldForReceipt(310500, { amountSatang: 321000, altAmountSatang: null }, ctx)).toBe(0)
   })
 
   it('hasNote ตัดช่องว่างล้วนทิ้ง', () => {

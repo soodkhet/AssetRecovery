@@ -552,6 +552,54 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
     expect(billing.bankFeeWrittenOffDate?.toISOString()).toBe(receipt.receivedDate.toISOString())
   })
 
+  it('มติ PO U163 — ลูกค้าหักภาษี + ค่าธรรมเนียมโอนปนกัน: บิล 3,210 · หัก 90 · เงินเข้า 3,105 ⇒ ภาษี 90 + ค่าธรรมเนียม 15 · paid · รอ 50 ทวิ 90', async () => {
+    await seedBilling(BILLING_A, 321000)
+    await seedRevenueIn(BILLING_A, 300000, 21000) // บริษัท A หัก 3% ของยอดก่อน VAT = 9,000
+    const id = await importUnmatched('"3,105.00"')
+
+    const { result } = await recon.matchBankTransaction(ctx, id, {
+      targetKind: 'billing',
+      targetId: BILLING_A,
+      matchNote: 'ลูกค้าหักภาษี ณ ที่จ่าย + ค่าธรรมเนียมโอน',
+      confirmRematch: false,
+    })
+    expect(result?.effect).toMatchObject({
+      kind: 'billing',
+      billingStatus: 'paid',
+      outstandingSatang: 0,
+      bankFeeWrittenOffSatang: 1500,
+    })
+
+    const receipt = await db().cashReceipt.findFirstOrThrow({ where: { billingBatchId: BILLING_A } })
+    expect(receipt.amountSatang).toBe(310500)
+    expect(receipt.whtWithheldByCustomerSatang).toBe(9000)
+    const billing = await db().billingBatch.findUniqueOrThrow({ where: { id: BILLING_A } })
+    expect(billing.receivedSatang).toBe(310500)
+    expect(billing.whtWithheldByCustomerSatang).toBe(9000)
+    expect(billing.bankFeeWrittenOffSatang).toBe(1500)
+    expect(billing.status).toBe('paid')
+    // U40 — รายการรอ 50 ทวิ ของลูกค้าเท่าภาษีที่หักเต็ม (ไม่ใช่ 0 และไม่ใช่ 105)
+    const pending = await db().customerWhtCertificate.findMany({ where: { billingBatchId: BILLING_A } })
+    expect(pending.map((row) => [row.status, row.withheldSatang])).toEqual([['pending', 9000]])
+  })
+
+  it('มติ PO U163 — ขาดจากยอดคาดรับเกินเพดาน ⇒ ไม่นับภาษี · ค้างบางส่วนตามเดิม', async () => {
+    await seedBilling(BILLING_A, 321000)
+    await seedRevenueIn(BILLING_A, 300000, 21000)
+    const id = await importUnmatched('"3,000.00"')
+
+    const { result } = await recon.matchBankTransaction(ctx, id, {
+      targetKind: 'billing',
+      targetId: BILLING_A,
+      matchNote: 'ลูกค้าโอนมาไม่ครบ',
+      confirmRematch: false,
+    })
+    expect(result?.effect).toMatchObject({ kind: 'billing', billingStatus: 'partially_paid', bankFeeWrittenOffSatang: 0 })
+    const receipt = await db().cashReceipt.findFirstOrThrow({ where: { billingBatchId: BILLING_A } })
+    expect(receipt.whtWithheldByCustomerSatang).toBe(0)
+    expect(await db().customerWhtCertificate.count({ where: { billingBatchId: BILLING_A } })).toBe(0)
+  })
+
   it('เงินเข้าจับกับรอบจ่ายไม่ได้ (ผิดฝั่ง) ⇒ BANK_TRANSACTION_INVALID_STATUS', async () => {
     await seedPayout(PAYOUT_A, 12000000)
     const id = await importUnmatched()

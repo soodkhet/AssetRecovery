@@ -67,6 +67,42 @@ export function resolveBankFeeWriteOff(input: {
 }
 
 /**
+ * มติ PO 07/10/2569 U163 (`22` §6.11.1 · ต่อยอด A1/U144) — **ภาษีที่ลูกค้าหัก ณ ที่จ่าย ของใบเงินรับใบนี้**
+ * เมื่อเงินเข้ามีทั้งภาษีที่ลูกค้าหัก + ค่าธรรมเนียมโอนปนกัน ⇒ **นับภาษีก่อน ส่วนต่างที่เหลือเป็นค่าธรรมเนียม**
+ *
+ * ให้ `net = total − expectedWht` (ยอดคาดรับหลังลูกค้าหัก) และ `cumulative = priorReceived + receipt` (ยอดรับสะสม):
+ * - `net − tolerance <= cumulative <= net` ⇒ ภาษีลูกค้าหัก **เต็มจำนวนที่คาด** (หักส่วนที่ใบก่อนบันทึกไปแล้ว)
+ *   — ส่วนต่าง `net − cumulative` (≤ เพดาน) ไปเป็นค่าธรรมเนียมธนาคารใน `resolveBankFeeWriteOff()`
+ * - รับเต็มยอดบิล (ลูกค้าไม่หัก) / ขาดเกินช่วง / ลูกค้าไม่ได้ตั้งให้หัก (`expectedWht = 0`) ⇒ `0` (พฤติกรรมเดิม)
+ * · `tolerance = 0` ⇒ เหลือกรณีเงินเข้า = `net` พอดี = กติกา A1 เดิม
+ * · เลขจำนวนเต็มล้วน ไม่คิดอัตราใหม่ — `expectedWht` มาจากยอดที่ snapshot/ประมาณไว้กับรอบวางบิลแล้ว
+ */
+export function resolveCustomerWhtForReceipt(input: {
+  totalSatang: number
+  /** ภาษีที่คาดว่าลูกค้าจะหัก (ยอดบิล − ยอดคาดรับ) · ไม่ได้ตั้งให้หัก = `0` */
+  expectedWhtSatang: number
+  /** ยอดรับสะสมของใบเงินรับใบก่อน ๆ ของรอบเดียวกัน (ไม่รวมใบนี้) */
+  priorReceivedSatang: number
+  /** ภาษีลูกค้าหักที่ใบก่อน ๆ บันทึกไปแล้ว */
+  priorWhtSatang: number
+  /** ยอดเงินเข้าของใบนี้ (บวก) */
+  receiptSatang: number
+  toleranceSatang: number
+}): number {
+  assertSatang(input.totalSatang, 'ยอดบิลรวม')
+  assertNonNegativeSatang(input.expectedWhtSatang, 'ภาษีที่คาดว่าลูกค้าจะหัก')
+  assertNonNegativeSatang(input.priorReceivedSatang, 'ยอดรับสะสมก่อนหน้า')
+  assertNonNegativeSatang(input.priorWhtSatang, 'ภาษีลูกค้าหักที่บันทึกแล้ว')
+  assertNonNegativeSatang(input.receiptSatang, 'ยอดเงินเข้า')
+  assertNonNegativeSatang(input.toleranceSatang, 'เพดานตัดส่วนต่างค่าธรรมเนียม')
+  if (input.expectedWhtSatang <= 0 || input.receiptSatang <= 0) return 0
+  const net = input.totalSatang - input.expectedWhtSatang
+  const cumulative = input.priorReceivedSatang + input.receiptSatang
+  if (cumulative > net || cumulative < net - input.toleranceSatang) return 0
+  return Math.max(0, input.expectedWhtSatang - input.priorWhtSatang)
+}
+
+/**
  * `22` §6.11 — `ar_outstanding = total_amount - received_amount` (`received` = `settledSatang()`)
  * ค่าติดลบ = รับเงินเกินยอดบิล (เกิดได้จริงตอนลูกค้าโอนเกิน) — คืนตามจริง ไม่ clamp เพื่อไม่ให้ยอดหาย
  */

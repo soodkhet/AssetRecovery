@@ -1,6 +1,6 @@
 import { assertWithinAdvanceMax } from '@/lib/advances/advance'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
-import { agingBucketIndex, resolveBankFeeWriteOff } from '@/lib/finance/ar-calc'
+import { agingBucketIndex, resolveBankFeeWriteOff, resolveCustomerWhtForReceipt } from '@/lib/finance/ar-calc'
 import { resolveApprovalFlow, type ApprovalMatrixCandidate } from '@/lib/finance/approval-flow-resolver'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { describeAgingBuckets, isAgingBucketsValid } from '@/lib/settings/finance-policy'
@@ -140,6 +140,29 @@ export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHe
     toleranceSatang === null || toleranceSatang < 0 || !Number.isInteger(toleranceSatang)
       ? 0
       : resolveBankFeeWriteOff({ totalSatang: billed, receivedSatang: received, whtWithheldByCustomerSatang: 0, toleranceSatang })
+  // มติ PO U163 — ลูกค้าหักภาษีด้วย: นับภาษีเต็มก่อน ส่วนต่างที่เหลือเป็นค่าธรรมเนียม (สูตรเดียวกับตอนจับคู่จริง)
+  const whtBilled = 321_000
+  const whtExpected = 9_000
+  const whtReceived = 310_500
+  const validTolerance = toleranceSatang !== null && toleranceSatang >= 0 && Number.isInteger(toleranceSatang)
+  const whtCounted = validTolerance
+    ? resolveCustomerWhtForReceipt({
+        totalSatang: whtBilled,
+        expectedWhtSatang: whtExpected,
+        priorReceivedSatang: 0,
+        priorWhtSatang: 0,
+        receiptSatang: whtReceived,
+        toleranceSatang,
+      })
+    : 0
+  const whtFee = validTolerance
+    ? resolveBankFeeWriteOff({
+        totalSatang: whtBilled,
+        receivedSatang: whtReceived,
+        whtWithheldByCustomerSatang: whtCounted,
+        toleranceSatang,
+      })
+    : 0
   return {
     title: 'เพดานตัดส่วนต่างค่าธรรมเนียมคืออะไร',
     what:
@@ -147,6 +170,10 @@ export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHe
     options: [
       { label: 'ขาดไม่เกินเพดาน', effect: 'ส่วนต่างเป็นค่าธรรมเนียมธนาคาร · บิลชำระครบ · ไม่มียอดค้าง' },
       { label: 'ขาดเกินเพดาน', effect: 'บิลค้างชำระบางส่วนตามเดิม — ต้องตามเก็บหรือทำรายการปรับปรุง' },
+      {
+        label: 'ลูกค้าหักภาษีด้วย',
+        effect: 'นับภาษีที่ลูกค้าหักเต็มจำนวนก่อน ส่วนต่างที่เหลือ (ไม่เกินเพดาน) เป็นค่าธรรมเนียมธนาคาร · บิลชำระครบ',
+      },
     ],
     examples:
       toleranceSatang === null
@@ -164,10 +191,25 @@ export function writeOffToleranceHelp(toleranceSatang: number | null): SettingHe
                 line('ค่าธรรมเนียมธนาคารที่บันทึก', money(fee)),
               ],
             },
+            {
+              title: `บิล ${money(whtBilled)} · ลูกค้าหักภาษี ${money(whtExpected)} · เงินเข้า ${money(whtReceived)}`,
+              lines: [
+                line('ภาษีที่ลูกค้าหัก (นับก่อน)', money(whtCounted)),
+                line('ค่าธรรมเนียมธนาคาร (ส่วนต่างที่เหลือ)', money(whtFee)),
+                line(
+                  'ผลกับบิล',
+                  whtCounted > 0 && whtReceived + whtCounted + whtFee === whtBilled
+                    ? 'ชำระครบ'
+                    : 'ค้างชำระบางส่วน — ส่วนต่างเกินเพดาน',
+                  true,
+                ),
+              ],
+            },
           ],
     who: WHO_SETTINGS,
     when: `${WHEN_FINANCE_POLICY} · ใช้เพดาน ณ ตอนจับคู่เงินรับ`,
     assumption: 'bank_fee_write_off',
+    moreAssumptions: ['customer_wht_bank_fee'],
   }
 }
 

@@ -54,6 +54,16 @@ describe('U140 — ทะเบียนค่าตั้งที่เป็�
     expect(help.whtFilingMethodHelp('online').assumption).toBe('wht_filing_method')
     expect(help.exportFormatsHelp().assumption).toBe('export_pack')
     expect(help.costCentersHelp().assumption).toBe('cost_centers')
+    // มติ PO U163 — เพดานค่าธรรมเนียมผูกสองสมมติฐาน (ตัดส่วนต่าง + ภาษีลูกค้าหักปนค่าธรรมเนียม)
+    const tolerance = help.writeOffToleranceHelp(5_000)
+    expect(tolerance.assumption).toBe('bank_fee_write_off')
+    expect(tolerance.moreAssumptions).toEqual(['customer_wht_bank_fee'])
+    expect(tolerance.examples?.[1]?.lines.map((row) => row.value)).toEqual(['฿90.00', '฿15.00', 'ชำระครบ'])
+    expect(help.writeOffToleranceHelp(1_000).examples?.[1]?.lines.map((row) => row.value)).toEqual([
+      '฿0.00',
+      '฿0.00',
+      'ค้างชำระบางส่วน — ส่วนต่างเกินเพดาน',
+    ])
     // ค่าตั้งที่ไม่ใช่สมมติฐาน = ไม่มีป้าย
     expect(help.slaPolicyHelp(24).assumption).toBeUndefined()
   })

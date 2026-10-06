@@ -34,6 +34,7 @@ export const SETTING_ASSUMPTION_KEYS = [
   'adjustment_after_close',
   'customer_wht',
   'bank_fee_write_off',
+  'customer_wht_bank_fee',
 ] as const
 
 export type SettingAssumptionKey = (typeof SETTING_ASSUMPTION_KEYS)[number]
@@ -166,6 +167,13 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
     question:
       'ลูกค้าโอนขาดไม่เกินเพดาน (ค่าเริ่มต้น ฿50) บันทึกส่วนต่างเป็นค่าธรรมเนียมธนาคารและปิดบิลเป็นชำระครบ — เพดานและการบันทึกบัญชีถูกต้องหรือไม่',
     source: 'B4 · U144',
+  },
+  customer_wht_bank_fee: {
+    key: 'customer_wht_bank_fee',
+    label: 'ลูกค้าหักภาษีและมีค่าธรรมเนียมโอนในรายการเดียว',
+    question:
+      'เงินเข้าขาดจากยอดหลังหักภาษีไม่เกินเพดาน ระบบนับภาษีที่ลูกค้าหักเต็มจำนวนก่อน แล้วบันทึกส่วนต่างที่เหลือเป็นค่าธรรมเนียมธนาคารและปิดบิลเป็นชำระครบ — ลำดับการบันทึกนี้ถูกต้องหรือไม่',
+    source: 'B4 · U163 (ต่อยอด A1 · U144)',
   },
 }
 
