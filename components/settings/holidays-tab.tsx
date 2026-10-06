@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { holidaysHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
@@ -265,6 +267,8 @@ export function HolidaysTab() {
         กำหนดยื่นวันที่ 15 (ออนไลน์) หรือวันที่ 7 (กระดาษ) ของเดือนถัดไป ถ้าตรงวันหยุดในปฏิทินนี้หรือเสาร์-อาทิตย์ ระบบเลื่อนเป็นวันทำการถัดไปให้
         — เพิ่มหรือลบวันหยุดแล้ว กำหนดยื่นของรอบที่ยังไม่ยื่นจะคำนวณใหม่ทันที
       </InlineAlert>
+
+      <SettingHelp className="mt-3" help={holidaysHelp(data.items.map((item) => item.holidayDate))} />
 
       <div className="mt-4">
         <Table>

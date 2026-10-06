@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
+import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_TAX_PROFILES } from '@/components/settings/shared'
+import { currentVatRateOf } from '@/components/settings/use-current-vat-rate'
 import {
   Button,
   Card,
@@ -24,6 +26,7 @@ import {
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate, fromInputDate, toInputDate } from '@/lib/format/datetime'
+import { pctFromInput, vatRateHelp } from '@/lib/settings/help'
 import { vatRateCreateSchema } from '@/lib/settings/schemas'
 import type { VatRateDto } from '@/lib/settings/types'
 import { findOverlappingPeriods, type VatRatePeriod } from '@/lib/settings/vat'
@@ -191,6 +194,8 @@ export function VatRatesTab() {
         <b>ปิดช่วง</b> ด้วยวันสิ้นสุด ไม่มีการลบอัตราออกจากประวัติ
       </InlineAlert>
 
+      <SettingHelp className="mt-3" help={vatRateHelp(currentVatRateOf(items))} />
+
       <div className="mt-4">
         <Table>
           <THead>
@@ -340,6 +345,8 @@ export function VatRatesTab() {
               placeholder="เช่น ปรับอัตราตามประกาศราชกิจจานุเบกษา"
             />
           </Field>
+
+          <SettingHelp defaultOpen help={vatRateHelp(pctFromInput(form.ratePct))} />
 
           <InlineAlert tone="warning" title="อัตรานี้กระทบยอดภาษีทั้งระบบ">
             เอกสารที่ออกไปแล้วยังอ้างอัตราที่ snapshot ไว้ (<span className="font-mono">vat_rate_used</span>) —

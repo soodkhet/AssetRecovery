@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { bankFileFormatsHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
@@ -276,6 +278,8 @@ export function BankFileFormatsTab() {
           </Can>
         </div>
       </div>
+
+      <SettingHelp className="mb-3" help={bankFileFormatsHelp()} />
 
       <Table>
         <THead>

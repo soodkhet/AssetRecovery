@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { taxDocTemplateHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import {
@@ -198,6 +200,7 @@ export function TaxDocTemplatesTab() {
         <p className="mt-0.5 text-xs text-slate-500">
           ปรับหน้าตาเอกสารภาษีทางการที่ระบบออกให้ — ใบกำกับภาษี และหนังสือรับรองหัก ณ ที่จ่าย 50 ทวิ
         </p>
+        <SettingHelp className="mt-3" help={taxDocTemplateHelp()} />
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

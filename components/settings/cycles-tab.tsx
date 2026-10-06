@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { cycleDueHelp, intFromInput } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
@@ -286,6 +288,8 @@ export function CyclesTab() {
         </div>
       </div>
 
+      <SettingHelp className="mb-3" help={cycleDueHelp({ dueRuleType: 'net_days', dueRuleValue: 30, cutoffDay: 31 })} />
+
       <Table>
         <THead>
           <Tr>
@@ -486,6 +490,14 @@ export function CyclesTab() {
               </Field>
             )}
           </div>
+
+          <SettingHelp
+            help={cycleDueHelp({
+              dueRuleType: form.dueRuleType,
+              dueRuleValue: intFromInput(form.dueRuleValue),
+              cutoffDay: form.cutoffRuleType === 'fixed_dates' ? (form.cutoffDates[0] ?? null) : null,
+            })}
+          />
 
           <Field id="cycle-scope" label="ใช้กับ (ขอบเขต)" required error={errors.scope}>
             <Input

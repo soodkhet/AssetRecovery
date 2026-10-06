@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
+import { SettingHelp } from '@/components/settings/setting-help'
 import {
   Button,
   Card,
@@ -42,6 +43,7 @@ import {
 } from '@/lib/payees/payee'
 import { payeeCreateSchema, payeeUpdateSchema } from '@/lib/payees/schemas'
 import type { PayeeDto } from '@/lib/payees/types'
+import { payeeConditionHelp, payeeTaxProfileHelp, payeeWht402Help, pctFromInput } from '@/lib/settings/help'
 import type { TaxProfileDto } from '@/lib/settings/types'
 
 /**
@@ -328,6 +330,17 @@ export function PayeeTab() {
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
+
+  /** U108 — ค่าของ Tax Profile ที่เลือกอยู่ในฟอร์ม (ตัวอย่างคำนวณสด) */
+  const selectedProfileDto = taxProfiles.find((profile) => profile.id === form.taxProfileId)
+  const selectedTaxProfile =
+    selectedProfileDto === undefined
+      ? undefined
+      : {
+          whtPct: selectedProfileDto.whtPct,
+          whtBasis: selectedProfileDto.whtBasis,
+          whtMinThresholdSatang: selectedProfileDto.whtMinThresholdSatang,
+        }
 
   return (
     <Card>
@@ -637,6 +650,7 @@ export function PayeeTab() {
               ))}
             </Select>
           </Field>
+          <SettingHelp help={payeeTaxProfileHelp(selectedTaxProfile ?? null)} />
 
           <Field
             id="payee-wht-40-2"
@@ -653,6 +667,7 @@ export function PayeeTab() {
               placeholder="เช่น 2.50"
             />
           </Field>
+          <SettingHelp help={payeeWht402Help(pctFromInput(form.wht402Pct))} />
 
           <div className="rounded-lg border border-slate-200 p-3">
             <AddressFields
@@ -682,6 +697,13 @@ export function PayeeTab() {
               ))}
             </Select>
           </Field>
+          <SettingHelp
+            help={payeeConditionHelp({
+              condition: form.whtCondition,
+              allowGrossUp,
+              whtPct: selectedTaxProfile?.whtPct ?? null,
+            })}
+          />
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <p className="mb-3 text-xs font-semibold text-slate-700">ข้อมูลบัญชีธนาคาร</p>

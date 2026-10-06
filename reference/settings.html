@@ -403,6 +403,19 @@ function renderTopNav() {
   </header>`;
 }
  
+// changelog mockup 06/10/2569 (มติ PO U108): กล่องคำอธิบายค่าตั้ง (คืออะไร · ผลของตัวเลือก · ตัวอย่างตัวเลข · ใครแก้ได้/มีผลเมื่อไร)
+// แอปจริง: <SettingHelp> + ข้อความ/ตัวอย่างจาก lib/settings/help (ตัวอย่างคำนวณด้วยสูตรจริงจากค่าที่กำลังเลือก) — ตัวเลขในม็อกอัปเป็นภาพประกอบ
+function settingHelp(title, what, rows, who, when, open) {
+  return `<details class="group rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-600 mb-4" ${open ? 'open' : ''}>
+    <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100"><span class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-400 font-serif text-[10px] italic text-slate-500">i</span><span class="flex-1">${title}</span><span class="text-slate-400 group-open:rotate-180">▾</span></summary>
+    <div class="space-y-3 border-t border-slate-200 px-3 py-3">
+      <p class="leading-relaxed">${what}</p>
+      ${rows.length ? `<div class="rounded-md border border-emerald-100 bg-white p-2.5"><dl class="space-y-0.5">${rows.map(r => `<div class="flex justify-between gap-3"><dt class="text-slate-500">${r[0]}</dt><dd class="text-right font-mono ${r[2] ? 'font-bold text-slate-900' : 'text-slate-700'}">${r[1]}</dd></div>`).join('')}</dl></div>` : ''}
+      <dl class="grid grid-cols-2 gap-2 border-t border-slate-200 pt-2"><div><dt class="font-semibold text-slate-700">ใครแก้ได้</dt><dd class="mt-0.5">${who}</dd></div><div><dt class="font-semibold text-slate-700">มีผลเมื่อไร</dt><dd class="mt-0.5">${when}</dd></div></dl>
+    </div>
+  </details>`;
+}
+
 function kpi(label, value, sub, color) {
   const c = { emerald:'text-emerald-700 bg-emerald-50 border-emerald-100', amber:'text-amber-700 bg-amber-50 border-amber-100', blue:'text-blue-700 bg-blue-50 border-blue-100', red:'text-red-700 bg-red-50 border-red-100' }[color] || 'text-slate-700 bg-slate-50 border-slate-100';
   return `<div class="bg-white border ${c.split(' ')[2]} rounded-xl p-5 shadow-sm"><div class="text-xs text-slate-500 font-bold uppercase tracking-wider">${label}</div><div class="mt-2 text-2xl font-extrabold ${c.split(' ')[0]}">${value}</div><div class="mt-1 text-[11px] font-medium text-slate-500 bg-white inline-block px-2 py-0.5 rounded border border-slate-100">${sub}</div></div>`;
@@ -1123,6 +1136,7 @@ function renderSettingsBanks() {
 function renderSettingsTax() {
   return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">Tax Profile (กติกาภาษี)</h2><button data-action="open-modal" data-type="fin-tax-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่ม Tax Profile</button></div>
   <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ การแก้ไข Tax Profile กระทบยอดภาษีทุกรายการที่ใช้ profile นั้น — ต้องบันทึก audit และระบุเหตุผลเสมอ</div>
+  ${settingHelp('กติกาภาษี (Tax Profile) ทำงานอย่างไร', 'ชุดกติกาที่ผูกกับผู้รับเงิน ใช้คิดภาษีหัก ณ ที่จ่าย — อัตรา ฐานที่ใช้หัก และยอดขั้นต่ำ · อัตราของผู้รับชนะอัตราของแผนเสมอ', [['ตัวอย่าง: เงินได้ ฿10,000.00 อัตรา 3%','หัก ฿300.00'],['ผู้รับได้รับ','฿9,700.00',1],['ยอด ฿950.00 (ต่ำกว่าเกณฑ์ ฿1,000.00)','ไม่หัก'],['ยอด ฿1,200.00','หัก ฿36.00']], 'Superadmin เท่านั้น · ต้องระบุเหตุผล', 'รอบจ่ายที่สร้างหลังบันทึก — รอบเดิมไม่คิดใหม่')}
   <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">ชื่อ Profile</th><th class="px-4 py-3 font-medium">ใช้กับ</th><th class="px-4 py-3 font-medium">VAT Mode</th><th class="px-4 py-3 font-medium">WHT Rate</th><th class="px-4 py-3 font-medium">ฐานหัก WHT</th><th class="px-4 py-3 font-medium">วงเงินขั้นต่ำ WHT</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
   ${store.finSettings.tax.map(t => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 font-bold text-slate-800">${t.name}</td><td class="px-4 py-3 text-xs text-slate-600">${t.appliesTo}</td><td class="px-4 py-3 text-xs"><span class="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono text-slate-700">${t.vatMode}</span></td><td class="px-4 py-3 font-bold text-rose-700">${t.whtPct}%</td><td class="px-4 py-3 text-xs">${t.whtBasis}</td><td class="px-4 py-3 text-xs">${(t.whtMinThreshold||0).toLocaleString('th-TH')} บาท</td><td class="px-4 py-3 text-right">${btnAction(Icon.edit+' แก้ไข','open-modal','fin-tax-form', t.id)}</td></tr>`).join('')}
   </tbody></table></div>`;
@@ -1133,6 +1147,7 @@ function renderSettingsWhtPolicy() {
   const box = (title, body, sub) => `<div class="rounded-lg border border-slate-200 bg-slate-50 p-3"><div class="text-xs font-semibold text-slate-500">${title}</div><div class="mt-1 text-xs text-slate-900">${body}</div>${sub ? `<div class="mt-1 text-xs text-slate-500">${sub}</div>` : ''}</div>`;
   return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">ค่าตั้งภาษีหัก ณ ที่จ่าย (Effective-dated)</h2><button class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} ตั้งค่าชุดใหม่</button></div>
   <p class="text-xs text-slate-500 mb-3">มีผลกับรอบจ่ายที่สร้างตั้งแต่วันที่มีผล — รอบที่สร้างแล้วใช้ค่าเดิมเสมอ · แก้ได้เฉพาะ Superadmin/บริหาร พร้อมเหตุผล</p>
+  ${settingHelp('เงื่อนไขการหัก (1) (2) (3) ต่างกันอย่างไร', '(1) หัก ณ ที่จ่าย ผู้รับรับภาระเอง · (2)/(3) บริษัทออกภาษีให้ ผู้รับได้เงินเต็ม', [['(1) เงินได้ ฿10,000.00 อัตรา 3%','ภาษี ฿300.00 · ผู้รับได้ ฿9,700.00'],['(2) ออกให้ตลอดไป','ภาษี ฿309.28 · เงินได้บนใบ ฿10,309.28'],['(3) ออกให้ครั้งเดียว','ภาษี ฿300.00 · เงินได้บนใบ ฿10,300.00'],['กำหนดยื่นงวด ต.ค. 2569 (ออนไลน์)','15/11/2569 → 16/11/2569 (เลื่อนจากวันหยุด)',1]], 'Superadmin และฝ่ายบริหาร · ต้องระบุเหตุผล', 'รอบจ่ายที่สร้างตั้งแต่วันที่มีผล')}
   <div class="grid grid-cols-4 gap-3 mb-4">
     ${box('ฐาน WHT (รวม)', 'คอมมิชชั่น · เบี้ยเสี่ยง · ค่าน้ำมัน · เบี้ยเลี้ยง', 'ไม่รวม: ค่าที่พัก · ค่าใช้จ่ายตามใบเสร็จ · รายการกรอกเอง')}
     ${box('การออก 50 ทวิ', 'ต่อผู้รับต่อรอบจ่าย (1 ใบรวมทุกรายการของผู้รับในรอบ)')}
@@ -1162,6 +1177,7 @@ function renderSettingsRetention() {
         <label class="text-xs font-semibold text-slate-700">ระยะเก็บหลังปิดเคส (ปี) <span class="text-red-500">*</span></label>
         <input type="text" inputmode="numeric" value="5" class="mt-1 w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm text-right focus-ring">
         <p class="mt-1 text-[11px] text-slate-400">ค่าเริ่มต้น 5 ปี · ตั้งได้ 1–20 ปี</p>
+      ${settingHelp('ระยะเก็บเอกสารลูกหนี้คืออะไร', 'ระบบลบเฉพาะไฟล์เอกสารลูกหนี้ของเคสที่จบครบระยะนี้ทุกวันอัตโนมัติ — ไม่แตะเอกสารบัญชี', [['ตัวอย่าง: ปิดเคส 06/10/2569 + เก็บ 5 ปี','ลบไฟล์วันที่ 07/10/2574',1]], 'Superadmin และฝ่ายบริหาร · ต้องระบุเหตุผล', 'รอบลบอัตโนมัติรอบถัดไป (ทุกวัน)', true)}
       </div>
       <div>
         <label class="text-xs font-semibold text-slate-700">เหตุผล <span class="text-red-500">*</span></label>
@@ -1202,6 +1218,7 @@ function renderSettingsVat() {
   const vr = store.finSettings.vatRates || [];
   return `<div class="flex items-center justify-between mb-4"><h2 class="text-lg font-bold text-slate-900">อัตรา VAT (Effective-dated)</h2><button data-action="open-modal" data-type="fin-vat-form" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm hover:bg-emerald-100">${Icon.plus} เพิ่มอัตรา VAT</button></div>
   <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ ช่วงวันที่ต้องไม่ทับซ้อนกัน (VAT_RATE_OVERLAP) — ระบบตรวจสอบก่อนบันทึกทุกครั้ง</div>
+  ${settingHelp('อัตรา VAT ใช้ทำอะไร', 'ระบบเลือกอัตราตามวันที่เกิดรายได้ แล้วเก็บอัตราที่ใช้ไว้กับรายการ', [['ตัวอย่าง: ค่าบริการ ฿1,000.00 ราคารวม VAT แล้ว','ก่อน VAT ฿934.58 · VAT ฿65.42 · รวม ฿1,000.00'],['ราคายังไม่รวม VAT','ก่อน VAT ฿1,000.00 · VAT ฿70.00 · รวม ฿1,070.00'],['ไม่คิด VAT','รวม ฿1,000.00']], 'Superadmin เท่านั้น · ต้องระบุเหตุผล', 'ตามช่วงวันที่มีผล — รายได้เดิมไม่คิดใหม่')}
   <div class="border border-slate-200 rounded-lg overflow-hidden bg-white"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">อัตรา VAT (%)</th><th class="px-4 py-3 font-medium">มีผลตั้งแต่</th><th class="px-4 py-3 font-medium">สิ้นสุด</th><th class="px-4 py-3 font-medium">สถานะ</th><th class="px-4 py-3 font-medium text-right">จัดการ</th></tr></thead><tbody class="divide-y divide-slate-100">
   ${vr.map(v => {
     const now = (()=>{const b=toBKK(new Date());return `${b.getFullYear()}-${String(b.getMonth()+1).padStart(2,'0')}-${String(b.getDate()).padStart(2,'0')}`;})();
@@ -1279,6 +1296,7 @@ function renderSettingsNumbering() {
   return `<h2 class="text-lg font-bold text-slate-900 mb-1">เลขที่เอกสาร</h2>
   <p class="text-xs text-slate-500 mb-4">คำนำหน้าและรูปแบบเลขของเอกสารทุกชนิดที่ระบบออก — ปีในเลขเอกสารเป็น พ.ศ. เสมอ</p>
   <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 mb-4">⚠️ แก้ไขได้เฉพาะ Superadmin — ใบเสร็จรับเงิน/ใบกำกับภาษี และหนังสือรับรองการหักภาษี ณ ที่จ่าย <b>ล็อกรูปแบบหลังออกฉบับแรก</b> · เอกสารอื่นเปลี่ยนได้ มีผลฉบับถัดไป · ทุกการเปลี่ยนต้องระบุเหตุผล</div>
+  ${settingHelp('เลขที่เอกสารทำงานอย่างไร', 'ระบบออกเลขต่อเนื่องให้อัตโนมัติ ไม่ข้าม ไม่ซ้ำ — คำนำหน้า · ปี พ.ศ. · จำนวนหลัก · เริ่มนับใหม่ทุกปี', [['ตัวอย่าง: WHT-{พ.ศ.}-NNN ออกล่าสุด WHT-2569-015','เลขถัดไป WHT-2569-016',1],['ขึ้นปีใหม่ 01/01/2570','WHT-2570-001']], 'Superadmin เท่านั้น · ต้องระบุเหตุผล', 'ฉบับถัดไป · เอกสารภาษีล็อกรูปแบบหลังออกฉบับแรก')}
   <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="bg-slate-50 text-xs text-slate-600"><tr>

@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { bankAccountsHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
@@ -274,6 +276,8 @@ export function BankAccountsTab() {
           </Can>
         </div>
       </div>
+
+      <SettingHelp className="mb-3" help={bankAccountsHelp()} />
 
       <Table>
         <THead>

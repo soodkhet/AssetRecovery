@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
+import { SettingHelp } from '@/components/settings/setting-help'
 import {
   ACTIVE_BADGE_GROUP,
   MANAGE_TAX_PROFILES,
@@ -35,6 +36,7 @@ import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang, parseBahtInput, toBahtInput } from '@/lib/format/money'
 import type { WhtFilingForm } from '@/lib/generated/prisma/enums'
+import { pctFromInput, satangFromInput, taxProfileHelp } from '@/lib/settings/help'
 import { taxProfileCreateSchema } from '@/lib/settings/schemas'
 import {
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
@@ -247,6 +249,8 @@ export function TaxProfilesTab() {
         ระบบบันทึก audit log พร้อมเหตุผลทุกครั้ง — รายการที่จ่ายไปแล้วยังอ้างค่าที่ snapshot ไว้ตอนตั้งรอบจ่าย
       </InlineAlert>
 
+      <SettingHelp className="mt-3" help={taxProfileHelp({ whtPct: null, whtBasis: 'before_vat', thresholdSatang: null })} />
+
       <div className="mt-4">
         <Table>
           <THead>
@@ -426,6 +430,15 @@ export function TaxProfilesTab() {
               />
             </Field>
           </div>
+
+          <SettingHelp
+            defaultOpen
+            help={taxProfileHelp({
+              whtPct: pctFromInput(form.whtPct),
+              whtBasis: form.whtBasis,
+              thresholdSatang: satangFromInput(form.whtMinThreshold),
+            })}
+          />
 
           <Field id="tax-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea

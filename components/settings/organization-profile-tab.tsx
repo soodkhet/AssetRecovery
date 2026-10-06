@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { organizationProfileHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
 import { Can } from '@/components/auth/permission-provider'
@@ -305,6 +307,8 @@ export function OrganizationProfileTab() {
           </Button>
         </Can>
       </div>
+
+      <SettingHelp className="mb-4" help={organizationProfileHelp()} />
 
       {profile.issues.length > 0 && (
         <InlineAlert tone="warning" title="ข้อมูลองค์กรยังเป็นค่าตัวอย่าง — กรอกข้อมูลจริงก่อนออกเอกสาร">
