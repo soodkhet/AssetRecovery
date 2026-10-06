@@ -607,7 +607,7 @@
 | 153 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 160 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/17-payroll-and-payout.md` (30 KB, 217 บรรทัด — v2.5)
+### `docs/17-payroll-and-payout.md` (33 KB, 220 บรรทัด — v2.6)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -615,31 +615,31 @@
 | 3 | # 17 — Payroll and Payout (รอบจ่ายเงินและไฟล์โอนธนาคาร) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 29 | ## 1. Summary |
-| 33 | ## 2. Purpose |
-| 37 | ## 3. In Scope |
-| 44 | ## 4. Out of Scope |
-| 49 | ## 5. Actors & Responsibilities |
-| 56 | ## 6. Core Concepts |
-| 58 | ### 6.1 Payout Batch แยกฝั่ง inhouse / outsource |
-| 62 | ### 6.2 WHT Calculation ต่อ Payout Batch |
-| 68 | ### 6.3 Idempotency Key (กันโอนซ้ำ) 🔶 สำคัญมากด้านความปลอดภัยทางการเงิน |
-| 72 | ### 6.4 หักคืนเงินทดรองในรอบจ่าย (มติ PO 05/10/2569 — UAT U30 · BUG-109) |
-| 82 | ## 7. Data Entities / Required Objects |
-| 84 | ### 7.1 Payout Batch (เติมสถานะ `draft` — ดู Changelog v2) |
-| 101 | ### 7.2 Payout Batch Item |
-| 112 | ## 8. UI / UX Rules |
-| 120 | ## 9. Workflow / Lifecycle |
-| 124 | ### 9.1 ยกเลิกรอบจ่าย (มติ PO 05/10/2569 — UAT U67) |
-| 139 | ## 10. Security / Control Rules |
-| 145 | ## 11. Validation & Error Handling |
-| 156 | ## 12. Permission Requirements |
-| 164 | ## 13. Audit Log Requirements |
-| 170 | ## 14. API / Integration Draft |
-| 180 | ## 15. Acceptance Criteria |
-| 187 | ## 16. Test Cases |
-| 201 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 209 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 30 | ## 1. Summary |
+| 34 | ## 2. Purpose |
+| 38 | ## 3. In Scope |
+| 45 | ## 4. Out of Scope |
+| 50 | ## 5. Actors & Responsibilities |
+| 57 | ## 6. Core Concepts |
+| 59 | ### 6.1 Payout Batch แยกฝั่ง inhouse / outsource |
+| 63 | ### 6.2 WHT Calculation ต่อ Payout Batch |
+| 69 | ### 6.3 Idempotency Key (กันโอนซ้ำ) 🔶 สำคัญมากด้านความปลอดภัยทางการเงิน |
+| 73 | ### 6.4 หักคืนเงินทดรองในรอบจ่าย (มติ PO 05/10/2569 — UAT U30 · BUG-109) |
+| 83 | ## 7. Data Entities / Required Objects |
+| 85 | ### 7.1 Payout Batch (เติมสถานะ `draft` — ดู Changelog v2) |
+| 102 | ### 7.2 Payout Batch Item |
+| 113 | ## 8. UI / UX Rules |
+| 122 | ## 9. Workflow / Lifecycle |
+| 126 | ### 9.1 ยกเลิกรอบจ่าย (มติ PO 05/10/2569 — UAT U67) |
+| 141 | ## 10. Security / Control Rules |
+| 147 | ## 11. Validation & Error Handling |
+| 158 | ## 12. Permission Requirements |
+| 166 | ## 13. Audit Log Requirements |
+| 172 | ## 14. API / Integration Draft |
+| 182 | ## 15. Acceptance Criteria |
+| 189 | ## 16. Test Cases |
+| 204 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 212 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/18-payee-and-tax-profile.md` (29 KB, 209 บรรทัด — v2.4)
 
@@ -898,7 +898,7 @@
 | 257 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 263 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/28-finance-export-pdf-spec.md` (35 KB, 166 บรรทัด — v2.7)
+### `docs/28-finance-export-pdf-spec.md` (37 KB, 167 บรรทัด — v2.8)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -906,21 +906,21 @@
 | 3 | # 28 — Finance Export PDF Spec (เอกสาร PDF ทั้งหมด) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 31 | ## 1. Summary |
-| 35 | ## 2. Purpose |
-| 39 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 43 | ## 6. รายการเอกสาร PDF ทั้งหมด |
-| 45 | ### 6.0 หัวเอกสารกลาง (Letterhead) — มติ PO 06/10/2569 (U99) |
-| 54 | ### 6.0.1 เลย์เอาต์เอกสารตามแบบที่อนุมัติ — มติ PO 06/10/2569 (U100/U101) |
-| 76 | ### 6.1 เอกสารภายใน (Internal — ไม่มีข้อกำหนดทางกฎหมาย, อ้างอิงไฟล์ 13 §6.7) |
-| 91 | ### 6.2 เอกสารทางการ — ใบกำกับภาษี (ไฟล์ 31 §6.2) 🔶 มีข้อกำหนดทางกฎหมายเข้มงวด |
-| 108 | ### 6.3 เอกสารทางการ — หนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) (ไฟล์ 33 §6.3) 🔶 ม... |
-| 123 | ### 6.4 Document Checklist Export (ไฟล์ 34, ใช้ XLSX ไม่ใช่ PDF) |
-| 127 | ### 6.5 หน้าตัวอย่างเอกสารทั้งหมด — มติ PO 06/10/2569 (U104) |
-| 138 | ## 7. Implementation Notes |
-| 146 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
-| 152 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 158 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 32 | ## 1. Summary |
+| 36 | ## 2. Purpose |
+| 40 | ## 3-5. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 44 | ## 6. รายการเอกสาร PDF ทั้งหมด |
+| 46 | ### 6.0 หัวเอกสารกลาง (Letterhead) — มติ PO 06/10/2569 (U99) |
+| 55 | ### 6.0.1 เลย์เอาต์เอกสารตามแบบที่อนุมัติ — มติ PO 06/10/2569 (U100/U101) |
+| 77 | ### 6.1 เอกสารภายใน (Internal — ไม่มีข้อกำหนดทางกฎหมาย, อ้างอิงไฟล์ 13 §6.7) |
+| 92 | ### 6.2 เอกสารทางการ — ใบกำกับภาษี (ไฟล์ 31 §6.2) 🔶 มีข้อกำหนดทางกฎหมายเข้มงวด |
+| 109 | ### 6.3 เอกสารทางการ — หนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) (ไฟล์ 33 §6.3) 🔶 ม... |
+| 124 | ### 6.4 Document Checklist Export (ไฟล์ 34, ใช้ XLSX ไม่ใช่ PDF) |
+| 128 | ### 6.5 หน้าตัวอย่างเอกสารทั้งหมด — มติ PO 06/10/2569 (U104) |
+| 139 | ## 7. Implementation Notes |
+| 147 | ## 8-16. (ไม่ใช้กับไฟล์ประเภทนี้) |
+| 153 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 159 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/30-accounting-handover-monthly-close.md` (24 KB, 187 บรรทัด — v2.6)
 
@@ -1494,7 +1494,7 @@
 | 444 | ## 5. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 451 | ## 6. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/96-reports.md` (40 KB, 490 บรรทัด — v2.9)
+### `docs/96-reports.md` (42 KB, 492 บรรทัด — v2.10)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1502,26 +1502,26 @@
 | 3 | # 96 — Reports (รายงานภาพรวมระบบ) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 33 | ## 1. Summary |
-| 37 | ## 2. Purpose |
-| 40 | ## 3. In Scope |
-| 46 | ## 4. Out of Scope |
-| 51 | ## 5. Actors & Responsibilities |
-| 63 | ## 6. รายงานทั้งหมด |
-| 65 | ### หมวด F — รายงานการเงิน |
-| 194 | ### หมวด O — รายงานงานติดตามทรัพย์ |
-| 274 | ### หมวด A — รายงานบัญชี |
-| 323 | ### หมวด E — Executive Dashboard |
-| 357 | ## 7. Data Sources (ดึงข้อมูลจากไหน) |
-| 379 | ## 8. Caching Strategy |
-| 392 | ## 9. API Endpoints |
-| 419 | ## 10. Permission Matrix |
-| 430 | ## 11. UI / UX Rules |
-| 441 | ## 12. Validation & Error Handling |
-| 452 | ## 13. Acceptance Criteria |
-| 464 | ## 14. Test Cases |
-| 481 | ## 15. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 488 | ## 16. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 34 | ## 1. Summary |
+| 38 | ## 2. Purpose |
+| 41 | ## 3. In Scope |
+| 47 | ## 4. Out of Scope |
+| 52 | ## 5. Actors & Responsibilities |
+| 64 | ## 6. รายงานทั้งหมด |
+| 66 | ### หมวด F — รายงานการเงิน |
+| 196 | ### หมวด O — รายงานงานติดตามทรัพย์ |
+| 276 | ### หมวด A — รายงานบัญชี |
+| 325 | ### หมวด E — Executive Dashboard |
+| 359 | ## 7. Data Sources (ดึงข้อมูลจากไหน) |
+| 381 | ## 8. Caching Strategy |
+| 394 | ## 9. API Endpoints |
+| 421 | ## 10. Permission Matrix |
+| 432 | ## 11. UI / UX Rules |
+| 443 | ## 12. Validation & Error Handling |
+| 454 | ## 13. Acceptance Criteria |
+| 466 | ## 14. Test Cases |
+| 483 | ## 15. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 490 | ## 16. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/97-client-portal.md` (78 KB, 359 บรรทัด — v6.1)
 
