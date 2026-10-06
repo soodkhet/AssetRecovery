@@ -16,6 +16,15 @@ export const ids = {
   deviceModels: {} as Record<string, string>,
 }
 
+/** อ่าน id จาก `ids` — ว่าง/ไม่มี = throw ข้อความชัดก่อนส่งเข้า service (กัน `''` หลุดไปเป็น validation error ปลายทาง) */
+export function need(group: keyof typeof ids, key: string): string {
+  const value = ids[group][key]
+  if (value === undefined || value === '') {
+    throw new Error(`ไม่มี id ของ ${String(group)}['${key}'] — ค่าตั้ง/master ยังไม่ถูกสร้างหรือโหลด (รัน --reset แล้ว seed ใหม่)`)
+  }
+  return value
+}
+
 /** เลขผู้เสียภาษี 13 หลักตาม mod-11 (สมมติ) */
 export function thaiId(prefix12: string): string {
   if (!/^\d{12}$/.test(prefix12)) throw new Error('ต้อง 12 หลัก')

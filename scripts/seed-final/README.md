@@ -28,6 +28,8 @@ SSOT ของข้อมูล = `uat/report/FINAL-coverage.md` (ส่วน 
    - `--with-storage` อัปโหลดไฟล์ตัวอย่าง (โลโก้/ลายเซ็น/เอกสารเคส/หลักฐาน/ใบเซ็นรับ/สลิป) ขึ้น bucket `case-documents` และไฟล์ export/โอนเงินขึ้น bucket จริง — ไม่ใส่ = ไฟล์อยู่ในหน่วยความจำ (เปิดดูในแอปไม่ได้)
 5. **verify**: `pnpm seed:final --verify` (exit code 2 เมื่อมี ❌)
 
+- ข้อ 3 สร้างค่าตั้งไปแล้ว ⇒ ข้อ 4 ข้ามการสร้างค่าตั้งแต่**โหลด id** Tax Profile / รูปแบบไฟล์ธนาคาร / บัญชีธนาคาร กลับจากฐาน (จับคู่ชื่อ+ฐานภาษี+แบบยื่น · purpose+รหัสธนาคาร+ชนิดไฟล์+encoding+คอลัมน์ · เลขบัญชี) — ไม่พบ/ซ้ำ = หยุดพร้อมข้อความ ให้ `--reset` ใหม่ · ผู้ใช้ที่สังกัดตรงอยู่แล้วไม่ถูกแก้ซ้ำ (audit เท่ากับการรันคำสั่งเดียว)
+
 รันซ้ำ: กลับไปข้อ 2 (ผู้ใช้ U123 คงอยู่ ไม่ต้องทำข้อ 3 ซ้ำ) · ผลเท่าเดิมทุกรอบ (ตรวจด้วย fingerprint จำนวนแถว/ยอดเงินแล้ว)
 
 staging: เพิ่ม `--target=staging` ทุกคำสั่ง (ปฏิเสธ URL ที่มีคำว่า prod / `VERCEL_ENV=production`)
@@ -35,6 +37,7 @@ staging: เพิ่ม `--target=staging` ทุกคำสั่ง (ปฏ�
 ### ฐานทดสอบบนเครื่อง (ไม่มี persona)
 `pnpm db:seed` แล้ว `pnpm seed:final --reset --allow-immutable-reset --bootstrap-personas --seed --verify`
 (ตรวจ 07/10/2569 บน `assetrecovery_test6`: ✅ 200/200 · รันซ้ำ 2 รอบ fingerprint จำนวนแถว/ยอดเงินเท่ากัน)
+แยกคำสั่งแบบลำดับ dev ก็ได้: `--reset --allow-immutable-reset` → `--bootstrap-personas` → `--seed` → `--verify` (ตรวจ 07/10/2569: ✅ 200/200 · fingerprint จำนวนแถวทุกตาราง + ผลรวม `*_satang` เท่ากับแบบคำสั่งเดียว)
 — `--bootstrap-personas` สร้าง persona ทั้ง 18 คนด้วยบัญชี Auth **จำลอง** (stub `lib/users/provisioning` · ไม่ยิง Supabase) · localhost เท่านั้น
 
 ## นาฬิกาจำลอง (U124) — ผล spike
