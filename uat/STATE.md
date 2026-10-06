@@ -19,6 +19,7 @@
 role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว handoff (2–3 รอบ/session)
 
 ## Log
+- 06/10/2569 merge fixer BM `fd2d2df` (U105 ค่าตั้ง `allow_gross_up_conditions` ปิดเป็นค่าเริ่มต้น + สูตรทบยอด (2)/(3) + snapshot ในรอบจ่าย · U107 ยกเลิก/ออกใหม่ใบรับรองแทนใบเสร็จ) · migration `20261006210000` / `211000` / `212000` · verify 353/4,843 · migration ใหม่รวม **41 ตัว** · ผู้ใช้รีวิว O55–O69 แล้ว (U105–U107) · มติ O70 · Q18 แก้ข้อความ → ต่อ: U108 คำอธิบายค่าตั้งบัญชี
 - 06/10/2569 merge fixer BL `75f0f89` (U104 บัญชี → "ตัวอย่างเอกสารทั้งหมด" `/accounting/document-samples` · 13 ตัวอย่าง PDF จริง + ลายน้ำ "ตัวอย่าง" · `view_document_samples`) · ไม่มี migration · verify 353/4,807 · มติ O69 · **งานตามมติครบ U22–U104**
 - 06/10/2569 merge fixer BK `6cf824f` (+BJ `81d4fd7`: U103 ใบรับรองแทนใบเสร็จ `substitute_receipts` + PDF ใบเบิก/รับคืนเงินทดรอง · ย้ายไป `doc-layout.tsx` · ฟอนต์ไทยตัวหนา `public/fonts/NotoSansThai-Bold.ttf` · BUG-170/171) · migration `20261006200000_substitute_receipts` · verify 350/4,776 · migration ใหม่รวม **38 ตัว** · มติ O68 · ต่อ: เมนูบัญชี → ตัวอย่างเอกสารทั้งหมด (U104)
 - 06/10/2569 ~14:10 **ตรวจ O4 แล้ว** (`uat/report/O4-recheck.md`): 0 แถว ทุก persona — **ตรงกฎ** (นับเฉพาะเคสเปิด created_at + 72 ชม. < now) · 2 แถวที่ R9 คาด (C6+C7 · 849000 = projected revenue) หายเพราะ C7 ปิดใน R13 (05/10 23:16) และ C6 ปิดใน R14 (06/10 10:51) ก่อนครบ 72 ชม. · ฐานไม่มีเคสเปิด · ข้อสังเกต UX: empty state ของ O4 บอก "ลองเปลี่ยนช่วงเวลา" ทั้งที่ O4 ไม่ใช้ช่วงเวลา
