@@ -76,18 +76,18 @@
 | v4.49 | 06/10/2569 | **มติ PO 06/10/2569 (U121 — Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ · ปิดหนี้ค้าง #3)** (migration `20261007090000_tax_profile_defaults_by_payee_type`): ตารางใหม่ `tax_profile_default_history` (insert-only — ไม่มี updated_*/deleted_at · 4 FK nullable → `tax_profiles` `ON DELETE RESTRICT` · CHECK เหตุผลไม่ว่าง · index `(organization_id, created_at)`) · `payout_batches` + snapshot `tax_profile_default_id` (FK `ON DELETE SET NULL` · NULL = ยังไม่เคยตั้ง/รอบเก่า) · Tax Profile ที่ใช้จริงต่อรายการยังอยู่ที่ `payout_batch_items.tax_profile_id` เดิม (รวมกรณีมาจากค่าเริ่มต้น) · seed §12 เพิ่มชุดค่าเริ่มต้น outsource · ไม่มี enum ใหม่ · ข้อมูลเดิมไม่เปลี่ยน |
 | v4.50 | 07/10/2569 | **มติ PO 06/10/2569 (U122) — เทมเพลตเอกสารมีผลจริง** (migration `20261007010000_document_template_signature`): `organizations` + `signature_path TEXT` / `signature_sha256 VARCHAR(64)` (รูปลายเซ็นผู้มีอำนาจ · CHECK hex 64 + มาคู่กัน `chk_organizations_signature_pair`) · `tax_document_template_settings` (คงชื่อตาราง): `document_type` เปลี่ยนเป็น enum ใหม่ `template_document_type` (`billing_invoice`/`tax_invoice`/`handover_note` — แถว `wht_certificate` ถูกลบ · ค่าเดิมอยู่ใน audit) · ลบคอลัมน์ `logo_url`/`signature_image_url`/`paper_size`/`language` · เพิ่ม `print_signature BOOLEAN NOT NULL DEFAULT false` · ลบ enum `tax_document_type`/`tax_doc_paper_size`/`tax_doc_language` · `document_template_snapshot JSONB` `{footer_note, signature_path, signature_sha256}` บน `tax_invoices` (ตอนออก · immutable ทั้งแถวเดิม) / `billing_batches` (ตอนส่งรอบ · เพิ่มใน trigger `billing_batches_party_snapshot_immutable`) / `handover_lots` (ตอนยืนยันล็อต · CHECK มีได้เฉพาะ confirmed) — CHECK เป็น object · NULL = เอกสารก่อน U122 (ไม่พิมพ์ · ไม่ backfill) |
 | v4.51 | 07/10/2569 | **มติ PO 07/10/2569 (U125 + U126)** — `service_fee_templates`: ลบคอลัมน์ `charge_per_tracking_round` (U125 — คิดค่าบริการทุกรอบติดตามอิสระเสมอ รายได้แยกต่อ (เคส, `tracking_round`) ไม่หักกลบ) · §3 enum `service_fee_basis` เหลือ `debt_amount` ค่าเดียว (U126 — ตัด `asset_value`; migration มียามหยุดถ้ายังมีเทมเพลต/เคสใช้ `asset_value`) · `cases.asset_value_satang` คงไว้เป็นข้อมูลเคส (ไม่ใช้เป็นฐานค่าบริการ) · migration `20261007100000_service_fee_drop_round_switch_and_asset_value` |
-| v4.5x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U134 + U136)** — **U134** `payout_batches` + `post_completion_synced_at TIMESTAMPTZ` (ขั้นหลังรอบจ่าย completed ครบแล้ว — NULL บนรอบ completed = ค้าง ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ) + partial index `idx_payout_batches_org_post_completion_pending` · backfill: รอบ completed เดิมที่ทุกรายการมีบันทึกจ่ายแล้ว = ครบ (migration `20261008031000_payout_post_completion_marker`) · **U136** `bank_transactions` + `occurrence_seq INTEGER NOT NULL DEFAULT 1` (CHECK ≥ 1) และ `uniq_bank_tx_statement_row` รวม `occurrence_seq` (migration `20261008030000_bank_tx_statement_occurrence`) |
-| v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
-| v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
-| v4.5x-DC | 07/10/2569 | **มติ PO 07/10/2569 (U147 + U148 + U149 — Final Test ด่าน 5 ND-5/6/7)** (migration `20261008090000_approval_flow_role_ids` · `20261008091000_tax_profile_income_type_code` · `20261008092000_bank_file_format_purpose_ids`): **(U149)** `approval_matrices.approval_flow TEXT[]` (ชื่อ role) → `approval_flow_role_ids UUID[]` NOT NULL + GIN `idx_approval_matrices_flow_roles` — แปลงชื่อเดิม (รวมชื่ออังกฤษตัวอย่าง Manager/Finance/FinanceAdmin/Executive) เป็น role ผู้อนุมัติ 3 ตัว (เลือก record seed · กลุ่ม system → inhouse → outsource) · สายที่แปลงไม่ครบถูกปิดใช้งาน + NOTICE · **(U148)** enum ใหม่ `tax_profile_income_type` + `tax_profiles.income_type_code` (ค่าเดิมตรงป้ายรายการ = รหัสนั้น · ที่เหลือ = `other` + ข้อความเดิม) · `income_type` คงเป็นข้อความที่พิมพ์ลง 50 ทวิ · **(U147)** enum ใหม่ `bank_file_purpose` + `bank_file_formats.purpose` NOT NULL (คอลัมน์เดิมทุกตัวอยู่ในคำศัพท์ statement = statement · อื่น = payment) + `bank_code VARCHAR(3)` (จับคู่คำสำคัญชุดเดียวกับ `resolveBankCode()` · bank_name = ชื่อมาตรฐาน) · `bank_accounts.statement_format`/`payment_file_format` (ข้อความ) → `statement_format_id`/`payment_file_format_id` UUID FK (RESTRICT) + index `idx_bank_accounts_statement_format`/`idx_bank_accounts_payment_file_format` (ชื่อเดิมตรงรูปแบบที่ยังใช้งาน**และชนิดตรงช่อง**เท่านั้น ไม่ตรง = NULL + NOTICE) · enum รวม 76 ตัว |
-| v4.5x-fixer-u132 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
-| v4.5x-DD | 07/10/2569 | **มติ PO 07/10/2569 (U151) — ผู้มีอำนาจลงนามบนเอกสารส่งออกนอก** (migration `20261008100000_authorized_signer`): `organizations` + `authorized_signer_name TEXT` / `authorized_signer_title TEXT` (ไม่บังคับ) · `document_template_snapshot` (JSONB เดิมบน `tax_invoices`/`billing_batches`/`handover_lots`) เพิ่มคีย์ `signer_name`/`signer_title` (+ `counterparty_signer_name` = `finance_companies.signer_name` ณ ตอนยืนยันล็อต — ใบส่งมอบเท่านั้น) — ไม่เปลี่ยนคอลัมน์ · `wht_certificates` + `payer_signer_name TEXT` / `payer_signer_title TEXT` (snapshot ณ วันออกใบ · trigger `wht_certificates_immutable` ครอบเพิ่ม) · เอกสาร/ใบเก่าไม่มีคีย์/NULL = ไม่พิมพ์ชื่อ (ไม่ backfill) |
-| v4.5x-DA | 07/10/2569 | **มติ PO 07/10/2569 (U143 + U150)** (migration `20261008070000_receipt_id_document_verification`) — ใบเสร็จของเบิกด้วยมือ/เคลียร์เงินทดรอง และเอกสารยืนยันตัวตนผู้รับเงิน **อัปโหลดจริงผ่าน server** (ตรวจไฟล์ + SHA-256) แทนช่อง path/URL พิมพ์เอง · `expenses` + `receipt_file_unverified BOOLEAN NOT NULL DEFAULT false` · `payee_profiles` + `id_document_hash VARCHAR(64)` + `id_document_unverified BOOLEAN NOT NULL DEFAULT false` · backfill: แถวเดิมที่มี path แต่ไม่มี hash ⇒ `*_unverified = true` (**ไม่ลบข้อมูล** — ระบบถือว่าไม่มีไฟล์: Export Pack `03_Expenses.receipt_file` · ความครบเอกสารบัญชีค่าใช้จ่าย · เกตยืนยันผู้รับเงิน) · CHECK `chk_expenses_receipt_verified` / `chk_payee_profiles_id_document_verified`: มี path ⇒ ต้องมี hash หรือเป็นข้อมูลเก่าที่ทำเครื่องหมายไว้ · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ flag = false |
-| v4.5x-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)** (migration `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source`): **(U145)** `finance_policy_settings` ลบ `advance_uncleared_to_employee_receivable` (สวิตช์ไม่เคยมีผล — รอบจ่ายหักคืนเงินทดรองค้างเสมอ) · **(U144)** `billing_batches` + `bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0` + `bank_fee_written_off_date DATE` (CHECK ≥ 0 · ยอด 0 ⇔ วันที่ NULL · partial index `idx_billing_batches_bank_fee_date (organization_id, bank_fee_written_off_date) WHERE ยอด > 0`) — ส่วนต่างรับขาด ≤ `write_off_tolerance_satang` เป็นค่าธรรมเนียมธนาคาร (`22` §6.11.1) · **(U146)** `finance_companies` ลบ `billing_day` / `payment_due_days` (รอบบิลเป็นแหล่งเดียว — บริษัทที่ไม่มีรอบครอบถูกจัดเข้ารอบบิลใหม่ `fixed_dates [billing_day]` + `net_days payment_due_days` ต่อกลุ่มค่า ⇒ วันครบกำหนดเท่าเดิม) · enum `cutoff_rule_type` ตัด `custom_text` (ค่าเดิม: เลขวันที่ในข้อความ + "สิ้นเดือน"=31 ⇒ `fixed_dates` · ไม่มี ⇒ `month_end`) · `cutoff_text` → `legacy_cutoff_text` (อ้างอิงเท่านั้น) · CHECK `cycles_cutoff_shape` ตัดกรณี custom_text · `cycles_due_rule_shape` ให้ `net_days` = 0 ได้ · ไม่มีตารางใหม่ |
-| v4.5x-DE | 07/10/2569 | **มติ PO U155 → U156 → U157 → U159 (Model Phone · DEC-016)** (migration `20261008110000_device_catalog`): enum ใหม่ `device_catalog_status` (`active`/`hidden` — ใช้เป็น **ค่าที่ผู้ดูแลตั้งด้วยมือ** เท่านั้น · ไม่มี `pending_review` ตาม U156) + `device_catalog_source` (`api`/`manual`) · ตารางใหม่ `device_catalog_settings` (1 แถว/org: `brand_names TEXT[]` + `recent_years` CHECK 1–30 ค่าเริ่มต้น 5 — ตัวกรองการแสดง) · `device_brands` (`name_key` UNIQUE ต่อ org · `manual_status` NULL = ตามตัวกรอง · `external_id` = ชื่อฝั่ง API · `last_synced_at` ใช้ resume การดึงครั้งแรก) · `device_models` (`asset_kind` · `manual_status` · `external_id` UNIQUE ต่อแบรนด์ · `release_year` CHECK 1990–2100 · `name_edited_at` = job ไม่ทับชื่อ) · `cases.device_model_id` (FK `ON DELETE SET NULL` — อ้างรุ่นเมื่อเลือกจากรายการ · ข้อความ snapshot ยังอยู่ที่ `asset_description`) · **การแสดงคำนวณตอนอ่าน** (`manual_status` ชนะ · ไม่งั้นแบรนด์ในรายชื่อ + รุ่นออกภายใน N ปี · ไม่ทราบปี = ผ่าน) — job ไม่เขียน `manual_status` · enum รวม 76 ตัว |
-| v4.5x-FD | 07/10/2569 | **มติ PO U165** (migration `20261008140000_service_fee_fail_fee`): แทน `service_fee_templates.charge_on_fail BOOLEAN` ด้วย **`fail_fee_satang INTEGER NULL`** (ยอดค่าบริการกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ · CHECK ≥ 0) · snapshot บนเคส `cases.service_fee_charge_on_fail` → **`service_fee_fail_fee_satang`** · `recycle_requests.prev_service_fee_charge_on_fail` → **`prev_service_fee_fail_fee_satang`** · แปลงข้อมูล: `true` + FLAT/HYBRID ⇒ = base · นอกนั้น ⇒ NULL (ผลรายได้เท่าเดิมทุกบาท) |
-| v4.5x-GA | 07/10/2569 | **มติ PO U166 — ความจุ/สีของเครื่อง** (migration `20261008150000_device_tac`): `cases.asset_capacity` / `cases.asset_color` (TEXT · ข้อความ snapshot ที่เลือกบนฟอร์มเคส/นำเข้า · "ไม่ระบุในสัญญา" เป็นค่าหนึ่ง · NULL = เคสก่อนมติ) · `assets.device_capacity` / `assets.device_color` (TEXT · snapshot จากเคสตอนปิดงานสำเร็จคู่กับ `device_desc`) · `assets.color_capacity_matched` (BOOLEAN · ผลติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้าคลัง · NULL = ยังไม่ตรวจรับ · ไม่ติ๊ก = false ไม่ block) · **มติ PO U166 → U167 → U168 — ฐาน TAC แทน RapidAPI (DEC-017 แทน DEC-016)** (migration `20261008150000_device_tac` + `20261008150100_device_tac_updates`): ลบแถวแคตตาล็อก `source = 'api'` (เคสคง `asset_description` · `device_model_id` → NULL) · enum `device_catalog_source` = (`tacdb`, `manual`) · `device_brands` ลบ `external_id`/`last_synced_at` (+ index) · `device_models.external_id` = คีย์ชื่อรุ่นจาก TAC แบบ normalize · enum ใหม่ `device_tac_source` (`tacdb`/`learned`/`manual`) · `device_tac_update_trigger` (`daily`/`manual`/`file`) · `device_tac_update_status` (`success`/`not_modified`/`failed`) · ตารางใหม่ **`device_tacs`** (TAC CHAR(8) CHECK 8 หลัก · ยี่ห้อ/รุ่น/รุ่นย่อย/ปี 1980–2100 · ผูก `device_models` ON DELETE SET NULL · UNIQUE `uniq_device_tacs_org_tac`) + **`device_tac_updates`** (insert-only ประวัติการอัปเดต · idx `(org, created_at DESC)`) · `device_catalog_settings` + `tac_etag`/`tac_checked_at`/`tac_imported_at`/`capacity_options`/`color_options`/`tac_source_sha`/`tac_source_updated_at`/`stale_alert_days` (1–3650 · ค่าเริ่มต้น 90) · ยกเลิกงาน `device_catalog_sync` ที่ค้างคิว |
-| v4.5x-HC | 07/10/2569 | **มติ O75** (migration `20261008153000_billing_status_debit_note_backfill` — ข้อมูลเท่านั้น ไม่เปลี่ยนโครงสร้าง): enum `billing_batch_status` เดิม · state machine เพิ่มเส้น `paid → partially_paid` (`23` §6.8) · backfill รอบ `paid` ที่ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ active) ยังค้าง > 0 ⇒ `partially_paid` + `audit_logs` (actor system · reason ระบุ migration) · รันซ้ำได้ |
+| v4.52 | 07/10/2569 | **มติ PO 07/10/2569 (U134 + U136)** — **U134** `payout_batches` + `post_completion_synced_at TIMESTAMPTZ` (ขั้นหลังรอบจ่าย completed ครบแล้ว — NULL บนรอบ completed = ค้าง ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ) + partial index `idx_payout_batches_org_post_completion_pending` · backfill: รอบ completed เดิมที่ทุกรายการมีบันทึกจ่ายแล้ว = ครบ (migration `20261008031000_payout_post_completion_marker`) · **U136** `bank_transactions` + `occurrence_seq INTEGER NOT NULL DEFAULT 1` (CHECK ≥ 1) และ `uniq_bank_tx_statement_row` รวม `occurrence_seq` (migration `20261008030000_bank_tx_statement_occurrence`) |
+| v4.53 | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
+| v4.54 | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
+| v4.55 | 07/10/2569 | **มติ PO 07/10/2569 (U147 + U148 + U149 — Final Test ด่าน 5 ND-5/6/7)** (migration `20261008090000_approval_flow_role_ids` · `20261008091000_tax_profile_income_type_code` · `20261008092000_bank_file_format_purpose_ids`): **(U149)** `approval_matrices.approval_flow TEXT[]` (ชื่อ role) → `approval_flow_role_ids UUID[]` NOT NULL + GIN `idx_approval_matrices_flow_roles` — แปลงชื่อเดิม (รวมชื่ออังกฤษตัวอย่าง Manager/Finance/FinanceAdmin/Executive) เป็น role ผู้อนุมัติ 3 ตัว (เลือก record seed · กลุ่ม system → inhouse → outsource) · สายที่แปลงไม่ครบถูกปิดใช้งาน + NOTICE · **(U148)** enum ใหม่ `tax_profile_income_type` + `tax_profiles.income_type_code` (ค่าเดิมตรงป้ายรายการ = รหัสนั้น · ที่เหลือ = `other` + ข้อความเดิม) · `income_type` คงเป็นข้อความที่พิมพ์ลง 50 ทวิ · **(U147)** enum ใหม่ `bank_file_purpose` + `bank_file_formats.purpose` NOT NULL (คอลัมน์เดิมทุกตัวอยู่ในคำศัพท์ statement = statement · อื่น = payment) + `bank_code VARCHAR(3)` (จับคู่คำสำคัญชุดเดียวกับ `resolveBankCode()` · bank_name = ชื่อมาตรฐาน) · `bank_accounts.statement_format`/`payment_file_format` (ข้อความ) → `statement_format_id`/`payment_file_format_id` UUID FK (RESTRICT) + index `idx_bank_accounts_statement_format`/`idx_bank_accounts_payment_file_format` (ชื่อเดิมตรงรูปแบบที่ยังใช้งาน**และชนิดตรงช่อง**เท่านั้น ไม่ตรง = NULL + NOTICE) · enum รวม 76 ตัว |
+| v4.56 | 07/10/2569 | **มติ PO 07/10/2569 (U132 + U133)** (migration `20261008050000_finance_company_documents` + `20261008051000_cycle_scope_kind`): **(U132)** enum `company_document_type` (`company_certificate`/`vat_registration`/`service_contract`/`bank_book`/`other`) + ตารางใหม่ `finance_company_documents` — **insert-only เก็บทุกเวอร์ชัน** (ไม่มี `updated_*`/`deleted_at` · trigger ห้าม UPDATE/DELETE/TRUNCATE) · `title` เฉพาะ `other` · `issued_date` เฉพาะหนังสือรับรอง (CHECK) · `version` + `replaces_document_id` UNIQUE (แทนที่ได้ครั้งเดียว · CHECK v1 ⇔ ไม่มีตัวก่อน) · partial unique `uniq_company_documents_first_singleton (company_id, document_type) WHERE version = 1 AND document_type <> 'other'` · `file_path` UNIQUE ต่อองค์กร + `file_sha256` · **(U133)** `billing_payout_cycles.scope` (ข้อความอิสระ) → `scope_kind` enum `cycle_scope_kind` (`all_companies`/`selected_companies`/`all_teams`/`inhouse`/`outsource` · CHECK `cycles_scope_matches_type`) + `legacy_scope_note` (ข้อความเดิม · แปลง AR = ทุกบริษัท · AP = ฝั่งที่ระบุชัด ไม่งั้นทุกทีม) + junction ใหม่ `billing_cycle_companies (cycle_id, company_id)` · `payout_batches` + `cycle_id` (FK รอบ AP) + `pay_due_date DATE` (CHECK มีคู่กัน) · enum รวม 74 ตัว |
+| v4.57 | 07/10/2569 | **มติ PO 07/10/2569 (U151) — ผู้มีอำนาจลงนามบนเอกสารส่งออกนอก** (migration `20261008100000_authorized_signer`): `organizations` + `authorized_signer_name TEXT` / `authorized_signer_title TEXT` (ไม่บังคับ) · `document_template_snapshot` (JSONB เดิมบน `tax_invoices`/`billing_batches`/`handover_lots`) เพิ่มคีย์ `signer_name`/`signer_title` (+ `counterparty_signer_name` = `finance_companies.signer_name` ณ ตอนยืนยันล็อต — ใบส่งมอบเท่านั้น) — ไม่เปลี่ยนคอลัมน์ · `wht_certificates` + `payer_signer_name TEXT` / `payer_signer_title TEXT` (snapshot ณ วันออกใบ · trigger `wht_certificates_immutable` ครอบเพิ่ม) · เอกสาร/ใบเก่าไม่มีคีย์/NULL = ไม่พิมพ์ชื่อ (ไม่ backfill) |
+| v4.58 | 07/10/2569 | **มติ PO 07/10/2569 (U143 + U150)** (migration `20261008070000_receipt_id_document_verification`) — ใบเสร็จของเบิกด้วยมือ/เคลียร์เงินทดรอง และเอกสารยืนยันตัวตนผู้รับเงิน **อัปโหลดจริงผ่าน server** (ตรวจไฟล์ + SHA-256) แทนช่อง path/URL พิมพ์เอง · `expenses` + `receipt_file_unverified BOOLEAN NOT NULL DEFAULT false` · `payee_profiles` + `id_document_hash VARCHAR(64)` + `id_document_unverified BOOLEAN NOT NULL DEFAULT false` · backfill: แถวเดิมที่มี path แต่ไม่มี hash ⇒ `*_unverified = true` (**ไม่ลบข้อมูล** — ระบบถือว่าไม่มีไฟล์: Export Pack `03_Expenses.receipt_file` · ความครบเอกสารบัญชีค่าใช้จ่าย · เกตยืนยันผู้รับเงิน) · CHECK `chk_expenses_receipt_verified` / `chk_payee_profiles_id_document_verified`: มี path ⇒ ต้องมี hash หรือเป็นข้อมูลเก่าที่ทำเครื่องหมายไว้ · แนบไฟล์ใหม่ที่ตรวจแล้ว ⇒ flag = false |
+| v4.59 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)** (migration `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source`): **(U145)** `finance_policy_settings` ลบ `advance_uncleared_to_employee_receivable` (สวิตช์ไม่เคยมีผล — รอบจ่ายหักคืนเงินทดรองค้างเสมอ) · **(U144)** `billing_batches` + `bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0` + `bank_fee_written_off_date DATE` (CHECK ≥ 0 · ยอด 0 ⇔ วันที่ NULL · partial index `idx_billing_batches_bank_fee_date (organization_id, bank_fee_written_off_date) WHERE ยอด > 0`) — ส่วนต่างรับขาด ≤ `write_off_tolerance_satang` เป็นค่าธรรมเนียมธนาคาร (`22` §6.11.1) · **(U146)** `finance_companies` ลบ `billing_day` / `payment_due_days` (รอบบิลเป็นแหล่งเดียว — บริษัทที่ไม่มีรอบครอบถูกจัดเข้ารอบบิลใหม่ `fixed_dates [billing_day]` + `net_days payment_due_days` ต่อกลุ่มค่า ⇒ วันครบกำหนดเท่าเดิม) · enum `cutoff_rule_type` ตัด `custom_text` (ค่าเดิม: เลขวันที่ในข้อความ + "สิ้นเดือน"=31 ⇒ `fixed_dates` · ไม่มี ⇒ `month_end`) · `cutoff_text` → `legacy_cutoff_text` (อ้างอิงเท่านั้น) · CHECK `cycles_cutoff_shape` ตัดกรณี custom_text · `cycles_due_rule_shape` ให้ `net_days` = 0 ได้ · ไม่มีตารางใหม่ |
+| v4.60 | 07/10/2569 | **มติ PO U155 → U156 → U157 → U159 (Model Phone · DEC-016)** (migration `20261008110000_device_catalog`): enum ใหม่ `device_catalog_status` (`active`/`hidden` — ใช้เป็น **ค่าที่ผู้ดูแลตั้งด้วยมือ** เท่านั้น · ไม่มี `pending_review` ตาม U156) + `device_catalog_source` (`api`/`manual`) · ตารางใหม่ `device_catalog_settings` (1 แถว/org: `brand_names TEXT[]` + `recent_years` CHECK 1–30 ค่าเริ่มต้น 5 — ตัวกรองการแสดง) · `device_brands` (`name_key` UNIQUE ต่อ org · `manual_status` NULL = ตามตัวกรอง · `external_id` = ชื่อฝั่ง API · `last_synced_at` ใช้ resume การดึงครั้งแรก) · `device_models` (`asset_kind` · `manual_status` · `external_id` UNIQUE ต่อแบรนด์ · `release_year` CHECK 1990–2100 · `name_edited_at` = job ไม่ทับชื่อ) · `cases.device_model_id` (FK `ON DELETE SET NULL` — อ้างรุ่นเมื่อเลือกจากรายการ · ข้อความ snapshot ยังอยู่ที่ `asset_description`) · **การแสดงคำนวณตอนอ่าน** (`manual_status` ชนะ · ไม่งั้นแบรนด์ในรายชื่อ + รุ่นออกภายใน N ปี · ไม่ทราบปี = ผ่าน) — job ไม่เขียน `manual_status` · enum รวม 76 ตัว |
+| v4.61 | 07/10/2569 | **มติ PO U165** (migration `20261008140000_service_fee_fail_fee`): แทน `service_fee_templates.charge_on_fail BOOLEAN` ด้วย **`fail_fee_satang INTEGER NULL`** (ยอดค่าบริการกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ · CHECK ≥ 0) · snapshot บนเคส `cases.service_fee_charge_on_fail` → **`service_fee_fail_fee_satang`** · `recycle_requests.prev_service_fee_charge_on_fail` → **`prev_service_fee_fail_fee_satang`** · แปลงข้อมูล: `true` + FLAT/HYBRID ⇒ = base · นอกนั้น ⇒ NULL (ผลรายได้เท่าเดิมทุกบาท) |
+| v4.62 | 07/10/2569 | **มติ PO U166 — ความจุ/สีของเครื่อง** (migration `20261008150000_device_tac`): `cases.asset_capacity` / `cases.asset_color` (TEXT · ข้อความ snapshot ที่เลือกบนฟอร์มเคส/นำเข้า · "ไม่ระบุในสัญญา" เป็นค่าหนึ่ง · NULL = เคสก่อนมติ) · `assets.device_capacity` / `assets.device_color` (TEXT · snapshot จากเคสตอนปิดงานสำเร็จคู่กับ `device_desc`) · `assets.color_capacity_matched` (BOOLEAN · ผลติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้าคลัง · NULL = ยังไม่ตรวจรับ · ไม่ติ๊ก = false ไม่ block) · **มติ PO U166 → U167 → U168 — ฐาน TAC แทน RapidAPI (DEC-017 แทน DEC-016)** (migration `20261008150000_device_tac` + `20261008150100_device_tac_updates`): ลบแถวแคตตาล็อก `source = 'api'` (เคสคง `asset_description` · `device_model_id` → NULL) · enum `device_catalog_source` = (`tacdb`, `manual`) · `device_brands` ลบ `external_id`/`last_synced_at` (+ index) · `device_models.external_id` = คีย์ชื่อรุ่นจาก TAC แบบ normalize · enum ใหม่ `device_tac_source` (`tacdb`/`learned`/`manual`) · `device_tac_update_trigger` (`daily`/`manual`/`file`) · `device_tac_update_status` (`success`/`not_modified`/`failed`) · ตารางใหม่ **`device_tacs`** (TAC CHAR(8) CHECK 8 หลัก · ยี่ห้อ/รุ่น/รุ่นย่อย/ปี 1980–2100 · ผูก `device_models` ON DELETE SET NULL · UNIQUE `uniq_device_tacs_org_tac`) + **`device_tac_updates`** (insert-only ประวัติการอัปเดต · idx `(org, created_at DESC)`) · `device_catalog_settings` + `tac_etag`/`tac_checked_at`/`tac_imported_at`/`capacity_options`/`color_options`/`tac_source_sha`/`tac_source_updated_at`/`stale_alert_days` (1–3650 · ค่าเริ่มต้น 90) · ยกเลิกงาน `device_catalog_sync` ที่ค้างคิว |
+| v4.63 | 07/10/2569 | **มติ O75** (migration `20261008153000_billing_status_debit_note_backfill` — ข้อมูลเท่านั้น ไม่เปลี่ยนโครงสร้าง): enum `billing_batch_status` เดิม · state machine เพิ่มเส้น `paid → partially_paid` (`23` §6.8) · backfill รอบ `paid` ที่ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ active) ยังค้าง > 0 ⇒ `partially_paid` + `audit_logs` (actor system · reason ระบุ migration) · รันซ้ำได้ |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -165,11 +165,11 @@ CREATE TYPE payee_type AS ENUM ('individual', 'corporate'); -- เพิ่ม 0
 
 -- ══ Settings enums (ไฟล์ 13 — เพิ่ม 04/07/2569 ตาม DEC-006/D1,D2) ══
 CREATE TYPE cycle_type             AS ENUM ('AR', 'AP');                        -- ไฟล์ 13 §6.1
--- ขอบเขตรอบ (v4.5x-fixer-u132 — มติ PO U133): AR = all_companies | selected_companies · AP = all_teams | inhouse | outsource
+-- ขอบเขตรอบ (v4.56 — มติ PO U133): AR = all_companies | selected_companies · AP = all_teams | inhouse | outsource
 CREATE TYPE cycle_scope_kind       AS ENUM ('all_companies', 'selected_companies', 'all_teams', 'inhouse', 'outsource');
--- ชนิดเอกสารบริษัทไฟแนนซ์ (v4.5x-fixer-u132 — มติ PO U132)
+-- ชนิดเอกสารบริษัทไฟแนนซ์ (v4.56 — มติ PO U132)
 CREATE TYPE company_document_type  AS ENUM ('company_certificate', 'vat_registration', 'service_contract', 'bank_book', 'other');
-CREATE TYPE cutoff_rule_type       AS ENUM ('fixed_dates', 'month_end');  -- v4.5x-fixer-db3 (มติ PO U146): ตัด custom_text
+CREATE TYPE cutoff_rule_type       AS ENUM ('fixed_dates', 'month_end');  -- v4.59 (มติ PO U146): ตัด custom_text
 CREATE TYPE bank_account_usage     AS ENUM ('receive', 'pay', 'both');          -- ไฟล์ 13 §6.3
 CREATE TYPE bank_file_type         AS ENUM ('CSV', 'TXT');                      -- ไฟล์ 13 §6.8
 CREATE TYPE bank_file_purpose      AS ENUM ('statement', 'payment');            -- มติ PO U147 (ไฟล์ 13 §6.8)
@@ -500,14 +500,14 @@ CREATE TYPE job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'ca
 -- pending = รอส่ง/รอ retry (available_at = เวลาที่หยิบได้) · sent = ส่งแล้ว · failed = ครบ max_attempts / payload ผิดรูป
 CREATE TYPE notification_outbox_status AS ENUM ('pending', 'sent', 'failed');
 
--- v4.5x-DE มติ PO U155 → U159 (DEC-016): แคตตาล็อก Model Phone
+-- v4.60 มติ PO U155 → U159 (DEC-016): แคตตาล็อก Model Phone
 -- device_catalog_status = ค่าที่ผู้ดูแลตั้งด้วยมือ (active แสดง / hidden ไม่แสดง) · คอลัมน์ NULL = ตามตัวกรอง
 CREATE TYPE device_catalog_status AS ENUM ('active', 'hidden');
--- v4.5x-GA มติ PO U166 (DEC-017 แทน DEC-016): แหล่งแคตตาล็อก = ฐาน TAC (tacdb) / ผู้ดูแลเพิ่มเอง (manual) — เลิก 'api' (RapidAPI · แถวเดิมถูกลบใน migration)
+-- v4.62 มติ PO U166 (DEC-017 แทน DEC-016): แหล่งแคตตาล็อก = ฐาน TAC (tacdb) / ผู้ดูแลเพิ่มเอง (manual) — เลิก 'api' (RapidAPI · แถวเดิมถูกลบใน migration)
 CREATE TYPE device_catalog_source AS ENUM ('tacdb', 'manual');
--- v4.5x-GA (U166): แหล่งของแถว TAC — tacdb = นำเข้าจากไฟล์ TAC · learned = ระบบจำจากเคสจริง · manual = ผู้ดูแลผูกเอง (ชนะทุกแหล่ง)
+-- v4.62 (U166): แหล่งของแถว TAC — tacdb = นำเข้าจากไฟล์ TAC · learned = ระบบจำจากเคสจริง · manual = ผู้ดูแลผูกเอง (ชนะทุกแหล่ง)
 CREATE TYPE device_tac_source AS ENUM ('tacdb', 'learned', 'manual');
--- v4.5x-GA (U167): ประวัติการอัปเดตฐาน TAC — ผู้สั่ง / ผล
+-- v4.62 (U167): ประวัติการอัปเดตฐาน TAC — ผู้สั่ง / ผล
 CREATE TYPE device_tac_update_trigger AS ENUM ('daily', 'manual', 'file');
 CREATE TYPE device_tac_update_status AS ENUM ('success', 'not_modified', 'failed');
 ```
@@ -537,8 +537,8 @@ CREATE TABLE organizations (
   logo_sha256     VARCHAR(64),                    -- v4.45 (U110) SHA-256 ของไฟล์โลโก้ · CHECK ^[0-9a-f]{64}$ · NULL = ไม่มีโลโก้/ก่อน U110
   signature_path  TEXT,                           -- v4.50 (U122) รูปลายเซ็นผู้มีอำนาจ `organization/<orgId>/signature/<uuid>.<ext>` · ไม่บังคับ · ไม่ลบไฟล์เดิม
   signature_sha256 VARCHAR(64),                   -- v4.50 (U122) CHECK hex 64 · มาคู่กับ signature_path
-  authorized_signer_name  TEXT,                   -- v4.5x-DD (U151) ชื่อผู้มีอำนาจลงนาม · ไม่บังคับ · snapshot ลงเอกสารส่งออกนอกตอนออก
-  authorized_signer_title TEXT,                   -- v4.5x-DD (U151) ตำแหน่ง · ไม่บังคับ
+  authorized_signer_name  TEXT,                   -- v4.57 (U151) ชื่อผู้มีอำนาจลงนาม · ไม่บังคับ · snapshot ลงเอกสารส่งออกนอกตอนออก
+  authorized_signer_title TEXT,                   -- v4.57 (U151) ตำแหน่ง · ไม่บังคับ
   vat_registered  BOOLEAN       NOT NULL DEFAULT true,
   branch_code     VARCHAR(5)    NOT NULL DEFAULT '00000',  -- สำนักงานใหญ่/สาขาของผู้ขาย (U82 · ม.86/4) · CHECK ตัวเลข 5 หลัก
   -- v4.41 (มติ PO U102): tax_invoice_* / billing_batch_seq* ย้ายไป document_number_series แล้วลบ
@@ -709,7 +709,7 @@ CREATE TABLE finance_companies (
   -- รูปแบบส่งใบกำกับภาษีเริ่มต้น — มติ PO 14/08/2569 (ไฟล์ 10 §7.1 · เปลี่ยนต่อใบได้ที่ไฟล์ 31 §6.2)
   default_invoice_delivery_format invoice_delivery_format NOT NULL DEFAULT 'paper_pdf',
   -- Billing
-  -- v4.5x-fixer-db3 (มติ PO U146): ลบ billing_day / payment_due_days — รอบบิลที่บริษัทใช้ (billing_cycle_companies
+  -- v4.59 (มติ PO U146): ลบ billing_day / payment_due_days — รอบบิลที่บริษัทใช้ (billing_cycle_companies
   -- หรือรอบ "ทุกบริษัท") เป็นแหล่งเดียวของวันตัดรอบ + เครดิตเทอม · ค่าเดิมแปลงเป็นรอบบิลใน migration 20261008082000
   -- WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — มติ PO 2026-08-12 ข้อ A1 · NULL = บริษัทนี้ไม่หัก
   wht_withheld_by_customer_pct NUMERIC(5,2) DEFAULT 3.00,
@@ -723,7 +723,7 @@ CREATE TABLE finance_companies (
   UNIQUE(organization_id, tax_id)
 );
 
--- ── finance_company_documents (v4.5x-fixer-u132 — มติ PO U132 · ไฟล์ 10 §7.4) ──
+-- ── finance_company_documents (v4.56 — มติ PO U132 · ไฟล์ 10 §7.4) ──
 -- insert-only เก็บทุกเวอร์ชัน (ไม่มี updated_*/deleted_at) · trigger ห้าม UPDATE/DELETE/TRUNCATE
 -- แทนที่ = แถวใหม่ชี้เวอร์ชันก่อน · ไฟล์ใน bucket case-documents path ต่อเวอร์ชัน (DEC-014)
 CREATE TABLE finance_company_documents (
@@ -767,7 +767,7 @@ CREATE TABLE service_fee_templates (
   -- SUCCESS_FEE / HYBRID
   rate_pct            NUMERIC(5,2)         NOT NULL DEFAULT 0,
   basis               service_fee_basis,
-  -- (v4.5x-FD มติ PO U165) ยอดกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ (แทน charge_on_fail)
+  -- (v4.61 มติ PO U165) ยอดกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ (แทน charge_on_fail)
   fail_fee_satang     INTEGER              CHECK (fail_fee_satang IS NULL OR fail_fee_satang >= 0),
   -- (v4.51 มติ PO U125) ตัดคอลัมน์ charge_per_tracking_round — คิดค่าบริการทุกรอบติดตามอิสระเสมอ
   -- Versioning (snapshot ลงใน Case ตอน approved)
@@ -945,12 +945,12 @@ CREATE TABLE billing_payout_cycles (
   type             cycle_type NOT NULL,
   cutoff_rule_type cutoff_rule_type NOT NULL,
   cutoff_dates     INTEGER[],          -- ใช้เมื่อ fixed_dates เช่น '{15,30}'
-  legacy_cutoff_text TEXT,             -- v4.5x-fixer-db3 (U146): ข้อความกติกาแบบอิสระเดิม (custom_text ถูกตัด) อ้างอิงเท่านั้น
+  legacy_cutoff_text TEXT,             -- v4.59 (U146): ข้อความกติกาแบบอิสระเดิม (custom_text ถูกตัด) อ้างอิงเท่านั้น
   -- มติ PO 2026-08-12 ข้อ A5 — ไฟล์ 19 ต้องคำนวณ due_date จากค่าเหล่านี้ (ห้าม parse จาก free text)
   due_rule_type    due_rule_type NOT NULL DEFAULT 'net_days',
   due_rule_value   INTEGER,            -- net_days = จำนวนวัน · day_of_next_month = วันที่ · month_end = ไม่ใช้
   due_rule         TEXT NOT NULL,      -- label ที่ผู้ใช้เห็น เช่น "Net 30 Days" (ไม่ใช้คำนวณ)
-  -- v4.5x-fixer-u132 (มติ PO U133): ขอบเขตจริง แทนข้อความอิสระ `scope` เดิม · ห้ามซ้อนกับรอบชนิดเดียวกันที่ใช้งาน (ชั้น service — CYCLE_SCOPE_OVERLAP)
+  -- v4.56 (มติ PO U133): ขอบเขตจริง แทนข้อความอิสระ `scope` เดิม · ห้ามซ้อนกับรอบชนิดเดียวกันที่ใช้งาน (ชั้น service — CYCLE_SCOPE_OVERLAP)
   scope_kind       cycle_scope_kind NOT NULL,
   legacy_scope_note TEXT,              -- ข้อความ "ใช้กับ" เดิมก่อน U133 (อ้างอิงเท่านั้น)
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -974,7 +974,7 @@ CREATE TABLE billing_payout_cycles (
 );
 CREATE INDEX idx_cycles_org ON billing_payout_cycles(organization_id, type);
 
--- ── billing_cycle_companies (v4.5x-fixer-u132 — มติ PO U133) ──
+-- ── billing_cycle_companies (v4.56 — มติ PO U133) ──
 -- junction: บริษัทที่รอบบิล AR ใช้ เมื่อ scope_kind = selected_companies (ไม่มี common columns ครบ — §2.4)
 CREATE TABLE billing_cycle_companies (
   organization_id UUID NOT NULL REFERENCES organizations(id),
@@ -1011,7 +1011,7 @@ CREATE TABLE finance_policy_settings (
   ar_aging_buckets    INTEGER[] NOT NULL DEFAULT '{30,60,90}', -- ไฟล์ 19 §6.4 (สร้างช่วง 0-30/31-60/61-90/90+ อัตโนมัติ)
   -- มติ PO 2026-08-12 ข้อ B4 — เพดานตัดส่วนต่างค่าธรรมเนียมธนาคารอัตโนมัติ (default 50 บาท)
   write_off_tolerance_satang INTEGER NOT NULL DEFAULT 5000,
-  -- (v4.5x-fixer-db3 — มติ PO U145) คอลัมน์ advance_uncleared_to_employee_receivable ถูกลบ: รอบจ่ายหักคืนเงินทดรองค้างเสมอ (D12)
+  -- (v4.59 — มติ PO U145) คอลัมน์ advance_uncleared_to_employee_receivable ถูกลบ: รอบจ่ายหักคืนเงินทดรองค้างเสมอ (D12)
   -- v4.43 มติ PO 06/10/2569 U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน (CHECK > 0 · `22` §6.17)
   substitute_receipt_max_per_doc_satang   INTEGER NOT NULL DEFAULT 50000,   -- ต่อใบ (฿500)
   substitute_receipt_max_per_month_satang INTEGER NOT NULL DEFAULT 300000,  -- ต่อคนต่อเดือน (฿3,000)
@@ -1112,9 +1112,9 @@ CREATE TABLE cases (
   -- Asset
   asset_kind          asset_kind,               -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.2 `asset_type`
   asset_description   TEXT,                     -- = `asset_brand_model` ของไฟล์ 38 §6.2
-  device_model_id     UUID REFERENCES device_models(id) ON DELETE SET NULL, -- v4.5x-DE (U155) รุ่นที่เลือกจาก Model Phone · NULL = ระบุเอง
-  asset_capacity      TEXT,                     -- v4.5x-GA (U166) ความจุตามสัญญา — ข้อความ snapshot ('128GB' / ระบุเอง / 'ไม่ระบุในสัญญา') · NULL = เคสก่อนมติ/ร่าง
-  asset_color         TEXT,                     -- v4.5x-GA (U166) สีตามสัญญา — ข้อความ snapshot เช่นเดียวกัน
+  device_model_id     UUID REFERENCES device_models(id) ON DELETE SET NULL, -- v4.60 (U155) รุ่นที่เลือกจาก Model Phone · NULL = ระบุเอง
+  asset_capacity      TEXT,                     -- v4.62 (U166) ความจุตามสัญญา — ข้อความ snapshot ('128GB' / ระบุเอง / 'ไม่ระบุในสัญญา') · NULL = เคสก่อนมติ/ร่าง
+  asset_color         TEXT,                     -- v4.62 (U166) สีตามสัญญา — ข้อความ snapshot เช่นเดียวกัน
   imei                VARCHAR(15),                     -- A6: IMEI 15 หลักเท่านั้น (exact match)
   serial_no           TEXT,                            -- A6: เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ)
   debt_amount_satang  INTEGER,
@@ -1216,7 +1216,7 @@ CREATE TABLE recycle_requests (
   -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.4 `recycle_history` = แถวที่ status = 'approved' ของตารางนี้
   previous_round  INTEGER,
   new_round       INTEGER,
-  -- มติ PO O72(2) (BUG-SF2 · v4.5x-BY) — snapshot ของรอบเดิมก่อนเคสถูกล้างตอนอนุมัติรีไซเกิล (เติมตอน approve)
+  -- มติ PO O72(2) (BUG-SF2 · v4.53) — snapshot ของรอบเดิมก่อนเคสถูกล้างตอนอนุมัติรีไซเกิล (เติมตอน approve)
   -- ใช้สร้างรายได้ของรอบเดิม (`revenues.tracking_round = previous_round`) เมื่อรายการเบิกรอบเดิมอนุมัติทีหลัง
   prev_outcome                    case_outcome,
   prev_closed_at                  TIMESTAMPTZ,
@@ -1339,9 +1339,9 @@ CREATE TABLE data_retention_settings (
   CONSTRAINT chk_data_retention_years_range CHECK (debtor_document_retention_years BETWEEN 1 AND 20)
 );
 
--- ── device_catalog_settings / device_brands / device_models (v4.5x-DE) ─────
+-- ── device_catalog_settings / device_brands / device_models (v4.60) ─────
 -- แคตตาล็อก "Model Phone" (มติ PO U155 → U159 → U166 · DEC-017 แทน DEC-016 · ไฟล์ 13 §6.18 · 38 §6.2)
--- v4.5x-GA: job device_tac_sync (รายวัน) นำเข้าฐาน TAC (device_tacs) แล้วเติมแบรนด์/รุ่น (source = tacdb) · การแสดงในตัวเลือก (คำนวณตอนอ่าน) =
+-- v4.62: job device_tac_sync (รายวัน) นำเข้าฐาน TAC (device_tacs) แล้วเติมแบรนด์/รุ่น (source = tacdb) · การแสดงในตัวเลือก (คำนวณตอนอ่าน) =
 --   manual_status ที่ผู้ดูแลตั้ง (ชนะเสมอ) ไม่งั้นตัวกรอง: แบรนด์ในรายชื่อ + รุ่นออกภายใน recent_years ปี
 --   (ไม่ทราบปี: tacdb = ไม่แสดง · manual = แสดง) · ปิดแบรนด์ = ทุกรุ่นไม่แสดง
 --   job ไม่เขียน manual_status และไม่ทับชื่อที่ผู้ดูแลแก้ (name_edited_at)
@@ -1349,14 +1349,14 @@ CREATE TABLE device_catalog_settings (
   organization_id UUID        PRIMARY KEY REFERENCES organizations(id),
   brand_names     TEXT[]      NOT NULL DEFAULT ARRAY[]::TEXT[],
   recent_years    INTEGER     NOT NULL DEFAULT 5,
-  capacity_options TEXT[]     NOT NULL DEFAULT ARRAY['16GB','32GB','64GB','128GB','256GB','512GB','1TB','2TB']::TEXT[], -- v4.5x-GA (U166) ตัวเลือกความจุของฟอร์มเคส
-  color_options   TEXT[]      NOT NULL DEFAULT ARRAY['ดำ','ขาว','เงิน','เทา','ทอง','น้ำเงิน','ฟ้า','เขียว','ม่วง','ชมพู','แดง','ส้ม','เหลือง']::TEXT[], -- v4.5x-GA (U166)
-  tac_etag        TEXT,                    -- v4.5x-GA (U166) ETag ของไฟล์ TAC รอบล่าสุด (fallback เมื่อ commits API ล้ม)
-  tac_checked_at  TIMESTAMPTZ,             -- v4.5x-GA เวลาตรวจแหล่ง TAC ล่าสุด
-  tac_imported_at TIMESTAMPTZ,             -- v4.5x-GA เวลานำเข้าสำเร็จล่าสุด
-  tac_source_sha  TEXT,                    -- v4.5x-GA (U167) commit sha ของไฟล์ต้นทางที่นำเข้าสำเร็จล่าสุด
-  tac_source_updated_at TIMESTAMPTZ,       -- v4.5x-GA (U167) วันที่ไฟล์บน GitHub ถูกแก้ล่าสุด (ของรอบนั้น)
-  stale_alert_days INTEGER    NOT NULL DEFAULT 90, -- v4.5x-GA (U167) ไฟล์ต้นทางไม่ถูกแก้เกิน N วัน ⇒ ป้าย "แหล่งข้อมูลอาจหยุดอัปเดต"
+  capacity_options TEXT[]     NOT NULL DEFAULT ARRAY['16GB','32GB','64GB','128GB','256GB','512GB','1TB','2TB']::TEXT[], -- v4.62 (U166) ตัวเลือกความจุของฟอร์มเคส
+  color_options   TEXT[]      NOT NULL DEFAULT ARRAY['ดำ','ขาว','เงิน','เทา','ทอง','น้ำเงิน','ฟ้า','เขียว','ม่วง','ชมพู','แดง','ส้ม','เหลือง']::TEXT[], -- v4.62 (U166)
+  tac_etag        TEXT,                    -- v4.62 (U166) ETag ของไฟล์ TAC รอบล่าสุด (fallback เมื่อ commits API ล้ม)
+  tac_checked_at  TIMESTAMPTZ,             -- v4.62 เวลาตรวจแหล่ง TAC ล่าสุด
+  tac_imported_at TIMESTAMPTZ,             -- v4.62 เวลานำเข้าสำเร็จล่าสุด
+  tac_source_sha  TEXT,                    -- v4.62 (U167) commit sha ของไฟล์ต้นทางที่นำเข้าสำเร็จล่าสุด
+  tac_source_updated_at TIMESTAMPTZ,       -- v4.62 (U167) วันที่ไฟล์บน GitHub ถูกแก้ล่าสุด (ของรอบนั้น)
+  stale_alert_days INTEGER    NOT NULL DEFAULT 90, -- v4.62 (U167) ไฟล์ต้นทางไม่ถูกแก้เกิน N วัน ⇒ ป้าย "แหล่งข้อมูลอาจหยุดอัปเดต"
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by      UUID        REFERENCES users(id),
   CONSTRAINT chk_device_catalog_recent_years CHECK (recent_years BETWEEN 1 AND 30),
@@ -1370,7 +1370,7 @@ CREATE TABLE device_brands (
   name_key        TEXT                  NOT NULL,  -- ตัวพิมพ์เล็ก ตัดช่องว่าง/ขีด/จุด (normalizeCatalogName)
   manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
   source          device_catalog_source NOT NULL,  -- tacdb / manual
-  -- v4.5x-GA (U166): ลบ external_id + last_synced_at (+ idx_device_brands_org_last_synced) — ใช้เฉพาะการดึง RapidAPI
+  -- v4.62 (U166): ลบ external_id + last_synced_at (+ idx_device_brands_org_last_synced) — ใช้เฉพาะการดึง RapidAPI
   created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
   created_by      UUID                  REFERENCES users(id),
   updated_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
@@ -1389,7 +1389,7 @@ CREATE TABLE device_models (
   name_key        TEXT                  NOT NULL,
   manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
   source          device_catalog_source NOT NULL,
-  external_id     TEXT,                            -- v4.5x-GA: คีย์ชื่อรุ่นจากฐาน TAC แบบ normalize (ผู้ดูแลแก้ชื่อแล้วยังจับคู่ได้) · NULL = เพิ่มเอง
+  external_id     TEXT,                            -- v4.62: คีย์ชื่อรุ่นจากฐาน TAC แบบ normalize (ผู้ดูแลแก้ชื่อแล้วยังจับคู่ได้) · NULL = เพิ่มเอง
   release_year    INTEGER,                         -- ค.ศ. ตามต้นทาง · NULL = ไม่ทราบ
   name_edited_at  TIMESTAMPTZ,                     -- ผู้ดูแลแก้ชื่อแล้ว ⇒ job ไม่ทับ
   created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
@@ -1404,7 +1404,7 @@ CREATE UNIQUE INDEX uniq_device_models_brand_name ON device_models(brand_id, nam
 CREATE UNIQUE INDEX uniq_device_models_brand_external ON device_models(brand_id, external_id);
 CREATE INDEX idx_device_models_org_kind ON device_models(organization_id, asset_kind);
 
--- ── device_tacs (v4.5x-GA — มติ PO U166 · DEC-017) ─────────────────
+-- ── device_tacs (v4.62 — มติ PO U166 · DEC-017) ─────────────────
 -- TAC (8 หลักแรกของ IMEI) → ยี่ห้อ/รุ่น/รหัสรุ่นย่อย/ปีที่ออก · ฟอร์มรับเคสค้นด้วย IMEI (38 §6.2)
 -- แหล่ง: tacdb (นำเข้าไฟล์ MoazEb/tac-database) / learned (ระบบจำจากเคส) / manual (ผู้ดูแลผูก — ชนะทุกแหล่ง)
 -- การนำเข้าเพิ่มเฉพาะ TAC ใหม่ ไม่ทับแถวเดิมทุกแหล่ง
@@ -1431,7 +1431,7 @@ CREATE UNIQUE INDEX uniq_device_tacs_org_tac ON device_tacs(organization_id, tac
 CREATE INDEX idx_device_tacs_org_model ON device_tacs(organization_id, device_model_id);
 CREATE INDEX idx_device_tacs_org_source ON device_tacs(organization_id, source);
 
--- ── device_tac_updates (v4.5x-GA — มติ PO U167) ─────────────────────
+-- ── device_tac_updates (v4.62 — มติ PO U167) ─────────────────────
 -- ประวัติการอัปเดตฐาน TAC — insert-only 1 แถวต่อรอบต่อองค์กร (ไม่มี updated_*/deleted_at)
 CREATE TABLE device_tac_updates (
   id                UUID                      PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1574,8 +1574,8 @@ CREATE TABLE assets (
   case_ref        TEXT            NOT NULL,
   debtor_name     TEXT            NOT NULL,
   device_desc     TEXT            NOT NULL,
-  device_capacity TEXT,                      -- v4.5x-GA (U166) snapshot `cases.asset_capacity` ตอนปิดงาน · NULL = เครื่องก่อนมติ
-  device_color    TEXT,                      -- v4.5x-GA (U166) snapshot `cases.asset_color` ตอนปิดงาน
+  device_capacity TEXT,                      -- v4.62 (U166) snapshot `cases.asset_capacity` ตอนปิดงาน · NULL = เครื่องก่อนมติ
+  device_color    TEXT,                      -- v4.62 (U166) snapshot `cases.asset_color` ตอนปิดงาน
   -- IMEI / Serial (A6 — มติ PO 2026-08-12)
   imei_contract   VARCHAR(15),               -- NULL ได้เฉพาะเครื่องที่ไม่มี IMEI (ต้องมี serial_contract แทน)
   imei_actual     VARCHAR(15),
@@ -1585,7 +1585,7 @@ CREATE TABLE assets (
   asset_status    asset_status    NOT NULL DEFAULT 'pending_intake',
   condition       asset_condition,
   condition_note  TEXT,
-  color_capacity_matched BOOLEAN,            -- v4.5x-GA (U166) ติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้า · NULL = ยังไม่ตรวจรับ · false = ไม่ได้ยืนยัน (ไม่ block)
+  color_capacity_matched BOOLEAN,            -- v4.62 (U166) ติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้า · NULL = ยังไม่ตรวจรับ · false = ไม่ได้ยืนยัน (ไม่ block)
   -- Photos (Supabase Storage URLs)
   photos          TEXT[]          NOT NULL DEFAULT '{}',
   -- Timestamps
@@ -1668,9 +1668,9 @@ CREATE TABLE payee_profiles (
   account_name    TEXT,
   account_number  TEXT,
   national_id     VARCHAR(13),
-  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2) · v4.5x-DA = path ไฟล์ที่อัปโหลดผ่าน server (มติ PO U150)
-  id_document_hash VARCHAR(64),  -- v4.5x-DA SHA-256 ของเอกสารยืนยันตัวตนที่ server ตรวจเอง (มติ PO U150)
-  id_document_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.5x-DA URL เก่าที่พิมพ์เอง = ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร · CHECK chk_payee_profiles_id_document_verified
+  id_document_url TEXT,   -- เพิ่ม 03/07/2569 (ไฟล์ 18 §7.1/§10) — บังคับเมื่อ require_payee_id_document=true (ไฟล์ 13 §6.2) · v4.58 = path ไฟล์ที่อัปโหลดผ่าน server (มติ PO U150)
+  id_document_hash VARCHAR(64),  -- v4.58 SHA-256 ของเอกสารยืนยันตัวตนที่ server ตรวจเอง (มติ PO U150)
+  id_document_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.58 URL เก่าที่พิมพ์เอง = ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร · CHECK chk_payee_profiles_id_document_verified
   wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(1)/40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 · U33 ช่องเดียวใช้ทั้งสองประเภท — ไฟล์ 18 §6.3)
   -- ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1 — ไฟล์ 18 §7.1) · ที่อยู่บังคับครบก่อนยืนยัน
   name_title          VARCHAR(50),                   -- คำนำหน้า (บุคคลธรรมดา)
@@ -1732,7 +1732,7 @@ CREATE TABLE expenses (
   receipt_in_company_name BOOLEAN NOT NULL DEFAULT false,  -- v4.36 ใบเสร็จค่าที่พักในนามบริษัท (มติ PO U96 #14) — CHECK ชนิดอื่น = false · ไม่เปลี่ยนสูตร WHT
   receipt_file_url      TEXT,               -- ใบเสร็จของรายการเบิกแยก (บังคับสำหรับที่พัก)
   receipt_file_hash     VARCHAR(64),        -- v4.10 SHA-256 ของใบเสร็จที่ server ตรวจเอง (มติ PO Q13 ขยายถึงใบเสร็จ — BUG-072)
-  receipt_file_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.5x-DA path เก่าที่พิมพ์เอง (ก่อนมติ PO U143) = ไม่ผ่านการตรวจ ⇒ ถือว่าไม่มีไฟล์ · CHECK chk_expenses_receipt_verified: url IS NULL OR hash IS NOT NULL OR unverified
+  receipt_file_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.58 path เก่าที่พิมพ์เอง (ก่อนมติ PO U143) = ไม่ผ่านการตรวจ ⇒ ถือว่าไม่มีไฟล์ · CHECK chk_expenses_receipt_verified: url IS NULL OR hash IS NOT NULL OR unverified
   superseded_by_expense_id UUID REFERENCES expenses(id),  -- รายการที่มาแทนหลัง resubmit_close_case (ไฟล์ 41 §10.1)
   field_day_settlement_id UUID REFERENCES field_day_settlements(id),  -- v4.12 แถวรายวันค่าน้ำมันเหมา/เบี้ยเลี้ยง (UAT Q21) · NULL = รายการอื่น
   -- Payout (FK → payout_batch_items เมื่อเข้ารอบจ่าย)
@@ -1806,7 +1806,7 @@ CREATE TABLE advances (
   rejection_reason    TEXT,
   -- A4 (มติ PO 2026-08-12): เส้นทางจ่ายเงินทดรองออกผ่านรอบจ่าย (คู่กับ payout_batch_items.advance_id)
   payout_batch_item_id UUID,
-  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนอนุมัติ (ใบเบิกเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
+  letterhead_snapshot JSONB,  -- v4.54 (U130) หัวกระดาษองค์กร ตอนอนุมัติ (ใบเบิกเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
   created_by          UUID            NOT NULL REFERENCES users(id),
   updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -1858,7 +1858,7 @@ CREATE TABLE payout_batches (
   wht_outsource_income_category wht_income_category,  -- snapshot U33 (v4.22) — NULL = รอบเก่า ⇒ 40(8)
   wht_allow_gross_up_conditions BOOLEAN,              -- snapshot U105 — NULL = รอบเก่า ⇒ ไม่อนุญาต (คิดแบบ (1))
   tax_profile_default_id UUID REFERENCES tax_profile_default_history(id) ON DELETE SET NULL,  -- snapshot ชุดค่าเริ่มต้นตามประเภทผู้รับ (v4.49 U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า · profile ที่ใช้จริงอยู่ที่ payout_batch_items.tax_profile_id
-  cycle_id              UUID REFERENCES billing_payout_cycles(id),  -- รอบจ่าย AP ที่ใช้ (v4.5x-fixer-u132 U133) — ระบบเลือกรอบที่ตรงฝั่งให้ แก้ได้ · NULL = ไม่ใช้รอบ/รอบเก่า
+  cycle_id              UUID REFERENCES billing_payout_cycles(id),  -- รอบจ่าย AP ที่ใช้ (v4.56 U133) — ระบบเลือกรอบที่ตรงฝั่งให้ แก้ได้ · NULL = ไม่ใช้รอบ/รอบเก่า
   pay_due_date          DATE,                -- กำหนดจ่ายตามเงื่อนไขของรอบนับจากวันตัดรอบ (snapshot) · CHECK มีคู่กับ cycle_id
   -- v4.25 (มติ PO U67) ยกเลิกรอบจ่าย — ครบทั้ง 3 ช่องเมื่อ (และเฉพาะเมื่อ) status = 'cancelled'
   cancelled_at          TIMESTAMPTZ,
@@ -1867,11 +1867,11 @@ CREATE TABLE payout_batches (
   CONSTRAINT chk_payout_batches_cancelled_fields CHECK (
     (status = 'cancelled' AND cancelled_at IS NOT NULL AND cancelled_by IS NOT NULL AND length(btrim(cancel_reason)) > 0)
     OR (status <> 'cancelled' AND cancelled_at IS NULL AND cancelled_by IS NULL AND cancel_reason IS NULL)),
-  -- v4.5x-CA (มติ PO U134) เวลาที่ขั้นหลังรอบจ่าย completed (บันทึกจ่าย + ออก 50 ทวิ) ทำครบ · NULL บนรอบ completed = ค้าง
+  -- v4.52 (มติ PO U134) เวลาที่ขั้นหลังรอบจ่าย completed (บันทึกจ่าย + ออก 50 ทวิ) ทำครบ · NULL บนรอบ completed = ค้าง
   -- ⇒ ตัวกวาด payout_completion_repair ทำต่อ · เขียนด้วย raw SQL เท่านั้น (ไม่ขยับ updated_at)
   post_completion_synced_at TIMESTAMPTZ,
   -- Audit
-  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนสร้างไฟล์โอนครั้งแรก (ใบสำคัญจ่าย/สลิป) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
+  letterhead_snapshot JSONB,  -- v4.54 (U130) หัวกระดาษองค์กร ตอนสร้างไฟล์โอนครั้งแรก (ใบสำคัญจ่าย/สลิป) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   created_by            UUID                 NOT NULL REFERENCES users(id),
   updated_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
@@ -1880,7 +1880,7 @@ CREATE TABLE payout_batches (
 );
 CREATE INDEX idx_payout_batches_org ON payout_batches(organization_id, status);
 CREATE INDEX idx_payout_batches_org_post_completion_pending ON payout_batches(organization_id, updated_at)
-  WHERE status = 'completed' AND post_completion_synced_at IS NULL AND deleted_at IS NULL;  -- v4.5x-CA U134 คิวตัวกวาด
+  WHERE status = 'completed' AND post_completion_synced_at IS NULL AND deleted_at IS NULL;  -- v4.52 U134 คิวตัวกวาด
 
 -- ── payout_batch_items ───────────────────────────────────────
 CREATE TABLE payout_batch_items (
@@ -1937,7 +1937,7 @@ CREATE TABLE advance_returns (
   reversed_at           TIMESTAMPTZ,
   reversed_by           UUID                   REFERENCES users(id),
   reversal_reason       TEXT,
-  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนบันทึกรับคืน (ใบรับคืนเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
+  letterhead_snapshot JSONB,  -- v4.54 (U130) หัวกระดาษองค์กร ตอนบันทึกรับคืน (ใบรับคืนเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
   created_by            UUID                   NOT NULL REFERENCES users(id),
   updated_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
@@ -1975,7 +1975,7 @@ CREATE TABLE substitute_receipts (
   cancelled_by       UUID                      REFERENCES users(id),
   cancel_reason      TEXT,                     -- เหตุผลบังคับ (ไม่ว่าง)
   replaces_receipt_id UUID                     REFERENCES substitute_receipts(id),  -- U117: ใบที่ยกเลิกซึ่งใบนี้ออกแทน (ห้ามแก้ · ห้ามอ้างตัวเอง)
-  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนออกใบรับรองแทนใบเสร็จ · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
+  letterhead_snapshot JSONB,  -- v4.54 (U130) หัวกระดาษองค์กร ตอนออกใบรับรองแทนใบเสร็จ · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at         TIMESTAMPTZ               NOT NULL DEFAULT NOW(),
   created_by         UUID                      NOT NULL REFERENCES users(id),
   updated_at         TIMESTAMPTZ               NOT NULL,
@@ -2063,7 +2063,7 @@ CREATE TABLE billing_batches (
   received_satang   INTEGER               NOT NULL DEFAULT 0,
   -- A1 (มติ PO 2026-08-12): WHT ที่ลูกค้า (ไฟแนนซ์) หักจากเรา — auto-match ต้องเทียบ total − wht ด้วย
   wht_withheld_by_customer_satang INTEGER NOT NULL DEFAULT 0,
-  -- v4.5x-fixer-db3 (มติ PO U144): ส่วนต่างรับขาด ≤ finance_policy_settings.write_off_tolerance_satang ตัดเป็นค่าธรรมเนียมธนาคาร
+  -- v4.59 (มติ PO U144): ส่วนต่างรับขาด ≤ finance_policy_settings.write_off_tolerance_satang ตัดเป็นค่าธรรมเนียมธนาคาร
   -- (นับเป็นชำระแล้ว — `22` §6.11.1) · CHECK ≥ 0 + (ยอด = 0) ⇔ (วันที่ IS NULL) · partial index (org, date) WHERE ยอด > 0
   bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0,
   bank_fee_written_off_date   DATE,
@@ -2073,7 +2073,7 @@ CREATE TABLE billing_batches (
   -- UAT BUG-164 (v4.40): snapshot ผู้ขาย/ผู้ซื้อของใบแจ้งหนี้ ตอนส่งรอบ (draft = NULL ทั้งชุด · ส่งแล้วแก้ไม่ได้ — trigger)
   seller_name TEXT, seller_tax_id VARCHAR(13), seller_address TEXT, seller_phone VARCHAR(20), seller_branch_code VARCHAR(5),
   buyer_name  TEXT, buyer_tax_id  VARCHAR(13), buyer_address  TEXT, buyer_phone  VARCHAR(20), buyer_branch_code  VARCHAR(5),
-  invoice_detail_snapshot JSONB,  -- v4.5x-BZ (U130) {customer_wht_pct, receiving_account, lines[{revenue_id, asset_description, handover_doc_ref}]} ณ วันส่ง · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
+  invoice_detail_snapshot JSONB,  -- v4.54 (U130) {customer_wht_pct, receiving_account, lines[{revenue_id, asset_description, handover_doc_ref}]} ณ วันส่ง · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at        TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
   created_by        UUID                  NOT NULL REFERENCES users(id),
   updated_at        TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
@@ -2319,8 +2319,8 @@ CREATE TABLE wht_certificates (
   payer_tax_id        VARCHAR(13)       NOT NULL,
   payer_address       TEXT              NOT NULL,
   payer_branch_code   VARCHAR(5)        NOT NULL CHECK (payer_branch_code ~ '^[0-9]{5}$'),
-  payer_signer_name   TEXT,             -- v4.5x-DD (U151) ผู้มีอำนาจลงนามฝั่งผู้จ่ายเงิน ณ วันออกใบ · NULL = ใบก่อน U151/ไม่ได้กรอก (ไม่พิมพ์ชื่อ)
-  payer_signer_title  TEXT,             -- v4.5x-DD (U151) ตำแหน่ง
+  payer_signer_name   TEXT,             -- v4.57 (U151) ผู้มีอำนาจลงนามฝั่งผู้จ่ายเงิน ณ วันออกใบ · NULL = ใบก่อน U151/ไม่ได้กรอก (ไม่พิมพ์ชื่อ)
+  payer_signer_title  TEXT,             -- v4.57 (U151) ตำแหน่ง
   created_at          TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
   created_by          UUID              NOT NULL REFERENCES users(id),
   CONSTRAINT wht_cert_batch_mode_has_batch CHECK (issue_mode <> 'per_payee_batch' OR payout_batch_id IS NOT NULL)
@@ -2342,7 +2342,7 @@ CREATE TABLE wht_filing_summaries (
   status          wht_filing_status NOT NULL DEFAULT 'pending',
   filed_at        TIMESTAMPTZ,
   filed_by        UUID              REFERENCES users(id),
-  -- v4.5x-BZ (มติ PO 07/10/2569 U127) ธง "ต้องยื่นเพิ่มเติม" — ยกเลิก/ออกใบ 50 ทวิ ของเดือนนี้หลัง `filed`
+  -- v4.54 (มติ PO 07/10/2569 U127) ธง "ต้องยื่นเพิ่มเติม" — ยกเลิก/ออกใบ 50 ทวิ ของเดือนนี้หลัง `filed`
   -- ยอด pnd* ของรอบ filed = ยอดที่ยื่น (ไม่คิดทับ) · CHECK wht_filing_supplementary_only_when_filed
   supplementary_required_at TIMESTAMPTZ,
   supplementary_filed_at    TIMESTAMPTZ,   -- บัญชีกด "ยื่นเพิ่มเติมแล้ว" (ล้างธง + pnd* = ยอดปัจจุบัน)
@@ -2387,7 +2387,7 @@ CREATE TABLE bank_transactions (
   transaction_date  DATE                NOT NULL,
   description       TEXT                NOT NULL,
   amount_satang     INTEGER             NOT NULL,  -- บวก=รับเงิน, ลบ=จ่ายเงิน
-  -- v4.5x-CA (มติ PO U136) ลำดับการเกิดของแถว (วัน+ยอด+รายละเอียด) เดียวกันภายในไฟล์ statement (1, 2, …)
+  -- v4.52 (มติ PO U136) ลำดับการเกิดของแถว (วัน+ยอด+รายละเอียด) เดียวกันภายในไฟล์ statement (1, 2, …)
   occurrence_seq    INTEGER             NOT NULL DEFAULT 1 CHECK (occurrence_seq >= 1),
   match_status      bank_match_status   NOT NULL DEFAULT 'unmatched',
   match_note        TEXT,
@@ -2444,7 +2444,7 @@ CREATE TABLE bank_transactions (
 CREATE INDEX idx_bank_tx_period  ON bank_transactions(period_id, match_status);
 CREATE INDEX idx_bank_tx_org_status ON bank_transactions(organization_id, match_status);  -- v4.23 U41 ยอดคงค้าง
 CREATE INDEX idx_bank_tx_account ON bank_transactions(bank_account_id, transaction_date);
--- กันนำเข้า statement ซ้ำ (Phase 8.2 · v4.5x-CA มติ PO U136 เพิ่ม occurrence_seq: 2 รายการเหมือนกันทุกช่องในวันเดียว = 2 แถว
+-- กันนำเข้า statement ซ้ำ (Phase 8.2 · v4.52 มติ PO U136 เพิ่ม occurrence_seq: 2 รายการเหมือนกันทุกช่องในวันเดียว = 2 แถว
 -- · นำเข้าไฟล์เดิมซ้ำได้ลำดับเดิม = ยังถูกกัน)
 CREATE UNIQUE INDEX uniq_bank_tx_statement_row ON bank_transactions
   (organization_id, bank_account_id, transaction_date, amount_satang, md5(lower(btrim(description))), occurrence_seq);
@@ -2613,7 +2613,7 @@ CREATE TABLE notification_outbox (
   CONSTRAINT chk_notification_outbox_sent_at CHECK ((status = 'sent') = (sent_at IS NOT NULL))
 );
 
--- ── setting_assumption_confirmations (v4.5x-BZ · มติ PO 07/10/2569 U140) ──────
+-- ── setting_assumption_confirmations (v4.54 · มติ PO 07/10/2569 U140) ──────
 -- บัญชียืนยันค่าตั้งที่เป็นสมมติฐาน (ทะเบียนในโค้ด lib/settings/assumptions.ts) ⇒ ป้าย "รอนักบัญชียืนยัน" หาย
 -- insert-only (trigger ห้าม UPDATE/DELETE) · ไม่มี updated_*/deleted_at โดยเจตนา
 CREATE TABLE setting_assumption_confirmations (
@@ -2770,8 +2770,8 @@ CREATE TABLE files (
 45_jobs.sql
 46_files.sql
 47_billing_payout_cycles.sql    ← เพิ่ม 04/07/2569 (DEC-006/D1)
-47b_billing_cycle_companies.sql  ← v4.5x-fixer-u132 (U133) ต้องหลัง billing_payout_cycles, finance_companies
-47c_finance_company_documents.sql ← v4.5x-fixer-u132 (U132) ต้องหลัง finance_companies, users
+47b_billing_cycle_companies.sql  ← v4.56 (U133) ต้องหลัง billing_payout_cycles, finance_companies
+47c_finance_company_documents.sql ← v4.56 (U132) ต้องหลัง finance_companies, users
 48_approval_matrices.sql
 49_finance_policy_settings.sql
 50_bank_file_formats.sql
@@ -2878,7 +2878,7 @@ VALUES ('...org_id...', NULL, false, '{30,60,90}');  -- NULL = ไม่จำ�
 | `bank_transactions` | match_status != 'unmatched' | unmatch ต้องมี reason + audit |
 | `handover_lots` | status = 'confirmed' | ห้าม UPDATE, ห้าม DELETE |
 | `audit_logs` | any | ห้าม UPDATE/DELETE เด็ดขาด |
-| `finance_company_documents` | any (v4.5x-fixer-u132 — มติ PO U132) | ห้าม UPDATE/DELETE/TRUNCATE — แทนที่ = เวอร์ชันใหม่ (trigger `trg_finance_company_documents_immutable`) |
+| `finance_company_documents` | any (v4.56 — มติ PO U132) | ห้าม UPDATE/DELETE/TRUNCATE — แทนที่ = เวอร์ชันใหม่ (trigger `trg_finance_company_documents_immutable`) |
 | `substitute_receipts` | any (v4.43 — มติ PO U103) | เลข/ผู้จ่าย/การผูก/วันที่/ยอดห้ามแก้ · `pending_signature` → `signed` ได้ครั้งเดียว ไฟล์ฉบับเซ็นเปลี่ยนไม่ได้ (trigger `trg_substitute_receipts_guard`) · บรรทัด (`substitute_receipt_lines`) ห้าม UPDATE |
 | `advance_returns` | any | แก้ได้ทางเดียวคือกลับรายการครั้งเดียว (มีเหตุผล) — ช่องอื่นห้ามแก้ (trigger) · ไม่มีเส้นทางลบในระบบ (มติ PO U30) |
 | `case_edit_history` | any | append-only ที่ชั้น service — มีแต่ INSERT ไม่มี endpoint/โค้ดที่ UPDATE/DELETE (เพิ่ม 14/08/2569 · ไฟล์ 38 §6.4 "ไม่เขียนทับประวัติเดิม") · **ไม่ใส่ trigger ระดับ DB** เพราะตารางนี้ผูก `ON DELETE CASCADE` กับ `cases` — trigger จะไปบล็อก cascade ด้วย (audit ตัวจริงที่ห้ามแตะเด็ดขาดคือ `audit_logs`) |
