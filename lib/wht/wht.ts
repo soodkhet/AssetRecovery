@@ -411,6 +411,45 @@ export function summarizeFilingTotals(rows: readonly FilingTotalSource[]): Filin
   )
 }
 
+// ── ยื่นเพิ่มเติม (มติ PO 07/10/2569 U127) ──────────────────────────────────────
+
+export interface FilingAmounts {
+  pnd1Satang: number
+  pnd3Satang: number
+  pnd53Satang: number
+}
+
+export interface SupplementaryFilingDiff {
+  /** ยอดปัจจุบันจากใบที่มีผล − ยอดที่ยื่นไปแล้ว (ต่อแบบ) — บวก = ต้องนำส่งเพิ่ม · ลบ = ยื่นเกิน */
+  pnd1Satang: number
+  pnd3Satang: number
+  pnd53Satang: number
+  totalSatang: number
+}
+
+/**
+ * ยอดต่างระหว่าง "ยอดที่ยื่นแล้ว" (คงเดิมบนรอบ `filed`) กับ "ยอดปัจจุบัน" (ใบ 50 ทวิ ที่ยังมีผลของเดือนนั้น)
+ * — ใช้แสดงบนรอบที่ติดธงต้องยื่นเพิ่มเติม · ไม่ปัด ไม่ตัด (สตางค์ล้วน)
+ */
+export function supplementaryFilingDiff(filed: FilingAmounts, current: FilingAmounts): SupplementaryFilingDiff {
+  const pnd1Satang = current.pnd1Satang - filed.pnd1Satang
+  const pnd3Satang = current.pnd3Satang - filed.pnd3Satang
+  const pnd53Satang = current.pnd53Satang - filed.pnd53Satang
+  return { pnd1Satang, pnd3Satang, pnd53Satang, totalSatang: pnd1Satang + pnd3Satang + pnd53Satang }
+}
+
+/** ล้างธงได้เฉพาะรอบที่ยื่นแล้วและยังติดธงอยู่ */
+export function assertSupplementaryFilingMarkable(input: {
+  status: WhtFilingStatus
+  supplementaryRequiredAt: Date | null
+}): void {
+  if (input.status !== 'filed' || input.supplementaryRequiredAt === null) {
+    throw new WhtError('WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED', {
+      detail: 'รอบนี้ไม่มีรายการที่ต้องยื่นเพิ่มเติม',
+    })
+  }
+}
+
 // ── State machine (`23` §6.11 · `33` §9/§10) ────────────────────────────────
 
 /** `active → cancelled` เท่านั้น — `cancelled` เป็น terminal (ห้ามลบ ห้าม reverse) */

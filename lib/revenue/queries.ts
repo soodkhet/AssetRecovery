@@ -16,8 +16,9 @@ import type {
   RevenueStatus,
 } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
-import { billingPartySnapshotOf } from '@/lib/revenue/billing-invoice'
+import { billingInvoiceDetailSnapshotJson, billingPartySnapshotOf } from '@/lib/revenue/billing-invoice'
 import { sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
+import { loadReceivingAccount } from '@/lib/revenue/billing-invoice-queries'
 import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
 import { documentTemplateSnapshotJson } from '@/lib/settings/tax-doc-template'
 import { RevenueError } from '@/lib/revenue/errors'
@@ -534,8 +535,38 @@ export async function sendBillingBatch(
             logoSha256: true,
           },
         },
-        company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
+        company: {
+          select: { name: true, taxId: true, address: true, phone: true, branchCode: true, whtWithheldByCustomerPct: true },
+        },
+        revenues: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            case: {
+              select: {
+                assetDescription: true,
+                assets: {
+                  where: { deletedAt: null, lotId: { not: null } },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: { lot: { select: { docRef: true } } },
+                },
+              },
+            },
+          },
+        },
       },
+    })
+    // มติ PO 07/10/2569 U130 — % ภาษีที่ลูกค้าหัก + บัญชีรับเงิน + รายละเอียดทรัพย์ ณ วันส่ง (พิมพ์ซ้ำได้ตัวเลขเดิม)
+    const invoiceDetailSnapshot = billingInvoiceDetailSnapshotJson({
+      customerWhtPct:
+        parties.company.whtWithheldByCustomerPct === null ? null : parties.company.whtWithheldByCustomerPct.toFixed(2),
+      receivingAccount: await loadReceivingAccount(user.organizationId, tx),
+      lines: parties.revenues.map((revenue) => ({
+        revenueId: revenue.id,
+        assetDescription: revenue.case.assetDescription,
+        handoverDocRef: revenue.case.assets[0]?.lot?.docRef ?? null,
+      })),
     })
     // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นของใบแจ้งหนี้ ณ วันส่ง
     const documentTemplate = await loadDocumentTemplateSnapshot(tx, user.organizationId, 'billing_invoice')
@@ -544,6 +575,7 @@ export async function sendBillingBatch(
       documentTemplateSnapshot: documentTemplateSnapshotJson(documentTemplate),
       // มติ PO U99 — หัวเอกสาร (ชื่ออังกฤษ/อีเมล/เว็บไซต์/โลโก้) ณ วันส่ง
       sellerProfileSnapshot: sellerProfileSnapshotJson(sellerProfileOf(parties.organization)),
+      invoiceDetailSnapshot,
     }
     // ยึดด้วยสถานะเดิม — สองคนกดส่งพร้อมกัน คนที่สองได้ 0 แถวแล้วโดนปฏิเสธ (ไม่ทับ `sent_at`)
     const claimed = await tx.billingBatch.updateMany({

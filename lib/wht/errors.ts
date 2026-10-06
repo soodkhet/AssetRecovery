@@ -20,6 +20,8 @@ export const WHT_ERROR_CODES = [
   'WHT_CANCEL_REQUIRES_REASON',
   'WHT_FILING_SUMMARY_NOT_FOUND',
   'WHT_FILING_ALREADY_FILED',
+  // มติ PO 07/10/2569 U127 — เติมเข้า `24` §6.8 พร้อม commit นี้
+  'WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED',
 ] as const
 
 export type WhtErrorCode = (typeof WHT_ERROR_CODES)[number]
@@ -30,6 +32,7 @@ const HTTP_STATUS: Record<WhtErrorCode, number> = {
   WHT_CANCEL_REQUIRES_REASON: 400,
   WHT_FILING_SUMMARY_NOT_FOUND: 404,
   WHT_FILING_ALREADY_FILED: 400,
+  WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED: 400,
 }
 
 const MESSAGES: Record<WhtErrorCode, ErrorMessage> = {
@@ -52,6 +55,10 @@ const MESSAGES: Record<WhtErrorCode, ErrorMessage> = {
   WHT_FILING_ALREADY_FILED: {
     title: 'รอบนี้ mark ว่ายื่นแล้ว',
     message: 'สรุปรอบนำส่งนี้ถูก mark ว่ายื่นแบบแล้ว — ทำซ้ำไม่ได้',
+  },
+  WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED: {
+    title: 'รอบนี้ไม่ต้องยื่นเพิ่มเติม',
+    message: 'บันทึก "ยื่นเพิ่มเติมแล้ว" ได้เฉพาะรอบที่ยื่นแล้วและมีป้ายต้องยื่นเพิ่มเติม — อาจมีผู้ใช้อื่นบันทึกไปแล้ว',
   },
 }
 

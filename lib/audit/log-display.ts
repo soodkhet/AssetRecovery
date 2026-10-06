@@ -118,6 +118,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   bank_transaction_allocations: 'การจับคู่รายการเดินบัญชี',
   customer_wht_certificates: 'หนังสือรับรองหัก ณ ที่จ่ายจากลูกค้า',
   tax_document_template_settings: 'เทมเพลตเอกสาร',
+  setting_assumption_confirmations: 'ยืนยันค่าตั้งที่รอนักบัญชี',
   audit_logs: 'บันทึกการใช้งาน',
   notifications: 'การแจ้งเตือน',
   push_subscriptions: 'การรับแจ้งเตือนบนอุปกรณ์',

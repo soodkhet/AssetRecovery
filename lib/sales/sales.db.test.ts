@@ -399,6 +399,44 @@ suite('มติ PO U95 — วางบิล ⇒ ใบแจ้งหนี�
       await db().organization.update({ where: { id: ORG_ID }, data: { name: org.name } })
     }
   })
+  it('U130 — ใบแจ้งหนี้ snapshot % ภาษีลูกค้าหัก + บัญชีรับเงิน + รายละเอียดทรัพย์ตอนส่ง · แก้ภายหลังพิมพ์ซ้ำได้ค่าเดิม · snapshot แก้ไม่ได้', async () => {
+    const { getBillingInvoiceSource } = await import('@/lib/revenue/billing-invoice-queries')
+    const company = await db().financeCompany.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { whtWithheldByCustomerPct: true },
+    })
+    await db().financeCompany.update({ where: { id: companyId }, data: { whtWithheldByCustomerPct: 3 } })
+    const batch = await seedBilling()
+    try {
+      await revenue.sendBillingBatch(billingCtx, batch.id, { reason: billingCtx.reason })
+      const sent = await getBillingInvoiceSource(accountant, batch.id)
+      expect(sent.customerWhtPct).toBe(3)
+      const stored = await db().billingBatch.findUniqueOrThrow({
+        where: { id: batch.id },
+        select: { invoiceDetailSnapshot: true },
+      })
+      expect(stored.invoiceDetailSnapshot).not.toBeNull()
+
+      // เปลี่ยน % ภาษีลูกค้าหัก + บัญชีรับเงินหลังส่ง ⇒ ใบเดิมพิมพ์ค่าเดิม
+      await db().financeCompany.update({ where: { id: companyId }, data: { whtWithheldByCustomerPct: 1 } })
+      await db().bankAccount.updateMany({ where: { organizationId: ORG_ID }, data: { accountName: 'ชื่อบัญชีใหม่หลังส่ง' } })
+      const reprint = await getBillingInvoiceSource(accountant, batch.id)
+      expect(reprint.customerWhtPct).toBe(3)
+      expect(reprint.receivingAccount).toEqual(sent.receivingAccount)
+      expect(reprint.lines.map((line) => [line.assetDescription, line.handoverDocRef])).toEqual(
+        sent.lines.map((line) => [line.assetDescription, line.handoverDocRef]),
+      )
+
+      await expect(
+        db().billingBatch.update({ where: { id: batch.id }, data: { invoiceDetailSnapshot: { lines: [] } } }),
+      ).rejects.toThrow(/BILLING_INVOICE_SNAPSHOT_IMMUTABLE/)
+    } finally {
+      await db().financeCompany.update({
+        where: { id: companyId },
+        data: { whtWithheldByCustomerPct: company.whtWithheldByCustomerPct },
+      })
+    }
+  })
 })
 
 suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จรับเงิน/ใบกำกับภาษี', () => {

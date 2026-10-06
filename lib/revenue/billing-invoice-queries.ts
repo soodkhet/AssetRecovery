@@ -1,9 +1,13 @@
 import type { SessionUser } from '@/lib/auth/types'
 import { prisma } from '@/lib/prisma'
-import { pickReceivingAccount } from '@/lib/organization/bank-account-line'
+import { pickReceivingAccount, type DocBankAccount } from '@/lib/organization/bank-account-line'
 import { parseSellerProfileSnapshot } from '@/lib/organization/profile'
 import { parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
-import { billingInvoicePartiesOf, type BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
+import {
+  billingInvoicePartiesOf,
+  parseBillingInvoiceDetailSnapshot,
+  type BillingInvoiceSource,
+} from '@/lib/revenue/billing-invoice'
 import { RevenueError } from '@/lib/revenue/errors'
 
 /**
@@ -35,6 +39,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
             sellerBranchCode: true,
             sellerProfileSnapshot: true,
             documentTemplateSnapshot: true,
+            invoiceDetailSnapshot: true,
             buyerName: true,
             buyerTaxId: true,
             buyerAddress: true,
@@ -56,6 +61,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
               where: { deletedAt: null },
               orderBy: [{ revenueDate: 'asc' }, { id: 'asc' }],
               select: {
+                id: true,
                 revenueDate: true,
                 grossSatang: true,
                 vatSatang: true,
@@ -83,13 +89,10 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
     throw new RevenueError('BILLING_BATCH_INVALID_STATUS', { detail: 'ใบแจ้งหนี้ออกได้หลังส่งรอบวางบิลแล้ว' })
   }
 
-  // บัญชีรับโอนของเรา (ค่าตั้งบัญชีธนาคาร — ใช้รับเงิน · บัญชีหลักก่อน) — ไม่มี ⇒ ไม่พิมพ์แถว (มติ PO U100)
-  const accounts = await prisma.bankAccount.findMany({
-    where: { organizationId: user.organizationId, deletedAt: null },
-    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-    select: { bankName: true, accountNumber: true, accountName: true, usage: true, isPrimary: true },
-  })
-  const receiving = pickReceivingAccount(accounts)
+  // มติ PO 07/10/2569 U130 — รอบที่ส่งหลัง U130 อ่าน % ภาษีลูกค้าหัก/บัญชีรับเงิน/รายละเอียดทรัพย์ จาก snapshot ตอนส่ง
+  // (พิมพ์ซ้ำ/Export Pack ได้ตัวเลขเดิม) · รอบก่อน U130 = ค่าปัจจุบัน (พฤติกรรมเดิม)
+  const detail = parseBillingInvoiceDetailSnapshot(batch.invoiceDetailSnapshot)
+  const receivingAccount = detail !== null ? detail.receivingAccount : await loadReceivingAccount(user.organizationId)
 
   return {
     batchNumber: batch.batchNumber,
@@ -106,15 +109,34 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
       vatSatang: revenue.vatSatang,
       totalSatang: revenue.totalSatang,
       vatRatePct: revenue.vatRatePctUsed.toString(),
-      assetDescription: revenue.case.assetDescription,
-      handoverDocRef: revenue.case.assets[0]?.lot?.docRef ?? null,
+      ...(detail?.lines.get(revenue.id) ?? {
+        assetDescription: revenue.case.assetDescription,
+        handoverDocRef: revenue.case.assets[0]?.lot?.docRef ?? null,
+      }),
     })),
     customerWhtPct:
-      batch.company.whtWithheldByCustomerPct === null ? null : batch.company.whtWithheldByCustomerPct.toNumber(),
+      detail !== null
+        ? detail.customerWhtPct
+        : batch.company.whtWithheldByCustomerPct === null
+          ? null
+          : batch.company.whtWithheldByCustomerPct.toNumber(),
     recordedCustomerWhtSatang: batch.whtWithheldByCustomerSatang,
-    receivingAccount:
-      receiving === null
-        ? null
-        : { bankName: receiving.bankName, accountNumber: receiving.accountNumber, accountName: receiving.accountName },
+    receivingAccount,
   }
+}
+
+/** บัญชีรับโอนของเรา (ค่าตั้งบัญชีธนาคาร — ใช้รับเงิน · บัญชีหลักก่อน) — ไม่มี ⇒ ไม่พิมพ์แถว (มติ PO U100) */
+export async function loadReceivingAccount(
+  organizationId: string,
+  client: Pick<typeof prisma, 'bankAccount'> = prisma,
+): Promise<DocBankAccount | null> {
+  const accounts = await client.bankAccount.findMany({
+    where: { organizationId, deletedAt: null },
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+    select: { bankName: true, accountNumber: true, accountName: true, usage: true, isPrimary: true },
+  })
+  const receiving = pickReceivingAccount(accounts)
+  return receiving === null
+    ? null
+    : { bankName: receiving.bankName, accountNumber: receiving.accountNumber, accountName: receiving.accountName }
 }

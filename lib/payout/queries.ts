@@ -67,6 +67,8 @@ import type {
   PayoutBatchListQuery,
   PayoutCompleteInput,
 } from '@/lib/payout/schemas'
+import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
+import { parseOrganizationLetterheadSnapshot } from '@/lib/organization/profile'
 import { prisma } from '@/lib/prisma'
 import { assertBankFileUsable } from '@/lib/settings/bank-file'
 import { SettingsError } from '@/lib/settings/errors'
@@ -318,15 +320,32 @@ export async function getPayoutBatch(user: SessionUser, batchId: string): Promis
 export async function getPayoutDocSource(
   user: SessionUser,
   batchId: string,
-): Promise<{ batch: PayoutBatchDetailDto; issuer: PayoutDocIssuer; payees: Map<string, PayoutPayeeDocInfo> }> {
-  const [batch, organization] = await Promise.all([
+): Promise<{
+  batch: PayoutBatchDetailDto
+  issuer: PayoutDocIssuer
+  payees: Map<string, PayoutPayeeDocInfo>
+  /** `payout_batches.letterhead_snapshot` ดิบ (มติ PO U130) — ส่งต่อให้ `issuedDocumentLetterhead()` */
+  letterheadSnapshot: unknown
+}> {
+  const [batch, organization, snapshotRow] = await Promise.all([
     getPayoutBatch(user, batchId),
     prisma.organization.findUniqueOrThrow({
       where: { id: user.organizationId },
       select: { name: true, address: true, taxId: true, phone: true },
     }),
+    prisma.payoutBatch.findFirst({
+      where: { id: batchId, organizationId: user.organizationId },
+      select: { letterheadSnapshot: true },
+    }),
   ])
-  return { batch, issuer: organization, payees: await payoutPayeeDocInfo(user.organizationId, batch) }
+  const letterheadSnapshot = snapshotRow?.letterheadSnapshot ?? null
+  // มติ PO U130 — ผู้จ่ายบนใบสำคัญจ่าย/สลิป = หัวกระดาษ ณ ตอนสร้างไฟล์โอนครั้งแรก · รอบก่อน U130 = ค่าปัจจุบัน
+  const snapshot = parseOrganizationLetterheadSnapshot(letterheadSnapshot)
+  const issuer: PayoutDocIssuer =
+    snapshot === null
+      ? organization
+      : { name: snapshot.name, address: snapshot.address, taxId: snapshot.taxId, phone: snapshot.phone }
+  return { batch, issuer, payees: await payoutPayeeDocInfo(user.organizationId, batch), letterheadSnapshot }
 }
 
 /**
@@ -940,6 +959,8 @@ export async function createPayoutBatch(
     }
 
     // สมุดย่อยการคืนยอด — 1 แถวต่อ (เงินทดรอง × บรรทัดที่หัก) · trigger กันยอดสะสมเกินยอดคืน
+    // มติ PO U130 — หัวกระดาษใบรับคืน (RAV) ณ ตอนบันทึก (ชุดเดียวกันทั้งรอบ)
+    const returnLetterhead = planned.length === 0 ? null : await captureLetterheadSnapshot(tx, user.organizationId)
     for (const offset of planned) {
       await tx.advanceReturn.create({
         data: {
@@ -951,6 +972,7 @@ export async function createPayoutBatch(
           payoutBatchId: batch.id,
           payoutBatchItemId: itemIds[offset.candidateIndex]!,
           createdBy: user.id,
+          ...(returnLetterhead === null ? {} : { letterheadSnapshot: returnLetterhead }),
         },
       })
     }
@@ -1236,6 +1258,11 @@ export async function generatePaymentFile(
     // มติ PO U102 — ใบสำคัญจ่าย 1 เลขต่อผู้รับเงินต่อรอบ ออกตอนสร้างไฟล์ครั้งแรก (สร้างซ้ำใช้เลขเดิม)
     // ลำดับผู้รับ = ลำดับรายการแรกของแต่ละคน (ตรงกับลำดับบนเอกสาร) · ปีตามวันที่สร้างไฟล์ (เวลาไทย)
     const vouchers = await assignVoucherNumbers(tx, user.organizationId, batchId, items, now)
+    // มติ PO 07/10/2569 U130 — หัวกระดาษใบสำคัญจ่าย/สลิป snapshot ตอนสร้างไฟล์ครั้งแรก (สร้างซ้ำคงชุดเดิม · trigger เขียนครั้งเดียว)
+    await tx.payoutBatch.updateMany({
+      where: { id: batchId, letterheadSnapshot: { equals: Prisma.DbNull } },
+      data: { letterheadSnapshot: await captureLetterheadSnapshot(tx, user.organizationId) },
+    })
     const row = await tx.payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: batchSelect })
 
     await emitAudit(

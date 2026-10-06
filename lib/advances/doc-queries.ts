@@ -22,6 +22,7 @@ const docSelect = {
   createdAt: true,
   approvedAt: true,
   clearedAt: true,
+  letterheadSnapshot: true,
   approvedByUser: { select: { fullName: true } },
   payee: {
     select: {
@@ -52,6 +53,7 @@ const docSelect = {
       reversedAt: true,
       reversalReason: true,
       createdAt: true,
+      letterheadSnapshot: true,
       payoutBatch: { select: { name: true, paymentFileGeneratedAt: true, updatedAt: true } },
       payoutBatchItem: { select: { voucherNumber: true } },
     },
@@ -107,6 +109,7 @@ function toAdvanceDocSource(row: AdvanceDocRow): AdvanceDocSource {
     },
     payoutBatchName: paidBatch?.name ?? null,
     substituteReceiptNumber: row.substituteReceipts[0]?.receiptNumber ?? null,
+    letterheadSnapshot: row.letterheadSnapshot,
   }
 }
 
@@ -147,5 +150,6 @@ export async function getAdvanceReturnDocSource(
     reversalReason: entry.reversalReason,
     collectedBeforeSatang: collectedBefore,
     advance: toAdvanceDocSource(row),
+    letterheadSnapshot: entry.letterheadSnapshot,
   }
 }

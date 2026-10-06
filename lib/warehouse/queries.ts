@@ -23,6 +23,7 @@ import type { HandoverParty } from '@/lib/warehouse/handover-doc'
 import { compareAssetIdentity, imeiSearchKey } from '@/lib/warehouse/imei'
 import { autoApproveCaseEvidence } from '@/lib/field/evidence-approval'
 import {
+  LETTERHEAD_ORGANIZATION_SELECT,
   organizationLetterheadSnapshotJson,
   organizationLetterheadSnapshotOf,
   parseOrganizationLetterheadSnapshot,
@@ -853,19 +854,6 @@ async function resolveLotDocument(
  *    `WarehouseError` ของกติกาที่ผู้ใช้แก้เองได้ (เอกสารไม่ครบ/ล็อตยืนยันแล้ว) ซึ่งต้องบอกตรง ๆ
  */
 /** ช่องหัวกระดาษองค์กรที่ snapshot ลงล็อตตอนยืนยัน (มติ PO U111) */
-const LETTERHEAD_SNAPSHOT_SELECT = {
-  name: true,
-  nameEn: true,
-  taxId: true,
-  address: true,
-  phone: true,
-  email: true,
-  website: true,
-  branchCode: true,
-  logoUrl: true,
-  logoSha256: true,
-} as const
-
 export async function confirmLot(
   user: SessionUser,
   lotId: string,
@@ -905,7 +893,7 @@ export async function confirmLot(
       // มติ PO U111 — snapshot หัวกระดาษองค์กร ณ ตอนยืนยัน (เขียนพร้อมการยึดล็อต — rollback ไปพร้อมกันทั้งก้อน)
       const organization = await tx.organization.findUniqueOrThrow({
         where: { id: user.organizationId },
-        select: LETTERHEAD_SNAPSHOT_SELECT,
+        select: LETTERHEAD_ORGANIZATION_SELECT,
       })
       const letterheadSnapshot = organizationLetterheadSnapshotJson(organizationLetterheadSnapshotOf(organization))
       // มติ PO U122 — ข้อความท้าย + รูปลายเซ็นของใบส่งมอบ ณ ตอนยืนยัน (พิมพ์ซ้ำหน้าตาเดิม)

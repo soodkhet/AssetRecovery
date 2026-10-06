@@ -5,6 +5,10 @@ import type { TaxInvoiceDocSource } from '@/lib/sales/sales'
 import {
   buildLetterhead,
   EMPTY_SELLER_PROFILE,
+  LETTERHEAD_ORGANIZATION_SELECT,
+  organizationLetterheadSnapshotJson,
+  organizationLetterheadSnapshotOf,
+  parseOrganizationLetterheadSnapshot,
   sellerProfileOf,
   type OrganizationLetterheadSnapshot,
   type DocLetterhead,
@@ -32,7 +36,9 @@ import { downloadUploadedFile } from '@/lib/uploads/storage'
  *   เอกสารก่อน U99 (ไม่มีชุดนี้) ⇒ 4 ฟิลด์นี้ว่าง ไม่ดึงค่าปัจจุบัน
  * - **ใบส่งมอบ LOT/DLV**: `handover_lots.letterhead_snapshot` ตอนยืนยันล็อต (มติ PO U111) — ล็อตที่ยังไม่ยืนยัน/
  *   ล็อตเก่าที่ไม่มี snapshot ใช้ค่าปัจจุบัน
- * - **เอกสารภายใน** (ใบสำคัญจ่าย/สลิป/สรุปรอบ/รายงาน/หน้าปก): ค่าปัจจุบันขององค์กร
+ * - **เอกสารภายในที่ออกให้คน** (ใบสำคัญจ่าย/สลิป · ใบเบิก/ใบรับคืนเงินทดรอง · ใบรับรองแทนใบเสร็จ):
+ *   `letterhead_snapshot` ตอนออก (มติ PO 07/10/2569 U130 — `issuedDocumentLetterhead()`) · ไม่มี snapshot = ค่าปัจจุบัน
+ * - **เอกสารภายในอื่น** (สรุปรอบจ่าย/รายงาน/หน้าปก): ค่าปัจจุบันขององค์กร
  *
  * โลโก้: ดาวน์โหลดจาก Storage ด้วย service role แล้วฝังเป็นรูป · โหลดไม่ได้/ไม่ใช่ PNG-JPG = พิมพ์โดยไม่มีโลโก้
  * · snapshot มี `logo_sha256` แล้วไฟล์ไม่ตรง hash = พิมพ์โดยไม่มีโลโก้ (ไม่พิมพ์รูปอื่นแทนรูปตอนออก — U110)
@@ -43,18 +49,6 @@ import { downloadUploadedFile } from '@/lib/uploads/storage'
  * · รูปลายเซ็นโหลดด้วยตัวเดียวกับโลโก้ (ตรวจ hash) — โหลดไม่ได้/ไม่ตรง = เว้นช่องเซ็นมือ ไม่ทำให้ออกเอกสารล้ม
  */
 
-const ORGANIZATION_SELECT = {
-  name: true,
-  nameEn: true,
-  taxId: true,
-  address: true,
-  phone: true,
-  email: true,
-  website: true,
-  branchCode: true,
-  logoUrl: true,
-  logoSha256: true,
-} as const
 
 interface OrganizationLetterheadRow {
   name: string
@@ -109,7 +103,7 @@ export function createLetterheadResolver(organizationId: string): {
   const logos = new Map<string, Promise<LetterheadLogo | null>>()
 
   const loadOrganization = (): Promise<OrganizationLetterheadRow> =>
-    (organization ??= prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: ORGANIZATION_SELECT }))
+    (organization ??= prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: LETTERHEAD_ORGANIZATION_SELECT }))
 
   const loadLogo = (path: string | null, sha256: string | null): Promise<LetterheadLogo | null> => {
     if (path === null) return Promise.resolve(null)
@@ -159,6 +153,36 @@ export function createLetterheadResolver(organizationId: string): {
       return buildLetterhead(snapshot, snapshot, await loadLogo(snapshot.logoPath, snapshot.logoSha256))
     },
   }
+}
+
+/** client ขั้นต่ำที่การ snapshot หัวกระดาษต้องใช้ — รับ `tx` ของ `$transaction` ได้ทุกโมดูล */
+export interface LetterheadSnapshotReader {
+  organization: {
+    findUniqueOrThrow(args: {
+      where: { id: string }
+      select: typeof LETTERHEAD_ORGANIZATION_SELECT
+    }): Promise<OrganizationLetterheadRow>
+  }
+}
+
+/**
+ * snapshot หัวกระดาษองค์กรทั้งชุด ณ ตอนออกเอกสาร (มติ PO 07/10/2569 U130 — แนวเดียวกับ U110/U111)
+ * → ค่า JSONB สำหรับคอลัมน์ `letterhead_snapshot` · เรียกใน `$transaction` เดียวกับการออกเอกสาร
+ */
+export async function captureLetterheadSnapshot(
+  client: LetterheadSnapshotReader,
+  organizationId: string,
+): Promise<ReturnType<typeof organizationLetterheadSnapshotJson>> {
+  const row = await client.organization.findUniqueOrThrow({ where: { id: organizationId }, select: LETTERHEAD_ORGANIZATION_SELECT })
+  return organizationLetterheadSnapshotJson(organizationLetterheadSnapshotOf(row))
+}
+
+/**
+ * หัวกระดาษของเอกสารภายในที่มี snapshot (ใบสำคัญจ่าย/สลิป/ADV/RAV/CRT — U130) · ไม่มี snapshot
+ * (เอกสารก่อน U130 หรือยังไม่ถึงจังหวะออก) = ค่าปัจจุบัน (พฤติกรรมเดิม)
+ */
+export function issuedDocumentLetterhead(organizationId: string, snapshot: unknown): Promise<DocLetterhead> {
+  return createLetterheadResolver(organizationId).forOrganizationSnapshot(parseOrganizationLetterheadSnapshot(snapshot))
 }
 
 /** หัวเอกสารจากค่าปัจจุบัน (เอกสารภายใน) — เรียกครั้งเดียวต่อเอกสาร */

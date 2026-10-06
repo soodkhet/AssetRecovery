@@ -63,6 +63,7 @@
 | v3.4 | 14/08/2569 | **เติม §6.9 หมวด Roles & Permissions** (Phase 1.6) — รวบ `SEED_ROLE_DELETE`/`SEED_ROLE_RENAME` (ต้นทาง `07` §11) เข้ามาใน dictionary กลาง + เพิ่ม code ที่ implementation ต้องใช้จริง: `ROLE_NOT_EDITABLE`, `CAPABILITY_LOCKED`, `CAPABILITY_NOT_FOUND`, `ROLE_IN_USE`, `DUPLICATE_ROLE_NAME`, `ROLE_NOT_FOUND` — ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.3 | 14/08/2569 | **เพิ่ม §6.10 หมวด Audit (Platform)** (Phase 1.4) — `AUDIT_REASON_REQUIRED` (บังคับ `reason` ตาม `90` §13) และ `AUDIT_IMMUTABLE` (`02` §13 — ห้าม UPDATE/DELETE audit_logs) · ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
 | v3.2 | 14/08/2569 | **เพิ่ม §6.9 หมวด Auth & Access Control** (Phase 1.3) — รวบ `PERMISSION_DENIED` (05 §11) / `LAST_SUPERADMIN_REMOVAL` (07 §11) ที่กระจายอยู่ไฟล์ต้นทาง เข้ามาไว้ใน dictionary กลาง + เพิ่ม code ใหม่ที่ implementation ต้องใช้จริง: `UNAUTHENTICATED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS`, `ACCOUNT_INACTIVE`, `USER_NOT_PROVISIONED` — ตรวจแล้วไม่ซ้ำกับ code เดิมทุกตัว (§7) ไม่กระทบ business logic เดิม |
+| v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127)** — เติม §6.8 `WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED` (400): กด "ยื่นเพิ่มเติมแล้ว" บนรอบ ภ.ง.ด. ที่ไม่ได้ติดธงต้องยื่นเพิ่มเติม (ยังไม่ยื่น/ไม่มีธง/มีคนบันทึกไปแล้ว — compare-and-set) · ตรวจแล้วไม่ซ้ำ code เดิม · ไม่ใช่ warning-only |
 
 ขอบเขตเอกสารนี้: รวม Error Code และเงื่อนไขการ validate ทั้งหมดของระบบไว้จุดเดียว เพื่อให้ frontend/backend ใช้ code เดียวกันสม่ำเสมอ และนักพัฒนาเช็คได้ว่ามี code ซ้ำ/ขัดแย้งกันหรือไม่
 
@@ -277,6 +278,7 @@
 | WHT_CERTIFICATE_INVALID_STATUS | ยกเลิกใบที่ `cancelled` ไปแล้ว (terminal — ห้ามลบ/ห้าม reverse ตาม `02` §13) | 33 |
 | WHT_FILING_SUMMARY_NOT_FOUND | อ้างสรุปรอบนำส่ง ภ.ง.ด.3/53 ที่ไม่มีในองค์กรของผู้เรียก (404) | 33 |
 | WHT_FILING_ALREADY_FILED | mark-filed รอบที่ `filed` ไปแล้ว (`33` §9 — `pending → filed` ทางเดียว) | 33 |
+| WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED | บันทึก "ยื่นเพิ่มเติมแล้ว" บนรอบที่ไม่ได้ติดธงต้องยื่นเพิ่มเติม (ยังไม่ `filed` / ไม่มีธง / ผู้ใช้อื่นบันทึกไปแล้ว — มติ PO 07/10/2569 U127) | 33 |
 
 ### 6.9 หมวด Auth & Access Control (ไฟล์ 05, 07, 08)
 

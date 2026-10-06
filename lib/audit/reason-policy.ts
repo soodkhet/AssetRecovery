@@ -71,6 +71,8 @@ export const ALWAYS_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensitivity>
   // ปฏิทินวันหยุด (มติ PO 06/10/2569 UAT U93) — เลื่อนกำหนดยื่นภาษี
   public_holidays: 'tax',
   tax_document_template_settings: 'tax',
+  // มติ PO U140 — ยืนยันสมมติฐานทางบัญชี/ภาษีของค่าตั้ง
+  setting_assumption_confirmations: 'tax',
   // ปิด/เปิดงวด
   accounting_periods: 'period_lock',
 }

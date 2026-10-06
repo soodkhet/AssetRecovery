@@ -27,6 +27,7 @@ import {
   payeesMissingTaxId,
   revenueCsv,
   whtCsv,
+  whtReversalRow,
   whtPctText,
   ADJUSTMENT_HEADERS,
   BANK_RECON_HEADERS,
@@ -460,7 +461,7 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
 
   it('แถวออกมาตรงรูปแบบตัวอย่าง', () => {
     expect(whtCsv([base]).slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold,0.00',
+      '0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold,0.00,active,-',
     )
   })
 
@@ -480,6 +481,8 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
       'payee_branch',
       'wht_condition',
       'wht_paid_by_payer_baht',
+      'status',
+      'ref_cert_no',
     ])
     const lines = whtCsv([
       base,
@@ -509,8 +512,19 @@ describe('05_WHT_Data.csv — payee_tax_id 13 หลักล้วน (DEC-006/
       .slice(CSV_BOM.length)
       .split('\r\n')
     // มติ PO U105 — (3) ออกให้ครั้งเดียว: ภาษีทั้งก้อนเป็นภาษีที่บริษัทออกให้ · (1) = 0
-    expect(person?.endsWith(',PND3,นาย,-,-,pay_once,255.00')).toBe(true)
-    expect(company?.endsWith(',PND53,-,"1 อาคาร A, ชั้น 2 แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500",00001,withhold,0.00')).toBe(true)
+    expect(person?.endsWith(',PND3,นาย,-,-,pay_once,255.00,active,-')).toBe(true)
+    expect(company?.endsWith(',PND53,-,"1 อาคาร A, ชั้น 2 แขวงสีลม เขตบางรัก กรุงเทพมหานคร 10500",00001,withhold,0.00,active,-')).toBe(true)
+  })
+
+  it('U128 — แถวกลับรายการ: ยอดติดลบ + status cancelled + อ้างใบเดิม · ใบออกแทนอ้างใบที่ถูกแทน', () => {
+    const reversal = whtReversalRow(base)
+    expect(reversal).toMatchObject({ grossSatang: -850000, whtSatang: -25500, rowStatus: 'cancelled', refCertificateNumber: '0142' })
+    const [, reversed, replacement] = whtCsv([reversal, { ...base, certificateNumber: '0150', refCertificateNumber: '0142' }])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(reversed?.startsWith('0142,ประยุทธ์ บุญมี,1123456789012,30/06/2569,ค่าจ้างทำของ ม.40(8),-8500.00,-255.00,3.00,PND3,')).toBe(true)
+    expect(reversed?.endsWith(',withhold,0.00,cancelled,0142')).toBe(true)
+    expect(replacement?.endsWith(',withhold,0.00,active,0142')).toBe(true)
   })
 })
 
@@ -1271,6 +1285,16 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
     expect(get('wht_withheld')).toMatchObject({ rowCount: 1, amountSatang: 36_600 })
     expect(get('wht_paid_by_payer')).toMatchObject({ rowCount: 2, amountSatang: 67_965 })
     expect(get('wht_remit_total')).toMatchObject({ rowCount: 3, amountSatang: 104_565 })
+    // U128 — แถวกลับรายการ (ยอดติดลบ) หักกลบในยอดสรุปและผลรวมไฟล์ 05 เอง
+    const [first, second] = wht
+    if (first === undefined || second === undefined) throw new Error('fixture')
+    const reversed = buildControlTotals({ ...CONTROL_TOTALS_FIXTURE, wht: [...wht, whtReversalRow(first), whtReversalRow(second)] })
+    const getReversed = (item: string) => reversed.find((line) => line.section === 'summary' && line.item === item)
+    expect(getReversed('wht_withheld')?.amountSatang).toBe(0)
+    expect(getReversed('wht_paid_by_payer')?.amountSatang).toBe(37_037)
+    expect(getReversed('wht_remit_total')?.amountSatang).toBe(37_037)
+    const file05 = reversed.find((line) => line.section === 'file' && line.item === 'wht_baht' && line.file.startsWith('05'))
+    expect(file05?.amountSatang).toBe(37_037)
     // ป้ายหักจากผู้รับต้องไม่รวมภาษีที่บริษัทออกให้
     expect(get('wht_withheld')?.description).toContain('หักจากผู้รับ')
     expect(get('wht_paid_by_payer')?.description).toContain('บริษัทออกให้')

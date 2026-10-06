@@ -10,6 +10,7 @@ import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { fmtDate, toBangkokParts } from '@/lib/format/datetime'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
+import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
 import { prisma } from '@/lib/prisma'
 import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
 import type {
@@ -237,6 +238,8 @@ export async function issueSubstituteReceipt(
       totalSatang,
       replacesReceiptId: input.replacesReceiptId ?? null,
       createdBy: actorId,
+      // มติ PO U130 — หัวกระดาษใบรับรองแทนใบเสร็จ ณ ตอนออก (พิมพ์ซ้ำ/Export Pack หน้าตาเดิม)
+      letterheadSnapshot: await captureLetterheadSnapshot(tx, input.organizationId),
       lines: {
         create: input.lines.map((line, index) => ({
           organizationId: input.organizationId,
@@ -311,6 +314,8 @@ export function substituteReceiptViewerOf(user: SessionUser): SubstituteReceiptV
 const docSourceSelect = {
   id: true,
   organizationId: true,
+  // มติ PO U130 — หัวกระดาษ ณ ตอนออกใบ
+  letterheadSnapshot: true,
   receiptNumber: true,
   status: true,
   issueDate: true,

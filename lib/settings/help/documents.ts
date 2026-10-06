@@ -50,6 +50,8 @@ export function documentNumberingHelp(input: {
     // ค่าในฟอร์มยังไม่ครบ/ไม่ถูกต้อง (เช่น จำนวนหลักว่าง) — ไม่แสดงตัวอย่าง
   }
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'invoice_numbering',
     title: 'เลขที่เอกสารทำงานอย่างไร',
     what: 'กำหนดหน้าตาเลขที่ของเอกสารแต่ละชนิด ระบบออกเลขต่อเนื่องให้อัตโนมัติ ไม่ข้าม ไม่ซ้ำ',
     options: [
@@ -103,6 +105,8 @@ export function dataRetentionHelp(years: number | null, closedAt: Date = SAMPLE_
 
 export function taxDocTemplateHelp(): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'tax_invoice_fields',
     title: 'เทมเพลตเอกสารกำหนดอะไร',
     what:
       'ค่าที่ต่างกันตามชนิดเอกสาร ของใบแจ้งหนี้/ใบวางบิล ใบเสร็จรับเงิน/ใบกำกับภาษี และใบส่งมอบทรัพย์ — ข้อความท้ายเอกสาร และจะพิมพ์รูปลายเซ็นผู้มีอำนาจหรือไม่ ส่วนโลโก้ ข้อมูลบริษัท และรูปลายเซ็นตั้งที่หน้าข้อมูลองค์กร (ใช้ร่วมทุกเอกสาร) · แบบเอกสารเป็น A4 ภาษาไทย ข้อมูลที่กฎหมายบังคับ (เลขผู้เสียภาษี ที่อยู่ ยอดภาษี ฯลฯ) ซ่อนหรือปิดไม่ได้ · หนังสือรับรอง 50 ทวิ ใช้แบบฟอร์มทางการ ไม่มีค่าตั้ง',
@@ -121,6 +125,8 @@ export function taxDocTemplateHelp(): SettingHelpContent {
 
 export function internalDocumentsHelp(): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'internal_documents',
     title: 'เอกสารภายในคืออะไร',
     what:
       'เอกสารที่ใช้ภายในบริษัท เช่น ใบสำคัญจ่าย สลิปค่าตอบแทน สรุปรอบจ่าย — ไม่ใช่เอกสารภาษีที่ส่งกรมสรรพากร ใช้หัวเอกสารจากข้อมูลองค์กร',
@@ -131,6 +137,8 @@ export function internalDocumentsHelp(): SettingHelpContent {
 
 export function exportFormatsHelp(): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'export_pack',
     title: 'ไฟล์ส่งสำนักงานบัญชีคืออะไร',
     what:
       'ชุดไฟล์ประจำงวด (ยอดขาย ยอดจ่าย ภาษีหัก ณ ที่จ่าย หลักฐาน) ที่ส่งให้สำนักงานบัญชีลงบัญชีและยื่นภาษี ระบบเก็บทุกเวอร์ชันพร้อมรหัสตรวจสอบไฟล์ ส่งซ้ำได้แต่ไม่เขียนทับของเดิม',

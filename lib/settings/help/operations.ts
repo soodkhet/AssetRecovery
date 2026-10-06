@@ -200,6 +200,8 @@ export function payeeIdDocumentHelp(required: boolean): SettingHelpContent {
 
 export function periodLockHelp(): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'adjustment_after_close',
     title: 'การล็อกรอบบัญชีคืออะไร',
     what:
       'เมื่อส่งตัวเลขของเดือนให้สำนักงานบัญชีหรือปิดงวดแล้ว ตัวเลขต้องไม่ถูกแก้เงียบ ๆ การแก้หลังปิดต้องทำเป็นรายการปรับปรุง (Adjustment) ที่มีผู้อนุมัติและประวัติชัดเจน',
@@ -234,6 +236,8 @@ export function bankAccountsHelp(): SettingHelpContent {
 
 export function bankFileFormatsHelp(): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'bank_file_formats',
     title: 'รูปแบบไฟล์ธนาคารคืออะไร',
     what:
       'กำหนดคอลัมน์และการเข้ารหัสของไฟล์โอนเงินที่อัปโหลดเข้าระบบธนาคาร ต้องตรงกับที่ธนาคารกำหนด ไม่งั้นธนาคารปฏิเสธไฟล์',
@@ -248,6 +252,8 @@ export function bankFileFormatsHelp(): SettingHelpContent {
 
 export function costCentersHelp(): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'cost_centers',
     title: 'ศูนย์ต้นทุนคืออะไร',
     what:
       'รหัสจัดกลุ่มค่าใช้จ่าย/รายได้ตามหน่วยงาน (เช่น ทีม ภาค) เพื่อให้สำนักงานบัญชีแยกต้นทุนในรายงาน — ไม่เปลี่ยนยอดเงิน',
@@ -262,6 +268,8 @@ export function costCentersHelp(): SettingHelpContent {
 
 export function holidaysHelp(holidayKeys: readonly string[]): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'holidays',
     title: 'ปฏิทินวันหยุดใช้ทำอะไร',
     what:
       'กำหนดยื่นภาษีหัก ณ ที่จ่ายที่ตรงเสาร์-อาทิตย์หรือวันหยุดในปฏิทินนี้ เลื่อนเป็นวันทำการถัดไปอัตโนมัติ — กรอกวันหยุดราชการปีละครั้ง',

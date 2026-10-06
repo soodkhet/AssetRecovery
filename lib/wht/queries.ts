@@ -13,11 +13,16 @@ import { loadHolidayKeys } from '@/lib/settings/queries/holiday-keys'
 import { resolveWhtFilingMethod } from '@/lib/settings/queries/wht-policy'
 import { WHT_FILING_METHOD_SUFFIX } from '@/lib/settings/wht-policy'
 import { WhtError } from '@/lib/wht/errors'
+import { usersWithCapability } from '@/lib/notifications/dispatch'
+import { whtSupplementaryFilingMessage } from '@/lib/notifications/messages'
+import { enqueueNotificationOutbox } from '@/lib/notifications/outbox'
+import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import type {
   WhtCancelInput,
   WhtCertificateListQuery,
   WhtFilingSummaryListQuery,
   WhtMarkFiledInput,
+  WhtMarkSupplementaryFiledInput,
 } from '@/lib/wht/schemas'
 import type {
   WhtCertificateDto,
@@ -28,6 +33,10 @@ import type {
 import {
   assertCertificateCancellable,
   assertFilingMarkable,
+  assertSupplementaryFilingMarkable,
+  type FilingAmounts,
+  MANAGE_WHT,
+  supplementaryFilingDiff,
   daysUntilFilingDue,
   EMPTY_FIELD_TEXT,
   filingDueDateOf,
@@ -74,6 +83,8 @@ import type { WhtCertificateMode, WhtIncomeCategory } from '@/lib/settings/wht-p
 
 const CERT_TARGET = 'wht_certificates'
 const FILING_TARGET = 'wht_filing_summaries'
+/** แหล่งของแถวคิวแจ้งเตือน "ต้องยื่นเพิ่มเติม" (มติ PO U127) — ส่งโดยรอบ cron `drainNotificationOutbox()` */
+const SUPPLEMENTARY_OUTBOX_SOURCE = 'wht_supplementary_filing'
 
 // ── select / mapper ─────────────────────────────────────────────────────────
 
@@ -169,11 +180,17 @@ const FILING_SELECT = {
   filedAt: true,
   filedByUser: { select: { fullName: true } },
   period: { select: { yearBe: true, month: true } },
+  supplementaryRequiredAt: true,
+  supplementaryFiledAt: true,
+  supplementaryFiledByUser: { select: { fullName: true } },
 } satisfies Prisma.WhtFilingSummarySelect
 
 type FilingRow = Prisma.WhtFilingSummaryGetPayload<{ select: typeof FILING_SELECT }>
 
-function toFilingDto(row: FilingRow, now: Date): WhtFilingSummaryDto {
+/**
+ * @param current ยอดปัจจุบันจากใบที่มีผล — ส่งเฉพาะรอบที่ติดธงต้องยื่นเพิ่มเติม (U127) เพื่อคิดยอดต่าง
+ */
+function toFilingDto(row: FilingRow, now: Date, current: FilingAmounts | null = null): WhtFilingSummaryDto {
   // วันตามปฏิทินก่อนเลื่อนวันหยุด (U93) — คิดจากงวด + วิธียื่นที่ snapshot ไว้ (ไม่ต้องเก็บคอลัมน์เพิ่ม)
   const nominal = filingNominalDueDateOf({ yearBe: row.period.yearBe, month: row.period.month }, row.filingMethod)
   const shifted = nominal.getTime() !== row.filingDueDate.getTime()
@@ -196,7 +213,23 @@ function toFilingDto(row: FilingRow, now: Date): WhtFilingSummaryDto {
     filedByName: row.filedByUser?.fullName ?? null,
     daysRemaining: daysUntilFilingDue(row.filingDueDate, now),
     isOverdue: isFilingOverdue(row.status, row.filingDueDate, now),
+    supplementaryRequired: row.supplementaryRequiredAt !== null,
+    supplementaryRequiredAt: row.supplementaryRequiredAt?.toISOString() ?? null,
+    supplementaryDiff:
+      row.supplementaryRequiredAt === null || current === null ? null : supplementaryFilingDiff(row, current),
+    supplementaryFiledAt: row.supplementaryFiledAt?.toISOString() ?? null,
+    supplementaryFiledByName: row.supplementaryFiledByUser?.fullName ?? null,
   }
+}
+
+/** ยอด ภ.ง.ด. ปัจจุบันจากใบที่ยังมีผลของงวด (สูตรเดียวกับสรุปรอบ — `summarizeFilingTotals()`) */
+async function currentFilingAmounts(client: TxClient, organizationId: string, periodId: string): Promise<FilingAmounts> {
+  const certificates = await client.whtCertificate.findMany({
+    where: { organizationId, expenseRecord: { periodId } },
+    select: { status: true, filingForm: true, whtSatang: true, grossSatang: true },
+  })
+  const totals = summarizeFilingTotals(certificates)
+  return { pnd1Satang: totals.pnd1Satang, pnd3Satang: totals.pnd3Satang, pnd53Satang: totals.pnd53Satang }
 }
 
 // ── สรุปรอบนำส่ง: สร้าง/คำนวณใหม่ (`33` §7.2) ───────────────────────────────
@@ -217,6 +250,13 @@ export async function refreshFilingSummary(
     yearBe: number
     month: number
   },
+  options: {
+    /**
+     * มติ PO U127 — การยกเลิก/ออกใบที่เป็นต้นเหตุของการคำนวณครั้งนี้ · รอบที่ยื่นแล้ว ⇒ ติดธงต้องยื่นเพิ่มเติม
+     * + เข้าคิวแจ้งบัญชีในทรานแซกชันเดียวกัน · ไม่ส่ง (job รายวัน) = ไม่ติดธง
+     */
+    certificateEvent?: { at: Date; certificateNumber: string; action: 'cancelled' | 'issued' }
+  } = {},
 ): Promise<FilingRow> {
   const certificates = await tx.whtCertificate.findMany({
     where: { organizationId: input.organizationId, expenseRecord: { periodId: input.periodId } },
@@ -234,9 +274,34 @@ export async function refreshFilingSummary(
     select: { id: true, status: true },
   })
   // `33` §7.2 — รอบที่บัญชี mark `filed` แล้ว (ยื่นจริงนอกระบบ) ห้ามคิดทับ: ทั้งยอด ภ.ง.ด. วันกำหนดยื่น และวิธียื่น
-  // คือบันทึกสิ่งที่ยื่นไปแล้ว (Final Test ด่าน 3) · การยกเลิก/ออกใบแทนหลังยื่นต้องทำอย่างไร = รอมติ (ยื่นเพิ่มเติม)
+  // คือบันทึกสิ่งที่ยื่นไปแล้ว (Final Test ด่าน 3) · มติ PO U127: การยกเลิก/ออกใบหลังยื่น = ติดธง "ต้องยื่นเพิ่มเติม"
+  // (ยอดต่างคิดสดจากใบที่มีผล) + แจ้งบัญชี — ยอดที่ยื่นไม่ถูกเขียนทับ
   if (existing?.status === 'filed') {
-    return tx.whtFilingSummary.findUniqueOrThrow({ where: { id: existing.id }, select: FILING_SELECT })
+    const event = options.certificateEvent
+    if (event === undefined) {
+      return tx.whtFilingSummary.findUniqueOrThrow({ where: { id: existing.id }, select: FILING_SELECT })
+    }
+    const flagged = await tx.whtFilingSummary.update({
+      where: { id: existing.id },
+      data: { supplementaryRequiredAt: event.at },
+      select: FILING_SELECT,
+    })
+    const recipients = await usersWithCapability(input.organizationId, MANAGE_WHT)
+    await enqueueNotificationOutbox(
+      tx,
+      outboxMessageEntries(
+        input.organizationId,
+        recipients,
+        whtSupplementaryFilingMessage({
+          summaryId: existing.id,
+          periodLabel: input.periodLabel,
+          certificateNumber: event.certificateNumber,
+          action: event.action,
+        }),
+      ),
+      { jobType: SUPPLEMENTARY_OUTBOX_SOURCE },
+    )
+    return flagged
   }
 
   if (existing === null) {
@@ -476,13 +541,17 @@ async function issueCertificate(
     tx,
   )
 
-  await refreshFilingSummary(tx, {
-    organizationId,
-    periodId: source.periodId,
-    periodLabel: source.period.periodLabel,
-    yearBe: source.period.yearBe,
-    month: source.period.month,
-  })
+  await refreshFilingSummary(
+    tx,
+    {
+      organizationId,
+      periodId: source.periodId,
+      periodLabel: source.period.periodLabel,
+      yearBe: source.period.yearBe,
+      month: source.period.month,
+    },
+    { certificateEvent: { at: created.createdAt, certificateNumber, action: 'issued' } },
+  )
 
   return created
 }
@@ -654,15 +723,18 @@ export async function cancelWhtCertificate(
       input.reissue && replacementGroup !== null ? await issueCertificate(tx, ctx, replacementGroup, certificate.id) : null
 
     // ยกเลิกอย่างเดียวก็ต้องคำนวณยอดรอบใหม่ (ออกใบแทนคำนวณให้แล้วใน `issueCertificate()`)
-    if (replacement === null) {
-      await refreshFilingSummary(tx, {
+    // มติ PO U127 — ยกเลิกในเดือนที่ยื่นแล้ว = ติดธงต้องยื่นเพิ่มเติม (ออกใบแทนติดธงซ้ำใน `issueCertificate()`)
+    await refreshFilingSummary(
+      tx,
+      {
         organizationId,
         periodId: source.periodId,
         periodLabel: source.period.periodLabel,
         yearBe: source.period.yearBe,
         month: source.period.month,
-      })
-    }
+      },
+      { certificateEvent: { at: now, certificateNumber: certificate.certificateNumber, action: 'cancelled' } },
+    )
 
     const cancelled = await tx.whtCertificate.findUniqueOrThrow({
       where: { id: certificate.id },
@@ -689,7 +761,18 @@ export async function listWhtFilingSummaries(
     select: FILING_SELECT,
   })
 
-  const items = rows.map((row) => toFilingDto(row, now))
+  // มติ PO U127 — รอบที่ติดธงต้องยื่นเพิ่มเติม: คิดยอดปัจจุบันจากใบที่มีผลเพื่อแสดงยอดต่างจากที่ยื่น
+  const items = await Promise.all(
+    rows.map(async (row) =>
+      toFilingDto(
+        row,
+        now,
+        row.supplementaryRequiredAt === null
+          ? null
+          : await currentFilingAmounts(prisma, user.organizationId, row.periodId),
+      ),
+    ),
+  )
   // รอบที่ยังไม่ยื่นและใกล้กำหนดที่สุด = ตัวที่ banner countdown ใช้ (`33` §8)
   const pending = items.filter((item) => item.status === 'pending').at(-1) ?? null
 
@@ -775,6 +858,87 @@ export async function markWhtFilingFiled(
   })
 
   return toFilingDto(filed, now)
+}
+
+// ── PATCH /api/accounting/wht-filing-summary/:id/mark-supplementary-filed (มติ PO U127) ──
+
+/**
+ * บัญชียืนยันว่ายื่นแบบเพิ่มเติมแล้ว (นอกระบบ) — ล้างธง "ต้องยื่นเพิ่มเติม" · ยอด `pnd*` ของรอบเลื่อนเป็น
+ * ยอดปัจจุบันจากใบที่มีผล (= ยอดที่ยื่นรวมฉบับเพิ่มเติม) · สถานะคง `filed` (ไม่มีสถานะใหม่) · เหตุผลบังคับ + audit
+ * ไม่ติดยาม Period Lock (เหตุผลเดียวกับ mark-filed — เป็นการบันทึกว่ายื่นแบบเสร็จ ไม่ใช่แก้ข้อมูลของงวด)
+ */
+export async function markWhtSupplementaryFiled(
+  ctx: AccountingMutationContext,
+  summaryId: string,
+  input: WhtMarkSupplementaryFiledInput,
+  now: Date = new Date(),
+): Promise<WhtFilingSummaryDto> {
+  assertOrgWideReadable(ctx.actor, 'wht-filing-summaries')
+  const organizationId = ctx.actor.organizationId
+  const summary = await prisma.whtFilingSummary.findFirst({
+    where: { id: summaryId, organizationId },
+    select: FILING_SELECT,
+  })
+  if (summary === null) {
+    throw new WhtError('WHT_FILING_SUMMARY_NOT_FOUND', { detail: `wht_filing_summary=${summaryId}` })
+  }
+  assertSupplementaryFilingMarkable(summary)
+  const flaggedAt = summary.supplementaryRequiredAt
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await currentFilingAmounts(tx, organizationId, summary.periodId)
+    // compare-and-set ด้วยเวลาธงเดิม — มีการยกเลิก/ออกใบเพิ่มระหว่างนั้น (ธงเลื่อนเวลา) หรือมีคนบันทึกไปแล้ว ⇒ ปฏิเสธ
+    const claimed = await tx.whtFilingSummary.updateMany({
+      where: { id: summary.id, status: 'filed', supplementaryRequiredAt: flaggedAt },
+      data: {
+        supplementaryRequiredAt: null,
+        supplementaryFiledAt: now,
+        supplementaryFiledBy: ctx.actor.id,
+        pnd1Satang: current.pnd1Satang,
+        pnd3Satang: current.pnd3Satang,
+        pnd53Satang: current.pnd53Satang,
+      },
+    })
+    if (claimed.count === 0) {
+      throw new WhtError('WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED', {
+        detail: 'ธงของรอบนี้เปลี่ยนไปแล้ว (มีผู้ใช้อื่นบันทึก หรือมีการยกเลิก/ออกใบเพิ่ม) — โหลดข้อมูลใหม่แล้วตรวจยอดอีกครั้ง',
+      })
+    }
+
+    await emitAudit(
+      {
+        organizationId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        action: 'update',
+        targetType: FILING_TARGET,
+        targetId: summary.id,
+        before: {
+          supplementary_required_at: flaggedAt?.toISOString() ?? null,
+          pnd1_satang: summary.pnd1Satang,
+          pnd3_satang: summary.pnd3Satang,
+          pnd53_satang: summary.pnd53Satang,
+        },
+        after: {
+          supplementary_required_at: null,
+          supplementary_filed_at: now.toISOString(),
+          period_label: summary.periodLabel,
+          pnd1_satang: current.pnd1Satang,
+          pnd3_satang: current.pnd3Satang,
+          pnd53_satang: current.pnd53Satang,
+        },
+        reason: input.reason,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+
+    return tx.whtFilingSummary.findUniqueOrThrow({ where: { id: summary.id }, select: FILING_SELECT })
+  })
+
+  return toFilingDto(updated, now)
 }
 
 // ── GET /api/accounting/wht-certificates/:id/pdf (`28` §6.3) ────────────────

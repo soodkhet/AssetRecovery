@@ -41,6 +41,13 @@ export const whtMarkFiledSchema = z.object({
 
 export type WhtMarkFiledInput = z.infer<typeof whtMarkFiledSchema>
 
+/** มติ PO 07/10/2569 U127 — บัญชีบันทึกว่ายื่นเพิ่มเติมแล้ว (เหตุผล/อ้างอิงการยื่นบังคับ) */
+export const whtMarkSupplementaryFiledSchema = z.object({
+  reason: z.string().trim().min(1, 'ต้องระบุอ้างอิงการยื่นเพิ่มเติม เช่น เลขที่ใบเสร็จ/วันที่ยื่น').max(1000),
+})
+
+export type WhtMarkSupplementaryFiledInput = z.infer<typeof whtMarkSupplementaryFiledSchema>
+
 export const whtFilingSummaryListQuerySchema = z.object({
   periodId: uuidSchema.optional(),
 })

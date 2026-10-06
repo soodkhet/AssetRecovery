@@ -395,7 +395,14 @@ export const WHT_HEADERS = [
   // มติ PO 06/10/2569 (U105) — ต่อท้ายสุด: ภาษีที่บริษัทออกให้ (เงื่อนไข (2)/(3) = wht_baht · (1) = 0)
   // gross_baht ของ (2)/(3) = เงินได้ + ภาษีที่ออกให้ (ตรงกับใบ 50 ทวิ)
   'wht_paid_by_payer_baht',
+  // มติ PO 07/10/2569 (U128) — ต่อท้ายสุด: `status` = `active` (ใบที่มีผล/ใบที่ออกภายหลังของเดือนที่ส่งชุดไปแล้ว)
+  // หรือ `cancelled` (แถวกลับรายการ — ยอดติดลบ) · `ref_cert_no` = ใบเดิมที่แถวนี้กลับรายการ / ใบที่ถูกออกแทน
+  'status',
+  'ref_cert_no',
 ] as const
+
+/** ชนิดแถวของไฟล์ 05 (U128) — `active` แถวปกติ · `cancelled` แถวกลับรายการ (ยอดติดลบ) */
+export type WhtExportRowStatus = 'active' | 'cancelled'
 
 export interface WhtExportRow {
   certificateNumber: string
@@ -418,6 +425,24 @@ export interface WhtExportRow {
   payeeBranchCode: string | null
   /** snapshot เงื่อนไขการหัก — รหัสตรง enum `wht_condition` (U94) */
   whtCondition: WhtCondition
+  /** U128 — ไม่ส่ง = `active` (แถวปกติ) · `cancelled` = แถวกลับรายการ (gross/wht ติดลบแล้ว) */
+  rowStatus?: WhtExportRowStatus
+  /** U128 — แถวกลับรายการ = เลขใบเดิม · ใบออกแทน = เลขใบที่ถูกแทน · อื่น ๆ = ว่าง */
+  refCertificateNumber?: string | null
+}
+
+/**
+ * แถวกลับรายการของใบ 50 ทวิ ที่ยกเลิกหลังส่งชุดของเดือนที่จ่ายไปแล้ว (มติ PO 07/10/2569 U128)
+ * — ยอดเงินติดลบ (ผลรวมไฟล์ 05/ยอดสรุปใน 00 หักกลับเอง) · `ref_cert_no` = เลขใบเดิม
+ */
+export function whtReversalRow(row: WhtExportRow): WhtExportRow {
+  return {
+    ...row,
+    grossSatang: -row.grossSatang,
+    whtSatang: -row.whtSatang,
+    rowStatus: 'cancelled',
+    refCertificateNumber: row.certificateNumber,
+  }
 }
 
 /** ตัวเลข 13 หลักล้วน — ตัดขีด/ช่องว่างที่คนกรอกติดมา แล้วตรวจความยาว (DEC-006/D10) */
@@ -463,6 +488,8 @@ export function whtCsv(rows: readonly WhtExportRow[]): string {
       row.payeeBranchCode ?? CSV_EMPTY,
       row.whtCondition,
       csvBaht(isPayerBorneWhtCondition(row.whtCondition) ? row.whtSatang : 0),
+      row.rowStatus ?? 'active',
+      row.refCertificateNumber ?? CSV_EMPTY,
     ]),
   )
 }

@@ -116,6 +116,11 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
     source: '90 §6.3 · 33 §6.2/§8',
     description: 'เตือนก่อนถึงกำหนดนำส่ง ภ.ง.ด.3/53 ของงวด — job รายวัน (idempotent ต่อ 1 งวด)',
   },
+  'wht.supplementary_filing_required': {
+    module: 'accounting',
+    source: '33 §9 (มติ PO 07/10/2569 U127)',
+    description: 'ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่บัญชี mark ว่ายื่น ภ.ง.ด. แล้ว — ติดธงต้องยื่นเพิ่มเติมบนรอบนำส่ง',
+  },
   'exception.created': {
     module: 'accounting',
     source: '90 §6.3 · 34 §9',

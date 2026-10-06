@@ -5,7 +5,7 @@ import type {
   WhtFilingMethod,
   WhtFilingStatus,
 } from '@/lib/generated/prisma/enums'
-import type { FilingTotals, FilingWarning } from '@/lib/wht/wht'
+import type { FilingTotals, FilingWarning, SupplementaryFilingDiff } from '@/lib/wht/wht'
 
 /**
  * DTO ของหนังสือรับรองหัก ณ ที่จ่าย + สรุปรอบนำส่ง (ไฟล์ 33 §8)
@@ -81,6 +81,16 @@ export interface WhtFilingSummaryDto {
   /** วันคงเหลือก่อนถึงกำหนด (ติดลบ = เลยกำหนด) — สำหรับ banner countdown (`33` §8) */
   daysRemaining: number
   isOverdue: boolean
+  /**
+   * มติ PO 07/10/2569 U127 — ธง "ต้องยื่นเพิ่มเติม" (รอบ `filed` ที่มีการยกเลิก/ออกใบในเดือนนั้นหลังยื่น)
+   * `pnd*Satang` ด้านบน = ยอดที่ยื่นแล้ว (ไม่ถูกคิดทับ)
+   */
+  supplementaryRequired: boolean
+  supplementaryRequiredAt: string | null
+  /** ยอดปัจจุบันจากใบที่มีผล − ยอดที่ยื่น · `null` = ไม่ติดธง */
+  supplementaryDiff: SupplementaryFilingDiff | null
+  supplementaryFiledAt: string | null
+  supplementaryFiledByName: string | null
 }
 
 export interface WhtFilingSummaryListDto {

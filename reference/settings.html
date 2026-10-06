@@ -417,6 +417,16 @@ function settingHelp(title, what, rows, who, when, open) {
   </details>`;
 }
 
+// changelog mockup 07/10/2569 (มติ PO U140): ป้าย "รอนักบัญชียืนยัน" เหนือกล่องคำอธิบายของค่าตั้งที่เป็นสมมติฐาน
+// แอปจริง: <SettingHelp> อ่าน help.assumption → <AssumptionBadge> · ปุ่ม "ยืนยันแล้ว" เฉพาะบัญชี (เหตุผลบังคับ) แล้วป้ายหาย
+function assumptionBadge(question, canConfirm) {
+  return `<div class="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mb-1.5">
+    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-orange-100 text-orange-800">รอนักบัญชียืนยัน</span>
+    <span>${question}</span>
+    ${canConfirm ? '<button type="button" class="rounded px-1 text-[11px] font-semibold text-slate-600 underline hover:text-slate-900">ยืนยันแล้ว</button>' : ''}
+  </div>`;
+}
+
 function kpi(label, value, sub, color) {
   const c = { emerald:'text-emerald-700 bg-emerald-50 border-emerald-100', amber:'text-amber-700 bg-amber-50 border-amber-100', blue:'text-blue-700 bg-blue-50 border-blue-100', red:'text-red-700 bg-red-50 border-red-100' }[color] || 'text-slate-700 bg-slate-50 border-slate-100';
   return `<div class="bg-white border ${c.split(' ')[2]} rounded-xl p-5 shadow-sm"><div class="text-xs text-slate-500 font-bold uppercase tracking-wider">${label}</div><div class="mt-2 text-2xl font-extrabold ${c.split(' ')[0]}">${value}</div><div class="mt-1 text-[11px] font-medium text-slate-500 bg-white inline-block px-2 py-0.5 rounded border border-slate-100">${sub}</div></div>`;

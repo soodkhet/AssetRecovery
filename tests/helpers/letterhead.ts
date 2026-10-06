@@ -1,5 +1,10 @@
 import { NO_DOC_TEMPLATE } from '@/lib/settings/tax-doc-template'
-import type { DocLetterhead } from '@/lib/organization/profile'
+import {
+  LETTERHEAD_ORGANIZATION_SELECT,
+  organizationLetterheadSnapshotJson,
+  organizationLetterheadSnapshotOf,
+  type DocLetterhead,
+} from '@/lib/organization/profile'
 
 /**
  * หัวเอกสารกลางสำหรับเทสต์ PDF (มติ PO U99) — ไม่แตะ DB/Storage
@@ -55,5 +60,16 @@ export function fakeLetterheadModule(): typeof import('@/lib/organization/letter
     taxInvoiceTemplate: async () => NO_DOC_TEMPLATE,
     billingInvoiceTemplate: async () => NO_DOC_TEMPLATE,
     handoverTemplate: async () => NO_DOC_TEMPLATE,
+    // U130 — snapshot ใช้ค่าจริงขององค์กรใน client ที่ส่งเข้ามา (โครง JSON เดียวกับของจริง) · พิมพ์ = หัวตัวอย่าง
+    captureLetterheadSnapshot: async (client, organizationId) =>
+      organizationLetterheadSnapshotJson(
+        organizationLetterheadSnapshotOf(
+          await client.organization.findUniqueOrThrow({
+            where: { id: organizationId },
+            select: LETTERHEAD_ORGANIZATION_SELECT,
+          }),
+        ),
+      ),
+    issuedDocumentLetterhead: async () => testLetterhead(),
   }
 }
