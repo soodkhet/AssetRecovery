@@ -116,7 +116,9 @@ export const config = {
     { key: '3', label: 'บัญชี: ปิดงวด/ภาษี/WHT/Export pack', file: resolve(ORCH_DIR, 'final-tests/3-accounting.md') },
     { key: '4', label: 'สิทธิ์ + Audit + Multi-tenant leak', file: resolve(ORCH_DIR, 'final-tests/4-security.md') },
     { key: '5', label: 'ความครบของ UI (ทุกเมนูใช้ได้จริง)', file: resolve(ORCH_DIR, 'final-tests/5-ui-completeness.md') },
-    { key: '6', label: 'ความทนทาน: idempotency / concurrency / jobs', file: resolve(ORCH_DIR, 'final-tests/6-reliability.md') },
+    { key: '6', label: 'ความทนทาน: idempotency / concurrency / jobs / outbox', file: resolve(ORCH_DIR, 'final-tests/6-reliability.md') },
+    // ด่าน 7 รันบนฐาน dev หลัง merge ด่าน 1–6 (มติ U119) · กติกากลางของทุกด่านอยู่ final-tests/0-common.md
+    { key: '7', label: 'เบราว์เซอร์จริงบนฐาน dev (ทุก role × flow × golden)', file: resolve(ORCH_DIR, 'final-tests/7-browser.md') },
   ],
 
   // --- โมเดลแยกตามบทบาท ('' = ใช้ค่าที่เลือกใน dropdown / default) ---
