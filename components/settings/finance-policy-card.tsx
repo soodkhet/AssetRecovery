@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
+import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
 import {
   Badge,
@@ -20,6 +21,14 @@ import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { parseBahtInput, toBahtInput } from '@/lib/format/money'
 import { MAX_AGING_BUCKETS, MIN_AGING_BUCKETS, describeAgingBuckets } from '@/lib/settings/finance-policy'
+import {
+  advancePolicyHelp,
+  agingBucketsHelp,
+  payeeIdDocumentHelp,
+  satangFromInput,
+  substituteReceiptHelp,
+  writeOffToleranceHelp,
+} from '@/lib/settings/help'
 import { financePolicyUpdateSchema } from '@/lib/settings/schemas'
 import type { FinancePolicyDto } from '@/lib/settings/types'
 
@@ -156,9 +165,8 @@ export function FinancePolicyCard() {
   if (error !== null) return <Card><ErrorState title={error.title} message={error.message} /></Card>
   if (form === null || policy === null) return null
 
-  const bucketPreview = describeAgingBuckets(
-    form.arAgingBuckets.filter((value) => value.trim() !== '').map((value) => Number(value)),
-  )
+  const bucketNumbers = form.arAgingBuckets.filter((value) => value.trim() !== '').map((value) => Number(value))
+  const bucketPreview = describeAgingBuckets(bucketNumbers)
 
   return (
     <Card>
@@ -203,6 +211,16 @@ export function FinancePolicyCard() {
           </Field>
         </div>
 
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <SettingHelp
+            help={advancePolicyHelp({
+              maxSatang: satangFromInput(form.advanceMaxAmountPerRequest),
+              unclearedToEmployeeReceivable: form.advanceUnclearedToEmployeeReceivable,
+            })}
+          />
+          <SettingHelp help={writeOffToleranceHelp(satangFromInput(form.writeOffTolerance))} />
+        </div>
+
         {/* มติ PO U103 — เพดานใบรับรองแทนใบเสร็จรับเงิน (รายจ่ายที่เรียกใบเสร็จไม่ได้) เกิน = บล็อก */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
@@ -238,6 +256,13 @@ export function FinancePolicyCard() {
             />
           </Field>
         </div>
+
+        <SettingHelp
+          help={substituteReceiptHelp(
+            satangFromInput(form.substituteReceiptMaxPerDoc),
+            satangFromInput(form.substituteReceiptMaxPerMonth),
+          )}
+        />
 
         <Field id="policy-aging" label={`ช่วงอายุหนี้ AR (วัน — ${MIN_AGING_BUCKETS}-${MAX_AGING_BUCKETS} ช่วง)`} required error={errors.arAgingBuckets}>
           <div id="policy-aging" className="space-y-2">
@@ -301,6 +326,11 @@ export function FinancePolicyCard() {
             />
             เงินทดรองที่ยังไม่เคลียร์ให้ตั้งเป็นลูกหนี้พนักงาน
           </label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <SettingHelp help={agingBucketsHelp(bucketNumbers)} />
+          <SettingHelp help={payeeIdDocumentHelp(form.requirePayeeIdDocument)} />
         </div>
 
         <Field id="policy-reason" label="เหตุผล" required error={errors.reason}>

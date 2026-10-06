@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { exportFormatsHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Card, InlineAlert, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
@@ -63,6 +65,8 @@ export function ExportFormatsTab() {
       <InlineAlert tone="info" title="แท็บนี้ดูอย่างเดียว">
         ชุดไฟล์ 00–16 ต้องครบทุกไฟล์และเรียงเลขไม่ขาด — เพิ่ม/ลบไฟล์ในชุดไม่ได้
       </InlineAlert>
+
+      <SettingHelp className="mt-3" help={exportFormatsHelp()} />
 
       <div className="mt-4">
         <Table>

@@ -1,5 +1,6 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
 import { useState } from 'react'
 import {
   Button,
@@ -18,6 +19,15 @@ import type { CompensationPlanListDto } from '@/lib/compensation/types'
 import type { FuelMode, TeamSide } from '@/lib/compensation/plan'
 import { parseBahtInput, toBahtInput } from '@/lib/format/money'
 import { toInputDate } from '@/lib/format/datetime'
+import {
+  allowanceHelp,
+  commissionHelp,
+  fuelHelp,
+  hotelCapHelp,
+  pctFromInput,
+  planWhtHelp,
+  satangFromInput,
+} from '@/lib/settings/help'
 
 /**
  * ฟอร์มสร้าง/แก้ไขแผนค่าตอบแทน — โครงตาม mockup `settings.html` (modal `create-comp`/`edit-comp`)
@@ -289,6 +299,15 @@ export function CompensationPlanFormModal({
               />
             </Field>
           )}
+          <SettingHelp
+            className="mt-3"
+            help={fuelHelp({
+              fuelMode: form.fuelMode,
+              ratePerKmSatang: satangFromInput(form.fuelRatePerKm),
+              maxPerCaseSatang: satangFromInput(form.fuelMaxPerCase),
+              dailyFlatSatang: satangFromInput(form.fuelDailyFlat),
+            })}
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -373,6 +392,13 @@ export function CompensationPlanFormModal({
               onChange={(event) => set('effectiveFrom', event.target.value)}
             />
           </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <SettingHelp help={allowanceHelp(satangFromInput(form.allowance))} />
+          <SettingHelp help={hotelCapHelp(satangFromInput(form.hotelMaxPerNight))} />
+          <SettingHelp help={commissionHelp(satangFromInput(form.commission), satangFromInput(form.noSuccessFee))} />
+          <SettingHelp help={planWhtHelp(pctFromInput(form.whtPct))} />
         </div>
 
         <label className="flex items-center gap-2 text-xs font-medium text-slate-700">

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
+import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_INVOICE_NUMBERING } from '@/components/settings/shared'
 import {
   Button,
@@ -34,6 +35,7 @@ import {
 import type { DocumentNumberingDto } from '@/lib/document-numbering/types'
 import { fmtCount } from '@/lib/format/money'
 import { fmtDateTime } from '@/lib/format/datetime'
+import { documentNumberingHelp } from '@/lib/settings/help'
 import { documentNumberingUpdateSchema } from '@/lib/settings/schemas'
 
 /**
@@ -212,6 +214,18 @@ export function DocumentNumberingTab() {
         ใบเสร็จรับเงิน/ใบกำกับภาษี และหนังสือรับรองการหักภาษี ณ ที่จ่าย ต้องมีเลขต่อเนื่องตามกฎหมาย — ตั้งรูปแบบก่อนออกฉบับแรก
         หลังจากนั้นเปลี่ยนไม่ได้ · เอกสารอื่นเปลี่ยนได้ มีผลกับฉบับถัดไป · ทุกการเปลี่ยนต้องระบุเหตุผลและบันทึกประวัติ
       </InlineAlert>
+
+      {rows[0] !== undefined && (
+        <SettingHelp
+          className="mt-3"
+          help={documentNumberingHelp({
+            docType: rows[0].docType,
+            state: rows[0],
+            formatLocked: rows[0].formatLocked,
+            at: new Date(),
+          })}
+        />
+      )}
 
       <div className="mt-4">
         <Table>
@@ -399,6 +413,22 @@ export function DocumentNumberingTab() {
                 })}
               </div>
             </div>
+
+            <SettingHelp
+              help={documentNumberingHelp({
+                docType: editing.docType,
+                state: {
+                  prefix: form.prefix.trim().toUpperCase(),
+                  includeYear: form.includeYear,
+                  digits: Number(form.digits),
+                  resetYearly: form.resetYearly,
+                  currentSeq: editing.currentSeq,
+                  currentYear: editing.currentYear,
+                },
+                formatLocked: editing.formatLocked,
+                at: new Date(),
+              })}
+            />
 
             <Field id="numbering-reason" label="เหตุผล" required error={errors.reason}>
               <Textarea

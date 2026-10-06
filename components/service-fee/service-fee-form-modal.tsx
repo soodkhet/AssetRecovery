@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { pctFromInput, satangFromInput, serviceFeeHelp } from '@/lib/settings/help'
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -239,6 +241,16 @@ export function ServiceFeeFormModal({
             </Field>
           </div>
         )}
+
+        <SettingHelp
+          help={serviceFeeHelp({
+            model: form.model,
+            baseSatang: satangFromInput(form.base),
+            ratePct: pctFromInput(form.ratePct),
+            basis: form.basis,
+            chargeOnFail: form.chargeOnFail,
+          })}
+        />
 
         <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
           <input

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
+import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_DATA_RETENTION } from '@/components/settings/shared'
 import {
   Button,
@@ -22,6 +23,7 @@ import {
   MAX_DEBTOR_DOCUMENT_RETENTION_YEARS,
   MIN_DEBTOR_DOCUMENT_RETENTION_YEARS,
 } from '@/lib/settings/data-retention'
+import { dataRetentionHelp, intFromInput } from '@/lib/settings/help'
 import { dataRetentionUpdateSchema } from '@/lib/settings/schemas'
 import type { DataRetentionPolicyDto } from '@/lib/settings/types'
 
@@ -150,6 +152,7 @@ export function DataRetentionTab() {
             />
           </div>
         </Field>
+        <SettingHelp defaultOpen help={dataRetentionHelp(intFromInput(form.years))} />
 
         <Field id="retention-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea

@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { slaPolicyHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
@@ -160,6 +162,7 @@ export function SlaPolicyTab() {
             )}
           </div>
         </Field>
+        <SettingHelp help={slaPolicyHelp(previewValid ? typed : null)} />
 
         <Field id="sla-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea

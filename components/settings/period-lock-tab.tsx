@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { periodLockHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Card, InlineAlert, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
@@ -92,6 +94,8 @@ export function PeriodLockTab() {
         {payload?.banner ?? 'เมื่อรอบบัญชีถูกรับรองส่งมอบแล้ว ห้ามแก้ source record โดยตรง'} — ต้องสร้าง Adjustment
         ผ่าน workflow แทนเท่านั้น
       </InlineAlert>
+
+      <SettingHelp className="mt-3" help={periodLockHelp()} />
 
       <div className="mt-4">
         <Table>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
+import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_WHT_POLICY } from '@/components/settings/shared'
 import {
   Button,
@@ -27,6 +28,14 @@ import { toFieldErrors } from '@/lib/api/validation'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { fmtDate, fromInputDate, nowDate, toInputDate } from '@/lib/format/datetime'
 import type { ExpenseType } from '@/lib/generated/prisma/enums'
+import {
+  whtBaseHelp,
+  whtCertificateModeHelp,
+  whtFilingMethodHelp,
+  whtGrossUpHelp,
+  whtIncomeTypeHelp,
+  whtZeroRateHelp,
+} from '@/lib/settings/help'
 import { whtPolicyCreateSchema } from '@/lib/settings/schemas'
 import type { WhtPolicyOverviewDto } from '@/lib/settings/types'
 import {
@@ -250,6 +259,14 @@ export function WhtPolicyTab() {
             {overview.isDefault && <StatusBadge group="neutral" label="ค่าเริ่มต้น" />}
           </div>
           <PolicySummary values={overview.current} />
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+            <SettingHelp help={whtBaseHelp(overview.current.baseExpenseTypes)} />
+            <SettingHelp help={whtCertificateModeHelp(overview.current.certificateMode)} />
+            <SettingHelp help={whtIncomeTypeHelp(overview.current)} />
+            <SettingHelp help={whtZeroRateHelp(overview.current.issueZeroRate402Certificate)} />
+            <SettingHelp help={whtGrossUpHelp(overview.current.allowGrossUpConditions)} />
+            <SettingHelp help={whtFilingMethodHelp(overview.current.filingMethod)} />
+          </div>
         </div>
       )}
 
@@ -392,6 +409,7 @@ export function WhtPolicyTab() {
               {errors.baseExpenseTypes !== undefined && (
                 <p className="mt-1 text-[11px] text-red-600">{errors.baseExpenseTypes}</p>
               )}
+              <SettingHelp className="mt-2" help={whtBaseHelp(form.baseExpenseTypes)} />
             </div>
 
             <Field id="wht-policy-cert" label="การออกหนังสือรับรอง 50 ทวิ" required error={errors.certificateMode}>
@@ -407,6 +425,7 @@ export function WhtPolicyTab() {
                 ))}
               </Select>
             </Field>
+            <SettingHelp help={whtCertificateModeHelp(form.certificateMode)} />
 
             <Field
               id="wht-policy-income"
@@ -473,6 +492,8 @@ export function WhtPolicyTab() {
               </div>
             )}
 
+            <SettingHelp help={whtIncomeTypeHelp(form)} />
+
             <div>
               <label className="flex items-start gap-2 text-xs font-medium text-slate-700">
                 <input
@@ -488,6 +509,7 @@ export function WhtPolicyTab() {
                 ผู้รับเงินได้ 40(1)/40(2) ที่อัตราหัก 0% จะได้หนังสือรับรองยอดภาษี 0 (เงินได้ = ยอดที่จ่ายในฐาน) เพื่อใช้ยื่น ภ.ง.ด.90/91
                 และนับในสรุป ภ.ง.ด.1 · ไม่เกี่ยวกับเงินได้ 40(8) ที่ต่ำกว่าเกณฑ์ขั้นต่ำ (ยังไม่ออกหนังสือรับรอง)
               </p>
+              <SettingHelp className="mt-2" help={whtZeroRateHelp(form.issueZeroRate402Certificate)} />
             </div>
 
             <div>
@@ -507,6 +529,7 @@ export function WhtPolicyTab() {
                 ปิด (ค่าเริ่มต้น): ผู้รับเลือกได้เฉพาะ (1) หัก ณ ที่จ่าย และสร้างรอบจ่ายไม่ได้ถ้ายังมีผู้รับที่ตั้ง (2)/(3) ไว้ ·
                 ยืนยันสูตรกับสำนักงานบัญชีก่อนเปิดใช้
               </p>
+              <SettingHelp className="mt-2" help={whtGrossUpHelp(form.allowGrossUpConditions)} />
             </div>
 
             {(form.incomeTypeMode === 'all_40_2' ||
@@ -523,7 +546,7 @@ export function WhtPolicyTab() {
               label="วิธียื่น ภ.ง.ด."
               required
               error={errors.filingMethod}
-              hint="ใช้คิดวันกำหนดยื่นและการแจ้งเตือน (ไม่เลื่อนตามวันหยุดราชการ)"
+              hint="ใช้คิดวันกำหนดยื่นและการแจ้งเตือน — ตรงเสาร์-อาทิตย์/วันหยุดในปฏิทินวันหยุด เลื่อนเป็นวันทำการถัดไป"
             >
               <Select
                 id="wht-policy-filing"
@@ -537,6 +560,7 @@ export function WhtPolicyTab() {
                 ))}
               </Select>
             </Field>
+            <SettingHelp help={whtFilingMethodHelp(form.filingMethod)} />
 
             <Field id="wht-policy-reason" label="เหตุผล" required error={errors.reason}>
               <Textarea

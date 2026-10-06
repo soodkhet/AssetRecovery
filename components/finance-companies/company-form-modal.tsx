@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { SettingHelp } from '@/components/settings/setting-help'
+import { useCurrentVatRate } from '@/components/settings/use-current-vat-rate'
 import { toFieldErrors } from '@/lib/api/validation'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -18,6 +20,14 @@ import {
 import { financeCompanyCreateSchema } from '@/lib/finance-companies/schemas'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
+import {
+  companyBillingHelp,
+  companyBranchHelp,
+  companyVatModeHelp,
+  customerWhtHelp,
+  intFromInput,
+  pctFromInput,
+} from '@/lib/settings/help'
 
 /**
  * ฟอร์มสร้าง/แก้ไขบริษัทไฟแนนซ์ — โครงตาม mockup `settings.html` (modal `create-company`/`edit-company`)
@@ -158,6 +168,8 @@ export function CompanyFormModal({
   const [saving, setSaving] = useState(false)
 
   const isEdit = company !== null
+  /** U108 — อัตรา VAT ที่มีผลวันนี้ สำหรับตัวอย่างตัวเลขเท่านั้น (ไม่ใช้ค่าคงที่) */
+  const vatRatePct = useCurrentVatRate(open)
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((current) => ({ ...current, [key]: value }))
@@ -286,6 +298,7 @@ export function CompanyFormModal({
             </Field>
           )}
         </div>
+        <SettingHelp help={companyBranchHelp()} />
 
         <Field id="co-address" label="ที่อยู่ตามที่จดทะเบียน (ใช้ออกเอกสารทางการ)" error={errors.address}>
           <Textarea id="co-address" value={form.address} onChange={(event) => set('address', event.target.value)} />
@@ -400,6 +413,18 @@ export function CompanyFormModal({
               onChange={(event) => set('paymentDueDays', event.target.value)}
             />
           </Field>
+        </div>
+
+        <div className="space-y-2">
+          <SettingHelp help={companyVatModeHelp(form.vatMode, vatRatePct)} />
+          <SettingHelp
+            help={customerWhtHelp({
+              whtPct: pctFromInput(form.whtWithheldByCustomerPct),
+              vatMode: form.vatMode,
+              vatRatePct,
+            })}
+          />
+          <SettingHelp help={companyBillingHelp(intFromInput(form.billingDay), intFromInput(form.paymentDueDays))} />
         </div>
 
         {isEdit && company.vatMode !== form.vatMode && (

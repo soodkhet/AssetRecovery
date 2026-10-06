@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { approvalMatrixHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { FinancePolicyCard } from '@/components/settings/finance-policy-card'
@@ -268,6 +270,8 @@ export function ApprovalMatrixTab() {
             </Can>
           </div>
         </div>
+
+        <SettingHelp className="mb-3" help={approvalMatrixHelp(items.filter((item) => item.isActive))} />
 
         <Table>
           <THead>

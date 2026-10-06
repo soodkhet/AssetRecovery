@@ -1,5 +1,7 @@
 'use client'
 
+import { SettingHelp } from '@/components/settings/setting-help'
+import { internalDocumentsHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { Badge, Button, Card, InlineAlert, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
@@ -66,6 +68,8 @@ export function InternalDocumentsTab() {
       <InlineAlert tone="info" title="แท็บนี้ดูอย่างเดียว">
         รายการเอกสารเป็นค่าตายตัวของระบบ เพิ่ม/ลบไม่ได้ — รูปแบบหน้าตา PDF เป็นแบบมาตรฐานของระบบ
       </InlineAlert>
+
+      <SettingHelp className="mt-3" help={internalDocumentsHelp()} />
 
       <div className="mt-4">
         <Table>
