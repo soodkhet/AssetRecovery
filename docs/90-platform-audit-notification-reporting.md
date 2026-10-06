@@ -24,6 +24,7 @@
 | v4.5 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)** — §6.2 Data Retention ของเอกสารลูกหนี้ใช้งานแล้ว: ค่าตั้งจำนวนปีหลังปิดเคส (`13` §6.16 ค่าเริ่มต้น 5 ปี) + job `purge_debtor_documents` (`91` §6.1) ลบไฟล์เอกสารลูกหนี้บน Storage เมื่อครบ · เก็บข้อมูลเคสที่ไม่ใช่ไฟล์ + วันที่ลบ · audit ต่อเคส (`delete` · actor = ระบบ + job id) |
 | v4.5x-CB | 07/10/2569 | **มติ PO U141** — (1) การเปิดไฟล์**ฉบับเซ็นของใบรับรองแทนใบเสร็จ** (`substitute-receipts/<id>/signed/…` — มีชื่อ/เลขบัตร/ที่อยู่ผู้รับเงิน) ลง audit `view` แบบเดียวกับ U90 (`target_type = substitute_receipts`) · (2) โหมดดู portal แทนลูกค้าที่เรียก API ตรงลง `view_as` ด้วย (`97` §13.1) |
 | v4.x-BY | 07/10/2569 | **มติ PO U135** — §6.3 `field_allowance.period_locked` ครอบค่าน้ำมัน `PER_KM` ที่ job `fuel_distance_retry` คำนวณได้หลังงวดปิดด้วย (ผู้รับ/ปลายทางเดียวกับ U50) — ไม่เพิ่มชื่อ event ใหม่ |
+| v4.6-GA | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)** — §6.3 เติมแถว `device_catalog.tac_update_failed` (อัปเดตฐาน TAC ของ Model Phone ไม่สำเร็จ ⇒ แจ้งผู้ดูแลแคตตาล็อกผ่าน outbox) |
 
 ขอบเขตเอกสารนี้: ระบบกลางสำหรับ Audit Log, Notification, Exception และ Reporting ที่ใช้ร่วมกันข้ามทุกโมดูล
 
@@ -143,6 +144,7 @@ sequenceDiagram
 | Accounting (34) | Exception ใหม่ (ระดับ critical) | `34-accounting-document-checklist-exceptions.md` |
 | คิวอนุมัติ (15/16/20) | `expense.approval_requested` (ผู้ถือ capability ของขั้นที่รออยู่ · ผู้จัดการเฉพาะทีมของรายการ) · `advance.approval_requested` (ผู้ถือ `approve_advance`) · `adjustment.approval_requested` (บทบาทที่ยังขาดตามสถานะงวด) — แจ้งทันทีเมื่อเข้าคิว/ขยับขั้น · ผู้ขอไม่ได้รับของตัวเอง — v4.3 มติ PO 05/10/2569 U29 | `16` §9.1 · `15` · `20` §6.2 |
 | Field job (41/91) | `field_allowance.period_locked` — job `daily_field_allowance` ข้ามวันที่อยู่ในงวดปิดแล้ว (และ job `fuel_distance_retry` ที่คำนวณค่าน้ำมัน `PER_KM` ได้หลังงวดของวันปิดงานปิดแล้ว — มติ PO U135 · คีย์กันซ้ำต่อรอบมอบหมาย) → แจ้งผู้ถือ `create_adjustment` พร้อมยอดที่คำนวณไว้ (1 พนักงาน × 1 วัน = 1 ครั้ง) — v4.3 มติ PO 05/10/2569 U25 | `41` §6.6 · `91` §6.1 |
+| ตั้งค่า (13/91) | `device_catalog.tac_update_failed` — job `device_tac_sync` / "อัปเดตตอนนี้" / "นำเข้าไฟล์เอง" ของ Model Phone ล้มเหลว (ระดับ critical · ถึงผู้ถือ `manage_device_catalog` ระดับ manage · เข้าคิวผ่าน `notification_outbox` ในทรานแซกชันเดียวกับแถวประวัติ — DEC-015 · กันซ้ำวันละครั้งตามวันไทย · มติ PO U167) | `13-accounting-finance-settings.md` §6.18 · `91` §6.1 |
 
 > **ผู้รับต้องอยู่ใน scope ของเรื่องเสมอ (v4.2 — มติ PO 03/10/2569 UAT Q17 · BUG-064)**: การแจ้งเตือนที่หาผู้รับจาก capability ต้องกรองตาม scope ระดับแถวด้วย — เรื่องของเคส = ทีมของเคส (ผู้จัดการ/หัวหน้าทีมอื่นไม่ได้รับ แม้ถือ capability เดียวกัน) · เรื่องของบริษัทไฟแนนซ์ = บริษัทนั้น · เรื่องระดับองค์กร = เฉพาะ role กลุ่ม system · **ลิงก์ต้องพาไปหน้าที่ผู้รับคนนั้นเปิดได้** (พนักงานภาคสนาม = หน้า Field Tracker ของตัวเอง ไม่ใช่หน้ามอบหมาย — UAT BUG-059)
 >

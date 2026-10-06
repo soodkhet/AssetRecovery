@@ -70,6 +70,7 @@ export const ERROR_CATALOG = {
   DUPLICATE_HOLIDAY_DATE: { status: 400, severity: 'reject', source: '24 §6.1' },
   // มติ PO U155 — แคตตาล็อกแบรนด์/รุ่นเครื่อง
   DEVICE_CATALOG_ITEM_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
+  DEVICE_TAC_FILE_INVALID: { status: 400, severity: 'reject', source: '24 §6.1' },
   DUPLICATE_DEVICE_CATALOG_ITEM: { status: 400, severity: 'reject', source: '24 §6.1' },
 
   // ── 24 §6.2 ภาษี/VAT ───────────────────────────────────────────────────

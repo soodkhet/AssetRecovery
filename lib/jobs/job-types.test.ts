@@ -29,7 +29,7 @@ describe('ทะเบียน job_type (`91` §6.1)', () => {
       'advance_overdue',
       'bank_file',
       'daily_field_allowance',
-      'device_catalog_sync',
+      'device_tac_sync',
       'export_pack',
       'purge_debtor_documents',
       'reassign_timeout',

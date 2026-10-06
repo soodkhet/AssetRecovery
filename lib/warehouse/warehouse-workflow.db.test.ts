@@ -243,12 +243,12 @@ async function seedApprovedCase(companyId: string, imei: string): Promise<string
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO cases (
       organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
-      debtor_name, addr_province, addr_district, asset_kind, asset_description, imei,
+      debtor_name, addr_province, addr_district, asset_kind, asset_description, asset_capacity, asset_color, imei,
       debt_amount_satang, assigned_team_id,
       service_fee_template_id, service_fee_model_snapshot, service_fee_base_satang, service_fee_fail_fee_satang
     ) VALUES (
       '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${companyId}', 'manual', 'approved', '${MANAGER_ID}',
-      'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15 สีดำ', '${imei}',
+      'ลูกหนี้ ${caseSeq}', '${PROVINCE}', 'เมือง', 'smartphone', 'iPhone 15 สีดำ', '128GB', 'ดำ', '${imei}',
       1000000, '${TEAM_ID}',
       '${TEMPLATE_ID}', 'FLAT', 50000, NULL
     ) RETURNING id
@@ -389,6 +389,10 @@ suite('Phase 2.13 — Asset auto-create hook (`44` §6.1)', () => {
     expect(asset.assetStatus).toBe('pending_intake')
     expect(asset.imeiContract).toBe(imei)
     expect(asset.deviceDesc).toBe('iPhone 15 สีดำ')
+    // มติ PO U166 — ความจุ/สีตามสัญญา snapshot จากเคสตอนปิดงาน · ยังไม่ตรวจรับ = null
+    expect(asset.deviceCapacity).toBe('128GB')
+    expect(asset.deviceColor).toBe('ดำ')
+    expect(asset.colorCapacityMatched).toBeNull()
     expect(asset.companyId).toBe(COMPANY_A)
     expect(asset.receivedAt).toBeNull()
     expect(asset.closedAt).toBeInstanceOf(Date)
@@ -488,6 +492,27 @@ suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`4
     const stored = await db().asset.findUniqueOrThrow({ where: { id: assetId } })
     expect(stored.imeiActual).toBe(imei)
     expect(stored.receivedAt).not.toBeNull()
+    // ไม่ส่งช่อง "สี/ความจุตรงกับสัญญา" = ไม่ได้ยืนยัน (false) ไม่ block
+    expect(stored.colorCapacityMatched).toBe(false)
+  })
+
+  it('มติ PO U166 — ติ๊ก "สี/ความจุตรงกับสัญญา" บันทึกลงเครื่อง + audit · DTO พกค่าตามสัญญา', async () => {
+    const { assetId, imei } = await seedClosedSuccessCase()
+    const result = await warehouse.intakeAsset(
+      admin,
+      assetId,
+      { ...intakeInput(imei), colorCapacityMatched: true },
+      ctx(admin),
+    )
+
+    expect(result.asset.colorCapacityMatched).toBe(true)
+    expect(result.asset.deviceCapacity).toBe('128GB')
+    expect(result.asset.deviceColor).toBe('ดำ')
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'assets', targetId: assetId, action: 'status_change' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({ colorCapacityMatched: true })
   })
 
   it('UAT Q14 (BUG-055) — คลังรับเข้า = หลักฐานปิดงานเคสสำเร็จผ่านอัตโนมัติ แล้วตีกลับไม่ได้', async () => {

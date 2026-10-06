@@ -516,8 +516,9 @@ async function seedPayees(): Promise<void> {
 }
 
 /**
- * แคตตาล็อก Model Phone (U155–U162) — เพิ่มเองผ่าน service ของหน้าตั้งค่า (ไม่เรียก API ภายนอก)
- * เคส FT บางแถวเลือกจากรายการ (`deviceModelId`) บางแถว "ระบุเอง" · ซ่อน 1 รุ่นเพื่อเห็นสถานะปิด
+ * แคตตาล็อก Model Phone (U155–U162 · U166) — เพิ่มเองผ่าน service ของหน้าตั้งค่า แล้ว**นำเข้าฐาน TAC ตัวอย่าง**
+ * (fixture เล็กใน repo `lib/device-catalog/fixtures/tac-sample.csv` ผ่านทาง "นำเข้าไฟล์เอง" — ไม่เรียกเน็ต)
+ * เคส FT บางแถวได้รุ่นจาก TAC (`deviceModelId`) บางแถว "ระบุเอง" · 1 เคส TAC ไม่พบ → ระบบจำ · ซ่อน 1 รุ่นเพื่อเห็นสถานะปิด
  */
 async function seedDeviceCatalog(): Promise<void> {
   const q = await import('@/lib/device-catalog/queries')
@@ -535,6 +536,20 @@ async function seedDeviceCatalog(): Promise<void> {
       const id = found?.id ?? (await q.createManualDeviceModel(await sctx(`เพิ่มรุ่น ${brandName} ${name}`), { brandId, assetKind, name, releaseYear })).id
       ids.deviceModels[`${brandName} ${name}`] = id
     }
+  }
+  // ฐาน TAC ตัวอย่าง — รันซ้ำได้ (เพิ่มเฉพาะ TAC ใหม่) · ผูกรุ่นที่เพิ่มเองข้างบนด้วยชื่อ (Galaxy A55 5G / iPhone 15)
+  if ((await db.deviceTac.count({ where: { organizationId: ORG_ID, source: 'tacdb' } })) === 0) {
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const { runDeviceTacSyncJob } = await import('@/lib/device-catalog/tac-sync-job')
+    const bytes = new Uint8Array(readFileSync(join(process.cwd(), 'lib/device-catalog/fixtures/tac-sample.csv')))
+    const actor = (await sctx('นำเข้าฐาน TAC ตัวอย่าง')).actor
+    await runDeviceTacSyncJob({
+      organizationId: ORG_ID,
+      filePath: `organization/${ORG_ID}/device-tac/seed-final.csv`,
+      actor: { id: actor.id, roleName: actor.roleName },
+      readFile: async () => bytes,
+    })
   }
   const hidden = ids.deviceModels['Apple iPhone 14'] ?? ''
   const row = await db.deviceModel.findUniqueOrThrow({ where: { id: hidden }, select: { manualStatus: true } })

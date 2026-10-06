@@ -432,3 +432,22 @@ export function splitBrandModelText(text: string | null | undefined): { brand: s
   if (model === '') return null
   return { brand: prettyBrandName(brand), model }
 }
+
+/**
+ * นำเข้า CSV เคส (มติ PO U166) — ตัดสินช่องยี่ห้อ/รุ่นของแถวเทียบกับฐาน TAC ของ IMEI
+ * - ไฟล์ว่าง + พบ TAC ⇒ เติมจาก TAC (`fill`) + แจ้งว่าเติมให้
+ * - ไฟล์มีค่าแต่ยี่ห้อไม่ตรงกับ TAC ⇒ **เตือน** (คงข้อความในไฟล์ ไม่ทับ)
+ * - ไม่พบ TAC / ตรงกัน ⇒ ไม่ทำอะไร
+ */
+export function tacImportDecision(
+  fileText: string | null | undefined,
+  tac: { brandName: string; label: string } | null,
+): { fill: boolean; warning: string | null } {
+  if (tac === null) return { fill: false, warning: null }
+  const text = cleanCatalogName(fileText ?? '')
+  if (text === '') return { fill: true, warning: `เติมยี่ห้อ/รุ่นจาก IMEI: ${tac.label}` }
+  const brandKey = normalizeCatalogName(tac.brandName)
+  const textKey = normalizeCatalogName(text)
+  if (textKey.includes(brandKey) || textKey.includes(normalizeCatalogName(tac.label))) return { fill: false, warning: null }
+  return { fill: false, warning: `ยี่ห้อ/รุ่นในไฟล์ไม่ตรงกับ IMEI (ฐานข้อมูลระบุ ${tac.label}) — ตรวจสอบก่อนส่งตรวจ` }
+}

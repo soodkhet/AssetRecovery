@@ -15,7 +15,8 @@ import {
   type DeviceAssetKind,
   type DeviceCatalogStatusCode,
 } from '@/lib/device-catalog/catalog'
-import { rapidApiConfigFromEnv } from '@/lib/device-catalog/rapidapi-client'
+import { DEVICE_TAC_SYNC_JOB_TYPE } from '@/lib/device-catalog/permissions'
+import { tacOfImei } from '@/lib/device-catalog/tac'
 import type {
   DeviceBrandListQuery,
   DeviceCatalogBulkVisibilityInput,
@@ -66,7 +67,8 @@ function modelSelfVisibleWhere(filter: CatalogFilter): Prisma.DeviceModelWhereIn
   return {
     OR: [
       { manualStatus: 'active' },
-      { manualStatus: null, OR: [{ releaseYear: null }, { releaseYear: { gte: filter.minReleaseYear } }] },
+      // ไม่ทราบปี: เพิ่มเอง = ผ่าน · ฐาน TAC = ไม่ผ่าน (ต้องตรงกับ passesRecentYears())
+      { manualStatus: null, OR: [{ releaseYear: null, source: 'manual' }, { releaseYear: { gte: filter.minReleaseYear } }] },
     ],
   }
 }
@@ -82,6 +84,7 @@ export function modelHiddenWhere(filter: CatalogFilter): Prisma.DeviceModelWhere
       { brand: brandHiddenWhere(filter) },
       { manualStatus: 'hidden' },
       { manualStatus: null, releaseYear: { lt: filter.minReleaseYear } },
+      { manualStatus: null, releaseYear: null, source: 'tacdb' },
     ],
   }
 }
@@ -114,7 +117,7 @@ function toModelDto(row: ModelRow, filter: CatalogFilter): DeviceModelRowDto {
     assetKind: row.assetKind,
     name: row.name,
     visible: isModelVisible(row, brandVisible, filter),
-    filterVisible: passesRecentYears(row.releaseYear, filter),
+    filterVisible: passesRecentYears(row.releaseYear, filter, row.source),
     manualStatus: row.manualStatus,
     source: row.source,
     releaseYear: row.releaseYear,
@@ -215,7 +218,7 @@ export async function listDeviceBrands(organizationId: string, query: DeviceBran
       orderBy: { name: 'asc' },
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
-      select: { id: true, name: true, nameKey: true, manualStatus: true, source: true, lastSyncedAt: true },
+      select: { id: true, name: true, nameKey: true, manualStatus: true, source: true },
     }),
     prisma.deviceBrand.count({ where }),
   ])
@@ -240,7 +243,6 @@ export async function listDeviceBrands(organizationId: string, query: DeviceBran
     source: row.source,
     modelCount: allCounts.find((group) => group.brandId === row.id)?._count._all ?? 0,
     visibleModelCount: visibleCounts.find((group) => group.brandId === row.id)?._count._all ?? 0,
-    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
   }))
   return { items, total, page: query.page, pageSize: query.pageSize }
 }
@@ -261,41 +263,54 @@ export async function listDeviceModels(organizationId: string, query: DeviceMode
   return { items: rows.map((row) => toModelDto(row, filter)), total, page: query.page, pageSize: query.pageSize }
 }
 
-export async function getDeviceCatalogSummary(organizationId: string): Promise<DeviceCatalogSummaryDto> {
-  const filter = await getCatalogFilter(organizationId)
-  const [brandCount, visibleBrandCount, modelCount, visibleModelCount, brandsPendingFirstSync, lastJob] = await Promise.all([
-    prisma.deviceBrand.count({ where: { organizationId, deletedAt: null } }),
-    prisma.deviceBrand.count({ where: { organizationId, deletedAt: null, ...brandVisibleWhere(filter) } }),
-    prisma.deviceModel.count({ where: { organizationId, deletedAt: null } }),
-    prisma.deviceModel.count({ where: { organizationId, deletedAt: null, brand: { deletedAt: null }, ...modelVisibleWhere(filter) } }),
-    prisma.deviceBrand.count({ where: { organizationId, deletedAt: null, externalId: { not: null }, lastSyncedAt: null } }),
-    prisma.job.findFirst({
-      where: { jobType: 'device_catalog_sync', OR: [{ organizationId }, { organizationId: null }] },
-      orderBy: { createdAt: 'desc' },
-      select: { status: true, completedAt: true, result: true },
-    }),
-  ])
-  const result = lastJob?.result
+const DAY_MS = 86_400_000
+
+/** สรุปหัวหน้า Model Phone (มติ PO U166/U167) — จำนวน + สถานะการอัปเดตฐาน TAC + ป้ายแหล่งข้อมูลหยุดอัปเดต */
+export async function getDeviceCatalogSummary(organizationId: string, now: Date = new Date()): Promise<DeviceCatalogSummaryDto> {
+  const filter = await getCatalogFilter(organizationId, now)
+  const [brandCount, visibleBrandCount, modelCount, visibleModelCount, tacCount, learnedTacCount, state, pendingJob] =
+    await Promise.all([
+      prisma.deviceBrand.count({ where: { organizationId, deletedAt: null } }),
+      prisma.deviceBrand.count({ where: { organizationId, deletedAt: null, ...brandVisibleWhere(filter) } }),
+      prisma.deviceModel.count({ where: { organizationId, deletedAt: null } }),
+      prisma.deviceModel.count({ where: { organizationId, deletedAt: null, brand: { deletedAt: null }, ...modelVisibleWhere(filter) } }),
+      prisma.deviceTac.count({ where: { organizationId, deletedAt: null } }),
+      prisma.deviceTac.count({ where: { organizationId, deletedAt: null, source: 'learned' } }),
+      prisma.deviceCatalogSettings.findUnique({
+        where: { organizationId },
+        select: { tacImportedAt: true, tacCheckedAt: true, tacSourceUpdatedAt: true, staleAlertDays: true },
+      }),
+      prisma.job.count({
+        where: {
+          jobType: DEVICE_TAC_SYNC_JOB_TYPE,
+          status: { in: ['pending', 'running'] },
+          OR: [{ organizationId }, { organizationId: null }],
+        },
+      }),
+    ])
+  const staleAlertDays = state?.staleAlertDays ?? 90
+  const sourceUpdatedAt = state?.tacSourceUpdatedAt ?? null
   return {
     brandCount,
     visibleBrandCount,
     modelCount,
     visibleModelCount,
-    brandsPendingFirstSync,
     minReleaseYear: filter.minReleaseYear,
-    lastJob:
-      lastJob === null
-        ? null
-        : {
-            status: lastJob.status,
-            finishedAt: lastJob.completedAt?.toISOString() ?? null,
-            result:
-              result !== null && typeof result === 'object' && !Array.isArray(result)
-                ? (result as Record<string, unknown>)
-                : null,
-          },
-    apiConfigured: rapidApiConfigFromEnv() !== null,
+    tacCount,
+    learnedTacCount,
+    tacImportedAt: state?.tacImportedAt?.toISOString() ?? null,
+    tacCheckedAt: state?.tacCheckedAt?.toISOString() ?? null,
+    sourceUpdatedAt: sourceUpdatedAt?.toISOString() ?? null,
+    sourceStale: isSourceStale(sourceUpdatedAt, staleAlertDays, now),
+    staleAlertDays,
+    pendingJob: pendingJob > 0,
   }
+}
+
+/** ไฟล์ต้นทางไม่ถูกแก้เกิน N วัน (U167) — ไม่ทราบวันที่ = ไม่ขึ้นป้าย (แสดง "ไม่ทราบ" แทน) */
+export function isSourceStale(sourceUpdatedAt: Date | null, staleAlertDays: number, now: Date): boolean {
+  if (sourceUpdatedAt === null) return false
+  return now.getTime() - sourceUpdatedAt.getTime() > staleAlertDays * DAY_MS
 }
 
 // ─── ตัวเลือกของฟอร์มรับเคส ───────────────────────────────────────
@@ -699,9 +714,15 @@ export async function resolveDeviceSelection(
   assetKind: DeviceAssetKind | null,
   deviceModelId: string | null,
   text: string | null,
+  imei: string | null = null,
 ): Promise<DeviceSelection> {
   if (deviceModelId === null) return { deviceModelId: null, text }
   const filter = await getCatalogFilter(organizationId)
+  // มติ PO U166 — รุ่นที่ TAC ของ IMEI เคสนี้ผูกไว้ ใช้ได้แม้ถูกซ่อนจากตัวเลือก (เครื่องจริงเป็นรุ่นนี้)
+  const tac = tacOfImei(imei)
+  const tacBound =
+    tac !== null &&
+    (await prisma.deviceTac.count({ where: { organizationId, tac, deletedAt: null, deviceModelId } })) > 0
   const row = await prisma.deviceModel.findFirst({
     where: {
       id: deviceModelId,
@@ -709,7 +730,7 @@ export async function resolveDeviceSelection(
       deletedAt: null,
       brand: { deletedAt: null },
       ...(assetKind === null ? {} : { assetKind }),
-      ...modelVisibleWhere(filter),
+      ...(tacBound ? {} : modelVisibleWhere(filter)),
     },
     select: { id: true, name: true, brand: { select: { name: true } } },
   })

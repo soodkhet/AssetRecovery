@@ -27,6 +27,8 @@ function scheduled(caseId: string, scheduleDate: string | null): FieldCaseListIt
     province: null,
     district: null,
     assetDescription: null,
+    assetCapacity: null,
+    assetColor: null,
     debtAmountSatang: null,
     assignedAt: '2026-08-01T03:00:00.000Z',
     acceptedAt: null,

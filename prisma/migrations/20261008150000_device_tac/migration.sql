@@ -76,5 +76,5 @@ ALTER TABLE "assets"
   ADD COLUMN "color_capacity_matched" BOOLEAN;
 
 -- ⑥ งานเก่าในคิว
-UPDATE "jobs" SET "status" = 'cancelled', "error_message" = 'เลิกใช้แหล่งข้อมูลเดิม — แทนด้วยงานอัปเดตฐาน TAC รายสัปดาห์'
+UPDATE "jobs" SET "status" = 'cancelled', "error_message" = 'เลิกใช้แหล่งข้อมูลเดิม — แทนด้วยงานอัปเดตฐาน TAC รายวัน'
 WHERE "job_type" = 'device_catalog_sync' AND "status" IN ('pending', 'running');

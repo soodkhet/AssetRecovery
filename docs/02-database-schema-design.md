@@ -86,6 +86,7 @@
 | v4.5x-fixer-db3 | 07/10/2569 | **มติ PO 07/10/2569 (U144 + U145 + U146)** (migration `20261008080000_drop_advance_uncleared_switch` · `20261008081000_billing_bank_fee_write_off` · `20261008082000_billing_cycle_single_source`): **(U145)** `finance_policy_settings` ลบ `advance_uncleared_to_employee_receivable` (สวิตช์ไม่เคยมีผล — รอบจ่ายหักคืนเงินทดรองค้างเสมอ) · **(U144)** `billing_batches` + `bank_fee_written_off_satang INTEGER NOT NULL DEFAULT 0` + `bank_fee_written_off_date DATE` (CHECK ≥ 0 · ยอด 0 ⇔ วันที่ NULL · partial index `idx_billing_batches_bank_fee_date (organization_id, bank_fee_written_off_date) WHERE ยอด > 0`) — ส่วนต่างรับขาด ≤ `write_off_tolerance_satang` เป็นค่าธรรมเนียมธนาคาร (`22` §6.11.1) · **(U146)** `finance_companies` ลบ `billing_day` / `payment_due_days` (รอบบิลเป็นแหล่งเดียว — บริษัทที่ไม่มีรอบครอบถูกจัดเข้ารอบบิลใหม่ `fixed_dates [billing_day]` + `net_days payment_due_days` ต่อกลุ่มค่า ⇒ วันครบกำหนดเท่าเดิม) · enum `cutoff_rule_type` ตัด `custom_text` (ค่าเดิม: เลขวันที่ในข้อความ + "สิ้นเดือน"=31 ⇒ `fixed_dates` · ไม่มี ⇒ `month_end`) · `cutoff_text` → `legacy_cutoff_text` (อ้างอิงเท่านั้น) · CHECK `cycles_cutoff_shape` ตัดกรณี custom_text · `cycles_due_rule_shape` ให้ `net_days` = 0 ได้ · ไม่มีตารางใหม่ |
 | v4.5x-DE | 07/10/2569 | **มติ PO U155 → U156 → U157 → U159 (Model Phone · DEC-016)** (migration `20261008110000_device_catalog`): enum ใหม่ `device_catalog_status` (`active`/`hidden` — ใช้เป็น **ค่าที่ผู้ดูแลตั้งด้วยมือ** เท่านั้น · ไม่มี `pending_review` ตาม U156) + `device_catalog_source` (`api`/`manual`) · ตารางใหม่ `device_catalog_settings` (1 แถว/org: `brand_names TEXT[]` + `recent_years` CHECK 1–30 ค่าเริ่มต้น 5 — ตัวกรองการแสดง) · `device_brands` (`name_key` UNIQUE ต่อ org · `manual_status` NULL = ตามตัวกรอง · `external_id` = ชื่อฝั่ง API · `last_synced_at` ใช้ resume การดึงครั้งแรก) · `device_models` (`asset_kind` · `manual_status` · `external_id` UNIQUE ต่อแบรนด์ · `release_year` CHECK 1990–2100 · `name_edited_at` = job ไม่ทับชื่อ) · `cases.device_model_id` (FK `ON DELETE SET NULL` — อ้างรุ่นเมื่อเลือกจากรายการ · ข้อความ snapshot ยังอยู่ที่ `asset_description`) · **การแสดงคำนวณตอนอ่าน** (`manual_status` ชนะ · ไม่งั้นแบรนด์ในรายชื่อ + รุ่นออกภายใน N ปี · ไม่ทราบปี = ผ่าน) — job ไม่เขียน `manual_status` · enum รวม 76 ตัว |
 | v4.5x-FD | 07/10/2569 | **มติ PO U165** (migration `20261008140000_service_fee_fail_fee`): แทน `service_fee_templates.charge_on_fail BOOLEAN` ด้วย **`fail_fee_satang INTEGER NULL`** (ยอดค่าบริการกรณีไม่สำเร็จ ทุกโมเดล · NULL = ไม่เก็บ · CHECK ≥ 0) · snapshot บนเคส `cases.service_fee_charge_on_fail` → **`service_fee_fail_fee_satang`** · `recycle_requests.prev_service_fee_charge_on_fail` → **`prev_service_fee_fail_fee_satang`** · แปลงข้อมูล: `true` + FLAT/HYBRID ⇒ = base · นอกนั้น ⇒ NULL (ผลรายได้เท่าเดิมทุกบาท) |
+| v4.5x-GA | 07/10/2569 | **มติ PO U166 — ความจุ/สีของเครื่อง** (migration `20261008150000_device_tac`): `cases.asset_capacity` / `cases.asset_color` (TEXT · ข้อความ snapshot ที่เลือกบนฟอร์มเคส/นำเข้า · "ไม่ระบุในสัญญา" เป็นค่าหนึ่ง · NULL = เคสก่อนมติ) · `assets.device_capacity` / `assets.device_color` (TEXT · snapshot จากเคสตอนปิดงานสำเร็จคู่กับ `device_desc`) · `assets.color_capacity_matched` (BOOLEAN · ผลติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้าคลัง · NULL = ยังไม่ตรวจรับ · ไม่ติ๊ก = false ไม่ block) · **มติ PO U166 → U167 → U168 — ฐาน TAC แทน RapidAPI (DEC-017 แทน DEC-016)** (migration `20261008150000_device_tac` + `20261008150100_device_tac_updates`): ลบแถวแคตตาล็อก `source = 'api'` (เคสคง `asset_description` · `device_model_id` → NULL) · enum `device_catalog_source` = (`tacdb`, `manual`) · `device_brands` ลบ `external_id`/`last_synced_at` (+ index) · `device_models.external_id` = คีย์ชื่อรุ่นจาก TAC แบบ normalize · enum ใหม่ `device_tac_source` (`tacdb`/`learned`/`manual`) · `device_tac_update_trigger` (`daily`/`manual`/`file`) · `device_tac_update_status` (`success`/`not_modified`/`failed`) · ตารางใหม่ **`device_tacs`** (TAC CHAR(8) CHECK 8 หลัก · ยี่ห้อ/รุ่น/รุ่นย่อย/ปี 1980–2100 · ผูก `device_models` ON DELETE SET NULL · UNIQUE `uniq_device_tacs_org_tac`) + **`device_tac_updates`** (insert-only ประวัติการอัปเดต · idx `(org, created_at DESC)`) · `device_catalog_settings` + `tac_etag`/`tac_checked_at`/`tac_imported_at`/`capacity_options`/`color_options`/`tac_source_sha`/`tac_source_updated_at`/`stale_alert_days` (1–3650 · ค่าเริ่มต้น 90) · ยกเลิกงาน `device_catalog_sync` ที่ค้างคิว |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -501,7 +502,13 @@ CREATE TYPE notification_outbox_status AS ENUM ('pending', 'sent', 'failed');
 -- v4.5x-DE มติ PO U155 → U159 (DEC-016): แคตตาล็อก Model Phone
 -- device_catalog_status = ค่าที่ผู้ดูแลตั้งด้วยมือ (active แสดง / hidden ไม่แสดง) · คอลัมน์ NULL = ตามตัวกรอง
 CREATE TYPE device_catalog_status AS ENUM ('active', 'hidden');
-CREATE TYPE device_catalog_source AS ENUM ('api', 'manual');
+-- v4.5x-GA มติ PO U166 (DEC-017 แทน DEC-016): แหล่งแคตตาล็อก = ฐาน TAC (tacdb) / ผู้ดูแลเพิ่มเอง (manual) — เลิก 'api' (RapidAPI · แถวเดิมถูกลบใน migration)
+CREATE TYPE device_catalog_source AS ENUM ('tacdb', 'manual');
+-- v4.5x-GA (U166): แหล่งของแถว TAC — tacdb = นำเข้าจากไฟล์ TAC · learned = ระบบจำจากเคสจริง · manual = ผู้ดูแลผูกเอง (ชนะทุกแหล่ง)
+CREATE TYPE device_tac_source AS ENUM ('tacdb', 'learned', 'manual');
+-- v4.5x-GA (U167): ประวัติการอัปเดตฐาน TAC — ผู้สั่ง / ผล
+CREATE TYPE device_tac_update_trigger AS ENUM ('daily', 'manual', 'file');
+CREATE TYPE device_tac_update_status AS ENUM ('success', 'not_modified', 'failed');
 ```
 
 ---
@@ -1105,6 +1112,8 @@ CREATE TABLE cases (
   asset_kind          asset_kind,               -- เพิ่ม 14/08/2569 — ไฟล์ 38 §6.2 `asset_type`
   asset_description   TEXT,                     -- = `asset_brand_model` ของไฟล์ 38 §6.2
   device_model_id     UUID REFERENCES device_models(id) ON DELETE SET NULL, -- v4.5x-DE (U155) รุ่นที่เลือกจาก Model Phone · NULL = ระบุเอง
+  asset_capacity      TEXT,                     -- v4.5x-GA (U166) ความจุตามสัญญา — ข้อความ snapshot ('128GB' / ระบุเอง / 'ไม่ระบุในสัญญา') · NULL = เคสก่อนมติ/ร่าง
+  asset_color         TEXT,                     -- v4.5x-GA (U166) สีตามสัญญา — ข้อความ snapshot เช่นเดียวกัน
   imei                VARCHAR(15),                     -- A6: IMEI 15 หลักเท่านั้น (exact match)
   serial_no           TEXT,                            -- A6: เครื่องที่ไม่มี IMEI (tablet Wi-Fi ฯลฯ)
   debt_amount_satang  INTEGER,
@@ -1330,17 +1339,27 @@ CREATE TABLE data_retention_settings (
 );
 
 -- ── device_catalog_settings / device_brands / device_models (v4.5x-DE) ─────
--- แคตตาล็อก "Model Phone" (มติ PO U155 → U159 · DEC-016 · ไฟล์ 13 §6.18 · 38 §6.2)
--- job device_catalog_sync ดึงทุกแบรนด์/รุ่นจาก RapidAPI เก็บไว้ · การแสดงในตัวเลือก (คำนวณตอนอ่าน) =
---   manual_status ที่ผู้ดูแลตั้ง (ชนะเสมอ) ไม่งั้นตัวกรอง: แบรนด์ในรายชื่อ + รุ่นออกภายใน recent_years ปี (ไม่ทราบปี = ผ่าน)
---   ปิดแบรนด์ = ทุกรุ่นไม่แสดง · job ไม่เขียน manual_status และไม่ทับชื่อที่ผู้ดูแลแก้ (name_edited_at)
+-- แคตตาล็อก "Model Phone" (มติ PO U155 → U159 → U166 · DEC-017 แทน DEC-016 · ไฟล์ 13 §6.18 · 38 §6.2)
+-- v4.5x-GA: job device_tac_sync (รายวัน) นำเข้าฐาน TAC (device_tacs) แล้วเติมแบรนด์/รุ่น (source = tacdb) · การแสดงในตัวเลือก (คำนวณตอนอ่าน) =
+--   manual_status ที่ผู้ดูแลตั้ง (ชนะเสมอ) ไม่งั้นตัวกรอง: แบรนด์ในรายชื่อ + รุ่นออกภายใน recent_years ปี
+--   (ไม่ทราบปี: tacdb = ไม่แสดง · manual = แสดง) · ปิดแบรนด์ = ทุกรุ่นไม่แสดง
+--   job ไม่เขียน manual_status และไม่ทับชื่อที่ผู้ดูแลแก้ (name_edited_at)
 CREATE TABLE device_catalog_settings (
   organization_id UUID        PRIMARY KEY REFERENCES organizations(id),
   brand_names     TEXT[]      NOT NULL DEFAULT ARRAY[]::TEXT[],
   recent_years    INTEGER     NOT NULL DEFAULT 5,
+  capacity_options TEXT[]     NOT NULL DEFAULT ARRAY['16GB','32GB','64GB','128GB','256GB','512GB','1TB','2TB']::TEXT[], -- v4.5x-GA (U166) ตัวเลือกความจุของฟอร์มเคส
+  color_options   TEXT[]      NOT NULL DEFAULT ARRAY['ดำ','ขาว','เงิน','เทา','ทอง','น้ำเงิน','ฟ้า','เขียว','ม่วง','ชมพู','แดง','ส้ม','เหลือง']::TEXT[], -- v4.5x-GA (U166)
+  tac_etag        TEXT,                    -- v4.5x-GA (U166) ETag ของไฟล์ TAC รอบล่าสุด (fallback เมื่อ commits API ล้ม)
+  tac_checked_at  TIMESTAMPTZ,             -- v4.5x-GA เวลาตรวจแหล่ง TAC ล่าสุด
+  tac_imported_at TIMESTAMPTZ,             -- v4.5x-GA เวลานำเข้าสำเร็จล่าสุด
+  tac_source_sha  TEXT,                    -- v4.5x-GA (U167) commit sha ของไฟล์ต้นทางที่นำเข้าสำเร็จล่าสุด
+  tac_source_updated_at TIMESTAMPTZ,       -- v4.5x-GA (U167) วันที่ไฟล์บน GitHub ถูกแก้ล่าสุด (ของรอบนั้น)
+  stale_alert_days INTEGER    NOT NULL DEFAULT 90, -- v4.5x-GA (U167) ไฟล์ต้นทางไม่ถูกแก้เกิน N วัน ⇒ ป้าย "แหล่งข้อมูลอาจหยุดอัปเดต"
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by      UUID        REFERENCES users(id),
-  CONSTRAINT chk_device_catalog_recent_years CHECK (recent_years BETWEEN 1 AND 30)
+  CONSTRAINT chk_device_catalog_recent_years CHECK (recent_years BETWEEN 1 AND 30),
+  CONSTRAINT chk_device_catalog_stale_alert_days CHECK (stale_alert_days BETWEEN 1 AND 3650)
 );
 
 CREATE TABLE device_brands (
@@ -1349,9 +1368,8 @@ CREATE TABLE device_brands (
   name            TEXT                  NOT NULL,
   name_key        TEXT                  NOT NULL,  -- ตัวพิมพ์เล็ก ตัดช่องว่าง/ขีด/จุด (normalizeCatalogName)
   manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
-  source          device_catalog_source NOT NULL,
-  external_id     TEXT,                            -- ชื่อแบรนด์ฝั่ง API · NULL = เพิ่มเอง
-  last_synced_at  TIMESTAMPTZ,                     -- NULL = ยังไม่เคยดึงรายการรุ่น (resume การดึงครั้งแรก)
+  source          device_catalog_source NOT NULL,  -- tacdb / manual
+  -- v4.5x-GA (U166): ลบ external_id + last_synced_at (+ idx_device_brands_org_last_synced) — ใช้เฉพาะการดึง RapidAPI
   created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
   created_by      UUID                  REFERENCES users(id),
   updated_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
@@ -1360,7 +1378,6 @@ CREATE TABLE device_brands (
   CONSTRAINT chk_device_brands_name_not_blank CHECK (btrim(name) <> '' AND name_key <> '')
 );
 CREATE UNIQUE INDEX uniq_device_brands_org_name ON device_brands(organization_id, name_key);
-CREATE INDEX idx_device_brands_org_last_synced ON device_brands(organization_id, last_synced_at);
 
 CREATE TABLE device_models (
   id              UUID                  PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1371,7 +1388,7 @@ CREATE TABLE device_models (
   name_key        TEXT                  NOT NULL,
   manual_status   device_catalog_status,           -- NULL = ตามตัวกรอง
   source          device_catalog_source NOT NULL,
-  external_id     TEXT,                            -- รหัสรุ่นฝั่ง API (ไม่มี = ชื่อรุ่นฝั่งต้นทาง)
+  external_id     TEXT,                            -- v4.5x-GA: คีย์ชื่อรุ่นจากฐาน TAC แบบ normalize (ผู้ดูแลแก้ชื่อแล้วยังจับคู่ได้) · NULL = เพิ่มเอง
   release_year    INTEGER,                         -- ค.ศ. ตามต้นทาง · NULL = ไม่ทราบ
   name_edited_at  TIMESTAMPTZ,                     -- ผู้ดูแลแก้ชื่อแล้ว ⇒ job ไม่ทับ
   created_at      TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
@@ -1385,6 +1402,56 @@ CREATE TABLE device_models (
 CREATE UNIQUE INDEX uniq_device_models_brand_name ON device_models(brand_id, name_key);
 CREATE UNIQUE INDEX uniq_device_models_brand_external ON device_models(brand_id, external_id);
 CREATE INDEX idx_device_models_org_kind ON device_models(organization_id, asset_kind);
+
+-- ── device_tacs (v4.5x-GA — มติ PO U166 · DEC-017) ─────────────────
+-- TAC (8 หลักแรกของ IMEI) → ยี่ห้อ/รุ่น/รหัสรุ่นย่อย/ปีที่ออก · ฟอร์มรับเคสค้นด้วย IMEI (38 §6.2)
+-- แหล่ง: tacdb (นำเข้าไฟล์ MoazEb/tac-database) / learned (ระบบจำจากเคส) / manual (ผู้ดูแลผูก — ชนะทุกแหล่ง)
+-- การนำเข้าเพิ่มเฉพาะ TAC ใหม่ ไม่ทับแถวเดิมทุกแหล่ง
+CREATE TABLE device_tacs (
+  id              UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID              NOT NULL REFERENCES organizations(id),
+  tac             CHAR(8)           NOT NULL,
+  brand_name      TEXT              NOT NULL,
+  model_name      TEXT              NOT NULL,
+  variant         TEXT,                              -- รหัสรุ่นย่อย (model code) เช่น SM-A057F/DS
+  release_year    INTEGER,                           -- ค.ศ. ตามต้นทาง · NULL = ไม่ทราบ
+  source          device_tac_source NOT NULL,
+  device_model_id UUID              REFERENCES device_models(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  created_by      UUID              REFERENCES users(id),
+  updated_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
+  updated_by      UUID,
+  deleted_at      TIMESTAMPTZ,
+  CONSTRAINT chk_device_tacs_tac_digits CHECK (tac ~ '^[0-9]{8}$'),
+  CONSTRAINT chk_device_tacs_names_not_blank CHECK (btrim(brand_name) <> '' AND btrim(model_name) <> ''),
+  CONSTRAINT chk_device_tacs_release_year CHECK (release_year IS NULL OR release_year BETWEEN 1980 AND 2100)
+);
+CREATE UNIQUE INDEX uniq_device_tacs_org_tac ON device_tacs(organization_id, tac);
+CREATE INDEX idx_device_tacs_org_model ON device_tacs(organization_id, device_model_id);
+CREATE INDEX idx_device_tacs_org_source ON device_tacs(organization_id, source);
+
+-- ── device_tac_updates (v4.5x-GA — มติ PO U167) ─────────────────────
+-- ประวัติการอัปเดตฐาน TAC — insert-only 1 แถวต่อรอบต่อองค์กร (ไม่มี updated_*/deleted_at)
+CREATE TABLE device_tac_updates (
+  id                UUID                      PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID                      NOT NULL REFERENCES organizations(id),
+  job_id            UUID,                                -- งาน device_tac_sync ของรอบนั้น
+  trigger           device_tac_update_trigger NOT NULL,  -- daily / manual / file
+  status            device_tac_update_status  NOT NULL,  -- success / not_modified / failed
+  source_sha        TEXT,                                -- commit sha ของไฟล์ต้นทาง
+  etag              TEXT,
+  source_updated_at TIMESTAMPTZ,                         -- วันที่ไฟล์บน GitHub ถูกแก้ล่าสุด
+  file_rows         INTEGER                   NOT NULL DEFAULT 0,
+  tacs_added        INTEGER                   NOT NULL DEFAULT 0,
+  brands_added      INTEGER                   NOT NULL DEFAULT 0,
+  models_added      INTEGER                   NOT NULL DEFAULT 0,
+  added_models      JSONB                     NOT NULL DEFAULT '[]', -- รายชื่อ "ยี่ห้อ รุ่น" ที่เพิ่ม (สูงสุด 2,000)
+  error_message     TEXT,                                -- สาเหตุเมื่อ failed
+  created_at        TIMESTAMPTZ               NOT NULL DEFAULT NOW(),
+  created_by        UUID                      REFERENCES users(id), -- NULL = งานอัตโนมัติ
+  CONSTRAINT chk_device_tac_updates_counts CHECK (file_rows >= 0 AND tacs_added >= 0 AND brands_added >= 0 AND models_added >= 0)
+);
+CREATE INDEX idx_device_tac_updates_org_created ON device_tac_updates(organization_id, created_at DESC);
 
 -- ── check_ins ────────────────────────────────────────────────
 -- เช็คอินระหว่างลงพื้นที่ ตามไฟล์ 41 §6.2
@@ -1506,6 +1573,8 @@ CREATE TABLE assets (
   case_ref        TEXT            NOT NULL,
   debtor_name     TEXT            NOT NULL,
   device_desc     TEXT            NOT NULL,
+  device_capacity TEXT,                      -- v4.5x-GA (U166) snapshot `cases.asset_capacity` ตอนปิดงาน · NULL = เครื่องก่อนมติ
+  device_color    TEXT,                      -- v4.5x-GA (U166) snapshot `cases.asset_color` ตอนปิดงาน
   -- IMEI / Serial (A6 — มติ PO 2026-08-12)
   imei_contract   VARCHAR(15),               -- NULL ได้เฉพาะเครื่องที่ไม่มี IMEI (ต้องมี serial_contract แทน)
   imei_actual     VARCHAR(15),
@@ -1515,6 +1584,7 @@ CREATE TABLE assets (
   asset_status    asset_status    NOT NULL DEFAULT 'pending_intake',
   condition       asset_condition,
   condition_note  TEXT,
+  color_capacity_matched BOOLEAN,            -- v4.5x-GA (U166) ติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้า · NULL = ยังไม่ตรวจรับ · false = ไม่ได้ยืนยัน (ไม่ block)
   -- Photos (Supabase Storage URLs)
   photos          TEXT[]          NOT NULL DEFAULT '{}',
   -- Timestamps

@@ -50,6 +50,8 @@ export const SETTINGS_ERROR_CODES = [
   // §6.18 แคตตาล็อกแบรนด์/รุ่น (มติ PO U155)
   'DEVICE_CATALOG_ITEM_NOT_FOUND',
   'DUPLICATE_DEVICE_CATALOG_ITEM',
+  // §6.18 นำเข้าไฟล์ TAC เอง (มติ PO U166)
+  'DEVICE_TAC_FILE_INVALID',
   // §6.11 ล็อกรอบบัญชี (โครง — บังคับเต็มรูปแบบ Phase 4.1)
   'PERIOD_LOCKED_DIRECT_EDIT',
 ] as const
@@ -86,6 +88,7 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   DUPLICATE_HOLIDAY_DATE: 400,
   DEVICE_CATALOG_ITEM_NOT_FOUND: 404,
   DUPLICATE_DEVICE_CATALOG_ITEM: 400,
+  DEVICE_TAC_FILE_INVALID: 400,
   PERIOD_LOCKED_DIRECT_EDIT: 400,
 }
 
@@ -205,6 +208,10 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   DUPLICATE_DEVICE_CATALOG_ITEM: {
     title: 'มีรุ่นนี้อยู่แล้ว',
     message: 'แบรนด์นี้มีรุ่นชื่อเดียวกันอยู่แล้ว (ไม่สนตัวพิมพ์/ช่องว่าง) — ถ้าถูกซ่อนไว้ ให้กดแสดงรายการเดิมแทน',
+  },
+  DEVICE_TAC_FILE_INVALID: {
+    title: 'ไฟล์ TAC ไม่ถูกต้อง',
+    message: 'ไฟล์ต้องเป็น CSV หัวตาราง Brand,TAC,SPECS และมีแถวข้อมูลที่ใช้ได้อย่างน้อย 1 แถว',
   },
   PERIOD_LOCKED_DIRECT_EDIT: {
     title: 'รอบบัญชีถูกล็อกแล้ว',

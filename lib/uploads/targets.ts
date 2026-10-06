@@ -54,6 +54,11 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
    * เพราะฟอร์มผู้ใช้ (U131) อัปโหลดก่อนผู้รับเงินเกิด · server ตรวจ `manage:manage_payee_profile`
    */
   z.object({ kind: z.literal('payee_id_document') }),
+  /**
+   * ไฟล์ฐาน TAC ที่ผู้ดูแลนำเข้าเอง (มติ PO U166) — path ผูกกับ **องค์กรของผู้เรียก** (server ใช้ session)
+   * server ตรวจ `manage:manage_device_catalog` · ตรวจรูปแบบไฟล์ตอนสั่งนำเข้า (ไม่ใช่ magic bytes — เป็น CSV)
+   */
+  z.object({ kind: z.literal('device_tac_file') }),
 ])
 
 export type UploadTarget = z.infer<typeof uploadTargetSchema>
@@ -123,7 +128,18 @@ export function uploadTargetPath(
       return companyDocumentPath(target.companyId, target.documentType, fileName, uniqueKey)
     case 'payee_id_document':
       return payeeIdDocumentPath(organizationId, fileName, uniqueKey)
+    case 'device_tac_file':
+      return deviceTacFilePath(organizationId, uniqueKey)
   }
+}
+
+/** path ไฟล์ TAC ที่นำเข้าเอง — `organization/<orgId>/device-tac/<uuid>.csv` (ไม่ใช้ชื่อไฟล์จากผู้ใช้) */
+export function deviceTacFilePrefix(organizationId: string): string {
+  return `organization/${organizationId}/device-tac/`
+}
+
+export function deviceTacFilePath(organizationId: string, uniqueKey: string): string {
+  return `${deviceTacFilePrefix(organizationId)}${uniqueKey}.csv`
 }
 
 /** เจ้าของ path ใน bucket — ตัดสินสิทธิ์เปิดดูจาก entity นี้ (ไม่ใช่จากตัวไฟล์) */
@@ -141,6 +157,7 @@ export type StoragePathOwner =
   | { kind: 'substitute_receipt'; substituteReceiptId: string }
   | { kind: 'finance_company'; companyId: string }
   | { kind: 'payee_id_document'; organizationId: string }
+  | { kind: 'device_tac_file'; organizationId: string }
 
 const HEX = '[0-9a-fA-F]'
 const UUID = `${HEX}{8}-${HEX}{4}-${HEX}{4}-${HEX}{4}-${HEX}{12}`
@@ -180,6 +197,10 @@ const OWNER_PATTERNS: ReadonlyArray<{ pattern: RegExp; owner: (id: string) => St
   {
     pattern: new RegExp(`^finance-companies/(${UUID})/documents/[^/]`),
     owner: (id) => ({ kind: 'finance_company', companyId: id }),
+  },
+  {
+    pattern: new RegExp(`^organization/(${UUID})/device-tac/[^/]`),
+    owner: (id) => ({ kind: 'device_tac_file', organizationId: id }),
   },
   {
     pattern: new RegExp(`^payees/(${UUID})/id-documents/[^/]`),

@@ -295,6 +295,9 @@ export interface CaseCompletenessInput {
   assetKind?: string | null
   assetBrandModel?: string | null
   assetImeiSerial?: string | null
+  /** มติ PO U166 — ความจุ/สีตามสัญญา ("ไม่ระบุในสัญญา" นับว่าเลือกแล้ว) */
+  assetCapacity?: string | null
+  assetColor?: string | null
   debtAmountSatang?: number | null
 }
 
@@ -343,6 +346,8 @@ export function missingRequiredFields(values: CaseCompletenessInput): string[] {
   if (blank(values.assetKind)) missing.push('assetType')
   if (blank(values.assetBrandModel)) missing.push('assetBrandModel')
   if (blank(values.assetImeiSerial)) missing.push('assetImeiSerial')
+  if (blank(values.assetCapacity)) missing.push('assetCapacity')
+  if (blank(values.assetColor)) missing.push('assetColor')
   if (values.debtAmountSatang === null || values.debtAmountSatang === undefined) {
     missing.push('outstandingDebtSatang')
   }
@@ -369,6 +374,8 @@ export const REQUIRED_FIELD_LABEL: Record<string, string> = {
   assetType: 'ประเภททรัพย์',
   assetBrandModel: 'ยี่ห้อ/รุ่นเครื่อง',
   assetImeiSerial: 'IMEI / Serial Number',
+  assetCapacity: 'ความจุ',
+  assetColor: 'สี',
   outstandingDebtSatang: 'มูลหนี้คงเหลือ',
 }
 

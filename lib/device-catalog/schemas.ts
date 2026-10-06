@@ -7,6 +7,15 @@ import {
   MIN_RECENT_YEARS,
   cleanBrandList,
 } from '@/lib/device-catalog/catalog'
+import {
+  MAX_ATTRIBUTE_LENGTH,
+  MAX_ATTRIBUTE_OPTIONS,
+  MAX_STALE_ALERT_DAYS,
+  MIN_STALE_ALERT_DAYS,
+  cleanAttributeOptions,
+} from '@/lib/device-catalog/device-attributes'
+import { TAC_SOURCES, parseTacInput } from '@/lib/device-catalog/tac'
+import { IMEI_FORMAT_MESSAGE, parseImei } from '@/lib/warehouse/imei'
 
 /**
  * Zod ของแคตตาล็อก Model Phone (มติ PO U155 → U159) — ใช้ร่วม FE/BE
@@ -40,6 +49,13 @@ export const deviceAssetKindSchema = z.enum(DEVICE_ASSET_KINDS, { error: 'เล
 /** ค่าที่ผู้ดูแลตั้งด้วยมือ — `null` = กลับไปใช้ตัวกรอง (U159) */
 export const manualStatusSchema = z.enum(DEVICE_CATALOG_STATUSES, { error: 'สถานะไม่ถูกต้อง' }).nullable()
 
+const attributeOptionsSchema = (label: string) =>
+  z
+    .array(z.string().max(MAX_ATTRIBUTE_LENGTH, `${label}ยาวเกิน ${MAX_ATTRIBUTE_LENGTH} ตัวอักษร`))
+    .transform((values) => cleanAttributeOptions(values))
+    .refine((values) => values.length >= 1, `ต้องมี${label}อย่างน้อย 1 รายการ`)
+    .refine((values) => values.length <= MAX_ATTRIBUTE_OPTIONS, `ไม่เกิน ${MAX_ATTRIBUTE_OPTIONS} รายการ`)
+
 export const deviceCatalogSettingsSchema = z.object({
   brandNames: z
     .array(z.string().max(120, 'ชื่อแบรนด์ยาวเกิน 120 ตัวอักษร'))
@@ -50,6 +66,15 @@ export const deviceCatalogSettingsSchema = z.object({
     .int('จำนวนปีต้องเป็นจำนวนเต็ม')
     .min(MIN_RECENT_YEARS, `อย่างน้อย ${MIN_RECENT_YEARS} ปี`)
     .max(MAX_RECENT_YEARS, `ไม่เกิน ${MAX_RECENT_YEARS} ปี`),
+  /** มติ PO U166 — ตัวเลือกความจุ/สีของฟอร์มรับเคส ("ไม่ระบุในสัญญา" ระบบใส่ให้เสมอ) */
+  capacityOptions: attributeOptionsSchema('ตัวเลือกความจุ'),
+  colorOptions: attributeOptionsSchema('ตัวเลือกสี'),
+  /** มติ PO U167 — แหล่ง TAC ไม่อัปเดตเกิน N วัน ⇒ ป้ายเตือน */
+  staleAlertDays: z
+    .number({ error: 'จำนวนวันต้องเป็นตัวเลข' })
+    .int('จำนวนวันต้องเป็นจำนวนเต็ม')
+    .min(MIN_STALE_ALERT_DAYS, `อย่างน้อย ${MIN_STALE_ALERT_DAYS} วัน`)
+    .max(MAX_STALE_ALERT_DAYS, `ไม่เกิน ${MAX_STALE_ALERT_DAYS} วัน`),
   reason: optionalReason,
 })
 
@@ -163,4 +188,59 @@ export const deviceModelSearchQuerySchema = z.object({
   assetKind: deviceAssetKindSchema.optional(),
   q: z.string().trim().max(120).default(''),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+})
+
+// ─── ฐาน TAC (มติ PO U166 · U167) ─────────────────────────────────
+
+/** TAC 8 หลัก (ตัดช่องว่าง/ขีด/จุดได้) */
+export const tacSchema = z
+  .string({ error: 'กรุณาระบุ TAC' })
+  .transform((value, ctx) => {
+    const tac = parseTacInput(value)
+    if (tac === null) {
+      ctx.addIssue({ code: 'custom', message: 'TAC ต้องเป็นตัวเลข 8 หลัก (8 หลักแรกของ IMEI)' })
+      return z.NEVER
+    }
+    return tac
+  })
+
+/** ฟอร์มรับเคสค้นยี่ห้อ/รุ่นจาก IMEI — แปลง/ตรวจด้วย `parseImei()` จุดเดียว (มติ PO U24) */
+export const deviceTacLookupQuerySchema = z.object({
+  imei: z
+    .string({ error: 'กรุณาระบุ IMEI' })
+    .max(40)
+    .transform((value, ctx) => {
+      const imei = parseImei(value)
+      if (imei === null) {
+        ctx.addIssue({ code: 'custom', message: IMEI_FORMAT_MESSAGE })
+        return z.NEVER
+      }
+      return imei
+    }),
+})
+
+export const deviceTacListQuerySchema = z.object({
+  source: z.enum([...TAC_SOURCES, 'all']).default('all'),
+  ...pageFields,
+})
+
+export type DeviceTacListQuery = z.infer<typeof deviceTacListQuerySchema>
+
+/** ผู้ดูแลเพิ่ม/ผูก TAC เอง */
+export const deviceTacBindSchema = z.object({
+  tac: tacSchema,
+  deviceModelId: catalogIdSchema,
+  reason: optionalReason,
+})
+
+export type DeviceTacBindInput = z.infer<typeof deviceTacBindSchema>
+
+/** ปุ่ม "อัปเดตตอนนี้" (+ "บังคับดึงใหม่") */
+export const deviceTacUpdateRequestSchema = z.object({
+  force: z.boolean().default(false),
+})
+
+/** "นำเข้าไฟล์เอง" — path ที่ได้จากการอัปโหลด (server ตรวจว่าเป็นขององค์กรผู้สั่ง) */
+export const deviceTacImportRequestSchema = z.object({
+  path: z.string().trim().min(1, 'กรุณาอัปโหลดไฟล์').max(1024),
 })

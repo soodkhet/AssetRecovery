@@ -41,7 +41,17 @@ import {
   companyDocumentRule,
   payeeIdDocumentRule,
 } from '@/lib/uploads/rules'
-import { parseStoragePath, uploadTargetPath, type StoragePathOwner, type UploadTarget } from '@/lib/uploads/targets'
+import {
+  deviceTacFilePrefix,
+  parseStoragePath,
+  uploadTargetPath,
+  type StoragePathOwner,
+  type UploadTarget,
+} from '@/lib/uploads/targets'
+import { MANAGE_DEVICE_CATALOG_CAPABILITY } from '@/lib/device-catalog/permissions'
+
+/** ไฟล์ฐาน TAC เต็ม ~12 MB — เผื่อโต (มติ PO U166) */
+export const DEVICE_TAC_FILE_MAX_BYTES = 40 * 1024 * 1024
 import {
   WAREHOUSE_CONFIRM_LOT_CAPABILITY,
   WAREHOUSE_INTAKE_CAPABILITY,
@@ -101,6 +111,8 @@ export const STORAGE_UPLOAD_CAPABILITIES = [
   REQUEST_ADVANCE,
   // มติ PO U150 — เอกสารยืนยันตัวตนผู้รับเงิน
   MANAGE_PAYEE_PROFILE_CAPABILITY,
+  // มติ PO U166 — ไฟล์ฐาน TAC ที่นำเข้าเอง
+  MANAGE_DEVICE_CATALOG_CAPABILITY,
 ] as const
 
 /**
@@ -176,6 +188,9 @@ function ruleFor(target: UploadTarget, user: SessionUser): UploadRule {
       return companyDocumentRule(target.companyId, target.documentType)
     case 'payee_id_document':
       return payeeIdDocumentRule(user.organizationId)
+    case 'device_tac_file':
+      // CSV ไม่มี magic bytes ⇒ ไม่ผ่าน `inspectUploadedBytes()` · route นำเข้าตรวจรูปแบบเอง (มติ PO U166)
+      return { prefix: deviceTacFilePrefix(user.organizationId), accept: [], maxBytes: DEVICE_TAC_FILE_MAX_BYTES }
   }
 }
 
@@ -258,6 +273,9 @@ async function assertCanUpload(target: UploadTarget): Promise<SessionUser> {
     case 'payee_id_document':
       // แนบเอกสารยืนยันตัวตน = แก้ข้อมูลผู้รับเงิน ⇒ สิทธิ์เดียวกับ endpoint ผู้รับเงิน/ฟอร์มผู้ใช้ (มติ PO U150)
       return requirePermission('manage', MANAGE_PAYEE_PROFILE_CAPABILITY)
+    case 'device_tac_file':
+      // นำเข้าไฟล์ TAC เอง = แก้แคตตาล็อก Model Phone ⇒ สิทธิ์เดียวกับ endpoint นำเข้า (มติ PO U166)
+      return requirePermission('manage', MANAGE_DEVICE_CATALOG_CAPABILITY)
   }
 }
 
@@ -394,6 +412,13 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner, path: s
         throw denied(user, `view:company-document company=${owner.companyId}`)
       }
       await assertCompanyDocumentAccess(user, owner.companyId)
+      return
+    }
+    case 'device_tac_file': {
+      // ไฟล์ TAC ที่นำเข้าเอง (มติ PO U166) — ผู้ดูแลแคตตาล็อกขององค์กรเดียวกันเท่านั้น
+      if (!hasAny(user, 'view', [MANAGE_DEVICE_CATALOG_CAPABILITY]) || owner.organizationId !== user.organizationId) {
+        throw denied(user, `view:device-tac-file org=${owner.organizationId}`)
+      }
       return
     }
     case 'payee_id_document': {

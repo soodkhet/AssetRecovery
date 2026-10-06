@@ -10,7 +10,7 @@ import { toInputDate } from '@/lib/format/datetime'
  *  · `wht_filing_reminder` — `33` §6.2/§8 · `90` §6.3 แถว 8 (Phase 5.2)
  *  · `report_export` — E13 (`02_OPEN_DECISIONS`) · `96` §11 (Phase 6.1) — รายงานเกิน 5,000 แถว
  *  · `payout_completion_repair` — มติ PO U134 (07/10/2569) — ตัวกวาดทำขั้นหลังรอบจ่าย `completed` ต่อให้ครบ
- *  · `device_catalog_sync` — มติ PO U155 → U157 (07/10/2569 · DEC-016) — เติมแคตตาล็อก Model Phone จาก RapidAPI ทุกเที่ยงคืนไทย
+ *  · `device_tac_sync` — มติ PO U166 → U167 → U168 (07/10/2569 · DEC-017) — อัปเดตฐาน TAC (ยี่ห้อ/รุ่นจาก IMEI) ของ Model Phone ทุกวันเที่ยงคืนไทย
  *
  * ทั้งสองตัวรันผ่านตัวรันงานเดียวกัน แต่ **ไม่อยู่ในรายการที่ dev trigger เรียกได้**
  * เพราะ `91` §14.1 ล็อกไว้ว่า "รับ job_type ตามรายการใน §6.1 เท่านั้น" (ดู `DEV_TRIGGER_JOB_TYPES`)
@@ -29,7 +29,7 @@ export const JOB_TYPES = [
   'daily_field_allowance',
   'purge_debtor_documents',
   'payout_completion_repair',
-  'device_catalog_sync',
+  'device_tac_sync',
 ] as const
 
 export type JobTypeCode = (typeof JOB_TYPES)[number]
@@ -144,14 +144,14 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
     schedule: null,
   },
 
-  device_catalog_sync: {
-    code: 'device_catalog_sync',
-    label: 'เติมแคตตาล็อกรุ่นเครื่อง (Model Phone)',
+  device_tac_sync: {
+    code: 'device_tac_sync',
+    label: 'อัปเดตฐานยี่ห้อ/รุ่นจาก IMEI (TAC)',
     description:
-      'ดึงแบรนด์/รุ่นมือถือและแท็บเล็ตจากแหล่งข้อมูลภายนอก — ของใหม่แสดงในฟอร์มรับเคสทันที ของที่ปิดไว้ไม่ถูกเปิดกลับ · ประหยัดโควตา: ดึงครบครั้งแรกทีละส่วนจนครบ แล้วหมุนดึงแบรนด์ทีละชุดทุกคืน · โควตาหมด/ไม่ได้ตั้งคีย์ = ข้าม',
-    source: 'มติ PO 07/10/2569 (U155 → U157) · DEC-016 · `91` §6.1 · `13` §6.18',
+      'ตรวจไฟล์ฐาน TAC สาธารณะทุกวัน — ไฟล์ไม่เปลี่ยน = จบ · เปลี่ยน = ดาวน์โหลดแล้วเพิ่มเฉพาะ TAC ใหม่ (ไม่ทับที่ระบบจำ/ผู้ดูแลผูก/ซ่อน) · ล้มเหลว = บันทึกประวัติ + แจ้งผู้ดูแล แล้วลองใหม่ตามระบบ',
+    source: 'มติ PO 07/10/2569 (U166 → U167 → U168) · DEC-017 · `91` §6.1 · `13` §6.18',
     inSpecCatalog: true,
-    // คีย์กันซ้ำรายวันตามวันไทย ⇒ cron รอบแรกหลังเที่ยงคืนไทย (17:00 UTC) ตั้งงานให้ · upsert idempotent
+    // คีย์กันซ้ำรายวันตามวันไทย (U168) ⇒ cron รอบแรกหลังเที่ยงคืนไทยตั้งงานให้ · นำเข้าเพิ่มเฉพาะ TAC ใหม่ (idempotent)
     schedule: { kind: 'daily' },
   },
 

@@ -106,7 +106,7 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
                     <div className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-500">
                       <IconMapPin className="h-4 w-4 shrink-0" />
                       {[item.district, item.province].filter((part) => part !== null).join(', ') || '—'} ·{' '}
-                      {assetSummary({ assetDescription: item.assetDescription })}
+                      {assetSummary({ assetDescription: item.assetDescription, assetCapacity: item.assetCapacity, assetColor: item.assetColor })}
                     </div>
                     <div className="mt-0.5 text-[11px] text-slate-400">
                       <RefText>{item.caseRef}</RefText>

@@ -1,3 +1,4 @@
+import { normalizeCapacityText } from '@/lib/device-catalog/device-attributes'
 import { parseBahtInput } from '@/lib/format/money'
 import { DEBTOR_NATIONALITIES, type DebtorNationalityCode } from '@/lib/cases/case'
 import { caseCreateSchema, type CaseCreateInput } from '@/lib/cases/schemas'
@@ -115,6 +116,8 @@ export type ImportField =
   | 'assetType'
   | 'assetBrandModel'
   | 'assetImeiSerial'
+  | 'assetCapacity'
+  | 'assetColor'
   | 'outstandingDebtBaht'
 
 export interface ImportColumn {
@@ -210,6 +213,9 @@ export const IMPORT_COLUMNS: readonly ImportColumn[] = [
     aliases: ['ยี่ห้อ', 'รุ่น', 'ยี่ห้อรุ่น', 'asset_brand_model', 'brand_model'],
   },
   { field: 'assetImeiSerial', label: 'IMEI / Serial', aliases: ['imei', 'serial', 'imeiserial', 'asset_imei_serial'] },
+  // มติ PO U166 — ความจุ/สีตามสัญญา
+  { field: 'assetCapacity', label: 'ความจุ', aliases: ['ความจุ', 'ความจุเครื่อง', 'capacity', 'storage', 'asset_capacity'] },
+  { field: 'assetColor', label: 'สี', aliases: ['สี', 'สีเครื่อง', 'color', 'colour', 'asset_color'] },
   {
     field: 'outstandingDebtBaht',
     label: 'มูลหนี้คงเหลือ (บาท)',
@@ -308,6 +314,16 @@ const IMPORT_COLUMN_TEMPLATE: Record<ImportField, ImportColumnTemplateSpec> = {
     requirement: 'required_before_review',
     format: 'IMEI ตัวเลข 15 หลัก เว้นวรรค ขีด หรือจุดคั่นได้ (หรือ Serial ของเครื่องที่มีตัวอักษร)',
     examples: ['350000000000001', '350000000000019'],
+  },
+  assetCapacity: {
+    requirement: 'required_before_review',
+    format: 'เช่น 128GB / 1TB หรือ "ไม่ระบุในสัญญา"',
+    examples: ['128GB', 'ไม่ระบุในสัญญา'],
+  },
+  assetColor: {
+    requirement: 'required_before_review',
+    format: 'สีตามสัญญา หรือ "ไม่ระบุในสัญญา"',
+    examples: ['ดำ', 'ไม่ระบุในสัญญา'],
   },
   outstandingDebtBaht: {
     requirement: 'required_before_review',
@@ -514,6 +530,8 @@ export function mapImportRow(
     assetType: assetType === 'invalid' ? null : assetType,
     assetBrandModel: text('assetBrandModel') ?? null,
     assetImeiSerial: text('assetImeiSerial') ?? null,
+    assetCapacity: normalizeCapacityText(text('assetCapacity')),
+    assetColor: text('assetColor') ?? null,
     outstandingDebtSatang,
   }
 

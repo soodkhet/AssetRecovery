@@ -1,3 +1,4 @@
+import { deviceAttributesText } from '@/lib/device-catalog/device-attributes'
 import type { FieldGroup } from '@/lib/field/field-status'
 import type { FieldAddressDto, FieldCaseListItemDto } from '@/lib/field/types'
 import type { AssignmentStatus } from '@/lib/generated/prisma/enums'
@@ -284,13 +285,17 @@ export function facebookHref(facebook: string | null | undefined): string | null
   return `https://www.facebook.com/search/people/?q=${encodeURIComponent(value)}`
 }
 
-/** ทรัพย์ + IMEI/serial บรรทัดเดียว (`41` §7.7) */
+/** ทรัพย์ (+ ความจุ/สีตามสัญญา — มติ PO U166) + IMEI/serial บรรทัดเดียว (`41` §7.7) */
 export function assetSummary(input: {
   assetDescription: string | null
+  assetCapacity?: string | null
+  assetColor?: string | null
   imei?: string | null
   serialNo?: string | null
 }): string {
-  const base = input.assetDescription === null || input.assetDescription === '' ? '—' : input.assetDescription
+  const description = input.assetDescription === null || input.assetDescription === '' ? '—' : input.assetDescription
+  const attributes = deviceAttributesText(input.assetCapacity, input.assetColor)
+  const base = attributes === '—' ? description : `${description} · ${attributes}`
   const imei = input.imei ?? ''
   const serialNo = input.serialNo ?? ''
   if (imei !== '') return `${base} (IMEI: ${imei})`

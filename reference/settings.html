@@ -1133,55 +1133,128 @@ function renderSystemSettingsContent() {
   <div class="text-right"><button data-action="toast" data-msg="บันทึกการตั้งค่าระบบเรียบร้อย" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 shadow-sm">บันทึกการตั้งค่าระบบ</button></div>`;
 }
  
-// Model Phone — แคตตาล็อกแบรนด์/รุ่นสำหรับช่องยี่ห้อ/รุ่นในฟอร์มรับเคส (มติ PO U155 → U159)
-// การแสดง = ตั้งด้วยมือ (ชนะเสมอ) ไม่งั้นตามตัวกรอง · ค้นหา + แบ่งหน้าฝั่ง server
+// Model Phone — แคตตาล็อกแบรนด์/รุ่น + ฐาน TAC สำหรับช่องยี่ห้อ/รุ่น/ความจุ/สีในฟอร์มรับเคส (มติ PO U155 → U159 → U166 → U167 → U168 · DEC-017)
+// แหล่ง = ฐาน TAC เปิด (MoazEb/tac-database) · job รายวันหลังเที่ยงคืน: เช็ก sha ของไฟล์ก่อน → ไม่เปลี่ยน = ไม่ดาวน์โหลด · fallback ETag · เพิ่มเฉพาะ TAC ใหม่
+// การแสดง = ตั้งด้วยมือ (ชนะเสมอ) ไม่งั้นตามตัวกรอง (แบรนด์ในรายชื่อ + ปีที่ออก) · ค้นหา + แบ่งหน้าฝั่ง server
+// mockup แสดงทุกแท็บเรียงกัน (แบรนด์ · รุ่น · TAC · ประวัติการอัปเดต · ตั้งค่า) — หน้าจริงแสดงทีละแท็บ
 function renderModelPhoneContent() {
   const brands = [
-    { name: 'Samsung', visible: true, manual: null, shown: 182, total: 1420, synced: '07/10/2569 00:05' },
-    { name: 'Apple', visible: true, manual: null, shown: 48, total: 132, synced: '07/10/2569 00:05' },
-    { name: 'BLU', visible: false, manual: null, shown: 0, total: 310, synced: '06/10/2569 00:05' },
-    { name: 'Wiko', visible: true, manual: 'active', shown: 3, total: 3, synced: '—' },
+    { name: 'Samsung', visible: true, manual: null, shown: 182, total: 2140, source: 'ฐาน TAC' },
+    { name: 'Apple', visible: true, manual: null, shown: 48, total: 412, source: 'ฐาน TAC' },
+    { name: 'Alcatel', visible: false, manual: null, shown: 0, total: 1310, source: 'ฐาน TAC' },
+    { name: 'Wiko', visible: true, manual: 'active', shown: 3, total: 3, source: 'เพิ่มเอง' },
+  ];
+  const tacs = [
+    { tac: '35123456', label: 'Samsung Galaxy A05', variant: 'SM-A057F/DS', year: '2566', source: 'tacdb', bound: 'Samsung Galaxy A05' },
+    { tac: '35987654', label: 'Apple iPhone 15', variant: 'A3090', year: '2566', source: 'tacdb', bound: 'Apple iPhone 15' },
+    { tac: '86012345', label: 'Oppo A6c', variant: 'PMC110', year: '—', source: 'learned', bound: 'OPPO A6c' },
+    { tac: '86555501', label: 'vivo Y04', variant: '—', year: '2567', source: 'manual', bound: 'vivo Y04' },
+  ];
+  const srcBadge = (s) => s === 'tacdb'
+    ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-700">ฐาน TAC</span>'
+    : s === 'learned'
+      ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-blue-100 text-blue-800">ระบบจำ</span>'
+      : '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-violet-100 text-violet-800">ผูกเอง</span>';
+  const updates = [
+    { at: '07/10/2569 00:10', status: 'not_modified', by: 'งานอัตโนมัติรายวัน', fileAt: '28/09/2569', added: '—', models: 0 },
+    { at: '06/10/2569 14:22', status: 'success', by: 'ผู้ดูแลกดอัปเดต · สมศรี ใจดี', fileAt: '28/09/2569', added: '1,240 / 3 / 186', models: 186 },
+    { at: '06/10/2569 00:10', status: 'failed', by: 'งานอัตโนมัติรายวัน', fileAt: '—', added: '—', models: 0, error: 'เชื่อมต่อแหล่งข้อมูลไม่ได้ (หมดเวลา) — ระบบจะลองใหม่' },
+    { at: '01/10/2569 09:05', status: 'success', by: 'นำเข้าไฟล์เอง · สมศรี ใจดี', fileAt: 'ไม่ทราบ', added: '254,985 / 11,047 / 130,912', models: 2000 },
+  ];
+  const resBadge = (u) => u.status === 'success'
+    ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-100 text-emerald-800">สำเร็จ</span>'
+    : u.status === 'not_modified'
+      ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-700">ไม่มีของใหม่</span>'
+      : `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-red-100 text-red-800">ล้มเหลว</span><div class="text-[11px] text-red-700 mt-1">${u.error}</div>`;
+  const learned = [
+    { at: '07/10/2569 10:42', tac: '86012345', label: 'OPPO A6c', by: 'วิภา ธุรการ' },
+    { at: '05/10/2569 16:03', tac: '35211199', label: 'Samsung Galaxy A16', by: 'ณัฐ ธุรการ' },
   ];
   const badge = (b) => `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.visible ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}">${b.visible ? 'แสดง' : 'ไม่แสดง'}</span> <span class="text-[11px] text-slate-400">${b.manual ? 'ตั้งด้วยมือ' : 'ตามตัวกรอง'}</span>`;
+  const sectionTitle = (t) => `<div class="font-semibold text-slate-800 mb-2 mt-6">${t}</div>`;
   return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-    <div class="flex items-start justify-between mb-4">
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
       <div>
         <h2 class="text-lg font-bold text-slate-900">Model Phone</h2>
-        <p class="text-xs text-slate-500 mt-0.5">แคตตาล็อกแบรนด์/รุ่นสำหรับช่อง "ยี่ห้อ/รุ่นเครื่อง" ในฟอร์มรับเคส — ระบบดึงข้อมูลทุกเที่ยงคืน · การตั้งด้วยมือชนะตัวกรองเสมอ</p>
+        <p class="text-xs text-slate-500 mt-0.5">แคตตาล็อกแบรนด์/รุ่นสำหรับช่อง "ยี่ห้อ/รุ่นเครื่อง" ในฟอร์มรับเคส — เติมจาก IMEI (TAC) อัตโนมัติ · ระบบตรวจฐาน TAC ทุกวันหลังเที่ยงคืน · การตั้งด้วยมือชนะตัวกรองเสมอ</p>
       </div>
-      <button data-action="toast" data-msg="เริ่มดึงข้อมูลแล้ว" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">ดึงข้อมูลตอนนี้</button>
+      <!-- ปุ่มทั้งสองปิดระหว่างมีงานอัปเดตรออยู่ · นำเข้าไฟล์เอง = อัปโหลด CSV หัว Brand,TAC,SPECS (≤ 40 MB) -->
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" class="rounded border-slate-300"> บังคับดึงไฟล์ใหม่ (แม้ไฟล์ต้นทางไม่เปลี่ยน)</label>
+        <button data-action="toast" data-msg="เลือกไฟล์ CSV ฐาน TAC เพื่อนำเข้า" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">นำเข้าไฟล์เอง</button>
+        <button data-action="toast" data-msg="ตั้งงานอัปเดตฐาน TAC แล้ว — ดูผลที่ประวัติการอัปเดต" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">อัปเดตตอนนี้</button>
+      </div>
     </div>
+    <!-- คำเตือน: ไฟล์ต้นทางไม่ถูกแก้เกินจำนวนวันที่ตั้ง (ค่าเริ่มต้น 90) · อีกแบบ "ยังไม่ได้นำเข้าฐาน TAC" เมื่อยังไม่เคยนำเข้า -->
+    <div class="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800"><span class="font-semibold">แหล่งข้อมูลอาจหยุดอัปเดต</span> — ไฟล์ฐาน TAC ต้นทางไม่ถูกแก้ไขมา 96 วัน (เกิน 90 วันที่ตั้งไว้) · ยังใช้ข้อมูลเดิมได้ และเพิ่ม/ผูก TAC เองได้</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-xs">
-      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">แบรนด์ที่แสดง</div><div class="font-mono text-base font-bold">24 / 118</div></div>
-      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">รุ่นที่แสดง</div><div class="font-mono text-base font-bold">1,204 / 12,310</div></div>
-      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">ยังไม่ได้ดึงรุ่น (ครั้งแรก)</div><div class="font-mono text-base font-bold">0 แบรนด์</div></div>
-      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">ดึงข้อมูลล่าสุด</div><div>07/10/2569 00:05</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">แบรนด์ที่แสดง</div><div class="font-mono text-base font-bold">24 / 11,050</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">รุ่นที่แสดง (ออกตั้งแต่ปี 2565)</div><div class="font-mono text-base font-bold">1,204 / 130,915</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">TAC ในระบบ</div><div class="font-mono text-base font-bold">256,227</div><div class="text-slate-500">ระบบจำ 38 · ผูกเอง 4</div></div>
+      <div class="rounded-lg border border-slate-200 p-3"><div class="text-slate-500">นำเข้าสำเร็จล่าสุด</div><div>06/10/2569 14:22</div><div class="text-slate-500">ไฟล์ต้นทางแก้ล่าสุด 28/09/2569</div></div>
     </div>
-    <div class="flex gap-1 border-b border-slate-200 mb-4 text-xs font-semibold">
+    <div class="flex gap-1 border-b border-slate-200 mb-4 text-xs font-semibold overflow-x-auto">
       <button class="px-3 py-2 border-b-2 border-slate-900 text-slate-900">แบรนด์</button>
       <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">รุ่น</button>
-      <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">ตัวกรองการแสดง</button>
+      <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">TAC</button>
+      <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">ประวัติการอัปเดต</button>
+      <button class="px-3 py-2 border-b-2 border-transparent text-slate-500">ตั้งค่า</button>
     </div>
     <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
       <div class="flex gap-2"><input placeholder="ค้นหาแบรนด์" class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-56"><select class="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"><option>ทั้งหมด</option><option>แสดงในตัวเลือก</option><option>ไม่แสดง</option><option>ตั้งด้วยมือ</option></select></div>
       <!-- มติ PO U162: เลือกทั้งหมด/ไม่เลือกทั้งหมด = ทั้งชุดที่ตรงคำค้น/ตัวกรองปัจจุบัน (ทุกหน้า) · กล่องยืนยันแจ้งจำนวน + เงื่อนไข · เหตุผลบังคับ · audit 1 แถวต่อการกด · ปุ่มเดียวกันอยู่บนแท็บรุ่น (รวมเงื่อนไขแบรนด์/ประเภท) -->
       <div class="flex flex-wrap items-center gap-2">
-        <button data-action="toast" data-msg="ยืนยัน: ตั้งแสดง 118 แบรนด์ที่ตรงเงื่อนไข (ทุกหน้า) — กรอกเหตุผล" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">เลือกทั้งหมด (แสดง)</button>
-        <button data-action="toast" data-msg="ยืนยัน: ตั้งไม่แสดง 118 แบรนด์ที่ตรงเงื่อนไข (ทุกหน้า) — กรอกเหตุผล" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">ไม่เลือกทั้งหมด (ไม่แสดง)</button>
+        <button data-action="toast" data-msg="ยืนยัน: ตั้งแสดง 11,050 แบรนด์ที่ตรงเงื่อนไข (ทุกหน้า) — กรอกเหตุผล" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">เลือกทั้งหมด (แสดง)</button>
+        <button data-action="toast" data-msg="ยืนยัน: ตั้งไม่แสดง 11,050 แบรนด์ที่ตรงเงื่อนไข (ทุกหน้า) — กรอกเหตุผล" class="border border-slate-300 bg-white text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50">ไม่เลือกทั้งหมด (ไม่แสดง)</button>
         <button class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">+ เพิ่มแบรนด์</button>
       </div>
     </div>
-    <table class="w-full text-sm"><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="text-left p-3">แบรนด์</th><th class="text-left p-3">การแสดง</th><th class="text-right p-3">รุ่นที่แสดง / ทั้งหมด</th><th class="text-left p-3">ดึงข้อมูลล่าสุด</th><th class="text-right p-3">จัดการ</th></tr></thead>
-    <tbody>${brands.map(b => `<tr class="border-t border-slate-100"><td class="p-3 font-semibold">${b.name}</td><td class="p-3">${badge(b)}</td><td class="p-3 text-right font-mono text-xs">${b.shown} / ${b.total}</td><td class="p-3 text-xs text-slate-500">${b.synced}</td><td class="p-3 text-right"><select class="border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white"><option ${!b.manual ? 'selected' : ''}>ตามตัวกรอง</option><option ${b.manual === 'active' ? 'selected' : ''}>แสดง (ตั้งเอง)</option><option>ไม่แสดง (ตั้งเอง)</option></select> <button class="border border-slate-300 rounded-lg px-2 py-1 text-xs">ดูรุ่น</button></td></tr>`).join('')}</tbody></table>
-    <div class="mt-4 flex justify-between text-xs text-slate-500"><span>แสดง 4 จาก 118 รายการ (หน้า 1/3)</span><span><button class="border border-slate-300 rounded-lg px-2 py-1">ก่อนหน้า</button> <button class="border border-slate-300 rounded-lg px-2 py-1">ถัดไป</button></span></div>
-    <div class="mt-6 rounded-lg border border-slate-200 p-4 text-xs">
-      <div class="font-semibold text-slate-800 mb-2">ตัวกรองการแสดง (แท็บที่ 3)</div>
-      <!-- มติ PO U162: ไม่กรองปี — ซ่อนค่าตั้งจำนวนปี (แหล่งข้อมูลไม่มีปีที่ออก) · รายชื่อแบรนด์ใช้จัดลำดับการดึงด้วย -->
-      <p class="mb-3 rounded-lg bg-blue-50 border border-blue-200 p-3 text-blue-800">แบรนด์ที่อยู่ในรายชื่อจะแสดงทุกรุ่น — ไม่กรองตามปีที่ออก เพราะแหล่งข้อมูลรุ่นเครื่องไม่มีปีที่ออกมาให้ · รายชื่อนี้ใช้จัดลำดับการดึงข้อมูลด้วย (ดึงแบรนด์ในรายชื่อก่อน)</p>
-      <div class="max-w-2xl">
-        <div><label class="block font-bold text-slate-700 mb-1">รายชื่อแบรนด์ที่แสดง (บรรทัดละแบรนด์)</label><textarea rows="5" class="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono">Samsung\nApple\nOPPO\nvivo\nXiaomi\nRedmi\nPOCO\n…</textarea></div>
-      </div>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="text-left p-3">แบรนด์</th><th class="text-left p-3">การแสดง</th><th class="text-right p-3">รุ่นที่แสดง / ทั้งหมด</th><th class="text-left p-3">ที่มา</th><th class="text-right p-3">จัดการ</th></tr></thead>
+    <tbody>${brands.map(b => `<tr class="border-t border-slate-100"><td class="p-3 font-semibold">${b.name}</td><td class="p-3">${badge(b)}</td><td class="p-3 text-right font-mono text-xs">${b.shown} / ${b.total.toLocaleString('en-US')}</td><td class="p-3 text-xs text-slate-500">${b.source}</td><td class="p-3 text-right whitespace-nowrap"><select class="border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white"><option ${!b.manual ? 'selected' : ''}>ตามตัวกรอง</option><option ${b.manual === 'active' ? 'selected' : ''}>แสดง (ตั้งเอง)</option><option>ไม่แสดง (ตั้งเอง)</option></select> <button class="border border-slate-300 rounded-lg px-2 py-1 text-xs">ดูรุ่น</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="mt-4 flex justify-between text-xs text-slate-500"><span>แสดง 4 จาก 11,050 รายการ (หน้า 1/222)</span><span><button class="border border-slate-300 rounded-lg px-2 py-1">ก่อนหน้า</button> <button class="border border-slate-300 rounded-lg px-2 py-1">ถัดไป</button></span></div>
+
+    ${sectionTitle('แท็บ TAC')}
+    <!-- ผูกเอง (manual) ชนะทุกแหล่ง · การนำเข้าไม่ทับแถว TAC ที่มีอยู่ (ทุกแหล่ง) -->
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div class="flex gap-2"><input placeholder="ค้นหา TAC หรือยี่ห้อ/รุ่น/รหัสรุ่นย่อย" class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-72"><select class="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"><option>ทุกแหล่ง</option><option>ฐาน TAC</option><option>ระบบจำ</option><option>ผูกเอง</option></select></div>
+      <button data-action="toast" data-msg="เปิดหน้าต่างเพิ่ม/ผูก TAC" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-semibold">+ เพิ่ม/ผูก TAC เอง</button>
     </div>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="text-left p-3">TAC</th><th class="text-left p-3">ยี่ห้อ-รุ่น</th><th class="text-left p-3">รหัสรุ่นย่อย</th><th class="text-left p-3">ปีที่ออก (พ.ศ.)</th><th class="text-left p-3">แหล่ง</th><th class="text-left p-3">ผูกรุ่น</th><th class="text-right p-3">จัดการ</th></tr></thead>
+    <tbody>${tacs.map(t => `<tr class="border-t border-slate-100"><td class="p-3 font-mono text-xs">${t.tac}</td><td class="p-3">${t.label}</td><td class="p-3 font-mono text-xs text-slate-500">${t.variant}</td><td class="p-3 text-xs">${t.year}</td><td class="p-3">${srcBadge(t.source)}</td><td class="p-3 text-xs">${t.bound}</td><td class="p-3 text-right"><button data-action="toast" data-msg="เลือกรุ่นที่จะผูกกับ TAC ${t.tac}" class="border border-slate-300 rounded-lg px-2 py-1 text-xs">ผูกรุ่นใหม่</button></td></tr>`).join('')}</tbody></table></div>
+    <!-- modal ผูกรุ่น: TAC 8 หลัก · ค้นหารุ่น · เลือก · เหตุผล (ไม่บังคับ) -->
+    <div class="mt-3 max-w-md rounded-lg border border-slate-200 p-4 text-xs space-y-2">
+      <div class="font-semibold text-slate-800">ผูกรุ่นกับ TAC</div>
+      <div><label class="block font-bold text-slate-700 mb-1">TAC (8 หลักแรกของ IMEI)</label><input value="86012345" class="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono"></div>
+      <div><label class="block font-bold text-slate-700 mb-1">รุ่น</label><input placeholder="พิมพ์ค้นหายี่ห้อ/รุ่น" class="w-full border border-slate-300 rounded-lg px-3 py-2"></div>
+      <div><label class="block font-bold text-slate-700 mb-1">เหตุผล (ไม่บังคับ)</label><input class="w-full border border-slate-300 rounded-lg px-3 py-2"></div>
+      <p class="text-slate-500">การผูกเองมีผลเหนือข้อมูลจากฐาน TAC และที่ระบบจำ</p>
+      <div class="text-right"><button class="border border-slate-300 rounded-lg px-3 py-1.5 font-semibold">ยกเลิก</button> <button data-action="toast" data-msg="ผูก TAC เรียบร้อย" class="bg-slate-900 text-white px-3 py-1.5 rounded-lg font-semibold">บันทึก</button></div>
+    </div>
+
+    ${sectionTitle('แท็บประวัติการอัปเดต')}
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="text-left p-3">วันเวลา</th><th class="text-left p-3">ผล</th><th class="text-left p-3">ผู้สั่ง</th><th class="text-left p-3">ไฟล์บน GitHub แก้ล่าสุด</th><th class="text-right p-3">TAC / แบรนด์ / รุ่นใหม่</th><th class="text-right p-3">รุ่นที่เพิ่ม</th></tr></thead>
+    <tbody>${updates.map(u => `<tr class="border-t border-slate-100 align-top"><td class="p-3 text-xs whitespace-nowrap">${u.at}</td><td class="p-3">${resBadge(u)}</td><td class="p-3 text-xs">${u.by}</td><td class="p-3 text-xs">${u.fileAt}</td><td class="p-3 text-right font-mono text-xs">${u.added}</td><td class="p-3 text-right">${u.models > 0 ? `<button data-action="toast" data-msg="รายชื่อรุ่นที่เพิ่มในรอบนี้" class="border border-slate-300 rounded-lg px-2 py-1 text-xs">ดูรายชื่อ (${u.models.toLocaleString('en-US')})</button>` : '<span class="text-xs text-slate-400">—</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="font-semibold text-slate-700 text-xs mt-4 mb-2">ระบบจำจากงานจริง</div>
+    <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-slate-50 text-xs text-slate-600"><tr><th class="text-left p-3">วันเวลา</th><th class="text-left p-3">TAC</th><th class="text-left p-3">ยี่ห้อ/รุ่น</th><th class="text-left p-3">ผู้เลือก</th></tr></thead>
+    <tbody>${learned.map(l => `<tr class="border-t border-slate-100"><td class="p-3 text-xs">${l.at}</td><td class="p-3 font-mono text-xs">${l.tac}</td><td class="p-3">${l.label}</td><td class="p-3 text-xs">${l.by}</td></tr>`).join('')}</tbody></table></div>
+
+    ${sectionTitle('แท็บตั้งค่า')}
+    <div class="rounded-lg border border-slate-200 p-4 text-xs">
+      <div class="grid gap-4 md:grid-cols-2 max-w-4xl">
+        <div><label class="block font-bold text-slate-700 mb-1">รายชื่อแบรนด์ที่แสดง (บรรทัดละแบรนด์)</label><textarea rows="5" class="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono">Samsung\nApple\nOPPO\nvivo\nXiaomi\nRedmi\nPOCO\n…</textarea></div>
+        <div class="space-y-3">
+          <div><label class="block font-bold text-slate-700 mb-1">แสดงรุ่นที่ออกภายใน (ปีล่าสุด)</label><input type="number" value="5" class="w-32 border border-slate-300 rounded-lg px-3 py-2"> <span class="text-slate-500">ปี — รุ่นจากฐาน TAC ที่ไม่ทราบปีจะไม่แสดง (ตั้งแสดงเองได้)</span></div>
+          <div><label class="block font-bold text-slate-700 mb-1">เตือนเมื่อแหล่งข้อมูลไม่อัปเดตเกิน</label><input type="number" value="90" class="w-32 border border-slate-300 rounded-lg px-3 py-2"> <span class="text-slate-500">วัน</span></div>
+        </div>
+        <div><label class="block font-bold text-slate-700 mb-1">ตัวเลือกความจุ (บรรทัดละรายการ)</label><textarea rows="5" class="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono">16GB\n32GB\n64GB\n128GB\n256GB\n512GB\n1TB\n2TB</textarea></div>
+        <div><label class="block font-bold text-slate-700 mb-1">ตัวเลือกสี (บรรทัดละรายการ)</label><textarea rows="5" class="w-full border border-slate-300 rounded-lg px-3 py-2">ดำ\nขาว\nเงิน\nเทา\nทอง\nน้ำเงิน\nฟ้า\nเขียว\nม่วง\nชมพู\nแดง\nส้ม\nเหลือง</textarea></div>
+      </div>
+      <p class="mt-2 text-slate-500">ฟอร์มรับเคสมีตัวเลือก "ระบุเอง…" และ "ไม่ระบุในสัญญา" ให้เสมอ</p>
+      <div class="mt-3 max-w-md"><label class="block font-bold text-slate-700 mb-1">เหตุผล (ไม่บังคับ)</label><input class="w-full border border-slate-300 rounded-lg px-3 py-2"></div>
+      <div class="mt-3 text-right"><button data-action="toast" data-msg="บันทึกการตั้งค่า Model Phone แล้ว" class="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-semibold">บันทึก</button></div>
+    </div>
+
+    <p class="mt-6 border-t border-slate-200 pt-3 text-[11px] text-slate-500">แหล่งที่มา: ข้อมูลยี่ห้อ/รุ่นจาก IMEI (TAC) มาจากฐานข้อมูลเปิด MoazEb/tac-database (สัญญาอนุญาต MIT) ซึ่งรวบรวมจากหลายแหล่ง รวมถึงฐาน TAC ของ Osmocom (CC BY-SA) — เป็นข้อมูลชุมชน อาจไม่ครบหรือคลาดเคลื่อน แก้ไข/ผูกเองได้ · <a href="https://github.com/MoazEb/tac-database" target="_blank" rel="noopener" class="underline">ดูแหล่งข้อมูล</a></p>
   </div>`;
 }
 

@@ -4,12 +4,20 @@ import type { DeviceAssetKind, DeviceCatalogSourceCode, DeviceCatalogStatusCode 
 export interface DeviceCatalogSettingsDto {
   brandNames: string[]
   recentYears: number
+  /** ตัวเลือกความจุ/สีของฟอร์มรับเคส (มติ PO U166) */
+  capacityOptions: string[]
+  colorOptions: string[]
+  /** แหล่ง TAC ไม่อัปเดตเกิน N วัน ⇒ ป้ายเตือน (มติ PO U167) */
+  staleAlertDays: number
   updatedAt: string | null
 }
 
 export interface DeviceCatalogSettingsValues {
   brandNames: string[]
   recentYears: number
+  capacityOptions: string[]
+  colorOptions: string[]
+  staleAlertDays: number
 }
 
 /** แถวแบรนด์ในหน้า Model Phone */
@@ -26,8 +34,6 @@ export interface DeviceBrandDto {
   modelCount: number
   /** จำนวนรุ่นที่แสดง (เมื่อแบรนด์แสดง) */
   visibleModelCount: number
-  /** ดึงรายการรุ่นจากต้นทางครั้งล่าสุด — `null` = ยังไม่เคย (หรือเพิ่มเอง) */
-  lastSyncedAt: string | null
 }
 
 export interface DeviceBrandListDto {
@@ -62,18 +68,26 @@ export interface DeviceModelListDto {
   pageSize: number
 }
 
-/** สรุปบนหัวหน้า Model Phone — ความคืบหน้าการดึงครั้งแรก + งานล่าสุด */
+/** สรุปบนหัวหน้า Model Phone (มติ PO U166/U167) */
 export interface DeviceCatalogSummaryDto {
   brandCount: number
   visibleBrandCount: number
   modelCount: number
   visibleModelCount: number
-  /** แบรนด์จากต้นทางที่ยังไม่เคยดึงรายการรุ่น (การดึงครบครั้งแรกยังไม่จบ) */
-  brandsPendingFirstSync: number
   minReleaseYear: number
-  lastJob: { status: string; finishedAt: string | null; result: Record<string, unknown> | null } | null
-  /** ตั้งคีย์ของแหล่งข้อมูลไว้แล้วหรือยัง (ไม่ส่งค่าคีย์ออกมาเด็ดขาด) */
-  apiConfigured: boolean
+  tacCount: number
+  learnedTacCount: number
+  /** นำเข้าไฟล์ TAC สำเร็จครั้งล่าสุด — `null` = ยังไม่เคย */
+  tacImportedAt: string | null
+  /** ตรวจแหล่งข้อมูลครั้งล่าสุด (รวมรอบที่ไม่มีของใหม่) */
+  tacCheckedAt: string | null
+  /** วันที่ไฟล์บน GitHub ถูกแก้ล่าสุด — `null` = ไม่ทราบ */
+  sourceUpdatedAt: string | null
+  /** ไฟล์ต้นทางไม่ถูกแก้เกินจำนวนวันในค่าตั้ง ⇒ ป้าย "แหล่งข้อมูลอาจหยุดอัปเดต" */
+  sourceStale: boolean
+  staleAlertDays: number
+  /** งานอัปเดตที่รอ/กำลังทำอยู่ (กันกดซ้ำ) */
+  pendingJob: boolean
 }
 
 /** ผลการค้นหาตัวเลือกในฟอร์มรับเคส — เฉพาะรายการที่แสดง ของประเภททรัพย์นั้น */
@@ -93,4 +107,72 @@ export interface DeviceCatalogBulkResultDto {
 export interface DeviceCatalogSyncRequestDto {
   jobId: string
   duplicate: boolean
+}
+
+/** ผลค้นหา TAC จาก IMEI ในฟอร์มรับเคส (มติ PO U166) */
+export interface DeviceTacLookupDto {
+  tac: string
+  found: boolean
+  /** มีเมื่อ `found` */
+  brandName: string | null
+  modelName: string | null
+  variant: string | null
+  releaseYear: number | null
+  source: 'tacdb' | 'learned' | 'manual' | null
+  /** รุ่นในแคตตาล็อกที่ผูก — ใช้เป็น `deviceModelId` ของเคสได้ (แม้รุ่นถูกซ่อนจากตัวเลือก) */
+  deviceModelId: string | null
+  assetKind: DeviceAssetKind | null
+  /** ข้อความยี่ห้อ/รุ่นที่เติมให้ฟอร์ม */
+  label: string | null
+}
+
+/** แถว TAC ในแท็บ TAC ของหน้า Model Phone */
+export interface DeviceTacRowDto {
+  id: string
+  tac: string
+  brandName: string
+  modelName: string
+  variant: string | null
+  releaseYear: number | null
+  source: 'tacdb' | 'learned' | 'manual'
+  deviceModelId: string | null
+  deviceModelLabel: string | null
+  createdAt: string
+  createdByName: string | null
+}
+
+export interface DeviceTacListDto {
+  items: DeviceTacRowDto[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+/** ประวัติการอัปเดต TAC 1 รอบ (มติ PO U167) */
+export interface DeviceTacUpdateDto {
+  id: string
+  createdAt: string
+  trigger: 'daily' | 'manual' | 'file'
+  status: 'success' | 'not_modified' | 'failed'
+  actorName: string | null
+  sourceSha: string | null
+  sourceUpdatedAt: string | null
+  fileRows: number
+  tacsAdded: number
+  brandsAdded: number
+  modelsAdded: number
+  addedModels: string[]
+  errorMessage: string | null
+}
+
+export interface DeviceTacHistoryDto {
+  updates: DeviceTacUpdateDto[]
+  /** TAC ที่ระบบจำจากงานจริงล่าสุด (U167) */
+  learned: DeviceTacRowDto[]
+}
+
+/** ตัวเลือกความจุ/สีของฟอร์มรับเคส (มติ PO U166) */
+export interface DeviceAttributeOptionsDto {
+  capacityOptions: string[]
+  colorOptions: string[]
 }

@@ -444,6 +444,9 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
           label="ทรัพย์"
           value={`${assetTypeLabel(detail.assetType)} · ${detail.assetBrandModel ?? '—'}`}
         />
+        {/* มติ PO U166 — ความจุ/สีตามสัญญา (ข้อความ snapshot บนเคส) */}
+        <Row label="ความจุ" value={detail.assetCapacity ?? '—'} />
+        <Row label="สี" value={detail.assetColor ?? '—'} />
         <Row
           label="IMEI / Serial"
           value={

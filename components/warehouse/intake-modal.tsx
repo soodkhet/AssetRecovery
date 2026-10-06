@@ -58,6 +58,8 @@ export function IntakeModal({
   const [serialActual, setSerialActual] = useState(asset.serialActual ?? '')
   const [condition, setCondition] = useState<AssetCondition | null>(asset.condition)
   const [conditionNote, setConditionNote] = useState(asset.conditionNote ?? '')
+  // มติ PO U166 — ไม่บังคับ ไม่ block · ไม่ติ๊ก = บันทึกว่าไม่ตรง/ไม่ได้ยืนยัน
+  const [colorCapacityMatched, setColorCapacityMatched] = useState(asset.colorCapacityMatched ?? false)
   const [photos, setPhotos] = useState<readonly string[]>([])
   const [uploading, setUploading] = useState<IntakePhotoAngle | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -164,6 +166,7 @@ export function IntakeModal({
           serialActual: serialActual.trim() === '' ? null : serialActual.trim(),
           condition,
           conditionNote: conditionNote.trim() === '' ? null : conditionNote.trim(),
+          colorCapacityMatched,
           photos,
         }),
       )
@@ -290,6 +293,22 @@ export function IntakeModal({
               )}
             </InlineAlert>
           )}
+
+          {/* มติ PO U166 — เทียบสี/ความจุของเครื่องจริงกับค่าตามสัญญา */}
+          <label className="mt-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <input
+              type="checkbox"
+              className="focus-ring mt-0.5 rounded"
+              checked={colorCapacityMatched}
+              onChange={(event) => setColorCapacityMatched(event.target.checked)}
+            />
+            <span className="text-sm">
+              <span className="font-semibold text-slate-800">สี/ความจุตรงกับสัญญา</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                ตามสัญญา: ความจุ {asset.deviceCapacity ?? '—'} · สี {asset.deviceColor ?? '—'}
+              </span>
+            </span>
+          </label>
         </section>
 
         {/* ── ขั้น 2/3: บันทึกสภาพ ───────────────────────────────── */}

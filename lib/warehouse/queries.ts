@@ -55,6 +55,7 @@ import type {
   LotCompanySummaryQuery,
   LotListQuery,
 } from '@/lib/warehouse/schemas'
+import { intakeColorCapacityMatched } from '@/lib/warehouse/schemas'
 import type { LotDocument } from '@/lib/warehouse/lot-status'
 import { intakePhotoRule, lotDocumentRule } from '@/lib/uploads/rules'
 import { toVerifiedUploadMap, uploadMapJson, verifyUploadedFile, verifyUploadedFiles } from '@/lib/uploads/verify'
@@ -127,6 +128,9 @@ const assetSelect = {
   caseRef: true,
   debtorName: true,
   deviceDesc: true,
+  deviceCapacity: true,
+  deviceColor: true,
+  colorCapacityMatched: true,
   imeiContract: true,
   imeiActual: true,
   serialContract: true,
@@ -177,6 +181,8 @@ function redactAssetForCompany(item: AssetListItemDto): AssetListItemDto {
     ...item,
     imeiActual: null,
     serialActual: null,
+    // ผลตรวจในคลังเป็นข้อมูลปฏิบัติการภายใน (เช่นเดียวกับ IMEI ที่ตรวจได้)
+    colorCapacityMatched: null,
     teamId: null,
     teamName: null,
     agentId: null,
@@ -193,6 +199,9 @@ function toAssetListItem(row: AssetRow): AssetListItemDto {
     caseRef: row.caseRef,
     debtorName: row.debtorName,
     deviceDesc: row.deviceDesc,
+    deviceCapacity: row.deviceCapacity,
+    deviceColor: row.deviceColor,
+    colorCapacityMatched: row.colorCapacityMatched,
     imeiContract: row.imeiContract,
     imeiActual: row.imeiActual,
     serialContract: row.serialContract,
@@ -435,6 +444,7 @@ export async function intakeAsset(
         serialActual: input.serialActual,
         condition: input.condition,
         conditionNote: input.conditionNote,
+        colorCapacityMatched: intakeColorCapacityMatched(input),
         photos: input.photos,
         photoHashes: uploadMapJson(photoHashes),
         receivedAt,
@@ -469,6 +479,7 @@ export async function intakeAsset(
           imeiActual: input.imeiActual,
           serialActual: input.serialActual,
           imeiMatch: comparison.matched,
+          colorCapacityMatched: intakeColorCapacityMatched(input),
           condition: input.condition,
           photosCount: input.photos.length,
           receivedAt,

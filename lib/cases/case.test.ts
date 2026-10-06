@@ -55,6 +55,8 @@ const complete: CaseCompletenessInput = {
   assetKind: 'smartphone',
   assetBrandModel: 'iPhone 15',
   assetImeiSerial: '356938035643809',
+  assetCapacity: '128GB',
+  assetColor: 'ดำ',
   debtAmountSatang: 1_000_000,
 }
 

@@ -40,6 +40,9 @@ export interface CaseFormState {
   /** มติ PO U155 — รุ่นที่เลือกจากแคตตาล็อก (`null` = ระบุเอง) · ข้อความ snapshot อยู่ที่ `assetBrandModel` */
   deviceModelId: string | null
   assetImeiSerial: string
+  /** มติ PO U166 — ความจุ/สีตามสัญญา ('' = ยังไม่เลือก) */
+  assetCapacity: string
+  assetColor: string
   /** ค่าที่ผู้ใช้พิมพ์เป็น **บาท** (ยังไม่แปลง) */
   outstandingDebtBaht: string
   /** ผู้ติดต่ออื่น (`38` §6.1.3) — เพิ่ม/ลบแถวได้ไม่จำกัด */
@@ -108,6 +111,8 @@ export const EMPTY_CASE_FORM: CaseFormState = {
   assetBrandModel: '',
   deviceModelId: null,
   assetImeiSerial: '',
+  assetCapacity: '',
+  assetColor: '',
   outstandingDebtBaht: '',
   contacts: [],
   editNote: '',
@@ -138,6 +143,8 @@ export function caseFormFromDetail(detail: CaseDetailDto | null): CaseFormState 
     assetBrandModel: detail.assetBrandModel ?? '',
     deviceModelId: detail.deviceModelId,
     assetImeiSerial: detail.assetImeiSerial ?? '',
+    assetCapacity: detail.assetCapacity ?? '',
+    assetColor: detail.assetColor ?? '',
     outstandingDebtBaht: toBahtInput(detail.outstandingDebtSatang),
     contacts: detail.contacts.map((contact) => ({
       key: contact.id,
@@ -188,6 +195,8 @@ export function buildCasePayload(
     assetBrandModel: form.assetBrandModel,
     deviceModelId: form.deviceModelId,
     assetImeiSerial: form.assetImeiSerial,
+    assetCapacity: form.assetCapacity,
+    assetColor: form.assetColor,
     outstandingDebtSatang: Number.isNaN(debt) ? form.outstandingDebtBaht : debt,
     documentMode: form.documentMode,
     productPhotoInContract: form.productPhotoInContract,

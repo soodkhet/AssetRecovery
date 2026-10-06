@@ -8,6 +8,7 @@ import { Button, EmptyState, ErrorState, LoadingState, Modal, RefText, StatusBad
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { portalAssetPhotoApiUrl, portalLotDetailApiUrl } from '@/lib/portal/handover-view'
 import type { PortalLotAssetDto, PortalLotDetailDto } from '@/lib/portal/serializers'
+import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 
 /**
  * รายละเอียดล็อตส่งมอบ (modal — mockup `lot-detail` + `asset-detail` รวมเป็นหน้าต่างเดียว)
@@ -140,7 +141,7 @@ function AssetItem({ asset, order, canDownload }: { asset: PortalLotAssetDto; or
             <span className="text-[11px] text-slate-400">#{order}</span>
           </div>
           <div className="mt-1 truncate text-sm font-semibold text-slate-800">{asset.debtorName}</div>
-          <div className="mt-0.5 text-xs text-slate-500">{asset.deviceDesc}</div>
+          <div className="mt-0.5 text-xs text-slate-500">{documentDeviceText(asset)}</div>
         </div>
         {asset.conditionLabel !== null ? (
           <StatusBadge group="neutral" label={`สภาพ: ${asset.conditionLabel}`} />

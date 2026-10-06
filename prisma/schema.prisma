@@ -712,7 +712,7 @@ enum DeviceCatalogStatus {
   @@map("device_catalog_status")
 }
 
-/// มติ PO U155 — ที่มาของรายการแคตตาล็อก: api = job ดึงจาก RapidAPI (DEC-016) · manual = ผู้ดูแลเพิ่มเอง
+/// มติ PO U155 · U166 — ที่มาของรายการแคตตาล็อก: tacdb = นำเข้าจากฐาน TAC (DEC-017) · manual = ผู้ดูแลเพิ่มเอง
 enum DeviceCatalogSource {
   /// มาจากฐาน TAC (มติ PO U166 · DEC-017)
   tacdb
@@ -728,6 +728,24 @@ enum DeviceTacSource {
   manual
 
   @@map("device_tac_source")
+}
+
+/// ผู้สั่งรอบอัปเดต TAC (มติ PO U167 · U168) — daily = job ทุกวันเที่ยงคืนไทย
+enum DeviceTacUpdateTrigger {
+  daily
+  manual
+  file
+
+  @@map("device_tac_update_trigger")
+}
+
+/// ผลของรอบอัปเดต TAC (มติ PO U167) — not_modified = ไฟล์ไม่เปลี่ยน (commit/ETag เดิม)
+enum DeviceTacUpdateStatus {
+  success
+  not_modified
+  failed
+
+  @@map("device_tac_update_status")
 }
 
 enum NotificationOutboxStatus {
@@ -826,6 +844,7 @@ model Organization {
   deviceCatalogSettings          DeviceCatalogSettings?
   deviceModels                   DeviceModel[]
   deviceTacs                     DeviceTac[]
+  deviceTacUpdates               DeviceTacUpdate[]
   checkIns                       CheckIn[]
   fieldDaySettlements            FieldDaySettlement[]
   caseEvidences                  CaseEvidence[]
@@ -1040,6 +1059,7 @@ model User {
   deviceCatalogSettingsUpdated  DeviceCatalogSettings[]         @relation("device_catalog_settings_updated_by")
   deviceModelsCreated           DeviceModel[]                   @relation("device_models_created_by")
   deviceTacsCreated             DeviceTac[]                     @relation("device_tacs_created_by")
+  deviceTacUpdatesCreated       DeviceTacUpdate[]               @relation("device_tac_updates_created_by")
   checkInsCreated               CheckIn[]                       @relation("checkins_created_by")
   fieldDaySettlements           FieldDaySettlement[]            @relation("field_day_settlements_agent")
   evidencesCreated              CaseEvidence[]                  @relation("evidences_created_by")
@@ -2239,18 +2259,24 @@ model DataRetentionSettings {
 /// ค่าตั้งตัวกรองของ Model Phone (มติ PO U159 · `13` §6.18) — 1 record ต่อองค์กร · ไม่มีแถว = ค่าเริ่มต้น
 /// เปลี่ยนแล้วการแสดงคำนวณใหม่ทันที (คำนวณตอนอ่าน — ไม่ต้องดึง API และไม่แตะ manual override)
 model DeviceCatalogSettings {
-  organizationId  String    @id @map("organization_id") @db.Uuid
+  organizationId     String    @id @map("organization_id") @db.Uuid
   /// รายชื่อแบรนด์ที่แสดงตั้งต้น (เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง)
-  brandNames      String[]  @default([]) @map("brand_names")
+  brandNames         String[]  @default([]) @map("brand_names")
   /// แสดงรุ่นที่ออกภายใน N ปีล่าสุด — CHECK 1–30 (raw SQL)
-  recentYears     Int       @default(5) @map("recent_years")
+  recentYears        Int       @default(5) @map("recent_years")
   /// ETag ของไฟล์ TAC ที่นำเข้าล่าสุด (U166) — ส่ง If-None-Match ไม่เปลี่ยน = จบงาน
-  tacEtag         String?   @map("tac_etag")
-  tacCheckedAt    DateTime? @map("tac_checked_at") @db.Timestamptz(6)
-  tacImportedAt   DateTime? @map("tac_imported_at") @db.Timestamptz(6)
+  tacEtag            String?   @map("tac_etag")
+  tacCheckedAt       DateTime? @map("tac_checked_at") @db.Timestamptz(6)
+  tacImportedAt      DateTime? @map("tac_imported_at") @db.Timestamptz(6)
+  /// commit sha ของไฟล์ TAC บน GitHub ที่นำเข้าสำเร็จล่าสุด (U167) — sha เดิม = ไม่ดาวน์โหลด
+  tacSourceSha       String?   @map("tac_source_sha")
+  /// วันที่ไฟล์ TAC บน GitHub ถูกแก้ล่าสุด (U167 — จาก GitHub API ครั้งล่าสุดที่ถามได้)
+  tacSourceUpdatedAt DateTime? @map("tac_source_updated_at") @db.Timestamptz(6)
+  /// แหล่งข้อมูลไม่อัปเดตเกิน N วัน ⇒ ป้ายเตือน (U167) — CHECK 1–3650 (raw SQL)
+  staleAlertDays     Int       @default(90) @map("stale_alert_days")
   /// ตัวเลือกความจุ/สีของฟอร์มรับเคส (U166) — ผู้ดูแลแก้ได้ในหน้า Model Phone
-  capacityOptions String[]  @default(["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]) @map("capacity_options")
-  colorOptions    String[]  @default(["ดำ", "ขาว", "เงิน", "เทา", "ทอง", "น้ำเงิน", "ฟ้า", "เขียว", "ม่วง", "ชมพู", "แดง", "ส้ม", "เหลือง"]) @map("color_options")
+  capacityOptions    String[]  @default(["16GB", "32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "2TB"]) @map("capacity_options")
+  colorOptions       String[]  @default(["ดำ", "ขาว", "เงิน", "เทา", "ทอง", "น้ำเงิน", "ฟ้า", "เขียว", "ม่วง", "ชมพู", "แดง", "ส้ม", "เหลือง"]) @map("color_options")
 
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   updatedBy String?  @map("updated_by") @db.Uuid
@@ -2261,7 +2287,7 @@ model DeviceCatalogSettings {
   @@map("device_catalog_settings")
 }
 
-/// แบรนด์ในแคตตาล็อก "Model Phone" (มติ PO U155 → U159) — job ดึงทุกแบรนด์จาก RapidAPI เก็บไว้ (DEC-016)
+/// แบรนด์ในแคตตาล็อก "Model Phone" (มติ PO U155 → U159 · U166) — นำเข้าจากฐาน TAC เก็บไว้ทั้งหมด (DEC-017)
 /// แสดงในตัวเลือก = `manual_status` ถ้าผู้ดูแลตั้ง ไม่งั้นตามตัวกรอง (อยู่ในรายชื่อแบรนด์ของค่าตั้ง)
 /// ปิดแบรนด์ = ทุกรุ่นของแบรนด์ไม่แสดง · job/การเปลี่ยนตัวกรองไม่เขียน `manual_status` เด็ดขาด
 model DeviceBrand {
@@ -2357,6 +2383,37 @@ model DeviceTac {
   @@index([organizationId, deviceModelId], map: "idx_device_tacs_org_model")
   @@index([organizationId, source], map: "idx_device_tacs_org_source")
   @@map("device_tacs")
+}
+
+/// ประวัติการอัปเดตฐาน TAC (มติ PO U167) — insert-only (ไม่มี updated_*/deleted_at) 1 แถวต่อรอบต่อองค์กร
+model DeviceTacUpdate {
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String                 @map("organization_id") @db.Uuid
+  jobId           String?                @map("job_id") @db.Uuid
+  trigger         DeviceTacUpdateTrigger
+  status          DeviceTacUpdateStatus
+  /// commit sha ของไฟล์บน GitHub ณ รอบนี้ — NULL = ถาม GitHub ไม่ได้/นำเข้าไฟล์เอง
+  sourceSha       String?                @map("source_sha")
+  etag            String?
+  /// วันที่ไฟล์บน GitHub ถูกแก้ล่าสุด ณ รอบนี้ — NULL = ถามไม่ได้ (ไม่ทำให้รอบล้ม)
+  sourceUpdatedAt DateTime?              @map("source_updated_at") @db.Timestamptz(6)
+  fileRows        Int                    @default(0) @map("file_rows")
+  tacsAdded       Int                    @default(0) @map("tacs_added")
+  brandsAdded     Int                    @default(0) @map("brands_added")
+  modelsAdded     Int                    @default(0) @map("models_added")
+  /// รายชื่อรุ่นที่เพิ่ม ("แบรนด์ รุ่น") — เก็บสูงสุด 2,000 ชื่อ
+  addedModels     Json                   @default("[]") @map("added_models")
+  errorMessage    String?                @map("error_message")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// ผู้ดูแลที่กดอัปเดต/นำเข้าไฟล์ — NULL = job รายวัน
+  createdBy String?  @map("created_by") @db.Uuid
+
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  createdByUser User?        @relation("device_tac_updates_created_by", fields: [createdBy], references: [id])
+
+  @@index([organizationId, createdAt(sort: Desc)], map: "idx_device_tac_updates_org_created")
+  @@map("device_tac_updates")
 }
 
 /// เช็คอินระหว่างลงพื้นที่ (`41` §6.2) — GPS จริงเท่านั้น · insert-only

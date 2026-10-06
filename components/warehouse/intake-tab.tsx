@@ -22,6 +22,7 @@ import { RejectIntakeModal, ViewRejectModal } from '@/components/warehouse/rejec
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
+import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { assetRowActions, type AssetRowAction } from '@/lib/warehouse/asset-actions'
 import {
   EMPTY_ASSET_FILTERS,
@@ -256,7 +257,7 @@ export function IntakeTab({
                         <div className="font-mono text-[10px] text-slate-400">S/N {item.serialContract}</div>
                       )}
                     </Td>
-                    <Td>{item.deviceDesc}</Td>
+                    <Td>{documentDeviceText(item)}</Td>
                     <Td>
                       <div className="text-xs text-slate-700">{item.teamName ?? '—'}</div>
                       <div className="text-[11px] text-slate-400">{item.agentName ?? '—'}</div>
@@ -311,7 +312,7 @@ export function IntakeTab({
                   />
                 </div>
                 <div className="mb-2 text-xs text-slate-500">
-                  {item.deviceDesc} · <span className="font-mono">{item.imeiContract ?? '—'}</span>
+                  {documentDeviceText(item)} · <span className="font-mono">{item.imeiContract ?? '—'}</span>
                 </div>
                 <div className="mb-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
                   <div>

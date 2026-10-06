@@ -419,6 +419,8 @@ export interface PortalLotAssetSource {
   caseRef: string
   debtorName: string
   deviceDesc: string
+  deviceCapacity: string | null
+  deviceColor: string | null
   condition: AssetCondition | null
   conditionNote: string | null
   photos: readonly string[]
@@ -429,6 +431,9 @@ export interface PortalLotAssetDto {
   caseRef: string
   debtorName: string
   deviceDesc: string
+  /** ความจุ/สีตามสัญญา (มติ PO U166) — บริษัทเป็นผู้ส่งค่านี้มาเอง · ผลตรวจในคลังไม่ส่งออก */
+  deviceCapacity: string | null
+  deviceColor: string | null
   condition: AssetCondition | null
   conditionLabel: string | null
   conditionNote: string | null
@@ -453,6 +458,8 @@ export function serializePortalLotAsset(row: PortalLotAssetSource): PortalLotAss
     caseRef: row.caseRef,
     debtorName: row.debtorName,
     deviceDesc: row.deviceDesc,
+    deviceCapacity: row.deviceCapacity,
+    deviceColor: row.deviceColor,
     condition: row.condition,
     conditionLabel: row.condition === null ? null : ASSET_CONDITION_LABEL[row.condition],
     conditionNote: row.conditionNote,

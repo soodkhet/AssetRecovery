@@ -2,21 +2,17 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
-import {
-  DeviceSpecsApiError,
-  DeviceSpecsQuotaError,
-  type DeviceSpecsClient,
-  type RemoteModel,
-} from '@/lib/device-catalog/rapidapi-client'
+import { TacSourceError, type TacDownloadResult, type TacSourceClient, type TacSourceCommit } from '@/lib/device-catalog/tac-source'
 
 /**
- * เทสต์ระดับ DB ของแคตตาล็อก Model Phone (มติ PO U155 → U157 → U159 · DEC-016)
+ * เทสต์ระดับ DB ของแคตตาล็อก Model Phone + ฐาน TAC (มติ PO U155 → U159 · U162 · U166 → U168 · DEC-017)
  *
- *  · job: ไม่มี key = ข้าม · ดึงครั้งแรก + รันซ้ำ idempotent · โควตาหมดกลางทาง = จบแบบสำเร็จ + resume รอบหน้า
- *    · ต้นทางล่ม (5xx) = โยนต่อให้ retry · **job ไม่เขียนทับการตั้งด้วยมือ/ชื่อที่ผู้ดูแลแก้**
- *  · การแสดง: ตัวกรอง (แบรนด์ในรายชื่อ + N ปี) · ตั้งด้วยมือชนะ · เปลี่ยนตัวกรองมีผลทันที · where ↔ pure ตรงกัน
- *  · เคส: เลือกจากรายการ = id + snapshot · รุ่นที่ไม่แสดงแล้ว = เก็บข้อความ ไม่บล็อก · นำเข้า CSV จับคู่ข้อความ
- * client ของ API เป็น mock เสมอ — **ห้ามเรียก API จริง**
+ *  · job `device_tac_sync` ทุกกิ่ง: นำเข้าครั้งแรก · commit sha เดิม = ไม่ดาวน์โหลด · commits API ล้ม = fallback ETag (304)
+ *    · บังคับดึงใหม่ · เพิ่มเฉพาะ TAC ใหม่ (ไม่ทับที่จำ/ผูก/ซ่อน/ชื่อที่ผู้ดูแลแก้) · ล้ม = ประวัติ + แจ้งผู้ดูแล (outbox) + โยนต่อ
+ *    · นำเข้าไฟล์เอง (ผ่าน/ผิดรูปแบบ)
+ *  · การแสดง: ตัวกรอง (แบรนด์ในรายชื่อ + N ปี) · ตั้งด้วยมือชนะ · where ↔ pure ตรงกัน
+ *  · เคส: IMEI → TAC → รุ่น · ระบบจำ learned (ไม่ทับ) · ผูก TAC เอง · นำเข้า CSV เติม/เตือนจาก TAC · ความจุ/สีบังคับก่อนส่งตรวจ
+ * client ของแหล่งข้อมูลเป็น mock เสมอ — **ห้ามเรียกเน็ตจริง**
  */
 
 const url = process.env.TEST_DATABASE_URL
@@ -38,7 +34,8 @@ const COMPANY_ID = '00000000-0000-4000-8000-000000155d03'
 const NOW = new Date('2026-10-07T05:00:00.000Z')
 
 let client: PrismaClient | null = null
-let job: typeof import('@/lib/device-catalog/sync-job') | null = null
+let job: typeof import('@/lib/device-catalog/tac-sync-job') | null = null
+let tacQueries: typeof import('@/lib/device-catalog/tac-queries') | null = null
 let queries: typeof import('@/lib/device-catalog/queries') | null = null
 let settings: typeof import('@/lib/device-catalog/settings-queries') | null = null
 let catalog: typeof import('@/lib/device-catalog/catalog') | null = null
@@ -80,58 +77,56 @@ const actor: SessionUser = {
 const meta = { ipAddress: null, userAgent: null }
 const context = { actor, meta, reason: null }
 
-/** fixture ของต้นทาง — แก้ได้ระหว่างเทสต์ */
-interface Fixture {
-  brands: string[]
-  models: Record<string, RemoteModel[]>
-  failModelsFor?: Record<string, Error>
-  failBrands?: Error
+/** ไฟล์ TAC ตัวอย่าง (รูปแบบเดียวกับ `tac_full.csv` ของต้นทาง) */
+const BASE_ROWS = [
+  'SAMSUNG,35000001,"SAMSUNG GALAXY A55, Samsung SM-A556E/DS2024"',
+  'SAMSUNG,35000002,"SAMSUNG GALAXY A55, Samsung SM-A556B2024"',
+  'SAMSUNG,35000003,"SAMSUNG GALAXY TAB S9, Samsung SM-X716B2023"',
+  'SAMSUNG,35000004,"SAMSUNG GALAXY S10, Samsung Galaxy S10, SM-G973F, 2019"',
+  'APPLE,35000005,"APPLE IPHONE 16, Apple iPhone 16, A3287, 2024"',
+  'APPLE,35000006,"APPLE IPAD AIR (2024), N/A, A2899, 2024"',
+  'BLU,35000007,"BLU G93, BLU G0310WW2023"',
+]
+
+function csvOf(rows: readonly string[] = BASE_ROWS): string {
+  return ['Brand,TAC,SPECS', ...rows].join('\n')
 }
 
-function mockClient(fixture: Fixture): DeviceSpecsClient & { calls: string[] } {
-  const calls: string[] = []
+/** mock ของแหล่งข้อมูล — บันทึก ETag ที่ถูกส่งไปในแต่ละการดาวน์โหลด */
+function mockSource(options: {
+  commit?: TacSourceCommit | null
+  csv?: string
+  etag?: string
+  notModifiedFor?: string
+  failDownload?: Error
+}): TacSourceClient & { downloads: Array<string | null>; commitCalls: number } {
+  const state = { downloads: [] as Array<string | null>, commitCalls: 0 }
   return {
-    calls,
-    async listBrands() {
-      calls.push('brands')
-      if (fixture.failBrands !== undefined) throw fixture.failBrands
-      return fixture.brands
+    get downloads() {
+      return state.downloads
     },
-    async listModels(brand: string) {
-      calls.push(`models:${brand}`)
-      const failure = fixture.failModelsFor?.[brand]
-      if (failure !== undefined) throw failure
-      return fixture.models[brand] ?? []
+    get commitCalls() {
+      return state.commitCalls
     },
-    quotaRemaining: () => null,
-    requestCount: () => calls.length,
+    async latestCommit() {
+      state.commitCalls += 1
+      return options.commit === undefined ? { sha: 'sha-1', committedAt: new Date('2026-09-01T00:00:00Z') } : options.commit
+    },
+    async download(etag: string | null): Promise<TacDownloadResult> {
+      state.downloads.push(etag)
+      if (options.failDownload !== undefined) throw options.failDownload
+      if (options.notModifiedFor !== undefined && etag === options.notModifiedFor) return { status: 'not_modified' }
+      return { status: 'ok', text: options.csv ?? csvOf(), etag: options.etag ?? '"etag-1"' }
+    },
   }
 }
 
-const m = (name: string, releaseYear: number | null, externalId: string | null = null): RemoteModel => ({
-  name,
-  releaseYear,
-  externalId,
-})
-
-function baseFixture(): Fixture {
-  return {
-    brands: ['Samsung', 'Apple', 'BLU'],
-    models: {
-      Samsung: [m('Samsung Galaxy A55', 2024, 'sa55'), m('Galaxy Tab S9', 2023, 'stabs9'), m('Galaxy S10', 2019, 'ss10')],
-      Apple: [m('iPhone 16', 2024), m('iPad Air (2024)', 2024)],
-      BLU: [m('G93', 2023)],
-    },
-  }
-}
-
-async function runJob(fixture: Fixture, maxRequests = 50, jobId = 'job-u155') {
-  return loaded(job).runDeviceCatalogSyncJob({
+async function runJob(csv = csvOf(), jobId = '00000000-0000-4000-8000-000000166001', sha = `sha-${jobId}`) {
+  return loaded(job).runDeviceTacSyncJob({
     organizationId: ORG_ID,
     now: NOW,
     jobId,
-    client: mockClient(fixture),
-    maxRequests,
+    client: mockSource({ commit: { sha, committedAt: new Date('2026-09-01T00:00:00Z') }, csv }),
   })
 }
 
@@ -141,6 +136,9 @@ async function model(name: string) {
 
 async function cleanup(): Promise<void> {
   await db().$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
+  await db().$executeRawUnsafe(`DELETE FROM device_tacs WHERE organization_id = '${ORG_ID}'`)
+  await db().$executeRawUnsafe(`DELETE FROM device_tac_updates WHERE organization_id = '${ORG_ID}'`)
+  await db().$executeRawUnsafe(`DELETE FROM notification_outbox WHERE organization_id = '${ORG_ID}'`)
   await db().$executeRawUnsafe(`DELETE FROM device_models WHERE organization_id = '${ORG_ID}'`)
   await db().$executeRawUnsafe(`DELETE FROM device_brands WHERE organization_id = '${ORG_ID}'`)
   await db().$executeRawUnsafe(`DELETE FROM device_catalog_settings WHERE organization_id = '${ORG_ID}'`)
@@ -149,7 +147,8 @@ async function cleanup(): Promise<void> {
 beforeAll(async () => {
   if (!url) return
   process.env.DATABASE_URL = url
-  job = await import('@/lib/device-catalog/sync-job')
+  job = await import('@/lib/device-catalog/tac-sync-job')
+  tacQueries = await import('@/lib/device-catalog/tac-queries')
   queries = await import('@/lib/device-catalog/queries')
   settings = await import('@/lib/device-catalog/settings-queries')
   catalog = await import('@/lib/device-catalog/catalog')
@@ -164,6 +163,12 @@ beforeAll(async () => {
   await db().$executeRawUnsafe(`
     INSERT INTO roles (id, organization_id, name, role_group, is_seed)
     VALUES ('${ROLE_ID}', '${ORG_ID}', 'ธุรการ U155', 'system', false) ON CONFLICT (id) DO NOTHING
+  `)
+  // ผู้รับการแจ้งเตือน job ล้ม = ผู้ถือ manage_device_catalog (U167)
+  await db().$executeRawUnsafe(`
+    INSERT INTO role_capabilities (role_id, capability_id, access_level)
+    SELECT '${ROLE_ID}', id, 'manage' FROM capabilities WHERE code = 'manage_device_catalog'
+    ON CONFLICT DO NOTHING
   `)
   await db().$executeRawUnsafe(`
     INSERT INTO users (id, organization_id, role_id, email, full_name, status)
@@ -180,7 +185,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   if (!url) return
   await cleanup()
-  // ตัวกรองของเทสต์: Samsung + Apple · 5 ปี (2022 ขึ้นไป) — BLU ไม่อยู่ในรายชื่อ
+  // ตัวกรองของเทสต์: Samsung + Apple · 5 ปี (2022 ขึ้นไป) — Blu ไม่อยู่ในรายชื่อ
   await db().deviceCatalogSettings.create({
     data: { organizationId: ORG_ID, brandNames: ['Samsung', 'Apple'], recentYears: 5 },
   })
@@ -191,103 +196,286 @@ afterAll(async () => {
   await client?.$disconnect()
 })
 
-suite('job device_catalog_sync (มติ PO U155 → U159)', () => {
-  it('ไม่มี key = ข้าม (สำเร็จ + เหตุผลใน Job Log) ไม่แตะข้อมูล', async () => {
-    const result = await loaded(job).runDeviceCatalogSyncJob({ organizationId: ORG_ID, now: NOW, client: null })
-    expect(result.skipped).toBe(true)
-    expect(result.skipReason).toContain('RAPIDAPI_KEY')
-    expect(await db().deviceBrand.count({ where: { organizationId: ORG_ID } })).toBe(0)
-  })
+suite('job device_tac_sync (มติ PO U166 → U168)', () => {
+  it('นำเข้าครั้งแรก: แบรนด์/รุ่น/TAC ครบ · ไม่ตั้ง manual_status · จัดประเภท · ประวัติ + sha/ETag · audit ระบบ + job id', async () => {
+    const result = await runJob()
+    expect(result).toMatchObject({ status: 'success', path: 'downloaded', tacsAdded: 7, brandsAdded: 3, modelsAdded: 6 })
+    expect(await db().deviceTac.count({ where: { organizationId: ORG_ID, source: 'tacdb' } })).toBe(7)
+    const models = await db().deviceModel.findMany({ where: { organizationId: ORG_ID }, include: { brand: true } })
+    expect(models.every((row) => row.manualStatus === null && row.source === 'tacdb')).toBe(true)
+    expect(models.find((row) => row.name === 'Galaxy Tab S9')?.assetKind).toBe('tablet')
+    expect(models.find((row) => row.name === 'iPad Air (2024)')?.assetKind).toBe('tablet')
+    expect(models.find((row) => row.name === 'Galaxy S10')?.releaseYear).toBe(2019)
+    const tac = await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '35000001' } })
+    expect(tac).toMatchObject({ brandName: 'Samsung', modelName: 'Galaxy A55', variant: 'SM-A556E/DS', releaseYear: 2024 })
+    expect(tac.deviceModelId).toBe((await model('Galaxy A55')).id)
 
-  it('ดึงครั้งแรก: เก็บทุกแบรนด์/ทุกรุ่น (ไม่กรอง) · จัดประเภท · ไม่ตั้ง manual_status · audit actor ระบบ + job id', async () => {
-    const result = await runJob(baseFixture())
-    expect(result).toMatchObject({ brandsCreated: 3, brandsSynced: 3, modelsCreated: 6, quotaExceeded: false, brandsPendingFirstSync: 0 })
-    const rows = await db().deviceModel.findMany({ where: { organizationId: ORG_ID }, orderBy: { name: 'asc' } })
-    expect(rows.map((row) => row.name)).toEqual(['G93', 'Galaxy A55', 'Galaxy S10', 'Galaxy Tab S9', 'iPad Air (2024)', 'iPhone 16'])
-    expect(rows.every((row) => row.manualStatus === null && row.source === 'api')).toBe(true)
-    expect((await model('Galaxy Tab S9')).assetKind).toBe('tablet')
-    expect((await model('iPad Air (2024)')).assetKind).toBe('tablet')
-    expect((await model('Galaxy A55')).assetKind).toBe('smartphone')
-    // ไม่มีรหัสจากต้นทาง ⇒ ใช้ชื่อรุ่นฝั่งต้นทางเป็นรหัส
-    expect((await model('iPhone 16')).externalId).toBe('iPhone 16')
-
-    const audits = await db().auditLog.findMany({
-      where: { organizationId: ORG_ID, targetType: 'device_models', reason: { contains: 'job-u155' } },
+    const history = await db().deviceTacUpdate.findMany({ where: { organizationId: ORG_ID } })
+    expect(history).toHaveLength(1)
+    expect(history[0]).toMatchObject({ trigger: 'daily', status: 'success', sourceSha: 'sha-00000000-0000-4000-8000-000000166001', tacsAdded: 7, modelsAdded: 6 })
+    expect(history[0]?.addedModels).toEqual(expect.arrayContaining(['Samsung Galaxy A55', 'Blu G93']))
+    const state = await db().deviceCatalogSettings.findUniqueOrThrow({ where: { organizationId: ORG_ID } })
+    expect(state).toMatchObject({ tacSourceSha: 'sha-00000000-0000-4000-8000-000000166001', tacEtag: '"etag-1"' })
+    const audit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'device_tacs', actorId: null },
+      orderBy: { createdAt: 'desc' },
     })
-    expect(audits.length).toBeGreaterThan(0)
-    expect(audits.every((audit) => audit.actorId === null)).toBe(true)
+    expect(audit?.reason).toContain('00000000-0000-4000-8000-000000166001')
   })
 
-  it('รันซ้ำ = idempotent (ไม่เกิดแถวซ้ำ) · รุ่นใหม่ของต้นทางถูกเพิ่ม', async () => {
-    await runJob(baseFixture())
-    const again = await runJob(baseFixture())
-    expect(again).toMatchObject({ brandsCreated: 0, modelsCreated: 0, modelsUnchanged: 6 })
-
-    const fixture = baseFixture()
-    fixture.models['Samsung']?.push(m('Galaxy A56', 2025, 'sa56'))
-    const third = await runJob(fixture)
-    expect(third.modelsCreated).toBe(1)
-    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(7)
+  it('commit sha เดิม = ไม่ดาวน์โหลด · บันทึก "ไม่มีของใหม่" + วันที่แก้ไฟล์บน GitHub', async () => {
+    await runJob(csvOf(), '00000000-0000-4000-8000-000000166002', 'sha-same')
+    const source = mockSource({ commit: { sha: 'sha-same', committedAt: new Date('2026-09-15T00:00:00Z') } })
+    const result = await loaded(job).runDeviceTacSyncJob({ organizationId: ORG_ID, now: NOW, jobId: '00000000-0000-4000-8000-000000166003', client: source })
+    expect(result).toMatchObject({ status: 'not_modified', path: 'sha_unchanged' })
+    expect(source.downloads).toEqual([])
+    const latest = await db().deviceTacUpdate.findFirstOrThrow({ where: { organizationId: ORG_ID, jobId: '00000000-0000-4000-8000-000000166003' } })
+    expect(latest).toMatchObject({ status: 'not_modified', sourceSha: 'sha-same' })
+    expect(latest.sourceUpdatedAt?.toISOString()).toBe('2026-09-15T00:00:00.000Z')
   })
 
-  it('job ไม่เขียนทับการตั้งด้วยมือ (แบรนด์/รุ่น) และชื่อที่ผู้ดูแลแก้', async () => {
-    await runJob(baseFixture())
+  it('commits API ล้ม = fallback ETag: ส่ง If-None-Match · 304 = ไม่มีของใหม่ · บังคับดึงใหม่ = ไม่ส่ง ETag', async () => {
+    await runJob()
+    const fallback = mockSource({ commit: null, notModifiedFor: '"etag-1"' })
+    const result = await loaded(job).runDeviceTacSyncJob({ organizationId: ORG_ID, now: NOW, jobId: '00000000-0000-4000-8000-000000166004', client: fallback })
+    expect(fallback.downloads).toEqual(['"etag-1"'])
+    expect(result).toMatchObject({ status: 'not_modified', path: 'etag_not_modified' })
+
+    const forced = mockSource({ commit: { sha: 'sha-00000000-0000-4000-8000-000000166001', committedAt: NOW }, notModifiedFor: '"etag-1"' })
+    const again = await loaded(job).runDeviceTacSyncJob({
+      organizationId: ORG_ID,
+      now: NOW,
+      jobId: '00000000-0000-4000-8000-000000166005',
+      trigger: 'manual',
+      force: true,
+      actor: { id: USER_ID, roleName: 'ธุรการ U155' },
+      client: forced,
+    })
+    expect(forced.downloads).toEqual([null])
+    expect(again).toMatchObject({ status: 'success', path: 'downloaded', tacsAdded: 0 })
+    const row = await db().deviceTacUpdate.findFirstOrThrow({ where: { organizationId: ORG_ID, jobId: '00000000-0000-4000-8000-000000166005' } })
+    expect(row).toMatchObject({ trigger: 'manual', createdBy: USER_ID })
+  })
+
+  it('เพิ่มเฉพาะ TAC ใหม่ · ไม่ทับแถวที่ระบบจำ/ผู้ดูแลผูก · ไม่เปิดรุ่นที่ซ่อน · ไม่ทับชื่อที่ผู้ดูแลแก้', async () => {
+    await runJob()
     const q = loaded(queries)
-    const samsung = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'Samsung' } })
-    const blu = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'BLU' } })
-    await q.updateDeviceBrand(context, samsung.id, { manualStatus: 'hidden' })
-    await q.updateDeviceBrand(context, blu.id, { manualStatus: 'active' })
     const a55 = await model('Galaxy A55')
-    await q.updateDeviceModel(context, a55.id, { name: 'Galaxy A55 (TH)', manualStatus: 'hidden' })
+    await q.updateDeviceModel(context, a55.id, { manualStatus: 'hidden', name: 'Galaxy A55 (ไทย)' })
+    await db().deviceTac.update({
+      where: { organizationId_tac: { organizationId: ORG_ID, tac: '35000005' } },
+      data: { source: 'manual', modelName: 'iPhone 16 (ผูกเอง)' },
+    })
+
+    const result = await runJob(
+      csvOf([...BASE_ROWS, 'SAMSUNG,35000008,"SAMSUNG GALAXY A55, Samsung SM-A556E2024"', 'APPLE,35000005,"APPLE IPHONE 17, N/A, A9999, 2025"']),
+      '00000000-0000-4000-8000-000000166006',
+    )
+    expect(result.tacsAdded).toBe(1)
+    expect(result.modelsAdded).toBe(0)
+    const renamed = await db().deviceModel.findUniqueOrThrow({ where: { id: a55.id } })
+    expect(renamed).toMatchObject({ manualStatus: 'hidden', name: 'Galaxy A55 (ไทย)' })
+    const added = await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '35000008' } })
+    expect(added.deviceModelId).toBe(a55.id)
+    const kept = await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '35000005' } })
+    expect(kept).toMatchObject({ source: 'manual', modelName: 'iPhone 16 (ผูกเอง)' })
+  })
+
+  it('ดาวน์โหลดล้ม = ประวัติ "ล้มเหลว" + สาเหตุ + แจ้งผู้ดูแล (outbox) แล้วโยนต่อให้ retry', async () => {
+    const source = mockSource({ failDownload: new TacSourceError('ดาวน์โหลดไฟล์ TAC ไม่สำเร็จ (HTTP 503)', 503) })
+    await expect(
+      loaded(job).runDeviceTacSyncJob({ organizationId: ORG_ID, now: NOW, jobId: '00000000-0000-4000-8000-000000166007', client: source }),
+    ).rejects.toBeInstanceOf(TacSourceError)
+    const row = await db().deviceTacUpdate.findFirstOrThrow({ where: { organizationId: ORG_ID, jobId: '00000000-0000-4000-8000-000000166007' } })
+    expect(row).toMatchObject({ status: 'failed', errorMessage: 'ดาวน์โหลดไฟล์ TAC ไม่สำเร็จ (HTTP 503)' })
+    const outbox = await db().notificationOutbox.findMany({ where: { organizationId: ORG_ID } })
+    expect(outbox).toHaveLength(1)
+    expect(outbox[0]?.payload).toMatchObject({ kind: 'message', userId: USER_ID, eventCode: 'device_catalog.tac_update_failed' })
+    expect(await db().deviceTac.count({ where: { organizationId: ORG_ID } })).toBe(0)
+  })
+
+  it('นำเข้าไฟล์เอง: สำเร็จ = trigger file · ไฟล์ผิดรูปแบบ = ล้มเหลว + ไม่แตะข้อมูล', async () => {
+    const ok = await loaded(job).runDeviceTacSyncJob({
+      organizationId: ORG_ID,
+      now: NOW,
+      jobId: '00000000-0000-4000-8000-000000166008',
+      filePath: `organization/${ORG_ID}/device-tac/x.csv`,
+      actor: { id: USER_ID, roleName: 'ธุรการ U155' },
+      readFile: async () => new TextEncoder().encode(csvOf(BASE_ROWS.slice(0, 2))),
+    })
+    expect(ok).toMatchObject({ trigger: 'file', status: 'success', path: 'file', tacsAdded: 2 })
+
+    await expect(
+      loaded(job).runDeviceTacSyncJob({
+        organizationId: ORG_ID,
+        now: NOW,
+        jobId: '00000000-0000-4000-8000-000000166009',
+        filePath: `organization/${ORG_ID}/device-tac/y.csv`,
+        actor: { id: USER_ID, roleName: 'ธุรการ U155' },
+        readFile: async () => new TextEncoder().encode('a,b,c\n1,2,3'),
+      }),
+    ).rejects.toThrow('Brand,TAC,SPECS')
+    const failed = await db().deviceTacUpdate.findFirstOrThrow({ where: { organizationId: ORG_ID, jobId: '00000000-0000-4000-8000-000000166009' } })
+    expect(failed).toMatchObject({ trigger: 'file', status: 'failed' })
+    expect(await db().deviceTac.count({ where: { organizationId: ORG_ID } })).toBe(2)
+  })
+
+  it('ประวัติ (U167): รอบอัปเดต + รายการที่ระบบจำ · ป้ายแหล่งข้อมูลหยุดอัปเดต', async () => {
+    await runJob()
+    const history = await loaded(tacQueries).getDeviceTacHistory(ORG_ID)
+    expect(history.updates[0]).toMatchObject({ status: 'success', trigger: 'daily', actorName: null })
+    const summary = await loaded(queries).getDeviceCatalogSummary(ORG_ID, NOW)
+    // ไฟล์ต้นทางแก้ 01/09/2026 · ตอนนี้ 07/10/2026 (36 วัน) < 90 วัน
+    expect(summary).toMatchObject({ tacCount: 7, sourceStale: false, staleAlertDays: 90 })
+    expect(loaded(queries).isSourceStale(new Date('2026-01-01T00:00:00Z'), 90, NOW)).toBe(true)
+    expect(loaded(queries).isSourceStale(null, 90, NOW)).toBe(false)
+  })
+})
+
+suite('เคส: IMEI → TAC · ระบบจำ · ผูกเอง · นำเข้า · ความจุ/สี (มติ PO U166)', () => {
+  let seq = 0
+  const ref = (): string => {
+    seq += 1
+    return `U166-${seq}-${Date.now()}`
+  }
+
+  it('ค้น TAC จาก IMEI: พบ = ยี่ห้อ/รุ่น + รุ่นในแคตตาล็อก · ไม่พบ = found false', async () => {
+    await runJob()
+    const found = await loaded(tacQueries).lookupDeviceTac(ORG_ID, '350000011234567')
+    expect(found).toMatchObject({ found: true, tac: '35000001', label: 'Samsung Galaxy A55', assetKind: 'smartphone' })
+    expect(found.deviceModelId).toBe((await model('Galaxy A55')).id)
+    const missing = await loaded(tacQueries).lookupDeviceTac(ORG_ID, '990000011234567')
+    expect(missing).toMatchObject({ found: false, label: null })
+  })
+
+  it('รุ่นที่ซ่อนจากตัวเลือกแต่ IMEI ตรง TAC = ผูกรุ่นได้ (เครื่องจริงเป็นรุ่นนี้)', async () => {
+    await runJob()
+    const s10 = await model('Galaxy S10') // ออกปี 2019 ⇒ ไม่แสดงในตัวเลือก
+    const created = await loaded(cases).createCase(
+      loaded(caseSchemas).caseCreateSchema.parse({
+        caseRef: ref(),
+        financeCompanyId: COMPANY_ID,
+        assetType: 'smartphone',
+        assetImeiSerial: '350000041234567',
+        deviceModelId: s10.id,
+      }),
+      { actor, meta },
+    )
+    expect(created).toMatchObject({ deviceModelId: s10.id, assetBrandModel: 'Samsung Galaxy S10' })
+  })
+
+  it('TAC ที่ฐานไม่รู้จัก + เลือกรุ่น/พิมพ์เอง = ระบบจำ (learned + audit) · ไม่ทับแถวที่มีอยู่', async () => {
+    await runJob()
+    const a55 = await model('Galaxy A55')
+    await loaded(cases).createCase(
+      loaded(caseSchemas).caseCreateSchema.parse({
+        caseRef: ref(),
+        financeCompanyId: COMPANY_ID,
+        assetType: 'smartphone',
+        assetImeiSerial: '86123456 000001 2',
+        deviceModelId: a55.id,
+      }),
+      { actor, meta },
+    )
+    const learned = await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '86123456' } })
+    expect(learned).toMatchObject({ source: 'learned', deviceModelId: a55.id, createdBy: USER_ID, modelName: 'Galaxy A55' })
+
+    // ครั้งต่อไปเลือกอย่างอื่น = ไม่ทับที่จำไว้ · TAC จากฐาน = ไม่ถูกแทนด้วยที่ผู้ใช้พิมพ์
+    await loaded(cases).createCase(
+      loaded(caseSchemas).caseCreateSchema.parse({
+        caseRef: ref(),
+        financeCompanyId: COMPANY_ID,
+        assetType: 'smartphone',
+        assetImeiSerial: '861234560000099',
+        assetBrandModel: 'Vivo Y99',
+      }),
+      { actor, meta },
+    )
+    await loaded(cases).createCase(
+      loaded(caseSchemas).caseCreateSchema.parse({
+        caseRef: ref(),
+        financeCompanyId: COMPANY_ID,
+        assetType: 'smartphone',
+        assetImeiSerial: '350000011111111',
+        assetBrandModel: 'Vivo Y99',
+      }),
+      { actor, meta },
+    )
+    expect((await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '86123456' } })).deviceModelId).toBe(a55.id)
+    expect((await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '35000001' } })).source).toBe('tacdb')
+
+    // พิมพ์เองกับ TAC ใหม่ = จำเป็นข้อความ (ไม่ผูกรุ่น)
+    await loaded(cases).createCase(
+      loaded(caseSchemas).caseCreateSchema.parse({
+        caseRef: ref(),
+        financeCompanyId: COMPANY_ID,
+        assetType: 'smartphone',
+        assetImeiSerial: '869999990000011',
+        assetBrandModel: 'Vivo Y99',
+      }),
+      { actor, meta },
+    )
+    expect(await db().deviceTac.findFirstOrThrow({ where: { organizationId: ORG_ID, tac: '86999999' } })).toMatchObject({
+      source: 'learned',
+      brandName: 'vivo',
+      modelName: 'Y99',
+      deviceModelId: null,
+    })
+    const history = await loaded(tacQueries).getDeviceTacHistory(ORG_ID)
+    expect(history.learned.map((row) => row.tac).sort()).toEqual(['86123456', '86999999'])
+  })
+
+  it('ผู้ดูแลผูก TAC เอง = แหล่ง manual (ทับได้ทุกแหล่ง) + audit', async () => {
+    await runJob()
     const iphone = await model('iPhone 16')
-    await q.updateDeviceModel(context, iphone.id, { manualStatus: 'active' })
-
-    await runJob(baseFixture(), 50, 'job-u155-2')
-
-    expect((await db().deviceBrand.findUniqueOrThrow({ where: { id: samsung.id } })).manualStatus).toBe('hidden')
-    expect((await db().deviceBrand.findUniqueOrThrow({ where: { id: blu.id } })).manualStatus).toBe('active')
-    const after = await db().deviceModel.findUniqueOrThrow({ where: { id: a55.id } })
-    expect(after.name).toBe('Galaxy A55 (TH)')
-    expect(after.manualStatus).toBe('hidden')
-    expect((await db().deviceModel.findUniqueOrThrow({ where: { id: iphone.id } })).manualStatus).toBe('active')
-    // ไม่เกิดแถวซ้ำจากชื่อที่ถูกแก้ (จับคู่ด้วยรหัส)
-    expect(await db().deviceModel.count({ where: { brandId: samsung.id } })).toBe(3)
+    const saved = await loaded(tacQueries).bindDeviceTac(context, { tac: '35000001', deviceModelId: iphone.id, reason: 'ฐานผิด' })
+    expect(saved).toMatchObject({ source: 'manual', brandName: 'Apple', modelName: 'iPhone 16', deviceModelId: iphone.id })
+    const list = await loaded(tacQueries).listDeviceTacs(ORG_ID, { q: '3500000', source: 'manual', page: 1, pageSize: 50 })
+    expect(list.items.map((row) => row.tac)).toEqual(['35000001'])
   })
 
-  it('โควตาหมดกลางทาง = จบแบบสำเร็จ + บันทึก · รอบหน้าดึงต่อจากแบรนด์ที่ค้าง (resume)', async () => {
-    const fixture = baseFixture()
-    // ลำดับดึงครั้งแรก (U162) = แบรนด์ในรายชื่อตลาดไทยตามลำดับรายชื่อ (Samsung → Apple) แล้วค่อยที่เหลือ (BLU)
-    // ⇒ โควตาหมดที่ BLU
-    fixture.failModelsFor = { BLU: new DeviceSpecsQuotaError('/models/BLU') }
-    const firstClient = mockClient(fixture)
-    const first = await loaded(job).runDeviceCatalogSyncJob({ organizationId: ORG_ID, now: NOW, client: firstClient, maxRequests: 50 })
-    expect(firstClient.calls).toEqual(['brands', 'models:Samsung', 'models:Apple', 'models:BLU'])
-    expect(first.quotaExceeded).toBe(true)
-    expect(first.brandsPendingFirstSync).toBe(1)
-    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(5)
-
-    const resumed = mockClient(baseFixture())
-    const second = await loaded(job).runDeviceCatalogSyncJob({ organizationId: ORG_ID, now: NOW, client: resumed, maxRequests: 2 })
-    // งบ 2 request = brands + แบรนด์ที่ค้าง 1 ตัว (ยังไม่เคยดึงมาก่อนเสมอ — ไม่วนกลับไปดึงแบรนด์ไทยที่ดึงแล้ว)
-    expect(resumed.calls).toEqual(['brands', 'models:BLU'])
-    expect(second).toMatchObject({ quotaExceeded: false, brandsPendingFirstSync: 0, modelsCreated: 1 })
+  it('นำเข้า CSV: ยี่ห้อว่าง = เติมจาก TAC · ไม่ตรง = เตือน (คงข้อความในไฟล์) · ความจุ/สีจากไฟล์', async () => {
+    await runJob()
+    const first = ref()
+    const second = ref()
+    const input = loaded(caseSchemas).caseImportSchema.parse({
+      financeCompanyId: COMPANY_ID,
+      rows: [
+        { เลขที่สัญญา: first, ประเภทสินค้า: 'มือถือ', 'IMEI / Serial': '350000011234567', ความจุ: '256 gb', สี: 'ดำ' },
+        { เลขที่สัญญา: second, ประเภทสินค้า: 'มือถือ', 'IMEI / Serial': '350000051234567', 'ยี่ห้อ/รุ่น': 'OPPO A78' },
+      ],
+    })
+    const result = await loaded(imports).importCases(input, { actor, meta })
+    expect(result.createdCount).toBe(2)
+    const byRow = new Map(result.rows.map((row) => [row.rowNumber, row]))
+    expect([...byRow.values()][0]?.warnings?.assetBrandModel).toContain('เติมยี่ห้อ/รุ่นจาก IMEI')
+    expect([...byRow.values()][1]?.warnings?.assetBrandModel).toContain('ไม่ตรงกับ IMEI')
+    const rows = await db().case.findMany({ where: { organizationId: ORG_ID, caseRef: { in: [first, second] } } })
+    const byRef = new Map(rows.map((row) => [row.caseRef, row]))
+    expect(byRef.get(first)).toMatchObject({
+      assetDescription: 'Samsung Galaxy A55',
+      deviceModelId: (await model('Galaxy A55')).id,
+      assetCapacity: '256GB',
+      assetColor: 'ดำ',
+    })
+    expect(byRef.get(second)).toMatchObject({ assetDescription: 'OPPO A78' })
   })
 
-  it('โควตาหมดตั้งแต่ดึงรายชื่อแบรนด์ = ข้าม ไม่แตะข้อมูลเดิม', async () => {
-    await runJob(baseFixture())
-    const fixture = baseFixture()
-    fixture.failBrands = new DeviceSpecsQuotaError('/brands')
-    const result = await runJob(fixture)
-    expect(result.quotaExceeded).toBe(true)
-    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(6)
-  })
-
-  it('ต้นทางล่ม (5xx) = โยน error ให้ตัวรันงาน retry · ของที่ดึงแล้วคงอยู่', async () => {
-    const fixture = baseFixture()
-    // ลำดับดึง (U162): Samsung → Apple (รายชื่อตลาดไทย) → BLU ⇒ ล่มที่ BLU หลังดึง 2 แบรนด์แรกแล้ว
-    fixture.failModelsFor = { BLU: new DeviceSpecsApiError('down', 503) }
-    await expect(runJob(fixture)).rejects.toBeInstanceOf(DeviceSpecsApiError)
-    expect(await db().deviceModel.count({ where: { organizationId: ORG_ID } })).toBe(5)
+  it('ความจุ/สีบังคับก่อนส่งตรวจ — "ไม่ระบุในสัญญา" นับว่าเลือกแล้ว · บันทึกเป็นข้อความ snapshot', async () => {
+    const draft = await loaded(cases).createCase(
+      loaded(caseSchemas).caseCreateSchema.parse({ caseRef: ref(), financeCompanyId: COMPANY_ID }),
+      { actor, meta },
+    )
+    expect(draft.readiness.missingFields).toEqual(expect.arrayContaining(['assetCapacity', 'assetColor']))
+    const updated = await loaded(cases).updateCase(
+      actor,
+      draft.id,
+      { assetCapacity: 'ไม่ระบุในสัญญา', assetColor: 'ม่วงลาเวนเดอร์' },
+      { actor, meta },
+    )
+    expect(updated).toMatchObject({ assetCapacity: 'ไม่ระบุในสัญญา', assetColor: 'ม่วงลาเวนเดอร์' })
+    expect(updated.readiness.missingFields).not.toContain('assetCapacity')
+    expect(updated.readiness.missingFields).not.toContain('assetColor')
   })
 })
 
@@ -298,21 +486,21 @@ suite('การแสดงในตัวเลือก: ตัวกรอ�
   }
 
   it('ตั้งต้นตามตัวกรอง: แบรนด์ในรายชื่อ + รุ่นภายใน 5 ปี · กรองประเภท · ค้นหาหลายคำ', async () => {
-    await runJob(baseFixture())
+    await runJob()
     expect(await optionNames()).toEqual(['Apple iPad Air (2024)', 'Apple iPhone 16', 'Samsung Galaxy A55', 'Samsung Galaxy Tab S9'])
     expect(await optionNames('tablet')).toEqual(['Apple iPad Air (2024)', 'Samsung Galaxy Tab S9'])
     expect(await optionNames(undefined, 'samsung a55')).toEqual(['Samsung Galaxy A55'])
   })
 
   it('ตั้งด้วยมือชนะตัวกรอง · ปิดแบรนด์ = ทุกรุ่นไม่แสดง · คืนค่า (null) = กลับไปตามตัวกรอง', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const q = loaded(queries)
     const s10 = await model('Galaxy S10')
     await q.bulkSetDeviceModelManualStatus(context, [s10.id], 'active')
-    const blu = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'BLU' } })
+    const blu = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'Blu' } })
     await q.updateDeviceBrand(context, blu.id, { manualStatus: 'active' })
     expect(await optionNames(undefined, 'galaxy s10')).toEqual(['Samsung Galaxy S10'])
-    expect(await optionNames(undefined, 'g93')).toEqual(['BLU G93'])
+    expect(await optionNames(undefined, 'g93')).toEqual(['Blu G93'])
 
     const apple = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'Apple' } })
     const iphone = await model('iPhone 16')
@@ -324,21 +512,21 @@ suite('การแสดงในตัวเลือก: ตัวกรอ�
     expect(await optionNames(undefined, 'iphone')).toEqual(['Apple iPhone 16'])
   })
 
-  it('เปลี่ยนตัวกรองแล้วมีผลทันที (ไม่ดึง API) และไม่แตะค่าที่ตั้งด้วยมือ', async () => {
-    await runJob(baseFixture())
+  it('เปลี่ยนตัวกรองแล้วมีผลทันที (ไม่ดึงข้อมูลใหม่) และไม่แตะค่าที่ตั้งด้วยมือ', async () => {
+    await runJob()
     const a55 = await model('Galaxy A55')
     await loaded(queries).updateDeviceModel(context, a55.id, { manualStatus: 'hidden' })
 
     const current = await loaded(settings).getDeviceCatalogSettings(ORG_ID)
-    await loaded(settings).updateDeviceCatalogSettings(context, current, { brandNames: ['Samsung', 'BLU'], recentYears: 10 })
-    expect(await optionNames()).toEqual(['BLU G93', 'Samsung Galaxy S10', 'Samsung Galaxy Tab S9'])
+    await loaded(settings).updateDeviceCatalogSettings(context, current, { ...current, brandNames: ['Samsung', 'Blu'], recentYears: 10 })
+    expect(await optionNames()).toEqual(['Blu G93', 'Samsung Galaxy S10', 'Samsung Galaxy Tab S9'])
     expect((await db().deviceModel.findUniqueOrThrow({ where: { id: a55.id } })).manualStatus).toBe('hidden')
   })
 
   it('where ของ DB ตรงกับ pure (isBrandVisible/isModelVisible) ทุกแถว', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const q = loaded(queries)
-    const blu = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'BLU' } })
+    const blu = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'Blu' } })
     await q.updateDeviceBrand(context, blu.id, { manualStatus: 'active' })
     await q.updateDeviceModel(context, (await model('Galaxy S10')).id, { manualStatus: 'active' })
     await q.updateDeviceModel(context, (await model('iPhone 16')).id, { manualStatus: 'hidden' })
@@ -382,7 +570,7 @@ suite('เคส: เลือกจากรายการ / ระบุเ�
   }
 
   it('เลือกจากรายการ = เก็บ id + ข้อความ snapshot จากแคตตาล็อก', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const a55 = await model('Galaxy A55')
     const created = await loaded(cases).createCase(
       loaded(caseSchemas).caseCreateSchema.parse({
@@ -399,7 +587,7 @@ suite('เคส: เลือกจากรายการ / ระบุเ�
   })
 
   it('รุ่นที่ไม่แสดงแล้ว/ประเภทไม่ตรง = ไม่บล็อก — เก็บข้อความที่ส่งมา ไม่อ้างรุ่น · ระบุเองได้เสมอ', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const s10 = await model('Galaxy S10') // เก่ากว่า 5 ปี ⇒ ไม่แสดง
     const hidden = await loaded(cases).createCase(
       loaded(caseSchemas).caseCreateSchema.parse({
@@ -441,7 +629,7 @@ suite('เคส: เลือกจากรายการ / ระบุเ�
   })
 
   it('แก้เคส: ส่งข้อความเดิมโดยไม่ระบุรุ่น = คงรุ่นเดิม · ส่งข้อความใหม่ = ปลดรุ่น', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const a55 = await model('Galaxy A55')
     const created = await loaded(cases).createCase(
       loaded(caseSchemas).caseCreateSchema.parse({
@@ -459,7 +647,7 @@ suite('เคส: เลือกจากรายการ / ระบุเ�
   })
 
   it('นำเข้า CSV: จับคู่ข้อความแบบไม่สนตัวพิมพ์/ช่องว่าง · ไม่เจอ = เก็บข้อความเดิม', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const a55 = await model('Galaxy A55')
     const first = ref()
     const second = ref()
@@ -488,7 +676,7 @@ suite('เลือกทั้งหมด / ไม่เลือกทั้�
   }
 
   it('ไม่เลือกแบรนด์ทั้งหมด: ทั้งชุดที่ตรงเงื่อนไข (ไม่ใช่แค่หน้าที่เห็น) · audit 1 แถวต่อการกด · job ไม่เขียนทับ', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const before = await bulkAudits('device_brands')
     const result = await loaded(queries).bulkSetDeviceCatalogVisibility(context, {
       target: 'brands',
@@ -515,13 +703,13 @@ suite('เลือกทั้งหมด / ไม่เลือกทั้�
     })
 
     // ค่าที่ตั้ง = การตั้งด้วยมือ ⇒ job รอบถัดไปไม่เขียนทับ
-    await runJob(baseFixture(), 50, 'job-u162')
+    await runJob(csvOf(), '00000000-0000-4000-8000-000000166010')
     const afterJob = await db().deviceBrand.findMany({ where: { organizationId: ORG_ID } })
     expect(afterJob.every((brand) => brand.manualStatus === 'hidden')).toBe(true)
   })
 
   it('เลือกรุ่นทั้งหมดตามคำค้น + แบรนด์ + ประเภท: เปลี่ยนเฉพาะที่ตรง · กดซ้ำ = ไม่เปลี่ยน แต่ยังลง audit ของการกด', async () => {
-    await runJob(baseFixture())
+    await runJob()
     const samsung = await db().deviceBrand.findFirstOrThrow({ where: { organizationId: ORG_ID, name: 'Samsung' } })
     const input = {
       target: 'models' as const,

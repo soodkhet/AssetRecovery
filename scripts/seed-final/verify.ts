@@ -315,6 +315,17 @@ async function verifyDecisions(): Promise<void> {
   atLeast('มติ', 'U155 เคสเลือกรุ่นจากแคตตาล็อก', 5, fromCatalog)
   atLeast('มติ', 'U155 เคสระบุรุ่นเอง', 5, typed)
   check('มติ', 'U157 รุ่นที่ซ่อน', 1, await db.deviceModel.count({ where: { ...where, manualStatus: 'hidden' } }))
+  // มติ PO U166 — ฐาน TAC ตัวอย่าง (fixture 27 แถว) + ระบบจำ 1 TAC · เคสได้รุ่นจาก TAC · ความจุ/สีครบรวม "ไม่ระบุในสัญญา"
+  check('มติ', 'U166 TAC จากฐานตัวอย่าง', 27, await db.deviceTac.count({ where: { ...where, source: 'tacdb' } }))
+  check('มติ', 'U166 TAC ที่ระบบจำ (TAC ไม่พบ → เลือกรุ่นเอง)', 1, await db.deviceTac.count({ where: { ...where, source: 'learned' } }))
+  const tacCases = await db.case.findMany({ where: { ...where, deviceModelId: { not: null } }, select: { imei: true, deviceModelId: true } })
+  const tacRows = await db.deviceTac.findMany({ where: { ...where, source: 'tacdb' }, select: { tac: true, deviceModelId: true } })
+  const tacModel = new Map(tacRows.map((row) => [row.tac, row.deviceModelId]))
+  atLeast('มติ', 'U166 เคสได้รุ่นจาก TAC ของ IMEI', 5, tacCases.filter((row) => row.imei !== null && tacModel.get(row.imei.slice(0, 8)) === row.deviceModelId).length)
+  check('มติ', 'U166 เคสไม่มีความจุ/สี', 0, await db.case.count({ where: { ...where, OR: [{ assetCapacity: null }, { assetColor: null }] } }))
+  atLeast('มติ', 'U166 เคส "ไม่ระบุในสัญญา"', 1, await db.case.count({ where: { ...where, OR: [{ assetCapacity: 'ไม่ระบุในสัญญา' }, { assetColor: 'ไม่ระบุในสัญญา' }] } }))
+  atLeast('มติ', 'U166 คลังติ๊ก สี/ความจุตรง', 1, await db.asset.count({ where: { ...where, colorCapacityMatched: true } }))
+  atLeast('มติ', 'U167 ประวัติการอัปเดต TAC (นำเข้าไฟล์สำเร็จ)', 1, await db.deviceTacUpdate.count({ where: { ...where, status: 'success' } }))
   const lots = await db.handoverLot.groupBy({ by: ['companyId'], where: { ...where, status: 'confirmed' }, _count: true })
   atLeast('มติ', 'U142 บริษัทที่มีล็อตส่งมอบแล้ว ≥ 3 ล็อต', 2, lots.filter((l) => l._count >= 3).length)
 }

@@ -3,7 +3,7 @@
 import { Button, Modal, RefText } from '@/components/ui'
 import { fmtDateTime, nowDate } from '@/lib/format/datetime'
 import type { HandoverType } from '@/lib/generated/prisma/enums'
-import { documentIdentifier, HANDOVER_DOC_TITLE } from '@/lib/warehouse/handover-doc'
+import { documentDeviceText, documentIdentifier, HANDOVER_DOC_TITLE } from '@/lib/warehouse/handover-doc'
 import type { AssetListItemDto } from '@/lib/warehouse/types'
 import { assetConditionLabel, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
 
@@ -104,7 +104,7 @@ export function HandoverNotePreview({
                   <RefText>{asset.caseRef}</RefText>
                 </td>
                 <td className="px-3 py-2">{asset.debtorName}</td>
-                <td className="px-3 py-2">{asset.deviceDesc}</td>
+                <td className="px-3 py-2">{documentDeviceText(asset)}</td>
                 <td className="px-3 py-2 font-mono">{documentIdentifier(asset)}</td>
                 <td className="px-3 py-2">{assetConditionLabel(asset.condition)}</td>
               </tr>
